@@ -379,6 +379,7 @@ local function NormalizePlaced(placed)
     size = Num(placed.size, 18),
     barWidth = Num(placed.barWidth, Num(placed.width, 54)),
     growth = placed.growth,
+    iconEffect = tostring(placed.iconEffect or "none"):lower(),
     missing = false,
     showCooldownSwipe = placed.showCooldownSwipe ~= false,
     showCooldown = placed.showCooldown ~= false,

@@ -240,8 +240,66 @@ local function DeepReplace(dst, src)
         end
     end
 end
+local function HistoryCharacterKey()
+    if type(_G.MSUF_GetCharKey) == "function" then
+        local ok, value = pcall(_G.MSUF_GetCharKey)
+        if ok and type(value) == "string" and value ~= "" then return value end
+    end
+    if type(_G.UnitName) == "function" and type(_G.GetRealmName) == "function" then
+        local okName, name = pcall(_G.UnitName, "player")
+        local okRealm, realm = pcall(_G.GetRealmName)
+        if okName and okRealm and type(name) == "string" and name ~= "" and type(realm) == "string" then
+            return name .. "-" .. realm
+        end
+    end
+end
+local function SnapshotProfileRouting()
+    local key = HistoryCharacterKey()
+    if not key then return nil end
+    local gdb = _G.MSUF_GlobalDB
+    local chars = type(gdb) == "table" and gdb.char or nil
+    local char = type(chars) == "table" and chars[key] or nil
+    local existed = type(char) == "table"
+    local autoSwitch
+    if existed then autoSwitch = char.specAutoSwitch end -- Preserve an explicit false value.
+    return {
+        key = key,
+        existed = existed,
+        specAutoSwitch = autoSwitch,
+        specProfileMap = existed and DeepCopy(char.specProfileMap) or nil,
+    }
+end
 local function SnapshotDB()
-    return DeepCopy(M.EnsureDB())
+    -- Spec-profile routing is the only persisted options family outside the
+    -- active profile DB. Keep its tiny per-character state in the same history
+    -- transaction so Assistant/UI undo and redo remain truthful for every
+    -- setting without copying the complete GlobalDB/profile collection.
+    return {
+        _msuf2HistoryState = true,
+        profileDB = DeepCopy(M.EnsureDB()),
+        profileRouting = SnapshotProfileRouting(),
+    }
+end
+local function HistoryProfileDB(snapshot)
+    if type(snapshot) == "table" and snapshot._msuf2HistoryState == true then return snapshot.profileDB end
+    return snapshot -- Backward compatibility for a history entry created before this schema.
+end
+local function RestoreProfileRouting(snapshot)
+    local routing = type(snapshot) == "table" and snapshot._msuf2HistoryState == true and snapshot.profileRouting or nil
+    if type(routing) ~= "table" or type(routing.key) ~= "string" then return end
+    local gdb = _G.MSUF_GlobalDB
+    if type(gdb) ~= "table" then return end
+    if type(gdb.char) ~= "table" then gdb.char = {} end
+    local char = gdb.char[routing.key]
+    if type(char) ~= "table" then char = {}; gdb.char[routing.key] = char end
+    if routing.existed then
+        char.specAutoSwitch = routing.specAutoSwitch
+        char.specProfileMap = DeepCopy(routing.specProfileMap)
+    else
+        char.specAutoSwitch = nil
+        char.specProfileMap = nil
+        if next(char) == nil then gdb.char[routing.key] = nil end
+    end
 end
 local function CurrentHistorySnapshot()
     if historySessionActive and type(historySessionSnapshot) == "table" then return historySessionSnapshot end
@@ -448,8 +506,11 @@ end
 
 local function ApplyHistorySnapshot(snapshot, reason, source)
     if type(snapshot) ~= "table" then return false end
+    local profileDB = HistoryProfileDB(snapshot)
+    if type(profileDB) ~= "table" then return false end
     historyRestoring = true
-    DeepReplace(M.EnsureDB(), snapshot)
+    DeepReplace(M.EnsureDB(), profileDB)
+    RestoreProfileRouting(snapshot)
     if historySessionActive then historySessionSnapshot = snapshot end
     historyRestoring = false
     if ApplyScopedHistoryRestore(reason, source) then
@@ -491,6 +552,9 @@ local function ApplyHistorySnapshot(snapshot, reason, source)
     end
     RequestHistoryGroupRuntime(reason or "MSUF2_HISTORY_GROUP")
     FlushApplyServiceNow()
+    if type(_G.MSUF_ApplySpecProfileIfEnabled) == "function" then
+        SafeInvoke(_G.MSUF_ApplySpecProfileIfEnabled, "MSUF2_HISTORY_PROFILE_ROUTING")
+    end
     M.CallIf(M.ApplyLocaleSelection, M.GetLocaleSelection and M.GetLocaleSelection() or "auto")
     M.CallIf(M.MarkMenuDataDirty, reason or "history")
     RebuildActivePage()
@@ -823,7 +887,7 @@ local CASTBAR_GENERAL_KEYS = KSW [[
 local MODULES_GENERAL_KEYS = KS("styleEnabled")
 local COLOR_GENERAL_KEYS = KSW "highlightEnabled playerCastbarOverrideEnabled playerCastbarOverrideMode npcTypeTarget npcTypeFocus npcTypeBoss npcTypeToT"
 local COLOR_GAMEPLAY_KEYS = KS("combatStateColorSync")
-local COLOR_BARS_KEYS = KS("classPowerComboPointColorMode")
+local COLOR_BARS_KEYS = KS("classPowerComboPointColorMode", "classPowerSlotColorModes", "classPowerFullColorEnabled")
 local GROUP_COLOR_KEYS = KSW [[
     gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB
     gfUnifiedR gfUnifiedG gfUnifiedB barTexture barBgTexture bgR bgG bgB hpBarAlpha hpBgAlpha
@@ -1397,11 +1461,23 @@ local function AttachCommandAction(ctx, widget, kind, getValue, setValue, opts)
         actionKey = opts.actionKey,
         navigationKey = opts.navigationKey,
         classification = opts.classification,
+        historyMode = opts.historyMode or (opts.classification == "ephemeral" and "none" or nil),
+        valueKind = opts.valueKind,
+        percentIsValue = opts.percentIsValue == true,
+        confirmRequired = opts.confirmRequired == true,
         get = getValue,
         set = setValue,
-        values = opts.values or widget.values,
+        values = type(opts.values or widget.values) == "table" and (opts.values or widget.values) or nil,
         getValues = function()
-            return widget.values
+            local values = opts.values or widget.values
+            -- Keep provider failures observable. RuntimeControlCatalog owns the
+            -- outer protected call and must be able to fail coverage when a
+            -- real bound dropdown cannot materialize its choices. Returning an
+            -- empty table here used to turn provider exceptions into a vacuous
+            -- 100% value-coverage result. A provider may still intentionally
+            -- return an empty table; only errors/non-table contracts fail.
+            if type(values) == "function" then values = values() end
+            return values
         end,
         min = opts.min or minValue,
         max = opts.max or maxValue,
@@ -1434,6 +1510,7 @@ local function AttachCommandAction(ctx, widget, kind, getValue, setValue, opts)
             actionKey = command.actionKey,
             navigationKey = command.navigationKey,
             classification = command.classification,
+            confirmRequired = command.confirmRequired,
             command = command,
         }, "binding")
     end

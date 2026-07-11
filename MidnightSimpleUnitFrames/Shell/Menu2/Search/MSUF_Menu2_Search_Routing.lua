@@ -256,6 +256,12 @@ local function SearchRouteHasAny(normalized, terms)
     return false
 end
 
+local function SearchRouteHasWord(normalized, word)
+    normalized, word = NormalizeSearchText(normalized), NormalizeSearchText(word)
+    if normalized == "" or word == "" then return false end
+    return (" " .. normalized .. " "):find(" " .. word .. " ", 1, true) ~= nil
+end
+
 local function SearchNewRoute()
     return { state = {}, accordion = {}, tables = {}, nestedTables = {}, general = {} }
 end
@@ -542,9 +548,20 @@ local function SearchRouteAuraScope(route, normalized)
         if SearchRouteHasAny(normalized, spec[2]) then
             SearchRouteSetState(route, "auraScope", spec[1])
             if spec[3] then SearchRouteSetState(route, "auraStyleGFScope", spec[3]) end
-            return
+            return spec[1]
         end
     end
+end
+
+local function SearchAuraStyleContainer(normalized)
+    for index = 1, 3 do
+        if SearchRouteHasAny(normalized, "custom " .. index .. "|custom" .. index) then
+            return "custom" .. index
+        end
+    end
+    if SearchRouteHasAny(normalized, "custom aura|custom display|whitelist") then return "custom1" end
+    if SearchRouteHasAny(normalized, "debuff|debuffs") then return "debuff" end
+    if SearchRouteHasAny(normalized, "buff|buffs") then return "buff" end
 end
 
 local SEARCH_UNIT_BY_PAGE = {
@@ -562,6 +579,7 @@ local SEARCH_AURA_ROUTE_PAGES = KeySetFromWords "auras3 auras3_buffs auras3_debu
 local SEARCH_ROUTE_SECTION_ROWS = {
     unit = [[
 preview=preview|hide preview
+auras=auras|aura|buff|buffs|debuff|debuffs|blacklist|whitelist|aura filter|custom aura
 frame_basics=frame basics|enable|disable|width|height|scale|frame size|smooth fill|health animation
 anchoring=anchoring|anchor|position|x offset|y offset|custom anchor|global anchor
 text=text|name text|hp text|health text|power text|font size|text anchor|text position|draw order|text layer
@@ -706,6 +724,37 @@ local function SearchRouteUnitPage(route, pageKey, normalized)
         "advanced status|status icon advanced|advanced x offset|advanced y offset|extended x offset|extended y offset|wide x offset|wide y offset",
         "status icons|status icon|indicator|level|raid group|group number|raid marker|leader|assist|elite|rare|dead|offline|combat icon|rested|incoming rez")
     SearchRouteUnitStatusSelection(route, unit, normalized)
+    local auraQuery = SearchRouteHasAny(normalized,
+        "aura|auras|buff|buffs|debuff|debuffs|blacklist|whitelist|filter|custom display|custom aura|spell id")
+    if auraQuery then
+        local container
+        for index = 1, 3 do
+            if SearchRouteHasAny(normalized, "custom " .. index .. "|custom" .. index) then container = "custom" .. index; break end
+        end
+        if not container and SearchRouteHasAny(normalized, "custom aura|custom display|whitelist") then container = "custom1" end
+        if not container and SearchRouteHasAny(normalized, "debuff|debuffs") then container = "debuff" end
+        if not container and SearchRouteHasAny(normalized, "buff|buffs") then container = "buff" end
+        container = container or (type(M.unitAuraTabSelection) == "table" and M.unitAuraTabSelection[unit]) or "buff"
+        local custom = tostring(container):match("^custom") ~= nil
+        local tool
+        if custom then
+            if SearchRouteHasAny(normalized, "whitelist|allow list|allowlist") then tool = "whitelist"
+            elseif SearchRouteHasAny(normalized, "filter|only mine|hide permanent") then tool = "filters"
+            -- `layer` must be a whole word: substring matching also finds it in
+            -- `player`, which incorrectly routed "player custom aura setup" to
+            -- the Layout workspace.
+            elseif SearchRouteHasAny(normalized, "layout|position|anchor|offset|size|strata|full frame|effect")
+                or SearchRouteHasWord(normalized, "layer")
+            then tool = "layout"
+            else tool = "setup" end
+        else
+            if SearchRouteHasAny(normalized, "blacklist|ignore list|block list") then tool = "blacklist"
+            elseif SearchRouteHasAny(normalized, "filter|only mine|dispellable|stealable|boss aura|hide permanent|no timer|no duration") then tool = "filters"
+            else tool = "layout" end
+        end
+        SearchRouteSetTable(route, "unitAuraTabSelection", unit, container)
+        SearchRouteSetNestedTable(route, "unitAuraToolSelection", unit, container, tool)
+    end
 end
 
 local function SearchRouteGroupPage(route, pageKey, normalized)
@@ -722,6 +771,17 @@ local function SearchRouteGroupPage(route, pageKey, normalized)
         SearchRouteGroupStatusSelection(route, normalized)
         local cornerSlot = SearchFirstMatch(normalized, CORNER_SLOT_TERMS)
         if cornerSlot then SearchRouteSetState(route, "gfCornerSlotSelection", cornerSlot) end
+    elseif pageKey == "gf_auras" and SearchRouteHasAny(normalized,
+        "aura|auras|buff|buffs|debuff|debuffs|blacklist|filter|layout|position|anchor|growth|icon size")
+    then
+        local activeScope = scope or M.gfScope or "party"
+        local lane = SearchRouteHasAny(normalized, "debuff|debuffs") and "debuff"
+            or (SearchRouteHasAny(normalized, "buff|buffs") and "buff" or nil)
+        lane = lane or (type(M.gfAuraLaneSelection) == "table" and M.gfAuraLaneSelection[activeScope]) or "buff"
+        local tool = SearchRouteHasAny(normalized, "blacklist|ignore list|block list") and "blacklist"
+            or (SearchRouteHasAny(normalized, "filter|only mine|dispellable|stealable|boss aura") and "filters" or "layout")
+        SearchRouteSetTable(route, "gfAuraLaneSelection", activeScope, lane)
+        SearchRouteSetNestedTable(route, "gfAuraToolSelection", activeScope, lane, tool)
     end
 end
 
@@ -743,7 +803,26 @@ local function SearchRouteGlobalPage(route, pageKey, normalized)
             SearchRouteSetGeneral(route, "_fontScopeKey", "shared")
         end
     elseif SEARCH_AURA_ROUTE_PAGES[pageKey] then
-        SearchRouteAuraScope(route, normalized)
+        local scope = SearchRouteAuraScope(route, normalized)
+        local container = SearchAuraStyleContainer(normalized)
+        if pageKey == "auras3_buffs" then container = "buff"
+        elseif pageKey == "auras3_debuffs" then container = "debuff" end
+        local activeScope = scope or M.auraScope or "shared"
+        local custom = type(container) == "string" and container:match("^custom[123]$") ~= nil
+        -- Custom 1-3 only exist for unit-style scopes. Do not manufacture a
+        -- group/shared custom branch when the query explicitly selected one of
+        -- those scopes; the page itself exposes only Buffs/Debuffs there.
+        if custom and (activeScope == "shared" or activeScope == "party"
+            or activeScope == "raid" or activeScope == "mythicraid")
+        then
+            container = nil
+        end
+        if container then
+            SearchRouteSetState(route, "auraStyleContainer", container)
+            if container == "buff" or container == "debuff" then
+                SearchRouteSetState(route, "auraStyleGFLane", container)
+            end
+        end
     elseif pageKey == "opt_colors" then
         local powerToken = SearchPowerColorTokenForText(normalized)
         if powerToken then SearchRouteSetState(route, "colorsPowerToken", powerToken) end

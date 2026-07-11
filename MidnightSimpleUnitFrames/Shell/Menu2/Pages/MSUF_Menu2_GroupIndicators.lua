@@ -1133,10 +1133,11 @@ function SpellTileGrid:OnDragStop(tile)
         QueueSpellIndicators(kind)
     end
     M.RunWithHistory("Spell Indicator Order", "group:spellOrder:" .. tostring(kind) .. ":" .. tostring(tile._specKey), Reorder)
-    self.refreshPage()
+    if M.Refresh then M.Refresh(self.ctx) else self.refreshPage() end
 end
 function SpellTileGrid:OnMouseUp(tile, button)
     if SpellIndicators(CurrentScope()).enabled ~= true then return end
+    if tile._suppressNextClick then tile._suppressNextClick = nil; tile._dragged = false; return end
     if tile._dragged then tile._dragged = false; return end
     local kind = CurrentScope()
     if tile._isAddTile then
@@ -1158,21 +1159,59 @@ function SpellTileGrid:OnMouseUp(tile, button)
         SetCurrentSpellAura(kind, tile._auraName)
         M.CallIf(RefreshGFPreview)
     end
-    self.refreshPage()
+    if M.Refresh then M.Refresh(self.ctx) else self.refreshPage() end
 end
 local function SpellTileOnEnter(tile) tile._grid:OnEnter(tile) end
 local function SpellTileOnLeave(tile) tile._grid:OnLeave(tile) end
-local function SpellTileOnDragStart(tile) tile._grid:OnDragStart(tile) end
-local function SpellTileOnDragStop(tile) tile._grid:OnDragStop(tile) end
 local function SpellTileOnMouseUp(tile, button) tile._grid:OnMouseUp(tile, button) end
+local function StopSpellTilePendingDrag(tile)
+    tile._pendingDrag = nil
+    tile._dragStartCursorX, tile._dragStartCursorY = nil, nil
+    tile:SetScript("OnUpdate", nil)
+end
+local function SpellTilePendingDragOnUpdate(tile)
+    if not tile._pendingDrag then return StopSpellTilePendingDrag(tile) end
+    if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then
+        StopSpellTilePendingDrag(tile)
+        return
+    end
+    local x, y = GetCursorPosition()
+    if not (x and y and tile._dragStartCursorX and tile._dragStartCursorY) then return end
+    local scale = UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale() or 1
+    local dx, dy = (x - tile._dragStartCursorX) / scale, (y - tile._dragStartCursorY) / scale
+    if (dx * dx + dy * dy) < 36 then return end
+    StopSpellTilePendingDrag(tile)
+    tile._grid:OnDragStart(tile)
+end
+local function SpellTileOnMouseDown(tile, button)
+    if button ~= "LeftButton" or tile._isAddTile then return end
+    tile._pendingDrag = true
+    tile._dragStartCursorX, tile._dragStartCursorY = GetCursorPosition()
+    tile:SetScript("OnUpdate", SpellTilePendingDragOnUpdate)
+end
+local function SpellTileInputMouseUp(tile, button)
+    if button ~= "LeftButton" then return end
+    StopSpellTilePendingDrag(tile)
+    if tile._dragged then
+        tile._suppressNextClick = true
+        tile._grid:OnDragStop(tile)
+    end
+end
+local function SpellTileOnHide(tile)
+    StopSpellTilePendingDrag(tile)
+    if tile._dragged then
+        tile:StopMovingOrSizing()
+        tile._dragged = false
+    end
+end
 function SpellTileGrid:EnsureTile(index)
     local tile = self.frame._tiles[index]
     if tile then return tile end
-    tile = CreateFrame("Frame", nil, self.frame, "BackdropTemplate")
+    tile = CreateFrame("Button", nil, self.frame, "BackdropTemplate")
     tile:SetSize(self.tileSize, self.tileSize)
     tile:SetMovable(true)
     tile:EnableMouse(true)
-    tile:RegisterForDrag("LeftButton")
+    tile:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     tile:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
     tile:SetBackdropColor(0.035, 0.040, 0.070, 0.96)
     tile.icon = tile:CreateTexture(nil, "ARTWORK")
@@ -1193,9 +1232,20 @@ function SpellTileGrid:EnsureTile(index)
     tile._grid = self
     tile:SetScript("OnEnter", SpellTileOnEnter)
     tile:SetScript("OnLeave", SpellTileOnLeave)
-    tile:SetScript("OnDragStart", SpellTileOnDragStart)
-    tile:SetScript("OnDragStop", SpellTileOnDragStop)
-    tile:SetScript("OnMouseUp", SpellTileOnMouseUp)
+    tile:SetScript("OnMouseDown", SpellTileOnMouseDown)
+    tile:SetScript("OnMouseUp", SpellTileInputMouseUp)
+    tile:SetScript("OnClick", SpellTileOnMouseUp)
+    tile:SetScript("OnHide", SpellTileOnHide)
+    tile._msuf2CommandAction = {
+        kind = "button",
+        valueKind = "text",
+        set = function(value)
+            if tile._isAddTile then
+                return AddCustomBuff(self.refreshPage, CurrentScope(), tile._specKey, value)
+            end
+            return tile._grid:OnMouseUp(tile, "LeftButton")
+        end,
+    }
     RegisterControl(tile, self.ctx, "spell.tile.slot." .. tostring(index), "Tracked spell tile " .. tostring(index), "button", "action")
     self.frame._tiles[index] = tile
     return tile
@@ -1226,6 +1276,8 @@ function SpellTileGrid:Refresh()
         local info, tile = trackable[i], self:EnsureTile(i)
         self:Position(tile, i, specKey, trackable)
         tile._auraName, tile._info, tile._isAddTile = info.name, info, false
+        RegisterControl(tile, self.ctx, "spell.tile.slot." .. tostring(i),
+            "Tracked spell " .. tostring(info.display or info.name or i), "button", "action")
         local auraCfg = SpellConfigFor(kind, specKey, info.name, false)
         tile._customBuff = IsCustomBuffEntry(info.name, auraCfg) or info.custom == true
         local tileEnabled = indicatorsOn and not (auraCfg and auraCfg.enabled == false)
@@ -1253,6 +1305,8 @@ function SpellTileGrid:Refresh()
         local slot, tile = #trackable + 1, self:EnsureTile(#trackable + 1)
         self:Position(tile, slot, specKey, trackable)
         tile._auraName, tile._info, tile._isAddTile, tile._customBuff = nil, nil, true, false
+        RegisterControl(tile, self.ctx, "spell.tile.slot." .. tostring(slot),
+            "Add custom group spell indicator", "button", "action")
         tile._customCount, tile._color = customCount, CUSTOM_BUFF_COLOR
         tile.icon:SetTexture("Interface\\Buttons\\WHITE8x8")
         tile.icon:SetTexCoord(0, 1, 0, 1)
@@ -1280,13 +1334,21 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
     local siRightX = siLeftX + siLeftW + siGap
     local siRightW = max(240, min(390, siInnerW - siLeftW - siGap))
     do
-        W.ControlCard(spells, Tr("Spell Set"), nil, siLeftX - 14, -38, siLeftW + 28, 334)
+        W.ControlCard(spells, Tr("Spell Set"), nil, siLeftX - 14, -38, siLeftW + 28, 374)
         W.ControlCard(spells, Tr("Selected Spell"), nil, siRightX - 14, -38, siRightW + 28, 358)
-        W.ControlCard(spells, Tr("Placed Indicator"), nil, siLeftX - 14, -374, siLeftW + 28, 462)
+        W.ControlCard(spells, Tr("Placed Indicator"), nil, siLeftX - 14, -414, siLeftW + 28, 462)
         W.ControlCard(spells, Tr("Frame Effect"), nil, siRightX - 14, -410, siRightW + 28, 360)
         W.ControlCard(spells, Tr("Utilities"), nil, siRightX - 14, -782, siRightW + 28, 194)
     end
     local RefreshSpellIndicatorState = M.RefreshProxy()
+    local function RequestSpellControlRefresh(reason)
+        if M.RequestRefresh then
+            return M.RequestRefresh(ctx, reason or "gf-spell-indicators")
+        elseif M.Refresh then
+            return M.Refresh(ctx)
+        end
+        return RefreshPage()
+    end
     local siEnable = W.SwitchAt(spells, Tr("Spell Indicators"), siLeftX, -72, siLeftW)
     siEnable._msuf2GroupFrameGateAlwaysEnabled = true
     M.BindBoolWidget(ctx, siEnable,
@@ -1323,13 +1385,50 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
             local kind = CurrentScope()
             SpellIndicators(kind).spec = value or "auto"
             EnsureSpellDefaults(kind, EffectiveSpellSpec(kind))
+            CurrentSpellAura(kind)
             QueueSpellIndicators(kind)
             M.CallIf(RefreshGFPreview)
             RefreshSpellIndicatorState()
-            RefreshPage()
+            RequestSpellControlRefresh("gf-spell-spec")
         end,
         ControlMeta(ctx, "spell.spec"))
     W.MoveWidget(specDrop, spells, siLeftX, -116, siLeftW, "LEFT")
+    local function PreviewAllSpecIconsEnabled()
+        local state = M.gfPreviewAllSpecSpellIcons
+        return type(state) == "table" and state[CurrentScope()] == true
+    end
+    local previewAll = T.Button(spells, Tr("Preview all"), siLeftW, 28)
+    if T.CenterButtonLabel then T.CenterButtonLabel(previewAll) end
+    previewAll:SetPoint("TOPLEFT", spells, "TOPLEFT", siLeftX, -162)
+    local function RefreshPreviewAllButton()
+        local enabled = PreviewAllSpecIconsEnabled()
+        if T.ApplyButtonRole then T.ApplyButtonRole(previewAll, enabled and "success" or "danger") end
+        if previewAll.SetActive then previewAll:SetActive(true) end
+    end
+    local function SetPreviewAllSpecIcons(enabled)
+        if type(M.IsConfigCombatLocked) == "function" and M.IsConfigCombatLocked() then return false end
+        if (_G.InCombatLockdown and _G.InCombatLockdown()) or _G.MSUF_InCombat == true then return false end
+        local kind = CurrentScope()
+        M.gfPreviewAllSpecSpellIcons = M.gfPreviewAllSpecSpellIcons or {}
+        M.gfPreviewAllSpecSpellIcons[kind] = enabled == true or nil
+        RefreshPreviewAllButton()
+        M.CallIf(RefreshGFPreview)
+        return PreviewAllSpecIconsEnabled() == (enabled == true)
+    end
+    previewAll:SetScript("OnClick", function()
+        SetPreviewAllSpecIcons(not PreviewAllSpecIconsEnabled())
+    end)
+    previewAll._msuf2CommandAction = {
+        kind = "toggle",
+        historyMode = "none",
+        get = PreviewAllSpecIconsEnabled,
+        set = SetPreviewAllSpecIcons,
+    }
+    RegisterControl(previewAll, ctx, "spell.preview_all", "Preview all active spec spell icons", "button", "ephemeral")
+    if M.AddTooltip then
+        M.AddTooltip(previewAll, "Preview all", "Green shows every enabled placed indicator for this spec. Red shows only the selected spell. This affects the preview only.", { hook = true })
+    end
+    RefreshPreviewAllButton()
     local multiSpecDrop = W.Dropdown(spells, Tr("Multi-Spec Entry"), function() return SpellTrackedSpecValues() end, siRightW)
     M.BindDropdownWidget(ctx, multiSpecDrop,
         function() return CurrentSpellMultiSpec(CurrentScope()) end,
@@ -1338,10 +1437,11 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
             M.gfSpellMultiSpecSelection = M.gfSpellMultiSpecSelection or {}
             M.gfSpellMultiSpecSelection[kind] = value or ""
             EnsureSpellDefaults(kind, EffectiveSpellSpec(kind))
+            CurrentSpellAura(kind)
             QueueSpellIndicators(kind)
             M.CallIf(RefreshGFPreview)
             RefreshSpellIndicatorState()
-            RefreshPage()
+            RequestSpellControlRefresh("gf-spell-multi-spec")
         end,
         ControlMeta(ctx, "spell.multi_spec.selector", "ephemeral"))
     W.MoveWidget(multiSpecDrop, spells, siRightX, -190, siRightW, "LEFT")
@@ -1362,10 +1462,10 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
             QueueSpellIndicators(kind)
             M.CallIf(RefreshGFPreview)
             RefreshSpellIndicatorState()
-            RefreshPage()
+            RequestSpellControlRefresh("gf-spell-multi-track")
         end,
         ControlMeta(ctx, "spell.multi_spec.tracked"))
-    local spellGrid = SpellTileGrid.New(ctx, spells, siLeftX, -214, siLeftW, RefreshPage)
+    local spellGrid = SpellTileGrid.New(ctx, spells, siLeftX, -254, siLeftW, RefreshPage)
    local auraDrop = W.Dropdown(spells, Tr("Spell"), function() return SpellAuraValues(CurrentScope()) end, siRightW)
     M.BindDropdownWidget(ctx, auraDrop,
         function() return CurrentSpellAura(CurrentScope()) end,
@@ -1373,7 +1473,7 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
             SetCurrentSpellAura(CurrentScope(), value)
             M.CallIf(RefreshGFPreview)
             RefreshSpellIndicatorState()
-            RefreshPage()
+            RequestSpellControlRefresh("gf-spell-selection")
         end,
         ControlMeta(ctx, "spell.selected_aura", "ephemeral"))
     W.MoveWidget(auraDrop, spells, siRightX, -282, siRightW, "LEFT")
@@ -1507,7 +1607,7 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         W.MoveWidget(control, spells, x, y, width, "LEFT")
         return control
     end
-    local placedType = BindSpellSubType("Indicator Type", PLACED_INDICATOR_TYPES, siLeftX, -410, siLeftW, "placed",
+    local placedType = BindSpellSubType("Indicator Type", PLACED_INDICATOR_TYPES, siLeftX, -450, siLeftW, "placed",
         function(placed)
             placed.type = placed.type or "icon"
             placed.anchor = placed.anchor or "TOPLEFT"
@@ -1516,13 +1616,13 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
             if placed.showCooldownSwipe == nil then placed.showCooldownSwipe = true end
         end,
         RefreshPage)
-    local placedAnchor = BindPlacedDropdown("Anchor", STATUS_ICON_ANCHORS, "anchor", "TOPLEFT", -464)
-    local placedSize = BindPlacedSlider("Size", 6, 48, 1, "size", 18, -518)
-    local placedX = BindPlacedSlider("X Offset", -100, 100, 1, "x", 0, -572)
-    local placedY = BindPlacedSlider("Y Offset", -100, 100, 1, "y", 0, -626)
-    local placedBarWidth = BindPlacedSlider("Bar Width", 8, 120, 1, "barWidth", 42, -680)
-    local placedGrowth = BindPlacedDropdown("Growth", SPELL_GROWTH_VALUES, "growth", "RIGHTDOWN", -734)
-    local placedIconEffect = BindPlacedDropdown("Icon Effect", ICON_EFFECT_TYPES, "iconEffect", "none", -788)
+    local placedAnchor = BindPlacedDropdown("Anchor", STATUS_ICON_ANCHORS, "anchor", "TOPLEFT", -504)
+    local placedSize = BindPlacedSlider("Size", 6, 48, 1, "size", 18, -558)
+    local placedX = BindPlacedSlider("X Offset", -100, 100, 1, "x", 0, -612)
+    local placedY = BindPlacedSlider("Y Offset", -100, 100, 1, "y", 0, -666)
+    local placedBarWidth = BindPlacedSlider("Bar Width", 8, 120, 1, "barWidth", 42, -720)
+    local placedGrowth = BindPlacedDropdown("Growth", SPELL_GROWTH_VALUES, "growth", "RIGHTDOWN", -774)
+    local placedIconEffect = BindPlacedDropdown("Icon Effect", ICON_EFFECT_TYPES, "iconEffect", "none", -828)
     local frameType = BindSpellSubType("Frame Effect", FRAME_EFFECT_TYPES, siRightX, -444, siRightW, "frame",
         function(frame)
             if not frame.color then
@@ -1604,6 +1704,7 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         local frame = FrameEffectConfig(CurrentScope(), false)
         local frameKind = frame and frame.type or "none"
         local hasFrame = hasSpell and frameKind ~= "none"
+        RefreshPreviewAllButton()
         local cdRelevant = placedEnabled and placed.type == "icon"
         local barRelevant = placedEnabled and placed.type == "bar"
         SetOptionEnabled(siEnable, not SPELL_INDICATORS_121_PTR_DISABLED)

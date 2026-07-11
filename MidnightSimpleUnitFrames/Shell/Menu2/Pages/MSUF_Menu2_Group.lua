@@ -558,12 +558,7 @@ local function ScopeSection(ctx, builder)
         getValue = function() return ctx and ctx.key end,
         setValue = function(pageKey) if pageKey and pageKey ~= ctx.key then M.SelectPage(pageKey) end end,
     })
-    for i = 1, #GROUP_PAGE_TABS do
-        local tab = GROUP_PAGE_TABS[i]
-        local btn = pageBar and pageBar.buttons and pageBar.buttons[i]
-        RegisterGroupControl(btn, ctx, "navigation.section." .. tab.key, tab.label, "button", "navigation", { navigationKey = tab.key })
-        if btn then btn._msuf2SkipHistoryCheckpoint = true end
-    end
+    RegisterGroupControl(pageBar, ctx, "navigation.section.selector", "Page", "segment", "ephemeral")
 
     local copy = (W.RoleButton and W.RoleButton(sec, M.Tr("Copy To"), "normal", 86, 24)) or W.TopButton(sec, M.Tr("Copy To"), 86, 24, {})
     copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -14, -15)
@@ -586,12 +581,8 @@ local function ScopeSection(ctx, builder)
         getValue = CurrentScope,
         setValue = SelectScope,
     })
-    for i = 1, #SCOPE_VALUES do
-        local info = SCOPE_VALUES[i]
-        local btn = scopeBar and scopeBar.buttons and scopeBar.buttons[i]
-        RegisterGroupControl(btn, ctx, "scope.select." .. info.value, info.text or ScopeShortLabel(info.value), "button", "ephemeral")
-        scopeBtns[info.value] = btn
-    end
+    RegisterGroupControl(scopeBar, ctx, "scope.selector", "Editing", "segment", "ephemeral")
+    for i = 1, #SCOPE_VALUES do scopeBtns[SCOPE_VALUES[i].value] = scopeBar and scopeBar.buttons and scopeBar.buttons[i] end
     M.gfCopyScopes = (type(M.gfCopyScopes) == "table") and M.gfCopyScopes or NewGFCopyScopes()
     local copyPopup = Shared.MakeScopeCopyPopup and Shared.MakeScopeCopyPopup(copy, {
         controlDomain = "group",
@@ -1018,9 +1009,16 @@ local function SpellSpecValues()
     local gf = GF()
     local si = gf and gf.SpellIndicators
     if si and type(si.SpecInfo) == "table" then
+        local specs = {}
         for specKey, info in pairs(si.SpecInfo) do
-            values[#values + 1] = { value = specKey, text = (info and info.display) or tostring(specKey) }
+            specs[#specs + 1] = { value = specKey, text = (info and info.display) or tostring(specKey) }
         end
+        table.sort(specs, function(a, b)
+            local left, right = tostring(a.text), tostring(b.text)
+            if left ~= right then return left < right end
+            return tostring(a.value) < tostring(b.value)
+        end)
+        for i = 1, #specs do values[#values + 1] = specs[i] end
     end
     return values
 end
@@ -1034,7 +1032,7 @@ local function SpellTrackedSpecValues()
         end
         table.sort(values, function(a, b) return tostring(a.text) < tostring(b.text) end)
     end
-    if #values == 0 then values[1] = { value = "", text = "No supported specs" } end
+    if #values == 0 then values[1] = { value = "", text = "No supported specs", disabled = true } end
     return values
 end
 local function CurrentSpellMultiSpec(kind)
@@ -1089,7 +1087,7 @@ local function SpellAuraValues(kind)
             end
         end
     end
-    if #values == 0 then values[1] = { value = "", text = "No spells for current spec" } end
+    if #values == 0 then values[1] = { value = "", text = "No spells for current spec", disabled = true } end
     return values
 end
 local function SpellSelectionKey(kind, specKey)

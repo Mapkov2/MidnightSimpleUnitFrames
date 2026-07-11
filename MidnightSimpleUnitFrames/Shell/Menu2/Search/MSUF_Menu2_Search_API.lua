@@ -26,8 +26,14 @@ Search.RunInputQuery = API.RunSearchInputQuery
 Search.OpenResults = API.OpenSearchResults
 Search.OpenTarget = API.OpenSearchTarget
 Search.SearchPages = API.SearchPages
+Search.GetFAQRecords = API.GetFAQRecords
 Search.TrimText = API.TrimText
 Search.ShortLabel = API.ShortLabel
+local Routing = Search._RoutingAPI
+if type(Routing) == "table" then
+    Search.RouteForTarget = Routing.SearchRouteForTarget
+    Search.ApplyRoute = Routing.ApplySearchRoute
+end
 
 if type(M.RegisterPage) == "function" and type(API.BuildSearchPage) == "function" then
     M.RegisterPage("search", { title = "Search", build = API.BuildSearchPage, version = 1 })
