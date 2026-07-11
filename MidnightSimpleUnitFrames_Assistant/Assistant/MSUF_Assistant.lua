@@ -5205,14 +5205,16 @@ local function PendingResultOpenResult(item, index)
     if not page then
         return { text = "I can explain result " .. tostring(index or 1) .. ", but I do not know a direct MSUF page to open for it.", result = "info" }
     end
-    local action = Registry and type(Registry.GetAction) == "function" and Registry:GetAction("open_page") or nil
+    local settingKey = (item.kind == "setting" or item.setting) and (item.settingKey or item.key or (item.setting and item.setting.key)) or nil
+    local actionKey = settingKey and "open_setting_control" or "open_page"
+    local action = Registry and type(Registry.GetAction) == "function" and Registry:GetAction(actionKey) or nil
     if not action then
         return { text = "Open " .. tostring(label or page) .. " to inspect result " .. tostring(index or 1) .. ".", result = "info" }
     end
     return A.ExecutePlan({
         kind = "action",
         action = action,
-        args = { page = page, label = label },
+        args = { page = page, label = item.label or label, settingKey = settingKey },
         label = "Open " .. tostring(label or page),
         summary = "Opens the page for an Assistant search result.",
     })
@@ -5701,7 +5703,10 @@ end
 
 function AP.ContextAxisAttributeStem(attribute)
     attribute = tostring(attribute or "")
-    local suffixes = { "Alignment", "Anchor", "Align", "Side" }
+    -- Preserve the semantic text subject when a layer/strata setting is
+    -- followed by movement. powerTextLayer -> powerText -> powerOffsetY,
+    -- instead of falling through to the Unit Frame's generic offsetY.
+    local suffixes = { "Alignment", "Anchor", "Align", "Side", "Layer" }
     for i = 1, #suffixes do
         local suffix = suffixes[i]
         if #attribute > #suffix and attribute:sub(-#suffix) == suffix then
@@ -6432,6 +6437,52 @@ function A.ExecutePlan(plan, opts)
     if guarded and not guidedReadOnlyStep
         and (plan.kind == "changes" or (plan.kind == "action" and actionMutability ~= "readOnly" and actionMutability ~= "navigation")) then
         return NormalizePlanResult(AP.ReadOnlyGuardResult(sourceText))
+    end
+    -- Individual per-unit filters are ineffective while the scope still
+    -- inherits Shared rules, and enabled filter values are ineffective while
+    -- the master gate is off. Expand these dependencies into the same
+    -- transaction so the visible widgets, runtime config, undo, and redo all
+    -- agree. Group filter dropdowns similarly require their lane to be active.
+    if plan.kind == "changes" and type(plan.changes) == "table" then
+        local existing, unitScopes, groupLanes = {}, {}, {}
+        for i = 1, #plan.changes do
+            local change = plan.changes[i]
+            local key = tostring(change and change.setting and change.setting.key or "")
+            existing[key] = true
+            local scope = key:match("^auras3%.([^.]+)%.[^.]+%.filter%.")
+            if scope and scope ~= "shared" then
+                local need = unitScopes[scope] or { enable = false }
+                need.enable = need.enable or (change.value ~= false and change.value ~= "none")
+                unitScopes[scope] = need
+            end
+            local lanePrefix = key:match("^(gf_[^.]+%.auras%.[^.]+)%.filterToken$")
+            if lanePrefix then groupLanes[lanePrefix] = true end
+        end
+        local dependencies = {}
+        local function AddDependency(key, value)
+            if existing[key] then return end
+            local setting = Registry and type(Registry.GetSetting) == "function" and Registry:GetSetting(key) or nil
+            if setting then
+                existing[key] = true
+                dependencies[#dependencies + 1] = { setting = setting, value = value }
+            end
+        end
+        for _, scope in ipairs({ "player", "target", "focus", "boss" }) do
+            local need = unitScopes[scope]
+            if need then
+                AddDependency("auras3." .. scope .. ".useSharedRules", false)
+                if need.enable then AddDependency("auras3." .. scope .. ".filtersEnabled", true) end
+            end
+        end
+        local orderedGroupLanes = {}
+        for lanePrefix in pairs(groupLanes) do orderedGroupLanes[#orderedGroupLanes + 1] = lanePrefix end
+        table.sort(orderedGroupLanes)
+        for i = 1, #orderedGroupLanes do AddDependency(orderedGroupLanes[i] .. ".enabled", true) end
+        if #dependencies > 0 then
+            for i = 1, #plan.changes do dependencies[#dependencies + 1] = plan.changes[i] end
+            plan.changes = dependencies
+            plan.bulkSafe = #dependencies > 1 and true or plan.bulkSafe
+        end
     end
     AP.RememberMentionedContext(plan)
     if PlanNeedsConfirmation(plan) and opts.confirmed ~= true then
@@ -7182,29 +7233,35 @@ end
 
 function AP.TryImmediateSubmitResult(text, opts)
     if type(A.TryImmediateConversationReply) ~= "function" then return nil end
+    local parser = A.Parser or {}
+    local normalized = type(parser.Normalize) == "function" and parser.Normalize(text) or tostring(text or ""):lower()
+    local adjacentJokeFollowup = type(A.RouterIsAdjacentJokeFollowup) == "function"
+        and A.RouterIsAdjacentJokeFollowup(normalized) == true
     -- Search results own pronoun/ordinal follow-ups ("set it to 18", "the
     -- second one", ...).  Let the pending-state router resolve or clarify
     -- them before the generic conversational shortcut can reinterpret the
     -- sentence as a fresh exact-alias mutation.
     local pendingResults = CurrentPendingResults()
-    if type(pendingResults) == "table" and #pendingResults > 0 then return nil end
+    if not adjacentJokeFollowup and type(pendingResults) == "table" and #pendingResults > 0 then return nil end
     -- The guided setup parser owns short conversational replies such as
     -- "why this", "show examples", and "open it".  They are meaningful only
     -- with the active workflow context, which the context-free shortcut does
     -- not inspect.
     local ctx = type(A.GetContext) == "function" and A.GetContext() or nil
-    if type(ctx) == "table" and type(ctx.guidedSetup) == "table" then return nil end
+    if not adjacentJokeFollowup and type(ctx) == "table" and type(ctx.guidedSetup) == "table" then return nil end
     -- Exact aura-list requests require lane/scope-aware action parsers and
     -- native blacklist/whitelist transaction semantics.  The conversational
     -- shortcut must not collapse "hide Rejuvenation in target buffs" into
     -- hiding the entire Target Buff lane.
-    local parser = A.Parser or {}
-    local normalized = type(parser.Normalize) == "function" and parser.Normalize(text) or tostring(text or ""):lower()
     local auraListValue = type(parser.AuraBlacklistSpellValue) == "function"
         and parser.AuraBlacklistSpellValue(text) or nil
-    if normalized:find("blacklist", 1, true) or normalized:find("whitelist", 1, true)
+    local noDurationAuraQuestion = normalized:find("permanent", 1, true)
+        or normalized:find("no timer", 1, true) or normalized:find("without timer", 1, true)
+        or normalized:find("no duration", 1, true) or normalized:find("without duration", 1, true)
+        or normalized:find("timeless", 1, true)
+    if not noDurationAuraQuestion and (normalized:find("blacklist", 1, true) or normalized:find("whitelist", 1, true)
         or (auraListValue and (normalized:find("aura", 1, true)
-            or normalized:find("buff", 1, true) or normalized:find("debuff", 1, true)))
+            or normalized:find("buff", 1, true) or normalized:find("debuff", 1, true))))
     then
         return nil
     end
@@ -7370,6 +7427,12 @@ function AP.TryImmediateMutationResult(text, opts)
         and parser._registryExactAliasSettings == settings
         and parser._registryExactAliasCount == #settings
         and type(parser._registryExactAliasIndex) == "table"
+    if not plan and A._ParseSpecResourceColorShortcut and exactColorCandidate then
+        plan = A._ParseSpecResourceColorShortcut(normalized, text)
+    end
+    if not plan and A._ParseClassPowerColorPriorityShortcut and exactColorCandidate then
+        plan = A._ParseClassPowerColorPriorityShortcut(normalized, text)
+    end
     if not plan and A._ParseClassColorFastShortcut and exactColorCandidate then
         plan = A._ParseClassColorFastShortcut(normalized, text)
     end

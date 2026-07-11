@@ -170,8 +170,3 @@ Shell\Menu2\MSUF_Menu2_AfterGroupPreview.xml
 Castbars\MSUF_InterruptReady.lua
 Castbars\MSUF_FocusKickIcon.lua
 UnitFrames\Effects\MSUF_UF_RoundedFrames.lua
-
-# ---------------------------------------------------------------
-# ASSISTANT RUNTIME (loads last; depends on the full Menu2 shell)
-# ---------------------------------------------------------------
-Shell\Menu2\MSUF_Menu2_AssistantRuntime.xml

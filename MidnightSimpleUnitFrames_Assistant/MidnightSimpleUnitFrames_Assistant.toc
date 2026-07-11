@@ -1,0 +1,9 @@
+## Interface: 120100
+## Title: |cff38c7f0Midnight|r |cffcce0ffSimple Unit Frames|r - Assistant
+## Notes: Load-on-demand Assistant for Midnight Simple Unit Frames.
+## Author: Mapko
+## Version: 6.0-beta11
+## Dependencies: MidnightSimpleUnitFrames
+## LoadOnDemand: 1
+
+MSUF_AssistantRuntime.xml

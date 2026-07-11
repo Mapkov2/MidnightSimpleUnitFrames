@@ -43,6 +43,26 @@ local ParseMenuWindowAction = P.ParseMenuWindowAction
 local EnumValueForText = P.EnumValueForText
 local RelativeNumberDeltaForText = P.RelativeNumberDeltaForText
 local ValueForRegistrySetting = P.ValueForRegistrySetting
+local ClassPowerSlotResourceForText
+local ClassPowerSlotIndexForText
+
+local CLASS_POWER_SLOT_MODE_TERMS = {
+    "slot mode", "slot color mode", "slot colour mode", "slot colors", "slot colours",
+    "individual colors", "individual colours", "individual slots", "per slot",
+    "custom slots", "color ramp", "colour ramp", "gradient", "farbverlauf",
+    "einzelne farben", "individual", "custom", "ramp", "einzeln", "individuell",
+    "gleiche farbe", "same color", "resource color",
+}
+local CLASS_POWER_SLOT_THRESHOLD_TERMS = { "above 5", "over 5", "5+", "five plus", "über 5", "ueber 5" }
+local CLASS_POWER_FULL_COLOR_TERMS = {
+    "full", "max", "at max", "maximum", "max resource", "capped", "when full",
+    "voll", "volle", "voller", "volles", "bei maximum", "maximal", "maximale", "maximaler",
+    "maximale ressourcen", "wenn voll",
+}
+local CLASS_POWER_SLOT_RESET_TERMS = {
+    "slot", "slots", "individual", "per slot", "custom slots",
+    "einzeln", "einzelne", "individuell", "plätze", "plaetze",
+}
 
 local function UnitDisplayLabel(unit)
     if A and type(A.DisplayUnitLabel) == "function" then return A.DisplayUnitLabel(unit) end
@@ -187,6 +207,17 @@ end
 
 function A._ParseClassPowerVisibilityShortcut(text)
     if not HasClassPowerIntent(text) then return nil end
+    -- "turn on <resource> full color" addresses the per-resource full-color
+    -- setting. Do not let the broad word "full" reinterpret it as the global
+    -- Hide Class Resource When Full toggle; the exact registry alias pass owns
+    -- the explicit resource setting immediately after this shortcut.
+    if ClassPowerSlotResourceForText
+        and ClassPowerSlotResourceForText(text)
+        and ContainsAny(text, CLASS_POWER_FULL_COLOR_TERMS)
+        and ContainsAny(text, FeaturesPhrases[198])
+    then
+        return nil
+    end
     local rule
     if ContainsAny(text, FeaturesPhrases[19]) then
         rule = { key = "bars.classPowerHideOOC", label = "Class Resource Hide Out of Combat" }
@@ -692,7 +723,8 @@ function A._ParseClassPowerDisplayBooleanShortcut(text)
 end
 
 function A._ParseClassPowerColorModeShortcut(text)
-    if not HasClassPowerIntent(text) then return nil end
+    local slotResource = ClassPowerSlotResourceForText and ClassPowerSlotResourceForText(text) or nil
+    if not HasClassPowerIntent(text) and not slotResource then return nil end
     if ContainsAny(text, FeaturesPhrases[104]) then return nil end
 
     if ContainsAny(text, FeaturesPhrases[105]) then
@@ -708,17 +740,20 @@ function A._ParseClassPowerColorModeShortcut(text)
         }
     end
 
-    if ContainsAny(text, FeaturesPhrases[106]) then
+    if ContainsAny(text, FeaturesPhrases[106]) or (slotResource and ContainsAny(text, CLASS_POWER_SLOT_MODE_TERMS)) then
         if ExtractColor and ExtractColor(text) ~= nil then return nil end
-        local setting = ClassPowerSetting("bars.classPowerComboPointColorMode")
+        local settingKey = slotResource and ("bars.classPowerSlotColorModes." .. slotResource.token)
+            or "bars.classPowerComboPointColorMode"
+        local setting = ClassPowerSetting(settingKey)
         if not setting then return nil end
         local value = EnumValueForText and EnumValueForText(setting, text) or nil
         if value == nil then return nil end
+        local resourceLabel = slotResource and (tostring(slotResource.className) .. " " .. tostring(slotResource.label)) or "Combo Points"
         return {
             kind = "changes",
             changes = { { setting = setting, value = value } },
-            label = "Combo Point Color Mode",
-            summary = "Changes how combo point colors are chosen.",
+            label = resourceLabel .. " Slot Color Mode",
+            summary = "Changes how individual " .. resourceLabel .. " slot colors are chosen.",
         }
     end
 
@@ -1624,6 +1659,54 @@ local CP_TOKEN_EXTRA_ALIASES = {
     RESOURCE_TEXT = { "resource text", "class resource text", "class power text" },
 }
 
+local SLOT_ORDINAL_ALIASES = {
+    [1] = { "1", "1st", "first", "one", "erste", "erster", "erstes" },
+    [2] = { "2", "2nd", "second", "two", "zweite", "zweiter", "zweites" },
+    [3] = { "3", "3rd", "third", "three", "dritte", "dritter", "drittes" },
+    [4] = { "4", "4th", "fourth", "four", "vierte", "vierter", "viertes" },
+    [5] = { "5", "5th", "fifth", "five", "fünfte", "fuenfte", "fünfter", "fuenfter" },
+    [6] = { "6", "6th", "sixth", "six", "sechste", "sechster", "sechstes" },
+    [7] = { "7", "7th", "seventh", "seven", "siebte", "siebter", "siebtes" },
+    [8] = { "8", "8th", "eighth", "eight", "achte", "achter", "achtes" },
+    [9] = { "9", "9th", "ninth", "nine", "neunte", "neunter", "neuntes" },
+    [10] = { "10", "10th", "tenth", "ten", "zehnte", "zehnter", "zehntes" },
+}
+
+local function ConsiderSlotResourceAlias(text, spec, alias, current, bestLen)
+    alias = tostring(alias or ""):lower()
+    if alias ~= "" and HasPhrase(text, alias) then
+        local len = #Compact(alias)
+        if len > bestLen then return spec, len end
+    end
+    return current, bestLen
+end
+
+ClassPowerSlotResourceForText = function(text)
+    local resources = A.ClassPowerSlotResources or {}
+    local best, bestLen = nil, 0
+    for i = 1, #resources do
+        local spec = resources[i]
+        best, bestLen = ConsiderSlotResourceAlias(text, spec, spec.label, best, bestLen)
+        best, bestLen = ConsiderSlotResourceAlias(text, spec, spec.token and spec.token:gsub("_", " "), best, bestLen)
+        for j = 1, #(spec.aliases or {}) do
+            best, bestLen = ConsiderSlotResourceAlias(text, spec, spec.aliases[j], best, bestLen)
+        end
+    end
+    return best, bestLen
+end
+
+ClassPowerSlotIndexForText = function(text, maxSlot)
+    maxSlot = tonumber(maxSlot) or 0
+    if ContainsAny(text, CLASS_POWER_SLOT_THRESHOLD_TERMS) then return nil end
+    for slot = math.min(maxSlot, 10), 1, -1 do
+        local aliases = SLOT_ORDINAL_ALIASES[slot]
+        for i = 1, #(aliases or {}) do
+            if HasPhrase(text, aliases[i]) then return slot end
+        end
+    end
+    return nil
+end
+
 local function ClassPowerColorTokenForText(text)
     local tokens = A.ClassPowerColorTokens or {}
     local bestToken
@@ -1646,6 +1729,16 @@ local function ClassPowerColorTokenForText(text)
         local extra = token and CP_TOKEN_EXTRA_ALIASES[token]
         for j = 1, #(extra or {}) do Consider(token, extra[j]) end
     end
+    local slotResource, resourceMatchLen = ClassPowerSlotResourceForText(text)
+    if slotResource and ContainsAny(text, CLASS_POWER_FULL_COLOR_TERMS) and ((resourceMatchLen or 0) + 12) > bestLen then
+        bestLen = (resourceMatchLen or 0) + 12
+        bestToken = tostring(slotResource.token) .. "_FULL"
+    end
+    local slot = slotResource and ClassPowerSlotIndexForText(text, slotResource.count) or nil
+    if slot and bestToken ~= tostring(slotResource.token) .. "_FULL" and ((resourceMatchLen or 0) + 8) > bestLen then
+        bestLen = (resourceMatchLen or 0) + 8
+        bestToken = tostring(slotResource.token) .. "_" .. tostring(slot)
+    end
     for i = 1, 7 do
         local token = "COMBO_POINTS_" .. tostring(i)
         Consider(token, "combo point " .. tostring(i))
@@ -1656,13 +1749,50 @@ local function ClassPowerColorTokenForText(text)
 end
 
 function A._ParseClassPowerColorShortcut(text, raw)
-    if not HasClassPowerIntent(text) then return nil end
+    local slotResource = ClassPowerSlotResourceForText and ClassPowerSlotResourceForText(text) or nil
+    if not HasClassPowerIntent(text) and not slotResource then return nil end
     if ContainsAny(text, FeaturesPhrases[191]) then return nil end
     local token = ClassPowerColorTokenForText(text)
-    if not token then return nil end
     local r, g, b, label = ExtractColor(raw, text)
+    local asksForColor = ContainsAny(text, { "color", "colour", "recolor", "recolour" })
+    if slotResource and asksForColor and DetectBoolean(text) == nil and not r then
+        return {
+            kind = "answer",
+            status = "info",
+            result = "info",
+            text = "Yes. Which " .. tostring(slotResource.className) .. " " .. tostring(slotResource.label)
+                .. " color do you want, and should it apply to all slots, one slot, or only when the resource is full?\n"
+                .. "Examples: set all " .. tostring(slotResource.label) .. " slots cyan | set "
+                .. tostring(slotResource.label) .. " 3 blue | set full " .. tostring(slotResource.label) .. " purple",
+            summary = "Asks which class-resource color and slot scope to change.",
+        }
+    end
     if not r then return nil end
     local background = ContainsAny(text, FeaturesPhrases[192])
+    local allSlots = slotResource
+        and not background
+        and not ClassPowerSlotIndexForText(text, slotResource.count)
+        and not ContainsAny(text, CLASS_POWER_FULL_COLOR_TERMS)
+        and ContainsAny(text, { "all", "all slots", "every", "each" })
+    if allSlots then
+        local changes = {}
+        for slot = 1, tonumber(slotResource.count) or 0 do
+            local setting = ClassPowerSetting("general.classPowerColorOverrides." .. tostring(slotResource.token) .. "_" .. tostring(slot))
+            if setting then
+                changes[#changes + 1] = { setting = setting, value = { r = r, g = g, b = b, label = label } }
+            end
+        end
+        if #changes > 0 then
+            return {
+                kind = "changes",
+                changes = changes,
+                bulkSafe = true,
+                label = tostring(slotResource.className) .. " " .. tostring(slotResource.label) .. " Slot Colors",
+                summary = "Changes every " .. tostring(slotResource.className) .. " " .. tostring(slotResource.label) .. " slot color.",
+            }
+        end
+    end
+    if not token then return nil end
     local key = (background and "general.classPowerBgColorOverrides." or "general.classPowerColorOverrides.") .. token
     local setting = ClassPowerSetting(key)
     if not setting then return nil end
@@ -1670,8 +1800,290 @@ function A._ParseClassPowerColorShortcut(text, raw)
         kind = "changes",
         changes = { { setting = setting, value = { r = r, g = g, b = b, label = label } } },
         label = background and "Class Resource Background Color" or "Class Resource Color",
-        summary = "Changes a Class Resource foreground or background color.",
+        summary = slotResource
+            and ("Changes a " .. tostring(slotResource.className) .. " " .. tostring(slotResource.label) .. " color.")
+            or "Changes a Class Resource foreground or background color.",
     }
+end
+
+function A._ParseClassPowerColorPriorityShortcut(text, raw)
+    local hasBulkScope = ContainsAny(text, { "all", "all slots", "every", "each" })
+    local asksWithoutValue = ContainsAny(text, { "color", "colour", "recolor", "recolour" })
+        and DetectBoolean(text) == nil
+        and ExtractColor(raw, text) == nil
+    if not hasBulkScope and not asksWithoutValue then return nil end
+    return A._ParseClassPowerColorShortcut(text, raw)
+end
+
+local SPEC_RESOURCE_COLOR_ROUTES = {
+    WARRIOR = {
+        aliases = { "warrior" },
+        specs = {
+            { aliases = { "arms", "arms warrior" } }, { aliases = { "fury warrior" } }, { aliases = { "protection warrior", "prot warrior" } },
+        },
+        targets = {
+            { label = "Rage (Player Power Bar)", keys = { "general.powerColorOverrides.RAGE" } },
+            { label = "Whirlwind (Class Resources)", keys = { "general.classPowerColorOverrides.WHIRLWIND" } },
+        },
+    },
+    PALADIN = {
+        aliases = { "paladin" }, specs = { { aliases = { "holy paladin" } }, { aliases = { "protection paladin", "prot paladin" } }, { aliases = { "retribution", "retribution paladin", "ret paladin" } } },
+        targets = {
+            { label = "Mana (Player Power Bar)", keys = { "general.powerColorOverrides.MANA" } },
+            { label = "Holy Power (Class Resources)", keys = { "general.classPowerColorOverrides.HOLY_POWER" } },
+        },
+    },
+    HUNTER = {
+        aliases = { "hunter" },
+        specs = {
+            { aliases = { "beast mastery", "beast mastery hunter", "bm hunter" }, targets = { { label = "Focus (Player Power Bar)", keys = { "general.powerColorOverrides.FOCUS" } } } },
+            { aliases = { "marksmanship", "marksmanship hunter", "mm hunter" }, targets = { { label = "Focus (Player Power Bar)", keys = { "general.powerColorOverrides.FOCUS" } } } },
+            { aliases = { "survival", "survival hunter" }, targets = {
+                { label = "Focus (Player Power Bar)", keys = { "general.powerColorOverrides.FOCUS" } },
+                { label = "Tip of the Spear (Class Resources)", keys = { "general.classPowerColorOverrides.TIP_OF_THE_SPEAR" } },
+            } },
+        },
+    },
+    ROGUE = {
+        aliases = { "rogue" }, specs = { { aliases = { "assassination", "assassination rogue" } }, { aliases = { "outlaw", "outlaw rogue" } }, { aliases = { "subtlety", "subtlety rogue", "sub rogue" } } },
+        targets = {
+            { label = "Energy (Player Power Bar)", keys = { "general.powerColorOverrides.ENERGY" } },
+            { label = "Combo Points (Class Resources)", keys = { "general.classPowerColorOverrides.COMBO_POINTS" } },
+        },
+    },
+    PRIEST = {
+        aliases = { "priest" },
+        specs = {
+            { aliases = { "discipline", "discipline priest", "disc priest" }, targets = { { label = "Mana (Player Power Bar)", keys = { "general.powerColorOverrides.MANA" } } } },
+            { aliases = { "holy priest" }, targets = { { label = "Mana (Player Power Bar)", keys = { "general.powerColorOverrides.MANA" } } } },
+            { aliases = { "shadow", "shadow priest" }, targets = {
+                { label = "Insanity (Player Power Bar or Class Resources)", keys = { "general.powerColorOverrides.INSANITY", "general.classPowerColorOverrides.INSANITY" } },
+                { label = "Mana (when Shadow Mana mode is active)", keys = { "general.powerColorOverrides.MANA" } },
+            } },
+        },
+    },
+    DEATHKNIGHT = {
+        aliases = { "death knight", "deathknight", "dk" }, specs = { { aliases = { "blood death knight", "blood dk" } }, { aliases = { "frost death knight", "frost dk" } }, { aliases = { "unholy", "unholy death knight", "unholy dk" } } },
+        targets = {
+            { label = "Runic Power (Player Power Bar)", keys = { "general.powerColorOverrides.RUNIC_POWER" } },
+            { label = "Runes (Class Resources)", keys = { "general.classPowerColorOverrides.RUNES" } },
+        },
+    },
+    SHAMAN = {
+        aliases = { "shaman" },
+        specs = {
+            { aliases = { "elemental", "elemental shaman", "ele shaman" }, targets = {
+                { label = "Maelstrom (Player Power Bar or Class Resources)", keys = { "general.powerColorOverrides.MAELSTROM", "general.classPowerColorOverrides.MAELSTROM" } },
+                { label = "Mana (when Elemental Maelstrom mode is active)", keys = { "general.powerColorOverrides.MANA" } },
+            } },
+            { aliases = { "enhancement", "enhancement shaman", "enh shaman" }, targets = {
+                { label = "Mana (Player Power Bar)", keys = { "general.powerColorOverrides.MANA" } },
+                { label = "Maelstrom Weapon (Class Resources)", keys = { "general.classPowerColorOverrides.MAELSTROM" } },
+            } },
+            { aliases = { "restoration shaman", "resto shaman" }, targets = { { label = "Mana (Player Power Bar)", keys = { "general.powerColorOverrides.MANA" } } } },
+        },
+    },
+    MAGE = {
+        aliases = { "mage" },
+        specs = {
+            { aliases = { "arcane", "arcane mage" }, targets = {
+                { label = "Mana (Player Power Bar)", keys = { "general.powerColorOverrides.MANA" } },
+                { label = "Arcane Charges (Class Resources)", keys = { "general.classPowerColorOverrides.ARCANE_CHARGES" } },
+            } },
+            { aliases = { "fire mage" }, targets = { { label = "Mana (Player Power Bar)", keys = { "general.powerColorOverrides.MANA" } } } },
+            { aliases = { "frost mage" }, targets = {
+                { label = "Mana (Player Power Bar)", keys = { "general.powerColorOverrides.MANA" } },
+                { label = "Icicles (Class Resources)", keys = { "general.classPowerColorOverrides.ICICLES" } },
+            } },
+        },
+    },
+    WARLOCK = {
+        aliases = { "warlock" }, specs = { { aliases = { "affliction", "affliction warlock" } }, { aliases = { "demonology", "demonology warlock", "demo warlock" } }, { aliases = { "destruction", "destruction warlock", "destro warlock" } } },
+        targets = {
+            { label = "Mana (Player Power Bar)", keys = { "general.powerColorOverrides.MANA" } },
+            { label = "Soul Shards (Class Resources)", keys = { "general.classPowerColorOverrides.SOUL_SHARDS" } },
+        },
+    },
+    MONK = {
+        aliases = { "monk" },
+        specs = {
+            { aliases = { "brewmaster", "brewmaster monk", "brew monk" }, targets = {
+                { label = "Energy (Player Power Bar)", keys = { "general.powerColorOverrides.ENERGY" } },
+                { label = "Stagger tiers (Class Resources)", keys = { "general.classPowerColorOverrides.STAGGER_GREEN", "general.classPowerColorOverrides.STAGGER_YELLOW", "general.classPowerColorOverrides.STAGGER_RED" } },
+            } },
+            { aliases = { "mistweaver", "mistweaver monk", "mw monk" }, targets = { { label = "Mana (Player Power Bar)", keys = { "general.powerColorOverrides.MANA" } } } },
+            { aliases = { "windwalker", "windwalker monk", "ww monk" }, targets = {
+                { label = "Energy (Player Power Bar)", keys = { "general.powerColorOverrides.ENERGY" } },
+                { label = "Chi (Class Resources)", keys = { "general.classPowerColorOverrides.CHI" } },
+            } },
+        },
+    },
+    DRUID = {
+        aliases = { "druid" },
+        specs = {
+            { aliases = { "balance", "balance druid", "boomkin" }, targets = { { label = "Astral Power (Player Power Bar and Balance resources)", keys = { "general.powerColorOverrides.LUNAR_POWER", "general.classPowerColorOverrides.ASTRAL_POWER" } } } },
+            { aliases = { "feral", "feral druid" }, targets = {
+                { label = "Energy (Player Power Bar)", keys = { "general.powerColorOverrides.ENERGY" } },
+                { label = "Combo Points (Class Resources)", keys = { "general.classPowerColorOverrides.COMBO_POINTS" } },
+            } },
+            { aliases = { "guardian", "guardian druid", "bear druid" }, targets = { { label = "Rage (Player Power Bar)", keys = { "general.powerColorOverrides.RAGE" } } } },
+            { aliases = { "restoration druid", "resto druid" }, targets = { { label = "Mana (Player Power Bar)", keys = { "general.powerColorOverrides.MANA" } } } },
+        },
+    },
+    DEMONHUNTER = {
+        aliases = { "demon hunter", "demonhunter", "dh" },
+        specs = {
+            { aliases = { "havoc", "havoc demon hunter", "havoc dh" }, targets = { { label = "Fury (Player Power Bar)", keys = { "general.powerColorOverrides.FURY" } } } },
+            { aliases = { "vengeance", "vengeance demon hunter", "vengeance dh" }, targets = {
+                { label = "Fury (Player Power Bar)", keys = { "general.powerColorOverrides.FURY" } },
+                { label = "Soul Fragments (Class Resources)", keys = { "general.classPowerColorOverrides.SOUL_FRAGMENTS_VENG" } },
+            } },
+            { aliases = { "devourer", "devourer demon hunter", "devourer dh" }, targets = {
+                { label = "Fury (Player Power Bar)", keys = { "general.powerColorOverrides.FURY" } },
+                { label = "Soul Fragments (Class Resources)", keys = { "general.classPowerColorOverrides.SOUL_FRAGMENTS" } },
+            } },
+        },
+    },
+    EVOKER = {
+        aliases = { "evoker" },
+        specs = {
+            { aliases = { "devastation", "devastation evoker", "dev evoker" }, targets = {
+                { label = "Mana (Player Power Bar)", keys = { "general.powerColorOverrides.MANA" } },
+                { label = "Essence (Class Resources)", keys = { "general.classPowerColorOverrides.ESSENCE" } },
+            } },
+            { aliases = { "preservation", "preservation evoker", "pres evoker" }, targets = {
+                { label = "Mana (Player Power Bar)", keys = { "general.powerColorOverrides.MANA" } },
+                { label = "Essence (Class Resources)", keys = { "general.classPowerColorOverrides.ESSENCE" } },
+            } },
+            { aliases = { "augmentation", "augmentation evoker", "aug evoker" }, targets = {
+                { label = "Essence (Player Power Bar)", keys = { "general.powerColorOverrides.ESSENCE" } },
+                { label = "Ebon Might (Class Resources)", keys = { "general.classPowerColorOverrides.EBON_MIGHT" } },
+                { label = "Mana (Alternative Mana Bar)", keys = { "general.powerColorOverrides.MANA" } },
+            } },
+        },
+    },
+}
+
+local function SpecResourcePhrase(text)
+    return ContainsAny(text, { "resource", "resources", "class resource", "class resources", "power resource", "power resources" })
+end
+
+local function CurrentClassAndSpec()
+    local classToken, specName
+    if type(_G.UnitClass) == "function" then
+        local _, token = _G.UnitClass("player")
+        classToken = token
+    end
+    if type(_G.GetSpecialization) == "function" and type(_G.GetSpecializationInfo) == "function" then
+        local index = _G.GetSpecialization()
+        if index then
+            local _, name = _G.GetSpecializationInfo(index)
+            specName = name and tostring(name):lower() or nil
+        end
+    end
+    return classToken, specName
+end
+
+local function SpecResourceRouteForText(text)
+    local currentClass, currentSpec = CurrentClassAndSpec()
+    local wantsCurrent = ContainsAny(text, { "my resource", "my resources", "my class resource", "my class resources" })
+    local classToken
+    if wantsCurrent and SPEC_RESOURCE_COLOR_ROUTES[currentClass] then classToken = currentClass end
+    if not classToken then
+        for token, route in pairs(SPEC_RESOURCE_COLOR_ROUTES) do
+            if ContainsAny(text, route.aliases) then classToken = token break end
+        end
+    end
+    if not classToken then
+        for token, route in pairs(SPEC_RESOURCE_COLOR_ROUTES) do
+            for i = 1, #(route.specs or {}) do
+                if ContainsAny(text, route.specs[i].aliases) then classToken = token break end
+            end
+            if classToken then break end
+        end
+    end
+    local route = classToken and SPEC_RESOURCE_COLOR_ROUTES[classToken] or nil
+    if not route then return nil end
+
+    local selectedSpec
+    for i = 1, #(route.specs or {}) do
+        local spec = route.specs[i]
+        if ContainsAny(text, spec.aliases) then selectedSpec = spec break end
+    end
+    if not selectedSpec and wantsCurrent and currentSpec then
+        for i = 1, #(route.specs or {}) do
+            local spec = route.specs[i]
+            if ContainsAny(currentSpec, spec.aliases) then selectedSpec = spec break end
+        end
+    end
+
+    local targets, seen = {}, {}
+    local function AddTargets(list)
+        for i = 1, #(list or {}) do
+            local target = list[i]
+            local signature = table.concat(target.keys or {}, "|")
+            if signature ~= "" and not seen[signature] then seen[signature] = true; targets[#targets + 1] = target end
+        end
+    end
+    if selectedSpec then AddTargets(selectedSpec.targets or route.targets) else
+        AddTargets(route.targets)
+        for i = 1, #(route.specs or {}) do AddTargets(route.specs[i].targets) end
+    end
+    return classToken, selectedSpec, targets
+end
+
+local function ChangesForResourceTarget(target, r, g, b, label)
+    local changes = {}
+    for i = 1, #(target.keys or {}) do
+        local setting = Registry and Registry:GetSetting(target.keys[i])
+        if setting then changes[#changes + 1] = { setting = setting, value = { r = r, g = g, b = b, label = label } } end
+    end
+    return changes
+end
+
+function A._ParseSpecResourceColorShortcut(text, raw)
+    if not SpecResourcePhrase(text) then return nil end
+    local r, g, b, colorLabel = ExtractColor(raw, text)
+    if not r and not ContainsAny(text, { "color", "colour", "recolor", "recolour" }) then return nil end
+    if ContainsAny(text, {
+        "combo point", "combo points", "holy power", "soul shard", "soul shards", "chi", "arcane charge", "arcane charges",
+        "rune", "runes", "essence", "essences", "soul fragment", "soul fragments", "maelstrom weapon", "whirlwind",
+        "tip of the spear", "icicle", "icicles", "ebon might", "stagger", "insanity", "astral power",
+    }) or ContainsAny(text, { "rage power", "energy power", "mana power", "focus power", "runic power", "fury power", "maelstrom power" }) then
+        return nil
+    end
+    local classToken, selectedSpec, targets = SpecResourceRouteForText(text)
+    if not classToken or #targets == 0 then return nil end
+    local routeLabel = selectedSpec and tostring((selectedSpec.aliases or {})[1] or classToken) or tostring(classToken)
+    if not r then
+        local lines = { "Which " .. routeLabel .. " resource color do you want to change?" }
+        for i = 1, #targets do lines[#lines + 1] = tostring(i) .. ". " .. tostring(targets[i].label) end
+        if #targets > 1 then lines[#lines + 1] = tostring(#targets + 1) .. ". All listed resources" end
+        lines[#lines + 1] = "Name the target and color, for example: set " .. tostring(targets[1].label):lower() .. " to cyan."
+        return { kind = "answer", status = "info", result = "info", text = table.concat(lines, "\n"), summary = "Offers spec-aware resource color targets." }
+    end
+
+    local applyAll = #targets == 1 or ContainsAny(text, { "all resources", "both resources", "every resource", "all class resources", "resources" })
+    if applyAll then
+        local changes = {}
+        for i = 1, #targets do
+            local targetChanges = ChangesForResourceTarget(targets[i], r, g, b, colorLabel)
+            for j = 1, #targetChanges do changes[#changes + 1] = targetChanges[j] end
+        end
+        if #changes == 0 then return nil end
+        return { kind = "changes", changes = changes, bulkSafe = #changes > 1, label = routeLabel .. " Resource Colors", summary = "Changes every requested spec-aware Player Power Bar and Class Resource color target." }
+    end
+
+    local choices = {}
+    for i = 1, #targets do
+        local targetChanges = ChangesForResourceTarget(targets[i], r, g, b, colorLabel)
+        if #targetChanges > 0 then choices[#choices + 1] = { changes = targetChanges, bulkSafe = #targetChanges > 1, label = targets[i].label, summary = "Changes " .. targets[i].label .. "." } end
+    end
+    local allChanges = {}
+    for i = 1, #choices do for j = 1, #(choices[i].changes or {}) do allChanges[#allChanges + 1] = choices[i].changes[j] end end
+    if #allChanges > 1 then choices[#choices + 1] = { changes = allChanges, bulkSafe = true, label = "All listed resources", summary = "Changes every listed resource color for this class/spec." } end
+    if #choices == 1 then return { kind = "changes", changes = choices[1].changes, bulkSafe = choices[1].bulkSafe, label = choices[1].label, summary = choices[1].summary } end
+    return { kind = "ambiguous", choices = choices, label = "Which " .. routeLabel .. " resource?", summary = "Separates Player Power Bar and Class Resource color targets." }
 end
 
 function A._ParsePowerColorShortcut(text, raw)
@@ -1707,6 +2119,10 @@ end
 local function ParseColorAction(text)
     if not ContainsAny(text, FeaturesPhrases[197]) then return nil end
     if not ContainsAny(text, FeaturesPhrases[198]) then return nil end
+    local slotResource = ClassPowerSlotResourceForText and ClassPowerSlotResourceForText(text) or nil
+    -- Combo Points have a dedicated no-argument reset action. Resolve that
+    -- phrase before the generic per-resource slot reset, which can also infer
+    -- COMBO_POINTS and would otherwise shadow this stable action key.
     if ContainsAny(text, FeaturesPhrases[199]) then
         local action = Registry and Registry:GetAction("reset_class_power_combo_slot_colors")
         return action and {
@@ -1715,6 +2131,16 @@ local function ParseColorAction(text)
             args = {},
             label = "Reset combo point slot colors",
             summary = "Resets the custom Class Resource combo point slot colors.",
+        } or nil
+    end
+    if slotResource and ContainsAny(text, CLASS_POWER_SLOT_RESET_TERMS) then
+        local action = Registry and Registry:GetAction("reset_class_power_slot_colors")
+        return action and {
+            kind = "action",
+            action = action,
+            args = { resourceToken = slotResource.token },
+            label = "Reset " .. tostring(slotResource.label) .. " slot colors",
+            summary = "Resets individual " .. tostring(slotResource.className) .. " " .. tostring(slotResource.label) .. " slot colors.",
         } or nil
     end
     local powerToken = PowerColorTokenForText(text)
