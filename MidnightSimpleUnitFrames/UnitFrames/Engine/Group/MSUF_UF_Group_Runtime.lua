@@ -32,12 +32,30 @@ local function InCombat()
   return InCombatLockdown and InCombatLockdown()
 end
 
+local function SyncCombatState(inCombat)
+  if inCombat == nil then inCombat = InCombat() end
+  inCombat = inCombat == true
+  ExportPublic("MSUF_InCombat", inCombat)
+  return inCombat
+end
+
 local IsUnitToken = UF and UF.IsUnitToken or function(unit)
   return issecretvalue(unit) ~= true and type(unit) == "string" and unit ~= ""
 end
 
 local function Conf(kind)
   return GF.GetConf and GF.GetConf(kind) or nil
+end
+
+local function RefreshPartyStateFrame(frame, _, kind, reason)
+  if kind ~= "party" then return false end
+  local refresh = UF and UF.RefreshGroupFrameState
+  return type(refresh) == "function" and refresh(frame, reason) == true or false
+end
+
+local function RefreshVisiblePartyState(reason)
+  if type(GF.ForEachFrame) ~= "function" then return false end
+  return GF.ForEachFrame(RefreshPartyStateFrame, false, reason)
 end
 
 local function ConfEnabled(kind)
@@ -263,7 +281,6 @@ function GF.DeferGroupRuntime(reason, kind, mask)
     end
   end
   GF._pendingGroupRuntimeMask = MergeDirtyMask(GF._pendingGroupRuntimeMask, mask)
-  if eventFrame then eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED") end
   return false
 end
 
@@ -411,7 +428,10 @@ local function FlushDeferred()
   GF._pendingGroupRuntimeKind = nil
   GF._pendingGroupRuntimeMask = nil
   if reason == "refresh" then return GF.RefreshVisuals(kind, mask) end
-  if reason == "roster" then return GF.RefreshHeaderLayout(kind) end
+  if reason == "roster" then
+    local did = GF.RefreshHeaderLayout(kind)
+    return RefreshVisiblePartyState("GROUP_ROSTER_UPDATE") or did
+  end
   if reason == "visibility" then return GF.UpdateGroupVisibility() end
   if reason == "layout" then
     local did = GF.RefreshHeaderLayout(kind)
@@ -431,21 +451,27 @@ end
 
 local function RuntimeOnEvent(self, event)
   if event == "PLAYER_REGEN_ENABLED" then
-    ExportPublic("MSUF_InCombat", false)
-    self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+    SyncCombatState(false)
     if GF._pendingGroupRuntime then FlushDeferred() end
     return
   elseif event == "PLAYER_REGEN_DISABLED" then
-    ExportPublic("MSUF_InCombat", true)
+    SyncCombatState(true)
     return
   elseif event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
+    SyncCombatState()
     GF.RefreshHeaderLayout(event)
+    if event == "PLAYER_ENTERING_WORLD" then
+      RefreshVisiblePartyState(event)
+    end
     return
   elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED" or event == "ROLE_CHANGED_INFORM" then
     if InCombat() then
       GF.DeferGroupRuntime("roster")
     else
       GF.RefreshHeaderLayout(event)
+      if event == "GROUP_ROSTER_UPDATE" then
+        RefreshVisiblePartyState(event)
+      end
     end
     return
   elseif event == "PLAYER_DIFFICULTY_CHANGED" or event == "ZONE_CHANGED_NEW_AREA" then
@@ -462,9 +488,10 @@ eventFrame:RegisterEvent("ROLE_CHANGED_INFORM")
 eventFrame:RegisterEvent("PLAYER_DIFFICULTY_CHANGED")
 eventFrame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
+eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 eventFrame:SetScript("OnEvent", RuntimeOnEvent)
 
-ExportPublic("MSUF_InCombat", InCombat())
+SyncCombatState()
 
 local GF_PUBLIC_ALIASES = {
   { "MSUF_GF_RebuildAll", "RebuildAll" },

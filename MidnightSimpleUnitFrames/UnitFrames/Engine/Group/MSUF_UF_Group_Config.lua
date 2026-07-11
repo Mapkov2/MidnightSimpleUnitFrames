@@ -447,6 +447,10 @@ local function CompileStatusRuntimeEvents(leader, assist, readyCheck, summon, ph
   if statusTextFlags then
     events = AddEvent(events, "UNIT_FLAGS")
   end
+  if statusTextConnection or statusTextFlags then
+    events = AddEvent(events, "PARTY_MEMBER_ENABLE")
+    events = AddEvent(events, "PARTY_MEMBER_DISABLE")
+  end
   if statusTextPlayerFlags then
     unitlessEvents = AddEvent(unitlessEvents, "PLAYER_FLAGS_CHANGED")
   end

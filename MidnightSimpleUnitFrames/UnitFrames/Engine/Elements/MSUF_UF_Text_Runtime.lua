@@ -51,6 +51,7 @@ local POWER_EVENTS_FREQUENT = Text.POWER_EVENTS_FREQUENT
 local POWER_TEXT_MAX_EVENTS = { "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" }
 local POWER_TEXT_VALUE_META_EVENTS = { "UNIT_POWER_UPDATE", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" }
 local POWER_TEXT_VALUE_META_EVENTS_FREQUENT = { "UNIT_POWER_UPDATE", "UNIT_POWER_FREQUENT", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" }
+local GROUP_LIFECYCLE_EVENTS = { "PARTY_MEMBER_ENABLE", "PARTY_MEMBER_DISABLE" }
 
 local function IsFiniteNumber(value)
   return type(value) == "number" and value == value and (value - value) == 0
@@ -641,6 +642,11 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
       hpMax = 1
     end
 
+    local pctOverride, pctOverrideSet
+    if needsPercent then
+      pctOverride, pctOverrideSet = ConsumeDispatchPercent(rt, "_dispatchHealthPercent", "_dispatchHealthPercentReady")
+    end
+
     if nativeSecrets and (issecretvalue(hp) == true
       or issecretvalue(hpMax) == true
       or issecretvalue(rt.healthMissing) == true) then
@@ -650,13 +656,11 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
       rt._dispatchHealthTextHP = nil
       rt._dispatchHealthTextMax = nil
       rt._dispatchHealthTextMissing = nil
-      UpdateTextSlotsSecret(rt.healthSlots, rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt)
+      UpdateTextSlotsSecret(rt.healthSlots, rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt, pctOverride, pctOverrideSet)
       return
     end
 
-    local pctOverride, pctOverrideSet
     if needsPercent then
-      pctOverride, pctOverrideSet = ConsumeDispatchPercent(rt, "_dispatchHealthPercent", "_dispatchHealthPercentReady")
       if pctOverrideSet ~= true and HealthPercentAvailable then
         pctOverride = HealthPercent(unit)
         pctOverrideSet = issecretvalue(pctOverride) == true or pctOverride ~= nil
@@ -669,7 +673,7 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
       rt._dispatchHealthTextHP = nil
       rt._dispatchHealthTextMax = nil
       rt._dispatchHealthTextMissing = nil
-      UpdateTextSlotsSecret(rt.healthSlots, rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt)
+      UpdateTextSlotsSecret(rt.healthSlots, rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt, pctOverride, pctOverrideSet)
       return
     end
     local keyHP, keyMax = false, false
@@ -754,7 +758,11 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
   if colorByHealth and UpdateHealthTextColor then
     UpdateHealthTextColor(frame, rt, unit, hp, hpMax)
   end
-  UpdateTextSlotsSecret(rt.healthSlots, rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt)
+  local pctOverride, pctOverrideSet
+  if needsPercent then
+    pctOverride, pctOverrideSet = ConsumeDispatchPercent(rt, "_dispatchHealthPercent", "_dispatchHealthPercentReady")
+  end
+  UpdateTextSlotsSecret(rt.healthSlots, rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt, pctOverride, pctOverrideSet)
 end
 
 local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
@@ -862,18 +870,21 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
       powerMax = 1
     end
 
+    local pctOverride, pctOverrideSet
+    if needsPercent then
+      pctOverride, pctOverrideSet = ConsumeDispatchPercent(rt, "_dispatchPowerPercent", "_dispatchPowerPercentReady")
+    end
+
     if nativeSecrets and (issecretvalue(power) == true or issecretvalue(powerMax) == true) then
       rt._lastPowerTextPower = nil
       rt._lastPowerTextMax = nil
       rt._dispatchPowerTextPower = nil
       rt._dispatchPowerTextMax = nil
-      UpdateTextSlotsSecret(rt.powerSlots, rt.powerSlotCount, power, powerMax, unit, PowerPercent, rt.powerNeedsPercent, rt)
+      UpdateTextSlotsSecret(rt.powerSlots, rt.powerSlotCount, power, powerMax, unit, PowerPercent, rt.powerNeedsPercent, rt, pctOverride, pctOverrideSet)
       return
     end
 
-    local pctOverride, pctOverrideSet
     if needsPercent then
-      pctOverride, pctOverrideSet = ConsumeDispatchPercent(rt, "_dispatchPowerPercent", "_dispatchPowerPercentReady")
       if pctOverrideSet ~= true and PowerPercentAvailable then
         pctOverride = PowerPercent(unit)
         pctOverrideSet = issecretvalue(pctOverride) == true or pctOverride ~= nil
@@ -940,7 +951,11 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
 
   rt._lastPowerRaw, rt._lastPowerMaxRaw = power, powerMax
 
-  UpdateTextSlotsSecret(rt.powerSlots, rt.powerSlotCount, power, powerMax, unit, PowerPercent, rt.powerNeedsPercent, rt)
+  local pctOverride, pctOverrideSet
+  if needsPercent then
+    pctOverride, pctOverrideSet = ConsumeDispatchPercent(rt, "_dispatchPowerPercent", "_dispatchPowerPercentReady")
+  end
+  UpdateTextSlotsSecret(rt.powerSlots, rt.powerSlotCount, power, powerMax, unit, PowerPercent, rt.powerNeedsPercent, rt, pctOverride, pctOverrideSet)
 end
 
 Text.RuntimeHotFunctions = {
@@ -1295,6 +1310,10 @@ function HealthText.GetEvents(frame, spec)
     return HEALTH_TEXT_VALUE_EVENTS
   end
   return HEALTH_TEXT_EVENTS
+end
+
+function HealthText.GetUnitlessEvents(frame, spec)
+  return HealthTextEnabled(spec) and spec and spec.scope == "group" and GROUP_LIFECYCLE_EVENTS or EMPTY_EVENTS
 end
 
 function HealthText.Update(frame, event, unit, hp, hpMax)

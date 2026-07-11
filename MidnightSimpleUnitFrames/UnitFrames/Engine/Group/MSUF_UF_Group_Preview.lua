@@ -591,18 +591,30 @@ local function PreviewApplyRevision(kind)
   return tostring(GF._compiledSpecRevision or "") .. ":" .. tostring(GF._compiledSpecSerial or "")
 end
 
-local function PreviewApplyKey(frame, kind, w, h)
+local function PreviewApplyKey(frame, kind, w, h, revision)
   local unit = (frame.GetAttribute and frame:GetAttribute("unit")) or frame.unit or "player"
-  return tostring(kind) .. "\030" .. tostring(unit) .. "\030" .. PreviewApplyRevision(kind)
+  return tostring(kind) .. "\030" .. tostring(unit) .. "\030" .. tostring(revision or PreviewApplyRevision(kind))
     .. "\030" .. tostring(w) .. "\030" .. tostring(h)
 end
 
-local function ApplyPreviewSpecIfNeeded(frame, kind, reason, w, h)
+local function ApplyPreviewSpecIfNeeded(frame, kind, reason, w, h, dirtyMask, expectedRevision)
   if not frame then return false end
-  local key = PreviewApplyKey(frame, kind, w, h)
+  local currentRevision = PreviewApplyRevision(kind)
+  local key = PreviewApplyKey(frame, kind, w, h, currentRevision)
   if frame._msufGFPreviewApplyKey == key and frame.MSUFSpec then return true end
-  if not GF.ApplyButton then return false end
-  local ok = GF.ApplyButton(frame, kind, reason)
+  local revisionCurrent = expectedRevision == nil or currentRevision == expectedRevision
+  local canApplyDirty = frame.MSUFSpec ~= nil
+    and dirtyMask ~= nil
+    and revisionCurrent
+    and type(GF.ApplyPreviewButtonDirty) == "function"
+  local ok
+  if canApplyDirty then
+    ok = GF.ApplyPreviewButtonDirty(frame, kind, reason, dirtyMask)
+  elseif GF.ApplyButton then
+    ok = GF.ApplyButton(frame, kind, reason)
+  else
+    return false
+  end
   if ok then frame._msufGFPreviewApplyKey = PreviewApplyKey(frame, kind, w, h) end
   return ok
 end
@@ -655,17 +667,17 @@ local function PreparePreviewFrame(kind, index, layout, w, h, spacing, growth, u
   return frame
 end
 
-local function ApplyPreviewFrame(kind, index, reason, layout, w, h, spacing, growth, upc, primary, blockW, blockH)
+local function ApplyPreviewFrame(kind, index, reason, layout, w, h, spacing, growth, upc, primary, blockW, blockH, dirtyMask, expectedRevision)
   local frame = PreparePreviewFrame(kind, index, layout, w, h, spacing, growth, upc, primary, blockW, blockH)
-  ApplyPreviewSpecIfNeeded(frame, kind, reason, w, h)
+  ApplyPreviewSpecIfNeeded(frame, kind, reason, w, h, dirtyMask, expectedRevision)
   ApplyPreviewData(frame, index, kind)
   return true
 end
 
-local function QueuePreviewBuild(kind, serial, visibleCount, reason, layout, w, h, spacing, growth, upc, primary, blockW, blockH)
+local function QueuePreviewBuild(kind, serial, visibleCount, reason, layout, w, h, spacing, growth, upc, primary, blockW, blockH, dirtyMask, expectedRevision)
   if not (C_Timer and C_Timer.After) then
     for i = 1, visibleCount do
-      ApplyPreviewFrame(kind, i, reason, layout, w, h, spacing, growth, upc, primary, blockW, blockH)
+      ApplyPreviewFrame(kind, i, reason, layout, w, h, spacing, growth, upc, primary, blockW, blockH, dirtyMask, expectedRevision)
     end
     return true
   end
@@ -675,12 +687,40 @@ local function QueuePreviewBuild(kind, serial, visibleCount, reason, layout, w, 
     if not (GF._previewActive and GF._previewActive[kind]) then return end
     local limit = min(visibleCount, index + PREVIEW_BUILD_SLICE_COUNT - 1)
     for i = index, limit do
-      ApplyPreviewFrame(kind, i, reason, layout, w, h, spacing, growth, upc, primary, blockW, blockH)
+      ApplyPreviewFrame(kind, i, reason, layout, w, h, spacing, growth, upc, primary, blockW, blockH, dirtyMask, expectedRevision)
     end
     index = limit + 1
     if index <= visibleCount then
       C_Timer.After(0, Step)
     end
+  end
+  C_Timer.After(0, Step)
+  return true
+end
+
+local function PreviewSpecsCurrent(frames, visibleCount, kind, w, h, revision)
+  for i = 1, visibleCount do
+    local frame = frames[i]
+    if not (frame and frame.MSUFSpec and frame._msufGFPreviewApplyKey == PreviewApplyKey(frame, kind, w, h, revision)) then
+      return false
+    end
+  end
+  return true
+end
+
+local function QueuePreviewDataRefresh(kind, serial, frames, visibleCount)
+  if not (C_Timer and C_Timer.After) then
+    for i = 1, visibleCount do ApplyPreviewData(frames[i], i, kind) end
+    return true
+  end
+  local index = 1
+  local function Step()
+    if CurrentPreviewBuildSerial(kind) ~= serial then return end
+    if not (GF._previewActive and GF._previewActive[kind]) then return end
+    local limit = min(visibleCount, index + PREVIEW_BUILD_SLICE_COUNT - 1)
+    for i = index, limit do ApplyPreviewData(frames[i], i, kind) end
+    index = limit + 1
+    if index <= visibleCount then C_Timer.After(0, Step) end
   end
   C_Timer.After(0, Step)
   return true
@@ -714,12 +754,22 @@ function GF.ShowPreview(kind, count, opts)
   end
   container:Show()
   local reason = opts and opts.reason or "MSUF_GF_PREVIEW"
+  local dirtyMask = opts and opts.dirtyMask or nil
+  local expectedRevision = PreviewApplyRevision(kind)
+  if PreviewSpecsCurrent(frames, visibleCount, kind, w, h, expectedRevision) then
+    if opts and opts.immediate == true or visibleCount <= PREVIEW_BUILD_SLICE_THRESHOLD then
+      for i = 1, visibleCount do ApplyPreviewData(frames[i], i, kind) end
+    else
+      QueuePreviewDataRefresh(kind, serial, frames, visibleCount)
+    end
+    return true
+  end
   if opts and opts.immediate == true or visibleCount <= PREVIEW_BUILD_SLICE_THRESHOLD then
     for i = 1, visibleCount do
-      ApplyPreviewFrame(kind, i, reason, layout, w, h, spacing, growth, upc, primary, blockW, blockH)
+      ApplyPreviewFrame(kind, i, reason, layout, w, h, spacing, growth, upc, primary, blockW, blockH, dirtyMask, expectedRevision)
     end
   else
-    QueuePreviewBuild(kind, serial, visibleCount, reason, layout, w, h, spacing, growth, upc, primary, blockW, blockH)
+    QueuePreviewBuild(kind, serial, visibleCount, reason, layout, w, h, spacing, growth, upc, primary, blockW, blockH, dirtyMask, expectedRevision)
   end
   return true
 end
@@ -746,13 +796,13 @@ function GF.HidePreview(kind)
   return true
 end
 
-function GF.RefreshPreviewLayout(kind)
+function GF.RefreshPreviewLayout(kind, opts)
   if InCombat() then return false end
   if kind == nil then
     local any = false
     for _, activeKind in ipairs({ "party", "raid", "mythicraid" }) do
       if GF._previewActive and GF._previewActive[activeKind] then
-        any = GF.RefreshPreviewLayout(activeKind) or any
+        any = GF.RefreshPreviewLayout(activeKind, opts) or any
       end
     end
     return any
@@ -760,7 +810,11 @@ function GF.RefreshPreviewLayout(kind)
   kind = NormalizeKind(kind) or "party"
   if not (GF._previewActive and GF._previewActive[kind]) then return false end
   local count = GF._previewShownCounts[kind] or DefaultPreviewCount(kind)
-  return GF.ShowPreview(kind, count, { reason = "MSUF_GF_PREVIEW_REFRESH" })
+  opts = type(opts) == "table" and opts or nil
+  return GF.ShowPreview(kind, count, {
+    reason = opts and opts.reason or "MSUF_GF_PREVIEW_REFRESH",
+    dirtyMask = opts and opts.dirtyMask or nil,
+  })
 end
 
 GF.RefreshPreviewBox = GF.RefreshPreviewLayout
@@ -809,6 +863,6 @@ end
 ExportPublic("MSUF_GF_ShowPreview", function(kind, count) return GF.ShowPreview(kind, count) end)
 ExportPublic("MSUF_GF_HidePreview", function(kind) return GF.HidePreview(kind) end)
 ExportPublic("MSUF_GF_SetPreviewAnchor", function(kind, parent) return GF.SetPreviewAnchor(kind, parent) end)
-ExportPublic("MSUF_GF_RefreshPreviewLayout", function(kind) return GF.RefreshPreviewLayout(kind) end)
+ExportPublic("MSUF_GF_RefreshPreviewLayout", function(kind, opts) return GF.RefreshPreviewLayout(kind, opts) end)
 ExportPublic("MSUF_GF_RefreshPreviewBox", _G.MSUF_GF_RefreshPreviewLayout)
 ExportPublic("MSUF_GF_RefreshPreviewAnimation", function() return GF.RefreshPreviewAnimation() end)

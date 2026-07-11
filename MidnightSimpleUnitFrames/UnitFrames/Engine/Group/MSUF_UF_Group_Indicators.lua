@@ -22,6 +22,7 @@ local function SetShown(region, show)
   region._msufGFShown = show
 end
 local UnitThreatSituation = UnitThreatSituation
+local UnitAffectingCombat = UnitAffectingCombat
 local UnitGroupRolesAssigned = UnitGroupRolesAssigned
 local CreateFrame = CreateFrame
 local tonumber = tonumber
@@ -50,7 +51,8 @@ local ApplyColorTexture = Apply.ColorTexture or function(tex, r, g, b, a)
 end
 
 local EMPTY = {}
-local CORNER_THREAT_EVENTS = { "UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE" }
+local CORNER_THREAT_EVENTS = { "UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE", "UNIT_FLAGS" }
+local CORNER_THREAT_UNITLESS_EVENTS = { "PLAYER_REGEN_ENABLED" }
 
 local function ClampLayer(layer, fallback)
   layer = floor((tonumber(layer) or fallback or 7) + 0.5)
@@ -130,6 +132,10 @@ end
 local function HasThreat(unit, cfg)
   if not UnitThreatSituation or not unit then return false end
   if not AggroModeAllows(unit, cfg and cfg.aggroMode) then return false end
+  if UnitAffectingCombat then
+    local active = UnitAffectingCombat(unit)
+    if issecretvalue(active) == true or (active ~= true and active ~= 1) then return false end
+  end
   local status = UnitThreatSituation(unit)
   if issecretvalue(status) == true or status == nil then return false end
   status = tonumber(status)
@@ -148,6 +154,11 @@ function GroupCornerIndicators.GetEvents(frame, spec)
   if cfg and cfg.needsThreat == true and cfg.needsAura ~= true then return CORNER_THREAT_EVENTS end
   if cfg and cfg.needsThreat == true then return CORNER_THREAT_EVENTS end
   return EMPTY
+end
+
+function GroupCornerIndicators.GetUnitlessEvents(frame, spec)
+  local cfg = spec and spec.cornerIndicators
+  return cfg and cfg.needsThreat == true and CORNER_THREAT_UNITLESS_EVENTS or EMPTY
 end
 
 local function EnsureCorner(frame, key, layer)

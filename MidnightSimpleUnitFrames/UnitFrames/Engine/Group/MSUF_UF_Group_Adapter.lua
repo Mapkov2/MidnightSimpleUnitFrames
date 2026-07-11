@@ -192,6 +192,16 @@ local function NotifyGroupRangeUnitIdentity(frame)
   end
 end
 
+local function RefreshGroupUnitState(frame, reason)
+  local refresh = UF and UF.RefreshGroupFrameState
+  if type(refresh) == "function" then
+    return refresh(frame, reason or UNIT_CHANGED_REASON)
+  end
+  if UF and UF.RunLeanIdentity then UF.RunLeanIdentity(frame, reason or UNIT_CHANGED_REASON) end
+  NotifyGroupRangeUnitIdentity(frame)
+  return false
+end
+
 function GF.RebindGroupHotRuntime(frame)
   if UF and UF.OptimizeFrameHotpaths then UF.OptimizeFrameHotpaths(frame) end
   return nil
@@ -287,7 +297,7 @@ local function SuspendUnitBinding(frame)
   end
 end
 
-local function ApplyUnitFrame(frame, kind, unit, reason)
+local function ApplyUnitFrame(frame, kind, unit, reason, applyMask, forceApply)
   if not (frame and kind and IsUnitToken(unit) and GF.CompileSpec) then return false end
   local shell = ShellFrame(frame)
   local visual = EnsureGroupVisual(shell)
@@ -302,18 +312,17 @@ local function ApplyUnitFrame(frame, kind, unit, reason)
   UF.SetFrameSpec(visual, spec, unit)
   SetButtonBasics(shell, visual, unit, spec)
 
-  if SameApplied(visual, kind, unit, spec) then
+  if forceApply ~= true and SameApplied(visual, kind, unit, spec) then
     attrUnit[shell] = unit
     TrackFrame(visual, unit)
     if reason == "UNIT_CHANGED" or reason == UNIT_CHANGED_REASON then
-      if UF.RunLeanIdentity then UF.RunLeanIdentity(visual, UNIT_CHANGED_REASON) end
-      NotifyGroupRangeUnitIdentity(visual)
+      RefreshGroupUnitState(visual, UNIT_CHANGED_REASON)
     end
     return true
   end
 
   UF.AttachFrame(visual, { scope = "group" })
-  GF.ApplyStructureSpec(visual, spec, reason == "UNIT_CHANGED" and UNIT_CHANGED_REASON or (reason or UNIT_STRUCTURE_REASON), BASIC_GROUP_MASK)
+  GF.ApplyStructureSpec(visual, spec, reason == "UNIT_CHANGED" and UNIT_CHANGED_REASON or (reason or UNIT_STRUCTURE_REASON), applyMask or BASIC_GROUP_MASK)
   MarkApplied(visual, kind, unit, spec)
   attrUnit[shell] = unit
   TrackFrame(visual, unit)
@@ -330,6 +339,22 @@ function GF.ApplyButton(frame, kind, reason)
   return ApplyUnitFrame(frame, kind or frame._msufGFKind or "party", unit, reason)
 end
 
+--- Preview-only targeted apply. Live group refreshes already use the same dirty
+--- mask resolver through Group_Runtime; this entry point lets cached menu/edit
+--- preview frames keep that precision without changing the normal button path.
+--- Unknown masks deliberately fall back to the full group mask.
+function GF.ApplyPreviewButtonDirty(frame, kind, reason, dirtyMask)
+  if not frame then return false end
+  local unit = frame.GetAttribute and frame:GetAttribute("unit") or frame.unit
+  if not IsUnitToken(unit) then
+    SuspendUnitBinding(frame)
+    return false
+  end
+  local resolveMask = GF.ApplyMaskForDirtyMask
+  local applyMask = type(resolveMask) == "function" and resolveMask(dirtyMask) or BASIC_GROUP_MASK
+  return ApplyUnitFrame(frame, kind or frame._msufGFKind or "party", unit, reason, applyMask, true)
+end
+
 local function OnChildAttributeChanged(self, name, value)
   if name ~= UNIT_ATTR then return end
   local visual = EnsureGroupVisual(self)
@@ -343,6 +368,12 @@ local function OnChildAttributeChanged(self, name, value)
   end
 
   if oldUnit == rawUnit and visual and visual.MSUFSpec and appliedUnit[visual] == rawUnit then
+    -- SecureGroupHeader rewrites unchanged partyN attributes on roster updates.
+    -- Treat that write as the event-driven catch-up barrier instead of dropping
+    -- it; raid headers stay on their normal per-unit paths to avoid 40 refreshes.
+    if (kind or visual._msufGFKind) == "party" then
+      RefreshGroupUnitState(visual, UNIT_CHANGED_REASON)
+    end
     return
   end
 
@@ -362,8 +393,7 @@ local function OnChildAttributeChanged(self, name, value)
     appliedUnit[visual] = rawUnit
     if kind then appliedKind[visual] = kind end
     TrackFrame(visual, rawUnit)
-    if UF.RunLeanIdentity then UF.RunLeanIdentity(visual, UNIT_CHANGED_REASON) end
-    NotifyGroupRangeUnitIdentity(visual)
+    RefreshGroupUnitState(visual, UNIT_CHANGED_REASON)
     return
   end
 
@@ -382,7 +412,6 @@ local function OnChildAttributeChanged(self, name, value)
   appliedUnit[visual] = rawUnit
   if kind then appliedKind[visual] = kind end
   TrackFrame(visual, rawUnit)
-  NotifyGroupRangeUnitIdentity(visual)
 end
 
 local function InstallChildAttrHook(child, kind)

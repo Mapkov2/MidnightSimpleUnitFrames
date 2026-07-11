@@ -90,6 +90,8 @@ local IDENTITY_BAR_ELEMENTS = {
 local HEALTH_EVENTS = {
   UNIT_HEALTH = true,
   UNIT_MAXHEALTH = true,
+  PARTY_MEMBER_ENABLE = true,
+  PARTY_MEMBER_DISABLE = true,
 }
 
 local POWER_EVENTS = {
@@ -97,6 +99,15 @@ local POWER_EVENTS = {
   UNIT_POWER_FREQUENT = true,
   UNIT_MAXPOWER = true,
   UNIT_DISPLAYPOWER = true,
+}
+
+local GROUP_LIFECYCLE_EVENTS = {
+  PARTY_MEMBER_ENABLE = true,
+  PARTY_MEMBER_DISABLE = true,
+}
+
+local NONPREFIX_UNIT_EVENTS = {
+  INCOMING_RESURRECT_CHANGED = true,
 }
 
 local BOSS_UNITS = {
@@ -444,10 +455,19 @@ end
 local function BeginFrameEvent(frame)
   frame._msufDispatchToken = (frame._msufDispatchToken or 0) + 1
   frame._msufDispatchActive = true
-  frame._msufUnitState = nil
+  -- Keep the per-frame state table allocated, but invalidate its contents for
+  -- this dispatch. RefreshUnitState still performs the same full read on the
+  -- first consumer, while later consumers in the same dispatch share it.
+  local state = frame._msufUnitState
+  if state then
+    state.ready = false
+    state.dispatchToken = nil
+    state.identityReady = nil
+  end
 end
 
 local function EndFrameEvent(frame)
+  if frame._msufDeferDispatchEnd == true then return end
   frame._msufDispatchActive = nil
 end
 
@@ -457,8 +477,97 @@ local function FrameOnEvent(frame, event, unit, ...)
   if path then return path(frame, event, unit, ...) end
 end
 
+local groupLifecycleDriver
+
+local function LifecycleUpdate(frame, name)
+  local active = frame and frame._msufActiveElements
+  if not (active and active[name] == true) then return nil end
+  local key = GetUpdateKey(name)
+  return key and frame[key] or nil
+end
+
+local function RunGroupLifecycleFollowers(frame, event)
+  local unit = frame.unit
+
+  local power, powerMax, powerType, powerToken, powerMetaChanged
+  local update = LifecycleUpdate(frame, "Power")
+  if update then
+    power, powerMax, powerType, powerToken, powerMetaChanged = update(frame, event, unit)
+  end
+  update = LifecycleUpdate(frame, "PowerText")
+  if update then
+    update(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
+  end
+
+  update = LifecycleUpdate(frame, "NameText")
+  if update then update(frame, event, unit) end
+
+  update = LifecycleUpdate(frame, "Portrait")
+  if update then update(frame, event, unit) end
+
+  local hpBar = frame.hpBar
+  local hp = hpBar and hpBar._msufHealthValueUnit == unit and hpBar._msufHealthValue or nil
+  local hpMax = hpBar and hpBar._msufHealthMaxUnit == unit and hpBar._msufHealthMax or nil
+  if issecretvalue(hp) == true then hp = nil end
+  if issecretvalue(hpMax) == true then hpMax = nil end
+
+  update = LifecycleUpdate(frame, "GroupStatusRuntime")
+  if update then update(frame, event, unit, hp) end
+  update = LifecycleUpdate(frame, "GroupRangeFade")
+  if update then update(frame, event, unit) end
+  update = LifecycleUpdate(frame, "GroupVisuals")
+  if update then update(frame, event, unit, hp, hpMax) end
+end
+
+--- Refresh one secure group child from a coherent authoritative snapshot.
+--- The caller's reason is diagnostic only: canonical lifecycle semantics keep
+--- Health/Prediction/Text and all group followers on the same narrow path.
+local function RefreshGroupFrameState(frame, _reason)
+  if not (frame and frame._msufCoreScope == "group" and FrameVisibleForEvent(frame)) then
+    return false
+  end
+  local event = "PARTY_MEMBER_ENABLE"
+  frame._msufGroupStateRefresh = true
+  frame._msufDeferDispatchEnd = true
+  if frame[event] then
+    FrameOnEvent(frame, event, nil)
+  else
+    BeginFrameEvent(frame)
+  end
+  RunGroupLifecycleFollowers(frame, event)
+  frame._msufDeferDispatchEnd = nil
+  EndFrameEvent(frame)
+  frame._msufGroupStateRefresh = nil
+  return true
+end
+UF.RefreshGroupFrameState = RefreshGroupFrameState
+
+local function GroupFrameOnShow(frame)
+  RefreshGroupFrameState(frame, "MSUF_GF_ONSHOW")
+end
+
+local function EnsureGroupLifecycleDriver()
+  if groupLifecycleDriver or not CreateFrame then return groupLifecycleDriver end
+  groupLifecycleDriver = CreateFrame("Frame")
+  groupLifecycleDriver:RegisterEvent("PARTY_MEMBER_ENABLE")
+  groupLifecycleDriver:RegisterEvent("PARTY_MEMBER_DISABLE")
+  groupLifecycleDriver:SetScript("OnEvent", function(_, event)
+    local frames = UF.attachedFrameList
+    for i = 1, #frames do
+      local frame = frames[i]
+      if frame and frame._msufCoreScope == "group" and FrameVisibleForEvent(frame) then
+        -- These events are a group invalidation barrier. Ignore unitTarget so
+        -- AI/follower transitions refresh every frame with its own bound unit.
+        RefreshGroupFrameState(frame, event)
+      end
+    end
+  end)
+  return groupLifecycleDriver
+end
+
 local function IsUnitEvent(event)
-  return type(event) == "string" and (event:sub(1, 5) == "UNIT_" or event == "INCOMING_RESURRECT_CHANGED")
+  return type(event) == "string"
+    and (event:sub(1, 5) == "UNIT_" or NONPREFIX_UNIT_EVENTS[event] == true)
 end
 
 local function DependentSource(frame, event)
@@ -513,26 +622,40 @@ local function CompileFrameEventPath(frame, event, list)
   if healthEvent or powerEvent then
     local barUpdate = healthEvent and frame[GetUpdateKey("Health")] or frame[GetUpdateKey("Power")]
     local textUpdate = healthEvent and frame[GetUpdateKey("HealthText")] or frame[GetUpdateKey("PowerText")]
-    local barFn, textFn
+    local predictionUpdate = healthEvent and frame[GetUpdateKey("Prediction")] or nil
+    local barFn, textFn, predictionFn
+    local routeUnitless
     local direct = true
     for i = 1, count, 2 do
       local update = list[i]
+      local unitless = list[i + 1] == true
+      if routeUnitless == nil then
+        routeUnitless = unitless
+      elseif routeUnitless ~= unitless then
+        direct = false
+        break
+      end
       if update == barUpdate then
         barFn = update
       elseif update == textUpdate then
         textFn = update
+      elseif predictionUpdate and update == predictionUpdate then
+        predictionFn = update
       else
         direct = false
         break
       end
     end
-    if direct == true and (barFn or textFn) then
+    if direct == true and (barFn or textFn or predictionFn) then
       if healthEvent then
         if target then
           return function(self, ev, _unit, ...)
             BeginFrameEvent(self)
             local hp, hpMax, percentReady
             if barFn then hp, hpMax, percentReady = barFn(self, ev, target, ...) end
+            if predictionFn then
+              if percentReady == true then predictionFn(self, ev, target, nil, nil, ...) else predictionFn(self, ev, target, hp, hpMax, ...) end
+            end
             if textFn then
               if percentReady == true then textFn(self, ev, target, nil, nil, ...) else textFn(self, ev, target, hp, hpMax, ...) end
             end
@@ -541,9 +664,12 @@ local function CompileFrameEventPath(frame, event, list)
         end
         return function(self, ev, unit, ...)
           BeginFrameEvent(self)
-          local u = unit or self.unit
+          local u = routeUnitless == true and self.unit or (unit or self.unit)
           local hp, hpMax, percentReady
           if barFn then hp, hpMax, percentReady = barFn(self, ev, u, ...) end
+          if predictionFn then
+            if percentReady == true then predictionFn(self, ev, u, nil, nil, ...) else predictionFn(self, ev, u, hp, hpMax, ...) end
+          end
           if textFn then
             if percentReady == true then textFn(self, ev, u, nil, nil, ...) else textFn(self, ev, u, hp, hpMax, ...) end
           end
@@ -561,7 +687,7 @@ local function CompileFrameEventPath(frame, event, list)
       end
       return function(self, ev, unit, ...)
         BeginFrameEvent(self)
-        local u = unit or self.unit
+        local u = routeUnitless == true and self.unit or (unit or self.unit)
         local power, powerMax, powerType, powerToken, metaChanged
         if barFn then power, powerMax, powerType, powerToken, metaChanged = barFn(self, ev, u, ...) end
         if textFn then textFn(self, ev, u, powerMax == nil and nil or power, powerMax, powerType, powerToken, metaChanged, ...) end
@@ -614,6 +740,11 @@ end
 
 local function RegisterFrameEvent(frame, event, unitless)
   if not (frame and frame.RegisterEvent) then return end
+  if frame._msufCoreScope == "group"
+    and GROUP_LIFECYCLE_EVENTS[event] == true
+    and EnsureGroupLifecycleDriver() then
+    return
+  end
   if unitless == true or not IsUnitEvent(event) or not frame.RegisterUnitEvent then
     frame:RegisterEvent(event)
     return
@@ -1081,6 +1212,12 @@ function UF.AttachFrame(frame, opts)
   UF.AttachFrameMethods(frame)
   frame._msufCoreScope = opts and opts.scope or frame._msufCoreScope or "single"
   frame._msufVisualRoot = opts and opts.visualRoot or frame._msufVisualRoot or frame
+  if frame._msufCoreScope == "group"
+    and frame.HookScript
+    and frame._msufGroupOnShowHooked ~= true then
+    frame._msufGroupOnShowHooked = true
+    frame:HookScript("OnShow", GroupFrameOnShow)
+  end
   if UF.attachedFrames[frame] ~= true then
     UF.attachedFrames[frame] = true
     UF.attachedFrameList[#UF.attachedFrameList + 1] = frame
@@ -1124,7 +1261,11 @@ function UF.OnUnitChanged(frame, oldUnit, newUnit)
   end
   frame._msufUnitState = nil
   RebuildFrameEvents(frame)
-  UF.RunLeanIdentity(frame, "MSUF_UNIT_IDENTITY")
+  if frame._msufCoreScope == "group" then
+    RefreshGroupFrameState(frame, "MSUF_GF_UNIT_IDENTITY")
+  else
+    UF.RunLeanIdentity(frame, "MSUF_UNIT_IDENTITY")
+  end
   local A3 = MSUF and MSUF.MSUF_Auras3
   if A3 and type(A3.OnFrameUnitChanged) == "function" then
     A3.OnFrameUnitChanged(frame, oldUnit, newUnit)
