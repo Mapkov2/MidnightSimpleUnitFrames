@@ -4,10 +4,24 @@ local _, ns = ...
 ns = ns or {}
 
 local data = {
-    currentVersion = "5.70",
-    previousVersion = "5.60",
-    rangeLabel = "5.60 -> 5.70",
+    currentVersion = "5.71",
+    previousVersion = "5.70",
+    rangeLabel = "5.70 -> 5.71",
     entries = {
+        {
+            version = "5.71",
+            date = "2026-07-11",
+            sections = {
+                {
+                    title = "Hotfix",
+                    bullets = {
+                        "Fixed repeated ADDON_ACTION_FORBIDDEN errors on Warrior login caused by the Whirlwind tracker registering COMBAT_LOG_EVENT_UNFILTERED while Class Resource was disabled.",
+                        "Restored the lightweight 5.6 spellcast-driven Whirlwind generator tracking and removed the global combat-log listener.",
+                        "Bound Whirlwind tracker events only while the Warrior Class Resource is active and cleanly unbound them when the feature is disabled.",
+                    },
+                },
+            },
+        },
         {
             version = "5.70",
             date = "2026-07-08",
@@ -81,37 +95,6 @@ local data = {
                     title = "Fixes",
                     bullets = {
                         "Fixed missing-health text formatting for imported profiles with secret health values.",
-                    },
-                },
-            },
-        },
-        {
-            version = "5.57",
-            date = "2026-06-04",
-            sections = {
-                {
-                    title = "Edge Case Fixes",
-                    bullets = {
-                        "Fixed a rare health-bar smoothing edge case where preserved HP color could leave a transparent strip while the bar was shrinking.",
-                        "Improved Blizzard party-frame fallback behavior when MSUF group frames are disabled, including arena and login/zone-change cases where Blizzard frames could be missing or briefly ghosted while solo.",
-                        "Hardened gameplay font application so profiles that reference missing SharedMedia or disabled addon fonts fall back safely instead of producing font asset errors.",
-                        "Refreshed group-frame range fade after instance, roster, and combat transitions so players who join or zone into an instance out of combat no longer stay faded as out of range until combat or /reload.",
-                        "Improved the missing buff scan for rare readable-aura edge cases.",
-                    },
-                },
-                {
-                    title = "Compatibility and Safety",
-                    bullets = {
-                        "Added a clear WoW 12.1 compatibility warning for MSUF 5.x users, with localized popup and chat messaging that points users to the current Alpha/Beta build for WoW 12.1.",
-                        "Kept secret-aura handling conservative while improving missing buff detection.",
-                    },
-                },
-                {
-                    title = "Performance Notes",
-                    bullets = {
-                        "Kept the new range recovery finite and event-driven instead of adding constant polling.",
-                        "Kept the missing buff scan on the existing cached aura path where possible.",
-                        "Kept the new font and Blizzard-frame safeguards on cold apply/login paths.",
                     },
                 },
             },
