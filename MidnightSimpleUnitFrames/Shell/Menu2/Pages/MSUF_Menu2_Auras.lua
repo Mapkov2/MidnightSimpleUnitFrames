@@ -36,6 +36,7 @@ local SHARED_PREVIEW_SCOPES = {
     { scope = "raid", label = "Raid" },
 }
 local LANE_VALUES = VTP "buff=Buffs|debuff=Debuffs"
+local UNIT_STYLE_CONTAINER_VALUES = VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3"
 local DEBUFF_TYPE_BORDER_MODE_VALUES = VTP "OFF=Off|BORDER=Border|SYMBOL=Border + Symbol"
 local COOLDOWN_SWIPE_DIRECTION_VALUES = VTP "NORMAL=Normal|REVERSE=Reverse"
 local DURATION_BAR_DISPLAY_VALUES = VTP "BAR_ONLY=Bar Only|OVERLAY=Icon + Bar"
@@ -129,7 +130,6 @@ local function AuraControlMeta(ctx, path, classification)
         classification = classification or "setting",
         ephemeral = classification == "ephemeral" or nil,
     }
-    if meta.classification == "action" then meta.actionKey = identity end
     return meta
 end
 local function RegisterAuraControl(ctx, widget, label, kind, path, classification)
@@ -389,6 +389,7 @@ local function AuraStyleScopeHasOverride(scope)
 end
 local function BuildAuraStyleScopeOverrideSection(ctx, b)
     local values = AURA_SCOPE_VALUES
+    local compactGroupScope = IsGroupScope(CurrentScope())
     local scopeOpts = {
         values = values,
         width = ctx.width,
@@ -402,7 +403,8 @@ local function BuildAuraStyleScopeOverrideSection(ctx, b)
     local metrics = W.MeasureScopeOverrideBar and W.MeasureScopeOverrideBar(values, scopeOpts)
     local overrideY = min(-58, ((metrics and metrics.bottomY) or -40) - 18)
     local hintY = overrideY - 34
-    local section = b:Section("", max(128, abs(hintY) + 42))
+    local compactHeight = max(68, abs((metrics and metrics.bottomY) or -40) + 18)
+    local section = b:Section("", compactGroupScope and compactHeight or max(128, abs(hintY) + 42))
     if section.title then section.title:Hide() end
     local segment = RegisterAuraChoiceBar(ctx, W.ScopeOverrideBar(ctx, section, scopeOpts), values, "style.scope.selector")
     local override = W.ToggleAt(section, "Use custom aura style for this scope", 14, overrideY, 300)
@@ -437,17 +439,22 @@ local function BuildAuraStyleScopeOverrideSection(ctx, b)
         local current = CurrentScope()
         local shared = current == "shared"
         local group = IsGroupScope(current)
+        local custom = not shared and not group and tostring(M.auraStyleContainer or ""):match("^custom[123]$") ~= nil
         local active = AuraStyleUnitOverrideLabels()
         local visibleActive = AuraStyleVisibleOverrideLabels(active)
-        W.SetControlShown(override, not shared and not group)
-        overrideInfo:SetShown(shared or group)
+        W.SetControlShown(override, not shared and not group and not custom)
+        overrideInfo:SetShown(shared or custom)
+        hint:SetShown(not group)
         reset:SetShown(shared and #active > 0)
         if shared then
             overrideInfo:SetText("|cffffffff" .. Tr("Overrides:") .. "|r " .. (#visibleActive > 0 and table_concat(visibleActive, ", ") or Tr("None")))
             hint:SetText("Shared aura style is the baseline for unit-frame aura text, swipe, border, and timer settings. Party and Raid are group-frame style scopes with their own settings.")
         elseif group then
-            overrideInfo:SetText("|cffffffff" .. Tr("Group style scope:") .. "|r " .. ScopeLabel(current))
-            hint:SetText(ScopeLabel(current) .. " uses group-frame aura style settings. These controls are scoped here and do not change unit-frame Shared style.")
+            overrideInfo:SetText("")
+            hint:SetText("")
+        elseif custom then
+            overrideInfo:SetText("|cffffffff" .. ScopeLabel(current) .. " Custom style|r")
+            hint:SetText("Custom 1-3 are always stored per frame. Icon styling and Full-Frame effects here only change " .. ScopeLabel(current) .. ".")
         elseif not Model.UseSharedVisuals(current) then
             hint:SetText("Override active: this scope keeps its own aura style. Shared style changes will not replace it until the override is reset.")
         else
@@ -484,7 +491,16 @@ end
 local function LanePlural(kind)
     return kind == "buff" and "Buffs" or "Debuffs"
 end
-local function BuildAuraStyleNav(ctx, b)
+local function CurrentAuraStyleContainer(scope)
+    local container = M.auraStyleContainer or CurrentLane("auraStyleGFLane", "debuff")
+    local custom = tostring(container):match("^custom[123]$") ~= nil
+    if container ~= "buff" and container ~= "debuff" and not custom then container = "debuff" end
+    if (scope == "shared" or IsGroupScope(scope)) and custom then
+        container = CurrentLane("auraStyleGFLane", "debuff")
+    end
+    return container
+end
+local function BuildAuraStyleNav(ctx, b, scope)
     local h = 54
     local section = T.Panel(b.parent, nil, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft)
     T.ApplySurface(section, "card")
@@ -494,24 +510,33 @@ local function BuildAuraStyleNav(ctx, b)
     b.y = b.y - h - 12
     if ctx and ctx.SetContentHeight then ctx:SetContentHeight(abs(b.y) + 28) end
     local w = section._msuf2Width or b.width or 720
-    local navW = min(460, w - 32)
-    local gap = 8
-    local function NavButton(parent, item, width)
-        local btn = T.Button(parent, item.text or LanePlural(item.value), width, 24)
-        if T.CenterButtonLabel then T.CenterButtonLabel(btn) end
-        return btn
-    end
-    BuildActionTabs(ctx, section, LANE_VALUES, 16, -15, navW, function()
-        return CurrentLane("auraStyleGFLane", "debuff")
-    end, function(kind)
-        SetCurrentLane("auraStyleGFLane", kind)
-        local key = (ctx and ctx.key) or M.activeKey
-        if key == "auras3_buffs" or key == "auras3_debuffs" then
-            SelectPage("auras3_styling", CurrentScope())
-        else
-            Rebuild(ctx)
+    local values = (scope ~= "shared" and not IsGroupScope(scope)) and UNIT_STYLE_CONTAINER_VALUES or LANE_VALUES
+    local bar = W.ScopeOverrideBar(ctx, section, {
+        values = values,
+        width = w,
+        label = "Container:",
+        labelWidth = 88,
+        centerY = -28,
+        getValue = function() return CurrentAuraStyleContainer(scope) end,
+        setValue = function(container)
+            M.SetMenuStateValue("auraStyleContainer", container)
+            if container == "buff" or container == "debuff" then SetCurrentLane("auraStyleGFLane", container) end
+            local key = (ctx and ctx.key) or M.activeKey
+            if key == "auras3_buffs" or key == "auras3_debuffs" then
+                SelectPage("auras3_styling", CurrentScope())
+            else
+                Rebuild(ctx)
+            end
+        end,
+    })
+    if bar and type(bar.buttons) == "table" then
+        for i = 1, #values do
+            local item = values[i]
+            RegisterAuraControl(ctx, bar.buttons[i], item.text, "button",
+                "style.container-selector." .. AuraCatalogToken(item.value), "ephemeral")
         end
-    end, gap, NavButton, "style.lane-navigation")
+    end
+    return CurrentAuraStyleContainer(scope)
 end
 local function OtherLane(kind)
     return kind == "buff" and "debuff" or "buff"
@@ -883,7 +908,13 @@ local function PlaceAuraPreviewText(fs, icon, anchor, x, y)
 end
 local function RefreshMiniAuraPreviewNow(refreshPreview)
     if AurasMenuCombatLocked() then return end
-    if type(refreshPreview) == "function" then refreshPreview() end
+    if type(refreshPreview) ~= "function" then return end
+    refreshPreview()
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, function()
+            if not AurasMenuCombatLocked() then refreshPreview() end
+        end)
+    end
 end
 local function GroupAuraPreviewDefaultSize(scope, lane)
     if scope == "raid" or scope == "mythicraid" then return 16 end
@@ -934,6 +965,8 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
         cfg.cooldownX = tonumber(group.cooldownX) or 0
         cfg.cooldownY = tonumber(group.cooldownY) or 0
         cfg.cooldownDecimalSeconds = tonumber(group.cooldownDecimalSeconds) or 3
+        local growthX, growthY = tostring(group.growthX or "RIGHT"), tostring(group.growthY or "DOWN")
+        cfg.growth = (growthX == "UP" or growthX == "DOWN") and growthX or (growthX .. growthY)
         cfg.showDurationBar = group.showDurationBar == true
         cfg.durationBarHeight = tonumber(group.durationBarHeight) or 2
         cfg.durationBarDisplay = group.durationBarDisplay == "OVERLAY" and "OVERLAY" or "BAR_ONLY"
@@ -957,6 +990,7 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
             cfg.maxIcons = cfg.perRow * 2
         end
         cfg.spacing = tonumber(runtimePreview and runtimePreview.spacing) or Model.ReadNumber(readScope, "spacing", 2, 0, 12)
+        cfg.growth = lane and type(Model.ReadLaneGrowthPair) == "function" and Model.ReadLaneGrowthPair(readScope, lane) or "RIGHTDOWN"
         if type(Model.ReadLaneStyleBool) == "function" and lane then
             cfg.showStacks = Model.ReadLaneStyleBool(readScope, lane, "showStackCount", true)
             cfg.showTimers = Model.ReadLaneStyleBool(readScope, lane, "showCooldownText", true)
@@ -1018,7 +1052,10 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
     local maxCols = max(1, floor(((width or 300) - 20 + cfg.spacing) / max(1, cfg.size + cfg.spacing)))
     cfg.columns = min(cfg.perRow, maxCols)
     cfg.maxRows = max(1, floor(((height or 104) - 38 + cfg.spacing) / max(1, cfg.size + cfg.spacing)))
-    cfg.count = min(14, cfg.maxIcons, cfg.columns * cfg.maxRows)
+    local vertical = cfg.growth == "UP" or cfg.growth == "DOWN"
+    cfg.rowsPerColumn = vertical and min(cfg.perRow, cfg.maxRows) or cfg.maxRows
+    cfg.columns = vertical and maxCols or cfg.columns
+    cfg.count = min(14, cfg.maxIcons, cfg.columns * cfg.rowsPerColumn)
     cfg.stackSize = max(7, tonumber(cfg.stackSize) or 10)
     cfg.cooldownSize = max(7, tonumber(cfg.cooldownSize) or 9)
     cfg.cooldownDecimalSeconds = min(30, max(0, tonumber(cfg.cooldownDecimalSeconds) or 3))
@@ -1026,6 +1063,58 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
     cfg.durationBarDisplay = cfg.durationBarDisplay == "OVERLAY" and "OVERLAY" or "BAR_ONLY"
     cfg.durationBarPosition = cfg.durationBarPosition == "TOP" and "TOP" or "BOTTOM"
     cfg.durationBarDirection = cfg.durationBarDirection == "ELAPSED" and "ELAPSED" or "REMAINING"
+    return cfg
+end
+local function ReadCustomAuraPreviewConfig(scope, index, width, height)
+    local item = Model.CustomContainer(scope, index, true)
+    local placed = item and type(item.placed) == "table" and item.placed or {}
+    local entries = type(Model.CustomContainerSpellEntries) == "function" and Model.CustomContainerSpellEntries(scope, index) or {}
+    local cfg = {
+        size = tonumber(placed.size) or 24,
+        spacing = tonumber(placed.spacing) or 2,
+        perRow = tonumber(placed.perRow) or 4,
+        maxIcons = tonumber(placed.max) or 8,
+        showStacks = placed.showStacks ~= false,
+        showTimers = placed.showCooldown ~= false,
+        showSwipe = placed.showCooldownSwipe ~= false,
+        cooldownSwipeReverse = placed.cooldownSwipeReverse == true,
+        stackSize = tonumber(placed.stackSize) or 14,
+        stackAnchor = placed.stackAnchor or "BOTTOMRIGHT",
+        stackX = tonumber(placed.stackX) or 0,
+        stackY = tonumber(placed.stackY) or 0,
+        cooldownSize = tonumber(placed.cooldownSize) or 14,
+        cooldownAnchor = placed.cooldownAnchor or "CENTER",
+        cooldownX = tonumber(placed.cooldownX) or 0,
+        cooldownY = tonumber(placed.cooldownY) or 0,
+        cooldownDecimalSeconds = tonumber(placed.cooldownDecimalSeconds) or 3,
+        debuffBorderMode = NormalizeDebuffTypeBorderMode(placed.debuffTypeBorderMode, "OFF"),
+        showDurationBar = placed.showDurationBar == true,
+        durationBarHeight = tonumber(placed.durationBarHeight) or 2,
+        durationBarDisplay = placed.durationBarDisplay == "OVERLAY" and "OVERLAY" or "BAR_ONLY",
+        durationBarPosition = placed.durationBarPosition == "TOP" and "TOP" or "BOTTOM",
+        durationBarDirection = placed.durationBarDirection == "ELAPSED" and "ELAPSED" or "REMAINING",
+        growth = placed.growth or "LEFTDOWN",
+        isBuff = not item or item.auraType ~= "DEBUFF",
+        previewTextures = {},
+    }
+    for i = 1, #entries do cfg.previewTextures[i] = entries[i] and entries[i].icon end
+    local maxSize = max(12, min(128, floor((height or 104) - 38), floor((width or 300) - 20)))
+    cfg.actualSize = max(8, cfg.size)
+    cfg.size = min(maxSize, cfg.actualSize)
+    cfg.spacing = min(24, max(0, cfg.spacing))
+    cfg.perRow = max(1, Round(cfg.perRow))
+    cfg.maxIcons = max(0, Round(cfg.maxIcons))
+    local maxCols = max(1, floor(((width or 300) - 20 + cfg.spacing) / max(1, cfg.size + cfg.spacing)))
+    cfg.columns = min(cfg.perRow, maxCols)
+    cfg.maxRows = max(1, floor(((height or 104) - 38 + cfg.spacing) / max(1, cfg.size + cfg.spacing)))
+    local vertical = cfg.growth == "UP" or cfg.growth == "DOWN"
+    cfg.rowsPerColumn = vertical and min(cfg.perRow, cfg.maxRows) or cfg.maxRows
+    cfg.columns = vertical and maxCols or cfg.columns
+    cfg.count = min(14, cfg.maxIcons, cfg.columns * cfg.rowsPerColumn)
+    cfg.stackSize = max(7, cfg.stackSize)
+    cfg.cooldownSize = max(7, cfg.cooldownSize)
+    cfg.cooldownDecimalSeconds = min(30, max(0, cfg.cooldownDecimalSeconds))
+    cfg.durationBarHeight = min(max(1, cfg.durationBarHeight), max(1, floor(cfg.size / 2)))
     return cfg
 end
 local function FormatAuraPreviewTimer(seconds, cfg)
@@ -1074,13 +1163,14 @@ local function BuildSharedAuraPreviewSamples(lane, width, height)
     end
     return samples
 end
-local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lane)
+local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lane, opts)
     if ctx and ctx.hiddenBuild then return nil end
+    opts = opts or {}
     lane = lane == "buff" and "buff" or (lane == "debuff" and "debuff" or nil)
     local box = T.Panel(parent, nil, { 0.010, 0.016, 0.034, 0.88 }, T.colors.borderSoft)
     box:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     box:SetSize(width or 300, height or 104)
-    W.LabelAt(box, "Preview", 10, -10, 100, "GameFontNormalSmall", T.colors.text)
+    W.LabelAt(box, opts.title or "Dummy Style Preview", 10, -10, 190, "GameFontNormalSmall", T.colors.text)
     local icons = {}
     for i = 1, 14 do icons[i] = CreateAuraPreviewIcon(box) end
     local labels = {}
@@ -1103,7 +1193,9 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
         icon:SetSize(cfg.size, cfg.size)
         local barOnly = cfg.showDurationBar == true and cfg.durationBarDisplay == "BAR_ONLY"
         local tex = isBuffIcon and buffTex or debuffTex
-        icon.icon:SetTexture(tex[((index - 1) % #tex) + 1])
+        local previewTextures = cfg.previewTextures
+        local previewTexture = previewTextures and previewTextures[((index - 1) % max(1, #previewTextures)) + 1]
+        icon.icon:SetTexture(previewTexture or tex[((index - 1) % #tex) + 1])
         icon.bg:SetShown(not barOnly)
         icon.icon:SetShown(not barOnly)
         local r, g, b = isBuffIcon and 0.20 or 0.78, isBuffIcon and 0.72 or 0.20, isBuffIcon and 0.42 or 0.24
@@ -1160,7 +1252,7 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
     end
     local function RefreshPreview()
         if AurasMenuCombatLocked() then return end
-        if scope == "shared" then
+        if scope == "shared" and not opts.customIndex then
             local samples = BuildSharedAuraPreviewSamples(lane, width, height)
             local count = min(#samples, #icons)
             local boxW, boxH = width or 300, height or 104
@@ -1195,16 +1287,24 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
             end
             return
         end
-        local cfg = ReadMiniAuraPreviewConfig(scope, lane, width, height)
+        local cfg = opts.customIndex and ReadCustomAuraPreviewConfig(scope, opts.customIndex, width, height)
+            or ReadMiniAuraPreviewConfig(scope, lane, width, height)
         for i = 1, #icons do
             local icon = icons[i]
             labels[i]:Hide()
             if i <= cfg.count then
-                local col = (i - 1) % cfg.columns
-                local row = floor((i - 1) / cfg.columns)
+                local growth = tostring(cfg.growth or "RIGHTDOWN"):upper()
+                local vertical = growth == "UP" or growth == "DOWN"
+                local col = vertical and floor((i - 1) / max(1, cfg.rowsPerColumn)) or ((i - 1) % cfg.columns)
+                local row = vertical and ((i - 1) % max(1, cfg.rowsPerColumn)) or floor((i - 1) / cfg.columns)
+                local left = growth:find("LEFT", 1, true) ~= nil
+                local up = growth:find("UP", 1, true) ~= nil
+                local startX = left and ((width or 300) - 10 - cfg.size) or 10
+                local startY = up and (-((height or 104) - 10 - cfg.size)) or -34
+                local step = cfg.size + cfg.spacing
                 icon:ClearAllPoints()
-                icon:SetPoint("TOPLEFT", box, "TOPLEFT", 10 + col * (cfg.size + cfg.spacing), -34 - row * (cfg.size + cfg.spacing))
-                local isBuffIcon = lane and lane == "buff" or (not lane and i <= 7)
+                icon:SetPoint("TOPLEFT", box, "TOPLEFT", startX + col * step * (left and -1 or 1), startY + row * step * (up and 1 or -1))
+                local isBuffIcon = opts.customIndex and cfg.isBuff or (lane and lane == "buff" or (not lane and i <= 7))
                 RenderPreviewIcon(icon, i, cfg, isBuffIcon, false)
             else
                 HidePreviewIcon(icon)
@@ -1214,6 +1314,34 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
     M.TrackRefresh(ctx, RefreshPreview)
     return box, RefreshPreview
 end
+local function BuildLiveAuraPreview(ctx, parent, scope, laneKind, x, y, width, height)
+    if ctx and ctx.hiddenBuild then return nil end
+    local box = T.Panel(parent, nil, { 0.010, 0.016, 0.034, 0.88 }, T.colors.borderSoft)
+    box:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    box:SetSize(width or 300, height or 120)
+    if box.SetClipsChildren then box:SetClipsChildren(true) end
+    W.LabelAt(box, "Live Tracked Auras", 10, -10, 180, "GameFontNormalSmall", T.colors.accent)
+    local status = W.Text(box, "", 194, -10, max(80, (width or 300) - 204), T.colors.muted)
+    status:SetJustifyH("RIGHT")
+    local function RefreshLive()
+        local ok, reason = type(A3.UpdateMenuAuraPreview) == "function"
+            and A3.UpdateMenuAuraPreview(box, scope, laneKind, width, height)
+        if ok then
+            status:SetText("Native · " .. ScopeLabel(scope))
+        elseif reason == "combat" then
+            status:SetText("Updates after combat")
+        elseif reason == "no-group-frame" then
+            status:SetText("No live member")
+        elseif tostring(laneKind):match("^custom[123]$") then
+            status:SetText("Disabled or whitelist empty")
+        else
+            status:SetText("No matching aura active")
+        end
+    end
+    M.TrackRefresh(ctx, RefreshLive)
+    box:HookScript("OnShow", function() RefreshLive() end)
+    return box, RefreshLive
+end
 local function BuildUnitStyle(ctx, b, scope)
     local unit = scope == "shared" and "shared" or scope
     local lane = CurrentLane("auraStyleGFLane", "debuff")
@@ -1221,8 +1349,10 @@ local function BuildUnitStyle(ctx, b, scope)
     local extraDebuffControls = lane == "debuff" and 64 or 0
     local styleControls = {}
     local refreshMiniPreview
+    local refreshLivePreview
     local function RefreshStylePreview()
         RefreshMiniAuraPreviewNow(refreshMiniPreview)
+        RefreshMiniAuraPreviewNow(refreshLivePreview)
     end
     local function ReadScopeBool(key, defaultValue)
         if type(Model.ReadLaneStyleBool) == "function" then return Model.ReadLaneStyleBool(unit, lane, key, defaultValue) end
@@ -1357,12 +1487,13 @@ local function BuildUnitStyle(ctx, b, scope)
     local scopeLabel = ScopeLabel(scope)
     local baseId = "aura_style_" .. tostring(scope or "shared") .. "_" .. lane
 
-    local previewH = unit == "shared" and 244 or 204
-    local previewBoxH = unit == "shared" and 158 or 118
-    local previewHintY = unit == "shared" and -210 or -170
+    local previewH = unit == "shared" and 478 or 446
+    local previewBoxH = unit == "shared" and 190 or 176
+    local previewHintY = unit == "shared" and -444 or -412
     local preview = b:Section(LaneTitle(lane) .. " Preview", previewH)
     local pw = BodyWidth(preview)
-    refreshMiniPreview = select(2, BuildMiniAuraPreview(ctx, preview, unit, 24, -34, pw - 48, previewBoxH, lane))
+    refreshLivePreview = select(2, BuildLiveAuraPreview(ctx, preview, unit, lane, 24, -34, pw - 48, 176))
+    refreshMiniPreview = select(2, BuildMiniAuraPreview(ctx, preview, unit, 24, -220, pw - 48, previewBoxH, lane))
     local hint = W.Text(preview, "", 24, previewHintY, pw - 48, T.colors.muted)
 
     local featuresH = 188 + extraDebuffControls
@@ -1449,9 +1580,9 @@ local function BuildUnitStyle(ctx, b, scope)
             end
         end
         if unit == "shared" then
-            hint:SetText("Shared preview groups frames by identical icon size and swipe direction; labels show the actual frame icon size. Font family follows Global Style > Fonts.")
+            hint:SetText("Top: native Player tracking. Bottom: dummy samples grouped by the real frame size and swipe direction. Font family follows Global Style > Fonts.")
         else
-            hint:SetText(editable and "Font family follows Global Style > Fonts. SpellID blacklists are on Filters." or "This scope inherits the Shared aura style.")
+            hint:SetText(editable and "Top: real Blizzard-tracked auras. Bottom: always-visible style dummy with the configured size and growth." or "This scope inherits Shared style; live and dummy previews still use this frame.")
         end
     end)
 end
@@ -1460,8 +1591,10 @@ local function BuildGroupStyle(ctx, b, scope)
     local extraDebuffControls = lane == "debuff" and 64 or 0
     local laneName = LanePlural(lane)
     local refreshMiniPreview
+    local refreshLivePreview
     local function RefreshStylePreview()
         RefreshMiniAuraPreviewNow(refreshMiniPreview)
+        RefreshMiniAuraPreviewNow(refreshLivePreview)
     end
     local function BodyWidth(body)
         return body and (body._msuf2Width or body.GetWidth and body:GetWidth()) or b.width or 720
@@ -1469,11 +1602,13 @@ local function BuildGroupStyle(ctx, b, scope)
     local scopeLabel = ScopeLabel(scope)
     local baseId = "aura_style_group_" .. tostring(scope or "group") .. "_" .. lane
 
-    local preview = b:Section("Group " .. LaneTitle(lane) .. " Preview", 160)
+    local preview = b:Section(LaneTitle(lane) .. " Preview", 430)
     local pw = BodyWidth(preview)
-    refreshMiniPreview = select(2, BuildMiniAuraPreview(ctx, preview, scope, 24, -34, pw - 48, 118, lane))
+    refreshLivePreview = select(2, BuildLiveAuraPreview(ctx, preview, scope, lane, 24, -34, pw - 48, 176))
+    refreshMiniPreview = select(2, BuildMiniAuraPreview(ctx, preview, scope, 24, -220, pw - 48, 176, lane))
+    W.Text(preview, "Top: current live member. Bottom: always-visible style dummy using this scope's size and growth.", 24, -404, pw - 48, T.colors.muted)
 
-    local features = b:CollapsibleSection(baseId .. "_features", "Group " .. LaneTitle(lane) .. " Basics", 186 + extraDebuffControls, true)
+    local features = b:CollapsibleSection(baseId .. "_features", LaneTitle(lane) .. " Basics", 186 + extraDebuffControls, true)
     local fw = BodyWidth(features)
     local colorsButton = ActionButton(features, "Open Aura Colors", 150, "normal")
     colorsButton:SetPoint("TOPLEFT", features, "TOPLEFT", 24, -42)
@@ -1495,7 +1630,7 @@ local function BuildGroupStyle(ctx, b, scope)
             AuraControlMeta(ctx, "group-style.lane." .. AuraCatalogToken(lane) .. ".dispel-border-mode"))
     end
 
-    local cooldown = b:CollapsibleSection(baseId .. "_cooldown", "Group " .. LaneTitle(lane) .. " Cooldown Text", 382, true)
+    local cooldown = b:CollapsibleSection(baseId .. "_cooldown", LaneTitle(lane) .. " Cooldown Text", 382, true)
     local cw = BodyWidth(cooldown)
     BindGroupSlider(ctx, cooldown, "Cooldown Font", 24, -54, 6, 24, 1, cw - 48, scope, lane, "cooldownSize", 8, "font", RefreshStylePreview)
     BindGroupDropdown(ctx, cooldown, "Cooldown Anchor", 24, -112, GFAnchorValues(), cw - 48, scope, lane, "cooldownAnchor", "CENTER", "geometry", RefreshStylePreview)
@@ -1517,7 +1652,7 @@ local function BuildGroupStyle(ctx, b, scope)
     AddTooltip(groupDecimal, "Cooldown text format", "Remaining time below this value uses one decimal place. Timers show unitless seconds below 1 minute and localized minutes above it. Set 0 for whole seconds only.")
     W.Text(cooldown, "Uses Blizzard DurationTextBinding; no Lua timer or OnUpdate work is added. Durations are unitless seconds below 1 minute, then localized minutes.", 24, -340, cw - 48, T.colors.muted)
 
-    local durationBar = b:CollapsibleSection(baseId .. "_duration_bar", "Group " .. LaneTitle(lane) .. " Duration Bar", 358, false)
+    local durationBar = b:CollapsibleSection(baseId .. "_duration_bar", LaneTitle(lane) .. " Duration Bar", 358, false)
     local dbw = BodyWidth(durationBar)
     W.Text(durationBar, "Optional native StatusBar timer for " .. scopeLabel .. " " .. laneName .. ".", 24, -42, dbw - 48, T.colors.muted)
     BindGroupSwitch(ctx, durationBar, "Show Duration Bar", 24, -82, dbw - 48, scope, lane, "showDurationBar", false, "visual", RefreshStylePreview)
@@ -1526,7 +1661,7 @@ local function BuildGroupStyle(ctx, b, scope)
     BindGroupDropdown(ctx, durationBar, "Position", 24, -256, DURATION_BAR_POSITION_VALUES, dbw - 48, scope, lane, "durationBarPosition", "BOTTOM", "visual", RefreshStylePreview)
     BindGroupDropdown(ctx, durationBar, "Fill Mode", 24, -314, DURATION_BAR_DIRECTION_VALUES, dbw - 48, scope, lane, "durationBarDirection", "REMAINING", "visual", RefreshStylePreview)
 
-    local stack = b:CollapsibleSection(baseId .. "_stack", "Group " .. LaneTitle(lane) .. " Stack Count", 270, false)
+    local stack = b:CollapsibleSection(baseId .. "_stack", LaneTitle(lane) .. " Stack Count", 270, false)
     local sw = BodyWidth(stack)
     BindGroupSwitch(ctx, stack, "Show Stack Count", 24, -54, sw - 48, scope, lane, "showStacks", true, "visual", RefreshStylePreview)
     BindGroupSlider(ctx, stack, "Stack Font", 24, -94, 6, 24, 1, sw - 48, scope, lane, "stackSize", 10, "font", RefreshStylePreview)
@@ -1535,29 +1670,105 @@ local function BuildGroupStyle(ctx, b, scope)
     BindGroupSlider(ctx, stack, "Stack X", 24, -210, -40, 40, 1, stackSmallW, scope, lane, "stackX", 0, "geometry", RefreshStylePreview)
     BindGroupSlider(ctx, stack, "Stack Y", 32 + stackSmallW, -210, -40, 40, 1, stackSmallW, scope, lane, "stackY", 0, "geometry", RefreshStylePreview)
 
-    local behavior = b:CollapsibleSection(baseId .. "_behavior", "Group " .. LaneTitle(lane) .. " Behavior", 220, false)
+    local behavior = b:CollapsibleSection(baseId .. "_behavior", LaneTitle(lane) .. " Behavior", 220, false)
     local bw = BodyWidth(behavior)
-    W.Text(behavior, "Shared group-frame aura behavior for " .. scopeLabel .. ".", 24, -42, bw - 48, T.colors.muted)
+    W.Text(behavior, "Behavior for " .. scopeLabel .. ".", 24, -42, bw - 48, T.colors.muted)
     BindGroupRootSwitch(ctx, behavior, "Sort by Duration", 24, -82, bw - 48, scope, "sortByDuration", false, "visual")
     BindGroupRootSwitch(ctx, behavior, "Prefer Player Auras", 24, -114, bw - 48, scope, "preferPlayer", false, "visual")
     BindGroupRootSwitch(ctx, behavior, "Dynamic Icon Scale", 24, -146, bw - 48, scope, "dynamicScale", false, "geometry", RefreshStylePreview)
     BindGroupConfSwitch(ctx, behavior, "Cooldown darkens on loss", 24, -188, bw - 48, scope, "cooldownSwipeDarkenOnLoss", false, "visual", RefreshStylePreview)
+end
+local function EnsureCustomPreviewEffect(box)
+    if box._msufCustomEffectOverlay then return box._msufCustomEffectOverlay, box._msufCustomEffectEdges, box._msufCustomEffectName end
+    local overlay = box:CreateTexture(nil, "BACKGROUND", nil, 1)
+    overlay:SetPoint("TOPLEFT", box, "TOPLEFT", 2, -2)
+    overlay:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -2, 2)
+    overlay:SetTexture(TEX_W8)
+    overlay:Hide()
+    local edges = {}
+    for i = 1, 4 do
+        edges[i] = box:CreateTexture(nil, "OVERLAY", nil, 3)
+        edges[i]:SetTexture(TEX_W8)
+        edges[i]:Hide()
+    end
+    local name = T.Font(box, "GameFontHighlight", "Preview Unit", T.colors.text)
+    name:SetPoint("BOTTOMLEFT", box, "BOTTOMLEFT", 10, 8)
+    name:Hide()
+    box._msufCustomEffectOverlay = overlay
+    box._msufCustomEffectEdges = edges
+    box._msufCustomEffectName = name
+    return overlay, edges, name
+end
+local function RefreshCustomPreviewEffect(box, item)
+    if not box then return end
+    local overlay, edges, name = EnsureCustomPreviewEffect(box)
+    local frame = item and type(item.frame) == "table" and item.frame or {}
+    local effect = tostring(frame.type or "none"):lower()
+    local color = type(frame.color) == "table" and frame.color or { 0.69, 0.50, 0.88, 0.8 }
+    local r, g, blue, alpha = color[1] or 0.69, color[2] or 0.50, color[3] or 0.88, color[4] or 0.8
+    overlay:SetVertexColor(r, g, blue, min(0.32, alpha * 0.34))
+    overlay:SetShown(effect == "healthtint" or effect == "pulse")
+    name:SetTextColor(r, g, blue, 1)
+    name:SetShown(effect == "namecolor")
+    local showEdges = effect == "border" or effect == "glow" or effect == "pulse"
+    local thickness = min(12, max(1, tonumber(frame.thickness) or 2))
+    for i = 1, #edges do
+        edges[i]:ClearAllPoints()
+        edges[i]:SetVertexColor(r, g, blue, effect == "glow" and min(1, alpha + 0.16) or alpha)
+        edges[i]:SetShown(showEdges)
+    end
+    edges[1]:SetPoint("TOPLEFT", box, "TOPLEFT", 1, -1); edges[1]:SetPoint("TOPRIGHT", box, "TOPRIGHT", -1, -1); edges[1]:SetHeight(thickness)
+    edges[2]:SetPoint("BOTTOMLEFT", box, "BOTTOMLEFT", 1, 1); edges[2]:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -1, 1); edges[2]:SetHeight(thickness)
+    edges[3]:SetPoint("TOPLEFT", box, "TOPLEFT", 1, -1); edges[3]:SetPoint("BOTTOMLEFT", box, "BOTTOMLEFT", 1, 1); edges[3]:SetWidth(thickness)
+    edges[4]:SetPoint("TOPRIGHT", box, "TOPRIGHT", -1, -1); edges[4]:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -1, 1); edges[4]:SetWidth(thickness)
+end
+local function BuildCustomAuraStylePreview(ctx, b, scope, index)
+    local section = b:Section("Custom " .. tostring(index) .. " Preview", 452)
+    local w = section._msuf2Width or b.width or 720
+    local liveRefresh = select(2, BuildLiveAuraPreview(ctx, section, scope, "custom" .. tostring(index), 24, -34, w - 48, 176))
+    local dummyBox, dummyRefresh = BuildMiniAuraPreview(ctx, section, scope, 24, -220, w - 48, 176, nil, {
+        customIndex = index,
+        title = "Dummy + Whitelist Style Preview",
+    })
+    local meta = W.Text(section, "", 24, -414, w - 48, T.colors.muted)
+    local function RefreshCustomPreview()
+        RefreshMiniAuraPreviewNow(liveRefresh)
+        RefreshMiniAuraPreviewNow(dummyRefresh)
+        local item = Model.CustomContainer(scope, index, true)
+        local placed = item and type(item.placed) == "table" and item.placed or {}
+        local frame = item and type(item.frame) == "table" and item.frame or {}
+        local count = type(Model.CustomContainerSpellEntries) == "function" and #Model.CustomContainerSpellEntries(scope, index) or 0
+        meta:SetText(tostring(tonumber(placed.size) or 24) .. "px · " .. tostring(tonumber(placed.spacing) or 2)
+            .. " gap · " .. tostring(tonumber(placed.perRow) or 4) .. " per row · " .. tostring(count)
+            .. " whitelisted · Full-Frame: " .. tostring(frame.type or "none"))
+        RefreshCustomPreviewEffect(dummyBox, item)
+    end
+    ctx._auraAppearancePreviewRefresh = RefreshCustomPreview
+    M.TrackRefresh(ctx, RefreshCustomPreview)
+    return section
 end
 local function BuildAuraStylePage(ctx)
     local b = W.PageBuilder(ctx)
     Model.EnsureDB()
     b:GlobalStyleHeader("Aura Style", "Text, cooldown, stack and marker styling.", 72)
     local scope = BuildAuraStyleScopeOverrideSection(ctx, b)
-    BuildAuraStyleNav(ctx, b)
-    if IsGroupScope(scope) then
+    local container = BuildAuraStyleNav(ctx, b, scope)
+    if tostring(container):match("^custom[123]$") then
+        local index = tonumber(container:match("(%d)$")) or 1
+        BuildCustomAuraStylePreview(ctx, b, scope, index)
+        M.BuildAuras3CompactCustomWorkspace(ctx, b, scope, index, "appearance")
+        M.BuildAuras3CompactCustomWorkspace(ctx, b, scope, index, "effect")
+    elseif IsGroupScope(scope) then
         BuildGroupStyle(ctx, b, scope)
     else
+        SetCurrentLane("auraStyleGFLane", container)
         BuildUnitStyle(ctx, b, scope)
     end
     FinishPage(ctx, b)
 end
 local function BuildAuraStyleLanePage(ctx, lane)
     SetCurrentLane("auraStyleGFLane", lane)
+    M.SetMenuStateValue("auraStyleContainer", lane)
     BuildAuraStylePage(ctx)
 end
 local function GFReadBlacklistCat(scope, groupKey, catKey)
@@ -1659,10 +1870,6 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
     local blacklist = Card(section, "Category Blacklist", "SpellID category filters for " .. ScopeLabel(scope) .. ".", 24, blacklistY, w - 48, categoryHeight)
     W.LabelAt(blacklist, "Active", 16, -50, 70, "GameFontNormalSmall", T.colors.accent)
     W.LabelAt(blacklist, lane == "buff" and "Buff category blacklist" or "Debuff category blacklist", 86, -50, 260, "GameFontHighlightSmall", T.colors.text)
-    local hidePermanent = BindSwitch(ctx, blacklist, "Hide permanent auras", 16, -100, w - 96,
-        ReadHidePermanent, WriteHidePermanent,
-        AuraControlMeta(ctx, "group-blacklist.lane." .. AuraCatalogToken(lane) .. ".hide-permanent"))
-    AddHidePermanentTooltip(hidePermanent)
     W.Text(blacklist, NATIVE_EXACT_AURA_FILTERS_TEXT, 16, -72, w - 96, T.colors.muted)
     if #meta == 0 then
         W.Text(blacklist, "No public aura category data is loaded.", 16, -132, w - 96, T.colors.muted)
@@ -1817,9 +2024,9 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
 end
 local UNIT_AURA_WORKSPACE_TABS = VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3"
 local UNIT_AURA_NORMAL_TOOLS = VTP "layout=Layout|filters=Filters|blacklist=Blacklist"
-local UNIT_AURA_CUSTOM_TOOLS = VTP "setup=Setup|whitelist=Whitelist|filters=Filters|layout=Layout|appearance=Icon Style|effect=Full-Frame"
+local UNIT_AURA_CUSTOM_TOOLS = VTP "setup=Setup|layout=Layout|filters=Filters|whitelist=Whitelist"
 local UNIT_AURA_NORMAL_TOOL_OK = { layout = true, filters = true, blacklist = true }
-local UNIT_AURA_CUSTOM_TOOL_OK = { setup = true, whitelist = true, filters = true, layout = true, appearance = true, effect = true }
+local UNIT_AURA_CUSTOM_TOOL_OK = { setup = true, whitelist = true, filters = true, layout = true }
 
 local function CurrentUnitAuraTool(unit, container)
     M.unitAuraToolSelection = M.unitAuraToolSelection or {}
@@ -2098,10 +2305,183 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
     end)
 end
 
+local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
+    local laneTitle = lane == "debuff" and "Debuff" or "Buff"
+    local values = GroupFilterValues(lane)
+    local optionRows = max(1, ceil(#values / 4))
+    local section = b:Section(laneTitle .. " Filters", max(150, 104 + optionRows * 32))
+    local w = section._msuf2Width or b.width or 720
+    local inner = w - 48
+    local gap = 10
+    local colW = floor((inner - gap * 3) / 4)
+    W.Text(section, "Native content · choose one", 24, -42, colW * 2 + gap, T.colors.muted)
+    local hidePermanent = BindSwitch(ctx, section, "Hide permanent", 24 + 2 * (colW + gap), -42, colW * 2 + gap,
+        function()
+            return type(Model.ReadGroupBlacklistHidePermanent) == "function"
+                and Model.ReadGroupBlacklistHidePermanent(scope, lane) == true
+        end,
+        function(value)
+            if type(Model.WriteGroupBlacklistHidePermanent) == "function"
+                and Model.WriteGroupBlacklistHidePermanent(scope, lane, value) then
+                QueueGroupScope(scope, "visual")
+            end
+        end,
+        AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.hide-permanent"))
+    AddTooltip(hidePermanent, "Hide permanent auras", "Always excludes auras without a duration.")
+    for i = 1, #values do
+        local item = values[i]
+        local col = (i - 1) % 4
+        local row = floor((i - 1) / 4)
+        local control = BindSwitch(ctx, section, item.text or item.value, 24 + col * (colW + gap), -78 - row * 32, colW,
+            function()
+                local group = GFReadGroup(scope, lane)
+                return CanonicalGroupFilterValue(group.filterToken or "ALL") == item.value
+            end,
+            function(enabled)
+                local group = GFReadGroup(scope, lane)
+                local current = CanonicalGroupFilterValue(group.filterToken or "ALL")
+                local value = enabled and item.value or (current == item.value and "ALL" or current)
+                GFWriteGroupValue(scope, lane, "filterToken", value, "visual")
+                QueueAurasPageRefresh(ctx, "group-native-filter-choice")
+            end,
+            AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.native." .. AuraCatalogToken(item.value)))
+        AddTooltip(control, item.text or item.value, "Native Blizzard AuraContainer content rule. Only one rule is active at a time.")
+    end
+end
+
+local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
+    local laneTitle = lane == "debuff" and "Debuff" or "Buff"
+    local section = b:Section(laneTitle .. " Blacklist", 250)
+    local w = section._msuf2Width or b.width or 720
+    local inner = w - 48
+    local inputValue = ""
+    local inputW = max(260, floor(inner * 0.46))
+    local input = BindTextInput(ctx, section, "Spell ID, link, or name", 24, -36, inputW,
+        function() return inputValue end, function(value) inputValue = value or "" end,
+        false, AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.manual-input", "ephemeral"))
+    local add = ActionButton(section, "Add", 86)
+    add:SetPoint("TOPLEFT", section, "TOPLEFT", 34 + inputW, -58)
+    add:SetScript("OnClick", function()
+        local value = input and input.GetText and input:GetText() or inputValue
+        if Model.AddGroupBlacklistSpell(scope, lane, value) then
+            QueueGroupScope(scope, "visual")
+            Rebuild(ctx)
+        end
+        if input and input.SetText then input:SetText("") end
+        inputValue = ""
+    end)
+    RegisterAuraControl(ctx, add, "Add", "button", "group-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.add", "action")
+    local presetW = max(150, floor(inner * 0.22))
+    local spellW = max(210, floor(inner * 0.30))
+    local function CurrentPreset()
+        local key = M.auraBlacklistPreset or "RAID_BUFFS"
+        local values = Model.BlacklistPresetValues()
+        for i = 1, #values do if values[i].value == key then return key end end
+        return values[1] and values[1].value or "RAID_BUFFS"
+    end
+    local preset = W.Dropdown(section, "Preset", function() return Model.BlacklistPresetValues() end, presetW)
+    W.MoveWidget(preset, section, 24, -92, presetW)
+    M.BindDropdownWidget(ctx, preset, CurrentPreset, function(value)
+        M.auraBlacklistPreset = value
+        M.auraBlacklistSpell = nil
+        QueueAurasPageRefresh(ctx, "group-aura-blacklist-preset")
+    end, AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.preset-selection", "ephemeral"))
+    local spell = W.Dropdown(section, "Spell", function() return Model.BlacklistSpellValues(CurrentPreset()) end, spellW)
+    W.MoveWidget(spell, section, 34 + presetW, -92, spellW)
+    M.BindDropdownWidget(ctx, spell,
+        function()
+            local values, selected = Model.BlacklistSpellValues(CurrentPreset()), M.auraBlacklistSpell
+            for i = 1, #values do if values[i].value == selected then return selected end end
+            return values[1] and values[1].value or nil
+        end,
+        function(value) M.auraBlacklistSpell = value end,
+        AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.spell-selection", "ephemeral"))
+    local addSpell = ActionButton(section, "Add spell", 96)
+    addSpell:SetPoint("TOPLEFT", section, "TOPLEFT", 44 + presetW + spellW, -114)
+    addSpell:SetScript("OnClick", function()
+        local values = Model.BlacklistSpellValues(CurrentPreset())
+        local spellID = M.auraBlacklistSpell or (values[1] and values[1].value)
+        if Model.AddGroupBlacklistSpell(scope, lane, spellID) then
+            QueueGroupScope(scope, "visual")
+            Rebuild(ctx)
+        end
+    end)
+    RegisterAuraControl(ctx, addSpell, "Add spell", "button", "group-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.add-preset-spell", "action")
+    local addSet = ActionButton(section, "Add set", 88)
+    addSet:SetPoint("LEFT", addSpell, "RIGHT", 8, 0)
+    addSet:SetScript("OnClick", function()
+        if Model.AddGroupBlacklistPresetGroup(scope, lane, CurrentPreset()) > 0 then
+            QueueGroupScope(scope, "visual")
+            Rebuild(ctx)
+        end
+    end)
+    RegisterAuraControl(ctx, addSet, "Add set", "button", "group-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.add-preset-set", "action")
+    local prepared = W.Text(section, "", 24, -154, inner, T.colors.accent)
+    local empty = W.Text(section, "No blocked spells. Add one above or use a preset.", 24, -184, inner, T.colors.muted)
+    local listScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
+    listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -178)
+    listScroll:SetSize(inner - 20, 54)
+    if listScroll.EnableMouseWheel then listScroll:EnableMouseWheel(true) end
+    local listChild = CreateFrame("Frame", nil, listScroll)
+    listChild:SetSize(inner - 42, 54)
+    listScroll:SetScrollChild(listChild)
+    if listScroll.SetPropagateMouseWheel then listScroll:SetPropagateMouseWheel(false) end
+    listScroll:SetScript("OnMouseWheel", function(self, delta) HandleNestedScrollWheel(self, delta, 32) end)
+    local rows = {}
+    local function EnsureRow(i)
+        local row = rows[i]
+        if row then return row end
+        row = CreateFrame("Button", nil, listChild)
+        row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((i - 1) * 22))
+        row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((i - 1) * 22))
+        row:SetHeight(20)
+        row.icon = row:CreateTexture(nil, "ARTWORK")
+        row.icon:SetPoint("LEFT", row, "LEFT", 3, 0)
+        row.icon:SetSize(17, 17)
+        row.text = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
+        row.text:SetPoint("LEFT", row.icon, "RIGHT", 7, 0)
+        row:SetScript("OnClick", function(self)
+            if self._spellID and Model.RemoveGroupBlacklistSpell(scope, lane, self._spellID) then
+                QueueGroupScope(scope, "visual")
+                Rebuild(ctx)
+            end
+        end)
+        rows[i] = row
+        return row
+    end
+    M.TrackRefresh(ctx, function()
+        local entries = type(Model.GroupBlacklistEntries) == "function" and Model.GroupBlacklistEntries(scope, lane) or {}
+        prepared:SetText((#entries == 1 and "1 blocked spell" or tostring(#entries) .. " blocked spells") .. " · click an entry to remove")
+        empty:SetShown(#entries == 0)
+        listScroll:SetShown(#entries > 0)
+        listChild:SetHeight(max(54, #entries * 22))
+        for i = 1, max(#rows, #entries) do
+            local row, entry = rows[i], entries[i]
+            if entry then
+                row = EnsureRow(i)
+                row._spellID = entry.value
+                row.icon:SetTexture(entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
+                row.text:SetText(entry.text or entry.value)
+                RegisterAuraControl(ctx, row, entry.text or entry.value or "Blacklist entry", "button",
+                    "group-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.entry." .. AuraCatalogToken(entry.value) .. ".remove", "action")
+                row:Show()
+            elseif row then row._spellID = nil; row:Hide() end
+        end
+    end)
+end
+
 function M.BuildAuras3GroupLaneWorkspace(ctx, b, scope, lane, opts)
     lane = lane == "debuff" and "debuff" or "buff"
     SetCurrentLane("auraStyleGFLane", lane)
     SetCurrentLane("auraFilterLane", lane)
+    if opts and opts.compact == true then
+        if opts.tool == "blacklist" then
+            BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
+        else
+            BuildCompactGroupAuraFilters(ctx, b, scope, lane)
+        end
+        return
+    end
     BuildGroupFilters(ctx, b, scope, lane, opts)
 end
 
@@ -2148,24 +2528,56 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
     local top = auraBuilder:Section("", 104)
     if top.title then top.title:Hide() end
     local sectionW = top._msuf2Width or auraBuilder.width or 720
-    W.LabelAt(top, "Container", 16, -22, 68, "GameFontNormalSmall", T.colors.accent)
-    local _, tabButtons = BuildActionTabs(ctx, top, UNIT_AURA_WORKSPACE_TABS, 88, -16, max(430, sectionW - 112), CurrentTab, function(value)
-        M.unitAuraTabSelection[unit] = value
-        Rebuild(ctx)
-    end, 6, UnitAuraWorkspaceTabButton, "unit-workspace.container-selector")
-    W.LabelAt(top, "Edit", 16, -58, 68, "GameFontNormalSmall", T.colors.accent)
+    local containerBar = W.ScopeOverrideBar(ctx, top, {
+        values = UNIT_AURA_WORKSPACE_TABS,
+        width = sectionW,
+        label = "Container:",
+        labelWidth = 72,
+        centerY = -28,
+        getValue = CurrentTab,
+        setValue = function(value)
+            M.unitAuraTabSelection[unit] = value
+            Rebuild(ctx)
+        end,
+    })
+    if containerBar and type(containerBar.buttons) == "table" then
+        for i = 1, #UNIT_AURA_WORKSPACE_TABS do
+            local item = UNIT_AURA_WORKSPACE_TABS[i]
+            RegisterAuraControl(ctx, containerBar.buttons[i], item.text, "button",
+                "unit-workspace.container-selector." .. AuraCatalogToken(item.value), "ephemeral")
+        end
+    end
     local tools = normalLane and UNIT_AURA_NORMAL_TOOLS or UNIT_AURA_CUSTOM_TOOLS
-    local _, toolButtons = BuildActionTabs(ctx, top, tools, 88, -52, max(430, sectionW - 112),
-        function() return CurrentUnitAuraTool(unit, currentTab) end,
-        function(value) SetUnitAuraTool(unit, currentTab, value); Rebuild(ctx) end, 6, UnitAuraWorkspaceTabButton,
-        "unit-workspace.tool-selector")
-    local workspaceHint = W.Text(top, "Icon text, cooldowns and borders: Appearance > Auras.", 16, -84, sectionW - 32, T.colors.muted)
+    local toolBar = W.ScopeOverrideBar(ctx, top, {
+        values = tools,
+        width = sectionW,
+        label = "Edit:",
+        labelWidth = 72,
+        centerY = -62,
+        getValue = function() return CurrentUnitAuraTool(unit, currentTab) end,
+        setValue = function(value) SetUnitAuraTool(unit, currentTab, value); Rebuild(ctx) end,
+    })
+    if toolBar and type(toolBar.buttons) == "table" then
+        for i = 1, #tools do
+            local item = tools[i]
+            RegisterAuraControl(ctx, toolBar.buttons[i], item.text, "button",
+                "unit-workspace.tool-selector." .. AuraCatalogToken(item.value), "ephemeral")
+        end
+    end
+    local openStyle = ActionButton(top, "Open Aura Style", 126, "normal")
+    openStyle:SetPoint("TOPRIGHT", top, "TOPRIGHT", -16, -74)
+    openStyle:SetScript("OnClick", function()
+        SetCurrentScope(unit)
+        M.SetMenuStateValue("auraStyleContainer", currentTab)
+        if normalLane then SetCurrentLane("auraStyleGFLane", currentTab) end
+        SelectPage("auras3_styling", unit)
+    end)
+    RegisterAuraControl(ctx, openStyle, "Open Aura Style", "button", "unit-workspace.open-aura-style", "navigation")
+    local workspaceHint = W.Text(top, "All icon and full-frame styling: Appearance > Auras.", 16, -84, sectionW - 174, T.colors.muted)
     M.TrackRefresh(ctx, function()
-        for _, item in ipairs(UNIT_AURA_WORKSPACE_TABS) do W.SetControlEnabled(tabButtons[item.value], true) end
-        for _, item in ipairs(tools) do W.SetControlEnabled(toolButtons[item.value], true) end
         workspaceHint:SetText(normalLane and not AnyUnitFrameAuraEnabled()
             and UNIT_AURA_DISPEL_WARNING
-            or "Icon text, cooldowns and borders: Appearance > Auras.")
+            or "All icon and full-frame styling: Appearance > Auras.")
     end)
 
     if normalLane then
@@ -2200,6 +2612,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
     if type(item.frame.color) ~= "table" then item.frame.color = { 0.69, 0.50, 0.88, 0.8 } end
     local function Apply(reason, rebuild)
         ApplyUnit(ctx, unit, reason or "AURAS3_CUSTOM_CONTAINER", rebuild == true)
+        if type(ctx._auraAppearancePreviewRefresh) == "function" then ctx._auraAppearancePreviewRefresh() end
     end
     local function Grid(w, count, gap)
         gap = gap or 10
@@ -2523,5 +2936,5 @@ end
 M.RegisterPage("auras3_buffs", { title = "Aura Style: Buffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "buff") end, version = 22 })
 M.RegisterPage("auras3_debuffs", { title = "Aura Style: Debuffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "debuff") end, version = 22 })
 M.RegisterPage("auras3_custom", { title = "MSUF Auras", build = BuildMovedAuraPage, version = 2 })
-M.RegisterPage("auras3_styling", { title = "Aura Style", build = BuildAuraStylePage, version = 42 })
+M.RegisterPage("auras3_styling", { title = "Aura Style", build = BuildAuraStylePage, version = 45 })
 M.RegisterPage("auras3_filters", { title = "MSUF Auras", build = BuildMovedAuraPage, version = 31 })

@@ -696,12 +696,16 @@ local function MergeGroupDirty(gf, current, incoming)
     return out
 end
 
-local function RefreshGroupPreview(kind, reason)
+local function RefreshGroupPreview(kind, reason, dirtyMask)
+    -- Preview work is menu/edit-only. Combat transactions already defer their
+    -- runtime mutation; do not allocate options or enter preview code here.
+    if InCombatLockdown and InCombatLockdown() then return end
     local gf = MSUF and MSUF.GF
+    local opts = { reason = reason or "MSUF2_GROUP", dirtyMask = dirtyMask }
     if gf and type(gf.RefreshPreviewLayout) == "function" then
-        ProfiledGroupInvoke("RefreshPreviewLayout", gf.RefreshPreviewLayout, kind)
+        ProfiledGroupInvoke("RefreshPreviewLayout", gf.RefreshPreviewLayout, kind, opts)
     elseif type(_G.MSUF_GF_RefreshPreviewLayout) == "function" then
-        Apply.CallGlobal("MSUF_GF_RefreshPreviewLayout", kind)
+        Apply.CallGlobal("MSUF_GF_RefreshPreviewLayout", kind, opts)
     end
     if type(M.RefreshGFNativePreviews) == "function" then
         Apply.SafeInvoke(M.RefreshGFNativePreviews, reason or "MSUF2_GROUP")
@@ -713,7 +717,7 @@ local function FinishGroupRecord(gf, rec, kind, reason, did)
         local ok = ProfiledGroupInvoke("RequestAuraRefresh", gf.RequestAuraRefresh, kind)
         did = ok == true or did
     end
-    RefreshGroupPreview(kind, reason)
+    RefreshGroupPreview(kind, reason, rec and rec.dirtyMask or nil)
     return did
 end
 

@@ -86,13 +86,18 @@ end
 
 local function UnitVisualBounds(frame)
     --- Unitframes can draw important parts outside the root frame
-    --- (portrait, detached powerbar). The edit overlay should match what the
-    --- user actually sees, while drag math keeps the root-frame offset stable.
+    --- (portrait, an attached powerbar). The edit overlay should match the
+    --- visual object owned by the unit mover, while drag math keeps the
+    --- root-frame offset stable. A detached powerbar has independent layout
+    --- settings and must not stretch the unit mover across the space between it
+    --- and the unitframe.
     local bounds = ExpandRect(nil, frame)
     bounds = ExpandRect(bounds, frame and (frame.hpBar or frame.Health))
 
     local power = frame and (frame.targetPowerBar or frame.powerBar or frame.Power)
-    if power and power.IsShown and power:IsShown() then
+    local powerDetached = (frame and frame._msufPowerBarDetached == true)
+        or (power and power._msufDetached == true)
+    if not powerDetached and power and power.IsShown and power:IsShown() then
         bounds = ExpandRect(bounds, power)
     end
 

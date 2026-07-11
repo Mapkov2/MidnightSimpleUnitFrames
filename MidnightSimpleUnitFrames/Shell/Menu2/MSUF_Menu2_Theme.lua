@@ -561,6 +561,20 @@ function T.MotionDuration(name, fallback)
     local value = key and T.motion and T.motion[key]
     return ClampMotionDuration(value, fallback)
 end
+local function StopAlphaMotion(frame)
+    if not frame then return end
+    local fade = frame._msuf2AlphaFade
+    if fade and fade.Stop then
+        if fade.SetScript then fade:SetScript("OnFinished", nil) end
+        fade:Stop()
+    end
+    local scale = frame._msuf2AlphaScale
+    if scale and scale.Stop then
+        if scale.SetScript then scale:SetScript("OnFinished", nil) end
+        scale:Stop()
+    end
+end
+T.StopMotion = StopAlphaMotion
 function T.PlayAlpha(frame, fromAlpha, toAlpha, duration, onFinished, smoothing)
     if not (frame and frame.SetAlpha and frame.CreateAnimationGroup) then
         if frame and frame.SetAlpha then frame:SetAlpha(toAlpha or 1) end
@@ -697,6 +711,23 @@ local function EnsureFocusVeilFrame()
     M._focusVeilFrame = overlay
     return overlay
 end
+function M.ResetFocusVeil(variant, opts)
+    opts = opts or {}
+    local overlay = M._focusVeilFrame
+    if not overlay then
+        M._focusVeilState = nil
+        return false
+    end
+    local state = M._focusVeilState
+    if variant and state and state.variant and variant ~= state.variant and not opts.force then return false end
+    overlay._msuf2FocusToken = (overlay._msuf2FocusToken or 0) + 1
+    StopAlphaMotion(overlay)
+    M._focusVeilState = nil
+    overlay:Hide()
+    overlay:ClearAllPoints()
+    overlay:SetAlpha(1)
+    return true
+end
 function M.ShowFocusVeil(owner, variant, opts)
     opts = opts or {}
     variant = variant or "dropdown"
@@ -737,12 +768,7 @@ function M.HideFocusVeil(variant, opts)
     M._focusVeilState = state
     if variant and state.variant and variant ~= state.variant and not opts.force then return end
     if opts.animated == false then
-        state.hiding = nil
-        state.owner = nil
-        state.variant = nil
-        overlay:Hide()
-        overlay:SetAlpha(1)
-        return
+        return M.ResetFocusVeil(variant, opts)
     end
     if state.hiding then return end
     if overlay.IsShown and not overlay:IsShown() then

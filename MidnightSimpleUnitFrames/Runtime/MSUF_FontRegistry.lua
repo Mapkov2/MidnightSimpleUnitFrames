@@ -470,23 +470,40 @@ end
 MSUF.MSUF_GetFontPreviewObject = MSUF_GetFontPreviewObject
 G.MSUF_GetFontPreviewObject = MSUF_GetFontPreviewObject
 
+local MSUF_COLOR_OBJECT_CACHE = {}
+local MSUF_DEFAULT_COLOR_OBJECT
+
+local function DefaultColorObject()
+    if not MSUF_DEFAULT_COLOR_OBJECT then
+        MSUF_DEFAULT_COLOR_OBJECT = G.CreateColor(1, 1, 1, 1)
+    end
+    return MSUF_DEFAULT_COLOR_OBJECT
+end
+
 local function MSUF_GetColorFromKey(key, fallbackColor)
     if type(key) ~= "string" then
         if fallbackColor then
             return fallbackColor
         end
-        return G.CreateColor(1, 1, 1, 1)
+        return DefaultColorObject()
     end
     local normalized = string_lower(key)
     local rgb = MSUF_FONT_COLORS[normalized]
     if rgb then
         local r, g, b = rgb[1], rgb[2], rgb[3]
-        return G.CreateColor(r or 1, g or 1, b or 1, 1)
+        r, g, b = r or 1, g or 1, b or 1
+        local cached = MSUF_COLOR_OBJECT_CACHE[normalized]
+        if cached and cached.r == r and cached.g == g and cached.b == b then
+            return cached.object
+        end
+        local object = G.CreateColor(r, g, b, 1)
+        MSUF_COLOR_OBJECT_CACHE[normalized] = { r = r, g = g, b = b, object = object }
+        return object
     end
     if fallbackColor then
         return fallbackColor
     end
-    return G.CreateColor(1, 1, 1, 1)
+    return DefaultColorObject()
 end
 MSUF.MSUF_GetColorFromKey = MSUF_GetColorFromKey
 G.MSUF_GetColorFromKey = MSUF_GetColorFromKey

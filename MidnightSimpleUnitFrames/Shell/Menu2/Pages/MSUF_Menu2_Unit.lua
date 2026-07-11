@@ -101,7 +101,8 @@ local function UnitControlMeta(ctx, semanticPath, classification)
         controlPath = identity:gsub("%.", "/"),
         classification = classification or "setting",
     }
-    if meta.classification == "action" then meta.actionKey = identity end
+    -- Unit controls execute against the page/runtime scope. The semantic role
+    -- is a stable control identity, not a globally resolvable Assistant action.
     return meta
 end
 local function RegisterUnitControl(widget, ctx, semanticPath, label, kind, classification, extra)

@@ -399,9 +399,15 @@ function Core.ApplyLayerVisibility(box)
     Core.SetShownSafe(mock.bounds, boundsOn)
 end
 function Core.InCombat()
-    local inCombat = _G.MSUF_InCombat
-    if inCombat == nil and _G.InCombatLockdown then inCombat = _G.InCombatLockdown() end
-    return inCombat == true
+    -- Blizzard's live lockdown state is authoritative for preview deferral.
+    -- MSUF_InCombat is runtime-owned and can briefly remain latched after combat;
+    -- consulting it first would strand the preview waiting for an event that has
+    -- already fired. Keep it only as a fallback for non-client/test environments.
+    local inCombatLockdown = _G.InCombatLockdown
+    if type(inCombatLockdown) == "function" then
+        return inCombatLockdown() == true
+    end
+    return _G.MSUF_InCombat == true
 end
 
 -- Unified preview alpha: hp/resource each have foreground and background opacity.

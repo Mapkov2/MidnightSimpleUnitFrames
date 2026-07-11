@@ -148,11 +148,14 @@ local BuildNav = M.BuildNavRail
 local CreateWindowControlButton = M.CreateWindowControlButton
 local RefreshWindowControls = M.RefreshWindowControls
 local ALIASES = M.ALIASES or {}
-local DEFAULT_WINDOW_W, DEFAULT_WINDOW_H = 1180, 720
-local MIN_WINDOW_W, MIN_WINDOW_H = 620, 430
-local MAX_WINDOW_W, MAX_WINDOW_H = 1600, 1100
+-- Menu2 is a visual editor, not a compact settings popup. The wider default
+-- keeps navigation, scope tabs, previews, and paired controls readable at the
+-- same time while retaining resize support for smaller displays.
+local DEFAULT_WINDOW_W, DEFAULT_WINDOW_H = 1360, 860
+local MIN_WINDOW_W, MIN_WINDOW_H = 700, 480
+local MAX_WINDOW_W, MAX_WINDOW_H = 1760, 1200
 local WINDOW_W, WINDOW_H = DEFAULT_WINDOW_W, DEFAULT_WINDOW_H
-local NAV_W = 158
+local NAV_W = 198
 local CONTENT_W = WINDOW_W - NAV_W - 34
 local CONTENT_H = WINDOW_H - 74
 local MENU_BASE_SCALE = 1.08
@@ -217,8 +220,15 @@ local function ReadSavedWindowSize()
     local g = M.GetGeneralDB and M.GetGeneralDB()
     if type(g) ~= "table" then return DEFAULT_WINDOW_W, DEFAULT_WINDOW_H end
     local maxW, maxH = WindowMaxBounds()
-    return ClampNumber(g.msuf2WindowW, MIN_WINDOW_W, maxW, DEFAULT_WINDOW_W),
-        ClampNumber(g.msuf2WindowH, MIN_WINDOW_H, maxH, DEFAULT_WINDOW_H)
+    local savedW = tonumber(g.msuf2WindowW)
+    local savedH = tonumber(g.msuf2WindowH)
+    -- Upgrade only the former exact default. Deliberately customized window
+    -- sizes remain untouched.
+    if (savedW == nil and savedH == nil) or (savedW == 1180 and savedH == 720) then
+        savedW, savedH = DEFAULT_WINDOW_W, DEFAULT_WINDOW_H
+    end
+    return ClampNumber(savedW, MIN_WINDOW_W, maxW, DEFAULT_WINDOW_W),
+        ClampNumber(savedH, MIN_WINDOW_H, maxH, DEFAULT_WINDOW_H)
 end
 local function SaveWindowSize(frame)
     RefreshWindowMetrics(frame)
@@ -1664,6 +1674,7 @@ local function InstallWindowLifecycle(state)
         EnsureEditModeUIHook()
         if self.RefreshStatus then self:RefreshStatus() end
         if M.scrollFrame and M.scrollFrame._msuf2RefreshScrollBar then M.scrollFrame:_msuf2RefreshScrollBar() end
+        M.CallIf(M.ResumePinnedPreviews, "WINDOW_SHOW")
         RequestBossPagePreviewForKey(M.activeKey)
         RequestGroupPagePreviewForKey(M.activeKey)
         M.CallIf(M.UpdateMenuCombatListener)
@@ -1682,12 +1693,17 @@ local function InstallWindowLifecycle(state)
         end
         CancelSearchBackgroundIndex()
         SetStatusEventsRegistered(false)
-        if W and type(W.CloseDropdown) == "function" then W.CloseDropdown() end
+        -- The dropdown and its focus veil are UIParent-owned modal surfaces.
+        -- They must be torn down synchronously when their menu owner disappears;
+        -- an animated close can otherwise outlive the hidden window and veil the
+        -- cached page when it is shown again.
+        if W and type(W.CloseDropdown) == "function" then W.CloseDropdown({ immediate = true }) end
+        if type(M.ResetFocusVeil) == "function" then M.ResetFocusVeil(nil, { force = true }) end
         M.CallIf(M.EndHistorySession)
         ResetStatusIndicatorTestModeOnMenuExit()
         SavePersistentMenuState()
         ResetBossPagePreviewCache()
-        M.CallIf(M.ReleasePinnedPreviews, "WINDOW_HIDE", nil)
+        M.CallIf(M.SuspendPinnedPreviews, "WINDOW_HIDE")
         M.CallIf(M.ReleaseGFNativePreviews, "WINDOW_HIDE", nil)
         SyncBossPagePreviewForKey(nil)
         RequestGroupPagePreviewForKey(nil)

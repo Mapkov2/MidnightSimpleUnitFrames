@@ -49,6 +49,7 @@ statusAFKText|AFK / DND Text|statusAFKText|0|statusAFKTextSize|statusAFKTextAnch
 ]],
     PLACED_INDICATOR_TYPES = VTP "none=None|icon=Icon|square=Square|bar=Bar|number=Number",
     FRAME_EFFECT_TYPES = VTP "none=None|healthtint=Health Tint|border=Border|glow=Glow|pulse=Pulse|namecolor=Name Color",
+    ICON_EFFECT_TYPES = VTP "none=None|glow=Animated Glow",
     SPELL_GROWTH_VALUES = VTP "RIGHTDOWN=Right then Down|LEFTDOWN=Left then Down|RIGHTUP=Right then Up|LEFTUP=Left then Up",
     CI_SLOT_VALUES = VTP "TL=Top Left|TR=Top Right|BL=Bottom Left|BR=Bottom Right|C=Center",
     CI_SLOT_DEFAULTS = {

@@ -21,7 +21,7 @@ local SPELL_INDICATORS_121_PTR_DISABLED = false
 local SPELL_INDICATORS_121_PTR_MESSAGE = "Native 12.1 AuraSlot SpellID filters are used for helpful auras on friendly Group Frames."
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local STATUS_ICON_RESET_FIELDS = M.WordList "size anchor x y layer iconStyle customIcon"
-local AURA_ANCHORS, STATUS_ICON_ANCHORS, GF_STATUS_ICON_SPECS, GF_STATUS_ICON_VALUES, PLACED_INDICATOR_TYPES, FRAME_EFFECT_TYPES, SPELL_GROWTH_VALUES, CI_SLOT_VALUES, CI_SLOT_DEFAULTS = M.PickDefaults(GP, [[AURA_ANCHORS STATUS_ICON_ANCHORS GF_STATUS_ICON_SPECS GF_STATUS_ICON_VALUES PLACED_INDICATOR_TYPES FRAME_EFFECT_TYPES SPELL_GROWTH_VALUES CI_SLOT_VALUES CI_SLOT_DEFAULTS]])
+local AURA_ANCHORS, STATUS_ICON_ANCHORS, GF_STATUS_ICON_SPECS, GF_STATUS_ICON_VALUES, PLACED_INDICATOR_TYPES, FRAME_EFFECT_TYPES, ICON_EFFECT_TYPES, SPELL_GROWTH_VALUES, CI_SLOT_VALUES, CI_SLOT_DEFAULTS = M.PickDefaults(GP, [[AURA_ANCHORS STATUS_ICON_ANCHORS GF_STATUS_ICON_SPECS GF_STATUS_ICON_VALUES PLACED_INDICATOR_TYPES FRAME_EFFECT_TYPES ICON_EFFECT_TYPES SPELL_GROWTH_VALUES CI_SLOT_VALUES CI_SLOT_DEFAULTS]])
 local GF, RefreshGFPreview, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, ScopeDropdown, ScopeSlider, ScopeColor, SpellIndicators, IconStyleValues, CurrentGFStatusSpec, QueueSpellIndicators, SpellSpecValues, SpellTrackedSpecValues, CurrentSpellMultiSpec, EffectiveSpellSpec, SpellAuraValues, SetCurrentSpellAura, ClearCurrentSpellAura, CurrentSpellAura, CurrentSpellConfig, PlacedConfig, FrameEffectConfig, CICategoryValues, CIFilterValues, CIModeValues, CurrentCISlot, CICustomConfig, BindNestedSlider, BindNestedStrataSlider, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, TrackSectionRefresh, OnOffBadge, OptionText, FrameStrataCount, ControlMeta, RegisterControl = M.Pick(GP, [[GF RefreshGFPreview Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle ScopeDropdown ScopeSlider ScopeColor SpellIndicators IconStyleValues CurrentGFStatusSpec QueueSpellIndicators SpellSpecValues SpellTrackedSpecValues CurrentSpellMultiSpec EffectiveSpellSpec SpellAuraValues SetCurrentSpellAura ClearCurrentSpellAura CurrentSpellAura CurrentSpellConfig PlacedConfig FrameEffectConfig CICategoryValues CIFilterValues CIModeValues CurrentCISlot CICustomConfig BindNestedSlider BindNestedStrataSlider SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus TrackSectionRefresh OnOffBadge OptionText FrameStrataCount ControlMeta RegisterControl]])
 OnOffBadge = OnOffBadge or M.OnOffBadge
 OptionText = OptionText or M.OptionText
@@ -1282,7 +1282,7 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
     do
         W.ControlCard(spells, Tr("Spell Set"), nil, siLeftX - 14, -38, siLeftW + 28, 334)
         W.ControlCard(spells, Tr("Selected Spell"), nil, siRightX - 14, -38, siRightW + 28, 358)
-        W.ControlCard(spells, Tr("Placed Indicator"), nil, siLeftX - 14, -374, siLeftW + 28, 408)
+        W.ControlCard(spells, Tr("Placed Indicator"), nil, siLeftX - 14, -374, siLeftW + 28, 462)
         W.ControlCard(spells, Tr("Frame Effect"), nil, siRightX - 14, -410, siRightW + 28, 360)
         W.ControlCard(spells, Tr("Utilities"), nil, siRightX - 14, -782, siRightW + 28, 194)
     end
@@ -1522,6 +1522,7 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
     local placedY = BindPlacedSlider("Y Offset", -100, 100, 1, "y", 0, -626)
     local placedBarWidth = BindPlacedSlider("Bar Width", 8, 120, 1, "barWidth", 42, -680)
     local placedGrowth = BindPlacedDropdown("Growth", SPELL_GROWTH_VALUES, "growth", "RIGHTDOWN", -734)
+    local placedIconEffect = BindPlacedDropdown("Icon Effect", ICON_EFFECT_TYPES, "iconEffect", "none", -788)
     local frameType = BindSpellSubType("Frame Effect", FRAME_EFFECT_TYPES, siRightX, -444, siRightW, "frame",
         function(frame)
             if not frame.color then
@@ -1614,6 +1615,7 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         SetManyEnabled(placedEnabled, placedAnchor, placedSize, placedX, placedY, placedGrowth)
         SetOptionEnabled(placedMissing, false)
         SetOptionEnabled(placedBarWidth, barRelevant)
+        SetOptionEnabled(placedIconEffect, cdRelevant)
         SetManyEnabled(cdRelevant, placedCooldownSwipe, placedCooldown)
         SetOptionEnabled(placedCooldownSize, cdRelevant and placed and placed.showCooldown ~= false)
         SetOptionEnabled(frameType, hasSpell)
