@@ -56,9 +56,9 @@ local max = math.max
 local min = math.min
 local IsEditModeActive
 local PREVIEW_WARNING_LINES = {
-    "|cffff5555MSUF 6.0 Preview Warning:|r This build targets World of Warcraft 12.1 PTR APIs.",
+    "|cffffd700MSUF 6.0 Beta:|r This build targets World of Warcraft 12.1 PTR APIs.",
     "|cffffd700MSUF:|r Aura display uses native 12.1 AuraContainer and AuraButton objects.",
-    "|cffffd700MSUF:|r Use preview builds only for PTR testing; production builds should be versioned without alpha/beta/pre labels.",
+    "|cff40ff40Thank you|r for helping test the beta! Please report bugs on Discord or GitHub.",
 }
 local previewWarningShown = {}
 local function GetAddonVersion()
