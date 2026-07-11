@@ -1,5 +1,40 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-Beta12 - Unreleased
+
+### Highlights
+- **One self-contained addon:** The Assistant runtime and every locale are again shipped from the main MSUF addon. Installation and release packages no longer depend on separate companion folders.
+- **Auras, indicators, and previews:** Aura styling now reaches Custom 1-3 containers, previews follow configured growth directions, and spell indicators can use animated icon glow as well as full-frame visual effects.
+- **More reliable group frames:** Group health, prediction, status, connection, roster, and combat state refreshes now share a consistent lifecycle, including AI-controlled party members.
+
+### Packaging And Locales
+- Folded the former Load-on-Demand Assistant and non-English locale companion addons back into the primary MSUF TOC. Inactive locale files still return immediately, so only the active language dictionary remains resident.
+- Simplified release, CurseForge, and Perfy package staging to ship and validate one addon folder and TOC.
+- Updated static validation for the unified package layout and removed obsolete companion-addon package metadata.
+
+### Aura Designer, Spell Indicators, And Menu2
+- Added a container selector to Aura Styling for Buffs, Debuffs, and Custom 1-3 containers. Custom-container styling is stored per unit-frame scope and now has a dedicated preview configuration.
+- Improved Aura and Group Aura previews: configured growth direction, spacing, rows/columns, duration bars, borders, timers, and custom-container spell icons are represented more faithfully.
+- Added animated glow for icon spell indicators, strengthened full-frame effect cleanup, and avoid duplicate geometry/visual passes while aura slots refresh.
+- Refined group aura controls, compact group-style navigation, control catalog metadata, menus, navigation, widgets, themes, and preview lifecycle behavior.
+
+### Assistant
+- Made result follow-ups fail closed: a pronoun or ordinal from a search result cannot mutate a setting until the result is explicitly selected or explained.
+- Improved guided setup, pending-result selection, no-change action handling, undo/history behavior, diagnostics, parser coverage, aura blacklist/filter actions, and setting-graph routing.
+- Expanded Assistant knowledge and control registrations for the updated aura, group-frame, text, and visual settings.
+
+### Unit, Group, Castbar, And Resource Runtime
+- Added detailed-health handling for AI-controlled group members and shared that authoritative health state with prediction, status, and gone/offline visual updates.
+- Tightened prediction calculator reuse to a single core dispatch, added group lifecycle refresh events, and split health/connection fast paths from full prediction refreshes.
+- Improved group runtime combat-state publication, post-roster frame-state refreshes, range fading, frame visuals, previews, text formatting/runtime, portrait/power/status elements, and core refresh coordination.
+- Refined focus interrupt/kick presentation and Class Power controller/mode behavior; updated fonts and Edit Mode movers to keep live frames and previews aligned.
+
+### What To Test First
+- Start MSUF with a non-English client and open Menu2 and the Assistant; confirm both work directly from the single installed addon folder.
+- Configure Custom 1-3 aura styling, directional aura growth, spell-indicator icon glow, and full-frame effects in unit and group previews.
+- Test AI party members, roster changes, reconnects, combat transitions, range fading, health/prediction bars, and group status overlays.
+- In the Assistant, search for a setting, then try a pronoun/ordinal follow-up before and after selecting a result; only an explicit selection may change a setting.
+
 ## 6.0-Beta11 - 2026-07-10
 
 ### Optional Assistant Runtime
