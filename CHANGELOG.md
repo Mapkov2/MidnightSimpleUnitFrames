@@ -1,5 +1,16 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-Beta12 - 2026-07-11
+
+### Changes
+
+- Moved the Assistant back into an optional load-on-demand companion addon to reduce normal MSUF startup and idle overhead.
+- Expanded Menu2 and Assistant control coverage, exact setting navigation, search routing, and undo handling.
+- Stabilized Edit Mode plus unit, group, aura, spell-effect, and Class Power preview refreshes and layering.
+- Added per-resource slot colors and full-resource colors for segmented Class Power displays.
+- Reduced duplicate aura work and allocations in large group-frame previews.
+- Hardened the two-addon release package and its static validation.
+
 ## 6.0-Beta11 - 2026-07-11
 
 ### Highlights
