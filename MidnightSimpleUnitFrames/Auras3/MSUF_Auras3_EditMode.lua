@@ -663,6 +663,18 @@ local function FallbackMetrics(cfg)
     }
 end
 
+local function PreviewLaneDimensions(cfg, metrics, shownIcons)
+    local size = (metrics and metrics.size) or (cfg and cfg.size) or 26
+    local spacing = (metrics and metrics.spacing) or (cfg and cfg.spacing) or 2
+    local perRow = (metrics and metrics.perRow) or (cfg and cfg.perRow) or 12
+    local vertical = metrics and metrics.verticalGrowth == true
+    if not metrics then
+        local _, _, fallbackVertical = GrowthParts(cfg and cfg.growth, cfg and cfg.rowWrap)
+        vertical = fallbackVertical == true
+    end
+    return GridDimensions(shownIcons, perRow, size, spacing, vertical)
+end
+
 local function WriteOffset(auras, unit, kind, x, y)
     kind = NormalizeKind(kind)
     local spec = GROUPS[kind]
@@ -714,6 +726,12 @@ local function ApplyDragUnit(auras, unit, moverKind, x, y)
         metrics = metrics or FallbackMetrics(cfg)
         local laneW = metrics.width or cfg.size
         local laneH = metrics.height or cfg.size
+        local spec = GROUPS[NormalizeKind(moverKind)]
+        if spec and spec.customIndex then
+            local shownIcons = math_min(PREVIEW_ICONS, metrics.num or cfg.max)
+            if shownIcons < 1 then shownIcons = 1 end
+            laneW, laneH = PreviewLaneDimensions(cfg, metrics, shownIcons)
+        end
         ApplyGroupScaleForFrame(other, frame)
         PositionPreviewGroup(other, frame, metrics.anchor or cfg.anchor, x, y, laneW, laneH)
     end
@@ -1717,6 +1735,9 @@ function EM.RefreshUnit(unit)
             if not metrics then fallback = FallbackMetrics(cfg) end
             local laneW = (metrics and metrics.width) or (fallback and fallback.width) or cfg.size
             local laneH = (metrics and metrics.height) or (fallback and fallback.height) or cfg.size
+            if spec.customIndex then
+                laneW, laneH = PreviewLaneDimensions(cfg, metrics or fallback, shownIcons)
+            end
             local growthX = (metrics and metrics.growthX) or (fallback and fallback.growthX) or 1
             local growthY = (metrics and metrics.growthY) or (fallback and fallback.growthY) or -1
             local vertical = metrics and metrics.verticalGrowth == true or (fallback and fallback.verticalGrowth == true)

@@ -36,7 +36,8 @@ local function SharedControlMeta(opts, suffix, classification)
         controlPath = semantic:gsub("%.", "/"),
         classification = classification or "ephemeral",
     }
-    if meta.classification == "action" then meta.actionKey = semantic end
+    -- Shared section actions inherit the owning page's live scope; the
+    -- identity must not masquerade as a static Assistant Registry action.
     return meta
 end
 local function RegisterSharedControl(widget, opts, suffix, label, kind, classification)

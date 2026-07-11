@@ -17,7 +17,7 @@ local floor = math.floor
 local max = math.max
 local min = math.min
 local Specs = M.GroupSpecs or {}
-local SCOPE_VALUES, GROWTH_VALUES, BLIZZARD_FALLBACK_VALUES, HEALTH_MODES, TEXT_MODES, DELIMITER_VALUES, ANCHORS, AURA_ANCHORS, SORT_MODES, GF_BAR_MODES, GF_ANCHOR_TO, GF_ANCHOR_POINTS, STATUS_ICON_ANCHORS, GF_STATUS_ICON_SPECS, GF_STATUS_ICON_VALUES, PLACED_INDICATOR_TYPES, FRAME_EFFECT_TYPES, SPELL_GROWTH_VALUES, CI_SLOT_VALUES, CI_SLOT_DEFAULTS, DISPEL_OVERLAY_STYLES, DEBUFF_STRIPE_EDGES = M.PickDefaults(Specs, M.GROUP_SPEC_TABLE_KEYS)
+local SCOPE_VALUES, GROWTH_VALUES, BLIZZARD_FALLBACK_VALUES, HEALTH_MODES, TEXT_MODES, DELIMITER_VALUES, ANCHORS, AURA_ANCHORS, SORT_MODES, GF_BAR_MODES, GF_ANCHOR_TO, GF_ANCHOR_POINTS, STATUS_ICON_ANCHORS, GF_STATUS_ICON_SPECS, GF_STATUS_ICON_VALUES, PLACED_INDICATOR_TYPES, FRAME_EFFECT_TYPES, ICON_EFFECT_TYPES, SPELL_GROWTH_VALUES, CI_SLOT_VALUES, CI_SLOT_DEFAULTS, DISPEL_OVERLAY_STYLES, DEBUFF_STRIPE_EDGES = M.PickDefaults(Specs, M.GROUP_SPEC_TABLE_KEYS)
 local SIMPLE_TEXTURES = Specs.SimpleTextures or function() return {} end
 local pendingGF = {}
 local gfFlushQueued = false
@@ -53,7 +53,9 @@ local function GroupControlMeta(ctx, semanticPath, classification)
         controlPath = identity:gsub("%.", "/"),
         classification = classification or "setting",
     }
-    if meta.classification == "action" then meta.actionKey = identity end
+    -- The control identity describes the visible role. Its command resolves the
+    -- currently selected Group scope at runtime, so it is not a static
+    -- Assistant Registry action.
     return meta
 end
 local function RegisterGroupControl(widget, ctx, semanticPath, label, kind, classification, extra)
@@ -516,9 +518,7 @@ local GROUP_SCOPE_BUTTON_STYLE = {
 }
 local function ScopeSection(ctx, builder)
     local pageW = tonumber(builder.width) or 720
-    local compactTop = pageW < 940
-    local commandH = compactTop and 84 or 54
-    local h = commandH
+    local h = 86
     local sec = T.Panel(builder.parent, nil, T.colors.glassStatus or T.colors.header, T.colors.borderSoft)
     T.ApplySurface(sec, "status")
     sec:SetPoint("TOPLEFT", builder.parent, "TOPLEFT", builder.x, builder.y)
@@ -527,9 +527,6 @@ local function ScopeSection(ctx, builder)
     builder.y = builder.y - h - 8
     if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(builder.y) + 28) end
 
-    local function MakeTopButton(parent, text, width, opts, buttonH)
-        return W.TopButton(parent, text, width, buttonH or 24, opts or {})
-    end
     local function SelectScope(kind)
         local previousScope = M.gfScope
         M.SetMenuStateValue("gfScope", kind or "party")
@@ -546,43 +543,54 @@ local function ScopeSection(ctx, builder)
     end
 
     local command = sec
-
-    local tabX = 14
+    local pageValues = {}
     for i = 1, #GROUP_PAGE_TABS do
         local tab = GROUP_PAGE_TABS[i]
-        local tabW = tonumber(tab.width) or 72
-        local btn = MakeTopButton(command, M.Tr(tab.label), tabW, GROUP_FLOW_TAB_STYLE)
+        pageValues[i] = { value = tab.key, text = tab.label, width = tonumber(tab.width) or 72 }
+    end
+    local pageBar = W.ScopeOverrideBar(ctx, command, {
+        values = pageValues,
+        width = pageW,
+        maxRight = pageW - 112,
+        label = "Page:",
+        labelWidth = 64,
+        centerY = -28,
+        getValue = function() return ctx and ctx.key end,
+        setValue = function(pageKey) if pageKey and pageKey ~= ctx.key then M.SelectPage(pageKey) end end,
+    })
+    for i = 1, #GROUP_PAGE_TABS do
+        local tab = GROUP_PAGE_TABS[i]
+        local btn = pageBar and pageBar.buttons and pageBar.buttons[i]
         RegisterGroupControl(btn, ctx, "navigation.section." .. tab.key, tab.label, "button", "navigation", { navigationKey = tab.key })
-        btn._msuf2SkipHistoryCheckpoint = true
-        btn:SetPoint("TOPLEFT", command, "TOPLEFT", tabX, -15)
-        if btn.SetActive then btn:SetActive(ctx and ctx.key == tab.key) end
-        btn:SetScript("OnClick", function() M.SelectPage(tab.key) end)
-        tabX = tabX + tabW + 8
+        if btn then btn._msuf2SkipHistoryCheckpoint = true end
     end
 
-    local copy = (W.RoleButton and W.RoleButton(sec, M.Tr("Copy To"), "normal", compactTop and 82 or 86, 24)) or MakeTopButton(sec, M.Tr("Copy To"), compactTop and 82 or 86)
-    copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -14, compactTop and -48 or -15)
-
+    local copy = (W.RoleButton and W.RoleButton(sec, M.Tr("Copy To"), "normal", 86, 24)) or W.TopButton(sec, M.Tr("Copy To"), 86, 24, {})
+    copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -14, -15)
     local scopeBtns = {}
-    local rowY = compactTop and -48 or -15
-    local scopeGap = 8
-    local totalScopeW = 0
+    local scopeValues = {}
     for i = 1, #SCOPE_VALUES do
         local info = SCOPE_VALUES[i]
-        totalScopeW = totalScopeW + ((info.value == "mythicraid") and 68 or 56)
-        if i > 1 then totalScopeW = totalScopeW + scopeGap end
+        scopeValues[i] = {
+            value = info.value,
+            text = ScopeShortLabel(info.value),
+            width = (info.value == "mythicraid") and 86 or 64,
+        }
     end
-    local actionW = compactTop and 82 or 86
-    local scopeX = compactTop and 14 or max(14, pageW - actionW - totalScopeW - 44)
+    local scopeBar = W.ScopeOverrideBar(ctx, command, {
+        values = scopeValues,
+        width = pageW,
+        label = "Editing:",
+        labelWidth = 64,
+        centerY = -60,
+        getValue = CurrentScope,
+        setValue = SelectScope,
+    })
     for i = 1, #SCOPE_VALUES do
         local info = SCOPE_VALUES[i]
-        local width = (info.value == "mythicraid") and 68 or 56
-        local btn = MakeTopButton(command, ScopeShortLabel(info.value), width, GROUP_SCOPE_BUTTON_STYLE)
+        local btn = scopeBar and scopeBar.buttons and scopeBar.buttons[i]
         RegisterGroupControl(btn, ctx, "scope.select." .. info.value, info.text or ScopeShortLabel(info.value), "button", "ephemeral")
-        btn:SetPoint("TOPLEFT", command, "TOPLEFT", scopeX, rowY)
-        btn:SetScript("OnClick", function() SelectScope(info.value) end)
         scopeBtns[info.value] = btn
-        scopeX = scopeX + width + scopeGap
     end
     M.gfCopyScopes = (type(M.gfCopyScopes) == "table") and M.gfCopyScopes or NewGFCopyScopes()
     local copyPopup = Shared.MakeScopeCopyPopup and Shared.MakeScopeCopyPopup(copy, {
@@ -1284,6 +1292,7 @@ M.Assign(GroupPage, {
     GF_STATUS_ICON_VALUES = GF_STATUS_ICON_VALUES,
     PLACED_INDICATOR_TYPES = PLACED_INDICATOR_TYPES,
     FRAME_EFFECT_TYPES = FRAME_EFFECT_TYPES,
+    ICON_EFFECT_TYPES = ICON_EFFECT_TYPES,
     SPELL_GROWTH_VALUES = SPELL_GROWTH_VALUES,
     CI_SLOT_VALUES = CI_SLOT_VALUES,
     CI_SLOT_DEFAULTS = CI_SLOT_DEFAULTS,

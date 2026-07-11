@@ -1035,7 +1035,7 @@ local function ApplyUnitPinnedPresentation(box, pinned, opts, sideW)
         line:SetShown(pinned)
     end
     if pinned and box.hint and not box._selectedHandle then
-        box.hint:SetText(TR("drag/select handles - right-click actions - Ctrl+wheel zoom"))
+        box.hint:SetText(TR("select a handle - gear opens exact settings - right-click quick actions - arrows nudge"))
     elseif not pinned then
         UpdateHandleHint(box, box._selectedHandle)
     end

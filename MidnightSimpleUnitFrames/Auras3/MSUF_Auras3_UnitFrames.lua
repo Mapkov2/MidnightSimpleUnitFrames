@@ -3581,6 +3581,96 @@ ApplyLane = function(root, lane, parentFrame, forceRecreate)
     return A3._TraceFinish(traceToken, current)
 end
 
+--- Cold-path Menu2 preview surface. The preview deliberately uses Blizzard's
+--- real AuraContainer instead of reading aura payloads in Lua. This keeps
+--- secret/forbidden aura values inside Blizzard's native assignment path while
+--- still showing the exact MSUF filter, whitelist, icon size, spacing, text,
+--- swipe, border, and duration-bar configuration.
+local function MenuPreviewGroupFrame(scope)
+    local gf = (MSUF and MSUF.GF) or nil
+    local frames = gf and gf.frameList
+    if type(frames) ~= "table" then return nil end
+    for i = 1, #frames do
+        local frame = frames[i]
+        local kind = frame and frame._msufGFKind
+        local matches = scope == "party" and kind == "party"
+            or scope == "raid" and (kind == "raid" or kind == "mythicraid")
+        local tracked = frame and gf.frames and gf.frames[frame] == true
+        local shown = frame and (not frame.IsShown or frame:IsShown() == true)
+        if matches and tracked and shown and issecretvalue(frame.unit) ~= true
+            and type(frame.unit) == "string" and frame.unit ~= "" then
+            return frame
+        end
+    end
+end
+
+local function MenuPreviewSourceLane(scope, laneKind)
+    local cfg, unit
+    if scope == "party" or scope == "raid" then
+        local frame = MenuPreviewGroupFrame(scope)
+        if frame then
+            unit = frame.unit
+            cfg = ResolveGroupFrameConfig(frame, unit)
+        end
+    else
+        unit = scope == "boss" and "boss1" or (scope == "shared" and "player" or scope)
+        cfg = A3.ResolveUnitFrameConfig(unit, nil)
+    end
+    local lane = cfg and cfg.lanes and cfg.lanes[laneKind]
+    return lane, unit
+end
+
+function A3.UpdateMenuAuraPreview(host, scope, laneKind, width, height)
+    if not host or InCombat() then return false, "combat" end
+    local source, unit = MenuPreviewSourceLane(scope, laneKind)
+    if not (source and source.enabled == true and unit) then
+        local old = host._msufA3MenuPreviewContainer
+        if old then A3._HideLane(old) end
+        return false, (scope == "party" or scope == "raid") and "no-group-frame" or "not-configured"
+    end
+
+    local lane = {}
+    for key, value in pairs(source) do lane[key] = value end
+    lane.unit = unit
+    lane.rootKey = "_MSUFMenuAuraPreview"
+    lane.anchor = "TOPLEFT"
+    lane.x = 10
+    lane.y = -34
+    lane.layer = 2
+    lane.strata = "AUTO"
+    lane.alpha = 1
+
+    local size = math_max(1, tonumber(lane.size) or 24)
+    local spacing = math_max(0, tonumber(lane.spacing) or 0)
+    local contentW = math_max(1, (tonumber(width) or 300) - 20)
+    local contentH = math_max(1, (tonumber(height) or 120) - 42)
+    local maxCols = math_max(1, math_floor((contentW + spacing) / math_max(1, size + spacing)))
+    local maxRows = math_max(1, math_floor((contentH + spacing) / math_max(1, size + spacing)))
+    local requestedPerRow = math_max(1, Round(lane.perRow or 1))
+    lane.perRow = math_min(requestedPerRow, lane.verticalGrowth == true and maxRows or maxCols)
+    local capacity = lane.perRow * (lane.verticalGrowth == true and maxCols or maxRows)
+    lane.max = math_min(math_max(0, Round(lane.max or 0)), capacity, 20)
+    if lane.max <= 0 then return false, "empty" end
+    local cols, rows = GridShape(lane.max, lane.perRow, lane.verticalGrowth == true)
+    lane.cols = cols
+    lane.rows = rows
+    lane.width = math_max(1, cols * size + math_max(cols - 1, 0) * spacing)
+    lane.height = math_max(1, rows * size + math_max(rows - 1, 0) * spacing)
+    lane._msufA3TrackingSignature = nil
+    lane._msufA3StructuralSignature = nil
+    lane._msufA3LayoutSignature = nil
+
+    local container = ApplyLane(host, lane, host, false)
+    host._msufA3MenuPreviewContainer = container
+    if host._msufA3MenuPreviewHooks ~= true then
+        host._msufA3MenuPreviewHooks = true
+        host:HookScript("OnHide", function(self)
+            if self._msufA3MenuPreviewContainer then A3._HideLane(self._msufA3MenuPreviewContainer) end
+        end)
+    end
+    return container ~= nil, container and "live" or "unavailable"
+end
+
 local function ApplyDispelSensor(root, sensor, parentFrame, forceRecreate)
     if not (root and sensor and sensor.enabled) then return nil end
     local traceToken = A3._TraceBeginLane("MSUF.ApplyDispelSensor", sensor, forceRecreate == true and "force" or "auto")
@@ -4223,6 +4313,29 @@ function A3.ApplyFontsFromGlobal(scope, reason)
         return A3.RequestScope(scope, reason or "AURAS3_FONT_VISUALS")
     end
     return A3.RefreshAll()
+end
+
+--- Narrow ClassPower bridge for secret player auras. AuraContainer retains
+--- ownership of UNIT_AURA parsing and binds protected values directly to its
+--- regions; callers only configure the frame once.
+function A3.CreateClassPowerAuraSensor(parent, key, spellIDs, initializeFrame)
+    if not (parent and type(spellIDs) == "table" and type(initializeFrame) == "function") then return nil end
+    if not EnsureBlizzardAuraContainerLoaded() then return nil end
+
+    local container = CreateNativeAuraContainer(parent)
+    if not container then return nil end
+    ConfigurePTR4AuraContainer(container, "player")
+    container:AddAuraSlot(tostring(key or "msuf_classpower"), "HELPFUL", {
+        maxFrameCount = 1,
+        candidateFilters = { includeSpellIDs = spellIDs },
+        initializeFrame = initializeFrame,
+    })
+    if not RegisterNativeContainer(container) then
+        container:Hide()
+        return nil
+    end
+    container:Show()
+    return container
 end
 
 -- AuraContainer owns UNIT_AURA and per-aura churn. Do not add an MSUF UNIT_AURA

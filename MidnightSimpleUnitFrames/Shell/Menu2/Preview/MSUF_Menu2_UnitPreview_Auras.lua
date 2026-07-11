@@ -471,7 +471,9 @@ local function CustomLaneBounds(item, kind, frameW, frameH)
     local x, y = tonumber(placed.x) or 0, tonumber(placed.y) or 0
     local growthX, growthY, vertical = CustomGrowth(placed.growth)
     local initialAnchor = ButtonAnchor(growthX, growthY)
-    local cols, rows = GridShape(count, perRow, vertical)
+    -- This bounded editor preview owns only the icons it actually draws. Runtime
+    -- capacity must not enlarge its hit box or zoom footprint with empty cells.
+    local cols, rows = GridShape(shown, perRow, vertical)
     local laneW = max(1, cols * size + max(cols - 1, 0) * spacing)
     local laneH = max(1, rows * size + max(rows - 1, 0) * spacing)
     local baseX, baseY = AnchorBase(anchor, frameW, frameH)
@@ -642,71 +644,6 @@ local function HideVisual(visual)
         visual._icons[i]:Hide()
     end
 end
-local function HideCustomEffectPreview(mock)
-    if not mock then return end
-    if mock._msufCustomAuraPreviewTint then mock._msufCustomAuraPreviewTint:Hide() end
-    if mock._msufCustomAuraPreviewEdges then
-        for i = 1, #mock._msufCustomAuraPreviewEdges do mock._msufCustomAuraPreviewEdges[i]:Hide() end
-    end
-    if mock._msufCustomAuraSavedNameColor and mock._nameFS and mock._nameFS.SetTextColor then
-        local c = mock._msufCustomAuraSavedNameColor
-        mock._nameFS:SetTextColor(c[1] or 1, c[2] or 1, c[3] or 1, c[4] or 1)
-    end
-    mock._msufCustomAuraSavedNameColor = nil
-end
-
-local function ApplyCustomEffectPreview(mock, state, S)
-    HideCustomEffectPreview(mock)
-    local selected, selectedPriority
-    for index = 1, 3 do
-        local bounds = state and state["custom" .. tostring(index)]
-        local effect = bounds and bounds.item and bounds.item.frame
-        local kind = type(effect) == "table" and tostring(effect.type or "none"):lower() or "none"
-        if kind ~= "none" then
-            local priority = tonumber(effect.priority) or 5
-            if not selected or priority < selectedPriority then selected, selectedPriority = effect, priority end
-        end
-    end
-    if not selected then return end
-    local color = selected.color or {}
-    local r, g, b, a = color[1] or 1, color[2] or 1, color[3] or 1, color[4] or 0.8
-    local kind = tostring(selected.type or "none"):lower()
-    if kind == "healthtint" then
-        local tint = mock._msufCustomAuraPreviewTint
-        if not tint then
-            tint = mock:CreateTexture(nil, "OVERLAY")
-            tint:SetTexture(TEX_W8)
-            mock._msufCustomAuraPreviewTint = tint
-        end
-        tint:ClearAllPoints()
-        tint:SetAllPoints(mock._health or mock)
-        tint:SetVertexColor(r, g, b, tonumber(selected.tintAlpha) or a)
-        tint:Show()
-    elseif kind == "namecolor" and mock._nameFS and mock._nameFS.SetTextColor then
-        if mock._nameFS.GetTextColor then
-            local cr, cg, cb, ca = mock._nameFS:GetTextColor()
-            mock._msufCustomAuraSavedNameColor = { cr, cg, cb, ca }
-        end
-        mock._nameFS:SetTextColor(r, g, b, a)
-    elseif kind == "border" or kind == "glow" or kind == "pulse" then
-        local edges = mock._msufCustomAuraPreviewEdges
-        if not edges then
-            edges = {}
-            for i = 1, 4 do
-                edges[i] = mock:CreateTexture(nil, "OVERLAY")
-                edges[i]:SetTexture(TEX_W8)
-            end
-            mock._msufCustomAuraPreviewEdges = edges
-        end
-        local thickness = max(1, S(tonumber(selected.thickness) or (kind == "glow" and 3 or 2)))
-        local top, bottom, left, right = edges[1], edges[2], edges[3], edges[4]
-        top:ClearAllPoints(); top:SetPoint("TOPLEFT", mock, "TOPLEFT", -thickness, thickness); top:SetPoint("TOPRIGHT", mock, "TOPRIGHT", thickness, thickness); top:SetHeight(thickness)
-        bottom:ClearAllPoints(); bottom:SetPoint("BOTTOMLEFT", mock, "BOTTOMLEFT", -thickness, -thickness); bottom:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", thickness, -thickness); bottom:SetHeight(thickness)
-        left:ClearAllPoints(); left:SetPoint("TOPLEFT", top, "BOTTOMLEFT"); left:SetPoint("BOTTOMLEFT", bottom, "TOPLEFT"); left:SetWidth(thickness)
-        right:ClearAllPoints(); right:SetPoint("TOPRIGHT", top, "BOTTOMRIGHT"); right:SetPoint("BOTTOMRIGHT", bottom, "TOPRIGHT"); right:SetWidth(thickness)
-        for i = 1, 4 do edges[i]:SetVertexColor(r, g, b, kind == "glow" and min(1, a * 0.85) or a); edges[i]:Show() end
-    end
-end
 function Auras.Hide(box)
     if not box then return end
     HideHandle(box.handleAuraBuffs)
@@ -715,7 +652,6 @@ function Auras.Hide(box)
     if box.auraPreviewVisuals then
         for _, kind in ipairs(AURA_PREVIEW_KINDS) do HideVisual(box.auraPreviewVisuals[kind]) end
     end
-    HideCustomEffectPreview(box.mock)
 end
 local function ValueOr(value, fallback)
     if value ~= nil then return value end
@@ -998,5 +934,4 @@ function Auras.Layout(box, mock, state, S, baseLevel)
         local kind = "custom" .. tostring(index)
         LayoutHandle(box, box["handleAuraCustom" .. tostring(index)], state, kind, S, baseLevel)
     end
-    ApplyCustomEffectPreview(mock, state, S)
 end

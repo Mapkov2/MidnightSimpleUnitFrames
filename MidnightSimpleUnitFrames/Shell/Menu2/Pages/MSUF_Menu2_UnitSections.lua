@@ -230,7 +230,7 @@ local SetSectionHeaderStatus = UnitSectionShared.SetSectionHeaderStatus or funct
 local function BuildPreview(ctx, builder, unit)
     local sec = builder:CollapsibleSection("preview", "Hide Preview", 378, true)
     if W.SetCollapsibleToggleText then W.SetCollapsibleToggleText(sec, "Hide Preview", "Show Preview") end
-    local previewNote = "Preview updates live here. Use MSUF Edit Mode to drag and place frames."
+    local previewNote = "Live preview. Select a handle, then use its gear to open the exact settings. Hovering menu controls highlights the related frame element. Use MSUF Edit Mode to place frames on screen."
     if unit == "pet" then
         previewNote = previewNote .. " Pet frames only appear in game while you have an active pet."
     elseif unit == "focus" then
@@ -258,10 +258,52 @@ local function BuildPreview(ctx, builder, unit)
         if ctx and ctx.wrapper and ctx.wrapper.IsShown and not ctx.wrapper:IsShown() then return false end
         return true
     end
+    local function SetPreviewOwner()
+        if not box then return end
+        box._msuf2UnitPageHostShown = PreviewHostShown
+        box._msuf2PinnedPreviewPageKey = ctx and ctx.key
+        box._msuf2PinnedPreviewWrapper = ctx and ctx.wrapper
+        box._msuf2PinnedFloating = nil
+    end
+    local function EnsurePreviewAttachment()
+        if not box then return end
+        local record = box._msuf2PinnedPreviewRecord
+        local pageKey = ctx and ctx.key
+        local wrapper = ctx and ctx.wrapper
+        if W and W.AttachPinnedPreview
+            and (not record or record.pageKey ~= pageKey or record.pageWrapper ~= wrapper)
+        then
+            W.AttachPinnedPreview(sec, box, {
+                stateKey = "unitFramePreview",
+                title = box.title,
+                hint = box.hint,
+                left = 14,
+                right = 14,
+                top = -8,
+                pinnedHeight = 232,
+                restoreParent = sec,
+                restorePoint = { "TOPLEFT", sec, "TOPLEFT", 14, -70 },
+                restoreWidth = ctx.width - 28,
+                restoreHeight = 292,
+                pageKey = pageKey,
+                wrapper = wrapper,
+            })
+            local preview = MSUF.UFPreview
+            if preview and type(preview.RegisterRuntimeControlsForPage) == "function" then
+                preview.RegisterRuntimeControlsForPage(box, pageKey)
+            end
+        end
+        -- The preview is shared across cached unit pages. Reassert the current
+        -- page's gate whenever ownership is rebound so no state from the
+        -- previous page can survive a close/reopen transition.
+        ApplyUnitFrameEnabledGate(ctx, unit)
+    end
     local function EnsurePreview()
         if box and box.GetParent and box:GetParent() == sec then
             if not PreviewHostShown() then return nil end
+            SetPreviewOwner()
             if box.Show then box:Show() end
+            EnsurePreviewAttachment()
             return box
         end
         if not PreviewHostShown() then return nil end
@@ -293,10 +335,7 @@ local function BuildPreview(ctx, builder, unit)
             box._msufPanel = panel
         end
         box._msufPanel = panel
-        box._msuf2UnitPageHostShown = PreviewHostShown
-        box._msuf2PinnedPreviewPageKey = ctx and ctx.key
-        box._msuf2PinnedPreviewWrapper = ctx and ctx.wrapper
-        box._msuf2PinnedFloating = nil
+        SetPreviewOwner()
         box:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, -70)
         box:Show()
         if box.title and box.title.SetTextColor then
@@ -317,31 +356,7 @@ local function BuildPreview(ctx, builder, unit)
                 end
             end)
         end
-        if W and W.AttachPinnedPreview then
-            W.AttachPinnedPreview(sec, box, {
-                stateKey = "unitFramePreview",
-                title = box.title,
-                hint = box.hint,
-                left = 14,
-                right = 14,
-                top = -8,
-                pinnedHeight = 232,
-                restoreParent = sec,
-                restorePoint = { "TOPLEFT", sec, "TOPLEFT", 14, -70 },
-                restoreWidth = ctx.width - 28,
-                restoreHeight = 292,
-                pageKey = ctx and ctx.key,
-                wrapper = ctx and ctx.wrapper,
-            })
-            local preview = MSUF.UFPreview
-            if preview and type(preview.RegisterRuntimeControlsForPage) == "function" then
-                preview.RegisterRuntimeControlsForPage(box, ctx and ctx.key)
-            end
-        end
-        -- The shared preview is created lazily after the page's first refresh.
-        -- Apply the owning unit gate now so first-open controls cannot inherit a
-        -- stale disabled gate from the unit page that previously owned the box.
-        ApplyUnitFrameEnabledGate(ctx, unit)
+        EnsurePreviewAttachment()
         return box
     end
     local function RefreshThisPreview(reason)
@@ -398,8 +413,29 @@ local function BuildPreview(ctx, builder, unit)
 end
 local function BuildTopActions(ctx, builder, unit, label)
     local pageW = tonumber(builder.width) or 720
-    local compactTabs = pageW < 980
-    local sectionH = 54
+    local scopeValues = {}
+    for i = 1, #UNIT_TAB_ORDER do
+        local tabUnit = UNIT_TAB_ORDER[i]
+        scopeValues[i] = {
+            value = tabUnit,
+            text = UnitTopTabLabel(tabUnit, false),
+            width = UnitTopTabWidth(tabUnit, false),
+        }
+    end
+    local scopeOpts = {
+        values = scopeValues,
+        width = pageW,
+        maxRight = pageW - 112,
+        label = "Editing:",
+        labelWidth = 64,
+        getValue = function() return unit end,
+        setValue = function(tabUnit)
+            local pageKey = UNIT_PAGE_FOR_UNIT[tabUnit]
+            if pageKey and pageKey ~= ctx.key then M.SelectPage(pageKey) end
+        end,
+    }
+    local scopeMetrics = W.MeasureScopeOverrideBar and W.MeasureScopeOverrideBar(scopeValues, scopeOpts)
+    local sectionH = math.max(54, math.abs((scopeMetrics and scopeMetrics.bottomY) or -40) + 14)
     local sec = T.Panel(builder.parent, nil, T.colors.glassStatus or T.colors.header, T.colors.borderSoft)
     T.ApplySurface(sec, "status")
     sec:SetPoint("TOPLEFT", builder.parent, "TOPLEFT", builder.x, builder.y)
@@ -407,40 +443,16 @@ local function BuildTopActions(ctx, builder, unit, label)
     sec._msuf2Width = pageW
     builder.y = builder.y - sectionH - 8
     if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(builder.y) + 28) end
-    local function MakeTopButton(parent, text, width, active, opts)
-        return W.TopButton(parent, text, width, 24, opts or TOP_BUTTON_STYLE, active)
-    end
     local rowY = -15
-    local editing = T.Font(sec, "GameFontNormalSmall", M.Tr("Editing:"), { 0.72, 0.82, 1.00, 1 })
-    editing:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, rowY - 4)
-    local previousTab
-    local tabStyle = {
-        bg = { 0.026, 0.040, 0.084, 0.95 },
-        border = { 0.095, 0.165, 0.330, 0.68 },
-        textColor = { 0.86, 0.92, 1.00, 1 },
-        hoverBg = { 0.036, 0.056, 0.108, 0.98 },
-        hoverBorder = { 0.150, 0.265, 0.500, 0.86 },
-        activeBg = { 0.050, 0.130, 0.315, 0.98 },
-        activeBorder = { 0.220, 0.520, 0.960, 0.98 },
-        activeTextColor = { 0.94, 0.98, 1.00, 1 },
-    }
-    for i = 1, #UNIT_TAB_ORDER do
-        local tabUnit = UNIT_TAB_ORDER[i]
-        local pageKey = UNIT_PAGE_FOR_UNIT[tabUnit]
-        local tab = MakeTopButton(sec, UnitTopTabLabel(tabUnit, compactTabs), UnitTopTabWidth(tabUnit, compactTabs), tabUnit == unit, tabStyle)
-        RegisterControl(tab, ctx, "navigation.unit_page." .. tostring(tabUnit), UnitTopTabLabel(tabUnit, false), "button", "navigation", { navigationKey = pageKey })
-        tab._msuf2SkipHistoryCheckpoint = true
-        if previousTab then
-            tab:SetPoint("TOPLEFT", previousTab, "TOPRIGHT", compactTabs and 4 or 6, 0)
-        else
-            tab:SetPoint("TOPLEFT", sec, "TOPLEFT", compactTabs and 82 or 92, rowY)
+    local scopeBar = W.ScopeOverrideBar and W.ScopeOverrideBar(ctx, sec, scopeOpts)
+    if scopeBar and type(scopeBar.buttons) == "table" then
+        for i = 1, #scopeValues do
+            local item = scopeValues[i]
+            local pageKey = UNIT_PAGE_FOR_UNIT[item.value]
+            local tab = scopeBar.buttons[i]
+            RegisterControl(tab, ctx, "navigation.unit_page." .. tostring(item.value), item.text, "button", "navigation", { navigationKey = pageKey })
+            tab._msuf2SkipHistoryCheckpoint = true
         end
-        if pageKey and pageKey ~= ctx.key then
-            tab:SetScript("OnClick", function() M.SelectPage(pageKey) end)
-        else
-            tab:EnableMouse(false)
-        end
-        previousTab = tab
     end
     local copy = W.TopButton(sec, M.Tr("Copy To"), 82, 24, nil, false)
     copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -14, rowY)
@@ -1179,6 +1191,6 @@ for key, info in pairs(UNIT_PAGES) do
     M.RegisterPage(key, {
         title = info.title,
         build = BuildUnitPage(info),
-        version = 23,
+        version = 25,
     })
 end

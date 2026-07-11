@@ -9,7 +9,7 @@ MSUF.MSUF2 = M
 local W = M.Widgets
 local T = M.Theme or {}
 local GP = M.GroupPage or {}
-local floor = math.floor
+local floor, ceil, abs = math.floor, math.ceil, math.abs
 local max = math.max
 local min = math.min
 local C_Timer = _G.C_Timer
@@ -56,7 +56,6 @@ local function AuraControlMeta(ctx, path, classification)
         classification = classification or "setting",
         ephemeral = classification == "ephemeral" or nil,
     }
-    if meta.classification == "action" then meta.actionKey = identity end
     return meta
 end
 local function RegisterAuraControl(ctx, widget, label, kind, path, classification)
@@ -73,17 +72,11 @@ local GF_AURA_WORKSPACE_TOOLS = {
     { value = "filters", text = "Filters" },
     { value = "blacklist", text = "Blacklist" },
 }
-local GF_AURA_WORKSPACE_TOOL_OK = { layout = true, filters = true, blacklist = true }
-local GF_AURA_WORKSPACE_TAB_STYLE = {
-    bg = { 0.012, 0.025, 0.052, 0.90 },
-    border = { 0.070, 0.130, 0.235, 0.52 },
-    textColor = { 0.78, 0.86, 0.97, 0.96 },
-    hoverBg = { 0.024, 0.052, 0.100, 0.96 },
-    hoverBorder = { 0.120, 0.245, 0.455, 0.78 },
-    activeBg = { 0.032, 0.090, 0.205, 0.97 },
-    activeBorder = { 0.150, 0.385, 0.760, 0.92 },
-    activeTextColor = { 0.94, 0.98, 1.00, 1.00 },
+local GF_AURA_WORKSPACE_LANES = {
+    { value = "buff", text = "Buffs" },
+    { value = "debuff", text = "Debuffs" },
 }
+local GF_AURA_WORKSPACE_TOOL_OK = { layout = true, filters = true, blacklist = true }
 local function CurrentAuraWorkspaceTool(scope, lane)
     M.gfAuraToolSelection = M.gfAuraToolSelection or {}
     local scopeState = M.gfAuraToolSelection[scope]
@@ -97,6 +90,16 @@ local function SetAuraWorkspaceTool(scope, lane, tool)
     local scopeState = M.gfAuraToolSelection[scope]
     if type(scopeState) ~= "table" then scopeState = {}; M.gfAuraToolSelection[scope] = scopeState end
     scopeState[lane] = GF_AURA_WORKSPACE_TOOL_OK[tool] and tool or "layout"
+end
+local function CurrentAuraWorkspaceLane(scope)
+    M.gfAuraLaneSelection = M.gfAuraLaneSelection or {}
+    local lane = M.gfAuraLaneSelection[scope]
+    if lane ~= "buff" and lane ~= "debuff" then lane = "buff"; M.gfAuraLaneSelection[scope] = lane end
+    return lane
+end
+local function SetAuraWorkspaceLane(scope, lane)
+    M.gfAuraLaneSelection = M.gfAuraLaneSelection or {}
+    M.gfAuraLaneSelection[scope] = lane == "debuff" and "debuff" or "buff"
 end
 local groupAuraRebuildSerial = 0
 local function RestoreGroupAuraScroll(offset, key, serial)
@@ -123,31 +126,60 @@ local function RebuildGroupAuraPage(ctx)
     end
 end
 local function BuildAuraWorkspaceTabs(ctx, section, scope, lane, width)
-    W.LabelAt(section, "Edit", 16, -36, 58, "GameFontNormalSmall", ThemeColor("accent", { 0.20, 0.60, 1.00, 1.00 }))
-    local x, gap = 88, 8
-    local available = max(360, (tonumber(width) or 720) - x - 24)
-    local buttonW = floor((available - gap * 2) / 3)
-    local buttons = {}
-    for i = 1, #GF_AURA_WORKSPACE_TOOLS do
-        local item = GF_AURA_WORKSPACE_TOOLS[i]
-        local btn = W.TopButton(section, item.text, buttonW, 24, GF_AURA_WORKSPACE_TAB_STYLE, item.value == CurrentAuraWorkspaceTool(scope, lane))
-        btn:SetPoint("TOPLEFT", section, "TOPLEFT", x + (i - 1) * (buttonW + gap), -30)
-        btn:SetScript("OnClick", function()
-            if CurrentAuraWorkspaceTool(scope, lane) == item.value then return end
-            SetAuraWorkspaceTool(scope, lane, item.value)
+    local sectionW = tonumber(width) or 720
+    local laneBar = W.ScopeOverrideBar(ctx, section, {
+        values = GF_AURA_WORKSPACE_LANES,
+        width = sectionW,
+        label = "Container:",
+        labelWidth = 72,
+        centerY = -28,
+        getValue = function() return CurrentAuraWorkspaceLane(scope) end,
+        setValue = function(value)
+            if CurrentAuraWorkspaceLane(scope) == value then return end
+            SetAuraWorkspaceLane(scope, value)
             RebuildGroupAuraPage(ctx)
-        end)
-        RegisterAuraControl(ctx, btn, item.text, "button",
-            "group-workspace.lane." .. AuraCatalogToken(lane, "lane") .. ".tool." .. AuraCatalogToken(item.value), "ephemeral")
-        buttons[item.value] = btn
+        end,
+    })
+    if laneBar and type(laneBar.buttons) == "table" then
+        for i = 1, #GF_AURA_WORKSPACE_LANES do
+            local item = GF_AURA_WORKSPACE_LANES[i]
+            RegisterAuraControl(ctx, laneBar.buttons[i], item.text, "button",
+                "group-workspace.container-selector." .. AuraCatalogToken(item.value), "ephemeral")
+        end
     end
-    M.TrackRefresh(ctx, function()
-        local current = CurrentAuraWorkspaceTool(scope, lane)
+    local toolBar = W.ScopeOverrideBar(ctx, section, {
+        values = GF_AURA_WORKSPACE_TOOLS,
+        width = sectionW,
+        label = "Edit:",
+        labelWidth = 72,
+        centerY = -62,
+        getValue = function() return CurrentAuraWorkspaceTool(scope, lane) end,
+        setValue = function(value)
+            if CurrentAuraWorkspaceTool(scope, lane) == value then return end
+            SetAuraWorkspaceTool(scope, lane, value)
+            RebuildGroupAuraPage(ctx)
+        end,
+    })
+    if toolBar and type(toolBar.buttons) == "table" then
         for i = 1, #GF_AURA_WORKSPACE_TOOLS do
             local item = GF_AURA_WORKSPACE_TOOLS[i]
-            if buttons[item.value].SetActive then buttons[item.value]:SetActive(item.value == current) end
+            RegisterAuraControl(ctx, toolBar.buttons[i], item.text, "button",
+                "group-workspace.lane." .. AuraCatalogToken(lane, "lane") .. ".tool." .. AuraCatalogToken(item.value), "ephemeral")
         end
+    end
+    local openStyle = T.Button(section, "Open Aura Style", 126, 22)
+    openStyle:SetPoint("TOPRIGHT", section, "TOPRIGHT", -16, -74)
+    if T.CenterButtonLabel then T.CenterButtonLabel(openStyle) end
+    openStyle:SetScript("OnClick", function()
+        local styleScope = scope == "mythicraid" and "raid" or scope
+        M.SetMenuStateValue("auraScope", styleScope)
+        M.SetMenuStateValue("auraStyleGFScope", styleScope)
+        M.SetMenuStateValue("auraStyleContainer", lane)
+        M.SetMenuStateValue("auraStyleGFLane", lane)
+        if M.SelectPage then M.SelectPage("auras3_styling") end
     end)
+    RegisterAuraControl(ctx, openStyle, "Open Aura Style", "button", "group-workspace.open-aura-style", "navigation")
+    W.Text(section, "All icon styling: Appearance > Auras.", 16, -84, sectionW - 174, MUTED)
 end
 local function NativeAuraKey(groupKey)
     return groupKey == "buff" and "buffs" or "debuffs"
@@ -180,97 +212,104 @@ local function BindAuraLaneEnabled(ctx, widget, groupKey)
         AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(groupKey, "lane") .. ".enabled"))
     return widget
 end
+local function CreateNestedGroupAuraBuilder(ctx, parentBuilder, body)
+    local entry = body and body._msuf2CollapsibleEntry
+    if not (entry and W.PageBuilder) then return parentBuilder end
+    local bodyWidth = body._msuf2Width or parentBuilder.width or 720
+    local nestedCtx = setmetatable({
+        wrapper = body,
+        width = max(320, bodyWidth - 24),
+        key = ctx and ctx.key,
+        entry = ctx and ctx.entry,
+        _msuf2ContentX = 12,
+        _msuf2TopInset = 0,
+    }, { __index = ctx })
+    function nestedCtx:SetContentHeight(height)
+        height = max(80, ceil(tonumber(height) or 80))
+        if entry.contentHeight == height then return end
+        entry.contentHeight = height
+        body:SetHeight(height)
+        if parentBuilder.RequestRelayoutCollapsibles then parentBuilder:RequestRelayoutCollapsibles() end
+    end
+    local nestedBuilder = W.PageBuilder(nestedCtx)
+    entry._msuf2SettleContentLayout = function()
+        if nestedBuilder.RelayoutCollapsibles then nestedBuilder:RelayoutCollapsibles() end
+        nestedCtx:SetContentHeight(abs(nestedBuilder.y) + 42)
+    end
+    return nestedBuilder
+end
+
 local function BuildGFAuras(ctx)
     local b = W.PageBuilder(ctx)
     ScopeSection(ctx, b)
     M.GroupPreview.Add(ctx, b)
     local function RefreshPage() M.CallIf(M.SelectPage, ctx.key) end
-    local AURA_POSITION_ANCHORS = (#STATUS_ICON_ANCHORS > 0 and STATUS_ICON_ANCHORS) or AURA_ANCHORS
-    local AURA_GROWTH_VALUES = (#SPELL_GROWTH_VALUES > 0 and SPELL_GROWTH_VALUES)
+    local scope = CurrentScope()
+    local lane = CurrentAuraWorkspaceLane(scope)
+    local tool = CurrentAuraWorkspaceTool(scope, lane)
+    local anchors = (#STATUS_ICON_ANCHORS > 0 and STATUS_ICON_ANCHORS) or AURA_ANCHORS
+    local growthValues = (#SPELL_GROWTH_VALUES > 0 and SPELL_GROWTH_VALUES)
         or VT("RIGHTDOWN", "Right then Down", "LEFTDOWN", "Left then Down", "RIGHTUP", "Right then Up", "LEFTUP", "Left then Up")
-    local AURA_GROUP_DEFAULTS = {
-        buff = {
-            enabledLabel = "Buffs", maxLabel = "Max icons", maxMax = 20,
-            anchor = "BOTTOMRIGHT", growth = "LEFTUP", size = 22, perRow = 4, max = 6, spacing = 1, layer = 5,
-            layoutHeight = 520,
-        },
-        debuff = {
-            enabledLabel = "Debuffs", maxLabel = "Max icons", maxMax = 20,
-            anchor = "TOPLEFT", growth = "RIGHTDOWN", size = 20, perRow = 3, max = 6, spacing = 1, layer = 6,
-            layoutHeight = 590,
-        },
-    }
-    local function BuildDebuffPTRNotice(section, leftX, y, width)
-        W.ControlCard(section, "Tracked Debuff IDs", nil, leftX - 14, y, width + 28, 76)
-        W.Text(section, "PTR 12.1 does not apply exact SpellID include/exclude identity filters to HARMFUL auras on friendly units. Use normal Debuffs/dispels here; native tracked debuff icons would over-match.", leftX, y - 36, width, MUTED)
-    end
-    local function BuildAuraGroupSection(groupKey, title)
-        local def = AURA_GROUP_DEFAULTS[groupKey]
-        local scope = CurrentScope()
-        local tool = CurrentAuraWorkspaceTool(scope, groupKey)
-        local sectionHeight = tool == "filters" and 360 or (tool == "blacklist" and 920 or def.layoutHeight)
-        local section = b:CollapsibleSection(groupKey == "buff" and "buffs" or "debuffs", title, sectionHeight, false)
-        local sectionW = section._msuf2Width or b.width or 720
-        BuildAuraWorkspaceTabs(ctx, section, scope, groupKey, sectionW)
-        local leftX = 30
-        local rightX = max(430, min(520, floor(sectionW * 0.50)))
-        local leftW = max(270, min(340, rightX - leftX - 70))
-        local rightW = max(280, min(360, sectionW - rightX - 42))
-        local controls, enable = {}, nil
-        if tool == "layout" then
-            local contentY = -72
-            W.ControlCardBackdrop(section, leftX - 14, -38 + contentY, leftW + 28, 42)
-            W.ControlCard(section, "Placement", nil, leftX - 14, -84 + contentY, leftW + 28, 286)
-            W.ControlCard(section, "Icon Grid", nil, rightX - 14, -84 + contentY, rightW + 28, 326)
-            enable = BindAuraLaneEnabled(ctx, W.SwitchAt(section, def.enabledLabel, leftX, -44 + contentY, 190), groupKey)
-            enable._msuf2GroupFrameGateAlwaysEnabled = true
-            controls = M.BuildControlSpecs({
-                { "dropdown", "Anchor", AURA_POSITION_ANCHORS, "anchor", def.anchor, "auras", leftX, -118 + contentY, leftW, "LEFT" },
-                { "dropdown", "Growth", AURA_GROWTH_VALUES, "growth", def.growth, "auras", leftX, -172 + contentY, leftW, "LEFT" },
-                { "slider", "Offset X", -160, 160, 1, "x", 0, "auras", leftX, -226 + contentY, leftW },
-                { "slider", "Offset Y", -160, 160, 1, "y", 0, "auras", leftX, -280 + contentY, leftW },
-                { "strata", "Frame Strata", 0, (FrameStrataCount or 9) - 1, 1, "strata", "AUTO", "auras", leftX, -334 + contentY, leftW },
-                { "slider", def.maxLabel, 0, def.maxMax, 1, "max", def.max, "auras", rightX, -118 + contentY, rightW },
-                { "slider", "Icon size", 8, 64, 1, "size", def.size, "auras", rightX, -172 + contentY, rightW },
-                { "slider", "Per row", 1, 20, 1, "perRow", def.perRow, "auras", rightX, -226 + contentY, rightW },
-                { "slider", "Spacing", 0, 12, 1, "spacing", def.spacing, "auras", rightX, -280 + contentY, rightW },
-                { "slider", "Layer (Z-Order)", 0, 30, 1, "layer", def.layer, "auras", rightX, -334 + contentY, rightW },
-            }, {
-                dropdown = function(s) local widget = BindNestedDropdown(ctx, W.Dropdown(section, s[2], s[3], s[9]), function() return AuraGroup(CurrentScope(), groupKey) end, s[4], s[5], s[6],
-                    AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(groupKey) .. ".layout." .. AuraCatalogToken(s[4]))); W.MoveWidget(widget, section, s[7], s[8], s[9], s[10] or "CENTER"); return widget end,
-                slider = function(s) local widget = BindNestedSlider(ctx, W.Slider(section, s[2], s[3], s[4], s[5], s[11]), function() return AuraGroup(CurrentScope(), groupKey) end, s[6], s[7], s[8],
-                    AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(groupKey) .. ".layout." .. AuraCatalogToken(s[6]))); W.MoveWidget(widget, section, s[9], s[10], s[11], s[12] or "CENTER"); return widget end,
-                strata = function(s) local widget = BindNestedStrataSlider(ctx, W.Slider(section, s[2], s[3], s[4], s[5], s[11]), function() return AuraGroup(CurrentScope(), groupKey) end, s[6], s[7], s[8],
-                    AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(groupKey) .. ".layout." .. AuraCatalogToken(s[6]))); W.MoveWidget(widget, section, s[9], s[10], s[11], s[12] or "CENTER"); return widget end,
-            })
-            if groupKey == "debuff" then BuildDebuffPTRNotice(section, leftX, -410 + contentY, sectionW - 72) end
-        elseif type(M.BuildAuras3GroupLaneWorkspace) == "function" then
-            M.BuildAuras3GroupLaneWorkspace(ctx, b, scope, groupKey, {
-                parent = section,
-                originY = -54,
-                tool = tool,
-            })
+    local defaults = lane == "buff"
+        and { anchor = "BOTTOMRIGHT", growth = "LEFTUP", size = 22, perRow = 4, max = 6, spacing = 1, layer = 5 }
+        or { anchor = "TOPLEFT", growth = "RIGHTDOWN", size = 20, perRow = 3, max = 6, spacing = 1, layer = 6 }
+
+    local outer = b:CollapsibleSection("auras", "Auras", 120, false)
+    local auraBuilder = CreateNestedGroupAuraBuilder(ctx, b, outer)
+    local top = auraBuilder:Section("", 104)
+    if top.title then top.title:Hide() end
+    BuildAuraWorkspaceTabs(ctx, top, scope, lane, top._msuf2Width or auraBuilder.width or 720)
+
+    if tool == "layout" then
+        local title = lane == "debuff" and "Debuff Layout" or "Buff Layout"
+        local section = auraBuilder:Section(title, 190)
+        local w = section._msuf2Width or auraBuilder.width or 720
+        local inner, gap = w - 48, 10
+        local controls = {}
+        local enable = BindAuraLaneEnabled(ctx, W.SwitchAt(section, "Visible", 24, -62, 104), lane)
+        enable._msuf2GroupFrameGateAlwaysEnabled = true
+        local dropdownW = max(180, floor((inner - 126 - gap * 2) / 2))
+        local anchorX = 24 + 126 + gap
+        local growthX = anchorX + dropdownW + gap
+        local function Dropdown(label, x, values, key, fallback)
+            local widget = BindNestedDropdown(ctx, W.Dropdown(section, label, values, dropdownW),
+                function() return AuraGroup(CurrentScope(), lane) end, key, fallback, "auras",
+                AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".layout." .. AuraCatalogToken(key)))
+            W.MoveWidget(widget, section, x, -34, dropdownW, "LEFT")
+            controls[#controls + 1] = widget
         end
-        local function RefreshAuraGroupState()
-            local cfg = AuraGroup(CurrentScope(), groupKey)
-            local groupEnabled = LaneBackendEnabled(CurrentScope(), groupKey)
-            if tool == "layout" then
-                SetOptionsEnabled(controls, groupEnabled)
-                SetOptionEnabled(enable, true)
-            end
-            SetSectionBadgesAndStatus(section, {
-                OnOffBadge(groupEnabled, "Shown", "Hidden"),
-                { text = "Max " .. BadgeNumber(cfg.max or def.max), kind = groupEnabled and "info" or "muted" },
-                { text = BadgeNumber(cfg.size or def.size) .. "px", kind = groupEnabled and "info" or "muted" },
-            })
+        Dropdown("Anchor", anchorX, anchors, "anchor", defaults.anchor)
+        Dropdown("Growth", growthX, growthValues, "growth", defaults.growth)
+        local col4 = floor((inner - gap * 3) / 4)
+        local function Slider(label, col, y, minValue, maxValue, key, fallback)
+            local widget = BindNestedSlider(ctx, W.Slider(section, label, minValue, maxValue, 1, col4),
+                function() return AuraGroup(CurrentScope(), lane) end, key, fallback, "auras",
+                AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".layout." .. AuraCatalogToken(key)))
+            W.MoveWidget(widget, section, 24 + (col - 1) * (col4 + gap), y, col4)
+            controls[#controls + 1] = widget
         end
-        M.TrackCollapsibleRefresh(ctx, section, RefreshAuraGroupState)
+        Slider("X", 1, -92, -300, 300, "x", 0)
+        Slider("Y", 2, -92, -300, 300, "y", 0)
+        Slider("Max", 3, -92, 0, 20, "max", defaults.max)
+        Slider("Size", 4, -92, 8, 80, "size", defaults.size)
+        Slider("Per row", 1, -146, 1, 20, "perRow", defaults.perRow)
+        Slider("Gap", 2, -146, 0, 12, "spacing", defaults.spacing)
+        Slider("Layer", 3, -146, 0, 30, "layer", defaults.layer)
+        local strata = BindNestedStrataSlider(ctx, W.Slider(section, "Strata", 0, (FrameStrataCount or 9) - 1, 1, col4),
+            function() return AuraGroup(CurrentScope(), lane) end, "strata", "AUTO", "auras",
+            AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".layout.strata"))
+        W.MoveWidget(strata, section, 24 + 3 * (col4 + gap), -146, col4)
+        controls[#controls + 1] = strata
+        M.TrackRefresh(ctx, function()
+            local shown = LaneBackendEnabled(CurrentScope(), lane)
+            SetOptionEnabled(enable, true)
+            SetOptionsEnabled(controls, shown)
+        end)
+    elseif type(M.BuildAuras3GroupLaneWorkspace) == "function" then
+        M.BuildAuras3GroupLaneWorkspace(ctx, auraBuilder, scope, lane, { tool = tool, compact = true })
     end
-    BuildAuraGroupSection("buff", "Buffs")
-    if GP.BuildSpellIndicatorsSection then
-        GP.BuildSpellIndicatorsSection(ctx, b, RefreshPage)
-    end
-    BuildAuraGroupSection("debuff", "Debuffs")
+
+    if GP.BuildSpellIndicatorsSection then GP.BuildSpellIndicatorsSection(ctx, b, RefreshPage) end
     FinalizeScopePage(ctx, b)
 end
-M.RegisterPage("gf_auras", { title = "MSUF Group Auras", build = BuildGFAuras, version = 22 })
+M.RegisterPage("gf_auras", { title = "MSUF Group Auras", build = BuildGFAuras, version = 27 })

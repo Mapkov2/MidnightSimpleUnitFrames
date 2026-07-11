@@ -2066,6 +2066,51 @@ function M.RefreshPinnedPreviews(scroll)
         if r and r.update and (not scroll or r.scroll == scroll) then r.update() end
     end
 end
+--- Window hiding is a suspension, not an ownership change: Menu2 keeps its
+--- page cache and can reopen the same page instance. Restore floating previews
+--- to their page slot and stop rendering them, but retain the live record and
+--- hooks so reopen does not attach another generation of callbacks.
+function M.SuspendPinnedPreviews(reason)
+    M._msuf2PinnedPreviewResumeSerial = (M._msuf2PinnedPreviewResumeSerial or 0) + 1
+    local list = M._pinnedPreviews
+    if type(list) ~= "table" then return end
+    for i = 1, #list do
+        local record = list[i]
+        local box = record and record.box
+        if record and type(record.restore) == "function" then record.restore() end
+        if record and record.scroll and record.scroll._msuf2PinnedPreviewActiveRecord == record then
+            record.scroll._msuf2PinnedPreviewActiveRecord = nil
+        end
+        if box then
+            box._msuf2PinnedFloating = nil
+            if box.Hide then box:Hide() end
+        end
+    end
+end
+function M.ResumePinnedPreviews(reason)
+    local list = M._pinnedPreviews
+    if type(list) ~= "table" or #list == 0 then return end
+    M._msuf2PinnedPreviewResumeSerial = (M._msuf2PinnedPreviewResumeSerial or 0) + 1
+    local serial = M._msuf2PinnedPreviewResumeSerial
+    for i = 1, #list do
+        local scroll = list[i] and list[i].scroll
+        if scroll then
+            scroll._msuf2PinnedPreviewLastOffset = nil
+            scroll._msuf2PinnedPreviewLastHeight = nil
+            scroll._msuf2PinnedPreviewLastChildHeight = nil
+        end
+    end
+    local function RefreshAfterShow()
+        if M._msuf2PinnedPreviewResumeSerial ~= serial then return end
+        if M.frame and M.frame.IsShown and not M.frame:IsShown() then return end
+        M.RefreshPinnedPreviews()
+    end
+    RefreshAfterShow()
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, RefreshAfterShow)
+        C_Timer.After(0.05, RefreshAfterShow)
+    end
+end
 function M.ReleasePinnedPreviews(reason, keepKey, releaseKey)
     local list = M._pinnedPreviews
     if type(list) ~= "table" then return end
@@ -2288,7 +2333,7 @@ function W.AttachPinnedPreview(body, box, opts)
         end
     end
     local function Restore(force)
-        if box._msuf2PinnedPreviewRecord and box._msuf2PinnedPreviewRecord ~= record then return end
+        if box._msuf2PinnedPreviewRecord ~= record then return end
         if not force and not pinned and box._msuf2PinnedFloating ~= true then return end
         restoring = true
         pinned = false
@@ -2345,7 +2390,7 @@ function W.AttachPinnedPreview(body, box, opts)
             return
         end
         if restoring then return end
-        if box._msuf2PinnedPreviewRecord and box._msuf2PinnedPreviewRecord ~= record then return end
+        if box._msuf2PinnedPreviewRecord ~= record then return end
         applyingPinnedState = true
         if not BodyOwned() then
             Restore()

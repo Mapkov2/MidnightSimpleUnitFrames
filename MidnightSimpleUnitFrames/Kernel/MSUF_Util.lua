@@ -1106,7 +1106,7 @@ function MSUF_Keybind_ToggleOptions()
                 win:Hide()
             end
         else
-            _G.MSUF_OpenStandaloneOptionsWindow("home")
+            _G.MSUF_OpenStandaloneOptionsWindow()
         end
     end
 end

@@ -19,6 +19,8 @@ local CreateFrame = _G.CreateFrame
 local hooksecurefunc = _G.hooksecurefunc
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local MAX_FINITE_AURA_DURATION = 2147483647
+local ICON_ALERT_TEXTURE = [[Interface\SpellActivationOverlay\IconAlert]]
+local ICON_ALERT_ANTS_TEXTURE = [[Interface\SpellActivationOverlay\IconAlertAnts]]
 
 local DEFAULT_SHARED = {
     cooldownTextSize = 8,
@@ -212,7 +214,8 @@ local function SlotLayoutSignature(slot)
         .. "\030" .. tostring(slot.showCooldownSwipe) .. "\030" .. tostring(slot.cooldownSwipeReverse)
         .. "\030" .. tostring(slot.cooldownSize)
         .. "\030" .. tostring(slot.showStacks) .. "\030" .. tostring(color[1]) .. "\030" .. tostring(color[2])
-        .. "\030" .. tostring(color[3]) .. "\030" .. tostring(color[4]) .. "\030" .. tostring(frame and frame.type)
+        .. "\030" .. tostring(color[3]) .. "\030" .. tostring(color[4]) .. "\030" .. tostring(slot.iconEffect)
+        .. "\030" .. tostring(frame and frame.type)
         .. "\030" .. tostring(frame and frame.priority) .. "\030" .. tostring(frame and frame.thickness)
         .. "\030" .. tostring(frame and frame.tintAlpha) .. "\030" .. tostring(frame and frame.strata)
         .. "\030" .. tostring(effectColor[1]) .. "\030" .. tostring(effectColor[2]) .. "\030" .. tostring(effectColor[3])
@@ -244,6 +247,8 @@ local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata)
         visual = "icon"
     end
     if visual == "none" and frameEffect == nil then return nil end
+    local iconEffect = tostring(placed and placed.iconEffect or "none"):lower()
+    if visual ~= "icon" or iconEffect ~= "glow" then iconEffect = "none" end
     local hiddenVisual = visual == "none" and frameEffect ~= nil
     local size = ClampNumber(placed and placed.size, hiddenVisual and 1 or 18, 1, 128)
     local width = visual == "bar" and ClampNumber(placed and placed.barWidth, size * 3, size, 256) or size
@@ -273,6 +278,7 @@ local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata)
             Clamp01(color and color[3], 0.88),
             Clamp01(color and color[4], 1),
         },
+        iconEffect = iconEffect,
         frameEffect = frameEffect,
         size = size,
         width = width,
@@ -409,6 +415,79 @@ local function EnsureEdges(button, parentFrame)
     return edges
 end
 
+-- Genuine animated action-button glow. The 22-frame ants animation is driven
+-- by a C-side AnimationGroup, so active indicators add no Lua OnUpdate work.
+-- Both the full-frame and icon effects use this renderer; because their roots
+-- are children of the native AuraSlot button, Blizzard's secret visibility is
+-- inherited without reading or branching on it in addon Lua.
+local function EnsureAnimatedGlow(owner)
+    if not owner then return nil end
+    local data = owner._msufA3AnimatedGlow
+    if data then return data end
+
+    local halo = owner:CreateTexture(nil, "OVERLAY", nil, 6)
+    halo:SetTexture(ICON_ALERT_TEXTURE)
+    halo:SetTexCoord(0.0078125, 0.5078125, 0.27734375, 0.52734375)
+    halo:SetBlendMode("ADD")
+
+    local ants = owner:CreateTexture(nil, "OVERLAY", nil, 7)
+    ants:SetTexture(ICON_ALERT_ANTS_TEXTURE)
+    ants:SetBlendMode("ADD")
+    local animation = ants:CreateAnimationGroup()
+    animation:SetLooping("REPEAT")
+    local flipbook = animation:CreateAnimation("FlipBook")
+    flipbook:SetFlipBookRows(5)
+    flipbook:SetFlipBookColumns(5)
+    flipbook:SetFlipBookFrames(22)
+    flipbook:SetFlipBookFrameWidth(48)
+    flipbook:SetFlipBookFrameHeight(48)
+    flipbook:SetDuration(0.37)
+
+    data = { halo = halo, ants = ants, animation = animation }
+    owner._msufA3AnimatedGlow = data
+    return data
+end
+
+local function AnchorAnimatedGlow(data, owner, padding)
+    if not (data and owner) or data.padding == padding then return end
+    data.padding = padding
+    local haloPadding = padding * 1.55
+    data.halo:ClearAllPoints()
+    data.halo:SetPoint("TOPLEFT", owner, "TOPLEFT", -haloPadding, haloPadding)
+    data.halo:SetPoint("BOTTOMRIGHT", owner, "BOTTOMRIGHT", haloPadding, -haloPadding)
+    data.ants:ClearAllPoints()
+    data.ants:SetPoint("TOPLEFT", owner, "TOPLEFT", -padding, padding)
+    data.ants:SetPoint("BOTTOMRIGHT", owner, "BOTTOMRIGHT", padding, -padding)
+end
+
+local function StartAnimatedGlow(owner, r, g, b, a, padding)
+    local data = EnsureAnimatedGlow(owner)
+    if not data then return false end
+    padding = ClampNumber(padding, 3, 1, 24)
+    AnchorAnimatedGlow(data, owner, padding)
+    if data.r ~= r or data.g ~= g or data.b ~= b or data.a ~= a then
+        data.r, data.g, data.b, data.a = r, g, b, a
+        data.halo:SetDesaturated(true)
+        data.ants:SetDesaturated(true)
+        data.halo:SetVertexColor(r, g, b, a)
+        data.ants:SetVertexColor(r, g, b, a)
+    end
+    data.active = true
+    data.halo:Show()
+    data.ants:Show()
+    if not data.animation:IsPlaying() then data.animation:Play() end
+    return true
+end
+
+local function StopAnimatedGlow(owner)
+    local data = owner and owner._msufA3AnimatedGlow
+    if not data then return end
+    data.active = nil
+    if data.animation:IsPlaying() then data.animation:Stop() end
+    data.halo:Hide()
+    data.ants:Hide()
+end
+
 local function NameFontString(parentFrame)
     if not parentFrame then return nil end
     return parentFrame.Name
@@ -503,9 +582,19 @@ local function HideButtonFrameEffect(button)
     local root = button._msufA3SpellIndicatorEffectRoot
     if root then
         StopPulse(root)
+        StopAnimatedGlow(root)
         root:Hide()
     end
     UnregisterNameOverlay(button)
+end
+
+local function HideButtonIconEffect(button)
+    if not button then return end
+    local root = button._msufA3SpellIndicatorIconEffectRoot
+    if root then
+        StopAnimatedGlow(root)
+        root:Hide()
+    end
 end
 
 function Runtime.HideFrameEffects(parentFrame)
@@ -520,6 +609,15 @@ function Runtime.HideFrameEffects(parentFrame)
     if parentFrame._msufA3SpellIndicatorEffectRoot then parentFrame._msufA3SpellIndicatorEffectRoot:Hide() end
 end
 
+function Runtime.HideIconEffects(parentFrame)
+    if not parentFrame then return end
+    local buttons = parentFrame._msufA3SpellIndicatorIconEffectButtons
+    if buttons then
+        for button in pairs(buttons) do HideButtonIconEffect(button) end
+    end
+    parentFrame._msufA3SpellIndicatorIconEffectButtons = nil
+end
+
 function Runtime.HideMissing(parentFrame)
     if not parentFrame then return end
     local missing = parentFrame._msufA3SpellIndicatorMissingFrames
@@ -532,6 +630,7 @@ end
 
 function Runtime.HideAll(parentFrame)
     Runtime.HideFrameEffects(parentFrame)
+    Runtime.HideIconEffects(parentFrame)
     Runtime.HideMissing(parentFrame)
 end
 
@@ -580,6 +679,7 @@ local function HideEffectRegions(button)
             if edges[i] then edges[i]:Hide() end
         end
     end
+    StopAnimatedGlow(button and button._msufA3SpellIndicatorEffectRoot)
     UnregisterNameOverlay(button)
 end
 
@@ -632,6 +732,8 @@ local function ApplyButtonFrameEffect(button, slot, parentFrame)
             name:SetTextColor(r, g, b, a)
             name:Show()
         end
+    elseif kind == "glow" then
+        StartAnimatedGlow(root, r, g, b, a, ClampNumber(effect.thickness, 3, 1, 16) + 2)
     else
         LayoutEdges(button, parentFrame, effect)
         if kind == "pulse" then StartPulse(root) end
@@ -639,6 +741,36 @@ local function ApplyButtonFrameEffect(button, slot, parentFrame)
 
     parentFrame._msufA3SpellIndicatorEffectButtons = parentFrame._msufA3SpellIndicatorEffectButtons or {}
     parentFrame._msufA3SpellIndicatorEffectButtons[button] = true
+    root:Show()
+    return true
+end
+
+local function ApplyButtonIconEffect(button, slot, parentFrame)
+    if not (button and slot and parentFrame) then return false end
+    if slot.visual ~= "icon" or slot.iconEffect ~= "glow" then
+        local buttons = parentFrame._msufA3SpellIndicatorIconEffectButtons
+        if buttons then buttons[button] = nil end
+        HideButtonIconEffect(button)
+        return false
+    end
+
+    local root = button._msufA3SpellIndicatorIconEffectRoot
+    if not root then
+        root = CreateFrame("Frame", nil, button)
+        root:EnableMouse(false)
+        button._msufA3SpellIndicatorIconEffectRoot = root
+    end
+    root:ClearAllPoints()
+    root:SetAllPoints(button)
+    SyncFrameStrata(root, ResolveFrameStrata(parentFrame, slot.strata))
+    if root.SetFrameLevel then root:SetFrameLevel((button:GetFrameLevel() or 0) + 4) end
+    local color = slot.color or {}
+    local size = ClampNumber(slot.size, 18, 1, 128)
+    StartAnimatedGlow(root,
+        Clamp01(color[1], 1), Clamp01(color[2], 1), Clamp01(color[3], 1), Clamp01(color[4], 1),
+        math_max(2, size * 0.15))
+    parentFrame._msufA3SpellIndicatorIconEffectButtons = parentFrame._msufA3SpellIndicatorIconEffectButtons or {}
+    parentFrame._msufA3SpellIndicatorIconEffectButtons[button] = true
     root:Show()
     return true
 end
@@ -653,11 +785,14 @@ function Runtime.ReleaseContainerEffects(container, parentFrame)
     if not container then return end
     parentFrame = parentFrame or container._msufA3ParentFrame
     local buttons = parentFrame and parentFrame._msufA3SpellIndicatorEffectButtons
+    local iconButtons = parentFrame and parentFrame._msufA3SpellIndicatorIconEffectButtons
     for i = 1, (container.createdButtons or 0) do
         local button = container[i]
         if button then
             HideButtonFrameEffect(button)
+            HideButtonIconEffect(button)
             if buttons then buttons[button] = nil end
+            if iconButtons then iconButtons[button] = nil end
         end
     end
 end
@@ -717,11 +852,24 @@ end
 
 local function SyncButtonGeometry(button, slot, parentFrame)
     if not (button and slot and parentFrame) then return false end
-    button:ClearAllPoints()
-    button:SetSize(slot.width or slot.size or 1, slot.height or slot.size or 1)
-    button:SetPoint(slot.anchor or "TOPLEFT", parentFrame, slot.anchor or "TOPLEFT", slot.x or 0, slot.y or 0)
+    local width, height = slot.width or slot.size or 1, slot.height or slot.size or 1
+    local anchor, x, y = slot.anchor or "TOPLEFT", slot.x or 0, slot.y or 0
+    if button._msufA3GeomParent ~= parentFrame or button._msufA3GeomAnchor ~= anchor
+        or button._msufA3GeomX ~= x or button._msufA3GeomY ~= y
+        or button._msufA3GeomWidth ~= width or button._msufA3GeomHeight ~= height then
+        button._msufA3GeomParent, button._msufA3GeomAnchor = parentFrame, anchor
+        button._msufA3GeomX, button._msufA3GeomY = x, y
+        button._msufA3GeomWidth, button._msufA3GeomHeight = width, height
+        button:ClearAllPoints()
+        button:SetSize(width, height)
+        button:SetPoint(anchor, parentFrame, anchor, x, y)
+    end
     SyncFrameStrata(button, ResolveFrameStrata(parentFrame, slot.strata))
-    if button.SetFrameLevel then button:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + (slot.layer or 9)) end
+    local level = (parentFrame:GetFrameLevel() or 0) + (slot.layer or 9)
+    if button.SetFrameLevel and button._msufA3GeomLevel ~= level then
+        button._msufA3GeomLevel = level
+        button:SetFrameLevel(level)
+    end
     return true
 end
 
@@ -788,6 +936,7 @@ local function PrepareButton(button, slot, parentFrame)
     deps.PrepareAuraButton(button, slot, 1)
     SyncButtonGeometry(button, slot, parentFrame)
     ApplyVisual(button, slot)
+    ApplyButtonIconEffect(button, slot, parentFrame)
     ApplyButtonFrameEffect(button, slot, parentFrame)
     SyncMissingFrame(parentFrame, slot, button)
     if button.EnableMouse then button:EnableMouse(false) end
@@ -889,9 +1038,9 @@ local function UpdateSlots(container, slotRoot)
             container:SetAuraSlotCandidateFilters(slot.slotKey, slot.candidateFilters)
             container._msufA3SpellIndicatorSlotCandidateFilterSignatures[slot.slotKey] = slot.candidateFilterSignature
         end
-        if container[i] then
-            PrepareButton(container[i], slot, container._msufA3ParentFrame)
-        end
+        -- Runtime.SyncGeometry performs the single visual/geometry pass after
+        -- every slot has been rebound. Doing it here as well configured each
+        -- button twice per refresh and repeated expensive region setters.
     end
     return true
 end

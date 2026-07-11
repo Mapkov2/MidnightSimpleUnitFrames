@@ -304,14 +304,23 @@ local function PositionDropdown(owner)
     end
     return true
 end
-function CloseDropdown()
-    if dropdownClosing and not dropdownOwner then return end
+function CloseDropdown(opts)
+    local immediate = opts == true or (type(opts) == "table" and opts.immediate == true)
+    if dropdownClosing and not dropdownOwner and not immediate then return end
     local owner = dropdownOwner or dropdownClosingOwner
     dropdownClosing = true
     dropdownClosingOwner = owner
     dropdownOwner = nil
-    HideDropdownFocus(true)
-    if dropdownFrame and dropdownFrame:IsShown() then
+    HideDropdownFocus(not immediate)
+    if immediate and dropdownFrame then
+        dropdownFrame._msuf2CloseToken = (dropdownFrame._msuf2CloseToken or 0) + 1
+        if T.StopMotion then T.StopMotion(dropdownFrame) end
+        dropdownClosing = nil
+        dropdownClosingOwner = nil
+        dropdownFrame._msuf2AnchorKey = nil
+        dropdownFrame:Hide()
+        dropdownFrame:SetAlpha(1)
+    elseif dropdownFrame and dropdownFrame:IsShown() then
         if dropdownFrame.EnableMouse then dropdownFrame:EnableMouse(false) end
         dropdownFrame._msuf2CloseToken = (dropdownFrame._msuf2CloseToken or 0) + 1
         local closeToken = dropdownFrame._msuf2CloseToken
@@ -867,7 +876,7 @@ function W.Dropdown(section, label, values, width)
         OpenDropdown(self, ResolveValues(self))
     end)
     btn:HookScript("OnHide", function(self)
-        if dropdownOwner == self then CloseDropdown() end
+        if dropdownOwner == self then CloseDropdown({ immediate = true }) end
     end)
     btn:SetScript("OnMouseWheel", function(self, delta)
         if dropdownOwner ~= self or not (dropdownFrame and dropdownFrame:IsShown()) then return end

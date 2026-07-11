@@ -25,6 +25,7 @@ local MENU_STATE_SCALAR_DEFAULTS = {
     auraStyleTab = "overview",
     auraStyleGFScope = "raid",
     auraStyleGFLane = "debuff",
+    auraStyleContainer = "debuff",
     auraStyleGFBlacklistLane = "debuff",
     auraBlacklistPreset = "RAID_BUFFS",
     gfStatusIconSelection = "roleIcon",

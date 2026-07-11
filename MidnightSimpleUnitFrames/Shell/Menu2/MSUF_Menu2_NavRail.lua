@@ -14,16 +14,18 @@ local SearchBridge = M.SearchBridge or {}
 local floor = math.floor
 local max = math.max
 local abs = math.abs
-local NAV_W = 158
-local NAV_BUTTON_H = 20
-local NAV_BUTTON_STEP = 23
+local NAV_W = 198
+local NAV_BUTTON_H = 24
+local NAV_BUTTON_STEP = 27
 local NAV_ITEM_X = 8
 local NAV_ITEM_RIGHT_PAD = 8
 local NAV_ITEM_INDENT = 12
 local NAV_SCROLL_GUTTER = 7
 local NAV_PILL_REFERENCE_LABEL = "Status & Indicators"
-local NAV_PILL_MIN_W = 112
-local NAV_PILL_MAX_W = 124
+local NAV_PILL_MIN_W = 150
+local NAV_PILL_MAX_W = 164
+local NAV_TEXT_BUMP = 3
+local NAV_SEARCH_TEXT_BUMP = 2
 local UpdateSearchPlaceholder = SearchBridge.UpdateSearchPlaceholder
 local ScheduleSearchInputQuery = SearchBridge.ScheduleSearchInputQuery
 local RunSearchInputQuery = SearchBridge.RunSearchInputQuery
@@ -66,7 +68,7 @@ local function NavPillVisualWidth(parent)
     if parent and parent.CreateFontString then
         local probe = parent._msuf2NavPillWidthProbe
         if not probe then
-            probe = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            probe = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
             probe:Hide()
             parent._msuf2NavPillWidthProbe = probe
         end
@@ -168,8 +170,13 @@ local function AssistantAPI()
     return (MSUF and MSUF.Assistant) or M.Assistant
 end
 local function AssistantRuntimeReady()
+    -- The runtime always loads with the core addon; the Assistant only owns
+    -- the navigation search after the user engaged it this session (Dashboard
+    -- card built or an explicit query submitted). Until then, typing keeps
+    -- running classic Menu2 search, matching the former load-on-demand gate.
     local A = AssistantAPI()
-    return A and (type(A.SubmitDeferred) == "function" or type(A.Submit) == "function")
+    return A and A._assistantEngaged == true
+        and (type(A.SubmitDeferred) == "function" or type(A.Submit) == "function")
 end
 local function SubmitAssistantQuery(query)
     query = TrimText(query)
@@ -197,6 +204,10 @@ local function SubmitAssistantQuery(query)
 end
 local function CreateNavButton(parent, key, label, indent)
     local btn = T.Button(parent, M.Tr(label), NavItemWidth(indent), NAV_BUTTON_H)
+    if btn._msuf2Label and btn._msuf2Label.SetFontObject and _G.GameFontHighlight then
+        btn._msuf2Label:SetFontObject(_G.GameFontHighlight)
+    end
+    T.StyleFontString(btn._msuf2Label, T.colors.text, NAV_TEXT_BUMP)
     btn:SetScript("OnClick", function() M.SelectPage(ResolveNavClickTarget(key)) end)
     btn._msuf2SkipHistoryCheckpoint = true
     btn._msuf2NavItem = true
@@ -322,6 +333,7 @@ local function CreateHistoryControls(parent)
             btn._msuf2Label:SetPoint("RIGHT", btn, "RIGHT", -6, 0)
             btn._msuf2Label:SetJustifyH("LEFT")
             btn._msuf2Label:SetText(M.Tr(label))
+            T.StyleFontString(btn._msuf2Label, T.colors.text, NAV_TEXT_BUMP)
         end
         local icon = btn:CreateTexture(nil, "ARTWORK", nil, 5)
         icon:SetTexture(texture)
@@ -438,6 +450,7 @@ local function BuildNavRail(parent)
         brandIconFrame._msuf2BrandIconMask = mask
     end
     local brand = T.Font(parent, "GameFontHighlightSmall", "MSUF", T.colors.title or T.colors.text)
+    T.StyleFontString(brand, T.colors.title or T.colors.text, NAV_TEXT_BUMP)
     brand:SetPoint("LEFT", brandIconFrame, "RIGHT", 8, 0)
     brand:SetPoint("RIGHT", parent, "RIGHT", -12, 0)
     brand:SetJustifyH("LEFT")
@@ -454,6 +467,7 @@ local function BuildNavRail(parent)
     search:SetMaxLetters(60)
     search:SetTextInsets(6, 22, 0, 0)
     T.SkinEditBox(search)
+    T.StyleFontString(search, T.colors.text, NAV_SEARCH_TEXT_BUMP)
     if T.CreateSuperellipseLayers then
         local fill, edge = T.CreateSuperellipseLayers(search, "_msuf2SearchEdit", 2, "BACKGROUND", "BORDER")
         search._msuf2RoundedEditFill = fill
@@ -474,7 +488,7 @@ local function BuildNavRail(parent)
     if placeholder.SetJustifyV then placeholder:SetJustifyV("MIDDLE") end
     if placeholder.SetWordWrap then placeholder:SetWordWrap(false) end
     if placeholder.SetNonSpaceWrap then placeholder:SetNonSpaceWrap(false) end
-    T.StyleFontString(placeholder, T.colors.searchPlaceholder or T.colors.muted, 0)
+    T.StyleFontString(placeholder, T.colors.searchPlaceholder or T.colors.muted, NAV_TEXT_BUMP)
     if placeholder.SetAlpha then placeholder:SetAlpha(0.94) end
     search._msuf2SearchPlaceholder = placeholder
     UpdateSearchPlaceholder(search)
@@ -499,15 +513,18 @@ local function BuildNavRail(parent)
         intro:EnableMouse(true)
         intro:Hide()
         local title = T.Font(intro, "GameFontNormalSmall", "Ask MSUF", T.colors.text)
+        T.StyleFontString(title, T.colors.text, NAV_TEXT_BUMP)
         title:SetPoint("TOPLEFT", intro, "TOPLEFT", 10, -10)
         title:SetPoint("TOPRIGHT", intro, "TOPRIGHT", -26, -10)
         title:SetJustifyH("LEFT")
         local body = T.Font(intro, "GameFontDisableSmall", "Try: \"where do I move raid frames\" or \"make text bigger\".", T.colors.muted)
+        T.StyleFontString(body, T.colors.muted, NAV_TEXT_BUMP)
         body:SetPoint("TOPLEFT", intro, "TOPLEFT", 10, -32)
         body:SetWidth(NAV_W - 30)
         body:SetWordWrap(true)
         body:SetJustifyH("LEFT")
         local foot = T.Font(intro, "GameFontDisableSmall", "Press Enter to ask the Assistant.", T.colors.dim)
+        T.StyleFontString(foot, T.colors.dim, NAV_TEXT_BUMP)
         foot:SetPoint("BOTTOMLEFT", intro, "BOTTOMLEFT", 10, 10)
         foot:SetPoint("BOTTOMRIGHT", intro, "BOTTOMRIGHT", -10, 10)
         foot:SetJustifyH("LEFT")
@@ -515,9 +532,10 @@ local function BuildNavRail(parent)
         close:SetSize(18, 18)
         close:SetPoint("TOPRIGHT", intro, "TOPRIGHT", -4, -4)
         local closeText = T.Font(close, "GameFontDisableSmall", "x", T.colors.dim)
+        T.StyleFontString(closeText, T.colors.dim, NAV_TEXT_BUMP)
         closeText:SetPoint("CENTER", close, "CENTER", 0, 0)
         close:SetScript("OnEnter", function() closeText:SetTextColor(1, 1, 1, 0.95) end)
-        close:SetScript("OnLeave", function() T.StyleFontString(closeText, T.colors.dim, 0) end)
+        close:SetScript("OnLeave", function() T.StyleFontString(closeText, T.colors.dim, NAV_TEXT_BUMP) end)
         close:SetScript("OnClick", HideSearchIntro)
         parent._msuf2SearchIntro = intro
         return intro
@@ -593,6 +611,7 @@ local function BuildNavRail(parent)
     clear:SetFrameLevel(search:GetFrameLevel() + 1)
     clear:SetPoint("RIGHT", search, "RIGHT", -3, 0)
     local clearText = T.Font(clear, "GameFontDisableSmall", "x", T.colors.dim)
+    T.StyleFontString(clearText, T.colors.dim, NAV_TEXT_BUMP)
     clearText:SetPoint("CENTER", clear, "CENTER", 0, 0)
     clear:Hide()
     clear:SetScript("OnClick", function()
@@ -624,9 +643,10 @@ local function BuildNavRail(parent)
         if item.title then
             local id = item.id or item.title
             if M.navHeaderState[id] == nil then M.navHeaderState[id] = true end
-            local title = T.Font(list, "GameFontDisableSmall", string.upper(M.Tr(item.title)), T.colors.navHeaderText or T.colors.muted)
+            local title = T.Font(list, "GameFontNormalSmall", string.upper(M.Tr(item.title)), T.colors.navHeaderText or T.colors.muted)
+            T.StyleFontString(title, T.colors.navHeaderText or T.colors.muted, NAV_TEXT_BUMP)
             title:SetJustifyH("LEFT")
-            title:SetSize(NavItemWidth(0), 16)
+            title:SetSize(NavItemWidth(0), 18)
             title._msuf2NavTitle = true
             title._msuf2NavTitleId = id
             title._msuf2RawLabel = item.title
@@ -639,6 +659,10 @@ local function BuildNavRail(parent)
             btn._msuf2NavHeader = true
             btn._msuf2NavHeaderId = id
             btn._msuf2RawLabel = item.header
+            if btn._msuf2Label and btn._msuf2Label.SetFontObject and _G.GameFontNormal then
+                btn._msuf2Label:SetFontObject(_G.GameFontNormal)
+            end
+            T.StyleFontString(btn._msuf2Label, T.colors.navHeaderText or T.colors.muted, NAV_TEXT_BUMP)
             btn._msuf2Label:ClearAllPoints()
             btn._msuf2Label:SetPoint("LEFT", 24, 0)
             btn._msuf2Label:SetPoint("RIGHT", -8, 0)
@@ -681,7 +705,7 @@ local function BuildNavRail(parent)
                 frame:ClearAllPoints()
                 if y < -4 then y = y - 8 else y = y - 4 end
                 frame:SetPoint("TOPLEFT", list, "TOPLEFT", NAV_ITEM_X + 2, y)
-                y = y - 18
+                y = y - 20
             elseif item.kind == "header" then
                 btn:Show()
                 if btn.SetScale then btn:SetScale(1) end

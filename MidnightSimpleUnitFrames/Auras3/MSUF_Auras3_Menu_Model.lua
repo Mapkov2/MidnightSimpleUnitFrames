@@ -1740,13 +1740,12 @@ end
 function Model.AddCustomContainerSpell(unit, index, value)
     local spellID = SpellIDFromInput(value)
     local item = Model.CustomContainer(unit, index, true)
-    if not (spellID and item) then return false end
+    if not (spellID and item) then return false, "invalid" end
     local set = CustomContainerSpellSet(item)
-    if set[spellID] ~= true then
-        local count = 0
-        for _, enabled in pairs(set) do if enabled == true then count = count + 1 end end
-        if count >= 40 then return false end
-    end
+    if set[spellID] == true then return false, "unchanged" end
+    local count = 0
+    for _, enabled in pairs(set) do if enabled == true then count = count + 1 end end
+    if count >= 40 then return false, "full" end
     set[spellID] = true
     WriteCustomContainerSpellSet(item, set)
     return true
@@ -1755,11 +1754,23 @@ end
 function Model.RemoveCustomContainerSpell(unit, index, value)
     local spellID = SpellIDFromInput(value)
     local item = Model.CustomContainer(unit, index, true)
-    if not (spellID and item) then return false end
+    if not (spellID and item) then return false, "invalid" end
     local set = CustomContainerSpellSet(item)
+    if set[spellID] ~= true then return false, "unchanged" end
     set[spellID] = nil
     WriteCustomContainerSpellSet(item, set)
     return true
+end
+
+function Model.ClearCustomContainerSpells(unit, index)
+    local item = Model.CustomContainer(unit, index, true)
+    if not item then return 0 end
+    local count = 0
+    for _, enabled in pairs(CustomContainerSpellSet(item)) do
+        if enabled == true then count = count + 1 end
+    end
+    if count > 0 then WriteCustomContainerSpellSet(item, {}) end
+    return count
 end
 
 function Model.CustomContainerSpellEntries(unit, index)
@@ -2188,12 +2199,20 @@ end
 function Model.RemoveBlacklistSpell(scope, value, kind)
     local raw = tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
     local spellID = SpellIDFromInput(raw)
+    local changed = false
     ForEachFrameBlacklist(scope, true, kind, function(list)
         if type(list) == "table" and type(list.spells) == "table" then
-            if spellID then list.spells[tostring(spellID)] = nil end
-            if raw ~= "" then list.spells[raw] = nil end
+            if spellID and list.spells[tostring(spellID)] ~= nil then
+                list.spells[tostring(spellID)] = nil
+                changed = true
+            end
+            if raw ~= "" and list.spells[raw] ~= nil then
+                list.spells[raw] = nil
+                changed = true
+            end
         end
     end)
+    return changed
 end
 
 function Model.BlacklistSummary(scope, kind)
@@ -2382,7 +2401,7 @@ function Model.AddGroupBlacklistSpell(scope, groupKey, value)
     write(a)
     if b then write(b) end
     if changed then InvalidateGroupBlacklist(scope, groupKey) end
-    return true
+    return changed
 end
 
 function Model.RemoveGroupBlacklistSpell(scope, groupKey, value)
@@ -2407,7 +2426,7 @@ function Model.RemoveGroupBlacklistSpell(scope, groupKey, value)
     remove(a)
     if b then remove(b) end
     if changed then InvalidateGroupBlacklist(scope, groupKey) end
-    return true
+    return changed
 end
 
 function Model.ClearGroupBlacklistSpells(scope, groupKey)
