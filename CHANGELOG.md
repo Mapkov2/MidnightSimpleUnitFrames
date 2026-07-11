@@ -1,6 +1,6 @@
 # Midnight Simple Unit Frames Changelog
 
-## 6.0-Beta12 - 2026-07-11
+## 6.0-Beta11 - 2026-07-11
 
 ### Highlights
 - **One self-contained addon:** The Assistant runtime and every locale are again shipped from the main MSUF addon. Installation and release packages no longer depend on separate companion folders.
@@ -35,7 +35,7 @@
 - Test AI party members, roster changes, reconnects, combat transitions, range fading, health/prediction bars, and group status overlays.
 - In the Assistant, search for a setting, then try a pronoun/ordinal follow-up before and after selecting a result; only an explicit selection may change a setting.
 
-## 6.0-Beta11 - 2026-07-10
+### Earlier Beta 11 Changes
 
 ### Optional Assistant Runtime
 - Moved the local MSUF Assistant into its own load-on-demand companion addon. The parser, setting graph, knowledge data, and indexes stay unloaded until the Assistant dashboard is opened from Menu2.
