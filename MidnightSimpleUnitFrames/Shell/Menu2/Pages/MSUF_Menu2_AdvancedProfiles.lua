@@ -217,11 +217,30 @@ local function BuildProfiles(ctx)
     local PROFILE_TOOLTIP = { hook = true, titleAsLine = true, bodyColor = { 0.85, 0.85, 0.85 } }
     local function AddProfileTooltip(frame, title, text) return M.AddTooltip and M.AddTooltip(frame, tostring(title or ""), text, PROFILE_TOOLTIP) or frame end
     local function PlaceActionRow(parent, x, left, right, y) left:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y); right:SetPoint("LEFT", left, "RIGHT", buttonGap, 0) end
-    local function ProfileButton(parent, label, onClick, danger, semanticPath)
+    local function ProfileButton(parent, label, onClick, danger, semanticPath, confirmRequired, prepareValue, validateValue, directCommand)
         local btn = T.Button(parent, label, buttonW, buttonH)
         if danger and T.SkinDangerButton then T.SkinDangerButton(btn) end
         btn:SetScript("OnClick", onClick)
-        RegisterControl(btn, ProfilesMeta(semanticPath, "action"), label, "button")
+        local command = type(directCommand) == "table" and directCommand or nil
+        if type(prepareValue) == "function" then
+            command = {
+                kind = "button",
+                valueKind = "text",
+                historyMode = "none",
+                confirmRequired = confirmRequired == true,
+                set = function(value)
+                    local prepared = prepareValue(value)
+                    local result = onClick(btn, "LeftButton", false)
+                    if type(validateValue) == "function" then return validateValue(prepared, result) end
+                    return result
+                end,
+            }
+        end
+        RegisterControl(btn, ProfilesMeta(semanticPath, "action", {
+            confirmRequired = confirmRequired == true,
+            historyMode = "none",
+            command = command,
+        }), label, "button")
         return btn
     end
 
@@ -230,7 +249,7 @@ local function BuildProfiles(ctx)
     local current = b:CollapsibleSection("profiles_management", "Profile Management", 238, true)
     local fieldW = min(360, max(300, rightX - 42))
     local profileDrop = W.Dropdown(current, "Active profile", {}, fieldW)
-    RegisterControl(profileDrop, ProfilesMeta("active_profile.select", "action"), "Active profile", "dropdown", ProfileValues)
+    RegisterControl(profileDrop, ProfilesMeta("active_profile.select", "action", { historyMode = "none" }), "Active profile", "dropdown", ProfileValues)
     local function RefreshProfileValues()
         profileDrop:SetValues(ProfileValues(false))
     end
@@ -265,7 +284,14 @@ local function BuildProfiles(ctx)
         M.profileCreateCopyName = ""
         nameInput:SetText("")
         RefreshAfterProfileChange(ctx)
-    end, nil, "profile.create")
+    end, nil, "profile.create", false, function(value)
+        local name = Trim(value)
+        local prepared = { name = name, existed = name ~= "" and ProfileExists(name) or false }
+        if name ~= "" then M.profileCreateCopyName = name; nameInput:SetText(name) end
+        return prepared
+    end, function(prepared)
+        return type(prepared) == "table" and prepared.name ~= "" and not prepared.existed and ProfileExists(prepared.name)
+    end)
     local copy = ProfileButton(current, "Copy current to name", function()
         if BlockCombatAction() then return end
         local name = Trim(nameInput:GetText())
@@ -277,7 +303,14 @@ local function BuildProfiles(ctx)
             nameInput:SetText("")
             RefreshAfterProfileChange(ctx)
         end
-    end, nil, "profile.copy_current")
+    end, nil, "profile.copy_current", false, function(value)
+        local name = Trim(value)
+        local prepared = { name = name, existed = name ~= "" and ProfileExists(name) or false }
+        if name ~= "" then M.profileCreateCopyName = name; nameInput:SetText(name) end
+        return prepared
+    end, function(prepared)
+        return type(prepared) == "table" and prepared.name ~= "" and not prepared.existed and ProfileExists(prepared.name)
+    end)
     local reset = ProfileButton(current, "Reset current profile", function()
         if BlockCombatAction() then return end
         if M.ShowPageResetConfirm then
@@ -291,7 +324,26 @@ local function BuildProfiles(ctx)
             ClearProfileHistory()
             RefreshAfterProfileChange(ctx)
         end
-    end, nil, "profile.reset_current")
+    end, nil, "profile.reset_current", true, nil, nil, {
+        kind = "button", historyMode = "none", confirmRequired = true,
+        set = function()
+            if BlockCombatAction() then return false end
+            -- The Assistant already supplied the explicit destructive-action
+            -- confirmation. Execute the same reset/apply/reload path used by
+            -- the menu popup instead of bypassing its post-reset work.
+            if type(M.ResetPageToDefaults) == "function" then
+                local ok, result = pcall(M.ResetPageToDefaults, "profiles")
+                if not ok or result ~= true then return false end
+                RefreshAfterProfileChange(ctx)
+                return true
+            end
+            local ok, result = CallMSUF("MSUF_ResetProfile", ActiveProfileName())
+            if not ok or result == false then return false end
+            ClearProfileHistory()
+            RefreshAfterProfileChange(ctx)
+            return true
+        end,
+    })
     local delete = ProfileButton(current, "Delete current profile", function()
         if BlockCombatAction() then return end
         local name = ActiveProfileName()
@@ -302,7 +354,19 @@ local function BuildProfiles(ctx)
             ClearProfileHistory()
             RefreshAfterProfileChange(ctx)
         end
-    end, true, "profile.delete_current")
+    end, true, "profile.delete_current", true, nil, nil, {
+        kind = "button", historyMode = "none", confirmRequired = true,
+        set = function()
+            if BlockCombatAction() then return false end
+            local name = ActiveProfileName()
+            if name == "Default" then return false end
+            local ok, result = CallMSUF("MSUF_DeleteProfile", name)
+            if not ok or result == false then return false end
+            ClearProfileHistory()
+            RefreshAfterProfileChange(ctx)
+            return true
+        end,
+    })
     MoveWidget(profileDrop, current, 14, -42, fieldW)
     MoveWidget(nameInput, current, 14, -104, fieldW)
     StyleProfileInput(nameInput, fieldW, 24, false)
@@ -388,13 +452,40 @@ local function BuildProfiles(ctx)
             M.ShowStatusFeedback("Export unavailable", "danger", 1.8)
         end
     end, nil, "export.generate")
+    local importCreateNew, importProfileName
     local import = T.Button(io, "Import to current profile", buttonW, buttonH)
-    RegisterControl(import, ProfilesMeta("import.execute", "action"), "Import to current profile", "button")
+    RegisterControl(import, ProfilesMeta("import.execute", "action", {
+        confirmRequired = true,
+        historyMode = "none",
+        command = {
+            kind = "button",
+            valueKind = "text",
+            historyMode = "none",
+            confirmRequired = true,
+            set = function(value)
+                local payload, newName
+                if type(value) == "table" then
+                    payload, newName = Trim(value.payload), Trim(value.profileName)
+                else
+                    payload = Trim(value)
+                end
+                if payload ~= "" then M.profileImportString = payload; blob:SetText(payload) end
+                if newName and newName ~= "" then
+                    M.profileImportCreateNew = true
+                    M.profileImportNewName = newName
+                    if importCreateNew then importCreateNew:SetChecked(true) end
+                    if importProfileName then importProfileName:SetText(newName) end
+                end
+                local handler = import:GetScript("OnClick")
+                if type(handler) == "function" then return handler(import, "LeftButton", false) end
+            end,
+        },
+    }), "Import to current profile", "button")
     AddProfileTooltip(import, "Import to current profile", "Applies the import string to the active profile. Export or copy your profile first if you want an easy backup.")
-    local importCreateNew = W.SwitchAt(io, "Import and create new profile", ioActionX, -154, 300)
+    importCreateNew = W.SwitchAt(io, "Import and create new profile", ioActionX, -154, 300)
     RegisterControl(importCreateNew, ProfilesMeta("import.create_new_mode", "ephemeral"), "Import and create new profile", "toggle")
     AddProfileTooltip(importCreateNew, "Import and create new profile", "Creates a separate profile before importing so you can test the import without changing your current profile.")
-    local importProfileName = W.TextInput(io, "New profile name", 260)
+    importProfileName = W.TextInput(io, "New profile name", 260)
     RegisterControl(importProfileName, ProfilesMeta("import.new_profile_name", "ephemeral"), "New profile name", "textinput")
     importProfileName._msuf2CommitOnBlur = false
     M.TrackRefresh(ctx, function()
@@ -484,9 +575,9 @@ local function BuildProfiles(ctx)
     end
     import:SetScript("OnClick", function()
         if M.profileImportCreateNew == true then
-            ImportIntoNewProfile()
+            return ImportIntoNewProfile()
         else
-            ImportIntoCurrent()
+            return ImportIntoCurrent()
         end
     end)
     importProfileName:SetOnValueCommitted(function(value)
@@ -517,7 +608,7 @@ local function BuildProfiles(ctx)
         elseif M.ShowStatusFeedback then
             M.ShowStatusFeedback("Legacy import unavailable", "danger", 1.8)
         end
-    end, nil, "import.legacy")
+    end, nil, "import.legacy", true)
     local wago = ProfileButton(io, "Browse Wago Profiles", function()
         if not CallMSUF("MSUF_ShowCopyLink", "Wago MSUF Profiles", WAGO_PROFILES_URL) then
             blob:SetText(WAGO_PROFILES_URL)

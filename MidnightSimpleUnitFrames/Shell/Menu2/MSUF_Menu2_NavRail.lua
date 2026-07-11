@@ -209,6 +209,10 @@ local function CreateNavButton(parent, key, label, indent)
     end
     T.StyleFontString(btn._msuf2Label, T.colors.text, NAV_TEXT_BUMP)
     btn:SetScript("OnClick", function() M.SelectPage(ResolveNavClickTarget(key)) end)
+    if M.RegisterMenuChromeControl then
+        M.RegisterMenuChromeControl(btn, "navigation." .. tostring(key), label, "navigation",
+            { navigationKey = ResolveNavClickTarget(key), help = "Opens this MSUF options page." })
+    end
     btn._msuf2SkipHistoryCheckpoint = true
     btn._msuf2NavItem = true
     btn._msuf2NavIndent = indent or 0
@@ -358,6 +362,13 @@ local function CreateHistoryControls(parent)
             M.Undo()
         end
     end)
+    if M.RegisterMenuChromeControl then
+        M.RegisterMenuChromeControl(undo, "history.undo", "Undo", "action", {
+            historyMode = "none", command = { kind = "button", historyMode = "none", set = function()
+                return M.Undo and M.Undo() or false
+            end },
+        })
+    end
     local redo = T.Button(row, "", buttonW, 22)
     T.SkinSuccessButton(redo)
     redo._msuf2SkipHistoryCheckpoint = true
@@ -368,6 +379,13 @@ local function CreateHistoryControls(parent)
     redo:SetScript("OnClick", function()
         M.CallIf(M.Redo)
     end)
+    if M.RegisterMenuChromeControl then
+        M.RegisterMenuChromeControl(redo, "history.redo", "Redo", "action", {
+            historyMode = "none", command = { kind = "button", historyMode = "none", set = function()
+                return M.Redo and M.Redo() or false
+            end },
+        })
+    end
     AttachHistoryTooltip(undo, function()
         local s = M.GetHistoryState and M.GetHistoryState() or {}
         return s.undoLabel and ("Undo: " .. ShortLabel(s.undoLabel, 28)) or "Undo"
@@ -497,6 +515,27 @@ local function BuildNavRail(parent)
         local intro = parent._msuf2SearchIntro
         if intro and intro.Hide then intro:Hide() end
     end
+    if M.RegisterVirtualRuntimeControl then
+        M.RegisterVirtualRuntimeControl({
+            controlId = "menu2.menu-chrome.search-intro-dismiss",
+            identityKey = "menu-chrome.search-intro-dismiss",
+            controlPath = "menu-chrome/search-intro-dismiss",
+            pageKey = "menu_chrome",
+            kind = "button",
+            label = "Dismiss search help",
+            classification = "action",
+            historyMode = "none",
+            help = "Dismisses the one-time search and Assistant introduction.",
+            command = {
+                kind = "button",
+                historyMode = "none",
+                set = function()
+                    HideSearchIntro()
+                    return true
+                end,
+            },
+        }, "menu-chrome-lazy")
+    end
     local function MarkSearchIntroSeen()
         M.SetSearchIntroSeen(true)
     end
@@ -537,6 +576,12 @@ local function BuildNavRail(parent)
         close:SetScript("OnEnter", function() closeText:SetTextColor(1, 1, 1, 0.95) end)
         close:SetScript("OnLeave", function() T.StyleFontString(closeText, T.colors.dim, NAV_TEXT_BUMP) end)
         close:SetScript("OnClick", HideSearchIntro)
+        if M.RegisterMenuChromeControl then
+            M.RegisterMenuChromeControl(close, "search.intro-dismiss", "Dismiss search help", "action", {
+                historyMode = "none",
+                help = "Dismisses the one-time search and Assistant introduction.",
+            })
+        end
         parent._msuf2SearchIntro = intro
         return intro
     end
@@ -624,6 +669,12 @@ local function BuildNavRail(parent)
         clear:Hide()
         search:SetFocus()
     end)
+    if M.RegisterMenuChromeControl then
+        M.RegisterMenuChromeControl(clear, "search.clear", "Clear menu search", "action", {
+            historyMode = "none",
+            help = "Clears the current menu search or Assistant query text.",
+        })
+    end
     search:HookScript("OnTextChanged", function(self)
         clear:SetShown(TrimText(self:GetText() or "") ~= "")
     end)
@@ -675,6 +726,20 @@ local function BuildNavRail(parent)
             btn:SetScript("OnClick", function(self)
                 M.SetNavHeaderOpen(self._msuf2NavHeaderId, nil)
             end)
+            if M.RegisterMenuChromeControl then
+                M.RegisterMenuChromeControl(btn, "navigation.group." .. tostring(id), item.header, "ephemeral", {
+                    kind = "toggle", historyMode = "none", help = "Expands or collapses this navigation group.",
+                    command = {
+                        kind = "toggle",
+                        historyMode = "none",
+                        get = function() return M.navHeaderState[id] == true end,
+                        set = function(value)
+                            local changed, _, open = M.SetNavHeaderOpen(id, value == true)
+                            return changed and open == (value == true)
+                        end,
+                    },
+                })
+            end
             btn._msuf2SkipHistoryCheckpoint = true
             AttachNavHoverGrow(btn)
             ApplyNavHeaderVisual(btn, M.navHeaderState[id])

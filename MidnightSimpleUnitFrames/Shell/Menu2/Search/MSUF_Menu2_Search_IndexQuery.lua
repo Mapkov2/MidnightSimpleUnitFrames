@@ -828,8 +828,31 @@ end
 
 local BuildRegistrySearchRecord
 
+function M.UnregisterSearchWidget(widget)
+    if not widget then return false end
+    local id, pageKey = widget._msuf2SearchRegistryId, widget._msuf2SearchRegistryPage
+    if not id then return false end
+    SEARCH_STATE.registry[id] = nil
+    SEARCH_STATE.registryRecords[id] = nil
+    local pageIds = pageKey and SEARCH_STATE.registryByPage[pageKey]
+    if pageIds then
+        for i = #pageIds, 1, -1 do
+            if pageIds[i] == id then table.remove(pageIds, i) end
+        end
+        if #pageIds == 0 then SEARCH_STATE.registryByPage[pageKey] = nil end
+    end
+    widget._msuf2SearchRegistryId = nil
+    widget._msuf2SearchRegistryPage = nil
+    MarkSearchIndexDirty()
+    return true
+end
+
 function M.RegisterSearchWidget(widget, meta)
     if not widget or type(meta) ~= "table" then return end
+    if widget._msuf2ControlPartOf ~= nil then
+        if type(M.UnregisterSearchWidget) == "function" then M.UnregisterSearchWidget(widget) end
+        return
+    end
     EnsureSearchLocaleFresh()
     local pageKey = meta.pageKey or M._msuf2SearchBuildKey or M.activeKey
     if type(pageKey) ~= "string" or pageKey == "" or pageKey == "search" then return end
@@ -841,10 +864,21 @@ function M.RegisterSearchWidget(widget, meta)
     local anchor = meta.anchor or widget._msuf2Title or widget._msuf2Label or widget
     local rawValues = meta.values or widget.values
     local command = meta.command or widget._msuf2CommandAction
+    if not command and type(M.BuildRuntimeWidgetCommand) == "function" then
+        command = M.BuildRuntimeWidgetCommand(widget, meta, kind)
+    end
     local keywords = meta.keywords
     local help = meta.help or meta.description
     local catalogId
-    if type(M.RegisterRuntimeControl) == "function" then
+    local catalogKind = tostring(kind or ""):lower()
+    local catalogClass = meta.classification or meta.controlType
+    local catalogInteractive = catalogClass == "setting" or catalogClass == "action" or catalogClass == "navigation"
+        or catalogKind == "button" or catalogKind == "toggle" or catalogKind == "slider"
+        or catalogKind == "dropdown" or catalogKind == "segment" or catalogKind == "textinput" or catalogKind == "color"
+    -- Search also indexes headings/descriptions, but those are not Assistant
+    -- controls. Sending static prose into RuntimeControlCatalog created
+    -- unstable fallback IDs and made option coverage depend on copy text.
+    if catalogInteractive and type(M.RegisterRuntimeControl) == "function" then
         local ok, result = pcall(M.RegisterRuntimeControl, widget, {
             controlId = meta.controlId,
             identityKey = meta.identityKey,
@@ -859,6 +893,7 @@ function M.RegisterSearchWidget(widget, meta)
             classification = meta.classification or meta.controlType,
             ephemeral = meta.ephemeral,
             help = help,
+            confirmRequired = meta.confirmRequired,
             command = command,
         }, "search")
         if ok then catalogId = result end
@@ -933,6 +968,7 @@ function M.RegisterSearchWidget(widget, meta)
         settingKey = meta.settingKey,
         actionKey = meta.actionKey,
         navigationKey = meta.navigationKey,
+        confirmRequired = meta.confirmRequired,
         keywords = keywords,
         help = help,
         _rawValues = rawValues,
@@ -1761,6 +1797,7 @@ Search._CoreAPI = {
     ScheduleSearchInputQuery = ScheduleSearchInputQuery,
     SearchBoxHasText = SearchBoxHasText,
     SearchPages = SearchPages,
+    GetFAQRecords = function() return SEARCH_FAQ end,
     SearchPlaceholderText = SearchPlaceholderText,
     ShortLabel = ShortLabel,
     TrimText = TrimText,

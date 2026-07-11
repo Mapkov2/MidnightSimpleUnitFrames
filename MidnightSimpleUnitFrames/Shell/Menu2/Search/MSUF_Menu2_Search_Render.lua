@@ -110,6 +110,25 @@ local function BuildSearchPage(ctx)
                 end
                 OpenSearchTarget(pageKey, query, fallback, anchor, route)
             end)
+            if type(M.RegisterMenuChromeControl) == "function" then
+                M.RegisterMenuChromeControl(btn, "search.result." .. tostring(i),
+                    (noOpen and "Select search result " or "Open search result ") .. tostring(rec.label or i), "action", {
+                        historyMode = "none",
+                        help = noOpen and "Selects this informational search result."
+                            or "Opens this search result, including its exact options route and anchor.",
+                        command = {
+                            kind = "button",
+                            historyMode = "none",
+                            canExecute = function() return btn.IsShown == nil or btn:IsShown() end,
+                            set = function()
+                                local click = btn.GetScript and btn:GetScript("OnClick")
+                                if type(click) ~= "function" then return false end
+                                click(btn, "LeftButton")
+                                return noOpen or M.activeKey == pageKey
+                            end,
+                        },
+                    })
+            end
             if SearchResultHasDetail(rec) then
                 local answer = (type(M.Tr) == "function" and M.Tr(rec.answer)) or rec.answer
                 W.Text(sec, ShortLabel(answer, 132), x + 8, y - 24, colW - 16, T.colors.dim)
@@ -151,6 +170,25 @@ Range Check=unit frame range check;Level Text=where is level text anchor;Perform
             end
             OpenSearchResults(searchQuery)
         end)
+        if type(M.RegisterMenuChromeControl) == "function" then
+            local shortcutToken = tostring(shortcuts[i][1] or i):lower():gsub("[^%w_]+", "."):gsub("^%.*", ""):gsub("%.*$", "")
+            M.RegisterMenuChromeControl(btn, "search.shortcut." .. (shortcutToken ~= "" and shortcutToken or tostring(i)),
+                "Search for " .. tostring(shortcuts[i][1] or searchQuery), "action", {
+                    historyMode = "none",
+                    help = "Runs this built-in MSUF support search.",
+                    command = {
+                        kind = "button",
+                        historyMode = "none",
+                        canExecute = function() return btn.IsShown == nil or btn:IsShown() end,
+                        set = function()
+                            local click = btn.GetScript and btn:GetScript("OnClick")
+                            if type(click) ~= "function" then return false end
+                            click(btn, "LeftButton")
+                            return true
+                        end,
+                    },
+                })
+        end
     end
     ctx:SetContentHeight(math.max(ContentHeight(), math.abs(b.y) + 42))
 end

@@ -28,6 +28,41 @@ M.RuntimeControlCatalog = Catalog
 
 Catalog.SCHEMA_VERSION = 1
 
+-- Shell controls are not built by the page/widget factories, so an omitted raw
+-- Button would otherwise be invisible to a percentage calculated only from
+-- already-registered records.  Keep the executable shell surface and the
+-- deliberately non-command UI mechanics in one small fail-closed contract.
+-- Assistant V2 validates this table during coverage and runtime acceptance.
+M.REQUIRED_SHELL_CONTRACT = {
+    schemaVersion = 1,
+    minimumControls = 6,
+    minimumDispositions = 14,
+    controls = {
+        ["menu2.menu-chrome.window-close"] = { classification = "action", kind = "button" },
+        ["menu2.menu-chrome.window-minimize"] = { classification = "action", kind = "button" },
+        ["menu2.menu-chrome.window-maximize"] = { classification = "action", kind = "button" },
+        ["menu2.menu-chrome.window-restore"] = { classification = "action", kind = "button" },
+        ["menu2.menu-chrome.search-clear"] = { classification = "action", kind = "button" },
+        ["menu2.menu-chrome.search-intro-dismiss"] = { classification = "action", kind = "button" },
+    },
+    dispositions = {
+        ["window.drag"] = "direct-manipulation",
+        ["window.resize"] = "direct-manipulation",
+        ["minimized-window.drag"] = "direct-manipulation",
+        ["scroll.mechanics"] = "navigation-mechanic",
+        ["search.input"] = "self-referential-input",
+        ["assistant.input"] = "self-referential-input",
+        ["assistant.run"] = "self-referential-submit",
+        ["dropdown.choice-rows"] = "logical-dropdown-values",
+        ["dropdown.scrollbar"] = "navigation-mechanic",
+        ["toggle.label-proxy"] = "logical-toggle-component",
+        ["slider.value-input"] = "logical-slider-component",
+        ["slider.step-buttons"] = "logical-slider-component",
+        ["segment.buttons"] = "logical-segment-component",
+        ["scope-selector.buttons"] = "logical-selector-component",
+    },
+}
+
 local CLASSIFICATION = {
     setting = true,
     action = true,
@@ -67,26 +102,33 @@ if type(STATE) ~= "table" then
         byId = {},
         byPage = {},
         byWidget = setmetatable({}, { __mode = "k" }),
+        components = setmetatable({}, { __mode = "k" }),
         issueSerial = 0,
         issues = {},
         collisionEvents = 0,
+        revision = 0,
     }
     Catalog._state = STATE
 else
     STATE.byId = type(STATE.byId) == "table" and STATE.byId or {}
     STATE.byPage = type(STATE.byPage) == "table" and STATE.byPage or {}
     STATE.byWidget = type(STATE.byWidget) == "table" and STATE.byWidget or setmetatable({}, { __mode = "k" })
+    STATE.components = type(STATE.components) == "table" and STATE.components or setmetatable({}, { __mode = "k" })
     STATE.issues = type(STATE.issues) == "table" and STATE.issues or {}
     STATE.issueSerial = tonumber(STATE.issueSerial) or 0
     STATE.collisionEvents = tonumber(STATE.collisionEvents) or 0
+    STATE.revision = tonumber(STATE.revision) or 0
 end
 
 local function CleanText(value)
     if value == nil then return "" end
     if type(value) ~= "string" and type(value) ~= "number" then return "" end
     local text = tostring(value)
-    text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
-    text = text:gsub("^%s+", ""):gsub("%s+$", "")
+    if text:find("|", 1, true) then
+        text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    end
+    if text:find("^%s") then text = text:gsub("^%s+", "") end
+    if text:find("%s$") then text = text:gsub("%s+$", "") end
     return text
 end
 
@@ -246,7 +288,7 @@ local function CommandMetadata(command, label)
     if type(values) == "table" then
         for _ in pairs(values) do count = count + 1 end
     end
-    return {
+    local metadata = {
         kind = CleanText(command.kind),
         ctxKey = CleanText(command.ctxKey),
         source = CommandSource(command, label),
@@ -258,11 +300,189 @@ local function CommandMetadata(command, label)
         hasRefresh = type(command.refresh) == "function",
         hasCombatGuard = type(command.blockCombat) == "function",
         hasDynamicValues = type(command.getValues) == "function",
+        hasValues = type(command.values) == "table" or type(command.getValues) == "function",
+        hasRuntimeValidator = type(command.canExecute) == "function",
         valueCount = count,
         min = tonumber(command.min),
         max = tonumber(command.max),
         step = tonumber(command.step),
     }
+    local interaction = CleanText(command.interaction)
+    local previewSurface = CleanText(command.previewSurface)
+    local previewHandleKey = CleanText(command.previewHandleKey)
+    local previewUnitKey = CleanText(command.previewUnitKey)
+    local previewScope = CleanText(command.previewScope)
+    if interaction ~= "" then metadata.interaction = interaction end
+    if previewSurface ~= "" then metadata.previewSurface = previewSurface end
+    if previewHandleKey ~= "" then metadata.previewHandleKey = previewHandleKey end
+    if previewUnitKey ~= "" then metadata.previewUnitKey = previewUnitKey end
+    if previewScope ~= "" then metadata.previewScope = previewScope end
+    return metadata
+end
+
+local SETTING_COMMAND_KINDS = {
+    toggle = true, slider = true, dropdown = true, segment = true,
+    textinput = true, color = true,
+}
+local function CapabilityIssue(record)
+    if type(record) ~= "table" then return nil end
+    local meta = record.commandMeta
+    local transient = record.classification == "ephemeral" and type(meta) == "table" and meta.hasSet == true
+    if record.classification ~= "setting" and record.classification ~= "action" and not transient then return nil end
+    if type(meta) ~= "table" or meta.hasSet ~= true then return "missing executable write command" end
+    local settingLike = record.classification == "setting" or transient and meta.hasGet == true
+    if settingLike and meta.hasGet ~= true then return "missing readable setting command" end
+    local kind = CleanText(meta.kind ~= "" and meta.kind or record.kind):lower()
+    if settingLike and not SETTING_COMMAND_KINDS[kind] then
+        return "unsupported setting command kind: " .. (kind ~= "" and kind or "<missing>")
+    end
+    if kind == "slider" then
+        if meta.min == nil or meta.max == nil or meta.step == nil then return "slider is missing min/max/step" end
+        if meta.min > meta.max then return "slider min exceeds max" end
+        if meta.step <= 0 then return "slider step must be positive" end
+    elseif kind == "dropdown" or kind == "segment" then
+        if meta.hasValues ~= true then return kind .. " is missing a values provider" end
+    end
+    return nil
+end
+local function RuntimeCapabilityIssue(record)
+    local issue = CapabilityIssue(record)
+    if issue then return issue end
+    local command, meta = record and record.command, record and record.commandMeta
+    if type(command) ~= "table" or type(meta) ~= "table" then return nil end
+    if meta.hasGet then
+        local ok = pcall(command.get)
+        if not ok then return "read command raised an error" end
+    end
+    local kind = CleanText(meta.kind ~= "" and meta.kind or record.kind):lower()
+    if kind == "dropdown" or kind == "segment" then
+        local values = command.values
+        if type(values) ~= "table" and type(command.getValues) == "function" then
+            local ok, resolved = pcall(command.getValues)
+            if not ok then return "values provider raised an error" end
+            values = resolved
+        end
+        if type(values) ~= "table" then return kind .. " values provider did not return a table" end
+    end
+    return nil
+end
+
+-- Some menu controls are actions rather than DB bindings (profile lifecycle,
+-- import/export, preview tools, and dashboard buttons).  They still need an
+-- executable catalog command, but duplicating those actions in the Assistant
+-- would create a second registry and keep page-specific state alive.  Build a
+-- tiny late-bound adapter only for such controls.  The closures deliberately
+-- resolve the widget's current callbacks at execution time because several
+-- pages register search metadata before installing their OnClick/on-change
+-- handlers.
+local function RuntimeWidgetValues(widget)
+    local values = widget and widget.values
+    if type(values) == "function" then
+        local ok, resolved = pcall(values)
+        values = ok and resolved or nil
+    end
+    return type(values) == "table" and values or nil
+end
+
+local function RuntimeWidgetGet(widget, kind)
+    if not widget then return nil end
+    if kind == "toggle" and type(widget.GetChecked) == "function" then return widget:GetChecked() and true or false end
+    if (kind == "dropdown" or kind == "slider" or kind == "segment") and type(widget.GetValue) == "function" then
+        return widget:GetValue()
+    end
+    if kind == "textinput" and type(widget.GetText) == "function" then return widget:GetText() end
+    return nil
+end
+
+local function RuntimeWidgetClick(widget)
+    local handler = widget and type(widget.GetScript) == "function" and widget:GetScript("OnClick") or nil
+    if type(handler) == "function" then return handler(widget, "LeftButton", false) end
+    -- Some clickable option tiles are Frames rather than Buttons and expose
+    -- their semantic left-click through OnMouseUp.
+    handler = widget and type(widget.GetScript) == "function" and widget:GetScript("OnMouseUp") or nil
+    if type(handler) == "function" then return handler(widget, "LeftButton") end
+    error("runtime control has no click handler", 2)
+end
+
+local function RuntimeWidgetCanExecute(widget, kind)
+    if not widget then return false end
+    if kind == "dropdown" then return type(widget._msuf2OnValueChanged) == "function" end
+    if kind == "textinput" then return type(widget._msuf2OnCommit) == "function" end
+    if kind == "slider" or kind == "segment" then return type(widget.SetValue) == "function" end
+    if kind == "toggle" then
+        if type(widget.SetChecked) ~= "function" or type(widget.GetScript) ~= "function" then return false end
+        return type(widget:GetScript("OnClick")) == "function"
+    end
+    if type(widget.GetScript) ~= "function" then return false end
+    return type(widget:GetScript("OnClick")) == "function" or type(widget:GetScript("OnMouseUp")) == "function"
+end
+
+local function RuntimeWidgetSet(widget, kind, value)
+    if not widget then error("runtime control widget is unavailable", 2) end
+    if kind == "button" then return RuntimeWidgetClick(widget) end
+    if kind == "toggle" then
+        local current = type(widget.GetChecked) == "function" and (widget:GetChecked() and true or false) or nil
+        local desired = value
+        if desired == nil then desired = current == nil and true or not current else desired = desired and true or false end
+        if current ~= nil and current == desired then return false end
+        local handler = type(widget.GetScript) == "function" and widget:GetScript("OnClick") or nil
+        if type(handler) == "function" and type(widget.SetChecked) == "function" then
+            -- WoW changes a CheckButton's checked state before OnClick. Direct
+            -- Assistant invocation must emulate that ordering for raw toggles.
+            widget:SetChecked(desired)
+            local result = handler(widget, "LeftButton", false)
+            local actual = type(widget.GetChecked) == "function" and (widget:GetChecked() and true or false) or desired
+            return actual == desired and (result == nil and true or result) or false
+        end
+        error("runtime toggle has no setter", 2)
+    end
+    if kind == "dropdown" then
+        if type(widget._msuf2OnValueChanged) ~= "function" then error("runtime dropdown has no value handler", 2) end
+        widget:SetValue(value)
+        return widget._msuf2OnValueChanged(value)
+    end
+    if kind == "textinput" then
+        if type(widget.SetText) == "function" then widget:SetText(tostring(value or "")) end
+        if type(widget._msuf2OnCommit) ~= "function" then error("runtime text input has no commit handler", 2) end
+        return widget._msuf2OnCommit(tostring(value or ""))
+    end
+    if kind == "slider" or kind == "segment" then
+        if type(widget.SetValue) ~= "function" then error("runtime value control has no setter", 2) end
+        return widget:SetValue(value)
+    end
+    return RuntimeWidgetClick(widget)
+end
+
+function M.BuildRuntimeWidgetCommand(widget, meta, kind)
+    meta = type(meta) == "table" and meta or {}
+    kind = CleanText(kind or meta.kind or (widget and widget._msuf2ControlKind)):lower()
+    local classification = meta.classification or meta.controlType
+    -- Automatic widget construction also feeds search, but has no semantic
+    -- classification yet.  Wait for the explicit page registration so bound
+    -- controls never allocate throwaway adapter closures.
+    local readable = kind == "toggle" or kind == "dropdown" or kind == "slider" or kind == "segment" or kind == "textinput"
+    local transientControl = classification == "ephemeral" and (readable or kind == "button")
+    if classification ~= "setting" and classification ~= "action" and not transientControl then return nil end
+    local writable = readable or kind == "button" or classification == "action"
+    if not writable then return nil end
+    local command = {
+        kind = kind ~= "" and kind or (classification == "action" and "button" or "control"),
+        source = meta.controlPath or meta.identityKey,
+        settingKey = meta.settingKey,
+        actionKey = meta.actionKey,
+        confirmRequired = meta.confirmRequired == true,
+        historyMode = meta.historyMode or (classification == "ephemeral" and "none" or nil),
+        blockCombat = type(meta.blockCombat) == "function" and meta.blockCombat or nil,
+    }
+    if readable then command.get = function() return RuntimeWidgetGet(widget, kind) end end
+    command.set = function(value) return RuntimeWidgetSet(widget, kind, value) end
+    command.canExecute = function() return RuntimeWidgetCanExecute(widget, kind) end
+    if kind == "dropdown" or kind == "segment" then command.getValues = function() return RuntimeWidgetValues(widget) end end
+    if kind == "slider" and widget then
+        if type(widget.GetMinMaxValues) == "function" then command.min, command.max = widget:GetMinMaxValues() end
+        command.step = tonumber(widget._msuf2Step)
+    end
+    return command
 end
 
 local function InferClassification(meta, command, kind)
@@ -288,6 +508,17 @@ local function InferClassification(meta, command, kind)
     end
     if command then return "unknown", "unclassified_command_shape" end
     return "unknown", "missing_command_metadata"
+end
+
+local function RevisionKey(record)
+    if type(record) ~= "table" then return nil end
+    return table.concat({
+        tostring(record.controlId or ""), tostring(record.pageKey or ""), tostring(record.kind or ""),
+        tostring(record.label or ""), tostring(record.identityLabel or ""), tostring(record.controlPath or ""),
+        tostring(record.settingKey or ""), tostring(record.actionKey or ""), tostring(record.navigationKey or ""),
+        tostring(record.help or ""), tostring(record.classification or ""),
+        record.confirmRequired and "1" or "0", tostring(record.command or ""),
+    }, "\031")
 end
 
 local function RemoveRecord(record)
@@ -324,6 +555,11 @@ local function PromoteExplicitId(record, explicitId)
     local oldId = record.controlId
     local occupied = STATE.byId[explicitId]
     RemoveRecord(record)
+    if occupied and occupied.virtual == true and record.virtual ~= true then
+        RemoveRecord(occupied)
+        occupied = nil
+        STATE.revision = STATE.revision + 1
+    end
     if occupied and occupied.widget ~= record.widget then
         occupied.collision = true
         occupied.identityStable = false
@@ -349,11 +585,13 @@ local function PromoteExplicitId(record, explicitId)
     record.previousControlId = oldId
     IndexRecord(record)
     if record.widget then record.widget._msuf2RuntimeControlId = record.controlId end
+    STATE.revision = STATE.revision + 1
     return record.controlId
 end
 
 function Catalog.Register(widget, meta, registrationSource)
     if not widget or type(meta) ~= "table" then return nil, "widget and metadata are required" end
+    if widget._msuf2ControlPartOf ~= nil then return nil, "component controls are owned by their logical parent" end
 
     local command = type(meta.command) == "table" and meta.command or nil
     local pageKey = CleanText(meta.pageKey or (command and command.ctxKey) or M._msuf2SearchBuildKey or M.activeKey)
@@ -371,12 +609,22 @@ function Catalog.Register(widget, meta, registrationSource)
     end
 
     if record and explicitId and record.controlId ~= explicitId then PromoteExplicitId(record, explicitId) end
+    local revisionBefore = record and (record._revisionKey or RevisionKey(record)) or nil
 
     if not record then
         local fallbackId, seed = FallbackId(pageKey, kind, identity, command)
         local requestedId = explicitId or fallbackId
         local idSource = explicitId and "explicit" or (invalidExplicitId and "fallback_invalid_explicit" or "fallback")
         local occupied = STATE.byId[requestedId]
+        -- A virtual record is a compact command contract for a real control
+        -- whose frame is built only after opening a disclosure/page.  Once the
+        -- real widget exists it owns the same semantic ID; replace the token
+        -- instead of reporting a false collision or retaining both records.
+        if occupied and occupied.virtual == true and meta.virtual ~= true then
+            RemoveRecord(occupied)
+            occupied = nil
+            STATE.revision = STATE.revision + 1
+        end
         local collision = occupied and occupied.widget ~= widget
         local controlId = requestedId
         if collision then
@@ -402,6 +650,7 @@ function Catalog.Register(widget, meta, registrationSource)
             identityStable = explicitId ~= nil or STABLE_IDENTITY_BASIS[identityBasis] == true,
             idSource = idSource,
             collision = collision and true or false,
+            virtual = meta.virtual == true,
             widget = widget,
             sources = {},
         }
@@ -445,6 +694,8 @@ function Catalog.Register(widget, meta, registrationSource)
     record.actionKey = CleanText(meta.actionKey or (record.command and record.command.actionKey) or record.actionKey)
     record.navigationKey = CleanText(meta.navigationKey or (record.command and record.command.navigationKey) or record.navigationKey)
     record.help = CleanText(meta.help or meta.description or record.help)
+    record.virtual = meta.virtual == true
+    record.confirmRequired = meta.confirmRequired == true or (record.command and record.command.confirmRequired == true) or record.confirmRequired == true
     record.registrationCount = (tonumber(record.registrationCount) or 0) + 1
     registrationSource = Slug(registrationSource, "runtime", 36)
     record.sources[registrationSource] = true
@@ -464,6 +715,9 @@ function Catalog.Register(widget, meta, registrationSource)
     record.classificationSource = reason
 
     widget._msuf2RuntimeControlId = record.controlId
+    local revisionAfter = RevisionKey(record)
+    record._revisionKey = revisionAfter
+    if revisionBefore ~= revisionAfter then STATE.revision = STATE.revision + 1 end
     return record.controlId, record
 end
 
@@ -475,9 +729,19 @@ function Catalog.GetForWidget(widget)
     return widget and STATE.byWidget[widget] or nil
 end
 
+function Catalog.GetRevision()
+    return STATE.revision
+end
+
 function Catalog.ClearPage(pageKey)
     pageKey = CleanText(pageKey)
     if pageKey == "" then return 0 end
+    for widget, component in pairs(STATE.components) do
+        if component.pageKey == pageKey then
+            STATE.components[widget] = nil
+            widget._msuf2RuntimeControlComponent = nil
+        end
+    end
     local page = STATE.byPage[pageKey]
     if not page then return 0 end
     local records = {}
@@ -486,6 +750,7 @@ function Catalog.ClearPage(pageKey)
         if record then records[#records + 1] = record end
     end
     for i = 1, #records do RemoveRecord(records[i]) end
+    if #records > 0 then STATE.revision = STATE.revision + 1 end
     local kept = {}
     for i = 1, #STATE.issues do
         if STATE.issues[i].pageKey ~= pageKey then kept[#kept + 1] = STATE.issues[i] end
@@ -516,6 +781,9 @@ local function PublicRecord(record)
         pageKey = record.pageKey,
         kind = record.kind,
         label = record.label,
+        help = record.help,
+        identityLabel = record.identityLabel,
+        controlPath = record.controlPath ~= "" and record.controlPath or nil,
         classification = record.classification,
         classificationSource = record.classificationSource,
         idSource = record.idSource,
@@ -529,6 +797,8 @@ local function PublicRecord(record)
         settingKey = record.settingKey ~= "" and record.settingKey or nil,
         actionKey = record.actionKey ~= "" and record.actionKey or nil,
         navigationKey = record.navigationKey ~= "" and record.navigationKey or nil,
+        confirmRequired = record.confirmRequired and true or false,
+        virtual = record.virtual and true or false,
         command = command,
         sources = sources,
     }
@@ -539,6 +809,33 @@ function Catalog.GetRecords()
     local out = {}
     for i = 1, #records do out[i] = PublicRecord(records[i]) end
     return out
+end
+
+-- Late-bound exact-control lookup for Search and the load-on-demand Assistant.
+-- This deliberately scans the existing catalog instead of maintaining a second
+-- setting index: exact navigation is a cold user action and should not add idle
+-- memory for thousands of controls.
+function Catalog.FindBySettingKey(settingKey, pageKey)
+    settingKey = CleanText(settingKey)
+    pageKey = CleanText(pageKey)
+    if settingKey == "" then return nil end
+    local best
+    for _, record in pairs(STATE.byId) do
+        if record.settingKey == settingKey then
+            if pageKey ~= "" and record.pageKey == pageKey then
+                best = record
+                break
+            end
+            if not best
+                or (record.identityStable and not best.identityStable)
+                or (not record.collision and best.collision)
+            then
+                best = record
+            end
+        end
+    end
+    if not best then return nil end
+    return PublicRecord(best), best.widget
 end
 
 function Catalog.ValidateRecord(record)
@@ -561,6 +858,8 @@ function Catalog.ValidateRecord(record)
     elseif record.classification == "unknown" then
         warnings[#warnings + 1] = "control semantics are unknown"
     end
+    local capabilityIssue = CapabilityIssue(record)
+    if capabilityIssue then warnings[#warnings + 1] = capabilityIssue end
     if record.collision then warnings[#warnings + 1] = "controlId collision requires an explicit ID" end
     if not record.identityStable then warnings[#warnings + 1] = "identity is not stable across source changes" end
     return #errors == 0, errors, warnings
@@ -608,8 +907,15 @@ function Catalog.GetCoverageReport()
         resolvedTargets = 0,
         unresolvedTargetCount = 0,
         unresolvedTargets = {},
+        invalidCapabilityCount = 0,
+        invalidCapabilities = {},
+        interactiveEphemeral = 0,
+        passiveEphemeral = 0,
         collisionEventsLifetime = STATE.collisionEvents,
+        componentParts = 0,
     }
+
+    for _ in pairs(STATE.components) do report.componentParts = report.componentParts + 1 end
 
     for i = 1, #records do
         local record = records[i]
@@ -633,18 +939,37 @@ function Catalog.GetCoverageReport()
             report.interactive = report.interactive + 1
             if classification ~= "unknown" then report.knownInteractive = report.knownInteractive + 1 end
         end
+        if classification == "ephemeral" then
+            if record.commandMeta and record.commandMeta.hasSet then report.interactiveEphemeral = report.interactiveEphemeral + 1
+            else report.passiveEphemeral = report.passiveEphemeral + 1 end
+        end
         if classification == "unknown" then
             local item = PublicRecord(record)
             item.reason = record.classificationSource
             report.unknown[#report.unknown + 1] = item
         end
-        if targetValidationAvailable and (classification == "setting" or classification == "action") then
+        if classification == "setting" or classification == "action"
+            or classification == "ephemeral" and record.commandMeta and record.commandMeta.hasSet then
+            local capabilityIssue = RuntimeCapabilityIssue(record)
+            if capabilityIssue then
+                report.invalidCapabilityCount = report.invalidCapabilityCount + 1
+                report.invalidCapabilities[#report.invalidCapabilities + 1] = {
+                    controlId = record.controlId, pageKey = record.pageKey,
+                    classification = classification, kind = record.commandMeta and record.commandMeta.kind or record.kind,
+                    reason = capabilityIssue,
+                }
+            end
             local key = classification == "setting" and record.settingKey or record.actionKey
             local hasDirectClosure = classification == "setting"
                 and record.commandMeta and record.commandMeta.hasGet and record.commandMeta.hasSet
                 or classification == "action" and record.commandMeta and record.commandMeta.hasSet
+                or classification == "ephemeral" and record.commandMeta and record.commandMeta.hasSet
             local resolved = hasDirectClosure == true
-            if key and key ~= "" then
+            if resolved and record.commandMeta and record.commandMeta.hasRuntimeValidator then
+                local ok, executable = pcall(record.command.canExecute)
+                resolved = ok and executable == true
+            end
+            if not resolved and key and key ~= "" and targetValidationAvailable then
                 resolved = classification == "setting" and registry:GetSetting(key) ~= nil
                     or classification == "action" and registry:GetAction(key) ~= nil
             end
@@ -667,7 +992,8 @@ function Catalog.GetCoverageReport()
     end
     report.catalogComplete = report.byClassification.unknown == 0 and report.collisions == 0
         and report.unstableIds == 0
-        and (not targetValidationAvailable or report.unresolvedTargetCount == 0)
+        and report.unresolvedTargetCount == 0
+        and report.invalidCapabilityCount == 0
 
     for i = 1, #STATE.issues do
         local issue = STATE.issues[i]
@@ -683,6 +1009,70 @@ end
 -- Menu2-level API: callers do not need to know the catalog object name.
 function M.RegisterRuntimeControl(widget, meta, registrationSource)
     return Catalog.Register(widget, meta, registrationSource)
+end
+
+-- Composite widgets (segments, scope selectors, slider +/- buttons) expose one
+-- logical command on the parent. Their child buttons remain visible UI parts,
+-- but are removed from the semantic catalog so they cannot become duplicate
+-- unknown controls. Runtime reports retain an explicit component count.
+function M.MarkRuntimeControlComponent(widget, owner)
+    if not widget or not owner then return false end
+    widget._msuf2ControlPartOf = owner
+    local record = STATE.byWidget[widget]
+    if record then RemoveRecord(record); STATE.revision = STATE.revision + 1 end
+    STATE.components[widget] = {
+        owner = owner,
+        pageKey = CleanText(M._msuf2SearchBuildKey or M.activeKey or "unknown"),
+    }
+    widget._msuf2RuntimeControlComponent = true
+    if type(M.UnregisterSearchWidget) == "function" then M.UnregisterSearchWidget(widget) end
+    return true
+end
+
+-- Registers a command-backed option without allocating a WoW frame. This is
+-- intended for controls hidden behind conditional dashboard disclosures. The
+-- token is stable and tiny; Catalog.Register transparently promotes the same
+-- explicit ID to the real widget when that widget is eventually constructed.
+function M.RegisterVirtualRuntimeControl(meta, registrationSource)
+    if type(meta) ~= "table" then return nil, "metadata is required" end
+    if not IsValidExplicitId(meta.controlId) then return nil, "virtual controls require a valid explicit controlId" end
+    local controlId = meta.controlId
+    local existing = STATE.byId[controlId]
+    if existing and existing.virtual ~= true then return existing.controlId, existing end
+    M._virtualRuntimeControlTokens = M._virtualRuntimeControlTokens or {}
+    local token = M._virtualRuntimeControlTokens[controlId]
+    if not token then
+        token = { _msuf2VirtualRuntimeControl = true }
+        M._virtualRuntimeControlTokens[controlId] = token
+    end
+    meta.virtual = true
+    return Catalog.Register(token, meta, registrationSource or "virtual")
+end
+
+function M.RegisterMenuChromeControl(widget, path, label, classification, opts)
+    if not widget then return nil end
+    opts = type(opts) == "table" and opts or {}
+    local token = Slug(path, "control", 72)
+    local meta = {
+        controlId = "menu2.menu-chrome." .. token,
+        identityKey = "menu-chrome." .. token,
+        controlPath = "menu-chrome/" .. token,
+        pageKey = "menu_chrome",
+        kind = opts.kind or (classification == "navigation" and "button" or "button"),
+        label = label or path,
+        classification = classification or "action",
+        navigationKey = opts.navigationKey,
+        confirmRequired = opts.confirmRequired == true,
+        historyMode = opts.historyMode,
+        help = opts.help,
+        command = opts.command,
+    }
+    if not meta.command and meta.classification == "action" then
+        meta.command = M.BuildRuntimeWidgetCommand(widget, meta, meta.kind)
+    end
+    local existing = STATE.byId[meta.controlId]
+    if existing and existing.widget ~= widget then RemoveRecord(existing) end
+    return Catalog.Register(widget, meta, "menu-chrome")
 end
 
 function M.ClearRuntimeControlsForPage(pageKey)

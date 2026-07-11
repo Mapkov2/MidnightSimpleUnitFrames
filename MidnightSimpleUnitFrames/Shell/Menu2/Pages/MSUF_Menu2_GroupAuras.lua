@@ -58,11 +58,12 @@ local function AuraControlMeta(ctx, path, classification)
     }
     return meta
 end
-local function RegisterAuraControl(ctx, widget, label, kind, path, classification)
+local function RegisterAuraControl(ctx, widget, label, kind, path, classification, navigationKey)
     if not widget or type(M.RegisterSearchWidget) ~= "function" then return widget end
     local meta = AuraControlMeta(ctx, path, classification)
     meta.label = label
     meta.kind = kind
+    if classification == "navigation" then meta.navigationKey = navigationKey end
     M.RegisterSearchWidget(widget, meta)
     return widget
 end
@@ -140,13 +141,7 @@ local function BuildAuraWorkspaceTabs(ctx, section, scope, lane, width)
             RebuildGroupAuraPage(ctx)
         end,
     })
-    if laneBar and type(laneBar.buttons) == "table" then
-        for i = 1, #GF_AURA_WORKSPACE_LANES do
-            local item = GF_AURA_WORKSPACE_LANES[i]
-            RegisterAuraControl(ctx, laneBar.buttons[i], item.text, "button",
-                "group-workspace.container-selector." .. AuraCatalogToken(item.value), "ephemeral")
-        end
-    end
+    RegisterAuraControl(ctx, laneBar, "Container", "segment", "group-workspace.container-selector", "ephemeral")
     local toolBar = W.ScopeOverrideBar(ctx, section, {
         values = GF_AURA_WORKSPACE_TOOLS,
         width = sectionW,
@@ -160,13 +155,8 @@ local function BuildAuraWorkspaceTabs(ctx, section, scope, lane, width)
             RebuildGroupAuraPage(ctx)
         end,
     })
-    if toolBar and type(toolBar.buttons) == "table" then
-        for i = 1, #GF_AURA_WORKSPACE_TOOLS do
-            local item = GF_AURA_WORKSPACE_TOOLS[i]
-            RegisterAuraControl(ctx, toolBar.buttons[i], item.text, "button",
-                "group-workspace.lane." .. AuraCatalogToken(lane, "lane") .. ".tool." .. AuraCatalogToken(item.value), "ephemeral")
-        end
-    end
+    RegisterAuraControl(ctx, toolBar, "Edit", "segment",
+        "group-workspace.lane." .. AuraCatalogToken(lane, "lane") .. ".tool-selector", "ephemeral")
     local openStyle = T.Button(section, "Open Aura Style", 126, 22)
     openStyle:SetPoint("TOPRIGHT", section, "TOPRIGHT", -16, -74)
     if T.CenterButtonLabel then T.CenterButtonLabel(openStyle) end
@@ -178,7 +168,7 @@ local function BuildAuraWorkspaceTabs(ctx, section, scope, lane, width)
         M.SetMenuStateValue("auraStyleGFLane", lane)
         if M.SelectPage then M.SelectPage("auras3_styling") end
     end)
-    RegisterAuraControl(ctx, openStyle, "Open Aura Style", "button", "group-workspace.open-aura-style", "navigation")
+    RegisterAuraControl(ctx, openStyle, "Open Aura Style", "button", "group-workspace.open-aura-style", "navigation", "auras3_styling")
     W.Text(section, "All icon styling: Appearance > Auras.", 16, -84, sectionW - 174, MUTED)
 end
 local function NativeAuraKey(groupKey)

@@ -132,23 +132,34 @@ local function AuraControlMeta(ctx, path, classification)
     }
     return meta
 end
-local function RegisterAuraControl(ctx, widget, label, kind, path, classification)
+local function RegisterAuraControl(ctx, widget, label, kind, path, classification, navigationKey)
     if not widget or type(M.RegisterSearchWidget) ~= "function" then return widget end
     local meta = AuraControlMeta(ctx, path, classification)
     meta.label = label
     meta.kind = kind
+    if classification == "navigation" then meta.navigationKey = navigationKey end
     M.RegisterSearchWidget(widget, meta)
     return widget
+end
+local function RegisterAuraTextAction(ctx, widget, input, label, path)
+    if widget then
+        widget._msuf2CommandAction = {
+            kind = "button",
+            valueKind = "text",
+            set = function(value)
+                value = tostring(value or "")
+                if input and input.SetText then input:SetText(value) end
+                local handler = type(widget.GetScript) == "function" and widget:GetScript("OnClick") or nil
+                if type(handler) ~= "function" then return false end
+                return handler(widget, "LeftButton", false)
+            end,
+        }
+    end
+    return RegisterAuraControl(ctx, widget, label, "button", path, "action")
 end
 local function RegisterAuraChoiceBar(ctx, bar, values, path)
     if not bar then return bar end
     RegisterAuraControl(ctx, bar, bar._msuf2SearchTitle or "Editing", "segment", path, "ephemeral")
-    for i = 1, #(values or {}) do
-        local item = values[i]
-        local button = bar.buttons and bar.buttons[i]
-        RegisterAuraControl(ctx, button, item.text or item.label or item.value or "Option", "button",
-            path .. ".option." .. AuraCatalogToken(item.value, tostring(i)), "ephemeral")
-    end
     return bar
 end
 local function Round(value)
@@ -511,7 +522,7 @@ local function BuildAuraStyleNav(ctx, b, scope)
     if ctx and ctx.SetContentHeight then ctx:SetContentHeight(abs(b.y) + 28) end
     local w = section._msuf2Width or b.width or 720
     local values = (scope ~= "shared" and not IsGroupScope(scope)) and UNIT_STYLE_CONTAINER_VALUES or LANE_VALUES
-    local bar = W.ScopeOverrideBar(ctx, section, {
+    local bar = RegisterAuraChoiceBar(ctx, W.ScopeOverrideBar(ctx, section, {
         values = values,
         width = w,
         label = "Container:",
@@ -528,14 +539,7 @@ local function BuildAuraStyleNav(ctx, b, scope)
                 Rebuild(ctx)
             end
         end,
-    })
-    if bar and type(bar.buttons) == "table" then
-        for i = 1, #values do
-            local item = values[i]
-            RegisterAuraControl(ctx, bar.buttons[i], item.text, "button",
-                "style.container-selector." .. AuraCatalogToken(item.value), "ephemeral")
-        end
-    end
+    }), values, "style.container.selector")
     return CurrentAuraStyleContainer(scope)
 end
 local function OtherLane(kind)
@@ -1503,7 +1507,7 @@ local function BuildUnitStyle(ctx, b, scope)
     local colorsButton = ActionButton(features, "Open Aura Colors", 150, "normal")
     colorsButton:SetPoint("TOPLEFT", features, "TOPLEFT", 24, featuresY)
     colorsButton:SetScript("OnClick", OpenAuraColors)
-    RegisterAuraControl(ctx, colorsButton, "Open Aura Colors", "button", "style.lane.colors", "navigation")
+    RegisterAuraControl(ctx, colorsButton, "Open Aura Colors", "button", "style.lane.colors", "navigation", "opt_colors")
     AddTooltip(colorsButton, "Aura colors", "Opens Colors > Auras for timer, stack, highlight, and pandemic colors.")
     BindStyleSwitch(features, "Show Cooldown Text", 24, featuresY - 44, fw - 48, "showCooldownText", true, "AURAS3_SHOW_COOLDOWN_TEXT")
     BindStyleSwitch(features, "Show Cooldown Swipe", 24, featuresY - 76, fw - 48, "showCooldownSwipe", true, "AURAS3_SHOW_COOLDOWN_SWIPE")
@@ -1613,7 +1617,7 @@ local function BuildGroupStyle(ctx, b, scope)
     local colorsButton = ActionButton(features, "Open Aura Colors", 150, "normal")
     colorsButton:SetPoint("TOPLEFT", features, "TOPLEFT", 24, -42)
     colorsButton:SetScript("OnClick", OpenAuraColors)
-    RegisterAuraControl(ctx, colorsButton, "Open Aura Colors", "button", "group-style.lane.colors", "navigation")
+    RegisterAuraControl(ctx, colorsButton, "Open Aura Colors", "button", "group-style.lane.colors", "navigation", "opt_colors")
     AddTooltip(colorsButton, "Aura colors", "Opens Colors > Auras for timer, stack, highlight, and pandemic colors.")
     BindGroupSwitch(ctx, features, "Show Cooldown Text", 24, -82, fw - 48, scope, lane, "showCooldown", true, "visual", RefreshStylePreview)
     BindGroupSwitch(ctx, features, "Show Cooldown Swipe", 24, -114, fw - 48, scope, lane, "showCooldownSwipe", true, "visual", RefreshStylePreview)
@@ -1901,24 +1905,28 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
     directAdd:SetPoint("TOPLEFT", direct, "TOPLEFT", 26 + directInputW, -90)
     directAdd:SetScript("OnClick", function()
         local value = directInput and directInput.GetText and directInput:GetText() or directInputValue
-        if Model.AddGroupBlacklistSpell(scope, lane, value) then
+        local changed = Model.AddGroupBlacklistSpell(scope, lane, value)
+        if changed then
             if directInput and directInput.SetText then directInput:SetText("") end
             directInputValue = ""
             QueueGroupScope(scope, "visual")
             Rebuild(ctx)
         end
+        return changed and true or false
     end)
-    RegisterAuraControl(ctx, directAdd, "Add", "button", "group-blacklist.lane." .. AuraCatalogToken(lane) .. ".add", "action")
+    RegisterAuraTextAction(ctx, directAdd, directInput, "Add", "group-blacklist.lane." .. AuraCatalogToken(lane) .. ".add")
     local directRemove = ActionButton(direct, "Remove", 96)
     directRemove:SetPoint("LEFT", directAdd, "RIGHT", 8, 0)
     directRemove:SetScript("OnClick", function()
         local value = directInput and directInput.GetText and directInput:GetText() or directInputValue
-        if Model.RemoveGroupBlacklistSpell(scope, lane, value) then
+        local changed = Model.RemoveGroupBlacklistSpell(scope, lane, value)
+        if changed then
             QueueGroupScope(scope, "visual")
             Rebuild(ctx)
         end
+        return changed and true or false
     end)
-    RegisterAuraControl(ctx, directRemove, "Remove", "button", "group-blacklist.lane." .. AuraCatalogToken(lane) .. ".remove", "action")
+    RegisterAuraTextAction(ctx, directRemove, directInput, "Remove", "group-blacklist.lane." .. AuraCatalogToken(lane) .. ".remove")
     local presetW = max(150, floor((w - 96) * 0.22))
     local spellW = max(210, floor((w - 96) * 0.30))
     local function CurrentPreset()
@@ -2199,11 +2207,13 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
     add:SetPoint("TOPLEFT", section, "TOPLEFT", 34 + inputW, -58)
     add:SetScript("OnClick", function()
         local value = input and input.GetText and input:GetText() or inputValue
-        if Model.AddBlacklistSpell(unit, value, lane) then ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_ADD", true) end
+        local changed = Model.AddBlacklistSpell(unit, value, lane)
+        if changed then ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_ADD", true) end
         if input and input.SetText then input:SetText("") end
         inputValue = ""
+        return changed and true or false
     end)
-    RegisterAuraControl(ctx, add, "Add", "button", "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.add", "action")
+    RegisterAuraTextAction(ctx, add, input, "Add", "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.add")
     local hidePermanent = BindSwitch(ctx, section, "Hide permanent auras", 24, -252, inner,
         function()
             return type(Model.ReadBlacklistHidePermanent) == "function"
@@ -2363,14 +2373,16 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
     add:SetPoint("TOPLEFT", section, "TOPLEFT", 34 + inputW, -58)
     add:SetScript("OnClick", function()
         local value = input and input.GetText and input:GetText() or inputValue
-        if Model.AddGroupBlacklistSpell(scope, lane, value) then
+        local changed = Model.AddGroupBlacklistSpell(scope, lane, value)
+        if changed then
             QueueGroupScope(scope, "visual")
             Rebuild(ctx)
         end
         if input and input.SetText then input:SetText("") end
         inputValue = ""
+        return changed and true or false
     end)
-    RegisterAuraControl(ctx, add, "Add", "button", "group-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.add", "action")
+    RegisterAuraTextAction(ctx, add, input, "Add", "group-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.add")
     local presetW = max(150, floor(inner * 0.22))
     local spellW = max(210, floor(inner * 0.30))
     local function CurrentPreset()
@@ -2528,7 +2540,7 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
     local top = auraBuilder:Section("", 104)
     if top.title then top.title:Hide() end
     local sectionW = top._msuf2Width or auraBuilder.width or 720
-    local containerBar = W.ScopeOverrideBar(ctx, top, {
+    local containerBar = RegisterAuraChoiceBar(ctx, W.ScopeOverrideBar(ctx, top, {
         values = UNIT_AURA_WORKSPACE_TABS,
         width = sectionW,
         label = "Container:",
@@ -2539,16 +2551,9 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
             M.unitAuraTabSelection[unit] = value
             Rebuild(ctx)
         end,
-    })
-    if containerBar and type(containerBar.buttons) == "table" then
-        for i = 1, #UNIT_AURA_WORKSPACE_TABS do
-            local item = UNIT_AURA_WORKSPACE_TABS[i]
-            RegisterAuraControl(ctx, containerBar.buttons[i], item.text, "button",
-                "unit-workspace.container-selector." .. AuraCatalogToken(item.value), "ephemeral")
-        end
-    end
+    }), UNIT_AURA_WORKSPACE_TABS, "unit-workspace.container-selector")
     local tools = normalLane and UNIT_AURA_NORMAL_TOOLS or UNIT_AURA_CUSTOM_TOOLS
-    local toolBar = W.ScopeOverrideBar(ctx, top, {
+    local toolBar = RegisterAuraChoiceBar(ctx, W.ScopeOverrideBar(ctx, top, {
         values = tools,
         width = sectionW,
         label = "Edit:",
@@ -2556,14 +2561,7 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
         centerY = -62,
         getValue = function() return CurrentUnitAuraTool(unit, currentTab) end,
         setValue = function(value) SetUnitAuraTool(unit, currentTab, value); Rebuild(ctx) end,
-    })
-    if toolBar and type(toolBar.buttons) == "table" then
-        for i = 1, #tools do
-            local item = tools[i]
-            RegisterAuraControl(ctx, toolBar.buttons[i], item.text, "button",
-                "unit-workspace.tool-selector." .. AuraCatalogToken(item.value), "ephemeral")
-        end
-    end
+    }), tools, "unit-workspace.tool-selector")
     local openStyle = ActionButton(top, "Open Aura Style", 126, "normal")
     openStyle:SetPoint("TOPRIGHT", top, "TOPRIGHT", -16, -74)
     openStyle:SetScript("OnClick", function()
@@ -2572,7 +2570,7 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
         if normalLane then SetCurrentLane("auraStyleGFLane", currentTab) end
         SelectPage("auras3_styling", unit)
     end)
-    RegisterAuraControl(ctx, openStyle, "Open Aura Style", "button", "unit-workspace.open-aura-style", "navigation")
+    RegisterAuraControl(ctx, openStyle, "Open Aura Style", "button", "unit-workspace.open-aura-style", "navigation", "auras3_styling")
     local workspaceHint = W.Text(top, "All icon and full-frame styling: Appearance > Auras.", 16, -84, sectionW - 174, T.colors.muted)
     M.TrackRefresh(ctx, function()
         workspaceHint:SetText(normalLane and not AnyUnitFrameAuraEnabled()
@@ -2632,14 +2630,16 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
         add:SetPoint("TOPLEFT", section, "TOPLEFT", 34 + inputW, -58)
         add:SetScript("OnClick", function()
             local value = input and input.GetText and input:GetText() or inputValue
-            if Model.AddCustomContainerSpell(unit, index, value) then
+            local changed = Model.AddCustomContainerSpell(unit, index, value)
+            if changed then
                 if input and input.SetText then input:SetText("") end
                 inputValue = ""
                 Apply("AURAS3_CUSTOM_WHITELIST_ADD", true)
                 Rebuild(ctx)
             end
+            return changed and true or false
         end)
-        RegisterAuraControl(ctx, add, "Add spell", "button", "custom-container.whitelist.add", "action")
+        RegisterAuraTextAction(ctx, add, input, "Add spell", "custom-container.whitelist.add")
         local hidePermanent = BindSwitch(ctx, section, "Hide permanent auras", 24, -94, inner,
             function() return item.filters.hidePermanent == true end,
             function(value) item.filters.hidePermanent = value == true; Apply("AURAS3_CUSTOM_HIDE_PERMANENT", true) end,
@@ -2924,7 +2924,7 @@ local function BuildMovedAuraPage(ctx)
         local button = ActionButton(section, page[1], i == 5 and 132 or 92)
         button:SetPoint("TOPLEFT", section, "TOPLEFT", x, -58)
         button:SetScript("OnClick", function() if M.SelectPage then M.SelectPage(page[2]) end end)
-        RegisterAuraControl(ctx, button, page[1], "button", "moved-page.open." .. AuraCatalogToken(page[2]), "navigation")
+        RegisterAuraControl(ctx, button, page[1], "button", "moved-page.open." .. AuraCatalogToken(page[2]), "navigation", page[2])
         x = x + (i == 5 and 144 or 104)
     end
     W.Text(section, "Open the frame and expand Auras. Buffs and Debuffs contain their own Blizzard filters and blacklists; Custom 1-3 contains its own whitelist. There is no separate Filter tab.", 24, -118, w - 48, T.colors.muted)

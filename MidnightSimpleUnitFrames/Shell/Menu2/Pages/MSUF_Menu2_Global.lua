@@ -361,12 +361,6 @@ local function BuildScopeOverrideSection(ctx, builder, opts)
     if scope.title then scope.title:Hide() end
     local segment = W.ScopeOverrideBar(ctx, scope, scopeOpts)
     RegisterControl(segment, opts.selectorMeta, opts.selectorLabel or "Editing:", "segment", values)
-    if segment and type(segment.buttons) == "table" and type(opts.selectorOptionMeta) == "function" then
-        for i = 1, #segment.buttons do
-            local item = values[i] or {}
-            RegisterControl(segment.buttons[i], opts.selectorOptionMeta(item.value), item.text or item.label or item.value or "", "button")
-        end
-    end
     local override = W.ToggleAt(scope, opts.toggleLabel or "Use custom settings for this scope", 14, overrideY, opts.toggleWidth or 260)
     M.BindBoolWidget(ctx, override, opts.getOverride or function()
         local current = scopeOpts.getValue and scopeOpts.getValue()

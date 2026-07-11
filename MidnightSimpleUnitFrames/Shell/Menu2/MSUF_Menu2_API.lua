@@ -22,6 +22,44 @@ ExportPublic("MSUF_OpenPage", function(pageKey) return M.SelectPage(pageKey or "
 ExportPublic("MSUF_SwitchMirrorPage", function(pageKey) return M.SelectPage(pageKey or "home") end)
 ExportPublic("MSUF_GetCurrentMirrorPage", function() return M.activeKey or "home" end)
 ExportPublic("MSUF_GetMirrorPages", function() return M.pages end)
+
+local function OpenExactSettingControl(settingKey, fallbackLabel, fallbackPage)
+    settingKey = tostring(settingKey or "")
+    fallbackPage = tostring(fallbackPage or "")
+    if settingKey == "" then return false, "Which exact MSUF option do you want me to open?" end
+    if M.BlockCombatAction and M.BlockCombatAction() then
+        return false, "I cannot open and focus an options control during combat. Try again after combat."
+    end
+
+    local catalog = M.RuntimeControlCatalog
+    local function FindControl(page)
+        if catalog and type(catalog.FindBySettingKey) == "function" then
+            return catalog.FindBySettingKey(settingKey, page)
+        end
+    end
+    local record, widget = FindControl(fallbackPage)
+    local page = tostring((record and record.pageKey) or fallbackPage or "")
+    if page == "" then return false, "I know that setting, but its MSUF menu page is not mapped yet." end
+
+    -- Opening the owning page lazily builds its real widgets and populates the
+    -- runtime catalog. Resolve once more afterwards to obtain the exact anchor.
+    if M.Open(page) == false then return false, "I could not open the MSUF options page." end
+    local builtRecord, builtWidget = FindControl(page)
+    record, widget = builtRecord or record, builtWidget or widget
+    page = tostring((record and record.pageKey) or page)
+    local label = tostring((record and (record.label or record.identityLabel)) or fallbackLabel or settingKey)
+    local query = tostring((record and (record.identityLabel or record.label)) or fallbackLabel or settingKey)
+    local bridge = M.SearchBridge
+    if bridge and type(bridge.OpenSearchTarget) == "function" then
+        bridge.OpenSearchTarget(page, query, label, widget)
+    elseif type(M.SelectPage) == "function" then
+        M.SelectPage(page)
+    end
+    return true, "Opened " .. label .. " and focused its exact control."
+end
+
+M.OpenExactSettingControl = OpenExactSettingControl
+ExportPublic("MSUF_OpenExactSettingControl", OpenExactSettingControl)
 do
     local combatFrame
     local combatRegistered = false

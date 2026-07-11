@@ -41,6 +41,7 @@ local function DashboardMeta(semanticPath, classification, exact)
     end
     return meta
 end
+local DASHBOARD_DIRECT_BY_ID
 local function RegisterDashboardControl(widget, meta, label, kind, values)
     if not (widget and type(meta) == "table" and type(M.RegisterSearchWidget) == "function") then return widget end
     local payload = {}
@@ -48,9 +49,284 @@ local function RegisterDashboardControl(widget, meta, label, kind, values)
     payload.label = label or payload.label
     payload.kind = kind or payload.kind
     payload.values = values or payload.values
+    local direct = DASHBOARD_DIRECT_BY_ID and DASHBOARD_DIRECT_BY_ID[payload.controlId]
+    if direct then
+        payload.confirmRequired = direct.confirmRequired == true or payload.confirmRequired == true
+        if not payload.help then payload.help = direct.help end
+        if not payload.blockCombat and direct.command then payload.blockCombat = direct.command.blockCombat end
+        if direct.useDirectCommandWithWidget == true then
+            payload.kind = direct.kind or payload.kind
+            payload.command = direct.command
+        end
+    end
     M.RegisterSearchWidget(widget, payload)
     return widget
 end
+
+-- Dashboard disclosures deliberately avoid allocating their inner frames until
+-- opened.  The Assistant must still be able to discover and execute the real
+-- settings/actions, so keep a compact command-only counterpart for every
+-- conditional scaling/recovery control.  RuntimeControlCatalog promotes these
+-- records to the real widgets (same explicit IDs) when a disclosure is opened.
+local function DirectClamp(value, minValue, maxValue)
+    value = tonumber(value) or minValue
+    if value < minValue then return minValue end
+    if value > maxValue then return maxValue end
+    return value
+end
+local function DirectPercent(value, fallback)
+    return math.floor(((tonumber(value) or fallback or 1) * 100) + 0.5)
+end
+local function DirectSnapPercent(value, minPercent, maxPercent, stepPercent)
+    stepPercent = stepPercent or 1
+    local percent = math.floor((tonumber(value) or 100) / stepPercent + 0.5) * stepPercent
+    return DirectClamp(percent, minPercent, maxPercent)
+end
+local function DirectGeneralDB()
+    if type(M.GetGeneralDB) ~= "function" then return nil end
+    local ok, db = pcall(M.GetGeneralDB)
+    return ok and type(db) == "table" and db or nil
+end
+local function DirectGlobalState()
+    local db = DirectGeneralDB()
+    if not db then return nil end
+    db.UIScale = type(db.UIScale) == "table" and db.UIScale or { Enabled = false, Scale = 1 }
+    db.UIScale.Enabled = db.UIScale.Enabled == true
+    db.UIScale.Scale = DirectClamp(db.UIScale.Scale, 0.3, 1.5)
+    return db, db.UIScale
+end
+local function DirectCombatLocked()
+    return type(M.IsConfigCombatLocked) == "function" and M.IsConfigCombatLocked() == true
+end
+local function DirectRequestScaleApply(reason)
+    if type(M.RequestGeneralApply) == "function" then
+        M.RequestGeneralApply(reason, { preview = true, applyAll = false, notify = false })
+    end
+end
+local function DirectSetGlobalScale(enabled, value, preset)
+    local db, ui = DirectGlobalState()
+    if not db then return false end
+    ui.Enabled = enabled == true
+    ui.Scale = DirectClamp(value or ui.Scale, 0.3, 1.5)
+    db.globalUiScalePreset = preset or (ui.Enabled and "custom" or "auto")
+    db.globalUiScaleValue = ui.Enabled and ui.Scale or nil
+    if ui.Enabled and type(_G.MSUF_SetGlobalUiScale) == "function" then
+        _G.MSUF_SetGlobalUiScale(ui.Scale, true)
+    elseif not ui.Enabled and type(_G.MSUF_ResetGlobalUiScale) == "function" then
+        _G.MSUF_ResetGlobalUiScale(true)
+    end
+    DirectRequestScaleApply("MSUF2_DASH_GLOBAL_SCALE")
+    return true
+end
+local function DirectGlobalScalePercent()
+    local _, ui = DirectGlobalState()
+    if not ui then return nil end
+    return ui.Enabled and DirectPercent(ui.Scale, 1) or false
+end
+local function DirectSetGlobalScalePercent(value)
+    local _, ui = DirectGlobalState()
+    if not ui then return false end
+    if value == false then return DirectSetGlobalScale(false, ui.Scale, "auto") end
+    return DirectSetGlobalScale(true, DirectSnapPercent(value, 30, 150, 1) / 100, "custom")
+end
+local function DirectMSUFScalePercent()
+    local db = DirectGeneralDB()
+    return db and DirectPercent(DirectClamp(tonumber(db.msufUiScale) or 1, 0.25, 1.5), 1) or nil
+end
+local function DirectSetMSUFScalePercent(value)
+    local db = DirectGeneralDB()
+    if not db then return false end
+    local scale = DirectSnapPercent(value, 25, 150, 5) / 100
+    db.msufUiScale = scale
+    if type(_G.MSUF_ApplyMsufScale) == "function" then _G.MSUF_ApplyMsufScale(scale) end
+    DirectRequestScaleApply("MSUF2_DASH_MSUF_SCALE")
+    return true
+end
+local function DirectMenuScalePercent()
+    local db = DirectGeneralDB()
+    return db and DirectPercent(DirectClamp(tonumber(db.slashMenuScale) or 1, 0.25, 1.5), 1) or nil
+end
+local function DirectSetMenuScalePercent(value)
+    local db = DirectGeneralDB()
+    if not db then return false end
+    local scale = DirectSnapPercent(value, 25, 150, 5) / 100
+    db.slashMenuScale = scale
+    if M.frame and type(M.frame.SetScale) == "function" then
+        local effective = type(M.GetEffectiveMenuScale) == "function" and M.GetEffectiveMenuScale(scale) or scale
+        M.frame:SetScale(effective)
+    end
+    return true
+end
+local function DirectPixelScale()
+    if type(_G.MSUF_GetPixelPerfectScale) == "function" then
+        local value = tonumber(_G.MSUF_GetPixelPerfectScale())
+        if value then return DirectClamp(value, 0.3, 1.5) end
+    end
+    if type(_G.GetPhysicalScreenSize) == "function" then
+        local _, height = _G.GetPhysicalScreenSize()
+        if tonumber(height) and height > 0 then return DirectClamp(768 / height, 0.3, 1.5) end
+    end
+    return 1
+end
+local function DirectRunSlash(message)
+    local slash = _G.SlashCmdList and _G.SlashCmdList["MIDNIGHTSUF"]
+    if type(slash) ~= "function" then return false end
+    slash(message or "")
+    return true
+end
+local function DirectCopyLink(title, url)
+    if type(_G.MSUF_ShowCopyLink) ~= "function" then return false end
+    _G.MSUF_ShowCopyLink(title, url)
+    return true
+end
+local function DirectBugReport()
+    return type(M.BugReport) == "table" and M.BugReport or nil
+end
+local function DirectOpenManualBugReport()
+    local bug = DirectBugReport()
+    if bug and type(bug.OpenManual) == "function" then bug.OpenManual(); return true end
+    if type(M.SetMenuStateValue) == "function" then M.SetMenuStateValue("dashboardBugReportOpen", true); return true end
+    return false
+end
+local function DirectBugDescription()
+    local bug = DirectBugReport()
+    if not (bug and type(bug.GetManualIssue) == "function") then return "" end
+    local ok, _, description = pcall(bug.GetManualIssue)
+    return ok and tostring(description or "") or ""
+end
+local function DirectSetBugDescription(value)
+    local bug = DirectBugReport()
+    if not (bug and type(bug.SetManualIssue) == "function") then return false end
+    bug.SetManualIssue(nil, tostring(value or ""))
+    return DirectBugDescription() == tostring(value or "")
+end
+local function DirectShowBugReport()
+    local bug = DirectBugReport()
+    if not (bug and type(bug.BuildText) == "function") then return false end
+    local ok, report = pcall(bug.BuildText, { includeLoadedAddons = true })
+    return ok and type(report) == "string" and report ~= "" and DirectCopyLink("MSUF Bug Report", report) or false
+end
+local function DirectClearBugReport()
+    local bug = DirectBugReport()
+    if not (bug and type(bug.Clear) == "function") then return false end
+    bug.Clear()
+    return true
+end
+local function DirectAction(setter, combatLocked)
+    local command = { kind = "button", set = setter, historyMode = "none" }
+    if combatLocked then command.blockCombat = DirectCombatLocked end
+    return command
+end
+
+local DASHBOARD_DIRECT_SPECS = {
+    {
+        path = "scaling.global_ui.percent", label = "Global UI Scale", kind = "slider", classification = "setting",
+        help = "Reads and applies the global WoW UI scale percentage directly.",
+        command = { kind = "slider", min = 30, max = 150, step = 1, percentIsValue = true,
+            get = DirectGlobalScalePercent, set = DirectSetGlobalScalePercent, blockCombat = DirectCombatLocked },
+    },
+    {
+        path = "scaling.msuf_frames.percent", label = "MSUF Frame Scale", kind = "slider", classification = "setting",
+        help = "Reads and applies the MSUF unit-frame scale percentage directly.",
+        command = { kind = "slider", min = 25, max = 150, step = 5, percentIsValue = true,
+            get = DirectMSUFScalePercent, set = DirectSetMSUFScalePercent, blockCombat = DirectCombatLocked },
+    },
+    {
+        path = "scaling.menu.percent", label = "MSUF Menu Scale", kind = "slider", classification = "setting",
+        help = "Reads and applies the MSUF configuration-menu scale percentage directly.",
+        command = { kind = "slider", min = 25, max = 150, step = 5, percentIsValue = true,
+            get = DirectMenuScalePercent, set = DirectSetMenuScalePercent, blockCombat = DirectCombatLocked },
+    },
+    { path = "display_recovery.reset_positions", label = "Reset Positions", classification = "action",
+        command = DirectAction(function() return DirectRunSlash("reset") end, true) },
+    { path = "display_recovery.copy_wago_link", label = "Wago Profiles", classification = "action",
+        command = DirectAction(function() return DirectCopyLink("Wago MSUF Profiles", "https://wago.io/search/imports/wow/msuf") end) },
+    { path = "display_recovery.print_help", label = "Print Help", classification = "action",
+        command = DirectAction(function() return DirectRunSlash("help") end) },
+    { path = "display_recovery.copy_discord_link", label = "Discord", classification = "action",
+        command = DirectAction(function() return DirectCopyLink("Discord", "https://discord.gg/2Gf9b2Wprz") end) },
+    { path = "display_recovery.factory_reset_all", label = "Factory Reset All", classification = "action", confirmRequired = true,
+        command = DirectAction(function() return type(M.StageFactoryReset) == "function" and M.StageFactoryReset() or false end, true) },
+    { path = "scaling.global_ui.preset.1080p", label = "1080p", classification = "action",
+        command = DirectAction(function() return DirectSetGlobalScale(true, 768 / 1080, "1080p") end, true) },
+    { path = "scaling.global_ui.preset.1440p", label = "1440p", classification = "action",
+        command = DirectAction(function() return DirectSetGlobalScale(true, 768 / 1440, "1440p") end, true) },
+    { path = "scaling.global_ui.preset.4k", label = "4K", classification = "action",
+        command = DirectAction(function() return DirectSetGlobalScale(true, 768 / 2160, "4k") end, true) },
+    { path = "scaling.global_ui.preset.pixel", label = "Pixel", classification = "action",
+        command = DirectAction(function() return DirectSetGlobalScale(true, DirectPixelScale(), "pixel") end, true) },
+    { path = "scaling.global_ui.apply", label = "Apply Global UI Scale", classification = "action",
+        command = DirectAction(function()
+            local db, ui = DirectGlobalState()
+            return db and DirectSetGlobalScale(ui.Enabled, ui.Scale, db.globalUiScalePreset) or false
+        end, true) },
+    { path = "scaling.global_ui.revert_pending", label = "Revert Global UI Scale", classification = "action",
+        command = DirectAction(function() return true end) },
+    { path = "scaling.global_ui.select_off", label = "Disable Global UI Scale", classification = "action",
+        command = DirectAction(function()
+            local _, ui = DirectGlobalState()
+            return ui and DirectSetGlobalScale(false, ui.Scale, "auto") or false
+        end, true) },
+    { path = "scaling.msuf_frames.apply", label = "Apply MSUF Frame Scale", classification = "action",
+        command = DirectAction(function() return DirectSetMSUFScalePercent(DirectMSUFScalePercent()) end, true) },
+    { path = "scaling.msuf_frames.revert_pending", label = "Revert MSUF Frame Scale", classification = "action",
+        command = DirectAction(function() return true end) },
+    { path = "scaling.menu.apply", label = "Apply MSUF Menu Scale", classification = "action",
+        command = DirectAction(function() return DirectSetMenuScalePercent(DirectMenuScalePercent()) end, true) },
+    { path = "scaling.menu.revert_pending", label = "Revert MSUF Menu Scale", classification = "action",
+        command = DirectAction(function() return true end) },
+    { path = "bug_report.install_bugsack", label = "BugSack", classification = "action",
+        command = DirectAction(function()
+            return DirectCopyLink("BugSack", "https://www.curseforge.com/wow/addons/bugsack")
+        end) },
+    { path = "bug_report.open_manual", label = "Report issue", classification = "action",
+        command = DirectAction(DirectOpenManualBugReport) },
+    { path = "bug_report.manual_description", label = "Bug report description", kind = "textinput",
+        classification = "ephemeral", useDirectCommandWithWidget = true,
+        command = { kind = "textinput", historyMode = "none", get = DirectBugDescription, set = DirectSetBugDescription } },
+    { path = "bug_report.select_text", label = "Select bug report", classification = "action",
+        command = DirectAction(DirectShowBugReport) },
+    { path = "bug_report.copy_github_link", label = "GitHub issue", classification = "action",
+        command = DirectAction(function()
+            return DirectCopyLink("GitHub Issue", "https://github.com/Mapkov2/MidnightSimpleUnitFrames/issues/new")
+        end) },
+    { path = "bug_report.copy_discord_link", label = "Discord", classification = "action",
+        command = DirectAction(function() return DirectCopyLink("Discord", "https://discord.gg/2Gf9b2Wprz") end) },
+    { path = "bug_report.copy_curseforge_link", label = "CurseForge", classification = "action",
+        command = DirectAction(function()
+            return DirectCopyLink("CurseForge", "https://www.curseforge.com/wow/addons/midnightsimpleunitframes")
+        end) },
+    { path = "bug_report.clear", label = "Clear bug report", classification = "action",
+        command = DirectAction(DirectClearBugReport) },
+}
+for i = 1, #DASHBOARD_DIRECT_SPECS do
+    local spec = DASHBOARD_DIRECT_SPECS[i]
+    spec.meta = DashboardMeta(spec.path, spec.classification, {
+        label = spec.label,
+        kind = spec.kind or "button",
+        help = spec.help,
+        confirmRequired = spec.confirmRequired == true,
+        historyMode = spec.command and spec.command.historyMode,
+        command = spec.command,
+    })
+end
+DASHBOARD_DIRECT_BY_ID = {}
+for i = 1, #DASHBOARD_DIRECT_SPECS do
+    local spec = DASHBOARD_DIRECT_SPECS[i]
+    DASHBOARD_DIRECT_BY_ID[spec.meta.controlId] = spec
+end
+local function RegisterDashboardDirectControls()
+    if type(M.RegisterVirtualRuntimeControl) ~= "function" then return 0 end
+    local registered = 0
+    for i = 1, #DASHBOARD_DIRECT_SPECS do
+        local id = M.RegisterVirtualRuntimeControl(DASHBOARD_DIRECT_SPECS[i].meta, "dashboard-direct")
+        if id then registered = registered + 1 end
+    end
+    return registered
+end
+M.RegisterDashboardDirectControls = RegisterDashboardDirectControls
+RegisterDashboardDirectControls()
+
 local function GetBundledChangelog()
     -- Changelog data is bundled as static state. The dashboard renders it read-only and should
     -- tolerate older builds where no changelog table exists.
@@ -207,6 +483,10 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
     RefreshOpenState()
 end
 local function BuildDashboardUX(ctx)
+    -- BuildPageEntry clears the page catalog immediately before invoking us.
+    -- Restore the frame-free contracts first; conditional real widgets below
+    -- then promote only the controls whose disclosures are currently open.
+    RegisterDashboardDirectControls()
     local root = ctx.wrapper
     local width = ctx.width or 760
     local x0, y0, gap = 12, -12, 16
@@ -378,6 +658,13 @@ local function BuildDashboardUX(ctx)
     local function StartNewAssistantTask()
         local A = MSUF and MSUF.Assistant
         if not A then return end
+        if type(A.StartNewTask) ~= "function" and type(A.EnsureRuntimeLoaded) == "function" then
+            local loaded = A.EnsureRuntimeLoaded("new-task")
+            if not loaded then return false end
+            A = MSUF and MSUF.Assistant or A
+        end
+        if type(A.ShowRuntimeDashboardCard) == "function" then A.ShowRuntimeDashboardCard() end
+        if type(A.StartNewTask) == "function" then return A.StartNewTask() end
         if A.Workflow and type(A.Workflow.CancelActiveWorkflow) == "function" then A.Workflow.CancelActiveWorkflow() end
         if type(A.CloseLargeTextPanel) == "function" then
             A.CloseLargeTextPanel()
@@ -820,7 +1107,7 @@ local function BuildDashboardUX(ctx)
         end, nil, "display_recovery.copy_discord_link")
         Button(recovery, "Factory Reset All", recoveryWrap and 16 or (recoveryW - 152), factoryY, 136, 22, function()
             M.CallIf(M.StageFactoryReset)
-        end, "danger", "display_recovery.factory_reset_all")
+        end, "danger", "display_recovery.factory_reset_all", "action", { confirmRequired = true })
         if recoveryWrap then
             local textX = recoveryNarrow and 160 or 160
             local textY = recoveryNarrow and -160 or -128
@@ -875,7 +1162,7 @@ local function BuildDashboardUX(ctx)
         local function PendingMenuScale()
             return Clamp(pendingMenuScale or AppliedMenuScale(), 0.25, 1.5)
         end
-        local function BuildScaleSlider(parent, label, x, top, width, minPct, maxPct, stepPct, semanticPath)
+        local function BuildScaleSlider(parent, label, x, top, width, minPct, maxPct, stepPct, semanticPath, command)
             local slider = W.Slider(parent, label, minPct, maxPct, stepPct, width)
             HideSliderValueBox(slider)
             slider:ClearAllPoints()
@@ -887,18 +1174,33 @@ local function BuildDashboardUX(ctx)
                 slider._msuf2Title:SetWidth(width)
             end
             EnablePercentWheel(slider, minPct, maxPct, stepPct)
-            RegisterDashboardControl(slider, DashboardMeta(semanticPath, "ephemeral", {
-                help = "Selects a pending scale percentage; use Apply to commit it.",
+            RegisterDashboardControl(slider, DashboardMeta(semanticPath, command and "setting" or "ephemeral", {
+                help = command and "Reads and applies this scale percentage directly."
+                    or "Selects a pending scale percentage; use Apply to commit it.",
+                command = command,
             }), label, "slider")
             return slider
         end
         local function BuildSimpleScaleColumn(opts)
             W.Text(scaling, opts.help, opts.x, opts.top - 20, colW, T.colors.muted)
             local status = W.Text(scaling, "", opts.x, opts.top - 40, colW, T.colors.muted)
+            local Refresh
+            local command = {
+                kind = "slider", min = opts.minPct, max = opts.maxPct, step = opts.stepPct, percentIsValue = true,
+                blockCombat = DirectCombatLocked,
+                get = function() return Percent(opts.applied(), 1) end,
+                set = function(value)
+                    local pct = SnapPct(value, opts.minPct, opts.maxPct, opts.stepPct)
+                    opts.apply(pct / 100)
+                    if Refresh then Refresh() end
+                    return true
+                end,
+                refresh = function() if Refresh then Refresh() end end,
+            }
             local slider = BuildScaleSlider(scaling, opts.label, opts.x, opts.top, colW, opts.minPct, opts.maxPct, opts.stepPct,
-                opts.semanticPath .. ".selected_percent")
+                opts.semanticPath .. ".percent", command)
             local apply, revert
-            local function Refresh()
+            Refresh = function()
                 local applied = opts.applied()
                 local pending = opts.pending()
                 local changed = math.abs(applied - pending) > 0.001
@@ -931,10 +1233,26 @@ local function BuildDashboardUX(ctx)
         end
         W.Text(scaling, "Changes the global WoW UI scale through MSUF presets.", globalX, globalTop - 20, colW, T.colors.muted)
         local globalStatus = W.Text(scaling, "", globalX, globalTop - 40, colW, T.colors.muted)
+        local RefreshGlobalScale, ApplyGlobalScale
+        local globalScaleCommand = {
+            kind = "slider", min = 30, max = 150, step = 1, percentIsValue = true,
+            blockCombat = DirectCombatLocked,
+            get = function()
+                local _, _, appliedEnabled, appliedScale = SelectedGlobalScale()
+                return appliedEnabled and Percent(appliedScale, 1) or false
+            end,
+            set = function(value)
+                local _, _, _, appliedScale = SelectedGlobalScale()
+                if value == false then ApplyGlobalScale(false, appliedScale, "auto")
+                else ApplyGlobalScale(true, SnapPct(value, 30, 150, 1) / 100, "custom") end
+                return true
+            end,
+            refresh = function() if RefreshGlobalScale then RefreshGlobalScale() end end,
+        }
         local globalScale = BuildScaleSlider(scaling, "Global UI Scale", globalX, globalTop, colW, 30, 150, 1,
-            "scaling.global_ui.selected_percent")
+            "scaling.global_ui.percent", globalScaleCommand)
         local globalApply, globalRevert
-        local function RefreshGlobalScale()
+        RefreshGlobalScale = function()
             local selectedEnabled, selectedScale, appliedEnabled, appliedScale = SelectedGlobalScale()
             local applied = appliedEnabled and (Percent(appliedScale, 1) .. "%") or M.Tr("Off")
             local selected = selectedEnabled and (Percent(selectedScale, 1) .. "%") or M.Tr("Off")
@@ -957,7 +1275,7 @@ local function BuildDashboardUX(ctx)
             pendingGlobalScale = Clamp(pct / 100, 0.3, 1.5)
             RefreshGlobalScale()
         end)
-        local function ApplyGlobalScale(enabled, value, preset)
+        ApplyGlobalScale = function(enabled, value, preset)
             local dbScale, ui = GlobalState()
             ui.Enabled = enabled == true
             ui.Scale = Clamp(value or ui.Scale, 0.3, 1.5)
