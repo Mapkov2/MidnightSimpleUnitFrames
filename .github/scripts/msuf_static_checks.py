@@ -8,6 +8,7 @@ castbar refresh pipeline, and group-frame refresh pipeline.
 
 from __future__ import annotations
 
+import hashlib
 import re
 import shutil
 import subprocess
@@ -20,6 +21,10 @@ ADDON_ROOT = REPO_ROOT / "MidnightSimpleUnitFrames"
 TOC = ADDON_ROOT / "MidnightSimpleUnitFrames.toc"
 LOCALE_TOC = REPO_ROOT / "MidnightSimpleUnitFrames_Locales" / "MidnightSimpleUnitFrames_Locales.toc"
 ASSISTANT_TOC = REPO_ROOT / "MidnightSimpleUnitFrames_Assistant" / "MidnightSimpleUnitFrames_Assistant.toc"
+ASSISTANT_ROOT = ASSISTANT_TOC.parent
+ASSISTANT_MANIFEST = ASSISTANT_ROOT / "MSUF_AssistantRuntime.xml"
+ASSISTANT_SCRIPT_COUNT = 327
+ASSISTANT_ORDER_SHA256 = "1D61896426D97A68A18AC2DE57FBB7AB8F76D72270A51F69D4F9E1B5BD30AA2F"
 SUPPORTED_LOCALES = {
     "enUS", "enGB", "deDE", "esES", "esMX", "frFR",
     "itIT", "koKR", "ptBR", "ruRU", "zhCN", "zhTW",
@@ -48,7 +53,15 @@ class CheckError(RuntimeError):
 
 
 def rel(path: Path) -> str:
-    return path.resolve().relative_to(ADDON_ROOT.resolve()).as_posix()
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(ADDON_ROOT.resolve()).as_posix()
+    except ValueError:
+        try:
+            companion_rel = resolved.relative_to(ASSISTANT_ROOT.resolve()).as_posix()
+        except ValueError as exc:
+            raise CheckError(f"runtime source is outside an addon root: {path}") from exc
+        return f"../MidnightSimpleUnitFrames_Assistant/{companion_rel}"
 
 
 def read(path: Path) -> str:
@@ -59,12 +72,29 @@ def should_skip(path: Path) -> bool:
     try:
         relative = path.resolve().relative_to(ADDON_ROOT.resolve())
     except ValueError:
+        try:
+            relative = path.resolve().relative_to(ASSISTANT_ROOT.resolve())
+        except ValueError:
+            return True
+        return any(part in SKIP_DIRS for part in relative.parts)
+    if relative.parts[:3] == ("Shell", "Menu2", "Assistant"):
+        return True  # forbidden core-owned V1 is reported by the ownership contract
+    if relative.as_posix() in {
+        "Shell/Menu2/MSUF_Menu2_AssistantDialogLocale.lua",
+        "Shell/Menu2/MSUF_Menu2_AssistantDialogLocale_Data.lua",
+    }:
         return True
     return any(part in SKIP_DIRS for part in relative.parts)
 
 
 def all_lua_files() -> list[Path]:
-    return sorted(path for path in ADDON_ROOT.rglob("*.lua") if not should_skip(path))
+    roots = (ADDON_ROOT, ASSISTANT_ROOT)
+    return sorted(
+        path
+        for root in roots
+        for path in root.rglob("*.lua")
+        if not should_skip(path)
+    )
 
 
 def normalize_ref(value: str) -> str:
@@ -85,7 +115,10 @@ def parse_load_refs() -> tuple[set[str], list[str]]:
     xml_queue: list[Path] = []
     seen_xml: set[Path] = set()
 
-    for toc in [TOC]:
+    manifests = [TOC]
+    if ASSISTANT_TOC.exists():
+        manifests.append(ASSISTANT_TOC)
+    for toc in manifests:
         for line_no, line in enumerate(read(toc).splitlines(), 1):
             item = line.strip()
             if not item or item.startswith("#") or item.startswith("##"):
@@ -151,14 +184,132 @@ def toc_field(text: str, name: str) -> str:
 
 
 def check_assistant_runtime_contracts() -> None:
-    if ASSISTANT_TOC.exists():
-        raise CheckError(f"legacy Assistant companion TOC must be removed: {ASSISTANT_TOC}")
-    main_toc = read(TOC)
-    require(
-        main_toc,
-        r"Shell\Menu2\MSUF_Menu2_AssistantRuntime.xml",
-        "main TOC Assistant runtime manifest",
+    if not ASSISTANT_TOC.exists():
+        raise CheckError(f"missing load-on-demand Assistant V1 companion: {ASSISTANT_TOC}")
+    if not ASSISTANT_MANIFEST.exists():
+        raise CheckError(f"missing Assistant V1 runtime manifest: {ASSISTANT_MANIFEST}")
+
+    menu2 = ADDON_ROOT / "Shell" / "Menu2"
+    forbidden_core = (
+        menu2 / "Assistant",
+        menu2 / "MSUF_Menu2_AssistantRuntime.xml",
+        menu2 / "MSUF_Menu2_AssistantDialogLocale.lua",
+        menu2 / "MSUF_Menu2_AssistantDialogLocale_Data.lua",
     )
+    present_core = [path for path in forbidden_core if path.exists()]
+    if present_core:
+        raise CheckError("Assistant V1 must be companion-owned; core artifacts found: " + ", ".join(map(str, present_core)))
+
+    v2_artifacts = sorted(
+        path
+        for root in (ADDON_ROOT, ASSISTANT_ROOT)
+        for path in root.rglob("*")
+        if "assistantv2" in path.name.lower()
+    )
+    if v2_artifacts:
+        raise CheckError("Assistant V2 runtime artifacts are forbidden: " + ", ".join(map(str, v2_artifacts)))
+
+    main_toc = read(TOC)
+    if "MSUF_Menu2_AssistantRuntime.xml" in main_toc or "AssistantV2" in main_toc:
+        raise CheckError("main TOC must not eagerly load an Assistant runtime")
+    companion = read(ASSISTANT_TOC)
+    require(companion, "## LoadOnDemand: 1", "Assistant V1 LoD metadata")
+    require(companion, "## Dependencies: MidnightSimpleUnitFrames", "Assistant V1 core dependency")
+    if "..\\" in companion or "../" in companion:
+        raise CheckError("Assistant companion TOC must not load runtime files from the core addon")
+    toc_payload = [
+        line.strip()
+        for line in companion.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+    if toc_payload != [ASSISTANT_MANIFEST.name]:
+        raise CheckError(f"Assistant TOC must load exactly {ASSISTANT_MANIFEST.name}, got: {toc_payload}")
+
+    scripts = [normalize_ref(value) for value in re.findall(r'<Script\s+file="([^"]+)"', read(ASSISTANT_MANIFEST))]
+    if len(scripts) != ASSISTANT_SCRIPT_COUNT or len(set(scripts)) != len(scripts):
+        raise CheckError(f"Assistant V1 manifest must contain exactly {ASSISTANT_SCRIPT_COUNT} unique scripts, got {len(scripts)}")
+    order_hash = hashlib.sha256("\n".join(scripts).encode("utf-8")).hexdigest().upper()
+    if order_hash != ASSISTANT_ORDER_SHA256:
+        raise CheckError(
+            f"Assistant V1 manifest inventory/load-order hash mismatch: expected {ASSISTANT_ORDER_SHA256}, got {order_hash}"
+        )
+    assistant_root_resolved = ASSISTANT_ROOT.resolve()
+    for script in scripts:
+        parts = Path(script).parts
+        if not script.lower().endswith(".lua") or ".." in parts or Path(script).is_absolute():
+            raise CheckError(f"unsafe or non-Lua Assistant manifest reference: {script}")
+        script_path = (ASSISTANT_ROOT / script).resolve()
+        try:
+            script_path.relative_to(assistant_root_resolved)
+        except ValueError as exc:
+            raise CheckError(f"Assistant manifest reference escapes companion: {script}") from exc
+        if not script_path.is_file():
+            raise CheckError(f"Assistant manifest references missing runtime file: {script}")
+
+    actual_inventory = sorted(
+        path.relative_to(ASSISTANT_ROOT).as_posix()
+        for path in ASSISTANT_ROOT.rglob("*")
+        if path.is_file()
+    )
+    expected_inventory = sorted([ASSISTANT_TOC.name, ASSISTANT_MANIFEST.name, *scripts])
+    if actual_inventory != expected_inventory:
+        unexpected = sorted(set(actual_inventory) - set(expected_inventory))
+        missing = sorted(set(expected_inventory) - set(actual_inventory))
+        raise CheckError(f"Assistant V1 companion inventory mismatch; unexpected={unexpected}, missing={missing}")
+
+    bridge = read(menu2 / "MSUF_AssistantBridge.lua")
+    bindings = read(menu2 / "MSUF_Menu2_Bindings.lua")
+    catalog = read(menu2 / "MSUF_Menu2_ControlCatalog.lua")
+    dashboard = read(menu2 / "MSUF_Menu2_Dashboard.lua")
+    nav = read(menu2 / "MSUF_Menu2_NavRail.lua")
+    widgets = read(menu2 / "MSUF_Menu2_Widgets.lua")
+    window = read(menu2 / "MSUF_Menu2_Window.lua")
+    routing = read(menu2 / "Search" / "MSUF_Menu2_Search_Routing.lua")
+    group = read(menu2 / "Pages" / "MSUF_Menu2_Group.lua")
+    ensure_start = bridge.find("function A.EnsureRuntimeLoaded(reason)")
+    combat_gate = bridge.find('if InCombat() then return false, "combat" end', ensure_start)
+    menu_gate = bridge.find('if not MenuShown() then return false, "menu_closed" end', ensure_start)
+    loaded_fast_path = bridge.find("if A.IsRuntimeLoaded() then", ensure_start)
+    if not (ensure_start >= 0 and ensure_start < combat_gate < loaded_fast_path
+            and ensure_start < menu_gate < loaded_fast_path):
+        raise CheckError("Assistant LoD bridge must gate combat and closed-menu calls before its loaded fast path")
+    if any(marker in bridge for marker in ("RegisterEvent", "OnUpdate", "NewTicker")):
+        raise CheckError("Assistant zero-idle bridge must not own events, OnUpdate, or tickers")
+    require(bridge, "function A.ShowRuntimeDashboardCard()", "LoD dashboard-card promotion")
+
+    require(catalog, "M.REQUIRED_SHELL_CONTRACT", "fail-closed raw-shell denominator")
+    require(catalog, "minimumControls = 6", "required raw-shell control minimum")
+    require(catalog, "minimumDispositions = 14", "required interaction disposition minimum")
+    require(catalog, "function M.RegisterVirtualRuntimeControl", "frame-free conditional control contracts")
+    require(catalog, "function M.MarkRuntimeControlComponent", "logical composite-control ownership")
+    require(catalog, "RuntimeCapabilityIssue(record)", "runtime getter/provider capability validation")
+    require(bindings, "Keep provider failures observable", "dynamic dropdown provider fail-closed behavior")
+    require(bindings, "SnapshotProfileRouting()", "profile/spec-routing undo coverage")
+
+    for marker in (
+        '"window.close"', '"window.minimize"', '"window.maximize"', '"window.restore"',
+    ):
+        require(window, marker, "window shell action registration")
+    require(nav, '"search.clear"', "search-clear shell action registration")
+    require(nav, 'controlId = "menu2.menu-chrome.search-intro-dismiss"',
+            "frame-free search-intro action registration")
+    for marker in (
+        "M.MarkRuntimeControlComponent(labelHit, btn)",
+        "M.MarkRuntimeControlComponent(edit, slider)",
+        "M.MarkRuntimeControlComponent(btn, slider)",
+        "M.MarkRuntimeControlComponent(btn, holder)",
+        "M.MarkRuntimeControlComponent(btn, bar)",
+    ):
+        require(widgets, marker, "composite widget interaction ownership")
+
+    require(dashboard, "RegisterDashboardDirectControls()", "frame-free Dashboard option contracts")
+    require(routing, "SearchAuraStyleContainer(normalized)", "Aura Style selector routing")
+    require(routing, 'SearchRouteSetState(route, "auraStyleContainer", container)',
+            "Aura Style container route application")
+    require(group, '{ value = "", text = "No supported specs", disabled = true }',
+            "non-selectable empty spec placeholder")
+    require(group, '{ value = "", text = "No spells for current spec", disabled = true }',
+            "non-selectable empty spell placeholder")
 
 
 def check_luac(lua_files: list[Path]) -> None:
@@ -522,6 +673,11 @@ def check_unit_preview_lifecycle_contracts() -> None:
     auras = read(ADDON_ROOT / "Shell" / "Menu2" / "Preview" / "MSUF_Menu2_UnitPreview_Auras.lua")
     aura_edit_mode = read(ADDON_ROOT / "Auras3" / "MSUF_Auras3_EditMode.lua")
     sections = read(ADDON_ROOT / "Shell" / "Menu2" / "Pages" / "MSUF_Menu2_UnitSections.lua")
+    group_preview = read(ADDON_ROOT / "Shell" / "Menu2" / "Pages" / "MSUF_Menu2_GroupPreview.lua")
+    group_native = read(ADDON_ROOT / "Shell" / "Menu2" / "Preview" / "MSUF_Menu2_GroupPreview_Native.lua")
+    group_render = read(ADDON_ROOT / "Shell" / "Menu2" / "Preview" / "MSUF_Menu2_GroupPreview_Render.lua")
+    class_power = read(ADDON_ROOT / "Shell" / "Menu2" / "Preview" / "MSUF_Menu2_ClassPowerPreview.lua")
+    window_priority = read(ADDON_ROOT / "Shell" / "Menu2" / "MSUF_Menu2_WindowPriority.lua")
     widgets = read(ADDON_ROOT / "Shell" / "Menu2" / "MSUF_Menu2_Widgets.lua")
     dropdowns = read(ADDON_ROOT / "Shell" / "Menu2" / "MSUF_Menu2_Dropdowns.lua")
     theme = read(ADDON_ROOT / "Shell" / "Menu2" / "MSUF_Menu2_Theme.lua")
@@ -587,6 +743,17 @@ def check_unit_preview_lifecycle_contracts() -> None:
         raise CheckError("Released pinned-preview callbacks must not run after record ownership is cleared")
     require(widgets, "function M.SuspendPinnedPreviews(reason)",
             "Window hide suspends cached pinned-preview ownership")
+    require(widgets, "record.restore(true)",
+            "Pinned-preview ownership boundaries force an idempotent restore")
+    require(widgets, 'box:CreateTexture(nil, "BACKGROUND", nil, -8)',
+            "Pinned-preview background is owned by the preview render tree")
+    if 'CreateFrame("Frame", nil, scrollParent or scroll, "BackdropTemplate")' in widgets:
+        raise CheckError("Pinned-preview background must not be an independently levelled overlay frame")
+    restore_start = widgets.find("local function Restore(force)")
+    restore_cleanup = widgets.find("local scrim = (record and record.scrim) or box._msuf2PinnedPreviewScrim", restore_start)
+    restore_early_return = widgets.find("if not force and not wasFloating then", restore_start)
+    if not (restore_start >= 0 and restore_start < restore_cleanup < restore_early_return):
+        raise CheckError("Pinned-preview restore must hide its background region before any logical-state early return")
     require(widgets, "function M.ResumePinnedPreviews(reason)",
             "Window show resumes cached pinned-preview geometry after ancestor visibility settles")
     require(widgets, "C_Timer.After(0.05, RefreshAfterShow)",
@@ -595,6 +762,62 @@ def check_unit_preview_lifecycle_contracts() -> None:
             "Window hide preserves cached pinned-preview records without reattaching hooks")
     require(window, 'M.CallIf(M.ResumePinnedPreviews, "WINDOW_SHOW")',
             "Window show resumes cached pinned-preview records")
+    require(group_preview, "function M.ResumeGFNativePreviews(reason, pageKey)",
+            "Cached native Group preview has a symmetric window/page resume owner")
+    if "if body and body.IsVisible and not body:IsVisible() then return false end" in group_preview:
+        raise CheckError("Native Group preview ownership must not use frame-lagged IsVisible state")
+    if "box:IsVisible()" in group_preview or "if self.IsVisible and not self:IsVisible() then return end" in group_native:
+        raise CheckError("Native Group preview refresh must not discard work using frame-lagged IsVisible state")
+    request_branch = group_preview.find("if box.RequestRefresh then")
+    direct_refresh = group_preview.find("box:Refresh()", request_branch)
+    if not (request_branch >= 0 and request_branch < direct_refresh):
+        raise CheckError("Native Group preview must prefer queued refresh before its direct fallback")
+    for boundary in ["WINDOW_SHOW", "SELECT_CACHED", "SELECT_PAGE"]:
+        require(window, f'M.CallIf(M.ResumeGFNativePreviews, "{boundary}"',
+                f"Native Group preview resumes at {boundary} ownership boundary")
+    if "if box.IsVisible and not box:IsVisible() then return end" in class_power:
+        raise CheckError("Class Resources preview refresh must not discard work using frame-lagged IsVisible state")
+    require(class_power, "function box:_msufCPPreviewHostShown()",
+            "Class Resources preview has a logical page/window owner predicate")
+    require(class_power, 'RequestClassPowerPreviewRefresh(box, "CLASSPOWER_PREVIEW_SHOW")',
+            "Class Resources preview repaints whenever its cached section is shown")
+    require(class_power, "function M.ResumeClassPowerPreview(reason, pageKey)",
+            "Cached Class Resources preview has an explicit lifecycle resume owner")
+    for boundary in ["WINDOW_SHOW", "SELECT_CACHED", "SELECT_PAGE"]:
+        require(window, f'M.CallIf(M.ResumeClassPowerPreview, "{boundary}"',
+                f"Class Resources preview resumes at {boundary} ownership boundary")
+    require(window, 'M.CallIf(M.ResumeClassPowerPreview, "EDIT_MODE_UI", M.activeKey)',
+            "Class Resources preview resumes across Edit Mode state boundaries")
+    require(group_render, "scene.selectedSpellEffect = scene.selectedSpellCfg and scene.selectedSpellCfg.frame",
+            "Selected Group spell effect is owned independently of its transient render handle")
+    require(group_render, 'selectedSpellEffectOwner = CreateFrame("Frame", nil, mock)',
+            "Selected Group spell effect has a stable mock-owned render owner")
+    require(group_render, "ApplySpellEffectPreview(selectedSpellEffectOwner, selectedSpellEffect)",
+            "Selected Group spell effect is reconstructed on its stable owner")
+    if "if effect then ApplySpellEffectPreview(handle, effect)" in group_render:
+        raise CheckError("Full-frame Group spell effects must not be owned by transient icon handles")
+    require(group_render, "HideSpellEffectPreview(spellHandle)",
+            "Fallback Group spell effect is explicitly released when handle ownership changes")
+    require(window_priority, 'local MENU_EDIT_FRAME_STRATA = "FULLSCREEN_DIALOG"',
+            "Edit Mode menu priority uses strata instead of a numeric level jump")
+    require(window_priority, "local MENU_EDIT_FRAME_LEVEL = MENU_NORMAL_FRAME_LEVEL",
+            "Cached menu descendants retain a stable numeric frame-level root")
+    require(window_priority, "local MENU_EDIT_POPUP_FRAME_LEVEL = MENU_NORMAL_POPUP_FRAME_LEVEL",
+            "Cached popup descendants retain a stable numeric frame-level root")
+    require(group_render, "local PREVIEW_LOCAL_BASE_OFFSET = 400",
+            "Group preview reserves a bounded local level band for strata emulation")
+    require(group_render, "local function SafePreviewFrameLevel(value)",
+            "Group preview guards the WoW frame-level API range")
+    if group_render.count(":SetFrameLevel(") != 1:
+        raise CheckError("Group preview render must route every frame-level write through its bounded API helper")
+    require(group_render, "SetPreviewFrameLevel(mock, previewRootLevel + PREVIEW_LOCAL_BASE_OFFSET)",
+            "Cached Group preview rebases its mock before every render")
+    require(group_render, "SetPreviewFrameLevel(selectedEffectRoot, baseLevel",
+            "Selected fallback spell frame effect is assigned a deterministic level")
+    require(group_render, 'ApplyHandleStrata(scene, selectedEffectRoot, "AUTO", liveStrata, hostStrata)',
+            "Selected full-frame effect inherits menu host strata without live Edit Mode offsets")
+    require(group_render, "SetPreviewFrameLevel(selectedEffectRoot, baseLevel + 24 + (11 - priority))",
+            "Selected full-frame effect uses a bounded preview-local priority band")
     require(theme, "function M.ResetFocusVeil(variant, opts)",
             "Menu modal focus veil has an explicit lifecycle reset")
     require(theme, "StopAlphaMotion(overlay)",
