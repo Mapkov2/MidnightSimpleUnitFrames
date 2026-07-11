@@ -18,10 +18,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ADDON_ROOT = REPO_ROOT / "MidnightSimpleUnitFrames"
 TOC = ADDON_ROOT / "MidnightSimpleUnitFrames.toc"
-LOCALE_ADDON_ROOT = REPO_ROOT / "MidnightSimpleUnitFrames_Locales"
-LOCALE_TOC = LOCALE_ADDON_ROOT / "MidnightSimpleUnitFrames_Locales.toc"
-ASSISTANT_ADDON_ROOT = REPO_ROOT / "MidnightSimpleUnitFrames_Assistant"
-ASSISTANT_TOC = ASSISTANT_ADDON_ROOT / "MidnightSimpleUnitFrames_Assistant.toc"
+LOCALE_TOC = REPO_ROOT / "MidnightSimpleUnitFrames_Locales" / "MidnightSimpleUnitFrames_Locales.toc"
+ASSISTANT_TOC = REPO_ROOT / "MidnightSimpleUnitFrames_Assistant" / "MidnightSimpleUnitFrames_Assistant.toc"
 SUPPORTED_LOCALES = {
     "enUS", "enGB", "deDE", "esES", "esMX", "frFR",
     "itIT", "koKR", "ptBR", "ruRU", "zhCN", "zhTW",
@@ -87,7 +85,7 @@ def parse_load_refs() -> tuple[set[str], list[str]]:
     xml_queue: list[Path] = []
     seen_xml: set[Path] = set()
 
-    for toc in [TOC, ASSISTANT_TOC, LOCALE_TOC]:
+    for toc in [TOC]:
         for line_no, line in enumerate(read(toc).splitlines(), 1):
             item = line.strip()
             if not item or item.startswith("#") or item.startswith("##"):
@@ -123,30 +121,18 @@ def parse_load_refs() -> tuple[set[str], list[str]]:
     return loaded_lua, missing
 
 
-def check_locale_addon_contracts() -> None:
-    if not LOCALE_TOC.exists():
-        raise CheckError(f"missing locale TOC: {LOCALE_TOC}")
+def check_locale_contracts() -> None:
+    if LOCALE_TOC.exists():
+        raise CheckError(f"legacy locale companion TOC must be removed: {LOCALE_TOC}")
     legacy_locale_addons = sorted(REPO_ROOT.glob("MidnightSimpleUnitFrames_Locale_*"))
     if legacy_locale_addons:
         names = ", ".join(path.name for path in legacy_locale_addons)
         raise CheckError(f"legacy per-locale addons must be removed: {names}")
 
     main_toc = read(TOC)
-    companion_toc = read(LOCALE_TOC)
     locale_core = read(ADDON_ROOT / "Locales" / "MSUF_Localization.lua")
-    require(
-        locale_core,
-        'local localeAddon = "MidnightSimpleUnitFrames_Locales"',
-        "consolidated locale addon name",
-    )
-    require(
-        locale_core,
-        'if MSUF.LOCALE ~= "enUS" and MSUF.LOCALE ~= "enGB" then',
-        "non-English LoadOnDemand condition",
-    )
-    require(locale_core, "loadAddOn(localeAddon)", "non-English locale LoadAddOn")
-    require(companion_toc, "## LoadOnDemand: 1", "locale companion LoadOnDemand")
-    require(companion_toc, "## X-MSUF-Locales:", "locale companion metadata")
+    if "LoadAddOn" in locale_core or "LocaleAddonName = localeAddon" in locale_core:
+        raise CheckError("locale core must not load a retired locale companion addon")
 
     for locale in sorted(SUPPORTED_LOCALES):
         locale_ref = f"Locales\\{locale}.lua"
@@ -156,21 +142,7 @@ def check_locale_addon_contracts() -> None:
             f'if not MSUF or MSUF.LOCALE ~= "{locale}" then return end',
             f"{locale} active-pack guard",
         )
-        if locale in ENGLISH_LOCALES:
-            require(main_toc, locale_ref, f"main TOC {locale} source")
-            if locale_ref in companion_toc:
-                raise CheckError(f"English locale must not load from companion: {locale}")
-        else:
-            companion_ref = f"..\\MidnightSimpleUnitFrames\\{locale_ref}"
-            require(companion_toc, companion_ref, f"locale companion {locale} source")
-            if locale_ref in main_toc:
-                raise CheckError(f"main TOC must not eagerly load locale pack {locale}")
-
-    companion_refs = set(re.findall(r"Locales\\([A-Za-z]{4})\.lua", companion_toc))
-    if companion_refs != NON_ENGLISH_LOCALES:
-        missing = sorted(NON_ENGLISH_LOCALES - companion_refs)
-        extra = sorted(companion_refs - NON_ENGLISH_LOCALES)
-        raise CheckError(f"locale companion mismatch; missing={missing}, extra={extra}")
+        require(main_toc, locale_ref, f"main TOC {locale} source")
 
 
 def toc_field(text: str, name: str) -> str:
@@ -178,26 +150,15 @@ def toc_field(text: str, name: str) -> str:
     return match.group(1).strip() if match else ""
 
 
-def check_assistant_addon_contracts() -> None:
-    if not ASSISTANT_TOC.exists():
-        raise CheckError(f"missing Assistant TOC: {ASSISTANT_TOC}")
-
+def check_assistant_runtime_contracts() -> None:
+    if ASSISTANT_TOC.exists():
+        raise CheckError(f"legacy Assistant companion TOC must be removed: {ASSISTANT_TOC}")
     main_toc = read(TOC)
-    assistant_toc = read(ASSISTANT_TOC)
-    require(assistant_toc, "## LoadOnDemand: 1", "Assistant LoadOnDemand")
-    require(assistant_toc, "## Dependencies: MidnightSimpleUnitFrames", "Assistant core dependency")
     require(
-        assistant_toc,
-        r"..\MidnightSimpleUnitFrames\Shell\Menu2\MSUF_Menu2_AssistantRuntime.xml",
-        "Assistant runtime manifest",
+        main_toc,
+        r"Shell\Menu2\MSUF_Menu2_AssistantRuntime.xml",
+        "main TOC Assistant runtime manifest",
     )
-    for field in ["Interface", "Version"]:
-        main_value = toc_field(main_toc, field)
-        assistant_value = toc_field(assistant_toc, field)
-        if not main_value or assistant_value != main_value:
-            raise CheckError(
-                f"Assistant {field} mismatch: main={main_value!r}, Assistant={assistant_value!r}"
-            )
 
 
 def check_luac(lua_files: list[Path]) -> None:
@@ -510,9 +471,14 @@ def check_portrait_refresh_contracts() -> None:
     portrait = read(ADDON_ROOT / "UnitFrames" / "Engine" / "Elements" / "MSUF_UF_Elements_Portrait.lua")
     visuals = read(ADDON_ROOT / "UnitFrames" / "Engine" / "Elements" / "MSUF_UF_Visuals_Common.lua")
 
-    vehicle_contract = "UNIT_ENTERED_VEHICLE = true,\n  UNIT_EXITED_VEHICLE = true,\n  MSUF_UNIT_IDENTITY_VISUAL = true"
-    require(portrait, vehicle_contract, "Portrait fallback vehicle refresh events")
-    require(visuals, vehicle_contract, "Portrait shared vehicle refresh events")
+    # The fallback and shared event maps may include additional lifecycle
+    # events, but both must retain the vehicle and identity refresh triggers.
+    for source, label in [
+        (portrait, "Portrait fallback vehicle refresh events"),
+        (visuals, "Portrait shared vehicle refresh events"),
+    ]:
+        for event in ["UNIT_ENTERED_VEHICLE = true", "UNIT_EXITED_VEHICLE = true", "MSUF_UNIT_IDENTITY_VISUAL = true"]:
+            require(source, event, label)
     require(
         portrait,
         "if forceRefresh == true or UnitPortraitKeyChanged(texture, unit, frame, p) then",
@@ -650,8 +616,8 @@ def check_unit_preview_lifecycle_contracts() -> None:
 def main() -> int:
     lua_files = all_lua_files()
     check_luac(lua_files)
-    check_locale_addon_contracts()
-    check_assistant_addon_contracts()
+    check_locale_contracts()
+    check_assistant_runtime_contracts()
     check_load_reachability(lua_files)
     check_kernel_castbar_contracts()
     check_group_refresh_contracts()
