@@ -49,6 +49,13 @@ Audit.ignore = Audit.ignore or {
         editModeSnapToGrid = true,
         fontColor = true,
     },
+    -- Player is never range-checked by the runtime (RANGE_KEYS deliberately
+    -- excludes it), even if old profiles still carry copied rangeFade fields.
+    player = {
+        rangeFadeEnabled = true,
+        rangeFadeAlpha = true,
+        rangeFadeLayerMode = true,
+    },
     -- Legacy flat mirrors copied from unit-frame fields into the group scopes;
     -- the canonical group settings are nameShortenEnabled, powerHeight, and
     -- the nested auras.buff/debuff tables that curated registrations control.
@@ -515,7 +522,7 @@ local function BuildPerformanceReport()
     local inCombat = ((_G.InCombatLockdown and _G.InCombatLockdown())
         or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))) and true or false
     local runtimeName = type(A.GetRuntimeAddonName) == "function"
-        and A.GetRuntimeAddonName() or "MidnightSimpleUnitFrames_Assistant"
+        and A.GetRuntimeAddonName() or "MidnightSimpleUnitFrames"
     local profiler = _G.C_AddOnProfiler
     local metric = _G.Enum and _G.Enum.AddOnProfilerMetric
     local profilerReady = profiler and metric and type(profiler.GetAddOnMetric) == "function"
@@ -550,7 +557,7 @@ local function BuildPerformanceReport()
         lines[#lines + 1] = "Blizzard profiler: unavailable in this client/session."
     end
     lines[#lines + 1] = ""
-    lines[#lines + 1] = "For an uncontaminated zero-idle measurement, close MSUF, wait 10 seconds, then run the /dump command from the idle_profiler_zero acceptance case."
+    lines[#lines + 1] = "For an uncontaminated zero-idle measurement, close MSUF, wait 10 seconds, then run the /dump command from the idle_assistant_shutdown acceptance case."
     lines[#lines + 1] = "Blizzard upstream/live source: AddOnProfiler GetAddOnMetric returns milliseconds; RecentAverageTime covers the last 60 ticks."
     return table.concat(lines, "\n")
 end
@@ -563,15 +570,15 @@ end
 -- Parser permutations stay in AssistantTraining; this list exercises the real
 -- WoW loader, rendered controls, combat lifecycle, and visible multi-turn UI.
 local ACCEPTANCE_SMOKE_CASES = {
-    SmokeCase("lod_dashboard_autoload", "M5", "Reload UI, then open the MSUF Dashboard.",
-        "/dump C_AddOns.IsAddOnLoaded(\"MidnightSimpleUnitFrames_Assistant\")",
-        "False before opening MSUF; true immediately after the Dashboard opens, with the normal chat card shown and no Start Assistant button."),
+    SmokeCase("runtime_core_load", "M5", "Reload UI, then open the MSUF Dashboard.",
+        "/dump MSUF_NS.Assistant.IsRuntimeLoaded()",
+        "True immediately after login (the runtime loads with the core addon); the Dashboard shows the normal chat card with no Start Assistant button and no load errors."),
     SmokeCase("interactive_latency", "M5", "Open the MSUF Dashboard, run /msufcoverage perf reset, then submit ten normal read-only questions one at a time.",
         "Ask: what is target frame width; where is raid ready check; what depends on target buffs; why is player power text hidden; how do profiles work; explain class resource width mode; where can I change castbar texture; why are party frames missing; what are your limits; answer in German what is aura filtering. Then run /msufcoverage perf.",
         "At least 10 user-response samples; interactive SLO PASS with p95 <=50 ms and max <=150 ms. Answers remain correct and no setting changes."),
-    SmokeCase("idle_profiler_zero", "M5", "After starting the Assistant once, close the MSUF menu, stay out of combat, and wait 10 seconds without reopening it.",
-        "/dump C_AddOnProfiler.GetAddOnMetric(\"MidnightSimpleUnitFrames_Assistant\",Enum.AddOnProfilerMetric.RecentAverageTime), C_AddOnProfiler.GetAddOnMetric(\"MidnightSimpleUnitFrames_Assistant\",Enum.AddOnProfilerMetric.LastTime)",
-        "Both values are exactly 0 after the idle window. The /dump runs outside Assistant code and therefore does not contaminate the measured tick."),
+    SmokeCase("idle_assistant_shutdown", "M5", "After starting the Assistant once, close the MSUF menu, stay out of combat, and wait 10 seconds without reopening it.",
+        "/dump MSUF_NS.Assistant._menuRuntimeActive, next(MSUF_NS.Assistant._menuRuntimeTimers or {})",
+        "_menuRuntimeActive is false and no menu-runtime timers remain (next returns nil): the Assistant schedules no background work while the menu is closed."),
     SmokeCase("catalog_all_pages", "M1", "Visit every MSUF page/sub-tab once after starting the Assistant.",
         "/run local r=MSUF_NS.MSUF2.GetRuntimeControlCoverageReport(); print(r.total,r.byClassification.unknown,r.collisions,r.unstableIds)",
         "All rendered interactive controls have stable identities: unknown=0, collisions=0, unstableIds=0."),
@@ -736,12 +743,15 @@ local function BuildAcceptanceGate()
     local manifestOk = exportOk or shippedCount > 0
     local coverageOk = type(coverage) == "table" and (tonumber(coverage.settings) or 0) > 0 and type(coverage.scopes) == "table"
     local catalog = type(M.GetRuntimeControlCoverageReport) == "function" and M.GetRuntimeControlCoverageReport() or nil
-    local catalogOk = type(catalog) == "table" and (tonumber(catalog.total) or 0) > 0 and catalog.catalogComplete == true
+    local catalogOk = type(catalog) == "table" and (tonumber(catalog.total) or 0) > 0
+        and catalog.catalogComplete == true and catalog.targetValidationAvailable == true
+        and (tonumber(catalog.unresolvedTargetCount) or 0) == 0
     local graph, graphError
     if type(A.GetSettingDependencyGraphCoverageReport) == "function" then
         graph, graphError = A.GetSettingDependencyGraphCoverageReport()
     end
     local graphOk = type(graph) == "table" and (tonumber(graph.coveragePercent) or 0) >= 70
+        and (tonumber(graph.specificCoveragePercent) or 0) >= 70
         and type(graph.unresolved) == "table" and #graph.unresolved == 0
     local smokeOk = counts.pass == #ACCEPTANCE_SMOKE_CASES and counts.fail == 0 and counts.block == 0 and counts.pending == 0
     local complete = smokeOk and manifestOk and coverageOk and catalogOk and graphOk
@@ -756,10 +766,10 @@ local function BuildAcceptanceGate()
         notes[#notes + 1] = "Coverage summary missing. Run /msufcoverage after /msufcoverage fill."
     end
     if not catalogOk then
-        notes[#notes + 1] = "Runtime control catalog incomplete. Visit every page/sub-tab, then require unknown=0, collisions=0, and unstableIds=0."
+        notes[#notes + 1] = "Runtime control catalog incomplete. Visit every page/sub-tab, then require unknown=0, collisions=0, unstableIds=0, target validation available, and unresolvedTargetCount=0."
     end
     if not graphOk then
-        notes[#notes + 1] = "Setting relationship graph needs at least 70% connected-setting coverage and zero unresolved endpoints; open MSUF before running the gate. " .. tostring(graphError or "")
+        notes[#notes + 1] = "Setting relationship graph needs at least 70% overall and non-root-specific connected-setting coverage plus zero unresolved endpoints; open MSUF before running the gate. " .. tostring(graphError or "")
     end
     return {
         time = date("%Y-%m-%d %H:%M:%S"),

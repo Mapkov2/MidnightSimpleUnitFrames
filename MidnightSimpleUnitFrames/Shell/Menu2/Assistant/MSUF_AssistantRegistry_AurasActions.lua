@@ -43,6 +43,10 @@ local ParseAuraBlacklistRemoveSpellAliasArgs = ActionParsers.ParseAuraBlacklistR
 local ParseAuraBlacklistClearAliasArgs = ActionParsers.ParseAuraBlacklistClearAliasArgs
 local ParseAuraBlacklistPresetAliasArgs = ActionParsers.ParseAuraBlacklistPresetAliasArgs
 local ParseAuraBlacklistSummaryAliasArgs = ActionParsers.ParseAuraBlacklistSummaryAliasArgs
+local ParseAuraCustomWhitelistAddAliasArgs = ActionParsers.ParseAuraCustomWhitelistAddAliasArgs
+local ParseAuraCustomWhitelistRemoveAliasArgs = ActionParsers.ParseAuraCustomWhitelistRemoveAliasArgs
+local ParseAuraCustomWhitelistClearAliasArgs = ActionParsers.ParseAuraCustomWhitelistClearAliasArgs
+local ParseAuraCustomWhitelistSummaryAliasArgs = ActionParsers.ParseAuraCustomWhitelistSummaryAliasArgs
 Registry:RegisterAction({
     key = "set_aura_edit_scope",
     label = "Set Aura Editing Scope",
@@ -160,5 +164,9 @@ if type(RegisterBlacklistActions) == "function" then
         ParseAuraBlacklistClearAliasArgs = ParseAuraBlacklistClearAliasArgs,
         ParseAuraBlacklistPresetAliasArgs = ParseAuraBlacklistPresetAliasArgs,
         ParseAuraBlacklistSummaryAliasArgs = ParseAuraBlacklistSummaryAliasArgs,
+        ParseAuraCustomWhitelistAddAliasArgs = ParseAuraCustomWhitelistAddAliasArgs,
+        ParseAuraCustomWhitelistRemoveAliasArgs = ParseAuraCustomWhitelistRemoveAliasArgs,
+        ParseAuraCustomWhitelistClearAliasArgs = ParseAuraCustomWhitelistClearAliasArgs,
+        ParseAuraCustomWhitelistSummaryAliasArgs = ParseAuraCustomWhitelistSummaryAliasArgs,
     })
 end

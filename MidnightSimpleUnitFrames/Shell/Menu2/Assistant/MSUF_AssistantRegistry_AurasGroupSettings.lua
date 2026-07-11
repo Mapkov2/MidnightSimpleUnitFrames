@@ -99,6 +99,7 @@ if type(RegisterGroupAuraLaneSettings) == "function" then
     RegisterGroupAuraLaneSettings({
         A = A,
         Registry = Registry,
+        AuraModel = AuraModel,
         UNIT_LABELS = UNIT_LABELS,
         AddAliasesForUnit = AddAliasesForUnit,
         AddGFAuraAliases = AddGFAuraAliases,
@@ -137,6 +138,7 @@ local RegisterGroupAuraCategorySettings = A.AurasRegistry and A.AurasRegistry.Re
 if type(RegisterGroupAuraCategorySettings) == "function" then
     RegisterGroupAuraCategorySettings({
         Registry = Registry,
+        AuraModel = AuraModel,
         AddAliasesForUnit = AddAliasesForUnit,
         GFAuraCategoryValues = GFAuraCategoryValues,
         GFAuraCategoryLabel = GFAuraCategoryLabel,

@@ -129,6 +129,14 @@ immer Vorrang; generierte sind mit `generated = true` markiert und als Kategorie
 weiterhin per `/msufcoverage generated <scope|all>` und `/msufcoverage stubs <scope>`
 kuratierte Registrierungen nachziehen (bessere Aliases, praeziser Apply, min/max).
 
+Seit 2026-07-10 traversiert AutoCoverage zusaetzlich sichere verschachtelte DB-Pfade bis
+zu acht Ebenen. Skalare Blaetter wie `target.auras.buff.iconSize` erhalten denselben
+generischen get/set-/Apply-Pfad und werden als `generatedNested = true` markiert. Interne
+`_`-Felder, numerische Pfadsegmente, Arrays/Spell-ID-Maps, Zyklen und tiefere Strukturen
+werden bewusst nicht freigegeben; dynamische Listen und riskante Actions bleiben bei den
+kuratierten Workflows. Der Manifest-Export schreibt verschachtelte Blaetter kompakt als
+punkt-separierte Keys und kann sie beim Setzen sicher in der Live-DB materialisieren.
+
 `MSUF_AssistantRegistry_AutoCoverage_Manifest.lua` ergaenzt nil-preserving Defaults:
 `AutoCoverage.Fill()` registriert Manifest-Keys, die in der Live-DB fehlen, mit
 Fallback auf den Manifest-Default. Dadurch misst `/msufcoverage` gegen den vollen

@@ -5300,7 +5300,7 @@ local function PendingResultFollowupResult(text, results)
         return AP.PendingResultAllowedValuesText and AP.PendingResultAllowedValuesText(item, index, results)
     end
     if IsPendingResultDecisionIntent(text) then return PendingResultDecisionText(item, index, results) end
-    if not item and not CurrentSelectedPendingResult() and #(results or {}) > 1 then
+    if not item and not CurrentSelectedPendingResult() and #(results or {}) > 0 then
         local pronounChangeClarification = PendingResultPronounChangeClarificationText(text, results)
         if pronounChangeClarification then return pronounChangeClarification end
     end
@@ -6143,7 +6143,7 @@ local function ExecuteAction(plan)
     end
 
     local preserveNilSavedVariables
-    local ran, ok, message = pcall(function() return action.run(args) end)
+    local ran, ok, message, runMeta = pcall(function() return action.run(args) end)
     if not ran or not ok then
         local rollbackErrors = RollbackAction()
         if not before and not beforeProfile and not beforeAction then
@@ -6175,7 +6175,8 @@ local function ExecuteAction(plan)
     local committedUndoBundle
     local undoStackBeforePush
     local redoStackBeforePush
-    if before or beforeProfile or beforeAction then
+    local noChange = type(runMeta) == "table" and runMeta.noChange == true
+    if (before or beforeProfile or beforeAction) and not noChange then
         snapshotStart = PerfNowMs()
         local after
         local afterProfile
@@ -6244,7 +6245,7 @@ local function ExecuteAction(plan)
         actionArgs = CopySerializableActionArgs(args)
     end
     local remembered, rememberErr = true, nil
-    if mutability == "savedState" and not preserveNilSavedVariables then
+    if mutability == "savedState" and not preserveNilSavedVariables and not noChange then
         remembered, rememberErr = pcall(A.RememberAppliedBundle, {
             action = action.key,
             actionLabel = AssistantPlanLabel(plan, AssistantActionLabel(action, "Assistant task")),
@@ -6269,7 +6270,7 @@ local function ExecuteAction(plan)
         }
     end
     if undoAvailable then text = AP.AppendUndoFollowupHint(text) end
-    local resultStatus = mutability == "savedState" and "applied"
+    local resultStatus = mutability == "savedState" and (noChange and "info" or "applied")
         or (mutability == "navigation" and "navigated" or "info")
     return {
         text = text,
@@ -6397,7 +6398,11 @@ local function NormalizePlanResult(result)
     if result.result == nil and result.status ~= nil then result.result = result.status end
     AP.RememberMentionedContext(result)
     if type(result.searchResults) == "table" and type(A.SetPendingResults) == "function" then
-        A.SetPendingResults(result.searchResults)
+        local hydrated = A.SetPendingResults(result.searchResults)
+        local selectedIndex = tonumber(result.selectPendingResult)
+        if selectedIndex and type(hydrated) == "table" and hydrated[selectedIndex] then
+            SetSelectedPendingResult(hydrated[selectedIndex], selectedIndex)
+        end
     end
     return result
 end
@@ -6420,7 +6425,12 @@ function A.ExecutePlan(plan, opts)
     local guarded = sourceText and type(A.RouterIsFailClosedReadOnlyRequest) == "function"
         and A.RouterIsFailClosedReadOnlyRequest(sourceText)
     local actionMutability = plan.kind == "action" and tostring(plan.action and plan.action.mutability or "") or nil
-    if guarded and (plan.kind == "changes" or (plan.kind == "action" and actionMutability ~= "readOnly" and actionMutability ~= "navigation")) then
+    local actionKey = plan.kind == "action" and tostring(plan.action and plan.action.key or "") or ""
+    local actionCommand = type(plan.args) == "table" and tostring(plan.args.command or "") or ""
+    local guidedReadOnlyStep = actionKey == "guided_setup_step"
+        and (actionCommand == "explain" or actionCommand == "examples" or actionCommand == "show" or actionCommand == "open")
+    if guarded and not guidedReadOnlyStep
+        and (plan.kind == "changes" or (plan.kind == "action" and actionMutability ~= "readOnly" and actionMutability ~= "navigation")) then
         return NormalizePlanResult(AP.ReadOnlyGuardResult(sourceText))
     end
     AP.RememberMentionedContext(plan)
@@ -6649,6 +6659,17 @@ local function HandlePending(text)
             ClearPendingResults()
             return { text = "Cancelled. I cleared the last search results.", result = "info" }
         end
+        -- Fail closed before any fresh-command parser sees a bare result
+        -- pronoun.  A result becomes an actionable referent only after the
+        -- user explicitly selects/explains it; a search list alone is not
+        -- permission to mutate its first text match.
+        if not CurrentSelectedPendingResult() then
+            local pronounClarification = PendingResultPronounChangeClarificationText(text, results)
+            if pronounClarification then
+                A._pendingResultFollowupHandled = true
+                return pronounClarification
+            end
+        end
         local resultFollowup = PendingResultFollowupResult(text, results)
         if resultFollowup then
             A._pendingResultFollowupHandled = true
@@ -6663,12 +6684,14 @@ function A.HandleCommandInput(text)
     local pending = HandlePending(text)
     if pending then return NormalizePlanResult(pending) end
     local router = A.RouterPrivate
-    local explicitReadOnlyAction = router and (
+    local activeContext = type(A.GetContext) == "function" and A.GetContext() or nil
+    local explicitReadOnlyAction = (type(activeContext) == "table" and type(activeContext.guidedSetup) == "table")
+        or (router and (
         (type(router.IsExplicitReadOnlyDiagnosticCommand) == "function" and router.IsExplicitReadOnlyDiagnosticCommand(text))
         or (type(router.IsExplicitNavigationCommand) == "function" and router.IsExplicitNavigationCommand(text))
         or (type(router.IsCurrentPageHelpRequest) == "function" and router.IsCurrentPageHelpRequest(text))
         or (type(A.RouterHasPendingAssistantState) == "function" and A.RouterHasPendingAssistantState())
-    )
+    ))
     if not explicitReadOnlyAction
         and type(A.RouterIsFailClosedReadOnlyRequest) == "function"
         and A.RouterIsFailClosedReadOnlyRequest(text)
@@ -7142,7 +7165,11 @@ function AP.RecordAssistantResult(result)    if result and result.text then
         -- confirmed factory reset intentionally left nil until reload.
         if result.preserveNilSavedVariables == true then return end
         if type(result.searchResults) == "table" and type(A.SetPendingResults) == "function" then
-            A.SetPendingResults(result.searchResults)
+            local hydrated = A.SetPendingResults(result.searchResults)
+            local selectedIndex = tonumber(result.selectPendingResult)
+            if selectedIndex and type(hydrated) == "table" and hydrated[selectedIndex] then
+                SetSelectedPendingResult(hydrated[selectedIndex], selectedIndex)
+            end
         end
         A.AddHistory("assistant", result.text, result.status or result.result, result.summary)
         if AP.IsMutationResultStatus(result.status or result.result) and type(A.RecordSuccessfulAssistantAction) == "function" and type(A.MaybePowerUserSupportHint) == "function" then
@@ -7155,6 +7182,32 @@ end
 
 function AP.TryImmediateSubmitResult(text, opts)
     if type(A.TryImmediateConversationReply) ~= "function" then return nil end
+    -- Search results own pronoun/ordinal follow-ups ("set it to 18", "the
+    -- second one", ...).  Let the pending-state router resolve or clarify
+    -- them before the generic conversational shortcut can reinterpret the
+    -- sentence as a fresh exact-alias mutation.
+    local pendingResults = CurrentPendingResults()
+    if type(pendingResults) == "table" and #pendingResults > 0 then return nil end
+    -- The guided setup parser owns short conversational replies such as
+    -- "why this", "show examples", and "open it".  They are meaningful only
+    -- with the active workflow context, which the context-free shortcut does
+    -- not inspect.
+    local ctx = type(A.GetContext) == "function" and A.GetContext() or nil
+    if type(ctx) == "table" and type(ctx.guidedSetup) == "table" then return nil end
+    -- Exact aura-list requests require lane/scope-aware action parsers and
+    -- native blacklist/whitelist transaction semantics.  The conversational
+    -- shortcut must not collapse "hide Rejuvenation in target buffs" into
+    -- hiding the entire Target Buff lane.
+    local parser = A.Parser or {}
+    local normalized = type(parser.Normalize) == "function" and parser.Normalize(text) or tostring(text or ""):lower()
+    local auraListValue = type(parser.AuraBlacklistSpellValue) == "function"
+        and parser.AuraBlacklistSpellValue(text) or nil
+    if normalized:find("blacklist", 1, true) or normalized:find("whitelist", 1, true)
+        or (auraListValue and (normalized:find("aura", 1, true)
+            or normalized:find("buff", 1, true) or normalized:find("debuff", 1, true)))
+    then
+        return nil
+    end
     local startedMs = PerfNowMs()
     local result = A.TryImmediateConversationReply(text)
     if not result then return nil end
@@ -7230,6 +7283,8 @@ end
 
 function AP.TryImmediateMutationResult(text, opts)
     if InCombat() or A.pendingConfirmation or CurrentPendingChoices() then return nil end
+    local pendingResults = CurrentPendingResults()
+    if type(pendingResults) == "table" and #pendingResults > 0 then return nil end
     local parser = A.Parser or {}
     local normalize = parser.Normalize
     if type(normalize) ~= "function" then return nil end
@@ -7240,6 +7295,27 @@ function AP.TryImmediateMutationResult(text, opts)
     -- The full Router will provide the diagnostic/help response.
     if (type(A.RouterIsFailClosedReadOnlyRequest) == "function" and A.RouterIsFailClosedReadOnlyRequest(text))
         or (type(parser.NonMutatingIntent) == "function" and parser.NonMutatingIntent(normalized))
+    then
+        return nil
+    end
+    -- Native aura list commands need the action parser because lane, unit,
+    -- custom-container index, confirmation, and snapshot semantics matter.
+    -- The generic exact-setting fast path would otherwise turn e.g. "hide
+    -- spell:774 in raid buffs" into disabling the entire Raid Buffs lane.
+    local auraListValue = type(parser.AuraBlacklistSpellValue) == "function"
+        and parser.AuraBlacklistSpellValue(text) or nil
+    if normalized:find("blacklist", 1, true) or normalized:find("whitelist", 1, true)
+        or (auraListValue and (normalized:find("aura", 1, true)
+            or normalized:find("buff", 1, true) or normalized:find("debuff", 1, true)))
+    then
+        return nil
+    end
+    -- Cross-frame wording is intentionally handled by the Router before the
+    -- parser. Running the exact-alias fast path here can otherwise apply the
+    -- subject setting while silently ignoring the different destination frame
+    -- (for example, "show target buffs on player frame").
+    if (type(A.RouterTryCrossFrameTextRequestShortcut) == "function" and A.RouterTryCrossFrameTextRequestShortcut(text))
+        or (type(A.RouterTryCrossFrameVisualRequestShortcut) == "function" and A.RouterTryCrossFrameVisualRequestShortcut(text))
     then
         return nil
     end

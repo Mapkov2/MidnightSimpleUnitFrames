@@ -747,6 +747,10 @@ end
 
 function A.BuildDashboardCard(parent, cardW, cardH)
     if not parent then return nil end
+    -- Building the real card is the point where the former load-on-demand
+    -- design pulled in the runtime; the navigation search treats the
+    -- Assistant as active from here on (see AssistantRuntimeReady).
+    A._assistantEngaged = true
     cardW = tonumber(cardW) or 520
     cardH = tonumber(cardH) or 326
 

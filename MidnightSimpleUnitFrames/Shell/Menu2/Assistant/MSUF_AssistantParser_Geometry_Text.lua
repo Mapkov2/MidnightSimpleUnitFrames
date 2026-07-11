@@ -74,6 +74,8 @@ local function TextSelectorSlot(text)
 end
 
 local function TextSelectorIntent(text, tab, slot)
+    if ContainsAny(text, GeometryTextPhrases[112]) then return false end
+    if FirstNumber(text) ~= nil and ContainsAny(text, GeometryTextPhrases[113]) then return false end
     if tab == "name" and ContainsAny(text, GeometryTextPhrases[12]) then return false end
     if (tab == "hp" or tab == "power") and slot and ContainsAny(text, GeometryTextPhrases[13]) then return true end
     if ContainsAny(text, GeometryTextPhrases[14]) then
@@ -1039,7 +1041,10 @@ function A._ParseTextAreaOffsetShortcut(text)
     if #units == 0 and #groups == 0 then return nil end
 
     local unitAttr = tab == "hp" and (axis == "x" and "hpOffsetX" or "hpOffsetY") or (axis == "x" and "powerOffsetX" or "powerOffsetY")
-    local groupAttr = tab == "hp" and (axis == "x" and "healthTextOffsetX" or "healthTextOffsetY") or (axis == "x" and "powerTextOffsetX" or "powerTextOffsetY")
+    -- Group registry keys use the DB field names (hpOffsetX/Y and
+    -- powerOffsetX/Y); healthTextOffsetX/Y are semantic attributes only.
+    local groupAttr = tab == "hp" and (axis == "x" and "hpOffsetX" or "hpOffsetY")
+        or (axis == "x" and "powerOffsetX" or "powerOffsetY")
     local changes = {}
     for i = 1, #units do
         local setting = Registry and Registry:GetSetting(tostring(units[i]) .. "." .. unitAttr)

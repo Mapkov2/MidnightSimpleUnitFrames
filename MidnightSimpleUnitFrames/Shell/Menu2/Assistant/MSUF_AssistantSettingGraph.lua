@@ -921,9 +921,24 @@ function G.GetCoverageReport()
     end
     table.sort(withoutRelations)
     local byKind, ruleHits = {}, {}
+    local specificallyRelated = {}
+    for _, edge in ipairs(state.edges) do
+        if not tostring(edge.ruleId or ""):find("root", 1, true) then
+            specificallyRelated[edge.from] = true
+            specificallyRelated[edge.to] = true
+        end
+    end
+    local rootOnly = {}
+    for key in pairs(related) do
+        if not specificallyRelated[key] then rootOnly[#rootOnly + 1] = key end
+    end
+    table.sort(rootOnly)
     for _, kind in ipairs(SortedKeys(D.relationKinds)) do byKind[kind] = state.byKind[kind] or 0 end
     for _, ruleId in ipairs(SortedKeys(state.ruleHits)) do ruleHits[ruleId] = state.ruleHits[ruleId] end
     local percentage = state.settingCount > 0 and (state.relatedNodeCount * 100 / state.settingCount) or 0
+    local specificCount = 0
+    for _ in pairs(specificallyRelated) do specificCount = specificCount + 1 end
+    local specificPercentage = state.settingCount > 0 and (specificCount * 100 / state.settingCount) or 0
     return {
         schemaVersion = G.schemaVersion,
         buildSerial = G._buildSerial or 0,
@@ -931,6 +946,9 @@ function G.GetCoverageReport()
         relatedSettings = state.relatedNodeCount,
         settingsWithoutRelations = withoutRelations,
         coveragePercent = percentage,
+        specificRelatedSettings = specificCount,
+        specificCoveragePercent = specificPercentage,
+        rootOnlySettings = rootOnly,
         edges = #state.edges,
         byKind = byKind,
         ruleHits = ruleHits,

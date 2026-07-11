@@ -1,6 +1,6 @@
 -- Assistant auto-coverage fallback registration.
 --
--- Closes the raw-coverage gap mechanically: every scalar DB key that no
+-- Closes the raw-coverage gap mechanically: every safe scalar DB path that no
 -- hand-written registry entry reaches gets a generated English setting with a
 -- label and aliases derived from the key name, direct get/set into the DB, and
 -- the broadest safe apply for its scope. Hand-written entries always win
@@ -49,6 +49,14 @@ local function LabelFromKey(key)
     -- normalization drops single-character tokens; spell them out.
     label = label:gsub(" ([RGBA])$", function(c) return " " .. CHANNEL_WORDS[c] end)
     return (label:gsub("^%l", string.upper))
+end
+
+local function LabelFromPath(path)
+    local labels = {}
+    for segment in tostring(path or ""):gmatch("[^.]+") do
+        labels[#labels + 1] = LabelFromKey(segment)
+    end
+    return table.concat(labels, " ")
 end
 
 local function ScopeLabel(scope)
@@ -422,6 +430,83 @@ local function ScopeTable(scope, create)
     return type(tbl) == "table" and tbl or nil
 end
 
+local MAX_NESTED_DEPTH = 8
+
+local function PathSegments(path)
+    local out = {}
+    for segment in tostring(path or ""):gmatch("[^.]+") do
+        if segment == "" or segment:sub(1, 1) == "_" or segment:match("^%d+$") then return nil end
+        out[#out + 1] = segment
+        if #out > MAX_NESTED_DEPTH then return nil end
+    end
+    return #out > 0 and out or nil
+end
+
+local function PathValue(root, path)
+    local segments = type(path) == "table" and path or PathSegments(path)
+    if type(root) ~= "table" or not segments then return nil, false end
+    local node = root
+    for i = 1, #segments - 1 do
+        node = node[segments[i]]
+        if type(node) ~= "table" then return nil, false end
+    end
+    local value = node[segments[#segments]]
+    return value, value ~= nil
+end
+
+local function WritePath(root, path, value, create)
+    local segments = type(path) == "table" and path or PathSegments(path)
+    if type(root) ~= "table" or not segments then return false end
+    local node = root
+    for i = 1, #segments - 1 do
+        local child = node[segments[i]]
+        if type(child) ~= "table" then
+            if not create or child ~= nil then return false end
+            child = {}
+            node[segments[i]] = child
+        end
+        node = child
+    end
+    node[segments[#segments]] = value
+    return true
+end
+
+local function IsSafePath(Audit, scope, path)
+    local segments = PathSegments(path)
+    if not segments then return false end
+    if Audit and type(Audit.IsIgnored) == "function" then
+        if Audit.IsIgnored(scope, segments[1]) or Audit.IsIgnored(scope, path) then return false end
+    end
+    return true
+end
+
+local SortedKeys
+
+local function WalkScalarPaths(root, callback)
+    if type(root) ~= "table" or type(callback) ~= "function" then return end
+    local active = {}
+    local function walk(node, prefix, depth)
+        if type(node) ~= "table" or active[node] or depth > MAX_NESTED_DEPTH then return end
+        active[node] = true
+        local keys = SortedKeys(node)
+        for i = 1, #keys do
+            local key = keys[i]
+            if type(key) == "string" and key ~= "" and key:sub(1, 1) ~= "_" and not key:match("^%d+$") then
+                local path = prefix and (prefix .. "." .. key) or key
+                local value = node[key]
+                local valueType = type(value)
+                if valueType == "table" then
+                    walk(value, path, depth + 1)
+                elseif valueType == "boolean" or valueType == "number" or valueType == "string" then
+                    callback(path, value)
+                end
+            end
+        end
+        active[node] = nil
+    end
+    walk(root, nil, 1)
+end
+
 local function ManifestDefaults()
     local manifest = A.AutoCoverageManifest
     if type(manifest) ~= "table" then return nil end
@@ -475,13 +560,13 @@ end
 local function WriteMirrors(spec, tbl, v)
     local mirrors = spec and spec.mirrorKeys
     if mirrors and tbl then
-        for i = 1, #mirrors do tbl[mirrors[i]] = v end
+        for i = 1, #mirrors do WritePath(tbl, mirrors[i], v, true) end
     end
 end
 
 local function BuildSpec(scope, key, value, fromManifest)
     local valueType = type(value)
-    local label = LabelFromKey(key)
+    local label = LabelFromPath(key)
     local scopeLabel = ScopeLabel(scope)
     local fullLabel = scopeLabel .. " " .. label
     local aliasBase = label:lower()
@@ -504,6 +589,8 @@ local function BuildSpec(scope, key, value, fromManifest)
         unit = unit,
         frameType = GROUP_SCOPES[scope] and "group" or (UNIT_SCOPES[scope] and "unitframe" or scope),
         attribute = key,
+        dbPath = key,
+        generatedNested = key:find(".", 1, true) ~= nil,
         aliases = aliases,
         generated = true,
         manifestDefault = fromManifest and value or nil,
@@ -517,14 +604,14 @@ local function BuildSpec(scope, key, value, fromManifest)
         spec.type = "boolean"
         spec.get = function()
             local tbl = ScopeTable(scope)
-            local v = tbl and tbl[key]
-            if v == nil then return value and true or false end
+            local v, exists = PathValue(tbl, key)
+            if not exists then return value and true or false end
             return v and true or false
         end
         spec.set = function(v)
             local tbl = ScopeTable(scope, true)
             if tbl then
-                tbl[key] = v and true or false
+                WritePath(tbl, key, v and true or false, true)
                 WriteMirrors(spec, tbl, v and true or false)
             end
         end
@@ -537,7 +624,8 @@ local function BuildSpec(scope, key, value, fromManifest)
         end
         spec.get = function()
             local tbl = ScopeTable(scope)
-            local v = tbl and tonumber(tbl[key])
+            local raw = PathValue(tbl, key)
+            local v = tonumber(raw)
             if v == nil then return value end
             return v
         end
@@ -548,7 +636,7 @@ local function BuildSpec(scope, key, value, fromManifest)
             if spec.max and v > spec.max then v = spec.max end
             local tbl = ScopeTable(scope, true)
             if tbl then
-                tbl[key] = v
+                WritePath(tbl, key, v, true)
                 WriteMirrors(spec, tbl, v)
             end
         end
@@ -556,14 +644,14 @@ local function BuildSpec(scope, key, value, fromManifest)
         spec.type = "string"
         spec.get = function()
             local tbl = ScopeTable(scope)
-            local v = tbl and tbl[key]
-            if v == nil then return value end
+            local v, exists = PathValue(tbl, key)
+            if not exists then return value end
             return tostring(v)
         end
         spec.set = function(v)
             local tbl = ScopeTable(scope, true)
             if tbl then
-                tbl[key] = tostring(v)
+                WritePath(tbl, key, tostring(v), true)
                 WriteMirrors(spec, tbl, tostring(v))
             end
         end
@@ -571,11 +659,11 @@ local function BuildSpec(scope, key, value, fromManifest)
     return spec
 end
 
-local function SortedKeys(map)
+SortedKeys = function(map)
     local out = {}
     if type(map) ~= "table" then return out end
     for key in pairs(map) do
-        out[#out + 1] = key
+        if type(key) == "string" then out[#out + 1] = key end
     end
     table.sort(out)
     return out
@@ -613,7 +701,7 @@ function Auto.BuildManifestText()
     local Audit = A.CoverageAudit
     local lines = {
         "-- Paste into MSUF_AssistantRegistry_AutoCoverage_Manifest.lua.",
-        "-- Source: freshly seeded profile DB scalar keys.",
+        "-- Source: freshly seeded profile DB safe scalar paths.",
         "Manifest.defaults = {",
     }
     local scopes = AllManifestScopes()
@@ -621,30 +709,24 @@ function Auto.BuildManifestText()
     for i = 1, #scopes do
         local scope = scopes[i]
         local tbl = ScopeTable(scope)
-        local keys = SortedKeys(tbl)
         local wroteScope = false
-        for k = 1, #keys do
-            local key = keys[k]
-            local value = tbl[key]
-            local valueType = type(value)
-            local ignored = Audit and type(Audit.IsIgnored) == "function" and Audit.IsIgnored(scope, key)
-            if type(key) == "string"
-                and not ignored
-                and (valueType == "boolean" or valueType == "number" or valueType == "string")
-            then
+        WalkScalarPaths(tbl, function(key, value)
+            if IsSafePath(Audit, scope, key) then
                 if not wroteScope then
                     lines[#lines + 1] = "    " .. LuaKey(scope) .. " = {"
                     wroteScope = true
                 end
+                -- Dotted keys keep the export compact and remain backwards
+                -- compatible with the existing flat manifest format.
                 lines[#lines + 1] = "        " .. LuaKey(key) .. " = " .. LuaValue(value) .. ","
                 total = total + 1
             end
-        end
+        end)
         if wroteScope then lines[#lines + 1] = "    }," end
     end
     lines[#lines + 1] = "}"
     lines[#lines + 1] = ""
-    lines[#lines + 1] = ("-- scalar defaults: %d"):format(total)
+    lines[#lines + 1] = ("-- safe scalar paths: %d"):format(total)
     return table.concat(lines, "\n"), total
 end
 
@@ -658,7 +740,7 @@ function Auto.StoreManifestExport(text, total)
     }
 end
 
---- Registers generated settings for every uncovered scalar DB key.
+--- Registers generated settings for every uncovered safe scalar DB path.
 --- Returns the number of settings added (0 when everything is covered or
 --- prerequisites are missing). Safe to call repeatedly.
 function Auto.Fill()
@@ -669,6 +751,7 @@ function Auto.Fill()
     if not (Audit and type(Audit.BuildCoveredSets) == "function") then return 0 end
     local covered = Audit.BuildCoveredSets()
     local added = 0
+    local nestedAdded = 0
     local IsCoveredKey = Audit.IsCoveredKey or function(set, k) return set[k] end
     local NormalizeKey = Audit.NormalizeCoverageKey or function(k) return k end
     -- normKey -> generated spec, per scope: legacy mirror spellings of the
@@ -677,9 +760,8 @@ function Auto.Fill()
     local function RegisterGenerated(scope, key, value, coveredSet, fromManifest)
         local valueType = type(value)
         if type(key) == "string"
-            and key:sub(1, 1) ~= "_"
+            and IsSafePath(Audit, scope, key)
             and not IsCoveredKey(coveredSet, key)
-            and not Audit.IsIgnored(scope, key)
             and (valueType == "boolean" or valueType == "number" or valueType == "string")
         then
             local fullKey = scope .. "." .. key
@@ -706,6 +788,7 @@ function Auto.Fill()
                 coveredSet[key] = registered
                 normMap[norm] = registered
                 added = added + 1
+                if registered.generatedNested then nestedAdded = nestedAdded + 1 end
             end
         end
     end
@@ -715,9 +798,9 @@ function Auto.Fill()
         if not tbl then return end
         local coveredSet = covered[scope] or {}
         covered[scope] = coveredSet
-        for key, value in pairs(tbl) do
+        WalkScalarPaths(tbl, function(key, value)
             RegisterGenerated(scope, key, value, coveredSet, false)
-        end
+        end)
     end
 
     local function FillManifestScope(scope)
@@ -727,11 +810,12 @@ function Auto.Fill()
         local live = ScopeTable(scope)
         local coveredSet = covered[scope] or {}
         covered[scope] = coveredSet
-        for key, value in pairs(manifestScope) do
-            if not (type(live) == "table" and live[key] ~= nil) then
+        WalkScalarPaths(manifestScope, function(key, value)
+            local _, exists = PathValue(live, key)
+            if not exists then
                 RegisterGenerated(scope, key, value, coveredSet, true)
             end
-        end
+        end)
     end
     for scope in pairs(UNIT_SCOPES) do FillScope(scope) end
     for scope in pairs(GROUP_SCOPES) do FillScope(scope) end
@@ -740,6 +824,7 @@ function Auto.Fill()
     for scope in pairs(GROUP_SCOPES) do FillManifestScope(scope) end
     for scope in pairs(FLAT_SCOPES) do FillManifestScope(scope) end
     Auto.lastFillCount = added
+    Auto.lastNestedFillCount = nestedAdded
     Auto._fillComplete = true
     if type(A.RecordSlowPerfSample) == "function" then
         A.RecordSlowPerfSample("assistant.autocoverage.fill", startedMs, tostring(added), 25)

@@ -28,20 +28,16 @@ function A.AurasRegistry.RegisterGroupDirectBlacklistActions(ctx)
     if type(ParseGroupAuraDirectBlacklistClearAliasArgs) ~= "function" or type(ParseGroupAuraDirectBlacklistPresetAliasArgs) ~= "function" then return end
     if type(ParseGroupAuraDirectBlacklistSummaryAliasArgs) ~= "function" then return end
 
-    local function NativeGroupDirectBlacklistReadOnlyMessage(scope, lane, value, operation)
-        local target = Assistant.GroupAuraCategoryScopeLabel(scope) .. " " .. Assistant.GroupAuraCategoryLanePlural(lane)
-        local subject = value and value ~= "" and (" for " .. tostring(value)) or ""
-        local prefix
-        if operation == "clear" then
-            prefix = "I did not clear the saved " .. target .. " spell blacklist."
-        elseif operation == "preset" then
-            prefix = "I did not add that preset to the saved " .. target .. " spell blacklist."
-        elseif operation == "remove" then
-            prefix = "I did not remove " .. tostring(value or "that spell") .. " from the saved " .. target .. " spell blacklist."
-        else
-            prefix = "I did not change the saved " .. target .. " spell blacklist" .. subject .. "."
-        end
-        return prefix .. " Exact group aura spell blacklist edits are legacy read-only data in the native 12.1 aura backend, so changing them would not affect live aura display. Use group aura filter tokens instead; for example, set " .. target .. " filter to All, Raid, or Dispellable."
+    local function Apply(scope)
+        if type(Assistant.ApplyGroupAuraCategory) == "function" then Assistant.ApplyGroupAuraCategory(scope) end
+    end
+
+    local function Target(scope, lane)
+        return Assistant.GroupAuraCategoryScopeLabel(scope) .. " " .. Assistant.GroupAuraCategoryLanePlural(lane)
+    end
+
+    local function RestrictionNote()
+        return " Blizzard may reject exact harmful-aura filters on friendly units and exact helpful-aura filters on hostile units."
     end
 
     Registry:RegisterAction({
@@ -62,7 +58,9 @@ function A.AurasRegistry.RegisterGroupDirectBlacklistActions(ctx)
             local lane = Assistant.GroupAuraCategoryLane(args and args.lane)
             local value = args and args.value
             if type(value) ~= "string" or value == "" then return false, "Which spell do you want me to use? A spell ID, spell link, or full spell name is enough." end
-            return false, NativeGroupDirectBlacklistReadOnlyMessage(scope, lane, value)
+            local changed = Assistant.AddGroupAuraBlacklistSpell(scope, lane, value)
+            if changed then Apply(scope) end
+            return true, (changed and "Done. Hidden " or "Already set. ") .. tostring(value) .. " for " .. Target(scope, lane) .. "." .. RestrictionNote(), not changed and { noChange = true } or nil
         end,
     })
 
@@ -84,7 +82,9 @@ function A.AurasRegistry.RegisterGroupDirectBlacklistActions(ctx)
             local lane = Assistant.GroupAuraCategoryLane(args and args.lane)
             local value = args and args.value
             if type(value) ~= "string" or value == "" then return false, "Which spell do you want me to use? A spell ID, spell link, or full spell name is enough." end
-            return false, NativeGroupDirectBlacklistReadOnlyMessage(scope, lane, value, "remove")
+            local changed = Assistant.RemoveGroupAuraBlacklistSpell(scope, lane, value)
+            if changed then Apply(scope) end
+            return true, (changed and "Done. Allowed " or "Already allowed. ") .. tostring(value) .. " for " .. Target(scope, lane) .. ".", not changed and { noChange = true } or nil
         end,
     })
 
@@ -93,6 +93,7 @@ function A.AurasRegistry.RegisterGroupDirectBlacklistActions(ctx)
         label = "Clear Hidden Group Aura Spells",
         type = "auras",
         combatSafe = true,
+        confirmRequired = true,
         aliases = {
             "clear", "clear all", "allow all", "remove all", "reset",
             "clear group aura blacklist", "clear group frame aura blacklist",
@@ -104,7 +105,9 @@ function A.AurasRegistry.RegisterGroupDirectBlacklistActions(ctx)
         run = function(args)
             local scope = Assistant.GroupAuraCategoryScope(args and args.scope)
             local lane = Assistant.GroupAuraCategoryLane(args and args.lane)
-            return false, NativeGroupDirectBlacklistReadOnlyMessage(scope, lane, nil, "clear")
+            local count = tonumber(Assistant.ClearGroupAuraBlacklistSpells(scope, lane)) or 0
+            if count > 0 then Apply(scope) end
+            return true, count > 0 and ("Done. Cleared " .. tostring(count) .. " hidden aura entries for " .. Target(scope, lane) .. ".") or "Already empty.", count == 0 and { noChange = true } or nil
         end,
     })
 
@@ -125,7 +128,9 @@ function A.AurasRegistry.RegisterGroupDirectBlacklistActions(ctx)
             local lane = Assistant.GroupAuraCategoryLane(args and args.lane)
             local preset = args and args.preset
             if type(preset) ~= "string" or preset == "" then return false, "Which hidden-aura preset do you want me to use?" end
-            return false, NativeGroupDirectBlacklistReadOnlyMessage(scope, lane, preset, "preset")
+            local count = tonumber(Assistant.AddGroupAuraBlacklistPreset(scope, lane, preset)) or 0
+            if count > 0 then Apply(scope) end
+            return true, count > 0 and ("Done. Added " .. tostring(count) .. " missing SpellIDs from " .. tostring(preset) .. " for " .. Target(scope, lane) .. "." .. RestrictionNote()) or "Already set. That preset added no new SpellIDs.", count == 0 and { noChange = true } or nil
         end,
     })
 
@@ -156,7 +161,7 @@ function A.AurasRegistry.RegisterGroupDirectBlacklistActions(ctx)
         run = function(args)
             local scope = Assistant.GroupAuraCategoryScope(args and args.scope)
             local lane = Assistant.GroupAuraCategoryLane(args and args.lane)
-            return true, "Done. Saved legacy " .. Assistant.GroupAuraCategoryScopeLabel(scope) .. " hidden " .. Assistant.GroupAuraCategoryLanePlural(lane) .. " (read-only in the native 12.1 backend):\n" .. tostring(Assistant.GroupAuraBlacklistSummary(scope, lane))
+            return true, Target(scope, lane) .. " blacklist:\n" .. tostring(Assistant.GroupAuraBlacklistSummary(scope, lane))
         end,
     })
 end

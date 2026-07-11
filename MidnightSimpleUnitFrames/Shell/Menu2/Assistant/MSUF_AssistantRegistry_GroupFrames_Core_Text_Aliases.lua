@@ -27,6 +27,7 @@ function A.GroupFramesRegistry.BuildTextAliasContext(ctx)
             add(term .. " class color")
             add(term .. " class colors")
             add(term .. " class colored")
+            add("make " .. term .. " class colored")
             add(term .. " colored by class")
             add(term .. " use class color")
             add(term .. " use class colors")
@@ -53,11 +54,11 @@ function A.GroupFramesRegistry.BuildTextAliasContext(ctx)
             raid = { "raid", "raid frame", "raid frames", "raidframe", "raidframes" },
             mythicraid = { "mythic raid", "mythic raid frame", "mythic raid frames", "mythicraid", "mythicraidframe", "mythicraidframes" },
         }
-        for _, term in ipairs(scopeTerms[scope] or {}) do
+        for _, term in ipairs({ "all group frames", "group frames", "group frame", "groupframes" }) do
             addModePhrases(term)
             addModeForScopePhrases(term)
         end
-        for _, term in ipairs({ "group frame", "group frames", "groupframes", "all group frames" }) do
+        for _, term in ipairs(scopeTerms[scope] or {}) do
             addModePhrases(term)
             addModeForScopePhrases(term)
         end

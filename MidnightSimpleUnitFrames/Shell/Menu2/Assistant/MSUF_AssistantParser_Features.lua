@@ -308,11 +308,12 @@ function A._ParseClassPowerDisplayStyleShortcut(text)
     end
     local textSetting = ClassPowerSetting("bars.classPowerShowText")
     if not textSetting then return nil end
-    local changes = { { setting = textSetting, value = value } }
-    if ContainsAny(text, FeaturesPhrases[39]) then
+    local changes = {}
+    if value == true or ContainsAny(text, FeaturesPhrases[39]) then
         local root = ClassPowerSetting("bars.showClassPower")
         if root then changes[#changes + 1] = { setting = root, value = true } end
     end
+    changes[#changes + 1] = { setting = textSetting, value = value }
     return {
         kind = "changes",
         changes = changes,

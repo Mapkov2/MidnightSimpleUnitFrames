@@ -51,7 +51,13 @@ function A.AurasRegistry.RegisterBlacklistSummaryAction(ctx)
             local Model = AuraModel()
             if not (Model and type(Model.BlacklistSummary) == "function") then return false, "Open Aura Filters first so I can show the hidden-aura list." end
             local scope = args and args.scope or "shared"
-            return true, "Done. Saved legacy " .. AuraScopeLabel(scope) .. " hidden auras (read-only while the native 12.1 backend is active):\n" .. tostring(Model.BlacklistSummary(scope))
+            if scope == "shared" then return false, "Choose Player, Target, Focus, or Boss so I know which native hidden-aura list to show." end
+            local lane = args and args.lane or "both"
+            if lane == "buff" or lane == "debuff" then
+                return true, AuraScopeLabel(scope) .. " " .. lane .. " blacklist:\n" .. tostring(Model.BlacklistSummary(scope, lane))
+            end
+            return true, AuraScopeLabel(scope) .. " buff blacklist:\n" .. tostring(Model.BlacklistSummary(scope, "buff"))
+                .. "\n\n" .. AuraScopeLabel(scope) .. " debuff blacklist:\n" .. tostring(Model.BlacklistSummary(scope, "debuff"))
         end,
     })
 end

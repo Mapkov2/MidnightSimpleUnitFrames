@@ -28,8 +28,9 @@ function A.AurasRegistry.BuildBlacklistActionParsers(ctx)
         local P = Assistant.Parser or {}
         local normalized = AuraActionNormalized(text)
         local scope = type(P.AuraBlacklistScope) == "function" and P.AuraBlacklistScope(normalized) or AuraActionEditScope(normalized)
-        return { scope = scope or "shared" }, {
-            summary = "Shows saved legacy hidden aura entries or explains why they are read-only.",
+        local lane = type(P.AuraBlacklistLane) == "function" and P.AuraBlacklistLane(normalized) or "both"
+        return { scope = scope or "shared", lane = lane or "both" }, {
+            summary = "Uses the native exact-SpellID hidden-aura list for the selected aura lane.",
         }
     end
 
@@ -41,17 +42,17 @@ function A.AurasRegistry.BuildBlacklistActionParsers(ctx)
         }) then
             return false
         end
-        if not normalized:find("blacklist", 1, true) then return false end
         return AuraActionContainsAny(normalized, {
             "group aura", "group auras", "group frame aura", "group frame auras",
             "party aura", "party auras", "party buff", "party buffs", "party debuff", "party debuffs",
             "raid aura", "raid auras", "raid buff", "raid buffs", "raid debuff", "raid debuffs",
             "mythic raid aura", "mythic raid auras", "mythic raid buff", "mythic raid buffs",
-            "for party", "on party", "for raid", "on raid",
+            "for party", "on party", "in party", "for raid", "on raid", "in raid",
         })
     end
 
     local function ParseAuraBlacklistSummaryAliasArgs(text)
+        if AuraActionNormalized(text):find("whitelist", 1, true) then return false end
         if not AuraActionContainsAny(text, {
             "show", "list", "summary", "current", "what is", "whats",
             "zeige", "anzeigen", "auflisten", "liste", "aktuell", "aktuelle",
@@ -62,11 +63,12 @@ function A.AurasRegistry.BuildBlacklistActionParsers(ctx)
         local args = ParseAuraBlacklistScopeAliasArgs(text)
         if not args then return false end
         return args, {
-            summary = "Shows saved legacy hidden aura entries.",
+            summary = "Shows native exact-SpellID hidden aura entries.",
         }
     end
 
     local function ParseAuraBlacklistClearAliasArgs(text)
+        if AuraActionNormalized(text):find("whitelist", 1, true) then return false end
         if not AuraActionContainsAny(text, {
             "clear", "empty", "reset", "allow all", "remove all", "delete all", "unblacklist all",
             "all spells", "all auras", "every spell", "every aura",
@@ -77,13 +79,15 @@ function A.AurasRegistry.BuildBlacklistActionParsers(ctx)
         local args = ParseAuraBlacklistScopeAliasArgs(text)
         if not args then return false end
         return args, {
-            summary = "Explains why exact hidden aura entries are read-only in the native backend.",
+            summary = "Clears native exact-SpellID hidden aura entries for the selected lane.",
         }
     end
 
     local function ParseAuraBlacklistSpellAliasArgs(text, raw)
         local P = Assistant.Parser or {}
         local normalized = AuraActionNormalized(text)
+        if normalized:find("whitelist", 1, true) then return false end
+        if normalized:find("permanent", 1, true) and not normalized:find("%d") then return false end
         if AuraBlacklistHasDirectGroupScope(normalized) then return false end
         if normalized:find("all spells", 1, true) or normalized:find("all auras", 1, true)
             or normalized:find("every spell", 1, true) or normalized:find("every aura", 1, true)
@@ -98,8 +102,9 @@ function A.AurasRegistry.BuildBlacklistActionParsers(ctx)
         local value = type(P.AuraBlacklistSpellValue) == "function" and P.AuraBlacklistSpellValue(raw or text) or nil
         if type(value) ~= "string" or value == "" then return false end
         local scope = type(P.AuraBlacklistScope) == "function" and P.AuraBlacklistScope(normalized) or AuraActionEditScope(normalized)
-        return { scope = scope or "shared", value = value }, {
-            summary = "Explains why exact hidden aura spell edits are read-only in the native backend.",
+        local lane = type(P.AuraBlacklistLane) == "function" and P.AuraBlacklistLane(normalized) or "both"
+        return { scope = scope or "shared", lane = lane or "both", value = value }, {
+            summary = "Edits the native exact-SpellID hidden-aura list for the selected aura lane.",
         }
     end
 
@@ -140,6 +145,7 @@ function A.AurasRegistry.BuildBlacklistActionParsers(ctx)
     local function ParseAuraBlacklistPresetAliasArgs(text)
         local P = Assistant.Parser or {}
         local normalized = AuraActionNormalized(text)
+        if normalized:find("whitelist", 1, true) then return false end
         local containsAny = type(P.ContainsAny) == "function" and P.ContainsAny or nil
         if normalized:find("quick preset", 1, true) or normalized:find("quick setup", 1, true) then return false end
         if AuraBlacklistHasDirectGroupScope(normalized) then return false end
@@ -163,10 +169,43 @@ function A.AurasRegistry.BuildBlacklistActionParsers(ctx)
         local preset = type(P.AuraBlacklistPresetForText) == "function" and P.AuraBlacklistPresetForText(normalized) or nil
         if not preset then return false end
         local scope = type(P.AuraBlacklistScope) == "function" and P.AuraBlacklistScope(normalized) or AuraActionEditScope(normalized)
-        return { scope = scope or "shared", preset = preset }, {
-            summary = "Explains why exact hidden-aura presets are read-only in the native backend.",
+        local lane = type(P.AuraBlacklistLane) == "function" and P.AuraBlacklistLane(normalized) or "both"
+        return { scope = scope or "shared", lane = lane or "both", preset = preset }, {
+            summary = "Adds missing preset SpellIDs to the native hidden-aura list.",
         }
     end
+
+    local function CustomWhitelistArgs(text, raw, mode)
+        local P = Assistant.Parser or {}
+        local normalized = AuraActionNormalized(text)
+        if not normalized:find("whitelist", 1, true) or not normalized:find("custom", 1, true) then return false end
+        local index = tonumber(normalized:match("custom%s+aura%s*([123])") or normalized:match("custom%s*([123])"))
+        if not index then return false end
+        local isRemove = normalized:find("remove", 1, true) or normalized:find("delete", 1, true)
+            or normalized:find("unwhitelist", 1, true) or normalized:find("entfernen", 1, true)
+        local isClear = normalized:find("clear", 1, true) or normalized:find("empty", 1, true)
+            or normalized:find("reset", 1, true) or normalized:find("remove all", 1, true)
+        local isSummary = AuraActionHasToken(normalized, "show") or AuraActionHasToken(normalized, "list")
+            or AuraActionHasToken(normalized, "current") or AuraActionHasToken(normalized, "summary")
+            or AuraActionHasToken(normalized, "zeige") or AuraActionHasToken(normalized, "auflisten")
+        if mode == "remove" and not isRemove then return false end
+        if mode == "clear" and not isClear then return false end
+        if mode == "summary" and not isSummary then return false end
+        if mode == "add" and (isRemove or isClear or isSummary) then return false end
+        local scope = type(P.AuraBlacklistScope) == "function" and P.AuraBlacklistScope(normalized) or AuraActionEditScope(normalized)
+        if scope == "shared" then return false end
+        local args = { scope = scope, index = index }
+        if mode == "add" or mode == "remove" then
+            args.value = type(P.AuraBlacklistSpellValue) == "function" and P.AuraBlacklistSpellValue(raw or text) or nil
+            if type(args.value) ~= "string" or args.value == "" then return false end
+        end
+        return args, { summary = "Edits the exact-SpellID whitelist for a unit-frame custom aura container." }
+    end
+
+    local function ParseAuraCustomWhitelistAddAliasArgs(text, raw) return CustomWhitelistArgs(text, raw, "add") end
+    local function ParseAuraCustomWhitelistRemoveAliasArgs(text, raw) return CustomWhitelistArgs(text, raw, "remove") end
+    local function ParseAuraCustomWhitelistClearAliasArgs(text, raw) return CustomWhitelistArgs(text, raw, "clear") end
+    local function ParseAuraCustomWhitelistSummaryAliasArgs(text, raw) return CustomWhitelistArgs(text, raw, "summary") end
 
     return {
         ParseAuraBlacklistAddSpellAliasArgs = ParseAuraBlacklistAddSpellAliasArgs,
@@ -174,5 +213,9 @@ function A.AurasRegistry.BuildBlacklistActionParsers(ctx)
         ParseAuraBlacklistClearAliasArgs = ParseAuraBlacklistClearAliasArgs,
         ParseAuraBlacklistPresetAliasArgs = ParseAuraBlacklistPresetAliasArgs,
         ParseAuraBlacklistSummaryAliasArgs = ParseAuraBlacklistSummaryAliasArgs,
+        ParseAuraCustomWhitelistAddAliasArgs = ParseAuraCustomWhitelistAddAliasArgs,
+        ParseAuraCustomWhitelistRemoveAliasArgs = ParseAuraCustomWhitelistRemoveAliasArgs,
+        ParseAuraCustomWhitelistClearAliasArgs = ParseAuraCustomWhitelistClearAliasArgs,
+        ParseAuraCustomWhitelistSummaryAliasArgs = ParseAuraCustomWhitelistSummaryAliasArgs,
     }
 end
