@@ -160,28 +160,10 @@ function MSUF.AddLocale(locale, dict)
     end
 end
 
---- English packs follow this file directly in the main TOC. Non-English packs
---- share one LoadOnDemand addon; every source file has an active-locale guard,
---- so only the selected dictionary executes and remains resident.
-if MSUF.LOCALE ~= "enUS" and MSUF.LOCALE ~= "enGB" then
-    local localeAddon = "MidnightSimpleUnitFrames_Locales"
-    local loadAddOn = _G.C_AddOns and _G.C_AddOns.LoadAddOn or _G.LoadAddOn
-    MSUF.LocaleAddonName = localeAddon
-    if type(loadAddOn) == "function" then
-        local loaded, reason = loadAddOn(localeAddon)
-        if loaded then
-            MSUF.LocaleAddonLoaded = true
-            MSUF.LocaleAddonLoadError = nil
-        else
-            MSUF.LocaleAddonLoaded = false
-            MSUF.LocaleAddonLoadError = reason
-        end
-    else
-        MSUF.LocaleAddonLoaded = false
-        MSUF.LocaleAddonLoadError = "LoadAddOn unavailable"
-    end
-else
-    MSUF.LocaleAddonName = nil
-    MSUF.LocaleAddonLoaded = nil
-    MSUF.LocaleAddonLoadError = nil
-end
+--- All language packs follow this file directly in the main TOC (English
+--- first, then the non-English dictionaries). Every source file has an
+--- active-locale guard, so only the selected dictionary executes and remains
+--- resident; the others return immediately.
+MSUF.LocaleAddonName = nil
+MSUF.LocaleAddonLoaded = nil
+MSUF.LocaleAddonLoadError = nil

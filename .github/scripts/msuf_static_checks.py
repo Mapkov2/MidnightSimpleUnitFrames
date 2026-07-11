@@ -397,6 +397,36 @@ def check_group_refresh_contracts() -> None:
     em2 = read(ADDON_ROOT / "UnitFrames" / "Engine" / "Group" / "MSUF_UF_Group_EM2.lua")
     targeted = read(ADDON_ROOT / "UnitFrames" / "Engine" / "Group" / "MSUF_UF_Group_TargetedSpells.lua")
 
+    require(runtime, "local function SyncCombatState", "group combat-state owner")
+    require(
+        runtime,
+        'eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")',
+        "group combat-start event ownership",
+    )
+    require(
+        runtime,
+        'eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")',
+        "group combat-end event ownership",
+    )
+    for event, state in [
+        ("PLAYER_REGEN_DISABLED", "true"),
+        ("PLAYER_REGEN_ENABLED", "false"),
+    ]:
+        if not re.search(
+            rf'(?:if|elseif)\s+event\s*==\s*["\']{event}["\']\s+then\s+'
+            rf'SyncCombatState\s*\(\s*{state}\s*\)',
+            runtime,
+        ):
+            raise CheckError(f"group combat-state owner must sync {state} on {event}")
+    if re.search(r':UnregisterEvent\s*\(\s*["\']PLAYER_REGEN_ENABLED["\']\s*\)', runtime):
+        raise CheckError("group combat-state owner must keep PLAYER_REGEN_ENABLED registered")
+    if not re.search(
+        r'elseif\s+event\s*==\s*["\']PLAYER_LOGIN["\']\s+or\s+'
+        r'event\s*==\s*["\']PLAYER_ENTERING_WORLD["\']\s+then\s+'
+        r'SyncCombatState\s*\(\s*\)',
+        runtime,
+    ):
+        raise CheckError("group combat-state owner must resync from the live API on login/world entry")
     require(runtime, "local dirtyApplyMaskCache = {}", "group dirty-mask cache")
     require(runtime, "local function ApplyRefreshFrame", "stable group refresh callback")
     require(runtime, "function GF.RegisterRuntimeObserver", "group runtime observer API")
@@ -500,10 +530,69 @@ def check_portrait_refresh_contracts() -> None:
     )
 
 
+def check_edit_mode_mover_contracts() -> None:
+    movers = read(ADDON_ROOT / "Shell" / "EditMode" / "MSUF_EditMode_Movers.lua")
+
+    require(
+        movers,
+        "frame._msufPowerBarDetached == true",
+        "Unit mover excludes a detached powerbar by frame ownership",
+    )
+    require(
+        movers,
+        "power._msufDetached == true",
+        "Unit mover excludes a detached powerbar by applied layout state",
+    )
+    require(
+        movers,
+        "if not powerDetached and power and power.IsShown and power:IsShown() then",
+        "Unit mover includes only attached visible powerbars in its visual bounds",
+    )
+
+
 def check_unit_preview_lifecycle_contracts() -> None:
     api = read(ADDON_ROOT / "Shell" / "Menu2" / "Preview" / "MSUF_Menu2_UnitPreview_API.lua")
+    core = read(ADDON_ROOT / "Shell" / "Menu2" / "Preview" / "MSUF_Menu2_UnitPreview_Core.lua")
+    auras = read(ADDON_ROOT / "Shell" / "Menu2" / "Preview" / "MSUF_Menu2_UnitPreview_Auras.lua")
+    aura_edit_mode = read(ADDON_ROOT / "Auras3" / "MSUF_Auras3_EditMode.lua")
     sections = read(ADDON_ROOT / "Shell" / "Menu2" / "Pages" / "MSUF_Menu2_UnitSections.lua")
     widgets = read(ADDON_ROOT / "Shell" / "Menu2" / "MSUF_Menu2_Widgets.lua")
+    dropdowns = read(ADDON_ROOT / "Shell" / "Menu2" / "MSUF_Menu2_Dropdowns.lua")
+    theme = read(ADDON_ROOT / "Shell" / "Menu2" / "MSUF_Menu2_Theme.lua")
+    window = read(ADDON_ROOT / "Shell" / "Menu2" / "MSUF_Menu2_Window.lua")
+
+    combat_gate = re.search(
+        r'function\s+Core\.InCombat\s*\(\s*\)\s*'
+        r'.*?local\s+(?P<lockdown>[A-Za-z_]\w*)\s*=\s*_G\.InCombatLockdown\s*'
+        r'.*?if\s+type\s*\(\s*(?P=lockdown)\s*\)\s*==\s*["\']function["\']\s+then\s*'
+        r'return\s+(?P=lockdown)\s*\(\s*\)\s*==\s*true\s*'
+        r'end\s*return\s+_G\.MSUF_InCombat\s*==\s*true\s*end',
+        core,
+        re.DOTALL,
+    )
+    if not combat_gate:
+        raise CheckError(
+            "Unit preview combat gate must prefer live InCombatLockdown and use "
+            "MSUF_InCombat only when that API is unavailable"
+        )
+    require_count(core, "_G.InCombatLockdown", 1, "Unit preview live combat authority")
+    require_count(core, "_G.MSUF_InCombat", 1, "Unit preview cached combat fallback")
+
+    if "ApplyCustomEffectPreview" in auras or "_msufCustomAuraPreviewTint" in auras:
+        raise CheckError(
+            "Generic Unit preview must not synthesize Custom Aura full-frame effects; "
+            "those effects require an active aura and have a dedicated scoped preview"
+        )
+    require(
+        auras,
+        "local cols, rows = GridShape(shown, perRow, vertical)",
+        "Custom Aura preview footprint uses rendered icon count",
+    )
+    require(
+        aura_edit_mode,
+        "laneW, laneH = PreviewLaneDimensions(cfg, metrics or fallback, shownIcons)",
+        "Edit Mode Custom Aura mover uses rendered icon count",
+    )
 
     for forbidden in [
         "if box.IsVisible and not box:IsVisible() then return end",
@@ -515,9 +604,47 @@ def check_unit_preview_lifecycle_contracts() -> None:
     require(api, 'if type(queuedRefresh) == "function" and box:IsShown() then',
             "Unit preview logically-owned queued render")
     require(sections, "local function PreviewHostShown()", "Unit preview page owner predicate")
+    require(sections, "local function EnsurePreviewAttachment()",
+            "Shared unit preview close/reopen ownership attachment")
+    require_count(sections, "EnsurePreviewAttachment()", 3,
+                  "Shared unit preview attachment definition and both ownership paths")
     require(widgets, "local function BodyOwned()", "Pinned preview logical ownership predicate")
     require(widgets, "if not BodyVisible() then\n            RefreshButton()",
             "Pinned preview transient visibility preservation")
+    require_count(
+        widgets,
+        "if box._msuf2PinnedPreviewRecord ~= record then return end",
+        2,
+        "Stale pinned-preview callbacks require exact record ownership",
+    )
+    if "if box._msuf2PinnedPreviewRecord and box._msuf2PinnedPreviewRecord ~= record then return end" in widgets:
+        raise CheckError("Released pinned-preview callbacks must not run after record ownership is cleared")
+    require(widgets, "function M.SuspendPinnedPreviews(reason)",
+            "Window hide suspends cached pinned-preview ownership")
+    require(widgets, "function M.ResumePinnedPreviews(reason)",
+            "Window show resumes cached pinned-preview geometry after ancestor visibility settles")
+    require(widgets, "C_Timer.After(0.05, RefreshAfterShow)",
+            "Pinned-preview resume has a settled-geometry refresh")
+    require(window, 'M.CallIf(M.SuspendPinnedPreviews, "WINDOW_HIDE")',
+            "Window hide preserves cached pinned-preview records without reattaching hooks")
+    require(window, 'M.CallIf(M.ResumePinnedPreviews, "WINDOW_SHOW")',
+            "Window show resumes cached pinned-preview records")
+    require(theme, "function M.ResetFocusVeil(variant, opts)",
+            "Menu modal focus veil has an explicit lifecycle reset")
+    require(theme, "StopAlphaMotion(overlay)",
+            "Menu focus veil reset cancels unfinished alpha motion")
+    require(theme, "overlay:ClearAllPoints()",
+            "Menu focus veil reset releases its cached page owner")
+    require(dropdowns, 'HideDropdownFocus(not immediate)',
+            "Immediate dropdown close synchronously releases its focus veil")
+    require(dropdowns, "if T.StopMotion then T.StopMotion(dropdownFrame) end",
+            "Immediate dropdown close cancels unfinished dropdown motion")
+    require(dropdowns, "if dropdownOwner == self then CloseDropdown({ immediate = true }) end",
+            "Hidden dropdown owner synchronously releases UIParent modal state")
+    require(window, 'W.CloseDropdown({ immediate = true })',
+            "Menu hide synchronously closes UIParent-owned dropdown state")
+    require(window, "M.ResetFocusVeil(nil, { force = true })",
+            "Menu hide enforces modal focus veil ownership cleanup")
 
 
 def main() -> int:
@@ -531,6 +658,7 @@ def main() -> int:
     check_powerbar_contracts()
     check_classpower_smoothing_contracts()
     check_portrait_refresh_contracts()
+    check_edit_mode_mover_contracts()
     check_unit_preview_lifecycle_contracts()
     print(f"MSUF static checks: ok ({len(lua_files)} Lua files)")
     return 0

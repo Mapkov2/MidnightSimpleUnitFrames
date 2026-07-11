@@ -427,6 +427,8 @@ $addonSource = Join-RepoPath $AddonName
 $tocSource = Join-Path $addonSource "$AddonName.toc"
 $assistantAddonSource = Join-RepoPath "${AddonName}_Assistant"
 $assistantTocSource = Join-Path $assistantAddonSource "${AddonName}_Assistant.toc"
+$localeAddonSource = Join-RepoPath "${AddonName}_Locales"
+$localeTocSource = Join-Path $localeAddonSource "${AddonName}_Locales.toc"
 
 if (-not (Test-Path -LiteralPath $addonSource)) {
   throw "Addon folder not found: $addonSource"
@@ -434,9 +436,8 @@ if (-not (Test-Path -LiteralPath $addonSource)) {
 if (-not (Test-Path -LiteralPath $tocSource)) {
   throw "Addon TOC not found: $tocSource"
 }
-if (-not (Test-Path -LiteralPath $assistantTocSource)) {
-  throw "Assistant addon TOC not found: $assistantTocSource"
-}
+$hasAssistantAddon = Test-Path -LiteralPath $assistantTocSource -PathType Leaf
+$hasLocaleAddon = Test-Path -LiteralPath $localeTocSource -PathType Leaf
 
 $resolvedLls = Resolve-Executable $LuaLanguageServer
 if (-not $resolvedLls) {
@@ -474,12 +475,12 @@ $perfyAddonSource = Join-Path $perfyRoot "AddOn"
 
 Write-Host "Copying $AddonName to staging folder $stagedAddon"
 Copy-Item -LiteralPath $addonSource -Destination $stageRoot -Recurse -Force
-Copy-Item -LiteralPath $assistantAddonSource -Destination $stageRoot -Recurse -Force
-$localeAddonSource = Join-Path $script:RepoRoot "${AddonName}_Locales"
-if (-not (Test-Path -LiteralPath $localeAddonSource -PathType Container)) {
-  throw "Missing MSUF locale addon: $localeAddonSource"
+if ($hasAssistantAddon) {
+  Copy-Item -LiteralPath $assistantAddonSource -Destination $stageRoot -Recurse -Force
 }
-Copy-Item -LiteralPath $localeAddonSource -Destination $stageRoot -Recurse -Force
+if ($hasLocaleAddon) {
+  Copy-Item -LiteralPath $localeAddonSource -Destination $stageRoot -Recurse -Force
+}
 
 foreach ($relativePath in @("docs", "scripts", "tools", "MSUF_PerfyHook.lua", ".gitignore")) {
   $fullPath = Join-Path $stagedAddon $relativePath
@@ -511,7 +512,9 @@ Add-MSUFPerfyFpsSampler -PerfyAddonDir $perfyAddonTarget
 
 Write-Host "Instrumenting TOC/XML reachable Lua files with Perfy"
 $stagedAssistantToc = Join-Path $stageRoot "${AddonName}_Assistant/${AddonName}_Assistant.toc"
-Invoke-PerfyInstrumentation -LuaLanguageServer $resolvedLls -LuaLanguageServerRoot $resolvedLlsRoot -PerfyMain $perfyMain -InputFiles @($stagedToc, $stagedAssistantToc)
+$entryTocs = @($stagedToc)
+if ($hasAssistantAddon) { $entryTocs += $stagedAssistantToc }
+Invoke-PerfyInstrumentation -LuaLanguageServer $resolvedLls -LuaLanguageServerRoot $resolvedLlsRoot -PerfyMain $perfyMain -InputFiles $entryTocs
 
 $allLuaFiles = @(Get-ChildItem -LiteralPath $stagedAddon -Filter "*.lua" -Recurse -File | Sort-Object FullName)
 if ($InstrumentAllLua) {
@@ -575,10 +578,10 @@ try {
   if (-not ($entries -contains "$AddonName/$AddonName.toc")) {
     throw "Package verification failed: $AddonName/$AddonName.toc is missing."
   }
-  if (-not ($entries -contains "${AddonName}_Locales/${AddonName}_Locales.toc")) {
+  if ($hasLocaleAddon -and -not ($entries -contains "${AddonName}_Locales/${AddonName}_Locales.toc")) {
     throw "Package verification failed: ${AddonName}_Locales/${AddonName}_Locales.toc is missing."
   }
-  if (-not ($entries -contains "${AddonName}_Assistant/${AddonName}_Assistant.toc")) {
+  if ($hasAssistantAddon -and -not ($entries -contains "${AddonName}_Assistant/${AddonName}_Assistant.toc")) {
     throw "Package verification failed: ${AddonName}_Assistant/${AddonName}_Assistant.toc is missing."
   }
   $badEntry = $entries | Where-Object {
