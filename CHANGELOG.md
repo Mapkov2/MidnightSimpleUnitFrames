@@ -1,5 +1,13 @@
 # Changelog
 
+## 5.71 - 2026-07-11
+
+### Hotfix
+
+- Fixed repeated `ADDON_ACTION_FORBIDDEN` errors on Warrior login caused by the Whirlwind tracker registering `COMBAT_LOG_EVENT_UNFILTERED` while Class Resource was disabled.
+- Restored the lightweight 5.6 spellcast-driven Whirlwind generator tracking and removed the global combat-log listener.
+- Bound Whirlwind tracker events only while the Warrior Class Resource is active and cleanly unbound them when the feature is disabled.
+
 ## 5.70 - 2026-07-08
 
 ### Patch Highlights

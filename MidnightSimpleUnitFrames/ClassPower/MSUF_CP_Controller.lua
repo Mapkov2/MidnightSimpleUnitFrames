@@ -221,15 +221,6 @@ do
         return false
     end
 
-    local function CurrentCombatLogEventInfo()
-        if type(CombatLogGetCurrentEventInfo) == "function" then
-            return CombatLogGetCurrentEventInfo()
-        end
-        if C_CombatLog and type(C_CombatLog.GetCurrentEventInfo) == "function" then
-            return C_CombatLog.GetCurrentEventInfo()
-        end
-    end
-
     local function GeneratorAllowed(spellID, known)
         if not GENERATORS[spellID] then return false end
         if (spellID == 6343 or spellID == 435222) then
@@ -238,7 +229,7 @@ do
         return true
     end
 
-    local function GrantStacksFromGeneratorHit()
+    local function GrantStacksFromGeneratorCast()
         stacks = MAX_STACKS
         expiresAt = GetTime() + DURATION
         ScheduleExpiry()
@@ -248,27 +239,13 @@ do
     -- Warrior-only: own event frame (Sensei pattern)
     if PLAYER_CLASS == "WARRIOR" then
         local f = CreateFrame("Frame")
-        f:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
-        f:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
-        f:RegisterEvent("PLAYER_DEAD")
-        f:RegisterEvent("PLAYER_ALIVE")
+        local eventsBound = false
         f:SetScript("OnEvent", function(_, event, unit, castGUID, spellID)
             if event == "PLAYER_DEAD" or event == "PLAYER_ALIVE" then
                 stacks = 0
                 expiresAt = nil
                 ResetSeenCastGUID()
                 if _wwRender then _wwRender() end
-                return
-            end
-
-            if event == "COMBAT_LOG_EVENT_UNFILTERED" then
-                local _, subevent, _, sourceGUID, _, _, _, _, _, _, _, cleuSpellID, _, _, missType = CurrentCombatLogEventInfo()
-                if sourceGUID ~= (UnitGUID and UnitGUID("player")) then return end
-                if subevent ~= "SPELL_DAMAGE" and subevent ~= "SPELL_BUILDING_DAMAGE" and not (subevent == "SPELL_MISSED" and missType == "ABSORB") then return end
-
-                local known = C_SpellBook and C_SpellBook.IsSpellKnown
-                if not GeneratorAllowed(cleuSpellID, known) then return end
-                GrantStacksFromGeneratorHit()
                 return
             end
 
@@ -284,6 +261,14 @@ do
                 noConsumeUntil = GetTime() + 2
             end
 
+            -- Keep the 5.6 spellcast-driven generator behavior. The 5.7
+            -- combat-log listener is unnecessary while this feature is off
+            -- and needs an untainted RegisterEvent call on Midnight clients.
+            if GeneratorAllowed(spellID, known) then
+                GrantStacksFromGeneratorCast()
+                return
+            end
+
             -- Spender â†’ consume 1
             if SPENDERS[spellID] then
                 if spellID == 23881 and GetTime() < noConsumeUntil then return end
@@ -294,6 +279,29 @@ do
                 end
             end
         end)
+
+        function WW.SetActive(active)
+            active = active == true
+            if eventsBound == active then return end
+
+            if active then
+                f:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+                f:RegisterEvent("PLAYER_DEAD")
+                f:RegisterEvent("PLAYER_ALIVE")
+                eventsBound = true
+            else
+                f:UnregisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+                f:UnregisterEvent("PLAYER_DEAD")
+                f:UnregisterEvent("PLAYER_ALIVE")
+                eventsBound = false
+                stacks = 0
+                expiresAt = nil
+                noConsumeUntil = 0
+                _expiryTimer = (_expiryTimer or 0) + 1
+                ResetSeenCastGUID()
+                if _wwRender then _wwRender() end
+            end
+        end
     end
 end
 
@@ -1332,6 +1340,9 @@ local function FullRefresh()
     -- ---- ClassPower ----
     local cpEnabled = (b.showClassPower ~= false)
     local powerType, renderMode, isAuraPower = GetClassPowerType()
+    if WW.SetActive then
+        WW.SetActive(cpEnabled and powerType == "WHIRLWIND" and renderMode ~= CPK.MODE.NONE)
+    end
     local cpHeight = tonumber(b.classPowerHeight) or 4
     if cpHeight < 2 then cpHeight = 2 elseif cpHeight > 30 then cpHeight = 30 end
 
@@ -2106,7 +2117,9 @@ do
                 _CP_RefreshConfig()
                 FullRefresh()
             end,
-            Disable = function() end,
+            Disable = function()
+                if WW.SetActive then WW.SetActive(false) end
+            end,
             RefreshSettings = function(_, source)
                 _cachedColorToken = nil
                 _cachedBgColorToken = nil
