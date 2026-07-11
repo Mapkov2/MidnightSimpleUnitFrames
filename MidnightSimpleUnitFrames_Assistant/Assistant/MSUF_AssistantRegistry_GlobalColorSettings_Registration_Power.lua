@@ -58,6 +58,7 @@ function A.GlobalRegistry.RegisterAssistantPowerColorSettings(ctx)
             SetClassPowerBgRGB = SetClassPowerBgRGB,
             ApplyClassPowerColors = ApplyClassPowerColors,
             COLOR_CP_TOKENS = ColorData.COLOR_CP_TOKENS or {},
+            CLASS_POWER_SLOT_RESOURCES = ColorData.CLASS_POWER_SLOT_RESOURCES or {},
         })
     end
 

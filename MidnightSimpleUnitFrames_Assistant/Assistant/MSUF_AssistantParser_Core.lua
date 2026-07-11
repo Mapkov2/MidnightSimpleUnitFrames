@@ -51,6 +51,10 @@ local NORMALIZE_WORD_REPLACEMENTS = {
     wheer = "where",
     wheree = "where",
     wher = "where",
+    permanant = "permanent",
+    permenant = "permanent",
+    permanet = "permanent",
+    permenent = "permanent",
     rsult = "result",
     rsults = "results",
     reslt = "result",
@@ -957,10 +961,13 @@ local ALL_GROUPS = { "party", "raid", "mythicraid" }
 local CLASS_POWER_TERMS = {
     "class power", "class resource", "class resources", "class bar", "resource bar",
     "combo point", "combo points", "holy power", "soul shard", "soul shards",
-    "chi", "arcane charge", "arcane charges", "rune", "runes",
+    "chi", "arcane charge", "arcane charges", "rune", "runes", "essence", "essences",
+    "soul fragment", "soul fragments", "maelstrom weapon", "maelstorm weapon",
+    "whirlwind", "tip of the spear", "icicle", "icicles",
     "klassenressource", "klassenressourcen", "klassenleiste", "klassen ressourcen",
     "ressourcenleiste", "ressourcen leiste", "kombopunkt", "kombopunkte",
-    "heilige kraft", "seelensplitter", "rune", "runen",
+    "heilige kraft", "seelensplitter", "rune", "runen", "essenz", "essenzen",
+    "seelenfragment", "seelenfragmente", "mahlstrom waffe", "wirbelwind", "speerspitze", "eiskristalle",
 }
 local GAMEPLAY_TERMS = {
     "gameplay", "spielhilfe", "combat timer", "combat state", "combat enter", "combat leave",

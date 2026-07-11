@@ -56,7 +56,7 @@ Data.GEOMETRY_TEXT_PARSER = {
         [19] = { "castbar", "cast bar", "aura", "auras", "buff", "debuff" },
         [20] = { "status icon", "status icons", "status indicator", "status indicators", "raid marker", "ready check", "leader icon", "assist icon" },
         [21] = {
-        "layer", "text layer", "draw layer", "draw level", "level",
+        "layer", "strata", "text layer", "text strata", "draw layer", "draw strata", "draw level", "level",
         "offset", "position", "pos", "x offset", "y offset",
         "move", "nudge", "shift", "anchor", "anchoring", "align", "alignment",
     },
@@ -71,7 +71,7 @@ Data.GEOMETRY_TEXT_PARSER = {
     },
         [24] = { "castbar", "cast bar", "aura", "auras", "buff", "debuff" },
         [25] = { "class power", "class resource", "class resources", "resource bar" },
-        [26] = { "text layer", "draw layer", "text level", "draw level", "layer" },
+        [26] = { "text layer", "text strata", "draw layer", "draw strata", "text level", "draw level", "layer", "strata" },
         [27] = { "bring forward", "move forward", "raise forward", "forward", "front", "above", "up" },
         [28] = { "send back", "move back", "backward", "behind", "below" },
         [29] = { "left hp text", "hp left text", "hp text left", "left health text", "health left text", "health text left", "left hp slot", "hp left slot", "hp slot left", "left health slot", "health left slot", "health slot left", "left hp label", "hp left label", "hp label left", "left health label", "health left label", "health label left" },

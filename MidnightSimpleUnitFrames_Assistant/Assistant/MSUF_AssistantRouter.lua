@@ -797,6 +797,11 @@ function R.HumanConversationReply(text)    local norm = R.Normalize(text)
         "erzaehl mir einen witz", "erzaehle mir einen witz", "erzaehl einen witz",
         "erzaehle einen witz", "mach einen witz", "noch einen witz", "noch ein witz", "naechster witz", "witz",
     }) then
+        local ctx = A.GetContext and A.GetContext() or nil
+        if type(ctx) == "table" then
+            ctx.lastConversationKind = "joke"
+            ctx.lastConversationTurn = tonumber(ctx.turnSerial or ctx.lastTurnSerial) or 0
+        end
         return {
             text = R.NextConversationJoke() or "Sure. MSUF is ready for the next joke.",
             status = "info",
@@ -981,10 +986,31 @@ function R.HumanConversationReply(text)    local norm = R.Normalize(text)
     return nil
 end
 
+function R.IsAdjacentJokeFollowup(norm)
+    norm = R.Normalize(norm)
+    if norm == "another one" or norm == "one more" or norm == "another" or norm == "again" then
+        local ctx = A.GetContext and A.GetContext() or nil
+        local currentTurn = type(ctx) == "table" and (tonumber(ctx.turnSerial or ctx.lastTurnSerial) or 0) or 0
+        local conversationTurn = type(ctx) == "table" and tonumber(ctx.lastConversationTurn) or nil
+        if type(ctx) == "table"
+            and ctx.lastConversationKind == "joke"
+            and conversationTurn ~= nil
+            and currentTurn == conversationTurn + 1
+        then
+            return true
+        end
+    end
+    return false
+end
+A.RouterIsAdjacentJokeFollowup = R.IsAdjacentJokeFollowup
+
 function A.TryImmediateConversationReply(text)
     local norm = R.Normalize(text)
     if norm == "" then return nil end
+    if R.IsAdjacentJokeFollowup(norm) then return R.HumanConversationReply("another joke") end
     if A.RouterHasBlockingPendingAssistantState and A.RouterHasBlockingPendingAssistantState() then return nil end
+    local auraDurationChoice = R.AuraDurationFilterQuestionReply and R.AuraDurationFilterQuestionReply(norm)
+    if auraDurationChoice then return auraDurationChoice end
     if norm:match("^wo%s+") or norm:match("^wie%s+kann%s+ich%s+")
         or norm:match("^welche%s+einstellung%s+") or norm:match("^welche%s+option%s+")
     then
@@ -3385,6 +3411,48 @@ function R.AuraFilterRecommendationWantsAnswer(norm)
     return false
 end
 
+function R.AuraDurationFilterQuestionReply(norm)
+    norm = R.Normalize(norm)
+    local durationIntent = R.ContainsAny(norm, {
+        "permanent", "no timer", "without timer", "no duration", "without duration", "timeless",
+    })
+    local auraIntent = R.ContainsAny(norm, { "aura", "auras", "buff", "buffs", "debuff", "debuffs" })
+    local questionIntent = R.ContainsAny(norm, {
+        "can you", "could you", "would you", "how can", "how do", "what filter", "which filter", "what are my choices",
+    })
+    if not durationIntent or not auraIntent or not questionIntent then return nil end
+
+    local lane, laneLabel = R.AuraLaneFromText(norm)
+    lane = lane or "buff"
+    laneLabel = laneLabel or (lane == "debuff" and "Debuffs" or "Buffs")
+    local scope, scopeLabel, isGroup = R.AuraFilterScopeFromText(norm)
+    scope = scope or "player"
+    scopeLabel = scopeLabel or "Player"
+    local hideKey = isGroup
+        and ("gf_" .. tostring(scope) .. ".auras." .. tostring(lane) .. ".blacklist.hidePermanent")
+        or ("auras3." .. tostring(scope) .. "." .. tostring(lane) .. ".blacklist.hidePermanent")
+    local command = "hide permanent " .. tostring(lane) .. "s on " .. tostring(scope) .. " frame"
+
+    local lines = {
+        scopeLabel .. " " .. laneLabel .. ": filter choices",
+        "Your 'no timer' description means permanent/no-duration auras. That is a real MSUF Hide Permanent Auras control; it is not a SpellID blacklist and it is not Blizzard's Not Cancelable filter.",
+        "Choices:",
+        "1. Hide permanent/no-duration " .. laneLabel:lower() .. " - automatically hides every aura in this lane that has no finite duration. Command: '" .. command .. "'.",
+        "2. Use a live " .. laneLabel:lower() .. " filter - Player, Raid, Raid In Combat"
+            .. (lane == "debuff" and ", Dispellable, or Crowd Control." or ", Cancelable, Not Cancelable, External Defensive, or Big Defensive."),
+        "3. Blacklist a specific spell - hides one exact SpellID; it does not mean all permanent auras. Command example: 'blacklist spell 12345 in " .. tostring(scope) .. " " .. tostring(lane) .. "s'.",
+        "Reply with the choice or use the exact command. I will not treat 'no timer' as an arbitrary SpellID.",
+    }
+    return {
+        kind = "answer",
+        status = "info",
+        result = "info",
+        text = table.concat(lines, "\n"),
+        summary = "Explains and offers executable Aura filter choices.",
+        searchResults = R.SettingFollowupResults and R.SettingFollowupResults(hideKey, scopeLabel .. " " .. laneLabel .. " Hide Permanent Auras") or nil,
+    }
+end
+
 function R.AuraRaidFilterRecommendationReply(norm)
     local lines = {}
     lines[#lines + 1] = "Raid aura filter recommendation"
@@ -3480,6 +3548,18 @@ function R.AuraUnitFilterStatusReply(norm, scope, scopeLabel, lane, laneLabel, r
         else
             lines[#lines + 1] = "Active filters right now:"
             for i = 1, #active do lines[#lines + 1] = "- " .. active[i] end
+        end
+    end
+
+    if not requestedKey then
+        lines[#lines + 1] = "Available choices for this lane:"
+        local availableSpecs = R.AURA_UNIT_FILTER_SPECS[lane] or {}
+        for i = 1, #availableSpecs do
+            local spec = availableSpecs[i]
+            lines[#lines + 1] = "- " .. tostring(spec.label) .. ": " .. R.AuraFilterEffectSentence(spec.effect)
+        end
+        if scope ~= "shared" then
+            lines[#lines + 1] = "- Hide Permanent Auras: hides auras with no finite duration. This is separate from Not Cancelable and from the exact SpellID blacklist."
         end
     end
 
@@ -7884,6 +7964,46 @@ R.LAST_CHANGE_LOCATION_FOLLOWUP_TERMS = {
     "what menu is it in", "what menu is that in", "what menu is this in",
 }
 
+R.LAST_CHANGE_OPEN_CONTROL_TERMS = {
+    "open it", "open that", "open this", "open the setting", "open the option",
+    "open that setting", "open this setting", "open that option", "open this option",
+    "open that exact slider", "open this exact slider", "open the exact slider",
+    "open that exact dropdown", "open this exact dropdown", "open the exact dropdown",
+    "open that exact control", "open this exact control", "open the exact control",
+    "go to it", "go to that", "go to this", "go to the setting", "go to the option",
+    "go to that exact slider", "go to this exact slider", "go to the exact slider",
+    "go to that exact dropdown", "go to this exact dropdown", "go to the exact dropdown",
+    "move to it", "move to that", "move to this", "move to the setting", "move to the option",
+    "move to that exact slider", "move to this exact slider", "move to the exact slider",
+    "move to that exact dropdown", "move to this exact dropdown", "move to the exact dropdown",
+    "take me to it", "take me to that", "take me to this", "take me to the setting", "take me to the option",
+    "show me that setting", "show me this setting", "show me that option", "show me this option",
+    "enter that menu", "enter this menu", "enter the exact menu", "jump to it", "jump to that", "jump to this",
+}
+
+function R.SettingControlNoun(item)
+    local kind = tostring(item and (item.controlType or (item.setting and item.setting.type)) or "")
+    if kind == "number" then return "slider" end
+    if kind == "enum" then return "dropdown" end
+    if kind == "boolean" then return "toggle" end
+    if kind == "color" then return "color picker" end
+    if kind == "string" then return "text field" end
+    return "control"
+end
+
+function R.OpenExactSettingItem(item)
+    if not (item and item.settingKey and item.page) then return nil end
+    local action = A.Registry and type(A.Registry.GetAction) == "function" and A.Registry:GetAction("open_setting_control") or nil
+    if not action then return nil end
+    return A.ExecutePlan({
+        kind = "action",
+        action = action,
+        args = { settingKey = item.settingKey, page = item.page, label = item.label },
+        label = "Open " .. tostring(item.label or "exact setting control"),
+        summary = "Opens and focuses the exact runtime control for the contextual setting.",
+    })
+end
+
 R.LAST_CHANGE_EXPLAIN_FOLLOWUP_TERMS = {
     "what does it do", "what does that do", "what does this do",
     "what does it mean", "what does that mean", "what does this mean",
@@ -7982,10 +8102,11 @@ function R.TryLastChangeSettingFollowup(text)
     if norm == "" then return nil end
     if not R.LastChangeFollowupHasSubject(norm) or R.LastChangeFollowupHasExplicitOtherSubject(norm) then return nil end
 
+    local asksOpenControl = R.ContainsAny(norm, R.LAST_CHANGE_OPEN_CONTROL_TERMS)
     local asksValue = R.ContainsAny(norm, R.LAST_CHANGE_VALUE_FOLLOWUP_TERMS)
     local asksLocation = R.ContainsAny(norm, R.LAST_CHANGE_LOCATION_FOLLOWUP_TERMS)
     local asksExplain = R.ContainsAny(norm, R.LAST_CHANGE_EXPLAIN_FOLLOWUP_TERMS)
-    if not asksValue and not asksLocation and not asksExplain then return nil end
+    if not asksOpenControl and not asksValue and not asksLocation and not asksExplain then return nil end
 
     local item, ctx = R.LastChangedSettingItem()
     if not item then return nil end
@@ -7997,17 +8118,24 @@ function R.TryLastChangeSettingFollowup(text)
     local example = R.RegistrySettingExample(item)
     local lines = {}
 
+    if asksOpenControl then
+        return R.OpenExactSettingItem(item)
+    end
+
     if asksLocation and not asksValue and not asksExplain then
         lines[#lines + 1] = label .. " setting location"
         lines[#lines + 1] = "This is the last setting I changed. It lives on " .. pageLabel .. " and is " .. R.RegistrySettingTypeText(controlType) .. ". I did not change it from this location question."
         if valueLine then lines[#lines + 1] = valueLine end
         if example and example ~= "" then lines[#lines + 1] = "Examples: open " .. pageLabel:lower() .. "; " .. example .. "." end
-        lines[#lines + 1] = "You can ask: what does it do | what is it now | undo"
+        local noun = R.SettingControlNoun(item)
+        lines[#lines + 1] = "Do you want me to open and focus that exact " .. noun .. "? Reply: open it."
         return {
             text = table.concat(lines, "\n"),
             status = "info",
             result = "info",
             summary = "Shows where the last changed setting lives.",
+            searchResults = { item },
+            selectPendingResult = 1,
         }
     end
 

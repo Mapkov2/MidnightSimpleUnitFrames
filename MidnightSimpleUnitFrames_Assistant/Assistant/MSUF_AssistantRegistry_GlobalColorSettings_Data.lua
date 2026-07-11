@@ -59,6 +59,37 @@ Data.CP_SLOT_DEFAULTS = {
     COMBO_POINTS_7 = { 1.00, 0.05, 0.05 },
 }
 
+-- Discrete Class Resource rows shared by the setting registry and the
+-- human-language parser. Keep aliases bounded and intentional: class/spec
+-- names cover requests that omit "resource", while common misspellings cover
+-- speech-to-text and casual chat without fuzzy-scanning every setting.
+Data.CLASS_POWER_SLOT_RESOURCES = {
+    { token = "COMBO_POINTS", label = "Combo Points", className = "Rogue / Feral Druid", count = 7,
+      aliases = { "combo point", "combo points", "combo", "combopoint", "combopoints", "cp", "rogue point", "rogue points", "feral point", "feral points", "kombo punkt", "kombo punkte", "kombopunkt", "kombopunkte", "schurkenpunkte" } },
+    { token = "HOLY_POWER", label = "Holy Power", className = "Paladin", count = 5,
+      aliases = { "holy power", "holypower", "paladin power", "paladin points", "heilige kraft", "heiligkraft", "paladin kraft" } },
+    { token = "SOUL_SHARDS", label = "Soul Shards", className = "Warlock", count = 5,
+      aliases = { "soul shard", "soul shards", "soulshard", "soulshards", "warlock shard", "warlock shards", "warlock souls", "seelensplitter", "seelen splitter", "hexer splitter" } },
+    { token = "CHI", label = "Chi", className = "Windwalker Monk", count = 6,
+      aliases = { "chi", "chi point", "chi points", "monk chi", "windwalker chi", "mönch chi", "moench chi" } },
+    { token = "ARCANE_CHARGES", label = "Arcane Charges", className = "Arcane Mage", count = 4,
+      aliases = { "arcane charge", "arcane charges", "arcanecharge", "arcanecharges", "arcane stack", "arcane stacks", "arcane mage", "arkane aufladung", "arkane aufladungen", "arkan aufladung" } },
+    { token = "RUNES", label = "Runes", className = "Death Knight", count = 6,
+      aliases = { "rune", "runes", "dk rune", "dk runes", "death knight rune", "death knight runes", "deathknight rune", "deathknight runes", "todesritter rune", "todesritter runen", "runen" } },
+    { token = "ESSENCE", label = "Essence", className = "Evoker", count = 6,
+      aliases = { "essence", "essences", "essence point", "essence points", "evoker essence", "evoker essences", "essenz", "essenzen", "rufer essenz", "rufer essenzen" } },
+    { token = "SOUL_FRAGMENTS_VENG", label = "Vengeance Soul Fragments", className = "Vengeance Demon Hunter", count = 6,
+      aliases = { "vengeance soul fragment", "vengeance soul fragments", "soul fragment", "soul fragments", "demon hunter soul", "demon hunter souls", "dh soul", "dh souls", "vengeance fragment", "vengeance fragments", "seelenfragment", "seelenfragmente" } },
+    { token = "MAELSTROM", label = "Maelstrom Weapon", className = "Enhancement Shaman", count = 10,
+      aliases = { "maelstrom weapon", "maelstrom stack", "maelstrom stacks", "maelstorm weapon", "maelstorm stacks", "mw stack", "mw stacks", "enhancement maelstrom", "enhancer maelstrom", "mahlstrom waffe", "mahlstromwaffe", "mahlstrom stapel" } },
+    { token = "WHIRLWIND", label = "Whirlwind", className = "Warrior", count = 4,
+      aliases = { "whirlwind", "whirlwind stack", "whirlwind stacks", "warrior whirlwind", "wirbelwind", "wirbelwind stapel" } },
+    { token = "TIP_OF_THE_SPEAR", label = "Tip of the Spear", className = "Survival Hunter", count = 3,
+      aliases = { "tip of the spear", "tip of spear", "spear tip", "spear tips", "spear stack", "spear stacks", "survival spear", "spitze des speers", "speerspitze", "speerspitzen" } },
+    { token = "ICICLES", label = "Icicles", className = "Frost Mage", count = 5,
+      aliases = { "icicle", "icicles", "iceicle", "iceicles", "frost mage icicle", "frost mage icicles", "frost icicle", "frost icicles", "eiskristall", "eiskristalle" } },
+}
+
 Data.COLOR_CLASS_TOKENS = {
     "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "DEATHKNIGHT", "SHAMAN",
     "MAGE", "WARLOCK", "MONK", "DRUID", "DEMONHUNTER", "EVOKER",

@@ -57,6 +57,48 @@ local function DashboardPageLabel(page)
     return "Dashboard"
 end
 
+local LEGACY_AURA_CONTENT_PAGES = {
+    auras3 = true,
+    auras3_buffs = true,
+    auras3_debuffs = true,
+    auras3_custom = true,
+    auras3_filters = true,
+    auras3_rendering = true,
+}
+
+local function ResolveAuraContentRoute(page, args)
+    if not LEGACY_AURA_CONTENT_PAGES[page] then return page, args and args.query end
+    local context = A.GetContext and A.GetContext() or nil
+    local settingKey = tostring(args and args.settingKey or context and context.lastSetting or "")
+    local query = tostring(args and args.query or args and args.label or "")
+    local scope = tostring(args and args.scope or "")
+    local lane = tostring(args and args.lane or "")
+    if scope == "" then
+        scope = settingKey:match("^auras3%.([^.]+)%.")
+            or settingKey:match("^gf_([^.]+)%.auras%.")
+            or tostring(context and context.lastUnit or "")
+    end
+    if lane == "" then
+        lane = settingKey:match("^auras3%.[^.]+%.([^.]+)%.")
+            or settingKey:match("^gf_[^.]+%.auras%.([^.]+)%.")
+            or (page == "auras3_debuffs" and "debuff")
+            or (page == "auras3_buffs" and "buff")
+            or (query:lower():find("debuff", 1, true) and "debuff")
+            or (query:lower():find("buff", 1, true) and "buff")
+    end
+    local auraContext = settingKey:find("^auras3%.") or settingKey:find("^gf_[^.]+%.auras%.")
+    if page == "auras3" and not auraContext and scope == "" then return "auras3_styling", query end
+    if scope == "party" or scope == "raid" or scope == "mythicraid" then
+        return "gf_auras", table.concat({ scope, lane, page == "auras3_filters" and "filters" or "", query }, " ")
+    end
+    if scope ~= "player" and scope ~= "target" and scope ~= "focus" and scope ~= "boss" then scope = "player" end
+    local tool = page == "auras3_filters" and "filters"
+        or (query:lower():find("blacklist", 1, true) and "blacklist")
+        or (query:lower():find("filter", 1, true) and "filters")
+        or ""
+    return "uf_" .. scope, table.concat({ scope, lane, tool, query }, " ")
+end
+
 Registry:RegisterAction({
     key = "open_page",
     label = "Open Dashboard Page",
@@ -65,11 +107,13 @@ Registry:RegisterAction({
     run = function(args)
         local page = args and args.page
         if type(page) ~= "string" or page == "" then return false, "Which page do you want me to open?" end
+        local routedQuery
+        page, routedQuery = ResolveAuraContentRoute(page, args)
         local previousPage = M and M.activeKey
         local label = DashboardPageLabel(page)
         local opened = false
         local bridge = M and M.SearchBridge
-        local query = args and args.query
+        local query = routedQuery or (args and args.query)
         if bridge and type(bridge.OpenSearchTarget) == "function" and type(query) == "string" and query ~= "" then
             bridge.OpenSearchTarget(page, query, label, args and args.anchor)
             opened = M and M.activeKey == page
@@ -86,6 +130,24 @@ Registry:RegisterAction({
             return true, "Opened " .. label .. "."
         end
         return false, "Open the MSUF menu first so I can navigate the Dashboard."
+    end,
+})
+
+Registry:RegisterAction({
+    key = "open_setting_control",
+    label = "Open Exact Setting Control",
+    type = "navigation",
+    combatSafe = false,
+    run = function(args)
+        local settingKey = args and args.settingKey
+        if type(settingKey) ~= "string" or settingKey == "" then
+            return false, "Which exact MSUF option do you want me to open?"
+        end
+        local open = _G.MSUF_OpenExactSettingControl or (M and M.OpenExactSettingControl)
+        if type(open) ~= "function" then
+            return false, "The exact-control navigation bridge is not available yet. Reopen the MSUF menu and try again."
+        end
+        return open(settingKey, args and args.label, args and args.page)
     end,
 })
 

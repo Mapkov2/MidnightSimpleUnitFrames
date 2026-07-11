@@ -479,6 +479,9 @@ end
 local function BuildContinuationFollowup(text, ctx)
     if A.ContextEngineEnabled == false then return nil end
     if not ctx then return nil end
+    -- An explicit semantic switch to draw layer/strata must never be treated
+    -- as another movement along the previous X/Y axis.
+    if ContainsAny(text, FollowupData.LAYER_TERMS) then return nil end
     if not ContinuationHasMarker(text) then return nil end
     if not ContinuationHasMovementVerb(text) then return nil end
     local direction = ContinuationDirection(text)
@@ -514,9 +517,53 @@ local function BuildContinuationFollowup(text, ctx)
     }
 end
 
+local function BuildExplicitTextLayerFollowup(text, ctx)
+    if not (ctx and type(ctx.lastChangeBundle) == "table") then return nil end
+    if not ContainsAny(text, FollowupData.LAYER_TERMS) then return nil end
+    local delta
+    if ContainsAny(text, FollowupData.FORCE_NEGATIVE_TERMS) or ContainsAny(text, FollowupData.NEGATIVE_TERMS) then
+        delta = -1
+    elseif ContainsAny(text, FollowupData.FORCE_POSITIVE_TERMS) or ContainsAny(text, FollowupData.POSITIVE_TERMS) then
+        delta = 1
+    end
+    local exact = FirstNumber(text)
+    if delta == nil and exact == nil then return nil end
+
+    local changes, seen = {}, {}
+    for i = 1, #ctx.lastChangeBundle do
+        local previous = ctx.lastChangeBundle[i]
+        local key = tostring(previous and previous.key or "")
+        local prefix, attr = key:match("^(.-)%.([^%.]+)$")
+        local layerAttr
+        if attr == "powerOffsetX" or attr == "powerOffsetY" or attr == "powerTextLayer" then
+            layerAttr = "powerTextLayer"
+        elseif attr == "hpOffsetX" or attr == "hpOffsetY" or attr == "hpTextLayer" then
+            layerAttr = prefix and prefix:match("^gf_") and "textLayer" or "hpTextLayer"
+        elseif attr == "nameOffsetX" or attr == "nameOffsetY" or attr == "nameTextLayer" then
+            layerAttr = "nameTextLayer"
+        end
+        local layerKey = prefix and layerAttr and (prefix .. "." .. layerAttr) or nil
+        local setting = layerKey and not seen[layerKey] and Registry and Registry:GetSetting(layerKey) or nil
+        if setting then
+            seen[layerKey] = true
+            changes[#changes + 1] = { setting = setting, value = delta == nil and exact or nil, relativeDelta = delta }
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        bulkSafe = #changes > 1,
+        label = "Change previous text strata",
+        summary = "Switches from the previous text position control to its matching text-layer control.",
+    }
+end
+
 local function BuildFollowup(text, ctx)
     if not ctx then return nil end
     if IsPageExplanationQuestion(text) then return nil end
+    local explicitTextLayer = BuildExplicitTextLayerFollowup(text, ctx)
+    if explicitTextLayer then return explicitTextLayer end
     local copyActionFollowup = P.BuildCopyActionFollowup and P.BuildCopyActionFollowup(text, ctx)
     if copyActionFollowup then return copyActionFollowup end
     if ContainsAny(text, FollowupData.PREVIOUS_COPY_QUERY_TERMS) and ctx.lastAction ~= "copy_unit" and ctx.lastAction ~= "copy_group" then

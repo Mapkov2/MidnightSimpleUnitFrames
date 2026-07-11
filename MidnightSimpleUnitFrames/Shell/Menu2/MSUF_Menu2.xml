@@ -18,7 +18,7 @@
     <Script file="MSUF_Menu2_WindowControls.lua"/>
     <Script file="MSUF_Menu2_Window.lua"/>
     <Script file="MSUF_Menu2_API.lua"/>
-    <Script file="Assistant\MSUF_AssistantBridge.lua"/>
+    <Script file="MSUF_AssistantBridge.lua"/>
     <Script file="MSUF_Menu2_BugReport.lua"/>
     <Script file="MSUF_Menu2_Dashboard.lua"/>
     <Script file="MSUF_Menu2_DevChecks.lua"/>

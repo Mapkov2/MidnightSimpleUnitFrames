@@ -15,6 +15,7 @@ if type(ctx) ~= "table" then return end
 
 local Registry = ctx.Registry
 local GeneralDB = ctx.GeneralDB
+local BarsDB = ctx.BarsDB
 local GameplayDB = ctx.GameplayDB
 local ApplyGameplayColors = ctx.ApplyGameplayColors
 local ApplyAuraColors = ctx.ApplyAuraColors
@@ -100,6 +101,7 @@ Registry:RegisterAction({
         g.powerColorOverrides = nil
         g.classPowerColorOverrides = nil
         g.classPowerBgColorOverrides = nil
+        if type(BarsDB) == "function" then BarsDB().classPowerFullColorEnabled = nil end
         ApplyClassPowerColors("MSUF_ASSISTANT_RESET_RESOURCE_COLORS")
         return true, "Done. Resource colors reset."
     end,

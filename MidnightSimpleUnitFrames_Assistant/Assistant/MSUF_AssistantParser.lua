@@ -5430,6 +5430,12 @@ function A.Parse(text, ctxOverride)
     local normalized = P.Normalize(raw)
     local ctx = type(ctxOverride) == "table" and ctxOverride or (A.GetContext and A.GetContext() or {})
     if normalized == "" then return { kind = "empty" } end
+    local textPositionCopy = A._ParseUnitTextPositionCopyShortcut and A._ParseUnitTextPositionCopyShortcut(normalized)
+    if textPositionCopy then
+        textPositionCopy.raw = raw
+        textPositionCopy.normalized = normalized
+        return textPositionCopy
+    end
     if type(ctx.guidedSetup) == "table" and P.ParseGuidedSetupFollowup then
         local guidedPriority = P.ParseGuidedSetupFollowup(normalized, ctx)
         if guidedPriority then
@@ -5438,7 +5444,14 @@ function A.Parse(text, ctxOverride)
             return guidedPriority
         end
     end
-    local exactFullAlias = P.ParseRegistryExactAliasShortcut
+    -- Slot color-mode settings intentionally use resource names such as
+    -- "maelstrom" too. Keep reset-color phrases out of the broad exact-setting
+    -- alias pass so the existing explanation guard and action-first color
+    -- parser can decide between "explain Reset ... Color" and execution.
+    local colorResetIntent = P.ParseColorAction
+        and P.ContainsAny(normalized, P.RootPhrases[779])
+        and P.ContainsAny(normalized, P.RootPhrases[780])
+    local exactFullAlias = not colorResetIntent and P.ParseRegistryExactAliasShortcut
         and P.ParseRegistryExactAliasShortcut(normalized, raw, { minTokens = 3, fullPhrase = true })
     if normalized:find(" text anchor ", 1, true) and not normalized:find("custom value", 1, true) then exactFullAlias = nil end
     if exactFullAlias then
@@ -5543,18 +5556,37 @@ function A.Parse(text, ctxOverride)
             return scopedOnly
         end
     end
-    if normalized:find("permanent", 1, true)
+    local noDurationAuraIntent = normalized:find("permanent", 1, true)
+        or normalized:find("no timer", 1, true)
+        or normalized:find("without timer", 1, true)
+        or normalized:find("no duration", 1, true)
+        or normalized:find("without duration", 1, true)
+        or normalized:find("timeless", 1, true)
+    if noDurationAuraIntent
         and (normalized:find("aura", 1, true) or normalized:find("buff", 1, true) or normalized:find("debuff", 1, true))
     then
         local isGroup = normalized:find("party", 1, true) or normalized:find("raid", 1, true)
             or normalized:find("group", 1, true)
         local lane = isGroup and P.AuraGroupBlacklistLane and P.AuraGroupBlacklistLane(normalized)
             or (P.AuraBlacklistLane and P.AuraBlacklistLane(normalized))
+        local contextKey = tostring(ctx and ctx.lastSetting or "")
+        local contextUnit, contextLane = contextKey:match("^auras3%.([^.]+)%.([^.]+)%.")
+        local contextGroup, contextGroupLane = contextKey:match("^gf_([^.]+)%.auras%.([^.]+)%.")
+        if lane == "both" then lane = contextLane or contextGroupLane or lane end
         local key
         if isGroup and P.AuraGroupBlacklistScope then
             key = "gf_" .. tostring(P.AuraGroupBlacklistScope(normalized)) .. ".auras." .. tostring(lane) .. ".blacklist.hidePermanent"
         elseif P.AuraBlacklistScope then
             local scope = P.AuraBlacklistScope(normalized)
+            local explicitUnits = P.DetectUnits and P.DetectUnits(normalized) or {}
+            local explicitShared = normalized:find("shared", 1, true) or normalized:find("global", 1, true)
+            if scope == "shared" and #explicitUnits == 0 and not explicitShared then
+                if contextGroup then
+                    key = "gf_" .. tostring(contextGroup) .. ".auras." .. tostring(lane) .. ".blacklist.hidePermanent"
+                else
+                    scope = contextUnit or tostring(ctx and ctx.lastUnit or "")
+                end
+            end
             if scope ~= "shared" then key = "auras3." .. tostring(scope) .. "." .. tostring(lane) .. ".blacklist.hidePermanent" end
         end
         local setting = key and A.Registry and A.Registry:GetSetting(key)
@@ -5571,12 +5603,20 @@ function A.Parse(text, ctxOverride)
                 normalized = normalized,
             }
         end
+        return {
+            kind = "answer",
+            status = "ambiguous",
+            text = "Which frame and lane should hide permanent/no-duration auras? For example: 'hide permanent player buffs' or 'hide permanent target debuffs'.",
+            summary = "Asks for the missing Aura filter scope instead of changing an unrelated filter.",
+            raw = raw,
+            normalized = normalized,
+        }
     end
     -- Exact aura-list edits are more specific than broad visibility toggles.
     -- Keep questions in the read-only path above and do not reinterpret the
     -- separate hide-permanent option as a SpellID blacklist mutation.
     if P.ParseRegistryActionAliasShortcut and P.AuraBlacklistSpellValue
-        and not normalized:find("permanent", 1, true)
+        and not noDurationAuraIntent
         and (normalized:find("blacklist", 1, true) or normalized:find("whitelist", 1, true)
             or normalized:find("buff", 1, true) or normalized:find("debuff", 1, true)
             or normalized:find("aura", 1, true))
@@ -6025,7 +6065,8 @@ function A.Parse(text, ctxOverride)
     -- visibility) cannot swallow a precisely named child/root option.
     -- Full-phrase mode requires the whole command minus verb and value to be
     -- exactly one alias; anything less precise continues through the pipeline.
-    local exactAliasPriorityParsed = P.ParseRegistryExactAliasShortcut and P.ParseRegistryExactAliasShortcut(normalized, raw, { minTokens = 3, fullPhrase = true })
+    local exactAliasPriorityParsed = not colorResetIntent and P.ParseRegistryExactAliasShortcut
+        and P.ParseRegistryExactAliasShortcut(normalized, raw, { minTokens = 3, fullPhrase = true })
     if exactAliasPriorityParsed then
         exactAliasPriorityParsed.raw = raw
         exactAliasPriorityParsed.normalized = normalized
@@ -6061,7 +6102,8 @@ function A.Parse(text, ctxOverride)
             return earlyAbsorbBarParsed
         end
     end
-    local earlyPowerColorTokenParsed = A._ParsePowerColorTokenFastShortcut and A._ParsePowerColorTokenFastShortcut(normalized, raw)
+    local earlyPowerColorTokenParsed = not colorResetIntent and A._ParsePowerColorTokenFastShortcut
+        and A._ParsePowerColorTokenFastShortcut(normalized, raw)
     if earlyPowerColorTokenParsed then
         earlyPowerColorTokenParsed.raw = raw
         earlyPowerColorTokenParsed.normalized = normalized
@@ -6122,6 +6164,18 @@ function A.Parse(text, ctxOverride)
         globalFontColorPriorityParsed.normalized = normalized
         return globalFontColorPriorityParsed
     end
+    local specResourceColorPriorityParsed = A._ParseSpecResourceColorShortcut and A._ParseSpecResourceColorShortcut(normalized, raw)
+    if specResourceColorPriorityParsed then
+        specResourceColorPriorityParsed.raw = raw
+        specResourceColorPriorityParsed.normalized = normalized
+        return specResourceColorPriorityParsed
+    end
+    local classResourceColorPriorityParsed = A._ParseClassPowerColorPriorityShortcut and A._ParseClassPowerColorPriorityShortcut(normalized, raw)
+    if classResourceColorPriorityParsed then
+        classResourceColorPriorityParsed.raw = raw
+        classResourceColorPriorityParsed.normalized = normalized
+        return classResourceColorPriorityParsed
+    end
     local classColorPriorityParsed = A._ParseClassColorFastShortcut and A._ParseClassColorFastShortcut(normalized, raw)
     if classColorPriorityParsed then
         classColorPriorityParsed.raw = raw
@@ -6176,7 +6230,8 @@ function A.Parse(text, ctxOverride)
         petFrameColorPriorityParsed.normalized = normalized
         return petFrameColorPriorityParsed
     end
-    local powerColorTokenPriorityParsed = A._ParsePowerColorTokenFastShortcut and A._ParsePowerColorTokenFastShortcut(normalized, raw)
+    local powerColorTokenPriorityParsed = not colorResetIntent and A._ParsePowerColorTokenFastShortcut
+        and A._ParsePowerColorTokenFastShortcut(normalized, raw)
     if powerColorTokenPriorityParsed then
         powerColorTokenPriorityParsed.raw = raw
         powerColorTokenPriorityParsed.normalized = normalized
@@ -6350,7 +6405,8 @@ function A.Parse(text, ctxOverride)
         barGradientPriorityParsed.normalized = normalized
         return barGradientPriorityParsed
     end
-    local classPowerPriorityParsed = A._ParseClassPowerPriorityShortcut and A._ParseClassPowerPriorityShortcut(normalized, raw)
+    local classPowerPriorityParsed = not colorResetIntent and A._ParseClassPowerPriorityShortcut
+        and A._ParseClassPowerPriorityShortcut(normalized, raw)
     if classPowerPriorityParsed then
         classPowerPriorityParsed.raw = raw
         classPowerPriorityParsed.normalized = normalized

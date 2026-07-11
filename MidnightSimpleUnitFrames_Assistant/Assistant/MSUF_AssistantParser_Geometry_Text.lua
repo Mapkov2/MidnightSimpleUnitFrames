@@ -30,6 +30,56 @@ local EnumValueForText = P.EnumValueForText
 local CurrentPageUnit = P.CurrentPageUnit
 local GroupScopesOrCurrentPage = P.GroupScopesOrCurrentPage
 
+local function ReadSettingValue(setting)
+    if not (setting and type(setting.get) == "function") then return nil end
+    local ok, value = pcall(setting.get)
+    if ok then return value end
+    return nil
+end
+
+local function PositionTextKind(text)
+    if ContainsAny(text, { "power text", "mana text", "power number", "mana number" }) then return "power" end
+    if ContainsAny(text, { "hp text", "health text", "hp number", "health number" }) then return "hp" end
+    if ContainsAny(text, { "name text", "unit name" }) then return "name" end
+    return nil
+end
+
+function A._ParseUnitTextPositionCopyShortcut(text)
+    if not ContainsAny(text, { "position of", "same position as", "position from" }) then return nil end
+    local destinationText, sourceText = text:match("^move%s+(.+)%s+to%s+the%s+position%s+of%s+(.+)$")
+    if not destinationText then destinationText, sourceText = text:match("^move%s+(.+)%s+to%s+position%s+of%s+(.+)$") end
+    if not destinationText then destinationText, sourceText = text:match("^put%s+(.+)%s+at%s+the%s+same%s+position%s+as%s+(.+)$") end
+    if not destinationText then return nil end
+    local destinationKind, sourceKind = PositionTextKind(destinationText), PositionTextKind(sourceText)
+    if not destinationKind or not sourceKind or destinationKind == sourceKind then return nil end
+    local units = DetectUnits(text)
+    if #units ~= 1 then
+        return { kind = "answer", status = "ambiguous", text = "Which single Unit Frame should copy that text position? Example: move target power text to the position of target HP text.", summary = "Requires one Unit Frame for an internal text-position copy." }
+    end
+    local unit = units[1]
+    local attrs = {
+        hp = { "hpOffsetX", "hpOffsetY" },
+        power = { "powerOffsetX", "powerOffsetY" },
+        name = { "nameOffsetX", "nameOffsetY" },
+    }
+    local sourceAttrs, destinationAttrs = attrs[sourceKind], attrs[destinationKind]
+    local changes = {}
+    for axis = 1, 2 do
+        local sourceSetting = Registry and Registry:GetSetting(tostring(unit) .. "." .. sourceAttrs[axis])
+        local destinationSetting = Registry and Registry:GetSetting(tostring(unit) .. "." .. destinationAttrs[axis])
+        local value = ReadSettingValue(sourceSetting)
+        if destinationSetting and type(value) == "number" then changes[#changes + 1] = { setting = destinationSetting, value = value } end
+    end
+    if #changes ~= 2 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        bulkSafe = true,
+        label = "Copy " .. sourceKind .. " text position to " .. destinationKind .. " text",
+        summary = "Copies both X and Y text offsets within the selected Unit Frame as one undoable change.",
+    }
+end
+
 local function DisplayValue(setting, value)
     if P and type(P.ValueDisplay) == "function" then
         local label = P.ValueDisplay(setting, value)
@@ -197,6 +247,15 @@ function A._ParseTextLayerShortcut(text)
         else
             local pageUnit = CurrentPageUnit()
             if pageUnit then units = { pageUnit } end
+        end
+        if #groups == 0 and #units == 0 then
+            local ctx = A.GetContext and A.GetContext() or nil
+            local currentTurn = type(ctx) == "table" and (tonumber(ctx.turnSerial or ctx.lastTurnSerial) or 0) or 0
+            local subjectTurn = type(ctx) == "table" and tonumber(ctx.lastSubjectTurn or ctx.lastMentionedTurn) or nil
+            local contextualUnit = type(ctx) == "table" and ctx.lastUnit or nil
+            if contextualUnit and subjectTurn and currentTurn - subjectTurn <= 1 then
+                units = { contextualUnit }
+            end
         end
     end
 

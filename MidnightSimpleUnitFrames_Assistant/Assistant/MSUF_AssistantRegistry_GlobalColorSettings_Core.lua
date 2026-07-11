@@ -78,6 +78,11 @@ function A.GlobalRegistry.BuildColorSettingsCoreContext(ctx)
             sameValue = ColorSame,
             apply = opts.apply or ApplyColors,
             combatSafe = opts.combatSafe == true,
+            description = opts.description,
+            resourceToken = opts.resourceToken,
+            resourceLabel = opts.resourceLabel,
+            className = opts.className,
+            slot = opts.slot,
         })
     end
 

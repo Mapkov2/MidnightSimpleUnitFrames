@@ -18,6 +18,7 @@ function A.GlobalRegistry.InstallColorResetActions(ctx, colorCore, auraPortraitC
     A.GlobalRegistry.ColorResetActions = {
         Registry = ctx.Registry,
         GeneralDB = ctx.GeneralDB,
+        BarsDB = ctx.BarsDB,
         GameplayDB = ctx.GameplayDB,
         ColorAPI = colorCore.ColorAPI,
         ApplyColors = ctx.ApplyColors,

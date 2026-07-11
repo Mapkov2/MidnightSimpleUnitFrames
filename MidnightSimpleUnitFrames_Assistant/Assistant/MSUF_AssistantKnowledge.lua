@@ -1559,8 +1559,11 @@ local CASTBAR_TEXT_HELP_TERMS = {
 local CLASS_RESOURCE_HELP_TERMS = {
     "class resource", "class resources", "class power", "class powers", "combo point", "combo points",
     "holy power", "chi", "soul shard", "rune", "runes", "arcane charge", "arcane charges",
+    "essence", "essences", "soul fragment", "soul fragments", "maelstrom weapon", "maelstorm weapon",
+    "whirlwind", "tip of the spear", "icicle", "icicles",
     "klassenressource", "klassenressourcen", "klassenleiste", "ressourcenleiste",
-    "kombopunkt", "kombopunkte", "heilige kraft", "seelensplitter", "runen",
+    "kombopunkt", "kombopunkte", "heilige kraft", "seelensplitter", "runen", "essenz", "essenzen",
+    "seelenfragment", "seelenfragmente", "mahlstrom waffe", "wirbelwind", "speerspitze", "eiskristalle",
 }
 
 local CONCEPT_HELP_INTENT_TERMS = {
@@ -1733,7 +1736,7 @@ local function DirectHelpAnswer(query, opts)
         and HasConceptHelpIntent(norm)
     then
         return {
-            text = "Class Resources help\nClass resources are class-specific combat resources such as combo points, holy power, chi, soul shards, runes, or arcane charges. MSUF can show and style Class Resources, configure related player HP/player power sections, and adjust resource colors, size, position, and anchoring.\nExamples: open class resources; make class resources wider; set combo point color red; detach player power bar.\nYou can ask: Open Class Resources",
+            text = "Class Resources help\nClass resources are class-specific combat resources such as Rogue/Feral Combo Points, Paladin Holy Power, Warlock Soul Shards, Monk Chi, Death Knight Runes, Evoker Essence, Arcane Charges, Vengeance Soul Fragments, Maelstrom Weapon, Whirlwind, Tip of the Spear, and Icicles. MSUF can color each discrete slot independently, use the resource color/ramp, and switch the entire display to a separate color at the dynamic maximum. You can name the resource, class/spec, slot number, or ordinal naturally.\nExamples: set Evoker essence 3 blue; make the second DK rune red; set full Warlock shards purple; disable max rune color; reset Maelstrom Weapon slot colors.\nYou can ask: Open Class Resources | Open Colors",
             status = "applied",
             summary = "Assistant class resources help",
         }
@@ -2003,7 +2006,7 @@ local function DirectHelpAnswer(query, opts)
         and ContainsAny(norm, KNOWLEDGE_INTENT_TERMS)
     then
         return {
-            text = "Class Resources help\nClass Resources covers visibility, size, width/height, gap, placement, anchor, style, fill direction, point colors, the managed Player Power bar, the second Player HP bar, and alternative mana when MSUF has those options for your class.\nExamples: make class resources wider; make class resource fill backwards; place class resources above player; set combo point color to red; class resources player power height 8.\nYou can ask: Open Class Resources | Open Colors",
+            text = "Class Resources help\nClass Resources covers visibility, size, width/height, gap, placement, anchor, style, fill direction, per-resource, per-slot, and full-at-maximum colors, the managed Player Power bar, the second Player HP bar, and alternative mana. Color requests understand resource names, class/spec names, common short forms, and ordinals.\nExamples: make class resources wider; set essence 3 cyan; make first paladin point gold; set full frost icicles blue; use a ramp for chi; disable full rune color.\nYou can ask: Open Class Resources | Open Colors",
             status = "applied",
             summary = "Assistant class resources help",
         }
