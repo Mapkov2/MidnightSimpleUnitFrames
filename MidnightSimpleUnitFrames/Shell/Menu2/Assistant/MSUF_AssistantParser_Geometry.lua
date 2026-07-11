@@ -796,6 +796,11 @@ end
 
 local function ParseGenericOffsetMove(text)
     if not OM.HasIntent(text) then return nil end
+    if text:find("focus kick", 1, true)
+        and (text:find("tracker", 1, true) or text:find("icon", 1, true))
+    then
+        return nil
+    end
 
     local direction = DetectDirection(text, {})
     local axis = OM.AxisForDirection(direction) or A._DetailOffsetAxis(text)
@@ -1649,10 +1654,10 @@ function P.ParseGroupScaleBreakpointShortcut(text)
     local changes = {}
     for i = 1, #groups do
         local scope = tostring(groups[i])
-        local modeSetting = Registry and Registry:GetSetting("gf_" .. scope .. ".frameScaleMode")
-        if modeSetting then changes[#changes + 1] = { setting = modeSetting, value = "auto" } end
         local setting = Registry and Registry:GetSetting("gf_" .. scope .. "." .. attr)
         if setting then changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta } end
+        local modeSetting = Registry and Registry:GetSetting("gf_" .. scope .. ".frameScaleMode")
+        if modeSetting then changes[#changes + 1] = { setting = modeSetting, value = "auto" } end
     end
     if #changes == 0 then return nil end
     return {
@@ -2345,7 +2350,7 @@ P.TEXT_VISIBILITY_VALUE_TERMS = {
 }
 
 P.TEXT_VISIBILITY_VERBS = {
-    "turn off", "turn on", "disable", "disabled", "enable", "enabled", "hide", "hidden",
+    "turn off", "turn on", "off", "on", "disable", "disabled", "enable", "enabled", "hide", "hidden",
     "show", "display", "visible", "aus", "deaktivieren", "deaktiviert", "ausschalten",
     "ausgeschaltet", "ausblenden", "verstecken", "an", "aktivieren", "aktiviert",
     "einschalten", "eingeschaltet", "anzeigen", "zeigen", "einblenden", "sichtbar",
@@ -2353,6 +2358,7 @@ P.TEXT_VISIBILITY_VERBS = {
 
 function P.ParseTextVisibilityShortcut(text)
     text = tostring(text or "")
+    local hasTerseToggle = ContainsAny(text, { "off", "on", "aus", "an" })
     if not (text:find("turn", 1, true) or text:find("disable", 1, true)
         or text:find("enable", 1, true) or text:find("hide", 1, true)
         or text:find("show", 1, true) or text:find("display", 1, true)
@@ -2361,7 +2367,7 @@ function P.ParseTextVisibilityShortcut(text)
         or text:find("einschalten", 1, true) or text:find("ausblenden", 1, true)
         or text:find("verstecken", 1, true) or text:find("anzeigen", 1, true)
         or text:find("zeigen", 1, true) or text:find("einblenden", 1, true)
-        or text:find("sichtbar", 1, true) or text == "an" or text == "aus") then
+        or text:find("sichtbar", 1, true) or hasTerseToggle) then
         return nil
     end
     if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end

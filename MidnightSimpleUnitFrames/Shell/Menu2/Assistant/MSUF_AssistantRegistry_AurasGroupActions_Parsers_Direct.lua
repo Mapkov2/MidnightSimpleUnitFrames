@@ -52,7 +52,7 @@ function A.AurasRegistry.BuildGroupDirectActionParsers(ctx)
         if type(value) ~= "string" or value == "" then return false end
         local scope, lane = DirectGroupAuraBlacklistScopeLane(normalized)
         return { scope = scope, lane = lane, value = value }, {
-            summary = "Explains why exact group aura spell blacklists are read-only in the native backend.",
+            summary = "Edits the native exact-SpellID hidden-aura list for the selected group lane.",
         }
     end
 
@@ -98,7 +98,7 @@ function A.AurasRegistry.BuildGroupDirectActionParsers(ctx)
         end
         local scope, lane = DirectGroupAuraBlacklistScopeLane(normalized)
         return { scope = scope, lane = lane }, {
-            summary = "Explains why exact group aura spell blacklists are read-only in the native backend.",
+            summary = "Clears native exact-SpellID hidden-aura entries for the selected group lane.",
         }
     end
 
@@ -123,7 +123,7 @@ function A.AurasRegistry.BuildGroupDirectActionParsers(ctx)
         end
         local scope, lane = DirectGroupAuraBlacklistScopeLane(normalized)
         return { scope = scope, lane = lane, preset = preset }, {
-            summary = "Explains why exact group aura spell blacklist presets are read-only in the native backend.",
+            summary = "Adds missing preset SpellIDs to the native group hidden-aura list.",
         }
     end
 
@@ -142,7 +142,7 @@ function A.AurasRegistry.BuildGroupDirectActionParsers(ctx)
         end
         local scope, lane = DirectGroupAuraBlacklistScopeLane(normalized)
         return { scope = scope, lane = lane }, {
-            summary = "Shows saved legacy hidden aura spells for group frames.",
+            summary = "Shows native exact-SpellID hidden aura entries for group frames.",
         }
     end
 

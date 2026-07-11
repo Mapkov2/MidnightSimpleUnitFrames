@@ -835,8 +835,11 @@ function R.HumanConversationReply(text)    local norm = R.Normalize(text)
     if R.ContainsAny(norm, {
         "cant find auras", "can't find auras", "cannot find auras", "where are auras",
         "where do i find auras", "where is auras", "find auras",
+        "tell me about auras", "tell me something about auras", "talk about auras",
         "ich finde auren nicht", "finde auren nicht", "wo sind auren", "wo finde ich auren",
         "auren nicht finden", "auren suche",
+        "erzaehl mir was zu auras", "erzaehle mir was zu auras",
+        "erzaehl mir etwas ueber auren", "erzaehle mir etwas ueber auren", "rede ueber auren",
     }) then
         return {
             text = "Auras are in the MSUF Auras pages. I can open Aura pages, explain live filters, change icon size/count/growth, adjust cooldown and stack text, list saved legacy hidden-aura data, and run visibility checks. Exact SpellID blacklist edits are read-only in the native 12.1 backend. Ask: open auras; where do I change aura filters; why are target buffs hidden?",
@@ -2929,6 +2932,9 @@ A.RouterTryAuraSettingShortcut = function(norm, coreHandler)
         reply.status = didNavigate and "navigated" or "info"
         reply.result = reply.status
         reply.searchResults = R.SettingFollowupResultsByQuery(settingLabel, settingLabel)
+        if type(reply.searchResults) == "table" and #reply.searchResults == 1 then
+            reply.selectPendingResult = 1
+        end
         return reply
     end
 
@@ -5459,6 +5465,11 @@ end
 
 function R.LooksLikePendingResultReply(text)    local norm = R.Normalize(text)
     if norm == "" then return false end
+    -- A bare command pronoun after a search must remain inside the result
+    -- state machine.  There it is deliberately clarified unless the user has
+    -- selected a numbered result; routing it as a fresh mutation can silently
+    -- change the closest global alias instead.
+    if A._StartsWithResultCommandPronoun and A._StartsWithResultCommandPronoun(text) then return true end
     if (R.HasNormalizedPhrase(norm, "current value") or R.HasNormalizedPhrase(norm, "value now"))
         and R.LastChangeFollowupHasExplicitOtherSubject and R.LastChangeFollowupHasExplicitOtherSubject(norm)
     then
@@ -5662,6 +5673,11 @@ function R.TryCorrectionShortcut(text, coreHandler)    local norm = R.Normalize(
     end
 
     if R.ContainsAny(norm, R.CORRECTION_HISTORY_TERMS) then
+        local ctx = type(A.GetContext) == "function" and A.GetContext() or nil
+        local parsed = type(A._ParseFollowupAnswer) == "function" and A._ParseFollowupAnswer("what did you change", ctx) or nil
+        if parsed and type(parsed.text) == "string" and parsed.text ~= "" then
+            return R.ControlResult(parsed.text, parsed.status or "info")
+        end
         return R.CoreControl(coreHandler, "what did you change", "I do not have a recorded Assistant change yet.", "info")
     end
 
@@ -8693,6 +8709,9 @@ function A.RouterTryRegistrySettingLocationShortcut(text, coreHandler, precomput
         result = "info",
         summary = "Assistant registry setting location",
         searchResults = R.RegistryLocationResultFollowups(close, #close),
+        -- A singular, high-confidence location answer establishes an explicit
+        -- conversational referent ("it").  A generic search list does not.
+        selectPendingResult = #close == 1 and 1 or nil,
     }
 end
 
@@ -9176,6 +9195,30 @@ function A.RouteInput(text, coreHandler)
             coreCache[value] = result or false
         end
         return coreCache[value] ~= false and coreCache[value] or nil
+    end
+
+    local guidedCtx = type(A.GetContext) == "function" and A.GetContext() or nil
+    if type(guidedCtx) == "table" and type(guidedCtx.guidedSetup) == "table" then
+        local guidedResult = Core(text)
+        if guidedResult and not A.RouterIsUnknownResult(guidedResult) then return guidedResult end
+    end
+
+    -- Native exact aura lists are narrower than lane visibility.  Resolve
+    -- their registered action before broad Aura help/visibility shortcuts can
+    -- reinterpret a named spell as a request to toggle the whole lane.
+    do
+        local parser = A.Parser or {}
+        local normalized = R.Normalize(text)
+        local spellValue = type(parser.AuraBlacklistSpellValue) == "function"
+            and parser.AuraBlacklistSpellValue(text) or nil
+        local exactAuraListIntent = normalized:find("blacklist", 1, true)
+            or normalized:find("whitelist", 1, true)
+            or (spellValue and (normalized:find("aura", 1, true)
+                or normalized:find("buff", 1, true) or normalized:find("debuff", 1, true)))
+        if exactAuraListIntent then
+            local exactAuraResult = Core(text)
+            if exactAuraResult and not A.RouterIsUnknownResult(exactAuraResult) then return exactAuraResult end
+        end
     end
 
     local hasPendingState = A.RouterHasPendingAssistantState()

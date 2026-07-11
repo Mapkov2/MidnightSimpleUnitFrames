@@ -62,6 +62,13 @@ local function AuraBlacklistScope(text)
     return "shared"
 end
 
+local function AuraBlacklistLane(text)
+    text = Normalize(text)
+    if text:find("debuff", 1, true) or text:find("harmful", 1, true) then return "debuff" end
+    if text:find("buff", 1, true) or text:find("helpful", 1, true) then return "buff" end
+    return "both"
+end
+
 local AURA_QUICK_PRESETS = {
     { key = "clean", aliases = { "clean", "clean 6 12", "clean aura", "clean auras" } },
     { key = "focused", aliases = { "focused", "focused 10 16", "focused aura", "focused auras" } },
@@ -174,6 +181,11 @@ local function AuraGeometryScopes(text)
         end
     end
     if #out > 0 then return out end
+
+    if HasGenericGroupAuraGeometryScope(text) then
+        AddAuraGeometryGroups(out)
+        return out
+    end
 
     if HasUnitAuraGeometryScope(text) then
         AddAuraGeometryUnits(out)
@@ -311,8 +323,6 @@ local function ParseAuraGeometryShortcut(text)
         and ContainsAny(text, AurasPhrases[35]) then
         return nil
     end
-    if HasGenericGroupAuraGeometryScope(text) and not HasConcreteGroupAuraGeometryScope(text) then return nil end
-
     local lanes = AuraGeometryLanes(text)
     local scopes = AuraGeometryScopes(text)
     if not lanes or not scopes then return nil end
@@ -2450,16 +2460,22 @@ local function AuraBlacklistSpellValue(raw)
     if value then return value end
 
     local patterns = {
+        "[Ww]hitelist%s+(.+)%s+[Ii]n%s+",
+        "[Ww]hitelist%s+(.+)%s+[Ff]or%s+",
+        "[Aa]dd%s+(.+)%s+to%s+.+[Ww]hitelist",
+        "[Rr]emove%s+(.+)%s+from%s+.+[Ww]hitelist",
         "[Aa]dd%s+(.+)%s+to%s+.+[Bb]lacklist",
         "[Aa]dd%s+(.+)%s+to%s+.+[Aa]uras?",
         "[Bb]lacklist%s+(.+)%s+[Ff]or%s+",
         "[Bb]lacklist%s+(.+)%s+[Oo]n%s+",
+        "[Bb]lacklist%s+(.+)%s+[Ii]n%s+",
         "[Bb]lock%s+(.+)%s+[Ff]or%s+",
         "[Bb]lock%s+(.+)%s+[Oo]n%s+",
         "[Ii]gnore%s+(.+)%s+[Ff]or%s+",
         "[Ii]gnore%s+(.+)%s+[Oo]n%s+",
         "[Hh]ide%s+(.+)%s+[Ff]or%s+",
         "[Hh]ide%s+(.+)%s+[Oo]n%s+",
+        "[Hh]ide%s+(.+)%s+[Ii]n%s+",
         "[Hh]ide%s+[Aa]ura%s+[Ss]pell%s+(.+)$",
         "[Hh]ide%s+[Hh]idden%s+[Aa]ura%s+[Ss]pell%s+(.+)$",
         "[Hh]ide%s+[Gg]roup%s+[Aa]ura%s+[Ss]pell%s+(.+)$",
@@ -2471,6 +2487,7 @@ local function AuraBlacklistSpellValue(raw)
         "[Hh]ide%s+[Rr]aid%s+[Dd]ebuff%s+[Aa]ura%s+[Ss]pell%s+(.+)$",
         "[Vv]erstecke%s+(.+)%s+[Aa]uf%s+",
         "[Vv]erstecke%s+(.+)%s+[Ff]uer%s+",
+        "[Vv]erstecke%s+(.+)%s+[Ii]n%s+",
         "[Aa]usblenden%s+(.+)%s+[Aa]uf%s+",
         "[Aa]usblenden%s+(.+)%s+[Ff]uer%s+",
         "[Ss]uppress%s+(.+)%s+[Ff]or%s+",
@@ -2483,6 +2500,10 @@ local function AuraBlacklistSpellValue(raw)
         "[Aa]llow%s+(.+)%s+[Oo]n%s+.+[Aa]uras?",
         "[Aa]llow%s+(.+)%s+[Ff]or%s+.+[Bb]lacklist",
         "[Aa]llow%s+(.+)%s+[Oo]n%s+.+[Bb]lacklist",
+        "[Aa]llow%s+(.+)%s+[Ii]n%s+.+[Aa]uras?",
+        "[Aa]llow%s+(.+)%s+[Ii]n%s+",
+        "[Aa]llow%s+[Hh]idden%s+[Aa]ura%s+[Ss]pell%s+(.+)%s+[Ii]n%s+",
+        "[Aa]llow%s+[Aa]ura%s+[Ss]pell%s+(.+)%s+[Ii]n%s+",
         "[Aa]llow%s+[Hh]idden%s+[Aa]ura%s+[Ss]pell%s+(.+)$",
         "[Aa]llow%s+[Aa]ura%s+[Ss]pell%s+(.+)$",
         "[Aa]llow%s+[Gg]roup%s+[Aa]ura%s+[Ss]pell%s+(.+)$",
@@ -2514,6 +2535,7 @@ end
 
 P.AURA_BLACKLIST_PRESETS = AURA_BLACKLIST_PRESETS
 P.AuraBlacklistScope = AuraBlacklistScope
+P.AuraBlacklistLane = AuraBlacklistLane
 P.AURA_QUICK_PRESETS = AURA_QUICK_PRESETS
 P.AuraQuickPresetForText = AuraQuickPresetForText
 P.AuraEditScopeForText = AuraEditScopeForText

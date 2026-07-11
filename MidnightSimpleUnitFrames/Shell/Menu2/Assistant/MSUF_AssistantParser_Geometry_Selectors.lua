@@ -166,6 +166,16 @@ local function ParseMenuSelectorState(text)
         end
     end
 
+    -- Natural value/geometry requests name the slot only to identify the
+    -- setting. They must continue to the setting parser instead of stopping
+    -- after changing the editor selection (for example "create HP text on the
+    -- left with max"). Explicit Select/Choose/Pick verbs remain selectors.
+    if not HasMenuSelectorVerb(text)
+        and ContainsAny(text, GS.NATURAL_TEXT_SELECTOR_REJECT_TERMS)
+    then
+        return nil
+    end
+
     local anchorTextTab = TextSelectorTab(text)
     local anchorTextSlot = TextSelectorSlot(text)
     if not anchorTextSlot then anchorTextSlot = NaturalTextSelectorSlot(text) end

@@ -12,6 +12,7 @@ function A.AurasRegistry.RegisterGroupAuraCategorySettings(ctx)
     if type(ctx) ~= "table" then return end
 
     local Registry = ctx.Registry
+    local AuraModel = ctx.AuraModel
     local AddAliasesForUnit = ctx.AddAliasesForUnit
     local GFAuraCategoryValues = ctx.GFAuraCategoryValues
     local GFAuraCategoryLabel = ctx.GFAuraCategoryLabel
@@ -29,7 +30,7 @@ function A.AurasRegistry.RegisterGroupAuraCategorySettings(ctx)
     if type(ReadGFAuraCategorySetting) ~= "function" or type(WriteGFAuraCategoryState) ~= "function" then return end
     if type(SameGFAuraCategoryState) ~= "function" or type(ApplyGFAuraCategory) ~= "function" then return end
 
-    local registerMutableLegacyCategorySettings = false
+    local registerMutableLegacyCategorySettings = true
     if not registerMutableLegacyCategorySettings then
         -- The native 12.1 group aura backend does not consume addon category
         -- blacklist data. Keep this legacy data out of generic setting mutation.
@@ -43,6 +44,32 @@ function A.AurasRegistry.RegisterGroupAuraCategorySettings(ctx)
     for _, scope in ipairs(GF_AURA_CATEGORY_SCOPES) do
         for _, laneInfo in ipairs(AURA_LANES) do
             local lane = laneInfo.key
+            if type(AuraModel) == "function" then
+                local settingScope, settingLane = scope, lane
+                local aliases = {}
+                AddAliasesForUnit(aliases, settingScope, "hide permanent " .. laneInfo.plural:lower())
+                AddAliasesForUnit(aliases, settingScope, "hide permanent auras for " .. laneInfo.plural:lower())
+                Registry:RegisterSetting({
+                    key = "gf_" .. settingScope .. ".auras." .. settingLane .. ".blacklist.hidePermanent",
+                    label = GFAuraCategoryScopeLabel(settingScope) .. " " .. GFAuraCategoryLaneLabel(settingLane) .. " Hide Permanent Auras",
+                    category = GFAuraCategoryScopeLabel(settingScope) .. " / Group Auras",
+                    unit = settingScope,
+                    frameType = "groupAura",
+                    attribute = "gfAura" .. GFAuraCategoryLaneLabel(settingLane) .. "BlacklistHidePermanent",
+                    type = "boolean",
+                    aliases = aliases,
+                    get = function()
+                        local Model = AuraModel()
+                        return Model and Model.ReadGroupBlacklistHidePermanent(settingScope, settingLane) == true or false
+                    end,
+                    set = function(value)
+                        local Model = AuraModel()
+                        if Model then Model.WriteGroupBlacklistHidePermanent(settingScope, settingLane, value == true) end
+                    end,
+                    apply = function() ApplyGFAuraCategory(settingScope) end,
+                    combatSafe = false,
+                })
+            end
             for i = 1, #categories do
                 local cat = categories[i]
                 local catKey = cat and (cat.key or cat.value)

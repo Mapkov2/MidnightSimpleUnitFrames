@@ -61,7 +61,7 @@ function A.AurasRegistry.BuildGroupDirectActionParserHelpers(ctx)
             "mythic raid aura", "mythic raid auras", "mythic raid buff", "mythic raid buffs",
             "group aura blacklist", "party aura blacklist", "raid aura blacklist",
             "party buff blacklist", "party debuff blacklist", "raid buff blacklist", "raid debuff blacklist",
-            "for party", "on party", "for raid", "on raid",
+            "for party", "on party", "in party", "for raid", "on raid", "in raid",
         }
         if type(P.ContainsAny) == "function" then return P.ContainsAny(normalized, phrases) end
         for i = 1, #phrases do

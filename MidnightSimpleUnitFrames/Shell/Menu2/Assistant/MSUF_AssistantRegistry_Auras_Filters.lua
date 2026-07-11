@@ -28,6 +28,7 @@ function A.AurasRegistry.RegisterFilterSettings(ctx, scope)
     local AuraSetFiltersEnabled = ctx.AuraSetFiltersEnabled
     local AuraReadFilter = ctx.AuraReadFilter
     local AuraWriteFilter = ctx.AuraWriteFilter
+    local AuraModel = ctx.AuraModel
     local ApplyAura = ctx.ApplyAura
 
     if not (Registry and type(Registry.RegisterSetting) == "function") then return end
@@ -106,5 +107,31 @@ function A.AurasRegistry.RegisterFilterSettings(ctx, scope)
             apply = function() ApplyAura(settingScope, "MSUF_ASSISTANT_AURA_FILTER_EXCLUSIVE") end,
             combatSafe = false,
         })
+
+        if scope ~= "shared" and type(AuraModel) == "function" then
+            local hideAliases = {}
+            AddAuraLaneAliases(hideAliases, settingScope, settingLane, "hide permanent auras")
+            AddAuraLaneAliases(hideAliases, settingScope, settingLane, "hide permanent")
+            Registry:RegisterSetting({
+                key = "auras3." .. settingScope .. "." .. settingLane .. ".blacklist.hidePermanent",
+                label = AuraScopeLabel(settingScope) .. " " .. laneInfo.label .. " Hide Permanent Auras",
+                category = AuraScopeLabel(settingScope) .. " / Aura Filters",
+                unit = settingScope,
+                frameType = "aura",
+                attribute = "aura" .. settingLane .. "BlacklistHidePermanent",
+                type = "boolean",
+                aliases = hideAliases,
+                get = function()
+                    local Model = AuraModel()
+                    return Model and Model.ReadBlacklistHidePermanent(settingScope, settingLane) == true or false
+                end,
+                set = function(value)
+                    local Model = AuraModel()
+                    if Model then Model.WriteBlacklistHidePermanent(settingScope, settingLane, value == true) end
+                end,
+                apply = function() ApplyAura(settingScope, "MSUF_ASSISTANT_AURA_HIDE_PERMANENT") end,
+                combatSafe = false,
+            })
+        end
     end
 end

@@ -105,6 +105,8 @@ local function ParseDispelOverlayOpacityShortcut(normalized)
     local groups = DetectGroups(normalized)
     for i = 1, #units do
         local unit = tostring(units[i])
+        local override = A.Registry and A.Registry:GetSetting("barScope." .. unit .. ".override")
+        if override then changes[#changes + 1] = { setting = override, value = true } end
         local setting = A.Registry and A.Registry:GetSetting("barScope." .. unit .. ".unitDispelOverlayAlpha")
         if setting then changes[#changes + 1] = { setting = setting, value = value } end
     end
@@ -653,6 +655,8 @@ local function ParseGroupHideOfflineDelayFastShortcut(normalized)
         local scope = tostring(groups[i])
         if (scope == "party" or scope == "raid" or scope == "mythicraid") and not seen[scope] then
             seen[scope] = true
+            local enabled = A.Registry and A.Registry:GetSetting("gf_" .. scope .. ".hideOfflineEnabled")
+            if enabled then changes[#changes + 1] = { setting = enabled, value = true } end
             local setting = A.Registry and A.Registry:GetSetting("gf_" .. scope .. ".hideOfflineDelay")
             if setting then changes[#changes + 1] = { setting = setting, value = value } end
         end
@@ -1200,7 +1204,11 @@ local function ParseGroupLayoutNumberFastShortcut(normalized)
     end
 
     local attr
-    if ContainsAny(normalized, P.RootPhrases[166]) then
+    if normalized:find("column", 1, true) and normalized:find("after", 1, true)
+        and (normalized:find("member", 1, true) or normalized:find("player", 1, true))
+    then
+        attr = "unitsPerColumn"
+    elseif ContainsAny(normalized, P.RootPhrases[166]) then
         attr = "unitsPerColumn"
     elseif ContainsAny(normalized, P.RootPhrases[167]) then
         attr = "maxColumns"
@@ -1248,6 +1256,10 @@ local function GroupGrowthValue(normalized)
     local target = P.TargetAfterLastConnector and P.TargetAfterLastConnector(normalized) or nil
     local function valueIn(text)
         if not text or text == "" then return nil end
+        if text:find("right then down", 1, true) or text:find("right and down", 1, true) then return "RIGHT" end
+        if text:find("left then down", 1, true) or text:find("left and down", 1, true) then return "LEFT" end
+        if text:find("down then right", 1, true) or text:find("down and right", 1, true) then return "DOWN" end
+        if text:find("up then right", 1, true) or text:find("up and right", 1, true) then return "UP" end
         if ContainsAny(text, P.RootPhrases[173]) then return "DOWN" end
         if ContainsAny(text, P.RootPhrases[174]) then return "UP" end
         if ContainsAny(text, P.RootPhrases[175]) then return "RIGHT" end
@@ -1302,7 +1314,12 @@ local function ParseGroupOrderingFastShortcut(normalized)
 
     local attr
     local value
-    if ContainsAny(normalized, P.RootPhrases[183]) then
+    if normalized:find("myself", 1, true)
+        and (normalized:find("first", 1, true) or normalized:find("at the top", 1, true))
+    then
+        attr = "playerFirstInRole"
+        value = true
+    elseif ContainsAny(normalized, P.RootPhrases[183]) then
         attr = "roleOrder"
         value = GroupRoleOrderValue(normalized)
         if value == nil then return nil end
@@ -1314,14 +1331,14 @@ local function ParseGroupOrderingFastShortcut(normalized)
         attr = "sortMode"
         value = GroupSortModeValue(normalized)
         if value == nil then return nil end
-    elseif ContainsAny(normalized, P.RootPhrases[186]) then
-        attr = "sortByRole"
-        value = DetectBoolean(normalized)
-        if value == nil then value = not ContainsAny(normalized, P.RootPhrases[187]) end
     elseif ContainsAny(normalized, P.RootPhrases[188]) then
         attr = "playerFirstInRole"
         value = DetectBoolean(normalized)
         if value == nil then value = not ContainsAny(normalized, P.RootPhrases[189]) end
+    elseif ContainsAny(normalized, P.RootPhrases[186]) then
+        attr = "sortByRole"
+        value = DetectBoolean(normalized)
+        if value == nil then value = not ContainsAny(normalized, P.RootPhrases[187]) end
     elseif ContainsAny(normalized, P.RootPhrases[190]) then
         attr = "preserveRaidGroups"
         value = DetectBoolean(normalized)
@@ -1383,7 +1400,10 @@ local function ParseGroupScalingFastShortcut(normalized)
 
     local attr
     local value
-    if ContainsAny(normalized, P.RootPhrases[199]) then
+    if normalized:find("automatic", 1, true) or normalized:find("auto scaling", 1, true) then
+        attr = "frameScaleMode"
+        value = "auto"
+    elseif ContainsAny(normalized, P.RootPhrases[199]) then
         attr = "frameScaleMode"
         value = GroupScaleModeValue(normalized)
         if value == nil then return nil end
@@ -3186,8 +3206,7 @@ local function ParseGroupRangeFadeFastShortcut(normalized)
         attr = "offlineAlpha"
         label = "Offline Opacity"
         value = FirstNumber(normalized)
-        if value == nil then return nil end
-        if value > 1 then value = value / 100 end
+        if value and value > 1 then value = value / 100 end
     elseif ContainsAny(normalized, P.RootPhrases[454]) then
         if ContainsAny(normalized, P.RootPhrases[455]) then
             attr = "healthFadeThreshold"
@@ -3220,7 +3239,7 @@ local function ParseGroupRangeFadeFastShortcut(normalized)
         value = DetectBoolean(normalized)
         if value == nil then value = true end
     end
-    if value == nil then return nil end
+    if value == nil and attr ~= "offlineAlpha" then return nil end
 
     local changes = {}
     local seen = {}
@@ -3229,7 +3248,13 @@ local function ParseGroupRangeFadeFastShortcut(normalized)
         if (scope == "party" or scope == "raid" or scope == "mythicraid") and not seen[scope] then
             seen[scope] = true
             local setting = A.Registry and A.Registry:GetSetting("gf_" .. scope .. "." .. attr)
-            if setting then changes[#changes + 1] = { setting = setting, value = value } end
+            if setting then
+                local relativeDelta = value == nil and P.RelativeNumberDeltaForText
+                    and P.RelativeNumberDeltaForText(setting, normalized, 0.05) or nil
+                if value ~= nil or relativeDelta ~= nil then
+                    changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta }
+                end
+            end
         end
     end
     if #changes == 0 then return nil end
@@ -3290,7 +3315,14 @@ local function ParseGroupNumberFastShortcut(normalized)
     local attr
     local label
     local value
-    if ContainsAny(normalized, P.RootPhrases[468]) then
+    local relativeDelta
+    if normalized:find("bigger", 1, true) or normalized:find("larger", 1, true)
+        or normalized:find("smaller", 1, true)
+    then
+        attr = "groupNumberSize"
+        label = "Group Number Size"
+        relativeDelta = normalized:find("smaller", 1, true) and -1 or 1
+    elseif ContainsAny(normalized, P.RootPhrases[468]) then
         attr = "groupNumberAnchor"
         label = "Group Number Anchor"
         value = GroupCornerAnchorValue(normalized)
@@ -3312,7 +3344,7 @@ local function ParseGroupNumberFastShortcut(normalized)
         value = DetectBoolean(normalized)
         if value == nil then value = true end
     end
-    if value == nil then return nil end
+    if value == nil and relativeDelta == nil then return nil end
 
     local changes = {}
     local seen = {}
@@ -3321,7 +3353,7 @@ local function ParseGroupNumberFastShortcut(normalized)
         if (scope == "party" or scope == "raid" or scope == "mythicraid") and not seen[scope] then
             seen[scope] = true
             local setting = A.Registry and A.Registry:GetSetting("gf_" .. scope .. "." .. attr)
-            if setting then changes[#changes + 1] = { setting = setting, value = value } end
+            if setting then changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta } end
         end
     end
     if #changes == 0 then return nil end
@@ -4395,9 +4427,9 @@ function A._ParsePipelineGeometry(normalized, raw)
     result = A._ParseTextSlotDropdownValueShortcut(normalized); if result then return result end
     result = A._ParseHPTextOptionShortcut(normalized); if result then return result end
     result = A._ParsePowerTextOptionShortcut(normalized); if result then return result end
-    result = A._ParseTextAreaOffsetShortcut(normalized); if result then return result end
     result = A._ParseTextSlotValueMoveShortcut(normalized); if result then return result end
     result = A._ParseTextSlotOffsetShortcut(normalized); if result then return result end
+    result = A._ParseTextAreaOffsetShortcut(normalized); if result then return result end
     result = P.ParseHumanAnchorTarget and P.ParseHumanAnchorTarget(normalized, raw); if result then return result end
     result = P.ParseGroupScaleBreakpointShortcut and P.ParseGroupScaleBreakpointShortcut(normalized); if result then return result end
     result = P.ParseCastbarTextSizeShortcut and P.ParseCastbarTextSizeShortcut(normalized); if result then return result end
@@ -5015,11 +5047,12 @@ end
 A._ParseGlobalUIShellPriorityShortcut = ParseGlobalUIShellPriorityShortcut
 
 local function ParseClassPowerPriorityShortcut(normalized, raw)
-    return (ParseClassPowerRootToggle and ParseClassPowerRootToggle(normalized))
+    return (A._ParseClassPowerDisplayStyleShortcut and A._ParseClassPowerDisplayStyleShortcut(normalized))
         or (A._ParseClassPowerPreviewResourceShortcut and A._ParseClassPowerPreviewResourceShortcut(normalized))
+        or (ParseClassPowerRootToggle and ParseClassPowerRootToggle(normalized))
+        or (A._ParseClassPowerPlacementShortcut and A._ParseClassPowerPlacementShortcut(normalized))
         or (A._ParseClassPowerWidthModeShortcut and A._ParseClassPowerWidthModeShortcut(normalized))
         or (A._ParseClassPowerVisibilityShortcut and A._ParseClassPowerVisibilityShortcut(normalized))
-        or (A._ParseClassPowerDisplayStyleShortcut and A._ParseClassPowerDisplayStyleShortcut(normalized))
         or (A._ParseClassPowerFillDirectionShortcut and A._ParseClassPowerFillDirectionShortcut(normalized))
         or (A._ParseClassPowerEmpoweredComboShortcut and A._ParseClassPowerEmpoweredComboShortcut(normalized))
         or (A._ParseClassPowerRuneTimeShortcut and A._ParseClassPowerRuneTimeShortcut(normalized))
@@ -5029,7 +5062,6 @@ local function ParseClassPowerPriorityShortcut(normalized, raw)
         or (A._ParseClassPowerAltManaShortcut and A._ParseClassPowerAltManaShortcut(normalized, raw))
         or (A._ParseClassPowerPlayerHPDetailShortcut and A._ParseClassPowerPlayerHPDetailShortcut(normalized, raw))
         or (A._ParseClassPowerAnchorShortcut and A._ParseClassPowerAnchorShortcut(normalized))
-        or (A._ParseClassPowerPlacementShortcut and A._ParseClassPowerPlacementShortcut(normalized))
         or (A._ParseClassPowerShapeShortcut and A._ParseClassPowerShapeShortcut(normalized))
         or (A._ParseClassPowerTextSizeShortcut and A._ParseClassPowerTextSizeShortcut(normalized))
         or (A._ParseClassPowerSizeShortcut and A._ParseClassPowerSizeShortcut(normalized))
@@ -5198,12 +5230,32 @@ function P.ShouldTryEarlyCompound(text)
 
     local itemCount = 0
     local itemGroups = {
-        { "name", "names" }, { "portrait", "portraits" }, { "power bar", "power bars" },
+        { "name", "names", "namen" }, { "portrait", "portraits", "portraet", "portraets" }, { "power bar", "power bars" },
         { "health bar", "health bars" }, { "castbar", "cast bar" }, { "buff", "buffs" },
         { "debuff", "debuffs" }, { "border", "outline" }, { "background" },
     }
     for i = 1, #itemGroups do
         if ContainsAny(text, itemGroups[i]) then itemCount = itemCount + 1 end
+    end
+    if itemCount >= 1 then
+        local scopeCount = #(DetectUnits(text) or {}) + #(DetectGroups(text) or {})
+        local hasTrailingBoolean = text:match("%s+on$") or text:match("%s+off$")
+            or text:match("%s+true$") or text:match("%s+false$")
+            or text:match("%s+enabled$") or text:match("%s+disabled$")
+            or text:match("%s+an$") or text:match("%s+aus$")
+            or text:match("%s+aktiviert$") or text:match("%s+deaktiviert$")
+        if scopeCount >= 2 and hasTrailingBoolean then return true end
+        if scopeCount >= 2 and (
+            text:match("^turn%s+off%s+") or text:match("^turn%s+on%s+")
+            or text:match("^disable%s+") or text:match("^enable%s+")
+            or text:match("^hide%s+") or text:match("^show%s+")
+            or text:match("^deaktivieren%s+") or text:match("^deaktiviere%s+")
+            or text:match("^aktivieren%s+") or text:match("^aktiviere%s+")
+            or text:match("^verstecken%s+") or text:match("^verstecke%s+")
+            or text:match("^anzeigen%s+") or text:match("^zeige%s+")
+        ) then
+            return true
+        end
     end
     if itemCount >= 2 and (
         text:match("^turn%s+off%s+") or text:match("^turn%s+on%s+")
@@ -5243,6 +5295,10 @@ function P.ShouldTryEarlyCompound(text)
             "show", "hide", "an", "aus", "aktivieren", "deaktivieren", "anzeigen", "verstecken",
         })
         if hasBoolean and itemCount >= 2 then return true end
+        if hasBoolean and itemCount >= 1 then
+            local scopeCount = #(DetectUnits(text) or {}) + #(DetectGroups(text) or {})
+            if scopeCount >= 2 then return true end
+        end
     end
     return false
 end
@@ -5256,7 +5312,15 @@ function A.ParseSimpleChange(text, ctxOverride)
     -- intents must fall through to the Router instead of being returned here,
     -- so page/location/problem specialists can give their richer answer.
     if P.NonMutatingIntent and P.NonMutatingIntent(normalized) then return nil end
-    local parsed = (A._ParseHumanSafetyGuidanceShortcut and A._ParseHumanSafetyGuidanceShortcut(normalized))
+    -- An exact full registry label is stronger evidence than a broad topical
+    -- shortcut.  Resolve it first so words such as "anchor", "name", "scale",
+    -- or "power text" cannot redirect a generated or human exact-label command
+    -- to the parent frame control.
+    local exactFullAlias = P.ParseRegistryExactAliasShortcut
+        and P.ParseRegistryExactAliasShortcut(normalized, raw, { minTokens = 3, fullPhrase = true })
+    if normalized:find(" text anchor ", 1, true) and not normalized:find("custom value", 1, true) then exactFullAlias = nil end
+    local parsed = exactFullAlias
+        or (A._ParseHumanSafetyGuidanceShortcut and A._ParseHumanSafetyGuidanceShortcut(normalized))
         or (A._ParseUnitRaidMarkerVisibilityShortcut and A._ParseUnitRaidMarkerVisibilityShortcut(normalized))
         or (A._ParseDispelOverlayOpacityShortcut and A._ParseDispelOverlayOpacityShortcut(normalized))
         or (A._ParseScopedDispelBorderTriggerFastShortcut and A._ParseScopedDispelBorderTriggerFastShortcut(normalized))
@@ -5289,9 +5353,9 @@ function A.ParseSimpleChange(text, ctxOverride)
         or (A._ParseTextSlotDropdownValueShortcut and A._ParseTextSlotDropdownValueShortcut(normalized))
         or (A._ParseHPTextOptionShortcut and A._ParseHPTextOptionShortcut(normalized))
         or (A._ParsePowerTextOptionShortcut and A._ParsePowerTextOptionShortcut(normalized))
-        or (A._ParseTextAreaOffsetShortcut and A._ParseTextAreaOffsetShortcut(normalized))
         or (A._ParseTextSlotValueMoveShortcut and A._ParseTextSlotValueMoveShortcut(normalized))
         or (A._ParseTextSlotOffsetShortcut and A._ParseTextSlotOffsetShortcut(normalized))
+        or (A._ParseTextAreaOffsetShortcut and A._ParseTextAreaOffsetShortcut(normalized))
         or (A._ParseTextFontSizeShortcut and A._ParseTextFontSizeShortcut(normalized))
         or ParseCustomAnchorSet(normalized, raw)
         or ParsePortraitDetailShortcut(normalized)
@@ -5362,10 +5426,60 @@ function A.Parse(text, ctxOverride)
     if autoCoverage and type(autoCoverage.EnsureFilled) == "function" then
         autoCoverage.EnsureFilled()
     end
-    local raw = Trim(text)
-    local normalized = Normalize(raw)
+    local raw = P.Trim(text)
+    local normalized = P.Normalize(raw)
     local ctx = type(ctxOverride) == "table" and ctxOverride or (A.GetContext and A.GetContext() or {})
     if normalized == "" then return { kind = "empty" } end
+    if type(ctx.guidedSetup) == "table" and P.ParseGuidedSetupFollowup then
+        local guidedPriority = P.ParseGuidedSetupFollowup(normalized, ctx)
+        if guidedPriority then
+            guidedPriority.raw = raw
+            guidedPriority.normalized = normalized
+            return guidedPriority
+        end
+    end
+    local exactFullAlias = P.ParseRegistryExactAliasShortcut
+        and P.ParseRegistryExactAliasShortcut(normalized, raw, { minTokens = 3, fullPhrase = true })
+    if normalized:find(" text anchor ", 1, true) and not normalized:find("custom value", 1, true) then exactFullAlias = nil end
+    if exactFullAlias then
+        exactFullAlias.raw = raw
+        exactFullAlias.normalized = normalized
+        return exactFullAlias
+    end
+    if P.ParseRegistryActionAliasShortcut and normalized:find("blacklist", 1, true)
+        and (normalized:find("what is", 1, true) or normalized:find("show", 1, true)
+            or normalized:find("list", 1, true) or normalized:find("current", 1, true))
+    then
+        local summaryAction = P.ParseRegistryActionAliasShortcut(normalized, raw)
+        local key = summaryAction and summaryAction.action and tostring(summaryAction.action.key or "") or ""
+        if key:find("_summary$") then
+            summaryAction.raw = raw
+            summaryAction.normalized = normalized
+            return summaryAction
+        end
+    end
+    if normalized:find("player", 1, true) and normalized:find("range fade", 1, true) then
+        return {
+            kind = "unknown",
+            status = "info",
+            text = "Player range fade is not a runtime-supported MSUF option. Choose Target, Focus, Pet, Target of Target, Focus Target, or Boss instead.",
+            summary = "Explains that Player range fade is unsupported instead of changing an unrelated global option.",
+            raw = raw,
+            normalized = normalized,
+        }
+    end
+    -- An exact registry-action explanation is always a lookup, even when the
+    -- public action label contains diagnostic words such as "Hidden" or
+    -- "Broken". Resolve this before NonMutatingIntent can reinterpret those
+    -- label tokens as a live problem report and return an executable
+    -- diagnostic action.
+    local actionExplainParsed = P.ParseRegistryActionExplainShortcut
+        and P.ParseRegistryActionExplainShortcut(normalized, raw)
+    if actionExplainParsed then
+        actionExplainParsed.raw = raw
+        actionExplainParsed.normalized = normalized
+        return actionExplainParsed
+    end
     local nonMutatingIntent = not ctx._nonMutatingSafeParse
         and P.NonMutatingIntent and P.NonMutatingIntent(normalized)
     if nonMutatingIntent then
@@ -5373,8 +5487,8 @@ function A.Parse(text, ctxOverride)
         -- still get the most specific help available instead of a generic
         -- safety banner. Scope help is a read-only registry action; Knowledge
         -- answers are explanatory data only. Neither path applies a setting.
-        if nonMutatingIntent == "problem" and ParseDiagnostic then
-            local diagnostic = ParseDiagnostic(normalized)
+        if nonMutatingIntent == "problem" and P.ParseDiagnostic then
+            local diagnostic = P.ParseDiagnostic(normalized)
             if diagnostic then
                 diagnostic.raw = raw
                 diagnostic.normalized = normalized
@@ -5382,7 +5496,7 @@ function A.Parse(text, ctxOverride)
             end
         end
         local scopedHelp = nonMutatingIntent == "capability"
-            and ParseScopedHelp and ParseScopedHelp(normalized)
+            and P.ParseScopedHelp and P.ParseScopedHelp(normalized)
         if scopedHelp then
             scopedHelp.raw = raw
             scopedHelp.normalized = normalized
@@ -5421,6 +5535,363 @@ function A.Parse(text, ctxOverride)
             return nonMutatingIntentParsed
         end
     end
+    if normalized:find("only", 1, true) and ParseScopedOnlyOverride then
+        local scopedOnly = ParseScopedOnlyOverride(normalized, raw)
+        if scopedOnly then
+            scopedOnly.raw = raw
+            scopedOnly.normalized = normalized
+            return scopedOnly
+        end
+    end
+    if normalized:find("permanent", 1, true)
+        and (normalized:find("aura", 1, true) or normalized:find("buff", 1, true) or normalized:find("debuff", 1, true))
+    then
+        local isGroup = normalized:find("party", 1, true) or normalized:find("raid", 1, true)
+            or normalized:find("group", 1, true)
+        local lane = isGroup and P.AuraGroupBlacklistLane and P.AuraGroupBlacklistLane(normalized)
+            or (P.AuraBlacklistLane and P.AuraBlacklistLane(normalized))
+        local key
+        if isGroup and P.AuraGroupBlacklistScope then
+            key = "gf_" .. tostring(P.AuraGroupBlacklistScope(normalized)) .. ".auras." .. tostring(lane) .. ".blacklist.hidePermanent"
+        elseif P.AuraBlacklistScope then
+            local scope = P.AuraBlacklistScope(normalized)
+            if scope ~= "shared" then key = "auras3." .. tostring(scope) .. "." .. tostring(lane) .. ".blacklist.hidePermanent" end
+        end
+        local setting = key and A.Registry and A.Registry:GetSetting(key)
+        if setting then
+            local value = not (normalized:find("show", 1, true) or normalized:find("allow", 1, true)
+                or normalized:find("unhide", 1, true) or normalized:find("do not hide", 1, true)
+                or normalized:find("dont hide", 1, true))
+            return {
+                kind = "changes",
+                changes = { { setting = setting, value = value } },
+                label = setting.label,
+                summary = (value and "Hides" or "Allows") .. " permanent auras only in the requested lane.",
+                raw = raw,
+                normalized = normalized,
+            }
+        end
+    end
+    -- Exact aura-list edits are more specific than broad visibility toggles.
+    -- Keep questions in the read-only path above and do not reinterpret the
+    -- separate hide-permanent option as a SpellID blacklist mutation.
+    if P.ParseRegistryActionAliasShortcut and P.AuraBlacklistSpellValue
+        and not normalized:find("permanent", 1, true)
+        and (normalized:find("blacklist", 1, true) or normalized:find("whitelist", 1, true)
+            or normalized:find("buff", 1, true) or normalized:find("debuff", 1, true)
+            or normalized:find("aura", 1, true))
+        and P.AuraBlacklistSpellValue(raw)
+    then
+        local auraListAction = P.ParseRegistryActionAliasShortcut(normalized, raw)
+        local actionKey = auraListAction and auraListAction.action and tostring(auraListAction.action.key or "") or ""
+        if actionKey:find("^aura_blacklist_") or actionKey:find("^aura_group_blacklist_")
+            or actionKey:find("^aura_group_category_blacklist_") or actionKey:find("^aura_custom_whitelist_")
+        then
+            auraListAction.raw = raw
+            auraListAction.normalized = normalized
+            return auraListAction
+        end
+    end
+    if P.ParseAuraGeometryShortcut
+        and (normalized:find("aura", 1, true) or normalized:find("buff", 1, true)
+            or normalized:find("debuff", 1, true))
+    then
+        local auraGeometryPriority = P.ParseAuraGeometryShortcut(normalized)
+        if auraGeometryPriority then
+            auraGeometryPriority.raw = raw
+            auraGeometryPriority.normalized = normalized
+            return auraGeometryPriority
+        end
+    end
+    if P.ParseAuraDebuffBorderModeShortcut and normalized:find("dispel border", 1, true) then
+        local borderModePriority = P.ParseAuraDebuffBorderModeShortcut(normalized)
+        if borderModePriority then
+            borderModePriority.raw = raw
+            borderModePriority.normalized = normalized
+            return borderModePriority
+        end
+    end
+    if (normalized:find("kick ready", 1, true) or normalized:find("interrupt ready", 1, true))
+        and (normalized:find("indicator", 1, true) or normalized:find("icon", 1, true))
+    then
+        local setting, value, relativeDelta
+        local amount = P.FirstNumber(normalized) or 1
+        if normalized:find("anchor", 1, true) or normalized:find("put ", 1, true) == 1 then
+            setting = A.Registry and A.Registry:GetSetting("general.kickReadyAnchor")
+            if normalized:find("left", 1, true) then value = "LEFT"
+            elseif normalized:find("right", 1, true) then value = "RIGHT"
+            elseif normalized:find("top", 1, true) then value = "TOP"
+            elseif normalized:find("bottom", 1, true) then value = "BOTTOM" end
+        elseif normalized:find("move", 1, true) then
+            local vertical = normalized:find("up", 1, true) or normalized:find("down", 1, true)
+            setting = A.Registry and A.Registry:GetSetting(vertical and "general.kickReadyOffsetY" or "general.kickReadyOffsetX")
+            local negative = normalized:find("left", 1, true) or normalized:find("down", 1, true)
+            relativeDelta = negative and -math.abs(amount) or math.abs(amount)
+        elseif normalized:find("size", 1, true) and P.FirstNumber(normalized) then
+            setting = A.Registry and A.Registry:GetSetting("general.kickReadySize")
+            value = P.FirstNumber(normalized)
+        elseif normalized:find("bigger", 1, true) or normalized:find("larger", 1, true)
+            or normalized:find("smaller", 1, true)
+        then
+            setting = A.Registry and A.Registry:GetSetting("general.kickReadySize")
+            relativeDelta = normalized:find("smaller", 1, true) and -math.abs(amount) or math.abs(amount)
+        end
+        if setting and (value ~= nil or relativeDelta ~= nil) then
+            return {
+                kind = "changes",
+                changes = { { setting = setting, value = value, relativeDelta = relativeDelta } },
+                label = setting.label or "Interrupt Ready Indicator",
+                summary = "Changes only the Interrupt Ready indicator.",
+                raw = raw,
+                normalized = normalized,
+            }
+        end
+    end
+    if normalized:find("focus kick", 1, true)
+        and (normalized:find("tracker", 1, true) or normalized:find("icon", 1, true))
+    then
+        local changes = {}
+        local amount = P.FirstNumber(normalized) or 1
+        if normalized:find("left", 1, true) or normalized:find("right", 1, true)
+            or normalized:find("up", 1, true) or normalized:find("down", 1, true)
+        then
+            local vertical = normalized:find("up", 1, true) or normalized:find("down", 1, true)
+            local key = vertical and "general.focusKickIconOffsetY" or "general.focusKickIconOffsetX"
+            local setting = A.Registry and A.Registry:GetSetting(key)
+            if setting then
+                local negative = normalized:find("left", 1, true) or normalized:find("down", 1, true)
+                changes[1] = { setting = setting, relativeDelta = negative and -math.abs(amount) or math.abs(amount) }
+            end
+        elseif normalized:find("bigger", 1, true) or normalized:find("larger", 1, true)
+            or normalized:find("smaller", 1, true)
+        then
+            local delta = normalized:find("smaller", 1, true) and -math.abs(amount) or math.abs(amount)
+            for _, key in ipairs({ "general.focusKickIconWidth", "general.focusKickIconHeight" }) do
+                local setting = A.Registry and A.Registry:GetSetting(key)
+                if setting then changes[#changes + 1] = { setting = setting, relativeDelta = delta } end
+            end
+        end
+        if #changes > 0 then
+            return {
+                kind = "changes",
+                changes = changes,
+                label = "Focus Kick Tracker",
+                bulkSafe = #changes > 1,
+                summary = "Changes only the Focus Kick Tracker position or size.",
+                raw = raw,
+                normalized = normalized,
+            }
+        end
+    end
+    if (normalized:find("scale", 1, true) or normalized:find("scaling", 1, true))
+        and (normalized:find("party", 1, true) or normalized:find("raid", 1, true)
+            or normalized:find("group frame", 1, true))
+    then
+        local autoModeIntent = normalized:find("based on raid size", 1, true)
+            or normalized:find("by player count", 1, true)
+        if autoModeIntent then
+            local changes = {}
+            for _, scope in ipairs(P.DetectGroups(normalized) or {}) do
+                local setting = A.Registry and A.Registry:GetSetting("gf_" .. tostring(scope) .. ".frameScaleMode")
+                if setting then changes[#changes + 1] = { setting = setting, value = "auto" } end
+            end
+            if #changes > 0 then
+                return { kind = "changes", changes = changes, label = "Automatic Group Scaling",
+                    bulkSafe = #changes > 1, summary = "Scales group frames automatically by group size.",
+                    raw = raw, normalized = normalized }
+            end
+        end
+        local hasBreakpoint = normalized:find("player", 1, true) or normalized:find("people", 1, true)
+            or normalized:find("raider", 1, true) or normalized:find("when ", 1, true)
+            or normalized:find(" at ", 1, true) or normalized:find(" for ", 1, true)
+            or normalized:find(" if ", 1, true)
+        if not hasBreakpoint then
+            local groups = P.DetectGroups(normalized)
+            local value = P.FirstNumber(normalized)
+            local changes = {}
+            for _, scope in ipairs(groups or {}) do
+                local setting = A.Registry and A.Registry:GetSetting("gf_" .. tostring(scope) .. ".frameScaleManual")
+                if setting and value ~= nil then changes[#changes + 1] = { setting = setting, value = value } end
+            end
+            if #changes > 0 then
+                return {
+                    kind = "changes", changes = changes,
+                    label = "Group Frame Scale", bulkSafe = #changes > 1,
+                    summary = "Changes the requested manual group-frame scale.", raw = raw, normalized = normalized,
+                }
+            end
+        end
+        local groupScalePriority = hasBreakpoint and P.ParseGroupScaleBreakpointShortcut
+            and P.ParseGroupScaleBreakpointShortcut(normalized)
+            or (A._ParseGroupScalingFastShortcut and A._ParseGroupScalingFastShortcut(normalized))
+        if groupScalePriority then
+            groupScalePriority.raw = raw
+            groupScalePriority.normalized = normalized
+            return groupScalePriority
+        end
+    end
+    if normalized:find("offline", 1, true)
+        and (normalized:find("party", 1, true) or normalized:find("raid", 1, true))
+    then
+        if normalized:find("in combat", 1, true) and normalized:find("hide", 1, true) then
+            local changes = {}
+            for _, scope in ipairs(P.DetectGroups(normalized) or {}) do
+                local setting = A.Registry and A.Registry:GetSetting("gf_" .. tostring(scope) .. ".hideOfflineInCombat")
+                if setting then changes[#changes + 1] = { setting = setting, value = true } end
+            end
+            if #changes > 0 then
+                return { kind = "changes", changes = changes, label = "Hide Offline In Combat",
+                    bulkSafe = #changes > 1, summary = "Hides offline group members only while in combat.",
+                    raw = raw, normalized = normalized }
+            end
+        end
+        if normalized:find("transparent", 1, true) or normalized:find("opacity", 1, true)
+            or normalized:find("alpha", 1, true) or normalized:find("fade offline", 1, true)
+        then
+            local changes = {}
+            local number = P.FirstNumber(normalized)
+            if number and number > 1 then number = number / 100 end
+            for _, scope in ipairs(P.DetectGroups(normalized) or {}) do
+                local setting = A.Registry and A.Registry:GetSetting("gf_" .. tostring(scope) .. ".offlineAlpha")
+                if setting then
+                    local delta = number == nil and P.RelativeNumberDeltaForText
+                        and P.RelativeNumberDeltaForText(setting, normalized, 0.05) or nil
+                    if number == nil and normalized:find("more transparent", 1, true) then delta = -0.05 end
+                    if number == nil and normalized:find("less transparent", 1, true) then delta = 0.05 end
+                    if number ~= nil or delta ~= nil then
+                        changes[#changes + 1] = { setting = setting, value = number, relativeDelta = delta }
+                    end
+                end
+            end
+            if #changes > 0 then
+                return { kind = "changes", changes = changes, label = "Offline Opacity",
+                    bulkSafe = #changes > 1, summary = "Changes only offline group-member opacity.",
+                    raw = raw, normalized = normalized }
+            end
+        end
+        local offlinePriority = A._ParseGroupRangeFadeFastShortcut and A._ParseGroupRangeFadeFastShortcut(normalized)
+        if offlinePriority then
+            offlinePriority.raw = raw
+            offlinePriority.normalized = normalized
+            return offlinePriority
+        end
+    end
+    if normalized:find("name", 1, true) and normalized:find("visible", 1, true)
+        and normalized:find("transparent", 1, true)
+        and (normalized:find("party", 1, true) or normalized:find("raid", 1, true))
+    then
+        local changes = {}
+        for _, scope in ipairs(P.DetectGroups(normalized) or {}) do
+            local setting = A.Registry and A.Registry:GetSetting("gf_" .. tostring(scope) .. ".alphaExcludeTextPortrait")
+            if setting then changes[#changes + 1] = { setting = setting, value = true } end
+        end
+        if #changes > 0 then
+            return { kind = "changes", changes = changes, label = "Keep Group Text Visible",
+                bulkSafe = #changes > 1, summary = "Keeps text and portraits visible while the frame is faded.",
+                raw = raw, normalized = normalized }
+        end
+    end
+    if normalized:find("out of range", 1, true)
+        and (normalized:find("party", 1, true) or normalized:find("raid", 1, true))
+        and normalized:find("transparent", 1, true)
+    then
+        local changes = {}
+        for _, scope in ipairs(P.DetectGroups(normalized) or {}) do
+            local enabled = A.Registry and A.Registry:GetSetting("gf_" .. tostring(scope) .. ".rangeFadeEnabled")
+            if enabled then changes[#changes + 1] = { setting = enabled, value = true } end
+            local delta
+            if normalized:find("more transparent", 1, true) then delta = -0.05 end
+            if normalized:find("less transparent", 1, true) then delta = 0.05 end
+            if delta then
+                local alpha = A.Registry and A.Registry:GetSetting("gf_" .. tostring(scope) .. ".rangeFadeAlpha")
+                if alpha then changes[#changes + 1] = { setting = alpha, relativeDelta = delta } end
+            end
+        end
+        if #changes > 0 then
+            return { kind = "changes", changes = changes, label = "Group Range Fade",
+                bulkSafe = #changes > 1, summary = "Enables group range fade and adjusts its out-of-range opacity.",
+                raw = raw, normalized = normalized }
+        end
+    end
+    if normalized:find("solo", 1, true)
+        and (normalized:find("party frame", 1, true) or normalized:find("raid frame", 1, true)
+            or normalized:find("show while solo", 1, true))
+        and not normalized:find("player in group", 1, true)
+    then
+        local value = not (normalized:find("hide", 1, true) or normalized:find("dont show", 1, true)
+            or normalized:find("do not show", 1, true) or normalized:find("not show", 1, true)
+            or normalized:find("turn off", 1, true))
+        local changes = {}
+        for _, scope in ipairs(P.DetectGroups(normalized) or {}) do
+            local setting = A.Registry and A.Registry:GetSetting("gf_" .. tostring(scope) .. ".showSolo")
+            if setting then changes[#changes + 1] = { setting = setting, value = value } end
+        end
+        if #changes > 0 then
+            return { kind = "changes", changes = changes, label = "Show Group Frames While Solo",
+                bulkSafe = #changes > 1, summary = "Changes only solo visibility for the requested group frame.",
+                raw = raw, normalized = normalized }
+        end
+    end
+    if normalized:find("bar outline thickness", 1, true)
+        and not normalized:find("castbar", 1, true)
+        and not normalized:find("cast bar", 1, true)
+        and not P.DetectUnits(normalized)[1]
+        and not P.DetectGroups(normalized)[1]
+    then
+        local setting = A.Registry and A.Registry:GetSetting("bars.barOutlineThickness")
+        local value = P.FirstNumber(normalized)
+        if setting and value ~= nil then
+            return { kind = "changes", changes = { { setting = setting, value = value } },
+                label = setting.label or "Global Bar Outline Thickness",
+                summary = "Changes global unit-frame bar outline thickness.", raw = raw, normalized = normalized }
+        end
+    end
+    if normalized:find("font sizes", 1, true)
+        and not P.DetectUnits(normalized)[1] and not P.DetectGroups(normalized)[1]
+    then
+        local setting = A.Registry and A.Registry:GetSetting("general.fontSize")
+        local value = P.FirstNumber(normalized)
+        if setting and value ~= nil then
+            return { kind = "changes", changes = { { setting = setting, value = value } },
+                label = setting.label or "Global Font Size", summary = "Changes the global MSUF font size.",
+                raw = raw, normalized = normalized }
+        end
+    end
+    local multiFontColorIntent = normalized:find("name", 1, true)
+        and (normalized:find("health text", 1, true) or normalized:find("hp text", 1, true)
+            or normalized:find("power text", 1, true))
+    if P.ParseScopedFontTextColorShortcut and not multiFontColorIntent then
+        local fontColorPriority = P.ParseScopedFontTextColorShortcut(normalized)
+        if fontColorPriority then
+            fontColorPriority.raw = raw
+            fontColorPriority.normalized = normalized
+            return fontColorPriority
+        end
+    end
+    if (normalized:find("shorten", 1, true) or normalized:find("truncat", 1, true)
+        or normalized:find("ellipsis", 1, true))
+        and (normalized:find("party", 1, true) or normalized:find("raid", 1, true))
+    then
+        if normalized:find("shorten", 1, true) then
+            local value = not (normalized:find("do not", 1, true) or normalized:find("dont", 1, true)
+                or normalized:find("turn off", 1, true) or normalized:find("disable", 1, true))
+            local changes = {}
+            for _, scope in ipairs(P.DetectGroups(normalized) or {}) do
+                local setting = A.Registry and A.Registry:GetSetting("gf_" .. tostring(scope) .. ".nameShortenEnabled")
+                if setting then changes[#changes + 1] = { setting = setting, value = value } end
+            end
+            if #changes > 0 then
+                return { kind = "changes", changes = changes, label = "Group Name Shortening",
+                    bulkSafe = #changes > 1, summary = "Changes group-frame name shortening.", raw = raw, normalized = normalized }
+            end
+        end
+        local groupNamePriority = A._ParseGroupNameTextFastShortcut and A._ParseGroupNameTextFastShortcut(normalized)
+        if groupNamePriority then
+            groupNamePriority.raw = raw
+            groupNamePriority.normalized = normalized
+            return groupNamePriority
+        end
+    end
     local humanSafetyParsed = A._ParseHumanSafetyGuidanceShortcut and A._ParseHumanSafetyGuidanceShortcut(normalized)
     if humanSafetyParsed then
         humanSafetyParsed.raw = raw
@@ -5433,6 +5904,13 @@ function A.Parse(text, ctxOverride)
         unitRaidMarkerVisibilityParsed.normalized = normalized
         return unitRaidMarkerVisibilityParsed
     end
+    local replayFollowupParsed = (normalized:find("same", 1, true) or normalized:find("gleich", 1, true))
+        and BuildFollowup and BuildFollowup(normalized, ctx)
+    if replayFollowupParsed then
+        replayFollowupParsed.raw = raw
+        replayFollowupParsed.normalized = normalized
+        return replayFollowupParsed
+    end
     local continuationPriorityParsed = P.BuildContinuationFollowup and P.BuildContinuationFollowup(normalized, ctx)
     if continuationPriorityParsed then
         continuationPriorityParsed.raw = raw
@@ -5442,9 +5920,9 @@ function A.Parse(text, ctxOverride)
     -- A destructive action alias is more specific than a setting alias with
     -- the same noun phrase (for example, "reset target aura scope" must reset
     -- the scope overrides, not set the Aura Editing Scope dropdown to Target).
-    if ContainsAny(normalized, P.RootPhrases[779]) and P.ParseRegistryActionAliasShortcut then
+    if P.ContainsAny(normalized, P.RootPhrases[779]) and P.ParseRegistryActionAliasShortcut then
         local actionText = normalized
-        if HasPhrase(normalized, "restore") then
+        if P.HasPhrase(normalized, "restore") then
             actionText = normalized:gsub("%f[%a]restore%f[%A]", "reset")
         end
         local destructiveAction = P.ParseRegistryActionAliasShortcut(actionText, raw)
@@ -5458,15 +5936,39 @@ function A.Parse(text, ctxOverride)
     -- Menu selectors change editing context; they must win over an exact
     -- setting alias for the selected dropdown (for example, "select player
     -- HP left slot" is not a request to choose an HP text format yet).
-    local menuSelectorPriorityParsed = ParseMenuSelectorState and ParseMenuSelectorState(normalized)
+    local shouldTryEarlyCompound = P.ShouldTryEarlyCompound and P.ShouldTryEarlyCompound(normalized)
+    local menuSelectorPriorityParsed = P.ParseMenuSelectorState and P.ParseMenuSelectorState(normalized)
     if menuSelectorPriorityParsed then
         menuSelectorPriorityParsed.raw = raw
         menuSelectorPriorityParsed.normalized = normalized
         return menuSelectorPriorityParsed
     end
-    if ContainsAny(normalized, P.RootPhrases[759]) then
-        local copySelectorPriorityParsed = (ParseUnitCopyScopeState and ParseUnitCopyScopeState(normalized))
-            or (ParseGroupCopyScopeState and ParseGroupCopyScopeState(normalized))
+    local hpTextOptionPriorityParsed = not shouldTryEarlyCompound
+        and A._ParseHPTextOptionShortcut and A._ParseHPTextOptionShortcut(normalized)
+    if hpTextOptionPriorityParsed then
+        hpTextOptionPriorityParsed.raw = raw
+        hpTextOptionPriorityParsed.normalized = normalized
+        return hpTextOptionPriorityParsed
+    end
+    local textVisibilityPriorityParsed = not shouldTryEarlyCompound
+        and P.ParseTextVisibilityShortcut and P.ParseTextVisibilityShortcut(normalized)
+    if textVisibilityPriorityParsed then
+        textVisibilityPriorityParsed.raw = raw
+        textVisibilityPriorityParsed.normalized = normalized
+        return textVisibilityPriorityParsed
+    end
+    local explicitTextSlotContent = normalized:find("text", 1, true)
+        or normalized:find("slot", 1, true) or normalized:find("label", 1, true)
+    local textSlotContentPriorityParsed = not shouldTryEarlyCompound and explicitTextSlotContent
+        and A._ParseTextSlotDropdownShortcut and A._ParseTextSlotDropdownShortcut(normalized)
+    if textSlotContentPriorityParsed then
+        textSlotContentPriorityParsed.raw = raw
+        textSlotContentPriorityParsed.normalized = normalized
+        return textSlotContentPriorityParsed
+    end
+    if P.ContainsAny(normalized, P.RootPhrases[759]) then
+        local copySelectorPriorityParsed = (P.ParseUnitCopyScopeState and P.ParseUnitCopyScopeState(normalized))
+            or (P.ParseGroupCopyScopeState and P.ParseGroupCopyScopeState(normalized))
         if copySelectorPriorityParsed then
             copySelectorPriorityParsed.raw = raw
             copySelectorPriorityParsed.normalized = normalized
@@ -5532,7 +6034,7 @@ function A.Parse(text, ctxOverride)
     -- Resolve a proven multi-change sentence before any single-setting fast
     -- path can consume only its first item. ParseCompound internally rejects
     -- ordinary one-setting commands and uses ParseSimpleChange recursively.
-    local earlyCompoundParsed = P.ShouldTryEarlyCompound(normalized)
+    local earlyCompoundParsed = shouldTryEarlyCompound
         and P.ParseCompound and P.ParseCompound(normalized, raw, nil)
     if earlyCompoundParsed then
         earlyCompoundParsed.raw = raw
@@ -5552,7 +6054,7 @@ function A.Parse(text, ctxOverride)
         return earlyScopedDispelBorderTriggerParsed
     end
     if LooksLikeAbsorbBarCommand(normalized) then
-        local earlyAbsorbBarParsed = ParseAbsorbBarShortcut and ParseAbsorbBarShortcut(normalized, raw)
+        local earlyAbsorbBarParsed = P.ParseAbsorbBarShortcut and P.ParseAbsorbBarShortcut(normalized, raw)
         if earlyAbsorbBarParsed then
             earlyAbsorbBarParsed.raw = raw
             earlyAbsorbBarParsed.normalized = normalized
@@ -6091,9 +6593,9 @@ function A.Parse(text, ctxOverride)
         dispelOverlayOpacityParsed.normalized = normalized
         return dispelOverlayOpacityParsed
     end
-    if ContainsAny(normalized, P.RootPhrases[617]) then
-        local opacityUnits = DetectUnits(normalized)
-        local opacityGroups = DetectGroups(normalized)
+    if P.ContainsAny(normalized, P.RootPhrases[617]) then
+        local opacityUnits = P.DetectUnits(normalized)
+        local opacityGroups = P.DetectGroups(normalized)
         local scopedOpacityParsed
         if #opacityUnits > 0 then
             scopedOpacityParsed = A._ParseExplicitUnitBarOpacityShortcut and A._ParseExplicitUnitBarOpacityShortcut(normalized)
@@ -6107,12 +6609,6 @@ function A.Parse(text, ctxOverride)
             return scopedOpacityParsed
         end
     end
-    local actionExplainParsed = P.ParseRegistryActionExplainShortcut and P.ParseRegistryActionExplainShortcut(normalized, raw)
-    if actionExplainParsed then
-        actionExplainParsed.raw = raw
-        actionExplainParsed.normalized = normalized
-        return actionExplainParsed
-    end
     local editModeControlParsed = A._ParseEditModeHUDControl and A._ParseEditModeHUDControl(normalized)
     if editModeControlParsed then
         editModeControlParsed.raw = raw
@@ -6120,28 +6616,28 @@ function A.Parse(text, ctxOverride)
         return editModeControlParsed
     end
     local customAnchorActionParsed
-    if ContainsAny(normalized, P.RootPhrases[618])
-        or (ContainsAny(normalized, P.RootPhrases[619])
-            and ContainsAny(normalized, P.RootPhrases[620]))
+    if P.ContainsAny(normalized, P.RootPhrases[618])
+        or (P.ContainsAny(normalized, P.RootPhrases[619])
+            and P.ContainsAny(normalized, P.RootPhrases[620]))
     then
-        customAnchorActionParsed = ParseCustomAnchorWorkflow(normalized) or ParseCustomAnchorClear(normalized)
+        customAnchorActionParsed = P.ParseCustomAnchorWorkflow(normalized) or P.ParseCustomAnchorClear(normalized)
         if customAnchorActionParsed then
             customAnchorActionParsed.raw = raw
             customAnchorActionParsed.normalized = normalized
             return customAnchorActionParsed
         end
     end
-    if ContainsAny(normalized, P.RootPhrases[621]) then
+    if P.ContainsAny(normalized, P.RootPhrases[621]) then
         local setting
         local value
-        if ContainsAny(normalized, P.RootPhrases[622]) then
+        if P.ContainsAny(normalized, P.RootPhrases[622]) then
             setting = A.Registry and A.Registry:GetSetting("targettarget.totInlineColorMode")
             value = setting and P.EnumValueForText and P.EnumValueForText(setting, normalized) or nil
-        elseif ContainsAny(normalized, P.RootPhrases[623]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[623]) then
             setting = A.Registry and A.Registry:GetSetting("targettarget.totInlineCustomSeparator")
             value = P.RawAfterLastConnector and P.RawAfterLastConnector(raw, { " to ", " as ", " value ", " separator " }) or nil
             value = value or tostring(raw or ""):match("[Tt][Oo]%s+(.+)$")
-        elseif ContainsAny(normalized, P.RootPhrases[624]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[624]) then
             local separatorSetting = A.Registry and A.Registry:GetSetting("targettarget.totInlineSeparator")
             local enumValue = separatorSetting and P.EnumValueForText and P.EnumValueForText(separatorSetting, normalized) or nil
             if enumValue ~= nil then
@@ -6157,9 +6653,9 @@ function A.Parse(text, ctxOverride)
             end
         else
             setting = A.Registry and A.Registry:GetSetting("targettarget.showToTInTargetName")
-            value = DetectBoolean(normalized)
-            if value == nil and ContainsAny(normalized, P.RootPhrases[625]) then value = true end
-            if value == nil and ContainsAny(normalized, P.RootPhrases[626]) then value = false end
+            value = P.DetectBoolean(normalized)
+            if value == nil and P.ContainsAny(normalized, P.RootPhrases[625]) then value = true end
+            if value == nil and P.ContainsAny(normalized, P.RootPhrases[626]) then value = false end
         end
         if setting and value ~= nil then
             return {
@@ -6172,18 +6668,18 @@ function A.Parse(text, ctxOverride)
             }
         end
     end
-    if ContainsAny(normalized, P.RootPhrases[627])
-        and ContainsAny(normalized, P.RootPhrases[628])
-        and not ContainsAny(normalized, P.RootPhrases[629])
+    if P.ContainsAny(normalized, P.RootPhrases[627])
+        and P.ContainsAny(normalized, P.RootPhrases[628])
+        and not P.ContainsAny(normalized, P.RootPhrases[629])
     then
         local setting
         local value
-        if ContainsAny(normalized, P.RootPhrases[630]) then
+        if P.ContainsAny(normalized, P.RootPhrases[630]) then
             setting = A.Registry and A.Registry:GetSetting("boss.bossLayoutMode")
             value = setting and P.EnumValueForText and P.EnumValueForText(setting, normalized) or nil
         else
             setting = A.Registry and A.Registry:GetSetting("boss.spacing")
-            value = FirstNumber(normalized)
+            value = P.FirstNumber(normalized)
         end
         if setting and value ~= nil then
             return {
@@ -6196,11 +6692,12 @@ function A.Parse(text, ctxOverride)
             }
         end
     end
-    if ContainsAny(normalized, P.RootPhrases[631])
-        and ContainsAny(normalized, P.RootPhrases[632])
-        and ContainsAny(normalized, P.RootPhrases[633])
+    if P.ContainsAny(normalized, P.RootPhrases[631])
+        and P.ContainsAny(normalized, P.RootPhrases[632])
+        and P.ContainsAny(normalized, P.RootPhrases[633])
+        and not normalized:find("icon", 1, true)
     then
-        local castbarUnits = DetectUnits(normalized)
+        local castbarUnits = P.DetectUnits(normalized)
         local castbarOffsetKeys = {
             player = { x = "general.castbarPlayerOffsetX", y = "general.castbarPlayerOffsetY" },
             target = { x = "general.castbarTargetOffsetX", y = "general.castbarTargetOffsetY" },
@@ -6231,7 +6728,7 @@ function A.Parse(text, ctxOverride)
         local key = unit and axis and castbarOffsetKeys[unit] and castbarOffsetKeys[unit][axis]
         local setting = key and A.Registry and A.Registry:GetSetting(key)
         if setting then
-            local amount = FirstNumber(normalized) or 10
+            local amount = P.FirstNumber(normalized) or 10
             if direction == "left" or direction == "down" then amount = -amount end
             return {
                 kind = "changes",
@@ -6249,8 +6746,8 @@ function A.Parse(text, ctxOverride)
             return earlyCastbarMoveParsed
         end
     end
-    if ContainsAny(normalized, P.RootPhrases[634])
-        and ContainsAny(normalized, P.RootPhrases[635])
+    if P.ContainsAny(normalized, P.RootPhrases[634])
+        and P.ContainsAny(normalized, P.RootPhrases[635])
     then
         local setting = A.Registry and A.Registry:GetSetting("general.castbarPlayerBackend")
         local value = setting and P.EnumValueForText and P.EnumValueForText(setting, normalized) or nil
@@ -6265,41 +6762,44 @@ function A.Parse(text, ctxOverride)
             }
         end
     end
-    if ContainsAny(normalized, P.RootPhrases[636])
-        and ContainsAny(normalized, P.RootPhrases[637])
-        and not ContainsAny(normalized, P.RootPhrases[638])
+    if P.ContainsAny(normalized, P.RootPhrases[636])
+        and P.ContainsAny(normalized, P.RootPhrases[637])
+        and not P.ContainsAny(normalized, P.RootPhrases[638])
     then
         local key
         local value
-        if ContainsAny(normalized, P.RootPhrases[639]) then
+        if P.ContainsAny(normalized, P.RootPhrases[639]) then
             key = "runtime.focusKickPreview"
-            value = DetectBoolean(normalized)
+            value = P.DetectBoolean(normalized)
             if value == nil then value = true end
-        elseif ContainsAny(normalized, P.RootPhrases[640]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[640]) then
             key = "general.focusKickIconWidth"
-            value = FirstNumber(normalized)
-        elseif ContainsAny(normalized, P.RootPhrases[641]) then
+            value = P.FirstNumber(normalized)
+        elseif P.ContainsAny(normalized, P.RootPhrases[641]) then
             key = "general.focusKickIconHeight"
-            value = FirstNumber(normalized)
-        elseif ContainsAny(normalized, P.RootPhrases[642]) then
+            value = P.FirstNumber(normalized)
+        elseif P.ContainsAny(normalized, P.RootPhrases[642]) then
             key = "general.focusKickTextSize"
-            value = FirstNumber(normalized)
-        elseif ContainsAny(normalized, P.RootPhrases[643]) then
+            value = P.FirstNumber(normalized)
+        elseif P.ContainsAny(normalized, P.RootPhrases[643]) then
             key = "general.focusKickIconOffsetX"
-            value = FirstNumber(normalized)
-        elseif ContainsAny(normalized, P.RootPhrases[644]) then
+            value = P.FirstNumber(normalized)
+        elseif P.ContainsAny(normalized, P.RootPhrases[644]) then
             key = "general.focusKickIconOffsetY"
-            value = FirstNumber(normalized)
+            value = P.FirstNumber(normalized)
         else
             key = "general.enableFocusKickIcon"
-            value = DetectBoolean(normalized)
+            value = P.DetectBoolean(normalized)
             if value == nil then value = true end
         end
         local setting = key and A.Registry and A.Registry:GetSetting(key)
-        if setting and value ~= nil then
+        local relativeDelta = setting and setting.type == "number" and P.RelativeNumberDeltaForText
+            and P.RelativeNumberDeltaForText(setting, normalized, 1) or nil
+        if relativeDelta ~= nil then value = nil end
+        if setting and (value ~= nil or relativeDelta ~= nil) then
             return {
                 kind = "changes",
-                changes = { { setting = setting, value = value } },
+                changes = { { setting = setting, value = value, relativeDelta = relativeDelta } },
                 label = setting.label or "Focus Kick Tracker",
                 summary = "Changes Focus Kick Tracker visibility, preview, size, or offset.",
                 raw = raw,
@@ -6307,33 +6807,33 @@ function A.Parse(text, ctxOverride)
             }
         end
     end
-    if ContainsAny(normalized, P.RootPhrases[645])
-        and not ContainsAny(normalized, P.RootPhrases[646])
+    if P.ContainsAny(normalized, P.RootPhrases[645])
+        and not P.ContainsAny(normalized, P.RootPhrases[646])
     then
         local key
         local value
-        if ContainsAny(normalized, P.RootPhrases[647]) then
+        if P.ContainsAny(normalized, P.RootPhrases[647]) then
             key = "general.kickReadyAutoSize"
-            value = DetectBoolean(normalized)
+            value = P.DetectBoolean(normalized)
             if value == nil then value = true end
-        elseif ContainsAny(normalized, P.RootPhrases[648]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[648]) then
             key = "general.kickReadyStyle"
-        elseif ContainsAny(normalized, P.RootPhrases[649]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[649]) then
             key = "general.kickReadyAnchor"
-        elseif ContainsAny(normalized, P.RootPhrases[650]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[650]) then
             key = "general.kickReadyOffsetX"
-            value = FirstNumber(normalized)
-        elseif ContainsAny(normalized, P.RootPhrases[651]) then
+            value = P.FirstNumber(normalized)
+        elseif P.ContainsAny(normalized, P.RootPhrases[651]) then
             key = "general.kickReadyOffsetY"
-            value = FirstNumber(normalized)
-        elseif ContainsAny(normalized, P.RootPhrases[652]) then
+            value = P.FirstNumber(normalized)
+        elseif P.ContainsAny(normalized, P.RootPhrases[652]) then
             key = "general.kickReadySize"
-            value = FirstNumber(normalized)
-        elseif ContainsAny(normalized, P.RootPhrases[653]) then
+            value = P.FirstNumber(normalized)
+        elseif P.ContainsAny(normalized, P.RootPhrases[653]) then
             key = "general.kickReadyShowTarget"
-        elseif ContainsAny(normalized, P.RootPhrases[654]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[654]) then
             key = "general.kickReadyShowFocus"
-        elseif ContainsAny(normalized, P.RootPhrases[655]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[655]) then
             key = "general.kickReadyShowBoss"
         end
         local setting = key and A.Registry and A.Registry:GetSetting(key)
@@ -6341,7 +6841,7 @@ function A.Parse(text, ctxOverride)
             if setting.type == "enum" then
                 value = P.EnumValueForText and P.EnumValueForText(setting, normalized) or nil
             elseif setting.type == "boolean" then
-                value = DetectBoolean(normalized)
+                value = P.DetectBoolean(normalized)
                 if value == nil then value = true end
             end
         end
@@ -6356,91 +6856,94 @@ function A.Parse(text, ctxOverride)
             }
         end
     end
-    if ContainsAny(normalized, P.RootPhrases[656])
-        and ContainsAny(normalized, P.RootPhrases[657])
-        and not ContainsAny(normalized, P.RootPhrases[658])
-        and not (ContainsAny(normalized, P.RootPhrases[659])
-            and ContainsAny(normalized, P.RootPhrases[660]))
+    if P.ContainsAny(normalized, P.RootPhrases[656])
+        and P.ContainsAny(normalized, P.RootPhrases[657])
+        and not P.ContainsAny(normalized, P.RootPhrases[658])
+        and not (P.ContainsAny(normalized, P.RootPhrases[659])
+            and P.ContainsAny(normalized, P.RootPhrases[660]))
     then
         local key
         local value
-        if ContainsAny(normalized, P.RootPhrases[661]) then
+        if P.ContainsAny(normalized, P.RootPhrases[661]) then
             key = "general.castbarShakeStrength"
-            value = FirstNumber(normalized)
-        elseif ContainsAny(normalized, P.RootPhrases[662]) then
+            value = P.FirstNumber(normalized)
+        elseif P.ContainsAny(normalized, P.RootPhrases[662]) then
             key = "general.castbarInterruptShake"
-            value = DetectBoolean(normalized)
+            value = P.DetectBoolean(normalized)
             if value == nil then value = true end
-        elseif ContainsAny(normalized, P.RootPhrases[663]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[663]) then
             key = "general.castbarUnifiedDirection"
-            value = DetectBoolean(normalized)
+            value = P.DetectBoolean(normalized)
             if value == nil then value = true end
-        elseif ContainsAny(normalized, P.RootPhrases[664]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[664]) then
             key = "general.castbarOpositeDirectionTarget"
-            value = DetectBoolean(normalized)
+            value = P.DetectBoolean(normalized)
             if value == nil then
-                value = not ContainsAny(normalized, P.RootPhrases[665])
+                value = not P.ContainsAny(normalized, P.RootPhrases[665])
             end
-        elseif ContainsAny(normalized, P.RootPhrases[666]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[666]) then
             key = "general.castbarFillDirection"
             local setting = A.Registry and A.Registry:GetSetting(key)
             value = setting and P.EnumValueForText and P.EnumValueForText(setting, normalized) or nil
-        elseif ContainsAny(normalized, P.RootPhrases[667]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[667]) then
             key = "general.castbarShowChannelTicks"
-            value = DetectBoolean(normalized)
+            value = P.DetectBoolean(normalized)
             if value == nil then value = true end
-        elseif ContainsAny(normalized, P.RootPhrases[668]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[668]) then
             key = "general.castbarBackgroundTexture"
             value = P.RawAfterLastConnector and P.RawAfterLastConnector(raw, { " to ", " as ", " = " }) or nil
-        elseif ContainsAny(normalized, P.RootPhrases[669]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[669]) then
             key = "general.castbarTexture"
             value = P.RawAfterLastConnector and P.RawAfterLastConnector(raw, { " to ", " as ", " = " }) or nil
-        elseif ContainsAny(normalized, P.RootPhrases[670]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[670]) then
             key = "general.castbarOutlineThickness"
-            value = FirstNumber(normalized)
-        elseif ContainsAny(normalized, P.RootPhrases[671]) then
+            value = P.FirstNumber(normalized)
+        elseif P.ContainsAny(normalized, P.RootPhrases[671]) then
             key = "general.castbarShowGlow"
-            value = DetectBoolean(normalized)
+            value = P.DetectBoolean(normalized)
             if value == nil then value = true end
-        elseif ContainsAny(normalized, P.RootPhrases[672]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[672]) then
             key = "general.castbarShowLatency"
-            value = DetectBoolean(normalized)
+            value = P.DetectBoolean(normalized)
             if value == nil then value = true end
-        elseif ContainsAny(normalized, P.RootPhrases[673]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[673]) then
             key = "general.castbarSparkOverflow"
-            value = DetectBoolean(normalized)
+            value = P.DetectBoolean(normalized)
             if value == nil then value = true end
-        elseif ContainsAny(normalized, P.RootPhrases[674]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[674]) then
             key = "general.castbarShowSpark"
-            value = DetectBoolean(normalized)
+            value = P.DetectBoolean(normalized)
             if value == nil then value = true end
-        elseif ContainsAny(normalized, P.RootPhrases[675]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[675]) then
             key = "general.empowerStageBlinkTime"
-            value = FirstNumber(normalized)
-        elseif ContainsAny(normalized, P.RootPhrases[676]) then
+            value = P.FirstNumber(normalized)
+        elseif P.ContainsAny(normalized, P.RootPhrases[676]) then
             key = "general.empowerColorStages"
-            value = DetectBoolean(normalized)
+            value = P.DetectBoolean(normalized)
             if value == nil then value = true end
-        elseif ContainsAny(normalized, P.RootPhrases[677]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[677]) then
             key = "general.empowerStageBlink"
-            value = DetectBoolean(normalized)
+            value = P.DetectBoolean(normalized)
             if value == nil then value = true end
-        elseif ContainsAny(normalized, P.RootPhrases[678]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[678]) then
             key = "general.castbarSpellNameShortening"
-            value = DetectBoolean(normalized)
+            value = P.DetectBoolean(normalized)
             if value == nil then value = true end
-        elseif ContainsAny(normalized, P.RootPhrases[679]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[679]) then
             key = "general.castbarSpellNameMaxLen"
-            value = FirstNumber(normalized)
-        elseif ContainsAny(normalized, P.RootPhrases[680]) then
+            value = P.FirstNumber(normalized)
+        elseif P.ContainsAny(normalized, P.RootPhrases[680]) then
             key = "general.castbarSpellNameReservedSpace"
-            value = FirstNumber(normalized)
+            value = P.FirstNumber(normalized)
         end
         local setting = key and A.Registry and A.Registry:GetSetting(key)
-        if setting and value ~= nil then
+        local relativeDelta = setting and setting.type == "number" and P.RelativeNumberDeltaForText
+            and P.RelativeNumberDeltaForText(setting, normalized, 1) or nil
+        if relativeDelta ~= nil then value = nil end
+        if setting and (value ~= nil or relativeDelta ~= nil) then
             return {
                 kind = "changes",
-                changes = { { setting = setting, value = value } },
+                changes = { { setting = setting, value = value, relativeDelta = relativeDelta } },
                 label = setting.label or "Cast Bar Behavior",
                 summary = "Changes a global Cast Bar behavior option.",
                 raw = raw,
@@ -6448,25 +6951,25 @@ function A.Parse(text, ctxOverride)
             }
         end
     end
-    if ContainsAny(normalized, P.RootPhrases[681])
-        and ContainsAny(normalized, P.RootPhrases[682])
-        and not DetectUnits(normalized)[1]
-        and not ContainsAny(normalized, P.RootPhrases[683])
+    if P.ContainsAny(normalized, P.RootPhrases[681])
+        and P.ContainsAny(normalized, P.RootPhrases[682])
+        and not P.DetectUnits(normalized)[1]
+        and not P.ContainsAny(normalized, P.RootPhrases[683])
     then
         local key
-        if ContainsAny(normalized, P.RootPhrases[684]) then
+        if P.ContainsAny(normalized, P.RootPhrases[684]) then
             key = "general.castbarSpellNameFontSize"
-        elseif ContainsAny(normalized, P.RootPhrases[685]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[685]) then
             key = "general.castbarTimeFontSize"
-        elseif ContainsAny(normalized, P.RootPhrases[686]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[686]) then
             key = "general.castbarIconSize"
-        elseif ContainsAny(normalized, P.RootPhrases[687]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[687]) then
             key = "general.castbarIconOffsetX"
-        elseif ContainsAny(normalized, P.RootPhrases[688]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[688]) then
             key = "general.castbarIconOffsetY"
         end
         local setting = key and A.Registry and A.Registry:GetSetting(key)
-        local value = setting and FirstNumber(normalized) or nil
+        local value = setting and P.FirstNumber(normalized) or nil
         if setting and value ~= nil then
             return {
                 kind = "changes",
@@ -6478,22 +6981,22 @@ function A.Parse(text, ctxOverride)
             }
         end
     end
-    if ContainsAny(normalized, P.RootPhrases[689])
-        and ContainsAny(normalized, P.RootPhrases[690])
-        and not ContainsAny(normalized, P.RootPhrases[691])
+    if P.ContainsAny(normalized, P.RootPhrases[689])
+        and P.ContainsAny(normalized, P.RootPhrases[690])
+        and not P.ContainsAny(normalized, P.RootPhrases[691])
     then
         local attr
-        if ContainsAny(normalized, P.RootPhrases[692]) then
+        if P.ContainsAny(normalized, P.RootPhrases[692]) then
             attr = "border"
-        elseif ContainsAny(normalized, P.RootPhrases[693]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[693]) then
             attr = "spacing"
-        elseif ContainsAny(normalized, P.RootPhrases[694]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[694]) then
             attr = "position"
-        elseif ContainsAny(normalized, P.RootPhrases[695]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[695]) then
             attr = "x"
-        elseif ContainsAny(normalized, P.RootPhrases[696]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[696]) then
             attr = "y"
-        elseif ContainsAny(normalized, P.RootPhrases[697]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[697]) then
             attr = "size"
         end
 
@@ -6532,7 +7035,7 @@ function A.Parse(text, ctxOverride)
             },
         }
 
-        local units = DetectUnits(normalized)
+        local units = P.DetectUnits(normalized)
         local changes = {}
         if attr then
             for i = 1, #units do
@@ -6543,7 +7046,7 @@ function A.Parse(text, ctxOverride)
                     if setting.type == "enum" then
                         value = P.EnumValueForText and P.EnumValueForText(setting, normalized) or nil
                     else
-                        value = FirstNumber(normalized)
+                        value = P.FirstNumber(normalized)
                     end
                     if value ~= nil then changes[#changes + 1] = { setting = setting, value = value } end
                 end
@@ -6561,34 +7064,34 @@ function A.Parse(text, ctxOverride)
             }
         end
     end
-    if ContainsAny(normalized, P.RootPhrases[698])
-        and ContainsAny(normalized, P.RootPhrases[699])
-        and not ContainsAny(normalized, P.RootPhrases[700])
+    if P.ContainsAny(normalized, P.RootPhrases[698])
+        and P.ContainsAny(normalized, P.RootPhrases[699])
+        and not P.ContainsAny(normalized, P.RootPhrases[700])
     then
         local attr
-        if ContainsAny(normalized, P.RootPhrases[701]) then
+        if P.ContainsAny(normalized, P.RootPhrases[701]) then
             attr = "timeFormat"
-        elseif ContainsAny(normalized, P.RootPhrases[702]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[702]) then
             attr = "timePosition"
-        elseif ContainsAny(normalized, P.RootPhrases[703]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[703]) then
             attr = "timeX"
-        elseif ContainsAny(normalized, P.RootPhrases[704]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[704]) then
             attr = "timeY"
-        elseif ContainsAny(normalized, P.RootPhrases[705]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[705]) then
             attr = "timeFontSize"
-        elseif ContainsAny(normalized, P.RootPhrases[706]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[706]) then
             attr = "spellTruncate"
-        elseif ContainsAny(normalized, P.RootPhrases[707]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[707]) then
             attr = "spellMaxWidth"
-        elseif ContainsAny(normalized, P.RootPhrases[708]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[708]) then
             attr = "spellFontSize"
-        elseif ContainsAny(normalized, P.RootPhrases[709]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[709]) then
             attr = "spellAlign"
-        elseif ContainsAny(normalized, P.RootPhrases[710]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[710]) then
             attr = "spellPosition"
-        elseif ContainsAny(normalized, P.RootPhrases[711]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[711]) then
             attr = "textX"
-        elseif ContainsAny(normalized, P.RootPhrases[712]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[712]) then
             attr = "textY"
         end
 
@@ -6651,7 +7154,7 @@ function A.Parse(text, ctxOverride)
             },
         }
 
-        local units = DetectUnits(normalized)
+        local units = P.DetectUnits(normalized)
         local changes = {}
         if attr then
             for i = 1, #units do
@@ -6662,7 +7165,7 @@ function A.Parse(text, ctxOverride)
                     if setting.type == "enum" then
                         value = P.EnumValueForText and P.EnumValueForText(setting, normalized) or nil
                     else
-                        value = FirstNumber(normalized)
+                        value = P.FirstNumber(normalized)
                     end
                     if value ~= nil then changes[#changes + 1] = { setting = setting, value = value } end
                 end
@@ -6680,20 +7183,20 @@ function A.Parse(text, ctxOverride)
             }
         end
     end
-    if ContainsAny(normalized, P.RootPhrases[713])
-        and ContainsAny(normalized, P.RootPhrases[714])
-        and not ContainsAny(normalized, P.RootPhrases[715])
+    if P.ContainsAny(normalized, P.RootPhrases[713])
+        and P.ContainsAny(normalized, P.RootPhrases[714])
+        and not P.ContainsAny(normalized, P.RootPhrases[715])
     then
         local attr
-        if ContainsAny(normalized, P.RootPhrases[716]) then
+        if P.ContainsAny(normalized, P.RootPhrases[716]) then
             attr = "time"
-        elseif ContainsAny(normalized, P.RootPhrases[717]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[717]) then
             attr = "icon"
-        elseif ContainsAny(normalized, P.RootPhrases[718]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[718]) then
             attr = "text"
         end
-        local value = DetectBoolean(normalized)
-        local units = DetectUnits(normalized)
+        local value = P.DetectBoolean(normalized)
+        local units = P.DetectUnits(normalized)
         local keys = {
             player = { time = "general.showPlayerCastTime", icon = "general.castbarPlayerShowIcon", text = "general.castbarPlayerShowSpellName" },
             target = { time = "general.showTargetCastTime", icon = "general.castbarTargetShowIcon", text = "general.castbarTargetShowSpellName" },
@@ -6720,18 +7223,18 @@ function A.Parse(text, ctxOverride)
             }
         end
     end
-    if ContainsAny(normalized, P.RootPhrases[719])
-        and ContainsAny(normalized, P.RootPhrases[720])
-        and not ContainsAny(normalized, P.RootPhrases[721])
+    if P.ContainsAny(normalized, P.RootPhrases[719])
+        and P.ContainsAny(normalized, P.RootPhrases[720])
+        and not P.ContainsAny(normalized, P.RootPhrases[721])
     then
         local axis
-        if ContainsAny(normalized, P.RootPhrases[722]) then
+        if P.ContainsAny(normalized, P.RootPhrases[722]) then
             axis = "w"
-        elseif ContainsAny(normalized, P.RootPhrases[723]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[723]) then
             axis = "h"
         end
-        local value = FirstNumber(normalized)
-        local units = DetectUnits(normalized)
+        local value = P.FirstNumber(normalized)
+        local units = P.DetectUnits(normalized)
         local keys = {
             player = { w = "general.castbarPlayerBarWidth", h = "general.castbarPlayerBarHeight" },
             target = { w = "general.castbarTargetBarWidth", h = "general.castbarTargetBarHeight" },
@@ -6758,18 +7261,18 @@ function A.Parse(text, ctxOverride)
             }
         end
     end
-    if ContainsAny(normalized, P.RootPhrases[724])
-        and ContainsAny(normalized, P.RootPhrases[725])
-        and not ContainsAny(normalized, P.RootPhrases[726])
+    if P.ContainsAny(normalized, P.RootPhrases[724])
+        and P.ContainsAny(normalized, P.RootPhrases[725])
+        and not P.ContainsAny(normalized, P.RootPhrases[726])
     then
         local axis
-        if ContainsAny(normalized, P.RootPhrases[727]) then
+        if P.ContainsAny(normalized, P.RootPhrases[727]) then
             axis = "x"
-        elseif ContainsAny(normalized, P.RootPhrases[728]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[728]) then
             axis = "y"
         end
-        local value = FirstNumber(normalized)
-        local units = DetectUnits(normalized)
+        local value = P.FirstNumber(normalized)
+        local units = P.DetectUnits(normalized)
         local keys = {
             player = { x = "general.castbarPlayerOffsetX", y = "general.castbarPlayerOffsetY" },
             target = { x = "general.castbarTargetOffsetX", y = "general.castbarTargetOffsetY" },
@@ -6796,12 +7299,12 @@ function A.Parse(text, ctxOverride)
             }
         end
     end
-    if ContainsAny(normalized, P.RootPhrases[729])
-        and not ContainsAny(normalized, P.RootPhrases[730])
+    if P.ContainsAny(normalized, P.RootPhrases[729])
+        and not P.ContainsAny(normalized, P.RootPhrases[730])
     then
-        local value = DetectBoolean(normalized)
+        local value = P.DetectBoolean(normalized)
         if value ~= nil then
-            local units = DetectUnits(normalized)
+            local units = P.DetectUnits(normalized)
             local keys = {
                 player = "general.enablePlayerCastbar",
                 target = "general.enableTargetCastbar",
@@ -6827,65 +7330,65 @@ function A.Parse(text, ctxOverride)
             end
         end
     end
-    if ContainsAny(normalized, P.RootPhrases[731]) and not ContainsAny(normalized, P.RootPhrases[732]) then
+    if P.ContainsAny(normalized, P.RootPhrases[731]) and not P.ContainsAny(normalized, P.RootPhrases[732]) then
         local actionKey
         local args = {}
         local label
         local summary
         local confirmRequired = false
-        if ContainsAny(normalized, P.RootPhrases[733]) then
-            local clear = ContainsAny(normalized, P.RootPhrases[734])
+        if P.ContainsAny(normalized, P.RootPhrases[733]) then
+            local clear = P.ContainsAny(normalized, P.RootPhrases[734])
             actionKey = "confirm_wago_backup"
             args.confirmed = not clear
             label = clear and "Clear Wago backup confirmation" or "Confirm Wago backup"
             summary = "Marks the Wago backup checklist for the active profile."
-        elseif ContainsAny(normalized, P.RootPhrases[735]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[735]) then
             actionKey = "open_recovery_tools"
             label = "Open recovery tools"
             summary = "Opens the Dashboard recovery area."
-        elseif ContainsAny(normalized, P.RootPhrases[736]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[736]) then
             actionKey = "set_dashboard_panel"
-            if ContainsAny(normalized, P.RootPhrases[737]) then
+            if P.ContainsAny(normalized, P.RootPhrases[737]) then
                 args.open = false
-            elseif ContainsAny(normalized, P.RootPhrases[738]) then
+            elseif P.ContainsAny(normalized, P.RootPhrases[738]) then
                 args.open = nil
             else
                 args.open = true
             end
             label = "Set Dashboard panel"
             summary = "Asks which Dashboard panel to open, such as recovery tools, scaling tools, or changelog."
-        elseif ContainsAny(normalized, P.RootPhrases[739]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[739]) then
             actionKey = "set_nav_search_intro"
-            if ContainsAny(normalized, P.RootPhrases[740]) then
+            if P.ContainsAny(normalized, P.RootPhrases[740]) then
                 args.command = "seen"
-            elseif ContainsAny(normalized, P.RootPhrases[741]) then
+            elseif P.ContainsAny(normalized, P.RootPhrases[741]) then
                 args.command = "reset"
             else
                 args.command = "show"
             end
             label = "Set search intro"
             summary = "Shows or hides the menu search intro."
-        elseif ContainsAny(normalized, P.RootPhrases[742]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[742]) then
             actionKey = "set_nav_section"
-            if ContainsAny(normalized, P.RootPhrases[743]) then
+            if P.ContainsAny(normalized, P.RootPhrases[743]) then
                 args.section = "groupframes"
                 label = "Group Frames"
-            elseif ContainsAny(normalized, P.RootPhrases[744]) then
+            elseif P.ContainsAny(normalized, P.RootPhrases[744]) then
                 args.section = "unitframes"
                 label = "Frames"
-            elseif ContainsAny(normalized, P.RootPhrases[745]) then
+            elseif P.ContainsAny(normalized, P.RootPhrases[745]) then
                 args.section = "globalstyle"
                 label = "Appearance"
-            elseif ContainsAny(normalized, P.RootPhrases[746]) then
+            elseif P.ContainsAny(normalized, P.RootPhrases[746]) then
                 args.section = "modules"
                 label = "Advanced"
-            elseif ContainsAny(normalized, P.RootPhrases[747]) then
+            elseif P.ContainsAny(normalized, P.RootPhrases[747]) then
                 args.section = "auras"
                 label = "Auras"
             end
-            if ContainsAny(normalized, P.RootPhrases[748]) then
+            if P.ContainsAny(normalized, P.RootPhrases[748]) then
                 args.open = false
-            elseif ContainsAny(normalized, P.RootPhrases[749]) then
+            elseif P.ContainsAny(normalized, P.RootPhrases[749]) then
                 args.open = nil
             else
                 args.open = true
@@ -6896,11 +7399,11 @@ function A.Parse(text, ctxOverride)
                 label = "Set navigation section"
             end
             summary = "Expands or collapses a menu section."
-        elseif ContainsAny(normalized, P.RootPhrases[750]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[750]) then
             args.panel = "scaling"
-            if ContainsAny(normalized, P.RootPhrases[737]) or ContainsAny(normalized, P.RootPhrases[738]) then
+            if P.ContainsAny(normalized, P.RootPhrases[737]) or P.ContainsAny(normalized, P.RootPhrases[738]) then
                 actionKey = "set_dashboard_panel"
-                args.open = ContainsAny(normalized, P.RootPhrases[737]) and false or nil
+                args.open = P.ContainsAny(normalized, P.RootPhrases[737]) and false or nil
                 label = args.open == false and "Close scaling tools" or "Toggle scaling tools"
                 summary = "Changes whether the Dashboard scaling area is open."
             else
@@ -6908,11 +7411,11 @@ function A.Parse(text, ctxOverride)
                 label = "Open scaling tools"
                 summary = "Opens the Dashboard scaling area."
             end
-        elseif ContainsAny(normalized, P.RootPhrases[751]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[751]) then
             args.panel = "changelog"
-            if ContainsAny(normalized, P.RootPhrases[737]) or ContainsAny(normalized, P.RootPhrases[738]) then
+            if P.ContainsAny(normalized, P.RootPhrases[737]) or P.ContainsAny(normalized, P.RootPhrases[738]) then
                 actionKey = "set_dashboard_panel"
-                args.open = ContainsAny(normalized, P.RootPhrases[737]) and false or nil
+                args.open = P.ContainsAny(normalized, P.RootPhrases[737]) and false or nil
                 label = args.open == false and "Close changelog" or "Toggle changelog"
                 summary = "Changes whether the Dashboard changelog is open."
             else
@@ -6920,22 +7423,22 @@ function A.Parse(text, ctxOverride)
                 label = "Open changelog"
                 summary = "Opens the Dashboard changelog."
             end
-        elseif ContainsAny(normalized, P.RootPhrases[752]) then
-            if ContainsAny(normalized, P.RootPhrases[753]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[752]) then
+            if P.ContainsAny(normalized, P.RootPhrases[753]) then
                 actionKey = "assistant.diagnostic.editMode.status"
-                if ContainsAny(normalized, P.RootPhrases[754]) then args.reason = "why_exit" end
+                if P.ContainsAny(normalized, P.RootPhrases[754]) then args.reason = "why_exit" end
                 label = "Show MSUF Edit Mode status"
-            elseif ContainsAny(normalized, P.RootPhrases[755]) then
+            elseif P.ContainsAny(normalized, P.RootPhrases[755]) then
                 actionKey = "assistant.action.editMode.cancel"
                 confirmRequired = true
                 label = "Cancel MSUF Edit Mode"
-            elseif ContainsAny(normalized, P.RootPhrases[756]) then
+            elseif P.ContainsAny(normalized, P.RootPhrases[756]) then
                 actionKey = "assistant.action.editMode.toggle"
                 label = "Toggle MSUF Edit Mode"
-            elseif ContainsAny(normalized, P.RootPhrases[757]) then
+            elseif P.ContainsAny(normalized, P.RootPhrases[757]) then
                 actionKey = "assistant.action.editMode.exit"
                 label = "Exit MSUF Edit Mode"
-            elseif ContainsAny(normalized, P.RootPhrases[758]) then
+            elseif P.ContainsAny(normalized, P.RootPhrases[758]) then
                 actionKey = "assistant.action.editMode.enter"
                 label = "Enter MSUF Edit Mode"
             end
@@ -6955,9 +7458,9 @@ function A.Parse(text, ctxOverride)
             }
         end
     end
-    if ContainsAny(normalized, P.RootPhrases[760])
-        and ContainsAny(normalized, P.RootPhrases[761])
-        and not ContainsAny(normalized, P.RootPhrases[762])
+    if P.ContainsAny(normalized, P.RootPhrases[760])
+        and P.ContainsAny(normalized, P.RootPhrases[761])
+        and not P.ContainsAny(normalized, P.RootPhrases[762])
     then
         local earlyCopyParsed = CopyRequest(normalized)
         if earlyCopyParsed then
@@ -6966,23 +7469,23 @@ function A.Parse(text, ctxOverride)
             return earlyCopyParsed
         end
     end
-    if ContainsAny(normalized, P.RootPhrases[763]) then
-        local earlyMenuWindowParsed = ParseMenuWindowAction and ParseMenuWindowAction(normalized)
+    if P.ContainsAny(normalized, P.RootPhrases[763]) then
+        local earlyMenuWindowParsed = P.ParseMenuWindowAction and P.ParseMenuWindowAction(normalized)
         if earlyMenuWindowParsed then
             earlyMenuWindowParsed.raw = raw
             earlyMenuWindowParsed.normalized = normalized
             return earlyMenuWindowParsed
         end
     end
-    if ContainsAny(normalized, P.RootPhrases[764]) and not ContainsAny(normalized, P.RootPhrases[765]) then
-        local earlyOpenParsed = ParseOpen and ParseOpen(normalized, raw)
+    if P.ContainsAny(normalized, P.RootPhrases[764]) and not P.ContainsAny(normalized, P.RootPhrases[765]) then
+        local earlyOpenParsed = P.ParseOpen and P.ParseOpen(normalized, raw)
         if earlyOpenParsed then
             earlyOpenParsed.raw = raw
             earlyOpenParsed.normalized = normalized
             return earlyOpenParsed
         end
     end
-    if normalized == "help" or normalized == "hilfe" or ContainsAny(normalized, P.RootPhrases[766]) then
+    if normalized == "help" or normalized == "hilfe" or P.ContainsAny(normalized, P.RootPhrases[766]) then
         local action = A.Registry and A.Registry:GetAction("assistant_help")
         if action then
             return {
@@ -6996,39 +7499,39 @@ function A.Parse(text, ctxOverride)
             }
         end
     end
-    if ContainsAny(normalized, P.RootPhrases[767]) then
-        local earlyScopedHelpParsed = ParseScopedHelp and ParseScopedHelp(normalized)
+    if P.ContainsAny(normalized, P.RootPhrases[767]) then
+        local earlyScopedHelpParsed = P.ParseScopedHelp and P.ParseScopedHelp(normalized)
         if earlyScopedHelpParsed then
             earlyScopedHelpParsed.raw = raw
             earlyScopedHelpParsed.normalized = normalized
             return earlyScopedHelpParsed
         end
     end
-    if ContainsAny(normalized, P.RootPhrases[768]) then
-        local earlySupportParsed = ParseSupportWorkflow and ParseSupportWorkflow(normalized)
+    if P.ContainsAny(normalized, P.RootPhrases[768]) then
+        local earlySupportParsed = P.ParseSupportWorkflow and P.ParseSupportWorkflow(normalized)
         if earlySupportParsed then
             earlySupportParsed.raw = raw
             earlySupportParsed.normalized = normalized
             return earlySupportParsed
         end
     end
-    if ContainsAny(normalized, P.RootPhrases[769]) then
-        local earlyGuidedSetupParsed = (ParseGuidedSetupFollowup and ParseGuidedSetupFollowup(normalized, ctx))
-            or (ParseGuidedSetup and ParseGuidedSetup(normalized))
+    if P.ContainsAny(normalized, P.RootPhrases[769]) then
+        local earlyGuidedSetupParsed = (P.ParseGuidedSetupFollowup and P.ParseGuidedSetupFollowup(normalized, ctx))
+            or (P.ParseGuidedSetup and P.ParseGuidedSetup(normalized))
         if earlyGuidedSetupParsed then
             earlyGuidedSetupParsed.raw = raw
             earlyGuidedSetupParsed.normalized = normalized
             return earlyGuidedSetupParsed
         end
     end
-    if ContainsAny(normalized, P.RootPhrases[770]) then
-        local diagnosticParsed = ParseDiagnostic and ParseDiagnostic(normalized)
+    if P.ContainsAny(normalized, P.RootPhrases[770]) then
+        local diagnosticParsed = P.ParseDiagnostic and P.ParseDiagnostic(normalized)
         if diagnosticParsed then
             diagnosticParsed.raw = raw
             diagnosticParsed.normalized = normalized
             return diagnosticParsed
         end
-        local supportWorkflowParsed = ParseSupportWorkflow and ParseSupportWorkflow(normalized)
+        local supportWorkflowParsed = P.ParseSupportWorkflow and P.ParseSupportWorkflow(normalized)
         if supportWorkflowParsed then
             supportWorkflowParsed.raw = raw
             supportWorkflowParsed.normalized = normalized
@@ -7039,21 +7542,21 @@ function A.Parse(text, ctxOverride)
         local label
         local summary
         local confirmRequired = false
-        if ContainsAny(normalized, P.RootPhrases[771]) then
+        if P.ContainsAny(normalized, P.RootPhrases[771]) then
             actionKey = "assistant_nomatch_clear"
             label = "Clear Assistant learning phrases"
             summary = "Clears stored Assistant learning/no-match phrases."
             confirmRequired = true
-        elseif ContainsAny(normalized, P.RootPhrases[772]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[772]) then
             actionKey = "assistant_nomatch_worklist"
-            if ContainsAny(normalized, P.RootPhrases[773]) then args.owner = "action-parser" end
+            if P.ContainsAny(normalized, P.RootPhrases[773]) then args.owner = "action-parser" end
             label = "Show Assistant learning list"
             summary = "Shows phrases that still need better Assistant answers."
-        elseif ContainsAny(normalized, P.RootPhrases[774]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[774]) then
             actionKey = "assistant_nomatch_telemetry"
             label = "Show Assistant phrases to improve"
             summary = "Shows stored phrases that still need better Assistant answers."
-        elseif ContainsAny(normalized, P.RootPhrases[775]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[775]) then
             actionKey = "assistant_status"
             label = "Show MSUF status"
             summary = "Shows read-only MSUF and Assistant details."
@@ -7066,14 +7569,14 @@ function A.Parse(text, ctxOverride)
             confirmRequired = confirmRequired,
             label = label or action.label or "Assistant diagnostic",
             summary = summary or "Runs an Assistant diagnostic.",
-        } or (ParseDiagnostic and ParseDiagnostic(normalized))
+        } or (P.ParseDiagnostic and P.ParseDiagnostic(normalized))
         if earlyDiagnosticParsed then
             earlyDiagnosticParsed.raw = raw
             earlyDiagnosticParsed.normalized = normalized
             return earlyDiagnosticParsed
         end
     end
-    if ContainsAny(normalized, P.RootPhrases[776]) then
+    if P.ContainsAny(normalized, P.RootPhrases[776]) then
         local auraActionParsed = P.ParseRegistryActionAliasShortcut and P.ParseRegistryActionAliasShortcut(normalized, raw)
         if auraActionParsed then
             auraActionParsed.raw = raw
@@ -7082,49 +7585,49 @@ function A.Parse(text, ctxOverride)
         end
     end
     local actionFirstParsed
-    if ContainsAny(normalized, P.RootPhrases[777]) then
-        actionFirstParsed = ParseGameplayAction(normalized, raw)
+    if P.ContainsAny(normalized, P.RootPhrases[777]) then
+        actionFirstParsed = P.ParseGameplayAction(normalized, raw)
     end
-    actionFirstParsed = actionFirstParsed or ParsePresetWorkflow(normalized) or ParseGlobalBarsAction(normalized)
-    if not actionFirstParsed and ContainsAny(normalized, P.RootPhrases[778]) then
-        actionFirstParsed = ParseFontColorAction(normalized, raw)
+    actionFirstParsed = actionFirstParsed or P.ParsePresetWorkflow(normalized) or P.ParseGlobalBarsAction(normalized)
+    if not actionFirstParsed and P.ContainsAny(normalized, P.RootPhrases[778]) then
+        actionFirstParsed = P.ParseFontColorAction(normalized, raw)
     end
     if not actionFirstParsed
-        and ContainsAny(normalized, P.RootPhrases[779])
-        and ContainsAny(normalized, P.RootPhrases[780])
+        and P.ContainsAny(normalized, P.RootPhrases[779])
+        and P.ContainsAny(normalized, P.RootPhrases[780])
     then
-        actionFirstParsed = ParseColorAction(normalized)
+        actionFirstParsed = P.ParseColorAction(normalized)
     end
     actionFirstParsed = actionFirstParsed
-        or ParseScopedOverrideReset(normalized)
-        or (not ContainsAny(normalized, P.RootPhrases[781]) and ParseCastbarPreviewAction(normalized))
-        or ParseGroupSpellIndicatorAction(normalized, raw)
-        or ParseGroupCornerIndicatorReset(normalized)
-        or ParseGroupStatusPreview(normalized)
-        or ParseUnitStatusPreview(normalized, ctx)
+        or P.ParseScopedOverrideReset(normalized)
+        or (not P.ContainsAny(normalized, P.RootPhrases[781]) and P.ParseCastbarPreviewAction(normalized))
+        or P.ParseGroupSpellIndicatorAction(normalized, raw)
+        or P.ParseGroupCornerIndicatorReset(normalized)
+        or P.ParseGroupStatusPreview(normalized)
+        or P.ParseUnitStatusPreview(normalized, ctx)
         or (P.ParseGroupStatusIconDetail and P.ParseGroupStatusIconDetail(normalized))
         or (P.ParseBarGradientRegistryShortcut and P.ParseBarGradientRegistryShortcut(normalized))
         or (P.ParsePowerBarGradientRegistryShortcut and P.ParsePowerBarGradientRegistryShortcut(normalized))
         or (P.ParseDetachedPowerBarMoveShortcut and P.ParseDetachedPowerBarMoveShortcut(normalized))
     if not actionFirstParsed
-        and ContainsAny(normalized, P.RootPhrases[782])
-        and not ContainsAny(normalized, P.RootPhrases[783])
+        and P.ContainsAny(normalized, P.RootPhrases[782])
+        and not P.ContainsAny(normalized, P.RootPhrases[783])
     then
-        actionFirstParsed = ParseGroupStatusIconReset(normalized)
-            or ParseUnitStatusIndicatorReset(normalized, ctx)
+        actionFirstParsed = P.ParseGroupStatusIconReset(normalized)
+            or P.ParseUnitStatusIndicatorReset(normalized, ctx)
     end
     if not actionFirstParsed
-        and ContainsAny(normalized, P.RootPhrases[784])
-        and ContainsAny(normalized, P.RootPhrases[785])
+        and P.ContainsAny(normalized, P.RootPhrases[784])
+        and P.ContainsAny(normalized, P.RootPhrases[785])
     then
-        actionFirstParsed = ParseReset(normalized)
+        actionFirstParsed = P.ParseReset(normalized)
     end
     if not actionFirstParsed
-        and ContainsAny(normalized, P.RootPhrases[786])
-        and ContainsAny(normalized, P.RootPhrases[787])
-        and not ContainsAny(normalized, P.RootPhrases[788])
+        and P.ContainsAny(normalized, P.RootPhrases[786])
+        and P.ContainsAny(normalized, P.RootPhrases[787])
+        and not P.ContainsAny(normalized, P.RootPhrases[788])
     then
-        actionFirstParsed = ParseReset(normalized)
+        actionFirstParsed = P.ParseReset(normalized)
     end
     if actionFirstParsed then
         actionFirstParsed.raw = raw
@@ -7149,22 +7652,22 @@ function A.Parse(text, ctxOverride)
         or (A._ParseTextSlotDropdownValueShortcut and A._ParseTextSlotDropdownValueShortcut(normalized))
         or (A._ParseHPTextOptionShortcut and A._ParseHPTextOptionShortcut(normalized))
         or (A._ParsePowerTextOptionShortcut and A._ParsePowerTextOptionShortcut(normalized))
-        or (A._ParseTextAreaOffsetShortcut and A._ParseTextAreaOffsetShortcut(normalized))
         or (A._ParseTextSlotValueMoveShortcut and A._ParseTextSlotValueMoveShortcut(normalized))
         or (A._ParseTextSlotOffsetShortcut and A._ParseTextSlotOffsetShortcut(normalized))
+        or (A._ParseTextAreaOffsetShortcut and A._ParseTextAreaOffsetShortcut(normalized))
         or (A._ParseTextFontSizeShortcut and A._ParseTextFontSizeShortcut(normalized))
     if earlyTextDetailParsed then
         earlyTextDetailParsed.raw = raw
         earlyTextDetailParsed.normalized = normalized
         return earlyTextDetailParsed
     end
-    local earlyCustomAnchorSetParsed = ParseCustomAnchorSet(normalized, raw)
+    local earlyCustomAnchorSetParsed = P.ParseCustomAnchorSet(normalized, raw)
     if earlyCustomAnchorSetParsed then
         earlyCustomAnchorSetParsed.raw = raw
         earlyCustomAnchorSetParsed.normalized = normalized
         return earlyCustomAnchorSetParsed
     end
-    local earlyPortraitDetailParsed = ParsePortraitDetailShortcut(normalized)
+    local earlyPortraitDetailParsed = P.ParsePortraitDetailShortcut(normalized)
     if earlyPortraitDetailParsed then
         earlyPortraitDetailParsed.raw = raw
         earlyPortraitDetailParsed.normalized = normalized
@@ -7182,15 +7685,15 @@ function A.Parse(text, ctxOverride)
         earlyPowerBarDetailParsed.normalized = normalized
         return earlyPowerBarDetailParsed
     end
-    local earlyUnitStatusDetailParsed = (ParseUnitStatusSymbolRegistryShortcut and ParseUnitStatusSymbolRegistryShortcut(normalized))
-        or (ParseStatusIconTestModeRegistryShortcut and ParseStatusIconTestModeRegistryShortcut(normalized))
+    local earlyUnitStatusDetailParsed = (P.ParseUnitStatusSymbolRegistryShortcut and P.ParseUnitStatusSymbolRegistryShortcut(normalized))
+        or (P.ParseStatusIconTestModeRegistryShortcut and P.ParseStatusIconTestModeRegistryShortcut(normalized))
         or (P.ParseUnitStatusIndicatorDetail and P.ParseUnitStatusIndicatorDetail(normalized))
     if earlyUnitStatusDetailParsed then
         earlyUnitStatusDetailParsed.raw = raw
         earlyUnitStatusDetailParsed.normalized = normalized
         return earlyUnitStatusDetailParsed
     end
-    local earlyUnitLoadConditionParsed = ParseUnitLoadConditionShortcut and ParseUnitLoadConditionShortcut(normalized)
+    local earlyUnitLoadConditionParsed = P.ParseUnitLoadConditionShortcut and P.ParseUnitLoadConditionShortcut(normalized)
     if earlyUnitLoadConditionParsed then
         earlyUnitLoadConditionParsed.raw = raw
         earlyUnitLoadConditionParsed.normalized = normalized
@@ -7244,14 +7747,14 @@ function A.Parse(text, ctxOverride)
         return earlyCastbarInterruptVisibilityParsed
     end
     local earlyOpacityParsed = (A._ParseGroupOpacityShortcut and A._ParseGroupOpacityShortcut(normalized))
-        or (ParseUnitOpacityShortcut and ParseUnitOpacityShortcut(normalized))
+        or (P.ParseUnitOpacityShortcut and P.ParseUnitOpacityShortcut(normalized))
     if earlyOpacityParsed then
         earlyOpacityParsed.raw = raw
         earlyOpacityParsed.normalized = normalized
         return earlyOpacityParsed
     end
     if LooksLikeAbsorbBarCommand(normalized) then
-        local earlyAbsorbBarParsed = ParseAbsorbBarShortcut and ParseAbsorbBarShortcut(normalized, raw)
+        local earlyAbsorbBarParsed = P.ParseAbsorbBarShortcut and P.ParseAbsorbBarShortcut(normalized, raw)
         if earlyAbsorbBarParsed then
             earlyAbsorbBarParsed.raw = raw
             earlyAbsorbBarParsed.normalized = normalized
@@ -7259,21 +7762,21 @@ function A.Parse(text, ctxOverride)
         end
     end
     if LooksLikeBarBorderEnumCommand(normalized) then
-        local earlyBarBorderEnumParsed = ParseBarBorderEnumShortcut and ParseBarBorderEnumShortcut(normalized)
+        local earlyBarBorderEnumParsed = P.ParseBarBorderEnumShortcut and P.ParseBarBorderEnumShortcut(normalized)
         if earlyBarBorderEnumParsed then
             earlyBarBorderEnumParsed.raw = raw
             earlyBarBorderEnumParsed.normalized = normalized
             return earlyBarBorderEnumParsed
         end
     end
-    local earlyAmbiguousGroupOutlineParsed = ParseAmbiguousGroupOutlineBorderShortcut and ParseAmbiguousGroupOutlineBorderShortcut(normalized)
+    local earlyAmbiguousGroupOutlineParsed = P.ParseAmbiguousGroupOutlineBorderShortcut and P.ParseAmbiguousGroupOutlineBorderShortcut(normalized)
     if earlyAmbiguousGroupOutlineParsed then
         earlyAmbiguousGroupOutlineParsed.raw = raw
         earlyAmbiguousGroupOutlineParsed.normalized = normalized
         return earlyAmbiguousGroupOutlineParsed
     end
     if LooksLikeBarOutlineHighlightCommand(normalized) then
-        local earlyBarOutlineHighlightParsed = ParseBarOutlineHighlightShortcut and ParseBarOutlineHighlightShortcut(normalized)
+        local earlyBarOutlineHighlightParsed = P.ParseBarOutlineHighlightShortcut and P.ParseBarOutlineHighlightShortcut(normalized)
         if earlyBarOutlineHighlightParsed then
             earlyBarOutlineHighlightParsed.raw = raw
             earlyBarOutlineHighlightParsed.normalized = normalized
@@ -7293,15 +7796,15 @@ function A.Parse(text, ctxOverride)
         earlyUnitAnchorParsed.normalized = normalized
         return earlyUnitAnchorParsed
     end
-    if ContainsAny(normalized, P.RootPhrases[789]) then
+    if P.ContainsAny(normalized, P.RootPhrases[789]) then
         local directColorParsed
-        if ContainsAny(normalized, P.RootPhrases[790]) then
-            directColorParsed = ParseScopedFontTextColorShortcut(normalized)
+        if P.ContainsAny(normalized, P.RootPhrases[790]) then
+            directColorParsed = P.ParseScopedFontTextColorShortcut(normalized)
         end
-        if ContainsAny(normalized, P.RootPhrases[791]) then
+        if P.ContainsAny(normalized, P.RootPhrases[791]) then
             directColorParsed = A._ParseClassPowerColorShortcut and A._ParseClassPowerColorShortcut(normalized, raw)
         end
-        if not directColorParsed and ContainsAny(normalized, P.RootPhrases[792]) then
+        if not directColorParsed and P.ContainsAny(normalized, P.RootPhrases[792]) then
             directColorParsed = A._ParsePowerColorShortcut and A._ParsePowerColorShortcut(normalized, raw)
         end
         if directColorParsed then
@@ -7310,8 +7813,8 @@ function A.Parse(text, ctxOverride)
             return directColorParsed
         end
     end
-    if ContainsAny(normalized, P.RootPhrases[793])
-        and ContainsAny(normalized, P.RootPhrases[794])
+    if P.ContainsAny(normalized, P.RootPhrases[793])
+        and P.ContainsAny(normalized, P.RootPhrases[794])
     then
         local detachedPowerDetail = P.ParseDetachedPowerBarRegistryShortcut
             and P.ParseDetachedPowerBarRegistryShortcut(normalized, raw)
@@ -7321,7 +7824,7 @@ function A.Parse(text, ctxOverride)
             return detachedPowerDetail
         end
     end
-    if ContainsAny(normalized, P.RootPhrases[795]) then
+    if P.ContainsAny(normalized, P.RootPhrases[795]) then
         local groupNumberParsed = P.ParseGroupNumberRegistryShortcut and P.ParseGroupNumberRegistryShortcut(normalized)
         if groupNumberParsed then
             groupNumberParsed.raw = raw
@@ -7329,7 +7832,7 @@ function A.Parse(text, ctxOverride)
             return groupNumberParsed
         end
     end
-    if ContainsAny(normalized, P.RootPhrases[796]) and ContainsAny(normalized, P.RootPhrases[797]) then
+    if P.ContainsAny(normalized, P.RootPhrases[796]) and P.ContainsAny(normalized, P.RootPhrases[797]) then
         local castbarColorParsed = P.ParseCastbarColorShortcut and P.ParseCastbarColorShortcut(normalized, raw)
         if castbarColorParsed then
             castbarColorParsed.raw = raw
@@ -7337,9 +7840,9 @@ function A.Parse(text, ctxOverride)
             return castbarColorParsed
         end
     end
-    if ContainsAny(normalized, P.RootPhrases[798])
-        and ContainsAny(normalized, P.RootPhrases[799])
-        and ContainsAny(normalized, P.RootPhrases[800])
+    if P.ContainsAny(normalized, P.RootPhrases[798])
+        and P.ContainsAny(normalized, P.RootPhrases[799])
+        and P.ContainsAny(normalized, P.RootPhrases[800])
     then
         local castbarMoveParsed = P.ParseGenericOffsetMove and P.ParseGenericOffsetMove(normalized)
         if castbarMoveParsed then
@@ -7348,7 +7851,7 @@ function A.Parse(text, ctxOverride)
             return castbarMoveParsed
         end
     end
-    if ContainsAny(normalized, P.RootPhrases[801]) and not ContainsAny(normalized, P.RootPhrases[802]) then
+    if P.ContainsAny(normalized, P.RootPhrases[801]) and not P.ContainsAny(normalized, P.RootPhrases[802]) then
         local statusTextParsed = A._ParseGlobalStatusTextStateShortcut and A._ParseGlobalStatusTextStateShortcut(normalized)
             or (P.ParseUnitStatusIconStyle and P.ParseUnitStatusIconStyle(normalized))
             or (P.ParseUnitStatusIndicatorDetail and P.ParseUnitStatusIndicatorDetail(normalized))
@@ -7358,8 +7861,8 @@ function A.Parse(text, ctxOverride)
             return statusTextParsed
         end
     end
-    if ContainsAny(normalized, P.RootPhrases[803])
-        and ContainsAny(normalized, P.RootPhrases[804])
+    if P.ContainsAny(normalized, P.RootPhrases[803])
+        and P.ContainsAny(normalized, P.RootPhrases[804])
     then
         local classPowerTextOffsetParsed = A._ParseClassPowerTextOffsetShortcut and A._ParseClassPowerTextOffsetShortcut(normalized)
         if classPowerTextOffsetParsed then
@@ -7368,7 +7871,7 @@ function A.Parse(text, ctxOverride)
             return classPowerTextOffsetParsed
         end
     end
-    if ContainsAny(normalized, P.RootPhrases[805]) and ContainsAny(normalized, P.RootPhrases[806]) then
+    if P.ContainsAny(normalized, P.RootPhrases[805]) and P.ContainsAny(normalized, P.RootPhrases[806]) then
         local groupRootMoveParsed = P.ParseGroupFrameRootMove and P.ParseGroupFrameRootMove(normalized)
         if groupRootMoveParsed then
             groupRootMoveParsed.raw = raw
@@ -7382,10 +7885,10 @@ function A.Parse(text, ctxOverride)
         groupDebuffStripeParsed.normalized = normalized
         return groupDebuffStripeParsed
     end
-    if ContainsAny(normalized, P.RootPhrases[807]) then
+    if P.ContainsAny(normalized, P.RootPhrases[807]) then
         local groupFrameParsed = P.ParseGroupPreserveRaidGroupsShortcut
             and P.ParseGroupPreserveRaidGroupsShortcut(normalized)
-        if not groupFrameParsed and ContainsAny(normalized, P.RootPhrases[808]) then
+        if not groupFrameParsed and P.ContainsAny(normalized, P.RootPhrases[808]) then
             groupFrameParsed = P.ParseGroupAvailabilityIntent and P.ParseGroupAvailabilityIntent(normalized)
         end
         if groupFrameParsed then
@@ -7394,7 +7897,7 @@ function A.Parse(text, ctxOverride)
             return groupFrameParsed
         end
     end
-    if ContainsAny(normalized, P.RootPhrases[809]) then
+    if P.ContainsAny(normalized, P.RootPhrases[809]) then
         local unitRootParsed = A._ParseUnitRootVisibilityShortcut and A._ParseUnitRootVisibilityShortcut(normalized)
         if unitRootParsed then
             unitRootParsed.raw = raw
@@ -7428,14 +7931,14 @@ function A.Parse(text, ctxOverride)
         historyAction.normalized = normalized
         return historyAction
     end
-    local hasEditModeContext = ContainsAny(normalized, P.RootPhrases[810])
-    if not hasEditModeContext and ContainsAny(normalized, P.RootPhrases[811]) then
+    local hasEditModeContext = P.ContainsAny(normalized, P.RootPhrases[810])
+    if not hasEditModeContext and P.ContainsAny(normalized, P.RootPhrases[811]) then
         return { kind = "undo" }
     end
-    if not hasEditModeContext and ContainsAny(normalized, P.RootPhrases[812]) then
+    if not hasEditModeContext and P.ContainsAny(normalized, P.RootPhrases[812]) then
         return { kind = "redo" }
     end
-    local guidedSetupFollowup = ParseGuidedSetupFollowup(normalized, ctx)
+    local guidedSetupFollowup = P.ParseGuidedSetupFollowup(normalized, ctx)
     if guidedSetupFollowup then
         guidedSetupFollowup.raw = raw
         guidedSetupFollowup.normalized = normalized

@@ -38,13 +38,8 @@ local ParseGroupAuraDirectBlacklistClearAliasArgs = GroupActionParsers.ParseGrou
 local ParseGroupAuraDirectBlacklistPresetAliasArgs = GroupActionParsers.ParseGroupAuraDirectBlacklistPresetAliasArgs
 local ParseGroupAuraDirectBlacklistSummaryAliasArgs = GroupActionParsers.ParseGroupAuraDirectBlacklistSummaryAliasArgs
 
-local function NativeGroupCategoryBlacklistReadOnlyMessage(scope, lane, categoryLabel, operation)
-    local target = A.GroupAuraCategoryScopeLabel(scope) .. " " .. A.GroupAuraCategoryLanePlural(lane)
-    local detail = categoryLabel and categoryLabel ~= "" and (" for " .. tostring(categoryLabel)) or ""
-    local prefix = operation == "clear"
-        and ("I did not clear the saved " .. target .. " category blacklist.")
-        or ("I did not change the saved " .. target .. " category blacklist" .. detail .. ".")
-    return prefix .. " Group aura category blacklists are legacy read-only data in the native 12.1 aura backend, so changing them would not hide or allow live auras. Use the group aura filter token instead; for example, set " .. target .. " filter to All, Raid, or Dispellable."
+local function GroupCategoryTarget(scope, lane)
+    return A.GroupAuraCategoryScopeLabel(scope) .. " " .. A.GroupAuraCategoryLanePlural(lane)
 end
 
 Registry:RegisterAction({
@@ -66,7 +61,11 @@ Registry:RegisterAction({
         local lane = A.GroupAuraCategoryLane(args and args.lane)
         local catKey = A.ResolveAuraGroupCategory(args and args.category)
         if not catKey then return false, "Which aura category do you want me to hide or allow?" end
-        return false, NativeGroupCategoryBlacklistReadOnlyMessage(scope, lane, A.AuraGroupCategoryLabel(catKey))
+        local value = args and args.value == true
+        local changed = A.WriteGroupAuraCategoryState(scope, lane, catKey, value)
+        if changed and type(A.ApplyGroupAuraCategory) == "function" then A.ApplyGroupAuraCategory(scope) end
+        local verb = value and "Hidden " or "Allowed "
+        return true, (changed and "Done. " or "Already set. ") .. verb .. A.AuraGroupCategoryLabel(catKey) .. " for " .. GroupCategoryTarget(scope, lane) .. ".", not changed and { noChange = true } or nil
     end,
 })
 
@@ -89,7 +88,7 @@ Registry:RegisterAction({
     run = function(args)
         local scope = A.GroupAuraCategoryScope(args and args.scope)
         local lane = A.GroupAuraCategoryLane(args and args.lane)
-        return true, "Done. Saved legacy hidden " .. A.GroupAuraCategoryScopeLabel(scope) .. " " .. A.GroupAuraCategoryLanePlural(lane) .. " categories (read-only in the native 12.1 backend):\n" .. A.GroupAuraCategorySummary(scope, lane)
+        return true, "Hidden categories for " .. GroupCategoryTarget(scope, lane) .. ":\n" .. A.GroupAuraCategorySummary(scope, lane)
     end,
 })
 
@@ -98,6 +97,7 @@ Registry:RegisterAction({
     label = "Clear Hidden Group Aura Categories",
     type = "auras",
     combatSafe = true,
+    confirmRequired = true,
     aliases = {
         "clear category blacklist", "clear all category blacklist",
         "allow all categories", "allow all public categories",
@@ -112,7 +112,8 @@ Registry:RegisterAction({
     run = function(args)
         local scope = A.GroupAuraCategoryScope(args and args.scope)
         local lane = A.GroupAuraCategoryLane(args and args.lane)
-        return false, NativeGroupCategoryBlacklistReadOnlyMessage(scope, lane, nil, "clear")
+        local count = tonumber(A.ClearGroupAuraCategoryBlacklist(scope, lane)) or 0
+        return true, count > 0 and ("Done. Cleared " .. tostring(count) .. " hidden categories for " .. GroupCategoryTarget(scope, lane) .. ".") or "Already empty.", count == 0 and { noChange = true } or nil
     end,
 })
 

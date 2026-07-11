@@ -136,5 +136,9 @@ function A.AurasRegistry.BuildActionParsers(ctx)
         ParseAuraBlacklistClearAliasArgs = BlacklistParsers.ParseAuraBlacklistClearAliasArgs,
         ParseAuraBlacklistPresetAliasArgs = BlacklistParsers.ParseAuraBlacklistPresetAliasArgs,
         ParseAuraBlacklistSummaryAliasArgs = BlacklistParsers.ParseAuraBlacklistSummaryAliasArgs,
+        ParseAuraCustomWhitelistAddAliasArgs = BlacklistParsers.ParseAuraCustomWhitelistAddAliasArgs,
+        ParseAuraCustomWhitelistRemoveAliasArgs = BlacklistParsers.ParseAuraCustomWhitelistRemoveAliasArgs,
+        ParseAuraCustomWhitelistClearAliasArgs = BlacklistParsers.ParseAuraCustomWhitelistClearAliasArgs,
+        ParseAuraCustomWhitelistSummaryAliasArgs = BlacklistParsers.ParseAuraCustomWhitelistSummaryAliasArgs,
     }
 end

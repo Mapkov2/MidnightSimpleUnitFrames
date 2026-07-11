@@ -585,6 +585,10 @@ end
 
 function Catalog.GetCoverageReport()
     local records = SortedRecords()
+    local assistant = _G.MSUF_NS and _G.MSUF_NS.Assistant
+    local registry = assistant and assistant.Registry
+    local targetValidationAvailable = type(registry) == "table"
+        and type(registry.GetSetting) == "function" and type(registry.GetAction) == "function"
     local report = {
         schemaVersion = Catalog.SCHEMA_VERSION,
         total = #records,
@@ -600,6 +604,10 @@ function Catalog.GetCoverageReport()
         interactiveCoveragePercent = 100,
         unknown = {},
         currentIssues = {},
+        targetValidationAvailable = targetValidationAvailable,
+        resolvedTargets = 0,
+        unresolvedTargetCount = 0,
+        unresolvedTargets = {},
         collisionEventsLifetime = STATE.collisionEvents,
     }
 
@@ -630,12 +638,36 @@ function Catalog.GetCoverageReport()
             item.reason = record.classificationSource
             report.unknown[#report.unknown + 1] = item
         end
+        if targetValidationAvailable and (classification == "setting" or classification == "action") then
+            local key = classification == "setting" and record.settingKey or record.actionKey
+            local hasDirectClosure = classification == "setting"
+                and record.commandMeta and record.commandMeta.hasGet and record.commandMeta.hasSet
+                or classification == "action" and record.commandMeta and record.commandMeta.hasSet
+            local resolved = hasDirectClosure == true
+            if key and key ~= "" then
+                resolved = classification == "setting" and registry:GetSetting(key) ~= nil
+                    or classification == "action" and registry:GetAction(key) ~= nil
+            end
+            if resolved then
+                report.resolvedTargets = report.resolvedTargets + 1
+            else
+                report.unresolvedTargetCount = report.unresolvedTargetCount + 1
+                report.unresolvedTargets[#report.unresolvedTargets + 1] = {
+                    controlId = record.controlId,
+                    pageKey = record.pageKey,
+                    classification = classification,
+                    targetKey = key ~= "" and key or nil,
+                }
+            end
+        end
     end
 
     if report.interactive > 0 then
         report.interactiveCoveragePercent = math.floor((report.knownInteractive * 10000 / report.interactive) + 0.5) / 100
     end
-    report.catalogComplete = report.byClassification.unknown == 0 and report.collisions == 0 and report.unstableIds == 0
+    report.catalogComplete = report.byClassification.unknown == 0 and report.collisions == 0
+        and report.unstableIds == 0
+        and (not targetValidationAvailable or report.unresolvedTargetCount == 0)
 
     for i = 1, #STATE.issues do
         local issue = STATE.issues[i]

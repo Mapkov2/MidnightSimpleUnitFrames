@@ -1477,6 +1477,7 @@ local EXPLICIT_MUTATION_PREFIXES = {
     "set", "change", "make", "adjust", "use", "apply", "turn", "enable", "disable", "show", "hide", "move", "nudge",
     "shift", "increase", "decrease", "raise", "lower", "reset", "restore", "recover",
     "open", "close", "copy", "create", "delete", "remove", "add", "clear", "toggle",
+    "allow", "unhide", "unblacklist", "unblock", "whitelist", "unwhitelist",
     "setze", "stelle", "mache", "aendere", "verwende", "nutze", "aktiviere", "aktivieren", "deaktiviere", "deaktivieren",
     "einschalten", "ausschalten", "zeige", "anzeigen", "verstecke", "verstecken",
     "einblenden", "ausblenden", "verschiebe", "verschieben", "erhoehe", "senke",
@@ -1586,6 +1587,8 @@ local function NonMutatingIntent(text)
     local questionPrefix = StartsWithAnyPhrase(actionable, READ_ONLY_QUESTION_PREFIXES)
     local lookupPrefix = StartsWithAnyPhrase(actionable, READ_ONLY_LOOKUP_PREFIXES)
     local embeddedQuestion = HasAnyExactPhrase(normalized, EMBEDDED_QUESTION_PHRASES)
+    local bareCapability = StartsWithAnyPhrase(actionable, { "can", "could", "does" })
+        and not StartsWithAnyPhrase(actionable, { "can you", "could you" })
     local presentationLookup = StartsWithAnyPhrase(actionable, { "show me", "zeige mir" })
         and (HasAnyExactPhrase(actionable, INFORMATION_TARGET_TERMS)
             or HasAnyExactPhrase(actionable, { "where", "location", "wo", "seite", "page" }))
@@ -1603,7 +1606,7 @@ local function NonMutatingIntent(text)
     -- setting/value. Diagnose it first instead of guessing an enable/reset.
     -- Specific workflows such as "fix profile mappings" do not name one of
     -- these visual areas and continue to their explicit action parser.
-    if HasAnyExactPhrase(normalized, REPAIR_PROBLEM_TERMS)
+    if not explicitMutation and HasAnyExactPhrase(normalized, REPAIR_PROBLEM_TERMS)
         and HasAnyExactPhrase(normalized, SUBJECTIVE_SETTING_AREAS)
     then
         return "problem"
@@ -1614,7 +1617,7 @@ local function NonMutatingIntent(text)
     -- profile"), while language wrappers such as "answer in German what is
     -- aura filtering" are caught by the embedded question phrase.
     if (not explicitMutation or presentationLookup)
-        and (questionPrefix or lookupPrefix or embeddedQuestion or presentationLookup)
+        and (questionPrefix or lookupPrefix or embeddedQuestion or presentationLookup or bareCapability)
     then
         if StartsWithAnyPhrase(actionable, CAUSAL_QUESTION_PREFIXES)
             or HasAnyExactPhrase(normalized, { "why is", "why are", "warum ist", "warum sind", "wieso ist", "wieso sind" })
@@ -1624,6 +1627,7 @@ local function NonMutatingIntent(text)
         end
         if StartsWithAnyPhrase(actionable, PROCEDURAL_QUESTION_PREFIXES)
             or StartsWithAnyPhrase(actionable, CAPABILITY_QUESTION_PREFIXES)
+            or bareCapability
             or StartsWithAnyPhrase(actionable, { "how", "wie" })
         then
             return "capability"

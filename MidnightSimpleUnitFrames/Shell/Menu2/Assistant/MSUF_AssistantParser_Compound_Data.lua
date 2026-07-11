@@ -17,8 +17,9 @@ Data.COMPOUND_PARSER = {
     COMMAND_STARTERS = {
         "set", "change", "make", "turn", "enable", "disable", "show", "hide", "move", "nudge", "shift",
         "increase", "decrease", "raise", "lower", "select", "use", "apply",
-        "setze", "stelle", "mach", "mache", "aktivieren", "deaktivieren", "einschalten", "ausschalten",
-        "anzeigen", "verstecken", "einblenden", "ausblenden", "verschiebe", "verschieben", "waehle", "nutze",
+        "setze", "stelle", "mach", "mache", "schalte", "schalt", "aktivieren", "aktiviere", "deaktivieren", "deaktiviere",
+        "einschalten", "ausschalten", "anzeigen", "zeige", "verstecken", "verstecke", "einblenden", "ausblenden",
+        "verschiebe", "verschieben", "waehle", "nutze",
     },
     SKIP_TERMS = {
         "copy", "copy profile", "profile copy", "copy from profile", "rename profile", "profile import", "profile export",
@@ -65,9 +66,10 @@ Data.COMPOUND_PARSER = {
     },
     SINGLE_NUMBER_SPECIAL_TERMS = { "portrait shape", "border thickness", "border size", "background on", "background off" },
     SCOPE_REMOVE_TERMS = {
-        "targettarget", "target of target", "tot", "focustarget", "focus target",
-        "mythic raid", "mythicraid", "player", "target", "focus", "pet", "boss", "party", "raid",
-        "frame", "frames", "unitframe", "unitframes", "group frame", "group frames",
+        "targettarget", "target of target", "tot", "ziel des ziels", "focustarget", "focus target", "fokus ziel",
+        "mythic raid", "mythicraid", "player", "spieler", "self", "ich", "target", "ziel", "focus", "fokus",
+        "pet", "begleiter", "boss", "party", "raid", "frame", "frames", "unitframe", "unitframes",
+        "group frame", "group frames", "gruppenframe", "gruppenframes",
         "and", "und",
     },
     ATTR_SPECS = {
@@ -103,6 +105,8 @@ Data.COMPOUND_PARSER = {
     BOOL_WORDS = {
         on = "turn on", enabled = "turn on", ["true"] = "turn on", yes = "turn on", show = "turn on",
         off = "turn off", disabled = "turn off", ["false"] = "turn off", no = "turn off", hide = "turn off",
+        an = "turn on", aktiviert = "turn on", sichtbar = "turn on", ja = "turn on",
+        aus = "turn off", deaktiviert = "turn off", versteckt = "turn off", nein = "turn off",
     },
     BOOLEAN_ITEM_TERMS = {
         { term = "castbar icons", item = "castbar icon" },
@@ -118,6 +122,7 @@ Data.COMPOUND_PARSER = {
         { term = "cast bars", item = "castbar" },
         { term = "portraits", item = "portrait" },
         { term = "names", item = "name" },
+        { term = "namen", item = "name" },
         { term = "icons", item = "icon" },
         { term = "health bar", item = "health bar" },
         { term = "power bar", item = "power bar" },

@@ -298,12 +298,19 @@ local function BooleanLead(text)
     if text:sub(1, 7) == "enable " then return "turn on", Trim(text:sub(8)) end
     if text:sub(1, 5) == "hide " then return "turn off", Trim(text:sub(6)) end
     if text:sub(1, 5) == "show " then return "turn on", Trim(text:sub(6)) end
+    for _, lead in ipairs({ "deaktivieren", "deaktiviere", "ausschalten", "verstecken", "verstecke", "ausblenden" }) do
+        if text:sub(1, #lead + 1) == lead .. " " then return "turn off", Trim(text:sub(#lead + 2)) end
+    end
+    for _, lead in ipairs({ "aktivieren", "aktiviere", "einschalten", "anzeigen", "zeige", "einblenden" }) do
+        if text:sub(1, #lead + 1) == lead .. " " then return "turn on", Trim(text:sub(#lead + 2)) end
+    end
     return nil, text
 end
 
 local function SingularItem(text)
     return Trim((text or "")
         :gsub("%f[%w]names%f[%W]", "name")
+        :gsub("%f[%w]namen%f[%W]", "name")
         :gsub("%f[%w]portraits%f[%W]", "portrait")
         :gsub("%f[%w]castbar icons%f[%W]", "castbar icon")
         :gsub("%f[%w]status icons%f[%W]", "status icon")
@@ -433,7 +440,10 @@ local ParseCommands
 
 local function StripCommandLead(text)
     text = Normalize(text)
-    for _, lead in ipairs({ "set", "change", "make", "turn", "show", "hide", "enable", "disable", "increase", "decrease", "raise", "lower", "setze", "stelle", "mach", "mache" }) do
+    for _, lead in ipairs({
+        "set", "change", "make", "turn", "show", "hide", "enable", "disable", "increase", "decrease", "raise", "lower",
+        "setze", "stelle", "mach", "mache", "schalte", "schalt", "aktiviere", "deaktiviere", "zeige", "verstecke"
+    }) do
         if text == lead then return "" end
         if text:sub(1, #lead + 1) == lead .. " " then return Trim(text:sub(#lead + 2)) end
     end
@@ -1749,7 +1759,7 @@ local function ExtractTrailingBoolean(text)
     local verb = BOOL_WORDS[words[#words]]
     if not verb then return nil end
     words[#words] = nil
-    return Trim(table.concat(words, " ")), verb
+    return StripCommandLead(Trim(table.concat(words, " "))), verb
 end
 
 local function ExtractLeadingBoolean(text)
@@ -2538,23 +2548,27 @@ function P.ParseCompound(normalized, raw, normalParsed)
     if fastBooleanOk and fastBooleanCount >= 2 then return finish(fastBoolean) end
 
     local numberCount = CountNumbers(text)
+    local function acceptedNumeric(candidate)
+        if not candidate then return nil end
+        local ok, count = accepted(candidate)
+        if ok and count >= 2 then return candidate end
+        return nil
+    end
     if numberCount >= 2 then
-        local numeric = FastNumericBooleanChain(text)
-            or ScopedValueTailPairs(text)
-            or ScopedRelativeValueTailPairs(text)
-            or FastAttributeListTrailingNumbers(text)
-            or RepeatedAttributeListTrailingNumbers(text)
-            or AttributeNumberPairs(text)
-            or AttributeListTrailingNumbers(text)
-            or AttributeListValues(text)
-        local ok, count = accepted(numeric)
-        if ok and count >= 2 then return finish(numeric) end
+        local numeric = acceptedNumeric(FastNumericBooleanChain(text))
+            or acceptedNumeric(ScopedValueTailPairs(text))
+            or acceptedNumeric(ScopedRelativeValueTailPairs(text))
+            or acceptedNumeric(FastAttributeListTrailingNumbers(text))
+            or acceptedNumeric(RepeatedAttributeListTrailingNumbers(text))
+            or acceptedNumeric(AttributeNumberPairs(text))
+            or acceptedNumeric(AttributeListTrailingNumbers(text))
+            or acceptedNumeric(AttributeListValues(text))
+        if numeric then return finish(numeric) end
     elseif numberCount == 1 then
-        local numeric = AttributeNumberPairs(text)
-            or AttributeListTrailingNumbers(text)
-            or AttributeListValues(text)
-        local ok, count = accepted(numeric)
-        if ok and count >= 2 then return finish(numeric) end
+        local numeric = acceptedNumeric(AttributeNumberPairs(text))
+            or acceptedNumeric(AttributeListTrailingNumbers(text))
+            or acceptedNumeric(AttributeListValues(text))
+        if numeric then return finish(numeric) end
     end
 
     if CountKnownWords(text, COLOR_VALUE_WORDS) >= 2 then

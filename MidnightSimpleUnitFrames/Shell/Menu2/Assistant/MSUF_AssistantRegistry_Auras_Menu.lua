@@ -45,7 +45,7 @@ function A.AurasRegistry.RegisterMenuSettings(ctx)
         category = "Menu / Auras",
         unit = "shared",
         frameType = "aura",
-        attribute = "auraEditingScope",
+        attribute = "auraEditScope",
         type = "enum",
         aliases = { "aura editing scope", "editing aura scope", "aura scope", "edit aura scope" },
         exactAliases = { "aura editing scope", "editing aura scope", "aura scope", "edit aura scope" },

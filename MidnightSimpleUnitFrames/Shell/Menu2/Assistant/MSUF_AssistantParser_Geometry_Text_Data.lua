@@ -148,9 +148,9 @@ Data.GEOMETRY_TEXT_PARSER = {
         "resurrection", "incoming rez", "summon",
     },
         [59] = {
-        "name", "name text", "unit name", "unitframe name", "unit frame name",
+        "name", "names", "name text", "unit name", "unitframe name", "unit frame name",
         "name label", "player name", "target name", "focus name", "pet name", "boss name",
-        "party name", "raid name", "mythic raid name", "group name",
+        "party name", "party names", "raid name", "raid names", "mythic raid name", "mythic raid names", "group name", "group names",
     },
         [60] = { "offset", "position", "pos", "x", "y", "move", "nudge", "shift", "left", "right", "up", "down" },
         [61] = { "down", "lower", "tiefer", "runter", "unten" },
@@ -234,5 +234,7 @@ Data.GEOMETRY_TEXT_PARSER = {
             "left slot", "slot left", "right slot", "slot right", "left side", "right side", "left label", "right label",
         },
         [111] = { "move", "nudge", "shift" },
+        [112] = { "offset", "x offset", "y offset", "horizontal offset", "vertical offset" },
+        [113] = { "move", "nudge", "shift", "up", "down", "left", "right" },
     },
 }

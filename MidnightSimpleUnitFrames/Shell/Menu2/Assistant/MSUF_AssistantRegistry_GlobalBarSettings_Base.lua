@@ -50,7 +50,7 @@ function A.GlobalBarRegistry.RegisterBaseBarSettings(ctx)
     if type(RegisterBarsBoolean) ~= "function" or type(RegisterBarsNumber) ~= "function" then return end
 
     RegisterBarsNumber("barOutlineThickness", "outline", "Global Bar Outline Thickness", 1, 0, 8, {
-        "bar outline thickness", "bar outline", "global bar outline", "global frame outline", "frame outline", "frame outline thickness",
+        "bar outline thickness", "bar outline thicknesses", "bar outline", "global bar outline", "global frame outline", "frame outline", "frame outline thickness",
         "bar border thickness", "bar border", "frame border", "global frame border", "border thickness", "outline thickness",
         "make border thicker", "make border thinner", "make border bigger", "make border smaller",
         "make frame outline bigger", "make frame outline smaller", "make outline bigger", "make outline smaller",
