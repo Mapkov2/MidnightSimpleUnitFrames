@@ -363,16 +363,6 @@ jobs:
           New-Item -ItemType Directory -Force -Path $stagePath | Out-Null
 
           Copy-Item -LiteralPath "MidnightSimpleUnitFrames" -Destination $stagePath -Recurse -Force
-          $assistantAddonSource = "MidnightSimpleUnitFrames_Assistant"
-          if (-not (Test-Path -LiteralPath $assistantAddonSource -PathType Container)) {
-            throw "Missing MSUF Assistant addon: $assistantAddonSource"
-          }
-          Copy-Item -LiteralPath $assistantAddonSource -Destination $stagePath -Recurse -Force
-          $localeAddonSource = "MidnightSimpleUnitFrames_Locales"
-          if (-not (Test-Path -LiteralPath $localeAddonSource -PathType Container)) {
-            throw "Missing MSUF locale addon: $localeAddonSource"
-          }
-          Copy-Item -LiteralPath $localeAddonSource -Destination $stagePath -Recurse -Force
 
           foreach ($relativePath in @(
             "MidnightSimpleUnitFrames/.codex-remote-attachments",
@@ -400,8 +390,8 @@ jobs:
           }
 
           $tocPaths = @(Get-ChildItem -LiteralPath $stagePath -Filter "*.toc" -File -Recurse)
-          if ($tocPaths.Count -ne 3) {
-            throw "Expected the main, Assistant, and locale TOCs, found $($tocPaths.Count)."
+          if ($tocPaths.Count -ne 1) {
+            throw "Expected exactly the main addon TOC, found $($tocPaths.Count)."
           }
           foreach ($tocPath in $tocPaths) {
             $tocContent = Get-Content -LiteralPath $tocPath.FullName -Raw
@@ -427,9 +417,8 @@ jobs:
             $entries = @($zip.Entries | ForEach-Object { $_.FullName -replace '\\', '/' })
             foreach ($requiredEntry in @(
               "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc",
-              "MidnightSimpleUnitFrames_Assistant/MidnightSimpleUnitFrames_Assistant.toc",
-              "MidnightSimpleUnitFrames_Locales/MidnightSimpleUnitFrames_Locales.toc",
-              "MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_AssistantRuntime.xml"
+              "MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_AssistantRuntime.xml",
+              "MidnightSimpleUnitFrames/Locales/deDE.lua"
             )) {
               if ($entries -notcontains $requiredEntry) {
                 throw "Release zip is missing required path: $requiredEntry"

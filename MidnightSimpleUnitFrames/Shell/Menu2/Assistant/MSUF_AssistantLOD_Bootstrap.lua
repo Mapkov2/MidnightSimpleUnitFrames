@@ -1,6 +1,7 @@
---- Namespace adapter for MidnightSimpleUnitFrames_Assistant.
---- The load-on-demand addon receives its own private table from WoW; all
---- Assistant modules must operate on the already-loaded core MSUF namespace.
+--- Namespace bootstrap for the Assistant runtime manifest.
+--- The runtime loads with the core addon, so the private table normally IS
+--- the main MSUF namespace. The legacy branch below keeps supporting loaders
+--- that hand the manifest a separate private table (headless harnesses).
 
 local _, private = ...
 local main = _G.MSUF_NS

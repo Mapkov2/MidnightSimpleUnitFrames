@@ -39,6 +39,16 @@ Kernel\MSUF_Libs.lua
 Locales\MSUF_Localization.lua
 Locales\enUS.lua
 Locales\enGB.lua
+Locales\deDE.lua
+Locales\esES.lua
+Locales\esMX.lua
+Locales\frFR.lua
+Locales\itIT.lua
+Locales\koKR.lua
+Locales\ptBR.lua
+Locales\ruRU.lua
+Locales\zhCN.lua
+Locales\zhTW.lua
 
 # ---------------------------------------------------------------
 # KERNEL / STATE / UI PRIMITIVES
@@ -160,3 +170,8 @@ Shell\Menu2\MSUF_Menu2_AfterGroupPreview.xml
 Castbars\MSUF_InterruptReady.lua
 Castbars\MSUF_FocusKickIcon.lua
 UnitFrames\Effects\MSUF_UF_RoundedFrames.lua
+
+# ---------------------------------------------------------------
+# ASSISTANT RUNTIME (loads last; depends on the full Menu2 shell)
+# ---------------------------------------------------------------
+Shell\Menu2\MSUF_Menu2_AssistantRuntime.xml
