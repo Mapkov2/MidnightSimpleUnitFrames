@@ -290,7 +290,7 @@ local function BuildPreview(ctx, builder, unit)
             })
             local preview = MSUF.UFPreview
             if preview and type(preview.RegisterRuntimeControlsForPage) == "function" then
-                preview.RegisterRuntimeControlsForPage(box, pageKey)
+                preview.RegisterRuntimeControlsForPage(box, ctx and ctx.key)
             end
         end
         -- The preview is shared across cached unit pages. Reassert the current
@@ -333,6 +333,10 @@ local function BuildPreview(ctx, builder, unit)
             box:ClearAllPoints()
             box:SetSize(ctx.width - 28, 292)
             box._msufPanel = panel
+            local preview = MSUF.UFPreview
+            if preview and type(preview.RegisterRuntimeControlsForPage) == "function" then
+                preview.RegisterRuntimeControlsForPage(box, ctx and ctx.key)
+            end
         end
         box._msufPanel = panel
         SetPreviewOwner()
@@ -402,6 +406,19 @@ local function BuildPreview(ctx, builder, unit)
         end
         RefreshThisPreview("MSUF2_UNIT_PAGE")
     end
+    M._assistantUnitPreviewEnsurers = M._assistantUnitPreviewEnsurers or {}
+    M._assistantUnitPreviewEnsurers[ctx.key] = function()
+        local entry = sec and sec._msuf2CollapsibleEntry
+        if entry and type(entry.SetOpenImmediate) == "function" and not entry.SetOpenImmediate(true) then return false end
+        previewQueueSerial = previewQueueSerial + 1
+        initialPreviewQueued = nil
+        RefreshThisPreview("MSUF2_ASSISTANT_UNIT_PREVIEW")
+        return box ~= nil and PreviewHostShown()
+    end
+    M.EnsureUnitPagePreviewForAssistant = M.EnsureUnitPagePreviewForAssistant or function(pageKey)
+        local ensure = M._assistantUnitPreviewEnsurers and M._assistantUnitPreviewEnsurers[pageKey]
+        return type(ensure) == "function" and ensure() == true or false
+    end
     if sec.HookScript then
         sec:HookScript("OnShow", RefreshPreviewState)
         sec:HookScript("OnHide", function()
@@ -445,15 +462,7 @@ local function BuildTopActions(ctx, builder, unit, label)
     if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(builder.y) + 28) end
     local rowY = -15
     local scopeBar = W.ScopeOverrideBar and W.ScopeOverrideBar(ctx, sec, scopeOpts)
-    if scopeBar and type(scopeBar.buttons) == "table" then
-        for i = 1, #scopeValues do
-            local item = scopeValues[i]
-            local pageKey = UNIT_PAGE_FOR_UNIT[item.value]
-            local tab = scopeBar.buttons[i]
-            RegisterControl(tab, ctx, "navigation.unit_page." .. tostring(item.value), item.text, "button", "navigation", { navigationKey = pageKey })
-            tab._msuf2SkipHistoryCheckpoint = true
-        end
-    end
+    RegisterControl(scopeBar, ctx, "navigation.unit_page.selector", "Editing", "segment", "ephemeral")
     local copy = W.TopButton(sec, M.Tr("Copy To"), 82, 24, nil, false)
     copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -14, rowY)
     local function DefaultScopes()

@@ -359,7 +359,10 @@ function Render.Install(Preview, deps)
         FillForSegment = SharedCPPreview.FillForSegment or FallbackFill,
         FormatSeconds = SharedCPPreview.FormatSeconds or F.Empty,
         IsCharged = SharedCPPreview.IsCharged or F.False,
+        IsFull = SharedCPPreview.IsFull or F.False,
         ResolveComboColor = SharedCPPreview.ResolveComboColor or FallbackCombo,
+        ResolveSlotColor = SharedCPPreview.ResolveSlotColor or function(_, _, _, r, g, b) return r, g, b end,
+        ResolveFullColor = SharedCPPreview.ResolveFullColor or function(_, _, r, g, b) return false, r, g, b end,
         ResolveBaseColor = function(spec, bars, fallbackR, fallbackG, fallbackB)
             return (SharedCPPreview.ResolveBaseColor or FallbackBase)(spec, bars, fallbackR, fallbackG, fallbackB, PowerColor)
         end,
@@ -925,6 +928,9 @@ function Preview.Refresh(box, reason)
         cp.r, cp.g, cp.b = pr, pg, pb
         cp.animatedValue = animState and R.CPPreview.AnimatedValue and R.CPPreview.AnimatedValue(cp.preview, animState.elapsed) or nil
         if cp.token then cp.r, cp.g, cp.b = R.CPPreview.ResolveBaseColor(cp.preview, bars, pr, pg, pb) end
+        cp.isFull = R.CPPreview.IsFull(cp.preview, cp.animatedValue)
+        local _, fullR, fullG, fullB = R.CPPreview.ResolveFullColor(bars, cp.token, cp.r, cp.g, cp.b)
+        cp.fullR, cp.fullG, cp.fullB = fullR, fullG, fullB
         cp.filledAlpha = tonumber(bars.classPowerFilledAlpha) or 0.95
         if cp.filledAlpha < 0 then cp.filledAlpha = 0 elseif cp.filledAlpha > 1 then cp.filledAlpha = 1 end
         cp.emptyAlpha = tonumber(bars.classPowerEmptyAlpha) or 0.28
@@ -1034,10 +1040,12 @@ function Preview.Refresh(box, reason)
                 if segEdge then segEdge:Hide() end
                 cp.sr, cp.sg, cp.sb = cp.r, cp.g, cp.b
                 cp.charged = R.CPPreview.IsCharged(cp.preview, bars, i)
-                if cp.charged then
+                if cp.isFull then
+                    cp.sr, cp.sg, cp.sb = cp.fullR, cp.fullG, cp.fullB
+                elseif cp.charged then
                     cp.sr, cp.sg, cp.sb = R.CPPreview.ResolveColor("CHARGED", 0.60, 0.20, 0.80)
-                elseif cp.token == "COMBO_POINTS" then
-                    cp.sr, cp.sg, cp.sb = R.CPPreview.ResolveComboColor(bars, i, cp.r, cp.g, cp.b)
+                else
+                    cp.sr, cp.sg, cp.sb = R.CPPreview.ResolveSlotColor(bars, cp.token, i, cp.r, cp.g, cp.b)
                 end
                 if cp.preview and cp.preview.threshold and cp.fill > 0 and i > cp.preview.threshold then cp.sr, cp.sg, cp.sb = R.CPPreview.ResolveColor(cp.preview.thresholdToken, cp.sr, cp.sg, cp.sb) end
                 cp.alpha = cp.fill > 0 and cp.filledAlpha or cp.emptyAlpha

@@ -362,3 +362,34 @@ end
 function AuraPopup.Sync()
     if pf and pf:IsShown() then Sync() end
 end
+local ASSISTANT_AURA_FIELDS = {
+    x = "xBox", y = "yBox", size = "sizeBox", spacing = "spacingBox",
+}
+function AuraPopup.GetAssistantField(field)
+    if not (pf and pf.unit and pf:IsShown()) then return nil end
+    if field == "lane" then return ActiveGroup() end
+    if field == "bossTogether" then
+        return pf.bossTogetherBtn and pf.bossTogetherBtn:IsShown() and pf.bossTogetherBtn._checked == true or nil
+    end
+    local widget = ASSISTANT_AURA_FIELDS[field] and pf[ASSISTANT_AURA_FIELDS[field]]
+    return widget and tonumber(widget.GetText and widget:GetText()) or nil
+end
+function AuraPopup.SetAssistantField(field, value)
+    if Quick.BlockConfigCombatLocked() or not (pf and pf.unit and pf:IsShown()) then return false end
+    if field == "lane" then
+        if value ~= "buff" and value ~= "debuff" then return false end
+        SetActiveGroup(value)
+    elseif field == "bossTogether" then
+        if not (pf.bossTogetherBtn and pf.bossTogetherBtn:IsShown()) then return false end
+        local checked = value == true
+        if pf.bossTogetherBtn.SetCheckedVisual then pf.bossTogetherBtn:SetCheckedVisual(checked) end
+        pf.bossTogetherBtn._checked = checked
+        Apply()
+    else
+        local widget = ASSISTANT_AURA_FIELDS[field] and pf[ASSISTANT_AURA_FIELDS[field]]
+        if not widget then return false end
+        Quick.SetBoxText(widget, tonumber(value))
+        Apply()
+    end
+    return AuraPopup.GetAssistantField(field) == value
+end
