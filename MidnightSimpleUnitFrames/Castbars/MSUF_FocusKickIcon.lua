@@ -173,14 +173,6 @@ local function SetBorderColor(red, green, blue, alpha)
     end
 end
 
-local function HasInterruptibleAPIValue(value)
-    local isSecretValue = _G.issecretvalue
-    if type(isSecretValue) == "function" and isSecretValue(value) == true then
-        return true
-    end
-    return value ~= nil
-end
-
 local function ApplyInterruptibilityColor(isNotInterruptible, apiNotInterruptibleRaw)
     if not iconFrame then return end
     if type(_G.MSUF_KickReady_Init) == "function" then _G.MSUF_KickReady_Init() end
@@ -194,28 +186,20 @@ local function ApplyInterruptibilityColor(isNotInterruptible, apiNotInterruptibl
         return
     end
 
-    local readyColor
+    local red, green, blue, alpha
+    local hasColor = false
     if type(_G.MSUF_KickReady_IsReady) == "function"
-        and type(_G.MSUF_KickReady_EvaluateColor) == "function"
+        and type(_G.MSUF_KickReady_EvaluateRGBA) == "function"
     then
-        readyColor = _G.MSUF_KickReady_EvaluateColor(_G.MSUF_KickReady_IsReady())
-    end
-
-    if HasInterruptibleAPIValue(apiNotInterruptibleRaw)
-        and readyColor
-        and _G.CreateColor
-        and _G.C_CurveUtil
-        and _G.C_CurveUtil.EvaluateColorFromBoolean
-    then
-        readyColor = _G.C_CurveUtil.EvaluateColorFromBoolean(
-            apiNotInterruptibleRaw,
-            _G.CreateColor(0.6, 0.6, 0.6, 1),
-            readyColor
+        red, green, blue, alpha = _G.MSUF_KickReady_EvaluateRGBA(
+            _G.MSUF_KickReady_IsReady(),
+            apiNotInterruptibleRaw
         )
+        hasColor = true
     end
 
-    if readyColor and readyColor.GetRGBA then
-        SetBorderColor(readyColor:GetRGBA())
+    if hasColor then
+        SetBorderColor(red, green, blue, alpha)
     else
         SetBorderColor(1, 0.2, 0.2, 1)
     end

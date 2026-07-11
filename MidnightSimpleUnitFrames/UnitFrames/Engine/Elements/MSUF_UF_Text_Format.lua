@@ -679,14 +679,31 @@ local SECRET_MODE_CODES = {
   PERCENTCURMAX = 12,
 }
 
+local SECRET_NEEDS_CUR = { [1] = true, [3] = true, [4] = true, [6] = true, [7] = true, [8] = true, [9] = true, [12] = true }
+local SECRET_NEEDS_MAX = { [2] = true, [3] = true, [4] = true, [8] = true, [9] = true, [10] = true, [11] = true, [12] = true }
+local SECRET_NEEDS_PCT = { [5] = true, [6] = true, [7] = true, [8] = true, [9] = true, [10] = true, [11] = true, [12] = true }
+local SECRET_SETTERS = {
+  function(fs, pattern, cur) fs:SetFormattedText(pattern, cur) end,
+  function(fs, pattern, _, maxValue) fs:SetFormattedText(pattern, maxValue) end,
+  function(fs, pattern, cur, maxValue, _, delimiter) fs:SetFormattedText(pattern, cur, delimiter, maxValue) end,
+  function(fs, pattern, cur, maxValue, _, delimiter) fs:SetFormattedText(pattern, maxValue, delimiter, cur) end,
+  function(fs, pattern, _, _, pct) fs:SetFormattedText(pattern, pct) end,
+  function(fs, pattern, cur, _, pct, delimiter) fs:SetFormattedText(pattern, cur, delimiter, pct) end,
+  function(fs, pattern, cur, _, pct, delimiter) fs:SetFormattedText(pattern, pct, delimiter, cur) end,
+  function(fs, pattern, cur, maxValue, pct, delimiter) fs:SetFormattedText(pattern, cur, delimiter, maxValue, delimiter, pct) end,
+  function(fs, pattern, cur, maxValue, pct, delimiter) fs:SetFormattedText(pattern, pct, delimiter, maxValue, delimiter, cur) end,
+  function(fs, pattern, _, maxValue, pct, delimiter) fs:SetFormattedText(pattern, maxValue, delimiter, pct) end,
+  function(fs, pattern, _, maxValue, pct, delimiter) fs:SetFormattedText(pattern, pct, delimiter, maxValue) end,
+  function(fs, pattern, cur, maxValue, pct, delimiter) fs:SetFormattedText(pattern, pct, delimiter, cur, delimiter, maxValue) end,
+}
+
 local function SecretWrite(slot, cur, maxValue, pct)
   local fs = slot.fs
   if not fs then return end
-  local code = slot.secretCode
   local fn = slot.secretValueFn
-  local needsCur = code == 1 or code == 3 or code == 4 or code == 6 or code == 7 or code == 8 or code == 9 or code == 12
-  local needsMax = code == 2 or code == 3 or code == 4 or code == 8 or code == 9 or code == 10 or code == 11 or code == 12
-  local needsPct = code == 5 or code == 6 or code == 7 or code == 8 or code == 9 or code == 10 or code == 11 or code == 12
+  local needsCur = slot.secretNeedsCur
+  local needsMax = slot.secretNeedsMax
+  local needsPct = slot.secretNeedsPct
   if fn then
     if needsCur then
       cur = issecretvalue(cur) == true and fn(cur) or fn(FiniteNumberOr(cur, 0))
@@ -707,31 +724,7 @@ local function SecretWrite(slot, cur, maxValue, pct)
   end
   fs._aText = nil
   fs._aTextPlain = nil
-  if code == 1 then
-    fs:SetFormattedText(slot.secretPattern, cur)
-  elseif code == 2 then
-    fs:SetFormattedText(slot.secretPattern, maxValue)
-  elseif code == 3 then
-    fs:SetFormattedText(slot.secretPattern, cur, slot.delimiter, maxValue)
-  elseif code == 4 then
-    fs:SetFormattedText(slot.secretPattern, maxValue, slot.delimiter, cur)
-  elseif code == 5 then
-    fs:SetFormattedText(slot.secretPattern, pct)
-  elseif code == 6 then
-    fs:SetFormattedText(slot.secretPattern, cur, slot.delimiter, pct)
-  elseif code == 7 then
-    fs:SetFormattedText(slot.secretPattern, pct, slot.delimiter, cur)
-  elseif code == 8 then
-    fs:SetFormattedText(slot.secretPattern, cur, slot.delimiter, maxValue, slot.delimiter, pct)
-  elseif code == 9 then
-    fs:SetFormattedText(slot.secretPattern, pct, slot.delimiter, maxValue, slot.delimiter, cur)
-  elseif code == 10 then
-    fs:SetFormattedText(slot.secretPattern, maxValue, slot.delimiter, pct)
-  elseif code == 11 then
-    fs:SetFormattedText(slot.secretPattern, pct, slot.delimiter, maxValue)
-  elseif code == 12 then
-    fs:SetFormattedText(slot.secretPattern, pct, slot.delimiter, cur, slot.delimiter, maxValue)
-  end
+  slot.secretSetter(fs, slot.secretPattern, cur, maxValue, pct, slot.delimiter)
 end
 
 local function SetModeText(fs, mode, cur, max, delimiter, unit, percentFn, short, hidePercentSymbol, pctOverride, pctOverrideSet, suffix, canSecret, percentDecimals)
@@ -835,8 +828,11 @@ local function AddTextSlot(slots, index, fs, mode, delimiter, short, hidePercent
   slot.writer = MODE_WRITERS[mode] or WriteCurMax
   slot.plainWriter = MODE_PLAIN_WRITERS[mode] or PlainWriteCurMax
   local secretCode = SECRET_MODE_CODES[mode]
-  slot.secretCode = secretCode
   slot.secretWriter = secretCode and SecretWrite or nil
+  slot.secretSetter = secretCode and SECRET_SETTERS[secretCode] or nil
+  slot.secretNeedsCur = SECRET_NEEDS_CUR[secretCode]
+  slot.secretNeedsMax = SECRET_NEEDS_MAX[secretCode]
+  slot.secretNeedsPct = SECRET_NEEDS_PCT[secretCode]
   slot.needsPercent = needsPercent
   slot.delimiter = NormalizeTextDelimiter(delimiter)
   slot.short = short == true
@@ -1083,7 +1079,7 @@ local function UpdateTextSlotsPlain(slots, count, cur, max, unit, percentFn, nee
   if nativeSecrets and (issecretvalue(cur) == true
     or issecretvalue(max) == true
     or (rt and issecretvalue(rt.healthMissing) == true)) then
-    return UpdateTextSlotsSecret(slots, count, cur, max, unit, percentFn, needsPercent, rt)
+    return UpdateTextSlotsSecret(slots, count, cur, max, unit, percentFn, needsPercent, rt, pctOverride, pctOverrideSet)
   end
   local pct
   local pctKnown = false
@@ -1094,7 +1090,7 @@ local function UpdateTextSlotsPlain(slots, count, cur, max, unit, percentFn, nee
       pct = percentFn(unit)
     end
     if issecretvalue(pct) == true then
-      return UpdateTextSlotsSecret(slots, count, cur, max, unit, percentFn, needsPercent, rt)
+      return UpdateTextSlotsSecret(slots, count, cur, max, unit, percentFn, needsPercent, rt, pct, true)
     end
     pctKnown = pct ~= nil
   end
@@ -1109,13 +1105,17 @@ local function UpdateTextSlotsPlain(slots, count, cur, max, unit, percentFn, nee
   end
 end
 
-UpdateTextSlotsSecret = function(slots, count, cur, max, unit, percentFn, needsPercent, rt)
+UpdateTextSlotsSecret = function(slots, count, cur, max, unit, percentFn, needsPercent, rt, pctOverride, pctOverrideSet)
   if not slots or not count or count <= 0 then
     return
   end
   local pct
   if needsPercent == true and percentFn then
-    pct = percentFn(unit)
+    if pctOverrideSet == true then
+      pct = pctOverride
+    else
+      pct = percentFn(unit)
+    end
   end
   for i = 1, count do
     local slot = slots[i]

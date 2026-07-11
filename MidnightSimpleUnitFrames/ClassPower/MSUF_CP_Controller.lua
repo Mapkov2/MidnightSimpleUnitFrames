@@ -909,6 +909,9 @@ local CP = {
     spExpires   = nil,     --- GetTime() expiry timestamp (nil = no timer)
     spLocalUntil = nil,    --- brief spellcast-led window before aura correction
     spCachedQ   = -1,      --- skip-if-same quantizer
+    icicleSensor = nil,    --- native AuraContainer fallback for secret Icicles
+    icicleButton = nil,
+    icicleNativeText = nil,
 }
 
 local CPAuras = {
@@ -1262,6 +1265,9 @@ local function CP_CompileVisual(powerType, renderMode, maxP)
     visual.baseR, visual.baseG, visual.baseB = baseR, baseG, baseB
     visual.bgR, visual.bgG, visual.bgB = bgR, bgG, bgB
     visual.chargedR, visual.chargedG, visual.chargedB = chargedR, chargedG, chargedB
+    if powerType == "ICICLES" and CP.icicleNativeText then
+        CP.icicleNativeText:SetTextColor(baseR, baseG, baseB, 1)
+    end
     visual.runeShowTime = b.runeShowTime ~= false
     visual.timerShowText = b.classPowerShowText == true
     visual.useComboSlotColors = powerType == PT.ComboPoints
@@ -1321,6 +1327,46 @@ do
         CP_EnsureBars = build.CP_EnsureBars or CP_EnsureBars
         CP_Create = build.CP_Create or CP_Create
     end
+end
+
+local function CP_SetIciclesSensorActive(active)
+    if active and not CP.icicleSensor then
+        local A3 = _G.MSUF_Auras3
+        local createSensor = A3 and A3.CreateClassPowerAuraSensor
+        local icicleID = CPConst.ICICLES and CPConst.ICICLES.AURA_ID
+        if type(createSensor) == "function" and icicleID and CP.container then
+            CP.icicleSensor = createSensor(CP.container, "msuf_cp_icicles", { [icicleID] = true }, function(button)
+                CP.icicleButton = button
+                button:ClearAllPoints()
+                button:SetAllPoints(button:GetParent())
+                button:SetMouseMotionEnabled(false)
+                if button.EnableMouse then button:EnableMouse(false) end
+                button:SetFrameLevel(CP.container:GetFrameLevel() + 16)
+
+                local count = button:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+                count:SetPoint("CENTER", button, "CENTER", 0, 0)
+                count:SetJustifyH("CENTER")
+                count:SetJustifyV("MIDDLE")
+                local r, g, b = ResolveClassPowerColor("ICICLES")
+                count:SetTextColor(r, g, b, 1)
+                count:SetShadowColor(0, 0, 0, 1)
+                count:SetShadowOffset(1, -1)
+
+                -- No custom formatter here: formatter objects created by addon
+                -- code reject secret values, and FormatNumber(applications)
+                -- receives a secret count on this build. The bare native path
+                -- (count text for 2+ applications) is the only secret-safe one.
+                button:SetApplicationCount(count, {})
+                CP.icicleNativeText = count
+            end)
+            if CP.icicleSensor then
+                CP.icicleSensor:SetAllPoints(CP.container)
+                CP.icicleSensor:SetFrameLevel(CP.container:GetFrameLevel() + 15)
+            end
+        end
+    end
+
+    if CP.icicleSensor then CP.icicleSensor:SetShown(active == true) end
 end
 
 --- Font / text-offset presentation helpers now live in
@@ -2064,6 +2110,7 @@ local function FullRefresh()
         CP.container._msufAnchorOnly = nil
         CP.container:Show()
         CP.visible = true
+        CP_SetIciclesSensorActive(powerType == "ICICLES")
         --- Belt-and-suspenders: ensure outline survives parent Hide/Show cycle
         if CP._outline then
             local outlineShape = tostring((_cpDB.bars and _cpDB.bars.classPowerShape) or "BAR"):upper()
@@ -2072,6 +2119,7 @@ local function FullRefresh()
 
     else
         --- Clean up rune/timer/essence OnUpdate scripts when hiding
+        CP_SetIciclesSensorActive(false)
         CP.visual = nil
         if (CP.renderMode == CPK.MODE.RUNE_CD or CP.runeOUAAny) and CP_StopRuneOnUpdates then
             CP_StopRuneOnUpdates(true)

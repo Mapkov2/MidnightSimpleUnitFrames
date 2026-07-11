@@ -15,6 +15,9 @@ end
 
 local SpellAPI = _G.C_Spell
 local TimerAPI = _G.C_Timer
+local CurveAPI = _G.C_CurveUtil
+local EvaluateColorValueFromBoolean = CurveAPI and CurveAPI.EvaluateColorValueFromBoolean
+local EvaluateColorFromBoolean = CurveAPI and CurveAPI.EvaluateColorFromBoolean
 
 local INTERRUPT_SPELLS = {
     DEATHKNIGHT = { DEFAULT = 47528 },
@@ -251,6 +254,14 @@ local function ColorForReady(isReady, general)
     return isReady and readyColor or notReadyColor
 end
 
+local function RGBAForReady(isReady, general)
+    general = general or GeneralDB()
+    if isReady then
+        return ColorFromDB(general, "kickReadyColor", 0, 1, 0)
+    end
+    return ColorFromDB(general, "kickNotReadyColor", 1, 0, 0)
+end
+
 local function ShouldShow(general, unit)
     if unit == "target" then
         return general.kickReadyShowTarget == true
@@ -439,25 +450,34 @@ local function MarkInactiveFillFrame(frame)
 end
 
 local function EvaluateIndicatorRGBA(isReady, rawNotInterruptible, general)
-    local color = ColorForReady(isReady, general)
+    local red, green, blue, alpha = RGBAForReady(isReady, general)
     local rawSecret = plainIsSecret(rawNotInterruptible) == true
 
     if not rawSecret and rawNotInterruptible == true then
-        color = NotInterruptibleColor()
-    elseif (rawSecret or rawNotInterruptible ~= false)
-        and HasKnownValue(rawNotInterruptible)
-        and _G.CreateColor
-        and _G.C_CurveUtil
-        and _G.C_CurveUtil.EvaluateColorFromBoolean
+        return 0.6, 0.6, 0.6, 1
+    end
+
+    if (rawSecret or (rawNotInterruptible ~= nil and rawNotInterruptible ~= false))
+        and EvaluateColorValueFromBoolean
     then
-        color = _G.C_CurveUtil.EvaluateColorFromBoolean(rawNotInterruptible, NotInterruptibleColor(), color)
+        return EvaluateColorValueFromBoolean(rawNotInterruptible, 0.6, red),
+            EvaluateColorValueFromBoolean(rawNotInterruptible, 0.6, green),
+            EvaluateColorValueFromBoolean(rawNotInterruptible, 0.6, blue),
+            alpha
     end
 
-    if color and color.GetRGBA then
-        return color:GetRGBA()
+    -- Compatibility fallback for clients exposing only the older color-object
+    -- evaluator. Current Midnight clients take the allocation-free scalar path.
+    if (rawSecret or (rawNotInterruptible ~= nil and rawNotInterruptible ~= false))
+        and EvaluateColorFromBoolean
+    then
+        local color = EvaluateColorFromBoolean(rawNotInterruptible, NotInterruptibleColor(), ColorForReady(isReady, general))
+        if color and color.GetRGBA then
+            return color:GetRGBA()
+        end
     end
 
-    return isReady and 0 or 1, isReady and 1 or 0, 0, 1
+    return red, green, blue, alpha
 end
 
 local function RawInterruptibleKey(value)
@@ -764,6 +784,10 @@ local function KickReady_EvaluateColor(ready)
     return ColorForReady(ready)
 end
 
+local function KickReady_EvaluateRGBA(ready, rawNotInterruptible)
+    return EvaluateIndicatorRGBA(ready, rawNotInterruptible)
+end
+
 local function KickReady_ApplyLayout(frame)
     local general = GeneralDB()
     if IndicatorStyle(general) == "fill" then
@@ -799,7 +823,10 @@ local function KickReady_RefreshAll()
 end
 
 local function CooldownEventAlreadyDisplayed()
-    local remaining = InterruptRemaining()
+    -- GetSpellCooldownDuration returns a fresh Duration object. Reuse this
+    -- event's object for both readable-remaining and secret IsZero paths.
+    local cooldown = InterruptCooldown()
+    local remaining = CooldownRemaining(cooldown)
     local ready
     if remaining ~= nil then
         ready = remaining <= 0.05
@@ -808,7 +835,6 @@ local function CooldownEventAlreadyDisplayed()
         -- IsZero can still yield a plain boolean readiness. Without this the
         -- guard exits before recording state and every SPELL_UPDATE_COOLDOWN
         -- (i.e. every player ability press) runs a full refresh pass.
-        local cooldown = InterruptCooldown()
         if cooldown and cooldown.IsZero then
             local zero = cooldown:IsZero()
             if zero ~= nil and plainIsSecret(zero) ~= true then
@@ -840,6 +866,7 @@ ExportPublic("MSUF_KickReady_IsReady", KickReady_IsReady)
 ExportPublic("MSUF_KickReady_GetSpellID", KickReady_GetSpellID)
 ExportPublic("MSUF_KickReady_GetReadyBoolForTint", KickReady_GetReadyBoolForTint)
 ExportPublic("MSUF_KickReady_EvaluateColor", KickReady_EvaluateColor)
+ExportPublic("MSUF_KickReady_EvaluateRGBA", KickReady_EvaluateRGBA)
 ExportPublic("MSUF_KickReady_ApplyLayout", KickReady_ApplyLayout)
 ExportPublic("MSUF_KickReady_RefreshFrame", KickReady_RefreshFrame)
 ExportPublic("MSUF_KickReady_RefreshAll", KickReady_RefreshAll)

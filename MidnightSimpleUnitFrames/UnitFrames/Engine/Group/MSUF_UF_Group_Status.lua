@@ -35,6 +35,8 @@ local STATUS_EVENT_KIND = {
   UNIT_CONNECTION = 8,
   UNIT_FLAGS = 8,
   PLAYER_FLAGS_CHANGED = 8,
+  PARTY_MEMBER_ENABLE = 8,
+  PARTY_MEMBER_DISABLE = 8,
   UNIT_FACTION = 9,
 }
 
@@ -154,7 +156,7 @@ end
 --- Unit flag APIs may return secret values in restricted contexts. Return nil
 --- instead of caching a derived key so the next unrestricted event can refresh.
 local function SeedHealthDeadOverride(seedHP)
-  if type(seedHP) ~= "number" then
+  if issecretvalue(seedHP) == true or type(seedHP) ~= "number" then
     return nil
   end
   return seedHP <= 0

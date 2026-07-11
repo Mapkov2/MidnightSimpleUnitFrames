@@ -1204,6 +1204,11 @@ function GroupRangeFade.Update(frame, event, unit, inRange)
     if UnitEventMatchesFrame(frame, unit) then
       changed, rangeValue, rangeSecret = StoreRange(frame, FrameIsPlayerUnit(frame) and true or nil)
     end
+  elseif event == "PARTY_MEMBER_ENABLE" or event == "PARTY_MEMBER_DISABLE" then
+    ClearOfflineDelay(frame)
+    ClearRange(frame)
+    RefreshSettledRange(frame)
+    changed = true
   elseif event == "UNIT_CONNECTION" then
     changed = true
   elseif event == "MSUF_GF_UNIT_IDENTITY" then

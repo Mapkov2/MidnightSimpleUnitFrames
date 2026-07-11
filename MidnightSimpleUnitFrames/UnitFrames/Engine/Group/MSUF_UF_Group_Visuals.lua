@@ -67,7 +67,9 @@ local VISUAL_HEALTH_FLAGS_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_FLAG
 local VISUAL_OFFLINE_EVENTS = { "UNIT_CONNECTION" }
 local VISUAL_FLAGS_EVENTS = { "UNIT_FLAGS" }
 local VISUAL_FLAGS_OFFLINE_EVENTS = { "UNIT_CONNECTION", "UNIT_FLAGS" }
-local VISUAL_HEALTH_OFFLINE_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_FLAGS" }
+local VISUAL_HEALTH_OFFLINE_EVENTS = {
+  "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_FLAGS",
+}
 local EDGE_KEYS = { "top", "bottom", "left", "right" }
 local HEALTH_FADE_SECRET_THROTTLE = 0.1
 
@@ -701,18 +703,18 @@ local function UpdateHealthFade(frame, cfg, seedHP, seedMaxHP, event)
   local seedMaxSecret = issecretvalue(seedMaxHP) == true
   local keyHPSecret = seedHPSecret
   local keyMaxSecret = seedMaxSecret
-  local keyCacheable = keyHP ~= nil
-    and keyMax ~= nil
-    and not keyHPSecret
+  local keyCacheable = not keyHPSecret
     and not keyMaxSecret
+    and keyHP ~= nil
+    and keyMax ~= nil
   if not keyCacheable then
     keyHP, keyMax = CachedHealthValues(frame)
     keyHPSecret = issecretvalue(keyHP) == true
     keyMaxSecret = issecretvalue(keyMax) == true
-    keyCacheable = keyHP ~= nil
-      and keyMax ~= nil
-      and not keyHPSecret
+    keyCacheable = not keyHPSecret
       and not keyMaxSecret
+      and keyHP ~= nil
+      and keyMax ~= nil
   end
   if not keyCacheable and event == "UNIT_HEALTH" and GetTime then
     local now = GetTime()
@@ -868,26 +870,15 @@ local function ResolveGone(frame, cfg, unit, seedHP, event)
       end
     end
   end
+  if issecretvalue(seedHP) ~= true and type(seedHP) == "number" then
+    -- Health/Prediction calculator values are the authoritative transition
+    -- signal. UnitIsDeadOrGhost can lag behind a positive AI health snapshot.
+    return seedHP <= 0
+  end
   local deadKnown = stateFresh and state.deadKnown == true
   local dead = deadKnown and state.dead == true or false
   if dead then
     return true
-  end
-  if issecretvalue(seedHP) ~= true and type(seedHP) == "number" then
-    if seedHP == 0 then
-      return true
-    end
-    if healthEvent and frame._msufGFDeadBgState == true then
-      local dg, known = ReadDeadCached(frame, unit)
-      return known ~= true or dg == true
-    end
-    if frame._msufGFDeadBgState == true and not deadKnown then
-      local dg, known = ReadDeadCached(frame, unit)
-      if known == true and dg == true then
-        return true
-      end
-    end
-    return false
   end
   if not deadKnown then
     local dg, known = ReadDeadCached(frame, unit)
@@ -1067,6 +1058,16 @@ local function UpdateVisuals(frame, event, updateInfo, seedMaxHP)
     local fn = cfg.runtimeOnHealth
     if fn then
       fn(frame, cfg, updateInfo, seedMaxHP, event)
+    end
+    return
+  elseif event == "PARTY_MEMBER_ENABLE" or event == "PARTY_MEMBER_DISABLE" then
+    local fn = cfg.runtimeOnHealth
+    if fn then
+      fn(frame, cfg, updateInfo, seedMaxHP, event)
+    end
+    fn = cfg.runtimeOnDeadBg
+    if fn then
+      fn(frame, cfg, updateInfo, event)
     end
     return
   elseif event == "UNIT_CONNECTION" or event == "UNIT_FLAGS" then

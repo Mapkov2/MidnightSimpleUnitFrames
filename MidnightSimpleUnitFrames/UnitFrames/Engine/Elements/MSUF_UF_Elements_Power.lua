@@ -638,7 +638,7 @@ local function UpdatePercent(frame, event, unit, animate)
     end
   end
   local rt = frame._msufTextRuntime
-  if rt and rt.powerNeedsPercent == true and not secret then
+  if rt and rt.powerNeedsPercent == true then
     rt._dispatchPowerPercent = pct
     rt._dispatchPowerPercentReady = true
   elseif rt then
@@ -699,6 +699,11 @@ end
 
 function Power.Update(frame, event, unit, eventPowerToken)
   unit = unit or frame.unit
+  local rt = frame and frame._msufTextRuntime
+  if rt then
+    rt._dispatchPowerPercent = nil
+    rt._dispatchPowerPercentReady = nil
+  end
   local bar = frame and frame.targetPowerBar
   if not (bar and unit and BarShown(bar)) then return end
   if not PowerEventMatchesToken(bar, event, eventPowerToken) then return end

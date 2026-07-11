@@ -1241,7 +1241,7 @@ local function UpdateElite(frame, status)
 end
 
 local function SeedHealthDeadOverride(seedHP)
-  if type(seedHP) ~= "number" then
+  if issecretvalue(seedHP) == true or type(seedHP) ~= "number" then
     return nil
   end
   return seedHP <= 0
@@ -1366,6 +1366,12 @@ end
 
 local function RefreshHealthAfterGoneStatus(frame, oldValue)
   if oldValue ~= "DEAD" and oldValue ~= "GHOST" and oldValue ~= "OFFLINE" then
+    return
+  end
+  -- A group-state snapshot has already written authoritative detailed health.
+  -- Do not immediately replace it with a second direct-health read while the
+  -- client is still committing an AI/secure-header transition.
+  if frame._msufGroupStateRefresh == true or frame._msufHealthStateNotify == true then
     return
   end
   if frame._msufStatusTextHealthRefresh == true then

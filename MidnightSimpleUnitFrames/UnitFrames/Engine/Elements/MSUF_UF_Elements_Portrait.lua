@@ -23,6 +23,10 @@ local tostring = V.tostring or tostring
 local max = V.max or math.max
 local EMPTY_EVENTS = V.EMPTY_EVENTS or {}
 local PORTRAIT_2D_EVENTS = V.PORTRAIT_2D_EVENTS or { "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED", "UNIT_CONNECTION" }
+local GROUP_PORTRAIT_2D_EVENTS = {
+  "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED", "UNIT_CONNECTION",
+  "UNIT_ENTERED_VEHICLE", "UNIT_EXITED_VEHICLE",
+}
 local PORTRAIT_2D_PLAYER_EVENTS = V.PORTRAIT_2D_PLAYER_EVENTS or { "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED", "UNIT_ENTERED_VEHICLE", "UNIT_EXITED_VEHICLE" }
 local PORTRAIT_2D_DEPENDENT_EVENTS = V.PORTRAIT_2D_DEPENDENT_EVENTS or { "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED", "UNIT_CONNECTION" }
 local WHITE = V.WHITE or "Interface\\Buttons\\WHITE8x8"
@@ -46,6 +50,8 @@ local QUEUED_2D_PORTRAIT_EVENTS = V.QUEUED_2D_PORTRAIT_EVENTS or {
   UNIT_CONNECTION = true,
   UNIT_ENTERED_VEHICLE = true,
   UNIT_EXITED_VEHICLE = true,
+  PARTY_MEMBER_ENABLE = true,
+  PARTY_MEMBER_DISABLE = true,
   MSUF_UNIT_IDENTITY_VISUAL = true,
   MSUF_UNIT_IDENTITY_SOFT = true,
   MSUF_UNIT_IDENTITY_SOFT_VISUAL = true,
@@ -57,6 +63,8 @@ local PORTRAIT_GUID_BUST_EVENTS = {
   UNIT_ENTERED_VEHICLE = true,
   UNIT_EXITED_VEHICLE = true,
   PORTRAITS_UPDATED = true,
+  PARTY_MEMBER_ENABLE = true,
+  PARTY_MEMBER_DISABLE = true,
 }
 local PORTRAIT_UNIT_STATE_EVENTS = {
   PLAYER_TARGET_CHANGED = true,
@@ -627,6 +635,9 @@ function Portrait.GetEvents(frame, spec)
     if unit == "targettarget" or unit == "focustarget" then
       return PORTRAIT_2D_DEPENDENT_EVENTS
     end
+    if spec and spec.scope == "group" then
+      return GROUP_PORTRAIT_2D_EVENTS
+    end
     return PORTRAIT_2D_EVENTS
   end
   return EMPTY_EVENTS
@@ -640,6 +651,9 @@ function Portrait.GetUnitlessEvents(frame, spec)
   local unit = frame and frame.unit or spec and spec.unit
   if p.render == "CLASS" then
     return EMPTY_EVENTS
+  end
+  if spec and spec.scope == "group" then
+    return PORTRAIT_UNITLESS_EVENTS
   end
   if unit == "target" then
     return TARGET_PORTRAIT_EXTRA_EVENTS

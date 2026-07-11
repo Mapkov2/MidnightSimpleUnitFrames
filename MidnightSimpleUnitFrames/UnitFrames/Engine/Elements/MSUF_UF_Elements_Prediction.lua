@@ -104,6 +104,7 @@ local PREDICTION_EVENTS = BuildPredictionEventTable(false, true)
 local PREDICTION_HEALTH_EVENTS = BuildPredictionEventTable(true, true)
 local PREDICTION_EVENTS_PLAYER = BuildPredictionEventTable(false, false)
 local PREDICTION_HEALTH_EVENTS_PLAYER = BuildPredictionEventTable(true, false)
+local GROUP_LIFECYCLE_EVENTS = { "PARTY_MEMBER_ENABLE", "PARTY_MEMBER_DISABLE" }
 
 local PLAN_REFRESH_HEAL = 1
 local PLAN_REFRESH_ABSORB = 2
@@ -387,9 +388,59 @@ local function UpdateCalc(frame, unit, cfg)
   if calc._msufPredictionCfg ~= cfg then
     ConfigureCalc(calc, cfg)
   end
+  local dispatchToken = frame
+    and frame._msufDispatchActive == true
+    and frame._msufDispatchToken
+    or nil
+  if dispatchToken ~= nil
+    and calc._msufPredictionUpdateDispatch == dispatchToken
+    and calc._msufPredictionUpdateUnit == unit
+    and calc._msufPredictionUpdateCfg == cfg then
+    return calc
+  end
   UnitGetDetailedHealPrediction(unit, PREDICTION_HEALER_UNIT, calc)
+  -- Share the calculator only inside one core dispatch. Two state events can
+  -- land in the same rendered frame; GetTime-based reuse would let a premature
+  -- PARTY_MEMBER_ENABLE snapshot poison the following UNIT_HEALTH update.
+  calc._msufPredictionUpdateDispatch = dispatchToken
+  calc._msufPredictionUpdateUnit = unit
+  calc._msufPredictionUpdateCfg = cfg
   return calc
 end
+
+local sharedHealthCalc
+local HEALTH_ONLY_CFG = {}
+
+--- Group lifecycle transitions and AI party health can lead the direct health
+--- APIs. Reuse the frame calculator when prediction is active; otherwise one
+--- shared calculator avoids allocating prediction state on every group frame.
+local function ReadDetailedHealth(frame, unit)
+  if not (unit and UnitGetDetailedHealPrediction and CreateUnitHealPredictionCalculator) then
+    return nil
+  end
+
+  local cfg = frame and frame._msufPredictionRuntimeCfg
+  local calc
+  if frame and (cfg or frame._msufPredictionCalc) then
+    calc = UpdateCalc(frame, unit, cfg or HEALTH_ONLY_CFG)
+  else
+    calc = sharedHealthCalc
+    if not calc then
+      calc = CreateUnitHealPredictionCalculator()
+      sharedHealthCalc = calc
+    end
+    if calc then
+      UnitGetDetailedHealPrediction(unit, PREDICTION_HEALER_UNIT, calc)
+    end
+  end
+  if not calc then return nil end
+
+  local current = calc.GetCurrentHealth and calc:GetCurrentHealth() or nil
+  local maximum = calc.GetMaximumHealth and calc:GetMaximumHealth() or nil
+  return current, maximum, calc
+end
+
+UF.ReadDetailedHealth = ReadDetailedHealth
 
 local function FallbackIncomingHeals(unit)
   return UnitGetIncomingHeals and UnitGetIncomingHeals(unit, PREDICTION_HEALER_UNIT) or nil
@@ -664,7 +715,6 @@ local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar)
   if not (bar and hpBar) then
     return
   end
-  mode = NormalizeAnchorMode(mode, 2)
   local followSource = (mode == 3 or mode == 4) and followBar or nil
   local follow = (mode == 3 or mode == 4) and (followSource and StatusTexture(followSource) or StatusTexture(hpBar)) or nil
   local runtimeWidth = tonumber(frame._msufPredictionFrameWidth)
@@ -732,7 +782,6 @@ local function PredictionLayoutCurrent(frame, bar, levelOffset, mode, reverse, f
   if not (bar and hpBar) then
     return false
   end
-  mode = NormalizeAnchorMode(mode, 2)
   local followSource = (mode == 3 or mode == 4) and followBar or nil
   local parent = (mode == 4) and frame or hpBar
   local width = tonumber(frame._msufWidth) or tonumber(frame._msufPredictionFrameWidth)
@@ -890,6 +939,7 @@ local function CompilePredictionPlans(cfg, healMode, absorbMode, followAbsorb)
 end
 
 local Prediction = {}
+Prediction.ReadDetailedHealth = ReadDetailedHealth
 local PREDICTION_BAR_DEFS = {
   { "heal", "incomingHealBar", 1, "healPredictionBar" },
   { "absorb", "absorbBar", 2 },
@@ -974,13 +1024,20 @@ local function PredictionEventsForConfig(cfg, healthAware, unit)
 end
 
 function Prediction.GetEvents(frame, spec)
-  return PredictionEventsForConfig(spec and spec.prediction, true, (frame and frame.unit) or (spec and spec.key))
+  return PredictionEventsForConfig(
+    spec and spec.prediction,
+    true,
+    (frame and frame.unit) or (spec and spec.key)
+  )
 end
 
 function Prediction.GetUnitlessEvents(frame, spec)
   local cfg = spec and spec.prediction
   if PredictionMask(cfg) == 0 then
     return EMPTY_EVENTS
+  end
+  if spec and spec.scope == "group" then
+    return GROUP_LIFECYCLE_EVENTS
   end
   local unit = frame and frame.unit
   if unit == "targettarget" or unit == "focustarget" then
@@ -1124,12 +1181,14 @@ local function UpdateAbsorbOnly(frame, event, unit, cfg, seedHP, seedMaxHP, abso
   UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, frame._msufPredictionAbsorb)
 end
 
+local UpdateFull
+
 function Prediction.UpdateHealthValue(frame, event, unit, seedHP, seedMaxHP)
   if unit and issecretvalue(unit) == true then
     unit = frame and frame.unit or nil
     seedHP, seedMaxHP = nil, nil
   elseif unit and frame and unit ~= frame.unit then
-    return Prediction.Update(frame, event, unit, seedHP, seedMaxHP)
+    return UpdateFull(frame, event, unit, seedHP, seedMaxHP)
   end
   unit = unit or frame.unit
   local cfg = frame._msufPredictionRuntimeCfg
@@ -1137,14 +1196,14 @@ function Prediction.UpdateHealthValue(frame, event, unit, seedHP, seedMaxHP)
     or cfg.test == true
     or frame._msufPredictionNeedsHealth ~= true
     or frame._msufPredictionMask == 0 then
-    return Prediction.Update(frame, event, unit, seedHP, seedMaxHP)
+    return UpdateFull(frame, event, unit, seedHP, seedMaxHP)
   end
   local cacheUnit = frame._msufPredictionCacheUnit
   if frame._msufPredictionCacheReady ~= true
     or issecretvalue(unit) == true
     or cacheUnit ~= unit
     or frame._msufPredictionCacheCfg ~= cfg then
-    return Prediction.Update(frame, event, unit, seedHP, seedMaxHP)
+    return UpdateFull(frame, event, unit, seedHP, seedMaxHP)
   end
 
   local maxHP = seedMaxHP
@@ -1173,14 +1232,14 @@ function Prediction.UpdateConnectionState(frame, event, unit, seedHP, seedMaxHP,
     unit = frame and frame.unit or nil
     seedHP, seedMaxHP, seedCalc = nil, nil, nil
   elseif unit and frame and unit ~= frame.unit then
-    return Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
+    return UpdateFull(frame, event, unit, seedHP, seedMaxHP, seedCalc)
   end
   unit = unit or frame.unit
   local cfg = frame._msufPredictionRuntimeCfg
   if not (cfg and cfg.enabled == true)
     or cfg.test == true
     or frame._msufPredictionMask == 0 then
-    return Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
+    return UpdateFull(frame, event, unit, seedHP, seedMaxHP, seedCalc)
   end
 
   local state = frame._msufUnitState
@@ -1232,7 +1291,7 @@ function Prediction.UpdateConnectionState(frame, event, unit, seedHP, seedMaxHP,
     return
   end
 
-  local result = Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
+  local result = UpdateFull(frame, event, unit, seedHP, seedMaxHP, seedCalc)
   if connected == true then
     frame._msufPredictionConnectionUnit = issecretvalue(unit) ~= true and unit or nil
     frame._msufPredictionConnectionOnline = true
@@ -1243,7 +1302,7 @@ function Prediction.UpdateConnectionState(frame, event, unit, seedHP, seedMaxHP,
   return result
 end
 
-function Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
+UpdateFull = function(frame, event, unit, seedHP, seedMaxHP, seedCalc)
   if unit and issecretvalue(unit) == true then
     unit = frame and frame.unit or nil
     seedHP, seedMaxHP, seedCalc = nil, nil, nil
@@ -1417,6 +1476,16 @@ function Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
     end
     ShowValue(frame.healAbsorbBar, maxHP, frame._msufPredictionHealAbsorb, forceMax)
   end
+end
+
+function Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
+  if event == "UNIT_HEALTH" then
+    return Prediction.UpdateHealthValue(frame, event, unit, seedHP, seedMaxHP)
+  end
+  if event == "UNIT_CONNECTION" then
+    return Prediction.UpdateConnectionState(frame, event, unit, seedHP, seedMaxHP, seedCalc)
+  end
+  return UpdateFull(frame, event, unit, seedHP, seedMaxHP, seedCalc)
 end
 
 UF.RegisterElement("Prediction", Prediction)

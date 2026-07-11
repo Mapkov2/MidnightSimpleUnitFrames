@@ -844,9 +844,18 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
             local txt = CP.text
             if txt then
                 local showText = visual and visual.showText == true
-                if showText and cur > 0 then txt:SetText(cur); CP_StampShown(txt, true) else CP_StampShown(txt, false) end
+                if powerType == "ICICLES" and CP.icicleNativeText then
+                    CP_StampShown(txt, false)
+                elseif showText and cur > 0 then
+                    txt:SetText(cur)
+                    CP_StampShown(txt, true)
+                else
+                    CP_StampShown(txt, false)
+                end
             end
-            CP_CheckAutoHide(cur, maxPower)
+            local autoHideCur = cur
+            if powerType == "ICICLES" and CP.icicleNativeText then autoHideCur = nil end
+            CP_CheckAutoHide(autoHideCur, maxPower)
         end
     end
 
