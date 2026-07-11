@@ -671,7 +671,7 @@ function Page:BuildHeader()
     quick:SetScript("OnClick", ExecuteQuickSetup)
     quick:SetScript("OnEnter", ShowQuickSetupTooltip)
     quick:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
-    RegisterControl(quick, Meta("quick_setup.class_bar", "action"), "Quick Setup: Class Bar", "button")
+    RegisterControl(quick, Meta("quick_setup.class_bar", "action", { confirmRequired = true }), "Quick Setup: Class Bar", "button")
 end
 
 function Page:BuildClassLayout()

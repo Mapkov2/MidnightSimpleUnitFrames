@@ -83,7 +83,7 @@ local function RequestClassPowerPreviewRefresh(box, reason)
         box._msufCPRefreshReason = nil
         box._msufCPRefreshQueued = nil
         if box.IsShown and not box:IsShown() then return end
-        if box.IsVisible and not box:IsVisible() then return end
+        if box._msufCPPreviewHostShown and not box:_msufCPPreviewHostShown() then return end
         box:Refresh(refreshReason or "CLASSPOWER_PREVIEW_REFRESH")
     end
     if C_Timer and C_Timer.After then
@@ -240,6 +240,9 @@ local function AutoFitPips(segCount, height, gap)
 end
 local function AnimationEnabled(preview)
     return preview and preview._animationEnabled == true
+end
+local function PreviewAnimationInCombat()
+    return ((_G.InCombatLockdown and _G.InCombatLockdown()) or _G.MSUF_InCombat == true) and true or false
 end
 local function PreviewElapsed(preview)
     return tonumber(preview and preview._animationElapsed) or 0
@@ -641,6 +644,105 @@ local function SelectHandle(handle)
     RegisterPreviewNudgeTarget(preview)
     RefreshHandleVisuals(preview)
 end
+local function ExactPreviewDelta(value)
+    value = tonumber(value)
+    if value == nil or value ~= value or value == math.huge or value == -math.huge then return nil end
+    return value
+end
+local function FindClassPowerPreviewHandle(preview, handleKey)
+    if not (preview and type(handleKey) == "string" and handleKey ~= "") then return nil end
+    for i = 1, #(preview.handles or {}) do
+        local handle = preview.handles[i]
+        if handle and handle._key == handleKey then return handle end
+    end
+    return nil
+end
+local function RestoreClassPowerPreviewSelection(preview, previous)
+    if previous and previous._preview == preview then
+        SelectHandle(previous)
+        return
+    end
+    preview.selectedHandle = nil
+    SetArrowBindings(preview, false)
+    FocusPreviewKeyboardTarget(preview, nil, false)
+    RefreshHandleVisuals(preview)
+end
+
+--- Move one explicitly named handle on the visible Class Resources preview.
+--- Exact DB readback is mandatory and a mismatch is rolled back. This API does
+--- not inspect Edit Mode's selected mover or its shared preview nudge target.
+function Preview.NudgeHandle(handleKey, dx, dy)
+    if type(M.IsConfigCombatLocked) == "function" and M.IsConfigCombatLocked() then return false, "combat-locked" end
+    if type(handleKey) ~= "string" or handleKey == "" then return false, "handle-required" end
+    dx, dy = ExactPreviewDelta(dx), ExactPreviewDelta(dy)
+    if dx == nil or dy == nil then return false, "invalid-delta" end
+    local preview = Preview.active
+    if not (preview and preview.IsShown and preview:IsShown() and (not preview.IsVisible or preview:IsVisible())) then return false, "preview-not-visible" end
+    local handle = FindClassPowerPreviewHandle(preview, handleKey)
+    if not handle then return false, "unknown-handle" end
+    if handle._dragging == true or (preview.dragFrame and preview.dragFrame._handle) then return false, "handle-busy" end
+    if not CanNudgeHandle(handle) or (handle.IsShown and not handle:IsShown()) then return false, "handle-not-visible" end
+    local store = StoreForHandle(handle)
+    if not (store and handle._xKey and handle._yKey) then return false, "handle-not-readable" end
+    local beforeX, beforeY = ReadHandle(handle)
+    if tonumber(beforeX) == nil or tonumber(beforeY) == nil then return false, "handle-not-readable" end
+    beforeX, beforeY = tonumber(beforeX), tonumber(beforeY)
+    local expectedX, expectedY = Round(beforeX + dx), Round(beforeY + dy)
+    local previous = preview.selectedHandle
+    SelectHandle(handle)
+    if preview.selectedHandle ~= handle then
+        RestoreClassPowerPreviewSelection(preview, previous)
+        return false, "selection-failed"
+    end
+    if expectedX == beforeX and expectedY == beforeY then return true, beforeX, beforeY, beforeX, beforeY end
+
+    local outcome
+    local function Mutate()
+        WriteHandle(handle, expectedX, expectedY, false)
+        local afterX, afterY = ReadHandle(handle)
+        afterX, afterY = tonumber(afterX), tonumber(afterY)
+        if afterX == expectedX and afterY == expectedY then
+            outcome = { true, beforeX, beforeY, afterX, afterY }
+            return true
+        end
+        WriteHandle(handle, beforeX, beforeY, false)
+        local restoredX, restoredY = ReadHandle(handle)
+        local rolledBack = tonumber(restoredX) == beforeX and tonumber(restoredY) == beforeY
+        local reason = not rolledBack and "rollback-failed" or "readback-mismatch"
+        outcome = { false, reason }
+        return false
+    end
+    local capturing = type(M.IsHistoryCapturing) == "function" and M.IsHistoryCapturing()
+    if type(M.CaptureHistory) == "function" and not capturing then
+        M.CaptureHistory("Nudge: " .. tostring(handle._label or handleKey),
+            "classPowerPreview:" .. handleKey .. ":exact-nudge", Mutate)
+    else
+        Mutate()
+        if outcome and outcome[1] and type(M.CheckpointHistory) == "function" then
+            M.CheckpointHistory("Nudge: " .. tostring(handle._label or handleKey),
+                "classPowerPreview:" .. handleKey .. ":exact-nudge")
+        end
+    end
+    if not (outcome and outcome[1]) then RestoreClassPowerPreviewSelection(preview, previous) end
+    if outcome and outcome[1] then return true, outcome[2], outcome[3], outcome[4], outcome[5] end
+    return false, (outcome and outcome[2]) or "write-failed"
+end
+function Preview.Pan(dx, dy)
+    if type(M.IsConfigCombatLocked) == "function" and M.IsConfigCombatLocked() then return false, "combat-locked" end
+    dx, dy = ExactPreviewDelta(dx), ExactPreviewDelta(dy)
+    if dx == nil or dy == nil then return false, "invalid-delta" end
+    local preview = Preview.active
+    if not (preview and preview.IsShown and preview:IsShown() and (not preview.IsVisible or preview:IsVisible())) then return false, "preview-not-visible" end
+    if (preview.canvas and preview.canvas._msufCPPreviewPanning) or (preview.dragFrame and preview.dragFrame._handle) then return false, "preview-busy" end
+    if type(ZoomPan.NudgePan) ~= "function" then return false, "pan-api-unavailable" end
+    return ZoomPan.NudgePan(preview, dx, dy)
+end
+ExportPublic("MSUF_ClassPowerPreview_NudgeHandle", function(handleKey, dx, dy)
+    return Preview.NudgeHandle(handleKey, dx, dy)
+end)
+ExportPublic("MSUF_ClassPowerPreview_Pan", function(dx, dy)
+    return Preview.Pan(dx, dy)
+end)
 local function HandleKeyDown(handle, key)
     if Helpers.ArrowKeyDown then
         return Helpers.ArrowKeyDown(handle, key, {
@@ -666,6 +768,11 @@ local function StopHandleDrag(handle, button, skipApply)
     if not (handle and handle._dragging) then return end
     local preview = handle._preview
     handle._dragging = nil
+    if preview then
+        preview._dragFrozenScale = nil
+        preview._dragFrozenBaseOffsetX = nil
+        preview._dragFrozenBaseOffsetY = nil
+    end
     if preview and preview.dragFrame and preview.dragFrame._handle == handle then
         preview.dragFrame:SetScript("OnUpdate", nil)
         preview.dragFrame._handle = nil
@@ -743,6 +850,9 @@ local function MakeHandle(preview, key, store, xKey, yKey, defaultX, defaultY, l
         self._startX, self._startY = ReadHandle(self)
         self._lastX, self._lastY = nil, nil
         self._cursorX, self._cursorY = GetCursorPosition()
+        preview._dragFrozenScale = tonumber(preview._mockScale) or tonumber(preview._mockAutoScale) or 1
+        preview._dragFrozenBaseOffsetX = tonumber(preview._mockBaseOffsetX) or 0
+        preview._dragFrozenBaseOffsetY = tonumber(preview._mockBaseOffsetY) or 0
         self._historyTx = BeginHistory(self)
         preview.dragFrame._handle = self
         preview.dragFrame:SetScript("OnUpdate", preview.dragUpdate)
@@ -754,7 +864,20 @@ local function MakeHandle(preview, key, store, xKey, yKey, defaultX, defaultY, l
     h:SetScript("OnHide", function(self)
         StopHandleDrag(self, nil, true)
     end)
-    RegisterPreviewControl(preview._catalogCtx, h, "handle." .. tostring(key), label or key, "button", "action", {
+    h._msuf2CommandAction = {
+        kind = "button",
+        historyMode = "none",
+        interaction = "preview.handle.select",
+        previewSurface = "class-power",
+        previewHandleKey = key,
+        set = function()
+            if h._msufPlaced ~= true then return false end
+            if h.IsShown and not h:IsShown() then return false end
+            SelectHandle(h)
+            return preview.selectedHandle == h
+        end,
+    }
+    RegisterPreviewControl(preview._catalogCtx, h, "handle." .. tostring(key), label or key, "button", "ephemeral", {
         help = "Moves this Class Resources preview element and opens its quick actions.",
     })
     if Helpers.EnsurePreviewHandleGear then
@@ -764,10 +887,17 @@ local function MakeHandle(preview, key, store, xKey, yKey, defaultX, defaultY, l
             shown = false,
             openSettings = OpenClassPowerHandleSettings,
         })
+        gear._msuf2ClassPowerOpenCommand = gear._msuf2ClassPowerOpenCommand or {
+            kind = "button",
+            historyMode = "none",
+            canExecute = function() return h ~= nil end,
+            set = function() return OpenClassPowerHandleSettings(h) end,
+        }
         RegisterPreviewControl(preview._catalogCtx, gear, "handle." .. tostring(key) .. ".open_settings",
-            "Open " .. tostring(label or key) .. " settings", "button", "navigation", {
-                navigationKey = "classpower",
+            "Open " .. tostring(label or key) .. " settings", "button", "action", {
+                historyMode = "none",
                 help = "Opens the settings section for this preview element.",
+                command = gear._msuf2ClassPowerOpenCommand,
             })
     end
     preview.handles[#preview.handles + 1] = h
@@ -968,11 +1098,17 @@ local function SegmentCount(spec)
     return count
 end
 
+local function ClassPowerPreviewState(bars, spec)
+    if bars and bars.showClassPower == false then return false, "settings" end
+    if not spec or spec.enabled == false or spec.mode == "none" then return false, "resource" end
+    return true
+end
+
 --- Compose the class-resource row/pips from profile values and the preview spec.
 --- Runtime values are simulated here; the live controller remains authoritative.
 local function RenderClassPower(preview, bars, spec)
     local frame = EnsureClassPower(preview)
-    local enabled = bars.showClassPower ~= false and spec and spec.enabled ~= false and spec.mode ~= "none"
+    local enabled, disabledReason = ClassPowerPreviewState(bars, spec)
     if not enabled then
         frame:Hide()
         HideBarOutline(frame)
@@ -983,7 +1119,7 @@ local function RenderClassPower(preview, bars, spec)
         frame.text:Hide()
         preview.handleClass:Hide()
         preview.handleClassText:Hide()
-        return nil
+        return nil, disabledReason
     end
     local h = Clamp(bars.classPowerHeight, 8, 2, 40)
     local count = SegmentCount(spec)
@@ -1033,6 +1169,12 @@ local function RenderClassPower(preview, bars, spec)
     local elapsed = PreviewElapsed(preview)
     local animated = AnimationEnabled(preview)
     local animatedValue = animated and CPPreview.AnimatedValue and CPPreview.AnimatedValue(spec, elapsed) or nil
+    local isFull = CPPreview.IsFull and CPPreview.IsFull(spec, animatedValue) or false
+    local fullR, fullG, fullB = r, g, b
+    if CPPreview.ResolveFullColor then
+        local _, fr, fg, fb = CPPreview.ResolveFullColor(bars, token, r, g, b)
+        fullR, fullG, fullB = fr, fg, fb
+    end
     local runeOrder = spec.mode == "rune" and CPPreview.BuildRuneOrder and CPPreview.BuildRuneOrder({}, bars, spec, elapsed, animated) or nil
     local textColorR, textColorG, textColorB = CPTextColor(1, 1, 1)
     for i = 1, #frame.segments do
@@ -1062,10 +1204,12 @@ local function RenderClassPower(preview, bars, spec)
             bg:SetVertexColor(bgr or 0, bgg or 0, bgb or 0, bgA)
             bg:Show()
             local sr, sg, sb = r, g, b
-            if CPPreview.IsCharged and CPPreview.IsCharged(spec, bars, i) then
+            if isFull then
+                sr, sg, sb = fullR, fullG, fullB
+            elseif CPPreview.IsCharged and CPPreview.IsCharged(spec, bars, i) then
                 sr, sg, sb = CPColor("CHARGED", 0.60, 0.20, 0.80)
-            elseif token == "COMBO_POINTS" and CPPreview.ResolveComboColor then
-                sr, sg, sb = CPPreview.ResolveComboColor(bars, i, r, g, b)
+            elseif CPPreview.ResolveSlotColor then
+                sr, sg, sb = CPPreview.ResolveSlotColor(bars, token, i, r, g, b)
             end
             if spec.threshold and frac > 0 and i > spec.threshold and CPPreview.ResolveColor then sr, sg, sb = CPColor(spec.thresholdToken, sr, sg, sb) end
             fill:ClearAllPoints()
@@ -1126,6 +1270,9 @@ local function RenderClassPower(preview, bars, spec)
         r = r,
         g = g,
         b = b,
+        fullR = fullR,
+        fullG = fullG,
+        fullB = fullB,
         filledA = filledA,
         emptyA = emptyA,
         textColorR = textColorR,
@@ -1403,6 +1550,7 @@ local function UpdateClassPowerAnimation(preview, frame)
     if frame.IsShown and not frame:IsShown() then return true end
     local elapsed = PreviewElapsed(preview)
     local animatedValue = CPPreview.AnimatedValue and CPPreview.AnimatedValue(spec, elapsed) or nil
+    local isFull = CPPreview.IsFull and CPPreview.IsFull(spec, animatedValue) or false
     local runeOrder = spec.mode == "rune" and CPPreview.BuildRuneOrder and CPPreview.BuildRuneOrder({}, bars, spec, elapsed, true) or nil
     for i = 1, state.count or 0 do
         local fill = frame.segments and frame.segments[i]
@@ -1413,10 +1561,12 @@ local function UpdateClassPowerAnimation(preview, frame)
                     or (i <= floor(tonumber(animatedValue or spec.value) or 0) and 1 or 0))
             if frac < 0 then frac = 0 elseif frac > 1 then frac = 1 end
             local sr, sg, sb = state.r, state.g, state.b
-            if CPPreview.IsCharged and CPPreview.IsCharged(spec, bars, i) then
+            if isFull then
+                sr, sg, sb = state.fullR, state.fullG, state.fullB
+            elseif CPPreview.IsCharged and CPPreview.IsCharged(spec, bars, i) then
                 sr, sg, sb = CPColor("CHARGED", 0.60, 0.20, 0.80)
-            elseif state.token == "COMBO_POINTS" and CPPreview.ResolveComboColor then
-                sr, sg, sb = CPPreview.ResolveComboColor(bars, i, sr, sg, sb)
+            elseif CPPreview.ResolveSlotColor then
+                sr, sg, sb = CPPreview.ResolveSlotColor(bars, state.token, i, sr, sg, sb)
             end
             if spec.threshold and frac > 0 and i > spec.threshold and CPPreview.ResolveColor then
                 sr, sg, sb = CPColor(spec.thresholdToken, sr, sg, sb)
@@ -1561,20 +1711,74 @@ local function RefreshBounds(preview, classFrame, powerFrame, hpFrame)
     PlaceBound(preview, "power", powerFrame, "Power", { 0.95, 0.72, 0.18 }, 1)
     PlaceBound(preview, "hp", hpFrame, "HP", { 0.25, 0.90, 0.42 }, 1)
 end
-local function ApplyPreviewZoom(preview)
+local function AddPreviewRegionBounds(preview, region, bounds)
+    if not (preview and preview.stage and region and region.IsShown and region:IsShown()) then return end
+    local stageX, stageY = preview.stage:GetCenter()
+    local regionX, regionY = region:GetCenter()
+    if not (stageX and stageY and regionX and regionY) then return end
+    local halfW = max(0, (tonumber(region:GetWidth()) or 0) * 0.5)
+    local halfH = max(0, (tonumber(region:GetHeight()) or 0) * 0.5)
+    -- GetCenter values for regions in the same scaled hierarchy are already in
+    -- their shared local coordinate space (see Blizzard_SharedXML/RegionUtil).
+    local centerX = regionX - stageX
+    local centerY = regionY - stageY
+    bounds.minX = min(bounds.minX, centerX - halfW)
+    bounds.maxX = max(bounds.maxX, centerX + halfW)
+    bounds.minY = min(bounds.minY, centerY - halfH)
+    bounds.maxY = max(bounds.maxY, centerY + halfH)
+    bounds.found = true
+end
+
+local function ResolvePreviewFit(preview, classFrame, powerFrame, hpFrame)
+    local bounds = { minX = math.huge, maxX = -math.huge, minY = math.huge, maxY = -math.huge }
+    local visibility = preview and preview.layerVisibility
+    local function Wanted(key) return not (visibility and visibility[key] == false) end
+    -- layerAvailable still describes the preceding refresh at this point.  Fit
+    -- the frames produced by this refresh and apply availability afterwards.
+    if Wanted("reference") then AddPreviewRegionBounds(preview, preview.playerRef, bounds) end
+    if Wanted("class") then AddPreviewRegionBounds(preview, classFrame, bounds) end
+    if Wanted("power") then AddPreviewRegionBounds(preview, powerFrame, bounds) end
+    if Wanted("hp") then AddPreviewRegionBounds(preview, hpFrame, bounds) end
+    if not bounds.found then return 1, 0, 0 end
+
+    local pad = 18
+    local contentW = max(1, (bounds.maxX - bounds.minX) + pad * 2)
+    local contentH = max(1, (bounds.maxY - bounds.minY) + pad * 2)
+    local canvasW = max(1, tonumber(preview.canvasW) or tonumber(preview.canvas:GetWidth()) or 1)
+    local canvasH = max(1, tonumber(preview.canvasH) or tonumber(preview.canvas:GetHeight()) or 1)
+    local autoScale = min(1, (canvasW - 24) / contentW, (canvasH - 24) / contentH)
+    if autoScale < 0.05 then autoScale = 0.05 end
+    local centerX = (bounds.minX + bounds.maxX) * 0.5
+    local centerY = (bounds.minY + bounds.maxY) * 0.5
+    return autoScale, -centerX, -centerY
+end
+
+local function ApplyPreviewZoom(preview, classFrame, powerFrame, hpFrame)
     if not (preview and preview.stage) then return end
-    local scale = tonumber(preview._manualZoom) or 1
-    if ZoomPan.Clamp then scale = ZoomPan.Clamp(scale) end
-    preview._mockAutoScale = 1
+    local autoScale, centerX, centerY = ResolvePreviewFit(preview, classFrame, powerFrame, hpFrame)
+    local manualScale = tonumber(preview._manualZoom)
+    local frozenScale = tonumber(preview._dragFrozenScale)
+    local scale = manualScale or frozenScale or autoScale
+    if (manualScale or frozenScale) and ZoomPan.Clamp then scale = ZoomPan.Clamp(scale) end
+    preview._mockAutoScale = autoScale
     preview._mockScale = scale
     preview._mockEffectiveScale = scale
+    if preview._dragFrozenBaseOffsetX ~= nil then
+        preview._mockBaseOffsetX = preview._dragFrozenBaseOffsetX
+        preview._mockBaseOffsetY = preview._dragFrozenBaseOffsetY
+    else
+        preview._mockBaseOffsetX = centerX * scale
+        preview._mockBaseOffsetY = centerY * scale
+    end
     if preview.stage.SetScale then preview.stage:SetScale(scale) end
     if ZoomPan.UpdateControls then ZoomPan.UpdateControls(preview) end
     if ZoomPan.ApplyPan then
         ZoomPan.ApplyPan(preview)
     else
         preview.stage:ClearAllPoints()
-        preview.stage:SetPoint("CENTER", preview.canvas, "CENTER", tonumber(preview._zoomPanX) or 0, tonumber(preview._zoomPanY) or 0)
+        preview.stage:SetPoint("CENTER", preview.canvas, "CENTER",
+            (tonumber(preview._mockBaseOffsetX) or 0) + (tonumber(preview._zoomPanX) or 0),
+            (tonumber(preview._mockBaseOffsetY) or 0) + (tonumber(preview._zoomPanY) or 0))
     end
 end
 local function ApplyPreviewBorder(preview)
@@ -1698,6 +1902,13 @@ local function AnimationOnUpdate(driver, elapsed)
         StopAnimationDriver(preview)
         return
     end
+    if PreviewAnimationInCombat() then
+        preview._animationEnabled = false
+        General().classPowerPreviewAnimate = false
+        StopAnimationDriver(preview)
+        RefreshAnimateButton(preview)
+        return
+    end
     elapsed = tonumber(elapsed) or 0
     preview._animationElapsed = (tonumber(preview._animationElapsed) or 0) + elapsed
     preview._animationAccum = (tonumber(preview._animationAccum) or 0) + elapsed
@@ -1713,6 +1924,7 @@ local function AnimationOnUpdate(driver, elapsed)
 end
 local function StartAnimationDriver(preview)
     if not (preview and preview._animationEnabled == true) then return end
+    if PreviewAnimationInCombat() then return end
     if not preview.animationDriver then
         preview.animationDriver = CreateFrame("Frame", nil, preview.canvas or preview)
         preview.animationDriver._preview = preview
@@ -1725,6 +1937,13 @@ end
 local function SetAnimationEnabled(preview, enabled)
     if not preview then return end
     enabled = enabled == true
+    if enabled and PreviewAnimationInCombat() then
+        preview._animationEnabled = false
+        General().classPowerPreviewAnimate = false
+        StopAnimationDriver(preview)
+        RefreshAnimateButton(preview)
+        return false
+    end
     if enabled and preview._animationEnabled ~= true then
         preview._animationElapsed = 0
         preview._animationAccum = 0
@@ -1738,6 +1957,7 @@ local function SetAnimationEnabled(preview, enabled)
         StopAnimationDriver(preview)
     end
     if preview.Refresh then preview:Refresh("CLASSPOWER_PREVIEW_ANIMATE_TOGGLE") end
+    return AnimationEnabled(preview) == enabled
 end
 local function CreateAnimateButton(preview)
     local btn = CreateFrame("Button", nil, preview.canvas, "BackdropTemplate")
@@ -1755,6 +1975,12 @@ local function CreateAnimateButton(preview)
     btn:SetScript("OnClick", function(self)
         SetAnimationEnabled(self._preview, not AnimationEnabled(self._preview))
     end)
+    btn._msuf2CommandAction = {
+        kind = "toggle",
+        historyMode = "none",
+        get = function() return AnimationEnabled(preview) end,
+        set = function(enabled) return SetAnimationEnabled(preview, enabled == true) end,
+    }
     M.AddTooltip(btn, "Animate Preview", "Animates Class Resource, Player Power, and HP fill values in this preview only.", { hook = true })
     btn._preview = preview
     preview.animateButton = btn
@@ -1841,8 +2067,11 @@ function Preview.Create(ctx, builder)
             fitReason = "CLASSPOWER_PREVIEW_ZOOM_FIT",
             oneReason = "CLASSPOWER_PREVIEW_ZOOM_1TO1",
         })
-        RegisterPreviewControl(ctx, box.zoomBar, "zoom.surface", "Preview zoom controls", "canvas", "ephemeral", {
-            help = "Accepts Ctrl + mouse wheel for preview zoom.",
+        box._msuf2ZoomCommand = box._msuf2ZoomCommand
+            or (Helpers.BuildZoomCommand and Helpers.BuildZoomCommand(box, ZoomPan, "CLASSPOWER_PREVIEW_ASSISTANT_ZOOM"))
+        RegisterPreviewControl(ctx, box.zoomBar, "zoom.surface", "Class Resources Preview Zoom", "slider", "ephemeral", {
+            help = "Sets the Class Resources preview zoom percentage; Fit and 1:1 remain available as exact actions.",
+            command = box._msuf2ZoomCommand,
         })
         local zoomControls = {
             { "zoomOutButton", "zoom.out", "Zoom out" },
@@ -1872,8 +2101,14 @@ function Preview.Create(ctx, builder)
     box.canvas:SetScript("OnMouseUp", function(self)
         if ZoomPan.Stop then ZoomPan.Stop(self) end
     end)
+    box._msuf2PanCommand = box._msuf2PanCommand or (Helpers.BuildPanCommand and Helpers.BuildPanCommand(
+        box, ZoomPan,
+        function(dx, dy) return Preview.Pan(dx, dy) end,
+        { previewSurface = "class-power" }
+    ))
     RegisterPreviewControl(ctx, box.canvas, "canvas", "Class Resources preview canvas", "canvas", "ephemeral", {
-        help = "Selects preview handles and supports Ctrl + drag pan and Ctrl + mouse wheel zoom.",
+        help = "Selects preview handles and pans this exact canvas by an explicit X/Y delta.",
+        command = box._msuf2PanCommand,
     })
     CreateLayerSidebar(box, sideW)
     box.noResource = T.Font(box.canvas, "GameFontDisableSmall", TR("Class resource is disabled for this preview resource."), T.colors.muted)
@@ -1902,8 +2137,15 @@ function Preview.Create(ctx, builder)
         local player = Player()
         local spec = M.GetClassPowerPreviewSpec and M.GetClassPowerPreviewSpec() or nil
         PaintPlayerReference(box, spec)
-        local classFrame = RenderClassPower(box, bars, spec)
-        if classFrame and classFrame.IsShown and classFrame:IsShown() then box.noResource:Hide() else box.noResource:Show() end
+        local classFrame, classDisabledReason = RenderClassPower(box, bars, spec)
+        if classFrame and classFrame.IsShown and classFrame:IsShown() then
+            box.noResource:Hide()
+        else
+            box.noResource:SetText(TR(classDisabledReason == "settings"
+                and "Class resource is disabled in Class Resource settings."
+                or "The selected preview resource has no class resource."))
+            box.noResource:Show()
+        end
         local powerFrame = RenderDetachedPower(box, bars, player, classFrame)
         local hpFrame = RenderPlayerHP(box, bars, player, classFrame, powerFrame, spec)
         box._msufCPPreviewAnim = {
@@ -1928,7 +2170,7 @@ function Preview.Create(ctx, builder)
             bounds = true,
         }
         RefreshBounds(box, classFrame, powerFrame, hpFrame)
-        ApplyPreviewZoom(box)
+        ApplyPreviewZoom(box, classFrame, powerFrame, hpFrame)
         ApplyLayerVisibility(box)
         RefreshLayerButtons(box)
         RefreshHandleVisuals(box)
@@ -1942,6 +2184,19 @@ function Preview.Create(ctx, builder)
     function box:RefreshAnimation()
         return RefreshClassPowerAnimation(box)
     end
+    function box:_msufCPPreviewHostShown()
+        if tostring(M.activeKey or "") ~= tostring((ctx and ctx.key) or "classpower") then return false end
+        if M.frame and M.frame.IsShown and not M.frame:IsShown() then return false end
+        if ctx and ctx.wrapper and ctx.wrapper.IsShown and not ctx.wrapper:IsShown() then return false end
+        return not section.IsShown or section:IsShown()
+    end
+    local function ActivateVisiblePreview()
+        if box.IsShown and box:IsShown() and box:_msufCPPreviewHostShown() then Preview.active = box end
+    end
+    box:HookScript("OnShow", ActivateVisiblePreview)
+    box:HookScript("OnHide", function()
+        if Preview.active == box then Preview.active = nil end
+    end)
     section:SetScript("OnHide", function()
         box._msufCPRefreshSerial = (tonumber(box._msufCPRefreshSerial) or 0) + 1
         box._msufCPRefreshQueued = nil
@@ -1959,10 +2214,20 @@ function Preview.Create(ctx, builder)
             box.dragFrame._handle = nil
             box.dragFrame:Hide()
         end
+        if Preview.active == box then Preview.active = nil end
     end)
     section:SetScript("OnShow", function()
+        ActivateVisiblePreview()
+        RequestClassPowerPreviewRefresh(box, "CLASSPOWER_PREVIEW_SHOW")
         if box._animationEnabled == true then StartAnimationDriver(box) end
     end)
+    function M.ResumeClassPowerPreview(reason, pageKey)
+        if pageKey and tostring(pageKey) ~= tostring((ctx and ctx.key) or "classpower") then return end
+        if not box:_msufCPPreviewHostShown() then return end
+        if box.IsShown and not box:IsShown() then box:Show() end
+        Preview.active = box
+        RequestClassPowerPreviewRefresh(box, reason or "CLASSPOWER_PREVIEW_RESUME")
+    end
     M._msuf2ClassPowerInlinePreview = section
     if W.AttachPinnedPreview then
         W.AttachPinnedPreview(section, box, {
@@ -1975,10 +2240,11 @@ function Preview.Create(ctx, builder)
             pageKey = ctx and ctx.key,
             wrapper = ctx and ctx.wrapper,
         })
-        RegisterPreviewControl(ctx, box._msuf2PinButton, "pin.toggle", "Pin Preview", "button", "ephemeral", {
+        RegisterPreviewControl(ctx, box._msuf2PinButton, "pin.toggle", "Pin Class Resources Preview", "toggle", "ephemeral", {
             help = "Keeps this preview visible while editing lower Class Resources options.",
         })
     end
+    ActivateVisiblePreview()
     M.TrackMethodRefresh(ctx, section, "Refresh")
     return section
 end

@@ -119,7 +119,7 @@ local _cpDB = {
     classSmooth    = true,   altManaSmooth = true,
     colorOverrides = nil,
     bgColorOverrides = nil,  bars = nil, general = nil,
-    comboPointColorMode = "default",
+    comboPointColorMode = "default", slotColorModes = nil, fullColorEnabled = nil,
 }
 local function _CP_RefreshConfig()
     local db = MSUF_DB
@@ -141,6 +141,8 @@ local function _CP_RefreshConfig()
     _cpDB.colorOverrides    = (type(g.classPowerColorOverrides) == "table") and g.classPowerColorOverrides or nil
     _cpDB.bgColorOverrides  = (type(g.classPowerBgColorOverrides) == "table") and g.classPowerBgColorOverrides or nil
     _cpDB.comboPointColorMode = cpMode
+    _cpDB.slotColorModes    = (type(b.classPowerSlotColorModes) == "table") and b.classPowerSlotColorModes or nil
+    _cpDB.fullColorEnabled  = (type(b.classPowerFullColorEnabled) == "table") and b.classPowerFullColorEnabled or nil
 end
 
 local function CP_ConfigClassPowerEnabled()
@@ -852,25 +854,53 @@ local COMBO_POINT_RAMP_R = { 0.00, 0.00, 1.00, 1.00, 1.00, 1.00, 1.00 }
 local COMBO_POINT_RAMP_G = { 0.95, 0.95, 1.00, 1.00, 1.00, 0.05, 0.05 }
 local COMBO_POINT_RAMP_B = { 1.00, 1.00, 0.00, 0.00, 0.00, 0.05, 0.05 }
 
-local function ResolveComboPointSlotColor(slot)
-    local mode = _cpDB.comboPointColorMode
+local function ResolveSlotColorMode(powerToken)
+    local modes = _cpDB.slotColorModes
+    local mode = modes and modes[powerToken]
+    -- Preserve existing Rogue profiles and Assistant actions without copying
+    -- the legacy value into every profile.
+    if mode == nil and powerToken == "COMBO_POINTS" then mode = _cpDB.comboPointColorMode end
+    if mode ~= "ramp" and mode ~= "custom" then return "default" end
+    return mode
+end
+
+local function ResolveSlotColor(powerToken, slot, baseR, baseG, baseB)
+    local mode = ResolveSlotColorMode(powerToken)
     if mode ~= "ramp" and mode ~= "custom" then return nil end
 
     slot = tonumber(slot) or 1
-    if slot < 1 then slot = 1 elseif slot > 7 then slot = 7 end
+    if slot < 1 then slot = 1 elseif slot > 10 then slot = 10 end
 
     if mode == "custom" then
         local ov = _cpDB.colorOverrides
-        local c = ov and ov[COMBO_POINT_SLOT_TOKENS[slot]]
+        local slotToken = powerToken == "COMBO_POINTS" and COMBO_POINT_SLOT_TOKENS[slot]
+            or (powerToken and (powerToken .. "_" .. tostring(slot)))
+        local c = slotToken and ov and ov[slotToken]
         if type(c) == "table" then
             local r, g, b = c[1] or c.r, c[2] or c.g, c[3] or c.b
             if type(r) == "number" and type(g) == "number" and type(b) == "number" then
                 return r, g, b
             end
         end
+        if powerToken ~= "COMBO_POINTS" then return baseR, baseG, baseB end
     end
 
-    return COMBO_POINT_RAMP_R[slot], COMBO_POINT_RAMP_G[slot], COMBO_POINT_RAMP_B[slot]
+    -- The established Rogue ramp remains the fallback for untouched custom
+    -- slots. Resources with 8-10 segments continue with its final red tier.
+    local rampSlot = slot > 7 and 7 or slot
+    return COMBO_POINT_RAMP_R[rampSlot] or baseR, COMBO_POINT_RAMP_G[rampSlot] or baseG, COMBO_POINT_RAMP_B[rampSlot] or baseB
+end
+
+local function ResolveFullResourceColor(powerToken, baseR, baseG, baseB)
+    local enabled = _cpDB.fullColorEnabled
+    if not (powerToken and enabled and enabled[powerToken] == true) then return false, baseR, baseG, baseB end
+    local overrides = _cpDB.colorOverrides
+    local color = overrides and overrides[powerToken .. "_FULL"]
+    if type(color) == "table" then
+        local r, g, b = color[1] or color.r, color[2] or color.g, color[3] or color.b
+        if type(r) == "number" and type(g) == "number" and type(b) == "number" then return true, r, g, b end
+    end
+    return true, baseR, baseG, baseB
 end
 
 --- ClassPower visual: segmented bars (created lazily on player frame)
@@ -904,6 +934,9 @@ local CP = {
     essenceOUAAny = false, --- true if Essence recharge pip has an OnUpdate
     powerToken  = nil,     --- cached POWER_TYPE_TOKENS[powerType] for hot event filters
     visual      = nil,     --- compiled static visual runtime values for active mode
+    slotR       = {},      --- persistent compiled per-slot colors (no refresh allocations)
+    slotG       = {},
+    slotB       = {},
     --- Spell Tracker state (Tip of the Spear only - Whirlwind uses WW module)
     spStacks    = 0,       --- current stack count
     spExpires   = nil,     --- GetTime() expiry timestamp (nil = no timer)
@@ -1270,14 +1303,20 @@ local function CP_CompileVisual(powerType, renderMode, maxP)
     end
     visual.runeShowTime = b.runeShowTime ~= false
     visual.timerShowText = b.classPowerShowText == true
-    visual.useComboSlotColors = powerType == PT.ComboPoints
-        and (_cpDB.comboPointColorMode == "ramp" or _cpDB.comboPointColorMode == "custom")
-        and type(ResolveComboPointSlotColor) == "function"
+    local slotMode = ResolveSlotColorMode(visual.powerToken)
+    local segmentedMode = renderMode == CPK.MODE.SEGMENTED
+        or renderMode == CPK.MODE.FRACTIONAL
+        or renderMode == CPK.MODE.RUNE_CD
+        or renderMode == CPK.MODE.AURA_SEGMENTED
+    visual.useSlotColors = segmentedMode and (slotMode == "ramp" or slotMode == "custom")
+    visual.useFullColor, visual.fullR, visual.fullG, visual.fullB = ResolveFullResourceColor(
+        visual.powerToken, baseR, baseG, baseB)
+    if not segmentedMode then visual.useFullColor = false end
 
-    if visual.useComboSlotColors then
-        visual.slotR, visual.slotG, visual.slotB = visual.slotR or {}, visual.slotG or {}, visual.slotB or {}
-        for i = 1, math_min(tonumber(maxP) or 0, 7) do
-            local r, g, bl = ResolveComboPointSlotColor(i)
+    if visual.useSlotColors then
+        visual.slotR, visual.slotG, visual.slotB = CP.slotR, CP.slotG, CP.slotB
+        for i = 1, math_min(tonumber(maxP) or 0, 10) do
+            local r, g, bl = ResolveSlotColor(visual.powerToken, i, baseR, baseG, baseB)
             visual.slotR[i], visual.slotG[i], visual.slotB[i] = r, g, bl
         end
     end
@@ -1472,7 +1511,8 @@ do
         ResolveClassPowerColor = ResolveClassPowerColor,
         ResolveClassPowerBgColor = ResolveClassPowerBgColor,
         ResolveChargedColor = ResolveChargedColor,
-        ResolveComboPointSlotColor = ResolveComboPointSlotColor,
+        ResolveSlotColor = ResolveSlotColor,
+        ResolveFullResourceColor = ResolveFullResourceColor,
         ResolveMWAbove5Color = ResolveMWAbove5Color,
         CP_CheckAutoHide = CP_CheckAutoHide,
         WW = WW,

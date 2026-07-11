@@ -107,7 +107,9 @@ local COLOR_CP_SLOT_DEFAULTS = {}
 for _, row in ipairs(ColorRows [[COMBO_POINTS_1|1|0.00|0.95|1.00;COMBO_POINTS_2|2|0.00|0.95|1.00;COMBO_POINTS_3|3|1.00|1.00|0.00;COMBO_POINTS_4|4|1.00|1.00|0.00;COMBO_POINTS_5|5|1.00|1.00|0.00;COMBO_POINTS_6|6|1.00|0.05|0.05;COMBO_POINTS_7|7|1.00|0.05|0.05]]) do
     COLOR_CP_SLOT_DEFAULTS[row.key] = { row.dr, row.dg, row.db }
 end
-local COLOR_CP_SLOT_MODES = ValueTextPairs "default=Resource color|ramp=Combo ramp|custom=Custom slots"
+local COLOR_CP_SLOT_MODES = ValueTextPairs "default=Resource color|ramp=Color ramp|custom=Custom slots"
+local COLOR_CP_SLOT_COUNTS = KeyLabelMap [[COMBO_POINTS=7|HOLY_POWER=5|SOUL_SHARDS=5|CHI=6|ARCANE_CHARGES=4|RUNES=6|ESSENCE=6|SOUL_FRAGMENTS_VENG=6|MAELSTROM=10|WHIRLWIND=4|TIP_OF_THE_SPEAR=3|ICICLES=5]]
+for token, count in pairs(COLOR_CP_SLOT_COUNTS) do COLOR_CP_SLOT_COUNTS[token] = tonumber(count) or 1 end
 local COLOR_DATA = {
     CLASS_LABELS = COLOR_CLASS_LABELS,
     NPC_ROWS = COLOR_NPC_ROWS,
@@ -682,6 +684,66 @@ local function ResetClassPowerRGB(token, bg)
     if bg then g.classPowerBgColorOverrides[token] = nil else g.classPowerColorOverrides[token] = nil end
     ApplyClassPowerColors()
 end
+local function ClassPowerSlotToken(resourceToken, slot)
+    if resourceToken == "COMBO_POINTS" and slot <= #COLOR_CP_SLOT_TOKENS then
+        return COLOR_CP_SLOT_TOKENS[slot]
+    end
+    return tostring(resourceToken or "COMBO_POINTS") .. "_" .. tostring(slot)
+end
+local function ClassPowerSlotCount(resourceToken)
+    return COLOR_CP_SLOT_COUNTS[resourceToken] or 0
+end
+local function GetClassPowerSlotMode(resourceToken)
+    local bars = Bars()
+    local modes = bars.classPowerSlotColorModes
+    local mode = type(modes) == "table" and modes[resourceToken] or nil
+    if mode == nil and resourceToken == "COMBO_POINTS" then mode = bars.classPowerComboPointColorMode end
+    if mode ~= "ramp" and mode ~= "custom" then return "default" end
+    return mode
+end
+local function SetClassPowerSlotMode(resourceToken, mode)
+    local bars = Bars()
+    if type(bars.classPowerSlotColorModes) ~= "table" then bars.classPowerSlotColorModes = {} end
+    mode = (mode == "ramp" or mode == "custom") and mode or "default"
+    bars.classPowerSlotColorModes[resourceToken] = mode ~= "default" and mode or nil
+    if resourceToken == "COMBO_POINTS" then bars.classPowerComboPointColorMode = mode end
+    ApplyClassPowerColors()
+end
+local function GetClassPowerSlotRGB(resourceToken, slot)
+    local token = ClassPowerSlotToken(resourceToken, slot)
+    local overrides = G().classPowerColorOverrides
+    if type(overrides) == "table" and type(overrides[token]) == "table" then
+        return TableRGB(overrides, token, 1, 1, 1)
+    end
+    if resourceToken ~= "COMBO_POINTS" and GetClassPowerSlotMode(resourceToken) ~= "ramp" then
+        return GetClassPowerRGB(resourceToken)
+    end
+    local rampSlot = slot > 7 and 7 or slot
+    local fallback = COLOR_CP_SLOT_DEFAULTS[COLOR_CP_SLOT_TOKENS[rampSlot]]
+    if fallback then return fallback[1], fallback[2], fallback[3] end
+    return GetClassPowerRGB(resourceToken)
+end
+local function ClassPowerFullColorToken(resourceToken)
+    return tostring(resourceToken or "COMBO_POINTS") .. "_FULL"
+end
+local function ClassPowerFullColorEnabled(resourceToken)
+    local enabled = Bars().classPowerFullColorEnabled
+    return type(enabled) == "table" and enabled[resourceToken] == true
+end
+local function SetClassPowerFullColorEnabled(resourceToken, enabled)
+    local bars = Bars()
+    if type(bars.classPowerFullColorEnabled) ~= "table" then bars.classPowerFullColorEnabled = {} end
+    bars.classPowerFullColorEnabled[resourceToken] = enabled == true and true or nil
+    ApplyClassPowerColors()
+end
+local function GetClassPowerFullRGB(resourceToken)
+    local token = ClassPowerFullColorToken(resourceToken)
+    local overrides = G().classPowerColorOverrides
+    if type(overrides) == "table" and type(overrides[token]) == "table" then
+        return TableRGB(overrides, token, 1, 1, 1)
+    end
+    return GetClassPowerRGB(resourceToken)
+end
 local function GetPandemicRGB()
     local db = DB()
     db.auras3 = db.auras3 or {}
@@ -759,13 +821,34 @@ local function BuildPowerAndClassPowerColors(ctx, b, CH)
     end, "power.editor.reset")
     local classPower = b:CollapsibleSection("colors_class_power", "Class Power Colors", 430, false)
     M.colorsCPToken = M.colorsCPToken or "COMBO_POINTS"
-    local cpColor, cpBg
+    local cpColor, cpBg, slotMode, slotReset, fullToggle, fullColor, fullReset
+    local slotControls = {}
+    local function RequestClassPowerEditorRefresh(reason)
+        if M.RequestRefresh then
+            M.RequestRefresh(ctx, reason or "class-power-resource-editor")
+        elseif M.Refresh then
+            M.Refresh(ctx)
+        end
+    end
+    local function RefreshSlotControls()
+        local resourceToken = M.colorsCPToken or "COMBO_POINTS"
+        local count = ClassPowerSlotCount(resourceToken)
+        local hasSlots = count > 0
+        W.SetControlShown(slotMode, hasSlots)
+        W.SetControlShown(slotReset, hasSlots)
+        W.SetControlShown(fullToggle, hasSlots)
+        W.SetControlShown(fullColor, hasSlots)
+        W.SetControlShown(fullReset, hasSlots)
+        for i = 1, #slotControls do
+            local shown = i <= count
+            W.SetControlShown(slotControls[i], shown)
+        end
+    end
     ValueDropdownAt(ctx, classPower, "Resource type", 12, -10, COLOR_DATA.CP_TOKENS, 310,
         function() return M.colorsCPToken or "COMBO_POINTS" end,
         function(v)
             M.SetMenuStateValue("colorsCPToken", v or "COMBO_POINTS")
-            if cpColor then cpColor:SetRGB(GetClassPowerRGB(M.colorsCPToken)) end
-            if cpBg then cpBg:SetRGB(GetClassPowerBgRGB(M.colorsCPToken)) end
+            RequestClassPowerEditorRefresh("class-power-resource-selection")
         end,
         Meta("class_power.editor.resource_selector", "ephemeral"))
     cpColor = ColorValueAt(ctx, classPower, "Color", 360, -10,
@@ -784,31 +867,58 @@ local function BuildPowerAndClassPowerColors(ctx, b, CH)
         ResetClassPowerRGB(M.colorsCPToken or "COMBO_POINTS", true)
         if cpBg then cpBg:SetRGB(GetClassPowerBgRGB(M.colorsCPToken or "COMBO_POINTS")) end
     end, "class_power.editor.reset_background")
-    ValueDropdownAt(ctx, classPower, "Combo point slot mode", 12, -92, COLOR_DATA.CP_SLOT_MODES, 230,
+    slotMode = ValueDropdownAt(ctx, classPower, "Resource slot mode", 12, -92, COLOR_DATA.CP_SLOT_MODES, 230,
         function()
-            local mode = Bars().classPowerComboPointColorMode or "default"
-            if mode ~= "ramp" and mode ~= "custom" then mode = "default" end
-            return mode
+            return GetClassPowerSlotMode(M.colorsCPToken or "COMBO_POINTS")
         end,
         function(v)
-            Bars().classPowerComboPointColorMode = v or "default"
-            ApplyClassPowerColors()
+            SetClassPowerSlotMode(M.colorsCPToken or "COMBO_POINTS", v)
         end,
-        Meta("class_power.combo_slots.mode"))
-    for i = 1, #COLOR_DATA.CP_SLOT_TOKENS do
-        local token = COLOR_DATA.CP_SLOT_TOKENS[i]
-        ColorValueAt(ctx, classPower, tostring(i), 12 + ((i - 1) % 4) * 160, -154 - floor((i - 1) / 4) * 38,
-            function() return GetClassPowerRGB(token) end,
+        Meta("class_power.resource_slots.mode"))
+    fullToggle = ValueSwitchAt(ctx, classPower, "Full resource color", 360, -116, 150,
+        function() return ClassPowerFullColorEnabled(M.colorsCPToken or "COMBO_POINTS") end,
+        function(value)
+            SetClassPowerFullColorEnabled(M.colorsCPToken or "COMBO_POINTS", value)
+        end,
+        Meta("class_power.full_resource.enabled"))
+    fullColor = ColorValueAt(ctx, classPower, "Full", 540, -116,
+        function() return GetClassPowerFullRGB(M.colorsCPToken or "COMBO_POINTS") end,
+        function(r, g, b)
+            local resourceToken = M.colorsCPToken or "COMBO_POINTS"
+            local enabled = ClassPowerFullColorEnabled(resourceToken)
+            if not enabled then SetClassPowerFullColorEnabled(resourceToken, true) end
+            SetClassPowerRGB(ClassPowerFullColorToken(resourceToken), r, g, b)
+            if not enabled then RequestClassPowerEditorRefresh("class-power-full-color") end
+        end, 36, 44, Meta("class_power.full_resource.color"))
+    for i = 1, 10 do
+        local slot = i
+        slotControls[i] = ColorValueAt(ctx, classPower, tostring(i), 12 + ((i - 1) % 4) * 160, -154 - floor((i - 1) / 4) * 38,
+            function() return GetClassPowerSlotRGB(M.colorsCPToken or "COMBO_POINTS", slot) end,
             function(r, g, c)
-                Bars().classPowerComboPointColorMode = "custom"
-                SetClassPowerRGB(token, r, g, c)
-            end, 24, 44, Meta("class_power.combo_slots.slot." .. tostring(token)))
+                local resourceToken = M.colorsCPToken or "COMBO_POINTS"
+                local custom = GetClassPowerSlotMode(resourceToken) == "custom"
+                if not custom then SetClassPowerSlotMode(resourceToken, "custom") end
+                SetClassPowerRGB(ClassPowerSlotToken(resourceToken, slot), r, g, c)
+                if not custom then RequestClassPowerEditorRefresh("class-power-slot-color") end
+            end, 24, 44, Meta("class_power.resource_slots.slot." .. tostring(i)))
     end
-    CH.ButtonAt(classPower, "Reset slots", 12, -246, 120, function()
+    slotReset = CH.ButtonAt(classPower, "Reset slots", 12, -284, 120, function()
+        local resourceToken = M.colorsCPToken or "COMBO_POINTS"
         local g = EnsureClassPowerOverrides()
-        for i = 1, #COLOR_DATA.CP_SLOT_TOKENS do g.classPowerColorOverrides[COLOR_DATA.CP_SLOT_TOKENS[i]] = nil end
+        for i = 1, ClassPowerSlotCount(resourceToken) do
+            g.classPowerColorOverrides[ClassPowerSlotToken(resourceToken, i)] = nil
+        end
         ApplyClassPowerColors()
-    end, "class_power.combo_slots.reset")
+        RequestClassPowerEditorRefresh("class-power-slots-reset")
+    end, "class_power.resource_slots.reset")
+    fullReset = CH.ButtonAt(classPower, "Reset full", 142, -284, 110, function()
+        local resourceToken = M.colorsCPToken or "COMBO_POINTS"
+        EnsureClassPowerOverrides().classPowerColorOverrides[ClassPowerFullColorToken(resourceToken)] = nil
+        SetClassPowerFullColorEnabled(resourceToken, false)
+        RequestClassPowerEditorRefresh("class-power-full-color-reset")
+    end, "class_power.full_resource.reset")
+    M.TrackRefresh(ctx, RefreshSlotControls)
+    RefreshSlotControls()
 end
 local function BuildAuraAndPortraitColors(ctx, b, CH)
     local auras = b:CollapsibleSection("colors_auras", "Auras", 526, false)

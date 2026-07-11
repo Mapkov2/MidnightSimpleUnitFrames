@@ -201,12 +201,15 @@ _G.MSUF_CP_MODE_BUILDERS.SEGMENTED = function(E)
 
         local visual = CP_GetVisual(E)
         local baseR, baseG, baseB = visual and visual.baseR or 1, visual and visual.baseG or 1, visual and visual.baseB or 1
+        local useSlotColors = visual and visual.useSlotColors == true
+        local useFullColor = visual and visual.useFullColor == true
         local bgR, bgG, bgB = visual and visual.bgR or 0, visual and visual.bgG or 0, visual and visual.bgB or 0
         local bgA = visual and visual.bgAlpha or 0.3
         local filledAlpha = visual and visual.filledAlpha or E.GetFilledAlpha()
         local emptyAlpha  = visual and visual.emptyAlpha or E.GetEmptyAlpha()
 
         local rechargingIdx = (cur < maxPower) and (cur + 1) or 0
+        local isFull = useFullColor and cur >= maxPower
         local needOnUpdate = false
         local visualVersion = visual and visual.version or 0
 
@@ -234,10 +237,14 @@ _G.MSUF_CP_MODE_BUILDERS.SEGMENTED = function(E)
                     CP_StampAlpha(bar, emptyAlpha)
                     SetEssenceOnUpdate(bar, false)
                 end
-                if bar._msufCPVisualVersion ~= visualVersion then
-                    CP_StampStatusBarColor(bar, baseR, baseG, baseB, 1)
+                if bar._msufCPVisualVersion ~= visualVersion or bar._msufCPFullColor ~= isFull then
+                    local slotR = useSlotColors and visual.slotR and visual.slotR[i]
+                    CP_StampStatusBarColor(bar, isFull and visual.fullR or (slotR or baseR),
+                        isFull and visual.fullG or (slotR and visual.slotG[i] or baseG),
+                        isFull and visual.fullB or (slotR and visual.slotB[i] or baseB), 1)
                     CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
                     bar._msufCPVisualVersion = visualVersion
+                    bar._msufCPFullColor = isFull
                 end
             end
         end
@@ -294,7 +301,8 @@ _G.MSUF_CP_MODE_BUILDERS.SEGMENTED = function(E)
         local showCharged = visual and visual.showCharged == true and powerType == PT.ComboPoints
         local chargedR, chargedG, chargedB
         if showCharged and chargedMap then chargedR, chargedG, chargedB = visual.chargedR, visual.chargedG, visual.chargedB end
-        local useSlotColors = visual and visual.useComboSlotColors == true
+        local useSlotColors = visual and visual.useSlotColors == true
+        local isFull = visual and visual.useFullColor == true and cur >= maxPower
         local bgA = visual and visual.bgAlpha or 0.3
         local bgR, bgG, bgB = visual and visual.bgR or 0, visual and visual.bgG or 0, visual and visual.bgB or 0
         local filledAlpha, emptyAlpha = visual and visual.filledAlpha or E.GetFilledAlpha(), visual and visual.emptyAlpha or E.GetEmptyAlpha()
@@ -306,7 +314,10 @@ _G.MSUF_CP_MODE_BUILDERS.SEGMENTED = function(E)
                 CP_SetPowerValue(bar, isFilled and 1 or 0, smoothInterp)
                 CP_StampAlpha(bar, isFilled and filledAlpha or emptyAlpha)
                 local isCharged = showCharged and chargedMap and chargedMap[i]
-                if isCharged then
+                if isFull then
+                    CP_StampStatusBarColor(bar, visual.fullR, visual.fullG, visual.fullB, 1)
+                    CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
+                elseif isCharged then
                     CP_StampStatusBarColor(bar, chargedR, chargedG, chargedB, 1)
                     if isFilled then
                         CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
@@ -402,10 +413,12 @@ _G.MSUF_CP_MODE_BUILDERS.FRACTIONAL = function(E)
         local visual = CP_GetVisual(E)
         local smoothInterp = visual and visual.smoothInterp
         local baseR, baseG, baseB = visual and visual.baseR or 1, visual and visual.baseG or 1, visual and visual.baseB or 1
+        local useSlotColors = visual and visual.useSlotColors == true
         local bgA = visual and visual.bgAlpha or 0.3
         local bgR, bgG, bgB = visual and visual.bgR or 0, visual and visual.bgG or 0, visual and visual.bgB or 0
         local fullBars = math_floor(fractional)
         local partial = fractional - fullBars
+        local isFull = visual and visual.useFullColor == true and fractional >= maxPower
         local filledAlpha, emptyAlpha = visual and visual.filledAlpha or E.GetFilledAlpha(), visual and visual.emptyAlpha or E.GetEmptyAlpha()
         local visualVersion = visual and visual.version or 0
         for i = 1, maxPower do
@@ -415,10 +428,14 @@ _G.MSUF_CP_MODE_BUILDERS.FRACTIONAL = function(E)
                 if i <= fullBars then CP_SetPowerValue(bar, 1, smoothInterp); CP_StampAlpha(bar, filledAlpha)
                 elseif i == fullBars + 1 and partial > 0.001 then CP_SetPowerValue(bar, partial, smoothInterp); CP_StampAlpha(bar, filledAlpha)
                 else CP_SetPowerValue(bar, 0, smoothInterp); CP_StampAlpha(bar, emptyAlpha) end
-                if bar._msufCPVisualVersion ~= visualVersion then
-                    CP_StampStatusBarColor(bar, baseR, baseG, baseB, 1)
+                if bar._msufCPVisualVersion ~= visualVersion or bar._msufCPFullColor ~= isFull then
+                    local slotR = useSlotColors and visual.slotR and visual.slotR[i]
+                    CP_StampStatusBarColor(bar, isFull and visual.fullR or (slotR or baseR),
+                        isFull and visual.fullG or (slotR and visual.slotG[i] or baseG),
+                        isFull and visual.fullB or (slotR and visual.slotB[i] or baseB), 1)
                     CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
                     bar._msufCPVisualVersion = visualVersion
+                    bar._msufCPFullColor = isFull
                 end
             end
         end
@@ -592,6 +609,7 @@ _G.MSUF_CP_MODE_BUILDERS.RUNE = function(E)
 
         local visual = CP_GetVisual(E)
         local baseR, baseG, baseB = visual and visual.baseR or 1, visual and visual.baseG or 1, visual and visual.baseB or 1
+        local useSlotColors = visual and visual.useSlotColors == true
         local bgA = visual and visual.bgAlpha or 0.3
         local showRuneTime = not visual or visual.runeShowTime ~= false
         local filledAlpha = visual and visual.filledAlpha or GetFilledAlpha()
@@ -660,11 +678,6 @@ _G.MSUF_CP_MODE_BUILDERS.RUNE = function(E)
                     CP_StampAlpha(bar, emptyAlpha)
                 end
 
-                if bar._msufCPVisualVersion ~= visualVersion then
-                    CP_StampStatusBarColor(bar, baseR, baseG, baseB, 1)
-                    CP_StampVertexColor(bar._bg, 0, 0, 0, bgA)
-                    bar._msufCPVisualVersion = visualVersion
-                end
                 CP_StampShown(bar, true)
             end
         end
@@ -673,6 +686,23 @@ _G.MSUF_CP_MODE_BUILDERS.RUNE = function(E)
         end
 
         CP.runeOUAAny = activeRuneOUA > 0
+
+        local isFull = visual and visual.useFullColor == true and readyCount >= maxPower
+        if CP._runeColorVersion ~= visualVersion or CP._runeFullColor ~= isFull then
+            for displayIdx = 1, maxPower do
+                local bar = CP.bars[displayIdx]
+                if not bar then break end
+                local slotR = useSlotColors and visual.slotR and visual.slotR[displayIdx]
+                CP_StampStatusBarColor(bar, isFull and visual.fullR or (slotR or baseR),
+                    isFull and visual.fullG or (slotR and visual.slotG[displayIdx] or baseG),
+                    isFull and visual.fullB or (slotR and visual.slotB[displayIdx] or baseB), 1)
+                CP_StampVertexColor(bar._bg, 0, 0, 0, bgA)
+                bar._msufCPVisualVersion = visualVersion
+                bar._msufCPFullColor = isFull
+            end
+            CP._runeColorVersion = visualVersion
+            CP._runeFullColor = isFull
+        end
 
         local txt = CP.text
         if txt then
@@ -754,6 +784,7 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
         local visual = CP_GetVisual(E)
         local smoothInterp = visual and visual.smoothInterp
         local baseR, baseG, baseB = visual and visual.baseR or 1, visual and visual.baseG or 1, visual and visual.baseB or 1
+        local useSlotColors = visual and visual.useSlotColors == true
         local bgA = visual and visual.bgAlpha or 0.3
         local bgR, bgG, bgB = visual and visual.bgR or 0, visual and visual.bgG or 0, visual and visual.bgB or 0
         local filledAlpha, emptyAlpha = visual and visual.filledAlpha or E.GetFilledAlpha(), visual and visual.emptyAlpha or E.GetEmptyAlpha()
@@ -761,13 +792,17 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
             local rawCur = C_Spell.GetSpellCastCount(CPK.SPELL.SOUL_CLEAVE)
             local curSafe = NotSecret(rawCur)
             if curSafe and rawCur == nil then rawCur = 0 end
+            local isFull = visual and visual.useFullColor == true and curSafe and (tonumber(rawCur) or 0) >= maxPower
             for i = 1, maxPower do
                 local bar = CP.bars[i]
                 if bar then
                     CP_StampMinMax(bar, i - 1, i)
                     CP_SetPowerValue(bar, rawCur, smoothInterp)
                     CP_StampAlpha(bar, filledAlpha)
-                    CP_StampStatusBarColor(bar, baseR, baseG, baseB, 1)
+                    local slotR = useSlotColors and visual.slotR and visual.slotR[i]
+                    CP_StampStatusBarColor(bar, isFull and visual.fullR or (slotR or baseR),
+                        isFull and visual.fullG or (slotR and visual.slotG[i] or baseG),
+                        isFull and visual.fullB or (slotR and visual.slotB[i] or baseB), 1)
                     CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
                 end
             end
@@ -828,6 +863,7 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
                 end
             end
             local mwAbove5 = (powerType == "MAELSTROM_WEAPON" and cur > CPK.THRESH.MW_SPEND)
+            local isFull = visual and visual.useFullColor == true and cur >= maxPower
             local abR, abG, abB
             if mwAbove5 then abR, abG, abB = ResolveMWAbove5Color() end
             for i = 1, maxPower do
@@ -837,7 +873,15 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
                     CP_StampMinMax(bar, 0, 1)
                     CP_SetPowerValue(bar, isFilled and 1 or 0, smoothInterp)
                     CP_StampAlpha(bar, isFilled and filledAlpha or emptyAlpha)
-                    if mwAbove5 and isFilled and i > CPK.THRESH.MW_SPEND then CP_StampStatusBarColor(bar, abR,abG,abB,1) else CP_StampStatusBarColor(bar, baseR,baseG,baseB,1) end
+                    if isFull then
+                        CP_StampStatusBarColor(bar, visual.fullR, visual.fullG, visual.fullB, 1)
+                    elseif mwAbove5 and isFilled and i > CPK.THRESH.MW_SPEND then
+                        CP_StampStatusBarColor(bar, abR, abG, abB, 1)
+                    else
+                        local slotR = useSlotColors and visual.slotR and visual.slotR[i]
+                        CP_StampStatusBarColor(bar, slotR or baseR,
+                            slotR and visual.slotG[i] or baseG, slotR and visual.slotB[i] or baseB, 1)
+                    end
                     CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
                 end
             end
