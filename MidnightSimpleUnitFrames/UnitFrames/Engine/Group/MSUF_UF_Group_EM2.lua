@@ -68,6 +68,7 @@ local _pendingGroupDragSource
 local _pendingGroupDragStartX
 local _pendingGroupDragStartY
 local GROUP_DRAG_THRESHOLD = 3
+local STABLE_GRID_POSITION_MODE = "GRID_BOUNDS_V2"
 
 local function GF()
   return MSUF and MSUF.GF
@@ -291,6 +292,12 @@ local function AnchorPoint(conf)
   return point
 end
 
+local function RelativeAnchorPoint(conf, fallback)
+  local point = conf and conf.relativePoint or fallback or "CENTER"
+  if not VALID_POINTS[point] then point = fallback or "CENTER" end
+  return point
+end
+
 local function PointFraction(point)
   local fx, fy
   if point == "LEFT" or point == "TOPLEFT" or point == "BOTTOMLEFT" then
@@ -325,7 +332,7 @@ local function ClampBoxAxis(minEdge, maxEdge, screenMax)
   return 0
 end
 
-local function ClampAnchorOffsetOnScreen(point, parent, offsetX, offsetY, totalW, totalH)
+local function ClampAnchorOffsetOnScreen(point, relativePoint, parent, offsetX, offsetY, totalW, totalH)
   if not (parent and parent.GetLeft and UIParent and UIParent.GetWidth) then
     return offsetX, offsetY
   end
@@ -339,8 +346,9 @@ local function ClampAnchorOffsetOnScreen(point, parent, offsetX, offsetY, totalW
     return offsetX, offsetY
   end
   local fx, fy = PointFraction(point)
-  local px = pLeft + (pRight - pLeft) * fx + (offsetX or 0)
-  local py = pBottom + (pTop - pBottom) * fy + (offsetY or 0)
+  local rfx, rfy = PointFraction(relativePoint)
+  local px = pLeft + (pRight - pLeft) * rfx + (offsetX or 0)
+  local py = pBottom + (pTop - pBottom) * rfy + (offsetY or 0)
   local boxW, boxH = totalW or 0, totalH or 0
   local left = px - boxW * fx
   local bottom = py - boxH * fy
@@ -521,9 +529,10 @@ local function PositionLogicalPreviewAnchor(kind, conf, totalW, totalH)
   if cx == nil then cx = defX end
   if cy == nil then cy = defY end
   local point = AnchorPoint(conf)
+  local relativePoint = RelativeAnchorPoint(conf, point)
   local parent = ResolveAnchorFrame(conf)
-  cx, cy = ClampAnchorOffsetOnScreen(point, parent, floor(cx + 0.5), floor(cy + 0.5), totalW, totalH)
-  anchor:SetPoint(point, parent, point, floor(cx + 0.5), floor(cy + 0.5))
+  cx, cy = ClampAnchorOffsetOnScreen(point, relativePoint, parent, floor(cx + 0.5), floor(cy + 0.5), totalW, totalH)
+  anchor:SetPoint(point, parent, relativePoint, floor(cx + 0.5), floor(cy + 0.5))
   anchor:Show()
   return anchor
 end
@@ -550,10 +559,12 @@ local function SyncContainer(kind)
 
   local totalW, totalH = tonumber(conf.width) or 80, tonumber(conf.height) or 32
   local gridDX, gridDY = 0, 0
+  local positionCount = GetPositionCount(kind)
+  if gf and type(gf.EnsureStableGridPosition) == "function" then
+    gf.EnsureStableGridPosition(kind, positionCount, conf)
+  end
   if gf and type(gf.GetGridMetrics) == "function" then
-    local dx, dy, w, h = gf.GetGridMetrics(kind, GetPositionCount(kind))
-    gridDX = tonumber(dx) or 0
-    gridDY = tonumber(dy) or 0
+    local _, _, w, h = gf.GetGridMetrics(kind, positionCount)
     totalW = tonumber(w) or totalW
     totalH = tonumber(h) or totalH
   end
@@ -616,7 +627,10 @@ local function SyncContainer(kind)
         centerToGridY = my
       end
     end
-    SetFrameToBounds(container, bounds)
+    if SetFrameToBounds(container, bounds) then
+      container._msufGFGridWidth = max((bounds.r or 0) - (bounds.l or 0), 1)
+      container._msufGFGridHeight = max((bounds.t or 0) - (bounds.b or 0), 1)
+    end
   end
   container._msufGFDragCenterToGridX = centerToGridX
   container._msufGFDragCenterToGridY = centerToGridY
@@ -933,6 +947,10 @@ local function NudgePreviewKind(kind, dx, dy)
 
   local conf = GetConf(kind)
   if not conf then return false end
+  local gf = GF()
+  if gf and type(gf.EnsureStableGridPosition) == "function" then
+    gf.EnsureStableGridPosition(kind, GetPositionCount(kind), conf)
+  end
   if _G.MSUF_EM_UndoBeforeChange then
     _G.MSUF_EM_UndoBeforeChange("gf", kind, true)
   end
@@ -940,8 +958,8 @@ local function NudgePreviewKind(kind, dx, dy)
   local defX, defY = GetDefaultCenter(kind)
   conf.offsetX = floor(((tonumber(conf.offsetX) or defX) + (tonumber(dx) or 0)) + 0.5)
   conf.offsetY = floor(((tonumber(conf.offsetY) or defY) + (tonumber(dy) or 0)) + 0.5)
+  conf.positionMode = STABLE_GRID_POSITION_MODE
 
-  local gf = GF()
   SyncContainer(kind)
   if gf and HasNativePreviewAPI(gf) and gf.RefreshPreviewLayout then
     gf.RefreshPreviewLayout(kind)
@@ -1331,6 +1349,7 @@ local function GF_EM2_ResetPosition(kind)
   local x, y = GetDefaultCenter(kind)
   conf.offsetX = x
   conf.offsetY = y
+  conf.positionMode = STABLE_GRID_POSITION_MODE
   RefreshAfterPopupApply(kind)
   RefreshGFPositionUI(kind)
   SetHUDStatus("Reset group position", "ok")
@@ -1374,6 +1393,7 @@ local function BuildGFPopup(mode)
 
     conf.offsetX = San(popup.xBox and popup.xBox:GetText(), conf.offsetX or 0)
     conf.offsetY = San(popup.yBox and popup.yBox:GetText(), conf.offsetY or 0)
+    conf.positionMode = STABLE_GRID_POSITION_MODE
 
     local w = popup.wBox and tonumber(popup.wBox:GetText())
     if w then conf.width = floor(max(40, min(400, w)) + 0.5) end
@@ -1440,6 +1460,7 @@ local function BuildGFPopup(mode)
     if _G.MSUF_EM_UndoBeforeChange then _G.MSUF_EM_UndoBeforeChange("gf", targetMode) end
     dst.offsetX = San(src.offsetX, 0)
     dst.offsetY = San(src.offsetY, 0)
+    dst.positionMode = STABLE_GRID_POSITION_MODE
     if src.width ~= nil then dst.width = floor(max(40, min(400, tonumber(src.width) or 120)) + 0.5) end
     if src.height ~= nil then dst.height = floor(max(16, min(200, tonumber(src.height) or 40)) + 0.5) end
     RefreshAfterPopupApply(targetMode)
@@ -1457,6 +1478,7 @@ local function BuildGFPopup(mode)
     if not conf then return end
     if _G.MSUF_EM_UndoBeforeChange then _G.MSUF_EM_UndoBeforeChange("gf", mode) end
     conf.offsetX, conf.offsetY = 0, 0
+    conf.positionMode = STABLE_GRID_POSITION_MODE
     RefreshAfterPopupApply(mode)
     local key = KIND_TO_KEY[mode]
     if key and EM2.Focus and EM2.Focus.NotifyPositionChanged then

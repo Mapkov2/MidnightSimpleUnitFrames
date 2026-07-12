@@ -24,26 +24,10 @@ local Util = EM2.Util
 if type(Util) ~= "table" then Util = {} end
 EM2.Util = Util
 
-local function EditCoreProfileStart()
-    local menu = MSUF and MSUF.MSUF2
-    if menu and menu.PerfProfile and menu.PerfProfile.enabled == true and menu.ProfileStart then
-        return menu.ProfileStart()
-    end
-end
-
-local function EditCoreProfileStop(bucket, key, started)
-    local menu = MSUF and MSUF.MSUF2
-    if menu and menu.PerfProfile and menu.PerfProfile.enabled == true and menu.ProfileStop then
-        menu.ProfileStop(bucket, key, started)
-    end
-end
-
 function Util.ApplyAllSettingsSafe()
     local UF = MSUF and MSUF.UF
     if UF and UF.Apply then
-        local started = EditCoreProfileStart()
         UF.Apply(nil)
-        EditCoreProfileStop("editApply", "UF.ApplyAll", started)
         return true
     end
     return false
@@ -79,7 +63,6 @@ local function ApplyGroupSettingsForKeySafe(kind)
     end
     local gf = MSUF and MSUF.GF
     if type(gf) ~= "table" or not kind then return false end
-    local started = EditCoreProfileStart()
     local did = false
     local dirty
     if gf.DIRTY_GEOMETRY and gf.DIRTY_LAYOUT then
@@ -94,14 +77,12 @@ local function ApplyGroupSettingsForKeySafe(kind)
         if type(gf.RefreshGeometry) == "function" then gf.RefreshGeometry(kind); did = true end
         if type(gf.RefreshVisuals) == "function" and dirty then gf.RefreshVisuals(kind, dirty); did = true end
     end
-    EditCoreProfileStop("editApply", "GF.Apply:" .. tostring(kind), started)
     return did
 end
 
 local function ApplyCastbarSettingsForKeySafe(unit)
     unit = EditCastbarUnitForKey(unit)
     if not unit then return false end
-    local started = EditCoreProfileStart()
     local did = false
     if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
         _G.MSUF_ApplyCastbarUnitAndSync(unit)
@@ -113,7 +94,6 @@ local function ApplyCastbarSettingsForKeySafe(unit)
         _G.MSUF_UpdateCastbarVisuals(unit)
         did = true
     end
-    EditCoreProfileStop("editApply", "Castbar.Apply:" .. tostring(unit), started)
     return did
 end
 
@@ -127,15 +107,10 @@ function Util.ApplySettingsForKeySafe(key)
 
     local UF = MSUF and MSUF.UF
     if UF and UF.Apply then
-        local started = EditCoreProfileStart()
-        local ok = UF.Apply(key) == true
-        EditCoreProfileStop("editApply", "UF.Apply:" .. tostring(key or "nil"), started)
-        return ok
+        return UF.Apply(key) == true
     end
     if type(_G.MSUF_ApplyUnitFrameKey_Immediate) == "function" and key then
-        local started = EditCoreProfileStart()
         _G.MSUF_ApplyUnitFrameKey_Immediate(key)
-        EditCoreProfileStop("editApply", "UF.ApplyImmediate:" .. tostring(key), started)
         return true
     end
     return false
@@ -198,9 +173,7 @@ end
 
 function Util.SyncMovers()
     if EM2.Movers and EM2.Movers.SyncAll then
-        local started = EditCoreProfileStart()
         EM2.Movers.SyncAll()
-        EditCoreProfileStop("editApply", "Movers.SyncAll", started)
     end
 end
 

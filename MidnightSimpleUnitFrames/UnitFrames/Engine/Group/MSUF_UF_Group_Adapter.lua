@@ -70,6 +70,11 @@ local function VisualFrame(frame)
   return frame and (frame._msufVisualFrame or frame) or frame
 end
 
+local function IsPreviewFrame(shell, visual)
+  return (shell and shell._msufGFIsPreviewFrame == true)
+    or (visual and visual._msufGFIsPreviewFrame == true)
+end
+
 local function EnsureGroupVisual(shell)
   if not shell then return nil end
   local visual = shell
@@ -235,6 +240,7 @@ local function ConfigureSecureClicks(frame)
 end
 
 local function SetButtonBasics(shell, visual, unit, spec)
+  local preview = IsPreviewFrame(shell, visual)
   shell._msufIsGroupFrameShell = true
   shell.unit = unit
   shell.unitKey = unit
@@ -243,21 +249,31 @@ local function SetButtonBasics(shell, visual, unit, spec)
   visual.unit = unit
   visual.unitKey = unit
   visual.MSUFUnitKey = unit
-  ConfigureSecureClicks(shell)
-  GF.RegisterClickCastFrame(shell)
+  if preview then
+    -- Preview buttons are visual-only. Keep them out of ClickCastFrames and do
+    -- not configure secure/default click handling that can never be used while
+    -- mouse input is disabled.
+    GF.UnregisterClickCastFrame(shell)
+  else
+    ConfigureSecureClicks(shell)
+    GF.RegisterClickCastFrame(shell)
+  end
   if shell.SetSize and not InCombat() then
     local w = spec and spec.width
     local h = spec and spec.height
-    if w and h and (shell._msufGFWidth ~= w or shell._msufGFHeight ~= h) then
+    local sizeChanged = w and h and (shell._msufGFWidth ~= w or shell._msufGFHeight ~= h)
+    if sizeChanged then
       shell:SetSize(w, h)
       shell._msufGFWidth = w
       shell._msufGFHeight = h
-    end
-    if w and h and visual.SetSize then
-      visual:SetSize(w, h)
+      if visual ~= shell and visual.SetSize then
+        visual:SetSize(w, h)
+      end
     end
   end
-  RegisterDefaultClicks(shell)
+  if not preview then
+    RegisterDefaultClicks(shell)
+  end
 end
 
 function GF.UntrackFrame(frame)

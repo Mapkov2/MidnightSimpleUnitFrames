@@ -86,17 +86,9 @@ _G.MSUF_GetSkironCooldownAnchorProxy = function()
     return MSUF.GetSkironCooldownAnchorProxy()
 end
 
-local function TraceCP(msg)
-    local buf = _G.MSUF_CPTraceBuffer
-    if buf and #buf < 80 then
-        buf[#buf + 1] = "[skiron] " .. msg
-    end
-end
-
 local function RequestSkironAnchorApply()
     local UF = MSUF.UF
     if not (UF and UF.spawned) then
-        TraceCP("apply skipped: UF not spawned yet")
         return
     end
     if InCombatLockdown and InCombatLockdown() then
@@ -106,7 +98,6 @@ local function RequestSkironAnchorApply()
         -- ClassPower and the detached power bar are insecure frames; they may
         -- re-anchor onto the proxy during lockdown (combat reload). Secure
         -- unit-frame geometry stays queued for the regen driver above.
-        TraceCP("proxy resolved in combat -> CP refresh")
         if type(_G.MSUF_ClassPower_Apply) == "function" then
             _G.MSUF_ClassPower_Apply({ anchor = true, cdm = true, syncNow = false })
         elseif type(_G.MSUF_ClassPower_Refresh) == "function" then
@@ -123,8 +114,6 @@ end
 local function RefreshSkironAnchorProxy(source, isActiveProxy)
     local proxy, changed = EnsureSkironAnchorProxy(source, isActiveProxy)
     if changed and proxy then
-        TraceCP("source changed -> "
-            .. tostring(proxy.MSUFSkironSource and proxy.MSUFSkironSource.GetName and proxy.MSUFSkironSource:GetName() or "?"))
         RequestSkironAnchorApply()
     end
     return proxy ~= nil

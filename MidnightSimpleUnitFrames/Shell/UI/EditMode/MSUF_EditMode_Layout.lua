@@ -1393,22 +1393,6 @@ local idleTickerScheduled = false
 local lastIdleTickTime
 local idleTickerGeneration = 0
 
-local function EditPerfStart()
-    local menu = (MSUF and MSUF.MSUF2) or _G.MSUF2
-    if menu and menu.PerfProfile and menu.PerfProfile.enabled == true and menu.ProfileStart then
-        return menu.ProfileStart()
-    end
-    return nil
-end
-
-local function EditPerfStop(key, started, extraCount)
-    if not started then return end
-    local menu = (MSUF and MSUF.MSUF2) or _G.MSUF2
-    if menu and menu.PerfProfile and menu.PerfProfile.enabled == true and menu.ProfileStop then
-        menu.ProfileStop("editDrag", key, started, extraCount)
-    end
-end
-
 local function SyncUnitPopupDuringDrag(d, elapsed)
     if not d then return end
     d.popupSyncAcc = (d.popupSyncAcc or 0) + (elapsed or 0)
@@ -1440,7 +1424,6 @@ local function CastbarDefaultOffsets(unit)
 end
 
 local function ApplyCastbarDragPosition(d, centerX, centerY)
-    local profileStarted = EditPerfStart()
     if not (d and d.conf and d.castbarXKey and d.castbarYKey) then return false end
     local g = d.conf
     local dx = (centerX or d.startCX or 0) - (d.startCX or 0)
@@ -1457,7 +1440,6 @@ local function ApplyCastbarDragPosition(d, centerX, centerY)
     end
 
     if g[d.castbarXKey] == nextX and g[d.castbarYKey] == nextY then
-        EditPerfStop("Castbar.Position", profileStarted)
         return false
     end
 
@@ -1485,12 +1467,10 @@ local function ApplyCastbarDragPosition(d, centerX, centerY)
         end
     end
 
-    EditPerfStop("Castbar.Position", profileStarted)
     return true
 end
 
 local function ApplyGroupDragPosition(d, centerX, centerY)
-    local profileStarted = EditPerfStart()
     if not (d and d.conf and d.bar) then return false end
     if IsConfigCombatLocked() then return false end
     local bar = d.bar
@@ -1511,6 +1491,7 @@ local function ApplyGroupDragPosition(d, centerX, centerY)
         d.conf.offsetX = nextX
         d.conf.offsetY = nextY
     end
+    d.conf.positionMode = "GRID_BOUNDS_V2"
     bar._msufDragActive = true
     if changed or positionChanged then
         d.lastGroupTargetCX = targetCX
@@ -1528,7 +1509,6 @@ local function ApplyGroupDragPosition(d, centerX, centerY)
             anchor:SetPoint("CENTER", UIParent, "BOTTOMLEFT", anchorCX, anchorCY)
         end
     end
-    EditPerfStop("Group.Position", profileStarted)
     return changed
 end
 
@@ -1560,20 +1540,12 @@ local function RunIdleWork(elapsed)
     if idleMoverDirty or idleMoverSyncAcc >= EDIT_IDLE_MOVER_SYNC_INTERVAL then
         idleMoverDirty = false
         idleMoverSyncAcc = 0
-        local profiling = MSUF and MSUF.MSUF2 and MSUF.MSUF2.PerfProfile and MSUF.MSUF2.PerfProfile.enabled == true
-            and MSUF.MSUF2.ProfileStart and MSUF.MSUF2.ProfileStop
-        local started = profiling and MSUF.MSUF2.ProfileStart() or nil
         if EM2.Movers and EM2.Movers.SyncAll and (not EM2.Movers.IsShown or EM2.Movers.IsShown()) then EM2.Movers.SyncAll() end
-        if profiling then MSUF.MSUF2.ProfileStop("editIdle", "Movers.SyncAll", started) end
     end
     if idleHUDDirty or idleHUDSyncAcc >= EDIT_IDLE_HUD_SYNC_INTERVAL then
         idleHUDDirty = false
         idleHUDSyncAcc = 0
-        local profiling = MSUF and MSUF.MSUF2 and MSUF.MSUF2.PerfProfile and MSUF.MSUF2.PerfProfile.enabled == true
-            and MSUF.MSUF2.ProfileStart and MSUF.MSUF2.ProfileStop
-        local started = profiling and MSUF.MSUF2.ProfileStart() or nil
         if EM2.HUD and EM2.HUD.RefreshControls and (not EM2.HUD.IsShown or EM2.HUD.IsShown()) then EM2.HUD.RefreshControls() end
-        if profiling then MSUF.MSUF2.ProfileStop("editIdle", "HUD.RefreshControls", started) end
     end
 end
 
@@ -1660,7 +1632,6 @@ local function OnUpdate(self, elapsed)
             return
         end
 
-        local unitProfileStarted = (not d.isGroupFrame) and EditPerfStart() or nil
         local bar = d.bar
         if bar and not IsConfigCombatLocked() then
             bar._msufDragActive = true
@@ -1741,8 +1712,6 @@ local function OnUpdate(self, elapsed)
                 end
             end
         end
-        EditPerfStop("Unit.Position", unitProfileStarted)
-
         if d.isGroupFrame then
             SyncGFPopupDuringDrag(d, elapsed)
         else
@@ -1989,9 +1958,7 @@ function Ticker.EndDrag()
             RefreshUFPreview("EM2_CASTBAR_DRAG_END", d.castbarUnit)
         elseif d.isGroupFrame then
             if not IsConfigCombatLocked() then
-                local profileStarted = EditPerfStart()
                 RefreshGroupGeometryScoped(d.groupKind)
-                EditPerfStop("Group.DragEndGeometry", profileStarted)
             end
             C_Timer.After(0.06, function()
                 if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end

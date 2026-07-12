@@ -766,18 +766,6 @@ local CASTBAR_TEST_FUNCS = {
 local previewMoverSyncQueued = false
 local previewReforceQueued = false
 
-local function PreviewProfileStart()
-    local m = MSUF and MSUF.MSUF2
-    if m and m.PerfProfile and m.PerfProfile.enabled == true and m.ProfileStart then return m.ProfileStart() end
-end
-
-local function PreviewProfileStop(key, started)
-    local m = MSUF and MSUF.MSUF2
-    if m and m.PerfProfile and m.PerfProfile.enabled == true and m.ProfileStop then
-        m.ProfileStop("editPreviewSync", key, started)
-    end
-end
-
 local function SchedulePreviewMoverSync(delay)
     if not (EM2.Movers and EM2.Movers.SyncAll) then return end
     if previewMoverSyncQueued then return end
@@ -810,7 +798,6 @@ end
 local function MSUF_EM2_ReforcePreviewFrames()
     if not _G.MSUF_PreviewTestMode then return end
     if IsConfigCombatLocked() then return end
-    local profileStarted = PreviewProfileStart()
     ForPreviewFrames(function(frame)
         if frame.ForceUpdate then frame:ForceUpdate("EM2_PREVIEW") end
         frame:Show()
@@ -825,7 +812,6 @@ local function MSUF_EM2_ReforcePreviewFrames()
             end
         end)
     end
-    PreviewProfileStop("ReforcePreviewFrames", profileStarted)
 end
 ExportPublic("MSUF_EM2_ReforcePreviewFrames", MSUF_EM2_ReforcePreviewFrames)
 
@@ -840,7 +826,6 @@ end
 ExportPublic("MSUF_EM2_SchedulePreviewReforce", MSUF_EM2_SchedulePreviewReforce)
 
 local function MSUF_SyncAllUnitPreviews()
-    local fullStarted = PreviewProfileStart()
     local active = _G.MSUF_UnitPreviewActive and true or false
     local editOn = EM2.State and EM2.State.IsActive()
     local want = active and editOn
@@ -860,20 +845,15 @@ local function MSUF_SyncAllUnitPreviews()
     --- 1) Boss: existing system
     ExportPublic("MSUF_BossTestMode", want)
     if _G.MSUF_SyncBossUnitframePreviewWithUnitEdit then
-        local started = PreviewProfileStart()
         _G.MSUF_SyncBossUnitframePreviewWithUnitEdit()
-        PreviewProfileStop("BossUnitPreviewSync", started)
     end
 
     --- 2) Non-player: refresh visibility drivers (reads MSUF_PreviewTestMode),
     --- then update each frame (pipeline calls EditPrev for unitless frames)
     if _G.MSUF_RefreshAllUnitVisibilityDrivers then
-        local started = PreviewProfileStart()
         _G.MSUF_RefreshAllUnitVisibilityDrivers(want)
-        PreviewProfileStop("RefreshVisibilityDrivers", started)
     end
 
-    local frameStarted = PreviewProfileStart()
     ForPreviewFrames(function(frame)
         if frame.ForceUpdate then frame:ForceUpdate("EM2_PREVIEW") end
         if want then
@@ -882,36 +862,26 @@ local function MSUF_SyncAllUnitPreviews()
             if frame.EnableMouse then frame:EnableMouse(true) end
         end
     end)
-    PreviewProfileStop("ForcePreviewFrames", frameStarted)
-
     --- 3) Castbars
     local beginBossBatch = _G.MSUF_BeginBossCastbarPreviewBatch
     local endBossBatch = _G.MSUF_EndBossCastbarPreviewBatch
     local batchingBossPreview = type(beginBossBatch) == "function" and type(endBossBatch) == "function"
     if batchingBossPreview then beginBossBatch() end
     if _G.MSUF_SyncCastbarEditModeWithUnitEdit then
-        local started = PreviewProfileStart()
         _G.MSUF_SyncCastbarEditModeWithUnitEdit()
-        PreviewProfileStop("SyncCastbarEditMode", started)
     end
-    local castbarStarted = PreviewProfileStart()
     --- Animated castbar motion is owned by the on-demand preview animation driver.
     for _, fn in ipairs(CASTBAR_TEST_FUNCS) do
         local f = _G[fn]; if type(f) == "function" then f(false, true) end
     end
-    PreviewProfileStop("CastbarTestModes", castbarStarted)
     if batchingBossPreview then endBossBatch() end
 
     --- 4) Aura refresh
     local a3 = MSUF and MSUF.MSUF_Auras3
     if a3 and type(a3.RefreshEditPreview) == "function" then
-        local started = PreviewProfileStart()
         a3.RefreshEditPreview()
-        PreviewProfileStop("Auras3.RefreshEditPreview", started)
     elseif a3 and type(a3.RefreshAll) == "function" then
-        local started = PreviewProfileStart()
         a3.RefreshAll()
-        PreviewProfileStop("Auras3.RefreshAll", started)
     end
 
     --- 5) Sync movers
@@ -919,7 +889,6 @@ local function MSUF_SyncAllUnitPreviews()
     if want then
         MSUF_EM2_SchedulePreviewReforce()
     end
-    PreviewProfileStop("SyncAllUnitPreviews", fullStarted)
 end
 
 ExportPublic("MSUF_SyncAllUnitPreviews", MSUF_SyncAllUnitPreviews)
@@ -1053,28 +1022,26 @@ do
             return true
         end
 
-        local function Phase(delay, label, fn)
+        local function Phase(delay, fn)
             timer.After(delay, function()
                 if not Alive() then return end
-                local started = PreviewProfileStart()
                 fn()
-                PreviewProfileStop("SyncAllUnitPreviewsAsync", label, started)
             end)
         end
 
-        Phase(0, "BossUnitPreviewSync", function()
+        Phase(0, function()
             if _G.MSUF_SyncBossUnitframePreviewWithUnitEdit then
                 _G.MSUF_SyncBossUnitframePreviewWithUnitEdit()
             end
         end)
 
-        Phase(0.02, "RefreshVisibilityDrivers", function()
+        Phase(0.02, function()
             if _G.MSUF_RefreshAllUnitVisibilityDrivers then
                 _G.MSUF_RefreshAllUnitVisibilityDrivers(want)
             end
         end)
 
-        Phase(0.04, "ForcePreviewFrames", function()
+        Phase(0.04, function()
             ForPreviewFrames(function(frame)
                 if frame.ForceUpdate then frame:ForceUpdate("EM2_PREVIEW") end
                 if want then
@@ -1085,7 +1052,7 @@ do
             end)
         end)
 
-        Phase(0.06, "CastbarPreviews", function()
+        Phase(0.06, function()
             local beginBossBatch = _G.MSUF_BeginBossCastbarPreviewBatch
             local endBossBatch = _G.MSUF_EndBossCastbarPreviewBatch
             local batchingBossPreview = type(beginBossBatch) == "function" and type(endBossBatch) == "function"
@@ -1098,7 +1065,7 @@ do
             if batchingBossPreview then endBossBatch() end
         end)
 
-        Phase(0.08, "Auras3.RefreshEditPreview", function()
+        Phase(0.08, function()
             local a3 = MSUF and MSUF.MSUF_Auras3
             if a3 and type(a3.RefreshEditPreview) == "function" then
                 a3.RefreshEditPreview()
@@ -1107,7 +1074,7 @@ do
             end
         end)
 
-        Phase(0.10, "PreviewSettle", function()
+        Phase(0.10, function()
             SchedulePreviewMoverSync(0.02)
             if want then
                 MSUF_EM2_SchedulePreviewReforce()

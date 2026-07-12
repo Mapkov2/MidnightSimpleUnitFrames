@@ -35,6 +35,8 @@ GF._previewAnchorFrame = GF._previewAnchorFrame or {}
 GF._previewContainer = GF._previewContainer or {}
 GF._previewLayoutFrame = GF._previewLayoutFrame or {}
 GF._previewBuildSerial = GF._previewBuildSerial or {}
+GF._previewFreeFrames = GF._previewFreeFrames or {}
+GF._previewFrameSerial = tonumber(GF._previewFrameSerial) or 0
 
 local PREVIEW_BUILD_SLICE_COUNT = 2
 local PREVIEW_BUILD_SLICE_THRESHOLD = 8
@@ -89,6 +91,12 @@ local function AnchorPoint(conf)
   return point
 end
 
+local function RelativeAnchorPoint(conf, fallback)
+  local point = conf and conf.relativePoint or fallback or "CENTER"
+  if not VALID_POINTS[point] then point = fallback or "CENTER" end
+  return point
+end
+
 local function PointFraction(point)
   local fx, fy
   if point == "LEFT" or point == "TOPLEFT" or point == "BOTTOMLEFT" then
@@ -123,7 +131,7 @@ local function ClampBoxAxis(minEdge, maxEdge, screenMax)
   return 0
 end
 
-local function ClampPreviewOffsetOnScreen(point, relative, x, y, totalW, totalH)
+local function ClampPreviewOffsetOnScreen(point, relativePoint, relative, x, y, totalW, totalH)
   if not (relative and relative.GetLeft and UIParent and UIParent.GetWidth) then
     return x, y
   end
@@ -137,8 +145,9 @@ local function ClampPreviewOffsetOnScreen(point, relative, x, y, totalW, totalH)
     return x, y
   end
   local fx, fy = PointFraction(point)
-  local px = pLeft + (pRight - pLeft) * fx + (x or 0)
-  local py = pBottom + (pTop - pBottom) * fy + (y or 0)
+  local rfx, rfy = PointFraction(relativePoint)
+  local px = pLeft + (pRight - pLeft) * rfx + (x or 0)
+  local py = pBottom + (pTop - pBottom) * rfy + (y or 0)
   local boxW, boxH = totalW or 0, totalH or 0
   local left = px - boxW * fx
   local bottom = py - boxH * fy
@@ -250,46 +259,54 @@ end
 local function PositionContainer(kind, count)
   local conf = GF.GetConf and GF.GetConf(kind) or {}
   local posCount = GetPositionCount(kind) or DefaultPreviewCount(kind)
-  local dx, dy, posW, posH = GF.GetGridMetrics(kind, posCount)
+  if GF.EnsureStableGridPosition then
+    GF.EnsureStableGridPosition(kind, posCount, conf)
+  end
+  local _, _, posW, posH = GF.GetGridMetrics(kind, posCount)
   local _, _, _, _, w, h, spacing, growth, upc, _, _, _, primary, _, _, blockW, blockH = GF.GetGridMetrics(kind, count)
   local parent = GF._previewAnchorFrame and GF._previewAnchorFrame[kind]
   local container, layout = EnsureContainer(kind, parent or UIParent)
 
   local containerW, containerH = max(posW or w or 1, 1), max(posH or h or 1, 1)
-  local point, relative, x, y
+  local point, relativePoint, relative, x, y
   if parent then
-    point, relative, x, y = "CENTER", parent, 0, 0
+    point, relativePoint, relative, x, y = "CENTER", "CENTER", parent, 0, 0
   else
     local cx, cy = tonumber(conf.offsetX), tonumber(conf.offsetY)
     if cx == nil or cy == nil then cx, cy = DefaultCenter(kind) end
-    point, relative, x, y = AnchorPoint(conf), ResolveAnchorFrame(conf), floor(cx + 0.5), floor(cy + 0.5)
-    x, y = ClampPreviewOffsetOnScreen(point, relative, x, y, containerW, containerH)
+    point = AnchorPoint(conf)
+    relativePoint = RelativeAnchorPoint(conf, point)
+    relative, x, y = ResolveAnchorFrame(conf), floor(cx + 0.5), floor(cy + 0.5)
+    x, y = ClampPreviewOffsetOnScreen(point, relativePoint, relative, x, y, containerW, containerH)
   end
-  local containerKey = tostring(point) .. "\030" .. tostring(relative) .. "\030" .. tostring(x) .. "\030" .. tostring(y)
+  local containerKey = tostring(point) .. "\030" .. tostring(relativePoint) .. "\030" .. tostring(relative) .. "\030" .. tostring(x) .. "\030" .. tostring(y)
     .. "\030" .. tostring(containerW) .. "\030" .. tostring(containerH)
   if container._msufGFPreviewPositionKey ~= containerKey then
     container._msufGFPreviewPositionKey = containerKey
     container:ClearAllPoints()
     container:SetSize(containerW, containerH)
-    container:SetPoint(point, relative, point, x, y)
+    container:SetPoint(point, relative, relativePoint, x, y)
   end
 
   local layoutW, layoutH = containerW, containerH
   local layoutPoint = AnchorPoint(conf)
-  local layoutKey = tostring(layoutPoint) .. "\030" .. tostring(dx or 0) .. "\030" .. tostring(dy or 0)
-    .. "\030" .. tostring(layoutW) .. "\030" .. tostring(layoutH) .. "\030" .. tostring(container)
+  local layoutKey = tostring(layoutPoint) .. "\030" .. tostring(layoutW) .. "\030" .. tostring(layoutH)
+    .. "\030" .. tostring(container)
   if layout._msufGFPreviewPositionKey ~= layoutKey then
     layout._msufGFPreviewPositionKey = layoutKey
     layout:ClearAllPoints()
     layout:SetSize(layoutW, layoutH)
-    layout:SetPoint(layoutPoint, container, layoutPoint, -(dx or 0), -(dy or 0))
+    --- The preview layout already has the full grid footprint. Align it with
+    --- the logical container instead of applying the header-origin delta a
+    --- second time; this keeps preview and live bounds count-independent.
+    layout:SetPoint(layoutPoint, container, layoutPoint, 0, 0)
   end
   layout.msufConfigKey = GF.GetConfigDBKey and GF.GetConfigDBKey(kind) or ("gf_" .. kind)
   layout._msufIsGroupFrame = true
   layout._msufGFKind = kind
   layout._msufGFPreviewLayout = true
-  layout._msufGFDragCenterToGridX = dx or 0
-  layout._msufGFDragCenterToGridY = dy or 0
+  layout._msufGFDragCenterToGridX = 0
+  layout._msufGFDragCenterToGridY = 0
   container:Show()
   layout:Show()
   return container, layout, w, h, spacing or 1, growth or "DOWN", upc or 5, primary, blockW, blockH
@@ -529,6 +546,59 @@ local function ClearPreviewData(frame)
   if GF.HideFrameAuras then GF.HideFrameAuras(frame) end
 end
 
+local function DeactivatePreviewFrame(frame)
+  if not frame then return end
+  ClearPreviewData(frame)
+  if frame.Hide then frame:Hide() end
+
+  -- Preview regions stay pooled on the button, but a hidden preview must not
+  -- stay attached to unit-frame routing, events, group iteration, or ClickCast.
+  if type(GF.UntrackFrame) == "function" then
+    GF.UntrackFrame(frame)
+  else
+    if type(GF.UnregisterClickCastFrame) == "function" then
+      GF.UnregisterClickCastFrame(frame)
+    end
+    local UF = MSUF and MSUF.UF
+    if UF and type(UF.DetachFrame) == "function" then
+      UF.DetachFrame(frame)
+    elseif frame.UnregisterAllEvents then
+      frame:UnregisterAllEvents()
+    end
+  end
+
+  frame._msufGFPreviewDetached = true
+  frame._msufGFPreviewApplyKey = nil
+end
+
+local function ReleasePreviewFrame(frames, index)
+  local frame = frames and frames[index]
+  if not frame then return false end
+  frames[index] = nil
+  DeactivatePreviewFrame(frame)
+
+  frame._msufGFPreviewPooled = true
+  frame._msufGFPreviewOwnerKind = nil
+  frame._msufGFPreviewIndex = nil
+  frame._msufGFPreviewClass = nil
+  frame._msufGFPreviewRole = nil
+  frame._msufGFPreviewAnimState = nil
+  frame._msufGFKind = nil
+  frame._msufGFEM2Kind = nil
+  frame.configKey = nil
+  frame.msufConfigKey = nil
+  frame.MSUFSpec = nil
+  frame.unit = nil
+  frame.unitKey = nil
+  frame.MSUFUnitKey = nil
+  if frame.SetAttribute then frame:SetAttribute("unit", nil) end
+  if frame.ClearAllPoints then frame:ClearAllPoints() end
+
+  local free = GF._previewFreeFrames
+  free[#free + 1] = frame
+  return true
+end
+
 local function PlacePreviewFrame(frame, layout, index, w, h, spacing, growth, upc)
   local row = (index - 1) % upc
   local col = floor((index - 1) / upc)
@@ -544,8 +614,8 @@ local function PlacePreviewFrame(frame, layout, index, w, h, spacing, growth, up
 end
 
 local function SetPreservedPreviewPoint(frame, layout, index, w, h, spacing, growth, primary, blockW, blockH)
+  local conf = layout and layout._msufGFKind and GF.GetConf and GF.GetConf(layout._msufGFKind)
   if not primary then
-    local conf = layout and layout._msufGFKind and GF.GetConf and GF.GetConf(layout._msufGFKind)
     local upc = floor((tonumber(conf and conf.unitsPerColumn) or 5) + 0.5)
     if upc < 1 then upc = 1 end
     primary = min(upc, 5)
@@ -558,14 +628,27 @@ local function SetPreservedPreviewPoint(frame, layout, index, w, h, spacing, gro
   local withinGroup = (index - 1) % 5
   local minor = floor(withinGroup / primary)
   local major = withinGroup % primary
+  local groupGrowth = conf and conf.groupGrowth
   if growth == "UP" then
-    frame:SetPoint("BOTTOMLEFT", layout, "BOTTOMLEFT", groupIndex * (blockW + spacing) + minor * (w + spacing), major * (h + spacing))
+    local left = groupGrowth ~= "LEFT"
+    local anchor = left and "BOTTOMLEFT" or "BOTTOMRIGHT"
+    local x = groupIndex * (blockW + spacing) + minor * (w + spacing)
+    frame:SetPoint(anchor, layout, anchor, left and x or -x, major * (h + spacing))
   elseif growth == "RIGHT" then
-    frame:SetPoint("TOPLEFT", layout, "TOPLEFT", major * (w + spacing), -(groupIndex * (blockH + spacing) + minor * (h + spacing)))
+    local down = groupGrowth ~= "UP"
+    local anchor = down and "TOPLEFT" or "BOTTOMLEFT"
+    local y = groupIndex * (blockH + spacing) + minor * (h + spacing)
+    frame:SetPoint(anchor, layout, anchor, major * (w + spacing), down and -y or y)
   elseif growth == "LEFT" then
-    frame:SetPoint("TOPRIGHT", layout, "TOPRIGHT", -major * (w + spacing), -(groupIndex * (blockH + spacing) + minor * (h + spacing)))
+    local down = groupGrowth ~= "UP"
+    local anchor = down and "TOPRIGHT" or "BOTTOMRIGHT"
+    local y = groupIndex * (blockH + spacing) + minor * (h + spacing)
+    frame:SetPoint(anchor, layout, anchor, -major * (w + spacing), down and -y or y)
   else
-    frame:SetPoint("TOPLEFT", layout, "TOPLEFT", groupIndex * (blockW + spacing) + minor * (w + spacing), -major * (h + spacing))
+    local left = groupGrowth ~= "LEFT"
+    local anchor = left and "TOPLEFT" or "TOPRIGHT"
+    local x = groupIndex * (blockW + spacing) + minor * (w + spacing)
+    frame:SetPoint(anchor, layout, anchor, left and x or -x, -major * (h + spacing))
   end
 end
 
@@ -601,9 +684,10 @@ local function ApplyPreviewSpecIfNeeded(frame, kind, reason, w, h, dirtyMask, ex
   if not frame then return false end
   local currentRevision = PreviewApplyRevision(kind)
   local key = PreviewApplyKey(frame, kind, w, h, currentRevision)
-  if frame._msufGFPreviewApplyKey == key and frame.MSUFSpec then return true end
+  if frame._msufGFPreviewDetached ~= true and frame._msufGFPreviewApplyKey == key and frame.MSUFSpec then return true end
   local revisionCurrent = expectedRevision == nil or currentRevision == expectedRevision
-  local canApplyDirty = frame.MSUFSpec ~= nil
+  local canApplyDirty = frame._msufGFPreviewDetached ~= true
+    and frame.MSUFSpec ~= nil
     and dirtyMask ~= nil
     and revisionCurrent
     and type(GF.ApplyPreviewButtonDirty) == "function"
@@ -615,7 +699,10 @@ local function ApplyPreviewSpecIfNeeded(frame, kind, reason, w, h, dirtyMask, ex
   else
     return false
   end
-  if ok then frame._msufGFPreviewApplyKey = PreviewApplyKey(frame, kind, w, h) end
+  if ok then
+    frame._msufGFPreviewDetached = nil
+    frame._msufGFPreviewApplyKey = PreviewApplyKey(frame, kind, w, h)
+  end
   return ok
 end
 
@@ -629,6 +716,26 @@ local function SetPreviewFrameSize(frame, w, h)
   frame:SetSize(w, h)
 end
 
+local function AcquirePreviewFrame(parent)
+  local free = GF._previewFreeFrames
+  local freeCount = #free
+  local frame = free[freeCount]
+  if frame then
+    free[freeCount] = nil
+  else
+    GF._previewFrameSerial = GF._previewFrameSerial + 1
+    frame = CreateFrame("Button", "MSUF_GFPreviewButton_" .. GF._previewFrameSerial, parent, "BackdropTemplate")
+    if frame.EnableMouse then frame:EnableMouse(false) end
+  end
+
+  frame._msufGFPreviewPooled = nil
+  frame._msufGFPreviewDetached = true
+  frame._msufGFPreviewApplyKey = nil
+  frame._msufGFPreviewPositionKey = nil
+  if frame:GetParent() ~= parent then frame:SetParent(parent) end
+  return frame
+end
+
 local function EnsurePreviewFrame(kind, index, parent)
   local frames = GF._previewFrames[kind]
   if not frames then
@@ -636,25 +743,25 @@ local function EnsurePreviewFrame(kind, index, parent)
     GF._previewFrames[kind] = frames
   end
   local frame = frames[index]
-  if frame then
-    frame._msufGFPreviewIndex = index
-    if frame:GetParent() ~= parent then frame:SetParent(parent) end
-    return frame
+  if not frame then
+    frame = AcquirePreviewFrame(parent)
+    frames[index] = frame
+  elseif frame:GetParent() ~= parent then
+    frame:SetParent(parent)
   end
 
-  frame = CreateFrame("Button", "MSUF_GFPreview_" .. kind .. "_" .. index, parent, "BackdropTemplate")
   frame._msufGFIsPreviewFrame = true
+  frame._msufGFPreviewOwnerKind = kind
   frame._msufGFPreviewIndex = index
-  frame._msufGFPreviewActive = true
   frame._msufGFKind = kind
+  frame._msufGFEM2Kind = kind
   frame._msufIsGroupFrame = true
   frame.msufConfigKey = GF.GetConfigDBKey and GF.GetConfigDBKey(kind) or ("gf_" .. kind)
+  frame.configKey = "gf_" .. kind
   frame.unit = "player"
   frame.unitKey = "player"
+  frame.MSUFUnitKey = "player"
   if frame.SetAttribute then frame:SetAttribute("unit", "player") end
-  if frame.EnableMouse then frame:EnableMouse(false) end
-  if frame.RegisterForClicks then frame:RegisterForClicks("LeftButtonUp") end
-  frames[index] = frame
   return frame
 end
 
@@ -747,12 +854,8 @@ function GF.ShowPreview(kind, count, opts)
   for i = 1, visibleCount do
     PreparePreviewFrame(kind, i, layout, w, h, spacing, growth, upc, primary, blockW, blockH)
   end
-  for i = visibleCount + 1, #frames do
-    local frame = frames[i]
-    if frame then
-      ClearPreviewData(frame)
-      frame:Hide()
-    end
+  for i = #frames, visibleCount + 1, -1 do
+    ReleasePreviewFrame(frames, i)
   end
   container:Show()
   local reason = opts and opts.reason or "MSUF_GF_PREVIEW"
@@ -779,23 +882,36 @@ end
 function GF.HidePreview(kind)
   kind = NormalizeKind(kind) or "party"
   local container = GF._previewContainer[kind]
-  if GF._previewActive[kind] ~= true and (not (container and container.IsShown and container:IsShown())) then
+  local frames = GF._previewFrames[kind]
+  if GF._previewActive[kind] ~= true
+    and (not (container and container.IsShown and container:IsShown()))
+    and not (frames and #frames > 0) then
     return true
   end
   BumpPreviewBuildSerial(kind)
   GF._previewActive[kind] = nil
   GF._previewShownCounts[kind] = nil
-  local frames = GF._previewFrames[kind]
   if frames then
-    for i = 1, #frames do
-      if frames[i] then
-        ClearPreviewData(frames[i])
-        frames[i]:Hide()
-      end
+    for i = #frames, 1, -1 do
+      ReleasePreviewFrame(frames, i)
     end
   end
   if container then container:Hide() end
   return true
+end
+
+--- Combat is a hard ownership boundary for the visual-only preview pool.  The
+--- options/edit-mode owner may still be logically open when combat starts, so
+--- orphan detection alone is insufficient: detach every preview immediately.
+function GF.HidePreviewsForCombat()
+  local hidden = false
+  for _, kind in ipairs({ "party", "raid", "mythicraid" }) do
+    local frames = GF._previewFrames[kind]
+    if GF._previewActive[kind] == true or (frames and #frames > 0) then
+      hidden = GF.HidePreview(kind) or hidden
+    end
+  end
+  return hidden
 end
 
 function GF.RefreshPreviewLayout(kind, opts)

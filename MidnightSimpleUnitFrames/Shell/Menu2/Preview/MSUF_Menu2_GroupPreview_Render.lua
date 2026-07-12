@@ -1039,8 +1039,6 @@ function Render.Install(box, ctx, deps)
         if self._dragFrame then
             SetPreviewFrameLevel(self._dragFrame, previewRootLevel + PREVIEW_LOCAL_BASE_OFFSET + 140)
         end
-        local profiling = M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStart and M.ProfileStop
-        local profileStarted = profiling and M.ProfileStart() or nil
         local scene = BuildScene(self, reason)
         local S = scene.S
         local textHandles, kind, label, conf, gf = scene.textHandles, scene.kind, scene.label, scene.conf, scene.gf
@@ -2018,7 +2016,6 @@ function Render.Install(box, ctx, deps)
         scene.textBaseLevel = textBaseLevel
         scene.dynamicSpellHandlesActive = dynamicSpellHandlesActive
         FinalizeScene(scene)
-        if profiling then M.ProfileStop("preview", "GroupPreview.Refresh", profileStarted) end
     end
     box:EnableKeyboard(true)
     if box.SetPropagateKeyboardInput then box:SetPropagateKeyboardInput(true) end
