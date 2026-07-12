@@ -1,5 +1,14 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-Beta13 - 2026-07-12
+
+### Changes
+
+- Stabilized Class Power textures, detached power shapes, and targeted unit-frame refreshes.
+- Improved class portrait fallbacks for transient and new Blizzard class tokens.
+- Smoothed Menu2 visuals, scrolling, menu fonts, and Assistant startup behavior.
+- Expanded Assistant parsing, setting navigation, and exact control routing.
+
 ## 6.0-Beta12 - 2026-07-11
 
 ### Changes

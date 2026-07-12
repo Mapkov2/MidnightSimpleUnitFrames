@@ -8,10 +8,25 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-Beta12",
-    previousVersion = "6.0-Beta11",
-    rangeLabel = "6.0-Beta11 -> 6.0-Beta12",
+    currentVersion = "6.0-Beta13",
+    previousVersion = "6.0-Beta12",
+    rangeLabel = "6.0-Beta12 -> 6.0-Beta13",
     entries = {
+        {
+            version = "6.0-Beta13",
+            date = "2026-07-12",
+            sections = {
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Stabilized Class Power textures, detached power shapes, and targeted unit-frame refreshes.",
+                        "Improved class portrait fallbacks for transient and new Blizzard class tokens.",
+                        "Smoothed Menu2 visuals, scrolling, menu fonts, and Assistant startup behavior.",
+                        "Expanded Assistant parsing, setting navigation, and exact control routing.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-Beta12",
             date = "2026-07-11",
@@ -181,50 +196,6 @@ local data = {
                         "Party, Raid, and Mythic Raid Buff/Debuff blacklists: category switches, exact SpellIDs, presets, and the active entry list.",
                         "Detached Player Power shapes, borders, colors, smooth fill, and texture changes; Class Resource and Alternative Mana smooth fill.",
                         "Rapid target/focus changes, target-of-target/focus-target updates, and pinned menu previews.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-Beta9",
-            date = "2026-07-09",
-            sections = {
-                {
-                    title = "Runtime Fixes",
-                    bullets = {
-                        "Fixed target portrait refreshes so portrait textures and model state recover more reliably after target, configuration, and preview changes.",
-                        "Fixed self-heal prediction calculation paths so player-driven incoming-heal prediction no longer double-counts or drops the local contribution in test scenarios.",
-                        "Fixed absorb prediction refresh behavior for menu test mode and forced prediction updates, including absorb, heal-absorb, over-absorb, and prediction visibility state.",
-                    },
-                },
-                {
-                    title = "Auras3 And Load Order",
-                    bullets = {
-                        "Embedded the Auras3 runtime directly into UFCore element loading so aura hooks initialize with the unit-frame backend instead of relying on a separate TOC runtime include.",
-                        "Tightened Auras3 edit-mode and performance-trace guards around UFCore frame resolution.",
-                    },
-                },
-                {
-                    title = "Menu2 And Previews",
-                    bullets = {
-                        "Fixed unit preview refresh paths for portrait, absorb, and heal-prediction states after option changes.",
-                        "Moved group-frame color controls into the advanced colors page and cleaned up the group bars page so group color settings are easier to find.",
-                        "Improved Assistant and menu routing for preview, group layout, group indicators, and color-related requests.",
-                    },
-                },
-                {
-                    title = "Release Workflow",
-                    bullets = {
-                        "Fixed annotated tag parsing for publish-target: curseforge so CurseForge-only beta releases do not accidentally publish to other destinations.",
-                    },
-                },
-                {
-                    title = "What To Test First",
-                    bullets = {
-                        "Target portrait changes after target swaps, /reload, preview toggles, and portrait option changes.",
-                        "Absorb, heal-absorb, over-absorb, and incoming-heal previews from the menu test controls.",
-                        "Group-frame color settings under Advanced Colors and the removed duplicate controls from Group Bars.",
-                        "Auras3 buff and debuff lanes after login and after switching edit/preview modes.",
                     },
                 },
             },
