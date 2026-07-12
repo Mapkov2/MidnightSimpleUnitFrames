@@ -211,18 +211,6 @@ local function RequestUnitFrameMenuPreview(reason)
     if type(fn) == "function" then fn(reason or "AURAS3_EDITMODE") end
 end
 
-local function ProfileStart()
-    local m = MSUF and MSUF.MSUF2
-    if m and m.PerfProfile and m.PerfProfile.enabled == true and m.ProfileStart then return m.ProfileStart() end
-end
-
-local function ProfileStop(bucket, key, started, count)
-    local m = MSUF and MSUF.MSUF2
-    if started and m and m.PerfProfile and m.PerfProfile.enabled == true and m.ProfileStop then
-        m.ProfileStop(bucket, key, started, count)
-    end
-end
-
 local function NormalizeKind(kind)
     kind = (type(kind) == "string") and kind:lower() or "buff"
     if kind == "buffs" then return "buff" end
@@ -738,18 +726,13 @@ local function ApplyDragUnit(auras, unit, moverKind, x, y)
 end
 
 local function RefreshAffectedRuntimeUnits(unit, shared)
-    local started = ProfileStart()
-    local count = 0
     if BOSS_UNITS[unit] and shared and shared.bossEditTogether ~= false then
         for i = 1, 5 do
-            count = count + 1
             A3.RefreshUnit("boss" .. i)
         end
     elseif unit then
-        count = 1
         A3.RefreshUnit(unit)
     end
-    ProfileStop("auraEditDrag", "RuntimeRefresh", started, count)
 end
 
 local function ShouldFlushDragRuntime(self, elapsed)
@@ -795,7 +778,6 @@ local function ApplyDragDelta(self, dx, dy, elapsed)
     local baseUnit = self._msufA3Unit
     local moverKind = self._msufA3MoverKind
 
-    local previewStarted = ProfileStart()
     if BOSS_UNITS[baseUnit] and shared.bossEditTogether ~= false then
         for i = 1, 5 do
             ApplyDragUnit(auras, "boss" .. i, moverKind, x, y)
@@ -803,8 +785,6 @@ local function ApplyDragDelta(self, dx, dy, elapsed)
     elseif baseUnit then
         ApplyDragUnit(auras, baseUnit, moverKind, x, y)
     end
-    ProfileStop("auraEditDrag", "PreviewPosition", previewStarted)
-
     FlushDragRuntime(self, baseUnit, shared, "AURAS3_EDITMODE_DRAG", false)
 end
 

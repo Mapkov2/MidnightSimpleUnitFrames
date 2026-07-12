@@ -121,8 +121,13 @@ function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
             local layerDefault = lane == "buff" and 5 or 6
             local aliases = {}
             AddAliasesForUnit(aliases, scope, laneInfo.plural:lower())
+            AddGFAuraAliases(aliases, scope, lane, "lane")
             AddGFAuraAliases(aliases, scope, lane, "visibility")
-            RegisterGFAuraBoolean(scope, lane, "Visible", "enabled", laneInfo.plural, true, aliases)
+            RegisterGFAuraBoolean(scope, lane, "Visible", "enabled", laneInfo.plural, true, aliases, {
+                page = "gf_auras",
+                description = "Shows or hides the entire " .. tostring(UNIT_LABELS[scope]) .. " " .. laneInfo.label:lower()
+                    .. " icon lane. This is lane visibility, not content filtering: it does not change the native Filter choice or Hide Permanent rule.",
+            })
 
             aliases = {}
             AddGFAuraAliases(aliases, scope, lane, "max")
@@ -194,7 +199,14 @@ function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
             AddGFAuraAliases(aliases, scope, lane, "filter")
             AddGFAuraAliases(aliases, scope, lane, "filter type")
             AddGFAuraAliases(aliases, scope, lane, "inclusive filter")
-            RegisterGFAuraEnum(scope, lane, "FilterToken", "filterToken", laneInfo.label .. " Filter", GF_AURA_FILTER_VALUES[lane], GF_AURA_FILTER_ALIASES, "ALL", aliases, "visual")
+            AddGFAuraAliases(aliases, scope, lane, "native filter")
+            AddGFAuraAliases(aliases, scope, lane, "content filter")
+            RegisterGFAuraEnum(scope, lane, "FilterToken", "filterToken", laneInfo.label .. " Filter", GF_AURA_FILTER_VALUES[lane], GF_AURA_FILTER_ALIASES, "ALL", aliases, "visual", {
+                page = "gf_auras",
+                description = "Chooses which auras pass the native Blizzard content filter for " .. tostring(UNIT_LABELS[scope])
+                    .. " " .. laneInfo.plural .. ". It does not show or hide the lane; Group Auras and the " .. laneInfo.label
+                    .. " lane must be enabled separately. Hide Permanent is an independent no-duration rule.",
+            })
 
             aliases = {}
             AddGFAuraAliases(aliases, scope, lane, "cooldown text")

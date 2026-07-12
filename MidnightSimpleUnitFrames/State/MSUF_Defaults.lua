@@ -725,6 +725,8 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
             SetDefault(auras[key], "strata", "AUTO")
             if key == "buff" then SetDefault(auras[key], "trackedStrata", "AUTO") end
             SetDefault(auras[key], "cooldownSwipeReverse", false)
+            SetDefault(auras[key], "sortMethod", "DEFAULT")
+            SetDefault(auras[key], "sortReverse", false)
             SetDefault(auras[key], "showDurationBar", false)
             SetDefault(auras[key], "durationBarHeight", 2)
             SetDefault(auras[key], "durationBarDisplay", "BAR_ONLY")
@@ -2776,6 +2778,10 @@ end
                 showCooldownText = true,
                 showCooldownSwipe = true,
                 cooldownSwipeReverse = false,
+                buffSortMethod = "DEFAULT",
+                buffSortReverse = false,
+                debuffSortMethod = "DEFAULT",
+                debuffSortReverse = false,
                 showDurationBar = false,
                 durationBarHeight = 2,
                 durationBarDisplay = "BAR_ONLY",

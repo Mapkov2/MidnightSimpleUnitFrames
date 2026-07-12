@@ -105,17 +105,20 @@ function A.AurasRegistry.BuildGroupAuraLaneCore(ctx)
         return true
     end
 
-    local function RegisterGFAuraBoolean(scope, lane, attr, key, label, defaultValue, aliases)
+    local function RegisterGFAuraBoolean(scope, lane, attr, key, label, defaultValue, aliases, opts)
+        opts = opts or {}
         Registry:RegisterSetting({
             key = "gf_" .. scope .. ".auras." .. lane .. "." .. key,
             label = UNIT_LABELS[scope] .. " " .. label,
             category = UNIT_LABELS[scope] .. " / Group Auras",
+            page = opts.page,
+            description = opts.description,
             unit = scope,
             frameType = "groupAura",
             attribute = "gfAura" .. lane .. attr,
             type = "boolean",
             aliases = aliases,
-            exactAliases = aliases,
+            exactAliases = opts.exactAliases or aliases,
             get = function()
                 if key == "enabled" then return GFAuraLaneShown(scope, lane) end
                 local value = GFReadAuraValue(scope, lane, key, nil)
@@ -140,6 +143,8 @@ function A.AurasRegistry.BuildGroupAuraLaneCore(ctx)
             key = "gf_" .. scope .. ".auras." .. lane .. "." .. key,
             label = UNIT_LABELS[scope] .. " " .. label,
             category = UNIT_LABELS[scope] .. " / Group Auras",
+            page = opts.page,
+            description = opts.description,
             unit = scope,
             frameType = "groupAura",
             attribute = "gfAura" .. lane .. attr,
@@ -167,6 +172,8 @@ function A.AurasRegistry.BuildGroupAuraLaneCore(ctx)
             key = "gf_" .. scope .. ".auras." .. lane .. "." .. key,
             label = UNIT_LABELS[scope] .. " " .. label,
             category = UNIT_LABELS[scope] .. " / Group Auras",
+            page = opts.page,
+            description = opts.description,
             unit = scope,
             frameType = "groupAura",
             attribute = "gfAura" .. lane .. attr,

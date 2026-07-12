@@ -91,7 +91,7 @@ function A.AurasRegistry.BuildGroupActionParsers(ctx)
         if value == nil then return false end
         local scope, lane = GroupAuraCategoryScopeLane(normalized)
         return { scope = scope, lane = lane, category = category, value = value }, {
-            summary = "Explains why group aura category blacklists are read-only in the native backend.",
+            summary = "Hides or allows a live group-aura category for the selected scope and lane.",
         }
     end
 
@@ -105,7 +105,7 @@ function A.AurasRegistry.BuildGroupActionParsers(ctx)
         end
         local scope, lane = GroupAuraCategoryScopeLane(normalized)
         return { scope = scope, lane = lane }, {
-            summary = "Shows saved legacy hidden aura categories for group frames.",
+            summary = "Shows the live hidden aura categories for the selected group-frame lane.",
         }
     end
 
@@ -123,7 +123,7 @@ function A.AurasRegistry.BuildGroupActionParsers(ctx)
         end
         local scope, lane = GroupAuraCategoryScopeLane(normalized)
         return { scope = scope, lane = lane }, {
-            summary = "Explains why group aura category blacklists are read-only in the native backend.",
+            summary = "Clears the live hidden-category list for the selected group-aura scope and lane.",
         }
     end
 

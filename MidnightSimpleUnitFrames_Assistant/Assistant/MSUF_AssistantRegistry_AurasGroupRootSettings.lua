@@ -8,7 +8,8 @@ MSUF.Assistant = A
 
 A.AurasRegistry = A.AurasRegistry or {}
 
-local function RegisterGFAuraRootBoolean(ctx, scope, attr, key, label, defaultValue, aliases, mode)
+local function RegisterGFAuraRootBoolean(ctx, scope, attr, key, label, defaultValue, aliases, mode, opts)
+    opts = opts or {}
     local Registry = ctx.Registry
     local UNIT_LABELS = ctx.UNIT_LABELS or {}
     local GFAurasRoot = ctx.GFAurasRoot
@@ -18,6 +19,8 @@ local function RegisterGFAuraRootBoolean(ctx, scope, attr, key, label, defaultVa
         key = "gf_" .. scope .. ".auras." .. key,
         label = UNIT_LABELS[scope] .. " " .. label,
         category = UNIT_LABELS[scope] .. " / Group Auras",
+        page = opts.page,
+        description = opts.description,
         unit = scope,
         frameType = "groupAura",
         attribute = "gfAura" .. attr,
@@ -120,7 +123,11 @@ function A.AurasRegistry.RegisterGroupAuraRootSettings(ctx, scope)
     AddAliasesForUnit(rootAliases, scope, "group aura system")
     AddAliasesForUnit(rootAliases, scope, "group auras enabled")
     AddAliasesForUnit(rootAliases, scope, "native group auras")
-    RegisterGFAuraRootBoolean(ctx, scope, "Enabled", "enabled", "Group Auras Enabled", true, rootAliases, "auras")
+    RegisterGFAuraRootBoolean(ctx, scope, "Enabled", "enabled", "Group Auras Enabled", true, rootAliases, "auras", {
+        page = "gf_auras",
+        description = "Master visibility for all " .. tostring(UNIT_LABELS[scope])
+            .. " group-aura lanes. It does not change the saved Buff or Debuff content filters, Hide Permanent rules, or individual lane visibility choices.",
+    })
 
     rootAliases = {}
     AddAliasesForUnit(rootAliases, scope, "aura tooltip")

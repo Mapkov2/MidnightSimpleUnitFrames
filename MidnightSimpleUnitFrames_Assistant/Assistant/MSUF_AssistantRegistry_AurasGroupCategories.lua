@@ -41,6 +41,26 @@ function A.AurasRegistry.RegisterGroupAuraCategorySettings(ctx)
     local AURA_LANES = ctx.AURA_LANES or {}
     local categories = GFAuraCategoryValues()
 
+    local function AddAlias(out, value)
+        if type(value) == "string" and value ~= "" then out[#out + 1] = value end
+    end
+
+    local function AddGroupNoTimerAliases(out, scope, laneInfo)
+        local lanePlural = laneInfo.plural:lower()
+        local scopes = scope == "raid" and { "raid", "mythic raid" } or { "party" }
+        for i = 1, #scopes do
+            local scopeName = scopes[i]
+            AddAlias(out, scopeName .. " " .. lanePlural .. " with no timer")
+            AddAlias(out, scopeName .. " " .. lanePlural .. " without a timer")
+            AddAlias(out, scopeName .. " " .. lanePlural .. " without timers")
+            AddAlias(out, scopeName .. " " .. lanePlural .. " that have no timer")
+            AddAlias(out, scopeName .. " " .. lanePlural .. " with no duration")
+            AddAlias(out, scopeName .. " " .. lanePlural .. " without a duration")
+            AddAlias(out, scopeName .. " permanent " .. lanePlural)
+            AddAlias(out, "hide permanent " .. scopeName .. " " .. lanePlural)
+        end
+    end
+
     for _, scope in ipairs(GF_AURA_CATEGORY_SCOPES) do
         for _, laneInfo in ipairs(AURA_LANES) do
             local lane = laneInfo.key
@@ -49,10 +69,15 @@ function A.AurasRegistry.RegisterGroupAuraCategorySettings(ctx)
                 local aliases = {}
                 AddAliasesForUnit(aliases, settingScope, "hide permanent " .. laneInfo.plural:lower())
                 AddAliasesForUnit(aliases, settingScope, "hide permanent auras for " .. laneInfo.plural:lower())
+                AddGroupNoTimerAliases(aliases, settingScope, laneInfo)
                 Registry:RegisterSetting({
                     key = "gf_" .. settingScope .. ".auras." .. settingLane .. ".blacklist.hidePermanent",
                     label = GFAuraCategoryScopeLabel(settingScope) .. " " .. GFAuraCategoryLaneLabel(settingLane) .. " Hide Permanent Auras",
                     category = GFAuraCategoryScopeLabel(settingScope) .. " / Group Auras",
+                    page = "gf_auras",
+                    description = settingScope == "raid"
+                        and ("Hides Raid and Mythic Raid " .. laneInfo.plural .. " that have no finite duration (also called permanent or no-timer auras). The Auras menu owns this as one aggregate Raid / Mythic Raid rule. It does not disable the lane or change its native Filter choice.")
+                        or ("Hides Party " .. laneInfo.plural .. " that have no finite duration (also called permanent or no-timer auras). It does not disable the lane or change its native Filter choice."),
                     unit = settingScope,
                     frameType = "groupAura",
                     attribute = "gfAura" .. GFAuraCategoryLaneLabel(settingLane) .. "BlacklistHidePermanent",

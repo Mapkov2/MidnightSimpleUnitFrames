@@ -113,6 +113,7 @@ Data.AURAS_PARSER = {
         [61] = { "buff", "buffs" },
         [62] = {
         "stack size", "stack text size", "stack x", "stack y",
+        "stack groesse", "stack grosse", "stack text groesse", "stack text grosse",
         "cooldown size", "cooldown text size", "timer size", "timer text size",
         "cooldown x", "cooldown y", "timer text x", "timer text y",
         "cooldown decimals", "cooldown decimal", "timer decimals", "timer decimal", "decimal seconds",

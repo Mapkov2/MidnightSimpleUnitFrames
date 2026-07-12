@@ -39,9 +39,22 @@ local LANE_VALUES = VTP "buff=Buffs|debuff=Debuffs"
 local UNIT_STYLE_CONTAINER_VALUES = VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3"
 local DEBUFF_TYPE_BORDER_MODE_VALUES = VTP "OFF=Off|BORDER=Border|SYMBOL=Border + Symbol"
 local COOLDOWN_SWIPE_DIRECTION_VALUES = VTP "NORMAL=Normal|REVERSE=Reverse"
+local AURA_SORT_DIRECTION_VALUES = VTP "NORMAL=Normal|REVERSE=Reversed"
+local BUFF_AURA_SORT_METHOD_VALUES = VTP "DEFAULT=Player & Priority First|BIG_DEFENSIVE=Other Defensives First|IMPORTANT_FIRST=Important First|EXPIRATION=Player First, Expiring Soon|EXPIRATION_ONLY=Expiring Soon|NAME=Player First, then Name|NAME_ONLY=Name"
+local DEBUFF_AURA_SORT_METHOD_VALUES = VTP "DEFAULT=Player & Priority First|UNIT_FRAME_DEBUFF=Debuff Type First|IMPORTANT_FIRST=Important First|EXPIRATION=Player First, Expiring Soon|EXPIRATION_ONLY=Expiring Soon|NAME=Player First, then Name|NAME_ONLY=Name"
 local DURATION_BAR_DISPLAY_VALUES = VTP "BAR_ONLY=Bar Only|OVERLAY=Icon + Bar"
 local DURATION_BAR_POSITION_VALUES = VTP "BOTTOM=Bottom|TOP=Top"
 local DURATION_BAR_DIRECTION_VALUES = VTP "REMAINING=Remaining|ELAPSED=Elapsed"
+local BUFF_AURA_SORT_METHOD_OK = { DEFAULT=true, BIG_DEFENSIVE=true, IMPORTANT_FIRST=true, EXPIRATION=true, EXPIRATION_ONLY=true, NAME=true, NAME_ONLY=true }
+local DEBUFF_AURA_SORT_METHOD_OK = { DEFAULT=true, UNIT_FRAME_DEBUFF=true, IMPORTANT_FIRST=true, EXPIRATION=true, EXPIRATION_ONLY=true, NAME=true, NAME_ONLY=true }
+local function AuraSortMethodValues(lane)
+    return lane == "debuff" and DEBUFF_AURA_SORT_METHOD_VALUES or BUFF_AURA_SORT_METHOD_VALUES
+end
+local function NormalizeAuraSortMethodForLane(lane, value)
+    value = tostring(value or "DEFAULT"):upper()
+    local allowed = lane == "debuff" and DEBUFF_AURA_SORT_METHOD_OK or BUFF_AURA_SORT_METHOD_OK
+    return allowed[value] and value or "DEFAULT"
+end
 local DEBUFF_TYPE_BORDER_PREVIEW_ATLAS = {
     BORDER = "ui-debuff-border-magic-noicon",
     SYMBOL = "ui-debuff-border-magic-icon",
@@ -643,10 +656,6 @@ local function GFReadGroup(scope, groupKey)
     local kind = GroupScopeKinds(scope)
     return GFAuraGroup(kind, groupKey)
 end
-local function GFReadConf(scope)
-    local kind = GroupScopeKinds(scope)
-    return GroupConf(kind)
-end
 local function GFWriteScopeValue(scope, mode, getTarget, key, value)
     local changed
     local a, b = GroupScopeKinds(scope)
@@ -681,9 +690,6 @@ local function GFWriteGroupValues(scope, groupKey, values, mode)
 end
 local function GFWriteRootValue(scope, key, value, mode)
     GFWriteScopeValue(scope, mode, GFAurasRoot, key, value)
-end
-local function GFWriteConfValue(scope, key, value, mode)
-    GFWriteScopeValue(scope, mode, GroupConf, key, value)
 end
 local function AuraFilter()
     local gf = GF()
@@ -774,20 +780,6 @@ local function BindGroupRootSwitch(ctx, parent, label, x, y, width, scope, key, 
         end,
         AuraControlMeta(ctx, "group-style.root." .. AuraCatalogToken(key)))
 end
-local function BindGroupConfSwitch(ctx, parent, label, x, y, width, scope, key, defaultValue, mode, afterSet)
-    return BindSwitch(ctx, parent, label, x, y, width,
-        function()
-            local conf = GFReadConf(scope)
-            local value = conf[key]
-            if value == nil then value = defaultValue end
-            return value and true or false
-        end,
-        function(v)
-            GFWriteConfValue(scope, key, v and true or false, mode or "visual")
-            if afterSet then afterSet(v and true or false) end
-        end,
-        AuraControlMeta(ctx, "group-style.config." .. AuraCatalogToken(key)))
-end
 local function BindGroupSlider(ctx, parent, label, x, y, minVal, maxVal, step, width, scope, groupKey, key, defaultValue, mode, afterSet)
     return BindSlider(ctx, parent, label, x, y, minVal, maxVal, step, width,
         function()
@@ -807,11 +799,13 @@ local function BindGroupDropdown(ctx, parent, label, x, y, values, width, scope,
             local group = GFReadGroup(scope, groupKey)
             local value = group[key] or defaultValue
             if key == "filterToken" then value = CanonicalGroupFilterValue(value) end
+            if key == "sortMethod" then value = NormalizeAuraSortMethodForLane(groupKey, value) end
             return value
         end,
         function(v)
             local value = v or defaultValue
             if key == "filterToken" then value = CanonicalGroupFilterValue(value) end
+            if key == "sortMethod" then value = NormalizeAuraSortMethodForLane(groupKey, value) end
             GFWriteGroupValue(scope, groupKey, key, value, mode or "visual")
             if afterSet then afterSet(value) end
         end,
@@ -1413,6 +1407,23 @@ local function BuildUnitStyle(ctx, b, scope)
     local function WriteScopeSwipeDirection(value)
         WriteScopeBool("cooldownSwipeReverse", value == "REVERSE")
     end
+    local function ReadScopeSortMethod()
+        local value = type(Model.ReadLaneStyleString) == "function"
+            and Model.ReadLaneStyleString(unit, lane, "sortMethod", "DEFAULT") or "DEFAULT"
+        return NormalizeAuraSortMethodForLane(lane, value)
+    end
+    local function WriteScopeSortMethod(value)
+        value = NormalizeAuraSortMethodForLane(lane, value)
+        if type(Model.WriteLaneStyleString) == "function" then
+            Model.WriteLaneStyleString(unit, lane, "sortMethod", value)
+        end
+    end
+    local function ReadScopeSortDirection()
+        return ReadScopeBool("sortReverse", false) and "REVERSE" or "NORMAL"
+    end
+    local function WriteScopeSortDirection(value)
+        WriteScopeBool("sortReverse", value == "REVERSE")
+    end
     local function ReadScopeDurationBarDisplay()
         if type(Model.ReadLaneDurationBarDisplay) == "function" then return Model.ReadLaneDurationBarDisplay(unit, lane) end
         local value = Model.ReadValue and Model.ReadValue(unit, "durationBarDisplay", "BAR_ONLY") or "BAR_ONLY"
@@ -1569,6 +1580,17 @@ local function BuildUnitStyle(ctx, b, scope)
         type(Model.DurationBarDirectionValues) == "function" and Model.DurationBarDirectionValues() or DURATION_BAR_DIRECTION_VALUES,
         dbw - 48, ReadScopeDurationBarDirection, WriteScopeDurationBarDirection, "AURAS3_DURATION_BAR_DIRECTION")
 
+    local behavior = b:CollapsibleSection(baseId .. "_behavior", LaneTitle(lane) .. " Ordering", 220, false)
+    local bw = BodyWidth(behavior)
+    W.Text(behavior, "Choose how Blizzard prioritizes " .. scopeLabel .. " " .. laneName .. ". Player-first methods say so explicitly.", 24, -42, bw - 48, T.colors.muted)
+    local sortMethod = BindStyleDropdown(behavior, "Sort By", 24, -82, AuraSortMethodValues(lane), bw - 48,
+        ReadScopeSortMethod, WriteScopeSortMethod, "AURAS3_SORT_METHOD")
+    AddTooltip(sortMethod, "Aura sorting", "Uses WoW 12.1's native AuraContainer sorting. Specialized buff and debuff methods are only shown where they are meaningful.")
+    local sortDirection = BindStyleDropdown(behavior, "Order", 24, -140, AURA_SORT_DIRECTION_VALUES, bw - 48,
+        ReadScopeSortDirection, WriteScopeSortDirection, "AURAS3_SORT_DIRECTION")
+    AddTooltip(sortDirection, "Aura sort order", "Reversed swaps the selected Blizzard comparator's complete priority order.")
+    W.Text(behavior, "Sorting stays inside Blizzard's protected aura pipeline; MSUF does not read aura values in Lua.", 24, -198, bw - 48, T.colors.muted)
+
     M.TrackRefresh(ctx, function()
         local editable = unit == "shared" or not Model.UseSharedVisuals(unit)
         W.SetControlsEnabled(styleControls, editable)
@@ -1674,13 +1696,24 @@ local function BuildGroupStyle(ctx, b, scope)
     BindGroupSlider(ctx, stack, "Stack X", 24, -210, -40, 40, 1, stackSmallW, scope, lane, "stackX", 0, "geometry", RefreshStylePreview)
     BindGroupSlider(ctx, stack, "Stack Y", 32 + stackSmallW, -210, -40, 40, 1, stackSmallW, scope, lane, "stackY", 0, "geometry", RefreshStylePreview)
 
-    local behavior = b:CollapsibleSection(baseId .. "_behavior", LaneTitle(lane) .. " Behavior", 220, false)
+    local behavior = b:CollapsibleSection(baseId .. "_behavior", LaneTitle(lane) .. " Ordering", 252, false)
     local bw = BodyWidth(behavior)
-    W.Text(behavior, "Behavior for " .. scopeLabel .. ".", 24, -42, bw - 48, T.colors.muted)
-    BindGroupRootSwitch(ctx, behavior, "Sort by Duration", 24, -82, bw - 48, scope, "sortByDuration", false, "visual")
-    BindGroupRootSwitch(ctx, behavior, "Prefer Player Auras", 24, -114, bw - 48, scope, "preferPlayer", false, "visual")
-    BindGroupRootSwitch(ctx, behavior, "Dynamic Icon Scale", 24, -146, bw - 48, scope, "dynamicScale", false, "geometry", RefreshStylePreview)
-    BindGroupConfSwitch(ctx, behavior, "Cooldown darkens on loss", 24, -188, bw - 48, scope, "cooldownSwipeDarkenOnLoss", false, "visual", RefreshStylePreview)
+    W.Text(behavior, "Choose how Blizzard prioritizes " .. scopeLabel .. " " .. laneName .. ". Player-first methods say so explicitly.", 24, -42, bw - 48, T.colors.muted)
+    local groupSortMethod = BindGroupDropdown(ctx, behavior, "Sort By", 24, -82, AuraSortMethodValues(lane), bw - 48,
+        scope, lane, "sortMethod", "DEFAULT", "visual")
+    AddTooltip(groupSortMethod, "Aura sorting", "Uses WoW 12.1's native AuraContainer sorting. Specialized buff and debuff methods are only shown where they are meaningful.")
+    local groupSortDirection = BindDropdown(ctx, behavior, "Order", 24, -140, AURA_SORT_DIRECTION_VALUES, bw - 48,
+        function()
+            local group = GFReadGroup(scope, lane)
+            return group.sortReverse == true and "REVERSE" or "NORMAL"
+        end,
+        function(v)
+            GFWriteGroupValue(scope, lane, "sortReverse", v == "REVERSE", "visual")
+        end,
+        AuraControlMeta(ctx, "group-style.lane." .. AuraCatalogToken(lane) .. ".sort-direction"))
+    AddTooltip(groupSortDirection, "Aura sort order", "Reversed swaps the selected Blizzard comparator's complete priority order.")
+    BindGroupRootSwitch(ctx, behavior, "Scale Icons for Large Groups", 24, -198, bw - 48, scope, "dynamicScale", false, "geometry", RefreshStylePreview)
+    W.Text(behavior, "Large groups use 85% icon scale above 15 members and 70% above 25.", 24, -230, bw - 48, T.colors.muted)
 end
 local function EnsureCustomPreviewEffect(box)
     if box._msufCustomEffectOverlay then return box._msufCustomEffectOverlay, box._msufCustomEffectEdges, box._msufCustomEffectName end
@@ -2933,8 +2966,8 @@ end
 
 -- Appearance keeps the scope-aware style editor. Old content/filter routes remain
 -- as compatibility landings and direct users to the matching frame Aura menu.
-M.RegisterPage("auras3_buffs", { title = "Aura Style: Buffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "buff") end, version = 22 })
-M.RegisterPage("auras3_debuffs", { title = "Aura Style: Debuffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "debuff") end, version = 22 })
+M.RegisterPage("auras3_buffs", { title = "Aura Style: Buffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "buff") end, version = 23 })
+M.RegisterPage("auras3_debuffs", { title = "Aura Style: Debuffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "debuff") end, version = 23 })
 M.RegisterPage("auras3_custom", { title = "MSUF Auras", build = BuildMovedAuraPage, version = 2 })
-M.RegisterPage("auras3_styling", { title = "Aura Style", build = BuildAuraStylePage, version = 45 })
+M.RegisterPage("auras3_styling", { title = "Aura Style", build = BuildAuraStylePage, version = 46 })
 M.RegisterPage("auras3_filters", { title = "MSUF Auras", build = BuildMovedAuraPage, version = 31 })

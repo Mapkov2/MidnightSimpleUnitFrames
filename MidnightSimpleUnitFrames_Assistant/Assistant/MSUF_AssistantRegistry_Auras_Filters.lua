@@ -29,19 +29,75 @@ function A.AurasRegistry.RegisterFilterSettings(ctx, scope)
     local AuraReadFilter = ctx.AuraReadFilter
     local AuraWriteFilter = ctx.AuraWriteFilter
     local AuraModel = ctx.AuraModel
+    local EnsureAuraFallbackDB = ctx.EnsureAuraFallbackDB
     local ApplyAura = ctx.ApplyAura
 
     if not (Registry and type(Registry.RegisterSetting) == "function") then return end
     if type(AddAliasesForAuraScope) ~= "function" or type(AddAuraLaneAliases) ~= "function" then return end
     if type(AuraScopeLabel) ~= "function" or type(RegisterAuraScopeBoolean) ~= "function" then return end
+    local scopePage = scope == "shared" and "uf_player" or ("uf_" .. tostring(scope))
+
+    local function AddAlias(out, value)
+        if type(value) == "string" and value ~= "" then out[#out + 1] = value end
+    end
+
+    local function AddNoTimerAliases(out, settingScope, settingLane)
+        local scopeLabel = tostring(AuraScopeLabel(settingScope) or settingScope):lower()
+        local lanePlural = settingLane == "buff" and "buffs" or "debuffs"
+        AddAlias(out, scopeLabel .. " " .. lanePlural .. " with no timer")
+        AddAlias(out, scopeLabel .. " " .. lanePlural .. " without a timer")
+        AddAlias(out, scopeLabel .. " " .. lanePlural .. " without timers")
+        AddAlias(out, scopeLabel .. " " .. lanePlural .. " that have no timer")
+        AddAlias(out, scopeLabel .. " " .. lanePlural .. " with no duration")
+        AddAlias(out, scopeLabel .. " " .. lanePlural .. " without a duration")
+        AddAlias(out, scopeLabel .. " " .. lanePlural .. " without duration")
+        AddAlias(out, scopeLabel .. " permanent " .. lanePlural)
+        AddAlias(out, "no timer " .. lanePlural .. " on " .. scopeLabel)
+        AddAlias(out, "no duration " .. lanePlural .. " on " .. scopeLabel)
+        AddAlias(out, "hide permanent " .. scopeLabel .. " " .. lanePlural)
+        AddAlias(out, scopeLabel .. " frame " .. lanePlural .. " without timers")
+    end
+
+    local function FallbackHidePermanent(settingScope, settingLane, create, value)
+        if type(EnsureAuraFallbackDB) ~= "function" then return false end
+        local auras = EnsureAuraFallbackDB()
+        local unit = tostring(settingScope)
+        local pu = type(auras.perUnit) == "table" and auras.perUnit[unit] or nil
+        if create and type(pu) ~= "table" then
+            pu = {}
+            auras.perUnit[unit] = pu
+        end
+        if type(pu) ~= "table" then return false end
+        if create and type(pu.blacklist) ~= "table" then pu.blacklist = {} end
+        local blacklist = pu.blacklist
+        if type(blacklist) ~= "table" then return false end
+        local laneKey = settingLane == "buff" and "buffs" or "debuffs"
+        if create and type(blacklist[laneKey]) ~= "table" then blacklist[laneKey] = {} end
+        local laneList = blacklist[laneKey]
+        if type(laneList) ~= "table" then return false end
+        if create then laneList.hidePermanent = value == true end
+        return laneList.hidePermanent == true
+    end
 
     local aliases = {}
+    AddAlias(aliases, tostring(AuraScopeLabel(scope)):lower() .. " aura filter gate")
+    AddAlias(aliases, tostring(AuraScopeLabel(scope)):lower() .. " blizzard aura filters")
+    AddAlias(aliases, tostring(AuraScopeLabel(scope)):lower() .. " buff and debuff filters")
+    AddAlias(aliases, tostring(AuraScopeLabel(scope)):lower() .. " filter evaluation")
     AddAliasesForAuraScope(aliases, scope, "filters")
     AddAliasesForAuraScope(aliases, scope, "enable filters")
     RegisterAuraScopeBoolean(scope, "filtersEnabled", "Filters Enabled", true, aliases,
         function() return AuraFiltersEnabled(scope) end,
         function(value) AuraSetFiltersEnabled(scope, value) end,
-        false)
+        false,
+        nil,
+        {
+            page = scopePage,
+            description = (scope == "shared"
+                    and "Master gate for Shared Blizzard aura filter tokens. Unit scopes that follow Shared Rules use this gate. "
+                    or "Master gate for this unit's Blizzard aura filter tokens. Changing it creates or updates this unit's own filter rules. ")
+                .. "It does not show or hide the Buff or Debuff lane, and Hide Permanent remains active independently.",
+        })
 
     for i = 1, #AURA_FILTER_BOOLEAN_SPECS do
         local spec = AURA_FILTER_BOOLEAN_SPECS[i]
@@ -51,6 +107,10 @@ function A.AurasRegistry.RegisterFilterSettings(ctx, scope)
             key = "auras3." .. scope .. "." .. spec.lane .. ".filter." .. spec.key,
             label = AuraScopeLabel(scope) .. " " .. spec.label,
             category = AuraScopeLabel(scope) .. " / Aura Filters",
+            page = scopePage,
+            description = "Blizzard token filter for " .. tostring(AuraScopeLabel(scope)) .. " "
+                .. (spec.lane == "buff" and "Buffs" or "Debuffs")
+                .. ". It is evaluated only while Filters Enabled is on; it does not show or hide the aura lane.",
             unit = scope,
             frameType = "aura",
             attribute = "aura" .. spec.lane .. "Filter" .. spec.key,
@@ -89,6 +149,9 @@ function A.AurasRegistry.RegisterFilterSettings(ctx, scope)
             key = "auras3." .. settingScope .. "." .. settingLane .. ".filter.exclusive",
             label = AuraScopeLabel(settingScope) .. " " .. laneInfo.label .. " Exclusive Filter",
             category = AuraScopeLabel(settingScope) .. " / Aura Filters",
+            page = scopePage,
+            description = "Chooses the exclusive Blizzard token filter for " .. tostring(AuraScopeLabel(settingScope))
+                .. " " .. laneInfo.plural .. ". It is evaluated only while Filters Enabled is on and does not control lane visibility.",
             unit = settingScope,
             frameType = "aura",
             attribute = "aura" .. settingLane .. "FilterExclusive",
@@ -112,10 +175,15 @@ function A.AurasRegistry.RegisterFilterSettings(ctx, scope)
             local hideAliases = {}
             AddAuraLaneAliases(hideAliases, settingScope, settingLane, "hide permanent auras")
             AddAuraLaneAliases(hideAliases, settingScope, settingLane, "hide permanent")
+            AddNoTimerAliases(hideAliases, settingScope, settingLane)
             Registry:RegisterSetting({
                 key = "auras3." .. settingScope .. "." .. settingLane .. ".blacklist.hidePermanent",
                 label = AuraScopeLabel(settingScope) .. " " .. laneInfo.label .. " Hide Permanent Auras",
                 category = AuraScopeLabel(settingScope) .. " / Aura Filters",
+                page = scopePage,
+                description = "Hides " .. tostring(AuraScopeLabel(settingScope)) .. " " .. laneInfo.plural
+                    .. " that have no finite duration (also called permanent or no-timer auras). This rule remains active when Filters Enabled is off and does not hide the entire "
+                    .. laneInfo.label:lower() .. " lane.",
                 unit = settingScope,
                 frameType = "aura",
                 attribute = "aura" .. settingLane .. "BlacklistHidePermanent",
@@ -123,11 +191,17 @@ function A.AurasRegistry.RegisterFilterSettings(ctx, scope)
                 aliases = hideAliases,
                 get = function()
                     local Model = AuraModel()
-                    return Model and Model.ReadBlacklistHidePermanent(settingScope, settingLane) == true or false
+                    if Model and type(Model.ReadBlacklistHidePermanent) == "function" then
+                        return Model.ReadBlacklistHidePermanent(settingScope, settingLane) == true
+                    end
+                    return FallbackHidePermanent(settingScope, settingLane, false)
                 end,
                 set = function(value)
                     local Model = AuraModel()
-                    if Model then Model.WriteBlacklistHidePermanent(settingScope, settingLane, value == true) end
+                    if Model and type(Model.WriteBlacklistHidePermanent) == "function" then
+                        Model.WriteBlacklistHidePermanent(settingScope, settingLane, value == true)
+                    end
+                    FallbackHidePermanent(settingScope, settingLane, true, value)
                 end,
                 apply = function() ApplyAura(settingScope, "MSUF_ASSISTANT_AURA_HIDE_PERMANENT") end,
                 combatSafe = false,

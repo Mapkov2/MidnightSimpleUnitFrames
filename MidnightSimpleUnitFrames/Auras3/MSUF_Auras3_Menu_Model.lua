@@ -215,6 +215,8 @@ local SHARED_LAYOUT_KEYS = {
     useDebuffTypeBorders = true,
     buffShowCooldownSwipe = true,
     buffCooldownSwipeReverse = true,
+    buffSortMethod = true,
+    buffSortReverse = true,
     buffShowDurationBar = true,
     buffDurationBarDisplay = true,
     buffDurationBarPosition = true,
@@ -226,6 +228,8 @@ local SHARED_LAYOUT_KEYS = {
     buffCooldownTextAnchor = true,
     debuffShowCooldownSwipe = true,
     debuffCooldownSwipeReverse = true,
+    debuffSortMethod = true,
+    debuffSortReverse = true,
     debuffShowDurationBar = true,
     debuffDurationBarDisplay = true,
     debuffDurationBarPosition = true,
@@ -267,6 +271,8 @@ local STYLE_SHARED_LAYOUT_KEYS = {
     useDebuffTypeBorders = true,
     buffShowCooldownSwipe = true,
     buffCooldownSwipeReverse = true,
+    buffSortMethod = true,
+    buffSortReverse = true,
     buffShowDurationBar = true,
     buffDurationBarDisplay = true,
     buffDurationBarPosition = true,
@@ -278,6 +284,8 @@ local STYLE_SHARED_LAYOUT_KEYS = {
     buffCooldownTextAnchor = true,
     debuffShowCooldownSwipe = true,
     debuffCooldownSwipeReverse = true,
+    debuffSortMethod = true,
+    debuffSortReverse = true,
     debuffShowDurationBar = true,
     debuffDurationBarDisplay = true,
     debuffDurationBarPosition = true,
@@ -329,6 +337,8 @@ local LANE_STYLE_KEYS = {
     buff = {
         showCooldownSwipe = "buffShowCooldownSwipe",
         cooldownSwipeReverse = "buffCooldownSwipeReverse",
+        sortMethod = "buffSortMethod",
+        sortReverse = "buffSortReverse",
         showDurationBar = "buffShowDurationBar",
         durationBarHeight = "buffDurationBarHeight",
         durationBarDisplay = "buffDurationBarDisplay",
@@ -350,6 +360,8 @@ local LANE_STYLE_KEYS = {
     debuff = {
         showCooldownSwipe = "debuffShowCooldownSwipe",
         cooldownSwipeReverse = "debuffCooldownSwipeReverse",
+        sortMethod = "debuffSortMethod",
+        sortReverse = "debuffSortReverse",
         showDurationBar = "debuffShowDurationBar",
         durationBarHeight = "debuffDurationBarHeight",
         durationBarDisplay = "debuffDurationBarDisplay",
@@ -394,6 +406,8 @@ local DEFAULT_SHARED = {
     useDebuffTypeBorders = false,
     buffShowCooldownSwipe = true,
     buffCooldownSwipeReverse = false,
+    buffSortMethod = "DEFAULT",
+    buffSortReverse = false,
     buffShowDurationBar = false,
     buffDurationBarHeight = 2,
     buffDurationBarDisplay = "BAR_ONLY",
@@ -404,6 +418,8 @@ local DEFAULT_SHARED = {
     buffShowStackCount = true,
     debuffShowCooldownSwipe = true,
     debuffCooldownSwipeReverse = false,
+    debuffSortMethod = "DEFAULT",
+    debuffSortReverse = false,
     debuffShowDurationBar = false,
     debuffDurationBarHeight = 2,
     debuffDurationBarDisplay = "BAR_ONLY",
@@ -1820,6 +1836,17 @@ end
 
 function Model.WriteLaneStyleBool(unit, kind, key, value)
     Model.WriteValue(unit, LaneStyleKey(kind, key), value and true or false)
+end
+
+function Model.ReadLaneStyleString(unit, kind, key, defaultValue)
+    local laneKey = LaneStyleKey(kind, key)
+    local value = Model.ReadValue(unit, laneKey, nil)
+    if value == nil and laneKey ~= key then value = Model.ReadValue(unit, key, defaultValue) end
+    return tostring(value or defaultValue or "")
+end
+
+function Model.WriteLaneStyleString(unit, kind, key, value)
+    Model.WriteValue(unit, LaneStyleKey(kind, key), tostring(value or ""))
 end
 
 function Model.ReadDebuffTypeBorderMode(unit)

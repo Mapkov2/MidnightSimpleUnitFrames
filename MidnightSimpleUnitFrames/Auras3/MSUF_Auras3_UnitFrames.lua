@@ -13,18 +13,6 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
     return value
 end
 
-local function ProfBegin(name)
-    if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
-        return MSUF.ProfBegin(name)
-    end
-end
-
-local function ProfEnd(name, token)
-    if token and MSUF and MSUF.ProfEnd then
-        MSUF.ProfEnd(name, token)
-    end
-end
-
 local A3 = MSUF.MSUF_Auras3
 if type(A3) ~= "table" then
     A3 = {}
@@ -33,66 +21,6 @@ end
 ExportPublic("MSUF_Auras3", A3)
 local SpellIndicatorsRuntime = A3.SpellIndicators or {}
 A3.SpellIndicators = SpellIndicatorsRuntime
-
-function A3._TraceContext()
-    local trace = A3 and A3.PerfTrace
-    if trace and trace.enabled == true and type(trace.Begin) == "function" and type(trace.End) == "function" then
-        return trace
-    end
-end
-
-function A3._TraceLaneDetail(lane, suffix)
-    if not lane then return tostring(suffix or "") end
-    local detail = tostring(lane.unit or "?") .. ":" .. tostring(lane.kind or lane.rootKey or "?")
-    if suffix ~= nil and suffix ~= "" then detail = detail .. ":" .. tostring(suffix) end
-    return detail
-end
-
-function A3._TraceFrameDetail(frame, reason)
-    local detail = tostring(frame and frame.unit or "?")
-    if reason ~= nil and reason ~= "" then detail = detail .. ":" .. tostring(reason) end
-    return detail
-end
-
-function A3._TraceContainerDetail(container, suffix)
-    if not container then return tostring(suffix or "") end
-    local lane = container._msufA3NativeLane
-        or (container._msufA3NativeLaneConfig and container._msufA3NativeLaneConfig.kind)
-        or "?"
-    local detail = tostring(container.unit or "?") .. ":" .. tostring(lane)
-    if suffix ~= nil and suffix ~= "" then detail = detail .. ":" .. tostring(suffix) end
-    return detail
-end
-
-function A3._TraceBegin(name, detail)
-    local trace = A3._TraceContext()
-    if trace then return trace.Begin(name, detail) end
-end
-
-function A3._TraceBeginLane(name, lane, suffix)
-    local trace = A3._TraceContext()
-    if trace then return trace.Begin(name, A3._TraceLaneDetail(lane, suffix)) end
-end
-
-function A3._TraceBeginFrame(name, frame, reason)
-    local trace = A3._TraceContext()
-    if trace then return trace.Begin(name, A3._TraceFrameDetail(frame, reason)) end
-end
-
-function A3._TraceBeginContainer(name, container, suffix)
-    local trace = A3._TraceContext()
-    if trace then return trace.Begin(name, A3._TraceContainerDetail(container, suffix)) end
-end
-
-function A3._TraceEnd(token)
-    local trace = token and A3._TraceContext()
-    if trace then trace.End(token) end
-end
-
-function A3._TraceFinish(token, ...)
-    A3._TraceEnd(token)
-    return ...
-end
 
 local UF = MSUF.UF
 if not (UF and UF.RegisterElement) then return end
@@ -142,6 +70,7 @@ local COLD_APPLY_REASONS = {
 local RefreshAppliedNativeRoot
 local EnsureNativeAuraRefreshDriver
 local ApplyLane
+local NormalizeAuraSortMethod, AuraSortEnums, AuraSortSignature
 
 local MANAGED_UNITS = {
     player = true, target = true, focus = true,
@@ -167,6 +96,8 @@ local DEFAULT_SHARED = {
     debuffShowTooltip = true,
     showCooldownSwipe = true,
     cooldownSwipeReverse = false,
+    sortMethod = "DEFAULT",
+    sortReverse = false,
     showDurationBar = false,
     durationBarHeight = 2,
     durationBarDisplay = "BAR_ONLY",
@@ -222,6 +153,8 @@ local LANE_SPECS = {
         showTextKey = "buffShowCooldownText",
         swipeKey = "buffShowCooldownSwipe",
         swipeReverseKey = "buffCooldownSwipeReverse",
+        sortMethodKey = "buffSortMethod",
+        sortReverseKey = "buffSortReverse",
         showDurationBarKey = "buffShowDurationBar",
         durationBarHeightKey = "buffDurationBarHeight",
         durationBarDisplayKey = "buffDurationBarDisplay",
@@ -258,6 +191,8 @@ local LANE_SPECS = {
         showTextKey = "debuffShowCooldownText",
         swipeKey = "debuffShowCooldownSwipe",
         swipeReverseKey = "debuffCooldownSwipeReverse",
+        sortMethodKey = "debuffSortMethod",
+        sortReverseKey = "debuffSortReverse",
         showDurationBarKey = "debuffShowDurationBar",
         durationBarHeightKey = "debuffDurationBarHeight",
         durationBarDisplayKey = "debuffDurationBarDisplay",
@@ -307,6 +242,22 @@ local STYLE_LAYOUT_KEYS = {
 }
 
 local STYLE_SHARED_LAYOUT_KEYS = {
+    -- Per-unit imports (notably UUF) may legitimately use different lane
+    -- visibility, counts, wrapping, and growth. These values live in
+    -- layoutShared so they can override the shared profile without changing
+    -- unrelated units.
+    showBuffs = true,
+    showDebuffs = true,
+    maxBuffs = true,
+    maxDebuffs = true,
+    buffPerRow = true,
+    debuffPerRow = true,
+    growth = true,
+    rowWrap = true,
+    buffGrowthX = true,
+    buffGrowthY = true,
+    debuffGrowthX = true,
+    debuffGrowthY = true,
     showTooltip = true,
     showCooldownSwipe = true,
     cooldownSwipeReverse = true,
@@ -359,6 +310,7 @@ local GROUP_LANE_SPECS = {
         hidePermanentKey = "buffHidePermanent",
         showTextKey = "buffShowCooldown", showStackKey = "buffShowStacks", swipeKey = "buffShowCooldownSwipe",
         swipeReverseKey = "buffCooldownSwipeReverse", tooltipKey = "buffShowTooltip",
+        sortMethodKey = "buffSortMethod", sortReverseKey = "buffSortReverse",
         showDurationBarKey = "buffShowDurationBar", durationBarHeightKey = "buffDurationBarHeight",
         durationBarDisplayKey = "buffDurationBarDisplay",
         durationBarPositionKey = "buffDurationBarPosition", durationBarDirectionKey = "buffDurationBarDirection",
@@ -381,6 +333,7 @@ local GROUP_LANE_SPECS = {
         hidePermanentKey = "trackedBuffHidePermanent",
         showTextKey = "trackedBuffShowCooldown", showStackKey = "trackedBuffShowStacks", swipeKey = "trackedBuffShowCooldownSwipe",
         swipeReverseKey = "trackedBuffCooldownSwipeReverse", tooltipKey = "trackedBuffShowTooltip",
+        sortMethodKey = "trackedBuffSortMethod", sortReverseKey = "trackedBuffSortReverse",
         showDurationBarKey = "trackedBuffShowDurationBar", durationBarHeightKey = "trackedBuffDurationBarHeight",
         durationBarDisplayKey = "trackedBuffDurationBarDisplay",
         durationBarPositionKey = "trackedBuffDurationBarPosition", durationBarDirectionKey = "trackedBuffDurationBarDirection",
@@ -403,6 +356,7 @@ local GROUP_LANE_SPECS = {
         hidePermanentKey = "debuffHidePermanent",
         showTextKey = "debuffShowCooldown", showStackKey = "debuffShowStacks", swipeKey = "debuffShowCooldownSwipe",
         swipeReverseKey = "debuffCooldownSwipeReverse", tooltipKey = "debuffShowTooltip",
+        sortMethodKey = "debuffSortMethod", sortReverseKey = "debuffSortReverse",
         showDurationBarKey = "debuffShowDurationBar", durationBarHeightKey = "debuffDurationBarHeight",
         durationBarDisplayKey = "debuffDurationBarDisplay",
         durationBarPositionKey = "debuffDurationBarPosition", durationBarDirectionKey = "debuffDurationBarDirection",
@@ -425,6 +379,7 @@ local GROUP_LANE_SPECS = {
         hidePermanentKey = "externalHidePermanent",
         showTextKey = "externalShowCooldown", showStackKey = "externalShowStacks", swipeKey = "externalShowCooldownSwipe",
         swipeReverseKey = "externalCooldownSwipeReverse", tooltipKey = "externalShowTooltip",
+        sortMethodKey = "externalSortMethod", sortReverseKey = "externalSortReverse",
         showDurationBarKey = "externalShowDurationBar", durationBarHeightKey = "externalDurationBarHeight",
         durationBarDisplayKey = "externalDurationBarDisplay",
         durationBarPositionKey = "externalDurationBarPosition", durationBarDirectionKey = "externalDurationBarDirection",
@@ -1119,6 +1074,8 @@ local function CompileUnitLane(unit, shared, layout, filtersRoot, kind, candidat
         showCooldownText = ReadBool(layout, shared, spec.showTextKey, ReadBool(layout, shared, "showCooldownText", true)),
         showCooldownSwipe = ReadBool(layout, shared, spec.swipeKey, ReadBool(layout, shared, "showCooldownSwipe", true)),
         cooldownSwipeReverse = ReadBool(layout, shared, spec.swipeReverseKey, ReadBool(layout, shared, "cooldownSwipeReverse", false)),
+        sortMethod = NormalizeAuraSortMethod(ReadRaw(layout, shared, spec.sortMethodKey) or ReadRaw(layout, shared, "sortMethod")),
+        sortReverse = ReadBool(layout, shared, spec.sortReverseKey, ReadBool(layout, shared, "sortReverse", false)),
         showDurationBar = ReadBool(layout, shared, spec.showDurationBarKey, ReadBool(layout, shared, "showDurationBar", false)),
         durationBarHeight = ReadNumber(layout, shared, spec.durationBarHeightKey, ReadRaw(layout, shared, "durationBarHeight") or DEFAULT_SHARED.durationBarHeight, 1, 16),
         durationBarDisplay = ReadDurationBarDisplay(shared, nil, spec.durationBarDisplayKey, ReadRaw(shared, nil, "durationBarDisplay") or DEFAULT_SHARED.durationBarDisplay),
@@ -1198,6 +1155,8 @@ local function CompileGroupLane(unit, source, kind)
         showCooldownText = source[spec.showTextKey] ~= false,
         showCooldownSwipe = source[spec.swipeKey] ~= false,
         cooldownSwipeReverse = cooldownSwipeReverse == true,
+        sortMethod = NormalizeAuraSortMethod(source[spec.sortMethodKey] or source.sortMethod),
+        sortReverse = source[spec.sortReverseKey] == true or (source[spec.sortReverseKey] == nil and source.sortReverse == true),
         showDurationBar = source[spec.showDurationBarKey] == true or source.showDurationBar == true,
         durationBarHeight = ClampNumber(source[spec.durationBarHeightKey] or source.durationBarHeight, DEFAULT_SHARED.durationBarHeight, 1, 16),
         durationBarDisplay = NormalizeDurationBarDisplay(source[spec.durationBarDisplayKey] or source.durationBarDisplay, DEFAULT_SHARED.durationBarDisplay),
@@ -1653,6 +1612,52 @@ local function ResolveGroupFrameConfig(frame, unit)
     return cfg
 end
 
+local AURA_SORT_METHOD_FIELDS = {
+    DEFAULT = "Default",
+    BIG_DEFENSIVE = "BigDefensive",
+    UNIT_FRAME_DEBUFF = "UnitFrameDebuff",
+    IMPORTANT_FIRST = "ImportantOnly",
+    EXPIRATION = "Expiration",
+    EXPIRATION_ONLY = "ExpirationOnly",
+    NAME = "Name",
+    NAME_ONLY = "NameOnly",
+}
+
+local AURA_SORT_METHOD_FALLBACKS = {
+    DEFAULT = 0,
+    BIG_DEFENSIVE = 1,
+    UNIT_FRAME_DEBUFF = 2,
+    IMPORTANT_FIRST = 3,
+    EXPIRATION = 4,
+    EXPIRATION_ONLY = 5,
+    NAME = 6,
+    NAME_ONLY = 7,
+}
+
+NormalizeAuraSortMethod = function(value)
+    value = tostring(value or DEFAULT_SHARED.sortMethod):upper():gsub("[%s%-]+", "_")
+    if value == "BIGDEFENSIVE" then value = "BIG_DEFENSIVE" end
+    if value == "UNITFRAMEDEBUFF" then value = "UNIT_FRAME_DEBUFF" end
+    if value == "IMPORTANTONLY" or value == "IMPORTANT" then value = "IMPORTANT_FIRST" end
+    if value == "EXPIRATIONONLY" then value = "EXPIRATION_ONLY" end
+    if value == "NAMEONLY" then value = "NAME_ONLY" end
+    return AURA_SORT_METHOD_FIELDS[value] and value or DEFAULT_SHARED.sortMethod
+end
+
+AuraSortEnums = function(lane)
+    local methodKey = NormalizeAuraSortMethod(lane and lane.sortMethod)
+    local methodEnums = _G.AuraContainerSortMethod
+    local directionEnums = _G.AuraContainerSortDirection
+    local method = methodEnums and methodEnums[AURA_SORT_METHOD_FIELDS[methodKey]] or AURA_SORT_METHOD_FALLBACKS[methodKey]
+    local reverse = lane and lane.sortReverse == true
+    local direction = directionEnums and directionEnums[reverse and "Reverse" or "Normal"] or (reverse and 1 or 0)
+    return method, direction
+end
+
+AuraSortSignature = function(lane)
+    return NormalizeAuraSortMethod(lane and lane.sortMethod) .. ":" .. (lane and lane.sortReverse == true and "R" or "N")
+end
+
 local function FrameAuraConfig(frame, unit)
     if IsGroupFrame(frame) then
         return ResolveGroupFrameConfig(frame, unit or frame.unit)
@@ -1932,6 +1937,7 @@ local PTR4_AURA_CONTAINER_METHODS = {
     "SetAuraGroupLayout",
     "SetAuraGroupMaxFrameCount",
     "SetAuraGroupCandidateFilters",
+    "SetAuraGroupSortMethod",
     "AddAuraSlot",
     "SetAuraSlotCandidateFilters",
     "AddItemEnchantment",
@@ -2371,7 +2377,6 @@ local function SyncContainerGeometry(container, lane, parentFrame)
 end
 
 local function PrepareAuraButton(button, lane, index)
-    local traceToken = A3._TraceBeginLane("MSUF.PrepareAuraButton", lane, index)
     ValidatePTR4AuraButtonContract(button)
     button._msufA3NativeButton = true
     button._msufA3LaneKind = lane.kind
@@ -2555,7 +2560,6 @@ local function PrepareAuraButton(button, lane, index)
     SyncButtonGeometry(button, lane, index)
     SyncCooldownTextLayering(button)
     button._msufA3LaneLayoutSignature = lane._msufA3LayoutSignature
-    A3._TraceEnd(traceToken)
 end
 
 local function DispelSensorTarget(parentFrame, sensor)
@@ -2701,9 +2705,12 @@ end
 
 local function BuildManagedAuraGroupOptions(container, lane)
     local nextIndex = 0
+    local sortMethod, sortDirection = AuraSortEnums(lane)
     return {
         maxFrameCount = lane.max,
         candidateFilters = lane.candidateFilters,
+        sortMethod = sortMethod,
+        sortDirection = sortDirection,
         initializeFrame = function(button)
             nextIndex = nextIndex + 1
             button._msufA3ManagedAuraButton = true
@@ -2800,9 +2807,8 @@ local function CreateManagedNativeLane(container, lane, parentFrame)
     container.createdButtons = lane.max or 0
     ConfigurePTR4AuraContainer(container, lane.unit)
 
-    local addGroupToken = A3._TraceBeginLane("MSUF.AddAuraGroup", lane, container._msufA3ManagedGroupKey)
     container:AddAuraGroup(container._msufA3ManagedGroupKey, lane.nativeFilter, BuildManagedAuraGroupOptions(container, lane))
-    A3._TraceEnd(addGroupToken)
+    container._msufA3SortSignature = AuraSortSignature(lane)
     if not ApplyManagedAuraGroupLayout(container, container._msufA3ManagedGroupKey, lane) then
         if container.Hide then container:Hide() end
         return nil
@@ -2841,9 +2847,7 @@ local function CreateManagedDispelSensor(container, sensor, parentFrame)
 
     for i = 1, container.createdButtons do
         local slotKey = ManagedAuraKey(sensor) .. "_" .. tostring(i)
-        local addSlotToken = A3._TraceBeginLane("MSUF.AddAuraSlot", sensor, slotKey)
         container:AddAuraSlot(slotKey, sensor.nativeFilter, BuildManagedAuraSlotOptions(container, sensor, parentFrame, i, i))
-        A3._TraceEnd(addSlotToken)
     end
     if not RegisterNativeContainer(container) then
         if container.Hide then container:Hide() end
@@ -2864,9 +2868,7 @@ local function AddDispelSensorSlots(container, sensor, parentFrame, firstButtonI
             sensor = sensor,
             sensorIndex = sensorIndex,
         }
-        local addSlotToken = A3._TraceBeginLane("MSUF.AddAuraSlot", sensor, slotKey)
         container:AddAuraSlot(slotKey, sensor.nativeFilter, BuildManagedAuraSlotOptions(container, sensor, parentFrame, buttonIndex, sensorIndex))
-        A3._TraceEnd(addSlotToken)
     end
     return buttonIndex
 end
@@ -3052,20 +3054,17 @@ A3._DirectIdentityRefreshUnitEligible = function(unit)
 end
 
 A3._DirectIdentityRefreshUnit = function(unit)
-    local traceToken = A3._TraceBegin("MSUF.DirectIdentityRefreshUnit", tostring(unit or "?"))
     local byUnit = A3._directIdentityAuraContainers
     local containers = byUnit and byUnit[unit]
-    if not containers then return A3._TraceFinish(traceToken, false) end
+    if not containers then return false end
     local any = false
     for container in pairs(containers) do
         if container and A3._NativeContainerVisible(container) and type(container.UpdateAllAuras) == "function" then
-            local updateToken = A3._TraceBeginContainer("MSUF.UpdateAllAuras", container, "identity")
             container:UpdateAllAuras()
-            A3._TraceEnd(updateToken)
             any = true
         end
     end
-    return A3._TraceFinish(traceToken, any)
+    return any
 end
 
 A3._DirectIdentityRefreshAll = function(groupOnly)
@@ -3162,10 +3161,6 @@ end
 
 RegisterNativeContainer = function(container, forceRefresh)
     if not container then return false end
-    local trace = A3 and A3.PerfTrace
-    if trace and trace.enabled == true and type(trace.WrapContainer) == "function" then
-        trace.WrapContainer(container)
-    end
     if forceRefresh ~= true and container._msufA3NativeRegistered == true then return true end
     if not A3._NativeContainerVisible(container) then
         container._msufA3NativeRegistrationPending = true
@@ -3424,9 +3419,12 @@ end
 
 function A3._BuildSharedAuraGroupOptions(container, lane, groupKey)
     local nextIndex = 0
+    local sortMethod, sortDirection = AuraSortEnums(lane)
     return {
         maxFrameCount = lane.max,
         candidateFilters = lane.candidateFilters,
+        sortMethod = sortMethod,
+        sortDirection = sortDirection,
         initializeFrame = function(button)
             nextIndex = nextIndex + 1
             button._msufA3ManagedAuraButton = true
@@ -3486,6 +3484,7 @@ function A3._CreateSharedNativeAuraContainer(root, lanes, parentFrame)
     container._msufA3GroupButtons = {}
     container._msufA3GroupMaxFrameCounts = {}
     container._msufA3GroupCandidateFilterSignatures = {}
+    container._msufA3GroupSortSignatures = {}
     container._msufA3GroupLayoutSignatures = {}
     container.unit = unit
     ConfigurePTR4AuraContainer(container, unit)
@@ -3493,12 +3492,11 @@ function A3._CreateSharedNativeAuraContainer(root, lanes, parentFrame)
     A3._SyncSharedAuraContainerGeometry(container, lanes, parentFrame)
     A3._ForEachEnabledNormalLane(lanes, function(lane, groupKey)
         container._msufA3GroupLanes[groupKey] = lane
-        local addGroupToken = A3._TraceBeginLane("MSUF.AddAuraGroup", lane, groupKey)
         container:AddAuraGroup(groupKey, lane.nativeFilter, A3._BuildSharedAuraGroupOptions(container, lane, groupKey))
-        A3._TraceEnd(addGroupToken)
         ApplyManagedAuraGroupLayout(container, groupKey, lane)
         container._msufA3GroupMaxFrameCounts[groupKey] = lane.max
         container._msufA3GroupCandidateFilterSignatures[groupKey] = lane.candidateFilterSignature
+        container._msufA3GroupSortSignatures[groupKey] = AuraSortSignature(lane)
         container._msufA3GroupLayoutSignatures[groupKey] = lane._msufA3LayoutSignature
     end)
     if not RegisterNativeContainer(container) then
@@ -3521,7 +3519,6 @@ function A3._ApplySharedAuraContainer(root, lanes, parentFrame, forceRecreate)
         if root then root[rootKey] = nil end
         return nil
     end
-    local traceToken = A3._TraceBegin("MSUF.ApplySharedAuraContainer", tostring(parentFrame and parentFrame.unit or "?"))
     local trackingSignature = A3._SharedAuraContainerTrackingSignature(lanes)
     local structuralSignature = A3._SharedAuraContainerStructuralSignature(lanes)
     local layoutSignature = A3._SharedAuraContainerLayoutSignature(lanes)
@@ -3529,6 +3526,7 @@ function A3._ApplySharedAuraContainer(root, lanes, parentFrame, forceRecreate)
     if forceRecreate ~= true and current and current._msufA3StructuralSignature == structuralSignature then
         A3._RebindNativeContainerUnit(current, A3._SharedAuraContainerUnit(lanes))
         current._msufA3SharedLanes = lanes
+        current._msufA3GroupSortSignatures = current._msufA3GroupSortSignatures or {}
         local refresh = false
         A3._ForEachEnabledNormalLane(lanes, function(lane, groupKey)
             current._msufA3GroupLanes[groupKey] = lane
@@ -3541,6 +3539,12 @@ function A3._ApplySharedAuraContainer(root, lanes, parentFrame, forceRecreate)
                 current:SetAuraGroupCandidateFilters(groupKey, lane.candidateFilters)
                 current._msufA3GroupCandidateFilterSignatures[groupKey] = lane.candidateFilterSignature
             end
+            local sortSignature = AuraSortSignature(lane)
+            if current._msufA3GroupSortSignatures[groupKey] ~= sortSignature then
+                local sortMethod, sortDirection = AuraSortEnums(lane)
+                current:SetAuraGroupSortMethod(groupKey, sortMethod, sortDirection)
+                current._msufA3GroupSortSignatures[groupKey] = sortSignature
+            end
             if current._msufA3GroupLayoutSignatures[groupKey] ~= lane._msufA3LayoutSignature then
                 ApplyManagedAuraGroupLayout(current, groupKey, lane)
                 current._msufA3GroupLayoutSignatures[groupKey] = lane._msufA3LayoutSignature
@@ -3549,16 +3553,14 @@ function A3._ApplySharedAuraContainer(root, lanes, parentFrame, forceRecreate)
         end)
         A3._SyncSharedAuraContainerGeometry(current, lanes, parentFrame)
         current:Show()
-        if not RegisterNativeContainer(current) then return A3._TraceFinish(traceToken, nil) end
+        if not RegisterNativeContainer(current) then return nil end
         if refresh == true and A3._NativeContainerVisible(current) and type(current.UpdateAllAuras) == "function" then
-            local updateToken = A3._TraceBeginContainer("MSUF.UpdateAllAuras", current, "sharedMaxFrameCount")
             current:UpdateAllAuras()
-            A3._TraceEnd(updateToken)
         end
         current._msufA3TrackingSignature = trackingSignature
         current._msufA3StructuralSignature = structuralSignature
         current._msufA3LayoutSignature = layoutSignature
-        return A3._TraceFinish(traceToken, current)
+        return current
     end
     A3._HideLane(current)
     if root then root[rootKey] = nil end
@@ -3569,12 +3571,11 @@ function A3._ApplySharedAuraContainer(root, lanes, parentFrame, forceRecreate)
         current._msufA3LayoutSignature = layoutSignature
         root[rootKey] = current
     end
-    return A3._TraceFinish(traceToken, current)
+    return current
 end
 
 ApplyLane = function(root, lane, parentFrame, forceRecreate)
     if not (root and lane and lane.enabled) then return nil end
-    local traceToken = A3._TraceBeginLane("MSUF.ApplyLane", lane, forceRecreate == true and "force" or "auto")
     local key = lane.rootKey
     local trackingSignature = lane._msufA3TrackingSignature or LaneTrackingSignature(lane)
     local structuralSignature = lane._msufA3StructuralSignature or LaneStructuralSignature(lane)
@@ -3593,21 +3594,25 @@ ApplyLane = function(root, lane, parentFrame, forceRecreate)
             current:SetAuraGroupCandidateFilters(current._msufA3ManagedGroupKey, lane.candidateFilters)
             current._msufA3CandidateFilterSignature = lane.candidateFilterSignature
         end
+        local sortSignature = AuraSortSignature(lane)
+        if current._msufA3SortSignature ~= sortSignature then
+            local sortMethod, sortDirection = AuraSortEnums(lane)
+            current:SetAuraGroupSortMethod(current._msufA3ManagedGroupKey, sortMethod, sortDirection)
+            current._msufA3SortSignature = sortSignature
+        end
         if layoutChanged then
             ApplyManagedAuraGroupLayout(current, current._msufA3ManagedGroupKey, lane)
         end
         SyncContainerGeometry(current, lane, parentFrame)
         current:Show()
-        if not RegisterNativeContainer(current) then return A3._TraceFinish(traceToken, nil) end
+        if not RegisterNativeContainer(current) then return nil end
         if refresh == true and A3._NativeContainerVisible(current) and type(current.UpdateAllAuras) == "function" then
-            local updateToken = A3._TraceBeginContainer("MSUF.UpdateAllAuras", current, "maxFrameCount")
             current:UpdateAllAuras()
-            A3._TraceEnd(updateToken)
         end
         current._msufA3TrackingSignature = trackingSignature
         current._msufA3StructuralSignature = structuralSignature
         current._msufA3LayoutSignature = layoutSignature
-        return A3._TraceFinish(traceToken, current)
+        return current
     end
     A3._HideLane(current)
     root[key] = nil
@@ -3620,7 +3625,7 @@ ApplyLane = function(root, lane, parentFrame, forceRecreate)
         current._msufA3CandidateFilterSignature = lane.candidateFilterSignature
         root[key] = current
     end
-    return A3._TraceFinish(traceToken, current)
+    return current
 end
 
 --- Cold-path Menu2 preview surface. The preview deliberately uses Blizzard's
@@ -3715,7 +3720,6 @@ end
 
 local function ApplyDispelSensor(root, sensor, parentFrame, forceRecreate)
     if not (root and sensor and sensor.enabled) then return nil end
-    local traceToken = A3._TraceBeginLane("MSUF.ApplyDispelSensor", sensor, forceRecreate == true and "force" or "auto")
     local key = sensor.rootKey
     local trackingSignature = sensor._msufA3TrackingSignature or SensorTrackingSignature(sensor)
     local structuralSignature = sensor._msufA3StructuralSignature or SensorStructuralSignature(sensor)
@@ -3725,11 +3729,11 @@ local function ApplyDispelSensor(root, sensor, parentFrame, forceRecreate)
         A3._RebindNativeContainerUnit(current, sensor.unit)
         SyncDispelSensorGeometry(current, sensor, parentFrame)
         current:Show()
-        if not RegisterNativeContainer(current) then return A3._TraceFinish(traceToken, nil) end
+        if not RegisterNativeContainer(current) then return nil end
         current._msufA3TrackingSignature = trackingSignature
         current._msufA3StructuralSignature = structuralSignature
         current._msufA3LayoutSignature = layoutSignature
-        return A3._TraceFinish(traceToken, current)
+        return current
     end
     A3._HideLane(current)
     root[key] = nil
@@ -3743,12 +3747,11 @@ local function ApplyDispelSensor(root, sensor, parentFrame, forceRecreate)
         sensor._msufA3LayoutSignature = layoutSignature
         root[key] = current
     end
-    return A3._TraceFinish(traceToken, current)
+    return current
 end
 
 local function ApplyDispelSensorRoot(root, sensorRoot, parentFrame, forceRecreate)
     if not (root and sensorRoot and sensorRoot.enabled == true and sensorRoot.sensorRoot == true) then return nil end
-    local traceToken = A3._TraceBeginLane("MSUF.ApplyDispelSensorRoot", sensorRoot, forceRecreate == true and "force" or "auto")
     local key = sensorRoot.rootKey or "DispelSensor"
     local trackingSignature = sensorRoot._msufA3TrackingSignature
     local structuralSignature = sensorRoot._msufA3StructuralSignature
@@ -3759,11 +3762,11 @@ local function ApplyDispelSensorRoot(root, sensorRoot, parentFrame, forceRecreat
         UpdateDispelSensorRootSlots(current, sensorRoot)
         SyncDispelSensorRootGeometry(current, sensorRoot, parentFrame)
         current:Show()
-        if not RegisterNativeContainer(current) then return A3._TraceFinish(traceToken, nil) end
+        if not RegisterNativeContainer(current) then return nil end
         current._msufA3TrackingSignature = trackingSignature
         current._msufA3StructuralSignature = structuralSignature
         current._msufA3LayoutSignature = layoutSignature
-        return A3._TraceFinish(traceToken, current)
+        return current
     end
     A3._HideLane(current)
     root[key] = nil
@@ -3774,11 +3777,10 @@ local function ApplyDispelSensorRoot(root, sensorRoot, parentFrame, forceRecreat
         current._msufA3LayoutSignature = layoutSignature
         root[key] = current
     end
-    return A3._TraceFinish(traceToken, current)
+    return current
 end
 
 local function RefreshNativeContainer(container, forceRefresh, lane, parentFrame)
-    local traceToken = A3._TraceBeginContainer("MSUF.RefreshNativeContainer", container, forceRefresh == true and "force" or "soft")
     lane = lane or (container and container._msufA3NativeLaneConfig)
     if container and container._msufA3SharedAuraGroups == true then
         A3._SyncSharedAuraContainerGeometry(container, container._msufA3SharedLanes, parentFrame)
@@ -3791,14 +3793,12 @@ local function RefreshNativeContainer(container, forceRefresh, lane, parentFrame
     else
         SyncContainerGeometry(container, lane, parentFrame)
     end
-    if not RegisterNativeContainer(container, forceRefresh == true) then return A3._TraceFinish(traceToken, false) end
-    if not A3._NativeContainerVisible(container) then return A3._TraceFinish(traceToken, true) end
+    if not RegisterNativeContainer(container, forceRefresh == true) then return false end
+    if not A3._NativeContainerVisible(container) then return true end
     if forceRefresh == true and type(container.UpdateAllAuras) == "function" then
-        local updateToken = A3._TraceBeginContainer("MSUF.UpdateAllAuras", container, "forceRefresh")
         container:UpdateAllAuras()
-        A3._TraceEnd(updateToken)
     end
-    return A3._TraceFinish(traceToken, true)
+    return true
 end
 
 RefreshAppliedNativeRoot = function(root, forceRefresh)
@@ -3888,16 +3888,15 @@ local function HideState(frame)
 end
 
 local function ApplyConfig(frame, cfg, reason)
-    local traceToken = A3._TraceBeginFrame("MSUF.ApplyConfig", frame, reason)
     if not (frame and cfg and cfg.enabled) then
         HideState(frame)
-        return A3._TraceFinish(traceToken, false)
+        return false
     end
     local root = EnsureRoot(frame)
-    if not root then return A3._TraceFinish(traceToken, false) end
+    if not root then return false end
     if RootAppliedConfigIsCurrent(root, frame, cfg, reason) then
         RefreshAppliedNativeRoot(root, false)
-        return A3._TraceFinish(traceToken, true)
+        return true
     end
     root.unit = cfg.unit or frame.unit
     root:SetAllPoints(frame)
@@ -3929,7 +3928,7 @@ local function ApplyConfig(frame, cfg, reason)
     root._msufA3FrameSpec = frame.MSUFSpec
     root.needFullUpdate = nil
     root:Show()
-    return A3._TraceFinish(traceToken, ok == true)
+    return ok == true
 end
 
 local function RootCanReuseContainersForConfig(root, cfg)
@@ -4008,8 +4007,7 @@ function A3.DisableFrame(frame)
 end
 
 function A3.RenderFrame(frame, reason)
-    local traceToken = A3._TraceBeginFrame("MSUF.RenderFrame", frame, reason)
-    if not frame then return A3._TraceFinish(traceToken, false) end
+    if not frame then return false end
     local cfg
     local cfgReady = false
 
@@ -4021,25 +4019,24 @@ function A3.RenderFrame(frame, reason)
         cfgReady = true
         if not (cfg and cfg.enabled == true) then
             HideState(frame)
-            return A3._TraceFinish(traceToken, false)
+            return false
         end
         if RootAppliedConfigIsCurrent(frame.Auras, frame, cfg, nil)
             and A3._RefreshAppliedNativeAuras(frame, false) then
-            return A3._TraceFinish(traceToken, true)
+            return true
         end
-        if InCombat() then return A3._TraceFinish(traceToken, false) end
+        if InCombat() then return false end
     end
     if not cfgReady then cfg = FrameAuraConfig(frame, frame.unit) end
     if FrameAppliedConfigIsCurrent(frame, reason, cfg) then
         A3._RefreshAppliedNativeAuras(frame, false)
-        return A3._TraceFinish(traceToken, true)
+        return true
     end
-    return A3._TraceFinish(traceToken, ApplyConfig(frame, cfg, reason))
+    return ApplyConfig(frame, cfg, reason)
 end
 
 A3.RenderUnitChangedFrame = function(frame, oldUnit, newUnit)
-    local traceToken = A3._TraceBeginFrame("MSUF.RenderUnitChangedFrame", frame, tostring(oldUnit or "?") .. ">" .. tostring(newUnit or "?"))
-    if not frame then return A3._TraceFinish(traceToken, false) end
+    if not frame then return false end
     if type(newUnit) == "string" and newUnit ~= "" then
         frame.unit = newUnit
         frame.unitKey = newUnit
@@ -4047,13 +4044,13 @@ A3.RenderUnitChangedFrame = function(frame, oldUnit, newUnit)
     local cfg = FrameAuraConfig(frame, frame.unit)
     if not (cfg and cfg.enabled == true) then
         HideState(frame)
-        return A3._TraceFinish(traceToken, false)
+        return false
     end
     local root = frame.Auras
     if InCombat() and not RootCanReuseContainersForConfig(root, cfg) then
-        return A3._TraceFinish(traceToken, false)
+        return false
     end
-    return A3._TraceFinish(traceToken, ApplyConfig(frame, cfg, "MSUF_UNIT_CHANGED_AURAS"))
+    return ApplyConfig(frame, cfg, "MSUF_UNIT_CHANGED_AURAS")
 end
 
 A3.OnFrameUnitChanged = A3.RenderUnitChangedFrame
@@ -4236,17 +4233,12 @@ A3._DoRefreshAll = function()
 end
 
 A3._FlushCoalescedRefreshAll = function()
-    local profName = "auras3:FlushRefreshAll"
-    local profToken = ProfBegin(profName)
     local pending = A3._refreshAllPending == true
     A3._refreshAllPending = nil
     A3._refreshAllCoalescing = nil
     if pending then
-        local result = A3._DoRefreshAll()
-        ProfEnd(profName, profToken)
-        return result
+        return A3._DoRefreshAll()
     end
-    ProfEnd(profName, profToken)
     return true
 end
 

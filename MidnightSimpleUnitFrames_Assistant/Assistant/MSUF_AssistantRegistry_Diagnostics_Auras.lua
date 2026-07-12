@@ -145,7 +145,7 @@ function A.DiagnosticsRegistry.BuildAuraDiagnostic(ctx)
             issues[#issues + 1] = label .. " uses custom aura filters. If only some auras are missing, check those filter options or turn custom filters off."
             AddFixChoice(choices, "auras3." .. scope .. ".overrideFilters", false, "Turn off " .. label .. " custom aura filters")
         end
-        AddUnitAuraBlacklistDiagnostics(scope, label, issues, choices)
+        AddUnitAuraBlacklistDiagnostics(scope, label, lanes, issues, choices)
         if #issues == 0 then
             return label .. " aura check: the requested aura lanes are enabled, and native filter settings look OK. If a specific aura is still missing, check whether that aura is currently active and allowed by Blizzard or unit ownership rules."
         end
