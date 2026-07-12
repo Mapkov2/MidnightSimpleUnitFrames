@@ -23,8 +23,8 @@ LOCALE_TOC = REPO_ROOT / "MidnightSimpleUnitFrames_Locales" / "MidnightSimpleUni
 ASSISTANT_TOC = REPO_ROOT / "MidnightSimpleUnitFrames_Assistant" / "MidnightSimpleUnitFrames_Assistant.toc"
 ASSISTANT_ROOT = ASSISTANT_TOC.parent
 ASSISTANT_MANIFEST = ASSISTANT_ROOT / "MSUF_AssistantRuntime.xml"
-ASSISTANT_SCRIPT_COUNT = 327
-ASSISTANT_ORDER_SHA256 = "1D61896426D97A68A18AC2DE57FBB7AB8F76D72270A51F69D4F9E1B5BD30AA2F"
+ASSISTANT_SCRIPT_COUNT = 328
+ASSISTANT_ORDER_SHA256 = "291364B471F1523AEE62E8F5B8AA160BA731E2DFCE3C5A7ADC0BA05C695E88C6"
 SUPPORTED_LOCALES = {
     "enUS", "enGB", "deDE", "esES", "esMX", "frFR",
     "itIT", "koKR", "ptBR", "ruRU", "zhCN", "zhTW",
@@ -38,10 +38,7 @@ SKIP_DIRS = {
 INTENTIONALLY_UNLOADED_LUA = {
     # Developer-only diagnostic tools. They are kept in source but excluded
     # from release loading so normal users pay no startup/runtime cost.
-    "Features/Diagnostics/MSUF_ClickCoreProfiler.lua",
-    "Features/Diagnostics/MSUF_Feature_ClickProbe.lua",
     "Features/Diagnostics/MSUF_Feature_DebugPosition.lua",
-    "UnitFrames/Engine/Group/MSUF_UF_Group_Profiler.lua",
     "UnitFrames/Engine/MSUF_UF_PreviewDiagnostics.lua",
     # Superseded by the Borders/RoundedFrames highlight implementations.
     "UnitFrames/Engine/Elements/MSUF_UF_Highlight.lua",

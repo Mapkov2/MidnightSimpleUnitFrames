@@ -18,7 +18,6 @@
   <Script file="..\..\..\Auras3\MSUF_Auras3_Core.lua"/>
   <Script file="..\..\..\Auras3\MSUF_Auras3_SpellIndicators.lua"/>
   <Script file="..\..\..\Auras3\MSUF_Auras3_UnitFrames.lua"/>
-  <Script file="..\..\..\Auras3\MSUF_Auras3_PerfTrace.lua"/>
   <Script file="..\..\..\Auras3\MSUF_Auras3_EditMode.lua"/>
   <Script file="..\..\..\Auras3\MSUF_Auras3_Menu_Model.lua"/>
 </Ui>
