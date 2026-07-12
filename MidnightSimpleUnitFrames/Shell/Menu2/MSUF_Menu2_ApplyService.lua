@@ -65,7 +65,6 @@ Apply.pendingAuraVisuals = pendingAuraVisuals
 Apply.pendingGroups = pendingGroups
 Apply.pendingGroupReason = pendingGroupReason
 
-local debugprofilestop = _G.debugprofilestop
 local APPLY_FLUSH_DELAY = 0.04
 local UNIT_KEYS = KeySet("player", "target", "targettarget", "focustarget", "focus", "pet", "boss")
 local UNIT_AURA_SCOPES = KeySet("player", "target", "focus", "boss")
@@ -134,123 +133,6 @@ local function ReportError(err)
     end
 end
 
-local perf = M.PerfProfile or Apply.perfProfile or { enabled = false, buckets = {} }
-perf.buckets = perf.buckets or {}
-M.PerfProfile = perf
-Apply.perfProfile = perf
-
-local function ResetPerfProfile()
-    perf.buckets = {}
-    perf.startedAt = debugprofilestop and debugprofilestop() or nil
-end
-
-local function ProfileStart()
-    if not perf.enabled then return nil end
-    return debugprofilestop and debugprofilestop() or false
-end
-
-local function RecordPerf(bucketName, key, elapsed, extraCount)
-    if not perf.enabled then return end
-    bucketName = tostring(bucketName or "misc")
-    key = tostring(key or "unknown")
-    local buckets = perf.buckets
-    local bucket = buckets[bucketName]
-    if not bucket then
-        bucket = {}
-        buckets[bucketName] = bucket
-    end
-    local rec = bucket[key]
-    if not rec then
-        rec = { count = 0, total = 0, max = 0, extra = 0 }
-        bucket[key] = rec
-    end
-    elapsed = tonumber(elapsed) or 0
-    rec.count = rec.count + 1
-    rec.total = rec.total + elapsed
-    if elapsed > rec.max then rec.max = elapsed end
-    rec.extra = rec.extra + (tonumber(extraCount) or 0)
-end
-
-local function ProfileStop(bucketName, key, started, extraCount)
-    if not perf.enabled then return end
-    local elapsed = 0
-    if type(started) == "number" and debugprofilestop then
-        elapsed = debugprofilestop() - started
-    end
-    RecordPerf(bucketName, key, elapsed, extraCount)
-end
-
-function Apply.SetProfiling(enabled, reset)
-    perf.enabled = enabled == true
-    if reset ~= false then ResetPerfProfile() end
-    return perf.enabled
-end
-
-function Apply.ResetProfiling()
-    ResetPerfProfile()
-end
-
-function Apply.GetProfile()
-    return perf
-end
-
-function M.RecordPerf(bucketName, key, elapsed, extraCount)
-    RecordPerf(bucketName, key, elapsed, extraCount)
-end
-
-function M.ProfileStart()
-    return ProfileStart()
-end
-
-function M.ProfileStop(bucketName, key, started, extraCount)
-    ProfileStop(bucketName, key, started, extraCount)
-end
-
-function M.SetPerfProfiling(enabled, reset)
-    return Apply.SetProfiling(enabled, reset)
-end
-
-function M.GetPerfProfile()
-    return perf
-end
-
-function M.ResetPerfProfile()
-    ResetPerfProfile()
-end
-
-function M.PrintPerfProfile(limit)
-    limit = tonumber(limit) or 8
-    if not print then return perf end
-    local allRows = {}
-    for bucketName, bucket in pairs(perf.buckets or {}) do
-        for key, rec in pairs(bucket) do
-            allRows[#allRows + 1] = { bucket = bucketName, key = key, rec = rec }
-        end
-    end
-    table.sort(allRows, function(a, b) return (a.rec.total or 0) > (b.rec.total or 0) end)
-    print("MSUF2 perf profile top:")
-    for i = 1, math.min(limit, #allRows) do
-        local row = allRows[i]
-        local rec = row.rec
-        local avg = (rec.count and rec.count > 0) and ((rec.total or 0) / rec.count) or 0
-        print(string.format("  %s %s: %.2fms total, %.2fms max, %.2fms avg, %d calls", row.bucket, row.key, rec.total or 0, rec.max or 0, avg, rec.count or 0))
-    end
-    print("MSUF2 perf profile by bucket:")
-    for bucketName, bucket in pairs(perf.buckets or {}) do
-        local rows = {}
-        for key, rec in pairs(bucket) do
-            rows[#rows + 1] = { key = key, rec = rec }
-        end
-        table.sort(rows, function(a, b) return (a.rec.total or 0) > (b.rec.total or 0) end)
-        for i = 1, math.min(limit, #rows) do
-            local rec = rows[i].rec
-            local avg = (rec.count and rec.count > 0) and ((rec.total or 0) / rec.count) or 0
-            print(string.format("  %s %s: %.2fms total, %.2fms max, %.2fms avg, %d calls", bucketName, rows[i].key, rec.total or 0, rec.max or 0, avg, rec.count or 0))
-        end
-    end
-    return perf
-end
-
 function Apply.SafeInvoke(fn, ...)
     if type(fn) ~= "function" then return false end
     local ok, r1, r2, r3, r4 = pcall(fn, ...)
@@ -264,11 +146,7 @@ end
 function Apply.CallGlobal(name, ...)
     local fn = _G[name]
     if type(fn) == "function" then
-        if perf.enabled ~= true then return Apply.SafeInvoke(fn, ...) end
-        local started = ProfileStart()
-        local ok, r1, r2, r3, r4 = Apply.SafeInvoke(fn, ...)
-        ProfileStop("global", name, started)
-        return ok, r1, r2, r3, r4
+        return Apply.SafeInvoke(fn, ...)
     end
     return false
 end
@@ -276,11 +154,7 @@ end
 function Apply.CallGlobalResult(name, ...)
     local fn = _G[name]
     if type(fn) == "function" then
-        if perf.enabled ~= true then return Apply.SafeInvoke(fn, ...) end
-        local started = ProfileStart()
-        local ok, r1, r2, r3, r4 = Apply.SafeInvoke(fn, ...)
-        ProfileStop("global", name, started)
-        return ok, r1, r2, r3, r4
+        return Apply.SafeInvoke(fn, ...)
     end
     return false, nil
 end
@@ -616,12 +490,7 @@ local function RefreshActiveBossPreview(reason)
     Apply.CallGlobal("MSUF_SyncBossUnitframePreviewWithUnitEdit")
 end
 
-local function ProfiledGroupInvoke(label, fn, ...)
-    local started = ProfileStart()
-    local ok, r1, r2, r3, r4 = Apply.SafeInvoke(fn, ...)
-    ProfileStop("groupApply", label, started)
-    return ok, r1, r2, r3, r4
-end
+local GroupInvoke = Apply.SafeInvoke
 
 local function MaskHas(mask, flag)
     mask = tonumber(mask) or 0
@@ -703,7 +572,7 @@ local function RefreshGroupPreview(kind, reason, dirtyMask)
     local gf = MSUF and MSUF.GF
     local opts = { reason = reason or "MSUF2_GROUP", dirtyMask = dirtyMask }
     if gf and type(gf.RefreshPreviewLayout) == "function" then
-        ProfiledGroupInvoke("RefreshPreviewLayout", gf.RefreshPreviewLayout, kind, opts)
+        GroupInvoke(gf.RefreshPreviewLayout, kind, opts)
     elseif type(_G.MSUF_GF_RefreshPreviewLayout) == "function" then
         Apply.CallGlobal("MSUF_GF_RefreshPreviewLayout", kind, opts)
     end
@@ -714,7 +583,7 @@ end
 
 local function FinishGroupRecord(gf, rec, kind, reason, did)
     if rec and rec.requestAuraRefresh and gf and type(gf.RequestAuraRefresh) == "function" then
-        local ok = ProfiledGroupInvoke("RequestAuraRefresh", gf.RequestAuraRefresh, kind)
+        local ok = GroupInvoke(gf.RequestAuraRefresh, kind)
         did = ok == true or did
     end
     RefreshGroupPreview(kind, reason, rec and rec.dirtyMask or nil)
@@ -730,7 +599,7 @@ local function ApplyGroupRecord(kindKey, rec, reason)
 
     if rec.invalidateConfCache then
         if gf and type(gf.InvalidateConfCache) == "function" then
-            local ok = ProfiledGroupInvoke("InvalidateConfCache", gf.InvalidateConfCache)
+            local ok = GroupInvoke(gf.InvalidateConfCache)
             did = ok == true or did
         else
             did = Apply.CallGlobal("MSUF_GF_InvalidateConfCache") or did
@@ -747,16 +616,16 @@ local function ApplyGroupRecord(kindKey, rec, reason)
 
     if _G.InCombatLockdown and _G.InCombatLockdown() then
         if rec.rebuild and type(gf.DeferGroupRuntime) == "function" then
-            ProfiledGroupInvoke("DeferGroupRuntime:rebuild", gf.DeferGroupRuntime, "rebuild", kind, dirty)
+            GroupInvoke(gf.DeferGroupRuntime, "rebuild", kind, dirty)
             did = true
         elseif rec.rebuild and type(gf.Rebuild) == "function" then
-            ProfiledGroupInvoke("Rebuild:combat", gf.Rebuild, kind)
+            GroupInvoke(gf.Rebuild, kind)
             did = true
         elseif rec.geometry and type(gf.DeferGroupRuntime) == "function" then
-            ProfiledGroupInvoke("DeferGroupRuntime:layout", gf.DeferGroupRuntime, "layout", kind, dirty)
+            GroupInvoke(gf.DeferGroupRuntime, "layout", kind, dirty)
             did = true
         elseif dirty and type(gf.DeferGroupRuntime) == "function" then
-            ProfiledGroupInvoke("DeferGroupRuntime:refresh", gf.DeferGroupRuntime, "refresh", kind, dirty)
+            GroupInvoke(gf.DeferGroupRuntime, "refresh", kind, dirty)
             did = true
         end
         return FinishGroupRecord(gf, rec, kind, reason, did)
@@ -764,25 +633,25 @@ local function ApplyGroupRecord(kindKey, rec, reason)
 
     if rec.rebuild then
         if type(gf.Rebuild) == "function" then
-            ProfiledGroupInvoke("Rebuild", gf.Rebuild, kind)
+            GroupInvoke(gf.Rebuild, kind)
             did = true
         elseif kind == nil and type(gf.RebuildAll) == "function" then
-            ProfiledGroupInvoke("RebuildAll", gf.RebuildAll)
+            GroupInvoke(gf.RebuildAll)
             did = true
         else
-            if type(gf.RefreshGeometry) == "function" then ProfiledGroupInvoke("RefreshGeometry:rebuild", gf.RefreshGeometry, kind); did = true end
-            if type(gf.RefreshUnitBindings) == "function" then ProfiledGroupInvoke("RefreshUnitBindings:rebuild", gf.RefreshUnitBindings, kind); did = true end
-            if type(gf.RefreshVisuals) == "function" then ProfiledGroupInvoke("RefreshVisuals:rebuild", gf.RefreshVisuals, kind, gf.DIRTY_ALL or dirty); did = true end
+            if type(gf.RefreshGeometry) == "function" then GroupInvoke(gf.RefreshGeometry, kind); did = true end
+            if type(gf.RefreshUnitBindings) == "function" then GroupInvoke(gf.RefreshUnitBindings, kind); did = true end
+            if type(gf.RefreshVisuals) == "function" then GroupInvoke(gf.RefreshVisuals, kind, gf.DIRTY_ALL or dirty); did = true end
         end
         return FinishGroupRecord(gf, rec, kind, reason, did)
     end
 
     if rec.geometry and type(gf.RefreshGeometry) == "function" then
-        ProfiledGroupInvoke("RefreshGeometry", gf.RefreshGeometry, kind)
+        GroupInvoke(gf.RefreshGeometry, kind)
         did = true
     end
     if dirty and type(gf.RefreshVisuals) == "function" then
-        ProfiledGroupInvoke("RefreshVisuals", gf.RefreshVisuals, kind, dirty)
+        GroupInvoke(gf.RefreshVisuals, kind, dirty)
         did = true
     end
     return FinishGroupRecord(gf, rec, kind, reason, did)
@@ -864,53 +733,51 @@ local function RefreshGroupFonts(scope)
     local dirty = gf.DIRTY_FONT or 4
     if type(gf.RefreshFonts) == "function" then
         if kindA then
-            local did = ProfiledGroupInvoke("RefreshFonts:" .. kindA, gf.RefreshFonts, kindA)
-            if kindB then did = ProfiledGroupInvoke("RefreshFonts:" .. kindB, gf.RefreshFonts, kindB) or did end
+            local did = GroupInvoke(gf.RefreshFonts, kindA)
+            if kindB then did = GroupInvoke(gf.RefreshFonts, kindB) or did end
             return did
         end
-        return ProfiledGroupInvoke("RefreshFonts", gf.RefreshFonts)
+        return GroupInvoke(gf.RefreshFonts)
     end
     if type(gf.MarkAllDirty) == "function" then
-        return ProfiledGroupInvoke("MarkAllDirty:FONT", gf.MarkAllDirty, dirty)
+        return GroupInvoke(gf.MarkAllDirty, dirty)
     end
     if type(gf.RefreshVisuals) == "function" then
         if kindA then
-            local did = ProfiledGroupInvoke("RefreshVisuals:FONT:" .. kindA, gf.RefreshVisuals, kindA, dirty)
-            if kindB then did = ProfiledGroupInvoke("RefreshVisuals:FONT:" .. kindB, gf.RefreshVisuals, kindB, dirty) or did end
+            local did = GroupInvoke(gf.RefreshVisuals, kindA, dirty)
+            if kindB then did = GroupInvoke(gf.RefreshVisuals, kindB, dirty) or did end
             return did
         end
-        return ProfiledGroupInvoke("RefreshVisuals:FONT", gf.RefreshVisuals, nil, dirty)
+        return GroupInvoke(gf.RefreshVisuals, nil, dirty)
     end
 end
 
-local function RefreshGroupVisuals(mask, label)
+local function RefreshGroupVisuals(mask)
     local gf = MSUF and MSUF.GF
     if not gf then return end
     local dirty = mask or gf.DIRTY_VISUAL or 2
-    label = label or "RefreshVisuals"
-    if type(gf.RefreshVisuals) == "function" then return ProfiledGroupInvoke(label, gf.RefreshVisuals, nil, dirty) end
+    if type(gf.RefreshVisuals) == "function" then return GroupInvoke(gf.RefreshVisuals, nil, dirty) end
     if type(gf.MarkAllDirty) == "function" then
-        return ProfiledGroupInvoke("MarkAllDirty:" .. label, gf.MarkAllDirty, dirty)
+        return GroupInvoke(gf.MarkAllDirty, dirty)
     end
 end
 
-local function RefreshGroupBarVisuals(mask, label, scope)
+local function RefreshGroupBarVisuals(mask, scope)
     local gf = MSUF and MSUF.GF
     if not gf then return end
     local dirty = mask or gf.DIRTY_VISUAL or 2
-    label = label or "RefreshVisuals:BARS"
     local kindA, kindB = GroupKindsForScope(scope)
     if not kindA and not IsGlobalApplyScope(scope) then return false end
     if type(gf.RefreshVisuals) == "function" then
         if kindA then
-            local did = ProfiledGroupInvoke(label .. ":" .. kindA, gf.RefreshVisuals, kindA, dirty)
-            if kindB then did = ProfiledGroupInvoke(label .. ":" .. kindB, gf.RefreshVisuals, kindB, dirty) or did end
+            local did = GroupInvoke(gf.RefreshVisuals, kindA, dirty)
+            if kindB then did = GroupInvoke(gf.RefreshVisuals, kindB, dirty) or did end
             return did
         end
-        return ProfiledGroupInvoke(label, gf.RefreshVisuals, nil, dirty)
+        return GroupInvoke(gf.RefreshVisuals, nil, dirty)
     end
     if type(gf.MarkAllDirty) == "function" then
-        return ProfiledGroupInvoke("MarkAllDirty:" .. label, gf.MarkAllDirty, dirty)
+        return GroupInvoke(gf.MarkAllDirty, dirty)
     end
 end
 
@@ -922,14 +789,14 @@ local function RefreshGroupColors(scope)
     local dirty = gf.DIRTY_COLOR or 8
     if type(gf.RefreshColors) == "function" then
         if kindA then
-            local did = ProfiledGroupInvoke("RefreshColors:" .. kindA, gf.RefreshColors, kindA)
-            if kindB then did = ProfiledGroupInvoke("RefreshColors:" .. kindB, gf.RefreshColors, kindB) or did end
+            local did = GroupInvoke(gf.RefreshColors, kindA)
+            if kindB then did = GroupInvoke(gf.RefreshColors, kindB) or did end
             return did
         end
-        return ProfiledGroupInvoke("RefreshColors", gf.RefreshColors)
+        return GroupInvoke(gf.RefreshColors)
     end
-    if kindA then return RefreshGroupBarVisuals(dirty, "RefreshVisuals:COLOR", scope) end
-    return RefreshGroupVisuals(dirty, "RefreshVisuals:COLOR")
+    if kindA then return RefreshGroupBarVisuals(dirty, scope) end
+    return RefreshGroupVisuals(dirty)
 end
 
 local function PushVisualUpdates()
@@ -1008,7 +875,7 @@ local function ApplyBarRuntime(opt, unitFramesApplied, castbarRefreshPending)
     end
     if opt and opt.roundedBars == true then
         Apply.CallGlobal("MSUF_ApplyRoundedUnitframes")
-        RefreshGroupBarVisuals(nil, "RefreshVisuals:ROUNDED_BARS", scope)
+        RefreshGroupBarVisuals(nil, scope)
         Apply.CallGlobal("MSUF_GF_RefreshPreviewLayout", "party")
         Apply.CallGlobal("MSUF_GF_RefreshPreviewLayout", "raid")
         Apply.CallGlobal("MSUF_GF_RefreshPreviewLayout", "mythicraid")
@@ -1045,7 +912,7 @@ local function ApplyBarRuntime(opt, unitFramesApplied, castbarRefreshPending)
         end
     end
     if needsGroupBorderRefresh then
-        RefreshGroupBarVisuals(borderDirty, "RefreshVisuals:HIGHLIGHT_BORDER", scope)
+        RefreshGroupBarVisuals(borderDirty, scope)
     end
     return castbarTexturesApplied
 end
@@ -1108,7 +975,6 @@ FlushApply = function()
     if InCombat() then
         return DeferApplyFlushUntilCombatEnds()
     end
-    local flushStarted = perf.enabled == true and ProfileStart() or nil
     flushQueued = false
     Apply.flushQueued = false
 
@@ -1239,7 +1105,6 @@ FlushApply = function()
         Apply.CallGlobal("MSUF_UFPreview_RequestRefresh", wantPreview)
         RefreshActiveBossPreview(wantPreview)
     end
-    if perf.enabled == true then ProfileStop("apply", "FlushApply", flushStarted) end
 end
 
 function Apply.QueueFlush()
@@ -1585,7 +1450,3 @@ Apply.RefreshTargetedGeneral = RefreshTargetedGeneral
 Apply.RefreshActiveBossPreview = RefreshActiveBossPreview
 
 ExportPublic("MSUF_Menu2_ApplyService", Apply)
-ExportPublic("MSUF_Menu2_SetPerfProfiling", M.SetPerfProfiling)
-ExportPublic("MSUF_Menu2_GetPerfProfile", M.GetPerfProfile)
-ExportPublic("MSUF_Menu2_ResetPerfProfile", M.ResetPerfProfile)
-ExportPublic("MSUF_Menu2_PrintPerfProfile", M.PrintPerfProfile)

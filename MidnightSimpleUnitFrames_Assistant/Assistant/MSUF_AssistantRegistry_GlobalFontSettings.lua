@@ -14,6 +14,7 @@ local C = A.RegistryCore
 if type(C) ~= "table" then return end
 
 -- Scoped Global Fonts assistant registry domain.
+local EnsureDB = C.EnsureDB
 local GeneralDB = C.GeneralDB
 local ApplyFonts = C.ApplyFonts
 local GLOBAL_SCOPE_ORDER = C.GLOBAL_SCOPE_ORDER
@@ -26,7 +27,7 @@ local GlobalScopeWrite = C.GlobalScopeWrite
 local GlobalScopeAliases = C.GlobalScopeAliases
 local RegisterScopedSetting = C.RegisterScopedSetting
 
-if type(GeneralDB) ~= "function" or type(RegisterScopedSetting) ~= "function" then return end
+if type(EnsureDB) ~= "function" or type(GeneralDB) ~= "function" or type(RegisterScopedSetting) ~= "function" then return end
 if type(GLOBAL_SCOPE_ORDER) ~= "table" or type(GlobalScopeAliases) ~= "function" then return end
 if type(NormalizeGlobalScope) ~= "function" or type(GlobalScopeIsGroup) ~= "function" then return end
 if type(GlobalScopeHasOverride) ~= "function" or type(GlobalScopeSetOverride) ~= "function" then return end
@@ -72,6 +73,7 @@ for _, scope in ipairs(GLOBAL_SCOPE_ORDER) do
 end
 
 if RegisterScopedFontDetailSettings({
+    EnsureDB = EnsureDB,
     GeneralDB = GeneralDB,
     ApplyFonts = ApplyFonts,
     GlobalScopeIsGroup = GlobalScopeIsGroup,

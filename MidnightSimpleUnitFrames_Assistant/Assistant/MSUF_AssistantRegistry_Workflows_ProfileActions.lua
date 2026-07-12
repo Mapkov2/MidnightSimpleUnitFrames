@@ -113,6 +113,7 @@ function A.Workflow.RegisterProfileWorkflowActions(ctx)
         run = function(args)
             local source = Trim(args and args.source or "")
             if source == "" then source = type(A.ActiveProfileName) == "function" and A.ActiveProfileName() or tostring(_G.MSUF_ActiveProfile or "Default") end
+            source = DisplayProfileName(source)
             A.StartPendingFlow("profileRenameDestination", { source = source, label = "Profile rename" })
             return true, "What should the new name be for profile " .. tostring(source) .. "? For example: 'to Raid Renamed' or 'named Raid Renamed'. Say 'cancel' or 'never mind' to stop."
         end,

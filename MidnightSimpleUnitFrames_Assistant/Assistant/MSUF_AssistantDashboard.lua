@@ -224,9 +224,12 @@ local function MessageColor(role, status)
 end
 
 local BUSY_DOTS = { "", ".", "..", "..." }
-local TYPEWRITER_INTERVAL = 0.025
-local TYPEWRITER_MIN_CHARS_PER_TICK = 2
-local TYPEWRITER_MAX_SECONDS = 3.0
+-- A short reveal adds warmth without scheduling a 40 Hz timer for up to three
+-- seconds after every answer.  Twenty ticks per second for under a second is
+-- visually smooth and substantially cheaper while the settings UI is open.
+local TYPEWRITER_INTERVAL = 0.05
+local TYPEWRITER_MIN_CHARS_PER_TICK = 6
+local TYPEWRITER_MAX_SECONDS = 0.8
 local TYPEWRITER_RECENT_SECONDS = 12
 local TYPEWRITER_TIMER_KEY = "assistant.dashboard.typewriter"
 local BUSY_TIMER_KEY = "assistant.dashboard.busy"
@@ -493,6 +496,8 @@ local function RenderHistory(ui)
     local newestAssistantIndex = NewestAssistantHistoryIndex(history)
     local y = -4
     local width = max(160, (ui.width or 420) - 16)
+    local roleWidth = width < 360 and 52 or 62
+    local textX = roleWidth + 8
     local rowIndex = 0
 
     if #history == 0 then
@@ -524,14 +529,14 @@ local function RenderHistory(ui)
             row.role = row.role or Font(row, "GameFontDisableSmall", "", T.colors and T.colors.dim or { 0.45, 0.50, 0.60, 1 })
             row.role:ClearAllPoints()
             row.role:SetPoint("TOPLEFT", row, "TOPLEFT", 6, -4)
-            row.role:SetWidth(78)
+            row.role:SetWidth(roleWidth)
             row.role:SetJustifyH("LEFT")
             SetAssistantText(row.role, item.role == "user" and "You" or "MSUF")
 
             row.text = row.text or Font(row, "GameFontHighlightSmall", "", T.colors and T.colors.text or { 1, 1, 1, 1 })
             row.text:ClearAllPoints()
-            row.text:SetPoint("TOPLEFT", row, "TOPLEFT", 82, -4)
-            row.text:SetWidth(width - 92)
+            row.text:SetPoint("TOPLEFT", row, "TOPLEFT", textX, -4)
+            row.text:SetWidth(width - textX - 10)
             row.text:SetJustifyH("LEFT")
             if row.text.SetWordWrap then row.text:SetWordWrap(true) end
             local c = MessageColor(item.role, item.status)
@@ -556,14 +561,14 @@ local function RenderHistory(ui)
         row.role = row.role or Font(row, "GameFontDisableSmall", "", T.colors and T.colors.dim or { 0.45, 0.50, 0.60, 1 })
         row.role:ClearAllPoints()
         row.role:SetPoint("TOPLEFT", row, "TOPLEFT", 6, -4)
-        row.role:SetWidth(78)
+        row.role:SetWidth(roleWidth)
         row.role:SetJustifyH("LEFT")
         SetAssistantText(row.role, "MSUF")
 
         row.text = row.text or Font(row, "GameFontHighlightSmall", "", T.colors and T.colors.text or { 1, 1, 1, 1 })
         row.text:ClearAllPoints()
-        row.text:SetPoint("TOPLEFT", row, "TOPLEFT", 82, -4)
-        row.text:SetWidth(width - 92)
+        row.text:SetPoint("TOPLEFT", row, "TOPLEFT", textX, -4)
+        row.text:SetWidth(width - textX - 10)
         row.text:SetJustifyH("LEFT")
         if row.text.SetWordWrap then row.text:SetWordWrap(true) end
         local c = MessageColor("assistant", "queued")

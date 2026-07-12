@@ -564,41 +564,71 @@ local function RequestGroupRuntime(reason)
     return false
 end
 
+local function UndoSchedulingBlocked()
+    return (type(A.IsCombatLocked) == "function" and A.IsCombatLocked()) or A._menuRuntimeActive == false
+end
+
+local function RunUndoNextFrame()
+    A.undoNextFrameQueued = nil
+    if UndoSchedulingBlocked() then return end
+    local pending = A.undoNextFramePending or {}
+    local order = A.undoNextFrameOrder or {}
+    A.undoNextFramePending = {}
+    A.undoNextFrameOrder = {}
+    for i = 1, #order do
+        local callback = pending[order[i]]
+        if type(callback) == "function" then callback() end
+    end
+end
+
+local function ArmUndoNextFrame()
+    if UndoSchedulingBlocked() then return false end
+    if A.undoNextFrameQueued then return true end
+    if #(A.undoNextFrameOrder or {}) == 0 then return false end
+    A.undoNextFrameQueued = true
+    if type(A.ScheduleMenuRuntimeNextFrame) == "function" then
+        if A.ScheduleMenuRuntimeNextFrame("assistant.undo.next_frame", RunUndoNextFrame) then return true end
+        A.undoNextFrameQueued = nil
+        return false
+    end
+    -- Headless/legacy fallback: the runtime normally always owns the central
+    -- scheduler before Undo is loaded.
+    RunUndoNextFrame()
+    return true
+end
+
+local function RemovePendingKey(key)
+    local pending = A.undoNextFramePending or {}
+    local order = A.undoNextFrameOrder or {}
+    pending[key] = nil
+    for i = #order, 1, -1 do
+        if order[i] == key then table.remove(order, i) end
+    end
+end
+
 local function ScheduleNextFrame(key, fn)
-    if type(fn) ~= "function" then return false end
-    if (type(A.IsCombatLocked) == "function" and A.IsCombatLocked()) or A._menuRuntimeActive == false then return false end
+    if type(fn) ~= "function" or UndoSchedulingBlocked() then return false end
     A.undoNextFramePending = A.undoNextFramePending or {}
     A.undoNextFrameOrder = A.undoNextFrameOrder or {}
-    local nextFramePending = A.undoNextFramePending
-    local nextFrameOrder = A.undoNextFrameOrder
     key = tostring(key or "MSUF_ASSISTANT_BROAD_APPLY")
-    if nextFramePending[key] == nil then
-        nextFrameOrder[#nextFrameOrder + 1] = key
+    if A.undoNextFramePending[key] == nil then
+        A.undoNextFrameOrder[#A.undoNextFrameOrder + 1] = key
     end
-    nextFramePending[key] = fn
-    if A.undoNextFrameQueued then return true end
-    A.undoNextFrameQueued = true
-    local timer
-    local function Run()
-        if type(A.UntrackMenuRuntimeTimer) == "function" then A.UntrackMenuRuntimeTimer("assistant.undo.next_frame", timer) end
-        A.undoNextFrameQueued = false
-        if (type(A.IsCombatLocked) == "function" and A.IsCombatLocked()) or A._menuRuntimeActive == false then return end
-        local pending = A.undoNextFramePending or {}
-        local order = A.undoNextFrameOrder or {}
-        A.undoNextFramePending = {}
-        A.undoNextFrameOrder = {}
-        for i = 1, #order do
-            local cb = pending[order[i]]
-            if type(cb) == "function" then cb() end
-        end
-    end
-    if _G.C_Timer and type(_G.C_Timer.NewTimer) == "function" then
-        timer = _G.C_Timer.NewTimer(0, Run)
-        if type(A.TrackMenuRuntimeTimer) == "function" then A.TrackMenuRuntimeTimer("assistant.undo.next_frame", timer) end
-    else
-        Run()
-    end
-    return true
+    A.undoNextFramePending[key] = fn
+    if ArmUndoNextFrame() then return true end
+    RemovePendingKey(key)
+    return false
+end
+
+function A.SuspendPendingBroadApply()
+    -- The central menu scheduler owns and cancels the actual timer. Retain the
+    -- coalesced callback/order so an explicit safe menu reopen can re-arm it.
+    A.undoNextFrameQueued = nil
+end
+
+function A.ResumePendingBroadApply()
+    if #(A.undoNextFrameOrder or {}) == 0 then return false end
+    return ArmUndoNextFrame()
 end
 
 local function BroadApply(reason)
@@ -655,7 +685,7 @@ function A.RequestBroadApply(reason, opts, callback)
     if state.running or state.scheduled then return true end
 
     state.scheduled = true
-    ScheduleNextFrame("MSUF_ASSISTANT_BROAD_APPLY", function()
+    local scheduled = ScheduleNextFrame("MSUF_ASSISTANT_BROAD_APPLY", function()
         state.scheduled = nil
         state.running = true
         local runReason = state.reason or "MSUF_ASSISTANT_APPLY"
@@ -682,6 +712,13 @@ function A.RequestBroadApply(reason, opts, callback)
             Finish(true)
         end
     end)
+    if not scheduled then
+        state.scheduled = nil
+        state.reason = nil
+        state.reasons[#state.reasons] = nil
+        if type(callback) == "function" then state.callbacks[#state.callbacks] = nil end
+        return false
+    end
     return true
 end
 
@@ -714,10 +751,14 @@ local function ApplyChangeList(changes, useOld)
         end
         local readOk, current = pcall(setting.get)
         if not readOk then return false, "Could not read " .. tostring(change.key or i) .. ": " .. tostring(current) end
+        local target = change.newValue
+        if useOld then target = change.oldValue end
         prepared[#prepared + 1] = {
             setting = setting,
             before = DeepCopy(current),
-            target = DeepCopy(useOld and change.oldValue or change.newValue),
+            -- Do not use `useOld and oldValue or newValue`: false is a valid
+            -- boolean setting value and must survive an undo selection.
+            target = DeepCopy(target),
         }
     end
 
@@ -783,6 +824,42 @@ local function ApplyChangeList(changes, useOld)
         return false, "Could not refresh restored settings: " .. tostring(applyErr)
     end
     return #written > 0
+end
+
+local function IsSnapshottedNameShorteningChange(change)
+    local key = tostring(change and change.key or "")
+    local scope, suffix = key:match("^fontScope%.([^.]+)%.(.+)$")
+    if scope and scope ~= "shared" then
+        return suffix == "shortenNames" or suffix == "shortenNameMaxChars"
+            or suffix == "shortenNameClipSide" or suffix == "shortenNameNoEllipsis"
+    end
+    scope, suffix = key:match("^(gf_[^.]+)%.(.+)$")
+    return scope ~= nil and (suffix == "nameShortenEnabled" or suffix == "nameMaxChars"
+        or suffix == "nameClipSide" or suffix == "nameNoEllipsis")
+end
+
+local function ApplyNameShorteningSnapshotBundle(bundle, useOld)
+    local targetStates = useOld and bundle.beforeNameShorteningStates or bundle.afterNameShorteningStates
+    local rollbackStates = useOld and bundle.afterNameShorteningStates or bundle.beforeNameShorteningStates
+    local ok, restored = pcall(A.RestoreNameShorteningStates, targetStates)
+    if not ok or restored ~= true then return false, restored end
+
+    local remaining = {}
+    for i = 1, #(bundle.changes or {}) do
+        local change = bundle.changes[i]
+        if not IsSnapshottedNameShorteningChange(change) then remaining[#remaining + 1] = change end
+    end
+    if #remaining > 0 then
+        local otherOK, otherError = ApplyChangeList(remaining, useOld)
+        if not otherOK then
+            pcall(A.RestoreNameShorteningStates, rollbackStates)
+            return false, otherError
+        end
+    end
+    if type(A.RequestBroadApply) == "function" then
+        pcall(A.RequestBroadApply, useOld and "MSUF_ASSISTANT_NAME_SHORTENING_UNDO" or "MSUF_ASSISTANT_NAME_SHORTENING_REDO")
+    end
+    return true
 end
 
 local function CurrentCharKey()
@@ -865,7 +942,9 @@ function A.UndoLast()
     end
     local restored = false
     local restoreError
-    if type(bundle.beforeActionTransaction) == "table" then
+    if type(bundle.beforeNameShorteningStates) == "table" then
+        restored, restoreError = ApplyNameShorteningSnapshotBundle(bundle, true)
+    elseif type(bundle.beforeActionTransaction) == "table" then
         local ok, value, detail = pcall(A.RestoreActionTransaction, bundle.beforeActionTransaction, "MSUF_ASSISTANT_ACTION_UNDO")
         restored = ok and value == true
         if not restored then restoreError = detail or value end
@@ -901,7 +980,9 @@ function A.RedoLast()
     end
     local restored = false
     local restoreError
-    if type(bundle.afterActionTransaction) == "table" then
+    if type(bundle.afterNameShorteningStates) == "table" then
+        restored, restoreError = ApplyNameShorteningSnapshotBundle(bundle, false)
+    elseif type(bundle.afterActionTransaction) == "table" then
         local ok, value, detail = pcall(A.RestoreActionTransaction, bundle.afterActionTransaction, "MSUF_ASSISTANT_ACTION_REDO")
         restored = ok and value == true
         if not restored then restoreError = detail or value end

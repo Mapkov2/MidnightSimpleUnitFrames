@@ -134,7 +134,7 @@ local function BorderTestScope()
     return scope == "gf_party" and "party" or scope == "gf_raid" and "raid" or scope
 end
 
--- ApplyService owns batching, profiling, combat deferral and compatibility fallbacks.
+-- ApplyService owns batching, combat deferral and compatibility fallbacks.
 -- The old page duplicated all of that logic in seven near-identical request functions.
 local function RequestApply(method, reason, scope)
     local service = M.ApplyService or _G.MSUF_Menu2_ApplyService

@@ -3740,8 +3740,8 @@ if not P.InitUnsupportedAuraCommand then
                     return {
                         kind = "unsupported",
                         status = "info",
-                        summary = "Explains native group aura blacklist limitation.",
-                        text = "Group aura exact spell/category blacklist data is legacy read-only in the native 12.1 backend, so I will not edit it as if it could affect live aura display. I can change live group aura filter tokens instead, such as All, Raid, or Dispellable, plus icon size, count, spacing, growth, layer, cooldown text, stack text, and duration bars.",
+                        summary = "Guides an incomplete group aura blacklist request.",
+                        text = "MSUF can edit live group exact-SpellID and category exclusions. Tell me Party, Raid, or Mythic Raid; Buffs or Debuffs; and the SpellID/category. Example: 'blacklist spell 12345 in raid debuffs'. Blizzard can restrict identity-based filtering for some friendly harmful or hostile helpful auras, so I will report that instead of hiding a whole lane.",
                     }
                 end
                 local unitBlacklistScope = ContainsAny(text, P.AURA_UNIT_BLACKLIST_SCOPE_TERMS)
@@ -3749,8 +3749,8 @@ if not P.InitUnsupportedAuraCommand then
                     return {
                         kind = "unsupported",
                         status = "info",
-                        summary = "Explains native unit aura blacklist limitation.",
-                        text = "Exact aura blacklist edits are legacy read-only while the native 12.1 backend is active, so I will not edit them as if they could affect live aura display. I can change live Aura Filter options instead, such as player-only, raid, dispellable, crowd-control, exclusive filters, icon size, count, spacing, growth, cooldown text, stack text, and duration bars.",
+                        summary = "Guides an incomplete unit aura blacklist request.",
+                        text = "MSUF can edit live exact-SpellID exclusions for Player, Target, Focus, and Boss Buff or Debuff lanes. Give the frame, lane, and SpellID—for example, 'blacklist spell 12345 in target buffs'. Blizzard can restrict identity-based filtering for some friendly harmful or hostile helpful auras; that never authorizes hiding the whole lane.",
                     }
                 end
                 if ContainsAny(text, P.RootPhrases[503])
@@ -3772,7 +3772,7 @@ if not P.InitUnsupportedAuraCommand then
                     kind = "unsupported",
                     status = "info",
                     summary = "Aura option fallback.",
-                    text = "I don't see an MSUF aura option for that request yet. I can change aura icon size, caps/count, X/Y offsets, spacing, growth, layer, cooldown text, stack text, duration bars, live filter tokens, quick presets, custom UnitFrame auras, and group aura copy when those options exist in MSUF. Saved exact SpellID blacklist data can be listed, but it is read-only while the native 12.1 backend is active. Aura areas I can't match will stay as they are.",
+                    text = "I don't see a precise MSUF aura option in that wording yet. I can change lane visibility, permanent/no-expiration filtering, live tokens, exact SpellID/category lists, Custom Aura include lists, icon layout, timer/stack styling, presets, and group aura copy. Name the frame or group, Buffs or Debuffs, and what should be kept or hidden; if more than one control fits, I will offer choices.",
                 }
             end
         end
@@ -3781,9 +3781,15 @@ end
 P.InitUnsupportedAuraCommand()
 
 local function EarlyAuraShortcut(normalized, raw)
-    return (P.ParseAuraFilterGuidanceShortcut and P.ParseAuraFilterGuidanceShortcut(normalized))
+    local ctx = type(A.GetContext) == "function" and A.GetContext() or {}
+    return (P.ParseAuraFilteringConversationShortcut and P.ParseAuraFilteringConversationShortcut(normalized, ctx, raw))
+        or (P.ParseAuraFilterGuidanceShortcut and P.ParseAuraFilterGuidanceShortcut(normalized))
         or (A.RouterTryAuraFilterStatusShortcut and A.RouterTryAuraFilterStatusShortcut(normalized))
         or (P.ParseAuraScopeOverrideShortcut and P.ParseAuraScopeOverrideShortcut(normalized))
+        -- Aura geometry owns words such as "grow". Resolve it before broad
+        -- lane visibility so an open-ended request can offer Growth choices
+        -- instead of treating "grow" as an implicit request to show buffs.
+        or (P.AuraGeometryShortcut and P.AuraGeometryShortcut(normalized))
         or (P.ParseAuraDirectSettingShortcut and P.ParseAuraDirectSettingShortcut(normalized, raw))
         or (P.ParseUnitAuraFilterBooleanShortcut and P.ParseUnitAuraFilterBooleanShortcut(normalized))
         or (P.ParseGroupAuraLiveFilterShortcut and P.ParseGroupAuraLiveFilterShortcut(normalized))
@@ -3791,7 +3797,6 @@ local function EarlyAuraShortcut(normalized, raw)
         or (P.ParseAuraCooldownSwipeDirectionShortcut and P.ParseAuraCooldownSwipeDirectionShortcut(normalized))
         or (P.ParseAuraDurationBarShortcut and P.ParseAuraDurationBarShortcut(normalized))
         or (P.ParseAuraDebuffBorderModeShortcut and P.ParseAuraDebuffBorderModeShortcut(normalized))
-        or (P.AuraGeometryShortcut and P.AuraGeometryShortcut(normalized))
         or (P.ParseGroupAuraRootSettingShortcut and P.ParseGroupAuraRootSettingShortcut(normalized))
         or (P.ParseGroupAuraVisibilityShortcut and P.ParseGroupAuraVisibilityShortcut(normalized))
 end
@@ -4377,9 +4382,12 @@ function A._ParsePipelineWorkflow(normalized, raw, ctx)
     result = P.ParseExactRegistryKeyShortcut and P.ParseExactRegistryKeyShortcut(normalized, raw); if result then return result end
     result = P.ParseExactActionKeyShortcut and P.ParseExactActionKeyShortcut(normalized, raw); if result then return result end
     result = P.ParseRegistryActionAliasShortcut and P.ParseRegistryActionAliasShortcut(normalized, raw); if result then return result end
+    -- The phrase "Class Resources Player Power" names the detached Player
+    -- power controls on that page. Resolve it before broad Class Resource
+    -- registry aliases can consume only "class resource width/anchor".
+    result = A._ParseClassPowerDetachedPlayerPowerShortcut and A._ParseClassPowerDetachedPlayerPowerShortcut(normalized, raw); if result then return result end
     result = P.ParseRegistryPriorityShortcut and P.ParseRegistryPriorityShortcut(normalized, raw); if result then return result end
     result = P.ParseRegistryExactAliasShortcut and P.ParseRegistryExactAliasShortcut(normalized, raw); if result then return result end
-    result = A._ParseClassPowerDetachedPlayerPowerShortcut and A._ParseClassPowerDetachedPlayerPowerShortcut(normalized, raw); if result then return result end
     result = ParseClassPowerRootToggle and ParseClassPowerRootToggle(normalized); if result then return result end
     result = A._ParseClassPowerWidthModeShortcut and A._ParseClassPowerWidthModeShortcut(normalized); if result then return result end
     result = A._ParseClassPowerVisibilityShortcut and A._ParseClassPowerVisibilityShortcut(normalized); if result then return result end
@@ -4402,7 +4410,7 @@ function A._ParsePipelineWorkflow(normalized, raw, ctx)
     result = A._ParseGameplayPositionPreset(normalized); if result then return result end
     result = A._ParseGameplayMoveShortcut(normalized); if result then return result end
     result = ParsePresetWorkflow(normalized); if result then return result end
-    result = P.ParseNameShorteningShortcut and P.ParseNameShorteningShortcut(normalized, ctx); if result then return result end
+    result = P.ParseNameShorteningShortcut and P.ParseNameShorteningShortcut(normalized, ctx, raw); if result then return result end
     result = ParseGuidedSetup(normalized); if result then return result end
     result = ParseScopedHelp(normalized); if result then return result end
     result = P.ParseGroupPowerBarSizeShortcut and P.ParseGroupPowerBarSizeShortcut(normalized); if result then return result end
@@ -4495,7 +4503,7 @@ function A._ParsePipelineFeature(normalized, raw, ctx)
     result = A._ParsePowerColorShortcut and A._ParsePowerColorShortcut(normalized, raw); if result then return result end
     result = ParseDarkModeBrightnessShortcut(normalized); if result then return result end
     result = ParseGlobalBarsAction(normalized); if result then return result end
-    result = P.ParseNameShorteningShortcut and P.ParseNameShorteningShortcut(normalized, ctx); if result then return result end
+    result = P.ParseNameShorteningShortcut and P.ParseNameShorteningShortcut(normalized, ctx, raw); if result then return result end
     result = EarlyAuraShortcut(normalized, raw); if result then return result end
     result = ParseCastbarGlobalDetail(normalized); if result then return result end
     result = P.ParseCastbarDirectionClarification and P.ParseCastbarDirectionClarification(normalized); if result then return result end
@@ -5345,6 +5353,11 @@ function A.ParseSimpleChange(text, ctxOverride)
     -- intents must fall through to the Router instead of being returned here,
     -- so page/location/problem specialists can give their richer answer.
     if P.NonMutatingIntent and P.NonMutatingIntent(normalized) then return nil end
+    -- Visual words such as "dots" and "ellipsis" belong to name shortening,
+    -- not to a coincidental frame/name alias. Resolve this narrow semantic
+    -- owner before exact aliases and text visibility in compound fragments.
+    local nameDots = P.ParseNameShorteningDotsShortcut
+        and P.ParseNameShorteningDotsShortcut(normalized, ctx, raw)
     -- An exact full registry label is stronger evidence than a broad topical
     -- shortcut.  Resolve it first so words such as "anchor", "name", "scale",
     -- or "power text" cannot redirect a generated or human exact-label command
@@ -5352,7 +5365,7 @@ function A.ParseSimpleChange(text, ctxOverride)
     local exactFullAlias = P.ParseRegistryExactAliasShortcut
         and P.ParseRegistryExactAliasShortcut(normalized, raw, { minTokens = 3, fullPhrase = true })
     if normalized:find(" text anchor ", 1, true) and not normalized:find("custom value", 1, true) then exactFullAlias = nil end
-    local parsed = exactFullAlias
+    local parsed = nameDots or exactFullAlias
         or (A._ParseHumanSafetyGuidanceShortcut and A._ParseHumanSafetyGuidanceShortcut(normalized))
         or (A._ParseUnitRaidMarkerVisibilityShortcut and A._ParseUnitRaidMarkerVisibilityShortcut(normalized))
         or (A._ParseDispelOverlayOpacityShortcut and A._ParseDispelOverlayOpacityShortcut(normalized))
@@ -5376,6 +5389,7 @@ function A.ParseSimpleChange(text, ctxOverride)
         or (A._ParseFontScopePriorityShortcut and A._ParseFontScopePriorityShortcut(normalized))
         or (A._ParseGlobalUIShellPriorityShortcut and A._ParseGlobalUIShellPriorityShortcut(normalized, raw))
         or (A._ParseBarGradientPriorityShortcut and A._ParseBarGradientPriorityShortcut(normalized))
+        or (A._ParseClassPowerDetachedPlayerPowerShortcut and A._ParseClassPowerDetachedPlayerPowerShortcut(normalized, raw))
         or (A._ParseClassPowerPriorityShortcut and A._ParseClassPowerPriorityShortcut(normalized, raw))
         or (A._ParseGameplayPriorityShortcut and A._ParseGameplayPriorityShortcut(normalized, raw))
         or EarlyAuraShortcut(normalized, raw)
@@ -5477,11 +5491,33 @@ function A.Parse(text, ctxOverride)
             return guidedPriority
         end
     end
+    -- "Dots on party frame" describes a visual symptom and must not be
+    -- reduced to the unrelated exact alias "party frame" (X/Y position) or
+    -- "party name" (name visibility). This specialist also returns safe
+    -- choices when the current shortening state does not make the meaning
+    -- certain.
+    local nameDotsPriority = P.ParseNameShorteningDotsShortcut
+        and P.ParseNameShorteningDotsShortcut(normalized, ctx, raw)
+    if nameDotsPriority then
+        nameDotsPriority.raw = raw
+        nameDotsPriority.normalized = normalized
+        return nameDotsPriority
+    end
     local hpTextColorPriority = P.ParseHPTextColorModePriority and P.ParseHPTextColorModePriority(normalized)
     if hpTextColorPriority then
         hpTextColorPriority.raw = raw
         hpTextColorPriority.normalized = normalized
         return hpTextColorPriority
+    end
+    -- Aura-filter language has several deliberately separate controls with
+    -- overlapping labels. Resolve its semantic owner before an exact alias can
+    -- toggle lane visibility or the live-filter master by accident.
+    local auraFilteringPriority = P.ParseAuraFilteringConversationShortcut
+        and P.ParseAuraFilteringConversationShortcut(normalized, ctx, raw)
+    if auraFilteringPriority then
+        auraFilteringPriority.raw = raw
+        auraFilteringPriority.normalized = normalized
+        return auraFilteringPriority
     end
     -- Slot color-mode settings intentionally use resource names such as
     -- "maelstrom" too. Keep reset-color phrases out of the broad exact-setting
@@ -5595,67 +5631,10 @@ function A.Parse(text, ctxOverride)
             return scopedOnly
         end
     end
-    local noDurationAuraIntent = normalized:find("permanent", 1, true)
-        or normalized:find("no timer", 1, true)
-        or normalized:find("without timer", 1, true)
-        or normalized:find("no duration", 1, true)
-        or normalized:find("without duration", 1, true)
-        or normalized:find("timeless", 1, true)
-    if noDurationAuraIntent
-        and (normalized:find("aura", 1, true) or normalized:find("buff", 1, true) or normalized:find("debuff", 1, true))
-    then
-        local isGroup = normalized:find("party", 1, true) or normalized:find("raid", 1, true)
-            or normalized:find("group", 1, true)
-        local lane = isGroup and P.AuraGroupBlacklistLane and P.AuraGroupBlacklistLane(normalized)
-            or (P.AuraBlacklistLane and P.AuraBlacklistLane(normalized))
-        local contextKey = tostring(ctx and ctx.lastSetting or "")
-        local contextUnit, contextLane = contextKey:match("^auras3%.([^.]+)%.([^.]+)%.")
-        local contextGroup, contextGroupLane = contextKey:match("^gf_([^.]+)%.auras%.([^.]+)%.")
-        if lane == "both" then lane = contextLane or contextGroupLane or lane end
-        local key
-        if isGroup and P.AuraGroupBlacklistScope then
-            key = "gf_" .. tostring(P.AuraGroupBlacklistScope(normalized)) .. ".auras." .. tostring(lane) .. ".blacklist.hidePermanent"
-        elseif P.AuraBlacklistScope then
-            local scope = P.AuraBlacklistScope(normalized)
-            local explicitUnits = P.DetectUnits and P.DetectUnits(normalized) or {}
-            local explicitShared = normalized:find("shared", 1, true) or normalized:find("global", 1, true)
-            if scope == "shared" and #explicitUnits == 0 and not explicitShared then
-                if contextGroup then
-                    key = "gf_" .. tostring(contextGroup) .. ".auras." .. tostring(lane) .. ".blacklist.hidePermanent"
-                else
-                    scope = contextUnit or tostring(ctx and ctx.lastUnit or "")
-                end
-            end
-            if scope ~= "shared" then key = "auras3." .. tostring(scope) .. "." .. tostring(lane) .. ".blacklist.hidePermanent" end
-        end
-        local setting = key and A.Registry and A.Registry:GetSetting(key)
-        if setting then
-            local value = not (normalized:find("show", 1, true) or normalized:find("allow", 1, true)
-                or normalized:find("unhide", 1, true) or normalized:find("do not hide", 1, true)
-                or normalized:find("dont hide", 1, true))
-            return {
-                kind = "changes",
-                changes = { { setting = setting, value = value } },
-                label = setting.label,
-                summary = (value and "Hides" or "Allows") .. " permanent auras only in the requested lane.",
-                raw = raw,
-                normalized = normalized,
-            }
-        end
-        return {
-            kind = "answer",
-            status = "ambiguous",
-            text = "Which frame and lane should hide permanent/no-duration auras? For example: 'hide permanent player buffs' or 'hide permanent target debuffs'.",
-            summary = "Asks for the missing Aura filter scope instead of changing an unrelated filter.",
-            raw = raw,
-            normalized = normalized,
-        }
-    end
     -- Exact aura-list edits are more specific than broad visibility toggles.
-    -- Keep questions in the read-only path above and do not reinterpret the
-    -- separate hide-permanent option as a SpellID blacklist mutation.
+    -- The semantic Aura-filter owner above handles no-expiration language;
+    -- explicit SpellIDs remain on their registered list-action path.
     if P.ParseRegistryActionAliasShortcut and P.AuraBlacklistSpellValue
-        and not noDurationAuraIntent
         and (normalized:find("blacklist", 1, true) or normalized:find("whitelist", 1, true)
             or normalized:find("buff", 1, true) or normalized:find("debuff", 1, true)
             or normalized:find("aura", 1, true))
@@ -6443,6 +6422,17 @@ function A.Parse(text, ctxOverride)
         barGradientPriorityParsed.raw = raw
         barGradientPriorityParsed.normalized = normalized
         return barGradientPriorityParsed
+    end
+    -- Keep the more specific detached Player Power surface ahead of the broad
+    -- "class resources" shortcuts.  Both vocabularies intentionally overlap,
+    -- but an explicit "class resources player power" request must retain the
+    -- Player Power qualifier instead of falling back to the class-resource bar.
+    local detachedPlayerPowerPriorityParsed = not colorResetIntent and A._ParseClassPowerDetachedPlayerPowerShortcut
+        and A._ParseClassPowerDetachedPlayerPowerShortcut(normalized, raw)
+    if detachedPlayerPowerPriorityParsed then
+        detachedPlayerPowerPriorityParsed.raw = raw
+        detachedPlayerPowerPriorityParsed.normalized = normalized
+        return detachedPlayerPowerPriorityParsed
     end
     local classPowerPriorityParsed = not colorResetIntent and A._ParseClassPowerPriorityShortcut
         and A._ParseClassPowerPriorityShortcut(normalized, raw)

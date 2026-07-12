@@ -1368,8 +1368,6 @@ local SEARCH_FAQ = SearchData.BuildFAQ and SearchData.BuildFAQ({
 local SEARCH_EASTER_EGGS = SearchData.EASTER_EGGS or {}
 
 local function BuildSearchRecords()
-    local profiling = M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStart and M.ProfileStop
-    local started = profiling and M.ProfileStart() or nil
     local pageInfos, pageInfoByKey = BuildSearchPageInfos()
 
     local records, seenRecords = {}, {}
@@ -1426,7 +1424,6 @@ local function BuildSearchRecords()
         end
     end
 
-    if profiling then M.ProfileStop("search", "BuildSearchRecords", started, #records) end
     return records
 end
 
@@ -1484,10 +1481,7 @@ local function StartSearchBackgroundIndex()
 
         local key = table.remove(SEARCH_STATE.indexQueue, 1)
         if key then
-            local profiling = M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStart and M.ProfileStop
-            local started = profiling and M.ProfileStart() or nil
             if M.BuildPageEntry then M.BuildPageEntry(key, true) end
-            if profiling then M.ProfileStop("searchHiddenBuild", key, started) end
             MarkSearchIndexDirty()
         end
 

@@ -65,6 +65,13 @@ end
 function R.IsExplicitNavigationCommand(text)
     local norm = R.Normalize and R.Normalize(text) or R.Trim(text):lower()
     if norm:match("^open%s+") or norm:match("^go%s+to%s+") or norm:match("^oeffne%s+") then return true end
+    if norm:match("^take%s+me%s+to%s+") or norm:match("^jump%s+to%s+") or norm:match("^navigate%s+to%s+") then return true end
+    if norm:match("^show%s+me%s+") and R.ContainsAny and R.ContainsAny(norm, {
+        "setting", "option", "control", "slider", "dropdown", "checkbox", "toggle", "picker", "page", "menu",
+        "einstellung", "regler", "auswahl", "schalter", "seite", "menue",
+    }) then
+        return true
+    end
     if norm:match("^close%s+") and R.ContainsAny and R.ContainsAny(norm, { "panel", "dashboard", "menu", "picker", "import", "export" }) then return true end
     if norm == "support links"
         or norm == "show support links"
@@ -115,7 +122,14 @@ function R.IsExplicitReadOnlyDiagnosticCommand(text)
         or norm:match("%s+help$") ~= nil
 end
 
-function R.ReadabilityReply(title, body, examples, actions, clarification)    A.lastAssistantHelpContext = {
+function R.ReadabilityReply(title, body, examples, actions, clarification)
+    -- A fully named readability request starts a new conversational topic.
+    -- Do not let stale search/diagnostic choices or a prior planning answer
+    -- reinterpret the next "what first?" / "open that" follow-up.
+    if type(A.RouterClearPendingResultsForRoute) == "function" then A.RouterClearPendingResultsForRoute() end
+    if type(A.RouterClearPendingChoicesForRoute) == "function" then A.RouterClearPendingChoicesForRoute() end
+    A.lastAssistantPlanningContext = nil
+    A.lastAssistantHelpContext = {
         kind = "readability",
         title = tostring(title or "Readability help"),
         examples = tostring(examples or "set player width to 300; set target cast bar height to 24."),
@@ -345,6 +359,8 @@ A.RouterSafePlanningFollowupTerms = A.RouterSafePlanningFollowupTerms or {
         "explain more", "tell me more", "more details", "details",
         "why", "why this", "why that", "explain it", "explain that",
         "can you explain that", "can you explain more",
+        "can you explain your recommendation", "explain your recommendation",
+        "why that recommendation", "why this recommendation",
     },
     safe = {
         "which one is safer", "what is safest", "what is safer",

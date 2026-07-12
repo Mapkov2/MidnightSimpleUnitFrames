@@ -64,12 +64,16 @@ R.IMMEDIATE_SHORT_CONVERSATION = {
     servus = true,
     thx = true,
     danke = true,
+    bye = true,
+    goodbye = true,
 }
 R.IMMEDIATE_CONVERSATION_PHRASES = {
-    "how are you", "how are you doing", "are you ok", "you good", "wie gehts", "wie geht es dir", "alles gut", "gehts dir gut",
-    "good morning", "good evening",
+    "how are you", "how are you doing", "hows it going", "how is it going", "are you ok", "you good", "wie gehts", "wie geht es dir", "alles gut", "gehts dir gut",
+    "good morning", "good afternoon", "good evening", "good night",
     "thanks", "thank you", "danke dir",
-    "who are you", "what are you", "wer bist du", "was bist du",
+    "who are you", "what are you", "whats your name", "what is your name", "tell me about yourself", "wer bist du", "was bist du",
+    "nice work", "great job", "that was helpful", "that was funny", "goodbye", "see you later",
+    "thats not what i meant", "not what i meant", "you misunderstood", "im confused", "i am confused", "i dont know what to ask",
     "tell me a joke", "tell joke", "tell me another joke", "another joke", "say something funny", "make me laugh", "joke", "jokes",
     "what can you do", "what can i ask", "what can i ask you", "what can the assistant do",
     "assistant help", "show commands", "what commands", "which commands", "available commands",
@@ -431,6 +435,33 @@ end
 function A.RouterIsFailClosedReadOnlyRequest(text)
     local norm = R.StripResponseLanguageDirective(text)
     if norm == "" then return true end
+    -- Value-less setting ideas must reach the Router before the direct-write
+    -- fast path. The Router can then show the exact control, range, or enum
+    -- choices without letting a label word masquerade as a value.
+    if type(R.OpenEndedSettingAnalysis) == "function" then
+        local openEnded = R.OpenEndedSettingAnalysis(norm)
+        if openEnded and (openEnded.explicitValue ~= true
+            or type(R.OpenEndedEntriesAreConfident) ~= "function"
+            or not R.OpenEndedEntriesAreConfident(openEnded.entries))
+        then
+            return true
+        end
+    end
+    if type(A.RouterLooksLikeExplicitSettingRelationshipRequest) == "function"
+        and A.RouterLooksLikeExplicitSettingRelationshipRequest(norm)
+    then
+        return true
+    end
+    if type(R.LooksLikeRegistrySettingDecisionQuestion) == "function"
+        and R.LooksLikeRegistrySettingDecisionQuestion(norm)
+    then
+        return true
+    end
+    if R.ContainsAny(norm, { "dependencies", "dependency", "depend on", "depends on", "relationship", "relationships", "connection", "connections", "related settings", "related options", "related to", "connected to other settings" })
+        and R.ContainsAny(norm, { "what", "which", "how", "show", "explain", "list" })
+    then
+        return true
+    end
     if R.HasUnmistakableMutationRequest(norm) then return false end
 
     local parser = A.Parser
@@ -737,7 +768,7 @@ end
 
 function A.RouterChatGPTStyleReply()
     return {
-        text = "Yes, for MSUF and WoW UI setup. I run locally inside MSUF instead of calling an external ChatGPT service, so I use the addon menu, registry, and current profile state that exist on your client.\nI can answer MSUF questions, find options, open pages, run checks, apply concrete safe changes, and help with undo or redo.\nMy limits: I do not browse live patch data, invent current class or talent guides, or bypass WoW combat restrictions. For live guides I point you to current external resources, and for protected changes I wait until they are safe.",
+        text = "Yes—for MSUF and WoW UI setup, that is the goal. I run locally inside MSUF instead of calling an external ChatGPT service, so I understand the addon through its menu registry and your current profile state.\nI can converse naturally, remember recent MSUF context, find and open controls, explain how settings connect, diagnose blockers, apply concrete safe changes, and help with undo or redo. When wording is uncertain, I give you choices instead of inventing an answer.\nMy limits: I do not browse live patch data, invent current class or talent guides, or bypass WoW combat restrictions. The Assistant does no active work after the menu closes or while combat blocks it.",
         status = "info",
         summary = "Assistant ChatGPT-style answer",
     }
@@ -789,15 +820,86 @@ function R.TroubleshootingReply()    return {
     }
 end
 
+local function ConversationPlayerName()
+    if type(_G.UnitName) ~= "function" then return nil end
+    local ok, name = pcall(_G.UnitName, "player")
+    name = ok and tostring(name or ""):match("^%s*(.-)%s*$") or ""
+    return name ~= "" and name or nil
+end
+
 function R.HumanConversationReply(text)    local norm = R.Normalize(text)
     if norm == "" then return nil end
+
+    local ctx = A.GetContext and A.GetContext() or nil
+    local choice = type(ctx) == "table" and ctx.humanConversationChoice or nil
+    local choiceNumber = tonumber(norm:match("^(%d+)$"))
+    local currentTurn = tonumber(ctx and (ctx.turnSerial or ctx.lastTurnSerial)) or 0
+    if type(choice) == "table" and currentTurn > (tonumber(choice.turn) or 0) + 1 then
+        ctx.humanConversationChoice = nil
+        choice = nil
+    end
+    if choiceNumber and type(choice) == "table" then
+        ctx.humanConversationChoice = nil
+        if choice.kind == "confusion" then
+            if choiceNumber == 1 then
+                return {
+                    text = "Tell me any words you remember from the control, plus the frame or page if you know it. For example: 'find target portrait position' or 'list all target settings'.",
+                    status = "info",
+                    summary = "Assistant find-setting choice",
+                }
+            elseif choiceNumber == 2 then
+                return {
+                    text = "Tell me the frame and the result you want. Examples: 'make target wider', 'move player name up', 'show dispellable target debuffs', or 'set party health texture to Smooth'. If several controls fit, I'll give you numbered options.",
+                    status = "info",
+                    summary = "Assistant change-setting choice",
+                }
+            elseif choiceNumber == 3 then
+                return R.TroubleshootingReply()
+            elseif choiceNumber == 4 then
+                local answer = A.Knowledge and type(A.Knowledge.Answer) == "function"
+                    and A.Knowledge.Answer("what can this page do", { currentPage = M and M.activeKey }) or nil
+                return answer or R.AssistantCapabilityReply()
+            end
+        elseif choice.kind == "correction" then
+            if choice.canUndo == true and choiceNumber == 1 then
+                local ok, message = false, nil
+                if type(A.UndoLast) == "function" then ok, message = A.UndoLast() end
+                return {
+                    text = message or (ok and "Undid the last Assistant change." or "I could not undo that change."),
+                    status = ok and "applied" or "failed",
+                    summary = "Assistant correction undo",
+                }
+            end
+            local keepIndex = choice.canUndo == true and 2 or 1
+            local expectedIndex = choice.canUndo == true and 3 or 2
+            if choiceNumber == keepIndex then
+                return {
+                    text = "Okay, I'll keep the current change. Tell me the corrected frame and option—for example, 'I meant Target Portrait Position, not Player Portrait Position.'",
+                    status = "info",
+                    summary = "Assistant correction clarification",
+                }
+            elseif choiceNumber == expectedIndex then
+                return {
+                    text = "Describe what you expected to see in game and which frame it concerns. I'll map that result to the closest MSUF controls and give you choices if more than one fits.",
+                    status = "info",
+                    summary = "Assistant expected-result clarification",
+                }
+            end
+        end
+        choice.turn = currentTurn
+        ctx.humanConversationChoice = choice
+        return {
+            text = "That number is not one of the choices I offered. Please pick a listed number or describe what you want in your own words.",
+            status = "ambiguous",
+            summary = "Assistant conversation choice clarification",
+        }
+    end
 
     if R.ContainsAny(norm, {
         "tell me a joke", "tell joke", "tell me another joke", "another joke", "say something funny", "make me laugh", "joke", "jokes",
         "erzaehl mir einen witz", "erzaehle mir einen witz", "erzaehl einen witz",
         "erzaehle einen witz", "mach einen witz", "noch einen witz", "noch ein witz", "naechster witz", "witz",
     }) then
-        local ctx = A.GetContext and A.GetContext() or nil
         if type(ctx) == "table" then
             ctx.lastConversationKind = "joke"
             ctx.lastConversationTurn = tonumber(ctx.turnSerial or ctx.lastTurnSerial) or 0
@@ -806,6 +908,43 @@ function R.HumanConversationReply(text)    local norm = R.Normalize(text)
             text = R.NextConversationJoke() or "Sure. MSUF is ready for the next joke.",
             status = "info",
             summary = "Assistant conversation",
+        }
+    end
+
+    if R.ContainsAny(norm, {
+        "thats not what i meant", "that is not what i meant", "not what i meant", "you misunderstood",
+        "you got that wrong", "wrong thing", "das meinte ich nicht", "falsch verstanden",
+    }) then
+        local canUndo = type(A.undoStack) == "table" and #A.undoStack > 0
+        local lines = {
+            "I may have misunderstood you, so I won't guess at another change.",
+            "Pick what you want to do:",
+        }
+        if canUndo then lines[#lines + 1] = "1. Type 'undo' to revert my last MSUF change." end
+        lines[#lines + 1] = tostring(canUndo and 2 or 1) .. ". Keep the change and tell me the corrected frame plus option."
+        lines[#lines + 1] = tostring(canUndo and 3 or 2) .. ". Tell me what result you expected, and I'll offer matching MSUF controls."
+        if type(ctx) == "table" then
+            ctx.humanConversationChoice = { kind = "correction", canUndo = canUndo, turn = currentTurn }
+        end
+        return {
+            text = table.concat(lines, "\n"),
+            status = "ambiguous",
+            result = "ambiguous",
+            summary = "Assistant correction choices",
+        }
+    end
+
+    if R.ContainsAny(norm, {
+        "im confused", "i am confused", "i dont know what to ask", "not sure what to ask", "where do i start",
+        "ich bin verwirrt", "weiss nicht was ich fragen soll", "wo fange ich an",
+    }) then
+        if type(ctx) == "table" then
+            ctx.humanConversationChoice = { kind = "confusion", turn = currentTurn }
+        end
+        return {
+            text = "No problem. Pick a direction:\n1. Find or open an MSUF setting.\n2. Change a frame, bar, aura, color, or text option.\n3. Diagnose something hidden or not working.\n4. Ask what the current page can do.\nYou can answer with a number or describe what you see.",
+            status = "info",
+            summary = "Assistant starting choices",
         }
     end
 
@@ -847,7 +986,7 @@ function R.HumanConversationReply(text)    local norm = R.Normalize(text)
         "erzaehl mir etwas ueber auren", "erzaehle mir etwas ueber auren", "rede ueber auren",
     }) then
         return {
-            text = "Auras are in the MSUF Auras pages. I can open Aura pages, explain live filters, change icon size/count/growth, adjust cooldown and stack text, list saved legacy hidden-aura data, and run visibility checks. Exact SpellID blacklist edits are read-only in the native 12.1 backend. Ask: open auras; where do I change aura filters; why are target buffs hidden?",
+            text = "Auras are in the MSUF Auras pages. I can guide or change lane visibility, no-expiration filtering, live filter tokens, exact SpellID/category lists, Custom Aura include lists, icon size/count/growth, cooldown and stack text, and visibility checks. Ask: open auras; filter target debuffs to ones I can dispel; hide permanent player buffs; why are target buffs hidden?",
             status = "info",
             summary = "Auras help",
         }
@@ -951,17 +1090,18 @@ function R.HumanConversationReply(text)    local norm = R.Normalize(text)
         }
     end
 
-    if R.ContainsAny(norm, { "how are you", "how are you doing", "are you ok", "you good", "wie gehts", "wie geht es dir", "alles gut", "gehts dir gut" }) then
+    if R.ContainsAny(norm, { "how are you", "how are you doing", "hows it going", "how is it going", "are you ok", "you good", "wie gehts", "wie geht es dir", "alles gut", "gehts dir gut" }) then
         return {
-            text = "I'm ready to help with MSUF. Name the option or frame you want to change, or ask where something is.",
+            text = "Doing well—quietly waiting for the next UI puzzle. Name the MSUF option or frame you want to tune, or just tell me what looks wrong.",
             status = "info",
             summary = "Assistant conversation",
         }
     end
 
-    if R.ContainsAny(norm, { "hi", "hello", "hey", "good morning", "good evening", "hallo", "moin", "servus" }) then
+    if R.ContainsAny(norm, { "hi", "hello", "hey", "good morning", "good afternoon", "good evening", "hallo", "moin", "servus" }) then
+        local name = ConversationPlayerName()
         return {
-            text = "Hi. I'm the local MSUF Assistant. Name what you want to change or find in MSUF.",
+            text = "Hey" .. (name and (", " .. name) or "") .. ". Good to see you. What are we tuning in MSUF today?",
             status = "info",
             summary = "Assistant conversation",
         }
@@ -969,15 +1109,39 @@ function R.HumanConversationReply(text)    local norm = R.Normalize(text)
 
     if R.ContainsAny(norm, { "thanks", "thank you", "thx", "danke", "danke dir" }) then
         return {
-            text = "You're welcome. Give me the next MSUF change whenever you're ready.",
+            text = "You're welcome. I'm here when you're ready for the next tweak.",
             status = "info",
             summary = "Assistant conversation",
         }
     end
 
-    if R.ContainsAny(norm, { "who are you", "what are you", "wer bist du", "was bist du" }) then
+    if R.ContainsAny(norm, { "nice work", "great job", "that was helpful", "well done", "gut gemacht" }) then
         return {
-            text = "I'm the local MSUF Assistant. I can change MSUF options, explain pages, and ask follow-up questions when a request needs a choice. For auras, I change areas that have a matching MSUF option.",
+            text = "Glad that helped. We can keep refining it, or leave it exactly as it is.",
+            status = "info",
+            summary = "Assistant conversation",
+        }
+    end
+
+    if R.ContainsAny(norm, { "that was funny", "good one", "haha", "lol" }) then
+        return {
+            text = "Glad it landed. I do have more—type 'another joke' if you want one.",
+            status = "info",
+            summary = "Assistant conversation",
+        }
+    end
+
+    if R.ContainsAny(norm, { "bye", "goodbye", "good night", "see you later", "see you", "tschuss", "tschuess", "bis spaeter" }) then
+        return {
+            text = "See you. Your MSUF settings will be right where you left them.",
+            status = "info",
+            summary = "Assistant conversation",
+        }
+    end
+
+    if R.ContainsAny(norm, { "who are you", "what are you", "whats your name", "what is your name", "tell me about yourself", "wer bist du", "was bist du" }) then
+        return {
+            text = "I'm the local MSUF Assistant—an in-game setup partner built around MSUF's own settings and current profile. I can find controls, explain how they connect, guide you to them, apply safe changes, and offer choices when your request could mean several things.",
             status = "info",
             summary = "Assistant conversation",
         }
@@ -1009,6 +1173,17 @@ function A.TryImmediateConversationReply(text)
     if norm == "" then return nil end
     if R.IsAdjacentJokeFollowup(norm) then return R.HumanConversationReply("another joke") end
     if A.RouterHasBlockingPendingAssistantState and A.RouterHasBlockingPendingAssistantState() then return nil end
+    local parser = A.Parser or {}
+    if type(parser.LooksLikeAuraFilteringConversation) == "function"
+        and parser.LooksLikeAuraFilteringConversation(
+            norm,
+            type(A.GetContext) == "function" and A.GetContext() or {}
+        )
+    then
+        return nil
+    end
+    local liveColor = R.TryLiveUnitColorExplanation and R.TryLiveUnitColorExplanation(text)
+    if liveColor then return liveColor end
     local auraDurationChoice = R.AuraDurationFilterQuestionReply and R.AuraDurationFilterQuestionReply(norm)
     if auraDurationChoice then return auraDurationChoice end
     if norm:match("^wo%s+") or norm:match("^wie%s+kann%s+ich%s+")
@@ -1050,7 +1225,14 @@ function A.TryImmediateConversationReply(text)
                 local subject = R.RegistryLocationSubject(norm)
                 local compact = subject ~= "" and R.CompactRegistrySettingSearchEntries(subject, 1) or nil
                 local compactLabel = compact and compact[1] and compact[1].item and R.Normalize(compact[1].item.label) or ""
-                if compactLabel ~= "" and not R.Normalize(visualHelp.text):find(compactLabel, 1, true) then
+                -- A specialist can accurately explain that no literal control
+                -- exists (for example per-frame Background Color). Override it
+                -- only for an exact full setting label, not a fuzzy generated
+                -- leaf that merely shares words such as portrait/background.
+                local exactSubject = R.Normalize(subject)
+                if compactLabel ~= "" and compactLabel == exactSubject
+                    and not R.Normalize(visualHelp.text):find(compactLabel, 1, true)
+                then
                     local location = A.RouterTryRegistrySettingLocationShortcut(norm, nil, compact)
                     if location then return location end
                 end
@@ -1075,7 +1257,7 @@ function R.UnsupportedAuraReply(text)    local norm = R.Normalize(text)
         kind = "unsupported",
         status = "info",
         summary = "Aura option fallback.",
-        text = "I don't see an MSUF aura option for that request yet. I can change aura icon size, caps/count, X/Y offsets, spacing, growth, layer, cooldown text, stack text, duration bars, live filter tokens, quick presets, custom UnitFrame auras, and group aura copy when those options exist in MSUF. Saved exact SpellID blacklist data can be listed, but it is read-only while the native 12.1 backend is active. Aura areas I can't match will stay as they are.",
+        text = "I don't see a precise MSUF aura option in that wording yet. I can change lane visibility, permanent/no-expiration filtering, live tokens, exact SpellID/category lists, Custom Aura include lists, icon layout, timer/stack styling, presets, and group aura copy. Name the frame or group, Buffs or Debuffs, and what should be kept or hidden; if more than one control fits, I will offer choices.",
     }
 end
 
@@ -1169,12 +1351,26 @@ function R.TryReadabilityShortcut(text)    local norm = R.Normalize(text)
     end
 
     if R.ContainsAny(norm, R.READABILITY_AURA_TERMS) then
-        return R.ReadabilityReply(
+        local openAction = "Open Auras"
+        if R.ContainsAny(norm, { "party", "raid", "mythic raid", "group" }) then
+            openAction = "Open Group Auras"
+        elseif R.ContainsAny(norm, { "target" }) then
+            openAction = R.ContainsAny(norm, { "debuff", "debuffs" }) and "Open Target Debuffs" or "Open Target Buffs"
+        elseif R.ContainsAny(norm, { "focus" }) then
+            openAction = R.ContainsAny(norm, { "debuff", "debuffs" }) and "Open Focus Debuffs" or "Open Focus Buffs"
+        elseif R.ContainsAny(norm, { "player" }) then
+            openAction = R.ContainsAny(norm, { "debuff", "debuffs" }) and "Open Player Debuffs" or "Open Player Buffs"
+        end
+        local reply = R.ReadabilityReply(
             "Aura readability help",
             "For aura size and overlap, I can change icon size, caps/count, spacing, growth direction, anchors, X/Y offsets, layer, cooldown text, and stack text when the scope is clear.",
             "set target buff icon size to 30; set party aura spacing to 4; make raid buffs grow up.",
-            "Open Auras | Check target buffs"
+            openAction .. " | Check target buffs"
         )
+        if type(A.lastAssistantHelpContext) == "table" then
+            A.lastAssistantHelpContext.nextStep = "Start with the least destructive visible setting: open Auras and adjust the named lane's Icon Size first. Then tune spacing or count only if the icons are still crowded."
+        end
+        return reply
     end
 
     if R.ContainsAny(norm, R.READABILITY_CASTBAR_TERMS) then
@@ -1187,12 +1383,16 @@ function R.TryReadabilityShortcut(text)    local norm = R.Normalize(text)
     end
 
     if R.ContainsAny(norm, R.READABILITY_GROUP_TERMS) then
-        return R.ReadabilityReply(
+        local reply = R.ReadabilityReply(
             "Group frame readability help",
             "For Party, Raid, and Mythic Raid readability, I can adjust group frame scale, layout, spacing, health text, name text, range fade, and aura layout.",
             "set raid scale for 20 players to 90; set party name text size to 13; open group health and text.",
             "Open Group Layout | Open Group Health & Text"
         )
+        if type(A.lastAssistantHelpContext) == "table" then
+            A.lastAssistantHelpContext.nextStep = "Start with the least destructive visible setting: open Group Layout and adjust scale or frame spacing first. If the frames are large enough but the words are not, adjust name or health text next."
+        end
+        return reply
     end
 
     if R.ContainsAny(norm, R.READABILITY_TEXT_TERMS) then
@@ -1379,7 +1579,7 @@ function R.TryColorContrastShortcut(text)    local norm = R.Normalize(text)
     if R.ContainsAny(norm, R.COLOR_CONTRAST_AURA_TERMS) then
         return R.ColorContrastReply(
             "Aura color and opacity help",
-            "For aura readability, I can adjust aura cooldown text colors, stack text, icon sizing, and live filters. Saved exact hidden-aura lists are read-only in the native 12.1 backend. For faded or hard-to-read aura icons, start by naming the scope and lane.",
+            "For aura readability, I can adjust aura cooldown text colors, stack text, icon sizing, and content filters. Exact hidden-aura lists are live too, subject to Blizzard's identity-filter restrictions. For faded or hard-to-read icons, start by naming the scope and lane.",
             "set aura safe timer color to white; set target buff icon size to 30; check target buffs.",
             "Open Auras | Check target buffs"
         )
@@ -2235,6 +2435,22 @@ A.RouterTryVisualSettingShortcut = function(norm, coreHandler)
         end
     end
 
+    if R.ContainsAny(norm, { "portrait" })
+        and R.ContainsAny(norm, { "border", "border color", "border colour" })
+        and R.ContainsAny(norm, { "color", "colour" })
+        and asksLocation
+    then
+        local label = scopeLabel and (scopeLabel .. " Portrait Border") or "Portrait Border"
+        local framePage = scopeLabel or "the relevant unit frame"
+        local frameCommand = scope and ("open " .. scope) or "open player"
+        return R.VisualSettingReply(
+            label .. " color setting location",
+            label .. " style and thickness live on " .. framePage .. ". Choose Custom color in its Border dropdown, then set the shared Portrait Border Color in Colors > Portrait Colors. Class color and reaction color are selected by that same per-frame Border dropdown.",
+            frameCommand .. "; set " .. tostring(scope or "player") .. " portrait border to custom; open colors; set portrait border color red.",
+            "Open " .. tostring(scopeLabel or "Player") .. " | Open Colors"
+        )
+    end
+
     if (R.ContainsAny(norm, { "border color", "frame border color" })
             or (R.ContainsAny(norm, { "border", "outline" }) and R.ContainsAny(norm, R.COLOR_TERMS)))
         and scopeKind == "unit"
@@ -2354,13 +2570,21 @@ R.UNIT_FRAME_MOVEMENT_EXCLUDED_TOPICS = {
     "combat timer", "combat crosshair",
 }
 
-function R.MovementSettingReply(title, body, examples, actions, status)
-    return {
+function R.MovementSettingReply(title, body, examples, actions, status, settingKey)
+    local reply = {
         text = tostring(title or "Frame position setting location") .. "\n" .. tostring(body or "") .. "\nExamples: " .. tostring(examples or "enter MSUF edit mode; open player; move player frame down 10.") .. "\nYou can ask: " .. tostring(actions or "Enter Edit Mode | Open Player | Open Target"),
         status = status or "info",
         result = status or "info",
         summary = "Assistant frame movement help",
     }
+    if settingKey and type(R.RegistrySettingItemForKey) == "function" and type(R.RegistryLocationResultFollowups) == "function" then
+        local item = R.RegistrySettingItemForKey(settingKey)
+        if item then
+            reply.searchResults = R.RegistryLocationResultFollowups({ { item = item } }, 1)
+            reply.selectPendingResult = 1
+        end
+    end
+    return reply
 end
 
 function R.LooksLikeFrameCombatMovementQuestion(norm)
@@ -2596,11 +2820,14 @@ A.RouterTryUnitFrameSettingShortcut = function(text, coreHandler)
     if not unit or not unitLabel then return nil end
 
     if R.ContainsAny(norm, { "portrait", "portrait style", "model portrait", "class portrait" }) then
+        local portraitSettingKey = R.ContainsAny(norm, { "position", "side", "left", "right" }) and (unit .. ".portraitMode") or nil
         return R.MovementSettingReply(
             unitLabel .. " Portrait setting location",
             unitLabel .. " portrait options live on the " .. unitLabel .. " frame page. Use " .. unitLabel .. " Portrait, Portrait Style, Portrait Position/Side, and keep-visible portrait options there; use a direct command only when you want me to change it.",
             "open " .. unit .. "; set " .. unit .. " portrait style to class; set " .. unit .. " portrait position left.",
-            "Open " .. unitLabel .. " | set " .. unit .. " portrait style to class"
+            "Open " .. unitLabel .. " | set " .. unit .. " portrait style to class",
+            nil,
+            portraitSettingKey
         )
     end
 
@@ -2609,7 +2836,9 @@ A.RouterTryUnitFrameSettingShortcut = function(text, coreHandler)
             unitLabel .. " Width setting location",
             unitLabel .. " Width lives on the " .. unitLabel .. " frame page. Use it with " .. unitLabel .. " Height and scale settings when the whole frame size should change.",
             "open " .. unit .. "; set " .. unit .. " width to 250; make " .. unit .. " frame wider.",
-            "Open " .. unitLabel .. " | set " .. unit .. " width to 250"
+            "Open " .. unitLabel .. " | set " .. unit .. " width to 250",
+            nil,
+            unit .. ".width"
         )
     end
 
@@ -2618,7 +2847,9 @@ A.RouterTryUnitFrameSettingShortcut = function(text, coreHandler)
             unitLabel .. " Height setting location",
             unitLabel .. " Height lives on the " .. unitLabel .. " frame page. Use it with " .. unitLabel .. " Width and scale settings when the whole frame size should change.",
             "open " .. unit .. "; set " .. unit .. " height to 40; make " .. unit .. " frame taller.",
-            "Open " .. unitLabel .. " | set " .. unit .. " height to 40"
+            "Open " .. unitLabel .. " | set " .. unit .. " height to 40",
+            nil,
+            unit .. ".height"
         )
     end
 
@@ -2687,6 +2918,54 @@ function R.AuraDetailPageForScope(groupScope, lane)
     return lane == "buff" and "Aura Buffs" or "Aura Debuffs"
 end
 
+function R.TryScopedAuraGrowthChoice(text, coreHandler)
+    if type(coreHandler) ~= "function" then return nil end
+    local norm = R.Normalize(text)
+    local lane = R.AuraLaneFromText(norm)
+    local scope = R.AuraScopeForDetailText(norm)
+    if not lane or not scope then return nil end
+
+    local growthIntent = R.ContainsAny(norm, { "growth direction", "grow direction", "growth", "grow differently", "grows differently" })
+        or ((R.HasNormalizedPhrase(norm, "grow") or R.HasNormalizedPhrase(norm, "grows"))
+            and not R.ContainsAny(norm, {
+                "icon size", "icons size", "bigger", "larger", "smaller", "shrink",
+                "cooldown text", "timer text", "stack text", "stack count", "font size", "text size",
+            }))
+    if not growthIntent then return nil end
+
+    local mutationIntent = R.StartsWithMutationCommand(norm)
+        or R.HasUnmistakableMutationRequest(norm)
+        or R.ContainsAny(norm, {
+            "want to change", "want change", "change how", "want to adjust", "adjust how",
+            "would like to change", "like to change", "need to change", "help me change",
+            "grow differently", "grows differently", "switch the growth", "switch growth",
+        })
+    if not mutationIntent then return nil end
+
+    -- A concrete direction belongs on the normal mutation path. This helper
+    -- exists for the open-ended form where the user named the exact control
+    -- but deliberately omitted its enum value.
+    local explicitDirection = R.ContainsAny(norm, {
+        "leftdown", "left down", "rightdown", "right down", "leftup", "left up", "rightup", "right up",
+        "to left", "to the left", "to right", "to the right", "upward", "upwards", "downward", "downwards",
+        "grow left", "grow right", "grow up", "grow down", "growth left", "growth right", "growth up", "growth down",
+        "horizontal", "horizontally", "vertical", "vertically",
+    })
+        or R.HasNormalizedPhrase(norm, "left") or R.HasNormalizedPhrase(norm, "right")
+        or R.HasNormalizedPhrase(norm, "up") or R.HasNormalizedPhrase(norm, "down")
+        or R.HasNormalizedPhrase(norm, "links") or R.HasNormalizedPhrase(norm, "rechts")
+        or R.HasNormalizedPhrase(norm, "hoch") or R.HasNormalizedPhrase(norm, "runter")
+    if explicitDirection then
+        return nil
+    end
+
+    local canonical = "change " .. tostring(scope) .. " " .. tostring(lane) .. " growth direction"
+    local result = type(R.TryOpenEndedSettingIdea) == "function" and R.TryOpenEndedSettingIdea(canonical, coreHandler)
+        or coreHandler("set " .. tostring(scope) .. " " .. tostring(lane) .. " growth direction")
+    if result and not A.RouterIsUnknownResult(result) then return result end
+    return nil
+end
+
 function R.AuraSpecificIconFilterRequest(norm)
     if not (R.WantsVisibilityOff(norm) or R.AsksSettingLocation(norm)) then return false end
     if not R.ContainsAny(norm, { "icon", "icons", "symbol" }) then return false end
@@ -2695,8 +2974,41 @@ function R.AuraSpecificIconFilterRequest(norm)
 end
 
 function R.AuraSpecificSpellRequest(norm)
-    if not R.WantsVisibilityOff(norm) then return false end
-    return R.ContainsAny(norm, { "spell ", "spell:", "power word shield" })
+    norm = R.Normalize(norm)
+    local parser = A.Parser or {}
+    local value = type(parser.AuraBlacklistSpellValue) == "function"
+        and parser.AuraBlacklistSpellValue(norm) or nil
+    if type(value) ~= "string" or value == "" then return false end
+
+    -- Custom Aura whitelists and exact exclusion lists are live native-
+    -- container controls. Keep them on their registered mutation paths.
+    if R.ContainsAny(norm, { "custom aura", "custom whitelist", "custom container" }) then return false end
+    if R.ContainsAny(norm, { "clear", "empty", "reset", "summary", "list", "current", "category", "categories", "preset" }) then return false end
+
+    local valueNorm = R.Normalize(value)
+    if R.ContainsAny(valueNorm, { " icon", " icons", " symbol", " symbols" }) then return false end
+    if valueNorm == "buff" or valueNorm == "buffs" or valueNorm == "debuff" or valueNorm == "debuffs"
+        or valueNorm == "aura" or valueNorm == "auras"
+        or valueNorm:find(" frame$", 1, false) or valueNorm:find(" frames$", 1, false)
+    then
+        return false
+    end
+
+    -- A generic "hide X on Target" sentence can name an ordinary frame
+    -- control (for example Target-of-Target Name). Only claim it is a spell
+    -- when the request also names an aura/list concept, a spell identifier, or
+    -- the known natural-language spell example handled by this shortcut.
+    local hasAuraContext = R.ContainsAny(norm, { "aura", "auras", "buff", "buffs", "debuff", "debuffs" })
+    local hasExactListContext = R.ContainsAny(norm, { "blacklist", "whitelist", "unblacklist" })
+    local hasExplicitSpellContext = R.ContainsAny(norm, { "spell ", "spell:", "power word shield" })
+    if not hasAuraContext and not hasExactListContext and not hasExplicitSpellContext then return false end
+
+    return R.WantsVisibilityOff(norm)
+        or R.ContainsAny(norm, {
+            "blacklist", "whitelist", "unblacklist", "block", "unblock", "ignore", "suppress",
+            "allow ", "remove ", "unhide", "stop hiding", "stop showing", "show again",
+            "verstecke", "ausblenden",
+        })
 end
 
 function R.AuraDetailExplicitNumber(norm)
@@ -2723,26 +3035,26 @@ A.RouterTryAuraDetailSettingShortcut = function(norm, coreHandler)
                 local laneText = lane and (" " .. laneLabel) or ""
                 return A.RouterAuraDetailReply(
                     scopeLabel .. laneText .. " hidden aura setting location",
-                    "Saved exact aura hiding data is shown in Aura Filters, but it is read-only while the native 12.1 backend is active. Open Aura Filters, set Aura Editing Scope to " .. scopeLabel .. ", then use live filter toggles/tokens for display changes. I did not change the frame or its power text.",
+                    "Exact aura hiding is a live SpellID list in Aura Filters. Open Aura Filters, set Aura Editing Scope to " .. scopeLabel .. ", choose the lane, then add or remove the exact SpellID. Blizzard may restrict identity filtering for some unit/reaction combinations. I did not change the frame or its power text.",
                     "open aura filters; set " .. scope .. (lane and (" " .. lane:lower() .. " ") or " ") .. "raid filter on.",
                     "Open Aura Filters | Check " .. scopeLabel .. " Auras"
                 )
             end
             local laneText = lane and (" " .. lane:lower() .. "s") or " auras"
-            local result = R.CoreControl(
-                coreHandler,
-                "hide " .. tostring(value) .. " for " .. tostring(scope) .. laneText,
-                "That looks like a specific aura. Exact SpellID blacklist edits are read-only while the native 12.1 backend is active, so use live Aura Filters instead of disabling the whole frame or aura lane.",
+            return A.RouterAuraDetailReply(
+                scopeLabel .. (lane and (" " .. laneLabel) or " Aura") .. " specific spell filter",
+                "That looks like one specific aura (" .. tostring(value) .. "), not a request to hide the whole " .. scopeLabel .. " frame or lane. I can add an exact SpellID exclusion after you confirm the frame and Buff/Debuff lane; Blizzard may restrict identity filtering on some units. I did not change the frame.",
+                "open aura filters; set " .. scope .. (lane and (" " .. lane:lower()) or "") .. " raid filter on; where can I adjust " .. scope .. laneText .. " filters.",
+                "Open Aura Filters | Check " .. scopeLabel .. " Auras",
                 "info"
             )
-            if result then return result end
         end
     end
 
     if lane and scope and R.AuraSpecificIconFilterRequest(norm) then
         return A.RouterAuraDetailReply(
             scopeLabel .. " " .. laneLabel .. " specific icon filter",
-            "That sounds like one specific " .. laneLabel:lower() .. " icon, not the whole " .. scopeLabel .. " " .. lanePlural .. " lane. Exact SpellID hiding is read-only in the native 12.1 backend, so use Aura Filters for live filter changes. I will not hide all " .. scopeLabel .. " " .. lanePlural .. " for one icon name.",
+            "That sounds like one specific " .. laneLabel:lower() .. " icon, not the whole " .. scopeLabel .. " " .. lanePlural .. " lane. Give me its SpellID and I can use the exact exclusion list when Blizzard permits identity filtering. I will not hide all " .. scopeLabel .. " " .. lanePlural .. " for one icon name.",
             "open aura filters; set " .. scope .. " " .. lane:lower() .. " raid filter on; where can I adjust " .. scope .. " " .. lane:lower() .. " filters.",
             "Open Aura Filters | Check " .. scopeLabel .. " " .. laneLabel,
             "info"
@@ -2757,10 +3069,11 @@ A.RouterTryAuraDetailSettingShortcut = function(norm, coreHandler)
         local sizeLabel = broadCooldownText and "Cooldown Text Size" or "Stack Text Size"
         local sizeIntent = R.ContainsAny(norm, { "size", "groesse", "grosse", "bigger", "larger", "smaller", "increase", "decrease", "reduce", "grow", "shrink" })
         if isGroupScope then
+            local groupSizeName = broadCooldownText and "cooldown font size" or "stack font size"
             return A.RouterAuraDetailReply(
                 scopeLabel .. " aura " .. settingLabel .. " needs a lane",
                 scopeLabel .. " aura " .. settingLabel .. " has separate Buff and Debuff controls. Tell me which lane so I do not change the wrong group aura text setting.",
-                "make " .. scope .. " buff " .. textName .. " size bigger; make " .. scope .. " debuff " .. textName .. " size bigger; turn off " .. scope .. " debuff " .. textName .. ".",
+                "make " .. scope .. " buff " .. groupSizeName .. " bigger; make " .. scope .. " debuff " .. groupSizeName .. " bigger; turn off " .. scope .. " debuff " .. textName .. ".",
                 "Open Group Auras | " .. scopeLabel .. " Buff " .. settingLabel .. " | " .. scopeLabel .. " Debuff " .. settingLabel,
                 asksLocation and "info" or "ambiguous"
             )
@@ -2847,12 +3160,13 @@ A.RouterTryAuraDetailSettingShortcut = function(norm, coreHandler)
         local command
         if R.ContainsAny(norm, { "size", "groesse", "grosse", "bigger", "larger", "smaller", "increase", "decrease", "reduce", "grow", "shrink" }) then
             settingLabel = isGroupScope and "Cooldown Font Size" or "Cooldown Text Size"
+            local commandSizeName = isGroupScope and "cooldown font size" or "cooldown text size"
             local explicitNumber = R.AuraDetailExplicitNumber(norm)
             if explicitNumber then
-                command = "set " .. scope .. " " .. lane .. " cooldown text size to " .. explicitNumber
+                command = "set " .. scope .. " " .. lane .. " " .. commandSizeName .. " to " .. explicitNumber
             else
                 local direction = R.ContainsAny(norm, { "smaller", "decrease", "reduce", "shrink" }) and "smaller" or "bigger"
-                command = "make " .. scope .. " " .. lane .. " cooldown text size " .. direction
+                command = "make " .. scope .. " " .. lane .. " " .. commandSizeName .. " " .. direction
             end
         else
             local verb = wantsOff and "turn off " or "turn on "
@@ -2868,12 +3182,13 @@ A.RouterTryAuraDetailSettingShortcut = function(norm, coreHandler)
         local command
         if R.ContainsAny(norm, { "size", "groesse", "grosse", "bigger", "larger", "smaller", "increase", "decrease", "reduce", "grow", "shrink" }) then
             settingLabel = isGroupScope and "Stack Font Size" or "Stack Text Size"
+            local commandSizeName = isGroupScope and "stack font size" or "stack text size"
             local explicitNumber = R.AuraDetailExplicitNumber(norm)
             if explicitNumber then
-                command = "set " .. scope .. " " .. lane .. " stack text size to " .. explicitNumber
+                command = "set " .. scope .. " " .. lane .. " " .. commandSizeName .. " to " .. explicitNumber
             else
                 local direction = R.ContainsAny(norm, { "smaller", "decrease", "reduce", "shrink" }) and "smaller" or "bigger"
-                command = "make " .. scope .. " " .. lane .. " stack text size " .. direction
+                command = "make " .. scope .. " " .. lane .. " " .. commandSizeName .. " " .. direction
             end
         else
             local verb = wantsOff and "turn off " or "turn on "
@@ -2915,7 +3230,7 @@ A.RouterTryAuraSettingShortcut = function(norm, coreHandler)
     if asksLocation and R.ContainsAny(norm, { "blacklist", "whitelist", "hidden aura", "hidden spell", "spell blacklist", "spell filter", "filter" }) then
         local reply = A.RouterAuraProblemReply(
             scopeLabel .. " " .. laneLabel .. " Filter setting location",
-            scopeLabel .. " " .. laneLabel .. " filtering lives in Aura Filters. Open Aura Filters, set Aura Editing Scope to " .. scopeLabel .. ", set Aura Filter Lane to " .. lanePlural .. ", then use live filter toggles/tokens for that lane. Saved exact blacklist/whitelist data is read-only in the native 12.1 backend.",
+            scopeLabel .. " " .. laneLabel .. " filtering lives in Aura Filters. Open Aura Filters, set Aura Editing Scope to " .. scopeLabel .. ", set Aura Filter Lane to " .. lanePlural .. ", then choose live tokens, Hide Permanent, or an exact SpellID list. Lane visibility and timer styling are separate controls.",
             "open aura filters; set aura editing scope to " .. scope .. "; set aura filter lane to " .. lane:lower() .. "s; set " .. scope .. " " .. lane:lower() .. " raid filter on.",
             "Open Aura Filters | Check " .. scopeLabel .. " " .. laneLabel
         )
@@ -3411,6 +3726,188 @@ function R.AuraFilterRecommendationWantsAnswer(norm)
     return false
 end
 
+local LIVE_COLOR_QUESTION_TERMS = {
+    "why is", "why does", "why did", "what does", "what is", "what means",
+    "explain", "different color", "changed color", "change color",
+}
+
+local LIVE_COLOR_VISUAL_TERMS = {
+    "color", "colored", "colour", "coloured", "red", "green", "blue",
+    "yellow", "orange", "purple", "gray", "grey", "white", "black",
+}
+
+local function LiveColorUnit(norm)
+    if R.ContainsAny(norm, { "target of target", "targettarget" }) then return "targettarget", "Target of Target" end
+    if R.ContainsAny(norm, { "focus target", "focustarget" }) then return "focustarget", "Focus Target" end
+    if R.ContainsAny(norm, { "target", "target frame", "target health", "target bar" }) then return "target", "Target" end
+    if R.ContainsAny(norm, { "focus", "focus frame", "focus health", "focus bar" }) then return "focus", "Focus" end
+    if R.ContainsAny(norm, { "player", "player frame", "my frame", "my health bar" }) then return "player", "Player" end
+    if R.ContainsAny(norm, { "pet", "pet frame", "pet health" }) then return "pet", "Pet" end
+    if R.ContainsAny(norm, { "boss", "boss frame", "boss health" }) then return "boss1", "Boss" end
+    return nil
+end
+
+local function SafeLiveValue(value)
+    return not (_G.issecretvalue and _G.issecretvalue(value) == true) and value or nil
+end
+
+local function LiveDebuffCount(unit)
+    local api = _G.C_UnitAuras and _G.C_UnitAuras.GetAuraDataByIndex
+    if type(api) ~= "function" then return nil end
+    local count = 0
+    for index = 1, 40 do
+        local ok, aura = pcall(api, unit, index, "HARMFUL")
+        if not ok or aura == nil then break end
+        count = count + 1
+    end
+    return count
+end
+
+local function LiveBorderVisual(frame, uf, spec)
+    if uf and type(uf.GetActiveBorderVisual) == "function" then
+        local ok, visual = pcall(uf.GetActiveBorderVisual, frame)
+        if ok and type(visual) == "table" then return visual end
+    end
+    if not frame then return nil end
+    local source = frame._msufBorderActiveSource
+    if source and frame._msufBorderShown ~= false then
+        return {
+            source = source,
+            r = frame._msufBorderR,
+            g = frame._msufBorderG,
+            b = frame._msufBorderB,
+            a = frame._msufBorderA,
+        }
+    end
+    local border = spec and spec.border
+    if frame._msufA3DispelActive == true and (not border or border.dispel ~= false) then
+        return {
+            source = "dispel",
+            r = frame._msufA3DispelR,
+            g = frame._msufA3DispelG,
+            b = frame._msufA3DispelB,
+            a = frame._msufA3DispelA,
+        }
+    end
+    return nil
+end
+
+local function LiveBorderExplanation(unitLabel, visual)
+    local source = tostring(visual and visual.source or "normal")
+    local cause
+    if source == "dispel" then
+        cause = "That is MSUF's active dispel/debuff highlight border. The Aura runtime marked a readable debuff for the current dispel rules; it is not the health fill changing reaction color."
+    elseif source == "aggro" then
+        cause = "That is MSUF's active aggro highlight border. It is showing current threat state, not a class or health-fill color."
+    elseif source == "purge" then
+        cause = "That is MSUF's purge highlight border, used to call attention to a purgeable effect."
+    elseif source == "bossTarget" then
+        cause = "That is MSUF's Boss Target highlight border, showing that this boss unit frame is your current target."
+    else
+        cause = "That is the normal configured MSUF border color; no higher-priority dispel, aggro, purge, or Boss Target highlight currently owns it."
+    end
+    local r = tonumber(SafeLiveValue(visual and visual.r))
+    local g = tonumber(SafeLiveValue(visual and visual.g))
+    local b = tonumber(SafeLiveValue(visual and visual.b))
+    local rgb = r and g and b and string.format(" The visible border is RGB %d, %d, %d.",
+        math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5)) or ""
+    return unitLabel .. " border: " .. cause .. rgb
+end
+
+function R.TryLiveUnitColorExplanation(text)
+    local norm = R.Normalize(text)
+    if not R.LooksLikeLiveUnitColorQuestion(norm) then return nil end
+    local unit, unitLabel = LiveColorUnit(norm)
+    if not unit then return nil end
+
+    local exists = type(_G.UnitExists) == "function" and SafeLiveValue(_G.UnitExists(unit)) or nil
+    if exists == false or exists == nil then
+        return {
+            text = "I can explain that, but I can't inspect " .. unitLabel .. " live right now because no readable unit is there. Target it again and ask 'why is my " .. unitLabel:lower() .. " this color?'. I'll check the live bar mode, unit reaction, and visible highlights.",
+            status = "info",
+            summary = "Live MSUF unit color explanation",
+        }
+    end
+
+    local frame = _G["MSUF_" .. unit]
+    local uf = MSUF and (MSUF.UnitFrames or MSUF.UF)
+    if not frame and uf and type(uf.GetFrame) == "function" then frame = uf.GetFrame(unit) end
+    local spec = frame and frame.MSUFSpec
+    local health = spec and spec.health or {}
+    local borderVisual = LiveBorderVisual(frame, uf, spec)
+    local asksBorder = R.ContainsAny(norm, { "border", "outline", "highlight", "edge", "rand", "umrandung" })
+    local asksHealthFill = R.ContainsAny(norm, { "health", "health bar", "health fill", "bar fill", "hp bar", "lebensbalken" })
+    if borderVisual and (asksBorder or (tostring(borderVisual.source or "normal") ~= "normal" and not asksHealthFill)) then
+        return {
+            text = LiveBorderExplanation(unitLabel, borderVisual)
+                .. "\nHighlight priority comes from the MSUF border settings; the first active source wins.",
+            status = "info",
+            summary = "Live MSUF border color explanation",
+        }
+    end
+    local mode = tostring(health.mode or "class"):lower()
+    local cause
+    if mode == "dark" or mode == "unified" then
+        cause = "MSUF is using the fixed " .. mode .. " health-bar color."
+    elseif mode == "gradient" then
+        cause = "MSUF is using the health gradient, so the color follows the unit's current health percentage."
+    elseif type(_G.UnitIsPlayer) == "function" and SafeLiveValue(_G.UnitIsPlayer(unit)) == true then
+        cause = "This is a player, so MSUF is using that player's class color."
+    else
+        local reaction = type(_G.UnitReaction) == "function" and tonumber(SafeLiveValue(_G.UnitReaction(unit, "player"))) or nil
+        if tostring(health.npcColorMode or ""):lower() == "type" and health.npcTypeColorBar ~= false then
+            cause = "MSUF's NPC Type coloring is active, so this bar follows the NPC's classification rather than a debuff."
+        elseif reaction and reaction >= 5 then
+            cause = "The unit is friendly, so MSUF is using the friendly reaction color."
+        elseif reaction == 4 then
+            cause = "The unit is neutral, so MSUF is using the neutral reaction color (usually yellow/orange)."
+        elseif reaction then
+            cause = "The unit is hostile, so MSUF is using the enemy reaction color."
+        else
+            cause = "MSUF is using the unit's class/reaction color mode."
+        end
+    end
+
+    local rgb
+    local bar = frame and (frame.hpBar or frame.Health)
+    if bar and type(bar.GetStatusBarColor) == "function" then
+        local r, g, b = bar:GetStatusBarColor()
+        r, g, b = tonumber(SafeLiveValue(r)), tonumber(SafeLiveValue(g)), tonumber(SafeLiveValue(b))
+        if r and g and b then
+            rgb = string.format(" The visible fill is RGB %d, %d, %d.", math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5))
+        end
+    end
+
+    local auraLine
+    if borderVisual and tostring(borderVisual.source or "") ~= "normal" then
+        auraLine = LiveBorderExplanation(unitLabel, borderVisual)
+    else
+        local debuffs = LiveDebuffCount(unit)
+        if debuffs and debuffs > 0 then
+            auraLine = "I can also see " .. tostring(debuffs) .. " readable debuff" .. (debuffs == 1 and "" or "s") .. ". On Target/Focus unit frames, debuffs normally affect their aura icons or highlight borders; they do not recolor the health fill."
+        elseif debuffs == 0 then
+            auraLine = "I don't see a readable debuff right now. Debuffs normally affect aura icons or highlight borders, not the Target/Focus health fill."
+        else
+            auraLine = "Debuffs normally affect aura icons or highlight borders, not the Target/Focus health fill."
+        end
+    end
+
+    return {
+        text = "Yep—this one has a concrete reason. " .. cause .. (rgb or "") .. "\n" .. auraLine
+            .. "\nColor guide: players use class colors; friendly, neutral, and hostile NPCs use reaction colors; NPC Type mode uses classification colors; Gradient follows health; Unified/Dark use a fixed profile color.",
+        status = "info",
+        summary = "Live MSUF unit color explanation",
+    }
+end
+
+function R.LooksLikeLiveUnitColorQuestion(text)
+    local norm = R.Normalize(text)
+    return norm ~= ""
+        and R.ContainsAny(norm, LIVE_COLOR_QUESTION_TERMS)
+        and R.ContainsAny(norm, LIVE_COLOR_VISUAL_TERMS)
+        and LiveColorUnit(norm) ~= nil
+end
+
 function R.AuraDurationFilterQuestionReply(norm)
     norm = R.Normalize(norm)
     local durationIntent = R.ContainsAny(norm, {
@@ -3726,7 +4223,7 @@ A.RouterTryAuraProblemShortcut = function(text, coreHandler)
     if R.ContainsAny(norm, terms.filter) then
         return A.RouterAuraProblemReply(
             "Aura filter help",
-            "Aura filters depend on the exact scope and lane: unit buffs, unit debuffs, group buffs, or group debuffs. Use Aura Editing Scope, Aura Filter Lane, live filter tokens, and quick presets before applying a new filter. Saved exact SpellID blacklist/category data is read-only in the native 12.1 backend.",
+            "Aura filters depend on the exact scope and lane: unit buffs, unit debuffs, group buffs, or group debuffs. Choose the frame/group and lane, then a goal: only mine, raid relevance, dispellable/CC, defensives, only timed, show all, or an exact SpellID/category list. I can guide that one choice at a time.",
             "open aura filters; set aura editing scope to target; set target debuff dispellable filter on; check target buffs.",
             "Open Aura Filters | Open Auras | Check target buffs | Open Group Auras"
         )
@@ -5110,7 +5607,115 @@ function R.TryVisibilityDiagnosticShortcut(text, coreHandler)    if type(coreHan
     return nil
 end
 
+function R.TryUncertainContextChoices(text)
+    local norm = R.Normalize(text)
+    if norm == "" or not (R.LooksLikeMutation(norm) or R.StartsWithMutationCommand(norm)) then return nil end
+    local parser = A.Parser or {}
+    local registry = A.Registry
+    if not registry then return nil end
+
+    local choices, seen = {}, {}
+    local function AddChoice(choice, identity)
+        identity = tostring(identity or "")
+        if not choice or identity == "" or seen[identity] or #choices >= 4 then return end
+        seen[identity] = true
+        choices[#choices + 1] = choice
+    end
+
+    local hasReference = R.ContainsAny(norm, {
+        "it", "that", "this", "same", "last setting", "previous setting",
+        "turn it", "change it", "make it", "move it",
+    })
+    local ctx = type(A.GetContext) == "function" and A.GetContext() or nil
+    local lastSetting = hasReference and type(ctx) == "table" and type(ctx.lastSetting) == "string"
+        and registry:GetSetting(ctx.lastSetting) or nil
+    if lastSetting then
+        local value
+        if type(parser.DetectBoolean) == "function" then value = parser.DetectBoolean(norm) end
+        local choice
+        if lastSetting.type == "boolean" and value ~= nil then
+            choice = {
+                setting = lastSetting,
+                value = value,
+                label = "Use the earlier topic: " .. tostring(lastSetting.label or lastSetting.key)
+                    .. " -> " .. (value and "enabled" or "disabled"),
+                summary = "Applies the user's explicit state to the previously discussed setting after confirmation.",
+            }
+        elseif lastSetting.type == "number" then
+            local explicit = type(parser.FirstNumber) == "function" and parser.FirstNumber(norm) or nil
+            local delta = type(parser.RelativeNumberDeltaForText) == "function"
+                and parser.RelativeNumberDeltaForText(lastSetting, norm) or nil
+            if explicit ~= nil or delta ~= nil then
+                choice = {
+                    setting = lastSetting,
+                    value = explicit,
+                    relativeDelta = explicit == nil and delta or nil,
+                    label = "Use the earlier topic: " .. tostring(lastSetting.label or lastSetting.key),
+                    summary = "Applies the requested number adjustment to the previously discussed setting after confirmation.",
+                }
+            end
+        end
+        AddChoice(choice, choice and ("setting:" .. tostring(lastSetting.key)) or nil)
+    end
+
+    local pageContext = R.CurrentPageContext and R.CurrentPageContext() or nil
+    local page = M and M.activeKey or nil
+    local scopeHelp = type(registry.GetAction) == "function" and registry:GetAction("assistant_scope_help") or nil
+    if pageContext and scopeHelp then
+        AddChoice({
+            action = scopeHelp,
+            args = { page = page, label = pageContext.label, frameType = pageContext.prefix },
+            label = "Show options for the current " .. tostring(pageContext.label) .. " page",
+            summary = "Shows scoped Assistant examples without changing MSUF.",
+        }, "scope:" .. tostring(page))
+    end
+
+    if R.ContainsAny(norm, { "color", "colour", "colors", "colours" }) then
+        local openPage = type(registry.GetAction) == "function" and registry:GetAction("open_page") or nil
+        if openPage then
+            AddChoice({
+                action = openPage,
+                args = { page = "opt_colors", label = "Colors" },
+                label = "Open Colors and choose the exact color area",
+                summary = "Opens Colors without changing a color by guesswork.",
+            }, "page:opt_colors")
+        end
+        if scopeHelp then
+            AddChoice({
+                action = scopeHelp,
+                args = { page = "opt_colors", label = "Colors", frameType = "colors" },
+                label = "Show color-setting examples",
+                summary = "Shows color-related Assistant examples without changing MSUF.",
+            }, "scope:opt_colors")
+        end
+    end
+
+    local help = type(registry.GetAction) == "function" and registry:GetAction("assistant_help") or nil
+    if help then
+        AddChoice({
+            action = help,
+            args = {},
+            label = "Show general Assistant examples",
+            summary = "Shows Assistant help without changing MSUF.",
+        }, "action:assistant_help")
+    end
+    if #choices == 0 or type(A.SetPendingChoices) ~= "function" then return nil end
+
+    local listText = A.SetPendingChoices(choices)
+    return {
+        text = "I'm not confident enough to guess what you meant, so I kept MSUF unchanged. Pick the closest option:\n" .. tostring(listText or ""),
+        status = "ambiguous",
+        result = "ambiguous",
+        summary = "Assistant low-confidence context choices",
+    }
+end
+
 function A.RouterFriendlyNoMatch(text)
+    local contextualChoice = R.TryUncertainContextChoices and R.TryUncertainContextChoices(text)
+    if contextualChoice then
+        if A.RecordNoMatch then A.RecordNoMatch(text, contextualChoice, "router-options") end
+        return contextualChoice
+    end
     local noMatch = R.KnowledgeNoMatch(text)
     if noMatch then return noMatch end
     local result = {
@@ -5129,6 +5734,7 @@ function A.RouterIsNoClueResult(result)
     if result.kind == "unknown" and (msg == "" or looksLikeNoOption) then return true end
     if result.status == "failed" and looksLikeNoOption then return true end
     if result.status == "failed" and (msg:find("could not parse", 1, true) or msg:find("could not understand", 1, true)) then return true end
+    if result.status == "failed" and (msg:find("Which page and option", 1, true) or msg:find("Which frame, page, or option", 1, true)) then return true end
     return false
 end
 
@@ -6269,7 +6875,7 @@ A.RouterTrySafePlanningShortcut = function(text, coreHandler)
         if R.ContainsAny(norm, { "aura", "auras", "filter", "filters", "layout", "blacklist", "hidden aura", "hidden", "dispellable" }) then
             return A.RouterSafePlanningReply(
                 "Aura system comparison",
-                "Aura layout controls where icons appear, how they grow, size, spacing, text, and caps. Live Aura filters decide which buffs or debuffs are allowed, exclusive, raid-focused, or dispellable-focused. Saved exact blacklist data is read-only in the native 12.1 backend. Tune layout when icons look wrong; tune live filters when the wrong aura groups appear.",
+                "Aura layout controls where icons appear, how they grow, size, spacing, text, and caps. Content filters decide which buffs or debuffs appear: live tokens, permanent/no-expiration rules, exact SpellID/category lists, and Custom Aura include lists. Tune layout when icons look wrong; tune filtering when the wrong aura groups appear.",
                 "open auras; open aura filters; show only dispellable debuffs; set target debuff raid filter on.",
                 "Open Auras | Open Aura Filters | Check Target Buffs"
             )
@@ -6344,7 +6950,7 @@ A.RouterTrySafePlanningShortcut = function(text, coreHandler)
         end
         return A.RouterSafePlanningReply(
             "Why Aura Filters matter",
-            "Aura Filters reduce noise by controlling which buffs and debuffs appear. They are safer than hiding whole aura systems because you can tune live filter tokens such as raid, player-only, exclusive, or dispellable while keeping important information visible. Saved exact SpellID/category blacklist data is read-only in the native 12.1 backend.",
+            "Aura Filters reduce noise without disabling the whole lane. You can use player-only, raid, exclusive, dispellable, permanent/no-expiration, exact SpellID/category, or Custom Aura rules while keeping the lane visible. If the goal is unclear, I will ask for frame, Buffs/Debuffs, then what should remain.",
             "open aura filters; show only dispellable debuffs; set target debuff raid filter on.",
             "Open Aura Filters | Open Auras | Check Target Buffs"
         )
@@ -6365,7 +6971,7 @@ A.RouterTrySafePlanningShortcut = function(text, coreHandler)
     then
         return A.RouterSafePlanningReply(
             "Aura filter planning",
-            "I will not guess which buffs or debuffs are useless or important, because that depends on class, content, and preference. The safe path is to inspect Aura Filters, then tune live filter tokens/toggles such as raid, player-only, exclusive, or dispellable. Saved exact SpellID/category blacklist data is read-only in the native 12.1 backend.",
+            "I will not guess which buffs or debuffs are useless or important, because that depends on class, content, and preference. I can guide you through frame, Buffs/Debuffs, and a goal such as only mine, raid relevance, dispellable, only timed, show all, or an exact SpellID/category rule.",
             "open aura filters; show only dispellable debuffs; set target debuff raid filter on; set target debuff icon size to 30.",
             "Open Aura Filters | Open Auras | Check Target Buffs"
         )
@@ -7021,6 +7627,11 @@ function R.RegistryLocationSubject(norm)
         "is there a way to turn on ", "is there a way to turn off ",
         "is there a way to enable ", "is there a way to disable ",
         "is there a way to show ", "is there a way to hide ", "is there a way to display ",
+        "which setting controls ", "what setting controls ",
+        "which option controls ", "what option controls ",
+        "which control changes ", "what control changes ",
+        "which controls ", "what controls ",
+        "help me find ", "help me locate ", "show me where ", "tell me where ",
         "where do i find ", "where can i find ", "where is the ", "where is ",
         "which page has ", "what page has ", "which menu has ", "what menu has ",
         "wo kann ich ", "wo finde ich ", "wo ist ", "wo sind ",
@@ -7235,6 +7846,7 @@ end
 function R.LooksLikeRegistrySettingCurrentValueQuestion(text)
     local norm = R.Normalize(text)
     if norm == "" then return false end
+    if norm:match("^is%s+there%s+") or norm:match("^is%s+it%s+possible%s+to%s+") then return false end
     if A.RouterLooksLikeExplicitSearchRequest and A.RouterLooksLikeExplicitSearchRequest(norm) then return false end
     if norm == "current value" or norm == "value now" then return false end
     if R.ContainsAny(norm, {
@@ -7493,6 +8105,8 @@ function R.RegistryLocationResultFollowups(entries, limit)
                 description = item.description,
                 controlType = item.controlType,
                 settingKey = item.setting and item.setting.key,
+                actionKey = item.action and item.action.key
+                    or ((item.kind == "action" or item.kind == "diagnostic") and item.key or nil),
                 canOpen = item.canOpen,
                 canExplain = item.canExplain,
             }
@@ -7630,7 +8244,7 @@ end
 
 function R.HasTargetTargetInlineSubject(norm)
     norm = R.Normalize(norm)
-    return R.ContainsAny(norm, { "targettarget", "tot", "targets target" })
+    return R.ContainsAny(norm, { "target of target", "targettarget", "tot", "targets target" })
 end
 
 function R.HasTargetTargetInlineFrameContext(norm)
@@ -7682,16 +8296,23 @@ function R.CompactRegistrySettingLabel(text)
     return R.Trim(tostring(text or ""):lower():gsub("[^%w]+", " "):gsub("%s+", " ")):gsub("cast bar", "castbar")
 end
 
+function R.EnsureCompleteSettingRegistry()
+    local auto = A.AutoCoverage
+    if auto and type(auto.EnsureFilled) == "function" then auto.EnsureFilled() end
+    local registry = A.Registry
+    return registry and type(registry.AllSettings) == "function" and registry:AllSettings() or nil
+end
+
 function R.CompactRegistrySettingSearchEntries(text, limit)
     local queryWords = R.CompactRegistrySettingTokens(text)
     if #queryWords < 2 then return nil end
-    local registry = A.Registry
-    local settings = registry and type(registry.AllSettings) == "function" and registry:AllSettings() or nil
+    local settings = R.EnsureCompleteSettingRegistry()
     if type(settings) ~= "table" then return nil end
 
     local matches = {}
     local queryJoined = table.concat(queryWords, " ")
     for i = 1, #settings do
+        if i % 64 == 0 and type(A.MaybeYield) == "function" then A.MaybeYield() end
         local setting = settings[i]
         local candidateText = R.CompactRegistrySettingLabel(setting and setting.label or "")
         local paddedCandidate = " " .. candidateText .. " "
@@ -7737,21 +8358,133 @@ function R.CompactRegistrySettingSearchEntries(text, limit)
     return matches
 end
 
+-- A handful of natural search phrases describe the menu's ownership rather
+-- than repeating the visible control label. Keep these lookups deterministic:
+-- they are exact, O(1), and avoid letting broad words such as "global" or
+-- "class resources" outrank the control the user actually named.
+R.EXPLICIT_SEARCH_CANONICAL_KEYS = {
+    ["class resources player power width"] = "player.detachedPowerBarWidth",
+    ["class resources player power bar width"] = "player.detachedPowerBarWidth",
+    ["class resource player power width"] = "player.detachedPowerBarWidth",
+    ["class resource player power bar width"] = "player.detachedPowerBarWidth",
+    ["class resources player power texture"] = "bars.detachedPowerBarTexture",
+    ["class resources player power bar texture"] = "bars.detachedPowerBarTexture",
+    ["class resource player power texture"] = "bars.detachedPowerBarTexture",
+    ["class resource player power bar texture"] = "bars.detachedPowerBarTexture",
+    ["player power bar anchor"] = "player.detachedPowerBarAnchorToClassPower",
+    ["global font outline"] = "fontScope.shared.outline",
+    ["global text outline"] = "fontScope.shared.outline",
+    ["global font monochrome"] = "fontScope.shared.fontMonochrome",
+    ["global monochrome font"] = "fontScope.shared.fontMonochrome",
+    ["global bar right absorb"] = "general.absorbAnchorMode",
+    ["global absorb right"] = "general.absorbAnchorMode",
+    ["global bar absorb color"] = "general.absorbBarColor",
+    ["global absorb bar color"] = "general.absorbBarColor",
+    ["global bar right color"] = "general.gradientDirection",
+    ["global bar gradient direction"] = "general.gradientDirection",
+}
+
+function R.RegistryActionItemForKey(actionKey, page)
+    actionKey = tostring(actionKey or "")
+    local registry = A.Registry
+    local action = actionKey ~= "" and registry and type(registry.GetAction) == "function"
+        and registry:GetAction(actionKey) or nil
+    if not action then return nil end
+    page = tostring(action.page or action.pageKey or page or "")
+    if page == "" then page = nil end
+    local pageLabel = page and A.DisplayPageLabel and A.DisplayPageLabel(page, "MSUF page") or nil
+    return {
+        kind = action.type == "diagnostic" and "diagnostic" or "action",
+        key = action.key,
+        actionKey = action.key,
+        label = type(A.DisplayActionLabel) == "function" and A.DisplayActionLabel(action)
+            or tostring(action.label or action.key),
+        page = page,
+        pageLabel = pageLabel,
+        category = action.category or action.type,
+        controlType = action.type,
+        description = action.description or action.summary,
+        action = action,
+        canOpen = page ~= nil,
+        canExplain = true,
+    }
+end
+
+function R.CanonicalExplicitSearchEntries(subject)
+    subject = R.Normalize(subject)
+    local key = R.EXPLICIT_SEARCH_CANONICAL_KEYS[subject]
+    if key then
+        local item = R.RegistrySettingItemForKey and R.RegistrySettingItemForKey(key) or nil
+        return item and { { score = 10000, rawScore = 10000, item = item } } or nil
+    end
+
+    if subject == "group indicator test mode"
+        or subject == "group indicators test mode"
+        or subject == "group status indicator test mode"
+    then
+        local item = R.RegistryActionItemForKey("preview_group_status_icon", "gf_indicators")
+        return item and { { score = 10000, rawScore = 10000, item = item } } or nil
+    end
+
+    if subject == "spell indicator tint alpha"
+        or subject == "group spell indicator tint alpha"
+        or subject == "spell indicator opacity"
+        or subject == "group spell indicator opacity"
+    then
+        local item = R.RegistryActionItemForKey("set_group_spell_indicator_aura", "gf_auras")
+        return item and { { score = 10000, rawScore = 10000, item = item } } or nil
+    end
+
+    if subject == "unit text size" or subject == "unit frame text size" then
+        local keys = { "player.hpFontSize", "player.powerFontSize", "player.nameFontSize" }
+        local entries = {}
+        for i = 1, #keys do
+            local item = R.RegistrySettingItemForKey and R.RegistrySettingItemForKey(keys[i]) or nil
+            if item then entries[#entries + 1] = { score = 10001 - i, rawScore = 10001 - i, item = item } end
+        end
+        return #entries > 0 and entries or nil
+    end
+
+    if subject == "raid background color" or subject == "raid frame background color" then
+        local backdrop = R.RegistrySettingItemForKey and R.RegistrySettingItemForKey("gf_raid.bgColor") or nil
+        local dead = R.RegistrySettingItemForKey and R.RegistrySettingItemForKey("gf_raid.deadBgColor") or nil
+        local entries = {}
+        if backdrop then entries[#entries + 1] = { score = 10000, rawScore = 10000, item = backdrop } end
+        if dead then entries[#entries + 1] = { score = 9999, rawScore = 9999, item = dead } end
+        return #entries > 0 and entries or nil, "raid_background"
+    end
+
+    return nil
+end
+
 function R.TryCompactExplicitSettingSearch(text)
     local norm = R.Normalize(text)
     local subject = norm:match("^search%s+(.+)$") or norm:match("^find%s+(.+)$")
         or norm:match("^suche%s+(.+)$") or norm:match("^finde%s+(.+)$")
     if not subject or subject == "" then return nil end
-    local entries = R.CompactRegistrySettingSearchEntries(subject, 5)
+    local entries, canonicalKind = R.CanonicalExplicitSearchEntries(subject)
+    if not entries then entries = R.CompactRegistrySettingSearchEntries(subject, 5) end
     if not entries then return nil end
     local visible = math.min(3, #entries)
-    local lines = { visible == 1 and "I found this in MSUF:" or "I found these MSUF matches:" }
+    local lines
+    if canonicalKind == "raid_background" and visible > 1 then
+        lines = {
+            "Raid background color could mean two different MSUF controls. Pick the one you meant:",
+        }
+    else
+        lines = { visible == 1 and "I found this in MSUF:" or "I found these MSUF matches:" }
+    end
     for i = 1, visible do lines[#lines + 1] = R.RegistryLocationLine(i, entries[i].item) end
-    lines[#lines + 1] = "You can ask me to open a page, explain a result, or change an option directly."
+    if canonicalKind == "raid_background" and visible > 1 then
+        lines[#lines + 1] = "Raid Backdrop Color is the normal frame background. Raid Dead Background Color is the special background used for dead members."
+        lines[#lines + 1] = "Reply with 1 or 2, or ask me to open or explain that result."
+    else
+        lines[#lines + 1] = "You can ask me to open a page, explain a result, or change an option directly."
+    end
     return {
         text = table.concat(lines, "\n"),
-        status = "info",
-        result = "info",
+        status = canonicalKind == "raid_background" and visible > 1 and "ambiguous" or "info",
+        result = canonicalKind == "raid_background" and visible > 1 and "ambiguous" or "info",
         summary = "Assistant compact registry search",
         searchResults = R.RegistryLocationResultFollowups(entries, visible),
     }
@@ -7761,7 +8494,11 @@ function R.RegistrySettingSearchEntries(text, norm, limit)
     local compact = R.CompactRegistrySettingSearchEntries(text, limit)
     if compact then return compact end
     if not (A.Knowledge and type(A.Knowledge.Search) == "function") then return nil end
-    local results = A.Knowledge.Search(text, tonumber(limit) or 16, { kind = "setting", ignoreCurrentPage = true }) or {}
+    local results = A.Knowledge.Search(text, tonumber(limit) or 16, { kind = "setting", ignoreCurrentPage = true })
+    -- Knowledge.Search uses nil as a deliberate cold-index sentinel. Preserve
+    -- it separately from a ready-but-empty result so first-load routing does
+    -- not poison the open-ended cache with a generic page fallback.
+    if results == nil then return nil, true end
     if #results == 0 then return nil end
 
     local scopeKind, scope, scopeLabel = R.RegistryRequestedScope(norm)
@@ -7860,6 +8597,538 @@ function R.RegistryEnumChoicesLine(item)
     return "Choices: " .. table.concat(values, ", ") .. "."
 end
 
+R.OPEN_ENDED_SETTING_MUTATION_VERBS = {
+    set = true, change = true, make = true, adjust = true, modify = true,
+    edit = true, switch = true, choose = true, alter = true, update = true,
+    tweak = true, configure = true,
+}
+
+R.OPEN_ENDED_SETTING_IGNORED_WORDS = {
+    ["a"] = true, ["an"] = true, ["the"] = true, ["my"] = true,
+    ["this"] = true, ["that"] = true, ["of"] = true, ["for"] = true,
+    ["on"] = true, ["in"] = true, ["to"] = true, ["as"] = true,
+}
+
+function R.OpenEndedMutationSubject(text)
+    local norm = R.Normalize(text)
+    if norm == "" then return nil end
+    norm = norm:gsub("^please%s+", "")
+        :gsub("^can%s+you%s+", "")
+        :gsub("^could%s+you%s+", "")
+        :gsub("^would%s+you%s+", "")
+        :gsub("^i%s+would%s+like%s+to%s+", "")
+        :gsub("^i%s+want%s+to%s+", "")
+        :gsub("^id%s+like%s+to%s+", "")
+        :gsub("^help%s+me%s+", "")
+    local verb, subject = norm:match("^(%S+)%s+(.+)$")
+    if not (verb and R.OPEN_ENDED_SETTING_MUTATION_VERBS[verb]) then return nil end
+    subject = R.Trim(subject:gsub("^the%s+", ""))
+    for _ = 1, 3 do
+        subject = R.Trim(subject
+            :gsub("%s+different$", "")
+            :gsub("%s+differently$", "")
+            :gsub("%s+somehow$", "")
+            :gsub("%s+around$", "")
+            :gsub("%s+please$", "")
+            :gsub("%s+for%s+me$", ""))
+    end
+    if subject == "" then return nil end
+    local connectorAt
+    local connectors = { " to ", " as ", " = ", " auf ", " zu " }
+    for i = 1, #connectors do
+        local connector = connectors[i]
+        local at = subject:find(connector, 1, true)
+        if at and (not connectorAt or at < connectorAt) then connectorAt = at end
+    end
+    local explicitConnector = connectorAt ~= nil
+    if connectorAt then subject = R.Trim(subject:sub(1, connectorAt - 1)) end
+    if subject == "" then return nil end
+    if not explicitConnector and subject:match("%f[%d]%d+%.?%d*%f[^%d]") then return nil end
+    if not explicitConnector and R.ContainsAny(subject, {
+        "bigger", "larger", "smaller", "increase", "decrease", "raise", "lower",
+        "more", "less", "brighter", "darker", "wider", "narrower", "taller", "shorter",
+    }) then
+        return nil
+    end
+    if not explicitConnector and R.ContainsAny(subject, { "growth", "direction", "anchor", "position" })
+        and (subject:match("%s+left$") or subject:match("%s+right$")
+            or subject:match("%s+up$") or subject:match("%s+down$")
+            or subject:match("%s+links$") or subject:match("%s+rechts$")
+            or subject:match("%s+hoch$") or subject:match("%s+runter$"))
+    then
+        return nil
+    end
+    local parser = A.Parser or {}
+    if not explicitConnector and type(parser.ExtractColor) == "function" then
+        local first = parser.ExtractColor(text, norm)
+        if first ~= nil then return nil end
+    end
+    return subject, norm, explicitConnector
+end
+
+function R.OpenEndedManualSettingEntries(subject)
+    local scope = subject:match("^(player)%s+name%s+font$")
+        or subject:match("^(target)%s+name%s+font$")
+        or subject:match("^(focus)%s+name%s+font$")
+        or subject:match("^(pet)%s+name%s+font$")
+        or subject:match("^(boss)%s+name%s+font$")
+    local keys
+    if scope then
+        keys = { "general.fontKey", "fontScope." .. scope .. ".override", scope .. ".nameFontSize" }
+    else
+        scope = subject:match("^(player)%s+portrait%s+style$")
+            or subject:match("^(target)%s+portrait%s+style$")
+            or subject:match("^(focus)%s+portrait%s+style$")
+            or subject:match("^(pet)%s+portrait%s+style$")
+            or subject:match("^(boss)%s+portrait%s+style$")
+        if scope then
+            keys = {
+                scope .. ".portraitClassStyle", scope .. ".portraitBorderStyle",
+                scope .. ".portraitRender", scope .. ".portraitMode",
+            }
+        else
+            scope = subject:match("^(player)%s+portrait$")
+                or subject:match("^(target)%s+portrait$")
+                or subject:match("^(focus)%s+portrait$")
+                or subject:match("^(pet)%s+portrait$")
+                or subject:match("^(boss)%s+portrait$")
+            if scope then
+                keys = {
+                    scope .. ".portraitMode", scope .. ".portraitRender",
+                    scope .. ".portraitBorderStyle", scope .. ".portraitClassStyle",
+                }
+            end
+        end
+    end
+    if not keys then
+        scope = subject:match("^(player)%s+name%s+position$")
+            or subject:match("^(target)%s+name%s+position$")
+            or subject:match("^(focus)%s+name%s+position$")
+            or subject:match("^(pet)%s+name%s+position$")
+            or subject:match("^(boss)%s+name%s+position$")
+        if scope then
+            keys = { scope .. ".nameTextAnchor", scope .. ".nameOffsetX", scope .. ".nameOffsetY" }
+        end
+    end
+    if not keys then
+        scope = subject:match("^(player)%s+frame%s+color$")
+            or subject:match("^(target)%s+frame%s+color$")
+            or subject:match("^(focus)%s+frame%s+color$")
+            or subject:match("^(pet)%s+frame%s+color$")
+            or subject:match("^(boss)%s+frame%s+color$")
+        if scope then
+            keys = {
+                scope .. ".healthColorMode", "barScope." .. scope .. ".barOutlineColor",
+                "fontScope." .. scope .. ".nameColorMode", "fontScope." .. scope .. ".colorHealthTextByHealth",
+            }
+        end
+    end
+    if not keys then
+        scope = subject:match("^(player)%s+cast%s*bar$")
+            or subject:match("^(target)%s+cast%s*bar$")
+            or subject:match("^(focus)%s+cast%s*bar$")
+            or subject:match("^(boss)%s+cast%s*bar$")
+        if scope == "target" then
+            keys = { "general.enableTargetCastbar", "general.castbarTargetBarWidth", "general.castbarTargetBarHeight" }
+        elseif scope == "focus" then
+            keys = { "general.enableFocusCastbar", "general.castbarFocusBarWidth", "general.castbarFocusBarHeight" }
+        elseif scope == "boss" then
+            keys = { "general.enableBossCastbar", "general.bossCastbarWidth", "general.bossCastbarHeight" }
+        end
+    end
+    if not keys then
+        scope = subject:match("^(player)%s+frame%s+growth$")
+            or subject:match("^(target)%s+frame%s+growth$")
+            or subject:match("^(focus)%s+frame%s+growth$")
+            or subject:match("^(boss)%s+frame%s+growth$")
+        if scope then
+            keys = { "auras3." .. scope .. ".buff.growth", "auras3." .. scope .. ".debuff.growth" }
+        end
+    end
+    if not keys and (subject == "castbar interrupt colors" or subject == "cast bar interrupt colors"
+        or subject == "castbar interrupt color" or subject == "cast bar interrupt color")
+    then
+        keys = {
+            "general.castbarInterruptibleColor",
+            "general.castbarNonInterruptibleColor",
+            "general.castbarInterruptUnavailableColor",
+            "general.castbarInterruptFeedbackColor",
+        }
+    end
+    if not keys then
+        scope = subject:match("^(player)%s+health%s+text$")
+            or subject:match("^(target)%s+health%s+text$")
+            or subject:match("^(focus)%s+health%s+text$")
+            or subject:match("^(pet)%s+health%s+text$")
+            or subject:match("^(boss)%s+health%s+text$")
+            or subject:match("^(player)%s+hp%s+text$")
+            or subject:match("^(target)%s+hp%s+text$")
+            or subject:match("^(focus)%s+hp%s+text$")
+            or subject:match("^(pet)%s+hp%s+text$")
+            or subject:match("^(boss)%s+hp%s+text$")
+        if scope then
+            keys = {
+                scope .. ".showHP", scope .. ".hpFontSize",
+                "fontScope." .. scope .. ".colorHealthTextByHealth", scope .. ".hpTextSeparator",
+            }
+        end
+    end
+    if not keys then return nil end
+    local entries = {}
+    for i = 1, #keys do
+        local item = R.RegistrySettingItemForKey(keys[i])
+        if item then
+            entries[#entries + 1] = {
+                item = item, score = 5000 - i, rawScore = 5000 - i,
+                manual = true, visibleLimit = #keys <= 4 and #keys or 3,
+            }
+        end
+    end
+    return #entries > 0 and entries or nil
+end
+
+function R.OpenEndedSubjectMatchesSetting(subject, setting)
+    if type(setting) ~= "table" then return false end
+    local parts = { tostring(setting.label or "") }
+    for i = 1, #(setting.aliases or {}) do parts[#parts + 1] = tostring(setting.aliases[i] or "") end
+    local hay = " " .. R.Normalize(table.concat(parts, " ")) .. " "
+    local meaningful = 0
+    for word in R.Normalize(subject):gmatch("%S+") do
+        if not R.OPEN_ENDED_SETTING_IGNORED_WORDS[word] then
+            meaningful = meaningful + 1
+            if not hay:find(" " .. word .. " ", 1, true) then return false end
+        end
+    end
+    return meaningful >= 2
+end
+
+function R.OpenEndedSubjectSettingRelation(subject, setting)
+    if type(setting) ~= "table" then return false, false end
+    local phrases = { tostring(setting.label or "") }
+    for i = 1, #(setting.aliases or {}) do phrases[#phrases + 1] = tostring(setting.aliases[i] or "") end
+    subject = R.Normalize(subject)
+    local namesSetting, explicitTail = false, false
+    for i = 1, #phrases do
+        local phrase = R.Normalize(phrases[i])
+        if phrase ~= "" then
+            if subject == phrase or phrase:sub(1, #subject + 1) == subject .. " " then
+                namesSetting = true
+            elseif subject:sub(1, #phrase + 1) == phrase .. " " then
+                local tail = R.Trim(subject:sub(#phrase + 2))
+                tail = tail:gsub("^direction%s*", "")
+                    :gsub("^mode%s*", "")
+                    :gsub("^style%s*", "")
+                    :gsub("^setting%s*", "")
+                    :gsub("^option%s*", "")
+                tail = R.Trim(tail)
+                if tail == "" then namesSetting = true else explicitTail = true end
+            end
+        end
+    end
+    if namesSetting then return true, false end
+    if setting.type == "enum" and type(setting.valueAliases) == "table" then
+        for alias in pairs(setting.valueAliases) do
+            alias = R.Normalize(alias)
+            if alias ~= "" and (subject == alias or subject:sub(-#alias - 1) == " " .. alias) then
+                return false, true
+            end
+        end
+    end
+    return false, explicitTail
+end
+
+function R.OpenEndedScopeMatchesSetting(norm, setting)
+    local scopeKind, scope = R.RegistryRequestedScope(norm)
+    if not scopeKind or not scope or type(setting) ~= "table" then return true end
+    local unit = tostring(setting.unit or "")
+    if unit == "" or unit == "global" or unit == "shared" or unit == "all" then return true end
+    if scopeKind == "unit" then return unit == scope end
+    if scopeKind == "group" then return unit == scope end
+    return true
+end
+
+function R.OpenEndedSettingEntries(subject, norm)
+    local canonical = subject:gsub("%s+text%s+size$", " font size")
+    local leadingScope, scopedTail = canonical:match("^(%S+)%s+(.+)$")
+    local recognizedScope = leadingScope == "player" or leadingScope == "target"
+        or leadingScope == "focus" or leadingScope == "boss"
+    if recognizedScope and (scopedTail == "castbar texture" or scopedTail == "cast bar texture") then
+        canonical = "castbar texture"
+    elseif recognizedScope and scopedTail == "power bar texture" then
+        canonical = "power bar texture"
+    end
+
+    local entries = R.OpenEndedManualSettingEntries(canonical)
+    if not entries then
+        entries = R.CanonicalExplicitSearchEntries(canonical)
+        for i = 1, #(entries or {}) do entries[i].manual = true end
+    end
+    if not entries then entries = R.CompactRegistrySettingSearchEntries(canonical, 10) end
+    local searchCold = false
+    if not entries then entries, searchCold = R.RegistrySettingSearchEntries(canonical, norm, 12) end
+    if not entries then return nil, canonical, nil, searchCold end
+
+    local filtered, seen, explicitValue, namesAnySetting = {}, {}, false, false
+    for i = 1, #entries do
+        local entry = entries[i]
+        local item = entry and entry.item
+        local setting = item and item.setting
+        local key = setting and tostring(setting.key or "") or ""
+        local namesSetting, hasExplicitTail = R.OpenEndedSubjectSettingRelation(canonical, setting)
+        local semanticMatch = entry.manual == true or namesSetting or R.OpenEndedSubjectMatchesSetting(canonical, setting)
+        local scopeMatch = R.OpenEndedScopeMatchesSetting(norm, setting)
+        if scopeMatch and semanticMatch and hasExplicitTail then explicitValue = true end
+        if scopeMatch and semanticMatch and namesSetting then namesAnySetting = true end
+        if key ~= "" and not seen[key] and scopeMatch and semanticMatch then
+            seen[key] = true
+            filtered[#filtered + 1] = entry
+        end
+    end
+    return #filtered > 0 and filtered or nil, canonical, explicitValue and not namesAnySetting, searchCold
+end
+
+function R.OpenEndedLikelyPage(subject, norm)
+    local page, label, detail
+    if R.ContainsAny(subject, { "castbar", "cast bar", "cast texture", "spell cast" }) then
+        page, label, detail = "opt_castbar", "Cast Bars", "Cast-bar controls live in Cast Bars."
+    elseif R.ContainsAny(subject, { "portrait" }) then
+        local unit, unitLabel = R.UnitScopeFromText(norm)
+        if unit and unitLabel then return { unit = unit, label = unitLabel, detail = unitLabel .. " portrait controls live on the " .. unitLabel .. " page." } end
+    elseif R.ContainsAny(subject, { "font", "text outline", "text rendering" }) then
+        page, label, detail = "opt_fonts", "Fonts", "Font family, outline, rendering, and scoped font overrides live in Fonts."
+    elseif R.ContainsAny(subject, { "color", "colour", "tint" }) then
+        page, label, detail = "opt_colors", "Colors", "Shared and scoped color controls live in Colors."
+    elseif R.ContainsAny(subject, { "aura", "buff", "debuff" }) then
+        local groupScope = R.GroupScopeFromText(norm)
+        if groupScope then
+            page, label, detail = "gf_auras", "Group Auras", "Party and Raid aura controls live in Group Auras."
+        else
+            page, label, detail = "auras3_styling", "Aura Style", "Unit-frame aura layout and styling controls live in Aura Style."
+        end
+    elseif R.ContainsAny(subject, { "raid spacing", "party spacing", "group spacing", "growth direction", "group layout" }) then
+        page, label, detail = "gf_layout", "Group Layout", "Party and Raid frame geometry controls live in Group Layout."
+    elseif R.ContainsAny(subject, { "class resource", "class power", "combo point", "holy power" }) then
+        page, label, detail = "classpower", "Class Resources", "Class-resource controls live in Class Resources."
+    elseif R.ContainsAny(subject, { "bar", "texture", "absorb", "power" }) then
+        page, label, detail = "opt_bars", "Bars", "Bar textures, power bars, absorbs, gradients, and outlines live in Bars."
+    end
+    return page and { page = page, label = label, detail = detail } or nil
+end
+
+function R.OpenEndedSettingAnalysis(text)
+    local norm = R.Normalize(text)
+    local cached = R._openEndedSettingCache
+    if type(cached) == "table" and cached.text == norm then
+        return cached.analysis ~= false and cached.analysis or nil
+    end
+    local subject, fullNorm, explicitConnector = R.OpenEndedMutationSubject(text)
+    if not subject then
+        R._openEndedSettingCache = { text = norm, analysis = false }
+        return nil
+    end
+    local entries, canonical, explicitTail, searchCold = R.OpenEndedSettingEntries(subject, fullNorm)
+    if explicitTail and not explicitConnector then
+        R._openEndedSettingCache = { text = norm, analysis = false }
+        return nil
+    end
+    local page = R.OpenEndedLikelyPage(subject, fullNorm)
+    local analysis = (entries or page) and {
+        subject = subject, canonical = canonical or subject, norm = fullNorm,
+        entries = entries, page = page, explicitValue = explicitConnector == true,
+        searchCold = searchCold == true,
+    } or nil
+    if not searchCold then
+        R._openEndedSettingCache = { text = norm, analysis = analysis or false }
+    end
+    return analysis
+end
+
+function R.OpenEndedEntriesAreConfident(entries)
+    if type(entries) ~= "table" or #entries == 0 then return false end
+    if #entries == 1 then return true end
+    local first, second = entries[1], entries[2]
+    local score1, score2 = tonumber(first.score) or 0, tonumber(second.score) or 0
+    local raw1, raw2 = tonumber(first.rawScore) or 0, tonumber(second.rawScore) or 0
+    return (score1 >= 4000 and score2 < 3000)
+        or (score1 >= score2 + 500)
+        or (raw1 >= 300 and raw1 >= raw2 + 80)
+end
+
+function R.OpenEndedSettingCurrentValue(setting)
+    if not (setting and type(setting.get) == "function") then return nil end
+    local ok, value = pcall(setting.get)
+    if not ok then return nil end
+    return R.RegistryValueLabel(setting, value)
+end
+
+function R.OpenEndedSettingChoices(setting)
+    if not setting then return nil end
+    local values
+    if setting.type == "boolean" then
+        values = { true, false }
+    elseif setting.type == "enum" and type(setting.values) == "table" and #setting.values > 0 and #setting.values <= 12 then
+        values = setting.values
+    else
+        return nil
+    end
+    local choices = {}
+    for i = 1, #values do
+        local value = values[i]
+        local valueLabel = R.RegistryValueLabel(setting, value)
+        choices[#choices + 1] = {
+            setting = setting,
+            value = value,
+            valueLabel = valueLabel,
+            label = type(A.DisplaySettingValueLabel) == "function"
+                and A.DisplaySettingValueLabel(setting, valueLabel, setting.label or "Option")
+                or (tostring(setting.label or "Option") .. ": " .. tostring(valueLabel)),
+        }
+    end
+    return choices
+end
+
+function R.TryOpenEndedSettingIdea(text, coreHandler)
+    local analysis = R.OpenEndedSettingAnalysis(text)
+    if not analysis then return nil end
+    if type(A.RouterClearPendingResultsForRoute) == "function" then A.RouterClearPendingResultsForRoute() end
+
+    local entries = analysis.entries
+    if analysis.explicitValue == true then
+        local auraDetail = A.RouterTryAuraDetailSettingShortcut
+            and A.RouterTryAuraDetailSettingShortcut(R.Normalize(text), coreHandler)
+        if auraDetail then return auraDetail end
+
+        -- Specialist parsers know semantic distinctions the generic registry
+        -- search cannot infer (for example Raid aura cooldown text still
+        -- needs a Buff/Debuff lane). Parse is declarative here: only its
+        -- non-mutating clarification plans may bypass the generic response.
+        local parseOk, specialized = false, nil
+        if type(A.Parse) == "function" then parseOk, specialized = pcall(A.Parse, text) end
+        if specialized and (specialized.kind == "answer" or specialized.kind == "ambiguous")
+            and type(coreHandler) == "function"
+        then
+            local savedCache = R._openEndedSettingCache
+            R._openEndedSettingCache = { text = R.Normalize(text), analysis = false }
+            local ok, result = pcall(coreHandler, text)
+            R._openEndedSettingCache = savedCache
+            if not ok then error(result, 0) end
+            if result and not A.RouterIsUnknownResult(result) then return result end
+        end
+        if R.OpenEndedEntriesAreConfident(entries) and type(coreHandler) == "function" then
+            -- This request was intentionally fail-closed before the direct
+            -- write path. Once the Router has proven an exact control and a
+            -- supplied value, allow only this cached Core call through that
+            -- same guard; restore the analysis immediately afterwards.
+            local savedCache = R._openEndedSettingCache
+            R._openEndedSettingCache = { text = R.Normalize(text), analysis = false }
+            local ok, result = pcall(coreHandler, text)
+            R._openEndedSettingCache = savedCache
+            if not ok then error(result, 0) end
+            if result and not A.RouterIsUnknownResult(result)
+                and not (type(A.RouterIsNoClueResult) == "function" and A.RouterIsNoClueResult(result))
+            then
+                return result
+            end
+        end
+        if type(entries) == "table" and #entries > 1 and not R.OpenEndedEntriesAreConfident(entries) then
+            local visible = math.min(tonumber(entries[1] and entries[1].visibleLimit) or 3, #entries)
+            local lines = {
+                "I understood that you supplied a value, but several MSUF controls fit the setting name, so I did not apply it to the wrong one. Pick the control you meant:",
+            }
+            for i = 1, visible do lines[#lines + 1] = R.RegistryLocationLine(i, entries[i].item) end
+            lines[#lines + 1] = "Reply with a number, then tell me the value again or ask me to open that control."
+            return {
+                text = table.concat(lines, "\n"),
+                status = "ambiguous",
+                summary = "Clarifies the control before applying a supplied value.",
+                searchResults = R.RegistryLocationResultFollowups(entries, visible),
+            }
+        end
+        local page = analysis.page
+        if page then
+            local followups = page.unit
+                and R.UnitPageFollowupResults(page.unit, page.label, page.detail)
+                or R.PageFollowupResults(page.page, page.label, page.detail)
+            return {
+                text = "I understood the value, but I could not identify one exact MSUF control safely, so I did not apply it.\nBest place to check: " .. tostring(page.label) .. ". " .. tostring(page.detail) .. "\nOpen that page and name the exact control, and I will use the value you requested.",
+                status = "ambiguous",
+                summary = "Offers the closest MSUF page after a concrete value could not be mapped safely.",
+                searchResults = followups,
+            }
+        end
+        return nil
+    end
+    if type(entries) ~= "table" or #entries == 0 then
+        local page = analysis.page
+        if not page then return nil end
+        local followups
+        if page.unit then
+            followups = R.UnitPageFollowupResults(page.unit, page.label, page.detail)
+        else
+            followups = R.PageFollowupResults(page.page, page.label, page.detail)
+        end
+        return {
+            text = "I understand the MSUF area, but not one exact control well enough to guess, so I kept everything unchanged.\nBest place to start: " .. tostring(page.label) .. ". " .. tostring(page.detail) .. "\nOpen that page, or add the control name or intended result and I will narrow it down.",
+            status = "ambiguous",
+            summary = "Offers the closest MSUF control family for an open-ended request.",
+            searchResults = followups,
+        }
+    end
+
+    if not R.OpenEndedEntriesAreConfident(entries) then
+        local visible = math.min(tonumber(entries[1] and entries[1].visibleLimit) or 3, #entries)
+        local lines = {
+            "That request could mean several MSUF controls, so I kept everything unchanged. Pick the control you meant:",
+        }
+        for i = 1, visible do lines[#lines + 1] = R.RegistryLocationLine(i, entries[i].item) end
+        lines[#lines + 1] = "Reply with a number, or ask me to open or explain one of them."
+        return {
+            text = table.concat(lines, "\n"),
+            status = "ambiguous",
+            summary = "Offers matching MSUF controls for an open-ended request.",
+            searchResults = R.RegistryLocationResultFollowups(entries, visible),
+        }
+    end
+
+    local item = entries[1].item
+    local setting = item and item.setting
+    if not setting then return nil end
+    local current = R.OpenEndedSettingCurrentValue(setting)
+    local location = R.RegistryLocationLine(1, item):gsub("^1%.%s*", "")
+    local prefix = "I found the exact MSUF control, but you did not choose a value, so I kept it unchanged.\n" .. location
+    if current ~= nil then prefix = prefix .. "\nCurrent value: " .. tostring(current) .. "." end
+
+    local choices = R.OpenEndedSettingChoices(setting)
+    if choices then
+        local choiceText = A.SetPendingChoices(choices)
+        return {
+            text = prefix .. "\n" .. tostring(choiceText or "Choose one of the listed values."),
+            status = "ambiguous",
+            summary = "Offers valid values for an open-ended MSUF setting request.",
+        }
+    end
+
+    local guidance = "Tell me the value you want, or ask me to open the control."
+    if setting.type == "number" then
+        local parts = {}
+        if setting.min ~= nil then parts[#parts + 1] = "min " .. tostring(setting.min) end
+        if setting.max ~= nil then parts[#parts + 1] = "max " .. tostring(setting.max) end
+        if setting.step ~= nil then parts[#parts + 1] = "step " .. tostring(setting.step) end
+        guidance = "Choose a number" .. (#parts > 0 and (" (" .. table.concat(parts, ", ") .. ")") or "") .. ", or ask me to open the control."
+    elseif setting.type == "color" then
+        guidance = "Choose a color name, RGB value, or #RRGGBB, or ask me to open the color control."
+    elseif setting.type == "string" then
+        guidance = "Tell me the text or media name you want, or ask me to open the control."
+    end
+    return {
+        text = prefix .. "\n" .. guidance,
+        status = "ambiguous",
+        summary = "Requests the missing value for an exact MSUF control.",
+        searchResults = R.RegistryLocationResultFollowups(entries, 1),
+        selectPendingResult = 1,
+    }
+end
+
 R.LAST_CHANGE_VALUE_FOLLOWUP_TERMS = {
     "what is it now", "what is that now", "what is this now",
     "what is it set to", "what is that set to", "what is this set to",
@@ -7908,16 +9177,320 @@ function R.SettingControlNoun(item)
 end
 
 function R.OpenExactSettingItem(item)
-    if not (item and item.settingKey and item.page) then return nil end
+    local settingKey = item and (item.settingKey or (item.setting and item.setting.key) or item.key)
+    if not (item and settingKey and item.page) then return nil end
     local action = A.Registry and type(A.Registry.GetAction) == "function" and A.Registry:GetAction("open_setting_control") or nil
     if not action then return nil end
     return A.ExecutePlan({
         kind = "action",
         action = action,
-        args = { settingKey = item.settingKey, page = item.page, label = item.label },
+        args = { settingKey = settingKey, page = item.page, label = item.label },
         label = "Open " .. tostring(item.label or "exact setting control"),
         summary = "Opens and focuses the exact runtime control for the contextual setting.",
     })
+end
+
+local DIRECT_NAVIGATION_PAGE_SUBJECTS = {
+    ["dashboard"] = "open dashboard", ["home"] = "open dashboard", ["search"] = "open search",
+    ["player"] = "open player", ["player frame"] = "open player", ["player unit frame"] = "open player",
+    ["target"] = "open target", ["target frame"] = "open target", ["target unit frame"] = "open target",
+    ["focus"] = "open focus", ["focus frame"] = "open focus", ["focus unit frame"] = "open focus",
+    ["pet"] = "open pet", ["pet frame"] = "open pet", ["pet unit frame"] = "open pet",
+    ["boss"] = "open boss", ["boss frame"] = "open boss", ["boss frames"] = "open boss",
+    ["target of target"] = "open target of target", ["target of target frame"] = "open target of target",
+    ["focus target"] = "open focus target", ["focus target frame"] = "open focus target",
+    ["targettarget"] = "open target of target", ["targettarget frame"] = "open target of target",
+    ["focustarget"] = "open focus target", ["focustarget frame"] = "open focus target",
+    ["group layout"] = "open group layout", ["group health"] = "open group health and text",
+    ["group health and text"] = "open group health and text",
+    ["group status"] = "open group status and indicators",
+    ["group status and indicators"] = "open group status and indicators",
+    ["group aura"] = "open group auras", ["group auras"] = "open group auras",
+    ["party"] = "open group layout",
+    ["party frames"] = "open group layout", ["raid"] = "open group layout",
+    ["raid frames"] = "open group layout", ["group frames"] = "open group layout",
+    ["bars"] = "open bars", ["cast bar"] = "open cast bars", ["cast bars"] = "open cast bars",
+    ["castbar"] = "open cast bars", ["castbars"] = "open cast bars",
+    ["colors"] = "open colors", ["colours"] = "open colors",
+    ["color"] = "open colors", ["colour"] = "open colors", ["fonts"] = "open fonts",
+    ["font"] = "open fonts", ["misc"] = "open miscellaneous", ["miscellaneous"] = "open miscellaneous",
+    ["class resources"] = "open class resources", ["class resource"] = "open class resources",
+    ["class power"] = "open class resources", ["gameplay"] = "open gameplay",
+    ["profiles"] = "open profiles", ["profile"] = "open profiles",
+    ["modules"] = "open modules", ["module"] = "open modules",
+    ["display recovery"] = "open display recovery",
+    ["display and recovery"] = "open display recovery",
+    ["display & recovery"] = "open display recovery",
+    ["aura"] = "open auras", ["auras"] = "open auras", ["aura style"] = "open aura style",
+    ["aura filters"] = "open aura filters",
+    ["player buffs"] = "open player buffs", ["player debuffs"] = "open player debuffs",
+    ["target buffs"] = "open target buffs", ["target debuffs"] = "open target debuffs",
+    ["focus buffs"] = "open focus buffs", ["focus debuffs"] = "open focus debuffs",
+    ["boss buffs"] = "open boss buffs", ["boss debuffs"] = "open boss debuffs",
+}
+
+function R.BroadPageNavigationCanonical(text)
+    local norm = R.Normalize(text)
+    local subject = norm:match("^open%s+(.+)$")
+        or norm:match("^take%s+me%s+to%s+(.+)$")
+        or norm:match("^jump%s+to%s+(.+)$")
+        or norm:match("^navigate%s+to%s+(.+)$")
+        or norm:match("^show%s+me%s+(.+)$")
+    if not subject then return nil end
+    subject = R.Trim(subject:gsub("^the%s+", ""):gsub("%s+page$", ""):gsub("%s+menu$", "")
+        :gsub("%s+options$", ""):gsub("%s+settings$", ""))
+    return DIRECT_NAVIGATION_PAGE_SUBJECTS[subject]
+end
+
+function A.RouterIsBroadPageNavigationRequest(text)
+    return R.BroadPageNavigationCanonical(text) ~= nil
+end
+
+function R.TryBroadPageNavigation(text, coreHandler)
+    local canonical = R.BroadPageNavigationCanonical(text)
+    if not canonical or type(coreHandler) ~= "function" then return nil end
+    return coreHandler(canonical)
+end
+
+function R.TryDirectSettingNavigation(text, coreHandler)
+    local norm = R.Normalize(text)
+    if norm == "" or R.LooksLikeGuidedTourRequest(norm) then return nil end
+    local direct = norm:match("^take%s+me%s+to%s+(.+)$")
+        or norm:match("^jump%s+to%s+(.+)$")
+        or norm:match("^navigate%s+to%s+(.+)$")
+        or norm:match("^show%s+me%s+(.+)$")
+        or norm:match("^open%s+(.+)$")
+    if not direct then return nil end
+    direct = R.Trim(direct:gsub("^the%s+", ""):gsub("^exact%s+", "")
+        :gsub("%s+setting$", ""):gsub("%s+option$", ""):gsub("%s+control$", "")
+        :gsub("%s+slider$", ""):gsub("%s+dropdown$", ""):gsub("%s+toggle$", "")
+        :gsub("%s+checkbox$", ""):gsub("%s+picker$", ""))
+    if direct == "" or not R.RegistrySettingSearchEntries then return nil end
+    -- Broad page commands already have an exact, stable open_page route. Do
+    -- not reinterpret them as a similarly named leaf setting merely because
+    -- the user used conversational wording such as "take me to Colors".
+    if DIRECT_NAVIGATION_PAGE_SUBJECTS[direct] then return nil end
+    -- Established navigation tools (profile import, anchor picker, recovery,
+    -- previews, Edit Mode, and similar actions) are more specific than a fuzzy
+    -- leaf-setting match. Preserve their registered action contract; exact
+    -- control wording such as "target width" typically has no action plan and
+    -- continues into the setting search below.
+    if type(coreHandler) == "function" and type(A.Parse) == "function" then
+        local parsed = A.Parse(text)
+        local actionKey = parsed and parsed.kind == "action" and parsed.action and parsed.action.key or nil
+        local function RunParsedAction()
+            local actionResult = coreHandler(text)
+            if actionResult and not A.RouterIsUnknownResult(actionResult) then return actionResult end
+            if parsed and type(A.ExecutePlan) == "function" then
+                actionResult = A.ExecutePlan(parsed)
+                if actionResult and R.IsExplicitNavigationCommand(text) then actionResult = R.AsNavigationResult(actionResult) end
+                return actionResult
+            end
+            return nil
+        end
+        if actionKey and actionKey ~= "open_page" and actionKey ~= "open_setting_control" then
+            local actionResult = RunParsedAction()
+            if actionResult and not A.RouterIsUnknownResult(actionResult) then return actionResult end
+        elseif actionKey == "open_page" and (direct:match("%s+options$")
+            or direct:match("%s+settings$") or direct:match("%s+page$") or direct:match("%s+menu$"))
+        then
+            local pageResult = RunParsedAction()
+            if pageResult and not A.RouterIsUnknownResult(pageResult) then return pageResult end
+        end
+    end
+    local entries = R.RegistrySettingSearchEntries(direct, norm, 8)
+    local top = entries and entries[1]
+    if not top or not top.item then return nil end
+    local nextScore = tonumber(entries[2] and entries[2].rawScore) or -10000
+    local rawScore = tonumber(top.rawScore) or 0
+    local exactLabel = R.RegistrySubjectMatchesLabel and R.RegistrySubjectMatchesLabel(top.item, direct)
+    if rawScore >= 600 and (exactLabel or rawScore - nextScore >= 300) then
+        return R.OpenExactSettingItem(top.item)
+    end
+    local visible = math.min(3, #entries)
+    if visible < 1 then return nil end
+    local lines = { "I found a few possible MSUF controls. Pick the one you want me to open:" }
+    for i = 1, visible do lines[#lines + 1] = tostring(i) .. ". " .. tostring(entries[i].item.label or "MSUF setting") end
+    return {
+        text = table.concat(lines, "\n"),
+        status = "ambiguous",
+        result = "ambiguous",
+        summary = "Assistant direct setting navigation choices",
+        searchResults = R.RegistryLocationResultFollowups(entries, visible),
+    }
+end
+
+local SETTING_BROWSER_PAGE_SIZE = 8
+local SETTING_BROWSER_PAGE_ALIASES = {
+    ["cast bars"] = "opt_castbar", ["cast bar"] = "opt_castbar", ["castbars"] = "opt_castbar",
+    ["colors"] = "opt_colors", ["colours"] = "opt_colors", ["fonts"] = "opt_fonts",
+    ["bars"] = "opt_bars", ["gameplay"] = "gameplay", ["profiles"] = "profiles",
+    ["class resources"] = "classpower", ["class power"] = "classpower",
+    ["modules"] = "modules", ["misc"] = "opt_misc", ["miscellaneous"] = "opt_misc",
+    ["group layout"] = "gf_layout", ["group health"] = "gf_bars",
+    ["group indicators"] = "gf_indicators", ["group auras"] = "gf_auras",
+}
+
+local function SettingBrowserSubject(norm)
+    if norm == "list all settings" or norm == "show all settings" or norm == "browse all settings"
+        or norm == "list every setting" or norm == "show every setting"
+    then
+        return "all"
+    end
+    local patterns = {
+        "^list%s+all%s+(.+)%s+settings$", "^show%s+all%s+(.+)%s+settings$", "^browse%s+all%s+(.+)%s+settings$",
+        "^list%s+(.+)%s+settings$", "^show%s+(.+)%s+settings$", "^browse%s+(.+)%s+settings$",
+        "^list%s+all%s+(.+)%s+options$", "^show%s+all%s+(.+)%s+options$", "^browse%s+(.+)%s+controls$",
+    }
+    for _, pattern in ipairs(patterns) do
+        local subject = norm:match(pattern)
+        if subject and subject ~= "" then return R.Trim(subject) end
+    end
+    return nil
+end
+
+local function SettingBrowserSpec(subject)
+    subject = R.Normalize(subject)
+    if subject == "all" then return { subject = subject, title = "All page-resolvable MSUF settings" } end
+    local unit, unitLabel = R.UnitFrameScopeFromText(subject)
+    if unit then return { subject = subject, unit = unit, title = tostring(unitLabel or unit) .. " settings" } end
+    local group, groupLabel = R.GroupScopeFromText(subject)
+    if group then return { subject = subject, group = group, title = tostring(groupLabel or group) .. " settings" } end
+    local page = SETTING_BROWSER_PAGE_ALIASES[subject]
+    if page then
+        local title = type(A.DisplayPageLabel) == "function" and A.DisplayPageLabel(page, subject) or subject
+        return { subject = subject, page = page, title = tostring(title) .. " settings" }
+    end
+    return { subject = subject, term = subject, title = tostring(subject:gsub("^%l", string.upper)) .. " settings" }
+end
+
+local function SettingBrowserResolvedPage(setting)
+    local page = setting and setting.page
+    local resolver = A.ResolveMenuPageForSetting or (A.Knowledge and A.Knowledge.ResolveSettingPage)
+    if (page == nil or page == "") and type(resolver) == "function" then
+        local ok, value = pcall(resolver, setting)
+        if ok then page = value end
+    end
+    page = tostring(page or "")
+    return page ~= "" and page or nil
+end
+
+local function SettingBrowserMatches(setting, page, spec)
+    if not page then return false end
+    if spec.unit then return tostring(setting.unit or "") == spec.unit or page == "uf_" .. spec.unit end
+    if spec.group then
+        local unit = tostring(setting.unit or "")
+        return unit == spec.group or unit == "gf_" .. spec.group
+    end
+    if spec.page then return page == spec.page end
+    if not spec.term then return true end
+    local haystack = R.Normalize(table.concat({
+        tostring(setting.label or ""), tostring(setting.category or ""), tostring(setting.frameType or ""),
+        tostring(setting.unit or ""), tostring(page),
+    }, " "))
+    return R.HasNormalizedPhrase(haystack, spec.term)
+end
+
+local function SettingBrowserEntries(spec)
+    local registry = A.Registry
+    local settings = R.EnsureCompleteSettingRegistry() or {}
+    local cache = R._settingBrowserCache
+    if type(cache) == "table"
+        and cache.registry == registry
+        and cache.count == #settings
+        and cache.subject == spec.subject
+        and type(cache.entries) == "table"
+    then
+        return cache.entries
+    end
+    local out = {}
+    for index, setting in ipairs(settings) do
+        if index % 64 == 0 and type(A.MaybeYield) == "function" then A.MaybeYield() end
+        local page = SettingBrowserResolvedPage(setting)
+        if SettingBrowserMatches(setting, page, spec) then
+            -- Keep the full scan allocation-light. Only the eight visible rows
+            -- need navigation result objects; materializing all 4k+ settings
+            -- here made an explicit "list all settings" request unnecessarily
+            -- expensive and retained no useful state for the next turn.
+            out[#out + 1] = setting
+        end
+    end
+    table.sort(out, function(left, right)
+        local a, b = R.Normalize(left.label), R.Normalize(right.label)
+        if a ~= b then return a < b end
+        return tostring(left.key or "") < tostring(right.key or "")
+    end)
+    -- Retain only the active browser's lightweight reference list while the
+    -- menu is open. A different subject replaces it, and menu hide/new task
+    -- clears it, so follow-up pagination is O(visible rows) without creating a
+    -- permanent all-settings cache.
+    R._settingBrowserCache = {
+        registry = registry,
+        count = #settings,
+        subject = spec.subject,
+        entries = out,
+    }
+    return out
+end
+
+function A.ClearRouterTransientCaches()
+    R._settingBrowserCache = nil
+    R._openEndedSettingCache = nil
+end
+
+function R.TrySettingBrowserShortcut(text)
+    local norm = R.Normalize(text)
+    local context = A.GetContext and A.GetContext() or nil
+    local browser = type(context) == "table" and context.settingBrowser or nil
+    local subject = SettingBrowserSubject(norm)
+    local direction
+    if not subject and type(browser) == "table" and not (type(context.guidedSetup) == "table") then
+        if R.ContainsAny(norm, { "next settings", "next setting page", "more settings", "show more settings" }) then direction = 1 end
+        if R.ContainsAny(norm, { "previous settings", "previous setting page", "back settings", "show previous settings" }) then direction = -1 end
+    end
+    if not subject and not direction then return nil end
+
+    local spec = SettingBrowserSpec(subject or browser.subject)
+    local entries = SettingBrowserEntries(spec)
+    if #entries == 0 then
+        return {
+            text = "I couldn't find a page-resolvable MSUF setting list for '" .. tostring(subject or browser.subject) .. "'. Try a frame or page such as Target, Auras, Cast Bars, Colors, or Group Layout.",
+            status = "info",
+            summary = "Assistant setting browser no match",
+        }
+    end
+    local offset = subject and 1 or (tonumber(browser.offset) or 1) + direction * SETTING_BROWSER_PAGE_SIZE
+    local maxOffset = math.floor((#entries - 1) / SETTING_BROWSER_PAGE_SIZE) * SETTING_BROWSER_PAGE_SIZE + 1
+    if offset < 1 then offset = 1 end
+    if offset > maxOffset then offset = maxOffset end
+    if type(context) == "table" then
+        context.settingBrowser = { subject = spec.subject, offset = offset }
+    end
+    local last = math.min(#entries, offset + SETTING_BROWSER_PAGE_SIZE - 1)
+    local visible = {}
+    local lines = { tostring(spec.title), tostring(offset) .. "-" .. tostring(last) .. " of " .. tostring(#entries) }
+    for index = offset, last do
+        local setting = entries[index]
+        local item = R.RegistrySettingItemForKey(setting and setting.key)
+        if item then visible[#visible + 1] = { item = item } end
+        local current
+        if setting and type(setting.get) == "function" then
+            local ok, value = pcall(setting.get)
+            if ok and type(R.RegistryValueLabel) == "function" then current = R.RegistryValueLabel(setting, value) end
+        end
+        local suffix = " — " .. R.SettingControlNoun(item)
+        if current ~= nil and tostring(current) ~= "" then suffix = suffix .. ", current " .. tostring(current) end
+        if setting and setting.assistantMutationSafe == false then suffix = suffix .. ", read-only fallback" end
+        lines[#lines + 1] = tostring(#visible) .. ". " .. tostring(item and (item.label or item.key) or setting and (setting.label or setting.key) or "MSUF setting") .. suffix
+    end
+    lines[#lines + 1] = "Reply 'next settings' or 'previous settings'. You can also say 'open result 2' or 'explain result 2'."
+    return {
+        text = table.concat(lines, "\n"),
+        status = "info",
+        result = "info",
+        summary = "Assistant paginated setting browser",
+        searchResults = R.RegistryLocationResultFollowups(visible, #visible),
+    }
 end
 
 R.LAST_CHANGE_EXPLAIN_FOLLOWUP_TERMS = {
@@ -8405,7 +9978,8 @@ function A.RouterTryTargetTargetInlineNameShortcut(text, coreHandler)
 
     if R.IsTargetTargetInlineLocationQuestion(norm) then
         if A.RouterTryRegistrySettingLocationShortcut then
-            return A.RouterTryRegistrySettingLocationShortcut("where can I turn on Target Target Inline Text", coreHandler)
+            local location = A.RouterTryRegistrySettingLocationShortcut("where can I turn on Target Target Inline Text", coreHandler)
+            if location then return location end
         end
         return {
             text = "Target Target Inline Text setting location\nTarget Target Inline Text lives on Target. I did not change it.",
@@ -8440,8 +10014,45 @@ function R.LooksLikeDependentTargetProblem(norm)
     if R.ContainsAny(norm, { "castbar", "cast bar", "cast bars", "buff", "buffs", "debuff", "debuffs", "aura", "auras" }) then return false end
     if not R.DependentTargetProblemKind(norm) then return false end
     if R.HasNaturalProblemTerm(norm) or R.ContainsAny(norm, R.VISIBILITY_PROBLEM_TERMS) then return true end
-    return norm:match("^why%s+") ~= nil
-        or R.ContainsAny(norm, { "where is", "where are", "where can", "how do i show", "how can i show" })
+    return R.ContainsAny(norm, { "where is", "where are", "where can", "how do i show", "how can i show" })
+end
+
+function R.HasRawAuraDoT(text)
+    return tostring(text or ""):find("%f[%a]DoT[sS]?%f[%A]") ~= nil
+end
+
+function R.NameShorteningDotsSettingKey(text)
+    local raw = tostring(text or "")
+    local norm = R.Normalize(raw)
+    if R.HasRawAuraDoT(raw) then return nil end
+    local explicitName = R.ContainsAny(norm, {
+        "name", "names", "short name", "short names", "shortened name", "shortened names",
+        "shorten", "shortening", "truncate", "truncation", "cut off name", "cut off names",
+    })
+    local hasDots = R.ContainsAny(norm, {
+        "dot", "dots", "ellipsis", "ellipses", "trailing dots", "three dots", "two dots",
+        "name dots", "name ellipsis",
+    }) or (explicitName and (raw:find("%.%.") ~= nil or raw:find("…", 1, true) ~= nil))
+    if not hasDots then return nil end
+    if not explicitName and R.ContainsAny(norm, {
+        "corner", "status", "indicator", "spell indicator", "combo point", "class resource",
+        "class power", "aura", "buff", "debuff", "castbar", "spell name",
+    }) then
+        return nil
+    end
+    if R.ContainsAny(norm, { "all names", "all unit names", "all shortened names", "shared names", "global names" }) then
+        return "fontScope.shared.shortenNameNoEllipsis"
+    end
+    local parser = A.Parser or {}
+    local groups = type(parser.DetectGroups) == "function" and parser.DetectGroups(norm) or {}
+    if groups[1] then return "gf_" .. tostring(groups[1]) .. ".nameNoEllipsis" end
+    local scope = type(parser.DetectGlobalScope) == "function" and parser.DetectGlobalScope(norm) or nil
+    if not scope or scope == "player" or scope == "gf_party" or scope == "gf_raid" then return nil end
+    return "fontScope." .. tostring(scope) .. ".shortenNameNoEllipsis"
+end
+
+function R.LooksLikeNameShorteningDotsRequest(text)
+    return R.NameShorteningDotsSettingKey(text) ~= nil
 end
 
 function R.DependentTargetMentionsParentFrame(norm, parentLabel)
@@ -8506,6 +10117,13 @@ function A.RouterTryRegistrySettingExplainShortcut(text, coreHandler, precompute
     local exactLabelMatch = R.RegistrySubjectMatchesLabel(top and top.item, subject)
     if not top or (top.score < 340 and not (exactLabelMatch and top.score >= 260)) then return nil end
     if (tonumber(top.rawScore) or 0) < 260 and not R.RegistryRequestedScope(norm) then return nil end
+    local runnerUp = entries[2]
+    if not exactLabelMatch and runnerUp
+        and (tonumber(runnerUp.score) or 0) >= (tonumber(top.score) or 0) - 40
+        and (tonumber(runnerUp.rawScore) or 0) >= (tonumber(top.rawScore) or 0) - 40
+    then
+        return nil
+    end
 
     local close = { top }
     for i = 2, #entries do
@@ -8681,6 +10299,13 @@ function A.RouterTryRegistrySettingTroubleshootingShortcut(text, coreHandler)
     local exactLabelMatch = R.RegistrySubjectMatchesLabel(top and top.item, subject)
     if not top or (top.score < 340 and not (exactLabelMatch and top.score >= 260)) then return nil end
     if (tonumber(top.rawScore) or 0) < 260 and not R.RegistryRequestedScope(norm) then return nil end
+    local runnerUp = entries[2]
+    if not exactLabelMatch and runnerUp
+        and (tonumber(runnerUp.score) or 0) >= (tonumber(top.score) or 0) - 40
+        and (tonumber(runnerUp.rawScore) or 0) >= (tonumber(top.rawScore) or 0) - 40
+    then
+        return nil
+    end
 
     local item = top.item or {}
     local label = tostring(item.label or "MSUF setting")
@@ -8710,7 +10335,11 @@ function A.RouterTryRegistrySettingLocationShortcut(text, coreHandler, precomput
     local norm = R.Normalize(text)
     if not R.LooksLikeRegistrySettingLocationQuestion(norm) then return nil end
     local subject = R.RegistryLocationSubject(norm)
-    local entries = precomputedEntries or R.RegistrySettingSearchEntries(subject ~= "" and subject or text, norm, 16)
+    local directKey = R.NameShorteningDotsSettingKey(text)
+    local directItem = directKey and R.RegistrySettingItemForKey(directKey) or nil
+    local entries = precomputedEntries
+        or (directItem and { { item = directItem, score = 10000, rawScore = 10000 } })
+        or R.RegistrySettingSearchEntries(subject ~= "" and subject or text, norm, 16)
     if not entries or #entries == 0 then return nil end
 
     local top = entries[1]
@@ -9179,7 +10808,7 @@ function A.RouterLooksLikePendingChoiceTopicSwitch(text)
     then
         return true
     end
-    if R.TrySignalProblemShortcut(norm) or R.TryReadabilityShortcut(norm) or R.TryColorContrastShortcut(norm) then
+    if R.LooksLikeLiveUnitColorQuestion(norm) or R.TrySignalProblemShortcut(norm) or R.TryReadabilityShortcut(norm) or R.TryColorContrastShortcut(norm) then
         return true
     end
     if A.RouterTryAssistantUsabilityProblemShortcut and A.RouterTryAssistantUsabilityProblemShortcut(norm, nil) then return true end
@@ -9241,10 +10870,95 @@ function A.RouteInput(text, coreHandler)
         return coreCache[value] ~= false and coreCache[value] or nil
     end
 
+    -- The beginner phrase is never a setting search. Resolve this exact form
+    -- before stale page/results context can feed its ordinary words into fuzzy
+    -- matching; result-specific forms such as "explain it simpler" must stay
+    -- on their richer pending-result path.
+    do
+        local normalized = R.Normalize(text)
+        if normalized == "explain like im new"
+            or normalized == "explain like i'm new"
+            or normalized == "explain like i am new"
+        then
+            local guidance = A.RouterTryDecisionGuidanceShortcut
+                and A.RouterTryDecisionGuidanceShortcut(text, Core)
+            if guidance then return guidance end
+        end
+    end
+
+    -- Goal-level comparisons and subjective cleanup requests are planning,
+    -- not permission to toggle the first fuzzy registry match. Keep this next
+    -- to decision guidance so stale menu context cannot turn "party or raid"
+    -- or "hide useless buffs" into an unrelated write.
+    do
+        local normalized = R.Normalize(text)
+        local terms = A.RouterSafePlanningTerms or {}
+        local earlyPlanningIntent = R.ContainsAny(normalized, terms.compare or {})
+            or R.ContainsAny(normalized, terms.overload or {})
+            or R.ContainsAny(normalized, terms.recommendationFollowup or {})
+            or (R.ContainsAny(normalized, terms.subjectiveAura or {})
+                and R.ContainsAny(normalized, terms.aura or {}))
+        if earlyPlanningIntent then
+            local earlySafePlanning = A.RouterTrySafePlanningShortcut
+                and A.RouterTrySafePlanningShortcut(text, Core)
+            if earlySafePlanning then return earlySafePlanning end
+        end
+    end
+
+    local settingBrowserResult = R.TrySettingBrowserShortcut and R.TrySettingBrowserShortcut(text)
+    if settingBrowserResult then return settingBrowserResult end
+
+    -- Resolve referential help replies before broad navigation parses
+    -- "open that" as a fuzzy setting name. The help context already owns a
+    -- concrete first Open action, so following it is both faster and safer.
+    local contextualHelpResult = R.TryHelpContextFollowup
+        and R.TryHelpContextFollowup(text, coreHandler)
+    if contextualHelpResult then return contextualHelpResult end
+
+    -- A fully scoped readability request is a deliberate topic switch. Let it
+    -- replace stale non-blocking search/guide state before that state can turn
+    -- the request into a broad Aura choice.
+    if not A.RouterHasPendingConfirmationOrFlow() then
+        -- A named signal problem (for example dispellable debuffs) carries
+        -- more information than the generic words "hard to see".
+        local signalTopic = R.TrySignalProblemShortcut(text)
+        if not signalTopic then
+            local readabilityTopic = R.TryReadabilityShortcut(text)
+            if readabilityTopic then return readabilityTopic end
+        end
+    end
+
+    -- Short commands on Group Auras inherit the visible Party/Raid/Mythic
+    -- scope. Resolve that O(1) page context before broad Aura aliases can match
+    -- a shared control or fan out across every frame.
+    if hasCore and not A.RouterHasPendingConfirmationOrFlow()
+        and R.ShouldKeepGroupAuraContext(R.Normalize(text))
+        and R.CurrentGroupScopePrefix() ~= nil
+        and R.StartsWithMutationCommand(text)
+        and not R.HasNaturalProblemTerm(R.Normalize(text))
+    then
+        local groupAuraContextResult = R.TryContext(text, Core)
+        if groupAuraContextResult and not A.RouterIsUnknownResult(groupAuraContextResult) then
+            return groupAuraContextResult
+        end
+    end
+
+    -- A named page is an explicit topic switch, even while a light guided
+    -- setup context exists. Resolve it before the guide's generic parser path.
+    local broadPageNavigation = R.TryBroadPageNavigation(text, Core)
+    if broadPageNavigation and not A.RouterIsUnknownResult(broadPageNavigation) then return broadPageNavigation end
+
     local guidedCtx = type(A.GetContext) == "function" and A.GetContext() or nil
     if type(guidedCtx) == "table" and type(guidedCtx.guidedSetup) == "table" then
-        local guidedResult = Core(text)
-        if guidedResult and not A.RouterIsUnknownResult(guidedResult) then return guidedResult end
+        -- A guide permits normal MSUF requests between steps. Let explicit
+        -- registry search keep its richer selectable results instead of having
+        -- the action parser reduce it to opening only the unit page.
+        local guidedSearch = type(A.RouterLooksLikeExplicitSearchRequest) == "function"
+            and A.RouterLooksLikeExplicitSearchRequest(text)
+        if not guidedSearch then
+            local guidedResult = Core(text)
+            if guidedResult and not A.RouterIsUnknownResult(guidedResult) then return guidedResult end
+        end
     end
 
     -- Native exact aura lists are narrower than lane visibility.  Resolve
@@ -9259,9 +10973,27 @@ function A.RouteInput(text, coreHandler)
             or normalized:find("whitelist", 1, true)
             or (spellValue and (normalized:find("aura", 1, true)
                 or normalized:find("buff", 1, true) or normalized:find("debuff", 1, true)))
-        if exactAuraListIntent then
+        local descriptiveIcon = R.AuraSpecificIconFilterRequest
+            and R.AuraSpecificIconFilterRequest(normalized)
+        local specificSpell = R.AuraSpecificSpellRequest and R.AuraSpecificSpellRequest(normalized)
+        if exactAuraListIntent and not descriptiveIcon and not specificSpell then
             local exactAuraResult = Core(text)
             if exactAuraResult and not A.RouterIsUnknownResult(exactAuraResult) then return exactAuraResult end
+        end
+    end
+
+    -- A named/icon-described aura is more specific than the surrounding unit
+    -- frame. Resolve it before generic "hide <player frame>" shortcuts can
+    -- disable the entire frame merely because the sentence ends with that
+    -- scope (for example, "hide Power Word: Shield on player frame").
+    do
+        local normalized = R.Normalize(text)
+        if (R.AuraSpecificSpellRequest and R.AuraSpecificSpellRequest(normalized))
+            or (R.AuraSpecificIconFilterRequest and R.AuraSpecificIconFilterRequest(normalized))
+        then
+            local specificAuraResult = A.RouterTryAuraProblemShortcut
+                and A.RouterTryAuraProblemShortcut(text, Core)
+            if specificAuraResult then return specificAuraResult end
         end
     end
 
@@ -9269,6 +11001,14 @@ function A.RouteInput(text, coreHandler)
     local hasBlockingPendingState = A.RouterHasBlockingPendingAssistantState()
     local hasPendingChoices = A.RouterHasPendingChoices()
     local hasPendingResults = A.RouterHasPendingSearchResults()
+    if hasPendingResults and type(A.RouterLooksLikeExplicitSettingRelationshipRequest) == "function"
+        and A.RouterLooksLikeExplicitSettingRelationshipRequest(text)
+    then
+        A.RouterClearPendingResultsForRoute()
+        hasPendingState = A.RouterHasPendingAssistantState()
+        hasBlockingPendingState = A.RouterHasBlockingPendingAssistantState()
+        hasPendingResults = false
+    end
     local pendingResultReply = hasPendingResults and R.LooksLikePendingResultReply(text)
     local auraFilterAnswerIntent = A.RouterTryAuraFilterStatusShortcut
         and R.AuraFilterStatusWantsAnswer
@@ -9315,9 +11055,44 @@ function A.RouteInput(text, coreHandler)
     if not hasBlockingPendingState and not pendingResultReply then
         local metaConversation = R.TryEarlyAssistantMetaConversationReply(text)
         if metaConversation then return metaConversation end
+
+        local liveColorExplanation = R.TryLiveUnitColorExplanation(text)
+        if liveColorExplanation then return liveColorExplanation end
     end
 
     if not hasBlockingPendingState and not pendingResultReply then
+        -- Filtering language owns several similarly named Aura controls. Run
+        -- its bounded semantic parser before growth, open-ended help, page
+        -- context, and fuzzy aliases can reinterpret the request.
+        local auraParser = A.Parser or {}
+        local auraContext = type(A.GetContext) == "function" and A.GetContext() or {}
+        if type(auraParser.LooksLikeAuraFilteringConversation) == "function"
+            and auraParser.LooksLikeAuraFilteringConversation(text, auraContext)
+        then
+            local auraFilteringResult = Core(text)
+            if auraFilteringResult and not A.RouterIsUnknownResult(auraFilteringResult) then
+                return auraFilteringResult
+            end
+        end
+
+        local auraGrowthChoice = R.TryScopedAuraGrowthChoice(text, Core)
+        if auraGrowthChoice then return auraGrowthChoice end
+
+        -- Give the parser's visual-semantic owner first refusal before broad
+        -- setting search or open-ended matching. Mixed-case DoT wording is
+        -- intentionally included so it can return Aura-vs-name-dot choices
+        -- instead of disabling/moving the surrounding frame.
+        local rawDots = tostring(text or "")
+        local semanticNameDots = R.LooksLikeNameShorteningDotsRequest(text)
+        local auraDoTs = R.HasRawAuraDoT(rawDots)
+        if (semanticNameDots or auraDoTs) and not R.LooksLikeRegistrySettingLocationQuestion(text) then
+            local dotResult = Core(text)
+            if dotResult and not A.RouterIsUnknownResult(dotResult) then return dotResult end
+        end
+
+        local openEndedSetting = R.TryOpenEndedSettingIdea(text, Core)
+        if openEndedSetting then return openEndedSetting end
+
         local earlyPageHelpResult = R.TryPageHelpShortcut(text, Core)
         if earlyPageHelpResult then return earlyPageHelpResult end
 
@@ -9334,6 +11109,27 @@ function A.RouteInput(text, coreHandler)
                 if location then return location end
             end
         end
+
+        -- Inline Target-of-Target name location requests are narrower than
+        -- general dependent-frame troubleshooting.
+        local earlyTargetTargetInlineName = A.RouterTryTargetTargetInlineNameShortcut
+            and A.RouterTryTargetTargetInlineNameShortcut(text, Core)
+        if earlyTargetTargetInlineName then return earlyTargetTargetInlineName end
+
+        -- "Focus target" and "target of target" are compound frame names.
+        -- Resolve their missing-frame questions before fuzzy registry matching
+        -- can split the phrase and explain an unrelated Focus/Target setting.
+        local earlyDependentTargetTroubleshooting = A.RouterTryDependentTargetTroubleshootingShortcut
+            and A.RouterTryDependentTargetTroubleshootingShortcut(text, Core)
+        if earlyDependentTargetTroubleshooting then return earlyDependentTargetTroubleshooting end
+
+        -- A full registered setting name is more specific than a broad signal
+        -- family such as dispel, cast bar, or aura. Resolve it first so
+        -- "Boss Debuff Dispellable Filter missing" does not collapse into
+        -- generic dispel help.
+        local earlyRegistryTroubleshooting = A.RouterTryRegistrySettingTroubleshootingShortcut
+            and A.RouterTryRegistrySettingTroubleshootingShortcut(text, Core)
+        if earlyRegistryTroubleshooting then return earlyRegistryTroubleshooting end
 
         -- A named tracker is more specific than its surrounding cast bar. This
         -- explanatory route must win before broad cast-bar troubleshooting.
@@ -9417,6 +11213,9 @@ function A.RouteInput(text, coreHandler)
 
         local registrySettingTroubleshootingResult = A.RouterTryRegistrySettingTroubleshootingShortcut and A.RouterTryRegistrySettingTroubleshootingShortcut(text, Core)
         if registrySettingTroubleshootingResult then return registrySettingTroubleshootingResult end
+
+        local directSettingNavigationResult = R.TryDirectSettingNavigation and R.TryDirectSettingNavigation(text, Core)
+        if directSettingNavigationResult then return directSettingNavigationResult end
 
         local visualSettingResult = A.RouterTryVisualSettingShortcut and A.RouterTryVisualSettingShortcut(text, Core)
         if visualSettingResult then return visualSettingResult end
@@ -9679,13 +11478,13 @@ function A.RouteInput(text, coreHandler)
     local helpContextResult = R.TryHelpContextFollowup(text, Core)
     if helpContextResult then return helpContextResult end
 
-    local generalGuidanceResult = R.TryGeneralGuidanceShortcut(text, Core)
-    if generalGuidanceResult then return generalGuidanceResult end
-
     if R.LooksLikeGuidedTourRequest(text) and hasCore then
         local guidedResult = Core(text)
         if guidedResult and not A.RouterIsUnknownResult(guidedResult) then return guidedResult end
     end
+
+    local generalGuidanceResult = R.TryGeneralGuidanceShortcut(text, Core)
+    if generalGuidanceResult then return generalGuidanceResult end
 
     if not hasBlockingPendingState and not pendingResultReply and explicitSearchRequest
         and A.Knowledge and type(A.Knowledge.Answer) == "function" then

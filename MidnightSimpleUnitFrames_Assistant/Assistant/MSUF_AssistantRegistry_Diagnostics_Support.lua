@@ -28,15 +28,6 @@ local function ActivePageLabel()
     return "MSUF page"
 end
 
-local function AssistantPerfLabel(label)
-    label = tostring(label or "")
-    if label == "assistant.submit" then return "answering a request" end
-    if label == "assistant.submit.deferred" then return "queued request" end
-    if label == "assistant.refresh_ui" then return "refreshing the UI" end
-    if label == "assistant.job.step" then return "background Assistant work" end
-    return "Assistant work"
-end
-
 local LOCALE_DISPLAY_LABELS = {
     enUS = "English (US)",
     enGB = "English (UK)",
@@ -136,17 +127,6 @@ function A.Workflow.StatusText()
         local detail = ""
         if type(jobSummary.labels) == "table" and #jobSummary.labels > 0 then detail = " (" .. table.concat(jobSummary.labels, ", ") .. ")" end
         lines[#lines + 1] = "Work in progress: " .. tostring(tonumber(jobSummary.count) or 0) .. detail
-    end
-    if A.PerformanceWarmupStatusText then
-        lines[#lines + 1] = "Ready state: " .. A.PerformanceWarmupStatusText()
-    end
-    local perf = A.GetLastPerfSample and A.GetLastPerfSample() or nil
-    if type(perf) == "table" then
-        lines[#lines + 1] = "Last response time: " .. AssistantPerfLabel(perf.label) .. " " .. tostring(math.floor((tonumber(perf.ms) or 0) + 0.5)) .. " ms"
-    end
-    local slow = A.GetLastSlowPerfSample and A.GetLastSlowPerfSample() or nil
-    if type(slow) == "table" then
-        lines[#lines + 1] = "Last slow response time: " .. AssistantPerfLabel(slow.label) .. " " .. tostring(math.floor((tonumber(slow.ms) or 0) + 0.5)) .. " ms"
     end
     return table.concat(lines, "\n")
 end

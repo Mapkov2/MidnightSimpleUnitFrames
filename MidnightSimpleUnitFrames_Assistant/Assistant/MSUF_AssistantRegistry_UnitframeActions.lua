@@ -60,11 +60,17 @@ Registry:RegisterAction({
         local src = args and args.source
         local targets = args and args.targets
         if type(src) ~= "string" or type(targets) ~= "table" or #targets == 0 then
-            return false, "Which source and destination do you want me to use for the copy?"
+            return false, "Which source and destination do you want me to use for the copy?", {
+                noMutation = true,
+                userFacingFailure = true,
+            }
         end
         local UP = M and M.UnitPage
         if not (UP and type(UP.CopyUnitSettings) == "function") then
-            return false, "Open a unit frame page first so I can copy those options."
+            return false, "Open a unit frame page first so I can copy those options.", {
+                noMutation = true,
+                userFacingFailure = true,
+            }
         end
         local targetLabels = {}
         for i = 1, #targets do

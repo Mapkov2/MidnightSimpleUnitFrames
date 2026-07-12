@@ -545,8 +545,6 @@ local function AddPerformance(lines)
             AddKV(lines, "Latency world ms", latencyWorld)
         end
     end
-    if type(_G.UpdateAddOnMemoryUsage) == "function" then pcall(_G.UpdateAddOnMemoryUsage) end
-    AddCallKV(lines, "MSUF memory KB", _G.GetAddOnMemoryUsage, ADDON_NAME)
 end
 local IMPORTANT_ADDONS = WL [[
 MidnightSimpleUnitFrames BugGrabber BugSack WeakAuras WeakAurasOptions ElvUI

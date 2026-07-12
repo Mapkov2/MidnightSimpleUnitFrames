@@ -69,15 +69,17 @@ local LEGACY_AURA_CONTENT_PAGES = {
 local function ResolveAuraContentRoute(page, args)
     if not LEGACY_AURA_CONTENT_PAGES[page] then return page, args and args.query end
     local context = A.GetContext and A.GetContext() or nil
-    local settingKey = tostring(args and args.settingKey or context and context.lastSetting or "")
+    local explicitSettingKey = tostring(args and args.settingKey or "")
+    local contextSettingKey = tostring(context and context.lastSetting or "")
+    local settingKey = explicitSettingKey ~= "" and explicitSettingKey or contextSettingKey
     local query = tostring(args and args.query or args and args.label or "")
     local queryLower = query:lower()
     local scope = tostring(args and args.scope or "")
     local lane = tostring(args and args.lane or "")
-    if scope == "" then
-        scope = settingKey:match("^auras3%.([^.]+)%.")
-            or settingKey:match("^gf_([^.]+)%.auras%.")
-            or tostring(context and context.lastUnit or "")
+    if scope == "" and explicitSettingKey ~= "" then
+        scope = explicitSettingKey:match("^auras3%.([^.]+)%.")
+            or explicitSettingKey:match("^gf_([^.]+)%.auras%.")
+            or ""
     end
     if scope == "" then
         scope = (queryLower:find("mythic raid", 1, true) and "mythicraid")
@@ -90,13 +92,20 @@ local function ResolveAuraContentRoute(page, args)
             or (queryLower:find("player", 1, true) and "player")
             or ""
     end
+    if scope == "" then
+        scope = contextSettingKey:match("^auras3%.([^.]+)%.")
+            or contextSettingKey:match("^gf_([^.]+)%.auras%.")
+            or tostring(context and context.lastUnit or "")
+    end
     if lane == "" then
-        lane = settingKey:match("^auras3%.[^.]+%.([^.]+)%.")
-            or settingKey:match("^gf_[^.]+%.auras%.([^.]+)%.")
+        lane = (explicitSettingKey ~= "" and (explicitSettingKey:match("^auras3%.[^.]+%.([^.]+)%.")
+            or explicitSettingKey:match("^gf_[^.]+%.auras%.([^.]+)%.")))
             or (page == "auras3_debuffs" and "debuff")
             or (page == "auras3_buffs" and "buff")
             or (queryLower:find("debuff", 1, true) and "debuff")
             or (queryLower:find("buff", 1, true) and "buff")
+            or contextSettingKey:match("^auras3%.[^.]+%.([^.]+)%.")
+            or contextSettingKey:match("^gf_[^.]+%.auras%.([^.]+)%.")
             or ""
     end
     local auraContext = settingKey:find("^auras3%.") or settingKey:find("^gf_[^.]+%.auras%.")
@@ -120,6 +129,7 @@ Registry:RegisterAction({
     run = function(args)
         local page = args and args.page
         if type(page) ~= "string" or page == "" then return false, "Which page do you want me to open?" end
+        local requestedPage = page
         local routedQuery
         page, routedQuery = ResolveAuraContentRoute(page, args)
         local previousPage = M and M.activeKey
@@ -139,6 +149,10 @@ Registry:RegisterAction({
         if opened then
             if previousPage and previousPage ~= page and A.Workflow and type(A.Workflow.PushNavigationPage) == "function" then
                 A.Workflow.PushNavigationPage(previousPage)
+            end
+            local requestedLabel = requestedPage ~= page and PAGE_LABEL_OVERRIDES[requestedPage] or nil
+            if requestedLabel then
+                return true, "Opened " .. label .. " and focused " .. tostring(requestedLabel) .. "."
             end
             return true, "Opened " .. label .. "."
         end

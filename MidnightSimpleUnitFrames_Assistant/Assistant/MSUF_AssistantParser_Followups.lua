@@ -64,6 +64,15 @@ local function ShouldUseLastUnitContext(text)
     return ContainsAny(text, FollowupData.LAST_UNIT_CONTEXT_TERMS)
 end
 
+local function ContextSubjectRecent(ctx, maxTurns)
+    if type(ctx) ~= "table" then return false end
+    local currentTurn = tonumber(ctx.turnSerial or ctx.lastTurnSerial) or 0
+    local subjectTurn = tonumber(ctx.lastSubjectTurn or ctx.lastMentionedTurn)
+    if not subjectTurn then return false end
+    local age = currentTurn - subjectTurn
+    return age >= 0 and age <= (tonumber(maxTurns) or 3)
+end
+
 local function FollowupValueDisplay(setting, value)
     if P and type(P.ValueDisplay) == "function" then
         local label = P.ValueDisplay(setting, value)
@@ -1659,6 +1668,7 @@ end
 local function BuildBooleanCorrection(text, ctx)
     if IsPageExplanationQuestion(text) then return nil end
     if not (ctx and type(ctx.lastSetting) == "string") then return nil end
+    if not ContextSubjectRecent(ctx, 3) then return nil end
     local value = DetectBoolean(text)
     if value == nil then return nil end
     if not ContainsAny(text, FollowupData.BOOLEAN_CORRECTION_TERMS) then return nil end
@@ -1696,7 +1706,7 @@ local function ParseSetting(text, ctx)
     if (attr == "width" or attr == "height") and ContainsAny(text, FollowupData.DIMENSION_GUARD_TERMS) then
         return nil
     end
-    local useLastUnit = ShouldUseLastUnitContext(text)
+    local useLastUnit = ShouldUseLastUnitContext(text) and ContextSubjectRecent(ctx, 3)
     if useLastUnit and frameType == "unitframe" and ctx and IsGroupContextUnit(ctx.lastUnit) then
         frameType = "group"
     end
@@ -1799,6 +1809,7 @@ P.GROUP_CONTEXT_UNITS = GROUP_CONTEXT_UNITS
 P.IsGroupContextUnit = IsGroupContextUnit
 P.ContextGroups = ContextGroups
 P.ShouldUseLastUnitContext = ShouldUseLastUnitContext
+P.ContextSubjectRecent = ContextSubjectRecent
 P.BuildFollowup = BuildFollowup
 P.BuildContinuationFollowup = BuildContinuationFollowup
 P.BuildBooleanCorrection = BuildBooleanCorrection

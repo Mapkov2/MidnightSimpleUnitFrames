@@ -175,6 +175,7 @@ function A.AurasRegistry.InstallSettingRegistries(ctx)
             AuraUseSharedRules = C.AuraUseSharedRules,
             AuraSetUseSharedRules = C.AuraSetUseSharedRules,
             AuraModel = C.AuraModel,
+            EnsureAuraFallbackDB = C.EnsureAuraFallbackDB,
             AuraFiltersEnabled = C.AuraFiltersEnabled,
             AuraSetFiltersEnabled = C.AuraSetFiltersEnabled,
             AuraReadFilter = C.AuraReadFilter,

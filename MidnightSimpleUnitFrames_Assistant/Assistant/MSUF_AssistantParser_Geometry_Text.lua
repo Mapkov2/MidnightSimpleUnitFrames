@@ -151,15 +151,18 @@ function A._ParseTextFontSizeShortcut(text)
         return nil
     end
     local allTextIntent = ContainsAny(text, GeometryTextPhrases[22]) and ContainsAny(text, GeometryTextPhrases[23])
-    if not allTextIntent and not TextFontSizeIntent(text) then
+    local broadGenericTextIntent = ContainsAny(text, GeometryTextPhrases[17])
+        and ContainsAny(text, { "text", "font" })
+    if not allTextIntent and not TextFontSizeIntent(text) and not broadGenericTextIntent then
         return nil
     end
     local tab = TextSelectorTab(text)
     local allText = tab == nil and allTextIntent
-    if tab ~= "name" and tab ~= "hp" and tab ~= "power" and not allText then return nil end
+    local genericText = tab == nil and not allText and broadGenericTextIntent
+    if tab ~= "name" and tab ~= "hp" and tab ~= "power" and not allText and not genericText then return nil end
 
     local attrs
-    if allText then
+    if allText or genericText then
         attrs = { "nameFontSize", "hpFontSize", "powerFontSize" }
     else
         attrs = { tab == "name" and "nameFontSize" or (tab == "hp" and "hpFontSize" or "powerFontSize") }
@@ -197,6 +200,14 @@ function A._ParseTextFontSizeShortcut(text)
         end
     end
     if #changes == 0 then return nil end
+    if genericText and #changes > 1 then
+        return {
+            kind = "ambiguous",
+            choices = changes,
+            label = "Which text should change size?",
+            summary = "Offers Name, HP, and Power text-size options instead of guessing which text the user meant.",
+        }
+    end
     if #changes > 1 and #groups > 1 and not allText then
         return {
             kind = "ambiguous",

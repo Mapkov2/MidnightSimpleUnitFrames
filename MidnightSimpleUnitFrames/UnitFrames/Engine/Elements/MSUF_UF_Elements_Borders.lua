@@ -582,6 +582,47 @@ function Borders.IsEnabled(frame, spec)
   return BorderNormalEnabled(cfg) or BorderHighlightEnabled(frame, cfg) or false
 end
 
+function Borders.GetActiveVisual(frame)
+  if not frame or frame._msufBorderShown ~= true then return nil end
+  local cfg = frame._msufBorderRuntimeCfg
+  if cfg == nil and frame.MSUFSpec then cfg = frame.MSUFSpec.border end
+  local source = "normal"
+  if cfg then
+    local testActive = _G.MSUF_BorderTestModesActive == true
+    local priority = HighlightPriorityOrder(cfg)
+    for i = 1, #priority do
+      local key = priority[i]
+      local active = false
+      if key == "dispel" then
+        active = (testActive and DispelTestApplies(frame))
+          or (cfg.dispel == true and frame._msufA3DispelActive == true)
+      elseif key == "aggro" then
+        active = (testActive and AggroTestApplies(frame))
+          or (cfg.aggro == true and IsAggroBorderUnit(frame) and ThreatState(frame))
+      elseif key == "purge" then
+        active = testActive and PurgeTestApplies(frame)
+      elseif key == "bossTarget" then
+        active = (testActive and BossTargetTestApplies(frame)) or BossTargetState(frame, cfg)
+      end
+      if active then source = key break end
+    end
+  end
+  return {
+    source = source,
+    r = frame._msufBorderR,
+    g = frame._msufBorderG,
+    b = frame._msufBorderB,
+    a = frame._msufBorderA,
+    secret = frame._msufBorderSecretColor == true,
+  }
+end
+
+if UF then
+  function UF.GetActiveBorderVisual(frame)
+    return Borders.GetActiveVisual(frame)
+  end
+end
+
 function Borders.Disable(frame)
   if frame and frame.MSUFUnitDispelOverlay then
     frame.MSUFUnitDispelOverlay:Hide()

@@ -25,12 +25,6 @@ local CASTBAR_PREVIEW_TYPES = M.KeySetFromWords "normal channel empowered"
 local CASTBAR_PAGE_WORK_DELAY = 0.04
 local CASTBAR_PREVIEW_REFRESH_INTERVAL = 1 / 30
 local CASTBAR_PREVIEW_ANIMATION_INTERVAL = 1 / 20
-local function ProfileStart()
-    return M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStart and M.ProfileStart() or nil
-end
-local function ProfileStop(bucket, key, started)
-    if started and M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStop then M.ProfileStop(bucket, key, started) end
-end
 local castbarPageWorkPending = {}
 local function ScheduleCastbarPageWork(key, delay, fn)
     if type(fn) ~= "function" then return end
@@ -512,7 +506,6 @@ local function BuildCastbars(ctx)
             end
         end
         function preview:Refresh()
-            local profileStarted = ProfileStart()
             local now = GetTime and GetTime() or 0
             local kind = self.castType or "normal"
             local unit = self.layoutUnit or "player"
@@ -841,7 +834,6 @@ local function BuildCastbars(ctx)
             for key, btn in pairs(unitButtons) do
                 if btn.SetActive then btn:SetActive(key == unit) end
             end
-            ProfileStop("preview", "CastbarPreview.Refresh", profileStarted)
         end
         box:SetScript("OnUpdate", function(_, elapsed)
             elapsed = tonumber(elapsed) or 0

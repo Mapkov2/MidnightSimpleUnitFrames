@@ -70,6 +70,12 @@ local function CopyArray(source)
     return out
 end
 
+local function CopyValues(source)
+    local out = {}
+    for i = 1, #(source or {}) do out[i] = source[i] end
+    return out
+end
+
 local function SortedKeys(source)
     local out = {}
     for key in pairs(source or {}) do out[#out + 1] = key end
@@ -104,7 +110,8 @@ end
 -- rule data generic while limiting each scan to the namespace it can match.
 local function BuildScanIndex(settings)
     local byTop = {}
-    for _, setting in ipairs(settings) do
+    for index, setting in ipairs(settings) do
+        if index % 128 == 0 and type(A.MaybeYield) == "function" then A.MaybeYield() end
         local key = type(setting) == "table" and setting.key or nil
         if type(key) == "string" then
             local top = TopSegment(key)
@@ -137,7 +144,15 @@ end
 local function EnsureAutoCoverage()
     local Auto = A.AutoCoverage
     if Auto and type(Auto.EnsureFilled) == "function" then
-        pcall(Auto.EnsureFilled)
+        -- Yielding cannot cross pcall on WoW's Lua runtime. Deferred dashboard
+        -- jobs already have an outer error boundary, so call directly there;
+        -- keep pcall for synchronous API/audit callers where MaybeYield is a
+        -- no-op and a partial registry must fail closed.
+        if A._jobYieldStartedMs ~= nil then
+            Auto.EnsureFilled()
+        else
+            pcall(Auto.EnsureFilled)
+        end
     end
 end
 
@@ -356,7 +371,8 @@ end
 
 local function ApplyCastbarGates(state, settings)
     local data = A.CastbarsRegistry and A.CastbarsRegistry.CASTBAR_KEYS or {}
-    for _, setting in ipairs(settings) do
+    for index, setting in ipairs(settings) do
+        if index % 128 == 0 and type(A.MaybeYield) == "function" then A.MaybeYield() end
         if setting.frameType == "castbar" then
             local unit = tostring(setting.unit or "")
             local keys = data[unit]
@@ -372,6 +388,229 @@ local function ApplyCastbarGates(state, settings)
                     evidence = "MSUF_AssistantRegistry_Castbars_Core_Data.lua:CASTBAR_KEYS and Castbars_Core.lua:RegisterUnitCastbarBoolean",
                     ruleId = "castbar-unit-root",
                 })
+            end
+        end
+    end
+end
+
+local function AddComponentGate(state, seen, from, to, ruleId, reason, evidence)
+    from, to = tostring(from or ""), tostring(to or "")
+    local identity = from .. "\031" .. to
+    if from == "" or to == "" or seen[identity] then return false end
+    seen[identity] = true
+    return AddEdge(state, {
+        from = from,
+        to = to,
+        kind = "visibility",
+        condition = DEFAULT_TRUE,
+        impact = "componentVisibility",
+        reason = reason,
+        evidence = evidence,
+        ruleId = ruleId,
+    })
+end
+
+local function AddConditionalControlGate(state, from, to, condition, ruleId, reason, evidence)
+    if not state.settingsByKey[from] or not state.settingsByKey[to] then return false end
+    return AddEdge(state, {
+        from = from,
+        to = to,
+        kind = "availability",
+        condition = condition,
+        impact = "controlAvailability",
+        reason = reason,
+        evidence = evidence,
+        ruleId = ruleId,
+    })
+end
+
+local function ApplyUnitVisualConditionalGates(state, scanIndex)
+    local portraitEvidence = "MSUF_Menu2_UnitFrameVisuals.lua:177-183 portrait BindGateGroup"
+    local powerEvidence = "MSUF_Menu2_UnitFrameVisuals.lua:386-400 power BindGateGroup"
+    for _, unit in ipairs(D.unitScopes or {}) do
+        local prefix = unit .. "."
+        AddConditionalControlGate(state, prefix .. "portraitZoom", prefix .. "portraitRender",
+            { operator = "notEquals", value = "CLASS" }, "unit-portrait-render-zoom",
+            "Portrait Zoom is available for 2D/3D portrait rendering, not Class portraits.", portraitEvidence)
+        AddConditionalControlGate(state, prefix .. "portraitClassStyle", prefix .. "portraitRender",
+            { operator = "equals", value = "CLASS" }, "unit-portrait-render-class-style",
+            "Class Portrait Style is available only when Portrait Render is Class.", portraitEvidence)
+        for _, child in ipairs({ "portraitBorderThickness", "portraitFillBorder" }) do
+            AddConditionalControlGate(state, prefix .. child, prefix .. "portraitBorderStyle",
+                { operator = "notEquals", value = "NONE" }, "unit-portrait-border-details",
+                "Portrait border details are available only when a portrait border style is selected.", portraitEvidence)
+        end
+        AddConditionalControlGate(state, prefix .. "powerBarBorderThickness", prefix .. "powerBarBorderEnabled",
+            DEFAULT_TRUE, "unit-power-border-thickness",
+            "Power Bar Border Thickness is available only while the power-bar border is enabled.", powerEvidence)
+
+        -- The native gate requires both Show Power and Detached Power. The
+        -- existing detached-mode rule supplies the latter; this edge records
+        -- the independent Show Power prerequisite for every detached detail.
+        for _, setting in ipairs(PrefixSettings(scanIndex, prefix)) do
+            local key = tostring(setting and setting.key or "")
+            local suffix = key:sub(#prefix + 1)
+            if StartsWith(suffix, "detachedPower") then
+                AddConditionalControlGate(state, key, prefix .. "showPowerBar", DEFAULT_TRUE,
+                    "unit-detached-power-visible", "Detached power controls are available only while the unit power bar is shown.", powerEvidence)
+            end
+        end
+    end
+
+    -- Only Player offers the Orb shape. Its size and rectangular width/height
+    -- controls are mutually exclusive in the native page.
+    for _, child in ipairs({ "detachedPowerBarSyncClassPower", "detachedPowerBarWidth", "detachedPowerBarHeight" }) do
+        AddConditionalControlGate(state, "player." .. child, "player.detachedPowerBarShape",
+            { operator = "notEquals", value = "ORB" }, "player-detached-power-non-orb",
+            "This detached power detail is available for Bar, Round, or Crystal shapes, not Orb.", powerEvidence)
+    end
+    AddConditionalControlGate(state, "player.detachedPowerOrbSize", "player.detachedPowerBarShape",
+        { operator = "equals", value = "ORB" }, "player-detached-power-orb-size",
+        "Detached Orb Size is available only when the detached power shape is Orb.", powerEvidence)
+end
+
+local function ApplyUnitStatusComponentGates(state)
+    local specs = A.UnitframeRegistryData and A.UnitframeRegistryData.STATUS_CONTROL_SPECS or {}
+    local fields = { "iconStyle", "customIcon", "symbol", "size", "anchor", "x", "y", "layer" }
+    local seen = {}
+    for _, unit in ipairs(D.unitScopes or {}) do
+        for _, spec in ipairs(specs) do
+            if type(spec) == "table" and (not spec.units or spec.units[unit] == true) then
+                local parent = unit .. "." .. tostring(spec.show or "")
+                for _, field in ipairs(fields) do
+                    -- Inline raid-group text reuses the normal name font/layer;
+                    -- those shared fields are not exclusively gated by this
+                    -- status component.
+                    if not (spec.inlineName and (field == "size" or field == "layer")) then
+                        local child = spec[field]
+                        if type(child) == "string" and child ~= "" then
+                            AddComponentGate(state, seen, unit .. "." .. child, parent,
+                                "unit-status-component", "This status detail is visible only while its unit-frame status component is shown.",
+                                "MSUF_AssistantRegistry_Unitframes_StatusData.lua:STATUS_CONTROL_SPECS and Unitframes_Status.lua registration")
+                        end
+                    end
+                end
+                if spec.value == "raidgroupname" then
+                    AddComponentGate(state, seen, unit .. ".raidGroupNameStyle", parent,
+                        "unit-status-component", "Raid Group Name style is visible only while Raid Group Name is shown.",
+                        "MSUF_AssistantRegistry_Unitframes_StatusData.lua:raidgroupname and Unitframes_Status.lua registration")
+                end
+            end
+        end
+    end
+end
+
+local function ApplyGroupStatusComponentGates(state)
+    local specs = A.GroupFramesRegistryData and A.GroupFramesRegistryData.GROUP_STATUS_ICON_SPECS or {}
+    local fields = { "iconStyle", "customIcon", "size", "anchor", "x", "y", "layer" }
+    local seen = {}
+    for _, scope in ipairs(D.groupScopes or {}) do
+        for _, spec in ipairs(specs) do
+            if type(spec) == "table" then
+                local parent = scope .. "." .. tostring(spec.enabled or "")
+                for _, field in ipairs(fields) do
+                    local child = spec[field]
+                    if type(child) == "string" and child ~= "" then
+                        AddComponentGate(state, seen, scope .. "." .. child, parent,
+                            "group-status-component", "This group status detail is visible only while its status component is enabled.",
+                            "MSUF_AssistantRegistry_GroupFrames_Data_StatusIcons*.lua and GroupFramesStatus.lua registration")
+                    end
+                end
+            end
+        end
+    end
+end
+
+local function ApplyCastbarComponentGates(state, settings)
+    local details = A.CastbarsRegistry and A.CastbarsRegistry.CASTBAR_DETAIL_FIELDS or {}
+    local attributeKinds = {
+        iconSize = "icon", iconPosition = "icon", iconOffsetX = "icon", iconOffsetY = "icon",
+        iconSpacing = "icon", iconBorderStyle = "icon",
+        spellNamePosition = "text", textOffsetX = "text", textOffsetY = "text",
+        spellNameAlign = "text", spellNameFontSize = "text", spellNameMaxWidth = "text",
+        spellNameTruncate = "text",
+        timeFormat = "time", timePosition = "time", timeOffsetX = "time", timeOffsetY = "time",
+        timeFontSize = "time",
+    }
+    local seen = {}
+    for _, setting in ipairs(settings or {}) do
+        local unit = tostring(setting and setting.unit or "")
+        local component = attributeKinds[tostring(setting and setting.attribute or "")]
+        local detail = details[unit]
+        local parentField = detail and component and detail[component]
+        if tostring(setting and setting.frameType or "") == "castbar" and parentField then
+            AddComponentGate(state, seen, setting.key, "general." .. parentField,
+                "castbar-subcomponent", "This cast bar detail is visible only while its icon, spell-name text, or time text is shown.",
+                "MSUF_AssistantRegistry_Castbars_Core_Data.lua:CASTBAR_DETAIL_FIELDS and Castbars_Details.lua registration")
+        end
+    end
+end
+
+local function ApplyTargetedSpellGates(state)
+    local parent = "gf_party.targetedSpellsEnabled"
+    local seen = {}
+    for _, field in ipairs({
+        "targetedSpellsMode", "targetedSpellsIconSize", "targetedSpellsMaxIcons", "targetedSpellsLayer",
+        "targetedSpellsAnchor", "targetedSpellsGrow", "targetedSpellsX", "targetedSpellsY",
+    }) do
+        AddComponentGate(state, seen, "gf_party." .. field, parent,
+            "party-targeted-spells", "This targeted-spell detail is visible only while Party Targeted Spell Indicators are enabled.",
+            "MSUF_AssistantRegistry_GroupFramesStatus.lua:RegisterTargetedSpellSettings")
+    end
+end
+
+local function ApplyGroupIndicatorGates(state)
+    local families = {
+        {
+            parent = "showGroupNumber",
+            children = { "groupNumberSize", "groupNumberAnchor", "groupNumberX", "groupNumberY" },
+            id = "group-number-component",
+            reason = "Group Number layout is visible only while Show Group Number is enabled.",
+            evidence = "MSUF_Menu2_GroupIndicators.lua group-number enablement and MSUF_AssistantRegistry_GroupFramesVisual_Highlights.lua",
+        },
+        {
+            parent = "hlFocusEnabled",
+            children = { "hlFocusSize", "hlFocusOffset", "hlFocusColor" },
+            id = "group-focus-highlight-component",
+            reason = "Focus Highlight details are visible only while the Focus Highlight is enabled.",
+            evidence = "MSUF_Menu2_GroupIndicators.lua focus-highlight enablement and MSUF_AssistantRegistry_GroupFramesVisual_Highlights.lua",
+        },
+        {
+            parent = "aggroEnabled",
+            children = { "aggroMode" },
+            id = "group-aggro-component",
+            reason = "Aggro Highlight mode is visible only while Aggro Highlight is enabled.",
+            evidence = "MSUF_AssistantRegistry_GroupFramesVisual_Highlights.lua aggro controls",
+        },
+        {
+            parent = "targetIndicator",
+            children = { "targetColor" },
+            id = "group-target-highlight-component",
+            reason = "Target Indicator color is visible only while Target Indicator is enabled.",
+            evidence = "MSUF_AssistantRegistry_GroupFramesVisual_Highlights.lua target controls",
+        },
+        {
+            parent = "deadBgEnabled",
+            children = { "deadBgColor", "deadBgA", "deadBgOffline" },
+            id = "group-dead-background-component",
+            reason = "Dead Background details are effective only while Dead Background is enabled.",
+            evidence = "MSUF_AssistantRegistry_GroupFramesSettings_FrameAlphaAnchor.lua and MSUF_UF_Group_Visuals.lua dead-background gate",
+        },
+        {
+            parent = "roleIcon",
+            children = { "roleIconShowTank", "roleIconShowHealer", "roleIconShowDPS" },
+            id = "group-role-icon-filter",
+            reason = "Role filters affect visible icons only while Role Icon is enabled.",
+            evidence = "MSUF_Menu2_GroupIndicators.lua role-filter enablement and MSUF_AssistantRegistry_GroupFramesStatus.lua",
+        },
+    }
+    local seen = {}
+    for _, scope in ipairs(D.groupScopes or {}) do
+        for _, family in ipairs(families) do
+            local parent = scope .. "." .. family.parent
+            for _, child in ipairs(family.children) do
+                AddComponentGate(state, seen, scope .. "." .. child, parent,
+                    family.id, family.reason, family.evidence)
             end
         end
     end
@@ -432,6 +671,45 @@ local function ApplyScopedInheritance(state, scanIndex)
                                 ruleId = rule.id .. "-override",
                             })
                         end
+                    end
+                end
+            end
+        end
+    end
+end
+
+local function ApplyCrossPrefixInheritance(state)
+    for _, rule in ipairs(D.crossPrefixInheritanceRules or {}) do
+        for _, target in ipairs(rule.targets or {}) do
+            local gate = tostring(target and target.gate or "")
+            local prefix = tostring(target and target.prefix or "")
+            if gate ~= "" and prefix ~= "" and state.settingsByKey[gate] then
+                for _, field in ipairs(rule.fields or {}) do
+                    local from = prefix .. "." .. tostring(field and field.target or "")
+                    local to = tostring(rule.sourcePrefix or "") .. "." .. tostring(field and field.source or "")
+                    if state.settingsByKey[from] and state.settingsByKey[to] then
+                        AddEdge(state, {
+                            from = from,
+                            to = to,
+                            kind = "inheritance",
+                            condition = { operator = "equals", value = false },
+                            gateKey = gate,
+                            gateCondition = { operator = "equals", value = false },
+                            impact = "effectiveValueSource",
+                            reason = rule.reason,
+                            evidence = rule.evidence,
+                            ruleId = tostring(rule.id or "cross-prefix-inheritance"),
+                        })
+                        AddEdge(state, {
+                            from = from,
+                            to = gate,
+                            kind = "override",
+                            condition = { operator = "equals", value = true },
+                            impact = "effectiveValueSource",
+                            reason = rule.overrideReason,
+                            evidence = rule.evidence,
+                            ruleId = tostring(rule.id or "cross-prefix-inheritance") .. "-override",
+                        })
                     end
                 end
             end
@@ -515,6 +793,169 @@ local function ApplyConflicts(state)
     end
 end
 
+local function SettingPage(setting)
+    if type(setting) ~= "table" then return nil end
+    local page = setting.page
+    local resolver = A.ResolveMenuPageForSetting
+        or (A.Knowledge and A.Knowledge.ResolveSettingPage)
+    if (page == nil or page == "") and type(resolver) == "function" then
+        local ok, resolved = pcall(resolver, setting)
+        if ok then page = resolved end
+    end
+    page = tostring(page or "")
+    return page ~= "" and page or nil
+end
+
+local function IsGeneratedCategory(category)
+    return tostring(category or ""):find("Auto (generated)", 1, true) ~= nil
+end
+
+local function AssociationGroups(setting, page)
+    local groups = {}
+    local category = tostring(setting and setting.category or "")
+    local unit = tostring(setting and setting.unit or "")
+    local frameType = tostring(setting and setting.frameType or "")
+    if category ~= "" and not IsGeneratedCategory(category) then
+        groups[#groups + 1] = table.concat({ "category", category, unit, frameType }, "\031")
+    end
+    groups[#groups + 1] = table.concat({ "page-scope", page, unit, frameType }, "\031")
+    groups[#groups + 1] = table.concat({ "page-frame", page, frameType }, "\031")
+    groups[#groups + 1] = "page\031" .. page
+    return groups
+end
+
+local function CommonPrefixLength(left, right)
+    left, right = tostring(left or ""), tostring(right or "")
+    local limit = math.min(#left, #right)
+    local count = 0
+    while count < limit and left:byte(count + 1) == right:byte(count + 1) do
+        count = count + 1
+    end
+    return count
+end
+
+local ASSOCIATION_STOP_WORDS = {
+    bars = true, bar = true, setting = true, option = true, global = true,
+    player = true, target = true, focus = true, boss = true, party = true, raid = true,
+}
+
+local function AssociationWords(state, key)
+    state.associationWords = state.associationWords or {}
+    if state.associationWords[key] then return state.associationWords[key] end
+    local setting = state.settingsByKey[key]
+    local text = tostring(setting and setting.label or key):lower()
+    local words = {}
+    for word in text:gmatch("[%w]+") do
+        if #word >= 3 and not ASSOCIATION_STOP_WORDS[word] then
+            if word == "opacity" then word = "alpha" end
+            if word == "background" or word == "bg" then word = "background" end
+            words[word] = true
+        end
+    end
+    state.associationWords[key] = words
+    return words
+end
+
+local function AssociationLeaf(state, key)
+    state.associationLeaves = state.associationLeaves or {}
+    local cached = state.associationLeaves[key]
+    if cached then return cached end
+    local leaf = tostring(key or ""):match("([^.]+)$") or tostring(key or "")
+    state.associationLeaves[key] = leaf
+    return leaf
+end
+
+local function AssociationSimilarity(state, left, right)
+    -- Association groups already encode page/scope/category proximity. Scanning
+    -- the repeated full key prefix (for example every "gf_party." byte) across
+    -- thousands of candidate pairs added substantial work without improving
+    -- the navigation-only match. Compare the meaningful leaf names instead.
+    local score = CommonPrefixLength(AssociationLeaf(state, left), AssociationLeaf(state, right))
+    local leftWords, rightWords = AssociationWords(state, left), AssociationWords(state, right)
+    for word in pairs(leftWords) do
+        if rightWords[word] then score = score + 100 + #word end
+    end
+    return score
+end
+
+-- Some controls are deliberately independent: no enablement gate, shared
+-- source, conflict, or other runtime prerequisite controls them.  For those
+-- user-facing controls, keep the graph useful by linking the nearest control
+-- in the same registered menu section and scope.  This is explicitly tagged
+-- as navigation context so it can never be mistaken for a runtime dependency.
+local function ApplyRegistryAssociations(state, settings, groupRootsBuilt, buildScope)
+    local alreadyRelated = {}
+    for key in pairs(state.outgoing) do alreadyRelated[key] = true end
+    for key in pairs(state.incoming) do alreadyRelated[key] = true end
+
+    local groups = {}
+    local candidatesByKey = {}
+    state.userFacingKeys = {}
+    state.standaloneUserFacing = {}
+    local candidateWork = 0
+    for index, setting in ipairs(settings) do
+        if index % 64 == 0 and type(A.MaybeYield) == "function" then A.MaybeYield() end
+        local key = type(setting) == "table" and tostring(setting.key or "") or ""
+        local scopeEligible = buildScope ~= "aura" or StartsWith(key, "auras3.")
+        local page = key ~= "" and scopeEligible and SettingPage(setting) or nil
+        if page then
+            state.userFacingKeys[key] = true
+            local candidates = AssociationGroups(setting, page)
+            candidatesByKey[key] = candidates
+            for _, groupKey in ipairs(candidates) do
+                local members = groups[groupKey]
+                if not members then
+                    members = {}
+                    groups[groupKey] = members
+                end
+                members[#members + 1] = key
+            end
+        end
+    end
+
+    for _, setting in ipairs(settings) do
+        local key = type(setting) == "table" and tostring(setting.key or "") or ""
+        local isDeferredGroupKey = groupRootsBuilt ~= true and key:match("^gf_[^.]+%.") ~= nil
+        if key ~= "" and state.userFacingKeys[key] and not alreadyRelated[key] and not isDeferredGroupKey then
+            local bestKey, bestScore
+            local selectedGroup
+            local seenCandidates = {}
+            local candidateGroups = candidatesByKey[key] or {}
+            for groupIndex, groupKey in ipairs(candidateGroups) do
+                local specificityBonus = (#candidateGroups - groupIndex) * 10
+                for _, candidateKey in ipairs(groups[groupKey] or {}) do
+                    candidateWork = candidateWork + 1
+                    if candidateWork % 128 == 0 and type(A.MaybeYield) == "function" then A.MaybeYield() end
+                    if candidateKey ~= key and not seenCandidates[candidateKey] then
+                        seenCandidates[candidateKey] = true
+                        local score = AssociationSimilarity(state, key, candidateKey) + specificityBonus
+                        if bestKey == nil or score > bestScore or (score == bestScore and candidateKey < bestKey) then
+                            bestKey, bestScore, selectedGroup = candidateKey, score, groupKey
+                        end
+                    end
+                end
+            end
+            if bestKey then
+                AddEdge(state, {
+                    from = key,
+                    to = bestKey,
+                    kind = "association",
+                    condition = DEFAULT_TRUE,
+                    impact = "navigationContext",
+                    reason = "These independently configurable options share the same registered MSUF menu section and control scope.",
+                    evidence = "Assistant registry page/category/unit/frameType metadata",
+                    ruleId = "registry-menu-association",
+                    associationGroup = selectedGroup,
+                    confidence = "registry",
+                })
+            else
+                state.standaloneUserFacing[#state.standaloneUserFacing + 1] = key
+            end
+        end
+    end
+    table.sort(state.standaloneUserFacing)
+end
+
 local function Finalize(state, settings)
     -- Sorting every adjacency list makes a cold build needlessly expensive.
     -- Public APIs sort only the small copied list they return, preserving a
@@ -543,7 +984,8 @@ local function Build(includeGroupRoots, requestedKey)
         unresolved = {},
         edgeIdentity = {},
     }
-    for _, setting in ipairs(settings) do
+    for index, setting in ipairs(settings) do
+        if index % 128 == 0 and type(A.MaybeYield) == "function" then A.MaybeYield() end
         if type(setting) == "table" and type(setting.key) == "string" then
             state.settingsByKey[setting.key] = setting
         end
@@ -564,11 +1006,21 @@ local function Build(includeGroupRoots, requestedKey)
         ApplyPrefixGates(state, scanIndex)
         ApplyFeatureGates(state, scanIndex)
         ApplyCastbarGates(state, settings)
+        ApplyUnitStatusComponentGates(state)
+        ApplyGroupStatusComponentGates(state)
+        ApplyCastbarComponentGates(state, settings)
+        ApplyUnitVisualConditionalGates(state, scanIndex)
+        ApplyTargetedSpellGates(state)
+        ApplyGroupIndicatorGates(state)
         ApplyRequires(state)
         ApplyScopedInheritance(state, scanIndex)
+        ApplyCrossPrefixInheritance(state)
         ApplyAuraInheritance(state, scanIndex)
         ApplyConflicts(state)
     end
+    ApplyRegistryAssociations(state, settings, includeGroupRoots, auraOnly and "aura" or "all")
+    state.associationWords = nil
+    state.associationLeaves = nil
     Finalize(state, settings)
 
     G._state = state
@@ -576,6 +1028,7 @@ local function Build(includeGroupRoots, requestedKey)
     G._registryCount = #settings
     state.buildScope = auraOnly and "aura" or "base"
     state.groupRootsBuilt = includeGroupRoots == true
+    if state.groupRootsBuilt or auraOnly then state.edgeIdentity = nil end
     G._buildSerial = (G._buildSerial or 0) + 1
     return state
 end
@@ -583,8 +1036,11 @@ end
 local function CompleteGroupRoots(state, settings)
     if state.groupRootsBuilt then return state end
     ApplyScopeRoots(state, settings, BuildScanIndex(settings), "group")
+    -- A navigation association may coexist with a newly completed group-root
+    -- prerequisite; its kind keeps the two meanings distinct to callers.
     Finalize(state, settings)
     state.groupRootsBuilt = true
+    state.edgeIdentity = nil
     G._buildSerial = (G._buildSerial or 0) + 1
     return state
 end
@@ -797,13 +1253,22 @@ local function BuildExplanation(state, key, context, diagnostic)
     local sentences = {
         SettingLabel(state, key) .. " is currently " .. DisplayValue(evaluation.value, evaluation.valueKnown) .. ".",
     }
+    local hasRuntimePrerequisite = false
+    for _, edge in ipairs(state.outgoing[key] or {}) do
+        if DEPENDENCY_KINDS[edge.kind] then
+            hasRuntimePrerequisite = true
+            break
+        end
+    end
 
     if #evaluation.blockers > 0 then
         local labels = {}
         for _, blocker in ipairs(evaluation.blockers) do labels[#labels + 1] = SettingLabel(state, blocker.to) end
         sentences[#sentences + 1] = "It is not fully effective right now because " .. table.concat(labels, ", ") .. " does not meet its required state."
-    elseif evaluation.effective then
+    elseif evaluation.effective and hasRuntimePrerequisite then
         sentences[#sentences + 1] = "Its runtime prerequisites are currently satisfied."
+    elseif evaluation.effective then
+        sentences[#sentences + 1] = "It has no registered runtime prerequisite and can be configured independently."
     end
     if evaluation.visible == false then
         sentences[#sentences + 1] = "Its related component is currently hidden, but the value can still be configured for later."
@@ -923,7 +1388,7 @@ function G.GetCoverageReport()
     local byKind, ruleHits = {}, {}
     local specificallyRelated = {}
     for _, edge in ipairs(state.edges) do
-        if not tostring(edge.ruleId or ""):find("root", 1, true) then
+        if edge.kind ~= "association" and not tostring(edge.ruleId or ""):find("root", 1, true) then
             specificallyRelated[edge.from] = true
             specificallyRelated[edge.to] = true
         end
@@ -939,6 +1404,12 @@ function G.GetCoverageReport()
     local specificCount = 0
     for _ in pairs(specificallyRelated) do specificCount = specificCount + 1 end
     local specificPercentage = state.settingCount > 0 and (specificCount * 100 / state.settingCount) or 0
+    local userFacingCount, userFacingRelatedCount = 0, 0
+    for key in pairs(state.userFacingKeys or {}) do
+        userFacingCount = userFacingCount + 1
+        if related[key] then userFacingRelatedCount = userFacingRelatedCount + 1 end
+    end
+    local userFacingCoverage = userFacingCount > 0 and (userFacingRelatedCount * 100 / userFacingCount) or 0
     return {
         schemaVersion = G.schemaVersion,
         buildSerial = G._buildSerial or 0,
@@ -948,6 +1419,16 @@ function G.GetCoverageReport()
         coveragePercent = percentage,
         specificRelatedSettings = specificCount,
         specificCoveragePercent = specificPercentage,
+        userFacingSettings = userFacingCount,
+        userFacingRelatedSettings = userFacingRelatedCount,
+        userFacingCoveragePercent = userFacingCoverage,
+        standaloneUserFacingSettings = CopyValues(state.standaloneUserFacing),
+        -- These names are precise: page resolution is a navigation guarantee,
+        -- not proof that the key is a currently visible widget.
+        pageResolvableSettings = userFacingCount,
+        pageResolvableRelatedSettings = userFacingRelatedCount,
+        pageResolvableCoveragePercent = userFacingCoverage,
+        standalonePageResolvableSettings = CopyValues(state.standaloneUserFacing),
         rootOnlySettings = rootOnly,
         edges = #state.edges,
         byKind = byKind,

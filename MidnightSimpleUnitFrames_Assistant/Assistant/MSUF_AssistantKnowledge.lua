@@ -915,7 +915,6 @@ local function InsertTopResult(results, entry, limit)
 end
 
 function K.Search(query, limit, opts)
-    local startedMs = _G.debugprofilestop and _G.debugprofilestop() or nil
     opts = opts or {}
     local index = K.EnsureIndexIfSafe()
     -- Contract: a result array means the index was ready; nil means the index
@@ -950,9 +949,6 @@ function K.Search(query, limit, opts)
     K.searchCache = K.searchCache or {}
     K.searchCacheOrder = K.searchCacheOrder or {}
     RememberCache(K.searchCache, K.searchCacheOrder, cacheKey, out, SEARCH_CACHE_LIMIT)
-    if type(A.RecordSlowPerfSample) == "function" then
-        A.RecordSlowPerfSample("assistant.knowledge.search", startedMs, tostring(#out) .. ":" .. Normalize(query):sub(1, 80), 8)
-    end
     return out
 end
 
@@ -1090,12 +1086,12 @@ local PAGE_HELP = {
         },
         actions = { "Export Current Profile", "Copy Wago Profiles Link", "Import Profile" },
     },
-    auras3 = { title = "Auras help", lines = { "Aura content lives on the frame it affects. Open a UnitFrame > Auras for Buffs, Debuffs, and Custom 1–3; use Group Frames > Auras for Party/Raid filters, lists, and layout.", "Scope-aware cooldown, stack, duration-bar, and icon styling remains under Appearance > Auras with Shared and per-frame overrides." }, actions = { "Open Target", "Open Player", "Open Group Auras" } },
-    auras3_styling = { title = "Aura Style help", lines = { "You can change aura basics, borders, cooldown text, stack text, duration bars, and related rendering details. Aura timer, stack, highlight, and pandemic colors live in Colors > Auras.", "Examples: set aura cooldown text size to 14; move target buff stack text right 3; set target duration bar fill mode to elapsed." }, actions = { "Open Aura Style", "Open Colors" } },
+    auras3 = { title = "Auras help", lines = { "Aura content lives on the frame it affects. Open a UnitFrame > Auras for Buffs, Debuffs, and Custom 1–3; use Group Frames > Auras for Party/Raid filters, lists, and layout.", "To change which icons appear, name the frame and Buff or Debuff lane. 'No timer' means a permanent/no-duration aura and maps to Hide Permanent; exact SpellID lists hide individual auras where Blizzard permits identity filtering.", "Cooldown text, swipe, stack text, duration bars, colors, size, and growth change how shown auras look, not which auras pass the filter." }, actions = { "Open Target", "Open Player", "Open Group Auras" } },
+    auras3_styling = { title = "Aura Style help", lines = { "You can change aura basics, borders, cooldown text, stack text, duration bars, and related rendering details. Aura timer, stack, highlight, and pandemic colors live in Colors > Auras.", "These are presentation controls. To hide auras with no timer, use Hide Permanent in that frame's Buff or Debuff filters instead.", "Examples: set aura cooldown text size to 14; move target buff stack text right 3; set target duration bar fill mode to elapsed." }, actions = { "Open Aura Style", "Open Colors" } },
     auras3_buffs = { title = "Aura Buffs help", lines = { "Open the affected UnitFrame > Auras > Buffs for its icon layout, Blizzard filters, SpellID blacklist, and preview.", "Party/Raid content lives in Group Frames > Auras; scope-aware styling remains under Appearance > Auras." }, actions = { "Open Target", "Open Player", "Open Group Auras" } },
     auras3_debuffs = { title = "Aura Debuffs help", lines = { "Open the affected UnitFrame > Auras > Debuffs for dispellable rules, blacklist, layout, and preview.", "Party/Raid content lives in Group Frames > Auras; scope-aware styling remains under Appearance > Auras." }, actions = { "Open Target", "Open Focus", "Open Group Auras" } },
     auras3_custom = { title = "Custom Auras help", lines = { "Every supported UnitFrame has Custom 1, Custom 2, and Custom 3 under its Auras section for setup, whitelist, filters, and layout.", "Icon styling and Secret-safe Full-Frame effects are scope-aware under Appearance > Auras; choose Player, Target, Focus, or Boss and then Custom 1-3." }, actions = { "Open Aura Style", "Open Target", "Open Player" } },
-    auras3_filters = { title = "Aura Filter help", lines = { "There is no standalone Aura Filters page anymore. Filters and Black-/Whitelists live directly beside the Buff, Debuff, or Custom container they affect.", "Open a UnitFrame > Auras, or Group Frames > Auras for Party/Raid." }, actions = { "Open Target", "Open Group Auras" } },
+    auras3_filters = { title = "Aura Filter help", lines = { "There is no standalone Aura Filters page anymore. Filters and Black-/Whitelists live directly beside the Buff, Debuff, or Custom container they affect.", "Start with scope and lane: Player/Target/Focus/Boss Buffs or Debuffs, or Party/Raid Buffs or Debuffs. Unit filter toggles inherit from Shared unless that unit uses custom rules; group lanes use their own filter token.", "Hide Permanent removes every no-duration aura in that lane. Exact SpellID blacklists remove one spell where Blizzard permits identity filtering; group category blacklists expand to the same live exact-SpellID exclusions. Timer text, swipe, and duration bars are style only." }, actions = { "Open Target", "Open Group Auras" } },
     gf_layout = { title = "Group Layout help", lines = { "You can change group frame layout, spacing, growth, anchoring, reverse health fill, scaling breakpoints, party/raid/mythic raid options, Blizzard fallback behavior, and visibility options.", "Examples: 'set raid scale for 20 players to 80', 'make raid frames fill backwards', 'move raid frame closer to player', 'set party growth direction to down', or 'show Blizzard party frames when Party is disabled'." }, actions = { "Open Group Layout" } },
     gf_bars = {
         title = "Group Health & Text help",
@@ -1113,7 +1109,7 @@ local PAGE_HELP = {
         },
         actions = { "Open Group Status & Indicators" },
     },
-    gf_auras = { title = "Group Auras help", lines = { "Party, Raid, and Mythic Raid Buff/Debuff content is configured here: visibility, layout, preview, native filters, and category/SpellID blacklists.", "Spell Indicators remain here; cooldown, stack, and duration-bar styling is scope-aware under Appearance > Auras." }, actions = { "Open Group Auras" } },
+    gf_auras = { title = "Group Auras help", lines = { "Party, Raid, and Mythic Raid Buff/Debuff content is configured here: visibility, layout, preview, native filter tokens, Hide Permanent, and live category/SpellID blacklists.", "Choose Party or Raid and then Buffs or Debuffs before changing content. Spell Indicators remain here; cooldown, stack, and duration-bar styling is scope-aware under Appearance > Auras and does not decide which auras appear." }, actions = { "Open Group Auras" } },
     classpower = { title = "Class Resources help", lines = { "You can change class resource mode, size, position, colors, and gameplay-specific class resource options available in MSUF." }, actions = { "Open Class Resources" } },
     gameplay = { title = "Gameplay help", lines = { "You can change gameplay features such as combat timer, sounds, totem/statue frame behavior, and related options." }, actions = { "Open Gameplay" } },
 }
@@ -1335,10 +1331,12 @@ local function CapabilityHelp(german)
     local lines = {
         "MSUF Assistant: what I can do",
         "I'm the local in-game assistant for MSUF. I use MSUF's menu data on your client, so I don't call an external ChatGPT service.",
-        "I can find and explain MSUF options, open pages, import/export profiles, run checks, use undo/redo, and change MSUF options.",
+        "I can find and explain MSUF options, open their pages and controls, import/export profiles, run checks, use undo/redo, and change safe MSUF options.",
         "I can handle " .. settingCount .. " MSUF options plus " .. actionCount .. " guided tasks or checks across unit frames, group frames, cast bars, auras, class resources, gameplay, profiles, diagnostics, and Edit Mode.",
-        "Examples: hide player name; set target cast bar height to 18; where do I change auras; export current profile; why is target cast bar hidden?",
+        "I can explain prerequisites, visibility gates, inheritance, overrides, conflicts, and nearby controls. If a request could match several settings, I show choices instead of guessing.",
+        "Examples: hide player name; set target cast bar height to 18; list all target settings; where do I change auras; export current profile; why is target cast bar hidden?",
         "I can answer WoW questions near UI setup. For current class, talent, or patch guides I point to current external guides because MSUF runs offline.",
+        "Performance: the full Assistant loads only after you use it, owns no passive combat events or tickers, and pauses/cancels scheduled work when the MSUF menu closes.",
         "You can ask: Open Player | Open Cast Bars | Profile Help | What can I change here?",
     }
     return { text = table.concat(lines, "\n"), status = "info", summary = "Assistant capabilities" }
@@ -1671,7 +1669,7 @@ local function DirectHelpAnswer(query, opts)
         and HasConceptHelpIntent(norm)
     then
         return {
-            text = "Auras, buffs, and debuffs help\nAura content lives directly on the frame it affects. Open Player, Target, Focus, or Boss Frames > Auras for Buffs, Debuffs, and Custom 1–3. Party/Raid filters and lists live in Group Frames > Auras. Scope-aware cooldown, stack, duration-bar, and icon styling remains under Appearance > Auras.\nExamples: open target; set target buff icon size to 30; show only dispellable raid debuffs; configure target Custom 1.\nYou can ask: Open Target | Open Player | Open Boss Frames | Open Group Auras | Open Aura Style",
+            text = "Auras, buffs, and debuffs help\nAura content lives directly on the frame it affects. Open Player, Target, Focus, or Boss Frames > Auras for Buffs, Debuffs, and Custom 1–3. Party/Raid filters and lists live in Group Frames > Auras. For content changes, name the frame and Buff or Debuff lane: broad filters select aura groups, Hide Permanent handles auras with no timer, and exact SpellID lists hide individual auras where Blizzard permits identity filtering. Cooldown/stack text, swipe, duration bars, colors, size, and growth are presentation only.\nExamples: hide player buffs with no timer; show only dispellable raid debuffs; list target buff blacklist; set target buff icon size to 30.\nYou can ask: Open Target | Open Player | Open Boss Frames | Open Group Auras | Open Aura Style",
             status = "applied",
             summary = "Assistant auras help",
         }
