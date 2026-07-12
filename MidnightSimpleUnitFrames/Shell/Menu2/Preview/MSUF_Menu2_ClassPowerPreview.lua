@@ -221,7 +221,7 @@ local function ResolveHPShape(bars, player)
     local value = tostring(bars and bars.playerHPBarShape or "BAR"):upper()
     if value ~= "FOLLOW_POWER" then return ResolvePowerShape(value, bars and bars.classPowerShape) end
     if not (player and player.powerBarDetached == true) then return "BAR" end
-    return ResolvePowerShape(player.detachedPowerBarShape or "FOLLOW_CLASS", bars and bars.classPowerShape)
+    return ResolvePowerShape(player.detachedPowerBarShape or "BAR", bars and bars.classPowerShape)
 end
 local function ShapeOutlineAlpha(value)
     value = tonumber(value) or 0
@@ -1299,7 +1299,7 @@ local function DetachedPowerShown(player)
     return player.powerBarDetached == true and player.detachedPowerBarAnchorToClassPower == true
 end
 local function DetachedPowerWidth(preview, bars, player, classFrame)
-    local shape = ResolvePowerShape(player.detachedPowerBarShape or "FOLLOW_CLASS", bars.classPowerShape)
+    local shape = ResolvePowerShape(player.detachedPowerBarShape or "BAR", bars.classPowerShape)
     if shape == "ORB" then return Clamp(player.detachedPowerOrbSize, 54, 20, 160), shape end
     if player.detachedPowerBarSyncClassPower ~= false and classFrame and classFrame.GetWidth then return max(20, floor(classFrame:GetWidth() + 0.5)), shape end
     local widthMode = bars.detachedPowerBarWidthMode

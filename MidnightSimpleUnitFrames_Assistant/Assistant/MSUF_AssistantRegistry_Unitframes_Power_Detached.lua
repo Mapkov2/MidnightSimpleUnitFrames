@@ -101,7 +101,7 @@ local function InitDetachedPowerBar(ctx, unit)
     conf.detachedPowerBarHeight = tonumber(conf.detachedPowerBarHeight) or 6
     conf.detachedPowerBarFrameLevelOffset = tonumber(conf.detachedPowerBarFrameLevelOffset) or 6
     if unit == "player" and conf.detachedPowerBarSyncClassPower == nil then conf.detachedPowerBarSyncClassPower = true end
-    if unit == "player" and conf.detachedPowerBarShape == nil then conf.detachedPowerBarShape = "FOLLOW_CLASS" end
+    if unit == "player" and conf.detachedPowerBarShape == nil then conf.detachedPowerBarShape = "BAR" end
     if unit == "player" and conf.detachedPowerOrbSize == nil then conf.detachedPowerOrbSize = 54 end
 end
 

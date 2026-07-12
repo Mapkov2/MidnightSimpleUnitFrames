@@ -62,9 +62,9 @@ local function NormalizeClassPowerShapeAlign(value)
     return "CENTER"
 end
 local function NormalizeDetachedPowerShape(value)
-    value = tostring(value or "FOLLOW_CLASS"):upper()
-    if value == "FOLLOW_CLASS" or value == "BAR" or value == "ROUND" or value == "CRYSTAL" or value == "ORB" then return value end
-    return "FOLLOW_CLASS"
+    value = tostring(value or "BAR"):upper()
+    if value == "BAR" or value == "ROUND" or value == "CRYSTAL" or value == "ORB" then return value end
+    return "BAR"
 end
 local function NormalizePlayerHPShape(value)
     value = tostring(value or "BAR"):upper()
@@ -76,16 +76,8 @@ local function ResolvePlayerHPShape(bars, db)
     if value ~= "FOLLOW_POWER" then return CPPreview.ResolvePowerShape(value) end
     local player = db and db.player or nil
     if not (player and player.powerBarDetached == true) then return "BAR" end
-    return CPPreview.ResolvePowerShape(player.detachedPowerBarShape or "FOLLOW_CLASS", bars and bars.classPowerShape)
+    return CPPreview.ResolvePowerShape(player.detachedPowerBarShape or "BAR", bars and bars.classPowerShape)
 end
-local SHAPE_PRESET_VALUES = VTP "classic=Classic Bar|dots=Clean Dots|gems=Gems|hex=Hex Pips|compact=Compact"
-local SHAPE_PRESETS = {
-    classic = { shape = "BAR", height = 4, gap = 0, bgAlpha = 0.30, filledAlpha = 1.00, emptyAlpha = 0.30 },
-    dots = { shape = "CIRCLE", height = 10, gap = 3, bgAlpha = 0.24, filledAlpha = 1.00, emptyAlpha = 0.22 },
-    gems = { shape = "DIAMOND", height = 12, gap = 4, bgAlpha = 0.24, filledAlpha = 1.00, emptyAlpha = 0.20 },
-    hex = { shape = "HEX", height = 10, gap = 3, bgAlpha = 0.24, filledAlpha = 1.00, emptyAlpha = 0.20 },
-    compact = { shape = "CIRCLE", height = 7, gap = 1, bgAlpha = 0.18, filledAlpha = 0.95, emptyAlpha = 0.16 },
-}
 local DETACHED_POWER_TEXT_PRESET_VALUES = VTP "OFF=Off|CURRENT=Current|CURMAX=Current / Max|PERCENT=Percent|CURPERCENT=Current + Percent|CURMAXPERCENT=Current / Max + Percent|CUSTOM=Custom Slots"
 local PLAYER_HP_ANCHOR_VALUES = VTP "CLASS_TOP=Above Class Resource|CLASS_BOTTOM=Below Class Resource|POWER_TOP=Above Player Power|POWER_BOTTOM=Below Player Power"
 local PLAYER_HP_WIDTH_VALUES = VTP "class=Class Resource|power=Player Power|player=Player Frame|custom=Custom"
@@ -97,42 +89,6 @@ local DETACHED_POWER_SEPARATORS = VT("", "space", "-", "-", "/", "/", "\\", "\\"
 local PLAYER_HP_SEPARATORS = DETACHED_POWER_SEPARATORS
 local TEXT_SLOT_VALUES = VT("left", "Left", "center", "Center", "right", "Right")
 local DETACHED_POWER_TEXT_PRESETS = M.KeySetFromWords "CURRENT CURMAX PERCENT CURPERCENT CURMAXPERCENT"
-local function ApplyShapePreset(key)
-    local preset = SHAPE_PRESETS[key]
-    if not preset then return end
-    local bars = Bars()
-    bars.classPowerShape = preset.shape
-    bars.classPowerHeight = preset.height
-    bars.classPowerGap = preset.gap
-    bars.classPowerOutline = 0
-    bars.classPowerBgAlpha = preset.bgAlpha
-    bars.classPowerFilledAlpha = preset.filledAlpha
-    bars.classPowerEmptyAlpha = preset.emptyAlpha
-    ApplyClassPower()
-end
-local function CurrentShapePreset()
-    local bars = Bars()
-    local shape = NormalizeClassPowerShape(bars.classPowerShape)
-    local height = floor(tonumber(bars.classPowerHeight) or 4)
-    local gap = floor(tonumber(bars.classPowerGap) or 0)
-    local outline = floor(tonumber(bars.classPowerOutline) or 0)
-    local bgAlpha = tonumber(bars.classPowerBgAlpha) or 0.30
-    local filledAlpha = tonumber(bars.classPowerFilledAlpha) or 1.00
-    local emptyAlpha = tonumber(bars.classPowerEmptyAlpha) or 0.30
-    for key, preset in pairs(SHAPE_PRESETS) do
-        if shape == preset.shape
-            and height == preset.height
-            and gap == preset.gap
-            and outline == 0
-            and math.abs(bgAlpha - preset.bgAlpha) < 0.001
-            and math.abs(filledAlpha - preset.filledAlpha) < 0.001
-            and math.abs(emptyAlpha - preset.emptyAlpha) < 0.001
-        then
-            return key
-        end
-    end
-    return nil
-end
 local CLASS_POWER_PREVIEW_SPECS = {
     { key = "deathknight_runes", label = "Death Knight - Runes", token = "RUNES", mode = "rune", segments = 6, value = 3, previewText = "3", runeDuration = 10 },
     { key = "demonhunter_devourer", label = "Demon Hunter - Soul Fragments", token = "SOUL_FRAGMENTS", mode = "aura_single", segments = 1, value = 0.58, previewText = "2" },
@@ -410,7 +366,7 @@ local function QuickApplyPhase1(offsets)
         powerBarDetached = true,
         detachedPowerBarAnchorToClassPower = true,
         detachedPowerBarSyncClassPower = true,
-        detachedPowerBarShape = "FOLLOW_CLASS",
+        detachedPowerBarShape = "BAR",
         detachedPowerOrbSize = tonumber(player.detachedPowerOrbSize) or 54,
         detachedPowerBarOffsetX = 0,
         detachedPowerBarOffsetY = -4,
@@ -622,18 +578,6 @@ function Page:CreateControlKinds()
                 end, spec.meta)
             return control
         end,
-        playerShape = function(_, parent, _, apply, spec)
-            local control = W.Dropdown(parent, spec[3], spec[4], spec[5])
-            apply = spec[6] or apply
-            M.BindDropdownWidget(self.ctx, control, function() return NormalizeDetachedPowerShape(Player().detachedPowerBarShape) end,
-                function(value)
-                    local player = Player()
-                    player.detachedPowerBarShape = NormalizeDetachedPowerShape(value)
-                    if player.detachedPowerBarShape == "ORB" and player.detachedPowerOrbSize == nil then player.detachedPowerOrbSize = 54 end
-                    apply(); self.refresh()
-                end, spec.meta)
-            return control
-        end,
         detachedTextPreset = function(_, parent, _, apply, spec)
             local control = W.Dropdown(parent, spec[3], spec[4], spec[5])
             apply = spec[6] or apply
@@ -676,19 +620,11 @@ end
 
 function Page:BuildClassLayout()
     local compact, width = self.width < 620, self.width
-    local section = self.b:CollapsibleSection("classpower_display", "Class Resource Layout", compact and 820 or 540, true)
+    local section = self.b:CollapsibleSection("classpower_display", "Class Resource Layout", compact and 760 or 440, true)
     local applyRefresh = self:WithRefresh(ApplyClassPower)
     self.cpEnable = SwitchAt(self.ctx, section, "Class Resource", 32, -64, 180, Bars, "showClassPower", true, applyRefresh, Meta("layout.enabled"))
-    local preset = W.Dropdown(section, "Shape Presets", SHAPE_PRESET_VALUES, 300)
-    M.BindDropdownWidget(self.ctx, preset, CurrentShapePreset, self:WithRefresh(ApplyShapePreset), Meta("layout.shape_preset"))
-    AddTooltip(preset, "Shape Presets", "Applies a ready style by setting only Shape, Height/Pip size, Pip gap, Outline off and opacity values.")
-    local quickValues = VT("BAR", "Bar", "CIRCLE", "Dot", "DIAMOND", "Gem", "HEX", "Hex")
-    local quick = W.Segment(section, "Quick shape", quickValues, 300)
-    M.BindSegment(self.ctx, quick, function() return NormalizeClassPowerShape(Bars().classPowerShape) end,
-        function(value) Bars().classPowerShape = NormalizeClassPowerShape(value); applyRefresh() end, Meta("layout.quick_shape"))
-    RegisterSegment(quick, "layout.quick_shape", quickValues, "setting")
     self.cp = self:Controls(section, Bars, ApplyClassPower, "layout", {
-        { "shape", "dropdown", "Shape", VT("BAR", "Bar", "CIRCLE", "Circle", "DIAMOND", "Diamond", "HEX", "Hex"), 260, "classPowerShape", "BAR", applyRefresh },
+        { "shape", "dropdown", "Class Resource shape", VT("BAR", "Bar", "CIRCLE", "Circle", "DIAMOND", "Diamond", "HEX", "Hex"), 260, "classPowerShape", "BAR", applyRefresh },
         { "height", "slider", "Height", 1, 40, 1, 300, "classPowerHeight", 4 },
         { "widthMode", "dropdown", "Width mode", VT("player", "Player frame", "auto_pips", "Auto fit pips", "cooldown", "Essential Cooldowns", "utility", "Utility Cooldowns", "tracked_buffs", "Tracked Buffs", "custom", "Custom"), 260, "classPowerWidthMode", "player", applyRefresh,
             help = "Auto fit pips is active only for Circle, Diamond and Hex. It uses pip count x pip size plus gaps." },
@@ -702,16 +638,28 @@ function Page:BuildClassLayout()
     M.BindSegment(self.ctx, self.cpAlign, function() return NormalizeClassPowerShapeAlign(Bars().classPowerShapeAlign) end,
         function(value) Bars().classPowerShapeAlign = NormalizeClassPowerShapeAlign(value); ApplyClassPower() end, Meta("layout.shape_alignment"))
     RegisterSegment(self.cpAlign, "layout.shape_alignment", alignValues, "setting")
-    self:Add("cp", preset, quick, self.cp.shape, self.cp.height, self.cp.widthMode, self.cpAlign, self.cp.x, self.cp.y, self.cp.level)
+    self:Add("cp", self.cp.shape, self.cp.height, self.cp.widthMode, self.cpAlign, self.cp.x, self.cp.y, self.cp.level)
+    self.cpPowerShape = W.Dropdown(section, "Powerbar shape (independent)", VT("BAR", "Bar", "ROUND", "Round", "CRYSTAL", "Crystal", "ORB", "Orb"), 300)
+    M.BindDropdownWidget(self.ctx, self.cpPowerShape,
+        function() return NormalizeDetachedPowerShape(Player().detachedPowerBarShape) end,
+        function(value)
+            local player = Player()
+            player.detachedPowerBarShape = NormalizeDetachedPowerShape(value)
+            if player.detachedPowerBarShape == "ORB" and player.detachedPowerOrbSize == nil then player.detachedPowerOrbSize = 54 end
+            ApplyDetachedPowerBar(); self.refresh()
+        end,
+        Meta("layout.independent_powerbar_shape", "setting", { settingKey = "player.detachedPowerBarShape" }))
+    AddTooltip(self.cpPowerShape, "Independent Powerbar Shape", "Changes only the detached Player Powerbar. Class Resource shape on the left changes only Class Resources.")
+    self:Add("detachedPlayer", self.cpPowerShape)
     local rightX = compact and 32 or min(max(430, floor(width * .52)), max(360, width - 360))
     local leftW = compact and max(250, width - 64) or max(250, rightX - 74)
     local rightW = compact and leftW or max(250, width - rightX - 32)
     local controlW = compact and max(250, min(320, width - 74)) or 300
-    W.ControlCard(section, "Class Resource", nil, 18, -38, leftW + 28, compact and 504 or 478)
-    W.ControlCard(section, "Position", nil, rightX - 14, compact and -562 or -38, rightW + 28, 232)
+    W.ControlCard(section, "Class Resource", nil, 18, -38, leftW + 28, 370)
+    W.ControlCard(section, "Powerbar & Position", nil, rightX - 14, compact and -430 or -38, rightW + 28, 286)
     MoveWidget(self.cpEnable, section, 32, -78)
-    PlaceColumn(section, 32, -116, 54, controlW, nil, preset, quick, self.cp.shape, self.cp.height, self.cp.widthMode, self.cp.width, self.cpAlign)
-    PlaceColumn(section, rightX, compact and -616 or -92, 54, controlW, nil, self.cp.x, self.cp.y, self.cp.level)
+    PlaceColumn(section, 32, -116, 54, controlW, nil, self.cp.shape, self.cp.height, self.cp.widthMode, self.cp.width, self.cpAlign)
+    PlaceColumn(section, rightX, compact and -484 or -92, 54, controlW, nil, self.cpPowerShape, self.cp.x, self.cp.y, self.cp.level)
 end
 
 function Page:BuildClassBehavior()
@@ -825,7 +773,6 @@ function Page:BuildDetachedPower()
     self.dpb = self:Controls(layout, Player, ApplyDetachedPowerBar, "detached_power.layout", {
         { "anchor", "toggle", "Anchor to Class Resource", "detachedPowerBarAnchorToClassPower", false, group = "detachedPlayer" },
         { "sync", "toggle", "Sync width to Class Resource", "detachedPowerBarSyncClassPower", true, group = "detachedPlayer" },
-        { "shape", "playerShape", "Player power shape", VT("FOLLOW_CLASS", "Follow Class Resource", "BAR", "Bar", "ROUND", "Round", "CRYSTAL", "Crystal", "ORB", "Orb"), 300, group = "detachedPlayer" },
         { "orbSize", "slider", "Orb size", 20, 160, 1, 300, "detachedPowerOrbSize", 54, group = "detachedPlayer" },
         { "x", "slider", "Power X", -1000, 1000, 1, 300, "detachedPowerBarOffsetX", 0, group = "detachedPlayer" },
         { "y", "slider", "Power Y", -1000, 1000, 1, 300, "detachedPowerBarOffsetY", -4, group = "detachedPlayer" },
@@ -835,7 +782,6 @@ function Page:BuildDetachedPower()
     AddTooltip(self.dpbUse, "Detached Player Power", "Moves the Player power bar out of the unit frame. Anchor connects it to the Class Resources stack; Sync only follows the stack width.")
     AddTooltip(self.dpb.anchor, "Anchor To Class Resource", "Keeps detached Player power attached to the Class Resource bar. Player power controls are disabled while this connection is active.")
     AddTooltip(self.dpb.sync, "Sync Width", "Uses the Class Resource width for detached Player power without making Class Resources own the Player power controls.")
-    AddTooltip(self.dpb.shape, "Player Power Shape", "FOLLOW_CLASS resolves from Class Resource shape: Bar -> Bar, Circle -> Round, Diamond/Hex -> Crystal. Orb is a single bottom-to-top filled mana/power sphere.")
     AddTooltip(smooth, "Player Power Smooth Fill", "Applies to this Player power StatusBar even while its layout is managed by Class Resources. Interpolation runs in Blizzard's C-side StatusBar implementation with frequent Player power updates.")
     W.ControlCard(text, "Power Text", "Text shown on the detached Player power bar managed here.", 14, -38, cardW, twoColumns and 560 or 790)
     self.dpbText = self:Controls(text, Player, ApplyDetachedPowerText, "detached_power.text", {
@@ -884,7 +830,7 @@ function Page:BuildDetachedPower()
         { "outline", "slider", "Power bar outline", 0, 8, 1, 300, "detachedPowerBarOutline", 1, ApplyDetachedPowerBarOutline, group = "detached" },
     })
     AddTooltip(texture.outline, "Power Bar Outline", "Controls only the detached Player power outline managed here. Bar uses an outside border; shapes use their fixed edge texture. 0 disables only the outline.")
-    PlaceColumn(layout, 32, twoColumns and -154 or -188, 54, controlW, "LEFT", self.dpb.anchor, self.dpb.sync, mode.mode, self.dpb.shape, self.dpb.orbSize, self.dpb.height)
+    PlaceColumn(layout, 32, twoColumns and -154 or -188, 54, controlW, "LEFT", self.dpb.anchor, self.dpb.sync, mode.mode, self.dpb.orbSize, self.dpb.height)
     PlaceColumn(layout, rightX, twoColumns and -154 or -520, 54, controlW, "LEFT", self.dpb.x, self.dpb.y, self.dpb.layer)
     PlaceColumn(textures, 32, -104, 54, controlW, "LEFT", texture.fg, texture.bg, texture.outline)
     PlaceColumn(text, 32, -104, 54, controlW, "LEFT", self.dpbText.onBar, self.dpbText.preset, self.dpbText.right)
@@ -930,7 +876,7 @@ function Page:BuildPlayerHP()
     AddTooltip(self.hpUse, "Second Player HP Bar", "Renders a second native Player health bar. The normal Player unitframe HP bar is untouched, so you can show HP twice.")
     AddTooltip(self.hp.anchor, "Anchor", "Power anchors use the Player power bar when it is visible; otherwise the HP bar falls back to the Class Resource anchor.")
     AddTooltip(self.hp.widthMode, "Width Mode", "Class Resource and Player Power follow existing frames. Custom uses the slider below. Width is resolved only during layout refresh.")
-    AddTooltip(self.hp.shape, "HP Shape", "Bar keeps the normal statusbar. Follow Player Power mirrors the effective detached Player power shape: Follow Class Resource still resolves Circle to Round and Diamond/Hex to Crystal. Orb uses a single vertical fill.")
+    AddTooltip(self.hp.shape, "HP Shape", "Bar keeps the normal statusbar. Follow Player Power mirrors the independent detached Player power shape. Orb uses a single vertical fill.")
     AddTooltip(self.hp.orbSize, "Orb Size", "Used only when this HP bar is explicitly set to Orb. Follow Player Power inherits the Player power orb size instead.")
     AddTooltip(self.hp.smooth, "Smooth Fill", "Optional interpolation for this second HP bar. Off keeps direct native SetValue updates.")
     W.ControlCard(textures, "HP Textures", "Bar uses SharedMedia textures. Shapes use fixed alpha assets.", 14, -38, cardW, 346)
@@ -1057,4 +1003,4 @@ function Page:Build()
 end
 
 local function BuildClassPower(ctx) Page.New(ctx):Build() end
-M.RegisterPage("classpower", { title = "MSUF Class Resources", build = BuildClassPower, version = 17 })
+M.RegisterPage("classpower", { title = "MSUF Class Resources", build = BuildClassPower, version = 18 })

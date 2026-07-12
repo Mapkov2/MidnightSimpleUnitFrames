@@ -159,9 +159,9 @@ builders.PLAYER_HP = function(E)
         local db = MSUF_DB
         local player = db and db.player or nil
         if not (player and player.powerBarDetached == true) then return "BAR" end
-        local value = tostring(player.detachedPowerBarShape or "FOLLOW_CLASS"):upper()
+        local value = tostring(player.detachedPowerBarShape or "BAR"):upper()
         if value == "ROUND" or value == "CRYSTAL" or value == "ORB" then return value end
-        if value ~= "FOLLOW_CLASS" then return "BAR" end
+        if value == "BAR" then return "BAR" end
         local classShape = NormalizeClassPowerShape(b and b.classPowerShape)
         if classShape == "CIRCLE" then return "ROUND" end
         if classShape == "DIAMOND" or classShape == "HEX" then return "CRYSTAL" end

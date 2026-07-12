@@ -142,6 +142,15 @@ local MASK_UNIT_IDENTITY_SOFT_AURAS = { auras = true }
 local MASK_GROUP_UNIT_IDENTITY = BuildNameSet("load health power name groupStatus prediction groupVisuals groupRange borders")
 local MASK_GROUP_UNIT_STRUCTURE = BuildNameSet("load health power name groupStatus prediction groupVisuals groupRange borders auras")
 
+-- StatusIndicators owns region creation/layout, while the per-indicator elements
+-- own initial state, event routing, and their cached status spec.  They therefore
+-- form one apply transaction: applying only the structure leaves the icons inert
+-- until a later status-specific settings refresh.
+local STATUS_APPLY_ELEMENTS =
+  "StatusIndicators RaidMarkerIndicator LeaderIndicator LevelIndicator " ..
+  "RaidGroupIndicator EliteIndicator StatusTextIndicator CombatIndicator " ..
+  "RestingIndicator IncomingResIndicator PVPIndicator"
+
 local runtimeReasonMasks = {}
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_FONT_RUNTIME, "FONT_RUNTIME MSUF2_HP_TEXT_COLOR")
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_CASTBAR_SYNC, "CASTBAR_SYNC")
@@ -187,14 +196,14 @@ AddRuntimeReasonMasks(runtimeReasonMasks, MASK_HEALTH, "MSUF_REVERSE_FILL")
 Metadata.runtimeReasonMasks = runtimeReasonMasks
 
 Metadata.defaultApplyMask = BuildNameSet(
-  "Health Power Text NameText HealthText PowerText StatusIndicators Prediction " ..
+  "Health Power Text NameText HealthText PowerText Portrait " .. STATUS_APPLY_ELEMENTS .. " Prediction " ..
   "Borders LoadConditions RangeFade Auras Castbars ClassPower")
 
 -- ApplyService owns cross-module followers explicitly. Its frame apply uses this
 -- mask so Auras/Castbars/ClassPower are not queued a second time by bridge
 -- elements. Direct Factory/Profile applies keep defaultApplyMask above.
 Metadata.coordinatedApplyMask = BuildNameSet(
-  "Health Power Text NameText HealthText PowerText StatusIndicators Prediction " ..
+  "Health Power Text NameText HealthText PowerText Portrait " .. STATUS_APPLY_ELEMENTS .. " Prediction " ..
   "Borders LoadConditions RangeFade")
 
 Metadata.refreshElementGroups = {

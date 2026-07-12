@@ -3279,8 +3279,21 @@ local function fill(key, defaults)
             if u.powerSmoothFill == nil then
                 u.powerSmoothFill = (unitKey == "player") and (bars.smoothPowerBar ~= false) or false
             end
-            if unitKey == "player" and u.detachedPowerBarShape == nil then
-                u.detachedPowerBarShape = "FOLLOW_CLASS"
+            if unitKey == "player" then
+                local legacyShape = tostring(u.detachedPowerBarShape or "FOLLOW_CLASS"):upper()
+                if legacyShape == "FOLLOW_CLASS" then
+                    local classShape = tostring(bars.classPowerShape or "BAR"):upper()
+                    if classShape == "CIRCLE" then
+                        u.detachedPowerBarShape = "ROUND"
+                    elseif classShape == "DIAMOND" or classShape == "HEX" then
+                        u.detachedPowerBarShape = "CRYSTAL"
+                    else
+                        u.detachedPowerBarShape = "BAR"
+                    end
+                elseif u.detachedPowerBarShape == nil then
+                    u.detachedPowerBarShape = "BAR"
+                end
+                u.detachedPowerBarSeparateShape = nil
             end
             if unitKey == "player" and u.detachedPowerOrbSize == nil then
                 u.detachedPowerOrbSize = 54
