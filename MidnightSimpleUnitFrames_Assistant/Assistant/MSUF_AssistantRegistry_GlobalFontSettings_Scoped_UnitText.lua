@@ -15,6 +15,7 @@ A.GlobalRegistry = A.GlobalRegistry or {}
 function A.GlobalRegistry.RegisterScopedUnitFontTextSettings(ctx, scope)
     if type(ctx) ~= "table" or type(scope) ~= "string" or scope == "" then return false end
 
+    local EnsureDB = ctx.EnsureDB
     local GeneralDB = ctx.GeneralDB
     local ApplyFonts = ctx.ApplyFonts
     local GlobalScopeRead = ctx.GlobalScopeRead
@@ -34,7 +35,7 @@ function A.GlobalRegistry.RegisterScopedUnitFontTextSettings(ctx, scope)
     local NAME_TRUNCATION_ALIASES = FontData.NAME_TRUNCATION_ALIASES
     local SharedOrScopedAliases = FontContext.SharedOrScopedAliases
 
-    if type(GeneralDB) ~= "function" or type(RegisterScopedSetting) ~= "function" then return false end
+    if type(EnsureDB) ~= "function" or type(GeneralDB) ~= "function" or type(RegisterScopedSetting) ~= "function" then return false end
     if type(GlobalScopeRead) ~= "function" or type(GlobalScopeWrite) ~= "function" then return false end
     if type(GlobalScopeAliases) ~= "function" or type(SharedOrScopedAliases) ~= "function" then return false end
     if type(DEFAULT_NPC_VALUES) ~= "table" or type(DEFAULT_NPC_ALIASES) ~= "table" then return false end
@@ -92,11 +93,32 @@ function A.GlobalRegistry.RegisterScopedUnitFontTextSettings(ctx, scope)
         reason = "MSUF_ASSISTANT_POWER_TEXT_COLOR",
     })
     if scope ~= "player" then
+        local function CopySharedNameShorteningOnTransition(scopeKey)
+            if scopeKey == "shared" then return end
+            local db = EnsureDB()
+            local scoped = type(db[scopeKey]) == "table" and db[scopeKey] or {}
+            db[scopeKey] = scoped
+            if scoped.fontOverride == true then return end
+            local general = GeneralDB()
+            -- Preserve the complete effective state. Hidden local fields may
+            -- be stale while the scope follows Shared, so do not reuse them.
+            scoped.shortenNames = db.shortenNames == true
+            scoped.shortenNameClipSide = (general.shortenNameClipSide == "RIGHT") and "RIGHT" or "LEFT"
+            scoped.shortenNameMaxChars = tonumber(general.shortenNameMaxChars) or 6
+            scoped.shortenNameShowDots = general.shortenNameShowDots ~= false
+        end
+
+        local function WriteScopedName(scopeKey, sharedTable, key, value)
+            CopySharedNameShorteningOnTransition(scopeKey)
+            GlobalScopeWrite(scopeKey, "fontOverride", sharedTable, key, value)
+        end
+
         RegisterScopedSetting("fontScope", scope, "shortenNames", "nameShortening", "Name Shortening", "boolean", false, GlobalScopeAliases(scope, {
             "shorten names", "shorten unit names", "name shortening", "truncate names",
         }), {
             flag = "fontOverride",
             shared = "db",
+            set = function(scopeKey, value) WriteScopedName(scopeKey, EnsureDB(), "shortenNames", value and true or false) end,
             apply = ApplyFonts,
             reason = "MSUF_ASSISTANT_NAME_SHORTENING",
         })
@@ -106,6 +128,9 @@ function A.GlobalRegistry.RegisterScopedUnitFontTextSettings(ctx, scope)
             flag = "fontOverride",
             values = NAME_TRUNCATION_VALUES,
             valueAliases = NAME_TRUNCATION_ALIASES,
+            set = function(scopeKey, value)
+                WriteScopedName(scopeKey, GeneralDB(), "shortenNameClipSide", value == "RIGHT" and "RIGHT" or "LEFT")
+            end,
             apply = ApplyFonts,
             reason = "MSUF_ASSISTANT_NAME_TRUNCATION_STYLE",
         })
@@ -115,17 +140,27 @@ function A.GlobalRegistry.RegisterScopedUnitFontTextSettings(ctx, scope)
             flag = "fontOverride",
             min = 4,
             max = 30,
+            set = function(scopeKey, value)
+                value = math.floor((tonumber(value) or 6) + 0.5)
+                if value < 4 then value = 4 elseif value > 30 then value = 30 end
+                WriteScopedName(scopeKey, GeneralDB(), "shortenNameMaxChars", value)
+            end,
             apply = ApplyFonts,
             reason = "MSUF_ASSISTANT_NAME_MAX_LENGTH",
         })
         RegisterScopedSetting("fontScope", scope, "shortenNameNoEllipsis", "nameNoEllipsis", "Name No Ellipsis", "boolean", false, GlobalScopeAliases(scope, {
             "no ellipsis", "hide name ellipsis", "truncate without dots", "truncate without ellipsis",
+            "shortened name dots", "name shortening dots", "name dots", "name ellipsis",
+            "trailing dots on shortened names",
         }), {
             flag = "fontOverride",
             get = function(scopeKey) return not GlobalScopeRead(scopeKey, "fontOverride", GeneralDB(), "shortenNameShowDots", true) end,
-            set = function(scopeKey, value) GlobalScopeWrite(scopeKey, "fontOverride", GeneralDB(), "shortenNameShowDots", not (value and true or false)) end,
+            set = function(scopeKey, value)
+                WriteScopedName(scopeKey, GeneralDB(), "shortenNameShowDots", not (value and true or false))
+            end,
             apply = ApplyFonts,
             reason = "MSUF_ASSISTANT_NAME_NO_ELLIPSIS",
+            description = "Controls only the trailing ellipsis on shortened unit names. Name visibility and shortening length are separate controls.",
         })
     end
     return true

@@ -37,16 +37,6 @@ local DIRECT_TEXT_GROUPS = {
     power = { basePrefix = "power", baseAliasPrefix = "powerText", directPrefix = "directPower", slotPrefix = "powerText", legacySlotPrefix = "power", defaultX = -4, defaultY = 4 },
 }
 
-local function BindingProfileStart()
-    if M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStart then return M.ProfileStart() end
-end
-
-local function BindingProfileStop(key, started)
-    if M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStop then
-        M.ProfileStop("binding", key, started)
-    end
-end
-
 local function WipeTable(t)
     for k in pairs(t) do t[k] = nil end
 end
@@ -725,11 +715,7 @@ local function WidgetHistorySource(ctx, widget, suffix)
 end
 local function CaptureWidgetChange(ctx, widget, label, fn)
     label = label or WidgetHistoryLabel(ctx, widget)
-    local kind = widget and (widget._msuf2ControlKind or widget.GetObjectType and widget:GetObjectType()) or "control"
-    local started = BindingProfileStart()
-    local result = M.CaptureHistory(label, WidgetHistorySource(ctx, widget, label), fn)
-    BindingProfileStop("CaptureWidget:" .. tostring((ctx and ctx.key) or "page") .. ":" .. tostring(kind), started)
-    return result
+    return M.CaptureHistory(label, WidgetHistorySource(ctx, widget, label), fn)
 end
 function M.RequestUnitApply(unit, reason, opts)
     if M.BlockCombatAction() then return false end
@@ -740,13 +726,11 @@ function M.RequestUnitApply(unit, reason, opts)
         unit = (unit == "focus_target" or unit == "focustargettarget") and "focustarget" or unit
     end
     if not UNIT_KEYS[unit] then return end
-    local started = BindingProfileStart()
     if not (opts and opts.history == false) then
         M.CheckpointHistory(reason or ("MSUF2_" .. tostring(unit)), "apply:unit:" .. tostring(unit) .. ":" .. tostring(reason or "change"))
     end
     local result = false
     if ApplyService.RequestUnit then result = ApplyService.RequestUnit(unit, reason, opts) end
-    BindingProfileStop("RequestUnitApply:" .. tostring(unit), started)
     return result
 end
 function M.SetUnitValue(unit, key, value, reason, opts)
@@ -766,13 +750,11 @@ function M.SetUnitValue(unit, key, value, reason, opts)
 end
 function M.RequestGeneralApply(reason, opts)
     if M.BlockCombatAction() then return false end
-    local started = BindingProfileStart()
     if not (opts and opts.history == false) then
         M.CheckpointHistory(reason or "MSUF2_GENERAL", "apply:general:" .. tostring(reason or "change"))
     end
     local result = false
     if ApplyService.RequestGeneral then result = ApplyService.RequestGeneral(reason, opts) end
-    BindingProfileStop("RequestGeneralApply", started)
     return result
 end
 function M.SetGeneralValue(key, value, reason, opts)

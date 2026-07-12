@@ -32,13 +32,12 @@ local function Trim(text)
     return (text:gsub("^%s+", ""):gsub("%s+$", ""))
 end
 
-local function PerfNowMs()
+local function RuntimeNowMs()
     local timer = type(_G.GetTimePreciseSec) == "function" and _G.GetTimePreciseSec or _G.GetTime
     if type(timer) == "function" then return (tonumber(timer()) or 0) * 1000 end
     return nil
 end
 
-local PERF_TRACE_LIMIT = 80
 local JOB_BUDGET_MS = 2
 local JOB_MAX_STEPS = 4
 A.JOB_YIELD = A.JOB_YIELD or {}
@@ -140,74 +139,45 @@ local function ScheduleNextFrame(key, fn)
         AP.nextFrameOrder = {}
         for i = 1, #order do
             local cb = pending[order[i]]
-            if type(cb) == "function" then cb() end
+            if type(cb) == "function" then
+                local ok, failure = pcall(cb)
+                if not ok and type(A.RecoverAssistantFailure) == "function" then
+                    pcall(A.RecoverAssistantFailure, failure, {
+                        label = "assistant.next-frame",
+                    })
+                end
+            end
         end
     end
     if _G.C_Timer and type(_G.C_Timer.NewTimer) == "function" then
-        AP.nextFrameTimer = _G.C_Timer.NewTimer(0, Run)
+        local ran = false
+        local function ProtectedRun()
+            ran = true
+            Run()
+        end
+        local scheduled, timer = pcall(_G.C_Timer.NewTimer, 0, ProtectedRun)
+        local cancellable = timer and type(timer.Cancel) == "function"
+        if scheduled and cancellable and not ran then
+            AP.nextFrameTimer = timer
+            return true
+        end
+        if ran then return true end
+        -- A timer API failure must not leave nextFrameQueued stuck or discard
+        -- accepted work. Execute the bounded pending batch now; callers still
+        -- receive an honest success result and cannot submit it a second time.
+        Run()
         return true
     end
     Run()
-    return false
+    return true
 end
 
-local function PushPerfTrace(sample)
-    if type(sample) ~= "table" then return end
-    A._perfTrace = A._perfTrace or {}
-    A._perfTrace[#A._perfTrace + 1] = sample
-    while #A._perfTrace > PERF_TRACE_LIMIT do table.remove(A._perfTrace, 1) end
-end
-
-function A.RecordPerfSample(label, startedMs, detail)
-    if not startedMs then return nil end
-    if InCombat() then return nil end
-    local now = PerfNowMs()
-    if not now then return nil end
-    local elapsed = now - startedMs
-    if elapsed < 0 then elapsed = 0 end
-    local sample = {
-        label = tostring(label or "assistant"),
-        detail = tostring(detail or ""),
-        ms = elapsed,
-    }
-    A.lastAssistantPerf = sample
-    if elapsed >= 250 and sample.label ~= "assistant.submit.deferred" then A.lastSlowAssistantPerf = sample end
-    PushPerfTrace(sample)
-    return sample
-end
-
-function A.RecordSlowPerfSample(label, startedMs, detail, thresholdMs)
-    if not startedMs then return nil end
-    local now = PerfNowMs()
-    if not now then return nil end
-    local elapsed = now - startedMs
-    if elapsed < 0 then elapsed = 0 end
-    if elapsed < (tonumber(thresholdMs) or 8) then return nil end
-    return A.RecordPerfSample(label, startedMs, detail)
-end
-
-function A.GetLastPerfSample()
-    return A.lastAssistantPerf
-end
-
-function A.GetLastSlowPerfSample()
-    return A.lastSlowAssistantPerf
-end
-
-function A.GetPerfTrace(limit)
-    local trace = A._perfTrace or {}
-    local count = tonumber(limit) or #trace
-    if count < 1 then count = #trace end
-    local first = math.max(1, #trace - count + 1)
-    local out = {}
-    for i = first, #trace do out[#out + 1] = trace[i] end
-    return out
-end
-
-function A.ClearPerfTrace()
-    A._perfTrace = {}
-    A.lastAssistantPerf = nil
-    A.lastSlowAssistantPerf = nil
+-- Public only for the tiny load-on-demand bridge and sibling Assistant
+-- modules. It keeps every next-frame callback under the core menu/combat
+-- lifecycle instead of allowing untracked timers.
+function A.ScheduleMenuRuntimeNextFrame(key, fn)
+    if type(fn) ~= "function" or InCombat() or not MenuRuntimeActive() then return false end
+    return ScheduleNextFrame(key, fn)
 end
 
 local function FriendlyJobLabel(label)
@@ -227,10 +197,6 @@ function A.GetJobSummary()
         out.labels[#out.labels + 1] = FriendlyJobLabel(job and job.label)
     end
     return out
-end
-
-function A.PerformanceWarmupStatusText()
-    return "on demand (no background warmup)"
 end
 
 local NO_MATCH_RECENT_LIMIT = 80
@@ -1079,19 +1045,147 @@ local function JobMatches(job, match)
     return tostring(job and job.label or "") == tostring(match)
 end
 
-function AP.AssistantJobErrorResult(err, job)
+local function FailureContainsAny(text, terms)
+    text = " " .. tostring(text or "") .. " "
+    for i = 1, #(terms or {}) do
+        if text:find(tostring(terms[i]), 1, true) then return true end
+    end
+    return false
+end
+
+local function FailureScopeLabel(text)
+    if FailureContainsAny(text, { " target of target ", " targettarget " }) then return "Target of Target" end
+    if FailureContainsAny(text, { " focus target ", " focustarget " }) then return "Focus Target" end
+    if FailureContainsAny(text, { " mythic raid ", " mythicraid " }) then return "Mythic Raid" end
+    if FailureContainsAny(text, { " target " }) then return "Target" end
+    if FailureContainsAny(text, { " focus " }) then return "Focus" end
+    if FailureContainsAny(text, { " pet " }) then return "Pet" end
+    if FailureContainsAny(text, { " boss " }) then return "Boss" end
+    if FailureContainsAny(text, { " party " }) then return "Party" end
+    if FailureContainsAny(text, { " raid " }) then return "Raid" end
+    if FailureContainsAny(text, { " player ", " my ", " self " }) then return "Player" end
+    return nil
+end
+
+local function AddFailurePageHint(hints, seen, page, label, detail)
+    page = tostring(page or "")
+    if page == "" or seen[page] then return end
+    seen[page] = true
+    hints[#hints + 1] = {
+        kind = "page",
+        key = page,
+        page = page,
+        label = tostring(label or page),
+        pageLabel = tostring(label or page),
+        description = tostring(detail or "Likely MSUF page for this request."),
+        canOpen = true,
+        canExplain = true,
+    }
+end
+
+-- This is deliberately independent of the parser, router, and knowledge
+-- index: it is the last-resort path used when one of those systems throws.
+-- It performs only a few bounded string checks and creates no passive work.
+local function FailurePageHints(query)
+    local normalized = " " .. tostring(query or ""):lower():gsub("[%p%c]", " "):gsub("%s+", " ") .. " "
+    local hints, seen = {}, {}
+    local scope = FailureScopeLabel(normalized)
+    local aura = FailureContainsAny(normalized, { " aura ", " auras ", " buff ", " buffs ", " debuff ", " debuffs " })
+
+    if aura then
+        local isBuff = FailureContainsAny(normalized, { " buff ", " buffs " })
+        local isDebuff = FailureContainsAny(normalized, { " debuff ", " debuffs " })
+        local groupScope = scope == "Party" or scope == "Raid" or scope == "Mythic Raid"
+        local page = groupScope and "gf_auras" or isBuff and not isDebuff and "auras3_buffs"
+            or isDebuff and not isBuff and "auras3_debuffs" or "auras3_styling"
+        local pageLabel = groupScope and "Group Auras" or isBuff and not isDebuff and "Aura Style: Buffs"
+            or isDebuff and not isBuff and "Aura Style: Debuffs" or "Aura Style"
+        local control = FailureContainsAny(normalized, { " growth ", " grow ", " direction " }) and "Growth"
+            or FailureContainsAny(normalized, { " anchor ", " attach " }) and "Anchor"
+            or FailureContainsAny(normalized, { " spacing ", " gap " }) and "Spacing"
+            or FailureContainsAny(normalized, { " size ", " bigger ", " smaller " }) and "Icon Size"
+            or FailureContainsAny(normalized, { " cooldown ", " timer " }) and "Cooldown"
+            or FailureContainsAny(normalized, { " stack ", " count " }) and "Stack Text"
+            or "the matching aura control"
+        local detail = "Choose " .. tostring(scope or "the intended frame") .. " as the editing scope, then look for " .. control .. "."
+        AddFailurePageHint(hints, seen, page, pageLabel, detail)
+        if FailureContainsAny(normalized, { " filter ", " blacklist ", " whitelist ", " hide ", " show only " }) then
+            AddFailurePageHint(hints, seen, "auras3_filters", "Aura Filters", "Check the relevant aura filter or list for " .. tostring(scope or "that frame") .. ".")
+        end
+    elseif FailureContainsAny(normalized, { " cast bar ", " castbar ", " casting bar " }) then
+        AddFailurePageHint(hints, seen, "opt_castbar", "Cast Bars", "Look for the " .. tostring(scope or "matching frame") .. " cast-bar control.")
+    elseif FailureContainsAny(normalized, { " class resource ", " class resources ", " class power ", " combo point ", " holy power " }) then
+        AddFailurePageHint(hints, seen, "classpower", "Class Resources", "Look for the matching resource, detached power, placement, or appearance control.")
+    elseif FailureContainsAny(normalized, { " profile ", " import ", " export ", " backup " }) then
+        AddFailurePageHint(hints, seen, "profiles", "Profiles", "Profile creation, switching, import, export, and backup controls live here.")
+    elseif FailureContainsAny(normalized, { " party ", " raid ", " mythic raid ", " group frame ", " group frames " }) then
+        if FailureContainsAny(normalized, { " indicator ", " icon ", " ready check ", " role ", " leader ", " summon " }) then
+            AddFailurePageHint(hints, seen, "gf_indicators", "Group Status & Indicators", "Look for the named Party/Raid status icon or indicator.")
+        elseif FailureContainsAny(normalized, { " growth ", " direction ", " spacing ", " columns ", " anchor ", " layout ", " scale " }) then
+            AddFailurePageHint(hints, seen, "gf_layout", "Group Layout", "Choose the intended Party, Raid, or Mythic Raid scope, then inspect its layout control.")
+        else
+            AddFailurePageHint(hints, seen, "gf_bars", "Group Health & Text", "Choose the intended group scope and inspect its health, power, text, or frame control.")
+        end
+    elseif FailureContainsAny(normalized, { " font ", " outline ", " monochrome " }) then
+        AddFailurePageHint(hints, seen, "opt_fonts", "Fonts", "Shared and frame-specific font controls live here.")
+    elseif FailureContainsAny(normalized, { " color ", " colour ", " colored ", " coloured " }) then
+        AddFailurePageHint(hints, seen, "opt_colors", "Colors", "Look for the named shared or frame color control.")
+    elseif FailureContainsAny(normalized, { " texture ", " absorb ", " health bar ", " power bar ", " bar " }) then
+        AddFailurePageHint(hints, seen, "opt_bars", "Bars", "Shared textures, absorb behavior, and bar appearance controls live here.")
+    elseif FailureContainsAny(normalized, { " combat timer ", " crosshair ", " totem ", " gameplay " }) then
+        AddFailurePageHint(hints, seen, "gameplay", "Gameplay", "Look for the named gameplay feature and its placement controls.")
+    end
+
+    if #hints == 0 and scope then
+        local pages = {
+            Player = { "uf_player", "Player" }, Target = { "uf_target", "Target" }, Focus = { "uf_focus", "Focus" },
+            Pet = { "uf_pet", "Pet" }, Boss = { "uf_boss", "Boss Frames" },
+            ["Target of Target"] = { "uf_targettarget", "Target of Target" }, ["Focus Target"] = { "uf_focustarget", "Focus Target" },
+        }
+        local match = pages[scope]
+        if match then AddFailurePageHint(hints, seen, match[1], match[2], "Look for the control named in your request on this frame page.") end
+    end
+    if #hints == 0 then
+        AddFailurePageHint(hints, seen, "search", "Search", "Search for the main MSUF noun from your request.")
+        AddFailurePageHint(hints, seen, "home", "Dashboard", "The Dashboard can guide you to a feature area or run local checks.")
+    end
+    return hints
+end
+
+function AP.AssistantFailureResult(err, context)
+    context = type(context) == "table" and context or {}
     local message = type(err) == "table" and err.message or err
     message = tostring(message or "unknown error")
     A.lastAssistantJobError = {
-        label = tostring(job and job.label or "assistant.job"),
+        label = tostring(context.label or (context.job and context.job.label) or "assistant.runtime"),
         message = message,
         stack = type(err) == "table" and err.stack or nil,
     }
+    local hints = FailurePageHints(context.text)
+    local lines = {
+        "Sorry — I couldn't finish a reliable answer for that request, but the Assistant recovered and is still ready.",
+        #hints == 1 and "My best suggestion is:" or "My best suggestions are:",
+    }
+    for i = 1, math.min(#hints, 3) do
+        local hint = hints[i]
+        lines[#lines + 1] = tostring(i) .. ". " .. tostring(hint.pageLabel or hint.label or "MSUF page") .. " — " .. tostring(hint.description or "check this page")
+    end
+    lines[#lines + 1] = "Reply with a number or 'open it', or rephrase the request and I will try again."
     return {
-        text = "Something went wrong while MSUF processed that request. I stopped that Assistant job so follow-up prompts can continue.",
+        text = table.concat(lines, "\n"),
         status = "failed",
         summary = "Assistant job failed: " .. message,
+        searchResults = hints,
+        selectPendingResult = #hints == 1 and 1 or nil,
     }
+end
+
+function AP.AssistantJobErrorResult(err, job)
+    return AP.AssistantFailureResult(err, {
+        job = job,
+        label = job and job.label,
+        text = job and job.requestText,
+    })
 end
 
 function AP.AssistantJobErrorHandler(err)
@@ -1099,6 +1193,107 @@ function AP.AssistantJobErrorHandler(err)
         message = tostring(err or "unknown error"),
         stack = type(_G.debugstack) == "function" and _G.debugstack(2) or nil,
     }
+end
+
+local function AssistantResultWasRecorded(result)
+    if type(result) ~= "table" or tostring(result.text or "") == "" or type(A.GetHistory) ~= "function" then return false end
+    local ok, history = pcall(A.GetHistory)
+    if not ok or type(history) ~= "table" then return false end
+    for i = #history, math.max(1, #history - 2), -1 do
+        local item = history[i]
+        if item and item.role ~= "user" then return tostring(item.text or "") == tostring(result.text or "") end
+    end
+    return false
+end
+
+local function RecordFailureUserIfMissing(text)
+    text = Trim(text)
+    if text == "" or type(A.AddHistory) ~= "function" then return end
+    local latest
+    if type(A.GetHistory) == "function" then
+        local ok, history = pcall(A.GetHistory)
+        if ok and type(history) == "table" then latest = history[#history] end
+    end
+    if latest and latest.role == "user" and tostring(latest.text or "") == text then return end
+    pcall(A.AddHistory, "user", text, "submitted")
+end
+
+local function RestoreAssistantInputAfterFailure()
+    A._busy = false
+    A._busyText = nil
+    A._busySerial = (tonumber(A._busySerial) or 0) + 1
+    A._assistantCurrentJob = nil
+
+    local jobs = A._assistantJobs
+    if type(jobs) == "table" then
+        for i = #jobs, 1, -1 do
+            if tostring(jobs[i] and jobs[i].label or "") == "assistant.submit" then table.remove(jobs, i) end
+        end
+    end
+
+    local ui = A.dashboardUI
+    if type(ui) ~= "table" then return end
+    local busyTimer = ui._msufAssistantBusyTimer
+    if busyTimer and type(busyTimer.Cancel) == "function" then pcall(busyTimer.Cancel, busyTimer) end
+    if type(A.UntrackMenuRuntimeTimer) == "function" then pcall(A.UntrackMenuRuntimeTimer, "assistant.dashboard.busy", busyTimer) end
+    ui._msufAssistantBusyTimer = nil
+    ui._msufAssistantBusyPulse = nil
+    local controls = { ui.input, ui.send }
+    for i = 1, #controls do
+        local control = controls[i]
+        if control and type(control.Enable) == "function" then pcall(control.Enable, control) end
+    end
+    local sendLabel = ui.send and ui.send._msuf2Label
+    if sendLabel and type(sendLabel.SetText) == "function" then
+        pcall(sendLabel.SetText, sendLabel, "Send")
+    elseif ui.send and type(ui.send.SetText) == "function" then
+        pcall(ui.send.SetText, ui.send, "Send")
+    end
+    if ui.input and type(ui.input.SetFocus) == "function" and MenuRuntimeActive() and not InCombat() then
+        pcall(ui.input.SetFocus, ui.input)
+    end
+end
+
+-- Public so the load-on-demand bridge can hand an unexpected post-load error
+-- to the full runtime without duplicating recovery policy.
+function A.RecoverAssistantFailure(err, context)
+    context = type(context) == "table" and context or {}
+    local result = AP.AssistantFailureResult(err, context)
+    RestoreAssistantInputAfterFailure()
+    RecordFailureUserIfMissing(context.text)
+    local recorded = false
+    if type(AP.RecordAssistantResult) == "function" then
+        local ok = pcall(AP.RecordAssistantResult, result)
+        recorded = ok
+    end
+    if not recorded and type(A.AddHistory) == "function" then
+        pcall(A.AddHistory, "assistant", result.text, result.status, result.summary)
+    end
+    if type(A.RequestRefreshUI) == "function" then
+        pcall(A.RequestRefreshUI, "assistant.failure.recovered")
+    elseif type(A.RefreshUI) == "function" then
+        pcall(A.RefreshUI)
+    end
+    if type(context.callback) == "function" then pcall(context.callback, result) end
+    return result
+end
+
+function AP.CompleteAssistantJob(job, result)
+    if type(job) ~= "table" or job._callbackCompleted == true then return false end
+    job._callbackCompleted = true
+    if type(job.callback) ~= "function" then return true end
+    local ok, callbackError = xpcall(function()
+        job.callback(result, job)
+    end, AP.AssistantJobErrorHandler)
+    if not ok then
+        AP.AssistantJobErrorResult(callbackError, job)
+        if A._busy == true or not AssistantResultWasRecorded(result) then
+            A.RecoverAssistantFailure(callbackError, { job = job, label = job.label, text = job.requestText })
+        else
+            RestoreAssistantInputAfterFailure()
+        end
+    end
+    return ok
 end
 
 function A.CancelJobs(match, reason)
@@ -1114,6 +1309,13 @@ function A.CancelJobs(match, reason)
             job.cancelled = true
             job.cancelReason = tostring(reason or "cancelled")
             table.remove(jobs, i)
+            AP.CompleteAssistantJob(job, {
+                text = "Stopped. I cancelled the assistant work that was still running.",
+                status = "info",
+                summary = "Cancelled running Assistant work.",
+                cancelled = true,
+                suppressAssistantRecord = true,
+            })
             removed = removed + 1
         end
     end
@@ -1142,7 +1344,7 @@ function A._RunJobPump()
         return false
     end
 
-    local sliceStart = PerfNowMs()
+    local sliceStart = RuntimeNowMs()
     local budget = tonumber(A.jobBudgetMs) or JOB_BUDGET_MS
     local maxSteps = tonumber(A.jobMaxStepsPerFrame) or JOB_MAX_STEPS
     if budget <= 0 then budget = JOB_BUDGET_MS end
@@ -1157,13 +1359,13 @@ function A._RunJobPump()
         local job = jobs[1]
         if job and job.cancelled then
             table.remove(jobs, 1)
-            if type(job.callback) == "function" then
-                job.callback({
-                    text = "Stopped. I cancelled the assistant work that was still running.",
-                    status = "info",
-                    summary = "Cancelled running Assistant work.",
-                }, job)
-            end
+            AP.CompleteAssistantJob(job, {
+                text = "Stopped. I cancelled the assistant work that was still running.",
+                status = "info",
+                summary = "Cancelled running Assistant work.",
+                cancelled = true,
+                suppressAssistantRecord = true,
+            })
             break
         end
         local jobMaxSteps = tonumber(job and job.maxStepsPerFrame) or maxSteps
@@ -1174,24 +1376,22 @@ function A._RunJobPump()
         local step = job and job.steps and job.steps[job.index]
         if type(step) ~= "function" then
             table.remove(jobs, 1)
-            if type(job.callback) == "function" then job.callback(job.result, job) end
+            AP.CompleteAssistantJob(job, job.result)
         else
-            local stepStart = PerfNowMs()
             A._assistantCurrentJob = job
             local ok, result, stopResult = xpcall(function()
                 return step(job)
             end, AP.AssistantJobErrorHandler)
             A._assistantCurrentJob = nil
-            A.RecordPerfSample("assistant.job.step", stepStart, tostring(job.label or "assistant.job") .. "#" .. tostring(job.index))
             stepsRun = stepsRun + 1
             if not ok then
                 table.remove(jobs, 1)
                 job.result = AP.AssistantJobErrorResult(result, job)
-                if type(job.callback) == "function" then job.callback(job.result, job) end
+                AP.CompleteAssistantJob(job, job.result)
             elseif result == false then
                 table.remove(jobs, 1)
                 if stopResult ~= nil then job.result = stopResult end
-                if type(job.callback) == "function" then job.callback(job.result, job) end
+                AP.CompleteAssistantJob(job, job.result)
             elseif result == A.JOB_YIELD then
                 break
             else
@@ -1201,12 +1401,11 @@ function A._RunJobPump()
         end
 
         if sliceStart and jobBudget > 0 then
-            local now = PerfNowMs()
+            local now = RuntimeNowMs()
             if now and (now - sliceStart) >= jobBudget then break end
         end
     end
 
-    A.RecordPerfSample("assistant.job.slice", sliceStart, tostring(stepsRun) .. " step(s)")
     if #jobs > 0 then
         if InCombat() or not MenuRuntimeActive() then
             DeferJobPumpForCombat(InCombat() and "combat:slice" or "menu-hidden:slice")
@@ -1222,13 +1421,13 @@ function A.MaybeYield(force)
     if not co or isMain then return false end
     local started = A._jobYieldStartedMs
     if not started then return false end
-    local now = PerfNowMs()
+    local now = RuntimeNowMs()
     if not now then return false end
     local budget = tonumber(A._jobYieldBudgetMs) or JOB_BUDGET_MS
     if force or (budget > 0 and (now - started) >= budget) then
         A._jobYieldStartedMs = nil
         coroutine.yield(A.JOB_YIELD)
-        A._jobYieldStartedMs = PerfNowMs()
+        A._jobYieldStartedMs = RuntimeNowMs()
         return true
     end
     return false
@@ -1250,12 +1449,19 @@ function A.CoroutineStep(fn)
                 return fn(job)
             end)
         end
-        A._jobYieldStartedMs = PerfNowMs()
+        A._jobYieldStartedMs = RuntimeNowMs()
         A._jobYieldBudgetMs = tonumber(job and job.budgetMs) or tonumber(A.jobBudgetMs) or JOB_BUDGET_MS
         local ok, result = coroutine.resume(co, job)
         A._jobYieldStartedMs = nil
         A._jobYieldBudgetMs = nil
-        if not ok then error(result) end
+        if not ok then
+            local detail = result
+            if type(debug) == "table" and type(debug.traceback) == "function" then
+                local traced, value = pcall(debug.traceback, co, tostring(result), 0)
+                if traced and type(value) == "string" and value ~= "" then detail = value end
+            end
+            error(detail, 0)
+        end
         if coroutine.status(co) ~= "dead" then return A.JOB_YIELD end
         return result
     end
@@ -1278,6 +1484,7 @@ function A.StartJob(label, steps, callback, opts)
         budgetMs = tonumber(opts.budgetMs),
         maxStepsPerFrame = tonumber(opts.maxStepsPerFrame),
         lowPriority = opts.lowPriority == true,
+        requestText = opts.requestText,
     }
     -- The pump is strict FIFO on jobs[1]. Background work (index warmup) can
     -- take minutes at its tiny frame budget, and a user command queued behind
@@ -1342,6 +1549,8 @@ function A.SetMenuRuntimeActive(active, reason)
 
     if not active then
         CancelMenuRuntimeTimers()
+        if type(A.SuspendPendingBroadApply) == "function" then A.SuspendPendingBroadApply() end
+        if type(A.ClearRouterTransientCaches) == "function" then A.ClearRouterTransientCaches() end
         if AP.nextFrameTimer and type(AP.nextFrameTimer.Cancel) == "function" then
             AP.nextFrameTimer:Cancel()
         end
@@ -1354,6 +1563,7 @@ function A.SetMenuRuntimeActive(active, reason)
         return false
     end
 
+    if type(A.ResumePendingBroadApply) == "function" then A.ResumePendingBroadApply() end
     ResumeAfterCombatCallbacks()
     A.ResumeCombatDeferredJobs(A._menuRuntimeReason)
     if type(A.FlushQueue) == "function" and type(A.HasQueuedPlans) == "function" and A.HasQueuedPlans() then
@@ -1399,9 +1609,7 @@ function A.RequestRefreshUI(reason)
             end)
             return
         end
-        local started = PerfNowMs()
         if type(A.RefreshUI) == "function" then A.RefreshUI() end
-        A.RecordPerfSample("assistant.refresh_ui", started, A._refreshReason)
     end)
     return true
 end
@@ -1601,6 +1809,7 @@ local function SerializeChoices(choices)
             label = choice and choice.label,
             valueLabel = choice and choice.valueLabel,
             summary = choice and choice.summary,
+            successText = choice and choice.successText,
             mediaType = choice and choice.mediaType,
             textArea = choice and choice.textArea,
             textSlot = choice and choice.textSlot,
@@ -1644,6 +1853,7 @@ local function RehydrateChoices(serialized)
                 diagnosticFix = item.diagnosticFix,
                 summary = item.summary,
                 bulkSafe = item.bulkSafe,
+                successText = item.successText,
             }
         elseif setting then
             choices[#choices + 1] = {
@@ -1656,6 +1866,7 @@ local function RehydrateChoices(serialized)
                 mediaType = item.mediaType,
                 textArea = item.textArea,
                 textSlot = item.textSlot,
+                successText = item.successText,
             }
         elseif item and item.actionKey and type(Registry.GetAction) == "function" then
             local action = Registry:GetAction(item.actionKey)
@@ -2321,6 +2532,27 @@ local function FindChoice(text, choices)
     local choiceIndex = wordToNumber[normalized] or wordToNumber[withPrefix]
     if choiceIndex and choices[choiceIndex] then return choices[choiceIndex] end
 
+    -- Labels and value labels are the cheapest and most precise natural
+    -- follow-up match. Resolve them before the legacy unit-name probe below;
+    -- otherwise a reply such as "single color" needlessly invokes the full
+    -- parser (and can warm/yield through its registry indexes) before reaching
+    -- the already displayed choice text.
+    if #normalized >= 2 then
+        for i = 1, #choices do
+            local choice = choices[i]
+            local setting = choice and choice.setting
+            local action = choice and choice.action
+            local label = NormalizeReply(choice and (choice.label or choice.valueLabel) or "")
+            local valueLabel = NormalizeReply(choice and choice.valueLabel or "")
+            local settingLabel = NormalizeReply(setting and setting.label or "")
+            local actionLabel = NormalizeReply(action and action.label or "")
+            if label ~= "" and (label == normalized or label:find(normalized, 1, true)) then return choice end
+            if valueLabel ~= "" and (valueLabel == normalized or valueLabel:find(normalized, 1, true)) then return choice end
+            if settingLabel ~= "" and settingLabel == normalized then return choice end
+            if actionLabel ~= "" and actionLabel == normalized then return choice end
+        end
+    end
+
     local units = A.Parse and A.Parse("show " .. normalized .. " name")
     local wantedUnit
     if units and type(units.changes) == "table" and units.changes[1] and units.changes[1].setting then
@@ -2341,19 +2573,25 @@ local function FindChoice(text, choices)
             if setting and setting.unit == wantedUnit then return choices[i] end
         end
     end
-    if #normalized >= 2 then
-        for i = 1, #choices do
-            local choice = choices[i]
-            local setting = choice and choice.setting
-            local action = choice and choice.action
-            local label = NormalizeReply(choice and (choice.label or choice.valueLabel) or "")
-            local valueLabel = NormalizeReply(choice and choice.valueLabel or "")
-            local settingLabel = NormalizeReply(setting and setting.label or "")
-            local actionLabel = NormalizeReply(action and action.label or "")
-            if label ~= "" and (label == normalized or label:find(normalized, 1, true)) then return choice end
-            if valueLabel ~= "" and (valueLabel == normalized or valueLabel:find(normalized, 1, true)) then return choice end
-            if settingLabel ~= "" and settingLabel == normalized then return choice end
-            if actionLabel ~= "" and actionLabel == normalized then return choice end
+    return nil
+end
+
+local function FindExactDisplayedChoice(text, choices)
+    local normalized = NormalizeReply(text)
+    if normalized == "" then return nil end
+    for i = 1, #(choices or {}) do
+        local choice = choices[i]
+        local setting = choice and choice.setting
+        local action = choice and choice.action
+        local labels = {
+            choice and choice.label,
+            choice and choice.valueLabel,
+            setting and setting.label,
+            action and action.label,
+        }
+        for j = 1, #labels do
+            local label = NormalizeReply(labels[j] or "")
+            if label ~= "" and label == normalized then return choice end
         end
     end
     return nil
@@ -3958,6 +4196,27 @@ local function SafeSingleSettingChangePlan(parsed, setting)
     return parsed
 end
 
+function AP.PortraitRenderFollowupPlan(text, sourceSetting)
+    if not (sourceSetting and tostring(sourceSetting.attribute or "") == "portraitMode") then return nil end
+    local normalized = NormalizeReply(text)
+    local value
+    if ReplyHasPhrase(normalized, "2d") or ReplyHasPhrase(normalized, "2d portrait") then
+        value = "2D"
+    elseif ReplyHasPhrase(normalized, "class portrait") then
+        value = "CLASS"
+    end
+    if not value then return nil end
+    local unit = tostring(sourceSetting.unit or "")
+    local setting = unit ~= "" and Registry and Registry:GetSetting(unit .. ".portraitRender") or nil
+    if not setting then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value, valueLabel = SettingValueLabel(setting, value) } },
+        label = AssistantSettingLabel(setting, "Portrait Render"),
+        summary = "Continues a portrait choice by selecting its render type.",
+    }
+end
+
 AP.PendingResultRelatedSiblingPlan = function(text, item, index, parser)
     local typoNormalizedText
     local function followupText()
@@ -4256,6 +4515,11 @@ end
 local function PendingResultSettingChangeResult(text, item, index)
     if not (item and item.setting) then return nil end
     local parser = A.Parser or {}
+    local portraitPlan = AP.PortraitRenderFollowupPlan(text, item.setting)
+    if portraitPlan then
+        SetSelectedPendingResult(item, index)
+        return A.ExecutePlan(portraitPlan)
+    end
     local synthetic = PendingResultSettingSyntheticText(text, item.setting, index)
     if not synthetic then
         local siblingPlan = AP.PendingResultRelatedSiblingPlan(text, item, index, parser)
@@ -5353,10 +5617,16 @@ ExecuteChoice = function(choice)
             label = ChoiceDisplayLabel(choice) or "Assistant selected options",
             summary = choice.summary or "Assistant selected options.",
             bulkSafe = choice.bulkSafe,
+            successText = choice.successText,
         })
     end
     if choice and choice.setting then
-        return A.ExecutePlan({ kind = "changes", changes = { choice }, label = "Assistant selected option" })
+        return A.ExecutePlan({
+            kind = "changes",
+            changes = { choice },
+            label = "Assistant selected option",
+            successText = choice.successText,
+        })
     end
     if choice and (choice.action or choice.actionKey) then
         local action = choice.action
@@ -5375,32 +5645,24 @@ ExecuteChoice = function(choice)
 end
 
 function AP.RunApplies(changedSettings)
-    local totalStartedMs = PerfNowMs()
     local applied = {}
     for i = 1, #changedSettings do
         local setting = changedSettings[i]
         if setting and type(setting.apply) == "function" and not applied[setting.key] then
             applied[setting.key] = true
-            local settingStartedMs = PerfNowMs()
             local ok, err = pcall(setting.apply)
-            A.RecordSlowPerfSample("assistant.apply.setting", settingStartedMs, setting.key or setting.label or i, 4)
             if not ok then
-                A.RecordSlowPerfSample("assistant.apply.total", totalStartedMs, tostring(#changedSettings), 8)
                 return false, "apply", setting.key or setting.label or i, err
             end
         end
     end
     local apply = (MSUF and MSUF.MSUF2 and MSUF.MSUF2.ApplyService) or _G.MSUF_Menu2_ApplyService
     if apply and type(apply.Flush) == "function" then
-        local flushStartedMs = PerfNowMs()
         local ok, err = pcall(apply.Flush)
-        A.RecordSlowPerfSample("assistant.apply.flush", flushStartedMs, tostring(#changedSettings), 4)
         if not ok then
-            A.RecordSlowPerfSample("assistant.apply.total", totalStartedMs, tostring(#changedSettings), 8)
             return false, "flush", "ApplyService.Flush", err
         end
     end
-    A.RecordSlowPerfSample("assistant.apply.total", totalStartedMs, tostring(#changedSettings), 8)
     return true
 end
 
@@ -5830,8 +6092,88 @@ function AP.TryNoOpEscalation(plan, changes)
     })
 end
 
+local GROUP_NAME_SHORTENING_FIELDS = {
+    "fontOverride", "nameShortenEnabled", "nameMaxChars", "nameClipSide", "nameNoEllipsis",
+    "nameShortenOverride", "_msufGFNameTruncationOverride",
+}
+
+local UNIT_NAME_SHORTENING_FIELDS = {
+    "fontOverride", "shortenNames", "shortenNameMaxChars", "shortenNameClipSide", "shortenNameShowDots",
+}
+
+local function NameShorteningStateScopes(changes)
+    local scopes, seen = {}, {}
+    for i = 1, #(changes or {}) do
+        local key = tostring(changes[i] and changes[i].setting and changes[i].setting.key or "")
+        local scope, suffix = key:match("^fontScope%.([^.]+)%.(.+)$")
+        local isNameSetting = suffix == "shortenNames" or suffix == "shortenNameMaxChars"
+            or suffix == "shortenNameClipSide" or suffix == "shortenNameNoEllipsis"
+        if not isNameSetting then
+            scope, suffix = key:match("^(gf_[^.]+)%.(.+)$")
+            isNameSetting = suffix == "nameShortenEnabled" or suffix == "nameMaxChars"
+                or suffix == "nameClipSide" or suffix == "nameNoEllipsis"
+        end
+        if isNameSetting and scope and scope ~= "shared" and not seen[scope] then
+            seen[scope] = true
+            scopes[#scopes + 1] = scope
+        end
+    end
+    return scopes
+end
+
+function A.CaptureNameShorteningStates(scopes)
+    if type(scopes) ~= "table" or #scopes == 0 then return nil end
+    local db = M and type(M.EnsureDB) == "function" and M.EnsureDB() or _G.MSUF_DB
+    if type(db) ~= "table" then return nil end
+    local states = {}
+    for i = 1, #scopes do
+        local scope = tostring(scopes[i] or "")
+        if scope ~= "" then
+            local conf = type(db[scope]) == "table" and db[scope] or nil
+            local fields = scope:find("^gf_") and GROUP_NAME_SHORTENING_FIELDS or UNIT_NAME_SHORTENING_FIELDS
+            local state = { scope = scope, scopeWasTable = conf ~= nil, fields = {} }
+            conf = conf or {}
+            for j = 1, #fields do
+                local field = fields[j]
+                local value = rawget(conf, field)
+                state.fields[field] = {
+                    present = value ~= nil,
+                    value = AP.CopyTransactionValue(value),
+                }
+            end
+            states[#states + 1] = state
+        end
+    end
+    return #states > 0 and states or nil
+end
+
+function A.RestoreNameShorteningStates(states)
+    if type(states) ~= "table" then return false end
+    local db = M and type(M.EnsureDB) == "function" and M.EnsureDB() or _G.MSUF_DB
+    if type(db) ~= "table" then return false end
+    for i = 1, #states do
+        local state = states[i]
+        local scope = type(state) == "table" and tostring(state.scope or "") or ""
+        if scope ~= "" and type(state.fields) == "table" then
+            local conf = type(db[scope]) == "table" and db[scope] or {}
+            db[scope] = conf
+            for field, saved in pairs(state.fields) do
+                if type(saved) == "table" and saved.present == true then
+                    conf[field] = AP.CopyTransactionValue(saved.value)
+                else
+                    conf[field] = nil
+                end
+            end
+            if state.scopeWasTable ~= true and next(conf) == nil then db[scope] = nil end
+        end
+    end
+    return true
+end
+
 local function ExecuteChanges(plan)
     local changes = plan.changes or {}
+    local nameStateScopes = NameShorteningStateScopes(changes)
+    local beforeNameShorteningStates = A.CaptureNameShorteningStates(nameStateScopes)
     local undoChanges = {}
     local undoIndexByKey = {}
     local executedChanges = {}
@@ -5840,6 +6182,12 @@ local function ExecuteChanges(plan)
     local unchangedApplySettings = {}
     local lastSetting, lastUnit, lastFrameType, lastCategory, lastValue
     local requiresReload
+
+    local function RestoreNameStateSnapshot()
+        if beforeNameShorteningStates then
+            pcall(A.RestoreNameShorteningStates, beforeNameShorteningStates)
+        end
+    end
 
     local function ResolveNewValue(setting, item, oldValue)
         local newValue = item.value
@@ -5893,6 +6241,7 @@ local function ExecuteChanges(plan)
         local readOk, currentValue = pcall(setting.get)
         if not readOk then
             local rollbackErrors = AP.RollbackSettingOperations(appliedOperations, changedSettings)
+            RestoreNameStateSnapshot()
             return AP.TransactionFailure(plan, "read", setting.key or setting.label or i, currentValue, rollbackErrors)
         end
         local oldValue = AP.CopyTransactionValue(currentValue)
@@ -5903,6 +6252,7 @@ local function ExecuteChanges(plan)
             local setOk, setErr = pcall(setting.set, AP.CopyTransactionValue(newValue))
             if not setOk then
                 local rollbackErrors = AP.RollbackSettingOperations(appliedOperations, changedSettings)
+                RestoreNameStateSnapshot()
                 return AP.TransactionFailure(plan, "set", setting.key or setting.label or i, setErr, rollbackErrors)
             end
 
@@ -5913,6 +6263,7 @@ local function ExecuteChanges(plan)
             local verifyOk, actualNewValue = pcall(setting.get)
             if not verifyOk then
                 local rollbackErrors = AP.RollbackSettingOperations(appliedOperations, changedSettings)
+                RestoreNameStateSnapshot()
                 return AP.TransactionFailure(plan, "verify.read", setting.key or setting.label or i, actualNewValue, rollbackErrors)
             end
             actualNewValue = AP.CopyTransactionValue(actualNewValue)
@@ -5927,10 +6278,12 @@ local function ExecuteChanges(plan)
             else
                 if ValuesEqual(setting, oldValue, actualNewValue) then
                     local rollbackErrors = AP.RollbackSettingOperations(appliedOperations, changedSettings)
+                    RestoreNameStateSnapshot()
                     return AP.TransactionFailure(plan, "verify.unchanged", setting.key or setting.label or i, "setter did not change the requested value", rollbackErrors)
                 end
                 if not acceptsNormalization and not ValuesEqual(setting, newValue, actualNewValue) then
                     local rollbackErrors = AP.RollbackSettingOperations(appliedOperations, changedSettings)
+                    RestoreNameStateSnapshot()
                     return AP.TransactionFailure(plan, "verify.value", setting.key or setting.label or i, "stored value differs from requested value", rollbackErrors)
                 end
 
@@ -5969,6 +6322,7 @@ local function ExecuteChanges(plan)
     local applyOk, applyPhase, applyTarget, applyErr = AP.RunApplies(changedSettings)
     if not applyOk then
         local rollbackErrors = AP.RollbackSettingOperations(appliedOperations, changedSettings)
+        RestoreNameStateSnapshot()
         return AP.TransactionFailure(plan, applyPhase, applyTarget, applyErr, rollbackErrors)
     end
 
@@ -6005,9 +6359,14 @@ local function ExecuteChanges(plan)
     end
 
     local bundle = AP.BuildChangeBundle(plan, executedChanges, undoChanges, lastSetting, lastUnit, lastFrameType, lastCategory, lastValue)
+    if beforeNameShorteningStates then
+        bundle.beforeNameShorteningStates = beforeNameShorteningStates
+        bundle.afterNameShorteningStates = A.CaptureNameShorteningStates(nameStateScopes)
+    end
     local pushOk, undoAvailable = pcall(A.PushUndo, bundle)
     if not pushOk then
         local rollbackErrors = AP.RollbackSettingOperations(appliedOperations, changedSettings)
+        RestoreNameStateSnapshot()
         return AP.TransactionFailure(plan, "commit.undo", lastSetting, undoAvailable, rollbackErrors)
     end
     bundle.undoAvailable = undoAvailable == true
@@ -6017,6 +6376,7 @@ local function ExecuteChanges(plan)
             table.remove(A.undoStack)
         end
         local rollbackErrors = AP.RollbackSettingOperations(appliedOperations, changedSettings)
+        RestoreNameStateSnapshot()
         return AP.TransactionFailure(plan, "commit.context", lastSetting, rememberErr, rollbackErrors)
     end
 
@@ -6026,7 +6386,8 @@ local function ExecuteChanges(plan)
         RememberTextChangeContext(record.setting, record.item, record.newValue)
     end
 
-    local text = AP.ChangedResponse(responseSettings, undoChanges)
+    local customSuccess = type(plan.successText) == "string" and Trim(plan.successText) or ""
+    local text = customSuccess ~= "" and customSuccess or AP.ChangedResponse(responseSettings, undoChanges)
     if requiresReload then text = text .. " Reload the UI for this change to fully take effect." end
     if not requiresReload and #undoChanges >= 6 then text = AP.AppendLargeChangeReloadHint(text) end
     text = AP.AppendUndoFollowupHint(text)
@@ -6091,7 +6452,6 @@ local function ExecuteAction(plan)
     local beforeAction
     local captureProfile = not captureAction and action.captureProfileSnapshot and A.CaptureProfileSnapshot
     local captureSnapshot = not captureAction and action.captureSnapshot and not captureProfile and A.CaptureSnapshot
-    local snapshotStart = PerfNowMs()
     if not captureAction and action.captureSnapshot == true and type(captureSnapshot) ~= "function" then
         return AP.TransactionFailure(plan, "preflight.snapshot", action.key, "snapshot service is unavailable")
     end
@@ -6118,8 +6478,6 @@ local function ExecuteAction(plan)
         end
         beforeProfile = snapshot
     end
-    A.RecordPerfSample("assistant.snapshot.before", snapshotStart, action.key)
-
     local function RollbackAction()
         local errors = {}
         if beforeAction then
@@ -6150,6 +6508,21 @@ local function ExecuteAction(plan)
     local preserveNilSavedVariables
     local ran, ok, message, runMeta = pcall(function() return action.run(args) end)
     if not ran or not ok then
+        -- Some action guards can prove that they rejected the request before
+        -- touching owner state. Preserve their useful guidance instead of
+        -- describing a rollback that did not happen. This escape hatch is
+        -- deliberately explicit so ordinary false returns still restore the
+        -- captured snapshot below.
+        if ran and type(runMeta) == "table"
+            and runMeta.noMutation == true
+            and runMeta.userFacingFailure == true
+        then
+            return {
+                text = Trim(message or "I could not complete that MSUF task."),
+                result = "failed",
+                summary = plan.summary,
+            }
+        end
         local rollbackErrors = RollbackAction()
         if not before and not beforeProfile and not beforeAction then
             local failureMessage = ran and message or nil
@@ -6182,7 +6555,6 @@ local function ExecuteAction(plan)
     local redoStackBeforePush
     local noChange = type(runMeta) == "table" and runMeta.noChange == true
     if (before or beforeProfile or beforeAction) and not noChange then
-        snapshotStart = PerfNowMs()
         local after
         local afterProfile
         local afterAction
@@ -6217,7 +6589,6 @@ local function ExecuteAction(plan)
             end
             afterProfile = snapshot
         end
-        A.RecordPerfSample("assistant.snapshot.after", snapshotStart, action.key)
         local undoBundle = {
             label = AssistantPlanLabel(plan, AssistantActionLabel(action, "Assistant task")),
             action = action.key,
@@ -6423,6 +6794,34 @@ function AP.ReadOnlyGuardResult(text)
     }
 end
 
+local function UnsafeGeneratedSettingResult(setting)
+    local label = tostring(setting and setting.label or setting and setting.key or "MSUF setting")
+    local reason = tostring(setting and setting.unsafeMutationReason
+        or "Its generated registry metadata does not define a reviewed value domain.")
+    local result = {
+        text = table.concat({
+            "I found " .. label .. ", but I kept MSUF unchanged because this raw fallback is not safe for automatic writes yet.",
+            reason,
+            "Options:",
+            "1. Open its MSUF page and use the native control.",
+            "2. Ask for its current value or an explanation.",
+            "3. Name a different, fully described MSUF control.",
+        }, "\n"),
+        result = "info",
+        status = "info",
+        kind = "unsupported",
+        summary = "Assistant protected an unconstrained generated setting",
+    }
+    local router = A.RouterPrivate
+    if router and type(router.RegistrySettingItemForKey) == "function"
+        and type(router.RegistryLocationResultFollowups) == "function"
+    then
+        local item = router.RegistrySettingItemForKey(setting and setting.key)
+        if item then result.searchResults = router.RegistryLocationResultFollowups({ { item = item } }, 1) end
+    end
+    return result
+end
+
 function A.ExecutePlan(plan, opts)
     opts = opts or {}
     if type(plan) ~= "table" then return NormalizePlanResult({ text = "Which frame, page, or option do you want me to change?", result = "failed" }) end
@@ -6432,8 +6831,9 @@ function A.ExecutePlan(plan, opts)
     local actionMutability = plan.kind == "action" and tostring(plan.action and plan.action.mutability or "") or nil
     local actionKey = plan.kind == "action" and tostring(plan.action and plan.action.key or "") or ""
     local actionCommand = type(plan.args) == "table" and tostring(plan.args.command or "") or ""
-    local guidedReadOnlyStep = actionKey == "guided_setup_step"
-        and (actionCommand == "explain" or actionCommand == "examples" or actionCommand == "show" or actionCommand == "open")
+    local guidedReadOnlyStep = actionKey == "guided_setup"
+        or (actionKey == "guided_setup_step"
+            and (actionCommand == "explain" or actionCommand == "examples" or actionCommand == "show" or actionCommand == "open"))
     if guarded and not guidedReadOnlyStep
         and (plan.kind == "changes" or (plan.kind == "action" and actionMutability ~= "readOnly" and actionMutability ~= "navigation")) then
         return NormalizePlanResult(AP.ReadOnlyGuardResult(sourceText))
@@ -6482,6 +6882,14 @@ function A.ExecutePlan(plan, opts)
             for i = 1, #plan.changes do dependencies[#dependencies + 1] = plan.changes[i] end
             plan.changes = dependencies
             plan.bulkSafe = #dependencies > 1 and true or plan.bulkSafe
+        end
+    end
+    if plan.kind == "changes" and type(plan.changes) == "table" then
+        for i = 1, #plan.changes do
+            local setting = plan.changes[i] and plan.changes[i].setting
+            if setting and setting.assistantMutationSafe == false then
+                return NormalizePlanResult(UnsafeGeneratedSettingResult(setting))
+            end
         end
     end
     AP.RememberMentionedContext(plan)
@@ -6683,6 +7091,15 @@ local function HandlePending(text)
         if NormalizeReply(text) == "what" then
             return { text = "Which listed option do you want me to use? A number, label, or unit name is enough.", result = "ambiguous" }
         end
+        -- A displayed choice label is an explicit answer even when it starts
+        -- with a command verb (for example "Hide no-expiration buffs" or
+        -- "Show all auras"). Resolve exact labels before the fresh-command
+        -- escape so the Assistant never discards its own guided options.
+        local exactDisplayedChoice = FindExactDisplayedChoice(text, choices)
+        if exactDisplayedChoice then
+            ClearPendingChoices()
+            return ExecuteChoice(exactDisplayedChoice)
+        end
         if LooksLikeFreshCommand(text) then
             ClearPendingChoices()
             return nil
@@ -6706,6 +7123,12 @@ local function HandlePending(text)
     end
     local results = CurrentPendingResults()
     if results then
+        if type(A.RouterLooksLikeExplicitSettingRelationshipRequest) == "function"
+            and A.RouterLooksLikeExplicitSettingRelationshipRequest(text)
+        then
+            ClearPendingResults()
+            return nil
+        end
         if IsChoiceAbort(text) then
             ClearPendingResults()
             return { text = "Cancelled. I cleared the last search results.", result = "info" }
@@ -6740,6 +7163,7 @@ function A.HandleCommandInput(text)
         or (router and (
         (type(router.IsExplicitReadOnlyDiagnosticCommand) == "function" and router.IsExplicitReadOnlyDiagnosticCommand(text))
         or (type(router.IsExplicitNavigationCommand) == "function" and router.IsExplicitNavigationCommand(text))
+        or (type(router.LooksLikeGuidedTourRequest) == "function" and router.LooksLikeGuidedTourRequest(text))
         or (type(router.IsCurrentPageHelpRequest) == "function" and router.IsCurrentPageHelpRequest(text))
         or (type(A.RouterHasPendingAssistantState) == "function" and A.RouterHasPendingAssistantState())
     ))
@@ -6750,9 +7174,7 @@ function A.HandleCommandInput(text)
         return NormalizePlanResult(AP.ReadOnlyGuardResult(text))
     end
 
-    local parseStartedMs = PerfNowMs()
     local parsed = A.Parse and A.Parse(text) or nil
-    A.RecordSlowPerfSample("assistant.parse", parseStartedMs, text, 8)
     if not parsed then return NormalizePlanResult({ text = "Which frame, page, or option do you want me to change?", result = "failed" }) end
     AP.RememberMentionedContext(parsed)
 
@@ -6770,7 +7192,11 @@ function A.HandleCommandInput(text)
         AP.SetPendingCandidates(A.pendingChoices)
         local ctx = A.GetContext and A.GetContext()
         if ctx then ctx.pendingChoices = SerializeChoices(A.pendingChoices) end
-        return NormalizePlanResult({ text = ChoiceText(A.pendingChoices), result = "ambiguous", summary = parsed.summary })
+        local choiceText = ChoiceText(A.pendingChoices)
+        if type(parsed.choiceIntro) == "string" and Trim(parsed.choiceIntro) ~= "" then
+            choiceText = Trim(parsed.choiceIntro) .. "\n" .. choiceText
+        end
+        return NormalizePlanResult({ text = choiceText, result = "ambiguous", summary = parsed.summary })
     end
     if parsed.kind == "unknown" then
         local result = { text = parsed.text or "Which page and option do you want me to use? Example: 'set target cast bar height to 20'.", result = parsed.status or "failed", kind = "unknown" }
@@ -6795,6 +7221,14 @@ local function CombatSubmitResult()
     }
 end
 
+local function InactiveSubmitResult()
+    return {
+        text = "The MSUF Assistant is paused because its menu is closed.",
+        status = "inactive",
+        summary = "Assistant work is paused while the menu is closed.",
+    }
+end
+
 local function ShouldClearPendingResultsAfterHandledInput(result, hadPendingResults, pendingResultReply)
     if not hadPendingResults or pendingResultReply then return false end
     if type(result) ~= "table" then return false end
@@ -6814,9 +7248,13 @@ function AP.AdvanceTurnSerial()
     return serial
 end
 
-function A.HandleInput(text)
+function A.HandleInput(text, handleOpts)
     if InCombat() then return NormalizePlanResult(CombatSubmitResult()) end
-    if A._skipTurnSerialAdvance == true then
+    if not MenuRuntimeActive() then return NormalizePlanResult(InactiveSubmitResult()) end
+    handleOpts = type(handleOpts) == "table" and handleOpts or {}
+    if handleOpts.skipTurnSerialAdvance == true then
+        A._skipTurnSerialAdvance = nil
+    elseif A._skipTurnSerialAdvance == true then
         A._skipTurnSerialAdvance = nil
     else
         AP.AdvanceTurnSerial()
@@ -6824,13 +7262,28 @@ function A.HandleInput(text)
     local hadPendingResults = CurrentPendingResults() ~= nil
     A._pendingResultFollowupHandled = nil
     local result
-    local routeStartedMs = PerfNowMs()
-    if type(A.RouteInput) == "function" then
-        result = NormalizePlanResult(A.RouteInput(text, A.HandleCommandInput))
-    else
-        result = NormalizePlanResult(A.HandleCommandInput(text))
+    local routed, routeResult
+    local function RunRoute()
+        if type(A.RouteInput) == "function" then return A.RouteInput(text, A.HandleCommandInput) end
+        return A.HandleCommandInput(text)
     end
-    A.RecordSlowPerfSample("assistant.route", routeStartedMs, text, 8)
+    -- Lua 5.1 cannot yield through xpcall. Deferred requests run inside the
+    -- Assistant's resumable coroutine and may cooperatively yield while a
+    -- cold registry/search index is built, so let the coroutine/job boundary
+    -- own error recovery there. Synchronous callers retain the local guard.
+    if A._jobYieldStartedMs ~= nil then
+        routed, routeResult = true, RunRoute()
+    else
+        routed, routeResult = xpcall(RunRoute, AP.AssistantJobErrorHandler)
+    end
+    if routed then
+        result = NormalizePlanResult(routeResult)
+    else
+        result = NormalizePlanResult(AP.AssistantFailureResult(routeResult, {
+            label = "assistant.route",
+            text = text,
+        }))
+    end
     local pendingResultReply = A._pendingResultFollowupHandled == true
     A._pendingResultFollowupHandled = nil
     if ShouldClearPendingResultsAfterHandledInput(result, hadPendingResults, pendingResultReply) then ClearPendingResults() end
@@ -7081,6 +7534,17 @@ function AP.SplitBatchCommands(text)    if A.pendingConfirmation or CurrentPendi
                     if not s then break end
                     local before = Trim(raw:sub(1, s - 1))
                     local after = AP.StripBatchLead(raw:sub(e + 1))
+                    -- Keep a conversational pronoun attached to the feature
+                    -- named by the first clause.  Without this, the fast
+                    -- registry matcher sees "player frame" and can turn the
+                    -- second clause into Player Frame Enabled instead of the
+                    -- Combat Timer anchor requested by the user.
+                    local beforeNorm = AP.NormalizeForBatch(before)
+                    local afterNorm = AP.NormalizeForBatch(after)
+                    local combatTimerAnchor = afterNorm:match("^anchor%s+it%s+to%s+(.+)$")
+                    if combatTimerAnchor and AP.BatchHasPhrase(beforeNorm, "combat timer") then
+                        after = "set combat timer anchor to " .. combatTimerAnchor
+                    end
                     if before ~= "" and after ~= "" and AP.StartsBatchCommand(after) then
                         parts[p] = before
                         table.insert(parts, p + 1, after)
@@ -7181,13 +7645,14 @@ function AP.BuildAtomicSettingBatch(parts)
     }
 end
 
-function AP.TrySubmitBatch(text, preSplitParts)    local parts = preSplitParts or AP.SplitBatchCommands(text)
+function AP.TrySubmitBatch(text, preSplitParts, opts)    local parts = preSplitParts or AP.SplitBatchCommands(text)
     if not parts then return nil end
     local atomicPlan = AP.BuildAtomicSettingBatch(parts)
     if atomicPlan then
         local result = A.ExecutePlan(atomicPlan)
         if type(result) == "table" and AP.IsSuccessfulResultStatus(result.status or result.result) then
-            result.text = "Done. I handled " .. tostring(#parts) .. " requests in one transaction:\n" .. tostring(result.text or "")
+            local detail = tostring(result.text or ""):gsub("^Done%.%s*", "", 1)
+            result.text = "Done. I handled " .. tostring(#parts) .. " requests together:\n" .. detail
             result.summary = atomicPlan.summary
         end
         return result
@@ -7195,7 +7660,9 @@ function AP.TrySubmitBatch(text, preSplitParts)    local parts = preSplitParts o
     local lines = {}
     local applied = 0
     for i = 1, #parts do
-        local result = A.HandleInput(parts[i])
+        local result = A.HandleInput(parts[i], {
+            skipTurnSerialAdvance = opts and opts.turnSerialAdvanced == true,
+        })
         if not result then
             return { text = "I paused at step " .. tostring(i) .. " because I could not match that request.", result = "failed" }
         end
@@ -7235,6 +7702,11 @@ function AP.TryImmediateSubmitResult(text, opts)
     if type(A.TryImmediateConversationReply) ~= "function" then return nil end
     local parser = A.Parser or {}
     local normalized = type(parser.Normalize) == "function" and parser.Normalize(text) or tostring(text or ""):lower()
+    local auraFilteringIntent = type(parser.LooksLikeAuraFilteringConversation) == "function"
+        and parser.LooksLikeAuraFilteringConversation(
+            normalized,
+            type(A.GetContext) == "function" and A.GetContext() or {}
+        )
     local adjacentJokeFollowup = type(A.RouterIsAdjacentJokeFollowup) == "function"
         and A.RouterIsAdjacentJokeFollowup(normalized) == true
     -- Search results own pronoun/ordinal follow-ups ("set it to 18", "the
@@ -7259,13 +7731,13 @@ function AP.TryImmediateSubmitResult(text, opts)
         or normalized:find("no timer", 1, true) or normalized:find("without timer", 1, true)
         or normalized:find("no duration", 1, true) or normalized:find("without duration", 1, true)
         or normalized:find("timeless", 1, true)
+    if auraFilteringIntent then return nil end
     if not noDurationAuraQuestion and (normalized:find("blacklist", 1, true) or normalized:find("whitelist", 1, true)
         or (auraListValue and (normalized:find("aura", 1, true)
             or normalized:find("buff", 1, true) or normalized:find("debuff", 1, true))))
     then
         return nil
     end
-    local startedMs = PerfNowMs()
     local result = A.TryImmediateConversationReply(text)
     if not result then return nil end
     if not (opts and opts.skipUserHistory == true) then
@@ -7278,7 +7750,6 @@ function AP.TryImmediateSubmitResult(text, opts)
     elseif type(A.RefreshUI) == "function" then
         A.RefreshUI()
     end
-    A.RecordPerfSample("assistant.submit.immediate", startedMs, text)
     return result
 end
 
@@ -7347,11 +7818,27 @@ function AP.TryImmediateMutationResult(text, opts)
     if type(normalize) ~= "function" then return nil end
     local normalized = normalize(text)
     if normalized == "" then return nil end
+    local ctx = A.GetContext and A.GetContext() or {}
+    local auraFilteringIntent = type(parser.LooksLikeAuraFilteringConversation) == "function"
+        and parser.LooksLikeAuraFilteringConversation(normalized, ctx)
+    -- This exact value-less request has a reviewed two-choice parser. Preserve
+    -- that O(1) clarification before the generic open-ended guard classifies
+    -- the word "color" as an underspecified setting idea and sends it through
+    -- fuzzy page guidance instead.
+    local priorityClarification = parser.ParseBareHPTextColorModeChoice
+        and parser.ParseBareHPTextColorModeChoice(normalized) or nil
+    -- Multiple explicit clauses must stay together.  Let the deferred batch
+    -- path parse and apply them atomically instead of allowing a warm exact-
+    -- alias index to consume only the final frame name.
+    if AP.SplitBatchCommands(text) then return nil end
     -- Never let continuation/exact-alias fast paths reinterpret a problem,
     -- capability question, location lookup, or subjective request as a write.
     -- The full Router will provide the diagnostic/help response.
-    if (type(A.RouterIsFailClosedReadOnlyRequest) == "function" and A.RouterIsFailClosedReadOnlyRequest(text))
-        or (type(parser.NonMutatingIntent) == "function" and parser.NonMutatingIntent(normalized))
+    if (not auraFilteringIntent and not priorityClarification
+            and type(A.RouterIsFailClosedReadOnlyRequest) == "function"
+            and A.RouterIsFailClosedReadOnlyRequest(text))
+        or (not auraFilteringIntent and type(parser.NonMutatingIntent) == "function" and parser.NonMutatingIntent(normalized))
+        or (not auraFilteringIntent and type(A.RouterIsBroadPageNavigationRequest) == "function" and A.RouterIsBroadPageNavigationRequest(text))
     then
         return nil
     end
@@ -7361,12 +7848,56 @@ function AP.TryImmediateMutationResult(text, opts)
     -- spell:774 in raid buffs" into disabling the entire Raid Buffs lane.
     local auraListValue = type(parser.AuraBlacklistSpellValue) == "function"
         and parser.AuraBlacklistSpellValue(text) or nil
-    if normalized:find("blacklist", 1, true) or normalized:find("whitelist", 1, true)
+    if not auraFilteringIntent and (normalized:find("blacklist", 1, true) or normalized:find("whitelist", 1, true)
         or (auraListValue and (normalized:find("aura", 1, true)
-            or normalized:find("buff", 1, true) or normalized:find("debuff", 1, true)))
+            or normalized:find("buff", 1, true) or normalized:find("debuff", 1, true))))
     then
         return nil
     end
+    local router = A.RouterPrivate
+    if not auraFilteringIntent and ((router and type(router.AuraSpecificSpellRequest) == "function" and router.AuraSpecificSpellRequest(normalized))
+        or (router and type(router.AuraSpecificIconFilterRequest) == "function" and router.AuraSpecificIconFilterRequest(normalized))
+    ) then
+        return nil
+    end
+    if not auraFilteringIntent
+        and (normalized:find("buff", 1, true) or normalized:find("debuff", 1, true) or normalized:find("aura", 1, true))
+        and (normalized:find("only my", 1, true) or normalized:find("only mine", 1, true)
+            or normalized:find("show only", 1, true))
+    then
+        -- "Only mine" can replace several live filter tokens. Let the full
+        -- aura parser ask whether to replace or combine instead of letting an
+        -- exact-alias fast path apply one incomplete write.
+        return nil
+    end
+    -- Aura cooldown/stack text sizing is narrower than the lane's Show Text
+    -- toggle. Let the lane-aware Router build the exact size command instead
+    -- of allowing a warm alias index to stop at the boolean parent setting.
+    local auraTextKind = normalized:find("cooldown text", 1, true)
+        or normalized:find("timer text", 1, true)
+        or normalized:find("stack text", 1, true)
+    local auraTextFamily = normalized:find("buff", 1, true)
+        or normalized:find("debuff", 1, true)
+        or normalized:find("aura", 1, true)
+        or (auraTextKind
+            and not normalized:find("castbar", 1, true)
+            and (normalized:find("player", 1, true)
+                or normalized:find("target", 1, true)
+                or normalized:find("focus", 1, true)
+                or normalized:find("boss", 1, true)
+                or normalized:find("party", 1, true)
+                or normalized:find("raid", 1, true)
+                or normalized:find("group", 1, true)))
+    local auraTextSize = normalized:find("size", 1, true)
+        or normalized:find("bigger", 1, true)
+        or normalized:find("larger", 1, true)
+        or normalized:find("smaller", 1, true)
+        or normalized:find("increase", 1, true)
+        or normalized:find("decrease", 1, true)
+        or normalized:find("reduce", 1, true)
+        or normalized:find("grow", 1, true)
+        or normalized:find("shrink", 1, true)
+    if auraTextFamily and auraTextKind and auraTextSize then return nil end
     -- Cross-frame wording is intentionally handled by the Router before the
     -- parser. Running the exact-alias fast path here can otherwise apply the
     -- subject setting while silently ignoring the different destination frame
@@ -7378,10 +7909,64 @@ function AP.TryImmediateMutationResult(text, opts)
     end
     if type(A.RouterShouldPreferPageContext) == "function" and A.RouterShouldPreferPageContext(text) then return nil end
 
-    local ctx = A.GetContext and A.GetContext() or {}
-    local plan
+    local plan = priorityClarification
+    if not plan and auraFilteringIntent and parser.ParseAuraFilteringConversationShortcut then
+        plan = parser.ParseAuraFilteringConversationShortcut(normalized, ctx, text)
+    end
+    -- Dots/ellipsis wording has a narrow semantic owner and can stay on the
+    -- constant-time path. The full name-shortening specialist must not run
+    -- here: generated exact-label commands such as "set target shorten name
+    -- max chars to 20" belong to their leaf registry settings.
+    if not plan and parser.ParseNameShorteningDotsShortcut then
+        plan = parser.ParseNameShorteningDotsShortcut(normalized, ctx, text)
+    end
+    -- Keep the reported value-less first prompt off the yielding exact-alias
+    -- build without broadening precedence over concrete registry commands.
+    local bareTargetNameShortening = normalized == "shorten target name"
+        or normalized == "shorten the target name"
+    if not plan and bareTargetNameShortening and parser.ParseNameShorteningShortcut then
+        plan = parser.ParseNameShorteningShortcut(normalized, ctx, text)
+    end
+    -- Preview is an action, not the similarly named Boss Frame Enabled
+    -- setting.  This priority is needed once the exact-alias cache is warm.
+    if parser.ParseBossFramePreviewShortcut and normalized:find("boss", 1, true)
+        and normalized:find("preview", 1, true)
+    then
+        plan = parser.ParseBossFramePreviewShortcut(normalized)
+    end
+    if not plan and Registry and type(Registry.GetSetting) == "function" then
+        local lastSetting = ctx and ctx.lastSetting and Registry:GetSetting(ctx.lastSetting) or nil
+        plan = AP.PortraitRenderFollowupPlan(text, lastSetting)
+    end
+    -- Broad "target text bigger" wording names the frame and the kind of
+    -- adjustment, but not which text line.  Ask Name/HP/Power explicitly;
+    -- the warm exact-alias index otherwise returns unrelated text offsets.
+    if not plan and A._ParseTextFontSizeShortcut
+        and (normalized:find("text", 1, true) or normalized:find("font", 1, true))
+        and (normalized:find("bigger", 1, true) or normalized:find("larger", 1, true)
+            or normalized:find("smaller", 1, true) or normalized:find("font size", 1, true)
+            or normalized:find("text size", 1, true))
+    then
+        plan = A._ParseTextFontSizeShortcut(normalized)
+    end
+    -- Named status indicators own their X/Y offsets. Resolve them before the
+    -- generic frame-movement fallback can interpret "ready check up" as the
+    -- Party/Raid frame's own Y position.
+    if not plan and A._ParseHumanIndicatorMoveFastShortcut
+        and (normalized:find("ready check", 1, true)
+            or normalized:find("raid marker", 1, true)
+            or normalized:find("role icon", 1, true)
+            or normalized:find("leader icon", 1, true)
+            or normalized:find("assist icon", 1, true)
+            or normalized:find("summon", 1, true)
+            or normalized:find("resurrect", 1, true)
+            or normalized:find("resurrection", 1, true)
+            or normalized:find("phase icon", 1, true))
+    then
+        plan = A._ParseHumanIndicatorMoveFastShortcut(normalized)
+    end
     if parser.BuildContinuationFollowup then
-        plan = parser.BuildContinuationFollowup(normalized, ctx)
+        plan = plan or parser.BuildContinuationFollowup(normalized, ctx)
     end
     if not plan and AP.LastChangeBundleAvailable(ctx)
         and AP.LooksLikeImmediateLastChangeFollowup(normalized)
@@ -7459,7 +8044,29 @@ function AP.TryImmediateMutationResult(text, opts)
     if not plan and A._ParseBarGradientPriorityShortcut and normalized:find("gradient", 1, true) then
         plan = A._ParseBarGradientPriorityShortcut(normalized)
     end
-    if not plan and exactAliasIndexReady and parser.ParseRegistryExactAliasShortcut then
+    -- Name-shortening has both reviewed scoped controls and raw AutoCoverage
+    -- compatibility fields with overlapping aliases.  The warm non-full
+    -- matcher can otherwise select the raw General field from a precise
+    -- Target command (depending on which earlier prompt warmed the index).
+    -- Let A.Parse's full-phrase matcher resolve these exact labels
+    -- deterministically; the bare natural request above remains O(1).
+    local nameShorteningExactCandidate = normalized:find("shorten name", 1, true)
+        or normalized:find("shorten names", 1, true)
+    if not plan and nameShorteningExactCandidate
+        and exactAliasIndexReady and parser.ParseRegistryExactAliasShortcut then
+        local exactPlan = parser.ParseRegistryExactAliasShortcut(normalized, text, {
+            minTokens = 3,
+            fullPhrase = true,
+        })
+        if not exactPlan and A._ParseFontScopePriorityShortcut then
+            exactPlan = A._ParseFontScopePriorityShortcut(normalized)
+        end
+        if exactPlan and exactPlan.kind == "changes" and exactPlan.confirmRequired ~= true then
+            plan = exactPlan
+        end
+    end
+    if not plan and not nameShorteningExactCandidate
+        and exactAliasIndexReady and parser.ParseRegistryExactAliasShortcut then
         local firstWord = normalized:match("^(%S+)")
         local deterministicRegistryMutation =
             firstWord == "set" or firstWord == "change" or firstWord == "make"
@@ -7497,7 +8104,6 @@ function AP.TryImmediateMutationResult(text, opts)
     end
     if not plan or plan.confirmRequired == true or plan.kind == "action" then return nil end
 
-    local startedMs = PerfNowMs()
     if not (opts and opts.skipUserHistory == true) then
         A.AddHistory("user", text, "submitted")
     end
@@ -7510,7 +8116,11 @@ function AP.TryImmediateMutationResult(text, opts)
         AP.SetPendingCandidates(A.pendingChoices)
         local activeContext = A.GetContext and A.GetContext()
         if activeContext then activeContext.pendingChoices = SerializeChoices(A.pendingChoices) end
-        result = NormalizePlanResult({ text = ChoiceText(A.pendingChoices), result = "ambiguous", summary = plan.summary })
+        local choiceText = ChoiceText(A.pendingChoices)
+        if type(plan.choiceIntro) == "string" and Trim(plan.choiceIntro) ~= "" then
+            choiceText = Trim(plan.choiceIntro) .. "\n" .. choiceText
+        end
+        result = NormalizePlanResult({ text = choiceText, result = "ambiguous", summary = plan.summary })
     elseif plan.kind == "answer" then
         result = NormalizePlanResult({ text = plan.text or "", result = plan.status or "info", summary = plan.summary })
     elseif plan.kind == "unknown" or plan.kind == "unsupported" then
@@ -7529,17 +8139,17 @@ function AP.TryImmediateMutationResult(text, opts)
     elseif type(A.RefreshUI) == "function" then
         A.RefreshUI()
     end
-    A.RecordPerfSample("assistant.submit.immediate_mutation", startedMs, text)
     return result
 end
 
 function AP.SubmitNow(text, opts)    opts = opts or {}
     text = Trim(text)
     if text == "" then return nil end
+    if InCombat() then return NormalizePlanResult(CombatSubmitResult()) end
+    if not MenuRuntimeActive() then return NormalizePlanResult(InactiveSubmitResult()) end
     AP.AdvanceTurnSerial()
     local immediate = AP.TryImmediateSubmitResult(text, opts)
     if immediate then return immediate end
-    if InCombat() then return CombatSubmitResult() end
     -- A complete multi-command sentence must be split before the low-latency
     -- single-plan path sees it. Otherwise that path can confidently apply the
     -- first clause and silently discard the remaining commands (for example,
@@ -7550,30 +8160,29 @@ function AP.SubmitNow(text, opts)    opts = opts or {}
         local immediateMutation = AP.TryImmediateMutationResult(text, opts)
         if immediateMutation then return immediateMutation end
     end
-    local startedMs = PerfNowMs()
     if opts.skipUserHistory ~= true then
         A.AddHistory("user", text, "submitted")
     end
-    A._skipTurnSerialAdvance = true
-    local result = NormalizePlanResult(AP.LongInputResult(text) or AP.TrySubmitBatch(text, batchParts) or A.HandleInput(text))
-    A._skipTurnSerialAdvance = nil
+    local result = NormalizePlanResult(AP.LongInputResult(text)
+        or AP.TrySubmitBatch(text, batchParts, { turnSerialAdvanced = true })
+        or A.HandleInput(text, { skipTurnSerialAdvance = true }))
     AP.RecordAssistantResult(result)
     if type(A.RequestRefreshUI) == "function" then
         A.RequestRefreshUI("assistant.submit")
     elseif type(A.RefreshUI) == "function" then
         A.RefreshUI()
     end
-    A.RecordPerfSample("assistant.submit", startedMs, text)
     return result
 end
 
 function A.Submit(text)
-    return AP.SubmitNow(text)
+    local ok, result = xpcall(function() return AP.SubmitNow(text) end, AP.AssistantJobErrorHandler)
+    if ok then return result end
+    return A.RecoverAssistantFailure(result, { label = "assistant.submit", text = text })
 end
 
 function AP.BuildDeferredSubmitSteps(text, callback, opts)    opts = opts or {}
     local steps = {}
-    local startedMs = PerfNowMs()
     local failClosedReadOnly = type(A.RouterIsFailClosedReadOnlyRequest) == "function" and A.RouterIsFailClosedReadOnlyRequest(text)
     local parts = not failClosedReadOnly and AP.SplitBatchCommands(text) or nil
     local finalResult
@@ -7581,11 +8190,10 @@ function AP.BuildDeferredSubmitSteps(text, callback, opts)    opts = opts or {}
 
     local function Complete(result)
         if finished then return end
-        finished = true
         finalResult = NormalizePlanResult(result)
         A.SetBusy(false)
-        AP.RecordAssistantResult(finalResult)
-        A.RecordPerfSample("assistant.submit.deferred", startedMs, text)
+        if finalResult.suppressAssistantRecord ~= true then AP.RecordAssistantResult(finalResult) end
+        finished = true
         if type(callback) == "function" then callback(finalResult) end
     end
 
@@ -7604,7 +8212,9 @@ function AP.BuildDeferredSubmitSteps(text, callback, opts)    opts = opts or {}
             steps[#steps + 1] = A.CoroutineStep(function()
                 if stopped then return end
                 local part = parts[partIndex]
-                local result = AP.LongInputResult(part) or A.HandleInput(part)
+                local result = AP.LongInputResult(part) or A.HandleInput(part, {
+                    skipTurnSerialAdvance = opts.turnSerialAdvanced == true,
+                })
                 if not result then
                     result = { text = "I paused at step " .. tostring(partIndex) .. " because I could not match that request.", result = "failed" }
                 end
@@ -7633,7 +8243,9 @@ function AP.BuildDeferredSubmitSteps(text, callback, opts)    opts = opts or {}
         end
     else
         steps[#steps + 1] = A.CoroutineStep(function()
-            finalResult = AP.LongInputResult(text) or A.HandleInput(text)
+            finalResult = AP.LongInputResult(text) or A.HandleInput(text, {
+                skipTurnSerialAdvance = opts.turnSerialAdvanced == true,
+            })
         end)
         steps[#steps + 1] = function()
             Complete(finalResult)
@@ -7650,11 +8262,21 @@ function AP.BuildDeferredSubmitSteps(text, callback, opts)    opts = opts or {}
     end
 end
 
-function A.SubmitDeferred(text, callback)
+function AP.RunSubmitCallback(callback, result, label, text)
+    if type(callback) ~= "function" then return true end
+    local ok, callbackError = xpcall(function() callback(result) end, AP.AssistantJobErrorHandler)
+    if not ok then AP.AssistantFailureResult(callbackError, { label = label or "assistant.callback", text = text }) end
+    return ok
+end
+
+function AP.SubmitDeferredNow(text, callback)
     text = Trim(text)
     if text == "" then return nil end
+    if InCombat() then return NormalizePlanResult(CombatSubmitResult()) end
+    if not MenuRuntimeActive() then return NormalizePlanResult(InactiveSubmitResult()) end
     if A.IsBusy() then
         if AP.IsAssistantStopCommand and AP.IsAssistantStopCommand(text) then
+            AP.AdvanceTurnSerial()
             local removed = A.StopAssistantWork("user")
             local result = NormalizePlanResult({
                 text = removed > 0 and "Stopped. I cancelled the assistant work that was still running." or "Stopped. I cleared the assistant busy state.",
@@ -7663,7 +8285,7 @@ function A.SubmitDeferred(text, callback)
             })
             A.AddHistory("user", text, "submitted")
             AP.RecordAssistantResult(result)
-            if type(callback) == "function" then callback(result) end
+            AP.RunSubmitCallback(callback, result, "assistant.stop.callback", text)
             if type(A.RequestRefreshUI) == "function" then
                 A.RequestRefreshUI("assistant.stop")
             elseif type(A.RefreshUI) == "function" then
@@ -7673,30 +8295,77 @@ function A.SubmitDeferred(text, callback)
         end
         return NormalizePlanResult({ text = "I am still working on the previous request. Press Stop or type stop to cancel it.", result = "busy" })
     end
+    -- A rejected message is not added to history or executed, so it must not
+    -- age conversational referents either. Advance only once the turn has
+    -- actually been accepted (including an accepted Stop command above).
+    AP.AdvanceTurnSerial()
     if AP.IsAssistantStopCommand and AP.IsAssistantStopCommand(text) then
         return NormalizePlanResult({ text = "Nothing is running right now.", result = "info" })
     end
     local immediate = AP.TryImmediateSubmitResult(text)
     if immediate then
-        if type(callback) == "function" then callback(immediate) end
+        AP.RunSubmitCallback(callback, immediate, "assistant.immediate.callback", text)
         return immediate
     end
-    if InCombat() then return NormalizePlanResult(CombatSubmitResult()) end
     local immediateMutation = AP.TryImmediateMutationResult(text)
     if immediateMutation then
-        if type(callback) == "function" then callback(immediateMutation) end
+        AP.RunSubmitCallback(callback, immediateMutation, "assistant.immediate-mutation.callback", text)
         return immediateMutation
     end
 
     A.SetBusy(true, "I am working on that. Press Stop or type stop to cancel.")
 
     A.AddHistory("user", text, "submitted")
-    local steps, onDone = AP.BuildDeferredSubmitSteps(text, callback, { userHistoryRecorded = true })
-    local job = A.StartJob("assistant.submit", steps, onDone)
+    local steps, onDone = AP.BuildDeferredSubmitSteps(text, callback, {
+        userHistoryRecorded = true,
+        turnSerialAdvanced = true,
+    })
+    local job = A.StartJob("assistant.submit", steps, onDone, { requestText = text })
     if job and type(job.result) == "table" and not A.IsBusy() then
         return NormalizePlanResult(job.result)
     end
     return NormalizePlanResult({ text = A.GetBusyText(), result = "queued" })
+end
+
+function A.SubmitDeferred(text, callback)
+    local ok, result = xpcall(function() return AP.SubmitDeferredNow(text, callback) end, AP.AssistantJobErrorHandler)
+    if ok then return result end
+    return A.RecoverAssistantFailure(result, {
+        label = "assistant.submit.deferred",
+        text = text,
+        callback = callback,
+    })
+end
+
+function A.StartNewTask()
+    if InCombat() or not MenuRuntimeActive() or A.IsBusy() then return false end
+    if A.Workflow and type(A.Workflow.CancelActiveWorkflow) == "function" then
+        A.Workflow.CancelActiveWorkflow()
+    end
+    if type(A.ClearPendingFlow) == "function" then A.ClearPendingFlow() end
+    ClearPendingChoices()
+    ClearPendingResults()
+    ClearPendingConfirmationContext()
+    if type(A.CloseLargeTextPanel) == "function" then
+        A.CloseLargeTextPanel()
+    else
+        A.largeTextPanel = nil
+    end
+    local context = A.GetContext and A.GetContext() or nil
+    if type(context) == "table" then
+        for key in pairs(context) do context[key] = nil end
+    end
+    if type(A.ClearRouterTransientCaches) == "function" then A.ClearRouterTransientCaches() end
+    if type(A.ClearHistory) == "function" then A.ClearHistory() end
+    local ui = A.dashboardUI
+    if ui and ui.input then
+        if type(ui.input.SetText) == "function" then ui.input:SetText("") end
+        if type(ui.input.SetFocus) == "function" then ui.input:SetFocus() end
+        local placeholder = ui.input._msufAssistantPlaceholder
+        if placeholder and type(placeholder.SetShown) == "function" then placeholder:SetShown(true) end
+    end
+    A.RequestRefreshUI("assistant.new_task")
+    return true
 end
 
 function A.RegisteredSettingSummary()

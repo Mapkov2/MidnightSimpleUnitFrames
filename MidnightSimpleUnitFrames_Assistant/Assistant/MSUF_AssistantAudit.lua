@@ -14,7 +14,6 @@
 --   /msufcoverage smoke          in-game acceptance checklist
 --   /msufcoverage smoke pass <id>|fail <id> <note>|block <id> <note>|reset
 --   /msufcoverage gate           summary gate for smoke + manifest + coverage
---   /msufcoverage perf|perf reset  interactive latency/profiler report
 --
 -- The audit only reads; it never mutates the DB or the registry.
 local addonName, MSUF = ...
@@ -45,6 +44,7 @@ Audit.ignore = Audit.ignore or {
     -- actions: generating settings for these would shadow the actions
     -- ("set global font color to yellow" is the set_global_font_color action).
     general = {
+        auraFontSize = true,
         bossPreviewEnabled = true,
         editModeSnapToGrid = true,
         fontColor = true,
@@ -169,6 +169,7 @@ local function BuildCoveredSets()
     local settings = type(registry) == "table" and registry.settings or nil
     if type(settings) ~= "table" then return covered, 0, 0, 0 end
     for i = 1, #settings do
+        if i % 64 == 0 and type(A.MaybeYield) == "function" then A.MaybeYield() end
         local setting = settings[i]
         if type(setting) == "table" then
             if setting.generated then generated = generated + 1 end
@@ -490,78 +491,6 @@ local function BuildGeneratedReport(scopeArg)
     return table.concat(lines, "\n")
 end
 
-local function Percentile(sorted, fraction)
-    if type(sorted) ~= "table" or #sorted == 0 then return 0 end
-    local index = math.ceil(#sorted * (tonumber(fraction) or 1))
-    if index < 1 then index = 1 elseif index > #sorted then index = #sorted end
-    return tonumber(sorted[index]) or 0
-end
-
-local function BuildPerformanceReport()
-    local trace = type(A.GetPerfTrace) == "function" and A.GetPerfTrace(80) or {}
-    local samples = {}
-    for i = 1, #trace do
-        local sample = trace[i]
-        local label = tostring(sample and sample.label or "")
-        if label:find("^assistant%.submit") and label ~= "assistant.submit.deferred" then
-            samples[#samples + 1] = tonumber(sample.ms) or 0
-        end
-    end
-    table.sort(samples)
-    local total = 0
-    for i = 1, #samples do total = total + samples[i] end
-    local average = #samples > 0 and total / #samples or 0
-    local p50 = Percentile(samples, 0.50)
-    local p95 = Percentile(samples, 0.95)
-    local maximum = #samples > 0 and samples[#samples] or 0
-    local enoughSamples = #samples >= 10
-    local latencyPass = enoughSamples and p95 <= 50 and maximum <= 150
-
-    local frame = M and M.frame
-    local menuShown = frame and type(frame.IsShown) == "function" and frame:IsShown() == true
-    local inCombat = ((_G.InCombatLockdown and _G.InCombatLockdown())
-        or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))) and true or false
-    local runtimeName = type(A.GetRuntimeAddonName) == "function"
-        and A.GetRuntimeAddonName() or "MidnightSimpleUnitFrames"
-    local profiler = _G.C_AddOnProfiler
-    local metric = _G.Enum and _G.Enum.AddOnProfilerMetric
-    local profilerReady = profiler and metric and type(profiler.GetAddOnMetric) == "function"
-        and (type(profiler.IsEnabled) ~= "function" or profiler.IsEnabled() == true)
-    local function ProfilerValue(name)
-        if not profilerReady or metric[name] == nil then return nil end
-        local ok, value = pcall(profiler.GetAddOnMetric, runtimeName, metric[name])
-        return ok and tonumber(value) or nil
-    end
-    local recent = ProfilerValue("RecentAverageTime")
-    local last = ProfilerValue("LastTime")
-    local session = ProfilerValue("SessionAverageTime")
-    local peak = ProfilerValue("PeakTime")
-    local over1 = ProfilerValue("CountTimeOver1Ms")
-    local over5 = ProfilerValue("CountTimeOver5Ms")
-
-    local lines = {
-        ("MSUF Assistant Performance - %s"):format(date("%Y-%m-%d %H:%M:%S")),
-        ("runtime addon: %s; menu shown: %s; combat: %s")
-            :format(runtimeName, menuShown and "yes" or "no", inCombat and "yes" or "no"),
-        ("interactive samples: %d; avg %.2f ms; p50 %.2f ms; p95 %.2f ms; max %.2f ms")
-            :format(#samples, average, p50, p95, maximum),
-        ("interactive SLO: %s (requires >=10 samples, p95 <=50 ms, max <=150 ms)")
-            :format(latencyPass and "PASS" or "NOT PROVEN"),
-    }
-    if profilerReady then
-        lines[#lines + 1] = ("Blizzard profiler (ms/tick): recent %.4f; last %.4f; session %.4f; peak %.4f")
-            :format(recent or 0, last or 0, session or 0, peak or 0)
-        lines[#lines + 1] = ("ticks over budget: >1 ms %.0f; >5 ms %.0f")
-            :format(over1 or 0, over5 or 0)
-    else
-        lines[#lines + 1] = "Blizzard profiler: unavailable in this client/session."
-    end
-    lines[#lines + 1] = ""
-    lines[#lines + 1] = "For an uncontaminated zero-idle measurement, close MSUF, wait 10 seconds, then run the /dump command from the idle_assistant_shutdown acceptance case."
-    lines[#lines + 1] = "Blizzard upstream/live source: AddOnProfiler GetAddOnMetric returns milliseconds; RecentAverageTime covers the last 60 ticks."
-    return table.concat(lines, "\n")
-end
-
 local function SmokeCase(id, phase, setup, command, expect)
     return { id = id, phase = phase, setup = setup, command = command, expect = expect }
 end
@@ -573,9 +502,9 @@ local ACCEPTANCE_SMOKE_CASES = {
     SmokeCase("runtime_core_load", "M5", "Reload UI, then open the MSUF Dashboard.",
         "/dump MSUF_NS.Assistant.IsRuntimeLoaded()",
         "True immediately after login (the runtime loads with the core addon); the Dashboard shows the normal chat card with no Start Assistant button and no load errors."),
-    SmokeCase("interactive_latency", "M5", "Open the MSUF Dashboard, run /msufcoverage perf reset, then submit ten normal read-only questions one at a time.",
-        "Ask: what is target frame width; where is raid ready check; what depends on target buffs; why is player power text hidden; how do profiles work; explain class resource width mode; where can I change castbar texture; why are party frames missing; what are your limits; answer in German what is aura filtering. Then run /msufcoverage perf.",
-        "At least 10 user-response samples; interactive SLO PASS with p95 <=50 ms and max <=150 ms. Answers remain correct and no setting changes."),
+    SmokeCase("interactive_read_only", "M5", "Open the MSUF Dashboard and submit ten normal read-only questions one at a time.",
+        "Ask: what is target frame width; where is raid ready check; what depends on target buffs; why is player power text hidden; how do profiles work; explain class resource width mode; where can I change castbar texture; why are party frames missing; what are your limits; answer in German what is aura filtering.",
+        "All ten answers remain correct and no setting changes."),
     SmokeCase("idle_assistant_shutdown", "M5", "After starting the Assistant once, close the MSUF menu, stay out of combat, and wait 10 seconds without reopening it.",
         "/dump MSUF_NS.Assistant._menuRuntimeActive, next(MSUF_NS.Assistant._menuRuntimeTimers or {})",
         "_menuRuntimeActive is false and no menu-runtime timers remain (next returns nil): the Assistant schedules no background work while the menu is closed."),
@@ -851,20 +780,10 @@ Audit.BuildAcceptanceGate = BuildAcceptanceGate
 Audit.StoreAcceptanceGate = StoreAcceptanceGate
 Audit.BuildAcceptanceGateReport = BuildAcceptanceGateReport
 Audit.BuildGeneratedReport = BuildGeneratedReport
-Audit.BuildPerformanceReport = BuildPerformanceReport
 
 local function RunCommand(msg)
     local rawMsg = tostring(msg or ""):gsub("^%s+", ""):gsub("%s+$", "")
     msg = rawMsg:lower()
-    if msg == "perf reset" or msg == "performance reset" then
-        if type(A.ClearPerfTrace) == "function" then A.ClearPerfTrace() end
-        print("|cffffd700MSUF:|r Assistant performance samples reset.")
-        return
-    end
-    if msg == "perf" or msg == "performance" or msg == "performance report" then
-        ShowReport("MSUF Assistant Performance", BuildPerformanceReport())
-        return
-    end
     if msg == "gate" or msg == "acceptance gate" or msg == "status gate" then
         local text, gate = BuildAcceptanceGateReport()
         ShowReport("MSUF Assistant Acceptance Gate", text)

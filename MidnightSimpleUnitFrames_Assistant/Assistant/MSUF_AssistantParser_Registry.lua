@@ -155,6 +155,7 @@ end
 
 local ROOT_FRAME_ENABLED_DETAIL_TERMS = {
     "indicator", "indicators", "status icon", "status icons", "status indicator", "status indicators",
+    "dot", "dots", "ellipsis", "ellipses",
     "icon", "icons", "marker", "markers", "raid marker", "target marker", "symbol", "symbols",
     "star", "circle", "diamond", "triangle", "moon", "square", "cross", "skull",
     "portrait", "portraits", "power bar", "mana bar",
@@ -807,6 +808,8 @@ local ENUM_VALUE_DISPLAY_LABELS = {
     ["HELPFUL|PLAYER"] = "helpful player",
     HORIZONrAL_LEFr = "horizontal left",
     HORIZONrAL_RIGHr = "horizontal right",
+    LEFTDOWN = "left then down",
+    LEFTUP = "left then up",
     LEFr = "left",
     LEFrDOWN = "left then down",
     LEFrUP = "left then up",
@@ -823,6 +826,8 @@ local ENUM_VALUE_DISPLAY_LABELS = {
     OOC = "out of combat",
     PAREN = "parentheses",
     REACrION = "reaction",
+    RIGHTDOWN = "right then down",
+    RIGHTUP = "right then up",
     RIGHr = "right",
     RIGHrDOWN = "right then down",
     RIGHrUP = "right then up",
@@ -1358,7 +1363,6 @@ local function RegistryCandidateListForToken(token)
 end
 
 P.RegistryCandidateSettings = function(text, settings, includeAliases)
-    local startedMs = _G.debugprofilestop and _G.debugprofilestop() or nil
     includeAliases = includeAliases == true
     P._EnsureRegistryCandidateIndex(settings, includeAliases)
     local cacheKey = (includeAliases and "full:" or "light:") .. Normalize(text)
@@ -1419,10 +1423,6 @@ P.RegistryCandidateSettings = function(text, settings, includeAliases)
         end
     end
     if #out == 0 and skippedValueToken and not includeAliases then
-        if type(A.RecordSlowPerfSample) == "function" then
-            local detail = (includeAliases and "full" or "light") .. ":0:" .. Normalize(text):sub(1, 80)
-            A.RecordSlowPerfSample("assistant.registry.candidates", startedMs, detail, 8)
-        end
         return {}
     end
     if #out == 0 then
@@ -1448,10 +1448,6 @@ P.RegistryCandidateSettings = function(text, settings, includeAliases)
             local oldKey = table.remove(P._registryCandidateCacheOrder, 1)
             P._registryCandidateCache[oldKey] = nil
         end
-    end
-    if type(A.RecordSlowPerfSample) == "function" then
-        local detail = (includeAliases and "full" or "light") .. ":" .. tostring(#out) .. ":" .. Normalize(text):sub(1, 80)
-        A.RecordSlowPerfSample("assistant.registry.candidates", startedMs, detail, 8)
     end
     return out
 end
@@ -5394,9 +5390,33 @@ end
 
 P.SettingMatchesText = SettingMatchesText
 P.SettingMatchScore = SettingMatchScore
+P.NAME_DOT_EXACT_TERMS = P.NAME_DOT_EXACT_TERMS or {
+    "dot", "dots", "ellipsis", "ellipses", "trailing dots", "three dots", "two dots",
+}
+P.NON_NAME_DOT_EXACT_TERMS = P.NON_NAME_DOT_EXACT_TERMS or {
+    "corner", "status", "indicator", "spell indicator", "combo point", "class resource",
+    "class power", "aura", "buff", "debuff", "castbar", "spell name",
+}
 P.RegistrySettingMayMatchExactAlias = function(setting, text)
     if RootFrameEnabledBlockedByDetail(setting, text) then return false end
     if AuraLaneVisibilityBlockedByDetail(setting, text) then return false end
+    -- An exact alias may match only a trailing scope phrase ("party frame" or
+    -- "party name") while ignoring the user's meaningful noun, "dots". Keep
+    -- unrelated geometry/name-visibility settings out of that candidate set;
+    -- explicit corner/status/resource/aura wording remains owned by its domain.
+    if ContainsAny(text, P.NAME_DOT_EXACT_TERMS)
+        and not ContainsAny(text, P.NON_NAME_DOT_EXACT_TERMS) then
+        local hay = (tostring(setting and setting.key or "") .. " "
+            .. tostring(setting and setting.label or "") .. " "
+            .. tostring(setting and setting.attribute or "")):lower()
+        if not hay:find("ellipsis", 1, true)
+            and not hay:find("shorten", 1, true)
+            and not hay:find("truncat", 1, true)
+            and not hay:find("namedots", 1, true)
+            and not hay:find("name dots", 1, true) then
+            return false
+        end
+    end
     return SettingAllowedByExplicitScopes(setting, text)
 end
 P.EnumValueForText = EnumValueForText

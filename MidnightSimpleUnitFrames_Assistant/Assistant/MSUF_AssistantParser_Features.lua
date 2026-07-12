@@ -3139,18 +3139,57 @@ end
 local NAME_SHORTENING_TERMS = {
     "shorten names", "shorten name", "short names", "short name", "name shortening",
     "truncate names", "truncate name", "name truncation", "unit name shortening",
-    "unit names short", "names short", "names shorter",
+    "unit names short", "names short", "names shorter", "shortened name", "shortened names",
+    "name is cut off", "name gets cut off", "names are cut off", "names get cut off",
 }
 
 local NAME_SHORTENING_DOT_TERMS = {
     "dots", "dot", "ellipsis", "ellipses", "name dots", "name ellipsis",
     "truncate dots", "truncate ellipsis", "shortening dots", "shortening ellipsis",
+    "trailing dots", "trailing dot", "trailing ellipsis", "three dots", "two dots",
 }
 
 local NAME_SHORTENING_NON_NAME_DOT_TERMS = {
     "corner dot", "corner dots", "corner indicator", "corner indicators",
     "status dot", "status dots", "status indicator", "status indicators",
-    "spell indicator", "spell indicators",
+    "spell indicator", "spell indicators", "combo point", "combo points", "combo dots",
+    "class resource", "class resources", "class power", "holy power", "soul shard", "soul shards",
+    "chi point", "chi points", "rune", "runes", "resource point", "resource points",
+    "damage over time", "damage-over-time", "aura", "auras", "buff", "buffs", "debuff", "debuffs",
+}
+
+local NAME_SHORTENING_DOT_HIDE_TERMS = {
+    "turn off", "switch off", "disable", "hide", "remove", "remove only", "get rid of",
+    "take away", "without dots", "without ellipsis", "no dots", "no more dots",
+    "without the dots", "without the ellipsis", "not have dots", "not have the dots",
+    "hide dots", "hide ellipsis", "dont want dots", "dont want the dots",
+    "do not want dots", "do not want the dots", "stop showing dots",
+}
+
+local NAME_SHORTENING_DOT_SHOW_TERMS = {
+    "turn on", "switch on", "enable", "show dots", "show ellipsis", "display dots",
+    "with dots", "with ellipsis", "keep dots", "keep the dots", "add dots", "restore dots",
+}
+
+local NAME_SHORTENING_LOCATION_TERMS = {
+    "where", "where is", "where are", "where do", "where can", "how do", "how can",
+    "which setting", "what setting", "which option", "what option", "help me find",
+    "help me locate", "show me where", "tell me where", "open the setting", "open the option",
+}
+
+local NAME_SHORTENING_SCOPE_ORDER = {
+    "shared", "target", "targettarget", "focus", "focustarget", "pet", "boss",
+    "gf_party", "gf_raid", "gf_mythicraid",
+}
+
+local NAME_SHORTENING_ALL_TERMS = {
+    "all shortened names", "every shortened name", "every shortened names",
+}
+
+local NAME_SHORTENING_SCOPE_LABELS = {
+    shared = "Shared", target = "Target", targettarget = "Target of Target",
+    focus = "Focus", focustarget = "Focus Target", pet = "Pet", boss = "Boss",
+    gf_party = "Party", gf_raid = "Raid", gf_mythicraid = "Mythic Raid", player = "Player",
 }
 
 local NAME_SHORTENING_KEEP_START_TERMS = {
@@ -3179,14 +3218,61 @@ local function HasNameShorteningIntent(text)
     return false
 end
 
-local function NameShorteningScope(text)
-    if ContainsAny(text, FeaturesPhrases[389]) then
-        return "shared"
+local function NameShorteningContextScope(ctx)
+    if type(ctx) ~= "table" then return nil end
+    local function ScopeForKey(key)
+        key = tostring(key or "")
+        local scope, suffix = key:match("^fontScope%.([^.]+)%.(.+)$")
+        if scope and (suffix:find("shortenName", 1, true) or suffix == "shortenNames") then return scope end
+        scope, suffix = key:match("^(gf_[^.]+)%.(.+)$")
+        if scope and (suffix == "nameShortenEnabled" or suffix == "nameMaxChars"
+            or suffix == "nameClipSide" or suffix == "nameNoEllipsis") then
+            return scope
+        end
+        return nil
     end
+    local scope = ScopeForKey(ctx.lastSetting)
+    if scope then return scope end
+    local bundle = ctx.lastChangeBundle
+    if type(bundle) == "table" then
+        for i = #bundle, 1, -1 do
+            scope = ScopeForKey(bundle[i] and bundle[i].key)
+            if scope then return scope end
+        end
+    end
+    return nil
+end
+
+local function AddNameShorteningScope(scopes, seen, scope)
+    if scope and scope ~= "" and not seen[scope] then
+        seen[scope] = true
+        scopes[#scopes + 1] = scope
+    end
+end
+
+local function NameShorteningScopes(text, ctx)
+    if ContainsAny(text, FeaturesPhrases[389])
+        or ContainsAny(text, NAME_SHORTENING_ALL_TERMS)
+        or ContainsAny(text, { "all scopes", "every scope" }) then
+        return {}, true, true
+    end
+    local scopes, seen = {}, {}
     local groups = DetectGroups and DetectGroups(text) or {}
-    if groups[1] then return "gf_" .. tostring(groups[1]) end
-    local scope = DetectGlobalScope and DetectGlobalScope(text) or nil
-    return scope or "shared"
+    for i = 1, #groups do AddNameShorteningScope(scopes, seen, "gf_" .. tostring(groups[i])) end
+    local units = DetectUnits and DetectUnits(text) or {}
+    for i = 1, #units do AddNameShorteningScope(scopes, seen, units[i]) end
+    if #scopes == 0 then
+        local scope = DetectGlobalScope and DetectGlobalScope(text) or nil
+        AddNameShorteningScope(scopes, seen, scope)
+    end
+    if #scopes > 0 then return scopes, false, true end
+    AddNameShorteningScope(scopes, seen, NameShorteningContextScope(ctx))
+    return scopes, false, false
+end
+
+local function NameShorteningScope(text, ctx)
+    local scopes, allRequested, explicit = NameShorteningScopes(text, ctx)
+    return scopes[1], explicit, allRequested
 end
 
 local function NameShorteningSetting(scope, suffix)
@@ -3269,76 +3355,378 @@ local function NameShorteningSideChoice(scope, sideValue, sideLabel, maxChars, r
 end
 
 local function IsNameShorteningContext(ctx)
-    if not ctx then return false end
-    local key = tostring(ctx.lastSetting or "")
-    if key:find("shortenName", 1, true) or key:find("shortenNames", 1, true) then return true end
-    if key:find("nameShorten", 1, true) or key:find("nameNoEllipsis", 1, true) then return true end
-    local bundle = ctx.lastChangeBundle
-    if type(bundle) == "table" then
-        for i = 1, #bundle do
-            local item = bundle[i]
-            key = tostring(item and item.key or "")
-            if key:find("shortenName", 1, true) or key:find("shortenNames", 1, true)
-                or key:find("nameShorten", 1, true) or key:find("nameNoEllipsis", 1, true) then
-                return true
-            end
-        end
-    end
-    return false
+    return NameShorteningContextScope(ctx) ~= nil
 end
 
-local function ParseNameShorteningDots(text, ctx)
-    if not ContainsAny(text, NAME_SHORTENING_DOT_TERMS) then return nil end
-    if ContainsAny(text, NAME_SHORTENING_NON_NAME_DOT_TERMS) and not HasNameShorteningIntent(text) then return nil end
-    if ContainsAny(text, FeaturesPhrases[393]) then return nil end
-    local explicitNameContext = HasNameShorteningIntent(text)
-        or ContainsAny(text, FeaturesPhrases[394])
-    if not explicitNameContext and not IsNameShorteningContext(ctx) then
-        local value = DetectBoolean(text)
-        if value == nil then return nil end
-    end
+local function NameShorteningDotsRawToken(raw)
+    raw = tostring(raw or "")
+    return raw:find("%.%.") ~= nil or raw:find("…", 1, true) ~= nil
+end
 
+local function NameShorteningRawAuraDoT(raw)
+    raw = tostring(raw or "")
+    return raw:find("%f[%a]DoT[sS]?%f[%A]") ~= nil
+end
+
+local function NameShorteningDotsPolarity(text)
+    if ContainsAny(text, {
+        "do not hide", "dont hide", "do not turn off", "dont turn off",
+        "do not remove", "dont remove", "not hide the dots", "not turn off the dots",
+        "do not show", "dont show", "do not turn on", "dont turn on",
+    }) then
+        return nil, true
+    end
+    local negativeSetting = ContainsAny(text, { "no ellipsis", "name no ellipsis" })
+    if negativeSetting then
+        if ContainsAny(text, { "turn off", "switch off", "disable", "set off", "to off", "to false", "= false" })
+            or text:match("%sfalse%s*$") or text:match("%soff%s*$") then
+            return false
+        end
+        if ContainsAny(text, { "turn on", "switch on", "enable", "set on", "to on", "to true", "= true" })
+            or text:match("%strue%s*$") or text:match("%son%s*$") then
+            return true
+        end
+        -- Naming the positive No Ellipsis option without a separate boolean
+        -- value means the user wants that option enabled.
+        return true
+    end
+    if ContainsAny(text, { "keep dots off", "keep the dots off", "leave dots off", "leave the dots off" }) then return true end
+    if ContainsAny(text, NAME_SHORTENING_DOT_HIDE_TERMS) or ContainsAny(text, FeaturesPhrases[395]) then return true end
+    if ContainsAny(text, NAME_SHORTENING_DOT_SHOW_TERMS) or ContainsAny(text, FeaturesPhrases[396]) then return false end
     local value = DetectBoolean(text)
-    local noEllipsis
-    if ContainsAny(text, FeaturesPhrases[395]) then
-        noEllipsis = true
-    elseif ContainsAny(text, FeaturesPhrases[396]) then
-        noEllipsis = false
-    elseif value ~= nil then
-        noEllipsis = not value
-    else
-        return {
-            kind = "answer",
-            status = "ambiguous",
-            text = "Do you want shortened names to show trailing dots? For hidden dots: 'turn off name dots'. For visible dots: 'turn on name dots'.",
-            summary = "Asks whether name-shortening ellipsis dots should be shown.",
-        }
-    end
+    if value ~= nil then return not value end
+    return nil
+end
 
-    local scope = NameShorteningScope(text)
-    local setting = NameShorteningSetting(scope, "shortenNameNoEllipsis")
-    if not setting then
+local function NameShorteningDotsChanges(scope, noEllipsis)
+    local changes = {}
+    local setting = AddNameShorteningChange(changes, scope, "shortenNameNoEllipsis", noEllipsis,
+        noEllipsis and "hidden" or "shown")
+    return setting, changes
+end
+
+local function NameShorteningDotsChangesForScopes(scopes, noEllipsis)
+    local changes, validScopes = {}, {}
+    for i = 1, #(scopes or {}) do
+        local scope = scopes[i]
+        local setting = AddNameShorteningChange(changes, scope, "shortenNameNoEllipsis", noEllipsis,
+            noEllipsis and "hidden" or "shown")
+        if setting then validScopes[#validScopes + 1] = scope end
+    end
+    return changes, validScopes
+end
+
+local function NameShorteningScopeListLabel(scopes)
+    local labels = {}
+    for i = 1, #(scopes or {}) do
+        labels[#labels + 1] = NAME_SHORTENING_SCOPE_LABELS[scopes[i]] or tostring(scopes[i])
+    end
+    if #labels == 0 then return "Shortened names" end
+    if #labels == 1 then return labels[1] end
+    if #labels == 2 then return labels[1] .. " and " .. labels[2] end
+    return table.concat(labels, ", ", 1, #labels - 1) .. ", and " .. labels[#labels]
+end
+
+local function NameShorteningCustomScopes()
+    local db = _G.MSUF_DB
+    local scopes = {}
+    if type(db) ~= "table" then return scopes end
+    for i = 1, #NAME_SHORTENING_SCOPE_ORDER do
+        local scope = NAME_SHORTENING_SCOPE_ORDER[i]
+        if scope ~= "shared" and scope ~= "player"
+            and type(db[scope]) == "table" and db[scope].fontOverride == true then
+            scopes[#scopes + 1] = scope
+        end
+    end
+    return scopes
+end
+
+local function NameShorteningAllDotsPlan(noEllipsis, navigation)
+    if navigation then
+        local setting = NameShorteningSetting("shared", "shortenNameNoEllipsis")
+        local action = setting and Registry and Registry:GetAction("open_setting_control") or nil
+        return action and {
+            kind = "action",
+            action = action,
+            args = { settingKey = setting.key, label = "Shared Shortened-Name Dots", page = "opt_fonts" },
+            label = "Open shortened-name dots",
+            summary = "Opens the Fonts control where Shared and custom name-shortening scopes are managed.",
+        } or nil
+    end
+    if noEllipsis == nil then return nil end
+    local sharedScopes = { "shared" }
+    local customScopes = NameShorteningCustomScopes()
+    if #customScopes == 0 then
+        local changes = NameShorteningDotsChangesForScopes(sharedScopes, noEllipsis)
         return {
-            kind = "unknown",
-            status = "failed",
-            text = "Name-shortening dots work for Shared, Target, Focus, Pet, Boss, Party, or Raid.",
+            kind = "changes",
+            changes = changes,
+            label = "All Shortened-Name Dots",
+            summary = "Changes Shared because every current scope follows it.",
+            successText = noEllipsis
+                and "Done. Shortened names no longer show trailing dots on any current scope."
+                or "Done. Shortened names show trailing dots on every current scope.",
         }
     end
+    local everyScope = { "shared" }
+    for i = 1, #customScopes do everyScope[#everyScope + 1] = customScopes[i] end
+    local sharedChanges = NameShorteningDotsChangesForScopes(sharedScopes, noEllipsis)
+    local everyChanges = NameShorteningDotsChangesForScopes(everyScope, noEllipsis)
     return {
-        kind = "changes",
-        changes = { { setting = setting, value = noEllipsis, valueLabel = noEllipsis and "hidden" or "shown" } },
-        label = setting.label or "Name No Ellipsis",
-        summary = "Changes whether shortened names show trailing dots.",
+        kind = "ambiguous",
+        choices = {
+            {
+                changes = sharedChanges,
+                label = (noEllipsis and "Hide" or "Show") .. " dots for Shared and scopes following it",
+                summary = "Leaves current custom scope overrides unchanged.",
+            },
+            {
+                changes = everyChanges,
+                label = (noEllipsis and "Hide" or "Show") .. " dots on every current scope",
+                summary = "Updates Shared plus every scope that currently has a custom font override.",
+            },
+        },
+        label = "Does all include custom font overrides?",
+        summary = "Clarifies whether current custom scopes should change too.",
     }
 end
 
-local function ParseNameShorteningShortcut(text, ctx)
-    local dots = ParseNameShorteningDots(text, ctx)
+local function NameShorteningDotsScopeChoices(noEllipsis, navigation)
+    local choices = {}
+    local action = (navigation or noEllipsis == nil) and Registry and Registry:GetAction("open_setting_control") or nil
+    for i = 1, #NAME_SHORTENING_SCOPE_ORDER do
+        local scope = NAME_SHORTENING_SCOPE_ORDER[i]
+        local setting = NameShorteningSetting(scope, "shortenNameNoEllipsis")
+        local scopeLabel = NAME_SHORTENING_SCOPE_LABELS[scope] or tostring(scope)
+        if setting then
+            if action then
+                choices[#choices + 1] = {
+                    action = action,
+                    args = { settingKey = setting.key, label = scopeLabel .. " Shortened-Name Dots", page = "opt_fonts" },
+                    label = "Open " .. scopeLabel .. " shortened-name dots",
+                    summary = "Opens the exact Fonts control without changing it.",
+                }
+            elseif noEllipsis ~= nil then
+                local _, changes = NameShorteningDotsChanges(scope, noEllipsis)
+                choices[#choices + 1] = {
+                    changes = changes,
+                    label = (noEllipsis and "Hide " or "Show ") .. scopeLabel .. " shortened-name dots",
+                    summary = "Changes only the ellipsis on shortened " .. scopeLabel .. " names.",
+                }
+            end
+        end
+    end
+    return choices
+end
+
+local function NameShorteningDotsDomainChoices(scope, noEllipsis, auraFirst, statusFirst)
+    local choices = {}
+    local openPage = Registry and Registry:GetAction("open_page")
+    local scopeLabel = NAME_SHORTENING_SCOPE_LABELS[scope] or "that frame"
+    local function AddPage(page, label, query)
+        if openPage then
+            choices[#choices + 1] = {
+                action = openPage,
+                args = { page = page, label = label, query = query },
+                label = label,
+                summary = "Opens the likely MSUF page without changing a setting.",
+            }
+        end
+    end
+    local function AddNameDots()
+        local setting = scope and NameShorteningSetting(scope, "shortenNameNoEllipsis") or nil
+        if setting and noEllipsis ~= nil then
+            local _, changes = NameShorteningDotsChanges(scope, noEllipsis)
+            choices[#choices + 1] = {
+                changes = changes,
+                label = (noEllipsis and "Hide " or "Show ") .. scopeLabel .. " shortened-name dots",
+                summary = "Changes only the ellipsis on shortened names.",
+            }
+        elseif setting and Registry then
+            local openSetting = Registry:GetAction("open_setting_control")
+            if openSetting then
+                choices[#choices + 1] = {
+                    action = openSetting,
+                    args = { settingKey = setting.key, label = scopeLabel .. " Shortened-Name Dots", page = "opt_fonts" },
+                    label = "Shortened-name ellipsis on " .. scopeLabel,
+                    summary = "Opens the exact Fonts control without changing it.",
+                }
+            end
+        else
+            AddPage("opt_fonts", "Shortened-name ellipsis", "name shortening no ellipsis")
+        end
+    end
+    local auraPage = scope and scope:find("^gf_") and "gf_auras" or "auras3"
+    local indicatorPage = scope and scope:find("^gf_") and "gf_indicators"
+        or (scope and scope ~= "shared" and ("uf_" .. tostring(scope)) or "uf_player")
+    if auraFirst then AddPage(auraPage, "DoTs / debuff auras", "debuff aura filters") end
+    if statusFirst then AddPage(indicatorPage, "Status or corner indicators", "status corner indicators") end
+    AddNameDots()
+    if not statusFirst then
+        AddPage(indicatorPage, "Status or corner indicators", "status corner indicators")
+    end
+    AddPage("classpower", "Class-resource dots", "class resource display")
+    if not auraFirst then AddPage(auraPage, "DoTs / debuff auras", "debuff aura filters") end
+    return {
+        kind = "ambiguous",
+        choices = choices,
+        label = "Which dots?",
+        summary = "Asks which visual dots the user means before changing MSUF.",
+    }
+end
+
+local function ParseNameShorteningDots(text, ctx, raw)
+    -- AutoCoverage exposes the underlying saved-variable field as an exact
+    -- compatibility setting (for example "Target Shorten Name Show Dots").
+    -- Keep exact generated-label commands owned by the registry; the semantic
+    -- No Ellipsis intent below is for natural wording such as "turn off the
+    -- dots on shortened party names". Both controls reach the same visible
+    -- behavior, but exact-label callers must retain exact-key parity.
+    if ContainsAny(text, { "shorten name show dots", "shorten names show dots" }) then return nil end
+    local explicitNameContext = HasNameShorteningIntent(text)
+        or ContainsAny(text, FeaturesPhrases[394])
+    local hasDotNoun = ContainsAny(text, NAME_SHORTENING_DOT_TERMS)
+    local rawDots = NameShorteningDotsRawToken(raw)
+    -- Two periods attached to an ordinary sentence can just be punctuation.
+    -- Treat raw '..'/'...' as the setting noun only when the user also names
+    -- shortened/unit names; explicit words such as dots/ellipsis remain enough.
+    if not hasDotNoun and not (rawDots and explicitNameContext) then return nil end
+    if ContainsAny(text, FeaturesPhrases[393]) then return nil end
+    local auraDoT = NameShorteningRawAuraDoT(raw)
+    local scopes, allRequested = NameShorteningScopes(text, ctx)
+    local scope = scopes[1]
+    local noEllipsis, negatedAction = NameShorteningDotsPolarity(text)
+    if noEllipsis == nil and rawDots and explicitNameContext then
+        if ContainsAny(text, { "without", "without the", "remove", "take away", "get rid of" }) then
+            noEllipsis = true
+        elseif ContainsAny(text, { "with", "with the", "show", "restore", "put back" }) then
+            noEllipsis = false
+        end
+    end
+    local nonNameDots = ContainsAny(text, NAME_SHORTENING_NON_NAME_DOT_TERMS)
+    if nonNameDots and not auraDoT then
+        if ContainsAny(text, { "status dot", "status dots", "status indicator", "status indicators" }) then
+            return NameShorteningDotsDomainChoices(scope, noEllipsis, false, true)
+        end
+        if ContainsAny(text, { "damage over time", "damage-over-time", "aura", "auras", "buff", "buffs", "debuff", "debuffs" }) then
+            return NameShorteningDotsDomainChoices(scope, noEllipsis, true)
+        end
+        return nil
+    end
+    local contextual = IsNameShorteningContext(ctx)
+
+    if auraDoT and not explicitNameContext then
+        return NameShorteningDotsDomainChoices(scope, noEllipsis, true)
+    end
+    if allRequested then
+        local strongAllEvidence = explicitNameContext or contextual
+            or ContainsAny(text, { "ellipsis", "ellipses", "trailing dots", "trailing dot", "three dots", "two dots" })
+        if not strongAllEvidence then
+            local sharedEnabled = NameShorteningSetting("shared", "shortenNames")
+            local ok, current = false, nil
+            if sharedEnabled and type(sharedEnabled.get) == "function" then ok, current = pcall(sharedEnabled.get) end
+            if ok and type(current) ~= "boolean" then current = nil end
+            if current ~= true then return NameShorteningDotsDomainChoices(nil, noEllipsis, false) end
+        end
+        local allPlan = NameShorteningAllDotsPlan(noEllipsis, ContainsAny(text, NAME_SHORTENING_LOCATION_TERMS))
+        if allPlan then return allPlan end
+        return NameShorteningDotsDomainChoices(nil, noEllipsis, false)
+    end
+    if #scopes == 0 then
+        if explicitNameContext or contextual then
+            return {
+                kind = "ambiguous",
+                choices = NameShorteningDotsScopeChoices(noEllipsis, ContainsAny(text, NAME_SHORTENING_LOCATION_TERMS)),
+                label = "Which shortened names?",
+                summary = "Asks which name-shortening scope should change instead of assuming Shared.",
+            }
+        end
+        return NameShorteningDotsDomainChoices(nil, noEllipsis, false)
+    end
+
+    local hasPlayer
+    for i = 1, #scopes do if scopes[i] == "player" then hasPlayer = true break end end
+    if hasPlayer then
+        return {
+            kind = "ambiguous",
+            choices = NameShorteningDotsScopeChoices(noEllipsis, ContainsAny(text, NAME_SHORTENING_LOCATION_TERMS)),
+            label = "Player uses Shared name-shortening options; choose a supported scope",
+            summary = "Player has no independent name-shortening control.",
+        }
+    end
+
+    local settings = {}
+    for i = 1, #scopes do
+        local setting = NameShorteningSetting(scopes[i], "shortenNameNoEllipsis")
+        if not setting then return NameShorteningDotsDomainChoices(scopes[i], noEllipsis, false) end
+        settings[#settings + 1] = setting
+    end
+
+    local strongNameEvidence = explicitNameContext or contextual
+        or ContainsAny(text, { "ellipsis", "ellipses", "trailing dots", "trailing dot", "three dots", "two dots" })
+        or (rawDots and explicitNameContext)
+    if not strongNameEvidence then
+        for i = 1, #scopes do
+            local enabled = NameShorteningSetting(scopes[i], "shortenNames")
+            local ok, current = false, nil
+            if enabled and type(enabled.get) == "function" then ok, current = pcall(enabled.get) end
+            if not ok or current ~= true then return NameShorteningDotsDomainChoices(scopes[i], noEllipsis, false) end
+        end
+    end
+
+    if ContainsAny(text, NAME_SHORTENING_LOCATION_TERMS) then
+        local action = Registry and Registry:GetAction("open_setting_control")
+        if action and #settings == 1 then
+            return {
+                kind = "action",
+                action = action,
+                args = { settingKey = settings[1].key, label = (NAME_SHORTENING_SCOPE_LABELS[scope] or "Name") .. " Shortened-Name Dots", page = "opt_fonts" },
+                label = "Open shortened-name dots",
+                summary = "Opens Appearance > Fonts > Name Shortening > No Ellipsis without changing it.",
+            }
+        end
+        return {
+            kind = "ambiguous",
+            choices = NameShorteningDotsScopeChoices(nil, true),
+            label = "Which shortened-name dots control should I open?",
+            summary = "Offers exact Fonts controls without changing them.",
+        }
+    end
+
+    if noEllipsis == nil or negatedAction then
+        local hideChanges = NameShorteningDotsChangesForScopes(scopes, true)
+        local showChanges = NameShorteningDotsChangesForScopes(scopes, false)
+        return {
+            kind = "ambiguous",
+            choices = {
+                { changes = hideChanges, label = "Hide the shortened-name dots" },
+                { changes = showChanges, label = "Show the shortened-name dots" },
+            },
+            label = "Hide or show the shortened-name dots?",
+            summary = "Asks whether name-shortening ellipsis dots should be shown.",
+        }
+    end
+    local changes, validScopes = NameShorteningDotsChangesForScopes(scopes, noEllipsis)
+    local scopeLabel = NameShorteningScopeListLabel(validScopes)
+    return {
+        kind = "changes",
+        changes = changes,
+        bulkSafe = #changes > 1,
+        label = scopeLabel .. " Shortened-Name Dots",
+        summary = "Changes only whether shortened names show trailing dots while preserving the shortening setup.",
+        successText = noEllipsis
+            and ("Done. " .. scopeLabel .. " shortened names no longer show trailing dots. The name, shortening length, and kept side stay unchanged.")
+            or ("Done. " .. scopeLabel .. " shortened names show trailing dots again. The shortening length and kept side stay unchanged."),
+    }
+end
+
+local function ParseNameShorteningShortcut(text, ctx, raw)
+    local dots = ParseNameShorteningDots(text, ctx, raw)
     if dots then return dots end
     if ContainsAny(text, FeaturesPhrases[397]) then return nil end
     if not HasNameShorteningIntent(text) then return nil end
 
-    local scope = NameShorteningScope(text)
+    local scope = NameShorteningScope(text, ctx) or "shared"
     local enabledSetting = NameShorteningSetting(scope, "shortenNames")
     local maxSetting = NameShorteningSetting(scope, "shortenNameMaxChars")
     local sideSetting = NameShorteningSetting(scope, "shortenNameClipSide")
@@ -3708,6 +4096,7 @@ P.ParseGameplayRootToggle = ParseGameplayRootToggle
 P.ParseGameplayAction = ParseGameplayAction
 P.ParseGlobalBarsAction = ParseGlobalBarsAction
 P.ParseDarkModeBrightnessShortcut = ParseDarkModeBrightnessShortcut
+P.ParseNameShorteningDotsShortcut = ParseNameShorteningDots
 P.ParseNameShorteningShortcut = ParseNameShorteningShortcut
 P.ParseCastbarPreviewAction = ParseCastbarPreviewAction
 P.CASTBAR_GLOBAL_BOOLEAN_DETAILS = CASTBAR_GLOBAL_BOOLEAN_DETAILS

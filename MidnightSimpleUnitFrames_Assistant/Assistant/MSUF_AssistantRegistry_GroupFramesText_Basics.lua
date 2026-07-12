@@ -123,6 +123,7 @@ function A.GroupFramesRegistry.RegisterTextBasics(ctx, scope, defaults)
     AddAliasesForUnit(aliases, scope, "name max chars", "name max zeichen")
     AddAliasesForUnit(aliases, scope, "name length", "name laenge")
     RegisterGroupNumber(scope, "nameMaxChars", "nameMaxChars", "Name Max Characters", 0, 0, 30, 1, "font", aliases, {
+        page = "opt_fonts",
         get = GroupNameShorteningMax,
         set = function(groupScope, value)
             SetGroupFontOverrideValue(groupScope, "nameMaxChars", ClampNumber(value, 0, 30, 1))
@@ -134,6 +135,7 @@ function A.GroupFramesRegistry.RegisterTextBasics(ctx, scope, defaults)
     AddAliasesForUnit(aliases, scope, "shorten names")
     AddAliasesForUnit(aliases, scope, "name shortening")
     RegisterGroupBoolean(scope, "nameShortening", "nameShortenEnabled", "Name Shortening", false, "font", aliases, {
+        page = "opt_fonts",
         get = GroupNameShorteningEnabled,
         set = function(groupScope, value)
             SetGroupFontOverrideValue(groupScope, "nameShortenEnabled", value and true or false)
@@ -152,6 +154,7 @@ function A.GroupFramesRegistry.RegisterTextBasics(ctx, scope, defaults)
         startletters = "RIGHT",
         ["keep start"] = "RIGHT",
     }, "font", aliases, {
+        page = "opt_fonts",
         get = GroupNameShorteningSide,
         set = function(groupScope, value)
             SetGroupFontOverrideValue(groupScope, "nameClipSide", value == "LEFT" and "LEFT" or "RIGHT")
@@ -162,11 +165,18 @@ function A.GroupFramesRegistry.RegisterTextBasics(ctx, scope, defaults)
     AddAliasesForUnit(aliases, scope, "no ellipsis")
     AddAliasesForUnit(aliases, scope, "name no ellipsis")
     AddAliasesForUnit(aliases, scope, "truncate without dots")
+    AddAliasesForUnit(aliases, scope, "shortened name dots")
+    AddAliasesForUnit(aliases, scope, "name shortening dots")
+    AddAliasesForUnit(aliases, scope, "name dots")
+    AddAliasesForUnit(aliases, scope, "name ellipsis")
+    AddAliasesForUnit(aliases, scope, "trailing dots on shortened names")
     RegisterGroupBoolean(scope, "nameNoEllipsis", "nameNoEllipsis", "Name No Ellipsis", false, "font", aliases, {
+        page = "opt_fonts",
         get = GroupNameShorteningNoEllipsis,
         set = function(groupScope, value)
             SetGroupFontOverrideValue(groupScope, "nameNoEllipsis", value and true or false)
         end,
+        description = "Controls only the trailing ellipsis on shortened group names. The name visibility and shortening length are separate controls.",
     })
 
     aliases = {}

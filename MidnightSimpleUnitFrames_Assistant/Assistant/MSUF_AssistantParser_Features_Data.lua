@@ -671,9 +671,6 @@ Data.FEATURES_PARSER = {
         "diagnostics", "diagnose", "diagnosen", "diagnose starten", "diagnosebericht", "debug summary", "debug report", "debug info", "debug bericht", "status bericht",
         "diagnostik", "fehlerbericht", "statusbericht", "diagnostik bericht",
         "assistant debug report", "version info", "locale info",
-        "assistant performance", "assistant timing", "assistant slow",
-        "is the assistant slow", "performance report", "perf report", "lag report",
-        "assistant leistung", "assistant langsam", "performance bericht", "lag bericht",
     },
         [318] = {
         "assistant help", "command help", "commands help", "help commands",
@@ -843,7 +840,11 @@ Data.FEATURES_PARSER = {
         [393] = { "castbar", "spell name", "spell names" },
         [394] = { "name", "names", "unit name", "unit names", "truncate", "truncation" },
         [395] = { "no dots", "without dots", "hide dots", "no ellipsis", "without ellipsis", "hide ellipsis" },
-        [396] = { "show dots", "with dots", "dots on", "show ellipsis", "with ellipsis", "ellipsis on" },
+        -- Do not use "dots on" / "ellipsis on" here. In natural requests,
+        -- "on" is commonly a location preposition ("dots on party frame"),
+        -- not an enabled-state value. The owning parser resolves command
+        -- polarity before scope wording.
+        [396] = { "show dots", "with dots", "show ellipsis", "with ellipsis" },
         [397] = { "castbar", "spell name", "spell names" },
         [398] = { "test", "preview", "show preview", "vorschau", "zeige vorschau", "preview anzeigen" },
         [399] = { "castbar", "cast bar", "zauberleiste", "zauberleisten" },

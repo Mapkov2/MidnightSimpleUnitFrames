@@ -2344,6 +2344,7 @@ P.TEXT_VISIBILITY_VALUE_TERMS = {
     "offset", "position", "pos", "x offset", "y offset", "move", "nudge", "shift",
     "layer", "size", "font", "font size", "decimal", "decimals", "color", "colour",
     "shorten", "shortened", "shortening", "short names", "shorten names", "shorten group names",
+    "dot", "dots", "ellipsis", "ellipses", "trailing dots", "three dots", "two dots",
     "raid group name", "raid group in name", "group name",
     "realtime", "real time", "real-time",
     "by health", "by power", "by resource", "by mana",

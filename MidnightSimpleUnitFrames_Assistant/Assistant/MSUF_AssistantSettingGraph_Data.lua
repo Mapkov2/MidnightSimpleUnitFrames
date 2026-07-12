@@ -15,7 +15,7 @@ MSUF.Assistant = A
 M.Assistant = A
 
 local D = {
-    schemaVersion = 1,
+    schemaVersion = 2,
 
     -- Relation direction is always dependent -> prerequisite/source.
     relationKinds = {
@@ -26,6 +26,10 @@ local D = {
         inheritance = true,
         override = true,
         conflict = true,
+        -- A navigation-only relationship derived from two registered controls
+        -- living in the same MSUF menu section/scope.  Association never
+        -- participates in runtime prerequisite evaluation.
+        association = true,
     },
 
     unitScopes = { "player", "target", "focus", "pet", "targettarget", "focustarget", "boss" },
@@ -504,6 +508,30 @@ D.scopedInheritanceRules = {
         requireUniqueSource = true,
         overrideSuffix = "override",
         evidence = "MSUF_AssistantRegistry_GlobalBarSettings_Scoped.lua and Registry_Core_GlobalScope_Accessors.lua:GlobalScopeRead",
+    },
+}
+
+-- Group name shortening uses native gf_* keys rather than fontScope.* keys,
+-- but follows the same Shared Fonts source until the group font override is
+-- enabled. Keep this cross-prefix relationship explicit so explanations and
+-- impact analysis know that No Ellipsis, length, side, and enablement move as
+-- one inherited setup.
+D.crossPrefixInheritanceRules = {
+    {
+        id = "group-name-font-inheritance",
+        targets = {
+            { prefix = "gf_party", gate = "fontScope.gf_party.override" },
+        },
+        fields = {
+            { target = "nameShortenEnabled", source = "shortenNames" },
+            { target = "nameMaxChars", source = "shortenNameMaxChars" },
+            { target = "nameClipSide", source = "shortenNameClipSide" },
+            { target = "nameNoEllipsis", source = "shortenNameNoEllipsis" },
+        },
+        sourcePrefix = "fontScope.shared",
+        reason = "This group name-shortening value follows Shared Fonts while the group font override is off.",
+        overrideReason = "The group font override makes this name-shortening value independent from Shared Fonts.",
+        evidence = "MSUF_GroupFrames_DB.lua:GF.ResolveNameTruncation and MSUF_Menu2_GlobalFonts.lua:SeedGFNameShorteningFromShared. Raid/Mythic are intentionally omitted here because the Fonts UI gate is aggregate while runtime evaluates their native flags independently.",
     },
 }
 

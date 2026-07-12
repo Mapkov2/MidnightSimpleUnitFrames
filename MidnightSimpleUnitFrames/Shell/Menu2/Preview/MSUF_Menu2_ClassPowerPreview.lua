@@ -1915,11 +1915,8 @@ local function AnimationOnUpdate(driver, elapsed)
     if preview._animationAccum < CP_PREVIEW_ANIMATION_INTERVAL then return end
     preview._animationAccum = 0
     if preview.Refresh then
-        local profiling = M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStart and M.ProfileStop
-        local started = profiling and M.ProfileStart() or nil
         local light = preview.RefreshAnimation and preview:RefreshAnimation("CLASSPOWER_PREVIEW_ANIMATE")
         if not light then preview:Refresh("CLASSPOWER_PREVIEW_ANIMATE") end
-        if profiling then M.ProfileStop("preview", light and "ClassPowerPreview.AnimationLight" or "ClassPowerPreview.AnimationFallback", started) end
     end
 end
 local function StartAnimationDriver(preview)
@@ -2131,8 +2128,6 @@ function Preview.Create(ctx, builder)
     box.handleHP = MakeHandle(box, "playerHP", "bars", "playerHPBarOffsetX", "playerHPBarOffsetY", 0, 0, "Second player HP bar", { 0.25, 0.90, 0.42 }, "hp", "hp")
     box.handleHPText = MakeHandle(box, "playerHPText", "bars", "playerHPBarTextOffsetX", "playerHPBarTextOffsetY", 0, 0, "Second player HP text", { 0.25, 0.90, 0.42 }, "hpText", "hpText")
     function section:Refresh()
-        local profiling = M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStart and M.ProfileStop
-        local profileStarted = profiling and M.ProfileStart() or nil
         local bars = Bars()
         local player = Player()
         local spec = M.GetClassPowerPreviewSpec and M.GetClassPowerPreviewSpec() or nil
@@ -2176,7 +2171,6 @@ function Preview.Create(ctx, builder)
         RefreshHandleVisuals(box)
         RefreshAnimateButton(box)
         if box._animationEnabled == true then StartAnimationDriver(box) end
-        if profiling then M.ProfileStop("preview", "ClassPowerPreview.Refresh", profileStarted) end
     end
     function box:Refresh()
         section:Refresh()

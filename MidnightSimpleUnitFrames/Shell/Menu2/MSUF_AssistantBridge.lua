@@ -15,6 +15,54 @@ local function MenuShown()
     local frame = M.frame
     return frame and type(frame.IsShown) == "function" and frame:IsShown() == true
 end
+local function CancelBridgeNextFrames(owner)
+    if type(owner) ~= "table" then return end
+    owner._msufAssistantBridgeTimerSerial = (tonumber(owner._msufAssistantBridgeTimerSerial) or 0) + 1
+    for _, timer in pairs(owner._msufAssistantBridgeTimers or {}) do
+        if timer and type(timer.Cancel) == "function" then pcall(timer.Cancel, timer) end
+    end
+    owner._msufAssistantBridgeTimers = nil
+end
+local function ScheduleBridgeNextFrame(owner, key, callback, onError)
+    if type(owner) ~= "table" or type(callback) ~= "function" or InCombat() or not MenuShown() then return false end
+    key = tostring(key or "assistant.bridge")
+    owner._msufAssistantBridgeTimerSerial = (tonumber(owner._msufAssistantBridgeTimerSerial) or 0) + 1
+    local serial = owner._msufAssistantBridgeTimerSerial
+    local function Run()
+        local timers = owner._msufAssistantBridgeTimers
+        if type(timers) == "table" then timers[key] = nil end
+        if owner._msufAssistantBridgeTimerSerial ~= serial or InCombat() or not MenuShown() then return end
+        local ok, failure = pcall(callback)
+        if not ok and type(onError) == "function" then pcall(onError, failure) end
+    end
+    if _G.C_Timer and type(_G.C_Timer.NewTimer) == "function" then
+        owner._msufAssistantBridgeTimers = owner._msufAssistantBridgeTimers or {}
+        local previous = owner._msufAssistantBridgeTimers[key]
+        if previous and type(previous.Cancel) == "function" then pcall(previous.Cancel, previous) end
+        local ran = false
+        local function ProtectedRun()
+            ran = true
+            Run()
+        end
+        local scheduled, timer = pcall(_G.C_Timer.NewTimer, 0, ProtectedRun)
+        -- Blizzard's NewTimer contract returns a cancellable timer. The
+        -- `ran` allowance keeps deterministic synchronous harnesses valid;
+        -- an unexpected nil result must fall through instead of stranding a
+        -- disabled loading card forever.
+        local cancellable = timer and type(timer.Cancel) == "function"
+        if scheduled and (cancellable or ran) then
+            if cancellable and not ran then owner._msufAssistantBridgeTimers[key] = timer end
+            return true
+        end
+    end
+    if _G.C_Timer and type(_G.C_Timer.After) == "function" then
+        local scheduled = pcall(_G.C_Timer.After, 0, Run)
+        if scheduled then return true end
+    end
+    -- The caller owns the synchronous fallback so it can perform the same
+    -- rollback if loading itself fails.
+    return false
+end
 local function Trim(text)
     return tostring(text or ""):gsub("^%s+", ""):gsub("%s+$", "")
 end
@@ -72,7 +120,10 @@ local function LoadFailureText(reason)
     if reason == "combat" then return "The Assistant cannot be loaded during combat." end
     if reason == "menu_closed" then return "The Assistant page is no longer open." end
     if reason == "loader_unavailable" then return "The Assistant loader is not available." end
-    if reason == "runtime_incomplete" then return "The Assistant loaded, but its runtime is incomplete." end
+    if reason == "loader_error" then return "The Assistant loader hit an error. Please try again; the menu is still usable." end
+    if reason == "runtime_incomplete" then
+        return "The Assistant started loading but could not finish. Reload the UI and try again; your MSUF settings are safe."
+    end
     return "The Assistant could not be loaded (" .. tostring(reason or "load failed") .. ")."
 end
 local function InvalidateAssistantSearchIndex()
@@ -101,14 +152,52 @@ function A.EnsureRuntimeLoaded(reason)
     end
     local addons = _G.C_AddOns
     if not (addons and type(addons.LoadAddOn) == "function") then return false, "loader_unavailable" end
-    local loaded, loadReason = addons.LoadAddOn(RUNTIME_ADDON)
+    local called, loaded, loadReason = pcall(addons.LoadAddOn, RUNTIME_ADDON)
+    if not called then
+        A._lastRuntimeLoadError = tostring(loaded or "loader error")
+        return false, "loader_error"
+    end
     local runtimeLoaded = A.IsRuntimeLoaded()
-    if loaded ~= true and not runtimeLoaded then return false, tostring(loadReason or "load_failed") end
+    local addonLoaded = loaded == true
+    if type(addons.IsAddOnLoaded) == "function" then
+        -- Current Blizzard API returns both loadedOrLoading and loaded. Either
+        -- flag means a missing runtime contract is a partial/incomplete load,
+        -- not a reason to trust LoadAddOn's status alone.
+        local checked, loadedOrLoading, fullyLoaded = pcall(addons.IsAddOnLoaded, RUNTIME_ADDON)
+        if checked and (loadedOrLoading == true or fullyLoaded == true) then addonLoaded = true end
+    end
+    if not runtimeLoaded then
+        if addonLoaded then return false, "runtime_incomplete" end
+        return false, tostring(loadReason or "load_failed")
+    end
     -- Loading the companion can register hundreds of controls after the menu's
     -- search index was built. Invalidate only on this fresh-load path.
     InvalidateAssistantSearchIndex()
     if type(A.SetMenuRuntimeActive) == "function" then A.SetMenuRuntimeActive(true, reason or "assistant-use") end
-    return runtimeLoaded, runtimeLoaded and nil or "runtime_incomplete"
+    return true
+end
+local function RecoverFirstRequest(query, failure, phase)
+    A._lastFirstRequestError = tostring(failure or "runtime error")
+    if type(A.RecoverAssistantFailure) == "function" then
+        local ok, recovered = pcall(A.RecoverAssistantFailure, failure, {
+            text = query,
+            phase = phase or "first-message",
+        })
+        if ok and recovered ~= nil then return recovered end
+    end
+
+    local text = "Sorry, I could not complete that request, but the Assistant is loaded and ready. "
+        .. "Try asking me to show the closest settings or where that option is."
+    if type(A.AddHistory) == "function" then
+        pcall(A.AddHistory, "user", query, "submitted")
+        pcall(A.AddHistory, "assistant", text, "failed")
+    end
+    if type(A.RequestRefreshUI) == "function" then
+        pcall(A.RequestRefreshUI, "assistant.first-message-error")
+    elseif type(A.RefreshUI) == "function" then
+        pcall(A.RefreshUI)
+    end
+    return { status = "failed", result = "failed", text = text }
 end
 function A.SubmitExplicitQuery(text, reason)
     text = Trim(text)
@@ -121,7 +210,9 @@ function A.SubmitExplicitQuery(text, reason)
     -- dashboard preserves the same natural conversation order after handoff.
     if type(A.AddLoginGreeting) == "function" then pcall(A.AddLoginGreeting) end
     local submit = type(A.SubmitDeferred) == "function" and A.SubmitDeferred or A.Submit
-    return true, submit(text)
+    local ok, result = pcall(submit, text)
+    if not ok then result = RecoverFirstRequest(text, result, "explicit-query") end
+    return true, result
 end
 function A.StartNewTaskWithRuntime(reason)
     reason = reason or "new-task"
@@ -135,9 +226,9 @@ function A.StartNewTaskWithRuntime(reason)
         end
         return false, "runtime_incomplete"
     end
-    if A.IsRuntimeLoaded() then return FinishNewTask() end
     if InCombat() then return false, "combat" end
     if not MenuShown() then return false, "menu_closed" end
+    if A.IsRuntimeLoaded() then return FinishNewTask() end
 
     local card = A._bridgeDashboardCard
     if card and card.status then SetText(card.status, "Assistant is loading up...") end
@@ -157,10 +248,10 @@ function A.StartNewTaskWithRuntime(reason)
     end
     -- Let the cold Home card paint its acknowledgement before the synchronous
     -- LoadAddOn call. This also removes the toolbar/page-build ordering race.
-    if _G.C_Timer and type(_G.C_Timer.After) == "function" then
-        local scheduled = pcall(_G.C_Timer.After, 0, LoadAndStart)
-        if scheduled then return true, "queued" end
-    end
+    if ScheduleBridgeNextFrame(card or A, "assistant.bridge.new-task", LoadAndStart, function(failure)
+        A._lastRuntimeLoadError = tostring(failure or "runtime error")
+        if card and card.status and not card.cancelled then SetText(card.status, LoadFailureText("runtime error")) end
+    end) then return true, "queued" end
     return LoadAndStart()
 end
 local BridgeBuildDashboardCard
@@ -314,22 +405,22 @@ BridgeBuildDashboardCard = function(parent, cardW, cardH)
             return
         end
         local function SubmitLoadedFirstMessage()
+            if InCombat() or not MenuShown() or A._menuRuntimeActive == false then return end
             local submit = type(A.SubmitDeferred) == "function" and A.SubmitDeferred or A.Submit
             local ok, result = pcall(submit, query)
             if ok then return result end
-            if type(A.AddHistory) == "function" then
-                A.AddHistory("user", query, "submitted")
-                A.AddHistory("assistant", "The first request could not be completed: " .. tostring(result or "runtime error"), "failed")
-            end
-            if type(A.RequestRefreshUI) == "function" then A.RequestRefreshUI("assistant.first-message-error") end
+            return RecoverFirstRequest(query, result, "first-message")
         end
         -- Query parsing/indexing is a separate frame from both LoadAddOn and UI
         -- promotion. Even an unusually expensive first request cannot prevent
         -- the real Assistant dashboard from replacing the loading shell.
-        if _G.C_Timer and type(_G.C_Timer.After) == "function" then
-            local scheduled = pcall(_G.C_Timer.After, 0, SubmitLoadedFirstMessage)
-            if not scheduled then SubmitLoadedFirstMessage() end
-        else
+        if type(A.ScheduleMenuRuntimeNextFrame) == "function" then
+            local ok, queued = pcall(A.ScheduleMenuRuntimeNextFrame,
+                "assistant.bridge.first-message", SubmitLoadedFirstMessage)
+            if ok and queued == true then return end
+        end
+        if not ScheduleBridgeNextFrame(card, "assistant.bridge.loaded-first-message", SubmitLoadedFirstMessage,
+            function(failure) RecoverFirstRequest(query, failure, "first-message-schedule") end) then
             SubmitLoadedFirstMessage()
         end
     end
@@ -352,9 +443,8 @@ BridgeBuildDashboardCard = function(parent, cardW, cardH)
         -- Give WoW one frame to paint this acknowledgement before LoadAddOn
         -- performs the intentionally heavy one-time V1 runtime initialization.
         SetText(status, "Assistant is loading up...")
-        if _G.C_Timer and type(_G.C_Timer.After) == "function" then
-            _G.C_Timer.After(0, LoadAndSubmitFirstMessage)
-        else
+        if not ScheduleBridgeNextFrame(card, "assistant.bridge.load-first-message", LoadAndSubmitFirstMessage,
+            function() RestoreAfterFailure(query, "runtime error") end) then
             LoadAndSubmitFirstMessage()
         end
         return true
@@ -395,8 +485,25 @@ BridgeBuildDashboardCard = function(parent, cardW, cardH)
     end
     if type(parent.HookScript) == "function" then
         parent:HookScript("OnHide", function()
-            card.cancelled = true
-            if A._bridgeDashboardCard == card then A._bridgeDashboardCard = nil end
+            CancelBridgeNextFrames(card)
+            -- Menu pages can be hidden and reused. Cancelling an in-flight
+            -- cold load must therefore restore this same card instead of
+            -- leaving disabled controls that reappear on the next menu open.
+            -- A genuinely replaced/promoted card is already detached.
+            if A._bridgeDashboardCard ~= card then
+                card.cancelled = true
+                return
+            end
+            if card.loading then
+                local pending = card.pendingQuery
+                card.loading = false
+                card.pendingQuery = nil
+                SetEnabled(input, true)
+                SetEnabled(send, true)
+                if type(input.SetText) == "function" then input:SetText(pending or "") end
+                SetShown(placeholder, Trim(pending) == "")
+                SetText(status, "Loading was paused when the menu closed. Send the message again when you are ready.")
+            end
         end)
     end
     A._bridgeDashboardCard = card

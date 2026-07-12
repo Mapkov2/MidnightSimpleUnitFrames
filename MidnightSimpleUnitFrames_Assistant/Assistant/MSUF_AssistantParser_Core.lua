@@ -621,6 +621,11 @@ Normalize = function(text)
         text = text:gsub("[\"'`]", "")
         text = text:gsub("[,;:!?%(%)]", " ")
     end
+    -- Sentence-ending periods/ellipses are conversational punctuation, not
+    -- part of a setting alias. Raw input remains available to specialists
+    -- that intentionally interpret '..', '...', or the Unicode ellipsis.
+    text = text:gsub("%.+%s*$", "")
+    text = text:gsub("…%s*$", "")
     text = text:gsub("%s+", " ")
     text = Trim(text)
     if text ~= "" then

@@ -37,6 +37,9 @@ end
 local function GuidedSetupGuideKey(style)
     local text = SetupNormalize(style)
     if text == "" then return "main" end
+    if SetupHasAny(text, { "show me around", "everything in msuf", "all of msuf", "full tour", "complete tour", "msuf tour", "ganze msuf", "alles in msuf" }) then return "full_tour" end
+    if SetupHasAny(text, { "aura", "auras", "buff", "buffs", "debuff", "debuffs", "aura filters", "auren" }) then return "auras" end
+    if SetupHasAny(text, { "color", "colors", "colour", "colours", "color setup", "farben", "farb setup" }) then return "colors" end
     if SetupHasAny(text, { "group frames", "group frame", "party frames", "raid frames", "mythic raid frames", "gruppenframes", "gruppe setup", "raid setup", "party setup" }) then return "group_frames" end
     if SetupHasAny(text, { "castbar", "castbars", "cast bar", "cast bars", "zauberleiste", "kick bar", "focus kick" }) then return "castbars" end
     if SetupHasAny(text, { "profile", "profiles", "profil", "profile setup", "profile guide", "spec profile", "import profile", "export profile" }) then return "profiles" end

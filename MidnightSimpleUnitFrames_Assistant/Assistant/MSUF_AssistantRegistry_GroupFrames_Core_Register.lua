@@ -32,6 +32,7 @@ function A.GroupFramesRegistry.BuildRegisterCoreContext(ctx)
             category = UNIT_LABELS[scope] .. " / Group Frames",
             unit = scope,
             frameType = "group",
+            page = opts.page,
             attribute = attr,
             type = "boolean",
             aliases = aliases,
@@ -72,6 +73,7 @@ function A.GroupFramesRegistry.BuildRegisterCoreContext(ctx)
             category = UNIT_LABELS[scope] .. " / Group Frames",
             unit = scope,
             frameType = "group",
+            page = opts.page,
             attribute = attr,
             type = "number",
             aliases = aliases,
@@ -86,8 +88,22 @@ function A.GroupFramesRegistry.BuildRegisterCoreContext(ctx)
                 return value
             end,
             set = function(value)
-                if opts.set then opts.set(scope, value); return end
-                GroupDB(scope)[dbKey] = ClampNumber(value, minValue, maxValue, step or 1)
+                local db = GroupDB(scope)
+                if dbKey == "offsetX" or dbKey == "offsetY" then
+                    local gf = MSUF and MSUF.GF
+                    if gf and type(gf.EnsureStableGridPosition) == "function" then
+                        local count = type(gf.GetLiveLayoutCount) == "function" and gf.GetLiveLayoutCount(scope) or nil
+                        gf.EnsureStableGridPosition(scope, count, db)
+                    end
+                end
+                if opts.set then
+                    opts.set(scope, value)
+                else
+                    db[dbKey] = ClampNumber(value, minValue, maxValue, step or 1)
+                end
+                if dbKey == "offsetX" or dbKey == "offsetY" then
+                    db.positionMode = "GRID_BOUNDS_V2"
+                end
             end,
             apply = function() ApplyGroup(scope, opts.mode or mode or "visual") end,
             combatSafe = false,
@@ -105,6 +121,7 @@ function A.GroupFramesRegistry.BuildRegisterCoreContext(ctx)
             category = UNIT_LABELS[scope] .. " / Group Frames",
             unit = scope,
             frameType = "group",
+            page = opts.page,
             attribute = attr,
             type = "enum",
             aliases = aliases,
@@ -135,6 +152,7 @@ function A.GroupFramesRegistry.BuildRegisterCoreContext(ctx)
             category = UNIT_LABELS[scope] .. " / Group Frames",
             unit = scope,
             frameType = "group",
+            page = opts.page,
             attribute = attr,
             type = "string",
             aliases = aliases,

@@ -101,12 +101,17 @@ function A.Workflow.RegisterPendingFlowHandlers(ctx)
 
     local function OriginalDestination(text, kind)
         local cleaned = CleanPendingProfileDestination(text, kind)
+        local normalized = Normalize(text)
         local history = type(A.GetHistory) == "function" and A.GetHistory() or nil
         if type(history) ~= "table" then return cleaned end
         for i = #history, 1, -1 do
             local item = history[i]
             if type(item) == "table" and item.role == "user" then
                 local original = CleanPendingProfileDestination(item.text, kind)
+                -- RouteInput normalizes punctuation before a blocking flow reaches
+                -- this handler. Recover the just-recorded raw reply so quoted empty
+                -- names stay empty and user-facing capitalization is preserved.
+                if Normalize(item.text) == normalized then return original end
                 if original:lower() == cleaned:lower() then return original end
                 break
             end
@@ -143,7 +148,7 @@ function A.Workflow.RegisterPendingFlowHandlers(ctx)
             })
         end
         if flow.kind == "profileRenameDestination" then
-            local dest = CleanPendingProfileDestination(text, flow.kind)
+            local dest = OriginalDestination(text, flow.kind)
             if dest == "" then return { text = "What should the new profile be called? Examples: 'to Raid Renamed' or 'named Raid Renamed'. Say 'cancel' or 'never mind' to stop.", status = "confirmation_needed" } end
             A.ClearPendingFlow()
             local action = Registry:GetAction("rename_profile")

@@ -26,13 +26,6 @@ function A.GroupFramesRegistry.BuildTextNameContext(ctx)
         conf._msufGFNameTruncationOverride = nil
     end
 
-    local function SetGroupFontOverrideValue(scope, key, value)
-        local conf = GroupDB(scope)
-        conf.fontOverride = true
-        conf[key] = value
-        ClearGroupNameShorteningLegacyFlags(conf)
-    end
-
     local function SharedNameShorteningEnabled()
         local db = EnsureDB and EnsureDB() or _G.MSUF_DB
         return db and db.shortenNames == true
@@ -52,6 +45,27 @@ function A.GroupFramesRegistry.BuildTextNameContext(ctx)
     local function SharedNameShorteningNoEllipsis()
         local g = GeneralDB and GeneralDB() or (_G.MSUF_DB and _G.MSUF_DB.general)
         return not (g and g.shortenNameShowDots ~= false)
+    end
+
+    local function CopyGroupNameShorteningFromShared(conf)
+        if type(conf) ~= "table" then return end
+        -- A disabled override can retain stale local values. Copy the complete
+        -- *effective* Shared state on the transition instead of filling only
+        -- nil fields; changing one detail must not resurrect an older length,
+        -- side, or enabled state.
+        conf.nameShortenEnabled = SharedNameShorteningEnabled()
+        conf.nameClipSide = SharedNameShorteningSide()
+        conf.nameNoEllipsis = SharedNameShorteningNoEllipsis()
+        conf.nameMaxChars = SharedNameShorteningMax()
+        ClearGroupNameShorteningLegacyFlags(conf)
+    end
+
+    local function SetGroupFontOverrideValue(scope, key, value)
+        local conf = GroupDB(scope)
+        if conf.fontOverride ~= true then CopyGroupNameShorteningFromShared(conf) end
+        conf.fontOverride = true
+        conf[key] = value
+        ClearGroupNameShorteningLegacyFlags(conf)
     end
 
     local function GroupNameShorteningEnabled(scope)

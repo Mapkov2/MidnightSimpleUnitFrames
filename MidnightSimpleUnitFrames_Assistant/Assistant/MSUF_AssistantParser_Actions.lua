@@ -869,9 +869,13 @@ local function ParseGroupStatusIconDetail(text)
 
     local iconSpec = GroupStatusIconSpecForText(text)
     if not iconSpec then return nil end
-    if #explicitGroups == 0
+    -- "Raid marker" names the indicator, so DetectGroups deliberately removes
+    -- that phrase before looking for an explicit group scope.  When no unit or
+    -- group was named, use the Raid workspace instead of the generic Party
+    -- fallback; explicit scopes such as "party raid marker" still win.
+    if #explicitUnits == 0
+        and #explicitGroups == 0
         and iconSpec.key == "raidMarker"
-        and ContainsAny(text, ActionsPhrases[73])
         and HasPhrase(text, "raid marker")
     then
         scopes = { "raid" }

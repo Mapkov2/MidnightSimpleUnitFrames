@@ -19,6 +19,7 @@ end
 local floor, max, min = math.floor, math.max, math.min
 local format = string.format
 local PreviewAbbreviateNumbers = _G.AbbreviateNumbers or _G.AbbreviateLargeNumbers or _G.ShortenNumber
+local PreviewFullNumbers = _G.BreakUpLargeNumbers
 local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
 local FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local Preview = MSUF.UFPreview or {}
@@ -787,7 +788,11 @@ local function ResolveNameAnchor(anchor, x)
     if anchor == "CENTER" then return "TOP", "TOP", x, "CENTER" end
     return "TOPLEFT", "TOPLEFT", x, "LEFT"
 end
-local function NumText(v)
+local function NumText(v, shortNumbers)
+    if shortNumbers == false then
+        if PreviewFullNumbers then return PreviewFullNumbers(v) end
+        return tostring(v)
+    end
     if PreviewAbbreviateNumbers then return PreviewAbbreviateNumbers(v) end
     if v >= 1000000 then return format("%.1fm", v / 1000000) end
     if v >= 1000 then return format("%.1fk", v / 1000) end
@@ -798,18 +803,19 @@ local function JoinSep(sep)
     if sep == "" then return " " end
     return " " .. sep .. " "
 end
-local function FormatMode(mode, cur, maxVal, pct, sep, isPower, hidePercentSymbol)
+local function FormatMode(mode, cur, maxVal, pct, sep, isPower, hidePercentSymbol, shortNumbers)
     if isPower then mode = NormalizePowerMode(mode) else mode = NormalizeHpMode(mode) end
     if mode == "NONE" then return "" end
-    local c = NumText(cur)
-    local m = NumText(maxVal)
+    local c = NumText(cur, shortNumbers)
+    local m = NumText(maxVal, shortNumbers)
     local p = tostring(pct)
     if hidePercentSymbol ~= true then p = p .. "%" end
     local s = JoinSep(sep)
     if mode == "PERCENT" then return p end
     if mode == "CURRENT" then return c end
+    if mode == "FULLVALUE" then return c end
     if mode == "MAX" then return m end
-    if mode == "DEFICIT" then return "-" .. NumText(maxVal - cur) end
+    if mode == "DEFICIT" then return "-" .. NumText(maxVal - cur, shortNumbers) end
     if mode == "CURMAX" then return c .. s .. m end
     if mode == "MAXCUR" then return m .. s .. c end
     if mode == "CURPERCENT" then return c .. s .. p end

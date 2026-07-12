@@ -602,6 +602,8 @@ local function BuildSpec(scope, key, value, fromManifest)
     }
     if valueType == "boolean" then
         spec.type = "boolean"
+        spec.generatedMutationSafety = "boolean"
+        spec.assistantMutationSafe = true
         spec.get = function()
             local tbl = ScopeTable(scope)
             local v, exists = PathValue(tbl, key)
@@ -619,8 +621,13 @@ local function BuildSpec(scope, key, value, fromManifest)
         spec.type = "number"
         if value >= 0 and value <= 1 then
             spec.min, spec.max, spec.step, spec.percent = 0, 1, 0.05, true
+            spec.generatedMutationSafety = "bounded-number"
+            spec.assistantMutationSafe = true
         else
             spec.step = 1
+            spec.generatedMutationSafety = "unconstrained-number"
+            spec.assistantMutationSafe = false
+            spec.unsafeMutationReason = "This generated numeric setting has no reviewed minimum or maximum."
         end
         spec.get = function()
             local tbl = ScopeTable(scope)
@@ -642,6 +649,9 @@ local function BuildSpec(scope, key, value, fromManifest)
         end
     else
         spec.type = "string"
+        spec.generatedMutationSafety = "unconstrained-string"
+        spec.assistantMutationSafe = false
+        spec.unsafeMutationReason = "This generated string setting has no reviewed list of allowed values."
         spec.get = function()
             local tbl = ScopeTable(scope)
             local v, exists = PathValue(tbl, key)
@@ -744,7 +754,6 @@ end
 --- Returns the number of settings added (0 when everything is covered or
 --- prerequisites are missing). Safe to call repeatedly.
 function Auto.Fill()
-    local startedMs = _G.debugprofilestop and _G.debugprofilestop() or nil
     local Registry = A.Registry
     if not (Registry and type(Registry.RegisterSetting) == "function") then return 0 end
     local Audit = A.CoverageAudit
@@ -752,12 +761,15 @@ function Auto.Fill()
     local covered = Audit.BuildCoveredSets()
     local added = 0
     local nestedAdded = 0
+    local fillWork = 0
     local IsCoveredKey = Audit.IsCoveredKey or function(set, k) return set[k] end
     local NormalizeKey = Audit.NormalizeCoverageKey or function(k) return k end
     -- normKey -> generated spec, per scope: legacy mirror spellings of the
     -- same field collapse into one setting instead of colliding as aliases.
     local generatedByNorm = {}
     local function RegisterGenerated(scope, key, value, coveredSet, fromManifest)
+        fillWork = fillWork + 1
+        if fillWork % 64 == 0 and type(A.MaybeYield) == "function" then A.MaybeYield() end
         local valueType = type(value)
         if type(key) == "string"
             and IsSafePath(Audit, scope, key)
@@ -826,9 +838,6 @@ function Auto.Fill()
     Auto.lastFillCount = added
     Auto.lastNestedFillCount = nestedAdded
     Auto._fillComplete = true
-    if type(A.RecordSlowPerfSample) == "function" then
-        A.RecordSlowPerfSample("assistant.autocoverage.fill", startedMs, tostring(added), 25)
-    end
     return added
 end
 
