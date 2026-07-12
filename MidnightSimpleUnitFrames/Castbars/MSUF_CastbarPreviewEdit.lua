@@ -126,22 +126,6 @@ local function ApplyUnitAndSync(unit)
     end
 end
 
-local function PreviewEditProfileStart()
-    local menu = _G.MSUF2 or (MSUF and MSUF.MSUF2)
-    if menu and menu.PerfProfile and menu.PerfProfile.enabled == true and menu.ProfileStart then
-        return menu.ProfileStart()
-    end
-    return nil
-end
-
-local function PreviewEditProfileStop(key, started)
-    if not started then return end
-    local menu = _G.MSUF2 or (MSUF and MSUF.MSUF2)
-    if menu and menu.PerfProfile and menu.PerfProfile.enabled == true and menu.ProfileStop then
-        menu.ProfileStop("castbarPreviewEdit", key, started)
-    end
-end
-
 local function PositionPreviewOnly(unit)
     local position = _G.MSUF_PositionCastbarPreviewUnit
     if type(position) == "function" then
@@ -150,13 +134,11 @@ local function PositionPreviewOnly(unit)
     return false
 end
 
-local function ThrottledApplyUnitAndSync(frame, unit, elapsed, key)
+local function ThrottledApplyUnitAndSync(frame, unit, elapsed)
     frame._msufPreviewApplyAcc = (tonumber(frame._msufPreviewApplyAcc) or 0) + (tonumber(elapsed) or 0)
     if frame._msufPreviewApplyAcc < CASTBAR_PREVIEW_DRAG_APPLY_INTERVAL then return false end
     frame._msufPreviewApplyAcc = 0
-    local started = PreviewEditProfileStart()
     ApplyUnitAndSync(unit)
-    PreviewEditProfileStop(key or "ApplyUnitAndSync", started)
     return true
 end
 
@@ -347,10 +329,8 @@ local function SetupCastbarPreviewEditHandlers(frame, unit)
         end
 
         self:SetScript("OnUpdate", function(dragFrame, elapsed)
-            local tickStarted = PreviewEditProfileStart()
             if not dragFrame.isDragging then
                 dragFrame:SetScript("OnUpdate", nil)
-                PreviewEditProfileStop("DragTick", tickStarted)
                 return
             end
 
@@ -360,7 +340,6 @@ local function SetupCastbarPreviewEditHandlers(frame, unit)
             local deltaY = currentCursorY / scale - (dragFrame.dragStartCursorY or currentCursorY / scale)
 
             if not dragFrame.dragMoved and math.abs(deltaX) + math.abs(deltaY) < 6 then
-                PreviewEditProfileStop("DragTick", tickStarted)
                 return
             end
 
@@ -415,9 +394,8 @@ local function SetupCastbarPreviewEditHandlers(frame, unit)
                     end
                 end
             else
-                ThrottledApplyUnitAndSync(dragFrame, unit, elapsed, dragFrame.dragMode == "SIZE" and "SizeApply" or "MoveApplyFallback")
+                ThrottledApplyUnitAndSync(dragFrame, unit, elapsed)
             end
-            PreviewEditProfileStop("DragTick", tickStarted)
         end)
     end)
 
@@ -441,9 +419,7 @@ local function SetupCastbarPreviewEditHandlers(frame, unit)
 
         PulsePreview(unit)
         if moved then
-            local started = PreviewEditProfileStart()
             ApplyUnitAndSync(unit)
-            PreviewEditProfileStop("DragEndApply", started)
         end
 
         if not moved

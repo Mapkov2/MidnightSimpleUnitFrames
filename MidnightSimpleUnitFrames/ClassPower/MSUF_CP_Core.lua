@@ -254,18 +254,6 @@ builders.LAYOUT = function(E)
         end
     end
 
-    --- Combat-reload anchor trace. Armed via /msufcptrace (persists across
-    --- /reload through MSUF_GlobalDB); a single nil-check when disarmed.
-    local function CP_Trace(msg)
-        local buf = _G.MSUF_CPTraceBuffer
-        if not buf then return end
-        local n = #buf
-        if n >= 80 then return end
-        local t = _G.GetTime and _G.GetTime() or 0
-        buf[n + 1] = string.format("[%.2f]%s %s", t % 10000,
-            (InCombatLockdown and InCombatLockdown()) and "C" or "o", msg)
-    end
-
     --- Applies size, anchor, segment placement, tick separators, and outline.
     --- This is warm-path code: it can run often during option changes, but it
     --- must not be called for every power value update.
@@ -286,7 +274,6 @@ builders.LAYOUT = function(E)
             --- children). Only defer when a hard position lock is active or
             --- something promoted the container into the protected anchor
             --- family; then the post-combat pass replays the geometry.
-            CP_Trace("defer: guard hardLock=" .. tostring(hardLocked))
             CP._layoutDirty = true
             ExportPublic("MSUF_ClassPowerLayoutDirty", true)
             RequestUFReanchorAfterCombat()
@@ -398,22 +385,15 @@ builders.LAYOUT = function(E)
                 lockdownProxy = proxy
             end
         end
-        CP_Trace("layout a2c=" .. tostring(b.classPowerAnchorToCooldown)
-            .. " init=" .. tostring(CP.container._msufLayoutInitialized == true)
-            .. " proxy=" .. (lockdownProxy and "usable" or "nil")
-            .. " w=" .. tostring(userW))
         local cachedCooldownAnchor = false
         if inLockdown and not lockdownProxy and b.classPowerAnchorToCooldown == true then
             CP.container:SetSize(userW, h)
             if type(_G.MSUF_ApplyCachedUnitFrameScreenPosition) == "function"
                 and _G.MSUF_ApplyCachedUnitFrameScreenPosition(CP.container, "classpower", "classpower")
             then
-                CP_Trace("cache apply OK")
                 CP.container._msufDirectCooldownAnchor = true
                 CP.container._msufHardLockPoint = CP.container._msufHardLockPoint or "TOP"
                 cachedCooldownAnchor = true
-            else
-                CP_Trace("cache apply FAIL -> fallback")
             end
         end
 
@@ -431,9 +411,6 @@ builders.LAYOUT = function(E)
                     anchorFrame = ecv
                 end
             end
-            CP_Trace("ecv=" .. tostring(ecv and ((ecv.GetName and ecv:GetName()) or "unnamed") or "nil")
-                .. " shown=" .. tostring((ecv and ecv.IsShown and ecv:IsShown()) == true)
-                .. " -> " .. (anchorFrame and "anchor direct" or "no anchor"))
             if anchorFrame then
                 CP.container:SetPoint("TOP", anchorFrame, "BOTTOM", oX, oY)
                 CP.container._msufDirectCooldownAnchor = true
@@ -445,11 +422,9 @@ builders.LAYOUT = function(E)
                 if type(_G.MSUF_ApplyCachedUnitFrameScreenPosition) == "function"
                     and _G.MSUF_ApplyCachedUnitFrameScreenPosition(CP.container, "classpower", "classpower")
                 then
-                    CP_Trace("late cache apply OK")
                     CP.container._msufDirectCooldownAnchor = true
                     CP.container._msufHardLockPoint = CP.container._msufHardLockPoint or "TOP"
                 else
-                    CP_Trace("late cache FAIL -> playerFrame fallback")
                     CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", 2 + oX, -(2 - oY))
                     CP.container._msufDirectCooldownAnchor = nil
                     CP.container._msufHardLockPoint = nil
@@ -457,18 +432,10 @@ builders.LAYOUT = function(E)
             end
         else
             if not cachedCooldownAnchor then
-                CP_Trace("anchor playerFrame (a2c off)")
                 CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", 2 + oX, -(2 - oY))
                 CP.container._msufDirectCooldownAnchor = nil
                 CP.container._msufHardLockPoint = nil
             end
-        end
-        if _G.MSUF_CPTraceBuffer and CP.container.GetPoint then
-            local p, rel, rp, px, py = CP.container:GetPoint(1)
-            local relName = rel and ((rel.GetName and rel:GetName()) or "unnamed") or "nil"
-            CP_Trace(string.format("final pts=%d p1=%s->%s:%s (%.0f,%.0f)",
-                CP.container:GetNumPoints() or 0, tostring(p), relName, tostring(rp),
-                tonumber(px) or 0, tonumber(py) or 0))
         end
         CP.container._msufLayoutInitialized = true
         CP.container._msufStableWidth = userW
@@ -1049,8 +1016,10 @@ builders.RUNTIME = function(env)
     end
 
     local function HandleDisplayPowerEvent()
-        local newSig = CP_ComputeStructuralSignature()
-        if newSig ~= CP.structuralSig then
+        local flags, powerType, renderMode = CP_ComputeStructuralSignature()
+        if flags ~= CP.structuralFlags
+            or powerType ~= CP.structuralPowerType
+            or renderMode ~= CP.structuralRenderMode then
             ThrottledFullRefresh()
             return
         end
@@ -1068,8 +1037,10 @@ builders.RUNTIME = function(env)
     --- of the resource display actually changed.
     local function HandleRareStructuralEvent(useTimer)
         if CP_ShouldUseLiteBindings() then
-            local newSig = CP_ComputeStructuralSignature()
-            if newSig ~= CP.structuralSig then
+            local flags, powerType, renderMode = CP_ComputeStructuralSignature()
+            if flags ~= CP.structuralFlags
+                or powerType ~= CP.structuralPowerType
+                or renderMode ~= CP.structuralRenderMode then
                 if useTimer then
                     C_Timer.After(0.1, FullRefresh)
                 else

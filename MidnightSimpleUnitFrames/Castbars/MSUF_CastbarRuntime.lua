@@ -45,6 +45,40 @@ local REASON_HARDHIDE = "HARDHIDE"
 local EMPTY_OPTIONS = {}
 local STOP_TIMERS = { "hideTimer", "succeededTimer" }
 
+-- A castbar only belongs in the Lua manager while at least one of these jobs
+-- still has to be performed by Lua.  The mask is compiled when a cast starts
+-- (and when the cold settings revision changes), never in the update loop.
+local WORK_TIME_TEXT = 1
+local WORK_GLOW = 2
+local WORK_CHANNEL = 4
+local WORK_EMPOWER = 8
+local WORK_DURATION_FALLBACK = 16
+local WORK_UNIT_FAILSAFE = 32
+
+Runtime.WorkMask = Runtime.WorkMask or {
+    TIME_TEXT = WORK_TIME_TEXT,
+    GLOW = WORK_GLOW,
+    CHANNEL = WORK_CHANNEL,
+    EMPOWER = WORK_EMPOWER,
+    DURATION_FALLBACK = WORK_DURATION_FALLBACK,
+    UNIT_FAILSAFE = WORK_UNIT_FAILSAFE,
+}
+
+local activeDurationFrames = Runtime._activeDurationFrames
+if not activeDurationFrames then
+    activeDurationFrames = setmetatable({}, { __mode = "k" })
+    Runtime._activeDurationFrames = activeDurationFrames
+end
+
+local function MaskHas(mask, flag)
+    return type(mask) == "number" and (mask % (flag * 2)) >= flag
+end
+
+local function MaskAdd(mask, flag)
+    if MaskHas(mask, flag) then return mask end
+    return mask + flag
+end
+
 local function DisableFrameOnUpdate(frame)
     if not frame or not frame.SetScript then return end
     frame:SetScript("OnUpdate", nil)
@@ -66,6 +100,9 @@ local function Now()
     return (GetTimePreciseSec and GetTimePreciseSec()) or GetTime()
 end
 
+local plainIsSecret = _G.issecretvalue or function(_) return false end
+local plainHuge = math.huge
+
 --- Dragonflight+ APIs may return value wrappers. Convert only to plain scalars
 --- here so the rest of Runtime can compare and cache safely.
 local function PlainNumber(value)
@@ -73,21 +110,425 @@ local function PlainNumber(value)
         return nil
     end
 
+    -- The duration APIs normally return an ordinary number. Avoid ToPlain and
+    -- the allocating tostring/tonumber round-trip on that overwhelmingly hot
+    -- path while retaining the wrapper fallback below.
+    if type(value) == "number" and plainIsSecret(value) ~= true
+        and value == value and value ~= plainHuge and value ~= -plainHuge then
+        return value
+    end
+
     local toPlain = _G.ToPlain
     if type(toPlain) == "function" then
         local plain = toPlain(value)
-        plain = tonumber(tostring(plain))
-        if plain ~= nil then
-            return plain
+        if plain ~= nil and plainIsSecret(plain) ~= true then
+            local plainType = type(plain)
+            if plainType == "number" then
+                if plain == plain and plain ~= plainHuge and plain ~= -plainHuge then
+                    return plain
+                end
+                return nil
+            elseif plainType == "string" then
+                return tonumber(plain)
+            end
+
+            -- Compatibility fallback for an unexpected ToPlain wrapper type.
+            return tonumber(tostring(plain))
         end
     end
 
     local valueType = type(value)
-    if valueType == "number" or valueType == "string" then
-        return tonumber(tostring(value))
+    if valueType == "number" then
+        if plainIsSecret(value) ~= true
+            and value == value and value ~= plainHuge and value ~= -plainHuge then
+            return value
+        end
+    elseif valueType == "string" and plainIsSecret(value) ~= true then
+        return tonumber(value)
     end
 
     return nil
+end
+
+local nativeTextFormats
+local nativeTextFormatsUnavailable
+
+local function BuildNativeTextFormats()
+    if nativeTextFormats then return nativeTextFormats end
+    if nativeTextFormatsUnavailable then return nil end
+
+    local durationUtil = _G.C_DurationUtil
+    local stringUtil = _G.C_StringUtil
+    local durationProperties = _G.Enum and _G.Enum.DurationTextBindingProperty
+    local rounding = _G.Enum and _G.Enum.NumericRuleFormatRounding
+    local createFormatter = stringUtil and stringUtil.CreateNumericRuleFormatter
+    if type(durationUtil) ~= "table"
+        or type(durationUtil.CreateDurationTextBinding) ~= "function"
+        or type(createFormatter) ~= "function"
+        or type(durationProperties) ~= "table"
+        or type(rounding) ~= "table"
+    then
+        nativeTextFormatsUnavailable = true
+        return nil
+    end
+
+    local ok, formatter = pcall(createFormatter)
+    if not ok or not formatter or type(formatter.SetBreakpoints) ~= "function" then
+        nativeTextFormatsUnavailable = true
+        return nil
+    end
+
+    ok = pcall(formatter.SetBreakpoints, formatter, {
+        {
+            threshold = 0,
+            step = 0.1,
+            rounding = rounding.Nearest,
+            format = "%.1f",
+        },
+    })
+    if not ok then
+        nativeTextFormatsUnavailable = true
+        return nil
+    end
+
+    local remaining = { property = durationProperties.RemainingDuration, formatter = formatter }
+    local elapsed = { property = durationProperties.ElapsedDuration, formatter = formatter }
+    local total = { property = durationProperties.TotalDuration, formatter = formatter }
+
+    nativeTextFormats = {
+        CURRENT = { "{}", { remaining } },
+        CURRENT_MAX = { "{} / {}", { remaining, total } },
+        ELAPSED = { "{}", { elapsed } },
+        MAX_CURRENT = { "{} / {}", { total, remaining } },
+        ELAPSED_MAX = { "{} / {}", { elapsed, total } },
+        MAX_ELAPSED = { "{} / {}", { total, elapsed } },
+    }
+    return nativeTextFormats
+end
+
+local function DisableNativeTimeText(frame)
+    if not frame then return end
+
+    local binding = frame._msufDurationTextBinding
+    if binding then
+        local disabled = type(binding.Disable) == "function"
+            and pcall(binding.Disable, binding)
+        if not disabled and type(binding.SetEnabled) == "function" then
+            pcall(binding.SetEnabled, binding, false)
+        end
+    end
+    -- DurationTextBinding mutates the FontString behind MSUF's Lua-side diff
+    -- cache. Invalidate that cache so the next Lua clear/update cannot be skipped
+    -- against a stale pre-binding value.
+    if frame.timeText then frame.timeText._msufLastText = nil end
+    frame._msufNativeTimeBound = nil
+end
+
+local function ApplyNativeTimeText(frame, durationObj, format)
+    if not (frame and frame.timeText and durationObj) then return false end
+
+    local formats = BuildNativeTextFormats()
+    local formatSpec = formats and formats[format]
+    if not formatSpec then return false end
+
+    local binding = frame._msufDurationTextBinding
+    if not binding then
+        local createBinding = _G.C_DurationUtil and _G.C_DurationUtil.CreateDurationTextBinding
+        if type(createBinding) ~= "function" then return false end
+
+        local ok
+        ok, binding = pcall(createBinding)
+        if not ok or not binding then return false end
+        frame._msufDurationTextBinding = binding
+    end
+
+    local configured = frame._msufDurationTextConfigured == true
+    if not configured then
+        local ok = type(binding.SetFontString) == "function"
+            and pcall(binding.SetFontString, binding, frame.timeText)
+        if not ok then
+            DisableNativeTimeText(frame)
+            return false
+        end
+
+        ok = type(binding.SetUpdateInterval) == "function"
+            and pcall(binding.SetUpdateInterval, binding, 0.10)
+        if not ok then
+            DisableNativeTimeText(frame)
+            return false
+        end
+        frame._msufDurationTextConfigured = true
+    end
+
+    if frame._msufDurationTextFormat ~= format then
+        local ok = type(binding.SetTextFormat) == "function"
+            and pcall(binding.SetTextFormat, binding, formatSpec[1], formatSpec[2])
+        if not ok then
+            DisableNativeTimeText(frame)
+            return false
+        end
+        frame._msufDurationTextFormat = format
+    end
+
+    local ok = type(binding.SetDuration) == "function"
+        and pcall(binding.SetDuration, binding, durationObj)
+    if not ok then
+        DisableNativeTimeText(frame)
+        return false
+    end
+
+    ok = type(binding.SetEnabled) == "function"
+        and pcall(binding.SetEnabled, binding, true)
+    if not ok then
+        DisableNativeTimeText(frame)
+        return false
+    end
+
+    if type(binding.UpdateFontString) == "function" then
+        pcall(binding.UpdateFontString, binding)
+    end
+    frame.timeText._msufLastText = nil
+    frame._msufNativeTimeBound = true
+    return true
+end
+
+local function CastTimeUnitKey(frame, unit)
+    unit = tostring(unit or ""):lower()
+    if frame and frame._msufIsBossCastbar then return "boss" end
+    if unit:match("^boss%d+$") then return "boss" end
+    return unit
+end
+
+--- Compile settings shared by the text and manager paths.  DB reads are cold:
+--- one per castbar settings revision, not one per manager registration/tick.
+function Runtime:RefreshWorkConfig(frame, force)
+    if not frame then return true, "CURRENT", 0 end
+
+    local revision = _G.MSUF__castTimeGlobalRev or 1
+    if not force
+        and frame._msufCastTimeRev == revision
+        and frame._msufCastTimeEnabled ~= nil
+        and frame._msufCastbarConfigMask ~= nil
+    then
+        return frame._msufCastTimeEnabled, frame._msufCastTimeFormat, frame._msufCastbarConfigMask
+    end
+
+    local general = _G.MSUF_DB and _G.MSUF_DB.general
+    local unit = frame.unit
+    local enabled = true
+    if general then
+        if unit == "player" then
+            enabled = general.showPlayerCastTime ~= false
+        elseif unit == "target" then
+            enabled = general.showTargetCastTime ~= false
+        elseif unit == "focus" then
+            enabled = general.showFocusCastTime ~= false
+        elseif frame._msufIsBossCastbar or tostring(unit or ""):match("^boss%d+$") then
+            enabled = general.showBossCastTime ~= false
+        end
+    end
+
+    local format = "CURRENT"
+    if general and type(_G.MSUF_GetCastbarTimeFormat) == "function" then
+        format = _G.MSUF_GetCastbarTimeFormat(CastTimeUnitKey(frame, unit), general) or format
+    end
+
+    if frame._msufCastTimeFormat ~= format then
+        frame._msufLastTimeDecimal = nil
+        frame._msufLastTimeTotalDecimal = nil
+        frame._msufLastTimeFormat = nil
+    end
+
+    local glowEnabled = general == nil or general.castbarShowGlow ~= false
+    local configMask = glowEnabled and WORK_GLOW or 0
+
+    frame._msufCastTimeEnabled = enabled and true or false
+    frame._msufCastTimeFormat = format
+    frame._msufCastTimeRev = revision
+    frame._msufCastbarConfigMask = configMask
+    return frame._msufCastTimeEnabled, format, configMask
+end
+
+function Runtime:PrepareWork(frame)
+    if not frame then return WORK_DURATION_FALLBACK end
+
+    local hadGlowTick = frame._msufCastbarGlowTick == true
+    local castTimeEnabled, format, mask = self:RefreshWorkConfig(frame, false)
+    local durationObj = frame.MSUF_durationObj
+    local isChanneled = frame.MSUF_isChanneled == true
+    local isEmpower = frame.isEmpower == true
+    local timerDriven = frame.MSUF_timerDriven == true
+
+    if isChanneled then mask = MaskAdd(mask, WORK_CHANNEL) end
+    if isEmpower then mask = MaskAdd(mask, WORK_EMPOWER) end
+    if not timerDriven or not durationObj then
+        mask = MaskAdd(mask, WORK_DURATION_FALLBACK)
+    end
+    if frame.unit ~= "player" then
+        mask = MaskAdd(mask, WORK_UNIT_FAILSAFE)
+    end
+
+    local canUseNativeText = not isChanneled
+        and not isEmpower
+        and timerDriven
+        and durationObj ~= nil
+        and frame._msufPlainEndTime ~= nil
+
+    if frame.timeText and castTimeEnabled then
+        if canUseNativeText and ApplyNativeTimeText(frame, durationObj, format) then
+            -- The client owns the text cadence; no Lua text work bit.
+        else
+            DisableNativeTimeText(frame)
+            mask = MaskAdd(mask, WORK_TIME_TEXT)
+        end
+    else
+        DisableNativeTimeText(frame)
+        if frame.timeText and frame.timeText.SetText then frame.timeText:SetText("") end
+    end
+
+    local timerAPI = _G.C_Timer
+    if not isChanneled
+        and not isEmpower
+        and timerDriven
+        and (frame._msufPlainEndTime == nil
+            or frame._msufNativeCompletionUnsafe == true
+            or type(timerAPI) ~= "table"
+            or type(timerAPI.NewTimer) ~= "function")
+    then
+        mask = MaskAdd(mask, WORK_DURATION_FALLBACK)
+    end
+
+    frame._msufCastbarWorkMask = mask
+    frame._msufCastbarGlowTick = MaskHas(mask, WORK_GLOW) or nil
+    if hadGlowTick and frame._msufCastbarGlowTick ~= true then
+        local resetGlow = _G.MSUF_ResetCastbarGlowFade
+        if type(resetGlow) == "function" then resetGlow(frame) end
+    end
+    return mask
+end
+
+function Runtime:NeedsManager(frame)
+    return not (frame and frame._msufCastbarWorkMask == 0)
+end
+
+function Runtime:CancelNativeCompletion(frame)
+    if not frame then return end
+    CancelTimerHandle(frame._msufNativeCompletionTimer)
+    frame._msufNativeCompletionTimer = nil
+end
+
+local function NativeCompletionCallback(frame)
+    frame._msufNativeCompletionTimer = nil
+    local workMask = frame._msufCastbarWorkMask
+    if frame.MSUF_castActive ~= true
+        or (workMask ~= 0 and workMask ~= WORK_UNIT_FAILSAFE)
+        or frame.MSUF_isChanneled == true
+        or frame.isEmpower == true
+        or (frame.IsShown and not frame:IsShown())
+    then
+        return
+    end
+
+    local durationObj = frame.MSUF_durationObj
+    local getter = durationObj and (durationObj.GetRemainingDuration or durationObj.GetRemaining)
+    local remaining
+    if type(getter) == "function" then
+        local ok, rawRemaining = pcall(getter, durationObj)
+        if ok then remaining = PlainNumber(rawRemaining) end
+    end
+
+    if remaining and remaining > 0.001 then
+        frame._msufPlainEndTime = Now() + remaining
+        Runtime:ArmNativeCompletion(frame)
+        return
+    end
+
+    if remaining == nil then
+        -- A duration that became unreadable/secret stays on the proven manager
+        -- path.  Do not guess whether it expired.
+        frame._msufNativeCompletionUnsafe = true
+        Runtime:PrepareWork(frame)
+        if type(_G.MSUF_RegisterCastbar) == "function" then
+            _G.MSUF_RegisterCastbar(frame)
+        end
+        return
+    end
+
+    if frame.SetSucceeded then
+        frame:SetSucceeded()
+    else
+        Runtime:Stop(frame, REASON_SUCCEEDED)
+    end
+end
+
+function Runtime:ArmNativeCompletion(frame)
+    local workMask = frame and frame._msufCastbarWorkMask
+    if not (frame
+        and (workMask == 0 or workMask == WORK_UNIT_FAILSAFE)
+        and frame._msufPlainEndTime) then
+        return false
+    end
+
+    local timerAPI = _G.C_Timer
+    if not (timerAPI and type(timerAPI.NewTimer) == "function") then return false end
+
+    self:CancelNativeCompletion(frame)
+    if not frame._msufNativeCompletionCallback then
+        frame._msufNativeCompletionCallback = function()
+            NativeCompletionCallback(frame)
+        end
+    end
+
+    local delay = frame._msufPlainEndTime - Now() + 0.05
+    if delay < 0.05 then delay = 0.05 end
+    local ok, timer = pcall(timerAPI.NewTimer, delay, frame._msufNativeCompletionCallback)
+    if not ok or not timer then
+        frame._msufNativeCompletionUnsafe = true
+        self:PrepareWork(frame)
+        return false
+    end
+
+    frame._msufNativeCompletionTimer = timer
+    return true
+end
+
+function Runtime:DeactivateNative(frame)
+    if not frame then return end
+    self:CancelNativeCompletion(frame)
+    DisableNativeTimeText(frame)
+end
+
+--- End active-duration ownership without changing interrupt/hold visuals.
+--- Terminal paths that intentionally keep the frame visible use this instead
+--- of Stop(), so cold settings refreshes cannot resurrect the finished cast.
+function Runtime:ReleaseActive(frame)
+    if not frame then return end
+
+    activeDurationFrames[frame] = nil
+    self:DeactivateNative(frame)
+    frame.MSUF_castActive = false
+    frame.MSUF_durationObj = nil
+    frame.MSUF_timerDriven = nil
+    frame.MSUF_timerRangeSet = nil
+    frame._msufPlainEndTime = nil
+    frame._msufRemaining = nil
+    frame._msufFastText = nil
+    frame._msufPlainTotal = nil
+    frame._msufCastbarWorkMask = nil
+    frame._msufCastbarGlowTick = nil
+    frame._msufNativeCompletionUnsafe = nil
+end
+
+function Runtime:RefreshActiveWork()
+    local register = _G.MSUF_RegisterCastbar
+    if type(register) ~= "function" then return end
+
+    for frame in pairs(activeDurationFrames) do
+        if frame.MSUF_castActive == true then
+            self:PrepareWork(frame)
+            register(frame)
+        end
+    end
 end
 
 local function SetText(frame, textKey, value)
@@ -155,13 +596,14 @@ function Runtime:ApplyTimer(statusBar, durationObj, reverseFill, isChanneled)
     local parent = statusBar.GetParent and statusBar:GetParent() or nil
     local timerDirection = TimerDirection(parent, isChanneled)
 
+    local ok
     if INTERPOLATION_IMMEDIATE ~= nil and timerDirection ~= nil then
-        statusBar:SetTimerDuration(durationObj, INTERPOLATION_IMMEDIATE, timerDirection)
+        ok = pcall(statusBar.SetTimerDuration, statusBar, durationObj, INTERPOLATION_IMMEDIATE, timerDirection)
     else
-        statusBar:SetTimerDuration(durationObj)
+        ok = pcall(statusBar.SetTimerDuration, statusBar, durationObj)
     end
 
-    return true
+    return ok == true
 end
 
 function Runtime:ClearTimer()
@@ -178,14 +620,17 @@ function Runtime:SnapshotDuration(frame, durationObj)
 
     local remaining
     if durationObj.GetRemainingDuration then
-        remaining = durationObj:GetRemainingDuration()
+        local ok, value = pcall(durationObj.GetRemainingDuration, durationObj)
+        if ok then remaining = value end
     elseif durationObj.GetRemaining then
-        remaining = durationObj:GetRemaining()
+        local ok, value = pcall(durationObj.GetRemaining, durationObj)
+        if ok then remaining = value end
     end
 
     local total
     if durationObj.GetTotalDuration then
-        total = durationObj:GetTotalDuration()
+        local ok, value = pcall(durationObj.GetTotalDuration, durationObj)
+        if ok then total = value end
     end
 
     remaining = PlainNumber(remaining)
@@ -218,6 +663,10 @@ function Runtime:ApplyActive(frame, state, options)
     end
 
     options = options or EMPTY_OPTIONS
+
+    self:CancelNativeCompletion(frame)
+    frame._msufNativeCompletionUnsafe = nil
+    activeDurationFrames[frame] = true
 
     local castType = state.castType or state.phase or "CAST"
     local isChanneled = castType == "CHANNEL"
@@ -292,6 +741,7 @@ function Runtime:ApplyActive(frame, state, options)
 
     if options.skipTimeText ~= true
         and frame.timeText
+        and frame._msufNativeTimeBound ~= true
         and type(_G.MSUF_UpdateCastTimeText_FromStatusBar) == "function"
     then
         _G.MSUF_UpdateCastTimeText_FromStatusBar(frame)
@@ -312,6 +762,7 @@ function Runtime:ApplyInterrupt(frame, options)
     end
 
     options = options or EMPTY_OPTIONS
+    self:ReleaseActive(frame)
 
     local statusBar = frame.statusBar
     if not statusBar then
@@ -377,6 +828,8 @@ function Runtime:Stop(frame, reasonOrOptions)
     end
 
     DisableFrameOnUpdate(frame)
+    activeDurationFrames[frame] = nil
+    self:DeactivateNative(frame)
 
     if type(_G.MSUF_UnregisterCastbar) == "function" then
         _G.MSUF_UnregisterCastbar(frame)
@@ -395,6 +848,9 @@ function Runtime:Stop(frame, reasonOrOptions)
     frame.castDuration = nil
     frame.castElapsed = nil
     frame.MSUF_castActive = false
+    frame._msufCastbarWorkMask = nil
+    frame._msufCastbarGlowTick = nil
+    frame._msufNativeCompletionUnsafe = nil
 
     local castState = frame._msufCastState
     if castState then

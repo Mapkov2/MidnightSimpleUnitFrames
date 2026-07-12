@@ -14,6 +14,7 @@ local next = next
 local tostring = tostring
 local tonumber = tonumber
 local table_remove = table.remove
+local table_concat = table.concat
 local CreateFrame = CreateFrame
 local InCombatLockdown = InCombatLockdown
 local UnitExists = UnitExists
@@ -22,7 +23,7 @@ local UnitIsDead = UnitIsDead
 local UnitIsDeadOrGhost = UnitIsDeadOrGhost
 local issecretvalue = _G.issecretvalue or function(_) return false end
 
-UF.version = "8.2-ouf-coalesced-dependent-identity"
+UF.version = "8.4-demand-runtime-plans"
 UF.frames = UF.frames or {}
 UF.frameList = UF.frameList or {}
 UF.attachedFrames = UF.attachedFrames or {}
@@ -72,6 +73,10 @@ UF.basicElements = BASIC_ELEMENTS
 local EVENT_ELEMENTS = {
   Portrait = true,
   Prediction = true,
+  -- Group range events must stay unit-filtered per frame. A shared
+  -- RegisterUnitEvent subscription is capped at four unit tokens and cannot
+  -- safely dispatch a secret UNIT_IN_RANGE_UPDATE unit payload.
+  GroupRangeFade = true,
 }
 
 -- Status regions are structural, but their child elements own the smallest
@@ -460,15 +465,26 @@ end
 
 local function FrameVisibleForEvent(frame)
   if not frame then return false end
-  local spec = frame.MSUFSpec
-  if spec and spec.enabled == false then return false end
-  if frame.IsVisible and not frame:IsVisible()
-    and _G.MSUF_PreviewTestMode ~= true
-    and _G.MSUF_BossTestMode ~= true
-    and _G.MSUF2_BossUnitframePreviewActive ~= true then
-    return false
+  local specEnabled = frame._msufCoreSpecEnabled
+  if specEnabled == nil then
+    local spec = frame.MSUFSpec
+    specEnabled = not spec or spec.enabled ~= false
+    frame._msufCoreSpecEnabled = specEnabled
   end
-  return true
+  if specEnabled == false then return false end
+
+  local visible = frame._msufCoreVisible
+  if visible == true then return true end
+  if _G.MSUF_PreviewTestMode == true
+    or _G.MSUF_BossTestMode == true
+    or _G.MSUF2_BossUnitframePreviewActive == true then
+    return true
+  end
+  if visible == false then return false end
+
+  visible = not frame.IsVisible or frame:IsVisible()
+  frame._msufCoreVisible = visible and true or false
+  return visible
 end
 
 local function IdentityUnitExists(frame, unit)
@@ -502,7 +518,13 @@ local function EndFrameEvent(frame)
 end
 
 local function FrameOnEvent(frame, event, unit, ...)
-  if not FrameVisibleForEvent(frame) then return end
+  -- SetFrameSpec plus the visibility hooks keep both flags hot and exact for
+  -- normal attached frames. Only fall back to the full preview-aware resolver
+  -- for cold initialization, hidden frames, and disabled specs.
+  if not (frame._msufCoreSpecEnabled == true and frame._msufCoreVisible == true)
+    and not FrameVisibleForEvent(frame) then
+    return
+  end
   local path = frame[event]
   if path then return path(frame, event, unit, ...) end
 end
@@ -572,8 +594,33 @@ local function RefreshGroupFrameState(frame, _reason)
 end
 UF.RefreshGroupFrameState = RefreshGroupFrameState
 
-local function GroupFrameOnShow(frame)
-  RefreshGroupFrameState(frame, "MSUF_GF_ONSHOW")
+local RegisterFrameEvent
+
+local function FrameOnShow(frame)
+  frame._msufCoreVisible = true
+  if frame._msufCoreRangeEventConfigured == true
+    and frame._msufCoreRangeEventSuspended == true
+    and RegisterFrameEvent then
+    RegisterFrameEvent(frame, "UNIT_IN_RANGE_UPDATE", frame._msufCoreRangeEventUnitless == true)
+    frame._msufCoreRangeEventSuspended = nil
+  end
+  if frame._msufCoreScope == "group" then
+    RefreshGroupFrameState(frame, "MSUF_GF_ONSHOW")
+  end
+end
+
+local function FrameOnHide(frame)
+  frame._msufCoreVisible = false
+  -- Blizzard's CompactUnitFrame explicitly unregisters this event while
+  -- hidden because every registered unit makes the client perform additional
+  -- native range work. Keep the compiled Lua route and restore registration
+  -- on OnShow, but remove both C++ and Lua overhead for invisible frames.
+  if frame._msufCoreRangeEventConfigured == true
+    and frame._msufCoreRangeEventSuspended ~= true
+    and frame.UnregisterEvent then
+    frame:UnregisterEvent("UNIT_IN_RANGE_UPDATE")
+    frame._msufCoreRangeEventSuspended = true
+  end
 end
 
 local function EnsureGroupLifecycleDriver()
@@ -644,6 +691,156 @@ local function AddEventHandler(frame, event, update, unitless)
   list[#list + 1] = unitless == true
 end
 
+local SelectElementEventUpdate
+
+-- Runtime route prototypes are immutable and receive the frame as their first
+-- argument, so identical frame archetypes can share them safely. Only module
+-- functions exported by registered elements enter the strong cache; a custom
+-- per-frame closure still gets a private route and therefore cannot be retained
+-- here after its frame is detached.
+local NIL_ROUTE_KEY = {}
+local staticElementFunctions = {}
+local directHealthRouteCache = {}
+local directPowerRouteCache = {}
+local singleRouteCache = {}
+
+local function IsRegisteredElementFunction(fn)
+  if type(fn) ~= "function" then return false end
+  if staticElementFunctions[fn] == true then return true end
+  for i = 1, #UF.elementOrder do
+    local element = UF.elements[UF.elementOrder[i]]
+    if type(element) == "table" then
+      for _, candidate in pairs(element) do
+        if candidate == fn then
+          staticElementFunctions[fn] = true
+          return true
+        end
+      end
+    end
+  end
+  return false
+end
+
+local function RouteCacheLeaf(root, fn1, fn2, fn3, mode, target)
+  local key1, key2, key3 = fn1 or NIL_ROUTE_KEY, fn2 or NIL_ROUTE_KEY, fn3 or NIL_ROUTE_KEY
+  local node = root[key1]
+  if not node then node = {}; root[key1] = node end
+  local nextNode = node[key2]
+  if not nextNode then nextNode = {}; node[key2] = nextNode end
+  node = nextNode
+  nextNode = node[key3]
+  if not nextNode then nextNode = {}; node[key3] = nextNode end
+  node = nextNode
+  nextNode = node[mode]
+  if not nextNode then nextNode = {}; node[mode] = nextNode end
+  return nextNode, target or NIL_ROUTE_KEY
+end
+
+local function BuildHealthRoute(barFn, textFn, predictionFn, routeUnitless, target)
+  if target then
+    return function(self, ev, _unit, ...)
+      BeginFrameEvent(self)
+      local hp, hpMax, percentReady
+      if barFn then hp, hpMax, percentReady = barFn(self, ev, target, ...) end
+      if predictionFn then
+        if percentReady == true then predictionFn(self, ev, target, nil, nil, ...) else predictionFn(self, ev, target, hp, hpMax, ...) end
+      end
+      if textFn then
+        if percentReady == true then textFn(self, ev, target, nil, nil, ...) else textFn(self, ev, target, hp, hpMax, ...) end
+      end
+      EndFrameEvent(self)
+    end
+  end
+  return function(self, ev, unit, ...)
+    BeginFrameEvent(self)
+    local u = routeUnitless == true and self.unit or (unit or self.unit)
+    local hp, hpMax, percentReady
+    if barFn then hp, hpMax, percentReady = barFn(self, ev, u, ...) end
+    if predictionFn then
+      if percentReady == true then predictionFn(self, ev, u, nil, nil, ...) else predictionFn(self, ev, u, hp, hpMax, ...) end
+    end
+    if textFn then
+      if percentReady == true then textFn(self, ev, u, nil, nil, ...) else textFn(self, ev, u, hp, hpMax, ...) end
+    end
+    EndFrameEvent(self)
+  end
+end
+
+local function BuildPowerRoute(barFn, textFn, _unused, routeUnitless, target)
+  if target then
+    return function(self, ev, _unit, ...)
+      BeginFrameEvent(self)
+      local power, powerMax, powerType, powerToken, metaChanged
+      if barFn then power, powerMax, powerType, powerToken, metaChanged = barFn(self, ev, target, ...) end
+      if textFn then textFn(self, ev, target, power, powerMax, powerType, powerToken, metaChanged, ...) end
+      EndFrameEvent(self)
+    end
+  end
+  return function(self, ev, unit, ...)
+    BeginFrameEvent(self)
+    local u = routeUnitless == true and self.unit or (unit or self.unit)
+    local power, powerMax, powerType, powerToken, metaChanged
+    if barFn then power, powerMax, powerType, powerToken, metaChanged = barFn(self, ev, u, ...) end
+    if textFn then textFn(self, ev, u, power, powerMax, powerType, powerToken, metaChanged, ...) end
+    EndFrameEvent(self)
+  end
+end
+
+local function SharedDirectRoute(cache, builder, fn1, fn2, fn3, routeUnitless, target)
+  if (fn1 and not IsRegisteredElementFunction(fn1))
+    or (fn2 and not IsRegisteredElementFunction(fn2))
+    or (fn3 and not IsRegisteredElementFunction(fn3)) then
+    return builder(fn1, fn2, fn3, routeUnitless, target)
+  end
+  local mode = target and "target" or (routeUnitless == true and "unitless" or "unit")
+  local leaf, key = RouteCacheLeaf(cache, fn1, fn2, fn3, mode, target)
+  local route = leaf[key]
+  if not route then
+    route = builder(fn1, fn2, fn3, routeUnitless, target)
+    leaf[key] = route
+  end
+  return route
+end
+
+local function BuildSingleRoute(update, unitless, target)
+  if unitless == true then
+    return function(self, ev, _unit, ...)
+      BeginFrameEvent(self)
+      update(self, ev, self.unit, ...)
+      EndFrameEvent(self)
+    end
+  elseif target then
+    return function(self, ev, _unit, ...)
+      BeginFrameEvent(self)
+      update(self, ev, target, ...)
+      EndFrameEvent(self)
+    end
+  end
+  return function(self, ev, unit, ...)
+    BeginFrameEvent(self)
+    update(self, ev, unit or self.unit, ...)
+    EndFrameEvent(self)
+  end
+end
+
+local function SharedSingleRoute(update, unitless, target)
+  if not IsRegisteredElementFunction(update) then
+    return BuildSingleRoute(update, unitless, target)
+  end
+  local node = singleRouteCache[update]
+  if not node then node = {}; singleRouteCache[update] = node end
+  local mode = target and "target" or (unitless == true and "unitless" or "unit")
+  local leaf = node[mode]
+  if not leaf then leaf = {}; node[mode] = leaf end
+  local key = target or NIL_ROUTE_KEY
+  local route = leaf[key]
+  if not route then
+    route = BuildSingleRoute(update, unitless, target)
+    leaf[key] = route
+  end
+  return route
+end
+
 local function CompileFrameEventPath(frame, event, list)
   local target = frame._msufFrameUnitEventTargets and frame._msufFrameUnitEventTargets[event]
   local count = #list
@@ -652,7 +849,13 @@ local function CompileFrameEventPath(frame, event, list)
   if healthEvent or powerEvent then
     local barUpdate = healthEvent and frame[GetUpdateKey("Health")] or frame[GetUpdateKey("Power")]
     local textUpdate = healthEvent and frame[GetUpdateKey("HealthText")] or frame[GetUpdateKey("PowerText")]
-    local predictionUpdate = healthEvent and frame[GetUpdateKey("Prediction")] or nil
+    local predictionUpdate
+    if healthEvent then
+      local predictionBase = frame[GetUpdateKey("Prediction")]
+      if predictionBase then
+        predictionUpdate = SelectElementEventUpdate(UF.elements.Prediction, frame, event, predictionBase)
+      end
+    end
     local barFn, textFn, predictionFn
     local routeUnitless
     local direct = true
@@ -678,73 +881,16 @@ local function CompileFrameEventPath(frame, event, list)
     end
     if direct == true and (barFn or textFn or predictionFn) then
       if healthEvent then
-        if target then
-          return function(self, ev, _unit, ...)
-            BeginFrameEvent(self)
-            local hp, hpMax, percentReady
-            if barFn then hp, hpMax, percentReady = barFn(self, ev, target, ...) end
-            if predictionFn then
-              if percentReady == true then predictionFn(self, ev, target, nil, nil, ...) else predictionFn(self, ev, target, hp, hpMax, ...) end
-            end
-            if textFn then
-              if percentReady == true then textFn(self, ev, target, nil, nil, ...) else textFn(self, ev, target, hp, hpMax, ...) end
-            end
-            EndFrameEvent(self)
-          end
-        end
-        return function(self, ev, unit, ...)
-          BeginFrameEvent(self)
-          local u = routeUnitless == true and self.unit or (unit or self.unit)
-          local hp, hpMax, percentReady
-          if barFn then hp, hpMax, percentReady = barFn(self, ev, u, ...) end
-          if predictionFn then
-            if percentReady == true then predictionFn(self, ev, u, nil, nil, ...) else predictionFn(self, ev, u, hp, hpMax, ...) end
-          end
-          if textFn then
-            if percentReady == true then textFn(self, ev, u, nil, nil, ...) else textFn(self, ev, u, hp, hpMax, ...) end
-          end
-          EndFrameEvent(self)
-        end
+        return SharedDirectRoute(directHealthRouteCache, BuildHealthRoute,
+          barFn, textFn, predictionFn, routeUnitless, target)
       end
-      if target then
-        return function(self, ev, _unit, ...)
-          BeginFrameEvent(self)
-          local power, powerMax, powerType, powerToken, metaChanged
-          if barFn then power, powerMax, powerType, powerToken, metaChanged = barFn(self, ev, target, ...) end
-          if textFn then textFn(self, ev, target, powerMax == nil and nil or power, powerMax, powerType, powerToken, metaChanged, ...) end
-          EndFrameEvent(self)
-        end
-      end
-      return function(self, ev, unit, ...)
-        BeginFrameEvent(self)
-        local u = routeUnitless == true and self.unit or (unit or self.unit)
-        local power, powerMax, powerType, powerToken, metaChanged
-        if barFn then power, powerMax, powerType, powerToken, metaChanged = barFn(self, ev, u, ...) end
-        if textFn then textFn(self, ev, u, powerMax == nil and nil or power, powerMax, powerType, powerToken, metaChanged, ...) end
-        EndFrameEvent(self)
-      end
+      return SharedDirectRoute(directPowerRouteCache, BuildPowerRoute,
+        barFn, textFn, nil, routeUnitless, target)
     end
   end
   if count == 2 then
     local update = list[1]
-    if list[2] == true then
-      return function(self, ev, _unit, ...)
-        BeginFrameEvent(self)
-        update(self, ev, self.unit, ...)
-        EndFrameEvent(self)
-      end
-    elseif target then
-      return function(self, ev, _unit, ...)
-        BeginFrameEvent(self)
-        update(self, ev, target, ...)
-        EndFrameEvent(self)
-      end
-    end
-    return function(self, ev, unit, ...)
-      BeginFrameEvent(self)
-      update(self, ev, unit or self.unit, ...)
-      EndFrameEvent(self)
-    end
+    return SharedSingleRoute(update, list[2] == true, target)
   end
 
   if target then
@@ -768,7 +914,7 @@ local function CompileFrameEventPath(frame, event, list)
   end
 end
 
-local function RegisterFrameEvent(frame, event, unitless)
+RegisterFrameEvent = function(frame, event, unitless)
   if not (frame and frame.RegisterEvent) then return end
   if frame._msufCoreScope == "group"
     and GROUP_LIFECYCLE_EVENTS[event] == true
@@ -800,7 +946,6 @@ local function ClearFrameEvents(frame)
     if names then
       for i = 1, #names do
         frame[names[i]] = nil
-        names[i] = nil
       end
     end
     frame._msufEvents = nil
@@ -810,12 +955,32 @@ local function ClearFrameEvents(frame)
     frame._msufElementEventRoutes = nil
     frame._msufEventRouteUnit = nil
     frame._msufEventRouteNeedsIdentity = nil
+    frame._msufCoreRangeEventConfigured = nil
+    frame._msufCoreRangeEventUnitless = nil
+    frame._msufCoreRangeEventSuspended = nil
   end
 end
 
 local function ElementUpdateFunction(frame, name)
   local key = UPDATE_KEYS[name]
   return key and frame[key] or nil
+end
+
+local function SelectElementUpdate(element, frame)
+  local update = element and element.Update
+  local selector = element and element.SelectUpdate
+  if type(selector) == "function" then
+    update = selector(frame, frame and frame.MSUFSpec) or update
+  end
+  return update
+end
+
+SelectElementEventUpdate = function(element, frame, event, update)
+  local selector = element and element.SelectEventUpdate
+  if type(selector) == "function" then
+    return selector(frame, frame and frame.MSUFSpec, event, update) or update
+  end
+  return update
 end
 
 local function FrameHasActiveElement(frame, name)
@@ -913,10 +1078,7 @@ end
 
 local function CompileRuntimePath(list, count)
   if count == 1 then
-    local fn = list[1]
-    return function(frame, event, unit)
-      return fn(frame, event, unit)
-    end
+    return list[1]
   end
   if count == 2 then
     local a, b = list[1], list[2]
@@ -935,62 +1097,136 @@ local function CompileRuntimePath(list, count)
   return nil
 end
 
-local function BuildRuntimeList(frame, include, listKey, countKey, labelKey, pathKey)
-  local list = frame[listKey] or {}
-  local labels = frame[labelKey] or {}
-  frame[listKey], frame[labelKey] = list, labels
-  local n = 0
-  for i = 1, #UF.elementOrder do
-    local name = UF.elementOrder[i]
-    if include(frame, name) == true then
-      local update = ElementUpdateFunction(frame, name)
-      if update then
-        n = n + 1
-        list[n] = update
-        labels[n] = name
+-- Identity and full-runtime paths are archetype data, not frame state. Intern
+-- immutable function/label sequences so identical raid children retain only
+-- references to one plan instead of four private arrays and two closures each.
+-- A frame-owned selector closure deliberately falls back to a private plan.
+local runtimeSequencePlanIntern = {}
+local runtimeSequenceBuildFns = {}
+local runtimeSequenceBuildLabels = {}
+local EMPTY_RUNTIME_SEQUENCE_FNS = {}
+local EMPTY_RUNTIME_SEQUENCE_LABELS = {}
+local EMPTY_RUNTIME_SEQUENCE_PLAN = {
+  functions = EMPTY_RUNTIME_SEQUENCE_FNS,
+  labels = EMPTY_RUNTIME_SEQUENCE_LABELS,
+  count = 0,
+}
+
+local function NewRuntimeSequencePlan(functions, labels, count)
+  local planFns, planLabels = {}, {}
+  for i = 1, count do
+    planFns[i] = functions[i]
+    planLabels[i] = labels[i]
+  end
+  return {
+    functions = planFns,
+    labels = planLabels,
+    count = count,
+    path = CompileRuntimePath(planFns, count),
+  }
+end
+
+local function InternRuntimeSequencePlan(functions, labels, count)
+  if count <= 0 then return EMPTY_RUNTIME_SEQUENCE_PLAN end
+
+  local node = runtimeSequencePlanIntern
+  for i = 1, count do
+    local update = functions[i]
+    if not IsRegisteredElementFunction(update) then
+      return NewRuntimeSequencePlan(functions, labels, count)
+    end
+    local byLabel = node[update]
+    if not byLabel then byLabel = {}; node[update] = byLabel end
+    local label = labels[i]
+    local nextNode = byLabel[label]
+    if not nextNode then nextNode = {}; byLabel[label] = nextNode end
+    node = nextNode
+  end
+
+  local plan = node.plan
+  if plan then return plan end
+  plan = NewRuntimeSequencePlan(functions, labels, count)
+  node.plan = plan
+  return plan
+end
+
+local function BuildRuntimeSequencePlan(frame, include)
+  local functions = runtimeSequenceBuildFns
+  local labels = runtimeSequenceBuildLabels
+  local active = frame and frame._msufActiveElements
+  local count = 0
+  if active then
+    for i = 1, #UF.elementOrder do
+      local name = UF.elementOrder[i]
+      if include[name] == true and active[name] == true then
+        local update = ElementUpdateFunction(frame, name)
+        if update then
+          count = count + 1
+          functions[count] = update
+          labels[count] = name
+        end
       end
     end
   end
-  for i = n + 1, #list do list[i] = nil end
-  for i = n + 1, #labels do labels[i] = nil end
-  frame[countKey] = n > 0 and n or nil
-  if pathKey then
-    frame[pathKey] = CompileRuntimePath(list, n)
+
+  local plan = InternRuntimeSequencePlan(functions, labels, count)
+  for i = 1, count do
+    functions[i] = nil
+    labels[i] = nil
   end
+  return plan
 end
 
+local function AssignRuntimeSequencePlan(frame, plan, listKey, countKey, labelKey, pathKey)
+  frame[listKey] = plan.functions
+  frame[labelKey] = plan.labels
+  frame[countKey] = plan.count > 0 and plan.count or nil
+  frame[pathKey] = plan.path
+end
+
+local identityBarPathIntern = {}
 local function CompileIdentityBarPath(frame)
   local active = frame and frame._msufActiveElements
   if not active then return nil end
   local health = active.Health == true and ElementUpdateFunction(frame, "Health") or nil
   local power = active.Power == true and ElementUpdateFunction(frame, "Power") or nil
+  if not (health or power) then return nil end
+
+  local shared = (not health or IsRegisteredElementFunction(health))
+    and (not power or IsRegisteredElementFunction(power))
+  local byPower, key
+  if shared then
+    local healthKey = health or NIL_ROUTE_KEY
+    byPower = identityBarPathIntern[healthKey]
+    if not byPower then byPower = {}; identityBarPathIntern[healthKey] = byPower end
+    key = power or NIL_ROUTE_KEY
+    local path = byPower[key]
+    if path then return path end
+  end
+
+  local path
   if health and power then
-    return function(self, event, unit)
+    path = function(self, event, unit)
       health(self, event, unit)
       power(self, event, unit)
     end
+  elseif health then
+    path = health
+  else
+    path = power
   end
-  if health then
-    return function(self, event, unit)
-      health(self, event, unit)
-    end
-  end
-  if power then
-    return function(self, event, unit)
-      power(self, event, unit)
-    end
-  end
-  return nil
+  if shared then byPower[key] = path end
+  return path
 end
 
 function UF.RebuildRuntimeStatusState(frame)
   if not frame then return false end
-  BuildRuntimeList(frame, function(_, name)
-    return IDENTITY_ELEMENTS[name] == true and FrameHasActiveElement(frame, name)
-  end, "_msufIdentityFns", "_msufIdentityCount", "_msufIdentityLabels", "_msufIdentityPath")
-  BuildRuntimeList(frame, function(_, name)
-    return HotElementAllowed(name) == true and FrameHasActiveElement(frame, name)
-  end, "_msufRuntimeAllFns", "_msufRuntimeAllCount", "_msufRuntimeAllLabels", "_msufRuntimeAllPath")
+  local identityPlan = BuildRuntimeSequencePlan(frame, IDENTITY_ELEMENTS)
+  AssignRuntimeSequencePlan(frame, identityPlan,
+    "_msufIdentityFns", "_msufIdentityCount", "_msufIdentityLabels", "_msufIdentityPath")
+  local runtimePlan = BuildRuntimeSequencePlan(frame, BASIC_ELEMENTS)
+  AssignRuntimeSequencePlan(frame, runtimePlan,
+    "_msufRuntimeAllFns", "_msufRuntimeAllCount", "_msufRuntimeAllLabels", "_msufRuntimeAllPath")
   frame._msufGroupIdentityFns = frame._msufIdentityFns
   frame._msufGroupIdentityCount = frame._msufIdentityCount
   frame._msufGroupIdentityLabels = frame._msufIdentityLabels
@@ -999,11 +1235,66 @@ function UF.RebuildRuntimeStatusState(frame)
   return true
 end
 
-local function SnapshotEventList(events)
+-- Event providers mostly return module constants. Intern a defensive copy once
+-- per distinct sequence so 40 identical raid frames do not retain the same
+-- event-name arrays over and over. The interned arrays are immutable.
+local eventListIntern = {}
+local EMPTY_EVENT_LIST = {}
+eventListIntern["0\030"] = EMPTY_EVENT_LIST
+
+local function InternEventList(events)
   if type(events) ~= "table" then return nil end
-  local snapshot = {}
-  for i = 1, #events do snapshot[i] = events[i] end
-  return snapshot
+  local count = #events
+  local key = tostring(count) .. "\030" .. table_concat(events, "\031", 1, count)
+  local interned = eventListIntern[key]
+  if interned then return interned end
+  interned = {}
+  for i = 1, count do interned[i] = events[i] end
+  eventListIntern[key] = interned
+  return interned
+end
+
+local routeSnapshotIntern = {}
+local sharedRouteSnapshots = {}
+local runtimeRoutePlanIntern = {}
+
+local function RuntimeRouteSnapshot(update, events, unitlessEvents)
+  events = InternEventList(events)
+  unitlessEvents = InternEventList(unitlessEvents)
+  if not IsRegisteredElementFunction(update) then
+    return { update = update, events = events, unitlessEvents = unitlessEvents }
+  end
+  local byEvents = routeSnapshotIntern[update]
+  if not byEvents then byEvents = {}; routeSnapshotIntern[update] = byEvents end
+  local eventKey = events or NIL_ROUTE_KEY
+  local byUnitless = byEvents[eventKey]
+  if not byUnitless then byUnitless = {}; byEvents[eventKey] = byUnitless end
+  local unitlessKey = unitlessEvents or NIL_ROUTE_KEY
+  local route = byUnitless[unitlessKey]
+  if not route then
+    route = { update = update, events = events, unitlessEvents = unitlessEvents }
+    byUnitless[unitlessKey] = route
+    sharedRouteSnapshots[route] = true
+  end
+  return route
+end
+
+local function InternRuntimeRoutePlan(routes)
+  local node = runtimeRoutePlanIntern
+  for i = 1, #UF.elementOrder do
+    local route = routes[UF.elementOrder[i]]
+    if route and sharedRouteSnapshots[route] ~= true then
+      return routes
+    end
+    local key = route or NIL_ROUTE_KEY
+    local nextNode = node[key]
+    if not nextNode then nextNode = {}; node[key] = nextNode end
+    node = nextNode
+  end
+  local plan = node.plan
+  if plan then return plan end
+  node.plan = routes
+  return routes
 end
 
 local function RebuildFrameEvents(frame)
@@ -1014,6 +1305,7 @@ local function RebuildFrameEvents(frame)
   frame._msufEventRouteUnit = frame.unit
   local active = frame._msufActiveElements
   if not active then
+    frame._msufElementEventRoutes = InternRuntimeRoutePlan(routes)
     frame._msufEventRouteNeedsIdentity = false
     UF.RebuildRuntimeStatusState(frame)
     if UF.SyncRuntimeDriver and UF._msufApplyingSpec ~= true then UF.SyncRuntimeDriver() end
@@ -1027,19 +1319,20 @@ local function RebuildFrameEvents(frame)
       if element and update then
         local events = ElementEvents(element, false, frame, frame.MSUFSpec)
         local unitlessEvents = ElementEvents(element, true, frame, frame.MSUFSpec)
-        routes[name] = {
-          update = update,
-          -- Providers normally return immutable constants, but snapshot the
-          -- lists so a future provider that reuses/mutates a table cannot make
-          -- the routing comparator accept stale registrations.
-          events = SnapshotEventList(events),
-          unitlessEvents = SnapshotEventList(unitlessEvents),
-        }
+        -- Providers may reuse or mutate their tables, so the runtime plan owns
+        -- an immutable interned snapshot rather than the provider table.
+        routes[name] = RuntimeRouteSnapshot(update, events, unitlessEvents)
         if type(events) == "table" then
-          for j = 1, #events do AddEventHandler(frame, events[j], update, false) end
+          for j = 1, #events do
+            local event = events[j]
+            AddEventHandler(frame, event, SelectElementEventUpdate(element, frame, event, update), false)
+          end
         end
         if type(unitlessEvents) == "table" then
-          for j = 1, #unitlessEvents do AddEventHandler(frame, unitlessEvents[j], update, true) end
+          for j = 1, #unitlessEvents do
+            local event = unitlessEvents[j]
+            AddEventHandler(frame, event, SelectElementEventUpdate(element, frame, event, update), true)
+          end
         end
       end
     end
@@ -1049,6 +1342,8 @@ local function RebuildFrameEvents(frame)
   local events = frame._msufEvents
   local names = frame._msufEventNames
   if events and names then
+    names = InternEventList(names)
+    frame._msufEventNames = names
     for n = 1, #names do
       local event = names[n]
       local list = events[event]
@@ -1056,10 +1351,24 @@ local function RebuildFrameEvents(frame)
       for i = 2, #list, 2 do
         if list[i] == true then unitless = true break end
       end
-      RegisterFrameEvent(frame, event, unitless)
+      if event == "UNIT_IN_RANGE_UPDATE" then
+        frame._msufCoreRangeEventConfigured = true
+        frame._msufCoreRangeEventUnitless = unitless == true
+        if frame._msufCoreVisible == false then
+          frame._msufCoreRangeEventSuspended = true
+        else
+          RegisterFrameEvent(frame, event, unitless)
+        end
+      else
+        RegisterFrameEvent(frame, event, unitless)
+      end
       frame[event] = CompileFrameEventPath(frame, event, list)
     end
   end
+  -- Compiled routes either capture only the one generic list they need or use
+  -- a shared prototype. The event->builder map itself has no runtime reader.
+  frame._msufEvents = nil
+  frame._msufElementEventRoutes = InternRuntimeRoutePlan(routes)
   UF.RebuildRuntimeStatusState(frame)
   if UF.SyncRuntimeDriver and UF._msufApplyingSpec ~= true then UF.SyncRuntimeDriver() end
   return true
@@ -1214,7 +1523,7 @@ local function FrameEnableElement(frame, name)
     RefreshFrameRoutingAfterElementApply(frame)
     return false
   end
-  frame[GetUpdateKey(name)] = element.Update
+  frame[GetUpdateKey(name)] = SelectElementUpdate(element, frame)
   frame._msufActiveElements[name] = true
   RefreshFrameRoutingAfterElementApply(frame)
   return true
@@ -1242,11 +1551,11 @@ function UF.AttachFrame(frame, opts)
   UF.AttachFrameMethods(frame)
   frame._msufCoreScope = opts and opts.scope or frame._msufCoreScope or "single"
   frame._msufVisualRoot = opts and opts.visualRoot or frame._msufVisualRoot or frame
-  if frame._msufCoreScope == "group"
-    and frame.HookScript
-    and frame._msufGroupOnShowHooked ~= true then
-    frame._msufGroupOnShowHooked = true
-    frame:HookScript("OnShow", GroupFrameOnShow)
+  if frame.HookScript and frame._msufCoreVisibilityHooked ~= true then
+    frame._msufCoreVisibilityHooked = true
+    frame:HookScript("OnShow", FrameOnShow)
+    frame:HookScript("OnHide", FrameOnHide)
+    frame._msufCoreVisible = not frame.IsVisible or frame:IsVisible()
   end
   if UF.attachedFrames[frame] ~= true then
     UF.attachedFrames[frame] = true
@@ -1275,6 +1584,7 @@ function UF.SetFrameSpec(frame, spec, unitFallback)
   if not (frame and spec) then return nil end
   local unit = spec.unit or unitFallback or frame.unit
   frame.MSUFSpec = spec
+  frame._msufCoreSpecEnabled = spec.enabled ~= false
   frame.MSUFUnitKey = unit
   frame.unit = unit
   frame.unitKey = unit
@@ -1322,6 +1632,9 @@ function UF.DetachFrame(frame)
   frame._msufRuntimeAllCount = nil
   frame._msufRuntimeAllLabels = nil
   frame._msufRuntimeAllPath = nil
+  frame._msufGroupIdentityFns = nil
+  frame._msufGroupIdentityCount = nil
+  frame._msufGroupIdentityLabels = nil
   frame._msufGroupIdentityPath = nil
   frame._msufCoreScope = nil
   frame._msufVisualRoot = nil
@@ -1387,13 +1700,14 @@ function UF.ApplyElementToFrame(frame, name, spec, updateReason)
     if frame._msufElementApplyBatch ~= true then RefreshFrameRoutingAfterElementApply(frame) end
     return true
   end
-  frame[GetUpdateKey(name)] = element.Update
+  local update = SelectElementUpdate(element, frame)
+  frame[GetUpdateKey(name)] = update
   frame._msufActiveElements[name] = true
   local immediateReason = updateReason
   if immediateReason == nil and element.UpdateOnApply == true then
     immediateReason = "MSUF_ELEMENT_APPLY"
   end
-  if immediateReason and element.Update then element.Update(frame, immediateReason, frame.unit) end
+  if immediateReason and update then update(frame, immediateReason, frame.unit) end
   if frame._msufElementApplyBatch ~= true then RefreshFrameRoutingAfterElementApply(frame) end
   return true
 end

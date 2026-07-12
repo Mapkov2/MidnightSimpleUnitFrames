@@ -25,25 +25,6 @@ do
         return unit and frames and frames[unit] or nil
     end
 
-    local function ProfBegin(name)
-        if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
-            return MSUF.ProfBegin(name)
-        end
-    end
-
-    local function ProfEnd(name, token)
-        if token and MSUF and MSUF.ProfEnd then
-            MSUF.ProfEnd(name, token)
-        end
-    end
-
-    local function ProfEventBegin(prefix, event)
-        if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
-            local name = prefix .. tostring(event)
-            return name, MSUF.ProfBegin(name)
-        end
-    end
-
     local balanceBuilders = _G.MSUF_CP_FEATURE_BUILDERS
     if type(balanceBuilders) ~= "table" then
         balanceBuilders = {}
@@ -549,11 +530,8 @@ local function _refreshActiveState()
 end
 
 local function _runDeferredAuraRefresh()
-    local profName = "classpower:balance:deferredAura"
-    local profToken = ProfBegin(profName)
     _auraDeferred = false
     if not _active then
-        ProfEnd(profName, profToken)
         return
     end
     _refreshEclipses()
@@ -562,7 +540,6 @@ local function _runDeferredAuraRefresh()
         _predAmt = _computeAP(_castSpell)
         _updateOverlay()
     end
-    ProfEnd(profName, profToken)
 end
 
 local function _deferAuraRefresh()
@@ -605,10 +582,7 @@ end
     end
 
     f:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
-        local profName, profToken = ProfEventBegin("classpower:balance:event:", event)
-        local result = BalanceOnEvent(self, event, arg1, arg2, arg3)
-        ProfEnd(profName, profToken)
-        return result
+        return BalanceOnEvent(self, event, arg1, arg2, arg3)
     end)
 
 _refreshActiveState()

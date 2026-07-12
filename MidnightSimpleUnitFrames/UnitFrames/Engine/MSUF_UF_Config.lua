@@ -1467,6 +1467,11 @@ local function CompileUnitText(out, db, unit, key, conf, general, bars)
   end
   text.healthDelimiter = conf.hpTextSeparator or general.hpTextSeparator or " - "
   text.healthPercentDecimals = (conf.healthTextDecimals == true or conf.hpTextDecimals == true) and 1 or 0
+  if conf.hpFullValueShort ~= nil then
+    text.healthShortNumbers = conf.hpFullValueShort == true
+  else
+    text.healthShortNumbers = general.useShortNumbers ~= false
+  end
   text.nameAnchor = conf.nameTextAnchor or conf.nameAnchor or general.nameTextAnchor or general.nameAnchor or "LEFT"
   text.nameX = Number(conf.nameOffsetX or conf.nameTextOffsetX or general.nameOffsetX or general.nameTextOffsetX, 4)
   local fontBaselineOffset = ResolveFontBaselineOffset(general, conf)

@@ -367,6 +367,20 @@ end
 -- Width-source sync machinery
 ------------------------------------------------------------------------
 
+local function FlushWidthSourceSync()
+    widthSourceQueued = false
+    if InCombat() then
+        widthSourcePendingAfterCombat = true
+        return
+    end
+    local g = GeneralDB()
+    for _, unit in ipairs(CASTBAR_UNITS) do
+        if WidthSourceNeedsReanchor(g, unit) then
+            ApplyCastbarEffectiveSizeUnit(unit, g)
+        end
+    end
+end
+
 -- Queue a one-shot, next-frame pass that re-applies the size of any unit whose
 -- width source changed. Deferred during combat and deduped while queued.
 local function QueueWidthSourceSync()
@@ -378,25 +392,11 @@ local function QueueWidthSourceSync()
     if widthSourceQueued then return end
     widthSourceQueued = true
 
-    local flush = function()
-        widthSourceQueued = false
-        if InCombat() then
-            widthSourcePendingAfterCombat = true
-            return
-        end
-        local g = GeneralDB()
-        for _, unit in ipairs(CASTBAR_UNITS) do
-            if WidthSourceNeedsReanchor(g, unit) then
-                ApplyCastbarEffectiveSizeUnit(unit, g)
-            end
-        end
-    end
-
     local runNext = _G.MSUF_Castbars_RunNextFrame
     if type(runNext) == "function" then
-        runNext(flush)
+        runNext(FlushWidthSourceSync)
     else
-        _G.C_Timer.After(0, flush)
+        _G.C_Timer.After(0, FlushWidthSourceSync)
     end
 end
 

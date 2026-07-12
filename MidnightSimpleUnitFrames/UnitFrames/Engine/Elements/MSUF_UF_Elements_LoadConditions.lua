@@ -170,6 +170,7 @@ end
 
 local RegisterUnitWatch = _G.RegisterUnitWatch
 local UnregisterUnitWatch = _G.UnregisterUnitWatch
+local UnitWatchRegistered = _G.UnitWatchRegistered
 
 -- A frame with no load conditions resolves to "[@unit,exists] show; hide",
 -- which is exactly what RegisterUnitWatch does natively -- and far cheaper.
@@ -200,6 +201,9 @@ end
 
 local function RegisterVisibility(frame, spec)
   local visibilityFrame = VisibilityFrame(frame)
+  if UnitWatchRegistered then
+    frame._msufUnitWatched = UnitWatchRegistered(visibilityFrame) == true and true or nil
+  end
   -- Existence-only visibility: use the lightweight unit watch, never a secure
   -- state driver. Tear down any driver left from a previous conditional config.
   if not VisibilityNeedsDriver(spec) and not ShouldForcePreview(frame) and RegisterUnitWatch then

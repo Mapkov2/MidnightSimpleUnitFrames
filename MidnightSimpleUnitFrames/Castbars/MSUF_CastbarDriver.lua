@@ -14,25 +14,6 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
     return value
 end
 
-local function ProfBegin(name)
-    if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
-        return MSUF.ProfBegin(name)
-    end
-end
-
-local function ProfEnd(name, token)
-    if token and MSUF and MSUF.ProfEnd then
-        MSUF.ProfEnd(name, token)
-    end
-end
-
-local function ProfEventBegin(prefix, event)
-    if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
-        local name = prefix .. tostring(event)
-        return name, MSUF.ProfBegin(name)
-    end
-end
-
 local C_Timer = _G.C_Timer
 local GetTime = _G.GetTime
 local GetCVar = _G.GetCVar
@@ -178,6 +159,7 @@ local function UpdateChannelHasteMarkers(frame, force)
 end
 
 local ToPlain = _G.ToPlain
+local RuntimePlainNumber = _G.MSUF_CastbarRuntime_PlainNumber
 local toPlainIsSecret = _G.issecretvalue or function(_) return false end
 local toPlainHuge = math.huge
 
@@ -190,6 +172,10 @@ local function ToPlainNumber(value)
     if type(value) == "number" and toPlainIsSecret(value) ~= true
         and value == value and value ~= toPlainHuge and value ~= -toPlainHuge then
         return value
+    end
+
+    if RuntimePlainNumber then
+        return RuntimePlainNumber(value)
     end
 
     if ToPlain then
@@ -269,6 +255,7 @@ end
 
 local function MSUF_UpdateCastTimeText_FromStatusBar(frame)
     if not (frame and frame.timeText) then return end
+    if frame._msufNativeTimeBound == true then return end
 
     if not (type(_G.MSUF_IsCastTimeEnabled) == "function" and _G.MSUF_IsCastTimeEnabled(frame)) then
         _G.MSUF_SetTextIfChanged(frame.timeText, "")
@@ -1134,10 +1121,7 @@ local function CreateCastBar(frameName, unit)
     end
 
     frame:SetScript("OnEvent", function(self, event, eventUnit, ...)
-        local profName, profToken = ProfEventBegin("castbar:driverEvent:", event)
-        local result = HandleDriverEvent(self, event, eventUnit, ...)
-        ProfEnd(profName, profToken)
-        return result
+        return HandleDriverEvent(self, event, eventUnit, ...)
     end)
 
     function frame:Cast(state)

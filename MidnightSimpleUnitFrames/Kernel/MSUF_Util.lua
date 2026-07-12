@@ -21,6 +21,15 @@ local string_sub, string_gsub, string_lower = string.sub, string.gsub, string.lo
 local InCombatLockdown = InCombatLockdown
 local CreateFrame, GetTime = CreateFrame, GetTime
 
+-- Built-in profilers were removed in favor of explicit disposable external traces.
+-- Drop their legacy SavedVariables payload once so old reports/armed trace state
+-- no longer consume memory or persist back to disk.
+local legacyProfilerDB = _G.MSUF_GlobalDB
+if type(legacyProfilerDB) == "table" then
+    legacyProfilerDB.clickCoreProfilerLast = nil
+    legacyProfilerDB.cpTraceArm = nil
+end
+
 --- Boss unit token helpers (perf)
 --- Avoid pattern matching (string:match) in hot paths. Pattern matching is
 --- noticeably heavier than simple substring/tonumber checks.

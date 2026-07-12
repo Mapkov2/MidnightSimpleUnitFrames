@@ -14,19 +14,6 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
     return value
 end
 
-local function ProfEnd(name, token)
-    if token and MSUF and MSUF.ProfEnd then
-        MSUF.ProfEnd(name, token)
-    end
-end
-
-local function ProfEventBegin(prefix, event)
-    if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
-        local name = prefix .. tostring(event)
-        return name, MSUF.ProfBegin(name)
-    end
-end
-
 local C_Timer = _G.C_Timer
 local type = type
 local tonumber = tonumber
@@ -62,10 +49,18 @@ local function EnsureDBLazy()
     end
 end
 
+local RuntimePlainNumber = _G.MSUF_CastbarRuntime_PlainNumber
+local CastbarRuntime = _G.MSUF_CastbarRuntime
+
+local function ReleaseRuntimeActive(frame)
+    if CastbarRuntime and CastbarRuntime.ReleaseActive then
+        CastbarRuntime:ReleaseActive(frame)
+    end
+end
+
 local function PlainNumber(value)
-    local fn = _G.MSUF_CastbarRuntime_PlainNumber
-    if type(fn) == "function" then
-        return fn(value)
+    if RuntimePlainNumber then
+        return RuntimePlainNumber(value)
     end
 
     if value == nil then return nil end
@@ -568,7 +563,8 @@ local function ApplyActiveCast(
         state.endTimeMS = endMS
         state.durationObj = durationObj
         state.reverseFill = reverseFill
-        timerDriven = _G.MSUF_Castbar_ApplyActiveDuration(frame, state, ACTIVE_DURATION_OPTIONS) and true or false
+        _G.MSUF_Castbar_ApplyActiveDuration(frame, state, ACTIVE_DURATION_OPTIONS)
+        timerDriven = frame.MSUF_timerDriven == true
     else
         frame.MSUF_durationObj = nil
         frame.MSUF_isChanneled = isChannel
@@ -795,6 +791,7 @@ local function HidePlayerFrameIfNoLongerCasting(frame)
     end
 
     DisableFrameOnUpdate(frame)
+    ReleaseRuntimeActive(frame)
     if frame.timeText then _G.MSUF_SetTextIfChanged(frame.timeText, "") end
     if _G.MSUF_UnregisterCastbar then _G.MSUF_UnregisterCastbar(frame) end
     frame._msufActiveCastGUID = nil
@@ -841,6 +838,7 @@ local function ShowInterruptFeedback(frame, label)
     if playerDB.showInterrupt == false then
         InvalidatePlayerInterruptHide(frame)
         DisableFrameOnUpdate(frame)
+        ReleaseRuntimeActive(frame)
         frame.interruptFeedbackEndTime = nil
         if frame.timeText then _G.MSUF_SetTextIfChanged(frame.timeText, "") end
         if frame.statusBar and frame.statusBar.SetValue then frame.statusBar:SetValue(0) end
@@ -896,6 +894,7 @@ end
 local function DisablePlayerCastbar(frame)
     InvalidatePlayerInterruptHide(frame)
     DisableFrameOnUpdate(frame)
+    ReleaseRuntimeActive(frame)
     if _G.MSUF_UnregisterCastbar then _G.MSUF_UnregisterCastbar(frame) end
     frame.interruptFeedbackEndTime = nil
     ClearActiveCastIdentity(frame)
@@ -1016,10 +1015,7 @@ local function PlayerCastbarOnEventImpl(frame, event, ...)
 end
 
 local function PlayerCastbarOnEvent(frame, event, ...)
-    local profName, profToken = ProfEventBegin("castbar:playerEvent:", event)
-    local result = PlayerCastbarOnEventImpl(frame, event, ...)
-    ProfEnd(profName, profToken)
-    return result
+    return PlayerCastbarOnEventImpl(frame, event, ...)
 end
 
 ExportPublic("MSUF_PlayerCastbar_UpdateLatencyZone", UpdateLatencyZone)

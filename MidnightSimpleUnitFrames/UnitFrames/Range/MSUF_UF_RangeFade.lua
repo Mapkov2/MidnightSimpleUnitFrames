@@ -275,7 +275,9 @@ local function FrameForUnit(unit)
 end
 
 local function FrameVisible(frame)
-  return not (frame and frame.IsShown) or frame:IsShown()
+  if not frame then return true end
+  if frame.IsVisible then return frame:IsVisible() end
+  return not frame.IsShown or frame:IsShown()
 end
 
 local function FrameRangeActive(frame)
@@ -491,7 +493,9 @@ end
 
 local function TargetActive()
   local frame = FrameForUnit("target")
-  return FrameRangeActive(frame)
+  return activeUnits.target == true
+    and FrameRangeActive(frame)
+    and FrameVisible(frame)
 end
 
 local function TargetUnregisterSpells()
@@ -724,6 +728,23 @@ local function RebuildPollSet()
 end
 
 local driver
+local SyncRuntime
+
+local function SetFrameDriverActive(frame, active)
+  local unit = frame and (frame._msufRangeUnit or frame.unit)
+  if not unit then return false end
+  active = active == true
+    and FrameRangeActive(frame)
+    and FrameVisible(frame)
+  local wasActive = activeUnits[unit] == true
+  if wasActive == active then return false end
+  if unit == "target" then MarkTargetSpellSyncDirty() end
+  activeUnits[unit] = active and true or nil
+  activeCount = activeCount + (active and 1 or -1)
+  if activeCount < 0 then activeCount = 0 end
+  MarkPollSetDirty()
+  return true
+end
 
 local function RangeUnitScheduled(unit)
   if not activeUnits[unit] then
@@ -769,14 +790,18 @@ local function ScheduleFocusTargetRange()
 end
 
 local function RangeFrameOnShow(self)
-  MarkPollSetDirty()
+  SetFrameDriverActive(self, true)
+  if not spellsBuilt then
+    RebuildSpells()
+  end
   EvaluateIfActive(self._msufRangeUnit or self.unit, true)
-  RebuildPollSet()
+  if SyncRuntime then SyncRuntime() end
 end
 
-local function RangeFrameOnHide()
-  MarkPollSetDirty()
-  RebuildPollSet()
+local function RangeFrameOnHide(self)
+  if SetFrameDriverActive(self, false) and SyncRuntime then
+    SyncRuntime()
+  end
 end
 
 local function HookFrameVisibility(frame)
@@ -983,7 +1008,7 @@ local function UnregisterDriver()
   driverEventMask = nil
 end
 
-local function SyncRuntime()
+SyncRuntime = function()
   if activeCount > 0 then
     RegisterDriver()
     SyncTargetSpells()
@@ -997,6 +1022,11 @@ local function SyncRuntime()
   TargetUnregisterSpells()
   WipeTable(activeUnits)
   activeCount = 0
+  -- The spell/talent events live on the range driver. Once the last visible
+  -- consumer is gone the driver is intentionally unregistered, so force a
+  -- fresh known-spell selection when a consumer becomes visible again.
+  spellsBuilt = false
+  MarkTargetSpellSyncDirty()
   pollCount = 0
   pollQueued = false
   pollNextAt = nil
@@ -1040,20 +1070,15 @@ function Range.RegisterFrame(frame, spec)
     return false
   end
 
-  if not activeUnits[unit] then
-    activeUnits[unit] = true
-    activeCount = activeCount + 1
-    if unit == "target" then
-      MarkTargetSpellSyncDirty()
+  SetFrameDriverActive(frame, true)
+  if activeUnits[unit] == true then
+    if not spellsBuilt then
+      RebuildSpells()
+    elseif unit == "target" and targetSpellSyncDirty == true then
+      SyncTargetSpells()
     end
-    MarkPollSetDirty()
+    EvaluateUnit(unit, true)
   end
-  if not spellsBuilt then
-    RebuildSpells()
-  elseif unit == "target" and targetSpellSyncDirty == true then
-    SyncTargetSpells()
-  end
-  EvaluateUnit(unit, true)
   SyncRuntime()
   return true
 end
