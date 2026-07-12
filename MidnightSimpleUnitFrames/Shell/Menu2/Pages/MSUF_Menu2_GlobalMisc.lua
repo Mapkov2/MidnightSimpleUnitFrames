@@ -12,7 +12,24 @@ local GP = M.GlobalPage or {}
 local max = math.max
 local min = math.min
 local Call, G, ReadG, SetG, ReadGBool, SetGBool, MenuFontValues, MenuFontKeyGet, MenuFontKeySet, ControlMeta = M.Pick(GP, [[Call G ReadG SetG ReadGBool SetGBool MenuFontValues MenuFontKeyGet MenuFontKeySet ControlMeta]])
+local SETTING_KEY_BY_PATH = {
+    ["language.selection"] = "general.menuLocale",
+    ["menu.font"] = "general.menuFontKey",
+    ["menu.navigation_hover_scale"] = "general.navHoverScale",
+    ["tooltips.provider"] = "general.unitTooltipProvider",
+    ["tooltips.anchor"] = "general.unitTooltipAnchor",
+    ["tooltips.visibility_mode"] = "general.unitTooltipMode",
+    ["tooltips.modifier"] = "general.unitTooltipModifier",
+}
 local function Meta(path, classification, exact)
+    exact = type(exact) == "table" and exact or {}
+    if exact.settingKey == nil then
+        exact.settingKey = SETTING_KEY_BY_PATH[path]
+        if exact.settingKey == nil then
+            local dbKey = tostring(path or ""):match("^setting%.(.+)$")
+            if dbKey then exact.settingKey = "general." .. dbKey end
+        end
+    end
     return ControlMeta("opt_misc", "global", path, classification, exact)
 end
 local VT = M.ValueTextList

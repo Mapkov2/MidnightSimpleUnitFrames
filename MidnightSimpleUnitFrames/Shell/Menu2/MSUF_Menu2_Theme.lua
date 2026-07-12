@@ -267,8 +267,10 @@ local function SetFillGradient(fill, baseColor, amountTop, amountBottom, alphaMu
     fill._msuf2GradientBottomColor = bottom
     ShadeColorInto(top, baseColor, amountTop or 0.16, alphaMul)
     ShadeColorInto(bottom, baseColor, amountBottom or -0.20, alphaMul)
-    if fill._parts then
-        ApplyGradientToParts(fill._parts, "VERTICAL", top, bottom)
+    if fill.L and fill.M and fill.R then
+        ApplyTextureGradient(fill.L, "VERTICAL", top, bottom, true)
+        ApplyTextureGradient(fill.M, "VERTICAL", top, bottom, true)
+        ApplyTextureGradient(fill.R, "VERTICAL", top, bottom, true)
     elseif fill.SetGradientAlpha or fill.SetGradient then
         ApplyTextureGradient(fill, "VERTICAL", top, bottom, false)
     elseif fill.SetVertexColor then
@@ -396,6 +398,12 @@ local SUPERELLIPSE_SPECS = {
     { "M", 0.25, 0.75 },
     { "R", 0.75, 1.00 },
 }
+local function SetSuperellipseVertexColor(self, r, g, b, a)
+    a = a or 1
+    self.L:SetVertexColor(r, g, b, a)
+    self.M:SetVertexColor(r, g, b, a)
+    self.R:SetVertexColor(r, g, b, a)
+end
 local function CreateSuperellipseParts(frame, layer, subLevel)
     local parts = {}
     -- The pill/superellipse skin is three textures, not a nine-slice frame. This keeps
@@ -408,12 +416,7 @@ local function CreateSuperellipseParts(frame, layer, subLevel)
         SmoothTexture(tex)
         parts[spec[1]] = tex
     end
-    parts._parts = { parts.L, parts.M, parts.R }
-    parts.SetVertexColor = function(self, r, g, b, a)
-        for i = 1, #self._parts do
-            self._parts[i]:SetVertexColor(r, g, b, a or 1)
-        end
-    end
+    parts.SetVertexColor = SetSuperellipseVertexColor
     return parts
 end
 local function LayoutSuperellipseParts(parts, frame, inset, capW)
@@ -2102,23 +2105,22 @@ local function SetNavPillArt(btn, state, baseColor, topAmount, bottomAmount, alp
 end
 local function SetSuperellipsePartsShown(parts, shown)
     if not parts then return end
-    local list = parts._parts
-    if not list then return end
-    for i = 1, #list do
-        if shown then
-            list[i]:Show()
-        else
-            list[i]:Hide()
-        end
+    if shown then
+        parts.L:Show()
+        parts.M:Show()
+        parts.R:Show()
+    else
+        parts.L:Hide()
+        parts.M:Hide()
+        parts.R:Hide()
     end
 end
 local function SetSuperellipsePartsBlend(parts, blend)
     if not parts then return end
-    local list = parts._parts
-    if not list then return end
-    for i = 1, #list do
-        if list[i].SetBlendMode then list[i]:SetBlendMode(blend or "BLEND") end
-    end
+    blend = blend or "BLEND"
+    if parts.L.SetBlendMode then parts.L:SetBlendMode(blend) end
+    if parts.M.SetBlendMode then parts.M:SetBlendMode(blend) end
+    if parts.R.SetBlendMode then parts.R:SetBlendMode(blend) end
 end
 local function EnsureNavActiveFX(btn)
     if not (btn and btn.CreateTexture and T.CreateSuperellipseLayers) then return nil end
@@ -2492,7 +2494,6 @@ end
 local SMOOTH_SCROLL_SPEED = 14
 local SMOOTH_SCROLL_MAX_ELAPSED = 0.050
 local SMOOTH_SCROLL_EPSILON = 0.45
-local SMOOTH_SCROLL_STEP_SEC = 1 / 30
 local function PixelBarTexture(texture)
     if not texture then return texture end
     texture:SetTexture("Interface\\Buttons\\WHITE8X8")
@@ -2554,7 +2555,6 @@ function T.StyleScrollFrame(scroll, anchor)
         end
     end
     local rawSetVerticalScroll = scroll.SetVerticalScroll
-    local smoothScrollElapsed = 0
     local function CurrentMaxScroll()
         local maxScroll = scroll._msuf2MaxScroll
         if maxScroll == nil then
@@ -2565,10 +2565,10 @@ function T.StyleScrollFrame(scroll, anchor)
         end
         return maxScroll
     end
-    local function SetRawScroll(offset)
-        local maxScroll = CurrentMaxScroll()
+    local function SetRawScroll(offset, current, maxScroll)
+        if maxScroll == nil then maxScroll = CurrentMaxScroll() end
         offset = ClampScrollValue(offset, maxScroll)
-        local current = (scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0
+        if current == nil then current = (scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0 end
         if rawSetVerticalScroll and math.abs(offset - current) > 0.01 then rawSetVerticalScroll(scroll, offset) end
         if bar then
             if bar._msuf2LastScrollValue ~= offset then
@@ -2582,7 +2582,6 @@ function T.StyleScrollFrame(scroll, anchor)
     end
     local function StopSmoothScroll()
         scroll._msuf2SmoothScrollTarget = nil
-        smoothScrollElapsed = 0
         local driver = scroll._msuf2SmoothScrollDriver
         if driver then driver:Hide() end
     end
@@ -2592,24 +2591,21 @@ function T.StyleScrollFrame(scroll, anchor)
             StopSmoothScroll()
             return
         end
-        target = ClampScrollValue(target, CurrentMaxScroll())
+        local maxScroll = CurrentMaxScroll()
+        target = ClampScrollValue(target, maxScroll)
         scroll._msuf2SmoothScrollTarget = target
         local current = (scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0
         local delta = target - current
         if (T.ReducedMotionEnabled and T.ReducedMotionEnabled()) or math.abs(delta) <= SMOOTH_SCROLL_EPSILON then
-            SetRawScroll(target)
+            SetRawScroll(target, current, maxScroll)
             StopSmoothScroll()
             return
         end
         elapsed = tonumber(elapsed) or 0
-        smoothScrollElapsed = smoothScrollElapsed + elapsed
-        if smoothScrollElapsed < SMOOTH_SCROLL_STEP_SEC then return end
-        elapsed = smoothScrollElapsed
-        smoothScrollElapsed = 0
         if elapsed > SMOOTH_SCROLL_MAX_ELAPSED then elapsed = SMOOTH_SCROLL_MAX_ELAPSED end
         local blend = math.min(1, elapsed * SMOOTH_SCROLL_SPEED)
         if blend <= 0 then return end
-        SetRawScroll(current + delta * blend)
+        SetRawScroll(current + delta * blend, current, maxScroll)
     end
     local function EnsureSmoothScrollDriver()
         local driver = scroll._msuf2SmoothScrollDriver
@@ -2621,15 +2617,16 @@ function T.StyleScrollFrame(scroll, anchor)
         return driver
     end
     local function SmoothScrollTo(offset)
-        local target = ClampScrollValue(offset, CurrentMaxScroll())
+        local maxScroll = CurrentMaxScroll()
+        local target = ClampScrollValue(offset, maxScroll)
         if T.ReducedMotionEnabled and T.ReducedMotionEnabled() then
-            SetRawScroll(target)
+            SetRawScroll(target, nil, maxScroll)
             StopSmoothScroll()
             return
         end
         local current = (scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0
         if math.abs(target - current) <= SMOOTH_SCROLL_EPSILON then
-            SetRawScroll(target)
+            SetRawScroll(target, current, maxScroll)
             StopSmoothScroll()
             return
         end

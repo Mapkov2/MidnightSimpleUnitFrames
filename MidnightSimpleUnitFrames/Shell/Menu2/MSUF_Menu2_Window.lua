@@ -1571,8 +1571,20 @@ local function BuildWindowToolbar(state)
         if type(M.StartNewAssistantTask) == "function" then return M.StartNewAssistantTask() end
         if _G.C_Timer and _G.C_Timer.After then
             _G.C_Timer.After(0, function()
-                if type(M.StartNewAssistantTask) == "function" then M.StartNewAssistantTask() end
+                if type(M.StartNewAssistantTask) == "function" then
+                    M.StartNewAssistantTask()
+                    return
+                end
+                local A = MSUF and MSUF.Assistant
+                if A and type(A.StartNewTaskWithRuntime) == "function" then
+                    A.StartNewTaskWithRuntime("new-task-toolbar")
+                end
             end)
+            return true
+        end
+        local A = MSUF and MSUF.Assistant
+        if A and type(A.StartNewTaskWithRuntime) == "function" then
+            return A.StartNewTaskWithRuntime("new-task-toolbar")
         end
     end
     local function RunToolbarEditMode()
