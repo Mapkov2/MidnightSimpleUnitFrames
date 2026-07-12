@@ -46,35 +46,79 @@ function A.RegistryCoreBuilders.BuildUnitAuraAdvancedHelpers(ctx)
 
     local function AuraUseSharedRules(scope)
         local Model = AuraModel()
-        if Model and type(Model.UseSharedRules) == "function" then return Model.UseSharedRules(scope) end
+        local modelValue = Model and type(Model.UseSharedRules) == "function" and Model.UseSharedRules(scope) or nil
+        if scope == "shared" then return true end
+        local auras = EnsureAuraFallbackDB()
+        local pu = auras.perUnit and auras.perUnit[AuraRuntimeUnit(scope)]
+        if pu and pu.overrideFilters ~= nil then return pu.overrideFilters ~= true end
+        if modelValue ~= nil then return modelValue == true end
         return true
     end
 
     local function AuraSetUseSharedRules(scope, value)
         local Model = AuraModel()
         if Model and type(Model.SetUseSharedRules) == "function" then Model.SetUseSharedRules(scope, value) end
+        if scope == "shared" then return end
+        local auras = EnsureAuraFallbackDB()
+        local unit = AuraRuntimeUnit(scope)
+        auras.perUnit[unit] = type(auras.perUnit[unit]) == "table" and auras.perUnit[unit] or {}
+        local pu = auras.perUnit[unit]
+        pu.overrideFilters = value ~= true
+        if value ~= true and type(pu.filters) ~= "table" then pu.filters = {} end
+    end
+
+    local function FallbackFilters(scope, create)
+        local auras, shared = EnsureAuraFallbackDB()
+        shared.filters = type(shared.filters) == "table" and shared.filters or (create and {} or nil)
+        if scope == "shared" then return shared.filters end
+        local unit = AuraRuntimeUnit(scope)
+        local pu = auras.perUnit and auras.perUnit[unit]
+        if create and type(pu) ~= "table" then
+            pu = {}
+            auras.perUnit[unit] = pu
+        end
+        if pu and pu.overrideFilters == true then
+            if create and type(pu.filters) ~= "table" then pu.filters = {} end
+            return pu.filters
+        end
+        return shared.filters
     end
 
     local function AuraFiltersEnabled(scope)
         local Model = AuraModel()
-        if Model and type(Model.ScopeFiltersEnabled) == "function" then return Model.ScopeFiltersEnabled(scope) end
+        local modelValue = Model and type(Model.ScopeFiltersEnabled) == "function" and Model.ScopeFiltersEnabled(scope) or nil
+        local filters = FallbackFilters(scope, false)
+        if type(filters) == "table" and filters.enabled ~= nil then return filters.enabled ~= false end
+        if modelValue ~= nil then return modelValue ~= false end
         return true
     end
 
     local function AuraSetFiltersEnabled(scope, value)
         local Model = AuraModel()
         if Model and type(Model.SetScopeFiltersEnabled) == "function" then Model.SetScopeFiltersEnabled(scope, value) end
+        local filters = FallbackFilters(scope, true)
+        if type(filters) == "table" then filters.enabled = value == true end
     end
 
     local function AuraReadFilter(scope, kind, key, defaultValue)
         local Model = AuraModel()
-        if Model and type(Model.ReadFilter) == "function" then return Model.ReadFilter(scope, kind, key, defaultValue) end
+        local modelValue = Model and type(Model.ReadFilter) == "function" and Model.ReadFilter(scope, kind, key, defaultValue) or nil
+        local filters = FallbackFilters(scope, false)
+        local group = type(filters) == "table" and filters[kind == "buff" and "buffs" or "debuffs"] or nil
+        if type(group) == "table" and group[key] ~= nil then return group[key] end
+        if modelValue ~= nil then return modelValue end
         return defaultValue
     end
 
     local function AuraWriteFilter(scope, kind, key, value)
         local Model = AuraModel()
         if Model and type(Model.WriteFilter) == "function" then Model.WriteFilter(scope, kind, key, value) end
+        local filters = FallbackFilters(scope, true)
+        local groupKey = kind == "buff" and "buffs" or "debuffs"
+        if type(filters) == "table" then
+            filters[groupKey] = type(filters[groupKey]) == "table" and filters[groupKey] or {}
+            filters[groupKey][key] = value
+        end
     end
 
     return {

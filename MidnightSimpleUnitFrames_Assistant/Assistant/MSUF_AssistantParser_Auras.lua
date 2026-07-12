@@ -216,6 +216,7 @@ local function AuraGeometryAxis(text, direction)
 end
 
 local function AuraGeometryAttribute(text, direction)
+    local hasSizeIntent = ContainsAny(text, AurasPhrases[16])
     if ContainsAny(text, AurasPhrases[9]) then
         return "cooldownAnchor"
     end
@@ -224,13 +225,12 @@ local function AuraGeometryAttribute(text, direction)
         return "filterToken"
     end
     if ContainsAny(text, AurasPhrases[13])
-        or (ContainsAny(text, AurasPhrases[14]) and direction) then
+        or (ContainsAny(text, AurasPhrases[14]) and (direction or not hasSizeIntent)) then
         return "growth"
     end
     if ContainsAny(text, AurasPhrases[15]) then
         return "anchor"
     end
-    local hasSizeIntent = ContainsAny(text, AurasPhrases[16])
     if not hasSizeIntent and ContainsAny(text, AurasPhrases[17]) then
         return "max"
     end
@@ -332,6 +332,7 @@ local function ParseAuraGeometryShortcut(text)
     if not attr then return nil end
 
     local changes = {}
+    local missingEnumSettings = {}
     for i = 1, #scopes do
         for j = 1, #lanes do
             local key = AuraGeometrySettingKey(scopes[i], lanes[j], attr)
@@ -345,11 +346,26 @@ local function ParseAuraGeometryShortcut(text)
                         relativeDelta = relativeDelta,
                         direction = direction,
                     }
+                elseif setting.type == "enum" then
+                    missingEnumSettings[#missingEnumSettings + 1] = setting
                 end
             end
         end
     end
-    if #changes == 0 then return nil end
+    if #changes == 0 then
+        if #missingEnumSettings == 1 and type(P.MissingValueResponse) == "function" then
+            return P.MissingValueResponse({ { setting = missingEnumSettings[1], score = 100 } }, text)
+        end
+        if #missingEnumSettings > 1 then
+            return {
+                kind = "answer",
+                status = "ambiguous",
+                text = "Which aura frame and lane should I change? For example: 'change player buff growth', 'change target debuff growth', or 'change raid buff growth'.",
+                summary = "Asks for the missing Aura growth scope before changing several lanes.",
+            }
+        end
+        return nil
+    end
     return {
         kind = "changes",
         changes = changes,
@@ -831,7 +847,11 @@ local function ParseAuraStyleBoolShortcut(text)
 end
 
 local AURA_STYLE_NUMBER_SPECS = {
-    { key = "stackTextSize", label = "Stack Text Size", aliases = { "stack size", "stack text size", "stack count text size" }, root = true },
+    { key = "stackTextSize", label = "Stack Text Size", aliases = {
+        "stack size", "stack text size", "stack count text size",
+        "stack groesse", "stack grosse", "stack text groesse", "stack text grosse",
+        "stack count text groesse", "stack count text grosse",
+    }, root = true },
     { key = "cooldownTextSize", label = "Cooldown Text Size", aliases = { "cooldown size", "cooldown text size", "timer text size", "timer size" }, root = true },
     { key = "stackTextOffsetX", label = "Stack Text X Offset", aliases = { "stack x", "stack x offset", "stack text x", "stack text x offset" } },
     { key = "stackTextOffsetY", label = "Stack Text Y Offset", aliases = { "stack y", "stack y offset", "stack text y", "stack text y offset" } },
@@ -2462,6 +2482,7 @@ local function AuraBlacklistSpellValue(raw)
     local patterns = {
         "[Ww]hitelist%s+(.+)%s+[Ii]n%s+",
         "[Ww]hitelist%s+(.+)%s+[Ff]or%s+",
+        "[Ww]hitelist%s+(.+)%s+[Oo]n%s+",
         "[Aa]dd%s+(.+)%s+to%s+.+[Ww]hitelist",
         "[Rr]emove%s+(.+)%s+from%s+.+[Ww]hitelist",
         "[Aa]dd%s+(.+)%s+to%s+.+[Bb]lacklist",

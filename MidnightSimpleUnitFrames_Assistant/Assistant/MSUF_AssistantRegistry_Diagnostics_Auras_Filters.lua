@@ -86,10 +86,55 @@ function A.DiagnosticsRegistry.BuildAuraDiagnosticFilterHelpers(ctx)
         end
     end
 
-    local function AddUnitAuraBlacklistDiagnostics(scope, label, issues, choices)
-        -- 12.1 native AuraContainers currently accept Blizzard filter strings,
-        -- not addon SpellID whitelist/blacklist predicates. Keep legacy profile
-        -- data out of diagnostics so it is not presented as an active cause.
+    local function EnabledEntryCount(entries)
+        if type(entries) ~= "table" then return 0 end
+        local count = 0
+        for _, enabled in pairs(entries) do
+            if enabled == true then count = count + 1 end
+        end
+        return count
+    end
+
+    local function UnitBlacklistLane(scope, lane)
+        local db = _G.MSUF_DB
+        local auras = type(db) == "table" and db.auras3 or nil
+        local perUnit = type(auras) == "table" and auras.perUnit or nil
+        local runtimeUnit = scope == "boss" and "boss1" or scope
+        local unit = type(perUnit) == "table" and perUnit[runtimeUnit] or nil
+        local root = type(unit) == "table" and unit.blacklist or nil
+        if type(root) ~= "table" then return nil end
+        local laneRoot = root[lane == "debuff" and "debuffs" or "buffs"]
+        return type(laneRoot) == "table" and laneRoot or root
+    end
+
+    local function GroupBlacklistLane(scope, lane)
+        local db = _G.MSUF_DB
+        if type(db) ~= "table" then return nil end
+        local key = scope == "party" and "gf_party" or (scope == "mythicraid" and "gf_mythicraid" or "gf_raid")
+        local conf = db[key]
+        local auras = type(conf) == "table" and conf.auras or nil
+        local group = type(auras) == "table" and auras[lane] or nil
+        return type(group) == "table" and group or nil
+    end
+
+    local function AddUnitAuraBlacklistDiagnostics(scope, label, lanes, issues, choices)
+        lanes = type(lanes) == "table" and lanes or { "buff", "debuff" }
+        for i = 1, #lanes do
+            local lane = lanes[i]
+            local laneLabel = AuraLaneLabel(lane)
+            local blacklist = UnitBlacklistLane(scope, lane)
+            local hidePermanentKey = "auras3." .. scope .. "." .. lane .. ".blacklist.hidePermanent"
+            if type(blacklist) == "table" and blacklist.hidePermanent == true then
+                issues[#issues + 1] = label .. " " .. laneLabel .. " hide permanent/no-duration auras. This rule still applies when the normal filter gate is off."
+                AddFixChoice(choices, hidePermanentKey, false, "Show permanent " .. label .. " " .. laneLabel)
+            end
+            local count = EnabledEntryCount(type(blacklist) == "table" and blacklist.spells or nil)
+            if count > 0 then
+                issues[#issues + 1] = label .. " " .. laneLabel .. " have " .. tostring(count)
+                    .. " live exact-SpellID " .. (count == 1 and "entry" or "entries")
+                    .. ", used where Blizzard permits identity filtering. Ask to list that blacklist if one specific aura is missing."
+            end
+        end
     end
 
     local function GroupAuraDefaultMax(lane)
@@ -127,8 +172,29 @@ function A.DiagnosticsRegistry.BuildAuraDiagnosticFilterHelpers(ctx)
             end
         end
 
-        -- Group category blacklists are legacy read-only data in the native
-        -- container path and cannot hide auras without addon aura scans.
+        local group = GroupBlacklistLane(scope, lane)
+        local blacklist = type(group) == "table" and group.blacklist or nil
+        local hidePermanentKey = "gf_" .. scope .. ".auras." .. lane .. ".blacklist.hidePermanent"
+        if (type(group) == "table" and group.hidePermanent == true)
+            or (type(blacklist) == "table" and blacklist.hidePermanent == true) then
+            issues[#issues + 1] = label .. " " .. laneLabel .. " hide permanent/no-duration auras."
+            AddFixChoice(choices, hidePermanentKey, false, "Show permanent " .. label .. " " .. laneLabel)
+        end
+
+        local spells = type(blacklist) == "table" and blacklist.spells or nil
+        if type(spells) ~= "table" and type(group) == "table" then spells = group.blacklistSpells end
+        local spellCount = EnabledEntryCount(spells)
+        if spellCount > 0 then
+            issues[#issues + 1] = label .. " " .. laneLabel .. " have " .. tostring(spellCount)
+                .. " live exact-SpellID " .. (spellCount == 1 and "entry" or "entries")
+                .. ", used where Blizzard permits identity filtering. Ask to list that blacklist if one specific aura is missing."
+        end
+        local categoryCount = EnabledEntryCount(type(group) == "table" and group.blacklistCats or nil)
+        if categoryCount > 0 then
+            issues[#issues + 1] = label .. " " .. laneLabel .. " have " .. tostring(categoryCount)
+                .. " live hidden aura " .. (categoryCount == 1 and "category" or "categories")
+                .. ". Category lists expand to native exact-SpellID exclusions with the same Blizzard restrictions."
+        end
     end
 
     return {

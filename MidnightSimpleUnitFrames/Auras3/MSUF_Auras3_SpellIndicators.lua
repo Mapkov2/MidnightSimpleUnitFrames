@@ -1013,9 +1013,7 @@ local function CreateSlots(root, slotRoot, parentFrame)
     Runtime.SyncGeometry(container, slotRoot, parentFrame)
     for i = 1, #slotRoot.slots do
         local slot = slotRoot.slots[i]
-        local addSlotToken = A3._TraceBeginLane("MSUF.AddAuraSlot", slot, slot.slotKey)
         container:AddAuraSlot(slot.slotKey, slot.nativeFilter, SlotOptions(container, slot, i))
-        A3._TraceEnd(addSlotToken)
         container._msufA3SpellIndicatorSlotCandidateFilterSignatures[slot.slotKey] = slot.candidateFilterSignature
     end
     if not deps.RegisterContainer(container) then
@@ -1049,7 +1047,6 @@ function Runtime.Apply(root, slotRoot, parentFrame, forceRecreate)
     if not (root and Runtime.IsRoot(slotRoot)) then return nil end
     local deps = D()
     if not deps.HideContainer then return nil end
-    local traceToken = A3._TraceBeginLane("MSUF.ApplySpellIndicators", slotRoot, forceRecreate == true and "force" or "auto")
     local key = slotRoot.rootKey or "SpellIndicators"
     local trackingSignature = slotRoot._msufA3TrackingSignature
     local structuralSignature = slotRoot._msufA3StructuralSignature
@@ -1061,16 +1058,14 @@ function Runtime.Apply(root, slotRoot, parentFrame, forceRecreate)
         UpdateSlots(current, slotRoot)
         Runtime.SyncGeometry(current, slotRoot, parentFrame)
         current:Show()
-        if deps.RegisterContainer and not deps.RegisterContainer(current) then return A3._TraceFinish(traceToken, nil) end
+        if deps.RegisterContainer and not deps.RegisterContainer(current) then return nil end
         if current._msufA3TrackingSignature ~= trackingSignature and type(current.UpdateAllAuras) == "function" then
-            local updateToken = A3._TraceBeginContainer("MSUF.UpdateAllAuras", current, "spellIndicators")
             current:UpdateAllAuras()
-            A3._TraceEnd(updateToken)
         end
         current._msufA3TrackingSignature = trackingSignature
         current._msufA3StructuralSignature = structuralSignature
         current._msufA3LayoutSignature = layoutSignature
-        return A3._TraceFinish(traceToken, current)
+        return current
     end
     Runtime.ReleaseContainerEffects(current, parentFrame)
     deps.HideContainer(current)
@@ -1082,5 +1077,5 @@ function Runtime.Apply(root, slotRoot, parentFrame, forceRecreate)
         current._msufA3LayoutSignature = layoutSignature
         root[key] = current
     end
-    return A3._TraceFinish(traceToken, current)
+    return current
 end

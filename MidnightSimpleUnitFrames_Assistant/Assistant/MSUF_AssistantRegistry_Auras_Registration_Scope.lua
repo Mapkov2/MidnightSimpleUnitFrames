@@ -86,11 +86,14 @@ function A.AurasRegistry.BuildScopeRegistrationHelpers(ctx)
         })
     end
 
-    local function RegisterAuraScopeBoolean(scope, attr, label, defaultValue, aliases, read, write, applyText, exactAliases)
+    local function RegisterAuraScopeBoolean(scope, attr, label, defaultValue, aliases, read, write, applyText, exactAliases, opts)
+        opts = opts or {}
         Registry:RegisterSetting({
             key = "auras3." .. scope .. "." .. attr,
             label = AuraScopeLabel(scope) .. " " .. label,
             category = AuraScopeLabel(scope) .. " / Auras",
+            page = opts.page,
+            description = opts.description,
             unit = scope,
             frameType = "aura",
             attribute = "aura" .. attr,

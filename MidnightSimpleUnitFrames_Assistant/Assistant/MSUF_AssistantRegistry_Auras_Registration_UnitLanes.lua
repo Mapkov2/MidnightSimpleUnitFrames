@@ -29,16 +29,20 @@ function A.AurasRegistry.BuildUnitLaneRegistrationHelpers(ctx)
         return "aura" .. (lane == "buff" and "Buff" or "Debuff") .. attr
     end
 
-    local function RegisterAuraUnitLaneBoolean(unit, lane, attr, label, aliases)
+    local function RegisterAuraUnitLaneBoolean(unit, lane, attr, label, aliases, opts)
+        opts = opts or {}
         Registry:RegisterSetting({
             key = "auras3." .. unit .. "." .. lane .. "." .. attr,
             label = UNIT_LABELS[unit] .. " " .. label,
             category = UNIT_LABELS[unit] .. " / Auras",
+            page = opts.page,
+            description = opts.description,
             unit = unit,
             frameType = "aura",
             attribute = AuraLaneAttribute(lane, attr),
             type = "boolean",
             aliases = aliases,
+            exactAliases = opts.exactAliases,
             get = function() return AuraLaneShown(unit, lane) end,
             set = function(value) SetAuraLaneShown(unit, lane, value) end,
             apply = function() ApplyAura(unit, "MSUF_ASSISTANT_AURA_VISIBILITY") end,

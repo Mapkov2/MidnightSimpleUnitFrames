@@ -293,6 +293,7 @@
     <Script file="Assistant\MSUF_AssistantParser_Profiles.lua"/>
     <Script file="Assistant\MSUF_AssistantParser_Auras_Data.lua"/>
     <Script file="Assistant\MSUF_AssistantParser_Auras.lua"/>
+    <Script file="Assistant\MSUF_AssistantParser_AuraFiltering.lua"/>
     <Script file="Assistant\MSUF_AssistantParser_Actions_Data.lua"/>
     <Script file="Assistant\MSUF_AssistantParser_Actions.lua"/>
     <Script file="Assistant\MSUF_AssistantParser_Registry_MatchCache.lua"/>

@@ -35,6 +35,9 @@ function A.AurasRegistry.RegisterUnitLaneSettings(ctx)
     local AuraWriteLanePerRow = ctx.AuraWriteLanePerRow
     local AURA_LANE_GROWTH_VALUES = ctx.AURA_LANE_GROWTH_VALUES
     local AURA_LANE_GROWTH_ALIASES = ctx.AURA_LANE_GROWTH_ALIASES
+    local unitPages = {
+        player = "uf_player", target = "uf_target", focus = "uf_focus", boss = "uf_boss",
+    }
     local AuraReadLaneGrowthPair = ctx.AuraReadLaneGrowthPair
     local AuraWriteLaneGrowthPair = ctx.AuraWriteLaneGrowthPair
     local AURA_ANCHOR_VALUES = ctx.AURA_ANCHOR_VALUES
@@ -66,11 +69,17 @@ function A.AurasRegistry.RegisterUnitLaneSettings(ctx)
     for _, unit in ipairs(AURA_UNITS) do
         for _, laneInfo in ipairs(AURA_LANES) do
             local lane = laneInfo.key
+            local unitLabel = tostring(unit):gsub("^%l", string.upper)
             local aliases = {}
             AddAliasesForAuraScope(aliases, unit, laneInfo.plural:lower())
+            AddAuraLaneAliases(aliases, unit, lane, "lane")
             AddAuraLaneAliases(aliases, unit, lane, "visibility")
             AddAuraLaneAliases(aliases, unit, lane, "shown")
-            RegisterAuraUnitLaneBoolean(unit, lane, "visible", laneInfo.plural, aliases)
+            RegisterAuraUnitLaneBoolean(unit, lane, "visible", laneInfo.plural, aliases, {
+                page = unitPages[unit],
+                description = "Shows or hides the entire " .. unitLabel .. " " .. laneInfo.label:lower()
+                    .. " icon lane. This is lane visibility, not filtering: it does not change Filters Enabled, Hide Permanent, or any individual Blizzard filter token.",
+            })
 
             aliases = {}
             AddAuraLaneAliases(aliases, unit, lane, "max")
