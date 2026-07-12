@@ -186,14 +186,15 @@ local function BuildGFBars(ctx)
     local hpSliderW = min(310, max(230, textRightW))
     local textDropW = min(310, max(220, textCardW))
     local textHalfDropW = floor((textCardW - 44) / 2)
-    local function TextModeExampleStr(mode, delim, isPower, decimalHP, hidePercentSymbol)
-        local cur     = isPower and "100"  or "12,450"
-        local max_    = isPower and "100"  or "15,000"
+    local function TextModeExampleStr(mode, delim, isPower, decimalHP, hidePercentSymbol, shortNumbers)
+        local cur     = isPower and "100"  or (shortNumbers and "12.5k" or "12,450")
+        local max_    = isPower and "100"  or (shortNumbers and "15.0k" or "15,000")
         local pct     = isPower and "100" or (decimalHP and "83.0" or "83")
         if hidePercentSymbol ~= true then pct = pct .. "%" end
-        local deficit = isPower and "0"    or "-2,550"
+        local deficit = isPower and "0"    or (shortNumbers and "-2.6k" or "-2,550")
         if mode == "PERCENT"        then return pct
         elseif mode == "CURRENT"    then return cur
+        elseif mode == "FULLVALUE"  then return cur
         elseif mode == "MAX"        then return max_
         elseif mode == "DEFICIT"    then return deficit
         elseif mode == "CURMAX"     then return cur  .. delim .. max_
@@ -223,7 +224,7 @@ local function BuildGFBars(ctx)
         }
         return rev[mode] or mode
     end
-    local function BuildTextPreviewStr(leftMode, centerMode, rightMode, delim, reverse, isPower, decimalHP, hideLeft, hideCenter, hideRight)
+    local function BuildTextPreviewStr(leftMode, centerMode, rightMode, delim, reverse, isPower, decimalHP, shortNumbers, hideLeft, hideCenter, hideRight)
         if reverse and not isPower then
             leftMode, centerMode, rightMode = ReverseHpPreviewMode(rightMode), ReverseHpPreviewMode(centerMode), ReverseHpPreviewMode(leftMode)
             hideLeft, hideRight = hideRight, hideLeft
@@ -232,7 +233,7 @@ local function BuildGFBars(ctx)
         local hideSlots = { hideLeft, hideCenter, hideRight }
         local parts = {}
         for i, mode in ipairs(slots) do
-            local ex = TextModeExampleStr(mode, delim, isPower, decimalHP, hideSlots[i])
+            local ex = TextModeExampleStr(mode, delim, isPower, decimalHP, hideSlots[i], shortNumbers)
             if ex then parts[#parts + 1] = ex end
         end
         return #parts > 0 and table.concat(parts, "  ") or "(none)"
@@ -441,7 +442,24 @@ local function BuildGFBars(ctx)
         end
         local function SlotControl(slot, label, x, y, width)
             local spec = cfg.slots[slot]
-            controls[slot] = ScopeDropdown(ctx, content, label, TEXT_MODES, width, spec.key, spec.default, "visual", x, y, width)
+            local control = W.Dropdown(content, label, TEXT_MODES, width)
+            controls[slot] = control
+            M.BindDropdownWidget(ctx, control,
+                function() return Val(CurrentScope(), spec.key, spec.default) end,
+                function(value)
+                    Set(CurrentScope(), spec.key, value or spec.default, "visual")
+                    SetCurrentSlot(kind, slot)
+                    FocusGFPreviewText(kind, slot, true)
+                    local textEnabled = cfg.showGet and cfg.showGet() or Bool(CurrentScope(), cfg.showKey, cfg.showDefault)
+                    if controls.RefreshPercentToggles then controls.RefreshPercentToggles(textEnabled) end
+                    if controls.RefreshShortNumbersToggle then controls.RefreshShortNumbersToggle(textEnabled) end
+                    if value == "FULLVALUE" and controls.shortNumbers and T.PlayNeonFlash then
+                        T.PlayNeonFlash(controls.shortNumbers, "info", { alpha = 0.26, duration = 0.85 })
+                    end
+                    RequestGroupBarsRefresh(ctx, "gf-bars-text-mode")
+                end,
+                ControlMeta(ctx, "text." .. kind .. ".slot." .. slot .. ".mode"))
+            W.MoveWidget(control, content, x, y, width, "LEFT")
         end
         SlotControl("right", "Right slot", 16, -96, textCardW - 32)
         SlotControl("left", "Left slot", 16, -178, textHalfDropW)
@@ -475,6 +493,20 @@ local function BuildGFBars(ctx)
         controls.delimiter = ScopeDropdown(ctx, content, "Delimiter", DELIMITER_VALUES, textHalfDropW, cfg.delimiterKey, " / ", "visual", 16, -266, textHalfDropW)
         if cfg.reverseKey then controls.reverse = BindScopeToggle(ctx, W.ToggleAt(content, "Reverse order", 28 + textHalfDropW, -288, textHalfDropW), cfg.reverseKey, false, "visual") end
         if cfg.decimalsKey then controls.decimals = BindScopeToggle(ctx, W.ToggleAt(content, "Decimal percent", 28 + textHalfDropW, -316, textHalfDropW), cfg.decimalsKey, false, "visual") end
+        if cfg.shortNumbersKey then
+            controls.shortNumbers = BindScopeToggle(ctx, W.ToggleAt(content, "Abbreviate HP values (K/M)", 16, -316, textHalfDropW), cfg.shortNumbersKey, true, "visual")
+            function controls.RefreshShortNumbersToggle(enabled)
+                local hasNumericValue = false
+                for _, spec in pairs(cfg.slots or {}) do
+                    local mode = Val(CurrentScope(), spec.key, spec.default)
+                    if mode ~= "NONE" and mode ~= "PERCENT" then
+                        hasNumericValue = true
+                        break
+                    end
+                end
+                SetOptionEnabled(controls.shortNumbers, enabled == true and hasNumericValue)
+            end
+        end
         local position = TextCard(tab, "Position", cfg.positionSubtitle, textRightX, -4, textRightW, 410)
         controls.x = ScopeSlider(ctx, position, "X Offset", -100, 100, 1, hpSliderW, cfg.xKey, 0, "font", 16, -64, textRightW - 58)
         controls.y = ScopeSlider(ctx, position, "Y Offset", -100, 100, 1, hpSliderW, cfg.yKey, 0, "font", 16, -122, textRightW - 58)
