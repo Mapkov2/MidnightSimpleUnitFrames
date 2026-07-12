@@ -135,6 +135,7 @@ GF.HEALTH_TEXT_MODES = {
     { key = "NONE",           label = "None"                           },
     { key = "PERCENT",        label = "Percent"                        },
     { key = "CURRENT",        label = "Current"                        },
+    { key = "FULLVALUE",      label = "Full Value"                     },
     { key = "MAX",            label = "Max"                            },
     { key = "DEFICIT",        label = "Deficit"                        },
     { key = "CURMAX",         label = "Current / Max"                  },
@@ -170,10 +171,6 @@ local PARTY_DEFAULTS = {
     clickCastEnabled  = true,
     --- Masque skin for aura icons (requires Masque addon)
     masqueEnabled     = false,
-    --- Group-frame aura/spell-indicator cooldowns default to the standard
-    --- Blizzard-style remaining-time swipe. Enabling the layout option flips
-    --- them into the elapsed-time "darkens on loss" style.
-    cooldownSwipeDarkenOnLoss = false,
     powerBarEnabled   = true,
     powerHeight       = 6,
     --- Position (CENTER-native, same as EM2 movers)
@@ -226,6 +223,7 @@ local PARTY_DEFAULTS = {
     textRight         = "NONE",
     textDelimiter     = " / ",
     healthTextDecimals = false,
+    hpFullValueShort  = true,
     --- Reverse order toggle (flips multi-part modes)
     hpTextReverse     = false,
     --- Name color
@@ -554,9 +552,12 @@ function GF.ShouldShowNameText(frame, conf)
 end
 
 ---
---- Grid metrics (stored position = GRID CENTER)
+--- Grid metrics (V2 stores the selected anchor point of the complete grid bounds)
 ---
 GF._measuredFirstCenterDelta = GF._measuredFirstCenterDelta or {}
+
+local LEGACY_GRID_POSITION_MODE = "GRID_CENTER_V1"
+local STABLE_GRID_POSITION_MODE = "GRID_BOUNDS_V2"
 
 function GF.GetHeaderOriginToFirstCenter(kind, w, h)
     local t = GF._measuredFirstCenterDelta and GF._measuredFirstCenterDelta[kind]
@@ -850,6 +851,24 @@ function GF.GetGridMetrics(kind, count)
     return dx, dy, totalW, totalH, w, h, sp, growth, upc, count, firstDX, firstDY
 end
 
+--- GRID_CENTER_V1 was rendered by shifting an already full-size header by the
+--- origin-to-center delta. That made the stored point a count-dependent corner
+--- in practice. Convert only when a group is actually about to be displayed so
+--- the current live/preview count preserves the exact legacy on-screen bounds.
+function GF.EnsureStableGridPosition(kind, count, conf)
+    conf = conf or (GF.GetConf and GF.GetConf(kind))
+    if type(conf) ~= "table" then return false end
+    if conf.positionMode == STABLE_GRID_POSITION_MODE then return false end
+    if conf.positionMode ~= LEGACY_GRID_POSITION_MODE then return false end
+
+    local dx, dy = GF.GetGridMetrics(kind, count)
+    local fallbackX = IsRaidLikeKind(kind) and -500 or -400
+    conf.offsetX = (tonumber(conf.offsetX) or fallbackX) - (tonumber(dx) or 0)
+    conf.offsetY = (tonumber(conf.offsetY) or 0) - (tonumber(dy) or 0)
+    conf.positionMode = STABLE_GRID_POSITION_MODE
+    return true
+end
+
 local function GetMigrationCount(kind, conf)
     if IsRaidLikeKind(kind) then
         local isInRaid = _G.IsInRaid
@@ -875,11 +894,11 @@ end
 
 local function MigrateGroupPositionToGridCenter(conf, kind)
     if not conf then return end
-    if conf.positionMode == "GRID_CENTER_V1" then return end
+    if conf.positionMode == LEGACY_GRID_POSITION_MODE or conf.positionMode == STABLE_GRID_POSITION_MODE then return end
     local dx, dy = GF.GetGridMetrics(kind, GetMigrationCount(kind, conf))
     conf.offsetX = (conf.offsetX or (IsRaidLikeKind(kind) and -500 or -400)) + dx
     conf.offsetY = (conf.offsetY or 0) + dy
-    conf.positionMode = "GRID_CENTER_V1"
+    conf.positionMode = LEGACY_GRID_POSITION_MODE
 end
 
 ---
@@ -1383,9 +1402,9 @@ end
 --- Auto-detect via difficultyID on PLAYER_ENTERING_WORLD.
 ---
 local LAYOUT_GEO_KEYS = {
-    "width", "height", "spacing", "growth",
+    "width", "height", "spacing", "growth", "groupGrowth",
     "unitsPerColumn", "maxColumns", "preserveRaidGroups",
-    "point", "anchorPoint", "offsetX", "offsetY",
+    "point", "anchorPoint", "relativePoint", "offsetX", "offsetY", "positionMode",
 }
 
 local RAID_LAYOUT_SITUATIONS = {
@@ -1416,6 +1435,12 @@ function GF.LoadRaidLayout(conf, situationKey)
     if type(slot) ~= "table" then return end
     for _, k in ipairs(LAYOUT_GEO_KEYS) do
         if slot[k] ~= nil then conf[k] = slot[k] end
+    end
+    --- Situation slots created before GRID_BOUNDS_V2 did not persist a mode.
+    --- Mark those offsets as legacy so the next real layout can preserve their
+    --- visible position while converting with the correct live roster count.
+    if slot.positionMode == nil then
+        conf.positionMode = LEGACY_GRID_POSITION_MODE
     end
 end
 

@@ -15,25 +15,6 @@ local TS = GF.TargetedSpells or {}
 GF.TargetedSpells = TS
 local Layers = MSUF.UF and MSUF.UF.Layers or {}
 
-local function ProfBegin(name)
-  if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
-    return MSUF.ProfBegin(name)
-  end
-end
-
-local function ProfEnd(name, token)
-  if token and MSUF and MSUF.ProfEnd then
-    MSUF.ProfEnd(name, token)
-  end
-end
-
-local function ProfEventBegin(prefix, event)
-  if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
-    local name = prefix .. tostring(event)
-    return name, MSUF.ProfBegin(name)
-  end
-end
-
 local CreateFrame = CreateFrame
 local C_Timer = C_Timer
 local C_NamePlate = C_NamePlate
@@ -868,8 +849,6 @@ local function ResolveCasterSample(caster, generation)
 end
 
 RunSampleQueue = function()
-  local profName = "group:targetedSpells:sampleQueue"
-  local profToken = ProfBegin(profName)
   sampleTimerAt = nil
   local now = (GetTime and GetTime()) or 0
   local out = sampleHead
@@ -911,7 +890,6 @@ RunSampleQueue = function()
   if nextDue then
     ArmSampleQueue(nextDue)
   end
-  ProfEnd(profName, profToken)
 end
 
 local function QueueCasterSamples(caster, firstDelay)
@@ -1146,10 +1124,7 @@ local function TargetedSpellsOnEvent(_, event, unit)
 end
 
 eventFrame:SetScript("OnEvent", function(self, event, unit)
-  local profName, profToken = ProfEventBegin("group:targetedSpells:event:", event)
-  local result = TargetedSpellsOnEvent(self, event, unit)
-  ProfEnd(profName, profToken)
-  return result
+  return TargetedSpellsOnEvent(self, event, unit)
 end)
 
 local function InitialRefresh()

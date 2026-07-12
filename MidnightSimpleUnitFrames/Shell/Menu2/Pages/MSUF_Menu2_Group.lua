@@ -165,14 +165,6 @@ local function ModeDirtyMask(gf, mode)
     if mode == "config" then return gf.DIRTY_CONFIG end
     return nil
 end
-local function GroupProfileStart()
-    return M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStart and M.ProfileStart() or nil
-end
-local function GroupProfileStop(key, started, extraCount)
-    if M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStop then
-        M.ProfileStop("groupPage", key, started, extraCount)
-    end
-end
 local function RequestGFPagePreview()
     if type(M.RequestGFPagePreviewForKey) == "function" then
         return M.RequestGFPagePreviewForKey(M.activeKey)
@@ -186,19 +178,13 @@ local function RefreshGFPreview(kind)
     -- change so the page does not hide a stale runtime configuration.
     local gf = GF()
     if gf and type(gf.RefreshPreviewLayout) == "function" then
-        local started = GroupProfileStart()
         gf.RefreshPreviewLayout(kind)
-        GroupProfileStop("GF.RefreshPreviewLayout", started)
     end
     if type(M.RefreshGFNativePreviews) == "function" then
-        local started = GroupProfileStart()
         M.RefreshGFNativePreviews("GF_PAGE_REFRESH")
-        GroupProfileStop("M.RefreshGFNativePreviews", started)
     end
     if type(M.RequestGFPagePreviewForKey) == "function" or type(M.SyncGFPagePreviewForKey) == "function" then
-        local started = GroupProfileStart()
         RequestGFPagePreview()
-        GroupProfileStop("M.RequestGFPagePreviewForKey", started)
     end
 end
 local function Conf(kind)
@@ -221,12 +207,8 @@ local function Val(kind, key, default)
 end
 local function FlushGF()
     gfFlushQueued = false
-    local started = GroupProfileStart()
     local gf = GF()
-    if not gf then
-        GroupProfileStop("FlushGF", started)
-        return
-    end
+    if not gf then return end
     local rebuild = pendingGF.rebuild
     local geometry = pendingGF.geometry
     local dirtyMask = pendingGF.dirtyMask
@@ -240,12 +222,10 @@ local function FlushGF()
         if rebuild and type(gf.Rebuild) == "function" then
             gf.Rebuild(kind)
             RefreshGFPreview(kind)
-            GroupProfileStop("FlushGF", started)
             return
         elseif rebuild and type(gf.RebuildAll) == "function" then
             gf.RebuildAll()
             RefreshGFPreview(kind)
-            GroupProfileStop("FlushGF", started)
             return
         end
         if geometry and type(gf.DeferGroupRuntime) == "function" then
@@ -259,7 +239,6 @@ local function FlushGF()
             gf._pendingRefreshVisuals = true
         end
         RefreshGFPreview(kind)
-        GroupProfileStop("FlushGF", started)
         return
     end
     if rebuild then
@@ -269,7 +248,6 @@ local function FlushGF()
             gf.RebuildAll()
         end
         RefreshGFPreview()
-        GroupProfileStop("FlushGF", started)
         return
     end
     if geometry then
@@ -279,7 +257,6 @@ local function FlushGF()
         if type(gf.RefreshVisuals) == "function" then gf.RefreshVisuals(kind, dirtyMask) end
     end
     RefreshGFPreview(kind)
-    GroupProfileStop("FlushGF", started)
 end
 local QueueGF
 local function QueueGFLegacy(kind, mode)
@@ -379,7 +356,7 @@ local GF_SHARED_COLOR_KEYS = M.KeySetFromWords [[
 local GF_COPY_CATEGORIES = {
     { key = "general", label = "Basics", keys = WL [[enabled blizzardFallbackMode showPlayer showSolo clickCastEnabled width height spacing growth groupFilter sortMode sortByRole roleOrder playerFirstInRole unitsPerColumn maxColumns preserveRaidGroups reverseFill smoothFill hideInClientScene hideInHousing hideOfflineEnabled hideOfflineInCombat hideOfflineDelay frameScaleMode frameScaleManual scaleAt10 scaleAt20 scaleAt25 scaleOver25]] },
     { key = "health", label = "Health & Bars", keys = WL [[gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB gfUnifiedR gfUnifiedG gfUnifiedB barTexture barBgTexture powerBarEnabled powerHeight showPower showPowerText powerTextLeft powerTextCenter powerTextRight powerTextLeftHidePercentSymbol powerTextCenterHidePercentSymbol powerTextRightHidePercentSymbol powerTextDelimiter powerFontSize powerOffsetX powerOffsetY powerTextLayer powerSmoothFill powerShowTank powerShowHealer powerShowDamager dispelOverlayEnabled dispelOverlayStyle dispelOverlayOnHealth dispelOverlayAlpha dispelOverlayTrigger dispelOverlayStrata deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB deadBgA]] },
-    { key = "text", label = "Text & Name", keys = WL [[showName hideNameOnDeadOffline nameFontSize nameAnchor nameOffsetX nameOffsetY nameTextLayer nameColorMode nameColorR nameColorG nameColorB nameShortenEnabled nameClipSide nameMaxChars nameNoEllipsis showHPText hpFontSize textLeft textCenter textRight hpTextLeftHidePercentSymbol hpTextCenterHidePercentSymbol hpTextRightHidePercentSymbol textDelimiter hpTextReverse healthTextDecimals hpOffsetX hpOffsetY textLayer]] },
+    { key = "text", label = "Text & Name", keys = WL [[showName hideNameOnDeadOffline nameFontSize nameAnchor nameOffsetX nameOffsetY nameTextLayer nameColorMode nameColorR nameColorG nameColorB nameShortenEnabled nameClipSide nameMaxChars nameNoEllipsis showHPText hpFontSize textLeft textCenter textRight hpTextLeftHidePercentSymbol hpTextCenterHidePercentSymbol hpTextRightHidePercentSymbol textDelimiter hpTextReverse healthTextDecimals hpFullValueShort hpOffsetX hpOffsetY textLayer]] },
     { key = "font", label = "Font Override", keys = WL [[fontOverride fontOutline useGlobalFontColor fontR fontG fontB]] },
     { key = "range", label = "Range Fade", keys = WL [[rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode offlineAlpha]] },
     { key = "indicators", label = "Status & Indicators", keys = GF_INDICATOR_COPY_FIELDS, prefix = WL [[si_ statusIcon indicator]] },

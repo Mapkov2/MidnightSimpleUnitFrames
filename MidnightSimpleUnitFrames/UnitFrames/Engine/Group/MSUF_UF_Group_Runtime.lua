@@ -27,6 +27,7 @@ local issecretvalue = _G.issecretvalue or function(_) return false end
 local eventFrame
 local runtimeObservers = {}
 local dirtyApplyMaskCache = {}
+local appliedLayoutScaleByKind = {}
 
 local function InCombat()
   return InCombatLockdown and InCombatLockdown()
@@ -45,6 +46,31 @@ end
 
 local function Conf(kind)
   return GF.GetConf and GF.GetConf(kind) or nil
+end
+
+-- Header layout is an out-of-combat cold path. Keep the last scale that was
+-- actually committed to a live header separate from conf._resolvedFrameScale:
+-- previews and geometry queries are allowed to update that config cache without
+-- touching live children. A changed live scale must drop the compiled base spec
+-- before SetupHeader scans its existing SecureGroupHeader children.
+local function SetupLiveHeader(key, kind)
+  local setup = GF.SetupHeader
+  if type(setup) ~= "function" then return nil end
+
+  if type(GF.EnsureDB) == "function" then GF.EnsureDB() end
+  local resolve = GF.ResolveFrameScale
+  local desiredScale = type(resolve) == "function" and tonumber(resolve(kind)) or nil
+  if desiredScale ~= nil and appliedLayoutScaleByKind[kind] ~= desiredScale then
+    if type(GF.InvalidateCompiledSpecs) == "function" then
+      GF.InvalidateCompiledSpecs(kind)
+    end
+  end
+
+  local header, scanned = setup(key, kind)
+  if header and desiredScale ~= nil then
+    appliedLayoutScaleByKind[kind] = desiredScale
+  end
+  return header, scanned
 end
 
 local function RefreshPartyStateFrame(frame, _, kind, reason)
@@ -127,7 +153,7 @@ local function SetupWantedHeaders(kind)
 
   if scope ~= "raid" and wantParty then
     local header, scanned
-    if GF.SetupHeader then header, scanned = GF.SetupHeader("party", "party") end
+    header, scanned = SetupLiveHeader("party", "party")
     if header and header.Show then header:Show() end
     if not scanned and GF.ScheduleScan then GF.ScheduleScan("party", "party") end
   elseif scope ~= "raid" then
@@ -136,7 +162,7 @@ local function SetupWantedHeaders(kind)
 
   if scope ~= "party" and wantRaid then
     local header, scanned
-    if GF.SetupHeader then header, scanned = GF.SetupHeader("raid", raidKind) end
+    header, scanned = SetupLiveHeader("raid", raidKind)
     if header and header.Show then header:Show() end
     if not scanned and GF.ScheduleScan then GF.ScheduleScan("raid", raidKind) end
   elseif scope ~= "party" then
@@ -414,8 +440,13 @@ function GF.EM2_NudgePreview(key, dx, dy)
   if kind ~= "party" and kind ~= "raid" and kind ~= "mythicraid" then return false end
   local conf = Conf(kind)
   if not conf then return false end
+  if GF.EnsureStableGridPosition then
+    local count = GF.GetLiveLayoutCount and GF.GetLiveLayoutCount(kind) or nil
+    GF.EnsureStableGridPosition(kind, count, conf)
+  end
   conf.offsetX = floor(((tonumber(conf.offsetX) or 0) + (tonumber(dx) or 0)) + 0.5)
   conf.offsetY = floor(((tonumber(conf.offsetY) or 0) + (tonumber(dy) or 0)) + 0.5)
+  conf.positionMode = "GRID_BOUNDS_V2"
   return GF.RefreshGeometry(kind)
 end
 
@@ -456,6 +487,9 @@ local function RuntimeOnEvent(self, event)
     return
   elseif event == "PLAYER_REGEN_DISABLED" then
     SyncCombatState(true)
+    if type(GF.HidePreviewsForCombat) == "function" then
+      GF.HidePreviewsForCombat()
+    end
     return
   elseif event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
     SyncCombatState()

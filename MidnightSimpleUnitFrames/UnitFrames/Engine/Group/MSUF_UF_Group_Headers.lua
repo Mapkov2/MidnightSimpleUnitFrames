@@ -17,6 +17,7 @@ local CreateFrame = CreateFrame
 local UIParent = UIParent
 local PetBattleFrameHider = PetBattleFrameHider
 local InCombatLockdown = InCombatLockdown
+local abs = math.abs
 local floor = math.floor
 local tonumber = tonumber
 local type = type
@@ -178,14 +179,14 @@ function GF.GetLiveLayoutCount(kind)
   return ConfiguredCount(kind, conf)
 end
 
-local function LayoutParts(kind, conf)
+local function LayoutParts(kind, conf, configuredCount)
   local w, h, spacing = 80, 32, 1
   if GF.GetScaledFrameMetrics then
     w, h, spacing = GF.GetScaledFrameMetrics(kind)
   else
     w, h, spacing = conf.width or w, conf.height or h, conf.spacing or spacing
   end
-  local count = ConfiguredCount(kind, conf)
+  local count = configuredCount or ConfiguredCount(kind, conf)
   local dx, dy, totalW, totalH = 0, 0, w, h
   if GF.GetGridMetrics then
     dx, dy, totalW, totalH = GF.GetGridMetrics(kind, count)
@@ -208,6 +209,12 @@ local function AnchorPoint(conf)
   if not VALID_POINTS[point] then
     point = "CENTER"
   end
+  return point
+end
+
+local function RelativeAnchorPoint(conf, fallback)
+  local point = conf and conf.relativePoint or fallback or "CENTER"
+  if not VALID_POINTS[point] then point = fallback or "CENTER" end
   return point
 end
 
@@ -247,7 +254,7 @@ end
 
 --- Keep anchor frames on screen when possible; child layout remains relative to
 --- the anchor so saved offsets stay meaningful.
-local function ClampAnchorOnScreen(anchor, point, parent, offsetX, offsetY, totalW, totalH)
+local function ClampAnchorOnScreen(anchor, point, relativePoint, parent, offsetX, offsetY, totalW, totalH)
   if not (anchor and parent and parent.GetLeft and UIParent and UIParent.GetWidth) then
     return
   end
@@ -261,8 +268,9 @@ local function ClampAnchorOnScreen(anchor, point, parent, offsetX, offsetY, tota
     return
   end
   local fx, fy = PointFraction(point)
-  local px = pLeft + (pRight - pLeft) * fx + (offsetX or 0)
-  local py = pBottom + (pTop - pBottom) * fy + (offsetY or 0)
+  local rfx, rfy = PointFraction(relativePoint)
+  local px = pLeft + (pRight - pLeft) * rfx + (offsetX or 0)
+  local py = pBottom + (pTop - pBottom) * rfy + (offsetY or 0)
   local boxW, boxH = totalW or 0, totalH or 0
   local left = px - boxW * fx
   local bottom = py - boxH * fy
@@ -275,7 +283,7 @@ local function ClampAnchorOnScreen(anchor, point, parent, offsetX, offsetY, tota
     return
   end
   anchor:ClearAllPoints()
-  anchor:SetPoint(point, parent, point, (offsetX or 0) + dx, (offsetY or 0) + dy)
+  anchor:SetPoint(point, parent, relativePoint, (offsetX or 0) + dx, (offsetY or 0) + dy)
 end
 
 local function EnsureAnchor(key, conf, totalW, totalH)
@@ -291,22 +299,23 @@ local function EnsureAnchor(key, conf, totalW, totalH)
   anchor:SetSize(totalW, totalH)
   anchor:ClearAllPoints()
   local point = AnchorPoint(conf)
+  local relativePoint = RelativeAnchorPoint(conf, point)
   local parent = ResolveAnchorFrame(conf)
-  anchor:SetPoint(point, parent, point, conf.offsetX or 0, conf.offsetY or 0)
+  anchor:SetPoint(point, parent, relativePoint, conf.offsetX or 0, conf.offsetY or 0)
   anchor:Show()
-  ClampAnchorOnScreen(anchor, point, parent, conf.offsetX or 0, conf.offsetY or 0, totalW, totalH)
+  ClampAnchorOnScreen(anchor, point, relativePoint, parent, conf.offsetX or 0, conf.offsetY or 0, totalW, totalH)
   return anchor
 end
 
-local function GrowthAttributes(growth, spacing)
+local function GrowthAttributes(growth, spacing, groupGrowth)
   if growth == "UP" then
-    return "BOTTOM", 0, spacing, "LEFT"
+    return "BOTTOM", 0, spacing, groupGrowth == "LEFT" and "RIGHT" or "LEFT"
   elseif growth == "RIGHT" then
-    return "LEFT", spacing, 0, "TOP"
+    return "LEFT", spacing, 0, groupGrowth == "UP" and "BOTTOM" or "TOP"
   elseif growth == "LEFT" then
-    return "RIGHT", -spacing, 0, "TOP"
+    return "RIGHT", -spacing, 0, groupGrowth == "UP" and "BOTTOM" or "TOP"
   end
-  return "TOP", 0, -spacing, "LEFT"
+  return "TOP", 0, -spacing, groupGrowth == "LEFT" and "RIGHT" or "LEFT"
 end
 
 local function AttrChanged(header, key, value)
@@ -834,7 +843,7 @@ end
 
 local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCount)
   local buttonTemplate = ButtonTemplate()
-  local point, xOffset, yOffset, columnAnchor = GrowthAttributes(conf.growth, spacing)
+  local point, xOffset, yOffset, columnAnchor = GrowthAttributes(conf.growth, spacing, conf.groupGrowth)
   local upc = ClampInt(conf.unitsPerColumn, kind == "party" and 5 or 5, 1, 40)
   local requiredColumns = RequiredHeaderColumns(kind, conf, layoutCount)
   local columns = requiredColumns
@@ -908,7 +917,11 @@ function GF.SetupHeader(key, kind)
   end
   if GF.EnsureDB then GF.EnsureDB() end
   local conf = GF.GetConf and GF.GetConf(kind) or {}
-  local w, h, spacing, dx, dy, totalW, totalH, layoutCount = LayoutParts(kind, conf)
+  local layoutCount = ConfiguredCount(kind, conf)
+  if GF.EnsureStableGridPosition then
+    GF.EnsureStableGridPosition(kind, layoutCount, conf)
+  end
+  local w, h, spacing, _, _, totalW, totalH = LayoutParts(kind, conf, layoutCount)
   local anchor = EnsureAnchor(key, conf, totalW, totalH)
   anchor.msufConfigKey = GF.GetConfigDBKey and GF.GetConfigDBKey(kind) or (kind == "party" and "gf_party" or "gf_raid")
   anchor._msufIsGroupFrame = true
@@ -953,9 +966,23 @@ function GF.SetupHeader(key, kind)
   end
   header:ClearAllPoints()
   local point = AnchorPoint(conf)
-  header:SetPoint(point, anchor, point, -dx, -dy)
+  --- SecureGroupHeader_Update resizes the header to the complete child
+  --- footprint. Align that footprint directly with the equally sized logical
+  --- anchor; applying the origin-to-center delta here a second time makes the
+  --- visible block drift whenever the roster count changes.
+  header:SetPoint(point, anchor, point, 0, 0)
   if wasHiddenForLayout then
     header:Show()
+  end
+  --- Filtering and preserved-group layouts can make Blizzard's real secure
+  --- footprint differ from the estimate. Re-clamp against the measured header
+  --- once its attributes have synchronously rebuilt the child layout.
+  local actualW = header.GetWidth and header:GetWidth() or nil
+  local actualH = header.GetHeight and header:GetHeight() or nil
+  if actualW and actualH and actualW > 0.5 and actualH > 0.5
+    and (abs(actualW - totalW) > 0.01 or abs(actualH - totalH) > 0.01) then
+    totalW, totalH = actualW, actualH
+    anchor = EnsureAnchor(key, conf, totalW, totalH)
   end
   local countChanged = header._msufGFLastLayoutCount ~= layoutCount
   header._msufGFLastLayoutCount = layoutCount

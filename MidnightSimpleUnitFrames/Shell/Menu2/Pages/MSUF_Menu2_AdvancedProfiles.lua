@@ -121,13 +121,17 @@ local function EnsureProfilePopups()
         end,
     })
     InstallProfilePopup("MSUF2_CONFIRM_UUF_IMPORT_BEST_EFFORT", {
-        text = M.Tr("This is an UnhaltedUnitFrames profile.\n\nMSUF will translate it as a best-effort import. Auras are not imported, and unsupported UUF-only settings may not map 1:1.\n\nImport anyway?"),
+        text = M.Tr("This is an UnhaltedUnitFrames profile.\n\nMSUF will translate supported unit-frame, party/raid-frame, and aura settings as a best-effort import. Unsupported UUF-only settings may not map 1:1.\n\nImport anyway?"),
         button1 = M.Tr("Import"),
         button2 = _G.CANCEL or M.Tr("Cancel"),
         OnAccept = function(_, data)
             if BlockCombatAction() then return end
             if data and type(data.after) == "function" then data.after() end
         end,
+    })
+    InstallProfilePopup("MSUF2_UUF_RUNTIME_DEFERRED", {
+        text = M.Tr("The UUF profile was converted and saved.\n\nUnhaltedUnitFrames is currently loaded, so MSUF cannot safely rebuild the live frames: both addons hook Blizzard frame parenting and would recurse.\n\nDisable UnhaltedUnitFrames in the AddOns list, then reload the UI."),
+        button1 = _G.OKAY or M.Tr("Okay"),
     })
     InstallProfilePopup("MSUF2_CONFIRM_RESET_PROFILE", {
         text = M.Tr("Reset profile '%s' to defaults?\n\nThis resets the entire selected profile to the current MSUF factory defaults. Every menu in that profile will be affected."),
@@ -184,6 +188,13 @@ local function ShowImportReloadPrompt()
         _G.MSUF_ShowReloadRecommendedPopup("Profile import")
     else
         PrintProfileMessage("|cffffd700", "Profile imported. Reload the UI with /reload.")
+    end
+end
+local function ShowUUFDeferredPrompt()
+    if _G.StaticPopup_Show and _G.StaticPopupDialogs and _G.StaticPopupDialogs.MSUF2_UUF_RUNTIME_DEFERRED then
+        _G.StaticPopup_Show("MSUF2_UUF_RUNTIME_DEFERRED")
+    else
+        PrintProfileMessage("|cffffd700", "UUF profile saved. Disable UnhaltedUnitFrames, then reload the UI.")
     end
 end
 local function ReloadAfterNewProfileImport(profileName)
@@ -513,6 +524,11 @@ local function BuildProfiles(ctx)
             end
             if imported ~= true then return false end
             ClearProfileHistory()
+            if _G.MSUF_ProfileIO_LastImportDeferredRuntime == true then
+                RefreshAfterProfileChange(ctx)
+                ShowUUFDeferredPrompt()
+                return true
+            end
             M.RequestGeneralApply("MSUF2_PROFILE_IMPORT", { preview = true, applyAll = false, notify = false })
             RefreshAfterProfileChange(ctx)
             ShowImportReloadPrompt()
@@ -565,6 +581,13 @@ local function BuildProfiles(ctx)
                 return false
             end
             ClearProfileHistory()
+            if _G.MSUF_ProfileIO_LastImportDeferredRuntime == true then
+                RefreshAfterProfileChange(ctx)
+                M.profileImportNewName = ""
+                importProfileName:SetText("")
+                ShowUUFDeferredPrompt()
+                return true
+            end
             M.RequestGeneralApply("MSUF2_PROFILE_IMPORT_NEW", { preview = true, applyAll = false, notify = false })
             RefreshAfterProfileChange(ctx)
             M.profileImportNewName = ""

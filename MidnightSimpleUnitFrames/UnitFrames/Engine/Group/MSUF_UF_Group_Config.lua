@@ -831,6 +831,8 @@ local function ApplyAuraLane(out, prefix, groupKey, group, defaults, maxCount, i
   end
   out[prefix .. "ShowCooldownSwipe"] = group.showCooldownSwipe ~= false
   out[prefix .. "CooldownSwipeReverse"] = group.cooldownSwipeReverse == true
+  out[prefix .. "SortMethod"] = group.sortMethod or "DEFAULT"
+  out[prefix .. "SortReverse"] = group.sortReverse == true
   out[prefix .. "ShowDurationBar"] = group.showDurationBar == true
   out[prefix .. "DurationBarHeight"] = scale(group.durationBarHeight, 2, 1)
   out[prefix .. "DurationBarDisplay"] = AuraDurationBarDisplay(group.durationBarDisplay)
@@ -1069,11 +1071,8 @@ local function CompileCoreAuras(kind, conf)
     showSwipe = true,
     showStacks = true,
     stackAnchor = "BOTTOMRIGHT",
-    sortByDuration = root and root.sortByDuration == true,
-    preferPlayer = root and root.preferPlayer == true,
     dynamicScale = root and root.dynamicScale == true,
     dynamicScaleValue = auraScale,
-    cooldownSwipeDarkenOnLoss = conf.cooldownSwipeDarkenOnLoss == true,
     iconSize = S(conf.auraIconSize, 20, 1),
     spacing = 1,
     perRow = 4,
@@ -1104,6 +1103,8 @@ local function CompileCoreAuras(kind, conf)
     showTooltip = buff.trackedShowTooltip,
     showCooldownSwipe = buff.trackedShowCooldownSwipe,
     cooldownSwipeReverse = buff.trackedCooldownSwipeReverse,
+    sortMethod = buff.trackedSortMethod or buff.sortMethod,
+    sortReverse = buff.trackedSortReverse == true or (buff.trackedSortReverse == nil and buff.sortReverse == true),
     showDurationBar = buff.trackedShowDurationBar,
     durationBarHeight = buff.trackedDurationBarHeight,
     durationBarDisplay = buff.trackedDurationBarDisplay,

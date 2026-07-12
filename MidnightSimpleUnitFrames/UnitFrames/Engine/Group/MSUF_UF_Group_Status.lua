@@ -162,7 +162,7 @@ local function SeedHealthDeadOverride(seedHP)
   return seedHP <= 0
 end
 
-local function StatusTextFlagsKey(frame, cfg, seedHP)
+local function StatusTextHealthKey(frame, cfg, seedHP)
   local unit = frame and frame.unit
   if not IsUnitToken(unit) then return nil end
   local healthDead = SeedHealthDeadOverride(seedHP)
@@ -189,6 +189,13 @@ local function StatusTextFlagsKey(frame, cfg, seedHP)
       if dead == true then key = key + 4 end
     end
   end
+  return key
+end
+
+local function StatusTextFlagsKey(frame, cfg)
+  local unit = frame and frame.unit
+  local key = StatusTextHealthKey(frame, cfg)
+  if key == nil then return nil end
   if cfg.showAFK == true and UnitIsAFK then
     local afk = UnitIsAFK(unit)
     if issecretvalue(afk) == true then return nil end
@@ -232,7 +239,9 @@ local function StatusTextChanged(frame, status, event, seedHP)
   local storeKey, key
   if event == "UNIT_HEALTH" then
     storeKey = "_msufGFStatusTextHealthKey"
-    key = StatusTextFlagsKey(frame, cfg, seedHP)
+    -- UNIT_HEALTH can only change the dead/ghost portion. AFK and DND have
+    -- their own flag events, so avoid both native queries on every health tick.
+    key = StatusTextHealthKey(frame, cfg, seedHP)
   elseif event == "UNIT_CONNECTION" then
     storeKey = "_msufGFStatusTextConnectionKey"
     key = StatusTextConnectionKey(frame, cfg)
