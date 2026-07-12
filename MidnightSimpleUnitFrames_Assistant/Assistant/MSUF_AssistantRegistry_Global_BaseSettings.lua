@@ -20,13 +20,41 @@ function A.GlobalRegistry.RegisterBaseSettings(ctx)
     local GeneralDB = ctx.GeneralDB
     local ApplyGeneral = ctx.ApplyGeneral
     local RegisterGeneralBoolean = ctx.RegisterGeneralBoolean
+    local RegisterGeneralString = ctx.RegisterGeneralString
     local RegisterBaseAppearanceSettings = A.GlobalRegistry and A.GlobalRegistry.RegisterBaseAppearanceSettings
 
     if not (Registry and type(Registry.RegisterSetting) == "function") then return end
     if type(GeneralDB) ~= "function" then return end
-    if type(RegisterGeneralBoolean) ~= "function" or type(RegisterBaseAppearanceSettings) ~= "function" then return end
+    if type(RegisterGeneralBoolean) ~= "function" or type(RegisterGeneralString) ~= "function" or type(RegisterBaseAppearanceSettings) ~= "function" then return end
 
     RegisterBaseAppearanceSettings(ctx)
+
+    RegisterGeneralString("menuFontKey", "menuFont", "MSUF Menu Font", "", {
+        "msuf menu font", "menu font", "options menu font", "options font", "dashboard menu font",
+        "font of the msuf menu", "font for the msuf menu", "msuf menu typeface", "menu typeface",
+    }, {
+        category = "Global / Misc",
+        frameType = "misc",
+        mediaType = "font",
+        reason = "MSUF_ASSISTANT_MENU_FONT",
+        normalizeValue = function(value)
+            value = tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
+            if value == "" then return "" end
+            local normalizePath = _G.MSUF_NormalizeFontPath
+            if type(normalizePath) == "function" then
+                local normalized = normalizePath(value)
+                if type(normalized) == "string" and normalized ~= "" then return normalized end
+            end
+            return value
+        end,
+        apply = function()
+            local theme = Menu and Menu.Theme
+            if theme and type(theme.ClearMenuFontCache) == "function" then theme.ClearMenuFontCache() end
+            if theme and type(theme.RefreshMenuFonts) == "function" then theme.RefreshMenuFonts() end
+        end,
+        combatSafe = true,
+        description = "Font used only by the MSUF options menu. Blizzard default is stored as an empty value.",
+    })
 
     RegisterGeneralBoolean("slashMenuSnapEnabled", "menuSnap", "Menu Edge Snap", true, {
         "menu edge snap", "edge snap", "window snap", "menu snapping", "snapping feature",

@@ -41,7 +41,7 @@ function Bridge.OpenSearchResults(query)
     SearchCall("OpenResults", query)
 end
 function Bridge.OpenSearchTarget(pageKey, query, fallback, preferredAnchor)
-    SearchCall("OpenTarget", pageKey, query, fallback, preferredAnchor)
+    return SearchCall("OpenTarget", pageKey, query, fallback, preferredAnchor)
 end
 function Bridge.BumpSearchInputSerial()
     SearchCall("BumpInputSerial")

@@ -971,8 +971,16 @@ local function OpenSearchTarget(pageKey, query, fallback, preferredAnchor, route
     route = route or SearchRouteForTarget(pageKey, query, fallback)
     local routeChanged = ApplySearchRoute(pageKey, route)
     if routeChanged then preferredAnchor = nil end
-    M.SelectPage(pageKey)
+    local selected = M.SelectPage(pageKey)
+    local region
+    if selected ~= false and M.activeKey == pageKey then
+        local entry = M.cache and M.cache[pageKey]
+        if entry and entry.wrapper then
+            region = FindSearchAnchor(pageKey, query, fallback, preferredAnchor)
+        end
+    end
     RunSoon(function() ScrollToSearchAnchor(pageKey, query, fallback, preferredAnchor) end)
+    return selected ~= false and M.activeKey == pageKey, region ~= nil
 end
 
 Search._RoutingAPI = {

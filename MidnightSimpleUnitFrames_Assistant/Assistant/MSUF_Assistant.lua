@@ -7427,6 +7427,17 @@ function AP.TryImmediateMutationResult(text, opts)
         and parser._registryExactAliasSettings == settings
         and parser._registryExactAliasCount == #settings
         and type(parser._registryExactAliasIndex) == "table"
+    -- A bare HP-text color request is a small, deterministic clarification:
+    -- single font color or health gradient. Keep it out of the full registry
+    -- alias/index path so the first LoD request cannot pay the multi-thousand
+    -- setting scan (or trip WoW's script watchdog) just to show two choices.
+    if not plan and exactColorCandidate and parser.ParseHPTextColorModePriority
+        and normalized:find("hp", 1, true)
+        and normalized:find("text", 1, true)
+        and normalized:find("color", 1, true)
+    then
+        plan = parser.ParseHPTextColorModePriority(normalized)
+    end
     if not plan and A._ParseSpecResourceColorShortcut and exactColorCandidate then
         plan = A._ParseSpecResourceColorShortcut(normalized, text)
     end
@@ -7484,7 +7495,7 @@ function AP.TryImmediateMutationResult(text, opts)
             end
         end
     end
-    if not plan or plan.confirmRequired == true or plan.kind == "action" or plan.kind == "ambiguous" then return nil end
+    if not plan or plan.confirmRequired == true or plan.kind == "action" then return nil end
 
     local startedMs = PerfNowMs()
     if not (opts and opts.skipUserHistory == true) then
@@ -7494,7 +7505,13 @@ function AP.TryImmediateMutationResult(text, opts)
     plan.normalized = plan.normalized or normalized
     if plan.kind == "changes" and plan.sourceText == nil then plan.sourceText = normalized end
     local result
-    if plan.kind == "answer" then
+    if plan.kind == "ambiguous" then
+        A.pendingChoices = plan.choices or {}
+        AP.SetPendingCandidates(A.pendingChoices)
+        local activeContext = A.GetContext and A.GetContext()
+        if activeContext then activeContext.pendingChoices = SerializeChoices(A.pendingChoices) end
+        result = NormalizePlanResult({ text = ChoiceText(A.pendingChoices), result = "ambiguous", summary = plan.summary })
+    elseif plan.kind == "answer" then
         result = NormalizePlanResult({ text = plan.text or "", result = plan.status or "info", summary = plan.summary })
     elseif plan.kind == "unknown" or plan.kind == "unsupported" then
         result = NormalizePlanResult({

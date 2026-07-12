@@ -119,21 +119,69 @@ function A.SubmitExplicitQuery(text, reason)
     -- The cold dashboard already rendered this greeting without loading any
     -- runtime files. Record it now, before the first user turn, so the real V1
     -- dashboard preserves the same natural conversation order after handoff.
-    if type(A.AddLoginGreeting) == "function" then A.AddLoginGreeting() end
+    if type(A.AddLoginGreeting) == "function" then pcall(A.AddLoginGreeting) end
     local submit = type(A.SubmitDeferred) == "function" and A.SubmitDeferred or A.Submit
     return true, submit(text)
+end
+function A.StartNewTaskWithRuntime(reason)
+    reason = reason or "new-task"
+    local function FinishNewTask()
+        local promoted, visible, promoteReason = pcall(A.ShowRuntimeDashboardCard)
+        if not promoted or not visible then return false, promoteReason or "runtime dashboard error" end
+        if type(A.StartNewTask) == "function" then
+            local ok, result = pcall(A.StartNewTask)
+            if not ok then return false, tostring(result or "new task error") end
+            return result ~= false, result == false and "new task rejected" or nil
+        end
+        return false, "runtime_incomplete"
+    end
+    if A.IsRuntimeLoaded() then return FinishNewTask() end
+    if InCombat() then return false, "combat" end
+    if not MenuShown() then return false, "menu_closed" end
+
+    local card = A._bridgeDashboardCard
+    if card and card.status then SetText(card.status, "Assistant is loading up...") end
+    local function LoadAndStart()
+        local called, loaded, loadReason = pcall(A.EnsureRuntimeLoaded, reason)
+        if not called or not loaded then
+            if card and card.status and not card.cancelled then
+                SetText(card.status, LoadFailureText(called and loadReason or "runtime error"))
+            end
+            return false
+        end
+        local ok, failure = FinishNewTask()
+        if not ok and card and card.status and not card.cancelled then
+            SetText(card.status, LoadFailureText(failure))
+        end
+        return ok
+    end
+    -- Let the cold Home card paint its acknowledgement before the synchronous
+    -- LoadAddOn call. This also removes the toolbar/page-build ordering race.
+    if _G.C_Timer and type(_G.C_Timer.After) == "function" then
+        local scheduled = pcall(_G.C_Timer.After, 0, LoadAndStart)
+        if scheduled then return true, "queued" end
+    end
+    return LoadAndStart()
 end
 local BridgeBuildDashboardCard
 function A.ShowRuntimeDashboardCard()
     if not A.IsRuntimeLoaded() then return false end
     local card = A._bridgeDashboardCard
     if not card then return A.dashboardUI ~= nil end
+    local runtimeUI
+    if A.BuildDashboardCard ~= BridgeBuildDashboardCard then
+        local ok, built = pcall(A.BuildDashboardCard, card.parent, card.cardW, card.cardH)
+        if not ok then return false, tostring(built or "runtime dashboard error") end
+        runtimeUI = built
+    end
+    card.runtimeUI = runtimeUI or card.runtimeUI
+    if card.runtimeUI == nil and A.dashboardUI == nil then return false, "runtime dashboard incomplete" end
+    -- Promote atomically: keep the usable cold card visible until the real
+    -- dashboard has been built successfully. A runtime UI error can no longer
+    -- strand the user on a disabled, permanent loading screen.
     card.cancelled = true
     if type(card.shellRegions) == "table" then
         for i = 1, #card.shellRegions do SetShown(card.shellRegions[i], false) end
-    end
-    if A.BuildDashboardCard ~= BridgeBuildDashboardCard then
-        card.runtimeUI = A.BuildDashboardCard(card.parent, card.cardW, card.cardH)
     end
     A._bridgeDashboardCard = nil
     return card.runtimeUI ~= nil or A.dashboardUI ~= nil
@@ -149,10 +197,14 @@ BridgeBuildDashboardCard = function(parent, cardW, cardH)
     local previous = A._bridgeDashboardCard
     if previous then previous.cancelled = true end
 
-    local title
+    local kicker, maturity, title
     if T and type(T.Font) == "function" then
+        kicker = T.Font(parent, "GameFontDisableSmall", "MSUF Assistant", T.colors and T.colors.accent or { 0.45, 0.75, 1, 1 })
+        kicker:SetPoint("TOPLEFT", parent, "TOPLEFT", 22, -22)
+        maturity = T.Font(parent, "GameFontDisableSmall", "(Early Alpha)", T.colors and T.colors.danger or { 1, 0.28, 0.28, 1 })
+        maturity:SetPoint("LEFT", kicker, "RIGHT", 4, 0)
         title = T.Font(parent, "GameFontNormalLarge", "MSUF Assistant", T.colors and T.colors.text)
-        title:SetPoint("TOPLEFT", parent, "TOPLEFT", 22, -42)
+        title:SetPoint("TOPLEFT", parent, "TOPLEFT", 22, -48)
     end
     local welcome
     if W and type(W.Text) == "function" then
@@ -226,7 +278,7 @@ BridgeBuildDashboardCard = function(parent, cardW, cardH)
         status = status,
         input = input,
         sendButton = send,
-        shellRegions = { title, welcome, help, status, input, send },
+        shellRegions = { kicker, maturity, title, welcome, help, status, input, send },
     }
 
     local function RestoreAfterFailure(query, reason)
@@ -243,16 +295,43 @@ BridgeBuildDashboardCard = function(parent, cardW, cardH)
     local function LoadAndSubmitFirstMessage()
         if card.cancelled or A._bridgeDashboardCard ~= card then return end
         local query = card.pendingQuery
-        local called, submitted, _, reason = pcall(A.SubmitExplicitQuery, query, "dashboard-first-message")
+        local called, loaded, reason = pcall(A.EnsureRuntimeLoaded, "dashboard-first-message")
         if not called then
             RestoreAfterFailure(query, "runtime error")
             return
         end
-        if not submitted then
+        if not loaded then
             RestoreAfterFailure(query, reason)
             return
         end
-        A.ShowRuntimeDashboardCard()
+        A._assistantEngaged = true
+        -- Greeting/history hydration is cosmetic. A SavedVariables edge case
+        -- here must never strand the cold shell in its disabled loading state.
+        if type(A.AddLoginGreeting) == "function" then pcall(A.AddLoginGreeting) end
+        local promoted, visible, promoteReason = pcall(A.ShowRuntimeDashboardCard)
+        if not promoted or not visible then
+            RestoreAfterFailure(query, promoted and promoteReason or "runtime dashboard error")
+            return
+        end
+        local function SubmitLoadedFirstMessage()
+            local submit = type(A.SubmitDeferred) == "function" and A.SubmitDeferred or A.Submit
+            local ok, result = pcall(submit, query)
+            if ok then return result end
+            if type(A.AddHistory) == "function" then
+                A.AddHistory("user", query, "submitted")
+                A.AddHistory("assistant", "The first request could not be completed: " .. tostring(result or "runtime error"), "failed")
+            end
+            if type(A.RequestRefreshUI) == "function" then A.RequestRefreshUI("assistant.first-message-error") end
+        end
+        -- Query parsing/indexing is a separate frame from both LoadAddOn and UI
+        -- promotion. Even an unusually expensive first request cannot prevent
+        -- the real Assistant dashboard from replacing the loading shell.
+        if _G.C_Timer and type(_G.C_Timer.After) == "function" then
+            local scheduled = pcall(_G.C_Timer.After, 0, SubmitLoadedFirstMessage)
+            if not scheduled then SubmitLoadedFirstMessage() end
+        else
+            SubmitLoadedFirstMessage()
+        end
     end
 
     local function SubmitFirstMessage()

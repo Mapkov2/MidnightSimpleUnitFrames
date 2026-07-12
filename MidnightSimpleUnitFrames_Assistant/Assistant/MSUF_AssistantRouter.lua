@@ -7501,95 +7501,11 @@ function R.RegistryLocationResultFollowups(entries, limit)
     return out
 end
 
-local GROUP_LAYOUT_FALLBACK_ATTRS = {
-    enabled = true,
-    showPlayer = true,
-    showSolo = true,
-    clickCast = true,
-    clickCastEnabled = true,
-    blizzardFallbackMode = true,
-    hideInClientScene = true,
-    hideOfflineEnabled = true,
-    hideOfflineInCombat = true,
-    hideOfflineDelay = true,
-    smoothFill = true,
-    reverseFill = true,
-    groupBackdropColor = true,
-    bgColor = true,
-    width = true,
-    height = true,
-    offsetX = true,
-    offsetY = true,
-    spacing = true,
-    unitsPerColumn = true,
-    maxColumns = true,
-    preserveRaidGroups = true,
-    growth = true,
-    sortMode = true,
-    sortByRole = true,
-    playerFirstInRole = true,
-    roleOrder = true,
-    frameScaleMode = true,
-    frameScaleEnabled = true,
-    frameScaleManual = true,
-    scaleAt10 = true,
-    scaleAt20 = true,
-    scaleAt25 = true,
-    scaleOver25 = true,
-    anchorToFrame = true,
-    customAnchorFrame = true,
-    anchorPoint = true,
-}
-
-R.FALLBACK_PAGE_BY_FRAME_TYPE = {
-    modules = "modules",
-    classPower = "classpower", classPowerPlayerHP = "classpower", altMana = "classpower", detachedPowerBar = "classpower",
-    bars = "bars", globalBars = "bars",
-    fonts = "fonts", colors = "colors",
-    gameplay = "gameplay", combatState = "gameplay", combatCrosshair = "gameplay", combatTimer = "gameplay", playerTotems = "gameplay",
-    dashboard = "home",
-}
-
 function R.FallbackPageForSetting(setting)
-    if type(setting) ~= "table" then return nil end
-    local unit = tostring(setting.unit or "")
-    local frameType = tostring(setting.frameType or "")
-    local category = R.Normalize(setting.category or "")
-    local unitPages = {
-        player = "uf_player",
-        target = "uf_target",
-        focus = "uf_focus",
-        pet = "uf_pet",
-        boss = "uf_boss",
-        targettarget = "uf_targettarget",
-        focustarget = "uf_focustarget",
-    }
-    if unitPages[unit] then return unitPages[unit] end
-    if R.FALLBACK_PAGE_BY_FRAME_TYPE[frameType] then return R.FALLBACK_PAGE_BY_FRAME_TYPE[frameType] end
-    if unit == "party" or unit == "raid" or unit == "mythicraid" then
-        if frameType == "aura" then return "gf_auras" end
-        local attr = tostring(setting.attribute or "")
-        local key = tostring(setting.key or "")
-        local compactAttr = R.Normalize(attr):gsub("%s+", "")
-        local compactKey = R.Normalize(key):gsub("%s+", "")
-        if category:find("indicator", 1, true)
-            or compactAttr:find("targetedspells", 1, true)
-            or compactKey:find("targetedspells", 1, true)
-            or compactAttr:find("statusicon", 1, true)
-            or compactKey:find("statusicon", 1, true)
-            or compactAttr:find("roleicon", 1, true)
-            or compactKey:find("roleicon", 1, true)
-        then
-            return "gf_indicators"
-        end
-        local suffix = tostring(setting.key or ""):match("%.([^%.]+)$")
-        if GROUP_LAYOUT_FALLBACK_ATTRS[attr] or (suffix and GROUP_LAYOUT_FALLBACK_ATTRS[suffix]) then return "gf_layout" end
-        return "gf_bars"
-    end
-    if category:find("misc", 1, true) then return "opt_misc" end
-    if category:find("cast", 1, true) then return "castbars" end
-    if category:find("aura", 1, true) then return "auras3" end
-    return nil
+    local resolver = A.ResolveMenuPageForSetting
+        or (A.Knowledge and A.Knowledge.ResolveSettingPage)
+    if type(resolver) == "function" then return resolver(setting) end
+    return type(setting) == "table" and setting.page or nil
 end
 
 function R.SettingFollowupResults(settingKey, query)

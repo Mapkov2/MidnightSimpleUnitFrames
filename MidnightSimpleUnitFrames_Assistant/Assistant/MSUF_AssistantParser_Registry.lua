@@ -2233,6 +2233,10 @@ P._FontTextColorDefaultIntent = function(text, spec)
     local boolValue = DetectBoolean(text)
     local targetValue = P.TargetAfterLastConnector and P.TargetAfterLastConnector(text) or tostring(text or ""):match("%s+to%s+(.+)$")
     if targetValue and spec then
+        if ContainsAny(targetValue, {
+            "single color", "single colour", "solid color", "solid colour",
+            "fixed color", "fixed colour", "one color", "one colour", "font color", "font colour",
+        }) then return true end
         if ContainsAny(targetValue, RegistryPhrases[68]) then return true end
         if spec.key == "nameColorMode" and ContainsAny(targetValue, RegistryPhrases[69]) then return false end
         if spec.key == "colorHealthTextByHealth" and ContainsAny(targetValue, RegistryPhrases[70]) then return false end
@@ -2254,6 +2258,54 @@ P._FontTextColorDefaultIntent = function(text, spec)
         return ContainsAny(text, RegistryPhrases[77])
     end
     return false
+end
+
+function P.ParseBareHPTextColorModeChoice(text)
+    if not (
+        text == "set hp color text" or text == "set hp text color"
+        or text == "change hp color text" or text == "change hp text color"
+        or text == "set health color text" or text == "set health text color"
+    ) then return nil end
+    local setting = Registry and Registry:GetSetting("fontScope.shared.colorHealthTextByHealth")
+    if not setting then return nil end
+    return {
+        kind = "ambiguous",
+        choices = {
+            { setting = setting, value = "DEFAULT", label = "Single color (Font Color)", summary = "Uses the configured fixed font color for HP text." },
+            { setting = setting, value = "HEALTH", label = "Health Gradient", summary = "Colors HP text dynamically by current health." },
+        },
+        label = "Choose HP Text Color Mode",
+        summary = "Asks whether HP text should use one fixed font color or the health gradient.",
+    }
+end
+
+function P.ParseHPTextColorModePriority(text)
+    local healthText = ContainsAny(text, { "hp text", "health text", "hp color text", "health color text" })
+    if not healthText then return nil end
+    local single = ContainsAny(text, {
+        "single color", "single colour", "solid color", "solid colour",
+        "fixed color", "fixed colour", "one color", "one colour", "font color", "font colour",
+    })
+    local gradient = ContainsAny(text, { "health gradient", "hp gradient", "by health" })
+        or (text:find("gradient", 1, true) and not single)
+    if not single and not gradient then return P.ParseBareHPTextColorModeChoice(text) end
+    local scope = DetectGlobalScope(text) or "shared"
+    if scope == "gf_mythicraid" then scope = "gf_raid" end
+    if scope == "gf_party" or scope == "gf_raid" then scope = "shared" end
+    local setting = Registry and Registry:GetSetting("fontScope." .. tostring(scope) .. ".colorHealthTextByHealth")
+    if not setting then return nil end
+    local changes = {}
+    local override = scope ~= "shared" and Registry:GetSetting("fontScope." .. tostring(scope) .. ".override") or nil
+    if override then changes[#changes + 1] = { setting = override, value = true } end
+    changes[#changes + 1] = { setting = setting, value = single and "DEFAULT" or "HEALTH" }
+    return {
+        kind = "changes",
+        changes = changes,
+        bulkSafe = #changes > 1,
+        label = "Health Text Color Mode",
+        summary = single and "Changes HP text from the health gradient to one configured font color."
+            or "Colors HP text dynamically with the health gradient.",
+    }
 end
 
 local function ParseScopedFontTextColorShortcut(text)
@@ -2290,6 +2342,8 @@ local function ParseScopedFontTextColorShortcut(text)
 
     local setting = Registry and Registry:GetSetting("fontScope." .. tostring(scope) .. "." .. spec.key)
     if not setting then return nil end
+    local bareChoice = spec.key == "colorHealthTextByHealth" and P.ParseBareHPTextColorModeChoice(text)
+    if bareChoice then return bareChoice end
     local value
     if P._FontTextColorDefaultIntent(text, spec) then
         value = "DEFAULT"
