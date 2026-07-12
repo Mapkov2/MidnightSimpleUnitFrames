@@ -494,7 +494,7 @@ local function BuildGFBars(ctx)
         if cfg.reverseKey then controls.reverse = BindScopeToggle(ctx, W.ToggleAt(content, "Reverse order", 28 + textHalfDropW, -288, textHalfDropW), cfg.reverseKey, false, "visual") end
         if cfg.decimalsKey then controls.decimals = BindScopeToggle(ctx, W.ToggleAt(content, "Decimal percent", 28 + textHalfDropW, -316, textHalfDropW), cfg.decimalsKey, false, "visual") end
         if cfg.shortNumbersKey then
-            controls.shortNumbers = BindScopeToggle(ctx, W.ToggleAt(content, "Abbreviate HP values (K/M)", 16, -316, textHalfDropW), cfg.shortNumbersKey, true, "visual")
+            controls.shortNumbers = BindScopeToggle(ctx, W.ToggleAt(content, "Abbreviate HP values (K/M)", 16, -316, textHalfDropW), cfg.shortNumbersKey, true, "font")
             function controls.RefreshShortNumbersToggle(enabled)
                 local hasNumericValue = false
                 for _, spec in pairs(cfg.slots or {}) do
@@ -568,6 +568,7 @@ local function BuildGFBars(ctx)
         delimiterKey = "textDelimiter",
         reverseKey = "hpTextReverse",
         decimalsKey = "healthTextDecimals",
+        shortNumbersKey = "hpFullValueShort",
         positionSubtitle = "Move all HP text together or adjust a selected slot.",
         xKey = "hpOffsetX",
         yKey = "hpOffsetY",
@@ -605,6 +606,7 @@ local function BuildGFBars(ctx)
     local hpTextControls, hpSlotControls = M.UnitSectionsShared.ValueTextControlSets("hp", hpControls, hpLayer, HookTextControls, CurrentSlot)
     local powerTextControls, powerSlotControls = M.UnitSectionsShared.ValueTextControlSets("power", powerControls, powerLayer, HookTextControls, CurrentSlot)
     if hpControls.decimals then hpTextControls[#hpTextControls + 1] = hpControls.decimals end
+    if hpControls.shortNumbers then hpTextControls[#hpTextControls + 1] = hpControls.shortNumbers end
     refreshTextControls = function()
         local tab = CurrentTextTab()
         local nameOn = Bool(CurrentScope(), "showName", true)
@@ -615,6 +617,7 @@ local function BuildGFBars(ctx)
         SetOptionsEnabled(nameTextControls, nameOn)
         SetOptionsEnabled(hpTextControls, hpOn)
         if hpControls.RefreshPercentToggles then hpControls.RefreshPercentToggles(hpOn) end
+        if hpControls.RefreshShortNumbersToggle then hpControls.RefreshShortNumbersToggle(hpOn) end
         SetOptionsEnabled(hpSlotControls, hpOn and not MoveTogether("hp"))
         SetOptionsEnabled(powerTextControls, powerOn)
         if powerControls.RefreshPercentToggles then powerControls.RefreshPercentToggles(powerOn) end
@@ -627,7 +630,7 @@ local function BuildGFBars(ctx)
             local delim = Val(kind, "textDelimiter", " / ")
             hpControls.preview:SetText(BuildTextPreviewStr(
                 Val(kind, "textLeft", "NONE"), Val(kind, "textCenter", "PERCENT"), Val(kind, "textRight", "NONE"),
-                delim, Bool(kind, "hpTextReverse", false), false, Bool(kind, "healthTextDecimals", false),
+                delim, Bool(kind, "hpTextReverse", false), false, Bool(kind, "healthTextDecimals", false), Bool(kind, "hpFullValueShort", true),
                 SlotHidePercentSymbol(kind, "hpTextLeftHidePercentSymbol"),
                 SlotHidePercentSymbol(kind, "hpTextCenterHidePercentSymbol"),
                 SlotHidePercentSymbol(kind, "hpTextRightHidePercentSymbol")))
@@ -636,7 +639,7 @@ local function BuildGFBars(ctx)
             local delim = Val(kind, "powerTextDelimiter", " / ")
             powerControls.preview:SetText(BuildTextPreviewStr(
                 Val(kind, "powerTextLeft", "NONE"), Val(kind, "powerTextCenter", "PERCENT"), Val(kind, "powerTextRight", "NONE"),
-                delim, false, true, false,
+                delim, false, true, false, true,
                 SlotHidePercentSymbol(kind, "powerTextLeftHidePercentSymbol"),
                 SlotHidePercentSymbol(kind, "powerTextCenterHidePercentSymbol"),
                 SlotHidePercentSymbol(kind, "powerTextRightHidePercentSymbol")))

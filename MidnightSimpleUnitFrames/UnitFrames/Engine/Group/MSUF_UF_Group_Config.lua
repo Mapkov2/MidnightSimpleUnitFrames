@@ -1188,6 +1188,7 @@ local function CompileTextSpec(kind, conf, general, baselineOffset, nameTextOpti
     healthRightHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "hpTextRightHidePercentSymbol"),
     healthDelimiter = conf.textDelimiter or " / ",
     healthPercentDecimals = (conf.healthTextDecimals == true or conf.hpTextDecimals == true) and 1 or 0,
+    healthShortNumbers = conf.hpFullValueShort ~= false,
     healthReverse = conf.hpTextReverse == true,
     healthLayer = Layer(conf.textLayer, 5),
     healthX = hpX,
