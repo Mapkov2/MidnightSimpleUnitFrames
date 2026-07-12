@@ -74,12 +74,40 @@ local EVENT_ELEMENTS = {
   Prediction = true,
 }
 
+-- Status regions are structural, but their child elements own the smallest
+-- possible live event routes. Keep this explicit instead of widening the hot
+-- event gate to every cold-path/apply element.
+local STATUS_EVENT_ELEMENTS = {
+  RaidMarkerIndicator = true,
+  LeaderIndicator = true,
+  LevelIndicator = true,
+  RaidGroupIndicator = true,
+  EliteIndicator = true,
+  StatusTextIndicator = true,
+  CombatIndicator = true,
+  RestingIndicator = true,
+  IncomingResIndicator = true,
+  PVPIndicator = true,
+}
+
 local IDENTITY_ELEMENTS = {
   NameText = true,
   HealthText = true,
   PowerText = true,
   InlineToT = true,
   Portrait = true,
+  -- These values belong to the bound unit and must be reseeded when target,
+  -- focus, dependent, pet, or boss identity changes. Resting is player-only
+  -- and owns PLAYER_UPDATE_RESTING/PLAYER_ENTERING_WORLD directly.
+  RaidMarkerIndicator = true,
+  LeaderIndicator = true,
+  LevelIndicator = true,
+  RaidGroupIndicator = true,
+  EliteIndicator = true,
+  StatusTextIndicator = true,
+  CombatIndicator = true,
+  IncomingResIndicator = true,
+  PVPIndicator = true,
 }
 
 local IDENTITY_BAR_ELEMENTS = {
@@ -402,7 +430,9 @@ end
 UF.CoreElementAllowed = HotElementAllowed
 
 local function EventElementAllowed(name)
-  return HotElementAllowed(name) == true or EVENT_ELEMENTS[name] == true
+  return HotElementAllowed(name) == true
+    or EVENT_ELEMENTS[name] == true
+    or STATUS_EVENT_ELEMENTS[name] == true
 end
 
 local function ApplyElementAllowed(name)
@@ -1359,7 +1389,11 @@ function UF.ApplyElementToFrame(frame, name, spec, updateReason)
   end
   frame[GetUpdateKey(name)] = element.Update
   frame._msufActiveElements[name] = true
-  if updateReason and element.Update then element.Update(frame, updateReason, frame.unit) end
+  local immediateReason = updateReason
+  if immediateReason == nil and element.UpdateOnApply == true then
+    immediateReason = "MSUF_ELEMENT_APPLY"
+  end
+  if immediateReason and element.Update then element.Update(frame, immediateReason, frame.unit) end
   if frame._msufElementApplyBatch ~= true then RefreshFrameRoutingAfterElementApply(frame) end
   return true
 end

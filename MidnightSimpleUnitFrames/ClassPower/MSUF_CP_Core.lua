@@ -134,6 +134,7 @@ builders.BUILD = function(E)
         for i = CP.maxBars + 1, count do
             local bar = CreateFrame("StatusBar", nil, CP.container)
             bar:SetStatusBarTexture(fgPath)
+            bar._msufCPTexturePath = fgPath
             bar:SetMinMaxValues(0, 1)
             bar._msufCPMin, bar._msufCPMax = 0, 1
             bar:SetValue(0)
@@ -142,6 +143,7 @@ builders.BUILD = function(E)
             local bg = bar:CreateTexture(nil, "BACKGROUND")
             bg:SetAllPoints(bar)
             bg:SetTexture(bgPath)
+            bg._msufCPTexturePath = bgPath
             bg:SetVertexColor(0, 0, 0, 0.3)
             bar._bg = bg
 
@@ -583,10 +585,16 @@ builders.LAYOUT = function(E)
                 local bar = CP.bars[i]
                 if bar then
                     bar:ClearAllPoints()
-                    bar:SetStatusBarTexture(shapeFill)
+                    if bar._msufCPTexturePath ~= shapeFill then
+                        bar:SetStatusBarTexture(shapeFill)
+                        bar._msufCPTexturePath = shapeFill
+                    end
                     CP_UseNativeShapeFill(bar, fillReverse)
                     if bar._bg then
-                        bar._bg:SetTexture(shapeBg)
+                        if bar._bg._msufCPTexturePath ~= shapeBg then
+                            bar._bg:SetTexture(shapeBg)
+                            bar._bg._msufCPTexturePath = shapeBg
+                        end
                         bar._bg:SetVertexColor(bgR, bgG, bgB, bgA)
                     end
                     if fillReverse then
@@ -872,19 +880,29 @@ builders.PRESENTATION = function(E)
         for i = 1, CP.maxBars do
             local bar = CP.bars[i]
             if bar then
-                bar:SetStatusBarTexture(activeFgPath)
-                if shapeInfo then
-                    local reverse = (_cpDB.bars and _cpDB.bars.classPowerFillReverse) == true
-                    CP_UseNativeShapeFill(bar, reverse)
-                else
-                    if bar.SetReverseFill then bar:SetReverseFill(false) end
-                    CP_DisableShapeFillClip(bar)
+                local textureChanged = bar._msufCPTexturePath ~= activeFgPath
+                if textureChanged then
+                    bar:SetStatusBarTexture(activeFgPath)
+                    bar._msufCPTexturePath = activeFgPath
+                    if shapeInfo then
+                        local reverse = (_cpDB.bars and _cpDB.bars.classPowerFillReverse) == true
+                        CP_UseNativeShapeFill(bar, reverse)
+                    else
+                        if bar.SetReverseFill then bar:SetReverseFill(false) end
+                        CP_DisableShapeFillClip(bar)
+                    end
                 end
-                if bar._bg then bar._bg:SetTexture(activeBgPath) end
+                if bar._bg and bar._bg._msufCPTexturePath ~= activeBgPath then
+                    bar._bg:SetTexture(activeBgPath)
+                    bar._bg._msufCPTexturePath = activeBgPath
+                end
                 ClearShapeEdge(bar)
             end
         end
-        if CP.bgTex then CP.bgTex:SetTexture(activeBgPath) end
+        if CP.bgTex and CP._msufCPBgTexturePath ~= activeBgPath then
+            CP.bgTex:SetTexture(activeBgPath)
+            CP._msufCPBgTexturePath = activeBgPath
+        end
     end
 
     return {

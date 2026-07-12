@@ -1749,7 +1749,10 @@ StatusStructure.IsEnabled = Status.IsEnabled
 UF.RegisterElement("StatusIndicators", StatusStructure)
 
 local function RegisterStatusIndicator(def)
-  local element = {}
+  -- Regions are created by StatusIndicators immediately before these child
+  -- elements are applied. Seed each child once on every spec apply; afterwards
+  -- its narrow event route and the unit-identity path keep it current.
+  local element = { UpdateOnApply = true }
   local name, key, events, unitlessEvents = def[1], def[2], def[3], def[4]
   local update, hide = def[5], def[6]
   local noGroup, playerOnly, getEvents = def[7], def[8], def[9]

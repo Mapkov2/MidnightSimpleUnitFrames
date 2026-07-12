@@ -155,14 +155,27 @@ function A.UnitframesRegistry.RegisterPowerSettings(ctx, unit)
             "class resources player power shape", "class resources player power bar shape",
             "class resource player power shape", "class power player power shape"
         )
-        RegisterUnitEnum(unit, "detachedPowerBarShape", "detachedPowerBarShape", "Detached Power Bar Shape", "FOLLOW_CLASS", DETACHED_POWER_SHAPE_VALUES, shapeAliases, {
+        RegisterUnitEnum(unit, "detachedPowerBarShape", "detachedPowerBarShape", "Detached Power Bar Shape", "BAR", DETACHED_POWER_SHAPE_VALUES, shapeAliases, {
             category = "Power Bar",
             power = true,
+            page = "classpower",
             valueAliases = DETACHED_POWER_SHAPE_ALIASES,
             get = function(unitKey)
-                local value = tostring(UnitDB(unitKey).detachedPowerBarShape or "FOLLOW_CLASS"):upper()
-                if value == "FOLLOW_CLASS" or value == "BAR" or value == "ROUND" or value == "CRYSTAL" or value == "ORB" then return value end
-                return "FOLLOW_CLASS"
+                local conf = UnitDB(unitKey)
+                local value = tostring(conf.detachedPowerBarShape or "BAR"):upper()
+                if value == "BAR" or value == "ROUND" or value == "CRYSTAL" or value == "ORB" then return value end
+                return "BAR"
+            end,
+            set = function(unitKey, value)
+                local conf = UnitDB(unitKey)
+                value = tostring(value or "BAR"):upper()
+                if value == "FOLLOW_CLASS" then
+                    local classShape = tostring(BarsDB().classPowerShape or "BAR"):upper()
+                    conf.detachedPowerBarShape = classShape == "CIRCLE" and "ROUND"
+                        or ((classShape == "DIAMOND" or classShape == "HEX") and "CRYSTAL" or "BAR")
+                    return
+                end
+                conf.detachedPowerBarShape = value
             end,
         })
         local orbSizeAliases = MakeAliases(unit,

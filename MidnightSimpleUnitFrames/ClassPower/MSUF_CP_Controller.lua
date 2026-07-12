@@ -2108,6 +2108,10 @@ local function FullRefresh()
         CP_EnsureBars(playerFrame, maxP)
         CP._outlineEdge = -1  --- force outline rebuild on mode/size changes
         CP_Layout(playerFrame, maxP, cpHeight, powerType)
+        --- Layout switches geometry and clipping, while presentation owns the
+        --- actual media paths. Refresh immediately so CIRCLE/DIAMOND/HEX -> BAR
+        --- cannot retain a pip fill/background texture until the next reload.
+        if CP_RefreshTexture then CP_RefreshTexture() end
         --- Cache layout params for lightweight CDM relayout (avoids FullRefresh)
         CP._pf = playerFrame
         CP._layoutH = cpHeight

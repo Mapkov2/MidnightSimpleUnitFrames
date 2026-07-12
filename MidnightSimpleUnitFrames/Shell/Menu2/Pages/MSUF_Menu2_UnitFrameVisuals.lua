@@ -26,7 +26,7 @@ local CASTBAR_WIDTH_SOURCE_VALUES = VT("manual", "Manual width", "unitframe", "A
 local CASTBAR_TEXT_ALIGN = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right")
 local CASTBAR_TRUNCATE_VALUES = VT("AUTO", "Auto fit", "CLIP", "Manual width", "NONE", "No width limit")
 local CASTBAR_ICON_BORDER_VALUES = VT("NONE", "None", "DARK", "Dark Border", "CASTBAR", "Castbar Border")
-local DETACHED_POWER_SHAPE_VALUES = VT("FOLLOW_CLASS", "Follow Class Resource", "BAR", "Bar", "ROUND", "Round", "CRYSTAL", "Crystal", "ORB", "Orb")
+local DETACHED_POWER_SHAPE_VALUES = VT("BAR", "Bar", "ROUND", "Round", "CRYSTAL", "Crystal", "ORB", "Orb")
 local UnitSectionShared = M.UnitSectionsShared or {}
 local SetSectionHeaderStatus = UnitSectionShared.SetSectionHeaderStatus or function() end
 local CreateSectionNotice = UnitSectionShared.CreateSectionNotice or function() end
@@ -60,9 +60,9 @@ local function RefreshClassPowerDetachedState()
     if type(M.RefreshClassPowerDetachedState) == "function" then M.RefreshClassPowerDetachedState() end
 end
 local function NormalizeDetachedPowerShape(value)
-    value = tostring(value or "FOLLOW_CLASS"):upper()
-    if value == "FOLLOW_CLASS" or value == "BAR" or value == "ROUND" or value == "CRYSTAL" or value == "ORB" then return value end
-    return "FOLLOW_CLASS"
+    value = tostring(value or "BAR"):upper()
+    if value == "BAR" or value == "ROUND" or value == "CRYSTAL" or value == "ORB" then return value end
+    return "BAR"
 end
 local function PortraitClassStyleValues()
     local PM = MSUF and MSUF.PortraitMedia
@@ -324,7 +324,7 @@ local function BuildPower(ctx, builder, unit)
                 conf.detachedPowerBarHeight = tonumber(conf.detachedPowerBarHeight) or 6
                 conf.detachedPowerBarFrameLevelOffset = tonumber(conf.detachedPowerBarFrameLevelOffset) or 6
                 if isPlayer and conf.detachedPowerBarSyncClassPower == nil then conf.detachedPowerBarSyncClassPower = true end
-                if isPlayer and conf.detachedPowerBarShape == nil then conf.detachedPowerBarShape = "FOLLOW_CLASS" end
+                if isPlayer and conf.detachedPowerBarShape == nil then conf.detachedPowerBarShape = "BAR" end
                 if isPlayer and conf.detachedPowerOrbSize == nil then conf.detachedPowerOrbSize = 54 end
             end
             M.RequestUnitApply(unit, "MSUF2_POWER_DETACHED", DETACHED_POWER_OPTS)
@@ -380,7 +380,7 @@ local function BuildPower(ctx, builder, unit)
                 RefreshClassPowerDetachedState()
             end,
             ControlMeta(ctx, "power.detached_shape"))
-        if M.AddTooltip then M.AddTooltip(detachedShape, "Detached Shape", "Orb is a single bottom-to-top filled mana/power sphere. Follow Class Resource maps Circle to Round and Diamond/Hex to Crystal.", { hook = true, owner = "ANCHOR_RIGHT" }) end
+        if M.AddTooltip then M.AddTooltip(detachedShape, "Independent Powerbar Shape", "Changes only Player power. Class Resources keep their own shape setting. Round and Crystal fill horizontally; Orb fills bottom-to-top.", { hook = true, owner = "ANCHOR_RIGHT" }) end
         orbSize = BindPowerSlider(detachedCard, AddDetachedControl, "Orb size", 16, sliderTop - 198, detachedSliderW, 20, 160, 1, "detachedPowerOrbSize", 54, "MSUF2_POWER_DETACHED_ORB_SIZE", nil, DETACHED_POWER_OPTS)
     end
     local function PowerOn() return ReadBool(unit, "showPowerBar", true) end

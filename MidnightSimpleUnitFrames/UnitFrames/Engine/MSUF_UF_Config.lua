@@ -1097,9 +1097,10 @@ local function NormalizeClassPowerShape(value)
 end
 
 local function ResolveDetachedPowerShape(conf, bars)
-  local value = tostring((conf and conf.detachedPowerBarShape) or "FOLLOW_CLASS"):upper()
+  local value = tostring((conf and conf.detachedPowerBarShape) or "BAR"):upper()
   if value == "BAR" or value == "ROUND" or value == "CRYSTAL" or value == "ORB" then return value end
-  if value ~= "FOLLOW_CLASS" then value = "FOLLOW_CLASS" end
+  --- Compatibility for an unmigrated legacy FOLLOW_CLASS value only. New
+  --- profiles always store a direct, independent Powerbar shape.
   local classShape = NormalizeClassPowerShape(bars and bars.classPowerShape)
   if classShape == "CIRCLE" then return "ROUND" end
   if classShape == "DIAMOND" or classShape == "HEX" then return "CRYSTAL" end
