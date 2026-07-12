@@ -33,6 +33,21 @@ local POWER_EVENTS = C and C.POWER_EVENTS
 local POWER_EVENTS_FAST = {
   "UNIT_POWER_FREQUENT", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE",
 }
+local POWER_TYPE_INVALIDATION_EVENTS = {
+  UNIT_DISPLAYPOWER = true,
+  UNIT_POWER_BAR_SHOW = true,
+  UNIT_POWER_BAR_HIDE = true,
+  PARTY_MEMBER_ENABLE = true,
+  PARTY_MEMBER_DISABLE = true,
+  MSUF_UNIT_IDENTITY = true,
+  MSUF_UNIT_IDENTITY_FAST = true,
+  MSUF_UNIT_IDENTITY_SOFT = true,
+  MSUF_UNIT_IDENTITY_SOFT_FAST = true,
+  MSUF_GF_UNIT_IDENTITY = true,
+  MSUF_GF_UNIT_STRUCTURE = true,
+  MSUF_APPLY = true,
+  MSUF_FORCE_UPDATE = true,
+}
 local POWER_SHAPE_MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\ClassPower\\"
 local DETACHED_SHAPE_TEXTURES = {
   ROUND = {
@@ -54,10 +69,6 @@ local DETACHED_SHAPE_TEXTURES = {
 }
 local function IsFiniteNumber(value)
   return type(value) == "number" and value == value and (value - value) == 0
-end
-
-local function IsSecret(value)
-  return issecretvalue(value) == true
 end
 
 local function SetPowerBarValue(bar, value, animate)
@@ -617,11 +628,11 @@ local function UpdatePercent(frame, event, unit, animate)
   local forceType = false
   if event ~= "UNIT_POWER_UPDATE" and event ~= "UNIT_POWER_FREQUENT" then
     local power = SpecPower(frame)
-    forceType = not power or power.mode ~= "power"
+    forceType = POWER_TYPE_INVALIDATION_EVENTS[event] == true or not power or power.mode ~= "power"
   end
   local powerType, token = ReadPowerTypeCached(bar, unit, forceType)
   local pct = UnitPowerPercent(unit, powerType or 0, true, SCALE_100)
-  local secret = IsSecret(pct)
+  local secret = issecretvalue(pct) == true
   if not secret and pct == nil then pct = 0 end
   if not secret and not IsFiniteNumber(pct) then pct = 0 end
   if bar._msufMinMax ~= 100 then
@@ -648,14 +659,26 @@ local function UpdatePercent(frame, event, unit, animate)
   return true, pct, powerType, token
 end
 
-local function UpdateAbsolute(frame, unit, animate)
+local function UpdateAbsolute(frame, event, unit, animate)
   local powerType, token
   local bar = frame.targetPowerBar
-  powerType, token = ReadPowerTypeCached(bar, unit, true)
-  local value = powerType ~= nil and UnitPower(unit, powerType) or UnitPower(unit)
-  local valueSecret = IsSecret(value)
-  local maxValue = powerType ~= nil and UnitPowerMax(unit, powerType) or UnitPowerMax(unit)
-  local maxSecret = IsSecret(maxValue)
+  local forceType = false
+  if event ~= "UNIT_POWER_UPDATE" and event ~= "UNIT_POWER_FREQUENT" then
+    local power = SpecPower(frame)
+    forceType = POWER_TYPE_INVALIDATION_EVENTS[event] == true or not power or power.mode ~= "power"
+  end
+  powerType, token = ReadPowerTypeCached(bar, unit, forceType)
+  local value
+  local maxValue
+  if powerType ~= nil then
+    value = UnitPower(unit, powerType)
+    maxValue = UnitPowerMax(unit, powerType)
+  else
+    value = UnitPower(unit)
+    maxValue = UnitPowerMax(unit)
+  end
+  local valueSecret = issecretvalue(value) == true
+  local maxSecret = issecretvalue(maxValue) == true
   if not valueSecret then
     value = value or 0
     if not IsFiniteNumber(value) then value = 0 end
@@ -697,10 +720,10 @@ local function UpdateAbsolute(frame, unit, animate)
   return value, maxValue, powerType, token
 end
 
-function Power.Update(frame, event, unit, eventPowerToken)
-  unit = unit or frame.unit
+local function UpdatePercentPath(frame, event, unit, eventPowerToken)
+  unit = unit or (frame and frame.unit)
   local rt = frame and frame._msufTextRuntime
-  if rt then
+  if rt and rt._dispatchPowerPercentReady == true then
     rt._dispatchPowerPercent = nil
     rt._dispatchPowerPercentReady = nil
   end
@@ -714,8 +737,75 @@ function Power.Update(frame, event, unit, eventPowerToken)
   end
   local ok, _, powerType, token = UpdatePercent(frame, event, unit, animate)
   if ok then return nil, nil, powerType, token, event == "UNIT_DISPLAYPOWER" end
-  local value, maxValue, absoluteType, absoluteToken = UpdateAbsolute(frame, unit, animate)
+  local value, maxValue, absoluteType, absoluteToken = UpdateAbsolute(frame, event, unit, animate)
   return value, maxValue, absoluteType, absoluteToken, event == "UNIT_DISPLAYPOWER"
+end
+
+local function UpdateAbsolutePath(frame, event, unit, eventPowerToken)
+  unit = unit or (frame and frame.unit)
+  local rt = frame and frame._msufTextRuntime
+  if rt and rt._dispatchPowerPercentReady == true then
+    rt._dispatchPowerPercent = nil
+    rt._dispatchPowerPercentReady = nil
+  end
+  local bar = frame and frame.targetPowerBar
+  if not (bar and unit and BarShown(bar)) then return end
+  if not PowerEventMatchesToken(bar, event, eventPowerToken) then return end
+  local animate = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
+  if not animate then
+    if SnapBarInterpolation then SnapBarInterpolation(bar) end
+    SetColor(frame)
+  end
+  local value, maxValue, powerType, token = UpdateAbsolute(frame, event, unit, animate)
+  return value, maxValue, powerType, token, event == "UNIT_DISPLAYPOWER"
+end
+
+local function UpdateCurrentPath(frame, event, unit, eventPowerToken)
+  unit = unit or (frame and frame.unit)
+  local rt = frame and frame._msufTextRuntime
+  if rt and rt._dispatchPowerPercentReady == true then
+    rt._dispatchPowerPercent = nil
+    rt._dispatchPowerPercentReady = nil
+  end
+  local bar = frame and frame.targetPowerBar
+  if not (bar and unit and BarShown(bar)) then return end
+  if not PowerEventMatchesToken(bar, event, eventPowerToken) then return end
+  local animate = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
+  if not animate then
+    if SnapBarInterpolation then SnapBarInterpolation(bar) end
+    SetColor(frame)
+  end
+  local ok, _, powerType, token = UpdatePercent(frame, event, unit, animate)
+  if not ok then return UpdateAbsolutePath(frame, event, unit, eventPowerToken) end
+  local value
+  if powerType ~= nil then value = UnitPower(unit, powerType) else value = UnitPower(unit) end
+  return value, nil, powerType, token, event == "UNIT_DISPLAYPOWER"
+end
+
+local POWER_PLAN_PERCENT = 1
+local POWER_PLAN_CURRENT = 2
+local POWER_PLAN_ABSOLUTE = 3
+
+local function PowerValuePlan(frame)
+  local rt = frame and frame._msufTextRuntime
+  if not (rt and (rt.powerSlotCount or 0) > 0) then return POWER_PLAN_PERCENT end
+  if rt.powerNeedsCurrent == true and rt.powerNeedsMax == true then return POWER_PLAN_ABSOLUTE end
+  if rt.powerNeedsCurrent == true then return POWER_PLAN_CURRENT end
+  return POWER_PLAN_PERCENT
+end
+
+function Power.Update(frame, event, unit, eventPowerToken)
+  local plan = PowerValuePlan(frame)
+  if plan == POWER_PLAN_ABSOLUTE then return UpdateAbsolutePath(frame, event, unit, eventPowerToken) end
+  if plan == POWER_PLAN_CURRENT then return UpdateCurrentPath(frame, event, unit, eventPowerToken) end
+  return UpdatePercentPath(frame, event, unit, eventPowerToken)
+end
+
+function Power.SelectUpdate(frame)
+  local plan = PowerValuePlan(frame)
+  if plan == POWER_PLAN_ABSOLUTE then return UpdateAbsolutePath end
+  if plan == POWER_PLAN_CURRENT then return UpdateCurrentPath end
+  return UpdatePercentPath
 end
 
 Power.UpdateValue = Power.Update
@@ -723,6 +813,19 @@ Power.UpdateValuePlain = Power.Update
 Power.UpdateValueStatic = Power.Update
 Power.UpdateValueStaticPlain = Power.Update
 Power.UpdateValueGroupPercent = Power.Update
-function Power.SelectGroupPowerUpdater() return nil end
+-- Keep both compiled value-source implementations discoverable as immutable
+-- element functions for shared Core route prototypes.
+Power.UpdateValuePercentPath = UpdatePercentPath
+Power.UpdateValueCurrentPath = UpdateCurrentPath
+Power.UpdateValueAbsolutePath = UpdateAbsolutePath
+function Power.SelectGroupPowerUpdater(frame)
+  if not frame then return nil end
+  local update = Power.SelectUpdate(frame)
+  local updateKey = UF._updateKeys and UF._updateKeys.Power
+  if updateKey and frame._msufActiveElements and frame._msufActiveElements.Power == true then
+    frame[updateKey] = update
+  end
+  return update
+end
 
 UF.RegisterElement("Power", Power)

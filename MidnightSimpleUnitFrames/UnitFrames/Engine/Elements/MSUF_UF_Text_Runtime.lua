@@ -52,6 +52,16 @@ local POWER_TEXT_MAX_EVENTS = { "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_POWE
 local POWER_TEXT_VALUE_META_EVENTS = { "UNIT_POWER_UPDATE", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" }
 local POWER_TEXT_VALUE_META_EVENTS_FREQUENT = { "UNIT_POWER_UPDATE", "UNIT_POWER_FREQUENT", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" }
 local GROUP_LIFECYCLE_EVENTS = { "PARTY_MEMBER_ENABLE", "PARTY_MEMBER_DISABLE" }
+local POWER_IDENTITY_EVENTS = {
+  PARTY_MEMBER_ENABLE = true,
+  PARTY_MEMBER_DISABLE = true,
+  MSUF_UNIT_IDENTITY = true,
+  MSUF_UNIT_IDENTITY_FAST = true,
+  MSUF_UNIT_IDENTITY_SOFT = true,
+  MSUF_UNIT_IDENTITY_SOFT_FAST = true,
+  MSUF_GF_UNIT_IDENTITY = true,
+  MSUF_GF_UNIT_STRUCTURE = true,
+}
 
 local function IsFiniteNumber(value)
   return type(value) == "number" and value == value and (value - value) == 0
@@ -94,10 +104,14 @@ local function PercentCacheKeyFromValue(pct, decimals)
   if NormalizePercentDecimals(decimals) >= 1 then
     return floor(pct * 10 + 0.5)
   end
-  return floor(pct + 0.5)
+  -- The zero-decimal writers use Lua's %d conversion, which truncates toward
+  -- zero. The dedupe key must use the same quantization or a 49.6 -> 50.0
+  -- transition can be skipped while the FontString still displays 49.
+  return pct >= 0 and floor(pct) or -floor(-pct)
 end
 
 local function PercentFromValues(cur, maxValue)
+  if issecretvalue(cur) == true or issecretvalue(maxValue) == true then return nil end
   if IsFiniteNumber(cur) and IsFiniteNumber(maxValue) and maxValue > 0 then
     return (cur / maxValue) * 100
   end
@@ -118,6 +132,7 @@ local function ClearGFHotHealthKeys(rt)
   if not rt then return end
   rt._msufGFHotHealthHP = nil
   rt._msufGFHotHealthMax = nil
+  rt._msufGFHotHealthPercent = nil
   rt._msufGFHotHealthMissing = nil
 end
 
@@ -125,6 +140,7 @@ local function ClearGFHotPowerKeys(rt)
   if not rt then return end
   rt._msufGFHotPower = nil
   rt._msufGFHotPowerMax = nil
+  rt._msufGFHotPowerPercent = nil
 end
 
 local function WriteGFHotSlot(slot, cur, maxValue, pct, pctKnown, rt, missing)
@@ -178,36 +194,33 @@ local function GFHotHealthNeedsUpdate(frame, rt, unit, hp, hpMax)
     keyMissing = missing or false
   end
 
-  local mode = rt.healthDispatchKeyMode or 0
-  local keyHP, keyMax = false, false
-  if mode == 1 then
-    keyHP = hp
-  elseif mode == 2 then
-    keyMax = hpMax
-  elseif mode == 3 then
-    keyHP, keyMax = hp, hpMax
-  elseif mode == 4 or mode == 5 then
+  local keyPercent = false
+  if rt.healthNeedsPercent == true then
     pct = PercentFromValues(hp, hpMax) or HealthPercent(unit)
     pctKnown = issecretvalue(pct) == true or pct ~= nil
     if issecretvalue(pct) == true then
       ClearGFHotHealthKeys(rt)
       return true, pct, true, missing
     end
-    keyHP = PercentCacheKeyFromValue(pct, rt.healthPercentDecimals)
-    if keyHP == false then
+    keyPercent = PercentCacheKeyFromValue(pct, rt.healthPercentDecimals)
+    if keyPercent == false then
       ClearGFHotHealthKeys(rt)
       return true, pct, pctKnown, missing
     end
-    keyMax = mode == 5 and hpMax or false
   end
+
+  local keyHP = rt.healthNeedsCurrent == true and hp or false
+  local keyMax = rt.healthNeedsMax == true and hpMax or false
 
   if rt._msufGFHotHealthHP == keyHP
     and rt._msufGFHotHealthMax == keyMax
+    and rt._msufGFHotHealthPercent == keyPercent
     and rt._msufGFHotHealthMissing == keyMissing then
     return false, pct, pctKnown, missing
   end
   rt._msufGFHotHealthHP = keyHP
   rt._msufGFHotHealthMax = keyMax
+  rt._msufGFHotHealthPercent = keyPercent
   rt._msufGFHotHealthMissing = keyMissing
   return true, pct, pctKnown, missing
 end
@@ -231,34 +244,108 @@ local function GFHotPowerNeedsUpdate(rt, unit, power, powerMax)
     return true, pct, pctKnown
   end
 
-  local mode = rt.powerDispatchKeyMode or 0
-  local keyPower, keyMax = false, false
-  if mode == 1 then
-    keyPower = power
-  elseif mode == 2 then
-    keyMax = powerMax
-  elseif mode == 3 then
-    keyPower, keyMax = power, powerMax
-  elseif mode == 4 or mode == 5 then
+  local keyPercent = false
+  if rt.powerNeedsPercent == true then
     pct = PercentFromValues(power, powerMax) or PowerPercent(unit)
     pctKnown = issecretvalue(pct) == true or pct ~= nil
     if issecretvalue(pct) == true then
       ClearGFHotPowerKeys(rt)
       return true, pct, true
     end
-    keyPower = PercentCacheKeyFromValue(pct, 0)
-    if keyPower == false then
+    keyPercent = PercentCacheKeyFromValue(pct, 0)
+    if keyPercent == false then
       ClearGFHotPowerKeys(rt)
       return true, pct, pctKnown
     end
-    keyMax = mode == 5 and powerMax or false
   end
 
-  if rt._msufGFHotPower == keyPower and rt._msufGFHotPowerMax == keyMax then
+  local keyPower = rt.powerNeedsCurrent == true and power or false
+  local keyMax = rt.powerNeedsMax == true and powerMax or false
+
+  if rt._msufGFHotPower == keyPower
+    and rt._msufGFHotPowerMax == keyMax
+    and rt._msufGFHotPowerPercent == keyPercent then
     return false, pct, pctKnown
   end
   rt._msufGFHotPower = keyPower
   rt._msufGFHotPowerMax = keyMax
+  rt._msufGFHotPowerPercent = keyPercent
+  return true, pct, pctKnown
+end
+
+local function GFHotHealthCurrentNeedsUpdate(rt, unit, hp)
+  local hpSecret = issecretvalue(hp) == true
+  local pct, pctKnown = nil, false
+  local keyPercent = false
+  if rt.healthNeedsPercent == true then
+    pct, pctKnown = ConsumeDispatchPercent(rt, "_dispatchHealthPercent", "_dispatchHealthPercentReady")
+    if pctKnown ~= true then
+      pct = HealthPercent(unit)
+      pctKnown = issecretvalue(pct) == true or pct ~= nil
+    end
+  end
+  if hpSecret or (pctKnown == true and issecretvalue(pct) == true) then
+    ClearGFHotHealthKeys(rt)
+    return true, pct, pctKnown
+  end
+  if hp == nil then
+    ClearGFHotHealthKeys(rt)
+    return true, pct, pctKnown
+  end
+  if rt.healthNeedsPercent == true then
+    keyPercent = PercentCacheKeyFromValue(pct, rt.healthPercentDecimals)
+    if keyPercent == false then
+      ClearGFHotHealthKeys(rt)
+      return true, pct, pctKnown
+    end
+  end
+  if rt._msufGFHotHealthHP == hp
+    and rt._msufGFHotHealthMax == false
+    and rt._msufGFHotHealthPercent == keyPercent
+    and rt._msufGFHotHealthMissing == false then
+    return false, pct, pctKnown
+  end
+  rt._msufGFHotHealthHP = hp
+  rt._msufGFHotHealthMax = false
+  rt._msufGFHotHealthPercent = keyPercent
+  rt._msufGFHotHealthMissing = false
+  return true, pct, pctKnown
+end
+
+local function GFHotPowerCurrentNeedsUpdate(rt, unit, power)
+  local powerSecret = issecretvalue(power) == true
+  local pct, pctKnown = nil, false
+  local keyPercent = false
+  if rt.powerNeedsPercent == true then
+    pct, pctKnown = ConsumeDispatchPercent(rt, "_dispatchPowerPercent", "_dispatchPowerPercentReady")
+    if pctKnown ~= true then
+      pct = PowerPercent(unit)
+      pctKnown = issecretvalue(pct) == true or pct ~= nil
+    end
+  end
+  if powerSecret or (pctKnown == true and issecretvalue(pct) == true) then
+    ClearGFHotPowerKeys(rt)
+    return true, pct, pctKnown
+  end
+  if power == nil then
+    ClearGFHotPowerKeys(rt)
+    return true, pct, pctKnown
+  end
+  if rt.powerNeedsPercent == true then
+    keyPercent = PercentCacheKeyFromValue(pct, 0)
+    if keyPercent == false then
+      ClearGFHotPowerKeys(rt)
+      return true, pct, pctKnown
+    end
+  end
+  if rt._msufGFHotPower == power
+    and rt._msufGFHotPowerMax == false
+    and rt._msufGFHotPowerPercent == keyPercent then
+    return false, pct, pctKnown
+  end
+  rt._msufGFHotPower = power
+  rt._msufGFHotPowerMax = false
+  rt._msufGFHotPowerPercent = keyPercent
   return true, pct, pctKnown
 end
 
@@ -353,7 +440,8 @@ local function ReadPowerValuesPlain(frame, unit, event, needPower, needMax, powe
     if frame._msufTextPowerTypeKnown ~= true
       or not typeUnitMatches
       or (not powerTick
-        and (event == "UNIT_DISPLAYPOWER"
+        and (POWER_IDENTITY_EVENTS[event] == true
+          or event == "UNIT_DISPLAYPOWER"
           or event == "UNIT_POWER_BAR_SHOW"
           or event == "UNIT_POWER_BAR_HIDE"
           or event == "MSUF_APPLY"
@@ -386,7 +474,8 @@ local function ReadPowerValuesPlain(frame, unit, event, needPower, needMax, powe
     if maxPower == nil
       or not maxUnitMatches
       or (not powerTick
-        and (event == "UNIT_MAXPOWER"
+        and (POWER_IDENTITY_EVENTS[event] == true
+          or event == "UNIT_MAXPOWER"
           or event == "UNIT_DISPLAYPOWER"
           or event == "UNIT_POWER_BAR_SHOW"
           or event == "UNIT_POWER_BAR_HIDE"
@@ -430,6 +519,45 @@ local function ReadHealthValuesCached(frame, unit)
     hpMax = bar._msufHealthMax
   end
   return hp, hpMax
+end
+
+local function SeedCachedHealthMax(frame, unit, hpMax)
+  if not frame then return false end
+  if issecretvalue(hpMax) == true then
+    frame._msufTextHealthMax = nil
+    frame._msufTextHealthMaxUnit = nil
+    return false
+  end
+  if hpMax == nil then return false end
+  frame._msufTextHealthMax = hpMax
+  frame._msufTextHealthMaxUnit = unit
+  return true
+end
+
+local function ReadHealthMaxCached(frame, unit, event)
+  local hpMax = frame and frame._msufTextHealthMax
+  if issecretvalue(hpMax) == true then
+    hpMax = nil
+    frame._msufTextHealthMax = nil
+    frame._msufTextHealthMaxUnit = nil
+  end
+
+  local sameUnit = frame and unit ~= nil and frame._msufTextHealthMaxUnit == unit
+  if hpMax == nil or not sameUnit or event ~= "UNIT_HEALTH" then
+    hpMax = UnitHealthMax(unit)
+    SeedCachedHealthMax(frame, unit, hpMax)
+  end
+  return hpMax
+end
+
+local function UpdateRuntimeHealthTextColor(frame, rt, unit, hp, hpMax, pct, pctReady)
+  if not (rt and rt.healthColorByHealth == true and UpdateHealthTextColor) then return end
+  local hpMissing = issecretvalue(hp) ~= true and hp == nil
+  local maxMissing = issecretvalue(hpMax) ~= true and hpMax == nil
+  if (hpMissing or maxMissing) and pctReady == true then
+    hp, hpMax = pct, 100
+  end
+  UpdateHealthTextColor(frame, rt, unit, hp, hpMax)
 end
 
 function Text.UpdateNameColor(frame, event, unit)
@@ -595,8 +723,16 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
   local colorByHealth = rt.healthColorByHealth == true
   local percentNeedsValues = false
   local missingNeedsValues = rt.healthNeedsMissing == true
-  local needHPValue = needsCurrent or colorByHealth or percentNeedsValues or missingNeedsValues
-  local needMaxValue = needsMax or colorByHealth or percentNeedsValues or missingNeedsValues
+  local needHPValue = needsCurrent or percentNeedsValues or missingNeedsValues
+  local needMaxValue = needsMax or percentNeedsValues or missingNeedsValues
+  local hpMissing = issecretvalue(hp) ~= true and hp == nil
+  local maxMissing = issecretvalue(hpMax) ~= true and hpMax == nil
+  local colorNeedsPercent = colorByHealth and (hpMissing or maxMissing)
+  local pctOverride, pctOverrideSet
+  if needsPercent or colorNeedsPercent then
+    pctOverride, pctOverrideSet = ConsumeDispatchPercent(rt, "_dispatchHealthPercent", "_dispatchHealthPercentReady")
+  end
+  SeedCachedHealthMax(frame, unit, hpMax)
 
   if rt.healthPlain == true then
     if (needHPValue and hp == nil) or (needMaxValue and hpMax == nil) then
@@ -612,7 +748,7 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
       hp = UnitHealth(unit)
     end
     if needMaxValue and hpMax == nil then
-      hpMax = UnitHealthMax(unit)
+      hpMax = ReadHealthMaxCached(frame, unit, event)
     end
 
     if rt.healthNeedsMissing == true then
@@ -642,11 +778,6 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
       hpMax = 1
     end
 
-    local pctOverride, pctOverrideSet
-    if needsPercent then
-      pctOverride, pctOverrideSet = ConsumeDispatchPercent(rt, "_dispatchHealthPercent", "_dispatchHealthPercentReady")
-    end
-
     if nativeSecrets and (issecretvalue(hp) == true
       or issecretvalue(hpMax) == true
       or issecretvalue(rt.healthMissing) == true) then
@@ -660,7 +791,9 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
       return
     end
 
-    if needsPercent then
+    if (needsPercent or colorNeedsPercent) and pctOverrideSet ~= true then
+      pctOverride = PercentFromValues(hp, hpMax)
+      pctOverrideSet = pctOverride ~= nil
       if pctOverrideSet ~= true and HealthPercentAvailable then
         pctOverride = HealthPercent(unit)
         pctOverrideSet = issecretvalue(pctOverride) == true or pctOverride ~= nil
@@ -714,9 +847,7 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
       rt._lastHealthTextMax = nil
       rt._lastHealthTextMissing = nil
     end
-    if colorByHealth and UpdateHealthTextColor then
-      UpdateHealthTextColor(frame, rt, unit, hp, hpMax)
-    end
+    UpdateRuntimeHealthTextColor(frame, rt, unit, hp, hpMax, pctOverride, pctOverrideSet)
     UpdateTextSlotsPlain(rt.healthSlots, rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt, pctOverride, pctOverrideSet)
     return
   end
@@ -739,7 +870,7 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
     hpSecret = issecretvalue(hp) == true
   end
   if needMaxValue and not hpMaxSecret and hpMax == nil then
-    hpMax = UnitHealthMax(unit)
+    hpMax = ReadHealthMaxCached(frame, unit, event)
     hpMaxSecret = issecretvalue(hpMax) == true
   end
 
@@ -755,13 +886,15 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
     rt.healthMissing = nil
   end
 
-  if colorByHealth and UpdateHealthTextColor then
-    UpdateHealthTextColor(frame, rt, unit, hp, hpMax)
+  if (needsPercent or colorNeedsPercent) and pctOverrideSet ~= true then
+    pctOverride = PercentFromValues(hp, hpMax)
+    pctOverrideSet = pctOverride ~= nil
+    if pctOverrideSet ~= true and HealthPercentAvailable then
+      pctOverride = HealthPercent(unit)
+      pctOverrideSet = issecretvalue(pctOverride) == true or pctOverride ~= nil
+    end
   end
-  local pctOverride, pctOverrideSet
-  if needsPercent then
-    pctOverride, pctOverrideSet = ConsumeDispatchPercent(rt, "_dispatchHealthPercent", "_dispatchHealthPercentReady")
-  end
+  UpdateRuntimeHealthTextColor(frame, rt, unit, hp, hpMax, pctOverride, pctOverrideSet)
   UpdateTextSlotsSecret(rt.healthSlots, rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt, pctOverride, pctOverrideSet)
 end
 
@@ -772,13 +905,7 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
     return
   end
   local animate = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
-  local identityChanged = not animate
-    and (event == "MSUF_UNIT_IDENTITY"
-      or event == "MSUF_UNIT_IDENTITY_FAST"
-      or event == "MSUF_UNIT_IDENTITY_SOFT"
-      or event == "MSUF_UNIT_IDENTITY_SOFT_FAST"
-      or event == "MSUF_GF_UNIT_IDENTITY"
-      or event == "MSUF_GF_UNIT_STRUCTURE")
+  local identityChanged = not animate and POWER_IDENTITY_EVENTS[event] == true
   local seededPowerType
   if identityChanged then
     frame._msufTextPowerType = nil
@@ -884,7 +1011,9 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
       return
     end
 
-    if needsPercent then
+    if needsPercent and pctOverrideSet ~= true then
+      pctOverride = PercentFromValues(power, powerMax)
+      pctOverrideSet = pctOverride ~= nil
       if pctOverrideSet ~= true and PowerPercentAvailable then
         pctOverride = PowerPercent(unit)
         pctOverrideSet = issecretvalue(pctOverride) == true or pctOverride ~= nil
@@ -954,6 +1083,14 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
   local pctOverride, pctOverrideSet
   if needsPercent then
     pctOverride, pctOverrideSet = ConsumeDispatchPercent(rt, "_dispatchPowerPercent", "_dispatchPowerPercentReady")
+    if pctOverrideSet ~= true then
+      pctOverride = PercentFromValues(power, powerMax)
+      pctOverrideSet = pctOverride ~= nil
+      if pctOverrideSet ~= true and PowerPercentAvailable then
+        pctOverride = PowerPercent(unit)
+        pctOverrideSet = issecretvalue(pctOverride) == true or pctOverride ~= nil
+      end
+    end
   end
   UpdateTextSlotsSecret(rt.powerSlots, rt.powerSlotCount, power, powerMax, unit, PowerPercent, rt.powerNeedsPercent, rt, pctOverride, pctOverrideSet)
 end
@@ -1124,6 +1261,7 @@ local function BuildGFHotHealthTextFromPercent(frame, rt)
   if not (slot and (slot.plainWriter or slot.secretWriter or slot.writer)) then
     return nil
   end
+  ClearGFHotHealthKeys(rt)
   return function(frame, event, unit, pct)
     local update, pctKnown = GFHotHealthPercentNeedsUpdate(rt, pct)
     if not update then return end
@@ -1141,7 +1279,24 @@ local function BuildGFHotHealthText(frame, rt)
   if not (slot and (slot.plainWriter or slot.secretWriter or slot.writer)) then
     return nil
   end
+  local partialCurrent = rt.healthNeedsCurrent == true
+    and rt.healthNeedsMax ~= true
+    and rt.healthNeedsMissing ~= true
+  ClearGFHotHealthKeys(rt)
   return function(frame, event, unit, hp, hpMax)
+    local hpSecret = issecretvalue(hp) == true
+    local maxSecret = issecretvalue(hpMax) == true
+    if not maxSecret and hpMax == nil then
+      if partialCurrent and (hpSecret or hp ~= nil) then
+        local update, pct, pctKnown = GFHotHealthCurrentNeedsUpdate(rt, unit, hp)
+        if not update then return end
+        rt.healthMissing = nil
+        rt._lastHpRaw, rt._lastHpMaxRaw = hp, nil
+        return WriteGFHotSlot(slot, hp, nil, pct, pctKnown, rt)
+      end
+      return UpdateHealthRuntime(frame, event, unit, hp, hpMax)
+    end
+    if not hpSecret and hp == nil then return UpdateHealthRuntime(frame, event, unit, hp, hpMax) end
     local update, pct, pctKnown, missing = GFHotHealthNeedsUpdate(frame, rt, unit, hp, hpMax)
     if not update then return end
     rt._lastHpRaw, rt._lastHpMaxRaw = hp, hpMax
@@ -1162,10 +1317,25 @@ local function BuildGFHotPowerText(frame, rt)
   if not (slot and (slot.plainWriter or slot.secretWriter or slot.writer)) then
     return nil
   end
-  return function(frame, event, unit, power, powerMax)
+  local partialCurrent = rt.powerNeedsCurrent == true and rt.powerNeedsMax ~= true
+  ClearGFHotPowerKeys(rt)
+  return function(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
+    local powerSecret = issecretvalue(power) == true
+    local maxSecret = issecretvalue(powerMax) == true
+    if not maxSecret and powerMax == nil then
+      if partialCurrent and (powerSecret or power ~= nil) then
+        local update, pct, pctKnown = GFHotPowerCurrentNeedsUpdate(rt, unit, power)
+        if not update then return end
+        rt._lastPowerRaw, rt._lastPowerMaxRaw = power, nil
+        return WriteGFHotSlot(slot, power, nil, pct, pctKnown, rt)
+      end
+      return UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
+    end
+    if not powerSecret and power == nil then
+      return UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
+    end
     local update, pct, pctKnown = GFHotPowerNeedsUpdate(rt, unit, power, powerMax)
     if not update then return end
-    rt.healthMissing = nil
     rt._lastPowerRaw, rt._lastPowerMaxRaw = power, powerMax
     WriteGFHotSlot(slot, power, powerMax, pct, pctKnown, rt)
   end
@@ -1202,10 +1372,10 @@ local function BuildGFHotPowerTextFromPercent(frame, rt)
   if not (slot and (slot.plainWriter or slot.secretWriter or slot.writer)) then
     return nil
   end
+  ClearGFHotPowerKeys(rt)
   return function(frame, event, unit, pct)
     local update, pctKnown = GFHotPowerPercentNeedsUpdate(rt, pct)
     if not update then return end
-    rt.healthMissing = nil
     rt._lastPowerRaw, rt._lastPowerMaxRaw = nil, nil
     WriteGFHotSlot(slot, nil, nil, pct, pctKnown, rt)
   end
@@ -1213,7 +1383,9 @@ end
 
 if Text.RuntimeHotFunctions then
   Text.RuntimeHotFunctions.healthFromPercent = BuildGFHotHealthTextFromPercent
+  Text.RuntimeHotFunctions.healthFromValues = BuildGFHotHealthText
   Text.RuntimeHotFunctions.powerFromPercent = BuildGFHotPowerTextFromPercent
+  Text.RuntimeHotFunctions.powerFromValues = BuildGFHotPowerText
 end
 
 function Text.IsEnabled(frame, spec)

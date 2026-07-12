@@ -26,7 +26,6 @@ local type                  = type
 local tonumber              = tonumber
 local CreateFrame           = _G.CreateFrame
 local InCombatLockdown      = _G.InCombatLockdown
-local debugprofilestop      = _G.debugprofilestop
 local RunNextFrame          = _G.MSUF_RunNextFrame or _G.MSUF_Core_RunNextFrame or function(fn)
     if type(fn) ~= "function" then return end
     C_Timer.After(0, fn)
@@ -108,37 +107,20 @@ local function DeferVisualFlushUntilCombatEnds(kind)
     return true
 end
 
-local function _ProfileStart()
-    local profiler = MSUF and MSUF.MSUF2
-    if profiler and type(profiler.ProfileStart) == "function" then
-        return profiler.ProfileStart()
-    end
-    return debugprofilestop and debugprofilestop() or nil
-end
-
-local function _ProfileStop(key, started)
-    local profiler = MSUF and MSUF.MSUF2
-    if profiler and type(profiler.ProfileStop) == "function" then
-        profiler.ProfileStop("colorPush", key, started)
-    end
-end
-
-local function _ProfiledCall(key, fn, ...)
+local function _Call(fn, ...)
     if type(fn) ~= "function" then return false end
-    local started = _ProfileStart()
     fn(...)
-    _ProfileStop(key, started)
     return true
 end
 
 local function _RefreshUnitFrameColors()
-    if _ProfiledCall("UF.RefreshColors", _G.MSUF_RefreshAllFrameColors) then return true end
-    if _ProfiledCall("UF.RefreshColors", MSUF and MSUF.UF and MSUF.UF.RefreshColors) then return true end
+    if _Call(_G.MSUF_RefreshAllFrameColors) then return true end
+    if _Call(MSUF and MSUF.UF and MSUF.UF.RefreshColors) then return true end
     -- Legacy-only fallback: without UF.RefreshColors there is no Config.serial
     -- advance to invalidate the lazy settings cache for us.
-    _ProfiledCall("UF.RefreshSettingsCache", _G.MSUF_UFCore_RefreshSettingsCache, "COLOR_CHANGE")
-    local did = _ProfiledCall("UF.RefreshIdentityColors", _G.MSUF_RefreshAllIdentityColors)
-    did = _ProfiledCall("UF.RefreshPowerTextColors", _G.MSUF_RefreshAllPowerTextColors) or did
+    _Call(_G.MSUF_UFCore_RefreshSettingsCache, "COLOR_CHANGE")
+    local did = _Call(_G.MSUF_RefreshAllIdentityColors)
+    did = _Call(_G.MSUF_RefreshAllPowerTextColors) or did
     return did
 end
 
@@ -168,7 +150,6 @@ local function _PushVisualUpdates_Flush()
         _pushPending = false
         return DeferVisualFlushUntilCombatEnds("color")
     end
-    local flushStarted = _ProfileStart()
     --- PERF (4.22 Beta hotfix): pending flag stays TRUE during the entire
     --- flush body. Pending dedup remains correct: any PushVisualUpdates()
     --- call during this flush is dropped, and the next one after we finish
@@ -178,10 +159,10 @@ local function _PushVisualUpdates_Flush()
     --- UF.RefreshColors advances Config.serial before elements read color
     --- settings, so the lazy settings cache is rebuilt once on first use.
     local colorsAlreadyRefreshed = _RefreshUnitFrameColors()
-    _ProfiledCall("BarBackgroundVisuals", _RefreshAllBarBackgroundVisuals, colorsAlreadyRefreshed)
-    _ProfiledCall("CastbarVisuals", _G.MSUF_UpdateCastbarVisuals)
+    _Call(_RefreshAllBarBackgroundVisuals, colorsAlreadyRefreshed)
+    _Call(_G.MSUF_UpdateCastbarVisuals)
     if MSUF.MSUF_ApplyGameplayVisuals then
-        _ProfiledCall("GameplayVisuals", MSUF.MSUF_ApplyGameplayVisuals)
+        _Call(MSUF.MSUF_ApplyGameplayVisuals)
     end
     --- Group Frames have their own render/dirty pipeline; refresh it explicitly
     --- so shared bar-color swatches (absorb/heal-absorb, borders, etc.) live-apply.
@@ -189,12 +170,12 @@ local function _PushVisualUpdates_Flush()
         local gf = MSUF and MSUF.GF
         local refreshGFColors = (gf and gf.RefreshColors) or _G.MSUF_GF_RefreshColors
         if type(refreshGFColors) == "function" then
-            _ProfiledCall("GF.RefreshColors", refreshGFColors)
+            _Call(refreshGFColors)
         end
     end
 
     --- Sync highlight priority stripe colors when border colors change.
-    _ProfiledCall("PrioRows.Reinit", _G.MSUF_PrioRows_Reinit)
+    _Call(_G.MSUF_PrioRows_Reinit)
 
     --- UF.RefreshColors already includes both Borders and Power. Running the
     --- legacy outline fanout afterwards would compile every unit spec and walk
@@ -202,17 +183,16 @@ local function _PushVisualUpdates_Flush()
     --- where the consolidated UF color refresh is unavailable.
     if colorsAlreadyRefreshed ~= true then
         local applyAll = _G.MSUF_ApplyBarOutlineThickness_All
-        _ProfiledCall("BarOutline.Refresh", applyAll)
+        _Call(applyAll)
     end
-    _ProfiledCall("RoundedFrames.Refresh", _G.MSUF_ApplyRoundedUnitframes)
-    _ProfiledCall("UnitPreview.RequestRefresh", _G.MSUF_UFPreview_RequestRefresh, "MSUF_COLOR_CHANGE")
+    _Call(_G.MSUF_ApplyRoundedUnitframes)
+    _Call(_G.MSUF_UFPreview_RequestRefresh, "MSUF_COLOR_CHANGE")
 
     --- Repaint the mouseover highlight cache so colour/size edits apply live.
-    _ProfiledCall("MouseoverHighlight.Refresh", _G.MSUF_RefreshMouseoverHighlight)
+    _Call(_G.MSUF_RefreshMouseoverHighlight)
 
     --- Pending flag cleared at END (see header comment for rationale).
     _pushPending = false
-    _ProfileStop("Flush", flushStarted)
 end
 
 local function _PushCastbarVisuals_Flush()
@@ -220,13 +200,11 @@ local function _PushCastbarVisuals_Flush()
         _castbarPushPending = false
         return DeferVisualFlushUntilCombatEnds("castbar")
     end
-    local flushStarted = _ProfileStart()
-    if not _ProfiledCall("CastbarVisuals", _G.MSUF_UpdateCastbarVisuals) then
-        _ProfiledCall("BossCastbarPreview", _G.MSUF_UpdateBossCastbarPreview)
+    if not _Call(_G.MSUF_UpdateCastbarVisuals) then
+        _Call(_G.MSUF_UpdateBossCastbarPreview)
     end
-    _ProfiledCall("UnitPreview.RequestRefresh", _G.MSUF_UFPreview_RequestRefresh, "MSUF_CASTBAR_COLOR_CHANGE")
+    _Call(_G.MSUF_UFPreview_RequestRefresh, "MSUF_CASTBAR_COLOR_CHANGE")
     _castbarPushPending = false
-    _ProfileStop("CastbarFlush", flushStarted)
 end
 
 PushVisualUpdates = function()
