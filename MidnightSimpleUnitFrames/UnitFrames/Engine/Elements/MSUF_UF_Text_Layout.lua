@@ -648,15 +648,18 @@ end
 local function EnsureFontString(frame, key, template, layer, fallback, layerField)
   local overlay = EnsureTextOverlay(frame, layerField, layer, fallback)
   local fs = frame[key]
+  local changed = false
   if fs and fs.GetParent and fs:GetParent() ~= overlay then
     if fs.SetParent then
       fs:SetParent(overlay)
       fs:ClearAllPoints()
       fs._msufPoint, fs._msufRelPoint, fs._msufRelativeTo, fs._msufX, fs._msufY = nil, nil, nil, nil, nil
+      changed = true
     else
       fs:Hide()
       fs:SetText("")
       fs = nil
+      changed = true
     end
   end
   if not fs then
@@ -665,8 +668,9 @@ local function EnsureFontString(frame, key, template, layer, fallback, layerFiel
       fs:SetWordWrap(false)
     end
     frame[key] = fs
+    changed = true
   end
-  return fs
+  return fs, changed
 end
 
 function Text.GetEvents()
@@ -677,17 +681,71 @@ function Text.GetUnitlessEvents()
   return EMPTY_EVENTS
 end
 
-function Text.Create(frame, spec)
+local function TextModeEnabled(mode)
+  return mode ~= nil and mode ~= "NONE"
+end
+
+local function EnsureConfiguredTextSinks(frame, spec)
   local text = spec and spec.text or {}
-  frame.nameText = EnsureFontString(frame, "nameText", "GameFontNormal", text.nameLayer, 5, "MSUFNameTextLayer")
-  frame.hpTextLeft = EnsureFontString(frame, "hpTextLeft", "GameFontNormalSmall", text.healthLayer, 5, "MSUFHealthTextLayer")
-  frame.hpTextCenter = EnsureFontString(frame, "hpTextCenter", "GameFontNormalSmall", text.healthLayer, 5, "MSUFHealthTextLayer")
-  frame.hpTextRight = EnsureFontString(frame, "hpTextRight", "GameFontNormalSmall", text.healthLayer, 5, "MSUFHealthTextLayer")
+  local changed, ready = false, true
+  local sink, sinkChanged
+
+  if spec and spec.showName ~= false then
+    sink, sinkChanged = EnsureFontString(frame, "nameText", "GameFontNormal", text.nameLayer, 5, "MSUFNameTextLayer")
+    frame.nameText = sink
+    changed = sinkChanged or changed
+    ready = sink ~= nil and ready
+  end
+
+  local healthLeft, healthCenter, healthRight = ResolveHealthTextModes(text)
+  if spec and spec.showHealthText ~= false then
+    if TextModeEnabled(healthLeft) then
+      sink, sinkChanged = EnsureFontString(frame, "hpTextLeft", "GameFontNormalSmall", text.healthLayer, 5, "MSUFHealthTextLayer")
+      frame.hpTextLeft = sink
+      changed = sinkChanged or changed
+      ready = sink ~= nil and ready
+    end
+    if TextModeEnabled(healthCenter) then
+      sink, sinkChanged = EnsureFontString(frame, "hpTextCenter", "GameFontNormalSmall", text.healthLayer, 5, "MSUFHealthTextLayer")
+      frame.hpTextCenter = sink
+      changed = sinkChanged or changed
+      ready = sink ~= nil and ready
+    end
+    if TextModeEnabled(healthRight) then
+      sink, sinkChanged = EnsureFontString(frame, "hpTextRight", "GameFontNormalSmall", text.healthLayer, 5, "MSUFHealthTextLayer")
+      frame.hpTextRight = sink
+      changed = sinkChanged or changed
+      ready = sink ~= nil and ready
+    end
+  end
   frame.hpText = frame.hpTextRight
-  frame.powerTextLeft = EnsureFontString(frame, "powerTextLeft", "GameFontNormalSmall", text.powerLayer, 2, "MSUFPowerTextLayer")
-  frame.powerTextCenter = EnsureFontString(frame, "powerTextCenter", "GameFontNormalSmall", text.powerLayer, 2, "MSUFPowerTextLayer")
-  frame.powerTextRight = EnsureFontString(frame, "powerTextRight", "GameFontNormalSmall", text.powerLayer, 2, "MSUFPowerTextLayer")
+
+  if spec and spec.showPowerText ~= false then
+    if TextModeEnabled(text.powerLeft) then
+      sink, sinkChanged = EnsureFontString(frame, "powerTextLeft", "GameFontNormalSmall", text.powerLayer, 2, "MSUFPowerTextLayer")
+      frame.powerTextLeft = sink
+      changed = sinkChanged or changed
+      ready = sink ~= nil and ready
+    end
+    if TextModeEnabled(text.powerCenter) then
+      sink, sinkChanged = EnsureFontString(frame, "powerTextCenter", "GameFontNormalSmall", text.powerLayer, 2, "MSUFPowerTextLayer")
+      frame.powerTextCenter = sink
+      changed = sinkChanged or changed
+      ready = sink ~= nil and ready
+    end
+    if TextModeEnabled(text.powerRight) then
+      sink, sinkChanged = EnsureFontString(frame, "powerTextRight", "GameFontNormalSmall", text.powerLayer, 2, "MSUFPowerTextLayer")
+      frame.powerTextRight = sink
+      changed = sinkChanged or changed
+      ready = sink ~= nil and ready
+    end
+  end
   frame.powerText = frame.powerTextRight
+  return changed, ready
+end
+
+function Text.Create(frame, spec)
+  return EnsureConfiguredTextSinks(frame, spec)
 end
 
 local SIG_SPEC_KEYS = { "key", "scope", "width", "height", "font", "fontFlags", "nameFontSize", "healthFontSize", "powerFontSize", "fontShadow", "fontShadowAlpha", "fontShadowX", "fontShadowY", "_msufTextLayoutRevision" }
@@ -697,7 +755,7 @@ local SIG_TEXT_KEYS = {
   "nameShortenMaskPx",
   "directLayout", "directNamePoint", "directNameRelativePoint", "directNameX", "directNameY",
   "nameClassColor", "nameNpcColor", "nameNpcClassColor", "npcColorMode", "npcTypeColorText", "npcTypeTarget", "npcTypeFocus", "npcTypeBoss", "npcTypeToT",
-  "healthLayer", "healthLeft", "healthCenter", "healthRight", "healthLeftHidePercentSymbol", "healthCenterHidePercentSymbol", "healthRightHidePercentSymbol", "healthReverse", "healthDelimiter", "healthPercentDecimals", "healthColorByHealth", "healthLeftX", "healthLeftY", "healthCenterX", "healthCenterY", "healthRightX", "healthRightY",
+  "healthLayer", "healthLeft", "healthCenter", "healthRight", "healthLeftHidePercentSymbol", "healthCenterHidePercentSymbol", "healthRightHidePercentSymbol", "healthReverse", "healthDelimiter", "healthPercentDecimals", "healthShortNumbers", "healthColorByHealth", "healthLeftX", "healthLeftY", "healthCenterX", "healthCenterY", "healthRightX", "healthRightY",
   "directHealthLeftPoint", "directHealthLeftRelativePoint", "directHealthLeftX", "directHealthLeftY", "directHealthCenterPoint", "directHealthCenterRelativePoint", "directHealthCenterX", "directHealthCenterY", "directHealthRightPoint", "directHealthRightRelativePoint", "directHealthRightX", "directHealthRightY",
   "powerLayer", "powerLeft", "powerCenter", "powerRight", "powerLeftHidePercentSymbol", "powerCenterHidePercentSymbol", "powerRightHidePercentSymbol", "powerDelimiter", "powerColorByType", "powerLeftX", "powerLeftY", "powerCenterX", "powerCenterY", "powerRightX", "powerRightY",
   "directPowerLeftPoint", "directPowerLeftRelativePoint", "directPowerLeftX", "directPowerLeftY", "directPowerCenterPoint", "directPowerCenterRelativePoint", "directPowerCenterX", "directPowerCenterY", "directPowerRightPoint", "directPowerRightRelativePoint", "directPowerRightX", "directPowerRightY",
@@ -766,33 +824,28 @@ end
 
 function Text.Apply(frame, spec)
   local text = spec and spec.text or {}
+  local sinksChanged, sinksReady = EnsureConfiguredTextSinks(frame, spec)
   local layoutRevision = spec and spec._msufTextLayoutRevision
-  if layoutRevision ~= nil
+  if frame._msufGFPreviewDetached ~= true
+    and not sinksChanged
+    and sinksReady
+    and layoutRevision ~= nil
     and frame._msufTextLayoutRevision == layoutRevision
-    and frame.nameText
-    and frame.hpTextLeft
-    and frame.hpTextCenter
-    and frame.hpTextRight
-    and frame.powerTextLeft
-    and frame.powerTextCenter
-    and frame.powerTextRight then
+  then
     RefreshAppliedTextColors(frame, spec, text)
     return
   end
   local signature = TextApplySignature(spec, text)
-  if frame._msufTextApplySignature == signature
-    and frame.nameText
-    and frame.hpTextLeft
-    and frame.hpTextCenter
-    and frame.hpTextRight
-    and frame.powerTextLeft
-    and frame.powerTextCenter
-    and frame.powerTextRight then
+  if frame._msufGFPreviewDetached ~= true
+    and not sinksChanged
+    and sinksReady
+    and frame._msufTextApplySignature == signature
+  then
     RefreshAppliedTextColors(frame, spec, text)
     return
   end
-  Text.Create(frame, spec)
-  local inlineEnabled = spec and spec.key == "target" and text.inlineToT and text.inlineToT.enabled == true
+  local showName = spec and spec.showName ~= false
+  local inlineEnabled = showName and spec.key == "target" and text.inlineToT and text.inlineToT.enabled == true
   if inlineEnabled then
     frame.totInlineSep = EnsureFontString(frame, "totInlineSep", "GameFontNormal", text.nameLayer, 5, "MSUFNameTextLayer")
     frame.totInlineText = EnsureFontString(frame, "totInlineText", "GameFontNormal", text.nameLayer, 5, "MSUFNameTextLayer")
@@ -821,7 +874,8 @@ function Text.Apply(frame, spec)
   frame._msufPowerTextR, frame._msufPowerTextG, frame._msufPowerTextB, frame._msufPowerTextA = nil, nil, nil, nil
   frame._msufHealthTextR, frame._msufHealthTextG, frame._msufHealthTextB, frame._msufHealthTextA = nil, nil, nil, nil
   local power = spec and spec.power or {}
-  local detachedPowerText = power.enabled == true and power.detached == true and power.textOnDetached == true and frame.targetPowerBar
+  local hasPowerText = frame.powerTextLeft or frame.powerTextCenter or frame.powerTextRight
+  local detachedPowerText = hasPowerText and power.enabled == true and power.detached == true and power.textOnDetached == true and frame.targetPowerBar
   local barAnchoredText = text.anchorToBars == true
   local directText = text.directLayout == true
   if detachedPowerText then
@@ -921,7 +975,6 @@ function Text.Apply(frame, spec)
   if frame.nameText then
     frame.nameText._msufShown = nil
   end
-  local showName = spec and spec.showName ~= false
   SetShownCached(frame.nameText, showName)
   if not showName then
     HideDots(frame._msufNameDotsFS)

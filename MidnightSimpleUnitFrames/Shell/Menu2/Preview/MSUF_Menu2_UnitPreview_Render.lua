@@ -470,8 +470,6 @@ function Preview.Refresh(box, reason)
     local R = D._RenderState or {}
     local PreviewInCombat = D.PreviewInCombat
     if PreviewInCombat() then return end
-    local profiling = MenuState.PerfProfile and MenuState.PerfProfile.enabled == true and MenuState.ProfileStart and MenuState.ProfileStop
-    local profileStarted = profiling and MenuState.ProfileStart() or nil
     local TR, PortraitStyleGet, max, min, abs, floor, format, TEX_W8, ApplyPreviewFont, CastbarEnabled, ReadCastbarSize, CastbarOffsetFields, CastbarDetached, CanDetachPowerBarKey, ClampPreviewLayer, SetTex, ReadPowerBarHeight, PlaceHandle, UnitPreviewText, UnitPreviewTextMovesTogether, SetShownSafe, ApplyPreviewLayerVisibility, ApplyPreviewTransparency, RefreshHandleSelectionVisuals, Auras = Pick(D, [[TR PortraitStyleGet max min abs floor format TEX_W8 ApplyPreviewFont CastbarEnabled ReadCastbarSize CastbarOffsetFields CastbarDetached CanDetachPowerBarKey ClampPreviewLayer SetTex ReadPowerBarHeight PlaceHandle UnitPreviewText UnitPreviewTextMovesTogether SetShownSafe ApplyPreviewLayerVisibility ApplyPreviewTransparency RefreshHandleSelectionVisuals Auras]])
     local panel = box._msufPanel
     local UNIT_DATA = D.UNIT_DATA or {}
@@ -1307,9 +1305,9 @@ function Preview.Refresh(box, reason)
     local hpPctValue = hpPercentDecimals and format("%.1f", floor(data.hp * 1000 + 0.5) / 10)
         or floor(data.hp * 100 + 0.5)
     local hpSepRaw = R.TextScopeGet(key, "hpTextSeparator", "")
-    mock.hpTextLeft:SetText(R.FormatMode(hpLeftMode, hpCur, hpMax, hpPctValue, hpSepRaw, false, hpLeftHidePercent))
-    mock.hpTextCenter:SetText(R.FormatMode(hpCenterMode, hpCur, hpMax, hpPctValue, hpSepRaw, false, hpCenterHidePercent))
-    mock.hpText:SetText(R.FormatMode(hpRightMode, hpCur, hpMax, hpPctValue, hpSepRaw, false, hpRightHidePercent))
+    mock.hpTextLeft:SetText(R.FormatMode(hpLeftMode, hpCur, hpMax, hpPctValue, hpSepRaw, false, hpLeftHidePercent, R.TextScopeGet(key, "hpFullValueShort", R.TextScopeGet(key, "useShortNumbers", true)) == true))
+    mock.hpTextCenter:SetText(R.FormatMode(hpCenterMode, hpCur, hpMax, hpPctValue, hpSepRaw, false, hpCenterHidePercent, R.TextScopeGet(key, "hpFullValueShort", R.TextScopeGet(key, "useShortNumbers", true)) == true))
+    mock.hpText:SetText(R.FormatMode(hpRightMode, hpCur, hpMax, hpPctValue, hpSepRaw, false, hpRightHidePercent, R.TextScopeGet(key, "hpFullValueShort", R.TextScopeGet(key, "useShortNumbers", true)) == true))
     mock.hpTextPct:SetText("")
     local powerSlots = R.TextScopeHasSlots(key, "powerTextLeft", "powerTextCenter", "powerTextRight")
     local powerLeftMode, powerCenterMode, powerRightMode
@@ -1716,6 +1714,5 @@ function Preview.Refresh(box, reason)
     ApplyPreviewLayerVisibility(box)
     ApplyPreviewTransparency(box, conf)
     RefreshHandleSelectionVisuals(box)
-    if profiling then MenuState.ProfileStop("preview", "UnitPreview.Refresh", profileStarted) end
 end
 end

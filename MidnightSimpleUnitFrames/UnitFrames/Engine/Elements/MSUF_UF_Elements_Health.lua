@@ -88,13 +88,13 @@ local function RuntimeColorEnabledForSpec(spec)
   return mode ~= "dark" and mode ~= "unified"
 end
 
-local function RuntimeColorOnHealth(frame)
-  local health = frame and frame.MSUFSpec and frame.MSUFSpec.health
-  return health and health.mode == "gradient"
-end
-
 local function RuntimeColorOnHealthEvent(frame, value)
-  if RuntimeColorOnHealth(frame) then
+  local gradient = frame and frame._msufHealthRuntimeGradient
+  if gradient == nil and frame then
+    local health = frame.MSUFSpec and frame.MSUFSpec.health
+    gradient = health and health.mode == "gradient" or false
+  end
+  if gradient == true then
     return true
   end
   if frame and frame._msufHealthStatusGone == true then
@@ -108,7 +108,11 @@ end
 
 local function ApplyRuntimeColor(frame, event, unit, hp, maxHP)
   local bar = frame and frame.hpBar
-  if not (bar and ApplyHealthStatusColor and RuntimeColorEnabled(frame)) then
+  local runtimeEnabled = frame and frame._msufHealthRuntimeColorEnabled
+  if runtimeEnabled == nil and frame then
+    runtimeEnabled = RuntimeColorEnabled(frame)
+  end
+  if not (bar and ApplyHealthStatusColor and runtimeEnabled == true) then
     return false
   end
   if issecretvalue(maxHP) ~= true
@@ -148,6 +152,9 @@ function Health.Apply(frame, spec)
   frame.healthBg = frame.hpBarBG or frame.bg
   frame._msufIsGroupFrame = spec and spec.scope == "group" or nil
   local h = spec and spec.health or nil
+  local mode = h and h.mode
+  frame._msufHealthRuntimeColorEnabled = mode ~= "dark" and mode ~= "unified"
+  frame._msufHealthRuntimeGradient = mode == "gradient"
   SetTexture(frame.hpBar, h and h.texture or spec and spec.texture or WHITE)
   if frame.hpBar.SetReverseFill then
     local reverse = h and h.reverse == true
@@ -186,16 +193,16 @@ local function UpdatePercent(frame, unit)
   if not (UnitHealthPercent and SCALE_100) then return false end
   local pct = UnitHealthPercent(unit, true, SCALE_100)
   local secret = issecretvalue(pct) == true
-  if not secret and pct == nil then pct = 0 end
   if not secret and not IsFiniteNumber(pct) then pct = 0 end
   local bar = frame.hpBar
-  if issecretvalue(bar._msufMinMax) == true or bar._msufMinMax ~= 100 then
+  -- Secret min/max and value payloads are never retained in these caches; the
+  -- secret branches below clear them. Comparing the plain cache fields is
+  -- therefore sufficient and avoids two secret-value API calls per update.
+  if bar._msufMinMax ~= 100 then
     bar:SetMinMaxValues(0, 100)
     bar._msufMinMax = 100
   end
-  if secret
-    or issecretvalue(bar._msufHealthPercentValue) == true
-    or bar._msufHealthPercentValue ~= pct then
+  if secret or bar._msufHealthPercentValue ~= pct then
     local interp = bar._msufSmoothInterp
     if interp then
       bar:SetValue(pct, interp)
@@ -215,7 +222,7 @@ local function UpdatePercent(frame, unit)
   bar._msufHealthMaxUnit = nil
   bar._msufHealthMaxReady = nil
   local rt = frame._msufTextRuntime
-  if rt and rt.healthNeedsPercent == true then
+  if rt and (rt.healthNeedsPercent == true or rt.healthColorByHealth == true) then
     rt._dispatchHealthPercent = pct
     rt._dispatchHealthPercentReady = true
   end
@@ -234,9 +241,7 @@ local function UpdateAbsoluteValues(frame, unit, hp, maxHP)
     if not IsFiniteNumber(maxHP) or maxHP <= 0 then maxHP = 1 end
   end
   local bar = frame.hpBar
-  if maxSecret
-    or issecretvalue(bar._msufMinMax) == true
-    or bar._msufMinMax ~= maxHP then
+  if maxSecret or bar._msufMinMax ~= maxHP then
     bar:SetMinMaxValues(0, maxHP)
     if maxSecret then
       bar._msufMinMax = nil
@@ -245,7 +250,6 @@ local function UpdateAbsoluteValues(frame, unit, hp, maxHP)
     end
   end
   if hpSecret
-    or issecretvalue(bar._msufHealthValue) == true
     or bar._msufHealthValue ~= hp
     or bar._msufHealthValueUnit ~= unit then
     local interp = bar._msufSmoothInterp
@@ -277,8 +281,11 @@ local function UpdateAbsoluteValues(frame, unit, hp, maxHP)
 end
 
 local function UpdateAbsolute(frame, unit)
-  local hp = UnitHealth and UnitHealth(unit) or 0
-  local maxHP = UnitHealthMax and UnitHealthMax(unit) or 1
+  -- UnitHealth/UnitHealthMax may return secret values. Keep these reads as
+  -- pure pass-throughs; boolean fallback expressions would inspect the
+  -- returned value before UpdateAbsoluteValues can handle it safely.
+  local hp = UnitHealth(unit)
+  local maxHP = UnitHealthMax(unit)
   return UpdateAbsoluteValues(frame, unit, hp, maxHP)
 end
 
@@ -306,26 +313,81 @@ local function NotifyGroupHealthState(frame, event, unit, hp)
   end
 end
 
-function Health.Update(frame, event, unit)
+local function UpdateSingle(frame, event, unit)
   unit = unit or frame.unit
   local rt = frame and frame._msufTextRuntime
-  if rt then
+  if rt and rt._dispatchHealthPercentReady == true then
     rt._dispatchHealthPercent = nil
     rt._dispatchHealthPercentReady = nil
   end
   if not (frame and frame.hpBar and unit) then return end
-  local lifecycleEvent = GROUP_LIFECYCLE_EVENT[event] == true
-  local readDetailed = false
-  if frame._msufIsGroupFrame == true then
-    if lifecycleEvent
-      or IDENTITY_EVENTS[event] == true
-      or frame._msufHealthAIUnit ~= unit then
-      -- UnitInPartyIsAI is queried only on cold identity/roster boundaries.
-      RefreshGroupAIHealthMode(frame, unit)
+
+  local ok, pct, maxValue, percentReady = UpdatePercent(frame, unit)
+  if ok then
+    if event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, pct) then
+      if not ApplyRuntimeColor(frame, event, unit, pct, 100) then SetColor(frame) end
     end
-    readDetailed = frame._msufHealthAI == true
+    return pct, maxValue, percentReady
   end
-  if readDetailed then
+
+  local hp, maxHP, absolutePercentReady = UpdateAbsolute(frame, unit)
+  if event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, hp) then
+    if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
+  end
+  return hp, maxHP, absolutePercentReady
+end
+
+local function UpdateSingleAbsolute(frame, event, unit)
+  unit = unit or frame.unit
+  local rt = frame and frame._msufTextRuntime
+  if rt and rt._dispatchHealthPercentReady == true then
+    rt._dispatchHealthPercent = nil
+    rt._dispatchHealthPercentReady = nil
+  end
+  if not (frame and frame.hpBar and unit) then return end
+
+  local hp, maxHP, percentReady = UpdateAbsolute(frame, unit)
+  if event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, hp) then
+    if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
+  end
+  return hp, maxHP, percentReady
+end
+
+local function UpdateSingleCurrent(frame, event, unit)
+  unit = unit or frame.unit
+  local rt = frame and frame._msufTextRuntime
+  if rt and rt._dispatchHealthPercentReady == true then
+    rt._dispatchHealthPercent = nil
+    rt._dispatchHealthPercentReady = nil
+  end
+  if not (frame and frame.hpBar and unit) then return end
+
+  local ok, pct = UpdatePercent(frame, unit)
+  if not ok then return UpdateSingleAbsolute(frame, event, unit) end
+  if event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, pct) then
+    if not ApplyRuntimeColor(frame, event, unit, pct, 100) then SetColor(frame) end
+  end
+  -- CURRENT without MAX is a distinct compiled plan: keep the bar on the
+  -- native percent API and read only the one absolute value the text needs.
+  return UnitHealth(unit), nil, false
+end
+
+local function UpdateGroup(frame, event, unit)
+  unit = unit or frame.unit
+  local rt = frame and frame._msufTextRuntime
+  if rt and rt._dispatchHealthPercentReady == true then
+    rt._dispatchHealthPercent = nil
+    rt._dispatchHealthPercentReady = nil
+  end
+  if not (frame and frame.hpBar and unit) then return end
+
+  if GROUP_LIFECYCLE_EVENT[event] == true
+    or IDENTITY_EVENTS[event] == true
+    or frame._msufHealthAIUnit ~= unit then
+    RefreshGroupAIHealthMode(frame, unit)
+  end
+
+  if frame._msufHealthAI == true then
     local readDetailed = UF.ReadDetailedHealth
     if readDetailed then
       local detailedHP, detailedMax = readDetailed(frame, unit)
@@ -333,46 +395,184 @@ function Health.Update(frame, event, unit)
       local maxAvailable = issecretvalue(detailedMax) == true or detailedMax ~= nil
       if hpAvailable and maxAvailable then
         local hp, maxHP, percentReady = UpdateAbsoluteValues(frame, unit, detailedHP, detailedMax)
-        if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then
-          SetColor(frame)
-        end
-        if frame._msufIsGroupFrame == true then
-          NotifyGroupHealthState(frame, event, unit, hp)
-        end
+        if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
+        NotifyGroupHealthState(frame, event, unit, hp)
         return hp, maxHP, percentReady
       end
     end
   end
+
   local ok, pct, maxValue, percentReady = UpdatePercent(frame, unit)
   if ok then
     if event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, pct) then
-      if not ApplyRuntimeColor(frame, event, unit, pct, 100) then
-        SetColor(frame)
-      end
+      if not ApplyRuntimeColor(frame, event, unit, pct, 100) then SetColor(frame) end
     end
-    if frame._msufIsGroupFrame == true then
-      NotifyGroupHealthState(frame, event, unit, pct)
-    end
+    NotifyGroupHealthState(frame, event, unit, pct)
     return pct, maxValue, percentReady
   end
+
   local hp, maxHP, absolutePercentReady = UpdateAbsolute(frame, unit)
   if event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, hp) then
-    if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then
-      SetColor(frame)
+    if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
+  end
+  NotifyGroupHealthState(frame, event, unit, hp)
+  return hp, maxHP, absolutePercentReady
+end
+
+local function UpdateGroupAbsolute(frame, event, unit)
+  unit = unit or frame.unit
+  local rt = frame and frame._msufTextRuntime
+  if rt and rt._dispatchHealthPercentReady == true then
+    rt._dispatchHealthPercent = nil
+    rt._dispatchHealthPercentReady = nil
+  end
+  if not (frame and frame.hpBar and unit) then return end
+
+  if GROUP_LIFECYCLE_EVENT[event] == true
+    or IDENTITY_EVENTS[event] == true
+    or frame._msufHealthAIUnit ~= unit then
+    RefreshGroupAIHealthMode(frame, unit)
+  end
+
+  if frame._msufHealthAI == true then
+    local readDetailed = UF.ReadDetailedHealth
+    if readDetailed then
+      local detailedHP, detailedMax = readDetailed(frame, unit)
+      local hpAvailable = issecretvalue(detailedHP) == true or detailedHP ~= nil
+      local maxAvailable = issecretvalue(detailedMax) == true or detailedMax ~= nil
+      if hpAvailable and maxAvailable then
+        local hp, maxHP, percentReady = UpdateAbsoluteValues(frame, unit, detailedHP, detailedMax)
+        if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
+        NotifyGroupHealthState(frame, event, unit, hp)
+        return hp, maxHP, percentReady
+      end
     end
   end
-  if frame._msufIsGroupFrame == true then
-    NotifyGroupHealthState(frame, event, unit, hp)
+
+  local hp, maxHP, percentReady = UpdateAbsolute(frame, unit)
+  if event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, hp) then
+    if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
   end
-  return hp, maxHP, absolutePercentReady
+  NotifyGroupHealthState(frame, event, unit, hp)
+  return hp, maxHP, percentReady
+end
+
+local function UpdateGroupCurrent(frame, event, unit)
+  unit = unit or frame.unit
+  local rt = frame and frame._msufTextRuntime
+  if rt and rt._dispatchHealthPercentReady == true then
+    rt._dispatchHealthPercent = nil
+    rt._dispatchHealthPercentReady = nil
+  end
+  if not (frame and frame.hpBar and unit) then return end
+
+  if GROUP_LIFECYCLE_EVENT[event] == true
+    or IDENTITY_EVENTS[event] == true
+    or frame._msufHealthAIUnit ~= unit then
+    RefreshGroupAIHealthMode(frame, unit)
+  end
+
+  if frame._msufHealthAI == true then
+    local readDetailed = UF.ReadDetailedHealth
+    if readDetailed then
+      local detailedHP, detailedMax = readDetailed(frame, unit)
+      local hpAvailable = issecretvalue(detailedHP) == true or detailedHP ~= nil
+      local maxAvailable = issecretvalue(detailedMax) == true or detailedMax ~= nil
+      if hpAvailable and maxAvailable then
+        local hp, maxHP, percentReady = UpdateAbsoluteValues(frame, unit, detailedHP, detailedMax)
+        if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
+        NotifyGroupHealthState(frame, event, unit, hp)
+        return hp, maxHP, percentReady
+      end
+    end
+  end
+
+  local ok, pct = UpdatePercent(frame, unit)
+  if not ok then return UpdateGroupAbsolute(frame, event, unit) end
+  if event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, pct) then
+    if not ApplyRuntimeColor(frame, event, unit, pct, 100) then SetColor(frame) end
+  end
+  local hp = UnitHealth(unit)
+  NotifyGroupHealthState(frame, event, unit, hp)
+  return hp, nil, false
+end
+
+local HEALTH_PLAN_PERCENT = 1
+local HEALTH_PLAN_CURRENT = 2
+local HEALTH_PLAN_ABSOLUTE = 3
+
+local function HealthValuePlan(frame)
+  if frame and frame._msufPredictionNeedsHealth == true then
+    return HEALTH_PLAN_ABSOLUTE
+  end
+  local rt = frame and frame._msufTextRuntime
+  if not (rt and (rt.healthSlotCount or 0) > 0) then return HEALTH_PLAN_PERCENT end
+  if rt.healthNeedsMissing == true
+    or (rt.healthNeedsCurrent == true and rt.healthNeedsMax == true) then
+    return HEALTH_PLAN_ABSOLUTE
+  end
+  if rt.healthNeedsCurrent == true then return HEALTH_PLAN_CURRENT end
+  return HEALTH_PLAN_PERCENT
+end
+
+local function UpdateColorOnly(frame, event, unit)
+  if not (frame and frame.hpBar) then return end
+  if not ApplyRuntimeColor(frame, event, unit or frame.unit) then
+    SetColor(frame)
+  end
+end
+
+function Health.Update(frame, event, unit)
+  -- Core installs UpdateGroup/UpdateSingle directly through SelectUpdate, so
+  -- event hot paths stay branch-free. Preserve the public update contract for
+  -- direct callers and compatibility paths that have a group frame.
+  local plan = HealthValuePlan(frame)
+  if frame and frame._msufIsGroupFrame == true then
+    if plan == HEALTH_PLAN_ABSOLUTE then return UpdateGroupAbsolute(frame, event, unit) end
+    if plan == HEALTH_PLAN_CURRENT then return UpdateGroupCurrent(frame, event, unit) end
+    return UpdateGroup(frame, event, unit)
+  end
+  if plan == HEALTH_PLAN_ABSOLUTE then return UpdateSingleAbsolute(frame, event, unit) end
+  if plan == HEALTH_PLAN_CURRENT then return UpdateSingleCurrent(frame, event, unit) end
+  return UpdateSingle(frame, event, unit)
+end
+
+function Health.SelectUpdate(frame, spec)
+  local plan = HealthValuePlan(frame)
+  if (spec and spec.scope == "group") or (frame and frame._msufIsGroupFrame == true) then
+    if plan == HEALTH_PLAN_ABSOLUTE then return UpdateGroupAbsolute end
+    if plan == HEALTH_PLAN_CURRENT then return UpdateGroupCurrent end
+    return UpdateGroup
+  end
+  if plan == HEALTH_PLAN_ABSOLUTE then return UpdateSingleAbsolute end
+  if plan == HEALTH_PLAN_CURRENT then return UpdateSingleCurrent end
+  return UpdateSingle
+end
+
+function Health.SelectEventUpdate(_frame, _spec, event)
+  -- UNIT_FLAGS changes dead/ghost/AFK/DND status, not the health value. The
+  -- color resolver performs the exact status and (for gradient mode) native
+  -- curve reads it needs, so a second UnitHealthPercent + StatusBar write is
+  -- redundant here.
+  if event == "UNIT_FLAGS" then
+    return UpdateColorOnly
+  end
+  return nil
 end
 
 Health.UpdateValue = Health.Update
 Health.UpdateValuePlain = Health.Update
 Health.UpdateValueStatic = Health.Update
 Health.UpdateValueStaticPlain = Health.Update
-Health.UpdateValueGroupStatic = Health.Update
-Health.UpdateValueGroupPercent = Health.Update
+Health.UpdateValueGroupStatic = UpdateGroup
+Health.UpdateValueGroupPercent = UpdateGroup
+-- Static implementations are exposed on the element descriptor so Core can
+-- safely intern direct route prototypes without retaining frame-owned closures.
+Health.UpdateValueSinglePercent = UpdateSingle
+Health.UpdateValueSingleCurrent = UpdateSingleCurrent
+Health.UpdateValueSingleAbsolute = UpdateSingleAbsolute
+Health.UpdateValueGroupCurrent = UpdateGroupCurrent
+Health.UpdateValueGroupAbsolute = UpdateGroupAbsolute
 Health.UpdateValuePercent = Health.Update
 Health.UpdateMaxValue = Health.Update
 Health.UpdateMaxValuePlain = Health.Update
@@ -380,7 +580,15 @@ Health.UpdateMaxValueStatic = Health.Update
 Health.UpdateMaxValueStaticPlain = Health.Update
 Health.UpdateConnectionState = Health.Update
 Health.UpdateIdentityColor = Health.Update
-function Health.SelectGroupHealthUpdater() return nil end
+function Health.SelectGroupHealthUpdater(frame)
+  if not frame then return nil end
+  local update = Health.SelectUpdate(frame, frame.MSUFSpec)
+  local updateKey = UF._updateKeys and UF._updateKeys.Health
+  if updateKey and frame._msufActiveElements and frame._msufActiveElements.Health == true then
+    frame[updateKey] = update
+  end
+  return update
+end
 
 function Health.RefreshColor(frameOrUnit, event)
   local frame = frameOrUnit

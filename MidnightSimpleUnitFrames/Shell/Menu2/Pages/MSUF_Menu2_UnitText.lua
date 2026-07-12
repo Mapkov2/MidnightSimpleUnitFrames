@@ -198,17 +198,18 @@ local function BuildText(ctx, builder, unit)
     local function TextModeHasPercent(mode)
         return tostring(mode or ""):find("PERCENT", 1, true) ~= nil
     end
-    local function TextModeExample(mode, delimiter, isPower, decimalPercent, hidePercentSymbol)
+    local function TextModeExample(mode, delimiter, isPower, decimalPercent, hidePercentSymbol, abbreviateFullValue)
         mode = tostring(mode or "NONE"):upper()
         if mode == "NONE" then return nil end
-        local cur = isPower and "100" or "630.0k"
-        local maxText = isPower and "100" or "1.0m"
+        local cur = isPower and "100" or (abbreviateFullValue and "630.0k" or "630,000")
+        local maxText = isPower and "100" or (abbreviateFullValue and "1.0m" or "1,000,000")
         local pct = isPower and "100" or (decimalPercent and "63.4" or "63")
         if hidePercentSymbol ~= true then pct = pct .. "%" end
         if mode == "PERCENT" then return pct end
         if mode == "CURRENT" then return cur end
+        if mode == "FULLVALUE" then return cur end
         if mode == "MAX" then return maxText end
-        if mode == "DEFICIT" then return "-370.0k" end
+        if mode == "DEFICIT" then return abbreviateFullValue and "-370.0k" or "-370,000" end
         if mode == "CURMAX" then return cur .. delimiter .. maxText end
         if mode == "MAXCUR" then return maxText .. delimiter .. cur end
         if mode == "CURPERCENT" then return cur .. delimiter .. pct end
@@ -373,6 +374,12 @@ local function BuildText(ctx, builder, unit)
     local SLOT_VALUES = VT("left", "Left", "center", "Center", "right", "Right")
     local function BuildValueTextTab(kind, tab, cfg)
         local controls = {}
+        local function FullValueShortEnabled()
+            if not cfg.fullValueShortKey then return false end
+            local value = ReadText(unit, cfg.fullValueShortKey, nil)
+            if value ~= nil then return value == true end
+            return type(cfg.fullValueShortDefault) == "function" and cfg.fullValueShortDefault() == true or cfg.fullValueShortDefault == true
+        end
         local content = TextCard(tab, "What text appears", "Slots are explained before advanced position controls.", leftX, -4, cardW, 346)
         local _, previewValue = PreviewText(content, cfg.preview, 16, -54, cardW - 32)
         controls.preview = previewValue
@@ -399,6 +406,13 @@ local function BuildText(ctx, builder, unit)
                     SetCurrentSlot(kind, slot)
                     FocusPreviewText(kind, slot, true)
                     RefreshTextHeader()
+                    local default = type(cfg.showDefault) == "function" and cfg.showDefault() or cfg.showDefault
+                    local textEnabled = ReadBool(unit, cfg.showKey, default)
+                    if controls.RefreshPercentToggles then controls.RefreshPercentToggles(textEnabled) end
+                    if controls.RefreshFullValueToggle then controls.RefreshFullValueToggle(textEnabled) end
+                    if v == "FULLVALUE" and controls.fullValueShort and T.PlayNeonFlash then
+                        T.PlayNeonFlash(controls.fullValueShort, "info", { alpha = 0.26, duration = 0.85 })
+                    end
                 end,
                 ControlMeta(ctx, "text." .. kind .. ".slot." .. slot .. ".mode"))
         end
@@ -453,7 +467,7 @@ local function BuildText(ctx, builder, unit)
                 { rightMode, hideRight },
             }
             for i = 1, #values do
-                local text = TextModeExample(values[i][1], delimiter, cfg.isPower == true, cfg.decimalsKey and ReadText(unit, cfg.decimalsKey, false) == true, values[i][2])
+                local text = TextModeExample(values[i][1], delimiter, cfg.isPower == true, cfg.decimalsKey and ReadText(unit, cfg.decimalsKey, false) == true, values[i][2], FullValueShortEnabled())
                 if text then parts[#parts + 1] = text end
             end
             controls.preview:SetText(#parts > 0 and table.concat(parts, "  ") or "(none)")
@@ -475,6 +489,27 @@ local function BuildText(ctx, builder, unit)
                 function() return ReadText(unit, cfg.decimalsKey, false) == true end,
                 function(v) SetText(unit, cfg.decimalsKey, v and true or false, cfg.decimalsReason) end,
                 ControlMeta(ctx, "text." .. kind .. ".decimals"))
+        end
+        if cfg.fullValueShortKey then
+            controls.fullValueShort = SwitchOrToggle(content, "Abbreviate HP values (K/M)", 16, -316, halfDropdownW)
+            M.BindBoolWidget(ctx, controls.fullValueShort,
+                FullValueShortEnabled,
+                function(v)
+                    SetText(unit, cfg.fullValueShortKey, v and true or false, cfg.fullValueShortReason)
+                    if controls.RefreshPreview then controls.RefreshPreview() end
+                end,
+                ControlMeta(ctx, "text." .. kind .. ".full_value_short"))
+            function controls.RefreshFullValueToggle(enabled)
+                local hasNumericValue = false
+                for _, spec in pairs(cfg.slots or {}) do
+                    local mode = ReadSlot(unit, spec.key, cfg.legacyKey, spec.default)
+                    if mode ~= "NONE" and mode ~= "PERCENT" then
+                        hasNumericValue = true
+                        break
+                    end
+                end
+                SetControlEnabled(controls.fullValueShort, enabled == true and hasNumericValue)
+            end
         end
         local position = TextCard(tab, cfg.positionTitle, cfg.positionSubtitle, rightX, -4, rightW, 410)
         local function BindPositionSlider(name, label, y, key, defaultValue, reason, focusSlot, afterSet)
@@ -554,6 +589,12 @@ local function BuildText(ctx, builder, unit)
         reverseKey = "hpTextReverse",
         reverseReason = "MSUF2_HP_REVERSE",
         decimalsKey = "healthTextDecimals",
+        fullValueShortKey = "hpFullValueShort",
+        fullValueShortDefault = function()
+            local general = GetGeneral()
+            return not general or general.useShortNumbers ~= false
+        end,
+        fullValueShortReason = "MSUF2_HP_FULL_VALUE_SHORT",
         decimalsReason = "MSUF2_HP_TEXT_DECIMALS",
         positionTitle = "Position",
         positionSubtitle = "Move all HP text together or adjust a selected slot.",
@@ -641,6 +682,7 @@ local function BuildText(ctx, builder, unit)
     local hpTextControls, hpSlotControls = UnitSectionShared.ValueTextControlSets("hp", hpControls, advHpLayer, HookTextControls, CurrentSlot)
     local powerTextControls, powerSlotControls = UnitSectionShared.ValueTextControlSets("power", powerControls, advPowerLayer, HookTextControls, CurrentSlot)
     if hpControls.decimals then hpTextControls[#hpTextControls + 1] = hpControls.decimals end
+    if hpControls.fullValueShort then hpTextControls[#hpTextControls + 1] = hpControls.fullValueShort end
     RefreshTextControlState = RefreshTextControlState(function()
         local tab = CurrentTextTab()
         M.CallIf(RefreshTextTabs)
@@ -657,6 +699,7 @@ local function BuildText(ctx, builder, unit)
         SetControlEnabled(hpControls.show, true)
         SetControlsEnabled(hpTextControls, hpOn)
         if hpControls.RefreshPercentToggles then hpControls.RefreshPercentToggles(hpOn) end
+        if hpControls.RefreshFullValueToggle then hpControls.RefreshFullValueToggle(hpOn) end
         SetControlsEnabled(hpSlotControls, hpOn and not MoveTogether("hp"))
         SetControlEnabled(powerControls.show, true)
         SetControlsEnabled(powerTextControls, powerOn)

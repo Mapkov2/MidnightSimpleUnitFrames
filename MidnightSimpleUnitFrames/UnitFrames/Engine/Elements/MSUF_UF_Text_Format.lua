@@ -98,6 +98,10 @@ local function SmallIntegerText(value)
   return nil
 end
 
+local function TruncateInteger(value)
+  return value >= 0 and floor(value) or -floor(-value)
+end
+
 local function CompactNumber(value)
   if type(value) ~= "number" then
     value = tonumber(value) or 0
@@ -185,7 +189,7 @@ local function NormalizePercentDecimals(decimals)
 end
 
 local MODE_NEEDS = {
-  CURRENT = 1, MAX = 2, CURMAX = 3, MAXCUR = 3,
+  CURRENT = 1, FULLVALUE = 1, MAX = 2, CURMAX = 3, MAXCUR = 3,
   PERCENT = 4, CURPERCENT = 5, PERCENTCUR = 5,
   MAXPERCENT = 6, PERCENTMAX = 6,
   CURMAXPERCENT = 7, PERCENTMAXCUR = 7, PERCENTCURMAX = 7,
@@ -247,15 +251,13 @@ local function FormatPercentValue(value, hideSymbol, canSecret, decimals)
     local text = format("%.1f", key / 10)
     return hideSymbol and text or (text .. "%")
   end
-  local text = SmallIntegerText(value) or format("%d", value or 0)
+  local integer = TruncateInteger(value)
+  local text = SmallIntegerText(integer) or format("%d", integer)
   if hideSymbol then
     return text
   end
-  if type(value) == "number" and value >= 0 and value <= 100 then
-    local n = floor(value)
-    if n == value then
-      return PERCENT_TEXT_0_100[n]
-    end
+  if integer >= 0 and integer <= 100 then
+    return PERCENT_TEXT_0_100[integer]
   end
   return text .. "%"
 end
@@ -346,13 +348,11 @@ local function SlotPercentPlain(slot, pct)
     local text = format("%.1f", key / 10)
     return slot.hidePercentSymbol and text or (text .. "%")
   end
-  if not slot.hidePercentSymbol and type(pct) == "number" and pct >= 0 and pct <= 100 then
-    local n = floor(pct)
-    if n == pct then
-      return PERCENT_TEXT_0_100[n]
-    end
+  local integer = TruncateInteger(pct)
+  if not slot.hidePercentSymbol and integer >= 0 and integer <= 100 then
+    return PERCENT_TEXT_0_100[integer]
   end
-  local text = SmallIntegerText(pct) or format("%d", pct or 0)
+  local text = SmallIntegerText(integer) or format("%d", integer)
   return slot.hidePercentSymbol and text or (text .. "%")
 end
 
@@ -560,6 +560,7 @@ end
 
 local MODE_WRITERS = {
   CURRENT = WriteCurrent,
+  FULLVALUE = WriteCurrent,
   MAX = WriteMax,
   CURMAX = WriteCurMax,
   MAXCUR = WriteMaxCur,
@@ -650,6 +651,7 @@ end
 
 local MODE_PLAIN_WRITERS = {
   CURRENT = PlainWriteCurrent,
+  FULLVALUE = PlainWriteCurrent,
   MAX = PlainWriteMax,
   CURMAX = PlainWriteCurMax,
   MAXCUR = PlainWriteMaxCur,
@@ -666,6 +668,7 @@ local MODE_PLAIN_WRITERS = {
 
 local SECRET_MODE_CODES = {
   CURRENT = 1,
+  FULLVALUE = 1,
   MAX = 2,
   CURMAX = 3,
   MAXCUR = 4,
@@ -682,6 +685,8 @@ local SECRET_MODE_CODES = {
 local SECRET_NEEDS_CUR = { [1] = true, [3] = true, [4] = true, [6] = true, [7] = true, [8] = true, [9] = true, [12] = true }
 local SECRET_NEEDS_MAX = { [2] = true, [3] = true, [4] = true, [8] = true, [9] = true, [10] = true, [11] = true, [12] = true }
 local SECRET_NEEDS_PCT = { [5] = true, [6] = true, [7] = true, [8] = true, [9] = true, [10] = true, [11] = true, [12] = true }
+-- Retain the compiled setter contract for cold-path consumers and smoke tests.
+-- The hot secret writer below emits the native call directly.
 local SECRET_SETTERS = {
   function(fs, pattern, cur) fs:SetFormattedText(pattern, cur) end,
   function(fs, pattern, _, maxValue) fs:SetFormattedText(pattern, maxValue) end,
@@ -697,34 +702,60 @@ local SECRET_SETTERS = {
   function(fs, pattern, cur, maxValue, pct, delimiter) fs:SetFormattedText(pattern, pct, delimiter, cur, delimiter, maxValue) end,
 }
 
-local function SecretWrite(slot, cur, maxValue, pct)
+local function CompileSecretWriter(slot)
   local fs = slot.fs
-  if not fs then return end
   local fn = slot.secretValueFn
+  local code = slot.secretCode
   local needsCur = slot.secretNeedsCur
   local needsMax = slot.secretNeedsMax
   local needsPct = slot.secretNeedsPct
-  if fn then
-    if needsCur then
-      cur = issecretvalue(cur) == true and fn(cur) or fn(FiniteNumberOr(cur, 0))
+  local pattern = slot.secretPattern
+  local delimiter = slot.delimiter
+
+  return function(_, cur, maxValue, pct)
+    if fn then
+      if needsCur then
+        cur = issecretvalue(cur) == true and fn(cur) or fn(FiniteNumberOr(cur, 0))
+      end
+      if needsMax then
+        maxValue = issecretvalue(maxValue) == true and fn(maxValue) or fn(FiniteNumberOr(maxValue, 0))
+      end
+    else
+      if needsCur and issecretvalue(cur) ~= true then cur = FiniteNumberOr(cur, 0) end
+      if needsMax and issecretvalue(maxValue) ~= true then maxValue = FiniteNumberOr(maxValue, 0) end
     end
-    if needsMax then
-      maxValue = issecretvalue(maxValue) == true and fn(maxValue) or fn(FiniteNumberOr(maxValue, 0))
-    end
-  else
-    if needsCur and issecretvalue(cur) ~= true then
-      cur = FiniteNumberOr(cur, 0)
-    end
-    if needsMax and issecretvalue(maxValue) ~= true then
-      maxValue = FiniteNumberOr(maxValue, 0)
+    if needsPct and issecretvalue(pct) ~= true then pct = FiniteNumberOr(pct, 0) end
+    fs._aText = nil
+    fs._aTextPlain = nil
+    -- The format mode is fixed when the slot is compiled. Dispatching the
+    -- native call here avoids a second Lua function call for every secret text
+    -- write while retaining one shared normalization path for all modes.
+    if code == 1 then
+      fs:SetFormattedText(pattern, cur)
+    elseif code == 2 then
+      fs:SetFormattedText(pattern, maxValue)
+    elseif code == 3 then
+      fs:SetFormattedText(pattern, cur, delimiter, maxValue)
+    elseif code == 4 then
+      fs:SetFormattedText(pattern, maxValue, delimiter, cur)
+    elseif code == 5 then
+      fs:SetFormattedText(pattern, pct)
+    elseif code == 6 then
+      fs:SetFormattedText(pattern, cur, delimiter, pct)
+    elseif code == 7 then
+      fs:SetFormattedText(pattern, pct, delimiter, cur)
+    elseif code == 8 then
+      fs:SetFormattedText(pattern, cur, delimiter, maxValue, delimiter, pct)
+    elseif code == 9 then
+      fs:SetFormattedText(pattern, pct, delimiter, maxValue, delimiter, cur)
+    elseif code == 10 then
+      fs:SetFormattedText(pattern, maxValue, delimiter, pct)
+    elseif code == 11 then
+      fs:SetFormattedText(pattern, pct, delimiter, maxValue)
+    else
+      fs:SetFormattedText(pattern, pct, delimiter, cur, delimiter, maxValue)
     end
   end
-  if needsPct and issecretvalue(pct) ~= true then
-    pct = FiniteNumberOr(pct, 0)
-  end
-  fs._aText = nil
-  fs._aTextPlain = nil
-  slot.secretSetter(fs, slot.secretPattern, cur, maxValue, pct, slot.delimiter)
 end
 
 local function SetModeText(fs, mode, cur, max, delimiter, unit, percentFn, short, hidePercentSymbol, pctOverride, pctOverrideSet, suffix, canSecret, percentDecimals)
@@ -785,7 +816,7 @@ local function ResolveHealthTextModes(text)
 end
 
 local function BuildSecretPattern(mode, vf, pf)
-  if mode == "CURRENT" or mode == "MAX" then
+  if mode == "CURRENT" or mode == "FULLVALUE" or mode == "MAX" then
     return vf
   elseif mode == "PERCENT" then
     return pf
@@ -828,7 +859,8 @@ local function AddTextSlot(slots, index, fs, mode, delimiter, short, hidePercent
   slot.writer = MODE_WRITERS[mode] or WriteCurMax
   slot.plainWriter = MODE_PLAIN_WRITERS[mode] or PlainWriteCurMax
   local secretCode = SECRET_MODE_CODES[mode]
-  slot.secretWriter = secretCode and SecretWrite or nil
+  slot.secretWriter = nil
+  slot.secretCode = secretCode
   slot.secretSetter = secretCode and SECRET_SETTERS[secretCode] or nil
   slot.secretNeedsCur = SECRET_NEEDS_CUR[secretCode]
   slot.secretNeedsMax = SECRET_NEEDS_MAX[secretCode]
@@ -844,6 +876,7 @@ local function AddTextSlot(slots, index, fs, mode, delimiter, short, hidePercent
     slot.secretPattern = BuildSecretPattern(mode,
       secretValueFn and "%s" or "%d",
       SecretPercentFormat(slot))
+    slot.secretWriter = CompileSecretWriter(slot)
   else
     slot.secretValueFn = nil
     slot.secretPattern = nil
@@ -942,7 +975,7 @@ local function CompileTextRuntime(frame, spec, text)
   rt.healthSlotCount, needsPercent, needsMissing, needsCurrent, needsMax = CompileThreeTextSlots(
     rt.healthSlots, frame, showHealth, HEALTH_SLOT_FIELDS,
     healthLeft, healthCenter, healthRight,
-    text.healthDelimiter, text.shortNumbers,
+    text.healthDelimiter, text.healthShortNumbers,
     healthHideLeft, healthHideCenter, healthHideRight, rt.healthPercentDecimals)
   rt.healthNeedsPercent = needsPercent
   rt.healthNeedsMissing = needsMissing
@@ -976,6 +1009,8 @@ local function CompileTextRuntime(frame, spec, text)
   rt._dispatchHealthTextMissing = nil
   rt._dispatchHealthMissing = nil
   rt._dispatchHealthMissingReady = nil
+  frame._msufTextHealthMax = nil
+  frame._msufTextHealthMaxUnit = nil
 
   local showPower = spec and spec.showPowerText ~= false
   local powerUnused
@@ -1026,15 +1061,26 @@ local function CompileTextRuntime(frame, spec, text)
   frame._msufTextPowerMaxUnit = nil
   local hot = Text.RuntimeHotFunctions
   if hot then
+    local groupScope = spec and spec.scope == "group"
     if rt.healthSlotCount > 0 then
-      rt.healthHot = hot.healthHot
+      local fromValues
+      if groupScope and (rt.healthNeedsCurrent == true
+        or rt.healthNeedsMax == true
+        or rt.healthNeedsMissing == true) then
+        fromValues = hot.healthFromValues and hot.healthFromValues(frame, rt) or nil
+      end
+      rt.healthHot = fromValues or hot.healthHot
       rt.healthHotFromPercent = hot.healthFromPercent and hot.healthFromPercent(frame, rt) or nil
     else
       rt.healthHot = nil
       rt.healthHotFromPercent = nil
     end
     if rt.powerSlotCount > 0 then
-      rt.powerHot = hot.powerHot
+      local fromValues
+      if groupScope and (rt.powerNeedsCurrent == true or rt.powerNeedsMax == true) then
+        fromValues = hot.powerFromValues and hot.powerFromValues(frame, rt) or nil
+      end
+      rt.powerHot = fromValues or hot.powerHot
       rt.powerHotFromPercent = hot.powerFromPercent and hot.powerFromPercent(frame, rt) or nil
     else
       rt.powerHot = nil
