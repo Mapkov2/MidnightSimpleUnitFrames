@@ -49,18 +49,22 @@ for i = 1, #ORDER do
     OPTIONS[i] = { value = id, text = PACKS[id].text }
 end
 
+-- Blizzard may expose non-playable/pseudo class tokens in this table (for
+-- example TRAVELER on 12.1). They have no bundled Rondo asset, but they still
+-- need a valid Blizzard-class fallback instead of a missing-media placeholder.
+for classToken, coords in pairs(CLASS_ICON_TCOORDS or {}) do
+    VISUALS.BLIZZARD[classToken] = {
+        atlas = "classicon-" .. classToken,
+        texture = BLIZZARD_CLASS_TEXTURE,
+        left = coords[1] or 0,
+        right = coords[2] or 1,
+        top = coords[3] or 0,
+        bottom = coords[4] or 1,
+    }
+end
+
+-- Custom packs intentionally contain only real playable-class artwork.
 for classToken, file in pairs(CLASS_FILE) do
-    local coords = CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[classToken]
-    if coords then
-        VISUALS.BLIZZARD[classToken] = {
-            atlas = "classicon-" .. classToken,
-            texture = BLIZZARD_CLASS_TEXTURE,
-            left = coords[1] or 0,
-            right = coords[2] or 1,
-            top = coords[3] or 0,
-            bottom = coords[4] or 1,
-        }
-    end
     VISUALS.RONDO_COLOR[classToken] = {
         texture = PACKS.RONDO_COLOR.base .. file .. "_64.tga",
         left = 0,

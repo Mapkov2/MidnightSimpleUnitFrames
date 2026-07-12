@@ -23,6 +23,7 @@ local tostring = V.tostring or tostring
 local max = V.max or math.max
 local EMPTY_EVENTS = V.EMPTY_EVENTS or {}
 local PORTRAIT_2D_EVENTS = V.PORTRAIT_2D_EVENTS or { "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED", "UNIT_CONNECTION" }
+local PORTRAIT_CLASS_EVENTS = V.PORTRAIT_CLASS_EVENTS or { "UNIT_PORTRAIT_UPDATE" }
 local GROUP_PORTRAIT_2D_EVENTS = {
   "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED", "UNIT_CONNECTION",
   "UNIT_ENTERED_VEHICLE", "UNIT_EXITED_VEHICLE",
@@ -30,7 +31,6 @@ local GROUP_PORTRAIT_2D_EVENTS = {
 local PORTRAIT_2D_PLAYER_EVENTS = V.PORTRAIT_2D_PLAYER_EVENTS or { "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED", "UNIT_ENTERED_VEHICLE", "UNIT_EXITED_VEHICLE" }
 local PORTRAIT_2D_DEPENDENT_EVENTS = V.PORTRAIT_2D_DEPENDENT_EVENTS or { "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED", "UNIT_CONNECTION" }
 local WHITE = V.WHITE or "Interface\\Buttons\\WHITE8x8"
-local QUESTION_MARK = V.QUESTION_MARK or "Interface\\ICONS\\INV_Misc_QuestionMark"
 local BOSS_PREVIEW_PORTRAIT = V.BOSS_PREVIEW_PORTRAIT or "Interface\\ICONS\\Achievement_Boss_LichKing"
 local BOSS_PREVIEW_CLASS = V.BOSS_PREVIEW_CLASS or "DEATHKNIGHT"
 local ADDON_PATH = V.ADDON_PATH or ("Interface\\AddOns\\" .. (addonName or "MidnightSimpleUnitFrames"))
@@ -457,35 +457,39 @@ local function BossPreviewClassToken(unit, frame)
   return nil
 end
 
-local function ApplyClassPortrait(texture, unit, p, class, frame)
+local function ApplyClassPortrait(texture, unit, p, class, frame, force)
   class = class or BossPreviewClassToken(unit, frame) or UnitClassToken(unit)
   local key = BuildClassPortraitKey(unit, frame, p, class)
   if texture and texture._msufPortraitKey == key then
     return
   end
   local classStyle = p and p.classStyle or "BLIZZARD"
-  if class and classStyle == "BLIZZARD" and texture and texture.SetAtlas then
-    SetAtlasCached(texture, "classicon-" .. class)
-    texture._msufPortraitKey = key
+  local PM = MSUF and MSUF.PortraitMedia
+  local visual
+  if PM and PM.ResolveClassPortrait then
+    visual = PM.ResolveClassPortrait(class, classStyle)
+  end
+  if type(visual) == "table" then
+    if visual.atlas and texture and texture.SetAtlas then
+      SetAtlasCached(texture, visual.atlas)
+    elseif visual.texture then
+      SetTextureCached(texture, visual.texture)
+      SetTexCoordCached(texture, visual.left or 0, visual.right or 1, visual.top or 0, visual.bottom or 1)
+    else
+      visual = nil
+    end
+  end
+  if visual then
+    if texture then
+      texture._msufPortraitKey = key
+    end
     return
   end
 
-  local PM = MSUF and MSUF.PortraitMedia
-  local path, l, r, t, b
-  if PM and PM.ResolveClassPortrait then
-    local visual = PM.ResolveClassPortrait(class, classStyle)
-    if type(visual) == "table" then
-      path, l, r, t, b = visual.texture, visual.left, visual.right, visual.top, visual.bottom
-    end
-  end
-  if not path then
-    path, l, r, t, b = QUESTION_MARK, 0, 1, 0, 1
-  end
-  SetTextureCached(texture, path)
-  SetTexCoordCached(texture, l or 0, r or 1, t or 0, b or 1)
-  if texture then
-    texture._msufPortraitKey = key
-  end
+  -- Match Blizzard's UnitFramePortrait_Update contract: a missing/transient
+  -- class token falls back to the actual unit portrait and gets another chance
+  -- when portrait data arrives. Never cache a question-mark as valid identity.
+  ApplyUnitPortrait(texture, unit, frame, p, force)
 end
 
 ApplyUnitPortrait = function(texture, unit, frame, p, force)
@@ -627,7 +631,7 @@ function Portrait.GetEvents(frame, spec)
   if p and p.enabled == true then
     local unit = frame and frame.unit or spec and spec.unit
     if p.render == "CLASS" then
-      return EMPTY_EVENTS
+      return PORTRAIT_CLASS_EVENTS
     end
     if unit == "player" or (spec and spec.key == "player") then
       return PORTRAIT_2D_PLAYER_EVENTS
@@ -650,7 +654,7 @@ function Portrait.GetUnitlessEvents(frame, spec)
   end
   local unit = frame and frame.unit or spec and spec.unit
   if p.render == "CLASS" then
-    return EMPTY_EVENTS
+    return PORTRAIT_UNITLESS_EVENTS
   end
   if spec and spec.scope == "group" then
     return PORTRAIT_UNITLESS_EVENTS
@@ -777,10 +781,11 @@ function Portrait.Update(frame, event, unit)
 
   local class
   if p.render == "CLASS" then
+    local force = forceRefresh == true or frame._msufPortraitForceRefresh == true
     frame._msufPortraitNeedsVisibleRefresh = nil
     frame._msufPortraitForceRefresh = nil
     class = UnitClassToken(unit)
-    ApplyClassPortrait(texture, unit, p, class, frame)
+    ApplyClassPortrait(texture, unit, p, class, frame, force)
   else
     if ShouldRefresh2DPortraitForEvent(event, identityVisual) then
       if forceRefresh == true or UnitPortraitKeyChanged(texture, unit, frame, p) then
