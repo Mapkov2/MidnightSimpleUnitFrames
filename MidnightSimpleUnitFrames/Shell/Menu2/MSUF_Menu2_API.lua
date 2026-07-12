@@ -51,7 +51,13 @@ local function OpenExactSettingControl(settingKey, fallbackLabel, fallbackPage)
     local query = tostring((record and (record.identityLabel or record.label)) or fallbackLabel or settingKey)
     local bridge = M.SearchBridge
     if bridge and type(bridge.OpenSearchTarget) == "function" then
-        bridge.OpenSearchTarget(page, query, label, widget)
+        local called, opened, focused = bridge.OpenSearchTarget(page, query, label, widget)
+        if called and opened == false then
+            return false, "I could not open the MSUF options page for " .. label .. "."
+        end
+        if called and focused == false then
+            return false, "I opened " .. page .. ", but its exact " .. label .. " control is not available there anymore."
+        end
     elseif type(M.SelectPage) == "function" then
         M.SelectPage(page)
     end

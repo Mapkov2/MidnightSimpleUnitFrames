@@ -754,9 +754,12 @@ function A.BuildDashboardCard(parent, cardW, cardH)
     cardW = tonumber(cardW) or 520
     cardH = tonumber(cardH) or 326
 
-    local kicker = Font(parent, "GameFontDisableSmall", "MSUF Assistant (Early Beta)", T.colors and T.colors.accent or { 0.45, 0.75, 1, 1 })
+    local kicker = Font(parent, "GameFontDisableSmall", "MSUF Assistant", T.colors and T.colors.accent or { 0.45, 0.75, 1, 1 })
     kicker:SetPoint("TOPLEFT", parent, "TOPLEFT", 22, -22)
     kicker:SetJustifyH("LEFT")
+    local maturity = Font(parent, "GameFontDisableSmall", "(Early Alpha)", T.colors and T.colors.danger or { 1, 0.28, 0.28, 1 })
+    maturity:SetPoint("LEFT", kicker, "RIGHT", 4, 0)
+    maturity:SetJustifyH("LEFT")
 
     local title = Font(parent, "GameFontNormalLarge", "Ask MSUF", T.colors and T.colors.text or { 1, 1, 1, 1 })
     title:SetPoint("TOPLEFT", parent, "TOPLEFT", 22, -48)

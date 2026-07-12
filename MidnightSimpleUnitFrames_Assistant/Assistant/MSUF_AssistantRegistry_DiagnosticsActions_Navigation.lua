@@ -71,6 +71,7 @@ local function ResolveAuraContentRoute(page, args)
     local context = A.GetContext and A.GetContext() or nil
     local settingKey = tostring(args and args.settingKey or context and context.lastSetting or "")
     local query = tostring(args and args.query or args and args.label or "")
+    local queryLower = query:lower()
     local scope = tostring(args and args.scope or "")
     local lane = tostring(args and args.lane or "")
     if scope == "" then
@@ -78,13 +79,25 @@ local function ResolveAuraContentRoute(page, args)
             or settingKey:match("^gf_([^.]+)%.auras%.")
             or tostring(context and context.lastUnit or "")
     end
+    if scope == "" then
+        scope = (queryLower:find("mythic raid", 1, true) and "mythicraid")
+            or (queryLower:find("mythicraid", 1, true) and "mythicraid")
+            or (queryLower:find("party", 1, true) and "party")
+            or (queryLower:find("raid", 1, true) and "raid")
+            or (queryLower:find("focus", 1, true) and "focus")
+            or (queryLower:find("target", 1, true) and "target")
+            or (queryLower:find("boss", 1, true) and "boss")
+            or (queryLower:find("player", 1, true) and "player")
+            or ""
+    end
     if lane == "" then
         lane = settingKey:match("^auras3%.[^.]+%.([^.]+)%.")
             or settingKey:match("^gf_[^.]+%.auras%.([^.]+)%.")
             or (page == "auras3_debuffs" and "debuff")
             or (page == "auras3_buffs" and "buff")
-            or (query:lower():find("debuff", 1, true) and "debuff")
-            or (query:lower():find("buff", 1, true) and "buff")
+            or (queryLower:find("debuff", 1, true) and "debuff")
+            or (queryLower:find("buff", 1, true) and "buff")
+            or ""
     end
     local auraContext = settingKey:find("^auras3%.") or settingKey:find("^gf_[^.]+%.auras%.")
     if page == "auras3" and not auraContext and scope == "" then return "auras3_styling", query end
@@ -93,8 +106,8 @@ local function ResolveAuraContentRoute(page, args)
     end
     if scope ~= "player" and scope ~= "target" and scope ~= "focus" and scope ~= "boss" then scope = "player" end
     local tool = page == "auras3_filters" and "filters"
-        or (query:lower():find("blacklist", 1, true) and "blacklist")
-        or (query:lower():find("filter", 1, true) and "filters")
+        or (queryLower:find("blacklist", 1, true) and "blacklist")
+        or (queryLower:find("filter", 1, true) and "filters")
         or ""
     return "uf_" .. scope, table.concat({ scope, lane, tool, query }, " ")
 end

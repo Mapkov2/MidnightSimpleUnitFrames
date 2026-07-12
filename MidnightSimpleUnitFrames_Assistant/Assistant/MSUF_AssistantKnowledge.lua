@@ -20,7 +20,7 @@ local K = A.Knowledge or {}
 A.Knowledge = K
 
 local MAX_RESULTS = 6
-local INDEX_VERSION = 8
+local INDEX_VERSION = 9
 local SEARCH_CACHE_LIMIT = 32
 local SEARCH_TEXT_LIMIT = 360
 local KNOWLEDGE_COMBINED_ALIAS_LIMIT = 2
@@ -278,6 +278,7 @@ end
 
 local function SettingLikelyPage(setting)
     if type(setting) ~= "table" then return nil end
+    if type(setting.page) == "string" and setting.page ~= "" then return setting.page end
     if setting.unit then
         for key, unit in pairs(PAGE_TO_UNIT) do if unit == setting.unit then return key end end
     end
@@ -305,6 +306,8 @@ local function SettingLikelyPage(setting)
     if cat:find("profile", 1, true) then return "profiles" end
     return nil
 end
+K.ResolveSettingPage = SettingLikelyPage
+A.ResolveMenuPageForSetting = SettingLikelyPage
 
 local function ActionLikelyPage(action)
     if type(action) ~= "table" then return nil end

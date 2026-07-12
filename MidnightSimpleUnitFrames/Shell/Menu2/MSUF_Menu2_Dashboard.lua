@@ -658,6 +658,9 @@ local function BuildDashboardUX(ctx)
     local function StartNewAssistantTask()
         local A = MSUF and MSUF.Assistant
         if not A then return end
+        if type(A.StartNewTaskWithRuntime) == "function" then
+            return A.StartNewTaskWithRuntime("new-task")
+        end
         if type(A.StartNewTask) ~= "function" and type(A.EnsureRuntimeLoaded) == "function" then
             local loaded = A.EnsureRuntimeLoaded("new-task")
             if not loaded then return false end

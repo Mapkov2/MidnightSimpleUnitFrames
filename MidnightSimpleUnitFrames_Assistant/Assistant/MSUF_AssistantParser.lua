@@ -5006,12 +5006,14 @@ local function ParseFontScopePriorityShortcut(normalized)
 end
 A._ParseFontScopePriorityShortcut = ParseFontScopePriorityShortcut
 
-local function ParseGlobalUIShellPriorityShortcut(normalized)
+local function ParseGlobalUIShellPriorityShortcut(normalized, raw)
     local specs = {
+        { key = "general.menuFontKey", label = "MSUF Menu Font", terms = { "msuf menu font", "menu font", "options menu font", "font of the msuf menu", "font for the msuf menu", "menu typeface" }, mediaType = "font" },
         { key = "general.slashMenuSnapEnabled", label = "Menu Edge Snap", terms = { "menu edge snap", "edge snap", "snap menu", "menu snapping" } },
         { key = "general.hideAdvancedMenu", label = "Advanced Menu", terms = { "advanced menu", "hide advanced menu", "show advanced menu" } },
         { key = "general.reduceMotion", label = "Reduce Motion", terms = { "reduce motion", "reduced motion", "less motion" } },
         { key = "general.showNavigationIcons", label = "Navigation Icons", terms = { "navigation icons", "nav icons" } },
+        { key = "general.showGameMenuButton", label = "MSUF Game Menu Button", terms = { "msuf button in game menu", "game menu button", "msuf game menu button", "escape menu button" } },
         { key = "general.navHoverScale", label = "Navigation Hover Size", terms = { "navigation hover size", "nav hover size", "navigation hover scale", "nav hover scale" } },
         { key = "general.showWelcomeMessage", label = "Welcome Message", terms = { "welcome message", "startup message" } },
         { key = "general.versionCheckEnabled", label = "Version Check", terms = { "version check", "version checker" } },
@@ -5031,6 +5033,37 @@ local function ParseGlobalUIShellPriorityShortcut(normalized)
         local spec = specs[i]
         if ContainsAny(normalized, spec.terms) then
             local setting = A.Registry and A.Registry:GetSetting(spec.key)
+            if setting and spec.mediaType then
+                local resolver = A.MediaResolver
+                local media = resolver and resolver.ResolveSetting and resolver.ResolveSetting(setting, normalized, raw)
+                if media and media.status == "exact" and media.value ~= nil then
+                    return {
+                        kind = "changes",
+                        changes = { { setting = setting, value = media.value, valueLabel = media.label or media.value, mediaType = media.mediaType } },
+                        label = spec.label,
+                        summary = "Changes the font used by the MSUF options menu.",
+                    }
+                elseif media and media.status == "choices" and type(media.choices) == "table" then
+                    local choices = {}
+                    for choiceIndex = 1, #media.choices do
+                        local item = media.choices[choiceIndex]
+                        choices[#choices + 1] = {
+                            setting = setting,
+                            value = item.value,
+                            valueLabel = item.label or item.value,
+                            label = tostring(setting.label or spec.label) .. ": " .. tostring(item.label or item.value),
+                            mediaType = media.mediaType,
+                        }
+                    end
+                    if #choices > 0 then
+                        return { kind = "ambiguous", choices = choices, label = "Which menu font?", summary = "Choose the exact font for the MSUF menu." }
+                    end
+                elseif media and media.status == "none" then
+                    local message = resolver.NoMatchMessage and resolver.NoMatchMessage(media.mediaType, media.query)
+                    return { kind = "unknown", status = "failed", text = message or "That font is not in the current font list." }
+                end
+                return nil
+            end
             local value = setting and P.ValueForRegistrySetting and P.ValueForRegistrySetting(setting, normalized, normalized) or nil
             if value ~= nil then
                 return {
@@ -5341,7 +5374,7 @@ function A.ParseSimpleChange(text, ctxOverride)
         or (A._ParseScopedGradientStrengthPriorityShortcut and A._ParseScopedGradientStrengthPriorityShortcut(normalized))
         or (A._ParseGlobalFontPriorityShortcut and A._ParseGlobalFontPriorityShortcut(normalized, raw))
         or (A._ParseFontScopePriorityShortcut and A._ParseFontScopePriorityShortcut(normalized))
-        or (A._ParseGlobalUIShellPriorityShortcut and A._ParseGlobalUIShellPriorityShortcut(normalized))
+        or (A._ParseGlobalUIShellPriorityShortcut and A._ParseGlobalUIShellPriorityShortcut(normalized, raw))
         or (A._ParseBarGradientPriorityShortcut and A._ParseBarGradientPriorityShortcut(normalized))
         or (A._ParseClassPowerPriorityShortcut and A._ParseClassPowerPriorityShortcut(normalized, raw))
         or (A._ParseGameplayPriorityShortcut and A._ParseGameplayPriorityShortcut(normalized, raw))
@@ -5443,6 +5476,12 @@ function A.Parse(text, ctxOverride)
             guidedPriority.normalized = normalized
             return guidedPriority
         end
+    end
+    local hpTextColorPriority = P.ParseHPTextColorModePriority and P.ParseHPTextColorModePriority(normalized)
+    if hpTextColorPriority then
+        hpTextColorPriority.raw = raw
+        hpTextColorPriority.normalized = normalized
+        return hpTextColorPriority
     end
     -- Slot color-mode settings intentionally use resource names such as
     -- "maelstrom" too. Keep reset-color phrases out of the broad exact-setting
@@ -6387,7 +6426,7 @@ function A.Parse(text, ctxOverride)
         fontScopePriorityParsed.normalized = normalized
         return fontScopePriorityParsed
     end
-    local globalUIShellPriorityParsed = A._ParseGlobalUIShellPriorityShortcut and A._ParseGlobalUIShellPriorityShortcut(normalized)
+    local globalUIShellPriorityParsed = A._ParseGlobalUIShellPriorityShortcut and A._ParseGlobalUIShellPriorityShortcut(normalized, raw)
     if globalUIShellPriorityParsed then
         globalUIShellPriorityParsed.raw = raw
         globalUIShellPriorityParsed.normalized = normalized

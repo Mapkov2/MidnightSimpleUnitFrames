@@ -31,6 +31,7 @@ function A.UnitframesRegistry.BuildSettingBaseUnitStringContext(ctx)
             category = UNIT_LABELS[unit] .. " / " .. (opts.category or "Frame"),
             unit = unit,
             frameType = opts.frameType or "unitframe",
+            page = opts.page,
             attribute = attr,
             type = "string",
             aliases = aliases,
