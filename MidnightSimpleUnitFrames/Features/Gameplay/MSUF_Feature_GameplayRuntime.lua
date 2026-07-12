@@ -257,13 +257,27 @@ end
 
 local combatStartTime = nil
 local lastTimerText = ""
+local lastTimerMinute
+local lastTimerSecond
 local combatTimerLoop
 
 local function SetCombatTimerText(text)
     if text ~= lastTimerText then
         lastTimerText = text
+        lastTimerMinute = nil
+        lastTimerSecond = nil
         timerText:SetText(text)
     end
+end
+
+local function SetCombatTimerValue(minutes, seconds)
+    if lastTimerText == false and minutes == lastTimerMinute and seconds == lastTimerSecond then
+        return
+    end
+    lastTimerText = false
+    lastTimerMinute = minutes
+    lastTimerSecond = seconds
+    timerText:SetFormattedText("%d:%02d", minutes, seconds)
 end
 
 local function SetCombatTimerShown(shown)
@@ -294,11 +308,22 @@ local function TickCombatTimer()
     local now = GetTime()
     combatStartTime = combatStartTime or now
     local elapsedCombat = math_max(now - combatStartTime, 0)
-    SetCombatTimerText(string_format("%d:%02d", math.floor(elapsedCombat / 60), math.floor(elapsedCombat % 60)))
+    SetCombatTimerValue(math.floor(elapsedCombat / 60), math.floor(elapsedCombat % 60))
 end
 
 local function _StartCombatTimerTick()
     if combatTimerLoop then return end
+
+    -- Retail provides one cancellable ticker for this exact repeating job.
+    -- It avoids allocating a fresh After timer every second and lets combat
+    -- end cancel the pending callback immediately.
+    if C_Timer.NewTicker then
+        combatTimerLoop = C_Timer.NewTicker(1.0, TickCombatTimer)
+        MSUF._MSUF_CombatTimerLoopActive = combatTimerLoop
+        return
+    end
+
+    -- Compatibility fallback for clients/harnesses without NewTicker.
     local loop = {}
     loop.step = function()
         if combatTimerLoop ~= loop or MSUF._MSUF_CombatTimerLoopActive ~= loop then return end
@@ -313,8 +338,12 @@ local function _StartCombatTimerTick()
 end
 
 local function _StopCombatTimerTick()
+    local loop = combatTimerLoop
     combatTimerLoop = nil
     MSUF._MSUF_CombatTimerLoopActive = nil
+    if loop and loop.Cancel then
+        loop:Cancel()
+    end
 end
 
 local function SetCombatStateClickThrough(active)
@@ -365,14 +394,30 @@ local function ClearCombatStateText()
     end
 end
 
+local combatStateClearTimer
+
+local function CombatStateClearTimerFired()
+    combatStateClearTimer = nil
+    local g = GetGameplayDB()
+    if stateText and g and g.enableCombatStateText then
+        ClearCombatStateText()
+        SetCombatStateClickThrough(false)
+    end
+end
+
+local function CancelCombatStateClear()
+    local timer = combatStateClearTimer
+    combatStateClearTimer = nil
+    if timer and timer.Cancel then timer:Cancel() end
+end
+
 local function ScheduleCombatStateClear(duration)
-    C_Timer.After(duration, function()
-        local g = GetGameplayDB()
-        if stateText and g and g.enableCombatStateText then
-            ClearCombatStateText()
-            SetCombatStateClickThrough(false)
-        end
-    end)
+    CancelCombatStateClear()
+    if C_Timer.NewTimer then
+        combatStateClearTimer = C_Timer.NewTimer(duration, CombatStateClearTimerFired)
+    else
+        C_Timer.After(duration, CombatStateClearTimerFired)
+    end
 end
 
 local GAMEPLAY_FALLBACK_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
@@ -447,6 +492,7 @@ end
 CombatStateOnEvent = function(event)
     local g = GetGameplayDB()
     if not g or not g.enableCombatStateText then
+        CancelCombatStateClear()
         ReleaseGameplayKeyboardNudge(stateFrame)
         ClearCombatStateText()
         SetCombatStateClickThrough(false)
@@ -986,6 +1032,7 @@ local function ApplyCombatStateText(g)
             stateFrame:Hide()
         end
     else
+        CancelCombatStateClear()
         ClearCombatStateText()
         SetCombatStateClickThrough(false)
     end

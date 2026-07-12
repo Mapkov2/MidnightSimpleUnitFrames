@@ -38,25 +38,6 @@ local function CoreUnitFrame(unit)
     return unit and frames and frames[unit] or nil
 end
 
-local function ProfBegin(name)
-    if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
-        return MSUF.ProfBegin(name)
-    end
-end
-
-local function ProfEnd(name, token)
-    if token and MSUF and MSUF.ProfEnd then
-        MSUF.ProfEnd(name, token)
-    end
-end
-
-local function ProfEventBegin(prefix, event)
-    if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
-        local name = prefix .. tostring(event)
-        return name, MSUF.ProfBegin(name)
-    end
-end
-
 --- Perf locals (eliminate global lookups in hot paths)
 local type, tonumber, tostring, pairs = type, tonumber, tostring, pairs
 local math_floor = math.floor
@@ -801,20 +782,24 @@ ExportPublic("MSUF_ClassPower_InvalidateColors", MSUF_ClassPower_InvalidateColor
 --- GetUnitChargedPowerPoints("player") returns a table of 1-based indices
 --- that represent which combo point slots are "charged". These are non-secret
 --- in WoW 12.0 builds.
-local _chargedMap = nil   --- [index] = true, or nil if none
+local _chargedMap = {}    --- reused [index] = true map
+local _chargedAny = false
 
 local function RefreshChargedPoints()
-    _chargedMap = nil
+    for index in pairs(_chargedMap) do
+        _chargedMap[index] = nil
+    end
+    _chargedAny = false
     if type(GetUnitChargedPowerPoints) ~= "function" then return end
 
     local indices = GetUnitChargedPowerPoints("player")
     if not CanAccessTableValue(indices) or #indices == 0 then return end
 
-    _chargedMap = {}
     for i = 1, #indices do
         local idx = indices[i]
         if type(idx) == "number" then
             _chargedMap[idx] = true
+            _chargedAny = true
         end
     end
 end
@@ -921,7 +906,9 @@ local CP = {
     isAuraPower = false, --- true ? driven by UNIT_AURA
     updateFn   = nil,    --- cached active mode update fn (avoids hot-path table lookups)
     modeProfile = nil,   --- cached active mode event profile for lite runtime bindings
-    structuralSig = nil, --- cached structural signature for cheap rare/display-power checks
+    structuralFlags = nil, --- allocation-free structural state for rare/display-power checks
+    structuralPowerType = nil,
+    structuralRenderMode = nil,
     isVehicle = false,   --- true ? vehicle combo points active
     visible   = false,
     height    = 4,
@@ -1520,7 +1507,7 @@ do
         GetFilledAlpha = function() return _filledAlpha end,
         GetEmptyAlpha = function() return _emptyAlpha end,
         GetVisual = function() return CP.visual end,
-        GetChargedMap = function() return _chargedMap end,
+        GetChargedMap = function() return _chargedAny and _chargedMap or nil end,
         GetPowerRegenForPowerType = GetPowerRegenForPowerType,
     }
     local segmented = CP_CallBuilder(CPModeBuilders.SEGMENTED, commonEnv)
@@ -1837,14 +1824,11 @@ local function CP_ComputeStructuralSignature()
     local newVehicle = (cpEnabled and UnitHasVehicleUI and UnitHasVehicleUI("player")) or false
     local wantCPVisible = cpEnabled and newPowerType and newRenderMode ~= CPK.MODE.NONE
     local wantAMVisible = (b.showAltMana == true) and NeedsAltManaBar() and (_G.MSUF_UnitEditModeActive ~= true)
-    return table.concat({
-        wantCPVisible and 1 or 0,
-        wantAMVisible and 1 or 0,
-        tostring(newPowerType or "nil"),
-        tostring(newRenderMode or CPK.MODE.NONE),
-        newAuraPower and 1 or 0,
-        newVehicle and 1 or 0,
-    }, "|")
+    local flags = (wantCPVisible and 1 or 0)
+        + (wantAMVisible and 2 or 0)
+        + (newAuraPower and 4 or 0)
+        + (newVehicle and 8 or 0)
+    return flags, newPowerType, newRenderMode or CPK.MODE.NONE
 end
 
 --- Forward declaration (AM defined later)
@@ -2212,7 +2196,7 @@ local function FullRefresh()
         CP_PlayerHPRefresh(playerFrame)
     end
 
-    CP.structuralSig = CP_ComputeStructuralSignature()
+    CP.structuralFlags, CP.structuralPowerType, CP.structuralRenderMode = CP_ComputeStructuralSignature()
     CP_RefreshEventBindings()
     CP_SetStructuralEventsBound(CP_ConfigAnyFeatureEnabled())
     if type(_G.MSUF_BAL_RefreshRuntime) == "function" then
@@ -2609,14 +2593,11 @@ end
 
 local _cpAuraDeferred = false
 local function CP_RunDeferredAuraUpdate()
-    local profName = "classpower:deferredAura"
-    local profToken = ProfBegin(profName)
     _cpAuraDeferred = false
     local profile = CP.modeProfile or CP_GetModeEventProfile(CP.renderMode, CP.powerType, CP.isAuraPower)
     if CP._liteBindingsActive == false or (CP.visible and profile and profile.aura == true) then
         OnAuraUpdate("player")
     end
-    ProfEnd(profName, profToken)
 end
 
 local function CP_DeferAuraUpdate()
@@ -2847,10 +2828,7 @@ local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
 end
 
 eventFrame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
-    local profName, profToken = ProfEventBegin("classpower:event:", event)
-    local result = ClassPowerOnEvent(self, event, arg1, arg2, arg3)
-    ProfEnd(profName, profToken)
-    return result
+    return ClassPowerOnEvent(self, event, arg1, arg2, arg3)
 end)
 
 --- Register startup events permanently. Structural/runtime events are bound

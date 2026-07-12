@@ -12,18 +12,6 @@ local ExportPublic = (MSUF.ExportPublic) or function(name, value)
     return value
 end
 
-local function ProfBegin(name)
-    if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
-        return MSUF.ProfBegin(name)
-    end
-end
-
-local function ProfEnd(name, token)
-    if token and MSUF and MSUF.ProfEnd then
-        MSUF.ProfEnd(name, token)
-    end
-end
-
 local PlayerCastbarCast = _G.MSUF_PlayerCastbar_Cast
 local PlayerCastbarOnEvent = _G.MSUF_PlayerCastbar_OnEvent
 local UpdateLatencyZone = _G.MSUF_PlayerCastbar_UpdateLatencyZone
@@ -79,6 +67,7 @@ end
 
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local mathHuge = math.huge
+local ToPlain = _G.ToPlain
 
 local function ToPlainNumber(value)
     -- PERF fast path: a plain finite number needs no tostring/tonumber
@@ -89,13 +78,24 @@ local function ToPlainNumber(value)
         return value
     end
 
-    local converter = _G.MSUF_ToPlainNumber
-    if type(converter) == "function" then return converter(value) end
-
     if value == nil then return nil end
-    if type(value) == "number" then return tonumber(tostring(value)) end
-    if type(value) == "string" then return tonumber(value) end
-    return tonumber(tostring(value))
+    if issecretvalue(value) == true then
+        local converter = _G.MSUF_ToPlainNumber or ToPlain
+        if type(converter) ~= "function" then return nil end
+        value = converter(value)
+        if value == nil or issecretvalue(value) == true then return nil end
+    end
+
+    local valueType = type(value)
+    if valueType == "number" then
+        if value == value and value ~= mathHuge and value ~= -mathHuge then
+            return value
+        end
+        return nil
+    elseif valueType == "string" then
+        return tonumber(value)
+    end
+    return nil
 end
 
 local function SetText(fontString, text)
@@ -353,12 +353,14 @@ local castTimeRev = _G.MSUF__castTimeGlobalRev or 1
 local applyGlowFade = _G.MSUF_ApplyCastbarGlowFade
 local resetGlowFade = _G.MSUF_ResetCastbarGlowFade
 local refreshStyleCache = _G.MSUF_RefreshCastbarStyleCache
+local castbarRuntime = _G.MSUF_CastbarRuntime
 local updateCastbarFrameRef
 
 AfterZero(function()
     applyGlowFade = _G.MSUF_ApplyCastbarGlowFade or applyGlowFade
     resetGlowFade = _G.MSUF_ResetCastbarGlowFade or resetGlowFade
     refreshStyleCache = _G.MSUF_RefreshCastbarStyleCache or refreshStyleCache
+    castbarRuntime = _G.MSUF_CastbarRuntime or castbarRuntime
     updateCastbarFrameRef = _G.MSUF_UpdateCastbarFrame
 end)
 
@@ -373,6 +375,8 @@ ExportPublic("MSUF_BumpCastbarStyleRev", BumpCastbarStyleRev)
 local function BumpCastTimeRev()
     ExportPublic("MSUF__castTimeGlobalRev", (_G.MSUF__castTimeGlobalRev or 1) + 1)
     castTimeRev = _G.MSUF__castTimeGlobalRev
+    local runtime = castbarRuntime or _G.MSUF_CastbarRuntime
+    if runtime and runtime.RefreshActiveWork then runtime:RefreshActiveWork() end
 end
 
 ExportPublic("MSUF_BumpCastTimeRev", BumpCastTimeRev)
@@ -386,6 +390,12 @@ end
 
 local function RefreshCastTimeEnabled(frame)
     if not (frame and frame.unit) then return true end
+
+    local runtime = castbarRuntime or _G.MSUF_CastbarRuntime
+    if runtime and runtime.RefreshWorkConfig then
+        local enabled = runtime:RefreshWorkConfig(frame, true)
+        return enabled ~= false
+    end
 
     local general = _G.MSUF_DB and _G.MSUF_DB.general
     if not general then
@@ -451,22 +461,29 @@ local CastbarManager = CreateFrame("Frame")
 CastbarManager.active = {}
 CastbarManager.low = {}
 CastbarManager.high = {}
+CastbarManager.failsafe = {}
 CastbarManager:Hide()
 ExportPublic("MSUF_CastbarManager", CastbarManager)
 
 local activeCount = 0
 local highFrequencyCount = 0
+local failsafeOnlyCount = 0
 local lowFrequencyInterval = 0.10
+local failsafeInterval = 0.25
 local managerTime = 0
 local lowFrequencyTicker
 local lowFrequencyLastTime
+local failsafeTicker
+local WORK_UNIT_FAILSAFE = castbarRuntime and castbarRuntime.WorkMask
+    and castbarRuntime.WorkMask.UNIT_FAILSAFE or 32
 
 local function StopCastbarIfUnitMissing(frame)
     if not frame or frame.unit == "player" or frame.interrupted then return false end
 
+    local now = Now()
     local nextCheck = frame._msufUnitExistNext
-    if nextCheck and managerTime < nextCheck then return false end
-    frame._msufUnitExistNext = managerTime + 0.25
+    if nextCheck and now < nextCheck then return false end
+    frame._msufUnitExistNext = now + failsafeInterval
 
     local unit = frame.unit
     local missing = unit and unit ~= ""
@@ -525,7 +542,7 @@ local function UpdateFastTextFrame(frame, elapsed)
             end
             frame._msufHeavyIn = heavyIn
         end
-    elseif applyGlowFade then
+    elseif frame._msufCastbarGlowTick and applyGlowFade then
         local total = frame._msufPlainTotal
         if total and total > 0 then
             local glowIn = frame._msufGlowIn or 0
@@ -565,6 +582,16 @@ local function UpdateBucket(bucket, elapsed)
     end
 end
 
+local function UpdateFailsafeBucket()
+    local bucket = CastbarManager.failsafe
+    local frame = next(bucket)
+    while frame do
+        local nextFrame = next(bucket, frame)
+        StopCastbarIfUnitMissing(frame)
+        frame = nextFrame
+    end
+end
+
 local RefreshManagerOnUpdate
 
 local function StopLowFrequencyTicker()
@@ -575,21 +602,44 @@ local function StopLowFrequencyTicker()
     lowFrequencyLastTime = nil
 end
 
+local function StopFailsafeTicker()
+    if failsafeTicker then
+        failsafeTicker:Cancel()
+        failsafeTicker = nil
+    end
+end
+
+local function FailsafeTicker()
+    if failsafeOnlyCount <= 0 then
+        StopFailsafeTicker()
+        return
+    end
+    UpdateFailsafeBucket()
+end
+
+local function RefreshFailsafeTicker()
+    if failsafeOnlyCount <= 0 then
+        StopFailsafeTicker()
+        return
+    end
+    if not failsafeTicker and C_Timer and C_Timer.NewTicker then
+        UpdateFailsafeBucket()
+        if failsafeOnlyCount > 0 then
+            failsafeTicker = C_Timer.NewTicker(failsafeInterval, FailsafeTicker)
+        end
+    end
+end
+
 local function LowFrequencyTicker()
-    local profName = "castbar:lowTicker"
-    local profToken = ProfBegin(profName)
-    if activeCount <= 0 then
+    if activeCount - failsafeOnlyCount <= 0 then
         StopLowFrequencyTicker()
-        CastbarManager:SetScript("OnUpdate", nil)
-        CastbarManager:Hide()
-        ProfEnd(profName, profToken)
+        if RefreshManagerOnUpdate then RefreshManagerOnUpdate() end
         return
     end
 
     if highFrequencyCount > 0 then
         StopLowFrequencyTicker()
         if RefreshManagerOnUpdate then RefreshManagerOnUpdate() end
-        ProfEnd(profName, profToken)
         return
     end
 
@@ -603,17 +653,14 @@ local function LowFrequencyTicker()
 
     managerTime = managerTime + elapsed
     UpdateBucket(CastbarManager.low, elapsed)
-    ProfEnd(profName, profToken)
 end
 
 local function ManagerOnUpdate(manager, elapsed)
-    local profName = "castbar:onUpdate"
-    local profToken = ProfBegin(profName)
     if activeCount <= 0 then
         StopLowFrequencyTicker()
+        StopFailsafeTicker()
         manager._msufLowTickAccum = 0
         manager:Hide()
-        ProfEnd(profName, profToken)
         return
     end
 
@@ -624,7 +671,7 @@ local function ManagerOnUpdate(manager, elapsed)
         UpdateBucket(manager.high, elapsed)
     end
 
-    local lowFrequencyCount = activeCount - highFrequencyCount
+    local lowFrequencyCount = activeCount - highFrequencyCount - failsafeOnlyCount
     if lowFrequencyCount > 0 then
         local accumulated = (manager._msufLowTickAccum or 0) + elapsed
         if accumulated >= lowFrequencyInterval then
@@ -636,18 +683,26 @@ local function ManagerOnUpdate(manager, elapsed)
     else
         manager._msufLowTickAccum = 0
     end
-    ProfEnd(profName, profToken)
 end
 
 RefreshManagerOnUpdate = function()
     if activeCount <= 0 then
         StopLowFrequencyTicker()
+        StopFailsafeTicker()
         CastbarManager:SetScript("OnUpdate", nil)
         CastbarManager:Hide()
         return
     end
 
     CastbarManager:Show()
+    RefreshFailsafeTicker()
+
+    local runtimeCount = activeCount - failsafeOnlyCount
+    if runtimeCount <= 0 then
+        StopLowFrequencyTicker()
+        CastbarManager:SetScript("OnUpdate", nil)
+        return true
+    end
 
     if highFrequencyCount > 0 then
         StopLowFrequencyTicker()
@@ -673,6 +728,7 @@ end
 
 CastbarManager:SetScript("OnHide", function(manager)
     StopLowFrequencyTicker()
+    StopFailsafeTicker()
     manager:SetScript("OnUpdate", nil)
 end)
 
@@ -695,6 +751,11 @@ local function FrameHasRuntimeWork(frame)
         or frame.channelDuration ~= nil
 end
 
+local function CastbarOnHide(hiddenFrame)
+    if hiddenFrame._msufInUnregister then return end
+    if UnregisterCastbar then UnregisterCastbar(hiddenFrame) end
+end
+
 RegisterCastbar = function(frame)
     if not (frame and frame.statusBar) then return end
     if not (CastbarManager and CastbarManager.active) then return end
@@ -706,9 +767,38 @@ RegisterCastbar = function(frame)
         return
     end
 
-    IsCastTimeEnabled(frame, true)
+    if not frame._msufOnHideHooked then
+        frame._msufOnHideHooked = true
+        frame:HookScript("OnHide", CastbarOnHide)
+    end
+
+    local runtime = castbarRuntime or _G.MSUF_CastbarRuntime
+    local workMask
+    if runtime and runtime.PrepareWork then
+        workMask = runtime:PrepareWork(frame)
+    else
+        IsCastTimeEnabled(frame, true)
+    end
+
+    if workMask == 0 then
+        if CastbarManager.active[frame] == true and UnregisterCastbar then
+            UnregisterCastbar(frame)
+            workMask = runtime:PrepareWork(frame)
+        end
+        if workMask == 0 and runtime:ArmNativeCompletion(frame) then
+            return
+        end
+        workMask = runtime:PrepareWork(frame)
+    elseif workMask == WORK_UNIT_FAILSAFE and runtime and runtime.ArmNativeCompletion then
+        if not runtime:ArmNativeCompletion(frame) then
+            workMask = runtime:PrepareWork(frame)
+        end
+    elseif runtime and runtime.CancelNativeCompletion then
+        runtime:CancelNativeCompletion(frame)
+    end
+
     frame._msufFastText = (frame.timeText and frame._msufCastTimeEnabled ~= false and frame.MSUF_timerDriven == true
-        and not frame.isEmpower) or false
+        and frame._msufNativeTimeBound ~= true and not frame.isEmpower) or false
 
     if frame.isEmpower then
         frame._msufTickInterval = 0.03
@@ -726,41 +816,43 @@ RegisterCastbar = function(frame)
         frame._msufRemaining = (remaining > 0) and remaining or 0
     end
 
-    local highFrequency = frame._msufTickInterval and frame._msufTickInterval < 0.10 or false
+    local failsafeOnly = workMask == WORK_UNIT_FAILSAFE
+        and C_Timer and type(C_Timer.NewTicker) == "function" or false
+    local highFrequency = not failsafeOnly
+        and frame._msufTickInterval and frame._msufTickInterval < 0.10 or false
     local wasActive = CastbarManager.active[frame] == true
     local wasHighFrequency = frame._msufManagerHighFreq == true
-    if wasActive and wasHighFrequency ~= highFrequency then
-        highFrequencyCount = highFrequencyCount + (highFrequency and 1 or -1)
-        if highFrequencyCount < 0 then highFrequencyCount = 0 end
-    end
+    local wasFailsafeOnly = frame._msufManagerFailsafeOnly == true
+    if wasActive and wasHighFrequency then highFrequencyCount = highFrequencyCount - 1 end
+    if wasActive and wasFailsafeOnly then failsafeOnlyCount = failsafeOnlyCount - 1 end
+    if highFrequencyCount < 0 then highFrequencyCount = 0 end
+    if failsafeOnlyCount < 0 then failsafeOnlyCount = 0 end
     frame._msufManagerHighFreq = highFrequency or nil
+    frame._msufManagerFailsafeOnly = failsafeOnly or nil
 
     local oldBucket = frame._msufManagerBucket
-    local newBucket = highFrequency and CastbarManager.high or CastbarManager.low
+    local newBucket = failsafeOnly and CastbarManager.failsafe
+        or (highFrequency and CastbarManager.high or CastbarManager.low)
     if wasActive and oldBucket ~= newBucket then
         if oldBucket then oldBucket[frame] = nil end
         newBucket[frame] = true
         frame._msufManagerBucket = newBucket
     end
 
-    if not wasActive then
+    if wasActive then
+        if highFrequency then highFrequencyCount = highFrequencyCount + 1 end
+        if failsafeOnly then failsafeOnlyCount = failsafeOnlyCount + 1 end
+    else
         activeCount = activeCount + 1
         if highFrequency then highFrequencyCount = highFrequencyCount + 1 end
+        if failsafeOnly then failsafeOnlyCount = failsafeOnlyCount + 1 end
         CastbarManager.active[frame] = true
         newBucket[frame] = true
         frame._msufManagerBucket = newBucket
     end
 
-    if not frame._msufOnHideHooked then
-        frame._msufOnHideHooked = true
-        frame:HookScript("OnHide", function(hiddenFrame)
-            if hiddenFrame._msufInUnregister then return end
-            if UnregisterCastbar then UnregisterCastbar(hiddenFrame) end
-        end)
-    end
-
     local startedLowOnly = RefreshManagerOnUpdate()
-    if not startedLowOnly and not wasActive and not highFrequency and highFrequencyCount <= 0 then
+    if not startedLowOnly and not wasActive and not highFrequency and not failsafeOnly and highFrequencyCount <= 0 then
         UpdateBucket(CastbarManager.low, 0)
     end
 end
@@ -770,12 +862,15 @@ UnregisterCastbar = function(frame)
     if not (CastbarManager and CastbarManager.active) then return end
 
     frame._msufInUnregister = true
+    local runtime = castbarRuntime or _G.MSUF_CastbarRuntime
+    if runtime and runtime.DeactivateNative then runtime:DeactivateNative(frame) end
     if resetGlowFade then resetGlowFade(frame) end
 
     if CastbarManager.active[frame] then
         CastbarManager.active[frame] = nil
         if CastbarManager.low then CastbarManager.low[frame] = nil end
         if CastbarManager.high then CastbarManager.high[frame] = nil end
+        if CastbarManager.failsafe then CastbarManager.failsafe[frame] = nil end
 
         activeCount = activeCount - 1
         if activeCount < 0 then activeCount = 0 end
@@ -783,6 +878,10 @@ UnregisterCastbar = function(frame)
         if frame._msufManagerHighFreq then
             highFrequencyCount = highFrequencyCount - 1
             if highFrequencyCount < 0 then highFrequencyCount = 0 end
+        end
+        if frame._msufManagerFailsafeOnly then
+            failsafeOnlyCount = failsafeOnlyCount - 1
+            if failsafeOnlyCount < 0 then failsafeOnlyCount = 0 end
         end
     end
 
@@ -799,6 +898,7 @@ UnregisterCastbar = function(frame)
     frame._msufGlowIn = nil
     frame._msufCastTimeWasEnabled = nil
     frame._msufManagerHighFreq = nil
+    frame._msufManagerFailsafeOnly = nil
     frame._msufManagerBucket = nil
     frame._msufInUnregister = nil
 
@@ -881,7 +981,7 @@ local function UpdateEmpowerFrame(frame, now)
         end
     end
 
-    if applyGlowFade and baseTotal > 0 then
+    if frame._msufCastbarGlowTick and applyGlowFade and baseTotal > 0 then
         local remaining = baseTotal - elapsed
         if remaining < 0 then remaining = 0 end
         applyGlowFade(frame, remaining, baseTotal)
@@ -973,7 +1073,8 @@ end
 local function ResolveDurationTotal(frame, durationObj, inferredTotal)
     local total = frame._msufPlainTotal
     if not total and durationObj.GetTotalDuration then
-        total = ToPlainNumber(durationObj:GetTotalDuration())
+        local ok, value = pcall(durationObj.GetTotalDuration, durationObj)
+        if ok then total = ToPlainNumber(value) end
     end
     if not total and inferredTotal then total = inferredTotal end
     if not total and frame.statusBar and frame.statusBar.GetMinMaxValues then
@@ -992,6 +1093,10 @@ local function UpdateDurationObjectFrame(frame, now)
     if frame._msufLastDurationObj ~= durationObj then
         frame._msufLastDurationObj = durationObj
         frame._msufTimerAssumeCountdown = nil
+        frame._msufPlainEndTime = nil
+        frame._msufPlainTotal = nil
+        frame._msufRemaining = nil
+        frame._msufZeroCount = nil
     end
 
     local plainEndTime = frame._msufPlainEndTime
@@ -1003,9 +1108,11 @@ local function UpdateDurationObjectFrame(frame, now)
     if shouldPollDuration then
         local rawRemaining
         if durationObj.GetRemainingDuration then
-            rawRemaining = durationObj:GetRemainingDuration()
+            local ok, value = pcall(durationObj.GetRemainingDuration, durationObj)
+            if ok then rawRemaining = value end
         else
-            rawRemaining = durationObj:GetRemaining()
+            local ok, value = pcall(durationObj.GetRemaining, durationObj)
+            if ok then rawRemaining = value end
         end
         remaining = ToPlainNumber(rawRemaining)
 
@@ -1014,9 +1121,16 @@ local function UpdateDurationObjectFrame(frame, now)
         end
 
         if not remaining and not remainingFromEnd then
-            if frame.timeText and frame._msufCastTimeEnabled ~= false and rawRemaining ~= nil then
-                local text = type(rawRemaining) == "number" and string.format("%.1f", rawRemaining) or tostring(rawRemaining or "")
-                SetText(frame.timeText, text)
+            if frame.timeText
+                and frame._msufCastTimeEnabled ~= false
+                and frame._msufNativeTimeBound ~= true
+                and rawRemaining ~= nil
+            then
+                if type(rawRemaining) == "number" and frame.timeText.SetFormattedText then
+                    frame.timeText:SetFormattedText("%.1f", rawRemaining)
+                else
+                    SetText(frame.timeText, tostring(rawRemaining or ""))
+                end
                 frame._msufZeroCount = nil
             end
             return true
@@ -1032,17 +1146,20 @@ local function UpdateDurationObjectFrame(frame, now)
         frame._msufRemaining = remaining
     end
 
-    local needsTotal = applyGlowFade or (frame.timeText and frame._msufCastTimeEnabled ~= false)
+    local needsLuaTimeText = frame.timeText
+        and frame._msufCastTimeEnabled ~= false
+        and frame._msufNativeTimeBound ~= true
+    local needsTotal = frame._msufCastbarGlowTick or needsLuaTimeText
     local total
     if needsTotal then
         total = ResolveDurationTotal(frame, durationObj, inferredTotal)
     end
 
-    if frame.timeText and frame._msufCastTimeEnabled ~= false then
+    if needsLuaTimeText then
         SetCastTimeTextIfChanged(frame, remaining, total)
     end
 
-    if applyGlowFade then
+    if frame._msufCastbarGlowTick and applyGlowFade then
         if total and total > 0 then applyGlowFade(frame, remaining, total) end
     end
 
@@ -1074,11 +1191,18 @@ local function UpdateEndTimeFrame(frame, now)
         frame.statusBar:SetValue(value)
     end
 
-    if frame.timeText and frame._msufCastTimeEnabled ~= false then
+    if frame.timeText
+        and frame._msufCastTimeEnabled ~= false
+        and frame._msufNativeTimeBound ~= true
+    then
         SetCastTimeTextIfChanged(frame, remaining, total)
     end
 
-    if applyGlowFade and frame.statusBar and frame.statusBar.GetMinMaxValues then
+    if frame._msufCastbarGlowTick
+        and applyGlowFade
+        and frame.statusBar
+        and frame.statusBar.GetMinMaxValues
+    then
         local minValue, maxValue = frame.statusBar:GetMinMaxValues()
         minValue = ToPlainNumber(minValue) or 0
         maxValue = ToPlainNumber(maxValue)
@@ -1095,6 +1219,7 @@ end
 
 UpdateCastbarFrame = function(frame, elapsed, now, sampleTime)
     if not (frame and frame.statusBar) then return end
+    if frame._msufCastbarWorkMask == 0 then return end
 
     local castTimeEnabled = frame._msufCastTimeEnabled
     if castTimeEnabled == nil or frame._msufCastTimeRev ~= castTimeRev then

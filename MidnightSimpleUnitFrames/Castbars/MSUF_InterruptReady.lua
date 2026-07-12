@@ -18,6 +18,9 @@ local TimerAPI = _G.C_Timer
 local CurveAPI = _G.C_CurveUtil
 local EvaluateColorValueFromBoolean = CurveAPI and CurveAPI.EvaluateColorValueFromBoolean
 local EvaluateColorFromBoolean = CurveAPI and CurveAPI.EvaluateColorFromBoolean
+local GLOBAL_RECOVERY_CATEGORY = _G.Constants
+    and _G.Constants.SpellCooldownConsts
+    and _G.Constants.SpellCooldownConsts.GLOBAL_RECOVERY_CATEGORY
 
 local INTERRUPT_SPELLS = {
     DEATHKNIGHT = { DEFAULT = 47528 },
@@ -79,17 +82,21 @@ local function PlainNumber(value)
         return value
     end
 
-    local toPlain = _G.ToPlain
-    if type(toPlain) == "function" then
-        local plain = tonumber(tostring(toPlain(value)))
-        if plain ~= nil then
-            return plain
-        end
+    if plainIsSecret(value) == true then
+        local toPlain = _G.ToPlain
+        if type(toPlain) ~= "function" then return nil end
+        value = toPlain(value)
+        if value == nil or plainIsSecret(value) == true then return nil end
     end
 
     local valueType = type(value)
-    if valueType == "number" or valueType == "string" then
-        return tonumber(tostring(value))
+    if valueType == "number" then
+        if value == value and value ~= plainHuge and value ~= -plainHuge then
+            return value
+        end
+        return nil
+    elseif valueType == "string" then
+        return tonumber(value)
     end
 
     return nil
@@ -103,6 +110,7 @@ end
 --- Some classes swap interrupt IDs by specialization, so cache both class/spec
 --- metadata with the selected spell.
 local function ResolveInterruptSpellID()
+    local previousSpellID = state.spellID
     local classToken
     if UnitClass then
         local _, token = UnitClass("player")
@@ -124,8 +132,31 @@ local function ResolveInterruptSpellID()
         state.specID = specID
     end
 
+    if previousSpellID and previousSpellID ~= spellID then
+        state.previousSpellID = previousSpellID
+    end
     state.spellID = spellID
     return spellID
+end
+
+--- Mirror Blizzard_CooldownViewer's event narrowing: unrelated spell cooldown
+--- events cannot change the interrupt display. Global recovery and nil-ID
+--- broadcasts remain relevant, as do the current and previous override IDs.
+local function NeedsInterruptCooldownUpdate(spellID, baseSpellID, startRecoveryCategory)
+    if spellID == nil then return true end
+    if GLOBAL_RECOVERY_CATEGORY == nil then return true end
+    if startRecoveryCategory == GLOBAL_RECOVERY_CATEGORY then
+        return true
+    end
+
+    local interruptSpellID = state.spellID or ResolveInterruptSpellID()
+    if spellID == interruptSpellID or baseSpellID == interruptSpellID then
+        return true
+    end
+
+    local previousSpellID = state.previousSpellID
+    return previousSpellID ~= nil
+        and (spellID == previousSpellID or baseSpellID == previousSpellID)
 end
 
 local function InterruptCooldown()
@@ -620,20 +651,6 @@ local function RefreshFrame(frame, castState, status, general, updateFillColor)
     frame._msufKickReadyVisualKey = visualKey
 end
 
-local function ForEachCastbar(callback)
-    callback(_G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar
-        or ((_G.TargetCastBar and _G.TargetCastBar._msufCastbarDriver == true) and _G.TargetCastBar))
-    callback(_G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar
-        or ((_G.FocusCastBar and _G.FocusCastBar._msufCastbarDriver == true) and _G.FocusCastBar))
-
-    local bossCastbars = _G.MSUF_BossCastbars
-    if type(bossCastbars) == "table" then
-        for index = 1, #bossCastbars do
-            callback(bossCastbars[index])
-        end
-    end
-end
-
 --- PERF: RefreshAll/RefreshActive/KickReady_RefreshFrame run per cooldown or
 --- castbar event; a fresh status table per call is steady combat garbage. The
 --- shared scratch is safe because the status never escapes these calls and the
@@ -650,9 +667,21 @@ local function RefreshAll(updateFillColor)
     local status = AcquireScratchStatus()
     local general = GeneralDB()
 
-    ForEachCastbar(function(frame)
-        RefreshFrame(frame, nil, status, general, updateFillColor)
-    end)
+    -- Keep this traversal direct. RefreshAll is event-driven and a capturing
+    -- callback here produced one short-lived closure on every refresh.
+    RefreshFrame(_G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar
+        or ((_G.TargetCastBar and _G.TargetCastBar._msufCastbarDriver == true) and _G.TargetCastBar),
+        nil, status, general, updateFillColor)
+    RefreshFrame(_G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar
+        or ((_G.FocusCastBar and _G.FocusCastBar._msufCastbarDriver == true) and _G.FocusCastBar),
+        nil, status, general, updateFillColor)
+
+    local bossCastbars = _G.MSUF_BossCastbars
+    if type(bossCastbars) == "table" then
+        for index = 1, #bossCastbars do
+            RefreshFrame(bossCastbars[index], nil, status, general, updateFillColor)
+        end
+    end
 
     if not status.resolved and fillActiveFrameCount > 0 then
         status.remaining = InterruptRemaining()
@@ -684,8 +713,13 @@ local function QueueActiveRefreshFrames(frames)
     end
 end
 
-local function RefreshActive(updateFillColor)
+local function RefreshActive(updateFillColor, seededReady, seededRemaining)
     local status = AcquireScratchStatus()
+    if seededReady ~= nil then
+        status.ready = seededReady
+        status.remaining = seededRemaining
+        status.resolved = true
+    end
     local general = GeneralDB()
 
     QueueActiveRefreshFrames(activeIndicatorFrames)
@@ -843,7 +877,7 @@ local function CooldownEventAlreadyDisplayed()
         end
     end
     if ready == nil then
-        return false
+        return false, nil, nil
     end
 
     if state.cooldownDisplayReady ~= ready then
@@ -852,13 +886,13 @@ local function CooldownEventAlreadyDisplayed()
         -- indicator actually paints; without this write the stored state goes
         -- stale whenever no cast is active.
         state.cooldownDisplayReady = ready
-        return false
+        return false, ready, remaining
     end
 
     if not ready then
         ScheduleCooldownRefresh(remaining, true)
     end
-    return true
+    return true, ready, remaining
 end
 
 ExportPublic("MSUF_KickReady_Init", KickReady_Init)
@@ -890,33 +924,38 @@ eventFrame = CreateFrame("Frame", "MSUF_InterruptReady_EventFrame")
 eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
-eventFrame:SetScript("OnEvent", function(_, event)
+eventFrame:SetScript("OnEvent", function(_, event, spellID, baseSpellID, _category, startRecoveryCategory)
     if event ~= "SPELL_UPDATE_COOLDOWN" then
         ResolveInterruptSpellID()
-    elseif CooldownEventAlreadyDisplayed() then
-        UpdateCooldownEventRegistration()
-        return
     else
-        -- PERF: one ability press fires SPELL_UPDATE_COOLDOWN several times in
-        -- the same frame, and with secret cooldowns the ready-state guard above
-        -- cannot dedupe. Cooldown state is constant within a frame (WoW settles
-        -- game state before Lua events fire), so refreshing once per frame is
-        -- lossless. Cast-driven repaints bypass this handler entirely.
-        -- GetTime (not GetTimePreciseSec) is frame-constant by design.
+        if not NeedsInterruptCooldownUpdate(spellID, baseSpellID, startRecoveryCategory) then
+            return
+        end
+
+        -- SPELL_UPDATE_COOLDOWN can repeat in one rendered frame. Filter and
+        -- dedupe before requesting a fresh Duration object.
         local now = _G.GetTime and _G.GetTime()
         if now ~= nil and state.cooldownRefreshFrameStamp == now then
-            UpdateCooldownEventRegistration()
             return
         end
         state.cooldownRefreshFrameStamp = now
+
+        local alreadyDisplayed, ready, remaining = CooldownEventAlreadyDisplayed()
+        if alreadyDisplayed then
+            UpdateCooldownEventRegistration()
+            return
+        end
+
+        local resolved
+        remaining, resolved = RefreshActive(true, ready, remaining)
+        if resolved then
+            ScheduleCooldownRefresh(remaining, true)
+        end
+        UpdateCooldownEventRegistration()
+        return
     end
 
-    local remaining, resolved
-    if event == "SPELL_UPDATE_COOLDOWN" then
-        remaining, resolved = RefreshActive(true)
-    else
-        remaining, resolved = RefreshAll(true)
-    end
+    local remaining, resolved = RefreshAll(true)
     if resolved then
         ScheduleCooldownRefresh(remaining, true)
     end

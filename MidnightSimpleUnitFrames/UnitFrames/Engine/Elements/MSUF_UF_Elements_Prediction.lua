@@ -25,14 +25,13 @@ local Enum = _G.Enum
 local UnitMissing
 do
   local issv = _G.issecretvalue or function(_) return false end
-  UnitMissing = function(frame, unit)
-    if issv(unit) == true then
+  UnitMissing = function(frame, unit, unitSecret)
+    if unitSecret == true then
       return false
     end
     local state = frame and frame._msufUnitState
     if state
       and state.ready == true
-      and issv(unit) ~= true
       and issv(state.unit) ~= true
       and state.unit == unit
       and state.existsKnown == true then
@@ -78,6 +77,23 @@ local PREDICTION_EVENT_BITS = {
   { 1, "UNIT_HEAL_PREDICTION" },
   { 2, "UNIT_ABSORB_AMOUNT_CHANGED" },
   { 4, "UNIT_HEAL_ABSORB_AMOUNT_CHANGED" },
+}
+local PREDICTION_DATA_EVENT_BITS = {
+  UNIT_HEAL_PREDICTION = 1,
+  UNIT_ABSORB_AMOUNT_CHANGED = 2,
+  UNIT_HEAL_ABSORB_AMOUNT_CHANGED = 4,
+}
+-- Single-bit masks deliberately reuse the native event keys so specialized
+-- paths (notably absorb-only) retain their exact event semantics. Combined
+-- masks address precompiled union plans without allocating a table at runtime.
+local PREDICTION_DIRTY_PLAN_KEYS = {
+  [1] = "UNIT_HEAL_PREDICTION",
+  [2] = "UNIT_ABSORB_AMOUNT_CHANGED",
+  [3] = "MSUF_PREDICTION_DIRTY_HEAL_ABSORB",
+  [4] = "UNIT_HEAL_ABSORB_AMOUNT_CHANGED",
+  [5] = "MSUF_PREDICTION_DIRTY_HEAL_HEALABSORB",
+  [6] = "MSUF_PREDICTION_DIRTY_ABSORB_HEALABSORB",
+  [7] = "MSUF_PREDICTION_DIRTY_ALL",
 }
 
 local function BuildPredictionEventTable(healthAware, includeConnection)
@@ -889,6 +905,23 @@ local function PredictionPlan(refreshHeal, refreshAbsorb, refreshHealAbsorb, sho
   }
 end
 
+local function MergePredictionPlans(plans, mask)
+  local merged
+  for i = 1, #PREDICTION_EVENT_BITS do
+    local bit = PREDICTION_EVENT_BITS[i][1]
+    if (mask % (bit * 2)) >= bit then
+      local plan = plans[PREDICTION_EVENT_BITS[i][2]]
+      if plan then
+        merged = merged or {}
+        for field = 1, PLAN_NEED_MAX_HP do
+          if plan[field] then merged[field] = true end
+        end
+      end
+    end
+  end
+  return merged
+end
+
 local predictionPlanCache = {}
 
 local function PredictionPlanCacheKey(heal, absorb, healAbsorb, clampHeal, clampAbsorb, followAbsorb, overAbsorb)
@@ -931,6 +964,16 @@ local function CompilePredictionPlans(cfg, healMode, absorbMode, followAbsorb)
     plans.UNIT_MAXHEALTH = PredictionPlan(clampHeal, clampAbsorb, nil, heal, absorb, healAbsorb, true, clampHeal or clampAbsorb or healAbsorb or overAbsorb, heal or absorb or healAbsorb)
   end
 
+  -- The three prediction payload events can arrive in one rendered frame.
+  -- Precompile their four possible multi-event unions once per configuration;
+  -- the hot event path then only merges an integer mask.
+  for mask = 3, 7 do
+    if mask ~= 4 then
+      local merged = MergePredictionPlans(plans, mask)
+      if merged then plans[PREDICTION_DIRTY_PLAN_KEYS[mask]] = merged end
+    end
+  end
+
   local fullNeedHP = healAbsorb or clampHeal or clampAbsorb or overAbsorb
   local fullNeedMaxHP = heal or absorb or healAbsorb or fullNeedHP
   local fullPlan = PredictionPlan(heal, absorb, healAbsorb, heal, absorb, healAbsorb, true, fullNeedHP, fullNeedMaxHP)
@@ -957,6 +1000,10 @@ local function ClearPredictionCache(frame)
   if not frame then
     return
   end
+  -- Invalidate queued data from the previous unit/configuration. The reusable
+  -- queue entry may remain until the next driver flush, where it becomes a
+  -- no-op; a new event can safely reuse that same entry in the meantime.
+  frame._msufPredictionDirtyMask = nil
   frame._msufPredictionCacheReady = nil
   frame._msufPredictionCacheUnit = nil
   frame._msufPredictionCacheCfg = nil
@@ -1183,6 +1230,86 @@ end
 
 local UpdateFull
 
+-- Blizzard's CompactUnitFrame defers the three expensive prediction payload
+-- events and resolves them at most once per rendered frame. Keep the same
+-- contract here with a dedicated, allocation-free hot path: two reusable
+-- arrays allow events raised during a flush to land in the next batch without
+-- extending the active loop or allocating closures/tables per event.
+local predictionQueueA, predictionQueueB = {}, {}
+local predictionWriteQueue = predictionQueueA
+local predictionWriteCount = 0
+local predictionDriver
+local predictionDriverArmed
+local FlushPredictionQueue
+
+local function ArmPredictionDriver()
+  if predictionDriverArmed == true then return true end
+  if not predictionDriver and CreateFrame then
+    predictionDriver = CreateFrame("Frame")
+  end
+  if not (predictionDriver and predictionDriver.SetScript) then return false end
+  predictionDriverArmed = true
+  predictionDriver:SetScript("OnUpdate", FlushPredictionQueue)
+  return true
+end
+
+local function QueuePredictionDataEvent(frame, event)
+  if not frame then return end
+  local bit = PREDICTION_DATA_EVENT_BITS[event]
+  if not bit then return end
+
+  local mask = frame._msufPredictionDirtyMask or 0
+  if (mask % (bit * 2)) < bit then
+    frame._msufPredictionDirtyMask = mask + bit
+  end
+  if frame._msufPredictionQueued == true then return end
+
+  frame._msufPredictionQueued = true
+  predictionWriteCount = predictionWriteCount + 1
+  predictionWriteQueue[predictionWriteCount] = frame
+  if ArmPredictionDriver() then return end
+
+  -- CreateFrame is unavailable only in non-WoW harnesses. Preserve behavior
+  -- synchronously there instead of leaving a queued update stranded.
+  predictionWriteQueue[predictionWriteCount] = nil
+  predictionWriteCount = predictionWriteCount - 1
+  frame._msufPredictionQueued = nil
+  mask = frame._msufPredictionDirtyMask
+  frame._msufPredictionDirtyMask = nil
+  if mask then UpdateFull(frame, PREDICTION_DIRTY_PLAN_KEYS[mask], frame.unit) end
+end
+
+FlushPredictionQueue = function()
+  if predictionDriver and predictionDriver.SetScript then
+    predictionDriver:SetScript("OnUpdate", nil)
+  end
+  predictionDriverArmed = nil
+
+  local batch = predictionWriteQueue
+  local count = predictionWriteCount
+  predictionWriteQueue = batch == predictionQueueA and predictionQueueB or predictionQueueA
+  predictionWriteCount = 0
+
+  for i = 1, count do
+    local frame = batch[i]
+    batch[i] = nil
+    if frame then
+      frame._msufPredictionQueued = nil
+      local mask = frame._msufPredictionDirtyMask
+      frame._msufPredictionDirtyMask = nil
+      if mask
+        and frame._msufPredictionDisabled ~= true
+        and frame._msufPredictionMask ~= 0 then
+        UpdateFull(frame, PREDICTION_DIRTY_PLAN_KEYS[mask], frame.unit)
+      end
+    end
+  end
+
+  -- A prediction API callback can synchronously queue more work. It belongs to
+  -- the following rendered frame, never to the batch currently being drained.
+  if predictionWriteCount > 0 then ArmPredictionDriver() end
+end
+
 function Prediction.UpdateHealthValue(frame, event, unit, seedHP, seedMaxHP)
   if unit and issecretvalue(unit) == true then
     unit = frame and frame.unit or nil
@@ -1312,6 +1439,7 @@ UpdateFull = function(frame, event, unit, seedHP, seedMaxHP, seedCalc)
   else
     unit = unit or frame.unit
   end
+  local unitSecret = issecretvalue(unit) == true
   local cfg = frame._msufPredictionRuntimeCfg
   local spec
   if not cfg then
@@ -1341,7 +1469,7 @@ UpdateFull = function(frame, event, unit, seedHP, seedMaxHP, seedCalc)
     end
   end
 
-  if cfg.test ~= true and UnitMissing(frame, unit) then
+  if cfg.test ~= true and UnitMissing(frame, unit, unitSecret) then
     Prediction.Disable(frame)
     return
   end
@@ -1383,10 +1511,24 @@ UpdateFull = function(frame, event, unit, seedHP, seedMaxHP, seedCalc)
 
   local cacheUnit = frame._msufPredictionCacheUnit
   local cacheReady = frame._msufPredictionCacheReady == true
-    and issecretvalue(unit) ~= true
+    and unitSecret ~= true
     and cacheUnit == unit
     and frame._msufPredictionCacheCfg == cfg
   local plans = frame._msufPredictionEventPlans
+  local pendingMask = frame._msufPredictionDirtyMask
+  if pendingMask and frame._msufPredictionAbsorbOnly ~= true then
+    local eventBit = PREDICTION_DATA_EVENT_BITS[event]
+    if eventBit then
+      if (pendingMask % (eventBit * 2)) < eventBit then
+        pendingMask = pendingMask + eventBit
+      end
+      frame._msufPredictionDirtyMask = nil
+      event = PREDICTION_DIRTY_PLAN_KEYS[pendingMask]
+    elseif not (event and plans and plans[event]) then
+      -- A full refresh already covers every queued prediction component.
+      frame._msufPredictionDirtyMask = nil
+    end
+  end
   local plan = event and plans and plans[event] or nil
   if not plan then
     if event and GATED_PREDICTION_EVENTS[event] then
@@ -1445,7 +1587,7 @@ UpdateFull = function(frame, event, unit, seedHP, seedMaxHP, seedCalc)
   end
   if refreshHeal or refreshAbsorb or refreshHealAbsorb then
     frame._msufPredictionCacheReady = true
-    frame._msufPredictionCacheUnit = issecretvalue(unit) ~= true and unit or nil
+    frame._msufPredictionCacheUnit = unitSecret ~= true and unit or nil
     frame._msufPredictionCacheCfg = cfg
   end
 
@@ -1486,6 +1628,17 @@ function Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
     return Prediction.UpdateConnectionState(frame, event, unit, seedHP, seedMaxHP, seedCalc)
   end
   return UpdateFull(frame, event, unit, seedHP, seedMaxHP, seedCalc)
+end
+
+function Prediction.SelectEventUpdate(_frame, _spec, event)
+  if PREDICTION_DATA_EVENT_BITS[event] then
+    return QueuePredictionDataEvent
+  elseif event == "UNIT_HEALTH" then
+    return Prediction.UpdateHealthValue
+  elseif event == "UNIT_CONNECTION" then
+    return Prediction.UpdateConnectionState
+  end
+  return UpdateFull
 end
 
 UF.RegisterElement("Prediction", Prediction)

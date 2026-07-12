@@ -18,6 +18,7 @@ local CreateFrame = CreateFrame
 local InCombatLockdown = InCombatLockdown
 local RegisterUnitWatch = RegisterUnitWatch
 local UnregisterUnitWatch = UnregisterUnitWatch
+local UnitWatchRegistered = UnitWatchRegistered
 local RegisterStateDriver = RegisterStateDriver
 local UIParent = UIParent
 local Mixin = Mixin
@@ -299,6 +300,11 @@ local function DisableFrame(frame)
     if UnregisterUnitWatch then UnregisterUnitWatch(frame) end
     frame:Hide()
   end
+  -- UnregisterUnitWatch removes the frame from Blizzard's secure existence
+  -- monitor. Keep our mirror state in sync or a later Blizzard -> MSUF profile
+  -- transition will believe the hidden frame is still watched and skip both
+  -- RegisterUnitWatch and Show forever.
+  frame._msufUnitWatched = nil
 end
 
 local function RegisterGlobals(unit, frame)
@@ -509,6 +515,7 @@ local function SpawnFrame(unit)
   end
   frame.Disable = function(self)
     if UnregisterUnitWatch then UnregisterUnitWatch(self) end
+    self._msufUnitWatched = nil
     if self.Hide then self:Hide() end
   end
   if frame.Show then frame:Show() end
@@ -538,7 +545,12 @@ local function ApplyFrame(frame, spec, applyMask)
 
   UF.ApplySpec(frame, spec, "MSUF_APPLY", applyMask == nil and true or applyMask)
 
-  if frame._msufVisibilityManaged ~= true and frame._msufUnitWatched ~= true then
+  local unitWatched = frame._msufUnitWatched == true
+  if UnitWatchRegistered then
+    unitWatched = UnitWatchRegistered(frame) == true
+    frame._msufUnitWatched = unitWatched and true or nil
+  end
+  if frame._msufVisibilityManaged ~= true and not unitWatched then
     if frame.Enable then
       frame:Enable()
       frame._msufUnitWatched = true
