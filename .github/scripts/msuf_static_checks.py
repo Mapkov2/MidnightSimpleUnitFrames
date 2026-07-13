@@ -740,15 +740,24 @@ def check_unit_preview_lifecycle_contracts() -> None:
             "Generic Unit preview must not synthesize Custom Aura full-frame effects; "
             "those effects require an active aura and have a dedicated scoped preview"
         )
+    # Since the runtime-metrics preview rewrite, Custom Aura footprints mirror
+    # the live lane: runtime metrics own the bounds when available, and the
+    # fallback sizes from full configured capacity (kept in sync with the
+    # aura_growth_anchor smoke assertions).
     require(
         auras,
-        "local cols, rows = GridShape(shown, perRow, vertical)",
-        "Custom Aura preview footprint uses rendered icon count",
+        "local cols, rows = GridShape(count, perRow, vertical)",
+        "Custom Aura preview footprint mirrors runtime lane capacity",
     )
+    if "PreviewLaneDimensions" in aura_edit_mode:
+        raise CheckError(
+            "Edit Mode Custom Aura mover must size from runtime metrics/capacity, "
+            "not a sample-icon footprint (PreviewLaneDimensions was removed)"
+        )
     require(
         aura_edit_mode,
-        "laneW, laneH = PreviewLaneDimensions(cfg, metrics or fallback, shownIcons)",
-        "Edit Mode Custom Aura mover uses rendered icon count",
+        "local laneW = (metrics and metrics.width) or (fallback and fallback.width) or cfg.size",
+        "Edit Mode Custom Aura mover sizes from runtime metrics",
     )
 
     for forbidden in [

@@ -20,13 +20,14 @@ local function Contains(value, needle, message)
 end
 
 local CLOSED = "First-load onboarding is already closed. Use Guided Setup on the Dashboard to run the tour again."
-local UNAVAILABLE = "First-load actions are unavailable right now. Resume Guided Setup or reopen MSUF next session."
+local UNAVAILABLE = "First-load actions are unavailable right now. Use Guided Setup on the Dashboard instead."
 local ACTIONS = { "personalize", "import_profile", "use_defaults", "whats_new", "not_now", "full_settings" }
 
-local function LoadFixture()
-    _G.MSUF_DB = nil
-    _G.MSUF_GlobalDB = nil
-    _G.MSUF_ActiveProfile = "Default"
+local function LoadFixture(saved)
+    saved = type(saved) == "table" and saved or {}
+    _G.MSUF_DB = saved.db
+    _G.MSUF_GlobalDB = saved.globalDB
+    _G.MSUF_ActiveProfile = saved.activeProfile or "Default"
     _G.MSUF = nil
     _G.MSUF_NS = nil
     _G.MSUF2 = nil
@@ -41,7 +42,10 @@ local function LoadFixture()
     local MSUF = {}
     local registered = {}
     local effects = { invalidates = 0, selects = 0, closes = 0, imports = 0 }
-    local M = {
+    -- Forward declaration: SetMenuStateValue/GetPersistentMenuStateTable close
+    -- over M, which is not in scope inside its own table constructor.
+    local M
+    M = {
         Tr = function(text) return text end,
         BlockCombatAction = function() return false end,
         RegisterVirtualRuntimeControl = function(record)
@@ -88,6 +92,69 @@ local function LoadFixture()
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_GuidedTour.lua"))("MidnightSimpleUnitFrames", MSUF)
 
     return MSUF, M, registered, effects
+end
+
+-- MSUF 5.71 used MSUF_DB plus MSUF_GlobalDB.profiles/chars without a profile
+-- schema marker. That untouched SavedVariables shape must select the upgrade
+-- scene and offer the existing profile instead of fresh defaults.
+do
+    local legacyProfile = { general = { barTexture = "MSUF Flat" }, player = { width = 220 } }
+    local MSUF = LoadFixture({
+        db = legacyProfile,
+        globalDB = {
+            profiles = { Raid = legacyProfile },
+            chars = { ["Tester-Realm"] = { activeProfile = "Raid" } },
+        },
+        activeProfile = "Raid",
+    })
+    local firstLoad = MSUF.FirstLoad6
+    local state, detection = firstLoad:GetState(), firstLoad:GetDetection()
+    Equal(state.installKind, "upgrade", "5.71 profile was classified as a fresh install")
+    Equal(state.installReason, "legacy_saved_profiles", "5.71 profile stored the wrong detection reason")
+    Check(detection.existingProfile == true, "5.71 existing profile was not detected")
+    Check(detection.legacyProfile == true, "5.71 schema-less profile was not classified as legacy")
+    Check(firstLoad:ShouldShowDashboard() == true, "5.71 profile lost the one-time continue choice")
+
+    local ok = MSUF.MSUF2.ExecuteFirstLoadDashboardAction("use_defaults")
+    Check(ok == true, "continue-current-profile action failed for 5.71 profile")
+    Equal(firstLoad:GetState().status, "completed", "continue-current-profile did not complete onboarding")
+    Equal(firstLoad:GetState().step, "current_profile", "upgrade action was recorded as fresh defaults")
+end
+
+-- Very old installations may only have the single MSUF_DB table. They are
+-- still existing users and must receive the same non-destructive upgrade path.
+do
+    local MSUF = LoadFixture({ db = { general = { fontSize = 12 } } })
+    local state, detection = MSUF.FirstLoad6:GetState(), MSUF.FirstLoad6:GetDetection()
+    Equal(state.installKind, "upgrade", "pre-profile-system DB was classified as fresh")
+    Equal(state.installReason, "legacy_saved_profile", "old single DB stored the wrong detection reason")
+    Check(detection.existingProfile == true, "old single DB was not detected as an existing profile")
+end
+
+-- A stale fresh marker from an earlier beta/debug run must not win over an
+-- untouched schema-less 5.71 profile that is now present in SavedVariables.
+do
+    local legacyProfile = { general = { healthTexture = "Old Texture" } }
+    local MSUF = LoadFixture({
+        db = legacyProfile,
+        globalDB = {
+            global = {
+                firstLoad6 = {
+                    schema = 1,
+                    revision = 1,
+                    installKind = "fresh",
+                    status = "pending",
+                    step = "welcome",
+                    firstSeenVersion = "6.0-beta-test",
+                },
+            },
+            profiles = { Default = legacyProfile },
+        },
+    })
+    local state = MSUF.FirstLoad6:GetState()
+    Equal(state.installKind, "upgrade", "stale fresh marker overruled a legacy profile")
+    Equal(state.installReason, "reclassified_legacy_saved_profiles", "legacy reclassification reason was lost")
+    Check(MSUF.FirstLoad6:ShouldShowDashboard() == true, "reclassified legacy profile did not show continue choice")
 end
 
 local function ResetEffects(effects)
@@ -159,8 +226,9 @@ do
     Equal(firstLoad:GetState().status, "dismissed", "tour restart changed dismissed FirstLoad status")
 end
 
--- "Not now" owns the remainder of the session. The persisted `later` state is
--- eligible again next reload, but stale virtual actions cannot override it now.
+-- Any explicit choice retires the one-time welcome scene permanently: "Not now"
+-- persists as `later`, stays hidden across reloads, and stale virtual actions
+-- cannot override it.
 do
     local MSUF, M = LoadFixture()
     local firstLoad = MSUF.FirstLoad6
@@ -168,11 +236,99 @@ do
     Check(ok == true, "not-now action failed")
     Equal(firstLoad:GetState().status, "later", "not-now did not persist later status")
     Check(firstLoad.deferredThisSession == true, "not-now did not defer this session")
+    Check(firstLoad:ShouldShowDashboard() == false, "not-now left the welcome scene visible")
 
     local staleOk, message = M.ExecuteFirstLoadDashboardAction("use_defaults")
     Check(staleOk == false, "deferred session accepted a stale FirstLoad action")
     Equal(message, UNAVAILABLE, "deferred action returned unclear status")
     Equal(firstLoad:GetState().status, "later", "deferred action changed persisted state")
+
+    -- Simulated reload: the state module re-reads the persisted SavedVariables.
+    -- A chosen route must keep the welcome scene retired in the next session.
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames/State/MSUF_FirstLoad.lua"))("MidnightSimpleUnitFrames", MSUF)
+    local reloaded = MSUF.FirstLoad6
+    Equal(reloaded:GetState().status, "later", "reload lost the persisted later status")
+    Check(reloaded.deferredThisSession == false, "reload kept the session-only defer flag")
+    Check(reloaded:ShouldShowDashboard() == false, "welcome scene resurfaced after reload despite a chosen route")
+end
+
+-- Viewing the changelog counts as a choice too and survives a reload, while an
+-- untouched (pending) install keeps offering the welcome scene next session.
+do
+    local MSUF, M = LoadFixture()
+    local firstLoad = MSUF.FirstLoad6
+    Check(firstLoad:ShouldShowDashboard() == true, "pending install did not offer the welcome scene")
+    Check(M.ExecuteFirstLoadDashboardAction("whats_new") == true, "whats-new action failed")
+    Equal(firstLoad:GetState().status, "later", "whats-new did not persist later status")
+
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames/State/MSUF_FirstLoad.lua"))("MidnightSimpleUnitFrames", MSUF)
+    Check(MSUF.FirstLoad6:ShouldShowDashboard() == false, "welcome scene resurfaced after reload despite viewing the changelog")
+
+    -- `/msuf firstload` relies on Reset to deliberately re-arm the retired
+    -- welcome scene for testing, including forcing the install-kind variant.
+    Check(MSUF.FirstLoad6:Reset("fresh") == true, "reset helper failed")
+    Equal(MSUF.FirstLoad6:GetState().status, "pending", "reset did not re-arm the pending status")
+    Equal(MSUF.FirstLoad6:GetInstallKind(), "fresh", "reset did not force the fresh install kind")
+    Check(MSUF.FirstLoad6:ShouldShowDashboard() == true, "reset did not resurface the welcome scene")
+    Check(MSUF.FirstLoad6:Reset("upgrade") == true, "upgrade reset helper failed")
+    Equal(MSUF.FirstLoad6:GetInstallKind(), "upgrade", "reset did not force the upgrade install kind")
+end
+
+local function Read(relativePath)
+    local file = assert(io.open(root .. "/" .. relativePath, "rb"))
+    local text = file:read("*a")
+    file:close()
+    return text
+end
+
+local function Count(value, needle)
+    local count, from = 0, 1
+    while true do
+        local at = value:find(needle, from, true)
+        if not at then return count end
+        count = count + 1
+        from = at + #needle
+    end
+end
+
+-- A successful import launched directly from the Profiles page must retire the
+-- welcome scene too; it does not require the welcome import card to be clicked.
+do
+    local MSUF = LoadFixture()
+    local firstLoad = MSUF.FirstLoad6
+    Check(firstLoad:CompleteProfileImport() == true, "direct profile import did not complete onboarding")
+    Equal(firstLoad:GetState().status, "completed", "direct profile import left onboarding pending")
+    Equal(firstLoad:GetState().step, "import", "direct profile import stored the wrong completion step")
+    Check(firstLoad:ShouldShowDashboard() == false, "welcome scene remained visible after direct profile import")
+
+    firstLoad:Reset("fresh")
+    Check(firstLoad:Start("guided_tour") == true, "guided-tour fixture did not start")
+    local completed, reason = firstLoad:CompleteProfileImport()
+    Check(completed == false, "profile import completion interrupted an active guided tour")
+    Equal(reason, "active", "guided-tour import guard returned the wrong reason")
+    Equal(firstLoad:GetState().step, "guided_tour", "guided-tour step changed during import completion guard")
+end
+
+-- Recover the exact stale state reported in-game: a fresh pending lifecycle
+-- already has the named profile that the import created and activated.
+do
+    local MSUF = LoadFixture()
+    local firstLoad = MSUF.FirstLoad6
+    _G.MSUF_ActiveProfile = "Imported Profile"
+    Check(firstLoad:ShouldShowDashboard() == false, "named imported profile did not retire stale onboarding")
+    Equal(firstLoad:GetState().status, "completed", "named imported profile left stale onboarding pending")
+    Equal(firstLoad:GetState().step, "import_recovered", "stale imported profile stored the wrong recovery step")
+    Check(_G.MSUF_GlobalDB.global.firstLoad6ProfileImported == true, "import recovery receipt was not persisted")
+end
+
+-- The completion hook belongs to the shared data mutation boundaries, not a
+-- single menu page, so compact, legacy/UUF, and external imports cannot bypass it.
+do
+    local profiles = Read("MidnightSimpleUnitFrames/State/MSUF_Profiles.lua")
+    Check(Count(profiles, "MSUF.ProfileIOCompleteFirstLoadImport()") >= 6,
+        "not every successful profile mutation records first-load completion")
+    Check(not profiles:find("CompletePendingFirstLoadImport", 1, true),
+        "first-load completion is still coupled to the Menu2 profile page")
 end
 
 print("PASS first-load action lifecycle: terminal/deferred guards and independent guided restart")
