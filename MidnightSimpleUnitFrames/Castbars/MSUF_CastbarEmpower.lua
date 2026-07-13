@@ -589,7 +589,6 @@ local function PlayerCastbarEmpowerStart(frame)
 
     frame:SetScript("OnUpdate", nil)
     frame:Show()
-    if type(_G.MSUF_EnsureCastbarManager) == "function" then _G.MSUF_EnsureCastbarManager() end
     if type(_G.MSUF_RegisterCastbar) == "function" then _G.MSUF_RegisterCastbar(frame) end
     if type(_G.MSUF_UpdateCastbarFrame) == "function" then _G.MSUF_UpdateCastbarFrame(frame, 0) end
 

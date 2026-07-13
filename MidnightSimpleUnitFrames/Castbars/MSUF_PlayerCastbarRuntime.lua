@@ -619,7 +619,6 @@ local function ApplyActiveCast(
     frame.MSUF_timerDriven = timerDriven and true or nil
 
     frame:Show()
-    _G.MSUF_EnsureCastbarManager()
     if _G.MSUF_RegisterCastbar then _G.MSUF_RegisterCastbar(frame) end
     if _G.MSUF_UpdateCastbarFrame then
         local now = (_G.GetTimePreciseSec and _G.GetTimePreciseSec()) or _G.GetTime()

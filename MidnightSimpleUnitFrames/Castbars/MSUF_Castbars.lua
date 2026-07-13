@@ -107,12 +107,27 @@ local function SetText(fontString, text)
     end
 end
 
+local function SyncTimeTextFollower(frame)
+    local follower = frame and frame._msufTimeTextFollower
+    local source = frame and frame.timeText
+    if not (follower and source and source.GetText and follower.SetText) then return end
+    local text = source:GetText()
+    if _G.issecretvalue and _G.issecretvalue(text) == true then
+        follower:SetText(text)
+    else
+        follower:SetText(text or "")
+    end
+end
+
+ExportPublic("MSUF_Castbar_SyncTimeTextFollower", SyncTimeTextFollower)
+
 local function SetCastTimeText(frame, remaining, total)
     if type(_G.MSUF_SetCastTimeText) == "function" then
         _G.MSUF_SetCastTimeText(frame, remaining, total)
     elseif frame and frame.timeText and frame.timeText.SetFormattedText then
         frame.timeText:SetFormattedText("%.1f", tonumber(remaining) or 0)
     end
+    if frame and frame._msufTimeTextFollower then SyncTimeTextFollower(frame) end
 end
 
 local function SetCastTimeTextIfChanged(frame, remaining, total)
@@ -526,6 +541,7 @@ local function UpdateFastTextFrame(frame, elapsed)
             frame._msufLastTimeFormat = format
             frame.timeText._msufLastText = nil
             frame.timeText:SetFormattedText("%.1f", remaining)
+            if frame._msufTimeTextFollower then SyncTimeTextFollower(frame) end
         end
     else
         SetCastTimeTextIfChanged(frame, remaining, frame._msufPlainTotal)
@@ -734,9 +750,7 @@ end)
 
 local function FrameHasRuntimeWork(frame)
     if frame.IsShown and not frame:IsShown()
-        and frame.MSUF_preview ~= true
-        and frame._msufPreview ~= true
-        and frame._msufCastbarPreview ~= true then
+        and frame._msufPreview ~= true then
         return false
     end
     return frame.MSUF_castActive == true
@@ -885,7 +899,6 @@ UnregisterCastbar = function(frame)
         end
     end
 
-    frame._msufNextTick = nil
     frame._msufHeavyIn = nil
     frame._msufHardStopNext = nil
     frame._msufUnitExistNext = nil
