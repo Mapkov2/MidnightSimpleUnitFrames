@@ -1855,7 +1855,7 @@ end
 --- concatenated with ".." and passed to FontString:SetText (C-side).
 --- Percent comes from UnitHealthPercent / UnitPowerPercent (non-secret).
 ---
---- Signature: FormatHealthText(mode, hp, hpMax, delimiter, reverse, unit, hidePercentSymbol)
+--- Signature: FormatHealthText(mode, hp, hpMax, delimiter, reverse, unit, hidePercentSymbol, shortNumbers)
 --- The optional "unit" parameter enables the secret-safe path.
 --- Preview mode (fake numeric values) omits unit - non-secret path runs.
 ---
@@ -1944,11 +1944,11 @@ end
 --- Secret: AbbreviateNumbers - secret string (C-side, no Lua arith)
 --- Non-secret: AbbreviateNumbers or BreakUpLargeNumbers per user pref
 ---
-local function _GF_Abbrev(val)
+local function _GF_Abbrev(val, shortNumbers)
     if val == nil then return "0" end
     local iss = _GF_issecretvalue
     local isSecret = iss and iss(val)
-    local useShort = _GF_GetUseShort()
+    local useShort = shortNumbers == nil and _GF_GetUseShort() or shortNumbers == true
     if isSecret then
         --- Secret: must use C-side abbreviator; no type()/tonumber()/arithmetic
         local fn = useShort and (_GF_AbbrShort or _GF_AbbrFallback)
@@ -2029,20 +2029,21 @@ end
 --- All inputs may be secret strings (from _GF_Abbrev) or normal strings.
 --- String concat ".." on secret strings produces a secret string.
 ---
-local function _GF_FormatByMode(mode, sCur, sMax, delim, pctStr, missingVal)
+local function _GF_FormatByMode(mode, sCur, sMax, delim, pctStr, missingVal, shortNumbers)
     if mode == "PERCENT"  then return pctStr or "" end
     if mode == "CURRENT"  then return sCur end
+    if mode == "FULLVALUE" then return sCur end
     if mode == "MAX"      then return sMax end
 
     if mode == "DEFICIT" then
         if missingVal == nil then return "" end
         local iss = _GF_issecretvalue
         if iss and iss(missingVal) then
-            return "-" .. _GF_Abbrev(missingVal)
+            return "-" .. _GF_Abbrev(missingVal, shortNumbers)
         end
         local m = tonumber(missingVal) or 0
         if m <= 0 then return "" end
-        return "-" .. _GF_Abbrev(m)
+        return "-" .. _GF_Abbrev(m, shortNumbers)
     end
 
     if mode == "CURMAX"   then return sCur .. delim .. sMax end
@@ -2062,14 +2063,14 @@ local function _GF_FormatByMode(mode, sCur, sMax, delim, pctStr, missingVal)
 end
 
 ---
---- FormatHealthText(mode, hp, hpMax, delimiter, reverse [, unit [, hidePercentSymbol]])
+--- FormatHealthText(mode, hp, hpMax, delimiter, reverse [, unit [, hidePercentSymbol [, shortNumbers]]])
 --- mode : "PERCENT", "CURMAX", "DEFICIT", etc. or "NONE"
 --- hp, hpMax : raw UnitHealth / UnitHealthMax (possibly secret)
 --- delimiter : " / " etc.
 --- reverse : swap mode before formatting
 --- unit : unitId for secret-safe percent (optional, nil in preview)
 ---
-function GF.FormatHealthText(mode, hp, hpMax, delimiter, reverse, unit, hidePercentSymbol)
+function GF.FormatHealthText(mode, hp, hpMax, delimiter, reverse, unit, hidePercentSymbol, shortNumbers)
     if not mode or mode == "NONE" then return "" end
     if reverse then mode = REVERSE_HP_MAP[mode] or mode end
 
@@ -2078,12 +2079,12 @@ function GF.FormatHealthText(mode, hp, hpMax, delimiter, reverse, unit, hidePerc
     local pctSuffix = hidePct and "" or "%"
 
     --- Abbreviate cur/max (secret-safe: C-side abbreviators)
-    local sCur = _GF_Abbrev(hp)
-    local sMax = _GF_Abbrev(hpMax)
+    local sCur = _GF_Abbrev(hp, shortNumbers)
+    local sMax = _GF_Abbrev(hpMax, shortNumbers)
 
     --- Percent (non-secret via UnitHealthPercent API; fallback if non-secret values)
     local pctStr = nil
-    if mode ~= "CURRENT" and mode ~= "MAX" and mode ~= "CURMAX" and mode ~= "MAXCUR" and mode ~= "DEFICIT" then
+    if mode ~= "CURRENT" and mode ~= "FULLVALUE" and mode ~= "MAX" and mode ~= "CURMAX" and mode ~= "MAXCUR" and mode ~= "DEFICIT" then
         local pctVal = _GF_HealthPercent(unit, hp, hpMax)
         pctStr = _GF_FormatPct(pctVal, pctSuffix)
     end
@@ -2104,7 +2105,7 @@ function GF.FormatHealthText(mode, hp, hpMax, delimiter, reverse, unit, hidePerc
         end
     end
 
-    return _GF_FormatByMode(mode, sCur, sMax, delim, pctStr, missingVal)
+    return _GF_FormatByMode(mode, sCur, sMax, delim, pctStr, missingVal, shortNumbers)
 end
 
 --- Truncate name string (UTF-8 aware when possible)
