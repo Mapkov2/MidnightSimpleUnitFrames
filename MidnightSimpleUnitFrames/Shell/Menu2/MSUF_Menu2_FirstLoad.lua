@@ -55,7 +55,7 @@ local function FirstLoadActionAvailability(firstLoad)
         return false, Tr("First-load onboarding is already closed. Use Guided Setup on the Dashboard to run the tour again.")
     end
     if not ShouldShow(firstLoad) then
-        return false, Tr("First-load actions are unavailable right now. Resume Guided Setup or reopen MSUF next session.")
+        return false, Tr("First-load actions are unavailable right now. Use Guided Setup on the Dashboard instead.")
     end
     return true
 end
@@ -300,6 +300,16 @@ local function CreateRouteCard(parent, T, data, x, top, width, height, compact)
     if data.recommended and type(T.ApplyNeonEdge) == "function" then
         T.ApplyNeonEdge(card, "ambient", { variant = "card" })
     end
+    if data.recommended then
+        -- Straddles the top border so the recommendation reads at a glance,
+        -- like a pricing-card ribbon.
+        local pill = T.Panel(card, nil, T.colors.coreRaised or T.colors.panel2, T.colors.accent or T.colors.coreBlue)
+        local pillText = T.Font(pill, "GameFontDisableSmall", Tr("RECOMMENDED"), T.colors.accent or T.colors.coreBlue)
+        pillText:SetPoint("CENTER", pill, "CENTER", 0, 0)
+        pill:SetSize(floor((pillText:GetStringWidth() or 84) + 18), 18)
+        pill:SetPoint("CENTER", card, "TOP", 0, 0)
+        pill:SetFrameLevel(card:GetFrameLevel() + 5)
+    end
 
     if compact then
         CreateIconWell(card, T, data.icon, 30, 14, -34)
@@ -315,13 +325,13 @@ local function CreateRouteCard(parent, T, data, x, top, width, height, compact)
         body:SetPoint("TOPLEFT", card, "TOPLEFT", 54, -57)
         SetTextLayout(body, width - 68, "LEFT")
     else
-        local meta = T.Font(card, "GameFontDisableSmall", Tr(data.meta), T.colors.coreHot or T.colors.accent)
-        meta:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -14)
-        meta:SetPoint("RIGHT", card, "RIGHT", -16, 0)
-        meta:SetJustifyH("LEFT")
         local timing = T.Font(card, "GameFontDisableSmall", Tr(data.timing), T.colors.muted)
         timing:SetPoint("TOPRIGHT", card, "TOPRIGHT", -16, -14)
         timing:SetJustifyH("RIGHT")
+        local meta = T.Font(card, "GameFontDisableSmall", Tr(data.meta), T.colors.coreHot or T.colors.accent)
+        meta:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -14)
+        meta:SetPoint("RIGHT", timing, "LEFT", -8, 0)
+        meta:SetJustifyH("LEFT")
         CreateIconWell(card, T, data.icon, 34, 16, -42)
         local title = T.Font(card, "GameFontNormal", Tr(data.title), T.colors.text)
         title:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -88)
@@ -332,7 +342,9 @@ local function CreateRouteCard(parent, T, data, x, top, width, height, compact)
     end
 
     RegisterControl(card, data.id, data.title, "action", data.body)
-    AddTooltip(card, Tr(data.title), Tr(data.body))
+    local tooltipBody = Tr(data.body)
+    if data.hint then tooltipBody = tooltipBody .. "\n\n" .. Tr(data.hint) end
+    AddTooltip(card, Tr(data.title), tooltipBody)
     if type(T.PlayMotion) == "function" then
         T.PlayMotion(card, "controlFocusIn", { fromAlpha = 0.20, toAlpha = 1, duration = 0.22 })
     end
@@ -354,9 +366,9 @@ end
 
 local function OpenProfileImport(firstLoad)
     -- This scene is a one-time route chooser, not the import workflow itself.
-    -- Keep the choice pending until an import actually succeeds. Closing or
-    -- cancelling the import page therefore returns the player to this safe
-    -- route chooser on the next unqualified menu open.
+    -- Choosing this route retires the welcome scene; a successful import later
+    -- completes the lifecycle, and a cancelled import simply lands on the
+    -- normal Dashboard with its own Guided Setup entry point.
     CallLifecycle(firstLoad, "Start", "import")
     InvalidateHomeCache()
     if type(M.SetMenuStateValue) == "function" then
@@ -407,10 +419,13 @@ function M.ExecuteFirstLoadDashboardAction(action)
         OpenProfileImport(firstLoad)
         return true, Tr("Opened safe new-profile import.")
     elseif action == "use_defaults" then
-        CallLifecycle(firstLoad, "Complete", "defaults")
+        local installKind = InstallKind(firstLoad, FirstLoadState(firstLoad))
+        CallLifecycle(firstLoad, "Complete", installKind == "upgrade" and "current_profile" or "defaults")
         InvalidateHomeCache()
         if not CloseMenu() and type(M.SelectPage) == "function" then M.SelectPage("home") end
-        return true, Tr("Kept the current/default setup.")
+        return true, installKind == "upgrade"
+            and Tr("Continued with the current profile.")
+            or Tr("Kept the current/default setup.")
     elseif action == "whats_new" then
         CallLifecycle(firstLoad, "DeferForSession", "changelog")
         if type(M.SetMenuStateValue) == "function" then
@@ -424,7 +439,7 @@ function M.ExecuteFirstLoadDashboardAction(action)
         CallLifecycle(firstLoad, "DeferForSession", "not_now")
         InvalidateHomeCache()
         if not CloseMenu() and type(M.SelectPage) == "function" then M.SelectPage("home") end
-        return true, Tr("First-load setup is deferred until the next session.")
+        return true, Tr("Closed the first-time setup. Start Guided Setup from the Dashboard anytime.")
     elseif action == "full_settings" then
         CallLifecycle(firstLoad, "Dismiss", "full_settings")
         InvalidateHome()
@@ -552,27 +567,35 @@ function M.BuildFirstLoadDashboardScene(ctx)
     local cardHeight = compact and 104 or 154
     local cardWidth = compact and contentWidth or floor((contentWidth - (cardGap * 2)) / 3)
 
+    -- Fresh installs benefit most from the tour; upgraders usually just want
+    -- to keep what they have, so the recommendation follows the install kind.
+    local recommendGuided = installKind ~= "upgrade"
     local routes = {
         {
-            id = "personalize", meta = "FULL GUIDED SETUP", timing = "Resume anytime", icon = "opt_bars", recommended = true,
+            id = "personalize", meta = "FULL GUIDED SETUP", timing = "~10 min", icon = "opt_bars",
+            recommended = recommendGuided,
             title = "Start guided setup",
             body = "Learn movement, every menu area, interactive previews, auras, and profiles at your own pace.",
+            hint = "You can pause and resume anytime. A restore point is saved before anything changes.",
             onClick = function() M.ExecuteFirstLoadDashboardAction("personalize") end,
         },
         {
-            id = "import_profile", meta = "EXISTING SETUP", timing = "Validate first", icon = "profiles",
+            id = "import_profile", meta = "EXISTING SETUP", timing = "~2 min", icon = "profiles",
             title = "Import a profile",
             body = "Review an import in a new profile before switching to it.",
+            hint = "Your current profile stays untouched until you switch.",
             onClick = function() M.ExecuteFirstLoadDashboardAction("import_profile") end,
         },
         {
             id = "use_defaults",
-            meta = installKind == "upgrade" and "CURRENT SETUP" or "ZERO SETUP",
+            meta = installKind == "upgrade" and "CURRENT PROFILE" or "ZERO SETUP",
             timing = "Instant", icon = "gameplay",
-            title = installKind == "upgrade" and "Keep current setup" or "Play with defaults",
+            recommended = not recommendGuided,
+            title = installKind == "upgrade" and "Continue with current profile" or "Play with defaults",
             body = installKind == "upgrade"
                 and "Close onboarding and keep your current profile exactly as it is."
                 or "Close onboarding without applying or resetting anything.",
+            hint = "You can change everything later in the full settings.",
             onClick = function() M.ExecuteFirstLoadDashboardAction("use_defaults") end,
         },
     }
@@ -618,7 +641,14 @@ function M.BuildFirstLoadDashboardScene(ctx)
     footnote:SetPoint("TOP", scene, "TOP", 0, footnoteTop)
     SetTextLayout(footnote, contentWidth, "CENTER")
 
-    local sceneHeight = math.abs(footnoteTop) + 36
+    -- Closing the window without a choice keeps the scene armed; say so instead
+    -- of surprising the player when it comes back after the next open.
+    local hintTop = footnoteTop - 18
+    local hint = T.Font(scene, "GameFontDisableSmall", Tr("Pick any option to continue - this page will not show again."), T.colors.dim)
+    hint:SetPoint("TOP", scene, "TOP", 0, hintTop)
+    SetTextLayout(hint, contentWidth, "CENTER")
+
+    local sceneHeight = math.abs(hintTop) + 36
     scene:SetHeight(sceneHeight)
     ctx:SetContentHeight(sceneHeight + math.abs(sceneTop) + 24)
     return true

@@ -539,15 +539,6 @@ local function BuildProfiles(ctx)
         if text and text ~= "" then return text end
         PrintProfileMessage("|cffff0000", "Import failed (empty string).")
     end
-    local function CompletePendingFirstLoadImport()
-        local firstLoad = MSUF and MSUF.FirstLoad6
-        local state = firstLoad and type(firstLoad.GetState) == "function" and firstLoad:GetState() or nil
-        if type(state) ~= "table" or state.status ~= "active" or state.step ~= "import" then return end
-        if type(firstLoad.Complete) == "function" then
-            pcall(firstLoad.Complete, firstLoad, "import")
-        end
-        if type(M.InvalidatePage) == "function" then M.InvalidatePage("home") end
-    end
     local function ImportIntoCurrent()
         local text = ImportTextOrFail()
         if not text then return false end
@@ -562,7 +553,6 @@ local function BuildProfiles(ctx)
                 return false
             end
             if imported ~= true then return false end
-            CompletePendingFirstLoadImport()
             ClearProfileHistory()
             if _G.MSUF_ProfileIO_LastImportDeferredRuntime == true then
                 RefreshAfterProfileChange(ctx)
@@ -620,7 +610,6 @@ local function BuildProfiles(ctx)
                 RefreshAfterProfileChange(ctx)
                 return false
             end
-            CompletePendingFirstLoadImport()
             ClearProfileHistory()
             if _G.MSUF_ProfileIO_LastImportDeferredRuntime == true then
                 RefreshAfterProfileChange(ctx)

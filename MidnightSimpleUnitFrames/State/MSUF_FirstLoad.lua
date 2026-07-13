@@ -13,6 +13,7 @@ local type, tostring = type, tostring
 local time = time
 
 local REVISION = 1
+local CURRENT_PROFILE_SCHEMA = 600
 local VALID_STATUS = {
     pending = true,
     active = true,
@@ -25,11 +26,55 @@ local TERMINAL_STATUS = {
     dismissed = true,
 }
 
--- SavedVariables are available before the first addon Lua file runs. Capture this
--- before Defaults/Profiles create their normal tables. Any prior payload, including
--- a malformed one, is treated as an upgrade so existing users never enter the clean-
--- install path by accident.
-local hadSavedState = rawget(_G, "MSUF_DB") ~= nil or rawget(_G, "MSUF_GlobalDB") ~= nil
+-- SavedVariables are available before the first addon Lua file runs. Capture
+-- their untouched shape before Defaults/Profiles create or migrate anything.
+-- MSUF 5.71 and older use the same MSUF_DB/MSUF_GlobalDB names as 6.0, so this
+-- is the authoritative upgrade/profile signal.
+local rawProfileDB = rawget(_G, "MSUF_DB")
+local rawGlobalDB = rawget(_G, "MSUF_GlobalDB")
+local hadSavedState = rawProfileDB ~= nil or rawGlobalDB ~= nil
+
+local function TableHasEntries(value)
+    return type(value) == "table" and next(value) ~= nil
+end
+
+local function FirstProfile(profiles)
+    if type(profiles) ~= "table" then return nil end
+    for _, profile in pairs(profiles) do
+        if type(profile) == "table" then return profile end
+    end
+end
+
+local function DetectInstallEvidence()
+    local profiles = type(rawGlobalDB) == "table" and rawGlobalDB.profiles or nil
+    local chars = type(rawGlobalDB) == "table" and rawGlobalDB.chars or nil
+    local profile = TableHasEntries(rawProfileDB) and rawProfileDB or FirstProfile(profiles)
+    local schema = tonumber(type(profile) == "table" and profile._msufProfileSchema)
+    local hasProfile = type(profile) == "table"
+    local reason
+    if TableHasEntries(profiles) then
+        reason = schema and "saved_profiles_schema" or "legacy_saved_profiles"
+    elseif TableHasEntries(rawProfileDB) then
+        reason = schema and "saved_profile_schema" or "legacy_saved_profile"
+    elseif TableHasEntries(chars) then
+        reason = "saved_profile_bindings"
+    elseif hadSavedState then
+        reason = "saved_variables_present"
+    else
+        reason = "no_saved_variables"
+    end
+    return {
+        reason = reason,
+        hadSavedState = hadSavedState,
+        hasProfile = hasProfile,
+        profileSchema = schema,
+        legacyProfile = hasProfile and (schema == nil or schema < CURRENT_PROFILE_SCHEMA) or false,
+        rawDB = rawProfileDB ~= nil,
+        rawProfiles = TableHasEntries(profiles),
+    }
+end
+
+local installEvidence = DetectInstallEvidence()
 
 local globalDB = rawget(_G, "MSUF_GlobalDB")
 if type(globalDB) ~= "table" then
@@ -65,6 +110,10 @@ if type(state) ~= "table" or state.revision ~= REVISION then
         step = "welcome",
         firstSeenVersion = AddonVersion(),
         firstSeenAt = Now(),
+        installReason = installEvidence.reason,
+        existingProfileDetected = installEvidence.hasProfile,
+        legacyProfileDetected = installEvidence.legacyProfile,
+        detectedProfileSchema = installEvidence.profileSchema,
     }
     globalDB.global.firstLoad6 = state
 else
@@ -73,19 +122,42 @@ else
     if not VALID_STATUS[state.status] then
         state.status = "pending"
     end
+    -- A stale beta/debug lifecycle must not overrule untouched 5.71-or-older
+    -- profile data. Current 6.0 profiles carry schema 600, so this correction
+    -- is narrow and cannot turn a real new 6.0 default profile into an upgrade.
+    if state.status == "pending" and state.installKind == "fresh" and installEvidence.legacyProfile then
+        state.installKind = "upgrade"
+        state.installReason = "reclassified_" .. tostring(installEvidence.reason)
+        state.existingProfileDetected = true
+        state.legacyProfileDetected = true
+        state.detectedProfileSchema = installEvidence.profileSchema
+    end
     if type(state.step) ~= "string" or state.step == "" then
         state.step = "welcome"
     end
     if type(state.firstSeenVersion) ~= "string" or state.firstSeenVersion == "" then
         state.firstSeenVersion = AddonVersion()
     end
+    if type(state.installReason) ~= "string" or state.installReason == "" then
+        state.installReason = state.installKind == "upgrade" and installEvidence.reason or "persisted_fresh_install"
+    end
+    if state.existingProfileDetected == nil and state.installKind == "upgrade" then
+        state.existingProfileDetected = installEvidence.hasProfile
+    end
+    if state.legacyProfileDetected == nil and state.installKind == "upgrade" then
+        state.legacyProfileDetected = installEvidence.legacyProfile
+    end
+    if state.detectedProfileSchema == nil and state.installKind == "upgrade" then
+        state.detectedProfileSchema = installEvidence.profileSchema
+    end
 end
 
 local FirstLoad = MSUF.FirstLoad6 or {}
 MSUF.FirstLoad6 = FirstLoad
 
--- Session-only by design. "Not now" hides the scene until the next reload but
--- remains pending account-wide so it can be offered again later.
+-- Session-only guard on top of the persisted status. It keeps the scene hidden
+-- for the rest of this session even if the persisted status is restored to
+-- "pending" (for example by an Assistant undo of a first-load action).
 FirstLoad.deferredThisSession = false
 
 function FirstLoad:GetState()
@@ -96,6 +168,18 @@ function FirstLoad:GetInstallKind()
     return state.installKind
 end
 
+function FirstLoad:GetDetection()
+    return {
+        installKind = state.installKind,
+        reason = state.installReason,
+        existingProfile = state.existingProfileDetected == true,
+        legacyProfile = state.legacyProfileDetected == true,
+        profileSchema = state.detectedProfileSchema,
+        rawDB = installEvidence.rawDB,
+        rawProfiles = installEvidence.rawProfiles,
+    }
+end
+
 function FirstLoad:IsTerminal()
     return TERMINAL_STATUS[state.status] == true
 end
@@ -104,15 +188,25 @@ function FirstLoad:ShouldShowDashboard()
     if self.deferredThisSession then
         return false
     end
-    -- Once the full guided setup owns the flow, reopening /msuf must resume
-    -- the tour rather than sending the player back to the welcome decision.
-    if state.status == "active" and state.step == "guided_tour" then
-        local tour = MSUF and MSUF.GuidedTour6
-        if type(tour) == "table" and type(tour.IsActive) == "function" and tour:IsActive() then
-            return false
-        end
+    -- Successful imports persist an independent receipt so the welcome cannot
+    -- reappear if an older/stale lifecycle table survived the profile switch.
+    -- Fresh installs that already have a named active profile predate that
+    -- receipt; treat that explicit setup choice as completed as well.
+    local activeProfile = rawget(_G, "MSUF_ActiveProfile")
+    local importReceipt = globalDB.global.firstLoad6ProfileImported == true
+    local recoveredNamedProfile = state.status == "pending"
+        and state.installKind == "fresh"
+        and type(activeProfile) == "string"
+        and activeProfile ~= ""
+        and activeProfile ~= "Default"
+    if importReceipt or recoveredNamedProfile then
+        self:CompleteProfileImport(recoveredNamedProfile and "import_recovered" or "import")
     end
-    return state.status == "pending" or state.status == "active" or state.status == "later"
+    -- Any explicit route choice (guided tour, import, defaults, changelog,
+    -- "not now", full settings) moves the status away from "pending" and
+    -- retires this one-time welcome scene for good. The normal Dashboard keeps
+    -- its own Guided Setup entry point, so nothing is lost permanently.
+    return state.status == "pending"
 end
 
 local function Transition(status, step)
@@ -149,8 +243,46 @@ function FirstLoad:Complete(step)
     return Transition("completed", step or "defaults")
 end
 
+-- A player can import from the Profiles page without first choosing the import
+-- card on the welcome scene. Treat that successful direct import as the same
+-- explicit setup choice, but do not interrupt an unrelated active guided tour.
+function FirstLoad:CompleteProfileImport(step)
+    globalDB.global.firstLoad6ProfileImported = true
+    if self:IsTerminal() then return false, state.status end
+    if state.status ~= "pending" and not (state.status == "active" and state.step == "import") then
+        return false, state.status
+    end
+    return self:Complete(step or "import")
+end
+
 function FirstLoad:Dismiss(step)
     self.deferredThisSession = false
     state.dismissedAt = Now()
     return Transition("dismissed", step or "full_settings")
+end
+
+--- Testing/preview helper (`/msuf firstload`): re-arms the one-time welcome
+--- scene as if the addon had just been installed, optionally forcing the
+--- fresh or upgrade variant. Deliberately bypasses the terminal-status guard.
+function FirstLoad:Reset(installKind)
+    if installKind ~= "fresh" and installKind ~= "upgrade" then
+        installKind = state.installKind
+    end
+    state = {
+        schema = 1,
+        revision = REVISION,
+        installKind = installKind == "fresh" and "fresh" or "upgrade",
+        status = "pending",
+        step = "welcome",
+        firstSeenVersion = AddonVersion(),
+        firstSeenAt = Now(),
+        installReason = installKind == "upgrade" and "debug_forced_upgrade" or "debug_forced_fresh",
+        existingProfileDetected = installKind == "upgrade" and installEvidence.hasProfile or false,
+        legacyProfileDetected = installKind == "upgrade" and installEvidence.legacyProfile or false,
+        detectedProfileSchema = installKind == "upgrade" and installEvidence.profileSchema or nil,
+    }
+    globalDB.global.firstLoad6 = state
+    globalDB.global.firstLoad6ProfileImported = nil
+    self.deferredThisSession = false
+    return true
 end

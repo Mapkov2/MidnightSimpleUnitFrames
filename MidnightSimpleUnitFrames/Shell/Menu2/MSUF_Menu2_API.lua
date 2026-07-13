@@ -140,6 +140,39 @@ SlashCmdList["MSUF2OPTIONS"] = function(msg)
         end
         return
     end
+    if cmd == "firstload" then
+        local firstLoad = MSUF and MSUF.FirstLoad6
+        if type(firstLoad) ~= "table" or type(firstLoad.Reset) ~= "function" then
+            print("|cff00b7ebMSUF|r: First-load module is not loaded.")
+            return
+        end
+        local arg = msg:match("^%S+%s+(%S+)") or ""
+        if arg == "status" then
+            local shows = type(firstLoad.ShouldShowDashboard) == "function" and firstLoad:ShouldShowDashboard()
+            local state = type(firstLoad.GetState) == "function" and firstLoad:GetState() or {}
+            local detection = type(firstLoad.GetDetection) == "function" and firstLoad:GetDetection() or {}
+            print(string.format("|cff00b7ebMSUF|r first-load: status=%s step=%s install=%s shows=%s reason=%s profile=%s legacy=%s schema=%s rawDB=%s rawProfiles=%s",
+                tostring(state.status), tostring(state.step), tostring(state.installKind),
+                tostring(shows), tostring(detection.reason), tostring(detection.existingProfile),
+                tostring(detection.legacyProfile), tostring(detection.profileSchema or "none"),
+                tostring(detection.rawDB), tostring(detection.rawProfiles)))
+            return
+        end
+        if arg ~= "" and arg ~= "fresh" and arg ~= "upgrade" then
+            print("|cff00b7ebMSUF|r: Usage: /msuf firstload [fresh|upgrade|status]")
+            return
+        end
+        if M.BlockCombatAction and M.BlockCombatAction() then return end
+        -- A clean preview also needs the guided tour parked, otherwise an
+        -- active tour would take over the next menu open.
+        local tour = MSUF and MSUF.GuidedTour6
+        if type(tour) == "table" and type(tour.Reset) == "function" then tour:Reset() end
+        firstLoad:Reset(arg ~= "" and arg or nil)
+        if type(M.InvalidatePage) == "function" then M.InvalidatePage("home") end
+        M.Open("home")
+        print("|cff00b7ebMSUF|r: First-start welcome re-armed (" .. tostring(firstLoad:GetInstallKind()) .. "). Guided-tour progress was reset.")
+        return
+    end
     if cmd == "help" or cmd == "reset" or cmd == "fullreset" or cmd == "absorb" or cmd == "analytics" then
         if cmd ~= "help" and M.BlockCombatAction and M.BlockCombatAction() then return end
         if _G.SlashCmdList and type(_G.SlashCmdList["MIDNIGHTSUF"]) == "function" then _G.SlashCmdList["MIDNIGHTSUF"](msg) end

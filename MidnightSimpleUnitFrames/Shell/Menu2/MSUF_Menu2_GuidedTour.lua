@@ -158,16 +158,23 @@ local function PersonalizedTitle(stage)
     return Tr(stage.title)
 end
 
+local function ControlIsAction(control)
+    return control and (control.classification == "action" or control.kind == "button")
+end
+
 local function StageCue(stage, position)
     local section = position and position.section
     local control = position and position.control
     if control then
+        local label = Tr(control.label)
         local help = tostring(control.help or ""):gsub("^%s+", ""):gsub("%s+$", "")
-        if help ~= "" then return Tr(help) end
-        if control.classification == "action" or control.kind == "button" then
-            return Tr("Try this action now, or keep it untouched and continue.")
+        if help ~= "" then
+            return format(Tr("The green arrow points to %s: %s"), label, Tr(help))
         end
-        return Tr("Adjust this option live, keep its current/default value, or skip it with a clear warning.")
+        if ControlIsAction(control) then
+            return format(Tr("The green arrow points to %s; use this action now or keep it untouched and continue."), label)
+        end
+        return format(Tr("The green arrow points to %s; adjust this option live, keep its current/default value, or skip it."), label)
     end
     local sectionId = section and (tostring(section.id or "") .. " " .. tostring(section.label or "")):lower() or ""
     if section then
@@ -569,24 +576,32 @@ local function EmphasizeControl(stage, section, controls, current)
         end
     end
 
-    local parent = section.outer
     local T = M.Theme
-    if parent and type(parent.CreateTexture) == "function" and T then
-        local marker = section.entry and section.entry._msuf2GuidedControlArrow
+    if type(CreateFrame) == "function" and T then
+        local marker = Runtime.controlMarker
         if not marker then
-            marker = parent:CreateTexture(nil, "OVERLAY", nil, 7)
-            local usedAtlas = false
-            if type(marker.SetAtlas) == "function" then
-                usedAtlas = pcall(marker.SetAtlas, marker, "NPE_ArrowRight", false)
-            end
-            if not usedAtlas and T.media then marker:SetTexture(T.media.collapseArrow) end
+            marker = CreateFrame("Frame", nil, selectedWidget)
             marker:SetSize(18, 18)
-            if section.entry then section.entry._msuf2GuidedControlArrow = marker end
+            local texture = marker:CreateTexture(nil, "OVERLAY", nil, 7)
+            texture:SetAllPoints()
+            local usedAtlas = false
+            if type(texture.SetAtlas) == "function" then
+                usedAtlas = pcall(texture.SetAtlas, texture, "NPE_ArrowRight", false)
+            end
+            if not usedAtlas and T.media then texture:SetTexture(T.media.collapseArrow) end
+            marker._msuf2Texture = texture
+            Runtime.controlMarker = marker
+        else
+            marker:SetParent(selectedWidget)
         end
         marker:ClearAllPoints()
         marker:SetPoint("RIGHT", selectedWidget, "LEFT", -3, 0)
+        if type(marker.SetFrameLevel) == "function" and type(selectedWidget.GetFrameLevel) == "function" then
+            marker:SetFrameLevel(selectedWidget:GetFrameLevel() + 8)
+        end
         local color = T.colors and T.colors.accent
-        if color then marker:SetVertexColor(color[1], color[2], color[3], 1) end
+        local texture = marker._msuf2Texture
+        if color and texture then texture:SetVertexColor(color[1], color[2], color[3], 1) end
         marker:Show()
         Runtime.controlEmphasis[#Runtime.controlEmphasis + 1] = { marker = marker }
         if type(T.PlayMotion) == "function" then
@@ -737,20 +752,62 @@ local function FocusGuidedWidget(widget, fallback, flash)
     local outer = widget or fallback
     local scroll = M.scrollFrame
     local child = M.scrollChild
-    local function FinishFocus()
-        if outer and scroll and child and outer.GetTop and child.GetTop and scroll.SetVerticalScroll then
-            local childTop, outerTop = child:GetTop(), outer:GetTop()
-            if childTop and outerTop then
-                scroll:SetVerticalScroll(max(0, floor((childTop - outerTop) + 0.5) - 12))
+    Runtime.focusRequest = (tonumber(Runtime.focusRequest) or 0) + 1
+    local request = Runtime.focusRequest
+    local function FinishFocus(pass)
+        if request ~= Runtime.focusRequest then return end
+        if type(M.RefreshPinnedPreviews) == "function" then M.RefreshPinnedPreviews(scroll) end
+        if outer and scroll and child
+            and outer.GetTop and scroll.GetTop and scroll.GetBottom
+            and scroll.GetVerticalScroll and scroll.SetVerticalScroll
+        then
+            local outerTop = outer:GetTop()
+            local scrollTop, scrollBottom = scroll:GetTop(), scroll:GetBottom()
+            if outerTop and scrollTop and scrollBottom then
+                local visibleTop = scrollTop
+                local activePreview = scroll._msuf2PinnedPreviewActiveRecord
+                local preview = activePreview and activePreview.box
+                local targetInsidePreview = preview and IsWidgetInside(outer, preview)
+                if preview and preview._msuf2PinnedFloating == true
+                    and (not preview.IsShown or preview:IsShown())
+                    and preview.GetBottom
+                then
+                    local previewBottom = preview:GetBottom()
+                    if previewBottom and previewBottom < visibleTop and previewBottom > scrollBottom then
+                        visibleTop = previewBottom
+                    end
+                end
+                if not targetInsidePreview then
+                    -- Leave enough room above a control to keep its section
+                    -- heading visible; section-only steps can sit nearer the top.
+                    local topInset = widget and 52 or 16
+                    local desiredTop = max(scrollBottom + 32, visibleTop - topInset)
+                    local current = tonumber(scroll:GetVerticalScroll()) or 0
+                    local childHeight = tonumber(child.GetHeight and child:GetHeight()) or 0
+                    local scrollHeight = tonumber(scroll.GetHeight and scroll:GetHeight()) or 0
+                    local maxScroll = max(0, childHeight - scrollHeight)
+                    local target = min(max(current + (desiredTop - outerTop), 0), maxScroll)
+                    if math.abs(target - current) >= 1 then scroll:SetVerticalScroll(floor(target + 0.5)) end
+                end
                 if scroll._msuf2RefreshScrollBar then scroll:_msuf2RefreshScrollBar() end
             end
         end
         local T = M.Theme
-        if flash and outer and T and type(T.PlayNeonFlash) == "function" and type(outer.CreateTexture) == "function" then
+        if pass == 1 and flash and outer and T and type(T.PlayNeonFlash) == "function" and type(outer.CreateTexture) == "function" then
             T.PlayNeonFlash(outer, "info", { alpha = 0.18, duration = 0.52 })
         end
+        -- The first scroll can activate or resize a pinned Preview. Re-run on
+        -- the settled geometry so the target lands below that overlay.
+        if pass == 1 and C_Timer and type(C_Timer.After) == "function" then
+            C_Timer.After(0, function() FinishFocus(2) end)
+        end
     end
-    if C_Timer and type(C_Timer.After) == "function" then C_Timer.After(0, FinishFocus) else FinishFocus() end
+    if C_Timer and type(C_Timer.After) == "function" then
+        C_Timer.After(0, function() FinishFocus(1) end)
+    else
+        FinishFocus(1)
+        FinishFocus(2)
+    end
 end
 
 local function FocusCurrentSection(stage)
@@ -886,6 +943,7 @@ end
 local function KeepLabel(stage, position)
     if stage.special then return "Keep as is" end
     if position.overview then return "Keep current" end
+    if ControlIsAction(position.control) then return "Keep action" end
     if position.control then return "Keep option" end
     return "Keep section"
 end
@@ -1324,7 +1382,11 @@ function M.RefreshGuidedTourChrome(reason)
             local controls = AllStageControls(stage, position.sections)
             chrome.section:SetText(format(Tr("Overview · %d sections · %d options"), #position.sections, #controls))
         elseif position.control then
-            chrome.section:SetText(format(Tr("Section %d / %d · Option %d / %d · %s"), position.index, #position.sections, position.controlIndex, #position.controls, Tr(position.control.label)))
+            if ControlIsAction(position.control) then
+                chrome.section:SetText(format(Tr("Section %d / %d · Action %d / %d · %s"), position.index, #position.sections, position.controlIndex, #position.controls, Tr(position.control.label)))
+            else
+                chrome.section:SetText(format(Tr("Section %d / %d · Option %d / %d · %s"), position.index, #position.sections, position.controlIndex, #position.controls, Tr(position.control.label)))
+            end
         elseif position.section then
             chrome.section:SetText(format(Tr("Section %d / %d · %s · %d options"), position.index, #position.sections, Tr(position.section.label), #position.controls))
         end
@@ -1370,6 +1432,12 @@ function M.RefreshGuidedTourChrome(reason)
     end
     SetButtonEnabled(chrome.pause, true)
     chrome:Show()
+    if (reason == "HOST_SIZE" or reason == "WINDOW_RESIZE")
+        and not profileMismatch and not manualAway
+        and not stage.special and not position.overview and position.section
+    then
+        FocusGuidedWidget(position.control and position.control.widget, position.section.outer, false)
+    end
     local signature = table.concat({ stage.id, position.section and position.section.id or "overview", position.control and position.control.id or "section", profileMismatch and "profile" or (warning and "warning" or "normal"), manualAway and "away" or "guided" }, "\031")
     PlayChromeTransition(chrome, signature, reason)
     return true
