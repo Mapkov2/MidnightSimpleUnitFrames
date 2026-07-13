@@ -4747,7 +4747,8 @@ local function PendingResultDecisionLine(index, item)
     local page = PendingResultPageLabel(item)
     local kind
     if item.setting then
-        kind = tostring(item.setting.type or "setting") .. " setting"
+        kind = type(A.DisplaySettingControl) == "function"
+            and A.DisplaySettingControl(item.setting, "noun") or "MSUF option"
     elseif item.action then
         kind = "Assistant task"
     elseif item.kind == "page" or item.page then
@@ -7818,6 +7819,12 @@ function AP.TryImmediateMutationResult(text, opts)
     if type(normalize) ~= "function" then return nil end
     local normalized = normalize(text)
     if normalized == "" then return nil end
+    local routePrivate = A.RouterPrivate
+    if routePrivate and type(routePrivate.IncompleteMovementSubject) == "function"
+        and routePrivate.IncompleteMovementSubject(text)
+    then
+        return nil
+    end
     local ctx = A.GetContext and A.GetContext() or {}
     local auraFilteringIntent = type(parser.LooksLikeAuraFilteringConversation) == "function"
         and parser.LooksLikeAuraFilteringConversation(normalized, ctx)

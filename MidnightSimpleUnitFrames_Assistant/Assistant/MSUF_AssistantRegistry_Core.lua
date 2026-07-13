@@ -279,6 +279,62 @@ function A.DisplaySettingLabel(setting)
     return DisplayScopedKeyLabel(setting and setting.key or label)
 end
 
+local SETTING_CONTROL_NOUNS = {
+    boolean = "on/off option",
+    enum = "choice control",
+    number = "number control",
+    color = "color control",
+}
+
+local function StringSettingControlNoun(setting)
+    local presentation = tostring(setting and setting.presentationKind or ""):lower()
+    if presentation ~= "" then return presentation end
+
+    local mediaType = tostring(setting and setting.mediaType or ""):lower()
+    local resolver = A.MediaResolver
+    if mediaType == "" and resolver and type(resolver.MediaTypeForSetting) == "function" then
+        local ok, resolved = pcall(resolver.MediaTypeForSetting, setting)
+        if ok then mediaType = tostring(resolved or ""):lower() end
+    end
+    if mediaType:find("font", 1, true) then return "font choice" end
+    if mediaType:find("texture", 1, true) or mediaType:find("statusbar", 1, true) then return "texture choice" end
+
+    local hint = table.concat({
+        tostring(setting and setting.key or ""),
+        tostring(setting and setting.label or ""),
+        tostring(setting and setting.category or ""),
+        tostring(setting and (setting.description or setting.summary) or ""),
+    }, " "):lower()
+    if hint:find("anchor frame", 1, true) or hint:find("frame name", 1, true) then return "frame name" end
+    if hint:find("custom icon", 1, true) then return "custom icon" end
+    if hint:find("texture", 1, true) then return "texture choice" end
+    if hint:find("font", 1, true) and not hint:find("text", 1, true) then return "font choice" end
+    if hint:find("style", 1, true) or hint:find("icon pack", 1, true)
+        or hint:find("icon set", 1, true) or hint:find("preset", 1, true)
+        or hint:find("media list", 1, true)
+    then
+        return "style choice"
+    end
+    return "text or named value"
+end
+
+-- Registry types stay machine-readable for parsing and validation. This helper
+-- is the only presentation layer for those types, so conversational output
+-- never asks a player to understand implementation words such as "enum" or
+-- assumes that every string-backed option is a free-text box.
+function A.DisplaySettingControl(settingOrType, form)
+    local setting = type(settingOrType) == "table" and settingOrType or { type = settingOrType }
+    local controlType = tostring(setting.type or "setting")
+    local noun = SETTING_CONTROL_NOUNS[controlType]
+        or (controlType == "string" and StringSettingControlNoun(setting))
+        or "MSUF option"
+    if form == "article" then
+        local first = noun:sub(1, 1):lower()
+        return (first:match("[aeiou]") and "an " or "a ") .. noun
+    end
+    return noun
+end
+
 function A.DisplaySettingValueLabel(setting, valueLabel, fallbackLabel)
     local label = A.DisplaySettingLabel(setting)
     if label == nil or tostring(label) == "" then label = fallbackLabel or "MSUF option" end
