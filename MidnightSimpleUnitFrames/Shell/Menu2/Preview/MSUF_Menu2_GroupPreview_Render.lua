@@ -1563,7 +1563,7 @@ function Render.Install(box, ctx, deps)
         end
         local hpDelimiter = runtimeText.healthDelimiter or conf.textDelimiter or " - "
         local function PreviewHealthText(mode, hidePercentSymbol)
-            if gf and gf.FormatHealthText then return gf.FormatHealthText(mode, fakeHP, fakeMax, hpDelimiter, false, nil, hidePercentSymbol) end
+            if gf and gf.FormatHealthText then return gf.FormatHealthText(mode, fakeHP, fakeMax, hpDelimiter, false, nil, hidePercentSymbol, runtimeText.healthShortNumbers == true or (runtimeText.healthShortNumbers == nil and conf.hpFullValueShort ~= false)) end
             return mode == "PERCENT" and (hidePercentSymbol and "72" or "72%") or "720k"
         end
         PaintPreviewText(mock._hpLeftFS, hpSize, hpLeftMode, "LEFT", "LEFT",
