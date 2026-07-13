@@ -67,9 +67,6 @@ local COLD_APPLY_REASONS = {
     MSUF_ELEMENT_REFRESH = true,
 }
 
-local RefreshAppliedNativeRoot
-local EnsureNativeAuraRefreshDriver
-local ApplyLane
 local NormalizeAuraSortMethod, AuraSortEnums, AuraSortSignature
 
 local MANAGED_UNITS = {
@@ -1867,6 +1864,15 @@ local function BuildAuraDurationFormatter(lane)
     return formatter
 end
 
+-- Keep the native container backend in its own lexical factory. The compiler
+-- and public orchestration below retain direct local aliases to the handful of
+-- hot entry points they use, while the backend's implementation locals no
+-- longer consume the main chunk's hard 200-local budget.
+local NativeRuntime = (function()
+local RefreshAppliedNativeRoot
+local EnsureNativeAuraRefreshDriver
+local ApplyLane
+
 -- Reusable options table for SetDurationText. Blizzard securecopies options on
 -- each call, so a single mutated table is safe across buttons and avoids per-button
 -- garbage; we only ever set cold-path formatter references on it.
@@ -1938,6 +1944,9 @@ local PTR4_AURA_CONTAINER_METHODS = {
     "SetAuraGroupMaxFrameCount",
     "SetAuraGroupCandidateFilters",
     "SetAuraGroupSortMethod",
+    "SetAuraLayoutAnchorPoint",
+    "SetAuraLayoutGrowthDirection",
+    "SetAuraLayoutRowWidth",
     "AddAuraSlot",
     "SetAuraSlotCandidateFilters",
     "AddItemEnchantment",
@@ -2168,7 +2177,7 @@ local function GetDispelSensorRootConfig(cfg)
     return cached
 end
 
-function A3._AuraAnchorOffset(anchor, width, height)
+local function AuraAnchorOffset(anchor, width, height)
     anchor = anchor or "TOPLEFT"
     if anchor == "TOP" then return width * 0.5, 0 end
     if anchor == "TOPRIGHT" then return width, 0 end
@@ -2199,8 +2208,8 @@ local function LayoutButton(button, lane, index)
     if parent and parent._msufA3SharedAuraGroups == true then
         local anchor = lane.anchor or lane.initialAnchor or "TOPLEFT"
         local initialAnchor = lane.initialAnchor or "TOPLEFT"
-        local ax, ay = A3._AuraAnchorOffset(anchor, lane.width or lane.size or 1, lane.height or lane.size or 1)
-        local ix, iy = A3._AuraAnchorOffset(initialAnchor, lane.width or lane.size or 1, lane.height or lane.size or 1)
+        local ax, ay = AuraAnchorOffset(anchor, lane.width or lane.size or 1, lane.height or lane.size or 1)
+        local ix, iy = AuraAnchorOffset(initialAnchor, lane.width or lane.size or 1, lane.height or lane.size or 1)
         button:SetPoint(initialAnchor, parent, anchor, (lane.x or 0) + (ix - ax) + x, (lane.y or 0) + (iy - ay) + y)
     else
         button:SetPoint(lane.initialAnchor or "TOPLEFT", parent, lane.initialAnchor or "TOPLEFT", x, y)
@@ -2327,6 +2336,61 @@ local function SyncButtonGeometry(button, lane, index)
     return true
 end
 
+local function LayoutVerticalAuraContainer(container, lane)
+    local group = container and container._msufA3ManagedAuraGroup
+    if not group and container then
+        group = container:GetAuraGroup(container._msufA3ManagedGroupKey)
+        container._msufA3ManagedAuraGroup = group
+    end
+    -- The AuraGroup is stable for the container lifetime; framesByIndex is not
+    -- and must be read after every Blizzard assignment/reorder.
+    local frames = group and group:GetFramesByIndex() or nil
+    if type(frames) ~= "table" then return false end
+    local count = #frames
+    local perColumn = math_max(lane.perRow or 1, 1)
+    local step = lane.step or lane.size or 1
+    local stepX = step * (lane.xSign or 1)
+    local stepY = step * (lane.ySign or -1)
+    local initialAnchor = lane.initialAnchor or "TOPLEFT"
+    for index = 1, count do
+        local button = frames[index]
+        if button then
+            -- Blizzard has already refreshed/ordered the active frame list. The
+            -- vertical-only fallback changes points and nothing else: no DB,
+            -- aura payload, font, cooldown, or visual work on UNIT_AURA churn.
+            local n = index - 1
+            button:ClearAllPoints()
+            button:SetPoint(initialAnchor, container, initialAnchor,
+                math_floor(n / perColumn) * stepX, (n % perColumn) * stepY)
+        end
+    end
+    local rows = math_min(count, perColumn)
+    local cols = count > 0 and math_floor((count + perColumn - 1) / perColumn) or 1
+    local size = lane.size or 1
+    local spacing = lane.spacing or 0
+    container:SetSize(
+        math_max(1, cols * size + math_max(cols - 1, 0) * spacing),
+        math_max(1, rows * size + math_max(rows - 1, 0) * spacing)
+    )
+    return count > 0
+end
+
+local function ApplyVerticalAwareAuraLayout(container)
+    local lane = container and container._msufA3NativeLaneConfig
+    if lane and lane.verticalGrowth == true then
+        return LayoutVerticalAuraContainer(container, lane)
+    end
+    local original = container and container._msufA3OriginalVerticalApplyLayout
+    if type(original) == "function" then return original(container) end
+end
+
+local function InstallVerticalAuraLayoutFallback(container)
+    if not container or container._msufA3VerticalLayoutInstalled == true then return end
+    container._msufA3VerticalLayoutInstalled = true
+    container._msufA3OriginalVerticalApplyLayout = container.ApplyLayout
+    container.ApplyLayout = ApplyVerticalAwareAuraLayout
+end
+
 local function SyncContainerGeometry(container, lane, parentFrame)
     if not (container and lane) then return false end
     parentFrame = parentFrame or container._msufA3ParentFrame or container:GetParent()
@@ -2357,6 +2421,20 @@ local function SyncContainerGeometry(container, lane, parentFrame)
     end
     container._msufA3GeomSig = sig
     container._msufA3GeomParent = parentFrame
+    -- 12.1 moved anchor/growth/wrapping from SetAuraGroupLayout to container-
+    -- level setters. Keep those secure/native decisions in this signature-
+    -- guarded cold path so Blizzard's ApplyLayout cannot restore its
+    -- TOPLEFT/right/down defaults after aura assignment churn.
+    local initialAnchor = lane.initialAnchor or "TOPLEFT"
+    container:SetAuraLayoutAnchorPoint(initialAnchor)
+    container:SetAuraLayoutGrowthDirection(lane.xSign or 1, lane.ySign or -1)
+    container:SetAuraLayoutRowWidth(lane.width or lane.size or 1)
+    if lane.verticalGrowth == true then
+        -- Native flow is row-major only. UP/DOWN lanes need a column-major
+        -- placement pass, installed once and delegated back to native layout if
+        -- the same container later switches to a horizontal growth mode.
+        InstallVerticalAuraLayoutFallback(container)
+    end
     container.createdButtons = lane.max
     container:SetSize(lane.width, lane.height)
     if parentFrame then
@@ -3969,6 +4047,50 @@ local function RootCanReuseContainersForConfig(root, cfg)
     return true
 end
 
+local function CreateClassPowerAuraSensor(parent, key, spellIDs, initializeFrame)
+    if not (parent and type(spellIDs) == "table" and type(initializeFrame) == "function") then return nil end
+    if not EnsureBlizzardAuraContainerLoaded() then return nil end
+
+    local container = CreateNativeAuraContainer(parent)
+    if not container then return nil end
+    ConfigurePTR4AuraContainer(container, "player")
+    container:AddAuraSlot(tostring(key or "msuf_classpower"), "HELPFUL", {
+        maxFrameCount = 1,
+        candidateFilters = { includeSpellIDs = spellIDs },
+        initializeFrame = initializeFrame,
+    })
+    if not RegisterNativeContainer(container) then
+        container:Hide()
+        return nil
+    end
+    container:Show()
+    return container
+end
+
+return {
+    ApplyConfig = ApplyConfig,
+    HideState = HideState,
+    EnsureRoot = EnsureRoot,
+    EnsureRefreshDriver = EnsureNativeAuraRefreshDriver,
+    RootConfigIsCurrent = RootAppliedConfigIsCurrent,
+    FrameConfigIsCurrent = FrameAppliedConfigIsCurrent,
+    CanReuseContainers = RootCanReuseContainersForConfig,
+    ReasonRequiresApply = ReasonRequiresAuraApply,
+    CreateClassPowerAuraSensor = CreateClassPowerAuraSensor,
+}
+end)()
+
+-- Direct local aliases keep public/runtime calls on the same fast upvalue path
+-- as before the lexical split; the table is only the one-time factory boundary.
+local ApplyConfig = NativeRuntime.ApplyConfig
+local HideState = NativeRuntime.HideState
+local EnsureRoot = NativeRuntime.EnsureRoot
+local EnsureNativeAuraRefreshDriver = NativeRuntime.EnsureRefreshDriver
+local RootAppliedConfigIsCurrent = NativeRuntime.RootConfigIsCurrent
+local FrameAppliedConfigIsCurrent = NativeRuntime.FrameConfigIsCurrent
+local RootCanReuseContainersForConfig = NativeRuntime.CanReuseContainers
+local ReasonRequiresAuraApply = NativeRuntime.ReasonRequiresApply
+
 function A3.SetUnitFrameOwner(unit, frame, owns)
     if not unit then return end
     A3._unitFrameOwners = A3._unitFrameOwners or {}
@@ -4352,25 +4474,7 @@ end
 --- Narrow ClassPower bridge for secret player auras. AuraContainer retains
 --- ownership of UNIT_AURA parsing and binds protected values directly to its
 --- regions; callers only configure the frame once.
-function A3.CreateClassPowerAuraSensor(parent, key, spellIDs, initializeFrame)
-    if not (parent and type(spellIDs) == "table" and type(initializeFrame) == "function") then return nil end
-    if not EnsureBlizzardAuraContainerLoaded() then return nil end
-
-    local container = CreateNativeAuraContainer(parent)
-    if not container then return nil end
-    ConfigurePTR4AuraContainer(container, "player")
-    container:AddAuraSlot(tostring(key or "msuf_classpower"), "HELPFUL", {
-        maxFrameCount = 1,
-        candidateFilters = { includeSpellIDs = spellIDs },
-        initializeFrame = initializeFrame,
-    })
-    if not RegisterNativeContainer(container) then
-        container:Hide()
-        return nil
-    end
-    container:Show()
-    return container
-end
+A3.CreateClassPowerAuraSensor = NativeRuntime.CreateClassPowerAuraSensor
 
 -- AuraContainer owns UNIT_AURA and per-aura churn. Do not add an MSUF UNIT_AURA
 -- scanner here; target/focus identity refresh is handled by the coalesced
