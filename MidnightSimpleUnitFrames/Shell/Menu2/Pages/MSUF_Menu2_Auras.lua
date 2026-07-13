@@ -23,6 +23,14 @@ local AURA_PREVIEW_EDGE_OPTS = { linesKey = "edge", maxEdgeSize = 1, texture = T
 local floor, ceil, max, min, abs = math.floor, math.ceil, math.max, math.min, math.abs
 local tonumber, tostring, type, ipairs, pairs = tonumber, tostring, type, ipairs, pairs
 local table_concat = table.concat
+local AccessibleNumber = M.AccessibleNumber or function(value, fallback)
+    fallback = tonumber(fallback) or 0
+    local canaccessvalue = _G.canaccessvalue
+    if type(canaccessvalue) == "function" and canaccessvalue(value) ~= true then return fallback end
+    local issecretvalue = _G.issecretvalue
+    if type(issecretvalue) == "function" and issecretvalue(value) == true then return fallback end
+    return tonumber(value) or fallback
+end
 local AURA_SCOPE_VALUES = VTP "shared=Shared|player=Player|target=Target|focus=Focus|boss=Boss|party=Party|raid=Raid / Mythic"
 local AURA_SCOPE_LABELS = { shared = "Shared", player = "Player", target = "Target", focus = "Focus", boss = "Boss", party = "Party", raid = "Raid / Mythic" }
 local AURA_SCOPE_VALID = M.KeySetFromWords "shared player target focus boss party raid"
@@ -228,15 +236,15 @@ local function RestoreAuraPageScroll(offset, key, serial)
     if serial and serial ~= auraScrollRestoreSerial then return end
     local scroll = M.scrollFrame
     if not (scroll and scroll.SetVerticalScroll) then return end
-    local range = scroll.GetVerticalScrollRange and scroll:GetVerticalScrollRange() or offset
-    local value = min(max(tonumber(offset) or 0, 0), max(tonumber(range) or 0, 0))
-    scroll:SetVerticalScroll(value)
+    -- The themed setter already clamps against its accessible cached range.
+    -- Avoid GetVerticalScrollRange here: Midnight may return a secret number.
+    scroll:SetVerticalScroll(AccessibleNumber(offset, 0))
     if M.RefreshPinnedPreviews then M.RefreshPinnedPreviews(scroll) end
 end
 local function Rebuild(ctx)
     local key = (ctx and ctx.key) or M.activeKey or "auras3"
     if M.InvalidatePage and M.SelectPage and M.frame and M.frame.IsShown and M.frame:IsShown() then
-        local scrollOffset = M.scrollFrame and M.scrollFrame.GetVerticalScroll and M.scrollFrame:GetVerticalScroll() or 0
+        local scrollOffset = AccessibleNumber(M.scrollFrame and M.scrollFrame.GetVerticalScroll and M.scrollFrame:GetVerticalScroll() or 0, 0)
         auraScrollRestoreSerial = auraScrollRestoreSerial + 1
         local restoreSerial = auraScrollRestoreSerial
         M.InvalidatePage(key)
@@ -290,8 +298,8 @@ end
 local function HandleNestedScrollWheel(scrollFrame, delta, step)
     delta = tonumber(delta) or 0
     if delta == 0 or not scrollFrame then return end
-    local range = scrollFrame.GetVerticalScrollRange and scrollFrame:GetVerticalScrollRange() or 0
-    local current = scrollFrame.GetVerticalScroll and scrollFrame:GetVerticalScroll() or 0
+    local range = AccessibleNumber(scrollFrame.GetVerticalScrollRange and scrollFrame:GetVerticalScrollRange() or 0, 0)
+    local current = AccessibleNumber(scrollFrame.GetVerticalScroll and scrollFrame:GetVerticalScroll() or 0, 0)
     local leavingTop = delta > 0 and current <= 0.01
     local leavingBottom = delta < 0 and current >= range - 0.01
     if range <= 0 or leavingTop or leavingBottom then

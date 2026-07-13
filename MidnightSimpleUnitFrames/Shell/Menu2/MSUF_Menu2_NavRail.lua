@@ -326,7 +326,7 @@ end
 local function CreateHistoryControls(parent)
     local row = CreateFrame("Frame", nil, parent)
     local rowW = NavItemWidth(0)
-    row:SetSize(rowW, 44)
+    row:SetSize(rowW, 60)
     local buttonGap = 6
     local buttonW = floor((rowW - buttonGap) * 0.5)
     local function StyleHistoryButton(btn, label, texture)
@@ -394,10 +394,25 @@ local function CreateHistoryControls(parent)
         local s = M.GetHistoryState and M.GetHistoryState() or {}
         return s.redoLabel and ("Redo: " .. ShortLabel(s.redoLabel, 28)) or "Redo"
     end, function() return HistoryTooltipText("redo") end)
+    local function HistorySummaryText(label, count)
+        if not label then return "" end
+        count = tonumber(count) or 0
+        return (count > 1 and ("[" .. tostring(count) .. "] ") or "") .. ShortLabel(label, count > 1 and 15 or 18)
+    end
+    local undoSummary = T.Font(row, "GameFontDisableSmall", "", T.colors.muted)
+    undoSummary:SetPoint("TOPLEFT", row, "TOPLEFT", 3, -27)
+    undoSummary:SetSize(buttonW - 6, 13)
+    undoSummary:SetJustifyH("LEFT")
+    if undoSummary.SetWordWrap then undoSummary:SetWordWrap(false) end
+    local redoSummary = T.Font(row, "GameFontDisableSmall", "", T.colors.muted)
+    redoSummary:SetPoint("TOPLEFT", row, "TOPLEFT", buttonW + buttonGap + 3, -27)
+    redoSummary:SetSize(buttonW - 6, 13)
+    redoSummary:SetJustifyH("LEFT")
+    if redoSummary.SetWordWrap then redoSummary:SetWordWrap(false) end
     local feedbackIcon = row:CreateTexture(nil, "ARTWORK", nil, 5)
     feedbackIcon:SetTexture(T.media.checkTickMedium)
     feedbackIcon:SetSize(9, 9)
-    feedbackIcon:SetPoint("TOPLEFT", row, "TOPLEFT", 3, -28)
+    feedbackIcon:SetPoint("TOPLEFT", row, "TOPLEFT", 3, -44)
     feedbackIcon:SetVertexColor(T.colors.ok[1], T.colors.ok[2], T.colors.ok[3], 1)
     feedbackIcon:SetAlpha(0)
     local feedback = T.Font(row, "GameFontDisableSmall", "", T.colors.ok)
@@ -408,6 +423,8 @@ local function CreateHistoryControls(parent)
     feedback:SetAlpha(0)
     row.undo = undo
     row.redo = redo
+    row.undoSummary = undoSummary
+    row.redoSummary = redoSummary
     row.feedback = feedback
     row.feedbackIcon = feedbackIcon
     M.historyControls = row
@@ -461,6 +478,16 @@ local function CreateHistoryControls(parent)
         local canUndo = s.canUndo and true or false
         local canRedo = s.canRedo and true or false
         local canResetAll = s.canResetAll and true or false
+        if controls.undoSummary then
+            controls.undoSummary:SetText(HistorySummaryText(s.undoLabel, s.undoCount))
+            local color = canUndo and T.colors.muted or T.colors.dim
+            controls.undoSummary:SetTextColor(color[1], color[2], color[3], canUndo and 0.96 or 0.52)
+        end
+        if controls.redoSummary then
+            controls.redoSummary:SetText(HistorySummaryText(s.redoLabel, s.redoCount))
+            local color = canRedo and T.colors.muted or T.colors.dim
+            controls.redoSummary:SetTextColor(color[1], color[2], color[3], canRedo and 0.96 or 0.52)
+        end
         if controls.undo and controls.undo.SetEnabled then controls.undo:SetEnabled(canUndo or canResetAll) end
         if controls.redo and controls.redo.SetEnabled then controls.redo:SetEnabled(canRedo) end
         if controls.undo and controls.undo._msuf2HistoryIcon then
@@ -845,7 +872,7 @@ local function BuildNavRail(parent)
                 frame:Show()
                 frame:ClearAllPoints()
                 frame:SetPoint("TOPLEFT", list, "TOPLEFT", NAV_ITEM_X, y - 2)
-                y = y - 50
+                y = y - 66
             elseif not item.group or M.navHeaderState[item.group] ~= false then
                 btn:Show()
                 if btn.SetScale then btn:SetScale(1) end

@@ -2573,9 +2573,18 @@ function T.CloseButton(parent)
     CloseButtonVisual(btn, false, false)
     return btn
 end
+local function AccessibleNumber(value, fallback)
+    fallback = tonumber(fallback) or 0
+    local canaccessvalue = _G.canaccessvalue
+    if type(canaccessvalue) == "function" and canaccessvalue(value) ~= true then return fallback end
+    local issecretvalue = _G.issecretvalue
+    if type(issecretvalue) == "function" and issecretvalue(value) == true then return fallback end
+    return tonumber(value) or fallback
+end
+M.AccessibleNumber = AccessibleNumber
 local function ClampScrollValue(value, maxValue)
-    value = tonumber(value) or 0
-    maxValue = tonumber(maxValue) or 0
+    value = AccessibleNumber(value, 0)
+    maxValue = AccessibleNumber(maxValue, 0)
     if value < 0 then return 0 end
     if value > maxValue then return maxValue end
     return value
@@ -2658,6 +2667,7 @@ function T.StyleScrollFrame(scroll, anchor)
         if maxScroll == nil then maxScroll = CurrentMaxScroll() end
         offset = ClampScrollValue(offset, maxScroll)
         if current == nil then current = (scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0 end
+        current = AccessibleNumber(current, 0)
         if rawSetVerticalScroll and math.abs(offset - current) > 0.01 then rawSetVerticalScroll(scroll, offset) end
         if bar then
             if bar._msuf2LastScrollValue ~= offset then
@@ -2683,7 +2693,7 @@ function T.StyleScrollFrame(scroll, anchor)
         local maxScroll = CurrentMaxScroll()
         target = ClampScrollValue(target, maxScroll)
         scroll._msuf2SmoothScrollTarget = target
-        local current = (scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0
+        local current = AccessibleNumber((scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0, 0)
         local delta = target - current
         if (T.ReducedMotionEnabled and T.ReducedMotionEnabled()) or math.abs(delta) <= SMOOTH_SCROLL_EPSILON then
             SetRawScroll(target, current, maxScroll)
@@ -2713,7 +2723,7 @@ function T.StyleScrollFrame(scroll, anchor)
             StopSmoothScroll()
             return
         end
-        local current = (scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0
+        local current = AccessibleNumber((scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0, 0)
         if math.abs(target - current) <= SMOOTH_SCROLL_EPSILON then
             SetRawScroll(target, current, maxScroll)
             StopSmoothScroll()
@@ -2731,7 +2741,8 @@ function T.StyleScrollFrame(scroll, anchor)
         if scroll._msuf2SmoothScrollTarget ~= nil then scroll._msuf2SmoothScrollTarget = ClampScrollValue(scroll._msuf2SmoothScrollTarget, maxScroll) end
         if maxScroll <= 1 or frameH <= 0 then
             StopSmoothScroll()
-            if rawSetVerticalScroll and (scroll:GetVerticalScroll() or 0) ~= 0 then rawSetVerticalScroll(scroll, 0) end
+            local current = AccessibleNumber(scroll:GetVerticalScroll() or 0, 0)
+            if rawSetVerticalScroll and current ~= 0 then rawSetVerticalScroll(scroll, 0) end
             if bar._msuf2LastScrollValue ~= 0 then
                 bar._msuf2LastScrollValue = 0
                 bar._msuf2Refreshing = true
@@ -2752,8 +2763,9 @@ function T.StyleScrollFrame(scroll, anchor)
             thumb._msuf2LastHeight = thumbH
             thumb:SetHeight(thumbH)
         end
-        local offset = ClampScrollValue(scroll:GetVerticalScroll() or 0, maxScroll)
-        if offset ~= (scroll:GetVerticalScroll() or 0) and rawSetVerticalScroll then rawSetVerticalScroll(scroll, offset) end
+        local current = AccessibleNumber(scroll:GetVerticalScroll() or 0, 0)
+        local offset = ClampScrollValue(current, maxScroll)
+        if offset ~= current and rawSetVerticalScroll then rawSetVerticalScroll(scroll, offset) end
         if bar._msuf2LastScrollValue ~= offset then
             bar._msuf2LastScrollValue = offset
             bar._msuf2Refreshing = true
@@ -2773,7 +2785,7 @@ function T.StyleScrollFrame(scroll, anchor)
             maxScroll = math.max(0, childH - frameH)
         end
         local clamped = ClampScrollValue(offset, maxScroll)
-        local current = (self.GetVerticalScroll and self:GetVerticalScroll()) or 0
+        local current = AccessibleNumber((self.GetVerticalScroll and self:GetVerticalScroll()) or 0, 0)
         if math.abs(clamped - current) > 0.01 then rawSetVerticalScroll(self, clamped) end
         if self._msuf2RefreshScrollBar then self:_msuf2RefreshScrollBar() end
     end
@@ -2782,7 +2794,8 @@ function T.StyleScrollFrame(scroll, anchor)
         local step = 64
         if IsShiftKeyDown and IsShiftKeyDown() then step = 180 end
         if IsControlKeyDown and IsControlKeyDown() then step = math.max(step, (scroll.GetHeight and scroll:GetHeight()) or step) end
-        SmoothScrollTo((scroll._msuf2SmoothScrollTarget or (scroll:GetVerticalScroll() or 0)) - delta * step)
+        local current = AccessibleNumber(scroll:GetVerticalScroll() or 0, 0)
+        SmoothScrollTo((scroll._msuf2SmoothScrollTarget or current) - delta * step)
     end
     scroll:EnableMouseWheel(true)
     scroll:SetScript("OnMouseWheel", function(_, delta) ScrollBy(delta) end)
@@ -2806,7 +2819,7 @@ function T.StyleScrollFrame(scroll, anchor)
         StopSmoothScroll()
         local maxScroll = scroll._msuf2MaxScroll or 0
         local clamped = ClampScrollValue(value, maxScroll)
-        local current = (scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0
+        local current = AccessibleNumber((scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0, 0)
         if rawSetVerticalScroll and math.abs(clamped - current) > 0.01 then rawSetVerticalScroll(scroll, clamped) end
         Refresh()
     end)
