@@ -209,19 +209,40 @@ end
 local function DisableNativeTimeText(frame)
     if not frame then return end
 
+    -- The common stop/prepare paths can converge on this helper several times.
+    -- Once the binding is known disabled, avoid repeated protected C-method
+    -- calls and repeated Lua text-cache invalidation. The pending flag covers a
+    -- binding that failed after a partial configuration mutation but before it
+    -- could be marked fully bound.
+    if frame._msufNativeTimeBound ~= true
+        and frame._msufNativeTextCleanupPending ~= true
+    then
+        return
+    end
+
     local binding = frame._msufDurationTextBinding
+    local cleaned = binding == nil
     if binding then
         local disabled = type(binding.Disable) == "function"
             and pcall(binding.Disable, binding)
         if not disabled and type(binding.SetEnabled) == "function" then
-            pcall(binding.SetEnabled, binding, false)
+            disabled = pcall(binding.SetEnabled, binding, false)
         end
+        cleaned = disabled == true
     end
     -- DurationTextBinding mutates the FontString behind MSUF's Lua-side diff
     -- cache. Invalidate that cache so the next Lua clear/update cannot be skipped
     -- against a stale pre-binding value.
     if frame.timeText then frame.timeText._msufLastText = nil end
-    frame._msufNativeTimeBound = nil
+    if cleaned then
+        frame._msufNativeTimeBound = nil
+        frame._msufNativeTextCleanupPending = nil
+    else
+        -- Keep retry ownership when the client rejected both disable forms.
+        -- Treat the binding as potentially live until a later cleanup succeeds.
+        frame._msufNativeTimeBound = true
+        frame._msufNativeTextCleanupPending = true
+    end
 end
 
 local function ApplyNativeTimeText(frame, durationObj, format)
@@ -247,6 +268,11 @@ local function ApplyNativeTimeText(frame, durationObj, format)
         end
         frame._msufDurationTextBinding = binding
     end
+
+    -- From this point onward every binding method can leave native state
+    -- partially configured. DisableNativeTimeText must therefore run even when
+    -- the final `_msufNativeTimeBound` success flag was never reached.
+    frame._msufNativeTextCleanupPending = true
 
     local configured = frame._msufDurationTextConfigured == true
     if not configured then
@@ -300,6 +326,7 @@ local function ApplyNativeTimeText(frame, durationObj, format)
     end
     frame.timeText._msufLastText = nil
     frame._msufNativeTimeBound = true
+    frame._msufNativeTextCleanupPending = nil
     frame._msufNativeTextUnsafe = nil
     return true
 end

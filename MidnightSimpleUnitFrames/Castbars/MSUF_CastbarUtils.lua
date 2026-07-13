@@ -141,17 +141,69 @@ if type(_G.MSUF_SetStatusBarColorIfChanged) ~= "function" then
     ExportPublic("MSUF_SetStatusBarColorIfChanged", SetStatusBarColorIfChangedImpl)
 end
 
-local interruptibleColorCache = { r = nil, g = nil, b = nil, a = nil, obj = nil }
-local nonInterruptibleColorCache = { r = nil, g = nil, b = nil, a = nil, obj = nil }
-local interruptUnavailableColorCache = { r = nil, g = nil, b = nil, a = nil, obj = nil }
-
-local function CachedColor(cache, red, green, blue, alpha)
-    if cache.r == red and cache.g == green and cache.b == blue and cache.a == alpha and cache.obj then
-        return cache.obj
+-- ColorObjects belong to the status bar that consumes them. A single module-
+-- global cache was repeatedly evicted when target/focus/boss frames used
+-- different color configurations, so returning to a frame recreated all of its
+-- objects. Direct fields keep the steady path allocation-free without creating
+-- per-call cache tables or string keys.
+local function CachedInterruptibleColor(statusBar, red, green, blue, alpha)
+    local color = statusBar._msufInterruptibleColor
+    if color
+        and statusBar._msufInterruptibleColorR == red
+        and statusBar._msufInterruptibleColorG == green
+        and statusBar._msufInterruptibleColorB == blue
+        and statusBar._msufInterruptibleColorA == alpha
+    then
+        return color
     end
-    cache.r, cache.g, cache.b, cache.a = red, green, blue, alpha
-    cache.obj = _G.CreateColor(red, green, blue, alpha)
-    return cache.obj
+
+    color = _G.CreateColor(red, green, blue, alpha)
+    statusBar._msufInterruptibleColor = color
+    statusBar._msufInterruptibleColorR = red
+    statusBar._msufInterruptibleColorG = green
+    statusBar._msufInterruptibleColorB = blue
+    statusBar._msufInterruptibleColorA = alpha
+    return color
+end
+
+local function CachedNonInterruptibleColor(statusBar, red, green, blue, alpha)
+    local color = statusBar._msufNonInterruptibleColor
+    if color
+        and statusBar._msufNonInterruptibleColorR == red
+        and statusBar._msufNonInterruptibleColorG == green
+        and statusBar._msufNonInterruptibleColorB == blue
+        and statusBar._msufNonInterruptibleColorA == alpha
+    then
+        return color
+    end
+
+    color = _G.CreateColor(red, green, blue, alpha)
+    statusBar._msufNonInterruptibleColor = color
+    statusBar._msufNonInterruptibleColorR = red
+    statusBar._msufNonInterruptibleColorG = green
+    statusBar._msufNonInterruptibleColorB = blue
+    statusBar._msufNonInterruptibleColorA = alpha
+    return color
+end
+
+local function CachedInterruptUnavailableColor(statusBar, red, green, blue, alpha)
+    local color = statusBar._msufInterruptUnavailableColor
+    if color
+        and statusBar._msufInterruptUnavailableColorR == red
+        and statusBar._msufInterruptUnavailableColorG == green
+        and statusBar._msufInterruptUnavailableColorB == blue
+        and statusBar._msufInterruptUnavailableColorA == alpha
+    then
+        return color
+    end
+
+    color = _G.CreateColor(red, green, blue, alpha)
+    statusBar._msufInterruptUnavailableColor = color
+    statusBar._msufInterruptUnavailableColorR = red
+    statusBar._msufInterruptUnavailableColorG = green
+    statusBar._msufInterruptUnavailableColorB = blue
+    statusBar._msufInterruptUnavailableColorA = alpha
+    return color
 end
 
 local function CanUseBooleanTintValue(value)
@@ -199,12 +251,12 @@ local function ApplyNonInterruptibleTint(
     local texture = statusBar.GetStatusBarTexture and statusBar:GetStatusBarTexture()
     local usedBooleanTint = false
     if texture and texture.SetVertexColorFromBoolean and _G.CreateColor then
-        local nonColor = CachedColor(nonInterruptibleColorCache, nonR, nonG, nonB, nonA or 1)
-        local castColor = CachedColor(interruptibleColorCache, castR, castG, castB, castA or 1)
+        local nonColor = CachedNonInterruptibleColor(statusBar, nonR, nonG, nonB, nonA or 1)
+        local castColor = CachedInterruptibleColor(statusBar, castR, castG, castB, castA or 1)
         local activeCastColor = castColor
         if useUnavailable then
-            local unavailableColor = CachedColor(
-                interruptUnavailableColorCache,
+            local unavailableColor = CachedInterruptUnavailableColor(
+                statusBar,
                 unavailableR,
                 unavailableG,
                 unavailableB,

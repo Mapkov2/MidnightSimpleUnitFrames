@@ -489,6 +489,7 @@ local managerTime = 0
 local lowFrequencyTicker
 local lowFrequencyLastTime
 local failsafeTicker
+local managerDriverMode = "IDLE"
 local WORK_UNIT_FAILSAFE = castbarRuntime and castbarRuntime.WorkMask
     and castbarRuntime.WorkMask.UNIT_FAILSAFE or 32
 
@@ -586,10 +587,20 @@ local function UpdateHeavyFrame(frame, elapsed)
     frame._msufHeavyIn = heavyIn
 end
 
+local function UpdateManagedFrame(frame, elapsed)
+    local stopped = StopCastbarIfUnitMissing(frame)
+    if not stopped and not UpdateFastTextFrame(frame, elapsed) then
+        UpdateHeavyFrame(frame, elapsed)
+    end
+end
+
 local function UpdateBucket(bucket, elapsed)
     local frame = next(bucket)
     while frame do
         local nextFrame = next(bucket, frame)
+        -- Keep the recurring ticker path inlined; UpdateManagedFrame exists for
+        -- the O(1) registration refresh and must not add another Lua call to
+        -- every active castbar tick.
         local stopped = StopCastbarIfUnitMissing(frame)
         if not stopped and not UpdateFastTextFrame(frame, elapsed) then
             UpdateHeavyFrame(frame, elapsed)
@@ -676,6 +687,7 @@ local function ManagerOnUpdate(manager, elapsed)
         StopLowFrequencyTicker()
         StopFailsafeTicker()
         manager._msufLowTickAccum = 0
+        managerDriverMode = "IDLE"
         manager:Hide()
         return
     end
@@ -706,8 +718,9 @@ RefreshManagerOnUpdate = function()
         StopLowFrequencyTicker()
         StopFailsafeTicker()
         CastbarManager:SetScript("OnUpdate", nil)
+        managerDriverMode = "IDLE"
         CastbarManager:Hide()
-        return
+        return false
     end
 
     CastbarManager:Show()
@@ -717,35 +730,51 @@ RefreshManagerOnUpdate = function()
     if runtimeCount <= 0 then
         StopLowFrequencyTicker()
         CastbarManager:SetScript("OnUpdate", nil)
-        return true
+        managerDriverMode = "FAILSAFE"
+        return false
     end
 
     if highFrequencyCount > 0 then
         StopLowFrequencyTicker()
         CastbarManager:SetScript("OnUpdate", ManagerOnUpdate)
+        managerDriverMode = "FRAME"
         return false
     end
 
     CastbarManager:SetScript("OnUpdate", nil)
 
     if C_Timer and C_Timer.NewTicker then
+        local topologyChanged = managerDriverMode ~= "LOW_TICKER"
         if not lowFrequencyTicker then
             lowFrequencyLastTime = Now()
             lowFrequencyTicker = C_Timer.NewTicker(lowFrequencyInterval, LowFrequencyTicker)
         end
+        managerDriverMode = "LOW_TICKER"
+        if topologyChanged then
+            -- A real driver hand-off (idle/failsafe/frame -> ticker) gets one
+            -- immediate coherent pass. Steady-state Register/Unregister calls
+            -- initialize only their affected frame below.
+            UpdateBucket(CastbarManager.low, 0)
+            return true
+        end
+        return false
+    end
+
+    local topologyChanged = managerDriverMode ~= "FRAME"
+    managerDriverMode = "FRAME"
+    CastbarManager:SetScript("OnUpdate", ManagerOnUpdate)
+    if topologyChanged then
         UpdateBucket(CastbarManager.low, 0)
         return true
     end
-
-    CastbarManager:SetScript("OnUpdate", ManagerOnUpdate)
-    UpdateBucket(CastbarManager.low, 0)
-    return true
+    return false
 end
 
 CastbarManager:SetScript("OnHide", function(manager)
     StopLowFrequencyTicker()
     StopFailsafeTicker()
     manager:SetScript("OnUpdate", nil)
+    managerDriverMode = "IDLE"
 end)
 
 local function FrameHasRuntimeWork(frame)
@@ -865,9 +894,17 @@ RegisterCastbar = function(frame)
         frame._msufManagerBucket = newBucket
     end
 
-    local startedLowOnly = RefreshManagerOnUpdate()
-    if not startedLowOnly and not wasActive and not highFrequency and not failsafeOnly and highFrequencyCount <= 0 then
-        UpdateBucket(CastbarManager.low, 0)
+    local lowBucketScanned = RefreshManagerOnUpdate()
+    -- Failsafe-only frames have no visual work: the first frame is sampled
+    -- when its ticker starts and later additions retain that ticker's cadence.
+    if not lowBucketScanned
+        and not failsafeOnly
+        and CastbarManager.active[frame] == true
+    then
+        -- Preserve the old zero-delay initialization without walking sibling
+        -- frames. Re-registering or reclassifying one frame touches only that
+        -- frame; driver topology changes remain the sole full-bucket case.
+        UpdateManagedFrame(frame, 0)
     end
 end
 
@@ -1009,12 +1046,38 @@ local function CheckChannelHardStop(frame, sampleTime)
     frame._msufHardStopNext = sampleTime + 0.15
 
     local unit = frame.unit
-    if frame.unit == "player" and type(_G.MSUF_PlayerCastbar_GetEffectiveUnit) == "function" then
-        unit = _G.MSUF_PlayerCastbar_GetEffectiveUnit(frame)
+    if unit == "player" then
+        local activeUnit = frame._msufActiveCastUnit
+        if activeUnit == "player" or activeUnit == "vehicle" then
+            unit = activeUnit
+        end
     end
     if not unit or unit == "" then return false end
 
-    if UnitChannelInfo(unit) then
+    local channelActive = UnitChannelInfo(unit) ~= nil
+    if not channelActive and frame.unit == "player" then
+        -- Vehicle transitions are event-owned, but the hard-stop guard must not
+        -- produce a false completion during the narrow hand-off window. Probe
+        -- the alternate token only after the stored active token returned no
+        -- channel; the steady channel tick therefore performs one API read and
+        -- never rebuilds a full cast state/DurationObject.
+        local alternateUnit
+        if unit == "vehicle" then
+            alternateUnit = "player"
+        elseif type(UnitHasVehicleUI) == "function"
+            and UnitHasVehicleUI("player")
+            and type(UnitExists) == "function"
+            and UnitExists("vehicle")
+        then
+            alternateUnit = "vehicle"
+        end
+        if alternateUnit and UnitChannelInfo(alternateUnit) then
+            frame._msufActiveCastUnit = alternateUnit
+            channelActive = true
+        end
+    end
+
+    if channelActive then
         frame._msufHardStopNoChannelSince = nil
         frame._msufHardStopChanThresh = nil
         return false
