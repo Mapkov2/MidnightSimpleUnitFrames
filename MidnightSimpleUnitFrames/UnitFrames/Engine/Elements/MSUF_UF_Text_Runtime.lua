@@ -414,11 +414,11 @@ local function SeedCachedPowerType(frame, unit, powerType, powerToken)
   return changed
 end
 
-local function SeedCachedPowerMax(frame, unit, powerMax)
+local function SeedCachedPowerMax(frame, unit, powerMax, powerMaxSecret)
   if not frame then
     return false
   end
-  if issecretvalue(powerMax) == true then
+  if powerMaxSecret == true then
     frame._msufTextPowerMax = nil
     frame._msufTextPowerMaxUnit = nil
     return false
@@ -906,7 +906,6 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
   end
   local animate = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
   local identityChanged = not animate and POWER_IDENTITY_EVENTS[event] == true
-  local seededPowerType
   if identityChanged then
     frame._msufTextPowerType = nil
     frame._msufTextPowerToken = nil
@@ -914,14 +913,28 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
     frame._msufTextPowerTypeUnit = nil
     frame._msufTextPowerMax = nil
     frame._msufTextPowerMaxUnit = nil
-    seededPowerType = SeedCachedPowerType(frame, unit, powerType, powerToken)
+    local seededPowerType = SeedCachedPowerType(frame, unit, powerType, powerToken)
     if rt.powerColorByType == true and seededPowerType ~= true then
       RefreshCachedPowerType(frame, unit)
     end
-  else
-    seededPowerType = SeedCachedPowerType(frame, unit, powerType, powerToken)
+  elseif not (powerMetaChanged == false
+      and animate
+      and frame._msufTextPowerTypeKnown == true
+      and frame._msufTextPowerTypeUnit == unit
+      and issecretvalue(powerType) ~= true
+      and issecretvalue(powerToken) ~= true
+      and (powerType ~= nil or powerToken ~= nil)
+      and frame._msufTextPowerType == powerType
+      and frame._msufTextPowerToken == powerToken) then
+    -- Power already resolved this metadata for a normal value tick. Preserve
+    -- the seed for text-only/bar-missing and unknown/secret payloads, but do
+    -- not rewrite four identical cache fields on every bar-fed update.
+    SeedCachedPowerType(frame, unit, powerType, powerToken)
   end
-  SeedCachedPowerMax(frame, unit, powerMax)
+  local powerMaxSecret = issecretvalue(powerMax) == true
+  if powerMaxSecret or powerMax ~= nil then
+    SeedCachedPowerMax(frame, unit, powerMax, powerMaxSecret)
+  end
   if rt.powerColorByType == true
     and animate
     and rt.powerRefreshTypeOnTick == true
