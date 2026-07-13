@@ -72,7 +72,6 @@ local OVER_ABSORB_TEXTURE = "Interface\\RaidFrame\\Shield-Overshield"
 local OVER_ABSORB_GLOW_W = 8
 local PREDICTION_HEALER_UNIT = "player"
 local EMPTY_EVENTS = {}
-local DERIVED_PREDICTION_TARGET_EVENTS = { "UNIT_TARGET" }
 local PREDICTION_EVENT_BITS = {
   { 1, "UNIT_HEAL_PREDICTION" },
   { 2, "UNIT_ABSORB_AMOUNT_CHANGED" },
@@ -96,7 +95,7 @@ local PREDICTION_DIRTY_PLAN_KEYS = {
   [7] = "MSUF_PREDICTION_DIRTY_ALL",
 }
 
-local function BuildPredictionEventTable(healthAware, includeConnection)
+local function BuildPredictionEventTable(healthAware, includeConnection, includeDependentTarget)
   -- Specs opt into only the prediction pieces they display. Build the event lists from bit
   -- masks once so runtime registration stays compact even with several overlay combinations.
   local out = {}
@@ -111,6 +110,7 @@ local function BuildPredictionEventTable(healthAware, includeConnection)
     end
     events[#events + 1] = "UNIT_MAXHEALTH"
     if includeConnection then events[#events + 1] = "UNIT_CONNECTION" end
+    if includeDependentTarget then events[#events + 1] = "UNIT_TARGET" end
     out[mask] = events
   end
   return out
@@ -120,6 +120,8 @@ local PREDICTION_EVENTS = BuildPredictionEventTable(false, true)
 local PREDICTION_HEALTH_EVENTS = BuildPredictionEventTable(true, true)
 local PREDICTION_EVENTS_PLAYER = BuildPredictionEventTable(false, false)
 local PREDICTION_HEALTH_EVENTS_PLAYER = BuildPredictionEventTable(true, false)
+local PREDICTION_EVENTS_DEPENDENT = BuildPredictionEventTable(false, true, true)
+local PREDICTION_HEALTH_EVENTS_DEPENDENT = BuildPredictionEventTable(true, true, true)
 local GROUP_LIFECYCLE_EVENTS = { "PARTY_MEMBER_ENABLE", "PARTY_MEMBER_DISABLE" }
 
 local PLAN_REFRESH_HEAL = 1
@@ -579,10 +581,16 @@ local function EnsureBar(frame, key, levelOffset)
   bar._msufValuePlain = true
   bar:SetStatusBarTexture(WHITE)
   bar:SetAllPoints(hpBar or frame)
-  if bar.SetFrameLevel and hpBar and hpBar.GetFrameLevel then
-    local level = (hpBar:GetFrameLevel() or frame:GetFrameLevel() or 1) + levelOffset
-    bar:SetFrameLevel(level)
-    bar._msufFrameLevel = level
+  if bar.SetFrameLevel and hpBar and (hpBar.GetFrameLevel or frame.GetFrameLevel) then
+    local baseLevel = hpBar.GetFrameLevel and hpBar:GetFrameLevel() or nil
+    if baseLevel == nil and frame.GetFrameLevel then
+      baseLevel = frame:GetFrameLevel()
+    end
+    if issecretvalue(baseLevel) ~= true then
+      local level = (baseLevel or 1) + levelOffset
+      bar:SetFrameLevel(level)
+      bar._msufFrameLevel = level
+    end
   end
   bar:Hide()
   frame[key] = bar
@@ -690,13 +698,41 @@ local function SyncBarLayer(frame, hpBar, bar, levelOffset)
       bar._msufFrameStrata = strata
     end
   end
-  if bar.SetFrameLevel and hpBar.GetFrameLevel then
-    local level = (hpBar:GetFrameLevel() or frame:GetFrameLevel() or 1) + levelOffset
-    if bar._msufFrameLevel ~= level then
-      bar:SetFrameLevel(level)
-      bar._msufFrameLevel = level
+  if bar.SetFrameLevel and (hpBar.GetFrameLevel or frame.GetFrameLevel) then
+    local baseLevel = hpBar.GetFrameLevel and hpBar:GetFrameLevel() or nil
+    if baseLevel == nil and frame.GetFrameLevel then
+      baseLevel = frame:GetFrameLevel()
+    end
+    if issecretvalue(baseLevel) ~= true then
+      local level = (baseLevel or 1) + levelOffset
+      if bar._msufFrameLevel ~= level then
+        bar:SetFrameLevel(level)
+        bar._msufFrameLevel = level
+      end
     end
   end
+end
+
+local function PredictionLayerCurrent(frame, hpBar, bar, levelOffset)
+  if bar.SetFrameStrata and frame.GetFrameStrata then
+    local strata = frame:GetFrameStrata()
+    local cachedStrata = bar._msufFrameStrata
+    if issecretvalue(strata) ~= true and strata
+      and (issecretvalue(cachedStrata) == true or cachedStrata ~= strata) then
+      return false
+    end
+  end
+  if bar.SetFrameLevel and (hpBar.GetFrameLevel or frame.GetFrameLevel) then
+    local baseLevel = hpBar.GetFrameLevel and hpBar:GetFrameLevel() or nil
+    if baseLevel == nil and frame.GetFrameLevel then
+      baseLevel = frame:GetFrameLevel()
+    end
+    if issecretvalue(baseLevel) ~= true
+      and bar._msufFrameLevel ~= (baseLevel or 1) + levelOffset then
+      return false
+    end
+  end
+  return true
 end
 
 local function StatusTexture(bar)
@@ -740,15 +776,18 @@ local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar)
   end
   local anchorTarget = follow or hpBar
   local parent = (mode == 4) and frame or hpBar
+  local parentCurrent = not bar.GetParent or bar:GetParent() == parent
 
-  if bar._msufPredictionMode == mode
+  local layoutCurrent = bar._msufPredictionMode == mode
     and bar._msufPredictionReverse == reverse
     and bar._msufPredictionFollowBar == followSource
     and bar._msufPredictionAnchorTarget == anchorTarget
     and bar._msufPredictionWidth == width
     and bar._msufPredictionParent == parent
     and bar._msufPredictionLevelOffset == levelOffset
-    and bar._msufReverseFill == reverse then
+    and bar._msufReverseFill == reverse
+    and parentCurrent
+  if layoutCurrent and PredictionLayerCurrent(frame, hpBar, bar, levelOffset) then
     return
   end
 
@@ -799,19 +838,28 @@ local function PredictionLayoutCurrent(frame, bar, levelOffset, mode, reverse, f
     return false
   end
   local followSource = (mode == 3 or mode == 4) and followBar or nil
+  local follow = (mode == 3 or mode == 4) and (followSource and StatusTexture(followSource) or StatusTexture(hpBar)) or nil
+  local runtimeWidth = tonumber(frame._msufPredictionFrameWidth)
+  local width = (hpBar.GetWidth and hpBar:GetWidth()) or runtimeWidth or 1
+  if not width or width <= 0 then
+    width = runtimeWidth or 1
+  end
+  local anchorTarget = follow or hpBar
   local parent = (mode == 4) and frame or hpBar
-  local width = tonumber(frame._msufWidth) or tonumber(frame._msufPredictionFrameWidth)
   return bar._msufPredictionMode == mode
     and bar._msufPredictionReverse == reverse
     and bar._msufPredictionFollowBar == followSource
-    and (not width or width <= 0 or bar._msufPredictionWidth == width)
+    and bar._msufPredictionAnchorTarget == anchorTarget
+    and bar._msufPredictionWidth == width
     and bar._msufPredictionParent == parent
     and bar._msufPredictionLevelOffset == levelOffset
     and bar._msufReverseFill == reverse
+    and (not bar.GetParent or bar:GetParent() == parent)
+    and PredictionLayerCurrent(frame, hpBar, bar, levelOffset)
 end
 
-local function LayoutBarIfNeeded(frame, bar, levelOffset, mode, reverse, followBar, force)
-  if not force and PredictionLayoutCurrent(frame, bar, levelOffset, mode, reverse, followBar) then
+local function LayoutBarIfNeeded(frame, bar, levelOffset, mode, reverse, followBar)
+  if PredictionLayoutCurrent(frame, bar, levelOffset, mode, reverse, followBar) then
     return
   end
   LayoutBar(frame, bar, levelOffset, mode, reverse, followBar)
@@ -830,6 +878,22 @@ local function LayoutHealAbsorbBar(frame, bar, levelOffset, hpReverse)
   end
   local reverse = hpReverse ~= true
 
+  local layoutCurrent = bar._msufHealAbsorbAnchorTarget == hpTexture
+    and bar._msufHealAbsorbWidth == width
+    and bar._msufHealAbsorbHpReverse == hpReverse
+    and bar._msufHealAbsorbParent == hpBar
+    and bar._msufHealAbsorbLevelOffset == levelOffset
+    and bar._msufReverseFill == reverse
+  if layoutCurrent and bar.GetParent and bar:GetParent() ~= hpBar then
+    layoutCurrent = false
+  end
+  if layoutCurrent and not PredictionLayerCurrent(frame, hpBar, bar, levelOffset) then
+    layoutCurrent = false
+  end
+  if layoutCurrent then
+    return
+  end
+
   SyncBarLayer(frame, hpBar, bar, levelOffset)
   local parentChanged = SetParentCached(bar, hpBar)
   if hpBar.SetClipsChildren and hpBar._msufPredictionClipsChildren ~= true then
@@ -837,27 +901,25 @@ local function LayoutHealAbsorbBar(frame, bar, levelOffset, hpReverse)
     hpBar._msufPredictionClipsChildren = true
   end
 
-  if bar._msufHealAbsorbAnchorTarget == hpTexture
-    and bar._msufHealAbsorbWidth == width
-    and bar._msufHealAbsorbHpReverse == hpReverse
-    and bar._msufHealAbsorbLevelOffset == levelOffset
-    and bar._msufReverseFill == reverse
-    and parentChanged ~= true then
-    return
+  if bar._msufHealAbsorbAnchorTarget ~= hpTexture
+    or bar._msufHealAbsorbWidth ~= width
+    or bar._msufHealAbsorbHpReverse ~= hpReverse
+    or bar._msufHealAbsorbParent ~= hpBar
+    or parentChanged then
+    bar:ClearAllPoints()
+    bar:SetWidth(width)
+    if hpReverse == true then
+      bar:SetPoint("TOPLEFT", hpTexture, "TOPLEFT", 0, 0)
+      bar:SetPoint("BOTTOMLEFT", hpTexture, "BOTTOMLEFT", 0, 0)
+    else
+      bar:SetPoint("TOPRIGHT", hpTexture, "TOPRIGHT", 0, 0)
+      bar:SetPoint("BOTTOMRIGHT", hpTexture, "BOTTOMRIGHT", 0, 0)
+    end
+    bar._msufHealAbsorbAnchorTarget = hpTexture
+    bar._msufHealAbsorbWidth = width
+    bar._msufHealAbsorbHpReverse = hpReverse
+    bar._msufHealAbsorbParent = hpBar
   end
-
-  bar:ClearAllPoints()
-  bar:SetWidth(width)
-  if hpReverse == true then
-    bar:SetPoint("TOPLEFT", hpTexture, "TOPLEFT", 0, 0)
-    bar:SetPoint("BOTTOMLEFT", hpTexture, "BOTTOMLEFT", 0, 0)
-  else
-    bar:SetPoint("TOPRIGHT", hpTexture, "TOPRIGHT", 0, 0)
-    bar:SetPoint("BOTTOMRIGHT", hpTexture, "BOTTOMRIGHT", 0, 0)
-  end
-  bar._msufHealAbsorbAnchorTarget = hpTexture
-  bar._msufHealAbsorbWidth = width
-  bar._msufHealAbsorbHpReverse = hpReverse
   bar._msufHealAbsorbLevelOffset = levelOffset
 
   if bar.SetReverseFill and bar._msufReverseFill ~= reverse then
@@ -1060,12 +1122,18 @@ local function PredictionEventsForConfig(cfg, healthAware, unit)
   if mask == 0 then
     return EMPTY_EVENTS
   end
-  local player = issecretvalue(unit) ~= true and unit == "player"
+  local plainUnit = issecretvalue(unit) ~= true and unit or nil
+  local player = plainUnit == "player"
+  local dependent = plainUnit == "targettarget" or plainUnit == "focustarget"
   local eventTable
   if healthAware ~= false and NeedsHealthEvent(cfg) then
-    eventTable = player and PREDICTION_HEALTH_EVENTS_PLAYER or PREDICTION_HEALTH_EVENTS
+    eventTable = player and PREDICTION_HEALTH_EVENTS_PLAYER
+      or dependent and PREDICTION_HEALTH_EVENTS_DEPENDENT
+      or PREDICTION_HEALTH_EVENTS
   else
-    eventTable = player and PREDICTION_EVENTS_PLAYER or PREDICTION_EVENTS
+    eventTable = player and PREDICTION_EVENTS_PLAYER
+      or dependent and PREDICTION_EVENTS_DEPENDENT
+      or PREDICTION_EVENTS
   end
   return eventTable[mask] or EMPTY_EVENTS
 end
@@ -1085,10 +1153,6 @@ function Prediction.GetUnitlessEvents(frame, spec)
   end
   if spec and spec.scope == "group" then
     return GROUP_LIFECYCLE_EVENTS
-  end
-  local unit = frame and frame.unit
-  if unit == "targettarget" or unit == "focustarget" then
-    return DERIVED_PREDICTION_TARGET_EVENTS
   end
   return EMPTY_EVENTS
 end
@@ -1602,7 +1666,7 @@ UpdateFull = function(frame, event, unit, seedHP, seedMaxHP, seedCalc)
   if showAbsorb and frame.absorbBar then
     if absorbMode == 3 or absorbMode == 4 then
       local follow = cfg.heal == true and frame.incomingHealBar and frame.incomingHealBar._msufShown == true and frame.incomingHealBar or nil
-      LayoutBarIfNeeded(frame, frame.absorbBar, 2, absorbMode, frame._msufPredictionAbsorbReverse, follow, forceMax == true)
+      LayoutBarIfNeeded(frame, frame.absorbBar, 2, absorbMode, frame._msufPredictionAbsorbReverse, follow)
     end
     if (forceMax == true or frame.absorbBar._msufMaxReady ~= true) and issecretvalue(maxHP) ~= true and maxHP == nil then
       maxHP = ReadHealthMax(frame, unit)
