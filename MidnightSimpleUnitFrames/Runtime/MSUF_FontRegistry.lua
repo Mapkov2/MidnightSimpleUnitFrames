@@ -487,8 +487,15 @@ local function MSUF_GetColorFromKey(key, fallbackColor)
         end
         return DefaultColorObject()
     end
-    local normalized = string_lower(key)
+    -- Stored palette keys are already canonical. Avoid creating a lowered
+    -- string on every runtime color refresh; mixed-case external callers keep
+    -- the same case-insensitive fallback.
+    local normalized = key
     local rgb = MSUF_FONT_COLORS[normalized]
+    if not rgb then
+        normalized = string_lower(key)
+        rgb = MSUF_FONT_COLORS[normalized]
+    end
     if rgb then
         local r, g, b = rgb[1], rgb[2], rgb[3]
         r, g, b = r or 1, g or 1, b or 1
