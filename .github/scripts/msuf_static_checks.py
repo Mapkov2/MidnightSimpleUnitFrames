@@ -23,8 +23,8 @@ LOCALE_TOC = REPO_ROOT / "MidnightSimpleUnitFrames_Locales" / "MidnightSimpleUni
 ASSISTANT_TOC = REPO_ROOT / "MidnightSimpleUnitFrames_Assistant" / "MidnightSimpleUnitFrames_Assistant.toc"
 ASSISTANT_ROOT = ASSISTANT_TOC.parent
 ASSISTANT_MANIFEST = ASSISTANT_ROOT / "MSUF_AssistantRuntime.xml"
-ASSISTANT_SCRIPT_COUNT = 328
-ASSISTANT_ORDER_SHA256 = "291364B471F1523AEE62E8F5B8AA160BA731E2DFCE3C5A7ADC0BA05C695E88C6"
+ASSISTANT_SCRIPT_COUNT = 324
+ASSISTANT_ORDER_SHA256 = "5B302939139B2F233BA2907FB383C45E8CE71587FA7157EF23ED063CB1E17754"
 LUA_MAIN_CHUNK_LOCAL_BUDGETS = {
     # WoW Lua rejects a function at 200 locals. Keep enough structural reserve
     # that ordinary Auras3 work cannot drift back to the compiler cliff.
@@ -38,7 +38,7 @@ ENGLISH_LOCALES = {"enUS", "enGB"}
 NON_ENGLISH_LOCALES = SUPPORTED_LOCALES - ENGLISH_LOCALES
 SKIP_DIRS = {
     "scripts", "docs", "tools", "graphify-out", "__pycache__",
-    ".codex-remote-attachments", "_local_workflows",
+    ".codex-remote-attachments", ".codex_assistant_goal", "_local_workflows",
 }
 INTENTIONALLY_UNLOADED_LUA = {
     # Developer-only diagnostic tools. They are kept in source but excluded
@@ -267,6 +267,7 @@ def check_assistant_runtime_contracts() -> None:
     widgets = read(menu2 / "MSUF_Menu2_Widgets.lua")
     window = read(menu2 / "MSUF_Menu2_Window.lua")
     routing = read(menu2 / "Search" / "MSUF_Menu2_Search_Routing.lua")
+    search_index = read(menu2 / "Search" / "MSUF_Menu2_Search_IndexQuery.lua")
     group = read(menu2 / "Pages" / "MSUF_Menu2_Group.lua")
     ensure_start = bridge.find("function A.EnsureRuntimeLoaded(reason)")
     combat_gate = bridge.find('if InCombat() then return false, "combat" end', ensure_start)
@@ -285,7 +286,15 @@ def check_assistant_runtime_contracts() -> None:
     require(catalog, "function M.RegisterVirtualRuntimeControl", "frame-free conditional control contracts")
     require(catalog, "function M.MarkRuntimeControlComponent", "logical composite-control ownership")
     require(catalog, "RuntimeCapabilityIssue(record)", "runtime getter/provider capability validation")
+    require(catalog, "ASSISTANT_REVIEW_DISPOSITIONS", "explicit Assistant disposition allowlist")
+    require(catalog, "missing explicit settingKey/actionKey or reviewed Assistant disposition",
+            "fail-closed persisted-control Assistant contract")
+    require(catalog, "report.assistantContractComplete", "Assistant contract completeness signal")
+    require(catalog, "report.assistantRegistryCrosswalkComplete", "Assistant registry crosswalk signal")
+    require(catalog, "report.persistedControls", "persisted-control audit denominator")
     require(bindings, "Keep provider failures observable", "dynamic dropdown provider fail-closed behavior")
+    require(bindings, "assistantDisposition = opts.assistantDisposition", "binding Assistant disposition propagation")
+    require(search_index, "assistantDisposition = meta.assistantDisposition", "search Assistant disposition propagation")
     require(bindings, "SnapshotProfileRouting()", "profile/spec-routing undo coverage")
 
     for marker in (
@@ -319,21 +328,30 @@ def check_luac(lua_files: list[Path]) -> None:
     if not luac:
         raise CheckError("luac is not available")
 
+    def compile_source(path: Path, *options: str) -> subprocess.CompletedProcess[bytes]:
+        source = path.read_bytes()
+        if source.startswith(b"\xef\xbb\xbf"):
+            source = source[3:]
+        return subprocess.run([luac, *options, "-"], input=source, capture_output=True)
+
+    def compiler_output(proc: subprocess.CompletedProcess[bytes]) -> str:
+        return (proc.stderr or proc.stdout).decode("utf-8", errors="replace").strip()
+
     failures: list[str] = []
     for path in lua_files:
-        proc = subprocess.run([luac, "-p", str(path)], capture_output=True, text=True)
+        proc = compile_source(path, "-p")
         if proc.returncode != 0:
-            failures.append(f"{rel(path)}: {(proc.stderr or proc.stdout).strip()}")
+            failures.append(f"{rel(path)}: {compiler_output(proc)}")
     if failures:
         raise CheckError("luac failures:\n" + "\n".join(failures[:30]))
 
     for relative_path, budget in LUA_MAIN_CHUNK_LOCAL_BUDGETS.items():
         path = ADDON_ROOT / relative_path
-        proc = subprocess.run([luac, "-l", "-l", str(path)], capture_output=True, text=True)
+        proc = compile_source(path, "-l", "-l")
         if proc.returncode != 0:
             raise CheckError(f"could not inspect Lua local budget for {relative_path}: "
-                             f"{(proc.stderr or proc.stdout).strip()}")
-        listing = proc.stdout or proc.stderr
+                             f"{compiler_output(proc)}")
+        listing = (proc.stdout or proc.stderr).decode("utf-8", errors="replace")
         match = re.search(r"(?m)^\s*locals\s*\((\d+)\)", listing)
         if not match:
             raise CheckError(f"could not parse main-chunk locals for {relative_path}")
@@ -386,7 +404,8 @@ def check_kernel_castbar_contracts() -> None:
 
     require(util, 'ExportPublic("MSUF_SafeCall"', "SafeCall export")
     require(scheduler, "SafeCall(cb)", "Scheduler protected callback")
-    require(event_bus, "SafeCall(h.fn, event, ...)", "EventBus protected handler")
+    require(event_bus, "local fn = h and h.fn", "EventBus cached handler")
+    require(event_bus, "SafeCall(fn, event, ...)", "EventBus protected handler")
 
     compact = re.sub(
         r"\s+",

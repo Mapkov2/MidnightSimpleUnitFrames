@@ -26,8 +26,8 @@ local common = {
     WHITE = "white",
 }
 local addon = { UF = UF, UFBarTextCommon = common }
-assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Power.lua"))
-    ("MidnightSimpleUnitFrames", addon)
+local powerChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Power.lua"))
+powerChunk("MidnightSimpleUnitFrames", addon)
 
 local isShownCalls = 0
 local bar = {

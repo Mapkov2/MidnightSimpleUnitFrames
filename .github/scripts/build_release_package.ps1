@@ -15,8 +15,8 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 $assistantManifestName = "MSUF_AssistantRuntime.xml"
-$assistantScriptCount = 328
-$assistantOrderSha256 = "291364B471F1523AEE62E8F5B8AA160BA731E2DFCE3C5A7ADC0BA05C695E88C6"
+$assistantScriptCount = 324
+$assistantOrderSha256 = "5B302939139B2F233BA2907FB383C45E8CE71587FA7157EF23ED063CB1E17754"
 
 function Normalize-AssistantReference {
     param([Parameter(Mandatory = $true)][string]$Path)
@@ -369,7 +369,7 @@ foreach ($directory in $localDirectories) {
 }
 
 $localFiles = @(Get-ChildItem -LiteralPath $stagePath -File -Force -Recurse | Where-Object {
-    $_.Name -match '(?i)^(?:\.DS_Store|\.gitignore|\.pkgmeta|Thumbs\.db|desktop\.ini|luac\.out|graph\.json|GRAPH_REPORT\.md|\.graphify.*|.*\.py[co])$'
+    $_.Name -match '(?i)^(?:\.DS_Store|\.gitignore|\.pkgmeta|Thumbs\.db|desktop\.ini|luac\.out|graph\.json|GRAPH_REPORT\.md|\.graphify.*|.*\.(?:html?|md)|.*\.py[co])$'
 })
 foreach ($file in $localFiles) {
     Remove-StagedItem -StageRoot $stagePath -Path $file.FullName
@@ -433,10 +433,10 @@ try {
         ($_ -match '(?i)(^|/)[^/]*AssistantV2[^/]*(?:/|$)') -or
         ($_ -match '(?i)^MidnightSimpleUnitFrames/Shell/Menu2/Assistant/') -or
         ($_ -match '(?i)^MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Assistant(?:Runtime\.xml|DialogLocale(?:_Data)?\.lua)$') -or
-        ($_ -match '(?i)(?:^|/)(?:\.DS_Store|\.gitignore|\.pkgmeta|Thumbs\.db|desktop\.ini|luac\.out|graph\.json|GRAPH_REPORT\.md|\.graphify.*|.*\.py[co])$')
+        ($_ -match '(?i)(?:^|/)(?:\.DS_Store|\.gitignore|\.pkgmeta|Thumbs\.db|desktop\.ini|luac\.out|graph\.json|GRAPH_REPORT\.md|\.graphify.*|.*\.(?:html?|md)|.*\.py[co])$')
     } | Select-Object -First 1
     if ($forbiddenEntry) {
-        throw "Release zip contains a forbidden core-owned Assistant, V2, profiling, Graphify, backup, or local-only path: $forbiddenEntry"
+        throw "Release zip contains a forbidden core-owned Assistant, V2, profiling, Graphify, backup, documentation, mockup, or local-only path: $forbiddenEntry"
     }
 
     foreach ($tocEntry in $tocRelativePaths) {
@@ -466,7 +466,7 @@ try {
     $assistantXml = Read-ZipEntryText -Zip $zip -EntryName "MidnightSimpleUnitFrames_Assistant/$assistantManifestName"
     $scriptRefs = @(Get-AssistantManifestReferences -ManifestText $assistantXml)
     if ($scriptRefs.Count -ne $assistantScriptCount -or (Get-AssistantReferenceHash -References $scriptRefs) -ne $assistantOrderSha256) {
-        throw "Packaged Assistant V1 manifest inventory/load order differs from the validated 328-script contract."
+        throw "Packaged Assistant V1 manifest inventory/load order differs from the validated 324-script contract."
     }
     if (($scriptRefs -join "`n") -ne ($assistantManifestRefs -join "`n")) {
         throw "Packaged Assistant V1 manifest differs from the validated source manifest."
@@ -492,5 +492,5 @@ if (-not $KeepStage) {
     Remove-StagedItem -StageRoot $outputPath -Path $stagePath
 }
 
-Write-Host "Validated ${zipPath}: two addons, two stamped TOCs, exact 328-script Assistant V1 LoD manifest, and no core Assistant/V2/Graphify/backup/local artifacts."
+Write-Host "Validated ${zipPath}: two addons, two stamped TOCs, exact 324-script Assistant V1 LoD manifest, and no core Assistant/V2/Graphify/backup/local artifacts."
 Write-Output $zipPath

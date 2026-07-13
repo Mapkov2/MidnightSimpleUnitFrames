@@ -84,12 +84,12 @@ _G.MSUF_DB = {
     },
 }
 local groupAddon = { UF = {} }
-assert(loadfile(root .. "/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB.lua"))
-    ("MidnightSimpleUnitFrames", groupAddon)
-assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Metadata.lua"))
-    ("MidnightSimpleUnitFrames", groupAddon)
-assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Config.lua"))
-    ("MidnightSimpleUnitFrames", groupAddon)
+local groupDBChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB.lua"))
+groupDBChunk("MidnightSimpleUnitFrames", groupAddon)
+local groupMetadataChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Metadata.lua"))
+groupMetadataChunk("MidnightSimpleUnitFrames", groupAddon)
+local groupConfigChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Config.lua"))
+groupConfigChunk("MidnightSimpleUnitFrames", groupAddon)
 
 Check(groupAddon.GF.PARTY_DEFAULTS.hpFullValueShort == true, "group abbreviation default must stay enabled")
 local groupSpec = groupAddon.GF.CompileSpec("party", nil, "party1")

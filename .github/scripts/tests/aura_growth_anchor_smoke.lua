@@ -2,9 +2,10 @@
 --
 -- The selected lane anchor pins the lane bounding box to the unit frame. The
 -- growth-derived initialAnchor belongs to Blizzard's internal element flow.
--- Horizontal-first lanes use Blizzard's native layout setters; vertical-first
--- UP/DOWN lanes use MSUF's small ApplyLayout fallback because the native flow
--- cannot swap its major axis.
+-- Horizontal-first lanes delegate to Blizzard's native layout, then restore the
+-- configured full-capacity bounds. Vertical-first UP/DOWN lanes use MSUF's small
+-- ApplyLayout fallback because the native flow cannot swap its major axis; both
+-- paths keep the outer anchor stable as the active aura count changes.
 local root = arg and arg[1] or "."
 
 local function Check(value, message)
@@ -170,6 +171,17 @@ local function NativeAuraApplyLayout(self)
         button:ClearAllPoints()
         button:SetPoint(anchor, self, anchor, col * step * xSign, row * step * ySign)
     end
+    -- Match Blizzard_CustomAuraContainerMixin:OnLayoutComplete: the native
+    -- layout shrinks the live container to the currently assigned frames.
+    -- MSUF's wrapper must restore the full configured lane bounds afterwards,
+    -- otherwise the selected outer anchor moves as aura count changes.
+    local count = #frames
+    local cols = count > 0 and math.min(count, perRow) or 1
+    local rows = count > 0 and math.floor((count + perRow - 1) / perRow) or 1
+    self:SetSize(
+        math.max(1, cols * size + math.max(cols - 1, 0) * spacing),
+        math.max(1, rows * size + math.max(rows - 1, 0) * spacing)
+    )
 end
 
 local function NewAuraContainer(parent)
@@ -260,7 +272,11 @@ local AurasElement = assert(registeredElements.Auras)
 Check(type(A3.ResolveUnitFrameConfig) == "function", "unit aura compiler missing")
 Check(type(A3._ApplyNormalLaneContainers) == "function", "normal lane integration surface missing")
 
-local ANCHORS = { "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT", "CENTER" }
+local ANCHORS = {
+    "TOPLEFT", "TOP", "TOPRIGHT",
+    "LEFT", "CENTER", "RIGHT",
+    "BOTTOMLEFT", "BOTTOM", "BOTTOMRIGHT",
+}
 local GROWTHS = {
     RIGHTDOWN = { x = 1, y = -1, initial = "TOPLEFT", vertical = false },
     LEFTDOWN = { x = -1, y = -1, initial = "TOPRIGHT", vertical = false },
@@ -306,9 +322,11 @@ end
 local function ApplyLane(lane)
     local parent = NewFrame(nil)
     local auraRoot = NewFrame(parent)
-    local ok, any = A3._ApplyNormalLaneContainers(auraRoot, { buff = lane }, parent, false)
+    local lanes = {}
+    lanes[lane.kind] = lane
+    local ok, any = A3._ApplyNormalLaneContainers(auraRoot, lanes, parent, false)
     Check(ok == true and any == true, "normal aura lane integration failed")
-    return assert(auraRoot.Buffs), auraRoot, parent
+    return assert(auraRoot[lane.rootKey]), auraRoot, parent
 end
 
 local function AssertPoint(frame, point, relativeTo, relativePoint, x, y, label)
@@ -396,11 +414,16 @@ for _, anchor in ipairs(ANCHORS) do
         Equal(container.layoutSetterCalls.width, setterCallsBeforeChurn.width,
             label .. " layout churn repeated native width setter")
         AssertGrid(frames, container, expected, label)
+        Near(container.width, lane.width, label .. " fixed-capacity width after layout")
+        Near(container.height, lane.height, label .. " fixed-capacity height after layout")
 
         if expected.vertical then
             Check(container.ApplyLayout ~= NativeAuraApplyLayout, label .. " did not install vertical layout fallback")
         else
-            Equal(container.ApplyLayout, NativeAuraApplyLayout, label .. " replaced Blizzard's horizontal layout")
+            Check(container.ApplyLayout ~= NativeAuraApplyLayout,
+                label .. " did not install fixed-capacity native layout wrapper")
+            Check((container.nativeApplyLayoutCalls or 0) >= 1,
+                label .. " horizontal wrapper did not delegate to Blizzard")
         end
 
         -- Reapplying an unchanged compiled lane is a cold-path no-op for layout
@@ -456,8 +479,114 @@ for _, anchor in ipairs(ANCHORS) do
         matrixCases = matrixCases + 1
     end
 end
-Equal(matrixCases, 30, "unit anchor/growth matrix coverage")
+Equal(matrixCases, 54, "unit anchor/growth matrix coverage")
 Check(horizontalChurnCovered and verticalChurnCovered, "native/fallback reorder coverage incomplete")
+
+-- PLAYER_ENTERING_WORLD / ZONE_CHANGED_NEW_AREA use a one-shot geometry pass
+-- that deliberately bypasses desired-value caches. Cover a visible repair and
+-- the deferred hidden-container marker on a normal player aura lane.
+do
+    local lane = UnitLane("RIGHT", "RIGHTDOWN")
+    local container, auraRoot, parent = ApplyLane(lane)
+    Check(A3._DirectIdentityRefreshUnitEligible("player") == true,
+        "player aura containers are excluded from world repair")
+    Check(container._msufA3DirectIdentityUnit == "player",
+        "player aura container was not registered for world repair")
+
+    local foreign = NewFrame(nil)
+    container.point = { "CENTER", foreign, "CENTER", 99, 88 }
+    container.width, container.height = 3, 4
+    local updates = container.updateAllAurasCalls or 0
+    Check(A3._DirectIdentityRefreshUnit("player", true) == true,
+        "visible player world repair did not run")
+    Equal(container.updateAllAurasCalls or 0, updates + 1,
+        "visible player world repair did not settle native auras first")
+    AssertPoint(container, lane.anchor, parent, lane.anchor, lane.x, lane.y,
+        "visible player world repair")
+    Near(container.width, lane.width, "visible player world repair width")
+    Near(container.height, lane.height, "visible player world repair height")
+    Equal(container._msufA3ForceManagedAuraGeometry, nil,
+        "visible player world repair marker was not consumed")
+
+    container:Hide()
+    container.point = { "CENTER", foreign, "CENTER", -77, 66 }
+    container.width, container.height = 5, 6
+    updates = container.updateAllAurasCalls or 0
+    A3._DirectIdentityRefreshUnit("player", true)
+    Equal(container.updateAllAurasCalls or 0, updates,
+        "hidden player container refreshed native auras")
+    Equal(container._msufA3ForceManagedAuraGeometry, true,
+        "hidden player container lost its deferred geometry marker")
+    local ok, any = A3._ApplyNormalLaneContainers(auraRoot, { buff = lane }, parent, false)
+    Check(ok == true and any == true and auraRoot.Buffs == container,
+        "hidden player container was not reused on its next config sync")
+    AssertPoint(container, lane.anchor, parent, lane.anchor, lane.x, lane.y,
+        "deferred player world repair")
+    Near(container.width, lane.width, "deferred player world repair width")
+    Near(container.height, lane.height, "deferred player world repair height")
+    Equal(container._msufA3ForceManagedAuraGeometry, nil,
+        "deferred player geometry marker survived successful sync")
+end
+
+-- Dispel border/overlay/corner sensors use native AuraSlots rather than aura
+-- groups. Their geometry cache must honor the same one-shot world marker.
+do
+    local parent = NewFrame(nil)
+    local auraRoot = NewFrame(parent)
+    local container = NewAuraContainer(auraRoot)
+    local button = NewAuraButton(container)
+    local sensor = {
+        sensor = true,
+        kind = "dispelCorner",
+        unit = "player",
+        visual = "corner",
+        size = 12,
+        max = 1,
+        layer = 14,
+        strata = "AUTO",
+        alpha = 1,
+        slots = { { anchor = "BOTTOM", x = 3, y = -2 } },
+        _msufA3LayoutSignature = "sensor-layout",
+    }
+    local sensorRoot = {
+        sensorRoot = true,
+        kind = "dispelSensors",
+        unit = "player",
+        layer = 14,
+        max = 1,
+        sensors = { sensor },
+        _msufA3LayoutSignature = "sensor-root-layout",
+    }
+    container[1] = button
+    container.createdButtons = 1
+    container._msufA3ManagedAuraSlots = true
+    container._msufA3NativeLaneConfig = sensorRoot
+    container._msufA3ParentFrame = parent
+    container._msufA3SensorButtonSlots = { { sensor = sensor, sensorIndex = 1 } }
+
+    Check(A3._SyncManagedAuraContainerGeometry(container, true) == true,
+        "forced dispel AuraSlot geometry sync failed")
+    AssertPoint(button, "BOTTOM", parent, "BOTTOM", 3, -2,
+        "forced dispel AuraSlot geometry")
+    Near(button.width, 12, "forced dispel AuraSlot width")
+    Near(button.height, 12, "forced dispel AuraSlot height")
+
+    local foreign = NewFrame(nil)
+    button.point = { "CENTER", foreign, "CENTER", 90, 80 }
+    button.width, button.height = 2, 3
+    Check(A3._SyncManagedAuraContainerGeometry(container, false) == true,
+        "cached dispel AuraSlot sync failed")
+    Equal(button.point[2], foreign, "cached dispel sync unexpectedly bypassed geometry cache")
+    container._msufA3ForceManagedAuraGeometry = true
+    Check(A3._SyncManagedAuraContainerGeometry(container, false) == true,
+        "deferred dispel AuraSlot repair failed")
+    AssertPoint(button, "BOTTOM", parent, "BOTTOM", 3, -2,
+        "deferred dispel AuraSlot geometry")
+    Near(button.width, 12, "deferred dispel AuraSlot width")
+    Near(button.height, 12, "deferred dispel AuraSlot height")
+    Equal(container._msufA3ForceManagedAuraGeometry, nil,
+        "deferred dispel AuraSlot marker survived successful sync")
+end
 
 -- Reusing a lane container across axis changes must keep one stable wrapper:
 -- horizontal layouts delegate to Blizzard; vertical layouts return to the
@@ -470,19 +599,15 @@ do
     container:ApplyLayout()
     local nativeCalls = container.nativeApplyLayoutCalls or 0
 
-    local activeSizes = {
-        { count = 2, width = 10, height = 22 },
-        { count = 3, width = 10, height = 34 },
-        { count = 4, width = 22, height = 34 },
-    }
-    for i = 1, #activeSizes do
-        local expected = activeSizes[i]
+    local activeCounts = { 1, 2, 3, 4, 5, 6 }
+    for i = 1, #activeCounts do
+        local activeCount = activeCounts[i]
         local active = {}
-        for index = 1, expected.count do active[index] = frames[index] end
+        for index = 1, activeCount do active[index] = frames[index] end
         group.frames = active
         container:ApplyLayout()
-        Near(container.width, expected.width, "vertical active-count width " .. tostring(expected.count))
-        Near(container.height, expected.height, "vertical active-count height " .. tostring(expected.count))
+        Near(container.width, upLane.width, "vertical fixed width at active count " .. tostring(activeCount))
+        Near(container.height, upLane.height, "vertical fixed height at active count " .. tostring(activeCount))
     end
     group.frames = frames
 
@@ -494,6 +619,17 @@ do
     Equal(container.nativeApplyLayoutCalls or 0, nativeCalls + 1,
         "vertical wrapper did not delegate horizontal layout to Blizzard")
     AssertGrid(frames, container, GROWTHS.RIGHTUP, "vertical-to-horizontal switch")
+    for _, activeCount in ipairs({ 1, 2, 4, 6 }) do
+        local active = {}
+        for index = 1, activeCount do active[index] = frames[index] end
+        group.frames = active
+        container:ApplyLayout()
+        Near(container.width, rightUpLane.width,
+            "horizontal fixed width at active count " .. tostring(activeCount))
+        Near(container.height, rightUpLane.height,
+            "horizontal fixed height at active count " .. tostring(activeCount))
+    end
+    group.frames = frames
 
     local downLane = UnitLane("TOPRIGHT", "DOWN")
     ok, any = A3._ApplyNormalLaneContainers(auraRoot, { buff = downLane }, parent, false)
@@ -515,54 +651,178 @@ local GROUP_GROWTHS = {
     { name = "RIGHTUP", xName = "RIGHT", yName = "UP", expected = GROWTHS.RIGHTUP },
     { name = "LEFTUP", xName = "LEFT", yName = "UP", expected = GROWTHS.LEFTUP },
 }
+local GROUP_LANES = {
+    {
+        kind = "buff", show = "showBuffs", max = "maxBuffs", size = "buffIconSize",
+        spacing = "buffSpacing", perRow = "buffPerRow", growthX = "buffGrowthX",
+        growthY = "buffGrowthY", anchor = "buffAnchor", x = "buffOffsetX", y = "buffOffsetY",
+    },
+    {
+        kind = "trackedBuff", show = "showTrackedBuffs", max = "maxTrackedBuffs", size = "trackedBuffIconSize",
+        spacing = "trackedBuffSpacing", perRow = "trackedBuffPerRow", growthX = "trackedBuffGrowthX",
+        growthY = "trackedBuffGrowthY", anchor = "trackedBuffAnchor", x = "trackedBuffOffsetX", y = "trackedBuffOffsetY",
+    },
+    {
+        kind = "debuff", show = "showDebuffs", max = "maxDebuffs", size = "debuffIconSize",
+        spacing = "debuffSpacing", perRow = "debuffPerRow", growthX = "debuffGrowthX",
+        growthY = "debuffGrowthY", anchor = "debuffAnchor", x = "debuffOffsetX", y = "debuffOffsetY",
+    },
+    {
+        kind = "external", show = "showExternals", max = "maxExternals", size = "externalIconSize",
+        spacing = "externalSpacing", perRow = "externalPerRow", growthX = "externalGrowthX",
+        growthY = "externalGrowthY", anchor = "externalAnchor", x = "externalOffsetX", y = "externalOffsetY",
+    },
+}
 
 local groupCases = 0
-for _, anchor in ipairs(ANCHORS) do
-    for _, growth in ipairs(GROUP_GROWTHS) do
-        local source = {
-            enabled = true,
-            showBuffs = true,
-            maxBuffs = 6,
-            buffIconSize = 10,
-            buffSpacing = 2,
-            buffPerRow = 3,
-            buffGrowthX = growth.xName,
-            buffGrowthY = growth.yName,
-            buffAnchor = anchor,
-            buffOffsetX = 7,
-            buffOffsetY = -5,
-            buffShowCooldown = false,
-            buffShowStacks = false,
-            buffShowCooldownSwipe = false,
-            buffShowDurationBar = false,
-            buffShowTooltip = false,
-        }
-        local frame = NewFrame(nil)
-        frame.unit = "party1"
-        frame._msufIsGroupFrame = true
-        frame.MSUFSpec = { auras = source }
-        Check(AurasElement.IsEnabled(frame) == true, "group aura config did not enable")
-        local cfg = assert(frame._msufA3NativeGroupConfig)
-        Check(cfg.group == true, "group aura config lost group marker")
-        local lane = assert(cfg.lanes.buff)
-        local label = "group " .. anchor .. "/" .. growth.name
-        Equal(lane.anchor, anchor, label .. " compiled bounding-box anchor")
-        Equal(lane.initialAnchor, growth.expected.initial, label .. " compiled initial anchor")
-        local container, _, parent = ApplyLane(lane)
-        AssertPoint(container, anchor, parent, anchor, 7, -5, label .. " container")
-        AssertLayoutSetters(container, growth.expected, label)
-        local frames = container:GetAuraGroup(container._msufA3ManagedGroupKey):GetFramesByIndex()
-        container:ApplyLayout()
-        AssertGrid(frames, container, growth.expected, label)
-        Equal(container.ApplyLayout, NativeAuraApplyLayout, label .. " replaced Blizzard's horizontal layout")
-        groupCases = groupCases + 1
+for _, laneSpec in ipairs(GROUP_LANES) do
+    for _, anchor in ipairs(ANCHORS) do
+        for _, growth in ipairs(GROUP_GROWTHS) do
+            local source = { enabled = true }
+            source[laneSpec.show] = true
+            source[laneSpec.max] = 6
+            source[laneSpec.size] = 10
+            source[laneSpec.spacing] = 2
+            source[laneSpec.perRow] = 3
+            source[laneSpec.growthX] = growth.xName
+            source[laneSpec.growthY] = growth.yName
+            source[laneSpec.anchor] = anchor
+            source[laneSpec.x] = 7
+            source[laneSpec.y] = -5
+            local frame = NewFrame(nil)
+            frame.unit = "party1"
+            frame._msufIsGroupFrame = true
+            frame.MSUFSpec = { auras = source }
+            Check(AurasElement.IsEnabled(frame) == true, "group aura config did not enable")
+            local cfg = assert(frame._msufA3NativeGroupConfig)
+            Check(cfg.group == true, "group aura config lost group marker")
+            local lane = assert(cfg.lanes[laneSpec.kind])
+            local label = "group " .. laneSpec.kind .. " " .. anchor .. "/" .. growth.name
+            Equal(lane.anchor, anchor, label .. " compiled bounding-box anchor")
+            Equal(lane.initialAnchor, growth.expected.initial, label .. " compiled initial anchor")
+            local container, _, parent = ApplyLane(lane)
+            AssertPoint(container, anchor, parent, anchor, 7, -5, label .. " container")
+            AssertLayoutSetters(container, growth.expected, label)
+            local frames = container:GetAuraGroup(container._msufA3ManagedGroupKey):GetFramesByIndex()
+            container:ApplyLayout()
+            AssertGrid(frames, container, growth.expected, label)
+            Check(container.ApplyLayout ~= NativeAuraApplyLayout,
+                label .. " did not install fixed-capacity native layout wrapper")
+            Near(container.width, lane.width, label .. " fixed-capacity width")
+            Near(container.height, lane.height, label .. " fixed-capacity height")
+            groupCases = groupCases + 1
+        end
     end
 end
-Equal(groupCases, 20, "group anchor/growth coverage")
+Equal(groupCases, 144, "group lane/anchor/growth coverage")
 
--- Static parity guards: live, Edit Mode, and both Menu2 previews all preserve
--- the same bounding-box/initial-anchor split. These assertions intentionally
--- avoid requiring preview code changes for a native-container-only bug.
+-- Execute the Menu2 unit-preview geometry provider directly. This keeps the
+-- preview side of the contract covered without constructing WoW UI regions:
+-- all nine anchors, both normal lanes, all three custom lanes, compiled metrics,
+-- full capacity with only four samples, and the no-runtime-metrics fallback.
+do
+    local previewConfig
+    local customItems = {}
+    local previewModel = {
+        CanonKey = function(value) return value end,
+        CurrentPanelKey = function() return "player" end,
+    }
+    local menuModel = {
+        ReadPreviewConfig = function() return previewConfig end,
+        CustomContainer = function(_, index) return customItems[index] end,
+    }
+    local previewNS = {
+        UFPreview = { Model = previewModel },
+        MSUF_Auras3 = { MenuModel = menuModel },
+    }
+    local previewChunk = assert(loadfile(root
+        .. "/MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Auras.lua"))
+    previewChunk("MidnightSimpleUnitFrames", previewNS)
+    local previewAuras = assert(previewNS.UFPreviewAuras)
+    local fractions = {
+        TOPLEFT = { 0, 1 }, TOP = { 0.5, 1 }, TOPRIGHT = { 1, 1 },
+        LEFT = { 0, 0.5 }, CENTER = { 0.5, 0.5 }, RIGHT = { 1, 0.5 },
+        BOTTOMLEFT = { 0, 0 }, BOTTOM = { 0.5, 0 }, BOTTOMRIGHT = { 1, 0 },
+    }
+    local function Metrics(anchor, x, y)
+        return {
+            enabled = true, num = 6, size = 10, spacing = 2, step = 12,
+            perRow = 3, width = 34, height = 22,
+            growthX = 1, growthY = -1, verticalGrowth = false,
+            initialAnchor = "TOPLEFT", anchor = anchor, x = x, y = y,
+        }
+    end
+    for _, anchor in ipairs(ANCHORS) do
+        local buffMetrics = Metrics(anchor, 7, -5)
+        local debuffMetrics = Metrics(anchor, -11, 8)
+        local customMetrics = {
+            Metrics(anchor, 3, 4), Metrics(anchor, -6, 9), Metrics(anchor, 12, -7),
+        }
+        previewConfig = {
+            enabled = true,
+            showBuffs = true,
+            showDebuffs = true,
+            buffMetrics = buffMetrics,
+            debuffMetrics = debuffMetrics,
+            customMetrics = customMetrics,
+            buffLayer = 5,
+            debuffLayer = 6,
+        }
+        for index = 1, 3 do
+            customItems[index] = {
+                enabled = true,
+                auraType = index == 2 and "DEBUFF" or "BUFF",
+                layer = 8 + index,
+                placed = {
+                    anchor = anchor, x = customMetrics[index].x, y = customMetrics[index].y,
+                    max = 6, size = 10, spacing = 2, perRow = 3, growth = "RIGHTDOWN",
+                },
+            }
+        end
+        local state = assert(previewAuras.BuildState("player", 200, 100))
+        local frac = fractions[anchor]
+        local function AssertPreviewLane(bounds, metrics, label)
+            Near(bounds.laneLeft, frac[1] * 200 + metrics.x - frac[1] * metrics.width,
+                label .. " left")
+            Near(bounds.laneBottom, frac[2] * 100 + metrics.y - frac[2] * metrics.height,
+                label .. " bottom")
+            Near(bounds.laneW, metrics.width, label .. " full-capacity width")
+            Near(bounds.laneH, metrics.height, label .. " full-capacity height")
+            Equal(bounds.shown, 4, label .. " sample count")
+        end
+        AssertPreviewLane(state.buff, buffMetrics, "unit preview buff " .. anchor)
+        AssertPreviewLane(state.debuff, debuffMetrics, "unit preview debuff " .. anchor)
+        for index = 1, 3 do
+            AssertPreviewLane(state["custom" .. tostring(index)], customMetrics[index],
+                "unit preview custom" .. tostring(index) .. " " .. anchor)
+        end
+    end
+
+    previewConfig = {
+        enabled = true, showBuffs = false, showDebuffs = false, customMetrics = {},
+    }
+    customItems[1] = {
+        enabled = true,
+        auraType = "BUFF",
+        layer = 9,
+        placed = {
+            anchor = "RIGHT", x = -2.5, y = 4.5,
+            max = 6, size = 10, spacing = 2, perRow = 3, growth = "RIGHTDOWN",
+        },
+    }
+    customItems[2], customItems[3] = nil, nil
+    local fallbackState = assert(previewAuras.BuildState("player", 200, 100))
+    local fallback = assert(fallbackState.custom1)
+    Near(fallback.laneW, 34, "custom preview fallback full-capacity width")
+    Near(fallback.laneH, 22, "custom preview fallback full-capacity height")
+    Near(fallback.laneLeft, 200 - 2 - 34, "custom preview fallback runtime-rounded X")
+    Near(fallback.laneBottom, 50 + 5 - 11, "custom preview fallback runtime-rounded Y")
+    Equal(fallback.shown, 4, "custom preview fallback sample count")
+end
+
+-- Static integration guards: live, Edit Mode, Menu2 unit/group previews, and
+-- the group External lane all preserve the same full-capacity rectangle and
+-- selected-anchor/internal-flow split.
 local runtimeSource = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua")
 Check(runtimeSource:find("container:SetPoint(lane.anchor, parentFrame, lane.anchor, lane.x, lane.y)", 1, true),
     "live lane no longer anchors its bounding box with lane.anchor")
@@ -579,23 +839,57 @@ Check(not runtimeSource:find("function A3._LayoutVerticalAuraContainer", 1, true
     "vertical churn uses an A3 namespace lookup")
 Check(runtimeSource:find("container._msufA3ManagedAuraGroup = group", 1, true),
     "vertical layout no longer caches the stable AuraGroup")
+Check(runtimeSource:find("InstallVerticalAuraLayoutFallback(container)", 1, true),
+    "normal lanes no longer install the fixed-capacity ApplyLayout wrapper")
+Check(Count(runtimeSource, "container:SetSize(lane.width or lane.size or 1, lane.height or lane.size or 1)") >= 2,
+    "native horizontal/vertical layout no longer restores full lane capacity")
+Check(runtimeSource:find("player = true", 1, true),
+    "player aura containers are no longer eligible for world repair")
+Check(runtimeSource:find("A3._SyncManagedAuraContainerGeometry", 1, true),
+    "generic managed-aura world repair dispatcher missing")
 
 local editModeSource = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_EditMode.lua")
 Check(editModeSource:find("PositionPreviewGroup(group, frame, anchor, x, y, laneW, laneH)", 1, true),
     "Edit Mode preview no longer anchors lane bounds with the selected anchor")
 Check(editModeSource:find("icon:SetPoint(initialAnchor, body, initialAnchor, col * step * growthX, row * step * growthY)", 1, true),
     "Edit Mode preview no longer flows icons from initialAnchor")
+Check(editModeSource:find('if anchor == "TOP" then return w * 0.5, h end', 1, true)
+    and editModeSource:find('if anchor == "RIGHT" then return w, h * 0.5 end', 1, true)
+    and editModeSource:find('if anchor == "BOTTOM" then return w * 0.5, 0 end', 1, true),
+    "Edit Mode preview lost edge-anchor geometry")
+Check(not editModeSource:find("PreviewLaneDimensions", 1, true),
+    "Edit Mode custom preview still shrinks to its sample icons")
 
 local unitPreviewSource = Read("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Auras.lua")
 Check(unitPreviewSource:find("local laneLeft = baseX + x - anchorLocalX", 1, true),
     "unit preview no longer positions lane bounds from the selected anchor")
 Check(unitPreviewSource:find('icon:SetPoint(bounds.initialAnchor or "TOPLEFT", visual, bounds.initialAnchor or "TOPLEFT"', 1, true),
     "unit preview no longer flows icons from initialAnchor")
+Check(unitPreviewSource:find("local cols, rows = GridShape(count, perRow, vertical)", 1, true),
+    "unit custom preview no longer sizes fallback bounds from full capacity")
+
+local menuModelSource = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Menu_Model.lua")
+Check(menuModelSource:find("TOPLEFT=true, TOP=true, TOPRIGHT=true", 1, true)
+    and menuModelSource:find("LEFT=true, CENTER=true, RIGHT=true", 1, true)
+    and menuModelSource:find("BOTTOMLEFT=true, BOTTOM=true, BOTTOMRIGHT=true", 1, true),
+    "unit aura menu model no longer accepts all nine anchors")
+Check(menuModelSource:find("customMetrics[index] = buildMetrics", 1, true),
+    "unit aura preview no longer consumes compiled custom-lane metrics")
 
 local groupPreviewSource = Read("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Render.lua")
 Check(groupPreviewSource:find("handle:SetPoint(anchor, mock, anchor", 1, true),
     "group preview no longer anchors lane bounds with the selected anchor")
 Check(groupPreviewSource:find("tex:SetPoint(rect.anchor, handle, rect.anchor, rect[1], rect[2])", 1, true),
     "group preview no longer flows icons from initialAnchor")
+Check(groupPreviewSource:find("if GF_PREVIEW_ANCHOR_FRAC[anchor] then return anchor end", 1, true),
+    "group aura preview no longer accepts all nine runtime anchors")
+Check(groupPreviewSource:find('LayoutAuraGroup(externalHandle, "external", externalCfg', 1, true),
+    "group External aura lane is missing from the preview renderer")
 
-print("PASS aura growth anchoring: 30 unit + 20 group layouts, 1000x vertical churn, axis reuse, cold-path reuse")
+local groupHandlesSource = Read("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Handles.lua")
+Check(groupHandlesSource:find("return ResolveAnchor(rx, ry)", 1, true),
+    "group aura drag no longer resolves through the nine-anchor helper")
+Check(groupHandlesSource:find('externalHandle._cfgGroup = "externals"', 1, true),
+    "group External aura handle no longer writes its persisted lane")
+
+print("PASS aura position parity: 54 unit + 144 group live layouts, 45 unit preview lanes, fixed active-count capacity, player/dispel zone repair, 1000x vertical churn")
