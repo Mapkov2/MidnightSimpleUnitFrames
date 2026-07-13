@@ -154,15 +154,45 @@ local Power = {
     SelectUpdate = function(frame) return frame.dynamicPowerUpdate end,
 }
 UF.RegisterElement("Power", Power)
-first.dynamicPowerUpdate = function(frame) frame.powerCalls = (frame.powerCalls or 0) + 1 end
-second.dynamicPowerUpdate = function(frame) frame.powerCalls = (frame.powerCalls or 0) + 1 end
+local PowerText = {
+    IsEnabled = function() return true end,
+    Create = function() end,
+    Apply = function() end,
+    GetEvents = function() return { "UNIT_POWER_UPDATE" } end,
+}
+function PowerText.Update(frame, event, unit, power, powerMax, powerType, powerToken, metaChanged)
+    frame.powerTextCalls = (frame.powerTextCalls or 0) + 1
+    frame.lastPowerPayload = { event, unit, power, powerMax, powerType, powerToken, metaChanged }
+end
+UF.RegisterElement("PowerText", PowerText)
+first.dynamicPowerUpdate = function(frame)
+    frame.powerCalls = (frame.powerCalls or 0) + 1
+    return 35, 100, 3, "ENERGY", false
+end
+second.dynamicPowerUpdate = function(frame)
+    frame.powerCalls = (frame.powerCalls or 0) + 1
+    return 35, 100, 3, "ENERGY", false
+end
 UF.ApplyElementToFrame(first, "Power", spec)
 UF.ApplyElementToFrame(second, "Power", spec)
+UF.ApplyElementToFrame(first, "PowerText", spec)
+UF.ApplyElementToFrame(second, "PowerText", spec)
 Check(first.UNIT_POWER_UPDATE ~= second.UNIT_POWER_UPDATE,
     "frame-owned update closures were incorrectly interned")
+first._msufDispatchToken = 41
+second._msufDispatchToken = 73
 first.UNIT_POWER_UPDATE(first, "UNIT_POWER_UPDATE", "player")
 second.UNIT_POWER_UPDATE(second, "UNIT_POWER_UPDATE", "player")
 Check(first.powerCalls == 1 and second.powerCalls == 1, "private routes lost frame-local update state")
+Check(first.powerTextCalls == 1 and second.powerTextCalls == 1,
+    "direct power routes did not update bar and text exactly once")
+Check(first.lastPowerPayload[3] == 35 and first.lastPowerPayload[4] == 100
+    and first.lastPowerPayload[5] == 3 and first.lastPowerPayload[6] == "ENERGY"
+    and first.lastPowerPayload[7] == false,
+    "direct power routes did not forward the bar payload to power text")
+Check(first._msufDispatchToken == 41 and second._msufDispatchToken == 73
+    and first._msufDispatchActive == nil and second._msufDispatchActive == nil,
+    "state-free power routes mutated the shared unit-state dispatch")
 
 -- A castbar may temporarily borrow this frame's existing health lifecycle
 -- route. Detach must notify it before deleting the compiled route so the owner

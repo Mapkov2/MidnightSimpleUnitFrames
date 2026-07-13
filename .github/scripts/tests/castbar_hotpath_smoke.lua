@@ -26,7 +26,7 @@ local function NewNamespace()
     return namespace
 end
 
--- StatusBar-local ColorObjects must survive interleaved frames/configurations.
+-- Global castbar colors share exactly one ColorObject per semantic color.
 do
     local createColorCalls = 0
     _G.CreateColor = function(red, green, blue, alpha)
@@ -60,12 +60,12 @@ do
         return { statusBar = statusBar }
     end
 
-    local function Tint(frame, nonR, castR, unavailable)
+    local function Tint(frame, unavailable)
         return applyTint(
             frame,
             false,
-            nonR, 0.2, 0.3, 1,
-            castR, 0.8, 0.9, 1,
+            0.1, 0.2, 0.3, 1,
+            0.4, 0.8, 0.9, 1,
             false,
             1, 0.5, 0.1, 1,
             false,
@@ -75,18 +75,17 @@ do
 
     local target = NewTintFrame()
     local focus = NewTintFrame()
-    Check(Tint(target, 0.1, 0.4, false) == true, "target boolean tint failed")
-    Equal(createColorCalls, 2, "target cold ColorObject count")
-    Check(Tint(focus, 0.6, 0.7, false) == true, "focus boolean tint failed")
-    Equal(createColorCalls, 4, "focus cold ColorObject count")
-    Check(Tint(target, 0.1, 0.4, false) == true, "target repeat tint failed")
-    Equal(createColorCalls, 4, "interleaved focus config evicted target colors")
-    Check(Tint(focus, 0.6, 0.7, false) == true, "focus repeat tint failed")
-    Equal(createColorCalls, 4, "interleaved target config evicted focus colors")
-    Check(Tint(target, 0.1, 0.4, true) == true, "unavailable tint failed")
-    Equal(createColorCalls, 5, "unavailable color was not created exactly once")
-    Tint(target, 0.1, 0.4, true)
-    Equal(createColorCalls, 5, "unchanged unavailable color was recreated")
+    Check(Tint(target, false) == true, "target boolean tint failed")
+    Equal(createColorCalls, 2, "global cold ColorObject count")
+    Check(Tint(focus, false) == true, "focus boolean tint failed")
+    Equal(createColorCalls, 2, "focus recreated global castbar colors")
+    Check(target.statusBar.texture.falseColor == focus.statusBar.texture.falseColor
+        and target.statusBar.texture.trueColor == focus.statusBar.texture.trueColor,
+        "frames did not share global castbar ColorObjects")
+    Check(Tint(target, true) == true, "unavailable tint failed")
+    Equal(createColorCalls, 3, "unavailable color was not created exactly once")
+    Tint(focus, true)
+    Equal(createColorCalls, 3, "unchanged unavailable color was recreated")
 end
 
 -- Native duration-text cleanup is a transition: steady disabled calls do no C work,
@@ -243,8 +242,9 @@ do
     Equal(cooldownAPICalls, 4, "next relevant cooldown event reused stale snapshot")
 end
 
--- Register/reclassify initializes only the affected frame. A complete low-bucket
--- pass is reserved for an actual frame-driver <-> ticker topology hand-off.
+-- Low-frequency register/reclassify initializes only the affected frame. High-
+-- frequency initialization stays caller-owned; a complete low-bucket pass is
+-- reserved for an actual frame-driver <-> ticker topology hand-off.
 -- Player channel hard-stop reads the stored active token without BuildState.
 do
     local now = 0
@@ -356,7 +356,7 @@ do
     local boss = NewManagedFrame("boss1", 8, true)
     register(boss)
     Equal(unitExistsCalls.target, 1, "low-to-frame topology transition rescanned low sibling early")
-    Equal(unitExistsCalls.boss1, 1, "new high-frequency frame was not initialized")
+    Equal(unitExistsCalls.boss1, nil, "manager duplicated caller-owned high-frequency initialization")
 
     now = 1.50
     unregister(boss)
@@ -402,4 +402,4 @@ do
     unregister(target)
 end
 
-print("PASS castbar hotpaths: local ColorObjects, native-text transition cleanup, cooldown snapshot sharing, O(1) manager refresh, channel unit fastpath")
+print("PASS castbar hotpaths: shared ColorObjects, native-text transition cleanup, cooldown snapshot sharing, O(1) manager refresh, channel unit fastpath")

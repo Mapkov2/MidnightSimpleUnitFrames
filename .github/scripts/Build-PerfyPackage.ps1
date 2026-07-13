@@ -196,6 +196,27 @@ function Patch-PerfyInstrumentorForWowLimits {
   }
 }
 
+function Remove-Utf8BomFromStagedLua {
+  param([Parameter(Mandatory = $true)][string]$Root)
+
+  $stripped = 0
+  foreach ($file in Get-ChildItem -LiteralPath $Root -Recurse -Filter "*.lua" -File) {
+    $bytes = [System.IO.File]::ReadAllBytes($file.FullName)
+    if ($bytes.Length -lt 3 -or $bytes[0] -ne 0xEF -or $bytes[1] -ne 0xBB -or $bytes[2] -ne 0xBF) {
+      continue
+    }
+
+    $contentLength = $bytes.Length - 3
+    $withoutBom = New-Object byte[] $contentLength
+    if ($contentLength -gt 0) {
+      [System.Array]::Copy($bytes, 3, $withoutBom, 0, $contentLength)
+    }
+    [System.IO.File]::WriteAllBytes($file.FullName, $withoutBom)
+    $stripped++
+  }
+  return $stripped
+}
+
 function Set-PerfyInterfaceVersion {
   param(
     [Parameter(Mandatory = $true)][string]$PerfyAddonDir,
@@ -502,6 +523,11 @@ foreach ($localDirectoryName in @(
     ForEach-Object {
       Remove-Item -LiteralPath $_.FullName -Recurse -Force
     }
+}
+
+$strippedBomCount = Remove-Utf8BomFromStagedLua -Root $stageRoot
+if ($strippedBomCount -gt 0) {
+  Write-Host "Stripped UTF-8 BOMs from $strippedBomCount staged Lua file(s)."
 }
 
 $perfyAddonTarget = Join-Path $stageRoot "!!!Perfy"

@@ -23,8 +23,8 @@ _G.CreateColor = function(r, g, b, a)
 end
 
 local addon = {}
-assert(loadfile(root .. "/MidnightSimpleUnitFrames/Runtime/MSUF_FontRegistry.lua"))
-    ("MidnightSimpleUnitFrames", addon)
+local fontRegistryChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/Runtime/MSUF_FontRegistry.lua"))
+fontRegistryChunk("MidnightSimpleUnitFrames", addon)
 lowerCalls = 0
 
 local red = _G.MSUF_GetColorFromKey("red")
