@@ -212,6 +212,14 @@ local UNIT_AURA_ELEMENTS = { "Auras" }
 
 local function ApplyUnitAuras(unit, reason, configAlreadyApplied)
     reason = reason or "MSUF2_UNIT_AURAS"
+    -- Aura layout writes go into the Auras3 saved model, which the UF element
+    -- path cannot see as changed (no config serial moves). Drop the cached
+    -- runtime aura config first so the refresh below recompiles the lane and
+    -- the menu preview reads post-write metrics instead of the stale cache.
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    if a3 and type(a3.InvalidateUnitRuntimeConfig) == "function" then
+        Apply.SafeInvoke(a3.InvalidateUnitRuntimeConfig, unit)
+    end
     if configAlreadyApplied == true then
         return ApplyAuraScope(unit, reason)
     end

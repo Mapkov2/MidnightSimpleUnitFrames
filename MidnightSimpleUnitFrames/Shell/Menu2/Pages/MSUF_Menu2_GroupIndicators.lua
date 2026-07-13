@@ -1322,10 +1322,14 @@ function SpellTileGrid:Refresh()
         SetSpellTileBorder(tile, false, CUSTOM_BUFF_COLOR, 0.72, indicatorsOn and 0.82 or 0.45)
         tile:Show()
     end
+    local tileCount = #trackable + ((specKey and customCount < CUSTOM_BUFF_LIMIT) and 1 or 0)
+    local rows = max(1, floor((max(1, tileCount) + self.perRow - 1) / self.perRow))
+    self.frame:SetHeight((rows * (self.tileSize + self.gap)) - self.gap)
+    return rows
 end
 
 local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
-    local spells = b:CollapsibleSection("si", Tr("Spell Indicators"), 1000, false)
+    local spells = b:CollapsibleSection("si", Tr("Spell Indicators"), 1046, false)
     local siW = spells._msuf2Width or ctx.width or 720
     local siGap = 28
     local siLeftX = 30
@@ -1333,12 +1337,13 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
     local siLeftW = max(240, min(370, floor((siInnerW - siGap) * 0.46)))
     local siRightX = siLeftX + siLeftW + siGap
     local siRightW = max(240, min(390, siInnerW - siLeftW - siGap))
+    local spellSetCard, placedIndicatorCard
     do
-        W.ControlCard(spells, Tr("Spell Set"), nil, siLeftX - 14, -38, siLeftW + 28, 374)
-        W.ControlCard(spells, Tr("Selected Spell"), nil, siRightX - 14, -38, siRightW + 28, 358)
-        W.ControlCard(spells, Tr("Placed Indicator"), nil, siLeftX - 14, -414, siLeftW + 28, 462)
-        W.ControlCard(spells, Tr("Frame Effect"), nil, siRightX - 14, -410, siRightW + 28, 360)
-        W.ControlCard(spells, Tr("Utilities"), nil, siRightX - 14, -782, siRightW + 28, 194)
+        spellSetCard = W.ControlCard(spells, Tr("Spell Set"), nil, siLeftX - 14, -38, siLeftW + 28, 404)
+        W.ControlCard(spells, Tr("Selected Spell"), nil, siRightX - 14, -38, siRightW + 28, 404)
+        placedIndicatorCard = W.ControlCard(spells, Tr("Placed Indicator"), nil, siLeftX - 14, -456, siLeftW + 28, 462)
+        W.ControlCard(spells, Tr("Frame Effect"), nil, siRightX - 14, -456, siRightW + 28, 360)
+        W.ControlCard(spells, Tr("Utilities"), nil, siRightX - 14, -828, siRightW + 28, 194)
     end
     local RefreshSpellIndicatorState = M.RefreshProxy()
     local function RequestSpellControlRefresh(reason)
@@ -1526,6 +1531,23 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
             QueueSpellIndicators(CurrentScope())
         end,
         ControlMeta(ctx, "spell.selected.only_mine"))
+    local autoBlacklist = W.ToggleAt(spells, Tr("Auto-blacklist from Buffs"), siRightX, -406, siRightW)
+    M.BindBoolWidget(ctx, autoBlacklist,
+        function()
+            local cfg = CurrentSpellConfig(CurrentScope(), false)
+            return cfg and cfg.autoBlacklist == true or false
+        end,
+        function(value)
+            local cfg = CurrentSpellConfig(CurrentScope(), true)
+            if cfg then cfg.autoBlacklist = value and true or nil end
+            QueueSpellIndicators(CurrentScope())
+        end,
+        ControlMeta(ctx, "spell.selected.auto_blacklist"))
+    if M.AddTooltip then
+        M.AddTooltip(autoBlacklist, "Auto-blacklist from Buffs",
+            "While this Spell Indicator is enabled, its Aura Spell IDs are automatically hidden from the normal Buff container. No manual blacklist entry is required.",
+            { hook = true, titleAsLine = true })
+    end
     local function BindPlacedDropdown(label, values, key, default, y)
         local control = W.Dropdown(spells, Tr(label), values, siLeftW)
         M.BindDropdownWidget(ctx, control,
@@ -1607,7 +1629,7 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         W.MoveWidget(control, spells, x, y, width, "LEFT")
         return control
     end
-    local placedType = BindSpellSubType("Indicator Type", PLACED_INDICATOR_TYPES, siLeftX, -450, siLeftW, "placed",
+    local placedType = BindSpellSubType("Indicator Type", PLACED_INDICATOR_TYPES, siLeftX, -492, siLeftW, "placed",
         function(placed)
             placed.type = placed.type or "icon"
             placed.anchor = placed.anchor or "TOPLEFT"
@@ -1616,14 +1638,14 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
             if placed.showCooldownSwipe == nil then placed.showCooldownSwipe = true end
         end,
         RefreshPage)
-    local placedAnchor = BindPlacedDropdown("Anchor", STATUS_ICON_ANCHORS, "anchor", "TOPLEFT", -504)
-    local placedSize = BindPlacedSlider("Size", 6, 48, 1, "size", 18, -558)
-    local placedX = BindPlacedSlider("X Offset", -100, 100, 1, "x", 0, -612)
-    local placedY = BindPlacedSlider("Y Offset", -100, 100, 1, "y", 0, -666)
-    local placedBarWidth = BindPlacedSlider("Bar Width", 8, 120, 1, "barWidth", 42, -720)
-    local placedGrowth = BindPlacedDropdown("Growth", SPELL_GROWTH_VALUES, "growth", "RIGHTDOWN", -774)
-    local placedIconEffect = BindPlacedDropdown("Icon Effect", ICON_EFFECT_TYPES, "iconEffect", "none", -828)
-    local frameType = BindSpellSubType("Frame Effect", FRAME_EFFECT_TYPES, siRightX, -444, siRightW, "frame",
+    local placedAnchor = BindPlacedDropdown("Anchor", STATUS_ICON_ANCHORS, "anchor", "TOPLEFT", -546)
+    local placedSize = BindPlacedSlider("Size", 6, 48, 1, "size", 18, -600)
+    local placedX = BindPlacedSlider("X Offset", -100, 100, 1, "x", 0, -654)
+    local placedY = BindPlacedSlider("Y Offset", -100, 100, 1, "y", 0, -708)
+    local placedBarWidth = BindPlacedSlider("Bar Width", 8, 120, 1, "barWidth", 42, -762)
+    local placedGrowth = BindPlacedDropdown("Growth", SPELL_GROWTH_VALUES, "growth", "RIGHTDOWN", -816)
+    local placedIconEffect = BindPlacedDropdown("Icon Effect", ICON_EFFECT_TYPES, "iconEffect", "none", -870)
+    local frameType = BindSpellSubType("Frame Effect", FRAME_EFFECT_TYPES, siRightX, -490, siRightW, "frame",
         function(frame)
             if not frame.color then
                 local c = CurrentAuraColor(CurrentScope())
@@ -1651,8 +1673,8 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
             QueueSpellIndicators(CurrentScope())
         end,
         ControlMeta(ctx, "spell.frame.color"))
-    W.MoveWidget(frameColor, spells, siRightX, -500, siRightW)
-    local framePriority = BindFrameSlider("Priority", 1, 10, 1, "priority", 5, -554)
+    W.MoveWidget(frameColor, spells, siRightX, -546, siRightW)
+    local framePriority = BindFrameSlider("Priority", 1, 10, 1, "priority", 5, -600)
     local frameAlpha = W.Slider(spells, Tr("Tint Alpha"), 5, 100, 5, siRightW)
     M.BindNumberWidget(ctx, frameAlpha,
         function()
@@ -1669,23 +1691,49 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
             QueueSpellIndicators(CurrentScope())
         end,
         25, StepMeta(ctx, "spell.frame.alpha", 5))
-    W.MoveWidget(frameAlpha, spells, siRightX, -608, siRightW, "LEFT")
-    local frameThickness = BindFrameSlider("Border / Glow Thickness", 1, 8, 1, "thickness", 2, -662)
+    W.MoveWidget(frameAlpha, spells, siRightX, -654, siRightW, "LEFT")
+    local frameThickness = BindFrameSlider("Border / Glow Thickness", 1, 8, 1, "thickness", 2, -708)
     local frameStrata = BindNestedStrataSlider(ctx,
         W.Slider(spells, Tr("Effect Strata"), 0, (FrameStrataCount or 9) - 1, 1, siRightW),
         function() return FrameEffectConfig(CurrentScope(), true) end, "strata", "AUTO", "visual", "spell.frame.strata")
-    W.MoveWidget(frameStrata, spells, siRightX, -716, siRightW, "LEFT")
-    local placedMissing = BindPlacedToggle("Show when missing", "missing", false, -822)
-    local placedCooldownSwipe = BindPlacedToggle("Show Cooldown Swipe", "showCooldownSwipe", true, -854)
-    local placedCooldown = BindPlacedToggle("Show Cooldown Text", "showCooldown", true, -886)
-    local placedCooldownSize = BindConfigSlider(PlacedConfig, siRightX, siRightW, "Cooldown Text Size", 6, 40, 1, "cooldownSize", 8, -918)
+    W.MoveWidget(frameStrata, spells, siRightX, -762, siRightW, "LEFT")
+    local placedMissing = BindPlacedToggle("Show when missing", "missing", false, -868)
+    local placedCooldownSwipe = BindPlacedToggle("Show Cooldown Swipe", "showCooldownSwipe", true, -900)
+    local placedCooldown = BindPlacedToggle("Show Cooldown Text", "showCooldown", true, -932)
+    local placedCooldownSize = BindConfigSlider(PlacedConfig, siRightX, siRightW, "Cooldown Text Size", 6, 40, 1, "cooldownSize", 8, -964)
+    local spellGridLayoutRows
+    local function RefreshSpellGridLayout(rows)
+        rows = max(3, tonumber(rows) or 3)
+        if rows == spellGridLayoutRows then return end
+        spellGridLayoutRows = rows
+        local extra = (rows - 3) * (spellGrid.tileSize + spellGrid.gap)
+        spellSetCard:SetHeight(404 + extra)
+        placedIndicatorCard:ClearAllPoints()
+        placedIndicatorCard:SetPoint("TOPLEFT", spells, "TOPLEFT", siLeftX - 14, -456 - extra)
+        W.MoveWidget(placedType, spells, siLeftX, -492 - extra, siLeftW, "LEFT")
+        W.MoveWidget(placedAnchor, spells, siLeftX, -546 - extra, siLeftW, "LEFT")
+        W.MoveWidget(placedSize, spells, siLeftX, -600 - extra, siLeftW, "LEFT")
+        W.MoveWidget(placedX, spells, siLeftX, -654 - extra, siLeftW, "LEFT")
+        W.MoveWidget(placedY, spells, siLeftX, -708 - extra, siLeftW, "LEFT")
+        W.MoveWidget(placedBarWidth, spells, siLeftX, -762 - extra, siLeftW, "LEFT")
+        W.MoveWidget(placedGrowth, spells, siLeftX, -816 - extra, siLeftW, "LEFT")
+        W.MoveWidget(placedIconEffect, spells, siLeftX, -870 - extra, siLeftW, "LEFT")
+        local contentHeight = max(1046, 930 + extra)
+        local entry = spells._msuf2CollapsibleEntry
+        if entry and entry.contentHeight ~= contentHeight then
+            entry.contentHeight = contentHeight
+            spells:SetHeight(contentHeight)
+            entry.outer:SetHeight(entry.headerHeight + (entry.open and contentHeight or 0))
+            b:RequestRelayoutCollapsibles()
+        end
+    end
     RefreshSpellIndicatorState = RefreshSpellIndicatorState(function()
         if SPELL_INDICATORS_121_PTR_DISABLED and SpellIndicators(CurrentScope()).enabled ~= false then
             SpellIndicators(CurrentScope()).enabled = false
             QueueSpellIndicators(CurrentScope())
         end
         EnsureSpellDefaults(CurrentScope(), EffectiveSpellSpec(CurrentScope()))
-        spellGrid:Refresh()
+        RefreshSpellGridLayout(spellGrid:Refresh())
         local spellCfg = SpellIndicators(CurrentScope())
         local indicatorsOn = (not SPELL_INDICATORS_121_PTR_DISABLED) and spellCfg.enabled == true
         local multi = spellCfg.spec == "multi"
@@ -1711,7 +1759,7 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         SetManyEnabled(indicatorsOn, siLayer, siStrata, specDrop)
         SetOptionEnabled(multiSpecDrop, indicatorsOn and multi)
         SetOptionEnabled(multiSpecEnabled, indicatorsOn and multi and CurrentSpellMultiSpec(CurrentScope()) ~= "")
-        SetManyEnabled(hasSpell, spellEnabled, onlyMine, placedType)
+        SetManyEnabled(hasSpell, spellEnabled, onlyMine, autoBlacklist, placedType)
         SetOptionEnabled(customSpellIDs, customSpell)
         SetManyEnabled(placedEnabled, placedAnchor, placedSize, placedX, placedY, placedGrowth)
         SetOptionEnabled(placedMissing, false)

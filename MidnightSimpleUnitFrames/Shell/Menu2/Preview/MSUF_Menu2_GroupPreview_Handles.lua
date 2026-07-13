@@ -104,7 +104,16 @@ function Handles.Install(box, deps)
             si.specs = si.specs or {}
             si.specs[specKey] = si.specs[specKey] or {}
             if create and type(si.specs[specKey][auraName]) ~= "table" then
-                si.specs[specKey][auraName] = { enabled = true, onlyOwn = true }
+                -- Preview items may exist only as merged SpecDefaults. Writing
+                -- through them must materialize the saved entry with its
+                -- default shape, or the write is lost / the icon shape resets.
+                local gf = MSUF and MSUF.GF
+                local registry = (gf and gf.SpellIndicators) or _G.MSUF_GF_SpellIndicators
+                if registry and type(registry.MaterializeAuraConfig) == "function" then
+                    registry.MaterializeAuraConfig(si, specKey, auraName)
+                else
+                    si.specs[specKey][auraName] = { enabled = true, onlyOwn = true }
+                end
             end
             return si.specs[specKey][auraName]
         end
@@ -336,12 +345,9 @@ function Handles.Install(box, deps)
                 conf[spec.y] = cfgY
             end
         elseif handle._cfgSpell then
-            local placed = SpellPlacedForHandle(handle, false)
-            local spellCfg = SpellConfigForHandle(handle, false)
-            if not placed and spellCfg then
-                spellCfg.placed = { type = "icon", size = 18 }
-                placed = spellCfg.placed
-            end
+            -- create=true: items rendered purely from SpecDefaults have no
+            -- saved entry yet; a read-only lookup silently dropped this write.
+            local placed = SpellPlacedForHandle(handle, true)
             if placed then
                 placed.anchor = anchor
                 placed.x = cfgX
@@ -384,12 +390,7 @@ function Handles.Install(box, deps)
             conf[spec.x] = cfgX
             conf[spec.y] = cfgY
         elseif handle._cfgSpell then
-            local placed = SpellPlacedForHandle(handle, false)
-            local spellCfg = SpellConfigForHandle(handle, false)
-            if not placed and spellCfg then
-                spellCfg.placed = { type = "icon", size = 18 }
-                placed = spellCfg.placed
-            end
+            local placed = SpellPlacedForHandle(handle, true)
             if not placed then return false end
             placed.x = cfgX
             placed.y = cfgY
@@ -453,12 +454,7 @@ function Handles.Install(box, deps)
             if not (spec and spec.x and spec.y) then return false end
             conf[spec.x], conf[spec.y] = x, y
         elseif handle._cfgSpell then
-            local placed = SpellPlacedForHandle(handle, false)
-            local spellCfg = SpellConfigForHandle(handle, false)
-            if not placed and spellCfg then
-                spellCfg.placed = { type = "icon", size = 18 }
-                placed = spellCfg.placed
-            end
+            local placed = SpellPlacedForHandle(handle, true)
             if not placed then return false end
             placed.x, placed.y = x, y
         elseif handle._cfgTargetedSpells then

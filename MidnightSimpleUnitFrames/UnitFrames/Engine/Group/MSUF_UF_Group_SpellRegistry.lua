@@ -199,6 +199,42 @@ if type(SI.GetAuraIcon) ~= "function" then
   end
 end
 
+--- Materialize one aura entry in the saved spec config so position/shape
+--- writes always land in SavedVariables. Preview items can be compiled purely
+--- from SpecDefaults; writing through such an item must first create its saved
+--- entry, and it must copy the default shape (square/bar/frame effect) so the
+--- first write does not flatten the indicator into the generic icon defaults.
+function SI.MaterializeAuraConfig(siCfg, specKey, auraName)
+  if not (type(siCfg) == "table" and specKey and auraName and auraName ~= "") then return nil end
+  siCfg.specs = type(siCfg.specs) == "table" and siCfg.specs or {}
+  local specCfg = siCfg.specs[specKey]
+  if type(specCfg) ~= "table" then
+    specCfg = {}
+    siCfg.specs[specKey] = specCfg
+  end
+  local entry = specCfg[auraName]
+  if type(entry) == "table" then return entry end
+  local def = SI.SpecDefaults and SI.SpecDefaults[specKey] and SI.SpecDefaults[specKey][auraName]
+  if type(def) == "table" then
+    entry = (GF._DeepCopyTable or CopyTable)(def)
+    if entry.onlyOwn == nil then entry.onlyOwn = true end
+  else
+    entry = { enabled = true, onlyOwn = true }
+  end
+  specCfg[auraName] = entry
+  return entry
+end
+
 function SI.InvalidateRuntimeCaches()
   SI.RefreshFromDB()
+  -- Saved geometry can be edited while a live container's cached button
+  -- anchors no longer match reality (native re-layout, world transitions).
+  -- Flag every spell-indicator container so the refresh that follows this
+  -- config change re-imposes saved geometry instead of trusting that cache;
+  -- previously only zone-load events requested this repair.
+  local a3 = MSUF.MSUF_Auras3
+  local runtime = a3 and a3.SpellIndicators
+  if runtime and type(runtime.RequestGeometryRepair) == "function" then
+    runtime.RequestGeometryRepair()
+  end
 end

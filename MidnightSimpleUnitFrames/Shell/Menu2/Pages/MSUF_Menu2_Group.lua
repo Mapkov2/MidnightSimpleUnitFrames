@@ -993,6 +993,27 @@ local function QueueSpellIndicators(kind)
     if si and type(si.InvalidateRuntimeCaches) == "function" then si.InvalidateRuntimeCaches() end
     QueueGF(kind or CurrentScope(), "visual")
 end
+local spellSpecIconCache = {}
+local function SpellSpecIcon(info)
+    if type(info) ~= "table" then return nil end
+    if info.icon then return info.icon end
+    local specID = tonumber(info.specID)
+    if not specID then return nil end
+    local cached = spellSpecIconCache[specID]
+    if cached then return cached end
+    local getInfo = _G.GetSpecializationInfoForSpecID or _G.GetSpecializationInfoByID
+    if type(getInfo) ~= "function" then return nil end
+    local icon = select(4, getInfo(specID))
+    if icon then spellSpecIconCache[specID] = icon end
+    return icon
+end
+local function SpellSpecOption(specKey, info)
+    return {
+        value = specKey,
+        text = (info and info.display) or tostring(specKey),
+        icon = SpellSpecIcon(info),
+    }
+end
 local function SpellSpecValues()
     local values = VT("auto", "Auto-Detect", "multi", "Multi-Spec")
     local gf = GF()
@@ -1000,7 +1021,7 @@ local function SpellSpecValues()
     if si and type(si.SpecInfo) == "table" then
         local specs = {}
         for specKey, info in pairs(si.SpecInfo) do
-            specs[#specs + 1] = { value = specKey, text = (info and info.display) or tostring(specKey) }
+            specs[#specs + 1] = SpellSpecOption(specKey, info)
         end
         table.sort(specs, function(a, b)
             local left, right = tostring(a.text), tostring(b.text)
@@ -1017,7 +1038,7 @@ local function SpellTrackedSpecValues()
     local si = gf and gf.SpellIndicators
     if si and type(si.SpecInfo) == "table" then
         for specKey, info in pairs(si.SpecInfo) do
-            values[#values + 1] = { value = specKey, text = (info and info.display) or tostring(specKey) }
+            values[#values + 1] = SpellSpecOption(specKey, info)
         end
         table.sort(values, function(a, b) return tostring(a.text) < tostring(b.text) end)
     end
@@ -1072,7 +1093,11 @@ local function SpellAuraValues(kind)
             local info = trackable[i]
             local key = info and info.name
             if key and (info.custom ~= true or (type(specCfg) == "table" and specCfg[key] ~= nil)) then
-                values[#values + 1] = { value = key, text = info.display or key }
+                local icon = info.icon
+                if not icon and type(si.GetAuraIcon) == "function" then
+                    icon = si.GetAuraIcon(specKey, key)
+                end
+                values[#values + 1] = { value = key, text = info.display or key, icon = icon }
             end
         end
     end
@@ -1117,7 +1142,18 @@ local function CurrentSpellConfig(kind, create)
     if not (specKey and auraName and auraName ~= "") then return nil end
     local cfg = SpellIndicators(kind)
     cfg.specs[specKey] = cfg.specs[specKey] or {}
-    if create and type(cfg.specs[specKey][auraName]) ~= "table" then cfg.specs[specKey][auraName] = { enabled = true, onlyOwn = true } end
+    if create and type(cfg.specs[specKey][auraName]) ~= "table" then
+        -- Copy the SpecDefaults shape when materializing so the first write to
+        -- a defaults-only spell keeps its square/bar/frame layout instead of
+        -- collapsing it to the generic icon entry.
+        local gf = GF()
+        local registry = gf and gf.SpellIndicators
+        if registry and type(registry.MaterializeAuraConfig) == "function" then
+            registry.MaterializeAuraConfig(cfg, specKey, auraName)
+        else
+            cfg.specs[specKey][auraName] = { enabled = true, onlyOwn = true }
+        end
+    end
     return cfg.specs[specKey][auraName], specKey, auraName
 end
 local function PlacedConfig(kind, create)

@@ -20,24 +20,25 @@ GF.SpellIndicators = SI
 
 SI.SpecMap = {}
 SI.SpecInfo = {}
-local function Spec(classToken, specIndex, specKey)
+local function Spec(classToken, specIndex, specKey, specID)
   SI.SpecMap[classToken .. "_" .. specIndex] = specKey
   SI.SpecInfo[specKey] = {
     display = specKey:gsub("(%l)(%u)", "%1 %2"),
     class = classToken,
+    specID = specID,
   }
 end
-Spec("DRUID", 4, "RestorationDruid")
-Spec("SHAMAN", 3, "RestorationShaman")
-Spec("PRIEST", 1, "DisciplinePriest")
-Spec("PRIEST", 2, "HolyPriest")
-Spec("PRIEST", 3, "ShadowPriest")
-Spec("PALADIN", 1, "HolyPaladin")
-Spec("PALADIN", 2, "ProtectionPaladin")
-Spec("PALADIN", 3, "RetributionPaladin")
-Spec("EVOKER", 2, "PreservationEvoker")
-Spec("EVOKER", 3, "AugmentationEvoker")
-Spec("MONK", 2, "MistweaverMonk")
+Spec("DRUID", 4, "RestorationDruid", 105)
+Spec("SHAMAN", 3, "RestorationShaman", 264)
+Spec("PRIEST", 1, "DisciplinePriest", 256)
+Spec("PRIEST", 2, "HolyPriest", 257)
+Spec("PRIEST", 3, "ShadowPriest", 258)
+Spec("PALADIN", 1, "HolyPaladin", 65)
+Spec("PALADIN", 2, "ProtectionPaladin", 66)
+Spec("PALADIN", 3, "RetributionPaladin", 70)
+Spec("EVOKER", 2, "PreservationEvoker", 1468)
+Spec("EVOKER", 3, "AugmentationEvoker", 1473)
+Spec("MONK", 2, "MistweaverMonk", 270)
 
 local PALADIN_BLESSING_IDS = {
   BlessingOfProtection = 1022,

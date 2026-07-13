@@ -86,15 +86,14 @@ local function GetCurrentSpellIndicatorSpecKey()
     return SI.SpecMap[classToken .. "_" .. specIdx]
 end
 
-local function CopyMissingSpecDefaults(siCfg, specKey)
+--- Additive nil-fill of one spec's saved entries from SpecDefaults. Explicit
+--- user state is never touched: existing tables keep their values, `false`
+--- entries/fields (user-disabled) stay false. Returns whether anything was
+--- written so callers only mark the profile dirty on a real change.
+local function FillMissingSpecDefaults(siCfg, specKey)
     local SI = GetSpellIndicatorModule()
     local defaults = SI and SI.SpecDefaults and SI.SpecDefaults[specKey]
     if not (siCfg and specKey and defaults) then return false end
-
-    if type(SI.EnsureSpecConfig) == "function" then
-        SI.EnsureSpecConfig(siCfg, specKey)
-        return true
-    end
 
     siCfg.specs = siCfg.specs or {}
     local specCfg = siCfg.specs[specKey]
@@ -103,25 +102,30 @@ local function CopyMissingSpecDefaults(siCfg, specKey)
         siCfg.specs[specKey] = specCfg
     end
 
+    local changed = false
     for auraName, def in pairs(defaults) do
         local entry = specCfg[auraName]
-        if type(entry) ~= "table" then
+        if entry == nil then
             entry = GF._DeepCopyTable(def)
             if entry.onlyOwn == nil then entry.onlyOwn = true end
             specCfg[auraName] = entry
-        else
+            changed = true
+        elseif type(entry) == "table" then
             if entry.placed == nil and def.placed ~= nil then
                 entry.placed = GF._DeepCopyTable(def.placed)
+                changed = true
             end
             if entry.frame == nil and def.frame ~= nil then
                 entry.frame = GF._DeepCopyTable(def.frame)
+                changed = true
             end
             if entry.onlyOwn == nil then
                 entry.onlyOwn = (def.onlyOwn ~= false)
+                changed = true
             end
         end
     end
-    return true
+    return changed
 end
 
 function GF.SeedSpellIndicatorDefaultsForSpec(specKey)
@@ -136,10 +140,15 @@ function GF.SeedSpellIndicatorDefaultsForSpec(specKey)
             local si, normalized = NormalizeSpellIndicatorConfig(conf)
             changed = normalized or changed
             if si then
+                -- The additive fill runs on every pass, stamped or not: spells
+                -- added to SpecDefaults in later builds must reach specs that
+                -- were seeded before those spells existed, otherwise their
+                -- preview icons render from merged defaults with no saved
+                -- entry behind them.
+                changed = FillMissingSpecDefaults(si, specKey) or changed
+
                 local stamps = si._autoSeededSpecs
                 if not stamps[specKey] then
-                    CopyMissingSpecDefaults(si, specKey)
-
                     if si.enabled ~= true then
                         si.enabled = true
                     end
@@ -159,6 +168,10 @@ function GF.SeedSpellIndicatorDefaultsForSpec(specKey)
     end
 
     if changed then
+        local siModule = GetSpellIndicatorModule()
+        if siModule and type(siModule.InvalidateRuntimeCaches) == "function" then
+            siModule.InvalidateRuntimeCaches()
+        end
         local dirty = GF.DIRTY_AURAS or GF.DIRTY_ALL or 0x3F
         -- Seeding touches only spell-indicator/aura config. Keep the refresh
         -- masked so first-login spec defaults do not replay every group element.
