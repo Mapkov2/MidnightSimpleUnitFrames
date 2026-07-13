@@ -453,17 +453,17 @@ end
 
 local function MSUF_SetTextIfChanged(fs, text)
     if not fs then return end
-    local v = text
-    if v == nil then v = "" end
-
     --- Secret-safe diff gate: only compare/cache plain Lua values.
     --- Secret values must pass straight through to C-side SetText().
     local sv = _G.issecretvalue
-    if sv and sv(v) == true then
+    if sv and sv(text) == true then
         fs._msufLastText = nil
-        fs:SetText(v)
+        fs:SetText(text)
         return
     end
+
+    local v = text
+    if v == nil then v = "" end
 
     local tv = type(v)
     if tv == "string" or tv == "number" or tv == "boolean" then

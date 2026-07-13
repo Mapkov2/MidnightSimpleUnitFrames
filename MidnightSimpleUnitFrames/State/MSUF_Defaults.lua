@@ -1546,6 +1546,9 @@ end
     if g.npcTypeColorText == nil then
         g.npcTypeColorText = true
     end
+    if g.npcClassColorBar == nil then
+        g.npcClassColorBar = false
+    end
     --- Per-unit NPC Type enable (nil/true = on, false = off)
     if g.npcTypeTarget == nil then g.npcTypeTarget = true end
     if g.npcTypeFocus  == nil then g.npcTypeFocus  = true end
@@ -2041,6 +2044,17 @@ end
     if g.castbarPlayerShowSpellName == nil then g.castbarPlayerShowSpellName = true end
     if g.castbarTargetShowTargetName == nil then g.castbarTargetShowTargetName = false end
     if g.castbarFocusShowTargetName == nil then g.castbarFocusShowTargetName = false end
+    if g.showBossCastTargetName == nil then g.showBossCastTargetName = false end
+    local function InitCastTargetTextDefaults(prefix)
+        if g[prefix .. "TargetNamePosition"] == nil then g[prefix .. "TargetNamePosition"] = "BELOW" end
+        if g[prefix .. "TargetNameFontSize"] == nil then g[prefix .. "TargetNameFontSize"] = 10 end
+        if g[prefix .. "TargetNameAlign"] == nil then g[prefix .. "TargetNameAlign"] = "RIGHT" end
+        if g[prefix .. "TargetNameOffsetX"] == nil then g[prefix .. "TargetNameOffsetX"] = 0 end
+        if g[prefix .. "TargetNameOffsetY"] == nil then g[prefix .. "TargetNameOffsetY"] = 1 end
+    end
+    InitCastTargetTextDefaults("castbarTarget")
+    InitCastTargetTextDefaults("castbarFocus")
+    InitCastTargetTextDefaults("bossCast")
     if g.castbarTargetTextOffsetX == nil then g.castbarTargetTextOffsetX = 0 end
     if g.castbarTargetTextOffsetY == nil then g.castbarTargetTextOffsetY = 0 end
     if g.castbarFocusTextOffsetX == nil then g.castbarFocusTextOffsetX = 0 end

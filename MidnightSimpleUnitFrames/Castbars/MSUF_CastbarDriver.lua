@@ -23,8 +23,7 @@ local UnitIsConnected = _G.UnitIsConnected
 local UnitShouldDisplaySpellTargetName = _G.UnitShouldDisplaySpellTargetName
 local UnitSpellTargetName = _G.UnitSpellTargetName
 local UnitSpellTargetClass = _G.UnitSpellTargetClass
-local C_ClassColor = _G.C_ClassColor
-local RAID_CLASS_COLORS = _G.RAID_CLASS_COLORS
+local C_ClassColor_GetClassColor = _G.C_ClassColor and _G.C_ClassColor.GetClassColor
 local CreateFrame = _G.CreateFrame
 local UIParent = _G.UIParent
 local type = type
@@ -792,6 +791,8 @@ local function CastTargetTextEnabled(frame)
         return _G.MSUF_DB and _G.MSUF_DB.general and _G.MSUF_DB.general.castbarTargetShowTargetName == true
     elseif unit == "focus" then
         return _G.MSUF_DB and _G.MSUF_DB.general and _G.MSUF_DB.general.castbarFocusShowTargetName == true
+    elseif frame._msufIsBossCastbar or tostring(unit or ""):match("^boss%d+$") then
+        return _G.MSUF_DB and _G.MSUF_DB.general and _G.MSUF_DB.general.showBossCastTargetName == true
     end
     return false
 end
@@ -800,26 +801,18 @@ local function SetCastTargetText(frame, text)
     local fs = frame and frame.castTargetText
     if not fs then return end
     if type(_G.MSUF_SetTextIfChanged) == "function" then
-        _G.MSUF_SetTextIfChanged(fs, text or "")
+        _G.MSUF_SetTextIfChanged(fs, text)
     else
-        fs:SetText(text or "")
+        fs:SetText(text)
     end
 end
 
 local function ApplyCastTargetTextColor(frame, classFilename)
     local fs = frame and frame.castTargetText
     if not fs then return end
-    local c
-    if classFilename and C_ClassColor and C_ClassColor.GetClassColor then
-        c = C_ClassColor.GetClassColor(classFilename)
-        if c and c.GetRGB then
-            fs:SetTextColor(c:GetRGB())
-            return
-        end
-    end
-    c = classFilename and RAID_CLASS_COLORS and RAID_CLASS_COLORS[classFilename]
-    if c then
-        fs:SetTextColor(c.r or 1, c.g or 1, c.b or 1)
+    if type(C_ClassColor_GetClassColor) == "function" then
+        local classColor = C_ClassColor_GetClassColor(classFilename)
+        fs:SetTextColor(classColor:GetRGB())
     else
         fs:SetTextColor(1, 1, 1)
     end
@@ -835,16 +828,14 @@ local function ResolveCastTargetInfo(state)
     if not (unit and UnitShouldDisplaySpellTargetName and UnitSpellTargetName) then
         return nil
     end
-    if not ToPlainBool(UnitShouldDisplaySpellTargetName(unit)) then
+    if not UnitShouldDisplaySpellTargetName(unit) then
         return nil
     end
 
     local targetName = UnitSpellTargetName(unit)
-    if not targetName then
-        return nil
-    end
-
-    return targetName, UnitSpellTargetClass and UnitSpellTargetClass(unit) or nil, true
+    local targetClass
+    if UnitSpellTargetClass then targetClass = UnitSpellTargetClass(unit) end
+    return targetName, targetClass, true
 end
 
 local function UpdateCastTargetText(frame, state)
@@ -856,8 +847,8 @@ local function UpdateCastTargetText(frame, state)
         return
     end
 
-    local targetName, targetClass = ResolveCastTargetInfo(state)
-    if not targetName then
+    local targetName, targetClass, targetNameAllowed = ResolveCastTargetInfo(state)
+    if targetNameAllowed ~= true then
         SetCastTargetText(frame, "")
         fs:Hide()
         return
@@ -867,6 +858,16 @@ local function UpdateCastTargetText(frame, state)
     ApplyCastTargetTextColor(frame, targetClass)
     fs:Show()
 end
+
+local function RefreshCastTargetText(frame)
+    if not (frame and frame.castTargetText) then return end
+    if not CastTargetTextEnabled(frame) then
+        UpdateCastTargetText(frame, nil)
+        return
+    end
+    UpdateCastTargetText(frame, BuildState(frame))
+end
+ExportPublic("MSUF_RefreshCastTargetText", RefreshCastTargetText)
 
 local function RefreshTargetFocusImmediate(frame)
     local state = BuildState(frame)

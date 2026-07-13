@@ -24,10 +24,11 @@ local CASTBAR_FIELDS = {
     player = { enable = "enablePlayerCastbar", backend = "castbarPlayerBackend", providerMemory = "castbarPlayerBackendBeforeHide", time = "showPlayerCastTime", icon = "castbarPlayerShowIcon", text = "castbarPlayerShowSpellName", timeFormat = "castbarPlayerTimeFormat", w = "castbarPlayerBarWidth", h = "castbarPlayerBarHeight", match = "castbarPlayerMatchWidth" },
     target = { enable = "enableTargetCastbar", backend = "castbarTargetBackend", providerMemory = "castbarTargetBackendBeforeHide", time = "showTargetCastTime", icon = "castbarTargetShowIcon", text = "castbarTargetShowSpellName", targetName = "castbarTargetShowTargetName", timeFormat = "castbarTargetTimeFormat", w = "castbarTargetBarWidth", h = "castbarTargetBarHeight", match = "castbarTargetMatchWidth" },
     focus = { enable = "enableFocusCastbar", backend = "castbarFocusBackend", providerMemory = "castbarFocusBackendBeforeHide", time = "showFocusCastTime", icon = "castbarFocusShowIcon", text = "castbarFocusShowSpellName", targetName = "castbarFocusShowTargetName", timeFormat = "castbarFocusTimeFormat", w = "castbarFocusBarWidth", h = "castbarFocusBarHeight", match = "castbarFocusMatchWidth" },
-    boss = { enable = "enableBossCastbar", backend = "bossCastbarBackend", providerMemory = "bossCastbarBackendBeforeHide", time = "showBossCastTime", icon = "showBossCastIcon", text = "showBossCastName", timeFormat = "bossCastTimeFormat", w = "bossCastbarWidth", h = "bossCastbarHeight", match = "bossCastbarMatchWidth" },
+    boss = { enable = "enableBossCastbar", backend = "bossCastbarBackend", providerMemory = "bossCastbarBackendBeforeHide", time = "showBossCastTime", icon = "showBossCastIcon", text = "showBossCastName", targetName = "showBossCastTargetName", timeFormat = "bossCastTimeFormat", w = "bossCastbarWidth", h = "bossCastbarHeight", match = "bossCastbarMatchWidth" },
 }
 local CASTBAR_PREFIX = { player = "castbarPlayer", target = "castbarTarget", focus = "castbarFocus", boss = "bossCast" }
 local CASTBAR_COPY_SUFFIXES = WL [[IconPosition IconSize IconOffsetX IconOffsetY IconSpacing IconBorderStyle SpellNamePosition SpellNameFontSize TextOffsetX TextOffsetY SpellNameAlign SpellNameMaxWidth SpellNameTruncate TimePosition TimeFontSize TimeOffsetX TimeOffsetY]]
+local CASTBAR_TARGET_NAME_COPY_SUFFIXES = WL [[TargetNamePosition TargetNameFontSize TargetNameAlign TargetNameOffsetX TargetNameOffsetY]]
 local LOAD_CONDITIONS = KLR [[
 loadCondHideMounted=Mounted
 loadCondHideOutOfCombat=Out of combat
@@ -328,6 +329,11 @@ local function CopyCastbar(g, src, dst)
     if not srcPrefix or not dstPrefix then return true end
     for i = 1, #CASTBAR_COPY_SUFFIXES do
         g[dstPrefix .. CASTBAR_COPY_SUFFIXES[i]] = g[srcPrefix .. CASTBAR_COPY_SUFFIXES[i]]
+    end
+    if s.targetName and d.targetName then
+        for i = 1, #CASTBAR_TARGET_NAME_COPY_SUFFIXES do
+            g[dstPrefix .. CASTBAR_TARGET_NAME_COPY_SUFFIXES[i]] = g[srcPrefix .. CASTBAR_TARGET_NAME_COPY_SUFFIXES[i]]
+        end
     end
     return true
 end

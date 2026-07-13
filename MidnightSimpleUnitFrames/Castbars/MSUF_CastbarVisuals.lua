@@ -615,6 +615,28 @@ local function ApplyTimeTextLayout(frame, g, unit, prefix)
     AnchorFontString(fs, statusBar, position, x, y, position == "LEFT" and "LEFT" or position == "CENTER" and "CENTER" or "RIGHT")
 end
 
+local function ApplyCastTargetTextLayout(frame, g, unit, prefix)
+    local fs = frame and frame.castTargetText
+    local statusBar = frame and frame.statusBar
+    if not (fs and statusBar) then return end
+
+    local size = DetailNum(g, prefix, "TargetNameFontSize", nil, 10)
+    if not size or size <= 0 then size = 10 end
+    ApplyFont(fs, g, prefix, "TargetName", size, "TargetName")
+
+    if fs.SetMaxLines then fs:SetMaxLines(1) end
+    if fs.SetWordWrap then fs:SetWordWrap(false) end
+    if fs.SetNonSpaceWrap then fs:SetNonSpaceWrap(false) end
+
+    local x = DetailNum(g, prefix, "TargetNameOffsetX", nil, 0)
+    local y = DetailNum(g, prefix, "TargetNameOffsetY", nil, 1)
+    local position = NormalizeTextPosition(DetailString(g, prefix, "TargetNamePosition", nil, "BELOW"), "BELOW")
+    local justify = NormalizeJustify(DetailString(g, prefix, "TargetNameAlign", nil, "RIGHT"), "RIGHT")
+    local statusW = RegionNumber(statusBar, "GetWidth", 250)
+    if fs.SetWidth then fs:SetWidth(math.max(20, statusW - 4)) end
+    AnchorFontString(fs, statusBar, position, x, y, justify)
+end
+
 --- Public visual entry for one frame. Call this after frame creation, anchoring,
 --- profile changes, or castbar size changes.
 local function ApplyCastbarDetailLayout(frame, forcedUnit, general)
@@ -626,6 +648,10 @@ local function ApplyCastbarDetailLayout(frame, forcedUnit, general)
     ApplyIconLayout(frame, g, unit, prefix)
     ApplyTimeTextLayout(frame, g, unit, prefix)
     ApplySpellTextLayout(frame, g, unit, prefix)
+    ApplyCastTargetTextLayout(frame, g, unit, prefix)
+    if frame._msufIsPreview ~= true and type(_G.MSUF_RefreshCastTargetText) == "function" then
+        _G.MSUF_RefreshCastTargetText(frame)
+    end
 end
 
 ExportPublic("MSUF_ApplyCastbarDetailLayout", ApplyCastbarDetailLayout)

@@ -124,7 +124,7 @@ function G.MSUF_BuildCastbarFrameElements(frame)
     frame.timeText:SetPoint("RIGHT", statusBar, "RIGHT", -2, 0)
     frame.timeText:SetText("")
 
-    if frame.unit == "target" or frame.unit == "focus" then
+    if frame.unit == "target" or frame.unit == "focus" or tostring(frame.unit or ""):match("^boss%d+$") then
         frame.castTargetText = statusBar:CreateFontString(nil, "OVERLAY")
         frame.CastTargetNameText = frame.castTargetText
         frame.castTargetText:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
@@ -232,6 +232,14 @@ function G.MSUF_CreateCastbarPreviewFrame(unit, name, options)
     if options.showTime ~= false then
         frame.timeText = CreateText(textOverlay, "RIGHT", "RIGHT", textOverlay, -2)
         frame.timeText:SetText(options.timeLabel or "3.2")
+    end
+
+    if unit == "target" or unit == "focus" or unit == "boss" then
+        frame.castTargetText = statusBar:CreateFontString(nil, "OVERLAY")
+        frame.CastTargetNameText = frame.castTargetText
+        frame.castTargetText:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
+        frame.castTargetText:SetText("")
+        frame.castTargetText:Hide()
     end
 
     frame.spark = CreateSpark(statusBar, statusBarHeight)

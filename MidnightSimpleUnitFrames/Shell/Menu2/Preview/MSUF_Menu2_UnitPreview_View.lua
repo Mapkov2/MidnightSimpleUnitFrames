@@ -109,7 +109,7 @@ local function RegisterUnitPreviewRuntimeControls(box, pageKey)
                 "Open " .. tostring((handle and handle._label) or key or "preview element") .. " settings",
                 "button", "action", {
                     historyMode = "none",
-                    help = "Opens the exact settings section for this preview element.",
+                    help = "Click the highlighted preview button to jump directly to this element's settings below.",
                     command = gear._msuf2UnitPreviewOpenCommand,
                 })
         else
@@ -280,7 +280,7 @@ local function RefreshHandleSelectionVisuals(box)
             "Open " .. tostring(selected._label or selected._key or "preview element") .. " settings",
             "button", "action", {
                 historyMode = "none",
-                help = "Opens the exact settings section for this preview element.",
+                help = "Click the highlighted preview button to jump directly to this element's settings below.",
                 command = gear and gear._msuf2UnitPreviewOpenCommand,
             }, previewPageKey)
     end
@@ -1561,6 +1561,8 @@ local function BuildPreview(parent, panel, width, height)
     mock.cast.text:SetPoint("LEFT", mock.cast, "LEFT", 24, 0)
     mock.cast.time = MakeFS(mock.cast, "OVERLAY", 11)
     mock.cast.time:SetPoint("RIGHT", mock.cast, "RIGHT", -6, 0)
+    mock.cast.target = MakeFS(mock.cast, "OVERLAY", 10)
+    mock.cast.target:SetPoint("TOP", mock.cast, "BOTTOM", 0, -1)
     mock.cast.sizeTag = mock.cast:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     mock.cast.sizeTag:SetPoint("BOTTOM", mock.cast, "TOP", 0, 2)
     mock.cast.sizeTag:SetTextColor(0.20, 0.90, 0.85, 0.95)
@@ -1614,6 +1616,7 @@ local function BuildPreview(parent, panel, width, height)
     box.handleCastbar = MakeHandle(box, "castbar", { castbar = true, global = true, section = "castbar" }, "Castbar", { 0.20, 0.90, 0.85 })
     box.handleCastbarIcon = MakeHandle(box, "castbarIcon", { suffixX = "IconOffsetX", suffixY = "IconOffsetY", bossX = "bossCastIconOffsetX", bossY = "bossCastIconOffsetY", defaultX = 0, defaultY = 0, iconFallback = true, readOffsets = ReadCastbarSubOffsets, writeOffsets = WriteCastbarSubOffsets, section = "castbar" }, "Castbar icon", { 0.20, 0.90, 0.85 })
     box.handleCastbarText = MakeHandle(box, "castbarText", { suffixX = "TextOffsetX", suffixY = "TextOffsetY", bossX = "bossCastTextOffsetX", bossY = "bossCastTextOffsetY", defaultX = 0, defaultY = 0, readOffsets = ReadCastbarSubOffsets, writeOffsets = WriteCastbarSubOffsets, section = "castbar" }, "Castbar text", { 0.20, 0.90, 0.85 })
+    box.handleCastbarTarget = MakeHandle(box, "castbarTarget", { suffixX = "TargetNameOffsetX", suffixY = "TargetNameOffsetY", bossX = "bossCastTargetNameOffsetX", bossY = "bossCastTargetNameOffsetY", defaultX = 0, defaultY = 1, readOffsets = ReadCastbarSubOffsets, writeOffsets = WriteCastbarSubOffsets, section = "castbar" }, "Cast target text", { 0.95, 0.78, 0.22 })
     box.handleCastbarTime = MakeHandle(box, "castbarTime", { suffixX = "TimeOffsetX", suffixY = "TimeOffsetY", bossX = "bossCastTimeOffsetX", bossY = "bossCastTimeOffsetY", bossBaseX = -2, defaultX = -2, defaultY = 0, defaultXFromG = "castbarPlayerTimeOffsetX", defaultYFromG = "castbarPlayerTimeOffsetY", readOffsets = ReadCastbarSubOffsets, writeOffsets = WriteCastbarSubOffsets, section = "castbar" }, "Castbar time", { 0.20, 0.90, 0.85 })
     if type(PreviewAuras.CreateHandles) == "function" then PreviewAuras.CreateHandles(box, MakeHandle) end
     box.statusHandles = { raidgroupname = box.handleRaidGroupName }
