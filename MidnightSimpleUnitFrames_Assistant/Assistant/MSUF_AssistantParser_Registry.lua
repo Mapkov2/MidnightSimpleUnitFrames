@@ -1,4 +1,4 @@
-﻿--- Shell/Menu2/Assistant/MSUF_AssistantParser_Registry.lua
+--- Shell/Menu2/Assistant/MSUF_AssistantParser_Registry.lua
 --- Registry-backed parser for Assistant setting-change plans.
 ---
 --- Ranks declarative registry entries and returns planned changes only; do not
@@ -582,18 +582,63 @@ function P.ScoreSettingCandidates(candidates, features)
     return aliasFiltered
 end
 
+local function RefreshRegistrySettingValues(setting)
+    local refresh = setting and setting.refreshValues
+    if type(refresh) ~= "function" then return false end
+    local ok, values, labels = pcall(refresh, setting)
+    if not ok or type(values) ~= "table" or #values == 0 then return false end
+    setting.values = values
+    if type(labels) == "table" then setting.valueLabels = labels end
+    return true
+end
+
+P.RefreshRegistrySettingValues = RefreshRegistrySettingValues
+
 local function EnumValueForText(setting, text)
     local function matchSegment(segment)
         segment = Normalize(segment)
         if segment == "" then return nil end
         local aliases = setting and setting.valueAliases
         local compactText = Compact(segment)
+        -- Exact choice keys and aliases always outrank fuzzy containment. This
+        -- matters for values such as weapon_axes_crossed: the shorter alias
+        -- "cross" must not redirect it to resurrection_cross.
+        if type(aliases) == "table" then
+            local bestValue, bestLen
+            for alias, value in pairs(aliases) do
+                local normalizedAlias = Normalize(alias)
+                local compactAlias = Compact(alias)
+                if segment == normalizedAlias or compactText == compactAlias then
+                    local len = #compactAlias
+                    if not bestLen or len > bestLen then bestValue, bestLen = value, len end
+                end
+            end
+            if bestValue ~= nil then return bestValue end
+        end
+        local values = setting and setting.values
+        if type(values) == "table" then
+            for i = 1, #values do
+                local value = values[i]
+                if segment == Normalize(value) or compactText == Compact(value) then return value end
+            end
+        end
+        local valueLabels = setting and setting.valueLabels
+        if type(values) == "table" and type(valueLabels) == "table" then
+            for i = 1, #values do
+                local value = values[i]
+                local label = valueLabels[value]
+                if label ~= nil and (segment == Normalize(label) or compactText == Compact(label)) then return value end
+            end
+        end
         if type(aliases) == "table" then
             local bestValue
             local bestLen = 0
             for alias, value in pairs(aliases) do
                 local compactAlias = Compact(alias)
-                if HasPhrase(segment, alias) or (#compactAlias >= 5 and compactText:find(compactAlias, 1, true)) then
+                local normalizedAlias = Normalize(alias)
+                local joinedPhrase = normalizedAlias:find(" ", 1, true)
+                    and #compactAlias >= 5 and compactText:find(compactAlias, 1, true)
+                if HasPhrase(segment, alias) or joinedPhrase then
                     local len = #Compact(alias)
                     if len > bestLen then
                         bestLen = len
@@ -603,12 +648,18 @@ local function EnumValueForText(setting, text)
             end
             if bestValue ~= nil then return bestValue end
         end
-        local values = setting and setting.values
         if type(values) == "table" then
             for i = 1, #values do
                 local value = values[i]
                 local compactValue = Compact(value)
                 if HasPhrase(segment, tostring(value)) or (#compactValue >= 5 and compactText:find(compactValue, 1, true)) then return value end
+            end
+        end
+        if type(values) == "table" and type(valueLabels) == "table" then
+            for i = 1, #values do
+                local value = values[i]
+                local label = valueLabels[value]
+                if label ~= nil and HasPhrase(segment, tostring(label)) then return value end
             end
         end
         return nil
@@ -934,6 +985,10 @@ local function ValueDisplay(setting, value)
         local display = setting.displayValues[value]
         if type(display) == "string" and display ~= "" then return display end
     end
+    if setting and type(setting.valueLabels) == "table" then
+        local display = setting.valueLabels[value]
+        if type(display) == "string" and display ~= "" then return display end
+    end
     local directEnumDisplay = DirectEnumDisplay(setting, value)
     if directEnumDisplay then return directEnumDisplay end
     if setting and type(setting.valueAliases) == "table" then
@@ -979,7 +1034,10 @@ local function MissingValueResponse(matches, raw)
     end
     local setting = best and best.setting
     if not setting then return nil end
-    if setting.type == "enum" and type(setting.values) == "table" and #setting.values > 0 and #setting.values <= 12 then
+    RefreshRegistrySettingValues(setting)
+    if (setting.type == "enum" or setting.type == "string")
+        and type(setting.values) == "table" and #setting.values > 0 and #setting.values <= 24
+    then
         local choices = {}
         for i = 1, #setting.values do
             local value = setting.values[i]
@@ -1017,6 +1075,11 @@ local function MissingValueResponse(matches, raw)
         status = "ambiguous",
         text = "What value do you want me to use for " .. tostring(setting.label or "this option") .. "? " .. hint,
         summary = "Value clarification for an MSUF option.",
+        pendingSetting = {
+            settingKey = setting.key,
+            expectedType = setting.type,
+            label = setting.label,
+        },
     }
 end
 
@@ -1930,7 +1993,23 @@ ValueForRegistrySetting = function(setting, text, raw)
         return value
     end
     if setting.type == "enum" then return EnumValueForText(setting, text) end
-    if setting.type == "string" then return StringValueForText(setting, text, raw) end
+    if setting.type == "string" then
+        -- Some native controls store their fixed choices as strings because
+        -- their keys can be extended by MSUF at runtime (status icon packs are
+        -- the main example).  Treat the registry's advertised choices exactly
+        -- like enum choices: normalize friendly aliases to the canonical key,
+        -- and never let arbitrary text pass a closed-choice contract.
+        if type(setting.values) == "table" and #setting.values > 0 then
+            local knownValue = EnumValueForText(setting, text)
+            if knownValue ~= nil then return knownValue end
+            if RefreshRegistrySettingValues(setting) then
+                knownValue = EnumValueForText(setting, text)
+                if knownValue ~= nil then return knownValue end
+            end
+            if setting.closedValues == true then return nil end
+        end
+        return StringValueForText(setting, text, raw)
+    end
     if setting.type == "color" then
         local r, g, b, label = ExtractColor(raw, text)
         if r then return { r = r, g = g, b = b, label = label } end

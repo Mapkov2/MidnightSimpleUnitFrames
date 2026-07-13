@@ -24,6 +24,10 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
     local AURA_STACK_ANCHOR_ALIASES = ctx.AURA_STACK_ANCHOR_ALIASES or {}
     local AURA_COOLDOWN_SWIPE_DIRECTION_VALUES = ctx.AURA_COOLDOWN_SWIPE_DIRECTION_VALUES or {}
     local AURA_COOLDOWN_SWIPE_DIRECTION_ALIASES = ctx.AURA_COOLDOWN_SWIPE_DIRECTION_ALIASES or {}
+    local AURA_SORT_METHOD_VALUES = ctx.AURA_SORT_METHOD_VALUES or {}
+    local AURA_SORT_METHOD_ALIASES = ctx.AURA_SORT_METHOD_ALIASES or {}
+    local AURA_SORT_DIRECTION_VALUES = ctx.AURA_SORT_DIRECTION_VALUES or {}
+    local AURA_SORT_DIRECTION_ALIASES = ctx.AURA_SORT_DIRECTION_ALIASES or {}
     local AURA_DURATION_BAR_POSITION_VALUES = ctx.AURA_DURATION_BAR_POSITION_VALUES or {}
     local AURA_DURATION_BAR_POSITION_ALIASES = ctx.AURA_DURATION_BAR_POSITION_ALIASES or {}
     local AURA_DURATION_BAR_DISPLAY_VALUES = ctx.AURA_DURATION_BAR_DISPLAY_VALUES or {}
@@ -64,6 +68,7 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
     local AuraUseSharedRules = ctx.AuraUseSharedRules
     local AuraSetUseSharedRules = ctx.AuraSetUseSharedRules
     local AuraModel = ctx.AuraModel
+    local EnsureAuraFallbackDB = ctx.EnsureAuraFallbackDB
     local ApplyAura = ctx.ApplyAura
 
     if not (Registry and type(Registry.RegisterSetting) == "function") then return end
@@ -75,6 +80,15 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
     end
     if #AURA_COOLDOWN_SWIPE_DIRECTION_VALUES == 0 then
         AURA_COOLDOWN_SWIPE_DIRECTION_VALUES = { "NORMAL", "REVERSE" }
+    end
+    if type(AURA_SORT_METHOD_VALUES.buff) ~= "table" or #AURA_SORT_METHOD_VALUES.buff == 0 then
+        AURA_SORT_METHOD_VALUES.buff = { "DEFAULT", "BIG_DEFENSIVE", "IMPORTANT_FIRST", "EXPIRATION", "EXPIRATION_ONLY", "NAME", "NAME_ONLY" }
+    end
+    if type(AURA_SORT_METHOD_VALUES.debuff) ~= "table" or #AURA_SORT_METHOD_VALUES.debuff == 0 then
+        AURA_SORT_METHOD_VALUES.debuff = { "DEFAULT", "UNIT_FRAME_DEBUFF", "IMPORTANT_FIRST", "EXPIRATION", "EXPIRATION_ONLY", "NAME", "NAME_ONLY" }
+    end
+    if #AURA_SORT_DIRECTION_VALUES == 0 then
+        AURA_SORT_DIRECTION_VALUES = { "NORMAL", "REVERSE" }
     end
     if #AURA_DURATION_BAR_POSITION_VALUES == 0 then
         AURA_DURATION_BAR_POSITION_VALUES = { "BOTTOM", "TOP" }
@@ -103,6 +117,106 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
     local function LaneStyleKey(lane, key)
         local prefix = lane == "buff" and "buff" or "debuff"
         return prefix .. key:sub(1, 1):upper() .. key:sub(2)
+    end
+
+    local sortMethodAllowed = { buff = {}, debuff = {} }
+    for lane, values in pairs(AURA_SORT_METHOD_VALUES) do
+        sortMethodAllowed[lane] = sortMethodAllowed[lane] or {}
+        for i = 1, #(values or {}) do sortMethodAllowed[lane][values[i]] = true end
+    end
+
+    local function NormalizeAuraSortMethod(lane, value)
+        value = tostring(value or "DEFAULT"):upper():gsub("[%s%-]+", "_")
+        if value == "BIGDEFENSIVE" then value = "BIG_DEFENSIVE" end
+        if value == "UNITFRAMEDEBUFF" then value = "UNIT_FRAME_DEBUFF" end
+        if value == "IMPORTANTONLY" or value == "IMPORTANT" then value = "IMPORTANT_FIRST" end
+        if value == "EXPIRATIONONLY" then value = "EXPIRATION_ONLY" end
+        if value == "NAMEONLY" then value = "NAME_ONLY" end
+        return sortMethodAllowed[lane] and sortMethodAllowed[lane][value] and value or "DEFAULT"
+    end
+
+    local function AuraFallbackLaneStyle(scope, lane, key, defaultValue, writeValue)
+        if type(EnsureAuraFallbackDB) ~= "function" then return defaultValue end
+        local _, shared = EnsureAuraFallbackDB()
+        if type(shared) ~= "table" then return defaultValue end
+        local laneKey = LaneStyleKey(lane, key)
+        if writeValue ~= nil then
+            shared[laneKey] = writeValue
+            return writeValue
+        end
+        local value = shared[laneKey]
+        if value == nil then value = shared[key] end
+        if value == nil then return defaultValue end
+        return value
+    end
+
+    local function AuraReadLaneSortMethod(scope, lane)
+        local Model = type(AuraModel) == "function" and AuraModel() or nil
+        local value
+        if Model and type(Model.ReadLaneStyleString) == "function" then
+            value = Model.ReadLaneStyleString(scope, lane, "sortMethod", "DEFAULT")
+        else
+            value = AuraFallbackLaneStyle(scope, lane, "sortMethod", "DEFAULT")
+        end
+        return NormalizeAuraSortMethod(lane, value)
+    end
+
+    local function AuraWriteLaneSortMethod(scope, lane, value)
+        value = NormalizeAuraSortMethod(lane, value)
+        local Model = type(AuraModel) == "function" and AuraModel() or nil
+        if Model and type(Model.WriteLaneStyleString) == "function" then
+            Model.WriteLaneStyleString(scope, lane, "sortMethod", value)
+        else
+            AuraFallbackLaneStyle(scope, lane, "sortMethod", "DEFAULT", value)
+        end
+    end
+
+    local function AuraReadLaneSortDirection(scope, lane)
+        local Model = type(AuraModel) == "function" and AuraModel() or nil
+        local reverse
+        if Model and type(Model.ReadLaneStyleBool) == "function" then
+            reverse = Model.ReadLaneStyleBool(scope, lane, "sortReverse", false)
+        else
+            reverse = AuraFallbackLaneStyle(scope, lane, "sortReverse", false) == true
+        end
+        return reverse and "REVERSE" or "NORMAL"
+    end
+
+    local function AuraWriteLaneSortDirection(scope, lane, value)
+        local reverse = value == "REVERSE"
+        local Model = type(AuraModel) == "function" and AuraModel() or nil
+        if Model and type(Model.WriteLaneStyleBool) == "function" then
+            Model.WriteLaneStyleBool(scope, lane, "sortReverse", reverse)
+        else
+            AuraFallbackLaneStyle(scope, lane, "sortReverse", false, reverse)
+        end
+    end
+
+    local function AuraSortExactAliases(scope, lane, direction)
+        local out, seen = {}, {}
+        local function add(value)
+            if value ~= "" and not seen[value] then seen[value] = true; out[#out + 1] = value end
+        end
+        local scopeWords = scope == "shared" and { "shared", "all" } or { scope }
+        local singular = lane == "buff" and "buff" or "debuff"
+        local plural = lane == "buff" and "buffs" or "debuffs"
+        for i = 1, #scopeWords do
+            local scopeWord = scopeWords[i]
+            if direction then
+                add("order of " .. scopeWord .. " " .. plural)
+                add(scopeWord .. " " .. plural .. " order")
+                add(scopeWord .. " " .. plural .. " sort order")
+                add(scopeWord .. " " .. plural .. " sort direction")
+                add(scopeWord .. " " .. singular .. " order")
+            else
+                add("sort " .. scopeWord .. " " .. plural)
+                add(scopeWord .. " " .. plural .. " sort")
+                add(scopeWord .. " " .. plural .. " sort method")
+                add(scopeWord .. " " .. plural .. " sorting")
+                add("sort " .. scopeWord .. " " .. singular)
+            end
+        end
+        return out
     end
 
     local function NormalizeDurationBarPosition(value)
@@ -371,6 +485,34 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
                 function() return AuraReadLaneStyleBool(settingScope, settingLane, "cooldownSwipeReverse", false) and "REVERSE" or "NORMAL" end,
                 function(value) AuraWriteLaneStyleBool(settingScope, settingLane, "cooldownSwipeReverse", value == "REVERSE") end,
                 true)
+
+            aliases = {}
+            AddAuraLaneAliases(aliases, settingScope, settingLane, "sort")
+            AddAuraLaneAliases(aliases, settingScope, settingLane, "sort method")
+            AddAuraLaneAliases(aliases, settingScope, settingLane, "sorting")
+            RegisterAuraScopeLaneEnum(settingScope, settingLane, "sortMethod", "Sort Method",
+                AURA_SORT_METHOD_VALUES[settingLane], AURA_SORT_METHOD_ALIASES[settingLane] or {}, aliases,
+                function() return AuraReadLaneSortMethod(settingScope, settingLane) end,
+                function(value) AuraWriteLaneSortMethod(settingScope, settingLane, value) end,
+                false, {
+                    page = settingLane == "buff" and "auras3_buffs" or "auras3_debuffs",
+                    exactAliases = AuraSortExactAliases(settingScope, settingLane, false),
+                    description = "Chooses the native Blizzard AuraContainer comparator for this Aura lane; it does not enable or disable the lane.",
+                })
+
+            aliases = {}
+            AddAuraLaneAliases(aliases, settingScope, settingLane, "sort order")
+            AddAuraLaneAliases(aliases, settingScope, settingLane, "order")
+            AddAuraLaneAliases(aliases, settingScope, settingLane, "sort direction")
+            RegisterAuraScopeLaneEnum(settingScope, settingLane, "sortReverse", "Sort Order",
+                AURA_SORT_DIRECTION_VALUES, AURA_SORT_DIRECTION_ALIASES, aliases,
+                function() return AuraReadLaneSortDirection(settingScope, settingLane) end,
+                function(value) AuraWriteLaneSortDirection(settingScope, settingLane, value) end,
+                false, {
+                    page = settingLane == "buff" and "auras3_buffs" or "auras3_debuffs",
+                    exactAliases = AuraSortExactAliases(settingScope, settingLane, true),
+                    description = "Uses the native normal or reversed AuraContainer order without changing lane visibility.",
+                })
 
             aliases = {}
             AddAuraLaneAliases(aliases, settingScope, settingLane, "duration bar position")

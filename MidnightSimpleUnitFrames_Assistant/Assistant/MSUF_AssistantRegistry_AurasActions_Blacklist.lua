@@ -1,4 +1,4 @@
-﻿-- Aura blacklist assistant action registrations.
+-- Aura blacklist assistant action registrations.
 -- Loaded before MSUF_AssistantRegistry_AurasActions.lua; the main action file passes parser helpers in.
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}

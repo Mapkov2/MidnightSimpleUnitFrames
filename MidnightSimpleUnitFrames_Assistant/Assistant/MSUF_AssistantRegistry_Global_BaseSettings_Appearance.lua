@@ -27,12 +27,13 @@ function A.GlobalRegistry.RegisterBaseAppearanceSettings(ctx)
 
     local BAR_MODE_ALIASES = {
         "bar mode", "bar color mode", "health bar mode", "bars mode", "bars color mode",
-        "dark mode", "class colors", "class color mode", "unified bars", "gradient bars",
-        "leisten modus", "balken modus", "dunkler modus", "klassenfarben", "verlauf balken",
+        "class colors", "class color mode", "unified bars", "gradient bars",
+        "leisten modus", "balken modus", "klassenfarben", "verlauf balken",
     }
     RegisterGeneralEnum("barMode", "barMode", "Global Bar Mode", "dark", { "dark", "class", "unified", "gradient" }, BAR_MODE_ALIASES, {
         category = "Global / Bars",
         frameType = "bars",
+        page = "opt_colors",
         apply = ApplyColors,
         reason = "MSUF_ASSISTANT_BAR_MODE",
         valueAliases = {
@@ -77,7 +78,8 @@ function A.GlobalRegistry.RegisterBaseAppearanceSettings(ctx)
     RegisterGeneralEnum("fontColor", "fontColor", "Global Font Palette Color", "white", {
         "white", "black", "red", "green", "blue", "yellow", "cyan", "magenta", "orange", "purple", "pink", "turquoise", "grey", "gray", "brown", "gold",
     }, {
-        "font color", "global font color", "text color", "schriftfarbe", "textfarbe",
+        "font palette color", "global font palette color", "text palette color", "palette font color",
+        "schrift palettenfarbe", "text palettenfarbe",
     }, {
         category = "Global / Fonts",
         frameType = "fonts",

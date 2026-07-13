@@ -198,7 +198,8 @@ function A.Workflow.RegisterPendingFlowHandlers(ctx)
         local parser = A.Parser or {}
         local norm = type(parser.ActionableText) == "function" and Normalize(parser.ActionableText(text)) or Normalize(text)
         local allowed = {
-            a = true, bit = true, by = true, further = true, it = true, just = true,
+            a = true, ["and"] = true, bit = true, by = true, further = true, it = true, just = true,
+            little = true, more = true, to = true,
             move = true, nudge = true, shift = true, position = true, reposition = true,
             please = true, pixel = true, pixels = true, px = true, slightly = true,
             that = true, the = true, this = true,
@@ -251,6 +252,89 @@ function A.Workflow.RegisterPendingFlowHandlers(ctx)
         return raw
     end
 
+    local function ClosedStringChoiceValue(setting, rawValue)
+        if not (setting and setting.type == "string" and setting.closedValues == true and type(setting.values) == "table") then
+            return nil, false
+        end
+        local parser = A.Parser or {}
+        if type(parser.RefreshRegistrySettingValues) == "function" then
+            parser.RefreshRegistrySettingValues(setting)
+        end
+        local wanted = Normalize(rawValue)
+        for alias, value in pairs(setting.valueAliases or {}) do
+            if Normalize(alias) == wanted then return value, true end
+        end
+        for i = 1, #setting.values do
+            local value = setting.values[i]
+            if Normalize(value) == wanted
+                or Normalize(setting.valueLabels and setting.valueLabels[value] or "") == wanted
+            then
+                return value, true
+            end
+        end
+        return nil, true
+    end
+
+    local function PendingValueConversationIntent(text)
+        local norm = Normalize(text)
+        if norm == "" then return nil end
+        if norm:find("what can i use", 1, true)
+            or norm:find("what values", 1, true)
+            or norm:find("what value", 1, true)
+            or norm:find("what options", 1, true)
+            or norm:find("which options", 1, true)
+            or norm:find("show me the options", 1, true)
+            or norm:find("list the options", 1, true)
+            or norm == "options" or norm == "choices"
+            or norm:find("i am not sure", 1, true)
+            or norm:find("im not sure", 1, true)
+            or norm:find("not sure what", 1, true)
+        then
+            return "help"
+        end
+        if norm == "maybe later" or norm == "not now" or norm == "never mind" or norm == "nevermind"
+            or norm:find("do not set", 1, true) or norm:find("dont set", 1, true)
+            or norm:find("not set it", 1, true) or norm:find("leave it", 1, true)
+            or norm:find("keep it", 1, true)
+        then
+            return "cancel"
+        end
+        return nil
+    end
+
+    local function PendingValueHelp(setting, flow)
+        local router = A.RouterPrivate or {}
+        local choices = type(router.OpenEndedSettingChoices) == "function"
+            and router.OpenEndedSettingChoices(setting) or nil
+        if choices and type(A.SetPendingChoices) == "function" then
+            A.ClearPendingFlow()
+            local choiceText = A.SetPendingChoices(choices)
+            return {
+                text = "These are the available values for " .. tostring(flow.label or setting.label or "that option")
+                    .. ":\n" .. tostring(choiceText or "Choose one of the displayed values."),
+                status = "ambiguous",
+            }
+        end
+        local guidance
+        if setting.type == "number" then
+            local parts = {}
+            if setting.min ~= nil then parts[#parts + 1] = "min " .. tostring(setting.min) end
+            if setting.max ~= nil then parts[#parts + 1] = "max " .. tostring(setting.max) end
+            if setting.step ~= nil then parts[#parts + 1] = "step " .. tostring(setting.step) end
+            guidance = "This is a number control" .. (#parts > 0 and (" (" .. table.concat(parts, ", ") .. ")") or "") .. "."
+        elseif setting.type == "color" then
+            guidance = "This accepts a color name, RGB value, or #RRGGBB."
+        elseif setting.type == "string" then
+            guidance = "This is a text or named-value field, so it does not have a fixed option list."
+        else
+            guidance = "This control does not expose a fixed option list."
+        end
+        return {
+            text = guidance .. " Tell me the value, ask me to open the native control, or say cancel. I have not changed anything.",
+            status = "ambiguous",
+        }
+    end
+
     local function HandleSettingValueFlow(text, flow)
         if WantsPendingSettingOpen(text) then
             return OpenPendingSetting(flow, flow.settingKey, flow.label)
@@ -259,6 +343,17 @@ function A.Workflow.RegisterPendingFlowHandlers(ctx)
         if not setting then
             A.ClearPendingFlow()
             return { text = "That option is no longer available in the active MSUF profile. Ask me to find it again.", status = "failed" }
+        end
+        local conversationIntent = PendingValueConversationIntent(text)
+        if conversationIntent == "cancel" then
+            A.ClearPendingFlow()
+            return {
+                text = "No problem. I kept " .. tostring(flow.label or setting.label or "that option")
+                    .. " unchanged. Ask me whenever you want to continue.",
+                status = "info",
+            }
+        elseif conversationIntent == "help" then
+            return PendingValueHelp(setting, flow)
         end
         -- A strong new command changes the subject instead of becoming the
         -- literal value of a free-form string setting. Referential forms such
@@ -287,9 +382,24 @@ function A.Workflow.RegisterPendingFlowHandlers(ctx)
         -- off labels/aliases (not internal dotted keys) so values such as
         -- "Shadow Word: Pain" retain their case and punctuation.
         local synthetic = "set " .. tostring(setting.label or setting.key) .. " to " .. tostring(rawValue)
-        local value = type(parser.ValueForRegistrySetting) == "function"
+        local value, closedString = ClosedStringChoiceValue(setting, rawValue)
+        if not closedString then value = type(parser.ValueForRegistrySetting) == "function"
             and parser.ValueForRegistrySetting(setting, Normalize(synthetic), synthetic) or nil
+        end
         if value == nil then
+            if closedString then
+                local router = A.RouterPrivate or {}
+                local choices = type(router.OpenEndedSettingChoices) == "function" and router.OpenEndedSettingChoices(setting) or nil
+                if choices and type(A.SetPendingChoices) == "function" then
+                    A.ClearPendingFlow()
+                    local choiceText = A.SetPendingChoices(choices)
+                    return {
+                        text = "'" .. tostring(rawValue) .. "' is not one of the available choices for "
+                            .. tostring(flow.label or setting.label or "that option") .. ".\n" .. tostring(choiceText or "Pick one of the displayed values."),
+                        status = "ambiguous",
+                    }
+                end
+            end
             return {
                 text = "I could not use '" .. tostring(rawValue) .. "' for " .. tostring(flow.label or setting.label or "that option")
                     .. ". Try another value, ask me to open it, or say cancel.",
@@ -317,8 +427,24 @@ function A.Workflow.RegisterPendingFlowHandlers(ctx)
         return nil
     end
 
+    local function MovementAxes(text)
+        local norm = Normalize(text)
+        local function Has(word) return norm:match("%f[%a]" .. word .. "%f[%A]") ~= nil end
+        local left, right = Has("left"), Has("right")
+        local up = Has("up") or Has("higher") or Has("raise")
+        local down = Has("down") or Has("lower")
+        if left and right or up and down then return nil, nil, true end
+        return left and "left" or right and "right" or nil,
+            up and "up" or down and "down" or nil,
+            false
+    end
+
     local function HandleSettingMovementFlow(text, flow)
         local norm = Normalize(text)
+        if norm:match("^result%s+%d+$") or norm:match("^option%s+%d+$") then
+            A.ClearPendingFlow()
+            return nil
+        end
         if WantsPendingSettingOpen(text) then
             local axisKey
             local axisLabel
@@ -345,6 +471,57 @@ function A.Workflow.RegisterPendingFlowHandlers(ctx)
         then
             A.ClearPendingFlow()
             return nil
+        end
+
+
+        local horizontalDirection, verticalDirection, conflictingDirections = MovementAxes(text)
+        if conflictingDirections then
+            return {
+                text = "Those directions conflict on the same axis. Pick one of Up/Down and one of Left/Right, or say cancel.",
+                status = "ambiguous",
+            }
+        end
+        if horizontalDirection and verticalDirection then
+            local xSetting, ySetting = PendingSetting(flow.xKey), PendingSetting(flow.yKey)
+            if not xSetting or not ySetting then
+                A.ClearPendingFlow()
+                return { text = "I could not reopen both exact position options. Ask me to find them again.", status = "failed" }
+            end
+            local router = A.RouterPrivate or {}
+            local numberCount = type(router.TextMovementNumberCount) == "function"
+                and router.TextMovementNumberCount(text) or 0
+            local firstAmount = type(router.TextMovementAmount) == "function"
+                and router.TextMovementAmount(text) or tonumber(tostring(text or ""):match("[%+%-]?%d+%.?%d*"))
+            local xAmount = type(router.TextMovementAmountForDirection) == "function"
+                and router.TextMovementAmountForDirection(text, horizontalDirection) or nil
+            local yAmount = type(router.TextMovementAmountForDirection) == "function"
+                and router.TextMovementAmountForDirection(text, verticalDirection) or nil
+            if numberCount == 1 then
+                xAmount, yAmount = xAmount or firstAmount, yAmount or firstAmount
+            end
+            if numberCount > 1 and (xAmount == nil or yAmount == nil) then
+                return {
+                    text = "I found more than one amount, but could not safely pair every amount with one axis, so I kept both offsets unchanged. Say for example 'up 5 and right 10', or cancel.",
+                    status = "ambiguous",
+                }
+            end
+            xAmount = math.abs(tonumber(xAmount) or tonumber(firstAmount) or tonumber(flow.step) or 10)
+            yAmount = math.abs(tonumber(yAmount) or tonumber(firstAmount) or tonumber(flow.step) or 10)
+            if xAmount == 0 or yAmount == 0 then
+                return { text = "Zero keeps " .. tostring(flow.label or "that component") .. " where it is. Give me another amount or say cancel.", status = "info" }
+            end
+            A.ClearPendingFlow()
+            return A.ExecutePlan({
+                kind = "changes",
+                changes = {
+                    { setting = xSetting, relativeDelta = horizontalDirection == "left" and -xAmount or xAmount, direction = horizontalDirection },
+                    { setting = ySetting, relativeDelta = verticalDirection == "down" and -yAmount or yAmount, direction = verticalDirection },
+                },
+                label = "Move " .. tostring(flow.label or "MSUF component") .. " " .. verticalDirection .. " and " .. horizontalDirection,
+                summary = "Moves both exact position axes selected in the previous Assistant message.",
+                sourceText = "move " .. tostring(flow.noun or flow.label or "component") .. " " .. verticalDirection
+                    .. " " .. tostring(yAmount) .. " and " .. horizontalDirection .. " " .. tostring(xAmount),
+            })
         end
 
         local direction = requestedDirection
@@ -384,6 +561,90 @@ function A.Workflow.RegisterPendingFlowHandlers(ctx)
             summary = "Moves the exact text position selected in the previous Assistant message.",
             sourceText = "move " .. tostring(flow.noun or flow.label or setting.label or setting.key) .. " " .. direction .. " " .. tostring(amount),
         })
+    end
+
+    local function HandleComponentMovementFlow(text, flow)
+        local norm = Normalize(text)
+        local choice = tonumber(norm:match("^(%d+)$") or norm:match("^option%s+(%d+)$") or norm:match("^result%s+(%d+)$"))
+        if not choice then
+            local reply = norm:gsub("^the%s+", ""):gsub("%s+please$", "")
+            choice = tonumber(reply:match("^(%d+)$")
+                or reply:match("^number%s+(%d+)$")
+                or reply:match("^option%s+(%d+)$")
+                or reply:match("^result%s+(%d+)$")
+                or reply:match("^choice%s+(%d+)$"))
+            if not choice then
+                local wordChoices = {
+                    one = 1, two = 2, three = 3, four = 4, five = 5,
+                    six = 6, seven = 7, eight = 8, nine = 9, ten = 10,
+                    first = 1, second = 2, third = 3, fourth = 4, fifth = 5,
+                    sixth = 6, seventh = 7, eighth = 8, ninth = 9, tenth = 10,
+                }
+                local word = reply:match("^number%s+(%a+)$")
+                    or reply:match("^option%s+(%a+)$")
+                    or reply:match("^result%s+(%a+)$")
+                    or reply:match("^choice%s+(%a+)$")
+                    or reply:match("^(%a+)%s+one$")
+                    or reply:match("^(%a+)$")
+                choice = word and wordChoices[word] or nil
+            end
+        end
+        local wantsGrowth = flow.growthKey and (
+            choice == tonumber(flow.growthChoice)
+            or norm:find("growth", 1, true) ~= nil
+            or norm:find("grow direction", 1, true) ~= nil
+            or norm:find("arrange", 1, true) ~= nil
+        )
+        if wantsGrowth then
+            local setting = PendingSetting(flow.growthKey)
+            local router = A.RouterPrivate or {}
+            local choices = setting and type(router.OpenEndedSettingChoices) == "function"
+                and router.OpenEndedSettingChoices(setting) or nil
+            if choices and type(A.SetPendingChoices) == "function" then
+                A.ClearPendingFlow()
+                local choiceText = A.SetPendingChoices(choices)
+                return {
+                    text = "Sure — how should " .. tostring(flow.label or "that component") .. " grow?\n"
+                        .. tostring(choiceText or "Choose one of the listed directions."),
+                    status = "ambiguous",
+                }
+            end
+            return OpenPendingSetting(flow, flow.growthKey, setting and setting.label or "Growth Direction")
+        end
+
+        local selectedKey
+        if choice == tonumber(flow.xChoice) or norm == "x" or norm == "x offset" or norm == "horizontal" then
+            selectedKey = flow.xKey
+        elseif choice == tonumber(flow.yChoice) or norm == "y" or norm == "y offset" or norm == "vertical" then
+            selectedKey = flow.yKey
+        end
+        if selectedKey then
+            local setting = PendingSetting(selectedKey)
+            if not setting then
+                A.ClearPendingFlow()
+                return { text = "That position control is no longer available. Ask me to find it again.", status = "failed" }
+            end
+            A.StartPendingFlow("settingValue", {
+                settingKey = selectedKey,
+                expectedType = setting.type,
+                label = setting.label,
+                page = flow.page,
+            })
+            return {
+                text = "I selected " .. tostring(setting.label) .. ". Give me its number, ask me to open it, or say cancel.",
+                status = "ambiguous",
+            }
+        end
+
+        if choice then
+            -- A different listed result (for example cooldown-text offset)
+            -- belongs to the ordinary pending-result selector, not to whole-
+            -- component movement.
+            A.ClearPendingFlow()
+            return nil
+        end
+
+        return HandleSettingMovementFlow(text, flow)
     end
 
     function A.HandlePendingFlow(text)
@@ -426,6 +687,7 @@ function A.Workflow.RegisterPendingFlowHandlers(ctx)
         end
         if flow.kind == "settingValue" then return HandleSettingValueFlow(text, flow) end
         if flow.kind == "settingMovement" then return HandleSettingMovementFlow(text, flow) end
+        if flow.kind == "componentMovement" then return HandleComponentMovementFlow(text, flow) end
         return nil
     end
 end

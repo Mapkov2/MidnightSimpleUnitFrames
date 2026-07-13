@@ -1,4 +1,4 @@
-﻿--- Shell/Menu2/Assistant/MSUF_AssistantParser_Geometry.lua
+--- Shell/Menu2/Assistant/MSUF_AssistantParser_Geometry.lua
 --- Geometry/layout parser shard for natural-language frame edits.
 ---
 --- Produces declarative move/size/anchor plans only; secure/combat-safe frame

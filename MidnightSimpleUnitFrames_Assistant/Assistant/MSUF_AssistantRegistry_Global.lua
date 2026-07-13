@@ -72,6 +72,7 @@ if type(RegisterGlobalBaseSettings) == "function" then
         GeneralDB = GeneralDB,
         ApplyGeneral = ApplyGeneral,
         ApplyVisuals = ApplyVisuals,
+        ApplyColors = ApplyColors,
         ApplyFonts = ApplyFonts,
         RegisterGeneralBoolean = RegisterGeneralBoolean,
         RegisterGeneralNumberSetting = RegisterGeneralNumberSetting,

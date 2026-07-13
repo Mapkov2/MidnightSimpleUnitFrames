@@ -283,6 +283,12 @@ local function SettingLikelyPage(setting)
         for key, unit in pairs(PAGE_TO_UNIT) do if unit == setting.unit then return key end end
     end
     local ft = setting.frameType
+    local cat = Normalize(setting.category or "")
+    -- Several Class Resource settings are edited on the dedicated Colors page
+    -- even though their runtime owner is classPower.  Page intent is more
+    -- specific than runtime ownership here; honoring it prevents exact-setting
+    -- navigation and follow-ups from opening a plausible but wrong control.
+    if cat:find("color", 1, true) or cat:find("colour", 1, true) then return "opt_colors" end
     if ft == "dashboard" then return "home" end
     if ft == "misc" then return "opt_misc" end
     if ft == "castbar" then return "opt_castbar" end
@@ -294,7 +300,6 @@ local function SettingLikelyPage(setting)
     if ft == "group" then return GroupSettingLikelyPage(setting) end
     if ft == "groupAura" then return "gf_auras" end
     if ft == "aura" then return "auras3_styling" end
-    local cat = Normalize(setting.category or "")
     if ft == "unitframe" and tostring(setting.unit or "") == "global" and cat:find("status icon", 1, true) then return "uf_player" end
     if cat:find("dashboard", 1, true) then return "home" end
     if cat:find("misc", 1, true) then return "opt_misc" end
@@ -302,7 +307,6 @@ local function SettingLikelyPage(setting)
     if cat:find("gameplay", 1, true) then return "gameplay" end
     if cat:find("castbar", 1, true) then return "opt_castbar" end
     if cat:find("font", 1, true) then return "opt_fonts" end
-    if cat:find("color", 1, true) or cat:find("colour", 1, true) then return "opt_colors" end
     if cat:find("profile", 1, true) then return "profiles" end
     return nil
 end

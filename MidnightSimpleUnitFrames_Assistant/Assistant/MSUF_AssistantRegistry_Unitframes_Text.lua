@@ -134,6 +134,34 @@ function A.UnitframesRegistry.RegisterTextSettings(ctx, unit)
         MakeAliases(unit, "reverse hp text", "hp text reverse order"), { category = "Text", text = true })
     RegisterUnitBooleanSetting(unit, "healthTextDecimals", "healthTextDecimals", "Health Text Decimals", false,
         MakeAliases(unit, "health text decimals", "hp text decimals", "decimal percent"), { category = "Text", text = true })
+    local hpAbbreviationAliases = MakeAliases(unit,
+        "abbreviate hp values", "abbreviate health values", "shorten hp values",
+        "short hp numbers", "abbreviated hp numbers", "hp value abbreviation")
+    AppendAliases(hpAbbreviationAliases,
+        "abbreviate unit hp values", "abbreviate unit health values", "unit hp value abbreviation")
+    RegisterUnitBooleanSetting(unit, "hpFullValueShort", "hpFullValueShort", "Abbreviate HP Values", true,
+        hpAbbreviationAliases, {
+            category = "Text",
+            text = true,
+            reason = "MSUF2_HP_FULL_VALUE_SHORT",
+            get = function(unitKey)
+                local conf = type(UnitDB) == "function" and UnitDB(unitKey) or nil
+                if type(conf) == "table" and conf.hpFullValueShort ~= nil then
+                    return conf.hpFullValueShort == true
+                end
+                local general = type(GeneralDB) == "function" and GeneralDB() or nil
+                return type(general) ~= "table" or general.useShortNumbers ~= false
+            end,
+            set = function(unitKey, value)
+                local conf = type(UnitDB) == "function" and UnitDB(unitKey) or nil
+                if type(conf) ~= "table" then return end
+                conf.hpFullValueShort = value and true or false
+                -- Match the native text setter: an explicit per-unit choice
+                -- replaces the legacy combined HP/power text override.
+                conf.hpPowerTextOverride = nil
+            end,
+            description = "Abbreviates numeric HP values with K/M. None and Percent-only HP slots are unaffected.",
+        })
     RegisterUnitTextNumber(unit, "hpOffsetX", "hpOffsetX", "HP Text X Offset", -4,
         MakeAliases(unit, "hp text x", "health text x offset"), { min = -300, max = 300 })
     RegisterUnitTextNumber(unit, "hpOffsetY", "hpOffsetY", "HP Text Y Offset", -4,

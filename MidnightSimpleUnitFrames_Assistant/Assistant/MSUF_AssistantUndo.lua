@@ -247,45 +247,6 @@ local function RestoreProfileOwnerState(state)
     return true
 end
 
-local function CaptureWagoBackupState(profileName)
-    local globalDB = rawget(_G, "MSUF_GlobalDB")
-    if type(globalDB) ~= "table" then
-        return { level = "root", root = CapturePublicValue("MSUF_GlobalDB") }
-    end
-    if type(globalDB.global) ~= "table" then
-        return { level = "global", value = CaptureField(globalDB, "global") }
-    end
-    if type(globalDB.global.dashboard) ~= "table" then
-        return { level = "dashboard", value = CaptureField(globalDB.global, "dashboard") }
-    end
-    local dashboard = globalDB.global.dashboard
-    if type(dashboard.wagoProfileBackupConfirmed) ~= "table" then
-        return { level = "map", value = CaptureField(dashboard, "wagoProfileBackupConfirmed") }
-    end
-    return {
-        level = "entry",
-        entry = CaptureField(dashboard.wagoProfileBackupConfirmed, profileName),
-    }
-end
-
-local function RestoreWagoBackupState(state, profileName)
-    if type(state) ~= "table" then return false, "invalid Wago backup snapshot" end
-    if state.level == "root" then return RestorePublicValue("MSUF_GlobalDB", state.root) end
-    local globalDB = rawget(_G, "MSUF_GlobalDB")
-    if type(globalDB) ~= "table" then globalDB = {}; ExportPublic("MSUF_GlobalDB", globalDB) end
-    if state.level == "global" then return RestoreField(globalDB, "global", state.value) end
-    if type(globalDB.global) ~= "table" then globalDB.global = {} end
-    if state.level == "dashboard" then return RestoreField(globalDB.global, "dashboard", state.value) end
-    if type(globalDB.global.dashboard) ~= "table" then globalDB.global.dashboard = {} end
-    local dashboard = globalDB.global.dashboard
-    if state.level == "map" then return RestoreField(dashboard, "wagoProfileBackupConfirmed", state.value) end
-    if state.level ~= "entry" or type(profileName) ~= "string" or profileName == "" then
-        return false, "unsupported Wago backup snapshot"
-    end
-    if type(dashboard.wagoProfileBackupConfirmed) ~= "table" then dashboard.wagoProfileBackupConfirmed = {} end
-    return RestoreField(dashboard.wagoProfileBackupConfirmed, profileName, state.entry)
-end
-
 local function CaptureNoMatchState()
     local state = { lastNoMatch = CaptureField(A, "_lastNoMatch") }
     local globalDB = rawget(_G, "MSUF_GlobalDB")
@@ -324,6 +285,61 @@ local function RestoreNoMatchState(state)
     return RestoreField(store, "total", state.total)
         and RestoreField(store, "recent", state.recent)
         and RestoreField(store, "counts", state.counts)
+end
+
+local function CaptureOnboardingState()
+    local state = {
+        firstLoadDeferred = CaptureField(MSUF and MSUF.FirstLoad6, "deferredThisSession"),
+        guidedTourSession = CaptureField(MSUF and MSUF.GuidedTour6, "session"),
+    }
+    local globalDB = rawget(_G, "MSUF_GlobalDB")
+    if type(globalDB) ~= "table" then
+        state.level, state.root = "root", CapturePublicValue("MSUF_GlobalDB")
+        return state
+    end
+    if type(globalDB.global) ~= "table" then
+        state.level, state.value = "global", CaptureField(globalDB, "global")
+        return state
+    end
+    state.level = "fields"
+    state.firstLoad6 = CaptureField(globalDB.global, "firstLoad6")
+    state.guidedTour6 = CaptureField(globalDB.global, "guidedTour6")
+    return state
+end
+
+local function RestoreOwnedTableField(container, key, fieldState)
+    if type(container) ~= "table" or type(fieldState) ~= "table" then return false end
+    local current = rawget(container, key)
+    if fieldState.exists == true and type(current) == "table" and type(fieldState.value) == "table" then
+        DeepReplace(current, fieldState.value)
+        container[key] = current
+        return true
+    end
+    return RestoreField(container, key, fieldState)
+end
+
+local function RestoreOnboardingState(state)
+    if type(state) ~= "table" or type(state.firstLoadDeferred) ~= "table"
+        or type(state.guidedTourSession) ~= "table"
+    then
+        return false, "invalid onboarding snapshot"
+    end
+    if type(MSUF and MSUF.FirstLoad6) == "table" then
+        RestoreField(MSUF.FirstLoad6, "deferredThisSession", state.firstLoadDeferred)
+    end
+    if type(MSUF and MSUF.GuidedTour6) == "table" then
+        RestoreField(MSUF.GuidedTour6, "session", state.guidedTourSession)
+    end
+    if state.level == "root" then return RestorePublicValue("MSUF_GlobalDB", state.root) end
+    local globalDB = rawget(_G, "MSUF_GlobalDB")
+    if type(globalDB) ~= "table" then globalDB = {}; ExportPublic("MSUF_GlobalDB", globalDB) end
+    if state.level == "global" then return RestoreOwnedTableField(globalDB, "global", state.value) end
+    if state.level ~= "fields" then return false, "unsupported onboarding snapshot" end
+    if type(globalDB.global) ~= "table" then globalDB.global = {} end
+    local restored = RestoreOwnedTableField(globalDB.global, "firstLoad6", state.firstLoad6)
+        and RestoreOwnedTableField(globalDB.global, "guidedTour6", state.guidedTour6)
+    if restored and M and type(M.InvalidatePage) == "function" then pcall(M.InvalidatePage, "home") end
+    return restored
 end
 
 local function CaptureFactoryResetState()
@@ -365,8 +381,20 @@ local ACTION_TRANSACTION_ADAPTERS = {
     profileCopyFromTo = { actionKey = "copy_profile_from_to", mode = "capturedOwnerState" },
     profileRename = { actionKey = "rename_profile", mode = "capturedOwnerState" },
     factoryResetAll = { actionKey = "factory_reset_all", mode = "capturedOwnerState" },
-    globalDashboardWagoBackup = { actionKey = "confirm_wago_backup", mode = "capturedOwnerState" },
     globalAssistantNoMatch = { actionKey = "assistant_nomatch_clear", mode = "capturedOwnerState" },
+    onboardingFirstLoad = {
+        mode = "capturedOwnerState",
+        actionKeys = {
+            ["first_load.personalize"] = true,
+            ["first_load.import_profile"] = true,
+            ["first_load.use_defaults"] = true,
+            ["first_load.whats_new"] = true,
+            ["first_load.not_now"] = true,
+            ["first_load.full_settings"] = true,
+            guided_setup = true,
+            guided_setup_step = true,
+        },
+    },
     managedHistory = {
         mode = "selfManaged",
         actionKeys = {
@@ -385,6 +413,7 @@ local ACTION_TRANSACTION_ADAPTERS = {
         mode = "deferredUserInput",
         actionKeys = {
             ["assistant.action.editMode.anchorPicker"] = true,
+            menu_reset_current_page_prompt = true,
             start_group_custom_anchor_picker = true,
             start_unit_custom_anchor_picker = true,
         },
@@ -418,12 +447,10 @@ function A.CaptureActionTransaction(actionKey, args, adapterName, prior)
         state, err = CaptureProfileOwnerState(identity, adapterName == "profileRename")
     elseif adapterName == "factoryResetAll" then
         state = CaptureFactoryResetState()
-    elseif adapterName == "globalDashboardWagoBackup" then
-        identity = type(prior) == "table" and prior.identity and DeepCopy(prior.identity)
-            or { profileName = ActiveProfileValue() }
-        state = CaptureWagoBackupState(identity.profileName)
     elseif adapterName == "globalAssistantNoMatch" then
         state = CaptureNoMatchState()
+    elseif adapterName == "onboardingFirstLoad" then
+        state = CaptureOnboardingState()
     end
     if type(state) ~= "table" then return nil, err or "action owner state could not be captured" end
     return {
@@ -452,10 +479,10 @@ function A.RestoreActionTransaction(snapshot, reason)
         restored, err = RestoreProfileOwnerState(snapshot.state)
     elseif snapshot.adapter == "factoryResetAll" then
         restored, err = RestoreFactoryResetState(snapshot.state)
-    elseif snapshot.adapter == "globalDashboardWagoBackup" then
-        restored, err = RestoreWagoBackupState(snapshot.state, snapshot.identity and snapshot.identity.profileName)
     elseif snapshot.adapter == "globalAssistantNoMatch" then
         restored, err = RestoreNoMatchState(snapshot.state)
+    elseif snapshot.adapter == "onboardingFirstLoad" then
+        restored, err = RestoreOnboardingState(snapshot.state)
     end
     if restored ~= true then return false, err or "action owner state could not be restored" end
 
@@ -464,10 +491,10 @@ function A.RestoreActionTransaction(snapshot, reason)
         verify, err = CaptureProfileOwnerState(snapshot.identity, snapshot.adapter == "profileRename")
     elseif snapshot.adapter == "factoryResetAll" then
         verify = CaptureFactoryResetState()
-    elseif snapshot.adapter == "globalDashboardWagoBackup" then
-        verify = CaptureWagoBackupState(snapshot.identity and snapshot.identity.profileName)
     elseif snapshot.adapter == "globalAssistantNoMatch" then
         verify = CaptureNoMatchState()
+    elseif snapshot.adapter == "onboardingFirstLoad" then
+        verify = CaptureOnboardingState()
     end
     if type(verify) ~= "table" or not DeepEqual(verify, snapshot.state) then
         return false, err or "restored action owner state did not verify"
@@ -487,8 +514,6 @@ function A.RestoreActionTransaction(snapshot, reason)
         local core = MSUF and MSUF.MSUF_UnitframeCore
         if core and type(core.InvalidateAllFrameConfigs) == "function" then pcall(core.InvalidateAllFrameConfigs) end
         if reason and type(A.RequestBroadApply) == "function" then pcall(A.RequestBroadApply, reason) end
-    elseif snapshot.adapter == "globalDashboardWagoBackup" then
-        if M and type(M.InvalidatePage) == "function" then pcall(M.InvalidatePage, "home") end
     end
     return true
 end

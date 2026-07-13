@@ -85,9 +85,7 @@ local function NormalizeClassPowerPreviewKey(key)
     return "rogue_combo"
 end
 
-local function ClassPowerPreviewActionTextHas(text, terms)
-    local compact = tostring(text or ""):lower():gsub("[^%w]+", "")
-    local hay = " " .. tostring(text or ""):lower():gsub("[^%w]+", " ") .. " "
+local function ClassPowerPreviewActionTextHas(compact, hay, terms)
     for i = 1, #(terms or {}) do
         local term = tostring(terms[i] or ""):lower()
         local compactTerm = term:gsub("[^%w]+", "")
@@ -100,12 +98,15 @@ local function ClassPowerPreviewActionTextHas(text, terms)
 end
 
 local function ParseClassPowerPreviewAnimationAliasArgs(text)
+    local lower = tostring(text or ""):lower()
+    local compact = lower:gsub("[^%w]+", "")
+    local hay = " " .. lower:gsub("[^%w]+", " ") .. " "
     local value
-    if ClassPowerPreviewActionTextHas(text, { "toggle", "switch", "umschalten" }) then
+    if ClassPowerPreviewActionTextHas(compact, hay, { "toggle", "switch", "umschalten" }) then
         value = nil
-    elseif ClassPowerPreviewActionTextHas(text, { "stop", "pause", "off", "disable", "turn off" }) then
+    elseif ClassPowerPreviewActionTextHas(compact, hay, { "stop", "pause", "off", "disable", "turn off" }) then
         value = false
-    elseif ClassPowerPreviewActionTextHas(text, { "start", "play", "animate", "on", "enable", "turn on" }) then
+    elseif ClassPowerPreviewActionTextHas(compact, hay, { "start", "play", "animate", "on", "enable", "turn on" }) then
         value = true
     end
     return { value = value }, {

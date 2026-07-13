@@ -35,6 +35,13 @@ local function SafeContext()
     return A.context
 end
 
+local function NativeGuidedTourIsActive()
+    local tour = MSUF.GuidedTour6 or _G.MSUF_GuidedTour6
+    if type(tour) ~= "table" or type(tour.IsActive) ~= "function" then return false end
+    local ok, active = pcall(tour.IsActive, tour)
+    return ok and active == true
+end
+
 local function SetContextFlow(flow)
     local ctx = SafeContext()
     if ctx then ctx.pendingFlow = flow end
@@ -141,8 +148,7 @@ function A.Workflow.WorkflowStatusText()
     lines[#lines + 1] = "- Choices waiting: " .. ((type(A.pendingChoices) == "table" and #A.pendingChoices > 0) and tostring(#A.pendingChoices) or "no")
     lines[#lines + 1] = "- Guided step: " .. WorkflowFlowLabel(flow)
     lines[#lines + 1] = "- Open Assistant panel: " .. (CurrentLargePanelKind() or "none")
-    local guided = SafeContext() and SafeContext().guidedSetup
-    lines[#lines + 1] = "- Setup guide: " .. (type(guided) == "table" and "active" or "inactive")
+    lines[#lines + 1] = "- Native guided tour: " .. (NativeGuidedTourIsActive() and "active" or "inactive")
     if M and type(M.GetPageHistoryState) == "function" then
         local state = M.GetPageHistoryState() or {}
         lines[#lines + 1] = "- Page history: " .. tostring(tonumber(state.backCount) or 0) .. " back, " .. tostring(tonumber(state.forwardCount) or 0) .. " forward"
@@ -174,10 +180,6 @@ function A.Workflow.CancelActiveWorkflow()
         return true, "Cancelled " .. WorkflowFlowLabel(flow) .. "."
     end
     if CurrentLargePanelKind() then return A.Workflow.CloseLargePanel("Cancelled. I closed the open Assistant panel.") end
-    local ctx = A.GetContext and A.GetContext()
-    if ctx and type(ctx.guidedSetup) == "table" and A.Workflow.GuidedSetupStep then
-        return true, A.Workflow.GuidedSetupStep("cancel")
-    end
     return false, "There is no Assistant step waiting to cancel."
 end
 

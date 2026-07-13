@@ -33,6 +33,10 @@ function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
     local GF_AURA_FILTER_ALIASES = ctx.GF_AURA_FILTER_ALIASES
     local AURA_COOLDOWN_SWIPE_DIRECTION_VALUES = ctx.AURA_COOLDOWN_SWIPE_DIRECTION_VALUES or {}
     local AURA_COOLDOWN_SWIPE_DIRECTION_ALIASES = ctx.AURA_COOLDOWN_SWIPE_DIRECTION_ALIASES or {}
+    local AURA_SORT_METHOD_VALUES = ctx.AURA_SORT_METHOD_VALUES or {}
+    local AURA_SORT_METHOD_ALIASES = ctx.AURA_SORT_METHOD_ALIASES or {}
+    local AURA_SORT_DIRECTION_VALUES = ctx.AURA_SORT_DIRECTION_VALUES or {}
+    local AURA_SORT_DIRECTION_ALIASES = ctx.AURA_SORT_DIRECTION_ALIASES or {}
     local AURA_DURATION_BAR_POSITION_VALUES = ctx.AURA_DURATION_BAR_POSITION_VALUES or {}
     local AURA_DURATION_BAR_POSITION_ALIASES = ctx.AURA_DURATION_BAR_POSITION_ALIASES or {}
     local AURA_DURATION_BAR_DISPLAY_VALUES = ctx.AURA_DURATION_BAR_DISPLAY_VALUES or {}
@@ -62,6 +66,15 @@ function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
     if #AURA_COOLDOWN_SWIPE_DIRECTION_VALUES == 0 then
         AURA_COOLDOWN_SWIPE_DIRECTION_VALUES = { "NORMAL", "REVERSE" }
     end
+    if type(AURA_SORT_METHOD_VALUES.buff) ~= "table" or #AURA_SORT_METHOD_VALUES.buff == 0 then
+        AURA_SORT_METHOD_VALUES.buff = { "DEFAULT", "BIG_DEFENSIVE", "IMPORTANT_FIRST", "EXPIRATION", "EXPIRATION_ONLY", "NAME", "NAME_ONLY" }
+    end
+    if type(AURA_SORT_METHOD_VALUES.debuff) ~= "table" or #AURA_SORT_METHOD_VALUES.debuff == 0 then
+        AURA_SORT_METHOD_VALUES.debuff = { "DEFAULT", "UNIT_FRAME_DEBUFF", "IMPORTANT_FIRST", "EXPIRATION", "EXPIRATION_ONLY", "NAME", "NAME_ONLY" }
+    end
+    if #AURA_SORT_DIRECTION_VALUES == 0 then
+        AURA_SORT_DIRECTION_VALUES = { "NORMAL", "REVERSE" }
+    end
     if #AURA_DURATION_BAR_POSITION_VALUES == 0 then
         AURA_DURATION_BAR_POSITION_VALUES = { "BOTTOM", "TOP" }
     end
@@ -85,6 +98,44 @@ function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
     local function WriteGFCooldownSwipeDirection(scope, lane, value)
         if type(GFWriteAuraValue) ~= "function" then return end
         GFWriteAuraValue(scope, lane, "cooldownSwipeReverse", value == "REVERSE")
+    end
+
+    local function ReadGFSortDirection(scope, lane)
+        if type(GFReadAuraValue) ~= "function" then return "NORMAL" end
+        return GFReadAuraValue(scope, lane, "sortReverse", false) == true and "REVERSE" or "NORMAL"
+    end
+
+    local function WriteGFSortDirection(scope, lane, value)
+        if type(GFWriteAuraValue) ~= "function" then return end
+        GFWriteAuraValue(scope, lane, "sortReverse", value == "REVERSE")
+    end
+
+    local function GFSortExactAliases(scope, lane, direction)
+        local out, seen = {}, {}
+        local function add(value)
+            if value ~= "" and not seen[value] then seen[value] = true; out[#out + 1] = value end
+        end
+        local scopeWords = { scope }
+        if scope == "mythicraid" then scopeWords[#scopeWords + 1] = "mythic raid" end
+        local singular = lane == "buff" and "buff" or "debuff"
+        local plural = lane == "buff" and "buffs" or "debuffs"
+        for i = 1, #scopeWords do
+            local scopeWord = scopeWords[i]
+            if direction then
+                add("order of " .. scopeWord .. " " .. plural)
+                add(scopeWord .. " " .. plural .. " order")
+                add(scopeWord .. " " .. plural .. " sort order")
+                add(scopeWord .. " " .. plural .. " sort direction")
+                add(scopeWord .. " " .. singular .. " order")
+            else
+                add("sort " .. scopeWord .. " " .. plural)
+                add(scopeWord .. " " .. plural .. " sort")
+                add(scopeWord .. " " .. plural .. " sort method")
+                add(scopeWord .. " " .. plural .. " sorting")
+                add("sort " .. scopeWord .. " " .. singular)
+            end
+        end
+        return out
     end
 
     local debuffBorderAllowed = {}
@@ -243,6 +294,41 @@ function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
                 valueAliases = AURA_COOLDOWN_SWIPE_DIRECTION_ALIASES,
                 get = function() return ReadGFCooldownSwipeDirection(scope, lane) end,
                 set = function(value) WriteGFCooldownSwipeDirection(scope, lane, cooldownSwipeDirectionAllowed[value] and value or "NORMAL") end,
+                apply = function() ApplyGroup(scope, "auras") end,
+                combatSafe = false,
+            })
+
+            aliases = {}
+            AddGFAuraAliases(aliases, scope, lane, "sort")
+            AddGFAuraAliases(aliases, scope, lane, "sort method")
+            AddGFAuraAliases(aliases, scope, lane, "sorting")
+            RegisterGFAuraEnum(scope, lane, "SortMethod", "sortMethod", laneInfo.label .. " Sort Method",
+                AURA_SORT_METHOD_VALUES[lane], AURA_SORT_METHOD_ALIASES[lane] or {}, "DEFAULT", aliases, "visual", {
+                    page = lane == "buff" and "auras3_buffs" or "auras3_debuffs",
+                    exactAliases = GFSortExactAliases(scope, lane, false),
+                    description = "Chooses the native Blizzard AuraContainer comparator for this group Aura lane; it does not enable or disable the lane.",
+                })
+
+            aliases = {}
+            AddGFAuraAliases(aliases, scope, lane, "sort order")
+            AddGFAuraAliases(aliases, scope, lane, "order")
+            AddGFAuraAliases(aliases, scope, lane, "sort direction")
+            Registry:RegisterSetting({
+                key = "gf_" .. scope .. ".auras." .. lane .. ".sortReverse",
+                label = UNIT_LABELS[scope] .. " " .. laneInfo.label .. " Sort Order",
+                category = UNIT_LABELS[scope] .. " / Group Auras",
+                page = lane == "buff" and "auras3_buffs" or "auras3_debuffs",
+                description = "Uses the native normal or reversed AuraContainer order without changing lane visibility.",
+                unit = scope,
+                frameType = "groupAura",
+                attribute = "gfAura" .. lane .. "SortReverse",
+                type = "enum",
+                aliases = aliases,
+                exactAliases = GFSortExactAliases(scope, lane, true),
+                values = AURA_SORT_DIRECTION_VALUES,
+                valueAliases = AURA_SORT_DIRECTION_ALIASES,
+                get = function() return ReadGFSortDirection(scope, lane) end,
+                set = function(value) WriteGFSortDirection(scope, lane, value == "REVERSE" and "REVERSE" or "NORMAL") end,
                 apply = function() ApplyGroup(scope, "auras") end,
                 combatSafe = false,
             })

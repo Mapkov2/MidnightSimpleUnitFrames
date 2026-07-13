@@ -697,8 +697,6 @@ Data.FEATURES_PARSER = {
             "close edit mode", "close msuf edit mode", "disable edit mode", "turn off edit mode", "edit mode off", "edit mode aus", "bearbeitungsmodus aus", "bearbeitungsmodus beenden", "bearbeitungsmodus verlassen", "bearbeitungsmodus deaktivieren",
             "editmodus aus", "editmodus beenden", "editmodus verlassen", "rahmen verschieben beenden",
         },
-        [325] = { "wago backup", "profile backup confirmed", "backup confirmed" },
-        [326] = { "clear", "reset", "unconfirm", "not confirmed" },
         [327] = { "recovery tools", "display recovery", "recover menu", "reset tools", "dashboard recovery" },
         [328] = { "scaling tools", "dashboard scaling", "scale tools", "ui scale tools", "open scaling" },
         [329] = { "changelog", "change log", "release notes", "latest changes", "build notes" },

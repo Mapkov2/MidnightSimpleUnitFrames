@@ -1297,8 +1297,6 @@ Data.ROOT_PARSER = {
             "provider", "interrupt", "spell", "test", "preview", "fill", "direction",
         },
         [731] = {
-        "confirm wago backup", "clear wago backup", "reset wago backup", "unconfirm wago backup",
-        "profile backup confirmed", "backup confirmed",
         "open dashboard panel", "show dashboard panel", "close dashboard panel", "hide dashboard panel",
         "toggle dashboard panel", "dashboard panels",
         "navigation section", "nav section", "sidebar section", "navigation group", "nav group",
@@ -1312,8 +1310,6 @@ Data.ROOT_PARSER = {
         "why cant i exit edit mode", "why can not i exit edit mode",
     },
         [732] = { " help", "help ", "how do i", "how can i", "what is", "what are", "explain", "describe" },
-        [733] = { "confirm wago backup", "clear wago backup", "reset wago backup", "unconfirm wago backup", "profile backup confirmed", "backup confirmed" },
-        [734] = { "clear", "reset", "unconfirm", "not confirmed" },
         [735] = { "open recovery tools", "show recovery tools", "display recovery", "dashboard recovery" },
         [736] = { "open dashboard panel", "show dashboard panel", "close dashboard panel", "hide dashboard panel", "toggle dashboard panel", "dashboard panels" },
         [737] = { "close", "hide", "collapse" },

@@ -87,6 +87,37 @@ function A.DashboardRegistry.RegisterNavigationActions(ctx)
     })
 
     Registry:RegisterAction({
+        key = "menu_search_clear",
+        label = "Clear Menu Search",
+        type = "navigation",
+        aliases = { "clear menu search", "clear search box", "clear ask msuf search" },
+        combatSafe = true,
+        run = function()
+            if not (M and type(M.ClearNavSearch) == "function") then
+                return false, "Open the MSUF menu first so I can clear its search box."
+            end
+            M.ClearNavSearch()
+            return true, "Cleared the MSUF menu search."
+        end,
+    })
+
+    Registry:RegisterAction({
+        key = "menu_reset_current_page_prompt",
+        label = "Reset Current Menu Page",
+        type = "navigation",
+        aliases = { "reset current menu page", "reset this options page", "open page reset confirmation" },
+        combatSafe = true,
+        run = function()
+            local pageKey = M and M.activeKey
+            if not (pageKey and type(M.ShowPageResetConfirm) == "function") then
+                return false, "Open an MSUF options page first so I can show its reset confirmation."
+            end
+            M.ShowPageResetConfirm(pageKey)
+            return true, "Opened the reset confirmation for the current MSUF page."
+        end,
+    })
+
+    Registry:RegisterAction({
         key = "set_menu_selector_state",
         label = "Set Menu Selector State",
         type = "navigation",

@@ -158,6 +158,11 @@ function A.GroupFramesRegistry.BuildRegisterCoreContext(ctx)
             aliases = aliases,
             valuePrefixes = opts.valuePrefixes or aliases,
             mediaType = opts.mediaType,
+            values = opts.values,
+            valueAliases = opts.valueAliases,
+            valueLabels = opts.valueLabels,
+            closedValues = opts.closedValues,
+            refreshValues = opts.refreshValues,
             get = function()
                 if opts.get then return opts.get(scope) end
                 local value = GroupDB(scope)[dbKey]

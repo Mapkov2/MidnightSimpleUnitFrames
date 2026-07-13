@@ -813,6 +813,39 @@ local function BooleanVerbForText(text)
     return nil
 end
 
+-- Split an explicit two-clause boolean sentence without losing the polarity
+-- carried by "keep" or by a negated second verb. Normalization removes the
+-- apostrophe in "don't", so handle both normalized English forms here.
+local function ButBooleanClauses(text)
+    text = Normalize(text)
+    local first, second = text:match("^(.-)%s+but%s+keep%s+(.+)$")
+    if first then
+        local explicitVerb = BooleanVerbForText(second)
+        return first, second, explicitVerb, explicitVerb == nil
+    end
+    first, second = text:match("^(.-)%s+but%s+leave%s+(.+)$")
+    if first then
+        local explicitVerb = BooleanVerbForText(second)
+        return first, second, explicitVerb, explicitVerb == nil
+    end
+
+    local negated
+    first, negated = text:match("^(.-)%s+but%s+dont%s+(.+)$")
+    if not first then first, negated = text:match("^(.-)%s+but%s+do%s+not%s+(.+)$") end
+    if first then
+        local verb, body = BooleanLead(negated)
+        if verb == "turn on" then return first, body, "turn off" end
+        if verb == "turn off" then return first, body, "turn on" end
+        return nil
+    end
+
+    first, second = text:match("^(.-)%s+but%s+(.+)$")
+    if not first then return nil end
+    local verb, body = BooleanLead(second)
+    if not verb then return nil end
+    return first, body, verb
+end
+
 local function StripBooleanWords(text)
     local out = " " .. Normalize(text) .. " "
     for _, word in ipairs({ "on", "off", "enable", "enabled", "disable", "disabled", "true", "false", "yes", "no", "show", "hide", "visible", "hidden", "keep", "and", "und", "for" }) do
@@ -994,6 +1027,20 @@ local function FastBooleanChange(changes, scope, item, verb)
     elseif item == "power bar" or item == "mana bar" then
         settingKey = dbScope .. ".showPowerBar"
         value = on
+    elseif item == "power text" then
+        settingKey = dbScope .. ".showPowerText"
+        value = on
+    elseif item == "health text" then
+        settingKey = dbScope .. ".showHPText"
+        value = on
+    elseif item == "buff" or item == "debuff" then
+        local lane = item
+        if dbScope == "gf_party" or dbScope == "gf_raid" or dbScope == "gf_mythicraid" then
+            settingKey = dbScope .. ".auras." .. lane .. ".enabled"
+        else
+            settingKey = "auras3." .. dbScope .. "." .. lane .. ".visible"
+        end
+        value = on
     else
         return false
     end
@@ -1020,14 +1067,11 @@ local function FastApplyBooleanItems(changes, scopes, items, verb)
 end
 
 local function FastKeepBoolean(text)
-    local first, second = text:match("^(.-)%s+but%s+keep%s+(.+)$")
-    if not first then first, second = text:match("^(.-)%s+but%s+leave%s+(.+)$") end
-    if not first then first, second = text:match("^(.-)%s+but%s+turn%s+(.+)$") end
-    if not (first and second) then return nil end
+    local first, second, secondVerb, retainSecond = ButBooleanClauses(text)
+    if not (first and second and (secondVerb or retainSecond)) then return nil end
 
     local firstVerb, firstBody = BooleanLead(first)
-    local secondVerb = BooleanVerbForText(second)
-    if not (firstVerb and secondVerb) then return nil end
+    if not firstVerb then return nil end
 
     local secondItemText, relationScope = BooleanRelationScope(second)
     local secondScopes = ScopeLabels(relationScope or second)
@@ -1043,8 +1087,8 @@ local function FastKeepBoolean(text)
 
     local changes = {}
     if not FastApplyBooleanItems(changes, firstScopes, firstItems, firstVerb) then return nil end
-    if not FastApplyBooleanItems(changes, secondScopes, secondItems, secondVerb) then return nil end
-    if #changes < 2 then return nil end
+    if not retainSecond and not FastApplyBooleanItems(changes, secondScopes, secondItems, secondVerb) then return nil end
+    if #changes < (retainSecond and 1 or 2) then return nil end
     return {
         kind = "changes",
         changes = changes,
@@ -1052,6 +1096,7 @@ local function FastKeepBoolean(text)
         summary = "Applies several requested option changes.",
         bulkSafe = true,
         compoundForce = true,
+        compoundRetainsSecond = retainSecond and true or nil,
     }
 end
 
@@ -1687,24 +1732,25 @@ local function SharedScope(text)
 end
 
 local function KeepButBoolean(text)
-    local first, second = text:match("^(.-)%s+but%s+keep%s+(.+)$")
-    if not first then first, second = text:match("^(.-)%s+but%s+leave%s+(.+)$") end
-    if not first then first, second = text:match("^(.-)%s+but%s+turn%s+(.+)$") end
-    if not (first and second) then return nil end
+    local first, second, secondVerb, retainSecond = ButBooleanClauses(text)
+    if not (first and second and (secondVerb or retainSecond)) then return nil end
     local firstLead, firstBody = BooleanLead(first)
     if not firstLead then return nil end
-    local secondVerb = BooleanVerbForText(second)
-    if not secondVerb then return nil end
     local fallbackScope = BooleanScopeText(second)
     local firstCommands = BooleanCommandsForText(firstLead, firstBody, fallbackScope)
     if not firstCommands then return nil end
     local firstScope = ScopeTextFromCommandList(firstCommands) or fallbackScope
-    local secondCommands = BooleanCommandsForText(secondVerb, second, firstScope)
-    if not secondCommands then return nil end
+    local secondCommands = not retainSecond and BooleanCommandsForText(secondVerb, second, firstScope) or nil
+    if not retainSecond and not secondCommands then return nil end
     local commands = {}
     AppendCommands(commands, firstCommands)
-    AppendCommands(commands, secondCommands)
-    return ParseCommands(commands)
+    if secondCommands then AppendCommands(commands, secondCommands) end
+    local plan = ParseCommands(commands)
+    if plan and retainSecond then
+        plan.compoundForce = true
+        plan.compoundRetainsSecond = true
+    end
+    return plan
 end
 
 local BOOL_WORDS = CompoundData.BOOL_WORDS or {}
@@ -2540,7 +2586,7 @@ function P.ParseCompound(normalized, raw, normalParsed)
     if text:find(" but ", 1, true) then
         local keep = FastKeepBoolean(text) or KeepButBoolean(text)
         local ok, count = accepted(keep)
-        if ok and count >= 3 then return finish(keep) end
+        if ok and (count >= 2 or keep.compoundRetainsSecond == true) then return finish(keep) end
     end
 
     local fastBoolean = FastBooleanScopeList(text)

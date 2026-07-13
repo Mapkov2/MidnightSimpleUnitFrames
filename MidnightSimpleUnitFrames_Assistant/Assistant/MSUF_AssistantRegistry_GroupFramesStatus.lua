@@ -35,6 +35,37 @@ function A.GroupFramesRegistry.RegisterStatusIconSettings(ctx, scope)
     if type(RegisterGroupBoolean) ~= "function" or type(RegisterGroupNumber) ~= "function" then return end
     if type(RegisterGroupEnum) ~= "function" or type(RegisterGroupString) ~= "function" then return end
 
+    local function GroupStatusIconPackContract()
+        local builtinLabels = {
+            DEFAULT = "Follow global style", BLIZZARD = "Blizzard", CLASSIC = "Classic", MIDNIGHT = "Midnight",
+            UXPRO = "UX Pro", GLOSSY_ORBS = "Glossy Orbs", DARK_EMBOSS = "Dark Emboss",
+            GLASS_PANELS = "Glass Panels", NEON_OUTLINE = "Neon Outline", RING_SYMBOLS = "Ring Symbols",
+            DOTS = "Dots", SHAPES = "Shapes", DIAMONDS = "Diamonds", SQUARES = "Squares",
+        }
+        local values, labels, seen = {}, {}, {}
+        local function Add(value, label)
+            value = tostring(value or "")
+            if value == "" or seen[value] then return end
+            seen[value] = true
+            values[#values + 1] = value
+            labels[value] = tostring(label or value)
+        end
+        local fn = _G.MSUF_GetStatusIconPackValues
+        local items = type(fn) == "function" and fn(true) or nil
+        for i = 1, #(items or {}) do
+            local item = items[i]
+            if type(item) == "table" then Add(item.value or item.key, item.text or item.label) end
+        end
+        if #values == 0 then
+            for i = 1, #GROUP_STATUS_ICON_PACK_VALUES do
+                local value = GROUP_STATUS_ICON_PACK_VALUES[i]
+                Add(value, builtinLabels[value] or value)
+            end
+        end
+        return values, labels
+    end
+    local statusPackValues, statusPackLabels = GroupStatusIconPackContract()
+
     local aliases = {}
     AddAliasesForUnit(aliases, scope, "default role icon style")
     AddAliasesForUnit(aliases, scope, "role icon style")
@@ -118,6 +149,11 @@ function A.GroupFramesRegistry.RegisterStatusIconSettings(ctx, scope)
             -- built-in aliases.
             RegisterGroupString(scope, "statusIcon" .. spec.value .. "Style", spec.iconStyle, StatusIconStyleLabel(spec),
                 spec.defaultIconStyle or "DEFAULT", "visual", aliases, {
+                    values = statusPackValues,
+                    valueLabels = statusPackLabels,
+                    valueAliases = { default = "DEFAULT", global = "DEFAULT", blizzard = "BLIZZARD" },
+                    closedValues = true,
+                    refreshValues = GroupStatusIconPackContract,
                     description = "Icon pack for this group indicator. Built-ins include "
                         .. table.concat(GROUP_STATUS_ICON_PACK_VALUES, ", ")
                         .. "; registered extension pack keys are accepted too.",

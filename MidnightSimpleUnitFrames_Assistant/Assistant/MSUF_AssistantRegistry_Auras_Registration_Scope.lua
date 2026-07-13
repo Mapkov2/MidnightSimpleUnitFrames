@@ -65,18 +65,22 @@ function A.AurasRegistry.BuildScopeRegistrationHelpers(ctx)
         })
     end
 
-    local function RegisterAuraScopeLaneEnum(scope, lane, attr, label, values, valueAliases, aliases, read, write, applyText)
+    local function RegisterAuraScopeLaneEnum(scope, lane, attr, label, values, valueAliases, aliases, read, write, applyText, opts)
+        opts = opts or {}
         local allowed = {}
         for i = 1, #values do allowed[values[i]] = true end
         Registry:RegisterSetting({
             key = "auras3." .. scope .. "." .. lane .. "." .. attr,
             label = AuraScopeLabel(scope) .. " " .. (lane == "buff" and "Buff " or "Debuff ") .. label,
             category = AuraScopeLabel(scope) .. " / Aura Style",
+            page = opts.page,
+            description = opts.description,
             unit = scope,
             frameType = "aura",
             attribute = "aura" .. (lane == "buff" and "Buff" or "Debuff") .. attr,
             type = "enum",
             aliases = aliases,
+            exactAliases = opts.exactAliases,
             values = values,
             valueAliases = valueAliases,
             get = read,

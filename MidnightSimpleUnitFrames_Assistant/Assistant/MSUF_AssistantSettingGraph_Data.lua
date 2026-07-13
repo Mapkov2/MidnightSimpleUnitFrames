@@ -37,6 +37,21 @@ local D = {
     auraScopes = { "player", "target", "focus", "boss" },
 }
 
+-- Page-resolvable settings normally need another setting node that explains
+-- their runtime gate, inheritance source, conflict, or navigation context.
+-- A small reviewed exception list is allowed when the dependency is an
+-- Assistant action rather than another scalar setting.  Keep these records
+-- explicit and evidence-backed so graph coverage never invents a false
+-- setting-to-setting edge merely to reach 100 percent.
+D.intentionalStandaloneSettings = {
+    ["profiles.specAutoSwitch"] = {
+        classification = "intentional-standalone-with-action-dependency",
+        actionKeys = { "set_spec_profile", "clear_spec_profile" },
+        reason = "Spec auto-switch is an independent boolean; its useful routing state is created or removed by the specialization-profile assignment actions, not by another registered scalar setting.",
+        evidence = "MSUF_Profiles.lua:MSUF_SetSpecAutoSwitchEnabled/MSUF_SetSpecProfile and MSUF_AssistantRegistry_Profiles.lua:set_spec_profile/clear_spec_profile",
+    },
+}
+
 -- Top-level runtime gates.  A disabled parent does not make its children
 -- uneditable: it makes them ineffective until the parent is enabled again.
 D.scopeRootRules = {
@@ -136,7 +151,7 @@ D.scopedFieldGateRules = {
         id = "unit-health-text",
         scopes = "unitScopes",
         parentSuffix = "showHP",
-        childPrefixes = { "hpText", "hpFont", "hpOffset", "healthText", "textLeft", "textCenter", "textRight" },
+        childPrefixes = { "hpText", "hpFont", "hpOffset", "hpFullValueShort", "healthText", "textLeft", "textCenter", "textRight" },
         kind = "visibility",
         impact = "componentVisibility",
         reason = "Health-text formatting is visible only while health text is shown.",
@@ -227,7 +242,7 @@ D.scopedFieldGateRules = {
         id = "group-health-text",
         scopes = "groupScopes",
         parentSuffix = "showHPText",
-        childPrefixes = { "hpText", "hpFont", "hpOffset", "healthText" },
+        childPrefixes = { "hpText", "hpFont", "hpOffset", "hpFullValueShort", "healthText" },
         kind = "visibility",
         impact = "componentVisibility",
         reason = "Group health-text formatting is visible only while health text is shown.",
@@ -489,6 +504,45 @@ D.requiresEdges = {
     },
 }
 
+-- Formatting applicability is an OR relationship: HP abbreviation matters
+-- when any of the three HP slots contains a numeric value.  Model the slot
+-- controls as non-blocking associations rather than three simultaneous hard
+-- prerequisites, while retaining the normal Show HP/root gates above.
+D.scopedAssociationRules = {
+    {
+        id = "unit-hp-abbreviation-numeric-modes",
+        scopes = "unitScopes",
+        fromSuffix = "hpFullValueShort",
+        toSuffixes = { "textLeft", "textCenter", "textRight" },
+        condition = {
+            operator = "oneOf",
+            values = {
+                "CURRENT", "FULLVALUE", "MAX", "DEFICIT", "CURMAX", "CURPERCENT",
+                "CURMAXPERCENT", "MAXPERCENT", "PERCENTCUR", "PERCENTMAX", "PERCENTCURMAX",
+            },
+        },
+        impact = "formatApplicability",
+        reason = "HP abbreviation affects this slot only when its mode contains a numeric health value; None and Percent-only are unaffected.",
+        evidence = "MSUF_Menu2_UnitText.lua:RefreshFullValueToggle and MSUF_UF_Config.lua:healthShortNumbers",
+    },
+    {
+        id = "group-hp-abbreviation-numeric-modes",
+        scopes = "groupScopes",
+        fromSuffix = "hpFullValueShort",
+        toSuffixes = { "textLeft", "textCenter", "textRight" },
+        condition = {
+            operator = "oneOf",
+            values = {
+                "CURRENT", "FULLVALUE", "MAX", "DEFICIT", "CURMAX", "CURPERCENT",
+                "CURMAXPERCENT", "MAXPERCENT", "PERCENTCUR", "PERCENTMAX", "PERCENTCURMAX",
+            },
+        },
+        impact = "formatApplicability",
+        reason = "HP abbreviation affects this slot only when its mode contains a numeric health value; None and Percent-only are unaffected.",
+        evidence = "MSUF_Menu2_GroupBars.lua:RefreshShortNumbersToggle and MSUF_UF_Group_Config.lua:healthShortNumbers",
+    },
+}
+
 -- Scoped-global registries implement their inheritance through these exact
 -- override gates.  The engine links only an unambiguous registered source.
 D.scopedInheritanceRules = {
@@ -539,6 +593,7 @@ D.auraInheritance = {
     styleLeafKeys = {
         "showStackCount", "showCooldownText", "showCooldownSwipe", "showTooltip", "showDurationBar",
         "stackAnchor", "cooldownAnchor", "cooldownSwipeReverse", "cooldownDecimalSeconds",
+        "sortMethod", "sortReverse",
         "stackTextSize", "stackTextOffsetX", "stackTextOffsetY", "cooldownTextSize",
         "cooldownTextOffsetX", "cooldownTextOffsetY", "durationBarPosition",
         "durationBarDisplay", "durationBarDirection", "durationBarHeight", "debuffTypeBorderMode",

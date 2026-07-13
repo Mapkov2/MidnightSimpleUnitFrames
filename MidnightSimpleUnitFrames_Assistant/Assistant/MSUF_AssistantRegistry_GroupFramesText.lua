@@ -136,6 +136,17 @@ function A.GroupFramesRegistry.RegisterTextSettings(ctx, scope)
     RegisterGroupBoolean(scope, "healthTextDecimals", "healthTextDecimals", "Health Text Decimals", false, "visual", aliases)
 
     aliases = {}
+    AddAliasesForUnit(aliases, scope, "abbreviate hp values")
+    AddAliasesForUnit(aliases, scope, "abbreviate health values")
+    AddAliasesForUnit(aliases, scope, "shorten hp values")
+    AddAliasesForUnit(aliases, scope, "short hp numbers")
+    AddAliasesForUnit(aliases, scope, "abbreviated hp numbers")
+    AddAliasesForUnit(aliases, scope, "hp value abbreviation")
+    RegisterGroupBoolean(scope, "hpFullValueShort", "hpFullValueShort", "Abbreviate HP Values", true, "font", aliases, {
+        description = "Abbreviates numeric HP values with K/M. None and Percent-only HP slots are unaffected.",
+    })
+
+    aliases = {}
     AddAliasesForUnit(aliases, scope, "hp text x")
     AddAliasesForUnit(aliases, scope, "hp text x offset")
     AddAliasesForUnit(aliases, scope, "health text x offset")

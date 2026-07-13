@@ -35,7 +35,7 @@ function A.AurasRegistry.RegisterFilterSettings(ctx, scope)
     if not (Registry and type(Registry.RegisterSetting) == "function") then return end
     if type(AddAliasesForAuraScope) ~= "function" or type(AddAuraLaneAliases) ~= "function" then return end
     if type(AuraScopeLabel) ~= "function" or type(RegisterAuraScopeBoolean) ~= "function" then return end
-    local scopePage = scope == "shared" and "uf_player" or ("uf_" .. tostring(scope))
+    local scopePage = scope == "shared" and "auras3_filters" or ("uf_" .. tostring(scope))
 
     local function AddAlias(out, value)
         if type(value) == "string" and value ~= "" then out[#out + 1] = value end
@@ -135,6 +135,7 @@ function A.AurasRegistry.RegisterFilterSettings(ctx, scope)
         local lane = laneInfo.key
         local settingScope, settingLane = scope, lane
         local values = AURA_EXCLUSIVE_FILTER_VALUES[settingLane] or { "none" }
+        if #values > 1 then
         local defaultValue = values[1] or "none"
         local allowed = {}
         for i = 1, #values do allowed[values[i]] = true end
@@ -170,6 +171,7 @@ function A.AurasRegistry.RegisterFilterSettings(ctx, scope)
             apply = function() ApplyAura(settingScope, "MSUF_ASSISTANT_AURA_FILTER_EXCLUSIVE") end,
             combatSafe = false,
         })
+        end
 
         if scope ~= "shared" and type(AuraModel) == "function" then
             local hideAliases = {}

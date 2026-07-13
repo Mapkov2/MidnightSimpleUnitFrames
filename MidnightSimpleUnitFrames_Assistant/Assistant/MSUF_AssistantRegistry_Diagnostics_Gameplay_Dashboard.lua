@@ -35,8 +35,14 @@ function A.DiagnosticsRegistry.BuildDashboardSetupDiagnostic(ctx)
         return "guided step"
     end
 
+    local function NativeGuidedTourIsActive()
+        local tour = MSUF.GuidedTour6 or _G.MSUF_GuidedTour6
+        if type(tour) ~= "table" or type(tour.IsActive) ~= "function" then return false end
+        local ok, active = pcall(tour.IsActive, tour)
+        return ok and active == true
+    end
+
     local function DashboardSetupDiagnosticText()
-        local context = Assistant.GetContext and Assistant.GetContext() or {}
         local global = type(_G.MSUF_GlobalDB) == "table" and _G.MSUF_GlobalDB or nil
         local dashRoot = global and type(global.global) == "table" and global.global or nil
         local dash = dashRoot and type(dashRoot.dashboard) == "table" and dashRoot.dashboard or {}
@@ -56,7 +62,7 @@ function A.DiagnosticsRegistry.BuildDashboardSetupDiagnostic(ctx)
             "Confirmation waiting: " .. YesNo(Assistant.pendingConfirmation ~= nil),
             "Choices waiting: " .. (pendingChoices > 0 and tostring(pendingChoices) or "no"),
             "Guided step: " .. GuidedStepLabel(),
-            "Setup guide: " .. tostring(type(context.guidedSetup) == "table" and "active" or "inactive"),
+            "Native guided tour: " .. tostring(NativeGuidedTourIsActive() and "active" or "inactive"),
             "Recovery panel: " .. OpenClosed(recoveryOpen),
             "Scaling panel: " .. OpenClosed(scalingOpen),
             "Changelog panel: " .. OpenClosed(changelogOpen),
