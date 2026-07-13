@@ -3207,19 +3207,14 @@ A3._DirectIdentityRefreshUnit = function(unit, forceSpellIndicatorGeometry)
                 container._msufA3ForceManagedAuraGeometry = true
             end
         end
-        if container and A3._NativeContainerVisible(container) and type(container.UpdateAllAuras) == "function" then
-            container:UpdateAllAuras()
-            -- A world transition can leave a reused managed container or
-            -- AuraSlot out of sync while its saved-geometry cache looks current.
-            -- Repair that exceptional lifecycle edge once after the native
-            -- refresh; normal aura updates keep the metadata-only fast path.
-            if container._msufA3ForceSpellIndicatorGeometry == true
-                and type(SpellIndicatorsRuntime.SyncGeometry) == "function" then
-                if SpellIndicatorsRuntime.SyncGeometry(container, container._msufA3NativeLaneConfig,
-                    container._msufA3ParentFrame, true) == true then
-                    container._msufA3ForceManagedAuraGeometry = nil
-                end
-            elseif container._msufA3ForceManagedAuraGeometry == true then
+        if container and type(container.UpdateAllAuras) == "function" then
+            if A3._NativeContainerVisible(container) then
+                container:UpdateAllAuras()
+            end
+            -- Zone/world transitions can desync a reused container while cache looks current.
+            -- Keep the normal cached fast path by applying geometry repair only once here.
+            if container._msufA3ForceManagedAuraGeometry == true
+                or container._msufA3ForceSpellIndicatorGeometry == true then
                 A3._SyncManagedAuraContainerGeometry(container, true)
             end
             any = true
