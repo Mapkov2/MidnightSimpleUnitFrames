@@ -558,6 +558,9 @@ local function HealthColor(key, data)
     if mode == "class" then
         if data.isPet and cache and cache.petFrameColorEnabled then return cache.petFrameColorR or 0, cache.petFrameColorG or 0.8, cache.petFrameColorB or 0 end
         if data.isPlayer then return ClassColor(data.class) end
+        local npcClassColor = cache and cache.npcClassColorBar
+        if npcClassColor == nil then npcClassColor = g.npcClassColorBar == true end
+        if npcClassColor and not data.isPet and key ~= "boss" then return ClassColor(data.class) end
         return NPCColor(PreviewNPCKind(key, data, cache))
     end
     if mode == "gradient" then return GradientPreviewColor(data.hp, PreviewGradientHealth(cache, g)) end

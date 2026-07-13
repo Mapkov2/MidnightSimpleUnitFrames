@@ -469,6 +469,8 @@ local function GetNPCTypeColorBar() local g = _general(); return not g or g.npcT
 local function SetNPCTypeColorBar(v) local g = _general(); if g then g.npcTypeColorBar = v and true or false; PushVisualUpdates() end end
 local function GetNPCTypeColorText() local g = _general(); return not g or g.npcTypeColorText ~= false end
 local function SetNPCTypeColorText(v) local g = _general(); if g then g.npcTypeColorText = v and true or false; PushVisualUpdates() end end
+local function GetNPCClassColorBar() local g = _general(); return g and g.npcClassColorBar == true or false end
+local function SetNPCClassColorBar(v) local g = _general(); if g then g.npcClassColorBar = v and true or false; PushVisualUpdates() end end
 local function ResetNPCTypeColors() if _G.MSUF_DB then _G.MSUF_DB.npcColors = nil end; PushVisualUpdates() end
 local function GetNPCTypePerUnit(key) local g = _general(); return not g or g[key] ~= false end
 local function SetNPCTypePerUnit(key, v) local g = _general(); if g then g[key] = v and true or false; PushVisualUpdates() end end
@@ -580,6 +582,8 @@ MSUF._colorsAPI = {
     SetNPCTypeColorBar              = SetNPCTypeColorBar,
     GetNPCTypeColorText             = GetNPCTypeColorText,
     SetNPCTypeColorText             = SetNPCTypeColorText,
+    GetNPCClassColorBar             = GetNPCClassColorBar,
+    SetNPCClassColorBar             = SetNPCClassColorBar,
     ResetNPCTypeColors              = ResetNPCTypeColors,
     NPC_TYPE_KEYS                   = NPC_TYPE_KEYS,
     NPC_TYPE_UNITS                  = NPC_TYPE_UNITS,

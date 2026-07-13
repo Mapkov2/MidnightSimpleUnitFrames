@@ -29,6 +29,7 @@ local NameTextColor = Text.NameTextColor
 local ResolveHealthTextModes = Text.ResolveHealthTextModes
 local CompileTextRuntime = Text.CompileTextRuntime
 local UpdateHealthTextColor = Text.UpdateHealthTextColor
+local RefreshNameRelativeStatusAnchors = MSUF.UFStatusRuntime and MSUF.UFStatusRuntime.RefreshNameRelativeAnchors
 local function LayoutText(fs, point, relPoint, x, y, justify, relativeTo)
   if not fs then
     return
@@ -1014,6 +1015,9 @@ function Text.Apply(frame, spec)
   end
   if frame.nameText then
     SetNameTextColor(frame, NameTextColor(frame, frame.unit))
+  end
+  if frame._msufNameRelativeStatus == true and RefreshNameRelativeStatusAnchors then
+    RefreshNameRelativeStatusAnchors(frame)
   end
   frame._msufTextApplySignature = signature
   frame._msufTextLayoutRevision = layoutRevision

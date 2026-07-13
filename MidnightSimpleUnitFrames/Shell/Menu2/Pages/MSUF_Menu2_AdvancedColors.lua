@@ -70,6 +70,7 @@ local COLOR_SETTING_KEY_BY_PATH = {
     ["npc.color.npcMelee"] = "npcColors.npcMelee",
     ["npc.color.npcMiniboss"] = "npcColors.npcMiniboss",
     ["npc.color.npcRegular"] = "npcColors.npcRegular",
+    ["npc.class_color_bar"] = "general.npcClassColorBar",
     ["npc_type.enabled"] = "general.npcColorMode",
     ["npc_type.option.npcTypeBoss"] = "general.npcTypeBoss",
     ["npc_type.option.npcTypeColorBar"] = "general.npcTypeColorBar",
@@ -1306,6 +1307,15 @@ local function BuildUnitAndNPCColors(ctx, b, CH)
         NPCColorAt(ctx, unit, row, 12, -10 - (i - 1) * 36, ApplyUnitframeColorWithReload)
     end
     CH.ApiColorAt(ctx, unit, "Pet Frame Color", 360, -10, "GetPetFrameColor", "SetPetFrameColor", 0, 0.8, 0, ApplyUnitframeColorWithReload)
+    ValueToggleAt(ctx, unit, "NPC class colors on HP bars (Class Color mode only)", 360, -54,
+        function() return ApiValue("GetNPCClassColorBar", function() return G().npcClassColorBar == true end) end,
+        function(v)
+            if not ApiCall("SetNPCClassColorBar", v) then
+                G().npcClassColorBar = v and true or false
+                ApplyUnitframeColorWithReload()
+            end
+        end,
+        Meta("npc.class_color_bar"))
     CH.ButtonAt(unit, "Reset Unitframe Colors", 12, -190, 190,
         function() ResetNPCColors("ResetAllNPCColors") end, "unitframe.reset")
     local npcType = b:CollapsibleSection("colors_npc_type", "NPC Type Colors", 330, false)

@@ -303,6 +303,7 @@ local function ResolveHealthVisual(conf)
     g = Num(conf.healthCustomG, 0.8),
     b = Num(conf.healthCustomB, 0.2),
     backgroundMatchHealth = (cache and cache.barBgMatchHPColor == true) or (general and general.barBgMatchHPColor == true) or false,
+    npcClassColorBar = (cache and cache.npcClassColorBar == true) or (general and general.npcClassColorBar == true) or false,
     gradientLowR = Num(cache and cache.healthGradientLowR or general and general.healthGradientLowR, 1),
     gradientLowG = Num(cache and cache.healthGradientLowG or general and general.healthGradientLowG, 0),
     gradientLowB = Num(cache and cache.healthGradientLowB or general and general.healthGradientLowB, 0),
@@ -972,13 +973,14 @@ local function CollectSpellIndicatorSpecs(siCfg, si)
   return out
 end
 
-local function BuildTrackedBuffIncludeHash(conf)
+local function BuildSpellIndicatorAuraHashes(conf)
   local si = SpellIndicatorModule()
   local siCfg = type(conf and conf.spellIndicators) == "table" and conf.spellIndicators or nil
-  if not (si and siCfg) then return nil, 0 end
+  if not (si and siCfg) then return nil, 0, nil end
   siCfg.specs = siCfg.specs or {}
   local specs = CollectSpellIndicatorSpecs(siCfg, si)
-  local hash, count = {}, 0
+  local hash, count, autoBlacklistHash, autoBlacklistCount = {}, 0, nil, 0
+  local autoBlacklistEnabled = siCfg.enabled == true
   for i = 1, #specs do
     local specKey = specs[i]
     local specCfg = siCfg.specs and siCfg.specs[specKey]
@@ -994,15 +996,34 @@ local function BuildTrackedBuffIncludeHash(conf)
     end
     if type(specCfg) == "table" then
       for auraName, entry in pairs(specCfg) do
-        if not (type(defaults) == "table" and defaults[auraName] ~= nil)
-          and type(entry) == "table" and entry.enabled ~= false then
-          count = count + AddSpellIDsForAura(hash, si, specKey, auraName, entry)
+        if type(entry) == "table" and entry.enabled ~= false then
+          if not (type(defaults) == "table" and defaults[auraName] ~= nil) then
+            count = count + AddSpellIDsForAura(hash, si, specKey, auraName, entry)
+          end
+          if autoBlacklistEnabled and entry.autoBlacklist == true then
+            autoBlacklistHash = autoBlacklistHash or {}
+            autoBlacklistCount = autoBlacklistCount + AddSpellIDsForAura(autoBlacklistHash, si, specKey, auraName, entry)
+          end
         end
       end
     end
   end
-  if count <= 0 then return nil, 0 end
-  return hash, count
+  if count <= 0 then hash = nil end
+  if autoBlacklistCount <= 0 then autoBlacklistHash = nil end
+  return hash, count, autoBlacklistHash
+end
+
+local function MergeSpellIDHashes(primary, extra)
+  if type(extra) ~= "table" then return primary end
+  if type(primary) == "table" then
+    -- `extra` is a fresh compile-local hash. Merge the cached manual entries
+    -- into it so the cached table stays immutable without allocating a third
+    -- result table.
+    for spellID, enabled in pairs(primary) do
+      if enabled == true then extra[spellID] = true end
+    end
+  end
+  return extra
 end
 
 local function CompileCoreAuras(kind, conf)
@@ -1014,7 +1035,7 @@ local function CompileCoreAuras(kind, conf)
   local showBuffs = rootEnabled and buff.enabled ~= false
   local showDebuffs = rootEnabled and debuff.enabled ~= false
   local showExternals = rootEnabled and externals.enabled ~= false
-  local trackedBuffIncludeHash, trackedBuffCount = BuildTrackedBuffIncludeHash(conf)
+  local trackedBuffIncludeHash, trackedBuffCount, spellIndicatorAutoBlacklistHash = BuildSpellIndicatorAuraHashes(conf)
   local trackedBuffMax = Num(buff.trackedMax, Num(conf.trackedBuffMax, trackedBuffCount > 0 and trackedBuffCount or 8))
   local trackedBuffsEnabled = false
   local function NormalizeDispelBorderMode(value, legacyEnabled)
@@ -1084,6 +1105,7 @@ local function CompileCoreAuras(kind, conf)
     showStealableBuffs = false,
   }
   ApplyAuraLane(out, "buff", "buff", buff, AURA_LANE_DEFAULTS.buff, Num(conf.auraMaxIcons, 4), defaultBuffSize, buffGrowthX, buffGrowthY, S, kind)
+  out.buffBlacklistHash = MergeSpellIDHashes(out.buffBlacklistHash, spellIndicatorAutoBlacklistHash)
   local trackedBuff = {
     max = trackedBuffMax,
     size = Num(buff.trackedSize, Num(buff.size, defaultTrackedBuffSize)),
@@ -1396,6 +1418,7 @@ local function CompileSpecUncached(kind, frame, unit, conf)
       backgroundTexture = bgTexture,
       background = CompileBarBackground(conf),
       backgroundMatchHealth = healthVisual.backgroundMatchHealth == true,
+      npcClassColorBar = healthVisual.npcClassColorBar == true,
       barGradient = ResolveBarGradient(conf, general, "enableGradient"),
       reverse = conf.reverseFill == true,
       smooth = conf.smoothFill ~= false,
@@ -1502,6 +1525,7 @@ local function RefreshColorDomain(kind, base, conf)
   health.gradientHighR, health.gradientHighG, health.gradientHighB = healthVisual.gradientHighR, healthVisual.gradientHighG, healthVisual.gradientHighB
   health.background = CompileBarBackground(conf)
   health.backgroundMatchHealth = healthVisual.backgroundMatchHealth == true
+  health.npcClassColorBar = healthVisual.npcClassColorBar == true
   health.barGradient = ResolveBarGradient(conf, general, "enableGradient")
 
   local power = base.power or {}

@@ -542,26 +542,49 @@ local function ExternalFrameWidth(frameName, relativeTo)
   return nil
 end
 
-local function ClassColor(unit)
-  if not IsUnitToken(unit) then
-    return 0.12, 0.62, 0.95
-  end
-  local _, class = UnitClass(unit)
+local function ClassColorForToken(class)
   if issecretvalue(class) == true then
     class = nil
   end
+  local c = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
+  if not c then
+    return nil
+  end
   local fast = _G.MSUF_UFCore_GetClassBarColorFast
-  if type(fast) == "function" and class then
+  if type(fast) == "function" then
     local r, g, b = fast(class)
     if type(r) == "number" and type(g) == "number" and type(b) == "number" then
       return r, g, b
     end
   end
-  local c = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
-  if c then
-    return c.r, c.g, c.b
+  return c.r, c.g, c.b
+end
+
+local function ClassColor(unit)
+  if IsUnitToken(unit) then
+    local _, class = UnitClass(unit)
+    local r, g, b = ClassColorForToken(class)
+    if r ~= nil then
+      return r, g, b
+    end
   end
   return 0.12, 0.62, 0.95
+end
+
+local function NPCClassToken(state, unit)
+  if not state then
+    return nil
+  end
+  if state.npcClassRead ~= true then
+    state.npcClassRead = true
+    if IsUnitToken(unit) then
+      local _, class = UnitClass(unit)
+      if issecretvalue(class) ~= true then
+        state.npcClass = class
+      end
+    end
+  end
+  return state.npcClass
 end
 
 local function PlainTrue(value)
@@ -798,6 +821,8 @@ local function RefreshUnitState(frame, unit, spec, event)
   state.isPlayerKnown = false
   state.npcKind = nil
   state.npcKindKnown = false
+  state.npcClass = nil
+  state.npcClassRead = nil
   state._npcKindTypeReady = nil
   state._npcKindType = nil
   state._npcKindReactionReady = nil
@@ -808,6 +833,10 @@ local function RefreshUnitState(frame, unit, spec, event)
     if state.isPlayerKnown and not state.isPlayer then
       state.npcKind = UnitNPCKind(frame, unit, spec)
       state.npcKindKnown = state.npcKind ~= nil
+      local health = spec and spec.health
+      if health and health.npcClassColorBar == true and spec.key ~= "pet" and spec.key ~= "boss" then
+        NPCClassToken(state, unit)
+      end
     end
     state.identityReady = true
   end
@@ -972,6 +1001,14 @@ local function HealthColor(frame, unit, hp, maxHP, calc, event)
 
   if state and state.isPlayerKnown and state.isPlayer then
     return ClassColor(unit)
+  end
+
+  if health.npcClassColorBar == true and spec and spec.key ~= "pet" and spec.key ~= "boss"
+      and state and state.isPlayerKnown and not state.isPlayer then
+    local r, g, b = ClassColorForToken(NPCClassToken(state, unit))
+    if r ~= nil then
+      return r, g, b
+    end
   end
 
   local kind = state and state.npcKindKnown and state.npcKind or UnitNPCKind(frame, unit, spec)
