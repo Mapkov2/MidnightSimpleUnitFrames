@@ -55,6 +55,17 @@ local fillActiveFrames = {}
 local fillActiveFrameCount = 0
 local refreshActiveFrames = {}
 local UpdateCooldownEventRegistration
+local cooldownSnapshot
+local cooldownSnapshotSpellID
+local cooldownSnapshotFrameStamp
+local cooldownSnapshotKnown = false
+
+local function InvalidateCooldownSnapshot()
+    cooldownSnapshot = nil
+    cooldownSnapshotSpellID = nil
+    cooldownSnapshotFrameStamp = nil
+    cooldownSnapshotKnown = false
+end
 
 local function GeneralDB()
     if type(_G.MSUF_EnsureDB) == "function" then
@@ -135,6 +146,9 @@ local function ResolveInterruptSpellID()
     if previousSpellID and previousSpellID ~= spellID then
         state.previousSpellID = previousSpellID
     end
+    if previousSpellID ~= spellID then
+        InvalidateCooldownSnapshot()
+    end
     state.spellID = spellID
     return spellID
 end
@@ -165,7 +179,27 @@ local function InterruptCooldown()
         return nil
     end
 
-    return SpellAPI.GetSpellCooldownDuration(spellID)
+    -- GetSpellCooldownDuration creates a LuaDurationObject. Share it only
+    -- inside the current rendered frame; relevant cooldown/spec/world events
+    -- invalidate before their refresh. This removes cast/color refresh-burst
+    -- allocation without depending on undocumented cross-event object lifetime.
+    local frameStamp = _G.GetTime and _G.GetTime()
+    if frameStamp ~= nil
+        and cooldownSnapshotKnown == true
+        and cooldownSnapshotFrameStamp == frameStamp
+        and cooldownSnapshotSpellID == spellID
+    then
+        return cooldownSnapshot
+    end
+
+    local cooldown = SpellAPI.GetSpellCooldownDuration(spellID)
+    if frameStamp ~= nil then
+        cooldownSnapshot = cooldown
+        cooldownSnapshotSpellID = spellID
+        cooldownSnapshotFrameStamp = frameStamp
+        cooldownSnapshotKnown = true
+    end
+    return cooldown
 end
 
 local function CooldownRemaining(cooldown)
@@ -183,8 +217,11 @@ local function CooldownRemaining(cooldown)
     return PlainNumber(remaining)
 end
 
-local function InterruptStatus()
-    local remaining = CooldownRemaining(InterruptCooldown())
+local function InterruptStatus(cooldown, cooldownResolved)
+    if cooldownResolved ~= true then
+        cooldown = InterruptCooldown()
+    end
+    local remaining = CooldownRemaining(cooldown)
     if remaining == nil then
         return false, nil
     end
@@ -195,7 +232,11 @@ end
 local function ResolveStatus(status)
     if type(status) == "table" then
         if not status.resolved then
-            status.ready, status.remaining = InterruptStatus()
+            if status.cooldownResolved ~= true then
+                status.cooldown = InterruptCooldown()
+                status.cooldownResolved = true
+            end
+            status.ready, status.remaining = InterruptStatus(status.cooldown, true)
             status.resolved = true
         end
 
@@ -660,7 +701,17 @@ local function AcquireScratchStatus()
     scratchStatus.resolved = nil
     scratchStatus.ready = nil
     scratchStatus.remaining = nil
+    scratchStatus.cooldown = nil
+    scratchStatus.cooldownResolved = nil
     return scratchStatus
+end
+
+local function StatusCooldown(status)
+    if status.cooldownResolved ~= true then
+        status.cooldown = InterruptCooldown()
+        status.cooldownResolved = true
+    end
+    return status.cooldown
 end
 
 local function RefreshAll(updateFillColor)
@@ -684,7 +735,7 @@ local function RefreshAll(updateFillColor)
     end
 
     if not status.resolved and fillActiveFrameCount > 0 then
-        status.remaining = InterruptRemaining()
+        status.remaining = CooldownRemaining(StatusCooldown(status))
         status.resolved = status.remaining ~= nil
     end
 
@@ -713,8 +764,12 @@ local function QueueActiveRefreshFrames(frames)
     end
 end
 
-local function RefreshActive(updateFillColor, seededReady, seededRemaining)
+local function RefreshActive(updateFillColor, seededReady, seededRemaining, seededCooldown, seededCooldownResolved)
     local status = AcquireScratchStatus()
+    if seededCooldownResolved == true then
+        status.cooldown = seededCooldown
+        status.cooldownResolved = true
+    end
     if seededReady ~= nil then
         status.ready = seededReady
         status.remaining = seededRemaining
@@ -735,7 +790,7 @@ local function RefreshActive(updateFillColor, seededReady, seededRemaining)
     end
 
     if not status.resolved and fillActiveFrameCount > 0 then
-        status.remaining = InterruptRemaining()
+        status.remaining = CooldownRemaining(StatusCooldown(status))
         status.resolved = status.remaining ~= nil
     end
 
@@ -840,7 +895,7 @@ local function KickReady_RefreshFrame(frame, castState)
     if status.resolved then
         ScheduleCooldownRefresh(status.remaining, true)
     elseif frame and fillActiveFrames[frame] then
-        ScheduleCooldownRefresh(InterruptRemaining(), true)
+        ScheduleCooldownRefresh(CooldownRemaining(StatusCooldown(status)), true)
     end
 end
 
@@ -877,7 +932,7 @@ local function CooldownEventAlreadyDisplayed()
         end
     end
     if ready == nil then
-        return false, nil, nil
+        return false, nil, nil, cooldown, true
     end
 
     if state.cooldownDisplayReady ~= ready then
@@ -886,13 +941,13 @@ local function CooldownEventAlreadyDisplayed()
         -- indicator actually paints; without this write the stored state goes
         -- stale whenever no cast is active.
         state.cooldownDisplayReady = ready
-        return false, ready, remaining
+        return false, ready, remaining, cooldown, true
     end
 
     if not ready then
         ScheduleCooldownRefresh(remaining, true)
     end
-    return true, ready, remaining
+    return true, ready, remaining, cooldown, true
 end
 
 ExportPublic("MSUF_KickReady_Init", KickReady_Init)
@@ -926,6 +981,7 @@ eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 eventFrame:SetScript("OnEvent", function(_, event, spellID, baseSpellID, _category, startRecoveryCategory)
     if event ~= "SPELL_UPDATE_COOLDOWN" then
+        InvalidateCooldownSnapshot()
         ResolveInterruptSpellID()
     else
         if not NeedsInterruptCooldownUpdate(spellID, baseSpellID, startRecoveryCategory) then
@@ -939,15 +995,16 @@ eventFrame:SetScript("OnEvent", function(_, event, spellID, baseSpellID, _catego
             return
         end
         state.cooldownRefreshFrameStamp = now
+        InvalidateCooldownSnapshot()
 
-        local alreadyDisplayed, ready, remaining = CooldownEventAlreadyDisplayed()
+        local alreadyDisplayed, ready, remaining, cooldown, cooldownResolved = CooldownEventAlreadyDisplayed()
         if alreadyDisplayed then
             UpdateCooldownEventRegistration()
             return
         end
 
         local resolved
-        remaining, resolved = RefreshActive(true, ready, remaining)
+        remaining, resolved = RefreshActive(true, ready, remaining, cooldown, cooldownResolved)
         if resolved then
             ScheduleCooldownRefresh(remaining, true)
         end
