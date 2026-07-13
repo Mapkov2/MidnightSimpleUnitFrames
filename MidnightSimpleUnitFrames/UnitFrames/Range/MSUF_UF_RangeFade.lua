@@ -843,6 +843,31 @@ local driverUnitMask
 local driverTargetMask
 local driverEventMask
 
+local function DriverMaskHas(mask, flag)
+  return mask ~= nil and mask % (flag + flag) >= flag
+end
+
+local function SetDriverEventRegistered(frame, event, wanted, registered)
+  if wanted == registered then return end
+  if wanted then
+    frame:RegisterEvent(event)
+  else
+    frame:UnregisterEvent(event)
+  end
+end
+
+local function SetDriverEventBundleRegistered(frame, events, wanted, registered)
+  if wanted == registered then return end
+  for i = 1, #events do
+    local event = events[i]
+    if wanted then
+      frame:RegisterEvent(event)
+    else
+      frame:UnregisterEvent(event)
+    end
+  end
+end
+
 local function DriverOnEvent(_, event, unit, a, b, c)
   if event == "SPELL_RANGE_CHECK_UPDATE" then
     OnTargetSpellRange(unit, a, b)
@@ -971,28 +996,61 @@ local function RegisterDriver()
     and driverEventMask == eventMask then
     return
   end
-  f:UnregisterAllEvents()
-  if activeCount > 0 then
-    f:RegisterEvent("PLAYER_ENTERING_WORLD")
-    f:RegisterEvent("PLAYER_REGEN_DISABLED")
-    f:RegisterEvent("PLAYER_REGEN_ENABLED")
-    for i = 1, #SPELL_UPDATE_EVENTS do
-      f:RegisterEvent(SPELL_UPDATE_EVENTS[i])
+
+  -- Keep unchanged subscriptions intact. Visibility churn commonly changes
+  -- only the target-related masks; rebuilding every event registration here
+  -- makes target frame show/hide substantially more expensive than the range
+  -- evaluation itself needs to be.
+  if not driverRegistered or driverUnitMask ~= unitMask then
+    if driverRegistered and driverUnitMask and driverUnitMask ~= 0 then
+      for i = 1, #UNIT_EVENTS do
+        f:UnregisterEvent(UNIT_EVENTS[i])
+      end
+    end
+    if unitCount > 0 then
+      for i = 1, #UNIT_EVENTS do
+        f:RegisterUnitEvent(UNIT_EVENTS[i], unpack(unitEventUnits, 1, unitCount))
+      end
     end
   end
-  if targetDependent then f:RegisterEvent("PLAYER_TARGET_CHANGED") end
-  if focusDependent then f:RegisterEvent("PLAYER_FOCUS_CHANGED") end
-  if petActive then f:RegisterEvent("UNIT_PET") end
-  if bossActive then f:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT") end
-  if targetActive and EnableSpellRangeCheck then f:RegisterEvent("SPELL_RANGE_CHECK_UPDATE") end
-  if unitCount > 0 then
-    for i = 1, #UNIT_EVENTS do
-      f:RegisterUnitEvent(UNIT_EVENTS[i], unpack(unitEventUnits, 1, unitCount))
+
+  if not driverRegistered or driverTargetMask ~= targetMask then
+    if driverRegistered and driverTargetMask and driverTargetMask ~= 0 then
+      f:UnregisterEvent(TARGET_UNIT_EVENT)
+    end
+    if targetCount > 0 then
+      f:RegisterUnitEvent(TARGET_UNIT_EVENT, unpack(targetEventUnits, 1, targetCount))
     end
   end
-  if targetCount > 0 then
-    f:RegisterUnitEvent(TARGET_UNIT_EVENT, unpack(targetEventUnits, 1, targetCount))
-  end
+
+  local oldEventMask = driverRegistered and driverEventMask or 0
+  local activeEventsWanted = activeCount > 0
+  local activeEventsRegistered = DriverMaskHas(oldEventMask, DRIVER_EVENT_ACTIVE_BIT)
+  SetDriverEventRegistered(f, "PLAYER_ENTERING_WORLD", activeEventsWanted, activeEventsRegistered)
+  SetDriverEventRegistered(f, "PLAYER_REGEN_DISABLED", activeEventsWanted, activeEventsRegistered)
+  SetDriverEventRegistered(f, "PLAYER_REGEN_ENABLED", activeEventsWanted, activeEventsRegistered)
+  SetDriverEventBundleRegistered(f, SPELL_UPDATE_EVENTS, activeEventsWanted, activeEventsRegistered)
+  SetDriverEventRegistered(
+    f, "PLAYER_TARGET_CHANGED", targetDependent,
+    DriverMaskHas(oldEventMask, DRIVER_EVENT_TARGET_BIT)
+  )
+  SetDriverEventRegistered(
+    f, "PLAYER_FOCUS_CHANGED", focusDependent,
+    DriverMaskHas(oldEventMask, DRIVER_EVENT_FOCUS_BIT)
+  )
+  SetDriverEventRegistered(
+    f, "UNIT_PET", petActive,
+    DriverMaskHas(oldEventMask, DRIVER_EVENT_PET_BIT)
+  )
+  SetDriverEventRegistered(
+    f, "INSTANCE_ENCOUNTER_ENGAGE_UNIT", bossActive,
+    DriverMaskHas(oldEventMask, DRIVER_EVENT_BOSS_BIT)
+  )
+  SetDriverEventRegistered(
+    f, "SPELL_RANGE_CHECK_UPDATE", targetActive and EnableSpellRangeCheck and true or false,
+    DriverMaskHas(oldEventMask, DRIVER_EVENT_TARGET_SPELL_BIT)
+  )
+
   driverRegistered = true
   driverUnitMask = unitMask
   driverTargetMask = targetMask

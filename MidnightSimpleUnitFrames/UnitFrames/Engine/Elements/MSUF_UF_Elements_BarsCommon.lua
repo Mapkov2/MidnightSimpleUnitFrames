@@ -48,6 +48,7 @@ local format = string.format
 local byte, sub = string.byte, string.sub
 local abs, floor, max = math.abs, math.floor, math.max
 local Clamp01 = UF.Clamp01
+local FreshUnitState = UF.FreshUnitState
 local GetTime = _G.GetTime
 local C_Timer = _G.C_Timer
 local Enum = _G.Enum
@@ -681,6 +682,7 @@ local function UnitNPCKind(frame, unit, spec, forText, keyOverride)
     typeColorEnabled = health.npcTypeColorBar
     colorMode = health.npcColorMode
   end
+  local useType = false
   if colorMode == "type" and typeColorEnabled ~= false then
     local key = keyOverride or spec and spec.key or frame.configKey
     local allowed = true
@@ -693,28 +695,39 @@ local function UnitNPCKind(frame, unit, spec, forText, keyOverride)
     elseif key == "targettarget" or key == "focustarget" then
       if forText then allowed = text.npcTypeToT ~= false else allowed = health.npcTypeToT ~= false end
     end
-    if allowed and not UnitIsNeutralForNPCType(unit) then
-      local kind = UnitNPCClassificationKind(unit)
-      if kind then
-        return kind
+    useType = allowed
+  end
+
+  local unitState = FreshUnitState and FreshUnitState(frame, unit)
+  local readyKey = useType and "_npcKindTypeReady" or "_npcKindReactionReady"
+  local valueKey = useType and "_npcKindType" or "_npcKindReaction"
+  if unitState and unitState[readyKey] == true then
+    return unitState[valueKey]
+  end
+
+  local kind
+  if useType and not UnitIsNeutralForNPCType(unit) then
+    kind = UnitNPCClassificationKind(unit)
+  end
+  if not kind then
+    local dead = UnitIsDeadOrGhost and UnitIsDeadOrGhost(unit)
+    if issecretvalue(dead) ~= true and dead then
+      kind = "dead"
+    elseif UnitReaction then
+      local reaction = SafeNumber(UnitReaction(unit, "player"))
+      if reaction and reaction >= 5 then
+        kind = "friendly"
+      elseif reaction and reaction == 4 then
+        kind = "neutral"
       end
     end
   end
-
-  local dead = UnitIsDeadOrGhost and UnitIsDeadOrGhost(unit)
-  if issecretvalue(dead) ~= true and dead then
-    return "dead"
+  kind = kind or "enemy"
+  if unitState then
+    unitState[readyKey] = true
+    unitState[valueKey] = kind
   end
-
-  if UnitReaction then
-    local reaction = SafeNumber(UnitReaction(unit, "player"))
-    if reaction and reaction >= 5 then
-      return "friendly"
-    elseif reaction and reaction == 4 then
-      return "neutral"
-    end
-  end
-  return "enemy"
+  return kind
 end
 
 local function ReadUnitBool(api, unit, defaultValue)
@@ -785,6 +798,10 @@ local function RefreshUnitState(frame, unit, spec, event)
   state.isPlayerKnown = false
   state.npcKind = nil
   state.npcKindKnown = false
+  state._npcKindTypeReady = nil
+  state._npcKindType = nil
+  state._npcKindReactionReady = nil
+  state._npcKindReaction = nil
   state.identityReady = nil
   if needsIdentity then
     state.isPlayer, state.isPlayerKnown = ReadUnitBool(UnitIsPlayer, unit, false)

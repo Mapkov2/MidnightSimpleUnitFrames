@@ -899,11 +899,12 @@ RegisterCastbar = function(frame)
     -- when its ticker starts and later additions retain that ticker's cadence.
     if not lowBucketScanned
         and not failsafeOnly
+        and not highFrequency
         and CastbarManager.active[frame] == true
     then
-        -- Preserve the old zero-delay initialization without walking sibling
-        -- frames. Re-registering or reclassifying one frame touches only that
-        -- frame; driver topology changes remain the sole full-bucket case.
+        -- Preserve the old zero-delay low-frequency initialization without
+        -- walking sibling frames. High-frequency casts already have a caller-
+        -- owned initial render and enter the frame driver on the next tick.
         UpdateManagedFrame(frame, 0)
     end
 end

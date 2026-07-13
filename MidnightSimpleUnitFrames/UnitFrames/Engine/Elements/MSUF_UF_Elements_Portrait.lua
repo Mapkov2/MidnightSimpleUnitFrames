@@ -92,6 +92,15 @@ local portraitUnitGeneration = {
 }
 local portraitGenerationEventStamp = {}
 
+local function ClearClassPortraitCache(texture)
+  if not texture or texture._msufPortraitClassReady ~= true then return end
+  texture._msufPortraitClassReady = nil
+  texture._msufPortraitClassUnit = nil
+  texture._msufPortraitClassFrameUnit = nil
+  texture._msufPortraitClassToken = nil
+  texture._msufPortraitClassStyle = nil
+end
+
 local function BumpPortraitUnitGeneration(unit)
   if portraitUnitGeneration[unit] ~= nil then
     portraitUnitGeneration[unit] = portraitUnitGeneration[unit] + 1
@@ -131,6 +140,7 @@ local function SetTextureCached(texture, value)
     texture._msufAtlas = nil
     texture._msufPortraitGUID = nil
     texture._msufPortraitKey = nil
+    ClearClassPortraitCache(texture)
   end
 end
 
@@ -148,6 +158,7 @@ local function SetAtlasCached(texture, atlas)
     texture._msufTexture = nil
     texture._msufPortraitGUID = nil
     texture._msufPortraitKey = nil
+    ClearClassPortraitCache(texture)
     texture._msufL, texture._msufR, texture._msufT, texture._msufB = nil, nil, nil, nil
   end
 end
@@ -163,6 +174,7 @@ local function ClearPortraitGUID(texture)
   if texture then
     texture._msufPortraitGUID = nil
     texture._msufPortraitKey = nil
+    ClearClassPortraitCache(texture)
   end
 end
 
@@ -177,10 +189,13 @@ local function PortraitFrameVisible(frame)
   if not frame then
     return false
   end
+  local holder = frame.MSUFPortraitHolder
+  if holder and frame._msufCoreVisible == true and holder._msufShown == true then
+    return true
+  end
   if frame.IsShown and not frame:IsShown() then
     return false
   end
-  local holder = frame.MSUFPortraitHolder
   if holder and holder.IsShown and not holder:IsShown() then
     return false
   end
@@ -419,7 +434,7 @@ end
 local function UnitClassToken(unit)
   if UnitClass then
     local _, token = UnitClass(unit)
-    if type(token) == "string" then
+    if issecretvalue(token) ~= true and type(token) == "string" then
       return token
     end
   end
@@ -459,11 +474,17 @@ end
 
 local function ApplyClassPortrait(texture, unit, p, class, frame, force)
   class = class or BossPreviewClassToken(unit, frame) or UnitClassToken(unit)
-  local key = BuildClassPortraitKey(unit, frame, p, class)
-  if texture and texture._msufPortraitKey == key then
+  local frameUnit = frame and frame.unit
+  local classStyle = p and p.classStyle or "BLIZZARD"
+  if texture
+    and texture._msufPortraitClassReady == true
+    and texture._msufPortraitClassUnit == unit
+    and texture._msufPortraitClassFrameUnit == frameUnit
+    and texture._msufPortraitClassToken == class
+    and texture._msufPortraitClassStyle == classStyle then
     return
   end
-  local classStyle = p and p.classStyle or "BLIZZARD"
+  local key = BuildClassPortraitKey(unit, frame, p, class)
   local PM = MSUF and MSUF.PortraitMedia
   local visual
   if PM and PM.ResolveClassPortrait then
@@ -482,6 +503,11 @@ local function ApplyClassPortrait(texture, unit, p, class, frame, force)
   if visual then
     if texture then
       texture._msufPortraitKey = key
+      texture._msufPortraitClassReady = true
+      texture._msufPortraitClassUnit = unit
+      texture._msufPortraitClassFrameUnit = frameUnit
+      texture._msufPortraitClassToken = class
+      texture._msufPortraitClassStyle = classStyle
     end
     return
   end
@@ -493,6 +519,7 @@ local function ApplyClassPortrait(texture, unit, p, class, frame, force)
 end
 
 ApplyUnitPortrait = function(texture, unit, frame, p, force)
+  ClearClassPortraitCache(texture)
   local l, r, t, b = Get2DPortraitTexCoords(p)
   if BossPreviewActive(unit, frame) then
     SetTextureCached(texture, BOSS_PREVIEW_PORTRAIT)
@@ -764,7 +791,7 @@ function Portrait.Update(frame, event, unit)
     return
   end
   unit = unit or frame.unit
-  if PORTRAIT_UNIT_STATE_EVENTS[event] == true then
+  if p.render ~= "CLASS" and PORTRAIT_UNIT_STATE_EVENTS[event] == true then
     BumpPortraitGenerationForEvent(event, unit)
   end
   local identityVisual = event == "MSUF_UNIT_IDENTITY_VISUAL"

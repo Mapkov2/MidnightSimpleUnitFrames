@@ -456,10 +456,12 @@ local function ReadGroupConfig(unit, kind)
         local item = CustomItem(unit, spec.customIndex, false)
         local placed = item and item.placed or {}
         local auraType = item and item.auraType == "DEBUFF" and "DEBUFF" or "BUFF"
+        local anchor = placed.anchor
+        if not AURA_TEXT_ANCHOR_OK[anchor] then anchor = spec.defaultAnchor end
         return {
             x = Round(placed.x or 0),
             y = Round(placed.y or 0),
-            anchor = placed.anchor or spec.defaultAnchor,
+            anchor = anchor,
             layer = Clamp(item and item.layer, spec.defaultLayer, 0, 30),
             size = Clamp(placed.size, 24, 1, 128),
             spacing = Clamp(placed.spacing, 2, 0, 64),
@@ -524,7 +526,7 @@ local function ReadGroupConfig(unit, kind)
         or (shared and shared[spec.anchorKey])
         or spec.defaultAnchor
         or "TOPLEFT"
-    if anchor ~= "TOPLEFT" and anchor ~= "TOPRIGHT" and anchor ~= "BOTTOMLEFT" and anchor ~= "BOTTOMRIGHT" and anchor ~= "CENTER" then
+    if not AURA_TEXT_ANCHOR_OK[anchor] then
         anchor = spec.defaultAnchor or "TOPLEFT"
     end
     local layer = (layout and layout[spec.layerKey] ~= nil and layout[spec.layerKey])
@@ -559,10 +561,15 @@ AnchorOffset = function(anchor, w, h)
     w = tonumber(w) or 0
     h = tonumber(h) or 0
     anchor = tostring(anchor or "TOPLEFT")
+    if anchor == "TOPLEFT" then return 0, h end
+    if anchor == "TOP" then return w * 0.5, h end
     if anchor == "TOPRIGHT" then return w, h end
-    if anchor == "BOTTOMLEFT" then return 0, 0 end
-    if anchor == "BOTTOMRIGHT" then return w, 0 end
+    if anchor == "LEFT" then return 0, h * 0.5 end
     if anchor == "CENTER" then return w * 0.5, h * 0.5 end
+    if anchor == "RIGHT" then return w, h * 0.5 end
+    if anchor == "BOTTOMLEFT" then return 0, 0 end
+    if anchor == "BOTTOM" then return w * 0.5, 0 end
+    if anchor == "BOTTOMRIGHT" then return w, 0 end
     return 0, h
 end
 
@@ -634,7 +641,7 @@ local function FallbackMetrics(cfg)
     local laneW, laneH = GridDimensions(cfg and cfg.max, cfg and cfg.perRow, cfg and cfg.size, cfg and cfg.spacing, vertical)
     return {
         enabled = cfg and cfg.show == true,
-        num = cfg and cfg.max or 0,
+        num = cfg and Round(cfg.max) or 0,
         size = cfg and cfg.size or 26,
         spacing = cfg and cfg.spacing or 2,
         step = ((cfg and cfg.size) or 26) + ((cfg and cfg.spacing) or 2),
@@ -649,18 +656,6 @@ local function FallbackMetrics(cfg)
         y = cfg and cfg.y or 0,
         anchor = cfg and cfg.anchor or "TOPLEFT",
     }
-end
-
-local function PreviewLaneDimensions(cfg, metrics, shownIcons)
-    local size = (metrics and metrics.size) or (cfg and cfg.size) or 26
-    local spacing = (metrics and metrics.spacing) or (cfg and cfg.spacing) or 2
-    local perRow = (metrics and metrics.perRow) or (cfg and cfg.perRow) or 12
-    local vertical = metrics and metrics.verticalGrowth == true
-    if not metrics then
-        local _, _, fallbackVertical = GrowthParts(cfg and cfg.growth, cfg and cfg.rowWrap)
-        vertical = fallbackVertical == true
-    end
-    return GridDimensions(shownIcons, perRow, size, spacing, vertical)
 end
 
 local function WriteOffset(auras, unit, kind, x, y)
@@ -714,12 +709,6 @@ local function ApplyDragUnit(auras, unit, moverKind, x, y)
         metrics = metrics or FallbackMetrics(cfg)
         local laneW = metrics.width or cfg.size
         local laneH = metrics.height or cfg.size
-        local spec = GROUPS[NormalizeKind(moverKind)]
-        if spec and spec.customIndex then
-            local shownIcons = math_min(PREVIEW_ICONS, metrics.num or cfg.max)
-            if shownIcons < 1 then shownIcons = 1 end
-            laneW, laneH = PreviewLaneDimensions(cfg, metrics, shownIcons)
-        end
         ApplyGroupScaleForFrame(other, frame)
         PositionPreviewGroup(other, frame, metrics.anchor or cfg.anchor, x, y, laneW, laneH)
     end
@@ -1715,9 +1704,6 @@ function EM.RefreshUnit(unit)
             if not metrics then fallback = FallbackMetrics(cfg) end
             local laneW = (metrics and metrics.width) or (fallback and fallback.width) or cfg.size
             local laneH = (metrics and metrics.height) or (fallback and fallback.height) or cfg.size
-            if spec.customIndex then
-                laneW, laneH = PreviewLaneDimensions(cfg, metrics or fallback, shownIcons)
-            end
             local growthX = (metrics and metrics.growthX) or (fallback and fallback.growthX) or 1
             local growthY = (metrics and metrics.growthY) or (fallback and fallback.growthY) or -1
             local vertical = metrics and metrics.verticalGrowth == true or (fallback and fallback.verticalGrowth == true)

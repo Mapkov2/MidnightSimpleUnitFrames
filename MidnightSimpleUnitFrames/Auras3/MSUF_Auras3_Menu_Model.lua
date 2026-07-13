@@ -109,12 +109,20 @@ local DURATION_BAR_DIRECTION_OK = { REMAINING=true, ELAPSED=true }
 
 local AURA_ANCHORS = {
     { value = "TOPLEFT", text = "Top Left" },
+    { value = "TOP", text = "Top" },
     { value = "TOPRIGHT", text = "Top Right" },
-    { value = "BOTTOMLEFT", text = "Bottom Left" },
-    { value = "BOTTOMRIGHT", text = "Bottom Right" },
+    { value = "LEFT", text = "Left" },
     { value = "CENTER", text = "Center" },
+    { value = "RIGHT", text = "Right" },
+    { value = "BOTTOMLEFT", text = "Bottom Left" },
+    { value = "BOTTOM", text = "Bottom" },
+    { value = "BOTTOMRIGHT", text = "Bottom Right" },
 }
-local AURA_ANCHOR_OK = { TOPLEFT=true, TOPRIGHT=true, BOTTOMLEFT=true, BOTTOMRIGHT=true, CENTER=true }
+local AURA_ANCHOR_OK = {
+    TOPLEFT=true, TOP=true, TOPRIGHT=true,
+    LEFT=true, CENTER=true, RIGHT=true,
+    BOTTOMLEFT=true, BOTTOM=true, BOTTOMRIGHT=true,
+}
 
 local LANE_GROWTH_VALUES = {
     { value = "RIGHTDOWN", text = "Right then Down" },
@@ -2731,8 +2739,15 @@ function Model.ReadPreviewConfig(unit)
     local auras, shared = Model.EnsureDB()
     if type(auras) ~= "table" or type(shared) ~= "table" then return nil end
     local runtimeCfg = type(A3.ResolveUnitFrameConfig) == "function" and A3.ResolveUnitFrameConfig(RuntimeUnit(unit)) or nil
-    local buffMetrics = runtimeCfg and type(A3.BuildAuraLaneMetrics) == "function" and A3.BuildAuraLaneMetrics(runtimeCfg, "buff") or nil
-    local debuffMetrics = runtimeCfg and type(A3.BuildAuraLaneMetrics) == "function" and A3.BuildAuraLaneMetrics(runtimeCfg, "debuff") or nil
+    local buildMetrics = runtimeCfg and type(A3.BuildAuraLaneMetrics) == "function" and A3.BuildAuraLaneMetrics or nil
+    local buffMetrics = buildMetrics and buildMetrics(runtimeCfg, "buff") or nil
+    local debuffMetrics = buildMetrics and buildMetrics(runtimeCfg, "debuff") or nil
+    local customMetrics = {}
+    if buildMetrics then
+        for index = 1, CUSTOM_CONTAINER_MAX do
+            customMetrics[index] = buildMetrics(runtimeCfg, "custom" .. tostring(index))
+        end
+    end
     local unitEnabled = runtimeCfg and runtimeCfg.enabled == true or Model.UnitEnabled(unit)
     local showBuffs = false
     local showDebuffs = false
@@ -2745,28 +2760,31 @@ function Model.ReadPreviewConfig(unit)
         enabled = unitEnabled,
         showBuffs = showBuffs == true,
         showDebuffs = showDebuffs == true,
-        buffX = Model.ReadNumber(unit, "buffGroupOffsetX", 0, -4096, 4096),
-        buffY = Model.ReadNumber(unit, "buffGroupOffsetY", 36, -4096, 4096),
-        debuffX = Model.ReadNumber(unit, "debuffGroupOffsetX", 0, -4096, 4096),
-        debuffY = Model.ReadNumber(unit, "debuffGroupOffsetY", 6, -4096, 4096),
-        buffAnchor = Model.ReadLaneAnchor(unit, "buff"),
-        debuffAnchor = Model.ReadLaneAnchor(unit, "debuff"),
+        buffMetrics = buffMetrics,
+        debuffMetrics = debuffMetrics,
+        customMetrics = customMetrics,
+        buffX = buffMetrics and buffMetrics.x or Model.ReadNumber(unit, "buffGroupOffsetX", 0, -4096, 4096),
+        buffY = buffMetrics and buffMetrics.y or Model.ReadNumber(unit, "buffGroupOffsetY", 36, -4096, 4096),
+        debuffX = debuffMetrics and debuffMetrics.x or Model.ReadNumber(unit, "debuffGroupOffsetX", 0, -4096, 4096),
+        debuffY = debuffMetrics and debuffMetrics.y or Model.ReadNumber(unit, "debuffGroupOffsetY", 6, -4096, 4096),
+        buffAnchor = buffMetrics and buffMetrics.anchor or Model.ReadLaneAnchor(unit, "buff"),
+        debuffAnchor = debuffMetrics and debuffMetrics.anchor or Model.ReadLaneAnchor(unit, "debuff"),
         buffLayer = Model.ReadLaneLayer(unit, "buff"),
         debuffLayer = Model.ReadLaneLayer(unit, "debuff"),
         buffSize = buffMetrics and buffMetrics.size or Model.ReadNumber(unit, "buffGroupIconSize", Model.ReadNumber(unit, "iconSize", 26, 1, 128), 1, 128),
         debuffSize = debuffMetrics and debuffMetrics.size or Model.ReadNumber(unit, "debuffGroupIconSize", Model.ReadNumber(unit, "iconSize", 26, 1, 128), 1, 128),
-        spacing = runtimeCfg and runtimeCfg.spacing or Model.ReadNumber(unit, "spacing", 2, 0, 64),
-        perRow = runtimeCfg and runtimeCfg.perRow or Model.ReadNumber(unit, "perRow", 12, 1, 40),
-        buffPerRow = runtimeCfg and runtimeCfg.buffPerRow or Model.ReadLanePerRow(unit, "buff"),
-        debuffPerRow = runtimeCfg and runtimeCfg.debuffPerRow or Model.ReadLanePerRow(unit, "debuff"),
-        maxBuffs = runtimeCfg and runtimeCfg.maxBuffs or Model.ReadNumber(unit, "maxBuffs", 12, 0, 80),
-        maxDebuffs = runtimeCfg and runtimeCfg.maxDebuffs or Model.ReadNumber(unit, "maxDebuffs", 12, 0, 80),
-        growth = runtimeCfg and runtimeCfg.growth or Model.ReadGrowth(unit),
-        rowWrap = runtimeCfg and runtimeCfg.rowWrap or Model.ReadRowWrap(unit),
-        buffGrowthX = runtimeCfg and runtimeCfg.buffGrowthX or Model.ReadLaneGrowth(unit, "buff"),
-        buffGrowthY = runtimeCfg and runtimeCfg.buffGrowthY or Model.ReadLaneRowWrap(unit, "buff"),
-        debuffGrowthX = runtimeCfg and runtimeCfg.debuffGrowthX or Model.ReadLaneGrowth(unit, "debuff"),
-        debuffGrowthY = runtimeCfg and runtimeCfg.debuffGrowthY or Model.ReadLaneRowWrap(unit, "debuff"),
+        spacing = (buffMetrics and buffMetrics.spacing) or (debuffMetrics and debuffMetrics.spacing) or Model.ReadNumber(unit, "spacing", 2, 0, 64),
+        perRow = (buffMetrics and buffMetrics.perRow) or (debuffMetrics and debuffMetrics.perRow) or Model.ReadNumber(unit, "perRow", 12, 1, 40),
+        buffPerRow = buffMetrics and buffMetrics.perRow or Model.ReadLanePerRow(unit, "buff"),
+        debuffPerRow = debuffMetrics and debuffMetrics.perRow or Model.ReadLanePerRow(unit, "debuff"),
+        maxBuffs = buffMetrics and buffMetrics.num or Model.ReadNumber(unit, "maxBuffs", 12, 0, 80),
+        maxDebuffs = debuffMetrics and debuffMetrics.num or Model.ReadNumber(unit, "maxDebuffs", 12, 0, 80),
+        growth = (buffMetrics and buffMetrics.growth) or (debuffMetrics and debuffMetrics.growth) or Model.ReadGrowth(unit),
+        rowWrap = (buffMetrics and buffMetrics.rowWrap) or (debuffMetrics and debuffMetrics.rowWrap) or Model.ReadRowWrap(unit),
+        buffGrowthX = buffMetrics and buffMetrics.growth or Model.ReadLaneGrowth(unit, "buff"),
+        buffGrowthY = buffMetrics and buffMetrics.rowWrap or Model.ReadLaneRowWrap(unit, "buff"),
+        debuffGrowthX = debuffMetrics and debuffMetrics.growth or Model.ReadLaneGrowth(unit, "debuff"),
+        debuffGrowthY = debuffMetrics and debuffMetrics.rowWrap or Model.ReadLaneRowWrap(unit, "debuff"),
         showStackCount = Model.ReadBool(unit, "showStackCount", true),
         showCooldownText = Model.ReadBool(unit, "showCooldownText", true),
         buffShowStackCount = Model.ReadLaneStyleBool(unit, "buff", "showStackCount", true),

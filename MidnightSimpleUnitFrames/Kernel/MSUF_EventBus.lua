@@ -88,10 +88,6 @@ local function RefreshDriverRegistration(event, ev)
     driver:RegisterUnitEvent(event, unpack(units))
 end
 
-local function UnitFilterMatches(units, unit)
-    return not units or (unit and units[unit] == true)
-end
-
 local function Compact(ev)
     if not ev or not ev.dirty then return end
     local list, idx, w = ev.list, ev.index, 0
@@ -210,17 +206,32 @@ end
 --- let removals mark handlers dead and compact after the current fanout.
 driver:SetScript("OnEvent", function(_, event, ...)
     local ev = bus.handlers[event]; if not ev then return end
-    ev.dd = (ev.dd or 0) + 1
+    ev.dd = ev.dd + 1
     local list, n = ev.list, #ev.list
-    local unit = ...
-    for i = 1, n do
-        local h = list[i]
-        if h and h.fn and UnitFilterMatches(h.units, unit) then
-            SafeCall(h.fn, event, ...)
-            if h.once then ev.index[h.key] = nil; h.fn = nil; h.dead = true; ev.dirty = true end
+
+    if ev.unitEvent then
+        local unit = ...
+        for i = 1, n do
+            local h = list[i]
+            local fn = h and h.fn
+            local units = h and h.units
+            if fn and (not units or (unit and units[unit] == true)) then
+                SafeCall(fn, event, ...)
+                if h.once then ev.index[h.key] = nil; h.fn = nil; h.dead = true; ev.dirty = true end
+            end
+        end
+    else
+        for i = 1, n do
+            local h = list[i]
+            local fn = h and h.fn
+            if fn then
+                SafeCall(fn, event, ...)
+                if h.once then ev.index[h.key] = nil; h.fn = nil; h.dead = true; ev.dirty = true end
+            end
         end
     end
-    ev.dd = (ev.dd or 0) - 1
+
+    ev.dd = ev.dd - 1
     if ev.dd <= 0 then
         ev.dd = 0
         if ev.dirty then Compact(ev) end

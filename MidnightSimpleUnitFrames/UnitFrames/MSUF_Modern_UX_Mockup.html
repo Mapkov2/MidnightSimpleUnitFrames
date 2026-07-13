@@ -428,11 +428,6 @@
       gap: 12px;
     }
 
-    .dashboard-grid {
-      grid-template-columns: minmax(0, 1.35fr) 360px;
-      grid-template-rows: minmax(0, 1fr);
-    }
-
     .unit-grid {
       grid-template-rows: auto minmax(300px, 1fr) auto;
     }
@@ -820,71 +815,6 @@
       outline: none;
     }
 
-    .checklist {
-      display: grid;
-      gap: 12px;
-      min-height: 0;
-      grid-template-rows: auto auto 1fr;
-    }
-
-    .task-list {
-      display: grid;
-      gap: 8px;
-    }
-
-    .task {
-      min-height: 60px;
-      border: 1px solid rgba(93, 145, 213, .16);
-      border-radius: 8px;
-      background: rgba(6, 15, 27, .72);
-      display: grid;
-      grid-template-columns: 42px 1fr auto;
-      align-items: center;
-      gap: 10px;
-      padding: 8px 10px;
-    }
-
-    .task .badge {
-      width: 30px;
-      height: 24px;
-      border-radius: 6px;
-      display: grid;
-      place-items: center;
-      color: #04110a;
-      font-weight: 800;
-      background: var(--green);
-    }
-
-    .task.current .badge {
-      background: var(--blue);
-      color: white;
-    }
-
-    .task .tag {
-      height: 22px;
-      padding: 0 9px;
-      border-radius: 7px;
-      display: grid;
-      place-items: center;
-      font-size: 12px;
-      border: 1px solid rgba(95, 151, 226, .22);
-      color: var(--muted);
-    }
-
-    .task.current {
-      border-color: rgba(80, 151, 255, .55);
-      background: rgba(13, 39, 73, .76);
-    }
-
-    .bug {
-      border-color: rgba(189, 57, 75, .34);
-    }
-
-    .bug .badge {
-      background: var(--red);
-      color: white;
-    }
-
     .bars-main {
       min-height: 0;
       display: grid;
@@ -1024,7 +954,7 @@
               </div>
             </div>
 
-            <div class="page-grid dashboard-grid">
+            <div class="page-grid">
               <div class="dashboard-main">
                 <div class="steps">
                   <div class="step active">
@@ -1069,34 +999,6 @@
                 </div>
               </div>
 
-              <aside class="checklist">
-                <div class="panel pad">
-                  <h2>Setup checklist</h2>
-                  <p>Shows only tasks that matter for this profile.</p>
-                </div>
-                <div class="task-list">
-                  <div class="task current">
-                    <div class="badge">1</div>
-                    <div><h3>Move frames</h3><p>Recommended before detail tuning.</p></div>
-                    <div class="tag">next</div>
-                  </div>
-                  <div class="task">
-                    <div class="badge">OK</div>
-                    <div><h3>Profile ready</h3><p>Active profile is loaded.</p></div>
-                    <div class="tag">done</div>
-                  </div>
-                  <div class="task">
-                    <div class="badge">OK</div>
-                    <div><h3>Pages available</h3><p>All Menu2 pages are registered.</p></div>
-                    <div class="tag">done</div>
-                  </div>
-                </div>
-                <div class="task bug">
-                  <div class="badge">!</div>
-                  <div><h3>Bug report</h3><p>One clear path: select, copy, open GitHub.</p></div>
-                  <div class="tag">error</div>
-                </div>
-              </aside>
             </div>
           </div>
 

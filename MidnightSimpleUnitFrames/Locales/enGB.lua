@@ -398,9 +398,6 @@ for k, v in pairs(MSUF_LOCALE_COVERAGE_enGB) do
     if L[k] == nil or L[k] == k then L[k] = v end
 end
 
-L["Confirm backup before using the Wago MSUF page."] = "Confirm backup before using the Wago MSUF page."
-L["Have you backed up this MSUF profile before using the Wago MSUF page?"] = "Have you backed up this MSUF profile before using the Wago MSUF page?"
-L["Wago backup"] = "Wago backup"
 L["|cffffd700MSUF:|r Group Frames reset to defaults."] = "|cffffd700MSUF:|r Group Frames reset to defaults."
 L["|cffffd700MSUF:|r Preserve HP color uses the same HP track color from Colors, but some bar textures may look different."] = "|cffffd700MSUF:|r Preserve HP color uses the same HP track color from Colours, but some bar textures may look different."
 L["Click a handle to select - drag custom layers - arrow keys nudge selected; Blizzard is locked"] = "Click a handle to select - drag custom layers - arrow keys nudge selected; Blizzard is locked"
@@ -423,7 +420,6 @@ L["%s - manual profile"] = "%s - manual profile"
 L["|cffffd700MSUF:|r Preserve HP color uses the same HP track color from Colors, but some bar textures may look different."] = "|cffffd700MSUF:|r Preserve HP color uses the same HP track color from Colors, but some bar textures may look different."
 L["A calmer setup command center: start with movement, frames, group frames, or a safe profile import."] = "A calmer setup command centre: start with movement, frames, group frames, or a safe profile import."
 L["Active profile"] = "Active profile"
-L["Active profile is loaded."] = "Active profile is loaded."
 L["Applied: %d%%  Selected: %d%%"] = "Applied: %d%%  Selected: %d%%"
 L["Applied: %s   Selected: %s"] = "Applied: %s   Selected: %s"
 L["Apply"] = "Apply"
@@ -472,8 +468,6 @@ L["Player, target, focus, pet, and boss frame setup with one preview language."]
 L["Preserve HP color keeps the HP fill color while layer fade is active and draws missing health separately with the same HP track color from Colors.\n\nThis can help when HP Bar fade makes the empty HP area disappear or look black. Some custom textures may still look flat, dark, or different while this option is enabled."] = "Preserve HP color keeps the HP fill color while layer fade is active and draws missing health separately with the same HP track color from Colors.\n\nThis can help when HP Bar fade makes the empty HP area disappear or look black. Some custom textures may still look flat, dark, or different while this option is enabled."
 L["Preview available"] = "Preview available"
 L["Print Help"] = "Print Help"
-L["Profile ready"] = "Profile ready"
-L["Recommended before detail tuning."] = "Recommended before detail tuning."
 L["Recommended Start"] = "Recommended Start"
 L["Reset Frame Positions"] = "Reset Frame Positions"
 L["Reset positions..."] = "Reset positions..."
@@ -484,15 +478,12 @@ L["Safe"] = "Safe"
 L["Scaling"] = "Scaling"
 L["Set up Group Frames"] = "Set up Group Frames"
 L["Set up Player"] = "Set up Player"
-L["Setup checklist"] = "Setup checklist"
 L["Shared defaults plus per-unit overrides explained inline."] = "Shared defaults plus per-unit overrides explained inline."
 L["start"] = "start"
 L["Support MSUF Development"] = "Support MSUF Development"
 L["The Wago button opens a copyable search link. Importing stays on the Profiles page so backup and new-profile import are visible."] = "The Wago button opens a copyable search link. Importing stays on the Profiles page so backup and new-profile import are visible."
 L["Unit Frames"] = "Unit Frames"
-L["Use pages to tune frames."] = "Use pages to tune frames."
 L["Use sliders for exact scale changes. Apply commits the selected value; Revert returns to the active value."] = "Use sliders for exact scale changes. Apply commits the selected value; Revert returns to the active value."
-L["Useful for first-run orientation."] = "Useful for first-run orientation."
 L["Wago profile hub"] = "Wago profile hub"
 L["Wago profile imports"] = "Wago profile imports"
 L["Wago Profiles"] = "Wago Profiles"
@@ -517,7 +508,7 @@ local EDIT_MODE_HELP = {
     EM_TOUR_DONE    = "Done",
     EM_TOUR_STEP    = "Step %d of %d",
     EM_HELP_BTN     = "? Help",
-    EM_HELP_BTN_TIP = "Quick reference and guided tour\nfor Edit Mode controls.",
+    EM_HELP_BTN_TIP = "Open the complete guided MSUF setup\nat the Edit Mode chapter.",
     EM_HINT_NONE     = "Click a mover to select it. Drag to move; click without dragging opens quick settings.",
     EM_HINT_SELECTED = "Drag the selection or use arrow keys. Shift = 5 px, Ctrl = 10 px, Alt = grid step.",
     EM_HINT_POPUP    = "Popup open: adjust values directly, use +/- for steps. Esc leaves a focused field or closes the popup. Shift = 5 px, Ctrl = 10 px, Alt = grid step.",
@@ -650,7 +641,7 @@ L["MSUF2_SEARCH_DASHBOARD_DISCORD_KEYWORDS"] = "discord discord link copy discor
 L["MSUF2_SEARCH_DASHBOARD_RECOVERY_KEYWORDS"] = "dashboard display recovery discord discord link copy discord link print help factory reset fullreset reset all recovery tools support help bug report feedback lost menu recover menu"
 L["MSUF2_SEARCH_DASHBOARD_SCALING_KEYWORDS"] = "dashboard scaling ui scale menu scale msuf frame scale msuf menu scale bigger smaller resize window options too big options too small zoom apply revert"
 L["MSUF2_SEARCH_DASHBOARD_SUPPORT_KEYWORDS"] = "support links support msuf support development donate donation patreon paypal ko-fi kofi github repository source code copy support link"
-L["MSUF2_SEARCH_DASHBOARD_WAGO_KEYWORDS"] = "wago profiles wago profile hub browse wago profiles wago link profile backup backup current profile"
+L["MSUF2_SEARCH_DASHBOARD_WAGO_KEYWORDS"] = "wago profiles wago profile hub browse wago profiles share wago profiles wago link"
 L["MSUF2_SEARCH_DEBUFF_STRIPE_KEYWORDS"] = "debuff stripe debuff strip stripe edge stripe height stripe opacity thin colored stripe colored stripe for debuffs debuff filter stripe raid debuff stripe party debuff stripe"
 L["MSUF2_SEARCH_DISPEL_DEBUFF_KEYWORDS"] = "dispel debuffs dispell debuffs dispellable debuffs show dispellable debuffs only dispellable debuffs where is dispel where is dispel border where is dispel glow how do i highlight dispels highlight dispellable debuffs why does dispel border not show why is dispel glow not showing magic debuff curse debuff poison debuff disease debuff bleed debuff any debuff any dispel-type debuff dispellable by me class cannot dispel non healer dispel border warrior dispel highlight cleanse debuffs decurse debuffs remove curse remove poison remove disease remove magic dispel border detects dispel test type healer dispel highlight raid dispels party dispels"
 L["MSUF2_SEARCH_DISPEL_OVERLAY_KEYWORDS"] = "dispel overlay unitframe dispel overlay group dispel overlay party dispel overlay raid dispel overlay health bar tint tint health bar for debuff overlay style overlay opacity show on current health only colored health bar dispel color health bar on dispel dispel color overlay"

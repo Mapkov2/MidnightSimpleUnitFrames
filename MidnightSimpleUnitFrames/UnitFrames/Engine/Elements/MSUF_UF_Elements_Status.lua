@@ -70,6 +70,15 @@ local function UnitExistsRuntime(unit, state)
   end
   return UnitExistsSafe(unit)
 end
+local function UnitIsPlayerRuntime(unit, state)
+  if state and state.isPlayerKnown == true then
+    return state.isPlayer == true
+  end
+  if not UnitIsPlayer then
+    return nil
+  end
+  return BoolTrue(UnitIsPlayer(unit))
+end
 local Apply = MSUF.Apply or {}
 local ApplyShown = Apply.Shown or function(region, show)
   if not region then return end
@@ -489,8 +498,8 @@ local function PVPFallbackTextureForAtlas(atlas)
   return PVP_TEXTURE_BY_ATLAS[atlas]
 end
 
-local function ResolvePVPAtlas(unit)
-  if not (unit and UnitExistsSafe(unit)) then
+local function ResolvePVPAtlas(unit, unitState)
+  if not (unit and UnitExistsRuntime(unit, unitState)) then
     return nil
   end
   if UnitFramePVPContextualDisabled() then
@@ -736,7 +745,8 @@ local function UpdateRaidMarker(frame, status)
   local cfg = status and status.raidMarker
   local tex = frame.raidTargetIcon
   local unit = frame.unit
-  local exists = UnitExistsSafe(unit)
+  local unitState = FreshUnitState(frame, unit)
+  local exists = UnitExistsRuntime(unit, unitState)
   if not (cfg and cfg.enabled and tex and GetRaidTargetIndex and SetRaidTargetIconTexture and exists) then
     if tex then
       tex._msufRaidMarkerIndex = nil
@@ -775,7 +785,8 @@ local function UpdateLeader(frame, status)
   local cfg = status and status.leader
   local tex = frame.LeaderIndicator
   local unit = frame.unit
-  local exists = UnitExistsSafe(unit)
+  local unitState = FreshUnitState(frame, unit)
+  local exists = UnitExistsRuntime(unit, unitState)
   if not (cfg and cfg.enabled and tex and exists) then
     SetShown(tex, false)
     return
@@ -798,12 +809,13 @@ local function UpdateLeaderPair(frame, status)
   local assistCfg = status and status.assist
   local leaderTex = frame and (frame.leaderIcon or frame.LeaderIndicator)
   local assistTex = frame and frame.assistIcon
-  local exists = UnitExistsSafe(unit)
+  local unitState = FreshUnitState(frame, unit)
+  local exists = UnitExistsRuntime(unit, unitState)
   -- Unit-type early-out: only a PLAYER can be group leader/assistant, so a
   -- non-player target (any mob) can never show these. Skip the two group-query
   -- API calls entirely and just ensure the icons are hidden. This guard makes
   -- rapid target-swaps over mobs cheap.
-  if exists and UnitIsPlayer and not BoolTrue(UnitIsPlayer(unit)) then
+  if exists and UnitIsPlayerRuntime(unit, unitState) == false then
     if leaderTex and leaderTex._msufStatusShown ~= false then SetShown(leaderTex, false); leaderTex._msufStatusShown = false end
     if assistTex and assistTex._msufStatusShown ~= false then SetShown(assistTex, false); assistTex._msufStatusShown = false end
     frame._msufLeaderPairState = 0
@@ -996,7 +1008,8 @@ local function UpdateRole(frame, status)
   local cfg = status and status.role
   local tex = frame and frame.roleIcon
   local unit = frame and frame.unit
-  local exists = UnitExistsSafe(unit)
+  local unitState = FreshUnitState(frame, unit)
+  local exists = UnitExistsRuntime(unit, unitState)
   local role = UnitGroupRolesAssigned and unit and UnitGroupRolesAssigned(unit) or nil
   if issecretvalue(role) == true then role = nil end
   if role == "NONE" then role = nil end
@@ -1088,8 +1101,9 @@ local function UpdatePhase(frame, status)
     return
   end
   local reason
-  local isPlayer = UnitIsPlayer and UnitIsPlayer(unit)
-  if BoolTrue(isPlayer) and UnitPhaseReason then
+  local unitState = FreshUnitState(frame, unit)
+  local isPlayer = UnitIsPlayerRuntime(unit, unitState)
+  if isPlayer == true and UnitPhaseReason then
     reason = UnitPhaseReason(unit)
   end
   if issecretvalue(reason) ~= true and reason then
@@ -1107,7 +1121,8 @@ local function UpdateLevel(frame, status)
   local cfg = status and status.level
   local fs = frame.levelText
   local unit = frame.unit
-  local exists = UnitExistsSafe(unit)
+  local unitState = FreshUnitState(frame, unit)
+  local exists = UnitExistsRuntime(unit, unitState)
   if not (cfg and cfg.enabled and fs and UnitLevel and exists) then
     SetShown(fs, false)
     return
@@ -1138,14 +1153,15 @@ local function UpdateRaidGroup(frame, status)
   local cfg = status and status.raidGroup
   local fs = frame.raidGroupNameText
   local unit = frame.unit
-  local exists = UnitExistsSafe(unit)
+  local unitState = FreshUnitState(frame, unit)
+  local exists = UnitExistsRuntime(unit, unitState)
   if not (cfg and cfg.enabled and fs and UnitInRaid and GetRaidRosterInfo and exists) then
     SetShown(fs, false)
     return
   end
   -- Only a PLAYER can be in the raid roster; a mob target never shows a raid
   -- group number. Skip UnitInRaid/GetRaidRosterInfo for non-players.
-  if UnitIsPlayer and not BoolTrue(UnitIsPlayer(unit)) then
+  if UnitIsPlayerRuntime(unit, unitState) == false then
     SetShown(fs, false)
     return
   end
@@ -1183,8 +1199,8 @@ local function EliteAtlas(state)
   return "nameplates-icon-elite-silver"
 end
 
-local function EliteState(unit)
-  local exists = UnitExistsSafe(unit)
+local function EliteState(unit, unitState)
+  local exists = UnitExistsRuntime(unit, unitState)
   if not (UnitClassification and exists) then
     return nil
   end
@@ -1219,11 +1235,13 @@ local function UpdateElite(frame, status)
   end
   -- Opposite gate: only NPCs are elite/rare/boss classifications, so a PLAYER
   -- target can never show this. Skip the classification query for players.
-  if status.testMode ~= true and UnitIsPlayer and BoolTrue(UnitIsPlayer(frame.unit)) then
+  local unit = frame.unit
+  local unitState = FreshUnitState(frame, unit)
+  if status.testMode ~= true and UnitIsPlayerRuntime(unit, unitState) == true then
     SetShown(tex, false)
     return
   end
-  local state = status.testMode and "BOSS" or EliteState(frame.unit)
+  local state = status.testMode and "BOSS" or EliteState(unit, unitState)
   if state then
     if ApplyStatusIconPackTexture(tex, cfg, status, "elite", state) then
       SetShown(tex, true)
@@ -1416,7 +1434,8 @@ local function UpdateCombat(frame, status)
   local cfg = status and status.combat
   local tex = frame.combatStateIndicatorIcon
   local unit = frame.unit
-  local exists = UnitExistsSafe(unit)
+  local unitState = FreshUnitState(frame, unit)
+  local exists = UnitExistsRuntime(unit, unitState)
   if not (cfg and cfg.enabled and tex and exists) then
     SetShown(tex, false)
     return
@@ -1458,7 +1477,8 @@ local function UpdateIncomingRes(frame, status)
   local cfg = status and status.incomingRes
   local tex = frame.incomingResIndicatorIcon
   local unit = frame.unit
-  local exists = UnitExistsSafe(unit)
+  local unitState = FreshUnitState(frame, unit)
+  local exists = UnitExistsRuntime(unit, unitState)
   if not (cfg and cfg.enabled and tex and exists) then
     SetShown(tex, false)
     return
@@ -1469,7 +1489,7 @@ local function UpdateIncomingRes(frame, status)
   end
   -- Only players get resurrected; a mob target never has incoming res. Skip the
   -- API query for non-players.
-  if status.testMode ~= true and UnitIsPlayer and not BoolTrue(UnitIsPlayer(unit)) then
+  if status.testMode ~= true and UnitIsPlayerRuntime(unit, unitState) == false then
     SetShown(tex, false)
     return
   end
@@ -1500,7 +1520,8 @@ local function UpdatePVP(frame, status)
     SetShown(tex, false)
     return
   end
-  local atlas = status.testMode and ResolvePVPTestAtlas(unit) or ResolvePVPAtlas(unit)
+  local unitState = FreshUnitState(frame, unit)
+  local atlas = status.testMode and ResolvePVPTestAtlas(unit) or ResolvePVPAtlas(unit, unitState)
   if atlas and ApplyStatusIconPackTexture(tex, cfg, status, "pvp", PVPVariantForAtlas(atlas)) then
     SetShown(tex, true)
   elseif ApplyPVPTexture(tex, atlas) then
