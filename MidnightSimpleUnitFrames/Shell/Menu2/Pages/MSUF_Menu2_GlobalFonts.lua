@@ -15,8 +15,52 @@ local max = math.max
 local min = math.min
 local UNIT_SCOPE_KEYS = GP.UNIT_SCOPE_KEYS or {}
 local DB, G, Unit, NormalizeScopeKey, ScopeDBKeys, ScopeHasOverride, ScopeSetOverride, CurrentFontScope, IsGFScope, FontScopeGet, FontScopeSet, NormalizeFontKey, FontValues, FontKeyGet, FontKeySet, SetControlEnabled, SetControlsEnabled, ApplyFonts, ControlMeta = M.Pick(GP, [[DB G Unit NormalizeScopeKey ScopeDBKeys ScopeHasOverride ScopeSetOverride CurrentFontScope IsGFScope FontScopeGet FontScopeSet NormalizeFontKey FontValues FontKeyGet FontKeySet SetControlEnabled SetControlsEnabled ApplyFonts ControlMeta]])
+local FONT_DYNAMIC_SETTING_KEYS_BY_PATH = {
+    ["name_shortening.enabled"] = { "gf_party.nameShortenEnabled", "gf_raid.nameShortenEnabled" },
+    ["name_shortening.style"] = { "gf_party.nameClipSide", "gf_raid.nameClipSide" },
+    ["name_shortening.max_length"] = { "gf_party.nameMaxChars", "gf_raid.nameMaxChars" },
+    ["name_shortening.no_ellipsis"] = { "gf_party.nameNoEllipsis", "gf_raid.nameNoEllipsis" },
+}
+local FONT_DYNAMIC_SETTING_SUFFIXES_BY_PATH = {
+    ["scope.override.enabled"] = { "override" },
+    ["text_style.outline"] = { "outline" },
+    ["text_style.rendering"] = { "fontMonochrome" },
+    ["text_style.shadow.enabled"] = { "textBackdrop" },
+    ["text_style.shadow.strength"] = { "fontShadowStrength" },
+    ["text_style.opacity"] = { "fontTextAlpha" },
+    ["text_style.baseline"] = { "fontBaselineOffset" },
+    ["colors.player_name"] = { "nameColorMode" },
+    ["colors.npc_name"] = { "npcNameRed", "nameNpcClassColor" },
+    ["colors.colorHealthTextByHealth"] = { "colorHealthTextByHealth" },
+    ["colors.colorPowerTextByType"] = { "colorPowerTextByType" },
+    ["name_shortening.enabled"] = { "shortenNames" },
+    ["name_shortening.style"] = { "shortenNameClipSide" },
+    ["name_shortening.max_length"] = { "shortenNameMaxChars" },
+    ["name_shortening.no_ellipsis"] = { "shortenNameNoEllipsis" },
+}
 local function Meta(path, classification, exact)
-    return ControlMeta("opt_fonts", "global", path, classification, exact)
+    local resolved = {}
+    if type(exact) == "table" then
+        for key, value in pairs(exact) do resolved[key] = value end
+    end
+    if path == "font.family" then
+        resolved.settingKey = resolved.settingKey or "general.fontKey"
+    elseif path == "scope.overrides.reset" then
+        resolved.actionKey = resolved.actionKey or "reset_all_scoped_global_font_overrides"
+    elseif (classification or "setting") == "setting" then
+        resolved.assistantDisposition = resolved.assistantDisposition or "dynamic"
+        resolved.assistantDispositionReason = resolved.assistantDispositionReason
+            or "This control reads and writes the explicitly selected Shared, unit, Party, or Raid font scope; some modes intentionally span multiple stored representation keys."
+        resolved.assistantSettingKeys = resolved.assistantSettingKeys or FONT_DYNAMIC_SETTING_KEYS_BY_PATH[path]
+        local suffixes = FONT_DYNAMIC_SETTING_SUFFIXES_BY_PATH[path]
+        if suffixes and not resolved.assistantSettingKeyPatterns then
+            resolved.assistantSettingKeyPatterns = {}
+            for i = 1, #suffixes do
+                resolved.assistantSettingKeyPatterns[i] = "^fontScope%.[%w_]+%." .. suffixes[i] .. "$"
+            end
+        end
+    end
+    return ControlMeta("opt_fonts", "global", path, classification, resolved)
 end
 local function RGB(r, g, b, a)
     return { r or 1, g or 1, b or 1, a or 1 }
@@ -288,6 +332,15 @@ local function BuildFonts(ctx)
         end
         return active
     end
+    local function RefreshFontsPage(reason)
+        if M.RequestRefresh then
+            M.RequestRefresh(ctx, reason)
+        elseif M.Refresh then
+            M.Refresh(ctx)
+        elseif M.SelectPage then
+            M.SelectPage(ctx.key)
+        end
+    end
     GP.BuildScopeOverrideSection(ctx, b, {
         values = scopeValues,
         selectorMeta = Meta("scope.selector", "ephemeral"),
@@ -314,7 +367,7 @@ local function BuildFonts(ctx)
                 if v and IsGFScope(key) then SeedGFNameShorteningFromShared() end
                 ApplyFonts("MSUF2_FONT_OVERRIDE")
             end
-            if M.SelectPage then M.SelectPage(ctx.key) end
+            RefreshFontsPage("fonts-scope-override")
         end,
         activeLabels = ActiveFontOverrideLabels,
         heightPad = 34,
@@ -324,7 +377,7 @@ local function BuildFonts(ctx)
                 if key ~= "shared" then ScopeSetOverride(key, "fontOverride", false) end
             end
             ApplyFonts("MSUF2_FONT_RESET_OVERRIDES")
-            if M.SelectPage then M.SelectPage(ctx.key) end
+            RefreshFontsPage("fonts-reset-overrides")
         end,
         hint = "Shared baseline plus per-unit and group-frame font overrides.",
         updateHint = function(hint, current, active, shared)

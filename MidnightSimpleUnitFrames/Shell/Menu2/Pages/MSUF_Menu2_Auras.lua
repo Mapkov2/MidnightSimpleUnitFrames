@@ -130,7 +130,7 @@ local function AuraCatalogPageKey(value, fallback)
     local token = tostring(value or ""):lower():gsub("[^%w_%-]+", "-"):gsub("^%-+", ""):gsub("%-+$", "")
     return token ~= "" and token or (fallback or "auras")
 end
-local function AuraControlMeta(ctx, path, classification)
+local function AuraControlMeta(ctx, path, classification, assistantContract)
     path = tostring(path or "control"):lower():gsub("[^%w%._/-]+", "-")
     path = path:gsub("/", "."):gsub("^%.+", ""):gsub("%.+$", "")
     local pageKey = AuraCatalogPageKey(ctx and ctx.key or M.activeKey, "auras")
@@ -143,6 +143,21 @@ local function AuraControlMeta(ctx, path, classification)
         classification = classification or "setting",
         ephemeral = classification == "ephemeral" or nil,
     }
+    if type(assistantContract) == "string" and assistantContract ~= "" then
+        meta.settingKey = assistantContract
+    elseif type(assistantContract) == "table" then
+        meta.settingKey = assistantContract.settingKey
+        meta.assistantDisposition = assistantContract.assistantDisposition
+        meta.assistantDispositionReason = assistantContract.assistantDispositionReason
+        meta.assistantSettingKeys = assistantContract.assistantSettingKeys
+        meta.assistantSettingKeyPatterns = assistantContract.assistantSettingKeyPatterns
+    end
+    if (meta.classification == "setting" or meta.classification == "action")
+        and not meta.settingKey and not meta.actionKey and not meta.assistantDisposition
+    then
+        meta.assistantDisposition = "dynamic"
+        meta.assistantDispositionReason = "This Aura control targets the selected scope, lane, tool, or container on the current Aura workspace."
+    end
     return meta
 end
 local function RegisterAuraControl(ctx, widget, label, kind, path, classification, navigationKey)
@@ -531,6 +546,7 @@ local function BuildAuraStyleNav(ctx, b, scope)
     section:SetPoint("TOPLEFT", b.parent, "TOPLEFT", b.x, b.y)
     section:SetSize(b.width, h)
     section._msuf2Width = b.width
+    if W.RegisterGuidedRegion then W.RegisterGuidedRegion(ctx, section, "Aura container") end
     b.y = b.y - h - 12
     if ctx and ctx.SetContentHeight then ctx:SetContentHeight(abs(b.y) + 28) end
     local w = section._msuf2Width or b.width or 720
@@ -614,6 +630,21 @@ end
 local function GroupScopeKinds(scope)
     if scope == "party" then return "party" end
     return "raid", "mythicraid"
+end
+local function GroupAssistantSettingKeys(scope, suffix)
+    suffix = tostring(suffix or "")
+    if scope == "party" then return { "gf_party" .. suffix } end
+    -- Raid and Mythic Raid share this Menu2 Aura editor and each write fans out
+    -- to both backing scopes.  Retain both finite identities so exact guidance
+    -- reaches the same reviewed dynamic control from either Registry setting.
+    return { "gf_raid" .. suffix, "gf_mythicraid" .. suffix }
+end
+local function GroupAssistantBlacklistSettingKeys(scope, suffix)
+    suffix = tostring(suffix or "")
+    if scope == "party" then return { "gf_party" .. suffix } end
+    -- Raid/Mythic share this editor and backing blacklist operation, but the
+    -- Assistant Registry intentionally exposes one canonical Raid list key.
+    return { "gf_raid" .. suffix }
 end
 local function GroupConf(kind)
     if type(GP.Conf) == "function" then return GP.Conf(kind) end
@@ -2097,7 +2128,8 @@ local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
     local enable = BindSwitch(ctx, section, "Visible", 24, -62, 104,
         function() return UnitLaneShown(unit, kind) end,
         function(v) SetUnitLaneShown(ctx, unit, kind, v, "AURAS3_UNIT_PAGE_" .. (kind == "buff" and "BUFFS" or "DEBUFFS")) end,
-        AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(kind) .. ".layout.visible"))
+        AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(kind) .. ".layout.visible", nil,
+            "auras3." .. unit .. "." .. kind .. ".visible"))
     enable._msuf2GroupFrameGateAlwaysEnabled = true
     local dropdownW = max(180, floor((inner - 126 - gap * 2) / 2))
     local anchorX = 24 + 126 + gap
@@ -2136,7 +2168,7 @@ local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
         function(v) Model.WriteNumber(unit, "spacing", v, 0, 64); ApplyUnit(ctx, unit, "AURAS3_UNIT_SPACING") end, "spacing")
     Number("Layer", 3, -146, 0, 30, function() return type(Model.ReadLaneLayer) == "function" and Model.ReadLaneLayer(unit, kind) or (kind == "buff" and 5 or 6) end,
         function(v) if type(Model.WriteLaneLayer) == "function" then Model.WriteLaneLayer(unit, kind, v); ApplyUnit(ctx, unit, "AURAS3_UNIT_LAYER") end end, "layer")
-    W.Text(section, "Drag the live preview for fast placement; use these values for exact alignment.", 24 + (col4 + gap) * 3, -154, col4, T.colors.muted)
+    W.Text(section, "Move the colored Preview handle; Live Tracked is display-only.", 24 + (col4 + gap) * 3, -154, col4, T.colors.muted)
     M.TrackRefresh(ctx, function()
         local shown = UnitLaneShown(unit, kind)
         W.SetControlEnabled(enable, true)
@@ -2158,12 +2190,16 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
             ApplyUnit(ctx, unit, "AURAS3_UNIT_FILTER_OWNERSHIP", true)
             Rebuild(ctx)
         end,
-        AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.ownership"))
+        AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.ownership", nil, {
+            assistantDisposition = "compound",
+            assistantDispositionReason = "Own filters is the inverse projection of Use Shared Rules and rebuilds the lane editor.",
+        }))
     AddTooltip(own, "Filter ownership", "Off follows Shared Blizzard filter tokens. Blacklists and Custom whitelists are always frame-specific.")
     local enabled = BindSwitch(ctx, section, "Enable filters", 24 + colW + gap, -42, colW,
         function() return Model.ScopeFiltersEnabled(unit) end,
         function(value) Model.SetScopeFiltersEnabled(unit, value); ApplyUnit(ctx, unit, "AURAS3_FILTER_ENABLE", true) end,
-        AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.enabled"))
+        AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.enabled", nil,
+            "auras3." .. unit .. ".filtersEnabled"))
     local hidePermanent = BindSwitch(ctx, section, "Hide permanent", 24 + 2 * (colW + gap), -42, colW,
         function()
             return type(Model.ReadBlacklistHidePermanent) == "function"
@@ -2175,7 +2211,8 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
                 ApplyUnit(ctx, unit, "AURAS3_HIDE_PERMANENT", true)
             end
         end,
-        AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.hide-permanent"))
+        AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.hide-permanent", nil,
+            "auras3." .. unit .. "." .. lane .. ".blacklist.hidePermanent"))
     AddTooltip(hidePermanent, "Hide permanent auras", "Always excludes auras without a duration, even when Blizzard token filters are disabled.")
     local specs = lane == "buff" and {
         { "Only mine", "onlyMine", "Only auras applied by the player." },
@@ -2206,7 +2243,8 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
                 ApplyUnit(ctx, unit, "AURAS3_FILTER_" .. lane .. "_" .. spec[2], true)
                 if spec[4] then QueueAurasPageRefresh(ctx, "auras-filter-conflict") end
             end,
-            AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".filters." .. AuraCatalogToken(spec[2])))
+            AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".filters." .. AuraCatalogToken(spec[2]), nil,
+                "auras3." .. unit .. "." .. lane .. ".filter." .. spec[2]))
         AddTooltip(control, spec[1], spec[3])
         filterControls[#filterControls + 1] = control
     end
@@ -2214,7 +2252,8 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
         local exclusive = BindDropdown(ctx, section, "Exclusive", 24 + 2 * (colW + gap), -92, DEBUFF_EXCLUSIVE, colW * 2 + gap,
             function() return Model.ReadFilter(unit, lane, "exclusive", "none") end,
             function(value) Model.WriteFilter(unit, lane, "exclusive", value or "none"); ApplyUnit(ctx, unit, "AURAS3_FILTER_DEBUFF_EXCLUSIVE", true) end,
-            AuraControlMeta(ctx, "unit-workspace.lane.debuff.filters.exclusive"))
+            AuraControlMeta(ctx, "unit-workspace.lane.debuff.filters.exclusive", nil,
+                "auras3." .. unit .. ".debuff.filter.exclusive"))
         filterControls[#filterControls + 1] = exclusive
     end
     M.TrackRefresh(ctx, function()
@@ -2258,7 +2297,8 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
                 ApplyUnit(ctx, unit, "AURAS3_HIDE_PERMANENT", true)
             end
         end,
-        AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.hide-permanent"))
+        AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.hide-permanent", nil,
+            "auras3." .. unit .. "." .. lane .. ".blacklist.hidePermanent"))
     AddTooltip(hidePermanent, "Hide permanent auras", "Always excludes auras without a duration. This rule is applied after the blacklist.")
     local presetW = max(150, floor(inner * 0.22))
     local spellW = max(210, floor(inner * 0.30))
@@ -2369,8 +2409,14 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
                 QueueGroupScope(scope, "visual")
             end
         end,
-        AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.hide-permanent"))
+        AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.hide-permanent", nil, {
+            assistantDisposition = "dynamic",
+            assistantDispositionReason = "This control targets the selected Group scope and Aura lane.",
+            assistantSettingKeys = GroupAssistantBlacklistSettingKeys(scope,
+                ".auras." .. lane .. ".blacklist.hidePermanent"),
+        }))
     AddTooltip(hidePermanent, "Hide permanent auras", "Always excludes auras without a duration.")
+    local selectedFilterToken = CanonicalGroupFilterValue((GFReadGroup(scope, lane) or {}).filterToken or "ALL")
     for i = 1, #values do
         local item = values[i]
         local col = (i - 1) % 4
@@ -2387,7 +2433,13 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
                 GFWriteGroupValue(scope, lane, "filterToken", value, "visual")
                 QueueAurasPageRefresh(ctx, "group-native-filter-choice")
             end,
-            AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.native." .. AuraCatalogToken(item.value)))
+            AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.native." .. AuraCatalogToken(item.value), nil,
+                item.value == selectedFilterToken and {
+                    assistantDisposition = "dynamic",
+                    assistantDispositionReason = "The active native-filter choice represents Filter Token for the selected Group scope and Aura lane.",
+                    assistantSettingKeys = GroupAssistantSettingKeys(scope,
+                        ".auras." .. lane .. ".filterToken"),
+                } or nil))
         AddTooltip(control, item.text or item.value, "Native Blizzard AuraContainer content rule. Only one rule is active at a time.")
     end
 end
@@ -2572,6 +2624,7 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
     local auraBuilder = CreateNestedAuraBuilder(ctx, builder, outer)
     local top = auraBuilder:Section("", 104)
     if top.title then top.title:Hide() end
+    if top._msuf2GuidedRegion then top._msuf2GuidedRegion.label = "Aura container and tools" end
     local sectionW = top._msuf2Width or auraBuilder.width or 720
     local containerBar = RegisterAuraChoiceBar(ctx, W.ScopeOverrideBar(ctx, top, {
         values = UNIT_AURA_WORKSPACE_TABS,
@@ -2817,7 +2870,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                 end,
                 AuraControlMeta(ctx, "custom-container.layout." .. AuraCatalogToken(spec[2])))
         end
-        W.Text(section, "Drag the Custom handle in the live preview, then fine-tune here.", 24 + 3 * (col4 + gap4), -154, col4, T.colors.muted)
+        W.Text(section, "Move the colored Custom handle; Live and dummy previews are display-only.", 24 + 3 * (col4 + gap4), -154, col4, T.colors.muted)
         return
     end
 

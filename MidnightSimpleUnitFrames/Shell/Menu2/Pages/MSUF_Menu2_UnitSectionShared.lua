@@ -44,6 +44,10 @@ local function RegisterSharedControl(widget, opts, suffix, label, kind, classifi
     local meta = SharedControlMeta(opts, suffix, classification)
     if not (widget and meta and type(M.RegisterSearchWidget) == "function") then return widget end
     meta.label, meta.kind = label, kind
+    if meta.classification == "setting" or meta.classification == "action" then
+        meta.assistantDisposition = opts.assistantDisposition
+        meta.assistantDispositionReason = opts.assistantDispositionReason
+    end
     M.RegisterSearchWidget(widget, meta)
     return widget
 end

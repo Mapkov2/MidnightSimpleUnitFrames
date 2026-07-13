@@ -38,12 +38,26 @@ function Bridge.RunSearchInputQuery(query, openPage)
     SearchCall("RunInputQuery", query, openPage)
 end
 function Bridge.OpenSearchResults(query)
-    SearchCall("OpenResults", query)
+    return SearchCall("OpenResults", query)
+end
+function Bridge.RunSearchQuery(query)
+    query = tostring(query or "")
+    local searchBox = M.nav and M.nav.searchBox
+    if searchBox and type(searchBox.SetText) == "function" then
+        searchBox._msuf2SearchInternal = true
+        searchBox:SetText(query)
+        searchBox._msuf2SearchInternal = nil
+        if type(searchBox.ClearFocus) == "function" then searchBox:ClearFocus() end
+    end
+    local called, result = SearchCall("OpenResults", query)
+    if not called then return false, "Menu search is not available in this build." end
+    if result == false then return false, "Menu search could not open that query." end
+    return true, query
 end
 local function ExactSettingDescriptor(exactTarget)
     if type(exactTarget) ~= "table" then return exactTarget end
     local settingKey = tostring(exactTarget.settingKey or "")
-    if settingKey == "" or exactTarget.attribute or exactTarget.dbPath or exactTarget.type then return exactTarget end
+    if settingKey == "" then return exactTarget end
     -- The Assistant companion is load-on-demand.  Read only its already-loaded
     -- descriptor at the moment the user asks to open a setting; Menu2 never
     -- loads the companion and retains none of its registry tables.
@@ -53,13 +67,11 @@ local function ExactSettingDescriptor(exactTarget)
     if type(setting) ~= "table" then return exactTarget end
     local descriptor = {}
     for key, value in pairs(exactTarget) do descriptor[key] = value end
-    descriptor.attribute = setting.attribute
-    descriptor.dbPath = setting.dbPath
-    descriptor.type = setting.type
-    descriptor.label = setting.label
-    descriptor.category = setting.category
-    descriptor.unit = setting.unit
-    descriptor.frameType = setting.frameType
+    local fields = { "attribute", "dbPath", "type", "label", "category", "unit", "frameType" }
+    for i = 1, #fields do
+        local key = fields[i]
+        if descriptor[key] == nil then descriptor[key] = setting[key] end
+    end
     return descriptor
 end
 function Bridge.OpenSearchTarget(pageKey, query, fallback, preferredAnchor, route, exactTarget)

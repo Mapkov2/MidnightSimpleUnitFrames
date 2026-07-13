@@ -2,10 +2,6 @@
 -- UI construction stays here; profile/runtime mutations route through shared Menu2 or Assistant helpers.
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local T = M.Theme
@@ -19,7 +15,6 @@ local max = math.max
 local min = math.min
 local CreateFrame = _G.CreateFrame
 local CreateColor = _G.CreateColor
-local MOVED_FRAME_DEFAULTS = { player = { -256, -180 }, target = { 320, -180 }, focus = { -260, -300 }, targettarget = { 220, -300 }, pet = { -275, -250 }, boss = { 360, 230 }, gf_party = { -400, 0 }, gf_raid = { -500, 0 }, gf_mythicraid = { -500, 0 } }
 local function NormalizeControlPath(value)
     local path = tostring(value or "")
     path = path:gsub("([%l%d])([%u])", "%1_%2"):lower()
@@ -51,6 +46,11 @@ local function RegisterDashboardControl(widget, meta, label, kind, values)
     payload.values = values or payload.values
     local direct = DASHBOARD_DIRECT_BY_ID and DASHBOARD_DIRECT_BY_ID[payload.controlId]
     if direct then
+        payload.settingKey = payload.settingKey or (direct.meta and direct.meta.settingKey)
+        payload.actionKey = payload.actionKey or (direct.meta and direct.meta.actionKey)
+        payload.assistantDisposition = payload.assistantDisposition or (direct.meta and direct.meta.assistantDisposition)
+        payload.assistantDispositionReason = payload.assistantDispositionReason
+            or (direct.meta and direct.meta.assistantDispositionReason)
         payload.confirmRequired = direct.confirmRequired == true or payload.confirmRequired == true
         if not payload.help then payload.help = direct.help end
         if not payload.blockCombat and direct.command then payload.blockCombat = direct.command.blockCombat end
@@ -179,39 +179,6 @@ local function DirectCopyLink(title, url)
     _G.MSUF_ShowCopyLink(title, url)
     return true
 end
-local function DirectBugReport()
-    return type(M.BugReport) == "table" and M.BugReport or nil
-end
-local function DirectOpenManualBugReport()
-    local bug = DirectBugReport()
-    if bug and type(bug.OpenManual) == "function" then bug.OpenManual(); return true end
-    if type(M.SetMenuStateValue) == "function" then M.SetMenuStateValue("dashboardBugReportOpen", true); return true end
-    return false
-end
-local function DirectBugDescription()
-    local bug = DirectBugReport()
-    if not (bug and type(bug.GetManualIssue) == "function") then return "" end
-    local ok, _, description = pcall(bug.GetManualIssue)
-    return ok and tostring(description or "") or ""
-end
-local function DirectSetBugDescription(value)
-    local bug = DirectBugReport()
-    if not (bug and type(bug.SetManualIssue) == "function") then return false end
-    bug.SetManualIssue(nil, tostring(value or ""))
-    return DirectBugDescription() == tostring(value or "")
-end
-local function DirectShowBugReport()
-    local bug = DirectBugReport()
-    if not (bug and type(bug.BuildText) == "function") then return false end
-    local ok, report = pcall(bug.BuildText, { includeLoadedAddons = true })
-    return ok and type(report) == "string" and report ~= "" and DirectCopyLink("MSUF Bug Report", report) or false
-end
-local function DirectClearBugReport()
-    local bug = DirectBugReport()
-    if not (bug and type(bug.Clear) == "function") then return false end
-    bug.Clear()
-    return true
-end
 local function DirectAction(setter, combatLocked)
     local command = { kind = "button", set = setter, historyMode = "none" }
     if combatLocked then command.blockCombat = DirectCombatLocked end
@@ -221,83 +188,63 @@ end
 local DASHBOARD_DIRECT_SPECS = {
     {
         path = "scaling.global_ui.percent", label = "Global UI Scale", kind = "slider", classification = "setting",
+        settingKey = "general.globalUiScale",
         help = "Reads and applies the global WoW UI scale percentage directly.",
         command = { kind = "slider", min = 30, max = 150, step = 1, percentIsValue = true,
             get = DirectGlobalScalePercent, set = DirectSetGlobalScalePercent, blockCombat = DirectCombatLocked },
     },
     {
         path = "scaling.msuf_frames.percent", label = "MSUF Frame Scale", kind = "slider", classification = "setting",
+        settingKey = "general.msufUiScale",
         help = "Reads and applies the MSUF unit-frame scale percentage directly.",
         command = { kind = "slider", min = 25, max = 150, step = 5, percentIsValue = true,
             get = DirectMSUFScalePercent, set = DirectSetMSUFScalePercent, blockCombat = DirectCombatLocked },
     },
     {
         path = "scaling.menu.percent", label = "MSUF Menu Scale", kind = "slider", classification = "setting",
+        settingKey = "general.slashMenuScale",
         help = "Reads and applies the MSUF configuration-menu scale percentage directly.",
         command = { kind = "slider", min = 25, max = 150, step = 5, percentIsValue = true,
             get = DirectMenuScalePercent, set = DirectSetMenuScalePercent, blockCombat = DirectCombatLocked },
     },
-    { path = "display_recovery.reset_positions", label = "Reset Positions", classification = "action",
+    { path = "display_recovery.reset_positions", label = "Reset Positions", classification = "action", actionKey = "reset_all_unit_positions",
         command = DirectAction(function() return DirectRunSlash("reset") end, true) },
-    { path = "display_recovery.copy_wago_link", label = "Wago Profiles", classification = "action",
+    { path = "display_recovery.copy_wago_link", label = "Wago Profiles", classification = "action", actionKey = "copy_wago_profiles_link",
         command = DirectAction(function() return DirectCopyLink("Wago MSUF Profiles", "https://wago.io/search/imports/wow/msuf") end) },
-    { path = "display_recovery.print_help", label = "Print Help", classification = "action",
+    { path = "display_recovery.print_help", label = "Print Help", classification = "action", actionKey = "assistant_help",
         command = DirectAction(function() return DirectRunSlash("help") end) },
-    { path = "display_recovery.copy_discord_link", label = "Discord", classification = "action",
+    { path = "display_recovery.copy_discord_link", label = "Discord", classification = "action", actionKey = "copy_support_link",
         command = DirectAction(function() return DirectCopyLink("Discord", "https://discord.gg/2Gf9b2Wprz") end) },
-    { path = "display_recovery.factory_reset_all", label = "Factory Reset All", classification = "action", confirmRequired = true,
+    { path = "display_recovery.factory_reset_all", label = "Factory Reset All", classification = "action", actionKey = "factory_reset_all", confirmRequired = true,
         command = DirectAction(function() return type(M.StageFactoryReset) == "function" and M.StageFactoryReset() or false end, true) },
-    { path = "scaling.global_ui.preset.1080p", label = "1080p", classification = "action",
+    { path = "scaling.global_ui.preset.1080p", label = "1080p", classification = "action", actionKey = "apply_global_scale_preset",
         command = DirectAction(function() return DirectSetGlobalScale(true, 768 / 1080, "1080p") end, true) },
-    { path = "scaling.global_ui.preset.1440p", label = "1440p", classification = "action",
+    { path = "scaling.global_ui.preset.1440p", label = "1440p", classification = "action", actionKey = "apply_global_scale_preset",
         command = DirectAction(function() return DirectSetGlobalScale(true, 768 / 1440, "1440p") end, true) },
-    { path = "scaling.global_ui.preset.4k", label = "4K", classification = "action",
+    { path = "scaling.global_ui.preset.4k", label = "4K", classification = "action", actionKey = "apply_global_scale_preset",
         command = DirectAction(function() return DirectSetGlobalScale(true, 768 / 2160, "4k") end, true) },
-    { path = "scaling.global_ui.preset.pixel", label = "Pixel", classification = "action",
+    { path = "scaling.global_ui.preset.pixel", label = "Pixel", classification = "action", actionKey = "apply_global_scale_preset",
         command = DirectAction(function() return DirectSetGlobalScale(true, DirectPixelScale(), "pixel") end, true) },
-    { path = "scaling.global_ui.apply", label = "Apply Global UI Scale", classification = "action",
+    { path = "scaling.global_ui.apply", label = "Apply Global UI Scale", classification = "action", actionKey = "dashboard.globalUiScale.apply",
         command = DirectAction(function()
             local db, ui = DirectGlobalState()
             return db and DirectSetGlobalScale(ui.Enabled, ui.Scale, db.globalUiScalePreset) or false
         end, true) },
-    { path = "scaling.global_ui.revert_pending", label = "Revert Global UI Scale", classification = "action",
+    { path = "scaling.global_ui.revert_pending", label = "Revert Global UI Scale", classification = "action", actionKey = "dashboard.globalUiScale.revertPending",
         command = DirectAction(function() return true end) },
-    { path = "scaling.global_ui.select_off", label = "Disable Global UI Scale", classification = "action",
+    { path = "scaling.global_ui.select_off", label = "Disable Global UI Scale", classification = "action", actionKey = "dashboard.globalUiScale.disable",
         command = DirectAction(function()
             local _, ui = DirectGlobalState()
             return ui and DirectSetGlobalScale(false, ui.Scale, "auto") or false
         end, true) },
-    { path = "scaling.msuf_frames.apply", label = "Apply MSUF Frame Scale", classification = "action",
+    { path = "scaling.msuf_frames.apply", label = "Apply MSUF Frame Scale", classification = "action", actionKey = "dashboard.msufFrameScale.apply",
         command = DirectAction(function() return DirectSetMSUFScalePercent(DirectMSUFScalePercent()) end, true) },
-    { path = "scaling.msuf_frames.revert_pending", label = "Revert MSUF Frame Scale", classification = "action",
+    { path = "scaling.msuf_frames.revert_pending", label = "Revert MSUF Frame Scale", classification = "action", actionKey = "dashboard.msufFrameScale.revertPending",
         command = DirectAction(function() return true end) },
-    { path = "scaling.menu.apply", label = "Apply MSUF Menu Scale", classification = "action",
+    { path = "scaling.menu.apply", label = "Apply MSUF Menu Scale", classification = "action", actionKey = "dashboard.menuScale.apply",
         command = DirectAction(function() return DirectSetMenuScalePercent(DirectMenuScalePercent()) end, true) },
-    { path = "scaling.menu.revert_pending", label = "Revert MSUF Menu Scale", classification = "action",
+    { path = "scaling.menu.revert_pending", label = "Revert MSUF Menu Scale", classification = "action", actionKey = "dashboard.menuScale.revertPending",
         command = DirectAction(function() return true end) },
-    { path = "bug_report.install_bugsack", label = "BugSack", classification = "action",
-        command = DirectAction(function()
-            return DirectCopyLink("BugSack", "https://www.curseforge.com/wow/addons/bugsack")
-        end) },
-    { path = "bug_report.open_manual", label = "Report issue", classification = "action",
-        command = DirectAction(DirectOpenManualBugReport) },
-    { path = "bug_report.manual_description", label = "Bug report description", kind = "textinput",
-        classification = "ephemeral", useDirectCommandWithWidget = true,
-        command = { kind = "textinput", historyMode = "none", get = DirectBugDescription, set = DirectSetBugDescription } },
-    { path = "bug_report.select_text", label = "Select bug report", classification = "action",
-        command = DirectAction(DirectShowBugReport) },
-    { path = "bug_report.copy_github_link", label = "GitHub issue", classification = "action",
-        command = DirectAction(function()
-            return DirectCopyLink("GitHub Issue", "https://github.com/Mapkov2/MidnightSimpleUnitFrames/issues/new")
-        end) },
-    { path = "bug_report.copy_discord_link", label = "Discord", classification = "action",
-        command = DirectAction(function() return DirectCopyLink("Discord", "https://discord.gg/2Gf9b2Wprz") end) },
-    { path = "bug_report.copy_curseforge_link", label = "CurseForge", classification = "action",
-        command = DirectAction(function()
-            return DirectCopyLink("CurseForge", "https://www.curseforge.com/wow/addons/midnightsimpleunitframes")
-        end) },
-    { path = "bug_report.clear", label = "Clear bug report", classification = "action",
-        command = DirectAction(DirectClearBugReport) },
 }
 for i = 1, #DASHBOARD_DIRECT_SPECS do
     local spec = DASHBOARD_DIRECT_SPECS[i]
@@ -305,15 +252,35 @@ for i = 1, #DASHBOARD_DIRECT_SPECS do
         label = spec.label,
         kind = spec.kind or "button",
         help = spec.help,
+        settingKey = spec.settingKey,
+        actionKey = spec.actionKey,
         confirmRequired = spec.confirmRequired == true,
         historyMode = spec.command and spec.command.historyMode,
         command = spec.command,
     })
 end
 DASHBOARD_DIRECT_BY_ID = {}
+local DASHBOARD_DIRECT_BY_ACTION = {}
 for i = 1, #DASHBOARD_DIRECT_SPECS do
     local spec = DASHBOARD_DIRECT_SPECS[i]
     DASHBOARD_DIRECT_BY_ID[spec.meta.controlId] = spec
+    if type(spec.actionKey) == "string" and spec.actionKey ~= "" then
+        DASHBOARD_DIRECT_BY_ACTION[spec.actionKey] = spec
+    end
+end
+function M.RunDashboardDirectAction(actionKey)
+    local spec = DASHBOARD_DIRECT_BY_ACTION[tostring(actionKey or "")]
+    local command = spec and spec.command
+    if not (command and type(command.set) == "function") then
+        return false, "That Dashboard action is not available in this menu build."
+    end
+    if type(command.blockCombat) == "function" and command.blockCombat() == true then
+        return false, "That Dashboard action is unavailable during combat."
+    end
+    local ok, result, detail = pcall(command.set)
+    if not ok then return false, "The Dashboard action failed safely: " .. tostring(result) end
+    if result == false then return false, detail or "The Dashboard action could not be completed." end
+    return true, detail or (spec and spec.label) or "Dashboard action complete."
 end
 local function RegisterDashboardDirectControls()
     if type(M.RegisterVirtualRuntimeControl) ~= "function" then return 0 end
@@ -483,18 +450,18 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
     RefreshOpenState()
 end
 local function BuildDashboardUX(ctx)
+    if type(M.BuildFirstLoadDashboardScene) == "function" and M.BuildFirstLoadDashboardScene(ctx) == true then
+        return
+    end
     -- BuildPageEntry clears the page catalog immediately before invoking us.
     -- Restore the frame-free contracts first; conditional real widgets below
     -- then promote only the controls whose disclosures are currently open.
     RegisterDashboardDirectControls()
     local root = ctx.wrapper
     local width = ctx.width or 760
-    local x0, y0, gap = 12, -12, 16
+    local x0, y0 = 12, -12
     local layoutW = max(1, width - x0)
-    local sideBySide = layoutW >= 760
-    local sideW = sideBySide and min(330, max(300, math.floor(layoutW * 0.31))) or layoutW
-    local mainW = sideBySide and (layoutW - sideW - gap) or layoutW
-    local sideX = sideBySide and (x0 + mainW + gap) or x0
+    local mainW = layoutW
     local function Card(parent, title, x, y, w, h, bg, border)
         bg = bg or T.colors.panel2
         border = border or T.colors.cardBorder or T.colors.borderSoft
@@ -600,37 +567,6 @@ local function BuildDashboardUX(ctx)
             bodyColor = { 0.85, 0.85, 0.85 },
         }) or frame
     end
-    local function MakeDashboardActionCard(card, title, tooltip, onClick, showArrow, semanticPath, classification, exact)
-        if not (card and card.CreateTexture and card.HookScript) then return card end
-        card:EnableMouse(true)
-        local hover = card:CreateTexture(nil, "BORDER", nil, 4)
-        hover:SetPoint("TOPLEFT", card, "TOPLEFT", 2, -2)
-        hover:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -2, 2)
-        hover:SetColorTexture(T.colors.coreBlue[1], T.colors.coreBlue[2], T.colors.coreBlue[3], 0.045)
-        hover:Hide()
-        card._msuf2DashboardActionHover = hover
-        if showArrow then
-            local arrow = T.Font(card, "GameFontNormal", ">", T.colors.dim)
-            arrow:SetPoint("TOPRIGHT", card, "TOPRIGHT", -16, -18)
-            arrow:SetJustifyH("RIGHT")
-            card._msuf2DashboardActionArrow = arrow
-        end
-        card:HookScript("OnEnter", function(self)
-            if self._msuf2DashboardActionHover then self._msuf2DashboardActionHover:Show() end
-            local arrow = self._msuf2DashboardActionArrow
-            if arrow and arrow.SetTextColor then arrow:SetTextColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 1) end
-        end)
-        card:HookScript("OnLeave", function(self)
-            if self._msuf2DashboardActionHover then self._msuf2DashboardActionHover:Hide() end
-            local arrow = self._msuf2DashboardActionArrow
-            if arrow and arrow.SetTextColor then arrow:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], T.colors.dim[4] or 1) end
-        end)
-        if onClick then card:SetScript("OnMouseUp", onClick) end
-        AddTooltip(card, title, tooltip)
-        RegisterDashboardControl(card, DashboardMeta(semanticPath, classification or "action", exact), title, "card")
-        return card
-    end
-    local function Select(pageKey) M.CallIf(M.SelectPage, pageKey) end
     local function IsDashboardEditModeActive()
         return M.IsMSUFEditModeActive(true)
     end
@@ -690,58 +626,6 @@ local function BuildDashboardUX(ctx)
     M.StartNewAssistantTask = StartNewAssistantTask
     local function CopyWagoLink()
         if type(_G.MSUF_ShowCopyLink) == "function" then _G.MSUF_ShowCopyLink("Wago MSUF Profiles", "https://wago.io/search/imports/wow/msuf") end
-    end
-    local function DashboardGlobalState()
-        ExportPublic("MSUF_GlobalDB", _G.MSUF_GlobalDB or {})
-        local gdb = _G.MSUF_GlobalDB
-        gdb.global = (type(gdb.global) == "table") and gdb.global or {}
-        gdb.global.dashboard = (type(gdb.global.dashboard) == "table") and gdb.global.dashboard or {}
-        return gdb.global.dashboard
-    end
-    local function ActiveProfileKey()
-        local key = tostring(_G.MSUF_ActiveProfile or "Default")
-        if key == "" then key = "Default" end
-        return key
-    end
-    local function WagoBackupConfirmed()
-        local dash = DashboardGlobalState()
-        local byProfile = dash.wagoProfileBackupConfirmed
-        return type(byProfile) == "table" and byProfile[ActiveProfileKey()] == true
-    end
-    local function SetWagoBackupConfirmed(confirmed)
-        local dash = DashboardGlobalState()
-        dash.wagoProfileBackupConfirmed = (type(dash.wagoProfileBackupConfirmed) == "table") and dash.wagoProfileBackupConfirmed or {}
-        local byProfile = dash.wagoProfileBackupConfirmed
-        if confirmed == true then
-            byProfile[ActiveProfileKey()] = true
-        else
-            byProfile[ActiveProfileKey()] = nil
-        end
-    end
-    local function RefreshDashboard()
-        M.CallIf(M.InvalidatePage, "home")
-        M.CallIf(M.SelectPage, "home")
-    end
-    local function ConfirmWagoBackup()
-        if WagoBackupConfirmed() then return end
-        local function accept()
-            SetWagoBackupConfirmed(true)
-            RefreshDashboard()
-        end
-        if _G.StaticPopupDialogs and _G.StaticPopup_Show then
-            local popup = M.InstallStaticPopup("MSUF2_WAGO_PROFILE_BACKUP_CONFIRM", {
-                text = "%s",
-                button1 = _G.YES or "Yes",
-                button2 = _G.NO or "No",
-                OnAccept = accept,
-            })
-            popup.button1 = _G.YES or "Yes"
-            popup.button2 = _G.NO or "No"
-            popup.OnAccept = accept
-            _G.StaticPopup_Show("MSUF2_WAGO_PROFILE_BACKUP_CONFIRM", M.Tr("Have you backed up this MSUF profile before using the Wago MSUF page?"))
-            return
-        end
-        accept()
     end
     local function Percent(value, fallback)
         return math.floor(((tonumber(value) or fallback or 1) * 100) + 0.5)
@@ -804,25 +688,6 @@ local function BuildDashboardUX(ctx)
         ui.Scale = Clamp(ui.Scale, 0.3, 1.5)
         return g, ui
     end
-    local function HasMovedFramesInEditMode()
-        local g = M.GetGeneralDB and M.GetGeneralDB()
-        if type(g) == "table" and g.hasMovedFramesInEditMode == true then return true end
-        local st = rawget(_G, "MSUF_EditState")
-        if type(st) == "table" and st.hasMovedFramesInEditMode == true then return true end
-        local db = M.EnsureDB and M.EnsureDB() or _G.MSUF_DB
-        if type(db) ~= "table" then return false end
-        for key, def in pairs(MOVED_FRAME_DEFAULTS) do
-            local conf = db[key]
-            if type(conf) == "table" then
-                local x, y = tonumber(conf.offsetX), tonumber(conf.offsetY)
-                if x and y and (math.abs(x - def[1]) > 0.5 or math.abs(y - def[2]) > 0.5) then
-                    if type(g) == "table" then g.hasMovedFramesInEditMode = true end
-                    return true
-                end
-            end
-        end
-        return false
-    end
     local function RunMSUFSlashCommand(message)
         local slash = _G.SlashCmdList and _G.SlashCmdList["MIDNIGHTSUF"]
         if type(slash) ~= "function" then return false end
@@ -832,6 +697,45 @@ local function BuildDashboardUX(ctx)
     M.dashboardEditModeButton = nil
     M.TrackRefresh(ctx, RefreshDashboardEditModeButtonSafe)
     local mainTop = y0
+
+    -- The complete setup remains available after onboarding. Keep this
+    -- launcher deliberately compact; the persistent progress bar itself lives
+    -- in the window chrome while the tour is active.
+    local tour = MSUF and MSUF.GuidedTour6
+    local tourState = type(tour) == "table" and type(tour.GetState) == "function" and tour:GetState() or nil
+    local tourActive = type(tourState) == "table" and tourState.status == "active"
+    local tourCompleted = type(tourState) == "table" and tourState.status == "completed"
+    local launcherNarrow = mainW < 520
+    local launcherH = launcherNarrow and 126 or 78
+    local launcher = Card(root, "", x0, mainTop, mainW, launcherH, T.colors.panel2, T.colors.borderSoft)
+    Kicker(launcher, tourActive and "GUIDED SETUP IN PROGRESS" or (tourCompleted and "GUIDED SETUP COMPLETE" or "GUIDED SETUP"), 16, -14)
+    local launcherTitle = tourActive and "Continue your MSUF setup"
+        or (tourCompleted and "Review or run the guided setup again" or "Set up every part of MSUF with guidance")
+    local title = T.Font(launcher, "GameFontNormal", M.Tr(launcherTitle), T.colors.text)
+    title:SetPoint("TOPLEFT", launcher, "TOPLEFT", 16, -34)
+    title:SetWidth(max(120, mainW - (launcherNarrow and 32 or 230)))
+    title:SetJustifyH("LEFT")
+    if tourActive then
+        local total = tonumber(M.guidedTourStageCount) or 23
+        local current = min(total, max(1, tonumber(tourState.currentStageIndex) or 1))
+        local step = T.Font(launcher, "GameFontDisableSmall", M.Format("Step %d of %d", current, total), T.colors.muted)
+        step:SetPoint("TOPLEFT", launcher, "TOPLEFT", 16, launcherNarrow and -70 or -57)
+    end
+    local actionText = tourActive and "Resume guided setup" or (tourCompleted and "Run guided setup again" or "Start guided setup")
+    local actionX = launcherNarrow and 16 or (mainW - 196)
+    local actionY = launcherNarrow and -92 or -27
+    local actionW = launcherNarrow and min(196, mainW - 32) or 180
+    local action = Button(launcher, actionText, actionX, actionY, actionW, 30, function()
+        if M.BlockCombatAction and M.BlockCombatAction() then return end
+        if tourActive and type(M.ResumeGuidedTour) == "function" then
+            M.ResumeGuidedTour()
+        elseif type(M.StartGuidedTour) == "function" then
+            M.StartGuidedTour({ source = "dashboard", restart = tourCompleted })
+        end
+    end, "primary", "guided_setup.start_or_resume", "action", { actionKey = "guided_setup" })
+    M.CallIf(T.AttachNavIcon, action, "home", false, true)
+
+    mainTop = mainTop - launcherH - 10
     local tinyHero = mainW < 390
     local heroH = tinyHero and 398 or (mainW < 560 and 382 or 360)
     local hero = Card(root, "", x0, mainTop, mainW, heroH, T.colors.glassHost, T.colors.cardBorder)
@@ -847,205 +751,6 @@ local function BuildDashboardUX(ctx)
         W.Text(hero, "The Assistant dashboard module is not available. Use the navigation pages and search to configure MSUF.", 22, -82, mainW - 44, T.colors.muted)
     end
     local featureBlockBottom = mainTop - heroH
-    local sideTop = sideBySide and mainTop or (featureBlockBottom - 16)
-    local checklistTop = sideTop
-    local checklistH = 236
-    local checklist = Card(root, "Setup checklist", sideX, checklistTop, sideW, checklistH)
-    M.CallIf(T.ApplyNeonEdge, checklist, "status", { variant = "card" })
-    W.Text(checklist, "Useful for first-run orientation.", 16, -38, sideW - 32, T.colors.muted)
-    local function Row(i, title, body, state, color, onClick, iconText, semanticPath, classification, exact)
-        local row = Card(checklist, "", 16, -60 - ((i - 1) * 42), sideW - 32, 36, T.colors.panel2, T.colors.borderSoft)
-        Pill(row, iconText or (i < 3 and "OK" or "!"), 10, -14, 28, color or T.colors.ok)
-        local label = T.Font(row, "GameFontNormal", M.Tr(title), T.colors.text)
-        label:SetPoint("TOPLEFT", row, "TOPLEFT", 48, -6)
-        W.Text(row, body, 48, -22, sideW - 132, T.colors.muted)
-        Pill(row, state, sideW - 86, -9, 54, color or T.colors.ok)
-        MakeDashboardActionCard(row, title, body, onClick, false, semanticPath, classification, exact)
-    end
-    local function BuildBugReportCard(x, top, width)
-        local bug = M.BugReport
-        if type(bug) ~= "table" or type(bug.GetStatus) ~= "function" then return 0 end
-        if type(bug.IsCombatDeferred) == "function" and bug.IsCombatDeferred() then return 0 end
-        local status, integration = bug.GetStatus()
-        integration = type(integration) == "table" and integration or {}
-        local autoReport = status == "has_error" or status == "dummy"
-        local manualReport = M.dashboardBugReportOpen == true
-        local hasReport = autoReport or manualReport
-        local missing = status == "missing"
-        local height = hasReport
-            and (autoReport and (width < 330 and 282 or 262) or (width < 330 and 326 or 306))
-            or (missing and 158 or 124)
-        local accent = hasReport and (T.colors.danger or T.colors.accent2)
-            or (missing and T.colors.accent2 or T.colors.ok)
-        local bg = hasReport and T.colors.glassPopup
-            or (missing and { 0.050, 0.042, 0.030, 0.68 } or T.colors.panel2)
-        local card = Card(root, "", x, top, width, height, bg, hasReport and { 0.430, 0.260, 0.300, 0.44 } or (accent or T.colors.borderSoft))
-        if hasReport then
-            M.CallIf(T.ApplyNeonEdge, card, autoReport and "error" or "warning", { variant = "popup" })
-            if autoReport and M._dashboardBugFlashStatus ~= tostring(status) then
-                M._dashboardBugFlashStatus = tostring(status)
-                M.CallIf(T.PlayNeonFlash, card, "error", { alpha = 0.24, duration = 0.85 })
-            end
-        else
-            M.CallIf(T.ApplyNeonEdge, card, missing and "warning" or "success", { variant = "card" })
-        end
-        local title = T.Font(card, "GameFontNormal", M.Tr("Bug report"), T.colors.text)
-        title:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -16)
-        local statusText = hasReport and (status == "dummy" and "test" or (autoReport and "error" or "manual"))
-            or (missing and "setup" or "clean")
-        Pill(card, statusText, width - 82, -13, 66, accent)
-        local links = type(bug.GetLinks) == "function" and bug.GetLinks() or {}
-        local function CopyLink(label, url)
-            if type(_G.MSUF_ShowCopyLink) == "function" then
-                _G.MSUF_ShowCopyLink(label, url)
-            elseif M.ShowStatusFeedback then
-                M.ShowStatusFeedback("Copy popup unavailable", "danger", 1.2)
-            end
-        end
-        local function OpenManualReport()
-            if type(bug.OpenManual) == "function" then
-                bug.OpenManual()
-            else
-                M.SetMenuStateValue("dashboardBugReportOpen", true)
-            end
-            RefreshDashboard()
-        end
-        if missing and not manualReport then
-            W.Text(card, "Install BugSack/BugGrabber to let MSUF include the captured Lua error and stacktrace automatically.", 16, -42, width - 32, T.colors.muted)
-            local bugSack = Button(card, "BugSack", 16, -92, 86, 22, function()
-                CopyLink("BugSack", links.bugsack or "https://www.curseforge.com/wow/addons/bugsack")
-            end, "primary", "bug_report.install_bugsack")
-            AddTooltip(bugSack, "BugSack", "Copies the BugSack addon page link.")
-            Button(card, "Report issue", 112, -92, 104, 22, OpenManualReport, nil, "bug_report.open_manual")
-            return height
-        end
-        if not hasReport then
-            local installText = integration.bugGrabberLoaded and "BugGrabber ready."
-                or (integration.bugSackLoaded and "BugSack ready." or "Bug helper unavailable.")
-            W.Text(card, "No MSUF errors detected. " .. installText, 16, -42, width - 32, T.colors.muted)
-            Button(card, "Report issue", 16, -82, 104, 22, OpenManualReport, "primary", "bug_report.open_manual")
-            return height
-        end
-        local bodyText = autoReport
-            and "MSUF captured the error. Three steps: select, Ctrl+C, open a link."
-            or "Describe the issue briefly. MSUF adds the technical context automatically."
-        W.Text(card, bodyText, 16, -42, width - 32, T.colors.muted)
-        local reportBox
-        local function SetManualIssue(issueType, description)
-            if type(bug.SetManualIssue) == "function" then bug.SetManualIssue(issueType, description) end
-        end
-        local selectedIssue, selectedDescription
-        if type(bug.GetManualIssue) == "function" then selectedIssue, selectedDescription = bug.GetManualIssue() end
-        local actionTop = autoReport and -78 or -116
-        if not autoReport then
-            local descBox = CreateFrame("EditBox", nil, card, "InputBoxTemplate")
-            descBox:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -76)
-            descBox:SetSize(width - 32, 30)
-            descBox:SetAutoFocus(false)
-            descBox:SetMaxLetters(240)
-            descBox:SetJustifyH("LEFT")
-            if descBox.SetFont then descBox:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 11, "") end
-            if descBox.SetTextInsets then descBox:SetTextInsets(8, 8, 0, 0) end
-            M.CallIf(T.SkinEditBox, descBox)
-            if T.StyleFontString then T.StyleFontString(descBox, T.colors.text, 0) end
-            descBox:SetText(selectedDescription or "")
-            local placeholder = descBox:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-            placeholder:SetPoint("LEFT", descBox, "LEFT", 10, 0)
-            placeholder:SetPoint("RIGHT", descBox, "RIGHT", -10, 0)
-            placeholder:SetJustifyH("LEFT")
-            placeholder:SetText(M.Tr("Optional note: what went wrong?"))
-            if placeholder.SetTextColor then placeholder:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], 0.82) end
-            if T.StyleFontString then T.StyleFontString(placeholder, { T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], 0.82 }, 0) end
-            placeholder:SetShown((selectedDescription or "") == "")
-            descBox:SetScript("OnTextChanged", function(self)
-                local text = self:GetText() or ""
-                SetManualIssue(nil, text)
-                placeholder:SetShown(text == "")
-            end)
-            descBox:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
-            descBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-            RegisterDashboardControl(descBox, DashboardMeta("bug_report.manual_description", "ephemeral", {
-                help = "Optional description added to the generated MSUF bug report.",
-            }), "Bug report description", "editbox")
-        end
-        local scroll
-        local function RefreshReportText()
-            local text = type(bug.BuildText) == "function" and bug.BuildText({ includeLoadedAddons = true }) or "Bug report unavailable."
-            if reportBox then
-                reportBox:SetText(text)
-                reportBox:SetCursorPosition(0)
-                local lineCount = 1
-                for _ in tostring(text):gmatch("\n") do lineCount = lineCount + 1 end
-                reportBox:SetHeight(max((scroll and scroll:GetHeight()) or 96, (lineCount * 13) + 24))
-                if scroll and scroll._msuf2RefreshScrollBar then scroll:_msuf2RefreshScrollBar() end
-            end
-            return text
-        end
-        local function SelectReport()
-            RefreshReportText()
-            if reportBox then
-                reportBox:SetFocus()
-                if reportBox.HighlightText then reportBox:HighlightText() end
-            end
-            M.CallIf(M.ShowStatusFeedback, "Report selected. Press Ctrl+C.", "info", 1.4)
-        end
-        local selectBtn = Button(card, "1 Select", 16, actionTop, 96, 22, SelectReport, "primary", "bug_report.select_text", "ephemeral")
-        AddTooltip(selectBtn, "Select report", "Selects the full report so it can be copied with Ctrl+C.")
-        Pill(card, "2 Ctrl+C", 120, actionTop + 1, 66, T.colors.accent2)
-        Button(card, "3 GitHub", width - 102, actionTop, 86, 22, function()
-            CopyLink("GitHub Issue", links.github or "https://github.com/Mapkov2/MidnightSimpleUnitFrames/issues/new")
-        end, "primary", "bug_report.copy_github_link")
-        Button(card, "Discord", 16, actionTop - 30, 76, 22, function()
-            CopyLink("Discord", links.discord or "https://discord.gg/2Gf9b2Wprz")
-        end, nil, "bug_report.copy_discord_link")
-        Button(card, "Curse", 100, actionTop - 30, 76, 22, function()
-            CopyLink("CurseForge", links.curseforge or "https://www.curseforge.com/wow/addons/midnightsimpleunitframes")
-        end, nil, "bug_report.copy_curseforge_link")
-        Button(card, "Clear", width - 78, actionTop - 30, 62, 22, function()
-            if type(bug.Clear) == "function" then bug.Clear() end
-            RefreshDashboard()
-        end, nil, "bug_report.clear")
-        local reportText = type(bug.BuildText) == "function" and bug.BuildText({ includeLoadedAddons = true }) or "Bug report unavailable."
-        local reportTop = actionTop - 62
-        local reportH = max(82, height + reportTop - 16)
-        scroll = CreateFrame("ScrollFrame", nil, card)
-        scroll:SetPoint("TOPLEFT", card, "TOPLEFT", 16, reportTop)
-        scroll:SetSize(width - 48, reportH)
-        reportBox = CreateFrame("EditBox", nil, scroll, "InputBoxTemplate")
-        reportBox:SetMultiLine(true)
-        reportBox:SetAutoFocus(false)
-        reportBox:SetMaxLetters(200000)
-        reportBox:SetJustifyH("LEFT")
-        reportBox:SetJustifyV("TOP")
-        reportBox:EnableMouse(true)
-        reportBox:SetWidth(width - 56)
-        if reportBox.SetFont then reportBox:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 10, "") end
-        if reportBox.SetTextInsets then reportBox:SetTextInsets(8, 8, 8, 8) end
-        M.CallIf(T.SkinEditBox, reportBox)
-        if T.StyleFontString then T.StyleFontString(reportBox, T.colors.text, 0) end
-        reportBox:SetText(reportText)
-        reportBox:SetCursorPosition(0)
-        local lines = 1
-        for _ in tostring(reportText):gmatch("\n") do lines = lines + 1 end
-        reportBox:SetHeight(max(reportH, (lines * 13) + 24))
-        reportBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-        scroll:SetScrollChild(reportBox)
-        M.CallIf(T.StyleScrollFrame, scroll, card)
-        RegisterDashboardControl(reportBox, DashboardMeta("bug_report.generated_text", "ephemeral", {
-            help = "Generated technical report text for copying to a support channel.",
-        }), "Generated bug report", "editbox")
-        return height
-    end
-    local movedFrames = HasMovedFramesInEditMode()
-    Row(1, "Profile ready", "Active profile is loaded.", "done", T.colors.ok, function() Select("profiles") end,
-        nil, "checklist.profile", "navigation", { navigationKey = "profiles" })
-    Row(2, "Pages available", "Use pages to tune frames.", "done", T.colors.ok, function() Select("uf_player") end,
-        nil, "checklist.player_page", "navigation", { navigationKey = "uf_player" })
-    Row(3, "Move frames", "Recommended before detail tuning.", movedFrames and "done" or "start", movedFrames and T.colors.ok or T.colors.accent2, ToggleEditMode, movedFrames and "OK" or "!",
-        "checklist.toggle_edit_mode", "action")
-    local wagoBackupConfirmed = WagoBackupConfirmed()
-    Row(4, "Wago backup", "Confirm backup before using the Wago MSUF page.", wagoBackupConfirmed and "done" or "start", wagoBackupConfirmed and T.colors.ok or T.colors.accent2, ConfirmWagoBackup, wagoBackupConfirmed and "OK" or "!",
-        "checklist.confirm_wago_backup", "action")
     local function DashboardDisclosure(parent, title, open, stateKey, width, fillPills, semanticPath)
         local head = CreateFrame("Button", nil, parent)
         head:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
@@ -1078,11 +783,8 @@ local function BuildDashboardUX(ctx)
         }), title, "button")
         return head
     end
-    local bugReportTop = checklistTop - checklistH - 10
-    local bugReportH = BuildBugReportCard(sideX, bugReportTop, sideW)
-    local sideBottom = bugReportH > 0 and (bugReportTop - bugReportH) or (checklistTop - checklistH)
-    local recoveryTop = sideBySide and (featureBlockBottom - 16) or (sideBottom - 16)
-    local recoveryW = sideBySide and mainW or layoutW
+    local recoveryTop = featureBlockBottom - 16
+    local recoveryW = layoutW
     local recoveryOpen = M.dashboardRecoveryOpen == true
     local recoveryWrap = recoveryW < 620
     local recoveryNarrow = recoveryW < 520
@@ -1427,6 +1129,7 @@ local function BuildDashboardUX(ctx)
         end)
         AddTooltip(btn, data.title, data.tooltip)
         RegisterDashboardControl(btn, DashboardMeta("support.link." .. tostring(data.title), "action", {
+            actionKey = "copy_support_link",
             anchor = supportTitle,
             keywords = { data.tooltip, "How to support MSUF", "support links", data.url },
             help = data.tooltip,
@@ -1439,7 +1142,6 @@ local function BuildDashboardUX(ctx)
         previous = btn
     end
     local bottom = supportTop - supportH
-    if sideBySide then bottom = min(bottom, sideBottom) end
     ctx:SetContentHeight(math.abs(bottom) + 42)
 end
-M.RegisterPage("home", { title = "MSUF Menu", build = BuildDashboardUX, version = 7 })
+M.RegisterPage("home", { title = "MSUF Menu", build = BuildDashboardUX, version = 9 })

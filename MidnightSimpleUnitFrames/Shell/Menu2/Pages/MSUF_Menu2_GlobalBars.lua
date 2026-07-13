@@ -44,8 +44,112 @@ local UNIT_DISPEL_TRIGGERS = VT("BORDER", "Use Dispel border detects", "BY_ME", 
 local UNIT_DISPEL_STYLES = VT("FULL", "Full Frame", "TOP", "Top Fade", "BOTTOM", "Bottom Fade",
     "LEFT", "Left Fade", "RIGHT", "Right Fade")
 local Call, DB, G, Bars, ReadG, ReadGBool, ReadB, NormalizeScopeKey, ScopeDBKeys, ScopeHasOverride, ScopeSetOverride, CurrentBarsScope, IsGFScope, BarScopeGet, BarScopeSet, BarScopeGetBars, BarScopeSetBars, TextureValues, CurrentPowerBarScopeUnit, SmoothPowerGet, SmoothPowerSet, PriorityOrder, PriorityColor, RefreshBorderTestModes, SetAbsorbTextureTest, SetControlEnabled, SetControlsEnabled, ApplyBars, ControlMeta, RegisterControl = M.Pick(GP, [[Call DB G Bars ReadG ReadGBool ReadB NormalizeScopeKey ScopeDBKeys ScopeHasOverride ScopeSetOverride CurrentBarsScope IsGFScope BarScopeGet BarScopeSet BarScopeGetBars BarScopeSetBars TextureValues CurrentPowerBarScopeUnit SmoothPowerGet SmoothPowerSet PriorityOrder PriorityColor RefreshBorderTestModes SetAbsorbTextureTest SetControlEnabled SetControlsEnabled ApplyBars ControlMeta RegisterControl]])
+local BAR_SETTING_BY_PATH = {
+    ["highlight.boss_target.mode"] = "general.bossTargetOutlineMode",
+    ["rounded.roundedFramesEnabled"] = "bars.roundedFramesEnabled",
+    ["rounded.roundedUnitFrames"] = "bars.roundedUnitFrames",
+    ["rounded.roundedGroupFrames"] = "bars.roundedGroupFrames",
+    ["rounded.roundedPowerBars"] = "bars.roundedPowerBars",
+    ["rounded.roundedMouseover"] = "bars.roundedMouseover",
+    ["power.realtime_text"] = "bars.realtimePowerText",
+}
+local BAR_ACTION_BY_PATH = {
+    ["scope.overrides.reset"] = "reset_all_scoped_global_bars_overrides",
+}
+local BAR_DYNAMIC_SETTING_KEYS_BY_PATH = {
+    ["textures.foreground"] = { "general.barTexture" },
+    ["textures.background"] = { "general.barBackgroundTexture" },
+    ["gradient.enableGradient"] = { "general.enableGradient" },
+    ["gradient.enablePowerGradient"] = { "general.enablePowerGradient" },
+    ["gradient.strength"] = { "general.gradientStrength" },
+    ["absorb.display_mode"] = { "general.absorbTextMode" },
+    ["absorb.absorbAnchorMode"] = { "general.absorbAnchorMode" },
+    ["absorb.absorbBarOpacity"] = { "general.absorbBarOpacity" },
+    ["absorb.absorbBarTexture"] = { "general.absorbBarTexture" },
+    ["absorb.healAbsorbBarOpacity"] = { "general.healAbsorbBarOpacity" },
+    ["absorb.healAbsorbBarTexture"] = { "general.healAbsorbBarTexture" },
+    ["absorb.healPredAnchorMode"] = { "general.healPredAnchorMode" },
+    ["absorb.heal_prediction.enabled"] = { "general.showSelfHealPrediction" },
+    ["absorb.over_absorb_overlay"] = { "general.overAbsorbOverlay" },
+    ["outline.thickness"] = { "bars.barOutlineThickness" },
+    ["highlight.border_thickness"] = { "general.highlightBorderThickness" },
+    ["highlight.border_mode.aggroOutlineMode"] = { "general.aggroOutlineMode" },
+    ["highlight.aggro.roles"] = { "general.aggroMode" },
+    ["highlight.border_mode.dispelOutlineMode"] = { "general.dispelOutlineMode" },
+    ["highlight.dispel.trigger"] = { "general.dispelBorderTrigger" },
+    ["highlight.border_mode.purgeOutlineMode"] = { "general.purgeOutlineMode" },
+    ["highlight.priority.enabled"] = { "general.hlPrioEnabled" },
+    ["unit_dispel_overlay.enabled"] = { "general.unitDispelOverlayEnabled" },
+    ["unit_dispel_overlay.unitDispelOverlayTrigger"] = { "general.unitDispelOverlayTrigger" },
+    ["unit_dispel_overlay.unitDispelOverlayStyle"] = { "general.unitDispelOverlayStyle" },
+    ["unit_dispel_overlay.unitDispelOverlayOnHealth"] = { "general.unitDispelOverlayOnHealth" },
+    ["unit_dispel_overlay.unitDispelOverlayAlpha"] = { "general.unitDispelOverlayAlpha" },
+    ["power.smooth_fill"] = { "bars.smoothPowerBar" },
+}
+local BAR_DYNAMIC_SETTING_SUFFIX_BY_PATH = {
+    ["scope.override.enabled"] = "override",
+    ["textures.foreground"] = "barTexture",
+    ["textures.background"] = "barBackgroundTexture",
+    ["gradient.enableGradient"] = "enableGradient",
+    ["gradient.enablePowerGradient"] = "enablePowerGradient",
+    ["gradient.strength"] = "gradientStrength",
+    ["absorb.display_mode"] = "absorbTextMode",
+    ["absorb.absorbAnchorMode"] = "absorbAnchorMode",
+    ["absorb.absorbBarOpacity"] = "absorbBarOpacity",
+    ["absorb.absorbBarTexture"] = "absorbBarTexture",
+    ["absorb.healAbsorbBarOpacity"] = "healAbsorbBarOpacity",
+    ["absorb.healAbsorbBarTexture"] = "healAbsorbBarTexture",
+    ["absorb.healPredAnchorMode"] = "healPredAnchorMode",
+    ["absorb.heal_prediction.enabled"] = "healPredEnabled",
+    ["absorb.over_absorb_overlay"] = "overAbsorbOverlay",
+    ["outline.thickness"] = "barOutlineThickness",
+    ["outline.strata"] = "barOutlineStrata",
+    ["outline.color"] = "barOutlineColor",
+    ["highlight.border_thickness"] = "highlightBorderThickness",
+    ["highlight.border_mode.aggroOutlineMode"] = "aggroOutlineMode",
+    ["highlight.aggro.roles"] = "aggroMode",
+    ["highlight.border_mode.dispelOutlineMode"] = "dispelOutlineMode",
+    ["highlight.dispel.trigger"] = "dispelBorderTrigger",
+    ["highlight.border_mode.purgeOutlineMode"] = "purgeOutlineMode",
+    ["highlight.priority.enabled"] = "hlPrioEnabled",
+    ["unit_dispel_overlay.enabled"] = "unitDispelOverlayEnabled",
+    ["unit_dispel_overlay.unitDispelOverlayTrigger"] = "unitDispelOverlayTrigger",
+    ["unit_dispel_overlay.unitDispelOverlayStyle"] = "unitDispelOverlayStyle",
+    ["unit_dispel_overlay.unitDispelOverlayOnHealth"] = "unitDispelOverlayOnHealth",
+    ["unit_dispel_overlay.unitDispelOverlayAlpha"] = "unitDispelOverlayAlpha",
+}
+local function IsDynamicBarPath(path)
+    path = tostring(path or "")
+    return path == "scope.override.enabled"
+        or path == "power.smooth_fill"
+        or path:find("^textures%.") ~= nil
+        or path:find("^gradient%.") ~= nil
+        or path:find("^absorb%.") ~= nil
+        or path:find("^outline%.") ~= nil
+        or (path:find("^highlight%.") ~= nil and path ~= "highlight.boss_target.mode")
+        or path:find("^unit_dispel_overlay%.") ~= nil
+end
 local function Meta(path, classification, exact)
-    return ControlMeta("opt_bars", "global", path, classification, exact)
+    local resolved = {}
+    if type(exact) == "table" then
+        for key, value in pairs(exact) do resolved[key] = value end
+    end
+    resolved.settingKey = resolved.settingKey or BAR_SETTING_BY_PATH[path]
+    resolved.actionKey = resolved.actionKey or BAR_ACTION_BY_PATH[path]
+    local kind = classification or "setting"
+    if (kind == "setting" or kind == "action") and not resolved.settingKey and not resolved.actionKey
+        and IsDynamicBarPath(path)
+    then
+        resolved.assistantDisposition = resolved.assistantDisposition or "dynamic"
+        resolved.assistantDispositionReason = resolved.assistantDispositionReason
+            or "The exact DB and Registry target is selected by the explicit Bars scope; Shared, unit, Party, and Raid scopes own distinct setting keys."
+        resolved.assistantSettingKeys = resolved.assistantSettingKeys or BAR_DYNAMIC_SETTING_KEYS_BY_PATH[path]
+        local suffix = BAR_DYNAMIC_SETTING_SUFFIX_BY_PATH[path]
+        if suffix and not resolved.assistantSettingKeyPatterns then
+            resolved.assistantSettingKeyPatterns = { "^barScope%.[%w_]+%." .. suffix .. "$" }
+        end
+    end
+    return ControlMeta("opt_bars", "global", path, classification, resolved)
 end
 local function RegisterSegment(segment, path, values)
     RegisterControl(segment, Meta(path, "ephemeral"), nil, "segment", values)
@@ -456,6 +560,15 @@ local function SetBarBackgroundTextureForScope(value)
 end
 local function BuildScopeSection(ctx, b)
     local scopeValues = GP.SCOPE_VALUES
+    local function RefreshBarsPage(reason)
+        if M.RequestRefresh then
+            M.RequestRefresh(ctx, reason)
+        elseif M.Refresh then
+            M.Refresh(ctx)
+        elseif M.SelectPage then
+            M.SelectPage(ctx.key)
+        end
+    end
     GP.BuildScopeOverrideSection(ctx, b, {
         values = scopeValues,
         selectorMeta = Meta("scope.selector", "ephemeral"),
@@ -467,7 +580,7 @@ local function BuildScopeSection(ctx, b)
             G().hpPowerTextSelectedKey = NormalizeScopeKey(v)
             if _G.MSUF_AbsorbTextureTestMode then SetAbsorbTextureTest(true) end
             RefreshBorderTestModes()
-            if M.SelectPage then M.SelectPage(ctx.key) end
+            RefreshBarsPage("bars-scope-change")
         end,
         hasOverride = function(value)
             return value ~= "shared" and ScopeHasOverride(value, "hlOverride")
@@ -482,7 +595,7 @@ local function BuildScopeSection(ctx, b)
                 ScopeSetOverride(key, "hlOverride", v)
                 ApplyBars("MSUF2_BARS_OVERRIDE")
             end
-            if M.SelectPage then M.SelectPage(ctx.key) end
+            RefreshBarsPage("bars-scope-override")
         end,
         reset = function()
             for i = 1, #scopeValues do
@@ -490,7 +603,7 @@ local function BuildScopeSection(ctx, b)
                 if key ~= "shared" then ScopeSetOverride(key, "hlOverride", false) end
             end
             ApplyBars("MSUF2_BARS_RESET_OVERRIDES")
-            if M.SelectPage then M.SelectPage(ctx.key) end
+            RefreshBarsPage("bars-reset-overrides")
         end,
         hint = "Textures are shared except Party/Raid group-frame overrides. Gradients can be customized per unit or group scope.",
         updateHint = function(hint, current, active, shared)

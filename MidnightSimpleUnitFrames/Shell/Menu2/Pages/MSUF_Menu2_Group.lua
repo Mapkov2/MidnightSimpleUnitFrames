@@ -53,6 +53,10 @@ local function GroupControlMeta(ctx, semanticPath, classification)
         controlPath = identity:gsub("%.", "/"),
         classification = classification or "setting",
     }
+    if meta.classification == "setting" or meta.classification == "action" then
+        meta.assistantDisposition = "dynamic"
+        meta.assistantDispositionReason = "This control targets the currently selected Party, Raid, or Mythic Raid scope."
+    end
     -- The control identity describes the visible role. Its command resolves the
     -- currently selected Group scope at runtime, so it is not a static
     -- Assistant Registry action.
@@ -64,6 +68,9 @@ local function RegisterGroupControl(widget, ctx, semanticPath, label, kind, clas
     meta.label, meta.kind = label, kind
     if type(extra) == "table" then
         for key, value in pairs(extra) do meta[key] = value end
+    end
+    if meta.settingKey or meta.actionKey then
+        meta.assistantDisposition, meta.assistantDispositionReason = nil, nil
     end
     if type(M.RegisterSearchWidget) == "function" then M.RegisterSearchWidget(widget, meta) end
     return widget
@@ -347,7 +354,7 @@ end
 local GF_COPY_EXCLUDE = M.KeySetFromWords "offsetX offsetY point positionMode _hlMigrated"
 local GF_SHARED_COLOR_KEYS = M.KeySetFromWords [[
     gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB
-    gfUnifiedR gfUnifiedG gfUnifiedB barTexture barBgTexture bgR bgG bgB hpBarAlpha hpBgAlpha
+    gfUnifiedR gfUnifiedG gfUnifiedB barTexture barBackgroundTexture barBgTexture bgR bgG bgB hpBarAlpha hpBgAlpha
     alphaExcludeTextPortrait deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB deadBgA
     debuffStripeAlpha debuffStripeColorR debuffStripeColorG debuffStripeColorB targetR targetG targetB
     hlFocusColorR hlFocusColorG hlFocusColorB groupBorderR groupBorderG groupBorderB groupBorderA
@@ -355,7 +362,7 @@ local GF_SHARED_COLOR_KEYS = M.KeySetFromWords [[
 ]]
 local GF_COPY_CATEGORIES = {
     { key = "general", label = "Basics", keys = WL [[enabled blizzardFallbackMode showPlayer showSolo clickCastEnabled width height spacing growth groupFilter sortMode sortByRole roleOrder playerFirstInRole unitsPerColumn maxColumns preserveRaidGroups reverseFill smoothFill hideInClientScene hideInHousing hideOfflineEnabled hideOfflineInCombat hideOfflineDelay frameScaleMode frameScaleManual scaleAt10 scaleAt20 scaleAt25 scaleOver25]] },
-    { key = "health", label = "Health & Bars", keys = WL [[gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB gfUnifiedR gfUnifiedG gfUnifiedB barTexture barBgTexture powerBarEnabled powerHeight showPower showPowerText powerTextLeft powerTextCenter powerTextRight powerTextLeftHidePercentSymbol powerTextCenterHidePercentSymbol powerTextRightHidePercentSymbol powerTextDelimiter powerFontSize powerOffsetX powerOffsetY powerTextLayer powerSmoothFill powerShowTank powerShowHealer powerShowDamager dispelOverlayEnabled dispelOverlayStyle dispelOverlayOnHealth dispelOverlayAlpha dispelOverlayTrigger dispelOverlayStrata deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB deadBgA]] },
+    { key = "health", label = "Health & Bars", keys = WL [[gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB gfUnifiedR gfUnifiedG gfUnifiedB barTexture barBackgroundTexture barBgTexture powerBarEnabled powerHeight showPower showPowerText powerTextLeft powerTextCenter powerTextRight powerTextLeftHidePercentSymbol powerTextCenterHidePercentSymbol powerTextRightHidePercentSymbol powerTextDelimiter powerFontSize powerOffsetX powerOffsetY powerTextLayer powerSmoothFill powerShowTank powerShowHealer powerShowDamager dispelOverlayEnabled dispelOverlayStyle dispelOverlayOnHealth dispelOverlayAlpha dispelOverlayTrigger dispelOverlayStrata deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB deadBgA]] },
     { key = "text", label = "Text & Name", keys = WL [[showName hideNameOnDeadOffline nameFontSize nameAnchor nameOffsetX nameOffsetY nameTextLayer nameColorMode nameColorR nameColorG nameColorB nameShortenEnabled nameClipSide nameMaxChars nameNoEllipsis showHPText hpFontSize textLeft textCenter textRight hpTextLeftHidePercentSymbol hpTextCenterHidePercentSymbol hpTextRightHidePercentSymbol textDelimiter hpTextReverse healthTextDecimals hpFullValueShort hpOffsetX hpOffsetY textLayer]] },
     { key = "font", label = "Font Override", keys = WL [[fontOverride fontOutline useGlobalFontColor fontR fontG fontB]] },
     { key = "range", label = "Range Fade", keys = WL [[rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode offlineAlpha]] },
@@ -501,6 +508,7 @@ local function ScopeSection(ctx, builder)
     sec:SetPoint("TOPLEFT", builder.parent, "TOPLEFT", builder.x, builder.y)
     sec:SetSize(pageW, h)
     sec._msuf2Width = pageW
+    if W.RegisterGuidedRegion then W.RegisterGuidedRegion(ctx, sec, "Group page and scope") end
     builder.y = builder.y - h - 8
     if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(builder.y) + 28) end
 
@@ -565,6 +573,8 @@ local function ScopeSection(ctx, builder)
         controlDomain = "group",
         controlPageKey = ctx and ctx.key,
         controlPath = "copy",
+        assistantDisposition = "dynamic",
+        assistantDispositionReason = "Copy actions depend on the selected Group source, destination, and category set.",
         width = 430,
         height = 334,
         categories = GF_COPY_CATEGORIES,
@@ -921,6 +931,8 @@ local function BuildRoleOrderRows(ctx, section, opts)
         controlDomain = "group",
         controlPageKey = ctx and ctx.key,
         controlPath = "sorting.role_priority",
+        assistantDisposition = "dynamic",
+        assistantDispositionReason = "Role-priority rows reorder the selected Group scope as one ordered value.",
         onReorder = SaveOrder,
         tooltip = function(self, row, tip)
             tip:SetOwner(self, "ANCHOR_RIGHT")

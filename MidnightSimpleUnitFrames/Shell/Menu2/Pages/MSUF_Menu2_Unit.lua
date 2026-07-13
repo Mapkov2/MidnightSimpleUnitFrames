@@ -105,6 +105,18 @@ local function UnitControlMeta(ctx, semanticPath, classification)
     -- is a stable control identity, not a globally resolvable Assistant action.
     return meta
 end
+local function UnitSettingMeta(ctx, semanticPath, unit, key)
+    local meta = UnitControlMeta(ctx, semanticPath, "setting")
+    unit, key = tostring(unit or ""), tostring(key or "")
+    if unit ~= "" and key ~= "" then meta.settingKey = unit .. "." .. key end
+    return meta
+end
+local function UnitReviewedMeta(ctx, semanticPath, classification, disposition, reason)
+    local meta = UnitControlMeta(ctx, semanticPath, classification)
+    meta.assistantDisposition = disposition
+    meta.assistantDispositionReason = reason
+    return meta
+end
 local function RegisterUnitControl(widget, ctx, semanticPath, label, kind, classification, extra)
     if not widget then return widget end
     local meta = UnitControlMeta(ctx, semanticPath, classification)
@@ -805,6 +817,8 @@ M.Assign(UnitPage, {
     UnitTopLabel = UnitTopLabel,
     UnitTopPillWidth = UnitTopPillWidth,
     ControlMeta = UnitControlMeta,
+    SettingMeta = UnitSettingMeta,
+    ReviewedMeta = UnitReviewedMeta,
     RegisterControl = RegisterUnitControl,
     NewCopyScopeDefaults = NewCopyScopeDefaults,
     CopyUnitSettings = CopyUnitSettings,

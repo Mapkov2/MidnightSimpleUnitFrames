@@ -251,6 +251,7 @@ function W.FocusCollapsibleSection(section, opts)
     local entry = section and section._msuf2CollapsibleEntry
     if not entry then return false end
     opts = opts or {}
+    local wasOpen = entry.open == true
     entry._msuf2MotionSerial = (entry._msuf2MotionSerial or 0) + 1
     if entry._msuf2MotionActive then entry._msuf2MotionActive = nil end
     entry.open = true
@@ -258,7 +259,7 @@ function W.FocusCollapsibleSection(section, opts)
     if opts.persist == true then
         entry._msuf2AutoOpened = nil
         if M.accordionState and entry.stateKey then M.accordionState[entry.stateKey] = true end
-    else
+    elseif not wasOpen or entry._msuf2AutoOpened == true then
         entry._msuf2AutoOpened = true
     end
     if entry.body then
@@ -340,6 +341,41 @@ end
 
 --- Page layout builder used by most Menu2 pages. It owns vertical flow,
 --- collapsible section state, search metadata registration, and content height.
+local function NextGuidedTourOrder(ctx)
+    local entry = ctx and ctx.entry
+    if type(entry) ~= "table" then return nil end
+    entry._msuf2GuidedTourOrder = (tonumber(entry._msuf2GuidedTourOrder) or 0) + 1
+    return entry._msuf2GuidedTourOrder
+end
+
+local function RegisterGuidedTourRegion(ctx, frame, title)
+    local pageEntry = ctx and ctx.entry
+    if type(pageEntry) ~= "table" or not frame then return nil end
+    local order = NextGuidedTourOrder(ctx)
+    if not order then return nil end
+    local region = {
+        id = "region_" .. tostring(order),
+        pageKey = tostring(ctx.key or ""),
+        label = tostring(title or "") ~= "" and tostring(title) or "Scope and overrides",
+        body = frame,
+        outer = frame,
+        guidedOrder = order,
+        kind = "region",
+    }
+    pageEntry.guidedRegions = pageEntry.guidedRegions or {}
+    pageEntry.guidedRegions[region.id] = region
+    frame._msuf2GuidedRegion = region
+    return region
+end
+
+function W.RegisterGuidedRegion(ctx, frame, title)
+    if frame and frame._msuf2GuidedRegion then
+        if tostring(title or "") ~= "" then frame._msuf2GuidedRegion.label = tostring(title) end
+        return frame._msuf2GuidedRegion
+    end
+    return RegisterGuidedTourRegion(ctx, frame, title)
+end
+
 function W.PageBuilder(ctx)
     if type(M.EnsurePersistentMenuState) == "function" then M.EnsurePersistentMenuState() end
     local contentX = tonumber(ctx and ctx._msuf2ContentX) or 12
@@ -436,6 +472,7 @@ function W.PageBuilder(ctx)
                 gap = 12,
             }
         end
+        W.RegisterGuidedRegion(ctx, section, title)
         return section
     end
     function b:CollapsibleSection(id, title, height, defaultOpen)
@@ -500,6 +537,7 @@ function W.PageBuilder(ctx)
             headerHeight = headerH,
             contentHeight = height or 120,
             stateKey = stateKey,
+            guidedOrder = NextGuidedTourOrder(ctx),
         }
         RefreshCollapseHintSuppression(entry)
         local function RefreshHeaderLayout()

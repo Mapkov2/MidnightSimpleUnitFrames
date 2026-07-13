@@ -180,6 +180,8 @@ local function BuildScene(box, reason)
         and S.CompiledAuraLane(scene.runtimeAuras, "trackedBuff", trackedRaw) or trackedRaw
     scene.debuffCfg = scene.runtimeAuras
         and S.CompiledAuraLane(scene.runtimeAuras, "debuff", rawAuras.debuff or {}) or rawAuras.debuff or {}
+    scene.externalCfg = scene.runtimeAuras
+        and S.CompiledAuraLane(scene.runtimeAuras, "external", rawAuras.externals or {}) or rawAuras.externals or {}
     scene.statusSpec = S.CurrentStatusSpec()
     scene.selectedSpellCfg = S.CurrentSpellConfig(kind)
     -- The selected frame effect belongs to the selected spell, not to whichever
@@ -244,6 +246,7 @@ local function BuildScene(box, reason)
     if scene.runtimeAuras then
         scene.customRenderer = scene.buffCfg.enabled == true
             or scene.trackedBuffCfg.enabled == true or scene.debuffCfg.enabled == true
+            or scene.externalCfg.enabled == true
         aurasEnabled = scene.customRenderer or scene.runtimeAuras.enabled == true
     else
         scene.customRenderer = true
@@ -258,6 +261,7 @@ local function BuildScene(box, reason)
     local customAuraText = SceneAuraLaneAvailable(scene, scene.buffCfg, 6)
         or SceneAuraLaneAvailable(scene, scene.trackedBuffCfg, 4)
         or SceneAuraLaneAvailable(scene, scene.debuffCfg, 6)
+        or SceneAuraLaneAvailable(scene, scene.externalCfg, 2)
     local textAvailable
     if runtimeSpec then
         textAvailable = runtimeSpec.showName == true
@@ -273,6 +277,7 @@ local function BuildScene(box, reason)
         buff = SceneAuraLaneAvailable(scene, scene.buffCfg, 6),
         trackedBuff = SceneAuraLaneAvailable(scene, scene.trackedBuffCfg, 4),
         debuff = SceneAuraLaneAvailable(scene, scene.debuffCfg, 6),
+        external = SceneAuraLaneAvailable(scene, scene.externalCfg, 2),
         status = statusAvailable,
         si = scene.runtimeSpellIndicators and scene.runtimeSpellIndicators.enabled == true
             and (scene.runtimeSpellPlacedAvailable or scene.runtimeSpellEffectAvailable)
@@ -403,6 +408,7 @@ local function FinalizeScene(scene)
         { S.buffHandle, scene.buffCfg, 5 },
         { S.trackedBuffHandle, scene.trackedBuffCfg, 9 },
         { S.debuffHandle, scene.debuffCfg, 6 },
+        { S.externalHandle, scene.externalCfg, 7 },
     }
     for i = 1, #auraHandles do
         local item, handle = auraHandles[i], auraHandles[i][1]
@@ -478,7 +484,7 @@ local function FinalizeScene(scene)
         SetPreviewFrameLevel(scene.textHandles[item[1]], scene.textBaseLevel
             + S.ClampLayer(runtimeText[item[2]] or conf[item[3]], item[4]))
     end
-    local auraKeys = { "buff", "trackedBuff", "debuff" }
+    local auraKeys = { "buff", "trackedBuff", "debuff", "external" }
     for i = 1, #auraHandles do
         local handle, cfg, key = auraHandles[i][1], auraHandles[i][2], auraKeys[i]
         if handle then
@@ -529,8 +535,8 @@ local function RenderAuras(scene)
     local S, self, mock = scene.S, scene.box, scene.mock
     local H, gf, kind, conf = scene.H, scene.gf, scene.kind, scene.conf
     local runtimeAuras = scene.runtimeAuras
-    local buffCfg, trackedBuffCfg, debuffCfg = scene.buffCfg, scene.trackedBuffCfg, scene.debuffCfg
-    local buffHandle, trackedBuffHandle, debuffHandle = S.buffHandle, S.trackedBuffHandle, S.debuffHandle
+    local buffCfg, trackedBuffCfg, debuffCfg, externalCfg = scene.buffCfg, scene.trackedBuffCfg, scene.debuffCfg, scene.externalCfg
+    local buffHandle, trackedBuffHandle, debuffHandle, externalHandle = S.buffHandle, S.trackedBuffHandle, S.debuffHandle, S.externalHandle
     local GF_PREVIEW_ANCHOR_FRAC, GF_AURA_MOCK_ICON_IDS = S.GF_PREVIEW_ANCHOR_FRAC, S.GF_AURA_MOCK_ICON_IDS
     local Int, Round, ScaleValue, ConfigToOffset = S.Int, S.Round, S.ScaleValue, S.ConfigToOffset
     local AuraGrowth, AddIconPool, MockSpellTexture = S.AuraGrowth, S.AddIconPool, S.MockSpellTexture
@@ -561,12 +567,10 @@ local function RenderAuras(scene)
         return 1, -1, false, "TOPLEFT"
     end
     local function RuntimeAuraAnchor(anchor, fallback)
-        if anchor == "TOPLEFT" or anchor == "TOPRIGHT"
-            or anchor == "BOTTOMLEFT" or anchor == "BOTTOMRIGHT"
-            or anchor == "CENTER" then
-            return anchor
-        end
-        return fallback or "CENTER"
+        anchor = tostring(anchor or ""):upper()
+        if GF_PREVIEW_ANCHOR_FRAC[anchor] then return anchor end
+        fallback = tostring(fallback or "CENTER"):upper()
+        return GF_PREVIEW_ANCHOR_FRAC[fallback] and fallback or "CENTER"
     end
     local function RuntimeAuraTextAnchor(anchor, fallback)
         if anchor == "TOPLEFT" or anchor == "TOP" or anchor == "TOPRIGHT"
@@ -874,6 +878,12 @@ local function RenderAuras(scene)
         anchor = "TOPLEFT", growth = "RIGHTDOWN",
         size = 20, perRow = 3, max = 6, spacing = 1, minSize = 8,
     })
+    if externalHandle then
+        LayoutAuraGroup(externalHandle, "external", externalCfg, {
+            anchor = "CENTER", growth = "RIGHTDOWN",
+            size = 28, perRow = 3, max = 2, spacing = 1, minSize = 8,
+        })
+    end
     scene.LayoutHandle = LayoutHandle
     scene.PlaceAuraPreviewText = PlaceAuraPreviewText
 end
@@ -902,6 +912,7 @@ function Render.Install(box, ctx, deps)
     local buffHandle = deps.buffHandle
     local trackedBuffHandle = deps.trackedBuffHandle
     local debuffHandle = deps.debuffHandle
+    local externalHandle = deps.externalHandle
     local statusHandles = deps.statusHandles or {}
     local spellHandle = deps.spellHandle
     local targetedHandle = deps.targetedHandle
@@ -951,6 +962,7 @@ function Render.Install(box, ctx, deps)
         buffHandle = buffHandle,
         trackedBuffHandle = trackedBuffHandle,
         debuffHandle = debuffHandle,
+        externalHandle = externalHandle,
         statusHandles = statusHandles,
         spellHandle = spellHandle,
         targetedHandle = targetedHandle,
@@ -1048,7 +1060,7 @@ function Render.Install(box, ctx, deps)
         local runtimeText, runtimePower, runtimeHealth = scene.runtimeText, scene.runtimePower, scene.runtimeHealth
         local runtimeBorder, runtimePrediction, runtimeStatus = scene.runtimeBorder, scene.runtimePrediction, scene.runtimeStatus
         local focus, layerVisible, soloLayer, layerAvailable = scene.focus, scene.layerVisible, scene.soloLayer, scene.layerAvailable
-        local buffCfg, trackedBuffCfg, debuffCfg = scene.buffCfg, scene.trackedBuffCfg, scene.debuffCfg
+        local buffCfg, trackedBuffCfg, debuffCfg, externalCfg = scene.buffCfg, scene.trackedBuffCfg, scene.debuffCfg, scene.externalCfg
         local statusSpec, selectedSpellCfg, selectedPlaced = scene.statusSpec, scene.selectedSpellCfg, scene.selectedPlaced
         local selectedSpellEffect = scene.selectedSpellEffect
         local selectedSpellNeedsPlacementPreview = scene.selectedSpellNeedsPlacementPreview

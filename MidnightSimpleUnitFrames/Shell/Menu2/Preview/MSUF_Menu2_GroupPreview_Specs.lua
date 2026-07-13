@@ -24,6 +24,7 @@ dstripe=gf_bars
 range=gf_bars
 buffs=gf_auras
 debuffs=gf_auras
+externals=gf_auras
 textcolor=gf_auras
 masque=gf_auras
 autil=gf_auras
@@ -63,6 +64,7 @@ gf_indicators=indicators
         buff = { 774, 17, 139, 33076, 33763, 81749 },
         trackedBuff = { 10060, 53563, 1022, 6940, 1044, 194384 },
         debuff = { 589, 980, 172, 12294, 1943, 5782 },
+        external = { 6940, 1022, 33206, 116849, 47788, 357170 },
     },
     AURA_GROWTH_TABLE = {
         RIGHTDOWN = { px = 1, py = 0, sx = 0, sy = -1 }, RIGHTUP = { px = 1, py = 0, sx = 0, sy = 1 },

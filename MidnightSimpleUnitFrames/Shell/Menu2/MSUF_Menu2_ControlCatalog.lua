@@ -16,6 +16,13 @@
 --- only explicit IDs and semantic identity keys/control paths are guaranteed to
 --- survive a future label rename.  GetCoverageReport exposes that distinction
 --- and all unknowns.
+---
+--- Assistant target contract:
+---   * Persisted settings/actions require an explicit settingKey/actionKey.
+---   * A deliberately non-scalar control may instead declare a reviewed
+---     assistantDisposition (compound, dynamic, or duplicate) plus its reason.
+---   * Runtime get/set closures prove capability only and never satisfy this
+---     semantic completeness contract by themselves.
 
 local _, MSUF = ...
 MSUF = MSUF or {}
@@ -38,12 +45,12 @@ M.REQUIRED_SHELL_CONTRACT = {
     minimumControls = 6,
     minimumDispositions = 14,
     controls = {
-        ["menu2.menu-chrome.window-close"] = { classification = "action", kind = "button" },
-        ["menu2.menu-chrome.window-minimize"] = { classification = "action", kind = "button" },
-        ["menu2.menu-chrome.window-maximize"] = { classification = "action", kind = "button" },
-        ["menu2.menu-chrome.window-restore"] = { classification = "action", kind = "button" },
-        ["menu2.menu-chrome.search-clear"] = { classification = "action", kind = "button" },
-        ["menu2.menu-chrome.search-intro-dismiss"] = { classification = "action", kind = "button" },
+        ["menu2.menu-chrome.window-close"] = { classification = "action", kind = "button", actionKey = "menu_window_close" },
+        ["menu2.menu-chrome.window-minimize"] = { classification = "action", kind = "button", actionKey = "menu_window_minimize" },
+        ["menu2.menu-chrome.window-maximize"] = { classification = "action", kind = "button", actionKey = "menu_window_maximize" },
+        ["menu2.menu-chrome.window-restore"] = { classification = "action", kind = "button", actionKey = "menu_window_restore" },
+        ["menu2.menu-chrome.search-clear"] = { classification = "action", kind = "button", actionKey = "menu_search_clear" },
+        ["menu2.menu-chrome.search-intro-dismiss"] = { classification = "action", kind = "button", actionKey = "set_nav_search_intro" },
     },
     dispositions = {
         ["window.drag"] = "direct-manipulation",
@@ -69,6 +76,17 @@ local CLASSIFICATION = {
     navigation = true,
     ephemeral = true,
     unknown = true,
+}
+
+-- Persisted controls need a reviewable Assistant identity.  Executable get/set
+-- closures only prove that the menu can operate a widget; they do not prove
+-- which natural-language setting or action the Assistant is allowed to target.
+-- A control that intentionally has no one-to-one target may opt out with one
+-- of these narrow, source-declared dispositions and a human review reason.
+local ASSISTANT_REVIEW_DISPOSITIONS = {
+    compound = true,
+    dynamic = true,
+    duplicate = true,
 }
 
 local STATIC_KINDS = {
@@ -130,6 +148,59 @@ local function CleanText(value)
     if text:find("^%s") then text = text:gsub("^%s+", "") end
     if text:find("%s$") then text = text:gsub("%s+$", "") end
     return text
+end
+
+local function CopyStringList(value)
+    if type(value) == "string" then return { value } end
+    local out = {}
+    for i = 1, #(type(value) == "table" and value or {}) do out[i] = value[i] end
+    return out
+end
+
+local function NormalizeAssistantRouteList(value, fieldName, requireAnchors)
+    local out, errors, seen = {}, {}, {}
+    if value == nil then return out, errors end
+    if type(value) == "string" then value = { value } end
+    if type(value) ~= "table" then
+        errors[#errors + 1] = fieldName .. " must be a string list"
+        return out, errors
+    end
+    local numericKeys = {}
+    for key in pairs(value) do
+        if type(key) ~= "number" or key < 1 or key % 1 ~= 0 then
+            errors[#errors + 1] = fieldName .. " must be a dense numeric string list"
+        else
+            numericKeys[#numericKeys + 1] = key
+        end
+    end
+    table.sort(numericKeys)
+    for index = 1, #numericKeys do
+        local key = numericKeys[index]
+        if key ~= index then errors[#errors + 1] = fieldName .. " must not contain gaps" end
+        local raw = value[key]
+        local text = type(raw) == "string" and CleanText(raw) or ""
+        if text == "" then
+            errors[#errors + 1] = fieldName .. " entries must be non-empty strings"
+        elseif requireAnchors and (text:sub(1, 1) ~= "^" or text:sub(-1) ~= "$") then
+            errors[#errors + 1] = fieldName .. " entries must be fully anchored with ^ and $"
+        else
+            local valid = true
+            if requireAnchors then valid = pcall(string.match, "", text) end
+            if not valid then
+                errors[#errors + 1] = fieldName .. " contains an invalid Lua pattern: " .. text
+            elseif not seen[text] then
+                seen[text] = true
+                out[#out + 1] = text
+            end
+        end
+    end
+    return out, errors
+end
+
+local function AssistantRouteFingerprint(record)
+    return table.concat(record and record.assistantSettingKeys or {}, "\030")
+        .. "\029" .. table.concat(record and record.assistantSettingKeyPatterns or {}, "\030")
+        .. "\029" .. table.concat(record and record.assistantSettingRouteErrors or {}, "\030")
 end
 
 local function NormalizeToken(value)
@@ -295,6 +366,10 @@ local function CommandMetadata(command, label)
         settingKey = CleanText(command.settingKey),
         actionKey = CleanText(command.actionKey),
         navigationKey = CleanText(command.navigationKey),
+        assistantDisposition = CleanText(command.assistantDisposition):lower(),
+        assistantDispositionReason = CleanText(command.assistantDispositionReason),
+        assistantSettingKeyCount = #(type(command.assistantSettingKeys) == "table" and command.assistantSettingKeys or {}),
+        assistantSettingKeyPatternCount = #(type(command.assistantSettingKeyPatterns) == "table" and command.assistantSettingKeyPatterns or {}),
         hasGet = type(command.get) == "function",
         hasSet = type(command.set) == "function",
         hasRefresh = type(command.refresh) == "function",
@@ -470,6 +545,10 @@ function M.BuildRuntimeWidgetCommand(widget, meta, kind)
         source = meta.controlPath or meta.identityKey,
         settingKey = meta.settingKey,
         actionKey = meta.actionKey,
+        assistantDisposition = meta.assistantDisposition,
+        assistantDispositionReason = meta.assistantDispositionReason,
+        assistantSettingKeys = CopyStringList(meta.assistantSettingKeys),
+        assistantSettingKeyPatterns = CopyStringList(meta.assistantSettingKeyPatterns),
         confirmRequired = meta.confirmRequired == true,
         historyMode = meta.historyMode or (classification == "ephemeral" and "none" or nil),
         blockCombat = type(meta.blockCombat) == "function" and meta.blockCombat or nil,
@@ -516,6 +595,8 @@ local function RevisionKey(record)
         tostring(record.controlId or ""), tostring(record.pageKey or ""), tostring(record.kind or ""),
         tostring(record.label or ""), tostring(record.identityLabel or ""), tostring(record.controlPath or ""),
         tostring(record.settingKey or ""), tostring(record.actionKey or ""), tostring(record.navigationKey or ""),
+        tostring(record.assistantDisposition or ""), tostring(record.assistantDispositionReason or ""),
+        AssistantRouteFingerprint(record),
         tostring(record.help or ""), tostring(record.classification or ""),
         record.confirmRequired and "1" or "0", tostring(record.command or ""),
     }, "\031")
@@ -693,6 +774,54 @@ function Catalog.Register(widget, meta, registrationSource)
     record.settingKey = CleanText(meta.settingKey or (record.command and record.command.settingKey) or record.settingKey)
     record.actionKey = CleanText(meta.actionKey or (record.command and record.command.actionKey) or record.actionKey)
     record.navigationKey = CleanText(meta.navigationKey or (record.command and record.command.navigationKey) or record.navigationKey)
+    local declaredDisposition = meta.assistantDisposition
+    if declaredDisposition == nil and command then declaredDisposition = command.assistantDisposition end
+    local declaredDispositionReason = meta.assistantDispositionReason
+    if declaredDispositionReason == nil and command then
+        declaredDispositionReason = command.assistantDispositionReason
+    end
+    local declaredTargetKey = meta.settingKey ~= nil or meta.actionKey ~= nil
+        or command and (command.settingKey ~= nil or command.actionKey ~= nil)
+    local declaredSettingKeys = meta.assistantSettingKeys
+    if declaredSettingKeys == nil and command then declaredSettingKeys = command.assistantSettingKeys end
+    local declaredSettingKeyPatterns = meta.assistantSettingKeyPatterns
+    if declaredSettingKeyPatterns == nil and command then
+        declaredSettingKeyPatterns = command.assistantSettingKeyPatterns
+    end
+    local declaredAssistantRoutes = declaredSettingKeys ~= nil or declaredSettingKeyPatterns ~= nil
+    if declaredDisposition ~= nil or declaredDispositionReason ~= nil then
+        record.assistantDisposition = CleanText(declaredDisposition):lower()
+        record.assistantDispositionReason = CleanText(declaredDispositionReason)
+    elseif declaredTargetKey then
+        -- Promotion from a reviewed role to a canonical key must not retain a
+        -- stale opt-out disposition from an earlier virtual/search record.
+        record.assistantDisposition = ""
+        record.assistantDispositionReason = ""
+    else
+        record.assistantDisposition = CleanText(record.assistantDisposition):lower()
+        record.assistantDispositionReason = CleanText(record.assistantDispositionReason)
+    end
+    if declaredAssistantRoutes then
+        local keys, keyErrors = NormalizeAssistantRouteList(
+            declaredSettingKeys, "assistantSettingKeys", false)
+        local patterns, patternErrors = NormalizeAssistantRouteList(
+            declaredSettingKeyPatterns, "assistantSettingKeyPatterns", true)
+        record.assistantSettingKeys = keys
+        record.assistantSettingKeyPatterns = patterns
+        record.assistantSettingRouteErrors = {}
+        for i = 1, #keyErrors do record.assistantSettingRouteErrors[#record.assistantSettingRouteErrors + 1] = keyErrors[i] end
+        for i = 1, #patternErrors do record.assistantSettingRouteErrors[#record.assistantSettingRouteErrors + 1] = patternErrors[i] end
+    elseif declaredTargetKey then
+        record.assistantSettingKeys = {}
+        record.assistantSettingKeyPatterns = {}
+        record.assistantSettingRouteErrors = {}
+    else
+        record.assistantSettingKeys = type(record.assistantSettingKeys) == "table" and record.assistantSettingKeys or {}
+        record.assistantSettingKeyPatterns = type(record.assistantSettingKeyPatterns) == "table"
+            and record.assistantSettingKeyPatterns or {}
+        record.assistantSettingRouteErrors = type(record.assistantSettingRouteErrors) == "table"
+            and record.assistantSettingRouteErrors or {}
+    end
     record.help = CleanText(meta.help or meta.description or record.help)
     record.virtual = meta.virtual == true
     record.confirmRequired = meta.confirmRequired == true or (record.command and record.command.confirmRequired == true) or record.confirmRequired == true
@@ -866,6 +995,16 @@ local REVIEWED_CONTROL_PATH_SETTING_COMPACTS = {
     ["opt/bars/global/highlight/border/mode/aggro/outline/mode"] = { "aggrooutlinemode", "aggroborder" },
 }
 
+-- Legacy positive PercentSymbol settings intentionally focus the modern
+-- inverse HidePercentSymbol toggle.  The Registry owns the value inversion;
+-- this catalog evidence is navigation-only and must remain explicit so a
+-- generic semantic match can never silently become an accepted alias.
+local REVIEWED_DUPLICATE_CONTROL_PATH_SETTING_COMPACTS = {
+    ["classpower/advanced/player/hp/text/player/hpbar/text/right/hide/percent/symbol"] = "playerhpbartextrightpercentsymbol",
+    ["classpower/advanced/player/hp/text/player/hpbar/text/left/hide/percent/symbol"] = "playerhpbartextleftpercentsymbol",
+    ["classpower/advanced/player/hp/text/player/hpbar/text/center/hide/percent/symbol"] = "playerhpbartextcenterpercentsymbol",
+}
+
 local function ReviewedSettingAliases(controlPath)
     return REVIEWED_CONTROL_PATH_SETTING_COMPACTS[CleanText(controlPath):lower()]
 end
@@ -881,68 +1020,99 @@ local function DescriptorMatchesReviewedSetting(compacts, controlPath)
     return false
 end
 
--- Explain why a catalog record does or does not own a static one-setting
--- Assistant link.  This is intentionally structural and cold-path only.  It
--- prevents audits from treating preview state, selected-slot editors, compound
--- projections, and duplicate surfaces as unexplained coverage holes.
+local function DescriptorReviewedAliasSource(compacts, controlPath)
+    local path = CleanText(controlPath):lower()
+    local reviewed = REVIEWED_CONTROL_PATH_SETTING_COMPACTS[path]
+    if reviewed == nil then return nil end
+    if not DescriptorMatchesReviewedSetting(compacts, path) then return false end
+    local duplicate = REVIEWED_DUPLICATE_CONTROL_PATH_SETTING_COMPACTS[path]
+    if duplicate then
+        for i = 1, #(compacts or {}) do
+            if compacts[i].value == duplicate then return "reviewed_duplicate_alias" end
+        end
+    end
+    return "reviewed_descriptor_alias"
+end
+
+local function ReviewedAssistantDisposition(record)
+    local disposition = CleanText(record and record.assistantDisposition):lower()
+    local reason = CleanText(record and record.assistantDispositionReason)
+    if disposition == "" then
+        if reason ~= "" then return nil, "assistantDispositionReason requires assistantDisposition" end
+        return nil
+    end
+    if not ASSISTANT_REVIEW_DISPOSITIONS[disposition] then
+        return nil, "unsupported assistantDisposition: " .. disposition
+    end
+    if reason == "" then
+        return nil, "assistantDisposition requires a non-empty review reason"
+    end
+    return disposition, nil, reason
+end
+
+-- Legacy path shapes are useful migration hints, never proof.  Keep them in
+-- reports so reviewers can make bounded source edits without letting a broad
+-- substring rule silently bless a persisted control.
+local function SuggestedAssistantDisposition(record)
+    local path = CleanText(record and record.controlPath):lower()
+    if path:find("/status/selected/", 1, true)
+        or path:find("/status/placement/", 1, true)
+        or path:find("/position/slot", 1, true)
+        or path:find("/slot/offset/", 1, true)
+        or path:find("/editor/", 1, true)
+        or path:find("/resource/slots/", 1, true)
+        or record and record.pageKey == "opt_colors" and path:find("/class/power/", 1, true)
+    then
+        return "dynamic", "the control path looks selected-scope dependent"
+    end
+    if record and record.pageKey == "classpower"
+        and path:find("/detached/power/", 1, true)
+        and not ReviewedSettingAliases(path)
+    then
+        return "duplicate", "the control path looks like a second surface for a Player setting"
+    end
+    if path:find("/portrait/enabled", 1, true)
+        or path:find("/move/together", 1, true)
+        or path:find("/move_together", 1, true)
+        or path:find("/text/preset", 1, true)
+    then
+        return "compound", "the control path looks like a multi-value projection"
+    end
+    return nil
+end
+
+-- Explain whether a persisted record has an auditable Assistant contract.
+-- Runtime closures remain capability evidence only; they never establish the
+-- semantic target by themselves.
 local function AssistantLinkDisposition(record)
     local classification = tostring(record and record.classification or "unknown")
     local path = CleanText(record and record.controlPath):lower()
-    local kind = tostring(record and record.kind or "")
-    if classification == "setting" then
-        if CleanText(record and record.settingKey) ~= "" then
-            return "setting.explicit", "The control declares its canonical Assistant settingKey.", true
+    local targetKey = classification == "setting" and CleanText(record and record.settingKey)
+        or classification == "action" and CleanText(record and record.actionKey) or ""
+    if classification == "setting" or classification == "action" then
+        if targetKey ~= "" then
+            return classification .. ".explicit", "The control declares its canonical Assistant "
+                .. (classification == "setting" and "settingKey." or "actionKey."), classification == "setting", true
         end
-        if record and record.confirmRequired then
-            return "setting.confirmation-required", "This mutation requires confirmation and is not a direct setting shortcut.", false
+        local disposition, dispositionError, reviewReason = ReviewedAssistantDisposition(record)
+        if disposition then
+            return classification .. ".reviewed-" .. disposition, reviewReason, false, true
         end
-        if kind == "button" then
-            return "setting.compound-control", "This button applies a compound or positional choice rather than one scalar setting.", false
-        end
-        if path:find("/preview/", 1, true) then
-            return "setting.preview-state", "This control changes preview-only state, not a persisted one-to-one setting.", false
-        end
-        if path:find("/status/selected/", 1, true)
-            or path:find("/status/placement/", 1, true)
-            or path:find("/position/slot", 1, true)
-            or path:find("/slot/offset/", 1, true)
-            or path:find("/editor/", 1, true)
-            or path:find("/resource/slots/", 1, true)
-            or record and record.pageKey == "opt_colors" and path:find("/class/power/", 1, true)
-        then
-            return "setting.dynamic-selector", "The visible widget edits whichever adjacent selector or preview handle is active, so it has no single static settingKey.", false
-        end
-        if record and record.pageKey == "classpower"
-            and path:find("/detached/power/", 1, true)
-            and not ReviewedSettingAliases(path)
-        then
-            return "setting.duplicate-surface", "This is a Class Resources view of a Player setting whose canonical Assistant surface is the Player page.", false
-        end
-        if path:find("/portrait/enabled", 1, true)
-            or path:find("/move/together", 1, true)
-            or path:find("/move_together", 1, true)
-            or path:find("/text/preset", 1, true)
-        then
-            return "setting.compound-projection", "This convenience control projects or updates multiple backing values and is not one scalar setting.", false
-        end
-        return "setting.descriptor", "A canonical Assistant descriptor may resolve this stable control path at request time.", true
-    end
-    if classification == "action" then
-        if record and record.confirmRequired then
-            return "action.confirmation-required", "This is a confirmation-gated action, not a setting; it must use the Assistant action contract.", false
-        end
-        return "action.command", "This is an executable action, not a setting; it must use actionKey or its bound command.", false
+        local suggested, suggestionReason = SuggestedAssistantDisposition(record)
+        local reason = dispositionError or ("Persisted " .. classification
+            .. " has no explicit target key or reviewed Assistant disposition.")
+        return classification .. ".unresolved", reason, false, false, suggested, suggestionReason
     end
     if classification == "navigation" then
-        return "navigation.route", "This control only opens another surface and has no backing setting.", false
+        return "navigation.route", "This control only opens another surface and has no backing setting.", false, true
     end
     if classification == "ephemeral" then
         if path:find("preview", 1, true) then
-            return "ephemeral.preview", "This state exists only to drive the menu preview and is intentionally not persisted as a setting.", false
+            return "ephemeral.preview", "This state exists only to drive the menu preview and is intentionally not persisted as a setting.", false, true
         end
-        return "ephemeral.ui-state", "This is transient menu workspace or selector state and is intentionally excluded from setting linkage.", false
+        return "ephemeral.ui-state", "This is transient menu workspace or selector state and is intentionally excluded from setting linkage.", false, true
     end
-    return "unknown.unclassified", "The control has no safe runtime classification, so the Assistant must not guess a setting link.", false
+    return "unknown.unclassified", "The control has no safe runtime classification, so the Assistant must not guess a setting link.", false, false
 end
 
 local function PublicRecord(record)
@@ -954,7 +1124,7 @@ local function PublicRecord(record)
         command = {}
         for key, value in pairs(record.commandMeta) do command[key] = value end
     end
-    local linkDisposition, linkReason, linkEligible = AssistantLinkDisposition(record)
+    local linkDisposition, linkReason, linkEligible, contractAccounted, suggestedDisposition, suggestionReason = AssistantLinkDisposition(record)
     return {
         schemaVersion = record.schemaVersion,
         controlId = record.controlId,
@@ -977,11 +1147,19 @@ local function PublicRecord(record)
         settingKey = record.settingKey ~= "" and record.settingKey or nil,
         actionKey = record.actionKey ~= "" and record.actionKey or nil,
         navigationKey = record.navigationKey ~= "" and record.navigationKey or nil,
+        assistantDisposition = record.assistantDisposition ~= "" and record.assistantDisposition or nil,
+        assistantDispositionReason = record.assistantDispositionReason ~= "" and record.assistantDispositionReason or nil,
+        assistantSettingKeys = CopyStringList(record.assistantSettingKeys),
+        assistantSettingKeyPatterns = CopyStringList(record.assistantSettingKeyPatterns),
+        assistantSettingRouteErrors = CopyStringList(record.assistantSettingRouteErrors),
         confirmRequired = record.confirmRequired and true or false,
         virtual = record.virtual and true or false,
         assistantLinkDisposition = linkDisposition,
         assistantLinkReason = linkReason,
         assistantStaticSettingLinkEligible = linkEligible and true or false,
+        assistantContractAccounted = contractAccounted and true or false,
+        suggestedAssistantDisposition = suggestedDisposition,
+        suggestedAssistantDispositionReason = suggestionReason,
         command = command,
         sources = sources,
     }
@@ -1255,14 +1433,15 @@ local function ResolveSettingDescriptorRecord(settingKey, pageKey, descriptor)
     local signatures, compacts = SettingDescriptorSignatures(settingKey, pageKey, descriptor)
     if #signatures == 0 then return nil, "missing_descriptor" end
     local expectedKinds = EXPECTED_SETTING_KINDS[CleanText(descriptor and descriptor.type):lower()]
-    local best, bestScore, tied
+    local best, bestScore, bestSource, tied
     local function ConsiderRecord(record)
         if record and record.classification == "setting"
             and (not expectedKinds or expectedKinds[record.kind])
             and record.commandMeta and record.commandMeta.hasGet and record.commandMeta.hasSet
         then
             local recordTokens, recordSet, rawPath = RecordSettingTokens(record)
-            local reviewedMatch = DescriptorMatchesReviewedSetting(compacts, rawPath)
+            local reviewedAliasSource = DescriptorReviewedAliasSource(compacts, rawPath)
+            local reviewedMatch = reviewedAliasSource ~= false
             local score
             if reviewedMatch then
                 score = CompactPathMatchScore(compacts, rawPath)
@@ -1282,7 +1461,8 @@ local function ResolveSettingDescriptorRecord(settingKey, pageKey, descriptor)
                 if record.identityStable then score = score + 2 end
                 if record.idSource == "explicit" then score = score + 1 end
                 if not bestScore or score > bestScore then
-                    best, bestScore, tied = record, score, false
+                    best, bestScore, bestSource, tied = record, score,
+                        reviewedAliasSource or "semantic_descriptor", false
                 elseif score == bestScore and record ~= best then
                     tied = true
                 end
@@ -1290,14 +1470,34 @@ local function ResolveSettingDescriptorRecord(settingKey, pageKey, descriptor)
         end
     end
     local pageRecords = pageKey ~= "" and STATE.byPage[pageKey] or nil
-    if pageRecords then
+    if pageKey ~= "" and not pageRecords then
+        return nil, "page_not_built"
+    elseif pageRecords then
         for controlId in pairs(pageRecords) do ConsiderRecord(STATE.byId[controlId]) end
     else
         for _, record in pairs(STATE.byId) do ConsiderRecord(record) end
     end
     if not best then return nil, "no_semantic_match" end
     if tied then return nil, "ambiguous_semantic_match" end
-    return best, "semantic_descriptor"
+    return best, bestSource or "semantic_descriptor"
+end
+
+local function SettingDescriptorFingerprint(descriptor)
+    if type(descriptor) ~= "table" then return "" end
+    local fields = { "attribute", "dbPath", "type", "label", "category", "unit", "frameType",
+        "menuControlDisposition", "menuControlDispositionReason", "menuControlDispositionEvidence" }
+    local parts = {}
+    for i = 1, #fields do
+        local key = fields[i]
+        local value = descriptor[key]
+        if type(value) == "table" then
+            local nested = {}
+            for j = 1, #value do nested[#nested + 1] = CleanText(value[j]) end
+            value = table.concat(nested, ".")
+        end
+        parts[#parts + 1] = key .. "=" .. CleanText(value)
+    end
+    return table.concat(parts, "|")
 end
 
 -- Late-bound exact-control lookup for Search and the load-on-demand Assistant.
@@ -1308,16 +1508,18 @@ function Catalog.FindBySettingKey(settingKey, pageKey, descriptor)
     settingKey = CleanText(settingKey)
     pageKey = CleanText(pageKey)
     if settingKey == "" then return nil end
+    local descriptorFingerprint = SettingDescriptorFingerprint(descriptor)
 
     -- Exact search focusing calls this resolver again during the immediate,
     -- zero-delay, and 0.05-second layout passes. Serve that one repeated key
     -- before scanning; the catalog revision invalidates the scalar cache.
     local cached = STATE.lastSettingDescriptorLookup
-    if cached and cached.revision == STATE.revision and cached.settingKey == settingKey and cached.pageKey == pageKey then
+    if cached and cached.revision == STATE.revision and cached.settingKey == settingKey
+        and cached.pageKey == pageKey and cached.descriptorFingerprint == descriptorFingerprint
+    then
         local record = cached.controlId and STATE.byId[cached.controlId] or nil
         if record then
             local public = PublicRecord(record)
-            public.settingKey = settingKey
             public.resolvedSettingKey = settingKey
             public.settingKeySource = cached.source
             return public, record.widget, cached.source
@@ -1334,15 +1536,11 @@ function Catalog.FindBySettingKey(settingKey, pageKey, descriptor)
             break
         end
     end
-    -- Preserve the previous cross-page fallback for callers with an outdated
-    -- page hint, but avoid it for the normal exact-page hit.
-    if not best then
+    -- With an explicit page hint, fail closed instead of focusing a visually
+    -- similar widget on another page. Page-less callers may still search all.
+    if not best and pageKey == "" then
         for _, record in pairs(STATE.byId) do
             if record.settingKey == settingKey then
-                if pageKey ~= "" and record.pageKey == pageKey then
-                    best = record
-                    break
-                end
                 if not best
                     or (record.identityStable and not best.identityStable)
                     or (not record.collision and best.collision)
@@ -1357,26 +1555,117 @@ function Catalog.FindBySettingKey(settingKey, pageKey, descriptor)
             revision = STATE.revision,
             settingKey = settingKey,
             pageKey = pageKey,
+            descriptorFingerprint = descriptorFingerprint,
             controlId = best.controlId,
             source = "explicit",
         }
         return PublicRecord(best), best.widget, "explicit"
     end
 
+    -- A reviewed dynamic control may represent a finite set or a narrow key
+    -- family selected by its current scope/resource/lane.  Source files must
+    -- declare that family explicitly.  Never infer it from labels or broad
+    -- page prefixes, and reject overlap between two controls as ambiguous.
+    local dynamicBest, dynamicSource, dynamicAmbiguous
+    local function ConsiderDynamicRecord(record)
+        if not record or record.classification ~= "setting"
+            or CleanText(record.assistantDisposition):lower() ~= "dynamic"
+            or #(record.assistantSettingRouteErrors or {}) > 0
+        then
+            return
+        end
+        local matchedSource
+        for i = 1, #(record.assistantSettingKeys or {}) do
+            if record.assistantSettingKeys[i] == settingKey then
+                matchedSource = "reviewed_dynamic_key"
+                break
+            end
+        end
+        if not matchedSource then
+            for i = 1, #(record.assistantSettingKeyPatterns or {}) do
+                local ok, matched = pcall(string.match, settingKey, record.assistantSettingKeyPatterns[i])
+                if ok and matched ~= nil then
+                    matchedSource = "reviewed_dynamic_pattern"
+                    break
+                end
+            end
+        end
+        if matchedSource then
+            if not dynamicBest then
+                dynamicBest, dynamicSource = record, matchedSource
+            elseif dynamicBest ~= record then
+                dynamicAmbiguous = true
+            elseif dynamicSource ~= "reviewed_dynamic_key" then
+                dynamicSource = matchedSource
+            end
+        end
+    end
+    if pageRecords then
+        for controlId in pairs(pageRecords) do ConsiderDynamicRecord(STATE.byId[controlId]) end
+    elseif pageKey == "" then
+        for _, record in pairs(STATE.byId) do ConsiderDynamicRecord(record) end
+    end
+    if dynamicAmbiguous then
+        STATE.lastSettingDescriptorLookup = {
+            revision = STATE.revision,
+            settingKey = settingKey,
+            pageKey = pageKey,
+            descriptorFingerprint = descriptorFingerprint,
+            source = "ambiguous_reviewed_dynamic",
+        }
+        return nil, nil, "ambiguous_reviewed_dynamic"
+    elseif dynamicBest then
+        STATE.lastSettingDescriptorLookup = {
+            revision = STATE.revision,
+            settingKey = settingKey,
+            pageKey = pageKey,
+            descriptorFingerprint = descriptorFingerprint,
+            controlId = dynamicBest.controlId,
+            source = dynamicSource,
+        }
+        local public = PublicRecord(dynamicBest)
+        public.resolvedSettingKey = settingKey
+        public.settingKeySource = dynamicSource
+        return public, dynamicBest.widget, dynamicSource
+    elseif pageKey ~= "" and not pageRecords then
+        STATE.lastSettingDescriptorLookup = {
+            revision = STATE.revision,
+            settingKey = settingKey,
+            pageKey = pageKey,
+            descriptorFingerprint = descriptorFingerprint,
+            source = "page_not_built",
+        }
+        return nil, nil, "page_not_built"
+    end
+
     descriptor = type(descriptor) == "table" and descriptor or nil
     if not descriptor then return nil end
+
+    if CleanText(descriptor.menuControlDisposition):lower() == "standalone"
+        and CleanText(descriptor.menuControlDispositionReason) ~= ""
+        and CleanText(descriptor.menuControlDispositionEvidence) ~= ""
+    then
+        STATE.lastSettingDescriptorLookup = {
+            revision = STATE.revision,
+            settingKey = settingKey,
+            pageKey = pageKey,
+            descriptorFingerprint = descriptorFingerprint,
+            source = "reviewed_standalone",
+        }
+        return nil, nil, "reviewed_standalone"
+    end
 
     local resolved, source = ResolveSettingDescriptorRecord(settingKey, pageKey, descriptor)
     STATE.lastSettingDescriptorLookup = {
         revision = STATE.revision,
         settingKey = settingKey,
         pageKey = pageKey,
+        descriptorFingerprint = descriptorFingerprint,
         controlId = resolved and resolved.controlId or nil,
         source = source,
     }
     if not resolved then return nil, nil, source end
     local public = PublicRecord(resolved)
-    public.settingKey = settingKey
     public.resolvedSettingKey = settingKey
     public.settingKeySource = source
     return public, resolved.widget, source
@@ -1391,12 +1680,48 @@ function Catalog.ValidateRecord(record)
     if CleanText(record.kind) == "" then errors[#errors + 1] = "kind is missing" end
     if not CLASSIFICATION[record.classification] then errors[#errors + 1] = "classification is invalid" end
     if not VALID_ID_SOURCES[record.idSource] then errors[#errors + 1] = "idSource is invalid" end
+    local reviewedDisposition, dispositionError = ReviewedAssistantDisposition(record)
+    local declaredDisposition = CleanText(record.assistantDisposition) ~= ""
+        or CleanText(record.assistantDispositionReason) ~= ""
+    local routeKeyCount = #(record.assistantSettingKeys or {})
+    local routePatternCount = #(record.assistantSettingKeyPatterns or {})
+    local routeCount = routeKeyCount + routePatternCount
+    for i = 1, #(record.assistantSettingRouteErrors or {}) do
+        errors[#errors + 1] = record.assistantSettingRouteErrors[i]
+    end
+    if routeCount > 0 then
+        if record.classification ~= "setting" then
+            errors[#errors + 1] = "Assistant setting routes are only valid for setting controls"
+        end
+        if CleanText(record.assistantDisposition):lower() ~= "dynamic" then
+            errors[#errors + 1] = "Assistant setting routes require assistantDisposition=dynamic"
+        end
+        if CleanText(record.settingKey) ~= "" then
+            errors[#errors + 1] = "settingKey and Assistant dynamic routes are mutually exclusive"
+        end
+    end
+    if declaredDisposition and dispositionError then errors[#errors + 1] = dispositionError end
+    if declaredDisposition and record.classification ~= "setting" and record.classification ~= "action" then
+        errors[#errors + 1] = "assistantDisposition is only valid for persisted setting/action controls"
+    end
     if record.classification == "setting" then
         if not (record.commandMeta and record.commandMeta.hasGet and record.commandMeta.hasSet) and record.settingKey == "" then
             warnings[#warnings + 1] = "setting has no complete read/write command metadata"
         end
-    elseif record.classification == "action" and not (record.commandMeta and record.commandMeta.hasSet) and record.actionKey == "" then
-        warnings[#warnings + 1] = "action has no write command metadata"
+        if record.settingKey ~= "" and reviewedDisposition then
+            errors[#errors + 1] = "settingKey and assistantDisposition are mutually exclusive"
+        elseif record.settingKey == "" and not reviewedDisposition then
+            warnings[#warnings + 1] = "persisted setting lacks an explicit Assistant target or reviewed disposition"
+        end
+    elseif record.classification == "action" then
+        if not (record.commandMeta and record.commandMeta.hasSet) and record.actionKey == "" then
+            warnings[#warnings + 1] = "action has no write command metadata"
+        end
+        if record.actionKey ~= "" and reviewedDisposition then
+            errors[#errors + 1] = "actionKey and assistantDisposition are mutually exclusive"
+        elseif record.actionKey == "" and not reviewedDisposition then
+            warnings[#warnings + 1] = "persisted action lacks an explicit Assistant target or reviewed disposition"
+        end
     elseif record.classification == "navigation" and record.navigationKey == "" then
         warnings[#warnings + 1] = "navigation control has no navigationKey"
     elseif record.classification == "unknown" then
@@ -1448,7 +1773,20 @@ function Catalog.GetCoverageReport()
         unknown = {},
         currentIssues = {},
         targetValidationAvailable = targetValidationAvailable,
+        persistedControls = 0,
         resolvedTargets = 0,
+        explicitTargetCount = 0,
+        registryValidatedTargetCount = 0,
+        registryMissingTargetCount = 0,
+        registryMissingTargets = {},
+        reviewedDispositionCount = 0,
+        reviewedDispositionCounts = {},
+        reviewedDynamicRouteControlCount = 0,
+        reviewedDynamicRouteKeyCount = 0,
+        reviewedDynamicRoutePatternCount = 0,
+        invalidAssistantRouteCount = 0,
+        invalidAssistantRoutes = {},
+        invalidAssistantDispositionCount = 0,
         unresolvedTargetCount = 0,
         unresolvedTargets = {},
         invalidCapabilityCount = 0,
@@ -1460,6 +1798,11 @@ function Catalog.GetCoverageReport()
         assistantStaticSettingLinkExcluded = 0,
         collisionEventsLifetime = STATE.collisionEvents,
         componentParts = 0,
+        requiredShellControlCount = 0,
+        requiredShellDispositionCount = 0,
+        missingShellControls = {},
+        invalidShellControls = {},
+        shellContractComplete = false,
     }
 
     for _ in pairs(STATE.components) do report.componentParts = report.componentParts + 1 end
@@ -1467,6 +1810,31 @@ function Catalog.GetCoverageReport()
     for i = 1, #records do
         local record = records[i]
         local classification = CLASSIFICATION[record.classification] and record.classification or "unknown"
+        local routeKeyCount = #(record.assistantSettingKeys or {})
+        local routePatternCount = #(record.assistantSettingKeyPatterns or {})
+        local routeCount = routeKeyCount + routePatternCount
+        local routeErrors = record.assistantSettingRouteErrors or {}
+        local routeAssociationError
+        if routeCount > 0 and classification ~= "setting" then
+            routeAssociationError = "Assistant setting routes are only valid for setting controls"
+        elseif routeCount > 0 and CleanText(record.assistantDisposition):lower() ~= "dynamic" then
+            routeAssociationError = "Assistant setting routes require assistantDisposition=dynamic"
+        elseif routeCount > 0 and CleanText(record.settingKey) ~= "" then
+            routeAssociationError = "settingKey and Assistant dynamic routes are mutually exclusive"
+        end
+        if routeCount > 0 then
+            report.reviewedDynamicRouteControlCount = report.reviewedDynamicRouteControlCount + 1
+            report.reviewedDynamicRouteKeyCount = report.reviewedDynamicRouteKeyCount + routeKeyCount
+            report.reviewedDynamicRoutePatternCount = report.reviewedDynamicRoutePatternCount + routePatternCount
+        end
+        if #routeErrors > 0 or routeAssociationError then
+            report.invalidAssistantRouteCount = report.invalidAssistantRouteCount + 1
+            report.invalidAssistantRoutes[#report.invalidAssistantRoutes + 1] = {
+                controlId = record.controlId,
+                pageKey = record.pageKey,
+                reason = routeAssociationError or table.concat(routeErrors, "; "),
+            }
+        end
         local linkDisposition, _, linkEligible = AssistantLinkDisposition(record)
         report.assistantLinkDispositionCounts[linkDisposition] =
             (report.assistantLinkDispositionCounts[linkDisposition] or 0) + 1
@@ -1476,7 +1844,10 @@ function Catalog.GetCoverageReport()
         report.byIdSource[record.idSource] = (report.byIdSource[record.idSource] or 0) + 1
         local page = report.byPage[record.pageKey]
         if not page then
-            page = { total = 0, setting = 0, action = 0, navigation = 0, ephemeral = 0, unknown = 0 }
+            page = {
+                total = 0, setting = 0, action = 0, navigation = 0, ephemeral = 0, unknown = 0,
+                assistantContractGaps = 0,
+            }
             report.byPage[record.pageKey] = page
         end
         page.total = page.total + 1
@@ -1511,30 +1882,63 @@ function Catalog.GetCoverageReport()
                     reason = capabilityIssue,
                 }
             end
-            local key = classification == "setting" and record.settingKey or record.actionKey
-            local hasDirectClosure = classification == "setting"
-                and record.commandMeta and record.commandMeta.hasGet and record.commandMeta.hasSet
-                or classification == "action" and record.commandMeta and record.commandMeta.hasSet
-                or classification == "ephemeral" and record.commandMeta and record.commandMeta.hasSet
-            local resolved = hasDirectClosure == true
-            if resolved and record.commandMeta and record.commandMeta.hasRuntimeValidator then
-                local ok, executable = pcall(record.command.canExecute)
-                resolved = ok and executable == true
-            end
-            if not resolved and key and key ~= "" and targetValidationAvailable then
-                resolved = classification == "setting" and registry:GetSetting(key) ~= nil
-                    or classification == "action" and registry:GetAction(key) ~= nil
-            end
-            if resolved then
-                report.resolvedTargets = report.resolvedTargets + 1
-            else
-                report.unresolvedTargetCount = report.unresolvedTargetCount + 1
-                report.unresolvedTargets[#report.unresolvedTargets + 1] = {
-                    controlId = record.controlId,
-                    pageKey = record.pageKey,
-                    classification = classification,
-                    targetKey = key ~= "" and key or nil,
-                }
+            -- Ephemeral commands are runtime capability, not persisted
+            -- Assistant targets.  Only settings/actions participate below.
+            if classification == "setting" or classification == "action" then
+                report.persistedControls = report.persistedControls + 1
+                local key = classification == "setting" and CleanText(record.settingKey)
+                    or CleanText(record.actionKey)
+                local disposition, dispositionError = ReviewedAssistantDisposition(record)
+                local declaredDisposition = CleanText(record.assistantDisposition) ~= ""
+                    or CleanText(record.assistantDispositionReason) ~= ""
+                local conflict = key ~= "" and declaredDisposition
+                local gapReason
+                if conflict then
+                    report.invalidAssistantDispositionCount = report.invalidAssistantDispositionCount + 1
+                    gapReason = "explicit target key and assistantDisposition are mutually exclusive"
+                elseif key ~= "" then
+                    report.resolvedTargets = report.resolvedTargets + 1
+                    report.explicitTargetCount = report.explicitTargetCount + 1
+                    if targetValidationAvailable then
+                        local target
+                        if classification == "setting" then target = registry:GetSetting(key)
+                        else target = registry:GetAction(key) end
+                        if target ~= nil then
+                            report.registryValidatedTargetCount = report.registryValidatedTargetCount + 1
+                        else
+                            report.registryMissingTargetCount = report.registryMissingTargetCount + 1
+                            report.registryMissingTargets[#report.registryMissingTargets + 1] = {
+                                controlId = record.controlId,
+                                pageKey = record.pageKey,
+                                classification = classification,
+                                targetKey = key,
+                            }
+                        end
+                    end
+                elseif disposition then
+                    report.reviewedDispositionCount = report.reviewedDispositionCount + 1
+                    report.reviewedDispositionCounts[disposition] =
+                        (report.reviewedDispositionCounts[disposition] or 0) + 1
+                else
+                    if declaredDisposition and dispositionError then
+                        report.invalidAssistantDispositionCount = report.invalidAssistantDispositionCount + 1
+                    end
+                    gapReason = dispositionError or "missing explicit settingKey/actionKey or reviewed Assistant disposition"
+                end
+                if gapReason then
+                    local _, _, _, _, suggestedDisposition, suggestionReason = AssistantLinkDisposition(record)
+                    report.unresolvedTargetCount = report.unresolvedTargetCount + 1
+                    page.assistantContractGaps = page.assistantContractGaps + 1
+                    report.unresolvedTargets[#report.unresolvedTargets + 1] = {
+                        controlId = record.controlId,
+                        pageKey = record.pageKey,
+                        classification = classification,
+                        targetKey = key ~= "" and key or nil,
+                        reason = gapReason,
+                        suggestedDisposition = suggestedDisposition,
+                        suggestionReason = suggestionReason,
+                    }
+                end
             end
         end
     end
@@ -1542,10 +1946,53 @@ function Catalog.GetCoverageReport()
     if report.interactive > 0 then
         report.interactiveCoveragePercent = math.floor((report.knownInteractive * 10000 / report.interactive) + 0.5) / 100
     end
+    local shell = M.REQUIRED_SHELL_CONTRACT
+    if type(shell) == "table" then
+        for controlId, expected in pairs(shell.controls or {}) do
+            report.requiredShellControlCount = report.requiredShellControlCount + 1
+            local record = STATE.byId[controlId]
+            if not record then
+                report.missingShellControls[#report.missingShellControls + 1] = controlId
+            else
+                local mismatches = {}
+                for _, field in ipairs({ "classification", "kind", "actionKey" }) do
+                    local wanted = CleanText(expected and expected[field])
+                    if wanted ~= "" and CleanText(record[field]) ~= wanted then
+                        mismatches[#mismatches + 1] = field .. "=" .. CleanText(record[field]) .. " expected=" .. wanted
+                    end
+                end
+                if #mismatches > 0 then
+                    report.invalidShellControls[#report.invalidShellControls + 1] = {
+                        controlId = controlId,
+                        reason = table.concat(mismatches, "; "),
+                    }
+                end
+            end
+        end
+        for _ in pairs(shell.dispositions or {}) do
+            report.requiredShellDispositionCount = report.requiredShellDispositionCount + 1
+        end
+        table.sort(report.missingShellControls)
+        table.sort(report.invalidShellControls, function(left, right)
+            return tostring(left and left.controlId or "") < tostring(right and right.controlId or "")
+        end)
+        report.shellContractComplete = tonumber(shell.schemaVersion) == 1
+            and report.requiredShellControlCount >= (tonumber(shell.minimumControls) or 0)
+            and report.requiredShellDispositionCount >= (tonumber(shell.minimumDispositions) or 0)
+            and #report.missingShellControls == 0
+            and #report.invalidShellControls == 0
+    end
+    report.assistantContractComplete = report.unresolvedTargetCount == 0
+        and report.invalidAssistantDispositionCount == 0
+        and report.invalidAssistantRouteCount == 0
+    report.assistantRegistryCrosswalkComplete = not targetValidationAvailable
+        or report.registryMissingTargetCount == 0
     report.catalogComplete = report.byClassification.unknown == 0 and report.collisions == 0
         and report.unstableIds == 0
-        and report.unresolvedTargetCount == 0
+        and report.assistantContractComplete
+        and report.assistantRegistryCrosswalkComplete
         and report.invalidCapabilityCount == 0
+        and report.shellContractComplete
 
     for i = 1, #STATE.issues do
         local issue = STATE.issues[i]
@@ -1613,7 +2060,13 @@ function M.RegisterMenuChromeControl(widget, path, label, classification, opts)
         kind = opts.kind or (classification == "navigation" and "button" or "button"),
         label = label or path,
         classification = classification or "action",
+        settingKey = opts.settingKey,
+        actionKey = opts.actionKey,
         navigationKey = opts.navigationKey,
+        assistantDisposition = opts.assistantDisposition,
+        assistantDispositionReason = opts.assistantDispositionReason,
+        assistantSettingKeys = opts.assistantSettingKeys,
+        assistantSettingKeyPatterns = opts.assistantSettingKeyPatterns,
         confirmRequired = opts.confirmRequired == true,
         historyMode = opts.historyMode,
         help = opts.help,

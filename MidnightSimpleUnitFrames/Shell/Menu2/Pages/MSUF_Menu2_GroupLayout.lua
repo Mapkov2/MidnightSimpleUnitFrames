@@ -385,6 +385,8 @@ local function BuildGFLayout(ctx)
         controlDomain = "group",
         controlPageKey = ctx and ctx.key,
         controlPath = "anchor.custom",
+        assistantDisposition = "dynamic",
+        assistantDispositionReason = "Custom anchor editing targets the currently selected Group scope.",
     })
     local function RefreshAnchorHeader()
         customAnchor.Refresh()

@@ -13,11 +13,39 @@ local floor = math.floor
 local max = math.max
 local min = math.min
 local CallGlobal, G, Gameplay, SetValue, LabelAt, ControlMeta, RegisterControl = M.Pick(AP, [[CallGlobal G Gameplay SetValue LabelAt ControlMeta RegisterControl]])
+local PROFILE_SETTING_BY_PATH = {
+    ["specialization.auto_switch.enabled"] = "profiles.specAutoSwitch",
+}
+local PROFILE_ACTION_BY_PATH = {
+    ["active_profile.select"] = "switch_profile",
+    ["profile.create"] = "create_profile",
+    ["profile.copy_current"] = "copy_profile",
+    ["profile.reset_current"] = "reset_profile",
+    ["profile.delete_current"] = "delete_profile",
+    ["export.generate"] = "export_profile",
+    ["import.legacy"] = "import_legacy_profile_string",
+    ["profiles.browse_wago"] = "copy_wago_profiles_link",
+}
 local function ProfilesMeta(path, classification, exact)
-    return ControlMeta("profiles", "advanced", path, classification, exact)
+    local resolved = {}
+    if type(exact) == "table" then
+        for key, value in pairs(exact) do resolved[key] = value end
+    end
+    resolved.settingKey = resolved.settingKey or PROFILE_SETTING_BY_PATH[path]
+    resolved.actionKey = resolved.actionKey or PROFILE_ACTION_BY_PATH[path]
+    if path == "import.execute" and not resolved.actionKey then
+        resolved.assistantDisposition = "dynamic"
+        resolved.assistantDispositionReason = "The button routes to import_profile_string or import_profile_string_new from the explicit new-profile import mode."
+    end
+    return ControlMeta("profiles", "advanced", path, classification, resolved)
 end
 local function ModulesMeta(path, classification, exact)
-    return ControlMeta("modules", "advanced", path, classification, exact)
+    local resolved = {}
+    if type(exact) == "table" then
+        for key, value in pairs(exact) do resolved[key] = value end
+    end
+    if path == "style.enabled" then resolved.settingKey = resolved.settingKey or "general.styleEnabled" end
+    return ControlMeta("modules", "advanced", path, classification, resolved)
 end
 local MoveWidget = W.MoveWidget or AP.MoveWidget
 local Tr = M.TranslateText or M.Tr or function(text) return text end
@@ -424,7 +452,9 @@ local function BuildProfiles(ctx)
                     CallMSUF("MSUF_SetSpecProfile", s.id, (v ~= "None") and v or nil)
                     RefreshAfterProfileChange(ctx)
                 end,
-                ProfilesMeta("specialization.mapping.slot." .. tostring(i)))
+                ProfilesMeta("specialization.mapping.slot." .. tostring(i), "action", {
+                    actionKey = "set_spec_profile",
+                }))
         end
     end
     local io = b:CollapsibleSection("profiles_io", "Export / Import", 424, false)
@@ -509,6 +539,15 @@ local function BuildProfiles(ctx)
         if text and text ~= "" then return text end
         PrintProfileMessage("|cffff0000", "Import failed (empty string).")
     end
+    local function CompletePendingFirstLoadImport()
+        local firstLoad = MSUF and MSUF.FirstLoad6
+        local state = firstLoad and type(firstLoad.GetState) == "function" and firstLoad:GetState() or nil
+        if type(state) ~= "table" or state.status ~= "active" or state.step ~= "import" then return end
+        if type(firstLoad.Complete) == "function" then
+            pcall(firstLoad.Complete, firstLoad, "import")
+        end
+        if type(M.InvalidatePage) == "function" then M.InvalidatePage("home") end
+    end
     local function ImportIntoCurrent()
         local text = ImportTextOrFail()
         if not text then return false end
@@ -523,6 +562,7 @@ local function BuildProfiles(ctx)
                 return false
             end
             if imported ~= true then return false end
+            CompletePendingFirstLoadImport()
             ClearProfileHistory()
             if _G.MSUF_ProfileIO_LastImportDeferredRuntime == true then
                 RefreshAfterProfileChange(ctx)
@@ -580,6 +620,7 @@ local function BuildProfiles(ctx)
                 RefreshAfterProfileChange(ctx)
                 return false
             end
+            CompletePendingFirstLoadImport()
             ClearProfileHistory()
             if _G.MSUF_ProfileIO_LastImportDeferredRuntime == true then
                 RefreshAfterProfileChange(ctx)

@@ -553,6 +553,25 @@ local function ApplyHistorySnapshot(snapshot, reason, source)
     RebuildActivePage()
     return true
 end
+
+-- Guided setup can span multiple menu sessions and reloads, while normal Menu2
+-- history intentionally cannot. Keep one compact active-profile restore point
+-- in guided-tour state and reuse the same proven restore fanout as Undo.
+function M.CaptureGuidedTourRestorePoint()
+    if IsConfigCombatLocked() then return nil end
+    local snapshot = SnapshotDB()
+    snapshot._msuf2GuidedProfileName = tostring(_G.MSUF_ActiveProfile or "Default")
+    return snapshot
+end
+
+function M.RestoreGuidedTourRestorePoint(snapshot)
+    if IsConfigCombatLocked() then return false end
+    local expectedProfile = type(snapshot) == "table" and tostring(snapshot._msuf2GuidedProfileName or "") or ""
+    local activeProfile = tostring(_G.MSUF_ActiveProfile or "Default")
+    if expectedProfile == "" or activeProfile ~= expectedProfile then return false, "profile_mismatch" end
+    return ApplyHistorySnapshot(snapshot, "MSUF2_GUIDED_TOUR_RESTORE", "guided_tour:restore_point")
+end
+
 function M.IsHistoryCapturing()
     return historyDepth > 0 or historyRestoring
 end
@@ -1445,6 +1464,10 @@ local function AttachCommandAction(ctx, widget, kind, getValue, setValue, opts)
         settingKey = opts.settingKey,
         actionKey = opts.actionKey,
         navigationKey = opts.navigationKey,
+        assistantDisposition = opts.assistantDisposition,
+        assistantDispositionReason = opts.assistantDispositionReason,
+        assistantSettingKeys = opts.assistantSettingKeys,
+        assistantSettingKeyPatterns = opts.assistantSettingKeyPatterns,
         classification = opts.classification,
         historyMode = opts.historyMode or (opts.classification == "ephemeral" and "none" or nil),
         valueKind = opts.valueKind,
@@ -1494,6 +1517,10 @@ local function AttachCommandAction(ctx, widget, kind, getValue, setValue, opts)
             settingKey = command.settingKey,
             actionKey = command.actionKey,
             navigationKey = command.navigationKey,
+            assistantDisposition = command.assistantDisposition,
+            assistantDispositionReason = command.assistantDispositionReason,
+            assistantSettingKeys = command.assistantSettingKeys,
+            assistantSettingKeyPatterns = command.assistantSettingKeyPatterns,
             classification = command.classification,
             confirmRequired = command.confirmRequired,
             command = command,

@@ -821,7 +821,7 @@ local function SearchRouteGroupPage(route, pageKey, normalized)
             or (SearchRouteHasAny(normalized, "buff|buffs") and "buff" or nil)
         lane = lane or (type(M.gfAuraLaneSelection) == "table" and M.gfAuraLaneSelection[activeScope]) or "buff"
         local tool = SearchRouteHasAny(normalized, "blacklist|ignore list|block list") and "blacklist"
-            or (SearchRouteHasAny(normalized, "filter|only mine|dispellable|stealable|boss aura") and "filters" or "layout")
+            or (SearchRouteHasAny(normalized, "filter|only mine|dispellable|stealable|boss aura|hide permanent|no timer|no duration") and "filters" or "layout")
         SearchRouteSetTable(route, "gfAuraLaneSelection", activeScope, lane)
         SearchRouteSetNestedTable(route, "gfAuraToolSelection", activeScope, lane, tool)
     end

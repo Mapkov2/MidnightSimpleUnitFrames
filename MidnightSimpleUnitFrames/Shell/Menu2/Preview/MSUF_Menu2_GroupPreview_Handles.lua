@@ -285,22 +285,7 @@ function Handles.Install(box, deps)
         return true
     end
     local function ResolveGroupAuraAnchor(rx, ry)
-        local best, bestD = "CENTER", 1e9
-        local candidates = {
-            { "CENTER", 0.5, 0.5 },
-            { "TOPLEFT", 0, 0 },
-            { "TOPRIGHT", 1, 0 },
-            { "BOTTOMLEFT", 0, 1 },
-            { "BOTTOMRIGHT", 1, 1 },
-        }
-        for i = 1, #candidates do
-            local c = candidates[i]
-            local dx = (rx or 0.5) - c[2]
-            local dy = (ry or 0.5) - c[3]
-            local d = dx * dx + dy * dy
-            if d < bestD then best, bestD = c[1], d end
-        end
-        return best
+        return ResolveAnchor(rx, ry)
     end
     local function SaveHandlePosition(handle, action)
         if not (handle and box._mock) or handle._locked then return end
@@ -861,6 +846,9 @@ function Handles.Install(box, deps)
     local debuffHandle = CreatePreviewHandle("debuff", "debuffs", { 0.89, 0.29, 0.29 }, "DEBUFFS", 86, 34, false)
     debuffHandle._cfgGroup = "debuff"
     AddIconPool(debuffHandle, 6)
+    local externalHandle = CreatePreviewHandle("external", "externals", { 0.30, 0.72, 1.00 }, "EXTERNAL", 86, 34, false)
+    externalHandle._cfgGroup = "externals"
+    AddIconPool(externalHandle, 2)
     local statusHandles = {}
     local statusSpecs = H.StatusSpecs()
     for i = 1, #statusSpecs do
@@ -983,6 +971,7 @@ function Handles.Install(box, deps)
         buffHandle = buffHandle,
         trackedBuffHandle = trackedBuffHandle,
         debuffHandle = debuffHandle,
+        externalHandle = externalHandle,
         statusHandles = statusHandles,
         spellHandle = spellHandle,
         targetedHandle = targetedHandle,
