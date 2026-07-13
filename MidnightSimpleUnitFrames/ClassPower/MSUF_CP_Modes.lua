@@ -1,8 +1,6 @@
 --- ClassPower/MSUF_CP_Modes.lua - class power render modes
 
 --- MSUF_CP_Mode_Segmented.lua
-
---- MSUF_CP_Mode_Segmented.lua
 --- Phase 2 ClassPower split: segmented base mode extracted from the core file.
 --- Includes smooth Essence recharge animation (Evoker pip fill).
 
@@ -13,7 +11,8 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
     return value
 end
 
-ExportPublic("MSUF_CP_MODE_BUILDERS", _G.MSUF_CP_MODE_BUILDERS or {})
+local modeBuilders = _G.MSUF_CP_MODE_BUILDERS or {}
+ExportPublic("MSUF_CP_MODE_BUILDERS", modeBuilders)
 
 local function CP_GetVisual(E)
     local getVisual = E and E.GetVisual
@@ -75,7 +74,152 @@ local function CP_StampMinMax(bar, minValue, maxValue)
     bar:SetMinMaxValues(minValue, maxValue)
 end
 
-_G.MSUF_CP_MODE_BUILDERS.SEGMENTED = function(E)
+--- Native 12.1 duration plumbing shared by the timer-backed modes. Objects are
+--- created only when a timer actually becomes active and then reused by their
+--- owning bar. The legacy Lua ticks remain available only as a degraded path
+--- for incomplete API environments (notably standalone smoke harnesses).
+local nativeTimerSupportCache = setmetatable({}, { __mode = "k" })
+local function CreateNativeTimerSupport(E)
+    local durationUtil = E.C_DurationUtil or _G.C_DurationUtil
+    local stringUtil = E.C_StringUtil or _G.C_StringUtil
+    local enum = E.Enum or _G.Enum
+    local cached = durationUtil and nativeTimerSupportCache[durationUtil]
+    if cached and cached.stringUtil == stringUtil and cached.enum == enum then
+        return cached.support
+    end
+    local interpolation = enum and enum.StatusBarInterpolation
+    local directions = enum and enum.StatusBarTimerDirection
+    local properties = enum and enum.DurationTextBindingProperty
+    local rounding = enum and enum.NumericRuleFormatRounding
+    local immediate = interpolation and interpolation.Immediate
+    local elapsedDirection = directions and directions.ElapsedTime
+    local remainingDirection = directions and directions.RemainingTime
+    local createDuration = durationUtil and durationUtil.CreateDuration
+    local createBinding = durationUtil and durationUtil.CreateDurationTextBinding
+    local createFormatter = stringUtil and stringUtil.CreateNumericRuleFormatter
+    local remainingComponents
+
+    local function EnsureDuration(owner, key)
+        if not (owner and type(createDuration) == "function") then return nil end
+        local duration = owner[key]
+        if duration then return duration end
+        local ok
+        ok, duration = pcall(createDuration)
+        if not ok or not duration then return nil end
+        owner[key] = duration
+        return duration
+    end
+
+    local function ApplyTimer(bar, duration, direction)
+        if not (bar and duration and immediate ~= nil and direction ~= nil
+            and type(bar.SetTimerDuration) == "function") then return false end
+        local ok = pcall(bar.SetTimerDuration, bar, duration, immediate, direction)
+        if not ok then return false end
+        bar._msufCPMin, bar._msufCPMax = nil, nil
+        return true
+    end
+
+    local function ResetDuration(duration)
+        if duration and type(duration.Reset) == "function" then pcall(duration.Reset, duration) end
+    end
+
+    local function SetTimeFromStart(duration, startTime, total)
+        return duration and type(duration.SetTimeFromStart) == "function"
+            and pcall(duration.SetTimeFromStart, duration, startTime, total) or false
+    end
+
+    local function SetTimeFromEnd(duration, endTime, total)
+        return duration and type(duration.SetTimeFromEnd) == "function"
+            and pcall(duration.SetTimeFromEnd, duration, endTime, total) or false
+    end
+
+    local function DisableBinding(owner, key, fontString)
+        local binding = owner and owner[key]
+        local activeKey = key .. "Active"
+        if binding then
+            if owner[activeKey] == true then
+                if type(binding.Disable) == "function" then pcall(binding.Disable, binding)
+                elseif type(binding.SetEnabled) == "function" then pcall(binding.SetEnabled, binding, false) end
+            end
+            if owner[activeKey] ~= false then owner[activeKey] = false end
+        end
+        if fontString then
+            fontString:SetText("")
+            fontString:Hide()
+            fontString._msufCPShown = false
+        end
+    end
+
+    local function EnsureFormatter()
+        if remainingComponents then return remainingComponents end
+        if type(createFormatter) ~= "function" or not properties or not rounding then return nil end
+        local ok, candidate = pcall(createFormatter)
+        if not ok or not (candidate and type(candidate.SetBreakpoints) == "function") then return nil end
+        ok = pcall(candidate.SetBreakpoints, candidate, {
+            { threshold = 0, step = 0.1, rounding = rounding.Nearest, format = "%.1f" },
+        })
+        if not ok then return nil end
+        remainingComponents = {
+            { property = properties.RemainingDuration, formatter = candidate },
+        }
+        return remainingComponents
+    end
+
+    local function BindRemainingText(owner, key, fontString, duration, format)
+        if not (owner and fontString and duration and type(createBinding) == "function") then return false end
+        local components = EnsureFormatter()
+        if not components then return false end
+        local activeKey = key .. "Active"
+        local formatKey = key .. "Format"
+        local durationKey = key .. "Duration"
+        if owner[activeKey] == true and owner[formatKey] == format and owner[durationKey] == duration then
+            return true
+        end
+        local binding = owner[key]
+        if not binding then
+            local ok
+            ok, binding = pcall(createBinding)
+            if not ok or not binding then return false end
+            if not pcall(binding.SetFontString, binding, fontString)
+                or not pcall(binding.SetUpdateInterval, binding, 0.10) then return false end
+            if type(binding.SetExpiredText) == "function" then pcall(binding.SetExpiredText, binding, "") end
+            if type(binding.SetZeroDurationText) == "function" then pcall(binding.SetZeroDurationText, binding, "") end
+            owner[key] = binding
+        end
+        if owner[formatKey] ~= format then
+            if not pcall(binding.SetTextFormat, binding, format, components) then return false end
+            owner[formatKey] = format
+        end
+        if not pcall(binding.SetDuration, binding, duration) then return false end
+        local enabled = type(binding.Enable) == "function" and pcall(binding.Enable, binding)
+        if not enabled and type(binding.SetEnabled) == "function" then
+            enabled = pcall(binding.SetEnabled, binding, true)
+        end
+        if not enabled then return false end
+        fontString:Show()
+        fontString._msufCPShown = true
+        owner[durationKey] = duration
+        owner[activeKey] = true
+        return true
+    end
+
+    local support = {
+        EnsureDuration = EnsureDuration,
+        ApplyElapsed = function(bar, duration) return ApplyTimer(bar, duration, elapsedDirection) end,
+        ApplyRemaining = function(bar, duration) return ApplyTimer(bar, duration, remainingDirection) end,
+        ResetDuration = ResetDuration,
+        SetTimeFromStart = SetTimeFromStart,
+        SetTimeFromEnd = SetTimeFromEnd,
+        BindRemainingText = BindRemainingText,
+        DisableBinding = DisableBinding,
+    }
+    if durationUtil then
+        nativeTimerSupportCache[durationUtil] = { stringUtil = stringUtil, enum = enum, support = support }
+    end
+    return support
+end
+
+modeBuilders.SEGMENTED = function(E)
     local tonumber = tonumber
     local PLAYER_CLASS = E.PLAYER_CLASS
     local PT = E.PT
@@ -88,13 +232,52 @@ _G.MSUF_CP_MODE_BUILDERS.SEGMENTED = function(E)
     local GetSpec = E.GetSpec
     local GetTime = E.GetTime
     local GetPowerRegenForPowerType = E.GetPowerRegenForPowerType
+    local nativeTimer = CreateNativeTimerSupport(E)
 
     --- Essence smooth recharge (Evoker only)
     local _essPrevCur    = nil
     local _essRechargeAt = 0
     local _essRate       = 0
     local _essActiveBar  = nil
+    local _essNativeBar  = nil
     local SetEssenceOnUpdate
+
+    local function StopNativeEssence(bar)
+        if not (bar and bar._essNativeActive) then return end
+        nativeTimer.ResetDuration(bar._msufCPEssenceDuration)
+        bar._essNativeActive = nil
+        bar._essNativeStart = nil
+        bar._essNativeRate = nil
+        bar._msufEssenceValue = nil
+        bar._msufEssenceValueVersion = nil
+        if _essNativeBar == bar then _essNativeBar = nil end
+        CP.essenceNativeAny = false
+    end
+
+    local function ApplyNativeEssence(bar, startTime, rate, now, partialProgress)
+        if not (bar and startTime and rate and rate > 0) then return false end
+        local duration = nativeTimer.EnsureDuration(bar, "_msufCPEssenceDuration")
+        if not duration then return false end
+
+        local needsResync = bar._essNativeActive ~= true or bar._essNativeRate ~= rate
+        if not needsResync and partialProgress ~= nil then
+            local predicted = (now - (bar._essNativeStart or startTime)) * rate
+            needsResync = math.abs(predicted - partialProgress) > 0.10
+        end
+        if needsResync then
+            if not nativeTimer.SetTimeFromStart(duration, startTime, 1 / rate) then return false end
+            if not nativeTimer.ApplyElapsed(bar, duration) then return false end
+            bar._essNativeStart = startTime
+            bar._essNativeRate = rate
+            bar._essNativeActive = true
+            bar._msufEssenceValue = nil
+            bar._msufEssenceValueVersion = nil
+        end
+        if _essNativeBar and _essNativeBar ~= bar then StopNativeEssence(_essNativeBar) end
+        _essNativeBar = bar
+        CP.essenceNativeAny = true
+        return true
+    end
 
     local function SetEssenceValue(bar, value)
         local visualVersion = CP.visual and CP.visual.version or 0
@@ -104,7 +287,7 @@ _G.MSUF_CP_MODE_BUILDERS.SEGMENTED = function(E)
         bar._msufEssenceValueVersion = visualVersion
     end
 
-    --- Essence smooth recharge ? tick logic (called from central controller tick).
+    --- Degraded Essence tick used only if native duration APIs are unavailable.
     local function EssenceBarOnUpdate(bar)
         local start = bar._essStart
         local rate  = bar._essRate
@@ -148,7 +331,9 @@ _G.MSUF_CP_MODE_BUILDERS.SEGMENTED = function(E)
             SetEssenceOnUpdate(_essActiveBar, false)
             _essActiveBar = nil
         end
+        if _essNativeBar then StopNativeEssence(_essNativeBar) end
         CP.essenceOUAAny = false
+        CP.essenceNativeAny = false
         _essPrevCur    = nil
         _essRechargeAt = 0
         _essRate       = 0
@@ -167,8 +352,10 @@ _G.MSUF_CP_MODE_BUILDERS.SEGMENTED = function(E)
             return
         end
         cur = tonumber(cur) or 0
+        local previousCur = _essPrevCur
 
         local now = GetTime()
+        local partialProgress
         if cur < maxPower then
             local rate
             if GetPowerRegenForPowerType then
@@ -179,7 +366,6 @@ _G.MSUF_CP_MODE_BUILDERS.SEGMENTED = function(E)
             if not rate or rate <= 0 then rate = 0.2 end
             _essRate = rate
 
-            local partialProgress
             if UnitPartialPower then
                 local rawPartial = UnitPartialPower("player", powerType)
                 if NotSecret(rawPartial) then
@@ -200,6 +386,24 @@ _G.MSUF_CP_MODE_BUILDERS.SEGMENTED = function(E)
         _essPrevCur = cur
 
         local visual = CP_GetVisual(E)
+        local rechargingIdx = (cur < maxPower) and (cur + 1) or 0
+        local visualVersion = visual and visual.version or 0
+
+        --- UNIT_POWER_FREQUENT remains the correction signal for dynamic regen,
+        --- but a stable native timer does not need a full five/six-bar repaint.
+        local nativeBar = rechargingIdx > 0 and CP.bars[rechargingIdx] or nil
+        if previousCur == cur and partialProgress ~= nil
+            and nativeBar and nativeBar == _essNativeBar
+            and nativeBar._essNativeActive == true
+            and nativeBar._essNativeRate == _essRate
+            and nativeBar._msufCPVisualVersion == visualVersion then
+            local predicted = (now - (nativeBar._essNativeStart or _essRechargeAt)) * _essRate
+            if math.abs(predicted - partialProgress) <= 0.10 then
+                CP_CheckAutoHide(cur, maxPower)
+                return
+            end
+        end
+
         local baseR, baseG, baseB = visual and visual.baseR or 1, visual and visual.baseG or 1, visual and visual.baseB or 1
         local useSlotColors = visual and visual.useSlotColors == true
         local useFullColor = visual and visual.useFullColor == true
@@ -207,16 +411,14 @@ _G.MSUF_CP_MODE_BUILDERS.SEGMENTED = function(E)
         local bgA = visual and visual.bgAlpha or 0.3
         local filledAlpha = visual and visual.filledAlpha or E.GetFilledAlpha()
         local emptyAlpha  = visual and visual.emptyAlpha or E.GetEmptyAlpha()
-
-        local rechargingIdx = (cur < maxPower) and (cur + 1) or 0
         local isFull = useFullColor and cur >= maxPower
         local needOnUpdate = false
-        local visualVersion = visual and visual.version or 0
 
         for i = 1, maxPower do
             local bar = CP.bars[i]
             if bar then
                 if i <= cur then
+                    StopNativeEssence(bar)
                     SetEssenceValue(bar, 1)
                     CP_StampAlpha(bar, filledAlpha)
                     SetEssenceOnUpdate(bar, false)
@@ -225,14 +427,19 @@ _G.MSUF_CP_MODE_BUILDERS.SEGMENTED = function(E)
                     local progress = elapsed * _essRate
                     if progress < 0 then progress = 0 end
                     if progress > 1 then progress = 1 end
-                    SetEssenceValue(bar, progress)
                     CP_StampAlpha(bar, filledAlpha)
-                    bar._essStart = _essRechargeAt
-                    bar._essRate  = _essRate
-                    SetEssenceOnUpdate(bar, true)
-                    _essActiveBar = bar
-                    needOnUpdate = true
+                    if ApplyNativeEssence(bar, _essRechargeAt, _essRate, now, partialProgress) then
+                        SetEssenceOnUpdate(bar, false)
+                    else
+                        SetEssenceValue(bar, progress)
+                        bar._essStart = _essRechargeAt
+                        bar._essRate  = _essRate
+                        SetEssenceOnUpdate(bar, true)
+                        _essActiveBar = bar
+                        needOnUpdate = true
+                    end
                 else
+                    StopNativeEssence(bar)
                     SetEssenceValue(bar, 0)
                     CP_StampAlpha(bar, emptyAlpha)
                     SetEssenceOnUpdate(bar, false)
@@ -364,13 +571,9 @@ _G.MSUF_CP_MODE_BUILDERS.SEGMENTED = function(E)
 end
 
 --- MSUF_CP_Mode_Fractional.lua
-
---- MSUF_CP_Mode_Fractional.lua
 --- Phase 2 ClassPower split: fractional mode extracted from the core file.
 
-ExportPublic("MSUF_CP_MODE_BUILDERS", _G.MSUF_CP_MODE_BUILDERS or {})
-
-_G.MSUF_CP_MODE_BUILDERS.FRACTIONAL = function(E)
+modeBuilders.FRACTIONAL = function(E)
     local tonumber = tonumber
     local string_format = string.format
     local math_floor = math.floor
@@ -463,14 +666,9 @@ _G.MSUF_CP_MODE_BUILDERS.FRACTIONAL = function(E)
 end
 
 --- MSUF_CP_Mode_Rune.lua
+--- DK rune mode. Native durations drive fill/text; RuntimeTick is degraded-only.
 
---- MSUF_CP_Mode_Rune.lua
---- DK rune mode. Unified CP tick: exports RuntimeTick for central controller.
---- No per-bar OnUpdate scripts ? controller drives a single OnUpdate frame.
-
-ExportPublic("MSUF_CP_MODE_BUILDERS", _G.MSUF_CP_MODE_BUILDERS or {})
-
-_G.MSUF_CP_MODE_BUILDERS.RUNE = function(E)
+modeBuilders.RUNE = function(E)
     local math_floor = math.floor
     local string_format = string.format
     local CP = E.CP
@@ -483,6 +681,9 @@ _G.MSUF_CP_MODE_BUILDERS.RUNE = function(E)
     local GetRuneMap = E.GetRuneMap
     local GetFilledAlpha = E.GetFilledAlpha
     local GetEmptyAlpha = E.GetEmptyAlpha
+    local EnsureRuneText = E.EnsureRuneText
+    local ApplyFont = E.ApplyFont
+    local nativeTimer = CreateNativeTimerSupport(E)
     local _runeTimeTextCache = {}
 
     local function GetRuneTimeText(q)
@@ -497,12 +698,46 @@ _G.MSUF_CP_MODE_BUILDERS.RUNE = function(E)
     local function ClearRuneText(bar)
         if not bar then return end
         local rfs = bar and bar._runeText
-        if rfs then
-            if bar._runeTextQ ~= -1 then rfs:SetText("") end
-            if bar._runeTextVisible ~= false then rfs:Hide() end
-        end
+        nativeTimer.DisableBinding(bar, "_msufCPRuneBinding", rfs)
         bar._runeTextQ = -1
         bar._runeTextVisible = false
+    end
+
+    local function StopNativeRune(bar)
+        if not (bar and bar._runeNativeActive) then return end
+        nativeTimer.ResetDuration(bar._msufCPRuneDuration)
+        nativeTimer.DisableBinding(bar, "_msufCPRuneBinding", bar._runeText)
+        bar._runeNativeActive = nil
+        bar._runeNativeStart = nil
+        bar._runeNativeTotal = nil
+    end
+
+    local function ApplyNativeRune(bar, startTime, total, showTime)
+        local duration = nativeTimer.EnsureDuration(bar, "_msufCPRuneDuration")
+        if not duration then return false end
+        if bar._runeNativeActive ~= true
+            or bar._runeNativeStart ~= startTime
+            or bar._runeNativeTotal ~= total then
+            if not nativeTimer.SetTimeFromStart(duration, startTime, total) then return false end
+            if not nativeTimer.ApplyElapsed(bar, duration) then return false end
+            bar._runeNativeActive = true
+            bar._runeNativeStart = startTime
+            bar._runeNativeTotal = total
+        end
+
+        if showTime then
+            local rfs, created
+            if EnsureRuneText then rfs, created = EnsureRuneText(bar) end
+            if created and ApplyFont then ApplyFont() end
+            if not nativeTimer.BindRemainingText(bar, "_msufCPRuneBinding", rfs, duration, "{}") then
+                StopNativeRune(bar)
+                return false
+            end
+            bar._runeTextVisible = true
+        else
+            ClearRuneText(bar)
+        end
+        return true
     end
 
     local function ApplyRuneText(bar, remaining)
@@ -528,7 +763,7 @@ _G.MSUF_CP_MODE_BUILDERS.RUNE = function(E)
         end
     end
 
-    --- Per-bar tick logic (called from central RuntimeTick, not per-bar OnUpdate).
+    --- Degraded per-bar tick logic; retail 12.1 uses native durations above.
     local function RuneBarTick(bar, elapsed)
         local start = bar._runeStart
         local dur = start and (GetTime() - start) or ((bar._runeDuration or 0) + elapsed)
@@ -546,8 +781,7 @@ _G.MSUF_CP_MODE_BUILDERS.RUNE = function(E)
         return not (total and dur >= total)
     end
 
-    --- Central RuntimeTick: called by controller's single OnUpdate frame.
-    --- Iterates all active rune bars in one pass.
+    --- Degraded RuntimeTick iterates fallback Rune bars in one pass.
     local function RuntimeTick(elapsed)
         local activeBars = CP.activeRuneBars
         if not activeBars then return false end
@@ -571,21 +805,12 @@ _G.MSUF_CP_MODE_BUILDERS.RUNE = function(E)
         return CP.runeOUAAny
     end
 
-    --- Flag-only management (no SetScript ? controller owns the tick).
-    local function SetRuneBarActive(bar, on)
-        if not bar then return end
-        if on then
-            bar._runeOUA = true
-        else
-            bar._runeOUA = false
-        end
-    end
-
     local function StopOnUpdates(clearText)
-        if not CP.runeOUAAny and not clearText then return end
+        if not CP.runeOUAAny and not CP.runeNativeAny and not clearText then return end
         for i = 1, CP.maxBars do
             local bar = CP.bars[i]
             if bar then
+                StopNativeRune(bar)
                 bar._runeOUA = false
                 bar._runeDuration = nil
                 bar._runeStart = nil
@@ -599,6 +824,7 @@ _G.MSUF_CP_MODE_BUILDERS.RUNE = function(E)
             end
         end
         CP.runeOUAAny = false
+        CP.runeNativeAny = false
     end
 
     local function Update(powerType, maxPower)
@@ -615,9 +841,11 @@ _G.MSUF_CP_MODE_BUILDERS.RUNE = function(E)
         local filledAlpha = visual and visual.filledAlpha or GetFilledAlpha()
         local emptyAlpha = visual and visual.emptyAlpha or GetEmptyAlpha()
 
-        local now = GetTime()
+        local hasVehicleUI = UnitHasVehicleUI and UnitHasVehicleUI("player")
+        local now = hasVehicleUI and 0 or GetTime()
         local readyCount = 0
         local activeRuneOUA = 0
+        local hasNativeRune = false
         local runeMap = GetRuneMap()
         local activeBars = CP.activeRuneBars
         local visualVersion = visual and visual.version or 0
@@ -631,15 +859,19 @@ _G.MSUF_CP_MODE_BUILDERS.RUNE = function(E)
             local bar = CP.bars[displayIdx]
             if not bar then break end
 
-            if UnitHasVehicleUI and UnitHasVehicleUI("player") then
+            if hasVehicleUI then
+                StopNativeRune(bar)
+                bar._runeOUA = false
+                ClearRuneText(bar)
                 CP_StampShown(bar, false)
             else
                 local start, duration, runeReady = GetRuneCooldown(runeID)
 
                 if runeReady then
+                    StopNativeRune(bar)
                     CP_StampMinMax(bar, 0, 1)
                     bar:SetValue(1)
-                    SetRuneBarActive(bar, false)
+                    bar._runeOUA = false
                     bar._runeDuration = nil
                     bar._runeStart = nil
                     CP_StampAlpha(bar, filledAlpha)
@@ -656,20 +888,26 @@ _G.MSUF_CP_MODE_BUILDERS.RUNE = function(E)
                     bar._runeStart = start
                     bar._runeTotalDuration = duration
                     bar._runeShowTime = showRuneTime
-                    CP_StampMinMax(bar, 0, duration)
-                    bar:SetValue(runeDuration)
-                    SetRuneBarActive(bar, true)
-                    activeRuneOUA = activeRuneOUA + 1
-                    activeBars[activeRuneOUA] = bar
                     CP_StampAlpha(bar, filledAlpha)
-                    if wasShowingTime ~= showRuneTime then
-                        bar._runeTextQ = -1
+                    if ApplyNativeRune(bar, start, duration, showRuneTime) then
+                        bar._runeOUA = false
+                        hasNativeRune = true
+                    else
+                        CP_StampMinMax(bar, 0, duration)
+                        bar:SetValue(runeDuration)
+                        bar._runeOUA = true
+                        activeRuneOUA = activeRuneOUA + 1
+                        activeBars[activeRuneOUA] = bar
+                        if wasShowingTime ~= showRuneTime then
+                            bar._runeTextQ = -1
+                        end
+                        ApplyRuneText(bar, duration - runeDuration)
                     end
-                    ApplyRuneText(bar, duration - runeDuration)
                 else
+                    StopNativeRune(bar)
                     CP_StampMinMax(bar, 0, 1)
                     bar:SetValue(0)
-                    SetRuneBarActive(bar, false)
+                    bar._runeOUA = false
                     bar._runeDuration = nil
                     bar._runeStart = nil
                     bar._runeTotalDuration = nil
@@ -686,6 +924,7 @@ _G.MSUF_CP_MODE_BUILDERS.RUNE = function(E)
         end
 
         CP.runeOUAAny = activeRuneOUA > 0
+        CP.runeNativeAny = hasNativeRune
 
         local isFull = visual and visual.useFullColor == true and readyCount >= maxPower
         if CP._runeColorVersion ~= visualVersion or CP._runeFullColor ~= isFull then
@@ -726,15 +965,11 @@ _G.MSUF_CP_MODE_BUILDERS.RUNE = function(E)
 end
 
 --- MSUF_CP_Mode_Aura.lua
-
---- MSUF_CP_Mode_Aura.lua
 --- Phase 2 ClassPower split: aura-driven modes extracted from the core file.
 --- Secret-safe: C_UnitAuras fields (applications) and C_Spell returns can be
 --- secret in Midnight/12.1. All Lua-side comparisons/arithmetic guarded with NotSecret.
 
-ExportPublic("MSUF_CP_MODE_BUILDERS", _G.MSUF_CP_MODE_BUILDERS or {})
-
-_G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
+modeBuilders.AURA = function(E)
     local type = type
     local tonumber = tonumber
     local GetTime = E.GetTime
@@ -976,13 +1211,9 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
 end
 
 --- MSUF_CP_Mode_Timer.lua
-
---- MSUF_CP_Mode_Timer.lua
 --- Phase 3 ClassPower split: timer-bar mode extracted from the core file.
 
-ExportPublic("MSUF_CP_MODE_BUILDERS", _G.MSUF_CP_MODE_BUILDERS or {})
-
-_G.MSUF_CP_MODE_BUILDERS.TIMER = function(E)
+modeBuilders.TIMER = function(E)
     local string_format = string.format
     local math_floor = math.floor
     local CP = E.CP
@@ -995,10 +1226,67 @@ _G.MSUF_CP_MODE_BUILDERS.TIMER = function(E)
     local CP_CheckAutoHide = E.CP_CheckAutoHide
     local GetFilledAlpha = E.GetFilledAlpha
     local GetEmptyAlpha = E.GetEmptyAlpha
+    local EnsureMainText = E.EnsureMainText
+    local ApplyFont = E.ApplyFont
+    local nativeTimer = CreateNativeTimerSupport(E)
 
     local _tbElapsed = 0
     local Update
     local SetOnUpdate
+
+    local function StopNativeTimer()
+        local bar = CP.bars[1]
+        if bar and bar._timerNativeActive then
+            nativeTimer.ResetDuration(bar._msufCPTimerDisplayDuration)
+            bar._timerNativeActive = nil
+            bar._timerNativeAuraID = nil
+            bar._timerNativeEndTime = nil
+        end
+        nativeTimer.DisableBinding(CP, "_msufCPTimerBinding", CP.text)
+        CP.timerNativeActive = false
+    end
+
+    local function ApplyNativeTimer(aura, bar, visual, forceBarSync)
+        local auraInstanceID = aura and aura.auraInstanceID
+        local getAuraDuration = C_UnitAuras and C_UnitAuras.GetAuraDuration
+        if not (auraInstanceID and type(getAuraDuration) == "function") then return false end
+        local ok, sourceDuration = pcall(getAuraDuration, "player", auraInstanceID)
+        if not ok then return false end
+        if not (sourceDuration and type(sourceDuration.GetEndTime) == "function") then return false end
+
+        local displayDuration = nativeTimer.EnsureDuration(bar, "_msufCPTimerDisplayDuration")
+        if not displayDuration then return false end
+        local endOK, endTime = pcall(sourceDuration.GetEndTime, sourceDuration)
+        if not endOK then return false end
+        local comparableEndTime = NotSecret(endTime)
+        local needsBarSync = forceBarSync == true
+            or bar._timerNativeActive ~= true
+            or bar._timerNativeAuraID ~= auraInstanceID
+            or not comparableEndTime
+            or bar._timerNativeEndTime ~= endTime
+        if needsBarSync then
+            if not nativeTimer.SetTimeFromEnd(displayDuration, endTime, EBON.MAX_DURATION) then return false end
+            if not nativeTimer.ApplyRemaining(bar, displayDuration) then return false end
+            bar._timerNativeAuraID = auraInstanceID
+            bar._timerNativeEndTime = comparableEndTime and endTime or nil
+        end
+
+        local showText = visual and visual.timerShowText == true
+        if showText then
+            local txt, created
+            if EnsureMainText then txt, created = EnsureMainText() end
+            if created and ApplyFont then ApplyFont() end
+            if not nativeTimer.BindRemainingText(CP, "_msufCPTimerBinding", txt, sourceDuration, "{}s") then
+                StopNativeTimer()
+                return false
+            end
+        else
+            nativeTimer.DisableBinding(CP, "_msufCPTimerBinding", CP.text)
+        end
+        bar._timerNativeActive = true
+        CP.timerNativeActive = true
+        return true
+    end
 
     local function GetPlayerAura(spellID)
         if type(GetTrackedPlayerAura) == "function" then
@@ -1011,32 +1299,25 @@ _G.MSUF_CP_MODE_BUILDERS.TIMER = function(E)
         local aura = GetPlayerAura(EBON.SPELL_ID)
         local expirationTime = aura and aura.expirationTime
         local remaining = 0
+        local remainingKnown = false
         if NotSecret(expirationTime) and expirationTime ~= nil then
             remaining = (tonumber(expirationTime) or 0) - GetTime()
+            remainingKnown = true
         end
         if remaining < 0 then remaining = 0 end
         local active = remaining > 0.05
-        local mx = EBON.MAX_DURATION
-
-        local qPct = math_floor(remaining * 10 + 0.5)
-        if qPct == CP.tbCachedQ then return active end
-        CP.tbCachedQ = qPct
-
-        local pct = remaining / mx
-        if pct > 1 then pct = 1 end
-
         local bar = CP.bars[1]
         if not bar then return active end
 
         local visual = CP_GetVisual(E)
-        local r, g, bl = visual and visual.baseR or 1, visual and visual.baseG or 1, visual and visual.baseB or 1
-        local bgA = visual and visual.bgAlpha or 0.3
-        local bgR, bgG, bgB = visual and visual.bgR or 0, visual and visual.bgG or 0, visual and visual.bgB or 0
         local filledAlpha = visual and visual.filledAlpha or GetFilledAlpha()
-        local emptyAlpha = visual and visual.emptyAlpha or GetEmptyAlpha()
 
         local visualVersion = visual and visual.version or 0
-        if CP._timerVisualVersion ~= visualVersion then
+        local visualChanged = CP._timerVisualVersion ~= visualVersion
+        if visualChanged then
+            local r, g, bl = visual and visual.baseR or 1, visual and visual.baseG or 1, visual and visual.baseB or 1
+            local bgA = visual and visual.bgAlpha or 0.3
+            local bgR, bgG, bgB = visual and visual.bgR or 0, visual and visual.bgG or 0, visual and visual.bgB or 0
             CP_StampStatusBarColor(bar, r, g, bl, 1)
             CP_StampMinMax(bar, 0, 1)
             CP_StampShown(bar, true)
@@ -1050,7 +1331,24 @@ _G.MSUF_CP_MODE_BUILDERS.TIMER = function(E)
             end
             CP._timerVisualVersion = visualVersion
         end
+
+        if aura and (not remainingKnown or active) and ApplyNativeTimer(aura, bar, visual, visualChanged) then
+            CP_StampAlpha(bar, filledAlpha)
+            CP_CheckAutoHide(remainingKnown and 1 or nil, 1)
+            CP.tbCachedQ = -1
+            return false
+        end
+
+        StopNativeTimer()
+        local qPct = math_floor(remaining * 10 + 0.5)
+        if qPct == CP.tbCachedQ then return active end
+        CP.tbCachedQ = qPct
+
+        local mx = EBON.MAX_DURATION
+        local pct = remaining / mx
+        if pct > 1 then pct = 1 end
         bar:SetValue(pct)
+        local emptyAlpha = visual and visual.emptyAlpha or GetEmptyAlpha()
         CP_StampAlpha(bar, remaining > 0 and filledAlpha or emptyAlpha)
 
         local txt = CP.text
@@ -1069,8 +1367,7 @@ _G.MSUF_CP_MODE_BUILDERS.TIMER = function(E)
         return active
     end
 
-    --- Central RuntimeTick: called by controller's single OnUpdate frame.
-    --- Throttled to ~20fps (0.05s) to avoid unnecessary timer text churn.
+    --- Degraded Ebon tick; the 12.1 native path never enters this function.
     local function RuntimeTick(elapsed)
         if not CP.visible or CP.renderMode ~= CPK.MODE.TIMER_BAR then return false end
         _tbElapsed = _tbElapsed + elapsed
@@ -1098,14 +1395,18 @@ _G.MSUF_CP_MODE_BUILDERS.TIMER = function(E)
         end
     end
 
+    local function Stop()
+        SetOnUpdate(false)
+        StopNativeTimer()
+    end
+
     return {
         Update = Update,
         SetOnUpdate = SetOnUpdate,
+        Stop = Stop,
         RuntimeTick = RuntimeTick,
     }
 end
-
---- MSUF_CP_Mode_Continuous.lua
 
 --- MSUF_CP_Mode_Continuous.lua
 --- Phase 4 ClassPower split: continuous single-bar mode extracted from the core
@@ -1113,9 +1414,7 @@ end
 --- Secret-safe: UnitPower/UnitPowerMax return secret values in 12.0.
 --- C API (SetMinMaxValues, SetValue) accepts secrets natively for bar fill.
 
-ExportPublic("MSUF_CP_MODE_BUILDERS", _G.MSUF_CP_MODE_BUILDERS or {})
-
-_G.MSUF_CP_MODE_BUILDERS.CONTINUOUS = function(E)
+modeBuilders.CONTINUOUS = function(E)
     local tonumber = tonumber
     local CP = E.CP
     local UnitPower = E.UnitPower
@@ -1191,14 +1490,10 @@ _G.MSUF_CP_MODE_BUILDERS.CONTINUOUS = function(E)
 end
 
 --- MSUF_CP_Mode_Stagger.lua
-
---- MSUF_CP_Mode_Stagger.lua
 --- Phase 4 ClassPower split: Brewmaster stagger mode extracted from the core
 --- file.
 
-ExportPublic("MSUF_CP_MODE_BUILDERS", _G.MSUF_CP_MODE_BUILDERS or {})
-
-_G.MSUF_CP_MODE_BUILDERS.STAGGER = function(E)
+modeBuilders.STAGGER = function(E)
     local type = type
     local tonumber = tonumber
     local CP = E.CP
