@@ -229,7 +229,10 @@ local function ApplyNativeTimeText(frame, durationObj, format)
 
     local formats = BuildNativeTextFormats()
     local formatSpec = formats and formats[format]
-    if not formatSpec then return false end
+    if not formatSpec then
+        frame._msufNativeTextUnsafe = true
+        return false
+    end
 
     local binding = frame._msufDurationTextBinding
     if not binding then
@@ -238,7 +241,10 @@ local function ApplyNativeTimeText(frame, durationObj, format)
 
         local ok
         ok, binding = pcall(createBinding)
-        if not ok or not binding then return false end
+        if not ok or not binding then
+            frame._msufNativeTextUnsafe = true
+            return false
+        end
         frame._msufDurationTextBinding = binding
     end
 
@@ -247,6 +253,7 @@ local function ApplyNativeTimeText(frame, durationObj, format)
         local ok = type(binding.SetFontString) == "function"
             and pcall(binding.SetFontString, binding, frame.timeText)
         if not ok then
+            frame._msufNativeTextUnsafe = true
             DisableNativeTimeText(frame)
             return false
         end
@@ -254,6 +261,7 @@ local function ApplyNativeTimeText(frame, durationObj, format)
         ok = type(binding.SetUpdateInterval) == "function"
             and pcall(binding.SetUpdateInterval, binding, 0.10)
         if not ok then
+            frame._msufNativeTextUnsafe = true
             DisableNativeTimeText(frame)
             return false
         end
@@ -264,6 +272,7 @@ local function ApplyNativeTimeText(frame, durationObj, format)
         local ok = type(binding.SetTextFormat) == "function"
             and pcall(binding.SetTextFormat, binding, formatSpec[1], formatSpec[2])
         if not ok then
+            frame._msufNativeTextUnsafe = true
             DisableNativeTimeText(frame)
             return false
         end
@@ -273,6 +282,7 @@ local function ApplyNativeTimeText(frame, durationObj, format)
     local ok = type(binding.SetDuration) == "function"
         and pcall(binding.SetDuration, binding, durationObj)
     if not ok then
+        frame._msufNativeTextUnsafe = true
         DisableNativeTimeText(frame)
         return false
     end
@@ -280,6 +290,7 @@ local function ApplyNativeTimeText(frame, durationObj, format)
     ok = type(binding.SetEnabled) == "function"
         and pcall(binding.SetEnabled, binding, true)
     if not ok then
+        frame._msufNativeTextUnsafe = true
         DisableNativeTimeText(frame)
         return false
     end
@@ -289,7 +300,19 @@ local function ApplyNativeTimeText(frame, durationObj, format)
     end
     frame.timeText._msufLastText = nil
     frame._msufNativeTimeBound = true
+    frame._msufNativeTextUnsafe = nil
     return true
+end
+
+-- Shared by detached cast-time consumers such as the focus-kick icon.  Keep
+-- formatter/binding construction here so every cast-time surface uses one
+-- native implementation and one failure policy.
+function Runtime:BindNativeTimeText(frame, durationObj, format)
+    return ApplyNativeTimeText(frame, durationObj, format or "CURRENT")
+end
+
+function Runtime:DisableNativeTimeText(frame)
+    DisableNativeTimeText(frame)
 end
 
 local function CastTimeUnitKey(frame, unit)
@@ -364,10 +387,6 @@ function Runtime:PrepareWork(frame)
     if not timerDriven or not durationObj then
         mask = MaskAdd(mask, WORK_DURATION_FALLBACK)
     end
-    if frame.unit ~= "player" then
-        mask = MaskAdd(mask, WORK_UNIT_FAILSAFE)
-    end
-
     local canUseNativeText = not isChanneled
         and not isEmpower
         and timerDriven
@@ -375,7 +394,10 @@ function Runtime:PrepareWork(frame)
         and frame._msufPlainEndTime ~= nil
 
     if frame.timeText and castTimeEnabled then
-        if canUseNativeText and ApplyNativeTimeText(frame, durationObj, format) then
+        if canUseNativeText
+            and frame._msufForceLuaTimeTextFollower ~= true
+            and ApplyNativeTimeText(frame, durationObj, format)
+        then
             -- The client owns the text cadence; no Lua text work bit.
         else
             DisableNativeTimeText(frame)
@@ -397,6 +419,16 @@ function Runtime:PrepareWork(frame)
     then
         mask = MaskAdd(mask, WORK_DURATION_FALLBACK)
     end
+
+    local unitNeedsFailsafe = frame.unit ~= "player"
+        and (
+            frame._msufCastLifecycleOwned ~= true
+            or frame._msufNativeCompletionUnsafe == true
+            or frame._msufNativeTimerUnsafe == true
+            or frame._msufDurationSnapshotUnsafe == true
+            or frame._msufNativeTextUnsafe == true
+        )
+    if unitNeedsFailsafe then mask = MaskAdd(mask, WORK_UNIT_FAILSAFE) end
 
     frame._msufCastbarWorkMask = mask
     frame._msufCastbarGlowTick = MaskHas(mask, WORK_GLOW) or nil
@@ -505,6 +537,8 @@ function Runtime:ReleaseActive(frame)
     if not frame then return end
 
     activeDurationFrames[frame] = nil
+    local setLifecycleActive = _G.MSUF_Castbar_SetLifecycleActive
+    if type(setLifecycleActive) == "function" then setLifecycleActive(frame, false) end
     self:DeactivateNative(frame)
     frame.MSUF_castActive = false
     frame.MSUF_durationObj = nil
@@ -517,6 +551,9 @@ function Runtime:ReleaseActive(frame)
     frame._msufCastbarWorkMask = nil
     frame._msufCastbarGlowTick = nil
     frame._msufNativeCompletionUnsafe = nil
+    frame._msufNativeTimerUnsafe = nil
+    frame._msufDurationSnapshotUnsafe = nil
+    frame._msufNativeTextUnsafe = nil
 end
 
 function Runtime:RefreshActiveWork()
@@ -546,6 +583,11 @@ local function SetText(frame, textKey, value)
         end
     elseif fontString.SetText then
         fontString:SetText(value or "")
+    end
+
+    if textKey == "timeText" and frame._msufTimeTextFollower then
+        local syncFollower = _G.MSUF_Castbar_SyncTimeTextFollower
+        if type(syncFollower) == "function" then syncFollower(frame) end
     end
 end
 
@@ -645,6 +687,7 @@ function Runtime:SnapshotDuration(frame, durationObj)
     end
 
     frame._msufPlainTotal = total
+    frame._msufDurationSnapshotUnsafe = remaining == nil and true or nil
     return remaining, total
 end
 
@@ -666,6 +709,9 @@ function Runtime:ApplyActive(frame, state, options)
 
     self:CancelNativeCompletion(frame)
     frame._msufNativeCompletionUnsafe = nil
+    frame._msufNativeTimerUnsafe = nil
+    frame._msufDurationSnapshotUnsafe = nil
+    frame._msufNativeTextUnsafe = nil
     activeDurationFrames[frame] = true
 
     local castType = state.castType or state.phase or "CAST"
@@ -710,6 +756,11 @@ function Runtime:ApplyActive(frame, state, options)
     frame._msufStripeReverseFill = reverseFill and true or false
     local timerDriven = self:ApplyTimer(frame.statusBar, durationObj, reverseFill, isChanneled) and true or false
     frame.MSUF_timerDriven = timerDriven
+    if timerDriven then
+        frame._msufNativeTimerUnsafe = nil
+    else
+        frame._msufNativeTimerUnsafe = true
+    end
     frame._msufTimerAssumeCountdown = timerDriven and (isChanneled == true) or nil
 
     local castState = frame._msufCastState or state
@@ -829,6 +880,8 @@ function Runtime:Stop(frame, reasonOrOptions)
 
     DisableFrameOnUpdate(frame)
     activeDurationFrames[frame] = nil
+    local setLifecycleActive = _G.MSUF_Castbar_SetLifecycleActive
+    if type(setLifecycleActive) == "function" then setLifecycleActive(frame, false) end
     self:DeactivateNative(frame)
 
     if type(_G.MSUF_UnregisterCastbar) == "function" then
@@ -851,6 +904,9 @@ function Runtime:Stop(frame, reasonOrOptions)
     frame._msufCastbarWorkMask = nil
     frame._msufCastbarGlowTick = nil
     frame._msufNativeCompletionUnsafe = nil
+    frame._msufNativeTimerUnsafe = nil
+    frame._msufDurationSnapshotUnsafe = nil
+    frame._msufNativeTextUnsafe = nil
 
     local castState = frame._msufCastState
     if castState then

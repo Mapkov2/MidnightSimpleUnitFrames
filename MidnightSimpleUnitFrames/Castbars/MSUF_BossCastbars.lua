@@ -236,12 +236,14 @@ local function SetBossEventsRegistered(frame, enabled)
         frame:RegisterEvent("PLAYER_ENTERING_WORLD")
         frame._msufDriverEventsRegistered = true
         frame._msufBossEventsRegistered = true
+        frame._msufCastLifecycleOwned = true
         return
     end
 
     frame:UnregisterAllEvents()
     frame._msufDriverEventsRegistered = nil
     frame._msufBossEventsRegistered = nil
+    frame._msufCastLifecycleOwned = nil
 end
 
 --- Create or reuse one boss castbar frame. The generic driver handles most cast
@@ -337,30 +339,6 @@ local function RefreshBossPreviewIfAllowed()
     end
 end
 
-local function ApplyBossCastbarTimeSetting(skipPreviewRefresh)
-    EnsureDB()
-
-    local general = _G.MSUF_DB and _G.MSUF_DB.general
-    local showTime = (not general) or general.showBossCastTime ~= false
-    local bossCastbars = _G.MSUF_BossCastbars
-
-    if bossCastbars then
-        for index = 1, #bossCastbars do
-            local frame = bossCastbars[index]
-            if frame and frame.timeText then
-                frame.timeText:Show()
-                frame.timeText:SetAlpha(showTime and 1 or 0)
-
-                if not showTime and frame.timeText.SetText then
-                    frame.timeText:SetText("")
-                end
-            end
-        end
-    end
-
-    if not skipPreviewRefresh then RefreshBossPreviewIfAllowed() end
-end
-
 local function ApplyBossCastbarPositionSetting(forceLayout, skipPreviewRefresh, geometryOnly)
     local bossCastbars = _G.MSUF_BossCastbars or EnsureBossCastbars()
     if not bossCastbars then
@@ -441,9 +419,7 @@ local function OnLogin()
     ApplyBossCastbarPositionSetting(true)
 end
 
-ExportPublic("MSUF_ApplyBossCastbarTimeSetting", ApplyBossCastbarTimeSetting)
 ExportPublic("MSUF_ApplyBossCastbarPositionSetting", ApplyBossCastbarPositionSetting)
-ExportPublic("MSUF_SetBossCastbarsEnabled", SetBossCastbarsEnabled)
 ExportPublic("MSUF_ApplyBossCastbarsEnabled", ApplyBossCastbarsEnabled)
 ExportPublic("MSUF_BossCastbar_Stop", StopBossCastbar)
 

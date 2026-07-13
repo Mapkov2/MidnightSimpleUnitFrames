@@ -19,6 +19,7 @@ local GetTime = _G.GetTime
 local GetCVar = _G.GetCVar
 local UnitExists = _G.UnitExists
 local UnitIsDeadOrGhost = _G.UnitIsDeadOrGhost
+local UnitIsConnected = _G.UnitIsConnected
 local UnitShouldDisplaySpellTargetName = _G.UnitShouldDisplaySpellTargetName
 local UnitSpellTargetName = _G.UnitSpellTargetName
 local UnitSpellTargetClass = _G.UnitSpellTargetClass
@@ -94,6 +95,113 @@ local CASTBAR_UNIT_EVENTS = {
     "UNIT_SPELLCAST_INTERRUPTED",
 }
 
+local ACTIVE_LIFECYCLE_EVENTS = {
+    "UNIT_HEALTH",
+    "UNIT_CONNECTION",
+}
+
+local SetCastLifecycleActive
+local HandleUnitDeathEvent
+
+local function SharedUFHealthLifecycleSink(owner, _, event)
+    if not owner then return end
+    if event == "MSUF_UF_LIFECYCLE_DETACH" then
+        owner._msufUFLifecycleFrame = nil
+        owner._msufCastLifecycleMode = nil
+        owner._msufCastLifecycleOwned = nil
+        if owner.MSUF_castActive == true then
+            SetCastLifecycleActive(owner, true)
+            if HandleUnitDeathEvent then HandleUnitDeathEvent(owner, "UNIT_CONNECTION") end
+        end
+        return
+    end
+    if HandleUnitDeathEvent then HandleUnitDeathEvent(owner, event) end
+end
+
+-- Target/focus token changes are owned by the permanent driver events, while
+-- death/disconnect events are needed only for the short lifetime of an active
+-- cast. Boss frames already own a richer persistent encounter lifecycle.
+SetCastLifecycleActive = function(frame, active)
+    if not frame or frame.unit == "player" then return true end
+
+    if frame._msufIsBossCastbar then
+        frame._msufCastLifecycleOwned = frame._msufBossEventsRegistered == true or nil
+        return frame._msufCastLifecycleOwned == true
+    end
+
+    if frame.unit ~= "target" and frame.unit ~= "focus" then
+        frame._msufCastLifecycleOwned = nil
+        return false
+    end
+
+    if not active then
+        if frame._msufCastLifecycleMode == nil
+            and frame._msufActiveLifecycleEventsRegistered == nil
+            and frame._msufUFLifecycleFrame == nil
+            and frame._msufCastLifecycleOwned == nil
+        then
+            return true
+        end
+        if frame._msufCastLifecycleMode == "UF" then
+            local UF = MSUF and MSUF.UF
+            if UF and type(UF.ClearHealthLifecycleSink) == "function" then
+                UF.ClearHealthLifecycleSink(frame._msufUFLifecycleFrame, frame)
+            end
+        end
+        if frame._msufActiveLifecycleEventsRegistered then
+            for index = 1, #ACTIVE_LIFECYCLE_EVENTS do
+                frame:UnregisterEvent(ACTIVE_LIFECYCLE_EVENTS[index])
+            end
+        end
+        frame._msufActiveLifecycleEventsRegistered = nil
+        frame._msufUFLifecycleFrame = nil
+        frame._msufCastLifecycleMode = nil
+        frame._msufCastLifecycleOwned = nil
+        return true
+    end
+
+    if frame._msufCastLifecycleMode == "UF"
+        and frame._msufUFLifecycleFrame ~= nil
+        and frame._msufCastLifecycleOwned == true
+    then
+        return true
+    end
+
+    if frame._msufActiveLifecycleEventsRegistered then
+        frame._msufCastLifecycleOwned = true
+        return true
+    end
+
+    local UF = MSUF and MSUF.UF
+    if UF and type(UF.SetHealthLifecycleSink) == "function" then
+        local attached, ufFrame = UF.SetHealthLifecycleSink(frame.unit, SharedUFHealthLifecycleSink, frame)
+        if attached == true then
+            frame._msufUFLifecycleFrame = ufFrame
+            frame._msufCastLifecycleMode = "UF"
+            frame._msufCastLifecycleOwned = true
+            return true
+        end
+    end
+
+    for index = 1, #ACTIVE_LIFECYCLE_EVENTS do
+        local ok = pcall(frame.RegisterUnitEvent, frame, ACTIVE_LIFECYCLE_EVENTS[index], frame.unit)
+        if not ok then
+            for cleanupIndex = 1, #ACTIVE_LIFECYCLE_EVENTS do
+                frame:UnregisterEvent(ACTIVE_LIFECYCLE_EVENTS[cleanupIndex])
+            end
+            frame._msufActiveLifecycleEventsRegistered = nil
+            frame._msufCastLifecycleOwned = nil
+            return false
+        end
+    end
+
+    frame._msufActiveLifecycleEventsRegistered = true
+    frame._msufCastLifecycleOwned = true
+    return true
+end
+
+ExportPublic("MSUF_Castbar_SetLifecycleActive", SetCastLifecycleActive)
+
 local function SetDriverEventsRegistered(frame, unit, enabled)
     if not frame then return end
 
@@ -111,6 +219,7 @@ local function SetDriverEventsRegistered(frame, unit, enabled)
     end
 
     if not frame._msufDriverEventsRegistered then return end
+    SetCastLifecycleActive(frame, false)
     for index = 1, #CASTBAR_UNIT_EVENTS do
         frame:UnregisterEvent(CASTBAR_UNIT_EVENTS[index])
     end
@@ -202,6 +311,18 @@ local function ToPlainBool(value)
     return value == true or value == 1 or value == "true"
 end
 
+local function ToKnownPlainBool(value)
+    if value == nil then return nil end
+    if toPlainIsSecret(value) == true then
+        if not ToPlain then return nil end
+        value = ToPlain(value)
+        if value == nil or toPlainIsSecret(value) == true then return nil end
+    end
+    if value == true or value == 1 or value == "true" then return true end
+    if value == false or value == 0 or value == "false" then return false end
+    return nil
+end
+
 local function CastStateActive(state)
     return state ~= nil and ToPlainBool(state.active) == true
 end
@@ -283,19 +404,8 @@ end
 
 local ClearEmpowerState = _G.MSUF_ClearEmpowerState or function() end
 
-local function SetSafetyOnUpdate(frame, enabled)
-    if not frame then return end
-
-    if enabled then
-        frame._msufSafetyNext = nil
-        frame._msufSafetyOnUpdate = nil
-        frame:SetScript("OnUpdate", nil)
-        return
-    end
-
-    frame._msufSafetyOnUpdate = nil
-    frame._msufSafetyNext = nil
-    frame:SetScript("OnUpdate", nil)
+local function ClearFrameOnUpdate(frame)
+    if frame and frame.SetScript then frame:SetScript("OnUpdate", nil) end
 end
 
 local function BuildState(frame)
@@ -434,12 +544,10 @@ local function StoreActiveStateIdentity(frame, state)
 
     if CastStateActive(state) then
         frame._msufActiveSeq = state.spellSequenceID
-        frame._msufActiveCastType = state.castType
         return
     end
 
     frame._msufActiveSeq = nil
-    frame._msufActiveCastType = nil
 end
 
 local function ActiveSequenceChanged(frame, sequenceID)
@@ -497,7 +605,7 @@ end
 local function StopDriverFrame(frame, reason, unregisterCastbar)
     if not frame then return end
 
-    SetSafetyOnUpdate(frame, false)
+    ClearFrameOnUpdate(frame)
     ClearStopExpectation(frame)
     ClearStartRetry(frame)
     HideChannelHasteMarkers(frame)
@@ -609,16 +717,6 @@ local function EnsureDriverCallbacks(frame)
         if CastStateActive(state) then
             StoreActiveStateIdentity(frame, state)
             frame:Cast(state)
-        end
-    end
-
-    frame._msufDeathRecheckCB = function()
-        frame._msufDeathRecheckPending = nil
-        if not frame:IsShown() or frame.interrupted then return end
-
-        local unit = frame.unit
-        if unit and (not UnitExists(unit) or (UnitIsDeadOrGhost and UnitIsDeadOrGhost(unit))) then
-            StopDriverFrame(frame, "STOPPED", false)
         end
     end
 
@@ -781,7 +879,7 @@ local function RefreshTargetFocusImmediate(frame)
     StoreActiveStateIdentity(frame, nil)
     UpdateCastTargetText(frame, nil)
 
-    SetSafetyOnUpdate(frame, false)
+    ClearFrameOnUpdate(frame)
     if CastbarAlreadyIdle(frame) then
         return false
     end
@@ -816,7 +914,7 @@ local function ScheduleTargetFocusChanged(frame)
 
     -- Never leave the previous unit's cast visible while the new target/focus
     -- is resolved on the next frame.
-    SetSafetyOnUpdate(frame, false)
+    ClearFrameOnUpdate(frame)
     if not CastbarAlreadyIdle(frame) then
         StopDriverFrame(frame, "UNIT_CHANGED", false)
     end
@@ -890,19 +988,20 @@ local function ScheduleStopConfirmation(frame, castType)
     C_Timer.After(0.40, frame._msufStopCB_failsafe)
 end
 
-local function HandleUnitDeathEvent(frame)
-    if not frame:IsShown() or frame.interrupted then return end
+HandleUnitDeathEvent = function(frame, event)
+    if not frame:IsShown() or frame.interrupted or frame.MSUF_castActive ~= true then return end
 
     local unit = frame.unit
-    if unit and (not UnitExists(unit) or (UnitIsDeadOrGhost and UnitIsDeadOrGhost(unit))) then
-        StopDriverFrame(frame, "STOPPED", false)
-        return
+    local exists, dead, connected
+    if event ~= "UNIT_HEALTH" and unit then
+        exists = ToKnownPlainBool(UnitExists(unit))
+        if UnitIsConnected then connected = ToKnownPlainBool(UnitIsConnected(unit)) end
     end
-
-    if not frame._msufDeathRecheckPending then
-        EnsureDriverCallbacks(frame)
-        frame._msufDeathRecheckPending = true
-        C_Timer.After(0.1, frame._msufDeathRecheckCB)
+    if unit and UnitIsDeadOrGhost then
+        dead = ToKnownPlainBool(UnitIsDeadOrGhost(unit))
+    end
+    if exists == false or dead == true or connected == false then
+        StopDriverFrame(frame, "STOPPED", false)
     end
 end
 
@@ -945,8 +1044,8 @@ local function HandleDriverEvent(frame, event, eventUnit)
         return
     end
 
-    if event == "UNIT_HEALTH" then
-        HandleUnitDeathEvent(frame)
+    if event == "UNIT_HEALTH" or event == "UNIT_CONNECTION" then
+        HandleUnitDeathEvent(frame, event)
         return
     end
 
@@ -1144,8 +1243,6 @@ local function CreateCastBar(frameName, unit)
             startTimeMS = state.startTimeMS
             endTimeMS = state.endTimeMS
             isChannel = state.castType == "CHANNEL"
-            self._msufCastSpellID = state.spellId
-            self._msufCastSpellSeq = state.spellSequenceID
         end
 
         if self.hideTimer then
@@ -1153,7 +1250,6 @@ local function CreateCastBar(frameName, unit)
             self.hideTimer = nil
         end
         if self.succeededTimer then
-            self._msufSucceededToken = (self._msufSucceededToken or 0) + 1
             self.succeededTimer = nil
         end
 
@@ -1185,6 +1281,7 @@ local function CreateCastBar(frameName, unit)
         end
 
         if spellName and (durationObj or ApplyFallbackActiveDuration(self, state, isChannel)) then
+            SetCastLifecycleActive(self, true)
             if durationObj then
                 state.durationObj = durationObj
                 state.text = label or spellName
@@ -1215,10 +1312,11 @@ local function CreateCastBar(frameName, unit)
 
             if self.unit ~= "player" then
                 self._msufZeroCount = nil
-                SetSafetyOnUpdate(self, true)
+                ClearFrameOnUpdate(self)
             end
         else
-            SetSafetyOnUpdate(self, false)
+            SetCastLifecycleActive(self, false)
+            ClearFrameOnUpdate(self)
             self.MSUF_castActive = false
             self.MSUF_kickInterruptibleConfirmed = nil
             UpdateCastTargetText(self, nil)
@@ -1242,7 +1340,7 @@ local function CreateCastBar(frameName, unit)
 
     function frame:SetInterrupted()
         HideChannelHasteMarkers(self)
-        SetSafetyOnUpdate(self, false)
+        ClearFrameOnUpdate(self)
         self._msufHideToken = (self._msufHideToken or 0) + 1
         self._msufInactiveRecheckToken = nil
         self._msufInterruptHideToken = nil
@@ -1309,7 +1407,7 @@ local function CreateCastBar(frameName, unit)
         HideChannelHasteMarkers(self)
         if self.interrupted then return end
 
-        SetSafetyOnUpdate(self, false)
+        ClearFrameOnUpdate(self)
         _G.MSUF_CB_ResetStateOnStop(self, "SUCCEEDED")
     end
 
@@ -1330,15 +1428,6 @@ local function CreateCastBar(frameName, unit)
     end
 
     return frame
-end
-
-local function MSUF_EnsureCastbarManager()
-    if _G.MSUF_CastbarManager
-        and _G.MSUF_RegisterCastbar
-        and _G.MSUF_UnregisterCastbar
-        and _G.MSUF_UpdateCastbarFrame then
-        return
-    end
 end
 
 local function EnsureDriverUnit(unit)
@@ -1388,14 +1477,13 @@ end
 local function HardHideDriverFrame(frame)
     if not frame then return end
 
-    SetSafetyOnUpdate(frame, false)
+    ClearFrameOnUpdate(frame)
     CancelTimerField(frame, "hideTimer")
     CancelTimerField(frame, "_msufStopTimer1")
     CancelTimerField(frame, "_msufStopTimer2")
     CancelTimerField(frame, "_msufStopTimer3")
     CancelTimerField(frame, "_msufStartRetryTimer")
     frame._msufStartRetryPending = nil
-    frame._msufDeathRecheckPending = nil
     frame.MSUF_castActive = false
     frame.interrupted = nil
     frame.MSUF_kickInterruptibleConfirmed = nil
@@ -1409,12 +1497,6 @@ local function HardHideDriverFrame(frame)
 
     if _G.MSUF_UnregisterCastbar then
         _G.MSUF_UnregisterCastbar(frame)
-    end
-    if frame.SetScript then
-        frame:SetScript("OnUpdate", nil)
-    end
-    if frame.Hide then
-        frame:Hide()
     end
 end
 
@@ -1510,10 +1592,6 @@ if _G.MSUF_EventBus_Register then
     _G.MSUF_EventBus_Register("PLAYER_ENTERING_WORLD", "MSUF_CASTBAR_DRIVER_WORLD", MSUF_CastbarDriver_OnEnteringWorld)
 end
 
-ExportPublic("MSUF_EnsureCastbarManager", MSUF_EnsureCastbarManager)
-ExportPublic("MSUF_CastbarDriver_OnLogin", MSUF_CastbarDriver_OnLogin)
-ExportPublic("MSUF_CastbarDriver_OnEnteringWorld", MSUF_CastbarDriver_OnEnteringWorld)
 ExportPublic("MSUF_UpdateCastTimeText_FromStatusBar", MSUF_UpdateCastTimeText_FromStatusBar)
 ExportPublic("MSUF_CreateCastBar", CreateCastBar)
-ExportPublic("MSUF_CastbarDriver_EnsureUnit", EnsureDriverUnit)
 ExportPublic("MSUF_CastbarDriver_ApplyBackendState", ApplyDriverBackendState)

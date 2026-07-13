@@ -71,72 +71,83 @@ local function ResolveTextSize(general)
     return ((tonumber(general.focusKickIconHeight) or 40) >= 48) and 14 or 12
 end
 
-local function StopTimeUpdater(frame)
-    if not frame then return end
-    frame.MSUF_timeUpdater = nil
-    frame.MSUF_timeAccum = nil
-    frame.MSUF_lastMirrorText = nil
-    frame.MSUF_lastMirrorAlpha = nil
-    if frame.SetScript then frame:SetScript("OnUpdate", nil) end
-end
-
-local function SyncTimeText()
-    if not (iconFrame and iconFrame:IsShown() and iconFrame.timeText) then
-        StopTimeUpdater(iconFrame)
-        return
-    end
-
-    local source = iconFrame.MSUF_sourceCastBar or _G.MSUF_FocusCastBar or _G.MSUF_FocusCastbar
+local function FocusSourceCastbar()
+    return (iconFrame and iconFrame.MSUF_sourceCastBar)
+        or _G.MSUF_FocusCastBar
+        or _G.MSUF_FocusCastbar
         or ((_G.FocusCastBar and _G.FocusCastBar._msufCastbarDriver == true) and _G.FocusCastBar)
-    if not (source and source.timeText) then
-        if iconFrame.MSUF_lastMirrorText ~= "" or iconFrame.MSUF_lastMirrorAlpha ~= 0 then
-            iconFrame.MSUF_lastMirrorText = ""
-            iconFrame.MSUF_lastMirrorAlpha = 0
-            iconFrame.timeText:SetText("")
-            iconFrame.timeText:SetAlpha(0)
+end
+
+local function DetachTimeDriver()
+    if not iconFrame then return end
+
+    local runtime = _G.MSUF_CastbarRuntime
+    if runtime and runtime.DisableNativeTimeText then
+        runtime:DisableNativeTimeText(iconFrame)
+    end
+
+    local source = iconFrame._msufTimeFollowerSource
+    if source and source._msufTimeTextFollower == iconFrame.timeText then
+        source._msufTimeTextFollower = nil
+        source._msufForceLuaTimeTextFollower = nil
+        iconFrame._msufTimeFollowerSource = nil
+
+        if source.MSUF_castActive == true
+            and runtime and runtime.PrepareWork
+            and type(_G.MSUF_RegisterCastbar) == "function"
+        then
+            runtime:PrepareWork(source)
+            _G.MSUF_RegisterCastbar(source)
         end
+    end
+end
+
+local function AttachTimeDriver(state)
+    if not (iconFrame and iconFrame.timeText) then return end
+    DetachTimeDriver()
+
+    local general = EnsureOptions()
+    if general.showFocusCastTime == false then
+        iconFrame.timeText:SetText("")
+        iconFrame.timeText:SetAlpha(0)
         return
     end
 
-    local text = source.timeText:GetText() or ""
-    local alpha = source.timeText:GetAlpha() or 1
-    local issecret = _G.issecretvalue
-    if issecret and (issecret(text) == true or issecret(alpha) == true) then
-        -- Never compare secret values; write through and drop the memo.
-        iconFrame.MSUF_lastMirrorText = nil
-        iconFrame.MSUF_lastMirrorAlpha = nil
+    iconFrame.timeText:SetAlpha(1)
+    local format = "CURRENT"
+    if type(_G.MSUF_GetCastbarTimeFormat) == "function" then
+        format = _G.MSUF_GetCastbarTimeFormat("focus", general) or format
+    end
+
+    local runtime = _G.MSUF_CastbarRuntime
+    if state and state.durationObj
+        and runtime and runtime.BindNativeTimeText
+        and runtime:BindNativeTimeText(iconFrame, state.durationObj, format)
+    then
+        return
+    end
+
+    -- Degraded clients reuse the source castbar's already-required manager
+    -- cadence.  The follower is written only when that source text changes.
+    local source = FocusSourceCastbar()
+    if not (source and source.timeText) then
+        iconFrame.timeText:SetText("")
+        iconFrame.timeText:SetAlpha(0)
+        return
+    end
+
+    source._msufTimeTextFollower = iconFrame.timeText
+    source._msufForceLuaTimeTextFollower = true
+    iconFrame._msufTimeFollowerSource = source
+    if runtime and runtime.PrepareWork then runtime:PrepareWork(source) end
+    if type(_G.MSUF_RegisterCastbar) == "function" then _G.MSUF_RegisterCastbar(source) end
+
+    local text = source.timeText:GetText()
+    if _G.issecretvalue and _G.issecretvalue(text) == true then
         iconFrame.timeText:SetText(text)
-        iconFrame.timeText:SetAlpha(alpha)
-        return
+    else
+        iconFrame.timeText:SetText(text or "")
     end
-    if iconFrame.MSUF_lastMirrorText == text and iconFrame.MSUF_lastMirrorAlpha == alpha then
-        return
-    end
-    iconFrame.MSUF_lastMirrorText = text
-    iconFrame.MSUF_lastMirrorAlpha = alpha
-    iconFrame.timeText:SetText(text)
-    iconFrame.timeText:SetAlpha(alpha)
-end
-
-local function OnTimeUpdate(frame, elapsed)
-    if not iconFrame or frame ~= iconFrame then
-        StopTimeUpdater(frame)
-        return
-    end
-
-    iconFrame.MSUF_timeAccum = (iconFrame.MSUF_timeAccum or 0) + (elapsed or 0)
-    if iconFrame.MSUF_timeAccum < 0.05 then return end
-    iconFrame.MSUF_timeAccum = 0
-    SyncTimeText()
-end
-
-local function StartTimeUpdater()
-    if not iconFrame or iconFrame.MSUF_timeUpdater then return end
-
-    iconFrame.MSUF_timeUpdater = true
-    iconFrame.MSUF_timeAccum = 0
-    iconFrame:SetScript("OnUpdate", OnTimeUpdate)
-    SyncTimeText()
 end
 
 local function ApplyTimeTextFont()
@@ -253,7 +264,7 @@ local function EnsureIconFrame()
     iconFrame:SetFrameStrata("HIGH")
     iconFrame:SetFrameLevel(50)
     iconFrame:Hide()
-    iconFrame:HookScript("OnHide", StopTimeUpdater)
+    iconFrame:HookScript("OnHide", DetachTimeDriver)
 
     iconFrame.bg = iconFrame:CreateTexture(nil, "BACKGROUND")
     iconFrame.bg:SetAllPoints()
@@ -600,11 +611,9 @@ local function ApplyCastState(state)
     iconFrame.MSUF_sourceCastBar = _G.MSUF_FocusCastBar or _G.MSUF_FocusCastbar
         or ((_G.FocusCastBar and _G.FocusCastBar._msufCastbarDriver == true) and _G.FocusCastBar)
     ApplyInterruptibilityColor(state.isNotInterruptible == true, state.apiNotInterruptibleRaw)
-    iconFrame._msufLastCastState = state
     iconFrame:Show()
     ApplyIconLayout()
-    StartTimeUpdater()
-    SyncTimeText()
+    AttachTimeDriver(state)
 end
 
 local function PlayInterruptFeedbackIfEnabled()
@@ -613,12 +622,10 @@ local function PlayInterruptFeedbackIfEnabled()
     PlayInterruptFeedback()
 end
 
-ExportPublic("MSUF_FocusKick_EnsureInitialized", EnsureInitialized)
 ExportPublic("MSUF_InitFocusKickIcon", InitFocusKickIcon)
 ExportPublic("MSUF_UpdateFocusKickIconOptions", UpdateFocusKickIconOptions)
 ExportPublic("MSUF_FocusKick_SetPreviewEnabled", SetPreviewEnabled)
 ExportPublic("MSUF_FocusKick_IsPreviewEnabled", IsPreviewEnabled)
-ExportPublic("MSUF_FocusKick_UpdateAppearance", ApplyIconLayout)
 ExportPublic("MSUF_FocusKick_ApplyTimeTextFont", ApplyTimeTextFont)
 ExportPublic("MSUF_FocusKick_ApplyCastState", ApplyCastState)
 ExportPublic("MSUF_FocusKick_PlayInterruptFeedback", PlayInterruptFeedbackIfEnabled)
