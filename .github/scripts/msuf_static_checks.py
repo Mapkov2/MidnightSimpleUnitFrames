@@ -25,6 +25,11 @@ ASSISTANT_ROOT = ASSISTANT_TOC.parent
 ASSISTANT_MANIFEST = ASSISTANT_ROOT / "MSUF_AssistantRuntime.xml"
 ASSISTANT_SCRIPT_COUNT = 328
 ASSISTANT_ORDER_SHA256 = "291364B471F1523AEE62E8F5B8AA160BA731E2DFCE3C5A7ADC0BA05C695E88C6"
+LUA_MAIN_CHUNK_LOCAL_BUDGETS = {
+    # WoW Lua rejects a function at 200 locals. Keep enough structural reserve
+    # that ordinary Auras3 work cannot drift back to the compiler cliff.
+    "Auras3/MSUF_Auras3_UnitFrames.lua": 150,
+}
 SUPPORTED_LOCALES = {
     "enUS", "enGB", "deDE", "esES", "esMX", "frFR",
     "itIT", "koKR", "ptBR", "ruRU", "zhCN", "zhTW",
@@ -321,6 +326,20 @@ def check_luac(lua_files: list[Path]) -> None:
             failures.append(f"{rel(path)}: {(proc.stderr or proc.stdout).strip()}")
     if failures:
         raise CheckError("luac failures:\n" + "\n".join(failures[:30]))
+
+    for relative_path, budget in LUA_MAIN_CHUNK_LOCAL_BUDGETS.items():
+        path = ADDON_ROOT / relative_path
+        proc = subprocess.run([luac, "-l", "-l", str(path)], capture_output=True, text=True)
+        if proc.returncode != 0:
+            raise CheckError(f"could not inspect Lua local budget for {relative_path}: "
+                             f"{(proc.stderr or proc.stdout).strip()}")
+        listing = proc.stdout or proc.stderr
+        match = re.search(r"(?m)^\s*locals\s*\((\d+)\)", listing)
+        if not match:
+            raise CheckError(f"could not parse main-chunk locals for {relative_path}")
+        local_count = int(match.group(1))
+        if local_count > budget:
+            raise CheckError(f"{relative_path} main chunk uses {local_count} locals; budget is {budget}")
 
 
 def check_load_reachability(lua_files: list[Path]) -> None:
