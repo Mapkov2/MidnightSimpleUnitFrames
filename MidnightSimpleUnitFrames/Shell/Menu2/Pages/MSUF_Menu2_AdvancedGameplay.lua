@@ -13,8 +13,26 @@ local floor = math.floor
 local max = math.max
 local min = math.min
 local Gameplay, MoveWidget, LabelAt, SwitchAt, AddTableControlSpecs, ControlMeta, RegisterControl = M.Pick(AP, [[Gameplay MoveWidget LabelAt SwitchAt AddTableControlSpecs ControlMeta RegisterControl]])
+local GAMEPLAY_SETTING_BY_PATH = {
+    ["timer.enabled"] = "gameplay.enableCombatTimer",
+    ["combat_state.enabled"] = "gameplay.enableCombatStateText",
+    ["totem_frame.enabled"] = "gameplay.enablePlayerTotems",
+    ["crosshair.enabled"] = "gameplay.enableCombatCrosshair",
+    ["crosshair.melee_spell"] = "gameplay.nameplateMeleeSpellID",
+}
+local GAMEPLAY_ACTION_BY_PATH = {
+    ["totem_frame.reset_layout"] = "reset_player_totems_layout",
+}
 local function Meta(path, classification, exact)
-    return ControlMeta("gameplay", "advanced", path, classification, exact)
+    local resolved = {}
+    if type(exact) == "table" then
+        for key, value in pairs(exact) do resolved[key] = value end
+    end
+    local dbKey = tostring(path or ""):match("^setting%.(.+)$")
+    resolved.settingKey = resolved.settingKey or GAMEPLAY_SETTING_BY_PATH[path]
+        or (dbKey and ("gameplay." .. dbKey))
+    resolved.actionKey = resolved.actionKey or GAMEPLAY_ACTION_BY_PATH[path]
+    return ControlMeta("gameplay", "advanced", path, classification, resolved)
 end
 local ApplyGameplay = M.ApplyGameplay
 local VT = M.ValueTextList

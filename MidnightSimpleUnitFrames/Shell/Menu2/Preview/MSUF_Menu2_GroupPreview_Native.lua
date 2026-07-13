@@ -128,17 +128,27 @@ local function OpenGFSection(sectionKey)
             M.SetMenuStateValue("gfScope", scope)
             if pageKey == "gf_auras" then
                 M.SetMenuStateValue("auraStyleGFScope", scope == "mythicraid" and "raid" or scope)
+                local lane
                 if sectionKey == "buffs" then
-                    M.SetMenuStateValue("auraStyleGFLane", "buff")
+                    lane = "buff"
                 elseif sectionKey == "debuffs" then
-                    M.SetMenuStateValue("auraStyleGFLane", "debuff")
+                    lane = "debuff"
+                elseif sectionKey == "externals" then
+                    lane = "externals"
+                end
+                if lane then
+                    M.gfAuraLaneSelection = M.gfAuraLaneSelection or {}
+                    M.gfAuraLaneSelection[scope] = lane
+                    if lane ~= "externals" then M.SetMenuStateValue("auraStyleGFLane", lane) end
                 end
             end
         end
         ExportPublic("MSUF_EM2_MenuFocusRequest", {
             key = (scope == "raid" and "gf_raid") or (scope == "mythicraid" and "gf_mythicraid") or "gf_party",
             component = sectionKey,
-            lane = sectionKey == "buffs" and "buff" or (sectionKey == "debuffs" and "debuff" or nil),
+            lane = sectionKey == "buffs" and "buff"
+                or (sectionKey == "debuffs" and "debuff"
+                or (sectionKey == "externals" and "externals" or nil)),
             pageKey = pageKey,
             sectionId = sectionKey,
             source = "group-preview",
@@ -545,10 +555,15 @@ local function CompiledAuraLane(auras, key, fallback)
         prefix, showKey = "trackedBuff", "showTrackedBuffs"
     elseif key == "debuff" then
         prefix, showKey = "debuff", "showDebuffs"
+    elseif key == "external" then
+        prefix, showKey = "external", "showExternals"
     else
         return fallback or {}
     end
-    local maxKey = key == "trackedBuff" and "maxTrackedBuffs" or ("max" .. (key == "buff" and "Buffs" or "Debuffs"))
+    local maxKey = key == "trackedBuff" and "maxTrackedBuffs"
+        or (key == "buff" and "maxBuffs")
+        or (key == "debuff" and "maxDebuffs")
+        or "maxExternals"
     local out = {
         _compiled = true,
         enabled = auras[showKey] == true,
@@ -1148,6 +1163,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         buff = true,
         trackedBuff = true,
         debuff = true,
+        external = true,
         status = true,
         si = true,
         targetedSpells = true,
@@ -1160,6 +1176,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         { "Buffs", { 0.20, 0.90, 0.35 }, "buffs", "buff" },
         { "Tracked", { 0.42, 0.68, 1.00 }, "buffs", "trackedBuff" },
         { "Debuffs", { 0.90, 0.20, 0.22 }, "debuffs", "debuff" },
+        { "External", { 0.30, 0.72, 1.00 }, "externals", "external" },
         { "Status", { 0.95, 0.78, 0.22 }, "sicons", "status" },
         { "Spells", { 0.86, 0.50, 1.00 }, "si", "si" },
         { "Target", { 1.00, 0.52, 0.18 }, "targetedSpells", "targetedSpells" },
@@ -1171,7 +1188,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         local def = layerDefs[i]
         local btn = R.MakePreviewSectionButton(layers, def[1], def[2], def[3], onOpen)
         btn._layerKey = def[4]
-        btn:SetPoint("TOP", layers, "TOP", 0, -23 - ((i - 1) * 18))
+        btn:SetPoint("TOP", layers, "TOP", 0, -23 - ((i - 1) * 17))
         btn:SetScript("OnEnter", function(self)
             if self.SetPreviewHover then self:SetPreviewHover(true) end
             if box._hint then
@@ -1307,6 +1324,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     local buffHandle = handleBundle.buffHandle
     local trackedBuffHandle = handleBundle.trackedBuffHandle
     local debuffHandle = handleBundle.debuffHandle
+    local externalHandle = handleBundle.externalHandle
     local statusHandles = handleBundle.statusHandles or {}
     local spellHandle = handleBundle.spellHandle
     local targetedHandle = handleBundle.targetedHandle
@@ -1327,6 +1345,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         renderDeps.width, renderDeps.mock = width, mock
         renderDeps.buffHandle, renderDeps.debuffHandle = buffHandle, debuffHandle
         renderDeps.trackedBuffHandle = trackedBuffHandle
+        renderDeps.externalHandle = externalHandle
         renderDeps.statusHandles, renderDeps.spellHandle = statusHandles, spellHandle
         renderDeps.targetedHandle = targetedHandle
         renderDeps.statusSpecs = H.StatusSpecs and H.StatusSpecs()

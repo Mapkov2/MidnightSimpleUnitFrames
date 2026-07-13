@@ -6,7 +6,7 @@ local W = M.Widgets or {}
 local UP = M.UnitPage or {}
 local max = math.max
 local AlphaLabel = M.AlphaLabel
-local ControlMeta = UP.ControlMeta
+local SettingMeta = UP.SettingMeta
 
 -- Unified, simple transparency: separate health/resource opacity cards with
 -- foreground and background sliders, plus one toggle that keeps frame texts +
@@ -38,7 +38,7 @@ local function BuildAlpha(ctx, builder, unit)
             function() return ReadNumber(unit, spec.key, spec.default) end,
             function(v) SetNumber(unit, spec.key, v, spec.reason, spec.flags) end,
             spec.default,
-            ControlMeta(ctx, "transparency." .. tostring(spec.key)))
+            SettingMeta(ctx, "transparency." .. tostring(spec.key), unit, spec.key))
         M.BindSliderLiveLabel(ctx, slider, function() return ReadNumber(unit, spec.key, spec.default) end,
             function(value) return AlphaLabel(spec.label, value) end, true)
         W.MoveWidget(slider, parent, 16, spec.y, width - 58, "LEFT")
@@ -53,7 +53,7 @@ local function BuildAlpha(ctx, builder, unit)
         function(v)
             SetBool(unit, "alphaExcludeTextPortrait", v, "MSUF2_ALPHA_EXCLUDE", { alpha = true, preview = true })
         end,
-        ControlMeta(ctx, "transparency.alpha_exclude_text_portrait"))
+        SettingMeta(ctx, "transparency.alpha_exclude_text_portrait", unit, "alphaExcludeTextPortrait"))
     local hint = W.Text(optionsCard, "", 16, -94, optionsW - 32, nil)
     if hint and hint.SetWordWrap then hint:SetWordWrap(true) end
     if hint and hint.SetText then hint:SetText(M.Tr("On: bars and background fade while text and portrait stay visible. Off: text and portrait fade with them.")) end

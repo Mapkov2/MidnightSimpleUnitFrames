@@ -16,8 +16,16 @@ local max = math.max
 local min = math.min
 local C_Timer = _G.C_Timer
 local Call, G, ReadG, SetG, ReadGBool, SetGBool, TextureValues, SetControlEnabled, SetControlsEnabled, ApplyCastbars, ControlMeta, RegisterControl = M.Pick(GP, [[Call G ReadG SetG ReadGBool SetGBool TextureValues SetControlEnabled SetControlsEnabled ApplyCastbars ControlMeta RegisterControl]])
+local CASTBAR_ACTION_BY_PATH = {
+    ["focus_kick.reset_position"] = "reset_focus_kick_position",
+}
 local function Meta(path, classification, exact)
-    return ControlMeta("opt_castbar", "global", path, classification, exact)
+    local resolved = {}
+    if type(exact) == "table" then
+        for key, value in pairs(exact) do resolved[key] = value end
+    end
+    resolved.actionKey = resolved.actionKey or CASTBAR_ACTION_BY_PATH[path]
+    return ControlMeta("opt_castbar", "global", path, classification, resolved)
 end
 local WHITE8 = "Interface\\Buttons\\WHITE8X8"
 local CASTBAR_PREVIEW_UNITS = M.KeySetFromWords "player target focus boss"
@@ -932,19 +940,22 @@ local function BuildCastbars(ctx)
             toggle = function(spec, i)
                 local label, x, y, width, key = spec[2], spec[3], spec[4], spec[5], spec[6]
                 local opts = spec[CAST_SPEC_OPTION_INDEX.toggle] or {}
-                opts.meta = opts.meta or Meta(semanticPrefix .. "." .. tostring(key or opts.name), opts.classification)
+                opts.meta = opts.meta or Meta(semanticPrefix .. "." .. tostring(key or opts.name), opts.classification,
+                    opts.classification == "ephemeral" and nil or { settingKey = opts.settingKey or (key and ("general." .. key)) })
                 return BindCastToggle(parent, label, x, y, width, key, spec[7], spec[8], opts.afterSet or spec[9], opts), opts.name or key or i
             end,
             slider = function(spec, i)
                 local label, x, y, width, key = spec[2], spec[3], spec[4], spec[5], spec[9]
                 local opts = spec[CAST_SPEC_OPTION_INDEX.slider] or {}
-                opts.meta = opts.meta or Meta(semanticPrefix .. "." .. tostring(key or opts.name), opts.classification)
+                opts.meta = opts.meta or Meta(semanticPrefix .. "." .. tostring(key or opts.name), opts.classification,
+                    opts.classification == "ephemeral" and nil or { settingKey = opts.settingKey or (key and ("general." .. key)) })
                 return BindCastSlider(parent, label, x, y, width, spec[6], spec[7], spec[8], key, spec[10], spec[11], opts.afterSet or spec[12], opts), opts.name or key or i
             end,
             dropdown = function(spec, i)
                 local label, x, y, width, key = spec[2], spec[3], spec[4], spec[5], spec[7]
                 local opts = spec[CAST_SPEC_OPTION_INDEX.dropdown] or {}
-                opts.meta = opts.meta or Meta(semanticPrefix .. "." .. tostring(key or opts.name), opts.classification)
+                opts.meta = opts.meta or Meta(semanticPrefix .. "." .. tostring(key or opts.name), opts.classification,
+                    opts.classification == "ephemeral" and nil or { settingKey = opts.settingKey or (key and ("general." .. key)) })
                 return BindCastDropdown(parent, label, x, y, width, spec[6], key, spec[8], spec[9], opts.afterSet or spec[10], opts), opts.name or key or i
             end,
         })
@@ -1006,6 +1017,7 @@ local function BuildCastbars(ctx)
     local function NameShorteningEnabled() return (tonumber(ReadG("castbarSpellNameShortening", 0)) or 0) == 1 end
     local textControls = BuildCastControlSpecs(text, {
         { "toggle", "Spell name shortening", textLeftX, -42, 260, nil, nil, nil, nil, { name = "shorten", switch = true, getValue = NameShorteningEnabled,
+            settingKey = "general.castbarSpellNameShortening",
             setValue = function(v)
                 SetG("castbarSpellNameShortening", v and 1 or 0, "MSUF2_CASTBAR_NAME_SHORTEN", { castbar = true, preview = true })
                 RequestCastPreviewRefresh()
@@ -1053,6 +1065,7 @@ local function BuildCastbars(ctx)
         { "slider", "Width", focusRightX, -74, 320, 16, 128, 1, "focusKickIconWidth", 40, "MSUF2_FOCUS_KICK_WIDTH", ApplyFocusKickOptions, { name = "width" } },
         { "slider", "Height", focusRightX, -128, 320, 16, 128, 1, "focusKickIconHeight", 40, "MSUF2_FOCUS_KICK_HEIGHT", ApplyFocusKickOptions, { name = "height" } },
         { "slider", "Text size", focusRightX, -182, 320, 8, 24, 1, nil, nil, nil, nil, { name = "text",
+            settingKey = "general.focusKickTextSize",
             getValue = function()
                 local v = tonumber(ReadG("focusKickTextSize", nil))
                 if v then return v end

@@ -1431,9 +1431,94 @@ end
 local function LayoutNavButtonLabel(btn, isChild, hasIcon)
     if not (btn and btn._msuf2Label) then return end
     btn._msuf2Label:ClearAllPoints()
-    btn._msuf2Label:SetPoint("LEFT", btn, "LEFT", hasIcon and (isChild and 24 or 26) or 10, 0)
+    btn._msuf2Label:SetPoint("LEFT", btn, "LEFT", hasIcon and (isChild and 27 or 29) or 10, 0)
     btn._msuf2Label:SetPoint("RIGHT", btn, "RIGHT", -8, 0)
     btn._msuf2Label:SetJustifyH("LEFT")
+end
+local NAV_ICON_SIZE = 17
+local NAV_GLYPH_PATHS = {
+    -- Layered droplet from the selected Colors concept.
+    opt_colors = {
+        { { 0, 7 }, { -2, 4 }, { -5, 0 }, { -5, -3 }, { -3, -6 }, { 0, -7 }, { 3, -6 }, { 5, -3 }, { 5, 0 }, { 2, 4 }, { 0, 7 } },
+        { { -2, -3 }, { -1, -4 }, { 1, -4 }, { 3, -2 } },
+    },
+    -- Three compact resource pips from the selected Class Resources concept.
+    classpower = {
+        { { -5, 6 }, { -6.5, 5 }, { -6.5, -5 }, { -5, -6 }, { -3.5, -5 }, { -3.5, 5 }, { -5, 6 } },
+        { { 0, 6 }, { -1.5, 5 }, { -1.5, -5 }, { 0, -6 }, { 1.5, -5 }, { 1.5, 5 }, { 0, 6 } },
+        { { 5, 6 }, { 3.5, 5 }, { 3.5, -5 }, { 5, -6 }, { 6.5, -5 }, { 6.5, 5 }, { 5, 6 } },
+        { { -5, -2 }, { -5, -4 } },
+        { { 0, -1 }, { 0, -4 } },
+        { { 5, 0 }, { 5, -4 } },
+    },
+    -- Crosshair and sword from the selected Gameplay concept.
+    gameplay = {
+        { { -2, 6 }, { 1, 5 }, { 2, 2 }, { 1, -1 }, { -2, -2 }, { -5, -1 }, { -6, 2 }, { -5, 5 }, { -2, 6 } },
+        { { -2, 8 }, { -2, 5 } },
+        { { -2, -2 }, { -2, -5 } },
+        { { -8, 2 }, { -5, 2 } },
+        { { 1, 2 }, { 4, 2 } },
+        { { 0, -6 }, { 6, 0 } },
+        { { 4.5, 1.5 }, { 6, 0 }, { 4.5, -1.5 } },
+        { { 0, -3.5 }, { 2.5, -6 } },
+        { { -1, -7 }, { 1, -5 } },
+    },
+}
+local NAV_GLYPH_TEXT = { opt_fonts = "Aa" }
+local function AddNavGlyphPath(holder, parts, points)
+    if not (holder and holder.CreateLine and type(points) == "table") then return end
+    for i = 2, #points do
+        local from, to = points[i - 1], points[i]
+        local line = holder:CreateLine(nil, "ARTWORK", nil, 3)
+        line:SetThickness(1.25)
+        line:SetStartPoint("CENTER", holder, from[1], from[2])
+        line:SetEndPoint("CENTER", holder, to[1], to[2])
+        line:SetColorTexture(1, 1, 1, 1)
+        parts[#parts + 1] = { region = line, kind = "line" }
+    end
+end
+local function CreateProceduralNavIcon(btn, navKey)
+    local paths, text = NAV_GLYPH_PATHS[navKey], NAV_GLYPH_TEXT[navKey]
+    if not (paths or text) then return nil end
+    local holder = CreateFrame("Frame", nil, btn)
+    holder:SetSize(NAV_ICON_SIZE, NAV_ICON_SIZE)
+    holder._msuf2GlyphParts = {}
+    if paths then
+        for i = 1, #paths do AddNavGlyphPath(holder, holder._msuf2GlyphParts, paths[i]) end
+    end
+    if text then
+        local label = holder:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+        label:SetPoint("CENTER", holder, "CENTER", 0, -0.5)
+        label:SetJustifyH("CENTER")
+        label:SetText(text)
+        if label.SetScale then label:SetScale(0.90) end
+        holder._msuf2GlyphParts[#holder._msuf2GlyphParts + 1] = { region = label, kind = "font" }
+    end
+    if navKey == "gameplay" then
+        local dot = holder:CreateTexture(nil, "ARTWORK", nil, 4)
+        dot:SetSize(1.75, 1.75)
+        dot:SetPoint("CENTER", holder, "CENTER", -2, 2)
+        dot:SetColorTexture(1, 1, 1, 1)
+        holder._msuf2GlyphParts[#holder._msuf2GlyphParts + 1] = { region = dot, kind = "texture" }
+    end
+    return holder
+end
+local function PaintNavIcon(btn, r, g, b, a)
+    local icon = btn and btn._msuf2NavIcon
+    if not icon then return end
+    local parts = icon._msuf2GlyphParts
+    if type(parts) == "table" then
+        for i = 1, #parts do
+            local part = parts[i]
+            if part.kind == "font" and part.region.SetTextColor then
+                part.region:SetTextColor(r, g, b, a)
+            elseif part.region.SetColorTexture then
+                part.region:SetColorTexture(r, g, b, a)
+            end
+        end
+    elseif icon.SetVertexColor then
+        icon:SetVertexColor(r, g, b, a)
+    end
 end
 function T.SetNavIconVisible(btn, visible)
     if not btn then return end
@@ -1463,17 +1548,21 @@ function T.AttachNavIcon(btn, navKey, isChild, visible)
     end
     local icon = btn._msuf2NavIcon
     if not icon then
-        icon = btn:CreateTexture(nil, "ARTWORK", nil, 3)
-        icon:SetSize(14, 14)
-        icon:SetTexture(T.media.navIcons)
+        icon = CreateProceduralNavIcon(btn, navKey)
+        if not icon then
+            icon = btn:CreateTexture(nil, "ARTWORK", nil, 3)
+            icon:SetTexture(T.media.navIcons)
+        end
+        icon:SetSize(NAV_ICON_SIZE, NAV_ICON_SIZE)
         icon:SetPoint("LEFT", btn, "LEFT", isChild and 8 or 10, 0)
         btn._msuf2NavIcon = icon
     else
         icon:ClearAllPoints()
+        icon:SetSize(NAV_ICON_SIZE, NAV_ICON_SIZE)
         icon:SetPoint("LEFT", btn, "LEFT", isChild and 8 or 10, 0)
     end
     local col, row = grid[1], grid[2]
-    icon:SetTexCoord(col / 8, (col + 1) / 8, row / 8, (row + 1) / 8)
+    if icon.SetTexCoord then icon:SetTexCoord(col / 8, (col + 1) / 8, row / 8, (row + 1) / 8) end
     btn._msuf2NavIconColor = color
     if not btn._msuf2NavStripe then
         local stripe = btn:CreateTexture(nil, "ARTWORK", nil, 6)
@@ -1917,7 +2006,7 @@ end
 local function PaintStoredNavIcon(btn, alpha)
     if btn._msuf2NavIcon and btn._msuf2NavIconColor then
         local ic = btn._msuf2NavIconColor
-        btn._msuf2NavIcon:SetVertexColor(ic[1], ic[2], ic[3], alpha)
+        PaintNavIcon(btn, ic[1], ic[2], ic[3], alpha)
     end
 end
 local NAV_PILL_TEX = {
@@ -2252,7 +2341,7 @@ local function ButtonVisual(btn, active, hover)
                 PaintButtonParts(fill, edge, btn._msuf2Label, bg, br, c.navTextActive, 0.24, -0.18)
                 SetNavActiveFX(btn, true, hover)
             end
-            if btn._msuf2NavIcon then btn._msuf2NavIcon:SetVertexColor(0.82, 0.92, 1.00, 0.96) end
+            PaintNavIcon(btn, 0.82, 0.92, 1.00, 0.96)
         elseif hover then
             local bg, br, tx = c.navPillHover, c.navPillEdgeHover, c.navText
             SetNavActiveFX(btn, false)

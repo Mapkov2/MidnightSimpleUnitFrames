@@ -162,18 +162,24 @@ Range Check=unit frame range check;Level Text=where is level text anchor;Perform
         local btn = T.Button(quick, shortcuts[i][1], buttonW, 22)
         btn:SetPoint("TOPLEFT", quick, "TOPLEFT", 14 + col * (buttonW + 14), -38 - row * 28)
         btn:SetScript("OnClick", function()
-            if M.nav and M.nav.searchBox then
-                M.nav.searchBox._msuf2SearchInternal = true
-                M.nav.searchBox:SetText(searchQuery)
-                M.nav.searchBox._msuf2SearchInternal = nil
-                M.nav.searchBox:ClearFocus()
+            local bridge = M.SearchBridge
+            if bridge and type(bridge.RunSearchQuery) == "function" then
+                bridge.RunSearchQuery(searchQuery)
+            else
+                if M.nav and M.nav.searchBox then
+                    M.nav.searchBox._msuf2SearchInternal = true
+                    M.nav.searchBox:SetText(searchQuery)
+                    M.nav.searchBox._msuf2SearchInternal = nil
+                    M.nav.searchBox:ClearFocus()
+                end
+                OpenSearchResults(searchQuery)
             end
-            OpenSearchResults(searchQuery)
         end)
         if type(M.RegisterMenuChromeControl) == "function" then
             local shortcutToken = tostring(shortcuts[i][1] or i):lower():gsub("[^%w_]+", "."):gsub("^%.*", ""):gsub("%.*$", "")
             M.RegisterMenuChromeControl(btn, "search.shortcut." .. (shortcutToken ~= "" and shortcutToken or tostring(i)),
                 "Search for " .. tostring(shortcuts[i][1] or searchQuery), "action", {
+                    actionKey = "menu_search_query",
                     historyMode = "none",
                     help = "Runs this built-in MSUF support search.",
                     command = {

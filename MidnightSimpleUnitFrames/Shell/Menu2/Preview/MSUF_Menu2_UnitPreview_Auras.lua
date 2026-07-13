@@ -19,6 +19,16 @@ local RoundOffset = (MSUF.UFPreviewCore and MSUF.UFPreviewCore.RoundOffset) or f
     if v >= 0 then return floor(v + 0.5) end
     return -floor((-v) + 0.5)
 end
+local function ClampNumber(value, defaultValue, minValue, maxValue)
+    value = tonumber(value)
+    if value == nil then value = defaultValue end
+    if minValue ~= nil and value < minValue then value = minValue end
+    if maxValue ~= nil and value > maxValue then value = maxValue end
+    return value
+end
+local function RuntimeRound(value)
+    return floor((tonumber(value) or 0) + 0.5)
+end
 local Auras = MSUF.UFPreviewAuras or {}
 MSUF.UFPreviewAuras = Auras
 local AURA_HANDLE_FIELDS = {
@@ -29,6 +39,11 @@ local AURA_HANDLE_FIELDS = {
     custom3 = { customIndex = 3, defaultX = 0, defaultY = 0, label = "Custom 3", color = { 1.00, 0.58, 0.28 } },
 }
 local AURA_PREVIEW_KINDS = { "buff", "debuff", "custom1", "custom2", "custom3" }
+local AURA_ANCHOR_OK = {
+    TOPLEFT=true, TOP=true, TOPRIGHT=true,
+    LEFT=true, CENTER=true, RIGHT=true,
+    BOTTOMLEFT=true, BOTTOM=true, BOTTOMRIGHT=true,
+}
 local AURA_TEXTURES = {
     buff = { 135987, 136116, 135932, 136085, 132333, 135981, 136048, 135964 },
     debuff = { 136118, 136139, 136197, 135817, 132851, 136188, 136170, 135813 },
@@ -344,11 +359,20 @@ local function AnchorOffset(anchor, w, h)
     w = tonumber(w) or 0
     h = tonumber(h) or 0
     anchor = tostring(anchor or "TOPLEFT")
+    if anchor == "TOPLEFT" then return 0, h end
+    if anchor == "TOP" then return w * 0.5, h end
     if anchor == "TOPRIGHT" then return w, h end
-    if anchor == "BOTTOMLEFT" then return 0, 0 end
-    if anchor == "BOTTOMRIGHT" then return w, 0 end
+    if anchor == "LEFT" then return 0, h * 0.5 end
     if anchor == "CENTER" then return w * 0.5, h * 0.5 end
+    if anchor == "RIGHT" then return w, h * 0.5 end
+    if anchor == "BOTTOMLEFT" then return 0, 0 end
+    if anchor == "BOTTOM" then return w * 0.5, 0 end
+    if anchor == "BOTTOMRIGHT" then return w, 0 end
     return 0, h
+end
+local function NormalizeAnchor(anchor, fallback)
+    anchor = tostring(anchor or "")
+    return AURA_ANCHOR_OK[anchor] and anchor or fallback or "TOPLEFT"
 end
 local function AnchorBase(anchor, frameW, frameH)
     return AnchorOffset(anchor, frameW, frameH)
@@ -381,21 +405,41 @@ local function LaneBounds(cfg, kind, frameW, frameH)
     local isBuff = kind == "buff"
     if isBuff and cfg.showBuffs ~= true then return nil end
     if (not isBuff) and cfg.showDebuffs ~= true then return nil end
-    local count = tonumber(isBuff and cfg.maxBuffs or cfg.maxDebuffs) or (isBuff and 8 or 12)
+    local metrics = isBuff and cfg.buffMetrics or cfg.debuffMetrics
+    if metrics and metrics.enabled ~= true then return nil end
+    local count = metrics and metrics.num or (isBuff and cfg.maxBuffs or cfg.maxDebuffs)
+    count = RuntimeRound(ClampNumber(count, isBuff and 8 or 12, 0, 80))
     if count <= 0 then return nil end
-    local size = max(1, isBuff and cfg.buffSize or cfg.debuffSize)
-    local x = isBuff and cfg.buffX or cfg.debuffX
-    local y = isBuff and cfg.buffY or cfg.debuffY
-    local anchor = isBuff and cfg.buffAnchor or cfg.debuffAnchor
-    local spacing = max(0, cfg.spacing or 0)
-    local perRow = max(1, (isBuff and cfg.buffPerRow or cfg.debuffPerRow) or cfg.perRow or 1)
+    local size = ClampNumber(metrics and metrics.size or (isBuff and cfg.buffSize or cfg.debuffSize), 26, 1, 128)
+    local x = metrics and metrics.x or (isBuff and cfg.buffX or cfg.debuffX)
+    local y = metrics and metrics.y or (isBuff and cfg.buffY or cfg.debuffY)
+    x = RuntimeRound(ClampNumber(x, 0, -4096, 4096))
+    y = RuntimeRound(ClampNumber(y, 0, -4096, 4096))
+    local defaultAnchor = isBuff and "BOTTOMRIGHT" or "TOPLEFT"
+    local anchor = NormalizeAnchor(metrics and metrics.anchor or (isBuff and cfg.buffAnchor or cfg.debuffAnchor), defaultAnchor)
+    local spacing = ClampNumber(metrics and metrics.spacing or cfg.spacing, 2, 0, 64)
+    local perRow = metrics and metrics.perRow or ((isBuff and cfg.buffPerRow or cfg.debuffPerRow) or cfg.perRow)
+    perRow = RuntimeRound(ClampNumber(perRow, 12, 1, 40))
     local shown = min(max(1, count), PREVIEW_ICONS)
-    local step = size + spacing
-    local growthX, growthY, vertical, initialAnchor = Growth(cfg, kind)
+    local step = tonumber(metrics and metrics.step) or (size + spacing)
+    local growthX, growthY, vertical, initialAnchor
+    if metrics then
+        growthX = tonumber(metrics.growthX) or 1
+        growthY = tonumber(metrics.growthY) or -1
+        vertical = metrics.verticalGrowth == true
+        initialAnchor = metrics.initialAnchor or ButtonAnchor(growthX, growthY)
+    else
+        growthX, growthY, vertical, initialAnchor = Growth(cfg, kind)
+    end
     local baseX, baseY = AnchorBase(anchor, frameW, frameH)
-    local cols, rows = GridShape(count, perRow, vertical)
-    local laneW = max(1, cols * size + max(cols - 1, 0) * spacing)
-    local laneH = max(1, rows * size + max(rows - 1, 0) * spacing)
+    local laneW, laneH
+    if metrics and metrics.width and metrics.height then
+        laneW, laneH = max(1, metrics.width), max(1, metrics.height)
+    else
+        local cols, rows = GridShape(count, perRow, vertical)
+        laneW = max(1, cols * size + max(cols - 1, 0) * spacing)
+        laneH = max(1, rows * size + max(rows - 1, 0) * spacing)
+    end
     local anchorLocalX, anchorLocalY = AnchorOffset(anchor, laneW, laneH)
     local laneLeft = baseX + x - anchorLocalX
     local laneBottom = baseY + y - anchorLocalY
@@ -458,24 +502,36 @@ local function CustomGrowth(growth)
     return -1, -1, false
 end
 
-local function CustomLaneBounds(item, kind, frameW, frameH)
+local function CustomLaneBounds(item, kind, frameW, frameH, metrics)
     if not (type(item) == "table" and item.enabled == true) then return nil end
     local placed = type(item.placed) == "table" and item.placed or {}
-    local count = max(0, tonumber(placed.max) or 8)
+    local count = metrics and metrics.num or RuntimeRound(ClampNumber(placed.max, 8, 0, 40))
     if count <= 0 then return nil end
-    local size = max(1, tonumber(placed.size) or 24)
-    local spacing = max(0, tonumber(placed.spacing) or 2)
-    local perRow = max(1, tonumber(placed.perRow) or 4)
+    local size = ClampNumber(metrics and metrics.size or placed.size, 24, 1, 128)
+    local spacing = ClampNumber(metrics and metrics.spacing or placed.spacing, 2, 0, 64)
+    local perRow = metrics and metrics.perRow or RuntimeRound(ClampNumber(placed.perRow, 4, 1, 40))
     local shown = min(max(1, count), PREVIEW_ICONS)
-    local anchor = placed.anchor or "TOPRIGHT"
-    local x, y = tonumber(placed.x) or 0, tonumber(placed.y) or 0
-    local growthX, growthY, vertical = CustomGrowth(placed.growth)
-    local initialAnchor = ButtonAnchor(growthX, growthY)
-    -- This bounded editor preview owns only the icons it actually draws. Runtime
-    -- capacity must not enlarge its hit box or zoom footprint with empty cells.
-    local cols, rows = GridShape(shown, perRow, vertical)
-    local laneW = max(1, cols * size + max(cols - 1, 0) * spacing)
-    local laneH = max(1, rows * size + max(rows - 1, 0) * spacing)
+    local anchor = NormalizeAnchor(metrics and metrics.anchor or placed.anchor, "TOPRIGHT")
+    local x = metrics and metrics.x or RuntimeRound(ClampNumber(placed.x, 0, -4096, 4096))
+    local y = metrics and metrics.y or RuntimeRound(ClampNumber(placed.y, 0, -4096, 4096))
+    local growthX, growthY, vertical, initialAnchor
+    if metrics then
+        growthX = tonumber(metrics.growthX) or -1
+        growthY = tonumber(metrics.growthY) or -1
+        vertical = metrics.verticalGrowth == true
+        initialAnchor = metrics.initialAnchor or ButtonAnchor(growthX, growthY)
+    else
+        growthX, growthY, vertical = CustomGrowth(placed.growth)
+        initialAnchor = ButtonAnchor(growthX, growthY)
+    end
+    local laneW, laneH
+    if metrics and metrics.width and metrics.height then
+        laneW, laneH = max(1, metrics.width), max(1, metrics.height)
+    else
+        local cols, rows = GridShape(count, perRow, vertical)
+        laneW = max(1, cols * size + max(cols - 1, 0) * spacing)
+        laneH = max(1, rows * size + max(rows - 1, 0) * spacing)
+    end
     local baseX, baseY = AnchorBase(anchor, frameW, frameH)
     local anchorLocalX, anchorLocalY = AnchorOffset(anchor, laneW, laneH)
     local laneLeft, laneBottom = baseX + x - anchorLocalX, baseY + y - anchorLocalY
@@ -499,7 +555,7 @@ local function CustomLaneBounds(item, kind, frameW, frameH)
         growthY = growthY,
         verticalGrowth = vertical == true,
         initialAnchor = initialAnchor,
-        layer = tonumber(item.layer) or 9,
+        layer = RuntimeRound(ClampNumber(item.layer, 9, 0, 30)),
         custom = true,
         item = item,
         auraType = item.auraType == "DEBUFF" and "debuff" or "buff",
@@ -518,7 +574,8 @@ function Auras.BuildState(key, frameW, frameH, runtimeSpec)
     local state = { unit = key, cfg = cfg, runtime = runtimeAuras, buff = buff, debuff = debuff }
     for index = 1, 3 do
         local kind = "custom" .. tostring(index)
-        state[kind] = CustomLaneBounds(CustomItem(model, key, index, false), kind, frameW, frameH)
+        local metrics = type(cfg.customMetrics) == "table" and cfg.customMetrics[index] or nil
+        state[kind] = CustomLaneBounds(CustomItem(model, key, index, false), kind, frameW, frameH, metrics)
     end
     if not state.buff and not state.debuff and not state.custom1 and not state.custom2 and not state.custom3 then return nil end
     return state

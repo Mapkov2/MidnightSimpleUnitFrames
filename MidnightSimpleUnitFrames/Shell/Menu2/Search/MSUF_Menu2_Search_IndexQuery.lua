@@ -890,6 +890,10 @@ function M.RegisterSearchWidget(widget, meta)
             settingKey = meta.settingKey,
             actionKey = meta.actionKey,
             navigationKey = meta.navigationKey,
+            assistantDisposition = meta.assistantDisposition,
+            assistantDispositionReason = meta.assistantDispositionReason,
+            assistantSettingKeys = meta.assistantSettingKeys,
+            assistantSettingKeyPatterns = meta.assistantSettingKeyPatterns,
             classification = meta.classification or meta.controlType,
             ephemeral = meta.ephemeral,
             help = help,
@@ -942,6 +946,10 @@ function M.RegisterSearchWidget(widget, meta)
         and previous.settingKey == meta.settingKey
         and previous.actionKey == meta.actionKey
         and previous.navigationKey == meta.navigationKey
+        and previous.assistantDisposition == meta.assistantDisposition
+        and previous.assistantDispositionReason == meta.assistantDispositionReason
+        and previous.assistantSettingKeys == meta.assistantSettingKeys
+        and previous.assistantSettingKeyPatterns == meta.assistantSettingKeyPatterns
         and previous.keywords == keywords
         and previous.help == help
         and previous._rawValues == rawValues
@@ -968,6 +976,10 @@ function M.RegisterSearchWidget(widget, meta)
         settingKey = meta.settingKey,
         actionKey = meta.actionKey,
         navigationKey = meta.navigationKey,
+        assistantDisposition = meta.assistantDisposition,
+        assistantDispositionReason = meta.assistantDispositionReason,
+        assistantSettingKeys = meta.assistantSettingKeys,
+        assistantSettingKeyPatterns = meta.assistantSettingKeyPatterns,
         confirmRequired = meta.confirmRequired,
         keywords = keywords,
         help = help,
@@ -1122,6 +1134,10 @@ BuildRegistrySearchRecord = function(entry)
                     settingKey = entry.settingKey,
                     actionKey = entry.actionKey,
                     navigationKey = entry.navigationKey,
+                    assistantDisposition = entry.assistantDisposition,
+                    assistantDispositionReason = entry.assistantDispositionReason,
+                    assistantSettingKeys = entry.assistantSettingKeys,
+                    assistantSettingKeyPatterns = entry.assistantSettingKeyPatterns,
                     help = entry.help,
                     command = command,
                 }, "search-command")

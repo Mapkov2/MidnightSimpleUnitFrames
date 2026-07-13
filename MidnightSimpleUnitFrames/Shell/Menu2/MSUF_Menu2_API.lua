@@ -115,8 +115,6 @@ SlashCmdList["MSUF2OPTIONS"] = function(msg)
     msg = tostring(msg or ""):gsub("^%s+", ""):gsub("%s+$", "")
     msg = msg:lower()
     local cmd = msg:match("^(%S+)") or ""
-    local bugReportCombat = ((_G.InCombatLockdown and _G.InCombatLockdown())
-        or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))) and true or false
     if cmd == "versiontest" then
         if type(_G.MSUF_VersionCheck_DebugFakeUpdate) == "function" then
             _G.MSUF_VersionCheck_DebugFakeUpdate()
@@ -125,39 +123,21 @@ SlashCmdList["MSUF2OPTIONS"] = function(msg)
         end
         return
     end
-    if cmd == "bugdummy" then
-        if bugReportCombat then
-            print("|cffffd700MSUF:|r Bug report generation is deferred while combat lockdown is active. Run /msuf bugdummy after combat.")
-            return
-        end
-        if type(_G.MSUF_BugReport_TriggerDummy) == "function" then
-            local report, reason = _G.MSUF_BugReport_TriggerDummy()
-            if not report then
-                print("|cffffd700MSUF:|r Bug report dummy was not created" .. (reason and (": " .. tostring(reason)) or "."))
-                return
-            end
-            print("|cff00b7ebMSUF:|r Dummy bug report created. Open the Dashboard bug report panel to copy it.")
-            M.Open("home")
-        else
-            print("|cffffd700MSUF:|r Bug report helper is not loaded.")
-        end
-        return
-    end
-    if cmd == "bug" or cmd == "bugreport" then
-        if bugReportCombat then
-            print("|cffffd700MSUF:|r Bug report generation is deferred while combat lockdown is active. Open it after combat.")
-            return
-        end
-        if type(_G.MSUF_BugReport_OpenManual) == "function" then
-            _G.MSUF_BugReport_OpenManual()
-        else
-            M.SetMenuStateValue("dashboardBugReportOpen", true)
-        end
-        M.Open("home")
-        return
-    end
     if cmd == "inputdebug" then
         if _G.SlashCmdList and type(_G.SlashCmdList["MIDNIGHTSUF"]) == "function" then _G.SlashCmdList["MIDNIGHTSUF"](msg) end
+        return
+    end
+    if cmd == "tour" or cmd == "guide" or cmd == "setup" then
+        if M.BlockCombatAction and M.BlockCombatAction() then return end
+        local tour = MSUF and MSUF.GuidedTour6
+        local active = type(tour) == "table" and type(tour.IsActive) == "function" and tour:IsActive()
+        if active and type(M.ResumeGuidedTour) == "function" then
+            M.ResumeGuidedTour()
+        elseif type(M.StartGuidedTour) == "function" then
+            M.StartGuidedTour({ source = "slash" })
+        else
+            M.Open("home")
+        end
         return
     end
     if cmd == "help" or cmd == "reset" or cmd == "fullreset" or cmd == "absorb" or cmd == "analytics" then
@@ -181,3 +161,12 @@ SlashCmdList["MSUFOPTIONS"] = SlashCmdList["MSUFOPTIONS"] or function(msg)
     local pageKey = aliases[tostring(msg or ""):lower()]
     M.Open(pageKey)
 end
+
+-- Stable integration points for Edit Mode and external launchers. Resolve the
+-- controller at click time because it is loaded after all Menu2 pages.
+ExportPublic("MSUF_StartGuidedTour", function(opts)
+    return type(M.StartGuidedTour) == "function" and M.StartGuidedTour(opts)
+end)
+ExportPublic("MSUF_ResumeGuidedTour", function()
+    return type(M.ResumeGuidedTour) == "function" and M.ResumeGuidedTour()
+end)

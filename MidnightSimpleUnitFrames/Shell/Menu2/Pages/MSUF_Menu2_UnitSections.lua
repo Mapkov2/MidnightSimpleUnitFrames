@@ -14,7 +14,7 @@ local UP = M.UnitPage or {}
 local floor = math.floor
 local VT = M.ValueTextList
 local UNIT_PAGES, LOAD_CONDITIONS, BOSS_LAYOUT_OPTIONS, SEPARATORS, UF_COPY_CATEGORIES = M.PickDefaults(UP, [[UNIT_PAGES LOAD_CONDITIONS BOSS_LAYOUT_OPTIONS SEPARATORS UF_COPY_CATEGORIES]])
-local GetConf, GetGeneral, Call, DefaultCopyTarget, UnitTopLabel, UnitTopPillWidth, NewCopyScopeDefaults, CopyUnitSettings, ToggleEditMode, IsEditModeActive, ReadBool, SetBool, ReadNumber, SetNumber, ReadGeneralBool, SetControlEnabled, NormalizeBossLayoutMode, UpdateLoadActive, ControlMeta, RegisterControl = M.Pick(UP, [[GetConf GetGeneral Call DefaultCopyTarget UnitTopLabel UnitTopPillWidth NewCopyScopeDefaults CopyUnitSettings ToggleEditMode IsEditModeActive ReadBool SetBool ReadNumber SetNumber ReadGeneralBool SetControlEnabled NormalizeBossLayoutMode UpdateLoadActive ControlMeta RegisterControl]])
+local GetConf, GetGeneral, Call, DefaultCopyTarget, UnitTopLabel, UnitTopPillWidth, NewCopyScopeDefaults, CopyUnitSettings, ToggleEditMode, IsEditModeActive, ReadBool, SetBool, ReadNumber, SetNumber, ReadGeneralBool, SetControlEnabled, NormalizeBossLayoutMode, UpdateLoadActive, ControlMeta, SettingMeta, ReviewedMeta, RegisterControl = M.Pick(UP, [[GetConf GetGeneral Call DefaultCopyTarget UnitTopLabel UnitTopPillWidth NewCopyScopeDefaults CopyUnitSettings ToggleEditMode IsEditModeActive ReadBool SetBool ReadNumber SetNumber ReadGeneralBool SetControlEnabled NormalizeBossLayoutMode UpdateLoadActive ControlMeta SettingMeta ReviewedMeta RegisterControl]])
 local UNIT_AURAS_MENU_UNITS = M.KeySetFromWords "player target focus boss"
 local TOT_INLINE_CUSTOM_SEPARATOR = "__CUSTOM__"
 local TOT_INLINE_CUSTOM_SEPARATOR_MAX = 5
@@ -486,6 +486,8 @@ local function BuildTopActions(ctx, builder, unit, label)
         controlDomain = "unit",
         controlPageKey = ctx and ctx.key,
         controlPath = "copy",
+        assistantDisposition = "compound",
+        assistantDispositionReason = "Copy actions apply a selected category set from this Unit page to a chosen destination.",
         width = 420,
         height = 276,
         categories = UF_COPY_CATEGORIES,
@@ -611,17 +613,17 @@ local function BuildBasics(ctx, builder, unit, label)
             SetBool(unit, "enabled", v, "MSUF2_FRAME_ENABLED", { preview = true })
             M.RequestOrRefresh(ctx, "frame-basics-enabled")
         end,
-        ControlMeta(ctx, "basics.enabled"))
+        SettingMeta(ctx, "basics.enabled", unit, "enabled"))
     local reverse = W.ToggleAt(sec, "Reverse fill direction", x2, row1, labelW)
     M.BindBoolWidget(ctx, reverse,
         function() return ReadBool(unit, "reverseFillBars", false) end,
         function(v) SetBool(unit, "reverseFillBars", v, "MSUF2_REVERSE_FILL", { preview = true }) end,
-        ControlMeta(ctx, "basics.reverse_fill"))
+        SettingMeta(ctx, "basics.reverse_fill", unit, "reverseFillBars"))
     local smooth = W.ToggleAt(sec, "Smooth fill", x3, row1, labelW)
     M.BindBoolWidget(ctx, smooth,
         function() return ReadBool(unit, "smoothFill", true) end,
         function(v) SetBool(unit, "smoothFill", v, "MSUF2_SMOOTH_FILL", { preview = true }) end,
-        ControlMeta(ctx, "basics.smooth_fill"))
+        SettingMeta(ctx, "basics.smooth_fill", unit, "smoothFill"))
     local colorMode = W.Dropdown(sec, "Health Color Scheme", HealthColorModeOptions, math.min(270, math.max(220, colW * 2)))
     UnitSectionShared.PlaceDropdown(sec, colorMode, x1, -84, math.min(270, math.max(220, colW * 2)))
     M.BindDropdownWidget(ctx, colorMode,
@@ -633,7 +635,7 @@ local function BuildBasics(ctx, builder, unit, label)
             conf.healthColorMode = NormalizeHealthColorMode(v)
             M.RequestUnitApply(unit, "MSUF2_HEALTH_COLOR_MODE", { preview = true, colors = true })
         end,
-        ControlMeta(ctx, "basics.health_color_mode"))
+        SettingMeta(ctx, "basics.health_color_mode", unit, "healthColorMode"))
     if M.AddTooltip then
         M.AddTooltip(colorMode, "Health Color Scheme", "Use Global follows the Unitframe Global Coloring mode from Colors. Other choices override only this frame.", { hook = true, owner = "ANCHOR_RIGHT" })
     end
@@ -645,7 +647,12 @@ local function BuildBasics(ctx, builder, unit, label)
     if sectionEntry then sectionEntry._msuf2RefreshState = RefreshBasicsState end
     local unitLabel = label or UnitTopLabel(unit)
     local notice, _, enableNow = UnitSectionShared.CreateSectionNotice(sec, -132, "Enable", 92)
-    RegisterControl(enableNow, ctx, "basics.enable_now", "Enable", "button", "action")
+    RegisterControl(enableNow, ctx, "basics.enable_now", "Enable", "button", "action", {
+        assistantDisposition = unit == "focustarget" and "compound" or "duplicate",
+        assistantDispositionReason = unit == "focustarget"
+            and "This shortcut can enable both Focus and Focus Target before showing the child frame."
+            or "This one-way shortcut duplicates the fixed unit.enabled setting.",
+    })
     notice:SetMessage(unitLabel .. " frame is disabled and will not appear.", "warning")
     enableNow:SetScript("OnClick", function()
         if unit == "focustarget" and not ReadBool("focus", "enabled", true) then SetBool("focus", "enabled", true, "MSUF2_FOCUSTARGET_PARENT_ENABLED", { preview = true }) end
@@ -728,7 +735,8 @@ local function BuildLayout(ctx, builder, unit)
             conf.anchorFrameName = nil
             ApplyAnchorChange()
         end,
-        ControlMeta(ctx, "anchoring.anchor_to"))
+        ReviewedMeta(ctx, "anchoring.anchor_to", "setting", "compound",
+            "Changing the anchor target also clears any custom anchor frame name."))
     local anchorPoint = W.Dropdown(sec, "Anchor Point", anchorPoints, 160)
     UnitSectionShared.PlaceDropdown(sec, anchorPoint, 284, -38, 160)
     W.AttachUnitEditFocus(anchorPoint, unit, "anchoring")
@@ -741,7 +749,8 @@ local function BuildLayout(ctx, builder, unit)
             conf.relativePoint = v
             ApplyAnchorChange()
         end,
-        ControlMeta(ctx, "anchoring.anchor_point"))
+        ReviewedMeta(ctx, "anchoring.anchor_point", "setting", "compound",
+            "Changing the anchor point writes both point and relativePoint together."))
     local function SetCustomAnchorValue(value)
         value = value or ""
         local conf = GetConf(unit)
@@ -763,6 +772,8 @@ local function BuildLayout(ctx, builder, unit)
         controlDomain = "unit",
         controlPageKey = ctx and ctx.key,
         controlPath = "anchoring.custom",
+        assistantDisposition = "compound",
+        assistantDispositionReason = "Custom anchor editing coordinates anchorFrameName with anchorToUnitframe.",
     })
     customAnchor.clear:SetScript("OnClick", function()
         local conf = GetConf(unit)
@@ -803,7 +814,7 @@ local function BuildInlineText(ctx, builder, unit)
             conf.showToTInTargetName = v and true or false
             ApplyToTInline("MSUF2_TOT_INLINE")
         end,
-        ControlMeta(ctx, "inline_text.show_target_of_target"))
+        SettingMeta(ctx, "inline_text.show_target_of_target", "targettarget", "showToTInTargetName"))
     local color = W.Dropdown(sec, "Inline color", ToTInlineColorOptions, rightW)
     W.MoveWidget(color, sec, rightX, -72, rightW)
     M.BindDropdownWidget(ctx, color,
@@ -813,7 +824,7 @@ local function BuildInlineText(ctx, builder, unit)
             conf.totInlineColorMode = NormalizeToTInlineColorMode(v)
             ApplyToTInline("MSUF2_TOT_INLINE_COLOR", true)
         end,
-        ControlMeta(ctx, "inline_text.color"))
+        SettingMeta(ctx, "inline_text.color", "targettarget", "totInlineColorMode"))
     local sep = W.Dropdown(sec, "Inline separator", TOT_INLINE_SEPARATOR_OPTIONS, 170)
     W.MoveWidget(sep, sec, 14, -124, 170)
     M.BindDropdownWidget(ctx, sep,
@@ -828,7 +839,7 @@ local function BuildInlineText(ctx, builder, unit)
             end
             ApplyToTInline("MSUF2_TOT_INLINE_SEPARATOR", true)
         end,
-        ControlMeta(ctx, "inline_text.separator"))
+        SettingMeta(ctx, "inline_text.separator", "targettarget", "totInlineSeparator"))
     local customSep = W.TextInput(sec, "Custom separator", rightW)
     W.MoveWidget(customSep, sec, rightX, -124, rightW)
     if customSep.SetMaxLetters then customSep:SetMaxLetters(TOT_INLINE_CUSTOM_SEPARATOR_MAX) end
@@ -851,7 +862,7 @@ local function BuildInlineText(ctx, builder, unit)
             end
         end,
         true,
-        ControlMeta(ctx, "inline_text.custom_separator"))
+        SettingMeta(ctx, "inline_text.custom_separator", "targettarget", "totInlineCustomSeparator"))
     local totInlineBaseControls = { color, sep }
     RefreshInlineControlState = function()
         local conf = GetConf("targettarget")
@@ -906,7 +917,7 @@ local function BuildLoadConditions(ctx, builder, unit)
                 UpdateLoadActive(unit)
                 M.RequestUnitApply(unit, "MSUF2_LOAD_CONDITION", { preview = true })
             end,
-            ControlMeta(ctx, "load_condition." .. tostring(spec.key)))
+            SettingMeta(ctx, "load_condition." .. tostring(spec.key), unit, spec.key))
     end
     local function RefreshLoadConditionState()
         SetSectionHeaderStatus(sec, nil)
@@ -1086,7 +1097,7 @@ local function BuildBossLayout(ctx, builder, unit)
         function() return ReadNumber(unit, "spacing", -36) end,
         function(v) SetNumber(unit, "spacing", v, "MSUF2_BOSS_SPACING", { preview = true }) end,
         -36, (function()
-            local meta = ControlMeta(ctx, "boss_layout.spacing")
+            local meta = SettingMeta(ctx, "boss_layout.spacing", unit, "spacing")
             meta.step, meta.roundStep = 1, true
             return meta
         end)())
@@ -1102,7 +1113,7 @@ local function BuildBossLayout(ctx, builder, unit)
             conf.invertBossOrder = nil
             M.RequestUnitApply(unit, "MSUF2_BOSS_LAYOUT_MODE", { preview = true })
         end,
-        ControlMeta(ctx, "boss_layout.mode"))
+        SettingMeta(ctx, "boss_layout.mode", unit, "bossLayoutMode"))
     local highlight = W.ToggleAt(sec, "Boss target highlight", leftX, -156, 260)
     M.BindBoolWidget(ctx, highlight,
         function() return ReadGeneralBool("bossTargetHighlightEnabled", true) end,
@@ -1112,7 +1123,7 @@ local function BuildBossLayout(ctx, builder, unit)
             g.bossTargetOutlineMode = v and 1 or 0
             M.RequestUnitApply("boss", "MSUF2_BOSS_TARGET_HIGHLIGHT", { preview = true })
         end,
-        ControlMeta(ctx, "boss_layout.target_highlight"))
+        SettingMeta(ctx, "boss_layout.target_highlight", "general", "bossTargetHighlightEnabled"))
 end
 local function BuildUnitSectionMaybeLazy(ctx, builder, unit, buildFn, opts)
     if UP.BuildSectionLazy and not (opts and opts.lazy == false) then

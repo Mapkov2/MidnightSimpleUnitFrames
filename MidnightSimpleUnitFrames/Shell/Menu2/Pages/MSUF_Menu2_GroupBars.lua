@@ -519,7 +519,7 @@ local function BuildGFBars(ctx)
                 if M.RefreshGFNativePreviews then M.RefreshGFNativePreviews() end
                 RequestGroupBarsRefresh(ctx, "gf-bars-text-move-together")
             end,
-            ControlMeta(ctx, "text." .. kind .. ".move_together"))
+            ControlMeta(ctx, "text." .. kind .. ".move_together", "ephemeral"))
         controls.slot = W.Segment(tab, "Slot", SLOT_VALUES, hpSliderW)
         W.MoveWidget(controls.slot, position, 16, -220, textRightW - 32, "LEFT")
         M.BindSegment(ctx, controls.slot,

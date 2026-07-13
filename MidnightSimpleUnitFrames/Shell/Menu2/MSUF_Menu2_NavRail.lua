@@ -333,7 +333,7 @@ local function CreateHistoryControls(parent)
         btn._msuf2SolidPill = true
         if btn._msuf2Label then
             btn._msuf2Label:ClearAllPoints()
-            btn._msuf2Label:SetPoint("LEFT", btn, "LEFT", 27, 0)
+            btn._msuf2Label:SetPoint("LEFT", btn, "LEFT", 30, 0)
             btn._msuf2Label:SetPoint("RIGHT", btn, "RIGHT", -6, 0)
             btn._msuf2Label:SetJustifyH("LEFT")
             btn._msuf2Label:SetText(M.Tr(label))
@@ -341,7 +341,7 @@ local function CreateHistoryControls(parent)
         end
         local icon = btn:CreateTexture(nil, "ARTWORK", nil, 5)
         icon:SetTexture(texture)
-        icon:SetSize(13, 13)
+        icon:SetSize(16, 16)
         icon:SetPoint("LEFT", btn, "LEFT", 9, 0)
         if icon.SetDesaturated then icon:SetDesaturated(true) end
         icon:SetVertexColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.92)
@@ -363,6 +363,7 @@ local function CreateHistoryControls(parent)
     end)
     if M.RegisterMenuChromeControl then
         M.RegisterMenuChromeControl(undo, "history.undo", "Undo", "action", {
+            actionKey = "menu_history_undo",
             historyMode = "none", command = { kind = "button", historyMode = "none", set = function()
                 return M.Undo and M.Undo() or false
             end },
@@ -379,6 +380,7 @@ local function CreateHistoryControls(parent)
     end)
     if M.RegisterMenuChromeControl then
         M.RegisterMenuChromeControl(redo, "history.redo", "Redo", "action", {
+            actionKey = "menu_history_redo",
             historyMode = "none", command = { kind = "button", historyMode = "none", set = function()
                 return M.Redo and M.Redo() or false
             end },
@@ -577,6 +579,7 @@ local function BuildNavRail(parent)
             kind = "button",
             label = "Dismiss search help",
             classification = "action",
+            actionKey = "set_nav_search_intro",
             historyMode = "none",
             help = "Dismisses the one-time search and Assistant introduction.",
             command = {
@@ -631,6 +634,7 @@ local function BuildNavRail(parent)
         close:SetScript("OnClick", HideSearchIntro)
         if M.RegisterMenuChromeControl then
             M.RegisterMenuChromeControl(close, "search.intro-dismiss", "Dismiss search help", "action", {
+                actionKey = "set_nav_search_intro",
                 historyMode = "none",
                 help = "Dismisses the one-time search and Assistant introduction.",
             })
@@ -712,7 +716,7 @@ local function BuildNavRail(parent)
     T.StyleFontString(clearText, T.colors.dim, NAV_TEXT_BUMP)
     clearText:SetPoint("CENTER", clear, "CENTER", 0, 0)
     clear:Hide()
-    clear:SetScript("OnClick", function()
+    local function ClearSearchInput()
         HideSearchIntro()
         search._msuf2SearchInternal = true
         search:SetText("")
@@ -721,9 +725,13 @@ local function BuildNavRail(parent)
         if not AssistantRuntimeReady() then RunSearchInputQuery("", true) end
         clear:Hide()
         search:SetFocus()
-    end)
+        return true
+    end
+    clear:SetScript("OnClick", ClearSearchInput)
+    M.ClearNavSearch = ClearSearchInput
     if M.RegisterMenuChromeControl then
         M.RegisterMenuChromeControl(clear, "search.clear", "Clear menu search", "action", {
+            actionKey = "menu_search_clear",
             historyMode = "none",
             help = "Clears the current menu search or Assistant query text.",
         })

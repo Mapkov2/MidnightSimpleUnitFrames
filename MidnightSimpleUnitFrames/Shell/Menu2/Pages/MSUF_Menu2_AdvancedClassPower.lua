@@ -14,7 +14,141 @@ local max = math.max
 local min = math.min
 local RefreshClassPowerInlinePreview = M.RefreshProxy()
 local CallGlobal, Bars, BoolValue, NumValue, SetValue, DeepCopyTable, BuildTableControlSpecs, SwitchAt, SetControlEnabled, ControlMeta, RegisterControl = M.Pick(AP, [[CallGlobal Bars BoolValue NumValue SetValue DeepCopyTable BuildTableControlSpecs SwitchAt SetControlEnabled ControlMeta RegisterControl]])
-local function Meta(path, classification, exact) return ControlMeta("classpower", "advanced", path, classification, exact) end
+local CLASSPOWER_SETTING_KEY_BY_PATH = {
+    ["alternative_mana.enabled"] = "bars.showAltMana",
+    ["alternative_mana.layout.height"] = "bars.altManaHeight",
+    ["alternative_mana.layout.y"] = "bars.altManaOffsetY",
+    ["alternative_mana.smooth_fill"] = "bars.altManaSmoothFill",
+    ["behavior.anchor"] = "bars.classPowerAnchorToCooldown",
+    ["behavior.charged"] = "bars.showChargedComboPoints",
+    ["behavior.ebon"] = "bars.showEbonMight",
+    ["behavior.ele"] = "bars.showEleMaelstrom",
+    ["behavior.prediction"] = "bars.classPowerShowPrediction",
+    ["behavior.reverse"] = "bars.classPowerFillReverse",
+    ["behavior.rune"] = "bars.runeShowTime",
+    ["behavior.shadow"] = "bars.showShadowMana",
+    ["behavior.smooth"] = "bars.classPowerSmoothFill",
+    ["behavior.text"] = "bars.classPowerShowText",
+    ["detached_power.enabled"] = "player.powerBarDetached",
+    ["detached_power.layout.anchor"] = "player.detachedPowerBarAnchorToClassPower",
+    ["detached_power.layout.height"] = "player.detachedPowerBarHeight",
+    ["detached_power.layout.layer"] = "player.detachedPowerBarFrameLevelOffset",
+    ["detached_power.layout.mode"] = "bars.detachedPowerBarWidthMode",
+    ["detached_power.layout.orbSize"] = "player.detachedPowerOrbSize",
+    ["detached_power.layout.smooth_fill"] = "player.powerSmoothFill",
+    ["detached_power.layout.sync"] = "player.detachedPowerBarSyncClassPower",
+    ["detached_power.layout.x"] = "player.detachedPowerBarOffsetX",
+    ["detached_power.layout.y"] = "player.detachedPowerBarOffsetY",
+    ["detached_power.text.center"] = "player.powerTextCenter",
+    ["detached_power.text.layer"] = "player.powerTextLayer",
+    ["detached_power.text.left"] = "player.powerTextLeft",
+    ["detached_power.text.onBar"] = "player.detachedPowerBarTextOnBar",
+    ["detached_power.text.powerTextCenterHidePercentSymbol"] = "player.powerTextCenterHidePercentSymbol",
+    ["detached_power.text.powerTextLeftHidePercentSymbol"] = "player.powerTextLeftHidePercentSymbol",
+    ["detached_power.text.powerTextRightHidePercentSymbol"] = "player.powerTextRightHidePercentSymbol",
+    ["detached_power.text.right"] = "player.powerTextRight",
+    ["detached_power.text.sep"] = "player.powerTextSeparator",
+    ["detached_power.text.size"] = "player.powerFontSize",
+    ["detached_power.text.x"] = "player.powerOffsetX",
+    ["detached_power.text.y"] = "player.powerOffsetY",
+    ["detached_power.textures.bg"] = "bars.detachedPowerBarBgTexture",
+    ["detached_power.textures.fg"] = "bars.detachedPowerBarTexture",
+    ["detached_power.textures.outline"] = "bars.detachedPowerBarOutline",
+    ["layout.enabled"] = "bars.showClassPower",
+    ["layout.height"] = "bars.classPowerHeight",
+    ["layout.level"] = "bars.classPowerFrameLevelOffset",
+    ["layout.shape"] = "bars.classPowerShape",
+    ["layout.shape_alignment"] = "bars.classPowerShapeAlign",
+    ["layout.width"] = "bars.classPowerWidth",
+    ["layout.widthMode"] = "bars.classPowerWidthMode",
+    ["layout.x"] = "bars.classPowerOffsetX",
+    ["layout.y"] = "bars.classPowerOffsetY",
+    ["player_hp.enabled"] = "bars.playerHPBarEnabled",
+    ["player_hp.layout.anchor"] = "bars.playerHPBarAnchor",
+    ["player_hp.layout.gap"] = "bars.playerHPBarGap",
+    ["player_hp.layout.height"] = "bars.playerHPBarHeight",
+    ["player_hp.layout.layer"] = "bars.playerHPBarFrameLevelOffset",
+    ["player_hp.layout.manualWidth"] = "bars.playerHPBarWidth",
+    ["player_hp.layout.orbSize"] = "bars.playerHPBarOrbSize",
+    ["player_hp.layout.shape"] = "bars.playerHPBarShape",
+    ["player_hp.layout.smooth"] = "bars.playerHPBarSmoothFill",
+    ["player_hp.layout.widthMode"] = "bars.playerHPBarWidthMode",
+    ["player_hp.layout.x"] = "bars.playerHPBarOffsetX",
+    ["player_hp.layout.y"] = "bars.playerHPBarOffsetY",
+    ["player_hp.text.center"] = "bars.playerHPBarTextCenter",
+    ["player_hp.text.enabled"] = "bars.playerHPBarTextEnabled",
+    ["player_hp.text.left"] = "bars.playerHPBarTextLeft",
+    ["player_hp.text.playerHPBarTextCenterHidePercentSymbol"] = "bars.playerHPBarTextCenterHidePercentSymbol",
+    ["player_hp.text.playerHPBarTextLeftHidePercentSymbol"] = "bars.playerHPBarTextLeftHidePercentSymbol",
+    ["player_hp.text.playerHPBarTextRightHidePercentSymbol"] = "bars.playerHPBarTextRightHidePercentSymbol",
+    ["player_hp.text.reverse"] = "bars.playerHPBarTextReverse",
+    ["player_hp.text.right"] = "bars.playerHPBarTextRight",
+    ["player_hp.text.sep"] = "bars.playerHPBarTextSeparator",
+    ["player_hp.text.size"] = "bars.playerHPBarTextSize",
+    ["player_hp.text.use_player_text"] = "bars.playerHPBarUsePlayerText",
+    ["player_hp.text.x"] = "bars.playerHPBarTextOffsetX",
+    ["player_hp.text.y"] = "bars.playerHPBarTextOffsetY",
+    ["player_hp.textures.bg"] = "bars.playerHPBarBgTexture",
+    ["player_hp.textures.bgAlpha"] = "bars.playerHPBarBgAlpha",
+    ["player_hp.textures.color"] = "bars.playerHPBarColorMode",
+    ["player_hp.textures.fg"] = "bars.playerHPBarTexture",
+    ["player_hp.textures.outline"] = "bars.playerHPBarOutline",
+    ["style.opacity.bg"] = "bars.classPowerBgAlpha",
+    ["style.opacity.empty"] = "bars.classPowerEmptyAlpha",
+    ["style.opacity.filled"] = "bars.classPowerFilledAlpha",
+    ["style.pips.gap"] = "bars.classPowerGap",
+    ["style.pips.outline"] = "bars.classPowerOutline",
+    ["style.pips.separator"] = "bars.classPowerTickWidth",
+    ["style.resources.bgTex"] = "bars.classPowerBgTexture",
+    ["style.resources.color"] = "bars.classPowerColorByType",
+    ["style.resources.comboColor"] = "bars.classPowerComboPointColorMode",
+    ["style.resources.fgTex"] = "bars.classPowerTexture",
+    ["style.text.font"] = "bars.classPowerFontSize",
+    ["style.text.textX"] = "bars.classPowerTextOffsetX",
+    ["style.text.textY"] = "bars.classPowerTextOffsetY",
+    ["visibility.out_of_combat"] = "bars.classPowerHideOOC",
+    ["visibility.when_empty"] = "bars.classPowerHideWhenEmpty",
+    ["visibility.when_full"] = "bars.classPowerHideWhenFull",
+}
+local CLASSPOWER_ACTION_KEY_BY_PATH = {
+    ["quick_setup.class_bar"] = "class_power_quick_setup",
+}
+local CLASSPOWER_REVIEWED_BY_PATH = {
+    ["detached_power.text.preset"] = {
+        "compound",
+        "A detached-power text preset writes the Player power-text slot modes as one coordinated layout.",
+    },
+    ["detached_power.text.slot_offset.x"] = {
+        "dynamic",
+        "This offset targets the currently selected left, center, or right Player power-text slot.",
+    },
+    ["detached_power.text.slot_offset.y"] = {
+        "dynamic",
+        "This offset targets the currently selected left, center, or right Player power-text slot.",
+    },
+}
+local CLASSPOWER_DYNAMIC_SETTING_KEYS_BY_PATH = {
+    ["detached_power.text.slot_offset.x"] = {
+        "player.powerTextLeftOffsetX", "player.powerTextCenterOffsetX", "player.powerTextRightOffsetX",
+    },
+    ["detached_power.text.slot_offset.y"] = {
+        "player.powerTextLeftOffsetY", "player.powerTextCenterOffsetY", "player.powerTextRightOffsetY",
+    },
+}
+local function Meta(path, classification, exact)
+    exact = type(exact) == "table" and exact or {}
+    if exact.settingKey == nil then exact.settingKey = CLASSPOWER_SETTING_KEY_BY_PATH[path] end
+    if exact.actionKey == nil then exact.actionKey = CLASSPOWER_ACTION_KEY_BY_PATH[path] end
+    if exact.settingKey == nil and exact.actionKey == nil then
+        local reviewed = CLASSPOWER_REVIEWED_BY_PATH[path]
+        if reviewed then
+            exact.assistantDisposition = reviewed[1]
+            exact.assistantDispositionReason = reviewed[2]
+            exact.assistantSettingKeys = CLASSPOWER_DYNAMIC_SETTING_KEYS_BY_PATH[path]
+        end
+    end
+    return ControlMeta("classpower", "advanced", path, classification, exact)
+end
 local function RegisterSegment(segment, path, values, classification)
     classification = classification or "ephemeral"
     RegisterControl(segment, Meta(path, classification), nil, "segment", values)
@@ -594,11 +728,14 @@ function Page:BuildHeader()
     T.ApplySurface(head, "status")
     head:SetPoint("TOPLEFT", b.parent, "TOPLEFT", b.x, b.y)
     head:SetSize(b.width, 54)
+    if W.RegisterGuidedRegion then W.RegisterGuidedRegion(ctx, head, "Class resource preview and quick setup") end
     head._msuf2Width, b.y = b.width, b.y - 62
     if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(b.y) + 28) end
     local previewW = min(330, max(180, self.width - 438))
     local preview = W.Dropdown(head, "Preview resource", CLASS_POWER_PREVIEW_VALUES, previewW)
-    RegisterControl(preview, Meta("preview.resource", "ephemeral"), "Preview resource", "dropdown", CLASS_POWER_PREVIEW_VALUES)
+    RegisterControl(preview, Meta("preview.resource", "setting", {
+        settingKey = "menu.classPowerPreviewResource",
+    }), "Preview resource", "dropdown", CLASS_POWER_PREVIEW_VALUES)
     MoveWidget(preview, head, 14, -15, previewW)
     preview:SetOnValueChanged(function(value) M.SetClassPowerPreviewSpecKey(value); preview:SetValue(M.GetClassPowerPreviewSpecKey()) end)
     preview:SetValue(M.GetClassPowerPreviewSpecKey())

@@ -43,7 +43,7 @@ local function AuraCatalogPageKey(value, fallback)
     local token = tostring(value or ""):lower():gsub("[^%w_%-]+", "-"):gsub("^%-+", ""):gsub("%-+$", "")
     return token ~= "" and token or (fallback or "gf_auras")
 end
-local function AuraControlMeta(ctx, path, classification)
+local function AuraControlMeta(ctx, path, classification, assistantContract)
     path = tostring(path or "control"):lower():gsub("[^%w%._/-]+", "-")
     path = path:gsub("/", "."):gsub("^%.+", ""):gsub("%.+$", "")
     local pageKey = AuraCatalogPageKey(ctx and ctx.key or M.activeKey, "gf_auras")
@@ -56,6 +56,20 @@ local function AuraControlMeta(ctx, path, classification)
         classification = classification or "setting",
         ephemeral = classification == "ephemeral" or nil,
     }
+    if type(assistantContract) == "string" and assistantContract ~= "" then
+        meta.settingKey = assistantContract
+    elseif type(assistantContract) == "table" then
+        meta.settingKey = assistantContract.settingKey
+        meta.assistantDisposition = assistantContract.assistantDisposition
+        meta.assistantDispositionReason = assistantContract.assistantDispositionReason
+        meta.assistantSettingKeys = assistantContract.assistantSettingKeys
+        meta.assistantSettingKeyPatterns = assistantContract.assistantSettingKeyPatterns
+    end
+    if meta.classification == "setting" or meta.classification == "action" then
+        meta.assistantDisposition = meta.assistantDisposition or "dynamic"
+        meta.assistantDispositionReason = meta.assistantDispositionReason
+            or "This control targets the currently selected Group scope and Aura lane."
+    end
     return meta
 end
 local function RegisterAuraControl(ctx, widget, label, kind, path, classification, navigationKey)
@@ -76,6 +90,7 @@ local GF_AURA_WORKSPACE_TOOLS = {
 local GF_AURA_WORKSPACE_LANES = {
     { value = "buff", text = "Buffs" },
     { value = "debuff", text = "Debuffs" },
+    { value = "externals", text = "External Defensives" },
 }
 local GF_AURA_WORKSPACE_TOOL_OK = { layout = true, filters = true, blacklist = true }
 local function CurrentAuraWorkspaceTool(scope, lane)
@@ -83,6 +98,7 @@ local function CurrentAuraWorkspaceTool(scope, lane)
     local scopeState = M.gfAuraToolSelection[scope]
     if type(scopeState) ~= "table" then scopeState = {}; M.gfAuraToolSelection[scope] = scopeState end
     local tool = scopeState[lane]
+    if lane == "externals" then tool = "layout" end
     if not GF_AURA_WORKSPACE_TOOL_OK[tool] then tool = "layout"; scopeState[lane] = tool end
     return tool
 end
@@ -95,12 +111,12 @@ end
 local function CurrentAuraWorkspaceLane(scope)
     M.gfAuraLaneSelection = M.gfAuraLaneSelection or {}
     local lane = M.gfAuraLaneSelection[scope]
-    if lane ~= "buff" and lane ~= "debuff" then lane = "buff"; M.gfAuraLaneSelection[scope] = lane end
+    if lane ~= "buff" and lane ~= "debuff" and lane ~= "externals" then lane = "buff"; M.gfAuraLaneSelection[scope] = lane end
     return lane
 end
 local function SetAuraWorkspaceLane(scope, lane)
     M.gfAuraLaneSelection = M.gfAuraLaneSelection or {}
-    M.gfAuraLaneSelection[scope] = lane == "debuff" and "debuff" or "buff"
+    M.gfAuraLaneSelection[scope] = (lane == "debuff" and "debuff") or (lane == "externals" and "externals") or "buff"
 end
 local groupAuraRebuildSerial = 0
 local function RestoreGroupAuraScroll(offset, key, serial)
@@ -143,7 +159,7 @@ local function BuildAuraWorkspaceTabs(ctx, section, scope, lane, width)
     })
     RegisterAuraControl(ctx, laneBar, "Container", "segment", "group-workspace.container-selector", "ephemeral")
     local toolBar = W.ScopeOverrideBar(ctx, section, {
-        values = GF_AURA_WORKSPACE_TOOLS,
+        values = lane == "externals" and { GF_AURA_WORKSPACE_TOOLS[1] } or GF_AURA_WORKSPACE_TOOLS,
         width = sectionW,
         label = "Edit:",
         labelWidth = 72,
@@ -157,22 +173,33 @@ local function BuildAuraWorkspaceTabs(ctx, section, scope, lane, width)
     })
     RegisterAuraControl(ctx, toolBar, "Edit", "segment",
         "group-workspace.lane." .. AuraCatalogToken(lane, "lane") .. ".tool-selector", "ephemeral")
-    local openStyle = T.Button(section, "Open Aura Style", 126, 22)
-    openStyle:SetPoint("TOPRIGHT", section, "TOPRIGHT", -16, -74)
-    if T.CenterButtonLabel then T.CenterButtonLabel(openStyle) end
-    openStyle:SetScript("OnClick", function()
-        local styleScope = scope == "mythicraid" and "raid" or scope
-        M.SetMenuStateValue("auraScope", styleScope)
-        M.SetMenuStateValue("auraStyleGFScope", styleScope)
-        M.SetMenuStateValue("auraStyleContainer", lane)
-        M.SetMenuStateValue("auraStyleGFLane", lane)
-        if M.SelectPage then M.SelectPage("auras3_styling") end
-    end)
-    RegisterAuraControl(ctx, openStyle, "Open Aura Style", "button", "group-workspace.open-aura-style", "navigation", "auras3_styling")
-    W.Text(section, "All icon styling: Appearance > Auras.", 16, -84, sectionW - 174, MUTED)
+    if lane ~= "externals" then
+        local openStyle = T.Button(section, "Open Aura Style", 126, 22)
+        openStyle:SetPoint("TOPRIGHT", section, "TOPRIGHT", -16, -74)
+        if T.CenterButtonLabel then T.CenterButtonLabel(openStyle) end
+        openStyle:SetScript("OnClick", function()
+            local styleScope = scope == "mythicraid" and "raid" or scope
+            M.SetMenuStateValue("auraScope", styleScope)
+            M.SetMenuStateValue("auraStyleGFScope", styleScope)
+            M.SetMenuStateValue("auraStyleContainer", lane)
+            M.SetMenuStateValue("auraStyleGFLane", lane)
+            if M.SelectPage then M.SelectPage("auras3_styling") end
+        end)
+        RegisterAuraControl(ctx, openStyle, "Open Aura Style", "button", "group-workspace.open-aura-style", "navigation", "auras3_styling")
+        W.Text(section, "All icon styling: Appearance > Auras.", 16, -84, sectionW - 174, MUTED)
+    else
+        W.Text(section, "External defensives use their dedicated layout below.", 16, -84, sectionW - 32, MUTED)
+    end
 end
 local function NativeAuraKey(groupKey)
-    return groupKey == "buff" and "buffs" or "debuffs"
+    if groupKey == "buff" then return "buffs" end
+    if groupKey == "externals" then return "externals" end
+    return "debuffs"
+end
+local function GroupAuraSettingKeys(scope, suffix)
+    suffix = tostring(suffix or "")
+    if scope == "party" then return { "gf_party" .. suffix } end
+    return { "gf_raid" .. suffix, "gf_mythicraid" .. suffix }
 end
 local function LaneBackendEnabled(scope, groupKey)
     local root = AurasRoot and AurasRoot(scope)
@@ -180,7 +207,30 @@ local function LaneBackendEnabled(scope, groupKey)
     if not root then return group.enabled ~= false end
     return root.enabled ~= false and group.enabled ~= false
 end
+local function BindAuraRootEnabled(ctx, widget)
+    local scope = CurrentScope()
+    M.BindBoolWidget(ctx, widget,
+        function()
+            local root = AurasRoot and AurasRoot(CurrentScope())
+            return not root or root.enabled ~= false
+        end,
+        function(value)
+            local activeScope = CurrentScope()
+            local root = AurasRoot and AurasRoot(activeScope)
+            if not root then return end
+            root.enabled = value and true or false
+            if QueueGF then QueueGF(activeScope, "auras") end
+            M.CallIf(RefreshContext, ctx)
+        end,
+        AuraControlMeta(ctx, "group-workspace.root.enabled", nil, {
+            assistantDisposition = "dynamic",
+            assistantDispositionReason = "This master switch targets the selected Group scope's persisted Aura backend gate.",
+            assistantSettingKeys = GroupAuraSettingKeys(scope, ".auras.enabled"),
+        }))
+    return widget
+end
 local function BindAuraLaneEnabled(ctx, widget, groupKey)
+    local scope = CurrentScope()
     M.BindBoolWidget(ctx, widget,
         function()
             return LaneBackendEnabled(CurrentScope(), groupKey)
@@ -199,7 +249,12 @@ local function BindAuraLaneEnabled(ctx, widget, groupKey)
             if QueueGF then QueueGF(scope, "auras") end
             M.CallIf(RefreshContext, ctx)
         end,
-        AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(groupKey, "lane") .. ".enabled"))
+        AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(groupKey, "lane") .. ".enabled", nil, {
+            assistantDisposition = "dynamic",
+            assistantDispositionReason = "Visible targets the selected Group scope and Aura lane and also activates the Aura backend when enabled.",
+            assistantSettingKeys = GroupAuraSettingKeys(scope,
+                ".auras." .. groupKey .. ".enabled"),
+        }))
     return widget
 end
 local function CreateNestedGroupAuraBuilder(ctx, parentBuilder, body)
@@ -242,16 +297,26 @@ local function BuildGFAuras(ctx)
         or VT("RIGHTDOWN", "Right then Down", "LEFTDOWN", "Left then Down", "RIGHTUP", "Right then Up", "LEFTUP", "Left then Up")
     local defaults = lane == "buff"
         and { anchor = "BOTTOMRIGHT", growth = "LEFTUP", size = 22, perRow = 4, max = 6, spacing = 1, layer = 5 }
+        or lane == "externals"
+        and { anchor = "CENTER", growth = "RIGHTDOWN", size = 28, perRow = 3, max = 2, spacing = 1, layer = 7 }
         or { anchor = "TOPLEFT", growth = "RIGHTDOWN", size = 20, perRow = 3, max = 6, spacing = 1, layer = 6 }
 
     local outer = b:CollapsibleSection("auras", "Auras", 120, false)
     local auraBuilder = CreateNestedGroupAuraBuilder(ctx, b, outer)
     local top = auraBuilder:Section("", 104)
     if top.title then top.title:Hide() end
+    if top._msuf2GuidedRegion then top._msuf2GuidedRegion.label = "Aura lane and tools" end
     BuildAuraWorkspaceTabs(ctx, top, scope, lane, top._msuf2Width or auraBuilder.width or 720)
 
+    local rootSection = auraBuilder:Section("Group Aura Visibility", 78)
+    local rootWidth = rootSection._msuf2Width or auraBuilder.width or 720
+    local rootEnabled = BindAuraRootEnabled(ctx,
+        W.SwitchAt(rootSection, "Enable group auras", 24, -50, rootWidth - 48))
+    rootEnabled._msuf2GroupFrameGateAlwaysEnabled = true
+
     if tool == "layout" then
-        local title = lane == "debuff" and "Debuff Layout" or "Buff Layout"
+        local title = lane == "debuff" and "Debuff Layout"
+            or (lane == "externals" and "External Defensive Layout" or "Buff Layout")
         local section = auraBuilder:Section(title, 190)
         local w = section._msuf2Width or auraBuilder.width or 720
         local inner, gap = w - 48, 10

@@ -642,6 +642,7 @@ function RebuildActivePageForResize(frame)
     if M.InvalidatePage then M.InvalidatePage(key) end
     M.activeKey = nil
     if M.SelectPage and frame and frame:IsShown() then M.SelectPage(key) end
+    M.CallIf(M.RefreshGuidedTourChrome, "WINDOW_RESIZE")
 end
 function M.RegisterPage(key, spec)
     if type(key) ~= "string" or type(spec) ~= "table" then return end
@@ -1092,6 +1093,10 @@ function M.SelectPage(key)
     if M.BlockCombatAction and M.BlockCombatAction() then return false end
     EnsurePersistentMenuState()
     key = ALIASES[key or ""] or key or "home"
+    -- Unknown slash/deep-link targets must never hide the current page and
+    -- leave an empty content area. Removed legacy pages and typos safely land
+    -- on the Dashboard instead.
+    if not (M.pages and M.pages[key]) then key = "home" end
     local hasPendingFocus = false
     do
         local req = _G.MSUF_EM2_MenuFocusRequest
@@ -1126,6 +1131,7 @@ function M.SelectPage(key)
         RequestGroupPagePreviewForKey(key)
         if hasPendingFocus and type(M.FocusRequestedSection) == "function" then M.FocusRequestedSection(key, { flash = true }) end
         if M.RefreshToolbarPageReset then M.RefreshToolbarPageReset() end
+        M.CallIf(M.GuidedTourOnPageSelected, key)
         return true
     end
     local previousKey = M.activeKey
@@ -1163,6 +1169,7 @@ function M.SelectPage(key)
     RequestBossPagePreviewForKey(key)
     RequestGroupPagePreviewForKey(key)
     if hasPendingFocus and type(M.FocusRequestedSection) == "function" then M.FocusRequestedSection(key, { flash = true }) end
+    M.CallIf(M.GuidedTourOnPageSelected, key)
     return true
 end
 local function CreateMinimizedBar(frame)
@@ -1189,6 +1196,7 @@ local function CreateMinimizedBar(frame)
     restore:SetScript("OnClick", function() RestoreMinimizedSlashMenu(frame) end)
     if M.RegisterMenuChromeControl then
         M.RegisterMenuChromeControl(restore, "window.restore", "Restore MSUF menu", "action", {
+            actionKey = "menu_window_restore",
             historyMode = "none",
             help = "Restores the minimized or maximized MSUF menu window.",
             command = {
@@ -1258,6 +1266,7 @@ local function BuildWindowShell()
     close:SetScript("OnClick", function() M.HideSlashMenuAndMinibar(f) end)
     if M.RegisterMenuChromeControl then
         M.RegisterMenuChromeControl(close, "window.close", "Close MSUF menu", "action", {
+            actionKey = "menu_window_close",
             historyMode = "none",
             help = "Closes the MSUF menu window, including its minimized bar.",
         })
@@ -1271,6 +1280,7 @@ local function BuildWindowShell()
     maximize:SetScript("OnClick", function() MaximizeSlashMenuWindow(f) end)
     if M.RegisterMenuChromeControl then
         M.RegisterMenuChromeControl(maximize, "window.maximize", "Maximize MSUF menu", "action", {
+            actionKey = "menu_window_maximize",
             historyMode = "none",
             help = "Maximizes the MSUF menu window; the same title-bar button restores it when maximized.",
             command = {
@@ -1289,6 +1299,7 @@ local function BuildWindowShell()
     minimize:SetScript("OnClick", function() MinimizeSlashMenuWindow(f) end)
     if M.RegisterMenuChromeControl then
         M.RegisterMenuChromeControl(minimize, "window.minimize", "Minimize MSUF menu", "action", {
+            actionKey = "menu_window_minimize",
             historyMode = "none",
             help = "Minimizes the MSUF menu to its compact draggable bar.",
         })
@@ -1595,6 +1606,7 @@ local function BuildWindowToolbar(state)
     toolbarEdit:SetScript("OnClick", RunToolbarEditMode)
     if M.RegisterMenuChromeControl then
         M.RegisterMenuChromeControl(toolbarEdit, "toolbar.edit-mode", "Edit Mode", "action", {
+            actionKey = "assistant.action.editMode.toggle",
             historyMode = "none", help = "Toggles MSUF Edit Mode.",
         })
     end
@@ -1604,7 +1616,7 @@ local function BuildWindowToolbar(state)
     T.CenterButtonLabel(toolbarTask)
     toolbarTask:SetScript("OnClick", RunToolbarNewTask)
     if M.RegisterMenuChromeControl then
-        M.RegisterMenuChromeControl(toolbarTask, "toolbar.new-task", "New Task", "action", {
+        M.RegisterMenuChromeControl(toolbarTask, "toolbar.new-task", "New Task", "ephemeral", {
             historyMode = "none", help = "Starts a new Assistant task.",
         })
     end
@@ -1620,6 +1632,7 @@ local function BuildWindowToolbar(state)
     end)
     if M.RegisterMenuChromeControl then
         M.RegisterMenuChromeControl(toolbarReset, "toolbar.reset-page", "Reset current page", "action", {
+            actionKey = "menu_reset_current_page_prompt",
             confirmRequired = true, historyMode = "none",
             command = { kind = "button", historyMode = "none", confirmRequired = true, set = function()
                 local key = M.activeKey
@@ -1758,6 +1771,7 @@ local function InstallWindowLifecycle(state)
         EnsureEditModeUIHook()
         if self.RefreshStatus then self:RefreshStatus() end
         if M.scrollFrame and M.scrollFrame._msuf2RefreshScrollBar then M.scrollFrame:_msuf2RefreshScrollBar() end
+        M.CallIf(M.RefreshGuidedTourChrome, "WINDOW_SHOW")
         M.CallIf(M.ResumePinnedPreviews, "WINDOW_SHOW")
         M.CallIf(M.ResumeClassPowerPreview, "WINDOW_SHOW", M.activeKey)
         M.CallIf(M.ResumeGFNativePreviews, "WINDOW_SHOW", M.activeKey)
@@ -1811,6 +1825,7 @@ local function BuildWindowScrollHost(state)
     scroll:SetScrollChild(child)
     M.scrollChild = child
     M.CallIf(T.StyleScrollFrame, scroll, host)
+    M.CallIf(M.InstallGuidedTourChrome, f, status, host, scroll)
 end
 
 local function BuildWindow()
@@ -1860,6 +1875,20 @@ function M.Open(pageKey)
     ApplyMenuFrameScale(f)
     ApplyMenuFramePriority(f)
     f:Show()
+    -- An unqualified open resumes an active guided setup before considering the
+    -- one-time welcome. Explicit deep links always keep their requested page.
+    if pageKey == nil then
+        local guided = MSUF and MSUF.GuidedTour6
+        if guided and type(guided.IsActive) == "function" and guided:IsActive() then
+            local current = type(M.GetGuidedTourCurrentPage) == "function" and M.GetGuidedTourCurrentPage() or nil
+            pageKey = current or "guided_setup"
+        else
+            local firstLoad = MSUF and MSUF.FirstLoad6
+            if firstLoad and type(firstLoad.ShouldShowDashboard) == "function" and firstLoad:ShouldShowDashboard() then
+                pageKey = "home"
+            end
+        end
+    end
     M.SelectPage(pageKey or M.sessionLastPage or "home")
     return true
 end

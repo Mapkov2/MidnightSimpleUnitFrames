@@ -18,12 +18,19 @@ local SetControlsEnabled = W.SetControlsEnabled
 local floor = math.floor
 local max = math.max
 local VT = M.ValueTextList
-local TEXT_ANCHORS, HP_MODES, POWER_MODES, SEPARATORS, GetConf, GetGeneral, Call, UnitTopLabel, ReadBool, SetBool, ReadNumber, SetNumber, ReadStatusBool, SetControlEnabled, ReadText, SetText, IsPlayerPowerManagedByClassResources, ControlMeta, RegisterControl = M.Pick(UP, [[TEXT_ANCHORS HP_MODES POWER_MODES SEPARATORS GetConf GetGeneral Call UnitTopLabel ReadBool SetBool ReadNumber SetNumber ReadStatusBool SetControlEnabled ReadText SetText IsPlayerPowerManagedByClassResources ControlMeta RegisterControl]])
+local TEXT_ANCHORS, HP_MODES, POWER_MODES, SEPARATORS, GetConf, GetGeneral, Call, UnitTopLabel, ReadBool, SetBool, ReadNumber, SetNumber, ReadStatusBool, SetControlEnabled, ReadText, SetText, IsPlayerPowerManagedByClassResources, ControlMeta, SettingMeta, ReviewedMeta, RegisterControl = M.Pick(UP, [[TEXT_ANCHORS HP_MODES POWER_MODES SEPARATORS GetConf GetGeneral Call UnitTopLabel ReadBool SetBool ReadNumber SetNumber ReadStatusBool SetControlEnabled ReadText SetText IsPlayerPowerManagedByClassResources ControlMeta SettingMeta ReviewedMeta RegisterControl]])
 TEXT_ANCHORS = TEXT_ANCHORS or {}
 HP_MODES = HP_MODES or {}
 POWER_MODES = POWER_MODES or {}
 SEPARATORS = SEPARATORS or {}
 local function BuildText(ctx, builder, unit)
+    local function FixedSettingMeta(path, key)
+        return SettingMeta(ctx, path, unit, key)
+    end
+    local function SelectedSlotMeta(path)
+        return ReviewedMeta(ctx, path, "setting", "dynamic",
+            "This position control targets the HP or power text slot selected beside it.")
+    end
     local sec = builder:CollapsibleSection("text", "Text", 620, false)
     sec._msuf2CollapsibleBadgesOnlyWhenOpen = true
     do
@@ -329,7 +336,7 @@ local function BuildText(ctx, builder, unit)
             SetBool(unit, "showName", v, "MSUF2_SHOW_NAME_TEXT", { text = true, preview = true })
             RefreshTextControlState()
         end,
-        ControlMeta(ctx, "text.name.show"))
+        FixedSettingMeta("text.name.show", "showName"))
     local namePosition = TextCard(nameTab, "Position", nil, leftX, -136, cardW, 260)
     local nameAnchor = W.Dropdown(namePosition, "Anchor", TEXT_ANCHORS, 210)
     PlaceDropdown(namePosition, nameAnchor, 16, -48, cardW - 32)
@@ -340,7 +347,7 @@ local function BuildText(ctx, builder, unit)
             FocusPreviewText("name", nil, true)
             RefreshTextHeader()
         end,
-        ControlMeta(ctx, "text.name.anchor"))
+        FixedSettingMeta("text.name.anchor", "nameTextAnchor"))
     local function BindNameOffsetSlider(label, y, key, defaultValue, reason)
         local control = W.Slider(namePosition, label, -300, 300, 1, 260)
         PlaceSlider(namePosition, control, 16, y, cardW - 72)
@@ -352,7 +359,7 @@ local function BuildText(ctx, builder, unit)
                 RefreshTextHeader()
             end,
             defaultValue, (function()
-                local meta = ControlMeta(ctx, "text.name." .. tostring(key))
+                local meta = FixedSettingMeta("text.name." .. tostring(key), key)
                 meta.step, meta.roundStep = 1, true
                 return meta
             end)())
@@ -367,7 +374,7 @@ local function BuildText(ctx, builder, unit)
         function() return EffectiveTextSize("nameFontSize", "nameFontSize") end,
         function(v) SetNumber(unit, "nameFontSize", v, "MSUF2_NAME_SIZE", { text = true, fonts = true, preview = true }) end,
         12, (function()
-            local meta = ControlMeta(ctx, "text.name.size")
+            local meta = FixedSettingMeta("text.name.size", "nameFontSize")
             meta.step, meta.roundStep = 1, true
             return meta
         end)())
@@ -393,7 +400,7 @@ local function BuildText(ctx, builder, unit)
                 SetBool(unit, cfg.showKey, v, cfg.showReason, { text = true, preview = true })
                 RefreshTextControlState()
             end,
-            ControlMeta(ctx, "text." .. kind .. ".show"))
+            FixedSettingMeta("text." .. kind .. ".show", cfg.showKey))
         local function SlotControl(slot, label, x, y, width)
             local spec = cfg.slots[slot]
             local control = W.Dropdown(content, label, cfg.modes, 260)
@@ -414,7 +421,7 @@ local function BuildText(ctx, builder, unit)
                         T.PlayNeonFlash(controls.fullValueShort, "info", { alpha = 0.26, duration = 0.85 })
                     end
                 end,
-                ControlMeta(ctx, "text." .. kind .. ".slot." .. slot .. ".mode"))
+                FixedSettingMeta("text." .. kind .. ".slot." .. slot .. ".mode", spec.key))
         end
         SlotControl("right", "Right slot", 16, -96, cardW - 32)
         SlotControl("left", "Left slot", 16, -178, halfDropdownW)
@@ -432,7 +439,7 @@ local function BuildText(ctx, builder, unit)
                     FocusPreviewText(kind, slot, true)
                     RefreshTextHeader()
                 end,
-                ControlMeta(ctx, "text." .. kind .. ".slot." .. slot .. ".hide_percent"))
+                FixedSettingMeta("text." .. kind .. ".slot." .. slot .. ".hide_percent", spec.hidePercentKey))
         end
         SlotHidePercentControl("right", "Hide right % sign", 16, -146, cardW - 32)
         SlotHidePercentControl("left", "Hide left % sign", 16, -230, halfDropdownW)
@@ -475,20 +482,20 @@ local function BuildText(ctx, builder, unit)
         controls.separator = W.Dropdown(content, "Delimiter", SEPARATORS, 160)
         PlaceDropdown(content, controls.separator, 16, -266, halfDropdownW)
         M.BindDropdownWidget(ctx, controls.separator, cfg.separatorGet, function(v) SetText(unit, cfg.separatorKey, v or "", cfg.separatorReason) end,
-            ControlMeta(ctx, "text." .. kind .. ".separator"))
+            FixedSettingMeta("text." .. kind .. ".separator", cfg.separatorKey))
         if cfg.reverseKey then
             controls.reverse = SwitchOrToggle(content, "Reverse order", 28 + halfDropdownW, -288, halfDropdownW)
             M.BindBoolWidget(ctx, controls.reverse,
                 function() return ReadText(unit, cfg.reverseKey, false) == true end,
                 function(v) SetText(unit, cfg.reverseKey, v and true or false, cfg.reverseReason) end,
-                ControlMeta(ctx, "text." .. kind .. ".reverse"))
+                FixedSettingMeta("text." .. kind .. ".reverse", cfg.reverseKey))
         end
         if cfg.decimalsKey then
             controls.decimals = SwitchOrToggle(content, "Decimal percent", 28 + halfDropdownW, -316, halfDropdownW)
             M.BindBoolWidget(ctx, controls.decimals,
                 function() return ReadText(unit, cfg.decimalsKey, false) == true end,
                 function(v) SetText(unit, cfg.decimalsKey, v and true or false, cfg.decimalsReason) end,
-                ControlMeta(ctx, "text." .. kind .. ".decimals"))
+                FixedSettingMeta("text." .. kind .. ".decimals", cfg.decimalsKey))
         end
         if cfg.fullValueShortKey then
             controls.fullValueShort = SwitchOrToggle(content, "Abbreviate HP values (K/M)", 16, -316, halfDropdownW)
@@ -498,7 +505,7 @@ local function BuildText(ctx, builder, unit)
                     SetText(unit, cfg.fullValueShortKey, v and true or false, cfg.fullValueShortReason)
                     if controls.RefreshPreview then controls.RefreshPreview() end
                 end,
-                ControlMeta(ctx, "text." .. kind .. ".full_value_short"))
+                FixedSettingMeta("text." .. kind .. ".full_value_short", cfg.fullValueShortKey))
             function controls.RefreshFullValueToggle(enabled)
                 local hasNumericValue = false
                 for _, spec in pairs(cfg.slots or {}) do
@@ -527,7 +534,12 @@ local function BuildText(ctx, builder, unit)
                     if afterSet then afterSet() end
                 end,
                 defaultValue, (function()
-                    local meta = ControlMeta(ctx, "text." .. kind .. ".position." .. tostring(name))
+                    local meta
+                    if type(key) == "function" then
+                        meta = SelectedSlotMeta("text." .. kind .. ".position." .. tostring(name))
+                    else
+                        meta = FixedSettingMeta("text." .. kind .. ".position." .. tostring(name), key)
+                    end
                     meta.step, meta.roundStep = 1, true
                     return meta
                 end)())
@@ -544,7 +556,7 @@ local function BuildText(ctx, builder, unit)
                 Call("MSUF_UFPreview_RequestRefresh", cfg.moveReason)
                 if M.RequestRefresh then M.RequestRefresh(ctx, "unit-text-move-together") elseif M.Refresh then M.Refresh(ctx) end
             end,
-            ControlMeta(ctx, "text." .. kind .. ".move_together"))
+            ControlMeta(ctx, "text." .. kind .. ".move_together", "ephemeral"))
         controls.slot = W.Segment(tab, "Slot", SLOT_VALUES, rightSliderW)
         W.MoveWidget(controls.slot, position, 16, -220, rightW - 32, "LEFT")
         M.BindSegment(ctx, controls.slot,
@@ -564,7 +576,7 @@ local function BuildText(ctx, builder, unit)
             function() return EffectiveTextSize(cfg.sizeKey, cfg.generalSizeKey) end,
             function(v) SetNumber(unit, cfg.sizeKey, v, cfg.sizeReason, { text = true, fonts = true, preview = true }) end,
             10, (function()
-                local meta = ControlMeta(ctx, "text." .. kind .. ".size")
+                local meta = FixedSettingMeta("text." .. kind .. ".size", cfg.sizeKey)
                 meta.step, meta.roundStep = 1, true
                 return meta
             end)())
@@ -665,7 +677,7 @@ local function BuildText(ctx, builder, unit)
                 RefreshTextHeader()
             end,
             defaultValue, (function()
-                local meta = ControlMeta(ctx, "text.advanced." .. tostring(key))
+                local meta = FixedSettingMeta("text.advanced." .. tostring(key), key)
                 meta.step, meta.roundStep = 1, true
                 return meta
             end)())

@@ -13,7 +13,7 @@ local max = math.max
 local min = math.min
 local VT = M.ValueTextList
 local POWER_UNITS, CASTBAR_FIELDS, PORTRAIT_RENDER, PORTRAIT_SHAPES, PORTRAIT_BORDERS = M.PickDefaults(UP, [[POWER_UNITS CASTBAR_FIELDS PORTRAIT_RENDER PORTRAIT_SHAPES PORTRAIT_BORDERS]])
-local GetConf, GetGeneral, GetBars, Call, UnitTopLabel, ReadBool, SetBool, ReadNumber, SetNumber, ReadGeneralBool, SetGeneralBool, NormalizePortrait, SetPortraitValue, IsPlayerPowerManagedByClassResources, ControlMeta, RegisterControl = M.Pick(UP, [[GetConf GetGeneral GetBars Call UnitTopLabel ReadBool SetBool ReadNumber SetNumber ReadGeneralBool SetGeneralBool NormalizePortrait SetPortraitValue IsPlayerPowerManagedByClassResources ControlMeta RegisterControl]])
+local GetConf, GetGeneral, GetBars, Call, UnitTopLabel, ReadBool, SetBool, ReadNumber, SetNumber, ReadGeneralBool, SetGeneralBool, NormalizePortrait, SetPortraitValue, IsPlayerPowerManagedByClassResources, ControlMeta, SettingMeta, ReviewedMeta, RegisterControl = M.Pick(UP, [[GetConf GetGeneral GetBars Call UnitTopLabel ReadBool SetBool ReadNumber SetNumber ReadGeneralBool SetGeneralBool NormalizePortrait SetPortraitValue IsPlayerPowerManagedByClassResources ControlMeta SettingMeta ReviewedMeta RegisterControl]])
 local CASTBAR_BACKEND_VALUES = VT("MSUF", "MSUF castbar", "BLIZZARD", "Blizzard castbar")
 local CASTBAR_PREFIX = { player = "castbarPlayer", target = "castbarTarget", focus = "castbarFocus", boss = "bossCast" }
 local CASTBAR_UNITS = M.KeySetFromWords "player target focus boss"
@@ -188,7 +188,8 @@ local function BuildPortrait(ctx, builder, unit)
             end
             RefreshPortraitControls()
         end,
-        ControlMeta(ctx, "portrait.enabled"))
+        ReviewedMeta(ctx, "portrait.enabled", "setting", "compound",
+            "Portrait is a boolean shortcut over the OFF/LEFT/RIGHT portraitMode enum and restores the remembered side when enabled."))
     local portrait = W.Segment(mainCard, "Position", VT("LEFT", "Left", "RIGHT", "Right"), min(220, rightW))
     W.MoveWidget(portrait, mainCard, 16, -62, min(220, leftW - 32))
     M.BindSegment(ctx, portrait,
@@ -279,7 +280,7 @@ local function BuildPower(ctx, builder, unit)
             end,
             function(v) SetNumber(unit, key, v, reason, opts or POWER_OPTS) end,
             ResolveDefault(defaultValue), (function()
-                local meta = ControlMeta(ctx, "power." .. tostring(key))
+                local meta = SettingMeta(ctx, "power." .. tostring(key), unit, key)
                 meta.step, meta.roundStep = step, true
                 return meta
             end)())
@@ -293,7 +294,7 @@ local function BuildPower(ctx, builder, unit)
                 SetBool(unit, key, v, reason, opts or POWER_OPTS)
                 if afterSet then afterSet(v) end
             end,
-            ControlMeta(ctx, "power." .. tostring(key)))
+            SettingMeta(ctx, "power." .. tostring(key), unit, key))
         return control
     end
     local function BuildPowerControls(parent, addFn, specs)
@@ -304,7 +305,10 @@ local function BuildPower(ctx, builder, unit)
     end
     local powerNotice, _, powerNoticeButton = CreateSectionNotice(sec, powerNoticeY, "Show Power", 126)
     if powerNoticeButton then
-        RegisterControl(powerNoticeButton, ctx, "power.enable_now", "Show Power", "button", "action")
+        RegisterControl(powerNoticeButton, ctx, "power.enable_now", "Show Power", "button", "action", {
+            assistantDisposition = "dynamic",
+            assistantDispositionReason = "This shortcut either opens Class Resources or enables the fixed unit power bar, depending on runtime ownership.",
+        })
         powerNoticeButton:SetScript("OnClick", function()
             if isPlayer and IsPlayerPowerManagedByClassResources and IsPlayerPowerManagedByClassResources(unit) then
                 if type(M.SelectPage) == "function" then M.SelectPage("classpower") end
@@ -325,7 +329,7 @@ local function BuildPower(ctx, builder, unit)
             SetBool(unit, "showPowerBar", v, "MSUF2_POWER_SHOW", { power = true, preview = true })
             RefreshPowerEnabled()
         end,
-        ControlMeta(ctx, "power.show"))
+        SettingMeta(ctx, "power.show", unit, "showPowerBar"))
     BuildPowerControls(borderCard, AddPowerControl, {
         { "toggle", "Power bar border", 16, -62, rightW - 32, "powerBarBorderEnabled", true, "MSUF2_POWER_BORDER",
         function()
@@ -373,7 +377,8 @@ local function BuildPower(ctx, builder, unit)
             RefreshPowerEnabled()
             RefreshClassPowerDetachedState()
         end,
-        ControlMeta(ctx, "power.detached"))
+        ReviewedMeta(ctx, "power.detached", "setting", "compound",
+            "Enabling detached power seeds its required geometry and Player synchronization defaults."))
     local detachedTextFields = BuildPowerControls(detachedCard, AddDetachedControl, {
         { "toggle", "Text on detached bar", 16, -62, detachedLeftW, "detachedPowerBarTextOnBar", false, "MSUF2_POWER_DETACHED_TEXT", nil,
         function()
@@ -421,7 +426,7 @@ local function BuildPower(ctx, builder, unit)
                 RefreshPowerEnabled()
                 RefreshClassPowerDetachedState()
             end,
-            ControlMeta(ctx, "power.detached_shape"))
+            SettingMeta(ctx, "power.detached_shape", unit, "detachedPowerBarShape"))
         if M.AddTooltip then M.AddTooltip(detachedShape, "Independent Powerbar Shape", "Changes only Player power. Class Resources keep their own shape setting. Round and Crystal fill horizontally; Orb fills bottom-to-top.", { hook = true, owner = "ANCHOR_RIGHT" }) end
         orbSize = BindPowerSlider(detachedCard, AddDetachedControl, "Orb size", 16, sliderTop - 198, detachedSliderW, 20, 160, 1, "detachedPowerOrbSize", 54, "MSUF2_POWER_DETACHED_ORB_SIZE", nil, DETACHED_POWER_OPTS)
     end
@@ -553,7 +558,7 @@ local function BuildCastbar(ctx, builder, unit)
         M.BindDropdownWidget(ctx, control,
             function() return ReadGeneralValue(key, defaultValue) end,
             function(v) SetGeneralValue(key, v or defaultValue, reason) end,
-            ControlMeta(ctx, "castbar.detail." .. tostring(reason)))
+            SettingMeta(ctx, "castbar.detail." .. tostring(reason), "general", key))
         return control
     end
     local function BindDetailSlider(parent, list, label, x, y, width, minValue, maxValue, step, key, defaultValue, reason)
@@ -565,7 +570,7 @@ local function BuildCastbar(ctx, builder, unit)
             function() return ReadGeneralNumber(key, defaultValue) end,
             function(v) SetGeneralNumber(key, v, reason) end,
             defaultValue, (function()
-                local meta = ControlMeta(ctx, "castbar.detail." .. tostring(reason))
+                local meta = SettingMeta(ctx, "castbar.detail." .. tostring(reason), "general", key)
                 meta.step, meta.roundStep = step, true
                 return meta
             end)())
@@ -677,7 +682,10 @@ local function BuildCastbar(ctx, builder, unit)
     RegisterControl(castbarTabs, ctx, "castbar.workspace_tab", "Castbar area", "segment", "ephemeral")
     local castbarNotice, _, castbarNoticeButton = CreateSectionNotice(generalTab, -318, "Use MSUF", 96)
     if castbarNoticeButton then
-        RegisterControl(castbarNoticeButton, ctx, "castbar.use_msuf", "Use MSUF", "button", "action")
+        RegisterControl(castbarNoticeButton, ctx, "castbar.use_msuf", "Use MSUF", "button", "action", {
+            assistantDisposition = "compound",
+            assistantDispositionReason = "This recovery shortcut coordinates castbar backend, enable state, and remembered provider.",
+        })
         castbarNoticeButton:SetScript("OnClick", function()
             SetCastbarBackend("MSUF")
         end)
@@ -687,7 +695,8 @@ local function BuildCastbar(ctx, builder, unit)
     M.BindBoolWidget(ctx, enabled,
         function() return ReadCastbarBackend() ~= "HIDE" end,
         SetCastbarEnabled,
-        ControlMeta(ctx, "castbar.enabled"))
+        ReviewedMeta(ctx, "castbar.enabled", "setting", "compound",
+            "Castbar visibility coordinates backend, enable state, and remembered provider."))
     local provider
     if canUseBlizzardProvider then
         provider = W.Dropdown(providerCard, "Castbar provider", CASTBAR_BACKEND_VALUES, min(260, controlWRight))
@@ -696,7 +705,7 @@ local function BuildCastbar(ctx, builder, unit)
         M.BindDropdownWidget(ctx, provider,
             ReadCastbarProvider,
             SetCastbarProvider,
-            ControlMeta(ctx, "castbar.provider"))
+            SettingMeta(ctx, "castbar.provider", "general", fields.backend))
     else
         W.Text(providerCard, "MSUF castbar", 16, -58, rightW - 32)
     end
@@ -705,7 +714,7 @@ local function BuildCastbar(ctx, builder, unit)
     M.BindBoolWidget(ctx, interrupt,
         function() return ReadBool(unit, "showInterrupt", true) end,
         function(v) SetBool(unit, "showInterrupt", v, "MSUF2_CASTBAR_INTERRUPT", { castbar = true, preview = true }) end,
-        ControlMeta(ctx, "castbar.show_interrupt"))
+        SettingMeta(ctx, "castbar.show_interrupt", unit, "showInterrupt"))
     local sizeCardW = sizeCard._msuf2Width or (sectionW - 32)
     local sizeRightX = max(350, floor(sizeCardW * 0.52))
     local sizeControlWLeft = min(300, max(220, sizeRightX - 42))
@@ -723,7 +732,7 @@ local function BuildCastbar(ctx, builder, unit)
             SetGeneralValue(key, nextValue, "MSUF2_CASTBAR_WIDTH_MODE")
             RefreshCastbarEnabled()
         end,
-        ControlMeta(ctx, "castbar.width_mode"))
+        SettingMeta(ctx, "castbar.width_mode", "general", CastbarWidthSourceKey()))
     local widthKey = CastbarWidthKey()
     local heightKey = CastbarHeightKey()
     local manualWidth = W.Slider(sizeCard, "Manual width", 40, 900, 1, sizeControlWRight)
@@ -737,7 +746,7 @@ local function BuildCastbar(ctx, builder, unit)
             SetGeneralNumber(widthKey, v, "MSUF2_CASTBAR_WIDTH")
         end,
         unit == "boss" and 176 or (unit == "focus" and 175 or 272), (function()
-            local meta = ControlMeta(ctx, "castbar.manual_width")
+            local meta = SettingMeta(ctx, "castbar.manual_width", "general", widthKey)
             meta.step, meta.roundStep = 1, true
             return meta
         end)())
@@ -752,7 +761,7 @@ local function BuildCastbar(ctx, builder, unit)
             SetGeneralNumber(heightKey, v, "MSUF2_CASTBAR_HEIGHT")
         end,
         unit == "boss" and 12 or 18, (function()
-            local meta = ControlMeta(ctx, "castbar.height")
+            local meta = SettingMeta(ctx, "castbar.height", "general", heightKey)
             meta.step, meta.roundStep = 1, true
             return meta
         end)())
@@ -765,7 +774,7 @@ local function BuildCastbar(ctx, builder, unit)
                 SetGeneralBool(field, v, reason, { castbar = true, preview = true })
                 RefreshCastbarEnabled()
             end,
-            ControlMeta(ctx, "castbar.feature." .. tostring(reason)))
+            SettingMeta(ctx, "castbar.feature." .. tostring(reason), "general", field))
         return control
     end
     local icon = BindCastbarFeatureToggle(iconCard, fields.icon, "MSUF2_CASTBAR_ICON")
@@ -794,7 +803,7 @@ local function BuildCastbar(ctx, builder, unit)
                 SetGeneralBool(fields.targetName, v, "MSUF2_CASTBAR_TARGET_NAME", { castbar = true, preview = true })
                 RefreshCastbarEnabled()
             end,
-            ControlMeta(ctx, "castbar.show_target_name"))
+            SettingMeta(ctx, "castbar.show_target_name", "general", fields.targetName))
     end
     local function ReadSpellTextWidthMode()
         local value = tostring(ReadGeneralValue(DetailKey("SpellNameTruncate"), "AUTO") or "AUTO"):upper()
@@ -824,7 +833,8 @@ local function BuildCastbar(ctx, builder, unit)
             end
             RefreshCastbarEnabled()
         end,
-        ControlMeta(ctx, "castbar.spell_text_width_mode"))
+        ReviewedMeta(ctx, "castbar.spell_text_width_mode", "setting", "compound",
+            "Selecting manual width can initialize the paired maximum-width value."))
     local spellTextManualWidth = W.Slider(textAdvancedCard, "Manual text width", 20, 500, 1, controlWLeft)
     W.MoveWidget(spellTextManualWidth, textAdvancedCard, 16, -106, controlWLeft)
     AddControl(nil, spellTextManualWidth)
@@ -833,7 +843,7 @@ local function BuildCastbar(ctx, builder, unit)
         function() return ReadGeneralNumber(DetailKey("SpellNameMaxWidth"), 0) end,
         function(v) SetGeneralNumber(DetailKey("SpellNameMaxWidth"), v, "MSUF2_CASTBAR_SPELL_MAX_WIDTH") end,
         0, (function()
-            local meta = ControlMeta(ctx, "castbar.spell_text_manual_width")
+            local meta = SettingMeta(ctx, "castbar.spell_text_manual_width", "general", DetailKey("SpellNameMaxWidth"))
             meta.step, meta.roundStep = 1, true
             return meta
         end)())
