@@ -8,10 +8,44 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-Beta13",
-    previousVersion = "6.0-Beta12",
-    rangeLabel = "6.0-Beta12 -> 6.0-Beta13",
+    currentVersion = "6.0-Beta14",
+    previousVersion = "6.0-Beta13",
+    rangeLabel = "6.0-Beta13 -> 6.0-Beta14",
     entries = {
+        {
+            version = "6.0-Beta14",
+            date = "2026-07-13",
+            sections = {
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Coalesced and interned core runtime update paths to reduce duplicate work.",
+                        "Added compact/abbreviated HP values and full-value HP formatting support where relevant.",
+                        "Stabilized group layout behavior with adaptive roster scaling and improved group runtime refresh ordering.",
+                        "Added configurable aura lane sorting, filtering, and improved aura growth/local budget handling.",
+                        "Improved class text and group text settings to keep health formatting and preview states in sync.",
+                        "Expanded assistant setting routes, guided actions, and conversational workflow behavior.",
+                        "Improved assistant diagnostics and control routing to match current menu pages and workflows.",
+                        "Refreshed release/tooling inventories and updated runtime release metadata handling.",
+                        "Wired HP abbreviation into group text runtime specs and kept runtime specs aligned with feature changes.",
+                        "Interned group lifecycle work plans and tightened status updates for gone-state and lifecycle transitions.",
+                        "Scaled castbar lifecycle and hotpath handling to active casts only for lower per-frame overhead.",
+                        "Compiled ClassPower mode runtime state and improved aurawork layout stability in active runtime paths.",
+                        "Optimized frequent color pathups with font/color fast paths.",
+                        "Reduced redundant visibility, metadata, and power-cached update work in hot paths.",
+                        "Streamlined prediction geometry caching and dependent-unit routing.",
+                        "Fixed player profile refresh to correctly apply alpha state.",
+                        "Refreshed menu theme/history feedback and exact setting-control resolution flow.",
+                        "Restored event-driven profile lifecycle behavior for target-sound handling.",
+                        "Updated Menu2 runtime and onboarding UX: first-load plus guided-tour states and pages.",
+                        "Expanded and cleaned Menu2 page/preview/runtime navigation for onboarding and grouped workflows.",
+                        "Updated smoke tests (including hotpath/coldpath coverage) and hardened release helper scripts.",
+                        "Extended Menu2/runtime coverage for new UI/locale paths and connected frame, aura, castbar, chat, EventBus, edit-mode, and range-fade behavior.",
+                        "Fixed Auras3 positioning after zone transitions so Auras3 layout remains correct after entering a new zone.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-Beta13",
             date = "2026-07-12",
@@ -144,58 +178,6 @@ local data = {
                         "Navigate quickly between pages and pinned previews; confirm unit and group preview refreshes and drag handles remain responsive.",
                         "Test group layouts, status/text/border settings, range fading, and Class Power previews across relevant specs.",
                         "Toggle Hide permanent auras for unit, custom, and group aura lanes and confirm permanent effects are excluded while timed effects remain.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-Beta10",
-            date = "2026-07-10",
-            sections = {
-                {
-                    title = "Unit Frame Auras - Blacklists And Whitelists",
-                    bullets = {
-                        "Buff and Debuff blacklists are frame-specific: add exact SpellIDs manually or from a preset, review the prepared entries, and click an entry to remove it.",
-                        "Custom Aura containers use their own exact SpellID whitelist, so only the spells you add enter that custom container.",
-                        "Blacklists and Custom-Aura whitelists stay local to the selected Unit Frame even when its normal Blizzard filter tokens inherit the Shared configuration.",
-                        "Aura setting changes now recompile the affected Unit Frame and refresh its preview immediately; configured aura-lane offsets are also preserved in the preview.",
-                    },
-                },
-                {
-                    title = "Group Frame Auras - Blacklists And Whitelists",
-                    bullets = {
-                        "Party, Raid, and Mythic Raid aura lanes now use focused Layout, Filters, and Blacklist workspaces.",
-                        "Group Buff and Debuff lanes support category blacklists plus exact SpellID blacklists; add individual spells or complete preset groups, see the active list with icons, and click an entry to remove it.",
-                        "Native Blizzard filter tokens remain available per group lane. Tracked helpful auras use exact SpellID include filters where Blizzard supports them.",
-                        "Private-aura controls were removed from the group-aura UI and Assistant because they are no longer part of the supported group-frame configuration.",
-                    },
-                },
-                {
-                    title = "Power Bars And Class Resources",
-                    bullets = {
-                        "Player Power, Class Resources, and Alternative Mana gain independently configurable native smooth fill using Blizzard StatusBar interpolation.",
-                        "Player Power uses frequent power events for responsive updates, while restricted values remain in Blizzard's native StatusBar path.",
-                        "Detached Player Power can use Bar, Round, Crystal, or Orb shapes with configurable borders; texture, background, gradient, and tint updates preserve the selected shape.",
-                        "Class Resource previews now match live cooldown-based width modes.",
-                    },
-                },
-                {
-                    title = "Runtime, Castbars, And Previews",
-                    bullets = {
-                        "Target and Focus castbars clear stale casts before the replacement update is queued, preventing the old unit's cast from remaining visible during a swap.",
-                        "Target-of-target and focus-target identity work is coalesced after target-change event bursts.",
-                        "Player portraits now force a native refresh when entering or leaving a vehicle, even though the player GUID itself does not change.",
-                        "Pinned menu previews use a simpler canvas host, and group/unit aura controls retain their scroll position during workspace rebuilds.",
-                    },
-                },
-                {
-                    title = "What To Test First",
-                    bullets = {
-                        "Unit-frame Buff and Debuff blacklists: manual SpellIDs, preset additions, removals, Shared-filter inheritance, and preview updates.",
-                        "Custom Unit Aura whitelist containers with exact SpellIDs and native filter toggles.",
-                        "Party, Raid, and Mythic Raid Buff/Debuff blacklists: category switches, exact SpellIDs, presets, and the active entry list.",
-                        "Detached Player Power shapes, borders, colors, smooth fill, and texture changes; Class Resource and Alternative Mana smooth fill.",
-                        "Rapid target/focus changes, target-of-target/focus-target updates, and pinned menu previews.",
                     },
                 },
             },
