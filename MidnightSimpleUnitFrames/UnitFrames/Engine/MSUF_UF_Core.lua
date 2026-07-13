@@ -576,6 +576,11 @@ local function FrameOnShow(frame)
   end
   if frame._msufCoreScope == "group" then
     RefreshGroupFrameState(frame, "MSUF_GF_ONSHOW")
+  elseif UF.RunLeanIdentity then
+    -- Identity events can arrive while target/focus/dependent frames are
+    -- hidden. Re-seed the existing lean plan once when the frame becomes
+    -- visible so no status from the previous unit can bleed through.
+    UF.RunLeanIdentity(frame, "MSUF_UF_ONSHOW")
   end
 end
 

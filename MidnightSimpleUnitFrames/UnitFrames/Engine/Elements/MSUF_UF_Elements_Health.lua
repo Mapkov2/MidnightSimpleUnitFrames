@@ -311,16 +311,43 @@ local function NeedsGroupAIRefresh(frame, event, unit)
     or frame._msufHealthAIUnit ~= unit
 end
 
-local function NotifyGroupHealthState(frame, event, unit, hp)
-  if event ~= "UNIT_HEALTH" and event ~= "UNIT_CONNECTION" then return end
+local function HealthStatusTransitionNeeded(frame, seedHP)
+  if seedHP == nil or frame._msufStatusTextHealthRefresh == true then
+    return false
+  end
+  local value = frame._msufStatusTextValue
+  if value == "DEAD" or value == "GHOST" or value == "OFFLINE" then
+    return seedHP > 0
+  end
+  return seedHP <= 0
+end
+
+local function NotifyHealthState(frame, event, unit, hp)
+  local group = frame._msufIsGroupFrame == true
+  if group ~= true then
+    -- Single-frame status owns UNIT_CONNECTION directly. Its health handoff is
+    -- only the missing DEAD/GHOST boundary, so reject every other event before
+    -- doing secret/type work on the steady-state route.
+    if event ~= "UNIT_HEALTH" or not frame._msufUpdateStatusTextIndicator then return end
+  elseif event ~= "UNIT_HEALTH" and event ~= "UNIT_CONNECTION" then
+    return
+  end
   local seedHP = issecretvalue(hp) ~= true and type(hp) == "number" and hp or nil
-  local updateGroupStatus = frame._msufUpdateGroupStatusState
-  if updateGroupStatus then
+  local updateStatus
+  if group then
+    local groupStatus = frame._msufUpdateGroupStatusState
+    if groupStatus and (event == "UNIT_CONNECTION" or HealthStatusTransitionNeeded(frame, seedHP)) then
+      updateStatus = groupStatus
+    end
+  elseif HealthStatusTransitionNeeded(frame, seedHP) then
+    updateStatus = frame._msufUpdateStatusTextIndicator
+  end
+  if updateStatus then
     frame._msufHealthStateNotify = true
-    updateGroupStatus(frame, event, unit, seedHP)
+    updateStatus(frame, event, unit, seedHP)
     frame._msufHealthStateNotify = nil
   end
-  local updateGoneState = frame._msufUpdateGroupVisualsGoneState
+  local updateGoneState = group and frame._msufUpdateGroupVisualsGoneState or nil
   if updateGoneState then
     updateGoneState(frame, event, unit, seedHP)
   end
@@ -340,6 +367,7 @@ local function UpdateSingle(frame, event, unit)
     if event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, pct) then
       if not ApplyRuntimeColor(frame, event, unit, pct, 100) then SetColor(frame) end
     end
+    NotifyHealthState(frame, event, unit, pct)
     return pct, maxValue, percentReady
   end
 
@@ -347,6 +375,7 @@ local function UpdateSingle(frame, event, unit)
   if event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, hp) then
     if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
   end
+  NotifyHealthState(frame, event, unit, hp)
   return hp, maxHP, absolutePercentReady
 end
 
@@ -363,6 +392,7 @@ local function UpdateSingleAbsolute(frame, event, unit)
   if event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, hp) then
     if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
   end
+  NotifyHealthState(frame, event, unit, hp)
   return hp, maxHP, percentReady
 end
 
@@ -382,7 +412,9 @@ local function UpdateSingleCurrent(frame, event, unit)
   end
   -- CURRENT without MAX is a distinct compiled plan: keep the bar on the
   -- native percent API and read only the one absolute value the text needs.
-  return UnitHealth(unit), nil, false
+  local hp = UnitHealth(unit)
+  NotifyHealthState(frame, event, unit, hp)
+  return hp, nil, false
 end
 
 local function UpdateGroup(frame, event, unit)
@@ -407,7 +439,7 @@ local function UpdateGroup(frame, event, unit)
       if hpAvailable and maxAvailable then
         local hp, maxHP, percentReady = UpdateAbsoluteValues(frame, unit, detailedHP, detailedMax)
         if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
-        NotifyGroupHealthState(frame, event, unit, hp)
+        NotifyHealthState(frame, event, unit, hp)
         return hp, maxHP, percentReady
       end
     end
@@ -418,7 +450,7 @@ local function UpdateGroup(frame, event, unit)
     if event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, pct) then
       if not ApplyRuntimeColor(frame, event, unit, pct, 100) then SetColor(frame) end
     end
-    NotifyGroupHealthState(frame, event, unit, pct)
+    NotifyHealthState(frame, event, unit, pct)
     return pct, maxValue, percentReady
   end
 
@@ -426,7 +458,7 @@ local function UpdateGroup(frame, event, unit)
   if event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, hp) then
     if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
   end
-  NotifyGroupHealthState(frame, event, unit, hp)
+  NotifyHealthState(frame, event, unit, hp)
   return hp, maxHP, absolutePercentReady
 end
 
@@ -452,7 +484,7 @@ local function UpdateGroupAbsolute(frame, event, unit)
       if hpAvailable and maxAvailable then
         local hp, maxHP, percentReady = UpdateAbsoluteValues(frame, unit, detailedHP, detailedMax)
         if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
-        NotifyGroupHealthState(frame, event, unit, hp)
+        NotifyHealthState(frame, event, unit, hp)
         return hp, maxHP, percentReady
       end
     end
@@ -462,7 +494,7 @@ local function UpdateGroupAbsolute(frame, event, unit)
   if event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, hp) then
     if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
   end
-  NotifyGroupHealthState(frame, event, unit, hp)
+  NotifyHealthState(frame, event, unit, hp)
   return hp, maxHP, percentReady
 end
 
@@ -488,7 +520,7 @@ local function UpdateGroupCurrent(frame, event, unit)
       if hpAvailable and maxAvailable then
         local hp, maxHP, percentReady = UpdateAbsoluteValues(frame, unit, detailedHP, detailedMax)
         if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
-        NotifyGroupHealthState(frame, event, unit, hp)
+        NotifyHealthState(frame, event, unit, hp)
         return hp, maxHP, percentReady
       end
     end
@@ -500,7 +532,7 @@ local function UpdateGroupCurrent(frame, event, unit)
     if not ApplyRuntimeColor(frame, event, unit, pct, 100) then SetColor(frame) end
   end
   local hp = UnitHealth(unit)
-  NotifyGroupHealthState(frame, event, unit, hp)
+  NotifyHealthState(frame, event, unit, hp)
   return hp, nil, false
 end
 
