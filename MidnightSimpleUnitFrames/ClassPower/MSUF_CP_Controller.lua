@@ -14,8 +14,8 @@
 --- - Render modes: each class/spec resolves to a render mode at FullRefresh.
 --- Hot-path dispatch is a single mode check - zero branching for inactive.
 --- - Secret-safe: raw UnitPower/UnitPowerMax (2 args), nil-guarded.
---- - Max performance: event-driven only (zero polling except DK rune OnUpdate
---- which runs only on recharging runes, ~1-3 max simultaneous).
+--- - Max performance: Rune, Essence, and Ebon timers use native 12.1 duration
+--- objects; Lua polling remains only for active Stagger or a degraded API path.
 
 --- Guard: only load once.
 if _G.__MSUF_ClassPower_Loaded then return end
@@ -61,7 +61,7 @@ local InCombatLockdown = InCombatLockdown
 local GetTime = GetTime
 local C_Timer = C_Timer
 local GetPowerRegenForPowerType = GetPowerRegenForPowerType
-local StatusBarInterpolation = Enum and Enum.StatusBarInterpolation
+local StatusBarInterpolation = _G.Enum and _G.Enum.StatusBarInterpolation
 local SMOOTH_INTERP = StatusBarInterpolation and StatusBarInterpolation.ExponentialEaseOut or nil
 
 --- Aura API (player-only class resources; unitframe aura display is native 12.1)
@@ -918,7 +918,10 @@ local CP = {
     tbCachedQ   = -1,      --- quantized percentage for skip-if-same
     tbOUA       = false,   --- true if timer-bar OnUpdate is active
     runeOUAAny  = false,   --- true if any rune bar currently has an OnUpdate
+    runeNativeAny = false, --- true while any Rune bar uses a native duration
     essenceOUAAny = false, --- true if Essence recharge pip has an OnUpdate
+    essenceNativeAny = false, --- true while one Essence pip uses a native duration
+    timerNativeActive = false, --- true while Ebon Might uses native durations
     powerToken  = nil,     --- cached POWER_TYPE_TOKENS[powerType] for hot event filters
     visual      = nil,     --- compiled static visual runtime values for active mode
     slotR       = {},      --- persistent compiled per-slot colors (no refresh allocations)
@@ -1341,6 +1344,8 @@ end
 
 local CP_EnsureBars
 local CP_Create
+local CP_EnsureRuneText
+local CP_EnsureMainText
 
 do
     local build = CP_CallBuilder(CPCoreBuilders.BUILD, {
@@ -1352,6 +1357,8 @@ do
     if build then
         CP_EnsureBars = build.CP_EnsureBars or CP_EnsureBars
         CP_Create = build.CP_Create or CP_Create
+        CP_EnsureRuneText = build.CP_EnsureRuneText
+        CP_EnsureMainText = build.CP_EnsureMainText
     end
 end
 
@@ -1509,6 +1516,12 @@ do
         GetVisual = function() return CP.visual end,
         GetChargedMap = function() return _chargedAny and _chargedMap or nil end,
         GetPowerRegenForPowerType = GetPowerRegenForPowerType,
+        C_DurationUtil = _G.C_DurationUtil,
+        C_StringUtil = _G.C_StringUtil,
+        Enum = _G.Enum,
+        EnsureRuneText = CP_EnsureRuneText,
+        EnsureMainText = CP_EnsureMainText,
+        ApplyFont = function() if CP_ApplyFont then CP_ApplyFont() end end,
     }
     local segmented = CP_CallBuilder(CPModeBuilders.SEGMENTED, commonEnv)
     if segmented and type(segmented.Update) == "function" then CP_UpdateValues = segmented.Update end
@@ -1528,7 +1541,6 @@ do
     local continuous = CP_CallBuilder(CPModeBuilders.CONTINUOUS, commonEnv)
     if continuous and type(continuous.Update) == "function" then CP_UpdateValues_Continuous = continuous.Update end
 
-    commonEnv.NotSecret = NotSecret
     commonEnv.UnitStagger = UnitStagger
     commonEnv.UnitHealthMax = UnitHealthMax
     commonEnv.STAGGER_CONST = CPConst.STAGGER or {}
@@ -1571,11 +1583,12 @@ ExportPublic("MSUF_CDM_GetScaledWidth", CDM_GetScaledWidth)
 --- CPK.MODE.RUNE_CD / CPK.MODE.TIMER_BAR
 --- Phase 3 CP split: rune + timer mode runners now live in
 --- ClassPower/Modes/MSUF_CP_Mode_Rune.lua and MSUF_CP_Mode_Timer.lua.
---- Unified CP tick: single OnUpdate frame drives all mode animations.
+--- Degraded/Stagger tick: native duration modes never enter this driver.
 local CP_StopRuneOnUpdates
 local SetTimerBarOnUpdate
+local StopTimerBar
 
---- Central CP runtime tick (unified driver for Rune/Essence/Timer animations).
+--- Central CP runtime tick for Stagger and guarded degraded fallbacks.
 local _cpTickFrame
 local _cpTickActive = false
 local _cpTickFn = nil
@@ -1657,6 +1670,7 @@ do
     if timer then
         if type(timer.Update) == "function" then CP_UpdateValues_TimerBar = timer.Update end
         if type(timer.SetOnUpdate) == "function" then SetTimerBarOnUpdate = timer.SetOnUpdate end
+        if type(timer.Stop) == "function" then StopTimerBar = timer.Stop end
         if type(timer.RuntimeTick) == "function" then _timerRuntimeTick = timer.RuntimeTick end
     end
 end
@@ -1667,7 +1681,7 @@ local function CP_SyncRuntimeOnUpdates(timerActive)
     --- Determine active tick function based on current mode + animation state.
     if mode == CPK.MODE.RUNE_CD then
         --- Rune mode: stop others, tick runes if any active.
-        if CP.essenceOUAAny and CP_StopEssenceOnUpdates then CP_StopEssenceOnUpdates() end
+        if (CP.essenceOUAAny or CP.essenceNativeAny) and CP_StopEssenceOnUpdates then CP_StopEssenceOnUpdates() end
         if CP.runeOUAAny and _runeRuntimeTick then
             CP_StartCentralTick(_runeRuntimeTick)
         else
@@ -1677,13 +1691,13 @@ local function CP_SyncRuntimeOnUpdates(timerActive)
     end
 
     --- Not rune mode: stop rune animations.
-    if CP.runeOUAAny and CP_StopRuneOnUpdates then
+    if (CP.runeOUAAny or CP.runeNativeAny) and CP_StopRuneOnUpdates then
         CP_StopRuneOnUpdates(false)
     end
 
     if mode == CPK.MODE.STAGGER then
-        if CP.essenceOUAAny and CP_StopEssenceOnUpdates then CP_StopEssenceOnUpdates() end
-        if SetTimerBarOnUpdate then SetTimerBarOnUpdate(false) end
+        if (CP.essenceOUAAny or CP.essenceNativeAny) and CP_StopEssenceOnUpdates then CP_StopEssenceOnUpdates() end
+        if StopTimerBar and (CP.timerNativeActive or CP.tbOUA) then StopTimerBar() end
         if timerActive and _staggerRuntimeTick then
             CP_StartCentralTick(_staggerRuntimeTick)
         else
@@ -1693,7 +1707,7 @@ local function CP_SyncRuntimeOnUpdates(timerActive)
     end
 
     if mode == CPK.MODE.TIMER_BAR then
-        if CP.essenceOUAAny and CP_StopEssenceOnUpdates then CP_StopEssenceOnUpdates() end
+        if (CP.essenceOUAAny or CP.essenceNativeAny) and CP_StopEssenceOnUpdates then CP_StopEssenceOnUpdates() end
         if SetTimerBarOnUpdate then SetTimerBarOnUpdate(timerActive == true) end
         if timerActive and _timerRuntimeTick then
             CP_StartCentralTick(_timerRuntimeTick)
@@ -1701,7 +1715,7 @@ local function CP_SyncRuntimeOnUpdates(timerActive)
             CP_StopCentralTick()
         end
     else
-        if SetTimerBarOnUpdate then SetTimerBarOnUpdate(false) end
+        if StopTimerBar and (CP.timerNativeActive or CP.tbOUA) then StopTimerBar() end
         --- SEGMENTED mode: essence may tick.
         if CP.essenceOUAAny and _essenceRuntimeTick then
             CP_StartCentralTick(_essenceRuntimeTick)
@@ -2120,13 +2134,16 @@ local function FullRefresh()
         if renderMode ~= CPK.MODE.RUNE_CD and CP_StopRuneOnUpdates then
             CP_StopRuneOnUpdates(true)
         end
-        if renderMode ~= CPK.MODE.TIMER_BAR and SetTimerBarOnUpdate then
-            SetTimerBarOnUpdate(false)
+        if renderMode ~= CPK.MODE.TIMER_BAR and (StopTimerBar or SetTimerBarOnUpdate) then
+            if StopTimerBar then StopTimerBar() else SetTimerBarOnUpdate(false) end
         end
         if (renderMode ~= CPK.MODE.SEGMENTED or powerType ~= PT.Essence) and CP_StopEssenceOnUpdates then
             CP_StopEssenceOnUpdates()
         end
 
+        if b.classPowerShowText == true and CP_EnsureMainText then
+            CP_EnsureMainText()
+        end
         CP_ApplyFont()
 
         --- Reset container alpha before update (auto-hide in updateFn may override)
@@ -2149,11 +2166,12 @@ local function FullRefresh()
         --- Clean up rune/timer/essence OnUpdate scripts when hiding
         CP_SetIciclesSensorActive(false)
         CP.visual = nil
-        if (CP.renderMode == CPK.MODE.RUNE_CD or CP.runeOUAAny) and CP_StopRuneOnUpdates then
+        if (CP.renderMode == CPK.MODE.RUNE_CD or CP.runeOUAAny or CP.runeNativeAny) and CP_StopRuneOnUpdates then
             CP_StopRuneOnUpdates(true)
         end
-        if SetTimerBarOnUpdate then SetTimerBarOnUpdate(false) end
-        if CP.essenceOUAAny and CP_StopEssenceOnUpdates then CP_StopEssenceOnUpdates() end
+        if StopTimerBar then StopTimerBar()
+        elseif SetTimerBarOnUpdate then SetTimerBarOnUpdate(false) end
+        if (CP.essenceOUAAny or CP.essenceNativeAny) and CP_StopEssenceOnUpdates then CP_StopEssenceOnUpdates() end
         CP_StopCentralTick()
         local maintainedAnchor = CP_EnsureHiddenAnchorGeometry(playerFrame, cpHeight)
         if CP.container then

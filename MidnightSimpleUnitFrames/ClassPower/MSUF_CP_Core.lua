@@ -82,27 +82,15 @@ local function CP_ShapeTextures(shape)
     return CP_SHAPE_TEXTURES[CP_NormalizeShape(shape)]
 end
 
---- Shape mode uses native StatusBar filling where possible. This cleanup resets
---- old/manual clipping state before a bar returns to segmented rectangular mode.
-local function CP_DisableShapeFillClip(bar)
-    if not bar then return end
-    if bar.SetScript and bar._shapeFillClipEnabled == true then
-        bar:SetScript("OnValueChanged", nil)
-    end
-    bar._shapeFillClipEnabled = nil
-    bar._shapeFillReverse = nil
-    local tex = bar._shapeFillTex or (bar.GetStatusBarTexture and bar:GetStatusBarTexture())
-    if tex then
-        tex:SetTexCoord(0, 1, 0, 1)
-        tex._msufCPShapeL, tex._msufCPShapeR = nil, nil
-    end
-    bar._shapeFillTex = nil
-end
-
 local function CP_UseNativeShapeFill(bar, reverse)
-    CP_DisableShapeFillClip(bar)
     if bar and bar.SetReverseFill then
         bar:SetReverseFill(reverse == true)
+    end
+end
+
+local function ClearShapeEdge(bar)
+    if bar and bar._shapeEdge then
+        bar._shapeEdge:Hide()
     end
 end
 
@@ -113,6 +101,46 @@ builders.BUILD = function(E)
     local _cpDB = E._cpDB
     local CreateFrame = E.CreateFrame
     local CP_ResolveTexture = E.CP_ResolveTexture
+
+    local function CP_EnsureRuneText(bar)
+        if not bar then return nil, false end
+        if bar._runeText then return bar._runeText, false end
+
+        local rfs = bar:CreateFontString(nil, "OVERLAY")
+        rfs:SetPoint("CENTER", bar, "CENTER", 0, 0)
+        rfs:SetJustifyH("CENTER")
+        if rfs.SetJustifyV then rfs:SetJustifyV("MIDDLE") end
+        rfs:SetFontObject("GameFontHighlightSmall")
+        rfs:SetTextColor(1, 1, 1, 1)
+        rfs:SetShadowColor(0, 0, 0, 1)
+        rfs:SetShadowOffset(1, -1)
+        rfs:Hide()
+        bar._runeText = rfs
+        return rfs, true
+    end
+
+    local function CP_EnsureMainText()
+        if CP.text then return CP.text, false end
+        local c = CP.container
+        if not c then return nil, false end
+
+        local tf = CreateFrame("Frame", nil, c)
+        tf:SetAllPoints(c)
+        tf:SetFrameLevel(c:GetFrameLevel() + 10)
+        CP.textFrame = tf
+
+        local fs = tf:CreateFontString(nil, "OVERLAY")
+        fs:SetPoint("CENTER", tf, "CENTER", 0, 0)
+        fs:SetJustifyH("CENTER")
+        if fs.SetJustifyV then fs:SetJustifyV("MIDDLE") end
+        fs:SetFontObject("GameFontHighlightSmall")
+        fs:SetTextColor(1, 1, 1, 1)
+        fs:SetShadowColor(0, 0, 0, 1)
+        fs:SetShadowOffset(1, -1)
+        fs:Hide()
+        CP.text = fs
+        return fs, true
+    end
 
     local function CP_EnsureBars(parent, count)
         if count <= CP.maxBars then return end
@@ -146,19 +174,6 @@ builders.BUILD = function(E)
             bg._msufCPTexturePath = bgPath
             bg:SetVertexColor(0, 0, 0, 0.3)
             bar._bg = bg
-
-            --- Per-rune cooldown time text (DK runes only; shown/hidden in CPK.MODE.RUNE_CD)
-            local rfs = bar:CreateFontString(nil, "OVERLAY")
-            rfs:SetPoint("CENTER", bar, "CENTER", 0, 0)
-            rfs:SetJustifyH("CENTER")
-            if rfs.SetJustifyV then rfs:SetJustifyV("MIDDLE") end
-            rfs:SetFontObject("GameFontHighlightSmall")
-            rfs:SetTextColor(1, 1, 1, 1)
-            rfs:SetShadowColor(0, 0, 0, 1)
-            rfs:SetShadowOffset(1, -1)
-            rfs:Hide()
-            bar._runeText = rfs
-            bar._runeTextQ = -1
 
             CP.bars[i] = bar
         end
@@ -200,40 +215,19 @@ builders.BUILD = function(E)
         --- Pre-allocate common max (6 for DK, 5 for most others)
         CP_EnsureBars(playerFrame, 8)
 
-        --- Text overlay (MRB pattern: separate Frame at elevated level so text
-        --- is always above individual bar segments and tick separators)
-        local tf = CreateFrame("Frame", nil, c)
-        tf:SetAllPoints(c)
-        tf:SetFrameLevel(c:GetFrameLevel() + 10)
-        CP.textFrame = tf
-
-        local fs = tf:CreateFontString(nil, "OVERLAY")
-        fs:SetPoint("CENTER", tf, "CENTER", 0, 0)
-        fs:SetJustifyH("CENTER")
-        if fs.SetJustifyV then fs:SetJustifyV("MIDDLE") end
-        fs:SetFontObject("GameFontHighlightSmall")
-        fs:SetTextColor(1, 1, 1, 1)
-        fs:SetShadowColor(0, 0, 0, 1)
-        fs:SetShadowOffset(1, -1)
-        fs:Hide()
-        CP.text = fs
     end
 
     return {
         CP_EnsureBars = CP_EnsureBars,
         CP_Create = CP_Create,
+        CP_EnsureRuneText = CP_EnsureRuneText,
+        CP_EnsureMainText = CP_EnsureMainText,
     }
 end
 
 --- LAYOUT computes geometry and anchoring for the already-created bars.
 --- The function also coordinates with detached power bars and external cooldown
 --- anchors, so keep combat-deferred work here rather than in value updates.
-
-local builders = _G.MSUF_CP_CORE_BUILDERS
-if type(builders) ~= "table" then
-    builders = {}
-    ExportPublic("MSUF_CP_CORE_BUILDERS", builders)
-end
 
 builders.LAYOUT = function(E)
     local CP = E.CP
@@ -247,12 +241,6 @@ builders.LAYOUT = function(E)
     local SetFilledAlpha = E.SetFilledAlpha
     local SetEmptyAlpha = E.SetEmptyAlpha
     local SetAutoHideActive = E.SetAutoHideActive
-
-    local function ClearShapeEdge(bar)
-        if bar and bar._shapeEdge then
-            bar._shapeEdge:Hide()
-        end
-    end
 
     --- Applies size, anchor, segment placement, tick separators, and outline.
     --- This is warm-path code: it can run often during option changes, but it
@@ -586,7 +574,6 @@ builders.LAYOUT = function(E)
                 if bar then
                     bar:ClearAllPoints()
                     if bar.SetReverseFill then bar:SetReverseFill(false) end
-                    CP_DisableShapeFillClip(bar)
                     ClearShapeEdge(bar)
                     local boundary = math_floor((totalBarSpace * i) / maxPower)
                     local thisW = boundary - prevBoundary
@@ -621,7 +608,6 @@ builders.LAYOUT = function(E)
 
         for i = maxPower + 1, CP.maxBars do
             if CP.bars[i] then
-                CP_DisableShapeFillClip(CP.bars[i])
                 ClearShapeEdge(CP.bars[i])
                 CP.bars[i]:Hide()
             end
@@ -672,12 +658,6 @@ end
 --- PRESENTATION owns visual refresh that does not change geometry or values:
 --- fonts, text offsets, colors, textures, and media swaps.
 
-local builders = _G.MSUF_CP_CORE_BUILDERS
-if type(builders) ~= "table" then
-    builders = {}
-    ExportPublic("MSUF_CP_CORE_BUILDERS", builders)
-end
-
 builders.PRESENTATION = function(E)
     local CP = E.CP
     local _cpDB = E._cpDB
@@ -687,12 +667,6 @@ builders.PRESENTATION = function(E)
     local ResolveClassPowerColor = E.ResolveClassPowerColor
     local CP_ResolveTexture = E.CP_ResolveTexture
     local GetUpdateFn = E.GetUpdateFn
-
-    local function ClearShapeEdge(bar)
-        if bar and bar._shapeEdge then
-            bar._shapeEdge:Hide()
-        end
-    end
 
     local _cpFontRev = 0
 
@@ -719,12 +693,32 @@ builders.PRESENTATION = function(E)
         fs:SetPoint("CENTER", tf, "CENTER", ox, oy)
     end
 
+    local function ClassPowerFontApplied(region, fontPath, size, fontFlags)
+        if type(region.GetFont) ~= "function" then return true end
+        local actual, actualSize, actualFlags = region:GetFont()
+        if not actual then return true end
+        if actualSize and actualSize ~= size then return false end
+        if (actualFlags or "") ~= (fontFlags or "") then return false end
+        if actual == fontPath then return true end
+        if type(_G.MSUF_FontPathMatches) == "function" and _G.MSUF_FontPathMatches(fontPath, actual) == true then return true end
+        if type(_G.MSUF_FontPathEquals) == "function" and _G.MSUF_FontPathEquals(fontPath, actual) == true then return true end
+        return tostring(actual or ""):gsub("/", "\\"):lower() == tostring(fontPath or ""):gsub("/", "\\"):lower()
+    end
+
+    local function ApplyClassPowerFont(region, fontPath, size, fontFlags)
+        if not (region and region.SetFont) then return false end
+        local ok = pcall(region.SetFont, region, fontPath, size, fontFlags)
+        if ok and ClassPowerFontApplied(region, fontPath, size, fontFlags) then return true end
+        local fallback = _G.MSUF_ResolveSafeFontPath and _G.MSUF_ResolveSafeFontPath("Fonts\\FRIZQT__.TTF", size, fontFlags, "FRIZQT") or "Fonts\\FRIZQT__.TTF"
+        ok = pcall(region.SetFont, region, fallback, size, fontFlags)
+        return ok and ClassPowerFontApplied(region, fallback, size, fontFlags)
+    end
+
     --- Font refresh is driven by global font serials and ClassPower options.
     --- Keep it stamped so profile/font changes repaint once instead of during
     --- every class-resource event.
     local function CP_ApplyFont()
         local fs = CP.text
-        if not fs then return end
 
         local path, flags, fr, fg, fb, baseSize, useShadow
         if type(_G.MSUF_GetGlobalFontSettings) == "function" then
@@ -753,29 +747,8 @@ builders.PRESENTATION = function(E)
         end
         if fontSize < 6 then fontSize = 6 end
 
-        local function ClassPowerFontApplied(region, fontPath, size, fontFlags)
-            if type(region.GetFont) ~= "function" then return true end
-            local actual, actualSize, actualFlags = region:GetFont()
-            if not actual then return true end
-            if actualSize and actualSize ~= size then return false end
-            if (actualFlags or "") ~= (fontFlags or "") then return false end
-            if actual == fontPath then return true end
-            if type(_G.MSUF_FontPathMatches) == "function" and _G.MSUF_FontPathMatches(fontPath, actual) == true then return true end
-            if type(_G.MSUF_FontPathEquals) == "function" and _G.MSUF_FontPathEquals(fontPath, actual) == true then return true end
-            return tostring(actual or ""):gsub("/", "\\"):lower() == tostring(fontPath or ""):gsub("/", "\\"):lower()
-        end
-
-        local function ApplyClassPowerFont(region, fontPath, size, fontFlags)
-            if not (region and region.SetFont) then return false end
-            local ok = pcall(region.SetFont, region, fontPath, size, fontFlags)
-            if ok and ClassPowerFontApplied(region, fontPath, size, fontFlags) then return true end
-            local fallback = _G.MSUF_ResolveSafeFontPath and _G.MSUF_ResolveSafeFontPath("Fonts\\FRIZQT__.TTF", size, fontFlags, "FRIZQT") or "Fonts\\FRIZQT__.TTF"
-            ok = pcall(region.SetFont, region, fallback, size, fontFlags)
-            return ok and ClassPowerFontApplied(region, fallback, size, fontFlags)
-        end
-
         local rev = (_G.MSUF_FontPathSerial or 0) + fontSize * 1000003
-        if _cpFontRev ~= rev then
+        if fs and _cpFontRev ~= rev then
             if ApplyClassPowerFont(fs, path, fontSize, flags) then
                 _cpFontRev = rev
             end
@@ -786,8 +759,10 @@ builders.PRESENTATION = function(E)
         for i = 1, (CP.maxBars or 0) do
             local bar = CP.bars[i]
             local rfs = bar and bar._runeText
-            if rfs then
-                ApplyClassPowerFont(rfs, path, runeSize, flags)
+            if rfs and rfs._msufCPFontRev ~= rev then
+                if ApplyClassPowerFont(rfs, path, runeSize, flags) then
+                    rfs._msufCPFontRev = rev
+                end
             end
         end
 
@@ -807,15 +782,17 @@ builders.PRESENTATION = function(E)
             end
         end
 
-        fs:SetTextColor(tr, tg, tb, textAlpha)
+        if fs then
+            fs:SetTextColor(tr, tg, tb, textAlpha)
 
-        if useShadow then
-            fs:SetShadowColor(0, 0, 0, shadowAlpha)
-            fs:SetShadowOffset(shadowX, shadowY)
-        else
-            fs:SetShadowOffset(0, 0)
+            if useShadow then
+                fs:SetShadowColor(0, 0, 0, shadowAlpha)
+                fs:SetShadowOffset(shadowX, shadowY)
+            else
+                fs:SetShadowOffset(0, 0)
+            end
+            CP_ApplyTextOffset()
         end
-        CP_ApplyTextOffset()
     end
 
     local function CP_ApplyColors(powerType)
@@ -826,7 +803,7 @@ builders.PRESENTATION = function(E)
     end
 
     --- Texture refresh is shared by bar and shape modes. Layout decides sizes;
-    --- this function only replaces media and clears stale shape clipping state.
+    --- this function only replaces media and native reverse-fill state.
     local function CP_RefreshTexture()
         local b = _cpDB.bars or {}
         local fgKey = b.classPowerTexture
@@ -856,7 +833,6 @@ builders.PRESENTATION = function(E)
                         CP_UseNativeShapeFill(bar, reverse)
                     else
                         if bar.SetReverseFill then bar:SetReverseFill(false) end
-                        CP_DisableShapeFillClip(bar)
                     end
                 end
                 if bar._bg and bar._bg._msufCPTexturePath ~= activeBgPath then
@@ -1141,12 +1117,6 @@ end
 --- SPECIALS contains class-specific prediction/state that is not a generic
 --- power-token event. Keeping these rules isolated prevents RUNTIME from turning
 --- into a spec-by-spec rules table.
-local builders = _G.MSUF_CP_FEATURE_BUILDERS
-if type(builders) ~= "table" then
-    builders = {}
-    ExportPublic("MSUF_CP_FEATURE_BUILDERS", builders)
-end
-
 builders.SPECIALS = function(env)
     local CP = env.CP
     local _cpDB = env._cpDB
