@@ -297,6 +297,7 @@ MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll)
     end
     MSUF_ProfileIO_RunDisableBlizzardFrames()
     MSUF_ProfileIO_RunFrameScaleApply()
+    MSUF_ProfileIO_CallGlobal("MSUF_TargetSoundDriver_ApplySetting")
     --- Group-frame config tables are cached by identity. Drop those references
     --- before the runtime rebuild reads the newly active profile root.
     MSUF_ProfileIO_CallGlobal("MSUF_GF_InvalidateConfCache")
