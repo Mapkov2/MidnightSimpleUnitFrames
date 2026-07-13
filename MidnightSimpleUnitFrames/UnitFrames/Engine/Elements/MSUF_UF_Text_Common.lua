@@ -9,6 +9,7 @@ if not C then return end
 -- Pulls the shared bar/text helper bundle into local symbols for legacy split modules. Keep
 -- behavioral changes in MSUF_UF_Elements_BarsCommon.lua so the text runtime stays consistent.
 local UF = C.UF
+local FreshUnitState = UF.FreshUnitState
 local CreateFrame = C.CreateFrame
 local UnitClass = C.UnitClass
 local UnitExists = C.UnitExists
@@ -335,10 +336,15 @@ local function SetNameTextColor(frame, r, g, b, a)
   frame._msufNameTextR, frame._msufNameTextG, frame._msufNameTextB, frame._msufNameTextA = r, g, b, a
 end
 
-local function PlainUnitIsPlayer(unit)
-  if issecretvalue(unit) == true or not UnitIsPlayer then
+local function PlainUnitIsPlayer(frame, unit)
+  if issecretvalue(unit) == true then
     return nil
   end
+  local unitState = FreshUnitState and FreshUnitState(frame, unit)
+  if unitState and unitState.isPlayerKnown == true then
+    return unitState.isPlayer == true
+  end
+  if not UnitIsPlayer then return nil end
   local isPlayer = UnitIsPlayer(unit)
   if issecretvalue(isPlayer) == true then
     return nil
@@ -357,7 +363,7 @@ local function NameTextColorFor(frame, unit, classNames, npcNames, keyOverride, 
   if not classNames and not npcNames and not npcClassNames then
     return fr, fg, fb, fa
   end
-  local isPlayer = PlainUnitIsPlayer(unit)
+  local isPlayer = PlainUnitIsPlayer(frame, unit)
   if isPlayer == nil then
     return fr, fg, fb, fa
   end
@@ -423,7 +429,7 @@ local function InlineTextColor(frame, unit, inline)
     return NameTextColorFor(frame, unit, inline.totNameClassColor == true, inline.totNameNpcColor == true, "targettarget", inline.totNameNpcClassColor == true)
   end
 
-  local isPlayer = PlainUnitIsPlayer(unit)
+  local isPlayer = PlainUnitIsPlayer(frame, unit)
   if isPlayer == nil then
     return fr, fg, fb, fa
   end

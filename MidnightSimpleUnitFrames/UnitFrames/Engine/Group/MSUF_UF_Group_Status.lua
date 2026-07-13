@@ -38,6 +38,8 @@ local STATUS_EVENT_KIND = {
   PARTY_MEMBER_ENABLE = 8,
   PARTY_MEMBER_DISABLE = 8,
   UNIT_FACTION = 9,
+  PLAYER_ROLES_ASSIGNED = 10,
+  ROLE_CHANGED_INFORM = 10,
 }
 
 local statusRuntime = MSUF.UFStatusRuntime or {}
@@ -131,6 +133,10 @@ local function RunPVP(frame, status)
   end
 end
 
+local function RunRole(frame, status)
+  UpdateRole(frame, status)
+end
+
 local function RunPhase(frame, status)
   UpdatePhase(frame, status)
 end
@@ -145,9 +151,6 @@ local function RunStatusApply(frame, status, event)
   end
   if status.runtimeLeaderPair == true then
     UpdateLeaderPair(frame, status)
-  end
-  if status.role and status.role.enabled == true then
-    UpdateRole(frame, status)
   end
   if status.runtimeReadyCheck == true then
     UpdateReadyCheck(frame, status, event)
@@ -214,6 +217,9 @@ local function CompileStatusDispatch(status)
   end
   if status.runtimePVP == true then
     dispatch[9] = RunPVP
+  end
+  if status.role and status.role.enabled == true then
+    dispatch[10] = RunRole
   end
   dispatch.apply = RunStatusApply
   status.runtimeDispatch = dispatch
@@ -454,6 +460,10 @@ function GroupStatusRuntime.Apply(frame)
     frame._msufUpdateGroupStatusState = RunStatusRuntimeFrame
   end
   dispatch.apply(frame, status, "MSUF_GF_STATUS_APPLY")
+  local applyRole = dispatch[10]
+  if applyRole then
+    applyRole(frame, status)
+  end
 end
 
 function GroupStatusRuntime.Disable(frame)

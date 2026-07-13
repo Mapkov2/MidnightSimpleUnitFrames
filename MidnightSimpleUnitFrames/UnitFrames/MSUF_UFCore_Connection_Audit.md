@@ -91,7 +91,7 @@ The embed owns loading, but several modules are still old implementation files u
 - Loaded optional group elements through `MSUF_UFCore_Group.xml`: Config indicators, GroupRangeFade, GroupVisuals, GroupStatusRuntime, GroupCornerIndicators.
 - Expanded the group structure apply mask so secure header children receive the optional group elements during coldpath structure apply.
 - Fixed deferred element refresh gating to use `UF.CoreElementAllowed`, so optional Core elements queued during combat are not dropped after combat.
-- Converted non-hot frame lookups to Core-first in Menu2 scale/preview, Unit preview runtime/castbar preview, preview animation/diagnostics, castbar preview/anchor helpers, boss castbar preview, Auras3 edit/runtime frame resolution, Gameplay combat-timer anchoring, Highlight, Rounded Frames, BugReport diagnostics, and ClassPower frame lookup fallbacks.
+- Converted non-hot frame lookups to Core-first in Menu2 scale/preview, Unit preview runtime/castbar preview, preview animation/diagnostics, castbar preview/anchor helpers, boss castbar preview, Auras3 edit/runtime frame resolution, Gameplay combat-timer anchoring, Highlight, Rounded Frames, and ClassPower frame lookup fallbacks.
 - Removed remaining broad `UF.ForceUpdate(nil)` calls from Menu2/Assistant color/bar apply paths and replaced them with targeted border/highlight refreshes.
 - Narrowed normal Assistant group visual/font/border/color applies to GF dirty masks. Rebuild/undo paths remain broad because they intentionally span multiple DB domains or lack changed-domain metadata.
 - Narrowed GroupPage queued applies to combined GF dirty masks. `visual`, `font`, `color`, `border`, and `auras` now collapse to one explicit mask instead of falling back to unmasked `RefreshVisuals`.
@@ -464,9 +464,6 @@ Fix applied:
   - Highlight cleanup/debug frame enumeration now uses `MSUF.UF.ForEachFrame()`/`MSUF.UF.frameList`.
 - `MSUF_EditMode_Layout.lua`, `MSUF_EditMode_Movers.lua`, and `MSUF_EditMode_Core.lua`
   - EditMode frame resolution/cache invalidation now uses `MSUF.UF.GetFrame()`/`MSUF.UF.frames`/`MSUF.UF.ForEachFrame()`.
-- `MSUF_Menu2_BugReport.lua`
-  - Frame context now enumerates through `MSUF.UF.ForEachFrame()` or `MSUF.UF.frames`; debug text now names the UFCore registry.
-
 Performance note:
 - No new live event registrations, C_Timer paths, or OnUpdate paths were added.
 - Search verification shows the only remaining `MSUF_UnitFrames` references in Lua are compatibility exports that point directly at `UF.frames`/`UF.frameList`.

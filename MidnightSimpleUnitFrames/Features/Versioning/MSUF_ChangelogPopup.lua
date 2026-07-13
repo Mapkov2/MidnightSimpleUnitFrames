@@ -116,6 +116,18 @@ local function ShouldShow(force)
     local version = CurrentVersion(data)
     if not version then return false end
     if force == true then return true, data, version end
+    -- The 6.0 first-load dashboard already offers the bundled release notes.
+    -- Suppress the duplicate popup for the version that created that scene,
+    -- while allowing a genuinely newer release to use this prompt later.
+    local firstLoad = MSUF and MSUF.FirstLoad6
+    if firstLoad and type(firstLoad.GetState) == "function" then
+        local firstLoadState = firstLoad:GetState()
+        local offeredVersion = type(firstLoadState) == "table" and firstLoadState.firstSeenVersion
+        if type(offeredVersion) == "string"
+            and offeredVersion:lower() == tostring(version):lower() then
+            return false
+        end
+    end
     local state = GlobalChangelogState()
     return state.lastSeenVersion ~= tostring(version), data, version
 end

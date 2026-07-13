@@ -822,20 +822,16 @@ end
 local function BuildPowerRoute(barFn, textFn, _unused, routeUnitless, target)
   if target then
     return function(self, ev, _unit, ...)
-      BeginFrameEvent(self)
       local power, powerMax, powerType, powerToken, metaChanged
       if barFn then power, powerMax, powerType, powerToken, metaChanged = barFn(self, ev, target, ...) end
       if textFn then textFn(self, ev, target, power, powerMax, powerType, powerToken, metaChanged, ...) end
-      EndFrameEvent(self)
     end
   end
   return function(self, ev, unit, ...)
-    BeginFrameEvent(self)
     local u = routeUnitless == true and self.unit or (unit or self.unit)
     local power, powerMax, powerType, powerToken, metaChanged
     if barFn then power, powerMax, powerType, powerToken, metaChanged = barFn(self, ev, u, ...) end
     if textFn then textFn(self, ev, u, power, powerMax, powerType, powerToken, metaChanged, ...) end
-    EndFrameEvent(self)
   end
 end
 
@@ -1225,9 +1221,18 @@ local function IdentityEventUpdate(frame, event)
   local unit = frame.unit
   if not IdentityUnitExists(frame, unit) then return end
   local barPath = frame._msufIdentityBarPath
-  if barPath then barPath(frame, event, unit) end
+  local hp, hpMax, healthPercentReady
+  local power, powerMax, powerType, powerToken, powerMetaChanged
+  if barPath then
+    hp, hpMax, healthPercentReady,
+      power, powerMax, powerType, powerToken, powerMetaChanged = barPath(frame, event, unit)
+  end
   local path = frame._msufIdentityPath
-  if path then return path(frame, event, unit) end
+  if path then
+    return path(frame, event, unit,
+      hp, hpMax, healthPercentReady,
+      power, powerMax, powerType, powerToken, powerMetaChanged)
+  end
 end
 
 --- Dependent units can receive PLAYER_*_CHANGED and UNIT_TARGET in the same
@@ -1329,6 +1334,53 @@ local function CompileRuntimePath(list, count)
   return nil
 end
 
+local IDENTITY_STEP_NORMAL = 0
+local IDENTITY_STEP_HEALTH_TEXT = 1
+local IDENTITY_STEP_POWER_TEXT = 2
+
+-- Identity bars run before the element sequence. Forward their ephemeral
+-- values to the matching text elements so restricted/secret payloads do not
+-- need a second native read. The values stay on the Lua stack and are never
+-- retained on the frame. Every other element keeps its original three-arg
+-- contract and the compiled elementOrder remains unchanged.
+local function CompileIdentityRuntimePath(list, labels, count)
+  if not count or count <= 0 then return nil end
+  local kinds = {}
+  for i = 1, count do
+    local label = labels[i]
+    if label == "HealthText" then
+      kinds[i] = IDENTITY_STEP_HEALTH_TEXT
+    elseif label == "PowerText" then
+      kinds[i] = IDENTITY_STEP_POWER_TEXT
+    else
+      kinds[i] = IDENTITY_STEP_NORMAL
+    end
+  end
+
+  return function(frame, event, unit,
+      hp, hpMax, healthPercentReady,
+      power, powerMax, powerType, powerToken, powerMetaChanged)
+    for i = 1, count do
+      local update = list[i]
+      local kind = kinds[i]
+      if kind == IDENTITY_STEP_HEALTH_TEXT then
+        if healthPercentReady == true then
+          -- Match BuildHealthRoute: the Health element already seeded the
+          -- dispatch-percent slot consumed by HealthText.
+          update(frame, event, unit, nil, nil)
+        else
+          update(frame, event, unit, hp, hpMax)
+        end
+      elseif kind == IDENTITY_STEP_POWER_TEXT then
+        update(frame, event, unit,
+          power, powerMax, powerType, powerToken, powerMetaChanged)
+      else
+        update(frame, event, unit)
+      end
+    end
+  end
+end
+
 -- Identity and full-runtime paths are archetype data, not frame state. Intern
 -- immutable function/label sequences so identical raid children retain only
 -- references to one plan instead of four private arrays and two closures each.
@@ -1344,7 +1396,7 @@ local EMPTY_RUNTIME_SEQUENCE_PLAN = {
   count = 0,
 }
 
-local function NewRuntimeSequencePlan(functions, labels, count)
+local function NewRuntimeSequencePlan(functions, labels, count, identity)
   local planFns, planLabels = {}, {}
   for i = 1, count do
     planFns[i] = functions[i]
@@ -1354,18 +1406,20 @@ local function NewRuntimeSequencePlan(functions, labels, count)
     functions = planFns,
     labels = planLabels,
     count = count,
-    path = CompileRuntimePath(planFns, count),
+    path = identity == true
+      and CompileIdentityRuntimePath(planFns, planLabels, count)
+      or CompileRuntimePath(planFns, count),
   }
 end
 
-local function InternRuntimeSequencePlan(functions, labels, count)
+local function InternRuntimeSequencePlan(functions, labels, count, identity)
   if count <= 0 then return EMPTY_RUNTIME_SEQUENCE_PLAN end
 
   local node = runtimeSequencePlanIntern
   for i = 1, count do
     local update = functions[i]
     if not IsRegisteredElementFunction(update) then
-      return NewRuntimeSequencePlan(functions, labels, count)
+      return NewRuntimeSequencePlan(functions, labels, count, identity)
     end
     local byLabel = node[update]
     if not byLabel then byLabel = {}; node[update] = byLabel end
@@ -1375,14 +1429,15 @@ local function InternRuntimeSequencePlan(functions, labels, count)
     node = nextNode
   end
 
-  local plan = node.plan
+  local planKey = identity == true and "identityPlan" or "plan"
+  local plan = node[planKey]
   if plan then return plan end
-  plan = NewRuntimeSequencePlan(functions, labels, count)
-  node.plan = plan
+  plan = NewRuntimeSequencePlan(functions, labels, count, identity)
+  node[planKey] = plan
   return plan
 end
 
-local function BuildRuntimeSequencePlan(frame, include)
+local function BuildRuntimeSequencePlan(frame, include, identity)
   local functions = runtimeSequenceBuildFns
   local labels = runtimeSequenceBuildLabels
   local active = frame and frame._msufActiveElements
@@ -1401,7 +1456,7 @@ local function BuildRuntimeSequencePlan(frame, include)
     end
   end
 
-  local plan = InternRuntimeSequencePlan(functions, labels, count)
+  local plan = InternRuntimeSequencePlan(functions, labels, count, identity)
   for i = 1, count do
     functions[i] = nil
     labels[i] = nil
@@ -1436,16 +1491,20 @@ local function CompileIdentityBarPath(frame)
     if path then return path end
   end
 
-  local path
-  if health and power then
-    path = function(self, event, unit)
-      health(self, event, unit)
-      power(self, event, unit)
+  -- Always wrap, including health-only and power-only plans, so every
+  -- archetype returns the same fixed tuple:
+  -- hp, hpMax, healthPercentReady, power, powerMax, type, token, metaChanged.
+  local path = function(self, event, unit)
+    local hp, hpMax, healthPercentReady
+    if health then
+      hp, hpMax, healthPercentReady = health(self, event, unit)
     end
-  elseif health then
-    path = health
-  else
-    path = power
+    local powerValue, powerMax, powerType, powerToken, powerMetaChanged
+    if power then
+      powerValue, powerMax, powerType, powerToken, powerMetaChanged = power(self, event, unit)
+    end
+    return hp, hpMax, healthPercentReady,
+      powerValue, powerMax, powerType, powerToken, powerMetaChanged
   end
   if shared then byPower[key] = path end
   return path
@@ -1453,7 +1512,7 @@ end
 
 function UF.RebuildRuntimeStatusState(frame)
   if not frame then return false end
-  local identityPlan = BuildRuntimeSequencePlan(frame, IDENTITY_ELEMENTS)
+  local identityPlan = BuildRuntimeSequencePlan(frame, IDENTITY_ELEMENTS, true)
   AssignRuntimeSequencePlan(frame, identityPlan,
     "_msufIdentityFns", "_msufIdentityCount", "_msufIdentityLabels", "_msufIdentityPath")
   local runtimePlan = BuildRuntimeSequencePlan(frame, BASIC_ELEMENTS)
@@ -1676,8 +1735,17 @@ function UF.RunLeanIdentity(frame, event)
   if not IdentityUnitExists(frame, unit) then return false end
   BeginFrameEvent(frame)
   event = event or "MSUF_UNIT_IDENTITY"
-  if barPath then barPath(frame, event, unit) end
-  if path then path(frame, event, unit) end
+  local hp, hpMax, healthPercentReady
+  local power, powerMax, powerType, powerToken, powerMetaChanged
+  if barPath then
+    hp, hpMax, healthPercentReady,
+      power, powerMax, powerType, powerToken, powerMetaChanged = barPath(frame, event, unit)
+  end
+  if path then
+    path(frame, event, unit,
+      hp, hpMax, healthPercentReady,
+      power, powerMax, powerType, powerToken, powerMetaChanged)
+  end
   EndFrameEvent(frame)
   return true
 end

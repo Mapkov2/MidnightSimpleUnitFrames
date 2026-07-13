@@ -34,6 +34,7 @@ local selectionFS, hintFS
 local hudStatusText, hudStatusKind, hudStatusUntil
 local selectionLastText, hintLastText, hintLastR, hintLastG, hintLastB, hintLastA
 local helpBtn, tutorialPanel, tourState
+local guidedTourBridgeRequested = false
 local bgWidget, gridWidget
 local HelpText
 
@@ -556,448 +557,114 @@ do
     end
 end
 
---- Tutorial / Help Reference Panel (lazy init)
-local HELP_SECTIONS = {
-    { title = "Drag & Move",        body = "EM_HELP_DRAG" },
-    { title = "Click Popup",        body = "EM_HELP_POPUP" },
-    { title = "Arrow Key Nudge",    body = "EM_HELP_NUDGE" },
-    { title = "Grid & Snap",        body = "EM_HELP_SNAP" },
-    { title = "Background Opacity", body = "EM_HELP_OPACITY" },
-    { title = "Preview & Auras",    body = "EM_HELP_PREVIEW" },
-    { title = "CDM & Anchor",       body = "EM_HELP_CDM" },
-    { title = "Copy Settings",      body = "EM_HELP_COPYTO" },
-    { title = "Undo / Cancel All",  body = "EM_HELP_UNDO" },
-    { title = "Exit Edit Mode",     body = "EM_HELP_EXIT" },
-}
+--- The full guided tour now lives inside the native MSUF menu.  Keep this
+--- bridge late-bound because Menu2 can be installed after the Edit Mode HUD.
+local function ResolveMenu2()
+    local menu = type(MSUF) == "table" and MSUF.MSUF2 or nil
+    if type(menu) ~= "table" then menu = _G.MSUF2 end
+    return type(menu) == "table" and menu or nil
+end
 
-local PANEL_W     = 340
-local PANEL_PAD   = 16
-local SEC_GAP     = 6
-local TITLE_SZ    = 12
-local BODY_SZ     = 11
-local BODY_W      = PANEL_W - PANEL_PAD * 2
-local HEADER_H    = 36
-local CLOSE_SZ    = 20
+local function HideLegacyFrame(frame)
+    if frame and type(frame.Hide) == "function" then frame:Hide() end
+end
 
-local function EnsureTutorialPanel()
-    if tutorialPanel then return tutorialPanel end
-    RefreshHUDTheme()
-
-    local p = CreateFrame("Frame", "MSUF_EM2_TutorialPanel", UIParent, "BackdropTemplate")
-    p:SetFrameStrata("TOOLTIP"); p:SetFrameLevel(950)
-    p:SetWidth(PANEL_W)
-    p:SetPoint("CENTER", UIParent, "CENTER", 0, 40)
-    p:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1,
-                    insets = { left = 1, right = 1, top = 1, bottom = 1 } })
-    p:SetBackdropColor(TH.r1Bg[1], TH.r1Bg[2], TH.r1Bg[3], TH.r1Bg[4] or 0.97)
-    p:SetBackdropBorderColor(TH.edge[1], TH.edge[2], TH.edge[3], 0.90)
-    ApplyHUDMaterial(p, "popup")
-    p:EnableMouse(true); p:Hide()
-
-    p:EnableKeyboard(true)
-    p:SetScript("OnKeyDown", function(self, k)
-        if k == "ESCAPE" then
-            self:SetPropagateKeyboardInput(false); self:Hide()
-        else
-            self:SetPropagateKeyboardInput(true)
+local function CleanupLegacyTourFrames()
+    local ts = tourState
+    if type(ts) == "table" then
+        if type(ts.masks) == "table" then
+            for i = 1, #ts.masks do HideLegacyFrame(ts.masks[i]) end
         end
-    end)
-    p:HookScript("OnHide", function(self)
-        if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
-    end)
+        HideLegacyFrame(ts.ring)
+        HideLegacyFrame(ts.card)
+        ts.step = 0
+    end
+    HideLegacyFrame(tutorialPanel)
+    HideLegacyFrame(_G.MSUF_EM2_TutorialPanel)
+    HideLegacyFrame(_G.MSUF_EM2_TourCard)
+end
 
-    local hdr = MakeFS(p, 13, TH.textR, TH.textG, TH.textB, 1)
-    hdr:SetPoint("TOPLEFT", p, "TOPLEFT", PANEL_PAD, -12)
-    hdr:SetText(HelpText("EM_HELP_TITLE"))
+local function OpenMenuGuidedTourAtEditMode()
+    CleanupLegacyTourFrames()
+    guidedTourBridgeRequested = false
 
-    local closeBtn = CreateFrame("Button", nil, p)
-    closeBtn:SetSize(CLOSE_SZ, CLOSE_SZ)
-    closeBtn:SetPoint("TOPRIGHT", p, "TOPRIGHT", -8, -8)
-    local closeFS = MakeFS(closeBtn, 14, TH.mutedR, TH.mutedG, TH.mutedB, 0.70)
-    closeFS:SetPoint("CENTER"); closeFS:SetText("x")
-    closeBtn:SetScript("OnEnter", function() closeFS:SetTextColor(1, 1, 1, 1) end)
-    closeBtn:SetScript("OnLeave", function() closeFS:SetTextColor(TH.mutedR, TH.mutedG, TH.mutedB, 0.70) end)
-    closeBtn:SetScript("OnClick", function() p:Hide() end)
+    local menu = ResolveMenu2()
+    local menuOpened = false
+    if menu and type(menu.Open) == "function" then
+        local ok, result = pcall(menu.Open)
+        menuOpened = ok and result ~= false
+    elseif type(_G.MSUF2_Open) == "function" then
+        local ok, result = pcall(_G.MSUF2_Open)
+        menuOpened = ok and result ~= false
+    end
 
-    local y = -(HEADER_H)
-
-    for i, sec in ipairs(HELP_SECTIONS) do
-        if i > 1 then
-            local div = p:CreateTexture(nil, "ARTWORK")
-            div:SetSize(BODY_W, 1)
-            div:SetPoint("TOPLEFT", p, "TOPLEFT", PANEL_PAD, y - SEC_GAP * 0.5)
-            div:SetColorTexture(TH.edge[1], TH.edge[2], TH.edge[3], 0.25)
-            y = y - SEC_GAP
+    -- Resolve again after opening: lazy menu installation may have populated
+    -- MSUF.MSUF2 during the call above.
+    menu = ResolveMenu2()
+    local openStage = menu and menu.OpenGuidedTourAtStage
+    if type(openStage) == "function" then
+        local ok, result = pcall(openStage, "edit_mode")
+        if ok and result ~= false then
+            guidedTourBridgeRequested = true
+            return true
         end
-
-        local tFS = MakeFS(p, TITLE_SZ, TH.onR, TH.onG, TH.onB, 1.00)
-        tFS:SetPoint("TOPLEFT", p, "TOPLEFT", PANEL_PAD, y)
-        tFS:SetText(HelpText(sec.title))
-
-        y = y - (TITLE_SZ + 4)
-
-        local bFS = MakeFS(p, BODY_SZ, TH.textR, TH.textG, TH.textB, 0.90)
-        bFS:SetPoint("TOPLEFT", p, "TOPLEFT", PANEL_PAD, y)
-        bFS:SetWidth(BODY_W); bFS:SetWordWrap(true); bFS:SetJustifyH("LEFT")
-        bFS:SetText(HelpText(sec.body))
-
-        local bH = bFS:GetStringHeight() or 14
-        y = y - bH - SEC_GAP
     end
-
-    y = y - 4
-    local tourBtn = CreateFrame("Button", nil, p, "BackdropTemplate")
-    tourBtn:SetSize(BODY_W, 28)
-    tourBtn:SetPoint("TOPLEFT", p, "TOPLEFT", PANEL_PAD, y)
-    tourBtn:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1,
-                          insets = { left = 1, right = 1, top = 1, bottom = 1 } })
-    tourBtn:SetBackdropColor(TH.onR * 0.25, TH.onG * 0.25, TH.onB * 0.25, 0.90)
-    tourBtn:SetBackdropBorderColor(TH.onR, TH.onG, TH.onB, 0.50)
-    local tbHL = tourBtn:CreateTexture(nil, "HIGHLIGHT")
-    tbHL:SetAllPoints(); tbHL:SetColorTexture(TH.onR, TH.onG, TH.onB, 0.10)
-    local tbFS = MakeFS(tourBtn, 12, TH.onR, TH.onG, TH.onB, 1)
-    tbFS:SetPoint("CENTER"); tbFS:SetText(HelpText("EM_TOUR_START"))
-    tourBtn:SetScript("OnClick", function()
-        p:Hide()
-        HUD.StartTour()
-    end)
-
-    y = y - 28 - 4
-    p:SetHeight(-y + PANEL_PAD * 0.5)
-
-    tutorialPanel = p
-    return p
+    return menuOpened
 end
 
---- Phase 2: Guided Tour ? spotlight mask + step cards
-local MASK_ALPHA = 0.65
-local CARD_W     = 300
-local CARD_PAD   = 14
-local SPOT_PAD   = 6
-
-local function GetTourSteps()
-    return {
-        {
-            title  = HelpText("Drag & Move"),
-            body   = HelpText("EM_HELP_DRAG"),
-            anchor = "CENTER",
-        },
-        {
-            target = function() return previewBtn end,
-            title  = HelpText("Preview & Auras"),
-            body   = HelpText("EM_HELP_PREVIEW"),
-            anchor = "BOTTOM",
-        },
-        {
-            title  = HelpText("Click Popup"),
-            body   = HelpText("EM_HELP_POPUP"),
-            anchor = "CENTER",
-        },
-        {
-            title  = HelpText("Arrow Key Nudge"),
-            body   = HelpText("EM_HELP_NUDGE"),
-            anchor = "CENTER",
-        },
-        {
-            target = function() return snapToggle end,
-            title  = HelpText("Grid & Snap"),
-            body   = HelpText("EM_HELP_SNAP"),
-            anchor = "BOTTOM",
-        },
-        {
-            target = function() return bgWidget end,
-            title  = HelpText("Background Opacity"),
-            body   = HelpText("EM_HELP_OPACITY"),
-            anchor = "BOTTOM",
-        },
-        {
-            target = function() return cdmBtn end,
-            title  = HelpText("CDM & Anchor"),
-            body   = HelpText("EM_HELP_CDM"),
-            anchor = "BOTTOM",
-        },
-        {
-            title  = HelpText("Copy Settings"),
-            body   = HelpText("EM_HELP_COPYTO"),
-            anchor = "CENTER",
-        },
-        {
-            target = function() return undoBtn end,
-            title  = HelpText("Undo / Cancel All"),
-            body   = HelpText("EM_HELP_UNDO"),
-            anchor = "BOTTOM",
-        },
-        {
-            target = function() return exitBtn end,
-            title  = HelpText("Exit Edit Mode"),
-            body   = HelpText("EM_HELP_EXIT"),
-            anchor = "BOTTOM",
-        },
-    }
-end
-
-local function EnsureTourFrames()
-    if tourState then return tourState end
-    RefreshHUDTheme()
-
-    local ts = {}
-    tourState = ts
-    ts.step = 0
-
-    ts.masks = {}
-    for i = 1, 4 do
-        local m = CreateFrame("Frame", nil, UIParent)
-        m:SetFrameStrata("TOOLTIP"); m:SetFrameLevel(940)
-        local tex = m:CreateTexture(nil, "BACKGROUND")
-        tex:SetAllPoints(); tex:SetColorTexture(0, 0, 0, MASK_ALPHA)
-        m:EnableMouse(true); m:Hide()
-        ts.masks[i] = m
-    end
-
-    ts.ring = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
-    ts.ring:SetFrameStrata("TOOLTIP"); ts.ring:SetFrameLevel(941)
-    ts.ring:SetBackdrop({ edgeFile = W8, edgeSize = 2 })
-    ts.ring:SetBackdropBorderColor(TH.onR, TH.onG, TH.onB, 0.85)
-    ts.ring:Hide()
-
-    ts.card = CreateFrame("Frame", "MSUF_EM2_TourCard", UIParent, "BackdropTemplate")
-    ts.card:SetFrameStrata("TOOLTIP"); ts.card:SetFrameLevel(945)
-    ts.card:SetWidth(CARD_W)
-    ts.card:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1,
-                          insets = { left = 1, right = 1, top = 1, bottom = 1 } })
-    ts.card:SetBackdropColor(TH.r1Bg[1], TH.r1Bg[2], TH.r1Bg[3], TH.r1Bg[4] or 0.97)
-    ts.card:SetBackdropBorderColor(TH.onR, TH.onG, TH.onB, 0.70)
-    ApplyHUDMaterial(ts.card, "popup")
-    ts.card:SetBackdropBorderColor(TH.onR, TH.onG, TH.onB, 0.70)
-    ts.card:EnableMouse(true); ts.card:Hide()
-
-    ts.card:EnableKeyboard(true)
-    ts.card:SetScript("OnKeyDown", function(self, k)
-        if k == "ESCAPE" then
-            self:SetPropagateKeyboardInput(false); HUD.StopTour()
-        else
-            self:SetPropagateKeyboardInput(true)
-        end
-    end)
-    ts.card:HookScript("OnHide", function(self)
-        if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
-    end)
-
-    ts.stepFS = MakeFS(ts.card, 10, TH.mutedR, TH.mutedG, TH.mutedB, 0.70)
-    ts.stepFS:SetPoint("TOPRIGHT", ts.card, "TOPRIGHT", -CARD_PAD, -10)
-
-    ts.titleFS = MakeFS(ts.card, 13, TH.onR, TH.onG, TH.onB, 1.00)
-    ts.titleFS:SetPoint("TOPLEFT", ts.card, "TOPLEFT", CARD_PAD, -10)
-
-    ts.bodyFS = MakeFS(ts.card, 11, TH.textR, TH.textG, TH.textB, 0.90)
-    ts.bodyFS:SetPoint("TOPLEFT", ts.card, "TOPLEFT", CARD_PAD, -28)
-    ts.bodyFS:SetWidth(CARD_W - CARD_PAD * 2)
-    ts.bodyFS:SetWordWrap(true); ts.bodyFS:SetJustifyH("LEFT")
-
-    local NAV_H = 26
-    local NAV_W = 68
-
-    local function NavBtn(text)
-        local b = CreateFrame("Button", nil, ts.card, "BackdropTemplate")
-        b:SetSize(NAV_W, NAV_H)
-        b:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1,
-                        insets = { left = 1, right = 1, top = 1, bottom = 1 } })
-        b:SetBackdropColor(TH.r2Bg[1], TH.r2Bg[2], TH.r2Bg[3], TH.r2Bg[4] or 0.90)
-        b:SetBackdropBorderColor(TH.edge[1], TH.edge[2], TH.edge[3], 0.65)
-        local hl = b:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.06)
-        b._fs = MakeFS(b, 11, TH.textR, TH.textG, TH.textB, 1)
-        b._fs:SetPoint("CENTER"); b._fs:SetText(text)
-        return b
-    end
-
-    ts.skipBtn = NavBtn(HelpText("EM_TOUR_SKIP"))
-    ts.skipBtn:SetScript("OnClick", function() HUD.StopTour() end)
-
-    ts.backBtn = NavBtn(HelpText("EM_TOUR_BACK"))
-    ts.backBtn:SetScript("OnClick", function() HUD.TourStep(ts.step - 1) end)
-
-    ts.nextBtn = NavBtn(HelpText("EM_TOUR_NEXT"))
-    ts.nextBtn:SetScript("OnClick", function()
-        local steps = GetTourSteps()
-        if ts.step >= #steps then
-            HUD.StopTour()
-        else
-            HUD.TourStep(ts.step + 1)
-        end
-    end)
-
-    return ts
-end
-
-local function PositionMask(ts, tgt)
-    local uiW, uiH = UIParent:GetWidth(), UIParent:GetHeight()
-    local m1, m2, m3, m4 = ts.masks[1], ts.masks[2], ts.masks[3], ts.masks[4]
-
-    if not tgt then
-        m1:ClearAllPoints(); m1:SetAllPoints(UIParent); m1:Show()
-        m2:Hide(); m3:Hide(); m4:Hide()
-        ts.ring:Hide()
-        return
-    end
-
-    local sl = tgt:GetLeft() or 0
-    local sr = tgt:GetRight() or 0
-    local st = tgt:GetTop() or 0
-    local sb = tgt:GetBottom() or 0
-    local ratio = tgt:GetEffectiveScale() / UIParent:GetEffectiveScale()
-    sl = sl * ratio - SPOT_PAD
-    sr = sr * ratio + SPOT_PAD
-    st = st * ratio + SPOT_PAD
-    sb = sb * ratio - SPOT_PAD
-
-    m1:ClearAllPoints()
-    m1:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 0, 0)
-    m1:SetPoint("BOTTOMRIGHT", UIParent, "TOPLEFT", uiW, -(uiH - st))
-    m1:Show()
-
-    m2:ClearAllPoints()
-    m2:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 0, -(uiH - sb))
-    m2:SetPoint("BOTTOMRIGHT", UIParent, "BOTTOMRIGHT", 0, 0)
-    m2:Show()
-
-    m3:ClearAllPoints()
-    m3:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 0, -(uiH - st))
-    m3:SetPoint("BOTTOMRIGHT", UIParent, "TOPLEFT", sl, -(uiH - sb))
-    m3:Show()
-
-    m4:ClearAllPoints()
-    m4:SetPoint("TOPLEFT", UIParent, "TOPLEFT", sr, -(uiH - st))
-    m4:SetPoint("BOTTOMRIGHT", UIParent, "TOPLEFT", uiW, -(uiH - sb))
-    m4:Show()
-
-    ts.ring:ClearAllPoints()
-    ts.ring:SetPoint("TOPLEFT", UIParent, "TOPLEFT", sl, -(uiH - st))
-    ts.ring:SetPoint("BOTTOMRIGHT", UIParent, "TOPLEFT", sr, -(uiH - sb))
-    ts.ring:Show()
-end
-
-local function PositionCard(ts, tgt, anchorHint)
-    local card = ts.card
-    card:ClearAllPoints()
-
-    if not tgt or anchorHint == "CENTER" then
-        card:SetPoint("CENTER", UIParent, "CENTER", 0, -20)
-        return
-    end
-
-    local ratio = tgt:GetEffectiveScale() / UIParent:GetEffectiveScale()
-    local uiH = UIParent:GetHeight()
-    local t = (tgt:GetTop() or 0) * ratio
-    local b = (tgt:GetBottom() or 0) * ratio
-    local cx = ((tgt:GetLeft() or 0) + (tgt:GetRight() or 0)) * 0.5 * ratio
-
-    if (uiH - t) < uiH * 0.3 then
-        card:SetPoint("TOP", UIParent, "TOPLEFT", cx, -(uiH - b) - 14)
-    else
-        card:SetPoint("BOTTOM", UIParent, "TOPLEFT", cx, (uiH - t) + 14)
-    end
-end
+--- The former floating Help reference panel has intentionally been removed.
+--- Help now enters the complete, menu-native guided tour above.
 
 function HUD.TourStep(idx)
-    local ts = EnsureTourFrames()
-    local steps = GetTourSteps()
-    if idx < 1 then idx = 1 end
-    if idx > #steps then idx = #steps end
-    ts.step = idx
-
-    local s = steps[idx]
-    local tgt = s.target and s.target() or nil
-
-    PositionMask(ts, tgt)
-    PositionCard(ts, tgt, s.anchor)
-
-    ts.titleFS:SetText(s.title)
-    ts.bodyFS:SetText(s.body)
-    ts.stepFS:SetText(HelpText("EM_TOUR_STEP"):format(idx, #steps))
-
-    local bH = ts.bodyFS:GetStringHeight() or 14
-    ts.card:SetHeight(28 + bH + 12 + 26 + 12)
-
-    ts.skipBtn:ClearAllPoints()
-    ts.skipBtn:SetPoint("BOTTOMLEFT", ts.card, "BOTTOMLEFT", CARD_PAD, 10)
-
-    ts.backBtn:ClearAllPoints()
-    ts.nextBtn:ClearAllPoints()
-    ts.nextBtn:SetPoint("BOTTOMRIGHT", ts.card, "BOTTOMRIGHT", -CARD_PAD, 10)
-    ts.backBtn:SetPoint("RIGHT", ts.nextBtn, "LEFT", -6, 0)
-
-    if idx <= 1 then ts.backBtn:Hide() else ts.backBtn:Show() end
-
-    local isLast = idx >= #steps
-    ts.nextBtn._fs:SetText(isLast and HelpText("EM_TOUR_DONE") or HelpText("EM_TOUR_NEXT"))
-    if isLast then
-        ts.nextBtn._fs:SetTextColor(TH.onR, TH.onG, TH.onB, 1)
-    else
-        ts.nextBtn._fs:SetTextColor(TH.textR, TH.textG, TH.textB, 1)
-    end
-
-    ts.card:Show()
+    -- Legacy callers may still supply an overlay step number.  The menu tour
+    -- owns its own progress and maps this entry to its Edit Mode stage.
+    return OpenMenuGuidedTourAtEditMode()
 end
 
 function HUD.StartTour()
-    local ts = EnsureTourFrames()
-    for i = 1, 4 do ts.masks[i]:Show() end
-    HUD.TourStep(1)
+    return OpenMenuGuidedTourAtEditMode()
 end
 
 function HUD.StopTour()
-    if not tourState then return end
-    for i = 1, 4 do tourState.masks[i]:Hide() end
-    tourState.ring:Hide()
-    tourState.card:Hide()
-    tourState.step = 0
+    CleanupLegacyTourFrames()
+    guidedTourBridgeRequested = false
+    return true
 end
 
 -- Readable lifecycle helpers for non-visual controllers (for example the
 -- load-on-demand Assistant).  Keep these on the existing HUD owner so callers
 -- never need to retain HUD frames or reproduce button click side effects.
 function HUD.IsHelpShown()
-    return tutorialPanel and tutorialPanel.IsShown and tutorialPanel:IsShown() or false
+    return guidedTourBridgeRequested
 end
 
 function HUD.SetHelpShown(shown)
     shown = shown == true
     if shown then
-        local panel = EnsureTutorialPanel()
-        if not panel then return false end
-        panel:Show()
-    elseif tutorialPanel then
-        tutorialPanel:Hide()
+        return OpenMenuGuidedTourAtEditMode()
     end
-    return HUD.IsHelpShown() == shown
+    HUD.StopTour()
+    return true
 end
 
 function HUD.IsTourActive()
-    return tourState and (tonumber(tourState.step) or 0) > 0
-        and tourState.card and tourState.card.IsShown and tourState.card:IsShown() or false
+    return guidedTourBridgeRequested
 end
 
 function HUD.GetTourStep()
-    return HUD.IsTourActive() and (tonumber(tourState.step) or 1) or 0
+    return HUD.IsTourActive() and 1 or 0
 end
 
 function HUD.SetTourActive(active)
     if active == true then
-        if not HUD.IsTourActive() then HUD.StartTour() end
-    else
-        HUD.StopTour()
+        return HUD.StartTour()
     end
-    return HUD.IsTourActive() == (active == true)
+    HUD.StopTour()
+    return true
 end
 
 function HUD.SetTourStep(step)
-    step = floor(tonumber(step) or 1)
-    local count = #GetTourSteps()
-    if step < 1 then step = 1 end
-    if step > count then step = count end
-    if not HUD.IsTourActive() then HUD.StartTour() end
-    HUD.TourStep(step)
-    return HUD.GetTourStep() == step
+    return OpenMenuGuidedTourAtEditMode()
 end
 
 local function EnsureHUD()
@@ -1052,8 +719,7 @@ local function EnsureHUD()
         helpBtn._pulse = pulse
     end
     helpBtn:SetScript("OnClick", function()
-        local panel = EnsureTutorialPanel()
-        if panel:IsShown() then panel:Hide() else panel:Show() end
+        HUD.StartTour()
     end)
     helpBtn:SetScript("OnEnter", function(self)
         if self._pulse then self._pulse:Stop() end
@@ -1401,20 +1067,6 @@ function HUD.Show()
     EnsureHUD(); HUD.RefreshControls(true)
     hudFrame:Show(); if row2Frame then row2Frame:Show() end
     if helpBtn and helpBtn._pulse then helpBtn._pulse:Play() end
-
-    local db = _G.MSUF_DB
-    if db then
-        db.general = db.general or {}
-        if not db.general.emTutorialSeen then
-            db.general.emTutorialSeen = true
-            C_Timer.After(0.3, function()
-                if HUD.IsShown() then
-                    local panel = EnsureTutorialPanel()
-                    if panel and not panel:IsShown() then panel:Show() end
-                end
-            end)
-        end
-    end
 end
 
 function HUD.Hide()

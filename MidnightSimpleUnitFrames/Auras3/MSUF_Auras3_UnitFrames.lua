@@ -2345,7 +2345,10 @@ local function LayoutVerticalAuraContainer(container, lane)
     -- The AuraGroup is stable for the container lifetime; framesByIndex is not
     -- and must be read after every Blizzard assignment/reorder.
     local frames = group and group:GetFramesByIndex() or nil
-    if type(frames) ~= "table" then return false end
+    if type(frames) ~= "table" then
+        container:SetSize(lane.width or lane.size or 1, lane.height or lane.size or 1)
+        return false
+    end
     local count = #frames
     local perColumn = math_max(lane.perRow or 1, 1)
     local step = lane.step or lane.size or 1
@@ -2364,14 +2367,10 @@ local function LayoutVerticalAuraContainer(container, lane)
                 math_floor(n / perColumn) * stepX, (n % perColumn) * stepY)
         end
     end
-    local rows = math_min(count, perColumn)
-    local cols = count > 0 and math_floor((count + perColumn - 1) / perColumn) or 1
-    local size = lane.size or 1
-    local spacing = lane.spacing or 0
-    container:SetSize(
-        math_max(1, cols * size + math_max(cols - 1, 0) * spacing),
-        math_max(1, rows * size + math_max(rows - 1, 0) * spacing)
-    )
+    -- The configured lane rectangle is the preview/live geometry contract.
+    -- Do not let the current visible aura count shrink the container because a
+    -- TOP/RIGHT/BOTTOM anchor would then move the active buttons around.
+    container:SetSize(lane.width or lane.size or 1, lane.height or lane.size or 1)
     return count > 0
 end
 
@@ -2381,18 +2380,30 @@ local function ApplyVerticalAwareAuraLayout(container)
         return LayoutVerticalAuraContainer(container, lane)
     end
     local original = container and container._msufA3OriginalVerticalApplyLayout
-    if type(original) == "function" then return original(container) end
+    if type(original) == "function" then
+        local result = original(container)
+        -- Blizzard's flow layout sizes the container to the currently visible
+        -- frames. Restore the full compiled lane rectangle after every native
+        -- layout so live anchors keep the same stable origin as the preview.
+        if lane then
+            container:SetSize(lane.width or lane.size or 1, lane.height or lane.size or 1)
+        end
+        return result
+    end
 end
 
 local function InstallVerticalAuraLayoutFallback(container)
+    -- Historical field/function names are retained for compatibility; the
+    -- wrapper now also stabilizes horizontal native-flow container bounds.
     if not container or container._msufA3VerticalLayoutInstalled == true then return end
     container._msufA3VerticalLayoutInstalled = true
     container._msufA3OriginalVerticalApplyLayout = container.ApplyLayout
     container.ApplyLayout = ApplyVerticalAwareAuraLayout
 end
 
-local function SyncContainerGeometry(container, lane, parentFrame)
+local function SyncContainerGeometry(container, lane, parentFrame, forceGeometry)
     if not (container and lane) then return false end
+    forceGeometry = forceGeometry == true or container._msufA3ForceManagedAuraGeometry == true
     parentFrame = parentFrame or container._msufA3ParentFrame or container:GetParent()
     container._msufA3NativeLaneConfig = lane
     container._msufA3ParentFrame = parentFrame
@@ -2408,7 +2419,8 @@ local function SyncContainerGeometry(container, lane, parentFrame)
     -- changed icon count or filter alters the tracking signature instead, which
     -- recreates the container, so a stale skip here is not possible.
     local sig = lane._msufA3LayoutSignature
-    if sig ~= nil and container._msufA3GeomSig == sig and container._msufA3GeomParent == parentFrame then
+    if forceGeometry ~= true
+        and sig ~= nil and container._msufA3GeomSig == sig and container._msufA3GeomParent == parentFrame then
         local cachedButtonStrata = container._msufA3ButtonFrameStrata
         if resolvedStrata and (issecretvalue(cachedButtonStrata) == true or cachedButtonStrata ~= resolvedStrata) then
             container._msufA3ButtonFrameStrata = resolvedStrata
@@ -2429,12 +2441,10 @@ local function SyncContainerGeometry(container, lane, parentFrame)
     container:SetAuraLayoutAnchorPoint(initialAnchor)
     container:SetAuraLayoutGrowthDirection(lane.xSign or 1, lane.ySign or -1)
     container:SetAuraLayoutRowWidth(lane.width or lane.size or 1)
-    if lane.verticalGrowth == true then
-        -- Native flow is row-major only. UP/DOWN lanes need a column-major
-        -- placement pass, installed once and delegated back to native layout if
-        -- the same container later switches to a horizontal growth mode.
-        InstallVerticalAuraLayoutFallback(container)
-    end
+    -- Native flow is row-major only. UP/DOWN lanes need a column-major
+    -- placement pass; horizontal lanes still delegate to Blizzard and then
+    -- restore the full compiled rectangle that native flow would shrink.
+    InstallVerticalAuraLayoutFallback(container)
     container.createdButtons = lane.max
     container:SetSize(lane.width, lane.height)
     if parentFrame then
@@ -2451,6 +2461,7 @@ local function SyncContainerGeometry(container, lane, parentFrame)
         end
     end
     container._msufA3ButtonFrameStrata = resolvedStrata
+    if forceGeometry == true then container._msufA3ForceManagedAuraGeometry = nil end
     return true
 end
 
@@ -2951,14 +2962,16 @@ local function AddDispelSensorSlots(container, sensor, parentFrame, firstButtonI
     return buttonIndex
 end
 
-local function SyncDispelSensorRootGeometry(container, sensorRoot, parentFrame)
+local function SyncDispelSensorRootGeometry(container, sensorRoot, parentFrame, forceGeometry)
     if not (container and sensorRoot and sensorRoot.sensorRoot == true) then return false end
+    forceGeometry = forceGeometry == true or container._msufA3ForceManagedAuraGeometry == true
     parentFrame = parentFrame or container._msufA3ParentFrame or container:GetParent()
     if not parentFrame then return false end
     container._msufA3NativeLaneConfig = sensorRoot
     container._msufA3ParentFrame = parentFrame
     local sig = sensorRoot._msufA3LayoutSignature
-    if sig ~= nil
+    if forceGeometry ~= true
+        and sig ~= nil
         and container._msufA3GeomSig == sig
         and container._msufA3GeomParent == parentFrame
     then
@@ -2980,6 +2993,7 @@ local function SyncDispelSensorRootGeometry(container, sensorRoot, parentFrame)
             end
         end
     end
+    if forceGeometry == true then container._msufA3ForceManagedAuraGeometry = nil end
     return true
 end
 
@@ -3032,15 +3046,17 @@ local function UpdateDispelSensorRootSlots(container, sensorRoot)
     return true
 end
 
-SyncDispelSensorGeometry = function(container, sensor, parentFrame)
+SyncDispelSensorGeometry = function(container, sensor, parentFrame, forceGeometry)
     if not (container and sensor) then return false end
+    forceGeometry = forceGeometry == true or container._msufA3ForceManagedAuraGeometry == true
     parentFrame = parentFrame or container._msufA3ParentFrame or container:GetParent()
     if not parentFrame then return false end
     container._msufA3NativeLaneConfig = sensor
     container._msufA3ParentFrame = parentFrame
     local target = DispelSensorTarget(parentFrame, sensor)
     local sig = sensor._msufA3LayoutSignature or SensorLayoutSignature(sensor)
-    if sig ~= nil
+    if forceGeometry ~= true
+        and sig ~= nil
         and container._msufA3GeomSig == sig
         and container._msufA3GeomParent == parentFrame
         and container._msufA3GeomTarget == target
@@ -3058,6 +3074,7 @@ SyncDispelSensorGeometry = function(container, sensor, parentFrame)
     for i = 1, (container.createdButtons or sensor.max or 0) do
         PrepareDispelSensorButton(container[i], sensor, parentFrame, i)
     end
+    if forceGeometry == true then container._msufA3ForceManagedAuraGeometry = nil end
     return true
 end
 
@@ -3083,6 +3100,46 @@ local function CreateNativeDispelSensorRoot(root, sensorRoot, parentFrame)
     return CreateManagedDispelSensorRoot(container, sensorRoot, parentFrame)
 end
 
+-- World transitions are the only path that deliberately distrusts cached
+-- desired geometry. Keep the dispatch here so every managed Auras3 container
+-- gets one cache-bypassing repair without adding live GetPoint work to normal
+-- UNIT_AURA updates.
+A3._ManagedAuraContainerSupportsGeometryRepair = function(container)
+    if not container then return false end
+    if container._msufA3SpellIndicatorRoot == true or container._msufA3SharedAuraGroups == true then
+        return true
+    end
+    return type(container._msufA3NativeLaneConfig) == "table"
+end
+
+A3._SyncManagedAuraContainerGeometry = function(container, forceGeometry)
+    if not A3._ManagedAuraContainerSupportsGeometryRepair(container) then return false end
+    forceGeometry = forceGeometry == true
+        or container._msufA3ForceManagedAuraGeometry == true
+        or container._msufA3ForceSpellIndicatorGeometry == true
+    local lane = container._msufA3NativeLaneConfig
+    local parentFrame = container._msufA3ParentFrame
+    local ok
+    if container._msufA3SharedAuraGroups == true then
+        ok = type(A3._SyncSharedAuraContainerGeometry) == "function"
+            and A3._SyncSharedAuraContainerGeometry(container, container._msufA3SharedLanes, parentFrame, forceGeometry)
+    elseif container._msufA3SpellIndicatorRoot == true then
+        ok = type(SpellIndicatorsRuntime.SyncGeometry) == "function"
+            and SpellIndicatorsRuntime.SyncGeometry(container, lane, parentFrame, forceGeometry)
+    elseif lane and lane.sensorRoot == true then
+        ok = SyncDispelSensorRootGeometry(container, lane, parentFrame, forceGeometry)
+    elseif lane and lane.sensor == true then
+        ok = SyncDispelSensorGeometry(container, lane, parentFrame, forceGeometry)
+    else
+        ok = SyncContainerGeometry(container, lane, parentFrame, forceGeometry)
+    end
+    if ok == true and forceGeometry == true then
+        container._msufA3ForceManagedAuraGeometry = nil
+        container._msufA3ForceSpellIndicatorGeometry = nil
+    end
+    return ok == true
+end
+
 ConfigureContainer = function(container, lane, parentFrame)
     container._msufA3NativeLane = lane.kind
     container._msufA3NativeRegistered = nil
@@ -3099,6 +3156,7 @@ A3._NativeContainerVisible = function(container)
 end
 
 A3._directIdentityRefreshUnits = A3._directIdentityRefreshUnits or {
+    player = true,
     target = true,
     focus = true,
     boss1 = true,
@@ -3110,6 +3168,7 @@ A3._directIdentityRefreshUnits = A3._directIdentityRefreshUnits or {
 
 A3._directIdentityRefreshAllEvents = A3._directIdentityRefreshAllEvents or {
     PLAYER_ENTERING_WORLD = true,
+    ZONE_CHANGED_NEW_AREA = true,
 }
 
 A3._directIdentityRefreshGroupEvents = A3._directIdentityRefreshGroupEvents or {
@@ -3131,27 +3190,51 @@ A3._DirectIdentityRefreshUnitEligible = function(unit)
     return A3._IsGroupUnitToken(unit)
 end
 
-A3._DirectIdentityRefreshUnit = function(unit)
+A3._DirectIdentityRefreshUnit = function(unit, forceSpellIndicatorGeometry)
     local byUnit = A3._directIdentityAuraContainers
     local containers = byUnit and byUnit[unit]
     if not containers then return false end
     local any = false
     for container in pairs(containers) do
+        if container and forceSpellIndicatorGeometry == true
+            and A3._ManagedAuraContainerSupportsGeometryRepair(container) then
+            -- Hidden containers cannot be repaired in this pass. Keep the
+            -- request on the container so its next visible/config sync consumes
+            -- it instead of trusting stale desired-geometry metadata.
+            if container._msufA3SpellIndicatorRoot == true then
+                container._msufA3ForceSpellIndicatorGeometry = true
+            else
+                container._msufA3ForceManagedAuraGeometry = true
+            end
+        end
         if container and A3._NativeContainerVisible(container) and type(container.UpdateAllAuras) == "function" then
             container:UpdateAllAuras()
+            -- A world transition can leave a reused managed container or
+            -- AuraSlot out of sync while its saved-geometry cache looks current.
+            -- Repair that exceptional lifecycle edge once after the native
+            -- refresh; normal aura updates keep the metadata-only fast path.
+            if container._msufA3ForceSpellIndicatorGeometry == true
+                and type(SpellIndicatorsRuntime.SyncGeometry) == "function" then
+                if SpellIndicatorsRuntime.SyncGeometry(container, container._msufA3NativeLaneConfig,
+                    container._msufA3ParentFrame, true) == true then
+                    container._msufA3ForceManagedAuraGeometry = nil
+                end
+            elseif container._msufA3ForceManagedAuraGeometry == true then
+                A3._SyncManagedAuraContainerGeometry(container, true)
+            end
             any = true
         end
     end
     return any
 end
 
-A3._DirectIdentityRefreshAll = function(groupOnly)
+A3._DirectIdentityRefreshAll = function(groupOnly, forceSpellIndicatorGeometry)
     local byUnit = A3._directIdentityAuraContainers
     if not byUnit then return false end
     local any = false
     for unit in pairs(byUnit) do
         if groupOnly ~= true or A3._IsGroupUnitToken(unit) then
-            any = A3._DirectIdentityRefreshUnit(unit) or any
+            any = A3._DirectIdentityRefreshUnit(unit, forceSpellIndicatorGeometry) or any
         end
     end
     return any
@@ -3159,18 +3242,24 @@ end
 
 A3._FlushScheduledDirectIdentityRefreshAll = function()
     local groupOnly = A3._directIdentityRefreshGroupOnly == true
+    local forceSpellIndicatorGeometry = A3._directIdentityRefreshForceSpellIndicatorGeometry == true
     A3._directIdentityRefreshPending = nil
     A3._directIdentityRefreshGroupOnly = nil
-    A3._DirectIdentityRefreshAll(groupOnly)
+    A3._directIdentityRefreshForceSpellIndicatorGeometry = nil
+    A3._DirectIdentityRefreshAll(groupOnly, forceSpellIndicatorGeometry)
 end
 
-A3._ScheduleDirectIdentityRefreshAll = function(groupOnly)
+A3._ScheduleDirectIdentityRefreshAll = function(groupOnly, forceSpellIndicatorGeometry)
     if A3._directIdentityRefreshPending == true then
         if groupOnly ~= true then A3._directIdentityRefreshGroupOnly = nil end
+        if forceSpellIndicatorGeometry == true then
+            A3._directIdentityRefreshForceSpellIndicatorGeometry = true
+        end
         return true
     end
     A3._directIdentityRefreshPending = true
     A3._directIdentityRefreshGroupOnly = groupOnly == true
+    A3._directIdentityRefreshForceSpellIndicatorGeometry = forceSpellIndicatorGeometry == true
     if C_Timer and C_Timer.After then
         C_Timer.After(0, A3._FlushScheduledDirectIdentityRefreshAll)
     else
@@ -3184,7 +3273,7 @@ A3._EnsureDirectIdentityRefreshFrame = function()
     local frame = CreateFrame("Frame")
     frame:SetScript("OnEvent", function(_, event)
         if A3._directIdentityRefreshAllEvents[event] == true then
-            A3._ScheduleDirectIdentityRefreshAll(false)
+            A3._ScheduleDirectIdentityRefreshAll(false, true)
             return
         end
         if A3._directIdentityRefreshGroupEvents[event] == true then
@@ -3202,13 +3291,15 @@ A3._EnsureDirectIdentityRefreshFrame = function()
     frame:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
     frame:RegisterEvent("GROUP_ROSTER_UPDATE")
     frame:RegisterEvent("PLAYER_ENTERING_WORLD")
+    frame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     A3._directIdentityAuraFrame = frame
     return frame
 end
 
 A3._RegisterDirectIdentityRefreshContainer = function(container)
     local unit = container and container.unit
-    if not A3._DirectIdentityRefreshUnitEligible(unit) then
+    if not container or container._msufA3SkipDirectIdentityRefresh == true
+        or not A3._DirectIdentityRefreshUnitEligible(unit) then
         A3._UnregisterDirectIdentityRefreshContainer(container)
         return false
     end
@@ -3515,15 +3606,17 @@ function A3._BuildSharedAuraGroupOptions(container, lane, groupKey)
     }
 end
 
-function A3._SyncSharedAuraContainerGeometry(container, lanes, parentFrame)
+function A3._SyncSharedAuraContainerGeometry(container, lanes, parentFrame, forceGeometry)
     if not (container and lanes) then return false end
+    forceGeometry = forceGeometry == true or container._msufA3ForceManagedAuraGeometry == true
     parentFrame = parentFrame or container._msufA3ParentFrame or container:GetParent()
     if not parentFrame then return false end
     container._msufA3ParentFrame = parentFrame
     container._msufA3SharedLanes = lanes
     SyncFrameStrata(container, ResolveSharedContainerStrata(lanes, parentFrame))
     local sig = A3._SharedAuraContainerLayoutSignature(lanes)
-    if sig ~= nil and container._msufA3GeomSig == sig and container._msufA3GeomParent == parentFrame then
+    if forceGeometry ~= true
+        and sig ~= nil and container._msufA3GeomSig == sig and container._msufA3GeomParent == parentFrame then
         SyncSharedAuraButtonLayering(container)
         return true
     end
@@ -3541,6 +3634,7 @@ function A3._SyncSharedAuraContainerGeometry(container, lanes, parentFrame)
     if container.SetFrameLevel then container:SetFrameLevel(parentFrame:GetFrameLevel() or 0) end
     A3._LayoutSharedAuraGroups(container)
     SyncSharedAuraButtonLayering(container)
+    if forceGeometry == true then container._msufA3ForceManagedAuraGeometry = nil end
     return true
 end
 
@@ -3860,17 +3954,13 @@ end
 
 local function RefreshNativeContainer(container, forceRefresh, lane, parentFrame)
     lane = lane or (container and container._msufA3NativeLaneConfig)
-    if container and container._msufA3SharedAuraGroups == true then
-        A3._SyncSharedAuraContainerGeometry(container, container._msufA3SharedLanes, parentFrame)
-    elseif SpellIndicatorsRuntime.IsRoot and SpellIndicatorsRuntime.SyncGeometry and SpellIndicatorsRuntime.IsRoot(lane) then
-        SpellIndicatorsRuntime.SyncGeometry(container, lane, parentFrame)
-    elseif lane and lane.sensorRoot == true then
-        SyncDispelSensorRootGeometry(container, lane, parentFrame)
-    elseif lane and lane.sensor == true then
-        SyncDispelSensorGeometry(container, lane, parentFrame)
-    else
-        SyncContainerGeometry(container, lane, parentFrame)
+    if container then
+        container._msufA3NativeLaneConfig = lane or container._msufA3NativeLaneConfig
+        container._msufA3ParentFrame = parentFrame or container._msufA3ParentFrame
     end
+    local forceGeometry = container and (container._msufA3ForceManagedAuraGeometry == true
+        or container._msufA3ForceSpellIndicatorGeometry == true)
+    if not A3._SyncManagedAuraContainerGeometry(container, forceGeometry) then return false end
     if not RegisterNativeContainer(container, forceRefresh == true) then return false end
     if not A3._NativeContainerVisible(container) then return true end
     if forceRefresh == true and type(container.UpdateAllAuras) == "function" then
@@ -4053,6 +4143,11 @@ local function CreateClassPowerAuraSensor(parent, key, spellIDs, initializeFrame
 
     local container = CreateNativeAuraContainer(parent)
     if not container then return nil end
+    -- This standalone slot receives its geometry from a caller-owned
+    -- initializeFrame callback. That callback is not guaranteed idempotent, so
+    -- do not include it in Auras3's generic world-repair registry until it has a
+    -- stored geometry descriptor that can be replayed safely.
+    container._msufA3SkipDirectIdentityRefresh = true
     ConfigurePTR4AuraContainer(container, "player")
     container:AddAuraSlot(tostring(key or "msuf_classpower"), "HELPFUL", {
         maxFrameCount = 1,

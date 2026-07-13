@@ -850,11 +850,12 @@ local function SyncMissingFrame(parentFrame, slot, button)
     frame:SetShown(slot.showWhenMissing == true and button == nil)
 end
 
-local function SyncButtonGeometry(button, slot, parentFrame)
+local function SyncButtonGeometry(button, slot, parentFrame, forceGeometry)
     if not (button and slot and parentFrame) then return false end
     local width, height = slot.width or slot.size or 1, slot.height or slot.size or 1
     local anchor, x, y = slot.anchor or "TOPLEFT", slot.x or 0, slot.y or 0
-    if button._msufA3GeomParent ~= parentFrame or button._msufA3GeomAnchor ~= anchor
+    if forceGeometry == true
+        or button._msufA3GeomParent ~= parentFrame or button._msufA3GeomAnchor ~= anchor
         or button._msufA3GeomX ~= x or button._msufA3GeomY ~= y
         or button._msufA3GeomWidth ~= width or button._msufA3GeomHeight ~= height then
         button._msufA3GeomParent, button._msufA3GeomAnchor = parentFrame, anchor
@@ -923,7 +924,7 @@ local function ApplyVisual(button, slot)
     end
 end
 
-local function PrepareButton(button, slot, parentFrame)
+local function PrepareButton(button, slot, parentFrame, forceGeometry)
     local deps = D()
     if not (button and slot and parentFrame and deps.PrepareAuraButton and deps.ValidateAuraButton) then return false end
     deps.ValidateAuraButton(button)
@@ -934,7 +935,7 @@ local function PrepareButton(button, slot, parentFrame)
     button._msufA3SpellIndicatorParentFrame = parentFrame
     button._msufA3ParentFrame = parentFrame
     deps.PrepareAuraButton(button, slot, 1)
-    SyncButtonGeometry(button, slot, parentFrame)
+    SyncButtonGeometry(button, slot, parentFrame, forceGeometry)
     ApplyVisual(button, slot)
     ApplyButtonIconEffect(button, slot, parentFrame)
     ApplyButtonFrameEffect(button, slot, parentFrame)
@@ -956,10 +957,11 @@ local function SlotOptions(container, slot, buttonIndex)
     }
 end
 
-function Runtime.SyncGeometry(container, slotRoot, parentFrame)
+function Runtime.SyncGeometry(container, slotRoot, parentFrame, forceGeometry)
     if not (container and Runtime.IsRoot(slotRoot)) then return false end
     parentFrame = parentFrame or container._msufA3ParentFrame or container:GetParent()
     if not parentFrame then return false end
+    forceGeometry = forceGeometry == true or container._msufA3ForceSpellIndicatorGeometry == true
     container._msufA3NativeLaneConfig = slotRoot
     container._msufA3ParentFrame = parentFrame
     local root = container:GetParent()
@@ -973,7 +975,7 @@ function Runtime.SyncGeometry(container, slotRoot, parentFrame)
     if slots then
         for i = 1, #slots do
             if slots[i] and container[i] then
-                PrepareButton(container[i], slots[i], parentFrame)
+                PrepareButton(container[i], slots[i], parentFrame, forceGeometry)
             elseif slots[i] then
                 SyncMissingFrame(parentFrame, slots[i], nil)
             end
@@ -986,6 +988,7 @@ function Runtime.SyncGeometry(container, slotRoot, parentFrame)
         end
     end
     Runtime.RefreshFrameEffects(parentFrame)
+    if forceGeometry == true then container._msufA3ForceSpellIndicatorGeometry = nil end
     return true
 end
 

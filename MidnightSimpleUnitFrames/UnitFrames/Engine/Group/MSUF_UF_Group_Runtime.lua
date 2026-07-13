@@ -84,6 +84,22 @@ local function RefreshVisiblePartyState(reason)
   return GF.ForEachFrame(RefreshPartyStateFrame, false, reason)
 end
 
+local function RefreshRoleStateFrame(frame, _, _, reason)
+  local update = frame and frame._msufUpdateGroupStatusState
+  if type(update) ~= "function" then return false end
+  update(frame, reason or "PLAYER_ROLES_ASSIGNED", frame.unit)
+  return true
+end
+
+-- SecureGroupHeader may rescan an unchanged child without reapplying its spec.
+-- Role assignments are an OOC cold-path concern, so explicitly catch those
+-- reused live frames up after header setup instead of adding role work to the
+-- shared combat/lifecycle hot path.
+local function RefreshVisibleRoleState(reason)
+  if type(GF.ForEachFrame) ~= "function" then return false end
+  return GF.ForEachFrame(RefreshRoleStateFrame, false, reason or "PLAYER_ROLES_ASSIGNED")
+end
+
 local function ConfEnabled(kind)
   local conf = Conf(kind)
   return conf and conf.enabled == true
@@ -461,7 +477,8 @@ local function FlushDeferred()
   if reason == "refresh" then return GF.RefreshVisuals(kind, mask) end
   if reason == "roster" then
     local did = GF.RefreshHeaderLayout(kind)
-    return RefreshVisiblePartyState("GROUP_ROSTER_UPDATE") or did
+    did = RefreshVisiblePartyState("GROUP_ROSTER_UPDATE") or did
+    return RefreshVisibleRoleState("PLAYER_ROLES_ASSIGNED") or did
   end
   if reason == "visibility" then return GF.UpdateGroupVisibility() end
   if reason == "layout" then
@@ -496,6 +513,7 @@ local function RuntimeOnEvent(self, event)
     GF.RefreshHeaderLayout(event)
     if event == "PLAYER_ENTERING_WORLD" then
       RefreshVisiblePartyState(event)
+      RefreshVisibleRoleState("PLAYER_ROLES_ASSIGNED")
     end
     return
   elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED" or event == "ROLE_CHANGED_INFORM" then
@@ -506,6 +524,7 @@ local function RuntimeOnEvent(self, event)
       if event == "GROUP_ROSTER_UPDATE" then
         RefreshVisiblePartyState(event)
       end
+      RefreshVisibleRoleState(event == "GROUP_ROSTER_UPDATE" and "PLAYER_ROLES_ASSIGNED" or event)
     end
     return
   elseif event == "PLAYER_DIFFICULTY_CHANGED" or event == "ZONE_CHANGED_NEW_AREA" then
