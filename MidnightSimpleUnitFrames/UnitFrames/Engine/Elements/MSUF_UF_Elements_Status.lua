@@ -329,6 +329,52 @@ local function ApplyLayer(region, layer)
   end
 end
 
+local function NameRelativeAnchor(frame, anchor)
+  local name = frame and frame.nameText
+  if not name then
+    return nil
+  end
+
+  local text = frame.MSUFSpec and frame.MSUFSpec.text or nil
+  local dots = frame._msufNameDotsFS
+  if dots and dots._msufShown == true and text and text.nameShortenDots == true then
+    if anchor == "NAMERIGHT" and text.nameShortenSide == "RIGHT" then
+      return dots, "LEFT", "RIGHT", 0
+    elseif anchor == "NAMELEFT" and text.nameShortenSide ~= "RIGHT" then
+      return dots, "RIGHT", "LEFT", 0
+    end
+  end
+
+  local clip = frame._msufNameInlineClip
+  if clip then
+    if anchor == "NAMERIGHT" then
+      return clip, "LEFT", "RIGHT", 0
+    end
+    return clip, "RIGHT", "LEFT", 0
+  end
+
+  local width = name.GetStringWidth and SafeNumber(name:GetStringWidth()) or 0
+  width = width or 0
+  local justify = name._msufJustifyH
+  if not justify and name.GetJustifyH then
+    justify = name:GetJustifyH()
+  end
+  if anchor == "NAMERIGHT" then
+    if justify == "RIGHT" then
+      return name, "LEFT", "RIGHT", 0
+    elseif justify == "CENTER" then
+      return name, "LEFT", "CENTER", width * 0.5
+    end
+    return name, "LEFT", "LEFT", width
+  end
+  if justify == "RIGHT" then
+    return name, "RIGHT", "RIGHT", -width
+  elseif justify == "CENTER" then
+    return name, "RIGHT", "CENTER", width * -0.5
+  end
+  return name, "RIGHT", "LEFT", 0
+end
+
 local function AnchorRegion(region, frame, cfg)
   if not (region and frame and cfg) then
     return
@@ -337,24 +383,24 @@ local function AnchorRegion(region, frame, cfg)
   local x = tonumber(cfg.x) or 0
   local y = tonumber(cfg.y) or 0
   local target, point, relPoint = frame, anchor, anchor
-  if anchor == "NAMERIGHT" then
-    if frame.nameText then
-      target, point, relPoint = frame.nameText, "LEFT", "RIGHT"
-    else
+  if anchor == "NAMERIGHT" or anchor == "NAMELEFT" then
+    local nameTarget, namePoint, nameRelPoint, nameX = NameRelativeAnchor(frame, anchor)
+    if nameTarget then
+      target, point, relPoint = nameTarget, namePoint, nameRelPoint
+      x = x + (nameX or 0)
+    elseif anchor == "NAMERIGHT" then
       point, relPoint = "RIGHT", "RIGHT"
-    end
-  elseif anchor == "NAMELEFT" then
-    if frame.nameText then
-      target, point, relPoint = frame.nameText, "RIGHT", "LEFT"
     else
       point, relPoint = "LEFT", "LEFT"
     end
   end
   if region._msufStatusAnchor ~= anchor or region._msufStatusTarget ~= target
+    or region._msufStatusPoint ~= point or region._msufStatusRelPoint ~= relPoint
     or region._msufStatusX ~= x or region._msufStatusY ~= y then
     region:ClearAllPoints()
     region:SetPoint(point, target, relPoint, x, y)
     region._msufStatusAnchor, region._msufStatusTarget = anchor, target
+    region._msufStatusPoint, region._msufStatusRelPoint = point, relPoint
     region._msufStatusX, region._msufStatusY = x, y
   end
 end
@@ -734,11 +780,43 @@ end
 local function ApplyConfiguredRegions(frame, spec)
   local status = spec and spec.status
   if not status then
+    if frame then frame._msufNameRelativeStatus = nil end
     return
   end
+  local nameRelative
   for i = 1, #CONFIGURED_REGION_DEFS do
-    ApplyConfiguredRegion(frame, spec, status, CONFIGURED_REGION_DEFS[i])
+    local def = CONFIGURED_REGION_DEFS[i]
+    ApplyConfiguredRegion(frame, spec, status, def)
+    local cfg = status[def[1]]
+    if cfg and cfg.enabled == true and (cfg.anchor == "NAMERIGHT" or cfg.anchor == "NAMELEFT") then
+      nameRelative = true
+    end
   end
+  if frame then frame._msufNameRelativeStatus = nameRelative end
+end
+
+local function RefreshNameRelativeAnchors(frame)
+  if not (frame and frame._msufNameRelativeStatus == true) then
+    return false
+  end
+  local status = frame.MSUFSpec and frame.MSUFSpec.status
+  if not status then
+    return false
+  end
+  local refreshed
+  for i = 1, #CONFIGURED_REGION_DEFS do
+    local def = CONFIGURED_REGION_DEFS[i]
+    local cfg = status[def[1]]
+    if cfg and cfg.enabled == true and (cfg.anchor == "NAMERIGHT" or cfg.anchor == "NAMELEFT") then
+      local field = status.group and def[3] or def[2]
+      local region = field and frame[field]
+      if region then
+        AnchorRegion(region, frame, cfg)
+        refreshed = true
+      end
+    end
+  end
+  return refreshed == true
 end
 
 local function UpdateRaidMarker(frame, status)
@@ -1557,6 +1635,7 @@ function Status.Disable(frame)
   end
   frame._msufStatusTextValue = nil
   frame._msufStatusTextLayout = nil
+  frame._msufNameRelativeStatus = nil
   CancelReadyCheckTimer(frame)
 end
 
@@ -1654,6 +1733,7 @@ local Runtime = {
   StatusEnabled = StatusEnabled,
   HideField = HideField,
   ApplyConfiguredRegions = ApplyConfiguredRegions,
+  RefreshNameRelativeAnchors = RefreshNameRelativeAnchors,
   CancelReadyCheckTimer = CancelReadyCheckTimer,
   UpdateRaidMarker = UpdateRaidMarker,
   UpdateLeader = UpdateLeader,

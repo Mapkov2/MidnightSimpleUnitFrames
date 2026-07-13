@@ -45,6 +45,7 @@ local UpdateTextSlotsPlain = Text.UpdateTextSlotsPlain or UpdateTextSlots
 local UpdateTextSlotsSecret = Text.UpdateTextSlotsSecret or UpdateTextSlots
 local ResolveHealthTextModes = Text.ResolveHealthTextModes
 local AnchorInlineToName = Text.AnchorInlineToName
+local RefreshNameRelativeStatusAnchors = MSUF.UFStatusRuntime and MSUF.UFStatusRuntime.RefreshNameRelativeAnchors
 local EMPTY_EVENTS = Text.EMPTY_EVENTS
 local POWER_EVENTS = Text.POWER_EVENTS
 local POWER_EVENTS_FREQUENT = Text.POWER_EVENTS_FREQUENT
@@ -613,6 +614,12 @@ function Text.UpdateInline(frame, event, unit)
   SetInlineTextColor(frame, InlineTextColor(frame, inlineUnit, inline))
 end
 
+local function RefreshNameRelativeStatus(frame)
+  if frame and frame._msufNameRelativeStatus == true and RefreshNameRelativeStatusAnchors then
+    RefreshNameRelativeStatusAnchors(frame)
+  end
+end
+
 function Text.UpdateName(frame, event, unit)
   local frameUnit = frame and frame.unit
   unit = unit or frameUnit
@@ -629,6 +636,7 @@ function Text.UpdateName(frame, event, unit)
     frame._msufNameStatusHidden = nil
     frame._msufNameTextUnit = nil
     SetTextCached(frame.nameText, "")
+    RefreshNameRelativeStatus(frame)
     frame.nameText._msufShown = nil
     SetShownCached(frame.nameText, false)
     return
@@ -641,6 +649,7 @@ function Text.UpdateName(frame, event, unit)
     frame.nameText._msufShown = nil
     SetShownCached(frame.nameText, true)
     SetTextCached(frame.nameText, previewName)
+    RefreshNameRelativeStatus(frame)
     frame._msufNameTextUnit = unit
     Text.UpdateNameColor(frame, event, unit)
     return
@@ -650,6 +659,7 @@ function Text.UpdateName(frame, event, unit)
     frame._msufNameStatusHidden = nil
     frame._msufNameTextUnit = nil
     SetTextCached(frame.nameText, "")
+    RefreshNameRelativeStatus(frame)
     frame.nameText._msufShown = nil
     SetShownCached(frame.nameText, false)
     return
@@ -685,6 +695,7 @@ function Text.UpdateName(frame, event, unit)
     if hidden then
       frame._msufNameTextUnit = nil
       SetTextCached(frame.nameText, "")
+      RefreshNameRelativeStatus(frame)
       frame.nameText._msufShown = nil
       SetShownCached(frame.nameText, false)
       return
@@ -705,6 +716,7 @@ function Text.UpdateName(frame, event, unit)
     return
   end
   SetTextCached(frame.nameText, ReadDisplayName(unit))
+  RefreshNameRelativeStatus(frame)
   frame._msufNameTextUnit = unit
   Text.UpdateNameColor(frame, event, unit)
 end

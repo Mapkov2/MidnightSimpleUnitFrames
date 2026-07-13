@@ -887,7 +887,7 @@ local function BuildStatus(ctx, builder, unit)
             return UP.BuildSectionLazy(ctx, builder, unit, {
                 id = "status_icons",
                 title = "Status icons",
-                height = 646,
+                height = 724,
                 build = function(lazyCtx, lazyBuilder, lazyUnit)
                     return fn(lazyCtx, lazyBuilder, lazyUnit)
                 end,

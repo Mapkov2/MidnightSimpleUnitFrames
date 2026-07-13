@@ -1535,6 +1535,9 @@ local function CompileUnitHealth(out, conf, general, bars)
   health.gradientHighB = Number(general.healthGradientHighB, 0)
   health.barGradient = ResolveBarGradient(conf, general, "enableGradient")
   ApplyNpcTypeFlags(health, general, "npcTypeColorBar")
+  -- Boss frames keep reaction coloring (hostile red / friendly green). The
+  -- optional NPC class-color override only applies to non-boss NPC frames.
+  health.npcClassColorBar = general.npcClassColorBar == true and out.key ~= "boss"
   health.petColorEnabled = general.petFrameColorEnabled == true
   health.petR = Number(general.petFrameColorR, 0)
   health.petG = Number(general.petFrameColorG, 0.8)
@@ -1879,6 +1882,7 @@ local function BuildSettingsCache(db)
   cache.petFrameColorB = Number(general.petFrameColorB, 0)
   ApplyNpcTypeFlags(cache, general, "npcTypeColorBar")
   ApplyNpcTypeFlags(cache, general, "npcTypeColorText")
+  cache.npcClassColorBar = general.npcClassColorBar == true
   cache.classColors = cache.classColors or {}
   local classColors = type(db.classColors) == "table" and db.classColors or nil
   local palette = MSUF.MSUF_FONT_COLORS or _G.MSUF_FONT_COLORS

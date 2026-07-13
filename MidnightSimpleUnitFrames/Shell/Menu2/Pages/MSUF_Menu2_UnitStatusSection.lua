@@ -33,7 +33,7 @@ local STATUS_TEXT_STATE_TOGGLES = {
 local DisabledNameAnchorValues = Shared.DisabledNameAnchorValues or function(values) return values or {} end
 local SetSectionHeaderStatus = Shared.SetSectionHeaderStatus or function() end
 local function BuildStatus(ctx, builder, unit)
-    local sec = builder:CollapsibleSection("status_icons", "Status icons", 646, false)
+    local sec = builder:CollapsibleSection("status_icons", "Status icons", 724, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local leftX = 14
     local topGap = 28
@@ -59,7 +59,7 @@ local function BuildStatus(ctx, builder, unit)
     })
     RegisterControl(statusTabs, ctx, "status.workspace_tab", "Status icon controls", "segment", "ephemeral")
     local selectedCard = W.ControlCard(basicTab, "Selected Indicator", nil, leftX - 2, -38, leftW + 28, 268)
-    local previewCard = W.ControlCard(basicTab, "Status Preview", nil, rightX - 14, -38, rightW + 28, 184)
+    local previewCard = W.ControlCard(basicTab, "Status Preview", nil, rightX - 14, -38, rightW + 28, 214)
     local placementCardX = leftX - 2
     local placementCardW = max(320, sectionW - placementCardX - 28)
     local placementCard = W.ControlCard(basicTab, "Placement", nil, placementCardX, -330, placementCardW, 262)
