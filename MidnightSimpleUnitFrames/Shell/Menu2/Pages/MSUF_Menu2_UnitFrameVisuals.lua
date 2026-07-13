@@ -80,16 +80,58 @@ local function PortraitClassStyleValues()
     return values
 end
 local NormalizePortraitClassStyle = M.NormalizePortraitClassStyle
-local function BuildPortrait(ctx, builder, unit)
-    local sec = builder:CollapsibleSection("portrait", "Portrait", 612, false)
-    local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
-    local leftX = 16
+local PORTRAIT_STACK_THRESHOLD = 680
+local function PortraitLayoutForWidth(sectionWidth)
+    sectionWidth = tonumber(sectionWidth) or 720
+    if sectionWidth < PORTRAIT_STACK_THRESHOLD then
+        local cardW = max(260, sectionWidth - 32)
+        return {
+            stacked = true,
+            height = 1092,
+            leftX = 16,
+            rightX = 16,
+            leftW = cardW,
+            rightW = cardW,
+            mainY = -38,
+            geometryY = -224,
+            borderY = -520,
+            styleY = -850,
+        }
+    end
     local cardGap = 28
-    local leftW = floor((sectionW - 48 - cardGap) * 0.5)
+    local leftX = 16
+    local leftW = floor((sectionWidth - 48 - cardGap) * 0.5)
     leftW = max(310, min(430, leftW))
     local rightX = leftX + leftW + cardGap
-    local rightW = max(310, min(430, sectionW - rightX - 16))
+    local rightW = max(310, min(430, sectionWidth - rightX - 16))
+    return {
+        stacked = false,
+        height = 612,
+        leftX = leftX,
+        rightX = rightX,
+        leftW = leftW,
+        rightW = rightW,
+        mainY = -38,
+        geometryY = -38,
+        borderY = -224,
+        styleY = -338,
+    }
+end
+UP.PortraitLayoutForWidth = PortraitLayoutForWidth
+
+local function BuildPortrait(ctx, builder, unit)
+    local layout = PortraitLayoutForWidth((ctx and ctx.width) or 720)
+    local sec = builder:CollapsibleSection("portrait", "Portrait", layout.height, false)
+    local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
+    layout = PortraitLayoutForWidth(sectionW)
+    local leftX, rightX = layout.leftX, layout.rightX
+    local leftW, rightW = layout.leftW, layout.rightW
     local RefreshPortraitControls = M.RefreshProxy()
+    local function PortraitControlMeta(path, settingKey)
+        local meta = ControlMeta(ctx, path)
+        meta.settingKey = settingKey
+        return meta
+    end
     local function BindPortraitDropdown(parent, label, values, x, y, width, key, defaultValue, reason, normalize, after)
         local control = W.Dropdown(parent, label, values, 220)
         W.MoveWidget(control, parent, x, y, width)
@@ -104,7 +146,7 @@ local function BuildPortrait(ctx, builder, unit)
                 SetPortraitValue(unit, key, v, reason)
                 if after then after() end
             end,
-            ControlMeta(ctx, "portrait." .. tostring(key)))
+            PortraitControlMeta("portrait." .. tostring(key), tostring(unit) .. "." .. tostring(key)))
         return control
     end
     local function BindPortraitSlider(parent, label, x, y, width, minValue, maxValue, step, key, defaultValue, reason)
@@ -114,7 +156,7 @@ local function BuildPortrait(ctx, builder, unit)
             function() return ReadNumber(unit, key, defaultValue) end,
             function(v) SetNumber(unit, key, v, reason, { preview = true }) end,
             defaultValue, (function()
-                local meta = ControlMeta(ctx, "portrait." .. tostring(key))
+                local meta = PortraitControlMeta("portrait." .. tostring(key), tostring(unit) .. "." .. tostring(key))
                 meta.step, meta.roundStep = step, true
                 return meta
             end)())
@@ -125,14 +167,14 @@ local function BuildPortrait(ctx, builder, unit)
         M.BindBoolWidget(ctx, control,
             function() return ReadBool(unit, key, defaultValue) end,
             function(v) SetPortraitValue(unit, key, v and true or false, reason) end,
-            ControlMeta(ctx, "portrait." .. tostring(key)))
+            PortraitControlMeta("portrait." .. tostring(key), tostring(unit) .. "." .. tostring(key)))
         return control
     end
     M._msuf2LastPortraitSide = M._msuf2LastPortraitSide or {}
-    local mainCard = W.ControlCard(sec, "Portrait", "Main portrait visibility and render mode.", leftX, -38, leftW, 168)
-    local geometryCard = W.ControlCard(sec, "Geometry", "Size, zoom, and local offset.", rightX, -38, rightW, 278)
-    local borderCard = W.ControlCard(sec, "Shape & Border", nil, leftX, -224, leftW, 312)
-    local styleCard = W.ControlCard(sec, "Class & Background", nil, rightX, -338, rightW, 166)
+    local mainCard = W.ControlCard(sec, "Portrait", "Main portrait visibility and render mode.", leftX, layout.mainY, leftW, 168)
+    local geometryCard = W.ControlCard(sec, "Geometry", "Size, zoom, and local offset.", rightX, layout.geometryY, rightW, 278)
+    local borderCard = W.ControlCard(sec, "Shape & Border", nil, leftX, layout.borderY, leftW, 312)
+    local styleCard = W.ControlCard(sec, "Class & Background", nil, rightX, layout.styleY, rightW, 166)
     local portraitEnable = W.SwitchAt(mainCard, "Portrait", leftW - 62, -24, 0, "HIDDEN")
     M.BindBoolWidget(ctx, portraitEnable,
         function() return NormalizePortrait(unit) ~= "OFF" end,
@@ -159,7 +201,7 @@ local function BuildPortrait(ctx, builder, unit)
             SetPortraitValue(unit, "portraitMode", v or "LEFT", "MSUF2_PORTRAIT_MODE")
             RefreshPortraitControls()
         end,
-        ControlMeta(ctx, "portrait.position"))
+        PortraitControlMeta("portrait.position", tostring(unit) .. ".portraitMode"))
     local render = BindPortraitDropdown(mainCard, "Render", PORTRAIT_RENDER, 16, -116, min(220, leftW - 32), "portraitRender", "2D", "MSUF2_PORTRAIT_RENDER", nil, RefreshPortraitControls)
     local shape = BindPortraitDropdown(borderCard, "Shape", PORTRAIT_SHAPES, 16, -58, min(220, leftW - 32), "portraitShape", "SQUARE", "MSUF2_PORTRAIT_SHAPE")
     local size = BindPortraitSlider(geometryCard, "Size override", 16, -62, rightW - 58, 0, 128, 1, "portraitSizeOverride", 0, "MSUF2_PORTRAIT_SIZE")
@@ -836,7 +878,7 @@ local function BuildCastbar(ctx, builder, unit)
     }))
 end
 if type(UP.RegisterSection) == "function" then
-    UP.RegisterSection({ id = "portrait", title = "Portrait", height = 612, placement = "after_inline_text", order = 10, build = BuildPortrait })
+    UP.RegisterSection({ id = "portrait", title = "Portrait", height = function(ctx) return PortraitLayoutForWidth(ctx and ctx.width).height end, placement = "after_inline_text", order = 10, build = BuildPortrait })
     UP.RegisterSection({ id = "power", sectionId = "power_bar", title = "Power Bar", height = function(_, _, unit) return PowerSectionHeight(unit) end, placement = "after_inline_text", order = 20, units = POWER_UNITS, build = BuildPower })
     UP.RegisterSection({ id = "castbar", title = "Castbar", height = function(_, _, unit) return CastbarTabHeight(unit, CurrentCastbarTab(unit)) end, placement = "after_inline_text", order = 30, units = CASTBAR_UNITS, build = BuildCastbar })
 end

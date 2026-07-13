@@ -121,17 +121,21 @@ local function CollectSearchAnchorCandidates(frame, out, depth)
     end
 end
 
+local function SearchAnchorBelongsToWrapper(wrapper, anchor)
+    if not (wrapper and anchor and anchor.GetTop) then return false end
+    local node = anchor
+    while node do
+        if node == wrapper then return true end
+        node = node.GetParent and node:GetParent() or nil
+    end
+    return false
+end
+
 local function FindSearchAnchor(pageKey, query, fallback, preferredAnchor)
     local entry = M.cache and M.cache[pageKey]
     local wrapper = entry and entry.wrapper
     if not wrapper then return nil end
-    if preferredAnchor and preferredAnchor.GetTop then
-        local node = preferredAnchor
-        while node do
-            if node == wrapper then return preferredAnchor end
-            node = node.GetParent and node:GetParent() or nil
-        end
-    end
+    if SearchAnchorBelongsToWrapper(wrapper, preferredAnchor) then return preferredAnchor end
 
     local candidates = {}
     CollectSearchAnchorCandidates(wrapper, candidates, 1)
@@ -145,6 +149,26 @@ local function FindSearchAnchor(pageKey, query, fallback, preferredAnchor)
         end
     end
     return best and best.region or nil
+end
+
+local function ResolveExactSearchAnchor(pageKey, exactTarget)
+    if type(exactTarget) ~= "table" then return nil, nil end
+    local settingKey = tostring(exactTarget.settingKey or "")
+    local catalog = M.RuntimeControlCatalog
+    if settingKey == "" or not (catalog and type(catalog.FindBySettingKey) == "function") then return nil, false end
+    local _, widget = catalog.FindBySettingKey(settingKey, pageKey, exactTarget)
+    if widget then return widget, true end
+    return nil, false
+end
+
+local function FindCurrentSearchAnchor(pageKey, query, fallback, preferredAnchor, exactTarget)
+    local exactAnchor, exactMatched = ResolveExactSearchAnchor(pageKey, exactTarget)
+    if exactMatched then
+        local wrapper = M.cache and M.cache[pageKey] and M.cache[pageKey].wrapper
+        if SearchAnchorBelongsToWrapper(wrapper, exactAnchor) then return exactAnchor, true end
+        exactMatched = false
+    end
+    return FindSearchAnchor(pageKey, query, fallback, preferredAnchor), exactMatched
 end
 
 local function OpenAnchorCollapsibles(region)
@@ -179,12 +203,30 @@ local function ClampScrollOffset(offset)
     return offset
 end
 
-local function SearchAnchorOffset(wrapper, region)
+local SEARCH_ANCHOR_TOP_INSET = 42
+local SEARCH_ANCHOR_PIN_MARGIN = 12
+local function ActivePinnedPreviewInset()
+    local scroll = M.scrollFrame
+    local active = scroll and scroll._msuf2PinnedPreviewActiveRecord
+    local box = active and active.box
+    if not box then return nil end
+    if box.IsShown and not box:IsShown() then return nil end
+    local scrollTop = scroll.GetTop and scroll:GetTop()
+    local boxBottom = box.GetBottom and box:GetBottom()
+    if scrollTop and boxBottom and boxBottom < scrollTop then
+        return math.max(SEARCH_ANCHOR_TOP_INSET, math.floor((scrollTop - boxBottom) + SEARCH_ANCHOR_PIN_MARGIN + 0.5))
+    end
+    local boxHeight = box.GetHeight and box:GetHeight()
+    if boxHeight then return math.max(SEARCH_ANCHOR_TOP_INSET, math.floor(boxHeight + 20.5)) end
+    return nil
+end
+
+local function SearchAnchorOffset(wrapper, region, topInset)
     if not (wrapper and region and wrapper.GetTop and region.GetTop) then return nil end
     local wrapperTop = wrapper:GetTop()
     local regionTop = region:GetTop()
     if not (wrapperTop and regionTop) then return nil end
-    return ClampScrollOffset((wrapperTop - regionTop) - 42)
+    return ClampScrollOffset((wrapperTop - regionTop) - (tonumber(topInset) or SEARCH_ANCHOR_TOP_INSET))
 end
 
 local function HighlightSearchAnchor(wrapper, region)
@@ -949,38 +991,59 @@ local function ApplySearchRoute(pageKey, route)
     end
     return changed
 end
-local function ScrollToSearchAnchor(pageKey, query, fallback, preferredAnchor)
+local function ScrollToSearchAnchor(pageKey, query, fallback, preferredAnchor, exactTarget)
+    if SearchCombatLocked() then return end
+    if M.frame and M.frame.IsShown and not M.frame:IsShown() then return end
     if M.activeKey ~= pageKey then return end
     local entry = M.cache and M.cache[pageKey]
     local wrapper = entry and entry.wrapper
     if not wrapper then return end
-    local region = FindSearchAnchor(pageKey, query, fallback, preferredAnchor)
+    local region = FindCurrentSearchAnchor(pageKey, query, fallback, preferredAnchor, exactTarget)
     if not region then return end
     local opened = OpenAnchorCollapsibles(region)
+    local reservedInset = SEARCH_ANCHOR_TOP_INSET
     local function finish()
-        local offset = SearchAnchorOffset(wrapper, region)
+        -- Zero-delay/0.05 callbacks can cross a combat transition or outlive
+        -- the options window. Do no resolver, layout, scroll, or highlight
+        -- work once either condition becomes true.
+        if SearchCombatLocked() then return end
+        if M.frame and M.frame.IsShown and not M.frame:IsShown() then return end
+        if M.activeKey ~= pageKey then return end
+        local currentEntry = M.cache and M.cache[pageKey]
+        wrapper = currentEntry and currentEntry.wrapper
+        if not wrapper then return end
+        region = FindCurrentSearchAnchor(pageKey, query, fallback, preferredAnchor, exactTarget)
+        if not region then return end
+        reservedInset = math.max(reservedInset, ActivePinnedPreviewInset() or SEARCH_ANCHOR_TOP_INSET)
+        local offset = SearchAnchorOffset(wrapper, region, reservedInset)
         if offset and M.scrollFrame and M.scrollFrame.SetVerticalScroll then
             M.scrollFrame:SetVerticalScroll(offset)
         end
         HighlightSearchAnchor(wrapper, region)
     end
     if opened then RunSoon(finish) else finish() end
+    -- The pinned unit preview settles on the same bounded 0/0.05-second cycle.
+    -- Rechecking twice keeps a compact-window target below that overlay without
+    -- installing an OnUpdate, event listener, or any idle/combat work.
+    RunSoon(finish)
+    if not SearchCombatLocked() and _G.C_Timer and _G.C_Timer.After then _G.C_Timer.After(0.05, finish) end
+    return true
 end
-local function OpenSearchTarget(pageKey, query, fallback, preferredAnchor, route)
+local function OpenSearchTarget(pageKey, query, fallback, preferredAnchor, route, exactTarget)
     if M.nav and M.nav.searchBox then M.nav.searchBox:ClearFocus() end
     route = route or SearchRouteForTarget(pageKey, query, fallback)
     local routeChanged = ApplySearchRoute(pageKey, route)
     if routeChanged then preferredAnchor = nil end
     local selected = M.SelectPage(pageKey)
-    local region
+    local region, exactMatched
     if selected ~= false and M.activeKey == pageKey then
         local entry = M.cache and M.cache[pageKey]
         if entry and entry.wrapper then
-            region = FindSearchAnchor(pageKey, query, fallback, preferredAnchor)
+            region, exactMatched = FindCurrentSearchAnchor(pageKey, query, fallback, preferredAnchor, exactTarget)
         end
     end
-    RunSoon(function() ScrollToSearchAnchor(pageKey, query, fallback, preferredAnchor) end)
-    return selected ~= false and M.activeKey == pageKey, region ~= nil
+    RunSoon(function() ScrollToSearchAnchor(pageKey, query, fallback, preferredAnchor, exactTarget) end)
+    return selected ~= false and M.activeKey == pageKey, region ~= nil, exactMatched
 end
 
 Search._RoutingAPI = {

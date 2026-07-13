@@ -766,6 +766,185 @@ local function SortedRecords()
     return out
 end
 
+-- A small reviewed bridge for controls whose stable UI path and SavedVariables
+-- key use intentionally different vocabulary.  Values are compact canonical
+-- setting-key suffixes (the scope before the first dot is omitted).  This is
+-- not a fuzzy alias list: each entry names one concrete runtime control path,
+-- and the descriptor resolver still requires page and widget-kind agreement.
+--
+-- Class Resources is the densest example because its table-driven page keeps
+-- terse layout paths ("layout/x", "style/text/font") while the public setting
+-- contract uses long names ("classPowerOffsetX", "classPowerFontSize").
+local REVIEWED_CONTROL_PATH_SETTING_COMPACTS = {
+    ["classpower/advanced/layout/enabled"] = "showclasspower",
+    ["classpower/advanced/layout/shape"] = "classpowershape",
+    ["classpower/advanced/layout/height"] = "classpowerheight",
+    ["classpower/advanced/layout/width/mode"] = "classpowerwidthmode",
+    ["classpower/advanced/layout/width"] = "classpowerwidth",
+    ["classpower/advanced/layout/x"] = "classpoweroffsetx",
+    ["classpower/advanced/layout/y"] = "classpoweroffsety",
+    ["classpower/advanced/layout/level"] = "classpowerframeleveloffset",
+    ["classpower/advanced/layout/shape/alignment"] = "classpowershapealign",
+    ["classpower/advanced/behavior/anchor"] = "classpoweranchortocooldown",
+    ["classpower/advanced/behavior/charged"] = "showchargedcombopoints",
+    ["classpower/advanced/behavior/text"] = "classpowershowtext",
+    ["classpower/advanced/behavior/rune"] = "runeshowtime",
+    ["classpower/advanced/behavior/reverse"] = "classpowerfillreverse",
+    ["classpower/advanced/behavior/ele"] = "showelemaelstrom",
+    ["classpower/advanced/behavior/ebon"] = "showebonmight",
+    ["classpower/advanced/behavior/shadow"] = "showshadowmana",
+    ["classpower/advanced/behavior/prediction"] = "classpowershowprediction",
+    ["classpower/advanced/behavior/smooth"] = "classpowersmoothfill",
+    ["classpower/advanced/style/resources/color"] = "classpowercolorbytype",
+    ["classpower/advanced/style/resources/combo/color"] = "classpowercombopointcolormode",
+    ["classpower/advanced/style/resources/fg/tex"] = "classpowertexture",
+    ["classpower/advanced/style/resources/bg/tex"] = "classpowerbgtexture",
+    ["classpower/advanced/style/text/font"] = "classpowerfontsize",
+    ["classpower/advanced/style/text/text/x"] = "classpowertextoffsetx",
+    ["classpower/advanced/style/text/text/y"] = "classpowertextoffsety",
+    ["classpower/advanced/style/opacity/bg"] = "classpowerbgalpha",
+    ["classpower/advanced/style/opacity/filled"] = "classpowerfilledalpha",
+    ["classpower/advanced/style/opacity/empty"] = "classpoweremptyalpha",
+    ["classpower/advanced/style/pips/separator"] = "classpowertickwidth",
+    ["classpower/advanced/style/pips/outline"] = "classpoweroutline",
+    ["classpower/advanced/style/pips/gap"] = "classpowergap",
+    ["classpower/advanced/visibility/out/of/combat"] = "classpowerhideooc",
+    ["classpower/advanced/visibility/when/full"] = "classpowerhidewhenfull",
+    ["classpower/advanced/visibility/when/empty"] = "classpowerhidewhenempty",
+
+    ["classpower/advanced/player/hp/enabled"] = "playerhpbarenabled",
+    ["classpower/advanced/player/hp/layout/anchor"] = "playerhpbaranchor",
+    ["classpower/advanced/player/hp/layout/width/mode"] = "playerhpbarwidthmode",
+    ["classpower/advanced/player/hp/layout/manual/width"] = "playerhpbarwidth",
+    ["classpower/advanced/player/hp/layout/shape"] = "playerhpbarshape",
+    ["classpower/advanced/player/hp/layout/orb/size"] = "playerhpbarorbsize",
+    ["classpower/advanced/player/hp/layout/height"] = "playerhpbarheight",
+    ["classpower/advanced/player/hp/layout/smooth"] = "playerhpbarsmoothfill",
+    ["classpower/advanced/player/hp/layout/gap"] = "playerhpbargap",
+    ["classpower/advanced/player/hp/layout/x"] = "playerhpbaroffsetx",
+    ["classpower/advanced/player/hp/layout/y"] = "playerhpbaroffsety",
+    ["classpower/advanced/player/hp/layout/layer"] = "playerhpbarframeleveloffset",
+    ["classpower/advanced/player/hp/textures/color"] = "playerhpbarcolormode",
+    ["classpower/advanced/player/hp/textures/fg"] = "playerhpbartexture",
+    ["classpower/advanced/player/hp/textures/bg"] = "playerhpbarbgtexture",
+    ["classpower/advanced/player/hp/textures/bg/alpha"] = "playerhpbarbgalpha",
+    ["classpower/advanced/player/hp/textures/outline"] = "playerhpbaroutline",
+    ["classpower/advanced/player/hp/text/enabled"] = "playerhpbartextenabled",
+    ["classpower/advanced/player/hp/text/use/player/text"] = "playerhpbaruseplayertext",
+    ["classpower/advanced/player/hp/text/right"] = "playerhpbartextright",
+    ["classpower/advanced/player/hp/text/left"] = "playerhpbartextleft",
+    ["classpower/advanced/player/hp/text/center"] = "playerhpbartextcenter",
+    ["classpower/advanced/player/hp/text/sep"] = "playerhpbartextseparator",
+    ["classpower/advanced/player/hp/text/reverse"] = "playerhpbartextreverse",
+    ["classpower/advanced/player/hp/text/size"] = "playerhpbartextsize",
+    ["classpower/advanced/player/hp/text/x"] = "playerhpbartextoffsetx",
+    ["classpower/advanced/player/hp/text/y"] = "playerhpbartextoffsety",
+    ["classpower/advanced/player/hp/text/player/hpbar/text/right/hide/percent/symbol"] = {
+        "playerhpbartextrighthidepercentsymbol", "playerhpbartextrightpercentsymbol",
+    },
+    ["classpower/advanced/player/hp/text/player/hpbar/text/left/hide/percent/symbol"] = {
+        "playerhpbartextlefthidepercentsymbol", "playerhpbartextleftpercentsymbol",
+    },
+    ["classpower/advanced/player/hp/text/player/hpbar/text/center/hide/percent/symbol"] = {
+        "playerhpbartextcenterhidepercentsymbol", "playerhpbartextcenterpercentsymbol",
+    },
+
+    ["classpower/advanced/detached/power/layout/mode"] = "detachedpowerbarwidthmode",
+    ["classpower/advanced/detached/power/textures/fg"] = "detachedpowerbartexture",
+    ["classpower/advanced/detached/power/textures/bg"] = "detachedpowerbarbgtexture",
+    ["classpower/advanced/detached/power/textures/outline"] = "detachedpowerbaroutline",
+
+    ["opt/castbar/global/focus/kick/enable/focus/kick/icon"] = "enablefocuskickicon",
+    ["opt/castbar/global/focus/kick/focus/kick/icon/width"] = "focuskickiconwidth",
+    ["opt/castbar/global/focus/kick/focus/kick/icon/height"] = "focuskickiconheight",
+    ["opt/castbar/global/focus/kick/focus/kick/icon/offset/x"] = "focuskickiconoffsetx",
+    ["opt/castbar/global/focus/kick/focus/kick/icon/offset/y"] = "focuskickiconoffsety",
+    ["opt/castbar/global/focus/kick/text"] = "focuskicktextsize",
+    ["opt/colors/advanced/npc/type/enabled"] = "npccolormode",
+    ["opt/colors/advanced/npc/type/option/npc/type/color/bar"] = "npctypecolorbar",
+    ["opt/bars/global/highlight/aggro/roles"] = "aggromode",
+    ["opt/bars/global/highlight/border/mode/aggro/outline/mode"] = { "aggrooutlinemode", "aggroborder" },
+}
+
+local function ReviewedSettingAliases(controlPath)
+    return REVIEWED_CONTROL_PATH_SETTING_COMPACTS[CleanText(controlPath):lower()]
+end
+
+local function DescriptorMatchesReviewedSetting(compacts, controlPath)
+    local reviewed = ReviewedSettingAliases(controlPath)
+    if reviewed == nil then return true end
+    local accepted = type(reviewed) == "table" and reviewed or { reviewed }
+    for i = 1, #(compacts or {}) do
+        local value = compacts[i].value
+        for j = 1, #accepted do if value == accepted[j] then return true end end
+    end
+    return false
+end
+
+-- Explain why a catalog record does or does not own a static one-setting
+-- Assistant link.  This is intentionally structural and cold-path only.  It
+-- prevents audits from treating preview state, selected-slot editors, compound
+-- projections, and duplicate surfaces as unexplained coverage holes.
+local function AssistantLinkDisposition(record)
+    local classification = tostring(record and record.classification or "unknown")
+    local path = CleanText(record and record.controlPath):lower()
+    local kind = tostring(record and record.kind or "")
+    if classification == "setting" then
+        if CleanText(record and record.settingKey) ~= "" then
+            return "setting.explicit", "The control declares its canonical Assistant settingKey.", true
+        end
+        if record and record.confirmRequired then
+            return "setting.confirmation-required", "This mutation requires confirmation and is not a direct setting shortcut.", false
+        end
+        if kind == "button" then
+            return "setting.compound-control", "This button applies a compound or positional choice rather than one scalar setting.", false
+        end
+        if path:find("/preview/", 1, true) then
+            return "setting.preview-state", "This control changes preview-only state, not a persisted one-to-one setting.", false
+        end
+        if path:find("/status/selected/", 1, true)
+            or path:find("/status/placement/", 1, true)
+            or path:find("/position/slot", 1, true)
+            or path:find("/slot/offset/", 1, true)
+            or path:find("/editor/", 1, true)
+            or path:find("/resource/slots/", 1, true)
+            or record and record.pageKey == "opt_colors" and path:find("/class/power/", 1, true)
+        then
+            return "setting.dynamic-selector", "The visible widget edits whichever adjacent selector or preview handle is active, so it has no single static settingKey.", false
+        end
+        if record and record.pageKey == "classpower"
+            and path:find("/detached/power/", 1, true)
+            and not ReviewedSettingAliases(path)
+        then
+            return "setting.duplicate-surface", "This is a Class Resources view of a Player setting whose canonical Assistant surface is the Player page.", false
+        end
+        if path:find("/portrait/enabled", 1, true)
+            or path:find("/move/together", 1, true)
+            or path:find("/move_together", 1, true)
+            or path:find("/text/preset", 1, true)
+        then
+            return "setting.compound-projection", "This convenience control projects or updates multiple backing values and is not one scalar setting.", false
+        end
+        return "setting.descriptor", "A canonical Assistant descriptor may resolve this stable control path at request time.", true
+    end
+    if classification == "action" then
+        if record and record.confirmRequired then
+            return "action.confirmation-required", "This is a confirmation-gated action, not a setting; it must use the Assistant action contract.", false
+        end
+        return "action.command", "This is an executable action, not a setting; it must use actionKey or its bound command.", false
+    end
+    if classification == "navigation" then
+        return "navigation.route", "This control only opens another surface and has no backing setting.", false
+    end
+    if classification == "ephemeral" then
+        if path:find("preview", 1, true) then
+            return "ephemeral.preview", "This state exists only to drive the menu preview and is intentionally not persisted as a setting.", false
+        end
+        return "ephemeral.ui-state", "This is transient menu workspace or selector state and is intentionally excluded from setting linkage.", false
+    end
+    return "unknown.unclassified", "The control has no safe runtime classification, so the Assistant must not guess a setting link.", false
+end
+
 local function PublicRecord(record)
     local sources = {}
     for source in pairs(record.sources or {}) do sources[#sources + 1] = source end
@@ -775,6 +954,7 @@ local function PublicRecord(record)
         command = {}
         for key, value in pairs(record.commandMeta) do command[key] = value end
     end
+    local linkDisposition, linkReason, linkEligible = AssistantLinkDisposition(record)
     return {
         schemaVersion = record.schemaVersion,
         controlId = record.controlId,
@@ -799,6 +979,9 @@ local function PublicRecord(record)
         navigationKey = record.navigationKey ~= "" and record.navigationKey or nil,
         confirmRequired = record.confirmRequired and true or false,
         virtual = record.virtual and true or false,
+        assistantLinkDisposition = linkDisposition,
+        assistantLinkReason = linkReason,
+        assistantStaticSettingLinkEligible = linkEligible and true or false,
         command = command,
         sources = sources,
     }
@@ -811,31 +994,392 @@ function Catalog.GetRecords()
     return out
 end
 
+-- Exact Assistant navigation normally arrives with a canonical setting key and
+-- a compact, read-only descriptor (attribute/dbPath/type/label).  Most Menu2
+-- controls predate settingKey metadata, but they already expose stable semantic
+-- control paths.  Resolve those two independent identities here, on demand,
+-- instead of retaining a second thousands-entry index in the always-loaded
+-- addon.  The matcher is deliberately fail-closed: every meaningful token in
+-- one descriptor identity must be present, the widget kind must agree when the
+-- descriptor declares a type, and a tied result is rejected.
+local SETTING_TOKEN_ALIASES = {
+    alpha = "alpha", opacity = "alpha",
+    background = "background", bg = "background",
+    color = "color", colour = "color",
+    delimiter = "separator", separator = "separator",
+    enable = "enabled", enabled = "enabled", show = "enabled", shown = "enabled",
+    visible = "enabled", visibility = "enabled", use = "enabled",
+    hp = "health", health = "health",
+    position = "offset", pos = "offset", offset = "offset",
+    sign = "symbol", symbol = "symbol",
+    strata = "layer", layer = "layer",
+}
+
+local SETTING_DESCRIPTOR_STOP_TOKENS = {
+    a = true, an = true, ["and"] = true, ["for"] = true, ["in"] = true, of = true,
+    on = true, option = true, setting = true, the = true, to = true,
+}
+
+local function AddSettingToken(tokens, seen, token)
+    token = CleanText(token):lower()
+    token = SETTING_TOKEN_ALIASES[token] or token
+    if token == "" or SETTING_DESCRIPTOR_STOP_TOKENS[token] or seen[token] then return end
+    seen[token] = true
+    tokens[#tokens + 1] = token
+end
+
+local function SettingIdentityTokens(value, ignored)
+    local text = CleanText(value)
+    if text == "" then return {} end
+    text = text:gsub("%%", " percent ")
+    text = text:gsub("(%l)(%u)", "%1 %2")
+    text = text:gsub("(%u)(%u%l)", "%1 %2")
+    text = text:gsub("[^%w]+", " ")
+    local tokens, seen = {}, {}
+    for token in text:gmatch("%S+") do
+        local normalized = SETTING_TOKEN_ALIASES[token:lower()] or token:lower()
+        if not (ignored and ignored[normalized]) then AddSettingToken(tokens, seen, normalized) end
+    end
+    return tokens
+end
+
+local function TokenSet(tokens)
+    local out = {}
+    for i = 1, #(tokens or {}) do out[tokens[i]] = true end
+    return out
+end
+
+local function AddDescriptorSignature(out, seen, value, source, ignored)
+    local tokens = SettingIdentityTokens(value, ignored)
+    if #tokens == 0 then return end
+    local key = table.concat(tokens, "\031")
+    if seen[key] then return end
+    seen[key] = true
+    out[#out + 1] = { tokens = tokens, source = source }
+end
+
+local function CompactSettingIdentity(value)
+    return CleanText(value):lower():gsub("[^%w]+", "")
+end
+
+local function AddDescriptorCompact(out, seen, value, source)
+    local compact = CompactSettingIdentity(value)
+    if #compact < 5 or seen[compact] then return end
+    seen[compact] = true
+    out[#out + 1] = { value = compact, source = source }
+end
+
+local function SettingDescriptorSignatures(settingKey, pageKey, descriptor)
+    descriptor = type(descriptor) == "table" and descriptor or {}
+    local ignored = TokenSet(SettingIdentityTokens(pageKey))
+    -- The page key carries scope words (uf_target, gf_party, and so on).  They
+    -- locate the page but are not part of the control's local identity.
+    ignored.uf, ignored.gf, ignored.unit = true, true, true
+    local scope = tostring(settingKey or ""):match("^([^%.]+)")
+    local nonSemanticScope = {
+        player = true, target = true, focus = true, pet = true, boss = true,
+        targettarget = true, focustarget = true, general = true, bars = true,
+        menu = true, auras3 = true, barScope = true, fontScope = true,
+        gf_party = true, gf_raid = true, gf_mythicraid = true,
+    }
+    if nonSemanticScope[scope] then
+        local scopeTokens = SettingIdentityTokens(scope)
+        for i = 1, #scopeTokens do ignored[scopeTokens[i]] = true end
+    end
+
+    local signatures, seen = {}, {}
+    AddDescriptorSignature(signatures, seen, descriptor.attribute, "attribute", ignored)
+    AddDescriptorSignature(signatures, seen, descriptor.dbPath, "db_path", ignored)
+    AddDescriptorSignature(signatures, seen, tostring(settingKey or ""):gsub("^[^%.]+%.", ""), "setting_key", ignored)
+    AddDescriptorSignature(signatures, seen, descriptor.label, "label", ignored)
+    local compacts, compactSeen = {}, {}
+    AddDescriptorCompact(compacts, compactSeen, descriptor.attribute, "attribute")
+    AddDescriptorCompact(compacts, compactSeen, descriptor.dbPath, "db_path")
+    AddDescriptorCompact(compacts, compactSeen, tostring(settingKey or ""):gsub("^[^%.]+%.", ""), "setting_key")
+    return signatures, compacts
+end
+
+local EXPECTED_SETTING_KINDS = {
+    boolean = { toggle = true },
+    bool = { toggle = true },
+    number = { slider = true },
+    color = { color = true },
+    enum = { dropdown = true, segment = true },
+    string = { dropdown = true, textinput = true },
+}
+
+local GENERIC_SETTING_IDENTITY_TOKENS = {
+    alpha = true, anchor = true, background = true, color = true, enabled = true,
+    height = true, layer = true, mode = true, offset = true, opacity = true,
+    size = true, style = true, text = true, width = true, x = true, y = true,
+}
+
+local function RecordSettingTokens(record)
+    local rawPath = CleanText(record and record.controlPath):lower()
+    -- Some semantic paths intentionally describe UI concepts rather than DB
+    -- spelling.  Expand only lossless UI synonyms used by shared builders.
+    rawPath = rawPath:gsub("slotx", "slot x"):gsub("sloty", "slot y")
+    local tokens, seen = {}, {}
+    local function Add(value)
+        local list = SettingIdentityTokens(value)
+        for i = 1, #list do AddSettingToken(tokens, seen, list[i]) end
+    end
+    Add(rawPath)
+    Add(record and record.label)
+    Add(record and record.identityLabel)
+    Add(record and record.kind)
+    if rawPath:find("/position/", 1, true) then AddSettingToken(tokens, seen, "offset") end
+    if rawPath:find("/anchor_to", 1, true) then
+        AddSettingToken(tokens, seen, "anchor")
+        AddSettingToken(tokens, seen, "frame")
+        AddSettingToken(tokens, seen, "name")
+    end
+    if rawPath:find("/move_together", 1, true) then
+        AddSettingToken(tokens, seen, "direct")
+        AddSettingToken(tokens, seen, "layout")
+    end
+    if rawPath:find("/basics/enabled", 1, true) then AddSettingToken(tokens, seen, "frame") end
+    if rawPath:find("/basics/smooth_fill", 1, true) then
+        AddSettingToken(tokens, seen, "frame")
+        AddSettingToken(tokens, seen, "health")
+    end
+    if rawPath:find("/basics/reverse_fill", 1, true) then AddSettingToken(tokens, seen, "health") end
+    if rawPath:find("/power/detached", 1, true) then AddSettingToken(tokens, seen, "bar") end
+    if rawPath:find("/castbar/manual_width", 1, true) then AddSettingToken(tokens, seen, "bar") end
+    if rawPath:find("/castbar/detail/msuf2_castbar_spell_", 1, true)
+        or rawPath:find("/castbar/spell_text_", 1, true)
+    then
+        AddSettingToken(tokens, seen, "text")
+        AddSettingToken(tokens, seen, "name")
+    end
+    if rawPath:find("/castbar/feature/msuf2_castbar_text", 1, true) then AddSettingToken(tokens, seen, "spell") end
+    if seen.text and seen.size then AddSettingToken(tokens, seen, "font") end
+    return tokens, seen, rawPath
+end
+
+local function CompactPathMatchScore(compacts, rawPath)
+    local segments, reviewedSegments = {}, {}
+    for segment in tostring(rawPath or ""):gmatch("[^/]+") do
+        segments[CompactSettingIdentity(segment)] = true
+    end
+    local reviewed = ReviewedSettingAliases(rawPath)
+    if type(reviewed) == "string" then
+        segments[reviewed] = true
+        reviewedSegments[reviewed] = true
+    elseif type(reviewed) == "table" then
+        for i = 1, #reviewed do
+            segments[reviewed[i]] = true
+            reviewedSegments[reviewed[i]] = true
+        end
+    end
+    -- Exact equivalences shared by every unit page. The semantic control path
+    -- names the visible UI concept while the Assistant key names its backing
+    -- SavedVariables field.
+    if rawPath:find("/text/name/show", 1, true) then segments.showname = true end
+    if rawPath:find("/text/hp/show", 1, true) then segments.showhp, segments.hptext = true, true end
+    if rawPath:find("/power/detached", 1, true) and not rawPath:find("detachedpowerbar", 1, true) then
+        segments.powerbardetached = true
+    end
+    if rawPath:find("/castbar/detail/msuf2_castbar_spell_align", 1, true) then segments.spellnamealign = true end
+    if rawPath:find("/castbar/detail/msuf2_castbar_spell_position", 1, true) then segments.spellnameposition = true end
+    if rawPath:find("/castbar/detail/msuf2_castbar_spell_size", 1, true) then segments.spellnamefontsize = true end
+    if rawPath:find("/castbar/detail/msuf2_castbar_spell_x", 1, true) then segments.textoffsetx = true end
+    if rawPath:find("/castbar/detail/msuf2_castbar_spell_y", 1, true) then segments.textoffsety = true end
+    if rawPath:find("/castbar/detail/msuf2_castbar_time_size", 1, true) then segments.timefontsize = true end
+    if rawPath:find("/castbar/spell_text_manual_width", 1, true) then segments.spellnamemaxwidth = true end
+    if rawPath:find("/castbar/spell_text_width_mode", 1, true) then segments.spellnametruncate = true end
+    if rawPath:find("/api/set/absorb/overlay/color", 1, true) then segments.absorbbarcolor = true end
+    if rawPath:find("/api/set/heal/absorb/overlay/color", 1, true) then segments.healabsorbbarcolor = true end
+    local best
+    for i = 1, #(compacts or {}) do
+        local compact = compacts[i]
+        -- A lone compact such as "height", "enabled", or "color" is not an
+        -- identity.  Accept it only when a reviewed exact path alias supplied
+        -- that compact; otherwise the richer token signatures must prove the
+        -- subsection.  This prevents a unit-frame height request from landing
+        -- on the only visible Cast Bar Height slider, for example.
+        if segments[compact.value]
+            and (reviewedSegments[compact.value] or not GENERIC_SETTING_IDENTITY_TOKENS[compact.value])
+        then
+            local weight = compact.source == "attribute" and 36
+                or compact.source == "db_path" and 32
+                or 28
+            local score = 1000 + #compact.value + weight
+            if not best or score > best then best = score end
+        end
+    end
+    return best
+end
+
+local function SignatureMatch(signature, recordTokens, recordSet, rawPath, descriptor)
+    local effective, matched = 0, 0
+    local dynamicSlot = rawPath:find("/position/slot", 1, true) ~= nil
+    local signatureSet = TokenSet(signature.tokens)
+    if dynamicSlot and not (signatureSet.slot or signatureSet.left or signatureSet.center or signatureSet.right) then return nil end
+    local dynamicStatus = rawPath:find("/status/selected/", 1, true) ~= nil
+    local descriptorAttribute = CleanText(descriptor and descriptor.attribute):lower()
+    local descriptorFrameType = CleanText(descriptor and descriptor.frameType):lower()
+    local descriptorCategory = CleanText(descriptor and descriptor.category):lower()
+    local statusDescriptor = (descriptorFrameType == "group" and descriptorAttribute:find("statusicon", 1, true) ~= nil)
+        or (descriptorFrameType == "unitframe" and descriptorCategory:find("status icons", 1, true) ~= nil)
+    local dynamicStatusFields = {
+        x = true, y = true, size = true, anchor = true, layer = true,
+        enabled = true, style = true, custom = true, color = true, symbol = true,
+    }
+    for i = 1, #signature.tokens do
+        local token = signature.tokens[i]
+        -- One selected Slot X/Y control edits left, center, or right according
+        -- to the adjacent selector.  Direction is therefore state, not widget
+        -- identity, and all three canonical slot keys resolve to that control.
+        local dynamicSide = dynamicSlot and (token == "left" or token == "center" or token == "right")
+        local dynamicStatusIdentity = dynamicStatus and statusDescriptor and not dynamicStatusFields[token]
+        if not dynamicSide and not dynamicStatusIdentity then
+            effective = effective + 1
+            if recordSet[token] then matched = matched + 1 end
+        end
+    end
+    if effective == 0 or matched ~= effective then return nil end
+    if effective == 1 and GENERIC_SETTING_IDENTITY_TOKENS[signature.tokens[1]]
+        and not (dynamicSlot or dynamicStatus and statusDescriptor)
+    then
+        return nil
+    end
+    local sourceWeight = signature.source == "attribute" and 24
+        or signature.source == "db_path" and 22
+        or signature.source == "setting_key" and 18
+        or 8
+    return effective * 100 + sourceWeight
+end
+
+local function ResolveSettingDescriptorRecord(settingKey, pageKey, descriptor)
+    local signatures, compacts = SettingDescriptorSignatures(settingKey, pageKey, descriptor)
+    if #signatures == 0 then return nil, "missing_descriptor" end
+    local expectedKinds = EXPECTED_SETTING_KINDS[CleanText(descriptor and descriptor.type):lower()]
+    local best, bestScore, tied
+    local function ConsiderRecord(record)
+        if record and record.classification == "setting"
+            and (not expectedKinds or expectedKinds[record.kind])
+            and record.commandMeta and record.commandMeta.hasGet and record.commandMeta.hasSet
+        then
+            local recordTokens, recordSet, rawPath = RecordSettingTokens(record)
+            local reviewedMatch = DescriptorMatchesReviewedSetting(compacts, rawPath)
+            local score
+            if reviewedMatch then
+                score = CompactPathMatchScore(compacts, rawPath)
+            end
+            local semanticScore
+            if reviewedMatch then
+                for i = 1, #signatures do
+                    local candidate = SignatureMatch(signatures[i], recordTokens, recordSet, rawPath, descriptor)
+                    if candidate then semanticScore = (semanticScore or 0) + candidate end
+                end
+            end
+            if semanticScore then score = (score or 0) + semanticScore end
+            if score then
+                -- Prefer a stable semantic identity if two controls expose the
+                -- same vocabulary; never let that preference break a true tie
+                -- between equally stable controls.
+                if record.identityStable then score = score + 2 end
+                if record.idSource == "explicit" then score = score + 1 end
+                if not bestScore or score > bestScore then
+                    best, bestScore, tied = record, score, false
+                elseif score == bestScore and record ~= best then
+                    tied = true
+                end
+            end
+        end
+    end
+    local pageRecords = pageKey ~= "" and STATE.byPage[pageKey] or nil
+    if pageRecords then
+        for controlId in pairs(pageRecords) do ConsiderRecord(STATE.byId[controlId]) end
+    else
+        for _, record in pairs(STATE.byId) do ConsiderRecord(record) end
+    end
+    if not best then return nil, "no_semantic_match" end
+    if tied then return nil, "ambiguous_semantic_match" end
+    return best, "semantic_descriptor"
+end
+
 -- Late-bound exact-control lookup for Search and the load-on-demand Assistant.
 -- This deliberately scans the existing catalog instead of maintaining a second
 -- setting index: exact navigation is a cold user action and should not add idle
 -- memory for thousands of controls.
-function Catalog.FindBySettingKey(settingKey, pageKey)
+function Catalog.FindBySettingKey(settingKey, pageKey, descriptor)
     settingKey = CleanText(settingKey)
     pageKey = CleanText(pageKey)
     if settingKey == "" then return nil end
+
+    -- Exact search focusing calls this resolver again during the immediate,
+    -- zero-delay, and 0.05-second layout passes. Serve that one repeated key
+    -- before scanning; the catalog revision invalidates the scalar cache.
+    local cached = STATE.lastSettingDescriptorLookup
+    if cached and cached.revision == STATE.revision and cached.settingKey == settingKey and cached.pageKey == pageKey then
+        local record = cached.controlId and STATE.byId[cached.controlId] or nil
+        if record then
+            local public = PublicRecord(record)
+            public.settingKey = settingKey
+            public.resolvedSettingKey = settingKey
+            public.settingKeySource = cached.source
+            return public, record.widget, cached.source
+        end
+        return nil, nil, cached.source
+    end
+
     local best
-    for _, record in pairs(STATE.byId) do
-        if record.settingKey == settingKey then
-            if pageKey ~= "" and record.pageKey == pageKey then
-                best = record
-                break
-            end
-            if not best
-                or (record.identityStable and not best.identityStable)
-                or (not record.collision and best.collision)
-            then
-                best = record
+    local pageRecords = pageKey ~= "" and STATE.byPage[pageKey] or nil
+    for controlId in pairs(pageRecords or {}) do
+        local record = STATE.byId[controlId]
+        if record and record.settingKey == settingKey then
+            best = record
+            break
+        end
+    end
+    -- Preserve the previous cross-page fallback for callers with an outdated
+    -- page hint, but avoid it for the normal exact-page hit.
+    if not best then
+        for _, record in pairs(STATE.byId) do
+            if record.settingKey == settingKey then
+                if pageKey ~= "" and record.pageKey == pageKey then
+                    best = record
+                    break
+                end
+                if not best
+                    or (record.identityStable and not best.identityStable)
+                    or (not record.collision and best.collision)
+                then
+                    best = record
+                end
             end
         end
     end
-    if not best then return nil end
-    return PublicRecord(best), best.widget
+    if best then
+        STATE.lastSettingDescriptorLookup = {
+            revision = STATE.revision,
+            settingKey = settingKey,
+            pageKey = pageKey,
+            controlId = best.controlId,
+            source = "explicit",
+        }
+        return PublicRecord(best), best.widget, "explicit"
+    end
+
+    descriptor = type(descriptor) == "table" and descriptor or nil
+    if not descriptor then return nil end
+
+    local resolved, source = ResolveSettingDescriptorRecord(settingKey, pageKey, descriptor)
+    STATE.lastSettingDescriptorLookup = {
+        revision = STATE.revision,
+        settingKey = settingKey,
+        pageKey = pageKey,
+        controlId = resolved and resolved.controlId or nil,
+        source = source,
+    }
+    if not resolved then return nil, nil, source end
+    local public = PublicRecord(resolved)
+    public.settingKey = settingKey
+    public.resolvedSettingKey = settingKey
+    public.settingKeySource = source
+    return public, resolved.widget, source
 end
 
 function Catalog.ValidateRecord(record)
@@ -911,6 +1455,9 @@ function Catalog.GetCoverageReport()
         invalidCapabilities = {},
         interactiveEphemeral = 0,
         passiveEphemeral = 0,
+        assistantLinkDispositionCounts = {},
+        assistantStaticSettingLinkEligible = 0,
+        assistantStaticSettingLinkExcluded = 0,
         collisionEventsLifetime = STATE.collisionEvents,
         componentParts = 0,
     }
@@ -920,6 +1467,11 @@ function Catalog.GetCoverageReport()
     for i = 1, #records do
         local record = records[i]
         local classification = CLASSIFICATION[record.classification] and record.classification or "unknown"
+        local linkDisposition, _, linkEligible = AssistantLinkDisposition(record)
+        report.assistantLinkDispositionCounts[linkDisposition] =
+            (report.assistantLinkDispositionCounts[linkDisposition] or 0) + 1
+        if linkEligible then report.assistantStaticSettingLinkEligible = report.assistantStaticSettingLinkEligible + 1
+        else report.assistantStaticSettingLinkExcluded = report.assistantStaticSettingLinkExcluded + 1 end
         report.byClassification[classification] = report.byClassification[classification] + 1
         report.byIdSource[record.idSource] = (report.byIdSource[record.idSource] or 0) + 1
         local page = report.byPage[record.pageKey]

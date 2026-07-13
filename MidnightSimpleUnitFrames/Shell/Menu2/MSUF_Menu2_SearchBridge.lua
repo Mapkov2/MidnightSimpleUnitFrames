@@ -40,8 +40,30 @@ end
 function Bridge.OpenSearchResults(query)
     SearchCall("OpenResults", query)
 end
-function Bridge.OpenSearchTarget(pageKey, query, fallback, preferredAnchor)
-    return SearchCall("OpenTarget", pageKey, query, fallback, preferredAnchor)
+local function ExactSettingDescriptor(exactTarget)
+    if type(exactTarget) ~= "table" then return exactTarget end
+    local settingKey = tostring(exactTarget.settingKey or "")
+    if settingKey == "" or exactTarget.attribute or exactTarget.dbPath or exactTarget.type then return exactTarget end
+    -- The Assistant companion is load-on-demand.  Read only its already-loaded
+    -- descriptor at the moment the user asks to open a setting; Menu2 never
+    -- loads the companion and retains none of its registry tables.
+    local assistant = MSUF.Assistant
+    local registry = assistant and assistant.Registry
+    local setting = registry and type(registry.GetSetting) == "function" and registry:GetSetting(settingKey) or nil
+    if type(setting) ~= "table" then return exactTarget end
+    local descriptor = {}
+    for key, value in pairs(exactTarget) do descriptor[key] = value end
+    descriptor.attribute = setting.attribute
+    descriptor.dbPath = setting.dbPath
+    descriptor.type = setting.type
+    descriptor.label = setting.label
+    descriptor.category = setting.category
+    descriptor.unit = setting.unit
+    descriptor.frameType = setting.frameType
+    return descriptor
+end
+function Bridge.OpenSearchTarget(pageKey, query, fallback, preferredAnchor, route, exactTarget)
+    return SearchCall("OpenTarget", pageKey, query, fallback, preferredAnchor, route, ExactSettingDescriptor(exactTarget))
 end
 function Bridge.BumpSearchInputSerial()
     SearchCall("BumpInputSerial")
