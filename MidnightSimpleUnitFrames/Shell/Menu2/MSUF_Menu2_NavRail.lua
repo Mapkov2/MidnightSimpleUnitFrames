@@ -326,7 +326,7 @@ end
 local function CreateHistoryControls(parent)
     local row = CreateFrame("Frame", nil, parent)
     local rowW = NavItemWidth(0)
-    row:SetSize(rowW, 26)
+    row:SetSize(rowW, 44)
     local buttonGap = 6
     local buttonW = floor((rowW - buttonGap) * 0.5)
     local function StyleHistoryButton(btn, label, texture)
@@ -343,17 +343,16 @@ local function CreateHistoryControls(parent)
         icon:SetTexture(texture)
         icon:SetSize(13, 13)
         icon:SetPoint("LEFT", btn, "LEFT", 9, 0)
-        if icon.SetDesaturated then icon:SetDesaturated(false) end
-        icon:SetVertexColor(1, 1, 1, 0.95)
+        if icon.SetDesaturated then icon:SetDesaturated(true) end
+        icon:SetVertexColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.92)
         btn._msuf2HistoryIcon = icon
         return icon
     end
     local undo = T.Button(row, "", buttonW, 22)
-    T.SkinDangerButton(undo)
     undo._msuf2SkipHistoryCheckpoint = true
     undo._msuf2HistorySource = "history:undo"
     undo._msuf2HistoryLabel = "Undo"
-    undo:SetPoint("LEFT", row, "LEFT", 0, 0)
+    undo:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
     StyleHistoryButton(undo, "Undo", T.media.historyUndo)
     undo:SetScript("OnClick", function()
         if _G.IsShiftKeyDown and _G.IsShiftKeyDown() and M.ResetHistorySession then
@@ -370,11 +369,10 @@ local function CreateHistoryControls(parent)
         })
     end
     local redo = T.Button(row, "", buttonW, 22)
-    T.SkinSuccessButton(redo)
     redo._msuf2SkipHistoryCheckpoint = true
     redo._msuf2HistorySource = "history:redo"
     redo._msuf2HistoryLabel = "Redo"
-    redo:SetPoint("LEFT", undo, "RIGHT", buttonGap, 0)
+    redo:SetPoint("TOPLEFT", undo, "TOPRIGHT", buttonGap, 0)
     StyleHistoryButton(redo, "Redo", T.media.historyRedo)
     redo:SetScript("OnClick", function()
         M.CallIf(M.Redo)
@@ -394,9 +392,66 @@ local function CreateHistoryControls(parent)
         local s = M.GetHistoryState and M.GetHistoryState() or {}
         return s.redoLabel and ("Redo: " .. ShortLabel(s.redoLabel, 28)) or "Redo"
     end, function() return HistoryTooltipText("redo") end)
+    local feedbackIcon = row:CreateTexture(nil, "ARTWORK", nil, 5)
+    feedbackIcon:SetTexture(T.media.checkTickMedium)
+    feedbackIcon:SetSize(9, 9)
+    feedbackIcon:SetPoint("TOPLEFT", row, "TOPLEFT", 3, -28)
+    feedbackIcon:SetVertexColor(T.colors.ok[1], T.colors.ok[2], T.colors.ok[3], 1)
+    feedbackIcon:SetAlpha(0)
+    local feedback = T.Font(row, "GameFontDisableSmall", "", T.colors.ok)
+    feedback:SetPoint("LEFT", feedbackIcon, "RIGHT", 4, 0)
+    feedback:SetPoint("RIGHT", row, "RIGHT", -2, 0)
+    feedback:SetJustifyH("LEFT")
+    if feedback.SetWordWrap then feedback:SetWordWrap(false) end
+    feedback:SetAlpha(0)
     row.undo = undo
     row.redo = redo
+    row.feedback = feedback
+    row.feedbackIcon = feedbackIcon
     M.historyControls = row
+    function M.ShowHistoryFeedback(text, seconds)
+        local controls = M.historyControls
+        local message = controls and controls.feedback
+        local icon = controls and controls.feedbackIcon
+        text = ShortLabel(text, 30)
+        if not (message and icon and text ~= "") then return end
+        controls._msuf2FeedbackSerial = (controls._msuf2FeedbackSerial or 0) + 1
+        local serial = controls._msuf2FeedbackSerial
+        message:SetText(text)
+        message:SetTextColor(T.colors.ok[1], T.colors.ok[2], T.colors.ok[3], 1)
+        message:SetAlpha(1)
+        icon:SetAlpha(1)
+        if T.PlayMotion then
+            T.PlayMotion(message, "controlFocusIn", { fromAlpha = 0.25, toAlpha = 1, duration = 0.10 })
+            T.PlayMotion(icon, "controlFocusIn", { fromAlpha = 0.25, toAlpha = 1, duration = 0.10 })
+        end
+        local timer = _G.C_Timer
+        if not (timer and timer.After) then return end
+        timer.After(tonumber(seconds) or 2.0, function()
+            if M.historyControls ~= controls or controls._msuf2FeedbackSerial ~= serial then return end
+            local function ClearFeedback()
+                if M.historyControls ~= controls or controls._msuf2FeedbackSerial ~= serial then return end
+                message:SetText("")
+                message:SetAlpha(0)
+                icon:SetAlpha(0)
+            end
+            if T.PlayMotion then
+                T.PlayMotion(icon, "controlFocusOut", {
+                    fromAlpha = icon.GetAlpha and icon:GetAlpha() or 1,
+                    toAlpha = 0,
+                    duration = 0.16,
+                })
+                T.PlayMotion(message, "controlFocusOut", {
+                    fromAlpha = message.GetAlpha and message:GetAlpha() or 1,
+                    toAlpha = 0,
+                    duration = 0.16,
+                    onFinished = ClearFeedback,
+                })
+            else
+                ClearFeedback()
+            end
+        end)
+    end
     function M.RefreshHistoryControls()
         local controls = M.historyControls
         if not controls then return end
@@ -404,13 +459,11 @@ local function CreateHistoryControls(parent)
         local canUndo = s.canUndo and true or false
         local canRedo = s.canRedo and true or false
         local canResetAll = s.canResetAll and true or false
-        if controls.undo then controls.undo._msuf2Danger = canUndo end
-        if controls.redo then controls.redo._msuf2Success = canRedo end
         if controls.undo and controls.undo.SetEnabled then controls.undo:SetEnabled(canUndo or canResetAll) end
         if controls.redo and controls.redo.SetEnabled then controls.redo:SetEnabled(canRedo) end
         if controls.undo and controls.undo._msuf2HistoryIcon then
             if canUndo then
-                controls.undo._msuf2HistoryIcon:SetVertexColor(1, 1, 1, 0.95)
+                controls.undo._msuf2HistoryIcon:SetVertexColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.96)
             elseif canResetAll then
                 controls.undo._msuf2HistoryIcon:SetVertexColor(T.colors.muted[1], T.colors.muted[2], T.colors.muted[3], 0.88)
             else
@@ -419,7 +472,7 @@ local function CreateHistoryControls(parent)
         end
         if controls.redo and controls.redo._msuf2HistoryIcon then
             if canRedo then
-                controls.redo._msuf2HistoryIcon:SetVertexColor(1, 1, 1, 0.95)
+                controls.redo._msuf2HistoryIcon:SetVertexColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.96)
             else
                 controls.redo._msuf2HistoryIcon:SetVertexColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], 0.42)
             end
@@ -784,7 +837,7 @@ local function BuildNavRail(parent)
                 frame:Show()
                 frame:ClearAllPoints()
                 frame:SetPoint("TOPLEFT", list, "TOPLEFT", NAV_ITEM_X, y - 2)
-                y = y - 32
+                y = y - 50
             elseif not item.group or M.navHeaderState[item.group] ~= false then
                 btn:Show()
                 if btn.SetScale then btn:SetScale(1) end
