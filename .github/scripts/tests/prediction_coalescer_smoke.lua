@@ -14,6 +14,15 @@ end
 local Methods = {}
 local drivers = {}
 
+local function Bump(region, operation)
+    local operations = region.operations
+    operations[operation] = (operations[operation] or 0) + 1
+end
+
+local function OperationCount(region, operation)
+    return region.operations[operation] or 0
+end
+
 local function NewRegion(kind, parent)
     return setmetatable({
         kind = kind,
@@ -23,10 +32,20 @@ local function NewRegion(kind, parent)
         width = 100,
         frameLevel = 1,
         frameStrata = "MEDIUM",
+        operations = {},
+        hooks = {},
+        registered = {},
     }, { __index = Methods })
 end
 
 function Methods:SetScript(script, callback) self.scripts[script] = callback end
+function Methods:HookScript(script, callback) self.hooks[script] = callback end
+function Methods:RegisterEvent(event) self.registered[event] = true end
+function Methods:RegisterUnitEvent(event, unit) self.registered[event] = unit end
+function Methods:UnregisterEvent(event) self.registered[event] = nil end
+function Methods:UnregisterAllEvents()
+    for event in pairs(self.registered) do self.registered[event] = nil end
+end
 function Methods:CreateTexture() return NewRegion("Texture", self) end
 function Methods:SetMinMaxValues(minimum, maximum) self.minimum, self.maximum = minimum, maximum end
 function Methods:SetValue(value) self.value = value end
@@ -47,18 +66,18 @@ function Methods:IsShown() return self.shown == true end
 function Methods:IsVisible() return self.shown == true end
 function Methods:Show() self.shown = true end
 function Methods:Hide() self.shown = false end
-function Methods:SetAllPoints() end
-function Methods:ClearAllPoints() end
-function Methods:SetPoint() end
-function Methods:SetWidth(width) self.width = width end
-function Methods:GetWidth() return self.width end
-function Methods:SetParent(parent) self.parent = parent end
-function Methods:GetParent() return self.parent end
-function Methods:SetFrameLevel(level) self.frameLevel = level end
-function Methods:GetFrameLevel() return self.frameLevel end
-function Methods:SetFrameStrata(strata) self.frameStrata = strata end
-function Methods:GetFrameStrata() return self.frameStrata end
-function Methods:SetReverseFill(reverse) self.reverse = reverse == true end
+function Methods:SetAllPoints() Bump(self, "SetAllPoints") end
+function Methods:ClearAllPoints() Bump(self, "ClearAllPoints") end
+function Methods:SetPoint() Bump(self, "SetPoint") end
+function Methods:SetWidth(width) Bump(self, "SetWidth"); self.width = width end
+function Methods:GetWidth() Bump(self, "GetWidth"); return self.width end
+function Methods:SetParent(parent) Bump(self, "SetParent"); self.parent = parent end
+function Methods:GetParent() Bump(self, "GetParent"); return self.parent end
+function Methods:SetFrameLevel(level) Bump(self, "SetFrameLevel"); self.frameLevel = level end
+function Methods:GetFrameLevel() Bump(self, "GetFrameLevel"); return self.frameLevel end
+function Methods:SetFrameStrata(strata) Bump(self, "SetFrameStrata"); self.frameStrata = strata end
+function Methods:GetFrameStrata() Bump(self, "GetFrameStrata"); return self.frameStrata end
+function Methods:SetReverseFill(reverse) Bump(self, "SetReverseFill"); self.reverse = reverse == true end
 function Methods:SetClipsChildren(clips) self.clipsChildren = clips == true end
 
 _G.CreateFrame = function(kind, _, parent)
@@ -271,4 +290,213 @@ FlushDriver()
 Equal(calls.detailed, 0, "absorb-only path unexpectedly created a detailed calculator read")
 Equal(absorbOnly.absorbBar._msufMaxReady, true, "absorb-only bar lost its native max state")
 
-print("PASS prediction coalescer: merged data events, per-frame isolation, sync/disable cancellation, next-batch reentry, absorb-only semantics")
+local function HasEvent(events, wanted)
+    for index = 1, #events do
+        if events[index] == wanted then return true end
+    end
+    return false
+end
+
+-- Dependent frames must expose UNIT_TARGET as a normal unit event. The core
+-- can then bind it to the exact parent unit (target/focus) instead of turning
+-- every UNIT_TARGET notification into global fanout.
+local dependentSpec = {
+    key = "targettarget",
+    unit = "targettarget",
+    scope = "single",
+    prediction = config,
+}
+local dependentFrame = { unit = "targettarget" }
+local dependentEvents = Prediction.GetEvents(dependentFrame, dependentSpec)
+Check(HasEvent(dependentEvents, "UNIT_TARGET"), "dependent prediction UNIT_TARGET was not a normal unit event")
+Check(not HasEvent(Prediction.GetUnitlessEvents(dependentFrame, dependentSpec), "UNIT_TARGET"),
+    "dependent prediction retained global UNIT_TARGET fanout")
+Check(Prediction.GetEvents(dependentFrame, dependentSpec) == dependentEvents,
+    "dependent event plan was allocated per query")
+local focusTargetSpec = {
+    key = "focustarget",
+    unit = "focustarget",
+    scope = "single",
+    prediction = config,
+}
+Check(Prediction.GetEvents({ unit = "focustarget" }, focusTargetSpec) == dependentEvents,
+    "equivalent dependent frames did not share their prebuilt event plan")
+Check(not HasEvent(Prediction.GetEvents({ unit = "target" }, {
+    key = "target", unit = "target", scope = "single", prediction = config,
+}), "UNIT_TARGET"), "ordinary target prediction inherited dependent UNIT_TARGET")
+local groupUnitless = Prediction.GetUnitlessEvents({ unit = "party1" }, {
+    key = "party", unit = "party1", scope = "group", prediction = config,
+})
+Check(HasEvent(groupUnitless, "PARTY_MEMBER_ENABLE") and HasEvent(groupUnitless, "PARTY_MEMBER_DISABLE"),
+    "group lifecycle unitless events were lost")
+
+-- Exercise the geometry caches through public updates. UNIT_MAXHEALTH carries
+-- forceMax for status-bar values but must not force otherwise-current anchors.
+local layoutConfig = {
+    enabled = true,
+    heal = true,
+    absorb = true,
+    healAbsorb = true,
+    healAnchorMode = 2,
+    absorbAnchorMode = 4,
+    overAbsorbOverlay = false,
+}
+local layoutFrame = MakeFrame("target", layoutConfig)
+local absorbBar = layoutFrame.absorbBar
+local healAbsorbBar = layoutFrame.healAbsorbBar
+Equal(absorbBar._msufPredictionParent, layoutFrame, "mode-4 absorb parent cache")
+Equal(absorbBar:GetParent(), layoutFrame, "mode-4 absorb actual parent")
+
+local absorbAnchors = OperationCount(absorbBar, "ClearAllPoints")
+local healAbsorbAnchors = OperationCount(healAbsorbBar, "ClearAllPoints")
+Prediction.Update(layoutFrame, "UNIT_MAXHEALTH", "target")
+Equal(OperationCount(absorbBar, "ClearAllPoints"), absorbAnchors,
+    "forceMax incorrectly forced absorb geometry")
+Equal(OperationCount(healAbsorbBar, "ClearAllPoints"), healAbsorbAnchors,
+    "current heal-absorb geometry was rebuilt")
+
+-- The live health-bar width, not a stale frame/spec width, owns prediction
+-- geometry. Both overlay types must repair themselves on the next real event.
+layoutFrame.hpBar.width = 137
+Prediction.Update(layoutFrame, "UNIT_MAXHEALTH", "target")
+Equal(absorbBar._msufPredictionWidth, 137, "absorb layout ignored live health width")
+Equal(healAbsorbBar._msufHealAbsorbWidth, 137, "heal-absorb layout ignored live health width")
+
+-- Replacing the follow texture invalidates the exact anchor target even when
+-- mode, follow bar and width remain identical.
+local replacementFollowTexture = NewRegion("Texture", layoutFrame.incomingHealBar)
+layoutFrame.incomingHealBar.statusTexture = replacementFollowTexture
+layoutFrame.incomingHealBar._msufPredictionStatusTexture = nil
+Prediction.Update(layoutFrame, "UNIT_MAXHEALTH", "target")
+Equal(absorbBar._msufPredictionAnchorTarget, replacementFollowTexture,
+    "absorb layout retained a replaced follow texture")
+
+-- Cached parent identity is insufficient: repair actual external reparenting.
+local foreignParent = NewRegion("Frame")
+absorbBar.parent = foreignParent
+Prediction.Update(layoutFrame, "UNIT_MAXHEALTH", "target")
+Equal(absorbBar:GetParent(), layoutFrame, "absorb layout did not repair actual parent drift")
+
+-- Heal-absorb validates parent, layer and anchor before its cached fast exit.
+healAbsorbBar.parent = foreignParent
+Prediction.Update(layoutFrame, "UNIT_MAXHEALTH", "target")
+Equal(healAbsorbBar:GetParent(), layoutFrame.hpBar, "heal-absorb did not repair actual parent drift")
+Equal(healAbsorbBar._msufHealAbsorbParent, layoutFrame.hpBar, "heal-absorb parent cache")
+
+local absorbLayerAnchors = OperationCount(absorbBar, "ClearAllPoints")
+local healAbsorbLayerAnchors = OperationCount(healAbsorbBar, "ClearAllPoints")
+layoutFrame.hpBar.frameLevel = 9
+layoutFrame.frameStrata = "HIGH"
+Prediction.Update(layoutFrame, "UNIT_MAXHEALTH", "target")
+Equal(absorbBar.frameLevel, 11, "absorb frame level did not follow health level")
+Equal(absorbBar.frameStrata, "HIGH", "absorb frame strata did not follow its frame")
+Equal(OperationCount(absorbBar, "ClearAllPoints"), absorbLayerAnchors,
+    "layer-only absorb repair rewrote geometry")
+Equal(healAbsorbBar.frameLevel, 12, "heal-absorb frame level did not follow health level")
+Equal(healAbsorbBar.frameStrata, "HIGH", "heal-absorb frame strata did not follow its frame")
+Equal(OperationCount(healAbsorbBar, "ClearAllPoints"), healAbsorbLayerAnchors,
+    "layer-only heal-absorb repair rewrote geometry")
+
+-- Incoming-heal geometry normally runs on Apply. A pure layer change must
+-- synchronize there without invalidating its already-correct anchors.
+local incomingBar = layoutFrame.incomingHealBar
+Prediction.Apply(layoutFrame, layoutFrame.MSUFSpec)
+Equal(incomingBar.frameLevel, 10, "incoming-heal frame level did not follow health level")
+Equal(incomingBar.frameStrata, "HIGH", "incoming-heal frame strata did not follow its frame")
+local incomingLayerAnchors = OperationCount(incomingBar, "ClearAllPoints")
+layoutFrame.hpBar.frameLevel = 10
+layoutFrame.frameStrata = "DIALOG"
+Prediction.Apply(layoutFrame, layoutFrame.MSUFSpec)
+Equal(incomingBar.frameLevel, 11, "incoming-heal frame level did not resynchronize")
+Equal(incomingBar.frameStrata, "DIALOG", "incoming-heal frame strata did not resynchronize")
+Equal(OperationCount(incomingBar, "ClearAllPoints"), incomingLayerAnchors,
+    "layer-only incoming-heal repair rewrote geometry")
+
+local replacementHealthTexture = NewRegion("Texture", layoutFrame.hpBar)
+layoutFrame.hpBar.statusTexture = replacementHealthTexture
+layoutFrame.hpBar._msufPredictionStatusTexture = nil
+Prediction.Update(layoutFrame, "UNIT_MAXHEALTH", "target")
+Equal(healAbsorbBar._msufHealAbsorbAnchorTarget, replacementHealthTexture,
+    "heal-absorb retained a replaced health texture")
+
+layoutFrame._msufPredictionHpReverse = true
+Prediction.Update(layoutFrame, "UNIT_MAXHEALTH", "target")
+Equal(healAbsorbBar._msufHealAbsorbHpReverse, true, "heal-absorb reverse anchor cache")
+Equal(healAbsorbBar.reverse, false, "heal-absorb reverse fill was not synchronized")
+
+-- Once repaired, another forceMax event stays entirely on the geometry cache.
+absorbAnchors = OperationCount(absorbBar, "ClearAllPoints")
+healAbsorbAnchors = OperationCount(healAbsorbBar, "ClearAllPoints")
+Prediction.Update(layoutFrame, "UNIT_MAXHEALTH", "target")
+Equal(OperationCount(absorbBar, "ClearAllPoints"), absorbAnchors,
+    "stable absorb geometry regressed after repair")
+Equal(OperationCount(healAbsorbBar, "ClearAllPoints"), healAbsorbAnchors,
+    "stable heal-absorb geometry regressed after repair")
+
+-- A host without GetFrameLevel is legal in reduced harnesses. If hpBar also
+-- yields no level, the guarded fallback remains deterministic and never calls
+-- a missing frame method.
+local savedFrameGetLevel = layoutFrame.GetFrameLevel
+local savedHealthGetLevel = layoutFrame.hpBar.GetFrameLevel
+layoutFrame.GetFrameLevel = false
+layoutFrame.hpBar.GetFrameLevel = function() return nil end
+absorbAnchors = OperationCount(absorbBar, "ClearAllPoints")
+Prediction.Update(layoutFrame, "UNIT_MAXHEALTH", "target")
+Equal(absorbBar.frameLevel, 3, "absorb missing-level fallback")
+Equal(OperationCount(absorbBar, "ClearAllPoints"), absorbAnchors,
+    "missing-level fallback rewrote absorb geometry")
+layoutFrame.GetFrameLevel = savedFrameGetLevel
+layoutFrame.hpBar.GetFrameLevel = savedHealthGetLevel
+
+-- Integration proof: with the real Core, the normal dependent UNIT_TARGET
+-- event is bound to its parent source and the compiled route receives the
+-- dependent display unit. No Core special case or global registration is used.
+_G.InCombatLockdown = function() return false end
+_G.UnitIsDead = function() return false end
+_G.UnitIsDeadOrGhost = function() return false end
+local RoutedMSUF = { UF = { Metadata = { defaultApplyMask = { Prediction = true } } } }
+_G.MSUF_NS = RoutedMSUF
+local coreChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Core.lua"))
+coreChunk("MidnightSimpleUnitFrames", RoutedMSUF)
+local routedPredictionChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Prediction.lua"))
+routedPredictionChunk("MidnightSimpleUnitFrames", RoutedMSUF)
+local RoutedUF = RoutedMSUF.UF
+
+local function MakeRoutedDependent(unit)
+    local routed = NewRegion("UnitFrame")
+    routed.unit = unit
+    routed.unitKey = unit
+    routed.hpBar = NewRegion("StatusBar", routed)
+    routed.hpBar:SetStatusBarTexture("health")
+    local routedSpec = {
+        enabled = true,
+        key = unit,
+        unit = unit,
+        scope = "single",
+        width = 100,
+        texture = "health",
+        health = { reverse = false },
+        prediction = config,
+    }
+    routed.MSUFSpec = routedSpec
+    RoutedUF.AttachFrame(routed, { scope = "single" })
+    RoutedUF.ApplyElementToFrame(routed, "Prediction", routedSpec)
+    return routed
+end
+
+local routedTargetTarget = MakeRoutedDependent("targettarget")
+Equal(routedTargetTarget.registered.UNIT_TARGET, "target",
+    "Core did not bind targettarget UNIT_TARGET to target")
+Equal(routedTargetTarget._msufFrameUnitEventTargets.UNIT_TARGET, "targettarget",
+    "Core lost targettarget route destination")
+ResetCalls()
+routedTargetTarget.UNIT_TARGET(routedTargetTarget, "UNIT_TARGET", "target")
+Equal(calls.lastUnit, "targettarget", "compiled targettarget route leaked its source unit")
+
+local routedFocusTarget = MakeRoutedDependent("focustarget")
+Equal(routedFocusTarget.registered.UNIT_TARGET, "focus",
+    "Core did not bind focustarget UNIT_TARGET to focus")
+Equal(routedFocusTarget._msufFrameUnitEventTargets.UNIT_TARGET, "focustarget",
+    "Core lost focustarget route destination")
+
+print("PASS prediction: coalescing, exact dependent routing, live geometry caches, parent/layer repair, absorb-only semantics")
