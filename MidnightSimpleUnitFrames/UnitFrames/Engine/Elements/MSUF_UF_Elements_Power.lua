@@ -140,10 +140,13 @@ local function ReadPowerTypeCached(bar, unit, force)
 end
 
 local function BarShown(bar)
+  -- Power owns this bar's Show/Hide lifecycle and updates the cached flag in
+  -- SetShown. Parent visibility is gated by the Core, while IsShown() only
+  -- repeats this local state through a native call on every power event.
   if not bar then return false end
-  if bar._msufShown == false then return false end
-  if bar.IsShown and not bar:IsShown() then return false end
-  return true
+  if bar._msufShown ~= nil then return bar._msufShown == true end
+  -- Preserve the pre-Apply/legacy fallback for a bar with no owned state yet.
+  return not bar.IsShown or bar:IsShown()
 end
 
 local function PowerEventMatchesToken(bar, event, eventPowerToken)
