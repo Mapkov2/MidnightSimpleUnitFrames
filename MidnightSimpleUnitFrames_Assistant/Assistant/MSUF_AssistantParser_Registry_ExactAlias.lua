@@ -38,14 +38,34 @@ local function Tokens(text)
     return out
 end
 
+local function AliasNormalizationMaskHas(mask, index)
+    if type(mask) ~= "number" then return false end
+    local bit = 2 ^ ((tonumber(index) or 1) - 1)
+    return (mask % (bit * 2)) >= bit
+end
+
+-- Registry registration records which aliases still need the parser's full
+-- normalizer. Most generated aliases are already canonical, so honoring that
+-- bitmask avoids normalizing and caching tens of thousands of identical
+-- strings while preserving byte-for-byte parser-normalization semantics.
+local function PreparedSettingAlias(setting, alias, index, exact)
+    if type(alias) ~= "string" then return Normalize(alias) end
+    if type(setting) == "table" and setting._assistantAliasNormVersion == 2 then
+        local mask = exact and setting._assistantExactAliasNormMask or setting._assistantAliasNormMask
+        if not AliasNormalizationMaskHas(mask, index) then return alias end
+    end
+    return Normalize(alias)
+end
+
 local function AddIndexAlias(index, setting, alias, minTokens)
-    alias = Normalize(alias)
     if alias == "" then return end
-    -- alias is already normalized; split directly instead of Tokens(), which
-    -- would run the full Normalize pass a second time per alias.
-    local tokens = {}
-    for token in alias:gmatch("%S+") do tokens[#tokens + 1] = token end
-    local count = #tokens
+    -- The alias is already normalized by PreparedSettingAlias. Count without
+    -- allocating a temporary token table for every retained registry phrase.
+    local count = 0
+    for _ in alias:gmatch("%S+") do
+        count = count + 1
+        if count > MAX_EXACT_ALIAS_TOKENS then return end
+    end
     minTokens = tonumber(minTokens) or 1
     if count < minTokens then return end
     if count == 0 or count > MAX_EXACT_ALIAS_TOKENS then return end
@@ -61,8 +81,7 @@ local function AddIndexAlias(index, setting, alias, minTokens)
         if bucket[i] == setting then return end
     end
     bucket[#bucket + 1] = setting
-    for i = 1, #tokens do
-        local token = tokens[i]
+    for token in alias:gmatch("%S+") do
         if not COMMON_EXACT_ALIAS_TOKENS[token] then index.triggerTokens[token] = true end
     end
     if count > index.maxTokens then index.maxTokens = count end
@@ -97,11 +116,13 @@ local function EnsureIndex(settings)
         if i % 64 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
         local setting = settings[i]
         local exactAliases = type(setting) == "table" and setting.exactAliases or nil
-        for j = 1, #(exactAliases or {}) do AddIndexAlias(index, setting, exactAliases[j], 1) end
+        for j = 1, #(exactAliases or {}) do
+            AddIndexAlias(index, setting, PreparedSettingAlias(setting, exactAliases[j], j, true), 1)
+        end
         local aliases = type(setting) == "table" and setting.aliases or nil
         for j = 1, #(aliases or {}) do
             if ShouldIndexNormalAlias(setting, aliases[j]) then
-                AddIndexAlias(index, setting, aliases[j], 2)
+                AddIndexAlias(index, setting, PreparedSettingAlias(setting, aliases[j], j, false), 2)
             end
         end
     end
@@ -113,6 +134,97 @@ local function EnsureIndex(settings)
 end
 
 P._EnsureRegistryExactAliasIndex = EnsureIndex
+
+local MAX_EXACT_ALIAS_LOOKUP_CACHE_RESULTS = 32
+
+local function CopySettingBucket(bucket, limit)
+    if type(bucket) ~= "table" or #bucket == 0 then return nil end
+    local out = {}
+    local bounded = math.max(1, math.floor(tonumber(limit) or 16))
+    for i = 1, math.min(#bucket, bounded) do out[i] = bucket[i] end
+    return out
+end
+
+-- Read-only setting-location questions should not have to construct and retain
+-- the parser's complete mutation index. Reuse it when it already exists;
+-- otherwise perform one exact prepared-alias scan and retain only the latest
+-- bounded result. Registration order, alias eligibility, and match limits are
+-- identical to the full index path.
+local function FindRegistryExactAliasSettings(settings, subject, limit)
+    settings = settings or {}
+    subject = Normalize(subject)
+    local tokenCount = 0
+    for _ in subject:gmatch("%S+") do tokenCount = tokenCount + 1 end
+    if subject == "" or tokenCount < 1 or tokenCount > MAX_EXACT_ALIAS_TOKENS then return nil end
+    limit = math.max(1, math.floor(tonumber(limit) or 16))
+
+    local completeIndex = P._registryExactAliasSettings == settings
+        and P._registryExactAliasCount == #settings
+        and type(P._registryExactAliasIndex) == "table"
+        and P._registryExactAliasIndex or nil
+    if completeIndex then
+        local byLength = completeIndex.byLength and completeIndex.byLength[tokenCount]
+        return CopySettingBucket(byLength and byLength[subject], limit)
+    end
+
+    local cached = P._registryExactAliasLookupCache
+    if type(cached) == "table"
+        and cached.settings == settings
+        and cached.count == #settings
+        and cached.subject == subject
+        and cached.tokenCount == tokenCount
+        and cached.limit == limit
+    then
+        return cached.bucket ~= false and CopySettingBucket(cached.bucket, limit) or nil
+    end
+
+    local bucket, seen = {}, {}
+    for i = 1, #settings do
+        if i % 64 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
+        local setting = settings[i]
+        local matched = false
+        local exactAliases = type(setting) == "table" and setting.exactAliases or nil
+        for j = 1, #(exactAliases or {}) do
+            if PreparedSettingAlias(setting, exactAliases[j], j, true) == subject then
+                matched = true
+                break
+            end
+        end
+        if not matched and tokenCount >= 2 then
+            local aliases = type(setting) == "table" and setting.aliases or nil
+            for j = 1, #(aliases or {}) do
+                local alias = PreparedSettingAlias(setting, aliases[j], j, false)
+                if alias == subject and ShouldIndexNormalAlias(setting, aliases[j]) then
+                    matched = true
+                    break
+                end
+            end
+        end
+        if matched and setting and not seen[setting] then
+            seen[setting] = true
+            bucket[#bucket + 1] = setting
+            if #bucket >= limit then break end
+        end
+    end
+
+    local cacheBucket
+    if #bucket == 0 then
+        cacheBucket = false
+    elseif #bucket <= MAX_EXACT_ALIAS_LOOKUP_CACHE_RESULTS then
+        cacheBucket = bucket
+    end
+    P._registryExactAliasLookupCache = cacheBucket ~= nil and {
+        settings = settings,
+        count = #settings,
+        subject = subject,
+        tokenCount = tokenCount,
+        limit = limit,
+        bucket = cacheBucket,
+    } or nil
+    return #bucket > 0 and CopySettingBucket(bucket, limit) or nil
+end
+
+P._FindRegistryExactAliasSettings = FindRegistryExactAliasSettings
 
 local function HasTriggerToken(index, tokens)
     local triggers = index and index.triggerTokens
@@ -359,6 +471,37 @@ local function AddExactAliasChange(changes, seenKeys, setting, value, relativeDe
     end
 end
 
+-- Build a normal transactional plan for one setting that the Router already
+-- identified by its complete label or alias.  Keeping this beside the exact
+-- alias matcher preserves intent guards and companion changes while avoiding
+-- a second fuzzy search that could redirect a very specific command.
+function P.PlanForExactRegistrySetting(setting, text, raw)
+    if type(setting) ~= "table" then return nil end
+    local guarded = GuardedSettingResponse(setting, text, raw)
+    if guarded then return guarded end
+
+    local relativeDelta = setting.type == "number" and RelativeNumberDeltaForText
+        and RelativeNumberDeltaForText(setting, text) or nil
+    local value
+    if relativeDelta == nil then value = ValueForRegistrySetting(setting, text, raw) end
+    if value == nil and relativeDelta == nil then
+        return MissingValueResponse and MissingValueResponse({ { setting = setting, score = 30000 } }, raw) or nil
+    end
+
+    local changes, seen = {}, {}
+    AddExactAliasChange(changes, seen, setting, value, relativeDelta, 30000, text)
+    return {
+        kind = "changes",
+        changes = changes,
+        bulkSafe = #changes > 1 and true or nil,
+        label = setting.label or "Assistant option change",
+        summary = "Changes the exactly named MSUF option.",
+        raw = raw,
+        sourceText = raw,
+        exactSettingMutation = true,
+    }
+end
+
 function P.ParseRegistryExactAliasShortcut(text, raw, opts)
     -- The immediate Submit fast path calls this matcher before the Router.
     -- Never let a problem report, option-list request, or subjective policy
@@ -392,7 +535,9 @@ function P.ParseRegistryExactAliasShortcut(text, raw, opts)
         -- routes. Generated settings have no dedicated parser, so the
         -- pre-pass is their only path.
         if not setting.generated and setting.type ~= "boolean" and setting.type ~= "number" then
-            if setting.type ~= "enum" or text:find("|", 1, true) then return nil end
+            local fixedString = setting.type == "string" and setting.closedValues == true
+                and type(setting.values) == "table" and #setting.values > 0
+            if not fixedString and (setting.type ~= "enum" or text:find("|", 1, true)) then return nil end
         end
         matches[1] = { setting = setting, score = #Compact(subject) }
         seen[setting] = true

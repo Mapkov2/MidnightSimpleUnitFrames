@@ -2,8 +2,10 @@
 --
 -- Closes the raw-coverage gap mechanically: every safe scalar DB path that no
 -- hand-written registry entry reaches gets a generated English setting with a
--- label and aliases derived from the key name, direct get/set into the DB, and
--- the broadest safe apply for its scope. Hand-written entries always win
+-- label and aliases derived from the key name, DB accessors, and the broadest
+-- safe apply for its scope. Only booleans have a proven generated write domain;
+-- numbers and strings stay read-only until a curated entry supplies bounds or
+-- allowed values. Hand-written entries always win
 -- (RegisterSetting dedupes by key; the covered-set check also honors
 -- unit+attribute), so this layer only ever fills holes.
 --
@@ -619,16 +621,15 @@ local function BuildSpec(scope, key, value, fromManifest)
         end
     elseif valueType == "number" then
         spec.type = "number"
-        if value >= 0 and value <= 1 then
-            spec.min, spec.max, spec.step, spec.percent = 0, 1, 0.05, true
-            spec.generatedMutationSafety = "bounded-number"
-            spec.assistantMutationSafe = true
-        else
-            spec.step = 1
-            spec.generatedMutationSafety = "unconstrained-number"
-            spec.assistantMutationSafe = false
-            spec.unsafeMutationReason = "This generated numeric setting has no reviewed minimum or maximum."
-        end
+        -- A default value is evidence for the current value, not for the
+        -- control's domain.  In particular, a default in [0, 1] may be an
+        -- alpha, a scale with a wider range, an enum encoded as a number, or a
+        -- counter.  Keep every generated number read-only until a curated
+        -- registry entry supplies reviewed min/max/step metadata.
+        spec.step = 1
+        spec.generatedMutationSafety = "unreviewed-number-domain"
+        spec.assistantMutationSafe = false
+        spec.unsafeMutationReason = "This generated numeric setting has no reviewed minimum, maximum, or step."
         spec.get = function()
             local tbl = ScopeTable(scope)
             local raw = PathValue(tbl, key)

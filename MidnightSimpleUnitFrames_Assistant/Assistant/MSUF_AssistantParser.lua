@@ -1,4 +1,4 @@
-﻿local addonName, MSUF = ...
+local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 
 local M = MSUF.MSUF2 or _G.MSUF2 or {}
@@ -1012,7 +1012,7 @@ local function ParseGroupTextureFastShortcut(normalized, raw)
     if ContainsAny(normalized, P.RootPhrases[135]) then
         key = "barScope.gf_" .. tostring(groups[1]) .. ".barBackgroundTexture"
     elseif ContainsAny(normalized, P.RootPhrases[136]) then
-        key = "gf_" .. tostring(groups[1]) .. ".barBgTexture"
+        key = "gf_" .. tostring(groups[1]) .. ".barBackgroundTexture"
     elseif ContainsAny(normalized, P.RootPhrases[137]) then
         key = "gf_" .. tostring(groups[1]) .. ".barTexture"
     elseif ContainsAny(normalized, P.RootPhrases[138]) then
@@ -4381,6 +4381,7 @@ function A._ParsePipelineWorkflow(normalized, raw, ctx)
     end
     result = P.ParseExactRegistryKeyShortcut and P.ParseExactRegistryKeyShortcut(normalized, raw); if result then return result end
     result = P.ParseExactActionKeyShortcut and P.ParseExactActionKeyShortcut(normalized, raw); if result then return result end
+    result = P.ParseExactActionPhraseShortcut and P.ParseExactActionPhraseShortcut(normalized, raw); if result then return result end
     result = P.ParseRegistryActionAliasShortcut and P.ParseRegistryActionAliasShortcut(normalized, raw); if result then return result end
     -- The phrase "Class Resources Player Power" names the detached Player
     -- power controls on that page. Resolve it before broad Class Resource
@@ -5482,14 +5483,6 @@ function A.Parse(text, ctxOverride)
         textPositionCopy.raw = raw
         textPositionCopy.normalized = normalized
         return textPositionCopy
-    end
-    if type(ctx.guidedSetup) == "table" and P.ParseGuidedSetupFollowup then
-        local guidedPriority = P.ParseGuidedSetupFollowup(normalized, ctx)
-        if guidedPriority then
-            guidedPriority.raw = raw
-            guidedPriority.normalized = normalized
-            return guidedPriority
-        end
     end
     -- "Dots on party frame" describes a visual symptom and must not be
     -- reduced to the unrelated exact alias "party frame" (X/Y position) or
@@ -7421,13 +7414,7 @@ function A.Parse(text, ctxOverride)
         local label
         local summary
         local confirmRequired = false
-        if P.ContainsAny(normalized, P.RootPhrases[733]) then
-            local clear = P.ContainsAny(normalized, P.RootPhrases[734])
-            actionKey = "confirm_wago_backup"
-            args.confirmed = not clear
-            label = clear and "Clear Wago backup confirmation" or "Confirm Wago backup"
-            summary = "Marks the Wago backup checklist for the active profile."
-        elseif P.ContainsAny(normalized, P.RootPhrases[735]) then
+        if P.ContainsAny(normalized, P.RootPhrases[735]) then
             actionKey = "open_recovery_tools"
             label = "Open recovery tools"
             summary = "Opens the Dashboard recovery area."

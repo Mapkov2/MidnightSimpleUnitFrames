@@ -41,6 +41,37 @@ function A.UnitframesRegistry.RegisterStatusIconSettings(ctx, unit)
     local STATUS_ANCHOR_ALIASES = ctx.STATUS_ANCHOR_ALIASES
     local RAID_GROUP_STYLE_VALUES = ctx.RAID_GROUP_STYLE_VALUES
     local RAID_GROUP_STYLE_ALIASES = ctx.RAID_GROUP_STYLE_ALIASES
+    local STATUS_ICON_PACK_LABELS = {
+        BLIZZARD = "Blizzard (Default)", CLASSIC = "Classic", MIDNIGHT = "Midnight", UXPRO = "UX Pro",
+        GLOSSY_ORBS = "Glossy Orbs", DARK_EMBOSS = "Dark Emboss", GLASS_PANELS = "Glass Panels",
+        NEON_OUTLINE = "Neon Outline", RING_SYMBOLS = "Ring Symbols", DOTS = "Dots", SHAPES = "Shapes",
+        DIAMONDS = "Diamonds", SQUARES = "Squares",
+    }
+    local function StatusIconPackContract(includeDefault)
+        local values, labels, seen = {}, {}, {}
+        local function Add(value, label)
+            value = tostring(value or "")
+            if value == "" or seen[value] then return end
+            seen[value] = true
+            values[#values + 1] = value
+            labels[value] = tostring(label or value)
+        end
+        local fn = _G.MSUF_GetStatusIconPackValues
+        local items = type(fn) == "function" and fn(includeDefault == true) or nil
+        for i = 1, #(items or {}) do
+            local item = items[i]
+            if type(item) == "table" then Add(item.value or item.key, item.text or item.label) end
+        end
+        if #values == 0 then
+            if includeDefault then Add("DEFAULT", "Follow global style") end
+            for i = 1, #STATUS_ICON_PACK_FALLBACK_VALUES do
+                local value = STATUS_ICON_PACK_FALLBACK_VALUES[i]
+                Add(value, STATUS_ICON_PACK_LABELS[value] or value)
+            end
+        end
+        return values, labels
+    end
+    local statusPackValues, statusPackLabels = StatusIconPackContract(false)
     local function IsRoleStatusSpec(spec)
         local value = spec and spec.value
         return value == "leader" or value == "assist"
@@ -112,6 +143,11 @@ function A.UnitframesRegistry.RegisterStatusIconSettings(ctx, unit)
                 -- specialized parser normalize the built-in aliases.
                 RegisterUnitString(unit, spec.iconStyle, spec.iconStyle, StatusIconStyleLabel(spec),
                     spec.defaultIconStyle or "BLIZZARD", aliases, StatusIconOpts(spec, {
+                        values = statusPackValues,
+                        valueLabels = statusPackLabels,
+                        valueAliases = { default = "BLIZZARD", blizzard = "BLIZZARD", ["blizzard default"] = "BLIZZARD" },
+                        closedValues = true,
+                        refreshValues = function() return StatusIconPackContract(false) end,
                         description = "Icon pack for this status indicator. Built-ins include "
                             .. table.concat(STATUS_ICON_PACK_FALLBACK_VALUES, ", ")
                             .. "; registered extension pack keys are accepted too.",

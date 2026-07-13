@@ -265,10 +265,6 @@
     <Script file="Assistant\MSUF_AssistantRegistry_Workflows_PendingFlows.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_Workflows_Navigation.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_Workflows.lua"/>
-    <Script file="Assistant\MSUF_AssistantRegistry_Diagnostics_Data.lua"/>
-    <Script file="Assistant\MSUF_AssistantRegistry_Diagnostics_Data_Guides.lua"/>
-    <Script file="Assistant\MSUF_AssistantRegistry_Diagnostics_Data_Guides_Extra.lua"/>
-    <Script file="Assistant\MSUF_AssistantRegistry_Diagnostics_Setup.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_Diagnostics_Support.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_Diagnostics_ScopeHelp.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_Diagnostics_Profiles.lua"/>

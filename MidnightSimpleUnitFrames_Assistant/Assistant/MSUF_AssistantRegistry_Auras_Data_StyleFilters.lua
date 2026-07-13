@@ -37,6 +37,82 @@ Data.AURA_COOLDOWN_SWIPE_DIRECTION_ALIASES = {
     ["reverse direction"] = "REVERSE",
 }
 
+-- Native WoW 12.1 AuraContainer ordering. Buffs and debuffs expose one
+-- lane-specific value each, so keep their reviewed value domains separate.
+Data.AURA_SORT_METHOD_VALUES = {
+    buff = {
+        "DEFAULT", "BIG_DEFENSIVE", "IMPORTANT_FIRST", "EXPIRATION",
+        "EXPIRATION_ONLY", "NAME", "NAME_ONLY",
+    },
+    debuff = {
+        "DEFAULT", "UNIT_FRAME_DEBUFF", "IMPORTANT_FIRST", "EXPIRATION",
+        "EXPIRATION_ONLY", "NAME", "NAME_ONLY",
+    },
+}
+Data.AURA_SORT_METHOD_ALIASES = {
+    buff = {
+        default = "DEFAULT",
+        normal = "DEFAULT",
+        ["player priority first"] = "DEFAULT",
+        ["player and priority first"] = "DEFAULT",
+        ["priority first"] = "DEFAULT",
+        ["big defensive"] = "BIG_DEFENSIVE",
+        ["big defensives"] = "BIG_DEFENSIVE",
+        ["big defensive first"] = "BIG_DEFENSIVE",
+        ["other defensives first"] = "BIG_DEFENSIVE",
+        ["important first"] = "IMPORTANT_FIRST",
+        important = "IMPORTANT_FIRST",
+        expiration = "EXPIRATION",
+        ["player first expiring soon"] = "EXPIRATION",
+        ["expiring soon"] = "EXPIRATION",
+        ["expiration only"] = "EXPIRATION_ONLY",
+        ["expiring soon only"] = "EXPIRATION_ONLY",
+        name = "NAME",
+        ["player first then name"] = "NAME",
+        ["then name"] = "NAME",
+        ["name only"] = "NAME_ONLY",
+        alphabetical = "NAME_ONLY",
+    },
+    debuff = {
+        default = "DEFAULT",
+        normal = "DEFAULT",
+        ["player priority first"] = "DEFAULT",
+        ["player and priority first"] = "DEFAULT",
+        ["priority first"] = "DEFAULT",
+        ["unit frame debuff"] = "UNIT_FRAME_DEBUFF",
+        ["unit frame debuff first"] = "UNIT_FRAME_DEBUFF",
+        ["debuff type first"] = "UNIT_FRAME_DEBUFF",
+        ["important first"] = "IMPORTANT_FIRST",
+        important = "IMPORTANT_FIRST",
+        expiration = "EXPIRATION",
+        ["player first expiring soon"] = "EXPIRATION",
+        ["expiring soon"] = "EXPIRATION",
+        ["expiration only"] = "EXPIRATION_ONLY",
+        ["expiring soon only"] = "EXPIRATION_ONLY",
+        name = "NAME",
+        ["player first then name"] = "NAME",
+        ["then name"] = "NAME",
+        ["name only"] = "NAME_ONLY",
+        alphabetical = "NAME_ONLY",
+    },
+}
+
+Data.AURA_SORT_DIRECTION_VALUES = { "NORMAL", "REVERSE" }
+Data.AURA_SORT_DIRECTION_ALIASES = {
+    normal = "NORMAL",
+    default = "NORMAL",
+    forward = "NORMAL",
+    forwards = "NORMAL",
+    original = "NORMAL",
+    ["normal order"] = "NORMAL",
+    reverse = "REVERSE",
+    reversed = "REVERSE",
+    backward = "REVERSE",
+    backwards = "REVERSE",
+    ["reverse order"] = "REVERSE",
+    ["reversed order"] = "REVERSE",
+}
+
 Data.AURA_DURATION_BAR_POSITION_VALUES = { "BOTTOM", "TOP" }
 Data.AURA_DURATION_BAR_POSITION_ALIASES = {
     bottom = "BOTTOM",

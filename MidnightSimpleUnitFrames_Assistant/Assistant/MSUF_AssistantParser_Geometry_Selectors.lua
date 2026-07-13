@@ -1,4 +1,4 @@
-﻿-- Assistant geometry selector parser: handles selector-state and page-local geometry phrases.
+-- Assistant geometry selector parser: handles selector-state and page-local geometry phrases.
 -- It resolves UI intent only; applying DB changes remains in registry/action execution.
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}

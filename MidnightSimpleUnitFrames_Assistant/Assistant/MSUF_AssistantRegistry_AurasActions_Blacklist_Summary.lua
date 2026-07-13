@@ -1,4 +1,4 @@
-﻿-- Aura blacklist summary assistant action registration.
+-- Aura blacklist summary assistant action registration.
 -- Loaded before MSUF_AssistantRegistry_AurasActions_Blacklist.lua; the main blacklist registry preserves action order.
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}

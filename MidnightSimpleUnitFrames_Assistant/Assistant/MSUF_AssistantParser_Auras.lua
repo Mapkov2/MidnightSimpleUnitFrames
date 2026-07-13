@@ -32,6 +32,21 @@ local Compact = P.Compact
 local DetectDirection = P.DetectDirection
 local DetectBoolean = P.DetectBoolean
 
+local function IsAuraSortRequest(text)
+    text = " " .. tostring(text or "") .. " "
+    local hasLane = text:find(" buff", 1, true)
+        or text:find(" debuff", 1, true)
+        or text:find(" aura", 1, true)
+    if not hasLane then return false end
+    return text:find(" sort ", 1, true) ~= nil
+        or text:find(" sorting ", 1, true) ~= nil
+        or text:find(" sorted ", 1, true) ~= nil
+        or text:find(" order ", 1, true) ~= nil
+        or text:find(" reverse ", 1, true) ~= nil
+        or text:find(" reversed ", 1, true) ~= nil
+end
+P.IsAuraSortRequest = IsAuraSortRequest
+
 local AURA_BLACKLIST_PRESETS = {
     { key = "RAID_BUFFS", aliases = { "raid buffs", "raid buff", "long term raid buffs", "raid buff preset" } },
     { key = "PRESERVATION_EVOKER", aliases = { "preservation evoker", "pres evoker" } },
@@ -1193,6 +1208,14 @@ end
 
 local function ParseAuraDirectSettingShortcut(text, raw)
     if not ContainsAny(text, AurasPhrases[92]) then return nil end
+    -- Sorting language belongs to the reviewed lane sortMethod/sortReverse
+    -- descriptors. Resolve their exact aliases here, before broad registry
+    -- priorities and AuraBooleanValue can select a filter or enable the lane.
+    if IsAuraSortRequest(text) then
+        return P.ParseRegistryExactAliasShortcut
+            and P.ParseRegistryExactAliasShortcut(text, raw)
+            or nil
+    end
     if ContainsAny(text, AurasPhrases[93]) then
         local value = P.RawAfterLastConnector and P.RawAfterLastConnector(raw or text, { " to ", " as ", " = " }) or nil
         if not value or value == "" then
@@ -2072,6 +2095,7 @@ local function ParseGroupAuraRootSettingShortcut(text)
 end
 
 local function ParseGroupAuraVisibilityShortcut(text)
+    if IsAuraSortRequest(text) then return nil end
     local hasBuff = ContainsAny(text, AurasPhrases[225])
     local hasDebuff = ContainsAny(text, AurasPhrases[226])
     if not ContainsAny(text, AurasPhrases[227]) and not (hasBuff and hasDebuff) then return nil end

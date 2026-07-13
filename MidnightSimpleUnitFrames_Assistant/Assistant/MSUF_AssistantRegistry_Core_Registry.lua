@@ -225,6 +225,48 @@ end
 C.MAX_SETTING_ALIASES = MAX_SETTING_ALIASES
 C.NormalizeSettingAlias = NormalizeSettingAlias
 
+-- Registry settings normally route back to one exact or reviewed dynamic
+-- Menu2 control.  These reviewed exceptions intentionally have no scalar
+-- widget: they are legacy/fallback values, compound representations, or are
+-- operated through an action/preview instead.  Keeping the evidence on the
+-- setting prevents semantic fallback from focusing an unrelated control.
+local MENU_CONTROL_STANDALONE = {}
+local function DefineMenuControlStandalone(keys, reason, evidence)
+    for key in tostring(keys or ""):gmatch("%S+") do
+        MENU_CONTROL_STANDALONE[key] = { reason = reason, evidence = evidence }
+    end
+end
+
+DefineMenuControlStandalone([[
+general.globalUiScaleEnabled
+]], "The Dashboard exposes pending Apply/Revert/Disable actions rather than a persisted enabled toggle.",
+    "MSUF_Menu2_Dashboard.lua scaling actions and MSUF_AssistantRegistry_DashboardActions.lua")
+DefineMenuControlStandalone([[
+general.dropdownStyleMode
+]], "Dropdown style mode is a compatibility value; the current Modules page exposes only the MSUF Style enable switch.",
+    "MSUF_Menu2_AdvancedProfiles.lua BuildModules")
+DefineMenuControlStandalone([[
+general.castbarIconSize general.castbarIconOffsetX general.castbarIconOffsetY
+general.castbarSpellNameFontSize general.castbarTimeFontSize runtime.focusKickPreview
+]], "This castbar fallback or runtime preview value has no scalar control on the current global Castbar page.",
+    "MSUF_Menu2_GlobalCastbars.lua controls and preview fallback reads")
+DefineMenuControlStandalone([[
+general.gradientDirection barScope.gf_party.gradientDirection barScope.gf_raid.gradientDirection
+]], "The current Bars UI edits independent multi-direction buttons; the legacy scalar direction setting has no equivalent single widget.",
+    "MSUF_Menu2_GlobalBars.lua ToggleGradientDirectionForScope direction pad")
+DefineMenuControlStandalone([[
+general.barOutlineColorA barScope.gf_party.barOutlineColorA barScope.gf_raid.barOutlineColorA
+]], "The Bars outline color widget edits RGB only; these legacy opacity scalars are not exposed by that widget.",
+    "MSUF_Menu2_GlobalBars.lua BuildOutlineSection")
+DefineMenuControlStandalone([[
+general.fontSize general.fontColor fontScope.gf_party.fontSize fontScope.gf_raid.fontSize
+]], "The current Fonts page has no global or scoped font-size/palette scalar; size is owned by concrete text controls and color by the Colors page.",
+    "MSUF_Menu2_GlobalFonts.lua BuildFonts")
+DefineMenuControlStandalone([[
+gf_mythicraid.nameClipSide gf_mythicraid.nameMaxChars gf_mythicraid.nameNoEllipsis gf_mythicraid.nameShortenEnabled
+]], "Raid is the single visible group-font scope and applies to Mythic Raid; there is no separate Mythic Raid selector or widget.",
+    "MSUF_Menu2_Global.lua GLOBAL_SCOPE_VALUES and MSUF_Menu2_GlobalFonts.lua group name controls")
+
 function Registry:RegisterSetting(spec)
     if type(spec) ~= "table" or type(spec.key) ~= "string" or spec.key == "" then return nil end
     if self.settingsByKey[spec.key] then return self.settingsByKey[spec.key] end
@@ -262,6 +304,18 @@ function Registry:RegisterSetting(spec)
     spec._assistantAliasNormVersion = 2
     spec._assistantAliasNormMask = aliasNormMask
     spec._assistantExactAliasNormMask = exactAliasNormMask
+    local standalone = MENU_CONTROL_STANDALONE[spec.key]
+    if spec.generated == true then
+        standalone = {
+            reason = "AutoCoverage provides a defensive raw-DB Assistant fallback and does not claim a visible Menu2 scalar control.",
+            evidence = "MSUF_AssistantRegistry_AutoCoverage.lua generated safe-scalar fallback contract",
+        }
+    end
+    if standalone then
+        spec.menuControlDisposition = "standalone"
+        spec.menuControlDispositionReason = standalone.reason
+        spec.menuControlDispositionEvidence = standalone.evidence
+    end
     self.settings[#self.settings + 1] = spec
     self.settingsByKey[spec.key] = spec
     if type(self._findSettingsIndex) == "table"
@@ -342,7 +396,7 @@ export_profile profile_summary
 
 DefineActionPolicies([[
 assistant.panel.close cancel_custom_anchor_picker dashboard_page_back dashboard_page_forward
-menu_window_close menu_window_maximize menu_window_minimize menu_window_restore
+    menu_search_clear menu_search_query menu_window_close menu_window_maximize menu_window_minimize menu_window_restore
 open_dashboard_panel open_page open_setting_control open_profile_import open_recovery_tools set_aura_edit_scope support_links_summary
 set_dashboard_panel set_menu_selector_state set_nav_search_intro set_nav_section
 ]], {
@@ -356,7 +410,7 @@ set_dashboard_panel set_menu_selector_state set_nav_search_intro set_nav_section
 -- These actions only open a user-driven picker.  The later click owns the
 -- profile mutation and is intentionally outside the synchronous action run.
 DefineActionPolicies([[
-assistant.action.editMode.anchorPicker start_group_custom_anchor_picker
+    assistant.action.editMode.anchorPicker menu_reset_current_page_prompt start_group_custom_anchor_picker
 start_unit_custom_anchor_picker
 ]], {
     mutability = "navigation",
@@ -375,7 +429,10 @@ DefineActionPolicies([[
 assistant.action.editMode.bossPreview assistant.action.editMode.enter
 assistant.action.editMode.exit assistant.action.editMode.groupPreview
 assistant.action.editMode.preview assistant.action.editMode.snap assistant.action.editMode.toggle
-assistant.workflow.cancel class_power_preview_animate guided_setup guided_setup_step
+assistant.workflow.cancel class_power_preview_animate
+dashboard.globalUiScale.apply dashboard.globalUiScale.revertPending
+dashboard.msufFrameScale.apply dashboard.msufFrameScale.revertPending
+dashboard.menuScale.apply dashboard.menuScale.revertPending
 preview_castbar preview_group_status_icon preview_player_totems preview_unit_status_indicator
 start_profile_copy_flow start_profile_rename_flow toggle_absorb_bar_test
 toggle_highlight_border_test
@@ -411,7 +468,7 @@ reset_portrait_colors reset_power_color_token reset_resource_colors
 reset_scoped_global_bars_override reset_scoped_global_font_override reset_unit_page
 reset_unit_position reset_unit_status_indicator reset_unitframe_colors
 set_crosshair_melee_spell set_global_font_color set_group_spell_indicator_aura
-set_group_spell_indicator_multi_spec
+set_group_spell_indicator_multi_spec dashboard.globalUiScale.disable
 ]], {
     mutability = "savedState",
     readOnly = false,
@@ -530,20 +587,6 @@ DefineActionPolicies([[factory_reset_all]], {
     rollbackStrategy = "transactionAdapter",
 })
 
-DefineActionPolicies([[confirm_wago_backup]], {
-    mutability = "savedState",
-    readOnly = false,
-    mutatesState = true,
-    stateOwner = "globalStore",
-    snapshotCoverage = "complete",
-    transactionAdapter = "globalDashboardWagoBackup",
-    transactionAdapterMode = "capturedOwnerState",
-    transactionAdapterReady = true,
-    transactionAdapterContract = "Capture and restore only the active profile entry in dashboard.wagoProfileBackupConfirmed.",
-    statePath = "MSUF_GlobalDB.global.dashboard.wagoProfileBackupConfirmed[activeProfile]",
-    rollbackStrategy = "transactionAdapter",
-})
-
 DefineActionPolicies([[assistant_nomatch_clear]], {
     mutability = "savedState",
     readOnly = false,
@@ -555,6 +598,24 @@ DefineActionPolicies([[assistant_nomatch_clear]], {
     transactionAdapterReady = true,
     transactionAdapterContract = "Capture and restore only assistantNoMatch total, recent, and counts plus the in-memory last-no-match pointer.",
     statePath = "MSUF_GlobalDB.global.assistantNoMatch",
+    rollbackStrategy = "transactionAdapter",
+})
+
+DefineActionPolicies([[
+first_load.personalize first_load.import_profile first_load.use_defaults
+first_load.whats_new first_load.not_now first_load.full_settings
+guided_setup guided_setup_step
+]], {
+    mutability = "savedState",
+    readOnly = false,
+    mutatesState = true,
+    stateOwner = "onboardingStore",
+    snapshotCoverage = "complete",
+    transactionAdapter = "onboardingFirstLoad",
+    transactionAdapterMode = "capturedOwnerState",
+    transactionAdapterReady = true,
+    transactionAdapterContract = "Capture and restore the first-load and guided-tour SavedVariables plus their session deferral flags while preserving lifecycle table identity.",
+    statePath = "MSUF_GlobalDB.global.firstLoad6 and MSUF_GlobalDB.global.guidedTour6",
     rollbackStrategy = "transactionAdapter",
 })
 

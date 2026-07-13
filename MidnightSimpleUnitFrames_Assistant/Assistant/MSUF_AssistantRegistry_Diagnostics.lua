@@ -29,9 +29,6 @@ local UnitDB = C.UnitDB
 local GroupDB = C.GroupDB
 local CASTBAR_KEYS = C.CASTBAR_KEYS
 local GetCastbarBackend = C.GetCastbarBackend
-local DiagnosticsData = A.DiagnosticsRegistryData
-if type(DiagnosticsData) ~= "table" then return end
-
 local function ActiveProfileName()
     if A and type(A.ActiveProfileName) == "function" then return A.ActiveProfileName() end
     local name = tostring(_G.MSUF_ActiveProfile or "Default")

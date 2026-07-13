@@ -37,6 +37,11 @@ function A.UnitframesRegistry.BuildSettingBaseUnitStringContext(ctx)
             aliases = aliases,
             valuePrefixes = opts.valuePrefixes or aliases,
             mediaType = opts.mediaType,
+            values = opts.values,
+            valueAliases = opts.valueAliases,
+            valueLabels = opts.valueLabels,
+            closedValues = opts.closedValues,
+            refreshValues = opts.refreshValues,
             normalizesValue = opts.normalizeValue ~= nil,
             get = function()
                 local value = UnitDB(unit)[dbKey]

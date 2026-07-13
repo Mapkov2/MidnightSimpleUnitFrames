@@ -1,4 +1,4 @@
-﻿--- Shell/Menu2/Assistant/MSUF_AssistantParser_Actions.lua
+--- Shell/Menu2/Assistant/MSUF_AssistantParser_Actions.lua
 --- Action parser shard for concrete Assistant commands.
 ---
 --- Returns action/changes plans rather than executing them, keeping undo,
@@ -2320,13 +2320,21 @@ function P.ParseExactActionPhraseShortcut(text, raw)
         } or nil
     end
     local action = match
+    local args, meta = {}, nil
+    if type(action.parseAliasArgs) == "function" then
+        local parsedArgs, parsedMeta = action.parseAliasArgs(Normalize(raw or text), raw, action)
+        if parsedArgs == false then return nil end
+        args = type(parsedArgs) == "table" and parsedArgs or {}
+        meta = type(parsedMeta) == "table" and parsedMeta or nil
+    end
     return {
         kind = "action",
         action = action,
-        args = {},
-        confirmRequired = action.confirmRequired == true,
-        label = type(A.DisplayActionLabel) == "function" and A.DisplayActionLabel(action) or action.label or "Assistant shortcut",
-        summary = "Runs the matching Assistant shortcut.",
+        args = args,
+        confirmRequired = action.confirmRequired == true or (meta and meta.confirmRequired == true),
+        label = (meta and meta.label)
+            or (type(A.DisplayActionLabel) == "function" and A.DisplayActionLabel(action) or action.label or "Assistant shortcut"),
+        summary = (meta and meta.summary) or "Runs the matching Assistant shortcut.",
     }
 end
 

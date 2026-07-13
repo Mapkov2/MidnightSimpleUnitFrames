@@ -1016,6 +1016,10 @@ end
 function P.ParseAuraFilteringConversationShortcut(text, ctx, raw)
     text = type(Normalize) == "function" and Normalize(text) or tostring(text or ""):lower()
     ctx = type(ctx) == "table" and ctx or (type(A.GetContext) == "function" and A.GetContext() or {})
+    -- A few native sort comparators share names with filter tokens (for
+    -- example Big Defensive). Exact lane-sort aliases own explicit sorting
+    -- language and must not be converted into live-filter mutations.
+    if type(P.IsAuraSortRequest) == "function" and P.IsAuraSortRequest(text) then return nil end
     if not P.LooksLikeAuraFilteringConversation(text, ctx) then return nil end
 
     local categoryPlan = GroupCategoryPlan(text, ctx)

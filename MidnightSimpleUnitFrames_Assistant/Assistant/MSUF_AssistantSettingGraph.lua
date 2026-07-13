@@ -631,6 +631,27 @@ local function ApplyRequires(state)
     end
 end
 
+local function ApplyScopedAssociations(state)
+    for _, rule in ipairs(D.scopedAssociationRules or {}) do
+        for _, scope in ipairs(D[rule.scopes] or {}) do
+            local from = scope .. "." .. tostring(rule.fromSuffix or "")
+            for _, suffix in ipairs(rule.toSuffixes or {}) do
+                AddEdge(state, {
+                    from = from,
+                    to = scope .. "." .. tostring(suffix or ""),
+                    kind = "association",
+                    condition = rule.condition or DEFAULT_TRUE,
+                    impact = rule.impact or "navigationContext",
+                    reason = rule.reason,
+                    evidence = rule.evidence,
+                    ruleId = rule.id,
+                    confidence = "explicit",
+                })
+            end
+        end
+    end
+end
+
 local function ApplyScopedInheritance(state, scanIndex)
     for _, rule in ipairs(D.scopedInheritanceRules or {}) do
         for _, scope in ipairs(rule.scopes or {}) do
@@ -806,6 +827,14 @@ local function SettingPage(setting)
     return page ~= "" and page or nil
 end
 
+local function IntentionalStandaloneRecord(key)
+    local declared = D.intentionalStandaloneSettings and D.intentionalStandaloneSettings[key]
+    if type(declared) ~= "table" then return nil end
+    local record = ShallowCopy(declared)
+    record.key = key
+    return record
+end
+
 local function IsGeneratedCategory(category)
     return tostring(category or ""):find("Auto (generated)", 1, true) ~= nil
 end
@@ -892,6 +921,9 @@ local function ApplyRegistryAssociations(state, settings, groupRootsBuilt, build
     local candidatesByKey = {}
     state.userFacingKeys = {}
     state.standaloneUserFacing = {}
+    state.intentionalStandaloneUserFacing = {}
+    state.intentionalStandaloneByKey = {}
+    state.unclassifiedStandaloneUserFacing = {}
     local candidateWork = 0
     for index, setting in ipairs(settings) do
         if index % 64 == 0 and type(A.MaybeYield) == "function" then A.MaybeYield() end
@@ -950,10 +982,21 @@ local function ApplyRegistryAssociations(state, settings, groupRootsBuilt, build
                 })
             else
                 state.standaloneUserFacing[#state.standaloneUserFacing + 1] = key
+                local intentional = IntentionalStandaloneRecord(key)
+                if intentional then
+                    state.intentionalStandaloneUserFacing[#state.intentionalStandaloneUserFacing + 1] = intentional
+                    state.intentionalStandaloneByKey[key] = intentional
+                else
+                    state.unclassifiedStandaloneUserFacing[#state.unclassifiedStandaloneUserFacing + 1] = key
+                end
             end
         end
     end
     table.sort(state.standaloneUserFacing)
+    table.sort(state.intentionalStandaloneUserFacing, function(left, right)
+        return tostring(left and left.key or "") < tostring(right and right.key or "")
+    end)
+    table.sort(state.unclassifiedStandaloneUserFacing)
 end
 
 local function Finalize(state, settings)
@@ -1013,6 +1056,7 @@ local function Build(includeGroupRoots, requestedKey)
         ApplyTargetedSpellGates(state)
         ApplyGroupIndicatorGates(state)
         ApplyRequires(state)
+        ApplyScopedAssociations(state)
         ApplyScopedInheritance(state, scanIndex)
         ApplyCrossPrefixInheritance(state)
         ApplyAuraInheritance(state, scanIndex)
@@ -1363,6 +1407,42 @@ function G.Validate()
         if identities[identity] then errors[#errors + 1] = "duplicate edge: " .. identity end
         identities[identity] = true
     end
+    for key, record in pairs(D.intentionalStandaloneSettings or {}) do
+        if not state.settingsByKey[key] then
+            errors[#errors + 1] = "intentional standalone setting is not registered: " .. tostring(key)
+        elseif not (state.userFacingKeys and state.userFacingKeys[key]) then
+            errors[#errors + 1] = "intentional standalone setting is not page-resolvable: " .. tostring(key)
+        elseif not (state.intentionalStandaloneByKey and state.intentionalStandaloneByKey[key]) then
+            errors[#errors + 1] = "intentional standalone setting has a setting relationship: " .. tostring(key)
+        end
+        if type(record) ~= "table" then
+            errors[#errors + 1] = "invalid intentional standalone record: " .. tostring(key)
+        else
+            if tostring(record.classification or "") == "" then
+                errors[#errors + 1] = "intentional standalone classification is missing: " .. tostring(key)
+            end
+            if tostring(record.reason or "") == "" then
+                errors[#errors + 1] = "intentional standalone reason is missing: " .. tostring(key)
+            end
+            if tostring(record.evidence or "") == "" then
+                errors[#errors + 1] = "intentional standalone evidence is missing: " .. tostring(key)
+            end
+            if type(record.actionKeys) ~= "table" or #record.actionKeys == 0 then
+                errors[#errors + 1] = "intentional standalone action dependency is missing: " .. tostring(key)
+            else
+                for _, actionKey in ipairs(record.actionKeys) do
+                    local action = state.Registry and type(state.Registry.GetAction) == "function"
+                        and state.Registry:GetAction(actionKey) or nil
+                    if not action then
+                        errors[#errors + 1] = "intentional standalone action is not registered: " .. tostring(key) .. " -> " .. tostring(actionKey)
+                    end
+                end
+            end
+        end
+    end
+    for _, key in ipairs(state.unclassifiedStandaloneUserFacing or {}) do
+        errors[#errors + 1] = "page-resolvable setting is neither related nor intentional standalone: " .. tostring(key)
+    end
     local cycles = FindDependencyCycles(state)
     for _, cycle in ipairs(cycles) do errors[#errors + 1] = "dependency cycle: " .. cycle end
     table.sort(errors)
@@ -1410,6 +1490,9 @@ function G.GetCoverageReport()
         if related[key] then userFacingRelatedCount = userFacingRelatedCount + 1 end
     end
     local userFacingCoverage = userFacingCount > 0 and (userFacingRelatedCount * 100 / userFacingCount) or 0
+    local intentionalStandaloneCount = #(state.intentionalStandaloneUserFacing or {})
+    local userFacingClassifiedCount = userFacingRelatedCount + intentionalStandaloneCount
+    local userFacingClassification = userFacingCount > 0 and (userFacingClassifiedCount * 100 / userFacingCount) or 0
     return {
         schemaVersion = G.schemaVersion,
         buildSerial = G._buildSerial or 0,
@@ -1423,12 +1506,20 @@ function G.GetCoverageReport()
         userFacingRelatedSettings = userFacingRelatedCount,
         userFacingCoveragePercent = userFacingCoverage,
         standaloneUserFacingSettings = CopyValues(state.standaloneUserFacing),
+        intentionalStandaloneUserFacingSettings = CopyArray(state.intentionalStandaloneUserFacing),
+        unclassifiedStandaloneUserFacingSettings = CopyValues(state.unclassifiedStandaloneUserFacing),
+        userFacingClassifiedSettings = userFacingClassifiedCount,
+        userFacingClassificationPercent = userFacingClassification,
         -- These names are precise: page resolution is a navigation guarantee,
         -- not proof that the key is a currently visible widget.
         pageResolvableSettings = userFacingCount,
         pageResolvableRelatedSettings = userFacingRelatedCount,
         pageResolvableCoveragePercent = userFacingCoverage,
         standalonePageResolvableSettings = CopyValues(state.standaloneUserFacing),
+        intentionalStandalonePageResolvableSettings = CopyArray(state.intentionalStandaloneUserFacing),
+        unclassifiedStandalonePageResolvableSettings = CopyValues(state.unclassifiedStandaloneUserFacing),
+        pageResolvableClassifiedSettings = userFacingClassifiedCount,
+        pageResolvableClassificationPercent = userFacingClassification,
         rootOnlySettings = rootOnly,
         edges = #state.edges,
         byKind = byKind,

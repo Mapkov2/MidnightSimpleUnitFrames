@@ -2709,14 +2709,21 @@ end
 
 local function PendingSettingPage(setting)
     if type(setting) ~= "table" then return nil end
-    if tostring(setting.frameType or "") == "group" then return PendingGroupSettingPage(setting) end
+    local explicitPage = tostring(setting.page or "")
+    if explicitPage ~= "" then return explicitPage end
     local unit = tostring(setting.unit or "")
     if unit ~= "" then
         if unit == "targettarget" then return "uf_targettarget" end
         if unit == "focustarget" then return "uf_focustarget" end
         return "uf_" .. unit
     end
+    local category = NormalizeReply(setting.category or "")
+    -- Class-resource colors are edited on the Colors page even though their
+    -- runtime owner is classPower.  Keep follow-ups on the same concrete page
+    -- selected by the Registry/Knowledge resolver.
+    if category:find("color", 1, true) or category:find("colour", 1, true) then return "opt_colors" end
     local frameType = tostring(setting.frameType or "")
+    if frameType == "group" then return PendingGroupSettingPage(setting) end
     if frameType == "castbar" then return "opt_castbar" end
     if frameType == "fonts" then return "opt_fonts" end
     if frameType == "bars" or frameType == "globalBars" then return "opt_bars" end
@@ -2731,10 +2738,8 @@ local function PendingSettingPage(setting)
         if unit == "player" or unit == "target" or unit == "focus" then return "uf_" .. unit end
         return "uf_target"
     end
-    local category = NormalizeReply(setting.category or "")
     if category:find("castbar", 1, true) or category:find("cast bar", 1, true) then return "opt_castbar" end
     if category:find("font", 1, true) then return "opt_fonts" end
-    if category:find("color", 1, true) or category:find("colour", 1, true) then return "opt_colors" end
     if category:find("profile", 1, true) then return "profiles" end
     return nil
 end
@@ -6827,15 +6832,13 @@ function A.ExecutePlan(plan, opts)
     opts = opts or {}
     if type(plan) ~= "table" then return NormalizePlanResult({ text = "Which frame, page, or option do you want me to change?", result = "failed" }) end
     local sourceText = opts.sourceText or plan.sourceText or plan.raw
-    local guarded = sourceText and type(A.RouterIsFailClosedReadOnlyRequest) == "function"
+    local guarded = sourceText
+        and type(A.RouterIsFailClosedReadOnlyRequest) == "function"
         and A.RouterIsFailClosedReadOnlyRequest(sourceText)
     local actionMutability = plan.kind == "action" and tostring(plan.action and plan.action.mutability or "") or nil
     local actionKey = plan.kind == "action" and tostring(plan.action and plan.action.key or "") or ""
-    local actionCommand = type(plan.args) == "table" and tostring(plan.args.command or "") or ""
-    local guidedReadOnlyStep = actionKey == "guided_setup"
-        or (actionKey == "guided_setup_step"
-            and (actionCommand == "explain" or actionCommand == "examples" or actionCommand == "show" or actionCommand == "open"))
-    if guarded and not guidedReadOnlyStep
+    local guidedTourAction = actionKey == "guided_setup" or actionKey == "guided_setup_step"
+    if guarded and not guidedTourAction
         and (plan.kind == "changes" or (plan.kind == "action" and actionMutability ~= "readOnly" and actionMutability ~= "navigation")) then
         return NormalizePlanResult(AP.ReadOnlyGuardResult(sourceText))
     end
@@ -7159,15 +7162,13 @@ function A.HandleCommandInput(text)
     local pending = HandlePending(text)
     if pending then return NormalizePlanResult(pending) end
     local router = A.RouterPrivate
-    local activeContext = type(A.GetContext) == "function" and A.GetContext() or nil
-    local explicitReadOnlyAction = (type(activeContext) == "table" and type(activeContext.guidedSetup) == "table")
-        or (router and (
+    local explicitReadOnlyAction = router and (
         (type(router.IsExplicitReadOnlyDiagnosticCommand) == "function" and router.IsExplicitReadOnlyDiagnosticCommand(text))
         or (type(router.IsExplicitNavigationCommand) == "function" and router.IsExplicitNavigationCommand(text))
         or (type(router.LooksLikeGuidedTourRequest) == "function" and router.LooksLikeGuidedTourRequest(text))
         or (type(router.IsCurrentPageHelpRequest) == "function" and router.IsCurrentPageHelpRequest(text))
         or (type(A.RouterHasPendingAssistantState) == "function" and A.RouterHasPendingAssistantState())
-    ))
+    )
     if not explicitReadOnlyAction
         and type(A.RouterIsFailClosedReadOnlyRequest) == "function"
         and A.RouterIsFailClosedReadOnlyRequest(text)
@@ -7208,6 +7209,9 @@ function A.HandleCommandInput(text)
         return NormalizePlanResult({ text = parsed.text or "I don't see an MSUF option for that request yet.", result = parsed.status or "info", kind = "unsupported", summary = parsed.summary })
     end
     if parsed.kind == "answer" then
+        if type(parsed.pendingSetting) == "table" and type(A.StartPendingFlow) == "function" then
+            A.StartPendingFlow("settingValue", parsed.pendingSetting)
+        end
         return NormalizePlanResult({ text = parsed.text or "", result = parsed.status or "info", summary = parsed.summary })
     end
     if (parsed.kind == "changes" or parsed.kind == "action") and parsed.sourceText == nil then parsed.sourceText = NormalizeReply(text) end
@@ -7703,6 +7707,8 @@ function AP.TryImmediateSubmitResult(text, opts)
     if type(A.TryImmediateConversationReply) ~= "function" then return nil end
     local parser = A.Parser or {}
     local normalized = type(parser.Normalize) == "function" and parser.Normalize(text) or tostring(text or ""):lower()
+    if AP.RequiresExactMovementRouting and AP.RequiresExactMovementRouting(text) then return nil end
+    if AP.RequiresCrossFrameTextRouting and AP.RequiresCrossFrameTextRouting(text) then return nil end
     local auraFilteringIntent = type(parser.LooksLikeAuraFilteringConversation) == "function"
         and parser.LooksLikeAuraFilteringConversation(
             normalized,
@@ -7716,12 +7722,6 @@ function AP.TryImmediateSubmitResult(text, opts)
     -- sentence as a fresh exact-alias mutation.
     local pendingResults = CurrentPendingResults()
     if not adjacentJokeFollowup and type(pendingResults) == "table" and #pendingResults > 0 then return nil end
-    -- The guided setup parser owns short conversational replies such as
-    -- "why this", "show examples", and "open it".  They are meaningful only
-    -- with the active workflow context, which the context-free shortcut does
-    -- not inspect.
-    local ctx = type(A.GetContext) == "function" and A.GetContext() or nil
-    if not adjacentJokeFollowup and type(ctx) == "table" and type(ctx.guidedSetup) == "table" then return nil end
     -- Exact aura-list requests require lane/scope-aware action parsers and
     -- native blacklist/whitelist transaction semantics.  The conversational
     -- shortcut must not collapse "hide Rejuvenation in target buffs" into
@@ -7810,6 +7810,51 @@ function AP.LooksLikeImmediateLastChangeFollowup(normalized)
     })
 end
 
+function AP.RequiresExactTextMovementRouting(text)
+    local router = A.RouterPrivate
+    return router and type(router.TextMovementIntent) == "function"
+        and router.TextMovementIntent(text) ~= nil
+end
+
+function AP.RequiresCrossFrameTextRouting(text)
+    local router = A.RouterPrivate
+    if not (router and type(router.CrossFrameTextRequestParts) == "function") then return false end
+    local subjectUnit, _, frameUnit = router.CrossFrameTextRequestParts(text)
+    return subjectUnit ~= nil and frameUnit ~= nil and subjectUnit ~= frameUnit
+end
+
+function AP.RequiresDirectionalTextMovementRouting(text)
+    local router = A.RouterPrivate
+    local intent = router and type(router.TextMovementIntent) == "function"
+        and router.TextMovementIntent(text) or nil
+    return type(intent) == "table"
+        and (intent.direction ~= nil or intent.conflictingDirections == true or intent.fixedAnchorRequested == true)
+end
+
+function AP.RequiresExactCastbarMovementRouting(text)
+    local router = A.RouterPrivate
+    if not router then return false end
+    if type(router.CastbarComponentMovementIntent) == "function"
+        and router.CastbarComponentMovementIntent(text) ~= nil
+    then
+        return true
+    end
+    return type(router.CastbarMovementIntent) == "function"
+        and router.CastbarMovementIntent(text) ~= nil
+end
+
+function AP.RequiresExactCastbarPositionRouting(text)
+    local router = A.RouterPrivate
+    return router and type(router.CastbarIconFixedPositionIntent) == "function"
+        and router.CastbarIconFixedPositionIntent(text) ~= nil
+end
+
+function AP.RequiresExactMovementRouting(text)
+    return AP.RequiresExactCastbarMovementRouting(text)
+        or AP.RequiresExactCastbarPositionRouting(text)
+        or AP.RequiresExactTextMovementRouting(text)
+end
+
 function AP.TryImmediateMutationResult(text, opts)
     if InCombat() or A.pendingConfirmation or CurrentPendingChoices() then return nil end
     local pendingResults = CurrentPendingResults()
@@ -7820,6 +7865,30 @@ function AP.TryImmediateMutationResult(text, opts)
     local normalized = normalize(text)
     if normalized == "" then return nil end
     local routePrivate = A.RouterPrivate
+    -- "Target of Target name ... on Target frame" names two different
+    -- owners. Let the Router explain the relationship (or offer the correct
+    -- frame) before an exact boolean alias can toggle only the first phrase.
+    if AP.RequiresCrossFrameTextRouting(text) then return nil end
+    -- Concrete directional movement and typed cast-bar icon placement have
+    -- reviewed O(1) owners. Bypass exact label detection before it can lazily
+    -- build the broad registry indices; value-only commands such as "set
+    -- target power text Y offset to 5" do not satisfy these guards and retain
+    -- exact-label precedence.
+    if AP.RequiresExactCastbarMovementRouting(text)
+        or AP.RequiresExactCastbarPositionRouting(text)
+        or AP.RequiresDirectionalTextMovementRouting(text)
+    then
+        return nil
+    end
+    -- A complete visible setting label must reach the Router's deterministic
+    -- exact-control lane before any low-latency topical shortcut can consume a
+    -- broader word such as layer, smooth, buff, color, scale, or dots.
+    if routePrivate and type(routePrivate.IsExactRegistrySettingMutation) == "function"
+        and routePrivate.IsExactRegistrySettingMutation(text)
+    then
+        return nil
+    end
+    if AP.RequiresExactTextMovementRouting(text) then return nil end
     if routePrivate and type(routePrivate.IncompleteMovementSubject) == "function"
         and routePrivate.IncompleteMovementSubject(text)
     then
@@ -7837,6 +7906,7 @@ function AP.TryImmediateMutationResult(text, opts)
     -- Multiple explicit clauses must stay together.  Let the deferred batch
     -- path parse and apply them atomically instead of allowing a warm exact-
     -- alias index to consume only the final frame name.
+    if normalized:find(" but ", 1, true) then return nil end
     if AP.SplitBatchCommands(text) then return nil end
     -- Never let continuation/exact-alias fast paths reinterpret a problem,
     -- capability question, location lookup, or subjective request as a write.
@@ -8129,6 +8199,9 @@ function AP.TryImmediateMutationResult(text, opts)
         end
         result = NormalizePlanResult({ text = choiceText, result = "ambiguous", summary = plan.summary })
     elseif plan.kind == "answer" then
+        if type(plan.pendingSetting) == "table" and type(A.StartPendingFlow) == "function" then
+            A.StartPendingFlow("settingValue", plan.pendingSetting)
+        end
         result = NormalizePlanResult({ text = plan.text or "", result = plan.status or "info", summary = plan.summary })
     elseif plan.kind == "unknown" or plan.kind == "unsupported" then
         result = NormalizePlanResult({
@@ -8162,7 +8235,8 @@ function AP.SubmitNow(text, opts)    opts = opts or {}
     -- first clause and silently discard the remaining commands (for example,
     -- "turn off target name and turn off focus name").
     local failClosedReadOnly = type(A.RouterIsFailClosedReadOnlyRequest) == "function" and A.RouterIsFailClosedReadOnlyRequest(text)
-    local batchParts = not failClosedReadOnly and AP.SplitBatchCommands(text) or nil
+    local exactMovement = AP.RequiresExactMovementRouting(text)
+    local batchParts = not failClosedReadOnly and not exactMovement and AP.SplitBatchCommands(text) or nil
     if not batchParts then
         local immediateMutation = AP.TryImmediateMutationResult(text, opts)
         if immediateMutation then return immediateMutation end
@@ -8191,7 +8265,8 @@ end
 function AP.BuildDeferredSubmitSteps(text, callback, opts)    opts = opts or {}
     local steps = {}
     local failClosedReadOnly = type(A.RouterIsFailClosedReadOnlyRequest) == "function" and A.RouterIsFailClosedReadOnlyRequest(text)
-    local parts = not failClosedReadOnly and AP.SplitBatchCommands(text) or nil
+    local exactMovement = AP.RequiresExactMovementRouting(text)
+    local parts = not failClosedReadOnly and not exactMovement and AP.SplitBatchCommands(text) or nil
     local finalResult
     local finished = false
 

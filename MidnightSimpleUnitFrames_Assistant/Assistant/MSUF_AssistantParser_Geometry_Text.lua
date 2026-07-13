@@ -1,4 +1,4 @@
-﻿-- Assistant geometry-text parser: parses text slot, offset, layer, and alignment commands.
+-- Assistant geometry-text parser: parses text slot, offset, layer, and alignment commands.
 -- Produces parser plans only; DB writes and apply side effects remain in Assistant execution.
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}

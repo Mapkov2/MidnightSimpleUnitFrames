@@ -101,7 +101,7 @@ function A.GroupFramesRegistry.RegisterBarAndPowerSettings(ctx, scope)
     AddAliasesForUnit(aliases, scope, "background texture")
     AddAliasesForUnit(aliases, scope, "bar background texture")
     AddAliasesForUnit(aliases, scope, "health background texture")
-    RegisterGroupTexture(scope, "barBackgroundTexture", "barBgTexture", "Background Texture", aliases)
+    RegisterGroupTexture(scope, "barBackgroundTexture", "barBackgroundTexture", "Background Texture", aliases)
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "health color mode")

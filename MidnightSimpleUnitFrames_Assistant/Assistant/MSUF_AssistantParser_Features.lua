@@ -1990,25 +1990,43 @@ local function SpecResourceRouteForText(text)
     local classToken
     if wantsCurrent and SPEC_RESOURCE_COLOR_ROUTES[currentClass] then classToken = currentClass end
     if not classToken then
+        local bestLength = 0
         for token, route in pairs(SPEC_RESOURCE_COLOR_ROUTES) do
-            if ContainsAny(text, route.aliases) then classToken = token break end
+            for i = 1, #(route.aliases or {}) do
+                local alias = route.aliases[i]
+                if HasPhrase(text, alias) and #Compact(alias) > bestLength then
+                    classToken, bestLength = token, #Compact(alias)
+                end
+            end
         end
     end
     if not classToken then
+        local bestLength = 0
         for token, route in pairs(SPEC_RESOURCE_COLOR_ROUTES) do
             for i = 1, #(route.specs or {}) do
-                if ContainsAny(text, route.specs[i].aliases) then classToken = token break end
+                local aliases = route.specs[i].aliases or {}
+                for j = 1, #aliases do
+                    local alias = aliases[j]
+                    if HasPhrase(text, alias) and #Compact(alias) > bestLength then
+                        classToken, bestLength = token, #Compact(alias)
+                    end
+                end
             end
-            if classToken then break end
         end
     end
     local route = classToken and SPEC_RESOURCE_COLOR_ROUTES[classToken] or nil
     if not route then return nil end
 
-    local selectedSpec
+    local selectedSpec, selectedSpecLength
     for i = 1, #(route.specs or {}) do
         local spec = route.specs[i]
-        if ContainsAny(text, spec.aliases) then selectedSpec = spec break end
+        for j = 1, #(spec.aliases or {}) do
+            local alias = spec.aliases[j]
+            local length = #Compact(alias)
+            if HasPhrase(text, alias) and (not selectedSpecLength or length > selectedSpecLength) then
+                selectedSpec, selectedSpecLength = spec, length
+            end
+        end
     end
     if not selectedSpec and wantsCurrent and currentSpec then
         for i = 1, #(route.specs or {}) do
@@ -2697,18 +2715,6 @@ local function ParseSupportWorkflow(text)
             confirmRequired = actionKey == "assistant.action.editMode.cancel",
             label = label,
             summary = "Starts, stops, or checks MSUF Edit Mode.",
-        } or nil
-    end
-
-    if ContainsAny(text, FeaturesPhrases[325]) then
-        local clear = ContainsAny(text, FeaturesPhrases[326])
-        local action = Registry and Registry:GetAction("confirm_wago_backup")
-        return action and {
-            kind = "action",
-            action = action,
-            args = { confirmed = not clear },
-            label = clear and "Clear Wago backup confirmation" or "Confirm Wago backup",
-            summary = "Marks the Wago backup checklist for the active profile.",
         } or nil
     end
 
@@ -3933,67 +3939,14 @@ local function ParseGuidedSetup(text)
 end
 
 local function ParseGuidedSetupFollowup(text, ctx)
-    local active = ctx and type(ctx.guidedSetup) == "table"
-    local explicit = ContainsAny(text, FeaturesPhrases[412])
-    if not active and not explicit then return nil end
-    local exact
-    if active then
-        if text == "cancel" or text == "stop" or text == "abort" or text == "abbrechen" then
-            exact = "cancel"
-        elseif text == "finish" or text == "done" or text == "complete" or text == "fertig" then
-            exact = "finish"
-        elseif text == "skip" or text == "ueberspringen" then
-            exact = "skip"
-        elseif text == "next" or text == "continue" or text == "weiter" then
-            exact = "next"
-        elseif text == "back" or text == "previous" or text == "zurueck" then
-            exact = "back"
-        elseif text == "show" or text == "repeat" or text == "status" or text == "anzeigen" or text == "wiederholen" then
-            exact = "show"
-        elseif text == "why" or text == "why this" or text == "explain" or text == "details"
-            or text == "tell me more" or text == "more details" or text == "what is it for" then
-            exact = "explain"
-        elseif text == "examples" or text == "show examples" or text == "show me examples" or text == "commands" then
-            exact = "examples"
-        elseif text == "open" or text == "open it" or text == "open this" or text == "open that"
-            or text == "show me where" or text == "take me there" or text == "go there" then
-            exact = "open"
-        elseif text == "do it" or text == "do that" or text == "apply it" or text == "use it" or text == "run it" then
-            exact = "apply"
-        end
-    end
-    local command
-    if ContainsAny(text, FeaturesPhrases[413]) then
-        command = "cancel"
-    elseif ContainsAny(text, FeaturesPhrases[414]) then
-        command = "finish"
-    elseif ContainsAny(text, FeaturesPhrases[415]) then
-        command = "skip"
-    elseif ContainsAny(text, FeaturesPhrases[416]) then
-        command = "next"
-    elseif ContainsAny(text, FeaturesPhrases[417]) then
-        command = "back"
-    elseif ContainsAny(text, FeaturesPhrases[418]) then
-        command = "show"
-    elseif active and ContainsAny(text, FeaturesPhrases[419]) then
-        command = "explain"
-    elseif active and ContainsAny(text, FeaturesPhrases[420]) then
-        command = "examples"
-    elseif active and ContainsAny(text, FeaturesPhrases[421]) then
-        command = "open"
-    elseif active and ContainsAny(text, FeaturesPhrases[422]) then
-        command = "apply"
-    elseif exact then
-        command = exact
-    end
-    if not command then return nil end
+    if not ContainsAny(text, FeaturesPhrases[418]) then return nil end
     local action = Registry and Registry:GetAction("guided_setup_step")
     return action and {
         kind = "action",
         action = action,
-        args = { command = command },
-        label = "Guided setup step",
-        summary = "Continues the active guided setup.",
+        args = { command = "show" },
+        label = "Open guided setup",
+        summary = "Returns to the native guided setup.",
     } or nil
 end
 
