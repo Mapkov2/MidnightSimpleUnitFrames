@@ -14,6 +14,14 @@ local max = math.max
 local min = math.min
 local C_Timer = _G.C_Timer
 local VT = M.ValueTextList
+local AccessibleNumber = M.AccessibleNumber or function(value, fallback)
+    fallback = tonumber(fallback) or 0
+    local canaccessvalue = _G.canaccessvalue
+    if type(canaccessvalue) == "function" and canaccessvalue(value) ~= true then return fallback end
+    local issecretvalue = _G.issecretvalue
+    if type(issecretvalue) == "function" and issecretvalue(value) == true then return fallback end
+    return tonumber(value) or fallback
+end
 local AURA_ANCHORS, STATUS_ICON_ANCHORS, SPELL_GROWTH_VALUES, ScopeSection, CurrentScope, AuraGroup, AurasRoot, QueueGF, RefreshContext, BindNestedSlider, BindNestedStrataSlider, BindNestedDropdown, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, OnOffBadge, BadgeNumber, OptionText, FrameStrataCount = M.Pick(GP, [[AURA_ANCHORS STATUS_ICON_ANCHORS SPELL_GROWTH_VALUES ScopeSection CurrentScope AuraGroup AurasRoot QueueGF RefreshContext BindNestedSlider BindNestedStrataSlider BindNestedDropdown SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus OnOffBadge BadgeNumber OptionText FrameStrataCount]])
 AURA_ANCHORS = AURA_ANCHORS or {}
 STATUS_ICON_ANCHORS = STATUS_ICON_ANCHORS or {}
@@ -123,14 +131,15 @@ local function RestoreGroupAuraScroll(offset, key, serial)
     if M.activeKey ~= key or serial ~= groupAuraRebuildSerial then return end
     local scroll = M.scrollFrame
     if not (scroll and scroll.SetVerticalScroll) then return end
-    local range = scroll.GetVerticalScrollRange and scroll:GetVerticalScrollRange() or offset
-    scroll:SetVerticalScroll(min(max(tonumber(offset) or 0, 0), max(tonumber(range) or 0, 0)))
+    -- The themed setter already clamps against its accessible cached range.
+    -- Avoid GetVerticalScrollRange here: Midnight may return a secret number.
+    scroll:SetVerticalScroll(AccessibleNumber(offset, 0))
     if M.RefreshPinnedPreviews then M.RefreshPinnedPreviews(scroll) end
 end
 local function RebuildGroupAuraPage(ctx)
     local key = (ctx and ctx.key) or M.activeKey or "gf_auras"
     if not (M.InvalidatePage and M.SelectPage and M.frame and M.frame.IsShown and M.frame:IsShown()) then return end
-    local offset = M.scrollFrame and M.scrollFrame.GetVerticalScroll and M.scrollFrame:GetVerticalScroll() or 0
+    local offset = AccessibleNumber(M.scrollFrame and M.scrollFrame.GetVerticalScroll and M.scrollFrame:GetVerticalScroll() or 0, 0)
     groupAuraRebuildSerial = groupAuraRebuildSerial + 1
     local serial = groupAuraRebuildSerial
     M.InvalidatePage(key)

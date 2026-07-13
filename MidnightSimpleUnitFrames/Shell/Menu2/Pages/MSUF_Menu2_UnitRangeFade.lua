@@ -19,7 +19,7 @@ local function BuildRangeFade(ctx, builder, unit)
     local SetControlEnabled = UP.SetControlEnabled
     local GetConf = UP.GetConf
     if not (ReadBool and SetBool and ReadNumber and SetNumber and SetString and SetControlEnabled and GetConf) then return end
-    local sec = builder:CollapsibleSection("range_fade", "Range Fade", 214, false)
+    local sec = builder:CollapsibleSection("range_fade", "Range Fade", 230, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local gap = 16
     local leftX = 20
@@ -27,8 +27,8 @@ local function BuildRangeFade(ctx, builder, unit)
     local leftW = floor((innerW - gap) * 0.48)
     local rightX = leftX + leftW + gap
     local rightW = innerW - leftW - gap
-    local mainCard = W.ControlCard(sec, "Range", "Unitframe range fade.", leftX, -38, leftW, 150)
-    local alphaCard = W.ControlCard(sec, "Out of range", "Opacity multiplier and affected layer.", rightX, -38, rightW, 150)
+    local mainCard = W.ControlCard(sec, "Range", "Unitframe range fade.", leftX, -38, leftW, 166)
+    local alphaCard = W.ControlCard(sec, "Out of range", "Opacity multiplier and affected layer.", rightX, -38, rightW, 166)
     local enabled = W.ToggleAt(mainCard, "Enable Range Fade", 16, -54, leftW - 32)
     M.BindBoolWidget(ctx, enabled,
         function() return ReadBool(unit, "rangeFadeEnabled", true) end,
@@ -59,7 +59,7 @@ if type(UP.RegisterSection) == "function" then
     UP.RegisterSection({
         id = "range_fade",
         title = "Range Fade",
-        height = 214,
+        height = 230,
         placement = "after_load_conditions",
         order = 10,
         units = RANGE_FADE_UNITS,

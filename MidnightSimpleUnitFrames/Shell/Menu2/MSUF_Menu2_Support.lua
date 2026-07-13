@@ -529,7 +529,18 @@ function M.CallIf(fn, ...)
 end
 
 -- Lets callbacks call a refresh function before its body is assigned later in the page build.
-function M.RefreshProxy() local refresh; return function(fn) if fn then refresh = fn; return fn end; return M.CallIf(refresh) end end
+function M.RefreshProxy()
+    local refresh
+    return function(candidate)
+        -- Toggle callbacks may pass their new boolean value to an `afterSet` handler.
+        -- Only functions install the proxy target; every other value is a refresh request.
+        if type(candidate) == "function" then
+            refresh = candidate
+            return candidate
+        end
+        return M.CallIf(refresh)
+    end
+end
 
 --- Declarative "master toggle gates dependent controls" helper.
 --- Replaces the repeated hand-written refresh closures that read a config value and call

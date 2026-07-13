@@ -673,9 +673,11 @@ local function BuildTextureSection(ctx, b)
         Meta("gradient.strength"))
     W.MoveWidget(strength, textures, rightX, gradientY - 90, compactTextures and math.min(leftW, 300) or 220, "LEFT")
     local padX = compactTextures and math.min(rightX + 210, (ctx.width or 720) - 104) or math.min(rightX + 238, (ctx.width or 720) - 104)
+    local padW, padH = 104, 78
+    local padButtonW, padButtonH = 22, 18
     local pad = T.Panel(textures, nil, T.colors.panel2 or { 0.014, 0.038, 0.072, 0.55 }, T.colors.borderSoft)
     pad:SetPoint("TOPLEFT", textures, "TOPLEFT", padX, gradientY - 18)
-    pad:SetSize(84, 64)
+    pad:SetSize(padW, padH)
     local center = pad:CreateTexture(nil, "ARTWORK")
     center:SetPoint("CENTER", pad, "CENTER", 0, 0)
     center:SetSize(10, 10)
@@ -683,7 +685,7 @@ local function BuildTextureSection(ctx, b)
     center:SetColorTexture(centerColor[1], centerColor[2], centerColor[3], 0.95)
     local directionButtons = {}
     local function PadButton(text, value, x, y)
-        local btn = T.Button(pad, text, 22, 18)
+        local btn = T.Button(pad, text, padButtonW, padButtonH)
         btn:SetPoint("TOPLEFT", pad, "TOPLEFT", x, y)
         T.CenterButtonLabel(btn)
         btn:SetScript("OnClick", function()
@@ -695,10 +697,13 @@ local function BuildTextureSection(ctx, b)
         directionButtons[value] = btn
         return btn
     end
-    PadButton("^", "UP", 31, -5)
-    PadButton("<", "LEFT", 8, -27)
-    PadButton(">", "RIGHT", 54, -27)
-    PadButton("v", "DOWN", 31, -49)
+    local centerX = (padW - padButtonW) * 0.5
+    local centerY = (padH - padButtonH) * 0.5
+    local sideOffset = 23
+    PadButton("^", "UP", centerX, -(centerY - sideOffset))
+    PadButton("<", "LEFT", centerX - sideOffset, -centerY)
+    PadButton(">", "RIGHT", centerX + sideOffset, -centerY)
+    PadButton("v", "DOWN", centerX, -(centerY + sideOffset))
     local textureControls = { barTexture, bgTexture }
     local gradientControls = { hpGradient, powerGradient }
     M.TrackRefresh(ctx, SyncGradientControls(function()
