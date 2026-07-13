@@ -27,6 +27,7 @@ local appliedKind = setmetatable({}, { __mode = "k" })
 local appliedWidth = setmetatable({}, { __mode = "k" })
 local appliedHeight = setmetatable({}, { __mode = "k" })
 local secureClicksConfigured = setmetatable({}, { __mode = "k" })
+local unitIndexRebindDepth = 0
 
 local UNIT_ATTR = "unit"
 local NO_UNIT = false
@@ -99,7 +100,6 @@ function GF.RegisterClickCastFrame(frame)
   _G.ClickCastFrames = type(_G.ClickCastFrames) == "table" and _G.ClickCastFrames or {}
   _G.ClickCastFrames[frame] = true
   frame._msufGFClickCastRegistered = true
-  frame._msufClickCastDisabledForClickSpikeTest = nil
   return true
 end
 
@@ -165,6 +165,39 @@ function GF.FrameForUnit(unit)
   local frame = GF.unitFrames and GF.unitFrames[unit]
   if frame and frame.unit == unit then return frame end
   return nil
+end
+
+local function BeginUnitIndexRebind()
+  unitIndexRebindDepth = unitIndexRebindDepth + 1
+end
+
+local function EndUnitIndexRebind()
+  unitIndexRebindDepth = unitIndexRebindDepth - 1
+  if unitIndexRebindDepth < 1 then
+    unitIndexRebindDepth = 0
+  end
+end
+
+--- Resolve a PARTY_MEMBER_ENABLE/DISABLE target only when the secure child,
+--- adapter index and visual binding all agree on the exact same plain token.
+--- Core falls back to a full group barrier for every non-exact result.
+function GF.ResolveLifecycleFrame(unit)
+  if unitIndexRebindDepth > 0 or not IsUnitToken(unit) then
+    return nil, false
+  end
+  local frame = GF.FrameForUnit(unit)
+  if not frame or GF.frames[frame] ~= true or frame._msufGFIsPreviewFrame == true then
+    return nil, false
+  end
+  local shell = ShellFrame(frame)
+  if shell and shell._msufGFIsPreviewFrame == true then return nil, false end
+  if shell and shell.GetAttribute then
+    local secureUnit = shell:GetAttribute(UNIT_ATTR)
+    if not IsUnitToken(secureUnit) or secureUnit ~= unit then
+      return nil, false
+    end
+  end
+  return frame, true
 end
 
 function GF.ValidateUnitFrameMap(frame, unit)
@@ -373,6 +406,7 @@ end
 
 local function OnChildAttributeChanged(self, name, value)
   if name ~= UNIT_ATTR then return end
+  BeginUnitIndexRebind()
   local visual = EnsureGroupVisual(self)
   local rawUnit = NormalizeAttrUnit(value)
   local oldUnit = StoredAttrUnit(self)
@@ -380,6 +414,7 @@ local function OnChildAttributeChanged(self, name, value)
 
   if rawUnit == NO_UNIT then
     SuspendUnitBinding(self)
+    EndUnitIndexRebind()
     return
   end
 
@@ -390,11 +425,13 @@ local function OnChildAttributeChanged(self, name, value)
     if (kind or visual._msufGFKind) == "party" then
       RefreshGroupUnitState(visual, UNIT_CHANGED_REASON)
     end
+    EndUnitIndexRebind()
     return
   end
 
   if not (visual and visual.MSUFSpec) then
     ApplyUnitFrame(self, kind or "party", rawUnit, "UNIT_CHANGED")
+    EndUnitIndexRebind()
     return
   end
 
@@ -410,6 +447,7 @@ local function OnChildAttributeChanged(self, name, value)
     if kind then appliedKind[visual] = kind end
     TrackFrame(visual, rawUnit)
     RefreshGroupUnitState(visual, UNIT_CHANGED_REASON)
+    EndUnitIndexRebind()
     return
   end
 
@@ -428,6 +466,7 @@ local function OnChildAttributeChanged(self, name, value)
   appliedUnit[visual] = rawUnit
   if kind then appliedKind[visual] = kind end
   TrackFrame(visual, rawUnit)
+  EndUnitIndexRebind()
 end
 
 local function InstallChildAttrHook(child, kind)

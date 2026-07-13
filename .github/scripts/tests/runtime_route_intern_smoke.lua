@@ -51,7 +51,7 @@ local Health = {
     IsEnabled = function() return true end,
     Create = function() end,
     Apply = function() end,
-    GetEvents = function() return { "UNIT_HEALTH", "UNIT_MAXHEALTH" } end,
+    GetEvents = function() return { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION" } end,
 }
 function Health.Update(frame, event, unit)
     calls[frame] = (calls[frame] or 0) + 1
@@ -134,11 +134,30 @@ first.UNIT_POWER_UPDATE(first, "UNIT_POWER_UPDATE", "player")
 second.UNIT_POWER_UPDATE(second, "UNIT_POWER_UPDATE", "player")
 Check(first.powerCalls == 1 and second.powerCalls == 1, "private routes lost frame-local update state")
 
+-- A castbar may temporarily borrow this frame's existing health lifecycle
+-- route. Detach must notify it before deleting the compiled route so the owner
+-- can promote itself to its minimal fallback instead of remaining falsely
+-- marked as UF-owned.
+UF.frames.player = first
+local lifecycleOwner = {}
+local lifecycleDetachCalls = 0
+local attached = UF.SetHealthLifecycleSink("player", function(owner, frame, event)
+    Check(owner == lifecycleOwner and frame == first, "detach lifecycle sink lost its owner/frame")
+    if event == "MSUF_UF_LIFECYCLE_DETACH" then
+        lifecycleDetachCalls = lifecycleDetachCalls + 1
+    end
+end, lifecycleOwner)
+Check(attached == true, "health lifecycle sink did not attach")
+Check(first._msufHealthLifecycleSink ~= nil, "attached lifecycle sink state missing")
+
 UF.DetachFrame(first)
 Check(first.UNIT_HEALTH == nil, "detach retained compiled event function")
 Check(next(first.registered) == nil, "detach retained native events")
 Check(first._msufGroupIdentityFns == nil and first._msufGroupIdentityLabels == nil,
     "detach retained shared group identity plan references")
+Check(lifecycleDetachCalls == 1, "detach did not notify the lifecycle sink exactly once")
+Check(first._msufHealthLifecycleSink == nil and first._msufHealthLifecycleSinkOwner == nil,
+    "detach retained lifecycle sink state")
 Check(type(second.UNIT_HEALTH) == "function", "detaching one frame damaged shared route")
 
 print("PASS runtime route interning: shared event/runtime plans, no in-game profiler API, isolated detach")
