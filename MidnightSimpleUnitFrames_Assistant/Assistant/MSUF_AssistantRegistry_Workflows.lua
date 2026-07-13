@@ -40,12 +40,26 @@ local function SetContextFlow(flow)
     if ctx then ctx.pendingFlow = flow end
 end
 
+local function SerializablePendingFlow(kind, data)
+    local flow = { kind = kind }
+    for key, value in pairs(data or {}) do
+        local valueType = type(value)
+        if valueType == "string" or valueType == "number" or valueType == "boolean" then
+            flow[key] = value
+        end
+    end
+    return flow
+end
+
 function A.StartPendingFlow(kind, data)
     if type(kind) ~= "string" or kind == "" then return false end
     data = type(data) == "table" and data or {}
     data.kind = kind
     A.pendingFlow = data
-    SetContextFlow({ kind = kind, label = data.label, source = data.source, target = data.target })
+    -- Pending setting conversations keep only scalar semantic data (setting
+    -- keys, labels, expected value type, and movement nouns).  This survives
+    -- a UI rebuild without retaining widgets, closures, or page objects.
+    SetContextFlow(SerializablePendingFlow(kind, data))
     return true
 end
 

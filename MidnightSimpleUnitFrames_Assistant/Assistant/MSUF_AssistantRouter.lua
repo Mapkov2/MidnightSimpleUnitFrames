@@ -435,6 +435,36 @@ end
 function A.RouterIsFailClosedReadOnlyRequest(text)
     local norm = R.StripResponseLanguageDirective(text)
     if norm == "" then return true end
+    -- Capability questions ask whether/how something can be done; they are not
+    -- permission to do it. Keep direct polite requests ("could you change")
+    -- actionable while treating possible/could-I forms as guidance.
+    if norm:match("^is%s+it%s+possible%s+to%s+")
+        or norm:match("^would%s+it%s+be%s+possible%s+to%s+")
+        or norm:match("^could%s+i%s+")
+    then
+        return true
+    end
+    -- Explicitly refusing a destructive action must never execute that action
+    -- after conversational wrapper stripping. This is deliberately narrower
+    -- than all negation: "do not show untimed buffs" is a valid Aura filter
+    -- request, whereas "do not want to hide power text" is an opt-out.
+    local refusesAction = norm:find("do not want to", 1, true)
+        or norm:find("dont want to", 1, true)
+        or norm:find("don t want to", 1, true)
+        or norm:match("^never%s+") ~= nil
+        or norm:find(" not hide ", 1, true)
+        or norm:match("^not%s+hide%s+") ~= nil
+        or norm:find(" dont hide ", 1, true)
+        or norm:find(" don t hide ", 1, true)
+        or norm:find(" do not hide ", 1, true)
+        or norm:find(" not disable ", 1, true)
+        or norm:find(" not remove ", 1, true)
+        or norm:find(" not turn off ", 1, true)
+    if refusesAction then return true end
+    -- A direction-less movement phrase is a clarification request. It must
+    -- reach the Router even when an Aura alias could also be read as a
+    -- visibility toggle ("move player buffs" must never mean "show buffs").
+    if type(R.IncompleteMovementSubject) == "function" and R.IncompleteMovementSubject(norm) then return true end
     -- Value-less setting ideas must reach the Router before the direct-write
     -- fast path. The Router can then show the exact control, range, or enum
     -- choices without letting a label word masquerade as a value.
@@ -2214,7 +2244,8 @@ function R.AsksSettingLocation(norm)
         or norm:match("^welche%s+einstellung") ~= nil
         or norm:match("^welche%s+option") ~= nil
         or R.ContainsAny(norm, {
-            "help me find", "help me locate", "tell me where", "looking for", "show me", "options", "list options", "setting controls", "option controls",
+            "help me find", "help me locate", "help me to find", "help me to locate", "tell me where", "looking for", "show me", "options", "list options", "setting controls", "option controls",
+            "how do i use", "how can i use", "can you help me find", "can you help me locate",
             "zeige mir", "hilf mir finden", "einstellung steuert", "option steuert",
         })
 end
@@ -4564,6 +4595,403 @@ function R.TextSettingFromText(norm)
     return "text", "Frame Text", "text"
 end
 
+local TEXT_MOVEMENT_ATTRS = {
+    name = { x = "nameOffsetX", y = "nameOffsetY", anchorUnit = "nameTextAnchor", anchorGroup = "nameAnchor", noun = "name text" },
+    health = { x = "hpOffsetX", y = "hpOffsetY", noun = "hp text" },
+    power = { x = "powerOffsetX", y = "powerOffsetY", noun = "power text" },
+    status = { x = "statusTextOffsetX", y = "statusTextOffsetY", anchorUnit = "statusTextAnchor", anchorGroup = "statusTextAnchor", noun = "status text" },
+}
+
+function R.TextMovementIntent(text)
+    local norm = R.Normalize(text)
+    if norm == "" then return nil end
+    local parser = A.Parser or {}
+    local actionable = type(parser.ActionableText) == "function" and parser.ActionableText(text) or norm
+    actionable = R.Normalize(actionable):gsub("^the%s+", "")
+
+    local unit, unitLabel = R.UnitScopeFromText(actionable)
+    if not unit then unit, unitLabel = R.UnitScopeFromText(norm) end
+    local settingScope = unit
+    local isGroup = false
+    if not unit then
+        unit, unitLabel = R.GroupScopeFromText(actionable)
+        if not unit then unit, unitLabel = R.GroupScopeFromText(norm) end
+        if unit then settingScope, isGroup = "gf_" .. tostring(unit), true end
+    end
+    if not unit or not unitLabel then return nil end
+
+    local textKind, settingKindLabel = R.TextSettingFromText(actionable)
+    local attrs = TEXT_MOVEMENT_ATTRS[textKind]
+    if not attrs then return nil end
+    if not R.ContainsAny(actionable, {
+        "name text", "unit name", "health text", "hp text", "power text", "mana text",
+        "energy text", "rage text", "status text", "dead text", "offline text",
+    }) then
+        return nil
+    end
+    if R.ContainsAny(actionable, {
+        "font size", "text size", "smaller", "bigger", "larger", "shrink", "enlarge",
+    }) then
+        return nil
+    end
+
+    local firstWord = actionable:match("^(%S+)")
+    -- Fixed anchor values belong to an Anchor enum, not to relative X/Y
+    -- offsets. In particular, "position ... top left" must never become a
+    -- silent ten-pixel left nudge.
+    local fixedAnchorRequested = firstWord == "position"
+        or R.ContainsAny(actionable, { " anchor", "center", "centre", "middle", "to top", "to bottom" })
+    local fixedAnchorValue
+    if fixedAnchorRequested then
+        if R.ContainsAny(actionable, { "top left", "upper left" }) then fixedAnchorValue = "TOPLEFT"
+        elseif R.ContainsAny(actionable, { "top right", "upper right" }) then fixedAnchorValue = "TOPRIGHT"
+        elseif R.ContainsAny(actionable, { "bottom left", "lower left" }) then fixedAnchorValue = "BOTTOMLEFT"
+        elseif R.ContainsAny(actionable, { "bottom right", "lower right" }) then fixedAnchorValue = "BOTTOMRIGHT"
+        elseif R.ContainsAny(actionable, { "center", "centre", "middle" }) then fixedAnchorValue = "CENTER"
+        elseif R.ContainsAny(actionable, { "left" }) then fixedAnchorValue = "LEFT"
+        elseif R.ContainsAny(actionable, { "right" }) then fixedAnchorValue = "RIGHT"
+        elseif R.ContainsAny(actionable, { "top", "upper" }) then fixedAnchorValue = "TOP"
+        elseif R.ContainsAny(actionable, { "bottom", "lower" }) then fixedAnchorValue = "BOTTOM" end
+    end
+
+    local hasLeft = R.ContainsAny(actionable, { "left", "to the left" })
+    local hasRight = R.ContainsAny(actionable, { "right", "to the right" })
+    local hasDown = R.ContainsAny(actionable, { "down", "lower", "lower down", "further down" })
+    local hasUp = R.ContainsAny(actionable, { "up", "higher", "further up" })
+    local horizontalDirection = hasLeft ~= hasRight and (hasLeft and "left" or "right") or nil
+    local verticalDirection = hasDown ~= hasUp and (hasDown and "down" or "up") or nil
+    local conflictingDirections = (hasLeft and hasRight) or (hasDown and hasUp)
+    local direction = not conflictingDirections and (horizontalDirection or verticalDirection) or nil
+
+    local hasMovementVerb = R.ContainsAny(actionable, {
+        "move", "nudge", "shift", "position", "reposition", "offset",
+    })
+    if not hasMovementVerb and not direction then return nil end
+
+    local readOnly = norm:match("^how%s+do%s+i%s+") ~= nil
+        or norm:match("^how%s+can%s+i%s+") ~= nil
+        or norm:match("^where%s+") ~= nil
+        or norm:match("^can%s+i%s+") ~= nil
+        or norm:match("^show%s+me%s+where%s+") ~= nil
+        or norm:match("^help%s+me%s+find%s+") ~= nil
+        or norm:match("^help%s+me%s+locate%s+") ~= nil
+        or norm:find("help me find", 1, true) ~= nil
+        or norm:find("help me locate", 1, true) ~= nil
+
+    local axis
+    if R.ContainsAny(actionable, { "x offset", "horizontal" }) or direction == "left" or direction == "right" then
+        axis = "x"
+    elseif R.ContainsAny(actionable, { "y offset", "vertical" }) or direction == "up" or direction == "down" then
+        axis = "y"
+    end
+
+    local amount = tostring(text or ""):match("[%+%-]?%d+%.?%d*")
+    local noun = tostring(unit) .. " " .. tostring(attrs.noun)
+    return {
+        unit = unit,
+        unitLabel = unitLabel,
+        textKind = textKind,
+        label = tostring(unitLabel) .. " " .. tostring(settingKindLabel),
+        noun = noun,
+        xKey = tostring(settingScope) .. "." .. tostring(attrs.x),
+        yKey = tostring(settingScope) .. "." .. tostring(attrs.y),
+        anchorKey = (isGroup and attrs.anchorGroup or attrs.anchorUnit)
+            and (tostring(settingScope) .. "." .. tostring(isGroup and attrs.anchorGroup or attrs.anchorUnit)) or nil,
+        fixedAnchorValue = fixedAnchorValue,
+        fixedAnchorRequested = fixedAnchorRequested and true or false,
+        direction = direction,
+        horizontalDirection = horizontalDirection,
+        verticalDirection = verticalDirection,
+        conflictingDirections = conflictingDirections and true or false,
+        amount = amount,
+        axis = axis,
+        readOnly = readOnly,
+    }
+end
+
+function R.TextMovementFixedAnchorResult(intent)
+    if type(intent) ~= "table" or not intent.fixedAnchorValue then return nil end
+    local item = intent.anchorKey and R.RegistrySettingItemForKey and R.RegistrySettingItemForKey(intent.anchorKey) or nil
+    local setting = item and item.setting
+    local validValue
+    if setting and setting.type == "enum" then
+        for i = 1, #(setting.values or {}) do
+            if tostring(setting.values[i]):upper() == tostring(intent.fixedAnchorValue):upper() then
+                validValue = setting.values[i]
+                break
+            end
+        end
+    end
+    if validValue and intent.readOnly then
+        return {
+            text = tostring(item.label or setting.label) .. " is the exact fixed-position control for " .. tostring(intent.label)
+                .. ". I kept it unchanged. Ask me to open it or say 'set " .. tostring(intent.noun)
+                .. " anchor to " .. tostring(validValue):lower() .. "'.",
+            status = "info",
+            summary = "Explains the exact fixed text-anchor control.",
+            searchResults = R.RegistryLocationResultFollowups({ { item = item, score = 10000, rawScore = 10000 } }, 1),
+        }
+    end
+    if validValue and type(A.ExecutePlan) == "function" then
+        return A.ExecutePlan({
+            kind = "changes",
+            changes = { { setting = setting, value = validValue } },
+            label = "Position " .. tostring(intent.label) .. " " .. tostring(validValue):lower(),
+            summary = "Changes the exact fixed text-anchor option.",
+            sourceText = "set " .. tostring(setting.label or setting.key) .. " to " .. tostring(validValue),
+        })
+    end
+    local guidance = R.TextMovementGuidance(intent, true)
+    if guidance then
+        guidance.status = "ambiguous"
+        guidance.result = "ambiguous"
+        guidance.text = tostring(intent.label) .. " does not have that fixed anchor choice in MSUF. I kept it unchanged.\n"
+            .. tostring(guidance.text or "Use its X Offset and Y Offset controls to place it instead.")
+        guidance.summary = "Offers the supported text-position controls instead of guessing an anchor."
+    end
+    return guidance
+end
+
+function R.TextMovementFollowupResults(intent)
+    if type(intent) ~= "table" then return nil end
+    local entries = {}
+    local keys = intent.axis == "x" and { intent.xKey }
+        or intent.axis == "y" and { intent.yKey }
+        or { intent.xKey, intent.yKey }
+    for _, key in ipairs(keys) do
+        local item = R.RegistrySettingItemForKey and R.RegistrySettingItemForKey(key) or nil
+        if item then entries[#entries + 1] = { item = item, score = 10000, rawScore = 10000 } end
+    end
+    if #entries == 0 then return nil end
+    return R.RegistryLocationResultFollowups and R.RegistryLocationResultFollowups(entries, #entries) or nil
+end
+
+function R.TextMovementGuidance(intent, readOnly)
+    if type(intent) ~= "table" then return nil end
+    local xItem = R.RegistrySettingItemForKey and R.RegistrySettingItemForKey(intent.xKey) or nil
+    local yItem = R.RegistrySettingItemForKey and R.RegistrySettingItemForKey(intent.yKey) or nil
+    if not xItem and not yItem then return nil end
+    if not readOnly and type(A.StartPendingFlow) == "function" then
+        A.StartPendingFlow("settingMovement", {
+            label = intent.label,
+            noun = intent.noun,
+            xKey = intent.xKey,
+            yKey = intent.yKey,
+            page = (xItem and xItem.page) or (yItem and yItem.page),
+            step = 10,
+        })
+    end
+    local lines = {
+        (readOnly and "Absolutely — here is where to move " or "Absolutely — I found ") .. tostring(intent.label) .. ".",
+    }
+    if xItem and intent.axis ~= "y" then lines[#lines + 1] = tostring(xItem.label) .. " moves it left or right." end
+    if yItem and intent.axis ~= "x" then lines[#lines + 1] = tostring(yItem.label) .. " moves it up or down." end
+    if readOnly then
+        lines[#lines + 1] = "I kept it unchanged. Ask me to open the horizontal or vertical control, or say for example 'move " .. tostring(intent.noun) .. " down 5'."
+    else
+        lines[#lines + 1] = "Which way should I move it? Reply Up, Down, Left, or Right; you can include an amount, such as 'down 5'. You can also say 'open horizontal', 'open vertical', or cancel."
+    end
+    return {
+        text = table.concat(lines, "\n"),
+        status = readOnly and "info" or "ambiguous",
+        result = readOnly and "info" or "ambiguous",
+        summary = readOnly and "Explains the exact text position controls." or "Guides an exact text position adjustment.",
+        searchResults = R.TextMovementFollowupResults(intent),
+    }
+end
+
+function R.TryTextMovementConversation(text, coreHandler)
+    local intent = R.TextMovementIntent(text)
+    if not intent then return nil end
+    if intent.fixedAnchorValue then return R.TextMovementFixedAnchorResult(intent) end
+    if intent.readOnly or not intent.direction or intent.conflictingDirections then
+        return R.TextMovementGuidance(intent, intent.readOnly)
+    end
+    if intent.horizontalDirection and intent.verticalDirection then
+        local xItem = R.RegistrySettingItemForKey and R.RegistrySettingItemForKey(intent.xKey) or nil
+        local yItem = R.RegistrySettingItemForKey and R.RegistrySettingItemForKey(intent.yKey) or nil
+        local xSetting = xItem and xItem.setting
+        local ySetting = yItem and yItem.setting
+        if xSetting and ySetting and type(A.ExecutePlan) == "function" then
+            local amount = math.abs(tonumber(intent.amount) or 10)
+            if amount == 0 then return R.TextMovementGuidance(intent, false) end
+            local xDelta = intent.horizontalDirection == "left" and -amount or amount
+            local yDelta = intent.verticalDirection == "down" and -amount or amount
+            return A.ExecutePlan({
+                kind = "changes",
+                changes = {
+                    { setting = xSetting, relativeDelta = xDelta, direction = intent.horizontalDirection },
+                    { setting = ySetting, relativeDelta = yDelta, direction = intent.verticalDirection },
+                },
+                label = "Move " .. tostring(intent.label) .. " "
+                    .. tostring(intent.verticalDirection) .. " and " .. tostring(intent.horizontalDirection),
+                summary = "Moves both exact text-position axes in one atomic Assistant change.",
+                sourceText = "move " .. tostring(intent.noun) .. " " .. tostring(intent.verticalDirection)
+                    .. " and " .. tostring(intent.horizontalDirection) .. " " .. tostring(amount),
+            })
+        end
+        return R.TextMovementGuidance(intent, false)
+    end
+    if type(coreHandler) ~= "function" then return nil end
+    local canonical = "move " .. tostring(intent.noun) .. " " .. tostring(intent.direction)
+    if intent.amount then canonical = canonical .. " " .. tostring(intent.amount) end
+    local result = coreHandler(canonical)
+    if result and not A.RouterIsUnknownResult(result) then return result end
+    return R.TextMovementGuidance(intent, false)
+end
+
+function R.IncompleteMovementSubject(text)
+    local parser = A.Parser or {}
+    local actionable = type(parser.ActionableText) == "function" and parser.ActionableText(text) or text
+    actionable = R.Normalize(actionable)
+    local verb, subject = actionable:match("^(%S+)%s+(.+)$")
+    if not verb or not subject or not ({
+        move = true, nudge = true, shift = true, position = true, reposition = true,
+    })[verb] then return nil end
+    if actionable:match("%d") or R.ContainsAny(actionable, {
+        "left", "right", "up", "down", "above", "below", "over", "under", "higher", "lower",
+        "x offset", "y offset", "horizontal", "vertical",
+    }) then
+        return nil
+    end
+    subject = R.Trim(subject:gsub("^the%s+", ""))
+    if subject == "" then return nil end
+    if R.ContainsAny(subject, { "frame", "frames", "unit frame", "group frame" })
+        and not R.ContainsAny(subject, {
+            "text", "name", "health", "hp", "power", "mana", "portrait", "buff", "debuff", "aura",
+            "icon", "marker", "indicator", "cast bar", "castbar", "resource", "totem",
+        })
+    then
+        return nil
+    end
+    return subject
+end
+
+function R.IncompleteMovementEntries(subject)
+    subject = R.Normalize(subject)
+    if subject == "" then return nil end
+    subject = subject:gsub("%f[%a]buffs%f[%A]", "buff")
+        :gsub("%f[%a]debuffs%f[%A]", "debuff")
+        :gsub("%f[%a]auras%f[%A]", "aura")
+    local settings = R.EnsureCompleteSettingRegistry()
+    if type(settings) ~= "table" then return nil end
+    local cached = R._incompleteMovementEntryCache
+    if type(cached) == "table" and cached.subject == subject and cached.count == #settings then
+        return cached.entries ~= false and cached.entries or nil
+    end
+
+    -- The old implementation performed four full 4.5k-setting searches (and
+    -- repeated all four again on a miss later in the same route). Do one
+    -- bounded registry pass, rank the four geometry families, and retain only
+    -- the last scalar subject result. This is submit-time/LoD work only.
+    local subjectWords = R.CompactRegistrySettingTokens(subject)
+    if #subjectWords == 0 then return nil end
+    local auraSubject = R.ContainsAny(subject, { "buff", "debuff", "aura" })
+    local familyRank = auraSubject
+        and { growth = 4, offset = 3, position = 2, anchor = 1 }
+        or { offset = 4, position = 3, anchor = 2, growth = 1 }
+    local entries = {}
+    for i = 1, #settings do
+        if i % 64 == 0 and type(A.MaybeYield) == "function" then A.MaybeYield() end
+        local setting = settings[i]
+        local candidateText = R.CompactRegistrySettingLabel(setting and setting.label or "")
+        local padded = " " .. candidateText .. " "
+        local ownsSubject = candidateText ~= ""
+        for j = 1, #subjectWords do
+            if not padded:find(" " .. subjectWords[j] .. " ", 1, true) then
+                ownsSubject = false
+                break
+            end
+        end
+        if ownsSubject then
+            local rank
+            for family, value in pairs(familyRank) do
+                if padded:find(" " .. family .. " ", 1, true) and (not rank or value > rank) then rank = value end
+            end
+            if rank then
+                local item = R.RegistrySettingItemForKey and R.RegistrySettingItemForKey(setting.key) or nil
+                if item then
+                    entries[#entries + 1] = {
+                        score = 10000 + rank * 100,
+                        rawScore = 10000 + rank * 100,
+                        item = item,
+                    }
+                end
+            end
+        end
+    end
+    table.sort(entries, function(a, b)
+        if a.score ~= b.score then return a.score > b.score end
+        return tostring(a.item and a.item.label or "") < tostring(b.item and b.item.label or "")
+    end)
+    while #entries > 8 do entries[#entries] = nil end
+    local result = #entries > 0 and entries or false
+    R._incompleteMovementEntryCache = { subject = subject, count = #settings, entries = result }
+    return result ~= false and result or nil
+end
+
+function R.TryIncompleteMovementConversation(text)
+    local subject = R.IncompleteMovementSubject(text)
+    if not subject then return nil end
+    local entries = R.IncompleteMovementEntries(subject)
+    if not entries then return nil end
+    if type(A.RouterClearPendingResultsForRoute) == "function" then A.RouterClearPendingResultsForRoute() end
+    local visible = math.min(6, #entries)
+    local lines = {
+        "I found several MSUF controls that can move or arrange " .. tostring(subject) .. ", so I kept everything unchanged. Which one did you mean?",
+    }
+    for i = 1, visible do lines[#lines + 1] = R.RegistryLocationLine(i, entries[i].item) end
+    if #entries > visible then lines[#lines + 1] = "Add a detail such as growth direction, anchor, X offset, or Y offset and I will narrow it further." end
+    lines[#lines + 1] = "Reply with a number, ask me to open one, or name the direction/value you want."
+    return {
+        text = table.concat(lines, "\n"),
+        status = "ambiguous",
+        result = "ambiguous",
+        summary = "Clarifies an incomplete movement request with exact MSUF controls.",
+        searchResults = R.RegistryLocationResultFollowups(entries, visible),
+    }
+end
+
+function R.ActionableMutationText(text)
+    local parser = A.Parser or {}
+    if type(parser.ActionableText) ~= "function" then return nil end
+    local norm = R.Normalize(text)
+    local actionable = R.Normalize(parser.ActionableText(text))
+    if actionable == "" or actionable == norm then return nil end
+    if norm:match("^how%s+do%s+i%s+") or norm:match("^how%s+can%s+i%s+")
+        or norm:match("^where%s+") or norm:match("^can%s+i%s+")
+        or norm:match("^show%s+me%s+where%s+")
+        or norm:match("^help%s+me%s+find%s+") or norm:match("^help%s+me%s+locate%s+")
+    then
+        return nil
+    end
+    return actionable
+end
+
+function R.TryConversationalMutation(text, coreHandler)
+    local norm = R.Normalize(text)
+    if norm:find("target s target", 1, true)
+        or norm:find("target's target", 1, true)
+        or norm:find("targets target", 1, true)
+        or (norm:find("target target", 1, true) and norm:find("on target frame", 1, true))
+    then
+        return nil
+    end
+    local movement = R.TryTextMovementConversation(text, coreHandler)
+    if movement then return movement end
+    local incompleteMovement = R.TryIncompleteMovementConversation(text)
+    if incompleteMovement then return incompleteMovement end
+
+    local actionable = R.ActionableMutationText(text)
+    if not actionable then return nil end
+    local openEnded = R.TryOpenEndedSettingIdea and R.TryOpenEndedSettingIdea(actionable, coreHandler)
+    if openEnded then return openEnded end
+    if not R.HasUnmistakableMutationRequest(actionable) then return nil end
+    local result = type(coreHandler) == "function" and coreHandler(actionable) or nil
+    if result and not A.RouterIsUnknownResult(result) then return result end
+    return nil
+end
+
 function R.LooksLikeUnitNameTextRequest(norm)
     norm = R.Normalize(norm)
     if norm == "" or not R.ContainsAny(norm, { "name", "names", "unit name" }) then return false end
@@ -4681,6 +5109,12 @@ A.RouterTryTextPowerSettingShortcut = function(norm, coreHandler)
 
     local unit, unitLabel = R.UnitScopeFromText(norm)
     if not unit or not unitLabel then return nil end
+
+    local textMovement = R.TextMovementIntent and R.TextMovementIntent(norm) or nil
+    if textMovement then
+        textMovement.readOnly = true
+        return R.TextMovementGuidance(textMovement, true)
+    end
 
     local mentionsPowerBar = R.ContainsAny(norm, A.RouterTextPowerProblemTerms.powerBar)
     if mentionsPowerBar then
@@ -7610,6 +8044,14 @@ end
 function R.RegistryLocationSubject(norm)
     norm = R.Normalize(norm)
     local prefixes = {
+        "can you help me to find ", "can you help me to locate ",
+        "could you help me to find ", "could you help me to locate ",
+        "would you help me to find ", "would you help me to locate ",
+        "can you help me find ", "can you help me locate ",
+        "could you help me find ", "could you help me locate ",
+        "would you help me find ", "would you help me locate ",
+        "help me to find ", "help me to locate ",
+        "how do i use ", "how can i use ",
         "where do i change ", "where can i change ", "where do i set ", "where can i set ",
         "where do i configure ", "where can i configure ", "where do i adjust ", "where can i adjust ",
         "where do i show ", "where can i show ", "where do i hide ", "where can i hide ",
@@ -7683,6 +8125,8 @@ function R.LooksLikeRegistrySettingLocationQuestion(text)
         "which page has", "what page has", "which menu has", "what menu has",
         "where is the setting", "where is the option", "where is",
         "where do i find", "where can i find",
+        "can you help me find", "can you help me locate", "help me to find", "help me to locate",
+        "how do i use", "how can i use",
         "wo kann ich", "wo finde ich", "wo ist", "wo sind",
         "wie kann ich", "wie aendere ich", "welche einstellung", "welche option",
     }) then
@@ -8204,19 +8648,18 @@ function R.RegistrySettingExample(item)
     return "open " .. tostring(item.pageLabel or "the matching page")
 end
 
-function R.RegistrySettingTypeText(controlType)
-    controlType = tostring(controlType or "")
-    if controlType == "" or controlType == "setting" then return "a setting" end
-    local first = controlType:sub(1, 1):lower()
-    local article = first:match("[aeiou]") and "an" or "a"
-    return article .. " " .. controlType .. " setting"
+function R.RegistrySettingTypeText(controlType, item)
+    local setting = item and (item.setting or item) or { type = controlType }
+    if type(A.DisplaySettingControl) == "function" then
+        return A.DisplaySettingControl(setting, "article")
+    end
+    return "an MSUF option"
 end
 
 function R.RegistryLocationLine(index, item)
     local label = tostring(item and item.label or "MSUF setting")
     local pageLabel = tostring(item and item.pageLabel or "MSUF page")
-    local kind = tostring(item and item.controlType or "setting")
-    return tostring(index) .. ". " .. label .. " - " .. pageLabel .. " [" .. kind .. "]"
+    return tostring(index) .. ". " .. label .. " - " .. pageLabel
 end
 
 function R.RegistryCloseMatchAllowed(item, queryNorm)
@@ -8356,6 +8799,77 @@ function R.CompactRegistrySettingSearchEntries(text, limit)
     end)
     while #matches > (tonumber(limit) or 16) do matches[#matches] = nil end
     return matches
+end
+
+-- Reuse the parser's already-bounded exact-alias index for conversational
+-- location questions.  This avoids a second large alias table and lets an
+-- exact registered phrase win before broad page/help wording.  The index is
+-- built lazily only after the LoadOnDemand Assistant receives a request.
+function R.ExactRegistrySettingAliasEntries(subject, limit)
+    subject = R.Normalize(subject)
+    if subject == "" then return nil end
+    local tokenCount = 0
+    for _ in subject:gmatch("%S+") do tokenCount = tokenCount + 1 end
+    if tokenCount == 0 then return nil end
+    local settings = R.EnsureCompleteSettingRegistry()
+    local parser = A.Parser or {}
+    local ensure = parser._EnsureRegistryExactAliasIndex
+    if type(settings) ~= "table" or type(ensure) ~= "function" then return nil end
+    local index = ensure(settings)
+    local bucket = index and index.byLength and index.byLength[tokenCount]
+        and index.byLength[tokenCount][subject] or nil
+    if type(bucket) ~= "table" or #bucket == 0 then return nil end
+
+    local entries, seen = {}, {}
+    for i = 1, #bucket do
+        local setting = bucket[i]
+        local key = tostring(setting and setting.key or "")
+        if key ~= "" and not seen[key] then
+            seen[key] = true
+            local item = R.RegistrySettingItemForKey and R.RegistrySettingItemForKey(key) or nil
+            if item then entries[#entries + 1] = { score = 20000, rawScore = 20000, item = item } end
+        end
+        if #entries >= (tonumber(limit) or 16) then break end
+    end
+    if #entries == 0 then return nil end
+    table.sort(entries, function(a, b)
+        return tostring(a.item and a.item.label or "") < tostring(b.item and b.item.label or "")
+    end)
+    return entries
+end
+
+function R.ExactRegistrySettingLabelEntries(subject, limit)
+    subject = R.Normalize(subject)
+    if subject == "" then return nil end
+    local settings = R.EnsureCompleteSettingRegistry()
+    if type(settings) ~= "table" then return nil end
+    if R._registryExactLabelSettings ~= settings
+        or R._registryExactLabelCount ~= #settings
+        or type(R._registryExactLabelIndex) ~= "table"
+    then
+        local index = {}
+        for i = 1, #settings do
+            if i % 64 == 0 and type(A.MaybeYield) == "function" then A.MaybeYield() end
+            local setting = settings[i]
+            local label = R.Normalize(setting and setting.label or "")
+            if label ~= "" then
+                local bucket = index[label]
+                if not bucket then bucket = {}; index[label] = bucket end
+                bucket[#bucket + 1] = setting
+            end
+        end
+        R._registryExactLabelSettings = settings
+        R._registryExactLabelCount = #settings
+        R._registryExactLabelIndex = index
+    end
+    local bucket = R._registryExactLabelIndex[subject]
+    if type(bucket) ~= "table" or #bucket == 0 then return nil end
+    local entries = {}
+    for i = 1, math.min(#bucket, tonumber(limit) or 16) do
+        local item = R.RegistrySettingItemForKey and R.RegistrySettingItemForKey(bucket[i].key) or nil
+        if item then entries[#entries + 1] = { score = 30000, rawScore = 30000, item = item } end
+    end
+    return #entries > 0 and entries or nil
 end
 
 -- A handful of natural search phrases describe the menu's ownership rather
@@ -8623,6 +9137,7 @@ function R.OpenEndedMutationSubject(text)
     local verb, subject = norm:match("^(%S+)%s+(.+)$")
     if not (verb and R.OPEN_ENDED_SETTING_MUTATION_VERBS[verb]) then return nil end
     subject = R.Trim(subject:gsub("^the%s+", ""))
+    subject = subject:gsub("grow%s+direction", "growth direction")
     for _ = 1, 3 do
         subject = R.Trim(subject
             :gsub("%s+different$", "")
@@ -8954,6 +9469,37 @@ function R.OpenEndedEntriesAreConfident(entries)
         or (raw1 >= 300 and raw1 >= raw2 + 80)
 end
 
+local function OpenEndedEnumContainsValue(setting, value)
+    if not (setting and setting.type == "enum" and type(setting.values) == "table") then return false end
+    for i = 1, #setting.values do
+        local candidate = setting.values[i]
+        if type(candidate) == "table" then candidate = candidate.value or candidate.key end
+        if candidate == value or tostring(candidate or ""):lower() == tostring(value or ""):lower() then return true end
+    end
+    return false
+end
+
+-- A specialist parser may safely break a generic name tie when it produced one
+-- fixed-list change and the supplied value belongs to exactly one of the
+-- candidate settings. Example: "portrait to 2D" fits Portrait Render, but not
+-- Portrait Position or Portrait Border. Free-form strings never qualify.
+function R.OpenEndedSpecialistProvesUniqueEnumValue(plan, entries)
+    if type(plan) ~= "table" or plan.kind ~= "changes" or type(plan.changes) ~= "table" or #plan.changes ~= 1 then return false end
+    if type(entries) ~= "table" or #entries < 2 then return false end
+    local change = plan.changes[1]
+    local selected = change and change.setting
+    local selectedKey = tostring(selected and selected.key or "")
+    if selectedKey == "" or not OpenEndedEnumContainsValue(selected, change.value) then return false end
+
+    local selectedIsCandidate, compatible = false, 0
+    for i = 1, #entries do
+        local setting = entries[i] and entries[i].item and entries[i].item.setting
+        if setting and tostring(setting.key or "") == selectedKey then selectedIsCandidate = true end
+        if OpenEndedEnumContainsValue(setting, change.value) then compatible = compatible + 1 end
+    end
+    return selectedIsCandidate and compatible == 1
+end
+
 function R.OpenEndedSettingCurrentValue(setting)
     if not (setting and type(setting.get) == "function") then return nil end
     local ok, value = pcall(setting.get)
@@ -8988,6 +9534,13 @@ function R.OpenEndedSettingChoices(setting)
 end
 
 function R.TryOpenEndedSettingIdea(text, coreHandler)
+    local parser = A.Parser or {}
+    local actionable = type(parser.ActionableText) == "function" and parser.ActionableText(text) or nil
+    if actionable and R.Normalize(actionable) ~= "" and R.Normalize(actionable) ~= R.Normalize(text)
+        and R.OpenEndedMutationSubject(actionable) ~= nil
+    then
+        text = actionable
+    end
     local analysis = R.OpenEndedSettingAnalysis(text)
     if not analysis then return nil end
     if type(A.RouterClearPendingResultsForRoute) == "function" then A.RouterClearPendingResultsForRoute() end
@@ -9000,11 +9553,15 @@ function R.TryOpenEndedSettingIdea(text, coreHandler)
 
         -- Specialist parsers know semantic distinctions the generic registry
         -- search cannot infer (for example Raid aura cooldown text still
-        -- needs a Buff/Debuff lane). Parse is declarative here: only its
-        -- non-mutating clarification plans may bypass the generic response.
+        -- needs a Buff/Debuff lane). Mutations may bypass the generic response
+        -- only when a fixed-list value proves one unique candidate.
         local parseOk, specialized = false, nil
         if type(A.Parse) == "function" then parseOk, specialized = pcall(A.Parse, text) end
-        if specialized and (specialized.kind == "answer" or specialized.kind == "ambiguous")
+        local specialistCanRun = specialized and (
+            specialized.kind == "answer" or specialized.kind == "ambiguous"
+            or R.OpenEndedSpecialistProvesUniqueEnumValue(specialized, entries)
+        )
+        if parseOk and specialistCanRun
             and type(coreHandler) == "function"
         then
             local savedCache = R._openEndedSettingCache
@@ -9120,6 +9677,14 @@ function R.TryOpenEndedSettingIdea(text, coreHandler)
     elseif setting.type == "string" then
         guidance = "Tell me the text or media name you want, or ask me to open the control."
     end
+    if type(A.StartPendingFlow) == "function" then
+        A.StartPendingFlow("settingValue", {
+            settingKey = setting.key,
+            expectedType = setting.type,
+            label = item.label or setting.label,
+            page = item.page,
+        })
+    end
     return {
         text = prefix .. "\n" .. guidance,
         status = "ambiguous",
@@ -9167,12 +9732,8 @@ R.LAST_CHANGE_OPEN_CONTROL_TERMS = {
 }
 
 function R.SettingControlNoun(item)
-    local kind = tostring(item and (item.controlType or (item.setting and item.setting.type)) or "")
-    if kind == "number" then return "slider" end
-    if kind == "enum" then return "dropdown" end
-    if kind == "boolean" then return "toggle" end
-    if kind == "color" then return "color picker" end
-    if kind == "string" then return "text field" end
+    local setting = item and (item.setting or item)
+    if type(A.DisplaySettingControl) == "function" then return A.DisplaySettingControl(setting, "noun") end
     return "control"
 end
 
@@ -9613,7 +10174,7 @@ function R.TryLastChangeSettingFollowup(text)
 
     if asksLocation and not asksValue and not asksExplain then
         lines[#lines + 1] = label .. " setting location"
-        lines[#lines + 1] = "This is the last setting I changed. It lives on " .. pageLabel .. " and is " .. R.RegistrySettingTypeText(controlType) .. ". I did not change it from this location question."
+        lines[#lines + 1] = "This is the last setting I changed. It lives on " .. pageLabel .. " and is " .. R.RegistrySettingTypeText(controlType, item) .. ". I did not change it from this location question."
         if valueLine then lines[#lines + 1] = valueLine end
         if example and example ~= "" then lines[#lines + 1] = "Examples: open " .. pageLabel:lower() .. "; " .. example .. "." end
         local noun = R.SettingControlNoun(item)
@@ -9645,7 +10206,7 @@ function R.TryLastChangeSettingFollowup(text)
     lines[#lines + 1] = label .. " explanation"
     lines[#lines + 1] = "This is the last setting I changed."
     lines[#lines + 1] = R.RegistrySettingPurpose(item)
-    lines[#lines + 1] = label .. " lives on " .. pageLabel .. ". It is " .. R.RegistrySettingTypeText(controlType) .. ". I did not change it from this explanation question."
+    lines[#lines + 1] = label .. " lives on " .. pageLabel .. ". It is " .. R.RegistrySettingTypeText(controlType, item) .. ". I did not change it from this explanation question."
     if valueLine then lines[#lines + 1] = valueLine end
     local choicesLine = R.RegistryEnumChoicesLine(item)
     if choicesLine then lines[#lines + 1] = choicesLine end
@@ -10150,7 +10711,7 @@ function A.RouterTryRegistrySettingExplainShortcut(text, coreHandler, precompute
     local lines = {
         label .. " explanation",
         R.RegistrySettingPurpose(item),
-        label .. " lives on " .. pageLabel .. ". It is " .. R.RegistrySettingTypeText(controlType) .. ". I did not change it.",
+        label .. " lives on " .. pageLabel .. ". It is " .. R.RegistrySettingTypeText(controlType, item) .. ". I did not change it.",
     }
     local valueLine = R.RegistryCurrentValueLine(item)
     if valueLine then lines[#lines + 1] = valueLine end
@@ -10231,7 +10792,7 @@ function A.RouterTryRegistrySettingCurrentValueShortcut(text, coreHandler)
     end
 
     lines[#lines + 1] = valueLine or ("I cannot read a saved current value for " .. label .. " right now.")
-    lines[#lines + 1] = label .. " lives on " .. pageLabel .. ". It is " .. R.RegistrySettingTypeText(controlType) .. ". I did not change it."
+    lines[#lines + 1] = label .. " lives on " .. pageLabel .. ". It is " .. R.RegistrySettingTypeText(controlType, item) .. ". I did not change it."
     local choicesLine = R.RegistryEnumChoicesLine(item)
     if choicesLine then lines[#lines + 1] = choicesLine end
     local relatedLine = R.RegistryRelatedLine(close)
@@ -10339,6 +10900,9 @@ function A.RouterTryRegistrySettingLocationShortcut(text, coreHandler, precomput
     local directItem = directKey and R.RegistrySettingItemForKey(directKey) or nil
     local entries = precomputedEntries
         or (directItem and { { item = directItem, score = 10000, rawScore = 10000 } })
+        or (subject ~= "" and R.ExactRegistrySettingLabelEntries(subject, 16))
+        or (subject ~= "" and R.CanonicalExplicitSearchEntries(subject))
+        or (subject ~= "" and R.ExactRegistrySettingAliasEntries(subject, 16))
         or R.RegistrySettingSearchEntries(subject ~= "" and subject or text, norm, 16)
     if not entries or #entries == 0 then return nil end
 
@@ -10352,7 +10916,7 @@ function A.RouterTryRegistrySettingLocationShortcut(text, coreHandler, precomput
     local close = {}
     close[1] = top
     for i = 2, #entries do
-        if #close >= 3 then break end
+        if #close >= 8 then break end
         if entries[i].score >= top.score - 140
             and (tonumber(entries[i].rawScore) or 0) >= (tonumber(top.rawScore) or 0) - 120
             and R.RegistryCloseMatchAllowed(entries[i].item, norm)
@@ -10366,11 +10930,14 @@ function A.RouterTryRegistrySettingLocationShortcut(text, coreHandler, precomput
         lines = { "Matching settings location" }
         lines[#lines + 1] = "Closest MSUF settings:"
         for i = 1, #close do lines[#lines + 1] = R.RegistryLocationLine(i, close[i].item) end
+        if #entries > #close then
+            lines[#lines + 1] = "Several frames use this control name. Add the frame name (for example Player, Target, Party, or Raid) and I will narrow it to the exact one."
+        end
         lines[#lines + 1] = "I did not change anything from this location question. Ask to open or explain a result before changing it."
     else
         lines = {
             label .. " setting location",
-            label .. " lives on " .. pageLabel .. ". It is " .. R.RegistrySettingTypeText(controlType) .. ". I did not change it from this location question.",
+            label .. " lives on " .. pageLabel .. ". It is " .. R.RegistrySettingTypeText(controlType, item) .. ". I did not change it from this location question.",
         }
     end
     if example and example ~= "" then lines[#lines + 1] = "Examples: open " .. pageLabel:lower() .. "; " .. example .. "." end
@@ -10847,6 +11414,16 @@ end
 function A.RouteInput(text, coreHandler)
     text = R.Trim(text)
     if text == "" then return nil end
+    -- Pending workflows must see the user's original casing and punctuation.
+    -- The routing-language normalizer below intentionally lowercases ordinary
+    -- intent text, which is correct for matching but would corrupt free-form
+    -- values and profile names (for example "Shadow Word: Pain").
+    local pendingFlow = A.Workflow and type(A.Workflow.PendingFlow) == "function"
+        and A.Workflow.PendingFlow() or nil
+    if type(pendingFlow) == "table" and type(A.HandlePendingFlow) == "function" then
+        local pendingResult = A.HandlePendingFlow(text)
+        if pendingResult then return pendingResult end
+    end
     local routedText = R.StripResponseLanguageDirective(text)
     if routedText ~= "" then text = routedText end
     R.ClearStaleHelpContextForInput(text)
@@ -11058,9 +11635,18 @@ function A.RouteInput(text, coreHandler)
 
         local liveColorExplanation = R.TryLiveUnitColorExplanation(text)
         if liveColorExplanation then return liveColorExplanation end
+
     end
 
     if not hasBlockingPendingState and not pendingResultReply then
+        -- A value-less "move <component>" is a request for position choices,
+        -- never permission to enable/disable the component. Resolve this
+        -- before Aura filtering/growth and visibility parsers can reinterpret
+        -- "move player buffs" as "show player buffs".
+        local incompleteMovement = not R.TextMovementIntent(text)
+            and R.TryIncompleteMovementConversation(text) or nil
+        if incompleteMovement then return incompleteMovement end
+
         -- Filtering language owns several similarly named Aura controls. Run
         -- its bounded semantic parser before growth, open-ended help, page
         -- context, and fuzzy aliases can reinterpret the request.
@@ -11154,6 +11740,7 @@ function A.RouteInput(text, coreHandler)
             local compactExplainResult = A.RouterTryRegistrySettingExplainShortcut and A.RouterTryRegistrySettingExplainShortcut(text, Core, compactExplainEntries)
             if compactExplainResult then return compactExplainResult end
         end
+
     end
 
     if not hasBlockingPendingState and not pendingResultReply
@@ -11213,6 +11800,13 @@ function A.RouteInput(text, coreHandler)
 
         local registrySettingTroubleshootingResult = A.RouterTryRegistrySettingTroubleshootingShortcut and A.RouterTryRegistrySettingTroubleshootingShortcut(text, Core)
         if registrySettingTroubleshootingResult then return registrySettingTroubleshootingResult end
+
+        -- Human wrappers such as "can you help me to" must not turn a valid
+        -- setting command into a generic help article. Keep the narrower Aura,
+        -- cross-frame, dependent-frame, and registry specialists ahead of it;
+        -- then preserve how/where questions and guide incomplete text movement.
+        local conversationalMutation = R.TryConversationalMutation(text, Core)
+        if conversationalMutation then return conversationalMutation end
 
         local directSettingNavigationResult = R.TryDirectSettingNavigation and R.TryDirectSettingNavigation(text, Core)
         if directSettingNavigationResult then return directSettingNavigationResult end
