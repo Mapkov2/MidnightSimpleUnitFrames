@@ -340,7 +340,6 @@ function UF.RegisterClickCastFrame(frame)
   _G.ClickCastFrames = type(_G.ClickCastFrames) == "table" and _G.ClickCastFrames or {}
   _G.ClickCastFrames[frame] = true
   clickCastRegistered[frame] = true
-  frame._msufClickCastDisabledForClickSpikeTest = nil
   return true
 end
 

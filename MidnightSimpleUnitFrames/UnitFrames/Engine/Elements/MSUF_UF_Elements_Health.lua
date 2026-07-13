@@ -290,12 +290,25 @@ local function UpdateAbsolute(frame, unit)
 end
 
 local function RefreshGroupAIHealthMode(frame, unit)
-  if not (frame and frame._msufIsGroupFrame == true and UnitInPartyIsAI) then
-    return false
+  if not (frame and frame._msufIsGroupFrame == true) then
+    return false, false
   end
-  frame._msufHealthAIUnit = unit
-  frame._msufHealthAI = UnitInPartyIsAI(unit) == true
-  return frame._msufHealthAI == true
+  if not UnitInPartyIsAI then return false, true end
+  local oldUnit = frame._msufHealthAIUnit
+  local oldAI = frame._msufHealthAI
+  local isAI = UnitInPartyIsAI(unit) == true
+  local changed = oldUnit ~= unit or oldAI ~= isAI
+  if changed then
+    frame._msufHealthAIUnit = unit
+    frame._msufHealthAI = isAI
+  end
+  return isAI, changed
+end
+
+local function NeedsGroupAIRefresh(frame, event, unit)
+  return (GROUP_LIFECYCLE_EVENT[event] == true and frame._msufGroupLifecycleAIMetadataReady ~= true)
+    or IDENTITY_EVENTS[event] == true
+    or frame._msufHealthAIUnit ~= unit
 end
 
 local function NotifyGroupHealthState(frame, event, unit, hp)
@@ -381,9 +394,7 @@ local function UpdateGroup(frame, event, unit)
   end
   if not (frame and frame.hpBar and unit) then return end
 
-  if GROUP_LIFECYCLE_EVENT[event] == true
-    or IDENTITY_EVENTS[event] == true
-    or frame._msufHealthAIUnit ~= unit then
+  if NeedsGroupAIRefresh(frame, event, unit) then
     RefreshGroupAIHealthMode(frame, unit)
   end
 
@@ -428,9 +439,7 @@ local function UpdateGroupAbsolute(frame, event, unit)
   end
   if not (frame and frame.hpBar and unit) then return end
 
-  if GROUP_LIFECYCLE_EVENT[event] == true
-    or IDENTITY_EVENTS[event] == true
-    or frame._msufHealthAIUnit ~= unit then
+  if NeedsGroupAIRefresh(frame, event, unit) then
     RefreshGroupAIHealthMode(frame, unit)
   end
 
@@ -466,9 +475,7 @@ local function UpdateGroupCurrent(frame, event, unit)
   end
   if not (frame and frame.hpBar and unit) then return end
 
-  if GROUP_LIFECYCLE_EVENT[event] == true
-    or IDENTITY_EVENTS[event] == true
-    or frame._msufHealthAIUnit ~= unit then
+  if NeedsGroupAIRefresh(frame, event, unit) then
     RefreshGroupAIHealthMode(frame, unit)
   end
 
@@ -580,6 +587,13 @@ Health.UpdateMaxValueStatic = Health.Update
 Health.UpdateMaxValueStaticPlain = Health.Update
 Health.UpdateConnectionState = Health.Update
 Health.UpdateIdentityColor = Health.Update
+function Health.UpdateGroupLifecycleMetadata(frame, _event, unit)
+  local isAI, changed = RefreshGroupAIHealthMode(frame, unit or (frame and frame.unit))
+  -- Detailed AI health/prediction availability is committed by these lifecycle
+  -- events. Refresh every active follower, but keep ordinary raid members on
+  -- the metadata-only path unless their classification actually changed.
+  return isAI == true or changed == true
+end
 function Health.SelectGroupHealthUpdater(frame)
   if not frame then return nil end
   local update = Health.SelectUpdate(frame, frame.MSUFSpec)

@@ -123,6 +123,7 @@ local IDENTITY_BAR_ELEMENTS = {
 local HEALTH_EVENTS = {
   UNIT_HEALTH = true,
   UNIT_MAXHEALTH = true,
+  UNIT_CONNECTION = true,
   PARTY_MEMBER_ENABLE = true,
   PARTY_MEMBER_DISABLE = true,
 }
@@ -530,71 +531,40 @@ local function FrameOnEvent(frame, event, unit, ...)
 end
 
 local groupLifecycleDriver
+local CompileGroupLifecyclePlan
 
-local function LifecycleUpdate(frame, name)
-  local active = frame and frame._msufActiveElements
-  if not (active and active[name] == true) then return nil end
-  local key = GetUpdateKey(name)
-  return key and frame[key] or nil
-end
-
-local function RunGroupLifecycleFollowers(frame, event)
-  local unit = frame.unit
-
-  local power, powerMax, powerType, powerToken, powerMetaChanged
-  local update = LifecycleUpdate(frame, "Power")
-  if update then
-    power, powerMax, powerType, powerToken, powerMetaChanged = update(frame, event, unit)
+local function RunCompiledGroupLifecycle(frame, event, mode)
+  if not (frame and frame._msufCoreScope == "group" and FrameVisibleForEvent(frame)) then
+    return false
   end
-  update = LifecycleUpdate(frame, "PowerText")
-  if update then
-    update(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
-  end
-
-  update = LifecycleUpdate(frame, "NameText")
-  if update then update(frame, event, unit) end
-
-  update = LifecycleUpdate(frame, "Portrait")
-  if update then update(frame, event, unit) end
-
-  local hpBar = frame.hpBar
-  local hp = hpBar and hpBar._msufHealthValueUnit == unit and hpBar._msufHealthValue or nil
-  local hpMax = hpBar and hpBar._msufHealthMaxUnit == unit and hpBar._msufHealthMax or nil
-  if issecretvalue(hp) == true then hp = nil end
-  if issecretvalue(hpMax) == true then hpMax = nil end
-
-  update = LifecycleUpdate(frame, "GroupStatusRuntime")
-  if update then update(frame, event, unit, hp) end
-  update = LifecycleUpdate(frame, "GroupRangeFade")
-  if update then update(frame, event, unit) end
-  update = LifecycleUpdate(frame, "GroupVisuals")
-  if update then update(frame, event, unit, hp, hpMax) end
+  local plan = frame._msufGroupLifecyclePlan
+  if not plan then plan = CompileGroupLifecyclePlan(frame) end
+  local path = plan and (mode == "global" and plan.globalPath or plan.fullPath)
+  if not path then return false end
+  path(frame, event)
+  return true
 end
 
 --- Refresh one secure group child from a coherent authoritative snapshot.
 --- The caller's reason is diagnostic only: canonical lifecycle semantics keep
 --- Health/Prediction/Text and all group followers on the same narrow path.
 local function RefreshGroupFrameState(frame, _reason)
-  if not (frame and frame._msufCoreScope == "group" and FrameVisibleForEvent(frame)) then
-    return false
-  end
-  local event = "PARTY_MEMBER_ENABLE"
-  frame._msufGroupStateRefresh = true
-  frame._msufDeferDispatchEnd = true
-  if frame[event] then
-    FrameOnEvent(frame, event, nil)
-  else
-    BeginFrameEvent(frame)
-  end
-  RunGroupLifecycleFollowers(frame, event)
-  frame._msufDeferDispatchEnd = nil
-  EndFrameEvent(frame)
-  frame._msufGroupStateRefresh = nil
-  return true
+  return RunCompiledGroupLifecycle(frame, "PARTY_MEMBER_ENABLE", "full")
 end
 UF.RefreshGroupFrameState = RefreshGroupFrameState
 
+local function BroadcastGroupLifecycle(event, mode, exceptFrame)
+  local frames = UF.attachedFrameList
+  for i = 1, #frames do
+    local frame = frames[i]
+    if frame ~= exceptFrame and frame._msufCoreScope == "group" then
+      RunCompiledGroupLifecycle(frame, event, mode)
+    end
+  end
+end
+
 local RegisterFrameEvent
+local RefreshHealthLifecycleSinkRoutes
 
 local function FrameOnShow(frame)
   frame._msufCoreVisible = true
@@ -611,6 +581,9 @@ end
 
 local function FrameOnHide(frame)
   frame._msufCoreVisible = false
+  if RefreshHealthLifecycleSinkRoutes and frame._msufHealthLifecycleSink then
+    RefreshHealthLifecycleSinkRoutes(frame)
+  end
   -- Blizzard's CompactUnitFrame explicitly unregisters this event while
   -- hidden because every registered unit makes the client perform additional
   -- native range work. Keep the compiled Lua route and restore registration
@@ -628,16 +601,28 @@ local function EnsureGroupLifecycleDriver()
   groupLifecycleDriver = CreateFrame("Frame")
   groupLifecycleDriver:RegisterEvent("PARTY_MEMBER_ENABLE")
   groupLifecycleDriver:RegisterEvent("PARTY_MEMBER_DISABLE")
-  groupLifecycleDriver:SetScript("OnEvent", function(_, event)
-    local frames = UF.attachedFrameList
-    for i = 1, #frames do
-      local frame = frames[i]
-      if frame and frame._msufCoreScope == "group" and FrameVisibleForEvent(frame) then
-        -- These events are a group invalidation barrier. Ignore unitTarget so
-        -- AI/follower transitions refresh every frame with its own bound unit.
-        RefreshGroupFrameState(frame, event)
+  groupLifecycleDriver:SetScript("OnEvent", function(_, event, unitTarget)
+    -- PARTY_MEMBER_ENABLE/DISABLE expose a UnitTokenVariant, but Blizzard also
+    -- uses the events as a group-wide alternate-power/presence invalidation.
+    -- Keep that global semantic on a compiled minimal path while reserving the
+    -- expensive health/prediction/portrait snapshot for the validated target.
+    local GF = MSUF and MSUF.GF
+    local resolve = GF and GF.ResolveLifecycleFrame
+    if IsUnitToken(unitTarget) and type(resolve) == "function" then
+      local targetFrame, exact = resolve(unitTarget)
+      if exact == true
+        and targetFrame
+        and targetFrame._msufCoreScope == "group"
+        and UF.attachedFrames[targetFrame] == true then
+        RunCompiledGroupLifecycle(targetFrame, event, "full")
+        BroadcastGroupLifecycle(event, "global", targetFrame)
+        return
       end
     end
+
+    -- Secret/unusable tokens, aliases, secure rebind windows and index misses
+    -- cannot be compared safely. Preserve the old authoritative full barrier.
+    BroadcastGroupLifecycle(event, "full")
   end)
   return groupLifecycleDriver
 end
@@ -703,6 +688,7 @@ local staticElementFunctions = {}
 local directHealthRouteCache = {}
 local directPowerRouteCache = {}
 local singleRouteCache = {}
+local sharedFrameEventRoutes = {}
 
 local function IsRegisteredElementFunction(fn)
   if type(fn) ~= "function" then return false end
@@ -766,6 +752,68 @@ local function BuildHealthRoute(barFn, textFn, predictionFn, routeUnitless, targ
   end
 end
 
+-- Castbars can borrow an already-registered target/focus health route instead
+-- of registering a second UNIT_HEALTH/UNIT_CONNECTION listener. The wrapper is
+-- shared; mutable owner/sink state remains frame-local and exists only while a
+-- non-player cast is active.
+local function HealthLifecycleSinkRoute(self, ev, unit, ...)
+  local base = ev == "UNIT_CONNECTION"
+    and self._msufHealthLifecycleConnectionBase
+    or self._msufHealthLifecycleHealthBase
+  if base then base(self, ev, unit, ...) end
+  local sink = self._msufHealthLifecycleSink
+  if sink then sink(self._msufHealthLifecycleSinkOwner, self, ev, unit or self.unit, ...) end
+end
+
+local function ClearHealthLifecycleSink(frame, notify)
+  if not frame then return false end
+  local sink = frame._msufHealthLifecycleSink
+  local owner = frame._msufHealthLifecycleSinkOwner
+  if not sink then return false end
+
+  if frame.UNIT_HEALTH == HealthLifecycleSinkRoute then
+    frame.UNIT_HEALTH = frame._msufHealthLifecycleHealthBase
+  end
+  if frame.UNIT_CONNECTION == HealthLifecycleSinkRoute then
+    frame.UNIT_CONNECTION = frame._msufHealthLifecycleConnectionBase
+  end
+  frame._msufHealthLifecycleSink = nil
+  frame._msufHealthLifecycleSinkOwner = nil
+  frame._msufHealthLifecycleSinkUnit = nil
+  frame._msufHealthLifecycleHealthBase = nil
+  frame._msufHealthLifecycleConnectionBase = nil
+
+  if notify == true then sink(owner, frame, "MSUF_UF_LIFECYCLE_DETACH", frame.unit) end
+  return true
+end
+
+
+RefreshHealthLifecycleSinkRoutes = function(frame)
+  if not (frame and frame._msufHealthLifecycleSink) then return false end
+  local health = frame.UNIT_HEALTH
+  local connection = frame.UNIT_CONNECTION
+  if health == HealthLifecycleSinkRoute then health = frame._msufHealthLifecycleHealthBase end
+  if connection == HealthLifecycleSinkRoute then connection = frame._msufHealthLifecycleConnectionBase end
+
+  local valid = UF.attachedFrames[frame] == true
+    and frame._msufCoreSpecEnabled == true
+    and frame._msufCoreVisible == true
+    and frame._msufHealthLifecycleSinkUnit == frame.unit
+    and frame._msufActiveElements and frame._msufActiveElements.Health == true
+    and type(health) == "function"
+    and type(connection) == "function"
+  if not valid then
+    ClearHealthLifecycleSink(frame, true)
+    return false
+  end
+
+  frame._msufHealthLifecycleHealthBase = health
+  frame._msufHealthLifecycleConnectionBase = connection
+  frame.UNIT_HEALTH = HealthLifecycleSinkRoute
+  frame.UNIT_CONNECTION = HealthLifecycleSinkRoute
+  return true
+end
+
 local function BuildPowerRoute(barFn, textFn, _unused, routeUnitless, target)
   if target then
     return function(self, ev, _unit, ...)
@@ -799,6 +847,7 @@ local function SharedDirectRoute(cache, builder, fn1, fn2, fn3, routeUnitless, t
     route = builder(fn1, fn2, fn3, routeUnitless, target)
     leaf[key] = route
   end
+  sharedFrameEventRoutes[route] = true
   return route
 end
 
@@ -838,6 +887,7 @@ local function SharedSingleRoute(update, unitless, target)
     route = BuildSingleRoute(update, unitless, target)
     leaf[key] = route
   end
+  sharedFrameEventRoutes[route] = true
   return route
 end
 
@@ -914,6 +964,187 @@ local function CompileFrameEventPath(frame, event, list)
   end
 end
 
+local groupLifecyclePlanIntern = {}
+
+local function LifecycleCachedHealth(frame, unit)
+  local hpBar = frame.hpBar
+  local hp = hpBar and hpBar._msufHealthValueUnit == unit and hpBar._msufHealthValue or nil
+  local hpMax = hpBar and hpBar._msufHealthMaxUnit == unit and hpBar._msufHealthMax or nil
+  if issecretvalue(hp) == true then hp = nil end
+  if issecretvalue(hpMax) == true then hpMax = nil end
+  return hp, hpMax
+end
+
+local function BuildLifecycleFullPath(healthPath, powerUpdate, powerTextUpdate,
+    nameUpdate, portraitUpdate, statusUpdate, rangeUpdate, visualsUpdate)
+  return function(frame, event)
+    local unit = frame.unit
+    frame._msufGroupStateRefresh = true
+    frame._msufDeferDispatchEnd = true
+    if healthPath then healthPath(frame, event, nil) else BeginFrameEvent(frame) end
+
+    local power, powerMax, powerType, powerToken, powerMetaChanged
+    if powerUpdate then
+      power, powerMax, powerType, powerToken, powerMetaChanged = powerUpdate(frame, event, unit)
+    end
+    if powerTextUpdate then
+      powerTextUpdate(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
+    end
+    if nameUpdate then nameUpdate(frame, event, unit) end
+    if portraitUpdate then portraitUpdate(frame, event, unit) end
+
+    local hp, hpMax = LifecycleCachedHealth(frame, unit)
+    if statusUpdate then statusUpdate(frame, event, unit, hp) end
+    if rangeUpdate then rangeUpdate(frame, event, unit) end
+    if visualsUpdate then visualsUpdate(frame, event, unit, hp, hpMax) end
+
+    frame._msufDeferDispatchEnd = nil
+    EndFrameEvent(frame)
+    frame._msufGroupStateRefresh = nil
+  end
+end
+
+local function BuildLifecycleGlobalPath(healthPath, healthMetadata, powerUpdate,
+    powerTextUpdate, namePresenceUpdate, statusUpdate, rangeUpdate, visualsUpdate)
+  return function(frame, event)
+    local unit = frame.unit
+
+    local refreshHealth
+    if healthMetadata then
+      refreshHealth = healthMetadata(frame, event, unit) == true
+    else
+      -- Unknown/custom health owners do not expose the cheap AI metadata gate.
+      -- Retain the authoritative full health snapshot for those private plans.
+      refreshHealth = healthPath ~= nil
+    end
+    local healthRefreshed = refreshHealth and healthPath ~= nil
+    if healthRefreshed then
+      -- Only the uncommon AI/classification-change branch enters Health again.
+      -- Mark that branch after the metadata decision so ordinary group members
+      -- avoid lifecycle marker writes on every global invalidation.
+      frame._msufGroupLifecycleAIMetadataReady = true
+      frame._msufGroupStateRefresh = true
+      frame._msufDeferDispatchEnd = true
+      healthPath(frame, event, nil)
+      frame._msufGroupLifecycleAIMetadataReady = nil
+    else
+      BeginFrameEvent(frame)
+    end
+
+    -- Blizzard treats PARTY_MEMBER_ENABLE/DISABLE as a group-wide alternate
+    -- power and presence invalidation. These are the intentionally global
+    -- followers; name/portrait and ordinary health stay target-only.
+    local power, powerMax, powerType, powerToken, powerMetaChanged
+    if powerUpdate then
+      power, powerMax, powerType, powerToken, powerMetaChanged = powerUpdate(frame, event, unit)
+    end
+    if powerTextUpdate then
+      powerTextUpdate(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
+    end
+    if namePresenceUpdate then namePresenceUpdate(frame, event, unit) end
+
+    local hp, hpMax = LifecycleCachedHealth(frame, unit)
+    if statusUpdate then statusUpdate(frame, event, unit, hp) end
+    if rangeUpdate then rangeUpdate(frame, event, unit) end
+    if visualsUpdate then visualsUpdate(frame, event, unit, hp, hpMax) end
+
+    if healthRefreshed then
+      frame._msufDeferDispatchEnd = nil
+      EndFrameEvent(frame)
+      frame._msufGroupStateRefresh = nil
+    else
+      EndFrameEvent(frame)
+    end
+  end
+end
+
+local function NewGroupLifecyclePlan(healthPath, healthMetadata, powerUpdate,
+    powerTextUpdate, nameUpdate, namePresenceUpdate, portraitUpdate, statusUpdate, rangeUpdate, visualsUpdate)
+  return {
+    fullPath = BuildLifecycleFullPath(healthPath, powerUpdate, powerTextUpdate,
+      nameUpdate, portraitUpdate, statusUpdate, rangeUpdate, visualsUpdate),
+    globalPath = BuildLifecycleGlobalPath(healthPath, healthMetadata, powerUpdate,
+      powerTextUpdate, namePresenceUpdate, statusUpdate, rangeUpdate, visualsUpdate),
+  }
+end
+
+local function InternLifecycleNode(node, value)
+  local key = value or NIL_ROUTE_KEY
+  local nextNode = node[key]
+  if not nextNode then nextNode = {}; node[key] = nextNode end
+  return nextNode
+end
+
+local function InternGroupLifecyclePlan(healthPath, healthMetadata, powerUpdate,
+    powerTextUpdate, nameUpdate, namePresenceUpdate, portraitUpdate, statusUpdate, rangeUpdate, visualsUpdate)
+  local shared = (not healthPath or sharedFrameEventRoutes[healthPath] == true)
+  shared = shared
+    and (not healthMetadata or IsRegisteredElementFunction(healthMetadata))
+    and (not powerUpdate or IsRegisteredElementFunction(powerUpdate))
+    and (not powerTextUpdate or IsRegisteredElementFunction(powerTextUpdate))
+    and (not nameUpdate or IsRegisteredElementFunction(nameUpdate))
+    and (not namePresenceUpdate or IsRegisteredElementFunction(namePresenceUpdate))
+    and (not portraitUpdate or IsRegisteredElementFunction(portraitUpdate))
+    and (not statusUpdate or IsRegisteredElementFunction(statusUpdate))
+    and (not rangeUpdate or IsRegisteredElementFunction(rangeUpdate))
+    and (not visualsUpdate or IsRegisteredElementFunction(visualsUpdate))
+  if not shared then
+    return NewGroupLifecyclePlan(healthPath, healthMetadata, powerUpdate,
+      powerTextUpdate, nameUpdate, namePresenceUpdate, portraitUpdate, statusUpdate, rangeUpdate, visualsUpdate)
+  end
+
+  local node = InternLifecycleNode(groupLifecyclePlanIntern, healthPath)
+  node = InternLifecycleNode(node, healthMetadata)
+  node = InternLifecycleNode(node, powerUpdate)
+  node = InternLifecycleNode(node, powerTextUpdate)
+  node = InternLifecycleNode(node, nameUpdate)
+  node = InternLifecycleNode(node, namePresenceUpdate)
+  node = InternLifecycleNode(node, portraitUpdate)
+  node = InternLifecycleNode(node, statusUpdate)
+  node = InternLifecycleNode(node, rangeUpdate)
+  node = InternLifecycleNode(node, visualsUpdate)
+  if not node.plan then
+    node.plan = NewGroupLifecyclePlan(healthPath, healthMetadata, powerUpdate,
+      powerTextUpdate, nameUpdate, namePresenceUpdate, portraitUpdate, statusUpdate, rangeUpdate, visualsUpdate)
+  end
+  return node.plan
+end
+
+local function ActiveLifecycleUpdate(frame, name)
+  local active = frame and frame._msufActiveElements
+  if not (active and active[name] == true) then return nil end
+  local key = GetUpdateKey(name)
+  return key and frame[key] or nil
+end
+
+CompileGroupLifecyclePlan = function(frame)
+  if not (frame and frame._msufCoreScope == "group") then
+    if frame then frame._msufGroupLifecyclePlan = nil end
+    return nil
+  end
+  local healthPath = frame.PARTY_MEMBER_ENABLE
+  local healthElement = UF.elements and UF.elements.Health
+  local healthMetadata = ActiveLifecycleUpdate(frame, "Health")
+    and healthElement and healthElement.UpdateGroupLifecycleMetadata or nil
+  local nameUpdate = ActiveLifecycleUpdate(frame, "NameText")
+  local text = frame.MSUFSpec and frame.MSUFSpec.text
+  local namePresenceUpdate = text and text.hideNameOnDeadOffline == true and nameUpdate or nil
+  local plan = InternGroupLifecyclePlan(
+    healthPath,
+    healthMetadata,
+    ActiveLifecycleUpdate(frame, "Power"),
+    ActiveLifecycleUpdate(frame, "PowerText"),
+    nameUpdate,
+    namePresenceUpdate,
+    ActiveLifecycleUpdate(frame, "Portrait"),
+    ActiveLifecycleUpdate(frame, "GroupStatusRuntime"),
+    ActiveLifecycleUpdate(frame, "GroupRangeFade"),
+    ActiveLifecycleUpdate(frame, "GroupVisuals")
+  )
+  frame._msufGroupLifecyclePlan = plan
+  return plan
+end
+
 RegisterFrameEvent = function(frame, event, unitless)
   if not (frame and frame.RegisterEvent) then return end
   if frame._msufCoreScope == "group"
@@ -981,10 +1212,6 @@ SelectElementEventUpdate = function(element, frame, event, update)
     return selector(frame, frame and frame.MSUFSpec, event, update) or update
   end
   return update
-end
-
-local function FrameHasActiveElement(frame, name)
-  return frame and frame._msufActiveElements and frame._msufActiveElements[name] == true
 end
 
 local function IdentityEventUpdate(frame, event)
@@ -1232,6 +1459,7 @@ function UF.RebuildRuntimeStatusState(frame)
   frame._msufGroupIdentityLabels = frame._msufIdentityLabels
   frame._msufGroupIdentityPath = frame._msufIdentityPath
   frame._msufIdentityBarPath = CompileIdentityBarPath(frame)
+  if CompileGroupLifecyclePlan then CompileGroupLifecyclePlan(frame) end
   return true
 end
 
@@ -1307,6 +1535,7 @@ local function RebuildFrameEvents(frame)
   if not active then
     frame._msufElementEventRoutes = InternRuntimeRoutePlan(routes)
     frame._msufEventRouteNeedsIdentity = false
+    if RefreshHealthLifecycleSinkRoutes then RefreshHealthLifecycleSinkRoutes(frame) end
     UF.RebuildRuntimeStatusState(frame)
     if UF.SyncRuntimeDriver and UF._msufApplyingSpec ~= true then UF.SyncRuntimeDriver() end
     return true
@@ -1365,6 +1594,7 @@ local function RebuildFrameEvents(frame)
       frame[event] = CompileFrameEventPath(frame, event, list)
     end
   end
+  if RefreshHealthLifecycleSinkRoutes then RefreshHealthLifecycleSinkRoutes(frame) end
   -- Compiled routes either capture only the one generic list they need or use
   -- a shared prototype. The event->builder map itself has no runtime reader.
   frame._msufEvents = nil
@@ -1622,6 +1852,12 @@ function UF.DetachFrame(frame)
       FrameDisableElement(frame, name, true)
     end
   end
+  -- Element teardown makes this frame ineligible for immediate reattachment.
+  -- Notify an active castbar lifecycle owner before erasing the wrapped event
+  -- routes so it can promote itself to the minimal event fallback.
+  if frame._msufHealthLifecycleSink then
+    ClearHealthLifecycleSink(frame, true)
+  end
   ClearFrameEvents(frame)
   frame._msufIdentityFns = nil
   frame._msufIdentityCount = nil
@@ -1636,6 +1872,7 @@ function UF.DetachFrame(frame)
   frame._msufGroupIdentityCount = nil
   frame._msufGroupIdentityLabels = nil
   frame._msufGroupIdentityPath = nil
+  frame._msufGroupLifecyclePlan = nil
   frame._msufCoreScope = nil
   frame._msufVisualRoot = nil
   UF.attachedFrames[frame] = nil
@@ -1653,6 +1890,35 @@ end
 function UF.GetFrame(unit)
   if unit and issecretvalue(unit) == true then return nil end
   return UF.frames[unit]
+end
+
+function UF.SetHealthLifecycleSink(unit, sink, owner)
+  if type(sink) ~= "function" or owner == nil then return false end
+  local frame = UF.GetFrame(unit)
+  if not (frame
+    and UF.attachedFrames[frame] == true
+    and frame.unit == unit
+    and frame._msufCoreSpecEnabled == true
+    and frame._msufCoreVisible == true
+    and frame._msufActiveElements and frame._msufActiveElements.Health == true
+    and type(frame.UNIT_HEALTH) == "function"
+    and type(frame.UNIT_CONNECTION) == "function") then
+    return false
+  end
+  if frame._msufHealthLifecycleSinkOwner ~= nil
+    and frame._msufHealthLifecycleSinkOwner ~= owner then
+    return false
+  end
+
+  frame._msufHealthLifecycleSink = sink
+  frame._msufHealthLifecycleSinkOwner = owner
+  frame._msufHealthLifecycleSinkUnit = unit
+  return RefreshHealthLifecycleSinkRoutes(frame) == true, frame
+end
+
+function UF.ClearHealthLifecycleSink(frame, owner)
+  if not frame or frame._msufHealthLifecycleSinkOwner ~= owner then return false end
+  return ClearHealthLifecycleSink(frame, false)
 end
 
 function UF.Apply(unit, applyMask)
