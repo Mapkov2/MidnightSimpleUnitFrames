@@ -87,6 +87,25 @@ local function MSUF_ProfileIO_RunProtected(label, fn, ...)
     end
     return true, result
 end
+
+-- Profile imports can enter through Menu2, legacy globals, or the external
+-- Wago API. Complete first-load at the shared mutation boundary so every
+-- successful path records the same durable lifecycle result.
+function MSUF.ProfileIOCompleteFirstLoadImport()
+    local firstLoad = MSUF and MSUF.FirstLoad6
+    if type(firstLoad) ~= "table" or type(firstLoad.CompleteProfileImport) ~= "function" then
+        return false
+    end
+    local ok, completed = pcall(firstLoad.CompleteProfileImport, firstLoad, "import")
+    if not ok then return false end
+    if completed == true then
+        local menu = MSUF and MSUF.MSUF2
+        if type(menu) == "table" and type(menu.InvalidatePage) == "function" then
+            menu.InvalidatePage("home")
+        end
+    end
+    return completed == true
+end
 function MSUF.ProfileIOIsUUFAddonLoaded()
     if _G.C_AddOns and type(_G.C_AddOns.IsAddOnLoaded) == "function" then
         return _G.C_AddOns.IsAddOnLoaded("UnhaltedUnitFrames") == true
@@ -3434,6 +3453,7 @@ local function MSUF_ApplySnapshotToActiveProfile(snapshot)
     MSUF_ProfileIO_PostImportApply_GroupFrames(snapshot.kind, payload, isUUFImport)
     MSUF_ProfileIO_PostImportApply_UnitAlphas(kind, payload)
     MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_IMPORT", true)
+    MSUF.ProfileIOCompleteFirstLoadImport()
      return true
 end
 function MSUF_ExportSelectionToString(kind)
@@ -3776,7 +3796,7 @@ local function MSUF_ProfileIO_ApplyUUFCastbarGeneral(unitKey, castbar, general)
         player = { enable = "enablePlayerCastbar", backend = "castbarPlayerBackend", memory = "castbarPlayerBackendBeforeHide", w = "castbarPlayerBarWidth", h = "castbarPlayerBarHeight", x = "castbarPlayerOffsetX", y = "castbarPlayerOffsetY", match = "castbarPlayerMatchWidth", icon = "castbarPlayerShowIcon", text = "castbarPlayerShowSpellName", time = "showPlayerCastTime", textX = "castbarPlayerTextOffsetX", textY = "castbarPlayerTextOffsetY", timeX = "castbarPlayerTimeOffsetX", timeY = "castbarPlayerTimeOffsetY" },
         target = { enable = "enableTargetCastbar", backend = "castbarTargetBackend", memory = "castbarTargetBackendBeforeHide", w = "castbarTargetBarWidth", h = "castbarTargetBarHeight", x = "castbarTargetOffsetX", y = "castbarTargetOffsetY", match = "castbarTargetMatchWidth", icon = "castbarTargetShowIcon", text = "castbarTargetShowSpellName", targetName = "castbarTargetShowTargetName", time = "showTargetCastTime", textX = "castbarTargetTextOffsetX", textY = "castbarTargetTextOffsetY", timeX = "castbarTargetTimeOffsetX", timeY = "castbarTargetTimeOffsetY" },
         focus = { enable = "enableFocusCastbar", backend = "castbarFocusBackend", memory = "castbarFocusBackendBeforeHide", w = "castbarFocusBarWidth", h = "castbarFocusBarHeight", x = "castbarFocusOffsetX", y = "castbarFocusOffsetY", match = "castbarFocusMatchWidth", icon = "castbarFocusShowIcon", text = "castbarFocusShowSpellName", targetName = "castbarFocusShowTargetName", time = "showFocusCastTime", textX = "castbarFocusTextOffsetX", textY = "castbarFocusTextOffsetY", timeX = "castbarFocusTimeOffsetX", timeY = "castbarFocusTimeOffsetY" },
-        boss = { enable = "enableBossCastbar", backend = "bossCastbarBackend", memory = "bossCastbarBackendBeforeHide", w = "bossCastbarWidth", h = "bossCastbarHeight", x = "bossCastbarOffsetX", y = "bossCastbarOffsetY", match = "bossCastbarMatchWidth", icon = "showBossCastIcon", text = "showBossCastName", time = "showBossCastTime", textX = "bossCastTextOffsetX", textY = "bossCastTextOffsetY", timeX = "bossCastTimeOffsetX", timeY = "bossCastTimeOffsetY" },
+        boss = { enable = "enableBossCastbar", backend = "bossCastbarBackend", memory = "bossCastbarBackendBeforeHide", w = "bossCastbarWidth", h = "bossCastbarHeight", x = "bossCastbarOffsetX", y = "bossCastbarOffsetY", match = "bossCastbarMatchWidth", icon = "showBossCastIcon", text = "showBossCastName", targetName = "showBossCastTargetName", time = "showBossCastTime", textX = "bossCastTextOffsetX", textY = "bossCastTextOffsetY", timeX = "bossCastTimeOffsetX", timeY = "bossCastTimeOffsetY" },
     }
     local keys = map[unitKey]
     if not keys then return end
@@ -5271,6 +5291,7 @@ local function MSUF_ApplyLegacyTableToActiveProfile(tbl, isUUFImport)
         MSUF_GlobalDB.profiles[MSUF_ActiveProfile] = MSUF_DB
     end
     MSUF_ProfileIO_RunEnsureDB(true)
+    MSUF.ProfileIOCompleteFirstLoadImport()
     if isUUFImport and MSUF.ProfileIOIsUUFAddonLoaded() then
         -- UUF and MSUF both intercept Blizzard frame parenting. Applying MSUF
         -- live while UUF is loaded recurses between both SetParent hooks and
@@ -5599,6 +5620,7 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable, isUUFImport
         end
         MSUF_GlobalDB.profiles[profileKey] = target
         MSUF_ProfileIO_RunEnsureDB(true)
+        MSUF.ProfileIOCompleteFirstLoadImport()
         if isUUFImport and MSUF.ProfileIOIsUUFAddonLoaded() then
             ExportPublic("MSUF_ProfileIO_LastImportDeferredRuntime", true)
             MSUF_ProfileIO_ReportImportWarnings()
@@ -5626,6 +5648,7 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable, isUUFImport
         end
         MSUF_GlobalDB.profiles[profileKey] = existing
         MSUF_ProfileIO_ReportImportWarnings()
+        MSUF.ProfileIOCompleteFirstLoadImport()
          return true
     end
     local stored = {}
@@ -5636,6 +5659,7 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable, isUUFImport
     end
     MSUF_GlobalDB.profiles[profileKey] = stored
     MSUF_ProfileIO_ReportImportWarnings()
+    MSUF.ProfileIOCompleteFirstLoadImport()
      return true
 end
 function MSUF_ExportExternal(profileKey)
