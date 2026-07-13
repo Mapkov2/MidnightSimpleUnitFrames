@@ -52,13 +52,6 @@ local UpdateRaidGroup = statusRuntime.UpdateRaidGroup
 local UpdateRole = statusRuntime.UpdateRole
 local UpdatePVP = statusRuntime.UpdatePVP
 local EMPTY_EVENTS = {}
-local UnitIsGhost = _G.UnitIsGhost
-local UnitIsAFK = _G.UnitIsAFK
-local UnitIsDND = _G.UnitIsDND
-local issecretvalue = _G.issecretvalue or function(_) return false end
-local IsUnitToken = UF.IsUnitToken
-local ReadConnectedCached = UF.ReadConnectedCached
-local ReadDeadCached = UF.ReadDeadCached
 
 --- Status runtime may load before or after this file depending on addon order.
 --- Bind lazily so Apply/Update can recover once the shared runtime exists.
@@ -142,125 +135,7 @@ local function RunPhase(frame, status)
   UpdatePhase(frame, status)
 end
 
-local function StatusTextEventRelevant(cfg, event)
-  if event == "UNIT_HEALTH" then
-    return cfg.showDead == true or cfg.showGhost == true
-  elseif event == "UNIT_CONNECTION" then
-    return cfg.showDead == true
-  elseif event == "UNIT_FLAGS" or event == "PLAYER_FLAGS_CHANGED" then
-    return cfg.showDead == true or cfg.showGhost == true or cfg.showAFK == true or cfg.showDND == true
-  end
-  return true
-end
-
---- Unit flag APIs may return secret values in restricted contexts. Return nil
---- instead of caching a derived key so the next unrestricted event can refresh.
-local function SeedHealthDeadOverride(seedHP)
-  if issecretvalue(seedHP) == true or type(seedHP) ~= "number" then
-    return nil
-  end
-  return seedHP <= 0
-end
-
-local function StatusTextHealthKey(frame, cfg, seedHP)
-  local unit = frame and frame.unit
-  if not IsUnitToken(unit) then return nil end
-  local healthDead = SeedHealthDeadOverride(seedHP)
-  local state = frame and frame._msufUnitState
-  local stateReady = state and state.ready == true
-    and state.unit == unit
-  local stateFresh = stateReady
-    and frame._msufDispatchActive == true
-    and state.dispatchToken == frame._msufDispatchToken
-  local key = 0
-  if healthDead ~= false and cfg.showGhost == true and UnitIsGhost then
-    local ghost = UnitIsGhost(unit)
-    if issecretvalue(ghost) == true then return nil end
-    if ghost == true or ghost == 1 then key = key + 2 end
-  end
-  if cfg.showDead == true then
-    if healthDead ~= nil then
-      if healthDead == true then key = key + 4 end
-    elseif stateFresh and state.deadKnown == true then
-      if state.dead == true then key = key + 4 end
-    else
-      local dead, known = ReadDeadCached(frame, unit)
-      if known ~= true then return nil end
-      if dead == true then key = key + 4 end
-    end
-  end
-  return key
-end
-
-local function StatusTextFlagsKey(frame, cfg)
-  local unit = frame and frame.unit
-  local key = StatusTextHealthKey(frame, cfg)
-  if key == nil then return nil end
-  if cfg.showAFK == true and UnitIsAFK then
-    local afk = UnitIsAFK(unit)
-    if issecretvalue(afk) == true then return nil end
-    if afk == true or afk == 1 then key = key + 8 end
-  end
-  if cfg.showDND == true and UnitIsDND then
-    local dnd = UnitIsDND(unit)
-    if issecretvalue(dnd) == true then return nil end
-    if dnd == true or dnd == 1 then key = key + 16 end
-  end
-  return key
-end
-
-local function StatusTextConnectionKey(frame, cfg)
-  local unit = frame and frame.unit
-  if not IsUnitToken(unit) then return nil end
-  local state = frame and frame._msufUnitState
-  local stateReady = state and state.ready == true
-    and state.unit == unit
-  local stateFresh = stateReady
-    and frame._msufDispatchActive == true
-    and state.dispatchToken == frame._msufDispatchToken
-  local key = 0
-  if cfg.showDead == true and stateFresh and state.connectedKnown == true then
-    if state.connected == false then key = key + 1 end
-  elseif cfg.showDead == true then
-    local connected, known = ReadConnectedCached(frame, unit)
-    if known ~= true then return nil end
-    if connected == false then key = key + 1 end
-  end
-  return key
-end
-
---- Status text can be expensive because it combines connection, dead, ghost,
---- AFK, and DND flags. Build compact keys and skip repainting unchanged text.
-local function StatusTextChanged(frame, status, event, seedHP)
-  local cfg = status and status.statusText
-  if not (cfg and cfg.enabled == true) then return true end
-  if status.testMode == true then return true end
-  if not StatusTextEventRelevant(cfg, event) then return false end
-  local storeKey, key
-  if event == "UNIT_HEALTH" then
-    storeKey = "_msufGFStatusTextHealthKey"
-    -- UNIT_HEALTH can only change the dead/ghost portion. AFK and DND have
-    -- their own flag events, so avoid both native queries on every health tick.
-    key = StatusTextHealthKey(frame, cfg, seedHP)
-  elseif event == "UNIT_CONNECTION" then
-    storeKey = "_msufGFStatusTextConnectionKey"
-    key = StatusTextConnectionKey(frame, cfg)
-  elseif event == "UNIT_FLAGS" or event == "PLAYER_FLAGS_CHANGED" then
-    storeKey = "_msufGFStatusTextFlagsKey"
-    key = StatusTextFlagsKey(frame, cfg)
-  else
-    return true
-  end
-  if key == nil then return true end
-  if frame[storeKey] == key then return false end
-  frame[storeKey] = key
-  return true
-end
-
 local function RunStatusText(frame, status, event, seedHP)
-  if not StatusTextChanged(frame, status, event, seedHP) then
-    return
-  end
   UpdateStatusText(frame, status, event, seedHP)
 end
 
@@ -290,9 +165,6 @@ local function RunStatusApply(frame, status, event)
     UpdateRaidGroup(frame, status)
   end
   if status.runtimeStatusText == true then
-    frame._msufGFStatusTextConnectionKey = nil
-    frame._msufGFStatusTextFlagsKey = nil
-    frame._msufGFStatusTextHealthKey = nil
     UpdateStatusText(frame, status, event)
   end
   if status.runtimePVP == true and UpdatePVP then

@@ -39,7 +39,7 @@ _G.UnitIsDead = function() return false end
 _G.UnitIsDeadOrGhost = function() return false end
 _G.issecretvalue = function() return false end
 
-local MSUF = { UF = { Metadata = { defaultApplyMask = true } } }
+local MSUF = { UF = { Metadata = { defaultApplyMask = { StatusTextIndicator = true } } } }
 _G.MSUF_NS = MSUF
 
 local chunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Core.lua"))
@@ -71,6 +71,18 @@ function NameText.Update(frame, event, unit)
     frame.lastNameEvent, frame.lastNameUnit = event, unit
 end
 UF.RegisterElement("NameText", NameText)
+
+local StatusTextIndicator = {
+    IsEnabled = function() return true end,
+    Create = function() end,
+    Apply = function() end,
+    GetEvents = function() return {} end,
+}
+function StatusTextIndicator.Update(frame, event, unit)
+    frame.statusCalls = (frame.statusCalls or 0) + 1
+    frame.lastStatusEvent, frame.lastStatusUnit = event, unit
+end
+UF.RegisterElement("StatusTextIndicator", StatusTextIndicator)
 
 local spec = { enabled = true, key = "player", unit = "player", scope = "group" }
 local first, second = NewFrame("player"), NewFrame("player")
@@ -110,6 +122,24 @@ first.UNIT_HEALTH(first, "UNIT_HEALTH", "player")
 second.UNIT_HEALTH(second, "UNIT_HEALTH", "player")
 Check(calls[first] == 1 and calls[second] == 1, "shared route did not preserve frame-local dispatch")
 Check(first.lastUnit == "player" and second.lastUnit == "player", "shared route changed unit binding")
+
+-- A hidden single frame can miss its target/focus identity event. OnShow must
+-- re-run the already compiled lean identity plan once, without a poll/driver.
+local targetSpec = { enabled = true, key = "target", unit = "target", scope = "single" }
+local target = NewFrame("target")
+target.visible = false
+UF.AttachFrame(target, { scope = "single" })
+UF.ApplyElementToFrame(target, "Health", targetSpec)
+UF.ApplyElementToFrame(target, "NameText", targetSpec)
+UF.ApplyElementToFrame(target, "StatusTextIndicator", targetSpec)
+target.nameCalls = 0
+target.statusCalls = 0
+target.visible = true
+target.hooks.OnShow(target)
+Check(target.nameCalls == 1 and target.lastNameEvent == "MSUF_UF_ONSHOW",
+    "single OnShow did not reseed the lean identity plan")
+Check(target.statusCalls == 1 and target.lastStatusEvent == "MSUF_UF_ONSHOW",
+    "single OnShow did not reseed status for the visible unit identity")
 
 Check(UF.PrivatizeRuntimeStatusStateForDiagnostics == nil,
     "removed in-game diagnostics runtime API was reintroduced")

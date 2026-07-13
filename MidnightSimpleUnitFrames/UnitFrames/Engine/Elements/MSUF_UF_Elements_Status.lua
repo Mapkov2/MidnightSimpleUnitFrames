@@ -1288,82 +1288,6 @@ local function StatusText(frame, cfg, unitState, seedHP)
   return nil
 end
 
-local function StatusTextConnectionKey(frame, cfg, unitState)
-  if not (cfg and cfg.showDead == true) then
-    return 0
-  end
-  local unit = frame and frame.unit
-  if not unit then
-    return nil
-  end
-  local connected, known = ReadConnectedCached(frame, unit, unitState)
-  if known ~= true then
-    return nil
-  end
-  return connected == false and 1 or 0
-end
-
-local function StatusTextFlagsKey(frame, cfg, unitState, seedHP)
-  local unit = frame and frame.unit
-  if not unit then
-    return nil
-  end
-  local healthDead = SeedHealthDeadOverride(seedHP)
-  local key = 0
-  if healthDead ~= false and cfg.showGhost == true and UnitIsGhost then
-    local ghost = UnitIsGhost(unit)
-    if issecretvalue(ghost) == true then return nil end
-    if ghost == true or ghost == 1 then key = key + 2 end
-  end
-  if cfg.showDead == true then
-    local dead, known
-    if healthDead ~= nil then
-      dead, known = healthDead, true
-    else
-      dead, known = ReadDeadCached(frame, unit, unitState)
-    end
-    if known ~= true then return nil end
-    if dead == true then key = key + 4 end
-  end
-  if cfg.showAFK == true and UnitIsAFK then
-    local afk = UnitIsAFK(unit)
-    if issecretvalue(afk) == true then return nil end
-    if afk == true or afk == 1 then key = key + 8 end
-  end
-  if cfg.showDND == true and UnitIsDND then
-    local dnd = UnitIsDND(unit)
-    if issecretvalue(dnd) == true then return nil end
-    if dnd == true or dnd == 1 then key = key + 16 end
-  end
-  return key
-end
-
-local function StatusTextChanged(frame, status, event, unitState, seedHP)
-  local cfg = status and status.statusText
-  if not (cfg and cfg.enabled == true) then return true end
-  if status.testMode == true then return true end
-  local storeKey, key
-  if event == "UNIT_CONNECTION" then
-    storeKey = "_msufStatusTextConnectionKey"
-    key = StatusTextConnectionKey(frame, cfg, unitState)
-  elseif event == "UNIT_FLAGS" or event == "PLAYER_FLAGS_CHANGED" then
-    storeKey = "_msufStatusTextFlagsKey"
-    key = StatusTextFlagsKey(frame, cfg, unitState)
-  elseif event == "UNIT_HEALTH" then
-    if cfg.showDead ~= true and cfg.showGhost ~= true then
-      return false
-    end
-    storeKey = "_msufStatusTextHealthKey"
-    key = StatusTextFlagsKey(frame, cfg, unitState, seedHP)
-  else
-    return true
-  end
-  if key == nil then return true end
-  if frame[storeKey] == key then return false end
-  frame[storeKey] = key
-  return true
-end
-
 local function RefreshHealthAfterGoneStatus(frame, oldValue)
   if oldValue ~= "DEAD" and oldValue ~= "GHOST" and oldValue ~= "OFFLINE" then
     return
@@ -1450,9 +1374,6 @@ local function UpdateStatusText(frame, status, event, seedHP)
   end
   if not UnitExistsRuntime(unit, unitState) then
     ClearStatusText(frame, fs)
-    return
-  end
-  if not StatusTextChanged(frame, status, event, unitState, seedHP) then
     return
   end
   local text, state = status.testMode and "DEAD" or nil, status.testMode and "dead" or nil
@@ -1605,9 +1526,6 @@ function Status.Apply(frame, spec)
   if frame then
     frame._msufStatusTextValue = nil
     frame._msufStatusTextLayout = nil
-    frame._msufStatusTextConnectionKey = nil
-    frame._msufStatusTextFlagsKey = nil
-    frame._msufStatusTextHealthKey = nil
   end
   ApplyConfiguredRegions(frame, spec)
 end
@@ -1618,9 +1536,6 @@ function Status.Disable(frame)
   end
   frame._msufStatusTextValue = nil
   frame._msufStatusTextLayout = nil
-  frame._msufStatusTextConnectionKey = nil
-  frame._msufStatusTextFlagsKey = nil
-  frame._msufStatusTextHealthKey = nil
   CancelReadyCheckTimer(frame)
 end
 
@@ -1793,8 +1708,8 @@ local function RegisterStatusIndicator(def)
   end
 
   if updateWithEvent == true then
-    function element.Update(frame, event)
-      update(frame, frame._msufStatusIndicatorStatus or (frame.MSUFSpec and frame.MSUFSpec.status), event)
+    function element.Update(frame, event, _unit, seedHP)
+      update(frame, frame._msufStatusIndicatorStatus or (frame.MSUFSpec and frame.MSUFSpec.status), event, seedHP)
     end
   else
     function element.Update(frame)
