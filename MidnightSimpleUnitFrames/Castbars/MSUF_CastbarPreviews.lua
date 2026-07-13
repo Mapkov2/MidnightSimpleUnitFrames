@@ -45,6 +45,7 @@ local PREVIEW_UNITS = {
         y = "castbarTargetOffsetY",
         detached = "castbarTargetDetached",
         showTime = "showTargetCastTime",
+        showTargetName = "castbarTargetShowTargetName",
         test = "targetCastbarTestMode",
     },
     focus = {
@@ -55,6 +56,7 @@ local PREVIEW_UNITS = {
         y = "castbarFocusOffsetY",
         detached = "castbarFocusDetached",
         showTime = "showFocusCastTime",
+        showTargetName = "castbarFocusShowTargetName",
         test = "focusCastbarTestMode",
     },
 }
@@ -269,6 +271,10 @@ local function ClearPreviewTest(frame, unit)
     if frame.castText then
         SetTextIfChanged(frame.castText, Translate(PREVIEW_LABELS[unit] or PREVIEW_LABELS.boss))
     end
+    if frame.castTargetText then
+        SetTextIfChanged(frame.castTargetText, "")
+        frame.castTargetText:Hide()
+    end
 end
 
 local function UpdatePreviewTest(frame)
@@ -297,6 +303,11 @@ local function UpdatePreviewTest(frame)
         frame.timeText:Show()
         frame.timeText:SetAlpha(showTime and 1 or 0)
         SetTextIfChanged(frame.timeText, showTime and FormatTimeText(frame, remaining, duration) or "")
+    end
+    if frame.castTargetText then
+        local showTargetName = config and config.showTargetName and general[config.showTargetName] == true
+        SetTextIfChanged(frame.castTargetText, showTargetName and Translate("Cleave Training Dummy") or "")
+        frame.castTargetText:SetShown(showTargetName == true)
     end
 
     if frame.latencyBar and type(_G.MSUF_PlayerCastbar_UpdateLatencyZone) == "function" then

@@ -316,15 +316,11 @@ function Engine:ResolveTargetInfo(state)
         return nil
     end
 
-    if not PlainBool(UnitShouldDisplaySpellTargetName(unit)) then
+    if not UnitShouldDisplaySpellTargetName(unit) then
         return nil
     end
 
     local targetName = UnitSpellTargetName(unit)
-    if not targetName then
-        return nil
-    end
-
     state.targetNameAllowed = true
     state.targetName = targetName
     if UnitSpellTargetClass then

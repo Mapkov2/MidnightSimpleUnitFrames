@@ -298,6 +298,28 @@ local function ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, s
     else
         box.handleCastbarText:Hide()
     end
+    local showTargetName = (key == "target" and g.castbarTargetShowTargetName == true)
+        or (key == "focus" and g.castbarFocusShowTargetName == true)
+        or (key == "boss" and g.showBossCastTargetName == true)
+    mock.cast.target:SetShown(showTargetName)
+    if showTargetName then
+        local targetSize = ReadCastbarNum(g, key, "TargetNameFontSize", "bossCastTargetNameFontSize", 10)
+        if not targetSize or targetSize <= 0 then targetSize = 10 end
+        ApplyPreviewFont(mock.cast.target, max(7, S(targetSize)))
+        mock.cast.target:SetTextColor(1, 0.82, 0.20, 1)
+        mock.cast.target:SetText(TR("Cleave Training Dummy"))
+        local targetX = ReadCastbarNum(g, key, "TargetNameOffsetX", "bossCastTargetNameOffsetX", 0)
+        local targetY = ReadCastbarNum(g, key, "TargetNameOffsetY", "bossCastTargetNameOffsetY", 1)
+        local targetPosition = NormalizeCastbarPreviewTextPos(ReadCastbarPreviewString(g, key, detailPrefix, "TargetNamePosition", "bossCastTargetNamePosition", "BELOW"), "BELOW")
+        local targetJustify = NormalizeCastbarPreviewJustify(ReadCastbarPreviewString(g, key, detailPrefix, "TargetNameAlign", "bossCastTargetNameAlign", "RIGHT"), "RIGHT")
+        mock.cast.target:SetWidth(max(20, scw - S(4)))
+        AnchorCastbarPreviewText(mock.cast.target, mock.cast, targetPosition, targetX, targetY, targetJustify, S)
+        box.handleCastbarTarget:SetSize(max(48, mock.cast.target:GetStringWidth() + 10), max(18, mock.cast.target:GetStringHeight() + 6))
+        if not UnitPreviewText.PlaceHandleAroundRegions(box.handleCastbarTarget, canvas, { mock.cast.target }, 3) then PlaceHandle(box.handleCastbarTarget, mock.cast.target) end
+    else
+        mock.cast.target:SetText("")
+        box.handleCastbarTarget:Hide()
+    end
     local showTime = key == "boss" and g.showBossCastTime ~= false
         or (key == "target" and g.showTargetCastTime ~= false)
         or (key == "focus" and g.showFocusCastTime ~= false)
@@ -752,15 +774,22 @@ function Preview.Refresh(box, reason)
         end
         if castPreviewVisible then
             wideW = max(wideW, castW)
+            local showTargetName = (key == "target" and g.castbarTargetShowTargetName == true)
+                or (key == "focus" and g.castbarFocusShowTargetName == true)
+                or (key == "boss" and g.showBossCastTargetName == true)
+            local targetPadX = showTargetName and (abs(R.ReadCastbarNum(g, key, "TargetNameOffsetX", "bossCastTargetNameOffsetX", 0) or 0) + 96) or 0
+            local targetPadY = showTargetName and (abs(R.ReadCastbarNum(g, key, "TargetNameOffsetY", "bossCastTargetNameOffsetY", 1) or 1) + 24) or 0
             local detailPadX = max(
                 abs(R.ReadCastbarNum(g, key, "IconOffsetX", "bossCastIconOffsetX", 0) or 0) + abs(R.ReadCastbarNum(g, key, "IconSize", "bossCastIconSize", castBarH) or castBarH),
                 abs(R.ReadCastbarNum(g, key, "TextOffsetX", "bossCastTextOffsetX", 0) or 0) + 80,
-                abs(R.ReadCastbarNum(g, key, "TimeOffsetX", "bossCastTimeOffsetX", 0) or 0) + 46
+                abs(R.ReadCastbarNum(g, key, "TimeOffsetX", "bossCastTimeOffsetX", 0) or 0) + 46,
+                targetPadX
             )
             local detailPadY = max(
                 abs(R.ReadCastbarNum(g, key, "IconOffsetY", "bossCastIconOffsetY", 0) or 0) + abs(R.ReadCastbarNum(g, key, "IconSize", "bossCastIconSize", castBarH) or castBarH),
                 abs(R.ReadCastbarNum(g, key, "TextOffsetY", "bossCastTextOffsetY", 0) or 0) + 24,
-                abs(R.ReadCastbarNum(g, key, "TimeOffsetY", "bossCastTimeOffsetY", 0) or 0) + 24
+                abs(R.ReadCastbarNum(g, key, "TimeOffsetY", "bossCastTimeOffsetY", 0) or 0) + 24,
+                targetPadY
             )
             minX, maxX = min(minX, cLeft - detailPadX), max(maxX, cLeft + castW + detailPadX)
             minY, maxY = min(minY, cBottom - detailPadY), max(maxY, cBottom + castBarH + detailPadY)

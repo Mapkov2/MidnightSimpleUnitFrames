@@ -199,6 +199,12 @@ local function ApplyBossCastbarPreviewLayout(preview, index)
         _G.MSUF_UpdateCastbarVisuals("boss")
     end
 
+    if preview.castTargetText then
+        local showTargetName = general.showBossCastTargetName == true
+        preview.castTargetText:SetText(showTargetName and "Cleave Training Dummy" or "")
+        preview.castTargetText:SetShown(showTargetName)
+    end
+
     if preview.statusBar then
         preview.statusBar:SetValue(0)
         if preview.MSUF_testMode then
