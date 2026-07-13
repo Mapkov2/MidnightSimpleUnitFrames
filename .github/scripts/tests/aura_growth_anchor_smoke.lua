@@ -508,6 +508,9 @@ do
     Equal(container._msufA3ForceManagedAuraGeometry, nil,
         "visible player world repair marker was not consumed")
 
+    -- Hidden containers skip the native aura refresh but still receive the
+    -- one-shot geometry repair immediately, so a lane hidden during a loading
+    -- screen does not wait for another zone event to reclaim its saved point.
     container:Hide()
     container.point = { "CENTER", foreign, "CENTER", -77, 66 }
     container.width, container.height = 5, 6
@@ -515,17 +518,19 @@ do
     A3._DirectIdentityRefreshUnit("player", true)
     Equal(container.updateAllAurasCalls or 0, updates,
         "hidden player container refreshed native auras")
-    Equal(container._msufA3ForceManagedAuraGeometry, true,
-        "hidden player container lost its deferred geometry marker")
+    AssertPoint(container, lane.anchor, parent, lane.anchor, lane.x, lane.y,
+        "hidden player world repair")
+    Near(container.width, lane.width, "hidden player world repair width")
+    Near(container.height, lane.height, "hidden player world repair height")
+    Equal(container._msufA3ForceManagedAuraGeometry, nil,
+        "hidden player world repair marker was not consumed")
     local ok, any = A3._ApplyNormalLaneContainers(auraRoot, { buff = lane }, parent, false)
     Check(ok == true and any == true and auraRoot.Buffs == container,
         "hidden player container was not reused on its next config sync")
     AssertPoint(container, lane.anchor, parent, lane.anchor, lane.x, lane.y,
-        "deferred player world repair")
-    Near(container.width, lane.width, "deferred player world repair width")
-    Near(container.height, lane.height, "deferred player world repair height")
-    Equal(container._msufA3ForceManagedAuraGeometry, nil,
-        "deferred player geometry marker survived successful sync")
+        "post-repair player config sync")
+    Near(container.width, lane.width, "post-repair player config sync width")
+    Near(container.height, lane.height, "post-repair player config sync height")
 end
 
 -- Dispel border/overlay/corner sensors use native AuraSlots rather than aura
