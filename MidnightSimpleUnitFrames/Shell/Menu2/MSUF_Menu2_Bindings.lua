@@ -342,6 +342,9 @@ local function PushHistory(label, source, before, after)
         historySessionDirty = true
     end
     NotifyHistoryChanged(false)
+    if type(M.ShowHistoryFeedback) == "function" then
+        M.ShowHistoryFeedback(FeedbackLabel(label or "MSUF2 change", 30), 2.0)
+    end
     return true
 end
 local function RebuildActivePage()
