@@ -354,6 +354,26 @@ function Runtime.IsRoot(root)
     return root and root.enabled == true and root.spellIndicatorRoot == true
 end
 
+--- Flag every live spell-indicator container so its next geometry sync
+--- bypasses the per-button anchor cache. Flag-only on purpose: the config
+--- refresh that accompanies every indicator write already runs SyncGeometry,
+--- so no extra layout pass is added here. This makes position edits apply
+--- deterministically instead of waiting for the zone-load geometry repair.
+function Runtime.RequestGeometryRepair()
+    local byUnit = A3._directIdentityAuraContainers
+    if not byUnit then return false end
+    local any = false
+    for _, containers in pairs(byUnit) do
+        for container in pairs(containers) do
+            if container._msufA3SpellIndicatorRoot == true then
+                container._msufA3ForceSpellIndicatorGeometry = true
+                any = true
+            end
+        end
+    end
+    return any
+end
+
 function Runtime.RootConfig(cfg)
     local root = cfg and cfg.spellIndicators
     return Runtime.IsRoot(root) and root or nil
@@ -934,8 +954,19 @@ local function PrepareButton(button, slot, parentFrame, forceGeometry)
     button._msufA3SpellIndicatorSlot = slot
     button._msufA3SpellIndicatorParentFrame = parentFrame
     button._msufA3ParentFrame = parentFrame
-    deps.PrepareAuraButton(button, slot, 1)
-    SyncButtonGeometry(button, slot, parentFrame, forceGeometry)
+    local prepareSignature = slot._msufA3LayoutSignature or SlotLayoutSignature(slot)
+    local needsFullPrepare = button._msufA3SpellIndicatorPrepareSignature ~= prepareSignature
+    if needsFullPrepare then
+        -- The shared aura preparer finishes with the normal aura-grid layout,
+        -- which temporarily anchors this manually placed slot to its container.
+        -- Re-running it for an unchanged slot used to leave the button there:
+        -- SyncButtonGeometry's desired-value cache then (correctly but
+        -- misleadingly) skipped the saved anchor. Prepare only when visual
+        -- configuration changed, and force our manual anchor after that pass.
+        deps.PrepareAuraButton(button, slot, 1)
+        button._msufA3SpellIndicatorPrepareSignature = prepareSignature
+    end
+    SyncButtonGeometry(button, slot, parentFrame, forceGeometry == true or needsFullPrepare)
     ApplyVisual(button, slot)
     ApplyButtonIconEffect(button, slot, parentFrame)
     ApplyButtonFrameEffect(button, slot, parentFrame)
@@ -951,8 +982,16 @@ local function SlotOptions(container, slot, buttonIndex)
         candidateFilters = slot.candidateFilters,
         initializeFrame = function(button)
             container[buttonIndex] = button
-            container._msufA3SpellIndicatorButtonSlots[buttonIndex] = slot
-            PrepareButton(button, slot, container._msufA3ParentFrame)
+            -- This closure lives for the container's whole lifetime, but the
+            -- native container re-runs it every time it recreates the slot's
+            -- button (every aura reapplication). Config edits replace the slot
+            -- tables in _msufA3SpellIndicatorButtonSlots; re-installing the
+            -- table captured at creation resurrected pre-edit geometry, so
+            -- always prepare with the container's current slot instead.
+            local slots = container._msufA3SpellIndicatorButtonSlots
+            local currentSlot = (slots and slots[buttonIndex]) or slot
+            if slots then slots[buttonIndex] = currentSlot end
+            PrepareButton(button, currentSlot, container._msufA3ParentFrame)
         end,
     }
 end

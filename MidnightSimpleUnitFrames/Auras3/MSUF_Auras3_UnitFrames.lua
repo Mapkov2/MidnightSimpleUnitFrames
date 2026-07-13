@@ -1191,6 +1191,18 @@ local function InvalidateUnitRuntimeConfig(unit)
     return unit
 end
 
+--- Menu writes land in the Auras3 saved model without touching UF.Config, so
+--- neither _runtimeConfigGen nor UF.Config.serial moves. Callers that refresh
+--- a unit through the UF element path must drop this cache first or both the
+--- live lane and the menu preview keep reading the pre-write layout.
+function A3.InvalidateUnitRuntimeConfig(unit)
+    if unit == "boss" then
+        for i = 1, 5 do InvalidateUnitRuntimeConfig("boss" .. i) end
+        return "boss"
+    end
+    return InvalidateUnitRuntimeConfig(unit)
+end
+
 local function EmptyUnitFrameConfig(unit)
     return {
         unit = unit,
