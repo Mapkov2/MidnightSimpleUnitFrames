@@ -508,7 +508,7 @@ local function ScopeSection(ctx, builder)
     sec:SetPoint("TOPLEFT", builder.parent, "TOPLEFT", builder.x, builder.y)
     sec:SetSize(pageW, h)
     sec._msuf2Width = pageW
-    if W.RegisterGuidedRegion then W.RegisterGuidedRegion(ctx, sec, "Group page and scope") end
+    if W.RegisterGuidedRegion then W.RegisterGuidedRegion(ctx, sec, "Party frame and Copy To", "group_scope") end
     builder.y = builder.y - h - 8
     if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(builder.y) + 28) end
 
@@ -526,6 +526,7 @@ local function ScopeSection(ctx, builder)
         end
         RefreshContext(ctx)
     end
+    sec._msuf2GuidedSelectScope = SelectScope
 
     local command = sec
     local pageValues = {}
@@ -588,6 +589,10 @@ local function ScopeSection(ctx, builder)
         categoryRowsPerColumn = 6,
         categoryColumnWidth = 205,
         categoryWidth = 150,
+        onPopupCreated = function(popup)
+            popup._msuf2GuidedNoScroll = true
+            if W.RegisterGuidedRegion then W.RegisterGuidedRegion(ctx, popup, "Copy Party settings", "group_copy_popup") end
+        end,
         onTargetClick = function(kind, api, popup)
             local function RunCopy()
                 if CopyGroupSettings(CurrentScope(), kind, M.gfCopyScopes) then
@@ -601,6 +606,15 @@ local function ScopeSection(ctx, builder)
     })
     RegisterGroupControl(copy, ctx, "copy.open", "Copy To", "button", "ephemeral")
     copy:SetScript("OnClick", function(self) if copyPopup then copyPopup.Show(self) end end)
+    if type(M.RegisterGuidedCopyPopup) == "function" then
+        M.RegisterGuidedCopyPopup("group", ctx.key, function()
+            local popup = copyPopup and copyPopup.GetPopup and copyPopup.GetPopup()
+            if popup and popup.IsShown and popup:IsShown() then return true end
+            if copyPopup then copyPopup.Show(copy) end
+            popup = copyPopup and copyPopup.GetPopup and copyPopup.GetPopup()
+            return popup and popup.IsShown and popup:IsShown() or false
+        end)
+    end
     sec:SetScript("OnHide", function() if copyPopup then copyPopup.Hide() end end)
     local function RefreshTop()
         local current = CurrentScope()

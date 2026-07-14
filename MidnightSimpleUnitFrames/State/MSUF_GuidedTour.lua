@@ -14,6 +14,7 @@ local time = time
 local REVISION = 1
 local DEFAULT_STAGE = "menu_basics"
 local EDIT_MODE_STAGE = "edit_mode"
+local GROUP_EDIT_MODE_STAGE = "group_edit_mode"
 local EDIT_MODE_MOVED_PREFERENCE = "editModeMoved"
 local EDIT_MODE_MOVED_KEY_PREFERENCE = "editModeMovedKey"
 local COOLDOWN_ANCHOR_PREFERENCE = "unitframeCooldownAnchor"
@@ -171,15 +172,51 @@ end
 
 function Tour:IsEditModePlacementComplete()
     return state.preferences[EDIT_MODE_MOVED_PREFERENCE] == true
+        and state.preferences.editModePopupOpened == true
+end
+
+function Tour:IsGroupEditModePlacementComplete()
+    return state.preferences.groupEditModeMoved == true
+        and state.preferences.groupEditModePopupOpened == true
+end
+
+function Tour:MarkEditModePopupOpened(moverKey)
+    if state.status ~= "active" then return false end
+    moverKey = tostring(moverKey or "")
+    if state.currentStageId == GROUP_EDIT_MODE_STAGE then
+        if moverKey ~= "gf_party" and moverKey ~= "party" then return false end
+        local changed = state.preferences.groupEditModePopupOpened ~= true
+        state.preferences.groupEditModePopupOpened = true
+        state.preferences.groupEditModePopupOpenedKey = moverKey
+        Touch()
+        return true, changed
+    end
+    if state.currentStageId ~= EDIT_MODE_STAGE or moverKey ~= "player" then return false end
+    local changed = state.preferences.editModePopupOpened ~= true
+    state.preferences.editModePopupOpened = true
+    state.preferences.editModePopupOpenedKey = moverKey
+    Touch()
+    return true, changed
 end
 
 function Tour:MarkEditModePlacementComplete(moverKey)
-    if state.status ~= "active" or state.currentStageId ~= EDIT_MODE_STAGE then return false end
+    if state.status ~= "active" then return false end
+    moverKey = tostring(moverKey or "")
+    if state.currentStageId == GROUP_EDIT_MODE_STAGE then
+        if moverKey ~= "gf_party" and moverKey ~= "party" then return false end
+        local changed = state.preferences.groupEditModeMoved ~= true
+        state.preferences.groupEditModeMoved = true
+        state.preferences.groupEditModeMovedKey = moverKey
+        Touch()
+        return true, changed
+    end
+    if state.currentStageId ~= EDIT_MODE_STAGE then return false end
+    if moverKey ~= "player" then return false end
     local anchor = state.preferences[COOLDOWN_ANCHOR_PREFERENCE]
     if anchor ~= "cooldown" and anchor ~= "independent" then return false end
     local changed = state.preferences[EDIT_MODE_MOVED_PREFERENCE] ~= true
     state.preferences[EDIT_MODE_MOVED_PREFERENCE] = true
-    state.preferences[EDIT_MODE_MOVED_KEY_PREFERENCE] = tostring(moverKey or "")
+    state.preferences[EDIT_MODE_MOVED_KEY_PREFERENCE] = moverKey
     Touch()
     return true, changed
 end

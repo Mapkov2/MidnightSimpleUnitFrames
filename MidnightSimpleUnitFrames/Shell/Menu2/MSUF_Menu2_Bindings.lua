@@ -1451,6 +1451,11 @@ local function MarkCommandSearchDirty()
         SafeInvoke(M.Search.MarkIndexDirty)
     end
 end
+local function NotifyGuidedControlInteraction(widget)
+    if type(M.NotifyGuidedTourControlInteraction) == "function" then
+        M.NotifyGuidedTourControlInteraction(widget)
+    end
+end
 -- metadata is optional and backward-compatible.  Stable controlId/identityKey
 -- and settingKey/actionKey/navigationKey values flow into both the executable
 -- command and the canonical runtime-control catalog.
@@ -1568,6 +1573,7 @@ function M.BindToggle(ctx, widget, getValue, setValue, metadata)
             setValue(nextValue)
         end)
         SyncFromValue(self)
+        NotifyGuidedControlInteraction(self)
     end)
     AddRefreshCall(ctx, SyncFromValue, widget)
 end
@@ -1600,6 +1606,7 @@ function M.BindSlider(ctx, slider, getValue, setValue, metadata)
         CaptureWidgetChange(ctx, self, nil, function()
             setValue(value)
         end)
+        NotifyGuidedControlInteraction(self)
     end)
     AddRefreshCall(ctx, RefreshSlider, slider, getValue)
 end
@@ -1618,6 +1625,7 @@ function M.BindSegment(ctx, segment, getValue, setValue, metadata)
                 setValue(self._msuf2Value)
             end)
             segment:SetValue(self._msuf2Value)
+            NotifyGuidedControlInteraction(segment)
         end)
     end
     AddRefreshCall(ctx, RefreshValueControl, segment, getValue)
@@ -1642,6 +1650,7 @@ function M.BindDropdown(ctx, dropdown, getValue, setValue, metadata)
         else
             dropdown:SetValue(value)
         end
+        NotifyGuidedControlInteraction(dropdown)
     end)
     AddRefreshCall(ctx, RefreshValueControl, dropdown, getValue)
 end
@@ -1659,6 +1668,7 @@ function M.BindTextInput(ctx, editBox, getValue, setValue, commitOnBlur, metadat
         CaptureWidgetChange(ctx, editBox, nil, function()
             setValue(value or "")
         end)
+        NotifyGuidedControlInteraction(editBox)
     end)
     AddRefreshCall(ctx, RefreshTextInput, editBox, getValue)
 end
@@ -1703,6 +1713,7 @@ function M.BindColor(ctx, colorButton, getRGB, setRGB, metadata)
             if type(setRGB) == "function" then setRGB(r, g, b) end
         end)
         RefreshColor()
+        NotifyGuidedControlInteraction(colorButton)
     end)
     colorButton:HookScript("OnHide", CommitColorHistory)
     M.AddRefresher(ctx, RefreshColor)

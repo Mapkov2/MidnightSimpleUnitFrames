@@ -50,7 +50,7 @@ local function BuildStatus(ctx, builder, unit)
     end
     local tabFrames = {}
     local basicTab, advancedTab = Shared.MakeTabFrames(sec, -64, sectionW, tabFrames, "basic", "advanced")
-    local statusTabs = W.SegmentTabs(ctx, sec, {
+    local statusTabs, RefreshStatusTabs, ReadStatusTab, SetGuidedStatusTab = W.SegmentTabs(ctx, sec, {
         label = "", values = STATUS_ICON_TAB_VALUES, width = statusTabW,
         frames = tabFrames, defaultTab = "basic",
         get = CurrentStatusTab,
@@ -59,6 +59,17 @@ local function BuildStatus(ctx, builder, unit)
     })
     if statusTabs._msuf2Title then statusTabs._msuf2Title:Hide() end
     RegisterControl(statusTabs, ctx, "status.workspace_tab", "Status icon controls", "segment", "ephemeral")
+    sec._msuf2GuidedSelectTab = function(tab)
+        if tab ~= "basic" and tab ~= "advanced" then return false end
+        if type(ReadStatusTab) == "function" and ReadStatusTab() == tab then return true end
+        if type(SetGuidedStatusTab) == "function" then
+            SetGuidedStatusTab(tab)
+        else
+            M.unitStatusTabSelection[unit] = tab
+            if type(RefreshStatusTabs) == "function" then RefreshStatusTabs() end
+        end
+        return type(ReadStatusTab) ~= "function" or ReadStatusTab() == tab
+    end
     local selectedCard = W.ControlCard(basicTab, "Selected Indicator", nil, leftX - 2, -38, leftW + 16, 268)
     local previewCard = W.ControlCard(basicTab, "Status Preview", nil, rightX - 2, -38, rightW + 16, 214)
     local placementCardX = leftX - 2

@@ -722,14 +722,16 @@ local function BuildDashboardUX(ctx)
     local launcher = Card(root, "", x0, mainTop, mainW, launcherH, T.colors.panel2, T.colors.borderSoft)
     Kicker(launcher, tourActive and "GUIDED SETUP IN PROGRESS" or (tourCompleted and "GUIDED SETUP COMPLETE" or "GUIDED SETUP"), 16, -14)
     local launcherTitle = tourActive and "Continue your MSUF setup"
-        or (tourCompleted and "Review or run the guided setup again" or "Set up every part of MSUF with guidance")
+        or (tourCompleted and "Review or run the guided setup again" or "Tune every essential system with hands-on guidance")
     local title = T.Font(launcher, "GameFontNormal", M.Tr(launcherTitle), T.colors.text)
     title:SetPoint("TOPLEFT", launcher, "TOPLEFT", 16, -36)
     title:SetWidth(max(120, mainW - (launcherNarrow and 32 or 230)))
     title:SetJustifyH("LEFT")
     if tourActive then
-        local total = tonumber(M.guidedTourStageCount) or 23
-        local current = min(total, max(1, tonumber(tourState.currentStageIndex) or 1))
+        local current, total
+        if type(M.GetGuidedTourStageProgress) == "function" then current, total = M.GetGuidedTourStageProgress() end
+        total = max(1, tonumber(total) or tonumber(M.guidedTourStageCount) or 1)
+        current = min(total, max(1, tonumber(current) or 1))
         local step = T.Font(launcher, "GameFontDisableSmall", M.Format("Step %d of %d", current, total), T.colors.muted)
         step:SetPoint("TOPLEFT", launcher, "TOPLEFT", 16, launcherNarrow and -72 or -56)
     end

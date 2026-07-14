@@ -2803,7 +2803,9 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
     local auraBuilder = CreateNestedAuraBuilder(ctx, builder, outer)
     local top = auraBuilder:Section("", 104)
     if top.title then top.title:Hide() end
-    if top._msuf2GuidedRegion then top._msuf2GuidedRegion.label = "Aura container and tools" end
+    if W.RegisterGuidedRegion then
+        W.RegisterGuidedRegion(ctx, top, "Aura container and tools", "unit_aura_tools")
+    end
     local sectionW = top._msuf2Width or auraBuilder.width or 720
     local containerBar = RegisterAuraChoiceBar(ctx, W.ScopeOverrideBar(ctx, top, {
         values = UNIT_AURA_WORKSPACE_TABS,

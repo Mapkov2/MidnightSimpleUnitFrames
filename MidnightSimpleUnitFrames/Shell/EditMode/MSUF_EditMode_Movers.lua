@@ -59,11 +59,14 @@ local function GuidedPlacementPending()
     if not (tour and type(tour.GetState) == "function") then return false end
     local state = tour:GetState()
     local preferences = state and state.preferences
-    local anchor = preferences and preferences.unitframeCooldownAnchor
-    return state and state.status == "active"
-        and state.currentStageId == "edit_mode"
+    if not (state and state.status == "active" and preferences) then return false end
+    if state.currentStageId == "group_edit_mode" then
+        return preferences.groupEditModeMoved ~= true or preferences.groupEditModePopupOpened ~= true, "gf_party"
+    end
+    local anchor = preferences.unitframeCooldownAnchor
+    return state.currentStageId == "edit_mode"
         and (anchor == "cooldown" or anchor == "independent")
-        and preferences.editModeMoved ~= true
+        and (preferences.editModeMoved ~= true or preferences.editModePopupOpened ~= true), "player"
 end
 
 local function HideGuidedPlacementCue()
@@ -106,8 +109,9 @@ end
 
 function Movers.RefreshGuidedPlacementCue()
     HideGuidedPlacementCue()
-    if not (moverParent and moverParent:IsShown() and GuidedPlacementPending()) then return end
-    local target = movers.player
+    local pending, preferredKey = GuidedPlacementPending()
+    if not (moverParent and moverParent:IsShown() and pending) then return end
+    local target = movers[preferredKey] or movers.player
     if not (target and target:IsShown()) then
         for _, mover in pairs(movers) do
             if mover:IsShown() then target = mover break end
@@ -115,7 +119,15 @@ function Movers.RefreshGuidedPlacementCue()
     end
     if not target then return end
     guidedCueMover = target
-    EnsureGuidedPlacementCue(target):Show()
+    local cue = EnsureGuidedPlacementCue(target)
+    local tour = MSUF and MSUF.GuidedTour6 or _G.MSUF_GuidedTour6
+    local state = tour and type(tour.GetState) == "function" and tour:GetState() or nil
+    local preferences = state and state.preferences or {}
+    local moved = preferredKey == "gf_party"
+        and preferences.groupEditModeMoved == true
+        or preferredKey ~= "gf_party" and preferences.editModeMoved == true
+    cue._label:SetText(Tr(moved and "Click this frame for its size popup" or "Drag this frame once"))
+    cue:Show()
 end
 
 local function RefreshUFPreview(reason)
@@ -412,6 +424,10 @@ local function CreateMover(key, cfg)
         if EM2.Focus and EM2.Focus.SetSelection then EM2.Focus.SetSelection(key, nil, nil, { source = "mover" }) end
         if EM2.Popups and EM2.Popups.Open then
             EM2.Popups.Open(key, self)
+            local menu = MSUF and MSUF.MSUF2
+            if menu and type(menu.NotifyGuidedEditModePopupOpened) == "function" then
+                menu.NotifyGuidedEditModePopupOpened(key)
+            end
         elseif EM2.Focus and EM2.Focus.NotifyPositionChanged then
             EM2.Focus.NotifyPositionChanged(key)
         end

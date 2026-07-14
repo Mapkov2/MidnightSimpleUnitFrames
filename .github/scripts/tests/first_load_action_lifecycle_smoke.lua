@@ -149,15 +149,20 @@ do
     Equal(blockedReason, "guided_edit_mode_move_required", "blocked Edit Mode advance returned the wrong reason")
     Equal(MSUF.GuidedTour6:GetState().currentStageId, "edit_mode", "blocked Edit Mode advance changed stages")
     Check(M.NotifyGuidedEditModeMoved("player") == true, "real Edit Mode movement was not accepted")
-    Check(M.IsGuidedEditModePlacementComplete() == true, "Edit Mode movement did not complete placement")
+    Check(M.IsGuidedEditModePlacementComplete() == false, "movement incorrectly skipped the required size-popup lesson")
+    Check(M.NotifyGuidedEditModePopupOpened("player") == true, "Player size popup was not accepted")
+    Check(M.IsGuidedEditModePlacementComplete() == true, "movement plus Player popup did not complete placement")
     Check(M.ShouldShowGuidedEditModeOpenCue() == false, "toolbar Edit Mode cue returned after placement completed")
     Equal(MSUF.GuidedTour6:GetState().preferences.editModeMovedKey, "player", "moved frame key was not persisted")
     Check(M.SetGuidedCooldownAnchorDecision("independent") == true, "independent anchor choice failed")
     Equal(_G.MSUF_DB.general.anchorToCooldown, false, "independent choice did not disable the Cooldown Manager anchor")
     Equal(M.GetGuidedCooldownAnchorDecision(), "independent", "independent choice was not persisted in tour state")
     Check(M.IsGuidedEditModePlacementComplete() == false, "changing the anchor did not require fresh placement")
-    Check(M.NotifyGuidedEditModeMoved("target") == true, "fresh placement after anchor change was rejected")
-    Check(M.IsGuidedEditModePlacementComplete() == true, "fresh placement after anchor change was not recorded")
+    Check(M.NotifyGuidedEditModeMoved("target") == false, "Target movement incorrectly satisfied the Player lesson")
+    Check(M.NotifyGuidedEditModePopupOpened("target") == false, "Target popup incorrectly satisfied the Player popup lesson")
+    Check(M.NotifyGuidedEditModeMoved("player") == true, "fresh Player placement after anchor change was rejected")
+    Check(M.NotifyGuidedEditModePopupOpened("player") == true, "fresh Player popup lesson was rejected")
+    Check(M.IsGuidedEditModePlacementComplete() == true, "fresh placement and popup were not recorded")
     Equal(effects.generalWrites, 2, "anchor choices did not use the real general setting mutation path")
     Equal(effects.applyFlushes, 2, "anchor choices were not applied before frame placement")
     Check(M.SetGuidedCooldownAnchorDecision("invalid") == false, "invalid anchor choice was accepted")
@@ -169,8 +174,7 @@ end
 do
     local MSUF, M, _, effects = LoadFixture()
     Check(MSUF.GuidedTour6:Start("Default", "menu_basics") == true, "guided tour did not start at Menu Basics")
-    Check(MSUF.GuidedTour6:SetPreference("playstyle", "dungeons") == true, "playstyle fixture preference failed")
-    Check(MSUF.GuidedTour6:SetPreference("informationStyle", "balanced") == true, "information-style fixture preference failed")
+    Check(MSUF.GuidedTour6:SetPreference("setupArea", "all") == true, "setup-area fixture preference failed")
     M.frame = { IsShown = function() return true end }
     M.activeKey = "guided_setup"
     M.cache = { guided_setup = { wrapper = {} } }
@@ -186,28 +190,101 @@ do
     end
 
     Check(M.RunGuidedTourStep("next") == true, "Menu Basics did not advance")
-    Equal(MSUF.GuidedTour6:GetState().currentStageId, "edit_mode", "Menu Basics advanced to the wrong stage")
+    Equal(MSUF.GuidedTour6:GetState().currentStageId, "unit_intro", "Menu Basics did not begin Part 1 with the Unitframe intro")
     Equal(effects.invalidates, 1, "same-page guided transition did not invalidate the old body")
     Equal(effects.selects, 1, "same-page guided transition did not rebuild immediately")
     Equal(effects.lastPage, "guided_setup", "same-page guided transition rebuilt the wrong page")
     M.cache.guided_setup = { wrapper = {} }
-    Check(M.RunGuidedTourStep("back") == true, "Edit Mode did not return to Menu Basics")
-    Equal(MSUF.GuidedTour6:GetState().currentStageId, "menu_basics", "Edit Mode returned to the wrong stage")
-    Equal(effects.invalidates, 2, "reverse same-page guided transition did not invalidate the Edit Mode body")
+    Check(M.RunGuidedTourStep("back") == true, "Unitframe intro did not return to Menu Basics")
+    Equal(MSUF.GuidedTour6:GetState().currentStageId, "menu_basics", "Unitframe intro returned to the wrong stage")
+    Equal(effects.invalidates, 2, "reverse same-page guided transition did not invalidate the Unitframe intro body")
     Equal(effects.selects, 2, "reverse same-page guided transition did not rebuild immediately")
 end
 
--- Spell Icons own a complete guided stage on the Group Auras page. The normal
--- Aura stage excludes that section, while the dedicated stage includes its
--- selector and preview controls as well as persistent settings/actions.
+-- The first choice builds a real route. Single-area tours omit unrelated
+-- chapters, while Everything keeps the three-part Unit/Group/Class flow.
+do
+    local MSUF, M = LoadFixture()
+    Check(MSUF.GuidedTour6:Start("Default", "menu_basics") == true, "required-choice fixture did not start")
+    local advanced, reason = M.RunGuidedTourStep("next")
+    Check(advanced == false, "guided setup advanced without choosing an area")
+    Equal(reason, "guided_setup_area_required", "missing setup choice returned the wrong blocker")
+
+    local cases = {
+        { choice = "unitframes", first = "unit_intro", total = 19 },
+        { choice = "groupframes", first = "group_intro", total = 24 },
+        { choice = "classresources", first = "class_intro", total = 5 },
+        { choice = "all", first = "unit_intro", total = 40 },
+    }
+    for i = 1, #cases do
+        local case = cases[i]
+        local MSUF, M = LoadFixture()
+        Check(MSUF.GuidedTour6:Start("Default", "menu_basics") == true, "route fixture did not start")
+        Check(MSUF.GuidedTour6:SetPreference("setupArea", case.choice) == true, "route choice was not stored")
+        local current, total = M.GetGuidedTourStageProgress()
+        Equal(current, 1, "route did not begin at the first mission")
+        Equal(total, case.total, "route has the wrong mission count for " .. case.choice)
+        Check(M.RunGuidedTourStep("next") == true, "route did not leave Menu Basics")
+        Equal(MSUF.GuidedTour6:GetState().currentStageId, case.first, "route opened the wrong first chapter")
+    end
+end
+
+-- Group placement is its own hands-on checkpoint. Only moving Party Frames
+-- satisfies it; moving an unrelated Unitframe cannot unlock the step.
+do
+    local MSUF, M = LoadFixture()
+    Check(MSUF.GuidedTour6:Start("Default", "group_edit_mode") == true, "group placement fixture did not start")
+    Check(M.IsGuidedGroupEditModePlacementComplete() == false, "group placement started complete")
+    Check(M.NotifyGuidedEditModeMoved("player") == false, "Player movement unlocked Party placement")
+    local advanced, reason = M.RunGuidedTourStep("next")
+    Check(advanced == false, "group placement advanced without a Party move")
+    Equal(reason, "guided_group_edit_mode_move_required", "group placement returned the wrong blocker")
+    Check(M.NotifyGuidedEditModeMoved("gf_party") == true, "Party movement did not unlock group placement")
+    Check(M.IsGuidedGroupEditModePlacementComplete() == false, "Party movement skipped its geometry-popup lesson")
+    Check(M.NotifyGuidedEditModePopupOpened("gf_party") == true, "Party geometry popup was not accepted")
+    Check(M.IsGuidedGroupEditModePlacementComplete() == true, "Party movement and geometry popup were not persisted")
+end
+
+-- Resuming anywhere inside the Group chapter must restore Party as the master
+-- scope before controls or Copy To resolve their dynamic target.
+do
+    local MSUF, M = LoadFixture()
+    Check(MSUF.GuidedTour6:Start("Default", "gf_party_name") == true, "Party master-scope fixture did not start")
+    M.gfScope = "raid"
+    M.activeKey = "gf_layout"
+    M.cache = { gf_layout = { sections = {}, guidedRegions = {} } }
+    Check(M.GuidedTourOnPageSelected("gf_layout") == true, "Party master mission did not accept its expected page")
+    Equal(M.gfScope, "party", "Group chapter did not restore Party as the master scope")
+end
+
+-- The streamlined tour has one curated Spell Icons mission. It includes its
+-- selector controls but excludes unrelated Aura workspaces.
 do
     local _, M = LoadFixture()
+    Equal(M.guidedTourStageCount, 40, "guided setup lost the forty-stage core workflow")
+    Check(M.IsGuidedTourSectionIncluded("uf_player_auras", "auras") == true, "Player core flow lost Auras")
+    Check(M.IsGuidedTourSectionIncluded("uf_player_name", "text") == true, "Player core flow lost Name text")
+    Check(M.IsGuidedTourSectionIncluded("uf_player_hp_text", "text") == true, "Player core flow lost HP text")
+    Check(M.IsGuidedTourSectionIncluded("uf_player_power_text", "text") == true, "Player core flow lost Power text")
+    Check(M.IsGuidedTourSectionIncluded("uf_player_portrait", "portrait") == true, "Player core flow lost Portrait")
+    Check(M.IsGuidedTourSectionIncluded("uf_player_power", "power_bar") == true, "Player core flow lost Power Bar")
+    Check(M.IsGuidedTourSectionIncluded("uf_player_castbar", "castbar") == true, "Player core flow lost Castbar")
+    Check(M.IsGuidedTourSectionIncluded("uf_player_status", "status_icons") == true, "Player core flow lost Status Icons")
+    Check(M.IsGuidedTourSectionIncluded("gf_party_name", "text") == true, "Party core flow lost Name text")
+    Check(M.IsGuidedTourSectionIncluded("gf_party_hp_text", "text") == true, "Party core flow lost HP text")
+    Check(M.IsGuidedTourSectionIncluded("gf_party_power_text", "text") == true, "Party core flow lost Power text")
+    Check(M.IsGuidedTourSectionIncluded("gf_party_resource", "power") == true, "Party core flow lost Resource Bar")
+    Check(M.IsGuidedTourSectionIncluded("gf_party_range", "range") == true, "Party core flow lost Range Fade")
+    Check(M.IsGuidedTourSectionIncluded("gf_party_dispel", "dispel") == true, "Party core flow lost Dispel Overlay")
+    Check(M.IsGuidedTourSectionIncluded("gf_party_stripe", "dstripe") == true, "Party core flow lost Debuff Stripe")
+    Check(M.IsGuidedTourSectionIncluded("gf_party_indicators", "indicators") == true, "Party core flow lost Frame Indicators")
+    Check(M.IsGuidedTourSectionIncluded("gf_party_status", "sicons") == true, "Party core flow lost Status Icons")
+    Check(M.IsGuidedTourSectionIncluded("gf_party_targeted_spells", "targetedSpells") == true, "Party core flow lost Targeted Spells")
+    Check(M.IsGuidedTourSectionIncluded("gf_party_corner_icons", "ci") == true, "Party core flow lost Corner Indicators")
+    Check(M.IsGuidedTourSectionIncluded("gf_party_auras", "auras") == true, "Party core flow lost Auras")
     Check(M.IsGuidedTourSectionIncluded("gf_spell_icons", "si") == true, "Spell Icons stage lost the spell-indicator section")
     Check(M.IsGuidedTourSectionIncluded("gf_spell_icons", "auras") == false, "Spell Icons stage includes unrelated Aura sections")
-    Check(M.IsGuidedTourSectionIncluded("gf_auras", "si") == false, "Group Auras stage still duplicates Spell Icons")
-    Check(M.IsGuidedTourSectionIncluded("gf_auras", "auras") == true, "Group Auras stage lost the Aura workspace")
     Check(M.GuidedTourIncludesEphemeralControls("gf_spell_icons") == true, "Spell Icons stage omits selector or preview controls")
-    Check(M.GuidedTourIncludesEphemeralControls("gf_auras") == false, "ordinary Group Auras stage unexpectedly includes ephemeral controls")
 end
 
 -- MSUF 5.71 used MSUF_DB plus MSUF_GlobalDB.profiles/chars without a profile
