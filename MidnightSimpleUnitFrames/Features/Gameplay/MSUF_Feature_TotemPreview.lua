@@ -501,6 +501,7 @@ do
 
     function _RefreshBlizzardTotems()
         local g = _EnsureGameplayDefaults()
+        if not (g and g.enablePlayerTotems) and not previewWanted then return end
         local hasTotemFrame = _PlayerHasBlizzardTotemFrame()
 
         if not hasTotemFrame then
@@ -529,8 +530,15 @@ do
             if event == "UNIT_SPELLCAST_SUCCEEDED" then
                 local unit = ...
                 if unit ~= "player" then return end
-                C_Timer.After(0, _RefreshBlizzardTotems)
-                C_Timer.After(0.10, _RefreshBlizzardTotems)
+                local generation = eventFrame._msufTotemGeneration
+                local function RefreshIfCurrent()
+                    local gd = _EnsureGameplayDefaults()
+                    if eventFrame._msufTotemGeneration == generation and gd and gd.enablePlayerTotems then
+                        _RefreshBlizzardTotems()
+                    end
+                end
+                C_Timer.After(0, RefreshIfCurrent)
+                C_Timer.After(0.10, RefreshIfCurrent)
                 return
             end
 
@@ -542,20 +550,34 @@ do
         end)
     end
 
+    local totemWasActive = false
     function MSUF.MSUF_Gameplay_PlayerTotems_Apply(g)
-        _EnsureEventFrame()
+        local enabled = g and g.enablePlayerTotems == true
+        if not enabled then
+            previewWanted = false
+            _ClearPreview()
+            if eventFrame then
+                eventFrame._msufTotemGeneration = (eventFrame._msufTotemGeneration or 0) + 1
+                eventFrame:UnregisterAllEvents()
+            end
+            if totemWasActive then _RestoreBlizzardTotemFrame() end
+            totemWasActive = false
+            return
+        end
 
+        _EnsureEventFrame()
+        eventFrame._msufTotemGeneration = (eventFrame._msufTotemGeneration or 0) + 1
         eventFrame:UnregisterAllEvents()
         eventFrame:RegisterEvent("ADDON_LOADED")
-        eventFrame:RegisterEvent("PLAYER_LOGIN")
         eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
         eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 
-        if g and g.enablePlayerTotems and _PlayerHasBlizzardTotemFrame() then
+        if _PlayerHasBlizzardTotemFrame() then
             eventFrame:RegisterEvent("PLAYER_TOTEM_UPDATE")
             eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
         end
 
+        totemWasActive = true
         _RefreshBlizzardTotems()
     end
 

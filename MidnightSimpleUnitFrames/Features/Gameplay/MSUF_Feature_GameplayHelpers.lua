@@ -123,6 +123,7 @@ local function MSUF_Gameplay_SelectNudgeFrame(frame, selected)
             frame:_msufGameplayUpdateKeyboardNudge()
         end
     end
+    if type(Gameplay.SyncNudgeEvents) == "function" then Gameplay.SyncNudgeEvents() end
 end
 
 local function MSUF_Gameplay_IsCombatInputLocked()
@@ -172,23 +173,37 @@ local function MSUF_Gameplay_ReleaseKeyboardNudge(frame)
     MSUF_Gameplay_SetKeyboardNudgeEnabled(frame, false)
 end
 
-local function MSUF_Gameplay_EnsureNudgeEventFrame()
-    if gameplayNudgeEventFrame or not CreateFrame then return end
-    gameplayNudgeEventFrame = CreateFrame("Frame")
-    gameplayNudgeEventFrame:RegisterEvent("PLAYER_LOGIN")
+local function MSUF_Gameplay_SyncNudgeEvents()
+    local wanted = false
+    for frame in pairs(gameplayNudgeFrames) do
+        local can = frame and frame._msufGameplayCanNudgeFn
+        if type(can) == "function" and can(frame) then
+            wanted = true
+            break
+        end
+    end
+    if not wanted then
+        if gameplayNudgeEventFrame then gameplayNudgeEventFrame:UnregisterAllEvents() end
+        return false
+    end
+    if not gameplayNudgeEventFrame then
+        if not CreateFrame then return false end
+        gameplayNudgeEventFrame = CreateFrame("Frame")
+        gameplayNudgeEventFrame:SetScript("OnEvent", function()
+            local locked = MSUF_Gameplay_IsCombatInputLocked()
+            for frame in pairs(gameplayNudgeFrames) do
+                if locked then
+                    MSUF_Gameplay_ReleaseKeyboardNudge(frame)
+                else
+                    MSUF_Gameplay_RefreshKeyboardNudge(frame)
+                end
+            end
+        end)
+    end
     gameplayNudgeEventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
     gameplayNudgeEventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
     gameplayNudgeEventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-    gameplayNudgeEventFrame:SetScript("OnEvent", function()
-        local locked = MSUF_Gameplay_IsCombatInputLocked()
-        for frame in pairs(gameplayNudgeFrames) do
-            if locked then
-                MSUF_Gameplay_ReleaseKeyboardNudge(frame)
-            else
-                MSUF_Gameplay_RefreshKeyboardNudge(frame)
-            end
-        end
-    end)
+    return true
 end
 
 local function MSUF_Gameplay_EnableKeyboardNudge(frame)
@@ -203,7 +218,7 @@ local function MSUF_Gameplay_SetupArrowNudge(frame, nudgeFn, canNudgeFn)
     frame._msufGameplayUpdateKeyboardNudge = MSUF_Gameplay_RefreshKeyboardNudge
     frame._msufGameplayReleaseKeyboardNudge = MSUF_Gameplay_ReleaseKeyboardNudge
     gameplayNudgeFrames[frame] = true
-    MSUF_Gameplay_EnsureNudgeEventFrame()
+    MSUF_Gameplay_SyncNudgeEvents()
 
     MSUF_Gameplay_EnableKeyboardNudge(frame)
 
@@ -273,3 +288,4 @@ Gameplay.EnableKeyboardNudge = MSUF_Gameplay_EnableKeyboardNudge
 Gameplay.RefreshKeyboardNudge = MSUF_Gameplay_RefreshKeyboardNudge
 Gameplay.ReleaseKeyboardNudge = MSUF_Gameplay_ReleaseKeyboardNudge
 Gameplay.SetupArrowNudge = MSUF_Gameplay_SetupArrowNudge
+Gameplay.SyncNudgeEvents = MSUF_Gameplay_SyncNudgeEvents

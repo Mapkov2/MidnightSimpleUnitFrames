@@ -1973,6 +1973,9 @@ local function FullRefresh()
     if not MSUF_DB then return end
     _CP_RefreshConfig()  --- P0: rebuild cached config
     local b = _cpDB.bars or {}
+    if CP.SyncControllerEvents and not CP_ConfigAnyFeatureEnabled() then
+        CP.SyncControllerEvents(false)
+    end
     local playerFrame = GetPlayerFrame()
     if not playerFrame then return end
     CPAuras.Rebuild()
@@ -2217,6 +2220,7 @@ local function FullRefresh()
     CP.structuralFlags, CP.structuralPowerType, CP.structuralRenderMode = CP_ComputeStructuralSignature()
     CP_RefreshEventBindings()
     CP_SetStructuralEventsBound(CP_ConfigAnyFeatureEnabled())
+    if CP.SyncControllerEvents then CP.SyncControllerEvents(CP_ConfigAnyFeatureEnabled()) end
     if type(_G.MSUF_BAL_RefreshRuntime) == "function" then
         _G.MSUF_BAL_RefreshRuntime()
     end
@@ -2362,8 +2366,8 @@ local function _CP_DeferredPBRelayout()
 end
 
 --- Dynamic hot-path event binding (CP-1): only keep runtime events that the
---- currently active class-power / alt-mana mode actually needs. Rare structural
---- events remain registered permanently; hot events are rebound after FullRefresh.
+--- currently active class-power / alt-mana mode actually needs. Structural and
+--- hot events are both detached when the complete Class Resources feature is off.
 local _cpBoundEvents = {}
 local _cpBoundUnits = {}
 
@@ -2849,11 +2853,25 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
     return ClassPowerOnEvent(self, event, arg1, arg2, arg3)
 end)
 
---- Register startup events permanently. Structural/runtime events are bound
---- after FullRefresh only while Class Resource features are actually enabled.
-eventFrame:RegisterEvent("PLAYER_LOGIN")
-eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-eventFrame:RegisterEvent("ADDON_LOADED")
+CP.SyncControllerEvents = function(active)
+    active = active == true
+    if not active then
+        eventFrame:UnregisterAllEvents()
+        _cpStructuralEventsBound = false
+        for event in pairs(_cpBoundEvents) do
+            _cpBoundEvents[event] = nil
+            _cpBoundUnits[event] = nil
+        end
+        return false
+    end
+    eventFrame:RegisterEvent("PLAYER_LOGIN")
+    eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+    eventFrame:RegisterEvent("ADDON_LOADED")
+    return true
+end
+
+--- Startup events exist only while at least one Class Resource feature is enabled.
+CP.SyncControllerEvents(CP_ConfigAnyFeatureEnabled())
 
 --- Public API (for Options, Edit Mode, and other modules)
 
@@ -3088,10 +3106,20 @@ do
                 EnsureDefaults()
             end,
             Enable = function()
+                CP.SyncControllerEvents(true)
                 _CP_RefreshConfig()
                 FullRefresh()
             end,
-            Disable = function() end,
+            Disable = function()
+                _CP_RefreshConfig()
+                CP_RefreshEventBindings()
+                CP_SetStructuralEventsBound(false)
+                CP.SyncControllerEvents(false)
+                if CP.container then CP.container:Hide() end
+                if AM.container then AM.container:Hide() end
+                if PHP.container then PHP.container:Hide() end
+                CP.visible, AM.visible, PHP.visible = false, false, false
+            end,
             RefreshSettings = function(_, source)
                 _cachedColorToken = nil
                 _cachedBgColorToken = nil

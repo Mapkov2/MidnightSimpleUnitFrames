@@ -12,19 +12,27 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
     _G[name] = value
     return value
 end
+local UI = MSUF.UI or _G.MSUF_UI
+local function Space(role, fallback)
+    return UI and UI.Space and UI.Space(role, fallback) or fallback
+end
 
 local BUTTON_NAME = "MSUF_GameMenuButton"
 local BUTTON_LABEL = "MSUF"
 local ICON_PATH = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\MSUF_MinimapIcon.tga"
-local ICON_SIZE = 19
-local ICON_GAP = 7
+local ICON_SIZE = 20
+local ICON_GAP = Space("sm", 8)
 local FONT_SIZE = 13
-local DEFAULT_BUTTON_HEIGHT = 21
-local BODY_OFFSET_Y = 10
-local EXIT_OFFSET_Y = -25
-local HEIGHT_PADDING = 10
+local DEFAULT_BUTTON_HEIGHT = Space("xl", 24)
+local BODY_OFFSET_Y = Space("md", 12)
+local EXIT_OFFSET_Y = -Space("xxl", 32) + Space("xs", 4)
+local HEIGHT_PADDING = Space("md", 12)
 
 local exitLabels = {}
+local runtimeEnabled = false
+local positionGeneration = 0
+local initFrame
+local HookGameMenu
 
 local function AddExitLabel(text)
     if type(text) == "string" and text ~= "" then
@@ -378,8 +386,12 @@ local function PositionGameMenuButton()
 end
 
 local function QueuePositionGameMenuButton()
+    if not runtimeEnabled then return end
+    local generation = positionGeneration
     if C_Timer and type(C_Timer.After) == "function" then
-        C_Timer.After(0, PositionGameMenuButton)
+        C_Timer.After(0, function()
+            if runtimeEnabled and generation == positionGeneration then PositionGameMenuButton() end
+        end)
     else
         PositionGameMenuButton()
     end
@@ -391,28 +403,38 @@ local function SetGameMenuButtonEnabled(enabled)
         g.showGameMenuButton = enabled and true or false
     end
 
+    runtimeEnabled = enabled and true or false
+    positionGeneration = positionGeneration + 1
     if enabled then
+        if not HookGameMenu() and initFrame then initFrame:RegisterEvent("ADDON_LOADED") end
         QueuePositionGameMenuButton()
     else
+        if initFrame then initFrame:UnregisterAllEvents() end
         RestoreGameMenuLayout()
     end
 end
 
-local function HookGameMenu()
+HookGameMenu = function()
+    if not runtimeEnabled then return false end
     local gameMenu = _G.GameMenuFrame
     if not gameMenu then return false end
     if gameMenu.MSUFGameMenuHooked then return true end
 
     EnsureButton()
-    gameMenu:HookScript("OnShow", QueuePositionGameMenuButton)
+    gameMenu:HookScript("OnShow", function()
+        if runtimeEnabled then QueuePositionGameMenuButton() end
+    end)
     gameMenu.MSUFGameMenuHooked = true
     return true
 end
 
-local frame = CreateFrame("Frame")
-frame:RegisterEvent("PLAYER_LOGIN")
-frame:RegisterEvent("ADDON_LOADED")
-frame:SetScript("OnEvent", function(self)
+initFrame = CreateFrame("Frame")
+runtimeEnabled = IsGameMenuButtonEnabled()
+if runtimeEnabled then
+    initFrame:RegisterEvent("PLAYER_LOGIN")
+    initFrame:RegisterEvent("ADDON_LOADED")
+end
+initFrame:SetScript("OnEvent", function(self)
     if HookGameMenu() then
         self:UnregisterEvent("PLAYER_LOGIN")
         self:UnregisterEvent("ADDON_LOADED")
