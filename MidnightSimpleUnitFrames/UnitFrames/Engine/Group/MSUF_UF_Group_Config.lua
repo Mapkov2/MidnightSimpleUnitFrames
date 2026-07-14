@@ -845,6 +845,7 @@ local function ApplyAuraLane(out, prefix, groupKey, group, defaults, maxCount, i
   out[prefix .. "CooldownAnchor"] = AuraTextAnchor(group.cooldownAnchor, "CENTER")
   out[prefix .. "CooldownX"] = scale(group.cooldownX, 0)
   out[prefix .. "CooldownY"] = scale(group.cooldownY, 0)
+  out[prefix .. "CooldownDecimalSeconds"] = Num(group.cooldownDecimalSeconds, 3)
   out[prefix .. "StackSize"] = scale(group.stackSize, defaults[6], 6)
   out[prefix .. "StackAnchor"] = AuraTextAnchor(group.stackAnchor, "BOTTOMRIGHT")
   out[prefix .. "StackX"] = scale(group.stackX, 0)
@@ -1138,6 +1139,7 @@ local function CompileCoreAuras(kind, conf)
     cooldownAnchor = buff.trackedCooldownAnchor,
     cooldownX = buff.trackedCooldownX,
     cooldownY = buff.trackedCooldownY,
+    cooldownDecimalSeconds = buff.trackedCooldownDecimalSeconds,
     stackSize = buff.trackedStackSize,
     stackAnchor = buff.trackedStackAnchor,
     stackX = buff.trackedStackX,
