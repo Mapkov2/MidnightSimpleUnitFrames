@@ -245,10 +245,8 @@ local function BuildGFBars(ctx)
         local g = db and db.general
         return g and g.hidePercentSymbol == true
     end
-    local hint = W.Text(text, "Font style is shared in Global Style > Fonts. Position can be adjusted here or dragged in Edit Mode.", 14, -38, textW - 210, { 0.60, 0.75, 1.00, 1 })
-    if hint.SetWordWrap then hint:SetWordWrap(true) end
     local scopeLabel = T.Font(text, "GameFontDisableSmall", "", T.colors.dim)
-    scopeLabel:SetPoint("TOPRIGHT", text, "TOPRIGHT", -16, -40)
+    scopeLabel:SetPoint("TOPRIGHT", text, "TOPRIGHT", -16, -68)
     scopeLabel:SetJustifyH("RIGHT")
     scopeLabel:SetWidth(170)
     text._msuf2CursorY = -64

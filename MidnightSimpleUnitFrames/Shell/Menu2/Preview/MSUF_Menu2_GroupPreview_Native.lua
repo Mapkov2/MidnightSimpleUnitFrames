@@ -22,6 +22,7 @@ local min = math.min
 local MSUF_ResolveIconTexturePath = _G.MSUF_ResolveIconTexturePath
 local GROUP_PREVIEW_REFRESH_DELAY = 0.05
 local GROUP_PREVIEW_ANIMATION_INTERVAL = 1 / 20
+local WHITE8X8 = Specs.WHITE8X8 or "Interface\\Buttons\\WHITE8X8"
 local function RegisterGroupPreviewControl(widget, semanticPath, label, kind, classification, extra)
     local page = M.GroupPage
     if page and type(page.RegisterControl) == "function" then
@@ -31,8 +32,6 @@ local function RegisterGroupPreviewControl(widget, semanticPath, label, kind, cl
 end
 local LAYER_HEADER_COLOR = { 0.45, 0.50, 0.62, 0.80 }
 local LAYER_TEXT_ON = { 0.76, 0.80, 0.90, 0.95 }
-local LAYER_TEXT_OFF = { 0.30, 0.30, 0.36, 0.55 }
-local LAYER_TEXT_HIGHLIGHT = { 0.90, 0.92, 1.00, 1.00 }
 local HANDLE_FALLBACK_COLOR = { 0.70, 0.80, 1.00 }
 local GF_PREVIEW_ROLE = Specs.ROLE or "HEALER"
 local SECTION_PAGE, PAGE_FOCUS, GF_PREVIEW_CLASSES, GF_PREVIEW_NAMES, GF_PREVIEW_ANCHOR_FRAC, GF_AURA_MOCK_ICON_IDS, GF_AURA_GROWTH_TABLE, GF_STATUS_RUNTIME_KEYS = PickDefaults(Specs, [[
@@ -311,104 +310,61 @@ local function ApplyGroupPreviewFlatBackdrop(frame, texture, bg, border)
         frame:SetBackdropBorderColor(border[1] or 0, border[2] or 0, border[3] or 0, border[4] or 1)
     end
 end
-local function ApplyGroupPreviewBodyTint(box, stage, texture, T)
-    if not (box and stage and box.CreateTexture) then return end
-    local tint = box._msufGFPreviewBodyTint
-    if not tint then
-        tint = box:CreateTexture(nil, "BACKGROUND", nil, 3)
-        box._msufGFPreviewBodyTint = tint
+local UpdateHint
+local function ApplyGroupPinnedPresentation(box, pinned, opts, sideW)
+    if not box then return end
+    local colors = (T and T.colors) or {}
+    local shade = box._msuf2PinnedHeaderShade
+    if not shade and box.CreateTexture then
+        shade = box:CreateTexture(nil, "BORDER", nil, -1)
+        shade:SetPoint("TOPLEFT", box, "TOPLEFT", 1, -1)
+        shade:SetPoint("TOPRIGHT", box, "TOPRIGHT", -1, -1)
+        shade:SetHeight(29)
+        shade:SetTexture(WHITE8X8)
+        box._msuf2PinnedHeaderShade = shade
     end
-    tint:ClearAllPoints()
-    tint:SetPoint("TOPLEFT", box, "TOPLEFT", 1, -1)
-    tint:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -1, 1)
-    if texture and tint.SetTexture then tint:SetTexture(texture) end
-    if T and type(T.ApplyTextureGradient) == "function" then
-        T.ApplyTextureGradient(tint, "VERTICAL", { 0.004, 0.006, 0.014, 0.98 }, { 0.010, 0.018, 0.040, 0.98 })
-    elseif tint.SetGradientAlpha then
-        tint:SetGradientAlpha("VERTICAL", 0.004, 0.006, 0.014, 0.98, 0.010, 0.018, 0.040, 0.98)
-    elseif tint.SetColorTexture then
-        tint:SetColorTexture(0.008, 0.014, 0.032, 0.98)
+    local line = box._msuf2PinnedHeaderLine
+    if not line and box.CreateTexture then
+        line = box:CreateTexture(nil, "BORDER", nil, 0)
+        line:SetPoint("TOPLEFT", box, "TOPLEFT", 10, -29)
+        line:SetPoint("TOPRIGHT", box, "TOPRIGHT", -10, -29)
+        line:SetHeight(1)
+        line:SetTexture(WHITE8X8)
+        box._msuf2PinnedHeaderLine = line
+    end
+    local canvasBottom = 12
+    if box._stage then
+        box._stage:ClearAllPoints()
+        box._stage:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -30)
+        box._stage:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -((sideW or 104) + 18), canvasBottom)
+    end
+    if box._layers and box._stage then
+        box._layers:ClearAllPoints()
+        box._layers:SetPoint("TOPLEFT", box._stage, "TOPRIGHT", 8, 0)
+        box._layers:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, canvasBottom)
+    end
+    if box._footer then box._footer:SetShown(not pinned) end
+    if shade then
+        local bg = colors.coreShadow or { 0.006, 0.016, 0.032, 1 }
+        shade:SetColorTexture(bg[1], bg[2], bg[3], pinned and 0.92 or 0)
+        shade:SetShown(pinned)
+    end
+    if line then
+        local border = colors.borderSoft or colors.border or { 0.070, 0.260, 0.390, 1 }
+        line:SetColorTexture(border[1], border[2], border[3], pinned and 0.52 or 0)
+        line:SetShown(pinned)
+    end
+    if pinned and box._hint and not box._selectedHandle then
+        local text = "select a handle - gear opens exact settings - right-click quick actions - arrows nudge"
+        box._hint:SetText((M.Tr and M.Tr(text)) or text)
+    elseif not pinned and UpdateHint then
+        UpdateHint(box, box._selectedHandle)
     end
 end
 local function PreviewScopeLabel(kind)
     if kind == "raid" then return "Raid" end
     if kind == "mythicraid" then return "Mythic Raid" end
     return "Party"
-end
-local function MakePreviewSectionButton(parent, label, color, sectionKey, onOpen)
-    local btn = CreateFrame("Button", nil, parent)
-    btn:SetSize(parent and parent._msufGFLayerButtonWidth or 94, 18)
-    btn._sectionKey = sectionKey
-    btn._layerColor = color or { 0.42, 0.72, 1.00 }
-    btn._bg = btn:CreateTexture(nil, "BACKGROUND")
-    btn._bg:SetAllPoints()
-    local idleBg = T.colors and T.colors.coreShadow or { 0.006, 0.016, 0.032 }
-    local surface = T.colors and T.colors.coreSurface or { 0.014, 0.038, 0.072 }
-    local raised = T.colors and T.colors.coreRaised or { 0.026, 0.070, 0.110 }
-    local blue = T.colors and T.colors.coreBlue or { 0.095, 0.360, 0.560 }
-    btn._bg:SetColorTexture(idleBg[1], idleBg[2], idleBg[3], 0.48)
-    btn._stripe = btn:CreateTexture(nil, "ARTWORK")
-    btn._stripe:SetPoint("LEFT", btn, "LEFT", 3, 0)
-    btn._stripe:SetSize(3, 13)
-    btn._stripe:SetColorTexture(btn._layerColor[1], btn._layerColor[2], btn._layerColor[3], 1)
-    btn._label = LayerFont(btn, label, LAYER_TEXT_ON)
-    btn._label:SetPoint("LEFT", btn._stripe, "RIGHT", 6, 0)
-    btn._label:SetPoint("RIGHT", btn, "RIGHT", -7, 0)
-    btn._label:SetJustifyH("LEFT")
-    btn._off = LayerFont(btn, "OFF", LAYER_TEXT_OFF)
-    btn._off:SetPoint("RIGHT", btn, "RIGHT", -2, 0)
-    btn._off:SetJustifyH("RIGHT")
-    btn._off:Hide()
-    btn:SetScript("OnClick", function() end)
-    function btn:SetPreviewHover(hover)
-        self._layerHover = hover == true
-        if self._msuf2LastLayerState then
-            self:SetPreviewActive(
-                self._msuf2LastLayerState.active,
-                self._msuf2LastLayerState.visible,
-                self._msuf2LastLayerState.solo,
-                self._msuf2LastLayerState.available
-            )
-        end
-    end
-    function btn:SetPreviewActive(active, visible, solo, available)
-        visible = visible ~= false
-        available = available ~= false
-        self._msuf2LastLayerState = self._msuf2LastLayerState or {}
-        self._msuf2LastLayerState.active = active == true
-        self._msuf2LastLayerState.visible = visible
-        self._msuf2LastLayerState.solo = solo == true
-        self._msuf2LastLayerState.available = available
-        self._off:Hide()
-        local c = self._layerColor or color or { 0.42, 0.72, 1.00 }
-        local hover = self._layerHover == true
-        if not available then
-            self._bg:SetColorTexture(idleBg[1], idleBg[2], idleBg[3], hover and 0.42 or 0.30)
-            self._stripe:SetColorTexture(c[1], c[2], c[3], hover and 0.42 or 0.24)
-            SetFSColor(self._label, LAYER_TEXT_OFF)
-        elseif solo then
-            self._bg:SetColorTexture(0.20, 0.14, 0.02, hover and 0.82 or 0.68)
-            self._stripe:SetColorTexture(1.00, 0.82, 0.18, 1)
-            SetFSColor(self._label, LAYER_TEXT_HIGHLIGHT)
-        elseif active and visible then
-            self._bg:SetColorTexture(blue[1], blue[2], blue[3], hover and 0.72 or 0.60)
-            self._stripe:SetColorTexture(c[1], c[2], c[3], 1.00)
-            SetFSColor(self._label, LAYER_TEXT_HIGHLIGHT)
-        elseif not visible then
-            self._bg:SetColorTexture(idleBg[1], idleBg[2], idleBg[3], hover and 0.42 or 0.28)
-            self._stripe:SetColorTexture(c[1], c[2], c[3], hover and 0.42 or 0.26)
-            SetFSColor(self._label, LAYER_TEXT_OFF)
-        elseif hover then
-            self._bg:SetColorTexture(surface[1], surface[2], surface[3], 0.64)
-            self._stripe:SetColorTexture(c[1], c[2], c[3], 0.92)
-            SetFSColor(self._label, LAYER_TEXT_HIGHLIGHT)
-        else
-            self._bg:SetColorTexture(raised[1] * 0.32, raised[2] * 0.32, raised[3] * 0.32, 0.34)
-            self._stripe:SetColorTexture(c[1], c[2], c[3], 0.66)
-            SetFSColor(self._label, LAYER_TEXT_ON)
-        end
-    end
-    return btn
 end
 local function ResolvePreviewStatusbarTexture(conf, key)
     conf = conf or {}
@@ -513,7 +469,6 @@ local function HealthColor(conf, pct, classToken)
         conf.healthCustomG or 0.8,
         conf.healthCustomB or 0.2
 end
-local WHITE8X8 = Specs.WHITE8X8 or "Interface\\Buttons\\WHITE8X8"
 local maskRoot = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\"
 local GF_PREVIEW_ROUNDED_MASK = Specs.ROUNDED_MASK or (maskRoot .. "rounded_bar_4x.tga")
 local GF_PREVIEW_ROUNDED_EDGE = Specs.ROUNDED_EDGE or (maskRoot .. "rounded_bar_edge_4x.tga")
@@ -703,7 +658,6 @@ local function ScaleValue(value, scale, minValue)
     if minValue ~= nil and v < minValue then v = minValue end
     return v
 end
-local UpdateHint
 if GFZoomPan.Configure then
     GFZoomPan.Configure({
         T = T,
@@ -1023,7 +977,6 @@ local NativeDeps = {
     OpenSection = OpenGFSection,
     LayerFont = LayerFont,
     LayerHeaderColor = LAYER_HEADER_COLOR,
-    MakePreviewSectionButton = MakePreviewSectionButton,
     CreateZoomButton = GFZoomPan.CreateButton,
     TR = Tr,
     Tr = Tr,
@@ -1092,21 +1045,39 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     local H, T, M = R.Helpers, R.T, R.M
     local width = (ctx.width or 720) - 28
     local layerW = 104
-    local stageW = max(320, width - layerW - 20)
-    local box = T.Panel(parent, nil, T.colors.panel2, T.colors.border)
-    box:SetSize(width, 300)
+    local box = CreateFrame("Frame", nil, parent, T.Template())
+    local chrome
+    if PreviewHelpers.ApplyPreviewChrome then
+        chrome = PreviewHelpers.ApplyPreviewChrome(box, "outer", T, function(frame, bg, border)
+            ApplyGroupPreviewFlatBackdrop(frame, R.WHITE8X8, bg, border)
+        end)
+    else
+        chrome = { title = T.colors.title or T.colors.text, layerHeader = T.colors.muted }
+        ApplyGroupPreviewFlatBackdrop(box, R.WHITE8X8, T.colors.panel or T.colors.panel2, T.colors.borderSoft or T.colors.border)
+    end
+    box:SetSize(width, 292)
+    box._msufStaticH = 292
+    box.ApplyPinnedPreviewPresentation = function(self, pinned, opts)
+        ApplyGroupPinnedPresentation(self, pinned, opts, layerW)
+    end
     if parent and parent.GetFrameLevel and box.SetFrameLevel then box:SetFrameLevel((parent:GetFrameLevel() or 0) + 2) end
-    local title = T.Font(box, "GameFontNormal", "", T.colors.accent)
-    title:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -10)
+    local title = T.Font(box, "GameFontNormal", "", chrome.title or T.colors.title or T.colors.text)
+    title:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -8)
     title:SetText(string.format((M.Tr and M.Tr("%s - %s")) or "%s - %s", (M.Tr and M.Tr("Group Frame Preview")) or "Group Frame Preview", H.PreviewScopeLabel(H.CurrentScope())))
     box._title = title
     local hint = T.Font(box, "GameFontDisableSmall", R.Tr("drag handles - double-click/settings opens options - right-click actions - Ctrl+wheel zoom"), T.colors.muted)
     hint:SetPoint("LEFT", title, "RIGHT", 12, 0)
     box._hint = hint
     local stage = CreateFrame("Frame", nil, box, T.Template())
-    stage:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -34)
-    stage:SetSize(stageW, 218)
-    ApplyGroupPreviewFlatBackdrop(stage, R.WHITE8X8, { 0, 0, 0, 1 }, T.colors.borderSoft)
+    stage:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -30)
+    stage:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -(layerW + 18), 12)
+    if PreviewHelpers.ApplyPreviewChrome then
+        PreviewHelpers.ApplyPreviewChrome(stage, "canvas", T, function(frame, bg, border)
+            ApplyGroupPreviewFlatBackdrop(frame, R.WHITE8X8, bg, border)
+        end)
+    else
+        ApplyGroupPreviewFlatBackdrop(stage, R.WHITE8X8, { 0.020, 0.039, 0.071, 0.92 }, T.colors.borderSoft)
+    end
     if stage.SetClipsChildren then stage:SetClipsChildren(true) end
     stage:EnableMouse(true)
     stage:EnableMouseWheel(true)
@@ -1157,15 +1128,20 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     bounds:SetBackdropBorderColor(0.90, 0.05, 0.02, 0.95)
     box._bounds = bounds
     local layers = CreateFrame("Frame", nil, box, T.Template())
-    ApplyGroupPreviewFlatBackdrop(layers, R.WHITE8X8, { 0.006, 0.010, 0.024, 0.96 }, T.colors.borderSoft)
+    local layerColors = T.colors or {}
+    if PreviewHelpers.ApplyPreviewChrome then
+        PreviewHelpers.ApplyPreviewChrome(layers, "sidebar", T, function(frame, bg, border)
+            ApplyGroupPreviewFlatBackdrop(frame, R.WHITE8X8, bg, border)
+        end)
+    else
+        ApplyGroupPreviewFlatBackdrop(layers, R.WHITE8X8, layerColors.coreShadow or layerColors.panel, layerColors.borderSoft)
+    end
     layers:SetPoint("TOPLEFT", stage, "TOPRIGHT", 8, 0)
-    layers:SetSize(layerW, 218)
-    layers._msufGFLayerButtonWidth = layerW - 10
+    layers:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 12)
     box._layers = layers
-    ApplyGroupPreviewBodyTint(box, stage, R.WHITE8X8, T)
-    local layersTitle = R.LayerFont(layers, "LAYERS", (T.colors and T.colors.muted) or R.LayerHeaderColor)
+    local layersTitle = R.LayerFont(layers, "LAYERS", chrome.layerHeader or (T.colors and T.colors.muted) or R.LayerHeaderColor)
     layersTitle:SetPoint("TOP", layers, "TOP", 0, -5)
-    M.gfPreviewLayerVisible = M.gfPreviewLayerVisible or {
+    local layerDefaults = {
         guides = true,
         bounds = true,
         buff = true,
@@ -1178,6 +1154,11 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         auraText = true,
         text = true,
     }
+    if type(M.gfPreviewLayerVisible) ~= "table" then M.gfPreviewLayerVisible = {} end
+    for key, value in pairs(layerDefaults) do
+        if M.gfPreviewLayerVisible[key] == nil then M.gfPreviewLayerVisible[key] = value end
+    end
+    local layerVisibility = M.gfPreviewLayerVisible
     local layerDefs = {
         { "Guides", { 0.42, 0.72, 1.00 }, "layout", "guides" },
         { "Bounds", { 1.00, 0.22, 0.12 }, "layout", "bounds" },
@@ -1192,66 +1173,85 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         { "Text", { 0.70, 0.90, 1.00 }, "text", "text" },
     }
     box._layerButtons = {}
+    box.layerVisibility = layerVisibility
+    local activeLayerText = layerColors.pillTextActive or layerColors.text or { 0.92, 0.96, 1.00, 1.00 }
+    local mutedLayerText = layerColors.muted or { 0.62, 0.70, 0.82, 0.90 }
+    local disabledLayerText = layerColors.dim or { 0.36, 0.46, 0.60, 0.82 }
+    local groupLayerButtonOpts = {
+        Tr = R.Tr,
+        height = 18,
+        rowHeight = 18,
+        topOffset = 23,
+        showOffText = false,
+        quiet = true,
+        quietBase = chrome.rowBase,
+        quietHover = chrome.rowHover,
+        textOn = { activeLayerText[1], activeLayerText[2], activeLayerText[3], 1.00 },
+        textOff = { mutedLayerText[1], mutedLayerText[2], mutedLayerText[3], 0.72 },
+        textDisabled = { disabledLayerText[1], disabledLayerText[2], disabledLayerText[3], 0.64 },
+        IsAvailable = function(owner, key)
+            return not (owner and owner._layerAvailable and owner._layerAvailable[key] == false)
+        end,
+        IsOn = function(owner, key)
+            if owner and owner._layerAvailable and owner._layerAvailable[key] == false then return false end
+            if M.gfPreviewSoloLayer ~= nil then return M.gfPreviewSoloLayer == key end
+            return layerVisibility[key] ~= false
+        end,
+        OnClick = function(self, owner)
+            if owner and owner._layerAvailable and owner._layerAvailable[self.key] == false then
+                if owner._hint then owner._hint:SetText(R.Tr("This layer is off in settings and cannot be shown in preview.")) end
+                return
+            end
+            if IsShiftKeyDown and IsShiftKeyDown() then
+                M.gfPreviewSoloLayer = (M.gfPreviewSoloLayer == self.key) and nil or self.key
+            else
+                M.gfPreviewSoloLayer = nil
+                layerVisibility[self.key] = layerVisibility[self.key] == false
+            end
+            for j = 1, #(owner._layerButtons or {}) do owner._layerButtons[j]:Refresh() end
+            if owner.RequestRefresh then owner:RequestRefresh("GROUP_PREVIEW_LAYER")
+            elseif owner.Refresh then owner:Refresh("GROUP_PREVIEW_LAYER") end
+        end,
+        OnEnter = function(self, owner, available, on, tr)
+            if not owner._hint then return end
+            local label = self.fs and self.fs:GetText() or tr("Layer")
+            if not available then
+                owner._hint:SetText(string.format(tr("%s is off in settings and cannot be shown in preview."), label))
+                return
+            end
+            local solo = M.gfPreviewSoloLayer == self.key
+            local action = solo and "Shift-click clears solo layer" or (on and "click to hide - Shift-click to solo" or "click to show")
+            owner._hint:SetText(label .. " - " .. tr(action))
+        end,
+        OnLeave = function(_, owner) R.UpdateHint(owner, owner._selectedHandle) end,
+    }
     for i = 1, #layerDefs do
         local def = layerDefs[i]
-        local btn = R.MakePreviewSectionButton(layers, def[1], def[2], def[3], onOpen)
-        btn._layerKey = def[4]
-        btn:SetPoint("TOP", layers, "TOP", 0, -23 - ((i - 1) * 17))
-        btn:SetScript("OnEnter", function(self)
-            if self.SetPreviewHover then self:SetPreviewHover(true) end
-            if box._hint then
-                local label = self._label and self._label:GetText() or ((M.Tr and M.Tr("Layer")) or "Layer")
-                if self._layerAvailable == false then
-                    box._hint:SetText(string.format((M.Tr and M.Tr("%s is off in settings and cannot be shown in preview.")) or "%s is off in settings and cannot be shown in preview.", label))
-                else
-                    local key = self._layerKey
-                    local visible = not (key and M.gfPreviewLayerVisible and M.gfPreviewLayerVisible[key] == false)
-                    local solo = key and M.gfPreviewSoloLayer == key
-                    local action = solo and "Shift-click clears solo layer" or (visible and "click to hide - Shift-click to solo" or "click to show")
-                    box._hint:SetText(label .. " - " .. ((M.Tr and M.Tr(action)) or action))
-                end
-            end
-        end)
-        btn:SetScript("OnLeave", function(self)
-            if self.SetPreviewHover then self:SetPreviewHover(false) end
-            R.UpdateHint(box, box._selectedHandle)
-        end)
+        local btn = PreviewHelpers.CreateLayerButton(layers, box, {
+            key = def[4], label = def[1], color = def[2],
+        }, i, layerW, groupLayerButtonOpts)
+        btn._sectionKey, btn._layerKey = def[3], def[4]
+        btn._label, btn._stripe, btn._bg, btn._off = btn.fs, btn.bar, btn.bg, btn.off
         M.AddTooltip(btn, "Layer disabled", "Turn this feature on in settings to make the preview layer available.", {
             hook = true,
             enabled = function(self) return self._layerAvailable == false end,
         })
-        btn:SetScript("OnClick", function(self)
-            local key = self._layerKey
-            if self._layerAvailable == false then
-                if box._hint then box._hint:SetText((self._label and self._label:GetText() or "Layer") .. " is off in settings and cannot be shown in preview.") end
-                return
-            end
-            if key then
-                if IsShiftKeyDown and IsShiftKeyDown() then
-                    M.gfPreviewSoloLayer = (M.gfPreviewSoloLayer == key) and nil or key
-                else
-                    M.gfPreviewSoloLayer = nil
-                    M.gfPreviewLayerVisible[key] = M.gfPreviewLayerVisible[key] == false
-                end
-            end
-            if box.RequestRefresh then box:RequestRefresh("GROUP_PREVIEW_LAYER") elseif box.Refresh then box:Refresh() end
-        end)
         btn._msuf2CommandAction = {
             kind = "toggle",
             historyMode = "none",
             get = function()
                 if btn._layerAvailable == false then return false end
                 if M.gfPreviewSoloLayer ~= nil then return M.gfPreviewSoloLayer == btn._layerKey end
-                return M.gfPreviewLayerVisible[btn._layerKey] ~= false
+                return layerVisibility[btn._layerKey] ~= false
             end,
             set = function(enabled)
                 if btn._layerAvailable == false then return false end
                 enabled = enabled == true
                 M.gfPreviewSoloLayer = nil
-                M.gfPreviewLayerVisible[btn._layerKey] = enabled
+                layerVisibility[btn._layerKey] = enabled
                 if box.RequestRefresh then box:RequestRefresh("GROUP_PREVIEW_ASSISTANT_LAYER")
                 elseif box.Refresh then box:Refresh() end
-                return (M.gfPreviewLayerVisible[btn._layerKey] ~= false) == enabled
+                return (layerVisibility[btn._layerKey] ~= false) == enabled
             end,
         }
         RegisterGroupPreviewControl(btn, "layer." .. tostring(def[4]), def[1] .. " preview layer", "button", "ephemeral")
@@ -1346,8 +1346,6 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             box._dragFrame:Hide()
         end
     end
-    local footer = T.Font(box, "GameFontDisableSmall", R.Tr("Click a handle to select - double-click/settings opens options - right-click actions - Ctrl+wheel zoom"), T.colors.muted)
-    footer:SetPoint("TOPLEFT", stage, "BOTTOMLEFT", 0, -8)
     if M.GroupPreviewRender and M.GroupPreviewRender.Install then
         local renderDeps = ShallowCopy(R) or {}
         renderDeps.width, renderDeps.mock = width, mock

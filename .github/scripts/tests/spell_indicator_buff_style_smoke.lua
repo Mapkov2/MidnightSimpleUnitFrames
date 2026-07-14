@@ -149,8 +149,20 @@ Check(groupConfig:find('out[prefix .. "CooldownDecimalSeconds"]', 1, true),
   "group compiler dropped the Buff decimal threshold")
 Check(previewNative:find('showDurationBar = auras[prefix .. "ShowDurationBar"]', 1, true),
   "group preview adapter dropped Buff duration-bar style")
-Check(previewRender:find("ConfigureSpellPreviewHandle(handle, item, placed, buffCfg)", 1, true),
-  "group preview no longer paints Spell Indicators with Buff style")
+Check(previewRender:find("ConfigureSpellPreviewHandle(handle, item, placed, item)", 1, true),
+  "group preview no longer paints Spell Indicators from their compiled appearance")
+Check(previewRender:find("scene.RuntimeAuraTextAnchor = RuntimeAuraTextAnchor", 1, true),
+  "group preview did not expose Aura text layout to Spell Indicator rendering")
+Check(previewRender:find("scene.LayoutAuraPreviewSwipe = LayoutAuraPreviewSwipe", 1, true),
+  "group preview did not expose Aura swipe layout to Spell Indicator rendering")
+Check(previewRender:find("scene.LayoutAuraDurationBar = LayoutAuraDurationBar", 1, true),
+  "group preview did not expose Aura duration-bar layout to Spell Indicator rendering")
+Check(previewRender:find("local RuntimeAuraTextAnchor = scene.RuntimeAuraTextAnchor", 1, true),
+  "group Spell Indicator rendering did not bind Aura text layout")
+Check(previewRender:find("local LayoutAuraPreviewSwipe = scene.LayoutAuraPreviewSwipe", 1, true),
+  "group Spell Indicator rendering did not bind Aura swipe layout")
+Check(previewRender:find("local LayoutAuraDurationBar = scene.LayoutAuraDurationBar", 1, true),
+  "group Spell Indicator rendering did not bind Aura duration-bar layout")
 Check(menu:find("Open Buff Aura Style", 1, true),
   "Spell Indicator menu lost its direct Buff Aura Style navigation")
 Check(not menu:find('BindPlacedToggle("Show Cooldown Text"', 1, true),

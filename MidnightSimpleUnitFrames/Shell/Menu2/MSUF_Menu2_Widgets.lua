@@ -2341,7 +2341,8 @@ function W.AttachPinnedPreview(body, box, opts)
     EnsureRestoreSlot()
     local pinBtn = box._msuf2PinButton
     if not pinBtn then
-        pinBtn = T.Button(box, Tr("Pinned"), opts.buttonWidth or 86, 22)
+        pinBtn = T.Button(box, Tr("Pinned"), opts.buttonWidth or 86, opts.buttonHeight or 22)
+        if opts.centerButton and T.CenterButtonLabel then T.CenterButtonLabel(pinBtn) end
         pinBtn._msuf2SearchText = "Pin Preview"
         pinBtn._msuf2ControlKind = "button"
         RegisterSearchObject(pinBtn, "Pin Preview", "button")
@@ -2349,7 +2350,8 @@ function W.AttachPinnedPreview(body, box, opts)
     else
         pinBtn:SetParent(box)
         pinBtn:ClearAllPoints()
-        pinBtn:SetSize(opts.buttonWidth or 86, 22)
+        pinBtn:SetSize(opts.buttonWidth or 86, opts.buttonHeight or 22)
+        if opts.centerButton and T.CenterButtonLabel then T.CenterButtonLabel(pinBtn) end
     end
     pinBtn:SetPoint("TOPRIGHT", box, "TOPRIGHT", -12, -8)
     local hint = opts.hint or box.hint or box._hint
@@ -2380,7 +2382,10 @@ function W.AttachPinnedPreview(body, box, opts)
         end
         if pinBtn._msuf2PinButtonActive ~= enabled then
             pinBtn._msuf2PinButtonActive = enabled
-            if pinBtn.SetActive then pinBtn:SetActive(enabled) end
+            -- The label already communicates the pin state.  Inline previews
+            -- can opt out of the strong active-blue treatment so the actual
+            -- preview remains the visual focus of the card.
+            if pinBtn.SetActive then pinBtn:SetActive(opts.quietButton == true and false or enabled) end
         end
     end
     local function EnsurePinnedScrim()
