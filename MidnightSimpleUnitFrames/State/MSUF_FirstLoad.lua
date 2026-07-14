@@ -191,11 +191,15 @@ function FirstLoad:ShouldShowDashboard()
     -- Successful imports persist an independent receipt so the welcome cannot
     -- reappear if an older/stale lifecycle table survived the profile switch.
     -- Fresh installs that already have a named active profile predate that
-    -- receipt; treat that explicit setup choice as completed as well.
+    -- receipt; treat that explicit setup choice as completed as well. An
+    -- explicit debug reset must bypass this recovery, otherwise
+    -- `/msuf firstload fresh` immediately completes itself again for the very
+    -- imported profile it is supposed to preview.
     local activeProfile = rawget(_G, "MSUF_ActiveProfile")
     local importReceipt = globalDB.global.firstLoad6ProfileImported == true
     local recoveredNamedProfile = state.status == "pending"
         and state.installKind == "fresh"
+        and state.installReason ~= "debug_forced_fresh"
         and type(activeProfile) == "string"
         and activeProfile ~= ""
         and activeProfile ~= "Default"

@@ -305,7 +305,7 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
     opts = opts or {}
     local data = GetBundledChangelog()
     local top = opts.top or -130
-    local headerH = 42
+    local headerH = 44
     local contentW = max(120, cardWidth or 420)
     local scrollW = max(80, contentW - 60)
     local function RawFont(parentFrame, template, text, color, bump)
@@ -353,19 +353,19 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
         return
     end
     local scroll = CreateFrame("ScrollFrame", nil, parent)
-    scroll:SetPoint("TOPLEFT", parent, "TOPLEFT", 16, top - headerH - 10)
-    scroll:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -34, opts.bottom or 70)
+    scroll:SetPoint("TOPLEFT", parent, "TOPLEFT", 16, top - headerH - 12)
+    scroll:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -36, opts.bottom or 72)
     local child = CreateFrame("Frame", nil, scroll)
     child:SetSize(scrollW, 1)
     scroll:SetScrollChild(child)
-    local y = -2
+    local y = 0
     local function AddText(text, fontObject, color, indent, gap, translate)
         local rawText = tostring(text or "")
         if translate and type(M.Tr) == "function" then rawText = M.Tr(rawText) end
         local fs = RawFont(child, fontObject or "GameFontHighlightSmall", rawText, color or T.colors.muted, 0)
         indent = indent or 0
         fs:SetPoint("TOPLEFT", child, "TOPLEFT", indent, y)
-        fs:SetWidth(max(40, scrollW - indent - 2))
+        fs:SetWidth(max(40, scrollW - indent - 4))
         fs:SetJustifyH("LEFT")
         if fs.SetWordWrap then fs:SetWordWrap(true) end
         if fs.SetNonSpaceWrap then fs:SetNonSpaceWrap(true) end
@@ -379,8 +379,8 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
         dotColor = dotColor or T.colors.accent
         textColor = textColor or T.colors.muted
         local dot = child:CreateTexture(nil, "ARTWORK")
-        dot:SetSize(3, 3)
-        dot:SetPoint("TOPLEFT", child, "TOPLEFT", 8, y - 6)
+        dot:SetSize(4, 4)
+        dot:SetPoint("TOPLEFT", child, "TOPLEFT", 8, y - 8)
         dot:SetColorTexture(dotColor[1], dotColor[2], dotColor[3], 0.88)
         return AddText(text, "GameFontHighlightSmall", textColor, 18, 5, true)
     end
@@ -450,6 +450,9 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
     RefreshOpenState()
 end
 local function BuildDashboardUX(ctx)
+    if type(M.BuildUpgradeHighlightDashboardScene) == "function" and M.BuildUpgradeHighlightDashboardScene(ctx) == true then
+        return
+    end
     if type(M.BuildFirstLoadDashboardScene) == "function" and M.BuildFirstLoadDashboardScene(ctx) == true then
         return
     end
@@ -475,7 +478,7 @@ local function BuildDashboardUX(ctx)
         card:SetSize(w, h)
         if title and title ~= "" then
             local label = T.Font(card, "GameFontNormal", M.Tr(title), T.colors.text)
-            label:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -14)
+            label:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -16)
             card._msuf2Title = label
         end
         return card
@@ -547,7 +550,7 @@ local function BuildDashboardUX(ctx)
     end
     local function Kicker(parent, text, x, y, color)
         local fs = T.Font(parent, "GameFontDisableSmall", string.upper(M.Tr(text or "")), color or T.colors.accent)
-        fs:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 16, y or -14)
+        fs:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 16, y or -16)
         return fs
     end
     local function Pill(parent, text, x, y, w, color)
@@ -656,7 +659,7 @@ local function BuildDashboardUX(ctx)
                 slider._msuf2StepButtons[i]:Hide()
             end
         end
-        if slider and slider._msuf2Title and slider._msuf2Title.SetFontObject then slider._msuf2Title:SetFontObject("GameFontHighlight") end
+        if slider and slider._msuf2Title then T.StyleFontString(slider._msuf2Title, T.colors.text, 3) end
     end
     local function EnablePercentWheel(slider, minPct, maxPct, stepPct)
         if not slider then return end
@@ -712,14 +715,14 @@ local function BuildDashboardUX(ctx)
     local launcherTitle = tourActive and "Continue your MSUF setup"
         or (tourCompleted and "Review or run the guided setup again" or "Set up every part of MSUF with guidance")
     local title = T.Font(launcher, "GameFontNormal", M.Tr(launcherTitle), T.colors.text)
-    title:SetPoint("TOPLEFT", launcher, "TOPLEFT", 16, -34)
+    title:SetPoint("TOPLEFT", launcher, "TOPLEFT", 16, -36)
     title:SetWidth(max(120, mainW - (launcherNarrow and 32 or 230)))
     title:SetJustifyH("LEFT")
     if tourActive then
         local total = tonumber(M.guidedTourStageCount) or 23
         local current = min(total, max(1, tonumber(tourState.currentStageIndex) or 1))
         local step = T.Font(launcher, "GameFontDisableSmall", M.Format("Step %d of %d", current, total), T.colors.muted)
-        step:SetPoint("TOPLEFT", launcher, "TOPLEFT", 16, launcherNarrow and -70 or -57)
+        step:SetPoint("TOPLEFT", launcher, "TOPLEFT", 16, launcherNarrow and -72 or -56)
     end
     local actionText = tourActive and "Resume guided setup" or (tourCompleted and "Run guided setup again" or "Start guided setup")
     local actionX = launcherNarrow and 16 or (mainW - 196)
@@ -746,7 +749,7 @@ local function BuildDashboardUX(ctx)
     else
         Kicker(hero, "MSUF", 22, -24)
         local title = T.Font(hero, "GameFontNormalLarge", M.Tr("Dashboard unavailable"), T.colors.text)
-        title:SetPoint("TOPLEFT", hero, "TOPLEFT", 22, -52)
+        title:SetPoint("TOPLEFT", hero, "TOPLEFT", 24, -52)
         title:SetWidth(mainW - 44)
         W.Text(hero, "The Assistant dashboard module is not available. Use the navigation pages and search to configure MSUF.", 22, -82, mainW - 44, T.colors.muted)
     end
@@ -755,7 +758,7 @@ local function BuildDashboardUX(ctx)
         local head = CreateFrame("Button", nil, parent)
         head:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
         head:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, 0)
-        head:SetHeight(42)
+        head:SetHeight(44)
         local hover = head:CreateTexture(nil, "BACKGROUND")
         hover:SetAllPoints()
         hover:SetColorTexture(0, 0, 0, 0)
@@ -1086,7 +1089,7 @@ local function BuildDashboardUX(ctx)
     end
     local supportDescH = (supportDesc.GetStringHeight and supportDesc:GetStringHeight()) or 0
     if supportDescH < 12 then supportDescH = 12 end
-    local aboutY = -42 - supportDescH - 5
+    local aboutY = -44 - supportDescH - 4
     local supportAbout = W.Text(support, aboutText, 16, aboutY, supportTextW, T.colors.muted)
     if supportAbout.SetWordWrap then supportAbout:SetWordWrap(true) end
     if supportAbout.SetNonSpaceWrap then supportAbout:SetNonSpaceWrap(true) end
@@ -1135,7 +1138,7 @@ local function BuildDashboardUX(ctx)
             help = data.tooltip,
         }), data.title, "button")
         if previous then
-            btn:SetPoint("LEFT", previous, "RIGHT", 10, 0)
+            btn:SetPoint("LEFT", previous, "RIGHT", 12, 0)
         else
             btn:SetPoint("LEFT", iconRow, "LEFT", 0, 0)
         end

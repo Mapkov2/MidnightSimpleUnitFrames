@@ -156,6 +156,13 @@ SlashCmdList["MSUF2OPTIONS"] = function(msg)
                 tostring(shows), tostring(detection.reason), tostring(detection.existingProfile),
                 tostring(detection.legacyProfile), tostring(detection.profileSchema or "none"),
                 tostring(detection.rawDB), tostring(detection.rawProfiles)))
+            local highlights = MSUF and MSUF.UpgradeHighlights
+            if type(highlights) == "table" and type(highlights.GetDebugSummary) == "function" then
+                local releaseKey, status, index, count = highlights:GetDebugSummary()
+                print(string.format("|cff00b7ebMSUF|r upgrade-highlights: release=%s status=%s index=%s count=%s shows=%s",
+                    tostring(releaseKey), tostring(status), tostring(index), tostring(count),
+                    tostring(type(highlights.ShouldShow) == "function" and highlights:ShouldShow() or false)))
+            end
             return
         end
         if arg ~= "" and arg ~= "fresh" and arg ~= "upgrade" then
@@ -168,9 +175,17 @@ SlashCmdList["MSUF2OPTIONS"] = function(msg)
         local tour = MSUF and MSUF.GuidedTour6
         if type(tour) == "table" and type(tour.Reset) == "function" then tour:Reset() end
         firstLoad:Reset(arg ~= "" and arg or nil)
+        local highlights = MSUF and MSUF.UpgradeHighlights
+        if type(highlights) == "table" then
+            if firstLoad:GetInstallKind() == "fresh" and type(highlights.BaselineKnownReleases) == "function" then
+                highlights:BaselineKnownReleases()
+            elseif type(highlights.ResetCurrent) == "function" then
+                highlights:ResetCurrent()
+            end
+        end
         if type(M.InvalidatePage) == "function" then M.InvalidatePage("home") end
         M.Open("home")
-        print("|cff00b7ebMSUF|r: First-start welcome re-armed (" .. tostring(firstLoad:GetInstallKind()) .. "). Guided-tour progress was reset.")
+        print("|cff00b7ebMSUF|r: First-start preview re-armed (" .. tostring(firstLoad:GetInstallKind()) .. "). Guided-tour progress was reset.")
         return
     end
     if cmd == "help" or cmd == "reset" or cmd == "fullreset" or cmd == "absorb" or cmd == "analytics" then
