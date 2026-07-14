@@ -4,6 +4,12 @@
 --
 -- Usage from the repository root:
 --   lua tools/assistant_v1_catalog_crosswalk.lua
+--   lua tools/assistant_v1_catalog_crosswalk.lua --graphify-inventory
+--
+-- The default is the standalone live-Graphify audit. It requires the ignored
+-- graphify-out/graph.json and proves that its complete setting projection is
+-- byte-for-byte equivalent at the contract level to the tracked compact
+-- inventory. Clean release/schema gates select --graphify-inventory explicitly.
 
 -- Important truth boundary:
 -- RuntimeControlCatalog only contains controls for pages that have actually
@@ -20,6 +26,26 @@ package.path = ".github/scripts/?.lua;tools/?.lua;tools/AssistantTraining/?.lua;
 require("wow_stubs")
 
 local Loader = require("assistant_runtime_manifest_loader")
+local GraphifyInventory = require("assistant_graphify_inventory")
+
+local function ResolveGraphifySource()
+    local requested = rawget(_G, "__MSUF_ASSISTANT_GRAPHIFY_SOURCE")
+    for i = 1, #(arg or {}) do
+        if arg[i] == "--graphify-live" then
+            assert(not requested or requested == "live", "conflicting Graphify source modes")
+            requested = "live"
+        elseif arg[i] == "--graphify-inventory" then
+            assert(not requested or requested == "inventory", "conflicting Graphify source modes")
+            requested = "inventory"
+        end
+    end
+    requested = requested or "live"
+    assert(requested == "live" or requested == "inventory",
+        "invalid Graphify source mode: " .. tostring(requested))
+    return requested
+end
+
+local GRAPHIFY_SOURCE = ResolveGraphifySource()
 
 local function Exists(path)
     local file = io.open(path, "rb")
@@ -49,12 +75,12 @@ local function ResolveRepositoryRoot()
     for _, root in ipairs({ ".", "..", "../.." }) do
         if Exists(Join(root, "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc"))
             and Exists(Join(root, "MidnightSimpleUnitFrames_Assistant/MidnightSimpleUnitFrames_Assistant.toc"))
-            and Exists(Join(root, "graphify-out/graph.json"))
+            and Exists(Join(root, "tools/assistant_graphify_inventory_data.lua"))
         then
             return root
         end
     end
-    error("repository root not found (core, Assistant companion, and graphify-out/graph.json are required)")
+    error("repository root not found (core, Assistant companion, and tracked Graphify inventory are required)")
 end
 
 local ROOT = ResolveRepositoryRoot()
@@ -272,111 +298,26 @@ for i = 1, #settings do
     end
 end
 
-local function JsonUnescape(text)
-    return tostring(text or "")
-        :gsub("\\/", "/")
-        :gsub("\\b", "\b")
-        :gsub("\\f", "\f")
-        :gsub("\\n", "\n")
-        :gsub("\\r", "\r")
-        :gsub("\\t", "\t")
-        :gsub('\\"', '"')
-        :gsub("\\\\", "\\")
+local inventoryPath = Join(ROOT, "tools/assistant_graphify_inventory_data.lua")
+local trackedGraphInventory = GraphifyInventory.Load(inventoryPath)
+local selectedGraphInventory = trackedGraphInventory
+if GRAPHIFY_SOURCE == "live" then
+    local graphPath = Join(ROOT, "graphify-out/graph.json")
+    assert(Exists(graphPath),
+        "live Graphify audit requires graphify-out/graph.json; clean gates must select --graphify-inventory")
+    local liveGraphInventory = GraphifyInventory.ParseGraph(graphPath)
+    local current, drift = GraphifyInventory.Compare(trackedGraphInventory, liveGraphInventory)
+    assert(current, "tracked Graphify setting inventory is stale: " .. tostring(drift)
+        .. "; review the live graph, then run tools/generate_assistant_graphify_inventory.lua")
+    selectedGraphInventory = liveGraphInventory
 end
 
--- Graphify's overlay emits one canonical node per extracted concrete setting.
--- Parse the graph arrays without a third-party JSON package.  The scanner is
--- string/escape aware and therefore does not confuse nested metadata objects.
-local function JsonField(object, key)
-    local encoded = object:match('"' .. key .. '":"([^"\\]*)"')
-    return encoded and JsonUnescape(encoded) or nil
-end
-
-local function EachJsonArrayObject(json, field, callback)
-    local _, cursor = json:find('"' .. field .. '":[', 1, true)
-    assert(cursor, "Graphify JSON array missing: " .. field)
-    cursor = cursor + 1
-    local depth, objectStart, quoted, escaped = 0, nil, false, false
-    for i = cursor, #json do
-        local char = json:sub(i, i)
-        if quoted then
-            if escaped then escaped = false
-            elseif char == "\\" then escaped = true
-            elseif char == '"' then quoted = false end
-        elseif char == '"' then
-            quoted = true
-        elseif char == "{" then
-            depth = depth + 1
-            if depth == 1 then objectStart = i end
-        elseif char == "}" then
-            depth = depth - 1
-            if depth == 0 and objectStart then
-                callback(json:sub(objectStart, i))
-                objectStart = nil
-            end
-        elseif char == "]" and depth == 0 then
-            return
-        end
-    end
-    error("unterminated Graphify JSON array: " .. field)
-end
-
-local graphText = Read(Join(ROOT, "graphify-out/graph.json"))
-local graphPaths, graphSeen, graphPathById, graphEvidenceByPath, graphPathCount = {}, {}, {}, {}, 0
-EachJsonArrayObject(graphText, "nodes", function(object)
-    if JsonField(object, "kind") ~= "setting" then return end
-    local path, id = JsonField(object, "setting_path"), JsonField(object, "id")
-    if path and path ~= "" and id and id ~= "" then
-        graphPathById[id] = path
-        graphEvidenceByPath[path] = graphEvidenceByPath[path] or {
-            sourceFile = JsonField(object, "source_file"),
-            sourceLocation = JsonField(object, "source_location"),
-        }
-        if not graphSeen[path] then
-            graphSeen[path] = true
-            graphPathCount = graphPathCount + 1
-            graphPaths[graphPathCount] = path
-        end
-    end
-end)
--- Do not depend on Lua's undefined `#table` result for a table that crossed a
--- hash/array resize while parsing the large one-line graph.  A bounded stable
--- insertion sort keeps the explicit node count authoritative.
-for i = 2, graphPathCount do
-    local value, j = graphPaths[i], i - 1
-    while j >= 1 and graphPaths[j] > value do graphPaths[j + 1] = graphPaths[j]; j = j - 1 end
-    graphPaths[j + 1] = value
-end
-
-assert(graphPathCount > 0, "Graphify setting inventory could not be parsed")
-
-local coreReadWrite, coreReference, assistantEvidence = {}, {}, {}
-EachJsonArrayObject(graphText, "links", function(object)
-    local relation = JsonField(object, "relation")
-    if relation ~= "reads_setting" and relation ~= "writes_setting"
-        and relation ~= "references_setting" and relation ~= "registers_setting"
-    then
-        return
-    end
-    local path = graphPathById[JsonField(object, "target")] or graphPathById[JsonField(object, "source")]
-    if not path then return end
-    local sourceFile = tostring(JsonField(object, "source_file") or ""):gsub("\\", "/")
-    local isAssistant = sourceFile:find("^MidnightSimpleUnitFrames_Assistant/") ~= nil
-    local isCore = sourceFile:find("^MidnightSimpleUnitFrames/") ~= nil and not isAssistant
-    if isCore and (relation == "reads_setting" or relation == "writes_setting") then
-        coreReadWrite[path] = true
-    elseif isCore and relation == "references_setting" then
-        coreReference[path] = true
-    elseif isAssistant then
-        assistantEvidence[path] = true
-    end
-end)
+local graphPaths, graphTierByPath, graphEvidenceByPath =
+    GraphifyInventory.ToCrosswalkMaps(selectedGraphInventory)
+local graphPathCount = #graphPaths
 
 local function GraphTier(path)
-    if coreReadWrite[path] then return "core_read_write" end
-    if coreReference[path] then return "core_reference_only" end
-    if assistantEvidence[path] then return "assistant_only" end
-    return "unclassified"
+    return graphTierByPath[path] or "unclassified"
 end
 
 local function FoldedIndex(index)
@@ -873,6 +814,7 @@ print("ASSISTANT V1 / GRAPHIFY / RUNTIME CATALOG CROSSWALK")
 print(string.format("menuModules=%d pagesRegistered=%d pageBuildFailures=%d", loadedMenuFiles, #pageKeys, #pageBuildFailures))
 print(string.format("assistantScripts=%d settings=%d explicit=%d generated=%d actions=%d autoAdded=%d",
     #loadedAssistant, #settings, explicitSettingCount, #settings - explicitSettingCount, #Registry:AllActions(), autoAdded))
+print(string.format("graphifySource=%s trackedInventory=%d", GRAPHIFY_SOURCE, trackedGraphInventory.recordCount))
 print(string.format("graphifySettings=%d exactExplicitReadWriteApplyContract=%d (%.2f%%) exactGeneratedFallback=%d sourceVerifiedHeuristic=%d casefoldExplicit=%d casefoldGenerated=%d unresolvedRawCandidates=%d ambiguous=%d",
     graphPathCount, #graphCrosswalk.explicit, Percent(#graphCrosswalk.explicit, graphPathCount),
     #graphCrosswalk.generated, #graphCrosswalk.heuristic, #graphCrosswalk.explicitCasefold,
@@ -985,6 +927,18 @@ for i = 1, #pageBuildFailures do
     print(string.format("PAGE_BUILD_FAILURE\t%s\t%s", failure.key, failure.error:gsub("[\r\n\t]+", " ")))
 end
 if verbose then
+    for i = 1, #graphDispositionReview.unclassified do
+        print("GRAPHIFY_UNCLASSIFIED_DISPOSITION\t" .. tostring(graphDispositionReview.unclassified[i]))
+    end
+    for i = 1, #graphDispositionReview.stale do
+        print("GRAPHIFY_STALE_DISPOSITION\t" .. tostring(graphDispositionReview.stale[i]))
+    end
+    for i = 1, #graphDispositionReview.missingEvidence do
+        print("GRAPHIFY_MISSING_EVIDENCE\t" .. tostring(graphDispositionReview.missingEvidence[i]))
+    end
+    for i = 1, #graphDispositionReview.invalidOwners do
+        print("GRAPHIFY_INVALID_OWNER\t" .. tostring(graphDispositionReview.invalidOwners[i]))
+    end
     for i = 1, #catalogRecords do
         local row = catalogRecords[i]
         if row.classification == "unknown" or row.collision == true or row.identityStable ~= true then

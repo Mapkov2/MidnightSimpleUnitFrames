@@ -236,7 +236,8 @@ $luaGates = @(
     [pscustomobject]@{ Category = "graph"; Path = "tools/assistant_control_catalog_contract_smoke.lua"; Args = @() },
     [pscustomobject]@{ Category = "graph"; Path = "tools/assistant_control_catalog_global_scope_audit.lua"; Args = @() },
     [pscustomobject]@{ Category = "graph"; Path = "tools/assistant_control_catalog_unit_group_aura_audit.lua"; Args = @() },
-    [pscustomobject]@{ Category = "graph"; Path = "tools/assistant_v1_catalog_crosswalk.lua"; Args = @() },
+    [pscustomobject]@{ Category = "graph"; Path = "tools/assistant_graphify_inventory_smoke.lua"; Args = @() },
+    [pscustomobject]@{ Category = "graph"; Path = "tools/assistant_v1_catalog_crosswalk.lua"; Args = @("--graphify-inventory") },
     [pscustomobject]@{ Category = "graph"; Path = "tools/assistant_setting_graph_smoke.lua"; Args = @() },
     [pscustomobject]@{ Category = "graph"; Path = "tools/assistant_setting_graph_audit.lua"; Args = @() },
 
@@ -351,8 +352,11 @@ $transitiveGateDependencies = @(
 
 $releaseAssets = @(
     "tools/generate_assistant_control_schema.ps1",
+    "tools/generate_assistant_graphify_inventory.lua",
     "tools/AssistantTraining/run.ps1",
     "tools/assistant_v1_training_oracle.lua",
+    "tools/assistant_graphify_inventory.lua",
+    "tools/assistant_graphify_inventory_data.lua",
     ".github/scripts/assistant_graphify_setting_dispositions.lua",
     ".github/scripts/assistant_training_coverage_dispositions.lua",
     "MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantControlSchema.lua",
