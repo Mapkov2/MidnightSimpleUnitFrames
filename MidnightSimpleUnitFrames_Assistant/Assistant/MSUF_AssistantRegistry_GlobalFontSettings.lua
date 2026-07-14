@@ -57,6 +57,7 @@ for _, scope in ipairs(GLOBAL_SCOPE_ORDER) do
         flag = "fontOverride",
         get = function(scopeKey) return GlobalScopeHasOverride(scopeKey, "fontOverride") end,
         set = function(scopeKey, value) GlobalScopeSetOverride(scopeKey, "fontOverride", value and true or false) end,
+        dbScopeKeys = { "fontOverride" },
         apply = ApplyFonts,
         reason = "MSUF_ASSISTANT_FONT_OVERRIDE",
         description = "Enables or disables custom font settings for this target.",

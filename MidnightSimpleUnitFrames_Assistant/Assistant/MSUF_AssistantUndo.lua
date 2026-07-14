@@ -778,12 +778,27 @@ local function ApplyChangeList(changes, useOld)
         if not readOk then return false, "Could not read " .. tostring(change.key or i) .. ": " .. tostring(current) end
         local target = change.newValue
         if useOld then target = change.oldValue end
+        local targetTransactionState = change.newTransactionState
+        if useOld then targetTransactionState = change.oldTransactionState end
+        local beforeTransactionState
+        if targetTransactionState ~= nil then
+            if type(setting.captureTransactionState) ~= "function" or type(setting.restoreTransactionState) ~= "function" then
+                return false, "Assistant setting transaction-state adapter is unavailable: " .. tostring(change.key or i)
+            end
+            local captureOk, captured = pcall(setting.captureTransactionState)
+            if not captureOk then
+                return false, "Could not capture " .. tostring(change.key or i) .. ": " .. tostring(captured)
+            end
+            beforeTransactionState = DeepCopy(captured)
+        end
         prepared[#prepared + 1] = {
             setting = setting,
             before = DeepCopy(current),
+            beforeTransactionState = beforeTransactionState,
             -- Do not use `useOld and oldValue or newValue`: false is a valid
             -- boolean setting value and must survive an undo selection.
             target = DeepCopy(target),
+            targetTransactionState = DeepCopy(targetTransactionState),
         }
     end
 
@@ -810,17 +825,28 @@ local function ApplyChangeList(changes, useOld)
     local function Rollback()
         for i = #written, 1, -1 do
             local item = written[i]
-            pcall(item.setting.set, DeepCopy(item.before))
+            if item.beforeTransactionState ~= nil and type(item.setting.restoreTransactionState) == "function" then
+                pcall(item.setting.restoreTransactionState, DeepCopy(item.beforeTransactionState), "MSUF_ASSISTANT_SETTING_UNDO_ROLLBACK")
+            else
+                pcall(item.setting.set, DeepCopy(item.before))
+            end
         end
         RunApplies()
     end
 
     for i = 1, #prepared do
         local item = prepared[i]
-        local ok, err = pcall(item.setting.set, DeepCopy(item.target))
-        if not ok then
+        local write = item.targetTransactionState ~= nil and item.setting.restoreTransactionState or item.setting.set
+        local writeValue = item.targetTransactionState ~= nil and item.targetTransactionState or item.target
+        local transactionRestore = item.targetTransactionState ~= nil
+        local ok, result = pcall(write, DeepCopy(writeValue), useOld and "MSUF_ASSISTANT_SETTING_UNDO" or "MSUF_ASSISTANT_SETTING_REDO")
+        if not ok or (transactionRestore and result ~= true) then
+            if transactionRestore then
+                pcall(item.setting.restoreTransactionState, DeepCopy(item.beforeTransactionState),
+                    "MSUF_ASSISTANT_SETTING_UNDO_WRITE_ROLLBACK")
+            end
             Rollback()
-            return false, "Could not restore " .. tostring(item.setting.key or i) .. ": " .. tostring(err)
+            return false, "Could not restore " .. tostring(item.setting.key or i) .. ": " .. tostring(result)
         end
         written[#written + 1] = item
         applySettings[#applySettings + 1] = item.setting

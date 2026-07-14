@@ -20,7 +20,7 @@ local K = A.Knowledge or {}
 A.Knowledge = K
 
 local MAX_RESULTS = 6
-local INDEX_VERSION = 9
+local INDEX_VERSION = 10
 local SEARCH_CACHE_LIMIT = 32
 local SEARCH_TEXT_LIMIT = 360
 local KNOWLEDGE_COMBINED_ALIAS_LIMIT = 2
@@ -171,6 +171,7 @@ local PAGE_LABEL_OVERRIDES = {
     classpower = "Class Resources",
     modules = "Modules",
     search = "Search",
+    guided_setup = "Guided Setup",
 
     opt_castbar = "Cast Bars",
     opt_bars = "Bars",
@@ -200,8 +201,8 @@ local PAGE_LABEL_OVERRIDES = {
 }
 local function PageLabel(pageKey)
     if not pageKey or tostring(pageKey) == "" then return "Assistant" end
-    if pageKey and A and type(A.DisplayPageLabel) == "function" then return A.DisplayPageLabel(pageKey, "MSUF page") end
     if pageKey and PAGE_LABEL_OVERRIDES[pageKey] then return PAGE_LABEL_OVERRIDES[pageKey] end
+    if pageKey and A and type(A.DisplayPageLabel) == "function" then return A.DisplayPageLabel(pageKey, "MSUF page") end
     return "MSUF page"
 end
 
@@ -503,7 +504,13 @@ local function BuildIndex()
                 controlType = setting.type,
                 description = setting.description or setting.summary,
                 setting = setting,
-                canApply = true,
+                -- A registry entry is searchable even when it is a generated
+                -- numeric/string fallback whose domain has not been reviewed.
+                -- Keep discovery and mutation capability as separate facts so
+                -- capability/help replies never imply that every raw DB scalar
+                -- can be written safely.
+                canApply = setting.assistantMutationSafe ~= false
+                    and type(setting.get) == "function" and type(setting.set) == "function",
                 canOpen = page ~= nil,
                 canExplain = true,
             })
@@ -535,31 +542,47 @@ local function BuildIndex()
     end
     if type(M.navItems) == "table" then
         local Data = M.SearchData or {}
+        local pages, groupByPage = {}, {}
         for i = 1, #M.navItems do
-            if i % 8 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
             local nav = M.navItems[i]
-            if nav.key then
-                local navLabel = PageLabel(nav.key)
-                local aliases = {}
-                if type(M.ALIASES) == "table" then
-                    for alias, key in pairs(M.ALIASES) do
-                        if key == nav.key then aliases[#aliases + 1] = alias end
-                    end
+            if nav.key then pages[nav.key], groupByPage[nav.key] = true, nav.group end
+        end
+        -- Workspace tabs are real, user-facing destinations even though only
+        -- their parent appears on the compact navigation rail. Index the same
+        -- canonical page model used by breadcrumbs and direct navigation.
+        for pageKey in pairs(type(M.navPrimaryForKey) == "table" and M.navPrimaryForKey or {}) do
+            pages[pageKey] = true
+            local primary = M.navPrimaryForKey[pageKey]
+            groupByPage[pageKey] = groupByPage[pageKey] or groupByPage[primary]
+        end
+        pages.search = true
+        pages.guided_setup = true
+        local orderedPages = {}
+        for pageKey in pairs(pages) do orderedPages[#orderedPages + 1] = pageKey end
+        table.sort(orderedPages)
+        for i = 1, #orderedPages do
+            if i % 8 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
+            local pageKey = orderedPages[i]
+            local navLabel = PageLabel(pageKey)
+            local aliases = {}
+            if type(M.ALIASES) == "table" then
+                for alias, key in pairs(M.ALIASES) do
+                    if key == pageKey then aliases[#aliases + 1] = alias end
                 end
-                AddIndexItem(index, {
-                    kind = "page",
-                    key = nav.key,
-                    label = navLabel,
-                    page = nav.key,
-                    pageLabel = navLabel,
-                    aliases = aliases,
-                    keywords = Data.KEYWORDS and Data.KEYWORDS[nav.key],
-                    category = nav.group,
-                    description = "Dashboard page.",
-                    canOpen = true,
-                    canExplain = true,
-                })
             end
+            AddIndexItem(index, {
+                kind = "page",
+                key = pageKey,
+                label = navLabel,
+                page = pageKey,
+                pageLabel = navLabel,
+                aliases = aliases,
+                keywords = Data.KEYWORDS and Data.KEYWORDS[pageKey],
+                category = groupByPage[pageKey],
+                description = "MSUF menu page.",
+                canOpen = true,
+                canExplain = true,
+            })
         end
     end
     local Data = M.SearchData or {}
@@ -1221,7 +1244,7 @@ local function PageHelp(page, titleOverride)
     lines[#lines + 1] = tostring(titleOverride or spec.title or PageLabel(page))
     for i = 1, #(spec.lines or {}) do lines[#lines + 1] = spec.lines[i] end
     if settings > 0 or actions > 0 then
-        lines[#lines + 1] = "On this page I can handle " .. tostring(settings) .. " options and " .. tostring(actions) .. " guided tasks or checks."
+        lines[#lines + 1] = "This page has " .. tostring(settings) .. " indexed options and " .. tostring(actions) .. " indexed tasks or checks. I only change entries with a reviewed direct-write contract."
     end
     local action = ActionLine(spec.actions)
     if action then lines[#lines + 1] = action end
@@ -1331,18 +1354,29 @@ local function CapabilityHelp(german)
     -- path (which can build the index in yielding slices) answers instead.
     if not counts then return nil end
     local settingCount = tostring(counts.setting or 0)
+    local writableSettingCount = tostring(counts.directSetting or 0)
+    local guidedSettingCount = tostring(counts.guidedSetting or 0)
     local actionCount = tostring((counts.action or 0) + (counts.diagnostic or 0))
+    local schemaCount
+    local schema = A.ControlSchema
+    if schema and type(schema.Stats) == "function" then
+        local ok, stats = pcall(schema.Stats)
+        if ok and type(stats) == "table" then schemaCount = tonumber(stats.records) end
+    end
     local lines = {
         "MSUF Assistant: what I can do",
         "I'm the local in-game assistant for MSUF. I use MSUF's menu data on your client, so I don't call an external ChatGPT service.",
         "I can find and explain MSUF options, open their pages and controls, import/export profiles, run checks, use undo/redo, and change safe MSUF options.",
-        "I can handle " .. settingCount .. " MSUF options plus " .. actionCount .. " guided tasks or checks across unit frames, group frames, cast bars, auras, class resources, gameplay, profiles, diagnostics, and Edit Mode.",
+        "My registry indexes " .. settingCount .. " MSUF settings: " .. writableSettingCount .. " have reviewed direct-write contracts, while " .. guidedSettingCount .. " are intentionally guidance/read-only fallbacks until their value domains are verified. It also indexes " .. actionCount .. " tasks or checks.",
         "I can explain prerequisites, visibility gates, inheritance, overrides, conflicts, and nearby controls. If a request could match several settings, I show choices instead of guessing.",
         "Examples: hide player name; set target cast bar height to 18; list all target settings; where do I change auras; export current profile; why is target cast bar hidden?",
         "I can answer WoW questions near UI setup. For current class, talent, or patch guides I point to current external guides because MSUF runs offline.",
         "Performance: the full Assistant loads only after you use it, owns no passive combat events or tickers, and pauses/cancels scheduled work when the MSUF menu closes.",
         "You can ask: Open Player | Open Cast Bars | Profile Help | What can I change here?",
     }
+    if schemaCount then
+        table.insert(lines, 5, "My generated cross-context Menu control schema contains " .. tostring(schemaCount) .. " stable control records for search, explanation, and exact navigation.")
+    end
     return { text = table.concat(lines, "\n"), status = "info", summary = "Assistant capabilities" }
 end
 K.CapabilityHelp = CapabilityHelp
@@ -2373,7 +2407,16 @@ function K.Summary()
         if i % 64 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
         local kind = index.items[i].kind or "unknown"
         counts[kind] = (counts[kind] or 0) + 1
+        if kind == "setting" then
+            if index.items[i].canApply == true then
+                counts.directSetting = (counts.directSetting or 0) + 1
+            else
+                counts.guidedSetting = (counts.guidedSetting or 0) + 1
+            end
+        end
     end
+    counts.directSetting = counts.directSetting or 0
+    counts.guidedSetting = counts.guidedSetting or 0
     K.summaryCache = counts
     K.summaryCacheIndex = index
     return counts

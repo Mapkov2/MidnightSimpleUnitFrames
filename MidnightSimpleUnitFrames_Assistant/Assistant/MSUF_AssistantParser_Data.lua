@@ -867,7 +867,7 @@ Data.ROOT_PARSER = {
         "border around group", "border around frames",
     },
         [488] = {
-        "color", "colors", "colour", "colours", "bar outline", "frame outline",
+        "color", "colors", "colour", "colours", "channel", "channels", "bar outline", "frame outline",
         "highlight border", "fallback aggro", "fallback threat", "fallback dispel",
         "aura", "auras", "buff", "buffs", "debuff", "debuffs",
     },

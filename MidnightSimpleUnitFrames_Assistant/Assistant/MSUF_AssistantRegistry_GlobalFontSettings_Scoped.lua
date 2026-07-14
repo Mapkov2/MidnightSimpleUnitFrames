@@ -73,10 +73,17 @@ function A.GlobalRegistry.RegisterScopedFontDetailSettings(ctx)
             Unpack(outlineAliases),
         }), {
             flag = "fontOverride",
+            dbScopes = scope == "gf_party" and {
+                { scope = "gf_party", dbKey = "fontOutline" },
+            } or (scope == "gf_raid" and {
+                { scope = "gf_raid", dbKey = "fontOutline" },
+                { scope = "gf_mythicraid", dbKey = "fontOutline" },
+            } or nil),
             values = FONT_OUTLINE_VALUES,
             valueAliases = FONT_OUTLINE_ALIASES,
             get = ScopedFontOutline,
             set = SetScopedFontOutline,
+            dbScopeKeys = GlobalScopeIsGroup(scope) and { "fontOutline" } or { "boldText", "noOutline" },
             apply = ApplyFonts,
             reason = "MSUF_ASSISTANT_FONT_OUTLINE",
         })
@@ -173,6 +180,7 @@ function A.GlobalRegistry.RegisterScopedFontDetailSettings(ctx)
             valueAliases = CLASS_DEFAULT_ALIASES,
             get = ScopedFontNameColor,
             set = SetScopedFontNameColor,
+            dbScopeKeys = GlobalScopeIsGroup(scope) and { "nameColorMode" } or { "nameClassColor" },
             apply = ApplyFonts,
             reason = "MSUF_ASSISTANT_NAME_COLOR_MODE",
         })

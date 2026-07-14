@@ -65,13 +65,14 @@ end
 function R.IsExplicitNavigationCommand(text)
     local norm = R.Normalize and R.Normalize(text) or R.Trim(text):lower()
     if norm:match("^open%s+") or norm:match("^go%s+to%s+") or norm:match("^oeffne%s+") then return true end
-    if norm:match("^take%s+me%s+to%s+") or norm:match("^jump%s+to%s+") or norm:match("^navigate%s+to%s+") then return true end
-    if norm:match("^show%s+me%s+") and R.ContainsAny and R.ContainsAny(norm, {
-        "setting", "option", "control", "slider", "dropdown", "checkbox", "toggle", "picker", "page", "menu",
-        "einstellung", "regler", "auswahl", "schalter", "seite", "menue",
-    }) then
+    if norm:match("^take%s+me%s+to%s+") or norm:match("^direct%s+me%s+to%s+")
+        or norm:match("^bring%s+me%s+to%s+") or norm:match("^lead%s+me%s+to%s+")
+        or norm:match("^jump%s+to%s+") or norm:match("^navigate%s+to%s+")
+        or norm:match("^find%s+and%s+open%s+")
+    then
         return true
     end
+    if norm:match("^show%s+me%s+") then return true end
     if norm:match("^close%s+") and R.ContainsAny and R.ContainsAny(norm, { "panel", "dashboard", "menu", "picker", "import", "export" }) then return true end
     if norm == "support links"
         or norm == "show support links"
@@ -330,17 +331,70 @@ function R.TryHelpContextFollowup(text, coreHandler)    local ctx = type(A.lastA
     return nil
 end
 
-A.RouterSafePlanningReply = function(title, body, examples, actions)
+function R.BuildPlanningItems(actions, reasons)
+    local items = {}
+    for rawLabel in tostring(actions or ""):gmatch("[^|]+") do
+        local label = R.Trim(rawLabel)
+        if label ~= "" then
+            local normalized = R.Normalize(label)
+            local openTarget = normalized:match("^open%s+(.+)$")
+            local command
+            local navigation = false
+            if openTarget and R.Trim(openTarget) ~= "" then
+                command = "open " .. R.Trim(openTarget)
+                navigation = true
+            elseif normalized == "guided setup" then
+                command = "guided setup"
+                navigation = true
+            end
+            items[#items + 1] = {
+                label = label,
+                command = command,
+                navigation = navigation,
+                reason = type(reasons) == "table" and reasons[#items + 1] or nil,
+            }
+        end
+    end
+    return items
+end
+
+local function PlanningItemsText(items)
+    if type(items) ~= "table" or #items == 0 then return nil end
+    local lines = { "Recommended order:" }
+    for i = 1, #items do
+        lines[#lines + 1] = tostring(i) .. ". " .. tostring(items[i].label or "MSUF step")
+    end
+    return table.concat(lines, "\n")
+end
+
+A.RouterSafePlanningReply = function(title, body, examples, actions, planItems, summary)
     A.RouterClearPendingResultsForRoute()
+    title = tostring(title or "Safe planning guidance")
+    body = tostring(body or "")
+    examples = tostring(examples or "guided setup; run checks; open player.")
+    actions = tostring(actions or "Guided Setup | Run Checks | Open Player")
+
+    local previous = type(A.lastAssistantPlanningContext) == "table" and A.lastAssistantPlanningContext or nil
+    if type(planItems) ~= "table" and previous and previous.title == title then planItems = previous.items end
+    if type(planItems) ~= "table" then planItems = R.BuildPlanningItems(actions) end
     A.lastAssistantPlanningContext = {
-        title = tostring(title or "Safe planning guidance"),
-        examples = tostring(examples or "guided setup; run checks; open player."),
-        actions = tostring(actions or "Guided Setup | Run Checks | Open Player"),
+        title = title,
+        body = body,
+        examples = examples,
+        actions = actions,
+        items = planItems,
+        selectedIndex = previous and previous.title == title and previous.selectedIndex or nil,
     }
+
+    local parts = { title, body }
+    local planText = PlanningItemsText(planItems)
+    if planText then parts[#parts + 1] = planText end
+    parts[#parts + 1] = "Examples: " .. examples
+    parts[#parts + 1] = "You can ask: " .. actions
     return {
-        text = tostring(title or "Safe planning guidance") .. "\n" .. tostring(body or "") .. "\nExamples: " .. tostring(examples or "guided setup; run checks; open player.") .. "\nYou can ask: " .. tostring(actions or "Guided Setup | Run Checks | Open Player"),
+        text = table.concat(parts, "\n"),
         status = "info",
-        summary = "Assistant safe planning guidance",
+        summary = summary or "Assistant safe planning guidance",
     }
 end
 
@@ -353,7 +407,13 @@ A.RouterSafePlanningFollowupTerms = A.RouterSafePlanningFollowupTerms or {
     open = {
         "open it", "open that", "open this", "open the page",
         "open first page", "open the first page", "open first page from checklist",
+        "open first one", "open the first one", "open the first item",
         "take me there", "go there", "show it", "show that", "show this",
+    },
+    first = {
+        "which should i do first", "which one first", "which one should i do first",
+        "which should i start with", "what should i do first", "what should i start with",
+        "where should i start", "what comes first", "recommend the first step",
     },
     details = {
         "explain more", "tell me more", "more details", "details",
@@ -381,6 +441,13 @@ function R.IsExactSafePlanningFollowup(norm)
         for i = 1, #group do
             if norm == R.Normalize(group[i]) then return true end
         end
+    end
+    if norm:match("^open%s+the%s+%a+%s+one$")
+        or norm:match("^open%s+%a+%s+one$")
+        or norm:match("^open%s+the%s+%a+%s+item$")
+        or norm:match("^open%s+%a+%s+item$")
+    then
+        return true
     end
     return false
 end
@@ -420,6 +487,60 @@ A.RouterTrySafePlanningFollowup = function(text, coreHandler)
     local title = tostring(ctx.title or "Safe planning guidance")
     local examples = tostring(ctx.examples or "guided setup; run checks; open player.")
     local actions = tostring(ctx.actions or "Guided Setup | Run Checks | Open Player")
+    local items = type(ctx.items) == "table" and ctx.items or R.BuildPlanningItems(actions)
+
+    local ordinalWords = {
+        { "first", 1 }, { "1st", 1 }, { "second", 2 }, { "2nd", 2 },
+        { "third", 3 }, { "3rd", 3 }, { "fourth", 4 }, { "4th", 4 },
+        { "fifth", 5 }, { "5th", 5 },
+    }
+    local function OrdinalIndex()
+        if R.HasNormalizedPhrase(norm, "last") and #items > 0 then return #items end
+        for i = 1, #ordinalWords do
+            local token, index = ordinalWords[i][1], ordinalWords[i][2]
+            if R.HasNormalizedPhrase(norm, token) and items[index] then return index end
+        end
+        return nil
+    end
+    local function ItemReason(item)
+        local reason = R.Trim(item and item.reason or "")
+        if reason ~= "" then return reason end
+        return "It is the earliest relevant MSUF area in this plan, so inspecting it first gives the later steps useful context without changing your profile."
+    end
+    local function FirstStepResult(index)
+        index = index or 1
+        local item = items[index]
+        if not item then
+            return {
+                text = title .. "\nI do not have an ordered item at that position. Ask me to show the plan again.",
+                status = "info",
+                summary = "Assistant planning ordinal clarification",
+            }
+        end
+        ctx.selectedIndex = index
+        return {
+            text = title .. "\nStart with " .. tostring(index) .. ". " .. tostring(item.label or "MSUF step") .. ".\nWhy: " .. ItemReason(item) .. "\nThis is navigation advice only; I did not change a setting.",
+            status = "info",
+            summary = "Assistant planning first step",
+        }
+    end
+
+    if R.ContainsAny(norm, terms.first) then return FirstStepResult(1) end
+
+    if R.ContainsAny(norm, terms.open) or norm:match("^open%s+") then
+        local index = OrdinalIndex() or tonumber(ctx.selectedIndex) or 1
+        local item = items[index]
+        if item and item.navigation == true and item.command and type(coreHandler) == "function" then
+            ctx.selectedIndex = index
+            local result = coreHandler(item.command)
+            if result and not A.RouterIsUnknownResult(result) then return R.AsNavigationResult(result) end
+        end
+        return {
+            text = title .. "\nI can only open a concrete page from the recommendation; I did not apply any suggested setting.\nAvailable steps: " .. actions,
+            status = "info",
+            summary = "Assistant planning navigation",
+        }
+    end
 
     if R.ContainsAny(norm, terms.apply) then
         return {
@@ -437,19 +558,6 @@ A.RouterTrySafePlanningFollowup = function(text, coreHandler)
         }
     end
 
-    if R.ContainsAny(norm, terms.open) then
-        local command = R.FirstOpenActionCommand(actions)
-        if command and type(coreHandler) == "function" then
-            local result = coreHandler(command)
-            if result and not A.RouterIsUnknownResult(result) then return R.AsNavigationResult(result) end
-        end
-        return {
-            text = title .. "\nOpen one of these pages or actions: " .. actions,
-            status = "info",
-            summary = "Assistant planning navigation",
-        }
-    end
-
     if R.ContainsAny(norm, terms.safe) then
         return A.RouterSafePlanningReply(
             title,
@@ -460,6 +568,15 @@ A.RouterTrySafePlanningFollowup = function(text, coreHandler)
     end
 
     if R.ContainsAny(norm, terms.details) then
+        local index = tonumber(ctx.selectedIndex) or 1
+        local item = items[index]
+        if item and R.ContainsAny(norm, { "why", "recommendation" }) then
+            return {
+                text = title .. "\nI recommend " .. tostring(index) .. ". " .. tostring(item.label or "this MSUF step") .. " first because " .. ItemReason(item) .. "\nThis explains the order only; I did not change a setting.",
+                status = "info",
+                summary = "Assistant planning recommendation reason",
+            }
+        end
         return {
             text = title .. "\nUse the examples when you want a concrete change, or open the relevant page first if you want to inspect settings safely.\nExamples: " .. examples .. "\nYou can ask: " .. actions,
             status = "info",

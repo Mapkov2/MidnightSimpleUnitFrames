@@ -134,6 +134,82 @@ function A.CastbarsRegistry.BuildCoreContext(ctx)
         })
     end
 
+    local function RegisterBossCastbarDetachSetting()
+        local ownedKeys = { "bossCastbarDetached", "bossCastbarOffsetX", "bossCastbarOffsetY" }
+        local function CaptureOwnerState()
+            local general = GeneralDB()
+            local state = { fields = {} }
+            for i = 1, #ownedKeys do
+                local key = ownedKeys[i]
+                local value = rawget(general, key)
+                state.fields[key] = { present = value ~= nil, value = value }
+            end
+            return state
+        end
+        local function RestoreOwnerState(state, reason)
+            if type(state) ~= "table" or type(state.fields) ~= "table" then
+                error("invalid boss castbar attachment transaction state")
+            end
+            local general = GeneralDB()
+            for i = 1, #ownedKeys do
+                local key = ownedKeys[i]
+                local saved = state.fields[key]
+                if type(saved) == "table" and saved.present == true then
+                    general[key] = saved.value
+                else
+                    general[key] = nil
+                end
+            end
+            ApplyCastbar(reason or "MSUF_ASSISTANT_BOSS_CASTBAR_ATTACHMENT_RESTORE", "boss")
+            return true
+        end
+        Registry:RegisterSetting({
+            key = "general.bossCastbarDetached",
+            label = "Boss Cast Bar Detached",
+            category = "Boss / Cast Bar / Position",
+            unit = "boss",
+            frameType = "castbar",
+            attribute = "detached",
+            type = "boolean",
+            aliases = {
+                "boss castbar detached", "boss cast bar detached", "detach boss castbar", "detach boss cast bar",
+                "boss castbar attached", "boss cast bar attached", "attach boss castbar", "attach boss cast bar",
+                "boss castbar anchor", "boss cast bar anchor", "boss castbar attachment", "boss cast bar attachment",
+            },
+            exactAliases = {
+                "detach boss castbar", "detach boss cast bar", "detach the boss castbar", "detach the boss cast bar",
+                "attach boss castbar", "attach boss cast bar", "attach the boss castbar", "attach the boss cast bar",
+                "anchor boss castbar to boss frame", "anchor boss cast bar to boss frame",
+                "dock boss castbar to boss frame", "dock boss cast bar to boss frame",
+            },
+            valueAliases = {
+                detach = true, detached = true, undock = true, separate = true,
+                attach = false, attached = false, anchor = false, anchored = false, dock = false, docked = false,
+            },
+            dbScopes = {
+                { scope = "general", dbKey = "bossCastbarDetached" },
+                { scope = "general", dbKey = "bossCastbarOffsetX" },
+                { scope = "general", dbKey = "bossCastbarOffsetY" },
+            },
+            dbScopesReplace = true,
+            get = function() return GeneralDB().bossCastbarDetached == true end,
+            set = function(value)
+                local setAnchored = _G.MSUF_EM_SetCastbarAnchoredToUnit
+                if type(setAnchored) ~= "function" then
+                    error("MSUF castbar attachment controller is unavailable")
+                end
+                setAnchored("boss", value ~= true)
+            end,
+            -- The Edit Mode owner applies and refreshes synchronously. Keep the
+            -- transaction Apply phase idempotent instead of applying twice.
+            apply = function() return true end,
+            captureTransactionState = CaptureOwnerState,
+            restoreTransactionState = RestoreOwnerState,
+            combatSafe = false,
+            description = "Detaches the Boss cast bar from the Boss frame or attaches it again while preserving Edit Mode placement semantics.",
+        })
+    end
+
     local BuildPlayerCastbarProviderRegistrar = A.CastbarsRegistry and A.CastbarsRegistry.BuildPlayerCastbarProviderRegistrar
     local RegisterPlayerCastbarProvider = type(BuildPlayerCastbarProviderRegistrar) == "function" and BuildPlayerCastbarProviderRegistrar({
         Registry = Registry,
@@ -161,6 +237,7 @@ function A.CastbarsRegistry.BuildCoreContext(ctx)
         RegisterGeneralNumber = RegisterGeneralNumber,
         RegisterGeneralEnumSetting = RegisterGeneralEnumSetting,
         RegisterCastbarUnitGeneralBoolean = RegisterCastbarUnitGeneralBoolean,
+        RegisterBossCastbarDetachSetting = RegisterBossCastbarDetachSetting,
         RegisterPlayerCastbarProvider = RegisterPlayerCastbarProvider,
     }
 end

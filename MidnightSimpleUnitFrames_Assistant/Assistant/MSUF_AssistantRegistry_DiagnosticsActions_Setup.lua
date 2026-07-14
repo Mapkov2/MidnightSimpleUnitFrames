@@ -83,7 +83,25 @@ function A.DiagnosticsRegistry.RegisterGuidedSetupActions(ctx)
         label = "Open Guided Setup",
         type = "setup",
         combatSafe = false,
-        run = function()
+        run = function(args)
+            local step = type(args) == "table" and tostring(args.step or ""):lower() or ""
+            if step ~= "" then
+                if type(M.RunGuidedTourStep) ~= "function" then
+                    return false, "Open the guided setup first so I can use that step."
+                end
+                local ok, reason, detail = M.RunGuidedTourStep(step)
+                if not ok then
+                    return false, reason == "guided_setup_inactive"
+                        and "Open the guided setup first so I can use that step."
+                        or "I do not recognize that guided-setup step."
+                end
+                if reason == "confirmation_needed" then
+                    return true, tostring(detail or "Confirm Skip in the guided bar to continue."), { noChange = true }
+                end
+                local labels = { back = "Back", keep = "Keep current", skip = "Skip", next = "Next", pause = "Pause" }
+                return true, "Used " .. tostring(labels[step] or step) .. " in the guided setup.",
+                    step == "pause" and { noChange = true } or nil
+            end
             return OpenNativeGuidedTour("assistant_followup")
         end,
     })

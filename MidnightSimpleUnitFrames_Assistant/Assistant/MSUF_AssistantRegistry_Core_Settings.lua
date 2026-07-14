@@ -80,6 +80,10 @@ local function RegisterGeneralBoolean(dbKey, attr, label, defaultValue, aliases,
         requiresReload = opts.requiresReload == true,
         matchLabel = opts.matchLabel,
         description = opts.description,
+        dbScopes = opts.dbScopes,
+        dbScopesReplace = opts.dbScopesReplace == true,
+        captureTransactionState = opts.captureTransactionState,
+        restoreTransactionState = opts.restoreTransactionState,
     })
 end
 

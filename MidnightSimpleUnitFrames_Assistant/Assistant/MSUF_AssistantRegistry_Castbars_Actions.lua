@@ -94,6 +94,44 @@ Registry:RegisterAction({
 })
 
 Registry:RegisterAction({
+    key = "set_castbar_test_mode",
+    label = "Set Cast Bar Test Mode",
+    type = "preview",
+    category = "Appearance / Cast Bars",
+    aliases = {
+        "start castbar test mode", "stop castbar test mode", "castbar test mode", "cast bar test mode",
+        "start player castbar test", "start target castbar test", "start focus castbar test", "start boss castbar test",
+        "stop player castbar test", "stop target castbar test", "stop focus castbar test", "stop boss castbar test",
+        "zauberleisten testmodus", "spieler zauberleisten test", "ziel zauberleisten test",
+        "fokus zauberleisten test", "boss zauberleisten test",
+    },
+    combatSafe = false,
+    run = function(args)
+        args = type(args) == "table" and args or {}
+        local unit = NormalizeCastbarPreviewUnit(args.unit)
+        local enabled = args.value ~= false
+        if enabled then
+            local editMode = A.Workflow and A.Workflow.EditMode
+            if not (editMode and type(editMode.Set) == "function") then
+                return false, "MSUF Edit Mode is not available yet. Reopen the MSUF menu and try again."
+            end
+            local entered, reason = editMode.Set(true, unit)
+            if entered == false then return false, "I could not enter MSUF Edit Mode: " .. tostring(reason or "unavailable") .. "." end
+        end
+        local setter = _G[unit == "player" and "MSUF_SetPlayerCastbarTestMode"
+            or unit == "target" and "MSUF_SetTargetCastbarTestMode"
+            or unit == "focus" and "MSUF_SetFocusCastbarTestMode"
+            or "MSUF_SetBossCastbarTestMode"]
+        if type(setter) ~= "function" then
+            return false, "The " .. UnitLabel(unit) .. " castbar test is not available yet."
+        end
+        setter(enabled, true)
+        return true, (enabled and "Started" or "Stopped") .. " the " .. UnitLabel(unit) .. " castbar test"
+            .. (enabled and " in MSUF Edit Mode." or ".")
+    end,
+})
+
+Registry:RegisterAction({
     key = "reset_focus_kick_position",
     label = "Reset Focus Kick Position",
     type = "reset",

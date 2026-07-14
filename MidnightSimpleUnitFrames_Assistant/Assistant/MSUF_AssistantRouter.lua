@@ -595,6 +595,16 @@ end
 function R.ExplicitMutationRefusalAction(text)
     local norm = R.Normalize(text)
     norm = norm:gsub("^please%s+", "")
+    norm = norm:gsub("^bitte%s+", "")
+    norm = norm:gsub("^nein%s+", "")
+    if norm == "do not" or norm == "dont" or norm == "don t"
+        or norm == "not" or norm == "never" or norm == "nicht"
+    then
+        -- A bare refusal has no useful action label, but it is still an
+        -- explicit cancellation. `false` distinguishes it from nil while
+        -- keeping the response generic and fully English.
+        return false
+    end
     local action = norm:match("^can%s+you%s+please%s+not%s+(.+)$")
         or norm:match("^could%s+you%s+please%s+not%s+(.+)$")
         or norm:match("^would%s+you%s+please%s+not%s+(.+)$")
@@ -610,8 +620,20 @@ function R.ExplicitMutationRefusalAction(text)
         or norm:match("^do%s+not%s+(.+)$")
         or norm:match("^don%s+t%s+(.+)$")
         or norm:match("^dont%s+(.+)$")
+        or norm:match("^no%s+(.+)$")
         or norm:match("^never%s+(.+)$")
         or norm:match("^not%s+(.+)$")
+        or norm:match("^nicht%s+(.+)$")
+    if not action then
+        -- German refusals commonly place the negation after the action
+        -- ("mach das nicht").  Fold that form into the same fail-closed
+        -- path as English prefix negation before any substring-based apply,
+        -- fix, undo, or redo matcher can see it.
+        action = (norm == "mach das nicht" and "mach das")
+            or (norm == "mach es nicht" and "mach es")
+            or norm:match("^mach%s+das%s+nicht%s+(.+)$")
+            or norm:match("^mach%s+es%s+nicht%s+(.+)$")
+    end
     if not action or action == "" then return nil end
     if R.IsSemanticAuraFilterNegation(norm) and action:match("^show%s+") then
         -- "Do not show buffs with no timer" describes the entries to filter
@@ -628,7 +650,31 @@ function R.ExplicitMutationRefusalAction(text)
         -- shortening. Let the dedicated semantic parser show its choices.
         return nil
     end
+    local followupMutation = action:match("^do%s+")
+        or action:match("^fix%s*")
+        or action:match("^repair%s*")
+        or action:match("^run%s*")
+        or action:match("^confirm%s*")
+        or action:match("^undo%s*")
+        or action:match("^redo%s*")
+        or action:match("^revert%s*")
+        or action:match("^reapply%s*")
+        or action:match("^continue%s*")
+        or action:match("^proceed%s*")
+        or action:match("^mach%s*")
+        or action:match("^machen%s*")
+        or action:match("^anwenden%s*")
+        or action:match("^uebernehmen%s*")
+        or action:match("^bestaetigen%s*")
+        or action:match("^reparieren%s*")
+        or action:match("^beheben%s*")
+        or action:match("^ausfuehren%s*")
+        or action:match("^fortfahren%s*")
+        or action:match("^rueckgaengig%s*")
+        or action:match("^wiederholen%s*")
+        or action:match("^erneut%s+anwenden%s*")
     if R.StartsWithMutationCommand(action)
+        or followupMutation
         or action:match("^position%s+")
         or action:match("^reposition%s+")
         or action:match("^turn%s+on%s+")
@@ -639,13 +685,108 @@ function R.ExplicitMutationRefusalAction(text)
     return nil
 end
 
+function R.HasContradictoryMutationConsent(text)
+    local norm = R.Normalize(text)
+    if norm == "" then return false end
+    local explicitOppositeClause = norm:match("^.-%s+but%s+do%s+not%s+(.+)$")
+        or norm:match("^.-%s+but%s+dont%s+(.+)$")
+        or norm:match("^.-%s+but%s+don%s+t%s+(.+)$")
+    if explicitOppositeClause and R.StartsWithMutationCommand(explicitOppositeClause) then
+        -- "Show power text but don't show the power bar" contains two
+        -- explicit, differently scoped commands. It is not a withdrawal of
+        -- consent for the first clause; the compound parser owns it.
+        return false
+    end
+    if R.IsSemanticAuraFilterNegation(norm)
+        and R.ContainsAny(norm, { "do not show", "dont show", "don t show" })
+    then
+        -- The semantic clause can follow an explicit filter lead, as in
+        -- "filter player buffs; do not show buffs with no timer".  It still
+        -- describes the entries to filter rather than revoking the command.
+        -- Keep "do not hide ..." outside this exemption: that is an actual
+        -- refusal to enable Hide Permanent Auras.
+        return false
+    end
+    if R.ContainsAny(norm, { "geht nicht", "funktioniert nicht", "does not work", "doesnt work", "not working" })
+        and not R.ContainsAny(norm, { "yes", "yeah", "okay", "ok", "sure", "apply", "fix", "undo", "redo", "ja" })
+    then
+        return false
+    end
+
+    local padded = " " .. norm .. " "
+    local strongNegative = padded:find(" do not ", 1, true)
+        or padded:find(" dont ", 1, true)
+        or padded:find(" don t ", 1, true)
+        or padded:find(" never mind ", 1, true)
+        or padded:find(" not now ", 1, true)
+        or padded:find(" no wait ", 1, true)
+        or padded:find(" wait no ", 1, true)
+        or padded:find(" actually no ", 1, true)
+        or padded:find(" actually not ", 1, true)
+        or padded:find(" but no ", 1, true)
+        or padded:find(" nein ", 1, true)
+        or padded:find(" nicht ", 1, true)
+        or norm:match("%s+no$")
+        or norm:match("%s+not$")
+        or norm:match("%s+dont$")
+    if not strongNegative then return false end
+    return R.ContainsAny(norm, R.MUTATION_TERMS)
+        or R.ContainsAny(norm, {
+            "yes", "yeah", "yep", "okay", "ok", "sure", "go ahead",
+            "do it", "fix it", "repair it", "undo", "redo", "revert", "reapply",
+            "ja", "mach das", "mach es", "rueckgaengig", "wiederholen",
+        })
+end
+
 function R.IsExplicitMutationRefusal(text)
     return R.ExplicitMutationRefusalAction(text) ~= nil
+        or R.HasContradictoryMutationConsent(text)
+end
+
+local SCOPED_EXCLUSION_HEADS = {
+    "player", "target", "target target", "target of target", "focus", "focus target",
+    "pet", "boss", "party", "raid", "mythic raid", "arena",
+}
+
+function R.ScopedMutationExclusion(text)
+    local norm = R.Normalize(text)
+    if norm == "" or not R.StartsWithMutationCommand(norm) then return nil end
+    if norm:find(" neither ", 1, true) and norm:find(" nor ", 1, true) then
+        return { cancel = true }
+    end
+
+    local keep, excluded = norm:match("^(.-)%s+but%s+not%s+(.+)$")
+    if not keep then keep, excluded = norm:match("^(.-)%s+except%s+(.+)$") end
+    if not keep then keep, excluded = norm:match("^(.-)%s+not%s+(.+)$") end
+    keep = R.Trim(keep or "")
+    excluded = R.Trim(excluded or ""):gsub("^the%s+", "")
+    if keep == "" or excluded == "" or not R.StartsWithMutationCommand(keep) then return nil end
+
+    local excludedHasScope = false
+    for i = 1, #SCOPED_EXCLUSION_HEADS do
+        local scope = SCOPED_EXCLUSION_HEADS[i]
+        if excluded == scope or excluded:sub(1, #scope + 1) == scope .. " " then
+            excludedHasScope = true
+            break
+        end
+    end
+    if not excludedHasScope then return nil end
+    return { keep = keep, excluded = excluded }
 end
 
 function A.RouterIsFailClosedReadOnlyRequest(text)
     local norm = R.StripResponseLanguageDirective(text)
     if norm == "" then return true end
+    if type(R.IsExplicitNavigationCommand) == "function" and R.IsExplicitNavigationCommand(norm) then
+        -- Navigation wording grants permission to open/focus a control, never
+        -- to change its value. Force it past every mutation fast path.
+        return true
+    end
+    if type(R.ScopedMutationExclusion) == "function" and R.ScopedMutationExclusion(norm) then
+        -- The Router must isolate the included clause before any single-plan
+        -- or batch fast path sees the explicitly excluded control.
+        return true
+    end
     -- Capability questions ask whether/how something can be done; they are not
     -- permission to do it. Keep direct polite requests ("could you change")
     -- actionable while treating possible/could-I forms as guidance.
@@ -701,6 +842,11 @@ function A.RouterIsFailClosedReadOnlyRequest(text)
     end
     if type(R.LooksLikeRegistrySettingDecisionQuestion) == "function"
         and R.LooksLikeRegistrySettingDecisionQuestion(norm)
+    then
+        return true
+    end
+    if type(R.LooksLikeNaturalEvaluationQuestion) == "function"
+        and R.LooksLikeNaturalEvaluationQuestion(norm)
     then
         return true
     end
@@ -1016,6 +1162,57 @@ function R.AssistantCapabilityReply()    local helper = A.Knowledge and A.Knowle
     }
 end
 
+function R.TryRuntimeVersionQuestion(text)
+    local norm = R.Normalize(text)
+    local asksClient = R.ContainsAny(norm, {
+        "what patch am i on", "which patch am i on", "what wow patch",
+        "current wow patch", "what wow version", "which wow version",
+        "what game version", "which game version", "client version",
+    })
+    local asksMSUF = R.ContainsAny(norm, {
+        "what msuf version", "which msuf version", "current msuf version",
+        "what version of msuf", "which version of msuf", "addon version",
+    })
+    if not asksClient and not asksMSUF then return nil end
+    local lines = { "Version information" }
+    if asksClient then
+        local version, build, date
+        if type(_G.GetBuildInfo) == "function" then
+            version, build, date = _G.GetBuildInfo()
+        end
+        if version then
+            local detail = tostring(version)
+            if build and tostring(build) ~= "" then detail = detail .. " (build " .. tostring(build) .. ")" end
+            if date and tostring(date) ~= "" then detail = detail .. ", " .. tostring(date) end
+            lines[#lines + 1] = "World of Warcraft client: " .. detail .. "."
+        else
+            lines[#lines + 1] = "I cannot read the current World of Warcraft client build in this session."
+        end
+    end
+    local metadata = _G.C_AddOns and type(_G.C_AddOns.GetAddOnMetadata) == "function"
+        and _G.C_AddOns.GetAddOnMetadata("MidnightSimpleUnitFrames", "Version")
+        or (type(_G.GetAddOnMetadata) == "function"
+            and _G.GetAddOnMetadata("MidnightSimpleUnitFrames", "Version"))
+    if asksMSUF or metadata then
+        lines[#lines + 1] = metadata and ("MSUF: " .. tostring(metadata) .. ".")
+            or "I cannot read the installed MSUF version metadata in this session."
+    end
+    lines[#lines + 1] = "This only reads local client/addon metadata; it does not change MSUF."
+    return { text = table.concat(lines, "\n"), status = "info", summary = "Reports local WoW and MSUF version metadata." }
+end
+
+function R.ClearMutationReferentContext()
+    local ctx = A.GetContext and A.GetContext() or nil
+    if type(ctx) ~= "table" then return end
+    for _, key in ipairs({
+        "lastChangeBundle", "lastSetting", "lastSettingTurn", "lastSubjectTurn",
+        "lastAction", "lastActionArgs", "lastUnit", "lastFrameType", "lastCategory",
+        "lastDirection", "lastAttribute", "lastMentionedSetting", "lastMentionedUnit",
+    }) do
+        ctx[key] = nil
+    end
+end
+
 function A.RouterChatGPTStyleReply()
     return {
         text = "Yes—for MSUF and WoW UI setup, that is the goal. I run locally inside MSUF instead of calling an external ChatGPT service, so I understand the addon through its menu registry and your current profile state.\nI can converse naturally, remember recent MSUF context, find and open controls, explain how settings connect, diagnose blockers, apply concrete safe changes, and help with undo or redo. When wording is uncertain, I give you choices instead of inventing an answer.\nMy limits: I do not browse live patch data, invent current class or talent guides, or bypass WoW combat restrictions. The Assistant does no active work after the menu closes or while combat blocks it.",
@@ -1150,6 +1347,7 @@ function R.HumanConversationReply(text)    local norm = R.Normalize(text)
         "erzaehl mir einen witz", "erzaehle mir einen witz", "erzaehl einen witz",
         "erzaehle einen witz", "mach einen witz", "noch einen witz", "noch ein witz", "naechster witz", "witz",
     }) then
+        R.ClearMutationReferentContext()
         if type(ctx) == "table" then
             ctx.lastConversationKind = "joke"
             ctx.lastConversationTurn = tonumber(ctx.turnSerial or ctx.lastTurnSerial) or 0
@@ -7880,11 +8078,17 @@ end
 A.RouterTryDecisionGuidanceShortcut = function(text, coreHandler)
     local norm = R.Normalize(text)
     if norm == "" then return nil end
-    local registrySettingDecisionResult = A.RouterTryRegistrySettingDecisionShortcut and A.RouterTryRegistrySettingDecisionShortcut(text, coreHandler)
-    if registrySettingDecisionResult then return registrySettingDecisionResult end
     local terms = A.RouterDecisionGuidanceTerms
     local hasResults = A.RouterHasPendingSearchResults()
     local hasSelected = A.RouterHasPendingSelectedResult()
+
+    -- A named setting deserves exact, read-only guidance before the generic
+    -- safety fallback. This keeps questions such as "is it safe to turn off
+    -- Boss Cast Bar?" attached to the intended control without treating the
+    -- question itself as permission to change it.
+    local registrySettingDecisionResult = A.RouterTryRegistrySettingDecisionShortcut
+        and A.RouterTryRegistrySettingDecisionShortcut(text, coreHandler)
+    if registrySettingDecisionResult then return registrySettingDecisionResult end
 
     if R.ContainsAny(norm, terms.safety) then
         if hasResults or hasSelected then
@@ -8038,6 +8242,13 @@ A.RouterSafePlanningTerms = A.RouterSafePlanningTerms or {
 A.RouterTrySafePlanningShortcut = function(text, coreHandler)
     local norm = R.Normalize(text)
     if norm == "" then return nil end
+    if type(A.lastAssistantPlanningContext) == "table"
+        and R.IsExactSafePlanningFollowup(norm)
+        and type(A.RouterTrySafePlanningFollowup) == "function"
+    then
+        local followup = A.RouterTrySafePlanningFollowup(text, coreHandler)
+        if followup then return followup end
+    end
     local terms = A.RouterSafePlanningTerms
 
     if R.ContainsAny(norm, terms.backup) then
@@ -8554,33 +8765,62 @@ end
 
 function R.RoleGuidanceReply(text)    local norm = R.Normalize(text)
     local role = R.DetectGuidanceRole(norm) or "role"
-    local detail, focus, examples, actions
+    local detail, focus, examples, actions, reasons
     if role == "healer" then
         detail = "For healing, prioritize readable Party/Raid health text, dispel visibility, range fade, cast bars, and important buffs/debuffs."
         focus = "Start in Group Health & Text, Group Status & Indicators, Group Auras, and Cast Bars."
         examples = "turn on raid click casting; set raid range fade to 40; show only dispellable debuffs; set raid health text size to 14."
         actions = "Open Group Health & Text | Open Group Status & Indicators | Open Group Auras | Guided Setup"
+        reasons = {
+            "Group Health & Text establishes the health, text, and range information used for every healing decision.",
+            "Group Status & Indicators adds dispel, role, and ready-state signals after the core health view is readable.",
+            "Group Auras then controls the buffs and debuffs that affect healing decisions without hiding the underlying health view.",
+            "Guided Setup is the safe fallback when you want to review the wider profile step by step.",
+        }
     elseif role == "tank" then
         detail = "For tanking, prioritize Target, Target of Target, Boss frames, cast bars, debuffs, threat/status visibility, and clear health bars."
         focus = "Start in Target, Target of Target, Boss Frames, Cast Bars, and Group Status & Indicators."
         examples = "show target of target; make target cast bar height 24; open boss frames; show raid marker on target."
         actions = "Open Target | Open Target of Target | Open Boss Frames | Open Cast Bars"
+        reasons = {
+            "Target is the primary place to verify enemy health, casts, and debuffs.",
+            "Target of Target adds threat and swap context after the main target is readable.",
+            "Boss Frames broaden that visibility to encounter units you are not currently targeting.",
+            "Cast Bars are easiest to tune once the relevant enemy frames are already readable.",
+        }
     elseif role == "dps" then
         detail = "For DPS, prioritize Target, Focus, cast bars, class resources, important buffs/debuffs, and enough group visibility without clutter."
         focus = "Start in Target, Focus, Cast Bars, Class Resources, Aura Filters, and Group Layout."
         examples = "show focus kick tracker; show kick ready on target; open class resources; set target buff icon size to 30."
         actions = "Open Cast Bars | Open Class Resources | Open Aura Filters | Open Target"
+        reasons = {
+            "Cast Bars expose the immediate interrupt and dangerous-cast information that most DPS decisions depend on.",
+            "Class Resources come next because they affect rotation readability without changing group information.",
+            "Aura Filters reduce noise after the core cast and resource signals are visible.",
+            "Target is the final visual pass for the combined combat information.",
+        }
     else
         detail = "For role setup, start with visibility, readable text, cast bars, and only the aura information you actively use."
         focus = "Start with Player/Target readability, group visibility, cast bars, and aura filters."
         examples = "guided setup; run checks; open player; open group layout."
         actions = "Guided Setup | Run Checks | Open Player | Open Group Layout"
+        reasons = {
+            "Guided Setup establishes your priorities without guessing profile changes.",
+            "Run Checks identifies real visibility problems before manual tuning.",
+            "Player is a safe first frame for checking basic readability.",
+            "Group Layout follows after the individual frame baseline is clear.",
+        }
     end
-    return {
-        text = "Role setup guidance\n" .. detail .. "\nSuggested MSUF focus: " .. focus .. "\nExamples: " .. examples .. "\nI will not guess-change your profile without a concrete request. Ask for Guided Setup, Run Checks, or name one exact change.\nYou can ask: " .. actions,
-        status = "info",
-        summary = "Assistant role setup guidance",
-    }
+    local body = detail .. "\nSuggested MSUF focus: " .. focus
+        .. "\nI will not guess-change your profile without a concrete request. Ask for Guided Setup, Run Checks, or name one exact change."
+    return A.RouterSafePlanningReply(
+        "Role setup guidance",
+        body,
+        examples,
+        actions,
+        R.BuildPlanningItems(actions, reasons),
+        "Assistant role setup guidance"
+    )
 end
 
 function R.ClassGuidanceReply(text)    local norm = R.Normalize(text)
@@ -8620,11 +8860,15 @@ function R.ClassGuidanceReply(text)    local norm = R.Normalize(text)
         actions = "Open Class Resources | Open Cast Bars | Open Aura Filters | Open Target"
     end
 
-    return {
-        text = title .. "\n" .. detail .. "\nSuggested MSUF focus: " .. focus .. "\nExamples: " .. examples .. "\nI will not give live talent or rotation advice offline, but I can help tune the MSUF UI for this class.\nYou can ask: " .. actions,
-        status = "info",
-        summary = "Assistant class setup guidance",
-    }
+    return A.RouterSafePlanningReply(
+        title,
+        detail .. "\nSuggested MSUF focus: " .. focus
+            .. "\nI will not give live talent or rotation advice offline, but I can help tune the MSUF UI for this class.",
+        examples,
+        actions,
+        nil,
+        "Assistant class setup guidance"
+    )
 end
 
 function R.ContentGuidanceReply(text)    local norm = R.Normalize(text)
@@ -8653,11 +8897,15 @@ function R.ContentGuidanceReply(text)    local norm = R.Normalize(text)
         actions = "Open Group Layout | Open Group Health & Text | Open Group Status & Indicators | Open Boss Frames"
     end
 
-    return {
-        text = "Content setup guidance\n" .. detail .. "\nSuggested MSUF focus: " .. focus .. "\nExamples: " .. examples .. "\nI will not guess-change your profile without a concrete request. Ask for Guided Setup, Run Checks, or name one exact change.\nYou can ask: " .. actions,
-        status = "info",
-        summary = "Assistant content setup guidance",
-    }
+    return A.RouterSafePlanningReply(
+        "Content setup guidance",
+        detail .. "\nSuggested MSUF focus: " .. focus
+            .. "\nI will not guess-change your profile without a concrete request. Ask for Guided Setup, Run Checks, or name one exact change.",
+        examples,
+        actions,
+        nil,
+        "Assistant content setup guidance"
+    )
 end
 
 function R.CombinedGuidanceReply(text)    local norm = R.Normalize(text)
@@ -8718,11 +8966,15 @@ function R.CombinedGuidanceReply(text)    local norm = R.Normalize(text)
         return nil
     end
 
-    return {
-        text = title .. "\n" .. detail .. "\nSuggested MSUF focus: " .. focus .. "\nExamples: " .. examples .. "\nI will not guess-change your profile without a concrete request. Ask for Guided Setup, Run Checks, or name one exact change.\nYou can ask: " .. actions,
-        status = "info",
-        summary = "Assistant combined setup guidance",
-    }
+    return A.RouterSafePlanningReply(
+        title,
+        detail .. "\nSuggested MSUF focus: " .. focus
+            .. "\nI will not guess-change your profile without a concrete request. Ask for Guided Setup, Run Checks, or name one exact change.",
+        examples,
+        actions,
+        nil,
+        "Assistant combined setup guidance"
+    )
 end
 
 function R.RecoveryGuidanceReply()    return {
@@ -8735,7 +8987,9 @@ end
 function R.IsCurrentPageHelpRequest(text)
     local norm = R.Normalize(text)
     if norm == "" then return false end
-    return R.ContainsAny(norm, { "here", "this page", "current page", "page help" }) and R.ContainsAny(norm, {
+    local currentPage = R.HasNormalizedPhrase(norm, "here") or R.HasNormalizedPhrase(norm, "this page")
+        or R.HasNormalizedPhrase(norm, "current page") or R.HasNormalizedPhrase(norm, "page help")
+    return currentPage and R.ContainsAny(norm, {
         "help", "commands", "what can", "what settings", "explain",
         "how can", "how do", "how to", "where can", "where do",
     })
@@ -8840,6 +9094,11 @@ R.BROAD_PAGE_LOCATION_SUBJECTS = {
     ["group auras"] = true,
     ["auras"] = true,
     ["aura"] = true,
+    -- Aura size is intentionally broad until the user names a frame/lane.
+    -- Route the typo-tolerant how/where question to Aura help instead of
+    -- guessing one of the unrelated Party/Raid private-aura sliders.
+    ["aura size"] = true,
+    ["aura icon size"] = true,
 }
 
 R.BROAD_SETTING_EXPLAIN_SUBJECTS = {
@@ -9062,6 +9321,9 @@ end
 
 function R.RegistryCurrentValueSubject(norm)
     norm = R.Normalize(norm)
+    local widthScope = norm:match("^how%s+wide%s+is%s+my%s+(.+)%s+frame$")
+        or norm:match("^how%s+wide%s+is%s+the%s+(.+)%s+frame$")
+    if widthScope then return R.Trim(widthScope .. " width") end
     local prefixes = {
         "current value of ", "current value for ",
         "current val of ", "current val for ",
@@ -9091,6 +9353,11 @@ function R.RegistryCurrentValueSubject(norm)
         "what is current value of ", "what is current value for ",
         "what is current val of ", "what is current val for ",
         "what is curent value of ", "what is curent value for ",
+        "what is the current ", "what is current ",
+        "tell me the current ", "tell me current ", "tell me the ",
+        "did i set ", "did we set ",
+        "was ist die aktuelle ", "was ist der aktuelle ", "was ist das aktuelle ",
+        "was ist aktuell ", "habe ich ", "haben wir ", "ist die ", "ist der ", "ist das ", "ist ",
         "what value is ", "what value does ",
         "what is the value of ", "what is the value for ",
         "what is ", "what are ", "what s ", "whats ",
@@ -9148,6 +9415,13 @@ function R.RegistryCurrentValueSubject(norm)
     norm = norm:gsub("%s+hiden$", "")
     norm = norm:gsub("%s+on$", "")
     norm = norm:gsub("%s+off$", "")
+    norm = norm:gsub("%s+current%s+value$", "")
+    norm = norm:gsub("%s+aktueller%s+wert$", "")
+    norm = norm:gsub("%s+aktuelle%s+wert$", "")
+    norm = norm:gsub("%s+to%s+[%+%-]?%d+%.?%d*$", "")
+    norm = norm:gsub("%s+[%+%-]?%d+%.?%d*$", "")
+    norm = norm:gsub("%s+auf%s+[%+%-]?%d+%.?%d*%s+gesetzt$", "")
+    norm = norm:gsub("%s+auf%s+[%+%-]?%d+%.?%d*$", "")
     norm = norm:gsub("^the%s+", "")
     return R.Trim(norm)
 end
@@ -9192,9 +9466,32 @@ end
 function R.LooksLikeRegistrySettingCurrentValueQuestion(text)
     local norm = R.Normalize(text)
     if norm == "" then return false end
+    if type(R.LooksLikeRegistrySettingDecisionQuestion) == "function"
+        and R.LooksLikeRegistrySettingDecisionQuestion(norm)
+    then
+        -- Recommendation wording can contain state words such as "showing"
+        -- or "on".  It still asks for advice, so the decision specialist must
+        -- run before the plain current-value reader.
+        return false
+    end
     if norm:match("^is%s+there%s+") or norm:match("^is%s+it%s+possible%s+to%s+") then return false end
     if A.RouterLooksLikeExplicitSearchRequest and A.RouterLooksLikeExplicitSearchRequest(norm) then return false end
     if norm == "current value" or norm == "value now" then return false end
+    if norm:match("^what%s+is%s+the%s+current%s+")
+        or norm:match("^tell%s+me%s+the%s+")
+        or norm:match("^how%s+wide%s+is%s+")
+        or norm:match("^did%s+i%s+set%s+")
+        or norm:match("^did%s+we%s+set%s+")
+        or norm:match("^is%s+.+%s+[%+%-]?%d+%.?%d*$")
+        or norm:match("^was%s+ist%s+.+aktuell")
+        or norm:match("^was%s+ist%s+d[ie][er]*%s+aktuell")
+        or norm:match("^habe%s+ich%s+.+%s+auf%s+[%+%-]?%d+%.?%d*%s+gesetzt$")
+        or norm:match("^ist%s+.+%s+[%+%-]?%d+%.?%d*$")
+        or norm:match("^.+%s+current%s+value$")
+    then
+        local subject = R.RegistryCurrentValueSubject(norm)
+        return subject ~= "" and subject ~= norm
+    end
     if R.ContainsAny(norm, {
         "current value of", "current value for",
         "current val of", "current val for",
@@ -9281,9 +9578,161 @@ function R.LooksLikeRegistrySettingExplainQuestion(text)
     return true
 end
 
+local NATURAL_DECISION_QUALITIES = {
+    "good", "better", "safe", "sensible", "reasonable", "useful",
+    "recommended", "necessary", "needed", "bad", "okay", "ok", "fine",
+    "acceptable", "advisable",
+}
+
+local NATURAL_DECISION_DIMENSIONS = {
+    wide = "width", wider = "width", narrow = "width", narrower = "width",
+    tall = "height", taller = "height", short = "height", shorter = "height",
+    big = "size", bigger = "size", large = "size", larger = "size",
+    small = "size", smaller = "size",
+}
+
+local function CleanNaturalDecisionSubject(subject)
+    subject = R.Trim(subject or "")
+    subject = subject:gsub("^my%s+", ""):gsub("^the%s+", "")
+    local prefixes = {
+        "i am setting ", "i am changing ", "i am making ", "i am adjusting ",
+        "i set ", "i change ", "i make ", "i adjust ",
+        "we set ", "we change ", "we make ", "we adjust ",
+        "turning on ", "turning off ", "turn on ", "turn off ",
+        "showing ", "hiding ", "show ", "hide ",
+        "enabling ", "disabling ", "enable ", "disable ",
+        "using ", "keeping ", "use ", "keep ",
+        "setting ", "changing ", "making ", "adjusting ",
+        "set ", "change ", "make ", "adjust ", "leave ",
+    }
+    for i = 1, #prefixes do
+        local prefix = prefixes[i]
+        if subject:sub(1, #prefix) == prefix then
+            subject = R.Trim(subject:sub(#prefix + 1))
+            break
+        end
+    end
+    subject = subject:gsub("%s+to%s+[%+%-]?%d+%.?%d*$", "")
+        :gsub("%s+at%s+[%+%-]?%d+%.?%d*$", "")
+        :gsub("%s+was%s+[%+%-]?%d+%.?%d*$", "")
+    return subject
+end
+
+function R.NaturalRegistryDecisionSubject(text)
+    local norm = R.Normalize(text)
+    if norm == "" then return nil end
+    local number = "[%+%-]?%d+%.?%d*"
+
+    local subject = norm:match("^is%s+(.+)%s+a%s+good%s+idea$")
+        or norm:match("^is%s+it%s+a%s+good%s+idea%s+to%s+(.+)$")
+        or norm:match("^is%s+it%s+worth%s+(.+)$")
+        or norm:match("^is%s+(.+)%s+worth%s+enabling$")
+        or norm:match("^is%s+(.+)%s+worth%s+disabling$")
+        or norm:match("^is%s+(.+)%s+worth%s+showing$")
+        or norm:match("^is%s+(.+)%s+worth%s+hiding$")
+        or norm:match("^do%s+you%s+think%s+i%s+should%s+(.+)$")
+        or norm:match("^do%s+you%s+think%s+(.+)%s+should%s+be%s+on$")
+        or norm:match("^do%s+you%s+think%s+(.+)%s+should%s+be%s+off$")
+        or norm:match("^do%s+you%s+think%s+(.+)%s+should%s+be%s+enabled$")
+        or norm:match("^do%s+you%s+think%s+(.+)%s+should%s+be%s+disabled$")
+        or norm:match("^do%s+you%s+think%s+(.+)%s+should%s+be%s+" .. number .. "$")
+        or norm:match("^would%s+it%s+be%s+better%s+if%s+i%s+(.+)$")
+        or norm:match("^would%s+it%s+be%s+better%s+if%s+(.+)%s+was%s+" .. number .. "$")
+        or norm:match("^would%s+it%s+help%s+to%s+(.+)$")
+        or norm:match("^could%s+" .. number .. "%s+work%s+for%s+(.+)$")
+        or norm:match("^is%s+" .. number .. "%s+too%s+much%s+for%s+(.+)$")
+        or norm:match("^is%s+(.+)%s+" .. number .. "%s+too%s+much$")
+        or norm:match("^do%s+i%s+need%s+(.+)%s+on$")
+        or norm:match("^do%s+i%s+need%s+(.+)%s+off$")
+        or norm:match("^do%s+i%s+need%s+(.+)%s+enabled$")
+        or norm:match("^do%s+i%s+need%s+(.+)%s+disabled$")
+        or norm:match("^do%s+i%s+really%s+need%s+to%s+(.+)$")
+        or norm:match("^would%s+you%s+keep%s+(.+)%s+on$")
+        or norm:match("^would%s+you%s+keep%s+(.+)%s+off$")
+        or norm:match("^should%s+we%s+(.+)$")
+        or norm:match("^should%s+i%s+leave%s+(.+)%s+on$")
+        or norm:match("^should%s+i%s+leave%s+(.+)%s+off$")
+        or norm:match("^what%s+if%s+i%s+(.+)$")
+        or norm:match("^what%s+if%s+we%s+(.+)$")
+        or norm:match("^how%s+about%s+(.+)$")
+    if subject then return CleanNaturalDecisionSubject(subject) end
+
+    for i = 1, #NATURAL_DECISION_QUALITIES do
+        local quality = NATURAL_DECISION_QUALITIES[i]
+        subject = norm:match("^is%s+" .. number .. "%s+a%s+" .. quality .. "%s+(.+)$")
+            or norm:match("^do%s+you%s+think%s+" .. number .. "%s+is%s+a%s+" .. quality .. "%s+(.+)$")
+            or norm:match("^do%s+you%s+think%s+(.+)%s+at%s+" .. number .. "%s+is%s+" .. quality .. "$")
+            or norm:match("^is%s+" .. number .. "%s+" .. quality .. "%s+for%s+(.+)$")
+            or norm:match("^would%s+" .. number .. "%s+be%s+" .. quality .. "%s+for%s+(.+)$")
+            or norm:match("^is%s+(.+)%s+" .. number .. "%s+a%s+" .. quality .. "%s+value$")
+            or norm:match("^is%s+(.+)%s+" .. number .. "%s+" .. quality .. "$")
+            or norm:match("^is%s+(.+)%s+" .. quality .. "%s+at%s+" .. number .. "$")
+            or norm:match("^is%s+(.+)%s+" .. quality .. "%s+on$")
+            or norm:match("^is%s+(.+)%s+" .. quality .. "%s+off$")
+            or norm:match("^is%s+it%s+" .. quality .. "%s+to%s+(.+)$")
+            or norm:match("^would%s+(.+)%s+" .. number .. "%s+be%s+" .. quality .. "$")
+            or norm:match("^would%s+(.+)%s+be%s+" .. quality .. "%s+on$")
+            or norm:match("^would%s+(.+)%s+be%s+" .. quality .. "%s+off$")
+            or norm:match("^would%s+(.+)%s+on%s+be%s+" .. quality .. "$")
+            or norm:match("^would%s+(.+)%s+off%s+be%s+" .. quality .. "$")
+            or norm:match("^would%s+(.+)%s+be%s+" .. quality .. "$")
+            or norm:match("^is%s+(.+)%s+on%s+" .. quality .. "$")
+            or norm:match("^is%s+(.+)%s+off%s+" .. quality .. "$")
+            or norm:match("^is%s+(.+)%s+" .. quality .. "$")
+        if subject then return CleanNaturalDecisionSubject(subject) end
+    end
+
+    subject = norm:match("^do%s+you%s+recommend%s+(.+)%s+" .. number .. "$")
+        or norm:match("^do%s+you%s+recommend%s+(.+)$")
+        or norm:match("^would%s+you%s+recommend%s+(.+)%s+" .. number .. "$")
+        or norm:match("^would%s+you%s+recommend%s+(.+)$")
+        or norm:match("^would%s+you%s+suggest%s+(.+)%s+" .. number .. "$")
+        or norm:match("^would%s+you%s+suggest%s+(.+)$")
+        or norm:match("^what%s+(.+)%s+do%s+you%s+recommend$")
+        or norm:match("^should%s+(.+)%s+be%s+" .. number .. "$")
+        or norm:match("^should%s+(.+)%s+be%s+on$")
+        or norm:match("^should%s+(.+)%s+be%s+off$")
+        or norm:match("^should%s+(.+)%s+be%s+enabled$")
+        or norm:match("^should%s+(.+)%s+be%s+disabled$")
+    if subject then return CleanNaturalDecisionSubject(subject) end
+
+    for adjective, dimension in pairs(NATURAL_DECISION_DIMENSIONS) do
+        subject = norm:match("^is%s+" .. number .. "%s+too%s+" .. adjective .. "%s+for%s+(.+)$")
+            or norm:match("^would%s+" .. number .. "%s+be%s+too%s+" .. adjective .. "%s+for%s+(.+)$")
+            or norm:match("^will%s+" .. number .. "%s+be%s+too%s+" .. adjective .. "%s+for%s+(.+)$")
+            or norm:match("^is%s+my%s+(.+)%s+too%s+" .. adjective .. "$")
+            or norm:match("^is%s+(.+)%s+too%s+" .. adjective .. "$")
+        if subject then
+            subject = CleanNaturalDecisionSubject(subject)
+            if not R.HasNormalizedPhrase(subject, dimension) then
+                subject = subject:gsub("%s+frame$", "")
+                subject = R.Trim(subject .. " " .. dimension)
+            end
+            return subject
+        end
+    end
+
+    subject = norm:match("^is%s+(.+)%s+too%s+high%s+at%s+" .. number .. "$")
+        or norm:match("^is%s+(.+)%s+too%s+low%s+at%s+" .. number .. "$")
+        or norm:match("^is%s+(.+)%s+too%s+high$")
+        or norm:match("^is%s+(.+)%s+too%s+low$")
+    if subject then return CleanNaturalDecisionSubject(subject) end
+    return nil
+end
+
 function R.RegistryDecisionSubject(norm)
     norm = R.Normalize(norm)
+    local naturalSubject = R.NaturalRegistryDecisionSubject(norm)
+    if naturalSubject then return naturalSubject end
+    local property, scope = norm:match("^what%s+(.+)%s+do%s+you%s+recommend%s+for%s+(.+)$")
+    if property and scope then return R.Trim(scope .. " " .. property) end
+    local directSubject = norm:match("^what%s+do%s+you%s+recommend%s+for%s+(.+)$")
+        or norm:match("^which%s+(.+)%s+do%s+you%s+recommend$")
+        or norm:match("^welche%s+(.+)%s+empfiehlst%s+du$")
+        or norm:match("^welchen%s+(.+)%s+empfiehlst%s+du$")
+    if directSubject then norm = directSubject end
     local prefixes = {
+        "should i set ", "should i change ", "should i make ", "should i adjust ",
         "should i turn on ", "should i turn off ", "should i enable ", "should i disable ",
         "should i show ", "should i hide ", "should i use ", "should i keep ",
         "do i need to turn on ", "do i need to turn off ", "do i need to enable ", "do i need to disable ",
@@ -9294,23 +9743,93 @@ function R.RegistryDecisionSubject(norm)
         "would it be safe to turn on ", "would it be safe to turn off ",
         "would it be safe to enable ", "would it be safe to disable ",
         "would it be safe to show ", "would it be safe to hide ", "would it be safe to use ",
+        "would it be better to set ", "would it be better to change ",
+        "would it be better to make ", "would it be better to adjust ",
+        "would it be better to turn on ", "would it be better to turn off ",
+        "would it be better to enable ", "would it be better to disable ",
+        "would it be better to show ", "would it be better to hide ",
+        "would it be better to use ", "would it be better to keep ",
+        "would it be better with ", "would i be better off with ",
+        "would it be better if ", "would i be better with ",
+        "soll ich ", "sollte ich ", "darf ich ",
     }
+    local stripBareNumericValue = false
     for i = 1, #prefixes do
         local prefix = prefixes[i]
         if norm:sub(1, #prefix) == prefix then
             norm = R.Trim(norm:sub(#prefix + 1))
+            stripBareNumericValue = prefix == "would it be better with "
+                or prefix == "would i be better off with "
+                or prefix == "would i be better with "
             break
         end
     end
+    norm = norm:gsub("%s+to%s+[%+%-]?%d+%.?%d*$", "")
+    norm = norm:gsub("%s+at%s+[%+%-]?%d+%.?%d*$", "")
+        :gsub("%s+were%s+[%+%-]?%d+%.?%d*$", "")
+    if stripBareNumericValue then
+        norm = norm:gsub("%s+[%+%-]?%d+%.?%d*$", "")
+    end
+    norm = norm:gsub("%s+were%s+on$", ""):gsub("%s+were%s+off$", "")
+        :gsub("%s+were%s+enabled$", ""):gsub("%s+were%s+disabled$", "")
+    norm = norm:gsub("%s+auf%s+[%+%-]?%d+%.?%d*%s+setzen$", "")
+        :gsub("%s+auf%s+[%+%-]?%d+%.?%d*%s+aendern$", "")
+        :gsub("%s+auf%s+[%+%-]?%d+%.?%d*$", "")
+    norm = norm:gsub("%s+setzen$", ""):gsub("%s+aendern$", "")
     norm = norm:gsub("^the%s+", "")
     return R.Trim(norm)
+end
+
+function R.RegistryCurrentValueExpectedNumber(norm)
+    norm = R.Normalize(norm)
+    local raw = norm:match("^did%s+i%s+set%s+.+%s+to%s+([%+%-]?%d+%.?%d*)$")
+        or norm:match("^did%s+we%s+set%s+.+%s+to%s+([%+%-]?%d+%.?%d*)$")
+        or norm:match("^is%s+.+%s+([%+%-]?%d+%.?%d*)$")
+        or norm:match("^habe%s+ich%s+.+%s+auf%s+([%+%-]?%d+%.?%d*)%s+gesetzt$")
+        or norm:match("^haben%s+wir%s+.+%s+auf%s+([%+%-]?%d+%.?%d*)%s+gesetzt$")
+        or norm:match("^ist%s+.+%s+([%+%-]?%d+%.?%d*)$")
+    return raw and tonumber(raw) or nil
+end
+
+function R.RegistryDecisionProposedNumber(norm)
+    norm = R.Normalize(norm)
+    local number = "([%+%-]?%d+%.?%d*)"
+    local raw = norm:match("^is%s+" .. number .. "%s+a%s+")
+        or norm:match("^do%s+you%s+think%s+" .. number .. "%s+is%s+")
+        or norm:match("^do%s+you%s+think%s+.+%s+should%s+be%s+" .. number .. "$")
+        or norm:match("^do%s+you%s+think%s+.+%s+at%s+" .. number .. "%s+is%s+")
+        or norm:match("^is%s+" .. number .. "%s+.+%s+for%s+")
+        or norm:match("^is%s+.+%s+" .. number .. "%s+a%s+.+%s+value$")
+        or norm:match("^is%s+.+%s+" .. number .. "%s+[%a]+$")
+        or norm:match("^is%s+.+%s+[%a]+%s+at%s+" .. number .. "$")
+        or norm:match("^is%s+" .. number .. "%s+too%s+")
+        or norm:match("^is%s+.+%s+" .. number .. "%s+too%s+much$")
+        or norm:match("^is%s+.+%s+too%s+[%a]+%s+at%s+" .. number .. "$")
+        or norm:match("^would%s+" .. number .. "%s+be%s+too%s+")
+        or norm:match("^would%s+" .. number .. "%s+be%s+[%a]+%s+for%s+")
+        or norm:match("^will%s+" .. number .. "%s+be%s+too%s+")
+        or norm:match("^could%s+" .. number .. "%s+work%s+for%s+")
+        or norm:match("^would%s+.+%s+" .. number .. "%s+be%s+")
+        or norm:match("^do%s+you%s+recommend%s+.+%s+" .. number .. "$")
+        or norm:match("^would%s+you%s+recommend%s+.+%s+" .. number .. "$")
+        or norm:match("^would%s+you%s+suggest%s+.+%s+" .. number .. "$")
+        or norm:match("^should%s+.+%s+be%s+" .. number .. "$")
+        or norm:match("%s+to%s+" .. number .. "$")
+        or norm:match("%s+at%s+" .. number .. "$")
+        or norm:match("%s+were%s+" .. number .. "$")
+        or norm:match("%s+was%s+" .. number .. "$")
+        or norm:match("^would%s+it%s+be%s+better%s+with%s+.+%s+" .. number .. "$")
+        or norm:match("^would%s+i%s+be%s+better%s+off%s+with%s+.+%s+" .. number .. "$")
+    return raw and tonumber(raw) or nil
 end
 
 function R.LooksLikeRegistrySettingDecisionQuestion(text)
     local norm = R.Normalize(text)
     if norm == "" then return false end
     if A.RouterLooksLikeExplicitSearchRequest and A.RouterLooksLikeExplicitSearchRequest(norm) then return false end
+    if R.NaturalRegistryDecisionSubject(norm) then return true end
     if not R.ContainsAny(norm, {
+        "should i set", "should i change", "should i make", "should i adjust",
         "should i turn on", "should i turn off", "should i enable", "should i disable",
         "should i show", "should i hide", "should i use", "should i keep",
         "do i need", "do i need to",
@@ -9319,6 +9838,16 @@ function R.LooksLikeRegistrySettingDecisionQuestion(text)
         "would it be safe to turn on", "would it be safe to turn off",
         "would it be safe to enable", "would it be safe to disable",
         "would it be safe to show", "would it be safe to hide", "would it be safe to use",
+        "would it be better to set", "would it be better to change",
+        "would it be better to make", "would it be better to adjust",
+        "would it be better to turn on", "would it be better to turn off",
+        "would it be better to enable", "would it be better to disable",
+        "would it be better to show", "would it be better to hide",
+        "would it be better to use", "would it be better to keep",
+        "would it be better with", "would i be better off with",
+        "would it be better if", "would i be better with",
+        "what do you recommend for", "do you recommend", "which", "recommend for",
+        "soll ich", "sollte ich", "darf ich", "empfiehlst du",
     }) then
         return false
     end
@@ -10429,6 +10958,37 @@ function R.OpenEndedScopeMatchesSetting(norm, setting)
     return true
 end
 
+function R.LooksLikeNaturalEvaluationQuestion(text)
+    local norm = R.Normalize(text)
+    if norm == "" then return false end
+    if R.NaturalRegistryDecisionSubject(norm) then return true end
+    local lead = norm:match("^do%s+you%s+think%s+")
+        or norm:match("^do%s+i%s+really%s+need%s+")
+        or norm:match("^would%s+you%s+recommend%s+")
+        or norm:match("^would%s+you%s+suggest%s+")
+        or norm:match("^would%s+you%s+keep%s+")
+        or norm:match("^should%s+i%s+")
+        or norm:match("^should%s+we%s+")
+        or norm:match("^would%s+")
+        or norm:match("^will%s+")
+        or norm:match("^could%s+[%+%-]?%d")
+        or norm:match("^is%s+")
+        or norm:match("^what%s+if%s+")
+        or norm:match("^how%s+about%s+")
+    if not lead then return false end
+    local evaluative = R.ContainsAny(norm, {
+        "good", "better", "best", "bad", "safe", "sensible", "reasonable",
+        "useful", "recommended", "recommend", "suggest", "necessary", "needed",
+        "need", "okay", "ok", "fine", "acceptable", "advisable", "worth",
+        "too wide", "too narrow", "too tall", "too short", "too big", "too small",
+        "too high", "too low", "too much", "work for", "help to", "should", "keep",
+    })
+    if not evaluative then return false end
+    return norm:match("[%+%-]?%d+%.?%d*") ~= nil
+        or R.ContainsAny(norm, R.MUTATION_TERMS)
+        or R.ContainsAny(norm, { " on", " off", "enabled", "disabled", "visible", "hidden", "showing", "hiding" })
+end
+
 function R.OpenEndedSettingEntries(subject, norm)
     local canonical = subject:gsub("%s+text%s+size$", " font size")
     local leadingScope, scopedTail = canonical:match("^(%S+)%s+(.+)$")
@@ -11185,6 +11745,9 @@ local DIRECT_NAVIGATION_PAGE_SUBJECTS = {
     ["display & recovery"] = "open display recovery",
     ["aura"] = "open auras", ["auras"] = "open auras", ["aura style"] = "open aura style",
     ["aura filters"] = "open aura filters",
+    ["custom aura"] = "open custom auras", ["custom auras"] = "open custom auras",
+    ["aura buffs"] = "open aura buffs", ["buff settings"] = "open aura buffs",
+    ["aura debuffs"] = "open aura debuffs", ["debuff settings"] = "open aura debuffs",
     ["player buffs"] = "open player buffs", ["player debuffs"] = "open player debuffs",
     ["target buffs"] = "open target buffs", ["target debuffs"] = "open target debuffs",
     ["focus buffs"] = "open focus buffs", ["focus debuffs"] = "open focus debuffs",
@@ -11195,9 +11758,14 @@ function R.BroadPageNavigationCanonical(text)
     local norm = R.Normalize(text)
     local subject = norm:match("^open%s+(.+)$")
         or norm:match("^take%s+me%s+to%s+(.+)$")
+        or norm:match("^direct%s+me%s+to%s+(.+)$")
+        or norm:match("^bring%s+me%s+to%s+(.+)$")
+        or norm:match("^lead%s+me%s+to%s+(.+)$")
+        or norm:match("^go%s+to%s+(.+)$")
         or norm:match("^jump%s+to%s+(.+)$")
         or norm:match("^navigate%s+to%s+(.+)$")
         or norm:match("^show%s+me%s+(.+)$")
+        or norm:match("^find%s+(.+)$")
     if not subject then return nil end
     subject = R.Trim(subject:gsub("^the%s+", ""):gsub("%s+page$", ""):gsub("%s+menu$", "")
         :gsub("%s+options$", ""):gsub("%s+settings$", ""))
@@ -11218,6 +11786,11 @@ function R.TryDirectSettingNavigation(text, coreHandler)
     local norm = R.Normalize(text)
     if norm == "" or R.LooksLikeGuidedTourRequest(norm) then return nil end
     local direct = norm:match("^take%s+me%s+to%s+(.+)$")
+        or norm:match("^direct%s+me%s+to%s+(.+)$")
+        or norm:match("^bring%s+me%s+to%s+(.+)$")
+        or norm:match("^lead%s+me%s+to%s+(.+)$")
+        or norm:match("^go%s+to%s+(.+)$")
+        or norm:match("^find%s+and%s+open%s+(.+)$")
         or norm:match("^jump%s+to%s+(.+)$")
         or norm:match("^navigate%s+to%s+(.+)$")
         or norm:match("^show%s+me%s+(.+)$")
@@ -11240,6 +11813,41 @@ function R.TryDirectSettingNavigation(text, coreHandler)
     if type(coreHandler) == "function" and type(A.Parse) == "function" then
         local parsed = A.Parse(text)
         local actionKey = parsed and parsed.kind == "action" and parsed.action and parsed.action.key or nil
+        -- Navigation phrasing can contain a real target value ("take me to
+        -- Raid Debuff Filter: dispellable" or "direct me to Target Portrait
+        -- Position: left"). The ordinary parser already resolves the exact
+        -- typed setting, but executing that plan would mutate it. Reuse only
+        -- its stable setting identity and open the control instead.
+        if parsed and parsed.kind == "changes" and type(parsed.changes) == "table"
+            and #parsed.changes > 0
+        then
+            local primary = parsed.changes[1]
+            local primarySetting = primary and primary.setting
+            local exactNavigation = type(primarySetting) == "table"
+                and tostring(primarySetting.key or "") ~= ""
+            -- Some specialist plans append boolean=true prerequisites after
+            -- the requested enum/filter. They still have one unambiguous
+            -- primary control. A genuine multi-setting request must remain a
+            -- choice instead of silently selecting its first control.
+            if exactNavigation and #parsed.changes > 1 then
+                for i = 2, #parsed.changes do
+                    local dependency = parsed.changes[i]
+                    local dependencySetting = dependency and dependency.setting
+                    if type(dependencySetting) ~= "table"
+                        or dependencySetting.type ~= "boolean"
+                        or dependency.value ~= true
+                    then
+                        exactNavigation = false
+                        break
+                    end
+                end
+            end
+            if exactNavigation and R.RegistrySettingItemForKey then
+                local item = R.RegistrySettingItemForKey(primarySetting.key)
+                local exactResult = item and R.OpenExactSettingItem(item) or nil
+                if exactResult then return exactResult end
+            end
+        end
         local function RunParsedAction()
             local actionResult = coreHandler(text)
             if actionResult and not A.RouterIsUnknownResult(actionResult) then return actionResult end
@@ -11250,9 +11858,16 @@ function R.TryDirectSettingNavigation(text, coreHandler)
             end
             return nil
         end
-        if actionKey and actionKey ~= "open_page" and actionKey ~= "open_setting_control" then
+        local actionMutability = parsed and parsed.action and tostring(parsed.action.mutability or "") or ""
+        if actionKey and actionKey ~= "open_page" and actionKey ~= "open_setting_control"
+            and (actionMutability == "navigation" or actionMutability == "readOnly")
+        then
             local actionResult = RunParsedAction()
-            if actionResult and not A.RouterIsUnknownResult(actionResult) then return actionResult end
+            if actionResult and actionResult._readOnlyGuard ~= true
+                and not A.RouterIsUnknownResult(actionResult)
+            then
+                return actionResult
+            end
         elseif actionKey == "open_page" and (direct:match("%s+options$")
             or direct:match("%s+settings$") or direct:match("%s+page$") or direct:match("%s+menu$"))
         then
@@ -11306,7 +11921,10 @@ local function SettingBrowserSubject(norm)
     }
     for _, pattern in ipairs(patterns) do
         local subject = norm:match(pattern)
-        if subject and subject ~= "" then return R.Trim(subject) end
+        if subject and subject ~= "" then
+            subject = R.Trim(subject):gsub("^me%s+", "")
+            if subject ~= "" then return subject end
+        end
     end
     return nil
 end
@@ -11314,10 +11932,42 @@ end
 local function SettingBrowserSpec(subject)
     subject = R.Normalize(subject)
     if subject == "all" then return { subject = subject, title = "All page-resolvable MSUF settings" } end
+
+    local function isScopeOnly(scope, label)
+        local normalized = {}
+        local function add(value)
+            value = R.Normalize(value)
+            if value ~= "" then normalized[value] = true end
+        end
+        add(scope)
+        add(label)
+        add(tostring(label or "") .. " frame")
+        add(tostring(label or "") .. " frames")
+        for _, alias in ipairs((A.UnitAliases and A.UnitAliases[scope]) or {}) do add(alias) end
+        if scope == "player" then add("my frame") end
+        return normalized[subject] == true
+    end
+
     local unit, unitLabel = R.UnitFrameScopeFromText(subject)
-    if unit then return { subject = subject, unit = unit, title = tostring(unitLabel or unit) .. " settings" } end
+    if unit then
+        local scopeOnly = isScopeOnly(unit, unitLabel)
+        return {
+            subject = subject,
+            unit = unit,
+            term = scopeOnly and nil or subject,
+            title = scopeOnly and (tostring(unitLabel or unit) .. " settings") or (subject:gsub("^%l", string.upper) .. " settings"),
+        }
+    end
     local group, groupLabel = R.GroupScopeFromText(subject)
-    if group then return { subject = subject, group = group, title = tostring(groupLabel or group) .. " settings" } end
+    if group then
+        local scopeOnly = isScopeOnly(group, groupLabel)
+        return {
+            subject = subject,
+            group = group,
+            term = scopeOnly and nil or subject,
+            title = scopeOnly and (tostring(groupLabel or group) .. " settings") or (subject:gsub("^%l", string.upper) .. " settings"),
+        }
+    end
     local page = SETTING_BROWSER_PAGE_ALIASES[subject]
     if page then
         local title = type(A.DisplayPageLabel) == "function" and A.DisplayPageLabel(page, subject) or subject
@@ -11339,17 +11989,28 @@ end
 
 local function SettingBrowserMatches(setting, page, spec)
     if not page then return false end
-    if spec.unit then return tostring(setting.unit or "") == spec.unit or page == "uf_" .. spec.unit end
+    if spec.unit and not (tostring(setting.unit or "") == spec.unit or page == "uf_" .. spec.unit) then return false end
     if spec.group then
         local unit = tostring(setting.unit or "")
-        return unit == spec.group or unit == "gf_" .. spec.group
+        if unit ~= spec.group and unit ~= "gf_" .. spec.group then return false end
     end
-    if spec.page then return page == spec.page end
+    if spec.page and page ~= spec.page then return false end
     if not spec.term then return true end
     local haystack = R.Normalize(table.concat({
-        tostring(setting.label or ""), tostring(setting.category or ""), tostring(setting.frameType or ""),
-        tostring(setting.unit or ""), tostring(page),
+        tostring(setting.key or ""), tostring(setting.label or ""), tostring(setting.attribute or ""),
+        tostring(setting.category or ""), tostring(setting.frameType or ""), tostring(setting.unit or ""), tostring(page),
     }, " "))
+    local parser = A.Parser
+    if parser and type(parser.MeaningTokens) == "function" then
+        local haystackSet = parser.MeaningTokens(haystack)
+        local _, wanted = parser.MeaningTokens(spec.term)
+        if type(haystackSet) == "table" and type(wanted) == "table" and #wanted > 0 then
+            for i = 1, #wanted do
+                if not haystackSet[wanted[i]] then return false end
+            end
+            return true
+        end
+    end
     return R.HasNormalizedPhrase(haystack, spec.term)
 end
 
@@ -12193,6 +12854,15 @@ function A.RouterTryRegistrySettingCurrentValueShortcut(text, coreHandler)
         end
     end
 
+    local expectedNumber = R.RegistryCurrentValueExpectedNumber(norm)
+    if setting and setting.type == "number" and expectedNumber ~= nil and type(setting.get) == "function" then
+        local current = tonumber(setting.get())
+        if current ~= nil then
+            local epsilon = math.max(0.000001, math.abs(expectedNumber) * 0.000001)
+            lines[#lines + 1] = (math.abs(current - expectedNumber) <= epsilon and "Yes." or "No.")
+        end
+    end
+
     lines[#lines + 1] = valueLine or ("I cannot read a saved current value for " .. label .. " right now.")
     lines[#lines + 1] = label .. " lives on " .. pageLabel .. ". It is " .. R.RegistrySettingTypeText(controlType, item) .. ". I did not change it."
     local choicesLine = R.RegistryEnumChoicesLine(item)
@@ -12224,6 +12894,7 @@ function A.RouterTryRegistrySettingDecisionShortcut(text, coreHandler)
     if (tonumber(top.rawScore) or 0) < 260 and not R.RegistryRequestedScope(norm) then return nil end
 
     local item = top.item or {}
+    local setting = item.setting
     local label = tostring(item.label or "MSUF setting")
     local pageLabel = tostring(item.pageLabel or "MSUF page")
     local example = R.RegistrySettingExample(item)
@@ -12234,7 +12905,57 @@ function A.RouterTryRegistrySettingDecisionShortcut(text, coreHandler)
     }
     local valueLine = R.RegistryCurrentValueLine(item)
     if valueLine then lines[#lines + 1] = valueLine end
-    if R.ContainsAny(norm, { "is it safe", "would it be safe" }) then
+    if setting and setting.type == "number" then
+        local current = type(setting.get) == "function" and tonumber(setting.get()) or nil
+        local step = tonumber(setting.step) or 1
+        local proposed = R.RegistryDecisionProposedNumber(norm)
+        local candidate = proposed
+        local proposedText = proposed and tostring(proposed) or nil
+        if proposed ~= nil and setting.percent == true and proposed > 1 then
+            candidate = proposed / 100
+            proposedText = tostring(proposed) .. "%"
+        end
+        if candidate ~= nil then
+            local minimum, maximum = tonumber(setting.min), tonumber(setting.max)
+            if (minimum ~= nil and candidate < minimum) or (maximum ~= nil and candidate > maximum) then
+                local range
+                if minimum ~= nil and maximum ~= nil then
+                    range = tostring(minimum) .. " to " .. tostring(maximum)
+                elseif minimum ~= nil then
+                    range = tostring(minimum) .. " or higher"
+                else
+                    range = tostring(maximum) .. " or lower"
+                end
+                lines[#lines + 1] = proposedText .. " is outside this setting's allowed range of " .. range
+                    .. ", so I would not recommend applying it. I kept the current value unchanged."
+            elseif current ~= nil then
+                local comparison
+                if math.abs(candidate - current) < 0.000001 then
+                    comparison = "matches the current value"
+                elseif candidate > current then
+                    comparison = "is higher than the current value, " .. tostring(current)
+                else
+                    comparison = "is lower than the current value, " .. tostring(current)
+                end
+                local range = minimum ~= nil and maximum ~= nil
+                    and (" It is within the allowed range of " .. tostring(minimum) .. " to " .. tostring(maximum) .. ".") or ""
+                lines[#lines + 1] = proposedText .. " " .. comparison .. "." .. range
+                    .. " It can be sensible if the frame stays readable and does not crowd nearby UI; compare it in the live preview before changing it."
+            else
+                lines[#lines + 1] = proposedText
+                    .. " is a valid candidate inside this control's range. Compare it in the live preview before changing it; there is no single best value for every layout."
+            end
+        elseif current ~= nil then
+            lines[#lines + 1] = "Your current value, " .. tostring(current)
+                .. ", is a sensible starting point if the frame is readable and does not crowd nearby UI. Adjust it in "
+                .. tostring(step) .. "-point steps while watching the live preview; there is no single best value for every layout."
+        else
+            lines[#lines + 1] = "There is no single best number for every layout. Start inside the allowed range and adjust in "
+                .. tostring(step) .. "-point steps while watching the live preview."
+        end
+    elseif setting and setting.type == "enum" then
+        lines[#lines + 1] = "Keep the current mode when it produces the behavior you want; compare the listed choices in the live preview before switching."
+    elseif R.ContainsAny(norm, { "is it safe", "would it be safe" }) then
         lines[#lines + 1] = "Normal MSUF setting changes can be undone, but the safer first step is to inspect the setting or ask for its current value before changing it."
     else
         lines[#lines + 1] = "Keep it enabled if it improves readability or gameplay information for you. Turn it off only if it is visual noise, duplicated elsewhere, or part of a layout you intentionally simplified."
@@ -12269,7 +12990,6 @@ function A.RouterTryRegistrySettingTroubleshootingShortcut(text, coreHandler)
     then
         return nil
     end
-
     local item = top.item or {}
     local label = tostring(item.label or "MSUF setting")
     local pageLabel = tostring(item.pageLabel or "MSUF page")
@@ -12365,6 +13085,41 @@ function A.RouterTryRegistrySettingLocationShortcut(text, coreHandler, precomput
         -- conversational referent ("it").  A generic search list does not.
         selectPendingResult = #close == 1 and 1 or nil,
     }
+end
+
+function R.ContextualSettingFollowupItem()
+    local pending = A.pendingResults
+    if type(pending) == "table" and #pending == 1 and type(pending[1]) == "table" then
+        return pending[1]
+    end
+    local ctx = A.GetContext and A.GetContext() or nil
+    local key = type(ctx) == "table" and tostring(ctx.lastSetting or "") or ""
+    if key ~= "" and type(R.RegistrySettingItemForKey) == "function" then
+        return R.RegistrySettingItemForKey(key)
+    end
+    return nil
+end
+
+function R.TryContextualSettingAdviceFollowup(text, coreHandler)
+    local norm = R.Normalize(text)
+    local wantsDecision = R.ContainsAny(norm, {
+        "is that good", "is this good", "is it good", "is that a good value",
+        "what do you recommend", "what would you recommend", "would you keep it",
+        "should i keep it", "is that sensible", "is this sensible",
+    })
+    local wantsWhy = norm == "why" or norm == "why that" or norm == "why this"
+        or norm == "why that change" or norm == "why this change"
+    if not wantsDecision and not wantsWhy then return nil end
+    local item = R.ContextualSettingFollowupItem()
+    local label = item and tostring(item.label or item.settingKey or item.key or "") or ""
+    if label == "" then return nil end
+    if wantsWhy and A.RouterTryRegistrySettingExplainShortcut then
+        return A.RouterTryRegistrySettingExplainShortcut("explain " .. label, coreHandler)
+    end
+    if wantsDecision and A.RouterTryRegistrySettingDecisionShortcut then
+        return A.RouterTryRegistrySettingDecisionShortcut("should i use " .. label, coreHandler)
+    end
+    return nil
 end
 
 function R.TryGeneralGuidanceShortcut(text, coreHandler)    local norm = R.Normalize(text)
@@ -12720,6 +13475,7 @@ function A.RouterLooksLikeExplicitSearchRequest(text)
         or norm:match("^search%s+for%s+") ~= nil
         or norm:match("^find%s+") ~= nil
         or norm:match("^find%s+me%s+") ~= nil
+        or norm:match("^help%s+me%s+find%s+") ~= nil
         or norm:match("^look%s+for%s+") ~= nil
         or norm:match("^suche%s+") ~= nil
         or norm:match("^finde%s+") ~= nil
@@ -12838,6 +13594,15 @@ function A.RouteInput(text, coreHandler)
     end
     if R.IsExplicitMutationRefusal(text) then
         local action = R.ExplicitMutationRefusalAction(text)
+        if type(A.CancelPendingMutationState) == "function" then
+            A.CancelPendingMutationState()
+        end
+        local refusalNorm = R.Normalize(text)
+        local germanRefusal = R.ContainsAny(refusalNorm, {
+            "nicht", "nein", "abbrechen", "rueckgaengig", "wiederholen",
+            "anwenden", "uebernehmen", "bestaetigen", "mach das", "mach es",
+        })
+        if germanRefusal then action = nil end
         local object = action and action:match("^hide%s+(.+)$") or nil
         local lines = { "Understood — I kept MSUF unchanged." }
         if object and object ~= "" then
@@ -12848,6 +13613,31 @@ function A.RouteInput(text, coreHandler)
             lines[#lines + 1] = "Tell me the result you do want, or ask me to show the relevant options."
         end
         return { text = table.concat(lines, "\n"), status = "info", summary = "Acknowledges an explicit request not to make a change." }
+    end
+    local scopedExclusion = R.ScopedMutationExclusion(text)
+    if scopedExclusion then
+        if type(A.CancelPendingMutationState) == "function" then A.CancelPendingMutationState() end
+        if scopedExclusion.cancel then
+            return {
+                text = "Understood - neither named MSUF control was changed.",
+                status = "info",
+                summary = "Honors a neither/nor exclusion without changing MSUF.",
+            }
+        end
+        local result = type(coreHandler) == "function" and coreHandler(scopedExclusion.keep) or nil
+        if type(result) ~= "table" then
+            return {
+                text = "I could not safely isolate the requested change, so I kept every named MSUF control unchanged.",
+                status = "ambiguous",
+                summary = "Scoped exclusion could not be planned safely.",
+            }
+        end
+        local status = tostring(result.status or result.result or "")
+        if status ~= "applied" and status ~= "unchanged" then return result end
+        result.text = tostring(result.text or "")
+            .. "\nI left " .. tostring(scopedExclusion.excluded) .. " unchanged, as requested."
+        result.summary = "Applies only the included MSUF control and preserves the explicitly excluded control."
+        return result
     end
     local routedText = R.StripResponseLanguageDirective(text)
     if routedText ~= "" then text = routedText end
@@ -12871,6 +13661,78 @@ function A.RouteInput(text, coreHandler)
             coreCache[value] = result or false
         end
         return coreCache[value] ~= false and coreCache[value] or nil
+    end
+
+    local runtimeVersion = R.TryRuntimeVersionQuestion and R.TryRuntimeVersionQuestion(text)
+    if runtimeVersion then return runtimeVersion end
+
+    local contextualSettingAdvice = R.TryContextualSettingAdviceFollowup
+        and R.TryContextualSettingAdviceFollowup(text, Core)
+    if contextualSettingAdvice then return contextualSettingAdvice end
+
+    local navigationNorm = R.Normalize(text)
+    local navigationSubject = navigationNorm:match("^open%s+(.+)$")
+        or navigationNorm:match("^show%s+me%s+(.+)$")
+        or navigationNorm:match("^go%s+to%s+(.+)$")
+        or navigationNorm:match("^take%s+me%s+to%s+(.+)$")
+    local referentialNavigation = navigationSubject == "it"
+        or navigationSubject == "that" or navigationSubject == "this"
+        or navigationSubject == "the setting" or navigationSubject == "the option"
+        or navigationSubject == "the control" or navigationSubject == "the result"
+        or (type(A.lastAssistantPlanningContext) == "table"
+            and type(R.IsExactSafePlanningFollowup) == "function"
+            and R.IsExactSafePlanningFollowup(navigationNorm))
+        or (type(R.LAST_CHANGE_OPEN_CONTROL_TERMS) == "table"
+            and R.ContainsAny(navigationNorm, R.LAST_CHANGE_OPEN_CONTROL_TERMS))
+    local guidedNavigation = type(R.LooksLikeGuidedTourRequest) == "function"
+        and R.LooksLikeGuidedTourRequest(text)
+    local locationNavigation = type(R.LooksLikeRegistrySettingLocationQuestion) == "function"
+        and R.LooksLikeRegistrySettingLocationQuestion(text)
+    local exactPageDestination = R.BroadPageNavigationCanonical
+        and R.BroadPageNavigationCanonical(text) or nil
+    local supportNavigation = navigationNorm == "support links"
+        or navigationNorm == "show support links" or navigationNorm == "show me support links"
+        or navigationNorm == "zeige support links" or navigationNorm == "zeige mir support links"
+        or navigationNorm == "support links anzeigen"
+    local pendingNavigation = (A.RouterHasPendingSearchResults()
+            and R.LooksLikePendingResultReply(text))
+        or (A.RouterHasPendingChoices()
+            and A.RouterLooksLikePendingChoiceFollowup(text))
+    if not referentialNavigation and not guidedNavigation
+        and (not locationNavigation or exactPageDestination ~= nil) and not supportNavigation
+        and not pendingNavigation
+        and ((type(R.IsExplicitNavigationCommand) == "function" and R.IsExplicitNavigationCommand(text))
+            or exactPageDestination ~= nil)
+    then
+        -- Navigation intent has global precedence over every setting/action
+        -- specialist. A value token inside the requested label (for example
+        -- "take me to raid debuff dispellable filter") describes the control
+        -- to focus; it never grants permission to write that value.
+        -- Exact page/control navigation is more specific than the parser's
+        -- broad page fallback.  In particular, "show me target portrait
+        -- position dropdown" can parse as Open Target even though the real
+        -- requested destination is the Target Portrait Position control.
+        local navigation = R.TryBroadPageNavigation
+            and R.TryBroadPageNavigation(text, Core) or nil
+        if not navigation and R.TryDirectSettingNavigation then
+            navigation = R.TryDirectSettingNavigation(text, Core)
+        end
+        if not navigation and type(A.Parse) == "function" then
+            local parsedNavigation = A.Parse(text)
+            local action = parsedNavigation and parsedNavigation.kind == "action"
+                and parsedNavigation.action or nil
+            local mutability = action and tostring(action.mutability or "") or ""
+            if action and (mutability == "navigation" or mutability == "readOnly") then
+                navigation = Core(text)
+            end
+        end
+        if navigation then return R.AsNavigationResult(navigation) end
+        return {
+            text = "I could not identify one exact MSUF destination from that wording, so I kept every setting unchanged. Name the page or exact control you want me to open.",
+            status = "info",
+            result = "info",
+            summary = "Explicit navigation request did not authorize a setting change.",
+        }
     end
 
     local exploratoryCapability = R.PotentialUnsupportedCapabilityCommand(text)
@@ -12960,6 +13822,30 @@ function A.RouteInput(text, coreHandler)
             and R.LooksLikeScopedHelpKnowledgeRequest(text)
             and A.Knowledge and type(A.Knowledge.Answer) == "function"
         then
+            local subject = normalized:match("^i%s+am%s+trying%s+to%s+change%s+(.+)$")
+                or normalized:match("^im%s+trying%s+to%s+change%s+(.+)$")
+            if not subject and normalized:find("ready check", 1, true) then
+                subject = normalized:match("^help%s+me%s+find%s+(.+)$")
+                    or normalized:match("^help%s+me%s+locate%s+(.+)$")
+                if subject then
+                    subject = subject:gsub("ready checks", "ready check icon")
+                    if subject:find("ready check", 1, true) and not subject:find("icon", 1, true) then subject = subject .. " icon" end
+                end
+            end
+            local compactLocation = subject and R.TryCompactExplicitSettingSearch
+                and R.TryCompactExplicitSettingSearch("find " .. subject) or nil
+            if compactLocation and normalized:find("ready check", 1, true) then
+                compactLocation.text = "Group Status & Indicators help\n" .. tostring(compactLocation.text or "")
+            elseif compactLocation and normalized:find("target buff", 1, true) then
+                compactLocation.text = "Aura Buffs help\n" .. tostring(compactLocation.text or "")
+            elseif compactLocation and normalized:find("target debuff", 1, true) then
+                compactLocation.text = "Aura Debuffs help\n" .. tostring(compactLocation.text or "")
+            end
+            if compactLocation then return compactLocation end
+            local settingLocation = R.AsksSettingLocation(normalized)
+                and R.TryRegistryLocationSpecialistGuidance
+                and R.TryRegistryLocationSpecialistGuidance(text, Core) or nil
+            if settingLocation then return settingLocation end
             local answer = A.Knowledge.Answer(text, { currentPage = M and M.activeKey })
             if answer then return answer end
         end
@@ -13029,6 +13915,16 @@ function A.RouteInput(text, coreHandler)
                 and A.RouterTrySafePlanningShortcut(text, Core)
             if earlySafePlanning then return earlySafePlanning end
         end
+    end
+
+    -- Exact page names outrank the all-setting browser. Without this guard,
+    -- queries such as "where is Group Status & Indicators" were answered
+    -- with an unrelated fuzzy leaf setting even though the destination is a
+    -- first-class Menu page. Navigation is ephemeral and never grants write
+    -- permission.
+    local exactPageNavigation = R.TryBroadPageNavigation and R.TryBroadPageNavigation(text, Core)
+    if exactPageNavigation and not A.RouterIsUnknownResult(exactPageNavigation) then
+        return R.AsNavigationResult(exactPageNavigation)
     end
 
     local settingBrowserResult = R.TrySettingBrowserShortcut and R.TrySettingBrowserShortcut(text)
@@ -13264,7 +14160,8 @@ function A.RouteInput(text, coreHandler)
         local openEndedSetting = R.TryOpenEndedSettingIdea(text, Core)
         if openEndedSetting then return openEndedSetting end
 
-        local earlyPageHelpResult = R.TryPageHelpShortcut(text, Core)
+        local earlyPageHelpResult = not explicitSearchRequest and not R.LooksLikeRegistrySettingLocationQuestion(text)
+            and R.TryPageHelpShortcut(text, Core) or nil
         if earlyPageHelpResult then return earlyPageHelpResult end
 
         local normForGermanLocation = R.Normalize(text)
@@ -13635,7 +14532,8 @@ function A.RouteInput(text, coreHandler)
     local readabilityResult = R.TryReadabilityShortcut(text)
     if readabilityResult then return readabilityResult end
 
-    local pageHelpResult = R.TryPageHelpShortcut(text, Core)
+    local pageHelpResult = not explicitSearchRequest and not R.LooksLikeRegistrySettingLocationQuestion(text)
+        and R.TryPageHelpShortcut(text, Core) or nil
     if pageHelpResult then return pageHelpResult end
 
     local pageLocationResult = R.TryPageLocationShortcut(text, Core)
@@ -13767,6 +14665,15 @@ function A.RouteInput(text, coreHandler)
     if hasCore then
         coreResult = coreResult or Core(text)
         if not A.RouterIsUnknownResult(coreResult) then return coreResult end
+    end
+
+    -- Curated registry owners, relationship guards, and the main parser have
+    -- first refusal. The generated schema is the bounded semantic lane for a
+    -- real public Menu2 control that still has no hand-written route.
+    if not hasBlockingPendingState and not pendingResultReply then
+        local schemaResult = A.ControlSchema and A.ControlSchema.TryConversation
+            and A.ControlSchema.TryConversation(text)
+        if schemaResult then return schemaResult end
     end
 
     if R.LooksLikeBareLookup(text) and A.Knowledge and type(A.Knowledge.Answer) == "function" then

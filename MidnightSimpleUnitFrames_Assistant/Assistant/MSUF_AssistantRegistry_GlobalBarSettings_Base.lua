@@ -29,6 +29,9 @@ function A.GlobalBarRegistry.RegisterBaseBarSettings(ctx)
     local RegisterGeneralMappedEnum = ctx.RegisterGeneralMappedEnum
     local RegisterBarsBoolean = ctx.RegisterBarsBoolean
     local RegisterBarsNumber = ctx.RegisterBarsNumber
+    local RegisterBarsEnum = ctx.RegisterBarsEnum
+    local OUTLINE_STRATA_VALUES = ctx.OUTLINE_STRATA_VALUES or {}
+    local OUTLINE_STRATA_ALIASES = ctx.OUTLINE_STRATA_ALIASES
     local ON_OFF_STORAGE = ctx.ON_OFF_STORAGE or {}
     local ON_OFF_VALUES = ctx.ON_OFF_VALUES or {}
     local ON_OFF_ALIASES = ctx.ON_OFF_ALIASES
@@ -47,7 +50,7 @@ function A.GlobalBarRegistry.RegisterBaseBarSettings(ctx)
     if type(ApplyBossTargetBorder) ~= "function" or type(ApplyHighlightBorders) ~= "function" then return end
     if type(RegisterGeneralBoolean) ~= "function" or type(RegisterGeneralNumberSetting) ~= "function" then return end
     if type(RegisterGeneralEnum) ~= "function" or type(RegisterGeneralMappedEnum) ~= "function" then return end
-    if type(RegisterBarsBoolean) ~= "function" or type(RegisterBarsNumber) ~= "function" then return end
+    if type(RegisterBarsBoolean) ~= "function" or type(RegisterBarsNumber) ~= "function" or type(RegisterBarsEnum) ~= "function" then return end
 
     RegisterBarsNumber("barOutlineThickness", "outline", "Global Bar Outline Thickness", 1, 0, 8, {
         "bar outline thickness", "bar outline thicknesses", "bar outline", "global bar outline", "global frame outline", "frame outline", "frame outline thickness",
@@ -56,6 +59,17 @@ function A.GlobalBarRegistry.RegisterBaseBarSettings(ctx)
         "make frame outline bigger", "make frame outline smaller", "make outline bigger", "make outline smaller",
         "border thicker", "border thinner", "border bigger", "border smaller", "outline thicker", "outline thinner", "outline bigger", "outline smaller",
     }, { category = "Global / Bars / Outline", frameType = "globalBars", apply = ApplyBarOutline, reason = "MSUF_ASSISTANT_BAR_OUTLINE" })
+    RegisterBarsEnum("barOutlineStrata", "strata", "Global Bar Outline Strata", "AUTO", OUTLINE_STRATA_VALUES, {
+        "bar outline strata", "bar outline layer", "frame outline strata", "frame outline layer",
+        "global bar outline strata", "global frame outline strata", "outline strata", "outline layer",
+    }, {
+        category = "Global / Bars / Outline",
+        frameType = "globalBars",
+        valueAliases = OUTLINE_STRATA_ALIASES,
+        apply = ApplyBarOutline,
+        reason = "MSUF_ASSISTANT_BAR_OUTLINE_STRATA",
+        description = "Chooses the frame strata used by the shared bar and frame outline.",
+    })
     RegisterGeneralNumberSetting("barOutlineColorA", "barOutlineOpacity", "Global Bar Outline Opacity", 1, 0, 1, {
         "bar outline opacity", "bar outline alpha", "frame outline opacity", "frame outline alpha",
         "bar border opacity", "bar border alpha", "frame border opacity", "frame border alpha",

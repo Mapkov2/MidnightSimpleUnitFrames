@@ -65,6 +65,15 @@ local function ListContains(list, value)
     return false
 end
 
+local function SettingAllowsAnyIntentScope(setting, scopes)
+    local allowed = type(setting) == "table" and setting.intentScopes or nil
+    if type(allowed) ~= "table" or #(scopes or {}) == 0 then return false end
+    for i = 1, #scopes do
+        if ListContains(allowed, scopes[i]) then return true end
+    end
+    return false
+end
+
 local function SettingKeyScope(setting)
     local key = tostring(setting and setting.key or "")
     local prefix = key:match("^([^%.]+)")
@@ -382,14 +391,27 @@ local function SettingAllowedByExplicitScopes(setting, text)
         return true
     end
     if setting.frameType == "group" or setting.frameType == "groupAura" then
-        if #groups > 0 then return ListContains(groups, unit) or ListContains(groups, keyScope) end
+        if #groups > 0 then
+            return ListContains(groups, unit) or ListContains(groups, keyScope)
+                or SettingAllowsAnyIntentScope(setting, groups)
+        end
         if #units > 0 then return false end
         return true
     end
     local settingKey = tostring(setting.key or ""):lower()
     if settingKey:find("bosstarget", 1, true) and ContainsAny(text, RegistryPhrases[15]) then return true end
-    if #units > 0 and unit ~= "" and unit ~= "global" and not ListContains(units, unit) and not ListContains(units, keyScope) then return false end
-    if #groups > 0 and #units == 0 and unit ~= "" and unit ~= "global" and not ListContains(groups, unit) and not ListContains(groups, keyScope) then return false end
+    if #units > 0 and unit ~= "" and unit ~= "global"
+        and not ListContains(units, unit) and not ListContains(units, keyScope)
+        and not SettingAllowsAnyIntentScope(setting, units)
+    then
+        return false
+    end
+    if #groups > 0 and #units == 0 and unit ~= "" and unit ~= "global"
+        and not ListContains(groups, unit) and not ListContains(groups, keyScope)
+        and not SettingAllowsAnyIntentScope(setting, groups)
+    then
+        return false
+    end
     return true
 end
 
@@ -1280,8 +1302,7 @@ local function CandidateIndexTokens(text)
     cached = candidateIndexTokenCacheCold[raw]
     if cached ~= nil then
         -- Promote so the entry survives the next generation swap.
-        candidateIndexTokenCacheHot[raw] = cached
-        return cached
+        return CacheCandidateIndexTokens(raw, cached)
     end
     local tokens = {}
     local seen = {}
@@ -1363,7 +1384,41 @@ P._BuildRegistryCandidateIndex = function(settings, includeAliases)
     P._registryCandidateCache = {}
     P._registryCandidateCacheOrder = {}
     P._registryCandidateFuzzyTokenCache = {}
+    P._registryCandidateFuzzyTokenCacheOrder = {}
+    P._registryCandidateFuzzyTokenCacheHead = 1
     if P.ClearSettingMatchScoreCache then P.ClearSettingMatchScoreCache() end
+end
+
+local REGISTRY_FUZZY_TOKEN_CACHE_LIMIT = 2048
+
+function P.ClearRegistryCandidateFuzzyCache()
+    P._registryCandidateFuzzyTokenCache = {}
+    P._registryCandidateFuzzyTokenCacheOrder = {}
+    P._registryCandidateFuzzyTokenCacheHead = 1
+end
+
+local function RememberRegistryFuzzyToken(token, value)
+    local cache = P._registryCandidateFuzzyTokenCache or {}
+    local order = P._registryCandidateFuzzyTokenCacheOrder or {}
+    local head = tonumber(P._registryCandidateFuzzyTokenCacheHead) or 1
+    P._registryCandidateFuzzyTokenCache = cache
+    P._registryCandidateFuzzyTokenCacheOrder = order
+    if cache[token] == nil then
+        order[#order + 1] = token
+        if #order - head + 1 > REGISTRY_FUZZY_TOKEN_CACHE_LIMIT then
+            cache[order[head]] = nil
+            head = head + 1
+            if head > REGISTRY_FUZZY_TOKEN_CACHE_LIMIT and head > (#order / 2) then
+                local compact = {}
+                for i = head, #order do compact[#compact + 1] = order[i] end
+                order, head = compact, 1
+                P._registryCandidateFuzzyTokenCacheOrder = order
+            end
+        end
+    end
+    cache[token] = value
+    P._registryCandidateFuzzyTokenCacheHead = head
+    return value
 end
 
 P._EnsureRegistryCandidateIndex = function(settings, includeAliases)
@@ -1393,7 +1448,7 @@ local function RegistryCandidateListForToken(token)
     local buckets = P._registryCandidateIndexFuzzyBuckets
     local firstBuckets = buckets and buckets[first]
     if type(firstBuckets) ~= "table" then
-        P._registryCandidateFuzzyTokenCache[token] = false
+        RememberRegistryFuzzyToken(token, false)
         return nil
     end
 
@@ -1412,7 +1467,7 @@ local function RegistryCandidateListForToken(token)
                         seenSettings[setting] = true
                         out[#out + 1] = setting
                         if #out > REGISTRY_FUZZY_CANDIDATE_LIST_LIMIT then
-                            P._registryCandidateFuzzyTokenCache[token] = false
+                            RememberRegistryFuzzyToken(token, false)
                             return nil
                         end
                     end
@@ -1421,7 +1476,7 @@ local function RegistryCandidateListForToken(token)
         end
     end
 
-    P._registryCandidateFuzzyTokenCache[token] = #out > 0 and out or false
+    RememberRegistryFuzzyToken(token, #out > 0 and out or false)
     return #out > 0 and out or nil
 end
 

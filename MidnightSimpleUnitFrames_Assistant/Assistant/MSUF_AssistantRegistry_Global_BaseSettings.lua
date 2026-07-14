@@ -133,7 +133,49 @@ function A.GlobalRegistry.RegisterBaseSettings(ctx)
     RegisterGeneralBoolean("showMinimapIcon", "minimapIcon", "MSUF Minimap Icon", true, {
         "minimap icon", "minimap button", "msuf minimap icon", "msuf minimap button", "show minimap icon", "hide minimap icon", "minikarten symbol",
         "minimap symbol", "minimap knopf", "minikarten icon", "minikarten button", "minikarten knopf", "symbol an der minimap",
-    }, { category = "Global / Misc", frameType = "misc", reason = "MSUF_ASSISTANT_MINIMAP_ICON" })
+    }, {
+        category = "Global / Misc", frameType = "misc", reason = "MSUF_ASSISTANT_MINIMAP_ICON",
+        dbScopes = { { scope = "general", dbKey = "minimapIconDB.hide" } },
+    })
+    Registry:RegisterSetting({
+        key = "general.minimapIconPosition",
+        label = "MSUF Minimap Icon Position",
+        category = "Global / Misc",
+        unit = "global",
+        frameType = "misc",
+        attribute = "minimapIconPosition",
+        type = "number",
+        min = 0,
+        max = 360,
+        step = 1,
+        aliases = { "minimap icon position", "minimap button position", "minimap icon angle", "minimap button angle" },
+        -- The minimap button itself is the native UI for this value: users
+        -- change the angle by dragging it around the minimap. There is no
+        -- duplicate Menu2 slider to navigate to, while the Assistant may read
+        -- and set the same persisted value directly.
+        menuControlDisposition = "standalone",
+        menuControlDispositionReason = "The minimap icon angle is controlled by dragging the minimap button, not by a Menu2 control.",
+        menuControlDispositionEvidence = "MidnightSimpleUnitFrames/Shell/MSUF_MinimapButton.lua:242-270,303-317",
+        dbScopes = { { scope = "general", dbKey = "minimapIconDB.minimapPos" } },
+        dbScopesReplace = true,
+        get = function()
+            local g = GeneralDB()
+            local db = type(g.minimapIconDB) == "table" and g.minimapIconDB or nil
+            return tonumber(db and db.minimapPos) or 220
+        end,
+        set = function(value)
+            local g = GeneralDB()
+            g.minimapIconDB = type(g.minimapIconDB) == "table" and g.minimapIconDB or {}
+            value = tonumber(value) or 220
+            if value < 0 then value = 0 elseif value > 360 then value = 360 end
+            g.minimapIconDB.minimapPos = value
+        end,
+        apply = function()
+            local fn = _G.MSUF_SetMinimapIconPosition
+            if type(fn) == "function" then fn(GeneralDB().minimapIconDB.minimapPos) end
+        end,
+        combatSafe = false,
+    })
     RegisterGeneralBoolean("playTargetSelectLostSounds", "targetSounds", "Target Select/Lost Sounds", false, {
         "target sounds", "target sound", "target lost sound", "target lost sounds", "target select sound", "target select sounds",
         "target select lost sounds", "play sound on target", "play sound on target lost", "play sound on target select", "ziel sound", "ziel sounds",

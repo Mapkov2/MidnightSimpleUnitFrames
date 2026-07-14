@@ -24,6 +24,32 @@ function A.GlobalRegistry.RegisterVisualScaleSettings(ctx)
     if type(Workflow.ClampScale) ~= "function" or type(Workflow.GlobalScaleState) ~= "function" then return false end
     if type(Workflow.SetGlobalScaleState) ~= "function" or type(Workflow.PushGlobalScale) ~= "function" then return false end
 
+    local function CopyTable(value)
+        local out = {}
+        for key, item in pairs(type(value) == "table" and value or {}) do out[key] = item end
+        return out
+    end
+
+    local function CaptureGlobalScaleState()
+        local g, ui = Workflow.GlobalScaleState()
+        return {
+            ui = CopyTable(ui),
+            preset = g.globalUiScalePreset,
+            value = g.globalUiScaleValue,
+            hasPreset = g.globalUiScalePreset ~= nil,
+            hasValue = g.globalUiScaleValue ~= nil,
+        }
+    end
+
+    local function RestoreGlobalScaleState(state)
+        if type(state) ~= "table" or type(state.ui) ~= "table" then return false end
+        local g = GeneralDB()
+        g.UIScale = CopyTable(state.ui)
+        g.globalUiScalePreset = state.hasPreset and state.preset or nil
+        g.globalUiScaleValue = state.hasValue and state.value or nil
+        return true
+    end
+
     Registry:RegisterSetting({
         key = "general.globalUiScale",
         label = "Global WoW UI Scale",
@@ -37,6 +63,8 @@ function A.GlobalRegistry.RegisterVisualScaleSettings(ctx)
         step = 0.01,
         percent = true,
         aliases = { "global ui scale", "wow ui scale", "global wow scale", "global scale" },
+        dbScopes = { { scope = "general", dbKey = "UIScale.Scale" } },
+        dbScopesReplace = true,
         get = function()
             local _, ui = Workflow.GlobalScaleState()
             return ui.Scale
@@ -45,6 +73,8 @@ function A.GlobalRegistry.RegisterVisualScaleSettings(ctx)
             Workflow.SetGlobalScaleState(true, value, "custom")
         end,
         apply = function() Workflow.PushGlobalScale() end,
+        captureTransactionState = CaptureGlobalScaleState,
+        restoreTransactionState = RestoreGlobalScaleState,
         combatSafe = false,
     })
 
@@ -57,6 +87,8 @@ function A.GlobalRegistry.RegisterVisualScaleSettings(ctx)
         attribute = "globalUiScaleEnabled",
         type = "boolean",
         aliases = { "global ui scale override", "wow ui scale override", "global scale override" },
+        dbScopes = { { scope = "general", dbKey = "UIScale.Enabled" } },
+        dbScopesReplace = true,
         get = function()
             local _, ui = Workflow.GlobalScaleState()
             return ui.Enabled == true
@@ -66,6 +98,8 @@ function A.GlobalRegistry.RegisterVisualScaleSettings(ctx)
             Workflow.SetGlobalScaleState(value and true or false, ui.Scale, value and "custom" or "auto")
         end,
         apply = function() Workflow.PushGlobalScale() end,
+        captureTransactionState = CaptureGlobalScaleState,
+        restoreTransactionState = RestoreGlobalScaleState,
         combatSafe = false,
     })
 

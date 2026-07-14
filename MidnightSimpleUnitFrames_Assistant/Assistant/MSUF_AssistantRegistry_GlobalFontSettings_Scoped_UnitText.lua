@@ -59,6 +59,7 @@ function A.GlobalRegistry.RegisterScopedUnitFontTextSettings(ctx, scope)
             GlobalScopeWrite(scopeKey, "fontOverride", GeneralDB(), "nameNpcClassColor", value == "CLASS")
             GlobalScopeWrite(scopeKey, "fontOverride", GeneralDB(), "npcNameRed", value == "NPC")
         end,
+        dbScopeKeys = { "nameNpcClassColor", "npcNameRed" },
         apply = ApplyFonts,
         reason = "MSUF_ASSISTANT_NPC_NAME_COLOR",
     })

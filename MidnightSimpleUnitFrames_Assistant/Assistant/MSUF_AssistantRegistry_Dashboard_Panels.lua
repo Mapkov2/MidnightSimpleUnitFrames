@@ -19,6 +19,25 @@ local DASHBOARD_PANEL_FIELDS = {
 }
 
 function A.Workflow.SetDashboardPanel(panel, open)
+    if panel == "all" then
+        if open ~= false then return false, "Which Dashboard panel do you want me to change?" end
+        for _, entry in pairs(DASHBOARD_PANEL_FIELDS) do
+            if M and type(M.PersistMenuStateValue) == "function" then
+                M.PersistMenuStateValue(entry.field, false)
+            elseif M then
+                M[entry.field] = false
+            end
+        end
+        if M and type(M.InvalidatePage) == "function" then M.InvalidatePage("home") end
+        if M and type(M.Open) == "function" then
+            if M.Open("home") == false then return false, "Open the MSUF menu first so I can navigate the Dashboard." end
+        elseif M and type(M.SelectPage) == "function" then
+            if M.SelectPage("home") == false then return false, "Open the MSUF menu first so I can navigate the Dashboard." end
+        else
+            return false, "Open the MSUF menu first so I can navigate the Dashboard."
+        end
+        return true, "Closed all optional Dashboard panels."
+    end
     local spec = DASHBOARD_PANEL_FIELDS[tostring(panel or "")]
     if not spec then return false, "Which Dashboard panel do you want me to change?" end
     if open == nil then

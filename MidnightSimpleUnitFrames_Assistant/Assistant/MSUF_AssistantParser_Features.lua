@@ -3816,10 +3816,27 @@ end
 local function ParseCastbarPreviewAction(text)
     if not ContainsAny(text, FeaturesPhrases[398]) then return nil end
     if not ContainsAny(text, FeaturesPhrases[399]) then return nil end
-    local action = Registry and Registry:GetAction("preview_castbar")
-    if not action then return nil end
     local units = DetectUnits(text)
     local unit = units[1] or "player"
+    local castbarTestMode = ContainsAny(text, {
+        "test mode", "testmode", "castbar test", "cast bar test", "test cast",
+        "testmodus", "zauberleisten test", "test zauberleiste",
+    })
+    if castbarTestMode then
+        local action = Registry and Registry:GetAction("set_castbar_test_mode")
+        if not action then return nil end
+        local disabled = ContainsAny(text, FeaturesPhrases[409])
+            or ContainsAny(text, { "disable", "off", "hide", "stoppe", "stoppen", "deaktivieren", "ausschalten" })
+        return {
+            kind = "action",
+            action = action,
+            args = { unit = unit, value = not disabled },
+            label = (disabled and "Stop " or "Start ") .. UnitDisplayLabel(unit) .. " Cast Bar Test",
+            summary = "Starts or stops the requested Cast Bar test in MSUF Edit Mode.",
+        }
+    end
+    local action = Registry and Registry:GetAction("preview_castbar")
+    if not action then return nil end
     local kind = "normal"
     if ContainsAny(text, FeaturesPhrases[400]) then
         kind = "channel"
@@ -3932,7 +3949,10 @@ local function ParseGuidedSetup(text)
     return action and {
         kind = "action",
         action = action,
-        args = { style = text },
+        -- The native tour owns all setup personalization and progress.  The
+        -- old text wizard used the raw prompt as a `style` argument, but that
+        -- field is intentionally absent from the saved-state action contract.
+        args = {},
         label = "Guided setup",
         summary = "Starts the guided setup flow.",
     } or nil
@@ -3944,7 +3964,9 @@ local function ParseGuidedSetupFollowup(text, ctx)
     return action and {
         kind = "action",
         action = action,
-        args = { command = "show" },
+        -- A bare follow-up only reopens the native tour.  Actual guided-bar
+        -- steps use the explicit, validated `step` field.
+        args = {},
         label = "Open guided setup",
         summary = "Returns to the native guided setup.",
     } or nil

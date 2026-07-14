@@ -42,6 +42,26 @@ Data.GRADIENT_DIRECTION_ALIASES = {
     verticalup = "UP",
     verticaldown = "DOWN",
 }
+Data.OUTLINE_STRATA_VALUES = {
+    "AUTO", "BACKGROUND", "LOW", "MEDIUM", "HIGH", "DIALOG",
+    "FULLSCREEN", "FULLSCREEN_DIALOG", "TOOLTIP",
+}
+Data.OUTLINE_STRATA_ALIASES = {
+    auto = "AUTO",
+    frame = "AUTO",
+    ["auto frame"] = "AUTO",
+    background = "BACKGROUND",
+    low = "LOW",
+    medium = "MEDIUM",
+    high = "HIGH",
+    dialog = "DIALOG",
+    fullscreen = "FULLSCREEN",
+    ["full screen"] = "FULLSCREEN",
+    fullscreen_dialog = "FULLSCREEN_DIALOG",
+    ["fullscreen dialog"] = "FULLSCREEN_DIALOG",
+    ["full screen dialog"] = "FULLSCREEN_DIALOG",
+    tooltip = "TOOLTIP",
+}
 Data.ON_OFF_STORAGE = { off = 0, on = 1 }
 Data.ON_OFF_VALUES = { "off", "on" }
 Data.ON_OFF_ALIASES = { off = "off", disabled = "off", hide = "off", on = "on", enabled = "on", show = "on" }
