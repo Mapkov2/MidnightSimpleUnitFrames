@@ -6,7 +6,7 @@ local function Check(condition, message)
 end
 
 local classification, classToken, reaction = "normal", "WARRIOR", 3
-local classificationReads, playerReads, classReads = 0, 0, 0
+local classificationReads, playerReads, classReads, reactionReads = 0, 0, 0, 0
 
 _G.issecretvalue = function() return false end
 _G.UnitExists = function() return true end
@@ -16,8 +16,11 @@ _G.UnitIsPlayer = function()
     playerReads = playerReads + 1
     return false
 end
-_G.UnitSelectionType = function() return 1 end
-_G.UnitReaction = function() return reaction end
+_G.UnitSelectionType = function() return reaction == 4 and 2 or 1 end
+_G.UnitReaction = function()
+    reactionReads = reactionReads + 1
+    return reaction
+end
 _G.UnitClassification = function()
     classificationReads = classificationReads + 1
     return classification
@@ -92,14 +95,29 @@ local state = Common.RefreshUnitState(frame, "target", spec, "MSUF_UNIT_IDENTITY
 Check(state.npcKind == "npcRegular", "initial NPC type classification changed")
 Check(classificationReads == 1 and playerReads == 1, "initial identity reads changed")
 local r, g, b = Common.HealthColor(frame, "target", 100, 100, false, "UNIT_HEALTH")
-Check(r == 0.8 and g == 0.6 and b == 0.4, "enabled NPC class color did not color the health bar")
-Check(classReads == 1, "NPC class color repeated UnitClass in one identity state")
+Check(r == 0.70 and g == 0.56 and b == 0.33, "hostile NPC was overridden by friendly NPC class color")
+Check(classReads == 0, "hostile NPC class was read")
+Check(reactionReads == 1, "friendly NPC eligibility repeated UnitReaction in one identity state")
 
 local kind = Common.UnitNPCKind(frame, "target", spec, true)
 Check(kind == "npcRegular", "text NPC type classification changed")
 Text.NameTextColor(frame, "target")
 Check(classificationReads == 1, "bar/name color repeated NPC classification in one dispatch")
 Check(playerReads == 1, "name color repeated UnitIsPlayer in one dispatch")
+
+reaction = 4
+frame._msufDispatchToken = 2
+state = Common.RefreshUnitState(frame, "target", spec, "MSUF_UNIT_IDENTITY")
+r, g, b = Common.HealthColor(frame, "target", 100, 100, false, "UNIT_HEALTH")
+Check(r == 1 and g == 1 and b == 0, "neutral NPC was overridden by friendly NPC class color")
+Check(classReads == 0, "neutral NPC class was read")
+
+reaction = 5
+frame._msufDispatchToken = 3
+state = Common.RefreshUnitState(frame, "target", spec, "MSUF_UNIT_IDENTITY")
+r, g, b = Common.HealthColor(frame, "target", 100, 100, false, "UNIT_HEALTH")
+Check(r == 0.8 and g == 0.6 and b == 0.4, "friendly NPC class color did not color the health bar")
+Check(classReads == 1, "friendly NPC class was not read exactly once")
 
 spec.health.npcClassColorBar = false
 r, g, b = Common.HealthColor(frame, "target", 100, 100, false, "UNIT_HEALTH")
@@ -108,10 +126,10 @@ spec.health.npcClassColorBar = true
 
 classification = "worldboss"
 classToken = "UNKNOWN"
-frame._msufDispatchToken = 2
+frame._msufDispatchToken = 4
 state = Common.RefreshUnitState(frame, "target", spec, "MSUF_UNIT_IDENTITY")
 Check(state.npcKind == "npcBoss", "new dispatch reused stale NPC classification")
-Check(classificationReads == 2 and playerReads == 2, "new dispatch did not refresh identity reads")
+Check(classificationReads == 3 and playerReads == 4, "new dispatch did not refresh identity reads")
 r, g, b = Common.HealthColor(frame, "target", 100, 100, false, "UNIT_HEALTH")
 Check(r == 0.74 and g == 0.11 and b == 0, "unknown NPC class did not fall back to NPC type color")
 
@@ -119,6 +137,7 @@ Check(r == 0.74 and g == 0.11 and b == 0, "unknown NPC class did not fall back t
 -- retain their reaction colors so hostile bosses are red and friendly bosses
 -- are green.
 classToken = "WARRIOR"
+reaction = 3
 local bossSpec = {
     key = "boss",
     health = {

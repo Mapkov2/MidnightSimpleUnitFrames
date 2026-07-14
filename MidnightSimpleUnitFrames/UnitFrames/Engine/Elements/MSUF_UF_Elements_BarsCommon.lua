@@ -571,13 +571,14 @@ local function ClassColor(unit)
   return 0.12, 0.62, 0.95
 end
 
-local function NPCClassToken(state, unit)
+local function FriendlyNPCClassToken(state, unit)
   if not state then
     return nil
   end
   if state.npcClassRead ~= true then
     state.npcClassRead = true
-    if IsUnitToken(unit) then
+    local reaction = IsUnitToken(unit) and UnitReaction and SafeNumber(UnitReaction(unit, "player")) or nil
+    if reaction and reaction >= 5 then
       local _, class = UnitClass(unit)
       if issecretvalue(class) ~= true then
         state.npcClass = class
@@ -835,7 +836,7 @@ local function RefreshUnitState(frame, unit, spec, event)
       state.npcKindKnown = state.npcKind ~= nil
       local health = spec and spec.health
       if health and health.npcClassColorBar == true and spec.key ~= "pet" and spec.key ~= "boss" then
-        NPCClassToken(state, unit)
+        FriendlyNPCClassToken(state, unit)
       end
     end
     state.identityReady = true
@@ -1005,7 +1006,7 @@ local function HealthColor(frame, unit, hp, maxHP, calc, event)
 
   if health.npcClassColorBar == true and spec and spec.key ~= "pet" and spec.key ~= "boss"
       and state and state.isPlayerKnown and not state.isPlayer then
-    local r, g, b = ClassColorForToken(NPCClassToken(state, unit))
+    local r, g, b = ClassColorForToken(FriendlyNPCClassToken(state, unit))
     if r ~= nil then
       return r, g, b
     end

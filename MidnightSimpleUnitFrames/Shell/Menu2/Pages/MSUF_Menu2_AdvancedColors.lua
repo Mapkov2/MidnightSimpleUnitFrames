@@ -1300,7 +1300,7 @@ local function BuildUnitAndNPCColors(ctx, b, CH)
         NPCColorAt(ctx, unit, row, 12, -10 - (i - 1) * 36, ApplyUnitframeColorWithReload)
     end
     CH.ApiColorAt(ctx, unit, "Pet Frame Color", 360, -10, "GetPetFrameColor", "SetPetFrameColor", 0, 0.8, 0, ApplyUnitframeColorWithReload)
-    ValueToggleAt(ctx, unit, "NPC class colors on HP bars (Class Color mode only)", 360, -54,
+    ValueToggleAt(ctx, unit, "Friendly NPC class colors on HP bars (Class Color mode only)", 360, -54,
         function() return ApiValue("GetNPCClassColorBar", function() return G().npcClassColorBar == true end) end,
         function(v)
             if not ApiCall("SetNPCClassColorBar", v) then
