@@ -119,6 +119,18 @@ end
 -- setting before any movers are opened.
 do
     local MSUF, M, _, effects = LoadFixture({ db = { general = { anchorToCooldown = false } } })
+    Check(M.IsGuidedTourWidgetActionable({ _msuf2AppliedEnabled = false }) == false,
+        "guided setup retained an explicitly disabled dependent control")
+    Check(M.IsGuidedTourWidgetActionable({ IsEnabled = function() return false end }) == false,
+        "guided setup retained a natively disabled dependent control")
+    Check(M.IsGuidedTourWidgetActionable({
+        buttons = {
+            { IsEnabled = function() return false end },
+            { _msuf2DesiredEnabled = false },
+        },
+    }) == false, "guided setup retained a segment with no actionable choices")
+    Check(M.IsGuidedTourWidgetActionable({ IsEnabled = function() return true end }) == true,
+        "guided setup removed an actionable control")
     Check(MSUF.GuidedTour6:Start("Default", "edit_mode") == true, "guided tour did not start at Edit Mode")
     Equal(M.GetGuidedCooldownAnchorDecision(), nil, "Edit Mode inferred an anchor choice without user input")
     Check(M.IsGuidedEditModePlacementUnlocked() == false, "frame placement unlocked before the anchor choice")

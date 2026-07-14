@@ -612,6 +612,31 @@ local function RuntimeControlRecords()
     return ok and type(records) == "table" and records or {}
 end
 
+local function GuidedWidgetIsActionable(widget)
+    if not widget or widget._msuf2AppliedEnabled == false or widget._msuf2DesiredEnabled == false then return false end
+    local function ObjectEnabled(object)
+        if not object or type(object.IsEnabled) ~= "function" then return true end
+        local ok, enabled = pcall(object.IsEnabled, object)
+        return not ok or (enabled ~= false and enabled ~= 0)
+    end
+    if not ObjectEnabled(widget) then return false end
+    if type(widget.buttons) == "table" and #widget.buttons > 0 then
+        for i = 1, #widget.buttons do
+            local button = widget.buttons[i]
+            if button
+                and button._msuf2AppliedEnabled ~= false
+                and button._msuf2DesiredEnabled ~= false
+                and ObjectEnabled(button)
+            then
+                return true
+            end
+        end
+        return false
+    end
+    return true
+end
+M.IsGuidedTourWidgetActionable = GuidedWidgetIsActionable
+
 local function SectionControls(pageKey, section, sections, records, includeEphemeral)
     local catalog = M.RuntimeControlCatalog
     if not (catalog and section and section.body) then return {} end
@@ -629,7 +654,7 @@ local function SectionControls(pageKey, section, sections, records, includeEphem
         then
             local internal = type(catalog.Get) == "function" and catalog.Get(record.controlId) or nil
             local widget = internal and internal.widget
-            local owner = widget and IsWidgetInside(widget, section.body) and section or nil
+            local owner = GuidedWidgetIsActionable(widget) and IsWidgetInside(widget, section.body) and section or nil
             if owner then
                 for j = 1, #sections do
                     local candidate = sections[j]
@@ -1295,12 +1320,23 @@ local function SkipCurrent()
     if stage.id == "final_review" then return false end
     local position = CurrentPosition(stage)
     local signature = SkipSignature(stage, position)
-    if Runtime.warning and Runtime.warning.signature == signature then
-        Runtime.warning = nil
-        return AdvanceCurrent("skipped")
+    if Runtime.warning then
+        local warning = Runtime.warning
+        local sectionId = position.section and position.section.id or nil
+        if warning.stageId == stage.id and warning.sectionId == sectionId then
+            Runtime.warning = nil
+            return AdvanceCurrent("skipped")
+        end
     end
     local text, count = SkipWarning(stage, position)
-    Runtime.warning = { signature = signature, text = text, count = count }
+    Runtime.warning = {
+        signature = signature,
+        stageId = stage.id,
+        sectionId = position.section and position.section.id or nil,
+        controlId = position.control and position.control.id or nil,
+        text = text,
+        count = count,
+    }
     M.RefreshGuidedTourChrome("SKIP_WARNING")
     return true
 end
