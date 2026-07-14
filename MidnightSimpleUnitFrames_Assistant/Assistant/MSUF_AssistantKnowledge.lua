@@ -776,10 +776,9 @@ local function RequestedSearchUnit(queryNorm, exactNorm)
     return nil
 end
 
-local function SearchScopeScore(item, queryNorm, exactNorm)
+local function SearchScopeScore(item, requested)
     local setting = item and item.setting
     if type(setting) ~= "table" then return 0 end
-    local requested = RequestedSearchUnit(queryNorm, exactNorm)
     if not requested then return 0 end
     local unit = tostring(setting.unit or "")
     if unit == requested then return 430 end
@@ -864,7 +863,8 @@ local function CopySearchResults(results)
     return out
 end
 
-local function TokenScore(item, queryTokens, queryNorm, intent, pageKey, exactQueryNorm)
+local function TokenScore(item, queryTokens, queryNorm, intent, pageKey, exactQueryNorm,
+    actionQueryHint, requestedSearchUnit, applyPageBoost)
     if not item or item.haystack == "" then return 0 end
     local score = 0
     local matched = false
@@ -904,7 +904,7 @@ local function TokenScore(item, queryTokens, queryNorm, intent, pageKey, exactQu
     if item.kind == "setting" then score = score + 90 end
     if item.kind == "page" then score = score + 65 end
     if item.kind == "diagnostic" then score = score + 70 end
-    if HasActionQueryHint(queryNorm, exactNorm) then
+    if actionQueryHint then
         if item.kind == "action" or item.kind == "diagnostic" then
             score = score + 460
         elseif item.kind == "setting" then
@@ -921,8 +921,8 @@ local function TokenScore(item, queryTokens, queryNorm, intent, pageKey, exactQu
     elseif intent == "help" then
         if item.kind == "faq" then score = score + 120 end
     end
-    score = score + SearchScopeScore(item, queryNorm, exactNorm)
-    score = score + SettingPageBoost(item.setting, pageKey)
+    score = score + SearchScopeScore(item, requestedSearchUnit)
+    if applyPageBoost then score = score + SettingPageBoost(item.setting, pageKey) end
     return score
 end
 
@@ -956,6 +956,12 @@ function K.Search(query, limit, opts)
     local norm = Normalize(expandedQuery)
     local queryTokens = SplitTokens(norm)
     if norm == "" or #queryTokens == 0 then return {} end
+    -- These values depend only on the query, not on an indexed item. Keeping
+    -- them outside the item loop avoids repeating normalization and phrase
+    -- scans thousands of times for every read-only setting lookup.
+    local actionQueryHint = HasActionQueryHint(norm, exactNorm)
+    local requestedSearchUnit = RequestedSearchUnit(norm, exactNorm)
+    local applyPageBoost = opts.ignoreCurrentPage ~= true
     limit = tonumber(limit) or MAX_RESULTS
     local cacheKey = tostring(pageKey) .. "\031" .. tostring(opts.kind or "") .. "\031" .. tostring(limit) .. "\031" .. norm
     if type(K.searchCache) == "table" and K.searchCache[cacheKey] then
@@ -965,7 +971,8 @@ function K.Search(query, limit, opts)
     for i = 1, #(index.items or {}) do
         if i % 32 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
         local item = index.items[i]
-        local score = TokenScore(item, queryTokens, norm, intent, pageKey, exactNorm)
+        local score = TokenScore(item, queryTokens, norm, intent, pageKey, exactNorm,
+            actionQueryHint, requestedSearchUnit, applyPageBoost)
         if opts.kind and item.kind ~= opts.kind then score = 0 end
         if score > 0 then
             InsertTopResult(results, { item = item, score = score }, limit)
@@ -1222,7 +1229,10 @@ local function RememberKnowledgeHelpContext(result)
 end
 
 local function CountRegisteredForPage(page)
-    local index = K.EnsureIndexIfSafe()
+    -- Curated page help does not need to construct the complete knowledge
+    -- index merely to append optional counts. Generic search will build the
+    -- index on demand; until then, keep the direct help response instant.
+    local index = type(K.index) == "table" and K.index.version == INDEX_VERSION and K.index or nil
     if not index then return 0, 0 end
     local settings, actions = 0, 0
     for i = 1, #(index.items or {}) do

@@ -10013,6 +10013,12 @@ function R.SettingFollowupResults(settingKey, query)
     local setting = registry and type(registry.GetSetting) == "function" and registry:GetSetting(settingKey) or nil
     query = tostring(query or (setting and setting.label) or settingKey)
 
+    -- A caller with an exact registry key already has the authoritative
+    -- owner. Build its single follow-up directly instead of scoring the whole
+    -- knowledge index to rediscover the same setting.
+    local directItem = R.RegistrySettingItemForKey and R.RegistrySettingItemForKey(settingKey) or nil
+    if directItem then return R.RegistryLocationResultFollowups({ { item = directItem } }, 1) end
+
     if A.Knowledge and type(A.Knowledge.Search) == "function" then
         local results = A.Knowledge.Search(query, 12, { kind = "setting", ignoreCurrentPage = true }) or {}
         for i = 1, #results do
@@ -10045,9 +10051,24 @@ end
 
 function R.SettingFollowupResultsByQuery(query, exactLabel)
     query = tostring(query or "")
-    if query == "" or not (A.Knowledge and type(A.Knowledge.Search) == "function") then return nil end
-    local results = A.Knowledge.Search(query, 12, { kind = "setting", ignoreCurrentPage = true }) or {}
+    if query == "" then return nil end
     local exactNorm = R.Normalize(exactLabel or query)
+
+    -- Specialist routes pass their display label here. The compact registry
+    -- matcher can resolve an exact label without the much broader FAQ/action/
+    -- page knowledge scan, while the existing search remains the fallback for
+    -- labels that do not map to a concrete setting.
+    local compact = R.CompactRegistrySettingSearchEntries
+        and R.CompactRegistrySettingSearchEntries(exactLabel or query, 12) or nil
+    for i = 1, #(compact or {}) do
+        local item = compact[i] and compact[i].item
+        if item and item.kind == "setting" and R.Normalize(item.label or "") == exactNorm then
+            return R.RegistryLocationResultFollowups({ { item = item } }, 1)
+        end
+    end
+
+    if not (A.Knowledge and type(A.Knowledge.Search) == "function") then return nil end
+    local results = A.Knowledge.Search(query, 12, { kind = "setting", ignoreCurrentPage = true }) or {}
     local first
     for i = 1, #results do
         local item = results[i] and results[i].item
@@ -11891,7 +11912,26 @@ function R.TryDirectSettingNavigation(text, coreHandler)
             or direct:match("%s+settings$") or direct:match("%s+page$") or direct:match("%s+menu$"))
         then
             local pageResult = RunParsedAction()
-            if pageResult and not A.RouterIsUnknownResult(pageResult) then return pageResult end
+            if pageResult and not A.RouterIsUnknownResult(pageResult) then
+                -- Page-style aura wording still names one readable lane state
+                -- (for example "show me target buff settings"). Preserve the
+                -- successful page route, but include that lane's current value
+                -- so navigation answers the named setting instead of returning
+                -- only a generic "opened" acknowledgement.
+                local scope, _, groupScope = R.AuraScopeForDetailText(norm)
+                local lane = R.AuraLaneFromText(norm)
+                if scope and not groupScope and lane and R.RegistrySettingItemForKey
+                    and R.RegistrySettingCurrentValueLine
+                then
+                    local item = R.RegistrySettingItemForKey("auras3." .. scope .. "." .. lane .. ".visible")
+                    local valueLine = item and R.RegistrySettingCurrentValueLine(item) or nil
+                    local body = tostring(pageResult.text or "")
+                    if valueLine and not body:find("Current value:", 1, true) then
+                        pageResult.text = body ~= "" and (body .. "\n" .. valueLine) or valueLine
+                    end
+                end
+                return pageResult
+            end
         end
     end
     local entries = R.RegistrySettingSearchEntries(direct, norm, 8)
@@ -13880,9 +13920,14 @@ function A.RouteInput(text, coreHandler)
         or exactLocationNorm:match("^wheres%s+")
     local naturalDisplayLocation = exactLocationNorm:match("^show%s+me%s+where%s+")
         or exactLocationNorm:match("^tell%s+me%s+where%s+")
-    local exactLocationEntries = R.ExactRegistryLocationEntries
-        and R.ExactRegistryLocationEntries(text) or nil
+    local prefersSpecialistLocation = R.RegistryLocationPrefersSpecialistGuidance(text)
     local exactLeafLocation = literalExactLocation or R.RegistryLocationNeedsExactLeafPrecedence(text)
+    -- Exact entries are consumed only by the exact-leaf and natural-display
+    -- branches below. Avoid scanning every registry label for other location
+    -- wording that will continue to a reviewed specialist route anyway.
+    local exactLocationEntries = (exactLeafLocation or naturalDisplayLocation)
+        and not prefersSpecialistLocation and R.ExactRegistryLocationEntries
+        and R.ExactRegistryLocationEntries(text) or nil
     local exactRegistryLocation = exactLocationEntries and exactLeafLocation
         and not R.RegistryLocationPrefersSpecialistGuidance(text)
         and R.TryExactRegistrySettingLocation
@@ -13892,7 +13937,7 @@ function A.RouteInput(text, coreHandler)
     -- Natural display wording is easily mistaken for a generic search. Give
     -- connected feature families their human guide first. If no family owns a
     -- complete exact label, return that exact location instead of fuzzy rows.
-    if naturalDisplayLocation or R.RegistryLocationPrefersSpecialistGuidance(text) then
+    if naturalDisplayLocation or prefersSpecialistLocation then
         local specialistLocation = R.TryRegistryLocationSpecialistGuidance(text, Core)
         if specialistLocation then return specialistLocation end
         if naturalDisplayLocation and exactLocationEntries and R.TryExactRegistrySettingLocation then
