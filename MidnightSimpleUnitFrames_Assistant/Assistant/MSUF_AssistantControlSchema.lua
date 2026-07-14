@@ -68,23 +68,27 @@ local function SearchTokens(value)
     return tokens
 end
 
-local function IdentityTokens(value)
-    local tokens = {}
-    for token in Normalize(value):gmatch("%S+") do
-        local alias = TOKEN_ALIASES[token] or token
-        for normalizedToken in tostring(alias):gmatch("%S+") do
-            if not STOP[normalizedToken] then tokens[#tokens + 1] = normalizedToken end
-        end
-    end
-    return tokens
-end
-
 local function SearchTokenKey(value)
     return table.concat(SearchTokens(value), "\031")
 end
 
 local function CanonicalSearchText(row)
     return table.concat({ row and row.label or "", row and row.pageKey or "", row and row.controlPath or "" }, " ")
+end
+
+local CANONICAL_QUERY_PREFIXES = {
+    "take me to ", "navigate to ", "direct me to ", "bring me to ", "jump to ",
+    "show me ", "where is ", "go to ", "open ", "find ",
+    "fuehre mich zu ", "zeige mir ", "oeffne ", "finde ", "wo ist ",
+}
+
+local function CanonicalIdentityQuery(value)
+    local normalized = Normalize(value)
+    for i = 1, #CANONICAL_QUERY_PREFIXES do
+        local prefix = CANONICAL_QUERY_PREFIXES[i]
+        if normalized:sub(1, #prefix) == prefix then return normalized:sub(#prefix + 1) end
+    end
+    return normalized
 end
 
 local function CurrentContextId()
@@ -254,8 +258,9 @@ local function EnsureIndex()
         built.labelSearch[i] = tostring(row.label or ""):lower()
         built.pageSearch[i] = tostring(row.pageKey or ""):lower()
         built.valueSearch[i] = tostring(row.values or ""):lower()
-        built.labelTokenKey[i] = SearchTokenKey(row.label)
-        built.canonicalIdentityKey[i] = table.concat(IdentityTokens(CanonicalSearchText(row)), "\031")
+        -- Label-token and canonical-identity keys are needed only for rows
+        -- that match a query.  Computing them for the entire 2k+ catalog made
+        -- the first ordinary search pay for thousands of unused normalizations.
         built.bySemanticId[row.semanticId] = row
         if row.controlId ~= "" then built.byControlId[row.controlId] = row end
         if row.settingKey ~= "" then
@@ -338,7 +343,8 @@ function Schema.Find(query, opts)
     local contextId, stateId = opts.contextId or CurrentContextId(), tostring(opts.stateId or "")
     local limit = math.max(1, math.min(tonumber(opts.limit) or 6, 20))
     local queryTokenKey = table.concat(tokens, "\031")
-    local queryIdentityKey = table.concat(IdentityTokens(query), "\031")
+    local queryIdentityKey = normalized
+    local queryIdentityAlternate = CanonicalIdentityQuery(query)
     local cacheKey = contextId .. "\031" .. stateId .. "\031" .. tostring(limit) .. "\031" .. normalized
     if searchCache[cacheKey] then
         local copy = {}
@@ -386,8 +392,20 @@ function Schema.Find(query, opts)
                 -- a tie. Page/value coincidences are not permission to choose
                 -- one control silently. Adding canonical page/path identity,
                 -- however, receives a deterministic exact-match bonus.
-                if queryTokenKey == built.labelTokenKey[i] then score = 200 end
-                if queryIdentityKey == built.canonicalIdentityKey[i] then score = score + 1000 end
+                local labelTokenKey = built.labelTokenKey[i]
+                if labelTokenKey == nil then
+                    labelTokenKey = SearchTokenKey(row.label)
+                    built.labelTokenKey[i] = labelTokenKey
+                end
+                if queryTokenKey == labelTokenKey then score = 200 end
+                local canonicalIdentityKey = built.canonicalIdentityKey[i]
+                if canonicalIdentityKey == nil then
+                    canonicalIdentityKey = Normalize(CanonicalSearchText(row))
+                    built.canonicalIdentityKey[i] = canonicalIdentityKey
+                end
+                if queryIdentityKey == canonicalIdentityKey or queryIdentityAlternate == canonicalIdentityKey then
+                    score = score + 1000
+                end
                 local inserted = false
                 for at = 1, #candidates do
                     if score > candidates[at].score or (score == candidates[at].score and row.semanticId < candidates[at].row.semanticId) then
