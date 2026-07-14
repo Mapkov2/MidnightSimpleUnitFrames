@@ -147,9 +147,9 @@ local function BuildGFLayout(ctx)
     local advancedRightX = advancedLeftX + advancedLeftW + layoutGap
     local advancedRightW = advancedInnerW - advancedLeftW - layoutGap
     local layoutSliderW = max(180, min(360, advancedLeftW - 64))
-    local sizeCard = W.ControlCard(advancedLayout, "Size", "Dimensions and spacing for each group member.", advancedLeftX, -38, advancedLeftW, 188)
-    local gridCard = W.ControlCard(advancedLayout, "Columns", "Column behavior for raid-like scopes.", advancedLeftX, -244, advancedLeftW, 158)
-    local growthCard = W.ControlCard(advancedLayout, "Growth", "How new members fill the group frame.", advancedRightX, -38, advancedRightW, 188)
+    local sizeCard = W.ControlCard(advancedLayout, "Size", nil, advancedLeftX, -38, advancedLeftW, 188)
+    local gridCard = W.ControlCard(advancedLayout, "Columns", nil, advancedLeftX, -244, advancedLeftW, 158)
+    local growthCard = W.ControlCard(advancedLayout, "Growth", nil, advancedRightX, -38, advancedRightW, 188)
     local function LayoutSlider(parent, label, minValue, maxValue, step, key, defaultValue, y)
         return AttachGroupFocus(ScopeSlider(ctx, parent, label, minValue, maxValue, step, layoutSliderW, key, defaultValue, "rebuild", 16, y, layoutSliderW, "LEFT"), "layout")
     end
@@ -177,7 +177,7 @@ local function BuildGFLayout(ctx)
     local sortingLeftW = floor((sortingInnerW - sortingGap) * 0.52)
     local sortingRightX = sortingLeftX + sortingLeftW + sortingGap
     local sortingRightW = sortingInnerW - sortingLeftW - sortingGap
-    local sortCard = W.ControlCard(sorting, "Sort mode", "Controls how group members are ordered.", sortingLeftX, -38, sortingLeftW, 174)
+    local sortCard = W.ControlCard(sorting, "Sort mode", nil, sortingLeftX, -38, sortingLeftW, 174)
     local roleCard = W.ControlCard(sorting, "Role Priority", "Drag rows with mouse to reorder.", sortingRightX, -38, sortingRightW, 174)
     local sortMode = W.Dropdown(sortCard, "Sort Mode", SORT_MODES, min(260, sortingLeftW - 32))
     W.MoveWidget(sortMode, sortCard, 16, -62, min(260, sortingLeftW - 32), "LEFT")
@@ -249,7 +249,7 @@ local function BuildGFLayout(ctx)
     local scaleLeftW = floor((scaleInnerW - scaleGap) * 0.48)
     local scaleRightX = scaleLeftX + scaleLeftW + scaleGap
     local scaleRightW = scaleInnerW - scaleLeftW - scaleGap
-    local scaleModeCard = W.ControlCard(scale, "Frame scaling", "Scales frame size, fonts, and icons proportionally.", scaleLeftX, -38, scaleLeftW, 128)
+    local scaleModeCard = W.ControlCard(scale, "Mode", "Scales frame size, fonts, and icons proportionally.", scaleLeftX, -38, scaleLeftW, 128)
     local manualCard = W.ControlCard(scale, "Manual Scale", "Buff/debuff positions stay relative to their anchors.", scaleLeftX, -184, scaleLeftW, 144)
     local autoCard = W.ControlCard(scale, "Auto Breakpoints", "Automatically scale by group size.", scaleRightX, -38, scaleRightW, 290)
     local RefreshScalingState = M.RefreshProxy()

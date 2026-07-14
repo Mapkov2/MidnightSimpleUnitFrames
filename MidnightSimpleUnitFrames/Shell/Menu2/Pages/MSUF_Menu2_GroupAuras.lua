@@ -184,7 +184,7 @@ local function BuildAuraWorkspaceTabs(ctx, section, scope, lane, width)
         "group-workspace.lane." .. AuraCatalogToken(lane, "lane") .. ".tool-selector", "ephemeral")
     if lane ~= "externals" then
         local openStyle = T.Button(section, "Open Aura Style", 126, 22)
-        openStyle:SetPoint("TOPRIGHT", section, "TOPRIGHT", -16, -74)
+        openStyle:SetPoint("TOPRIGHT", section, "TOPRIGHT", -16, -76)
         if T.CenterButtonLabel then T.CenterButtonLabel(openStyle) end
         openStyle:SetScript("OnClick", function()
             local styleScope = scope == "mythicraid" and "raid" or scope

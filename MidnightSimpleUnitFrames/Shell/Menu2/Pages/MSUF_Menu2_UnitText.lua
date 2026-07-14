@@ -63,10 +63,10 @@ local function BuildText(ctx, builder, unit)
     local RefreshTextControlState = M.RefreshProxy()
     W.Text(sec, "Font style is shared in |cff38c7f0Global Style > Fonts|r. Position can be adjusted here or dragged in |cff38c7f0Edit Mode|r.", 14, -38, sectionW - 210, T.colors.muted)
     local scope = T.Font(sec, "GameFontDisableSmall", M.Format(M.Tr("Editing %s"), UnitTopLabel(unit)), T.colors.dim)
-    scope:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -16, -38)
+    scope:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -16, -40)
     scope:SetJustifyH("RIGHT")
     scope:SetWidth(170)
-    sec._msuf2CursorY = -62
+    sec._msuf2CursorY = -64
     local tabValues = VT("name", "Name", "hp", "HP Text", "power", "Power Text", "advanced", "Advanced")
     local sampleNames = {
         player = "Mapko",
@@ -327,7 +327,7 @@ local function BuildText(ctx, builder, unit)
         x = 20, y = -68,
     })
     RegisterControl(tabs, ctx, "text.workspace_tab", "Text area", "segment", "ephemeral")
-    local nameContent = TextCard(nameTab, "Name text", "Controls whether the unit name is shown on this frame.", leftX, -4, cardW, 116)
+    local nameContent = TextCard(nameTab, "Name text", nil, leftX, -4, cardW, 116)
     local _, namePreviewValue = PreviewText(nameContent, NamePreviewText(), 16, -54, cardW - 32)
     local showNameText = W.SwitchAt(nameContent, "Show Name", cardW - 62, -24, 0, "HIDDEN")
     M.BindBoolWidget(ctx, showNameText,
@@ -387,7 +387,7 @@ local function BuildText(ctx, builder, unit)
             if value ~= nil then return value == true end
             return type(cfg.fullValueShortDefault) == "function" and cfg.fullValueShortDefault() == true or cfg.fullValueShortDefault == true
         end
-        local content = TextCard(tab, "What text appears", "Slots are explained before advanced position controls.", leftX, -4, cardW, 346)
+        local content = TextCard(tab, "Content", nil, leftX, -4, cardW, 346)
         local _, previewValue = PreviewText(content, cfg.preview, 16, -54, cardW - 32)
         controls.preview = previewValue
         controls.show = W.SwitchAt(content, cfg.showLabel, cardW - 62, -24, 0, "HIDDEN")

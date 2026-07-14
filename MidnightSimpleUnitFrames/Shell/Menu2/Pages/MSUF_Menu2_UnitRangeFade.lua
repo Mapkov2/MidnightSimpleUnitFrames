@@ -27,8 +27,8 @@ local function BuildRangeFade(ctx, builder, unit)
     local leftW = floor((innerW - gap) * 0.48)
     local rightX = leftX + leftW + gap
     local rightW = innerW - leftW - gap
-    local mainCard = W.ControlCard(sec, "Range", "Unitframe range fade.", leftX, -38, leftW, 166)
-    local alphaCard = W.ControlCard(sec, "Out of range", "Opacity multiplier and affected layer.", rightX, -38, rightW, 166)
+    local mainCard = W.ControlCard(sec, "Behavior", nil, leftX, -38, leftW, 166)
+    local alphaCard = W.ControlCard(sec, "Out of range", nil, rightX, -38, rightW, 166)
     local enabled = W.ToggleAt(mainCard, "Enable Range Fade", 16, -54, leftW - 32)
     M.BindBoolWidget(ctx, enabled,
         function() return ReadBool(unit, "rangeFadeEnabled", true) end,

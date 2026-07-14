@@ -34,7 +34,7 @@ local Specs = {
     GF_ANCHOR_POINTS = VTP "TOPLEFT=TOPLEFT|TOP=TOP|TOPRIGHT=TOPRIGHT|LEFT=LEFT|CENTER=CENTER|RIGHT=RIGHT|BOTTOMLEFT=BOTTOMLEFT|BOTTOM=BOTTOM|BOTTOMRIGHT=BOTTOMRIGHT",
     STATUS_ICON_ANCHORS = VTP "TOPLEFT=Top Left|TOPRIGHT=Top Right|BOTTOMLEFT=Bottom Left|BOTTOMRIGHT=Bottom Right|CENTER=Center|TOP=Top|BOTTOM=Bottom|LEFT=Left|RIGHT=Right",
     GF_STATUS_ICON_SPECS = StatusIconSpecs [[
-roleIcon|Role Icon|roleIcon|roleIconStyle|roleIconSize|roleIconAnchor|roleIconX|roleIconY|roleIconLayer|12|TOPLEFT|1|roleIconCustomIcon
+roleIcon|Role Icon|roleIcon|roleIconStyle|roleIconSize|roleIconAnchor|roleIconX|roleIconY|roleIconLayer|16|LEFT|1|roleIconCustomIcon
 leaderIcon|Leader|leaderIcon|leaderIconStyle|leaderIconSize|leaderIconAnchor|leaderIconX|leaderIconY|leaderIconLayer|12|TOPRIGHT|2|leaderIconCustomIcon
 assistIcon|Assist|assistIcon|assistIconStyle|assistIconSize|assistIconAnchor|assistIconX|assistIconY|assistIconLayer|12|TOPRIGHT|2|assistIconCustomIcon
 raidMarker|Raid Marker|raidMarker|raidMarkerStyle|raidMarkerSize|raidMarkerAnchor|raidMarkerX|raidMarkerY|raidMarkerLayer|14|CENTER|3|raidMarkerCustomIcon

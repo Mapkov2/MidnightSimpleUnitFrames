@@ -340,7 +340,7 @@ local function CreateRoundedTexturePreview(parent, x, y, width)
     local card = W.ControlCard(parent, "Preview", nil, x, y, width, 88)
     if not card then return end
     local sample, sampleW, sampleH, powerH = CreateFrame("Frame", nil, card), min(440, max(280, width - 44)), 46, 8
-    sample:SetPoint("TOPLEFT", card, "TOPLEFT", 18, -38)
+    sample:SetPoint("TOPLEFT", card, "TOPLEFT", 20, -40)
     sample:SetSize(sampleW, sampleH)
     card._msuf2RoundedPreviewSample = sample
     local regions = {
@@ -676,7 +676,7 @@ local function BuildTextureSection(ctx, b)
     local padW, padH = 104, 78
     local padButtonW, padButtonH = 22, 18
     local pad = T.Panel(textures, nil, T.colors.panel2 or { 0.014, 0.038, 0.072, 0.55 }, T.colors.borderSoft)
-    pad:SetPoint("TOPLEFT", textures, "TOPLEFT", padX, gradientY - 18)
+    pad:SetPoint("TOPLEFT", textures, "TOPLEFT", padX, gradientY - 20)
     pad:SetSize(padW, padH)
     local center = pad:CreateTexture(nil, "ARTWORK")
     center:SetPoint("CENTER", pad, "CENTER", 0, 0)
@@ -1182,7 +1182,7 @@ local function BuildUnitDispelOverlaySection(ctx, b)
     local ufOverlayW = ufOverlay._msuf2Width or ctx.width or 720
     local ufOverlayCardW = min(900, max(320, ufOverlayW - 40))
     overlayWide = ufOverlayCardW >= 760
-    local ufOverlayCard = W.ControlCard(ufOverlay, "UnitFrame Dispel Overlay",
+    local ufOverlayCard = W.ControlCard(ufOverlay, "Behavior & Style",
         "Tints unit-frame health bars when a configured debuff condition is active.",
         20, -38, ufOverlayCardW, overlayWide and 294 or 404)
     local SyncUFOverlayControls = M.RefreshProxy()

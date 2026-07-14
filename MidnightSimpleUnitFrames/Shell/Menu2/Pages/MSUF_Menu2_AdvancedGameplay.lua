@@ -110,8 +110,8 @@ local function BuildGameplay(ctx)
     end
     local function SectionColumns(section, requested)
         local cardW = SectionCardWidth(section)
-        local innerX = 30
-        local gap = 34
+        local innerX = 32
+        local gap = 36
         local innerW = max(160, cardW - 32)
         local colW = max(120, floor((innerW - gap) * 0.5))
         return innerX, innerX + colW + gap, min(requested or colW, colW), colW
@@ -212,9 +212,9 @@ local function BuildGameplay(ctx)
         LabelAt(classSec, "Uses Blizzard TotemFrame; MSUF only re-anchors it out of combat.", 30, -60, min(520, classW - 60), "GameFontDisableSmall", T.colors.muted)
         totemEnable = SwitchAt(ctx, classSec, "Blizzard TotemFrame", 30, -92, min(300, classControlW), Gameplay, "enablePlayerTotems", false, ApplyGameplayUI, Meta("totem_frame.enabled"))
         previewBtn = T.Button(classSec, "Preview", min(120, classControlW), 22)
-        previewBtn:SetPoint("TOPLEFT", classSec, "TOPLEFT", 30, -128)
+        previewBtn:SetPoint("TOPLEFT", classSec, "TOPLEFT", 32, -128)
         resetTotemBtn = T.Button(classSec, "Reset TotemFrame layout", min(190, classControlW), 22)
-        resetTotemBtn:SetPoint("TOPLEFT", classSec, "TOPLEFT", 30, -160)
+        resetTotemBtn:SetPoint("TOPLEFT", classSec, "TOPLEFT", 32, -160)
         LabelAt(classSec, "Tip: Move the preview via mousedrag or arrow keys.", 30, -196, min(520, classW - 60), "GameFontDisableSmall", T.colors.muted)
         AddControls(totemControls, classSec, {
             { "slider", "Icon size", 30, -238, 8, 64, 1, classControlW, "playerTotemsIconSize", 24 },
@@ -293,7 +293,7 @@ local function BuildGameplay(ctx)
         })
         classSpellToggle, specSpellToggle = crossControls[#crossControls - 1], crossControls[#crossControls]
         preview = T.Panel(cross, nil, { 0, 0, 0, 0.92 }, T.colors.borderSoft)
-        preview:SetPoint("TOPLEFT", cross, "TOPLEFT", 30, -410)
+        preview:SetPoint("TOPLEFT", cross, "TOPLEFT", 32, -412)
         preview:SetSize(min(260, max(160, crossCardW - 28)), 120)
         AddControls(crossControls, cross, {
             { "slider", "Crosshair thickness", 30, -560, 1, 12, 1, crossControlW, "crosshairThickness", 3 },

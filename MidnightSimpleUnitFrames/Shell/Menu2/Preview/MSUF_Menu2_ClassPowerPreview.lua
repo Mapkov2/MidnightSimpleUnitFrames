@@ -1741,7 +1741,7 @@ local function ResolvePreviewFit(preview, classFrame, powerFrame, hpFrame)
     if Wanted("hp") then AddPreviewRegionBounds(preview, hpFrame, bounds) end
     if not bounds.found then return 1, 0, 0 end
 
-    local pad = 18
+    local pad = 20
     local contentW = max(1, (bounds.maxX - bounds.minX) + pad * 2)
     local contentH = max(1, (bounds.maxY - bounds.minY) + pad * 2)
     local canvasW = max(1, tonumber(preview.canvasW) or tonumber(preview.canvas:GetWidth()) or 1)

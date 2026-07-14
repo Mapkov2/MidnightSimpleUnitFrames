@@ -40,13 +40,13 @@ local dropdownRows = {}
 -- One popup instance is reused for all dropdowns. This keeps strata/focus behavior predictable
 -- and avoids leaking row frames as pages are rebuilt.
 local DROPDOWN_ROW_H = 24
-local DROPDOWN_ICON_SIZE = 18
-local DROPDOWN_ICON_LEFT = 10
-local DROPDOWN_ICON_TEXT_LEFT = 34
+local DROPDOWN_ICON_SIZE = 20
+local DROPDOWN_ICON_LEFT = 12
+local DROPDOWN_ICON_TEXT_LEFT = 36
 local DROPDOWN_TEXTURE_PREVIEW_W = 72
 local DROPDOWN_TEXTURE_PREVIEW_H = 12
 local DROPDOWN_TEXTURE_TEXT_LEFT = 92
-local DROPDOWN_SCROLLBAR_W = 10
+local DROPDOWN_SCROLLBAR_W = 12
 local DROPDOWN_POSITION_INTERVAL = 0.10
 local DROPDOWN_SMOOTH_SCROLL_SPEED = 14
 local DROPDOWN_SMOOTH_SCROLL_MAX_ELAPSED = 0.050
@@ -369,7 +369,7 @@ local function EnsureDropdownFrame()
     dropdownFrame:Hide()
     dropdownScroll = CreateFrame("ScrollFrame", "MSUF2NativeDropdownScroll", dropdownFrame)
     dropdownScroll:SetPoint("TOPLEFT", dropdownFrame, "TOPLEFT", 2, -2)
-    dropdownScroll:SetPoint("BOTTOMRIGHT", dropdownFrame, "BOTTOMRIGHT", -18, 2)
+    dropdownScroll:SetPoint("BOTTOMRIGHT", dropdownFrame, "BOTTOMRIGHT", -20, 2)
     dropdownScroll:EnableMouseWheel(true)
     dropdownScroll:SetScript("OnMouseWheel", function(_, delta) DropdownWheel(delta) end)
     dropdownChild = CreateFrame("Frame", nil, dropdownScroll)
@@ -381,8 +381,8 @@ local function EnsureDropdownFrame()
     dropdownSlider:SetValueStep(1)
     if dropdownSlider.SetObeyStepOnDrag then dropdownSlider:SetObeyStepOnDrag(false) end
     if dropdownSlider.EnableMouse then dropdownSlider:EnableMouse(true) end
-    dropdownSlider:SetPoint("TOPRIGHT", dropdownFrame, "TOPRIGHT", -6, -8)
-    dropdownSlider:SetPoint("BOTTOMRIGHT", dropdownFrame, "BOTTOMRIGHT", -6, 8)
+    dropdownSlider:SetPoint("TOPRIGHT", dropdownFrame, "TOPRIGHT", -8, -8)
+    dropdownSlider:SetPoint("BOTTOMRIGHT", dropdownFrame, "BOTTOMRIGHT", -8, 8)
     local track = PixelBarTexture(dropdownSlider:CreateTexture(nil, "BACKGROUND"))
     track:SetPoint("TOP", dropdownSlider, "TOP", 0, 0)
     track:SetPoint("BOTTOM", dropdownSlider, "BOTTOM", 0, 0)
@@ -394,7 +394,7 @@ local function EnsureDropdownFrame()
     trackEdge:SetWidth(1)
     dropdownSlider._msuf2TrackEdge = trackEdge
     local thumb = PixelBarTexture(dropdownSlider:CreateTexture(nil, "OVERLAY"))
-    thumb:SetSize(5, 34)
+    thumb:SetSize(4, 36)
     dropdownSlider:SetThumbTexture(thumb)
     dropdownSlider._msuf2Thumb = thumb
     dropdownSlider._msuf2ThumbBase = T.colors.coreRim or { 0.043, 0.096, 0.150 }
@@ -564,7 +564,7 @@ local function SetDropdownIconTexture(texture, icon)
     texture:Show()
 end
 local function PaintDropdownChoice(frame, label, icon, sr, sg, sb, sa, rightInset, statusbarTexture)
-    local left = 10
+    local left = 12
     if statusbarTexture and frame._msuf2TexturePreview then
         if frame._msuf2Icon then frame._msuf2Icon:Hide() end
         if frame._msuf2Swatch then frame._msuf2Swatch:Hide() end
@@ -598,11 +598,11 @@ local function PaintDropdownChoice(frame, label, icon, sr, sg, sb, sa, rightInse
     end
     label:ClearAllPoints()
     label:SetPoint("LEFT", frame, "LEFT", left, 0)
-    label:SetPoint("RIGHT", frame, "RIGHT", rightInset or -6, 0)
+    label:SetPoint("RIGHT", frame, "RIGHT", rightInset or -8, 0)
 end
 local function AddDropdownChoiceAssets(frame, borderLeft, borderAlpha)
     local swatchBorder = frame:CreateTexture(nil, "ARTWORK")
-    swatchBorder:SetPoint("LEFT", frame, "LEFT", borderLeft or 10, 0)
+    swatchBorder:SetPoint("LEFT", frame, "LEFT", borderLeft or 12, 0)
     swatchBorder:SetSize(16, 16)
     swatchBorder:SetColorTexture(0, 0, 0, borderAlpha or 0.85)
     swatchBorder:Hide()
@@ -618,7 +618,7 @@ local function AddDropdownChoiceAssets(frame, borderLeft, borderAlpha)
     icon:Hide()
     frame._msuf2Icon = icon
     local texturePreviewBorder = frame:CreateTexture(nil, "ARTWORK")
-    texturePreviewBorder:SetPoint("LEFT", frame, "LEFT", borderLeft or 10, 0)
+    texturePreviewBorder:SetPoint("LEFT", frame, "LEFT", borderLeft or 12, 0)
     texturePreviewBorder:SetSize(DROPDOWN_TEXTURE_PREVIEW_W + 2, DROPDOWN_TEXTURE_PREVIEW_H + 2)
     texturePreviewBorder:SetColorTexture(0, 0, 0, borderAlpha or 0.85)
     texturePreviewBorder:Hide()
@@ -648,21 +648,21 @@ local function DropdownRow(index)
     end
     local selected = row:CreateTexture(nil, "OVERLAY")
     selected:SetPoint("LEFT", row, "LEFT", 2, 0)
-    selected:SetSize(2, DROPDOWN_ROW_H - 5)
+    selected:SetSize(2, DROPDOWN_ROW_H - 4)
     selected:SetColorTexture(T.colors.accent2[1], T.colors.accent2[2], T.colors.accent2[3], 0.95)
     selected:Hide()
     row._msuf2Selected = selected
     AddDropdownChoiceAssets(row, 10, 0.85)
     local text = T.Font(row, "GameFontHighlight", "", T.colors.text)
-    text:SetPoint("LEFT", row, "LEFT", 10, 0)
-    text:SetPoint("RIGHT", row, "RIGHT", -6, 0)
+    text:SetPoint("LEFT", row, "LEFT", 12, 0)
+    text:SetPoint("RIGHT", row, "RIGHT", -8, 0)
     text:SetJustifyH("LEFT")
     if text.SetWordWrap then text:SetWordWrap(false) end
     if text.SetNonSpaceWrap then text:SetNonSpaceWrap(false) end
     StoreDropdownDefaultFont(text)
     row._msuf2Text = text
     local fontPreview = T.Font(row, "GameFontHighlightSmall", "AaBbCc", T.colors.muted)
-    fontPreview:SetPoint("RIGHT", row, "RIGHT", -6, 0)
+    fontPreview:SetPoint("RIGHT", row, "RIGHT", -8, 0)
     fontPreview:SetWidth(76)
     fontPreview:SetJustifyH("RIGHT")
     StoreDropdownDefaultFont(fontPreview)
@@ -718,7 +718,7 @@ local function OpenDropdown(owner, valuesTable)
     local listHeight = visible * DROPDOWN_ROW_H + 4
     local totalHeight = #valuesTable * DROPDOWN_ROW_H
     local needsScroll = #valuesTable > visible
-    dropdownFrame:SetSize(rowWidth + (needsScroll and 18 or 4), listHeight)
+    dropdownFrame:SetSize(rowWidth + (needsScroll and 20 or 4), listHeight)
     dropdownChild:SetSize(rowWidth, totalHeight)
     dropdownScroll:ClearAllPoints()
     dropdownScroll:SetPoint("TOPLEFT", dropdownFrame, "TOPLEFT", 2, -2)
@@ -796,17 +796,17 @@ function W.Dropdown(section, label, values, width)
     btn._msuf2Title = title
     btn._msuf2ControlKind = "dropdown"
     btn._msuf2DropdownWheelManaged = true
-    btn:SetPoint("TOPLEFT", x, y - 22)
+    btn:SetPoint("TOPLEFT", x, y - 24)
     btn.values = values or {}
     btn._msuf2Label:ClearAllPoints()
-    btn._msuf2Label:SetPoint("LEFT", btn, "LEFT", 10, 0)
-    btn._msuf2Label:SetPoint("RIGHT", btn, "RIGHT", -26, 0)
+    btn._msuf2Label:SetPoint("LEFT", btn, "LEFT", 12, 0)
+    btn._msuf2Label:SetPoint("RIGHT", btn, "RIGHT", -28, 0)
     btn._msuf2Label:SetJustifyH("LEFT")
     StoreDropdownDefaultFont(btn._msuf2Label)
     btn._msuf2Chevron = btn:CreateTexture(nil, "OVERLAY")
     btn._msuf2Chevron:SetTexture(T.media.dropdownChevron)
     btn._msuf2Chevron:SetPoint("RIGHT", btn, "RIGHT", -8, 0)
-    btn._msuf2Chevron:SetSize(10, 10)
+    btn._msuf2Chevron:SetSize(12, 12)
     btn._msuf2Chevron:SetVertexColor(T.colors.muted[1], T.colors.muted[2], T.colors.muted[3], 0.95)
     AddDropdownChoiceAssets(btn, 9, 0.90)
     local function ResolveValues(self)

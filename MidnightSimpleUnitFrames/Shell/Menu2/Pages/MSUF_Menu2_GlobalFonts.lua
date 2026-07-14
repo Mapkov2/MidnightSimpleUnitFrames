@@ -552,14 +552,13 @@ local function BuildFonts(ctx)
     M.TrackRefresh(ctx, RefreshScopedFontControls)
     local nameScope = CurrentFontScope()
     if IsGFScope(nameScope) then
-        local names = b:CollapsibleSection("fonts_name_shortening", "Name Shortening", 322, true)
-        W.Text(names, "Group Frame Name Truncation", 14, -38, ctx.width - 28, T.colors.text)
-        names._msuf2CursorY = -72
+        local names = b:CollapsibleSection("fonts_name_shortening", "Name Shortening", 288, true)
+        names._msuf2CursorY = -40
         local shorten, side, chars, noEllipsis
         local function RefreshGFNameShorteningUI()
             if M.RequestRefresh then M.RequestRefresh(ctx, "fonts-gf-name-shortening") elseif M.Refresh then M.Refresh(ctx) end
         end
-        local controls = BuildNameShorteningControls(names, "Shorten group names", 1, -228,
+        local controls = BuildNameShorteningControls(names, "Shorten group names", 1, -194,
             function()
                 if GFNameUsesLocalScope() then return GFNameScopeGet("nameShortenEnabled", (tonumber(GFNameScopeGet("nameMaxChars", 0)) or 0) > 0) and true or false end
                 return SharedNameShorteningEnabled()

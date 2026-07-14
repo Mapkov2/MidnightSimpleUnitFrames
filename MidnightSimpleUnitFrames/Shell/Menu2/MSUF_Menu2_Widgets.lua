@@ -17,6 +17,8 @@ MSUF.MSUF2 = M
 local T = M.Theme
 local W = M.Widgets or {}
 M.Widgets = W
+W.spacing = T and T.spacing or W.spacing
+W.Space = T and T.Space or W.Space
 local floor = math.floor
 local max = math.max
 local min = math.min
@@ -455,12 +457,12 @@ function W.PageBuilder(ctx)
         RegisterSearchObject(section, title, "section")
         section:SetPoint("TOPLEFT", self.parent, "TOPLEFT", self.x, self.y)
         section:SetSize(self.width, height or 120)
-        section._msuf2CursorY = -38
-        section._msuf2ContentX = 14
+        section._msuf2CursorY = -40
+        section._msuf2ContentX = 16
         section._msuf2Width = self.width
         local fs = T.Font(section, "GameFontNormal", Tr(title or ""), T.colors.text)
         SetSearchText(fs, title)
-        fs:SetPoint("TOPLEFT", 14, -12)
+        fs:SetPoint("TOPLEFT", 16, -12)
         section.title = fs
         self.y = self.y - (height or 120) - 12
         if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(self.y) + 28) end
@@ -518,8 +520,8 @@ function W.PageBuilder(ctx)
         SetSearchTitle(body, title)
         body:SetPoint("TOPLEFT", outer, "TOPLEFT", 0, -headerH)
         body:SetSize(contentW, height or 120)
-        body._msuf2CursorY = -38
-        body._msuf2ContentX = 14
+        body._msuf2CursorY = -40
+        body._msuf2ContentX = 16
         body._msuf2Width = contentW
         local entry = {
             outer = outer,
@@ -554,7 +556,7 @@ function W.PageBuilder(ctx)
                         if badge and badge._msuf2BadgeWantedShown ~= false then
                             local bw = (badge.GetWidth and badge:GetWidth()) or 0
                             if bw > 0 then
-                                totalW = totalW + bw + (#availableBadges > 0 and 6 or 0)
+                                totalW = totalW + bw + (#availableBadges > 0 and 8 or 0)
                                 availableBadges[#availableBadges + 1] = badge
                             end
                         end
@@ -562,7 +564,7 @@ function W.PageBuilder(ctx)
                     availableW = max(0, availableW)
                     while #availableBadges > 1 and totalW > availableW do
                         local badge = availableBadges[#availableBadges]
-                        totalW = totalW - ((badge.GetWidth and badge:GetWidth()) or 0) - (#availableBadges > 1 and 6 or 0)
+                        totalW = totalW - ((badge.GetWidth and badge:GetWidth()) or 0) - (#availableBadges > 1 and 8 or 0)
                         availableBadges[#availableBadges] = nil
                     end
                     if #availableBadges == 1 and totalW > availableW then availableBadges[1] = nil end
@@ -577,12 +579,12 @@ function W.PageBuilder(ctx)
                         badge:ClearAllPoints()
                         badge:SetPoint("RIGHT", header, "RIGHT", right, 0)
                         badge:SetShown(true)
-                        right = right - bw - 6
+                        right = right - bw - 8
                     end
                     if #availableBadges > 0 then
                         if hint.Hide then hint:Hide() end
                         label:ClearAllPoints()
-                        label:SetPoint("LEFT", arrow, "RIGHT", 6, 0)
+                        label:SetPoint("LEFT", arrow, "RIGHT", 8, 0)
                         label:SetPoint("RIGHT", header, "RIGHT", right - 8, 0)
                         label:SetJustifyH("LEFT")
                         return
@@ -595,7 +597,7 @@ function W.PageBuilder(ctx)
                 hint:SetPoint("LEFT", header, "RIGHT", -(12 + reserve), 0)
                 hint:SetJustifyH("RIGHT")
                 label:ClearAllPoints()
-                label:SetPoint("LEFT", arrow, "RIGHT", 6, 0)
+                label:SetPoint("LEFT", arrow, "RIGHT", 8, 0)
                 label:SetPoint("RIGHT", hint, "LEFT", -8, 0)
                 label:SetJustifyH("LEFT")
             end
@@ -749,12 +751,12 @@ function W.PageBuilder(ctx)
         section:SetSize(self.width, height or 78)
         local fs = T.Font(section, "GameFontNormalLarge", Tr(title or ""), T.colors.text)
         SetSearchText(fs, title)
-        fs:SetPoint("TOPLEFT", 14, -12)
+        fs:SetPoint("TOPLEFT", 16, -12)
         section.title = fs
         if subtitle and subtitle ~= "" then
             local sub = T.Font(section, "GameFontDisableSmall", Tr(subtitle), T.colors.muted)
             SetSearchText(sub, subtitle)
-            sub:SetPoint("TOPLEFT", fs, "BOTTOMLEFT", 0, -6)
+            sub:SetPoint("TOPLEFT", fs, "BOTTOMLEFT", 0, -8)
             sub:SetWidth(self.width - 28)
             sub:SetJustifyH("LEFT")
             section.subtitle = sub
@@ -1178,9 +1180,9 @@ function W.SetCollapsibleBadges(section, specs)
     if entry._msuf2RefreshLayout then entry._msuf2RefreshLayout() end
 end
 local function NextRow(section, height)
-    local y = section._msuf2CursorY or -38
+    local y = section._msuf2CursorY or -40
     section._msuf2CursorY = y - (height or 28)
-    return section._msuf2ContentX or 14, y
+    return section._msuf2ContentX or 16, y
 end
 --- Public cursor advance for pages that mix flowed rows with manually placed
 --- blocks (e.g. a row of side-by-side ControlCards): reserve the block's height
@@ -1649,21 +1651,21 @@ function W.ControlCardBackdrop(parent, x, y, width, height, bg, border)
     return card
 end
 function W.Toggle(section, label)
-    local x, y = NextRow(section, 30)
+    local x, y = NextRow(section, 32)
     return CreateToggle(section, label, x, y)
 end
 function W.ToggleAt(section, label, x, y, labelWidth)
-    return CreateToggle(section, label, x or 14, y or -38, labelWidth)
+    return CreateToggle(section, label, x or 16, y or -40, labelWidth)
 end
 function W.SwitchAt(section, label, x, y, labelWidth, labelSide)
-    local switchW, switchH = 35, 18
-    local knobSize = 14
+    local switchW, switchH = 36, 20
+    local knobSize = 16
     local knobPad = 2
     local switchTrackTexture = (T.media and T.media.switchTrack) or (T.media and T.media.superellipse) or "Interface\\Buttons\\WHITE8X8"
     local switchKnobTexture = (T.media and T.media.switchKnob) or (T.media and T.media.sliderThumb) or (T.media and T.media.superellipse) or "Interface\\Buttons\\WHITE8X8"
     local btn = CreateFrame("CheckButton", nil, section)
     btn._msuf2ControlKind = "toggle"
-    btn:SetPoint("TOPLEFT", x or 14, y or -38)
+    btn:SetPoint("TOPLEFT", x or 16, y or -40)
     btn:SetSize(switchW, switchH)
     if btn.RegisterForClicks then btn:RegisterForClicks("LeftButtonUp") end
     if btn.EnableMouse then btn:EnableMouse(true) end
@@ -2077,7 +2079,7 @@ function W.MoveWidget(widget, parent, x, y, width, titleJustify)
     end
     widget:ClearAllPoints()
     if kind == "slider" or kind == "dropdown" or kind == "textinput" or kind == "segment" then
-        widget:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y - 22)
+        widget:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y - 24)
     elseif kind == "color" then
         if widget._msuf2Title then widget._msuf2Title:SetWidth(100) end
         widget:SetPoint("TOPLEFT", parent, "TOPLEFT", x + 108, y + 2)
@@ -2105,7 +2107,7 @@ function W.DividerAt(parent, y, leftPad, rightPad)
     return line
 end
 function W.Button(section, label, width)
-    local x, y = NextRow(section, 30)
+    local x, y = NextRow(section, 32)
     local btn = T.Button(section, Tr(label or ""), width or 160, 24)
     btn._msuf2ControlKind = "button"
     RegisterSearchObject(btn, label, "button")
@@ -2349,12 +2351,12 @@ function W.AttachPinnedPreview(body, box, opts)
         pinBtn:ClearAllPoints()
         pinBtn:SetSize(opts.buttonWidth or 86, 22)
     end
-    pinBtn:SetPoint("TOPRIGHT", box, "TOPRIGHT", -10, -6)
+    pinBtn:SetPoint("TOPRIGHT", box, "TOPRIGHT", -12, -8)
     local hint = opts.hint or box.hint or box._hint
     if hint and hint.SetPoint then
         hint:ClearAllPoints()
         hint:SetPoint("LEFT", opts.title or box.title or box._title, "RIGHT", 12, 0)
-        hint:SetPoint("RIGHT", pinBtn, "LEFT", -10, 0)
+        hint:SetPoint("RIGHT", pinBtn, "LEFT", -12, 0)
         hint:SetJustifyH("LEFT")
     end
     local placeholder = body.CreateFontString and body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall") or nil
@@ -2524,8 +2526,8 @@ function W.AttachPinnedPreview(body, box, opts)
                     + (opts.frameLevelOffset or 80)
                 box:SetParent(scrollParent or scroll)
                 box:ClearAllPoints()
-                box:SetPoint("TOPLEFT", scroll, "TOPLEFT", opts.left or 14, opts.top or -8)
-                box:SetPoint("TOPRIGHT", scroll, "TOPRIGHT", -(opts.right or 14), opts.top or -8)
+                box:SetPoint("TOPLEFT", scroll, "TOPLEFT", opts.left or 16, opts.top or -8)
+                box:SetPoint("TOPRIGHT", scroll, "TOPRIGHT", -(opts.right or 16), opts.top or -8)
                 if box.SetFrameLevel then box:SetFrameLevel(level) end
                 ApplyPinnedPresentation(true, level)
                 if box.RequestRefresh then box:RequestRefresh("PINNED_PREVIEW_LAYOUT") end
@@ -2607,12 +2609,12 @@ end
 function W.Slider(section, label, minVal, maxVal, step, width)
     local x, y = NextRow(section, 48)
     local valueGap = 8
-    local buttonGap = 2
-    local stepButtonW = 18
+    local buttonGap = 4
+    local stepButtonW = 20
     local editW = 52
     local minTrackW = 96
     local compactMinTrackW = 48
-    local sliderH = 22
+    local sliderH = 24
     local valueClusterW = valueGap + stepButtonW + buttonGap + editW + buttonGap + stepButtonW
     local compactValueClusterW = valueGap + editW
     width = width or 280
@@ -2630,7 +2632,7 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     slider._msuf2Title = title
     slider._msuf2ControlKind = "slider"
     RegisterSearchObject(slider, label, "slider", { anchor = title })
-    slider:SetPoint("TOPLEFT", x, y - 22)
+    slider:SetPoint("TOPLEFT", x, y - 24)
     slider:SetSize(max(compactMinTrackW, width - valueClusterW), sliderH)
     if slider.EnableMouse then slider:EnableMouse(true) end
     slider:SetMinMaxValues(minVal or 0, maxVal or 1)
@@ -2643,7 +2645,7 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     HideSliderTemplateParts(slider)
     if T.StyleSlider then T.StyleSlider(slider) end
     local function StepButton(text)
-        local btn = T.Button(section, text, 18, 20)
+        local btn = T.Button(section, text, 20, 24)
         SetSearchText(btn, text)
         if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(btn, slider)
         else btn._msuf2ControlPartOf = slider end
@@ -2651,7 +2653,7 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     end
     local minus = StepButton("-")
     local edit = CreateFrame("EditBox", nil, section, "InputBoxTemplate")
-    edit:SetSize(52, 20)
+    edit:SetSize(52, 24)
     edit:SetAutoFocus(false)
     edit:SetJustifyH("CENTER")
     edit:SetNumeric(false)
@@ -2844,18 +2846,18 @@ function W.Segment(section, label, values, width)
     title:SetPoint("TOPLEFT", x, y)
     local holder = CreateFrame("Frame", nil, section)
     RegisterSearchObject(holder, label, "segment", { anchor = title, values = values })
-    holder:SetPoint("TOPLEFT", x, y - 22)
-    holder:SetSize(width or 360, 22)
+    holder:SetPoint("TOPLEFT", x, y - 24)
+    holder:SetSize(width or 360, 24)
     holder._msuf2ControlKind = "segment"
     holder._msuf2Title = title
     holder.buttons = {}
     holder.values = values or {}
     local count = #holder.values
-    local gap = 6
+    local gap = 8
     local bw = count > 0 and math.floor(((width or 360) - gap * (count - 1)) / count) or 80
     for i = 1, count do
         local item = holder.values[i]
-        local btn = T.Button(holder, item.text or tostring(item.value), bw, 22)
+        local btn = T.Button(holder, item.text or tostring(item.value), bw, 24)
         -- A Segment is one logical control. Its option buttons are visual
         -- parts and must not become duplicate catalog records.
         if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(btn, holder)
@@ -2925,7 +2927,7 @@ local function TextInputSetOnValueCommitted(self, fn) self._msuf2OnCommit = fn e
 --- Text inputs commit on Enter or focus loss; callers attach the actual profile
 --- write through SetOnValueCommitted.
 function W.TextInput(section, label, width)
-    local x, y = NextRow(section, 50)
+    local x, y = NextRow(section, 48)
     width = width or 260
     local title = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text)
     SetSearchText(title, label)
@@ -2934,8 +2936,8 @@ function W.TextInput(section, label, width)
     edit._msuf2Title = title
     edit._msuf2ControlKind = "textinput"
     RegisterSearchObject(edit, label, "textinput", { anchor = title })
-    edit:SetPoint("TOPLEFT", x, y - 22)
-    edit:SetSize(width, 22)
+    edit:SetPoint("TOPLEFT", x, y - 24)
+    edit:SetSize(width, 24)
     edit:SetAutoFocus(false)
     edit:SetJustifyH("LEFT")
     edit:SetMaxLetters(200000)
@@ -3010,7 +3012,7 @@ end
 --- Color buttons use Blizzard's shared ColorPickerFrame but keep previous RGB
 --- values on the button so cancel can restore the UI state.
 function W.Color(section, label)
-    local x, y = NextRow(section, 34)
+    local x, y = NextRow(section, 32)
     local title = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text)
     SetSearchText(title, label)
     title:SetPoint("TOPLEFT", x, y)
@@ -3020,7 +3022,7 @@ function W.Color(section, label)
     btn._msuf2ControlKind = "color"
     RegisterSearchObject(btn, label, "color", { anchor = title })
     btn:SetPoint("TOPLEFT", x + 250, y + 2)
-    btn:SetSize(44, 18)
+    btn:SetSize(44, 20)
     btn._msuf2Swatch, btn._msuf2Edge = T.CreateSuperellipseLayers(btn, "_msuf2Color", 1, "ARTWORK", "ARTWORK")
     btn._msuf2Edge:SetVertexColor(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], 0.75)
     btn.SetRGB = ColorSetRGB

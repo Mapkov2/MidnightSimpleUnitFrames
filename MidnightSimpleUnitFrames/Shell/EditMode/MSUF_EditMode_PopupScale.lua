@@ -175,6 +175,8 @@ local function EnsureScaleProxy(frame)
     Edge({ "TOPRIGHT", proxy, "TOPRIGHT", 0, 0 }, { "BOTTOMRIGHT", proxy, "BOTTOMRIGHT", 0, 0 }, 2, nil)
 
     local label = proxy:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    local ui = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
+    if ui and ui.ApplyFontSize then ui.ApplyFontSize(label, "caption") end
     label:SetPoint("BOTTOMRIGHT", proxy, "TOPRIGHT", 0, 4)
     label:SetJustifyH("RIGHT")
     if label.SetTextColor then label:SetTextColor(0.22, 0.78, 0.94, 1) end

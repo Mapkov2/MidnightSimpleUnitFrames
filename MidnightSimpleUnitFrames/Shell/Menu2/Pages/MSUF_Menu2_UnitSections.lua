@@ -340,7 +340,7 @@ local function BuildPreview(ctx, builder, unit)
         end
         box._msufPanel = panel
         SetPreviewOwner()
-        box:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, -70)
+        box:SetPoint("TOPLEFT", sec, "TOPLEFT", 16, -72)
         box:Show()
         if box.title and box.title.SetTextColor then
             local c = T.colors.accent
@@ -464,7 +464,7 @@ local function BuildTopActions(ctx, builder, unit, label)
     local scopeBar = W.ScopeOverrideBar and W.ScopeOverrideBar(ctx, sec, scopeOpts)
     RegisterControl(scopeBar, ctx, "navigation.unit_page.selector", "Editing", "segment", "ephemeral")
     local copy = W.TopButton(sec, M.Tr("Copy To"), 82, 24, nil, false)
-    copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -14, rowY)
+    copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -16, rowY)
     local function DefaultScopes()
         if type(NewCopyScopeDefaults) == "function" then return NewCopyScopeDefaults() end
         local t = {}
@@ -548,8 +548,8 @@ local function AttachBasicsHeaderStatus(sec, unit)
         end
         if sectionEntry.label then
             sectionEntry.label:ClearAllPoints()
-            sectionEntry.label:SetPoint("LEFT", sectionEntry.arrow, "RIGHT", 6, 0)
-            sectionEntry.label:SetPoint("RIGHT", badge, "LEFT", -10, 0)
+            sectionEntry.label:SetPoint("LEFT", sectionEntry.arrow, "RIGHT", 8, 0)
+            sectionEntry.label:SetPoint("RIGHT", badge, "LEFT", -12, 0)
             sectionEntry.label:SetJustifyH("LEFT")
         end
     end
@@ -934,7 +934,7 @@ local function BuildBossLayoutTiles(parent, x, y, tileW, tileH, gap)
     if not parent then return nil end
     tileW, tileH, gap = tileW or 64, tileH or 70, gap or 8
     local control = CreateFrame("Frame", nil, parent)
-    control:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 14, y or -42)
+    control:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 16, y or -44)
     control:SetSize((tileW * #BOSS_LAYOUT_TILE_VALUES) + (gap * (#BOSS_LAYOUT_TILE_VALUES - 1)), tileH + 20)
     control._msuf2ControlKind = "segment"
     control.values = BOSS_LAYOUT_OPTIONS
@@ -1015,7 +1015,7 @@ local function BuildBossLayoutTiles(parent, x, y, tileW, tileH, gap)
         end
         if not btn._firstText then
             btn._firstText = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-            if btn._firstText.SetFont then btn._firstText:SetFont("Fonts\\FRIZQT__.TTF", 7, "OUTLINE") end
+            if btn._firstText.SetFont then btn._firstText:SetFont("Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE") end
             btn._firstText:SetText("1")
             btn._firstText:SetTextColor(0, 0, 0, 1)
         end
@@ -1028,7 +1028,7 @@ local function BuildBossLayoutTiles(parent, x, y, tileW, tileH, gap)
 
         if not btn._arrow then
             btn._arrow = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-            if btn._arrow.SetFont then btn._arrow:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE") end
+            if btn._arrow.SetFont then btn._arrow:SetFont("Fonts\\FRIZQT__.TTF", T.FontSize("caption"), "OUTLINE") end
             btn._arrow:SetTextColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.95)
         end
         btn._arrow:SetText(info.arrow)
@@ -1072,7 +1072,7 @@ local function BuildBossLayoutTiles(parent, x, y, tileW, tileH, gap)
             })
         end
         local text = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        if text.SetFont then text:SetFont("Fonts\\FRIZQT__.TTF", 8, "OUTLINE") end
+        if text.SetFont then text:SetFont("Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE") end
         text:SetPoint("BOTTOM", btn, "BOTTOM", 0, 3)
         text:SetText(M.Tr(info.text or ""))
         btn._label = text

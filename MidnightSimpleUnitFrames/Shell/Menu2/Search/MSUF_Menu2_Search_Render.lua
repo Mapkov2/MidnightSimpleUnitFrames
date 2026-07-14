@@ -69,14 +69,12 @@ local function BuildSearchPage(ctx)
     local sec = b:Section("Search Results", sectionH)
     if combatLocked then
         W.Text(sec, "Search is paused in combat.", 14, -44, width - 28, T.colors.muted)
-        W.Text(sec, "MSUF2 does not build or refresh the search index during combat.", 14, -70, width - 28, T.colors.dim)
     elseif query == "" then
         W.Text(sec, "Start typing to search every MSUF2 menu page.", 14, -44, width - 28, T.colors.muted)
     elseif not queryReady then
         W.Text(sec, M.Format("Type at least %d characters to search.", MIN_SEARCH_QUERY_LEN), 14, -44, width - 28, T.colors.muted)
     elseif M.searchResultsPending then
         W.Text(sec, M.Format("Searching for \"%s\"...", query), 14, -44, width - 28, T.colors.muted)
-        W.Text(sec, "Results update after you stop typing for a moment.", 14, -70, width - 28, T.colors.dim)
     elseif #results == 0 then
         W.Text(sec, M.Format("No results for \"%s\".", query), 14, -44, width - 28, T.colors.muted)
         W.Text(sec, SEARCH_STATE.indexing and "Still indexing menu pages..." or "Try a page name like bars, profiles, auras, castbar, colors, group, or target.", 14, -70, width - 28, T.colors.dim)
@@ -160,7 +158,7 @@ Range Check=unit frame range check;Level Text=where is level text anchor;Perform
         local row = math.floor((i - 1) / 3)
         local searchQuery = shortcuts[i][2]
         local btn = T.Button(quick, shortcuts[i][1], buttonW, 22)
-        btn:SetPoint("TOPLEFT", quick, "TOPLEFT", 14 + col * (buttonW + 14), -38 - row * 28)
+        btn:SetPoint("TOPLEFT", quick, "TOPLEFT", 16 + col * (buttonW + 16), -40 - row * 28)
         btn:SetScript("OnClick", function()
             local bridge = M.SearchBridge
             if bridge and type(bridge.RunSearchQuery) == "function" then

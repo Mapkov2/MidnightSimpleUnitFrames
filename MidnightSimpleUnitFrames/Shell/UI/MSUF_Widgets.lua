@@ -21,6 +21,58 @@ local W8 = "Interface\\Buttons\\WHITE8X8"
 local FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local max = math.max
 
+-- One shared type scale for Menu2 and Edit Mode. Preview content may use the
+-- micro token, but configurable unit-frame text remains outside this system.
+UI.fontSizes = {
+    micro = 9,
+    caption = 11,
+    body = 13,
+    section = 15,
+    heading = 17,
+    hero = 21,
+}
+UI.spacing = {
+    hairline = 1,
+    optical = 2,
+    xs = 4,
+    sm = 8,
+    md = 12,
+    lg = 16,
+    xl = 24,
+    xxl = 32,
+}
+function UI.Space(role, fallback)
+    local value = type(role) == "string" and UI.spacing[role] or tonumber(role)
+    return tonumber(value) or tonumber(fallback) or UI.spacing.sm
+end
+ExportPublic("MSUF_SPACING", UI.spacing)
+ExportPublic("MSUF_Space", UI.Space)
+local FONT_SIZE_ORDER = { 9, 11, 13, 15, 17, 21 }
+function UI.FontSize(role, fallback)
+    local size = type(role) == "string" and UI.fontSizes[role] or tonumber(role)
+    return tonumber(size) or tonumber(fallback) or UI.fontSizes.body
+end
+function UI.NormalizeFontSize(size)
+    size = tonumber(size) or UI.fontSizes.body
+    local best, bestDistance = FONT_SIZE_ORDER[1], math.huge
+    for i = 1, #FONT_SIZE_ORDER do
+        local candidate = FONT_SIZE_ORDER[i]
+        local distance = math.abs(size - candidate)
+        -- Prefer the larger token on an exact tie so 10/12/16/20 do not
+        -- become less readable while the old Blizzard font objects migrate.
+        if distance < bestDistance or (distance == bestDistance and candidate > best) then
+            best, bestDistance = candidate, distance
+        end
+    end
+    return best
+end
+function UI.ApplyFontSize(fs, roleOrSize, fontPath, flags)
+    if not (fs and fs.SetFont) then return fs end
+    local currentFont, _, currentFlags = fs.GetFont and fs:GetFont()
+    fs:SetFont(fontPath or currentFont or FONT, UI.FontSize(roleOrSize), flags or currentFlags or "")
+    return fs
+end
+
 UI.colors = UI.colors or {
     bg = { 0.030, 0.040, 0.075, 0.965 },
     popup = { 0.008, 0.012, 0.022, 0.950 },
@@ -125,7 +177,8 @@ function UI.Font(parent, template, text, color)
     local theme = UI.GetMenu2Theme()
     if theme and theme.Font then return theme.Font(parent, template or "GameFontHighlight", text or "", color or UI.Color("text", UI.colors.text)) end
     local fs = parent:CreateFontString(nil, "OVERLAY", template or "GameFontHighlight")
-    if not template and fs.SetFont then fs:SetFont(FONT, 12, "") end
+    local _, inheritedSize = fs.GetFont and fs:GetFont()
+    UI.ApplyFontSize(fs, UI.NormalizeFontSize(inheritedSize or UI.fontSizes.body))
     fs:SetText(Tr(text or ""))
     local c = color or UI.Color("text", UI.colors.text)
     fs:SetTextColor(c[1], c[2], c[3], c[4] or 1)

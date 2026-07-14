@@ -546,7 +546,7 @@ local function ScopeSection(ctx, builder)
     RegisterGroupControl(pageBar, ctx, "navigation.section.selector", "Page", "segment", "ephemeral")
 
     local copy = (W.RoleButton and W.RoleButton(sec, M.Tr("Copy To"), "normal", 86, 24)) or W.TopButton(sec, M.Tr("Copy To"), 86, 24, {})
-    copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -14, -15)
+    copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -16, -16)
     local scopeBtns = {}
     local scopeValues = {}
     for i = 1, #SCOPE_VALUES do
@@ -781,7 +781,7 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
         end
         if not btn._firstText then
             btn._firstText = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-            if btn._firstText.SetFont then btn._firstText:SetFont("Fonts\\FRIZQT__.TTF", 7, "OUTLINE") end
+            if btn._firstText.SetFont then btn._firstText:SetFont("Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE") end
             btn._firstText:SetText("1")
             btn._firstText:SetTextColor(0, 0, 0, 1)
         end
@@ -795,7 +795,7 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
         end
         if not btn._arrow then
             btn._arrow = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-            if btn._arrow.SetFont then btn._arrow:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE") end
+            if btn._arrow.SetFont then btn._arrow:SetFont("Fonts\\FRIZQT__.TTF", T.FontSize("caption"), "OUTLINE") end
             btn._arrow:SetTextColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.95)
         end
         btn._arrow:SetText(info.arrow)
@@ -836,7 +836,7 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
             })
         end
         local text = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        if text.SetFont then text:SetFont("Fonts\\FRIZQT__.TTF", 8, "OUTLINE") end
+        if text.SetFont then text:SetFont("Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE") end
         text:SetPoint("BOTTOM", btn, "BOTTOM", 0, 3)
         text:SetText(info.text)
         btn._label = text

@@ -405,7 +405,7 @@ local function SetDetachedPowerTextPreset(value)
 end
 local QUICK_SETUP_FLAG = "quickSetupClassBarOffered"
 local QUICK_CP_HEIGHT = 4
-local QUICK_CDM_GAP = 2
+local QUICK_CDM_GAP = 4
 local QUICK_FALLBACK_Y_FRAC = 0.60
 local QUICK_KEYS = {
     bars = M.WordList [[showClassPower classPowerShape classPowerShapeAlign classPowerShowText classPowerAnchorToCooldown classPowerWidthMode showEleMaelstrom showEbonMight showChargedComboPoints runeShowTime runeShowTimeText classPowerOffsetX classPowerOffsetY classPowerOutline detachedPowerBarWidthMode smoothPowerBar realtimePowerText classPowerSmoothFill altManaSmoothFill]],
@@ -743,7 +743,7 @@ function Page:BuildHeader()
     M.TrackRefresh(ctx, function() preview:SetValue(M.GetClassPowerPreviewSpecKey()) end)
     local colors = T.Button(head, "Class Color", 112, 24)
     if W.StyleTopActionButton then W.StyleTopActionButton(colors) end
-    colors:SetPoint("TOPRIGHT", head, "TOPRIGHT", -16, -15)
+    colors:SetPoint("TOPRIGHT", head, "TOPRIGHT", -16, -16)
     colors:SetScript("OnClick", function() M.SelectPage("opt_colors") end)
     RegisterControl(colors, Meta("navigation.class_colors", "navigation", { navigationKey = "opt_colors" }), "Class Color", "button")
     local quick = T.Button(head, "Quick Setup: Class Bar", 158, 24)
@@ -792,7 +792,7 @@ function Page:BuildClassLayout()
     local leftW = compact and max(250, width - 64) or max(250, rightX - 74)
     local rightW = compact and leftW or max(250, width - rightX - 32)
     local controlW = compact and max(250, min(320, width - 74)) or 300
-    W.ControlCard(section, "Class Resource", nil, 18, -38, leftW + 28, 370)
+    W.ControlCard(section, "Shape & Size", nil, 18, -38, leftW + 28, 370)
     W.ControlCard(section, "Powerbar & Position", nil, rightX - 14, compact and -430 or -38, rightW + 28, 286)
     MoveWidget(self.cpEnable, section, 32, -78)
     PlaceColumn(section, 32, -116, 54, controlW, nil, self.cp.shape, self.cp.height, self.cp.widthMode, self.cp.width, self.cpAlign)
@@ -812,7 +812,7 @@ function Page:BuildClassBehavior()
         { "shadow", "toggle", "Show Insanity bar (Shadow)", "showShadowMana", false, group = "cp" },
         { "prediction", "toggle", "Show resource prediction", "classPowerShowPrediction", true, group = "cp" },
         { "smooth", "toggle", "Smooth fill", "classPowerSmoothFill", true, ApplyClassPowerSmoothing, group = "cp",
-            helpTitle = "Class Resource Smooth Fill", help = "Uses Blizzard's native StatusBar interpolation for power-driven Class Resource fills. Rune, Essence recharge, and timer bars keep their dedicated runtime animation." },
+            helpTitle = "Class Resource Smooth Fill", help = "Smooths resource changes. Runes, Essence recharge, and timers keep their own animation." },
     })
     local rightX = min(max(380, floor(self.width * .45)), max(320, self.width - 420))
     W.ControlCardBackdrop(section, 14, -38, max(280, rightX - 42), 154)
@@ -919,8 +919,7 @@ function Page:BuildDetachedPower()
     AddTooltip(self.dpbUse, "Detached Player Power", "Moves the Player power bar out of the unit frame. Anchor connects it to the Class Resources stack; Sync only follows the stack width.")
     AddTooltip(self.dpb.anchor, "Anchor To Class Resource", "Keeps detached Player power attached to the Class Resource bar. Player power controls are disabled while this connection is active.")
     AddTooltip(self.dpb.sync, "Sync Width", "Uses the Class Resource width for detached Player power without making Class Resources own the Player power controls.")
-    AddTooltip(smooth, "Player Power Smooth Fill", "Applies to this Player power StatusBar even while its layout is managed by Class Resources. Interpolation runs in Blizzard's C-side StatusBar implementation with frequent Player power updates.")
-    W.ControlCard(text, "Power Text", "Text shown on the detached Player power bar managed here.", 14, -38, cardW, twoColumns and 560 or 790)
+    W.ControlCard(text, "Power Text", nil, 14, -38, cardW, twoColumns and 560 or 790)
     self.dpbText = self:Controls(text, Player, ApplyDetachedPowerText, "detached_power.text", {
         { "onBar", "detachedTextOnBar", "Power text on bar", "detachedPowerBarTextOnBar", false, group = "detachedPlayer" },
         { "preset", "detachedTextPreset", "Power text", DETACHED_POWER_TEXT_PRESET_VALUES, 300, group = "detachedPlayer" },
@@ -960,7 +959,7 @@ function Page:BuildDetachedPower()
     AddTooltip(self.dpbText.preset, "Power Text", "Simple presets for Player power text while detached power is managed by Class Resources. Custom Slots means the existing slot layout is kept until you choose a preset.")
     AddTooltip(self.dpbText.onBar, "Power Text On Bar", "Places Player power text on the detached power bar. When off, the same Player power text remains positioned by the normal text layout.")
     AddTooltip(self.dpbText.x, "Text X", "Moves all detached Player power text slots together. Slot X/Y controls below add per-slot offsets.")
-    W.ControlCard(textures, "Power Textures", "Bar uses SharedMedia textures. Shapes use fixed alpha assets.", 14, -38, cardW, 260)
+    W.ControlCard(textures, "Power Textures", nil, 14, -38, cardW, 260)
     local texture = self:Controls(textures, Bars, ApplyDetachedPowerBar, "detached_power.textures", {
         { "fg", "dropdown", "Foreground texture", function() return TextureValues("Use global bar texture") end, 300, "detachedPowerBarTexture", "", group = "detached" },
         { "bg", "dropdown", "Background texture", function() return TextureValues("Use foreground texture") end, 300, "detachedPowerBarBgTexture", "", group = "detached" },
@@ -991,7 +990,7 @@ function Page:BuildPlayerHP()
     local values = VT("layout", "Layout", "textures", "Textures", "text", "Text")
     RegisterSegment(W.SegmentTabs(self.ctx, section, { stateKey = "classPowerPlayerHPTab", label = "HP area", values = values,
         width = min(520, max(320, width - 64)), frames = frames, defaultTab = "layout", x = 32, y = -44 }), "player_hp.workspace_tab", values)
-    W.ControlCard(layout, "Second Player HP Bar", "Optional duplicate HP bar managed by Class Resources.", 14, -38, cardW, twoColumns and 500 or 760)
+    W.ControlCard(layout, "Visibility & Position", nil, 14, -38, cardW, twoColumns and 500 or 760)
     local applyRefresh = self:WithRefresh(ApplyPlayerHPBar)
     self.hpUse = SwitchAt(self.ctx, layout, "Second Player HP bar", 32, -104, controlW, Bars, "playerHPBarEnabled", false, applyRefresh, Meta("player_hp.enabled"))
     self.hp = self:Controls(layout, Bars, ApplyPlayerHPBar, "player_hp.layout", {
@@ -1016,7 +1015,7 @@ function Page:BuildPlayerHP()
     AddTooltip(self.hp.shape, "HP Shape", "Bar keeps the normal statusbar. Follow Player Power mirrors the independent detached Player power shape. Orb uses a single vertical fill.")
     AddTooltip(self.hp.orbSize, "Orb Size", "Used only when this HP bar is explicitly set to Orb. Follow Player Power inherits the Player power orb size instead.")
     AddTooltip(self.hp.smooth, "Smooth Fill", "Optional interpolation for this second HP bar. Off keeps direct native SetValue updates.")
-    W.ControlCard(textures, "HP Textures", "Bar uses SharedMedia textures. Shapes use fixed alpha assets.", 14, -38, cardW, 346)
+    W.ControlCard(textures, "HP Textures", nil, 14, -38, cardW, 346)
     local texture = self:Controls(textures, Bars, ApplyPlayerHPBar, "player_hp.textures", {
         { "color", "dropdown", "HP color", PLAYER_HP_COLOR_VALUES, 300, "playerHPBarColorMode", "GLOBAL" },
         { "fg", "dropdown", "Foreground texture", function() return TextureValues("Use global bar texture") end, 300, "playerHPBarTexture", "", ApplyPlayerHPTextures },
@@ -1029,7 +1028,7 @@ function Page:BuildPlayerHP()
     AddTooltip(texture.color, "HP Color", "Global follows the normal MSUF health color mode. Class Color forces your class color. Dark Mode forces the configured dark bar color. HP Gradient colors only this second HP bar by current health.")
     AddTooltip(texture.bg, "Background Texture", "Visible behind the filled HP amount. At 100% HP the fill covers the background; Outline 0 does not disable this texture.")
     AddTooltip(texture.outline, "HP Outline", "Controls only the second HP bar outline. Bar uses four outside border edges; shapes use their fixed edge texture. 0 disables only the outline.")
-    W.ControlCard(text, "HP Text", "Same value modes as Player unitframe health text.", 14, -38, cardW, twoColumns and 520 or 690)
+    W.ControlCard(text, "HP Text", nil, 14, -38, cardW, twoColumns and 520 or 690)
     local textRefresh = self:WithRefresh(ApplyPlayerHPText)
     self.hpTextEnable = SwitchAt(self.ctx, text, "Show HP text", 32, -104, controlW, Bars, "playerHPBarTextEnabled", true, textRefresh, Meta("player_hp.text.enabled"))
     local shared = SwitchAt(self.ctx, text, "Use Player HP text", 32, -136, controlW, Bars, "playerHPBarUsePlayerText", true, textRefresh, Meta("player_hp.text.use_player_text"))
@@ -1063,7 +1062,7 @@ function Page:BuildAlternativeMana()
     local section = self.b:CollapsibleSection("classpower_alt_mana", "Alternative Mana", 306, false)
     local cardW = min(620, (section._msuf2Width or self.width) - 28)
     local controlW = min(360, cardW - 64)
-    W.ControlCard(section, "Alternative Mana", "Shadow, Ret, Ele, Enh, Balance, Feral, WW", 14, -38, cardW, 234)
+    W.ControlCard(section, "Visibility & Size", "For specializations that use mana alongside another resource.", 14, -38, cardW, 234)
     self.altToggle = SwitchAt(self.ctx, section, "Show mana bar (dual resource)", 32, -98, controlW, Bars, "showAltMana", false, ApplyClassPower, Meta("alternative_mana.enabled"))
     local smooth = SwitchAt(self.ctx, section, "Smooth fill", 32, -132, controlW, Bars, "altManaSmoothFill", true, ApplyClassPowerSmoothing, Meta("alternative_mana.smooth_fill"))
     local fields = self:Controls(section, Bars, ApplyClassPower, "alternative_mana.layout", {
@@ -1072,7 +1071,6 @@ function Page:BuildAlternativeMana()
     })
     PlaceColumn(section, 32, -174, 54, controlW, "LEFT", fields.height, fields.y)
     self:AddNamed("altMana", fields, "height y"); self:Add("altMana", smooth)
-    AddTooltip(smooth, "Alternative Mana Smooth Fill", "Uses native C-side StatusBar interpolation and UNIT_POWER_FREQUENT updates for the Alternative Mana bar.")
 end
 
 function Page:RefreshControlState()

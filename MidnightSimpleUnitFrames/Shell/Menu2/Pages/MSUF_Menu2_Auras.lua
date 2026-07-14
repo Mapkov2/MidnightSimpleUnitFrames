@@ -69,7 +69,7 @@ local DEBUFF_TYPE_BORDER_PREVIEW_ATLAS = {
 }
 local DEBUFF_EXCLUSIVE = VTP "none=None|raid=Raid"
 local NATIVE_EXACT_AURA_FILTERS_ENABLED = true
-local NATIVE_EXACT_AURA_FILTERS_TEXT = "Exact SpellID filters use Blizzard 12.1 AuraContainer candidateFilters where the client permits identity filtering."
+local NATIVE_EXACT_AURA_FILTERS_TEXT = "Exact Spell IDs are used when Blizzard exposes them."
 local GROUP_NATIVE_FILTER_LABELS = {
     ALL = "All",
     Player = "Player",
@@ -364,7 +364,7 @@ end
 local function BuildActionTabs(ctx, parent, values, x, y, width, getValue, setValue, gap, buttonFactory, catalogPath)
     gap = gap or 6
     local count = #values
-    local bw = max(54, floor(((width or 720) - gap * (count - 1)) / count))
+    local bw = max(56, floor(((width or 720) - gap * (count - 1)) / count))
     local buttons = {}
     for i = 1, count do
         local item = values[i]
@@ -470,8 +470,8 @@ local function BuildAuraStyleScopeOverrideSection(ctx, b)
         end,
         AuraControlMeta(ctx, "style.scope.override"))
     local overrideInfo = W.Text(section, "", 14, overrideY, ctx.width - 130, T.colors.text)
-    local reset = T.Button(section, "Reset", 76, 22)
-    reset:SetPoint("TOPRIGHT", section, "TOPRIGHT", -14, overrideY + 8)
+    local reset = T.Button(section, "Reset", 76, 24)
+    reset:SetPoint("TOPRIGHT", section, "TOPRIGHT", -16, overrideY + 8)
     T.CenterButtonLabel(reset)
     reset:SetScript("OnClick", function()
         for i = 1, #AURA_STYLE_UNIT_SCOPES do
@@ -548,7 +548,7 @@ local function CurrentAuraStyleContainer(scope)
     return container
 end
 local function BuildAuraStyleNav(ctx, b, scope)
-    local h = 54
+    local h = 56
     local section = T.Panel(b.parent, nil, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft)
     T.ApplySurface(section, "card")
     section:SetPoint("TOPLEFT", b.parent, "TOPLEFT", b.x, b.y)
@@ -891,10 +891,10 @@ local function CreateAuraPreviewIcon(parent)
     f.edge = {}
     if PreviewHelpers.LayoutEdgeLines then PreviewHelpers.LayoutEdgeLines(f, 1, AURA_PREVIEW_EDGE_OPTS) end
     f.stack = f:CreateFontString(nil, "OVERLAY")
-    f.stack:SetFont(FONT, 9, "OUTLINE")
+    f.stack:SetFont(FONT, T.FontSize("micro"), "OUTLINE")
     f.stack:SetPoint("TOPRIGHT", f, "TOPRIGHT", -1, -1)
     f.timer = f:CreateFontString(nil, "OVERLAY")
-    f.timer:SetFont(FONT, 8, "OUTLINE")
+    f.timer:SetFont(FONT, T.FontSize("micro"), "OUTLINE")
     f.timer:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 2, 1)
     return f
 end
@@ -1570,7 +1570,7 @@ local function BuildUnitStyle(ctx, b, scope)
 
     local stack = b:CollapsibleSection(baseId .. "_stack", LaneTitle(lane) .. " Stack Count", 296, false)
     local sw = BodyWidth(stack)
-    BindStyleSwitch(stack, "Show Stack Count", 24, -54, sw - 48, "showStackCount", true, "AURAS3_SHOW_STACKS")
+    BindStyleSwitch(stack, "Show Stack Count", 24, -56, sw - 48, "showStackCount", true, "AURAS3_SHOW_STACKS")
     AddStyleControl(BindDropdown(ctx, stack, "Anchor", 24, -94, Model.StackAnchorValues(), sw - 48,
         function()
             if type(Model.ReadLaneStackAnchor) == "function" then return Model.ReadLaneStackAnchor(unit, lane) end
@@ -1591,44 +1591,39 @@ local function BuildUnitStyle(ctx, b, scope)
     BindStyleSlider(stack, "X", 24, -212, -40, 40, 1, stackSmallW, "stackTextOffsetX", -1, -2000, 2000, nil, nil, "AURAS3_STACK_X")
     BindStyleSlider(stack, "Y", 32 + stackSmallW, -212, -40, 40, 1, stackSmallW, "stackTextOffsetY", 1, -2000, 2000, nil, nil, "AURAS3_STACK_Y")
 
-    local cooldown = b:CollapsibleSection(baseId .. "_cooldown", LaneTitle(lane) .. " Cooldown Text", 426, true)
+    local cooldown = b:CollapsibleSection(baseId .. "_cooldown", LaneTitle(lane) .. " Cooldown Text", 374, true)
     local cw = BodyWidth(cooldown)
-    W.Text(cooldown, "Timer font size, anchor, offset, and tooltip behavior for " .. scopeLabel .. " " .. laneName .. ".", 24, -42, cw - 48, T.colors.muted)
-    BindStyleSlider(cooldown, "Text Size", 24, -82, 6, 40, 1, cw - 48, "cooldownTextSize", 14, 6, 40, nil, nil, "AURAS3_COOLDOWN_SIZE")
-    BindStyleDropdown(cooldown, "Anchor", 24, -140, type(Model.AuraAnchorValues) == "function" and Model.AuraAnchorValues() or GFAnchorValues(), cw - 48, ReadScopeCooldownAnchor, WriteScopeCooldownAnchor, "AURAS3_COOLDOWN_ANCHOR")
-    BindStyleSlider(cooldown, "X", 24, -198, -40, 40, 1, cw - 48, "cooldownTextOffsetX", 0, -2000, 2000, nil, nil, "AURAS3_COOLDOWN_X")
-    BindStyleSlider(cooldown, "Y", 24, -258, -40, 40, 1, cw - 48, "cooldownTextOffsetY", 0, -2000, 2000, nil, nil, "AURAS3_COOLDOWN_Y")
-    local swipeDirection = BindStyleDropdown(cooldown, "Swipe Direction", 24, -306, COOLDOWN_SWIPE_DIRECTION_VALUES, cw - 48, ReadScopeSwipeDirection, WriteScopeSwipeDirection, "AURAS3_COOLDOWN_SWIPE_DIRECTION")
-    AddTooltip(swipeDirection, "Cooldown swipe direction", "Selects the Blizzard cooldown swipe direction with Cooldown:SetReverse. This only affects the swipe overlay, not icon size or position.")
-    local decimal = BindStyleSlider(cooldown, "Decimals below sec", 24, -364, 0, 30, 1, cw - 48, "cooldownDecimalSeconds", 3, 0, 30, nil, nil, "AURAS3_COOLDOWN_FORMAT")
+    BindStyleSlider(cooldown, "Text Size", 24, -48, 6, 40, 1, cw - 48, "cooldownTextSize", 14, 6, 40, nil, nil, "AURAS3_COOLDOWN_SIZE")
+    BindStyleDropdown(cooldown, "Anchor", 24, -104, type(Model.AuraAnchorValues) == "function" and Model.AuraAnchorValues() or GFAnchorValues(), cw - 48, ReadScopeCooldownAnchor, WriteScopeCooldownAnchor, "AURAS3_COOLDOWN_ANCHOR")
+    BindStyleSlider(cooldown, "X", 24, -162, -40, 40, 1, cw - 48, "cooldownTextOffsetX", 0, -2000, 2000, nil, nil, "AURAS3_COOLDOWN_X")
+    BindStyleSlider(cooldown, "Y", 24, -222, -40, 40, 1, cw - 48, "cooldownTextOffsetY", 0, -2000, 2000, nil, nil, "AURAS3_COOLDOWN_Y")
+    local swipeDirection = BindStyleDropdown(cooldown, "Swipe Direction", 24, -270, COOLDOWN_SWIPE_DIRECTION_VALUES, cw - 48, ReadScopeSwipeDirection, WriteScopeSwipeDirection, "AURAS3_COOLDOWN_SWIPE_DIRECTION")
+    AddTooltip(swipeDirection, "Cooldown swipe direction", "Reverses only the swipe overlay. Icon size and position stay unchanged.")
+    local decimal = BindStyleSlider(cooldown, "Decimals below sec", 24, -328, 0, 30, 1, cw - 48, "cooldownDecimalSeconds", 3, 0, 30, nil, nil, "AURAS3_COOLDOWN_FORMAT")
     AddTooltip(decimal, "Cooldown text format", "Remaining time below this value uses one decimal place. Timers show unitless seconds below 1 minute and localized minutes above it. Set 0 for whole seconds only.")
-    W.Text(cooldown, "Uses Blizzard DurationTextBinding; no Lua timer or OnUpdate work is added. Durations are unitless seconds below 1 minute, then localized minutes.", 24, -408, cw - 48, T.colors.muted)
 
-    local durationBar = b:CollapsibleSection(baseId .. "_duration_bar", LaneTitle(lane) .. " Duration Bar", 358, false)
+    local durationBar = b:CollapsibleSection(baseId .. "_duration_bar", LaneTitle(lane) .. " Duration Bar", 322, false)
     local dbw = BodyWidth(durationBar)
-    W.Text(durationBar, "Optional native StatusBar timer for " .. scopeLabel .. " " .. laneName .. ". Driven by Blizzard's DurationBar binding.", 24, -42, dbw - 48, T.colors.muted)
-    BindStyleSwitch(durationBar, "Show Duration Bar", 24, -82, dbw - 48, "showDurationBar", false, "AURAS3_DURATION_BAR")
-    BindStyleSlider(durationBar, "Height", 24, -140, 1, 16, 1, dbw - 48, "durationBarHeight", 2, 1, 16, nil, nil, "AURAS3_DURATION_BAR_HEIGHT")
-    BindStyleDropdown(durationBar, "Display", 24, -198,
+    BindStyleSwitch(durationBar, "Show Duration Bar", 24, -48, dbw - 48, "showDurationBar", false, "AURAS3_DURATION_BAR")
+    BindStyleSlider(durationBar, "Height", 24, -104, 1, 16, 1, dbw - 48, "durationBarHeight", 2, 1, 16, nil, nil, "AURAS3_DURATION_BAR_HEIGHT")
+    BindStyleDropdown(durationBar, "Display", 24, -162,
         type(Model.DurationBarDisplayValues) == "function" and Model.DurationBarDisplayValues() or DURATION_BAR_DISPLAY_VALUES,
         dbw - 48, ReadScopeDurationBarDisplay, WriteScopeDurationBarDisplay, "AURAS3_DURATION_BAR_DISPLAY")
-    BindStyleDropdown(durationBar, "Position", 24, -256,
+    BindStyleDropdown(durationBar, "Position", 24, -220,
         type(Model.DurationBarPositionValues) == "function" and Model.DurationBarPositionValues() or DURATION_BAR_POSITION_VALUES,
         dbw - 48, ReadScopeDurationBarPosition, WriteScopeDurationBarPosition, "AURAS3_DURATION_BAR_POSITION")
-    BindStyleDropdown(durationBar, "Fill Mode", 24, -314,
+    BindStyleDropdown(durationBar, "Fill Mode", 24, -278,
         type(Model.DurationBarDirectionValues) == "function" and Model.DurationBarDirectionValues() or DURATION_BAR_DIRECTION_VALUES,
         dbw - 48, ReadScopeDurationBarDirection, WriteScopeDurationBarDirection, "AURAS3_DURATION_BAR_DIRECTION")
 
-    local behavior = b:CollapsibleSection(baseId .. "_behavior", LaneTitle(lane) .. " Ordering", 220, false)
+    local behavior = b:CollapsibleSection(baseId .. "_behavior", LaneTitle(lane) .. " Ordering", 156, false)
     local bw = BodyWidth(behavior)
-    W.Text(behavior, "Choose how Blizzard prioritizes " .. scopeLabel .. " " .. laneName .. ". Player-first methods say so explicitly.", 24, -42, bw - 48, T.colors.muted)
-    local sortMethod = BindStyleDropdown(behavior, "Sort By", 24, -82, AuraSortMethodValues(lane), bw - 48,
+    local sortMethod = BindStyleDropdown(behavior, "Sort By", 24, -48, AuraSortMethodValues(lane), bw - 48,
         ReadScopeSortMethod, WriteScopeSortMethod, "AURAS3_SORT_METHOD")
-    AddTooltip(sortMethod, "Aura sorting", "Uses WoW 12.1's native AuraContainer sorting. Specialized buff and debuff methods are only shown where they are meaningful.")
-    local sortDirection = BindStyleDropdown(behavior, "Order", 24, -140, AURA_SORT_DIRECTION_VALUES, bw - 48,
+    AddTooltip(sortMethod, "Aura sorting", "Only relevant sorting methods are shown for buffs and debuffs.")
+    local sortDirection = BindStyleDropdown(behavior, "Order", 24, -104, AURA_SORT_DIRECTION_VALUES, bw - 48,
         ReadScopeSortDirection, WriteScopeSortDirection, "AURAS3_SORT_DIRECTION")
-    AddTooltip(sortDirection, "Aura sort order", "Reversed swaps the selected Blizzard comparator's complete priority order.")
-    W.Text(behavior, "Sorting stays inside Blizzard's protected aura pipeline; MSUF does not read aura values in Lua.", 24, -198, bw - 48, T.colors.muted)
+    AddTooltip(sortDirection, "Aura sort order", "Reversed flips the complete priority order.")
 
     M.TrackRefresh(ctx, function()
         local editable = unit == "shared" or not Model.UseSharedVisuals(unit)
@@ -1676,11 +1671,11 @@ local function BuildGroupStyle(ctx, b, scope)
     local features = b:CollapsibleSection(baseId .. "_features", LaneTitle(lane) .. " Basics", 186 + extraDebuffControls, true)
     local fw = BodyWidth(features)
     local colorsButton = ActionButton(features, "Open Aura Colors", 150, "normal")
-    colorsButton:SetPoint("TOPLEFT", features, "TOPLEFT", 24, -42)
+    colorsButton:SetPoint("TOPLEFT", features, "TOPLEFT", 24, -44)
     colorsButton:SetScript("OnClick", OpenAuraColors)
     RegisterAuraControl(ctx, colorsButton, "Open Aura Colors", "button", "group-style.lane.colors", "navigation", "opt_colors")
     AddTooltip(colorsButton, "Aura colors", "Opens Colors > Auras for timer, stack, highlight, and pandemic colors.")
-    BindGroupSwitch(ctx, features, "Show Cooldown Text", 24, -82, fw - 48, scope, lane, "showCooldown", true, "visual", RefreshStylePreview)
+    BindGroupSwitch(ctx, features, "Show Cooldown Text", 24, -84, fw - 48, scope, lane, "showCooldown", true, "visual", RefreshStylePreview)
     BindGroupSwitch(ctx, features, "Show Cooldown Swipe", 24, -114, fw - 48, scope, lane, "showCooldownSwipe", true, "visual", RefreshStylePreview)
     BindGroupSwitch(ctx, features, "Show Tooltip", 24, -146, fw - 48, scope, lane, "showTooltip", true, "visual", RefreshStylePreview)
     if lane == "debuff" then
@@ -1695,9 +1690,9 @@ local function BuildGroupStyle(ctx, b, scope)
             AuraControlMeta(ctx, "group-style.lane." .. AuraCatalogToken(lane) .. ".dispel-border-mode"))
     end
 
-    local cooldown = b:CollapsibleSection(baseId .. "_cooldown", LaneTitle(lane) .. " Cooldown Text", 382, true)
+    local cooldown = b:CollapsibleSection(baseId .. "_cooldown", LaneTitle(lane) .. " Cooldown Text", 336, true)
     local cw = BodyWidth(cooldown)
-    BindGroupSlider(ctx, cooldown, "Cooldown Font", 24, -54, 6, 24, 1, cw - 48, scope, lane, "cooldownSize", 8, "font", RefreshStylePreview)
+    BindGroupSlider(ctx, cooldown, "Cooldown Font", 24, -56, 6, 24, 1, cw - 48, scope, lane, "cooldownSize", 8, "font", RefreshStylePreview)
     BindGroupDropdown(ctx, cooldown, "Cooldown Anchor", 24, -112, GFAnchorValues(), cw - 48, scope, lane, "cooldownAnchor", "CENTER", "geometry", RefreshStylePreview)
     local cooldownSmallW = max(120, floor((cw - 72) / 2))
     BindGroupSlider(ctx, cooldown, "Cooldown X", 24, -170, -40, 40, 1, cooldownSmallW, scope, lane, "cooldownX", 0, "geometry", RefreshStylePreview)
@@ -1712,36 +1707,33 @@ local function BuildGroupStyle(ctx, b, scope)
             RefreshStylePreview()
         end,
         AuraControlMeta(ctx, "group-style.lane." .. AuraCatalogToken(lane) .. ".cooldown-swipe-direction"))
-    AddTooltip(groupSwipeDirection, "Cooldown swipe direction", "Selects the Blizzard cooldown swipe direction with Cooldown:SetReverse. This only affects the swipe overlay, not icon size or position.")
+    AddTooltip(groupSwipeDirection, "Cooldown swipe direction", "Reverses only the swipe overlay. Icon size and position stay unchanged.")
     local groupDecimal = BindGroupSlider(ctx, cooldown, "Decimals below sec", 24, -288, 0, 30, 1, cw - 48, scope, lane, "cooldownDecimalSeconds", 3, "visual", RefreshStylePreview)
     AddTooltip(groupDecimal, "Cooldown text format", "Remaining time below this value uses one decimal place. Timers show unitless seconds below 1 minute and localized minutes above it. Set 0 for whole seconds only.")
-    W.Text(cooldown, "Uses Blizzard DurationTextBinding; no Lua timer or OnUpdate work is added. Durations are unitless seconds below 1 minute, then localized minutes.", 24, -340, cw - 48, T.colors.muted)
 
-    local durationBar = b:CollapsibleSection(baseId .. "_duration_bar", LaneTitle(lane) .. " Duration Bar", 358, false)
+    local durationBar = b:CollapsibleSection(baseId .. "_duration_bar", LaneTitle(lane) .. " Duration Bar", 322, false)
     local dbw = BodyWidth(durationBar)
-    W.Text(durationBar, "Optional native StatusBar timer for " .. scopeLabel .. " " .. laneName .. ".", 24, -42, dbw - 48, T.colors.muted)
-    BindGroupSwitch(ctx, durationBar, "Show Duration Bar", 24, -82, dbw - 48, scope, lane, "showDurationBar", false, "visual", RefreshStylePreview)
-    BindGroupSlider(ctx, durationBar, "Height", 24, -140, 1, 16, 1, dbw - 48, scope, lane, "durationBarHeight", 2, "visual", RefreshStylePreview)
-    BindGroupDropdown(ctx, durationBar, "Display", 24, -198, DURATION_BAR_DISPLAY_VALUES, dbw - 48, scope, lane, "durationBarDisplay", "BAR_ONLY", "visual", RefreshStylePreview)
-    BindGroupDropdown(ctx, durationBar, "Position", 24, -256, DURATION_BAR_POSITION_VALUES, dbw - 48, scope, lane, "durationBarPosition", "BOTTOM", "visual", RefreshStylePreview)
-    BindGroupDropdown(ctx, durationBar, "Fill Mode", 24, -314, DURATION_BAR_DIRECTION_VALUES, dbw - 48, scope, lane, "durationBarDirection", "REMAINING", "visual", RefreshStylePreview)
+    BindGroupSwitch(ctx, durationBar, "Show Duration Bar", 24, -48, dbw - 48, scope, lane, "showDurationBar", false, "visual", RefreshStylePreview)
+    BindGroupSlider(ctx, durationBar, "Height", 24, -104, 1, 16, 1, dbw - 48, scope, lane, "durationBarHeight", 2, "visual", RefreshStylePreview)
+    BindGroupDropdown(ctx, durationBar, "Display", 24, -162, DURATION_BAR_DISPLAY_VALUES, dbw - 48, scope, lane, "durationBarDisplay", "BAR_ONLY", "visual", RefreshStylePreview)
+    BindGroupDropdown(ctx, durationBar, "Position", 24, -220, DURATION_BAR_POSITION_VALUES, dbw - 48, scope, lane, "durationBarPosition", "BOTTOM", "visual", RefreshStylePreview)
+    BindGroupDropdown(ctx, durationBar, "Fill Mode", 24, -278, DURATION_BAR_DIRECTION_VALUES, dbw - 48, scope, lane, "durationBarDirection", "REMAINING", "visual", RefreshStylePreview)
 
     local stack = b:CollapsibleSection(baseId .. "_stack", LaneTitle(lane) .. " Stack Count", 270, false)
     local sw = BodyWidth(stack)
-    BindGroupSwitch(ctx, stack, "Show Stack Count", 24, -54, sw - 48, scope, lane, "showStacks", true, "visual", RefreshStylePreview)
+    BindGroupSwitch(ctx, stack, "Show Stack Count", 24, -56, sw - 48, scope, lane, "showStacks", true, "visual", RefreshStylePreview)
     BindGroupSlider(ctx, stack, "Stack Font", 24, -94, 6, 24, 1, sw - 48, scope, lane, "stackSize", 10, "font", RefreshStylePreview)
     BindGroupDropdown(ctx, stack, "Stack Anchor", 24, -152, GFAnchorValues(), sw - 48, scope, lane, "stackAnchor", "BOTTOMRIGHT", "geometry", RefreshStylePreview)
     local stackSmallW = max(120, floor((sw - 72) / 2))
     BindGroupSlider(ctx, stack, "Stack X", 24, -210, -40, 40, 1, stackSmallW, scope, lane, "stackX", 0, "geometry", RefreshStylePreview)
     BindGroupSlider(ctx, stack, "Stack Y", 32 + stackSmallW, -210, -40, 40, 1, stackSmallW, scope, lane, "stackY", 0, "geometry", RefreshStylePreview)
 
-    local behavior = b:CollapsibleSection(baseId .. "_behavior", LaneTitle(lane) .. " Ordering", 252, false)
+    local behavior = b:CollapsibleSection(baseId .. "_behavior", LaneTitle(lane) .. " Ordering", 216, false)
     local bw = BodyWidth(behavior)
-    W.Text(behavior, "Choose how Blizzard prioritizes " .. scopeLabel .. " " .. laneName .. ". Player-first methods say so explicitly.", 24, -42, bw - 48, T.colors.muted)
-    local groupSortMethod = BindGroupDropdown(ctx, behavior, "Sort By", 24, -82, AuraSortMethodValues(lane), bw - 48,
+    local groupSortMethod = BindGroupDropdown(ctx, behavior, "Sort By", 24, -48, AuraSortMethodValues(lane), bw - 48,
         scope, lane, "sortMethod", "DEFAULT", "visual")
-    AddTooltip(groupSortMethod, "Aura sorting", "Uses WoW 12.1's native AuraContainer sorting. Specialized buff and debuff methods are only shown where they are meaningful.")
-    local groupSortDirection = BindDropdown(ctx, behavior, "Order", 24, -140, AURA_SORT_DIRECTION_VALUES, bw - 48,
+    AddTooltip(groupSortMethod, "Aura sorting", "Only relevant sorting methods are shown for buffs and debuffs.")
+    local groupSortDirection = BindDropdown(ctx, behavior, "Order", 24, -104, AURA_SORT_DIRECTION_VALUES, bw - 48,
         function()
             local group = GFReadGroup(scope, lane)
             return group.sortReverse == true and "REVERSE" or "NORMAL"
@@ -1750,9 +1742,9 @@ local function BuildGroupStyle(ctx, b, scope)
             GFWriteGroupValue(scope, lane, "sortReverse", v == "REVERSE", "visual")
         end,
         AuraControlMeta(ctx, "group-style.lane." .. AuraCatalogToken(lane) .. ".sort-direction"))
-    AddTooltip(groupSortDirection, "Aura sort order", "Reversed swaps the selected Blizzard comparator's complete priority order.")
-    BindGroupRootSwitch(ctx, behavior, "Scale Icons for Large Groups", 24, -198, bw - 48, scope, "dynamicScale", false, "geometry", RefreshStylePreview)
-    W.Text(behavior, "Large groups use 85% icon scale above 15 members and 70% above 25.", 24, -230, bw - 48, T.colors.muted)
+    AddTooltip(groupSortDirection, "Aura sort order", "Reversed flips the complete priority order.")
+    BindGroupRootSwitch(ctx, behavior, "Scale Icons for Large Groups", 24, -160, bw - 48, scope, "dynamicScale", false, "geometry", RefreshStylePreview)
+    W.Text(behavior, "85% above 15 members · 70% above 25", 24, -192, bw - 48, T.colors.muted)
 end
 local function EnsureCustomPreviewEffect(box)
     if box._msufCustomEffectOverlay then return box._msufCustomEffectOverlay, box._msufCustomEffectEdges, box._msufCustomEffectName end
@@ -1768,7 +1760,7 @@ local function EnsureCustomPreviewEffect(box)
         edges[i]:Hide()
     end
     local name = T.Font(box, "GameFontHighlight", "Preview Unit", T.colors.text)
-    name:SetPoint("BOTTOMLEFT", box, "BOTTOMLEFT", 10, 8)
+    name:SetPoint("BOTTOMLEFT", box, "BOTTOMLEFT", 12, 8)
     name:Hide()
     box._msufCustomEffectOverlay = overlay
     box._msufCustomEffectEdges = edges
@@ -1936,14 +1928,14 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
         if not fixedLane then BuildLaneTabs(ctx, filter, "auraFilterLane", 112, -68, min(300, w - 180)) end
         local dropdownW = min(360, max(240, floor((filterW - 48) * 0.55)))
         BindGroupDropdown(ctx, filter, laneText .. " Filter", 16, -142, GroupFilterValues(lane), dropdownW, scope, lane, "filterToken", "ALL", "visual")
-        W.Text(filter, "Choose the native Blizzard AuraContainer filter for this lane.", 40 + dropdownW, -142, max(220, filterW - dropdownW - 64), T.colors.muted)
+        W.Text(filter, "Choose which auras Blizzard provides for this lane.", 40 + dropdownW, -142, max(220, filterW - dropdownW - 64), T.colors.muted)
         local hidePermanent = BindSwitch(ctx, filter, "Hide permanent auras", 16, -192, dropdownW,
             ReadHidePermanent, WriteHidePermanent,
             AuraControlMeta(ctx, "group-filter.lane." .. AuraCatalogToken(lane) .. ".hide-permanent"))
         AddHidePermanentTooltip(hidePermanent)
     end
     if not showBlacklist then return end
-    local blacklist = Card(section, "Category Blacklist", "SpellID category filters for " .. ScopeLabel(scope) .. ".", 24, blacklistY, w - 48, categoryHeight)
+    local blacklist = Card(section, "Category Blacklist", nil, 24, blacklistY, w - 48, categoryHeight)
     W.LabelAt(blacklist, "Active", 16, -50, 70, "GameFontNormalSmall", T.colors.accent)
     W.LabelAt(blacklist, lane == "buff" and "Buff category blacklist" or "Debuff category blacklist", 86, -50, 260, "GameFontHighlightSmall", T.colors.text)
     W.Text(blacklist, NATIVE_EXACT_AURA_FILTERS_TEXT, 16, -72, w - 96, T.colors.muted)
@@ -1974,7 +1966,7 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
         function(value) directInputValue = value or "" end,
         false, AuraControlMeta(ctx, "group-blacklist.lane." .. AuraCatalogToken(lane) .. ".manual-input", "ephemeral"))
     local directAdd = ActionButton(direct, "Add", 90)
-    directAdd:SetPoint("TOPLEFT", direct, "TOPLEFT", 26 + directInputW, -90)
+    directAdd:SetPoint("TOPLEFT", direct, "TOPLEFT", 28 + directInputW, -92)
     directAdd:SetScript("OnClick", function()
         local value = directInput and directInput.GetText and directInput:GetText() or directInputValue
         local changed = Model.AddGroupBlacklistSpell(scope, lane, value)
@@ -1999,7 +1991,7 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
         return changed and true or false
     end)
     RegisterAuraTextAction(ctx, directRemove, directInput, "Remove", "group-blacklist.lane." .. AuraCatalogToken(lane) .. ".remove")
-    local presetW = max(150, floor((w - 96) * 0.22))
+    local presetW = max(152, floor((w - 96) * 0.22))
     local spellW = max(210, floor((w - 96) * 0.30))
     local function CurrentPreset()
         local key = M.auraBlacklistPreset or "RAID_BUFFS"
@@ -2060,14 +2052,14 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
         local row = rows[index]
         if row then return row end
         row = CreateFrame("Button", nil, listChild)
-        row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((index - 1) * 22))
-        row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((index - 1) * 22))
+        row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((index - 1) * 24))
+        row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((index - 1) * 24))
         row:SetHeight(20)
         row.icon = row:CreateTexture(nil, "ARTWORK")
         row.icon:SetPoint("LEFT", row, "LEFT", 3, 0)
         row.icon:SetSize(17, 17)
         row.text = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
-        row.text:SetPoint("LEFT", row.icon, "RIGHT", 7, 0)
+        row.text:SetPoint("LEFT", row.icon, "RIGHT", 8, 0)
         row:SetScript("OnClick", function(self)
             if self._spellID and Model.RemoveGroupBlacklistSpell(scope, lane, self._spellID) then
                 QueueGroupScope(scope, "visual")
@@ -2084,7 +2076,7 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
         prepared:SetText((#entries == 1 and "1 blocked spell" or tostring(#entries) .. " blocked spells") .. " · click an entry to remove")
         empty:SetShown(#entries == 0)
         listScroll:SetShown(#entries > 0)
-        listChild:SetHeight(max(48, #entries * 22))
+        listChild:SetHeight(max(48, #entries * 24))
         for i = 1, max(#rows, #entries) do
             local row, entry = rows[i], entries[i]
             if entry then
@@ -2131,7 +2123,7 @@ local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
     local section = b:Section(title, 190)
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48
-    local gap = 10
+    local gap = 12
     local controls = {}
     local enable = BindSwitch(ctx, section, "Visible", 24, -62, 104,
         function() return UnitLaneShown(unit, kind) end,
@@ -2188,7 +2180,7 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
     local section = b:Section((lane == "debuff" and "Debuff" or "Buff") .. " Filters", 150)
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48
-    local gap = 10
+    local gap = 12
     local colW = floor((inner - gap * 3) / 4)
     local filterControls = {}
     local own = BindSwitch(ctx, section, "Own filters", 24, -42, colW,
@@ -2284,7 +2276,7 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
         function() return inputValue end, function(value) inputValue = value or "" end,
         false, AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.manual-input", "ephemeral"))
     local add = ActionButton(section, "Add", 86)
-    add:SetPoint("TOPLEFT", section, "TOPLEFT", 34 + inputW, -58)
+    add:SetPoint("TOPLEFT", section, "TOPLEFT", 36 + inputW, -60)
     add:SetScript("OnClick", function()
         local value = input and input.GetText and input:GetText() or inputValue
         local changed = Model.AddBlacklistSpell(unit, value, lane)
@@ -2308,7 +2300,7 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
         AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.hide-permanent", nil,
             "auras3." .. unit .. "." .. lane .. ".blacklist.hidePermanent"))
     AddTooltip(hidePermanent, "Hide permanent auras", "Always excludes auras without a duration. This rule is applied after the blacklist.")
-    local presetW = max(150, floor(inner * 0.22))
+    local presetW = max(152, floor(inner * 0.22))
     local spellW = max(210, floor(inner * 0.30))
     local function CurrentPreset()
         local key = M.auraBlacklistPreset or "RAID_BUFFS"
@@ -2348,10 +2340,10 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
     local empty = W.Text(section, "No blocked spells. Add one above or use a preset.", 24, -184, inner, T.colors.muted)
     local listScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
     listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -178)
-    listScroll:SetSize(inner - 20, 54)
+    listScroll:SetSize(inner - 20, 56)
     if listScroll.EnableMouseWheel then listScroll:EnableMouseWheel(true) end
     local listChild = CreateFrame("Frame", nil, listScroll)
-    listChild:SetSize(inner - 42, 54)
+    listChild:SetSize(inner - 44, 56)
     listScroll:SetScrollChild(listChild)
     if listScroll.SetPropagateMouseWheel then listScroll:SetPropagateMouseWheel(false) end
     listScroll:SetScript("OnMouseWheel", function(self, delta) HandleNestedScrollWheel(self, delta, 32) end)
@@ -2360,14 +2352,14 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
         local row = rows[i]
         if row then return row end
         row = CreateFrame("Button", nil, listChild)
-        row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((i - 1) * 22))
-        row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((i - 1) * 22))
+        row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((i - 1) * 24))
+        row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((i - 1) * 24))
         row:SetHeight(20)
         row.icon = row:CreateTexture(nil, "ARTWORK")
         row.icon:SetPoint("LEFT", row, "LEFT", 3, 0)
         row.icon:SetSize(17, 17)
         row.text = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
-        row.text:SetPoint("LEFT", row.icon, "RIGHT", 7, 0)
+        row.text:SetPoint("LEFT", row.icon, "RIGHT", 8, 0)
         row:SetScript("OnClick", function(self)
             Model.RemoveBlacklistSpell(unit, self._spellID, lane)
             ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_REMOVE", true)
@@ -2380,7 +2372,7 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
         prepared:SetText((#entries == 1 and "1 blocked spell" or tostring(#entries) .. " blocked spells") .. " · click an entry to remove")
         empty:SetShown(#entries == 0)
         listScroll:SetShown(#entries > 0)
-        listChild:SetHeight(max(54, #entries * 22))
+        listChild:SetHeight(max(56, #entries * 24))
         for i = 1, max(#rows, #entries) do
             local row, entry = rows[i], entries[i]
             if entry then
@@ -2403,9 +2395,9 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
     local section = b:Section(laneTitle .. " Filters", max(150, 104 + optionRows * 32))
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48
-    local gap = 10
+    local gap = 12
     local colW = floor((inner - gap * 3) / 4)
-    W.Text(section, "Native content · choose one", 24, -42, colW * 2 + gap, T.colors.muted)
+    W.Text(section, "Show auras", 24, -42, colW * 2 + gap, T.colors.muted)
     local hidePermanent = BindSwitch(ctx, section, "Hide permanent", 24 + 2 * (colW + gap), -42, colW * 2 + gap,
         function()
             return type(Model.ReadGroupBlacklistHidePermanent) == "function"
@@ -2448,7 +2440,7 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
                     assistantSettingKeys = GroupAssistantSettingKeys(scope,
                         ".auras." .. lane .. ".filterToken"),
                 } or nil))
-        AddTooltip(control, item.text or item.value, "Native Blizzard AuraContainer content rule. Only one rule is active at a time.")
+        AddTooltip(control, item.text or item.value, "Only one filter can be active.")
     end
 end
 
@@ -2463,7 +2455,7 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
         function() return inputValue end, function(value) inputValue = value or "" end,
         false, AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.manual-input", "ephemeral"))
     local add = ActionButton(section, "Add", 86)
-    add:SetPoint("TOPLEFT", section, "TOPLEFT", 34 + inputW, -58)
+    add:SetPoint("TOPLEFT", section, "TOPLEFT", 36 + inputW, -60)
     add:SetScript("OnClick", function()
         local value = input and input.GetText and input:GetText() or inputValue
         local changed = Model.AddGroupBlacklistSpell(scope, lane, value)
@@ -2476,7 +2468,7 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
         return changed and true or false
     end)
     RegisterAuraTextAction(ctx, add, input, "Add", "group-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.add")
-    local presetW = max(150, floor(inner * 0.22))
+    local presetW = max(152, floor(inner * 0.22))
     local spellW = max(210, floor(inner * 0.30))
     local function CurrentPreset()
         local key = M.auraBlacklistPreset or "RAID_BUFFS"
@@ -2525,10 +2517,10 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
     local empty = W.Text(section, "No blocked spells. Add one above or use a preset.", 24, -184, inner, T.colors.muted)
     local listScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
     listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -178)
-    listScroll:SetSize(inner - 20, 54)
+    listScroll:SetSize(inner - 20, 56)
     if listScroll.EnableMouseWheel then listScroll:EnableMouseWheel(true) end
     local listChild = CreateFrame("Frame", nil, listScroll)
-    listChild:SetSize(inner - 42, 54)
+    listChild:SetSize(inner - 44, 56)
     listScroll:SetScrollChild(listChild)
     if listScroll.SetPropagateMouseWheel then listScroll:SetPropagateMouseWheel(false) end
     listScroll:SetScript("OnMouseWheel", function(self, delta) HandleNestedScrollWheel(self, delta, 32) end)
@@ -2537,14 +2529,14 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
         local row = rows[i]
         if row then return row end
         row = CreateFrame("Button", nil, listChild)
-        row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((i - 1) * 22))
-        row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((i - 1) * 22))
+        row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((i - 1) * 24))
+        row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((i - 1) * 24))
         row:SetHeight(20)
         row.icon = row:CreateTexture(nil, "ARTWORK")
         row.icon:SetPoint("LEFT", row, "LEFT", 3, 0)
         row.icon:SetSize(17, 17)
         row.text = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
-        row.text:SetPoint("LEFT", row.icon, "RIGHT", 7, 0)
+        row.text:SetPoint("LEFT", row.icon, "RIGHT", 8, 0)
         row:SetScript("OnClick", function(self)
             if self._spellID and Model.RemoveGroupBlacklistSpell(scope, lane, self._spellID) then
                 QueueGroupScope(scope, "visual")
@@ -2559,7 +2551,7 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
         prepared:SetText((#entries == 1 and "1 blocked spell" or tostring(#entries) .. " blocked spells") .. " · click an entry to remove")
         empty:SetShown(#entries == 0)
         listScroll:SetShown(#entries > 0)
-        listChild:SetHeight(max(54, #entries * 22))
+        listChild:SetHeight(max(56, #entries * 24))
         for i = 1, max(#rows, #entries) do
             local row, entry = rows[i], entries[i]
             if entry then
@@ -2657,7 +2649,7 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
         setValue = function(value) SetUnitAuraTool(unit, currentTab, value); Rebuild(ctx) end,
     }), tools, "unit-workspace.tool-selector")
     local openStyle = ActionButton(top, "Open Aura Style", 126, "normal")
-    openStyle:SetPoint("TOPRIGHT", top, "TOPRIGHT", -16, -74)
+    openStyle:SetPoint("TOPRIGHT", top, "TOPRIGHT", -16, -76)
     openStyle:SetScript("OnClick", function()
         SetCurrentScope(unit)
         M.SetMenuStateValue("auraStyleContainer", currentTab)
@@ -2721,7 +2713,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             function() return inputValue end, function(value) inputValue = value or "" end,
             false, AuraControlMeta(ctx, "custom-container.whitelist.input", "ephemeral"))
         local add = ActionButton(section, "Add spell", 108)
-        add:SetPoint("TOPLEFT", section, "TOPLEFT", 34 + inputW, -58)
+        add:SetPoint("TOPLEFT", section, "TOPLEFT", 36 + inputW, -60)
         add:SetScript("OnClick", function()
             local value = input and input.GetText and input:GetText() or inputValue
             local changed = Model.AddCustomContainerSpell(unit, index, value)
@@ -2743,10 +2735,10 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
         local empty = W.Text(section, "No spells tracked. Add up to 40 exact SpellIDs.", 24, -158, inner, T.colors.muted)
         local listScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
         listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -148)
-        listScroll:SetSize(inner - 20, 82)
+        listScroll:SetSize(inner - 20, 84)
         if listScroll.EnableMouseWheel then listScroll:EnableMouseWheel(true) end
         local listChild = CreateFrame("Frame", nil, listScroll)
-        listChild:SetSize(inner - 42, 82)
+        listChild:SetSize(inner - 44, 84)
         listScroll:SetScrollChild(listChild)
         if listScroll.SetPropagateMouseWheel then listScroll:SetPropagateMouseWheel(false) end
         listScroll:SetScript("OnMouseWheel", function(self, delta) HandleNestedScrollWheel(self, delta, 32) end)
@@ -2755,14 +2747,14 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             local row = rows[i]
             if row then return row end
             row = CreateFrame("Button", nil, listChild)
-            row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((i - 1) * 22))
-            row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((i - 1) * 22))
+            row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((i - 1) * 24))
+            row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((i - 1) * 24))
             row:SetHeight(20)
             row.icon = row:CreateTexture(nil, "ARTWORK")
             row.icon:SetPoint("LEFT", row, "LEFT", 3, 0)
             row.icon:SetSize(17, 17)
             row.text = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
-            row.text:SetPoint("LEFT", row.icon, "RIGHT", 7, 0)
+            row.text:SetPoint("LEFT", row.icon, "RIGHT", 8, 0)
             row:SetScript("OnClick", function(self)
                 if self._spellID and Model.RemoveCustomContainerSpell(unit, index, self._spellID) then
                     Apply("AURAS3_CUSTOM_WHITELIST_REMOVE", true)
@@ -2777,7 +2769,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             status:SetText((#entries == 1 and "1 tracked spell" or tostring(#entries) .. " tracked spells") .. " · click an entry to remove")
             empty:SetShown(#entries == 0)
             listScroll:SetShown(#entries > 0)
-            listChild:SetHeight(max(82, #entries * 22))
+            listChild:SetHeight(max(84, #entries * 24))
             for i = 1, max(#rows, #entries) do
                 local row, entry = rows[i], entries[i]
                 if entry then
@@ -2944,7 +2936,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
     end
 
     if tool == "effect" then
-        local section = b:Section("Custom " .. tostring(index) .. " Full-Frame", 194)
+        local section = b:Section("Custom " .. tostring(index) .. " Full-Frame", 156)
         local w = section._msuf2Width or b.width or 720
         local col3, gap = Grid(w, 3)
         BindDropdown(ctx, section, "Effect", 24, -34, CUSTOM_FRAME_EFFECTS, col3,
@@ -2973,7 +2965,6 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             function() return tonumber(item.frame.priority) or 5 end,
             function(value) item.frame.priority = tonumber(value) or 5; Apply("AURAS3_CUSTOM_EFFECT_PRIORITY") end,
             AuraControlMeta(ctx, "custom-container.effect.priority"))
-        W.Text(section, "Secret-safe native AuraSlot effect. No aura scan, polling, or per-icon OnUpdate.", 24, -158, w - 48, T.colors.muted)
         return
     end
 
@@ -3005,7 +2996,7 @@ end
 
 local function BuildMovedAuraPage(ctx)
     local b = W.PageBuilder(ctx)
-    b:GlobalStyleHeader("Aura Content moved to Frames", "Style stays here under Appearance > Auras. Filters and lists now live directly in each frame's matching Aura menu.", 82)
+    b:GlobalStyleHeader("Aura Content moved to Frames", "Style stays here under Appearance > Auras. Filters and lists now live directly in each frame's matching Aura menu.", 84)
     local section = b:Section("Open a Frame", 190)
     local w = section._msuf2Width or b.width or 720
     local pages = {
@@ -3016,7 +3007,7 @@ local function BuildMovedAuraPage(ctx)
     for i = 1, #pages do
         local page = pages[i]
         local button = ActionButton(section, page[1], i == 5 and 132 or 92)
-        button:SetPoint("TOPLEFT", section, "TOPLEFT", x, -58)
+        button:SetPoint("TOPLEFT", section, "TOPLEFT", x, -60)
         button:SetScript("OnClick", function() if M.SelectPage then M.SelectPage(page[2]) end end)
         RegisterAuraControl(ctx, button, page[1], "button", "moved-page.open." .. AuraCatalogToken(page[2]), "navigation", page[2])
         x = x + (i == 5 and 144 or 104)
