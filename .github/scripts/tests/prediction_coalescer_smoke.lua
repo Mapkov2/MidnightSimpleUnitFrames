@@ -107,7 +107,8 @@ _G.Enum = {
     UnitHealAbsorbMode = { Total = 1 },
 }
 _G.issecretvalue = function(value) return type(value) == "table" and value.__secret == true end
-_G.UnitExists = function() return true end
+local unitExists = true
+_G.UnitExists = function() return unitExists end
 _G.UnitIsConnected = function() return true end
 _G.UnitHealth = function() return 60 end
 _G.UnitHealthMax = function() return 100 end
@@ -254,6 +255,23 @@ FlushDriver()
 Equal(calls.detailed, 0, "disabled frame processed stale prediction data")
 Prediction.Apply(frame, spec)
 Prediction.Update(frame, "MSUF_TEST_RESEED", "player")
+
+-- A transiently missing startup unit may clear Prediction's compiled mask.
+-- The first later data event must revalidate the live spec instead of being
+-- discarded forever by the coalescer's cached disabled state.
+unitExists = false
+Prediction.Update(frame, "MSUF_STARTUP_UNIT_MISSING", "player")
+Check(frame._msufPredictionDisabled == true, "missing startup unit did not disable prediction")
+Equal(frame._msufPredictionMask, 0, "missing startup unit did not clear prediction mask")
+unitExists = true
+ResetCalls()
+for _ = 1, 10 do queueAbsorb(frame, "UNIT_ABSORB_AMOUNT_CHANGED", "player") end
+Equal(calls.detailed, 0, "disabled recovery ran before the render-frame flush")
+FlushDriver()
+Equal(calls.detailed, 1, "valid absorb burst did not recover disabled prediction")
+Equal(calls.absorb, 1, "disabled recovery burst was not coalesced")
+Check(frame._msufPredictionDisabled ~= true, "valid absorb event left prediction disabled")
+Equal(frame._msufPredictionAbsorb, 18, "disabled recovery did not populate absorb state")
 
 -- Work raised while the active batch is draining is deferred to the next
 -- driver invocation, preventing same-frame queue amplification.
@@ -451,15 +469,35 @@ layoutFrame.hpBar.GetFrameLevel = savedHealthGetLevel
 -- Integration proof: with the real Core, the normal dependent UNIT_TARGET
 -- event is bound to its parent source and the compiled route receives the
 -- dependent display unit. No Core special case or global registration is used.
-_G.InCombatLockdown = function() return false end
+local routedInCombat = false
+_G.InCombatLockdown = function() return routedInCombat end
 _G.UnitIsDead = function() return false end
 _G.UnitIsDeadOrGhost = function() return false end
 local RoutedMSUF = { UF = { Metadata = { defaultApplyMask = { Prediction = true } } } }
 _G.MSUF_NS = RoutedMSUF
 local coreChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Core.lua"))
 coreChunk("MidnightSimpleUnitFrames", RoutedMSUF)
+local worldEntryRegistration
+local scheduledWorldSeed
+_G.MSUF_EventBus_Register = function(event, key, callback, unitFilter, once)
+    if key == "MSUF_UF_PREDICTION_WORLD_ENTRY" then
+        worldEntryRegistration = {
+            event = event,
+            callback = callback,
+            unitFilter = unitFilter,
+            once = once,
+        }
+    end
+    return true
+end
+_G.MSUF_ScheduleOnce = function(key, callback)
+    if key == "UF_PREDICTION_WORLD_ENTRY" then scheduledWorldSeed = callback end
+end
 local routedPredictionChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Prediction.lua"))
+local driverCountBeforeRoutedPrediction = #drivers
 routedPredictionChunk("MidnightSimpleUnitFrames", RoutedMSUF)
+Equal(#drivers, driverCountBeforeRoutedPrediction,
+    "prediction world-entry hook allocated a private event/update frame")
 local RoutedUF = RoutedMSUF.UF
 
 local function MakeRoutedDependent(unit)
@@ -480,7 +518,11 @@ local function MakeRoutedDependent(unit)
     }
     routed.MSUFSpec = routedSpec
     RoutedUF.AttachFrame(routed, { scope = "single" })
+    local readsBeforeApply = calls.detailed
     RoutedUF.ApplyElementToFrame(routed, "Prediction", routedSpec)
+    Equal(calls.detailed, readsBeforeApply + 1, "Prediction was not seeded during element apply")
+    Equal(routed._msufPredictionAbsorb, 18, "apply seed did not populate current absorb state")
+    Check(routed._msufPredictionCacheReady == true, "apply seed did not establish prediction cache")
     return routed
 end
 
@@ -499,4 +541,35 @@ Equal(routedFocusTarget.registered.UNIT_TARGET, "focus",
 Equal(routedFocusTarget._msufFrameUnitEventTargets.UNIT_TARGET, "focustarget",
     "Core lost focustarget route destination")
 
-print("PASS prediction: coalescing, exact dependent routing, live geometry caches, parent/layer repair, absorb-only semantics")
+-- PLAYER_ENTERING_WORLD uses the shared EventBus and shared next-frame
+-- scheduler. It reseeds already-active frames once unit data is authoritative,
+-- without allocating a private frame or rebuilding their specs.
+Check(worldEntryRegistration ~= nil, "prediction world-entry hook was not registered")
+Equal(worldEntryRegistration.event, "PLAYER_ENTERING_WORLD", "prediction startup hook uses wrong event")
+Check(worldEntryRegistration.unitFilter == nil, "prediction startup hook unexpectedly uses a unit filter")
+Check(worldEntryRegistration.once ~= true, "prediction startup hook would miss later world transitions")
+ResetCalls()
+worldEntryRegistration.callback("PLAYER_ENTERING_WORLD")
+Equal(calls.detailed, 0, "world-entry prediction seed did not defer to the next frame")
+Check(type(scheduledWorldSeed) == "function", "world-entry prediction seed was not scheduled")
+scheduledWorldSeed()
+Equal(calls.detailed, 2, "world-entry seed did not refresh both attached prediction frames")
+Equal(#drivers, driverCountBeforeRoutedPrediction,
+    "world-entry prediction seed created a private OnUpdate driver")
+
+routedInCombat = true
+ResetCalls()
+worldEntryRegistration.callback("PLAYER_ENTERING_WORLD")
+scheduledWorldSeed()
+Equal(calls.detailed, 0, "world-entry prediction seed performed protected combat work")
+routedInCombat = false
+
+local savedFocusTargetUnit = routedFocusTarget.unit
+routedFocusTarget.unit = nil
+ResetCalls()
+worldEntryRegistration.callback("PLAYER_ENTERING_WORLD")
+scheduledWorldSeed()
+Equal(calls.detailed, 1, "world-entry seed did not skip a suspended nil-unit group frame")
+routedFocusTarget.unit = savedFocusTargetUnit
+
+print("PASS prediction: startup seed/recovery, world-entry reseed, coalescing, exact routing, geometry caches")
