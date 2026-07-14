@@ -317,7 +317,7 @@ local function BuildIndicatorsSection(ctx, b)
 end
 
 local function BuildStatusIconsSection(ctx, b, RefreshPage)
-    local sicons = b:CollapsibleSection("sicons", "Status Icons", 624, false)
+    local sicons = b:CollapsibleSection("sicons", "Status Icons", 634, false)
     local siconW = sicons._msuf2Width or ctx.width or 720
     local siconGap = 16
     local siconLeftX = 20
@@ -332,14 +332,15 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         return key
     end
     local siconTabFrames = {}
-    local siconBasicTab, siconAdvancedTab = M.UnitSectionsShared.MakeTabFrames(sicons, -104, siconW, siconTabFrames, "basic", "advanced")
+    local siconBasicTab, siconAdvancedTab = M.UnitSectionsShared.MakeTabFrames(sicons, -64, siconW, siconTabFrames, "basic", "advanced")
     local statusTabs = W.SegmentTabs(ctx, sicons, {
         get = CurrentStatusIconTab,
         set = function(value) M.gfStatusIconTabSelection[CurrentScope()] = value or "basic" end,
-        label = "Status icon controls", values = STATUS_ICON_TAB_VALUES, width = min(420, siconInnerW),
+        label = "", values = STATUS_ICON_TAB_VALUES, width = min(420, siconInnerW),
         frames = siconTabFrames,
-        defaultTab = "basic", x = siconLeftX, y = -50,
+        defaultTab = "basic", x = siconLeftX, y = -12,
     })
+    if statusTabs._msuf2Title then statusTabs._msuf2Title:Hide() end
     RegisterControl(statusTabs, ctx, "status.workspace_tab", "Status icon controls", "segment", "ephemeral")
     local styleCard = W.ControlCard(siconBasicTab, "Style", nil, siconLeftX, -38, siconLeftW, 132)
     local selectedCard = W.ControlCard(siconBasicTab, "Selected Indicator", nil, siconLeftX, -188, siconLeftW, 316)

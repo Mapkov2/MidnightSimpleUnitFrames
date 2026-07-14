@@ -1852,10 +1852,12 @@ local CP_LAYER_BUTTON_OPTS = {
 }
 local function CreateLayerSidebar(box, sideW)
     local sidebar = T.Panel(box, nil, { 0.025, 0.028, 0.04, 0.82 }, T.colors.borderSoft)
-    sidebar:SetPoint("TOPLEFT", box.canvas, "TOPRIGHT", 6, 0)
+    if Helpers.ApplyPreviewChrome then Helpers.ApplyPreviewChrome(sidebar, "sidebar", T) end
+    sidebar:SetPoint("TOPLEFT", box.canvas, "TOPRIGHT", 8, 0)
     sidebar:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 12)
     box.sidebar = sidebar
-    local hdr = T.Font(sidebar, "GameFontDisableSmall", TR("LAYERS"), { 0.45, 0.50, 0.62, 0.8 })
+    local chrome = Helpers.PreviewChromePalette and Helpers.PreviewChromePalette(T) or {}
+    local hdr = T.Font(sidebar, "GameFontDisableSmall", TR("LAYERS"), chrome.layerHeader or T.colors.muted)
     hdr:SetPoint("TOP", sidebar, "TOP", 0, -5)
     box.layerVisibility = {}
     box.layerButtons = {}
@@ -2020,12 +2022,14 @@ function Preview.Create(ctx, builder)
     local section = builder:Section("Preview", 388)
     local width = section._msuf2Width or builder.width or ctx.width or 720
     local innerW = max(470, width - 28)
-    local sideW = 80
+    local sideW = 104
     local box = T.Panel(section, nil, { 0.018, 0.022, 0.044, 0.88 }, T.colors.borderSoft)
+    local chrome = Helpers.ApplyPreviewChrome and Helpers.ApplyPreviewChrome(box, "outer", T)
+        or { title = T.colors.title or T.colors.text, canvasBorder = T.colors.borderSoft }
     box._catalogCtx = ctx
     box:SetPoint("TOPLEFT", section, "TOPLEFT", 14, -38)
     box:SetSize(innerW, 330)
-    box.canvasW, box.canvasH = max(340, innerW - sideW - 38), 260
+    box.canvasW, box.canvasH = max(320, innerW - sideW - 30), 288
     box.playerW, box.playerH = min(275, max(190, box.canvasW - 160)), 38
     box.handles = {}
     if box.EnableKeyboard then box:EnableKeyboard(true) end
@@ -2034,21 +2038,18 @@ function Preview.Create(ctx, builder)
     RegisterPreviewControl(ctx, box, "keyboard.nudge_surface", "Class Resources preview keyboard controls", "canvas", "ephemeral", {
         help = "Receives arrow-key nudges for the selected preview handle.",
     })
-    local title = T.Font(box, "GameFontNormal", TR("Class Resources Preview"), T.colors.accent)
-    title:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -10)
+    local title = T.Font(box, "GameFontNormal", TR("Class Resources Preview"), chrome.title or T.colors.accent)
+    title:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -8)
     local hint = T.Font(box, "GameFontDisableSmall", TR("drag handles - double-click/settings opens options - right-click actions - Ctrl+wheel zoom"), T.colors.muted)
-    hint:SetPoint("LEFT", title, "RIGHT", 14, 0)
+    hint:SetPoint("LEFT", title, "RIGHT", 12, 0)
     hint:SetPoint("RIGHT", box, "RIGHT", -12, 0)
     hint:SetJustifyH("LEFT")
     box.hint = hint
-    box.summary = T.Font(box, "GameFontDisableSmall", "", T.colors.muted)
-    box.summary:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -30)
-    box.summary:SetPoint("RIGHT", box, "RIGHT", -12, 0)
-    box.summary:SetJustifyH("LEFT")
     box.canvas = T.Panel(box, nil, { 0, 0, 0, 1 }, T.colors.borderSoft)
-    box.canvas:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -54)
+    if Helpers.ApplyPreviewChrome then Helpers.ApplyPreviewChrome(box.canvas, "canvas", T) end
+    box.canvas:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -30)
     box.canvas:SetSize(box.canvasW, box.canvasH)
-    box._canvasBorderColor = T.colors.borderSoft
+    box._canvasBorderColor = chrome.canvasBorder or T.colors.borderSoft
     if box.canvas.SetClipsChildren then box.canvas:SetClipsChildren(true) end
     box.canvas:EnableMouse(true)
     box.canvas:EnableMouseWheel(true)

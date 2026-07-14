@@ -61,11 +61,7 @@ local function BuildText(ctx, builder, unit)
     local rightSliderW = math.min(310, math.max(230, rightW))
     local halfDropdownW = floor((cardW - 44) / 2)
     local RefreshTextControlState = M.RefreshProxy()
-    local scope = T.Font(sec, "GameFontDisableSmall", M.Format(M.Tr("Editing %s"), UnitTopLabel(unit)), T.colors.dim)
-    scope:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -16, -68)
-    scope:SetJustifyH("RIGHT")
-    scope:SetWidth(170)
-    sec._msuf2CursorY = -64
+    sec._msuf2CursorY = -12
     local tabValues = VT("name", "Name", "hp", "HP Text", "power", "Power Text", "advanced", "Advanced")
     local sampleNames = {
         player = "Mapko",
@@ -313,9 +309,9 @@ local function BuildText(ctx, builder, unit)
         end
     end
     local nameTab, hpTab, powerTab, advancedTab =
-        UnitSectionShared.MakeTabFrames(sec, -118, sectionW, tabFrames, "name", "hp", "power", "advanced")
+        UnitSectionShared.MakeTabFrames(sec, -64, sectionW, tabFrames, "name", "hp", "power", "advanced")
     tabs, RefreshTextTabs = W.SegmentTabs(ctx, sec, {
-        label = "Text area", values = tabValues, width = math.min(520, sectionW - 48),
+        label = "", values = tabValues, width = math.min(520, sectionW - 48),
         frames = tabFrames, defaultTab = "name",
         get = CurrentTextTab,
         set = function(v) M.unitTextTabSelection[unit] = v or "name" end,
@@ -323,12 +319,13 @@ local function BuildText(ctx, builder, unit)
             FocusActivePreviewText()
             RefreshTextControlState()
         end,
-        x = 20, y = -68,
+        x = 20, y = -12,
     })
+    if tabs._msuf2Title then tabs._msuf2Title:Hide() end
     RegisterControl(tabs, ctx, "text.workspace_tab", "Text area", "segment", "ephemeral")
-    local nameContent = TextCard(nameTab, "Name text", nil, leftX, -4, cardW, 116)
+    local nameContent = TextCard(nameTab, nil, nil, leftX, -4, cardW, 116)
     local _, namePreviewValue = PreviewText(nameContent, NamePreviewText(), 16, -54, cardW - 32)
-    local showNameText = W.SwitchAt(nameContent, "Show Name", cardW - 62, -24, 0, "HIDDEN")
+    local showNameText = W.SwitchAt(nameContent, "Show Name", 16, -24, 0, "HIDDEN")
     M.BindBoolWidget(ctx, showNameText,
         function() return ReadBool(unit, "showName", true) end,
         function(v)
@@ -386,10 +383,10 @@ local function BuildText(ctx, builder, unit)
             if value ~= nil then return value == true end
             return type(cfg.fullValueShortDefault) == "function" and cfg.fullValueShortDefault() == true or cfg.fullValueShortDefault == true
         end
-        local content = TextCard(tab, "Content", nil, leftX, -4, cardW, 346)
+        local content = TextCard(tab, nil, nil, leftX, -4, cardW, 346)
         local _, previewValue = PreviewText(content, cfg.preview, 16, -54, cardW - 32)
         controls.preview = previewValue
-        controls.show = W.SwitchAt(content, cfg.showLabel, cardW - 62, -24, 0, "HIDDEN")
+        controls.show = W.SwitchAt(content, cfg.showLabel, 16, -24, 0, "HIDDEN")
         M.BindBoolWidget(ctx, controls.show,
             function()
                 local default = type(cfg.showDefault) == "function" and cfg.showDefault() or cfg.showDefault
@@ -732,10 +729,9 @@ if type(UP.RegisterSection) == "function" then
     UP.RegisterSection({
         id = "text",
         title = "Text",
-        -- Tab content starts 118px below the body and reaches 518px down.
-        -- Leave enough room for the card surface/shadow before the next
-        -- accordion header; a purely geometric 12px inset still looked clipped.
-        height = 672,
+        -- Tab content starts 64px below the body and reaches 518px down.
+        -- Preserve a 36px bottom inset for the card surface/shadow.
+        height = 618,
         placement = "after_auras",
         order = 10,
         build = BuildText,

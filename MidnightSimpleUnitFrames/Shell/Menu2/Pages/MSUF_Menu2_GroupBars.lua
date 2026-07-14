@@ -92,12 +92,8 @@ local function BuildDispelOverlaySection(ctx, b)
     end
     TrackSectionRefresh(ctx, dispel, RefreshDispelState)
 end
-local function BuildGFBars(ctx)
-    local b = W.PageBuilder(ctx)
-    ScopeSection(ctx, b)
-    M.GroupPreview.Add(ctx, b)
-    local AlphaLabel = M.AlphaLabel
-    local power = b:CollapsibleSection("power", "Power Bar", 240, false)
+local function BuildGFResourceBarSection(ctx, b)
+    local power = b:CollapsibleSection("power", "Resource Bar", 240, false)
     local powerW = power._msuf2Width or b.width or 720
     local powerGap = 16
     local powerLeftX = 20
@@ -175,7 +171,10 @@ local function BuildGFBars(ctx)
         })
     end
     TrackSectionRefresh(ctx, power, RefreshPowerState)
-    local text = b:CollapsibleSection("text", "Text", 620, false)
+end
+
+local function BuildGFTextSection(ctx, b)
+    local text = b:CollapsibleSection("text", "Text", 618, false)
     text._msuf2CollapsibleBadgesOnlyWhenOpen = true
     local textW = text._msuf2Width or b.width or 720
     local textLeftX = 24
@@ -245,11 +244,7 @@ local function BuildGFBars(ctx)
         local g = db and db.general
         return g and g.hidePercentSymbol == true
     end
-    local scopeLabel = T.Font(text, "GameFontDisableSmall", "", T.colors.dim)
-    scopeLabel:SetPoint("TOPRIGHT", text, "TOPRIGHT", -16, -68)
-    scopeLabel:SetJustifyH("RIGHT")
-    scopeLabel:SetWidth(170)
-    text._msuf2CursorY = -64
+    text._msuf2CursorY = -12
     local tabValues = VT("name", "Name", "hp", "HP Text", "power", "Power Text", "advanced", "Advanced")
     M.gfTextTabSelection = M.gfTextTabSelection or {}
     local function CurrentTextTab()
@@ -320,15 +315,6 @@ local function BuildGFBars(ctx)
             ActivateGFPreviewText(kind, slot)
         end)
         widget:HookScript("OnLeave", RestoreGFPreviewTextFocus)
-    end
-    local function ScopeDisplayName()
-        local scope = CurrentScope() or "party"
-        for i = 1, #SCOPE_VALUES do
-            local info = SCOPE_VALUES[i]
-            if info and info.value == scope then return info.text or scope end
-        end
-        scope = tostring(scope)
-        return scope:sub(1, 1):upper() .. scope:sub(2)
     end
     local BadgeValue = UnitSectionShared.TextBadgeValue
     local GF_TEXT_SUMMARY_SLOTS = {
@@ -404,9 +390,9 @@ local function BuildGFBars(ctx)
         end
     end
     local nameTab, hpTab, powerTab, advancedTab =
-        M.UnitSectionsShared.MakeTabFrames(text, -118, textW, tabFrames, "name", "hp", "power", "advanced")
+        M.UnitSectionsShared.MakeTabFrames(text, -64, textW, tabFrames, "name", "hp", "power", "advanced")
     local textTabs, RefreshTextTabs = W.SegmentTabs(ctx, text, {
-        label = "Text area", values = tabValues, width = min(520, textW - 48),
+        label = "", values = tabValues, width = min(520, textW - 48),
         frames = tabFrames, defaultTab = "name",
         get = CurrentTextTab,
         set = function(v) M.gfTextTabSelection[CurrentScope()] = v or "name" end,
@@ -414,12 +400,13 @@ local function BuildGFBars(ctx)
             FocusActiveGFPreviewText()
             if refreshTextControls then refreshTextControls() end
         end,
-        x = 20, y = -68,
+        x = 20, y = -12,
     })
+    if textTabs._msuf2Title then textTabs._msuf2Title:Hide() end
     RegisterControl(textTabs, ctx, "text.workspace_tab", "Text area", "segment", "ephemeral")
-    local nameContent = TextCard(nameTab, "Name text", nil, textLeftX, -4, textCardW, 158)
+    local nameContent = TextCard(nameTab, nil, nil, textLeftX, -4, textCardW, 158)
     PreviewText(nameContent, "Mapko", 16, -54, textCardW - 32)
-    local showName = BindScopeToggle(ctx, W.SwitchAt(nameContent, "Show Name", textCardW - 62, -24, 0, "HIDDEN"), "showName", true, "font")
+    local showName = BindScopeToggle(ctx, W.SwitchAt(nameContent, "Show Name", 16, -24, 0, "HIDDEN"), "showName", true, "font")
     local hideNameOnStatus = BindScopeToggle(ctx, W.ToggleAt(nameContent, "Hide name on dead/offline", 16, -104, textCardW - 32), "hideNameOnDeadOffline", false, "visual")
     local namePosition = TextCard(nameTab, "Position", nil, textLeftX, -178, textCardW, 260)
     local nameAnchor = ScopeDropdown(ctx, namePosition, "Anchor", ANCHORS, textDropW, "nameAnchor", "LEFT", "font", 16, -48, textCardW - 32)
@@ -430,13 +417,13 @@ local function BuildGFBars(ctx)
     local SLOT_VALUES = VT("left", "Left", "center", "Center", "right", "Right")
     local function BuildValueTextTab(kind, tab, cfg)
         local controls = {}
-        local content = TextCard(tab, "Content", nil, textLeftX, -4, textCardW, 346)
+        local content = TextCard(tab, nil, nil, textLeftX, -4, textCardW, 346)
         controls.preview = PreviewText(content, "", 16, -54, textCardW - 32)
         if cfg.showGet then
-            controls.show = W.SwitchAt(content, cfg.showLabel, textCardW - 62, -24, 0, "HIDDEN")
+            controls.show = W.SwitchAt(content, cfg.showLabel, 16, -24, 0, "HIDDEN")
             M.BindBoolWidget(ctx, controls.show, cfg.showGet, cfg.showSet, ControlMeta(ctx, "text." .. kind .. ".show"))
         else
-            controls.show = BindScopeToggle(ctx, W.SwitchAt(content, cfg.showLabel, textCardW - 62, -24, 0, "HIDDEN"), cfg.showKey, cfg.showDefault, "font")
+            controls.show = BindScopeToggle(ctx, W.SwitchAt(content, cfg.showLabel, 16, -24, 0, "HIDDEN"), cfg.showKey, cfg.showDefault, "font")
         end
         local function SlotControl(slot, label, x, y, width)
             local spec = cfg.slots[slot]
@@ -611,7 +598,6 @@ local function BuildGFBars(ctx)
         local hpOn = Bool(CurrentScope(), "showHPText", true)
         local powerOn = IsPowerTextEnabled()
         M.CallIf(RefreshTextTabs)
-        scopeLabel:SetText(M.Format(M.Tr("Editing %s"), ScopeDisplayName()))
         SetOptionsEnabled(nameTextControls, nameOn)
         SetOptionsEnabled(hpTextControls, hpOn)
         if hpControls.RefreshPercentToggles then hpControls.RefreshPercentToggles(hpOn) end
@@ -646,7 +632,9 @@ local function BuildGFBars(ctx)
         FocusActiveGFPreviewText()
     end
     TrackSectionRefresh(ctx, text, refreshTextControls)
-    BuildDispelOverlaySection(ctx, b)
+end
+
+local function BuildGFDebuffStripeSection(ctx, b)
     local stripe = b:CollapsibleSection("dstripe", "Debuff Stripe", 284, false)
     local stripeW = stripe._msuf2Width or b.width or 720
     local stripeCardW = min(560, stripeW - 40)
@@ -668,6 +656,10 @@ local function BuildGFBars(ctx)
         })
     end
     TrackSectionRefresh(ctx, stripe, RefreshStripeState)
+end
+
+local function BuildGFRangeFadeSection(ctx, b)
+    local AlphaLabel = M.AlphaLabel
     local range = b:CollapsibleSection("range", "Range Fade", 220, false)
     local rangeW = range._msuf2Width or b.width or 720
     local rangeGap = 16
@@ -719,6 +711,19 @@ local function BuildGFBars(ctx)
         })
     end
     TrackSectionRefresh(ctx, range, RefreshRangeState)
+end
+
+M.GroupFrameLayoutSections = M.GroupFrameLayoutSections or {}
+M.GroupFrameLayoutSections.BuildResourceBar = BuildGFResourceBarSection
+M.GroupFrameLayoutSections.BuildText = BuildGFTextSection
+M.GroupFrameLayoutSections.BuildRangeFade = BuildGFRangeFadeSection
+
+local function BuildGFBars(ctx)
+    local b = W.PageBuilder(ctx)
+    ScopeSection(ctx, b)
+    M.GroupPreview.Add(ctx, b)
+    BuildDispelOverlaySection(ctx, b)
+    BuildGFDebuffStripeSection(ctx, b)
     FinalizeScopePage(ctx, b)
 end
-M.RegisterPage("gf_bars", { title = "MSUF Group Health & Text", build = BuildGFBars, version = 15 })
+M.RegisterPage("gf_bars", { title = "MSUF Group Dispel Overlay", build = BuildGFBars, version = 17 })

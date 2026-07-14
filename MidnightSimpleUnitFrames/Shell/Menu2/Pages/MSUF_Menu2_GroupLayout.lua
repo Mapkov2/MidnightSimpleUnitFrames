@@ -13,7 +13,6 @@ local min = math.min
 local VT = M.ValueTextList
 local SCOPE_VALUES, GROWTH_VALUES, BLIZZARD_FALLBACK_VALUES, SORT_MODES, GF_ANCHOR_TO, GF_ANCHOR_POINTS = M.PickDefaults(GP, [[SCOPE_VALUES GROWTH_VALUES BLIZZARD_FALLBACK_VALUES SORT_MODES GF_ANCHOR_TO GF_ANCHOR_POINTS]])
 local GF, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, ScopeDropdown, ScopeSlider, BuildGrowthDirectionTiles, BuildRoleOrderRows, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, TrackSectionRefresh, OnOffBadge, BadgeNumber, OptionText, CreateSectionNotice, ControlMeta, RegisterControl = M.Pick(GP, [[GF Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle ScopeDropdown ScopeSlider BuildGrowthDirectionTiles BuildRoleOrderRows SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus TrackSectionRefresh OnOffBadge BadgeNumber OptionText CreateSectionNotice ControlMeta RegisterControl]])
-local SIMPLE_TEXTURES = GP.SIMPLE_TEXTURES or function() return {} end
 SetSectionBadgesAndStatus = SetSectionBadgesAndStatus or M.Noop
 OnOffBadge = OnOffBadge or M.OnOffBadge
 BadgeNumber = BadgeNumber or M.BadgeNumber
@@ -149,6 +148,13 @@ local function BuildGFLayout(ctx)
     end
     TrackSectionRefresh(ctx, general, RefreshHideOfflineState)
 
+    local layoutSections = M.GroupFrameLayoutSections
+    if layoutSections then
+        if layoutSections.BuildText then layoutSections.BuildText(ctx, b) end
+        if layoutSections.BuildResourceBar then layoutSections.BuildResourceBar(ctx, b) end
+        if layoutSections.BuildRangeFade then layoutSections.BuildRangeFade(ctx, b) end
+    end
+
     -- Keep Group Frame opacity controls visually aligned with the Unitframe
     -- Transparency section while binding them to the currently selected scope.
     local transparency = b:CollapsibleSection("transparency", "Transparency", nil, false)
@@ -180,24 +186,6 @@ local function BuildGFLayout(ctx)
         AttachGroupFocus(W.ToggleAt(opacityOptionsCard, "Keep text + portrait visible", 16, -62, transparencyRightW - 32), "bars"),
         "alphaExcludeTextPortrait", false, "visual", "field.alphaExcludeTextPortrait")
     if b.FinishSection then b:FinishSection(transparency, 48) end
-
-    local bars = b:CollapsibleSection("bars", "Bars", nil, false)
-    local barsW = bars._msuf2Width or b.width or 720
-    local barsGap = 16
-    local barsLeftX = 20
-    local barsInnerW = max(320, barsW - 40)
-    local barsLeftW = floor((barsInnerW - barsGap) / 2)
-    local barsRightX = barsLeftX + barsLeftW + barsGap
-    local barsRightW = barsInnerW - barsLeftW - barsGap
-    local _, barsCardY = W.NextRow(bars, 120)
-    local foregroundTextureCard = W.ControlCard(bars, "Foreground", nil, barsLeftX, barsCardY, barsLeftW, 120)
-    local backgroundTextureCard = W.ControlCard(bars, "Background", nil, barsRightX, barsCardY, barsRightW, 120)
-    local textureValues = SIMPLE_TEXTURES()
-    AttachGroupFocus(ScopeDropdown(ctx, foregroundTextureCard, "Texture", textureValues, min(290, barsLeftW - 32),
-        "barTexture", "", "visual", 16, -64, min(290, barsLeftW - 32), "LEFT", "field.barTexture"), "bars")
-    AttachGroupFocus(ScopeDropdown(ctx, backgroundTextureCard, "Texture", textureValues, min(290, barsRightW - 32),
-        "barBgTexture", "", "visual", 16, -64, min(290, barsRightW - 32), "LEFT", "field.barBgTexture"), "bars")
-    if b.FinishSection then b:FinishSection(bars, 36) end
 
     local advancedLayout = b:CollapsibleSection("layout_advanced", "Geometry", 448, false)
     local advancedLayoutW = advancedLayout._msuf2Width or b.width or 720
@@ -410,8 +398,16 @@ local function BuildGFLayout(ctx)
     TrackSectionRefresh(ctx, scale, RefreshScalingState)
 
     local anchor = b:CollapsibleSection("anchor", "Anchoring", 220, false)
-    local anchorTo = W.Dropdown(anchor, "Anchor To", GF_ANCHOR_TO, 200)
-    M.UnitSectionsShared.PlaceDropdown(anchor, anchorTo, 14, -38, 200)
+    local anchorW = anchor._msuf2Width or b.width or 720
+    local anchorLeftX = 20
+    local anchorGap = 24
+    local anchorInnerW = max(320, anchorW - 40)
+    local anchorColumnW = floor((anchorInnerW - anchorGap) * 0.5)
+    local anchorRightX = anchorLeftX + anchorColumnW + anchorGap
+    local anchorControlW = min(300, max(180, anchorColumnW - 16))
+    local customAnchorW = min(260, max(180, anchorColumnW - 128))
+    local anchorTo = W.Dropdown(anchor, "Anchor To", GF_ANCHOR_TO, anchorControlW)
+    M.UnitSectionsShared.PlaceDropdown(anchor, anchorTo, anchorLeftX, -38, anchorControlW)
     M.BindDropdownWidget(ctx, anchorTo,
         function() return Conf(CurrentScope()).anchorToFrame or "FREE" end,
         function(v)
@@ -420,7 +416,7 @@ local function BuildGFLayout(ctx)
             QueueGF(CurrentScope(), "rebuild")
         end,
         ControlMeta(ctx, "field.anchorToFrame"))
-    local anchorPoint = ScopeDropdown(ctx, anchor, "Anchor Point", GF_ANCHOR_POINTS, 160, "anchorPoint", "CENTER", "rebuild", 254, -38, 160)
+    local anchorPoint = ScopeDropdown(ctx, anchor, "Anchor Point", GF_ANCHOR_POINTS, anchorControlW, "anchorPoint", "CENTER", "rebuild", anchorRightX, -38, anchorControlW)
     local function IsStandardAnchorTarget(value)
         return value == nil or value == "" or value == "FREE" or value == "player" or value == "target"
             or value == "targettarget" or value == "focustarget" or value == "focus"
@@ -436,6 +432,9 @@ local function BuildGFLayout(ctx)
         QueueGF(kind, "rebuild")
     end
     local customAnchor = M.UnitSectionsShared.CustomAnchorEditor(ctx, anchor, {
+        x = anchorLeftX,
+        y = -112,
+        width = customAnchorW,
         getValue = CurrentCustomAnchor,
         setValue = SetCustomAnchor,
         clearValue = function() SetCustomAnchor("") end,
@@ -465,4 +464,4 @@ local function BuildGFLayout(ctx)
     TrackSectionRefresh(ctx, anchor, RefreshAnchorHeader)
     FinalizeScopePage(ctx, b)
 end
-M.RegisterPage("gf_layout", { title = "MSUF Group Layout", build = BuildGFLayout, version = 20 })
+M.RegisterPage("gf_layout", { title = "MSUF Group Layout", build = BuildGFLayout, version = 22 })

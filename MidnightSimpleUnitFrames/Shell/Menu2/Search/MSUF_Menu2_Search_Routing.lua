@@ -636,6 +636,9 @@ boss_layout=boss layout|boss preview|boss frames
 ]],
     gf_layout = [[
 general=general|enable|disable|turn off|off|hide group frames|hide raid frames|hide party frames|group frames off|raid frames off|party frames off|use msuf group frames|show player|show solo|solo|visibility|party frames not showing|raid frames not showing|ausschalten|deaktivieren|ausblenden
+text=text|name text|health text|hp text|power text|font size|text slot|delimiter|hide percent
+power=resource bar|power bar|mana bar|role power|smooth fill|tank power|healer power|dps power
+range=range fade|range check|distance check|out of range
 layout=layout|growth|direction|spacing|columns|rows|width|height
 sorting=sorting|sort|role order|player first|groups first
 scaling=frame scaling|scale|smooth health fill|smooth fill|party smooth fill|raid smooth fill
@@ -643,13 +646,8 @@ border=transparency|alpha|opacity|fade
 anchor=anchoring|anchor|position|move party|move raid|x offset|y offset
 ]],
     gf_bars = [[
-hcolor=health colors|health color|class color|hp color
-bars=bars custom|health bar|bar texture|bar height
-power=power bar|mana bar|power text|smooth fill
-text=text|name text|health text|hp text|power text|font size
 dispel=dispel overlay|overlay style|overlay detects|overlay priority|health bar tint
 dstripe=debuff stripe|stripe edge|stripe height|stripe opacity
-range=range fade|range check|distance check|out of range
 ]],
     gf_auras = [[
 buffs=buffs|buff|hots|own buffs|healer buffs|buff position|buff size|buff layer
@@ -802,7 +800,7 @@ end
 local function SearchRouteGroupPage(route, pageKey, normalized)
     local scope = SearchGroupScopeForText(normalized)
     if scope then SearchRouteSetState(route, "gfScope", scope) end
-    if pageKey == "gf_bars" then
+    if pageKey == "gf_layout" then
         if SearchTextKindForText(normalized) then SearchRouteOpenAccordion(route, pageKey, "text") end
         SearchRouteTextState(route, "gfTextTabSelection", "gfTextSlotSelection", scope or M.gfScope or "party", normalized)
     elseif pageKey == "gf_indicators" then

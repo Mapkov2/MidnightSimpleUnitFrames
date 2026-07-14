@@ -312,8 +312,7 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "How do I get class-colored health bars or names?",
-                a = "Open Global Style > Colors for class bar colors and unitframe colors. Group health colors are" ..
-                    " in Group Frames > Health & Text.",
+                a = "Open Global Style > Colors for class bar colors, unitframe colors, and Group Frame Colors.",
                 p = "opt_colors",
                 t = "Opens: Global Style > Colors > Class Bar Colors",
                 x = "Class Bar Colors Unitframe Colors Group Health Colors class colored names health bars",

@@ -94,7 +94,7 @@ if type(Data.RegisterFAQProvider) == "function" then
             {
                 l = "Where is Smooth fill for party or raid frames?",
                 a = "Open Group Frames > Layout for Smooth health fill. For group-frame power bars, open Group" ..
-                    " Frames > Health & Text > Power Bar > Smooth fill.",
+                    " Frames > Layout > Resource Bar > Smooth fill.",
                 p = "gf_layout",
                 t = "Opens: Group Frames > Layout > Smooth health fill",
                 x = "Group Frames Layout Smooth health fill Health Text Power Bar Smooth fill party raid weiche" ..
@@ -206,11 +206,11 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "How do I configure group frames?",
-                a = "Use Group Frames pages: Layout for size/growth/sorting, Health & Text for bars/text, Auras for" ..
+                a = "Use Group Frames pages: Layout for size, growth, sorting, bars, and text; Auras for" ..
                     " Buff/Debuff placement, and Status & Indicators for status icons.",
                 p = "gf_layout",
                 t = "Opens: Group Frames > Layout",
-                x = "Group Frames Layout Health & Text Auras Buffs Debuffs Status Indicators party raid growth sorting",
+                x = "Group Frames Layout Resource Bar Text Auras Buffs Debuffs Status Indicators party raid growth sorting",
                 k = SearchKeywordList(
                     "group frames|groupframes|party|raid|mythic raid|gruppe|raid frames|layout|growth|sorting",
                     "raidframes|partyframes"

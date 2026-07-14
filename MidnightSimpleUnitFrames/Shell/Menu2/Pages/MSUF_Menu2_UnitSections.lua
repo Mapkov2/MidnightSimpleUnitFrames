@@ -12,6 +12,7 @@ local SetControlsEnabled = W.SetControlsEnabled
 local ControlGates = M.ControlGates or {}
 local UP = M.UnitPage or {}
 local floor = math.floor
+local max, min = math.max, math.min
 local VT = M.ValueTextList
 local UNIT_PAGES, LOAD_CONDITIONS, BOSS_LAYOUT_OPTIONS, SEPARATORS, UF_COPY_CATEGORIES = M.PickDefaults(UP, [[UNIT_PAGES LOAD_CONDITIONS BOSS_LAYOUT_OPTIONS SEPARATORS UF_COPY_CATEGORIES]])
 local GetConf, GetGeneral, Call, DefaultCopyTarget, UnitTopLabel, UnitTopPillWidth, NewCopyScopeDefaults, CopyUnitSettings, ToggleEditMode, IsEditModeActive, ReadBool, SetBool, ReadNumber, SetNumber, ReadGeneralBool, SetControlEnabled, NormalizeBossLayoutMode, UpdateLoadActive, ControlMeta, SettingMeta, ReviewedMeta, RegisterControl = M.Pick(UP, [[GetConf GetGeneral Call DefaultCopyTarget UnitTopLabel UnitTopPillWidth NewCopyScopeDefaults CopyUnitSettings ToggleEditMode IsEditModeActive ReadBool SetBool ReadNumber SetNumber ReadGeneralBool SetControlEnabled NormalizeBossLayoutMode UpdateLoadActive ControlMeta SettingMeta ReviewedMeta RegisterControl]])
@@ -695,6 +696,14 @@ local function BuildBasics(ctx, builder, unit, label)
 end
 local function BuildLayout(ctx, builder, unit)
     local sec = builder:CollapsibleSection("anchoring", "Anchoring", 220, false)
+    local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
+    local anchorLeftX = 20
+    local anchorGap = 24
+    local anchorInnerW = max(320, sectionW - 40)
+    local anchorColumnW = floor((anchorInnerW - anchorGap) * 0.5)
+    local anchorRightX = anchorLeftX + anchorColumnW + anchorGap
+    local anchorControlW = min(300, max(180, anchorColumnW - 16))
+    local customAnchorW = min(260, max(180, anchorColumnW - 128))
     local anchorChoices = VT("GLOBAL", "Global anchor", "EssentialCooldownViewer", "Essential cooldown viewer", "UtilityCooldownViewer", "Utility cooldown viewer", "BuffIconCooldownViewer", "Tracked buffs viewer", "player", "Player frame", "target", "Target frame", "targettarget", "Target of Target frame", "focustarget", "Focus Target frame", "focus", "Focus frame", "pet", "Pet frame")
     local anchorPoints = VT("TOPLEFT", "TOPLEFT", "TOP", "TOP", "TOPRIGHT", "TOPRIGHT", "LEFT", "LEFT", "CENTER", "CENTER", "RIGHT", "RIGHT", "BOTTOMLEFT", "BOTTOMLEFT", "BOTTOM", "BOTTOM", "BOTTOMRIGHT", "BOTTOMRIGHT")
     local standardAnchorValues = M.KeySetFromWords "GLOBAL global FREE EssentialCooldownViewer UtilityCooldownViewer BuffIconCooldownViewer player target targettarget focustarget focus pet"
@@ -738,8 +747,8 @@ local function BuildLayout(ctx, builder, unit)
     local function ApplyAnchorChange()
         M.RequestUnitApply(unit, "MSUF2_ANCHORING", { preview = true })
     end
-    local anchorTo = W.Dropdown(sec, "Anchor To", AnchorValues, 230)
-    UnitSectionShared.PlaceDropdown(sec, anchorTo, 14, -38, 230)
+    local anchorTo = W.Dropdown(sec, "Anchor To", AnchorValues, anchorControlW)
+    UnitSectionShared.PlaceDropdown(sec, anchorTo, anchorLeftX, -38, anchorControlW)
     W.AttachUnitEditFocus(anchorTo, unit, "anchoring")
     M.BindDropdownWidget(ctx, anchorTo,
         AnchorValue,
@@ -752,8 +761,8 @@ local function BuildLayout(ctx, builder, unit)
         end,
         ReviewedMeta(ctx, "anchoring.anchor_to", "setting", "compound",
             "Changing the anchor target also clears any custom anchor frame name."))
-    local anchorPoint = W.Dropdown(sec, "Anchor Point", anchorPoints, 160)
-    UnitSectionShared.PlaceDropdown(sec, anchorPoint, 284, -38, 160)
+    local anchorPoint = W.Dropdown(sec, "Anchor Point", anchorPoints, anchorControlW)
+    UnitSectionShared.PlaceDropdown(sec, anchorPoint, anchorRightX, -38, anchorControlW)
     W.AttachUnitEditFocus(anchorPoint, unit, "anchoring")
     M.BindDropdownWidget(ctx, anchorPoint,
         AnchorPointValue,
@@ -774,6 +783,9 @@ local function BuildLayout(ctx, builder, unit)
         ApplyAnchorChange()
     end
     local customAnchor = UnitSectionShared.CustomAnchorEditor(ctx, sec, {
+        x = anchorLeftX,
+        y = -112,
+        width = customAnchorW,
         getValue = function() return CustomAnchorName(GetConf(unit)) end,
         setValue = function(value) SetCustomAnchorValue(value) end,
         clearValue = function()

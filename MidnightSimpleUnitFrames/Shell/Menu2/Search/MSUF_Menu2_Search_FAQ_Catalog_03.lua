@@ -19,7 +19,7 @@ if type(Data.RegisterFAQProvider) == "function" then
             ]])
 
         return Data.FAQRows({
-            { l = "Where is the unit frame range check?", a = "Open the matching unit page > Range Fade. Group range fade is still in Group Frames > Health & Text.", p = "uf_target", t = "Opens: Target > Range Fade", x = "Range Fade unit frame range check range checker distance check out of range alpha target targettarget focus focustarget pet boss", k = "unit frame range check|unitframe range check|unit frames range check|range check unitframe|range check unit frame|range checker|distance check|distance checker|out of range unit frame|out of range frames|target out of range|focus out of range|boss out of range|target range fade|focus range fade|boss range fade|reichweitencheck|reichweite check|entfernung check", y = 165 },
+            { l = "Where is the unit frame range check?", a = "Open the matching unit page > Range Fade. Group range fade is in Group Frames > Effects.", p = "uf_target", t = "Opens: Target > Range Fade", x = "Range Fade unit frame range check range checker distance check out of range alpha target targettarget focus focustarget pet boss", k = "unit frame range check|unitframe range check|unit frames range check|range check unitframe|range check unit frame|range checker|distance check|distance checker|out of range unit frame|out of range frames|target out of range|focus out of range|boss out of range|target range fade|focus range fade|boss range fade|reichweitencheck|reichweite check|entfernung check", y = 165 },
         },
         {
             {
@@ -253,15 +253,15 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
         },
         {
-            { "Where do I change group health text or power bars?", "Open Group Frames > Health & Text. It controls health colors, bars, power bar, text, dispel overlay, debuff stripe, and range fade. Heal prediction is in Global Style > Bars > Absorb Display.", "gf_bars", "Opens: Group Frames > Health & Text", "Health Colors Bars Power Bar Text Dispel Overlay Debuff Stripe Range Fade group range check raid range check party range check", SearchKeywordList(SEARCH_DISPEL_OVERLAY_KEYWORDS, SEARCH_DEBUFF_STRIPE_KEYWORDS, "group health text|raid health text|party health text|group power bar|raid power bar|party power bar|heal prediction|incoming heals|dispel overlay|debuff stripe|group range fade|group range check|raid range check|party range check|raid out of range|party out of range|range check raid frames"), 180, },
+            { "Where do I change group health text or resource bars?", "Open Group Frames > Layout. Text, Resource Bar, and Range Fade are arranged beside Frame Basics and Transparency. Dispel Overlay and Debuff Stripe are on the Dispel Overlay page. Heal prediction is in Global Style > Bars > Absorb Display.", "gf_layout", "Opens: Group Frames > Layout", "Health Text Resource Bar Text Layout Group Dispel Overlay group range check raid range check party range check", SearchKeywordList(SEARCH_DISPEL_OVERLAY_KEYWORDS, SEARCH_DEBUFF_STRIPE_KEYWORDS, "group health text|raid health text|party health text|group resource bar|group power bar|raid power bar|party power bar|heal prediction|incoming heals|dispel overlay|debuff stripe|group range fade|group range check|raid range check|party range check|raid out of range|party out of range|range check raid frames"), 180, },
         },
         {
             {
                 l = "Where is party or raid range check?",
-                a = "Open Group Frames > Health & Text > Range Fade. Affects chooses frame or HP fading, and the" ..
+                a = "Open Group Frames > Effects > Range Fade. Affects chooses frame or HP fading, and the" ..
                     " alpha sliders control out-of-range and offline opacity.",
                 p = "gf_bars",
-                t = "Opens: Group Frames > Health & Text > Range Fade",
+                t = "Opens: Group Frames > Effects > Range Fade",
                 x = "Range Fade group frame range check raid range check party range check out of range alpha" ..
                     " offline opacity affects frame HP",
                 k = SearchKeywordList(
