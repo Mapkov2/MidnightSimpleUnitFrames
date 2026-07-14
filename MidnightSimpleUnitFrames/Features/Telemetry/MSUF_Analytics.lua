@@ -334,7 +334,7 @@ function Analytics.SetEnabled(enabled, quiet)
 
     if not analytics.enabled then
         if eventFrame then
-            eventFrame:UnregisterEvent("PLAYER_REGEN_ENABLED")
+            eventFrame:UnregisterAllEvents()
         end
         pendingAfterCombat = false
         if not quiet then
@@ -384,4 +384,4 @@ ExportPublic("MSUF_Analytics_IsEnabled", function()
     return Analytics.IsEnabled()
 end)
 
-EnsureEventFrame():RegisterEvent("PLAYER_LOGIN")
+if IsEnabled() then EnsureEventFrame():RegisterEvent("PLAYER_LOGIN") end

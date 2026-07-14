@@ -289,20 +289,29 @@ local function MSUF_SetMinimapIconEnabled(enabled)
     if type(g.minimapIconDB) ~= "table" then g.minimapIconDB = { minimapPos = 220 } end
     g.minimapIconDB.hide = not enabled
 
-    EnsureInitialized()
-    ApplyShowHide(enabled)
+    if enabled then
+        EnsureInitialized()
+        ApplyShowHide(true)
+    elseif dataObj or fallbackBtn or usingLDB then
+        ApplyShowHide(false)
+    end
 end
 ExportPublic("MSUF_SetMinimapIconEnabled", MSUF_SetMinimapIconEnabled)
 
 --- Init on login (DB is expected to exist by then)
 local initFrame = CreateFrame("Frame")
-initFrame:RegisterEvent("PLAYER_LOGIN")
+local initialGeneral = EnsureGeneralDB()
+if not initialGeneral or initialGeneral.showMinimapIcon then
+    initFrame:RegisterEvent("PLAYER_LOGIN")
+end
 initFrame:SetScript("OnEvent", function(self)
     self:UnregisterEvent("PLAYER_LOGIN")
     self:SetScript("OnEvent", nil)
     local g = EnsureGeneralDB()
     if g then
-        EnsureInitialized()
-        ApplyShowHide(g.showMinimapIcon)
+        if g.showMinimapIcon then
+            EnsureInitialized()
+            ApplyShowHide(true)
+        end
     end
 end)

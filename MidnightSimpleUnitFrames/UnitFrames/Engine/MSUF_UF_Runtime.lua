@@ -360,6 +360,13 @@ function UF.RegisterVisualRefreshCallback(key, fn)
   return true
 end
 
+function UF.UnregisterVisualRefreshCallback(key)
+  if key == nil then return false end
+  local existed = UF.visualRefreshCallbacks[key] ~= nil
+  UF.visualRefreshCallbacks[key] = nil
+  return existed
+end
+
 local function RunVisualRefreshCallbacks(unit)
   for _, fn in pairs(UF.visualRefreshCallbacks) do fn(unit) end
 end

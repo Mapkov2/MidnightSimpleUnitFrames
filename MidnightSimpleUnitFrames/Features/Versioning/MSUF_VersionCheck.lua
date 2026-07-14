@@ -60,6 +60,8 @@ local highestSeenStr = nil
 local notifiedUser   = false
 local prefixOk       = false
 local moduleActive   = false  --- true if Init() ran successfully
+local broadcastGeneration = 0
+local IsEnabled
 
 --- Core
 local function ReadMyVersion()
@@ -88,6 +90,7 @@ local function NotifyOnce()
 end
 
 local function BroadcastOnce()
+    if not moduleActive or not IsEnabled() then return end
     if not myVersionStr or myVersionNum <= 0 then return end
     if not prefixOk then return end
 
@@ -129,7 +132,7 @@ local function OnAddonMessage(_, prefix, payload, _, _)
 end
 
 --- DB helper
-local function IsEnabled()
+IsEnabled = function()
     local db = _G.MSUF_DB
     if not db or not db.general then return true end --- default: enabled
     return db.general.versionCheckEnabled ~= false
@@ -138,9 +141,8 @@ end
 --- Event wiring
 local KEY = "MSUF_VersionCheck"
 
-local function Init()
-    if not IsEnabled() then return end
-
+local function Enable()
+    if moduleActive or not IsEnabled() then return end
     ReadMyVersion()
 
     --- Register prefix (idempotent)
@@ -154,7 +156,10 @@ local function Init()
 
     --- One-shot broadcast at login (delayed to avoid login storm)
     bus:Register("PLAYER_ENTERING_WORLD", KEY .. "_PEW", function()
-        C_Timer.After(5 + math.random() * 5, BroadcastOnce)
+        local generation = broadcastGeneration
+        C_Timer.After(5 + math.random() * 5, function()
+            if generation == broadcastGeneration then BroadcastOnce() end
+        end)
     end, nil, true) --- once = true
 
     --- Passive listener for peer versions (stays registered all session)
@@ -163,12 +168,24 @@ local function Init()
     moduleActive = true
 end
 
+local function Disable()
+    broadcastGeneration = broadcastGeneration + 1
+    local bus = MSUF.MSUF_EventBus or _G.MSUF_EventBus
+    if bus then
+        bus:Unregister("PLAYER_ENTERING_WORLD", KEY .. "_PEW")
+        bus:Unregister("CHAT_MSG_ADDON", KEY .. "_CMA")
+    end
+    moduleActive = false
+end
+
 --- Module registration
 MSUF.MSUF_RegisterModule("VersionCheck", {
     key     = "VersionCheck",
     order   = 999,
-    enabled = true,
-    Init    = function() Init() end,
+    IsEnabled = IsEnabled,
+    Enable = Enable,
+    Disable = Disable,
+    Shutdown = Disable,
 })
 
 --- Public API (slash commands, options, debug)

@@ -36,6 +36,7 @@ local EventBus_Register = _G.MSUF_EventBus_Register
 local EventBus_Unregister = _G.MSUF_EventBus_Unregister
 local RegisterModule = MSUF.MSUF_RegisterModule
 local ApplyGameplayNow
+local SyncGameplaySpecEvents
 
 local function BusRegister(...)
     if type(EventBus_Register) == "function" then EventBus_Register(...) end
@@ -138,15 +139,18 @@ local function SetAltDragMouse(frame, enabled, locked, clickThrough)
     end
 end
 
-local function EnsureAltDragWatcher(key, frame, enabledKey, lockKey, clickThroughKey)
-    if MSUF[key] then return end
-    local f = CreateFrame("Frame")
-    MSUF[key] = f
-    f:RegisterEvent("MODIFIER_STATE_CHANGED")
-    f:SetScript("OnEvent", function()
-        local gd = GetGameplayDB()
-        SetAltDragMouse(frame, gd and gd[enabledKey], gd and gd[lockKey], gd and gd[clickThroughKey])
-    end)
+local function EnsureAltDragWatcher(key, frame, enabledKey, lockKey, clickThroughKey, enabled)
+    local f = MSUF[key]
+    if not f then
+        f = CreateFrame("Frame")
+        MSUF[key] = f
+        f:SetScript("OnEvent", function()
+            local gd = GetGameplayDB()
+            SetAltDragMouse(frame, gd and gd[enabledKey], gd and gd[lockKey], gd and gd[clickThroughKey])
+        end)
+    end
+    f:UnregisterAllEvents()
+    if enabled == true then f:RegisterEvent("MODIFIER_STATE_CHANGED") end
 end
 
 local function SyncGameplayPanel(method)
@@ -873,7 +877,7 @@ local function CreateCombatTimerFrame()
 
     ApplyLockState()
 
-    EnsureAltDragWatcher("_MSUF_CombatTimerModifierFrame", combatFrame, "enableCombatTimer", "lockCombatTimer", "combatTimerClickThrough")
+    EnsureAltDragWatcher("_MSUF_CombatTimerModifierFrame", combatFrame, "enableCombatTimer", "lockCombatTimer", "combatTimerClickThrough", true)
 
     return combatFrame
 end
@@ -1082,6 +1086,7 @@ local function ApplyCombatTimer(g)
     if combatFrame then
         ApplyCombatTimerAnchor(g)
         combatFrame:SetShown(g.enableCombatTimer)
+        EnsureAltDragWatcher("_MSUF_CombatTimerModifierFrame", combatFrame, "enableCombatTimer", "lockCombatTimer", "combatTimerClickThrough", g.enableCombatTimer == true)
     end
 end
 
@@ -1165,6 +1170,9 @@ ApplyGameplayNow = function()
         combatStartTime = nil
         lastTimerText = ""
     end
+    if SyncGameplaySpecEvents then SyncGameplaySpecEvents(g) end
+    local gameplay = MSUF.Gameplay
+    if gameplay and type(gameplay.SyncNudgeEvents) == "function" then gameplay.SyncNudgeEvents() end
 end
 
 MSUF.MSUF_ApplyGameplayVisuals = ApplyGameplayNow
@@ -1199,12 +1207,19 @@ end
 
 do
     local _specChangeFrame = CreateFrame("Frame")
-    _specChangeFrame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
-    _specChangeFrame:RegisterEvent("PLAYER_LOGIN")
-    _specChangeFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
     _specChangeFrame:SetScript("OnEvent", function()
         if MSUF.MSUF_RequestGameplayApply then MSUF.MSUF_RequestGameplayApply() end
     end)
+    SyncGameplaySpecEvents = function(g)
+        g = g or GetGameplayDB()
+        local wanted = g and (g.enableCombatTimer == true
+            or g.enableCombatStateText == true
+            or g.enableCombatCrosshair == true
+            or g.enablePlayerTotems == true)
+        _specChangeFrame:UnregisterAllEvents()
+        if wanted then _specChangeFrame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED") end
+        return wanted == true
+    end
 end
 
 do
@@ -1236,13 +1251,26 @@ end
 local function StopGameplayModule()
     _StopCombatTimerTick()
     UnregisterGameplayEventBus(true, true)
+    if SyncGameplaySpecEvents then SyncGameplaySpecEvents({}) end
+    local modifierFrame = MSUF._MSUF_CombatTimerModifierFrame
+    if modifierFrame then modifierFrame:UnregisterAllEvents() end
+    local gameplay = MSUF.Gameplay
+    if gameplay and type(gameplay.SyncNudgeEvents) == "function" then gameplay.SyncNudgeEvents() end
+end
+
+local function IsGameplayModuleEnabled()
+    local g = GetGameplayDB()
+    return g and (g.enableCombatTimer == true
+        or g.enableCombatStateText == true
+        or g.enableCombatCrosshair == true
+        or g.enablePlayerTotems == true) or false
 end
 
 local reg = RegisterModule or _G.MSUF_RegisterModule
 if type(reg) == "function" then
     reg("Gameplay", {
         order = 50,
-        IsEnabled = function() return true end,
+        IsEnabled = IsGameplayModuleEnabled,
         Init = GameplayDefaults,
         Enable = MSUF.MSUF_RequestGameplayApply,
         Disable = StopGameplayModule,

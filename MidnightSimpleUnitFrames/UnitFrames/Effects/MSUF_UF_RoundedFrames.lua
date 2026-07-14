@@ -1287,6 +1287,46 @@ local function HookOnce()
     end)
   end
 end
+
+local ROUNDED_CALLBACK_NAMES = {
+  "MSUF_RoundedUF_OnApplyAll",
+  "MSUF_RoundedUF_OnGroupMouseover",
+  "MSUF_RoundedUF_OnUnitMouseover",
+  "MSUF_RoundedUF_OnUnitHighlightChanged",
+  "MSUF_RoundedUF_OnUnitDispelOverlayChanged",
+  "MSUF_RoundedUF_OnGroupFrameApplied",
+  "MSUF_RoundedUF_OnGroupBackdropAlphaChanged",
+  "MSUF_RoundedUF_OnGroupHighlightChanged",
+  "MSUF_RoundedUF_OnModulesApplied",
+  "MSUF_RoundedUF_OnRareVisualsRefreshed",
+}
+local roundedCallbackFns = {}
+
+local function SetRoundedCallbacksActive(enabled)
+  local UF = MSUF and MSUF.UF
+  if enabled then
+    HookOnce()
+    for i = 1, #ROUNDED_CALLBACK_NAMES do
+      local name = ROUNDED_CALLBACK_NAMES[i]
+      local fn = roundedCallbackFns[name] or _G[name]
+      if type(fn) == "function" then
+        roundedCallbackFns[name] = fn
+        ExportPublic(name, fn)
+      end
+    end
+    return
+  end
+  if UF and type(UF.UnregisterVisualRefreshCallback) == "function" then
+    UF.UnregisterVisualRefreshCallback("RoundedFrames")
+  end
+  for i = 1, #ROUNDED_CALLBACK_NAMES do
+    local name = ROUNDED_CALLBACK_NAMES[i]
+    local fn = _G[name]
+    if type(fn) == "function" then roundedCallbackFns[name] = fn end
+    ExportPublic(name, nil)
+  end
+end
+
 local Module = {
   key   = "roundedUnitframes",
   name  = "Rounded frame texture",
@@ -1298,35 +1338,33 @@ local Module = {
 
   Init = function()
     if IsEnabled() then
-      HookOnce()
+      SetRoundedCallbacksActive(true)
       ApplyAll()
     end
   end,
 
   Enable = function()
     forceDisabled = false
-    HookOnce()
+    SetRoundedCallbacksActive(true)
     ApplyAll()
   end,
 
   Disable = function()
     forceDisabled = true
-    HookOnce()
     ApplyAll()
+    SetRoundedCallbacksActive(false)
   end,
 
   Apply = function()
     forceDisabled = false
-    HookOnce()
+    SetRoundedCallbacksActive(true)
     ApplyAll()
   end,
 }
 
 do
-  local f = CreateFrame("Frame")
+    local f = CreateFrame("Frame")
     MSUF.__msufRoundedEventFrame = f
-    f:RegisterEvent("ADDON_LOADED")
-    f:RegisterEvent("PLAYER_LOGIN")
     f:SetScript("OnEvent", function(_, event, arg1)
       if event == "ADDON_LOADED" then
         if arg1 == addonName or arg1 == "MidnightSimpleUnitFrames" then
@@ -1365,7 +1403,11 @@ end
 local function ApplyRoundedUnitframes()
   forceDisabled = false
   UpdateMouseoverEdgeColor()
-  if IsEnabled() then HookOnce() end
+  if IsEnabled() then
+    SetRoundedCallbacksActive(true)
+  else
+    SetRoundedCallbacksActive(false)
+  end
   ApplyAll()
 end
 ExportPublic("MSUF_ApplyRoundedUnitframes", ApplyRoundedUnitframes)
