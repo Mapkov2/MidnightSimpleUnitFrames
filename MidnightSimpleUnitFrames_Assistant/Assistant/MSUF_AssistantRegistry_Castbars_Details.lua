@@ -124,24 +124,24 @@ function A.CastbarsRegistry.RegisterDetailSettings(ctx)
         RegisterGeneralNumber(spec.prefix .. "TimeFontSize", unit, "castbar", "timeFontSize", "Castbar Time Font Size", 0, 0, 48, aliases)
 
         if unit ~= "player" then
-            aliases = UnitCastbarAliases(unit, "castbar target name position", "cast target name position",
-                "castbar destination name position")
+            aliases = UnitCastbarAliases(unit, "castbar destination name position",
+                "castbar target name position", "cast target name position")
             RegisterGeneralEnumSetting(spec.prefix .. "TargetNamePosition", unit, "castbar", "targetNamePosition",
                 "Castbar Target Name Position", "BELOW", CASTBAR_TEXT_POSITION_VALUES, aliases, CASTBAR_TEXT_POSITION_ALIASES)
-            aliases = UnitCastbarAliases(unit, "castbar target name font size", "cast target name size",
-                "castbar destination name font size")
+            aliases = UnitCastbarAliases(unit, "castbar destination name font size",
+                "castbar target name font size", "cast target name size")
             RegisterGeneralNumber(spec.prefix .. "TargetNameFontSize", unit, "castbar", "targetNameFontSize",
                 "Castbar Target Name Font Size", unit == "target" and 12 or 10, 6, 48, aliases)
-            aliases = UnitCastbarAliases(unit, "castbar target name alignment", "cast target name alignment",
-                "castbar destination name alignment")
+            aliases = UnitCastbarAliases(unit, "castbar destination name alignment",
+                "castbar target name alignment", "cast target name alignment")
             RegisterGeneralEnumSetting(spec.prefix .. "TargetNameAlign", unit, "castbar", "targetNameAlign",
                 "Castbar Target Name Alignment", "RIGHT", CASTBAR_TEXT_ALIGN_VALUES, aliases, CASTBAR_TEXT_ALIGN_ALIASES)
-            aliases = UnitCastbarAliases(unit, "castbar target name x", "castbar target name x offset",
-                "castbar destination name x offset")
+            aliases = UnitCastbarAliases(unit, "castbar destination name x offset",
+                "castbar target name x", "castbar target name x offset")
             RegisterGeneralNumber(spec.prefix .. "TargetNameOffsetX", unit, "castbar", "targetNameOffsetX",
                 "Castbar Target Name X Offset", unit == "target" and 2 or 0, -300, 300, aliases)
-            aliases = UnitCastbarAliases(unit, "castbar target name y", "castbar target name y offset",
-                "castbar destination name y offset")
+            aliases = UnitCastbarAliases(unit, "castbar destination name y offset",
+                "castbar target name y", "castbar target name y offset")
             RegisterGeneralNumber(spec.prefix .. "TargetNameOffsetY", unit, "castbar", "targetNameOffsetY",
                 "Castbar Target Name Y Offset", 1, -300, 300, aliases)
         end

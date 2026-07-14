@@ -300,10 +300,23 @@ local function BuildPower(ctx, builder, unit)
     end
     local powerNotice, _, powerNoticeButton = CreateSectionNotice(sec, powerNoticeY, "Show Power", 126)
     if powerNoticeButton then
-        RegisterControl(powerNoticeButton, ctx, "power.enable_now", "Show Power", "button", "action", {
-            assistantDisposition = "dynamic",
-            assistantDispositionReason = "This shortcut either opens Class Resources or enables the fixed unit power bar, depending on runtime ownership.",
-        })
+        local powerShortcutMeta
+        if not isPlayer then
+            powerShortcutMeta = {
+                settingKey = unit .. ".showPowerBar",
+                command = {
+                    kind = "toggle", valueKind = "boolean",
+                    get = function() return ReadBool(unit, "showPowerBar", true) end,
+                    set = function(value) SetBool(unit, "showPowerBar", value == true, "MSUF2_POWER_SHOW", { power = true, preview = true }) end,
+                },
+            }
+        else
+            powerShortcutMeta = {
+                actionKey = "show_player_power_or_open_class_resources",
+            }
+        end
+        RegisterControl(powerNoticeButton, ctx, "power.enable_now", "Show Power", "button",
+            not isPlayer and "setting" or "action", powerShortcutMeta)
         powerNoticeButton:SetScript("OnClick", function()
             if isPlayer and IsPlayerPowerManagedByClassResources and IsPlayerPowerManagedByClassResources(unit) then
                 if type(M.SelectPage) == "function" then M.SelectPage("classpower") end
@@ -678,9 +691,13 @@ local function BuildCastbar(ctx, builder, unit)
     RegisterControl(castbarTabs, ctx, "castbar.workspace_tab", "Castbar area", "segment", "ephemeral")
     local castbarNotice, _, castbarNoticeButton = CreateSectionNotice(generalTab, -334, "Use MSUF", 96)
     if castbarNoticeButton then
-        RegisterControl(castbarNoticeButton, ctx, "castbar.use_msuf", "Use MSUF", "button", "action", {
-            assistantDisposition = "compound",
-            assistantDispositionReason = "This recovery shortcut coordinates castbar backend, enable state, and remembered provider.",
+        RegisterControl(castbarNoticeButton, ctx, "castbar.use_msuf", "Use MSUF", "button", "setting", {
+            settingKey = "general." .. tostring(fields.enable),
+            command = {
+                kind = "toggle", valueKind = "boolean",
+                get = function() return ReadCastbarBackend() ~= "HIDE" end,
+                set = function(value) SetCastbarEnabled(value == true) end,
+            },
         })
         castbarNoticeButton:SetScript("OnClick", function()
             SetCastbarBackend("MSUF")

@@ -588,7 +588,9 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         QueueGF(kind, "visual")
         RefreshStatusIconMenu()
     end)
-    RegisterControl(statusReset, ctx, "status.selected.reset", "Reset selected", "button", "action")
+    RegisterControl(statusReset, ctx, "status.selected.reset", "Reset selected", "button", "action", {
+        actionKey = "reset_selected_group_status_icon",
+    })
     statusReset:ClearAllPoints()
     statusReset:SetPoint("TOPLEFT", previewCard, "TOPLEFT", 16, -86)
     statusReset:SetSize(min(160, previewInnerW), 24)
@@ -662,7 +664,9 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
     advanced.reset:SetScript("OnClick", function()
         if statusReset and statusReset.Click then statusReset:Click() end
     end)
-    RegisterControl(advanced.reset, ctx, "status.advanced.reset", "Reset selected", "button", "action")
+    RegisterControl(advanced.reset, ctx, "status.advanced.reset", "Reset selected", "button", "action", {
+        actionKey = "reset_selected_group_status_icon",
+    })
     advanced.reset:ClearAllPoints()
     advanced.reset:SetPoint("TOPLEFT", advanced.card, "TOPLEFT", siconRightX - siconLeftX, -150)
     advanced.reset:SetSize(160, 24)

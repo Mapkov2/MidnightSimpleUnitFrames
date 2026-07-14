@@ -651,12 +651,23 @@ local function BuildBasics(ctx, builder, unit, label)
     if sectionEntry then sectionEntry._msuf2RefreshState = RefreshBasicsState end
     local unitLabel = label or UnitTopLabel(unit)
     local notice, _, enableNow = UnitSectionShared.CreateSectionNotice(sec, -132, "Enable", 92)
-    RegisterControl(enableNow, ctx, "basics.enable_now", "Enable", "button", "action", {
-        assistantDisposition = unit == "focustarget" and "compound" or "duplicate",
-        assistantDispositionReason = unit == "focustarget"
-            and "This shortcut can enable both Focus and Focus Target before showing the child frame."
-            or "This one-way shortcut duplicates the fixed unit.enabled setting.",
-    })
+    local enableShortcutMeta
+    if unit ~= "focustarget" then
+        enableShortcutMeta = {
+            settingKey = unit .. ".enabled",
+            command = {
+                kind = "toggle", valueKind = "boolean",
+                get = function() return ReadBool(unit, "enabled", true) end,
+                set = function(value) SetBool(unit, "enabled", value == true, "MSUF2_FRAME_ENABLED", { preview = true }) end,
+            },
+        }
+    else
+        enableShortcutMeta = {
+            actionKey = "enable_focus_target_frame",
+        }
+    end
+    RegisterControl(enableNow, ctx, "basics.enable_now", "Enable", "button",
+        unit ~= "focustarget" and "setting" or "action", enableShortcutMeta)
     notice:SetMessage(unitLabel .. " frame is disabled and will not appear.", "warning")
     enableNow:SetScript("OnClick", function()
         if unit == "focustarget" and not ReadBool("focus", "enabled", true) then SetBool("focus", "enabled", true, "MSUF2_FOCUSTARGET_PARENT_ENABLED", { preview = true }) end
@@ -786,6 +797,12 @@ local function BuildLayout(ctx, builder, unit)
         customAnchor.box:SetText("")
         ApplyAnchorChange()
     end)
+    RegisterControl(customAnchor.clear, ctx, "anchoring.custom.clear", "Clear", "button", "action", {
+        actionKey = "clear_unit_custom_anchor", actionFixedArgs = { unit = unit },
+    })
+    RegisterControl(customAnchor.pick, ctx, "anchoring.custom.pick", "Pick", "button", "action", {
+        actionKey = "start_unit_custom_anchor_picker", actionFixedArgs = { unit = unit },
+    })
     local function RefreshLayoutState()
         customAnchor.Refresh()
         if anchorTo.SetValue then anchorTo:SetValue(AnchorValue()) end

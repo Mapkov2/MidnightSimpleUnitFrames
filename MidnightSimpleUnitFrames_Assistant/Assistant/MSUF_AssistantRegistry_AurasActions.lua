@@ -174,6 +174,70 @@ Registry:RegisterAction({
     end,
 })
 
+Registry:RegisterAction({
+    key = "reset_aura_custom_container",
+    label = "Reset Custom Aura Container",
+    description = "Returns one unit-frame Custom Aura container to its defaults, including its whitelist, filters, layout, and appearance.",
+    page = "auras3",
+    type = "reset",
+    combatSafe = false,
+    confirmRequired = true,
+    aliases = {
+        "reset custom aura container", "reset custom aura", "reset custom aura slot",
+    },
+    parseAliasArgs = function(text)
+        local normalized = tostring(text or ""):lower()
+        if not normalized:find("reset", 1, true)
+            or not normalized:find("custom", 1, true)
+            or not normalized:find("aura", 1, true)
+        then
+            return false
+        end
+        local parsed = {}
+        for _, scope in ipairs({ "player", "target", "focus", "boss" }) do
+            if normalized:find("%f[%a]" .. scope .. "%f[%A]") then
+                parsed.scope = scope
+                break
+            end
+        end
+        parsed.index = tonumber(normalized:match("custom%s+aura%s*([123])")
+            or normalized:match("container%s*([123])")
+            or normalized:match("slot%s*([123])"))
+        return parsed, { summary = "Resets one unit-frame Custom Aura container to its defaults." }
+    end,
+    run = function(args)
+        local scope = tostring(args and args.scope or ""):lower()
+        if scope ~= "player" and scope ~= "target" and scope ~= "focus" and scope ~= "boss" then
+            return false, "Choose Player, Target, Focus, or Boss so I know which Custom Aura container to reset."
+        end
+
+        local model = AuraModel()
+        if not (model and type(model.ResetCustomContainer) == "function") then
+            return false, "Custom Aura containers are not available in the current context."
+        end
+
+        local index = tonumber(args and args.index)
+        local maxIndex = type(model.CustomContainerMax) == "function" and tonumber(model.CustomContainerMax()) or 3
+        maxIndex = maxIndex or 3
+        if not index or index % 1 ~= 0 or index < 1 or index > maxIndex then
+            return false, "Choose a Custom Aura container from 1 to " .. tostring(maxIndex) .. "."
+        end
+
+        model.ResetCustomContainer(scope, index)
+        ApplyAura(scope, "MSUF_ASSISTANT_AURA_CUSTOM_CONTAINER_RESET")
+        local pageKey = "uf_" .. scope
+        local rebuildCurrentPage = M.activeKey == pageKey and type(M.SelectPage) == "function"
+        if type(M.InvalidatePage) == "function" then M.InvalidatePage(pageKey) end
+        if rebuildCurrentPage then
+            M.activeKey = nil
+            M.SelectPage(pageKey)
+        elseif type(M.Refresh) == "function" then
+            M.Refresh()
+        end
+        return true, "Done. Reset " .. AuraScopeLabel(scope) .. " Custom Aura " .. tostring(index) .. "."
+    end,
+})
+
 local RegisterQuickPresetAction = A.AurasRegistry and A.AurasRegistry.RegisterQuickPresetAction
 if type(RegisterQuickPresetAction) == "function" then
     RegisterQuickPresetAction({

@@ -851,7 +851,16 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
             Set(CurrentScope(), "growth", info.value, "geometry")
             RefreshGrowthTiles()
         end)
-        RegisterGroupControl(btn, ctx, "field.growth.option." .. info.value, "Growth: " .. info.text, "button", "action")
+        RegisterGroupControl(btn, ctx, "field.growth.option." .. info.value, "Growth: " .. info.text, "button", "setting", {
+            assistantDisposition = "dynamic",
+            assistantDispositionReason = "This tile edits the growth setting for the currently selected Group scope.",
+            assistantSettingKeys = { "gf_party.growth", "gf_raid.growth", "gf_mythicraid.growth" },
+            command = {
+                kind = "dropdown", valueKind = "enum", values = GROWTH_VALUES,
+                get = function() return Val(CurrentScope(), "growth", "DOWN") end,
+                set = function(value) Set(CurrentScope(), "growth", value, "geometry"); RefreshGrowthTiles() end,
+            },
+        })
         buttons[info.value] = btn
     end
     M.TrackRefresh(ctx, RefreshGrowthTiles)

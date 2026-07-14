@@ -99,7 +99,16 @@ local function BuildGFLayout(ctx)
         generalNotice, _, generalNoticeButton = CreateSectionNotice(general, -374, "Enable Scope", 104)
     end
     if generalNoticeButton then
-        RegisterControl(generalNoticeButton, ctx, "scope.enable_now", "Enable Scope", "button", "action")
+        RegisterControl(generalNoticeButton, ctx, "scope.enable_now", "Enable Scope", "button", "setting", {
+            assistantDisposition = "dynamic",
+            assistantDispositionReason = "This shortcut edits the enabled setting for the currently selected Group scope.",
+            assistantSettingKeys = { "gf_party.enabled", "gf_raid.enabled", "gf_mythicraid.enabled" },
+            command = {
+                kind = "toggle", valueKind = "boolean",
+                get = function() return Bool(CurrentScope(), "enabled", false) end,
+                set = function(value) Set(CurrentScope(), "enabled", value == true, "rebuild") end,
+            },
+        })
         generalNoticeButton:SetScript("OnClick", function()
             Set(CurrentScope(), "enabled", true, "rebuild")
         end)
@@ -439,6 +448,12 @@ local function BuildGFLayout(ctx)
         controlPath = "anchor.custom",
         assistantDisposition = "dynamic",
         assistantDispositionReason = "Custom anchor editing targets the currently selected Group scope.",
+    })
+    RegisterControl(customAnchor.clear, ctx, "anchor.custom.clear", "Clear", "button", "action", {
+        actionKey = "clear_group_custom_anchor", actionInputArg = "scope",
+    })
+    RegisterControl(customAnchor.pick, ctx, "anchor.custom.pick", "Pick", "button", "action", {
+        actionKey = "start_group_custom_anchor_picker", actionInputArg = "scope",
     })
     local function RefreshAnchorHeader()
         customAnchor.Refresh()

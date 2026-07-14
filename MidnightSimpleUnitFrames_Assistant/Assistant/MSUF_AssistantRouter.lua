@@ -2834,6 +2834,15 @@ A.RouterTryVisualSettingShortcut = function(norm, coreHandler)
         end
     end
 
+    if R.ContainsAny(norm, { "castbar texture", "cast bar texture" }) and asksLocation then
+        return R.VisualSettingReply(
+            "Castbar Texture setting location",
+            "Castbar Texture lives in Cast Bars. Use it for the shared Player, Target, Focus, and Boss castbar fill texture; Castbar Background Texture is beside it for the background.",
+            "open cast bars; set castbar texture to Blizzard; set castbar background texture to Blizzard.",
+            "Open Cast Bars | set castbar texture to Blizzard"
+        )
+    end
+
     if R.ContainsAny(norm, { "bar texture", "health bar texture", "power bar texture", "texture" })
         and R.ContainsAny(norm, { "bar", "bars", "health", "power", "texture" })
         and asksLocation
@@ -11703,13 +11712,21 @@ function R.OpenExactSettingItem(item)
     if not (item and settingKey and item.page) then return nil end
     local action = A.Registry and type(A.Registry.GetAction) == "function" and A.Registry:GetAction("open_setting_control") or nil
     if not action then return nil end
-    return A.ExecutePlan({
+    local result = A.ExecutePlan({
         kind = "action",
         action = action,
         args = { settingKey = settingKey, page = item.page, label = item.label },
         label = "Open " .. tostring(item.label or "exact setting control"),
         summary = "Opens and focuses the exact runtime control for the contextual setting.",
     })
+    if type(result) == "table" and type(R.RegistrySettingCurrentValueLine) == "function" then
+        local valueLine = R.RegistrySettingCurrentValueLine(item)
+        local body = tostring(result.text or "")
+        if valueLine and not body:find("Current value:", 1, true) then
+            result.text = body ~= "" and (body .. "\n" .. valueLine) or valueLine
+        end
+    end
+    return result
 end
 
 local DIRECT_NAVIGATION_PAGE_SUBJECTS = {
@@ -11766,6 +11783,8 @@ function R.BroadPageNavigationCanonical(text)
         or norm:match("^navigate%s+to%s+(.+)$")
         or norm:match("^show%s+me%s+(.+)$")
         or norm:match("^find%s+(.+)$")
+        or norm:match("^where%s+is%s+(.+)$")
+        or norm:match("^where%s+are%s+(.+)$")
     if not subject then return nil end
     subject = R.Trim(subject:gsub("^the%s+", ""):gsub("%s+page$", ""):gsub("%s+menu$", "")
         :gsub("%s+options$", ""):gsub("%s+settings$", ""))
