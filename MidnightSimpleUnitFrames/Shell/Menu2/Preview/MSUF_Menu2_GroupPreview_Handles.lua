@@ -21,6 +21,11 @@ local HANDLE_FALLBACKS = {
     CurrentStatusSpec = F.Nil, CurrentSpellConfig = F.Nil, CurrentSpellPlaced = F.Nil, HandleText = FallbackHandleText, HandleOffsets = F.Nil,
     UpdateHint = F.Noop, RefreshHandleSelection = F.Noop, StatusLabel = F.Status, StartPan = F.False, StopPan = F.Noop, ZoomWheel = F.Noop,
 }
+local SPELL_DROP_ANCHOR_FRAC = {
+    TOPLEFT = { 0, 1 }, TOP = { 0.5, 1 }, TOPRIGHT = { 1, 1 },
+    LEFT = { 0, 0.5 }, CENTER = { 0.5, 0.5 }, RIGHT = { 1, 0.5 },
+    BOTTOMLEFT = { 0, 0 }, BOTTOM = { 0.5, 0 }, BOTTOMRIGHT = { 1, 0 },
+}
 function Handles.Install(box, deps)
     if not box then return nil end
     deps = deps or {}
@@ -812,14 +817,14 @@ function Handles.Install(box, deps)
             handle._iconBorders[i] = border
             local stack = handle._iconStacks[i] or handle:CreateFontString(nil, "OVERLAY")
             if stack.SetFont and stack._msufGFPreviewFont ~= true then
-                stack:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 9, "OUTLINE")
+                stack:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE")
                 stack._msufGFPreviewFont = true
             end
             stack:Hide()
             handle._iconStacks[i] = stack
             local timer = handle._iconTimers[i] or handle:CreateFontString(nil, "OVERLAY")
             if timer.SetFont and timer._msufGFPreviewFont ~= true then
-                timer:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 9, "OUTLINE")
+                timer:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE")
                 timer._msufGFPreviewFont = true
             end
             timer:Hide()
@@ -896,6 +901,136 @@ function Handles.Install(box, deps)
         for key, handle in pairs(spellIndicatorHandles) do
             if not active[key] then handle:Hide() end
         end
+    end
+    local function CursorPositionInUI()
+        local x, y = GetCursorPosition()
+        if not (x and y) then return nil end
+        local scale = (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
+        if scale <= 0 then scale = 1 end
+        return x / scale, y / scale
+    end
+    local function CursorInsideFrame(frame)
+        if not (frame and frame.GetLeft and frame.GetRight and frame.GetTop and frame.GetBottom) then return false end
+        local x, y = CursorPositionInUI()
+        if not (x and y) then return false end
+        local left, right, top, bottom = frame:GetLeft(), frame:GetRight(), frame:GetTop(), frame:GetBottom()
+        return left and right and top and bottom and x >= left and x <= right and y >= bottom and y <= top or false
+    end
+    local function EnsureSpellDropGuide()
+        if box._spellDropGuide then return box._spellDropGuide end
+        local guide = CreateFrame("Frame", nil, mock, T.Template())
+        guide:SetAllPoints(mock)
+        guide:EnableMouse(false)
+        if guide.SetFrameLevel and mock.GetFrameLevel then guide:SetFrameLevel((mock:GetFrameLevel() or 0) + 135) end
+        guide:SetBackdrop({ bgFile = WHITE8X8, edgeFile = WHITE8X8, edgeSize = 2 })
+        guide._text = T.Font(guide, "GameFontNormal", Tr("Drop to place spell icon"), { 0.72, 0.90, 1, 1 })
+        guide._text:SetPoint("BOTTOM", guide, "TOP", 0, 6)
+        guide:Hide()
+        box._spellDropGuide = guide
+        return guide
+    end
+    function box:SetSpellDropTarget(active, spellLabel)
+        local guide = EnsureSpellDropGuide()
+        if not active then
+            guide:Hide()
+            guide._dropInside = nil
+            guide._dropLabel = nil
+            if self._hint then UpdateHint(self, self._selectedHandle) end
+            return false
+        end
+        local inside = CursorInsideFrame(mock)
+        if guide._dropInside ~= inside then
+            guide._dropInside = inside
+            if inside then
+                guide:SetBackdropColor(0.12, 0.72, 0.38, 0.10)
+                guide:SetBackdropBorderColor(0.22, 1.00, 0.55, 1)
+                guide._text:SetText(Tr("Release to place and position"))
+                guide._text:SetTextColor(0.42, 1.00, 0.65, 1)
+            else
+                guide:SetBackdropColor(0.12, 0.50, 0.82, 0.07)
+                guide:SetBackdropBorderColor(0.32, 0.76, 1.00, 0.95)
+                guide._text:SetText(Tr("Drag onto the frame to place"))
+                guide._text:SetTextColor(0.72, 0.90, 1.00, 1)
+            end
+        end
+        guide:Show()
+        if self._hint and (guide._dropLabel ~= spellLabel or guide._hintInside ~= inside) then
+            guide._dropLabel = spellLabel
+            guide._hintInside = inside
+            self._hint:SetText(string.format("%s   %s", tostring(spellLabel or Tr("Spell icon")),
+                Tr(inside and "release to place at this position" or "drag onto the unit frame")))
+        end
+        return inside
+    end
+    function box:DropSpellIndicatorAtCursor(specKey, auraName)
+        if type(M.IsConfigCombatLocked) == "function" and M.IsConfigCombatLocked() then return false, "combat-locked" end
+        if not (specKey and auraName and auraName ~= "") then return false, "spell-required" end
+        if not CursorInsideFrame(mock) then return false, "outside-frame" end
+        local cursorX, cursorY = CursorPositionInUI()
+        local left, bottom = mock:GetLeft(), mock:GetBottom()
+        local width, height = mock:GetWidth(), mock:GetHeight()
+        if not (cursorX and cursorY and left and bottom and width and height and width > 0 and height > 0) then
+            return false, "preview-geometry-unavailable"
+        end
+        local kind = H.CurrentScope()
+        local dropHandle = {
+            _key = "si_drop_" .. tostring(specKey) .. ":" .. tostring(auraName),
+            _cfgSpell = true,
+            _cfgSpellItem = { specKey = specKey, auraName = auraName },
+            _previewText = auraName,
+        }
+        local existingCfg = SpellConfigForHandle(dropHandle, false)
+        local placedForSize = existingCfg and type(existingCfg.placed) == "table" and existingCfg.placed or {}
+        local previewScale = tonumber(box._mockScale) or tonumber(box._mockAutoScale) or 1
+        if previewScale <= 0 then previewScale = 1 end
+        local iconWidth = tonumber(placedForSize.size) or 18
+        if (placedForSize.type or "icon") == "bar" then iconWidth = tonumber(placedForSize.barWidth) or (iconWidth * 3) end
+        local iconHeight = tonumber(placedForSize.size) or 18
+        iconWidth, iconHeight = iconWidth * previewScale, iconHeight * previewScale
+        local rx = (cursorX - left) / width
+        local ry = 1 - ((cursorY - bottom) / height)
+        local anchor = ResolveAnchor(rx, ry)
+        local frac = SPELL_DROP_ANCHOR_FRAC[anchor] or SPELL_DROP_ANCHOR_FRAC.CENTER
+        local anchorX = cursorX + ((frac[1] - 0.5) * iconWidth)
+        local anchorY = cursorY + ((frac[2] - 0.5) * iconHeight)
+        local offX, offY = PointOffset(anchorX, anchorY, mock, anchor)
+        local nextX, nextY = OffsetToConfig(offX, previewScale), OffsetToConfig(offY, previewScale)
+        local placedSuccessfully = false
+        local function PlaceSpellIcon()
+            local cfg = SpellConfigForHandle(dropHandle, true)
+            local placed = SpellPlacedForHandle(dropHandle, true)
+            if not (placed and cfg) then return false end
+            local conf = H.Conf(kind)
+            local si = conf and conf.spellIndicators
+            if si then si.enabled = true end
+            cfg.enabled = true
+            placed.type = (placed.type and placed.type ~= "none") and placed.type or "icon"
+            placed.anchor, placed.x, placed.y = anchor, nextX, nextY
+            local gp = M.GroupPage or {}
+            if type(gp.SetCurrentSpellAura) == "function" then
+                gp.SetCurrentSpellAura(kind, auraName)
+            else
+                M.gfSpellIndicatorSelection = M.gfSpellIndicatorSelection or {}
+                M.gfSpellIndicatorSelection[kind] = auraName
+            end
+            if si and si.spec == "multi" then
+                M.gfSpellMultiSpecSelection = M.gfSpellMultiSpecSelection or {}
+                M.gfSpellMultiSpecSelection[kind] = specKey
+            end
+            RefreshGroupPreviewAfterMove(dropHandle)
+            placedSuccessfully = true
+            return true
+        end
+        local historyKey = "group:spellDrop:" .. tostring(kind) .. ":" .. tostring(specKey) .. ":" .. tostring(auraName)
+        if type(M.RunWithHistory) == "function" then
+            M.RunWithHistory("Place Spell Indicator", historyKey, PlaceSpellIcon)
+        else
+            PlaceSpellIcon()
+            if placedSuccessfully then CheckpointHandleHistory(dropHandle, "Place") end
+        end
+        if not placedSuccessfully then return false, "spell-config-unavailable" end
+        if M.RequestRefresh then M.RequestRefresh(nil, "gf-spell-drop-controls") end
+        return true, anchor, nextX, nextY
     end
     box._spellIndicatorHandles = spellIndicatorHandles
     local targetedHandle = CreatePreviewHandle("targetedSpells", "targetedSpells", { 1.00, 0.52, 0.18 }, "TARGET", 72, 32, false)
@@ -996,6 +1131,18 @@ local function VisibleGroupPreview()
     return found
 end
 M.GroupPreview = M.GroupPreview or {}
+function M.GroupPreview.UpdateSpellDropTarget(active, spellLabel)
+    local box, reason = VisibleGroupPreview()
+    if not box then return false, reason end
+    if type(box.SetSpellDropTarget) ~= "function" then return false, "spell-drop-api-unavailable" end
+    return box:SetSpellDropTarget(active == true, spellLabel)
+end
+function M.GroupPreview.DropSpellIndicatorAtCursor(specKey, auraName)
+    local box, reason = VisibleGroupPreview()
+    if not box then return false, reason end
+    if type(box.DropSpellIndicatorAtCursor) ~= "function" then return false, "spell-drop-api-unavailable" end
+    return box:DropSpellIndicatorAtCursor(specKey, auraName)
+end
 function M.GroupPreview.NudgeHandle(handleKey, dx, dy)
     local box, reason = VisibleGroupPreview()
     if not box then return false, reason end

@@ -113,6 +113,35 @@ local function AnyGroupFrameEnabled()
 end
 GF.AnyGroupRuntimeEnabled = AnyGroupFrameEnabled
 
+local RUNTIME_EVENTS = {
+  "PLAYER_LOGIN",
+  "PLAYER_ENTERING_WORLD",
+  "GROUP_ROSTER_UPDATE",
+  "PLAYER_ROLES_ASSIGNED",
+  "ROLE_CHANGED_INFORM",
+  "PLAYER_DIFFICULTY_CHANGED",
+  "ZONE_CHANGED_NEW_AREA",
+  "PLAYER_REGEN_DISABLED",
+  "PLAYER_REGEN_ENABLED",
+}
+
+local function SetRuntimeEventsEnabled(enabled, regenOnly)
+  if not eventFrame then return end
+  if eventFrame.UnregisterAllEvents then
+    eventFrame:UnregisterAllEvents()
+  elseif eventFrame.UnregisterEvent then
+    for i = 1, #RUNTIME_EVENTS do eventFrame:UnregisterEvent(RUNTIME_EVENTS[i]) end
+  end
+  if regenOnly then
+    eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    return
+  end
+  if not enabled then return end
+  for i = 1, #RUNTIME_EVENTS do
+    eventFrame:RegisterEvent(RUNTIME_EVENTS[i])
+  end
+end
+
 local function LiveRaidKind()
   local kind = GF.GetLiveRaidKind and GF.GetLiveRaidKind() or nil
   if kind == "mythicraid" then return "mythicraid" end
@@ -332,9 +361,19 @@ function GF.UpdateGroupVisibility()
 end
 
 function GF.RefreshHeaderLayout(kind)
-  if InCombat() then return GF.DeferGroupRuntime("layout", kind) end
   if GF.EnsureDB then GF.EnsureDB() end
-  return SetupWantedHeaders(kind)
+  local enabled = AnyGroupFrameEnabled()
+  if InCombat() then
+    local result = GF.DeferGroupRuntime("layout", kind)
+    SetRuntimeEventsEnabled(enabled, not enabled)
+    return result
+  end
+  local result = SetupWantedHeaders(kind)
+  SetRuntimeEventsEnabled(enabled)
+  if type(GF.RefreshSpellIndicatorSeedEvents) == "function" then
+    GF.RefreshSpellIndicatorSeedEvents()
+  end
+  return result
 end
 
 function GF.RefreshUnitBindings(kind)
@@ -498,22 +537,31 @@ local function FlushDeferred()
 end
 
 local function RuntimeOnEvent(self, event)
-  if event == "PLAYER_REGEN_ENABLED" then
-    SyncCombatState(false)
-    if GF._pendingGroupRuntime then FlushDeferred() end
-    return
-  elseif event == "PLAYER_REGEN_DISABLED" then
-    SyncCombatState(true)
-    if type(GF.HidePreviewsForCombat) == "function" then
-      GF.HidePreviewsForCombat()
-    end
-    return
-  elseif event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
+  -- SavedVariables/config caches are only reliable at the startup event
+  -- boundary. Handle it before the disabled fast-exit so a cold cache cannot
+  -- unregister the very events that perform the first live header setup.
+  if event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
     SyncCombatState()
     GF.RefreshHeaderLayout(event)
     if event == "PLAYER_ENTERING_WORLD" then
       RefreshVisiblePartyState(event)
       RefreshVisibleRoleState("PLAYER_ROLES_ASSIGNED")
+    end
+    return
+  end
+  if not AnyGroupFrameEnabled() and event ~= "PLAYER_REGEN_ENABLED" then
+    SetRuntimeEventsEnabled(false)
+    return
+  end
+  if event == "PLAYER_REGEN_ENABLED" then
+    SyncCombatState(false)
+    if GF._pendingGroupRuntime then FlushDeferred() end
+    SetRuntimeEventsEnabled(AnyGroupFrameEnabled())
+    return
+  elseif event == "PLAYER_REGEN_DISABLED" then
+    SyncCombatState(true)
+    if type(GF.HidePreviewsForCombat) == "function" then
+      GF.HidePreviewsForCombat()
     end
     return
   elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED" or event == "ROLE_CHANGED_INFORM" then
@@ -533,18 +581,12 @@ local function RuntimeOnEvent(self, event)
 end
 
 eventFrame = CreateFrame("Frame")
+eventFrame:SetScript("OnEvent", RuntimeOnEvent)
+-- SecureGroupHeaderTemplate starts hidden. Keep only the two one-shot startup
+-- events until SavedVariables are ready; RefreshHeaderLayout then installs the
+-- normal enabled event set or unregisters everything for a disabled runtime.
 eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-eventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
-eventFrame:RegisterEvent("PLAYER_ROLES_ASSIGNED")
-eventFrame:RegisterEvent("ROLE_CHANGED_INFORM")
-eventFrame:RegisterEvent("PLAYER_DIFFICULTY_CHANGED")
-eventFrame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
-eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
-eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
-eventFrame:SetScript("OnEvent", RuntimeOnEvent)
-
-SyncCombatState()
 
 local GF_PUBLIC_ALIASES = {
   { "MSUF_GF_RebuildAll", "RebuildAll" },

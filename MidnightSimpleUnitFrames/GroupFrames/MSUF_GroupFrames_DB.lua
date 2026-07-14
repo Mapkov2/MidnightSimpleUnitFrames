@@ -268,7 +268,7 @@ local PARTY_DEFAULTS = {
     targetG           = 1,
     targetB           = 1,
     --- Status icons
-    iconStyle         = "BLIZZARD",  --- BLIZZARD / GLOSSY_ORBS / DARK_EMBOSS / etc.
+    iconStyle         = "MSUF_ROLES", --- MSUF role glyphs; unsupported status types fall back to Blizzard
     useMidnightIcons  = false,
     roleIcon          = true,
     roleIconStyle     = "DEFAULT",
@@ -276,9 +276,9 @@ local PARTY_DEFAULTS = {
     roleIconShowTank   = true,
     roleIconShowHealer = true,
     roleIconShowDPS    = true,
-    roleIconSize      = 12,
-    roleIconAnchor    = "TOPLEFT",
-    roleIconX         = 0,
+    roleIconSize      = 16,
+    roleIconAnchor    = "LEFT",
+    roleIconX         = 4,
     roleIconY         = 0,
     raidMarker        = true,
     raidMarkerStyle   = "DEFAULT",
@@ -359,7 +359,7 @@ local PARTY_DEFAULTS = {
     statusGhostTextLayer = 7,
     statusAFKTextLayer   = 7,
     --- Text offsets
-    nameOffsetX       = 0,
+    nameOffsetX       = 28, -- clears the complete left status-icon lane
     nameOffsetY       = 0,
     hpOffsetX         = 0,
     hpOffsetY         = 0,
@@ -393,9 +393,17 @@ local PARTY_DEFAULTS = {
     --- Group Frame heal prediction is edited in Global Style > Bars using the
     --- Party/Raid bar scopes. hlOverride gates local values; otherwise the
     --- shared UnitFrame heal-prediction toggle is the fallback.
-    healPredEnabled      = false,
+    healPredEnabled      = true,
     healPredAnchorMode   = 3,
-    --- (absorbEnabled, healAbsorbEnabled are resolved at runtime)
+    enableAbsorbBar      = true,
+    healAbsorbEnabled    = true,
+    absorbTextMode       = 2,
+    absorbAnchorMode     = 5,
+    absorbBarOpacity     = 1,
+    absorbBarTexture     = "MSUF Smooth v2",
+    healAbsorbBarOpacity = 1,
+    healAbsorbBarTexture = "Solid",
+    overAbsorbOverlay    = true,
     --- Group number (raid subgroup on frame)
     showGroupNumber       = false,
     groupNumberSize       = 10,
@@ -523,7 +531,7 @@ do
     RAID_DEFAULTS.showPowerText  = false
     RAID_DEFAULTS.nameFontSize   = 10
     RAID_DEFAULTS.hpFontSize     = 9
-    RAID_DEFAULTS.roleIconSize   = 10
+    RAID_DEFAULTS.roleIconSize   = 14
     RAID_DEFAULTS.raidMarkerSize = 12
     RAID_DEFAULTS.pvpIconSize    = 12
     RAID_DEFAULTS.auraMaxIcons   = 3
@@ -2247,6 +2255,7 @@ local BLIZZARD_PVP_TEXTURES = {
 local CUSTOM_STYLES = {
     CLASSIC       = "Classic",
     MIDNIGHT      = "Midnight",
+    MSUF_ROLES    = "MSUFRoles",
     UXPRO         = "UXPro",
     GLOSSY_ORBS   = "GlossyOrbs",
     NEON_OUTLINE  = "NeonOutline",
@@ -2260,8 +2269,19 @@ local CUSTOM_STYLES = {
 }
 
 local CUSTOM_STYLES_NO_MIDNIGHT_SUFFIX = {
-    CLASSIC  = true,
-    MIDNIGHT = true,
+    CLASSIC    = true,
+    MIDNIGHT   = true,
+    MSUF_ROLES = true,
+}
+
+local ROLE_ONLY_CUSTOM_STYLES = {
+    MSUF_ROLES = true,
+}
+
+local ROLE_ONLY_ICON_FILES = {
+    tank = true,
+    healer = true,
+    dps = true,
 }
 
 local STANDALONE_STATUS_ICON_FOLDERS = {
@@ -2612,7 +2632,7 @@ local function IndicatorIconStyle(conf, indicatorKey)
     local styleKey = INDICATOR_STYLE_KEYS[indicatorKey]
     local style = styleKey and conf[styleKey] or nil
     if type(style) ~= "string" or style == "" or style == "DEFAULT" then
-        style = conf.iconStyle or "BLIZZARD"
+        style = conf.iconStyle or "MSUF_ROLES"
     end
     return NormalizeIconStyle(style, "BLIZZARD")
 end
@@ -2620,6 +2640,7 @@ end
 local function CustomIconPath(style, file, useMidnight)
     local folder = CUSTOM_STYLES[style]
     if not folder then return nil end
+    if ROLE_ONLY_CUSTOM_STYLES[style] and not ROLE_ONLY_ICON_FILES[file] then return nil end
     if useMidnight and not CUSTOM_STYLES_NO_MIDNIGHT_SUFFIX[style] then
         file = file .. "_midnight"
     end
@@ -2800,7 +2821,8 @@ function GF.GetStatusIconTexture(style, iconType, variant, useMidnight)
     local file = StatusIconFile(iconType, variant)
     local folder = CUSTOM_STYLES[style]
     if folder and file then
-        return CustomIconPath(style, file, useMidnight == true), 0, 1, 0, 1
+        local path = CustomIconPath(style, file, useMidnight == true)
+        if path then return path, 0, 1, 0, 1 end
     end
     local external = ExternalIconPackByKey(style)
     if external and file then
@@ -2816,7 +2838,7 @@ function GF.StatusIconPackSupports(style, iconType, variant, useMidnight)
     if style == "BLIZZARD" then return BuiltinStatusIconTexture(iconType, variant) ~= nil end
     local file = StatusIconFile(iconType, variant)
     if not file then return false end
-    if CUSTOM_STYLES[style] then return true end
+    if CUSTOM_STYLES[style] then return file ~= nil and CustomIconPath(style, file, useMidnight == true) ~= nil end
     local external = ExternalIconPackByKey(style)
     if external then return ExternalIconPath(external, file, useMidnight == true) ~= nil end
     return false
@@ -2847,6 +2869,7 @@ end
 
 GF.ICON_STYLE_ITEMS = {
     { key = "BLIZZARD",      label = "Blizzard (Default)" },
+    { key = "MSUF_ROLES",    label = "MSUF Roles"         },
     { key = "CLASSIC",       label = "Classic"            },
     { key = "MIDNIGHT",      label = "Midnight"           },
     { key = "UXPRO",         label = "UX Pro"             },
