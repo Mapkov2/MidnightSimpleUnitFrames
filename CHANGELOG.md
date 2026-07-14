@@ -1,5 +1,30 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-Beta15 - 2026-07-14
+
+### Highlights
+
+- Added a guided Beta 15 upgrade highlights flow and refined first-load onboarding.
+- Added configurable castbar name/target text.
+- Added group-frame role icons and mouse-drag positioning for spell icons directly in the preview.
+
+### Changes
+
+- Refined first-load routing and guided setup behavior.
+- Added configurable castbar target text.
+- Added NPC class colors and name-relative status anchors for unit frames.
+- Stabilized spell-indicator geometry and aura filtering.
+- Hardened Menu2 scrolling for secret values and refreshed layout behavior.
+- Expanded regression smoke coverage for the updated runtime paths.
+- Gated castbar lifecycle and hotpath events to active features.
+- Reseeded visible prediction bars after world entry and cold-start recovery.
+- Added group-frame role icons and live spell-indicator preview placement.
+- Detached event routes for disabled features to reduce idle work.
+- Unified Menu2 and Edit Mode layout tokens.
+- Updated prediction and locale-aware default baselines.
+- Added the Beta 15 upgrade highlights flow and onboarding integration.
+- Added lifecycle and group-frame regression coverage for the Beta 15 changes.
+
 ## 6.0-Beta14 - 2026-07-13
 
 ### Changes
