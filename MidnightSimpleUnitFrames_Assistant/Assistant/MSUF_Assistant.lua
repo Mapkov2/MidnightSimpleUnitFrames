@@ -8113,10 +8113,19 @@ function AP.TryImmediateSubmitResult(text, opts)
     end
     if AP.RequiresExactMovementRouting and AP.RequiresExactMovementRouting(text) then return nil end
     if AP.RequiresCrossFrameTextRouting and AP.RequiresCrossFrameTextRouting(text) then return nil end
+    local context = type(A.GetContext) == "function" and A.GetContext() or {}
+    local nameDotsPlan = type(parser.ParseNameShorteningDotsShortcut) == "function"
+        and parser.ParseNameShorteningDotsShortcut(normalized, context, text) or nil
+    if type(nameDotsPlan) == "table" and nameDotsPlan.kind == "ambiguous" then
+        -- Negated dots/ellipsis wording deliberately produces a clarification.
+        -- Do not let the conversational fast path replace that fail-closed
+        -- result before the mutation planner can preserve the ambiguity.
+        return nil
+    end
     local auraFilteringIntent = type(parser.LooksLikeAuraFilteringConversation) == "function"
         and parser.LooksLikeAuraFilteringConversation(
             normalized,
-            type(A.GetContext) == "function" and A.GetContext() or {}
+            context
         )
     local adjacentJokeFollowup = type(A.RouterIsAdjacentJokeFollowup) == "function"
         and A.RouterIsAdjacentJokeFollowup(normalized) == true
