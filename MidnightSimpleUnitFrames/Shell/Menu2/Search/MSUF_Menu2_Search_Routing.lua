@@ -817,8 +817,9 @@ local function SearchRouteGroupPage(route, pageKey, normalized)
         "aura|auras|buff|buffs|debuff|debuffs|blacklist|filter|layout|position|anchor|growth|icon size")
     then
         local activeScope = scope or M.gfScope or "party"
-        local lane = SearchRouteHasAny(normalized, "debuff|debuffs") and "debuff"
-            or (SearchRouteHasAny(normalized, "buff|buffs") and "buff" or nil)
+        local lane = SearchRouteHasAny(normalized, "external defensives|external defensive|externals") and "externals"
+            or (SearchRouteHasAny(normalized, "debuff|debuffs") and "debuff"
+            or (SearchRouteHasAny(normalized, "buff|buffs") and "buff" or nil))
         lane = lane or (type(M.gfAuraLaneSelection) == "table" and M.gfAuraLaneSelection[activeScope]) or "buff"
         local tool = SearchRouteHasAny(normalized, "blacklist|ignore list|block list") and "blacklist"
             or (SearchRouteHasAny(normalized, "filter|only mine|dispellable|stealable|boss aura|hide permanent|no timer|no duration") and "filters" or "layout")

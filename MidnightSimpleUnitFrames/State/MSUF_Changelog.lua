@@ -8,10 +8,43 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-Beta14",
-    previousVersion = "6.0-Beta13",
-    rangeLabel = "6.0-Beta13 -> 6.0-Beta14",
+    currentVersion = "6.0-Beta15",
+    previousVersion = "6.0-Beta14",
+    rangeLabel = "6.0-Beta14 -> 6.0-Beta15",
     entries = {
+        {
+            version = "6.0-Beta15",
+            date = "2026-07-14",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Added a guided Beta 15 upgrade highlights flow and refined first-load onboarding.",
+                        "Added configurable castbar name/target text.",
+                        "Added group-frame role icons and mouse-drag positioning for spell icons directly in the preview.",
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Refined first-load routing and guided setup behavior.",
+                        "Added configurable castbar target text.",
+                        "Added NPC class colors and name-relative status anchors for unit frames.",
+                        "Stabilized spell-indicator geometry and aura filtering.",
+                        "Hardened Menu2 scrolling for secret values and refreshed layout behavior.",
+                        "Expanded regression smoke coverage for the updated runtime paths.",
+                        "Gated castbar lifecycle and hotpath events to active features.",
+                        "Reseeded visible prediction bars after world entry and cold-start recovery.",
+                        "Added group-frame role icons and live spell-indicator preview placement.",
+                        "Detached event routes for disabled features to reduce idle work.",
+                        "Unified Menu2 and Edit Mode layout tokens.",
+                        "Updated prediction and locale-aware default baselines.",
+                        "Added the Beta 15 upgrade highlights flow and onboarding integration.",
+                        "Added lifecycle and group-frame regression coverage for the Beta 15 changes.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-Beta14",
             date = "2026-07-13",
@@ -74,110 +107,6 @@ local data = {
                         "Added per-resource slot colors and full-resource colors for segmented Class Power displays.",
                         "Reduced duplicate aura work and allocations in large group-frame previews.",
                         "Hardened the two-addon release package and its static validation.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-Beta11",
-            date = "2026-07-11",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "One self-contained addon: The Assistant runtime and every locale are again shipped from the main MSUF addon. Installation and release packages no longer depend on separate companion folders.",
-                        "Auras, indicators, and previews: Aura styling now reaches Custom 1-3 containers, previews follow configured growth directions, and spell indicators can use animated icon glow as well as full-frame visual effects.",
-                        "More reliable group frames: Group health, prediction, status, connection, roster, and combat state refreshes now share a consistent lifecycle, including AI-controlled party members.",
-                    },
-                },
-                {
-                    title = "Packaging And Locales",
-                    bullets = {
-                        "Folded the former Load-on-Demand Assistant and non-English locale companion addons back into the primary MSUF TOC. Inactive locale files still return immediately, so only the active language dictionary remains resident.",
-                        "Simplified release, CurseForge, and Perfy package staging to ship and validate one addon folder and TOC.",
-                        "Updated static validation for the unified package layout and removed obsolete companion-addon package metadata.",
-                    },
-                },
-                {
-                    title = "Aura Designer, Spell Indicators, And Menu2",
-                    bullets = {
-                        "Added a container selector to Aura Styling for Buffs, Debuffs, and Custom 1-3 containers. Custom-container styling is stored per unit-frame scope and now has a dedicated preview configuration.",
-                        "Improved Aura and Group Aura previews: configured growth direction, spacing, rows/columns, duration bars, borders, timers, and custom-container spell icons are represented more faithfully.",
-                        "Added animated glow for icon spell indicators, strengthened full-frame effect cleanup, and avoid duplicate geometry/visual passes while aura slots refresh.",
-                        "Refined group aura controls, compact group-style navigation, control catalog metadata, menus, navigation, widgets, themes, and preview lifecycle behavior.",
-                    },
-                },
-                {
-                    title = "Assistant",
-                    bullets = {
-                        "Made result follow-ups fail closed: a pronoun or ordinal from a search result cannot mutate a setting until the result is explicitly selected or explained.",
-                        "Improved guided setup, pending-result selection, no-change action handling, undo/history behavior, diagnostics, parser coverage, aura blacklist/filter actions, and setting-graph routing.",
-                        "Expanded Assistant knowledge and control registrations for the updated aura, group-frame, text, and visual settings.",
-                    },
-                },
-                {
-                    title = "Unit, Group, Castbar, And Resource Runtime",
-                    bullets = {
-                        "Added detailed-health handling for AI-controlled group members and shared that authoritative health state with prediction, status, and gone/offline visual updates.",
-                        "Tightened prediction calculator reuse to a single core dispatch, added group lifecycle refresh events, and split health/connection fast paths from full prediction refreshes.",
-                        "Improved group runtime combat-state publication, post-roster frame-state refreshes, range fading, frame visuals, previews, text formatting/runtime, portrait/power/status elements, and core refresh coordination.",
-                        "Refined focus interrupt/kick presentation and Class Power controller/mode behavior; updated fonts and Edit Mode movers to keep live frames and previews aligned.",
-                    },
-                },
-                {
-                    title = "What To Test First",
-                    bullets = {
-                        "Start MSUF with a non-English client and open Menu2 and the Assistant; confirm both work directly from the single installed addon folder.",
-                        "Configure Custom 1-3 aura styling, directional aura growth, spell-indicator icon glow, and full-frame effects in unit and group previews.",
-                        "Test AI party members, roster changes, reconnects, combat transitions, range fading, health/prediction bars, and group status overlays.",
-                        "In the Assistant, search for a setting, then try a pronoun/ordinal follow-up before and after selecting a result; only an explicit selection may change a setting.",
-                    },
-                },
-                {
-                    title = "Optional Assistant Runtime",
-                    bullets = {
-                        "Moved the local MSUF Assistant into its own load-on-demand companion addon. The parser, setting graph, knowledge data, and indexes stay unloaded until the Assistant dashboard is opened from Menu2.",
-                        "Added a lightweight Menu2 bridge, so normal menu search remains available while the Assistant has zero idle CPU and memory cost outside an active Assistant session. Opening the dashboard now loads and shows the Assistant directly, without a separate start button.",
-                        "Improved Assistant request routing, undo/redo, queued work, context handling, diagnostics, and the settings registry; added German/English presentation handling for Assistant dialogs.",
-                    },
-                },
-                {
-                    title = "Menu, Search, And Previews",
-                    bullets = {
-                        "Reworked Menu2 control registration around a shared control catalog and streamlined page/runtime loading.",
-                        "Improved pinned and embedded preview ownership so refreshes survive transient visibility changes while navigating or rebuilding menu pages.",
-                        "Refined group and unit preview rendering, draggable text/handle behavior, control enablement, search descriptions, and dashboard navigation.",
-                    },
-                },
-                {
-                    title = "Unit, Group, And Class Resources",
-                    bullets = {
-                        "Expanded group-frame configuration and runtime refresh handling for layout, visual layers, borders, text placement, status state, and range fading.",
-                        "Improved Class Power controller and mode handling, including Balance Druid resource behavior and more faithful menu previews.",
-                        "Updated unit-frame formatting, layers, rounded-frame effects, fonts, textures, and color application paths to keep live frames and previews in sync.",
-                    },
-                },
-                {
-                    title = "Aura Filtering",
-                    bullets = {
-                        "Added an optional Hide permanent auras filter for unit-frame, custom-container, group-frame, and spell-indicator aura candidates.",
-                        "Kept blacklist state and its menu/Assistant controls synchronized across the relevant unit and group aura scopes.",
-                    },
-                },
-                {
-                    title = "Packaging And Validation",
-                    bullets = {
-                        "Added the Assistant companion addon to release and Perfy staging, with matching interface/version contract checks.",
-                        "Hardened package cleanup and verification to exclude local workflow, graph, cache, and compiled-artifact directories.",
-                    },
-                },
-                {
-                    title = "What To Test First",
-                    bullets = {
-                        "Open Menu2 normally, use regular search, then start the Assistant and verify its dashboard, request handling, undo/redo, and combat-disabled state.",
-                        "Navigate quickly between pages and pinned previews; confirm unit and group preview refreshes and drag handles remain responsive.",
-                        "Test group layouts, status/text/border settings, range fading, and Class Power previews across relevant specs.",
-                        "Toggle Hide permanent auras for unit, custom, and group aura lanes and confirm permanent effects are excluded while timed effects remain.",
                     },
                 },
             },
