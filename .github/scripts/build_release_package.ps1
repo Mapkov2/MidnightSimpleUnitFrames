@@ -15,8 +15,8 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 $assistantManifestName = "MSUF_AssistantRuntime.xml"
-$assistantScriptCount = 324
-$assistantOrderSha256 = "5B302939139B2F233BA2907FB383C45E8CE71587FA7157EF23ED063CB1E17754"
+$assistantScriptCount = 328
+$assistantOrderSha256 = "6D93B5BB79D3EDAFDF14D2838216E6ACEE814645ED37AFDEFB28863A9F232A39"
 
 function Normalize-AssistantReference {
     param([Parameter(Mandatory = $true)][string]$Path)
@@ -466,7 +466,7 @@ try {
     $assistantXml = Read-ZipEntryText -Zip $zip -EntryName "MidnightSimpleUnitFrames_Assistant/$assistantManifestName"
     $scriptRefs = @(Get-AssistantManifestReferences -ManifestText $assistantXml)
     if ($scriptRefs.Count -ne $assistantScriptCount -or (Get-AssistantReferenceHash -References $scriptRefs) -ne $assistantOrderSha256) {
-        throw "Packaged Assistant V1 manifest inventory/load order differs from the validated 324-script contract."
+        throw "Packaged Assistant V1 manifest inventory/load order differs from the validated $assistantScriptCount-script contract."
     }
     if (($scriptRefs -join "`n") -ne ($assistantManifestRefs -join "`n")) {
         throw "Packaged Assistant V1 manifest differs from the validated source manifest."
@@ -492,5 +492,5 @@ if (-not $KeepStage) {
     Remove-StagedItem -StageRoot $outputPath -Path $stagePath
 }
 
-Write-Host "Validated ${zipPath}: two addons, two stamped TOCs, exact 324-script Assistant V1 LoD manifest, and no core Assistant/V2/Graphify/backup/local artifacts."
+Write-Host "Validated ${zipPath}: two addons, two stamped TOCs, exact $assistantScriptCount-script Assistant V1 LoD manifest, and no core Assistant/V2/Graphify/backup/local artifacts."
 Write-Output $zipPath
