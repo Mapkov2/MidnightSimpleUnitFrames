@@ -342,6 +342,19 @@ local function SetAttrIfChanged(header, key, value)
   return true
 end
 
+--- Blizzard's SecureGroupHeader reuses active children and adds their new
+--- SetPoint anchors without clearing the previous anchor topology. Reset only
+--- when point names or the configured row/column topology changes so pooled/live headers
+--- cannot retain stale TOP/BOTTOM or LEFT/RIGHT constraints.
+local function ResetManagedChildAnchors(header)
+  if not (header and header.GetAttribute) then return end
+  for index = 1, 40 do
+    local child = header:GetAttribute("child" .. index)
+    if not child then return end
+    if child.ClearAllPoints then child:ClearAllPoints() end
+  end
+end
+
 local function ClampInt(value, fallback, minValue, maxValue)
   value = floor((tonumber(value) or fallback or minValue or 1) + 0.5)
   if minValue and value < minValue then value = minValue end
@@ -855,22 +868,26 @@ local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCou
   local initCfg = (sizeChanged or secureInitChanged) and BuildInitialConfigFunction(initialWidth, initialHeight) or nil
   local sortState = BuildSortState(key, kind, conf)
   local groupFilter = sortState.sortMethod == "NAMELIST" and nil or (key == "party" and nil or ResolveGroupFilter(conf))
+  local childAnchorTopologyChanged = AttrChanged(header, "point", point)
+    or AttrChanged(header, "columnAnchorPoint", columnAnchor)
+    or AttrChanged(header, "unitsPerColumn", upc)
+    or AttrChanged(header, "maxColumns", columns)
   local shouldHide = header.IsShown and header:IsShown()
     and (AttrChanged(header, "template", buttonTemplate)
       or sizeChanged
-      or AttrChanged(header, "point", point)
       or AttrChanged(header, "xOffset", xOffset)
       or AttrChanged(header, "yOffset", yOffset)
       or AttrChanged(header, "columnSpacing", spacing)
-      or AttrChanged(header, "columnAnchorPoint", columnAnchor)
-      or AttrChanged(header, "unitsPerColumn", upc)
-      or AttrChanged(header, "maxColumns", columns)
+      or childAnchorTopologyChanged
       or AttrChanged(header, "groupFilter", groupFilter)
       or secureInitChanged
       or SortStateChanged(header, sortState))
 
   if shouldHide then
     header:Hide()
+  end
+  if childAnchorTopologyChanged then
+    ResetManagedChildAnchors(header)
   end
 
   local changed = false

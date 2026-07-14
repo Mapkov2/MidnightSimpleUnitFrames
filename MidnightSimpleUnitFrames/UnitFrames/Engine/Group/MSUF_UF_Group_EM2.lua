@@ -30,6 +30,10 @@ local hooksecurefunc = hooksecurefunc
 local floor, max, min = math.floor, math.max, math.min
 local type, tonumber, tostring = type, tonumber, tostring
 local abs = math.abs
+local SharedUI = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
+local function FontSize(role)
+  return SharedUI and SharedUI.FontSize and SharedUI.FontSize(role) or (role == "caption" and 11 or 13)
+end
 
 local KIND_TO_KEY = {
   party = "gf_party",
@@ -54,6 +58,7 @@ local _containers = {}
 local _previewAnchors = {}
 local _popups = {}
 local _em2Active = false
+local SyncCombatHooks
 local _previewShownByEM2 = true
 local _activePreviewKind
 local _gfButton
@@ -403,7 +408,7 @@ local function EnsureContainer(kind)
   f._msufGFEditEdge = edge
 
   local fs = f:CreateFontString(nil, "OVERLAY")
-  fs:SetFont(STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF", 11, "")
+  fs:SetFont(STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF", FontSize("caption"), "")
   fs:SetShadowOffset(1, -1)
   fs:SetTextColor(0.68, 0.83, 1.00, 0.88)
   fs:SetPoint("CENTER")
@@ -1012,6 +1017,7 @@ ExportPublic("MSUF_GF_EM2_SetActivePreviewKind", GF_EM2_SetActivePreviewKind)
 local function EnterEditMode()
   if _em2Active then return end
   _em2Active = true
+  if SyncCombatHooks then SyncCombatHooks(true) end
   _previewShownByEM2 = true
   ShowPreviewOnly()
   SyncMoversSoon(0.1)
@@ -1020,6 +1026,7 @@ end
 local function ExitEditMode()
   if not _em2Active then return end
   _em2Active = false
+  if SyncCombatHooks then SyncCombatHooks(false) end
   _previewShownByEM2 = false
 
   local gf = GF()
@@ -1116,7 +1123,7 @@ local function InstallHUDToggle()
       hl:SetColorTexture(1, 1, 1, 0.05)
 
       local label = _gfButton:CreateFontString(nil, "OVERLAY")
-      label:SetFont(STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF", 12, "")
+      label:SetFont(STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF", FontSize("body"), "")
       label:SetShadowOffset(1, -1)
       label:SetPoint("CENTER")
       label:SetText("Groups")
@@ -1171,19 +1178,30 @@ local function InstallRuntimeObserver()
 end
 
 local combatHookFrame
-local function InstallCombatHooks()
-  if combatHookFrame then return end
-  combatHookFrame = CreateFrame("Frame")
+SyncCombatHooks = function(enabled)
+  if not combatHookFrame then
+    combatHookFrame = CreateFrame("Frame")
+    combatHookFrame:SetScript("OnEvent", function(_, event)
+      if event == "PLAYER_REGEN_DISABLED" then
+        HidePreviewVisualsForCombat()
+      elseif _previewShownByEM2 then
+        ShowPreviewOnly()
+      end
+    end)
+  end
+  if combatHookFrame.UnregisterAllEvents then
+    combatHookFrame:UnregisterAllEvents()
+  elseif combatHookFrame.UnregisterEvent then
+    combatHookFrame:UnregisterEvent("PLAYER_REGEN_DISABLED")
+    combatHookFrame:UnregisterEvent("PLAYER_REGEN_ENABLED")
+  end
+  if enabled ~= true then return end
   combatHookFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
   combatHookFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
-  combatHookFrame:SetScript("OnEvent", function(_, event)
-    if not _em2Active then return end
-    if event == "PLAYER_REGEN_DISABLED" then
-      HidePreviewVisualsForCombat()
-    elseif _previewShownByEM2 then
-      ShowPreviewOnly()
-    end
-  end)
+end
+
+local function InstallCombatHooks()
+  SyncCombatHooks(_em2Active)
 end
 
 local function San(v, d)
@@ -1254,7 +1272,7 @@ local function PMakeCopyButton(popup, x, y, w, currentMode, onCopy)
     bg:SetAllPoints()
     bg:SetColorTexture(0, 0, 0, 0)
     local key, label = src[1], src[2]
-    local fs = Q.FS(item, 10, (key == currentMode) and C.muted or C.white)
+    local fs = Q.FS(item, "caption", (key == currentMode) and C.muted or C.white)
     fs:SetPoint("LEFT", 8, 0)
     fs:SetText(Tr(label))
     item:SetScript("OnEnter", function()

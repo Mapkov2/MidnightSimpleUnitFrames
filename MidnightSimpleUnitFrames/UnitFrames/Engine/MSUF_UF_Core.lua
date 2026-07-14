@@ -532,6 +532,7 @@ end
 
 local groupLifecycleDriver
 local CompileGroupLifecyclePlan
+local SyncGroupLifecycleDriver
 
 local function RunCompiledGroupLifecycle(frame, event, mode)
   if not (frame and frame._msufCoreScope == "group" and FrameVisibleForEvent(frame)) then
@@ -602,11 +603,9 @@ local function FrameOnHide(frame)
 end
 
 local function EnsureGroupLifecycleDriver()
-  if groupLifecycleDriver or not CreateFrame then return groupLifecycleDriver end
-  groupLifecycleDriver = CreateFrame("Frame")
-  groupLifecycleDriver:RegisterEvent("PARTY_MEMBER_ENABLE")
-  groupLifecycleDriver:RegisterEvent("PARTY_MEMBER_DISABLE")
-  groupLifecycleDriver:SetScript("OnEvent", function(_, event, unitTarget)
+  if not groupLifecycleDriver and CreateFrame then
+    groupLifecycleDriver = CreateFrame("Frame")
+    groupLifecycleDriver:SetScript("OnEvent", function(_, event, unitTarget)
     -- PARTY_MEMBER_ENABLE/DISABLE expose a UnitTokenVariant, but Blizzard also
     -- uses the events as a group-wide alternate-power/presence invalidation.
     -- Keep that global semantic on a compiled minimal path while reserving the
@@ -628,8 +627,30 @@ local function EnsureGroupLifecycleDriver()
     -- Secret/unusable tokens, aliases, secure rebind windows and index misses
     -- cannot be compared safely. Preserve the old authoritative full barrier.
     BroadcastGroupLifecycle(event, "full")
-  end)
+    end)
+  end
+  if groupLifecycleDriver then
+    groupLifecycleDriver:RegisterEvent("PARTY_MEMBER_ENABLE")
+    groupLifecycleDriver:RegisterEvent("PARTY_MEMBER_DISABLE")
+  end
   return groupLifecycleDriver
+end
+
+SyncGroupLifecycleDriver = function()
+  local wanted = false
+  for i = 1, #UF.attachedFrameList do
+    local frame = UF.attachedFrameList[i]
+    if frame and frame._msufCoreScope == "group" and UF.attachedFrames[frame] == true then
+      wanted = true
+      break
+    end
+  end
+  if wanted then
+    EnsureGroupLifecycleDriver()
+  elseif groupLifecycleDriver then
+    groupLifecycleDriver:UnregisterAllEvents()
+  end
+  return wanted
 end
 
 local function IsUnitEvent(event)
@@ -1955,6 +1976,7 @@ function UF.DetachFrame(frame)
       break
     end
   end
+  if SyncGroupLifecycleDriver then SyncGroupLifecycleDriver() end
   UF._msufApplyingSpec = wasApplying
   if wasApplying ~= true and UF.SyncRuntimeDriver then UF.SyncRuntimeDriver() end
   return true

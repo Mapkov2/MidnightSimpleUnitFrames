@@ -245,7 +245,7 @@ local function BuildIndicatorsSection(ctx, b)
     RegisterControl(openBars, ctx, "navigation.global_bars_highlight", "Open Bars", "button", "navigation", { navigationKey = "opt_bars" })
     local hlHint = W.Text(highlightCard, "Shows a border around the current target in group frames. Aggro and dispel borders are controlled in Bars.", 16, -42, innerW - 164, T.colors.muted)
     if hlHint.SetWordWrap then hlHint:SetWordWrap(true) end
-    local groupNumberCard = W.ControlCard(indicators, "Group Number", "Small group index label on each frame.", leftX, -148, leftW, 246)
+    local groupNumberCard = W.ControlCard(indicators, "Group Number", nil, leftX, -148, leftW, 246)
     local groupNumberToggle = BindScopeToggle(ctx, W.SwitchAt(groupNumberCard, "Group Number", leftW - 62, -24, 0, "HIDDEN"), "showGroupNumber", false, "visual")
     groupNumberToggle._msuf2GroupFrameGateAlwaysEnabled = true
     local groupNumberControls = {}
@@ -280,7 +280,7 @@ local function BuildIndicatorsSection(ctx, b)
     AddScopeSlider(focusControls, focusCard, "Border Thickness", 1, 6, 1, rightW, "hlFocusSize", 2, "visual", -88)
     local focusColorHint = W.Text(focusCard, "Focus color is in Global Style > Colors > Group Frame Colors.", 16, -142, rightW - 32, T.colors.muted)
     if focusColorHint.SetWordWrap then focusColorHint:SetWordWrap(true) end
-    local groupBorderCard = W.ControlCard(indicators, "Group Border", "Optional border around the full group frame.", leftX, -412, leftW, 202)
+    local groupBorderCard = W.ControlCard(indicators, "Group Border", nil, leftX, -412, leftW, 202)
     local groupBorderToggle = BindScopeToggle(ctx, W.SwitchAt(groupBorderCard, "Group Border", leftW - 62, -24, 0, "HIDDEN"), "groupBorderEnabled", false, "visual")
     groupBorderToggle._msuf2GroupFrameGateAlwaysEnabled = true
     local groupBorderControls = {}
@@ -489,7 +489,7 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         if type(resolver) ~= "function" then return nil end
         return resolver(style, iconType, variant, useMidnight == true)
     end
-    local iconStyle = ScopeDropdown(ctx, styleCard, "Default role icon style", IconStyleValues, siconLeftW, "iconStyle", "BLIZZARD", "visual", 16, -56, siconLeftW - 32)
+    local iconStyle = ScopeDropdown(ctx, styleCard, "Default role icon style", IconStyleValues, siconLeftW, "iconStyle", "MSUF_ROLES", "visual", 16, -56, siconLeftW - 32)
     local midnightStyle = BindScopeToggle(ctx, W.ToggleAt(styleCard, "Use Midnight Style", 16, -106, siconLeftW - 32), "useMidnightIcons", false, "visual")
     local statusSelector = W.Dropdown(selectedCard, "Indicator", GF_STATUS_ICON_VALUES, siconLeftW)
     M.BindDropdownWidget(ctx, statusSelector,
@@ -569,7 +569,7 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         SetStatusPreviewMode("current")
     end)
     previewCurrent:ClearAllPoints()
-    previewCurrent:SetPoint("TOPLEFT", previewCard, "TOPLEFT", 16, -54)
+    previewCurrent:SetPoint("TOPLEFT", previewCard, "TOPLEFT", 16, -56)
     local previewAll = PreviewActionButton(previewCard, "Show all", previewAllW, "status.preview.all", function()
         SetStatusPreviewMode("all")
     end)
@@ -614,7 +614,7 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         iconPreviewLabel:SetShown(shown and true or false)
         iconPreviewStrip:SetShown(shown and true or false)
         if not shown then return end
-        local style = IsRoleStatusIconSpec(spec) and Val(CurrentScope(), "iconStyle", "BLIZZARD") or "BLIZZARD"
+        local style = IsRoleStatusIconSpec(spec) and Val(CurrentScope(), "iconStyle", "MSUF_ROLES") or "BLIZZARD"
         if type(style) ~= "string" or style == "" or style == "DEFAULT" then style = "BLIZZARD" end
         local customPath = spec and spec.customIcon and Val(CurrentScope(), spec.customIcon, "") or ""
         local useMidnight = Bool(CurrentScope(), "useMidnightIcons", false)
@@ -672,7 +672,7 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
     advanced.previewAll = PreviewActionButton(advanced.card, "Show all", 112, "status.advanced.preview.all", function()
         if previewAll and previewAll.Click then previewAll:Click() end
     end)
-    advanced.previewAll:SetPoint("LEFT", advanced.previewCurrent, "RIGHT", 10, 0)
+    advanced.previewAll:SetPoint("LEFT", advanced.previewCurrent, "RIGHT", 12, 0)
     local statusPlacementControls = { statusControls.size, statusControls.anchor, statusControls.x, statusControls.y, statusControls.layer, advanced.x, advanced.y, advanced.layer }
     local statusActionControls = { advanced.reset, advanced.previewCurrent, statusReset, previewCurrent }
     RefreshStatusIconState = function()
@@ -1050,6 +1050,7 @@ end
 
 local SpellTileGrid = {}
 SpellTileGrid.__index = SpellTileGrid
+local SpellTileDragOnUpdate
 function SpellTileGrid.New(ctx, parent, x, y, width, refreshPage)
     local frame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     frame:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
@@ -1058,8 +1059,8 @@ function SpellTileGrid.New(ctx, parent, x, y, width, refreshPage)
     local self = setmetatable({
         ctx = ctx, parent = parent, frame = frame, refreshPage = refreshPage,
         label = W.LabelAt(parent, Tr("Tracked Spells"), x, y + 48, width, "GameFontNormalSmall", T.colors.accent),
-        hint = W.Text(parent, Tr("Left-click configures, right-click toggles, drag to sort."), x, y + 27, width, T.colors.muted),
-        tileSize = 52, gap = 6,
+        hint = W.Text(parent, Tr("Left-click configures, right-click toggles, drag to preview or sort."), x, y + 27, width, T.colors.muted),
+        tileSize = 52, gap = 8,
     }, SpellTileGrid)
     self.perRow = max(1, floor((width + self.gap) / (self.tileSize + self.gap)))
     return self
@@ -1095,7 +1096,8 @@ function SpellTileGrid:OnEnter(tile)
     if info.secret then GameTooltip:AddLine(Tr("Secret aura (name/fingerprint matched)"), 0.72, 0.62, 0.95) end
     GameTooltip:AddLine(Tr("Left-click to configure"), 0.75, 0.78, 0.86)
     GameTooltip:AddLine(Tr(tile._customBuff and "Right-click to remove" or "Right-click to toggle"), 0.55, 0.82, 0.55)
-    GameTooltip:AddLine(Tr("Drag to reorder"), 0.55, 0.70, 0.95)
+    GameTooltip:AddLine(Tr("Drag onto the Group Frame Preview to place and position it"), 0.42, 0.90, 1.00, true)
+    GameTooltip:AddLine(Tr("Drop within this list to reorder"), 0.55, 0.70, 0.95)
     GameTooltip:Show()
     tile:SetBackdropColor(0.070, 0.085, 0.125, 1)
     tile:SetBackdropBorderColor(color[1], color[2], color[3], 1)
@@ -1112,12 +1114,26 @@ function SpellTileGrid:OnDragStart(tile)
     tile._dragged = true
     tile:StartMoving()
     tile:SetFrameStrata("TOOLTIP")
+    local preview = M.GroupPreview
+    if preview and type(preview.UpdateSpellDropTarget) == "function" then
+        preview.UpdateSpellDropTarget(true, tile._info and (tile._info.display or tile._info.name) or tile._auraName)
+    end
+    tile:SetScript("OnUpdate", SpellTileDragOnUpdate)
 end
 function SpellTileGrid:OnDragStop(tile)
     if tile._isAddTile then return end
+    tile:SetScript("OnUpdate", nil)
     tile:StopMovingOrSizing()
     local strata = self.frame:GetFrameStrata()
     if issecretvalue(strata) ~= true and strata then tile:SetFrameStrata(strata) end
+    local preview = M.GroupPreview
+    local dropped = preview and type(preview.DropSpellIndicatorAtCursor) == "function"
+        and preview.DropSpellIndicatorAtCursor(tile._specKey, tile._auraName) == true
+    if preview and type(preview.UpdateSpellDropTarget) == "function" then preview.UpdateSpellDropTarget(false) end
+    if dropped then
+        if M.Refresh then M.Refresh(self.ctx) else self.refreshPage() end
+        return
+    end
     local hostLeft, hostTop, cx, cy = self.frame:GetLeft(), self.frame:GetTop(), tile:GetCenter()
     if not (hostLeft and hostTop and cx and cy) then return end
     local bestSlot, bestDist = tile._slot or 1, math.huge
@@ -1164,6 +1180,12 @@ end
 local function SpellTileOnEnter(tile) tile._grid:OnEnter(tile) end
 local function SpellTileOnLeave(tile) tile._grid:OnLeave(tile) end
 local function SpellTileOnMouseUp(tile, button) tile._grid:OnMouseUp(tile, button) end
+SpellTileDragOnUpdate = function(tile)
+    local preview = M.GroupPreview
+    if preview and type(preview.UpdateSpellDropTarget) == "function" then
+        preview.UpdateSpellDropTarget(true, tile._info and (tile._info.display or tile._info.name) or tile._auraName)
+    end
+end
 local function StopSpellTilePendingDrag(tile)
     tile._pendingDrag = nil
     tile._dragStartCursorX, tile._dragStartCursorY = nil, nil
@@ -1202,6 +1224,8 @@ local function SpellTileOnHide(tile)
     if tile._dragged then
         tile:StopMovingOrSizing()
         tile._dragged = false
+        local preview = M.GroupPreview
+        if preview and type(preview.UpdateSpellDropTarget) == "function" then preview.UpdateSpellDropTarget(false) end
     end
 end
 function SpellTileGrid:EnsureTile(index)
@@ -1218,13 +1242,25 @@ function SpellTileGrid:EnsureTile(index)
     tile.icon:SetSize(36, 36)
     tile.icon:SetPoint("TOP", tile, "TOP", 0, -3)
     tile.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    tile.addText = tile:CreateFontString(nil, "OVERLAY")
-    tile.addText:SetFont("Fonts\\FRIZQT__.TTF", 24, "OUTLINE")
-    tile.addText:SetPoint("CENTER", tile.icon, "CENTER")
-    tile.addText:SetText("+")
+    local addMark = CreateFrame("Frame", nil, tile)
+    addMark:SetSize(20, 20)
+    addMark:SetPoint("CENTER", tile.icon, "CENTER")
+    addMark.horizontal = addMark:CreateTexture(nil, "OVERLAY")
+    addMark.horizontal:SetSize(16, 3)
+    addMark.horizontal:SetPoint("CENTER")
+    addMark.vertical = addMark:CreateTexture(nil, "OVERLAY")
+    addMark.vertical:SetSize(3, 16)
+    addMark.vertical:SetPoint("CENTER")
+    function addMark:SetText() end
+    function addMark:SetTextColor(r, g, b, a)
+        self.horizontal:SetColorTexture(r, g, b, a)
+        self.vertical:SetColorTexture(r, g, b, a)
+    end
+    tile.addText = addMark
+    tile.addText:SetTextColor(0.70, 0.90, 1, 1)
     tile.addText:Hide()
     tile.label = tile:CreateFontString(nil, "OVERLAY")
-    tile.label:SetFont("Fonts\\FRIZQT__.TTF", 7, "OUTLINE")
+    tile.label:SetFont("Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE")
     tile.label:SetPoint("BOTTOM", tile, "BOTTOM", 0, 2)
     tile.label:SetWidth(self.tileSize - 4)
     tile.label:SetMaxLines(1)
@@ -1267,7 +1303,7 @@ function SpellTileGrid:Refresh()
     trackable = type(trackable) == "table" and trackable or {}
     local specCfg = type(siCfg.specs) == "table" and specKey and siCfg.specs[specKey]
     local customCount = CountCustomBuffs(specCfg)
-    self.hint:SetText(Tr(#trackable == 0 and "No spells for current spec." or "Left-click configures, right-click toggles, drag to sort."))
+    self.hint:SetText(Tr(#trackable == 0 and "No spells for current spec." or "Left-click configures, right-click toggles, drag to preview or sort."))
     if self.hint.SetTextColor then
         local color = indicatorsOn and T.colors.muted or T.colors.dim
         self.hint:SetTextColor(color[1], color[2], color[3], color[4] or 1)
@@ -1709,7 +1745,7 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         local extra = (rows - 3) * (spellGrid.tileSize + spellGrid.gap)
         spellSetCard:SetHeight(404 + extra)
         placedIndicatorCard:ClearAllPoints()
-        placedIndicatorCard:SetPoint("TOPLEFT", spells, "TOPLEFT", siLeftX - 14, -456 - extra)
+        placedIndicatorCard:SetPoint("TOPLEFT", spells, "TOPLEFT", siLeftX - 16, -456 - extra)
         W.MoveWidget(placedType, spells, siLeftX, -492 - extra, siLeftW, "LEFT")
         W.MoveWidget(placedAnchor, spells, siLeftX, -546 - extra, siLeftW, "LEFT")
         W.MoveWidget(placedSize, spells, siLeftX, -600 - extra, siLeftW, "LEFT")

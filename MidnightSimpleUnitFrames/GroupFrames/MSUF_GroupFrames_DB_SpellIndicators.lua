@@ -201,11 +201,47 @@ ExportPublic("MSUF_GF_SeedCurrentSpecSpellIndicatorDefaults", GF.SeedCurrentSpec
 do
     local seedFrame = CreateFrame("Frame")
     local queued = false
+    local generation = 0
+    local eventsEnabled = false
+    local SEED_EVENTS = {
+        "PLAYER_LOGIN",
+        "PLAYER_ENTERING_WORLD",
+        "PLAYER_SPECIALIZATION_CHANGED",
+        "ACTIVE_PLAYER_SPECIALIZATION_CHANGED",
+        "PLAYER_TALENT_UPDATE",
+        "TRAIT_CONFIG_UPDATED",
+    }
+
+    local function SpellIndicatorRuntimeWanted()
+        for i = 1, #GF_SI_KINDS do
+            local conf = GF.GetConf and GF.GetConf(GF_SI_KINDS[i]) or nil
+            if conf and conf.enabled == true
+                and type(conf.spellIndicators) == "table"
+                and conf.spellIndicators.enabled == true then
+                return true
+            end
+        end
+        return false
+    end
+
+    local function SetSeedEventsEnabled(enabled)
+        enabled = enabled == true
+        if eventsEnabled == enabled then return end
+        eventsEnabled = enabled
+        generation = generation + 1
+        queued = false
+        seedFrame:UnregisterAllEvents()
+        if not enabled then return end
+        for i = 1, #SEED_EVENTS do seedFrame:RegisterEvent(SEED_EVENTS[i]) end
+    end
+
     local function QueueSeed()
-        if queued then return end
+        if not eventsEnabled or queued then return end
         queued = true
+        local queuedGeneration = generation
         local function Run()
             queued = false
+            if queuedGeneration ~= generation or not eventsEnabled or not SpellIndicatorRuntimeWanted() then return end
             if GF.EnsureDB then GF.EnsureDB() end
             if GF.SeedCurrentSpecSpellIndicatorDefaults then
                 GF.SeedCurrentSpecSpellIndicatorDefaults()
@@ -214,14 +250,17 @@ do
         C_Timer.After(0, Run)
     end
 
-    seedFrame:RegisterEvent("PLAYER_LOGIN")
-    seedFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-    seedFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
-    seedFrame:RegisterEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED")
-    seedFrame:RegisterEvent("PLAYER_TALENT_UPDATE")
-    seedFrame:RegisterEvent("TRAIT_CONFIG_UPDATED")
     seedFrame:SetScript("OnEvent", function(_, event, unit)
         if event == "PLAYER_SPECIALIZATION_CHANGED" and unit and unit ~= "player" then return end
         QueueSeed()
     end)
+
+    function GF.RefreshSpellIndicatorSeedEvents()
+        local wanted = SpellIndicatorRuntimeWanted()
+        SetSeedEventsEnabled(wanted)
+        if wanted then QueueSeed() end
+        return wanted
+    end
+    ExportPublic("MSUF_GF_RefreshSpellIndicatorSeedEvents", GF.RefreshSpellIndicatorSeedEvents)
+    GF.RefreshSpellIndicatorSeedEvents()
 end

@@ -3193,6 +3193,16 @@ A3._directIdentityEventUnits = A3._directIdentityEventUnits or {
     INSTANCE_ENCOUNTER_ENGAGE_UNIT = { "boss1", "boss2", "boss3", "boss4", "boss5" },
 }
 
+A3._HasDirectIdentityRefreshContainers = function()
+    local byUnit = A3._directIdentityAuraContainers
+    if not byUnit then return false end
+    for unit, containers in pairs(byUnit) do
+        if containers and next(containers) then return true end
+        byUnit[unit] = nil
+    end
+    return false
+end
+
 A3._IsGroupUnitToken = function(unit)
     return type(unit) == "string" and (unit:match("^party%d+$") ~= nil or unit:match("^raid%d+$") ~= nil)
 end
@@ -3253,10 +3263,12 @@ A3._FlushScheduledDirectIdentityRefreshAll = function()
     A3._directIdentityRefreshPending = nil
     A3._directIdentityRefreshGroupOnly = nil
     A3._directIdentityRefreshForceSpellIndicatorGeometry = nil
+    if not A3._HasDirectIdentityRefreshContainers() then return false end
     A3._DirectIdentityRefreshAll(groupOnly, forceSpellIndicatorGeometry)
 end
 
 A3._ScheduleDirectIdentityRefreshAll = function(groupOnly, forceSpellIndicatorGeometry)
+    if not A3._HasDirectIdentityRefreshContainers() then return false end
     if A3._directIdentityRefreshPending == true then
         if groupOnly ~= true then A3._directIdentityRefreshGroupOnly = nil end
         if forceSpellIndicatorGeometry == true then
@@ -3276,9 +3288,10 @@ A3._ScheduleDirectIdentityRefreshAll = function(groupOnly, forceSpellIndicatorGe
 end
 
 A3._EnsureDirectIdentityRefreshFrame = function()
-    if A3._directIdentityAuraFrame then return A3._directIdentityAuraFrame end
-    local frame = CreateFrame("Frame")
-    frame:SetScript("OnEvent", function(_, event)
+    local frame = A3._directIdentityAuraFrame
+    if not frame then
+        frame = CreateFrame("Frame")
+        frame:SetScript("OnEvent", function(_, event)
         if A3._directIdentityRefreshAllEvents[event] == true then
             A3._ScheduleDirectIdentityRefreshAll(false, true)
             return
@@ -3292,14 +3305,16 @@ A3._EnsureDirectIdentityRefreshFrame = function()
         for i = 1, #units do
             A3._DirectIdentityRefreshUnit(units[i])
         end
-    end)
+        end)
+        A3._directIdentityAuraFrame = frame
+    end
+    frame:UnregisterAllEvents()
     frame:RegisterEvent("PLAYER_TARGET_CHANGED")
     frame:RegisterEvent("PLAYER_FOCUS_CHANGED")
     frame:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
     frame:RegisterEvent("GROUP_ROSTER_UPDATE")
     frame:RegisterEvent("PLAYER_ENTERING_WORLD")
     frame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
-    A3._directIdentityAuraFrame = frame
     return frame
 end
 
@@ -3331,8 +3346,18 @@ A3._UnregisterDirectIdentityRefreshContainer = function(container)
     if not unit then return end
     local byUnit = A3._directIdentityAuraContainers
     local set = byUnit and byUnit[unit]
-    if set then set[container] = nil end
+    if set then
+        set[container] = nil
+        if not next(set) then byUnit[unit] = nil end
+    end
     container._msufA3DirectIdentityUnit = nil
+    if not A3._HasDirectIdentityRefreshContainers() then
+        A3._directIdentityRefreshPending = nil
+        A3._directIdentityRefreshGroupOnly = nil
+        A3._directIdentityRefreshForceSpellIndicatorGeometry = nil
+        local frame = A3._directIdentityAuraFrame
+        if frame then frame:UnregisterAllEvents() end
+    end
 end
 
 RegisterNativeContainer = function(container, forceRefresh)
