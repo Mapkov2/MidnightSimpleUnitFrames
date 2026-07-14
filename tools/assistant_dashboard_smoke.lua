@@ -266,6 +266,27 @@ assert((tonumber((A.GetContext and A.GetContext() or {}).turnSerial) or 0) == de
 expectApplied("undo", "Reverted")
 expectApplied("redo", "Reapplied")
 
+local selectorAction = assert(A.Registry:GetAction("set_menu_selector_state"), "menu selector action missing")
+M.activeKey = "home"
+local selectedGroupText, selectedGroupTextMessage = selectorAction.run({
+    selector = "group_text",
+    scope = "party",
+    tab = "power",
+    slot = "right",
+})
+assert(selectedGroupText == true, "group Power text selector failed: " .. tostring(selectedGroupTextMessage))
+assert(M.activeKey == "gf_layout", "group Power text selector opened the wrong page: " .. tostring(M.activeKey))
+
+M.activeKey = "home"
+local movedGroupText, movedGroupTextMessage = selectorAction.run({
+    selector = "group_text_move_together",
+    scope = "party",
+    tab = "hp",
+    value = false,
+})
+assert(movedGroupText == true, "group HP move-together selector failed: " .. tostring(movedGroupTextMessage))
+assert(M.activeKey == "gf_layout", "group HP move-together selector opened the wrong page: " .. tostring(M.activeKey))
+
 assert(type(A.StartNewTask) == "function", "runtime New Task implementation missing")
 local taskContext = assert(A.GetContext())
 taskContext.lastSetting = "target.width"

@@ -1414,7 +1414,7 @@ local cases = {
     {
         input = "where can I set range fade for raid frames?",
         status = "applied",
-        contains = { "Raid Range Fade setting location", "Group Health & Text", "Range Fade Alpha" },
+        contains = { "Raid Range Fade setting location", "Group Layout", "Range Fade Alpha" },
         notContains = { "Done. I changed" },
     },
     {
@@ -1605,7 +1605,7 @@ local cases = {
     {
         input = "what setting controls mythic raid name text size?",
         status = "applied",
-        contains = { "Mythic Raid Name Font Size setting location", "Group Health & Text" },
+        contains = { "Mythic Raid Name Font Size setting location", "Group Layout" },
         notContains = { "Group frame layout help", "Done. I changed" },
     },
     {
@@ -1629,19 +1629,19 @@ local cases = {
     {
         input = "where can I change party dead background color?",
         status = "applied",
-        contains = { "Party Dead Background Color setting location", "Group Health & Text", "I did not change it from this location question" },
+        contains = { "Party Dead Background Color setting location", "Group Layout", "I did not change it from this location question" },
         notContains = { "Done. I changed" },
     },
     {
         input = "how do I adjust party dead background color?",
         status = "applied",
-        contains = { "Party Dead Background Color setting location", "Group Health & Text" },
+        contains = { "Party Dead Background Color setting location", "Group Layout" },
         notContains = { "Done. I changed" },
     },
     {
         input = "which option controls raid group border padding?",
         status = "applied",
-        contains = { "Raid Group Border Padding setting location", "Group Health & Text" },
+        contains = { "Raid Group Border Padding setting location", "Group Layout" },
         notContains = { "Mythic Raid Group Border Padding", "Done. I changed" },
     },
     {
@@ -1665,13 +1665,13 @@ local cases = {
     {
         input = "what is raid group border padding for?",
         status = "applied",
-        contains = { "Raid Group Border Padding explanation", "Group Health & Text", "spacing around the group border" },
+        contains = { "Raid Group Border Padding explanation", "Group Layout", "spacing around the group border" },
         notContains = { "Raid Dispel Overlay Detects", "I found these MSUF matches", "Done. I changed" },
     },
     {
         input = "why would I use party dead background color?",
         status = "applied",
-        contains = { "Party Dead Background Color explanation", "dead group members", "Group Health & Text" },
+        contains = { "Party Dead Background Color explanation", "dead group members", "Group Layout" },
         notContains = { "Suggested fixes", "Show Party group frames", "Done. I changed" },
     },
     {

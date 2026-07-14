@@ -404,9 +404,9 @@ expectCopy("also copy power text settings from target to target of target", "cop
 expectCopy("copy positioning from player to target", "copy_unit", "player", { "target" }, { basics = false, text = false, portrait = false, power = false, castbar = false, status = false, load = false, transparency = false, layout = true })
 expectCopy("copy just the text options from target to the same position to player", "copy_unit", "target", { "player" }, { basics = false, text = true, portrait = false, power = false, castbar = false, status = false, load = false, transparency = false, layout = true })
 expectCopy("can you copy just the text options and position from target to player", "copy_unit", "target", { "player" }, { basics = false, text = true, portrait = false, power = false, castbar = false, status = false, load = false, transparency = false, layout = true })
-expectCopy("copy raid profile to party", "copy_group", "raid", { "party" }, { general = true, health = true, text = true, font = true, border = true, range = true, indicators = true, auras = true, highlight = true, dstripe = true, features = true })
-expectCopy("copy raid profile to party without text", "copy_group", "raid", { "party" }, { general = true, health = true, text = false, font = true, border = true, range = true, indicators = true, auras = true, highlight = true, dstripe = true, features = true })
-expectCopy("copy raid settings to party except indicators", "copy_group", "raid", { "party" }, { general = true, health = true, text = true, font = true, border = true, range = true, indicators = false, auras = true, highlight = true, dstripe = true, features = true })
+expectCopy("copy raid profile to party", "copy_group", "raid", { "party" }, { general = true, health = true, dispel = true, text = true, font = true, range = true, indicators = true, auras = true, highlight = true, dstripe = true, features = true })
+expectCopy("copy raid profile to party without text", "copy_group", "raid", { "party" }, { general = true, health = true, dispel = true, text = false, font = true, range = true, indicators = true, auras = true, highlight = true, dstripe = true, features = true })
+expectCopy("copy raid settings to party except indicators", "copy_group", "raid", { "party" }, { general = true, health = true, dispel = true, text = true, font = true, range = true, indicators = false, auras = true, highlight = true, dstripe = true, features = true })
 expectCopy("copy player text and castbar to target", "copy_unit", "player", { "target" }, { text = true, castbar = true, basics = false, layout = false })
 expectCopy("copy player size to target", "copy_unit", "player", { "target" }, { layout = true, basics = true, text = false })
 expectSettingAt("can you make the focus frame as big as player", 1, "focus.width", 275, "width")
@@ -693,14 +693,16 @@ expectSettingAt("set party width to 120 and height to 36 and power bar height to
 expectSettingAt("set party width to 120 and height to 36 and power bar height to 5", 2, "gf_party.height", 36, "height")
 expectSettingAt("set party width to 120 and height to 36 and power bar height to 5", 3, "gf_party.powerHeight", 5, "powerHeight")
 expectCopy("copy player all settings to target", "copy_unit", "player", { "target" }, { basics = true, text = true, portrait = true, power = true, castbar = true, status = true, load = true, transparency = true, layout = true })
-expectCopy("copy party health and text to raid", "copy_group", "party", { "raid" }, { health = true, text = true, general = false, font = false })
-expectCopy("can you copy just health and text options from party to raid", "copy_group", "party", { "raid" }, { health = true, text = true, general = false, font = false })
+expectCopy("copy party health and text to raid", "copy_group", "party", { "raid" }, { health = true, dispel = false, text = true, general = false, font = false })
+expectCopy("can you copy just health and text options from party to raid", "copy_group", "party", { "raid" }, { health = true, dispel = false, text = true, general = false, font = false })
+expectCopy("copy party health bars to raid", "copy_group", "party", { "raid" }, { health = true, dispel = false, text = false, highlight = false, dstripe = false })
+expectCopy("copy party dispel overlay to raid", "copy_group", "party", { "raid" }, { general = false, health = false, dispel = true, text = false, font = false, range = false, indicators = false, auras = false, highlight = false, dstripe = false, features = false })
 expectCopy("copy raid layout but not auras to party", "copy_group", "raid", { "party" }, { general = true, health = false, text = false, auras = false })
 expectCopy("copy raid layout without auras to party", "copy_group", "raid", { "party" }, { general = true, health = false, text = false, auras = false })
 expectCopy("make party look like raid without auras", "copy_group", "raid", { "party" }, { general = true, health = true, text = true, auras = false })
-expectCopy("copy raid buffs to party", "copy_group", "raid", { "party" }, { general = false, health = false, text = false, font = false, border = false, range = false, indicators = false, auras = true, highlight = false, dstripe = false, features = false })
-expectCopy("copy raid auras to party", "copy_group", "raid", { "party" }, { general = false, health = false, text = false, font = false, border = false, range = false, indicators = false, auras = true, highlight = false, dstripe = false, features = false })
-expectCopy("copy party all settings to all groups", "copy_group", "party", { "raid", "mythicraid" }, { general = true, health = true, text = true, font = true, border = true, range = true, indicators = true, auras = true, highlight = true, dstripe = true, features = true })
+expectCopy("copy raid buffs to party", "copy_group", "raid", { "party" }, { general = false, health = false, dispel = false, text = false, font = false, range = false, indicators = false, auras = true, highlight = false, dstripe = false, features = false })
+expectCopy("copy raid auras to party", "copy_group", "raid", { "party" }, { general = false, health = false, dispel = false, text = false, font = false, range = false, indicators = false, auras = true, highlight = false, dstripe = false, features = false })
+expectCopy("copy party all settings to all groups", "copy_group", "party", { "raid", "mythicraid" }, { general = true, health = true, dispel = true, text = true, font = true, range = true, indicators = true, auras = true, highlight = true, dstripe = true, features = true })
 expectAnswer("copy just text options from target to party group frame", "different layout options")
 expectActionArg("apply 1440p global ui scale preset", "apply_global_scale_preset", "preset", "1440p")
 expectActionArg("apply 1080p ui preset", "apply_global_scale_preset", "preset", "1080p")
@@ -1140,6 +1142,8 @@ expectActionArg("clear group copy categories", "set_menu_selector_state", "selec
 expectActionArg("clear group copy categories", "set_menu_selector_state", "command", "none")
 expectActionArg("turn off group copy auras category", "set_menu_selector_state", "category", "auras")
 expectActionArg("turn off group copy auras category", "set_menu_selector_state", "value", false)
+expectActionArg("turn on group copy dispel overlay category", "set_menu_selector_state", "category", "dispel")
+expectActionArg("turn on group copy dispel overlay category", "set_menu_selector_state", "value", true)
 
 expectSetting("turn off target castbar", "general.enableTargetCastbar", false, "enabled")
 expectSetting("turn off target castbar name", "general.castbarTargetShowSpellName", false, "text")
@@ -2317,9 +2321,9 @@ actionCtx.lastActionUndoable = true
 actionCtx.lastActionArgs = {
     source = "party",
     targets = { "raid" },
-    scopes = { general = false, health = true, text = true, font = false, border = false, range = false, indicators = false, auras = false, highlight = false, dstripe = false, features = false },
+    scopes = { general = false, health = true, dispel = false, text = true, font = false, range = false, indicators = false, auras = false, highlight = false, dstripe = false, features = false },
 }
-expectCopy("same for mythic raid", "copy_group", "party", { "mythicraid" }, { general = false, health = true, text = true, auras = false, indicators = false })
+expectCopy("same for mythic raid", "copy_group", "party", { "mythicraid" }, { general = false, health = true, dispel = false, text = true, auras = false, indicators = false })
 actionCtx.lastAction = nil
 actionCtx.lastActionArgs = nil
 expectAnswer("copy that to target", "Start with a full copy request first")

@@ -254,6 +254,7 @@ $luaGates = @(
 
     [pscustomobject]@{ Category = "search"; Path = "tools/assistant_menu_search_coverage_audit.lua"; Args = @() },
     [pscustomobject]@{ Category = "search"; Path = "tools/assistant_search_workspace_route_smoke.lua"; Args = @() },
+    [pscustomobject]@{ Category = "search/editmode"; Path = "tools/assistant_group_page_route_smoke.lua"; Args = @() },
     [pscustomobject]@{ Category = "search"; Path = "tools/assistant_search_readability_context_regression.lua"; Args = @() },
     [pscustomobject]@{ Category = "search"; Path = "tools/assistant_knowledge_audit.lua"; Args = @() },
     [pscustomobject]@{ Category = "page"; Path = "tools/assistant_page_navigation_matrix.lua"; Args = @() },

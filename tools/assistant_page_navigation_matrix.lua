@@ -65,7 +65,7 @@ local pages = {
     { "uf_targettarget", "target of target", "Target of Target", "uf_targettarget" },
     { "uf_focustarget", "focus target", "Focus Target", "uf_focustarget" },
     { "gf_layout", "group layout", "Group Layout", "gf_layout" },
-    { "gf_bars", "group health and text", "Group Health & Text", "gf_bars" },
+    { "gf_bars", "group dispel overlay", "Group Dispel Overlay", "gf_bars" },
     { "gf_indicators", "group status and indicators", "Group Status & Indicators", "gf_indicators" },
     { "gf_auras", "group auras", "Group Auras", "gf_auras" },
     { "opt_bars", "bars", "Bars", "opt_bars" },

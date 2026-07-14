@@ -109,8 +109,14 @@ local function pageContextForSetting(setting)
         if unit ~= "" and unit ~= "global" then return "uf_" .. unit end
     end
     if frameType == "group" or key:find("^gf_") then
-        if category:find("indicator", 1, true) or key:lower():find("icon", 1, true) then return "gf_indicators" end
-        if category:find("text", 1, true) or key:lower():find("texture", 1, true) or key:lower():find("bar", 1, true) then return "gf_bars" end
+        local keyLower = key:lower():gsub("%s+", "")
+        local attrLower = tostring(setting and setting.attribute or ""):lower():gsub("%s+", "")
+        if category:find("indicator", 1, true) or keyLower:find("icon", 1, true) then return "gf_indicators" end
+        if keyLower:find("dispeloverlay", 1, true) or attrLower:find("dispeloverlay", 1, true)
+            or keyLower:find("debuffstripe", 1, true) or attrLower:find("debuffstripe", 1, true)
+        then
+            return "gf_bars"
+        end
         return "gf_layout"
     end
     if frameType == "castbar" then return "opt_castbar" end
