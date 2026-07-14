@@ -3235,8 +3235,9 @@ local function fill(key, defaults)
         local pc = MSUF_DB.player.castbar
         if pc.channelTickUseCustom == nil then pc.channelTickUseCustom = false end
         if type(pc.channelTickCount) ~= "number" then pc.channelTickCount = 5 end
-        if type(pc.channelTickPreviewDuration) ~= "number" then pc.channelTickPreviewDuration = 2.5 end
-        if pc.channelTickPreviewLoop == nil then pc.channelTickPreviewLoop = true end
+        -- Retired preview-only keys are intentionally neither seeded nor
+        -- cleared: fresh profiles stay clean and existing profiles remain
+        -- losslessly compatible with older builds and exports.
         if type(pc.channelTickPosPct) ~= "table" then pc.channelTickPosPct = {} end
     end
     fill("target", {

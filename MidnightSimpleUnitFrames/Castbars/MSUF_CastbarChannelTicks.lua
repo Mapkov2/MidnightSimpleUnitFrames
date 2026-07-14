@@ -16,13 +16,20 @@ local function TickConfig()
     local general = db and db.general or nil
     local playerCastbar = db and db.player and db.player.castbar or nil
 
-    local useCustom = playerCastbar and playerCastbar.channelTickUseCustom == true
-    if not useCustom and not (general and general.castbarShowChannelTicks == true) then
+    -- The visible global switch is the authoritative on/off gate. Custom
+    -- state only selects count/positions and must never override an Off write.
+    if not (general and general.castbarShowChannelTicks == true) then
         return false, 0, nil, false
     end
 
+    local useCustom = playerCastbar and playerCastbar.channelTickUseCustom == true
     local tickCount = useCustom and tonumber(playerCastbar.channelTickCount) or DEFAULT_TICK_COUNT
     tickCount = tickCount or DEFAULT_TICK_COUNT
+
+    if tickCount ~= tickCount or tickCount == math.huge or tickCount == -math.huge then
+        tickCount = DEFAULT_TICK_COUNT
+    end
+    tickCount = math.floor(tickCount + 0.5)
 
     if tickCount < 0 then
         tickCount = 0
