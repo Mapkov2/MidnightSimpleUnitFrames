@@ -424,6 +424,7 @@ local ACTION_SAMPLE_PROMPTS = {
     aura_custom_whitelist_remove_spell = "remove Rejuvenation from target custom aura 1 whitelist",
     aura_custom_whitelist_clear_spells = "clear target custom aura 1 whitelist",
     aura_custom_whitelist_summary = "show target custom aura 1 whitelist",
+    reset_aura_custom_container = "reset custom aura container 1 for target",
 
     reset_group_status_icon = "reset party raid marker status icon",
     reset_group_status_icons = "reset party status icons",
@@ -470,7 +471,7 @@ local ACTION_SAMPLE_PROMPTS = {
 
     open_recovery_tools = "open recovery tools",
     open_dashboard_panel = "open scaling tools",
-    set_dashboard_panel = "toggle dashboard panel",
+    set_dashboard_panel = "toggle scaling tools",
     set_nav_section = "open group frames navigation section",
     set_nav_search_intro = "reset search intro",
     set_menu_selector_state = "select all group copy categories",
@@ -691,6 +692,36 @@ local seedCases = {
         prompt = "change castbar color from green to red",
         expect = { kind = "ambiguous" },
         category = "safe-clarification",
+    },
+    {
+        id = "action-input-reset-custom-aura-needs-target",
+        prompt = "reset custom aura container",
+        expect = { kind = "answer", status = "ambiguous", textContains = { "kept MSUF unchanged" } },
+        category = "safe-action-input-clarification",
+    },
+    {
+        id = "action-input-dashboard-panel-needs-target",
+        prompt = "toggle dashboard panel",
+        expect = { kind = "answer", status = "ambiguous", textContains = { "kept MSUF unchanged" } },
+        category = "safe-action-input-clarification",
+    },
+    {
+        id = "edit-mode-background-opacity-percent",
+        prompt = "set edit mode background opacity to 50",
+        expect = { kind = "action", actionKey = "assistant.action.editMode.backgroundOpacity", args = { value = 0.5 } },
+        category = "edit-mode-action-input",
+    },
+    {
+        id = "edit-mode-background-opacity-one-percent-word",
+        prompt = "set edit mode background opacity to 1 percent",
+        expect = { kind = "action", actionKey = "assistant.action.editMode.backgroundOpacity", args = { value = 0.01 } },
+        category = "edit-mode-action-input",
+    },
+    {
+        id = "edit-mode-background-opacity-one-percent-symbol",
+        prompt = "set edit mode background opacity to 1%",
+        expect = { kind = "action", actionKey = "assistant.action.editMode.backgroundOpacity", args = { value = 0.01 } },
+        category = "edit-mode-action-input",
     },
     {
         id = "combo-point-red-yellow",
@@ -2899,6 +2930,15 @@ local function checkExpectation(result, expect)
     end
     if expect.actionKey and actionKey(result) ~= expect.actionKey then
         return false, "expected action " .. tostring(expect.actionKey) .. ", got " .. tostring(actionKey(result))
+    end
+    if type(expect.args) == "table" then
+        local actualArgs = type(result) == "table" and result.args or nil
+        for key, wanted in pairs(expect.args) do
+            if type(actualArgs) ~= "table" or actualArgs[key] ~= wanted then
+                return false, "expected action arg " .. tostring(key) .. "=" .. tostring(wanted)
+                    .. ", got " .. tostring(type(actualArgs) == "table" and actualArgs[key] or nil)
+            end
+        end
     end
     return true
 end
