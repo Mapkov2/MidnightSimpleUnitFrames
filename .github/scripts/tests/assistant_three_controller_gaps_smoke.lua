@@ -140,7 +140,7 @@ end
 A.GlobalBarRegistry.RegisterScopedOverlaySettings = function() return true end
 A.GlobalBarRegistry.RegisterScopedBarSettings({
     GeneralDB = function() return _G.MSUF_DB.general end,
-    ApplyBars = Apply, ApplyBarGradients = Apply, ApplyBarOutline = Apply,
+    ApplyBars = Apply, ApplyBarGradients = Apply, ApplyBarOutline = Apply, ApplyHighlightBorders = Apply,
     RegisterScopedSetting = RegisterScopedSetting,
     RegisterScopedOverlaySettings = function() return true end,
     GLOBAL_SCOPE_ORDER = scopes,
@@ -287,7 +287,10 @@ beforeApply = previewRefreshes
 ok, reason = Schema.Execute("preview.guides", "false")
 assert(ok == false and reason == "invalid_value")
 assert(_G.MSUF_DB.general.classPowerPreviewGuidesEnabled == true and previewRefreshes == beforeApply)
-assert(Schema.Execute("preview.guides", false) == true)
+ok, reason = Schema.Execute("preview.guides", false)
+local transactionError = A.lastAssistantTransactionError or {}
+assert(ok == true, "preview guide mutation failed: " .. tostring(type(reason) == "table" and (reason.text or reason.result) or reason)
+    .. " [" .. tostring(transactionError.phase) .. ":" .. tostring(transactionError.target) .. ":" .. tostring(transactionError.error) .. "]")
 assert(_G.MSUF_DB.general.classPowerPreviewGuidesEnabled == false and M._msuf2ClassPowerInlinePreview.layerVisibility.guides == false)
 assert(A.UndoLast() == true and guides.get() == true and M._msuf2ClassPowerInlinePreview.layerVisibility.guides == true)
 assert(A.RedoLast() == true and guides.get() == false and M._msuf2ClassPowerInlinePreview.layerVisibility.guides == false)

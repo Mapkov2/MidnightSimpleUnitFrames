@@ -501,7 +501,8 @@ function Schema.NormalizeSettingValue(setting, value)
         if type(value) ~= "boolean" then return false, "expected_boolean" end
         if type(A.NormalizeRegistrySettingValue) == "function" then
             local ok, normalized = A.NormalizeRegistrySettingValue(setting, value)
-            return ok and true or false, ok and normalized or "expected_boolean"
+            if not ok then return false, "expected_boolean" end
+            return true, normalized
         end
         return true, value
     end
