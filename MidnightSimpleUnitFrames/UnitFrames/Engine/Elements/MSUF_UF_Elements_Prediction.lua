@@ -19,6 +19,7 @@ local UnitGetTotalAbsorbs = _G.UnitGetTotalAbsorbs
 local UnitGetTotalHealAbsorbs = _G.UnitGetTotalHealAbsorbs
 local CreateUnitHealPredictionCalculator = _G.CreateUnitHealPredictionCalculator
 local UnitGetDetailedHealPrediction = _G.UnitGetDetailedHealPrediction
+local InCombatLockdown = _G.InCombatLockdown
 local tonumber = tonumber
 local type = type
 local Enum = _G.Enum
@@ -1043,7 +1044,7 @@ local function CompilePredictionPlans(cfg, healMode, absorbMode, followAbsorb)
   return plans, fullPlan
 end
 
-local Prediction = {}
+local Prediction = { UpdateOnApply = true }
 Prediction.ReadDetailedHealth = ReadDetailedHealth
 local PREDICTION_BAR_DEFS = {
   { "heal", "incomingHealBar", 1, "healPredictionBar" },
@@ -1361,9 +1362,11 @@ FlushPredictionQueue = function()
       frame._msufPredictionQueued = nil
       local mask = frame._msufPredictionDirtyMask
       frame._msufPredictionDirtyMask = nil
-      if mask
-        and frame._msufPredictionDisabled ~= true
-        and frame._msufPredictionMask ~= 0 then
+      if mask then
+        -- A transiently missing unit may have disabled and cleared the cached
+        -- runtime plan after this event was registered. Let UpdateFull validate
+        -- the current spec and rebuild that plan instead of stranding the bar
+        -- until an unrelated health/lifecycle event happens.
         UpdateFull(frame, PREDICTION_DIRTY_PLAN_KEYS[mask], frame.unit)
       end
     end
@@ -1703,6 +1706,65 @@ function Prediction.SelectEventUpdate(_frame, _spec, event)
     return Prediction.UpdateConnectionState
   end
   return UpdateFull
+end
+
+--- Reseed live prediction values after Blizzard has finalized world/unit data.
+--- This is a cold lifecycle path: it touches only visible frames with an active
+--- Prediction element and does not rebuild specs, layouts, or event routing.
+function Prediction.RefreshVisible(reason)
+  if InCombatLockdown and InCombatLockdown() then return false end
+  local frames = UF and UF.attachedFrameList
+  if type(frames) ~= "table" then return false end
+
+  local did = false
+  reason = reason or "MSUF_PREDICTION_WORLD_ENTRY"
+  for i = 1, #frames do
+    local frame = frames[i]
+    local active = frame and frame._msufActiveElements
+    local update = frame and frame._msufUpdatePrediction
+    local visible = frame and frame._msufCoreVisible
+    if frame
+      and frame._msufCoreSpecEnabled ~= false
+      and (not UF.IsUnitToken or UF.IsUnitToken(frame.unit))
+      and active and active.Prediction == true
+      and type(update) == "function"
+      and (visible == true
+        or _G.MSUF_PreviewTestMode == true
+        or _G.MSUF_BossTestMode == true
+        or _G.MSUF2_BossUnitframePreviewActive == true
+        or (visible == nil and (not frame.IsVisible or frame:IsVisible()))) then
+      -- Direct element refreshes do not pass through BeginFrameEvent. Invalidate
+      -- a possibly pre-world UnitExists snapshot so UnitMissing reads live state.
+      local state = frame._msufUnitState
+      if state then state.ready = false end
+      update(frame, reason, frame.unit)
+      did = true
+    end
+  end
+  return did
+end
+
+UF.RefreshVisiblePredictions = Prediction.RefreshVisible
+
+local function FlushWorldEntryPredictionSeed()
+  Prediction.RefreshVisible("MSUF_PREDICTION_WORLD_ENTRY")
+end
+
+local function OnPredictionWorldEntry()
+  local schedule = _G.MSUF_ScheduleOnce
+  if type(schedule) == "function" then
+    schedule("UF_PREDICTION_WORLD_ENTRY", FlushWorldEntryPredictionSeed)
+  else
+    FlushWorldEntryPredictionSeed()
+  end
+end
+
+local registerEvent = _G.MSUF_EventBus_Register
+if type(registerEvent) == "function" then
+  -- Blizzard performs an authoritative prediction refresh on every world entry.
+  -- Use the shared bus plus the shared next-frame scheduler so pre-existing
+  -- absorbs are seeded after unit data settles without a private event driver.
+  registerEvent("PLAYER_ENTERING_WORLD", "MSUF_UF_PREDICTION_WORLD_ENTRY", OnPredictionWorldEntry)
 end
 
 UF.RegisterElement("Prediction", Prediction)
