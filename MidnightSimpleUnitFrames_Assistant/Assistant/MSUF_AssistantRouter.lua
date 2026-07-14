@@ -739,6 +739,13 @@ function R.HasContradictoryMutationConsent(text)
 end
 
 function R.IsExplicitMutationRefusal(text)
+    if type(R.LooksLikeNameShorteningDotsRequest) == "function"
+        and R.LooksLikeNameShorteningDotsRequest(text)
+    then
+        -- Negated dots/ellipsis wording has two valid readings. Keep both
+        -- refusal detectors from replacing the dedicated clarification.
+        return false
+    end
     return R.ExplicitMutationRefusalAction(text) ~= nil
         or R.HasContradictoryMutationConsent(text)
 end
