@@ -907,6 +907,8 @@ local function ApplyRegistryAssociations(state, settings, groupRootsBuilt, build
 
     local groups = {}
     local candidatesByKey = {}
+    local canonicalCandidateGroups = {}
+    local candidateVectorByGroups = {}
     local descriptorByKey = {}
     state.userFacingKeys = {}
     state.standaloneUserFacing = {}
@@ -922,6 +924,13 @@ local function ApplyRegistryAssociations(state, settings, groupRootsBuilt, build
         if page then
             state.userFacingKeys[key] = true
             local candidates = AssociationGroups(setting, page)
+            local signature = table.concat(candidates, "\030")
+            local canonical = canonicalCandidateGroups[signature]
+            if not canonical then
+                canonical = candidates
+                canonicalCandidateGroups[signature] = canonical
+            end
+            candidates = canonical
             candidatesByKey[key] = candidates
             for _, groupKey in ipairs(candidates) do
                 local members = groups[groupKey]
@@ -940,29 +949,45 @@ local function ApplyRegistryAssociations(state, settings, groupRootsBuilt, build
         if key ~= "" and state.userFacingKeys[key] and not alreadyRelated[key] and not isDeferredGroupKey then
             local bestKey, bestScore
             local selectedGroup
-            local seenCandidates = {}
             local candidateGroups = candidatesByKey[key] or {}
             local descriptor = descriptorByKey[key]
             if not descriptor then
                 descriptor = AssociationDescriptor(setting, key)
                 descriptorByKey[key] = descriptor
             end
-            for groupIndex, groupKey in ipairs(candidateGroups) do
-                local specificityBonus = (#candidateGroups - groupIndex) * 10
-                for _, candidateKey in ipairs(groups[groupKey] or {}) do
+            local candidateVector = candidateVectorByGroups[candidateGroups]
+            if not candidateVector then
+                candidateVector = {}
+                local seenCandidates = {}
+                for groupIndex, groupKey in ipairs(candidateGroups) do
+                    local specificityBonus = (#candidateGroups - groupIndex) * 10
+                    for _, candidateKey in ipairs(groups[groupKey] or {}) do
+                        candidateWork = candidateWork + 1
+                        if candidateWork % 128 == 0 and type(A.MaybeYield) == "function" then A.MaybeYield() end
+                        if not seenCandidates[candidateKey] then
+                            seenCandidates[candidateKey] = true
+                            candidateVector[#candidateVector + 1] = candidateKey
+                            candidateVector[#candidateVector + 1] = specificityBonus
+                            candidateVector[#candidateVector + 1] = groupKey
+                        end
+                    end
+                end
+                candidateVectorByGroups[candidateGroups] = candidateVector
+            end
+            for candidateIndex = 1, #candidateVector, 3 do
+                local candidateKey = candidateVector[candidateIndex]
+                if candidateKey ~= key then
                     candidateWork = candidateWork + 1
                     if candidateWork % 128 == 0 and type(A.MaybeYield) == "function" then A.MaybeYield() end
-                    if candidateKey ~= key and not seenCandidates[candidateKey] then
-                        seenCandidates[candidateKey] = true
-                        local candidateDescriptor = descriptorByKey[candidateKey]
-                        if not candidateDescriptor then
-                            candidateDescriptor = AssociationDescriptor(state.settingsByKey[candidateKey], candidateKey)
-                            descriptorByKey[candidateKey] = candidateDescriptor
-                        end
-                        local score = AssociationSimilarity(descriptor, candidateDescriptor) + specificityBonus
-                        if bestKey == nil or score > bestScore or (score == bestScore and candidateKey < bestKey) then
-                            bestKey, bestScore, selectedGroup = candidateKey, score, groupKey
-                        end
+                    local candidateDescriptor = descriptorByKey[candidateKey]
+                    if not candidateDescriptor then
+                        candidateDescriptor = AssociationDescriptor(state.settingsByKey[candidateKey], candidateKey)
+                        descriptorByKey[candidateKey] = candidateDescriptor
+                    end
+                    local score = AssociationSimilarity(descriptor, candidateDescriptor) + candidateVector[candidateIndex + 1]
+                    if bestKey == nil or score > bestScore or (score == bestScore and candidateKey < bestKey) then
+                        bestKey, bestScore = candidateKey, score
+                        selectedGroup = candidateVector[candidateIndex + 2]
                     end
                 end
             end
