@@ -61,6 +61,10 @@ local widthSourceQueued = false             -- a next-frame flush is queued
 local widthSourcePendingAfterCombat = false -- work was deferred due to combat
 local widthSourceRetryActive = false        -- the hook-install retry loop is running
 local widthSourceRetryIndex = 0             -- index into WIDTH_SOURCE_RETRY_DELAYS
+local widthSourceRetryGeneration = 0
+local widthSourceLifecycleActive = false
+local widthSourceBoot
+local SyncWidthSourceLifecycle
 
 -- Forward declaration (assigned far below; referenced by the sync machinery).
 local ApplyCastbarEffectiveSizeUnit
@@ -259,6 +263,13 @@ end
 -- The configured (and validated) width-source kind for a unit, or nil.
 local function ConfiguredWidthSource(g, unit)
     local def = UNIT_CASTBAR[NormalizeUnit(unit)]
+    if not def then return nil end
+    local shouldUse = _G.MSUF_ShouldUseMSUFCastbar
+    if type(shouldUse) == "function" then
+        if shouldUse(NormalizeUnit(unit), g) ~= true then return nil end
+    elseif g and g[def.enable] == false then
+        return nil
+    end
     return NormalizeWidthSourceKind(def and g and g[def.match])
 end
 
@@ -369,6 +380,7 @@ end
 
 local function FlushWidthSourceSync()
     widthSourceQueued = false
+    if not widthSourceLifecycleActive then return end
     if InCombat() then
         widthSourcePendingAfterCombat = true
         return
@@ -384,6 +396,7 @@ end
 -- Queue a one-shot, next-frame pass that re-applies the size of any unit whose
 -- width source changed. Deferred during combat and deduped while queued.
 local function QueueWidthSourceSync()
+    if not widthSourceLifecycleActive then return end
     if InCombat() then
         widthSourcePendingAfterCombat = true
         widthSourceQueued = false
@@ -410,9 +423,12 @@ local function HookWidthSourceFrame(frame)
         return false
     end
     hookedWidthSourceFrames[frame] = true
-    frame:HookScript("OnSizeChanged", QueueWidthSourceSync)
-    frame:HookScript("OnShow", QueueWidthSourceSync)
-    frame:HookScript("OnHide", QueueWidthSourceSync)
+    local function QueueIfActive()
+        if widthSourceLifecycleActive then QueueWidthSourceSync() end
+    end
+    frame:HookScript("OnSizeChanged", QueueIfActive)
+    frame:HookScript("OnShow", QueueIfActive)
+    frame:HookScript("OnHide", QueueIfActive)
     return true
 end
 
@@ -450,6 +466,11 @@ end
 -- One backoff step of the hook-install retry loop. Stops when no unit needs a
 -- width source, or once every active source has been hooked (then syncs once).
 local function WidthSourceRetryStep()
+    local generation = widthSourceRetryGeneration
+    if not widthSourceLifecycleActive then
+        widthSourceRetryActive = false
+        return
+    end
     if InCombat() then
         widthSourcePendingAfterCombat = true
         widthSourceRetryActive = false
@@ -482,13 +503,16 @@ local function WidthSourceRetryStep()
 
     local delay = WIDTH_SOURCE_RETRY_DELAYS[widthSourceRetryIndex]
     if delay then
-        _G.C_Timer.After(delay, WidthSourceRetryStep)
+        _G.C_Timer.After(delay, function()
+            if generation == widthSourceRetryGeneration then WidthSourceRetryStep() end
+        end)
     else
         widthSourceRetryActive = false
     end
 end
 
 local function StartWidthSourceRetry()
+    if not widthSourceLifecycleActive then return end
     if widthSourceRetryActive then return end
     if InCombat() then
         widthSourcePendingAfterCombat = true
@@ -496,13 +520,20 @@ local function StartWidthSourceRetry()
     end
     widthSourceRetryActive = true
     widthSourceRetryIndex = 0
-    _G.C_Timer.After(0, WidthSourceRetryStep)
+    local generation = widthSourceRetryGeneration
+    _G.C_Timer.After(0, function()
+        if generation == widthSourceRetryGeneration then WidthSourceRetryStep() end
+    end)
 end
 
 -- Public entry: refresh width-source hooks (and optionally re-anchor) for a unit
 -- or, when unit is nil, all units. keepSignature avoids clearing cached sigs.
 function MSUF_UpdateCastbarWidthSourceSync(g, unit, keepSignature)
     g = g or GeneralDB()
+    if SyncWidthSourceLifecycle and not SyncWidthSourceLifecycle(g) then
+        InvalidateWidthSourceSignature(unit)
+        return
+    end
     if InCombat() then
         widthSourcePendingAfterCombat = true
         return
@@ -540,12 +571,8 @@ end
 
 -- Re-run width-source sync after login / leaving combat.
 do
-    local boot = CreateFrame("Frame")
-    boot:RegisterEvent("PLAYER_ENTERING_WORLD")
-    boot:RegisterEvent("PLAYER_REGEN_ENABLED")
-    boot:RegisterEvent("EDIT_MODE_LAYOUTS_UPDATED")
-    boot:RegisterEvent("ADDON_LOADED")
-    boot:SetScript("OnEvent", function(_, event, addon)
+    widthSourceBoot = CreateFrame("Frame")
+    widthSourceBoot:SetScript("OnEvent", function(_, event, addon)
         if event == "ADDON_LOADED" and addon ~= "Blizzard_CooldownViewer" and addon ~= "Blizzard_EditMode" then
             return
         end
@@ -562,6 +589,32 @@ do
         MSUF_UpdateCastbarWidthSourceSync(g, nil, true)
         QueueWidthSourceSync()
     end)
+
+    SyncWidthSourceLifecycle = function(g)
+        g = g or GeneralDB()
+        local wanted = false
+        for i = 1, #CASTBAR_UNITS do
+            if ConfiguredWidthSource(g, CASTBAR_UNITS[i]) then
+                wanted = true
+                break
+            end
+        end
+        if widthSourceLifecycleActive == wanted then return wanted end
+        widthSourceLifecycleActive = wanted
+        widthSourceRetryGeneration = widthSourceRetryGeneration + 1
+        widthSourceRetryActive = false
+        widthSourceQueued = false
+        widthSourcePendingAfterCombat = false
+        widthSourceBoot:UnregisterAllEvents()
+        if wanted then
+            widthSourceBoot:RegisterEvent("PLAYER_ENTERING_WORLD")
+            widthSourceBoot:RegisterEvent("PLAYER_REGEN_ENABLED")
+            widthSourceBoot:RegisterEvent("EDIT_MODE_LAYOUTS_UPDATED")
+            widthSourceBoot:RegisterEvent("ADDON_LOADED")
+        end
+        return wanted
+    end
+    SyncWidthSourceLifecycle(GeneralDB())
 end
 
 ------------------------------------------------------------------------

@@ -410,10 +410,13 @@ local function SetBossCastbarsEnabled(enabled)
 end
 
 local function ApplyBossCastbarsEnabled()
-    SetBossCastbarsEnabled(BossCastbarsEnabled())
+    local enabled = BossCastbarsEnabled()
+    SetBossCastbarsEnabled(enabled)
+    if _G.MSUF_BossCastbars_SyncLifecycle then _G.MSUF_BossCastbars_SyncLifecycle(enabled) end
 end
 
 local function OnLogin()
+    if not BossCastbarsEnabled() then return end
     EnsureBossCastbars()
 
     ApplyBossCastbarPositionSetting(true)
@@ -423,12 +426,25 @@ ExportPublic("MSUF_ApplyBossCastbarPositionSetting", ApplyBossCastbarPositionSet
 ExportPublic("MSUF_ApplyBossCastbarsEnabled", ApplyBossCastbarsEnabled)
 ExportPublic("MSUF_BossCastbar_Stop", StopBossCastbar)
 
-if type(_G.MSUF_EventBus_Register) == "function" then
-    _G.MSUF_EventBus_Register("PLAYER_LOGIN", "MSUF_BOSS_CASTBARS", OnLogin, nil, true)
-    _G.MSUF_EventBus_Register("PLAYER_ENTERING_WORLD", "MSUF_BOSS_CASTBARS_WORLD", OnLogin)
-else
-    local frame = CreateFrame("Frame")
-    frame:RegisterEvent("PLAYER_LOGIN")
-    frame:RegisterEvent("PLAYER_ENTERING_WORLD")
-    frame:SetScript("OnEvent", OnLogin)
+local bossLifecycleFrame
+local function SyncBossLifecycle(enabled)
+    enabled = enabled == true
+    if type(_G.MSUF_EventBus_Unregister) == "function" then
+        _G.MSUF_EventBus_Unregister("PLAYER_LOGIN", "MSUF_BOSS_CASTBARS")
+        _G.MSUF_EventBus_Unregister("PLAYER_ENTERING_WORLD", "MSUF_BOSS_CASTBARS_WORLD")
+    end
+    if bossLifecycleFrame then bossLifecycleFrame:UnregisterAllEvents() end
+    if not enabled then return false end
+    if type(_G.MSUF_EventBus_Register) == "function" then
+        _G.MSUF_EventBus_Register("PLAYER_LOGIN", "MSUF_BOSS_CASTBARS", OnLogin, nil, true)
+        _G.MSUF_EventBus_Register("PLAYER_ENTERING_WORLD", "MSUF_BOSS_CASTBARS_WORLD", OnLogin)
+    else
+        bossLifecycleFrame = bossLifecycleFrame or CreateFrame("Frame")
+        bossLifecycleFrame:SetScript("OnEvent", OnLogin)
+        bossLifecycleFrame:RegisterEvent("PLAYER_LOGIN")
+        bossLifecycleFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+    end
+    return true
 end
+ExportPublic("MSUF_BossCastbars_SyncLifecycle", SyncBossLifecycle)
+SyncBossLifecycle(BossCastbarsEnabled())

@@ -1559,6 +1559,8 @@ local function ApplyCastbarUnitCold(unit)
 end
 
 local function MSUF_CastbarDriver_OnLogin()
+    local any = _G.MSUF_AreAnyCastbarsEnabled
+    if type(any) == "function" and not any() then return end
     ApplyDriverBackendState("target")
     ApplyDriverBackendState("focus")
     local applied = false
@@ -1572,10 +1574,17 @@ local function MSUF_CastbarDriver_OnLogin()
 end
 
 local function MSUF_CastbarDriver_OnEnteringWorld()
+    local any = _G.MSUF_AreAnyCastbarsEnabled
+    if type(any) == "function" and not any() then return end
     ApplyDriverBackendState("target")
     ApplyDriverBackendState("focus")
 
-    if _G.PetCastingBarFrame then
+    local general = _G.MSUF_DB and _G.MSUF_DB.general
+    local shouldUse = _G.MSUF_ShouldUseMSUFCastbar
+    local ownsPlayerCastbar = type(shouldUse) == "function"
+        and shouldUse("player", general) == true
+        or (type(shouldUse) ~= "function" and (not general or general.enablePlayerCastbar ~= false))
+    if ownsPlayerCastbar and _G.PetCastingBarFrame then
         _G.PetCastingBarFrame:UnregisterAllEvents()
         _G.PetCastingBarFrame:Hide()
         _G.PetCastingBarFrame:HookScript("OnShow", function(frame)
@@ -1588,11 +1597,22 @@ local function MSUF_CastbarDriver_OnEnteringWorld()
     end
 end
 
-if _G.MSUF_EventBus_Register then
+local function SyncCastbarDriverLifecycle(runNow)
+    if not _G.MSUF_EventBus_Register then return false end
+    if _G.MSUF_EventBus_Unregister then
+        _G.MSUF_EventBus_Unregister("PLAYER_LOGIN", "MSUF_CASTBAR_DRIVER_LOGIN")
+        _G.MSUF_EventBus_Unregister("PLAYER_ENTERING_WORLD", "MSUF_CASTBAR_DRIVER_WORLD")
+    end
+    local any = _G.MSUF_AreAnyCastbarsEnabled
+    if type(any) == "function" and not any() then return false end
     _G.MSUF_EventBus_Register("PLAYER_LOGIN", "MSUF_CASTBAR_DRIVER_LOGIN", MSUF_CastbarDriver_OnLogin, nil, true)
     _G.MSUF_EventBus_Register("PLAYER_ENTERING_WORLD", "MSUF_CASTBAR_DRIVER_WORLD", MSUF_CastbarDriver_OnEnteringWorld)
+    if runNow == true then MSUF_CastbarDriver_OnLogin() end
+    return true
 end
+SyncCastbarDriverLifecycle(false)
 
 ExportPublic("MSUF_UpdateCastTimeText_FromStatusBar", MSUF_UpdateCastTimeText_FromStatusBar)
 ExportPublic("MSUF_CreateCastBar", CreateCastBar)
 ExportPublic("MSUF_CastbarDriver_ApplyBackendState", ApplyDriverBackendState)
+ExportPublic("MSUF_CastbarDriver_SyncLifecycle", SyncCastbarDriverLifecycle)

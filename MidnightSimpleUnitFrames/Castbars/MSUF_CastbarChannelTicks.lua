@@ -75,7 +75,7 @@ local function EnsurePlayerChannelTickMarkers(frame, tickCount)
     if not frame._msufPlayerChannelHasteMarkersHooked and statusBar.HookScript then
         frame._msufPlayerChannelHasteMarkersHooked = true
         statusBar:HookScript("OnSizeChanged", function()
-            if frame then
+            if frame and frame._msufPlayerChannelTickRuntimeActive == true then
                 frame._msufPlayerChannelHasteMarkersForce = true
             end
         end)
@@ -121,6 +121,7 @@ local function UpdatePlayerChannelHasteMarkers(frame, force)
     end
 
     local enabled, tickCount, customPositions, useCustom = TickConfig()
+    frame._msufPlayerChannelTickRuntimeActive = enabled and true or nil
     if not enabled then
         HidePlayerChannelTickMarkers(frame)
         return

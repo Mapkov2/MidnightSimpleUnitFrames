@@ -29,6 +29,7 @@ local FOCUS_CAST_EVENTS = {
 local frame
 local refreshQueued = false
 local eventsRegistered = false
+local lifecycleEventsRegistered = false
 
 local function FocusKickEnabled()
     local db = G.MSUF_DB
@@ -96,12 +97,26 @@ local function SetEventsRegistered(enabled)
     end
 end
 
+local function SetLifecycleEventsRegistered(enabled)
+    enabled = enabled and true or false
+    if lifecycleEventsRegistered == enabled then return end
+    lifecycleEventsRegistered = enabled
+    if enabled then
+        frame:RegisterEvent("PLAYER_ENTERING_WORLD")
+        frame:RegisterEvent("PLAYER_FOCUS_CHANGED")
+    else
+        frame:UnregisterEvent("PLAYER_ENTERING_WORLD")
+        frame:UnregisterEvent("PLAYER_FOCUS_CHANGED")
+    end
+end
+
 --- Recompute ownership and current cast-state. Event handlers queue this to the
 --- next frame so several spellcast events from the same transition collapse into
 --- one UI update.
 local function Refresh()
     local enabled = FocusKickEnabled()
     SetEventsRegistered(enabled)
+    SetLifecycleEventsRegistered(enabled)
 
     if enabled then
         EnsureFocusKickUI()
@@ -149,9 +164,6 @@ local function QueueRefresh()
 end
 
 frame = CreateFrame("Frame")
-frame:RegisterEvent("PLAYER_LOGIN")
-frame:RegisterEvent("PLAYER_ENTERING_WORLD")
-frame:RegisterEvent("PLAYER_FOCUS_CHANGED")
 frame:SetScript("OnEvent", function(_, event, unit)
     if event == "UNIT_SPELLCAST_INTERRUPTED" and unit == "focus" then
         if FocusKickEnabled() and type(G.MSUF_FocusKick_PlayInterruptFeedback) == "function" then
@@ -162,6 +174,13 @@ frame:SetScript("OnEvent", function(_, event, unit)
     QueueRefresh()
 end)
 
-G.MSUF_FocusKickDriver_ForceUpdate = QueueRefresh
+G.MSUF_FocusKickDriver_ForceUpdate = function()
+    if not FocusKickEnabled() then
+        refreshQueued = false
+        Refresh()
+        return
+    end
+    QueueRefresh()
+end
 
-G.C_Timer.After(0.2, QueueRefresh)
+if FocusKickEnabled() then G.C_Timer.After(0.2, QueueRefresh) end

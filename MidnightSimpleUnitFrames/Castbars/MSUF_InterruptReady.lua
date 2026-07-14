@@ -55,6 +55,7 @@ local fillActiveFrames = {}
 local fillActiveFrameCount = 0
 local refreshActiveFrames = {}
 local UpdateCooldownEventRegistration
+local UpdateLifecycleEventRegistration
 local cooldownSnapshot
 local cooldownSnapshotSpellID
 local cooldownSnapshotFrameStamp
@@ -348,6 +349,21 @@ local function ShouldShow(general, unit)
     end
 
     return false
+end
+
+local function CastbarFeatureActive(general, unit, key)
+    local shouldUse = _G.MSUF_ShouldUseMSUFCastbar
+    if type(shouldUse) == "function" then return shouldUse(unit, general) == true end
+    return general[key] ~= false
+end
+
+local function FeatureEnabled(general)
+    general = general or GeneralDB()
+    local target = general.kickReadyShowTarget == true and CastbarFeatureActive(general, "target", "enableTargetCastbar")
+    local focus = (general.kickReadyShowFocus == true or general.enableFocusKickIcon == true)
+        and CastbarFeatureActive(general, "focus", "enableFocusCastbar")
+    local boss = general.kickReadyShowBoss == true and CastbarFeatureActive(general, "boss", "enableBossCastbar")
+    return target or focus or boss
 end
 
 local function UnitSupportsFillStyle(general, unit)
@@ -851,17 +867,20 @@ local function ScheduleCooldownRefresh(remaining, remainingResolved)
 end
 
 local function KickReady_Init()
+    if not FeatureEnabled() then return nil end
     ResolveInterruptSpellID()
     return state.spellID
 end
 
 local function KickReady_IsReady()
+    if not FeatureEnabled() then return nil end
     local ready, remaining = InterruptStatus()
     ScheduleCooldownRefresh(remaining, true)
     return ready
 end
 
 local function KickReady_GetSpellID()
+    if not FeatureEnabled() then return nil end
     return state.spellID or ResolveInterruptSpellID()
 end
 
@@ -900,6 +919,16 @@ local function KickReady_RefreshFrame(frame, castState)
 end
 
 local function KickReady_RefreshAll()
+    local enabled = FeatureEnabled()
+    if UpdateLifecycleEventRegistration then UpdateLifecycleEventRegistration(enabled) end
+    if not enabled then
+        cooldownTimerGeneration = cooldownTimerGeneration + 1
+        cooldownTimerEndTime = nil
+        InvalidateCooldownSnapshot()
+        local remaining, resolved = RefreshAll(false)
+        if UpdateCooldownEventRegistration then UpdateCooldownEventRegistration() end
+        return remaining, resolved
+    end
     ResolveInterruptSpellID()
     local remaining, resolved = RefreshAll(true)
     if resolved then
@@ -976,9 +1005,6 @@ UpdateCooldownEventRegistration = function()
 end
 
 eventFrame = CreateFrame("Frame", "MSUF_InterruptReady_EventFrame")
-eventFrame:RegisterEvent("PLAYER_LOGIN")
-eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 eventFrame:SetScript("OnEvent", function(_, event, spellID, baseSpellID, _category, startRecoveryCategory)
     if event ~= "SPELL_UPDATE_COOLDOWN" then
         InvalidateCooldownSnapshot()
@@ -1018,3 +1044,21 @@ eventFrame:SetScript("OnEvent", function(_, event, spellID, baseSpellID, _catego
     end
     UpdateCooldownEventRegistration()
 end)
+
+UpdateLifecycleEventRegistration = function(enabled)
+    if eventFrame.UnregisterAllEvents then
+        eventFrame:UnregisterAllEvents()
+    else
+        eventFrame:UnregisterEvent("PLAYER_LOGIN")
+        eventFrame:UnregisterEvent("PLAYER_ENTERING_WORLD")
+        eventFrame:UnregisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+        eventFrame:UnregisterEvent("SPELL_UPDATE_COOLDOWN")
+    end
+    cooldownEventRegistered = false
+    if enabled ~= true then return false end
+    eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+    eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+    UpdateCooldownEventRegistration()
+    return true
+end
+UpdateLifecycleEventRegistration(FeatureEnabled())

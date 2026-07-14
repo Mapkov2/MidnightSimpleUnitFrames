@@ -208,7 +208,7 @@ do
     }
     _G.C_CurveUtil = nil
     _G.issecretvalue = function() return false end
-    _G.MSUF_DB = { general = {} }
+    _G.MSUF_DB = { general = { kickReadyShowTarget = true } }
     _G.CreateFrame = function()
         local frame = { scripts = {}, events = {} }
         function frame:RegisterEvent(event) self.events[event] = true end
@@ -240,6 +240,11 @@ do
     now = 102
     onEvent(interruptEventFrame, "SPELL_UPDATE_COOLDOWN", 2139, 2139, nil, 0)
     Equal(cooldownAPICalls, 4, "next relevant cooldown event reused stale snapshot")
+
+    _G.MSUF_DB.general.kickReadyShowTarget = false
+    _G.MSUF_KickReady_RefreshAll()
+    Check(next(interruptEventFrame.events) == nil, "disabled interrupt-ready retained lifecycle events")
+    Check(_G.MSUF_KickReady_GetSpellID() == nil, "disabled interrupt-ready resolved a spell")
 end
 
 -- Low-frequency register/reclassify initializes only the affected frame. High-

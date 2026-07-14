@@ -145,9 +145,6 @@ end
 ExportPublic("MSUF_SuppressBlizzardPlayerCastbars", SuppressBlizzardPlayerCastbars)
 
 local eventFrame = CreateFrame("Frame")
-eventFrame:RegisterEvent("PLAYER_LOGIN")
-eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-eventFrame:RegisterEvent("ADDON_LOADED")
 eventFrame:SetScript("OnEvent", function(_, event, addonName)
     if event == "ADDON_LOADED"
         and addonName ~= "Blizzard_CastingBarFrame"
@@ -158,6 +155,18 @@ eventFrame:SetScript("OnEvent", function(_, event, addonName)
 
     SuppressBlizzardPlayerCastbars()
 end)
+
+local function SyncBlizzardCastbarEvents()
+    local wanted = ShouldUseMSUF("player")
+    eventFrame:UnregisterAllEvents()
+    if wanted then
+        eventFrame:RegisterEvent("PLAYER_LOGIN")
+        eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+        eventFrame:RegisterEvent("ADDON_LOADED")
+    end
+    return wanted
+end
+SyncBlizzardCastbarEvents()
 
 local AreAnyCastbarsEnabled = _G.MSUF_AreAnyCastbarsEnabled
 if type(AreAnyCastbarsEnabled) ~= "function" then
@@ -213,7 +222,17 @@ if type(CastbarsOnSettingsChanged) ~= "function" then
             syncBackend(GeneralDB())
         end
 
+        SyncBlizzardCastbarEvents()
         SuppressBlizzardPlayerCastbars()
+        if type(_G.MSUF_FocusKickDriver_ForceUpdate) == "function" then
+            _G.MSUF_FocusKickDriver_ForceUpdate()
+        end
+        if type(_G.MSUF_CastbarDriver_SyncLifecycle) == "function" then
+            _G.MSUF_CastbarDriver_SyncLifecycle(true)
+        end
+        if type(_G.MSUF_KickReady_RefreshAll) == "function" then
+            _G.MSUF_KickReady_RefreshAll()
+        end
 
         local applyPlayerState = _G.MSUF_PlayerCastbar_ApplyBackendState
         if type(applyPlayerState) == "function" then
@@ -229,6 +248,13 @@ if type(CastbarsOnSettingsChanged) ~= "function" then
         local applyBossState = _G.MSUF_ApplyBossCastbarsEnabled
         if type(applyBossState) == "function" then
             applyBossState()
+        end
+
+        if type(_G.MSUF_UpdateCastbarWidthSourceSync) == "function" then
+            _G.MSUF_UpdateCastbarWidthSourceSync(GeneralDB())
+        end
+        if type(_G.MSUF_ApplyPlayerChannelTickMarkers) == "function" then
+            _G.MSUF_ApplyPlayerChannelTickMarkers()
         end
 
         if not AreAnyCastbarsEnabled() then
@@ -262,8 +288,14 @@ if type(registerModule) == "function" then
             return AreAnyCastbarsEnabled()
         end,
         Enable = function() end,
-        Disable = CastbarsForceHideAll,
-        Shutdown = CastbarsForceHideAll,
+        Disable = function()
+            CastbarsOnSettingsChanged("module_disable")
+            CastbarsForceHideAll()
+        end,
+        Shutdown = function()
+            CastbarsOnSettingsChanged("module_shutdown")
+            CastbarsForceHideAll()
+        end,
         RefreshSettings = function(_, reason)
             CastbarsOnSettingsChanged(reason or "module_refresh")
 
