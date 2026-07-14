@@ -20,6 +20,7 @@
     <Script file="MSUF_Menu2_API.lua"/>
     <Script file="MSUF_AssistantBridge.lua"/>
     <Script file="MSUF_Menu2_FirstLoad.lua"/>
+    <Script file="MSUF_Menu2_UpgradeHighlights.lua"/>
     <Script file="MSUF_Menu2_Dashboard.lua"/>
     <Script file="MSUF_Menu2_DevChecks.lua"/>
 </Ui>

@@ -54,6 +54,16 @@ local function FirstLoadActionAvailability(firstLoad)
     if status == "completed" or status == "dismissed" then
         return false, Tr("First-load onboarding is already closed. Use Guided Setup on the Dashboard to run the tour again.")
     end
+    -- Existing-profile upgrades are owned by the release highlight scene. Do
+    -- not let stale Search/Assistant virtual actions bypass its explicit skip
+    -- warning and close onboarding behind the user's back.
+    local highlights = MSUF and MSUF.UpgradeHighlights
+    if type(highlights) == "table" and type(highlights.ShouldShow) == "function" then
+        local ok, shown = pcall(highlights.ShouldShow, highlights)
+        if ok and shown == true then
+            return false, Tr("Review or skip the release highlights on the Dashboard before using first-load actions.")
+        end
+    end
     if not ShouldShow(firstLoad) then
         return false, Tr("First-load actions are unavailable right now. Use Guided Setup on the Dashboard instead.")
     end
@@ -217,23 +227,13 @@ local function CreateWelcomeMark(parent, T, size, top)
 end
 
 local function CreateVersionRow(parent, T, text, contentWidth, top)
-    local labelWidth = text:find("UPGRADED", 1, true) and 190 or 170
-    local badgeWidth, gap = 64, 8
-    local rowWidth = min(contentWidth, labelWidth + gap + badgeWidth)
-    labelWidth = max(110, rowWidth - gap - badgeWidth)
+    local rowWidth = min(contentWidth, text:find("UPGRADED", 1, true) and 240 or 210)
     local row = CreateFrame("Frame", nil, parent)
     row:SetSize(rowWidth, 20)
     row:SetPoint("TOP", parent, "TOP", 0, top)
     local label = T.Font(row, "GameFontDisableSmall", Tr(text), T.colors.coreHot or T.colors.accent)
-    label:SetPoint("LEFT", row, "LEFT", 0, 0)
-    label:SetWidth(labelWidth)
-    label:SetJustifyH("RIGHT")
-    local badge = T.Panel(row, nil, T.colors.pillBaseSolid or T.colors.panel2, T.colors.pillEdge or T.colors.borderSoft)
-    badge:SetSize(badgeWidth, 18)
-    badge:SetPoint("LEFT", label, "RIGHT", gap, 0)
-    local badgeText = T.Font(badge, "GameFontDisableSmall", Tr("ONE TIME"), T.colors.coreHot or T.colors.accent)
-    badgeText:SetPoint("CENTER", badge, "CENTER", 0, 0)
-    badgeText:SetJustifyH("CENTER")
+    label:SetAllPoints(row)
+    label:SetJustifyH("CENTER")
     return row
 end
 
@@ -270,10 +270,10 @@ local function CreateProtectionPanel(parent, T, contentWidth, top, compact, inst
             item:SetPoint("TOPLEFT", panel, "TOPLEFT", x, 0)
         end
         local label = T.Font(item, "GameFontDisableSmall", Tr(spec[1]), T.colors.muted)
-        label:SetPoint("TOPLEFT", item, "TOPLEFT", 15, -9)
+        label:SetPoint("TOPLEFT", item, "TOPLEFT", 16, -8)
         local valueText = spec[4] == false and spec[2] or Tr(spec[2])
         local value = T.Font(item, "GameFontNormalSmall", valueText, spec[3] and T.colors.ok or T.colors.text)
-        value:SetPoint("TOPLEFT", item, "TOPLEFT", 15, -26)
+        value:SetPoint("TOPLEFT", item, "TOPLEFT", 16, -28)
         value:SetPoint("RIGHT", item, "RIGHT", -12, 0)
         value:SetJustifyH("LEFT")
         if i > 1 then
@@ -306,7 +306,7 @@ local function CreateRouteCard(parent, T, data, x, top, width, height, compact)
         local pill = T.Panel(card, nil, T.colors.coreRaised or T.colors.panel2, T.colors.accent or T.colors.coreBlue)
         local pillText = T.Font(pill, "GameFontDisableSmall", Tr("RECOMMENDED"), T.colors.accent or T.colors.coreBlue)
         pillText:SetPoint("CENTER", pill, "CENTER", 0, 0)
-        pill:SetSize(floor((pillText:GetStringWidth() or 84) + 18), 18)
+        pill:SetSize(floor((pillText:GetStringWidth() or 84) + 20), 20)
         pill:SetPoint("CENTER", card, "TOP", 0, 0)
         pill:SetFrameLevel(card:GetFrameLevel() + 5)
     end
@@ -314,22 +314,22 @@ local function CreateRouteCard(parent, T, data, x, top, width, height, compact)
     if compact then
         CreateIconWell(card, T, data.icon, 30, 14, -34)
         local meta = T.Font(card, "GameFontDisableSmall", Tr(data.meta), T.colors.coreHot or T.colors.accent)
-        meta:SetPoint("TOPLEFT", card, "TOPLEFT", 54, -12)
-        meta:SetPoint("RIGHT", card, "RIGHT", -14, 0)
+        meta:SetPoint("TOPLEFT", card, "TOPLEFT", 56, -12)
+        meta:SetPoint("RIGHT", card, "RIGHT", -16, 0)
         meta:SetJustifyH("LEFT")
         local title = T.Font(card, "GameFontNormal", Tr(data.title), T.colors.text)
-        title:SetPoint("TOPLEFT", card, "TOPLEFT", 54, -34)
-        title:SetPoint("RIGHT", card, "RIGHT", -14, 0)
+        title:SetPoint("TOPLEFT", card, "TOPLEFT", 56, -36)
+        title:SetPoint("RIGHT", card, "RIGHT", -16, 0)
         title:SetJustifyH("LEFT")
         local body = T.Font(card, "GameFontHighlightSmall", Tr(data.body), T.colors.muted)
-        body:SetPoint("TOPLEFT", card, "TOPLEFT", 54, -57)
+        body:SetPoint("TOPLEFT", card, "TOPLEFT", 56, -56)
         SetTextLayout(body, width - 68, "LEFT")
     else
         local timing = T.Font(card, "GameFontDisableSmall", Tr(data.timing), T.colors.muted)
-        timing:SetPoint("TOPRIGHT", card, "TOPRIGHT", -16, -14)
+        timing:SetPoint("TOPRIGHT", card, "TOPRIGHT", -16, -16)
         timing:SetJustifyH("RIGHT")
         local meta = T.Font(card, "GameFontDisableSmall", Tr(data.meta), T.colors.coreHot or T.colors.accent)
-        meta:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -14)
+        meta:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -16)
         meta:SetPoint("RIGHT", timing, "LEFT", -8, 0)
         meta:SetJustifyH("LEFT")
         CreateIconWell(card, T, data.icon, 34, 16, -42)
@@ -337,7 +337,7 @@ local function CreateRouteCard(parent, T, data, x, top, width, height, compact)
         title:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -88)
         SetTextLayout(title, width - 32, "LEFT")
         local body = T.Font(card, "GameFontHighlightSmall", Tr(data.body), T.colors.muted)
-        body:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -111)
+        body:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -112)
         SetTextLayout(body, width - 32, "LEFT")
     end
 

@@ -1,0 +1,433 @@
+-- Interactive, non-destructive release highlights for existing profiles.
+-- Lifecycle and release data live in State/MSUF_UpgradeHighlights.lua.
+local _, MSUF = ...
+MSUF = MSUF or {}
+
+local M = MSUF.MSUF2 or {}
+MSUF.MSUF2 = M
+
+local CreateFrame = _G.CreateFrame
+local floor = math.floor
+local max = math.max
+local min = math.min
+local format = string.format
+local tostring = tostring
+local type = type
+
+local function Tr(text)
+    return type(M.Tr) == "function" and M.Tr(text) or text
+end
+
+local function Controller()
+    local value = MSUF and MSUF.UpgradeHighlights
+    return type(value) == "table" and value or nil
+end
+
+local function BlockedByCombat()
+    return type(M.BlockCombatAction) == "function" and M.BlockCombatAction() == true
+end
+
+local function RefreshHome()
+    if type(M.InvalidatePage) == "function" then M.InvalidatePage("home") end
+    if type(M.SelectPage) == "function" then M.SelectPage("home") end
+end
+
+local function ApplyTargetRoute(item)
+    local route = type(item) == "table" and item.route or nil
+    if type(route) ~= "table" then return end
+    local unit = tostring(route.unit or "")
+    if unit ~= "" and type(route.unitTextTab) == "string" then
+        M.unitTextTabSelection = type(M.unitTextTabSelection) == "table" and M.unitTextTabSelection or {}
+        M.unitTextTabSelection[unit] = route.unitTextTab
+    end
+    if unit ~= "" and type(route.unitAuraTab) == "string" then
+        M.unitAuraTabSelection = type(M.unitAuraTabSelection) == "table" and M.unitAuraTabSelection or {}
+        M.unitAuraTabSelection[unit] = route.unitAuraTab
+        if type(route.unitAuraTool) == "string" then
+            M.unitAuraToolSelection = type(M.unitAuraToolSelection) == "table" and M.unitAuraToolSelection or {}
+            local tools = M.unitAuraToolSelection[unit]
+            if type(tools) ~= "table" then tools = {}; M.unitAuraToolSelection[unit] = tools end
+            tools[route.unitAuraTab] = route.unitAuraTool
+        end
+    end
+    if type(route.accordion) == "string" and route.accordion ~= "" then
+        local accordion
+        if type(M.GetPersistentMenuStateTable) == "function" then
+            accordion = M.GetPersistentMenuStateTable("accordionState")
+        else
+            M.accordionState = type(M.accordionState) == "table" and M.accordionState or {}
+            accordion = M.accordionState
+        end
+        accordion[route.accordion] = true
+    end
+end
+M.ApplyUpgradeHighlightTargetRoute = ApplyTargetRoute
+
+local function OpenPage(item)
+    local pageKey = type(item) == "table" and item.pageKey or item
+    ApplyTargetRoute(item)
+    if type(M.InvalidatePage) == "function" then M.InvalidatePage("home") end
+    if type(item) == "table" and type(item.route) == "table" and type(M.InvalidatePage) == "function" then
+        M.InvalidatePage(pageKey)
+    end
+    if type(M.SelectPage) == "function" then M.SelectPage(pageKey or "home") end
+end
+
+local function SetTextLayout(fontString, width, justify)
+    if not fontString then return fontString end
+    fontString:SetWidth(max(1, width or 1))
+    fontString:SetJustifyH(justify or "LEFT")
+    if fontString.SetWordWrap then fontString:SetWordWrap(true) end
+    if fontString.SetNonSpaceWrap then fontString:SetNonSpaceWrap(true) end
+    return fontString
+end
+
+local function RegisterControl(widget, releaseKey, suffix, label, help)
+    if not (widget and type(M.RegisterSearchWidget) == "function") then return widget end
+    local safeRelease = tostring(releaseKey or "release"):gsub("[^%w]+", "_"):lower()
+    local identity = "home.upgrade_highlights." .. safeRelease .. "." .. tostring(suffix or "action")
+    M.RegisterSearchWidget(widget, {
+        controlId = "menu2." .. identity,
+        identityKey = identity,
+        controlPath = identity:gsub("%.", "/"),
+        pageKey = "home",
+        classification = "action",
+        actionKey = "upgrade_highlights." .. safeRelease .. "." .. tostring(suffix or "action"),
+        label = Tr(label),
+        kind = "button",
+        help = help and Tr(help) or nil,
+        historyMode = "none",
+    })
+    return widget
+end
+
+local function AddTooltip(widget, title, body)
+    if type(M.AddTooltip) == "function" then
+        M.AddTooltip(widget, Tr(title), Tr(body), {
+            hook = true,
+            titleAsLine = true,
+            bodyColor = { 0.85, 0.88, 0.94 },
+        })
+    end
+    return widget
+end
+
+local function Button(parent, T, releaseKey, suffix, label, x, y, width, onClick, role, help)
+    local button = T.Button(parent, Tr(label), width, 26)
+    button._msuf2SkipHistoryCheckpoint = true
+    button:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    if type(T.CenterButtonLabel) == "function" then T.CenterButtonLabel(button) end
+    if role == "primary" and type(T.SkinPrimaryButton) == "function" then
+        T.SkinPrimaryButton(button)
+    elseif role == "danger" and type(T.SkinDangerButton) == "function" then
+        T.SkinDangerButton(button)
+    end
+    button:SetScript("OnClick", function()
+        if BlockedByCombat() then return end
+        if type(onClick) == "function" then onClick() end
+    end)
+    RegisterControl(button, releaseKey, suffix, label, help)
+    if help then AddTooltip(button, label, help) end
+    return button
+end
+
+local function CreateIconWell(parent, T, navKey, size, x, y)
+    local well = T.Panel(parent, nil, T.colors.pillBaseSolid or T.colors.panel2, T.colors.pillEdge or T.colors.borderSoft)
+    well:SetSize(size, size)
+    well:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    if type(T.ApplySurface) == "function" then T.ApplySurface(well, "card") end
+    local icon = well:CreateTexture(nil, "ARTWORK", nil, 2)
+    icon:SetSize(floor(size * 0.52), floor(size * 0.52))
+    icon:SetPoint("CENTER", well, "CENTER", 0, 0)
+    local grid = T.navIconGrid and T.navIconGrid[navKey]
+    if grid and T.media and T.media.navIcons then
+        icon:SetTexture(T.media.navIcons)
+        icon:SetTexCoord(grid[1] / 8, (grid[1] + 1) / 8, grid[2] / 8, (grid[2] + 1) / 8)
+    else
+        icon:SetTexture(T.media and T.media.logo or "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\MSUF_MinimapIcon.tga")
+        icon:SetTexCoord(0.075, 0.925, 0.075, 0.925)
+    end
+    local color = T.navIconColors and T.navIconColors[navKey] or T.colors.coreHot or T.colors.accent
+    icon:SetVertexColor(color[1], color[2], color[3], 0.98)
+    return well
+end
+
+local function CreateScene(ctx, T)
+    local width = max(320, tonumber(ctx.width) or 760)
+    local sceneX, sceneTop = 12, -12
+    local sceneWidth = max(288, width - sceneX)
+    local contentWidth = min(720, max(280, sceneWidth - 40))
+    local scene = CreateFrame("Frame", nil, ctx.wrapper)
+    scene:SetPoint("TOPLEFT", ctx.wrapper, "TOPLEFT", sceneX, sceneTop)
+    scene:SetWidth(sceneWidth)
+
+    local wash = scene:CreateTexture(nil, "BACKGROUND", nil, 0)
+    wash:SetPoint("TOPLEFT", scene, "TOPLEFT", 0, 0)
+    wash:SetPoint("TOPRIGHT", scene, "TOPRIGHT", 0, 0)
+    wash:SetHeight(260)
+    wash:SetTexture((T.media and T.media.gradV) or "Interface\\Buttons\\WHITE8X8")
+    wash:SetVertexColor(T.colors.coreBlue[1], T.colors.coreBlue[2], T.colors.coreBlue[3], 0.055)
+    return scene, sceneWidth, contentWidth, contentWidth < 660, sceneTop
+end
+
+local function Header(scene, T, releaseKey, title, copy, contentWidth)
+    local kicker = T.Font(scene, "GameFontDisableSmall", format(Tr("UPGRADED TO MSUF %s"), releaseKey), T.colors.coreHot or T.colors.accent)
+    kicker:SetPoint("TOP", scene, "TOP", 0, -32)
+    SetTextLayout(kicker, contentWidth, "CENTER")
+
+    local heading = T.Font(scene, "GameFontNormalHuge", Tr(title), T.colors.title or T.colors.text)
+    heading:SetPoint("TOP", scene, "TOP", 0, -64)
+    SetTextLayout(heading, contentWidth, "CENTER")
+
+    local body = T.Font(scene, "GameFontHighlight", Tr(copy), T.colors.muted)
+    body:SetPoint("TOP", scene, "TOP", 0, -106)
+    SetTextLayout(body, min(680, contentWidth), "CENTER")
+end
+
+local function SummaryRow(parent, T, item, number, x, y, width, compact)
+    local height = compact and 58 or 48
+    local row = T.Panel(parent, nil, T.colors.coreShadow or T.colors.bg, T.colors.borderSoft)
+    row:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    row:SetSize(width, height)
+    if type(T.ApplySurface) == "function" then T.ApplySurface(row, "card") end
+
+    CreateIconWell(row, T, item.icon, 32, 10, -8)
+    local numberText = T.Font(row, "GameFontDisableSmall", format("%02d", number), T.colors.coreHot or T.colors.accent)
+    numberText:SetPoint("TOPLEFT", row, "TOPLEFT", 52, -8)
+    local title = T.Font(row, "GameFontHighlight", Tr(item.title), T.colors.text)
+    title:SetPoint("TOPLEFT", row, "TOPLEFT", 78, -8)
+    SetTextLayout(title, width - 90, "LEFT")
+    if not compact then
+        local copy = T.Font(row, "GameFontDisableSmall", Tr(item.summary), T.colors.dim)
+        copy:SetPoint("TOPLEFT", row, "TOPLEFT", 80, -28)
+        SetTextLayout(copy, width - 90, "LEFT")
+    end
+    return height
+end
+
+local function RemainingHighlights(spec, record)
+    local remaining = {}
+    local outcomes = type(record.outcomes) == "table" and record.outcomes or {}
+    for i = 1, #spec.highlights do
+        local item = spec.highlights[i]
+        if outcomes[item.id] == nil then remaining[#remaining + 1] = item end
+    end
+    return remaining
+end
+
+local function BuildLanding(ctx, scene, T, releaseKey, spec, record, contentWidth, compact, sceneTop)
+    local count = #spec.highlights
+    Header(scene, T, releaseKey, spec.title,
+        format(Tr("Your current profile stays unchanged. Review %d new highlights and choose only what you want to configure."), count),
+        contentWidth)
+
+    local profile = tostring(_G.MSUF_ActiveProfile or "Default")
+    local safety = T.Font(scene, "GameFontDisableSmall",
+        format(Tr("CURRENT PROFILE: %s - NO SETTINGS WILL BE CHANGED"), profile), T.colors.ok or T.colors.coreHot)
+    safety:SetPoint("TOP", scene, "TOP", 0, -154)
+    SetTextLayout(safety, contentWidth, "CENTER")
+
+    local listTop = -188
+    local gap = 8
+    local rowHeight = compact and 60 or 48
+    for i = 1, count do
+        SummaryRow(scene, T, spec.highlights[i], i, floor((scene:GetWidth() - contentWidth) / 2),
+            listTop - ((i - 1) * (rowHeight + gap)), contentWidth, compact)
+    end
+
+    local buttonsTop = listTop - (count * rowHeight) - ((count - 1) * gap) - 20
+    if compact then
+        local buttonWidth = min(260, contentWidth)
+        local x = floor((scene:GetWidth() - buttonWidth) / 2)
+        Button(scene, T, releaseKey, "start", format(Tr("Start %d-highlight tour"), count), x, buttonsTop, buttonWidth,
+            function() Controller():Start(); RefreshHome() end, "primary",
+            "Review the release highlights without changing your current profile.")
+        Button(scene, T, releaseKey, "skip_request", "Continue with current profile", x, buttonsTop - 36, buttonWidth,
+            function() Controller():RequestSkip(); RefreshHome() end, nil,
+            "Review exactly what you would skip before closing the tour.")
+        buttonsTop = buttonsTop - 36
+    else
+        local primaryWidth, secondaryWidth, gapWidth = 212, 212, 12
+        local x = floor((scene:GetWidth() - primaryWidth - secondaryWidth - gapWidth) / 2)
+        Button(scene, T, releaseKey, "start", format(Tr("Start %d-highlight tour"), count), x, buttonsTop, primaryWidth,
+            function() Controller():Start(); RefreshHome() end, "primary",
+            "Review the release highlights without changing your current profile.")
+        Button(scene, T, releaseKey, "skip_request", "Continue with current profile", x + primaryWidth + gapWidth, buttonsTop, secondaryWidth,
+            function() Controller():RequestSkip(); RefreshHome() end, nil,
+            "Review exactly what you would skip before closing the tour.")
+    end
+
+    local hintTop = buttonsTop - 44
+    local hint = T.Font(scene, "GameFontDisableSmall", Tr("About two minutes. You can leave at any point and configure each area later."), T.colors.dim)
+    hint:SetPoint("TOP", scene, "TOP", 0, hintTop)
+    SetTextLayout(hint, contentWidth, "CENTER")
+    local height = math.abs(hintTop) + 36
+    scene:SetHeight(height)
+    ctx:SetContentHeight(height + math.abs(sceneTop) + 24)
+end
+
+local function Progress(scene, T, count, current, contentWidth, top)
+    local gap = 8
+    local segmentWidth = floor((contentWidth - ((count - 1) * gap)) / count)
+    local x = floor((scene:GetWidth() - contentWidth) / 2)
+    for i = 1, count do
+        local active = i <= current
+        local color = active and (T.colors.coreHot or T.colors.accent) or (T.colors.borderSoft or T.colors.dim)
+        local segment = scene:CreateTexture(nil, "ARTWORK", nil, 2)
+        segment:SetPoint("TOPLEFT", scene, "TOPLEFT", x + ((i - 1) * (segmentWidth + gap)), top)
+        segment:SetSize(segmentWidth, 3)
+        segment:SetColorTexture(color[1], color[2], color[3], active and 0.92 or 0.34)
+    end
+end
+
+local function BuildActive(ctx, scene, T, releaseKey, spec, record, contentWidth, compact, sceneTop)
+    local count = #spec.highlights
+    local index = max(1, min(count, tonumber(record.index) or 1))
+    local item = spec.highlights[index]
+    Header(scene, T, releaseKey, format(Tr("Highlight %d of %d"), index, count), "", contentWidth)
+    Progress(scene, T, count, index, contentWidth, -156)
+
+    local cardTop = -184
+    local cardHeight = compact and 280 or 240
+    local card = T.Panel(scene, nil, T.colors.coreShadow or T.colors.bg, T.colors.cardBorder or T.colors.borderSoft)
+    card:SetPoint("TOPLEFT", scene, "TOPLEFT", floor((scene:GetWidth() - contentWidth) / 2), cardTop)
+    card:SetSize(contentWidth, cardHeight)
+    if type(T.ApplySurface) == "function" then T.ApplySurface(card, "card") end
+    CreateIconWell(card, T, item.icon, compact and 44 or 52, 20, -20)
+
+    local textX = compact and 20 or 88
+    local textWidth = compact and (contentWidth - 40) or (contentWidth - 112)
+    local titleTop = compact and -80 or -24
+    local title = T.Font(card, "GameFontNormalLarge", Tr(item.title), T.colors.title or T.colors.text)
+    title:SetPoint("TOPLEFT", card, "TOPLEFT", textX, titleTop)
+    SetTextLayout(title, textWidth, "LEFT")
+
+    local summary = T.Font(card, "GameFontHighlight", Tr(item.summary), T.colors.muted)
+    summary:SetPoint("TOPLEFT", card, "TOPLEFT", textX, titleTop - 40)
+    SetTextLayout(summary, textWidth, "LEFT")
+
+    local why = T.Font(card, "GameFontDisableSmall", Tr("WHY IT MATTERS"), T.colors.coreHot or T.colors.accent)
+    why:SetPoint("TOPLEFT", card, "TOPLEFT", textX, titleTop - 104)
+    local impact = T.Font(card, "GameFontHighlight", Tr(item.impact), T.colors.text)
+    impact:SetPoint("TOPLEFT", card, "TOPLEFT", textX, titleTop - 124)
+    SetTextLayout(impact, textWidth, "LEFT")
+
+    local buttonsTop = cardTop - cardHeight - 20
+    local buttonY = buttonsTop
+    local function ConfigureCurrent()
+        Controller():Advance("opened")
+        OpenPage(item)
+        -- The Assistant remains load-on-demand. Only its explicit final
+        -- highlight action promotes the normal Home card and loads runtime.
+        if item.id == "assistant" then
+            local assistant = MSUF and MSUF.Assistant
+            if type(assistant) == "table" and type(assistant.StartNewTaskWithRuntime) == "function" then
+                assistant.StartNewTaskWithRuntime("upgrade-highlights")
+            end
+        end
+    end
+    if compact then
+        local w = min(250, contentWidth)
+        local x = floor((scene:GetWidth() - w) / 2)
+        Button(scene, T, releaseKey, "configure_" .. item.id, item.action, x, buttonY, w,
+            ConfigureCurrent, "primary", item.impact)
+        Button(scene, T, releaseKey, "next_" .. item.id, index == count and "Finish tour" or "Next highlight", x, buttonY - 36, w, function()
+            Controller():Advance("reviewed")
+            RefreshHome()
+        end, nil, "Mark this highlight as reviewed and continue.")
+        buttonY = buttonY - 36
+    else
+        local w, gap = 172, 12
+        local x = floor((scene:GetWidth() - (w * 2) - gap) / 2)
+        Button(scene, T, releaseKey, "configure_" .. item.id, item.action, x, buttonY, w,
+            ConfigureCurrent, "primary", item.impact)
+        Button(scene, T, releaseKey, "next_" .. item.id, index == count and "Finish tour" or "Next highlight", x + w + gap, buttonY, w, function()
+            Controller():Advance("reviewed")
+            RefreshHome()
+        end, nil, "Mark this highlight as reviewed and continue.")
+    end
+
+    local utilityTop = buttonY - 44
+    local backWidth, skipWidth = 92, 104
+    local utilityX = floor((scene:GetWidth() - backWidth - skipWidth - 12) / 2)
+    local back = Button(scene, T, releaseKey, "back", "Back", utilityX, utilityTop, backWidth,
+        function() Controller():Back(); RefreshHome() end, nil)
+    if index <= 1 and type(back.Disable) == "function" then back:Disable() end
+    Button(scene, T, releaseKey, "skip_request", "Skip tour", utilityX + backWidth + 12, utilityTop, skipWidth,
+        function() Controller():RequestSkip(); RefreshHome() end, nil,
+        "See the remaining highlights before deciding to skip them.")
+
+    local height = math.abs(utilityTop) + 48
+    scene:SetHeight(height)
+    ctx:SetContentHeight(height + math.abs(sceneTop) + 24)
+end
+
+local function BuildSkipWarning(ctx, scene, T, releaseKey, spec, record, contentWidth, compact, sceneTop)
+    local remaining = RemainingHighlights(spec, record)
+    local count = #remaining
+    Header(scene, T, releaseKey, format(Tr("Skip %d remaining highlights?"), count),
+        format(Tr("Your profile will stay safe, but you will leave these %d new configuration areas unexplored:"), count),
+        contentWidth)
+
+    local listTop = -174
+    local rowHeight, gap = compact and 44 or 40, 8
+    for i = 1, count do
+        local item = remaining[i]
+        local row = T.Panel(scene, nil, T.colors.coreShadow or T.colors.bg, T.colors.borderSoft)
+        row:SetPoint("TOPLEFT", scene, "TOPLEFT", floor((scene:GetWidth() - contentWidth) / 2), listTop - ((i - 1) * (rowHeight + gap)))
+        row:SetSize(contentWidth, rowHeight)
+        if type(T.ApplySurface) == "function" then T.ApplySurface(row, "card") end
+        local marker = T.Font(row, "GameFontHighlight", format("%d.", i), T.colors.coreHot or T.colors.accent)
+        marker:SetPoint("TOPLEFT", row, "TOPLEFT", 12, -12)
+        local text = T.Font(row, "GameFontHighlight", Tr(item.missed), T.colors.text)
+        text:SetPoint("TOPLEFT", row, "TOPLEFT", 40, -12)
+        SetTextLayout(text, contentWidth - 52, "LEFT")
+    end
+
+    local buttonsTop = listTop - (count * rowHeight) - (max(0, count - 1) * gap) - 24
+    if compact then
+        local w = min(270, contentWidth)
+        local x = floor((scene:GetWidth() - w) / 2)
+        Button(scene, T, releaseKey, "cancel_skip", "Show me the highlights", x, buttonsTop, w,
+            function() Controller():CancelSkip(); RefreshHome() end, "primary")
+        Button(scene, T, releaseKey, "confirm_skip", format(Tr("Skip all %d and continue"), count), x, buttonsTop - 36, w,
+            function() Controller():ConfirmSkip(); RefreshHome() end, "danger")
+        buttonsTop = buttonsTop - 36
+    else
+        local w, gapWidth = 212, 12
+        local x = floor((scene:GetWidth() - (w * 2) - gapWidth) / 2)
+        Button(scene, T, releaseKey, "cancel_skip", "Show me the highlights", x, buttonsTop, w,
+            function() Controller():CancelSkip(); RefreshHome() end, "primary")
+        Button(scene, T, releaseKey, "confirm_skip", format(Tr("Skip all %d and continue"), count), x + w + gapWidth, buttonsTop, w,
+            function() Controller():ConfirmSkip(); RefreshHome() end, "danger")
+    end
+
+    local noteTop = buttonsTop - 44
+    local note = T.Font(scene, "GameFontDisableSmall", Tr("Skipping closes this release tour only. Every setting remains available in Menu2."), T.colors.dim)
+    note:SetPoint("TOP", scene, "TOP", 0, noteTop)
+    SetTextLayout(note, contentWidth, "CENTER")
+    local height = math.abs(noteTop) + 36
+    scene:SetHeight(height)
+    ctx:SetContentHeight(height + math.abs(sceneTop) + 24)
+end
+
+function M.BuildUpgradeHighlightDashboardScene(ctx)
+    local controller = Controller()
+    if not controller or type(controller.ShouldShow) ~= "function" or not controller:ShouldShow() then return false end
+    local T = M.Theme
+    if not (ctx and ctx.wrapper and T and type(T.Panel) == "function" and type(T.Font) == "function" and type(T.Button) == "function") then
+        return false
+    end
+
+    local releaseKey, spec, record = controller:GetCurrent()
+    if not (releaseKey and type(spec) == "table" and type(record) == "table") then return false end
+    local scene, _, contentWidth, compact, sceneTop = CreateScene(ctx, T)
+    if record.status == "skip_warning" then
+        BuildSkipWarning(ctx, scene, T, releaseKey, spec, record, contentWidth, compact, sceneTop)
+    elseif record.status == "active" then
+        BuildActive(ctx, scene, T, releaseKey, spec, record, contentWidth, compact, sceneTop)
+    else
+        BuildLanding(ctx, scene, T, releaseKey, spec, record, contentWidth, compact, sceneTop)
+    end
+    return true
+end

@@ -30,8 +30,8 @@ local STAGES = {
     },
     {
         id = "edit_mode", special = true, pageKey = "guided_setup", icon = "uf_player",
-        title = "Place your frames",
-        impact = "Skipping frame placement leaves whole-frame movement, snapping, nudging and safe exit behavior unexplained.",
+        title = "Choose your anchor, then place frames",
+        impact = "Skipping frame placement also skips the important choice between following the Cooldown Manager and independent Unitframe placement.",
     },
     { id = "uf_player", pageKey = "uf_player", icon = "uf_player", title = "Player frame", impact = "Skipping the Player frame leaves its layout, text, indicators and aura options unreviewed." },
     { id = "uf_target", pageKey = "uf_target", icon = "uf_target", title = "Target frame", impact = "Skipping the Target frame leaves its layout, text, indicators and aura options unreviewed." },
@@ -43,7 +43,12 @@ local STAGES = {
     { id = "gf_layout", pageKey = "gf_layout", icon = "gf_layout", title = "Party and raid layout", impact = "Skipping group layout leaves frame size, growth, sorting, scaling and anchoring unreviewed." },
     { id = "gf_bars", pageKey = "gf_bars", icon = "gf_bars", title = "Group health and text", impact = "Skipping group bars leaves health, power, text, range and dispel presentation unreviewed." },
     { id = "gf_indicators", pageKey = "gf_indicators", icon = "gf_indicators", title = "Group indicators", impact = "Skipping group indicators leaves status icons, targeted spells and corner indicators unreviewed." },
-    { id = "gf_auras", pageKey = "gf_auras", icon = "gf_auras", title = "Group auras", impact = "Skipping group auras leaves group buff, debuff and spell-indicator behavior unreviewed." },
+    { id = "gf_auras", pageKey = "gf_auras", icon = "gf_auras", title = "Group auras", excludeSections = { si = true }, impact = "Skipping group auras leaves group buff and debuff behavior unreviewed." },
+    {
+        id = "gf_spell_icons", pageKey = "gf_auras", icon = "gf_auras", title = "Spell Icons",
+        includeSections = { si = true }, includeEphemeralControls = true,
+        impact = "Skipping Spell Icons leaves spec selection, tracked spells, custom SpellIDs, icon placement, cooldowns and full-frame effects unreviewed.",
+    },
     { id = "opt_bars", pageKey = "opt_bars", icon = "opt_bars", title = "Bars and textures", impact = "Skipping Bars leaves global textures, absorbs, outlines, highlights and power behavior unreviewed." },
     { id = "opt_castbar", pageKey = "opt_castbar", icon = "opt_castbar", title = "Cast bars", impact = "Skipping Cast Bars leaves cast appearance, text, empowered casts and interrupt cues unreviewed." },
     { id = "opt_colors", pageKey = "opt_colors", icon = "opt_colors", title = "Colors", impact = "Skipping Colors leaves frame, power, aura, class, text and castbar colors unreviewed." },
@@ -67,6 +72,21 @@ for i = 1, #STAGES do
     STAGE_BY_ID[STAGES[i].id] = STAGES[i]
 end
 M.guidedTourStageCount = #STAGES
+
+local function StageIncludesSection(stage, sectionId)
+    if type(stage) ~= "table" then return true end
+    local included = stage.includeSections
+    if type(included) == "table" and included[sectionId] ~= true then return false end
+    local excluded = stage.excludeSections
+    return type(excluded) ~= "table" or excluded[sectionId] ~= true
+end
+function M.IsGuidedTourSectionIncluded(stageId, sectionId)
+    return StageIncludesSection(STAGE_BY_ID[tostring(stageId or "")], tostring(sectionId or ""))
+end
+function M.GuidedTourIncludesEphemeralControls(stageId)
+    local stage = STAGE_BY_ID[tostring(stageId or "")]
+    return type(stage) == "table" and stage.includeEphemeralControls == true
+end
 
 local Runtime = M._guidedTourRuntime or {}
 M._guidedTourRuntime = Runtime
@@ -138,6 +158,18 @@ local function PersonalQuestionsComplete()
     return Preference("playstyle") ~= nil and Preference("informationStyle") ~= nil
 end
 
+local COOLDOWN_ANCHOR_PREFERENCE = "unitframeCooldownAnchor"
+local VALID_COOLDOWN_ANCHOR_DECISION = { cooldown = true, independent = true }
+local function CooldownAnchorDecision()
+    local value = Preference(COOLDOWN_ANCHOR_PREFERENCE)
+    return VALID_COOLDOWN_ANCHOR_DECISION[value] and value or nil
+end
+local function CooldownAnchorDecisionComplete()
+    return CooldownAnchorDecision() ~= nil
+end
+M.GetGuidedCooldownAnchorDecision = CooldownAnchorDecision
+M.IsGuidedEditModePlacementUnlocked = CooldownAnchorDecisionComplete
+
 local PREFERENCE_LABELS = {
     general = "General play",
     solo = "Solo and world",
@@ -204,8 +236,20 @@ local function StageCue(stage, position)
         end
         return Tr("Choose one answer in each row. You can skip this personal step at any time.")
     end
-    if stage.id == "edit_mode" then return Tr("Drag whole frames, use arrows for precision, and Exit to keep your placement.") end
+    if stage.id == "edit_mode" then
+        local decision = CooldownAnchorDecision()
+        if decision == "cooldown" then
+            return Tr("Anchor chosen: Unitframes follow Main Cooldowns. Now place the anchored layout in MSUF Edit Mode.")
+        end
+        if decision == "independent" then
+            return Tr("Anchor chosen: Unitframes stay independent of Main Cooldowns. Now place them in MSUF Edit Mode.")
+        end
+        return Tr("Before moving any frame, choose whether all Unitframes should follow Main Cooldowns or use independent placement.")
+    end
     if stage.id:match("^uf_") then return Tr("Start with Preview, then follow each highlighted frame section.") end
+    if stage.id == "gf_spell_icons" then
+        return Tr("Configure Spell Icons completely: choose the scope and spec, select or add a spell, then review its icon, cooldown and frame effects.")
+    end
     if stage.id:match("^gf_") then
         local playstyle = Preference("playstyle", "general")
         if playstyle == "raid" then return Tr("Raid focus: compare Raid and Mythic scopes before reviewing each highlighted section.") end
@@ -229,6 +273,31 @@ end
 local function BlockedByCombat()
     return type(M.BlockCombatAction) == "function" and M.BlockCombatAction() == true
 end
+
+local function SetGuidedCooldownAnchorDecision(value)
+    if not VALID_COOLDOWN_ANCHOR_DECISION[value] or BlockedByCombat() then return false end
+    local enabled = value == "cooldown"
+    local general = type(M.GetGeneralDB) == "function" and M.GetGeneralDB() or nil
+    if type(general) ~= "table" then
+        local db = _G.MSUF_DB
+        if type(db) ~= "table" then return false end
+        db.general = type(db.general) == "table" and db.general or {}
+        general = db.general
+    end
+    if general.anchorToCooldown ~= enabled then
+        if type(M.SetGeneralValue) == "function" then
+            if M.SetGeneralValue("anchorToCooldown", enabled, "MSUF2_GUIDED_COOLDOWN_ANCHOR") == false then return false end
+        else
+            general.anchorToCooldown = enabled
+        end
+    end
+    local stored = Invoke(Tour(), "SetPreference", COOLDOWN_ANCHOR_PREFERENCE, value)
+    if not stored then return false end
+    local apply = M.ApplyService or _G.MSUF_Menu2_ApplyService
+    if type(apply) == "table" and type(apply.Flush) == "function" then apply.Flush() end
+    return true
+end
+M.SetGuidedCooldownAnchorDecision = SetGuidedCooldownAnchorDecision
 
 local function ExpectedPage(stage)
     stage = stage or CurrentStage()
@@ -316,6 +385,17 @@ local function SortedSections(pageKey)
         return a.id < b.id
     end)
     return sections
+end
+
+local function StageSections(stage)
+    local sections = SortedSections(stage and stage.pageKey)
+    if type(stage) ~= "table" then return sections end
+    local filtered = {}
+    for i = 1, #sections do
+        local section = sections[i]
+        if StageIncludesSection(stage, section.id) then filtered[#filtered + 1] = section end
+    end
+    return filtered
 end
 
 local function ClearControlEmphasis()
@@ -408,8 +488,8 @@ local function EmphasizeSection(pageKey, current, currentControl)
                 usedAtlas = ok
             end
             if not usedAtlas then marker:SetTexture(T.media.collapseArrow) end
-            marker:SetSize(18, 18)
-            marker:SetPoint("RIGHT", outer, "LEFT", -2, 0)
+            marker:SetSize(20, 20)
+            marker:SetPoint("RIGHT", outer, "LEFT", -4, 0)
             local color = T.colors.accent
             marker:SetVertexColor(color[1], color[2], color[3], 1)
             entry._msuf2GuidedArrow = marker
@@ -444,7 +524,7 @@ local function RuntimeControlRecords()
     return ok and type(records) == "table" and records or {}
 end
 
-local function SectionControls(pageKey, section, sections, records)
+local function SectionControls(pageKey, section, sections, records, includeEphemeral)
     local catalog = M.RuntimeControlCatalog
     if not (catalog and section and section.body) then return {} end
     records = type(records) == "table" and records or RuntimeControlRecords()
@@ -454,7 +534,8 @@ local function SectionControls(pageKey, section, sections, records)
         local record = records[i]
         if type(record) == "table"
             and record.pageKey == pageKey
-            and (record.classification == "setting" or record.classification == "action")
+            and (record.classification == "setting" or record.classification == "action"
+                or (includeEphemeral == true and record.classification == "ephemeral"))
             and type(record.controlId) == "string"
             and not seen[record.controlId]
         then
@@ -535,7 +616,20 @@ local function PageGuideModel(pageKey)
 end
 
 local function AllStageControls(stage)
-    return PageGuideModel(stage.pageKey).allControls
+    local sections = StageSections(stage)
+    local records = RuntimeControlRecords()
+    local controls, seen = {}, {}
+    for i = 1, #sections do
+        local list = SectionControls(stage.pageKey, sections[i], sections, records, stage.includeEphemeralControls)
+        for j = 1, #list do
+            local control = list[j]
+            if not seen[control.id] then
+                seen[control.id] = true
+                controls[#controls + 1] = control
+            end
+        end
+    end
+    return controls
 end
 
 local function EmphasizeControl(stage, section, controls, current)
@@ -581,7 +675,7 @@ local function EmphasizeControl(stage, section, controls, current)
         local marker = Runtime.controlMarker
         if not marker then
             marker = CreateFrame("Frame", nil, selectedWidget)
-            marker:SetSize(18, 18)
+            marker:SetSize(20, 20)
             local texture = marker:CreateTexture(nil, "OVERLAY", nil, 7)
             texture:SetAllPoints()
             local usedAtlas = false
@@ -595,7 +689,7 @@ local function EmphasizeControl(stage, section, controls, current)
             marker:SetParent(selectedWidget)
         end
         marker:ClearAllPoints()
-        marker:SetPoint("RIGHT", selectedWidget, "LEFT", -3, 0)
+        marker:SetPoint("RIGHT", selectedWidget, "LEFT", -4, 0)
         if type(marker.SetFrameLevel) == "function" and type(selectedWidget.GetFrameLevel) == "function" then
             marker:SetFrameLevel(selectedWidget:GetFrameLevel() + 8)
         end
@@ -644,12 +738,8 @@ local function RecordSectionOnly(stage, section, result)
 end
 
 local function RecordSectionAndControls(stage, section, result, sections, records)
-    local controls
-    if type(records) == "table" then
-        controls = SectionControls(stage.pageKey, section, sections, records)
-    else
-        controls = PageGuideModel(stage.pageKey).controlsBySection[section.id] or {}
-    end
+    records = type(records) == "table" and records or RuntimeControlRecords()
+    local controls = SectionControls(stage.pageKey, section, sections, records, stage.includeEphemeralControls)
     RecordControls(stage, section, controls, result)
     RecordSectionOnly(stage, section, result)
     return #controls
@@ -818,13 +908,13 @@ local function FocusCurrentSection(stage)
         ClearSectionEmphasis(stage.pageKey)
         return
     end
-    local sections = SortedSections(stage.pageKey)
+    local sections = StageSections(stage)
     local section, index = FindCursorSection(cursor, sections)
     if not section then
         WriteCursor(stage, { overview = true, sectionIndex = 0, controlIndex = 0, controlTotal = 0 })
         return
     end
-    local controls = SectionControls(stage.pageKey, section, sections)
+    local controls = SectionControls(stage.pageKey, section, sections, nil, stage.includeEphemeralControls)
     local control, controlIndex = FindCursorControl(cursor, controls)
     if cursor.sectionId ~= section.id
         or cursor.sectionIndex ~= index
@@ -875,6 +965,10 @@ local function SelectExpectedPage(stage)
     Runtime.warning = nil
     if stage.special then InvalidateGuidedPage() end
     if M.frame and type(M.frame.IsShown) == "function" and M.frame:IsShown() then
+        if M.activeKey == pageKey then
+            if type(M.RefreshGuidedTourChrome) == "function" then M.RefreshGuidedTourChrome("SAME_PAGE_STAGE") end
+            return true
+        end
         if type(M.SelectPage) == "function" then return M.SelectPage(pageKey) end
     elseif type(M.Open) == "function" then
         return M.Open(pageKey)
@@ -922,11 +1016,11 @@ end
 
 local function CurrentPosition(stage)
     if stage.special then return { overview = true, sections = {}, index = 0 } end
-    local sections = SortedSections(stage.pageKey)
+    local sections = StageSections(stage)
     local cursor = ReadCursor(stage)
     local section, index = FindCursorSection(cursor, sections)
     if not section then cursor.overview = true end
-    local controls = section and SectionControls(stage.pageKey, section, sections) or {}
+    local controls = section and SectionControls(stage.pageKey, section, sections, nil, stage.includeEphemeralControls) or {}
     local control, controlIndex = FindCursorControl(cursor, controls)
     return {
         overview = cursor.overview ~= false,
@@ -951,7 +1045,7 @@ end
 local function SetSectionCursor(stage, sections, sectionIndex, controlIndex, reason)
     local section = sections[sectionIndex]
     if not section then return false end
-    local controls = SectionControls(stage.pageKey, section, sections)
+    local controls = SectionControls(stage.pageKey, section, sections, nil, stage.includeEphemeralControls)
     controlIndex = min(max(tonumber(controlIndex) or 0, 0), #controls)
     local control = controlIndex > 0 and controls[controlIndex] or nil
     WriteCursor(stage, {
@@ -1171,7 +1265,7 @@ local function AnchorTourScroll(chrome, active)
     local scroll = chrome.scroll
     scroll:ClearAllPoints()
     scroll:SetPoint("TOPLEFT", active and chrome or chrome.status, "BOTTOMLEFT", 0, 0)
-    scroll:SetPoint("BOTTOMRIGHT", chrome.host, "BOTTOMRIGHT", -22, 0)
+    scroll:SetPoint("BOTTOMRIGHT", chrome.host, "BOTTOMRIGHT", -24, 0)
     scroll._msuf2MaxScroll = nil
     scroll._msuf2SmoothScrollTarget = nil
     if type(scroll._msuf2RefreshScrollBar) == "function" then scroll:_msuf2RefreshScrollBar() end
@@ -1189,27 +1283,27 @@ local function LayoutChrome(chrome, warning, helpText)
     chrome._msuf2Compact = compact
 
     chrome.iconWell:ClearAllPoints()
-    chrome.iconWell:SetPoint("TOPLEFT", chrome, "TOPLEFT", 14, -13)
-    chrome.iconWell:SetSize(34, 34)
+    chrome.iconWell:SetPoint("TOPLEFT", chrome, "TOPLEFT", 16, -12)
+    chrome.iconWell:SetSize(36, 36)
     chrome.title:ClearAllPoints()
-    chrome.title:SetPoint("TOPLEFT", chrome, "TOPLEFT", 58, -12)
-    chrome.title:SetPoint("RIGHT", chrome.step, "LEFT", -10, 0)
+    chrome.title:SetPoint("TOPLEFT", chrome, "TOPLEFT", 60, -12)
+    chrome.title:SetPoint("RIGHT", chrome.step, "LEFT", -12, 0)
     chrome.step:ClearAllPoints()
-    chrome.step:SetPoint("TOPRIGHT", chrome, "TOPRIGHT", -14, -14)
-    chrome.step:SetWidth(compact and 84 or 110)
+    chrome.step:SetPoint("TOPRIGHT", chrome, "TOPRIGHT", -16, -16)
+    chrome.step:SetWidth(compact and 84 or 112)
     chrome.section:ClearAllPoints()
-    chrome.section:SetPoint("TOPLEFT", chrome, "TOPLEFT", 58, -33)
-    chrome.section:SetPoint("TOPRIGHT", chrome, "TOPRIGHT", -14, -33)
+    chrome.section:SetPoint("TOPLEFT", chrome, "TOPLEFT", 60, -32)
+    chrome.section:SetPoint("TOPRIGHT", chrome, "TOPRIGHT", -16, -32)
     chrome.cueArrow:ClearAllPoints()
-    chrome.cueArrow:SetPoint("TOPLEFT", chrome, "TOPLEFT", 14, compact and -62 or -56)
+    chrome.cueArrow:SetPoint("TOPLEFT", chrome, "TOPLEFT", 16, compact and -64 or -56)
     chrome.help:ClearAllPoints()
-    chrome.help:SetPoint("TOPLEFT", chrome, "TOPLEFT", 34, compact and -58 or -52)
-    chrome.help:SetPoint("BOTTOMRIGHT", chrome, "BOTTOMRIGHT", -14, compact and 88 or 58)
+    chrome.help:SetPoint("TOPLEFT", chrome, "TOPLEFT", 36, compact and -60 or -52)
+    chrome.help:SetPoint("BOTTOMRIGHT", chrome, "BOTTOMRIGHT", -16, compact and 88 or 60)
     chrome.help:SetWidth(hostWidth - 48)
     chrome.progress:ClearAllPoints()
-    chrome.progress:SetPoint("BOTTOMLEFT", chrome, "BOTTOMLEFT", 14, compact and 74 or 44)
-    chrome.progress:SetPoint("BOTTOMRIGHT", chrome, "BOTTOMRIGHT", -14, compact and 74 or 44)
-    chrome.progress:SetHeight(6)
+    chrome.progress:SetPoint("BOTTOMLEFT", chrome, "BOTTOMLEFT", 16, compact and 76 or 44)
+    chrome.progress:SetPoint("BOTTOMRIGHT", chrome, "BOTTOMRIGHT", -16, compact and 76 or 44)
+    chrome.progress:SetHeight(4)
 
     local buttons = { chrome.back, chrome.keep, chrome.skip, chrome.next, chrome.pause }
     local minimums = compact and { 48, 72, 58, 60, 54 } or { 58, 82, 68, 72, 64 }
@@ -1291,7 +1385,7 @@ local function ProgressFraction(stage, position)
         local total, completed = 1, 1 -- stage overview
         local records = RuntimeControlRecords()
         for i = 1, #position.sections do
-            local controls = SectionControls(stage.pageKey, position.sections[i], position.sections, records)
+            local controls = SectionControls(stage.pageKey, position.sections[i], position.sections, records, stage.includeEphemeralControls)
             total = total + 1 + #controls -- section overview plus every registered control
             if i < position.index then
                 completed = completed + 1 + #controls
@@ -1425,10 +1519,11 @@ function M.RefreshGuidedTourChrome(reason)
         SetButtonEnabled(chrome.skip, true)
         SetButtonEnabled(chrome.next, false)
     else
+        local waitingForAnchorDecision = stage.id == "edit_mode" and not CooldownAnchorDecisionComplete()
         SetButtonEnabled(chrome.back, not firstPosition)
-        SetButtonEnabled(chrome.keep, not final and stage.id ~= "menu_basics")
+        SetButtonEnabled(chrome.keep, not final and stage.id ~= "menu_basics" and not waitingForAnchorDecision)
         SetButtonEnabled(chrome.skip, not final)
-        SetButtonEnabled(chrome.next, stage.id ~= "menu_basics" or PersonalQuestionsComplete())
+        SetButtonEnabled(chrome.next, (stage.id ~= "menu_basics" or PersonalQuestionsComplete()) and not waitingForAnchorDecision)
     end
     SetButtonEnabled(chrome.pause, true)
     chrome:Show()
@@ -1487,15 +1582,15 @@ function M.InstallGuidedTourChrome(frame, status, host, scroll)
     chrome.frame, chrome.status, chrome.host, chrome.scroll = frame, status, host, scroll
 
     local divider = chrome:CreateTexture(nil, "ARTWORK", nil, 3)
-    divider:SetPoint("BOTTOMLEFT", chrome, "BOTTOMLEFT", 14, 0)
-    divider:SetPoint("BOTTOMRIGHT", chrome, "BOTTOMRIGHT", -14, 0)
+    divider:SetPoint("BOTTOMLEFT", chrome, "BOTTOMLEFT", 16, 0)
+    divider:SetPoint("BOTTOMRIGHT", chrome, "BOTTOMRIGHT", -16, 0)
     divider:SetHeight(1)
     divider:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.18)
 
     local iconWell = T.Panel(chrome, nil, T.colors.pillBaseSolid or T.colors.panel2, T.colors.pillEdge or T.colors.borderSoft)
     if type(T.ApplySurface) == "function" then T.ApplySurface(iconWell, "card") end
     local icon = iconWell:CreateTexture(nil, "ARTWORK", nil, 2)
-    icon:SetSize(18, 18)
+    icon:SetSize(20, 20)
     icon:SetPoint("CENTER", iconWell, "CENTER", 0, 0)
     chrome.iconWell, chrome.icon = iconWell, icon
 
@@ -1725,8 +1820,8 @@ end
 
 local function AddCardIcon(card, T, iconKey)
     local well = T.Panel(card, nil, T.colors.pillBaseSolid or T.colors.panel2, T.colors.pillEdge or T.colors.borderSoft)
-    well:SetPoint("TOPLEFT", card, "TOPLEFT", 14, -14)
-    well:SetSize(30, 30)
+    well:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -16)
+    well:SetSize(32, 32)
     local icon = well:CreateTexture(nil, "ARTWORK")
     icon:SetSize(16, 16)
     icon:SetPoint("CENTER")
@@ -1748,11 +1843,11 @@ local function InfoCard(builder, T, title, body, iconKey, height)
     if card.title then card.title:SetText("") end
     AddCardIcon(card, T, iconKey or "home")
     local heading = T.Font(card, "GameFontNormal", Tr(title), T.colors.text)
-    heading:SetPoint("TOPLEFT", card, "TOPLEFT", 54, -13)
-    heading:SetPoint("RIGHT", card, "RIGHT", -14, 0)
+    heading:SetPoint("TOPLEFT", card, "TOPLEFT", 56, -12)
+    heading:SetPoint("RIGHT", card, "RIGHT", -16, 0)
     heading:SetJustifyH("LEFT")
     local copy = T.Font(card, "GameFontHighlightSmall", Tr(body), T.colors.muted)
-    copy:SetPoint("TOPLEFT", card, "TOPLEFT", 54, -37)
+    copy:SetPoint("TOPLEFT", card, "TOPLEFT", 56, -36)
     SetWrapped(copy, builder.width - 70)
     if type(T.PlayMotion) == "function" then
         T.PlayMotion(card, "controlFocusIn", { fromAlpha = 0.18, toAlpha = 1, duration = 0.20 })
@@ -1846,7 +1941,20 @@ end
 
 local function BuildEditModePage(ctx, T, W)
     local b = W.PageBuilder(ctx)
-    Header(b, "Move whole frames safely", "Preview moves inner elements; MSUF Edit Mode places complete frames.")
+    Header(b, "Choose the frame anchor first", "This decides what every Unitframe position is relative to. Choose before opening MSUF Edit Mode.")
+
+    local decisionCard = b:Section("", 146)
+    if decisionCard.title then decisionCard.title:SetText("") end
+    local decisionValues = {
+        { value = "cooldown", text = Tr("Follow Main Cooldowns") },
+        { value = "independent", text = Tr("Independent placement") },
+    }
+    local decision = W.Segment(decisionCard, Tr("Should all Unitframes follow the Cooldown Manager?"), decisionValues, max(240, b.width - 32))
+    if type(W.MoveWidget) == "function" then W.MoveWidget(decision, decisionCard, 16, -18, max(240, b.width - 32), "LEFT") end
+    local decisionCopy = T.Font(decisionCard, "GameFontHighlightSmall", "", T.colors.muted)
+    decisionCopy:SetPoint("TOPLEFT", decisionCard, "TOPLEFT", 16, -88)
+    SetWrapped(decisionCopy, b.width - 32)
+
     InfoCard(b, T, "What you can move", "Unitframes, supported castbars, group containers, aura groups and the tooltip preview. Boss 1 moves the shared Boss layout.", "uf_player", 86)
     InfoCard(b, T, "Drag, select and align", "Drag to place; click for quick controls. Arrow keys nudge, while Grid and Snap align.", "gf_layout", 80)
     InfoCard(b, T, "Undo, Cancel All, Exit", "Undo and Redo affect individual moves. Cancel All restores the entry snapshot; Exit keeps your work.", "gameplay", 82)
@@ -1855,12 +1963,12 @@ local function BuildEditModePage(ctx, T, W)
     local action = b:Section("", 84)
     if action.title then action.title:SetText("") end
     local stateLabel = T.Font(action, "GameFontNormal", "", T.colors.text)
-    stateLabel:SetPoint("TOPLEFT", action, "TOPLEFT", 16, -18)
-    stateLabel:SetWidth(max(120, b.width - 250))
+    stateLabel:SetPoint("TOPLEFT", action, "TOPLEFT", 16, -20)
+    stateLabel:SetWidth(max(120, b.width - 252))
     stateLabel:SetJustifyH("LEFT")
     local stateCopy = T.Font(action, "GameFontDisableSmall", "", T.colors.muted)
-    stateCopy:SetPoint("TOPLEFT", stateLabel, "BOTTOMLEFT", 0, -6)
-    stateCopy:SetWidth(max(120, b.width - 250))
+    stateCopy:SetPoint("TOPLEFT", stateLabel, "BOTTOMLEFT", 0, -8)
+    stateCopy:SetWidth(max(120, b.width - 252))
     stateCopy:SetJustifyH("LEFT")
     local button = T.Button(action, Tr("Open MSUF Edit Mode"), min(210, max(150, floor(b.width * 0.30))), 28)
     button:SetPoint("RIGHT", action, "RIGHT", -16, 0)
@@ -1870,11 +1978,41 @@ local function BuildEditModePage(ctx, T, W)
     local function Refresh()
         local status = type(M.EditModeLifecycleStatus) == "function" and M.EditModeLifecycleStatus() or {}
         local active = status.active == true
-        stateLabel:SetText(active and Tr("MSUF Edit Mode is active") or Tr("Ready to place frames"))
-        stateCopy:SetText(active and Tr("Use the Edit Mode HUD; Exit keeps the result.") or Tr("This opens the in-game placement HUD."))
+        local anchorDecision = CooldownAnchorDecision()
+        decision:SetValue(anchorDecision)
+        if anchorDecision == "cooldown" then
+            decisionCopy:SetText(Tr("Selected: Unitframes follow Essential Cooldown Manager. If Main Cooldowns move, the anchored Unitframe layout follows."))
+        elseif anchorDecision == "independent" then
+            decisionCopy:SetText(Tr("Selected: Unitframes use the current global/custom anchor. Moving Main Cooldowns will not move them."))
+        else
+            decisionCopy:SetText(Tr("Required before placement. Changing this later can shift the whole layout because the saved offsets use a different anchor."))
+        end
+        stateLabel:SetText(active and Tr("MSUF Edit Mode is active") or (anchorDecision and Tr("Anchor chosen - ready to place frames") or Tr("Choose anchoring before placement")))
+        stateCopy:SetText(active and Tr("Use the Edit Mode HUD; Exit keeps the result.") or (anchorDecision and Tr("This opens the in-game placement HUD.") or Tr("Edit Mode unlocks after the anchor choice above.")))
         SetFontColor(stateLabel, active and (T.colors.ok or T.colors.accent) or T.colors.text)
         SetButtonText(button, active and "Exit and keep changes" or "Open MSUF Edit Mode")
-        SetButtonEnabled(button, not status.combatLocked)
+        SetButtonEnabled(button, not status.combatLocked and (active or anchorDecision ~= nil))
+    end
+    for i = 1, #(decision.buttons or {}) do
+        local choice = decision.buttons[i]
+        choice:SetScript("OnClick", function(self)
+            if SetGuidedCooldownAnchorDecision(self._msuf2Value) then
+                Refresh()
+                M.RefreshGuidedTourChrome("COOLDOWN_ANCHOR_DECISION")
+            end
+        end)
+    end
+    if type(M.RegisterSearchWidget) == "function" then
+        M.RegisterSearchWidget(decision, {
+            controlId = "menu2.guided_setup.cooldown_anchor_decision",
+            identityKey = "guided_setup.cooldown_anchor_decision",
+            controlPath = "guided_setup/cooldown_anchor_decision",
+            pageKey = "guided_setup",
+            label = Tr("Unitframe Cooldown Manager anchoring"),
+            kind = "segment",
+            classification = "setting",
+            help = Tr("Choose this before moving frames because it changes the anchor used by every Unitframe position."),
+        })
     end
     button:SetScript("OnClick", function()
         if BlockedByCombat() then return end
@@ -1895,12 +2033,12 @@ local function SummaryCard(builder, T, title, value, body, color)
     if card.title then card.title:SetText("") end
     local number = T.Font(card, "GameFontNormalLarge", tostring(value or 0), color or T.colors.accent)
     number:SetPoint("LEFT", card, "LEFT", 16, 8)
-    number:SetWidth(54)
+    number:SetWidth(56)
     number:SetJustifyH("CENTER")
     local heading = T.Font(card, "GameFontNormal", Tr(title), T.colors.text)
-    heading:SetPoint("TOPLEFT", card, "TOPLEFT", 82, -16)
+    heading:SetPoint("TOPLEFT", card, "TOPLEFT", 84, -16)
     local copy = T.Font(card, "GameFontDisableSmall", Tr(body), T.colors.muted)
-    copy:SetPoint("TOPLEFT", card, "TOPLEFT", 82, -40)
+    copy:SetPoint("TOPLEFT", card, "TOPLEFT", 84, -40)
     SetWrapped(copy, builder.width - 98)
     return card
 end
@@ -1946,14 +2084,14 @@ local function BuildFinalReviewPage(ctx, T, W)
         local restore = b:Section("", 92)
         if restore.title then restore.title:SetText("") end
         local title = T.Font(restore, "GameFontNormal", Tr(restoreAlreadyUsed and "Starting setup restored" or "Starting setup saved"), T.colors.text)
-        title:SetPoint("TOPLEFT", restore, "TOPLEFT", 16, -18)
+        title:SetPoint("TOPLEFT", restore, "TOPLEFT", 16, -20)
         title:SetWidth(max(120, b.width - 260))
         title:SetJustifyH("LEFT")
         local copy = T.Font(restore, "GameFontDisableSmall", Tr(restoreAlreadyUsed
             and "The starting profile values are active again. Finish when you are ready."
             or "You can restore the profile state captured before this guided setup."),
             restoreAlreadyUsed and (T.colors.ok or T.colors.accent) or T.colors.muted)
-        copy:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
+        copy:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
         SetWrapped(copy, max(120, b.width - 260))
         local button = T.Button(restore, Tr(restoreAlreadyUsed and "Starting setup restored" or "Restore starting setup"), min(220, max(170, floor(b.width * 0.32))), 28)
         button:SetPoint("RIGHT", restore, "RIGHT", -16, 0)
