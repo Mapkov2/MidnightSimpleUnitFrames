@@ -50,8 +50,17 @@ function Resolve-RequiredTool {
         Select-Object -First 1
     if (-not $command) { throw "$Requirement is required on PATH ('$Name' was not found)." }
 
-    $versionOutput = @(& $command.Source @VersionArguments 2>&1 | ForEach-Object { [string]$_ })
-    $exitCode = $LASTEXITCODE
+    # Lua 5.1 writes `-v` to stderr.  Keep that version banner in the captured
+    # output without letting Windows PowerShell promote it to a terminating
+    # NativeCommandError while this gate runs under ErrorActionPreference=Stop.
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $versionOutput = @(& $command.Source @VersionArguments 2>&1 | ForEach-Object { [string]$_ })
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
     $versionText = ($versionOutput -join " ").Trim()
     if ($exitCode -ne 0 -or $versionText -notmatch $VersionPattern) {
         throw "$Requirement is required; '$($command.Source)' reported '$versionText'."
@@ -122,8 +131,14 @@ function Invoke-CheckedCommand {
     )
 
     Write-Host ("[gate] {0}" -f $Label)
-    $output = @(& $FilePath @Arguments 2>&1 | ForEach-Object { [string]$_ })
-    $exitCode = $LASTEXITCODE
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $output = @(& $FilePath @Arguments 2>&1 | ForEach-Object { [string]$_ })
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
     if ($exitCode -ne 0) {
         $details = ($output -join "`n").Trim()
         if (-not $details) { $details = "No diagnostic output was produced." }
