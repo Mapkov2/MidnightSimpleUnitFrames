@@ -11,6 +11,7 @@ $expectedAssistantOrderSha256 = "6D93B5BB79D3EDAFDF14D2838216E6ACEE814645ED37AFD
 $startingLocation = Get-Location
 $previousEnglishSuiteFull = $env:MSUF_ENGLISH_SUITE_FULL
 $previousPerfMultiplier = $env:MSUF_ASSISTANT_PERF_BUDGET_MULTIPLIER
+$previousSchemaGateLockHeld = $env:MSUF_ASSISTANT_SCHEMA_GATE_LOCK_HELD
 
 function Resolve-RepositoryRoot {
     $candidate = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
@@ -364,10 +365,26 @@ $releaseAssets = @(
     "MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantRegistry_ActionInputs.lua"
 )
 
+$schemaGateMutex = [System.Threading.Mutex]::new(
+    $false, "Local\MSUF_AssistantSchemaAndReleaseGate_v1")
+$schemaGateMutexHeld = $false
+Write-Host "[gate-lock] Waiting for exclusive Assistant schema/release access..."
+try {
+    $schemaGateMutexHeld = $schemaGateMutex.WaitOne([TimeSpan]::FromMinutes(30))
+} catch [System.Threading.AbandonedMutexException] {
+    $schemaGateMutexHeld = $true
+}
+if (-not $schemaGateMutexHeld) {
+    $schemaGateMutex.Dispose()
+    throw "Timed out waiting for exclusive Assistant schema/release access."
+}
+Write-Host "[gate-lock] Exclusive Assistant schema/release access acquired."
+
 try {
     Set-Location -LiteralPath $repoRoot
     $env:MSUF_ENGLISH_SUITE_FULL = "1"
     $env:MSUF_ASSISTANT_PERF_BUDGET_MULTIPLIER = "1"
+    $env:MSUF_ASSISTANT_SCHEMA_GATE_LOCK_HELD = "1"
 
     $manifestFiles = @(Get-AssistantManifestFiles)
     foreach ($gate in $pythonGates) { [void](Require-File -RelativePath $gate.Path) }
@@ -432,5 +449,8 @@ try {
 } finally {
     $env:MSUF_ENGLISH_SUITE_FULL = $previousEnglishSuiteFull
     $env:MSUF_ASSISTANT_PERF_BUDGET_MULTIPLIER = $previousPerfMultiplier
+    $env:MSUF_ASSISTANT_SCHEMA_GATE_LOCK_HELD = $previousSchemaGateLockHeld
     Set-Location -LiteralPath $startingLocation
+    if ($schemaGateMutexHeld) { $schemaGateMutex.ReleaseMutex() }
+    $schemaGateMutex.Dispose()
 }
