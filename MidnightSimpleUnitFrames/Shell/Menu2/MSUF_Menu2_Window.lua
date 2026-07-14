@@ -766,6 +766,7 @@ local function RefreshDashboardEditModeButton()
             if btn.SetActive then btn:SetActive(active) end
         end
     end
+    M.CallIf(M.RefreshGuidedTourChrome, "EDIT_MODE_STATUS")
 end
 local editModeUIHooked = false
 local function EnsureEditModeUIHook()
