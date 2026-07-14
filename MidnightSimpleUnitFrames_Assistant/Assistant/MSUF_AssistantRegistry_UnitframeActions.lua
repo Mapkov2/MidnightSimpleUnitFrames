@@ -50,6 +50,57 @@ local function DisplayUnitLabel(unit)
     return (unit:gsub("^%l", string.upper))
 end
 
+local function ApplyEnabledUnit(unit, reason, opts)
+    local conf = UnitDB(unit)
+    if type(conf) ~= "table" then return false end
+    conf.enabled = true
+    ApplyUnit(unit, reason, opts or { preview = true })
+    return true
+end
+
+Registry:RegisterAction({
+    key = "enable_focus_target_frame",
+    label = "Enable Focus Target Frame",
+    page = "uf_focustarget",
+    type = "enable",
+    combatSafe = false,
+    captureSnapshot = true,
+    run = function()
+        local focus = UnitDB("focus")
+        if type(focus) ~= "table" then return false, "Focus frame settings are not available." end
+        if focus.enabled == false then
+            ApplyEnabledUnit("focus", "MSUF2_FOCUSTARGET_PARENT_ENABLED", { preview = true })
+        end
+        if not ApplyEnabledUnit("focustarget", "MSUF2_FRAME_ENABLED", { preview = true }) then
+            return false, "Focus Target frame settings are not available."
+        end
+        return true, "Done. Enabled the Focus and Focus Target frames."
+    end,
+})
+
+Registry:RegisterAction({
+    key = "show_player_power_or_open_class_resources",
+    label = "Show Player Power",
+    page = "uf_player",
+    type = "enable",
+    combatSafe = false,
+    captureSnapshot = true,
+    run = function()
+        local conf = UnitDB("player")
+        if type(conf) ~= "table" then return false, "Player power settings are not available." end
+        if conf.powerBarDetached == true and conf.detachedPowerBarAnchorToClassPower == true then
+            if M and type(M.SelectPage) == "function" then
+                M.SelectPage("classpower")
+                return true, "Opened Class Resources, which currently manages the Player power bar."
+            end
+            return false, "Open Class Resources to manage the Player power bar."
+        end
+        conf.showPowerBar = true
+        ApplyUnit("player", "MSUF2_POWER_SHOW", { power = true, preview = true })
+        return true, "Done. Showing the Player power bar."
+    end,
+})
+
 Registry:RegisterAction({
     key = "copy_unit",
     label = "Copy Unit Options",

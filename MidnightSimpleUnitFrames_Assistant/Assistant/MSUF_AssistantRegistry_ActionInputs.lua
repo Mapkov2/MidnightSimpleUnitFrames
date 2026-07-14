@@ -145,6 +145,7 @@ local GROUP_AURA_SCOPE = Enum({ "party", "raid" }, {
 local AURA_UNIT_INPUT_SCOPE = Enum({ "shared", "player", "target", "focus", "boss" }, {
     global = "shared", all = "shared",
 })
+local AURA_CUSTOM_CONTAINER_SCOPE = Enum({ "player", "target", "focus", "boss" })
 local AURA_EDIT_SCOPE = Enum({ "shared", "player", "target", "focus", "boss", "party", "raid" }, {
     global = "shared", all = "shared", group = "party", mythicraid = "raid", ["mythic raid"] = "raid",
 })
@@ -398,6 +399,8 @@ reset_aura_colors reset_bar_background_color reset_bar_colors reset_castbar_colo
 reset_class_power_combo_slot_colors reset_focus_kick_position reset_gameplay_colors reset_global_font_color
 reset_health_gradient_colors reset_npc_type_colors reset_player_totems_layout reset_portrait_colors
 reset_profile reset_resource_colors reset_unitframe_colors support_links_summary
+enable_focus_target_frame show_player_power_or_open_class_resources
+reset_selected_group_status_icon
 ]])
 
 DefineObject("apply_aura_quick_preset", { preset = AURA_QUICK_PRESET, scope = AURA_EDIT_SCOPE }, { required = { "preset" } })
@@ -437,6 +440,9 @@ DefineObject("aura_custom_whitelist_add_spell aura_custom_whitelist_remove_spell
 }, { required = { "scope", "index", "value" } })
 DefineObject("aura_custom_whitelist_clear_spells aura_custom_whitelist_summary", {
     scope = AURA_UNIT_INPUT_SCOPE, index = Integer(1, 3),
+}, { required = { "scope", "index" } })
+DefineObject("reset_aura_custom_container", {
+    scope = AURA_CUSTOM_CONTAINER_SCOPE, index = Integer(1, 3),
 }, { required = { "scope", "index" } })
 
 DefineObject("aura_group_blacklist_add_spell aura_group_blacklist_remove_spell", {
@@ -586,6 +592,9 @@ DefineObject("reset_class_power_color_token", {
     token = CLASS_POWER_COLOR_TOKEN, background = BOOL,
 }, { required = { "token" } })
 DefineObject("reset_class_power_slot_colors", {
+    resourceToken = CLASS_POWER_RESOURCE_TOKEN,
+}, { required = { "resourceToken" } })
+DefineObject("reset_class_power_full_color", {
     resourceToken = CLASS_POWER_RESOURCE_TOKEN,
 }, { required = { "resourceToken" } })
 DefineObject("set_global_font_color", {

@@ -99,7 +99,23 @@ local COLOR_ACTION_KEY_BY_PATH = {
     ["gameplay.reset"] = "reset_gameplay_colors",
     ["npc_type.reset"] = "reset_npc_type_colors",
     ["portrait.reset"] = "reset_portrait_colors",
+    ["power.editor.reset"] = "reset_power_color_token",
+    ["class_power.editor.reset_foreground"] = "reset_class_power_color_token",
+    ["class_power.editor.reset_background"] = "reset_class_power_color_token",
+    ["class_power.resource_slots.reset"] = "reset_class_power_slot_colors",
+    ["class_power.full_resource.reset"] = "reset_class_power_full_color",
     ["unitframe.reset"] = "reset_unitframe_colors",
+}
+local COLOR_ACTION_INPUT_BY_PATH = {
+    ["power.editor.reset"] = "token",
+    ["class_power.editor.reset_foreground"] = "token",
+    ["class_power.editor.reset_background"] = "token",
+    ["class_power.resource_slots.reset"] = "resourceToken",
+    ["class_power.full_resource.reset"] = "resourceToken",
+}
+local COLOR_ACTION_FIXED_ARGS_BY_PATH = {
+    ["class_power.editor.reset_foreground"] = { background = false },
+    ["class_power.editor.reset_background"] = { background = true },
 }
 local function PrefixedSettingKeys(prefix, tokens)
     local keys = {}
@@ -161,6 +177,8 @@ local function Meta(path, classification, exact)
         if classToken then exact.settingKey = "classColors." .. classToken end
     end
     if exact.actionKey == nil then exact.actionKey = COLOR_ACTION_KEY_BY_PATH[path] end
+    if exact.actionInputArg == nil then exact.actionInputArg = COLOR_ACTION_INPUT_BY_PATH[path] end
+    if exact.actionFixedArgs == nil then exact.actionFixedArgs = COLOR_ACTION_FIXED_ARGS_BY_PATH[path] end
     if exact.settingKey == nil and exact.actionKey == nil then
         exact.assistantDisposition, exact.assistantDispositionReason = ColorReviewedDisposition(path)
         exact.assistantSettingKeys = COLOR_DYNAMIC_SETTING_KEYS_BY_PATH[path]

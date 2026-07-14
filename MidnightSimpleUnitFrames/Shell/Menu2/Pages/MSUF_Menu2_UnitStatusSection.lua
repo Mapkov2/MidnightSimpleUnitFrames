@@ -146,6 +146,14 @@ local function BuildStatus(ctx, builder, unit)
         if type(assistantContract) == "table" then
             for key, value in pairs(assistantContract) do meta[key] = value end
         end
+        if classification == "action" and semanticPath
+            and (semanticPath == "status.selected.reset" or semanticPath == "status.advanced.reset")
+        then
+            meta.actionKey = "reset_unit_status_indicator"
+            meta.actionFixedArgs = { unit = unit }
+            meta.actionInputArg = "status"
+            meta.assistantDisposition, meta.assistantDispositionReason = nil, nil
+        end
         M.RegisterSearchWidget(control, meta)
     end
     local function BindStatusPlacementSlider(parent, label, minValue, maxValue, xPos, yPos, width, specKey, defaultKey, fallback, reason, searchLabel, keywords, normalize)

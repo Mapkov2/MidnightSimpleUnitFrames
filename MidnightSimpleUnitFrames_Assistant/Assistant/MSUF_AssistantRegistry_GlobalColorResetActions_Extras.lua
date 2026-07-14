@@ -106,3 +106,35 @@ Registry:RegisterAction({
         return true, "Done. Resource colors reset."
     end,
 })
+
+Registry:RegisterAction({
+    key = "reset_class_power_full_color",
+    label = "Reset Class Power Full Resource Color",
+    type = "color",
+    combatSafe = false,
+    captureSnapshot = true,
+    run = function(args)
+        local resourceToken = args and args.resourceToken
+        if type(resourceToken) ~= "string" or resourceToken == "" then
+            return false, "Which class resource full color do you want me to reset?"
+        end
+
+        local g = GeneralDB()
+        if type(g.classPowerColorOverrides) ~= "table" then g.classPowerColorOverrides = {} end
+        g.classPowerColorOverrides[resourceToken .. "_FULL"] = nil
+
+        local bars = type(BarsDB) == "function" and BarsDB() or nil
+        if type(bars) == "table" then
+            if type(bars.classPowerFullColorEnabled) ~= "table" then bars.classPowerFullColorEnabled = {} end
+            bars.classPowerFullColorEnabled[resourceToken] = nil
+        end
+
+        ApplyClassPowerColors("MSUF_ASSISTANT_RESET_CLASS_POWER_FULL_COLOR")
+        if M and type(M.RequestRefresh) == "function" then
+            M.RequestRefresh(nil, "class-power-full-color-reset")
+        elseif M and type(M.Refresh) == "function" then
+            M.Refresh()
+        end
+        return true, "Done. Reset that class resource's full color."
+    end,
+})

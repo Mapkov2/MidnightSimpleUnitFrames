@@ -50,6 +50,46 @@ Registry:RegisterAction({
 })
 
 Registry:RegisterAction({
+    key = "reset_selected_group_status_icon",
+    label = "Reset Selected Group Status Icon",
+    type = "reset",
+    combatSafe = false,
+    captureSnapshot = true,
+    run = function()
+        local gp = M and M.GroupPage
+        local scope = gp and type(gp.CurrentScope) == "function" and gp.CurrentScope() or (M and M.gfScope)
+        if scope ~= "raid" and scope ~= "mythicraid" then scope = "party" end
+
+        local spec = gp and type(gp.CurrentGFStatusSpec) == "function" and gp.CurrentGFStatusSpec()
+            or ResolveGroupStatusIcon(M and M.gfStatusIconSelection)
+        if not spec then return false, "Select a group status icon first." end
+
+        local conf = gp and type(gp.Conf) == "function" and gp.Conf(scope)
+        local gf = gp and type(gp.GF) == "function" and gp.GF() or (MSUF and MSUF.GF)
+        if type(conf) == "table" then
+            for _, field in ipairs({ "size", "anchor", "x", "y", "layer", "iconStyle", "customIcon" }) do
+                local key = spec[field]
+                if key then conf[key] = gf and gf.GetDefault and gf.GetDefault(scope, key) or nil end
+            end
+            if gp and type(gp.QueueGF) == "function" then
+                gp.QueueGF(scope, "visual")
+            else
+                ResetGroupStatusIcon(scope, spec)
+            end
+        else
+            ResetGroupStatusIcon(scope, spec)
+        end
+
+        if M and type(M.RequestRefresh) == "function" then
+            M.RequestRefresh(nil, "gf-indicators-status-icon")
+        elseif M and type(M.Refresh) == "function" then
+            M.Refresh()
+        end
+        return true, "Done. Reset " .. GroupLabel(scope) .. " " .. tostring(spec.label) .. " placement and icon style."
+    end,
+})
+
+Registry:RegisterAction({
     key = "reset_group_status_icons",
     label = "Reset Group Status Icons",
     type = "reset",

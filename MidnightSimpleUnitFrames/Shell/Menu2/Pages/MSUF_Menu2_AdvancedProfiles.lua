@@ -24,6 +24,7 @@ local PROFILE_ACTION_BY_PATH = {
     ["profile.delete_current"] = "delete_profile",
     ["export.generate"] = "export_profile",
     ["import.legacy"] = "import_legacy_profile_string",
+    ["import.execute"] = "import_profile_string",
     ["profiles.browse_wago"] = "copy_wago_profiles_link",
 }
 local PROFILE_ACTION_INPUT_BY_PATH = {
@@ -31,6 +32,7 @@ local PROFILE_ACTION_INPUT_BY_PATH = {
     ["profile.create"] = "name",
     ["profile.copy_current"] = "name",
     ["import.legacy"] = "value",
+    ["import.execute"] = "value",
 }
 local function ProfilesMeta(path, classification, exact)
     local resolved = {}
@@ -42,10 +44,6 @@ local function ProfilesMeta(path, classification, exact)
     resolved.actionInputArg = resolved.actionInputArg or PROFILE_ACTION_INPUT_BY_PATH[path]
     if path == "profile.delete_current" and resolved.actionFixedArgs == nil then
         resolved.actionFixedArgs = { name = { context = "activeProfile" } }
-    end
-    if path == "import.execute" and not resolved.actionKey then
-        resolved.assistantDisposition = "dynamic"
-        resolved.assistantDispositionReason = "The button routes to import_profile_string or import_profile_string_new from the explicit new-profile import mode."
     end
     return ControlMeta("profiles", "advanced", path, classification, resolved)
 end

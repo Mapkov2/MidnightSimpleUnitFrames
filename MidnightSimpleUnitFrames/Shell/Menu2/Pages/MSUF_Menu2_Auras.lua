@@ -170,6 +170,9 @@ local function AuraControlMeta(ctx, path, classification, assistantContract)
         meta.settingKey = assistantContract
     elseif type(assistantContract) == "table" then
         meta.settingKey = assistantContract.settingKey
+        meta.actionKey = assistantContract.actionKey
+        meta.actionFixedArgs = assistantContract.actionFixedArgs
+        meta.actionInputArg = assistantContract.actionInputArg
         meta.assistantDisposition = assistantContract.assistantDisposition
         meta.assistantDispositionReason = assistantContract.assistantDispositionReason
         meta.assistantSettingKeys = assistantContract.assistantSettingKeys
@@ -185,13 +188,14 @@ local function AuraControlMeta(ctx, path, classification, assistantContract)
 end
 local function RegisterAuraControl(ctx, widget, label, kind, path, classification, navigationKey)
     if not widget or type(M.RegisterSearchWidget) ~= "function" then return widget end
-    local meta = AuraControlMeta(ctx, path, classification)
+    local meta = AuraControlMeta(ctx, path, classification,
+        type(navigationKey) == "table" and navigationKey or nil)
     meta.label = label
     meta.kind = kind
     if classification == "navigation" then
         meta.navigationKey = navigationKey
     elseif classification == "action" then
-        meta.actionKey = navigationKey
+        if type(navigationKey) == "string" then meta.actionKey = navigationKey end
         if meta.actionKey then
             meta.assistantDisposition = nil
             meta.assistantDispositionReason = nil
@@ -200,7 +204,7 @@ local function RegisterAuraControl(ctx, widget, label, kind, path, classificatio
     M.RegisterSearchWidget(widget, meta)
     return widget
 end
-local function RegisterAuraTextAction(ctx, widget, input, label, path)
+local function RegisterAuraTextAction(ctx, widget, input, label, path, assistantContract)
     if widget then
         widget._msuf2CommandAction = {
             kind = "button",
@@ -214,7 +218,7 @@ local function RegisterAuraTextAction(ctx, widget, input, label, path)
             end,
         }
     end
-    return RegisterAuraControl(ctx, widget, label, "button", path, "action")
+    return RegisterAuraControl(ctx, widget, label, "button", path, "action", assistantContract)
 end
 local function RegisterAuraChoiceBar(ctx, bar, values, path)
     if not bar then return bar end
@@ -2049,6 +2053,8 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
     local section = opts.parent or b:CollapsibleSection("group_aura_filters_" .. tostring(scope) .. "_" .. laneKey, "Group Frame Blizzard Filters & Lists", standaloneHeight, false)
     local w = section._msuf2Width or b.width or 720
     local lane = laneKey
+    local groupActionPath = "group-blacklist.scope." .. AuraCatalogToken(scope)
+        .. ".lane." .. AuraCatalogToken(lane)
     local laneText = lane == "buff" and "Buff" or "Debuff"
     local function ReadHidePermanent()
         return type(Model.ReadGroupBlacklistHidePermanent) == "function"
@@ -2124,7 +2130,9 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
         end
         return changed and true or false
     end)
-    RegisterAuraTextAction(ctx, directAdd, directInput, "Add", "group-blacklist.lane." .. AuraCatalogToken(lane) .. ".add")
+    RegisterAuraTextAction(ctx, directAdd, directInput, "Add", groupActionPath .. ".add", {
+        actionKey = "aura_group_blacklist_add_spell", actionFixedArgs = { scope = scope, lane = lane }, actionInputArg = "value",
+    })
     local directRemove = ActionButton(direct, "Remove", 96)
     directRemove:SetPoint("LEFT", directAdd, "RIGHT", 8, 0)
     directRemove:SetScript("OnClick", function()
@@ -2136,7 +2144,9 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
         end
         return changed and true or false
     end)
-    RegisterAuraTextAction(ctx, directRemove, directInput, "Remove", "group-blacklist.lane." .. AuraCatalogToken(lane) .. ".remove")
+    RegisterAuraTextAction(ctx, directRemove, directInput, "Remove", groupActionPath .. ".remove", {
+        actionKey = "aura_group_blacklist_remove_spell", actionFixedArgs = { scope = scope, lane = lane }, actionInputArg = "value",
+    })
     local presetW = max(152, floor((w - 96) * 0.22))
     local spellW = max(210, floor((w - 96) * 0.30))
     local function CurrentPreset()
@@ -2172,7 +2182,9 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
             Rebuild(ctx)
         end
     end)
-    RegisterAuraControl(ctx, addSpell, "Add spell", "button", "group-blacklist.lane." .. AuraCatalogToken(lane) .. ".add-preset-spell", "action")
+    RegisterAuraControl(ctx, addSpell, "Add spell", "button", groupActionPath .. ".add-preset-spell", "action", {
+        actionKey = "aura_group_blacklist_add_spell", actionFixedArgs = { scope = scope, lane = lane }, actionInputArg = "value",
+    })
     local addSet = ActionButton(direct, "Add set", 88)
     addSet:SetPoint("LEFT", addSpell, "RIGHT", 8, 0)
     addSet:SetScript("OnClick", function()
@@ -2181,7 +2193,9 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
             Rebuild(ctx)
         end
     end)
-    RegisterAuraControl(ctx, addSet, "Add set", "button", "group-blacklist.lane." .. AuraCatalogToken(lane) .. ".add-preset-set", "action")
+    RegisterAuraControl(ctx, addSet, "Add set", "button", groupActionPath .. ".add-preset-set", "action", {
+        actionKey = "aura_group_blacklist_add_preset", actionFixedArgs = { scope = scope, lane = lane }, actionInputArg = "preset",
+    })
     local prepared = W.Text(direct, "", 16, -210, w - 80, T.colors.accent)
     local empty = W.Text(direct, "No blacklisted spells. Add one above or use a preset.", 16, -246, w - 80, T.colors.muted)
     local listScroll = CreateFrame("ScrollFrame", nil, direct, "UIPanelScrollFrameTemplate")
@@ -2436,7 +2450,9 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
         inputValue = ""
         return changed and true or false
     end)
-    RegisterAuraTextAction(ctx, add, input, "Add", "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.add")
+    RegisterAuraTextAction(ctx, add, input, "Add", "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.add", {
+        actionKey = "aura_blacklist_add_spell", actionFixedArgs = { scope = unit, lane = lane }, actionInputArg = "value",
+    })
     local hidePermanent = BindSwitch(ctx, section, "Hide permanent auras", 24, -252, inner,
         function()
             return type(Model.ReadBlacklistHidePermanent) == "function"
@@ -2480,13 +2496,17 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
         local spellID = M.auraBlacklistSpell or (values[1] and values[1].value)
         if Model.AddBlacklistPresetSpell(unit, spellID, lane) then ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_PRESET_ADD", true) end
     end)
-    RegisterAuraControl(ctx, addSpell, "Add spell", "button", "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.add-preset-spell", "action")
+    RegisterAuraControl(ctx, addSpell, "Add spell", "button", "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.add-preset-spell", "action", {
+        actionKey = "aura_blacklist_add_spell", actionFixedArgs = { scope = unit, lane = lane }, actionInputArg = "value",
+    })
     local addSet = ActionButton(section, "Add set", 88)
     addSet:SetPoint("LEFT", addSpell, "RIGHT", 8, 0)
     addSet:SetScript("OnClick", function()
         if Model.AddBlacklistPresetGroup(unit, CurrentPreset(), lane) then ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_PRESET_GROUP_ADD", true) end
     end)
-    RegisterAuraControl(ctx, addSet, "Add set", "button", "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.add-preset-set", "action")
+    RegisterAuraControl(ctx, addSet, "Add set", "button", "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.add-preset-set", "action", {
+        actionKey = "aura_blacklist_add_preset", actionFixedArgs = { scope = unit, lane = lane }, actionInputArg = "preset",
+    })
     local prepared = W.Text(section, "", 24, -154, inner, T.colors.accent)
     local empty = W.Text(section, "No blocked spells. Add one above or use a preset.", 24, -184, inner, T.colors.muted)
     local listScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
@@ -2598,6 +2618,8 @@ end
 local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
     local laneTitle = lane == "debuff" and "Debuff" or "Buff"
     local section = b:Section(laneTitle .. " Blacklist", 250)
+    local groupActionPath = "group-workspace.scope." .. AuraCatalogToken(scope)
+        .. ".lane." .. AuraCatalogToken(lane) .. ".blacklist"
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48
     local inputValue = ""
@@ -2618,7 +2640,9 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
         inputValue = ""
         return changed and true or false
     end)
-    RegisterAuraTextAction(ctx, add, input, "Add", "group-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.add")
+    RegisterAuraTextAction(ctx, add, input, "Add", groupActionPath .. ".add", {
+        actionKey = "aura_group_blacklist_add_spell", actionFixedArgs = { scope = scope, lane = lane }, actionInputArg = "value",
+    })
     local presetW = max(152, floor(inner * 0.22))
     local spellW = max(210, floor(inner * 0.30))
     local function CurrentPreset()
@@ -2654,7 +2678,9 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
             Rebuild(ctx)
         end
     end)
-    RegisterAuraControl(ctx, addSpell, "Add spell", "button", "group-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.add-preset-spell", "action")
+    RegisterAuraControl(ctx, addSpell, "Add spell", "button", groupActionPath .. ".add-preset-spell", "action", {
+        actionKey = "aura_group_blacklist_add_spell", actionFixedArgs = { scope = scope, lane = lane }, actionInputArg = "value",
+    })
     local addSet = ActionButton(section, "Add set", 88)
     addSet:SetPoint("LEFT", addSpell, "RIGHT", 8, 0)
     addSet:SetScript("OnClick", function()
@@ -2663,7 +2689,9 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
             Rebuild(ctx)
         end
     end)
-    RegisterAuraControl(ctx, addSet, "Add set", "button", "group-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.add-preset-set", "action")
+    RegisterAuraControl(ctx, addSet, "Add set", "button", groupActionPath .. ".add-preset-set", "action", {
+        actionKey = "aura_group_blacklist_add_preset", actionFixedArgs = { scope = scope, lane = lane }, actionInputArg = "preset",
+    })
     local prepared = W.Text(section, "", 24, -154, inner, T.colors.accent)
     local empty = W.Text(section, "No blocked spells. Add one above or use a preset.", 24, -184, inner, T.colors.muted)
     local listScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
@@ -2711,7 +2739,7 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
                 row.icon:SetTexture(entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
                 row.text:SetText(entry.text or entry.value)
                 RegisterAuraControl(ctx, row, entry.text or entry.value or "Blacklist entry", "button",
-                    "group-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.entry." .. AuraCatalogToken(entry.value) .. ".remove", "action")
+                    groupActionPath .. ".entry." .. AuraCatalogToken(entry.value) .. ".remove", "action")
                 row:Show()
             elseif row then row._spellID = nil; row:Hide() end
         end
@@ -2839,6 +2867,10 @@ local CUSTOM_STRATA_VALUES = VTP "AUTO=Auto|BACKGROUND=Background|LOW=Low|MEDIUM
 --- native Custom Container record consumed by runtime and previews.
 function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
     index = max(1, min(type(Model.CustomContainerMax) == "function" and Model.CustomContainerMax() or 3, tonumber(index) or 1))
+    -- The selected Custom Aura index is part of an action's executable
+    -- identity.  Reusing one path for Custom 1/2/3 made the generated schema
+    -- collapse three different fixed argument contracts into one action.
+    local customActionPath = "custom-container.custom" .. tostring(index)
     local item = Model.CustomContainer(unit, index, true)
     if not item then return end
     item.filters = type(item.filters) == "table" and item.filters or {}
@@ -2876,7 +2908,9 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             end
             return changed and true or false
         end)
-        RegisterAuraTextAction(ctx, add, input, "Add spell", "custom-container.whitelist.add")
+        RegisterAuraTextAction(ctx, add, input, "Add spell", customActionPath .. ".whitelist.add", {
+            actionKey = "aura_custom_whitelist_add_spell", actionFixedArgs = { scope = unit, index = index }, actionInputArg = "value",
+        })
         local hidePermanent = BindSwitch(ctx, section, "Hide permanent auras", 24, -94, inner,
             function() return item.filters.hidePermanent == true end,
             function(value) item.filters.hidePermanent = value == true; Apply("AURAS3_CUSTOM_HIDE_PERMANENT", true) end,
@@ -2929,7 +2963,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                     row.icon:SetTexture(entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
                     row.text:SetText(entry.text or tostring(entry.spellID))
                     RegisterAuraControl(ctx, row, entry.text or tostring(entry.spellID), "button",
-                        "custom-container.whitelist.entry." .. AuraCatalogToken(entry.spellID) .. ".remove", "action")
+                        customActionPath .. ".whitelist.entry." .. AuraCatalogToken(entry.spellID) .. ".remove", "action")
                     row:Show()
                 elseif row then row._spellID = nil; row:Hide() end
             end
@@ -3139,7 +3173,10 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
     local reset = ActionButton(section, "Reset", 88)
     reset:SetPoint("TOPRIGHT", section, "TOPRIGHT", -24, -56)
     reset:SetScript("OnClick", function() Model.ResetCustomContainer(unit, index); Apply("AURAS3_CUSTOM_CONTAINER_RESET", true); Rebuild(ctx) end)
-    RegisterAuraControl(ctx, reset, "Reset", "button", "custom-container.setup.reset", "action")
+    RegisterAuraControl(ctx, reset, "Reset", "button", customActionPath .. ".setup.reset", "action", {
+        actionKey = "reset_aura_custom_container",
+        actionFixedArgs = { scope = unit, index = index },
+    })
     local count = #Model.CustomContainerSpellEntries(unit, index)
     W.Text(section, tostring(count) .. " whitelisted " .. (count == 1 and "spell" or "spells") .. " · style remains live in Menu Preview and Edit Mode.", 24, -104, inner, T.colors.muted)
     M.TrackRefresh(ctx, function() W.SetControlEnabled(enabled, true) end)
