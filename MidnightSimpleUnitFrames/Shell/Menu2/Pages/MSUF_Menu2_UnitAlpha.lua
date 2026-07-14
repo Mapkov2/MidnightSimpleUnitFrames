@@ -5,7 +5,6 @@ MSUF.MSUF2 = M
 local W = M.Widgets or {}
 local UP = M.UnitPage or {}
 local max = math.max
-local AlphaLabel = M.AlphaLabel
 local SettingMeta = UP.SettingMeta
 
 -- Unified, simple transparency: separate health/resource opacity cards with
@@ -23,30 +22,29 @@ local function BuildAlpha(ctx, builder, unit)
     local leftX = 20
     local innerW = max(320, sectionW - 40)
     local cardW = math.floor((innerW - (gap * 2)) / 3)
-    local cardH = 168
+    local cardH = 180
     local healthX = leftX
     local resourceX = healthX + cardW + gap
     local optionsX = resourceX + cardW + gap
     local optionsW = innerW - (cardW * 2) - (gap * 2)
     local _, cardY = W.NextRow(sec, cardH)
-    local healthCard = W.ControlCard(sec, "Opacity Health", "Fade the health bar foreground and background.", healthX, cardY, cardW, cardH)
-    local resourceCard = W.ControlCard(sec, "Opacity Resource Bar", "Fade the resource bar foreground and background.", resourceX, cardY, cardW, cardH)
-    local optionsCard = W.ControlCard(sec, "Options", "Keep text and portrait readable while bars fade.", optionsX, cardY, optionsW, cardH)
+    local healthCard = W.ControlCard(sec, "Health Bar", nil, healthX, cardY, cardW, cardH)
+    local resourceCard = W.ControlCard(sec, "Resource Bar", nil, resourceX, cardY, cardW, cardH)
+    local optionsCard = W.ControlCard(sec, "Options", nil, optionsX, cardY, optionsW, cardH)
     local function AddAlphaSlider(parent, width, spec)
-        local slider = W.Slider(parent, "", 0, 1, 0.05, width)
+        local slider = W.Slider(parent, spec.label, 0, 1, 0.05, width)
+        M.UsePercentInput(slider)
         M.BindNumberWidget(ctx, slider,
             function() return ReadNumber(unit, spec.key, spec.default) end,
             function(v) SetNumber(unit, spec.key, v, spec.reason, spec.flags) end,
             spec.default,
             SettingMeta(ctx, "transparency." .. tostring(spec.key), unit, spec.key))
-        M.BindSliderLiveLabel(ctx, slider, function() return ReadNumber(unit, spec.key, spec.default) end,
-            function(value) return AlphaLabel(spec.label, value) end, true)
         W.MoveWidget(slider, parent, 16, spec.y, width - 58, "LEFT")
     end
-    AddAlphaSlider(healthCard, cardW, { label = "Foreground", key = "hpBarAlpha", default = 1, reason = "MSUF2_ALPHA_HP", flags = { alpha = true, preview = true }, y = -62 })
-    AddAlphaSlider(healthCard, cardW, { label = "Background", key = "hpBgAlpha", default = 0.85, reason = "MSUF2_ALPHA_BG", flags = { preview = true }, y = -100 })
-    AddAlphaSlider(resourceCard, cardW, { label = "Foreground", key = "powerBarAlpha", default = 1, reason = "MSUF2_ALPHA_POWER", flags = { power = true, preview = true }, y = -62 })
-    AddAlphaSlider(resourceCard, cardW, { label = "Background", key = "powerBarBgAlpha", default = 0.85, reason = "MSUF2_ALPHA_POWER_BG", flags = { power = true, preview = true }, y = -100 })
+    AddAlphaSlider(healthCard, cardW, { label = "Foreground", key = "hpBarAlpha", default = 1, reason = "MSUF2_ALPHA_HP", flags = { alpha = true, preview = true }, y = -54 })
+    AddAlphaSlider(healthCard, cardW, { label = "Background", key = "hpBgAlpha", default = 0.85, reason = "MSUF2_ALPHA_BG", flags = { preview = true }, y = -112 })
+    AddAlphaSlider(resourceCard, cardW, { label = "Foreground", key = "powerBarAlpha", default = 1, reason = "MSUF2_ALPHA_POWER", flags = { power = true, preview = true }, y = -54 })
+    AddAlphaSlider(resourceCard, cardW, { label = "Background", key = "powerBarBgAlpha", default = 0.85, reason = "MSUF2_ALPHA_POWER_BG", flags = { power = true, preview = true }, y = -112 })
     local exclude = W.ToggleAt(optionsCard, "Keep text + portrait visible", 16, -62, optionsW - 32)
     M.BindBoolWidget(ctx, exclude,
         function() return ReadBool(unit, "alphaExcludeTextPortrait", false) end,
@@ -54,9 +52,6 @@ local function BuildAlpha(ctx, builder, unit)
             SetBool(unit, "alphaExcludeTextPortrait", v, "MSUF2_ALPHA_EXCLUDE", { alpha = true, preview = true })
         end,
         SettingMeta(ctx, "transparency.alpha_exclude_text_portrait", unit, "alphaExcludeTextPortrait"))
-    local hint = W.Text(optionsCard, "", 16, -94, optionsW - 32, nil)
-    if hint and hint.SetWordWrap then hint:SetWordWrap(true) end
-    if hint and hint.SetText then hint:SetText(M.Tr("On: bars and background fade while text and portrait stay visible. Off: text and portrait fade with them.")) end
     if builder.FinishSection then builder:FinishSection(sec, 48) end
 end
 if type(UP.RegisterSection) == "function" then

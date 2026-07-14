@@ -733,7 +733,10 @@ if type(UP.RegisterSection) == "function" then
     UP.RegisterSection({
         id = "text",
         title = "Text",
-        height = 620,
+        -- Tab content starts 118px below the body and reaches 518px down.
+        -- Leave enough room for the card surface/shadow before the next
+        -- accordion header; a purely geometric 12px inset still looked clipped.
+        height = 672,
         placement = "after_auras",
         order = 10,
         build = BuildText,

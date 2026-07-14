@@ -21,7 +21,7 @@ local CASTBAR_ICON_POSITIONS = VT("LEFT", "Left", "RIGHT", "Right", "INSIDE_LEFT
 local CASTBAR_TEXT_POSITIONS = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right", "ABOVE", "Above", "BELOW", "Below")
 local CASTBAR_TIME_FORMATS = VT("CURRENT", "Remaining", "ELAPSED", "Elapsed", "ELAPSED_MAX", "Elapsed / Total", "CURRENT_MAX", "Remaining / Total")
 local CASTBAR_TAB_VALUES = VT("general", "General", "icon", "Icon", "spell", "Spell Text", "time", "Time Text", "advanced", "Advanced")
-local CASTBAR_TAB_HEIGHTS = { general = 430, icon = 540, spell = 540, time = 540, advanced = 344 }
+local CASTBAR_TAB_HEIGHTS = { general = 446, icon = 540, spell = 540, time = 540, advanced = 344 }
 local CASTBAR_WIDTH_SOURCE_VALUES = VT("manual", "Manual width", "unitframe", "Auto: Unit Frame", "essential", "Auto: Essential Cooldowns", "utility", "Auto: Utility Cooldowns")
 local CASTBAR_TEXT_ALIGN = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right")
 local CASTBAR_TRUNCATE_VALUES = VT("AUTO", "Auto fit", "CLIP", "Manual width", "NONE", "No width limit")
@@ -657,7 +657,7 @@ local function BuildCastbar(ctx, builder, unit)
         UnitSectionShared.MakeTabFrames(sec, -118, sectionW, tabFrames, "general", "icon", "spell", "time", "advanced")
     local generalCard = W.ControlCard(generalTab, "General", nil, leftX, -4, leftW, 132)
     local providerCard = W.ControlCard(generalTab, "Provider", nil, rightX, -4, rightW, 132)
-    local sizeCard = W.ControlCard(generalTab, "Size", "Width can use manual bounds or follow another frame.", leftX, -154, sectionW - 32, 150)
+    local sizeCard = W.ControlCard(generalTab, "Size", "Width can use manual bounds or follow another frame.", leftX, -154, sectionW - 32, 166)
     local iconCard = W.ControlCard(iconTab, "Icon", nil, leftX, -4, leftW, 370)
     local spellCard = W.ControlCard(spellTab, "Spell Name Text", nil, leftX, -4, leftW, 370)
     local targetNameCard = fields.targetName and W.ControlCard(spellTab, "Cast Target Text", nil, rightX, -4, rightW, 370) or nil
@@ -676,7 +676,7 @@ local function BuildCastbar(ctx, builder, unit)
         x = 20, y = -58,
     })
     RegisterControl(castbarTabs, ctx, "castbar.workspace_tab", "Castbar area", "segment", "ephemeral")
-    local castbarNotice, _, castbarNoticeButton = CreateSectionNotice(generalTab, -318, "Use MSUF", 96)
+    local castbarNotice, _, castbarNoticeButton = CreateSectionNotice(generalTab, -334, "Use MSUF", 96)
     if castbarNoticeButton then
         RegisterControl(castbarNoticeButton, ctx, "castbar.use_msuf", "Use MSUF", "button", "action", {
             assistantDisposition = "compound",

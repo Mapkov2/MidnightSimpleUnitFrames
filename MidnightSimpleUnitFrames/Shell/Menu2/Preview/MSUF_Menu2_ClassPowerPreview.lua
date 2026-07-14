@@ -1863,10 +1863,18 @@ local function CreateLayerSidebar(box, sideW)
         local def = CP_PREVIEW_LAYERS[i]
         box.layerVisibility[def.key] = (def.key == "guides") and PreviewGuidesEnabled() or true
         local btn = Helpers.CreateLayerButton(sidebar, box, def, i, sideW, CP_LAYER_BUTTON_OPTS)
-        RegisterPreviewControl(box._catalogCtx, btn, "layer." .. tostring(def.key),
-            tostring(def.label or def.key) .. " preview layer", "button", "ephemeral", {
-                help = def.tooltip,
-            })
+        if def.key == "guides" then
+            RegisterPreviewControl(box._catalogCtx, btn, "layer.guides",
+                tostring(def.label or def.key) .. " preview layer", "toggle", "setting", {
+                    settingKey = "general.classPowerPreviewGuidesEnabled",
+                    help = def.tooltip,
+                })
+        else
+            RegisterPreviewControl(box._catalogCtx, btn, "layer." .. tostring(def.key),
+                tostring(def.label or def.key) .. " preview layer", "button", "ephemeral", {
+                    help = def.tooltip,
+                })
+        end
         box.layerButtons[#box.layerButtons + 1] = btn
     end
 end

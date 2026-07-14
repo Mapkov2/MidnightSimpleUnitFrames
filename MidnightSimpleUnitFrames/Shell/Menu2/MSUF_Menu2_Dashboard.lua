@@ -48,6 +48,8 @@ local function RegisterDashboardControl(widget, meta, label, kind, values)
     if direct then
         payload.settingKey = payload.settingKey or (direct.meta and direct.meta.settingKey)
         payload.actionKey = payload.actionKey or (direct.meta and direct.meta.actionKey)
+        payload.actionFixedArgs = payload.actionFixedArgs or (direct.meta and direct.meta.actionFixedArgs)
+        payload.actionInputArg = payload.actionInputArg or (direct.meta and direct.meta.actionInputArg)
         payload.assistantDisposition = payload.assistantDisposition or (direct.meta and direct.meta.assistantDisposition)
         payload.assistantDispositionReason = payload.assistantDispositionReason
             or (direct.meta and direct.meta.assistantDispositionReason)
@@ -214,16 +216,21 @@ local DASHBOARD_DIRECT_SPECS = {
     { path = "display_recovery.print_help", label = "Print Help", classification = "action", actionKey = "assistant_help",
         command = DirectAction(function() return DirectRunSlash("help") end) },
     { path = "display_recovery.copy_discord_link", label = "Discord", classification = "action", actionKey = "copy_support_link",
+        actionFixedArgs = { link = "discord" },
         command = DirectAction(function() return DirectCopyLink("Discord", "https://discord.gg/2Gf9b2Wprz") end) },
     { path = "display_recovery.factory_reset_all", label = "Factory Reset All", classification = "action", actionKey = "factory_reset_all", confirmRequired = true,
         command = DirectAction(function() return type(M.StageFactoryReset) == "function" and M.StageFactoryReset() or false end, true) },
     { path = "scaling.global_ui.preset.1080p", label = "1080p", classification = "action", actionKey = "apply_global_scale_preset",
+        actionFixedArgs = { preset = "1080p" },
         command = DirectAction(function() return DirectSetGlobalScale(true, 768 / 1080, "1080p") end, true) },
     { path = "scaling.global_ui.preset.1440p", label = "1440p", classification = "action", actionKey = "apply_global_scale_preset",
+        actionFixedArgs = { preset = "1440p" },
         command = DirectAction(function() return DirectSetGlobalScale(true, 768 / 1440, "1440p") end, true) },
     { path = "scaling.global_ui.preset.4k", label = "4K", classification = "action", actionKey = "apply_global_scale_preset",
+        actionFixedArgs = { preset = "4k" },
         command = DirectAction(function() return DirectSetGlobalScale(true, 768 / 2160, "4k") end, true) },
     { path = "scaling.global_ui.preset.pixel", label = "Pixel", classification = "action", actionKey = "apply_global_scale_preset",
+        actionFixedArgs = { preset = "pixel" },
         command = DirectAction(function() return DirectSetGlobalScale(true, DirectPixelScale(), "pixel") end, true) },
     { path = "scaling.global_ui.apply", label = "Apply Global UI Scale", classification = "action", actionKey = "dashboard.globalUiScale.apply",
         command = DirectAction(function()
@@ -254,6 +261,8 @@ for i = 1, #DASHBOARD_DIRECT_SPECS do
         help = spec.help,
         settingKey = spec.settingKey,
         actionKey = spec.actionKey,
+        actionFixedArgs = spec.actionFixedArgs,
+        actionInputArg = spec.actionInputArg,
         confirmRequired = spec.confirmRequired == true,
         historyMode = spec.command and spec.command.historyMode,
         command = spec.command,
@@ -1104,10 +1113,10 @@ local function BuildDashboardUX(ctx)
     support:SetHeight(supportH)
     local iconDir = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\"
     local supportLinks = {
-        { texture = "Patreon.png", title = "Patreon", tooltip = "Click to copy the Patreon support link.", url = "https://www.patreon.com/cw/MidnightSimpleUnitframes" },
-        { texture = "PayPal.png", title = "PayPal", tooltip = "Click to copy the PayPal support link.", url = "https://www.paypal.com/ncp/payment/H3N2P87S53KBQ" },
-        { texture = "Ko-Fi.png", title = "Ko-fi", tooltip = "Click to copy the Ko-fi link.", url = "https://ko-fi.com/midnightsimpleunitframes#linkModal" },
-        { texture = "GitHub.png", title = "GitHub", tooltip = "Click to copy the GitHub repository link.", url = "https://github.com/Mapkov2/MidnightSimpleUnitFrames" },
+        { key = "patreon", texture = "Patreon.png", title = "Patreon", tooltip = "Click to copy the Patreon support link.", url = "https://www.patreon.com/cw/MidnightSimpleUnitframes" },
+        { key = "paypal", texture = "PayPal.png", title = "PayPal", tooltip = "Click to copy the PayPal support link.", url = "https://www.paypal.com/ncp/payment/H3N2P87S53KBQ" },
+        { key = "kofi", texture = "Ko-Fi.png", title = "Ko-fi", tooltip = "Click to copy the Ko-fi link.", url = "https://ko-fi.com/midnightsimpleunitframes#linkModal" },
+        { key = "github", texture = "GitHub.png", title = "GitHub", tooltip = "Click to copy the GitHub repository link.", url = "https://github.com/Mapkov2/MidnightSimpleUnitFrames" },
     }
     local iconRow = CreateFrame("Frame", nil, support)
     iconRow:SetSize(160, 24)
@@ -1133,6 +1142,7 @@ local function BuildDashboardUX(ctx)
         AddTooltip(btn, data.title, data.tooltip)
         RegisterDashboardControl(btn, DashboardMeta("support.link." .. tostring(data.title), "action", {
             actionKey = "copy_support_link",
+            actionFixedArgs = { link = data.key },
             anchor = supportTitle,
             keywords = { data.tooltip, "How to support MSUF", "support links", data.url },
             help = data.tooltip,

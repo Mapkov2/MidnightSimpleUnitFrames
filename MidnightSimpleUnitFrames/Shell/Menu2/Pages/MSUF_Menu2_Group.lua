@@ -354,15 +354,14 @@ end
 local GF_COPY_EXCLUDE = M.KeySetFromWords "offsetX offsetY point positionMode _hlMigrated"
 local GF_SHARED_COLOR_KEYS = M.KeySetFromWords [[
     gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB
-    gfUnifiedR gfUnifiedG gfUnifiedB barTexture barBackgroundTexture barBgTexture bgR bgG bgB hpBarAlpha hpBgAlpha
-    alphaExcludeTextPortrait deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB deadBgA
+    gfUnifiedR gfUnifiedG gfUnifiedB bgR bgG bgB deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB deadBgA
     debuffStripeAlpha debuffStripeColorR debuffStripeColorG debuffStripeColorB targetR targetG targetB
     hlFocusColorR hlFocusColorG hlFocusColorB groupBorderR groupBorderG groupBorderB groupBorderA
     ciAggroColorR ciAggroColorG ciAggroColorB
 ]]
 local GF_COPY_CATEGORIES = {
     { key = "general", label = "Basics", keys = WL [[enabled blizzardFallbackMode showPlayer showSolo clickCastEnabled width height spacing growth groupFilter sortMode sortByRole roleOrder playerFirstInRole unitsPerColumn maxColumns preserveRaidGroups reverseFill smoothFill hideInClientScene hideInHousing hideOfflineEnabled hideOfflineInCombat hideOfflineDelay frameScaleMode frameScaleManual scaleAt10 scaleAt20 scaleAt25 scaleOver25]] },
-    { key = "health", label = "Health & Bars", keys = WL [[gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB gfUnifiedR gfUnifiedG gfUnifiedB barTexture barBackgroundTexture barBgTexture powerBarEnabled powerHeight showPower showPowerText powerTextLeft powerTextCenter powerTextRight powerTextLeftHidePercentSymbol powerTextCenterHidePercentSymbol powerTextRightHidePercentSymbol powerTextDelimiter powerFontSize powerOffsetX powerOffsetY powerTextLayer powerSmoothFill powerShowTank powerShowHealer powerShowDamager dispelOverlayEnabled dispelOverlayStyle dispelOverlayOnHealth dispelOverlayAlpha dispelOverlayTrigger dispelOverlayStrata deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB deadBgA]] },
+    { key = "health", label = "Health & Bars", keys = WL [[gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB gfUnifiedR gfUnifiedG gfUnifiedB barTexture barBackgroundTexture barBgTexture hpBarAlpha hpBgAlpha alphaExcludeTextPortrait powerBarEnabled powerHeight showPower showPowerText powerTextLeft powerTextCenter powerTextRight powerTextLeftHidePercentSymbol powerTextCenterHidePercentSymbol powerTextRightHidePercentSymbol powerTextDelimiter powerFontSize powerOffsetX powerOffsetY powerTextLayer powerSmoothFill powerShowTank powerShowHealer powerShowDamager dispelOverlayEnabled dispelOverlayStyle dispelOverlayOnHealth dispelOverlayAlpha dispelOverlayTrigger dispelOverlayStrata deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB deadBgA]] },
     { key = "text", label = "Text & Name", keys = WL [[showName hideNameOnDeadOffline nameFontSize nameAnchor nameOffsetX nameOffsetY nameTextLayer nameColorMode nameColorR nameColorG nameColorB nameShortenEnabled nameClipSide nameMaxChars nameNoEllipsis showHPText hpFontSize textLeft textCenter textRight hpTextLeftHidePercentSymbol hpTextCenterHidePercentSymbol hpTextRightHidePercentSymbol textDelimiter hpTextReverse healthTextDecimals hpFullValueShort hpOffsetX hpOffsetY textLayer]] },
     { key = "font", label = "Font Override", keys = WL [[fontOverride fontOutline useGlobalFontColor fontR fontG fontB]] },
     { key = "range", label = "Range Fade", keys = WL [[rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode offlineAlpha]] },
@@ -474,11 +473,12 @@ local OnOffBadge, BadgeNumber, OptionText = M.OnOffBadge, M.BadgeNumber, M.Optio
 local function CreateSectionNotice(sec, topY, buttonLabel, buttonWidth)
     return Shared.CreateSectionNotice(sec, topY, buttonLabel, buttonWidth, "_msuf2GroupFrameGateAlwaysEnabled")
 end
+local NAV_SUBPAGE_LABELS = M.navSubpageLabels or {}
 local GROUP_PAGE_TABS = {
-    { key = "gf_layout", label = "Layout", width = 64 },
-    { key = "gf_bars", label = "Health & Text", width = 108 },
-    { key = "gf_indicators", label = "Status & Indicators", width = 138 },
-    { key = "gf_auras", label = "Auras", width = 58 },
+    { key = "gf_layout", label = NAV_SUBPAGE_LABELS.gf_layout or "Layout", width = 64 },
+    { key = "gf_bars", label = NAV_SUBPAGE_LABELS.gf_bars or "Health & Text", width = 108 },
+    { key = "gf_indicators", label = NAV_SUBPAGE_LABELS.gf_indicators or "Status & Indicators", width = 138 },
+    { key = "gf_auras", label = NAV_SUBPAGE_LABELS.gf_auras or "Auras", width = 58 },
 }
 local GROUP_FLOW_TAB_STYLE = {
     bg = { 0.018, 0.032, 0.064, 0.95 },
@@ -866,6 +866,26 @@ local ROLE_SORT_BY_KEY = {}
 for i = 1, #ROLE_SORT_DEFS do
     ROLE_SORT_BY_KEY[ROLE_SORT_DEFS[i].key] = i
 end
+local ROLE_SORT_VALUES = {
+    { value = "TANK,HEALER,DAMAGER", text = "Tank, Healer, DPS" },
+    { value = "TANK,DAMAGER,HEALER", text = "Tank, DPS, Healer" },
+    { value = "HEALER,TANK,DAMAGER", text = "Healer, Tank, DPS" },
+    { value = "HEALER,DAMAGER,TANK", text = "Healer, DPS, Tank" },
+    { value = "DAMAGER,TANK,HEALER", text = "DPS, Tank, Healer" },
+    { value = "DAMAGER,HEALER,TANK", text = "DPS, Healer, Tank" },
+}
+local function NormalizeRoleOrder(value)
+    if type(value) ~= "string" then return nil end
+    local parts, seen = {}, {}
+    for token in value:gmatch("[^,]+") do
+        token = token:match("^%s*(.-)%s*$"):upper()
+        if token == "MELEE" or token == "RANGED" then token = "DAMAGER" end
+        if not ROLE_SORT_BY_KEY[token] or seen[token] then return nil end
+        seen[token], parts[#parts + 1] = true, token
+    end
+    if #parts ~= #ROLE_SORT_DEFS then return nil end
+    return table.concat(parts, ",")
+end
 local function BuildRoleOrderRows(ctx, section, opts)
     if not section then return nil end
     opts = opts or {}
@@ -890,6 +910,18 @@ local function BuildRoleOrderRows(ctx, section, opts)
         return token
     end
     local holder, rows
+    local function CurrentRoleOrder()
+        local conf = Conf(CurrentScope())
+        return NormalizeRoleOrder(conf.roleOrder) or "TANK,HEALER,DAMAGER"
+    end
+    local function ApplyRoleOrder(value)
+        value = NormalizeRoleOrder(value)
+        if not value then return false end
+        local kind = CurrentScope()
+        Conf(kind).roleOrder = value
+        QueueGF(kind, "rebuild")
+        return true
+    end
     local function SaveOrder()
         local kind = CurrentScope()
         local function WriteOrder()
@@ -898,15 +930,12 @@ local function BuildRoleOrderRows(ctx, section, opts)
             table.sort(ordered, function(a, b) return (a.slotIndex or 0) < (b.slotIndex or 0) end)
             local parts = {}
             for i = 1, #ordered do parts[#parts + 1] = ordered[i].key end
-            local conf = Conf(kind)
-            conf.roleOrder = table.concat(parts, ",")
-            QueueGF(kind, "rebuild")
+            ApplyRoleOrder(table.concat(parts, ","))
         end
         M.RunWithHistory("Role Priority Order", "group:roleOrder:" .. tostring(kind), WriteOrder)
     end
     local function LoadOrder()
-        local conf = Conf(CurrentScope())
-        local order = type(conf.roleOrder) == "string" and conf.roleOrder or "TANK,HEALER,DAMAGER"
+        local order = CurrentRoleOrder()
         local slot = 0
         local assigned = {}
         for token in order:gmatch("[^,]+") do
@@ -931,8 +960,26 @@ local function BuildRoleOrderRows(ctx, section, opts)
         controlDomain = "group",
         controlPageKey = ctx and ctx.key,
         controlPath = "sorting.role_priority",
+        controlClassification = "setting",
         assistantDisposition = "dynamic",
         assistantDispositionReason = "Role-priority rows reorder the selected Group scope as one ordered value.",
+        assistantSettingKeys = { "gf_party.roleOrder", "gf_raid.roleOrder", "gf_mythicraid.roleOrder" },
+        controlCommand = {
+            kind = "dragrow",
+            source = "group/sorting/role_priority",
+            valueKind = "enum",
+            values = ROLE_SORT_VALUES,
+            get = CurrentRoleOrder,
+            set = function(value)
+                local changed = ApplyRoleOrder(value)
+                if changed and holder and holder.Refresh then holder.Refresh() end
+                return changed
+            end,
+            canExecute = function()
+                local scope = CurrentScope()
+                return scope == "party" or scope == "raid" or scope == "mythicraid"
+            end,
+        },
         onReorder = SaveOrder,
         tooltip = function(self, row, tip)
             tip:SetOwner(self, "ANCHOR_RIGHT")

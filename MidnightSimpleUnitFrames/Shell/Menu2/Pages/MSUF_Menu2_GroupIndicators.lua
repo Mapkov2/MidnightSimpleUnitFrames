@@ -377,7 +377,7 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         W.MoveWidget(control, parent, x, y, moveWidth or width, "LEFT")
         return control
     end
-    local function BindStatusSlider(parent, label, minValue, maxValue, step, width, specField, defaultValue, reason, x, y, moveWidth, clamp)
+    local function BindStatusSlider(parent, label, minValue, maxValue, step, width, specField, defaultValue, reason, x, y, moveWidth, clamp, identitySuffix)
         local control = W.Slider(parent, label, minValue, maxValue, step, width)
         M.BindNumberWidget(ctx, control,
             function()
@@ -396,14 +396,15 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
                 end
                 Set(CurrentScope(), spec[specField], value, reason)
             end,
-            StatusSpecDefault(CurrentGFStatusSpec(), defaultValue), StepMeta(ctx, "status.selected." .. tostring(specField), step))
+            StatusSpecDefault(CurrentGFStatusSpec(), defaultValue), StepMeta(ctx,
+                "status.selected." .. tostring(specField) .. (identitySuffix and ("." .. identitySuffix) or ""), step))
         W.MoveWidget(control, parent, x, y, moveWidth or width, "LEFT")
         return control
     end
     local function BuildStatusControls(parent, specs)
         return M.BuildControlSpecs(specs, {
             dropdown = function(s, i) return BindStatusDropdown(parent, s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10], s[11]), s[12] or s[5] or i end,
-            slider = function(s, i) return BindStatusSlider(parent, s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10], s[11], s[12], s[13]), s[14] or s[7] or i end,
+            slider = function(s, i) return BindStatusSlider(parent, s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10], s[11], s[12], s[13], s.identitySuffix), s[14] or s[7] or i end,
         })
     end
     local function StatusIconPreviewEntries(spec)
@@ -652,9 +653,9 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
     local advanced = {}
     advanced.card = W.ControlCard(siconAdvancedTab, "Advanced Placement", nil, siconLeftX, -38, siconInnerW, 316)
     M.Assign(advanced, BuildStatusControls(advanced.card, {
-        { "slider", "X Offset (extended)", -500, 500, 1, siconLeftW, "x", 0, "geometry", 16, -58, siconLeftW - 58 },
-        { "slider", "Y Offset (extended)", -500, 500, 1, siconRightW, "y", 0, "geometry", siconRightX - siconLeftX, -58, siconRightW - 58 },
-        { "slider", "Layer", 0, 30, 1, siconLeftW, "layer", function(spec) return spec.defaultLayer end, "visual", 16, -128, siconLeftW - 58, true },
+        { "slider", "X Offset (extended)", -500, 500, 1, siconLeftW, "x", 0, "geometry", 16, -58, siconLeftW - 58, identitySuffix = "extended" },
+        { "slider", "Y Offset (extended)", -500, 500, 1, siconRightW, "y", 0, "geometry", siconRightX - siconLeftX, -58, siconRightW - 58, identitySuffix = "extended" },
+        { "slider", "Layer", 0, 30, 1, siconLeftW, "layer", function(spec) return spec.defaultLayer end, "visual", 16, -128, siconLeftW - 58, true, identitySuffix = "extended" },
     }))
     advanced.reset = W.Button(advanced.card, "Reset selected", 160)
     advanced.reset._msuf2SkipHistoryCheckpoint = true
@@ -1379,7 +1380,7 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         W.ControlCard(spells, Tr("Selected Spell"), nil, siRightX - 14, -38, siRightW + 28, 404)
         placedIndicatorCard = W.ControlCard(spells, Tr("Placed Indicator"), nil, siLeftX - 14, -456, siLeftW + 28, 462)
         W.ControlCard(spells, Tr("Frame Effect"), nil, siRightX - 14, -456, siRightW + 28, 360)
-        W.ControlCard(spells, Tr("Utilities"), nil, siRightX - 14, -828, siRightW + 28, 194)
+        W.ControlCard(spells, Tr("Buff Appearance"), nil, siRightX - 14, -828, siRightW + 28, 194)
     end
     local RefreshSpellIndicatorState = M.RefreshProxy()
     local function RequestSpellControlRefresh(reason)
@@ -1733,10 +1734,28 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         W.Slider(spells, Tr("Effect Strata"), 0, (FrameStrataCount or 9) - 1, 1, siRightW),
         function() return FrameEffectConfig(CurrentScope(), true) end, "strata", "AUTO", "visual", "spell.frame.strata")
     W.MoveWidget(frameStrata, spells, siRightX, -762, siRightW, "LEFT")
-    local placedMissing = BindPlacedToggle("Show when missing", "missing", false, -868)
-    local placedCooldownSwipe = BindPlacedToggle("Show Cooldown Swipe", "showCooldownSwipe", true, -900)
-    local placedCooldown = BindPlacedToggle("Show Cooldown Text", "showCooldown", true, -932)
-    local placedCooldownSize = BindConfigSlider(PlacedConfig, siRightX, siRightW, "Cooldown Text Size", 6, 40, 1, "cooldownSize", 8, -964)
+    local appearanceHint = W.Text(spells,
+        "Cooldown text, swipe, tooltip, duration bar, and stacks follow this scope's Buff Aura Style.",
+        siRightX, -866, siRightW, T.colors.muted)
+    if appearanceHint.SetWordWrap then appearanceHint:SetWordWrap(true) end
+    local openBuffAppearance = T.Button(spells, Tr("Open Buff Aura Style"), siRightW, 28)
+    openBuffAppearance._msuf2GroupFrameGateAlwaysEnabled = true
+    openBuffAppearance:SetPoint("TOPLEFT", spells, "TOPLEFT", siRightX, -930)
+    if T.CenterButtonLabel then T.CenterButtonLabel(openBuffAppearance) end
+    openBuffAppearance:SetScript("OnClick", function()
+        local scope = CurrentScope() == "party" and "party" or "raid"
+        M.SetMenuStateValue("auraScope", scope)
+        M.SetMenuStateValue("auraStyleGFScope", scope)
+        M.SetMenuStateValue("auraStyleGFLane", "buff")
+        M.SetMenuStateValue("auraStyleContainer", "buff")
+        if M.SelectPage then M.SelectPage("auras3_styling") end
+    end)
+    RegisterControl(openBuffAppearance, ctx, "spell.buff_appearance.open", "Open Buff Aura Style", "button", "navigation", { navigationKey = "auras3_styling" })
+    if M.AddTooltip then
+        M.AddTooltip(openBuffAppearance, "Buff Aura Style",
+            "Appearance > Auras > this Party or Raid scope > Buffs. Spell choice, placement, size, layer, and effects remain per indicator.",
+            { hook = true, titleAsLine = true })
+    end
     local spellGridLayoutRows
     local function RefreshSpellGridLayout(rows)
         rows = max(3, tonumber(rows) or 3)
@@ -1798,11 +1817,8 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         SetManyEnabled(hasSpell, spellEnabled, onlyMine, autoBlacklist, placedType)
         SetOptionEnabled(customSpellIDs, customSpell)
         SetManyEnabled(placedEnabled, placedAnchor, placedSize, placedX, placedY, placedGrowth)
-        SetOptionEnabled(placedMissing, false)
         SetOptionEnabled(placedBarWidth, barRelevant)
         SetOptionEnabled(placedIconEffect, cdRelevant)
-        SetManyEnabled(cdRelevant, placedCooldownSwipe, placedCooldown)
-        SetOptionEnabled(placedCooldownSize, cdRelevant and placed and placed.showCooldown ~= false)
         SetOptionEnabled(frameType, hasSpell)
         SetManyEnabled(hasFrame, frameColor, framePriority, frameAlpha, frameThickness, frameStrata)
         local badges = {
