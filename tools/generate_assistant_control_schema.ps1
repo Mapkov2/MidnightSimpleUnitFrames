@@ -16,9 +16,14 @@ if ($env:MSUF_ASSISTANT_SCHEMA_GATE_LOCK_HELD -ne "1") {
         $false, "Local\MSUF_AssistantSchemaAndReleaseGate_v1")
     Write-Host "[gate-lock] Waiting for exclusive Assistant schema/release access..."
     try {
-        $schemaGateMutexHeld = $schemaGateMutex.WaitOne([TimeSpan]::FromMinutes(30))
-    } catch [System.Threading.AbandonedMutexException] {
-        $schemaGateMutexHeld = $true
+        try {
+            $schemaGateMutexHeld = $schemaGateMutex.WaitOne([TimeSpan]::FromMinutes(30))
+        } catch [System.Threading.AbandonedMutexException] {
+            $schemaGateMutexHeld = $true
+        }
+    } catch {
+        $schemaGateMutex.Dispose()
+        throw
     }
     if (-not $schemaGateMutexHeld) {
         $schemaGateMutex.Dispose()
@@ -382,8 +387,11 @@ if ($Check) {
     Write-Host "wrote $absoluteOutput ($($records.Count) controls, $($contexts.Count) contexts, $($expectedStateIds.Count) finite states, $([Text.Encoding]::UTF8.GetByteCount($content)) bytes)"
 }
 } finally {
-    if ($schemaGateMutexHeld -and $schemaGateMutex) {
-        $schemaGateMutex.ReleaseMutex()
+    if ($schemaGateMutex) {
+        try {
+            if ($schemaGateMutexHeld) { $schemaGateMutex.ReleaseMutex() }
+        } finally {
+            $schemaGateMutex.Dispose()
+        }
     }
-    if ($schemaGateMutex) { $schemaGateMutex.Dispose() }
 }
