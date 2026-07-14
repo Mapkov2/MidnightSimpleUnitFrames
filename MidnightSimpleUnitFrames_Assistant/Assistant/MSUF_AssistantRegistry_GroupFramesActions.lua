@@ -136,12 +136,12 @@ Registry:RegisterAction({
 local GROUP_COPY_SCOPE_LABELS = {
     { key = "general", label = "Basics" },
     { key = "health", label = "Health & Bars" },
+    { key = "dispel", label = "Dispel Overlay" },
     { key = "text", label = "Text & Name" },
     { key = "font", label = "Font Override" },
-    { key = "border", label = "Background & Opacity" },
     { key = "range", label = "Range Fade" },
     { key = "indicators", label = "Status & Indicators" },
-    { key = "auras", label = "Auras" },
+    { key = "auras", label = "Auras - All" },
     { key = "highlight", label = "Highlight & Aggro" },
     { key = "dstripe", label = "Debuff Stripe" },
     { key = "features", label = "Corner/Spell" },
@@ -188,16 +188,23 @@ local function AddDirty(mask, flag)
 end
 
 local GROUP_COPY_EXCLUDE = WordSet("offsetX offsetY point positionMode _hlMigrated")
+local GROUP_SHARED_COLOR_KEYS = WordSet([[
+gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB
+gfUnifiedR gfUnifiedG gfUnifiedB bgR bgG bgB deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB deadBgA
+debuffStripeAlpha debuffStripeColorR debuffStripeColorG debuffStripeColorB targetR targetG targetB
+hlFocusColorR hlFocusColorG hlFocusColorB groupBorderR groupBorderG groupBorderB groupBorderA
+ciAggroColorR ciAggroColorG ciAggroColorB
+]])
 local GROUP_COPY_CATEGORIES = {
     { key = "general", keys = WordList("enabled blizzardFallbackMode showPlayer showSolo clickCastEnabled width height spacing growth groupFilter sortMode sortByRole roleOrder playerFirstInRole unitsPerColumn maxColumns preserveRaidGroups reverseFill smoothFill hideInClientScene hideInHousing hideOfflineEnabled hideOfflineInCombat hideOfflineDelay frameScaleMode frameScaleManual scaleAt10 scaleAt20 scaleAt25 scaleOver25") },
-    { key = "health", keys = WordList("gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB gfUnifiedR gfUnifiedG gfUnifiedB barTexture barBackgroundTexture barBgTexture powerBarEnabled powerHeight showPower showPowerText powerTextLeft powerTextCenter powerTextRight powerTextLeftHidePercentSymbol powerTextCenterHidePercentSymbol powerTextRightHidePercentSymbol powerTextDelimiter powerFontSize powerOffsetX powerOffsetY powerTextLayer powerSmoothFill powerShowTank powerShowHealer powerShowDamager dispelOverlayEnabled dispelOverlayStyle dispelOverlayOnHealth dispelOverlayAlpha dispelOverlayTrigger dispelOverlayStrata healthFadeEnabled healthFadeThreshold healthFadeAlpha deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB deadBgA") },
+    { key = "health", keys = WordList("gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB gfUnifiedR gfUnifiedG gfUnifiedB barTexture barBackgroundTexture barBgTexture hpBarAlpha hpBgAlpha alphaExcludeTextPortrait powerBarEnabled powerHeight showPower showPowerText powerTextLeft powerTextCenter powerTextRight powerTextLeftHidePercentSymbol powerTextCenterHidePercentSymbol powerTextRightHidePercentSymbol powerTextDelimiter powerFontSize powerOffsetX powerOffsetY powerTextLayer powerSmoothFill powerShowTank powerShowHealer powerShowDamager deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB deadBgA") },
+    { key = "dispel", keys = WordList("dispelOverlayEnabled dispelOverlayStyle dispelOverlayOnHealth dispelOverlayAlpha dispelOverlayTrigger dispelOverlayStrata") },
     { key = "text", keys = WordList("showName hideNameOnDeadOffline nameFontSize nameAnchor nameOffsetX nameOffsetY nameTextLayer nameColorMode nameColorR nameColorG nameColorB nameShortenEnabled nameClipSide nameMaxChars nameNoEllipsis showHPText hpFontSize textLeft textCenter textRight hpTextLeftHidePercentSymbol hpTextCenterHidePercentSymbol hpTextRightHidePercentSymbol textDelimiter hpTextReverse healthTextDecimals hpFullValueShort hpOffsetX hpOffsetY textLayer") },
     { key = "font", keys = WordList("fontOverride fontOutline useGlobalFontColor fontR fontG fontB") },
-    { key = "border", keys = WordList("bgR bgG bgB hpBarAlpha hpBgAlpha alphaExcludeTextPortrait") },
     { key = "range", keys = WordList("rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode offlineAlpha") },
-    { key = "indicators", keys = WordList("pvpIcon statusText statusGhostText statusAFKText showGroupNumber groupNumberSize groupNumberAnchor groupNumberX groupNumberY groupBorderEnabled groupBorderSize groupBorderPadding groupBorderR groupBorderG groupBorderB groupBorderA iconStyle useMidnightIcons roleIconStyle leaderIconStyle assistIconStyle raidMarkerStyle readyCheckIconStyle summonIconStyle resurrectIconStyle pvpIconStyle phaseIconStyle roleIconCustomIcon leaderIconCustomIcon assistIconCustomIcon raidMarkerCustomIcon readyCheckIconCustomIcon summonIconCustomIcon resurrectIconCustomIcon pvpIconCustomIcon phaseIconCustomIcon"), prefix = WordList("si_ statusIcon indicator") },
+    { key = "indicators", keys = WordList("pvpIcon statusText statusGhostText statusAFKText showGroupNumber groupNumberSize groupNumberAnchor groupNumberX groupNumberY groupBorderEnabled groupBorderSize groupBorderPadding groupBorderR groupBorderG groupBorderB groupBorderA iconStyle useMidnightIcons roleIconStyle leaderIconStyle assistIconStyle raidMarkerStyle readyCheckIconStyle summonIconStyle resurrectIconStyle pvpIconStyle phaseIconStyle roleIconCustomIcon leaderIconCustomIcon assistIconCustomIcon raidMarkerCustomIcon readyCheckIconCustomIcon summonIconCustomIcon resurrectIconCustomIcon pvpIconCustomIcon phaseIconCustomIcon pvpIcon pvpIconStyle pvpIconCustomIcon pvpIconSize pvpIconAnchor pvpIconX pvpIconY pvpIconLayer statusText statusTextSize statusTextAnchor statusOffsetX statusOffsetY statusTextLayer statusGhostText statusGhostTextSize statusGhostTextAnchor statusGhostOffsetX statusGhostOffsetY statusGhostTextLayer statusAFKText statusAFKTextSize statusAFKTextAnchor statusAFKOffsetX statusAFKOffsetY statusAFKTextLayer"), prefix = WordList("si_ statusIcon indicator") },
     { key = "auras", tables = WordList("auras") },
-    { key = "highlight", keys = WordList("targetIndicator targetR targetG targetB"), prefix = WordList("hl dispel") },
+    { key = "highlight", keys = WordList("targetIndicator targetR targetG targetB aggroMode dispelEnabled dispelOutlineMode dispelBorderEnabled dispelBorderMode dispelBorderTrigger dispelTrigger"), prefix = WordList("hl") },
     { key = "dstripe", prefix = WordList("debuffStripe") },
     { key = "features", keys = WordList("ciEnabled ciAlpha"), tables = WordList("spellIndicators"), prefix = WordList("ci") },
 }
@@ -236,12 +243,11 @@ end
 local function GroupCopyDirtyMask(gf, scopes)
     if not gf or type(scopes) ~= "table" then return nil end
     if scopes.general then return nil end
-    if scopes.health or scopes.text or scopes.range or scopes.indicators or scopes.highlight or scopes.dstripe or scopes.features then
+    if scopes.health or scopes.dispel or scopes.text or scopes.range or scopes.indicators or scopes.highlight or scopes.dstripe or scopes.features then
         return gf.DIRTY_CONFIG or gf.DIRTY_ALL or gf.DIRTY_VISUAL
     end
     local dirty
     if scopes.font then dirty = AddDirty(dirty, gf.DIRTY_FONT) end
-    if scopes.border then dirty = AddDirty(dirty, gf.DIRTY_BORDER) end
     if scopes.auras then dirty = AddDirty(dirty, gf.DIRTY_AURAS) end
     return dirty or gf.DIRTY_VISUAL
 end
@@ -340,7 +346,7 @@ local function CopyGroupSettingsFallback(srcKind, dstKind, scopes)
         end
     end
     for key, value in pairs(srcConf) do
-        if not GROUP_COPY_EXCLUDE[key] then
+        if not GROUP_COPY_EXCLUDE[key] and not GROUP_SHARED_COLOR_KEYS[key] then
             local copy = allowKeys[key] or allowTables[key]
             if (not copy) and type(key) == "string" then
                 for i = 1, #allowPrefixes do

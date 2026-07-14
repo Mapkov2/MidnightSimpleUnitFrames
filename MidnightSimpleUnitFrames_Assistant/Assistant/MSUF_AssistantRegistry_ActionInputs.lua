@@ -283,18 +283,18 @@ local UNIT_COPY_SCOPE = Map({
     status = BOOL, load = BOOL, transparency = BOOL, layout = BOOL,
 })
 local GROUP_COPY_SCOPE = Map({
-    general = BOOL, health = BOOL, text = BOOL, font = BOOL, border = BOOL, range = BOOL,
+    general = BOOL, health = BOOL, dispel = BOOL, text = BOOL, font = BOOL, range = BOOL,
     indicators = BOOL, auras = BOOL, highlight = BOOL, dstripe = BOOL, features = BOOL,
 })
 local COPY_CATEGORY = Enum({
     "basics", "text", "portrait", "power", "castbar", "status", "load", "transparency", "layout",
-    "general", "health", "font", "border", "range", "indicators", "auras", "highlight", "dstripe", "features",
+    "general", "health", "dispel", "font", "range", "indicators", "auras", "highlight", "dstripe", "features",
 })
 local UNIT_COPY_CATEGORY = Enum({
     "basics", "text", "portrait", "power", "castbar", "status", "load", "transparency", "layout",
 })
 local GROUP_COPY_CATEGORY = Enum({
-    "general", "health", "text", "font", "border", "range", "indicators", "auras", "highlight", "dstripe", "features",
+    "general", "health", "dispel", "text", "font", "range", "indicators", "auras", "highlight", "dstripe", "features",
 })
 local SELECTOR_KIND = Enum({ "power", "classPower" }, {
     classpower = "classPower", classresource = "classPower", cp = "classPower",

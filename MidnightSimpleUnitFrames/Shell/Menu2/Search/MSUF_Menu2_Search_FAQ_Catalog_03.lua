@@ -19,7 +19,7 @@ if type(Data.RegisterFAQProvider) == "function" then
             ]])
 
         return Data.FAQRows({
-            { l = "Where is the unit frame range check?", a = "Open the matching unit page > Range Fade. Group range fade is in Group Frames > Effects.", p = "uf_target", t = "Opens: Target > Range Fade", x = "Range Fade unit frame range check range checker distance check out of range alpha target targettarget focus focustarget pet boss", k = "unit frame range check|unitframe range check|unit frames range check|range check unitframe|range check unit frame|range checker|distance check|distance checker|out of range unit frame|out of range frames|target out of range|focus out of range|boss out of range|target range fade|focus range fade|boss range fade|reichweitencheck|reichweite check|entfernung check", y = 165 },
+            { l = "Where is the unit frame range check?", a = "Open the matching unit page > Range Fade. Group range fade is in Group Frames > Layout.", p = "uf_target", t = "Opens: Target > Range Fade", x = "Range Fade unit frame range check range checker distance check out of range alpha target targettarget focus focustarget pet boss", k = "unit frame range check|unitframe range check|unit frames range check|range check unitframe|range check unit frame|range checker|distance check|distance checker|out of range unit frame|out of range frames|target out of range|focus out of range|boss out of range|target range fade|focus range fade|boss range fade|reichweitencheck|reichweite check|entfernung check", y = 165 },
         },
         {
             {
@@ -258,10 +258,10 @@ if type(Data.RegisterFAQProvider) == "function" then
         {
             {
                 l = "Where is party or raid range check?",
-                a = "Open Group Frames > Effects > Range Fade. Affects chooses frame or HP fading, and the" ..
+                a = "Open Group Frames > Layout > Range Fade. Affects chooses frame or HP fading, and the" ..
                     " alpha sliders control out-of-range and offline opacity.",
-                p = "gf_bars",
-                t = "Opens: Group Frames > Effects > Range Fade",
+                p = "gf_layout",
+                t = "Opens: Group Frames > Layout > Range Fade",
                 x = "Range Fade group frame range check raid range check party range check out of range alpha" ..
                     " offline opacity affects frame HP",
                 k = SearchKeywordList(

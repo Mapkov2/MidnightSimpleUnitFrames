@@ -1797,6 +1797,17 @@ R.READABILITY_FRAME_TERMS = {    "frame", "frames", "unit frame", "unit frames",
 }
 
 function R.TryReadabilityShortcut(text)    local norm = R.Normalize(text)
+    -- Copy requests own their source, destination, category, transaction, and
+    -- undo behavior. Keep them out of fuzzy readability matching (notably the
+    -- near-match between "overlay" and "overlap") so Router help cannot
+    -- replace a valid deterministic copy action.
+    local copyTerms = {
+        "copy", "use", "kopiere", "kopieren", "uebernehme", "uebernehmen",
+        "look like", "looks like", "same as", "the same as", "match", "mirror", "clone",
+    }
+    for i = 1, #copyTerms do
+        if R.HasNormalizedPhrase(norm, copyTerms[i]) then return nil end
+    end
     if norm == "" or not R.ContainsAny(norm, R.READABILITY_PROBLEM_TERMS) then return nil end
     if R.ContainsAny(norm, {
         "make my ui cleaner", "make my interface cleaner",
@@ -2867,7 +2878,7 @@ A.RouterTryVisualSettingShortcut = function(norm, coreHandler)
 
     if R.ContainsAny(norm, { "heal prediction", "incoming heal prediction", "incoming heal overlay" }) and asksLocation then
         local label = scopeLabel and (scopeLabel .. " Heal Prediction Overlay") or "Heal Prediction Overlay"
-        local page = scopeKind == "group" and "Group Dispel Overlay and Bars" or "Bars"
+        local page = "Bars"
         return R.VisualSettingReply(
             label .. " setting location",
             label .. " is controlled through " .. page .. ". Group scopes can use scoped Heal Prediction Overlay options; the shared overlay controls live in Bars.",
@@ -6913,6 +6924,27 @@ A.RouterTryClassResourceProblemShortcut = function(text, coreHandler)
     end
 
     if R.ContainsAny(norm, terms.color) then
+        local specificColorResource = false
+        local resourceColorTerms = {
+            "combo point", "combo points", "holy power", "rune", "runes",
+            "soul shard", "soul shards", "chi", "arcane charge", "arcane charges",
+            "essence", "essences", "soul fragment", "soul fragments",
+            "maelstrom weapon", "whirlwind", "tip of the spear", "icicle", "icicles",
+        }
+        for i = 1, #resourceColorTerms do
+            if R.HasNormalizedPhrase(norm, resourceColorTerms[i]) then
+                specificColorResource = true
+                break
+            end
+        end
+        -- A named class resource has several real color owners (individual
+        -- slots, full-state color, and sometimes more than one class/spec).
+        -- Let the deterministic parser ask that exact ambiguity instead of
+        -- replacing it with broad color help.
+        if specificColorResource and type(coreHandler) == "function" then
+            local exact = coreHandler(text)
+            if exact and not A.RouterIsUnknownResult(exact) then return exact end
+        end
         return A.RouterClassResourceProblemReply(
             "Class Resources color help",
             "Class Resource colors are separate from global frame colors. Combo points, holy power, runes, arcane charges, backgrounds, and separators can have their own color options depending on the resource.",
@@ -8788,7 +8820,7 @@ function R.RoleGuidanceReply(text)    local norm = R.Normalize(text)
         examples = "turn on raid click casting; set raid range fade to 40; show only dispellable debuffs; set raid health text size to 14."
         actions = "Open Group Layout | Open Group Dispel Overlay | Open Group Status & Indicators | Open Group Auras | Guided Setup"
         reasons = {
-            "Group Layout establishes health, text, resource, stripe, and range readability; Group Dispel Overlay handles dispel feedback.",
+            "Group Layout establishes health, text, resource, and range readability; Group Dispel Overlay handles dispel overlays and debuff stripes.",
             "Group Status & Indicators adds dispel, role, and ready-state signals after the core health view is readable.",
             "Group Auras then controls the buffs and debuffs that affect healing decisions without hiding the underlying health view.",
             "Guided Setup is the safe fallback when you want to review the wider profile step by step.",

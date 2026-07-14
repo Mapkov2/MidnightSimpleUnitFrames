@@ -1187,22 +1187,15 @@ local ASSISTANT_FRAME_PAGE = {
     aura = "auras3_styling",
 }
 
-local ASSISTANT_GROUP_LAYOUT_ATTRS = M.KeySetFromWords([[
-enabled showPlayer showSolo clickCast clickCastEnabled blizzardFallbackMode
-hideInClientScene hideInHousing hideOfflineEnabled hideOfflineInCombat hideOfflineDelay
-smoothFill reverseFill width height offsetX offsetY spacing unitsPerColumn
-maxColumns preserveRaidGroups growth sortMode sortByRole playerFirstInRole
-roleOrder frameScaleMode frameScaleEnabled frameScaleManual scaleAt10
-scaleAt20 scaleAt25 scaleOver25 hpBarAlpha hpBgAlpha alphaExcludeTextPortrait
-barTexture barBackgroundTexture barBgTexture
-groupBackdropColor anchorToFrame customAnchorFrame anchorPoint
-]])
-
 local ASSISTANT_GROUP_INDICATOR_PARTS = M.KeySetFromWords([[
 roleicon leadericon assisticon raidmarker readycheck summonicon summonanchor
 summonx summony summonlayer resurrecticon resurrectanchor resurrectx resurrecty
 resurrectlayer phaseicon pvpicon warmode threaticon aggroicon spellindicator
 spellindicators cornerindicator cornerindicators
+]])
+
+local ASSISTANT_GROUP_EFFECT_PARTS = M.KeySetFromWords([[
+dispeloverlay debuffstripe
 ]])
 
 local function AssistantRegistryGroupPage(setting)
@@ -1212,10 +1205,10 @@ local function AssistantRegistryGroupPage(setting)
     for part in pairs(ASSISTANT_GROUP_INDICATOR_PARTS) do
         if attrNorm:find(part, 1, true) or keyNorm:find(part, 1, true) then return "gf_indicators" end
     end
-    if ASSISTANT_GROUP_LAYOUT_ATTRS[attr] then return "gf_layout" end
-    local suffix = tostring(setting and setting.key or ""):match("%.([^%.]+)$")
-    if suffix and ASSISTANT_GROUP_LAYOUT_ATTRS[suffix] then return "gf_layout" end
-    return "gf_bars"
+    for part in pairs(ASSISTANT_GROUP_EFFECT_PARTS) do
+        if attrNorm:find(part, 1, true) or keyNorm:find(part, 1, true) then return "gf_bars" end
+    end
+    return "gf_layout"
 end
 
 local function AssistantRegistryPageForSetting(setting)

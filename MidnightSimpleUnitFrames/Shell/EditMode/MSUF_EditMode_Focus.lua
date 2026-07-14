@@ -104,7 +104,7 @@ end
 local UnitSectionForComponent = U.UnitSectionForComponent
 
 local function GroupPageForComponent(component)
-    if component == "bars" or component == "hp" or component == "power" or component == "name" or component == "text" then return "gf_bars" end
+    if component == "dispel" or component == "stripe" or component == "dstripe" then return "gf_bars" end
     if component == "auras" then return "gf_auras" end
     if component == "status" or component == "indicators" or component == "sicons" then return "gf_indicators" end
     return "gf_layout"
@@ -113,12 +113,9 @@ end
 local function GroupSectionForComponent(pageKey, component)
     pageKey = pageKey or GroupPageForComponent(component)
     if pageKey == "gf_bars" then
-        if component == "power" then return "power" end
-        if component == "name" or component == "hp" or component == "text" then return "text" end
         if component == "dispel" then return "dispel" end
-        if component == "range" then return "range" end
         if component == "stripe" or component == "dstripe" then return "dstripe" end
-        return "bars"
+        return "dispel"
     elseif pageKey == "gf_auras" then
         if component == "debuffs" or component == "debuff" then return "debuffs" end
         if component == "ext" or component == "externals" or component == "external" then return "ext" end
@@ -129,13 +126,17 @@ local function GroupSectionForComponent(pageKey, component)
         if component == "corners" or component == "ci" then return "ci" end
         return "indicators"
     end
+    if component == "power" then return "power" end
+    if component == "name" or component == "hp" or component == "text" then return "text" end
+    if component == "range" then return "range" end
+    if component == "bars" then return "general" end
     if component == "anchor" or component == "anchoring" then return "anchor" end
     if component == "tooltip" then return "tooltip" end
     if component == "sorting" or component == "sort" then return "sorting" end
     if component == "scale" or component == "scaling" then return "scaling" end
-    if component == "border" or component == "alpha" or component == "transparency" then return "border" end
+    if component == "border" or component == "alpha" or component == "transparency" then return "transparency" end
     if component == "general" then return "general" end
-    return "layout"
+    return "layout_advanced"
 end
 
 local function ClearPassiveMenuFocusRequest()

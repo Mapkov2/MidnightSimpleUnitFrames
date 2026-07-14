@@ -62,7 +62,7 @@ function A.DashboardRegistry.BuildGroupTextSelectors(ctx)
         if slot and (tab == "hp" or tab == "power") then PersistNestedTableValue("gfTextSlotSelection", scope, tab, slot) end
         RememberSelectedTextTarget("group", scope, tab, slot)
         FocusGroupText(scope, tab, slot)
-        OpenMenuPage("gf_bars")
+        OpenMenuPage("gf_layout")
         return true, "Selected " .. GroupLabel(scope) .. " " .. TEXT_TAB_LABELS[tab] .. (slot and (" " .. TEXT_SLOT_LABELS[slot] .. " slot") or " tab") .. "."
     end
 
@@ -80,7 +80,7 @@ function A.DashboardRegistry.BuildGroupTextSelectors(ctx)
         RememberSelectedTextTarget("group", scope, tab, slot)
         FocusGroupText(scope, tab, slot)
         if Menu and type(Menu.RefreshGFNativePreviews) == "function" then Menu.RefreshGFNativePreviews() end
-        OpenMenuPage("gf_bars")
+        OpenMenuPage("gf_layout")
         return true, "Set " .. GroupLabel(scope) .. " " .. TEXT_TAB_LABELS[tab] .. " move text as one group " .. (value and "on" or "off") .. "."
     end
 

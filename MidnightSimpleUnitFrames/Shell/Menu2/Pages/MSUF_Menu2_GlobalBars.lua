@@ -1305,7 +1305,7 @@ local function BuildUnitDispelOverlaySection(ctx, b)
     }
     local hintY = overlayWide and -284 or -384
     local groupHint = W.Text(ufOverlayCard,
-        "Group frame scopes use Group Frames > Health & Bars > Dispel Overlay.",
+        "Group frame scopes use Group Frames > Dispel Overlay.",
         16, hintY, ufOverlayCardW - 32, T.colors.muted)
     local auraHint = W.Text(ufOverlayCard, UNITFRAME_DISPEL_AURA_WARNING,
         16, hintY, ufOverlayCardW - 32, UNITFRAME_DISPEL_AURA_WARNING_COLOR)
