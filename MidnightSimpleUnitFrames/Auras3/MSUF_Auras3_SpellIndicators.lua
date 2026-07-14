@@ -212,8 +212,15 @@ local function SlotLayoutSignature(slot)
         .. "\030" .. tostring(slot.size) .. "\030" .. tostring(slot.width) .. "\030" .. tostring(slot.height)
         .. "\030" .. tostring(slot.layer) .. "\030" .. tostring(slot.strata) .. "\030" .. tostring(slot.showCooldownText)
         .. "\030" .. tostring(slot.showCooldownSwipe) .. "\030" .. tostring(slot.cooldownSwipeReverse)
-        .. "\030" .. tostring(slot.cooldownSize)
-        .. "\030" .. tostring(slot.showStacks) .. "\030" .. tostring(color[1]) .. "\030" .. tostring(color[2])
+        .. "\030" .. tostring(slot.cooldownSize) .. "\030" .. tostring(slot.cooldownAnchor)
+        .. "\030" .. tostring(slot.cooldownX) .. "\030" .. tostring(slot.cooldownY)
+        .. "\030" .. tostring(slot.cooldownDecimalSeconds)
+        .. "\030" .. tostring(slot.showDurationBar) .. "\030" .. tostring(slot.durationBarHeight)
+        .. "\030" .. tostring(slot.durationBarDisplay) .. "\030" .. tostring(slot.durationBarPosition)
+        .. "\030" .. tostring(slot.durationBarDirection)
+        .. "\030" .. tostring(slot.showStacks) .. "\030" .. tostring(slot.stackSize)
+        .. "\030" .. tostring(slot.stackAnchor) .. "\030" .. tostring(slot.stackX) .. "\030" .. tostring(slot.stackY)
+        .. "\030" .. tostring(slot.showTooltip) .. "\030" .. tostring(color[1]) .. "\030" .. tostring(color[2])
         .. "\030" .. tostring(color[3]) .. "\030" .. tostring(color[4]) .. "\030" .. tostring(slot.iconEffect)
         .. "\030" .. tostring(frame and frame.type)
         .. "\030" .. tostring(frame and frame.priority) .. "\030" .. tostring(frame and frame.thickness)
@@ -231,7 +238,7 @@ local function FinalizeSlot(slot)
     return slot
 end
 
-local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata)
+local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata, sharedBuffStyle)
     if not (type(unit) == "string" and unit ~= "" and type(item) == "table" and item.enabled == true) then return nil end
     local placed = type(item.placed) == "table" and item.placed or nil
     local frameEffect = type(item.frame) == "table" and item.frame or nil
@@ -250,6 +257,11 @@ local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata)
     local iconEffect = tostring(placed and placed.iconEffect or "none"):lower()
     if visual ~= "icon" or iconEffect ~= "glow" then iconEffect = "none" end
     local hiddenVisual = visual == "none" and frameEffect ~= nil
+    -- Spell selection and placement stay per indicator. Reusable icon
+    -- appearance belongs to the scope's Aura Style > Buffs lane so Party and
+    -- Raid never expose a second, drifting cooldown/stack style surface.
+    -- Corner custom slots deliberately retain their explicit no-text contract.
+    local appearance = item.cornerSlotKey == nil and type(sharedBuffStyle) == "table" and sharedBuffStyle or nil
     local size = ClampNumber(placed and placed.size, hiddenVisual and 1 or 18, 1, 128)
     local width = visual == "bar" and ClampNumber(placed and placed.barWidth, size * 3, size, 256) or size
     local color = type(item.color) == "table" and item.color or nil
@@ -295,37 +307,37 @@ local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata)
         perRow = 1,
         cols = 1,
         rows = 1,
-        showCooldownText = placed and placed.showCooldown ~= false and visual == "icon",
-        showCooldownSwipe = placed and placed.showCooldownSwipe ~= false and visual == "icon",
-        cooldownSwipeReverse = false,
-        showDurationBar = false,
-        durationBarHeight = DEFAULT_SHARED.durationBarHeight,
-        durationBarDisplay = DEFAULT_SHARED.durationBarDisplay,
-        durationBarPosition = DEFAULT_SHARED.durationBarPosition,
-        durationBarDirection = DEFAULT_SHARED.durationBarDirection,
-        showStacks = placed and placed.showStacks ~= false and (visual == "icon" or visual == "number"),
-        showTooltip = false,
+        showCooldownText = (appearance and appearance.showCooldownText ~= false or (not appearance and placed and placed.showCooldown ~= false)) and visual == "icon",
+        showCooldownSwipe = (appearance and appearance.showCooldownSwipe ~= false or (not appearance and placed and placed.showCooldownSwipe ~= false)) and visual == "icon",
+        cooldownSwipeReverse = appearance and appearance.cooldownSwipeReverse == true or false,
+        showDurationBar = appearance and appearance.showDurationBar == true and visual == "icon" or false,
+        durationBarHeight = ClampNumber(appearance and appearance.durationBarHeight, DEFAULT_SHARED.durationBarHeight, 1, 16),
+        durationBarDisplay = appearance and appearance.durationBarDisplay or DEFAULT_SHARED.durationBarDisplay,
+        durationBarPosition = appearance and appearance.durationBarPosition or DEFAULT_SHARED.durationBarPosition,
+        durationBarDirection = appearance and appearance.durationBarDirection or DEFAULT_SHARED.durationBarDirection,
+        showStacks = (appearance and appearance.showStacks ~= false or (not appearance and placed and placed.showStacks ~= false)) and (visual == "icon" or visual == "number"),
+        showTooltip = appearance and appearance.showTooltip ~= false or false,
         showAuraBorder = false,
         showAuraSymbol = false,
-        cooldownSize = ClampNumber(placed and placed.cooldownSize, DEFAULT_SHARED.cooldownTextSize, 6, 40),
-        cooldownAnchor = "CENTER",
-        cooldownX = 0,
-        cooldownY = 0,
-        cooldownDecimalSeconds = DEFAULT_SHARED.cooldownDecimalSeconds,
-        stackAnchor = "BOTTOMRIGHT",
-        stackSize = DEFAULT_SHARED.stackTextSize,
-        stackX = 0,
-        stackY = 0,
+        cooldownSize = ClampNumber(appearance and appearance.cooldownSize or (placed and placed.cooldownSize), DEFAULT_SHARED.cooldownTextSize, 6, 40),
+        cooldownAnchor = SpellIndicatorAnchor(appearance and appearance.cooldownAnchor, "CENTER"),
+        cooldownX = ClampNumber(appearance and appearance.cooldownX, 0, -2000, 2000),
+        cooldownY = ClampNumber(appearance and appearance.cooldownY, 0, -2000, 2000),
+        cooldownDecimalSeconds = ClampNumber(appearance and appearance.cooldownDecimalSeconds, DEFAULT_SHARED.cooldownDecimalSeconds, 0, 30),
+        stackAnchor = SpellIndicatorAnchor(appearance and appearance.stackAnchor, "BOTTOMRIGHT"),
+        stackSize = ClampNumber(appearance and appearance.stackSize, DEFAULT_SHARED.stackTextSize, 6, 40),
+        stackX = ClampNumber(appearance and appearance.stackX, 0, -2000, 2000),
+        stackY = ClampNumber(appearance and appearance.stackY, 0, -2000, 2000),
     })
 end
 
-function Runtime.CompileSlots(unit, spellIndicators)
+function Runtime.CompileSlots(unit, spellIndicators, sharedBuffStyle)
     if not (type(spellIndicators) == "table" and spellIndicators.enabled == true and type(spellIndicators.items) == "table") then
         return nil
     end
     local slots, trackingParts, structuralParts, layoutParts = {}, {}, {}, {}
     for i = 1, #spellIndicators.items do
-        local slot = CompileSlot(unit, spellIndicators.items[i], i, spellIndicators.layer, spellIndicators.strata)
+        local slot = CompileSlot(unit, spellIndicators.items[i], i, spellIndicators.layer, spellIndicators.strata, sharedBuffStyle)
         if slot then
             slots[#slots + 1] = slot
             trackingParts[#trackingParts + 1] = slot._msufA3TrackingSignature

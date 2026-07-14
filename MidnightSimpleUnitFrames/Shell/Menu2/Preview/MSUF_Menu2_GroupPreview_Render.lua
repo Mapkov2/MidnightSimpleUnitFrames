@@ -1852,8 +1852,9 @@ function Render.Install(box, ctx, deps)
                 max(2, spellSize * 0.15))
             root:Show()
         end
-        local function ConfigureSpellPreviewHandle(handle, item, placed, fallbackTexture, fallbackColor)
+        local function ConfigureSpellPreviewHandle(handle, item, placed, appearance, fallbackTexture, fallbackColor)
             if not (handle and placed) then return false end
+            appearance = appearance or {}
             local spellType = placed.type or "icon"
             local spellBaseSize = tonumber(placed.size) or 20
             local spellSize = max(14, ScaleValue(spellBaseSize, previewScale, 10))
@@ -1866,6 +1867,7 @@ function Render.Install(box, ctx, deps)
             local spellSwipe = handle._iconSwipes and handle._iconSwipes[1]
             local spellStack = handle._iconStacks and handle._iconStacks[1]
             local spellTimer = handle._iconTimers and handle._iconTimers[1]
+            local spellDurationBar = handle._iconDurationBars and handle._iconDurationBars[1]
             local handleColor = handle._msufSpellIndicatorColor
             if not handleColor then
                 handleColor = {}
@@ -1880,6 +1882,7 @@ function Render.Install(box, ctx, deps)
             if spellSwipe then spellSwipe:Hide() end
             if spellStack then spellStack:Hide() end
             if spellTimer then spellTimer:Hide() end
+            if spellDurationBar then spellDurationBar:Hide() end
             if spellType == "bar" then
                 local barW = max(spellSize * 2, ScaleValue(placed.barWidth or (spellBaseSize * 3), previewScale, 16))
                 handle:SetSize(barW, spellSize)
@@ -1909,8 +1912,10 @@ function Render.Install(box, ctx, deps)
                     spellStack:SetTextColor(spellR, spellG, spellB, 1)
                     spellStack:ClearAllPoints()
                     spellStack:SetPoint("CENTER", handle, "CENTER", 0, 0)
-                    spellStack:SetText(placed.showStacks ~= false and "9" or "")
-                    spellStack:Show()
+                    local showStacks = appearance.showStacks
+                    if showStacks == nil then showStacks = placed.showStacks ~= false end
+                    spellStack:SetText(showStacks and "9" or "")
+                    spellStack:SetShown(showStacks)
                 end
             else
                 handle:SetSize(spellSize, spellSize)
@@ -1922,27 +1927,40 @@ function Render.Install(box, ctx, deps)
                     spellTex:SetAllPoints(handle)
                     spellTex:Show()
                 end
+                local showCooldown = appearance.showCooldownText
+                if showCooldown == nil then showCooldown = appearance.showCooldown end
+                if showCooldown == nil then showCooldown = placed.showCooldown ~= false end
+                local showSwipe = appearance.showCooldownSwipe
+                if showSwipe == nil then showSwipe = placed.showCooldownSwipe ~= false end
+                local showStacks = appearance.showStacks
+                if showStacks == nil then showStacks = placed.showStacks ~= false end
+                local barOnly = appearance.showDurationBar == true and (appearance.durationBarDisplay or "BAR_ONLY") == "BAR_ONLY"
+                if spellTex and spellTex.SetAlpha then spellTex:SetAlpha(barOnly and 0 or 1) end
                 if spellTimer then
-                    local showCooldown = placed.showCooldown ~= false
-                    local cooldownSize = max(6, ScaleValue(placed.cooldownSize or 8, previewScale, 6))
+                    local cooldownSize = max(6, ScaleValue(appearance.cooldownSize or placed.cooldownSize or 8, previewScale, 6))
                     SetPreviewFont(spellTimer, cooldownSize)
                     spellTimer:SetTextColor(1, 1, 1, 1)
-                    PlaceAuraPreviewText(spellTimer, spellTex or handle, "CENTER", 0, 0)
+                    PlaceAuraPreviewText(spellTimer, spellTex or handle,
+                        RuntimeAuraTextAnchor(appearance.cooldownAnchor, "CENTER"),
+                        ConfigToOffset(appearance.cooldownX or 0, previewScale),
+                        ConfigToOffset(appearance.cooldownY or 0, previewScale))
                     spellTimer:SetText(showCooldown and "12" or "")
                     spellTimer:SetShown(showCooldown)
                 end
-                if spellSwipe and placed.showCooldownSwipe ~= false then
-                    spellSwipe:ClearAllPoints()
-                    spellSwipe:SetPoint("TOPLEFT", spellTex or handle, "TOPLEFT", 0, 0)
-                    spellSwipe:SetPoint("BOTTOMRIGHT", spellTex or handle, "BOTTOM", 0, 0)
+                if spellSwipe and showSwipe and not barOnly then
+                    LayoutAuraPreviewSwipe(spellSwipe, spellTex or handle, spellSize, 0.48,
+                        appearance.cooldownSwipeReverse == true)
                     spellSwipe:SetVertexColor(0, 0, 0, 0.32)
                     spellSwipe:Show()
                 end
-                if spellStack and placed.showStacks ~= false then
-                    SetPreviewFont(spellStack, max(6, spellSize * 0.42))
+                LayoutAuraDurationBar(spellDurationBar, spellTex or handle, appearance, spellSize, nil)
+                if spellStack and showStacks then
+                    SetPreviewFont(spellStack, max(6, ScaleValue(appearance.stackSize or 10, previewScale, 6)))
                     spellStack:SetTextColor(1, 1, 1, 1)
-                    spellStack:ClearAllPoints()
-                    spellStack:SetPoint("BOTTOMRIGHT", spellTex or handle, "BOTTOMRIGHT", -1, 1)
+                    PlaceAuraPreviewText(spellStack, spellTex or handle,
+                        RuntimeAuraTextAnchor(appearance.stackAnchor, "BOTTOMRIGHT"),
+                        ConfigToOffset(appearance.stackX or 0, previewScale),
+                        ConfigToOffset(appearance.stackY or 0, previewScale))
                     spellStack:SetText("2")
                     spellStack:Show()
                 end
@@ -1962,7 +1980,7 @@ function Render.Install(box, ctx, deps)
                 local effect = selectedItem and (item.frame or selectedSpellEffect) or nil
                 local handle = box:EnsureSpellIndicatorHandle(item, i)
                 local placedShown = placed and (placed.type or "icon") ~= "none"
-                if handle and placedShown and ConfigureSpellPreviewHandle(handle, item, placed) then
+                if handle and placedShown and ConfigureSpellPreviewHandle(handle, item, placed, buffCfg) then
                     if selectedItem then selectedRuntimeSpellHandleUsed = true end
                 elseif handle and effect then
                     handle:SetSize(1, 1)
@@ -2010,7 +2028,7 @@ function Render.Install(box, ctx, deps)
             selectedFallbackItem.display = scene.selectedSpellAuraName or "Spell"
             ConfigureSpellPreviewHandle(spellHandle, selectedFallbackItem,
                 selectedPlaced or { type = "icon", size = 20, anchor = "TOPLEFT", x = 0, y = 0 },
-                selectedSpellIcon, { spellR, spellG, spellB, 1 })
+                buffCfg, selectedSpellIcon, { spellR, spellG, spellB, 1 })
             HideSpellEffectPreview(spellHandle)
         else
             HideSpellEffectPreview(spellHandle)

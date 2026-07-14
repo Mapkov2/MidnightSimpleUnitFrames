@@ -1567,13 +1567,13 @@ local function ResolveGroupFrameConfig(frame, unit)
         _msufA3VisualGen = visualGen,
         _msufA3Source = source,
     }
+    local buff = type(source) == "table" and CompileGroupLane(unit, source, "buff") or nil
     local combinedSpellSource = BuildGroupSpellIndicatorSource(spellSource, cornerSource)
     local spellIndicatorRoot = type(unit) == "string" and unit ~= "" and SpellIndicatorsRuntime.CompileSlots
-        and SpellIndicatorsRuntime.CompileSlots(unit, combinedSpellSource) or nil
+        and SpellIndicatorsRuntime.CompileSlots(unit, combinedSpellSource, buff) or nil
     cfg.spellIndicators = spellIndicatorRoot
     cfg.enabled = spellIndicatorRoot and spellIndicatorRoot.enabled == true or false
     if type(source) == "table" and type(unit) == "string" and unit ~= "" and source.enabled ~= false then
-        local buff = CompileGroupLane(unit, source, "buff")
         local trackedBuff = CompileGroupLane(unit, source, "trackedBuff")
         local debuff = CompileGroupLane(unit, source, "debuff")
         local external = CompileGroupLane(unit, source, "external")
