@@ -52,7 +52,7 @@ P|opt_misc|Miscellaneous|appearance
 T|Features|features
 P|classpower|Class Resources|features
 P|gameplay|Gameplay|features
-P|profiles|Profiles
+P|profiles|Profiles|features
 ]]
 M.navPrimaryForKey = {
     home = "home",
@@ -80,7 +80,76 @@ M.navPrimaryForKey = {
     classpower = "classpower",
     gameplay = "gameplay",
     profiles = "profiles",
+    modules = "profiles",
 }
+
+-- Canonical labels for pages reached through a visible primary page and then
+-- a workspace tab. Assistant/search directions consume this same navigation
+-- model so menu moves do not require a second companion-addon breadcrumb map.
+M.navSubpageLabels = {
+    uf_player = "Player",
+    uf_target = "Target",
+    uf_targettarget = "Target of Target",
+    uf_focustarget = "Focus Target",
+    uf_focus = "Focus",
+    uf_pet = "Pet",
+    uf_boss = "Boss",
+    gf_layout = "Layout",
+    gf_bars = "Health & Text",
+    gf_indicators = "Status & Indicators",
+    gf_auras = "Auras",
+    auras3_buffs = "Buffs",
+    auras3_debuffs = "Debuffs",
+    auras3_custom = "Custom Auras",
+    auras3_filters = "Filters",
+    modules = "Modules",
+}
+
+local function HumanizePageKey(value)
+    value = tostring(value or ""):gsub("^uf_", ""):gsub("^gf_", ""):gsub("^opt_", "")
+    value = value:gsub("_", " "):gsub("(%l)(%u)", "%1 %2"):gsub("%s+", " ")
+    value = value:gsub("^%s+", ""):gsub("%s+$", "")
+    return value:gsub("^%l", string.upper)
+end
+
+local function NavigationIndex()
+    local groups, pages = {}, {}
+    for i = 1, #(M.navItems or {}) do
+        local item = M.navItems[i]
+        if item.title and item.id then groups[item.id] = item.title end
+        if item.key then pages[item.key] = item end
+    end
+    return groups, pages
+end
+
+function M.GetMenuPageLabel(pageKey)
+    pageKey = tostring(pageKey or "")
+    local _, pages = NavigationIndex()
+    local item = pages[pageKey]
+    if item and item.label then return item.label end
+    return M.navSubpageLabels[pageKey] or HumanizePageKey(pageKey)
+end
+
+function M.GetMenuBreadcrumb(pageKey)
+    pageKey = tostring(pageKey or "")
+    if pageKey == "" or pageKey == "menu_chrome" then return "MSUF menu" end
+    if pageKey == "guided_setup" then return "Dashboard > Guided Setup" end
+    if pageKey == "search" then return "MSUF menu > Search" end
+
+    local groups, pages = NavigationIndex()
+    local primaryKey = (M.navPrimaryForKey and M.navPrimaryForKey[pageKey]) or pageKey
+    local primary = pages[primaryKey]
+    if not primary then return M.GetMenuPageLabel(pageKey) end
+
+    local parts = {}
+    if primary.group and groups[primary.group] then parts[#parts + 1] = groups[primary.group] end
+    parts[#parts + 1] = primary.label or M.GetMenuPageLabel(primaryKey)
+    if pageKey ~= primaryKey then
+        local secondary = M.navSubpageLabels[pageKey] or M.GetMenuPageLabel(pageKey)
+        if secondary ~= "" and secondary ~= parts[#parts] then parts[#parts + 1] = secondary end
+    end
+    return table.concat(parts, " > ")
+end
 local function AliasRows(rows)
     local aliases = {}
     for line in Lines(rows) do

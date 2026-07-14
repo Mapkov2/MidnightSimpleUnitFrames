@@ -36,6 +36,18 @@ local UNIT_SCOPES = {
 }
 local GROUP_SCOPES = { gf_party = "party", gf_raid = "raid", gf_mythicraid = "mythicraid" }
 local FLAT_SCOPES = { general = true, bars = true, gameplay = true }
+local GENERATED_EXCLUSIONS = {
+    general = {
+        disableScaling = true, -- retired migration flag; never a public setting
+        globalUiScalePreset = true, -- workflow mirror owned by the curated UI-scale settings/actions
+    },
+}
+
+local function IsGeneratedPathAllowed(scope, key)
+    local excluded = GENERATED_EXCLUSIONS[scope]
+    return not (excluded and excluded[key] == true)
+end
+Auto.IsGeneratedPathAllowed = IsGeneratedPathAllowed
 
 -- "Channel" keeps these distinct from color VALUE words ("set X color to red")
 -- that the color parser owns.
@@ -486,27 +498,19 @@ local SortedKeys
 
 local function WalkScalarPaths(root, callback)
     if type(root) ~= "table" or type(callback) ~= "function" then return end
-    local active = {}
-    local function walk(node, prefix, depth)
-        if type(node) ~= "table" or active[node] or depth > MAX_NESTED_DEPTH then return end
-        active[node] = true
-        local keys = SortedKeys(node)
-        for i = 1, #keys do
-            local key = keys[i]
-            if type(key) == "string" and key ~= "" and key:sub(1, 1) ~= "_" and not key:match("^%d+$") then
-                local path = prefix and (prefix .. "." .. key) or key
-                local value = node[key]
-                local valueType = type(value)
-                if valueType == "table" then
-                    walk(value, path, depth + 1)
-                elseif valueType == "boolean" or valueType == "number" or valueType == "string" then
-                    callback(path, value)
-                end
+    local keys = SortedKeys(root)
+    for i = 1, #keys do
+        local key = keys[i]
+        if type(key) == "string" and key ~= "" and key:sub(1, 1) ~= "_"
+            and not key:match("^%d+$") and not key:find(".", 1, true)
+        then
+            local value = root[key]
+            local valueType = type(value)
+            if valueType == "boolean" or valueType == "number" or valueType == "string" then
+                callback(key, value)
             end
         end
-        active[node] = nil
     end
-    walk(root, nil, 1)
 end
 
 local function ManifestDefaults()
@@ -592,10 +596,13 @@ local function BuildSpec(scope, key, value, fromManifest)
         frameType = GROUP_SCOPES[scope] and "group" or (UNIT_SCOPES[scope] and "unitframe" or scope),
         attribute = key,
         dbPath = key,
-        generatedNested = key:find(".", 1, true) ~= nil,
+        generatedNested = false,
         aliases = aliases,
         generated = true,
-        manifestDefault = fromManifest and value or nil,
+        -- Keep false as a real default; the common `a and value or nil`
+        -- idiom would erase boolean-off manifest values.
+        manifestDefault = value,
+        manifestBacked = fromManifest == true,
         combatSafe = false,
         apply = ScopeApply(scope, key),
         description = fromManifest
@@ -761,7 +768,6 @@ function Auto.Fill()
     if not (Audit and type(Audit.BuildCoveredSets) == "function") then return 0 end
     local covered = Audit.BuildCoveredSets()
     local added = 0
-    local nestedAdded = 0
     local fillWork = 0
     local IsCoveredKey = Audit.IsCoveredKey or function(set, k) return set[k] end
     local NormalizeKey = Audit.NormalizeCoverageKey or function(k) return k end
@@ -773,6 +779,8 @@ function Auto.Fill()
         if fillWork % 64 == 0 and type(A.MaybeYield) == "function" then A.MaybeYield() end
         local valueType = type(value)
         if type(key) == "string"
+            and not key:find(".", 1, true)
+            and IsGeneratedPathAllowed(scope, key)
             and IsSafePath(Audit, scope, key)
             and not IsCoveredKey(coveredSet, key)
             and (valueType == "boolean" or valueType == "number" or valueType == "string")
@@ -801,43 +809,28 @@ function Auto.Fill()
                 coveredSet[key] = registered
                 normMap[norm] = registered
                 added = added + 1
-                if registered.generatedNested then nestedAdded = nestedAdded + 1 end
             end
         end
-    end
-
-    local function FillScope(scope)
-        local tbl = ScopeTable(scope)
-        if not tbl then return end
-        local coveredSet = covered[scope] or {}
-        covered[scope] = coveredSet
-        WalkScalarPaths(tbl, function(key, value)
-            RegisterGenerated(scope, key, value, coveredSet, false)
-        end)
     end
 
     local function FillManifestScope(scope)
         local manifest = ManifestDefaults()
         local manifestScope = type(manifest) == "table" and manifest[scope] or nil
         if type(manifestScope) ~= "table" then return end
-        local live = ScopeTable(scope)
         local coveredSet = covered[scope] or {}
         covered[scope] = coveredSet
         WalkScalarPaths(manifestScope, function(key, value)
-            local _, exists = PathValue(live, key)
-            if not exists then
-                RegisterGenerated(scope, key, value, coveredSet, true)
-            end
+            -- The checked-in factory manifest is the identity authority.
+            -- Saved profiles may contain legacy or future fields, but those
+            -- cannot create environment-dependent public Assistant controls.
+            RegisterGenerated(scope, key, value, coveredSet, true)
         end)
     end
-    for scope in pairs(UNIT_SCOPES) do FillScope(scope) end
-    for scope in pairs(GROUP_SCOPES) do FillScope(scope) end
-    for scope in pairs(FLAT_SCOPES) do FillScope(scope) end
     for scope in pairs(UNIT_SCOPES) do FillManifestScope(scope) end
     for scope in pairs(GROUP_SCOPES) do FillManifestScope(scope) end
     for scope in pairs(FLAT_SCOPES) do FillManifestScope(scope) end
     Auto.lastFillCount = added
-    Auto.lastNestedFillCount = nestedAdded
+    Auto.lastNestedFillCount = 0
     Auto._fillComplete = true
     return added
 end

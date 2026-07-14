@@ -2429,7 +2429,15 @@ local function ButtonSetText(self, value)
     self._msuf2SearchText = raw
     if self._msuf2Label then self._msuf2Label._msuf2SearchText = raw end
     self._msuf2Label:SetText(text)
-    if M and type(M.RegisterSearchWidget) == "function" and value and value ~= "" then M.RegisterSearchWidget(self, { label = value, kind = "button", anchor = self._msuf2Label }) end
+    if M and type(M.RegisterSearchWidget) == "function" and value and value ~= "" then
+        local previous = type(self._msuf2SearchMeta) == "table" and self._msuf2SearchMeta or nil
+        local meta = { label = value, kind = "button", anchor = self._msuf2Label }
+        if previous then
+            for key, item in pairs(previous) do meta[key] = item end
+            meta.label, meta.kind, meta.anchor = value, previous.kind or "button", previous.anchor or self._msuf2Label
+        end
+        M.RegisterSearchWidget(self, meta)
+    end
 end
 local function ButtonGetText(self)
     return self._msuf2Label:GetText()

@@ -112,17 +112,27 @@ local function EnsureIndex(settings)
     end
 
     local index = { byLength = {}, maxTokens = 0, triggerTokens = {} }
+    local aliasWork = 0
+    local function MaybeYieldAliasWork()
+        aliasWork = aliasWork + 1
+        -- A single setting can retain dozens of normal/exact aliases. Yield
+        -- checks only between settings let one alias-heavy bucket exceed the
+        -- per-frame job budget during a cold index build.
+        if aliasWork % 16 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
+    end
     for i = 1, #settings do
         if i % 64 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
         local setting = settings[i]
         local exactAliases = type(setting) == "table" and setting.exactAliases or nil
         for j = 1, #(exactAliases or {}) do
             AddIndexAlias(index, setting, PreparedSettingAlias(setting, exactAliases[j], j, true), 1)
+            MaybeYieldAliasWork()
         end
         local aliases = type(setting) == "table" and setting.aliases or nil
         for j = 1, #(aliases or {}) do
             if ShouldIndexNormalAlias(setting, aliases[j]) then
                 AddIndexAlias(index, setting, PreparedSettingAlias(setting, aliases[j], j, false), 2)
+                MaybeYieldAliasWork()
             end
         end
     end
@@ -329,6 +339,7 @@ local function ActionAliasSet()
         return P._exactActionAliasSet
     end
     local set = {}
+    local aliasWork = 0
     for i = 1, #actions do
         local action = actions[i]
         if type(action) == "table" then
@@ -338,6 +349,8 @@ local function ActionAliasSet()
                 for j = 1, #(list or {}) do
                     local norm = Normalize(list[j])
                     if norm ~= "" then set[norm] = true end
+                    aliasWork = aliasWork + 1
+                    if aliasWork % 16 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
                 end
             end
         end
@@ -379,7 +392,26 @@ end
 
 local function FullPhraseMatch(index, tokens, minTokens)
     local subject, count, boolFromVerb = SubjectPhrase(tokens)
-    if not subject or count < (tonumber(minTokens) or 4) then return nil end
+    if not subject then return nil end
+    local requestedMinTokens = tonumber(minTokens) or 4
+    -- A unique two-word numeric control with an explicit value tail is already
+    -- deterministic ("set target width to 300"). Resolve that narrow shape in
+    -- the cold full-phrase pass. Otherwise the compound parser falls through
+    -- several broad registries before eventually producing this same plan,
+    -- leaving a long unsliced tail immediately after the cold index finishes.
+    local explicitTwoTokenNumber = count == 2 and requestedMinTokens == 3 and boolFromVerb == nil
+        and (tokens[1] == "set" or tokens[1] == "change" or tokens[1] == "adjust")
+    if explicitTwoTokenNumber then
+        local hasValueTail = false
+        for i = 2, #tokens - 1 do
+            if tokens[i] == "to" then
+                hasValueTail = true
+                break
+            end
+        end
+        explicitTwoTokenNumber = hasValueTail
+    end
+    if count < requestedMinTokens and not explicitTwoTokenNumber then return nil end
     local bucket = index.byLength and index.byLength[count]
     local hits = bucket and bucket[subject]
     if not hits or #hits == 0 then return nil end
@@ -389,14 +421,16 @@ local function FullPhraseMatch(index, tokens, minTokens)
         setting = ReduceEquivalentHits(hits)
         if not setting then return nil end
     end
+    explicitTwoTokenNumber = explicitTwoTokenNumber and setting.type == "number"
+    if count < requestedMinTokens and not explicitTwoTokenNumber then return nil end
     -- Short phrases on hand-written settings stay with their dedicated flows
     -- unless the caller explicitly opted into a shorter full-phrase match.
     -- A.Parse uses three tokens here because an exact three-word control name
     -- (for example "party buff tooltip") is already more specific than a
     -- topical parent/lane shortcut. Keep the historical four-token floor for
     -- callers that do not provide an explicit threshold.
-    local handWrittenMinTokens = tonumber(minTokens) or 4
-    if not setting.generated and count < handWrittenMinTokens then return nil end
+    local handWrittenMinTokens = requestedMinTokens
+    if not setting.generated and count < handWrittenMinTokens and not explicitTwoTokenNumber then return nil end
     return setting, subject, boolFromVerb
 end
 

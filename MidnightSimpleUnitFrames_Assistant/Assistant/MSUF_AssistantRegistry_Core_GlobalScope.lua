@@ -19,13 +19,46 @@ local NormalizeGlobalScope = C.NormalizeGlobalScope
 local GlobalScopeLabel = C.GlobalScopeLabel
 local GlobalScopeRead = C.GlobalScopeRead
 local GlobalScopeWrite = C.GlobalScopeWrite
+local GlobalScopeDBKeys = C.GlobalScopeDBKeys
 local ScopedSharedTable = C.ScopedSharedTable
 
 if not (Registry and type(Registry.RegisterSetting) == "function") then return end
 if type(ClampNumber) ~= "function" then return end
 if type(NormalizeGlobalScope) ~= "function" or type(GlobalScopeLabel) ~= "function" then return end
 if type(GlobalScopeRead) ~= "function" or type(GlobalScopeWrite) ~= "function" then return end
+if type(GlobalScopeDBKeys) ~= "function" then return end
 if type(ScopedSharedTable) ~= "function" then return end
+
+local function ScopedDBOwnership(scope, dbKeys, sharedKind)
+    local keys
+    if scope == "shared" then
+        if sharedKind == "bars" then
+            keys = { "bars" }
+        elseif sharedKind ~= "db" then
+            keys = { "general" }
+        end
+    else
+        keys = GlobalScopeDBKeys(scope)
+    end
+    if type(keys) ~= "table" then return nil end
+    if type(dbKeys) ~= "table" then dbKeys = { dbKeys } end
+    local out = {}
+    for i = 1, #keys do
+        for j = 1, #dbKeys do
+            if type(dbKeys[j]) == "string" and dbKeys[j] ~= "" then
+                out[#out + 1] = { scope = keys[i], dbKey = dbKeys[j] }
+            end
+        end
+    end
+    return #out > 0 and out or nil
+end
+
+local function ScopedIntentScopes(scope)
+    if scope == "gf_party" then return { "party", "gf_party" } end
+    if scope == "gf_raid" then return { "raid", "mythicraid", "gf_raid", "gf_mythicraid" } end
+    if scope == "shared" then return { "shared", "global" } end
+    return { scope }
+end
 
 local function RegisterScopedSetting(kind, scope, dbKey, attr, label, settingType, defaultValue, aliases, opts)
     opts = opts or {}
@@ -33,6 +66,7 @@ local function RegisterScopedSetting(kind, scope, dbKey, attr, label, settingTyp
     local values = opts.values or {}
     local allowed = {}
     for i = 1, #values do allowed[values[i]] = true end
+    local dbScopes = opts.dbScopes or ScopedDBOwnership(scope, opts.dbScopeKeys or dbKey, opts.shared)
     Registry:RegisterSetting({
         key = (opts.keyPrefix or kind) .. "." .. scope .. "." .. dbKey,
         label = GlobalScopeLabel(scope) .. " " .. label,
@@ -40,6 +74,9 @@ local function RegisterScopedSetting(kind, scope, dbKey, attr, label, settingTyp
         unit = scope,
         frameType = opts.frameType or (kind == "fontScope" and "fonts" or "globalBars"),
         attribute = attr,
+        dbScopes = dbScopes,
+        dbScopesReplace = type(dbScopes) == "table" and #dbScopes > 0,
+        intentScopes = opts.intentScopes or ScopedIntentScopes(scope),
         type = settingType,
         aliases = aliases,
         values = opts.values,
@@ -87,6 +124,8 @@ local function RegisterScopedSetting(kind, scope, dbKey, attr, label, settingTyp
         combatSafe = opts.combatSafe == true,
         confirmRequired = opts.confirmRequired == true,
         description = opts.description,
+        captureTransactionState = opts.captureTransactionState,
+        restoreTransactionState = opts.restoreTransactionState,
     })
 end
 

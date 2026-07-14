@@ -25,6 +25,7 @@ function A.GlobalBarRegistry.BuildGlobalBarSettingsContext(ctx)
     local RegisterGeneralMappedEnum = C.RegisterGeneralMappedEnum
     local RegisterBarsBoolean = C.RegisterBarsBoolean
     local RegisterBarsNumber = C.RegisterBarsNumber
+    local RegisterBarsEnum = C.RegisterBarsEnum
     local RegisterGeneralBoolean = C.RegisterGeneralBoolean
     local RegisterGeneralNumberSetting = C.RegisterGeneralNumberSetting
     local RegisterGeneralEnum = C.RegisterGeneralEnum
@@ -41,7 +42,7 @@ function A.GlobalBarRegistry.BuildGlobalBarSettingsContext(ctx)
     if type(GeneralDB) ~= "function" or type(RegisterScopedSetting) ~= "function" then return nil end
     if type(GLOBAL_SCOPE_ORDER) ~= "table" or type(GlobalScopeAliases) ~= "function" then return nil end
     if type(RegisterGeneralString) ~= "function" or type(RegisterGeneralMappedEnum) ~= "function" then return nil end
-    if type(RegisterBarsBoolean) ~= "function" or type(RegisterBarsNumber) ~= "function" then return nil end
+    if type(RegisterBarsBoolean) ~= "function" or type(RegisterBarsNumber) ~= "function" or type(RegisterBarsEnum) ~= "function" then return nil end
     if type(RegisterGeneralBoolean) ~= "function" or type(RegisterGeneralNumberSetting) ~= "function" then return nil end
     if type(RegisterGeneralEnum) ~= "function" or type(RegisterScopedMappedEnum) ~= "function" then return nil end
     if type(GlobalScopeIsGroup) ~= "function" or type(GlobalScopeHasOverride) ~= "function" then return nil end
@@ -56,6 +57,8 @@ function A.GlobalBarRegistry.BuildGlobalBarSettingsContext(ctx)
     local GRADIENT_DIRECTION_VALUES = GlobalBarData.GRADIENT_DIRECTION_VALUES
     local GRADIENT_DIRECTION_KEYS = GlobalBarData.GRADIENT_DIRECTION_KEYS
     local GRADIENT_DIRECTION_ALIASES = GlobalBarData.GRADIENT_DIRECTION_ALIASES
+    local OUTLINE_STRATA_VALUES = GlobalBarData.OUTLINE_STRATA_VALUES
+    local OUTLINE_STRATA_ALIASES = GlobalBarData.OUTLINE_STRATA_ALIASES
     local ON_OFF_STORAGE = GlobalBarData.ON_OFF_STORAGE
     local ON_OFF_VALUES = GlobalBarData.ON_OFF_VALUES
     local ON_OFF_ALIASES = GlobalBarData.ON_OFF_ALIASES
@@ -75,6 +78,7 @@ function A.GlobalBarRegistry.BuildGlobalBarSettingsContext(ctx)
     local UNIT_DISPEL_STYLE_ALIASES = GlobalBarData.UNIT_DISPEL_STYLE_ALIASES
 
     if type(GRADIENT_DIRECTION_VALUES) ~= "table" or type(GRADIENT_DIRECTION_KEYS) ~= "table" or type(GRADIENT_DIRECTION_ALIASES) ~= "table" then return nil end
+    if type(OUTLINE_STRATA_VALUES) ~= "table" or type(OUTLINE_STRATA_ALIASES) ~= "table" then return nil end
     if type(ON_OFF_STORAGE) ~= "table" or type(ON_OFF_VALUES) ~= "table" or type(ON_OFF_ALIASES) ~= "table" then return nil end
     if type(AGGRO_MODE_VALUES) ~= "table" or type(AGGRO_MODE_ALIASES) ~= "table" then return nil end
     if type(ABSORB_MODE_STORAGE) ~= "table" or type(ABSORB_MODE_VALUES) ~= "table" or type(ABSORB_MODE_ALIASES) ~= "table" then return nil end
@@ -103,6 +107,7 @@ function A.GlobalBarRegistry.BuildGlobalBarSettingsContext(ctx)
         RegisterGeneralMappedEnum = RegisterGeneralMappedEnum,
         RegisterBarsBoolean = RegisterBarsBoolean,
         RegisterBarsNumber = RegisterBarsNumber,
+        RegisterBarsEnum = RegisterBarsEnum,
         GLOBAL_SCOPE_ORDER = GLOBAL_SCOPE_ORDER,
         GlobalScopeIsGroup = GlobalScopeIsGroup,
         GlobalScopeHasOverride = GlobalScopeHasOverride,
@@ -117,6 +122,8 @@ function A.GlobalBarRegistry.BuildGlobalBarSettingsContext(ctx)
         GRADIENT_DIRECTION_VALUES = GRADIENT_DIRECTION_VALUES,
         GRADIENT_DIRECTION_KEYS = GRADIENT_DIRECTION_KEYS,
         GRADIENT_DIRECTION_ALIASES = GRADIENT_DIRECTION_ALIASES,
+        OUTLINE_STRATA_VALUES = OUTLINE_STRATA_VALUES,
+        OUTLINE_STRATA_ALIASES = OUTLINE_STRATA_ALIASES,
         ON_OFF_STORAGE = ON_OFF_STORAGE,
         ON_OFF_VALUES = ON_OFF_VALUES,
         ON_OFF_ALIASES = ON_OFF_ALIASES,

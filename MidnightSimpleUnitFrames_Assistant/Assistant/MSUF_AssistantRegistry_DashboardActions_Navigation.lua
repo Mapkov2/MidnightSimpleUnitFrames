@@ -19,6 +19,49 @@ function A.DashboardRegistry.RegisterNavigationActions(ctx)
     local WorkflowOwner = ctx.A or A
     if not (Registry and type(Registry.RegisterAction) == "function") then return end
 
+    local function NormalizedActionText(text)
+        return tostring(text or ""):lower():gsub("[^%w]+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+    end
+
+    local function RequestedOpenState(text)
+        text = NormalizedActionText(text)
+        if text:find("close", 1, true) or text:find("collapse", 1, true) or text:find("hide", 1, true) then return false end
+        if text:find("open", 1, true) or text:find("expand", 1, true) or text:find("show", 1, true) then return true end
+        return nil
+    end
+
+    local function ParseDashboardPanelAliasArgs(text)
+        text = NormalizedActionText(text)
+        local panel = text:find("recovery", 1, true) and "recovery"
+            or text:find("scaling", 1, true) and "scaling"
+            or text:find("changelog", 1, true) and "changelog"
+        local open = RequestedOpenState(text)
+        -- "Close dashboard panel" has one safe deterministic meaning: close
+        -- every optional Dashboard panel. Opening/toggling still requires the
+        -- caller to name the exact panel.
+        if not panel and open == false then panel = "all" end
+        if not panel then return false end
+        return { panel = panel, open = open }
+    end
+
+    local function ParseNavSectionAliasArgs(text)
+        text = NormalizedActionText(text)
+        local section
+        if text:find("group frame", 1, true) or text:find("raid frame", 1, true) or text:find("party frame", 1, true) then
+            section = "groupframes"
+        elseif text:find("aura", 1, true) or text:find("buff", 1, true) or text:find("debuff", 1, true) then
+            section = "auras"
+        elseif text:find("appearance", 1, true) or text:find("global style", 1, true) then
+            section = "globalstyle"
+        elseif text:find("advanced", 1, true) or text:find("module", 1, true) then
+            section = "modules"
+        elseif text:find("frame", 1, true) then
+            section = "unitframes"
+        end
+        if not section then return false end
+        return { section = section, open = RequestedOpenState(text) }
+    end
+
     Registry:RegisterAction({
         key = "open_recovery_tools",
         label = "Open Recovery Tools",
@@ -49,6 +92,7 @@ function A.DashboardRegistry.RegisterNavigationActions(ctx)
             "open scaling tools", "close scaling tools", "toggle scaling tools",
             "open changelog", "close changelog", "toggle changelog",
         },
+        parseAliasArgs = ParseDashboardPanelAliasArgs,
         combatSafe = true,
         run = function(args)
             return WorkflowOwner.Workflow.SetDashboardPanel(args and args.panel, args and args.open)
@@ -66,6 +110,7 @@ function A.DashboardRegistry.RegisterNavigationActions(ctx)
             "expand appearance section", "collapse appearance section",
             "expand advanced section", "collapse advanced section",
         },
+        parseAliasArgs = ParseNavSectionAliasArgs,
         combatSafe = true,
         run = function(args)
             return WorkflowOwner.Workflow.SetNavSection(args and args.section, args and args.open)
@@ -106,6 +151,7 @@ function A.DashboardRegistry.RegisterNavigationActions(ctx)
         label = "Reset Current Menu Page",
         type = "navigation",
         aliases = { "reset current menu page", "reset this options page", "open page reset confirmation" },
+        aliasNoArgs = true,
         combatSafe = true,
         run = function()
             local pageKey = M and M.activeKey

@@ -48,6 +48,15 @@ function A.GroupFramesRegistry.BuildTextColorContext(ctx)
             unit = scope,
             frameType = "group",
             attribute = attr,
+            -- One visible color picker owns all three scalar DB channels.
+            -- Declaring them prevents unsafe raw R/G/B fallback controls from
+            -- being generated alongside the canonical color setting.
+            dbScopes = {
+                { scope = "gf_" .. scope, dbKey = keyPrefix .. "R" },
+                { scope = "gf_" .. scope, dbKey = keyPrefix .. "G" },
+                { scope = "gf_" .. scope, dbKey = keyPrefix .. "B" },
+            },
+            dbScopesReplace = true,
             type = "color",
             aliases = aliases,
             get = function()

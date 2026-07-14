@@ -15,6 +15,7 @@ if type(C) ~= "table" then return end
 
 local Registry = C.Registry
 local CallGlobal = C.CallGlobal
+local GeneralDB = C.GeneralDB
 
 local ClassPowerData = A.ClassPowerRegistryData
 if type(ClassPowerData) ~= "table" then return end
@@ -125,6 +126,17 @@ local function RefreshClassPowerPreview()
     if preview and type(preview.Refresh) == "function" then preview:Refresh() end
 end
 
+local function RefreshClassPowerPreviewGuides()
+    local preview = M and M._msuf2ClassPowerInlinePreview
+    if preview and type(preview.layerVisibility) == "table" then
+        local general = type(GeneralDB) == "function" and GeneralDB() or {}
+        preview.layerVisibility.guides = general.classPowerPreviewGuidesEnabled ~= false
+    end
+    if preview and type(preview.Refresh) == "function" then
+        preview:Refresh("MSUF_ASSISTANT_CLASSPOWER_PREVIEW_GUIDES")
+    end
+end
+
 Registry:RegisterSetting({
     key = "menu.classPowerPreviewResource",
     label = "Class Resource Preview Resource",
@@ -164,6 +176,41 @@ Registry:RegisterSetting({
     combatSafe = true,
     description = "Selects the Class Resources page preview without changing saved class-resource settings.",
 })
+
+if type(GeneralDB) == "function" then
+    Registry:RegisterSetting({
+        key = "general.classPowerPreviewGuidesEnabled",
+        label = "Class Resource Preview Guides",
+        category = "Class Resources / Preview",
+        unit = "global",
+        frameType = "classPower",
+        attribute = "classPowerPreviewGuidesEnabled",
+        type = "boolean",
+        aliases = {
+            "class resource preview guides", "class resources preview guides", "class power preview guides",
+            "preview guides", "preview mover guides", "preview handles", "class resource preview handles",
+            "show preview guides", "hide preview guides", "show class resource preview guides",
+            "hide class resource preview guides",
+        },
+        exactAliases = {
+            "enable class resource preview guides", "disable class resource preview guides",
+            "show class resource preview guides", "hide class resource preview guides",
+            "enable class power preview guides", "disable class power preview guides",
+            "show class power preview guides", "hide class power preview guides",
+            "enable preview mover guides", "disable preview mover guides",
+            "show preview mover guides", "hide preview mover guides",
+        },
+        get = function()
+            return GeneralDB().classPowerPreviewGuidesEnabled ~= false
+        end,
+        set = function(value)
+            GeneralDB().classPowerPreviewGuidesEnabled = value and true or false
+        end,
+        apply = RefreshClassPowerPreviewGuides,
+        combatSafe = true,
+        description = "Shows or hides the mover handles and selected borders in the Class Resources preview.",
+    })
+end
 
 A.ClassPowerRegistry = A.ClassPowerRegistry or {}
 A.ClassPowerRegistry.Actions = {

@@ -49,27 +49,50 @@ Audit.ignore = Audit.ignore or {
         editModeSnapToGrid = true,
         fontColor = true,
     },
+    -- Compatibility mirror retained in the bars table. The visible/global
+    -- owner is general.highlightBorderThickness; scoped overrides are owned by
+    -- barScope.*.highlightBorderThickness.
+    bars = {
+        highlightBorderThickness = true,
+    },
     -- Player is never range-checked by the runtime (RANGE_KEYS deliberately
     -- excludes it), even if old profiles still carry copied rangeFade fields.
     player = {
         rangeFadeEnabled = true,
         rangeFadeAlpha = true,
         rangeFadeLayerMode = true,
+        -- Unit frames read the canonical general toggle. This copied legacy
+        -- field is not a distinct Player control.
+        showSelfHealPrediction = true,
     },
     -- Legacy flat mirrors copied from unit-frame fields into the group scopes;
     -- the canonical group settings are nameShortenEnabled, powerHeight, and
     -- the nested auras.buff/debuff tables that curated registrations control.
-    gf_party = { auraIconSize = true, auraMaxIcons = true, powerBarHeight = true, shortenNames = true },
-    gf_raid = { auraIconSize = true, auraMaxIcons = true, powerBarHeight = true, shortenNames = true },
-    gf_mythicraid = { auraIconSize = true, auraMaxIcons = true, powerBarHeight = true, shortenNames = true },
+    -- groupGrowth is secondary secure-header/import state, not the visible
+    -- primary Growth control. Exposing it as an unconstrained string would let
+    -- the Assistant write invalid layout state. Party's copied heal-prediction
+    -- field is likewise inert; the reviewed owner is barScope.gf_party.
+    gf_party = {
+        auraIconSize = true, auraMaxIcons = true, powerBarHeight = true, shortenNames = true,
+        groupGrowth = true, showSelfHealPrediction = true,
+    },
+    gf_raid = {
+        auraIconSize = true, auraMaxIcons = true, powerBarHeight = true, shortenNames = true,
+        groupGrowth = true,
+    },
+    gf_mythicraid = {
+        auraIconSize = true, auraMaxIcons = true, powerBarHeight = true, shortenNames = true,
+        groupGrowth = true,
+    },
 }
 
--- Coverage keys are compared in a normalized form as a fallback so naming
--- variants of the same DB field ("barBackgroundTexture" vs "barBgTexture",
--- "override" under fontScope vs "fontOverride") do not read as gaps.
+-- Coverage keys are compared case/punctuation-insensitively. Do not rewrite
+-- semantic words here: fields such as portraitBackgroundColor and
+-- portraitBgColor can coexist with different values. True storage mirrors
+-- must be claimed explicitly through dbScopes/norms on the curated setting.
 local function NormalizeCoverageKey(key)
     key = tostring(key or ""):lower():gsub("[^%w]", "")
-    return (key:gsub("background", "bg"))
+    return key
 end
 Audit.NormalizeCoverageKey = NormalizeCoverageKey
 
@@ -125,7 +148,21 @@ local function SettingScope(setting)
     local key = type(setting.key) == "string" and setting.key or ""
     local prefix, rest = key:match("^([^.]+)%.(.+)$")
     local out = {}
-    if prefix and IsValidScope(prefix) then
+    -- Curated aggregate controls may own more than the scope encoded in their
+    -- public key. Example: the visible Raid style control intentionally writes
+    -- both gf_raid and gf_mythicraid. Make that ownership explicit so raw DB
+    -- mirrors are never exposed as separate AutoCoverage settings.
+    local explicitScopes = type(setting.dbScopes) == "table" and setting.dbScopes or {}
+    for i = 1, #explicitScopes do
+        local target = setting.dbScopes[i]
+        local scope = type(target) == "table" and (target.scope or target[1]) or nil
+        local dbKey = type(target) == "table" and (target.dbKey or target.key or target[2]) or nil
+        if IsValidScope(scope) and type(dbKey) == "string" and dbKey ~= "" then
+            out[#out + 1] = { scope = scope, dbKey = dbKey, norms = target.norms }
+        end
+    end
+    local replaceInferred = setting.dbScopesReplace == true and #out > 0
+    if not replaceInferred and prefix and IsValidScope(prefix) then
         out[#out + 1] = { scope = prefix, dbKey = rest }
     end
     -- Three-segment keys ("fontScope.focus.npcNameRed", "barScope.player.X")
@@ -135,7 +172,7 @@ local function SettingScope(setting)
     -- also prepended as a normalized variant because the raw DB key often
     -- carries it ("fontScope.focus.override" stores db.focus.fontOverride).
     local domainSeg, midScope, midKey = key:match("^([^.]+)%.([^.]+)%.(.+)$")
-    if midScope then
+    if not replaceInferred and midScope then
         if midScope == "tot" then midScope = "targettarget" end
         if IsValidScope(midScope) and not midKey:find(".", 1, true) then
             local norms = { NormalizeCoverageKey(midKey) }
@@ -146,7 +183,7 @@ local function SettingScope(setting)
     end
     local unit = setting.unit
     local attr = setting.attribute
-    if type(unit) == "string" and type(attr) == "string" and attr ~= "" then
+    if not replaceInferred and type(unit) == "string" and type(attr) == "string" and attr ~= "" then
         if unit == "tot" then unit = "targettarget" end
         local scope
         if setting.frameType == "group" then

@@ -1551,6 +1551,8 @@ function A.SetMenuRuntimeActive(active, reason)
         CancelMenuRuntimeTimers()
         if type(A.SuspendPendingBroadApply) == "function" then A.SuspendPendingBroadApply() end
         if type(A.ClearRouterTransientCaches) == "function" then A.ClearRouterTransientCaches() end
+        if A.Parser and type(A.Parser.ClearRegistryCandidateFuzzyCache) == "function" then A.Parser.ClearRegistryCandidateFuzzyCache() end
+        if A.Parser and type(A.Parser.ClearActionAliasFuzzyCache) == "function" then A.Parser.ClearActionAliasFuzzyCache() end
         if AP.nextFrameTimer and type(AP.nextFrameTimer.Cancel) == "function" then
             AP.nextFrameTimer:Cancel()
         end
@@ -1662,6 +1664,121 @@ local function ValuesEqual(setting, oldValue, newValue)
         end
     end
     return oldValue == newValue
+end
+
+function A.IsFiniteAssistantNumber(value)
+    return type(value) == "number"
+        and value == value
+        and value ~= math.huge
+        and value ~= -math.huge
+end
+
+function A.RefreshAssistantSettingValues(setting)
+    local refresh = setting and setting.refreshValues
+    if type(refresh) ~= "function" then return true end
+    local ok, values, labels = pcall(refresh, setting)
+    if not ok then return false, "value domain refresh failed" end
+    if type(values) ~= "table" or #values == 0 then return false, "value domain is empty" end
+    setting.values = values
+    if type(labels) == "table" then setting.valueLabels = labels end
+    return true
+end
+
+function AP.ValueInAssistantSettingDomain(setting, value)
+    local values = setting and setting.values
+    if type(values) ~= "table" or #values == 0 then return false end
+    for i = 1, #values do
+        if values[i] == value then return true end
+    end
+    return false
+end
+
+-- This is the transaction-boundary type contract for registry settings.  It
+-- deliberately accepts only native values; natural-language coercion belongs
+-- to the parser and must have completed before a plan reaches ExecuteChanges.
+-- The boolean result keeps false itself usable as a normalized setting value.
+function A.NormalizeRegistrySettingValue(setting, value, opts)
+    if type(setting) ~= "table" then return false, "missing setting" end
+    opts = type(opts) == "table" and opts or nil
+    local settingType = tostring(setting.type or "")
+
+    if settingType == "boolean" then
+        if type(value) ~= "boolean" then return false, "expected boolean" end
+        return true, value
+    end
+
+    if settingType == "number" then
+        if not A.IsFiniteAssistantNumber(value) then return false, "expected finite number" end
+        local minValue = setting.min
+        local maxValue = setting.max
+        local step = setting.step
+        if step == nil then step = setting.increment end
+        if minValue ~= nil and not A.IsFiniteAssistantNumber(minValue) then return false, "invalid minimum metadata" end
+        if maxValue ~= nil and not A.IsFiniteAssistantNumber(maxValue) then return false, "invalid maximum metadata" end
+        if step ~= nil and not A.IsFiniteAssistantNumber(step) then return false, "invalid step metadata" end
+        if minValue ~= nil and maxValue ~= nil and minValue > maxValue then return false, "invalid numeric range" end
+
+        local normalized = value
+        if minValue ~= nil and normalized < minValue then normalized = minValue end
+        if maxValue ~= nil and normalized > maxValue then normalized = maxValue end
+        if step ~= nil and step > 0 then
+            normalized = math.floor((normalized / step) + 0.5) * step
+        end
+        -- Rounding around zero can cross a non-step-aligned bound, so enforce
+        -- the declared range again after applying the step.
+        if minValue ~= nil and normalized < minValue then normalized = minValue end
+        if maxValue ~= nil and normalized > maxValue then normalized = maxValue end
+        if not A.IsFiniteAssistantNumber(normalized) then return false, "normalized number is not finite" end
+        if math.abs(normalized - math.floor(normalized + 0.5)) < 0.001 then
+            normalized = math.floor(normalized + 0.5)
+        end
+        return true, normalized
+    end
+
+    if settingType == "enum" then
+        if not (opts and opts.skipRefresh == true) then
+            local refreshed, reason = A.RefreshAssistantSettingValues(setting)
+            if not refreshed then return false, reason end
+        end
+        if not AP.ValueInAssistantSettingDomain(setting, value) then return false, "unsupported enum value" end
+        return true, value
+    end
+
+    if settingType == "string" then
+        if type(value) ~= "string" then return false, "expected string" end
+        if setting.closedValues == true then
+            if not (opts and opts.skipRefresh == true) then
+                local refreshed, reason = A.RefreshAssistantSettingValues(setting)
+                if not refreshed then return false, reason end
+            end
+            if not AP.ValueInAssistantSettingDomain(setting, value) then return false, "unsupported string value" end
+        end
+        return true, value
+    end
+
+    if settingType == "color" then
+        if type(value) ~= "table" then return false, "expected color table" end
+        local r = value.r
+        local g = value.g
+        local b = value.b
+        local a = value.a
+        if r == nil then r = value[1] end
+        if g == nil then g = value[2] end
+        if b == nil then b = value[3] end
+        if a == nil then a = value[4] end
+        if not A.IsFiniteAssistantNumber(r) or not A.IsFiniteAssistantNumber(g) or not A.IsFiniteAssistantNumber(b) then
+            return false, "expected finite RGB components"
+        end
+        if r < 0 or r > 1 or g < 0 or g > 1 or b < 0 or b > 1 then
+            return false, "RGB components must be between 0 and 1"
+        end
+        if a ~= nil and (not A.IsFiniteAssistantNumber(a) or a < 0 or a > 1) then
+            return false, "alpha component must be between 0 and 1"
+        end
+        return true, value
+    end
+
+    return false, "unsupported setting type"
 end
 
 local function AssistantSettingLabel(setting, fallback)
@@ -2334,6 +2451,12 @@ end
 
 local function IsChoiceAbort(text)
     if IsCancel(text) then return true end
+    local router = A.RouterPrivate
+    if router and type(router.IsExplicitMutationRefusal) == "function"
+        and router.IsExplicitMutationRefusal(text)
+    then
+        return true
+    end
     local normalized = NormalizeReply(text)
     local withoutPrefix = normalized:gsub("^option%s+", ""):gsub("^choice%s+", ""):gsub("^select%s+", ""):gsub("^pick%s+", "")
     if normalized == "0" or withoutPrefix == "0" then return true end
@@ -2342,7 +2465,9 @@ local function IsChoiceAbort(text)
     if normalized == "do nothing" or withoutPrefix == "do nothing" then return true end
     local phrases = {
         "nope", "never mind", "nevermind", "forget it", "leave it", "skip it",
-        "cancel that", "abort that", "stop that", "stop it", "not now",
+        "cancel it", "cancel this", "cancel that", "abort it", "abort this", "abort that",
+        "stop that", "stop it", "not now", "maybe later", "no thanks", "no thank you",
+        "please do not", "please dont", "please don t",
         "i dont want", "i do not want", "dont want", "do not want",
         "i dont want to change", "i do not want to change", "dont change", "do not change",
         "not that", "not this", "wrong choice", "wrong list", "none of these", "none of them",
@@ -2356,6 +2481,7 @@ local function IsChoiceAbort(text)
 end
 
 local function IsSingleChoiceApply(text)
+    if IsChoiceAbort(text) then return false end
     local normalized = NormalizeReply(text)
     if normalized == "1" then return true end
     local phrases = {
@@ -2374,6 +2500,7 @@ local function IsSingleChoiceApply(text)
 end
 
 local function IsNaturalFixApply(text)
+    if IsChoiceAbort(text) then return false end
     local normalized = NormalizeReply(text)
     local phrases = {
         "fix it", "fix that", "repair it", "repair that", "apply fix", "apply the fix",
@@ -2387,6 +2514,7 @@ local function IsNaturalFixApply(text)
 end
 
 local function IsConfirmationApply(text)
+    if IsChoiceAbort(text) then return false end
     if IsYes(text) then return true end
     local normalized = NormalizeReply(text)
     local phrases = {
@@ -2403,6 +2531,7 @@ local function IsConfirmationApply(text)
 end
 
 local function LooksLikeUndoRedoCommand(text)
+    if IsChoiceAbort(text) then return false end
     local normalized = NormalizeReply(text)
     if normalized == "undo" or normalized == "redo" then return true end
     local phrases = {
@@ -2455,8 +2584,70 @@ function A.SetPendingChoices(choices)
     return ChoiceText(A.pendingChoices)
 end
 
+AP.PendingChoiceOrdinalWords = AP.PendingChoiceOrdinalWords or {
+    { word = "first", index = 1 }, { word = "second", index = 2 },
+    { word = "third", index = 3 }, { word = "fourth", index = 4 },
+    { word = "fifth", index = 5 }, { word = "sixth", index = 6 },
+    { word = "seventh", index = 7 }, { word = "eighth", index = 8 },
+    { word = "ninth", index = 9 }, { word = "tenth", index = 10 },
+}
+
+function AP.PendingChoiceExcludedOrdinalIndex(text, choices)
+    choices = choices or {}
+    local normalized = NormalizeReply(text)
+    local padded = " " .. normalized .. " "
+    local function HasPhrase(phrase)
+        return padded:find(" " .. phrase .. " ", 1, true) ~= nil
+    end
+
+    local excluded, candidates = {}, {}
+    local hasExclusion = false
+    for i = 1, #AP.PendingChoiceOrdinalWords do
+        local spec = AP.PendingChoiceOrdinalWords[i]
+        if HasPhrase("not " .. spec.word)
+            or HasPhrase("not the " .. spec.word)
+            or HasPhrase("except " .. spec.word)
+            or HasPhrase("except the " .. spec.word)
+        then
+            excluded[spec.index] = true
+            hasExclusion = true
+        end
+    end
+
+    if HasPhrase("not last") or HasPhrase("not the last")
+        or HasPhrase("except last") or HasPhrase("except the last")
+    then
+        excluded[#choices] = true
+        hasExclusion = true
+    end
+
+    if hasExclusion then
+        for i = 1, #AP.PendingChoiceOrdinalWords do
+            local spec = AP.PendingChoiceOrdinalWords[i]
+            if choices[spec.index] and HasPhrase(spec.word) and not excluded[spec.index] then
+                candidates[spec.index] = true
+            end
+        end
+        if choices[#choices] and HasPhrase("last") and not excluded[#choices] then candidates[#choices] = true end
+
+        local selected
+        for index in pairs(candidates) do
+            if selected ~= nil then return nil, true end
+            selected = index
+        end
+        return selected, true
+    end
+
+    if normalized == "last" or normalized == "last one" or normalized == "the last" or normalized == "the last one" then
+        return #choices > 0 and #choices or nil, true
+    end
+    return nil, false
+end
+
 function AP.PendingCandidateIndex(text, choices)
     choices = choices or {}
+    local excludedSelection, handledExclusion = AP.PendingChoiceExcludedOrdinalIndex(text, choices)
+    if handledExclusion then return excludedSelection end
     local normalized = NormalizeReply(text)
     normalized = normalized
         :gsub("^the%s+", "")
@@ -2765,6 +2956,8 @@ local function PendingChoicePage(choice)
 end
 
 local function PendingChoiceIndex(text, choices)
+    local excludedSelection, handledExclusion = AP.PendingChoiceExcludedOrdinalIndex(text, choices)
+    if handledExclusion then return excludedSelection end
     local normalized = NormalizeReply(text)
     local n = tonumber(normalized)
     if n and choices[n] then return n end
@@ -5713,9 +5906,12 @@ function AP.RollbackSettingOperations(operations, changedSettings)
         local operation = operations[i]
         local setting = operation and operation.setting
         if setting and type(setting.set) == "function" then
-            local ok, err = pcall(setting.set, AP.CopyTransactionValue(operation.oldValue))
-            if not ok then
-                errors[#errors + 1] = "set:" .. tostring(setting.key or setting.label or i) .. ":" .. tostring(err)
+            local transactionRestore = type(setting.restoreTransactionState) == "function" and operation.oldTransactionState ~= nil
+            local restore = transactionRestore and setting.restoreTransactionState or setting.set
+            local value = transactionRestore and operation.oldTransactionState or operation.oldValue
+            local ok, restored = pcall(restore, AP.CopyTransactionValue(value), "MSUF_ASSISTANT_SETTING_ROLLBACK")
+            if not ok or (transactionRestore and restored ~= true) then
+                errors[#errors + 1] = "set:" .. tostring(setting.key or setting.label or i) .. ":" .. tostring(restored)
             end
         end
     end
@@ -6195,17 +6391,21 @@ local function ExecuteChanges(plan)
         end
     end
 
+    local refreshedDomains = {}
+
     local function ResolveNewValue(setting, item, oldValue)
         local newValue = item.value
         if item.relativeDelta ~= nil then
-            newValue = (tonumber(oldValue) or 0) + (tonumber(item.relativeDelta) or 0)
+            if setting.type ~= "number" then return false, "relative change requires a number setting" end
+            if not A.IsFiniteAssistantNumber(oldValue) then return false, "relative change requires a finite current value" end
+            if not A.IsFiniteAssistantNumber(item.relativeDelta) then return false, "relative change requires a finite delta" end
+            newValue = oldValue + item.relativeDelta
         end
-        if setting.type == "number" and A.ClampNumber then
-            newValue = A.ClampNumber(newValue, setting.min, setting.max, setting.step)
-        elseif setting.type == "boolean" then
-            newValue = newValue and true or false
-        end
-        return newValue
+        local domainSetting = setting.type == "enum" or (setting.type == "string" and setting.closedValues == true)
+        local skipRefresh = domainSetting and refreshedDomains[setting] == true
+        local ok, normalized = A.NormalizeRegistrySettingValue(setting, newValue, { skipRefresh = skipRefresh })
+        if ok and domainSetting then refreshedDomains[setting] = true end
+        return ok, normalized
     end
 
     -- Resolve every target and read every starting value before the first write.
@@ -6229,10 +6429,14 @@ local function ExecuteChanges(plan)
             end
             oldValue = AP.CopyTransactionValue(value)
         end
-        local newValue = ResolveNewValue(setting, item, oldValue)
+        local valueOk, newValue = ResolveNewValue(setting, item, oldValue)
+        if not valueOk then
+            return AP.TransactionFailure(plan, "preflight.value", setting.key or setting.label or i, newValue)
+        end
         prepared[#prepared + 1] = {
             item = item,
             setting = setting,
+            newValue = AP.CopyTransactionValue(newValue),
         }
         virtualKnown[setting] = true
         virtualValues[setting] = AP.CopyTransactionValue(newValue)
@@ -6251,18 +6455,46 @@ local function ExecuteChanges(plan)
             return AP.TransactionFailure(plan, "read", setting.key or setting.label or i, currentValue, rollbackErrors)
         end
         local oldValue = AP.CopyTransactionValue(currentValue)
-        local newValue = ResolveNewValue(setting, item, oldValue)
+        local newValue = AP.CopyTransactionValue(pending.newValue)
         if ValuesEqual(setting, oldValue, newValue) then
             if setting.applyWhenUnchanged == true then unchangedApplySettings[#unchangedApplySettings + 1] = setting end
         else
+            local oldTransactionState
+            local hasCapture = type(setting.captureTransactionState) == "function"
+            local hasRestore = type(setting.restoreTransactionState) == "function"
+            if hasCapture ~= hasRestore then
+                local rollbackErrors = AP.RollbackSettingOperations(appliedOperations, changedSettings)
+                RestoreNameStateSnapshot()
+                return AP.TransactionFailure(plan, "preflight.transaction-state", setting.key or setting.label or i,
+                    "setting transaction-state capture and restore must be declared together", rollbackErrors)
+            end
+            if hasCapture then
+                local captureOk, captured = pcall(setting.captureTransactionState)
+                if not captureOk or captured == nil then
+                    local rollbackErrors = AP.RollbackSettingOperations(appliedOperations, changedSettings)
+                    RestoreNameStateSnapshot()
+                    return AP.TransactionFailure(plan, "preflight.transaction-state", setting.key or setting.label or i, captured, rollbackErrors)
+                end
+                oldTransactionState = AP.CopyTransactionValue(captured)
+            end
             local setOk, setErr = pcall(setting.set, AP.CopyTransactionValue(newValue))
             if not setOk then
+                local currentRestoreError
+                if hasRestore then
+                    local restored, detail = pcall(setting.restoreTransactionState,
+                        AP.CopyTransactionValue(oldTransactionState), "MSUF_ASSISTANT_SETTING_SET_ROLLBACK")
+                    if not restored or detail ~= true then currentRestoreError = detail end
+                end
                 local rollbackErrors = AP.RollbackSettingOperations(appliedOperations, changedSettings)
+                if currentRestoreError ~= nil then
+                    rollbackErrors[#rollbackErrors + 1] = "set:" .. tostring(setting.key or setting.label or i)
+                        .. ":" .. tostring(currentRestoreError)
+                end
                 RestoreNameStateSnapshot()
                 return AP.TransactionFailure(plan, "set", setting.key or setting.label or i, setErr, rollbackErrors)
             end
 
-            local operation = { setting = setting, oldValue = oldValue }
+            local operation = { setting = setting, oldValue = oldValue, oldTransactionState = oldTransactionState }
             appliedOperations[#appliedOperations + 1] = operation
             changedSettings[#changedSettings + 1] = setting
 
@@ -6297,13 +6529,26 @@ local function ExecuteChanges(plan)
                 if not ValuesEqual(setting, newValue, actualNewValue) then
                     valueLabel = SettingValueLabel(setting, actualNewValue)
                 end
+                local newTransactionState
+                if hasCapture then
+                    local captureOk, captured = pcall(setting.captureTransactionState)
+                    if not captureOk or captured == nil then
+                        local rollbackErrors = AP.RollbackSettingOperations(appliedOperations, changedSettings)
+                        RestoreNameStateSnapshot()
+                        return AP.TransactionFailure(plan, "verify.transaction-state", setting.key or setting.label or i, captured, rollbackErrors)
+                    end
+                    newTransactionState = AP.CopyTransactionValue(captured)
+                end
                 operation.newValue = actualNewValue
+                operation.newTransactionState = newTransactionState
                 committed[#committed + 1] = {
                     item = item,
                     setting = setting,
                     oldValue = oldValue,
                     newValue = actualNewValue,
                     valueLabel = valueLabel,
+                    oldTransactionState = oldTransactionState,
+                    newTransactionState = newTransactionState,
                 }
             end
         end
@@ -6344,6 +6589,7 @@ local function ExecuteChanges(plan)
         if undoIndex then
             undoChanges[undoIndex].newValue = record.newValue
             undoChanges[undoIndex].valueLabel = record.valueLabel
+            undoChanges[undoIndex].newTransactionState = record.newTransactionState
             responseSettings[undoIndex] = setting
         else
             undoChanges[#undoChanges + 1] = {
@@ -6351,6 +6597,8 @@ local function ExecuteChanges(plan)
                 oldValue = record.oldValue,
                 newValue = record.newValue,
                 valueLabel = record.valueLabel,
+                oldTransactionState = record.oldTransactionState,
+                newTransactionState = record.newTransactionState,
             }
             undoIndexByKey[undoKey] = #undoChanges
             responseSettings[#responseSettings + 1] = setting
@@ -6430,6 +6678,29 @@ local function ExecuteAction(plan)
         return AP.TransactionFailure(plan, "preflight.action_policy", action.key, "action mutability policy is missing or invalid")
     end
     local args = plan.args or {}
+    local actionKey = type(action.key) == "string" and action.key or ""
+    local inputCatalog = A.ActionInputs
+    local getInputContract = inputCatalog and inputCatalog.GetContract
+    local normalizeActionInput = A.NormalizeAssistantActionInput
+    if actionKey == "" or type(getInputContract) ~= "function" or type(normalizeActionInput) ~= "function" then
+        return AP.TransactionFailure(plan, "preflight.action_input", action.key,
+            "explicit action input contract is unavailable")
+    end
+    local contractOk, inputContract = pcall(getInputContract, actionKey)
+    if not contractOk or type(inputContract) ~= "table" then
+        return AP.TransactionFailure(plan, "preflight.action_input", action.key,
+            contractOk and "explicit action input contract is unavailable" or inputContract)
+    end
+    -- The catalog key is authoritative.  Never accept a contract supplied on
+    -- an action table, because plans and test doubles may carry copied or
+    -- forged metadata even when their action key is legitimate.
+    local inputOk, normalizedArgs, inputError = pcall(normalizeActionInput, actionKey, args)
+    if not inputOk or type(normalizedArgs) ~= "table" then
+        return AP.TransactionFailure(plan, "preflight.action_input", action.key,
+            inputOk and inputError or normalizedArgs)
+    end
+    args = normalizedArgs
+    plan.args = normalizedArgs
     local adapterName = action.transactionAdapter
     local adapterMode
     if adapterName ~= nil then
@@ -6800,6 +7071,24 @@ function AP.ReadOnlyGuardResult(text)
     }
 end
 
+function A.CancelPendingMutationState()
+    local ctx = A.GetContext and A.GetContext()
+    local hadPending = A.pendingConfirmation ~= nil
+        or (type(A.pendingChoices) == "table" and #A.pendingChoices > 0)
+        or (type(A.pendingFlow) == "table")
+        or (type(ctx) == "table" and (ctx.pendingConfirmation ~= nil
+            or type(ctx.pendingChoices) == "table"
+            or ctx.pendingFlow ~= nil))
+    A.pendingConfirmation = nil
+    ClearPendingConfirmationContext()
+    ClearPendingChoices()
+    if A.Workflow and type(A.Workflow.CancelActiveWorkflow) == "function" then
+        A.Workflow.CancelActiveWorkflow()
+    end
+    if type(A.ClearPendingFlow) == "function" then A.ClearPendingFlow() end
+    return hadPending
+end
+
 local function UnsafeGeneratedSettingResult(setting)
     local label = tostring(setting and setting.label or setting and setting.key or "MSUF setting")
     local reason = tostring(setting and setting.unsafeMutationReason
@@ -7056,15 +7345,18 @@ local function HandlePending(text)
         if flowResult then return flowResult end
     end
     if A.pendingConfirmation then
+        if IsChoiceAbort(text) then
+            A.pendingConfirmation = nil
+            ClearPendingConfirmationContext()
+            local normalized = NormalizeReply(text)
+            local status = normalized == "cancel" and "applied"
+                or ((normalized == "abbrechen" or normalized == "nein danke") and "failed") or "info"
+            return { text = "Cancelled. I kept the options as they were.", result = status }
+        end
         if LooksLikeUndoRedoCommand(text) then
             A.pendingConfirmation = nil
             ClearPendingConfirmationContext()
             return nil
-        end
-        if IsChoiceAbort(text) then
-            A.pendingConfirmation = nil
-            ClearPendingConfirmationContext()
-            return { text = "Cancelled. I kept the options as they were.", result = NormalizeReply(text) == "cancel" and "applied" or "failed" }
         end
         local confirmationFollowup = A._PendingConfirmationFollowupResult(text, A.pendingConfirmation)
         if confirmationFollowup then return confirmationFollowup end
@@ -7448,6 +7740,13 @@ function AP.BatchBooleanLead(text)    local norm = AP.NormalizeForBatch(text)
     return nil
 end
 
+function AP.BatchSettingLead(text)    local norm = AP.NormalizeForBatch(text)
+    for _, lead in ipairs({ "set", "change", "adjust", "setze", "stelle", "aendere" }) do
+        if norm == lead or norm:sub(1, #lead + 1) == lead .. " " then return lead end
+    end
+    return nil
+end
+
 function AP.HasOwnBatchBoolean(text)    local norm = AP.NormalizeForBatch(text)
     if norm == "" then return false end
     for _, lead in ipairs({ "on", "off", "enable", "disable", "enabled", "disabled", "show", "hide", "true", "false", "yes", "no" }) do
@@ -7513,14 +7812,55 @@ function AP.InheritableSettingTail(text)    text = AP.NormalizeForBatch(text)
     return AP.HasScopedSettingDetail(text)
 end
 
+function AP.IsReadOnlyBatchTail(text)
+    local norm = AP.NormalizeForBatch(AP.StripBatchLead(text))
+    if norm == "" then return false end
+    if type(A.RouterIsFailClosedReadOnlyRequest) == "function"
+        and A.RouterIsFailClosedReadOnlyRequest(norm)
+    then
+        return true
+    end
+    local router = A.RouterPrivate
+    return router and (
+        (type(router.IsExplicitReadOnlyDiagnosticCommand) == "function"
+            and router.IsExplicitReadOnlyDiagnosticCommand(norm))
+        or (type(router.IsExplicitNavigationCommand) == "function"
+            and router.IsExplicitNavigationCommand(norm))
+    ) or false
+end
+
 function AP.InheritedBatchCommand(before, after)    local actionTail = AP.InheritableActionTail(after)
+    if AP.IsReadOnlyBatchTail(after) then return nil end
     local settingTail = AP.InheritableSettingTail(after)
     if not actionTail and not settingTail then return nil end
     local lead = AP.BatchBooleanLead(before)
+    if not lead and settingTail then lead = AP.BatchSettingLead(before) end
     if not lead then return nil end
     if settingTail and AP.HasOwnBatchBoolean(after) then return nil end
     if settingTail and not AP.HasScopedSettingDetail(before) then return nil end
     return Trim(lead .. " " .. after)
+end
+
+function AP.IsNamedConjunctionBoundary(before, after)
+    before = AP.NormalizeForBatch(before)
+    after = AP.NormalizeForBatch(after)
+    if before == "" or after == "" then return false end
+    local names = {
+        { left = "group health", right = "text" },
+        { left = "group status", right = "indicators" },
+        { left = "display", right = "recovery" },
+    }
+    for i = 1, #names do
+        local item = names[i]
+        local left = item.left
+        local right = item.right
+        local leftMatches = before == left
+            or before:sub(-#left - 1) == " " .. left
+        local rightMatches = after == right
+            or after:sub(1, #right + 1) == right .. " "
+        if leftMatches and rightMatches then return true end
+    end
+    return false
 end
 
 function AP.SplitBatchCommands(text)    if A.pendingConfirmation or CurrentPendingChoices() then return nil end
@@ -7546,11 +7886,16 @@ function AP.SplitBatchCommands(text)    if A.pendingConfirmation or CurrentPendi
                     -- Combat Timer anchor requested by the user.
                     local beforeNorm = AP.NormalizeForBatch(before)
                     local afterNorm = AP.NormalizeForBatch(after)
+                    if AP.IsNamedConjunctionBoundary(beforeNorm, afterNorm) then
+                        startAt = e + 1
+                    else
                     local combatTimerAnchor = afterNorm:match("^anchor%s+it%s+to%s+(.+)$")
                     if combatTimerAnchor and AP.BatchHasPhrase(beforeNorm, "combat timer") then
                         after = "set combat timer anchor to " .. combatTimerAnchor
                     end
-                    if before ~= "" and after ~= "" and AP.StartsBatchCommand(after) then
+                    if before ~= "" and after ~= ""
+                        and (AP.StartsBatchCommand(after) or AP.IsReadOnlyBatchTail(after))
+                    then
                         parts[p] = before
                         table.insert(parts, p + 1, after)
                         changed = true
@@ -7564,6 +7909,7 @@ function AP.SplitBatchCommands(text)    if A.pendingConfirmation or CurrentPendi
                         break
                     end
                     startAt = e + 1
+                    end
                 end
                 if changed then break end
             end
@@ -7650,8 +7996,78 @@ function AP.BuildAtomicSettingBatch(parts)
     }
 end
 
+function AP.TrySubmitMixedBatch(parts, opts)
+    if type(parts) ~= "table" or #parts < 2 then return nil end
+    local mutationParts, readOnlyParts = {}, {}
+    for i = 1, #parts do
+        if AP.IsReadOnlyBatchTail(parts[i]) then
+            readOnlyParts[#readOnlyParts + 1] = { index = i, text = parts[i] }
+        else
+            mutationParts[#mutationParts + 1] = parts[i]
+        end
+    end
+    if #mutationParts == 0 or #readOnlyParts == 0 then return nil end
+
+    local atomicPlan
+    if #mutationParts == 1 and type(A.Parse) == "function" then
+        local parsed = A.Parse(mutationParts[1])
+        if type(parsed) == "table" and parsed.kind == "changes"
+            and type(parsed.changes) == "table" and #parsed.changes > 0
+        then
+            atomicPlan = parsed
+        end
+    else
+        atomicPlan = AP.BuildAtomicSettingBatch(mutationParts)
+    end
+    if not atomicPlan then return AP.BatchPlanFailure(parts) end
+
+    local informational = {}
+    for i = 1, #readOnlyParts do
+        local part = readOnlyParts[i]
+        local result = A.HandleInput(part.text, {
+            skipTurnSerialAdvance = opts and opts.turnSerialAdvanced == true,
+        })
+        local status = result and (result.status or result.result)
+        if not result or AP.IsMutationResultStatus(status)
+            or not AP.IsSuccessfulResultStatus(status)
+        then
+            return AP.BatchPlanFailure(parts)
+        end
+        informational[#informational + 1] = {
+            index = part.index,
+            text = tostring(result.text or ""),
+        }
+    end
+
+    local changed = A.ExecutePlan(atomicPlan)
+    local changedStatus = changed and (changed.status or changed.result)
+    if not changed or not AP.IsSuccessfulResultStatus(changedStatus) then return changed end
+
+    local lines = {
+        "Done. I handled " .. tostring(#parts) .. " parts safely.",
+        tostring(changed.text or ""),
+    }
+    for i = 1, #informational do
+        lines[#lines + 1] = informational[i].text
+    end
+    changed.text = table.concat(lines, "\n")
+    changed.summary = "Handled a mixed atomic setting change and read-only Assistant request."
+    return changed
+end
+
+function AP.BatchPlanFailure(parts)
+    return {
+        text = "I could not safely plan every part of that combined request, so I kept MSUF unchanged. Rephrase the unclear part or send the requests separately.",
+        status = "ambiguous",
+        summary = "Combined request needs clarification before anything changes.",
+        batchParts = type(parts) == "table" and #parts or 0,
+    }
+end
+
 function AP.TrySubmitBatch(text, preSplitParts, opts)    local parts = preSplitParts or AP.SplitBatchCommands(text)
     if not parts then return nil end
+    local mixed = AP.TrySubmitMixedBatch(parts, opts)
+    if mixed then return mixed end
     local atomicPlan = AP.BuildAtomicSettingBatch(parts)
     if atomicPlan then
         local result = A.ExecutePlan(atomicPlan)
@@ -7662,25 +8078,7 @@ function AP.TrySubmitBatch(text, preSplitParts, opts)    local parts = preSplitP
         end
         return result
     end
-    local lines = {}
-    local applied = 0
-    for i = 1, #parts do
-        local result = A.HandleInput(parts[i], {
-            skipTurnSerialAdvance = opts and opts.turnSerialAdvanced == true,
-        })
-        if not result then
-            return { text = "I paused at step " .. tostring(i) .. " because I could not match that request.", result = "failed" }
-        end
-        local status = result.status or result.result
-        if not AP.IsSuccessfulResultStatus(status) then
-            return result
-        end
-        if AP.IsMutationResultStatus(status) then applied = applied + 1 end
-        lines[#lines + 1] = tostring(i) .. ". " .. AP.BatchLine(result.text)
-    end
-    local textOut = "Done. I handled " .. tostring(#parts) .. " requests:\n" .. table.concat(lines, "\n")
-    if applied > 0 then textOut = AP.AppendUndoFollowupHint(textOut) end
-    return { text = textOut, result = applied > 0 and "applied" or "info", summary = "Handled multiple Assistant requests." }
+    return AP.BatchPlanFailure(parts)
 end
 
 function AP.RecordAssistantResult(result)    if result and result.text then
@@ -7705,8 +8103,14 @@ end
 
 function AP.TryImmediateSubmitResult(text, opts)
     if type(A.TryImmediateConversationReply) ~= "function" then return nil end
+    if AP.SplitBatchCommands(text) then return nil end
     local parser = A.Parser or {}
     local normalized = type(parser.Normalize) == "function" and parser.Normalize(text) or tostring(text or ""):lower()
+    if type(A.RouterIsFailClosedReadOnlyRequest) == "function"
+        and A.RouterIsFailClosedReadOnlyRequest(text)
+    then
+        return nil
+    end
     if AP.RequiresExactMovementRouting and AP.RequiresExactMovementRouting(text) then return nil end
     if AP.RequiresCrossFrameTextRouting and AP.RequiresCrossFrameTextRouting(text) then return nil end
     local auraFilteringIntent = type(parser.LooksLikeAuraFilteringConversation) == "function"
@@ -7865,6 +8269,16 @@ function AP.TryImmediateMutationResult(text, opts)
     local normalized = normalize(text)
     if normalized == "" then return nil end
     local routePrivate = A.RouterPrivate
+    if routePrivate and type(routePrivate.IsExplicitNavigationCommand) == "function"
+        and routePrivate.IsExplicitNavigationCommand(text)
+    then
+        -- Navigation owns value-bearing Aura phrases too. The Aura immediate
+        -- mutation lane deliberately bypasses several generic read-only
+        -- guards, so without this explicit handoff "take me to Raid Debuff
+        -- Filter: dispellable" is answered generically before the Router can
+        -- open the resolved control.
+        return nil
+    end
     -- "Target of Target name ... on Target frame" names two different
     -- owners. Let the Router explain the relationship (or offer the correct
     -- frame) before an exact boolean alias can toggle only the first phrase.
@@ -8264,9 +8678,14 @@ end
 
 function AP.BuildDeferredSubmitSteps(text, callback, opts)    opts = opts or {}
     local steps = {}
-    local failClosedReadOnly = type(A.RouterIsFailClosedReadOnlyRequest) == "function" and A.RouterIsFailClosedReadOnlyRequest(text)
-    local exactMovement = AP.RequiresExactMovementRouting(text)
-    local parts = not failClosedReadOnly and not exactMovement and AP.SplitBatchCommands(text) or nil
+    local parts
+    if opts.batchChecked == true then
+        parts = opts.preSplitParts
+    else
+        local failClosedReadOnly = type(A.RouterIsFailClosedReadOnlyRequest) == "function" and A.RouterIsFailClosedReadOnlyRequest(text)
+        local exactMovement = AP.RequiresExactMovementRouting(text)
+        parts = not failClosedReadOnly and not exactMovement and AP.SplitBatchCommands(text) or nil
+    end
     local finalResult
     local finished = false
 
@@ -8286,41 +8705,15 @@ function AP.BuildDeferredSubmitSteps(text, callback, opts)    opts = opts or {}
     end
 
     if parts then
-        local lines = {}
-        local applied = 0
-        local stopped = false
-        for i = 1, #parts do
-            local partIndex = i
-            steps[#steps + 1] = A.CoroutineStep(function()
-                if stopped then return end
-                local part = parts[partIndex]
-                local result = AP.LongInputResult(part) or A.HandleInput(part, {
-                    skipTurnSerialAdvance = opts.turnSerialAdvanced == true,
-                })
-                if not result then
-                    result = { text = "I paused at step " .. tostring(partIndex) .. " because I could not match that request.", result = "failed" }
-                end
-                local status = result.status or result.result
-                if not AP.IsSuccessfulResultStatus(status) then
-                    finalResult = result
-                    stopped = true
-                    return
-                end
-                if AP.IsMutationResultStatus(status) then applied = applied + 1 end
-                lines[#lines + 1] = tostring(partIndex) .. ". " .. AP.BatchLine(result.text)
-            end)
-        end
+        -- Planning can build cold registry indices. Keep it inside the
+        -- yielding job coroutine so accepting a compound prompt never blocks
+        -- the Dashboard frame while each clause is resolved.
+        steps[#steps + 1] = A.CoroutineStep(function()
+            finalResult = AP.TrySubmitBatch(text, parts, { turnSerialAdvanced = true })
+                or AP.BatchPlanFailure(parts)
+        end)
         steps[#steps + 1] = function()
-            if not finalResult then
-                local textOut = "Done. I handled " .. tostring(#parts) .. " requests:\n" .. table.concat(lines, "\n")
-                if applied > 0 then textOut = AP.AppendUndoFollowupHint(textOut) end
-                finalResult = {
-                    text = textOut,
-                    status = applied > 0 and "applied" or "info",
-                    summary = "Handled multiple Assistant requests.",
-                }
-            end
-            Complete(finalResult)
+            Complete(finalResult or AP.BatchPlanFailure(parts))
             return finalResult
         end
     else
@@ -8384,15 +8777,24 @@ function AP.SubmitDeferredNow(text, callback)
     if AP.IsAssistantStopCommand and AP.IsAssistantStopCommand(text) then
         return NormalizePlanResult({ text = "Nothing is running right now.", result = "info" })
     end
-    local immediate = AP.TryImmediateSubmitResult(text)
-    if immediate then
-        AP.RunSubmitCallback(callback, immediate, "assistant.immediate.callback", text)
-        return immediate
-    end
-    local immediateMutation = AP.TryImmediateMutationResult(text)
-    if immediateMutation then
-        AP.RunSubmitCallback(callback, immediateMutation, "assistant.immediate-mutation.callback", text)
-        return immediateMutation
+    -- Detect compound commands before either immediate lane. Those lanes are
+    -- single-intent optimizations and can otherwise spend cold-start time
+    -- proving that a multi-clause request does not belong there before the
+    -- scheduler receives it. The deferred batch owner parses every clause and
+    -- commits exactly one atomic transaction (or no writes at all).
+    local batchParts = AP.SplitBatchCommands(text)
+    if batchParts and AP.RequiresExactMovementRouting(text) then batchParts = nil end
+    if not batchParts then
+        local immediate = AP.TryImmediateSubmitResult(text)
+        if immediate then
+            AP.RunSubmitCallback(callback, immediate, "assistant.immediate.callback", text)
+            return immediate
+        end
+        local immediateMutation = AP.TryImmediateMutationResult(text)
+        if immediateMutation then
+            AP.RunSubmitCallback(callback, immediateMutation, "assistant.immediate-mutation.callback", text)
+            return immediateMutation
+        end
     end
 
     A.SetBusy(true, "I am working on that. Press Stop or type stop to cancel.")
@@ -8401,6 +8803,8 @@ function AP.SubmitDeferredNow(text, callback)
     local steps, onDone = AP.BuildDeferredSubmitSteps(text, callback, {
         userHistoryRecorded = true,
         turnSerialAdvanced = true,
+        batchChecked = true,
+        preSplitParts = batchParts,
     })
     local job = A.StartJob("assistant.submit", steps, onDone, { requestText = text })
     if job and type(job.result) == "table" and not A.IsBusy() then
@@ -8438,6 +8842,8 @@ function A.StartNewTask()
         for key in pairs(context) do context[key] = nil end
     end
     if type(A.ClearRouterTransientCaches) == "function" then A.ClearRouterTransientCaches() end
+    if A.Parser and type(A.Parser.ClearRegistryCandidateFuzzyCache) == "function" then A.Parser.ClearRegistryCandidateFuzzyCache() end
+    if A.Parser and type(A.Parser.ClearActionAliasFuzzyCache) == "function" then A.Parser.ClearActionAliasFuzzyCache() end
     if type(A.ClearHistory) == "function" then A.ClearHistory() end
     local ui = A.dashboardUI
     if ui and ui.input then

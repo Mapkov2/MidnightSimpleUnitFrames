@@ -620,10 +620,13 @@ local function BuildFollowup(text, ctx)
         or tostring(text or ""):match("^zu%s+[-+]?%d+%.?%d*$") ~= nil
     local exactValueReference = ContainsAny(text, FollowupData.EXACT_VALUE_REFERENCE_TERMS)
     local pluralExactValueReference = ContainsAny(text, FollowupData.PLURAL_EXACT_VALUE_REFERENCE_TERMS)
+    local relativeNumberIntent = ContainsAny(text, P.RELATIVE_INCREASE_TERMS or {})
+        or ContainsAny(text, P.RELATIVE_DECREASE_TERMS or {})
     local exactValueIntent = pureNumberIntent
         or bareExactValueIntent
         or (not explicitAuraBulkScope and ContainsAny(text, FollowupData.MIN_MAX_TERMS))
-        or (not explicitAuraBulkScope and exactValueReference and FirstNumber(text) ~= nil)
+        or (not explicitAuraBulkScope and not relativeNumberIntent
+            and exactValueReference and FirstNumber(text) ~= nil)
     local commandIntent = ContainsAny(text, FollowupData.COMMAND_INTENT_TERMS)
     local auraLaneObjectIntent = ContainsAny(text, FollowupData.AURA_LANE_OBJECT_REFERENCE_TERMS) and ContainsAny(text, FollowupData.AURA_LANE_OBJECT_ACTION_TERMS)
     local genericObjectIntent = ContainsAny(text, FollowupData.GENERIC_OBJECT_REFERENCE_TERMS) and ContainsAny(text, FollowupData.GENERIC_OBJECT_ACTION_TERMS)
@@ -632,7 +635,7 @@ local function BuildFollowup(text, ctx)
     for _ in tostring(text or ""):gmatch("%S+") do wordCount = wordCount + 1 end
     local bareDirectionalFollowup = ContainsAny(text, FollowupData.BARE_DIRECTIONAL_FOLLOWUP_TERMS) and wordCount <= 3 and not ContainsAny(text, FollowupData.BARE_DIRECTIONAL_GUARD_TERMS)
     local hasIntent = positiveIntent or negativeIntent or neutralIntent or oppositeIntent or reverseCorrectionIntent
-        or tooPositiveIntent or tooNegativeIntent or notEnoughIntent or exactValueIntent
+        or tooPositiveIntent or tooNegativeIntent or notEnoughIntent or exactValueIntent or relativeNumberIntent
         or leftIntent or rightIntent or targetReplayIntent
         or auraLaneObjectIntent
         or genericObjectIntent
@@ -817,6 +820,15 @@ local function BuildFollowup(text, ctx)
     local function FindGenericRelatedSetting(prev, targetAttr)
         if not (Registry and type(Registry.FindSettings) == "function") then return nil end
         local previousSetting = prev and prev.key and Registry:GetSetting(prev.key) or nil
+        if targetAttr == "enabled" and previousSetting and previousSetting.type == "boolean"
+            and ContainsAny(text, FollowupData.BOOLEAN_CORRECTION_TERMS)
+        then
+            -- A pronoun correction such as "actually, turn it back on" owns
+            -- the exact boolean that was just changed. Searching siblings for
+            -- a generic Enabled attribute can otherwise redirect the command
+            -- from Target Name to the whole Target Frame.
+            return previousSetting
+        end
         local unit = (prev and prev.unit) or (previousSetting and previousSetting.unit)
         local frameType = (prev and prev.frameType) or (previousSetting and previousSetting.frameType)
         local attribute = (prev and prev.attribute) or (previousSetting and previousSetting.attribute)
@@ -1467,7 +1479,8 @@ local function BuildFollowup(text, ctx)
 
     if #units == 0 and #groups == 0
         and (positiveIntent or negativeIntent or neutralIntent or oppositeIntent or reverseCorrectionIntent
-            or tooPositiveIntent or tooNegativeIntent or notEnoughIntent or leftIntent or rightIntent)
+            or tooPositiveIntent or tooNegativeIntent or notEnoughIntent or leftIntent or rightIntent
+            or relativeNumberIntent)
         and (not commandIntent or explicitFollowupReference or bareDirectionalFollowup)
     then
         local repeatChanges = {}
@@ -1479,11 +1492,23 @@ local function BuildFollowup(text, ctx)
                 local siblingKey = followDirection and FollowupSiblingKey(prev.key, followDirection) or nil
                 local sibling = siblingKey and Registry:GetSetting(siblingKey) or nil
                 if sibling and sibling.type == "number" then setting = sibling end
-                local relativeDelta = nil
                 local prevDelta = tonumber(prev.relativeDelta)
                 local directionDelta = prevDelta
                 if directionDelta == nil then directionDelta = PreviousValueDelta(prev) end
                 local explicitAmount = A._RelativeNumberAmountForText(text)
+                local movementRepeatDelta = PreviousMovementDelta(prev)
+                local relativeDelta
+                if relativeNumberIntent and P.RelativeNumberDeltaForText then
+                    -- A bare "more" after a positional nudge should repeat that
+                    -- nudge's magnitude.  Feeding it through the generic number
+                    -- parser first would replace a previous +/-10 movement with
+                    -- the registry setting's ordinary step (usually 1).  An
+                    -- explicit amount still wins, and non-movement settings keep
+                    -- their normal step-based interpretation.
+                    if movementRepeatDelta == nil or explicitAmount ~= nil then
+                        relativeDelta = P.RelativeNumberDeltaForText(setting, text)
+                    end
+                end
                 local amount = FollowupAmount(setting, prevDelta, explicitAmount)
                 local previousNegative = (prev.direction == "left" or prev.direction == "down") or (directionDelta ~= nil and directionDelta < 0)
                 local sign = nil
@@ -1508,7 +1533,7 @@ local function BuildFollowup(text, ctx)
                 elseif neutralIntent and (directionDelta ~= nil or neutralIncreaseIntent) then
                     sign = previousNegative and -1 or 1
                 end
-                if sign ~= nil then
+                if relativeDelta == nil and sign ~= nil then
                     relativeDelta = amount * sign
                 end
                 if relativeDelta ~= nil then

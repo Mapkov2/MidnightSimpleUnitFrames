@@ -18,6 +18,7 @@
     <Script file="Assistant\MSUF_AssistantRegistry_Core_UnitAuras.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_Core_Context.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_Core.lua"/>
+    <Script file="Assistant\MSUF_AssistantRegistry_ActionInputs.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_Core_Registry.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_Core_Gameplay.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_Core_Settings_Unit.lua"/>
@@ -313,11 +314,14 @@
     <Script file="Assistant\MSUF_AssistantParser_Compound.lua"/>
     <Script file="Assistant\MSUF_AssistantParser_Data.lua"/>
     <Script file="Assistant\MSUF_AssistantParser.lua"/>
+    <Script file="Assistant\MSUF_AssistantParser_ActionInputGuard.lua"/>
     <Script file="Assistant\MSUF_Assistant.lua"/>
     <Script file="Assistant\MSUF_AssistantDashboard.lua"/>
     <Script file="Assistant\MSUF_AssistantAudit.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_AutoCoverage_Manifest.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_AutoCoverage.lua"/>
+    <Script file="Assistant\MSUF_AssistantControlSchema_Data.lua"/>
+    <Script file="Assistant\MSUF_AssistantControlSchema.lua"/>
     <Script file="Assistant\MSUF_AssistantKnowledge.lua"/>
     <Script file="Assistant\MSUF_AssistantRouter_Context.lua"/>
     <Script file="Assistant\MSUF_AssistantRouter.lua"/>

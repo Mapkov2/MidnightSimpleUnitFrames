@@ -178,6 +178,7 @@ Range Check=unit frame range check;Level Text=where is level text anchor;Perform
             M.RegisterMenuChromeControl(btn, "search.shortcut." .. (shortcutToken ~= "" and shortcutToken or tostring(i)),
                 "Search for " .. tostring(shortcuts[i][1] or searchQuery), "action", {
                     actionKey = "menu_search_query",
+                    actionFixedArgs = { query = searchQuery },
                     historyMode = "none",
                     help = "Runs this built-in MSUF support search.",
                     command = {

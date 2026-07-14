@@ -844,7 +844,7 @@ Data.FEATURES_PARSER = {
         -- polarity before scope wording.
         [396] = { "show dots", "with dots", "show ellipsis", "with ellipsis" },
         [397] = { "castbar", "spell name", "spell names" },
-        [398] = { "test", "preview", "show preview", "vorschau", "zeige vorschau", "preview anzeigen" },
+        [398] = { "test", "test mode", "testmode", "testmodus", "preview", "show preview", "vorschau", "zeige vorschau", "preview anzeigen" },
         [399] = { "castbar", "cast bar", "zauberleiste", "zauberleisten" },
         [400] = { "channel", "channeled", "channelled", "kanal", "kanalisiert" },
         [401] = { "empowered", "empower", "evoker", "verstaerkt", "verstaerken", "ermaechtigt", "ermaechtigen" },

@@ -2656,9 +2656,13 @@ local EXPLICIT_FULL_GROUP_BORDER_TERMS = {
     "full group border", "whole group border", "outer group border", "group block border",
     "border around group", "border around frames", "entire group border",
 }
+local EXPLICIT_FONT_OUTLINE_TERMS = {
+    "font outline", "font outlines", "text outline", "text outlines", "outline style",
+}
 local function IsAmbiguousGroupOutlineBorderIntent(text)
     if ContainsAny(text, EXPLICIT_GROUP_BAR_OUTLINE_TERMS) then return false end
     if ContainsAny(text, EXPLICIT_FULL_GROUP_BORDER_TERMS) then return false end
+    if ContainsAny(text, EXPLICIT_FONT_OUTLINE_TERMS) then return false end
     if not ContainsAny(text, AMBIGUOUS_GROUP_OUTLINE_SCOPE_TERMS) then return false end
     return ContainsAny(text, AMBIGUOUS_GROUP_OUTLINE_DETAIL_TERMS)
 end

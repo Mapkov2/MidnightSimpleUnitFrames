@@ -113,8 +113,10 @@ function A.UnitframesRegistry.RegisterStatusIconSettings(ctx, unit)
         return out
     end
 
+    local raidGroupSpec
     for s = 1, #STATUS_CONTROL_SPECS do
         local spec = STATUS_CONTROL_SPECS[s]
+        if spec.value == "raidgroupname" then raidGroupSpec = spec end
         if not spec.units or spec.units[unit] == true then
             local aliases = {}
             for a = 1, #(spec.aliases or {}) do
@@ -239,6 +241,19 @@ function A.UnitframesRegistry.RegisterStatusIconSettings(ctx, unit)
                 }))
             end
         end
+    end
+
+    -- Menu2 builds the shared status-placement surface for every unit page,
+    -- including the hidden raid-group style dropdown. Keep its declared
+    -- setting key typed even on Boss/Pet so the catalog never falls back to an
+    -- unconstrained generated string owner.
+    if raidGroupSpec and raidGroupSpec.units and raidGroupSpec.units[unit] ~= true then
+        local aliases = MakeAliases(unit, "raid group style", "raid group name style", "group number style")
+        RegisterUnitEnum(unit, "raidGroupNameStyle", "raidGroupNameStyle", "Raid Group Name Style",
+            "PAREN", RAID_GROUP_STYLE_VALUES, aliases, StatusIconOpts(raidGroupSpec, {
+                valueAliases = RAID_GROUP_STYLE_ALIASES,
+                description = "Typed backing value for the shared status-placement surface on this unit page.",
+            }))
     end
 
     RegisterUnitBooleanSetting(unit, "stateIconsTestMode", "stateIconsTestMode", "Status Icon Test Mode", false, MakeAliases(unit,

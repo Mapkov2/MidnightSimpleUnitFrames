@@ -114,7 +114,23 @@ function A.Workflow.StatusText()
     lines[#lines + 1] = "Active profile: " .. ActiveProfileName()
     lines[#lines + 1] = "In combat: " .. combat
     lines[#lines + 1] = "Edit mode: " .. edit
-    lines[#lines + 1] = "I know " .. tostring(#(Registry.settings or {})) .. " options and " .. tostring(#(Registry.actions or {})) .. " tasks"
+    -- Status must not be the operation that cold-builds the full knowledge
+    -- index. Reuse detailed counts only after an explicit knowledge request
+    -- has already materialized it.
+    local knowledgeCounts = A.Knowledge and type(A.Knowledge.summaryCache) == "table"
+        and A.Knowledge.summaryCache or nil
+    if type(knowledgeCounts) == "table" then
+        lines[#lines + 1] = "Registry inventory: " .. tostring(knowledgeCounts.setting or 0)
+            .. " indexed settings (" .. tostring(knowledgeCounts.directSetting or 0)
+            .. " reviewed direct-write, " .. tostring(knowledgeCounts.guidedSetting or 0)
+            .. " guidance/read-only) and "
+            .. tostring((knowledgeCounts.action or 0) + (knowledgeCounts.diagnostic or 0))
+            .. " indexed tasks or checks"
+    else
+        lines[#lines + 1] = "Registry inventory: " .. tostring(#(Registry.settings or {}))
+            .. " indexed settings and " .. tostring(#(Registry.actions or {}))
+            .. " indexed tasks or checks; direct mutation still requires a reviewed write contract"
+    end
     local parser = A.Parser or {}
     local actionAliasCandidates = tonumber(parser._lastRegistryActionAliasCandidateCount)
     local actionAliasTotal = tonumber(parser._lastRegistryActionAliasTotalCount)

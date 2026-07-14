@@ -33,7 +33,7 @@ MSUF.MSUF2 = M
 local Catalog = M.RuntimeControlCatalog or {}
 M.RuntimeControlCatalog = Catalog
 
-Catalog.SCHEMA_VERSION = 1
+Catalog.SCHEMA_VERSION = 2
 
 -- Shell controls are not built by the page/widget factories, so an omitted raw
 -- Button would otherwise be invisible to a percentage calculated only from
@@ -155,6 +155,59 @@ local function CopyStringList(value)
     local out = {}
     for i = 1, #(type(value) == "table" and value or {}) do out[i] = value[i] end
     return out
+end
+
+local function CopySerializableActionValue(value, seen, depth)
+    local kind = type(value)
+    if value == nil or kind == "boolean" or kind == "string" then return value end
+    if kind == "number" then
+        if value ~= value or value == math.huge or value == -math.huge then return nil, "non-finite number" end
+        return value
+    end
+    if kind ~= "table" then return nil, "unsupported " .. kind end
+    depth = (depth or 0) + 1
+    if depth > 5 then return nil, "table nesting exceeds five levels" end
+    seen = seen or {}
+    if seen[value] then return nil, "cyclic table" end
+    seen[value] = true
+    local out = {}
+    for key, item in pairs(value) do
+        local keyKind = type(key)
+        if keyKind ~= "string" and keyKind ~= "number" then
+            seen[value] = nil
+            return nil, "unsupported table key " .. keyKind
+        end
+        local copy, err = CopySerializableActionValue(item, seen, depth)
+        if err then
+            seen[value] = nil
+            return nil, err
+        end
+        out[key] = copy
+    end
+    seen[value] = nil
+    return out
+end
+
+local function ActionValueFingerprint(value)
+    local kind = type(value)
+    if value == nil then return "z:" end
+    if kind == "boolean" then return value and "b:1" or "b:0" end
+    if kind == "number" then return "n:" .. string.format("%.17g", value) end
+    if kind == "string" then return "s:" .. value end
+    if kind ~= "table" then return "x:" .. kind end
+    local keys = {}
+    for key in pairs(value) do keys[#keys + 1] = key end
+    table.sort(keys, function(left, right)
+        local lt, rt = type(left), type(right)
+        if lt ~= rt then return lt < rt end
+        return tostring(left) < tostring(right)
+    end)
+    local parts = { "t:" }
+    for i = 1, #keys do
+        local key = keys[i]
+        parts[#parts + 1] = ActionValueFingerprint(key) .. "=" .. ActionValueFingerprint(value[key])
+    end
+    return table.concat(parts, "\030")
 end
 
 local function NormalizeAssistantRouteList(value, fieldName, requireAnchors)
@@ -378,6 +431,9 @@ local function CommandMetadata(command, label)
         hasValues = type(command.values) == "table" or type(command.getValues) == "function",
         hasRuntimeValidator = type(command.canExecute) == "function",
         valueCount = count,
+        valueKind = CleanText(command.valueKind),
+        historyMode = CleanText(command.historyMode),
+        percentIsValue = command.percentIsValue == true,
         min = tonumber(command.min),
         max = tonumber(command.max),
         step = tonumber(command.step),
@@ -397,7 +453,7 @@ end
 
 local SETTING_COMMAND_KINDS = {
     toggle = true, slider = true, dropdown = true, segment = true,
-    textinput = true, color = true,
+    textinput = true, color = true, dragrow = true,
 }
 local function CapabilityIssue(record)
     if type(record) ~= "table" then return nil end
@@ -415,8 +471,16 @@ local function CapabilityIssue(record)
         if meta.min == nil or meta.max == nil or meta.step == nil then return "slider is missing min/max/step" end
         if meta.min > meta.max then return "slider min exceeds max" end
         if meta.step <= 0 then return "slider step must be positive" end
-    elseif kind == "dropdown" or kind == "segment" then
+    elseif kind == "dropdown" or kind == "segment" or kind == "dragrow" then
         if meta.hasValues ~= true then return kind .. " is missing a values provider" end
+        if kind == "dragrow" then
+            if meta.valueKind ~= "enum" then return "dragrow requires valueKind=enum" end
+            local disposition = CleanText(record.assistantDisposition):lower()
+            local routeCount = #(record.assistantSettingKeys or {}) + #(record.assistantSettingKeyPatterns or {})
+            if disposition ~= "dynamic" or routeCount == 0 then
+                return "dragrow requires a reviewed dynamic Registry order route"
+            end
+        end
     end
     return nil
 end
@@ -430,7 +494,7 @@ local function RuntimeCapabilityIssue(record)
         if not ok then return "read command raised an error" end
     end
     local kind = CleanText(meta.kind ~= "" and meta.kind or record.kind):lower()
-    if kind == "dropdown" or kind == "segment" then
+    if kind == "dropdown" or kind == "segment" or kind == "dragrow" then
         local values = command.values
         if type(values) ~= "table" and type(command.getValues) == "function" then
             local ok, resolved = pcall(command.getValues)
@@ -545,6 +609,8 @@ function M.BuildRuntimeWidgetCommand(widget, meta, kind)
         source = meta.controlPath or meta.identityKey,
         settingKey = meta.settingKey,
         actionKey = meta.actionKey,
+        actionFixedArgs = CopySerializableActionValue(meta.actionFixedArgs),
+        actionInputArg = meta.actionInputArg,
         assistantDisposition = meta.assistantDisposition,
         assistantDispositionReason = meta.assistantDispositionReason,
         assistantSettingKeys = CopyStringList(meta.assistantSettingKeys),
@@ -595,6 +661,7 @@ local function RevisionKey(record)
         tostring(record.controlId or ""), tostring(record.pageKey or ""), tostring(record.kind or ""),
         tostring(record.label or ""), tostring(record.identityLabel or ""), tostring(record.controlPath or ""),
         tostring(record.settingKey or ""), tostring(record.actionKey or ""), tostring(record.navigationKey or ""),
+        ActionValueFingerprint(record.actionFixedArgs), tostring(record.actionInputArg or ""),
         tostring(record.assistantDisposition or ""), tostring(record.assistantDispositionReason or ""),
         AssistantRouteFingerprint(record),
         tostring(record.help or ""), tostring(record.classification or ""),
@@ -774,6 +841,25 @@ function Catalog.Register(widget, meta, registrationSource)
     record.settingKey = CleanText(meta.settingKey or (record.command and record.command.settingKey) or record.settingKey)
     record.actionKey = CleanText(meta.actionKey or (record.command and record.command.actionKey) or record.actionKey)
     record.navigationKey = CleanText(meta.navigationKey or (record.command and record.command.navigationKey) or record.navigationKey)
+    local declaredActionFixedArgs = meta.actionFixedArgs
+    if declaredActionFixedArgs == nil and command then declaredActionFixedArgs = command.actionFixedArgs end
+    if declaredActionFixedArgs ~= nil then
+        local fixedArgs, fixedArgsError = CopySerializableActionValue(declaredActionFixedArgs)
+        record.actionFixedArgs = fixedArgs
+        record.actionContractError = fixedArgsError
+    elseif meta.actionKey ~= nil or command and command.actionKey ~= nil then
+        record.actionFixedArgs = nil
+        record.actionContractError = nil
+    end
+    local declaredActionInputArg = meta.actionInputArg
+    if declaredActionInputArg == nil and command then declaredActionInputArg = command.actionInputArg end
+    if declaredActionInputArg ~= nil then
+        record.actionInputArg = CleanText(declaredActionInputArg)
+    elseif meta.actionKey ~= nil or command and command.actionKey ~= nil then
+        record.actionInputArg = ""
+    else
+        record.actionInputArg = CleanText(record.actionInputArg)
+    end
     local declaredDisposition = meta.assistantDisposition
     if declaredDisposition == nil and command then declaredDisposition = command.assistantDisposition end
     local declaredDispositionReason = meta.assistantDispositionReason
@@ -1146,6 +1232,9 @@ local function PublicRecord(record)
         invalidExplicitId = record.invalidExplicitId,
         settingKey = record.settingKey ~= "" and record.settingKey or nil,
         actionKey = record.actionKey ~= "" and record.actionKey or nil,
+        actionFixedArgs = CopySerializableActionValue(record.actionFixedArgs),
+        actionInputArg = record.actionInputArg ~= "" and record.actionInputArg or nil,
+        actionContractError = record.actionContractError,
         navigationKey = record.navigationKey ~= "" and record.navigationKey or nil,
         assistantDisposition = record.assistantDisposition ~= "" and record.assistantDisposition or nil,
         assistantDispositionReason = record.assistantDispositionReason ~= "" and record.assistantDispositionReason or nil,
@@ -1170,6 +1259,253 @@ function Catalog.GetRecords()
     local out = {}
     for i = 1, #records do out[i] = PublicRecord(records[i]) end
     return out
+end
+
+local function SemanticPath(record)
+    local path = CleanText(record and record.controlPath)
+    if path == "" then path = CleanText(record and record.identityKey) end
+    if path == "" then path = CleanText(record and record.controlId) end
+    return path
+end
+
+local function FamilyIdentity(path)
+    local parts, family, members = {}, {}, {}
+    for part in tostring(path or ""):gmatch("[^/]+") do parts[#parts + 1] = part end
+    for i = 1, #parts do
+        local part = parts[i]
+        if part:match("^%d+$") then
+            family[#family + 1] = "{member}"
+            members[#members + 1] = part
+        else
+            family[#family + 1] = part
+        end
+    end
+    if #members == 0 then return nil, nil end
+    return table.concat(family, "/"), table.concat(members, ".")
+end
+
+local function AssistantSafety(record)
+    if type(record) ~= "table" then return "readOnly" end
+    if record.classification == "navigation" then return "nonStateful" end
+    local command = record.command
+    local readable = type(command) == "table" and type(command.get) == "function"
+    local writable = type(command) == "table" and type(command.set) == "function"
+    if record.classification == "unknown" or not writable then return "readOnly" end
+    -- Persisted Menu2 callbacks are capability evidence, not an Assistant
+    -- transaction boundary. Only a canonical Registry target can provide
+    -- validation, confirmation, snapshot, undo/redo, and atomic rollback.
+    -- Reviewed dynamic/compound/duplicate controls remain discoverable and
+    -- navigable, but fail closed until a concrete target is selected.
+    if record.classification == "setting" and CleanText(record.settingKey) == "" then return "guided" end
+    if record.classification == "action" and CleanText(record.actionKey) == "" then return "guided" end
+    if record.classification == "action" and record.actionContractError then return "guided" end
+    if record.confirmRequired == true then return "confirm" end
+    if record.classification == "ephemeral" then return "nonStateful" end
+    if record.classification == "setting" and not readable then return "readOnly" end
+    return "direct"
+end
+
+local function AssistantSemanticId(record)
+    local path = SemanticPath(record)
+    local familyId, memberKey = FamilyIdentity(path)
+    local pagePath = CleanText(record.pageKey)
+    if pagePath ~= "" and path ~= "" then pagePath = pagePath .. "/" .. path
+    elseif pagePath == "" then pagePath = path end
+    if record.classification == "ephemeral" and familyId then
+        familyId = CleanText(record.pageKey) .. "/" .. familyId
+        return "instance:" .. familyId .. ":" .. memberKey, familyId, memberKey
+    end
+    local target = record.classification == "setting" and CleanText(record.settingKey)
+        or record.classification == "action" and CleanText(record.actionKey)
+        or record.classification == "navigation" and CleanText(record.navigationKey) or ""
+    local prefix = record.classification == "setting" and "setting"
+        or record.classification == "action" and "action"
+        or record.classification == "navigation" and "navigation" or "control"
+    if target == "" then target = pagePath end
+    if pagePath ~= "" and path ~= target then target = target .. "@" .. pagePath end
+    return prefix .. ":" .. target, familyId, memberKey
+end
+
+local function SelectableValues(record)
+    local command = record and record.command
+    if type(command) ~= "table" then return nil end
+    local values = command.values
+    if type(values) ~= "table" and type(command.getValues) == "function" then
+        local ok, resolved = pcall(command.getValues)
+        if ok and type(resolved) == "table" then values = resolved end
+    end
+    if type(values) ~= "table" then return nil end
+    local out = {}
+    for _, row in pairs(values) do
+        if type(row) == "table" and row.value ~= nil and row.disabled ~= true and row.header ~= true then
+            out[#out + 1] = { value = row.value, text = CleanText(row.text or row.label or row.value) }
+        elseif type(row) == "string" or type(row) == "number" then
+            out[#out + 1] = { value = row, text = tostring(row) }
+        end
+    end
+    table.sort(out, function(left, right)
+        local leftText, rightText = tostring(left.text), tostring(right.text)
+        if leftText ~= rightText then return leftText < rightText end
+        return tostring(left.value) < tostring(right.value)
+    end)
+    return out
+end
+
+local function AssistantDescriptor(record)
+    local semanticId, familyId, memberKey = AssistantSemanticId(record)
+    local command = record.commandMeta or {}
+    return {
+        schemaVersion = Catalog.SCHEMA_VERSION,
+        semanticId = semanticId,
+        familyId = familyId,
+        memberKey = memberKey,
+        contextBound = familyId ~= nil,
+        controlId = record.controlId,
+        pageKey = record.pageKey,
+        controlPath = SemanticPath(record),
+        classification = record.classification,
+        kind = record.kind,
+        label = record.label,
+        help = record.help,
+        settingKey = record.settingKey ~= "" and record.settingKey or nil,
+        actionKey = record.actionKey ~= "" and record.actionKey or nil,
+        actionFixedArgs = CopySerializableActionValue(record.actionFixedArgs),
+        actionInputArg = record.actionInputArg ~= "" and record.actionInputArg or nil,
+        actionContractError = record.actionContractError,
+        navigationKey = record.navigationKey ~= "" and record.navigationKey or nil,
+        assistantDisposition = record.assistantDisposition ~= "" and record.assistantDisposition or nil,
+        safety = AssistantSafety(record),
+        valueKind = command.valueKind ~= "" and command.valueKind or nil,
+        percentIsValue = command.percentIsValue == true,
+        min = command.min,
+        max = command.max,
+        step = command.step,
+        values = SelectableValues(record),
+        confirmRequired = record.confirmRequired == true,
+        identityStable = record.identityStable == true,
+    }
+end
+
+function Catalog.GetAssistantDescriptors()
+    local records, out = SortedRecords(), {}
+    for i = 1, #records do out[i] = AssistantDescriptor(records[i]) end
+    return out
+end
+
+local function EnsureSemanticIndex()
+    local cached = Catalog._assistantSemanticIndex
+    if type(cached) == "table" and cached.revision == STATE.revision then return cached end
+    cached = { revision = STATE.revision, bySemanticId = {}, ambiguous = {} }
+    local records = SortedRecords()
+    for i = 1, #records do
+        local record = records[i]
+        local semanticId = AssistantSemanticId(record)
+        local previous = cached.bySemanticId[semanticId]
+        if previous and previous ~= record then
+            cached.bySemanticId[semanticId] = nil
+            cached.ambiguous[semanticId] = true
+        elseif not cached.ambiguous[semanticId] then
+            cached.bySemanticId[semanticId] = record
+        end
+    end
+    Catalog._assistantSemanticIndex = cached
+    return cached
+end
+
+function Catalog.Resolve(semanticId, context)
+    semanticId = CleanText(semanticId)
+    if semanticId == "" then return nil, "missing_semantic_id" end
+    local index = EnsureSemanticIndex()
+    if index.ambiguous[semanticId] then return nil, "ambiguous_semantic_id" end
+    local record = index.bySemanticId[semanticId]
+    if not record then return nil, "not_built" end
+    if type(context) == "table" and context.pageKey and CleanText(context.pageKey) ~= record.pageKey then
+        return nil, "wrong_page_context"
+    end
+    -- Keep the live widget available to exact-control navigation.  The
+    -- generated Assistant schema is function-free, so it resolves a stable
+    -- semantic ID only after the owning page has been built; returning the
+    -- widget here lets the caller focus the exact transient/test control too.
+    return record, record.widget, AssistantDescriptor(record)
+end
+
+function Catalog.Read(controlId)
+    if _G.InCombatLockdown and _G.InCombatLockdown() then return nil, "combat" end
+    local record = STATE.byId[CleanText(controlId)]
+    local command = record and record.command
+    if not (command and type(command.get) == "function") then return nil, "read_unavailable" end
+    local result = { pcall(command.get) }
+    if not result[1] then return nil, "read_failed", result[2] end
+    table.remove(result, 1)
+    return true, (unpack or table.unpack)(result)
+end
+
+local function ValueAllowed(record, value)
+    local kind = CleanText(record and record.kind):lower()
+    local command = record and record.command or {}
+    if kind == "toggle" then return type(value) == "boolean", value end
+    if kind == "slider" then
+        value = tonumber(value)
+        if value == nil then return false end
+        local minimum, maximum = tonumber(command.min), tonumber(command.max)
+        if minimum and value < minimum or maximum and value > maximum then return false end
+        return true, value
+    end
+    if kind == "dropdown" or kind == "segment" then
+        local values = SelectableValues(record) or {}
+        for i = 1, #values do
+            if value == values[i].value or tostring(value):lower() == tostring(values[i].text):lower() then
+                return true, values[i].value
+            end
+        end
+        return false
+    end
+    if kind == "textinput" then return type(value) == "string", value end
+    if kind == "color" then
+        if type(value) ~= "table" then return false end
+        local r, g, b = tonumber(value[1] or value.r), tonumber(value[2] or value.g), tonumber(value[3] or value.b)
+        local a = tonumber(value[4] or value.a or 1)
+        if not r or not g or not b or not a or r < 0 or r > 1 or g < 0 or g > 1
+            or b < 0 or b > 1 or a < 0 or a > 1 then return false end
+        return true, { r, g, b, a }
+    end
+    if kind == "button" then return true, value end
+    -- Drag and drag-row controls represent ordered state, not a scalar click.
+    -- They require a reviewed Registry order owner; never pass an arbitrary
+    -- value through to a widget callback.
+    return false
+end
+
+function Catalog.Execute(controlId, value, options)
+    options = type(options) == "table" and options or {}
+    if _G.InCombatLockdown and _G.InCombatLockdown() then return false, "combat" end
+    local record = STATE.byId[CleanText(controlId)]
+    if not record then return false, "stale_control" end
+    local safety = AssistantSafety(record)
+    if safety == "readOnly" then return false, "read_only" end
+    if safety == "guided" then return false, "guided" end
+    if safety == "confirm" and options.confirmed ~= true then
+        return false, "confirmation_required", AssistantSemanticId(record)
+    end
+    local command = record.command
+    if not (command and type(command.set) == "function") then return false, "write_unavailable" end
+    if type(command.blockCombat) == "function" then
+        local ok, blocked = pcall(command.blockCombat)
+        if not ok or blocked == true then return false, "blocked" end
+    end
+    if type(command.canExecute) == "function" then
+        local ok, executable = pcall(command.canExecute)
+        if not ok or executable ~= true then return false, "stale_control" end
+    end
+    local valid, normalized = ValueAllowed(record, value)
+    if not valid then return false, "invalid_value" end
+    local ok, result
+    if record.kind == "color" then ok, result = pcall(command.set, normalized[1], normalized[2], normalized[3], normalized[4])
+    else ok, result = pcall(command.set, normalized) end
+    if not ok then return false, "write_failed", result end
+    if result == false then return false, "write_rejected" end
+    if type(command.refresh) == "function" then pcall(command.refresh) end
+    return true, result
 end
 
 -- Exact Assistant navigation normally arrives with a canonical setting key and
@@ -2062,6 +2398,8 @@ function M.RegisterMenuChromeControl(widget, path, label, classification, opts)
         classification = classification or "action",
         settingKey = opts.settingKey,
         actionKey = opts.actionKey,
+        actionFixedArgs = opts.actionFixedArgs,
+        actionInputArg = opts.actionInputArg,
         navigationKey = opts.navigationKey,
         assistantDisposition = opts.assistantDisposition,
         assistantDispositionReason = opts.assistantDispositionReason,
@@ -2075,6 +2413,17 @@ function M.RegisterMenuChromeControl(widget, path, label, classification, opts)
     if not meta.command and meta.classification == "action" then
         meta.command = M.BuildRuntimeWidgetCommand(widget, meta, meta.kind)
     end
+    -- Theme buttons refresh their visible label through RegisterSearchWidget.
+    -- Preserve the semantic chrome metadata on the widget so that a later
+    -- SetText cannot demote a stable navigation/action back to a raw button.
+    local searchMeta = {}
+    for key, value in pairs(type(widget._msuf2SearchMeta) == "table" and widget._msuf2SearchMeta or {}) do
+        searchMeta[key] = value
+    end
+    for key, value in pairs(meta) do searchMeta[key] = value end
+    searchMeta.label = label or path
+    searchMeta.kind = meta.kind
+    widget._msuf2SearchMeta = searchMeta
     local existing = STATE.byId[meta.controlId]
     if existing and existing.widget ~= widget then RemoveRecord(existing) end
     return Catalog.Register(widget, meta, "menu-chrome")

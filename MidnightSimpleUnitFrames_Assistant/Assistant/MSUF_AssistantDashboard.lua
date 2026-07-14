@@ -186,7 +186,7 @@ local function AddTooltip(frame, title, body)
     return frame
 end
 
-local function Button(parent, text, width, height, role)
+local function Button(parent, text, width, height, role, semanticPath)
     local btn = T.Button and T.Button(parent, Tr(text), width, height) or CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
     btn:SetSize(width or 80, height or 24)
     if btn._msuf2Label then
@@ -196,6 +196,14 @@ local function Button(parent, text, width, height, role)
     end
     if role == "primary" and T.SkinPrimaryButton then T.SkinPrimaryButton(btn) end
     if T.CenterButtonLabel then T.CenterButtonLabel(btn) end
+    if semanticPath and type(M.RegisterMenuChromeControl) == "function" then
+        M.RegisterMenuChromeControl(btn, "assistant." .. tostring(semanticPath), text, "ephemeral", {
+            kind = "button",
+            assistantDisposition = nil,
+            historyMode = "none",
+            help = "Assistant conversation UI control; it is not an MSUF setting.",
+        })
+    end
     return btn
 end
 
@@ -233,6 +241,7 @@ local TYPEWRITER_MAX_SECONDS = 0.8
 local TYPEWRITER_RECENT_SECONDS = 12
 local TYPEWRITER_TIMER_KEY = "assistant.dashboard.typewriter"
 local BUSY_TIMER_KEY = "assistant.dashboard.busy"
+local TYPED_HISTORY_LIMIT = 256
 
 local function InCombat()
     if A.IsCombatLocked and A.IsCombatLocked() then return true end
@@ -319,7 +328,14 @@ local function FinishAssistantTypewriter(ui, state)
     state.timer = nil
     state.scheduled = nil
     ui._msufAssistantTyped = ui._msufAssistantTyped or {}
+    ui._msufAssistantTypedOrder = ui._msufAssistantTypedOrder or {}
+    if ui._msufAssistantTyped[state.key] == nil then
+        ui._msufAssistantTypedOrder[#ui._msufAssistantTypedOrder + 1] = state.key
+    end
     ui._msufAssistantTyped[state.key] = true
+    while #ui._msufAssistantTypedOrder > TYPED_HISTORY_LIMIT do
+        ui._msufAssistantTyped[table.remove(ui._msufAssistantTypedOrder, 1)] = nil
+    end
     if ui._msufAssistantTypewriter == state then ui._msufAssistantTypewriter = nil end
     if state.region then
         SetAssistantHistoryText(state.row, state.region, state.text)
@@ -803,7 +819,7 @@ function A.BuildDashboardCard(parent, cardW, cardH)
     panel.title:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, -2)
     panel.title:SetWidth(max(120, cardW - 120))
     panel.title:SetJustifyH("LEFT")
-    panel.headerClose = Button(panel, "Close", 64, 22)
+    panel.headerClose = Button(panel, "Close", 64, 22, nil, "panel.header-close")
     panel.headerClose:SetPoint("TOPRIGHT", panel, "TOPRIGHT", 0, -1)
     AddTooltip(panel.headerClose, "Close panel", "Closes this Assistant text panel and returns to the chat.")
     panel.help = Font(panel, "GameFontDisableSmall", "", T.colors and T.colors.muted or { 0.65, 0.70, 0.78, 1 })
@@ -844,10 +860,10 @@ function A.BuildDashboardCard(parent, cardW, cardH)
     panel.status:SetPoint("TOPLEFT", panel.boxFrame, "BOTTOMLEFT", 0, -7)
     panel.status:SetWidth(max(120, cardW - 44 - 172))
     panel.status:SetJustifyH("LEFT")
-    panel.primary = Button(panel, "Copy text", 92, 24, "primary")
+    panel.primary = Button(panel, "Copy text", 92, 24, "primary", "panel.primary")
     panel.primary:SetPoint("TOPRIGHT", panel.boxFrame, "BOTTOMRIGHT", -74, -5)
     AddTooltip(panel.primary, "Copy text", "Selects the full text so it can be copied with Ctrl+C.")
-    panel.close = Button(panel, "Close", 64, 24)
+    panel.close = Button(panel, "Close", 64, 24, nil, "panel.footer-close")
     panel.close:SetPoint("TOPRIGHT", panel.boxFrame, "BOTTOMRIGHT", 0, -5)
     local function CloseLargePanel()
         if panel.box.ClearFocus then panel.box:ClearFocus() end
@@ -857,10 +873,10 @@ function A.BuildDashboardCard(parent, cardW, cardH)
     panel.close:SetScript("OnClick", CloseLargePanel)
 
     local chipPrompts = {
-        { "What can I ask", "what can you do" },
-        { "Move frames", "start edit mode" },
-        { "Find auras", "where do I change auras" },
-        { "Import safely", "import profile safely" },
+        { "What can I ask", "what can you do", "prompt.what-can-i-ask" },
+        { "Move frames", "start edit mode", "prompt.move-frames" },
+        { "Find auras", "where do I change auras", "prompt.find-auras" },
+        { "Import safely", "import profile safely", "prompt.import-safely" },
     }
     local chipX = 22
     local chips = {}
@@ -868,7 +884,7 @@ function A.BuildDashboardCard(parent, cardW, cardH)
     for i = 1, visibleChips do
         local label, prompt = chipPrompts[i][1], chipPrompts[i][2]
         local width = min(146, max(92, 42 + (#label * 5)))
-        local chip = Button(parent, label, width, chipH)
+        local chip = Button(parent, label, width, chipH, nil, chipPrompts[i][3])
         chip:SetPoint("TOPLEFT", parent, "TOPLEFT", chipX, chipsY)
         chipX = chipX + width + 8
         chip._msufAssistantPrompt = prompt
@@ -896,7 +912,7 @@ function A.BuildDashboardCard(parent, cardW, cardH)
     SetAssistantText(placeholder, "what can you do")
     input._msufAssistantPlaceholder = placeholder
 
-    local send = Button(parent, "Send", sendW, inputH, "primary")
+    local send = Button(parent, "Send", sendW, inputH, "primary", "submit")
     send:SetPoint("LEFT", input, "RIGHT", 10, 0)
 
     local ui = {

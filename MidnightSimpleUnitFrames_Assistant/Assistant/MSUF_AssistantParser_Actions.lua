@@ -1676,14 +1676,13 @@ local function ParseCustomAnchorClear(text)
                 summary = "Clears the group-frame custom anchor frame name.",
             } or nil
         end
-        local action = Registry and Registry:GetAction("clear_unit_custom_anchor")
-        return action and {
-            kind = "action",
-            action = action,
-            args = { text = text },
-            label = "Clear custom anchor",
-            summary = "Asks which unit frame or group frame should clear its custom anchor.",
-        } or nil
+        return {
+            kind = "answer",
+            status = "ambiguous",
+            text = "Which custom anchor do you want me to clear? Name a unit frame such as Player or Target, or a group frame such as Party, Raid, or Mythic Raid. I kept MSUF unchanged.",
+            summary = "Asks which frame should clear its custom anchor before execution.",
+            actionInputClarification = true,
+        }
     end
     local action = Registry and Registry:GetAction("clear_unit_custom_anchor")
     return action and {
@@ -1838,11 +1837,12 @@ local function ParseDashboardPanelAction(text)
         else
             open = true
         end
+        local panelArg = open == false and "all" or nil
         local action = Registry and Registry:GetAction("set_dashboard_panel")
         return action and {
             kind = "action",
             action = action,
-            args = { open = open },
+            args = { panel = panelArg, open = open },
             label = "Set Dashboard panel",
             summary = "Asks which Dashboard panel to open, such as recovery tools, scaling tools, or changelog.",
         } or nil
@@ -2077,6 +2077,7 @@ local ACTION_ALIAS_COMMON_TOKENS = {
 }
 
 local ACTION_ALIAS_FUZZY_CANDIDATE_LIMIT = 180
+local ACTION_ALIAS_FUZZY_TOKEN_CACHE_LIMIT = 1024
 
 local function ActionAliasTokens(text)
     local out = {}
@@ -2113,7 +2114,7 @@ local function EnsureRegistryActionAliasIndex(actions)
         return P._registryActionAliasIndex
     end
 
-    local index = { byToken = {}, fuzzyBuckets = {}, fuzzyTokenCache = {}, always = {} }
+    local index = { byToken = {}, fuzzyBuckets = {}, fuzzyTokenCache = {}, fuzzyTokenOrder = {}, fuzzyTokenHead = 1, always = {} }
     for i = 1, #actions do
         local action = actions[i]
         if type(action) == "table"
@@ -2137,6 +2138,37 @@ end
 
 P._EnsureRegistryActionAliasIndex = EnsureRegistryActionAliasIndex
 
+function P.ClearActionAliasFuzzyCache()
+    local index = P._registryActionAliasIndex
+    if type(index) ~= "table" then return end
+    index.fuzzyTokenCache = {}
+    index.fuzzyTokenOrder = {}
+    index.fuzzyTokenHead = 1
+end
+
+local function RememberActionFuzzyToken(index, token, value)
+    index.fuzzyTokenCache = index.fuzzyTokenCache or {}
+    index.fuzzyTokenOrder = index.fuzzyTokenOrder or {}
+    local cache, order = index.fuzzyTokenCache, index.fuzzyTokenOrder
+    local head = tonumber(index.fuzzyTokenHead) or 1
+    if cache[token] == nil then
+        order[#order + 1] = token
+        if #order - head + 1 > ACTION_ALIAS_FUZZY_TOKEN_CACHE_LIMIT then
+            cache[order[head]] = nil
+            head = head + 1
+            if head > ACTION_ALIAS_FUZZY_TOKEN_CACHE_LIMIT and head > (#order / 2) then
+                local compact = {}
+                for i = head, #order do compact[#compact + 1] = order[i] end
+                order, head = compact, 1
+                index.fuzzyTokenOrder = order
+            end
+        end
+    end
+    cache[token] = value
+    index.fuzzyTokenHead = head
+    return value
+end
+
 local function AddActionAliasCandidates(candidateSet, index, tokens)
     for i = 1, #(tokens or {}) do
         local bucket = index.byToken[tokens[i]]
@@ -2157,7 +2189,7 @@ local function FuzzyActionAliasTokenCandidates(index, token)
 
     local firstBuckets = index.fuzzyBuckets and index.fuzzyBuckets[token:sub(1, 1)]
     if type(firstBuckets) ~= "table" then
-        index.fuzzyTokenCache[token] = false
+        RememberActionFuzzyToken(index, token, false)
         return nil
     end
 
@@ -2176,7 +2208,7 @@ local function FuzzyActionAliasTokenCandidates(index, token)
                         seenActions[action] = true
                         out[#out + 1] = action
                         if #out > ACTION_ALIAS_FUZZY_CANDIDATE_LIMIT then
-                            index.fuzzyTokenCache[token] = false
+                            RememberActionFuzzyToken(index, token, false)
                             return nil
                         end
                     end
@@ -2185,7 +2217,7 @@ local function FuzzyActionAliasTokenCandidates(index, token)
         end
     end
 
-    index.fuzzyTokenCache[token] = #out > 0 and out or false
+    RememberActionFuzzyToken(index, token, #out > 0 and out or false)
     return #out > 0 and out or nil
 end
 
@@ -2222,6 +2254,7 @@ local function RegistryActionAliasCandidates(actions, text, allowFuzzy)
     P._lastRegistryActionAliasTotalCount = #actions
     return out
 end
+P.RegistryActionAliasCandidates = RegistryActionAliasCandidates
 
 local EXACT_ACTION_PREFIXES = {
     "run ", "execute ", "start ", "show ", "use ", "apply ", "check ",

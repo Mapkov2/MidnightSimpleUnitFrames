@@ -596,8 +596,7 @@ Normalize = function(text)
     cached = normalizeCacheCold[raw]
     if cached ~= nil then
         -- Promote so the entry survives the next generation swap.
-        normalizeCacheHot[raw] = cached
-        return cached
+        return CacheNormalize(raw, cached)
     end
     -- The assistant accepts English/German phrasing plus common typos. These replacements
     -- intentionally happen before phrase folding so the downstream parser can stay literal.
@@ -800,6 +799,7 @@ local fuzzyPhraseCache = {}
 local fuzzyPhraseCacheTokens = {}
 local fuzzyPhraseTokenCache = {}
 local fuzzyPhraseTokenCacheOrder = {}
+local fuzzyPhraseTokenCacheHead = 1
 local FUZZY_PHRASE_TOKEN_CACHE_LIMIT = 4096
 
 -- Phrase fuzzy matching is scoped to the current input text. Registry aliases are reused
@@ -810,9 +810,23 @@ local function CachedFuzzyPhraseTokens(phrase)
     phraseTokens = Tokenize(phrase)
     fuzzyPhraseTokenCache[phrase] = phraseTokens
     fuzzyPhraseTokenCacheOrder[#fuzzyPhraseTokenCacheOrder + 1] = phrase
-    while #fuzzyPhraseTokenCacheOrder > FUZZY_PHRASE_TOKEN_CACHE_LIMIT do
-        local oldPhrase = table.remove(fuzzyPhraseTokenCacheOrder, 1)
+    while #fuzzyPhraseTokenCacheOrder - fuzzyPhraseTokenCacheHead + 1 > FUZZY_PHRASE_TOKEN_CACHE_LIMIT do
+        local oldPhrase = fuzzyPhraseTokenCacheOrder[fuzzyPhraseTokenCacheHead]
+        fuzzyPhraseTokenCacheOrder[fuzzyPhraseTokenCacheHead] = nil
+        fuzzyPhraseTokenCacheHead = fuzzyPhraseTokenCacheHead + 1
         fuzzyPhraseTokenCache[oldPhrase] = nil
+    end
+    -- Amortized compaction keeps the queue itself bounded without shifting
+    -- thousands of entries for every new phrase once the cache is full.
+    if fuzzyPhraseTokenCacheHead > FUZZY_PHRASE_TOKEN_CACHE_LIMIT
+        and fuzzyPhraseTokenCacheHead > (#fuzzyPhraseTokenCacheOrder / 2)
+    then
+        local compact = {}
+        for i = fuzzyPhraseTokenCacheHead, #fuzzyPhraseTokenCacheOrder do
+            compact[#compact + 1] = fuzzyPhraseTokenCacheOrder[i]
+        end
+        fuzzyPhraseTokenCacheOrder = compact
+        fuzzyPhraseTokenCacheHead = 1
     end
     return phraseTokens
 end
@@ -1029,7 +1043,7 @@ local PAGE_TEXT_TARGETS = {
     { page = "uf_focus", label = "Focus", terms = { "focus", "fokus" } },
     { page = "uf_pet", label = "Pet", terms = { "pet", "begleiter" } },
     { page = "uf_boss", label = "Boss", terms = { "boss", "boss frames", "bossframes" } },
-    { page = "search", label = "Search", terms = { "search page", "search results" } },
+    { page = "search", label = "Search", terms = { "search", "search page", "search results" } },
 }
 
 local function AddUnique(out, value)

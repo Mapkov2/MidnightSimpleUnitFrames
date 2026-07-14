@@ -7422,6 +7422,7 @@ function A.Parse(text, ctxOverride)
             actionKey = "set_dashboard_panel"
             if P.ContainsAny(normalized, P.RootPhrases[737]) then
                 args.open = false
+                args.panel = "all"
             elseif P.ContainsAny(normalized, P.RootPhrases[738]) then
                 args.open = nil
             else

@@ -247,9 +247,13 @@ general.dropdownStyleMode
     "MSUF_Menu2_AdvancedProfiles.lua BuildModules")
 DefineMenuControlStandalone([[
 general.castbarIconSize general.castbarIconOffsetX general.castbarIconOffsetY
-general.castbarSpellNameFontSize general.castbarTimeFontSize runtime.focusKickPreview
-]], "This castbar fallback or runtime preview value has no scalar control on the current global Castbar page.",
-    "MSUF_Menu2_GlobalCastbars.lua controls and preview fallback reads")
+general.castbarSpellNameFontSize general.castbarTimeFontSize general.bossCastbarDetached runtime.focusKickPreview
+]], "This castbar fallback, Edit Mode attachment, or runtime preview value has no scalar control on the current global Castbar page.",
+    "MSUF_Menu2_GlobalCastbars.lua controls, MSUF_EditMode_Movers.lua castbar attachment, and preview fallback reads")
+DefineMenuControlStandalone([[
+general.classPowerPreviewGuidesEnabled
+]], "The persisted Guides toggle belongs to the conditionally-created Class Resources inline preview; when that preview exists its layer control carries this exact settingKey.",
+    "MSUF_Menu2_ClassPowerPreview.lua CreateLayerSidebar layer.guides registration")
 DefineMenuControlStandalone([[
 general.gradientDirection barScope.gf_party.gradientDirection barScope.gf_raid.gradientDirection
 ]], "The current Bars UI edits independent multi-direction buttons; the legacy scalar direction setting has no equivalent single widget.",
@@ -433,7 +437,7 @@ assistant.workflow.cancel class_power_preview_animate
 dashboard.globalUiScale.apply dashboard.globalUiScale.revertPending
 dashboard.msufFrameScale.apply dashboard.msufFrameScale.revertPending
 dashboard.menuScale.apply dashboard.menuScale.revertPending
-preview_castbar preview_group_status_icon preview_player_totems preview_unit_status_indicator
+    preview_castbar preview_group_status_icon preview_player_totems preview_unit_status_indicator set_castbar_test_mode
 start_profile_copy_flow start_profile_rename_flow toggle_absorb_bar_test
 toggle_highlight_border_test
 ]], {
@@ -456,7 +460,7 @@ assistant.action.editMode.backgroundOpacity assistant.action.editMode.cdm
 assistant.action.editMode.grid assistant.action.editMode.gridStep
 assistant.action.editMode.resetPosition class_power_quick_setup clear_group_custom_anchor
 clear_unit_custom_anchor copy_group copy_unit move_group_spell_indicator_order
-reset_all_aura_overrides reset_all_scoped_global_bars_overrides
+reset_all_aura_overrides reset_all_aura_style_overrides reset_all_scoped_global_bars_overrides
 reset_all_scoped_global_font_overrides reset_all_unit_positions reset_aura_colors
 reset_aura_scope_overrides reset_bar_background_color reset_bar_colors reset_castbar_colors
 reset_class_colors reset_class_power_color_token reset_class_power_combo_slot_colors reset_class_power_slot_colors
@@ -727,6 +731,22 @@ function Registry:RegisterAction(spec)
     if type(spec) ~= "table" or type(spec.key) ~= "string" or spec.key == "" then return nil end
     if self.actionsByKey[spec.key] then return self.actionsByKey[spec.key] end
     ApplyActionPolicy(spec)
+    local actionInputs = A.ActionInputs
+    local inputContract = type(actionInputs) == "table" and type(actionInputs.GetContract) == "function"
+        and actionInputs.GetContract(spec.key) or nil
+    if type(inputContract) == "table" then
+        if spec.assistantInput ~= nil and spec.assistantInput ~= inputContract then
+            spec.assistantInputExplicit = false
+            spec.assistantInputError = "action input contract conflict"
+        else
+            spec.assistantInput = inputContract
+            spec.assistantInputExplicit = true
+            spec.assistantInputSource = tostring(inputContract.source or "registry.actionInputs.v1")
+        end
+    else
+        spec.assistantInputExplicit = false
+        spec.assistantInputError = "missing explicit action input contract"
+    end
     spec.aliases = type(spec.aliases) == "table" and spec.aliases or {}
     self.actions[#self.actions + 1] = spec
     self.actionsByKey[spec.key] = spec
@@ -740,6 +760,14 @@ end
 
 function Registry:AllActions()
     return self.actions
+end
+
+function Registry:NormalizeActionInput(actionOrKey, args)
+    local actionInputs = A.ActionInputs
+    if type(actionInputs) ~= "table" or type(actionInputs.Normalize) ~= "function" then
+        return nil, "Assistant action input normalizer is unavailable"
+    end
+    return actionInputs.Normalize(actionOrKey, args)
 end
 
 function Registry:RegisterTodo(text)

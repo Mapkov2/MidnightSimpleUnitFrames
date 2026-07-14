@@ -18,6 +18,7 @@ function A.GlobalBarRegistry.RegisterScopedBarSettings(ctx)
     local GeneralDB = ctx.GeneralDB
     local ApplyBars = ctx.ApplyBars
     local ApplyBarGradients = ctx.ApplyBarGradients
+    local ApplyHighlightBorders = ctx.ApplyHighlightBorders
     local RegisterScopedSetting = ctx.RegisterScopedSetting
     local RegisterScopedOverlaySettings = A.GlobalBarRegistry.RegisterScopedOverlaySettings
     local GLOBAL_SCOPE_ORDER = ctx.GLOBAL_SCOPE_ORDER
@@ -30,22 +31,158 @@ function A.GlobalBarRegistry.RegisterScopedBarSettings(ctx)
     local GRADIENT_DIRECTION_VALUES = ctx.GRADIENT_DIRECTION_VALUES
     local GRADIENT_DIRECTION_KEYS = ctx.GRADIENT_DIRECTION_KEYS
     local GRADIENT_DIRECTION_ALIASES = ctx.GRADIENT_DIRECTION_ALIASES
+    local OUTLINE_STRATA_VALUES = ctx.OUTLINE_STRATA_VALUES
+    local OUTLINE_STRATA_ALIASES = ctx.OUTLINE_STRATA_ALIASES
 
-    if type(GeneralDB) ~= "function" then return false end
+    if type(GeneralDB) ~= "function" or type(ApplyHighlightBorders) ~= "function" then return false end
     if type(RegisterScopedSetting) ~= "function" or type(RegisterScopedOverlaySettings) ~= "function" then return false end
     if type(GLOBAL_SCOPE_ORDER) ~= "table" or type(GlobalScopeAliases) ~= "function" then return false end
     if type(GlobalScopeHasOverride) ~= "function" then return false end
     if type(GlobalScopeSetOverride) ~= "function" or type(GlobalScopeRead) ~= "function" or type(GlobalScopeWrite) ~= "function" then return false end
     if type(NormalizeTextureKeyForAssistant) ~= "function" then return false end
     if type(GRADIENT_DIRECTION_VALUES) ~= "table" or type(GRADIENT_DIRECTION_KEYS) ~= "table" then return false end
+    if type(OUTLINE_STRATA_VALUES) ~= "table" or type(OUTLINE_STRATA_ALIASES) ~= "table" then return false end
 
+    local HIGHLIGHT_KEYS = { "dispel", "aggro", "purge", "bossTarget" }
+    local HIGHLIGHT_ALLOWED = { dispel = true, aggro = true, purge = true, bossTarget = true }
+    local HIGHLIGHT_ALIASES = {
+        Dispel = "dispel", DISPEL = "dispel", Aggro = "aggro", AGGRO = "aggro",
+        Purge = "purge", PURGE = "purge", BossTarget = "bossTarget", BOSS_TARGET = "bossTarget",
+        ["Boss Target"] = "bossTarget", ["boss target"] = "bossTarget", boss_target = "bossTarget",
+        bosstarget = "bossTarget", magic = "dispel", curse = "dispel", disease = "dispel",
+        poison = "dispel", bleed = "dispel",
+    }
+    local HIGHLIGHT_VALUES = {}
+    local function BuildPermutations(prefix, used)
+        if #prefix == #HIGHLIGHT_KEYS then
+            HIGHLIGHT_VALUES[#HIGHLIGHT_VALUES + 1] = table.concat(prefix, ",")
+            return
+        end
+        for i = 1, #HIGHLIGHT_KEYS do
+            local key = HIGHLIGHT_KEYS[i]
+            if not used[key] then
+                used[key], prefix[#prefix + 1] = true, key
+                BuildPermutations(prefix, used)
+                prefix[#prefix], used[key] = nil, nil
+            end
+        end
+    end
+    BuildPermutations({}, {})
+
+    local function CopyArray(value)
+        local out = {}
+        for i = 1, #(type(value) == "table" and value or {}) do out[i] = value[i] end
+        return out
+    end
+
+    local function NormalizeHighlightOrder(value)
+        local source = {}
+        if type(value) == "string" then
+            for token in value:gmatch("[^,]+") do source[#source + 1] = token:match("^%s*(.-)%s*$") end
+        elseif type(value) == "table" then
+            for i = 1, #value do source[#source + 1] = value[i] end
+        else
+            return nil
+        end
+        local out, used = {}, {}
+        for i = 1, #source do
+            local raw = source[i]
+            local key = type(raw) == "string" and (HIGHLIGHT_ALIASES[raw] or HIGHLIGHT_ALIASES[raw:lower()] or raw) or nil
+            if not HIGHLIGHT_ALLOWED[key] or used[key] then return nil end
+            used[key], out[#out + 1] = true, key
+        end
+        if #out ~= #HIGHLIGHT_KEYS then return nil end
+        return out
+    end
+
+    local function PhysicalScopeKeys(scope)
+        if scope == "shared" then return { "general" } end
+        if scope == "gf_raid" then return { "gf_raid", "gf_mythicraid" } end
+        return { scope }
+    end
+
+    local function CaptureHighlightState(scope)
+        local db = _G.MSUF_DB or {}
+        local state = { scope = scope, entries = {} }
+        local keys = PhysicalScopeKeys(scope)
+        for i = 1, #keys do
+            local key = keys[i]
+            local owner = type(db[key]) == "table" and db[key] or {}
+            state.entries[i] = {
+                key = key,
+                hasOrder = owner.hlPrioOrder ~= nil,
+                order = CopyArray(owner.hlPrioOrder),
+                hasOverride = owner.hlOverride ~= nil,
+                override = owner.hlOverride,
+                hasLegacy = owner.highlightPrioOrder ~= nil,
+                legacy = CopyArray(owner.highlightPrioOrder),
+            }
+        end
+        return state
+    end
+
+    local function RestoreHighlightState(state)
+        if type(state) ~= "table" or type(state.entries) ~= "table" then return false end
+        local db = _G.MSUF_DB
+        if type(db) ~= "table" then return false end
+        for i = 1, #state.entries do
+            local entry = state.entries[i]
+            if type(entry) ~= "table" or type(entry.key) ~= "string" then return false end
+            db[entry.key] = type(db[entry.key]) == "table" and db[entry.key] or {}
+            local owner = db[entry.key]
+            owner.hlPrioOrder = entry.hasOrder and CopyArray(entry.order) or nil
+            owner.hlOverride = entry.hasOverride and entry.override or nil
+            owner.highlightPrioOrder = entry.hasLegacy and CopyArray(entry.legacy) or nil
+        end
+        return true
+    end
+
+    local function RegisterHighlightPriority(scope)
+        local dbScopes
+        if scope == "shared" then
+            dbScopes = {
+                { scope = "general", dbKey = "hlPrioOrder" },
+                { scope = "general", dbKey = "highlightPrioOrder" },
+            }
+        end
+        RegisterScopedSetting("barScope", scope, "hlPrioOrder", "highlightPriorityOrder",
+            "Highlight Priority Order", "enum", HIGHLIGHT_VALUES[1], GlobalScopeAliases(scope, {
+                "highlight priority order", "border priority order", "highlight order", "border order",
+            }), {
+                flag = "hlOverride",
+                values = HIGHLIGHT_VALUES,
+                dbScopes = dbScopes,
+                dbScopeKeys = { "hlPrioOrder" },
+                get = function(scopeKey)
+                    local raw = GlobalScopeRead(scopeKey, "hlOverride", GeneralDB(), "hlPrioOrder", nil)
+                    if type(raw) ~= "table" and scopeKey == "shared" then raw = GeneralDB().highlightPrioOrder end
+                    local order = NormalizeHighlightOrder(raw) or CopyArray(HIGHLIGHT_KEYS)
+                    return table.concat(order, ",")
+                end,
+                set = function(scopeKey, value)
+                    local order = NormalizeHighlightOrder(value)
+                    if not order then error("invalid highlight priority order") end
+                    GlobalScopeWrite(scopeKey, "hlOverride", GeneralDB(), "hlPrioOrder", CopyArray(order))
+                    if scopeKey == "shared" then GeneralDB().highlightPrioOrder = CopyArray(order) end
+                end,
+                captureTransactionState = function() return CaptureHighlightState(scope) end,
+                restoreTransactionState = RestoreHighlightState,
+                apply = ApplyHighlightBorders,
+                reason = "MSUF_ASSISTANT_HIGHLIGHT_PRIORITY_ORDER",
+                description = "Sets the complete four-item highlight priority as one validated order.",
+            })
+    end
+
+    RegisterHighlightPriority("shared")
     for _, scope in ipairs(GLOBAL_SCOPE_ORDER) do
+        RegisterHighlightPriority(scope)
         RegisterScopedSetting("barScope", scope, "override", "override", "Bars Override", "boolean", false, GlobalScopeAliases(scope, {
             "bars override", "custom bars", "custom bar settings", "bar custom settings",
         }), {
             flag = "hlOverride",
             get = function(scopeKey) return GlobalScopeHasOverride(scopeKey, "hlOverride") end,
             set = function(scopeKey, value) GlobalScopeSetOverride(scopeKey, "hlOverride", value and true or false) end,
+            dbScopeKeys = { "hlOverride" },
             apply = ApplyBars,
             reason = "MSUF_ASSISTANT_BARS_OVERRIDE",
             description = "Enables or disables custom Global Bars settings for this target.",
@@ -121,8 +258,23 @@ function A.GlobalBarRegistry.RegisterScopedBarSettings(ctx)
                 end
                 GlobalScopeWrite(scopeKey, "hlOverride", GeneralDB(), "gradientDirection", value)
             end,
+            dbScopeKeys = {
+                "gradientDirRight", "gradientDirLeft", "gradientDirUp", "gradientDirDown", "gradientDirection",
+            },
             apply = ApplyBarGradients,
             reason = "MSUF_ASSISTANT_SCOPED_GRADIENT_DIRECTION",
+        })
+        RegisterScopedSetting("barScope", scope, "barOutlineStrata", "strata", "Bar Outline Strata", "enum", "AUTO", GlobalScopeAliases(scope, {
+            "bar outline strata", "bar outline layer", "frame outline strata", "frame outline layer",
+            "outline strata", "outline layer",
+        }), {
+            flag = "hlOverride",
+            shared = "bars",
+            values = OUTLINE_STRATA_VALUES,
+            valueAliases = OUTLINE_STRATA_ALIASES,
+            apply = ctx.ApplyBarOutline,
+            reason = "MSUF_ASSISTANT_SCOPED_BAR_OUTLINE_STRATA",
+            description = "Chooses the frame strata used by this scope's bar and frame outline.",
         })
         if RegisterScopedOverlaySettings(ctx, scope) == false then return false end
     end

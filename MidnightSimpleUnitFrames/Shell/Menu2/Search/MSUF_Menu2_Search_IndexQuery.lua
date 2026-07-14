@@ -872,9 +872,9 @@ function M.RegisterSearchWidget(widget, meta)
     local catalogId
     local catalogKind = tostring(kind or ""):lower()
     local catalogClass = meta.classification or meta.controlType
-    local catalogInteractive = catalogClass == "setting" or catalogClass == "action" or catalogClass == "navigation"
+    local catalogInteractive = meta.catalog ~= false and (catalogClass == "setting" or catalogClass == "action" or catalogClass == "navigation"
         or catalogKind == "button" or catalogKind == "toggle" or catalogKind == "slider"
-        or catalogKind == "dropdown" or catalogKind == "segment" or catalogKind == "textinput" or catalogKind == "color"
+        or catalogKind == "dropdown" or catalogKind == "segment" or catalogKind == "textinput" or catalogKind == "color")
     -- Search also indexes headings/descriptions, but those are not Assistant
     -- controls. Sending static prose into RuntimeControlCatalog created
     -- unstable fallback IDs and made option coverage depend on copy text.
@@ -889,6 +889,8 @@ function M.RegisterSearchWidget(widget, meta)
             identityLabel = meta.identityLabel or widget._msuf2SearchText or rawLabel,
             settingKey = meta.settingKey,
             actionKey = meta.actionKey,
+            actionFixedArgs = meta.actionFixedArgs,
+            actionInputArg = meta.actionInputArg,
             navigationKey = meta.navigationKey,
             assistantDisposition = meta.assistantDisposition,
             assistantDispositionReason = meta.assistantDispositionReason,
@@ -945,6 +947,8 @@ function M.RegisterSearchWidget(widget, meta)
         and previous.ephemeral == meta.ephemeral
         and previous.settingKey == meta.settingKey
         and previous.actionKey == meta.actionKey
+        and previous.actionFixedArgs == meta.actionFixedArgs
+        and previous.actionInputArg == meta.actionInputArg
         and previous.navigationKey == meta.navigationKey
         and previous.assistantDisposition == meta.assistantDisposition
         and previous.assistantDispositionReason == meta.assistantDispositionReason
@@ -958,6 +962,7 @@ function M.RegisterSearchWidget(widget, meta)
         return
     end
 
+    widget._msuf2SearchMeta = meta
     local entry = {
         id = id,
         widget = widget,
@@ -975,6 +980,8 @@ function M.RegisterSearchWidget(widget, meta)
         ephemeral = meta.ephemeral,
         settingKey = meta.settingKey,
         actionKey = meta.actionKey,
+        actionFixedArgs = meta.actionFixedArgs,
+        actionInputArg = meta.actionInputArg,
         navigationKey = meta.navigationKey,
         assistantDisposition = meta.assistantDisposition,
         assistantDispositionReason = meta.assistantDispositionReason,
@@ -1187,6 +1194,7 @@ smoothFill reverseFill width height offsetX offsetY spacing unitsPerColumn
 maxColumns preserveRaidGroups growth sortMode sortByRole playerFirstInRole
 roleOrder frameScaleMode frameScaleEnabled frameScaleManual scaleAt10
 scaleAt20 scaleAt25 scaleOver25 hpBarAlpha hpBgAlpha alphaExcludeTextPortrait
+barTexture barBackgroundTexture barBgTexture
 groupBackdropColor anchorToFrame customAnchorFrame anchorPoint
 ]])
 
