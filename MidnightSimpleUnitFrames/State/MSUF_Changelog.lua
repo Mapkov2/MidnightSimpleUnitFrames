@@ -8,10 +8,33 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-Beta15",
-    previousVersion = "6.0-Beta14",
-    rangeLabel = "6.0-Beta14 -> 6.0-Beta15",
+    currentVersion = "6.0-Beta16",
+    previousVersion = "6.0-Beta15",
+    rangeLabel = "6.0-Beta15 -> 6.0-Beta16",
     entries = {
+        {
+            version = "6.0-Beta16",
+            date = "2026-07-14",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Added shared Buff Aura Style controls for Party and Raid spell indicators.",
+                        "Added a generated Assistant control schema for safer exact menu navigation and actions.",
+                        "Refined Menu2 frame controls, previews, and visual layout.",
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Fixed castbar channel ticks to always honor the global visibility switch.",
+                        "Added configurable bar gradients, textures, transparency, and minimap-icon positioning.",
+                        "Hardened Assistant value validation, cancellation, undo/redo, and action-input handling.",
+                        "Added Assistant schema and spell-indicator regression coverage to the release gate.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-Beta15",
             date = "2026-07-14",
@@ -90,23 +113,6 @@ local data = {
                         "Improved class portrait fallbacks for transient and new Blizzard class tokens.",
                         "Smoothed Menu2 visuals, scrolling, menu fonts, and Assistant startup behavior.",
                         "Expanded Assistant parsing, setting navigation, and exact control routing.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-Beta12",
-            date = "2026-07-11",
-            sections = {
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Moved the Assistant back into an optional load-on-demand companion addon to reduce normal MSUF startup and idle overhead.",
-                        "Expanded Menu2 and Assistant control coverage, exact setting navigation, search routing, and undo handling.",
-                        "Stabilized Edit Mode plus unit, group, aura, spell-effect, and Class Power preview refreshes and layering.",
-                        "Added per-resource slot colors and full-resource colors for segmented Class Power displays.",
-                        "Reduced duplicate aura work and allocations in large group-frame previews.",
-                        "Hardened the two-addon release package and its static validation.",
                     },
                 },
             },

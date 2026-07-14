@@ -1,5 +1,21 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-Beta16 - 2026-07-14
+
+### Highlights
+
+- Added shared Buff Aura Style controls for Party and Raid spell indicators.
+- Added a generated Assistant control schema for safer exact menu navigation and actions.
+- Refined Menu2 frame controls, previews, and visual layout.
+
+### Changes
+
+- Fixed gradiant options in bars not applying correctly
+- Fixed castbar channel ticks to always honor the global visibility switch.
+- Added configurable bar gradients, textures, transparency, and minimap-icon positioning.
+- Hardened Assistant value validation, cancellation, undo/redo, and action-input handling.
+- Added Assistant schema and spell-indicator regression coverage to the release gate.
+
 ## 6.0-Beta15 - 2026-07-14
 
 ### Highlights
