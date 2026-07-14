@@ -4,17 +4,19 @@
 
 ### Highlights
 
-- Added shared Buff Aura Style controls for Party and Raid spell indicators.
-- Added a generated Assistant control schema for safer exact menu navigation and actions.
-- Refined Menu2 frame controls, previews, and visual layout.
+- Streamlined Unit, Group, Cast Bar, and Class Resource menus with cleaner layouts, less redundant text, and fewer clipping issues.
+- Reworked Group Frame navigation: Text, Resource Bar, and Range Fade now live in Layout; Dispel Overlay and Debuff Stripe share a focused Dispel Overlay page.
+- Unified Unit, Group, and Class Resource previews and added live font previews in dropdowns.
+- Expanded the Assistant with safer exact menu actions, broader control coverage, faster search, and lower cold-start cost.
+- Improved guided setup and Edit Mode placement, and stabilized aura positioning after zone transitions.
 
 ### Changes
 
-- Fixed gradiant options in bars not applying correctly
-- Fixed castbar channel ticks to always honor the global visibility switch.
-- Added configurable bar gradients, textures, transparency, and minimap-icon positioning.
-- Hardened Assistant value validation, cancellation, undo/redo, and action-input handling.
-- Added Assistant schema and spell-indicator regression coverage to the release gate.
+- Added shared group Buff Aura Style support for spell indicators plus configurable bar gradients, textures, transparency, and minimap-icon positioning.
+- Fixed bar gradients, castbar channel-tick visibility, and aura repositioning after entering a new zone.
+- Fixed guided setup selecting disabled controls and improved skip, highlight, and placement behavior.
+- Hardened Assistant value safety, direct Search navigation, ambiguous commands, undo/action routing, and generated schema coverage.
+- Added reproducible serialized release gates, self-contained Graphify inventory checks, and broader Menu2/preview regression coverage.
 
 ## 6.0-Beta15 - 2026-07-14
 

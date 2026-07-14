@@ -2,7 +2,7 @@
 ## Title: |cff38c7f0Midnight|r |cffcce0ffSimple Unit Frames|r - Assistant
 ## Notes: Load-on-demand Assistant for Midnight Simple Unit Frames.
 ## Author: Mapko
-## Version: 6.0-beta13
+## Version: 6.0-beta16
 ## Dependencies: MidnightSimpleUnitFrames
 ## LoadOnDemand: 1
 
