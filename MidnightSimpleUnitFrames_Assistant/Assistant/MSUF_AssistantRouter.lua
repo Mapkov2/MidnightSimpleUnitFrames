@@ -129,7 +129,7 @@ R.PAGE_CONTEXT = {    uf_player = { prefix = "player", label = "Player" },
     gameplay = { prefix = "gameplay", label = "Gameplay" },
     profiles = { prefix = "profile", label = "Profiles" },
     gf_layout = { prefix = "group", label = "Group Layout" },
-    gf_bars = { prefix = "group text", label = "Group Health & Text" },
+    gf_bars = { prefix = "group dispel overlay", label = "Group Dispel Overlay" },
     gf_indicators = { prefix = "group indicator", label = "Group Status & Indicators" },
     gf_auras = { prefix = "group aura", label = "Group Auras" },
     auras3 = { prefix = "aura", label = "Auras" },
@@ -1841,8 +1841,8 @@ function R.TryReadabilityShortcut(text)    local norm = R.Normalize(text)
         local reply = R.ReadabilityReply(
             "Group frame readability help",
             "For Party, Raid, and Mythic Raid readability, I can adjust group frame scale, layout, spacing, health text, name text, range fade, and aura layout.",
-            "set raid scale for 20 players to 90; set party name text size to 13; open group health and text.",
-            "Open Group Layout | Open Group Health & Text"
+            "set raid scale for 20 players to 90; set party name text size to 13; open group layout.",
+            "Open Group Layout | Open Group Dispel Overlay"
         )
         if type(A.lastAssistantHelpContext) == "table" then
             A.lastAssistantHelpContext.nextStep = "Start with the least destructive visible setting: open Group Layout and adjust scale or frame spacing first. If the frames are large enough but the words are not, adjust name or health text next."
@@ -2061,9 +2061,9 @@ function R.TryColorContrastShortcut(text)    local norm = R.Normalize(text)
     if R.ContainsAny(norm, R.COLOR_CONTRAST_GROUP_TERMS) then
         return R.ColorContrastReply(
             "Group frame color and opacity help",
-            "Group-frame colors and bar opacity live in Colors > Group Frame Colors and apply to Party, Raid, and Mythic Raid together. Group Health & Text still controls range fade, dispel overlay, text, power, and debuff stripe layout.",
+            "Group-frame colors and bar opacity live in Colors > Group Frame Colors and apply to Party, Raid, and Mythic Raid together. Group Layout contains text, resource bars, and Range Fade; Dispel Overlay and Debuff Stripe share the Dispel Overlay page.",
             "set raid range fade to 40; set group debuff stripe color red; open colors.",
-            "Open Colors | Open Group Health & Text"
+            "Open Colors | Open Group Layout | Open Group Dispel Overlay"
         )
     end
 
@@ -2640,7 +2640,7 @@ A.RouterGroupLayoutProblemTerms = A.RouterGroupLayoutProblemTerms or {
 
 A.RouterGroupLayoutReply = function(title, body, examples, actions)
     return {
-        text = tostring(title or "Group Layout help") .. "\n" .. tostring(body or "") .. "\nExamples: " .. tostring(examples or "open group layout; set raid max columns to 5; set party growth direction to down.") .. "\nYou can ask: " .. tostring(actions or "Open Group Layout | Open Group Health & Text"),
+        text = tostring(title or "Group Layout help") .. "\n" .. tostring(body or "") .. "\nExamples: " .. tostring(examples or "open group layout; set raid max columns to 5; set party growth direction to down.") .. "\nYou can ask: " .. tostring(actions or "Open Group Layout | Open Group Dispel Overlay"),
         status = "info",
         summary = "Assistant group layout help",
     }
@@ -2806,7 +2806,7 @@ A.RouterTryVisualSettingShortcut = function(norm, coreHandler)
         if scopeKind == "group" then
             return R.VisualSettingReply(
                 scopeLabel .. " Opacity setting location",
-                "Group-frame health and background opacity live in Colors > Group Frame Colors and apply to Party, Raid, and Mythic Raid together. Range Fade opacity stays in Group Health & Text.",
+                "Group-frame health and background opacity live in Colors > Group Frame Colors and apply to Party, Raid, and Mythic Raid together. Range Fade opacity is in Group Layout.",
                 "open colors; set group health bar opacity to 80; set group bar background opacity to 70.",
                 "Open Colors | set group health bar opacity to 80"
             )
@@ -2826,9 +2826,9 @@ A.RouterTryVisualSettingShortcut = function(norm, coreHandler)
         if scopeKind == "group" then
             return R.VisualSettingReply(
                 scopeLabel .. " Range Fade setting location",
-                scopeLabel .. " Range Fade lives in Group Health & Text. Use " .. scopeLabel .. " Range Fade to enable the behavior, and " .. scopeLabel .. " Range Fade Alpha/Opacity to control how faded out-of-range units become.",
-                "open group health and text; turn on " .. scope .. " range fade; set " .. scope .. " range fade alpha to 40.",
-                "Open Group Health & Text | turn on " .. scope .. " range fade"
+                scopeLabel .. " Range Fade lives in Group Layout. Use " .. scopeLabel .. " Range Fade to enable the behavior, and " .. scopeLabel .. " Range Fade Alpha/Opacity to control how faded out-of-range units become.",
+                "open group layout; turn on " .. scope .. " range fade; set " .. scope .. " range fade alpha to 40.",
+                "Open Group Layout | turn on " .. scope .. " range fade"
             )
         end
         if scopeKind == "unit" and scope ~= "player" then
@@ -2867,7 +2867,7 @@ A.RouterTryVisualSettingShortcut = function(norm, coreHandler)
 
     if R.ContainsAny(norm, { "heal prediction", "incoming heal prediction", "incoming heal overlay" }) and asksLocation then
         local label = scopeLabel and (scopeLabel .. " Heal Prediction Overlay") or "Heal Prediction Overlay"
-        local page = scopeKind == "group" and "Group Health & Text and Bars" or "Bars"
+        local page = scopeKind == "group" and "Group Dispel Overlay and Bars" or "Bars"
         return R.VisualSettingReply(
             label .. " setting location",
             label .. " is controlled through " .. page .. ". Group scopes can use scoped Heal Prediction Overlay options; the shared overlay controls live in Bars.",
@@ -3795,14 +3795,14 @@ A.RouterTryGroupNaturalSettingShortcut = function(norm, coreHandler)
         end
         local reply = A.RouterGroupLayoutReply(
             scopeLabel .. " " .. textLabel .. " setting location",
-            scopeLabel .. " " .. textLabel .. " lives in Group Health & Text. Open Group Health & Text and use the " .. scopeLabel .. " text visibility, font size, text slot, delimiter, offset, and layer controls for that group scope.",
-            "open group health and text; set " .. scope .. " " .. commandNoun .. " to 12; turn on " .. scope .. " names.",
-            "Open Group Health & Text | set " .. scope .. " " .. commandNoun .. " to 12"
+            scopeLabel .. " " .. textLabel .. " lives in Group Layout. Open Group Layout and use the " .. scopeLabel .. " text visibility, font size, text slot, delimiter, offset, and layer controls for that group scope.",
+            "open group layout; set " .. scope .. " " .. commandNoun .. " to 12; turn on " .. scope .. " names.",
+            "Open Group Layout | set " .. scope .. " " .. commandNoun .. " to 12"
         )
         reply.status = "info"
         reply.result = "info"
         reply.searchResults = R.SettingFollowupResultsByQuery(scopeLabel .. " " .. textLabel, scopeLabel .. " " .. textLabel)
-            or R.PageFollowupResults("gf_bars", "Group Health & Text", scopeLabel .. " text controls live in Group Health & Text.")
+            or R.PageFollowupResults("gf_layout", "Group Layout", scopeLabel .. " text controls live in Group Layout.")
         return reply
     end
 
@@ -3943,7 +3943,7 @@ A.RouterTryGroupLayoutProblemShortcut = function(text, coreHandler)
             "Group spacing and growth help",
             "Group spacing, growth direction, columns, width, height, and scale are all Group Layout settings. If frames overlap or spread too far apart, start with spacing and scale before changing health text or auras.",
             "set raid spacing to 4; set party growth direction to down; set raid scale for 20 players to 90; open group layout.",
-            "Open Group Layout | Open Group Health & Text"
+            "Open Group Layout | Open Group Dispel Overlay"
         )
     end
 
@@ -3952,9 +3952,9 @@ A.RouterTryGroupLayoutProblemShortcut = function(text, coreHandler)
     then
         return A.RouterGroupLayoutReply(
             "Group range fade help",
-            "Range Fade controls how transparent group frames become when units are out of range. If frames are too faded, lower the fade amount or inspect Group Health & Text for the relevant Party, Raid, or Mythic Raid scope.",
-            "set raid range fade to 40; set party range fade to 60; open group health and text.",
-            "Open Group Health & Text | Open Group Layout"
+            "Range Fade controls how transparent group frames become when units are out of range. If frames are too faded, lower the fade amount in Group Layout for the relevant Party, Raid, or Mythic Raid scope.",
+            "set raid range fade to 40; set party range fade to 60; open group layout.",
+            "Open Group Layout"
         )
     end
 
@@ -4255,7 +4255,7 @@ local function LiveColorGeneralGuide()
         text = "MSUF frame color guide\n"
             .. "A frame can show several independent color layers, so one color does not always have one meaning. The health fill can use player class colors, friendly/neutral/hostile NPC reaction colors, NPC Type colors, a health gradient, or a fixed Unified/Dark color. The border or outline can separately show a dispel/debuff, aggro, purge, or Boss Target highlight; the first active highlight wins.\n"
             .. "For example, an orange Target health fill can mean a neutral NPC, while an orange border can be a dispel/debuff highlight. A debuff normally affects its aura icon or highlight border, not the health fill itself.\n"
-            .. "Open Colors for health and border colors. For Party/Raid overlays and debuff stripes, also check Group Health & Text. I kept MSUF unchanged.",
+            .. "Open Colors for health and border colors. For Party/Raid dispel overlays and debuff stripes, check Group Dispel Overlay. I kept MSUF unchanged.",
         status = "info",
         summary = "MSUF frame color guide",
     }
@@ -4270,7 +4270,7 @@ local function LiveColorGroupGuide(groupLabel, norm)
     return {
         text = tostring(groupLabel or "Group") .. " frame color guide\n"
             .. detail .. " Group frames can combine a health fill, border/outline, dispel overlay, debuff stripe, and aura icons.\n"
-            .. "Open Colors for group health colors, Group Health & Text for dispel overlays and debuff stripes, or Group Auras for the aura icons and filters. I kept MSUF unchanged.",
+            .. "Open Colors for group health colors, Group Dispel Overlay for dispel overlays and debuff stripes, or Group Auras for the aura icons and filters. I kept MSUF unchanged.",
         status = "info",
         summary = "MSUF group frame color guide",
     }
@@ -6304,9 +6304,9 @@ A.RouterTryTextPowerProblemShortcut = function(text, coreHandler)
     if mentionsText and R.ContainsAny(norm, terms.format) then
         return A.RouterTextPowerProblemReply(
             "Text format help",
-            "Unit-frame text format is controlled by the text slot and format options for the specific frame. Group-frame text lives in Group Health & Text. Name the frame and text type before I change it, so I do not overwrite the wrong slot.",
+            "Unit-frame text format is controlled by the text slot and format options for the specific frame. Group-frame text lives in Group Layout. Name the frame and text type before I change it, so I do not overwrite the wrong slot.",
             "set target hp text left current; set player health text to percent; open fonts.",
-            "Open Fonts | Open Player | Open Target | Open Group Health & Text"
+            "Open Fonts | Open Player | Open Target | Open Group Layout"
         )
     end
 
@@ -6315,7 +6315,7 @@ A.RouterTryTextPowerProblemShortcut = function(text, coreHandler)
             "Text visibility help",
             "If frame text is missing, check whether the specific text element is enabled, whether the slot is empty, and whether font size, color, alpha, or range fade makes it unreadable.",
             "set player name font size to 14; show target health text; open fonts.",
-            "Open Fonts | Open Player | Open Target | Open Group Health & Text"
+            "Open Fonts | Open Player | Open Target | Open Group Layout"
         )
     end
 
@@ -8281,8 +8281,8 @@ A.RouterTrySafePlanningShortcut = function(text, coreHandler)
             return A.RouterSafePlanningReply(
                 "Range fade and opacity comparison",
                 "Opacity is the normal transparency of a frame or element. Range Fade is conditional: it changes transparency when a unit is out of range. Use opacity for permanent visual weight; use Range Fade when you want out-of-range units to stand out or fade back.",
-                "set raid range fade to 40; make party frames less transparent; open group health and text.",
-                "Open Group Health & Text | Open Target | Open Bars"
+                "set raid range fade to 40; make party frames less transparent; open group layout.",
+                "Open Group Layout | Open Target | Open Bars"
             )
         end
         if R.ContainsAny(norm, { "class resource", "class resources", "power bar", "mana bar" }) then
@@ -8337,16 +8337,16 @@ A.RouterTrySafePlanningShortcut = function(text, coreHandler)
             return A.RouterSafePlanningReply(
                 "Unit and group frame comparison",
                 "Unit frames cover individual units such as Player, Target, Focus, Pet, Boss, Target of Target, and Focus Target. Group frames cover Party, Raid, and Mythic Raid members. Tune unit frames for the units you interact with; tune group frames for party and raid status.",
-                "open player; open target; open group layout; open group health and text.",
-                "Open Player | Open Target | Open Group Layout | Open Group Health & Text"
+                "open player; open target; open group layout; open group dispel overlay.",
+                "Open Player | Open Target | Open Group Layout | Open Group Dispel Overlay"
             )
         end
         if R.ContainsAny(norm, { "party", "raid", "mythic raid" }) then
             return A.RouterSafePlanningReply(
                 "Group frame comparison",
                 "Party frames are for small-group layouts; Raid and Mythic Raid frames are for larger grouped layouts. Use Party tuning for dungeons and small groups, Raid/Mythic Raid tuning for raid rosters, and copy settings only when you explicitly ask for that copy.",
-                "open group layout; open group health and text; make party frames easier to read; make raid frames easier to read.",
-                "Open Group Layout | Open Group Health & Text | Open Group Auras"
+                "open group layout; open group dispel overlay; make party frames easier to read; make raid frames easier to read.",
+                "Open Group Layout | Open Group Dispel Overlay | Open Group Auras"
             )
         end
         if R.ContainsAny(norm, { "raid marker", "raid markers", "role icon", "role icons", "ready check", "ready checks" }) then
@@ -8362,7 +8362,7 @@ A.RouterTrySafePlanningShortcut = function(text, coreHandler)
                 "Absorb and heal prediction comparison",
                 "Absorbs are shields already preventing damage. Incoming heals or heal prediction show healing that is expected or already being cast. Use absorb displays for shields; use heal prediction when healers need to see likely future health.",
                 "open bars; turn on heal prediction overlay; set absorb bar anchor right; set absorb bar color blue.",
-                "Open Bars | Open Group Health & Text | Open Colors"
+                "Open Bars | Open Group Layout | Open Colors"
             )
         end
         if R.ContainsAny(norm, { "font outline", "font shadow" }) then
@@ -8444,8 +8444,8 @@ A.RouterTrySafePlanningShortcut = function(text, coreHandler)
             return A.RouterSafePlanningReply(
                 "Healer tracking guidance",
                 "Healers usually need readable Party/Raid health, range fade, dispellable debuffs, incoming heals, important buffs/debuffs, ready checks, and enough cast-bar information for interrupts or dangerous casts.",
-                "open group health and text; open group auras; show only dispellable debuffs; set raid range fade to 40.",
-                "Open Group Health & Text | Open Group Auras | Open Aura Filters"
+                "open group layout; open group dispel overlay; open group auras; show only dispellable debuffs; set raid range fade to 40.",
+                "Open Group Layout | Open Group Dispel Overlay | Open Group Auras | Open Aura Filters"
             )
         end
         if R.ContainsAny(norm, { "tank", "tanks", "tanking" }) then
@@ -8469,8 +8469,8 @@ A.RouterTrySafePlanningShortcut = function(text, coreHandler)
             return A.RouterSafePlanningReply(
                 "Why range fade matters",
                 "Range Fade helps you notice when a unit is out of range without reading extra text. It is especially useful for healers and group frames because it can make unreachable players visually different.",
-                "set raid range fade to 40; set party range fade to 40; open group health and text.",
-                "Open Group Health & Text | Open Target"
+                "set raid range fade to 40; set party range fade to 40; open group layout.",
+                "Open Group Layout | Open Target"
             )
         end
         if R.ContainsAny(norm, { "target of target" }) then
@@ -8784,11 +8784,11 @@ function R.RoleGuidanceReply(text)    local norm = R.Normalize(text)
     local detail, focus, examples, actions, reasons
     if role == "healer" then
         detail = "For healing, prioritize readable Party/Raid health text, dispel visibility, range fade, cast bars, and important buffs/debuffs."
-        focus = "Start in Group Health & Text, Group Status & Indicators, Group Auras, and Cast Bars."
+        focus = "Start in Group Layout, Group Dispel Overlay, Group Status & Indicators, Group Auras, and Cast Bars."
         examples = "turn on raid click casting; set raid range fade to 40; show only dispellable debuffs; set raid health text size to 14."
-        actions = "Open Group Health & Text | Open Group Status & Indicators | Open Group Auras | Guided Setup"
+        actions = "Open Group Layout | Open Group Dispel Overlay | Open Group Status & Indicators | Open Group Auras | Guided Setup"
         reasons = {
-            "Group Health & Text establishes the health, text, and range information used for every healing decision.",
+            "Group Layout establishes health, text, resource, stripe, and range readability; Group Dispel Overlay handles dispel feedback.",
             "Group Status & Indicators adds dispel, role, and ready-state signals after the core health view is readable.",
             "Group Auras then controls the buffs and debuffs that affect healing decisions without hiding the underlying health view.",
             "Guided Setup is the safe fallback when you want to review the wider profile step by step.",
@@ -8856,14 +8856,14 @@ function R.ClassGuidanceReply(text)    local norm = R.Normalize(text)
         actions = "Open Class Resources | Open Cast Bars | Open Aura Filters"
     elseif classSpec.key == "shaman" then
         detail = "For Shaman UI, prioritize the Totem/Statue frame, Class Resources, Target/Focus cast bars, important buffs/debuffs, and group status if you heal."
-        focus = "Start in Gameplay, Class Resources, Cast Bars, Aura Filters, and Group Health & Text."
+        focus = "Start in Gameplay, Class Resources, Cast Bars, Aura Filters, and Group Layout."
         examples = "show totem frame; make totem icons bigger; open class resources; set target debuff icon size to 30."
         actions = "Open Gameplay | Open Class Resources | Open Cast Bars | Open Aura Filters"
     elseif role == "healer" then
         detail = "For " .. label .. " healing UI, prioritize readable Party/Raid frames, dispel visibility, range fade, cast bars, important auras, and Class Resources where MSUF exposes them."
-        focus = "Start in Group Health & Text, Group Status & Indicators, Group Auras, Aura Filters, Cast Bars, and Class Resources."
+        focus = "Start in Group Layout, Group Dispel Overlay, Group Status & Indicators, Group Auras, Aura Filters, Cast Bars, and Class Resources."
         examples = "set raid range fade to 40; show only dispellable debuffs; set raid health text size to 14; open class resources."
-        actions = "Open Group Health & Text | Open Group Status & Indicators | Open Group Auras | Open Class Resources"
+        actions = "Open Group Layout | Open Group Dispel Overlay | Open Group Status & Indicators | Open Group Auras | Open Class Resources"
     elseif role == "tank" then
         detail = "For " .. label .. " tank UI, prioritize Target, Target of Target, Boss frames, cast bars, debuffs, threat/status readability, and Class Resources where MSUF exposes them."
         focus = "Start in Target, Target of Target, Boss Frames, Cast Bars, Aura Filters, and Class Resources."
@@ -8893,9 +8893,9 @@ function R.ContentGuidanceReply(text)    local norm = R.Normalize(text)
     local detail, focus, examples, actions
     if context == "mythic+" then
         detail = "For Mythic+ and dungeon UI, prioritize Target/Focus cast bars, interrupts, boss frames, Party readability, dispel visibility, and important buffs/debuffs."
-        focus = "Start in Cast Bars, Group Health & Text, Group Auras, Aura Filters, Target, and Focus."
+        focus = "Start in Cast Bars, Group Layout, Group Dispel Overlay, Group Auras, Aura Filters, Target, and Focus."
         examples = "show focus kick tracker; show kick ready on target; set party range fade to 40; set target debuff icon size to 30."
-        actions = "Open Cast Bars | Open Group Health & Text | Open Group Auras | Open Aura Filters"
+        actions = "Open Cast Bars | Open Group Layout | Open Group Dispel Overlay | Open Group Auras | Open Aura Filters"
     elseif context == "pvp" then
         detail = "For PvP UI, prioritize Target, Focus, cast bars, class resources, key debuffs, trinket-adjacent visibility, and clean group frames without hiding critical text."
         focus = "Start in Target, Focus, Cast Bars, Class Resources, Aura Filters, and Group Status & Indicators."
@@ -8908,9 +8908,9 @@ function R.ContentGuidanceReply(text)    local norm = R.Normalize(text)
         actions = "Open Player | Open Target | Open Class Resources | Open Gameplay"
     else
         detail = "For raid UI, prioritize Raid/Mythic Raid layout, health text, range fade, dispel visibility, ready checks, boss frames, and boss cast bars."
-        focus = "Start in Group Layout, Group Health & Text, Group Status & Indicators, Group Auras, Boss Frames, and Cast Bars."
+        focus = "Start in Group Layout, Group Dispel Overlay, Group Status & Indicators, Group Auras, Boss Frames, and Cast Bars."
         examples = "set raid range fade to 40; show raid ready check icon; open boss frames; set boss cast bar height to 20."
-        actions = "Open Group Layout | Open Group Health & Text | Open Group Status & Indicators | Open Boss Frames"
+        actions = "Open Group Layout | Open Group Dispel Overlay | Open Group Status & Indicators | Open Boss Frames"
     end
 
     return A.RouterSafePlanningReply(
@@ -8940,27 +8940,27 @@ function R.CombinedGuidanceReply(text)    local norm = R.Normalize(text)
 
     if role == "healer" and context == "mythic+" then
         detail = "For Mythic+ healing, prioritize Party health clarity, dispel visibility, range fade, Target/Focus cast feedback, and important buffs/debuffs."
-        focus = "Start in Group Health & Text, Group Auras, Cast Bars, Aura Filters, and Focus."
+        focus = "Start in Group Layout, Group Dispel Overlay, Group Auras, Cast Bars, Aura Filters, and Focus."
         examples = "turn on party click casting; set party range fade to 40; show only dispellable debuffs; show focus kick tracker."
-        actions = "Open Group Health & Text | Open Group Auras | Open Cast Bars | Open Aura Filters"
+        actions = "Open Group Layout | Open Group Dispel Overlay | Open Group Auras | Open Cast Bars | Open Aura Filters"
     elseif role == "healer" and context == "raid" then
         detail = "For raid healing, prioritize Raid/Mythic Raid health text, range fade, dispel overlays, debuff visibility, ready checks, and auras that affect healing decisions."
-        focus = "Start in Group Layout, Group Health & Text, Group Status & Indicators, and Group Auras."
+        focus = "Start in Group Layout, Group Dispel Overlay, Group Status & Indicators, and Group Auras."
         examples = "set raid range fade to 40; set raid health text size to 14; show raid ready check icon; show only dispellable debuffs."
-        actions = "Open Group Layout | Open Group Health & Text | Open Group Status & Indicators | Open Group Auras"
+        actions = "Open Group Layout | Open Group Dispel Overlay | Open Group Status & Indicators | Open Group Auras"
     elseif role == "tank" and context == "mythic+" then
         detail = "For Mythic+ tanking, prioritize Target, Target of Target, Boss frames, interrupt feedback, debuff tracking, and readable Party status."
-        focus = "Start in Target, Target of Target, Boss Frames, Cast Bars, and Group Health & Text."
+        focus = "Start in Target, Target of Target, Boss Frames, Cast Bars, and Group Layout."
         examples = "show target of target; make target cast bar height 24; show kick ready on target; set party range fade to 40."
-        actions = "Open Target | Open Target of Target | Open Cast Bars | Open Group Health & Text"
+        actions = "Open Target | Open Target of Target | Open Cast Bars | Open Group Layout"
     elseif role == "tank" and context == "raid" then
         detail = "For raid tanking, prioritize Boss frames, Target/Target of Target, raid markers, cast bars, debuffs, and enough Raid visibility for swaps and externals."
-        focus = "Start in Boss Frames, Target, Target of Target, Cast Bars, Group Status & Indicators, and Group Health & Text."
+        focus = "Start in Boss Frames, Target, Target of Target, Cast Bars, Group Status & Indicators, and Group Layout."
         examples = "open boss frames; show target of target; show raid marker on target; set boss cast bar height to 20."
         actions = "Open Boss Frames | Open Target | Open Target of Target | Open Cast Bars"
     elseif role == "dps" and context == "mythic+" then
         detail = "For Mythic+ DPS, prioritize Target/Focus cast bars, interrupt-ready feedback, class resources, important debuffs, and compact Party awareness."
-        focus = "Start in Cast Bars, Class Resources, Target, Focus, Aura Filters, and Group Health & Text."
+        focus = "Start in Cast Bars, Class Resources, Target, Focus, Aura Filters, and Group Layout."
         examples = "show focus kick tracker; show kick ready on target; open class resources; set target debuff icon size to 30."
         actions = "Open Cast Bars | Open Class Resources | Open Aura Filters | Open Focus"
     elseif role == "dps" and context == "raid" then
@@ -9026,7 +9026,9 @@ R.PAGE_LOCATION_TERMS = {    { label = "Support Links", terms = { "support link"
     { label = "Changelog", terms = { "changelog", "change log", "release notes", "latest changes", "build notes" } },
     { label = "Dashboard Scaling", terms = { "dashboard scaling", "dashboard scale", "scaling tools", "scale tools", "ui scale tools", "menu scale", "menu scaling", "msuf frame scale", "options scale" } },
     { label = "Display Recovery", terms = { "display recovery", "display and recovery", "recovery tools", "dashboard recovery", "recover menu", "reset tools" } },
-    { label = "Group Health & Text", terms = { "group health and text", "group health text", "group text", "party health text", "raid health text", "mythic raid health text" } },
+    { label = "Group Layout", terms = { "group health and text", "group health text", "group text", "party health text", "raid health text", "mythic raid health text" } },
+    { label = "Group Layout", terms = { "group range", "range fade" } },
+    { label = "Group Dispel Overlay", terms = { "group effects", "debuff stripe", "group dispel", "group dispel overlay", "dispel overlay" } },
     { label = "Group Status & Indicators", terms = { "group status and indicators", "group indicators", "group indicator", "ready check", "ready checks", "role icon", "raid marker", "corner indicator", "corner indicators" } },
     { label = "Group Auras", terms = { "group aura", "group auras", "party auras", "raid auras", "mythic raid auras", "group buffs", "group debuffs", "party buffs", "party debuffs", "raid buffs", "raid debuffs" } },
     { label = "Group Layout", terms = { "group layout", "group frames", "party frames", "raid frames", "mythic raid frames", "party layout", "raid layout" } },
@@ -11782,8 +11784,10 @@ local DIRECT_NAVIGATION_PAGE_SUBJECTS = {
     ["focus target"] = "open focus target", ["focus target frame"] = "open focus target",
     ["targettarget"] = "open target of target", ["targettarget frame"] = "open target of target",
     ["focustarget"] = "open focus target", ["focustarget frame"] = "open focus target",
-    ["group layout"] = "open group layout", ["group health"] = "open group health and text",
-    ["group health and text"] = "open group health and text",
+    ["group layout"] = "open group layout", ["group health"] = "open group layout",
+    ["group health and text"] = "open group layout", ["group text"] = "open group layout",
+    ["group effects"] = "open group dispel overlay",
+    ["group dispel overlay"] = "open group dispel overlay",
     ["group status"] = "open group status and indicators",
     ["group status and indicators"] = "open group status and indicators",
     ["group aura"] = "open group auras", ["group auras"] = "open group auras",
@@ -11984,7 +11988,8 @@ local SETTING_BROWSER_PAGE_ALIASES = {
     ["bars"] = "opt_bars", ["gameplay"] = "gameplay", ["profiles"] = "profiles",
     ["class resources"] = "classpower", ["class power"] = "classpower",
     ["modules"] = "modules", ["misc"] = "opt_misc", ["miscellaneous"] = "opt_misc",
-    ["group layout"] = "gf_layout", ["group health"] = "gf_bars",
+    ["group layout"] = "gf_layout", ["group health"] = "gf_layout", ["group text"] = "gf_layout",
+    ["group effects"] = "gf_bars", ["group dispel overlay"] = "gf_bars",
     ["group indicators"] = "gf_indicators", ["group auras"] = "gf_auras",
 }
 

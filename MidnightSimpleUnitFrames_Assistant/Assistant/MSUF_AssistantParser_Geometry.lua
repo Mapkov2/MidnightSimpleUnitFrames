@@ -3894,7 +3894,7 @@ local function ParseGroupFrameColorMode(text)
         kind = "changes",
         changes = changes,
         label = "Set group-frame bar color mode",
-        summary = "Changes the Group Frames > Health & Text Bar Color Mode instead of the global unit frame bar mode.",
+        summary = "Changes the Group Frame Bar Color Mode instead of the global unit frame bar mode.",
     }
 end
 

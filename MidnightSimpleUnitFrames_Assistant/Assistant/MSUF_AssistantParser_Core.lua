@@ -1018,8 +1018,8 @@ local PAGE_TEXT_TARGETS = {
 
     { page = "gf_indicators", label = "Group Status & Indicators", terms = { "group status and indicators", "group indicators", "group indicator", "party indicators", "raid indicators", "group status icons", "raid status icons", "ready check", "summon icon", "role icon", "leader icon", "assist icon" } },
     { page = "gf_auras", label = "Group Auras", terms = { "group auras", "group aura", "party auras", "raid auras", "group buffs", "group debuffs", "party buffs", "raid debuffs" } },
-    { page = "gf_bars", label = "Group Health & Text", terms = { "group health", "group text", "group bars", "party health", "party text", "party bars", "raid health", "raid text", "raid bars", "health and text" } },
-    { page = "gf_layout", label = "Group Layout", terms = { "group layout", "party layout", "raid layout", "group settings", "party settings", "raid settings", "group frames", "groupframes", "party frames", "raid frames", "mythic raid", "mythicraid", "gruppenframes", "group", "party", "raid" } },
+    { page = "gf_bars", label = "Group Dispel Overlay", terms = { "group dispel", "group dispel overlay", "party dispel overlay", "raid dispel overlay", "dispel overlay", "debuff stripe", "group effects", "party effects", "raid effects" } },
+    { page = "gf_layout", label = "Group Layout", terms = { "group layout", "party layout", "raid layout", "group health", "group text", "group resource", "group power", "group bars", "group range", "range fade", "party health", "party text", "party bars", "raid health", "raid text", "raid bars", "health and text", "group settings", "party settings", "raid settings", "group frames", "groupframes", "party frames", "raid frames", "mythic raid", "mythicraid", "gruppenframes", "group", "party", "raid" } },
 
     { page = "auras3_filters", label = "Aura Filters", terms = { "aura filters", "aura filter", "filters", "blacklist", "aura blacklist", "blocked auras" } },
     { page = "auras3_styling", label = "Aura Style", terms = { "aura style", "aura styling", "aura cooldown text", "aura borders" } },
@@ -1462,7 +1462,7 @@ local function FrameTypeForPage(page)
     if page == "profiles" then return "profiles" end
     if page == "opt_castbar" then return "castbar" end
     if page == "auras3" or page == "auras3_buffs" or page == "auras3_debuffs" or page == "auras3_custom" or page == "auras3_rendering" or page == "auras3_styling" or page == "auras3_filters" then return "aura" end
-    if page == "gf_layout" or page == "gf_auras" or page == "gf_indicators" then return "group" end
+    if page == "gf_layout" or page == "gf_bars" or page == "gf_auras" or page == "gf_indicators" then return "group" end
     if page == "opt_colors" then return "colors" end
     if page == "opt_fonts" then return "fonts" end
     if page == "opt_bars" then return "globalBars" end
