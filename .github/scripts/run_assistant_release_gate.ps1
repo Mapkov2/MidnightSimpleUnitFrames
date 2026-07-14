@@ -38,6 +38,36 @@ function Require-File {
     return $path
 }
 
+function Require-TrackedFile {
+    param([Parameter(Mandatory = $true)][string]$RelativePath)
+
+    [void](Require-File -RelativePath $RelativePath)
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $indexOutput = @(& git -C $script:repoRoot ls-files --error-unmatch -- $RelativePath 2>&1 |
+            ForEach-Object { [string]$_ })
+        $indexExitCode = $LASTEXITCODE
+        $headOutput = @(& git -C $script:repoRoot cat-file -e ("HEAD:{0}" -f $RelativePath) 2>&1 |
+            ForEach-Object { [string]$_ })
+        $headExitCode = $LASTEXITCODE
+        $diffOutput = @(& git -C $script:repoRoot diff --quiet HEAD -- $RelativePath 2>&1 |
+            ForEach-Object { [string]$_ })
+        $diffExitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    if ($indexExitCode -ne 0) {
+        throw "Required release-gate file is not Git-tracked: $RelativePath`n$($indexOutput -join "`n")"
+    }
+    if ($headExitCode -ne 0) {
+        throw "Required release-gate file is not committed in HEAD: $RelativePath`n$($headOutput -join "`n")"
+    }
+    if ($diffExitCode -ne 0) {
+        throw "Required release-gate file differs from HEAD: $RelativePath`n$($diffOutput -join "`n")"
+    }
+}
+
 function Resolve-RequiredTool {
     param(
         [Parameter(Mandatory = $true)][string]$Name,
@@ -238,6 +268,7 @@ $luaGates = @(
     [pscustomobject]@{ Category = "controller"; Path = "tools/assistant_channel_tick_controller_smoke.lua"; Args = @() },
 
     [pscustomobject]@{ Category = "action-input"; Path = "tools/assistant_action_input_contract_audit.lua"; Args = @() },
+    [pscustomobject]@{ Category = "action-input"; Path = "tools/assistant_action_alias_input_audit.lua"; Args = @() },
     [pscustomobject]@{ Category = "action-input"; Path = "tools/assistant_action_parse_audit.lua"; Args = @() },
 
     [pscustomobject]@{ Category = "transaction"; Path = "tools/assistant_transaction_smoke.lua"; Args = @() },
@@ -283,6 +314,52 @@ $luaGates = @(
     [pscustomobject]@{ Category = "performance"; Path = "tools/assistant_coldstart_benchmark.lua"; Args = @("all") }
 )
 
+# These files are loaded by a named gate or harness rather than invoked as a
+# top-level gate. Keep the closure explicit so an ignored local helper cannot
+# make a dirty checkout pass while a clean release checkout fails.
+$transitiveGateDependencies = @(
+    "tools/assistant_action_output_english_audit.lua",
+    "tools/assistant_aura_output_audit.lua",
+    "tools/assistant_aura_registry_coverage_audit.lua",
+    "tools/assistant_command_surface_output_audit.lua",
+    "tools/assistant_control_schema_collect.lua",
+    "tools/assistant_dashboard_smoke.lua",
+    "tools/assistant_dialog_output_audit.lua",
+    "tools/assistant_explanations_output_audit.lua",
+    "tools/assistant_followup_surface_output_audit.lua",
+    "tools/assistant_guided_setup_output_audit.lua",
+    "tools/assistant_history_output_english_audit.lua",
+    "tools/assistant_locale_action_output_audit.lua",
+    "tools/assistant_locale_output_audit.lua",
+    "tools/assistant_nomatch_output_english_audit.lua",
+    "tools/assistant_output_english_audit.lua",
+    "tools/assistant_parse_metadata_english_audit.lua",
+    "tools/assistant_registry_label_language_audit.lua",
+    "tools/assistant_registry_metadata_english_audit.lua",
+    "tools/assistant_router_conversation_output_audit.lua",
+    "tools/assistant_runtime_manifest_loader.lua",
+    "tools/assistant_setting_search_output_english_audit.lua",
+    "tools/assistant_undo_output_audit.lua",
+    "tools/assistant_value_display_english_audit.lua",
+    "tools/assistant_visible_language_static_audit.lua",
+    "tools/assistant_workflow_output_audit.lua",
+    "tools/AssistantTraining/runner.lua",
+    "tools/AssistantTraining/wow_stubs.lua",
+    "tools/lua51_bom_runner.lua",
+    "tools/test-wow-lua51-loadability.ps1"
+)
+
+$releaseAssets = @(
+    "tools/generate_assistant_control_schema.ps1",
+    "tools/AssistantTraining/run.ps1",
+    "tools/assistant_v1_training_oracle.lua",
+    ".github/scripts/assistant_graphify_setting_dispositions.lua",
+    ".github/scripts/assistant_training_coverage_dispositions.lua",
+    "MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantControlSchema.lua",
+    "MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantControlSchema_Data.lua",
+    "MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantRegistry_ActionInputs.lua"
+)
+
 try {
     Set-Location -LiteralPath $repoRoot
     $env:MSUF_ENGLISH_SUITE_FULL = "1"
@@ -291,16 +368,24 @@ try {
     $manifestFiles = @(Get-AssistantManifestFiles)
     foreach ($gate in $pythonGates) { [void](Require-File -RelativePath $gate.Path) }
     foreach ($gate in $luaGates) { [void](Require-File -RelativePath $gate.Path) }
-    foreach ($path in @(
-        "tools/generate_assistant_control_schema.ps1",
-        "tools/AssistantTraining/run.ps1",
-        "tools/assistant_v1_training_oracle.lua",
-        ".github/scripts/assistant_graphify_setting_dispositions.lua",
-        ".github/scripts/assistant_training_coverage_dispositions.lua",
-        "MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantControlSchema.lua",
-        "MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantControlSchema_Data.lua",
-        "MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantRegistry_ActionInputs.lua"
-    )) { [void](Require-File -RelativePath $path) }
+    foreach ($path in $transitiveGateDependencies) { [void](Require-File -RelativePath $path) }
+    foreach ($path in $releaseAssets) { [void](Require-File -RelativePath $path) }
+
+    $trackedPaths = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($gate in $pythonGates) { [void]$trackedPaths.Add($gate.Path) }
+    foreach ($gate in $luaGates) { [void]$trackedPaths.Add($gate.Path) }
+    foreach ($path in $transitiveGateDependencies) { [void]$trackedPaths.Add($path) }
+    foreach ($path in $releaseAssets) { [void]$trackedPaths.Add($path) }
+    [void]$trackedPaths.Add(".github/scripts/run_assistant_release_gate.ps1")
+    [void]$trackedPaths.Add("MidnightSimpleUnitFrames_Assistant/MSUF_AssistantRuntime.xml")
+    foreach ($manifestFile in $manifestFiles) {
+        $relative = $manifestFile.Substring($repoRoot.Length).TrimStart(
+            [System.IO.Path]::DirectorySeparatorChar,
+            [System.IO.Path]::AltDirectorySeparatorChar).Replace('\', '/')
+        [void]$trackedPaths.Add($relative)
+    }
+    foreach ($path in $trackedPaths) { Require-TrackedFile -RelativePath $path }
+    Write-Host ("[gate] Git-tracked release closure: {0} files" -f $trackedPaths.Count)
 
     Write-Host "MSUF Assistant release gate"
     Write-Host "  repo: $repoRoot"
