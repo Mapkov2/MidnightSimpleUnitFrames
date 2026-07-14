@@ -21,7 +21,7 @@ local CASTBAR_ICON_POSITIONS = VT("LEFT", "Left", "RIGHT", "Right", "INSIDE_LEFT
 local CASTBAR_TEXT_POSITIONS = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right", "ABOVE", "Above", "BELOW", "Below")
 local CASTBAR_TIME_FORMATS = VT("CURRENT", "Remaining", "ELAPSED", "Elapsed", "ELAPSED_MAX", "Elapsed / Total", "CURRENT_MAX", "Remaining / Total")
 local CASTBAR_TAB_VALUES = VT("general", "General", "icon", "Icon", "spell", "Spell Text", "time", "Time Text", "advanced", "Advanced")
-local CASTBAR_TAB_HEIGHTS = { general = 446, icon = 540, spell = 540, time = 540, advanced = 344 }
+local CASTBAR_TAB_HEIGHTS = { general = 392, icon = 486, spell = 486, time = 486, advanced = 290 }
 local CASTBAR_WIDTH_SOURCE_VALUES = VT("manual", "Manual width", "unitframe", "Auto: Unit Frame", "essential", "Auto: Essential Cooldowns", "utility", "Auto: Utility Cooldowns")
 local CASTBAR_TEXT_ALIGN = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right")
 local CASTBAR_TRUNCATE_VALUES = VT("AUTO", "Auto fit", "CLIP", "Manual width", "NONE", "No width limit")
@@ -667,18 +667,18 @@ local function BuildCastbar(ctx, builder, unit)
     end
     local tabFrames = {}
     local generalTab, iconTab, spellTab, timeTab, advancedTab =
-        UnitSectionShared.MakeTabFrames(sec, -118, sectionW, tabFrames, "general", "icon", "spell", "time", "advanced")
-    local generalCard = W.ControlCard(generalTab, "General", nil, leftX, -4, leftW, 132)
+        UnitSectionShared.MakeTabFrames(sec, -64, sectionW, tabFrames, "general", "icon", "spell", "time", "advanced")
+    local generalCard = W.ControlCard(generalTab, nil, nil, leftX, -4, leftW, 132)
     local providerCard = W.ControlCard(generalTab, "Provider", nil, rightX, -4, rightW, 132)
     local sizeCard = W.ControlCard(generalTab, "Size", "Width can use manual bounds or follow another frame.", leftX, -154, sectionW - 32, 166)
-    local iconCard = W.ControlCard(iconTab, "Icon", nil, leftX, -4, leftW, 370)
-    local spellCard = W.ControlCard(spellTab, "Spell Name Text", nil, leftX, -4, leftW, 370)
+    local iconCard = W.ControlCard(iconTab, nil, nil, leftX, -4, leftW, 370)
+    local spellCard = W.ControlCard(spellTab, nil, nil, leftX, -4, leftW, 370)
     local targetNameCard = fields.targetName and W.ControlCard(spellTab, "Cast Target Text", nil, rightX, -4, rightW, 370) or nil
-    local timeCard = W.ControlCard(timeTab, "Cast Time Text", nil, leftX, -4, leftW, 370)
+    local timeCard = W.ControlCard(timeTab, nil, nil, leftX, -4, leftW, 370)
     local textAdvancedCard = W.ControlCard(advancedTab, "Spell Text Behavior", nil, leftX, -4, leftW, 190)
     local iconAdvancedCard = W.ControlCard(advancedTab, "Icon Style", nil, rightX, -4, rightW, 118)
     local castbarTabs = W.SegmentTabs(ctx, sec, {
-        label = "Castbar area", values = CASTBAR_TAB_VALUES, width = min(620, sectionW - 48),
+        label = "", values = CASTBAR_TAB_VALUES, width = min(620, sectionW - 48),
         frames = tabFrames, defaultTab = "general",
         get = function() return CurrentCastbarTab(unit) end,
         set = function(v)
@@ -686,8 +686,9 @@ local function BuildCastbar(ctx, builder, unit)
             M.unitCastbarTabSelection[unit] = NormalizeCastbarTabKey(v)
         end,
         afterRefresh = function(tab) SetCastbarSectionHeight(CastbarTabHeight(unit, tab)) end,
-        x = 20, y = -58,
+        x = 20, y = -12,
     })
+    if castbarTabs._msuf2Title then castbarTabs._msuf2Title:Hide() end
     RegisterControl(castbarTabs, ctx, "castbar.workspace_tab", "Castbar area", "segment", "ephemeral")
     local castbarNotice, _, castbarNoticeButton = CreateSectionNotice(generalTab, -334, "Use MSUF", 96)
     if castbarNoticeButton then

@@ -476,7 +476,7 @@ end
 local NAV_SUBPAGE_LABELS = M.navSubpageLabels or {}
 local GROUP_PAGE_TABS = {
     { key = "gf_layout", label = NAV_SUBPAGE_LABELS.gf_layout or "Layout", width = 64 },
-    { key = "gf_bars", label = NAV_SUBPAGE_LABELS.gf_bars or "Health & Text", width = 108 },
+    { key = "gf_bars", label = NAV_SUBPAGE_LABELS.gf_bars or "Dispel Overlay", width = 108 },
     { key = "gf_indicators", label = NAV_SUBPAGE_LABELS.gf_indicators or "Status & Indicators", width = 138 },
     { key = "gf_auras", label = NAV_SUBPAGE_LABELS.gf_auras or "Auras", width = 58 },
 }

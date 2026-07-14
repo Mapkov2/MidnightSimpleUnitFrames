@@ -40,8 +40,8 @@ local STAGES = {
     { id = "uf_targettarget", pageKey = "uf_targettarget", icon = "uf_targettarget", title = "Target of target", impact = "Skipping Target of target leaves its layout, text and visibility options unreviewed." },
     { id = "uf_focustarget", pageKey = "uf_focustarget", icon = "uf_focustarget", title = "Focus target", impact = "Skipping Focus target leaves its layout, text and visibility options unreviewed." },
     { id = "uf_boss", pageKey = "uf_boss", icon = "uf_boss", title = "Boss frames", impact = "Skipping Boss frames leaves their shared layout, text, indicators and aura options unreviewed." },
-    { id = "gf_layout", pageKey = "gf_layout", icon = "gf_layout", title = "Party and raid layout", impact = "Skipping group layout leaves frame size, growth, sorting, scaling and anchoring unreviewed." },
-    { id = "gf_bars", pageKey = "gf_bars", icon = "gf_bars", title = "Group health and text", impact = "Skipping group bars leaves health, power, text, range and dispel presentation unreviewed." },
+    { id = "gf_layout", pageKey = "gf_layout", icon = "gf_layout", title = "Party and raid layout", impact = "Skipping group layout leaves frame basics, text, resource bars, range fade, transparency, geometry, sorting, scaling and anchoring unreviewed." },
+    { id = "gf_bars", pageKey = "gf_bars", icon = "gf_bars", title = "Group dispel overlay", impact = "Skipping the group dispel overlay leaves Party, Raid and Mythic Raid dispel overlays and debuff stripes unreviewed." },
     { id = "gf_indicators", pageKey = "gf_indicators", icon = "gf_indicators", title = "Group indicators", impact = "Skipping group indicators leaves status icons, targeted spells and corner indicators unreviewed." },
     { id = "gf_auras", pageKey = "gf_auras", icon = "gf_auras", title = "Group auras", excludeSections = { si = true }, impact = "Skipping group auras leaves group buff and debuff behavior unreviewed." },
     {

@@ -15,13 +15,13 @@ sorting=gf_layout
 scaling=gf_layout
 border=gf_layout
 anchor=gf_layout
-hcolor=gf_bars
-bars=gf_bars
-power=gf_bars
-text=gf_bars
+hcolor=opt_colors
+bars=opt_bars
+power=gf_layout
+text=gf_layout
 dispel=gf_bars
 dstripe=gf_bars
-range=gf_bars
+range=gf_layout
 buffs=gf_auras
 debuffs=gf_auras
 externals=gf_auras
@@ -36,7 +36,7 @@ ci=gf_indicators
 ]],
     PAGE_FOCUS = M.KeyLabelMap [[
 gf_layout=layout
-gf_bars=text
+gf_bars=dispel
 gf_auras=buffs
 gf_indicators=indicators
 ]],

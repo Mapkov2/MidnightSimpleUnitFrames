@@ -757,7 +757,7 @@ end
 
 function Page:BuildClassLayout()
     local compact, width = self.width < 620, self.width
-    local section = self.b:CollapsibleSection("classpower_display", "Class Resource Layout", compact and 760 or 440, true)
+    local section = self.b:CollapsibleSection("classpower_display", "Layout", compact and 760 or 440, true)
     local applyRefresh = self:WithRefresh(ApplyClassPower)
     self.cpEnable = SwitchAt(self.ctx, section, "Class Resource", 32, -64, 180, Bars, "showClassPower", true, applyRefresh, Meta("layout.enabled"))
     self.cp = self:Controls(section, Bars, ApplyClassPower, "layout", {
@@ -800,7 +800,7 @@ function Page:BuildClassLayout()
 end
 
 function Page:BuildClassBehavior()
-    local section = self.b:CollapsibleSection("classpower_behavior", "Class Resource Behavior", 206, false)
+    local section = self.b:CollapsibleSection("classpower_behavior", "Behavior", 206, false)
     local fields = self:Controls(section, Bars, ApplyClassPower, "behavior", {
         { "anchor", "toggle", "Anchor to Essential Cooldown", "classPowerAnchorToCooldown", false, group = "cp" },
         { "charged", "toggle", "Show empowered combo points", "showChargedComboPoints", true, group = "cp" },
@@ -822,7 +822,7 @@ function Page:BuildClassBehavior()
 end
 
 function Page:BuildClassStyle()
-    local section = self.b:CollapsibleSection("classpower_visuals", "Class Resource Style", 430, false)
+    local section = self.b:CollapsibleSection("classpower_visuals", "Appearance", 430, false)
     local width, inner = section._msuf2Width or self.width, max(320, (section._msuf2Width or self.width) - 64)
     local cardW, controlW, frames = min(540, inner), min(360, min(540, inner) - 32), {}
     local resources, text, opacity, pips = M.UnitSectionsShared.MakeTabFrames(section, -88, width, frames, "resources", "text", "opacity", "pips")
@@ -862,7 +862,7 @@ function Page:BuildClassStyle()
 end
 
 function Page:BuildClassVisibility()
-    local section = self.b:CollapsibleSection("classpower_visibility", "Class Resource Visibility", 216, false)
+    local section = self.b:CollapsibleSection("classpower_visibility", "Auto-Hide", 216, false)
     local width = min(560, (section._msuf2Width or self.width) - 28)
     W.ControlCard(section, "Auto-Hide Rules", nil, 14, -54, width, 142)
     for i, spec in ipairs({
@@ -876,7 +876,7 @@ end
 
 function Page:BuildDetachedPower()
     local compact = self.width < 680
-    local section = self.b:CollapsibleSection("classpower_detached_power", "Player Power Bar", compact and 920 or 640, false)
+    local section = self.b:CollapsibleSection("classpower_detached_power", "Player Power", compact and 920 or 640, false)
     local width = section._msuf2Width or self.width
     local cardW, controlW = min(650, width - 28), min(300, max(240, min(650, width - 28) - 64))
     local twoColumns, frames = not compact and cardW >= 620, {}
@@ -981,7 +981,7 @@ end
 
 function Page:BuildPlayerHP()
     local compact = self.width < 680
-    local section = self.b:CollapsibleSection("classpower_player_hp", "Second Player HP Bar", compact and 980 or 700, false)
+    local section = self.b:CollapsibleSection("classpower_player_hp", "Extra Health Bar", compact and 980 or 700, false)
     local width = section._msuf2Width or self.width
     local cardW, controlW = min(650, width - 28), min(300, max(240, min(650, width - 28) - 64))
     local twoColumns, frames = not compact and cardW >= 620, {}

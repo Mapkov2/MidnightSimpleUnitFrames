@@ -33,7 +33,7 @@ local STATUS_TEXT_STATE_TOGGLES = {
 local DisabledNameAnchorValues = Shared.DisabledNameAnchorValues or function(values) return values or {} end
 local SetSectionHeaderStatus = Shared.SetSectionHeaderStatus or function() end
 local function BuildStatus(ctx, builder, unit)
-    local sec = builder:CollapsibleSection("status_icons", "Status icons", 724, false)
+    local sec = builder:CollapsibleSection("status_icons", "Status icons", 684, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local leftX = 14
     local topGap = 28
@@ -49,14 +49,15 @@ local function BuildStatus(ctx, builder, unit)
         return key
     end
     local tabFrames = {}
-    local basicTab, advancedTab = Shared.MakeTabFrames(sec, -104, sectionW, tabFrames, "basic", "advanced")
+    local basicTab, advancedTab = Shared.MakeTabFrames(sec, -64, sectionW, tabFrames, "basic", "advanced")
     local statusTabs = W.SegmentTabs(ctx, sec, {
-        label = "Status icon controls", values = STATUS_ICON_TAB_VALUES, width = statusTabW,
+        label = "", values = STATUS_ICON_TAB_VALUES, width = statusTabW,
         frames = tabFrames, defaultTab = "basic",
         get = CurrentStatusTab,
         set = function(value) M.unitStatusTabSelection[unit] = value or "basic" end,
-        x = 20, y = -50,
+        x = 20, y = -12,
     })
+    if statusTabs._msuf2Title then statusTabs._msuf2Title:Hide() end
     RegisterControl(statusTabs, ctx, "status.workspace_tab", "Status icon controls", "segment", "ephemeral")
     local selectedCard = W.ControlCard(basicTab, "Selected Indicator", nil, leftX - 2, -38, leftW + 16, 268)
     local previewCard = W.ControlCard(basicTab, "Status Preview", nil, rightX - 2, -38, rightW + 16, 214)
