@@ -167,7 +167,7 @@ local cases = {
     { input = "menu is off screen", status = "info", contains = "Menu and Assistant size help" },
     { input = "menu search not working", status = "info", contains = "Menu search help" },
     { input = "search results are wrong", status = "info", contains = "Menu search help" },
-    { input = "where is search", status = "info", contains = "Menu search help" },
+    { input = "where is search", status = "navigated", contains = "Done. Opened Search." },
     { input = "undo not working", status = "info", contains = "Undo and history help" },
     { input = "redo not working", status = "info", contains = "Undo and history help" },
     { input = "how do i undo a change", status = "info", contains = "Undo and history help" },
