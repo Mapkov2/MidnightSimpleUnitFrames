@@ -30,6 +30,26 @@ if type(ApplyGameplayColors) ~= "function" or type(ApplyAuraColors) ~= "function
 if type(ApplyPortraitColors) ~= "function" or type(ApplyClassPowerColors) ~= "function" then return end
 if type(AuraSharedDB) ~= "function" or type(SetAllPortraitRGB) ~= "function" then return end
 
+local function ParseClassPowerFullColorAliasArgs(text)
+    local normalized = tostring(text or ""):lower():gsub("[^%w]+", " ")
+    normalized = " " .. normalized:gsub("^%s+", ""):gsub("%s+$", "") .. " "
+
+    local data = A.GlobalColorSettingsRegistryData
+    for _, resource in ipairs(type(data) == "table" and data.CLASS_POWER_SLOT_RESOURCES or {}) do
+        for _, alias in ipairs(resource.aliases or {}) do
+            local phrase = tostring(alias or ""):lower():gsub("[^%w]+", " ")
+            phrase = phrase:gsub("^%s+", ""):gsub("%s+$", "")
+            if phrase ~= "" and normalized:find(" " .. phrase .. " ", 1, true) then
+                return { resourceToken = resource.token }
+            end
+        end
+    end
+
+    -- A generic request still belongs to this action, but the explicit input
+    -- contract will retain it as a safe resource-choice clarification.
+    return {}
+end
+
 Registry:RegisterAction({
     key = "reset_gameplay_colors",
     label = "Reset Gameplay Colors",
@@ -113,6 +133,13 @@ Registry:RegisterAction({
     type = "color",
     combatSafe = false,
     captureSnapshot = true,
+    aliases = {
+        "reset vengeance soul fragments full resource color",
+        "reset holy power full resource color",
+        "reset class resource full color", "reset class power full color",
+        "restore class resource full color",
+    },
+    parseAliasArgs = ParseClassPowerFullColorAliasArgs,
     run = function(args)
         local resourceToken = args and args.resourceToken
         if type(resourceToken) ~= "string" or resourceToken == "" then

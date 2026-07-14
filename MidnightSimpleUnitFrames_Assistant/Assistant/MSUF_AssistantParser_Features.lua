@@ -2505,7 +2505,7 @@ local function HasEditModeHUDControlIntent(text)
     return ContainsAny(text, FeaturesPhrases[261])
 end
 
-local function ParseEditModeHUDControl(text)
+local function ParseEditModeHUDControl(text, raw)
     local hasEditContext = HasEditModeContext(text)
     local previewWord = ContainsAny(text, FeaturesPhrases[262])
     local hasExplicitAuraPreview = ContainsAny(text, FeaturesPhrases[263]) and (hasEditContext or previewWord or ContainsAny(text, FeaturesPhrases[264]))
@@ -2565,6 +2565,11 @@ local function ParseEditModeHUDControl(text)
     if hasBackgroundOpacity then
         local number = FirstNumber(text)
         if number == nil and value ~= nil then number = value and 85 or 5 end
+        local rawText = tostring(raw or text or ""):lower()
+        local explicitPercent = rawText:find("%%") ~= nil
+            or rawText:find("%f[%a]percent%f[%A]") ~= nil
+            or rawText:find("%f[%a]prozent%f[%A]") ~= nil
+        if number ~= nil and (number > 1 or explicitPercent) then number = number / 100 end
         return EditModeAction("assistant.action.editMode.backgroundOpacity", { value = number }, "Set Edit Mode Background opacity")
     end
     if hasCDM and hasEditContext then
@@ -2573,7 +2578,7 @@ local function ParseEditModeHUDControl(text)
     return nil
 end
 
-local function ParseSupportWorkflow(text)
+local function ParseSupportWorkflow(text, raw)
     if ContainsAny(text, FeaturesPhrases[287]) then
         local action = Registry and Registry:GetAction("assistant_nomatch_clear")
         return action and {
@@ -2682,7 +2687,7 @@ local function ParseSupportWorkflow(text)
         } or nil
     end
 
-    local editModeControl = ParseEditModeHUDControl(text)
+    local editModeControl = ParseEditModeHUDControl(text, raw)
     if editModeControl then return editModeControl end
 
     if ContainsAny(text, FeaturesPhrases[319]) then
@@ -4035,7 +4040,7 @@ local function ParseLookupQuestion(text, raw)
         or ParseScopedHelp(text)
         or ParseDashboardPanelAction(text)
         or ParseOpen(text, raw)
-        or ParseSupportWorkflow(text)
+        or ParseSupportWorkflow(text, raw)
         or ParseMenuWindowAction(text)
         or {
             kind = "unknown",

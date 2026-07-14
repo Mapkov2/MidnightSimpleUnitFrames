@@ -65,6 +65,11 @@ Registry:RegisterAction({
     type = "enable",
     combatSafe = false,
     captureSnapshot = true,
+    aliases = {
+        "enable focus and focus target frames", "activate focus target frame",
+        "turn on both focus frames",
+    },
+    aliasNoArgs = true,
     run = function()
         local focus = UnitDB("focus")
         if type(focus) ~= "table" then return false, "Focus frame settings are not available." end
@@ -85,6 +90,11 @@ Registry:RegisterAction({
     type = "enable",
     combatSafe = false,
     captureSnapshot = true,
+    aliases = {
+        "restore the player power display", "bring back the player power bar",
+        "re-enable player power bar",
+    },
+    aliasNoArgs = true,
     run = function()
         local conf = UnitDB("player")
         if type(conf) ~= "table" then return false, "Player power settings are not available." end
