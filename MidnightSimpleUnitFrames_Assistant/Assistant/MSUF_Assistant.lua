@@ -2888,6 +2888,11 @@ local PENDING_GROUP_INDICATOR_KEY_PARTS = {
     "targetedspell", "targetedspells",
 }
 
+local PENDING_GROUP_EFFECT_KEY_PARTS = {
+    "dispeloverlay",
+    "debuffstripe",
+}
+
 local function PendingGroupSettingPage(setting)
     local attr = tostring(setting and setting.attribute or "")
     local key = NormalizeReply(setting and setting.key or ""):gsub("%s+", "")
@@ -6305,11 +6310,6 @@ end
 local GROUP_NAME_SHORTENING_FIELDS = {
     "fontOverride", "nameShortenEnabled", "nameMaxChars", "nameClipSide", "nameNoEllipsis",
     "nameShortenOverride", "_msufGFNameTruncationOverride",
-}
-
-local PENDING_GROUP_EFFECT_KEY_PARTS = {
-    "dispeloverlay",
-    "debuffstripe",
 }
 
 local UNIT_NAME_SHORTENING_FIELDS = {

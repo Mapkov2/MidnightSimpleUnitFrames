@@ -136,8 +136,17 @@ local function ScopeAdjustedTextForSetting(setting, text)
     return adjusted
 end
 
+function P.HasExactPhraseInList(text, phrases)
+    for i = 1, #(phrases or {}) do
+        if HasPhrase(text, phrases[i]) then return true end
+    end
+    return false
+end
+
 local function HasAllScopeIntent(text)
-    return ContainsAny(text, RegistryPhrases[2])
+    -- Bulk scope is a write-safety boundary. A typo-tolerant fuzzy match must
+    -- never turn an unrelated noun into permission to change every scope.
+    return P.HasExactPhraseInList(text, RegistryPhrases[2])
 end
 
 P.ExplicitAuraFilterScope = P.ExplicitAuraFilterScope or function(text)
@@ -3637,7 +3646,7 @@ end
 
 P.GroupShortcutScopes = function(text)
     local scopes, concrete = GroupAvailabilityScopes(text)
-    local allGroups = HasAllScopeIntent(text) or ContainsAny(text, RegistryPhrases[224])
+    local allGroups = HasAllScopeIntent(text) or P.HasExactPhraseInList(text, RegistryPhrases[224])
     return scopes, concrete or allGroups
 end
 
@@ -3835,6 +3844,17 @@ P.ParseGroupColumnLayoutShortcut = function(text)
     if ContainsAny(text, RegistryPhrases[251]) then return nil end
     if not ContainsAny(text, RegistryPhrases[252]) then return nil end
     if not ContainsAny(text, RegistryPhrases[253]) then return nil end
+    local explicitUnits, explicitGroups = ExplicitScopes(text)
+    if #explicitUnits > 0 and #explicitGroups == 0 then
+        -- A visible Group page must not make an explicit Boss/Target/etc.
+        -- request inherit the current Party scope.
+        return {
+            kind = "answer",
+            status = "ambiguous",
+            text = "I found multiple matches for that layout wording, but MSUF does not expose a columns setting for Boss or ordinary unit frames. Did you mean Boss Frame spacing/size, or Group Frames > Layout > Max Columns? I did not change anything.",
+            summary = "Separates unit-frame layout from group-frame column controls without inheriting the visible Party scope.",
+        }
+    end
     local value = FirstNumber(text)
     if value == nil then
         if HasPhrase(text, "one") then value = 1

@@ -41,9 +41,9 @@ Data.PROFILE_PARSER = {
     GROUP_COPY_SCOPE_DEFAULTS = {
         general = true,
         health = true,
+        dispel = true,
         text = true,
         font = true,
-        border = true,
         range = true,
         indicators = true,
         auras = true,
@@ -54,10 +54,10 @@ Data.PROFILE_PARSER = {
 
     GROUP_COPY_SCOPE_SPECS = {
         { key = "general", aliases = { "general", "basics", "basic settings", "layout", "position", "positioning", "placement", "size", "width", "height", "spacing", "growth", "sort", "sorting", "columns", "raid groups" } },
-        { key = "health", aliases = { "health", "health bars", "bars", "power", "power bar", "power text", "bar texture", "dispel overlay" } },
+        { key = "health", aliases = { "health", "health bars", "bars", "power", "power bar", "power text", "bar texture", "opacity", "alpha", "transparency", "background opacity" } },
+        { key = "dispel", aliases = { "dispel overlay", "group dispel overlay", "party dispel overlay", "raid dispel overlay" } },
         { key = "text", aliases = { "text", "name", "health text", "hp text", "text and name" } },
         { key = "font", aliases = { "font", "fonts", "font override", "font color", "font outline" } },
-        { key = "border", aliases = { "background", "opacity", "alpha", "transparency", "background opacity" } },
         { key = "range", aliases = { "range", "range fade", "offline alpha" } },
         { key = "indicators", aliases = { "indicators", "status icons", "status icon", "role icon", "leader icon", "assist icon", "raid marker", "ready check", "summon icon" } },
         { key = "auras", aliases = { "auras", "aura", "buffs", "buff", "debuffs", "debuff" } },

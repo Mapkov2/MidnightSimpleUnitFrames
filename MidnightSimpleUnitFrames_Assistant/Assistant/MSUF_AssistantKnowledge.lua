@@ -121,8 +121,8 @@ local PAGE_CATEGORY_TERMS = {
     classpower = { "class resource", "class power", "resource", "detached power", "alternative mana", "player hp" },
     gameplay = { "gameplay", "combat timer", "combat enter", "combat leave", "combat state", "target sound", "totem", "crosshair" },
     profiles = { "profile", "profiles" },
-    gf_layout = { "group", "layout", "party", "raid", "mythic", "health", "resource", "power", "text", "effects", "stripe", "range" },
-    gf_bars = { "group", "dispel", "overlay" },
+    gf_layout = { "group", "layout", "party", "raid", "mythic", "health", "resource", "power", "text", "range" },
+    gf_bars = { "group", "dispel", "overlay", "effects", "stripe", "debuff stripe" },
     gf_indicators = { "indicator", "status", "corner" },
     gf_auras = { "group aura", "aura" },
 }

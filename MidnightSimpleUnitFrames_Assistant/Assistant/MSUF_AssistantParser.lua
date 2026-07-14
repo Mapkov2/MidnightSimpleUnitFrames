@@ -1227,7 +1227,16 @@ local function ParseGroupLayoutNumberFastShortcut(normalized)
     if value == nil then return nil end
 
     local groups = DetectGroups(normalized)
-    if #groups == 0 and ContainsAny(normalized, P.RootPhrases[172]) then
+    local allGroups = false
+    for i = 1, #(P.RootPhrases[172] or {}) do
+        if HasPhrase(normalized, P.RootPhrases[172][i]) then
+            allGroups = true
+            break
+        end
+    end
+    -- Fuzzy matching must not turn unrelated scopes such as "boss frames"
+    -- into "all group frames" and silently default the mutation to Party.
+    if #groups == 0 and allGroups then
         groups = { "party", "raid", "mythicraid" }
     end
     if #groups == 0 then return nil end
@@ -3116,6 +3125,11 @@ local function ParseGroupDispelOverlayFastShortcut(normalized)
     if not ContainsAny(normalized, P.RootPhrases[441]) then
         return nil
     end
+    -- A named copy category is still a copy request. Do not let the broad
+    -- overlay fast path reinterpret "copy party dispel overlay to raid" as
+    -- two enable-setting mutations before the action pipeline can preserve
+    -- the requested source, target, transaction, and undo semantics.
+    if P.ParseGroupCopy and P.ParseGroupCopy(normalized) then return nil end
     -- Page-navigation requests must reach ParseOpen; "open" is not an enable verb.
     if normalized:match("^open%s+") then return nil end
     if ContainsAny(normalized, P.RootPhrases[442]) then return nil end

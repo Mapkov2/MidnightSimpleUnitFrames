@@ -1216,11 +1216,11 @@ local GROUP_COPY_TARGETS = {
   { "raid", "Raid" },
   { "mythicraid", "Mythic Raid" },
 }
-local GROUP_PAGE_COMPONENT = { gf_bars = "bars", gf_auras = "auras", gf_indicators = "status" }
+local GROUP_PAGE_COMPONENT = { gf_bars = "dispel", gf_auras = "auras", gf_indicators = "status" }
 local GROUP_PAGE_SECTION = { gf_auras = "buffs", gf_indicators = "sicons" }
 local GROUP_PAGE_BUTTONS = {
   { "Layout", 20, 66, "gf_layout", "layout" },
-  { "Health & Text", 96, 104, "gf_bars", "bars" },
+  { "Dispel Overlay", 96, 104, "gf_bars", "dispel" },
   { "Auras", 210, 68, "gf_auras", "auras" },
   { "Status & Indicators", 288, 126, "gf_indicators", "status" },
 }
@@ -1348,9 +1348,16 @@ end
 
 local function GroupSectionForPage(pageKey, component)
   if pageKey == "gf_bars" then
+    if component == "stripe" or component == "dstripe" then return "dstripe" end
+    return "dispel"
+  end
+  if pageKey == "gf_layout" then
     if component == "power" then return "power" end
     if component == "name" or component == "hp" or component == "text" then return "text" end
-    return "bars"
+    if component == "range" then return "range" end
+    if component == "bars" then return "general" end
+    if component == "border" or component == "alpha" or component == "transparency" then return "transparency" end
+    if component == "layout" then return "layout_advanced" end
   end
   return GROUP_PAGE_SECTION[pageKey] or "layout"
 end
