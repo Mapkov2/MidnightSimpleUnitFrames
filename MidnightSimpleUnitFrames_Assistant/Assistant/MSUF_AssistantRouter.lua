@@ -9836,7 +9836,21 @@ function R.LooksLikeRegistrySettingDecisionQuestion(text)
     local norm = R.Normalize(text)
     if norm == "" then return false end
     if A.RouterLooksLikeExplicitSearchRequest and A.RouterLooksLikeExplicitSearchRequest(norm) then return false end
-    if R.NaturalRegistryDecisionSubject(norm) then return true end
+    local naturalSubject = R.NaturalRegistryDecisionSubject(norm)
+    if naturalSubject then
+        -- Bare pronouns need conversational/result context; they are not an
+        -- exact setting identity. Let the decision-guidance lane handle them
+        -- instead of allowing fuzzy registry search to choose an unrelated
+        -- control such as the first setting on a page.
+        if naturalSubject == "this" or naturalSubject == "that" or naturalSubject == "it"
+            or naturalSubject == "this setting" or naturalSubject == "that setting"
+            or naturalSubject == "this option" or naturalSubject == "that option"
+            or naturalSubject == "the setting" or naturalSubject == "the option"
+        then
+            return false
+        end
+        return true
+    end
     if not R.ContainsAny(norm, {
         "should i set", "should i change", "should i make", "should i adjust",
         "should i turn on", "should i turn off", "should i enable", "should i disable",
