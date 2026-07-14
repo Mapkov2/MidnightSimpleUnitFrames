@@ -23,8 +23,8 @@ LOCALE_TOC = REPO_ROOT / "MidnightSimpleUnitFrames_Locales" / "MidnightSimpleUni
 ASSISTANT_TOC = REPO_ROOT / "MidnightSimpleUnitFrames_Assistant" / "MidnightSimpleUnitFrames_Assistant.toc"
 ASSISTANT_ROOT = ASSISTANT_TOC.parent
 ASSISTANT_MANIFEST = ASSISTANT_ROOT / "MSUF_AssistantRuntime.xml"
-ASSISTANT_SCRIPT_COUNT = 324
-ASSISTANT_ORDER_SHA256 = "5B302939139B2F233BA2907FB383C45E8CE71587FA7157EF23ED063CB1E17754"
+ASSISTANT_SCRIPT_COUNT = 328
+ASSISTANT_ORDER_SHA256 = "6D93B5BB79D3EDAFDF14D2838216E6ACEE814645ED37AFDEFB28863A9F232A39"
 LUA_MAIN_CHUNK_LOCAL_BUDGETS = {
     # WoW Lua rejects a function at 200 locals. Keep enough structural reserve
     # that ordinary Auras3 work cannot drift back to the compiler cliff.
@@ -229,11 +229,14 @@ def check_assistant_runtime_contracts() -> None:
 
     scripts = [normalize_ref(value) for value in re.findall(r'<Script\s+file="([^"]+)"', read(ASSISTANT_MANIFEST))]
     if len(scripts) != ASSISTANT_SCRIPT_COUNT or len(set(scripts)) != len(scripts):
-        raise CheckError(f"Assistant V1 manifest must contain exactly {ASSISTANT_SCRIPT_COUNT} unique scripts, got {len(scripts)}")
+        raise CheckError(
+            f"Assistant V1 manifest must contain exactly {ASSISTANT_SCRIPT_COUNT} unique scripts, got {len(scripts)}"
+        )
     order_hash = hashlib.sha256("\n".join(scripts).encode("utf-8")).hexdigest().upper()
     if order_hash != ASSISTANT_ORDER_SHA256:
         raise CheckError(
-            f"Assistant V1 manifest inventory/load-order hash mismatch: expected {ASSISTANT_ORDER_SHA256}, got {order_hash}"
+            "Assistant V1 manifest inventory/load-order hash mismatch: "
+            f"expected {ASSISTANT_ORDER_SHA256}, got {order_hash}"
         )
     assistant_root_resolved = ASSISTANT_ROOT.resolve()
     for script in scripts:
