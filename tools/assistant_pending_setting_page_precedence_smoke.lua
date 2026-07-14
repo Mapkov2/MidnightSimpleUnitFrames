@@ -41,4 +41,28 @@ assertPage("classpower", {
     category = "Class Resources / Layout",
 }, "ordinary classPower setting stays on classpower")
 
+assertPage("gf_bars", {
+    key = "gf_party.dispelOverlayAlpha",
+    attribute = "dispelOverlayAlpha",
+    frameType = "group",
+}, "group dispel overlay routes to group bars")
+
+assertPage("gf_bars", {
+    key = "gf_raid.debuffStripeEnabled",
+    attribute = "debuffStripeEnabled",
+    frameType = "group",
+}, "group debuff stripe routes to group bars")
+
+assertPage("gf_indicators", {
+    key = "gf_party.roleIconEnabled",
+    attribute = "roleIconEnabled",
+    frameType = "group",
+}, "group indicator routing still takes precedence")
+
+assertPage("gf_layout", {
+    key = "gf_party.width",
+    attribute = "width",
+    frameType = "group",
+}, "ordinary group layout routing remains unchanged")
+
 print("assistant_pending_setting_page_precedence_smoke: ok")

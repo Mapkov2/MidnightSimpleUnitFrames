@@ -30,7 +30,7 @@ Check(preserved == "Existing menu help.", "existing Menu help must be preserved 
 local sliderHelp = ResolveHelp({ kind = "slider", label = "Opacity", pageKey = "gf_bars", min = 0,
     max = 1, step = 0.05 }, { description = "Controls frame opacity" }, nil, "direct")
 Check(sliderHelp:find("Controls frame opacity.", 1, true), "registry description fallback")
-Check(sliderHelp:find("Group Frames > Bars", 1, true), "human page fallback")
+Check(sliderHelp:find("Group Frames > Dispel Overlay", 1, true), "human page fallback")
 Check(sliderHelp:find("Allowed range: 0 to 1 in increments of 0.05.", 1, true), "numeric constraints")
 
 local enumValues = {}

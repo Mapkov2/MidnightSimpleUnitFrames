@@ -268,8 +268,14 @@ local function pageContextForItem(item)
         if unit ~= "" and unit ~= "global" then return "uf_" .. unit end
     end
     if frameType == "group" or key:find("^gf_") then
-        if category:find("indicator", 1, true) or key:lower():find("icon", 1, true) then return "gf_indicators" end
-        if category:find("text", 1, true) or key:lower():find("texture", 1, true) or key:lower():find("bar", 1, true) then return "gf_bars" end
+        local keyLower = key:lower():gsub("%s+", "")
+        local attrLower = tostring(item and item.attribute or ""):lower():gsub("%s+", "")
+        if category:find("indicator", 1, true) or keyLower:find("icon", 1, true) then return "gf_indicators" end
+        if keyLower:find("dispeloverlay", 1, true) or attrLower:find("dispeloverlay", 1, true)
+            or keyLower:find("debuffstripe", 1, true) or attrLower:find("debuffstripe", 1, true)
+        then
+            return "gf_bars"
+        end
         return "gf_layout"
     end
     if frameType == "castbar" then return "opt_castbar" end
@@ -364,7 +370,7 @@ end
 local answerProbes = {
     { "where can I change raid frame width", "Group frame layout help" },
     { "where can I hide offline players in raid frames", "Group frame layout help" },
-    { "where can I change party health text", "Group Health & Text help" },
+    { "where can I change party health text", "Group Layout" },
     { "where can I change group frame status icons", "Group Status & Indicators help" },
     { "where can I change target health text", "Unit frame text help" },
     { "where can I move target castbar text", "Cast Bar text help" },
@@ -376,7 +382,7 @@ local answerProbes = {
     { "explain raid frame player count scaling", "Group frame scaling breakpoints" },
     { "where is detached power bar offset", "Detached Power Bar help" },
     { "where do I change target powerbar offset", "Power Bar offset help" },
-    { "where do I hide healer power bars in raid", "Group role Power Bar help" },
+    { "where do I hide healer power bars in raid", "Group role Resource Bar help" },
     { "where is group frame role sorting", "Group role sorting help" },
 }
 

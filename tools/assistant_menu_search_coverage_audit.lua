@@ -34,6 +34,7 @@ local function loadSearch(name)
 end
 
 loadMenu("MSUF_Menu2_Navigation.lua")
+M.pages = M.pages or {}
 
 for _, file in ipairs({
     "MSUF_Menu2_Search_Data.lua",
@@ -44,6 +45,8 @@ for _, file in ipairs({
     "MSUF_Menu2_Search_FAQ_Catalog_02.lua",
     "MSUF_Menu2_Search_FAQ_Catalog_03.lua",
     "MSUF_Menu2_Search_FAQ_Catalog_04.lua",
+    "MSUF_Menu2_Search_Text.lua",
+    "MSUF_Menu2_Search_IndexQuery.lua",
 }) do
     loadSearch(file)
 end
@@ -177,6 +180,41 @@ for _, probe in ipairs(keywordProbes) do
         end
     end
     if not found then fail("page keyword probe", tostring(probe.page) .. " via " .. tostring(probe.query)) end
+end
+
+local mainMenuSearch = M.Search and M.Search._CoreAPI and M.Search._CoreAPI.SearchPages
+if type(mainMenuSearch) ~= "function" then
+    fail("main-menu exact search", "SearchPages API is missing")
+else
+    local exactSettingProbes = {
+        { key = "gf_party.width", page = "gf_layout", area = "layout" },
+        { key = "gf_party.smoothFill", page = "gf_layout", area = "health" },
+        { key = "gf_party.powerBarEnabled", page = "gf_layout", area = "resource" },
+        { key = "gf_party.hpTextMode", page = "gf_layout", area = "text" },
+        { key = "gf_party.rangeFadeEnabled", page = "gf_layout", area = "range" },
+        { key = "gf_party.dispelOverlayAlpha", page = "gf_bars", area = "dispel overlay" },
+        { key = "gf_raid.debuffStripeEnabled", page = "gf_bars", area = "debuff stripe" },
+        { key = "gf_party.roleIcon", page = "gf_indicators", area = "indicator" },
+    }
+    for _, probe in ipairs(exactSettingProbes) do
+        local setting = A.Registry:GetSetting(probe.key)
+        if not setting then
+            fail("main-menu exact search setting", probe.key)
+        else
+            local exactRecord
+            for _, record in ipairs(mainMenuSearch(probe.key) or {}) do
+                if record._msufAssistantSettingKey == probe.key then
+                    exactRecord = record
+                    break
+                end
+            end
+            if not exactRecord then
+                fail("main-menu exact search result", probe.key .. " (" .. probe.area .. ")")
+            elseif exactRecord.key ~= probe.page then
+                fail("main-menu exact search page", probe.key .. " expected " .. probe.page .. ", got " .. tostring(exactRecord.key))
+            end
+        end
+    end
 end
 
 if #failures > 0 then

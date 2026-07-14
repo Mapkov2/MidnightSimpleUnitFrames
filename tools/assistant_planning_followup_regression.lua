@@ -95,10 +95,10 @@ local guidance = A.HandleInput("recommend settings for healer")
 assert(status(guidance) == "info", "healer guidance was not read-only: " .. tostring(status(guidance)))
 assert(contains(guidance, "Role setup guidance"), "healer guidance title missing")
 assert(contains(guidance, "Recommended order:"), "healer guidance did not show an ordered plan")
-assert(contains(guidance, "1. Open Group Health & Text"), "healer first plan item is wrong")
+assert(contains(guidance, "1. Open Group Layout"), "healer first plan item is wrong")
 assert(type(A.lastAssistantPlanningContext) == "table", "healer plan context was not persisted")
-assert(type(A.lastAssistantPlanningContext.items) == "table" and #A.lastAssistantPlanningContext.items == 4,
-    "healer plan did not persist four structured items")
+assert(type(A.lastAssistantPlanningContext.items) == "table" and #A.lastAssistantPlanningContext.items == 5,
+    "healer plan did not persist five structured items")
 local profileAfter = profileSnapshot()
 assert(deepEqual(profileBefore, profileAfter), "healer guidance changed profile data: " .. tostring(firstDiff(profileBefore, profileAfter)))
 
@@ -106,22 +106,23 @@ for _, prompt in ipairs({ "which should I do first?", "which one first?" }) do
     local before = profileSnapshot()
     local answer = A.HandleInput(prompt)
     assert(status(answer) == "info", prompt .. " was not read-only: " .. tostring(status(answer)))
-    assert(contains(answer, "Start with 1. Open Group Health & Text"), prompt .. " lost the first plan item")
-    assert(contains(answer, "health, text, and range information"), prompt .. " lost the first-item reason")
+    assert(contains(answer, "Start with 1. Open Group Layout"), prompt .. " lost the first plan item")
+    assert(contains(answer, "health, text, resource, and range readability"), prompt .. " lost the first-item reason")
+    assert(not contains(answer, "resource, stripe"), prompt .. " assigned Debuff Stripe to Group Layout")
     assert(deepEqual(before, profileSnapshot()), prompt .. " changed profile data")
 end
 
 local beforeWhy = profileSnapshot()
 local why = A.HandleInput("why that recommendation?")
 assert(status(why) == "info", "recommendation explanation was not read-only")
-assert(contains(why, "I recommend 1. Open Group Health & Text first because"), "recommendation explanation lost its referent")
+assert(contains(why, "I recommend 1. Open Group Layout first because"), "recommendation explanation lost its referent")
 assert(contains(why, "I did not change a setting"), "recommendation explanation omitted the no-change contract")
 assert(deepEqual(beforeWhy, profileSnapshot()), "recommendation explanation changed profile data")
 
 local beforeOpen = profileSnapshot()
 local opened = A.HandleInput("open the first one")
 assert(status(opened) == "navigated", "opening the first plan item did not report navigation: " .. tostring(status(opened)) .. " / " .. tostring(opened and opened.text))
-assert(M.activeKey == "gf_bars", "opening the first healer item did not navigate to Group Health & Text: " .. tostring(M.activeKey))
+assert(M.activeKey == "gf_layout", "opening the first healer item did not navigate to Group Layout: " .. tostring(M.activeKey))
 assert(deepEqual(beforeOpen, profileSnapshot()), "opening a plan item changed profile data")
 
 -- Every recommendation family keeps the same structured follow-up contract,
@@ -129,7 +130,7 @@ assert(deepEqual(beforeOpen, profileSnapshot()), "opening a plan item changed pr
 local planningFamilies = {
     { prompt = "rogue ui setup", title = "Rogue UI guidance", first = "Open Class Resources" },
     { prompt = "mythic plus ui setup", title = "Content setup guidance", first = "Open Cast Bars" },
-    { prompt = "healer mythic plus setup", title = "Combined setup guidance", first = "Open Group Health & Text" },
+    { prompt = "healer mythic plus setup", title = "Combined setup guidance", first = "Open Group Layout" },
 }
 for _, family in ipairs(planningFamilies) do
     resetConversation()
@@ -375,7 +376,7 @@ assert(executions[1] == 0 and executions[2] == 2 and executions[3] == 1,
     "pure exclusion executed a choice: " .. table.concat(executions, ","))
 
 print(string.format(
-    "assistant_planning_followup_regression: ok rolePlanItems=4 planningFamilies=%d naturalDecisions=%d commandControls=4 exclusions=3 versionReads=1",
+    "assistant_planning_followup_regression: ok rolePlanItems=5 planningFamilies=%d naturalDecisions=%d commandControls=4 exclusions=3 versionReads=1",
     #planningFamilies,
     #naturalDecisionQuestions
 ))

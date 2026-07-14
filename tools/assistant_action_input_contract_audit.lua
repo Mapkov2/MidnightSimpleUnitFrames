@@ -235,6 +235,9 @@ Invalid("copy_unit", { source = "player", targets = { "party" } }, "allowed valu
 Invalid("copy_unit", { source = "player" }, "requires input field")
 Valid("copy_group", { target = "raid" }, function(out) assert(out.target == "raid") end)
 Valid("copy_group", { targets = { "raid", "mythic raid" } }, function(out) assert(out.targets[2] == "mythicraid") end)
+Valid("copy_group", { target = "raid", scopes = { health = true, dispel = false } }, function(out)
+    assert(out.scopes.health == true and out.scopes.dispel == false)
+end)
 Invalid("copy_group", {}, "requires one of")
 
 Valid("set_global_font_color", { r = "0.1", g = 0.2, b = 0.3, label = "custom" }, function(out)
@@ -309,6 +312,11 @@ Valid("set_menu_selector_state", {
     selector = "unit_copy_scope", command = "select all", categories = { "text", "portrait" },
 }, function(out)
     assert(out.command == "selectall" and out.categories[2] == "portrait")
+end)
+Valid("set_menu_selector_state", {
+    selector = "group_copy_scope", command = "only", categories = { "health", "dispel" },
+}, function(out)
+    assert(out.command == "only" and out.categories[2] == "dispel")
 end)
 Invalid("set_menu_selector_state", { selector = "unknown_selector" }, "allowed value")
 Invalid("set_menu_selector_state", { selector = "unit_text", arbitrary = "value" }, "unknown input field")
