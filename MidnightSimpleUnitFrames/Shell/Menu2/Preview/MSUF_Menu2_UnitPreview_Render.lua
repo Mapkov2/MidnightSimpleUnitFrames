@@ -883,23 +883,53 @@ function Preview.Refresh(box, reason)
     if not (runtimeSpec and runtimeSpec.prediction) then healPredShown = R.PreviewHealPredictionEnabled(conf, g) end
     local absorbShown = runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.absorb == true
     if not (runtimeSpec and runtimeSpec.prediction) then absorbShown = R.PreviewAbsorbBarEnabled(conf, g, key) end
+    local healAbsorbShown = runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.healAbsorb == true
+    if not (runtimeSpec and runtimeSpec.prediction) then
+        local enabled = g and g.healAbsorbEnabled
+        if conf and conf.hlOverride == true and conf.healAbsorbEnabled ~= nil then enabled = conf.healAbsorbEnabled end
+        healAbsorbShown = absorbShown and enabled ~= false
+    end
     local healPredFrac = ((healPredMode == 3) and min(0.14, max(0.02, 1 - hpFrac))) or 0.14
     if healPredShown then
-        local r = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.healR) or tonumber(g and g.healPredColorR) or 0
-        local gg = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.healG) or tonumber(g and g.healPredColorG) or 1
-        local b = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.healB) or tonumber(g and g.healPredColorB) or 0.4
-        local a = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.healA) or 0.55
+        local r = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.healR) or tonumber(g and g.healPredictionColorR) or 0
+        local gg = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.healG) or tonumber(g and g.healPredictionColorG) or 1
+        local b = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.healB) or tonumber(g and g.healPredictionColorB) or 0
+        local a = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.healA) or tonumber(g and g.healPredictionColorA) or 0.45
         mock.healPred:SetVertexColor(r, gg, b, a)
         R.LayoutUnitPreviewOverlay(mock.healPred, mock.hpBG, mock.hp, healPredMode, healPredFrac, hpReverse, nil, hpAreaW)
     else
         mock.healPred:Hide()
     end
     if absorbShown then
+        local r = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.absorbR) or tonumber(g and g.absorbBarColorR) or 1
+        local gg = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.absorbG) or tonumber(g and g.absorbBarColorG) or 1
+        local b = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.absorbB) or tonumber(g and g.absorbBarColorB) or 1
+        local a = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.absorbA) or tonumber(g and g.absorbBarOpacity) or tonumber(g and g.absorbBarColorA) or 0.75
+        mock.absorb:SetVertexColor(r, gg, b, a)
         local absorbAnchor = nil
         if healPredShown and mock.healPred:IsShown() and (healPredMode == 3 or healPredMode == 4) and (absorbMode == 3 or absorbMode == 4) then absorbAnchor = mock.healPred end
         R.LayoutUnitPreviewOverlay(mock.absorb, mock.hpBG, mock.hp, absorbMode, 0.10, hpReverse, absorbAnchor, hpAreaW)
     else
         mock.absorb:Hide()
+    end
+    if healAbsorbShown then
+        local r = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.healAbsorbR) or tonumber(g and g.healAbsorbBarColorR) or 0.7
+        local gg = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.healAbsorbG) or tonumber(g and g.healAbsorbBarColorG) or 0
+        local b = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.healAbsorbB) or tonumber(g and g.healAbsorbBarColorB) or 0
+        local a = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.healAbsorbA) or tonumber(g and g.healAbsorbBarOpacity) or tonumber(g and g.healAbsorbBarColorA) or 1
+        mock.healAbsorb:ClearAllPoints()
+        if hpReverse then
+            mock.healAbsorb:SetPoint("TOPLEFT", mock.hp, "TOPLEFT", 0, 0)
+            mock.healAbsorb:SetPoint("BOTTOMLEFT", mock.hp, "BOTTOMLEFT", 0, 0)
+        else
+            mock.healAbsorb:SetPoint("TOPRIGHT", mock.hp, "TOPRIGHT", 0, 0)
+            mock.healAbsorb:SetPoint("BOTTOMRIGHT", mock.hp, "BOTTOMRIGHT", 0, 0)
+        end
+        mock.healAbsorb:SetWidth(max(1, min(mock.hp:GetWidth() or hpAreaW, hpAreaW * 0.07)))
+        mock.healAbsorb:SetVertexColor(r, gg, b, a)
+        mock.healAbsorb:Show()
+    else
+        mock.healAbsorb:Hide()
     end
     local hr, hg, hb
     if runtimeSpec and runtimeSpec.health

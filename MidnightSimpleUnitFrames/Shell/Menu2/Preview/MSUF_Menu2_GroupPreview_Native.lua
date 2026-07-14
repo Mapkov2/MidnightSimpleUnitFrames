@@ -1306,6 +1306,13 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     mock._absorb:SetValue(1)
     mock._absorb:SetStatusBarTexture(R.WHITE8X8)
     mock._absorb:SetStatusBarColor(0.55, 0.70, 1, 0.55)
+    mock._healAbsorb = CreateFrame("StatusBar", nil, mock._health)
+    mock._healAbsorb:SetMinMaxValues(0, 1)
+    mock._healAbsorb:SetValue(0.07)
+    mock._healAbsorb:SetStatusBarTexture(R.WHITE8X8)
+    mock._healAbsorb:SetStatusBarColor(0.70, 0, 0, 1)
+    if mock._health.SetClipsChildren then mock._health:SetClipsChildren(true) end
+    if mock._healAbsorb.SetFrameLevel and mock._health.GetFrameLevel then mock._healAbsorb:SetFrameLevel((mock._health:GetFrameLevel() or 1) + 3) end
     mock._power = CreateFrame("StatusBar", nil, mock)
     mock._power:SetMinMaxValues(0, 1)
     mock._power:SetValue(1)
