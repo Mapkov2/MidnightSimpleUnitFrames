@@ -15,6 +15,7 @@ local WHITE = C and C.WHITE or "Interface\\Buttons\\WHITE8X8"
 local SCALE_100 = C and C.SCALE_100
 local SetBarSmoothing = C and C.SetBarSmoothing
 local ApplyHealthStatusColor = C and C.ApplyHealthStatusColor
+local ApplyBarGradient = C and C.ApplyBarGradient
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local ExportPublic = MSUF.ExportPublic or function(name, value)
   _G[name] = value
@@ -171,6 +172,7 @@ function Health.Apply(frame, spec)
   frame.hpBar._msufHealthMaxReady = nil
   frame.hpBar._msufHealthPercentValue = nil
   if SetBarSmoothing then SetBarSmoothing(frame.hpBar, h and h.smooth == true) end
+  if ApplyBarGradient then ApplyBarGradient(frame, frame.hpBar, h and h.barGradient, "hpGradients") end
   SetColor(frame, true)
   ApplyRuntimeColor(frame, "MSUF_COLOR_CHANGE", frame.unit)
 end

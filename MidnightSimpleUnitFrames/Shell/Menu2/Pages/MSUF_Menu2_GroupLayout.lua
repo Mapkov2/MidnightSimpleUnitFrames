@@ -13,6 +13,7 @@ local min = math.min
 local VT = M.ValueTextList
 local SCOPE_VALUES, GROWTH_VALUES, BLIZZARD_FALLBACK_VALUES, SORT_MODES, GF_ANCHOR_TO, GF_ANCHOR_POINTS = M.PickDefaults(GP, [[SCOPE_VALUES GROWTH_VALUES BLIZZARD_FALLBACK_VALUES SORT_MODES GF_ANCHOR_TO GF_ANCHOR_POINTS]])
 local GF, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, ScopeDropdown, ScopeSlider, BuildGrowthDirectionTiles, BuildRoleOrderRows, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, TrackSectionRefresh, OnOffBadge, BadgeNumber, OptionText, CreateSectionNotice, ControlMeta, RegisterControl = M.Pick(GP, [[GF Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle ScopeDropdown ScopeSlider BuildGrowthDirectionTiles BuildRoleOrderRows SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus TrackSectionRefresh OnOffBadge BadgeNumber OptionText CreateSectionNotice ControlMeta RegisterControl]])
+local SIMPLE_TEXTURES = GP.SIMPLE_TEXTURES or function() return {} end
 SetSectionBadgesAndStatus = SetSectionBadgesAndStatus or M.Noop
 OnOffBadge = OnOffBadge or M.OnOffBadge
 BadgeNumber = BadgeNumber or M.BadgeNumber
@@ -138,7 +139,58 @@ local function BuildGFLayout(ctx)
         end
     end
     TrackSectionRefresh(ctx, general, RefreshHideOfflineState)
-    local advancedLayout = b:CollapsibleSection("layout_advanced", "Geometry", 430, false)
+
+    -- Keep Group Frame opacity controls visually aligned with the Unitframe
+    -- Transparency section while binding them to the currently selected scope.
+    local transparency = b:CollapsibleSection("transparency", "Transparency", nil, false)
+    local transparencyW = transparency._msuf2Width or b.width or 720
+    local transparencyGap = 16
+    local transparencyLeftX = 20
+    local transparencyInnerW = max(320, transparencyW - 40)
+    local transparencyCardW = floor((transparencyInnerW - transparencyGap) / 2)
+    local transparencyRightX = transparencyLeftX + transparencyCardW + transparencyGap
+    local transparencyRightW = transparencyInnerW - transparencyCardW - transparencyGap
+    local transparencyCardH = 180
+    local _, transparencyCardY = W.NextRow(transparency, transparencyCardH)
+    local healthOpacityCard = W.ControlCard(transparency, "Health Bar", nil, transparencyLeftX, transparencyCardY, transparencyCardW, transparencyCardH)
+    local opacityOptionsCard = W.ControlCard(transparency, "Options", nil, transparencyRightX, transparencyCardY, transparencyRightW, transparencyCardH)
+    local function AddAlphaSlider(parent, width, spec)
+        local slider = W.Slider(parent, spec.label, 0, 1, 0.05, width)
+        M.UsePercentInput(slider)
+        M.BindNumberWidget(ctx, slider,
+            function() return Num(CurrentScope(), spec.key, spec.default) end,
+            function(value) Set(CurrentScope(), spec.key, tonumber(value) or spec.default, "visual") end,
+            spec.default,
+            ControlMeta(ctx, "field." .. tostring(spec.key)))
+        W.MoveWidget(slider, parent, 16, spec.y, width - 58, "LEFT")
+        return AttachGroupFocus(slider, "bars")
+    end
+    AddAlphaSlider(healthOpacityCard, transparencyCardW, { label = "Foreground", key = "hpBarAlpha", default = 1, y = -54 })
+    AddAlphaSlider(healthOpacityCard, transparencyCardW, { label = "Background", key = "hpBgAlpha", default = 0.85, y = -112 })
+    BindScopeToggle(ctx,
+        AttachGroupFocus(W.ToggleAt(opacityOptionsCard, "Keep text + portrait visible", 16, -62, transparencyRightW - 32), "bars"),
+        "alphaExcludeTextPortrait", false, "visual", "field.alphaExcludeTextPortrait")
+    if b.FinishSection then b:FinishSection(transparency, 48) end
+
+    local bars = b:CollapsibleSection("bars", "Bars", nil, false)
+    local barsW = bars._msuf2Width or b.width or 720
+    local barsGap = 16
+    local barsLeftX = 20
+    local barsInnerW = max(320, barsW - 40)
+    local barsLeftW = floor((barsInnerW - barsGap) / 2)
+    local barsRightX = barsLeftX + barsLeftW + barsGap
+    local barsRightW = barsInnerW - barsLeftW - barsGap
+    local _, barsCardY = W.NextRow(bars, 120)
+    local foregroundTextureCard = W.ControlCard(bars, "Foreground", nil, barsLeftX, barsCardY, barsLeftW, 120)
+    local backgroundTextureCard = W.ControlCard(bars, "Background", nil, barsRightX, barsCardY, barsRightW, 120)
+    local textureValues = SIMPLE_TEXTURES()
+    AttachGroupFocus(ScopeDropdown(ctx, foregroundTextureCard, "Texture", textureValues, min(290, barsLeftW - 32),
+        "barTexture", "", "visual", 16, -64, min(290, barsLeftW - 32), "LEFT", "field.barTexture"), "bars")
+    AttachGroupFocus(ScopeDropdown(ctx, backgroundTextureCard, "Texture", textureValues, min(290, barsRightW - 32),
+        "barBgTexture", "", "visual", 16, -64, min(290, barsRightW - 32), "LEFT", "field.barBgTexture"), "bars")
+    if b.FinishSection then b:FinishSection(bars, 36) end
+
+    local advancedLayout = b:CollapsibleSection("layout_advanced", "Geometry", 448, false)
     local advancedLayoutW = advancedLayout._msuf2Width or b.width or 720
     local layoutGap = 16
     local advancedLeftX = 20
@@ -148,7 +200,7 @@ local function BuildGFLayout(ctx)
     local advancedRightW = advancedInnerW - advancedLeftW - layoutGap
     local layoutSliderW = max(180, min(360, advancedLeftW - 64))
     local sizeCard = W.ControlCard(advancedLayout, "Size", nil, advancedLeftX, -38, advancedLeftW, 188)
-    local gridCard = W.ControlCard(advancedLayout, "Columns", nil, advancedLeftX, -244, advancedLeftW, 158)
+    local gridCard = W.ControlCard(advancedLayout, nil, nil, advancedLeftX, -244, advancedLeftW, 180)
     local growthCard = W.ControlCard(advancedLayout, "Growth", nil, advancedRightX, -38, advancedRightW, 188)
     local function LayoutSlider(parent, label, minValue, maxValue, step, key, defaultValue, y)
         return AttachGroupFocus(ScopeSlider(ctx, parent, label, minValue, maxValue, step, layoutSliderW, key, defaultValue, "rebuild", 16, y, layoutSliderW, "LEFT"), "layout")
@@ -157,9 +209,9 @@ local function BuildGFLayout(ctx)
     LayoutSlider(sizeCard, "Height", 16, 120, 1, "height", 40, -114)
     LayoutSlider(sizeCard, "Spacing", 0, 20, 1, "spacing", 1, -162)
     BuildGrowthDirectionTiles(ctx, growthCard, { x = 16, y = -68, tileWidth = 64, tileHeight = 64, gap = 8, advanceCursor = false })
-    LayoutSlider(gridCard, "Units per column", 1, 40, 1, "unitsPerColumn", 5, -62)
-    LayoutSlider(gridCard, "Max columns", 1, 8, 1, "maxColumns", 8, -108)
-    local preserveRaidGroups = BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(gridCard, "Preserve raid groups", 16, -138, advancedLeftW - 32), "layout"), "preserveRaidGroups", false, "rebuild")
+    LayoutSlider(gridCard, "Units per column", 1, 40, 1, "unitsPerColumn", 5, -28)
+    LayoutSlider(gridCard, "Max columns", 1, 8, 1, "maxColumns", 8, -86)
+    local preserveRaidGroups = BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(gridCard, "Preserve raid groups", 16, -144, advancedLeftW - 32), "layout"), "preserveRaidGroups", false, "rebuild")
     local function RefreshRaidGroupLayoutState()
         SetOptionEnabled(preserveRaidGroups, CurrentScope() ~= "party")
         SetSectionBadgesAndStatus(advancedLayout, {
@@ -398,4 +450,4 @@ local function BuildGFLayout(ctx)
     TrackSectionRefresh(ctx, anchor, RefreshAnchorHeader)
     FinalizeScopePage(ctx, b)
 end
-M.RegisterPage("gf_layout", { title = "MSUF Group Layout", build = BuildGFLayout, version = 19 })
+M.RegisterPage("gf_layout", { title = "MSUF Group Layout", build = BuildGFLayout, version = 20 })

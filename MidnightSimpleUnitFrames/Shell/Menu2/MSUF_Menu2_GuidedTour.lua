@@ -1553,10 +1553,38 @@ local function RegisterChromeControl(button, suffix, label, help)
     if type(M.RegisterMenuChromeControl) == "function" then
         M.RegisterMenuChromeControl(button, "guided-tour." .. suffix, Tr(label), "action", {
             actionKey = "guided_setup_step",
+            actionFixedArgs = { step = suffix },
             historyMode = "none",
             help = Tr(help),
         })
     end
+end
+
+function M.RunGuidedTourStep(step)
+    step = tostring(step or ""):lower()
+    if BlockedByCombat() or not TourIsActive() then return false, "guided_setup_inactive" end
+    if step == "back" then
+        BackCurrent()
+    elseif step == "keep" then
+        AdvanceCurrent("kept")
+    elseif step == "skip" then
+        local skipped = SkipCurrent()
+        if skipped and Runtime.warning then
+            return true, "confirmation_needed", Runtime.warning.text
+        end
+    elseif step == "next" then
+        if Runtime.manualAway then
+            Runtime.manualAway = nil
+            SelectExpectedPage(CurrentStage())
+        else
+            AdvanceCurrent("reviewed")
+        end
+    elseif step == "pause" then
+        PauseTour()
+    else
+        return false, "unknown_guided_setup_step"
+    end
+    return true, step
 end
 
 function M.InstallGuidedTourChrome(frame, status, host, scroll)
@@ -1623,18 +1651,11 @@ function M.InstallGuidedTourChrome(frame, status, host, scroll)
     progressFill:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.96)
     chrome.progress, chrome.progressFill = progress, progressFill
 
-    chrome.back = ChromeButton(chrome, T, "Back", BackCurrent)
-    chrome.keep = ChromeButton(chrome, T, "Keep current", function() AdvanceCurrent("kept") end)
-    chrome.skip = ChromeButton(chrome, T, "Skip", SkipCurrent)
-    chrome.next = ChromeButton(chrome, T, "Next", function()
-        if Runtime.manualAway then
-            Runtime.manualAway = nil
-            SelectExpectedPage(CurrentStage())
-        else
-            AdvanceCurrent("reviewed")
-        end
-    end)
-    chrome.pause = ChromeButton(chrome, T, "Pause", PauseTour)
+    chrome.back = ChromeButton(chrome, T, "Back", function() M.RunGuidedTourStep("back") end)
+    chrome.keep = ChromeButton(chrome, T, "Keep current", function() M.RunGuidedTourStep("keep") end)
+    chrome.skip = ChromeButton(chrome, T, "Skip", function() M.RunGuidedTourStep("skip") end)
+    chrome.next = ChromeButton(chrome, T, "Next", function() M.RunGuidedTourStep("next") end)
+    chrome.pause = ChromeButton(chrome, T, "Pause", function() M.RunGuidedTourStep("pause") end)
     if type(T.SkinPrimaryButton) == "function" then T.SkinPrimaryButton(chrome.next) end
 
     RegisterChromeControl(chrome.back, "back", "Guided setup: Back", "Returns to the previous section, overview or stage.")

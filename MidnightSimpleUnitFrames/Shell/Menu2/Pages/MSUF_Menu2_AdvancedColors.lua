@@ -456,12 +456,6 @@ local GROUP_BAR_MODES = (M.GroupSpecs and M.GroupSpecs.GF_BAR_MODES)
     or ValueTextPairs "GLOBAL=Follow Global Style|CLASS=Class Color|dark=Dark Mode|unified=Unified Color|GRADIENT=Health Gradient|CUSTOM=Custom Color"
 local GROUP_HEALTH_MODES = (M.GroupSpecs and M.GroupSpecs.HEALTH_MODES)
     or ValueTextPairs "CLASS=Class|GRADIENT=Gradient|CUSTOM=Custom"
-local function GroupTextureValues()
-    local specs = M.GroupSpecs
-    if specs and type(specs.SimpleTextures) == "function" then return specs.SimpleTextures() end
-    if type(M.StatusBarTextureItems) == "function" then return M.StatusBarTextureItems("Follow Global Style") end
-    return {}
-end
 local function GroupDBConf(dbKey)
     local db = DB()
     db[dbKey] = db[dbKey] or {}
@@ -512,17 +506,12 @@ local function RequestGroupColorApply(reason, mode)
     end
     return false
 end
-local function SetGroupValue(key, value, reason, mode, opts)
+local function SetGroupValue(key, value, reason, mode)
     local changed = false
-    opts = opts or {}
     for i = 1, #GROUP_COLOR_DB_KEYS do
         local conf = GroupDBConf(GROUP_COLOR_DB_KEYS[i])
         if conf[key] ~= value then
             conf[key] = value
-            changed = true
-        end
-        if opts.texture == true and type(value) == "string" and value ~= "" and conf.hlOverride ~= true then
-            conf.hlOverride = true
             changed = true
         end
     end
@@ -610,7 +599,7 @@ local function SetGroupHealthBarRGB(r, g, b)
 end
 local function BuildGroupFrameColors(ctx, b)
     local pageW = ctx.width or 720
-    local group = b:CollapsibleSection("colors_group_frames", "Group Frame Colors", pageW >= 840 and 748 or 1368, false)
+    local group = b:CollapsibleSection("colors_group_frames", "Group Frame Colors", pageW >= 840 and 624 or 1158, false)
     local w = group._msuf2Width or pageW
     local wide = w >= 840
     local gap = 16
@@ -619,11 +608,11 @@ local function BuildGroupFrameColors(ctx, b)
     local leftW = wide and floor((innerW - gap) * 0.48) or innerW
     local rightX = wide and (leftX + leftW + gap) or leftX
     local rightW = wide and (innerW - leftW - gap) or innerW
-    local secondY = wide and -394 or -690
-    local health = Card(group, "Health Bars", "Shared by Party, Raid, and Mythic Raid.", leftX, -42, leftW, 282)
-    local background = Card(group, "Bar Background", nil, rightX, wide and -42 or -340, rightW, 326)
+    local secondY = wide and -270 or -498
+    local health = Card(group, "Health Bars", "Shared by Party, Raid, and Mythic Raid.", leftX, -42, leftW, 210)
+    local background = Card(group, "Bar Background", nil, rightX, wide and -42 or -270, rightW, 210)
     local state = Card(group, "State Tints", "Dead/offline tint and debuff stripe colors.", leftX, secondY, leftW, 300)
-    local highlights = Card(group, "Group Highlights", nil, rightX, wide and secondY or -1008, rightW, 288)
+    local highlights = Card(group, "Group Highlights", nil, rightX, wide and secondY or -816, rightW, 288)
 
     ValueDropdownAt(ctx, health, "Bar Color Mode", 16, -54, GROUP_BAR_MODES, min(280, leftW - 32),
         GroupBarMode,
@@ -638,25 +627,11 @@ local function BuildGroupFrameColors(ctx, b)
         Meta("group_frame.health.mode"))
     local healthColor = ColorValueAt(ctx, health, "Health bar color", 16, -108, GroupHealthBarRGB, SetGroupHealthBarRGB,
         nil, nil, Meta("group_frame.health.color"))
-    GroupAlphaSlider(ctx, health, "Health bar opacity", 16, -156, max(220, leftW - 58), "hpBarAlpha", 1)
-    ValueToggleAt(ctx, health, "Keep text + portrait visible", 16, -212,
-        function() return GroupBool("alphaExcludeTextPortrait", false) end,
-        function(value) SetGroupValue("alphaExcludeTextPortrait", value and true or false, "MSUF2_GROUP_ALPHA_KEEP_TEXT", "visual") end,
-        Meta("group_frame.health.keep_text_portrait"))
-    local healthHint = W.Text(health, "", 16, -244, leftW - 32, T.colors.muted)
+    local healthHint = W.Text(health, "", 16, -156, leftW - 32, T.colors.muted)
     if healthHint.SetWordWrap then healthHint:SetWordWrap(true) end
 
     GroupColorAt(ctx, background, "Background Color", 16, -54, "bg", 0.10, 0.10, 0.10)
-    ValueDropdownAt(ctx, background, "Foreground Texture", 16, -92, GroupTextureValues(), min(290, rightW - 32),
-        function() return GroupRead("barTexture", "") or "" end,
-        function(value) SetGroupValue("barTexture", value or "", "MSUF2_GROUP_BAR_TEXTURE", "visual", { texture = true }) end,
-        Meta("group_frame.background.foreground_texture"))
-    ValueDropdownAt(ctx, background, "Background Texture", 16, -146, GroupTextureValues(), min(290, rightW - 32),
-        function() return GroupRead("barBgTexture", "") or "" end,
-        function(value) SetGroupValue("barBgTexture", value or "", "MSUF2_GROUP_BAR_BG_TEXTURE", "visual", { texture = true }) end,
-        Meta("group_frame.background.texture"))
-    GroupAlphaSlider(ctx, background, "Background opacity", 16, -202, max(220, rightW - 58), "hpBgAlpha", 0.85)
-    ValueDropdownAt(ctx, background, "Health color fallback", 16, -258, GROUP_HEALTH_MODES, min(290, rightW - 32),
+    ValueDropdownAt(ctx, background, "Health color fallback", 16, -108, GROUP_HEALTH_MODES, min(290, rightW - 32),
         function() return GroupRead("healthColorMode", "CLASS") or "CLASS" end,
         function(value) SetGroupValue("healthColorMode", value or "CLASS", "MSUF2_GROUP_HEALTH_FALLBACK", "visual") end,
         Meta("group_frame.health.fallback_mode"))
@@ -680,7 +655,7 @@ local function BuildGroupFrameColors(ctx, b)
     GroupAlphaSlider(ctx, highlights, "Group border opacity", 16, -172, max(220, rightW - 58), "groupBorderA", 0.95)
     GroupColorAt(ctx, highlights, "Corner aggro color", 16, -224, "ciAggroColor", 1.00, 0.55, 0.00)
 
-    local syncNote = W.Text(group, "Applies to Party, Raid and Mythic Raid together.", 24, wide and -704 or -1322, w - 48, T.colors.muted)
+    local syncNote = W.Text(group, "Applies to Party, Raid and Mythic Raid together.", 24, wide and -580 or -1114, w - 48, T.colors.muted)
     if syncNote.SetWordWrap then syncNote:SetWordWrap(true) end
     M.BindGateGroup(ctx, nil, {
         { controls = healthColor, on = function()
@@ -704,8 +679,7 @@ local function BuildGroupFrameColors(ctx, b)
                 local mixed = GroupScopesDiffer({
                     "gfBarMode", "healthColorMode", "healthCustomR", "healthCustomG", "healthCustomB",
                     "gfDarkR", "gfDarkG", "gfDarkB", "gfUnifiedR", "gfUnifiedG", "gfUnifiedB",
-                    "barTexture", "barBgTexture", "bgR", "bgG", "bgB", "hpBarAlpha", "hpBgAlpha",
-                    "alphaExcludeTextPortrait", "deadBgEnabled", "deadBgOffline", "deadBgR", "deadBgG", "deadBgB", "deadBgA",
+                    "bgR", "bgG", "bgB", "deadBgEnabled", "deadBgOffline", "deadBgR", "deadBgG", "deadBgB", "deadBgA",
                     "debuffStripeAlpha", "debuffStripeColorR", "debuffStripeColorG", "debuffStripeColorB", "targetR", "targetG", "targetB",
                     "hlFocusColorR", "hlFocusColorG", "hlFocusColorB", "groupBorderR", "groupBorderG", "groupBorderB",
                     "groupBorderA", "ciAggroColorR", "ciAggroColorG", "ciAggroColorB",
@@ -1569,4 +1543,4 @@ local function BuildColors(ctx)
     BuildAuraAndPortraitColors(ctx, b, CH)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-M.RegisterPage("opt_colors", { title = "MSUF Colors", build = BuildColors, version = 6 })
+M.RegisterPage("opt_colors", { title = "MSUF Colors", build = BuildColors, version = 7 })

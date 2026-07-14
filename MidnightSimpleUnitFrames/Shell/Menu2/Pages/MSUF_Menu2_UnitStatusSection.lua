@@ -58,8 +58,8 @@ local function BuildStatus(ctx, builder, unit)
         x = 20, y = -50,
     })
     RegisterControl(statusTabs, ctx, "status.workspace_tab", "Status icon controls", "segment", "ephemeral")
-    local selectedCard = W.ControlCard(basicTab, "Selected Indicator", nil, leftX - 2, -38, leftW + 28, 268)
-    local previewCard = W.ControlCard(basicTab, "Status Preview", nil, rightX - 14, -38, rightW + 28, 214)
+    local selectedCard = W.ControlCard(basicTab, "Selected Indicator", nil, leftX - 2, -38, leftW + 16, 268)
+    local previewCard = W.ControlCard(basicTab, "Status Preview", nil, rightX - 2, -38, rightW + 16, 214)
     local placementCardX = leftX - 2
     local placementCardW = max(320, sectionW - placementCardX - 28)
     local placementCard = W.ControlCard(basicTab, "Placement", nil, placementCardX, -330, placementCardW, 262)

@@ -138,6 +138,7 @@ local usingLDB = false
 
 --- Fallback button path
 local fallbackBtn = nil
+local fallbackRepos = nil
 
 local function ApplyShowHide(enabled)
     enabled = not not enabled
@@ -249,6 +250,7 @@ local function EnsureInitialized()
             b:ClearAllPoints()
             b:SetPoint("CENTER", _G.Minimap, "CENTER", x, y)
         end
+        fallbackRepos = Repos
 
         b:SetScript("OnDragStart", function(self)
             self:SetScript("OnUpdate", function()
@@ -297,6 +299,22 @@ local function MSUF_SetMinimapIconEnabled(enabled)
     end
 end
 ExportPublic("MSUF_SetMinimapIconEnabled", MSUF_SetMinimapIconEnabled)
+
+local function MSUF_SetMinimapIconPosition(value)
+    local g = EnsureGeneralDB()
+    if not g then return false end
+    g.minimapIconDB = type(g.minimapIconDB) == "table" and g.minimapIconDB or {}
+    value = tonumber(value) or 220
+    if value < 0 then value = 0 elseif value > 360 then value = 360 end
+    g.minimapIconDB.minimapPos = value
+    if usingLDB and DBIcon and type(DBIcon.Refresh) == "function" then
+        DBIcon:Refresh(DATA_NAME, g.minimapIconDB)
+    elseif type(fallbackRepos) == "function" then
+        fallbackRepos()
+    end
+    return true
+end
+ExportPublic("MSUF_SetMinimapIconPosition", MSUF_SetMinimapIconPosition)
 
 --- Init on login (DB is expected to exist by then)
 local initFrame = CreateFrame("Frame")

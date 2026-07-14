@@ -29,12 +29,20 @@ local function SharedControlMeta(opts, suffix, classification)
     local path = PortableControlToken(opts.controlPath, "control")
     local tail = PortableControlToken(suffix, "control")
     local semantic = domain .. "." .. path .. "." .. tail
+    local resolvedClassification = opts.controlClassification or classification or "ephemeral"
     local meta = {
         controlId = "menu2." .. pageKey .. "." .. semantic,
         pageKey = pageKey,
         identityKey = semantic,
         controlPath = semantic:gsub("%.", "/"),
-        classification = classification or "ephemeral",
+        classification = resolvedClassification,
+        settingKey = opts.settingKey,
+        actionKey = opts.actionKey,
+        actionFixedArgs = opts.actionFixedArgs,
+        actionInputArg = opts.actionInputArg,
+        assistantSettingKeys = opts.assistantSettingKeys,
+        assistantSettingKeyPatterns = opts.assistantSettingKeyPatterns,
+        command = opts.controlCommand,
     }
     -- Shared section actions inherit the owning page's live scope; the
     -- identity must not masquerade as a static Assistant Registry action.

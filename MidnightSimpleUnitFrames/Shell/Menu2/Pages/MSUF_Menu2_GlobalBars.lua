@@ -72,6 +72,7 @@ local BAR_DYNAMIC_SETTING_KEYS_BY_PATH = {
     ["absorb.heal_prediction.enabled"] = { "general.showSelfHealPrediction" },
     ["absorb.over_absorb_overlay"] = { "general.overAbsorbOverlay" },
     ["outline.thickness"] = { "bars.barOutlineThickness" },
+    ["outline.strata"] = { "bars.barOutlineStrata" },
     ["highlight.border_thickness"] = { "general.highlightBorderThickness" },
     ["highlight.border_mode.aggroOutlineMode"] = { "general.aggroOutlineMode" },
     ["highlight.aggro.roles"] = { "general.aggroMode" },
@@ -162,11 +163,70 @@ local function RegisterSegment(segment, path, values)
     end
     return segment
 end
+local HIGHLIGHT_ORDER_KEYS = { "dispel", "aggro", "purge", "bossTarget" }
+local HIGHLIGHT_ORDER_ALLOWED = { dispel = true, aggro = true, purge = true, bossTarget = true }
+local HIGHLIGHT_ORDER_VALUES = {}
+local function BuildHighlightOrderValues(prefix, used)
+    if #prefix == #HIGHLIGHT_ORDER_KEYS then
+        local value = table.concat(prefix, ",")
+        HIGHLIGHT_ORDER_VALUES[#HIGHLIGHT_ORDER_VALUES + 1] = { value = value, text = value }
+        return
+    end
+    for i = 1, #HIGHLIGHT_ORDER_KEYS do
+        local key = HIGHLIGHT_ORDER_KEYS[i]
+        if not used[key] then
+            used[key], prefix[#prefix + 1] = true, key
+            BuildHighlightOrderValues(prefix, used)
+            prefix[#prefix], used[key] = nil, nil
+        end
+    end
+end
+BuildHighlightOrderValues({}, {})
+local function ParseHighlightOrder(value)
+    if type(value) ~= "string" then return nil end
+    local order, used = {}, {}
+    for token in value:gmatch("[^,]+") do
+        token = token:match("^%s*(.-)%s*$")
+        if token:lower() == "bosstarget" or token:lower() == "boss target" then token = "bossTarget"
+        else token = token:lower() end
+        if not HIGHLIGHT_ORDER_ALLOWED[token] or used[token] then return nil end
+        used[token], order[#order + 1] = true, token
+    end
+    if #order ~= #HIGHLIGHT_ORDER_KEYS then return nil end
+    return order
+end
+local HIGHLIGHT_ORDER_COMMAND = {
+    kind = "dragrow",
+    source = "global/highlight/priority/order",
+    valueKind = "enum",
+    values = HIGHLIGHT_ORDER_VALUES,
+    get = function() return table.concat(PriorityOrder(), ",") end,
+    set = function(value)
+        local order = ParseHighlightOrder(value)
+        if not order then return false end
+        BarScopeSet("hlPrioOrder", order, "MSUF2_HIGHLIGHT_PRIORITY_ORDER")
+        if CurrentBarsScope() == "shared" then
+            G().hlPrioOrder = order
+            G().highlightPrioOrder = order
+        end
+        return true
+    end,
+    canExecute = function() return true end,
+}
 local function RegisterDragRows(container, path)
     local rows = container and container.rows or {}
-    for i = 1, #rows do
-        RegisterControl(rows[i].frame, Meta(path .. ".slot." .. tostring(i), "action"),
-            "Highlight priority slot " .. tostring(i), "drag")
+    local owner = rows[1] and rows[1].frame
+    if owner then
+        RegisterControl(owner, Meta(path .. ".order", "setting", {
+            assistantSettingKeyPatterns = { "^barScope%.[%w_]+%.hlPrioOrder$" },
+            command = HIGHLIGHT_ORDER_COMMAND,
+        }), "Highlight priority order", "dragrow")
+        -- The remaining visible rows are handles for the same atomic four-item
+        -- order. They must resolve to one catalog owner, not four competing
+        -- setting routes.
+        if M.MarkRuntimeControlComponent then
+            for i = 2, #rows do M.MarkRuntimeControlComponent(rows[i].frame, owner) end
+        end
     end
     return container
 end
