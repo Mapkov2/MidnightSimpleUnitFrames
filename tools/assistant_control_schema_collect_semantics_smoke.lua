@@ -3,6 +3,8 @@ _G = _G or _ENV
 local file = assert(io.open("tools/assistant_control_schema_collect.lua", "rb"))
 local source = file:read("*a") or ""
 file:close()
+assert(source:find('_G.__MSUF_ASSISTANT_GRAPHIFY_SOURCE = "inventory"', 1, true),
+    "schema collector no longer selects the tracked Graphify inventory explicitly")
 local marker = 'local source = Read("tools/assistant_v1_catalog_crosswalk.lua")'
 local at = assert(source:find(marker, 1, true), "collector architecture marker changed")
 source = source:sub(1, at - 1) .. [==[

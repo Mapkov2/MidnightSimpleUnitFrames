@@ -664,4 +664,8 @@ source = source .. '\n__MSUF_CollectAssistantControlSchemaStates(M, Catalog, Reg
     .. '__MSUF_EmitAssistantControlSchema()\n'
 local chunk, err = loadstring(source, "@tools/assistant_v1_catalog_crosswalk.lua")
 assert(chunk, err)
-chunk()
+local previousGraphifySource = rawget(_G, "__MSUF_ASSISTANT_GRAPHIFY_SOURCE")
+_G.__MSUF_ASSISTANT_GRAPHIFY_SOURCE = "inventory"
+local ok, result = pcall(chunk)
+_G.__MSUF_ASSISTANT_GRAPHIFY_SOURCE = previousGraphifySource
+assert(ok, result)
