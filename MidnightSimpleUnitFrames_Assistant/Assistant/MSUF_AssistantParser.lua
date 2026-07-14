@@ -3116,6 +3116,8 @@ local function ParseGroupDispelOverlayFastShortcut(normalized)
     if not ContainsAny(normalized, P.RootPhrases[441]) then
         return nil
     end
+    -- Page-navigation requests must reach ParseOpen; "open" is not an enable verb.
+    if normalized:match("^open%s+") then return nil end
     if ContainsAny(normalized, P.RootPhrases[442]) then return nil end
 
     local groups = DetectGroups(normalized)
@@ -4649,6 +4651,7 @@ A._ParseGlobalRoundedBarsPriorityShortcut = ParseGlobalRoundedBarsPriorityShortc
 
 local function ParseGlobalUnitDispelOverlayPriorityShortcut(normalized)
     if not ContainsAny(normalized, P.RootPhrases[566]) then return nil end
+    if normalized:match("^open%s+") then return nil end
     if ContainsAny(normalized, P.RootPhrases[567]) then
         return nil
     end
@@ -4699,6 +4702,7 @@ A._ParseGlobalUnitDispelOverlayPriorityShortcut = ParseGlobalUnitDispelOverlayPr
 
 local function ParseScopedUnitDispelOverlayPriorityShortcut(normalized)
     if not ContainsAny(normalized, P.RootPhrases[572]) then return nil end
+    if normalized:match("^open%s+") then return nil end
     if ContainsAny(normalized, P.RootPhrases[573]) then
         return nil
     end

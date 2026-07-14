@@ -177,7 +177,7 @@ local PAGE_DISPLAY_LABELS = {
     opt_misc = "Miscellaneous",
 
     gf_layout = "Group Layout",
-    gf_bars = "Group Health & Text",
+    gf_bars = "Group Dispel Overlay",
     gf_indicators = "Group Status & Indicators",
     gf_auras = "Group Auras",
 

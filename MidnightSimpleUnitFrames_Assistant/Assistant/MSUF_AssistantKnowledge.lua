@@ -121,8 +121,8 @@ local PAGE_CATEGORY_TERMS = {
     classpower = { "class resource", "class power", "resource", "detached power", "alternative mana", "player hp" },
     gameplay = { "gameplay", "combat timer", "combat enter", "combat leave", "combat state", "target sound", "totem", "crosshair" },
     profiles = { "profile", "profiles" },
-    gf_layout = { "group", "layout", "party", "raid", "mythic" },
-    gf_bars = { "group", "health", "text", "bars" },
+    gf_layout = { "group", "layout", "party", "raid", "mythic", "health", "resource", "power", "text", "effects", "stripe", "range" },
+    gf_bars = { "group", "dispel", "overlay" },
     gf_indicators = { "indicator", "status", "corner" },
     gf_auras = { "group aura", "aura" },
 }
@@ -180,7 +180,7 @@ local PAGE_LABEL_OVERRIDES = {
     opt_misc = "Miscellaneous",
 
     gf_layout = "Group Layout",
-    gf_bars = "Group Health & Text",
+    gf_bars = "Group Dispel Overlay",
     gf_indicators = "Group Status & Indicators",
     gf_auras = "Group Auras",
 
@@ -263,6 +263,11 @@ local GROUP_INDICATOR_KEY_PARTS = {
     "targetedspell", "targetedspells",
 }
 
+local GROUP_EFFECT_KEY_PARTS = {
+    "dispeloverlay",
+    "debuffstripe",
+}
+
 local function GroupSettingLikelyPage(setting)
     local attr = tostring(setting and setting.attribute or "")
     local key = Normalize(setting and setting.key or "")
@@ -271,10 +276,14 @@ local function GroupSettingLikelyPage(setting)
         local part = GROUP_INDICATOR_KEY_PARTS[i]
         if attrNorm:find(part, 1, true) or key:find(part, 1, true) then return "gf_indicators" end
     end
+    for i = 1, #GROUP_EFFECT_KEY_PARTS do
+        local part = GROUP_EFFECT_KEY_PARTS[i]
+        if attrNorm:find(part, 1, true) or key:find(part, 1, true) then return "gf_bars" end
+    end
     if GROUP_LAYOUT_ATTRS[attr] then return "gf_layout" end
     local suffix = tostring(setting and setting.key or ""):match("%.([^%.]+)$")
     if suffix and GROUP_LAYOUT_ATTRS[suffix] then return "gf_layout" end
-    return "gf_bars"
+    return "gf_layout"
 end
 
 local function SettingLikelyPage(setting)
@@ -1126,14 +1135,14 @@ local PAGE_HELP = {
     auras3_debuffs = { title = "Aura Debuffs help", lines = { "Open the affected UnitFrame > Auras > Debuffs for dispellable rules, blacklist, layout, and preview.", "Party/Raid content lives in Group Frames > Auras; scope-aware styling remains under Appearance > Auras." }, actions = { "Open Target", "Open Focus", "Open Group Auras" } },
     auras3_custom = { title = "Custom Auras help", lines = { "Every supported UnitFrame has Custom 1, Custom 2, and Custom 3 under its Auras section for setup, whitelist, filters, and layout.", "Icon styling and Secret-safe Full-Frame effects are scope-aware under Appearance > Auras; choose Player, Target, Focus, or Boss and then Custom 1-3." }, actions = { "Open Aura Style", "Open Target", "Open Player" } },
     auras3_filters = { title = "Aura Filter help", lines = { "There is no standalone Aura Filters page anymore. Filters and Black-/Whitelists live directly beside the Buff, Debuff, or Custom container they affect.", "Start with scope and lane: Player/Target/Focus/Boss Buffs or Debuffs, or Party/Raid Buffs or Debuffs. Unit filter toggles inherit from Shared unless that unit uses custom rules; group lanes use their own filter token.", "Hide Permanent removes every no-duration aura in that lane. Exact SpellID blacklists remove one spell where Blizzard permits identity filtering; group category blacklists expand to the same live exact-SpellID exclusions. Timer text, swipe, and duration bars are style only." }, actions = { "Open Target", "Open Group Auras" } },
-    gf_layout = { title = "Group Layout help", lines = { "You can change group frame layout, spacing, growth, anchoring, reverse health fill, scaling breakpoints, party/raid/mythic raid options, Blizzard fallback behavior, and visibility options.", "Examples: 'set raid scale for 20 players to 80', 'make raid frames fill backwards', 'move raid frame closer to player', 'set party growth direction to down', or 'show Blizzard party frames when Party is disabled'." }, actions = { "Open Group Layout" } },
+    gf_layout = { title = "Group Layout help", lines = { "You can change group frame basics, text, resource bars, transparency, geometry, sorting, scaling, anchoring, Party/Raid/Mythic Raid behavior, and visibility options.", "Examples: 'set raid health text size to 14', 'hide healer resource bars in raid frames', 'set raid scale for 20 players to 80', or 'set party growth direction to down'." }, actions = { "Open Group Layout", "Open Colors" } },
     gf_bars = {
-        title = "Group Health & Text help",
+        title = "Group Dispel Overlay help",
         lines = {
-            "You can change Party, Raid, and Mythic Raid health, power, role power, text slots, text font sizes, range fade, dispel overlay, debuff stripe layout, and related group bar options. Group-frame colors live in Colors > Group Frame Colors.",
-            "Examples: set raid health text size to 14; hide healer power bars in raid frames; set party range fade to 45; open group colors.",
+            "You can configure the Party, Raid, and Mythic Raid Dispel Overlay and Debuff Stripe here. Other group-frame controls, including text, resource bars, and range fade, live in Group Layout.",
+            "Examples: enable the raid dispel overlay; set its detection mode; choose the full-frame overlay style; adjust the debuff stripe edge or height.",
         },
-        actions = { "Open Group Health & Text", "Open Colors" },
+        actions = { "Open Group Dispel Overlay", "Open Group Layout" },
     },
     gf_indicators = {
         title = "Group Status & Indicators help",
@@ -1165,7 +1174,9 @@ local SCOPED_HELP_ALIASES = {
     { terms = { "aura help", "auras help", "buff help", "debuff help" }, page = "auras3" },
     { terms = { "edit mode help", "editmode help", "help edit mode", "bearbeitungsmodus hilfe", "hilfe bearbeitungsmodus", "editmodus hilfe" }, page = "home", special = "editmode" },
     { terms = { "group help", "group frames help", "help group", "help group frames", "party help", "help party", "raid help", "help raid" }, page = "gf_layout" },
-    { terms = { "group text help", "group health help", "group health and text help", "help group text", "help group health", "help group health and text", "party text help", "raid text help", "party health help", "raid health help" }, page = "gf_bars" },
+    { terms = { "group text help", "group health help", "group health and text help", "help group text", "help group health", "help group health and text", "party text help", "raid text help", "party health help", "raid health help" }, page = "gf_layout" },
+    { terms = { "group range help", "help group range" }, page = "gf_layout" },
+    { terms = { "group effects help", "debuff stripe help", "help group effects", "group dispel help", "group dispel overlay help", "help group dispel", "help group dispel overlay" }, page = "gf_bars" },
     { terms = { "indicator help", "help indicator", "group indicator help", "help group indicator", "corner indicator help", "help corner indicator", "targeted spell help", "targeted spells help", "targeted spell indicator help" }, page = "gf_indicators" },
     { terms = { "group aura help", "group auras help", "help group aura", "help group auras", "party aura help", "raid aura help", "mythic raid aura help" }, page = "gf_auras" },
     { terms = { "class resource help", "help class resource", "class power help", "help class power" }, page = "classpower" },
@@ -1317,7 +1328,9 @@ local WHAT_CAN_DIRECT_HELP_TERMS = {
 }
 
 local WHAT_CAN_PAGE_HELP_TARGETS = {
-    { page = "gf_bars", terms = { "group health and text", "group health", "group text", "party health", "party text", "raid health", "raid text", "mythic raid health", "mythic raid text" } },
+    { page = "gf_layout", terms = { "group health and text", "group health", "group text", "group resource", "group power", "party health", "party text", "party power", "raid health", "raid text", "raid power", "mythic raid health", "mythic raid text" } },
+    { page = "gf_layout", terms = { "group range", "range fade" } },
+    { page = "gf_bars", terms = { "group effects", "debuff stripe", "group dispel", "group dispel overlay", "dispel overlay" } },
     { page = "gf_indicators", terms = { "group status and indicators", "group indicators", "group indicator", "party indicator", "party indicators", "raid indicator", "raid indicators", "corner indicator", "corner indicators", "targeted spell", "targeted spells", "targeted spell indicator", "targeted spell indicators", "status icon", "status icons", "ready check", "raid marker", "role icon" } },
     { page = "gf_auras", terms = { "group aura", "group auras", "party aura", "party auras", "raid aura", "raid auras", "mythic raid aura", "mythic raid auras", "group buff", "group buffs", "group debuff", "group debuffs" } },
     { page = "gf_layout", terms = { "group layout", "group frame", "group frames", "party frame", "party frames", "raid frame", "raid frames", "mythic raid frame", "mythic raid frames", "party layout", "raid layout" } },
@@ -1684,7 +1697,7 @@ local function DirectHelpAnswer(query, opts)
         and HasConceptHelpIntent(norm)
     then
         return {
-            text = "Party and raid frame help\nParty, Raid, and Mythic Raid frames are group frames: they show members of your group so you can track health, range, buffs, debuffs, role icons, ready checks, and other group status. In MSUF, their layout lives mainly in Group Layout, while health/text, indicators, and auras have their own group-frame pages.\nExamples: open group layout; make raid frames wider; set raid range fade to 40; show party ready check icon.\nYou can ask: Open Group Layout | Open Group Health & Text | Open Group Status & Indicators | Open Group Auras",
+            text = "Party and raid frame help\nParty, Raid, and Mythic Raid frames are group frames: they show members of your group so you can track health, range, buffs, debuffs, role icons, ready checks, and other group status. Layout contains group text, resource bars, and range fade; Dispel Overlay contains dispel overlays and debuff stripes; indicators and auras remain on their focused group-frame pages.\nExamples: open group layout; make raid frames wider; set raid range fade to 40; show party ready check icon.\nYou can ask: Open Group Layout | Open Group Dispel Overlay | Open Group Status & Indicators | Open Group Auras",
             status = "applied",
             summary = "Assistant group frames help",
         }
@@ -1726,7 +1739,7 @@ local function DirectHelpAnswer(query, opts)
         and HasConceptHelpIntent(norm)
     then
         return {
-            text = "Health Bar help\nA health bar shows how much health a unit has. MSUF can change health bar size, opacity, texture, color behavior, gradients, absorb overlays, incoming-heal overlays, text, and group-frame health layout options.\nExamples: set player height to 40; set raid health text size to 14; turn on heal prediction overlay; set health bar texture to Smooth.\nYou can ask: Open Player | Open Group Health & Text | Open Bars",
+            text = "Health Bar help\nA health bar shows how much health a unit has. MSUF can change health bar size, opacity, texture, color behavior, gradients, absorb overlays, incoming-heal overlays, text, and group-frame health layout options.\nExamples: set player height to 40; set raid health text size to 14; turn on heal prediction overlay; set health bar texture to Smooth.\nYou can ask: Open Player | Open Group Layout | Open Bars",
             status = "applied",
             summary = "Assistant health bar help",
         }
@@ -1740,7 +1753,7 @@ local function DirectHelpAnswer(query, opts)
         and HasConceptHelpIntent(norm)
     then
         return {
-            text = "Power Bar help\nA power bar shows a unit resource such as mana, energy, rage, focus, runic power, or a similar class resource. MSUF can change unit power bars, detached power bars, power text, role power in group frames, and class-resource/player-power options.\nExamples: detach target power bar; hide healer power bars in raid frames; set mana power bar color blue; open class resources.\nYou can ask: Open Player | Open Group Health & Text | Open Class Resources | Open Colors",
+            text = "Power Bar help\nA power bar shows a unit resource such as mana, energy, rage, focus, runic power, or a similar class resource. MSUF can change unit power bars, detached power bars, power text, role power in group frames, and class-resource/player-power options.\nExamples: detach target power bar; hide healer power bars in raid frames; set mana power bar color blue; open class resources.\nYou can ask: Open Player | Open Group Layout | Open Class Resources | Open Colors",
             status = "applied",
             summary = "Assistant power bar help",
         }
@@ -1776,7 +1789,7 @@ local function DirectHelpAnswer(query, opts)
         and HasConceptHelpIntent(norm)
     then
         return {
-            text = "Incoming Heal and Heal Prediction help\nIncoming heals are heals that are already being cast or predicted. MSUF can show them with heal prediction overlays and related bar options, so healers can see health plus expected healing.\nExamples: turn on heal prediction overlay; set heal prediction anchor right; open bars; open group health and text.\nYou can ask: Open Bars | Open Group Health & Text",
+            text = "Incoming Heal and Heal Prediction help\nIncoming heals are heals that are already being cast or predicted. MSUF can show them with heal prediction overlays and related bar options, so healers can see health plus expected healing.\nExamples: turn on heal prediction overlay; set heal prediction anchor right; open bars; open group layout.\nYou can ask: Open Bars | Open Group Layout",
             status = "applied",
             summary = "Assistant heal prediction help",
         }
@@ -1795,7 +1808,7 @@ local function DirectHelpAnswer(query, opts)
         and HasConceptDefinitionIntent(norm)
     then
         return {
-            text = "Alpha and opacity help\nAlpha and opacity both describe transparency. Lower opacity makes a frame, bar, text, or aura more see-through; higher opacity makes it more solid. MSUF uses these options for frame alpha, bar/background alpha, range fade, aura fading, and some highlight overlays.\nExamples: set player alpha to 80; set raid range fade to 40; make party frames less transparent; open bars.\nYou can ask: Open Bars | Open Group Health & Text | Open Player",
+            text = "Alpha and opacity help\nAlpha and opacity both describe transparency. Lower opacity makes a frame, bar, text, or aura more see-through; higher opacity makes it more solid. Group transparency and Range Fade both live in Group Layout.\nExamples: set player alpha to 80; set raid range fade to 40; make party frames less transparent; open bars.\nYou can ask: Open Bars | Open Group Layout | Open Player",
             status = "applied",
             summary = "Assistant alpha opacity help",
         }
@@ -1845,7 +1858,7 @@ local function DirectHelpAnswer(query, opts)
         and HasConceptDefinitionIntent(norm)
     then
         return {
-            text = "Font rendering help\nFont options control how text is drawn. Size changes readability, outline makes letters stand out, monochrome changes the render style, and shadow options add contrast behind text. MSUF has shared font options plus text-specific font settings.\nExamples: set global font size to 14; set shared font outline to thick; set player name font size to 16; open fonts.\nYou can ask: Open Fonts | Open Player | Open Group Health & Text",
+            text = "Font rendering help\nFont options control how text is drawn. Size changes readability, outline makes letters stand out, monochrome changes the render style, and shadow options add contrast behind text. MSUF has shared font options plus text-specific font settings.\nExamples: set global font size to 14; set shared font outline to thick; set player name font size to 16; open fonts.\nYou can ask: Open Fonts | Open Player | Open Group Layout",
             status = "applied",
             summary = "Assistant font rendering help",
         }
@@ -1919,7 +1932,7 @@ local function DirectHelpAnswer(query, opts)
         and ContainsAny(norm, { "help", "what", "what is", "how", "where", "enable", "show", "explain" })
     then
         return {
-            text = "Mouseover and click casting help\nFor healing UI, MSUF can enable Click Casting on Party, Raid, and Mythic Raid frames and can improve mouseover readability with hover highlights, range fade, dispel visibility, and clear group health text. Spell bindings themselves come from WoW's click-cast/keybind system or a click-casting addon.\nExamples: turn on raid click casting; turn on party click casting; set raid range fade to 40; open group layout.\nYou can ask: Open Group Layout | Open Group Health & Text | Open Colors",
+            text = "Mouseover and click casting help\nFor healing UI, MSUF can enable Click Casting on Party, Raid, and Mythic Raid frames and can improve mouseover readability with hover highlights, range fade, dispel visibility, and clear group health text. Spell bindings themselves come from WoW's click-cast/keybind system or a click-casting addon.\nExamples: turn on raid click casting; turn on party click casting; set raid range fade to 40; open group layout.\nYou can ask: Open Group Layout | Open Group Dispel Overlay | Open Colors",
             status = "applied",
             summary = "Assistant mouseover healing help",
         }
@@ -1928,7 +1941,7 @@ local function DirectHelpAnswer(query, opts)
         and ContainsAny(norm, { "help", "what", "what is", "what does", "how", "where", "explain", "range" })
     then
         return {
-            text = "Range check help\nMSUF can show range through unit-frame and group-frame Range Fade options, and Gameplay has Combat Crosshair range feedback through the melee range spell. Range Fade makes frames more transparent when the unit is out of range.\nExamples: set raid range fade to 40; turn on target range fade; show combat crosshair; set crosshair melee spell 100780.\nYou can ask: Open Group Health & Text | Open Target | Open Gameplay",
+            text = "Range check help\nMSUF can show range through unit-frame and group-frame Range Fade options, and Gameplay has Combat Crosshair range feedback through the melee range spell. Group-frame Range Fade lives in Group Layout.\nExamples: set raid range fade to 40; turn on target range fade; show combat crosshair; set crosshair melee spell 100780.\nYou can ask: Open Group Layout | Open Target | Open Gameplay",
             status = "applied",
             summary = "Assistant range check help",
         }
@@ -1937,7 +1950,7 @@ local function DirectHelpAnswer(query, opts)
         and ContainsAny(norm, { "help", "what", "what is", "what does", "how", "where", "explain", "debuff" })
     then
         return {
-            text = "Dispel help\nMSUF has separate dispel features. Party/Raid/Mythic Raid use Group Frames > Health & Text > Dispel Overlay. Player/Target/Focus/Boss use Bars > UnitFrame Dispel Overlay and the global/scoped Dispel Border. Aura Filters decide which dispellable debuffs are shown as icons. UnitFrame Dispel Border/Overlay need at least one UnitFrame aura container enabled.\nExamples: turn on party dispel overlay; set raid dispel overlay to max; set target dispel overlay opacity to 80; set dispel border detects to dispellable by me; show only dispellable raid debuffs.\nYou can ask: Open Group Health & Text | Open Bars | Open Aura Filters",
+            text = "Dispel help\nMSUF has separate dispel features. Party/Raid/Mythic Raid use Group Frames > Dispel Overlay. Player/Target/Focus/Boss use Bars > UnitFrame Dispel Overlay and the global/scoped Dispel Border. Aura Filters decide which dispellable debuffs are shown as icons. UnitFrame Dispel Border/Overlay need at least one UnitFrame aura container enabled.\nExamples: turn on party dispel overlay; set raid dispel overlay to max; set target dispel overlay opacity to 80; set dispel border detects to dispellable by me; show only dispellable raid debuffs.\nYou can ask: Open Group Dispel Overlay | Open Bars | Open Aura Filters",
             status = "applied",
             summary = "Assistant dispel help",
         }
@@ -1994,7 +2007,7 @@ local function DirectHelpAnswer(query, opts)
         and ContainsAny(norm, KNOWLEDGE_INTENT_TERMS)
     then
         return {
-            text = "Group Health & Text help\nIn Group Frames > Health & Text, I can help with group health, power, role power, text slots, text font sizes, range fade, dispel overlay, and debuff stripe layout options. Group-frame colors live in Colors > Group Frame Colors.\nExamples: change party health text; hide healer power bars in raid frames; set raid range fade to 40; open group health and text.\nYou can ask: Open Group Health & Text | Open Colors",
+            text = "Group health and text help\nIn Group Frames > Layout, I can help with group health, resource bars, role visibility, text slots, text font sizes, range fade, transparency, and frame geometry. Dispel Overlay and Debuff Stripe share the Dispel Overlay page.\nExamples: change party health text; hide healer resource bars in raid frames; set raid range fade to 40.\nYou can ask: Open Group Layout | Open Group Dispel Overlay | Open Colors",
             status = "applied",
             summary = "Assistant group health text help",
         }
@@ -2004,7 +2017,7 @@ local function DirectHelpAnswer(query, opts)
         and ContainsAny(norm, KNOWLEDGE_INTENT_TERMS)
     then
         return {
-            text = "Group frame layout help\nGroup frame sizing, spacing, growth direction, anchoring, range fade, offline behavior, and raid-size scaling live across Group Layout and Group Health & Text.\nExamples: set raid width to 140; make party frames taller; set raid growth direction to down; hide offline players in raid frames; set raid range fade to 40.\nYou can ask: Open Group Layout | Open Group Health & Text",
+            text = "Group frame layout help\nGroup frame sizing, text, resource bars, range fade, transparency, spacing, growth direction, anchoring, offline behavior, and raid-size scaling live in Group Layout. Dispel Overlay and Debuff Stripe share the Dispel Overlay page.\nExamples: set raid width to 140; make party frames taller; set raid growth direction to down; hide offline players in raid frames; set raid range fade to 40.\nYou can ask: Open Group Layout | Open Group Dispel Overlay",
             status = "applied",
             summary = "Assistant group layout help",
         }
@@ -2131,7 +2144,7 @@ local function DirectHelpAnswer(query, opts)
         and ContainsAny(norm, { "where", "help", "how", "show", "hide", "turn on", "turn off", "enable", "disable" })
     then
         return {
-            text = "Group role Power Bar help\nGroup Frames can show or hide Power Bars by role through the Tank, Healer, and DPS Power options.\nExamples: hide healer power bars in raid frames; show tank power in party frames; hide dps power in raid frames.\nYou can ask: Open Group Health & Text",
+            text = "Group role Resource Bar help\nGroup Frames > Layout can show or hide Resource Bars by role through the Tank, Healer, and DPS options.\nExamples: hide healer resource bars in raid frames; show tank resources in party frames; hide DPS resources in raid frames.\nYou can ask: Open Group Layout",
             status = "applied",
             summary = "Assistant group role power help",
         }
@@ -2227,7 +2240,7 @@ local function DirectHelpAnswer(query, opts)
     if ContainsAny(norm, { "what can i change", "what settings can i change", "what can i do" })
         and ContainsAny(norm, { "group health", "group text", "group health and text", "party health", "party text", "raid health", "raid text", "mythic raid health", "mythic raid text" })
     then
-        return PageHelp("gf_bars")
+        return PageHelp("gf_layout")
     end
     if ContainsAny(norm, { "what can i change", "what settings can i change", "what can i do" })
         and ContainsAny(norm, { "group aura", "group auras", "party aura", "party auras", "raid aura", "raid auras", "group buff", "group buffs", "group debuff", "group debuffs" })

@@ -1123,8 +1123,12 @@ local function FailurePageHints(query)
             AddFailurePageHint(hints, seen, "gf_indicators", "Group Status & Indicators", "Look for the named Party/Raid status icon or indicator.")
         elseif FailureContainsAny(normalized, { " growth ", " direction ", " spacing ", " columns ", " anchor ", " layout ", " scale " }) then
             AddFailurePageHint(hints, seen, "gf_layout", "Group Layout", "Choose the intended Party, Raid, or Mythic Raid scope, then inspect its layout control.")
+        elseif FailureContainsAny(normalized, { " dispel ", " stripe " }) then
+            AddFailurePageHint(hints, seen, "gf_bars", "Group Dispel Overlay", "Choose the intended group scope and inspect its Dispel Overlay or Debuff Stripe control.")
+        elseif FailureContainsAny(normalized, { " range fade ", " out of range " }) then
+            AddFailurePageHint(hints, seen, "gf_layout", "Group Layout", "Choose the intended group scope and inspect its Range Fade control.")
         else
-            AddFailurePageHint(hints, seen, "gf_bars", "Group Health & Text", "Choose the intended group scope and inspect its health, power, text, or frame control.")
+            AddFailurePageHint(hints, seen, "gf_layout", "Group Layout", "Choose the intended group scope and inspect its health, resource, text, or layout control.")
         end
     elseif FailureContainsAny(normalized, { " font ", " outline ", " monochrome " }) then
         AddFailurePageHint(hints, seen, "opt_fonts", "Fonts", "Shared and frame-specific font controls live here.")
@@ -2801,7 +2805,7 @@ local PENDING_PAGE_LABEL_OVERRIDES = {
     opt_fonts = "Fonts",
     opt_misc = "Miscellaneous",
     gf_layout = "Group Layout",
-    gf_bars = "Group Health & Text",
+    gf_bars = "Group Dispel Overlay",
     gf_indicators = "Group Status & Indicators",
     gf_auras = "Group Auras",
     auras3 = "Auras",
@@ -2892,10 +2896,14 @@ local function PendingGroupSettingPage(setting)
         local part = PENDING_GROUP_INDICATOR_KEY_PARTS[i]
         if attrNorm:find(part, 1, true) or key:find(part, 1, true) then return "gf_indicators" end
     end
+    for i = 1, #PENDING_GROUP_EFFECT_KEY_PARTS do
+        local part = PENDING_GROUP_EFFECT_KEY_PARTS[i]
+        if attrNorm:find(part, 1, true) or key:find(part, 1, true) then return "gf_bars" end
+    end
     if PENDING_GROUP_LAYOUT_ATTRS[attr] then return "gf_layout" end
     local suffix = tostring(setting and setting.key or ""):match("%.([^%.]+)$")
     if suffix and PENDING_GROUP_LAYOUT_ATTRS[suffix] then return "gf_layout" end
-    return "gf_bars"
+    return "gf_layout"
 end
 
 local function PendingSettingPage(setting)
@@ -6297,6 +6305,11 @@ end
 local GROUP_NAME_SHORTENING_FIELDS = {
     "fontOverride", "nameShortenEnabled", "nameMaxChars", "nameClipSide", "nameNoEllipsis",
     "nameShortenOverride", "_msufGFNameTruncationOverride",
+}
+
+local PENDING_GROUP_EFFECT_KEY_PARTS = {
+    "dispeloverlay",
+    "debuffstripe",
 }
 
 local UNIT_NAME_SHORTENING_FIELDS = {

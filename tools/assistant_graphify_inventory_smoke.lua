@@ -2,17 +2,12 @@ package.path = "tools/?.lua;" .. package.path
 
 local Inventory = require("assistant_graphify_inventory")
 local tracked = Inventory.Load("tools/assistant_graphify_inventory_data.lua")
-assert(tracked.recordCount == 1652, "reviewed Graphify setting-inventory count drifted")
+assert(tracked.recordCount == 1651, "reviewed Graphify setting-inventory count drifted")
 
 local paths, tiers, evidence = Inventory.ToCrosswalkMaps(tracked)
 assert(#paths == tracked.recordCount, "Graphify inventory map lost paths")
-assert(tiers["bars._msuf2Width"] == "core_read_write",
-    "clean-HEAD Graphify inventory lost the Group Layout source path")
-assert(type(evidence["bars._msuf2Width"]) == "table"
-    and evidence["bars._msuf2Width"].sourceFile
-        == "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupLayout.lua"
-    and evidence["bars._msuf2Width"].sourceLocation == "L185",
-    "clean-HEAD Graphify inventory source evidence drifted")
+assert(tiers["bars._msuf2Width"] == nil and evidence["bars._msuf2Width"] == nil,
+    "Graphify inventory retained the removed Group Bars width projection")
 
 local same, sameError = Inventory.Compare(tracked, tracked)
 assert(same == true and sameError == nil, "identical Graphify inventories did not compare equal")

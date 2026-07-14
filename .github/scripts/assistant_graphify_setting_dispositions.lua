@@ -173,7 +173,6 @@ bars.classPowerTextOffset
 bars.cpCond
 bars.cpSound
 bars.highlightBorderThickness
-bars._msuf2Width
 bars.playerHPBar
 bars.powerBarBgMatchBarColor
 bars.stagger
