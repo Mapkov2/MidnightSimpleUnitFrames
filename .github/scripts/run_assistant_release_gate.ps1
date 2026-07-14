@@ -370,9 +370,14 @@ $schemaGateMutex = [System.Threading.Mutex]::new(
 $schemaGateMutexHeld = $false
 Write-Host "[gate-lock] Waiting for exclusive Assistant schema/release access..."
 try {
-    $schemaGateMutexHeld = $schemaGateMutex.WaitOne([TimeSpan]::FromMinutes(30))
-} catch [System.Threading.AbandonedMutexException] {
-    $schemaGateMutexHeld = $true
+    try {
+        $schemaGateMutexHeld = $schemaGateMutex.WaitOne([TimeSpan]::FromMinutes(30))
+    } catch [System.Threading.AbandonedMutexException] {
+        $schemaGateMutexHeld = $true
+    }
+} catch {
+    $schemaGateMutex.Dispose()
+    throw
 }
 if (-not $schemaGateMutexHeld) {
     $schemaGateMutex.Dispose()
@@ -447,10 +452,16 @@ try {
 
     Write-Host "MSUF Assistant release gate: PASS"
 } finally {
-    $env:MSUF_ENGLISH_SUITE_FULL = $previousEnglishSuiteFull
-    $env:MSUF_ASSISTANT_PERF_BUDGET_MULTIPLIER = $previousPerfMultiplier
-    $env:MSUF_ASSISTANT_SCHEMA_GATE_LOCK_HELD = $previousSchemaGateLockHeld
-    Set-Location -LiteralPath $startingLocation
-    if ($schemaGateMutexHeld) { $schemaGateMutex.ReleaseMutex() }
-    $schemaGateMutex.Dispose()
+    try {
+        $env:MSUF_ENGLISH_SUITE_FULL = $previousEnglishSuiteFull
+        $env:MSUF_ASSISTANT_PERF_BUDGET_MULTIPLIER = $previousPerfMultiplier
+        $env:MSUF_ASSISTANT_SCHEMA_GATE_LOCK_HELD = $previousSchemaGateLockHeld
+        Set-Location -LiteralPath $startingLocation
+    } finally {
+        try {
+            if ($schemaGateMutexHeld) { $schemaGateMutex.ReleaseMutex() }
+        } finally {
+            $schemaGateMutex.Dispose()
+        }
+    }
 }
