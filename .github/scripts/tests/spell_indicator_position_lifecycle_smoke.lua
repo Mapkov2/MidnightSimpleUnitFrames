@@ -258,12 +258,24 @@ end
 -- display zoom; dividing by previewScale yields the live X/Y values above.
 local liveSource = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_SpellIndicators.lua")
 local previewSource = Read("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Render.lua")
+local previewHandlesSource = Read("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Handles.lua")
+local indicatorMenuSource = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupIndicators.lua")
 Check(liveSource:find("button:SetPoint(anchor, parentFrame, anchor, x, y)", 1, true),
   "live Spell Indicator no longer anchors point-to-identical-point")
 Check(previewSource:find("handle:SetPoint(anchor, mock, anchor, ConfigToOffset(x or 0, previewScale), ConfigToOffset(y or 0, previewScale))", 1, true),
   "preview Spell Indicator no longer anchors point-to-identical-point with zoomed offsets")
 Check(previewSource:find('LayoutHandle(handle, placed.anchor, placed.x, placed.y, "TOPLEFT")', 1, true),
   "preview Spell Indicator no longer feeds the compiled anchor/X/Y into LayoutHandle")
+Check(previewHandlesSource:find("function box:DropSpellIndicatorAtCursor(specKey, auraName)", 1, true),
+  "group preview lost tracked-spell drop placement")
+Check(previewHandlesSource:find("placed.anchor, placed.x, placed.y = anchor, nextX, nextY", 1, true),
+  "tracked-spell drop no longer writes the live placement contract")
+Check(previewHandlesSource:find('M.RunWithHistory("Place Spell Indicator"', 1, true),
+  "tracked-spell drop is no longer undoable")
+Check(indicatorMenuSource:find("preview.DropSpellIndicatorAtCursor(tile._specKey, tile._auraName)", 1, true),
+  "tracked spell tiles no longer drop into the Group Frame Preview")
+Check(indicatorMenuSource:find("preview.UpdateSpellDropTarget(true", 1, true),
+  "tracked spell drag lost its visible preview drop target")
 
 -- PLAYER_ENTERING_WORLD must opt into the exceptional repair path. The native
 -- aura update settles first so later lifecycle work cannot immediately replace

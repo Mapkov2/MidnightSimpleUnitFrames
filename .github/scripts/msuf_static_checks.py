@@ -547,12 +547,12 @@ def check_group_refresh_contracts() -> None:
     require(runtime, "local function SyncCombatState", "group combat-state owner")
     require(
         runtime,
-        'eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")',
+        '"PLAYER_REGEN_DISABLED",',
         "group combat-start event ownership",
     )
     require(
         runtime,
-        'eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")',
+        '"PLAYER_REGEN_ENABLED",',
         "group combat-end event ownership",
     )
     for event, state in [
@@ -565,10 +565,10 @@ def check_group_refresh_contracts() -> None:
             runtime,
         ):
             raise CheckError(f"group combat-state owner must sync {state} on {event}")
-    if re.search(r':UnregisterEvent\s*\(\s*["\']PLAYER_REGEN_ENABLED["\']\s*\)', runtime):
-        raise CheckError("group combat-state owner must keep PLAYER_REGEN_ENABLED registered")
+    require(runtime, "local function SetRuntimeEventsEnabled", "dynamic group runtime event lifecycle")
+    require(runtime, "if not AnyGroupFrameEnabled()", "disabled group runtime fast shutdown")
     if not re.search(
-        r'elseif\s+event\s*==\s*["\']PLAYER_LOGIN["\']\s+or\s+'
+        r'(?:if|elseif)\s+event\s*==\s*["\']PLAYER_LOGIN["\']\s+or\s+'
         r'event\s*==\s*["\']PLAYER_ENTERING_WORLD["\']\s+then\s+'
         r'SyncCombatState\s*\(\s*\)',
         runtime,
