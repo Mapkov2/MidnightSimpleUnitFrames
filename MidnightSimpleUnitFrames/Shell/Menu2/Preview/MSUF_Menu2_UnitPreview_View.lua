@@ -1173,23 +1173,6 @@ local function CreatePreviewAnimationButton(box)
     box.RefreshAnimationButton = RefreshPreviewAnimationButton
     RefreshPreviewAnimationButton(box)
 end
-local function ApplyPreviewCanvasGradient(canvas, T)
-    if not (canvas and canvas.CreateTexture) then return end
-    local bg = canvas._msufUnitPreviewGradient
-    if not bg then
-        bg = canvas:CreateTexture(nil, "BACKGROUND", nil, -7)
-        bg:SetAllPoints(canvas)
-        bg:SetTexture(TEX_W8)
-        canvas._msufUnitPreviewGradient = bg
-    end
-    if T and type(T.ApplyTextureGradient) == "function" then
-        T.ApplyTextureGradient(bg, "VERTICAL", { 0.000, 0.000, 0.000, 0.98 }, { 0.050, 0.052, 0.058, 0.98 })
-    elseif bg.SetGradientAlpha then
-        bg:SetGradientAlpha("VERTICAL", 0.000, 0.000, 0.000, 0.98, 0.050, 0.052, 0.058, 0.98)
-    elseif bg.SetColorTexture then
-        bg:SetColorTexture(0.018, 0.019, 0.022, 0.98)
-    end
-end
 local function ApplyUnitPinnedPresentation(box, pinned, opts, sideW)
     if not box then return end
     local T = MenuTheme()
@@ -1212,7 +1195,7 @@ local function ApplyUnitPinnedPresentation(box, pinned, opts, sideW)
         line:SetTexture(TEX_W8)
         box._msuf2PinnedHeaderLine = line
     end
-    local canvasBottom = pinned and 12 or 28
+    local canvasBottom = 12
     if box.canvas then
         box.canvas:ClearAllPoints()
         box.canvas:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -30)
@@ -1246,11 +1229,11 @@ local function BuildPreview(parent, panel, width, height)
     local colors = (T and T.colors) or {}
     local box = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     box:SetSize(width or 632, height or 228)
-    ApplyPreviewBackdrop(
-        box,
-        colors.panel2 or { 0.035, 0.043, 0.058, 0.96 },
-        colors.border or { 0.19, 0.25, 0.34, 0.95 }
-    )
+    local chrome = PreviewHelpers.ApplyPreviewChrome and PreviewHelpers.ApplyPreviewChrome(box, "outer", T, ApplyPreviewBackdrop)
+    if not chrome then
+        ApplyPreviewBackdrop(box, colors.panel or { 0.035, 0.067, 0.114, 0.54 }, colors.borderSoft or { 0.086, 0.149, 0.227, 0.46 })
+        chrome = { title = colors.title or colors.text, layerHeader = colors.muted }
+    end
     box._msufStaticH = height or 228
     box._msufPanel = panel
     box.ApplyPinnedPreviewPresentation = function(self, pinned, opts)
@@ -1272,7 +1255,7 @@ local function BuildPreview(parent, panel, width, height)
     local title = box:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     title:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -8)
     title:SetText(TR("Unit Frame Preview"))
-    if T and T.StyleFontString then T.StyleFontString(title, colors.accent or colors.text or { 1, 1, 1, 1 }, 1) end
+    if T and T.StyleFontString then T.StyleFontString(title, chrome.title or colors.title or colors.text or { 1, 1, 1, 1 }, 1) end
     box.title = title
     local hint = box:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     hint:SetPoint("LEFT", title, "RIGHT", 12, 0)
@@ -1281,14 +1264,12 @@ local function BuildPreview(parent, panel, width, height)
     box.hint = hint
     local canvas = CreateFrame("Frame", nil, box, "BackdropTemplate")
     canvas:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -30)
-    canvas:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -(sideW + 18), 28)
-    ApplyPreviewBackdrop(
-        canvas,
-        { 0, 0, 0, 0.62 },
-        colors.borderSoft or { 1, 1, 1, 0.06 },
-        { backdrop = { bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 }, bg = { 0.01, 0.012, 0.018, 0.62 } }
-    )
-    ApplyPreviewCanvasGradient(canvas, T)
+    canvas:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -(sideW + 18), 12)
+    if PreviewHelpers.ApplyPreviewChrome then
+        PreviewHelpers.ApplyPreviewChrome(canvas, "canvas", T, ApplyPreviewBackdrop)
+    else
+        ApplyPreviewBackdrop(canvas, { 0.020, 0.039, 0.071, 0.92 }, colors.borderSoft or { 0.086, 0.149, 0.227, 0.38 })
+    end
     if canvas.SetClipsChildren then canvas:SetClipsChildren(true) end
     canvas:EnableMouse(true)
     canvas:EnableMouseWheel(true)
@@ -1311,29 +1292,21 @@ local function BuildPreview(parent, panel, width, height)
         PreviewHelpers.EnsurePreviewControlsHint(box, canvas, { M = M2, T = T, Tr = TR })
     end
     CreatePreviewAnimationButton(box)
-    local footer = box:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    footer:SetPoint("TOPLEFT", canvas, "BOTTOMLEFT", 0, -8)
-    footer:SetText(TR("Click a handle to select - double-click/settings opens options - right-click actions - Ctrl+wheel zoom"))
-    local muted = colors.muted or { 0.55, 0.60, 0.70, 0.90 }
-    footer:SetTextColor(muted[1], muted[2], muted[3], muted[4] or 1)
-    if T and T.StyleFontString then T.StyleFontString(footer, muted, 0) end
-    box.footer = footer
     local sidebar = CreateFrame("Frame", nil, box, "BackdropTemplate")
     sidebar:SetPoint("TOPLEFT", canvas, "TOPRIGHT", 8, 0)
-    sidebar:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 28)
-    ApplyPreviewBackdrop(
-        sidebar,
-        colors.coreInk or colors.panel or { 0.010, 0.024, 0.046, 0.86 },
-        colors.borderSoft or { 0.070, 0.260, 0.390, 0.58 },
-        { backdrop = { bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 } }
-    )
+    sidebar:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 12)
+    if PreviewHelpers.ApplyPreviewChrome then
+        PreviewHelpers.ApplyPreviewChrome(sidebar, "sidebar", T, ApplyPreviewBackdrop)
+    else
+        ApplyPreviewBackdrop(sidebar, colors.coreShadow or colors.panel or { 0.020, 0.039, 0.071, 0.56 }, colors.borderSoft or { 0.086, 0.149, 0.227, 0.32 })
+    end
     box.sidebar = sidebar
     local sHdr = sidebar:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     sHdr:SetPoint("TOP", sidebar, "TOP", 0, -5)
     sHdr:SetText(TR("LAYERS"))
-    local layerHeaderColor = colors.muted or { 0.62, 0.70, 0.82, 0.90 }
-    sHdr:SetTextColor(layerHeaderColor[1], layerHeaderColor[2], layerHeaderColor[3], 0.94)
-    if T and T.StyleFontString then T.StyleFontString(sHdr, { layerHeaderColor[1], layerHeaderColor[2], layerHeaderColor[3], 0.94 }, 0) end
+    local layerHeaderColor = chrome.layerHeader or colors.muted or { 0.62, 0.70, 0.82, 0.82 }
+    sHdr:SetTextColor(layerHeaderColor[1], layerHeaderColor[2], layerHeaderColor[3], layerHeaderColor[4] or 0.82)
+    if T and T.StyleFontString then T.StyleFontString(sHdr, layerHeaderColor, 0) end
     box.layerVisibility = {}
     box.layerButtons = {}
     local function UnitLayerAvailable(owner, key)
@@ -1348,6 +1321,9 @@ local function BuildPreview(parent, panel, width, height)
         rowHeight = 18,
         topOffset = 23,
         showOffText = false,
+        quiet = true,
+        quietBase = chrome.rowBase,
+        quietHover = chrome.rowHover,
         textOn = { activeLayerText[1], activeLayerText[2], activeLayerText[3], 1.00 },
         textOff = { mutedLayerText[1], mutedLayerText[2], mutedLayerText[3], 0.72 },
         textDisabled = { disabledLayerText[1], disabledLayerText[2], disabledLayerText[3], 0.64 },

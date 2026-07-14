@@ -1303,6 +1303,76 @@ function H.RegisterEditModeNudgeTarget(owner, opts)
     }
     fn(owner[targetField])
 end
+local PREVIEW_CHROME_FALLBACK = {
+    outerBg = { 0.035, 0.067, 0.114, 0.54 },
+    outerBorder = { 0.086, 0.149, 0.227, 0.46 },
+    canvasBg = { 0.020, 0.039, 0.071, 0.92 },
+    canvasBorder = { 0.086, 0.149, 0.227, 0.38 },
+    canvasTop = { 0.020, 0.039, 0.071, 0.96 },
+    canvasBottom = { 0.027, 0.063, 0.106, 0.90 },
+    sidebarBg = { 0.020, 0.039, 0.071, 0.56 },
+    sidebarBorder = { 0.086, 0.149, 0.227, 0.32 },
+    title = { 0.231, 0.510, 0.965, 1.00 },
+    layerHeader = { 0.659, 0.706, 0.780, 0.82 },
+    rowBase = { 0.035, 0.067, 0.114, 1.00 },
+    rowHover = { 0.055, 0.098, 0.161, 1.00 },
+}
+local function PreviewChromeColor(source, fallback, alpha)
+    source = type(source) == "table" and source or fallback
+    return { source[1] or fallback[1], source[2] or fallback[2], source[3] or fallback[3], alpha }
+end
+function H.PreviewChromePalette(theme)
+    local colors = (theme and theme.colors) or {}
+    return {
+        outerBg = PreviewChromeColor(colors.panel, PREVIEW_CHROME_FALLBACK.outerBg, 0.54),
+        outerBorder = PreviewChromeColor(colors.borderSoft, PREVIEW_CHROME_FALLBACK.outerBorder, 0.46),
+        canvasBg = PreviewChromeColor(colors.coreShadow, PREVIEW_CHROME_FALLBACK.canvasBg, 0.92),
+        canvasBorder = PreviewChromeColor(colors.borderSoft, PREVIEW_CHROME_FALLBACK.canvasBorder, 0.38),
+        canvasTop = PreviewChromeColor(colors.coreShadow, PREVIEW_CHROME_FALLBACK.canvasTop, 0.96),
+        canvasBottom = PreviewChromeColor(colors.coreInk, PREVIEW_CHROME_FALLBACK.canvasBottom, 0.90),
+        sidebarBg = PreviewChromeColor(colors.coreShadow, PREVIEW_CHROME_FALLBACK.sidebarBg, 0.56),
+        sidebarBorder = PreviewChromeColor(colors.borderSoft, PREVIEW_CHROME_FALLBACK.sidebarBorder, 0.32),
+        -- One controlled blue accent anchors the preview header while the
+        -- surrounding card, canvas, and tools remain deliberately quiet.
+        title = PreviewChromeColor(colors.accent or colors.coreGlow, PREVIEW_CHROME_FALLBACK.title, 1.00),
+        layerHeader = PreviewChromeColor(colors.muted, PREVIEW_CHROME_FALLBACK.layerHeader, 0.82),
+        rowBase = PreviewChromeColor(colors.coreSurface or colors.panel, PREVIEW_CHROME_FALLBACK.rowBase, 1.00),
+        rowHover = PreviewChromeColor(colors.coreRaised or colors.panel2, PREVIEW_CHROME_FALLBACK.rowHover, 1.00),
+    }
+end
+function H.ApplyPreviewChrome(frame, role, theme, fallback)
+    if not frame then return H.PreviewChromePalette(theme) end
+    role = role or "outer"
+    local palette = H.PreviewChromePalette(theme)
+    local bg = role == "canvas" and palette.canvasBg or (role == "sidebar" and palette.sidebarBg or palette.outerBg)
+    local border = role == "canvas" and palette.canvasBorder or (role == "sidebar" and palette.sidebarBorder or palette.outerBorder)
+    if theme and type(theme.ApplyBackdrop) == "function" then
+        theme.ApplyBackdrop(frame, bg, border)
+    elseif type(fallback) == "function" then
+        fallback(frame, bg, border)
+    end
+    if role == "outer" and theme and type(theme.ApplyGradient) == "function" then
+        theme.ApplyGradient(frame, "card", { key = "_msuf2PreviewCardGradient", alpha = 0.34 })
+    elseif role == "canvas" and frame.CreateTexture then
+        local gradient = frame._msuf2PreviewCanvasGradient
+        if not gradient then
+            gradient = frame:CreateTexture(nil, "BACKGROUND", nil, -7)
+            gradient:SetAllPoints(frame)
+            gradient:SetTexture("Interface\\Buttons\\WHITE8X8")
+            frame._msuf2PreviewCanvasGradient = gradient
+        end
+        if theme and type(theme.ApplyTextureGradient) == "function" then
+            theme.ApplyTextureGradient(gradient, "VERTICAL", palette.canvasTop, palette.canvasBottom)
+        elseif gradient.SetGradientAlpha then
+            gradient:SetGradientAlpha("VERTICAL",
+                palette.canvasTop[1], palette.canvasTop[2], palette.canvasTop[3], palette.canvasTop[4],
+                palette.canvasBottom[1], palette.canvasBottom[2], palette.canvasBottom[3], palette.canvasBottom[4])
+        elseif gradient.SetColorTexture then
+            gradient:SetColorTexture(palette.canvasBg[1], palette.canvasBg[2], palette.canvasBg[3], palette.canvasBg[4])
+        end
+    end
+    return palette
+end
 local LAYER_BUTTON_FALLBACK_COLOR = { 1, 1, 1 }
 local function LayerButtonAvailable(owner, key)
     return not (owner and owner.layerAvailable and owner.layerAvailable[key] == false)
@@ -1331,7 +1401,24 @@ function H.RefreshLayerButton(btn, owner, opts)
         btn.off:SetText(opts.offText or "OFF")
         btn.off:SetShown((opts.showOffText == true) and ((not available) or not on))
     end
-    if not available then
+    local quiet = opts.quiet == true
+    local quietBase = opts.quietBase or PREVIEW_CHROME_FALLBACK.rowBase
+    if not available and quiet then
+        btn.bg:SetColorTexture(quietBase[1], quietBase[2], quietBase[3], 0.10)
+        btn.bar:SetColorTexture(c[1], c[2], c[3], 0.20)
+        btn.fs:SetTextColor(textDisabled[1], textDisabled[2], textDisabled[3], textDisabled[4] or 0.62)
+        if btn.off then btn.off:SetTextColor(textDisabled[1], textDisabled[2], textDisabled[3], 0.62) end
+    elseif on and quiet then
+        btn.bg:SetColorTexture(quietBase[1], quietBase[2], quietBase[3], 0.34)
+        btn.bar:SetColorTexture(c[1], c[2], c[3], 0.76)
+        btn.fs:SetTextColor(textOn[1], textOn[2], textOn[3], textOn[4] or 0.96)
+        if btn.off then btn.off:SetTextColor(textOff[1], textOff[2], textOff[3], 0.0) end
+    elseif quiet then
+        btn.bg:SetColorTexture(quietBase[1], quietBase[2], quietBase[3], 0.08)
+        btn.bar:SetColorTexture(c[1], c[2], c[3], 0.26)
+        btn.fs:SetTextColor(textOff[1], textOff[2], textOff[3], textOff[4] or 0.74)
+        if btn.off then btn.off:SetTextColor(textOff[1], textOff[2], textOff[3], 0.72) end
+    elseif not available then
         btn.bg:SetColorTexture(0.010, 0.018, 0.030, 0.32)
         btn.bar:SetColorTexture(c[1], c[2], c[3], 0.30)
         btn.fs:SetTextColor(textDisabled[1], textDisabled[2], textDisabled[3], textDisabled[4] or 0.62)
@@ -1414,8 +1501,14 @@ function H.CreateLayerButton(parent, owner, def, index, sideW, opts)
         local available = LayerButtonAvailableFor(owner, self.key, opts)
         local on = LayerButtonOnFor(owner, self.key, opts)
         local c = self.color or LAYER_BUTTON_FALLBACK_COLOR
-        self.bg:SetColorTexture((available and on) and c[1] * 0.18 or 0.026, (available and on) and c[2] * 0.18 or 0.070, (available and on) and c[3] * 0.18 or 0.110, (available and on) and 0.74 or 0.58)
-        self.bar:SetColorTexture(c[1], c[2], c[3], available and 1.0 or 0.48)
+        if opts.quiet == true then
+            local hover = opts.quietHover or PREVIEW_CHROME_FALLBACK.rowHover
+            self.bg:SetColorTexture(hover[1], hover[2], hover[3], available and 0.42 or 0.18)
+            self.bar:SetColorTexture(c[1], c[2], c[3], available and 0.90 or 0.36)
+        else
+            self.bg:SetColorTexture((available and on) and c[1] * 0.18 or 0.026, (available and on) and c[2] * 0.18 or 0.070, (available and on) and c[3] * 0.18 or 0.110, (available and on) and 0.74 or 0.58)
+            self.bar:SetColorTexture(c[1], c[2], c[3], available and 1.0 or 0.48)
+        end
         self.fs:SetTextColor(0.90, 0.92, 1, 1)
         if opts.OnEnter then
             opts.OnEnter(self, owner, available, on, tr)

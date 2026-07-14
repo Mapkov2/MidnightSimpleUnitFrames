@@ -30,9 +30,9 @@ local function GFPreviewIntroMetrics(width)
     lines = min(lines, 4)
     local noteTop = 40
     local noteLineH = 14
-    local noteGap = 12
+    local noteGap = 18
     local boxY = -(noteTop + (lines * noteLineH) + noteGap)
-    local contentH = max(364, -boxY + 300 + 16)
+    local contentH = max(378, -boxY + 292 + 14)
     return contentH, boxY
 end
 local function IsCurrentPreviewBox(box)
@@ -166,6 +166,11 @@ local function AddGFPreview(ctx, builder)
                 left = 14,
                 right = 14,
                 top = -8,
+                pinnedHeight = 232,
+                buttonWidth = 78,
+                buttonHeight = 20,
+                centerButton = true,
+                quietButton = true,
                 pageKey = ctx and ctx.key,
                 wrapper = ctx and ctx.wrapper,
                 restoreParent = body,

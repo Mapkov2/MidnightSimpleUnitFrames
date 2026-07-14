@@ -167,7 +167,7 @@ local function BuildScene(box, reason)
         runtimePrediction = runtimeSpec and runtimeSpec.prediction or {},
         runtimeStatus = runtimeSpec and runtimeSpec.status or {},
         focus = H.PreviewFocusForPage(S.ctx.key),
-        layerVisible = M.gfPreviewLayerVisible or {},
+        layerVisible = type(M.gfPreviewLayerVisible) == "table" and M.gfPreviewLayerVisible or {},
         soloLayer = M.gfPreviewSoloLayer,
         textHandles = box._textHandles or {},
     }
@@ -521,8 +521,7 @@ local function FinalizeScene(scene)
         local button = box._layerButtons[i]
         local available = scene.layerAvailable[button._layerKey] ~= false
         button._layerAvailable = available
-        button:SetPreviewActive(button._sectionKey == scene.focus, SceneLayerOn(scene, button._layerKey),
-            scene.soloLayer == button._layerKey, available)
+        if button.Refresh then button:Refresh() end
     end
     if box._selectedHandle and box._selectedHandle.IsShown and not box._selectedHandle:IsShown() then S.SelectHandle(nil) end
     S.RefreshHandleSelection(box)
@@ -886,6 +885,9 @@ local function RenderAuras(scene)
     end
     scene.LayoutHandle = LayoutHandle
     scene.PlaceAuraPreviewText = PlaceAuraPreviewText
+    scene.RuntimeAuraTextAnchor = RuntimeAuraTextAnchor
+    scene.LayoutAuraPreviewSwipe = LayoutAuraPreviewSwipe
+    scene.LayoutAuraDurationBar = LayoutAuraDurationBar
 end
 
 Render.Components = { Plan = BuildScene, Auras = RenderAuras, Finalize = FinalizeScene }
@@ -1631,6 +1633,9 @@ function Render.Install(box, ctx, deps)
         RenderAuras(scene)
         local LayoutHandle = scene.LayoutHandle
         local PlaceAuraPreviewText = scene.PlaceAuraPreviewText
+        local RuntimeAuraTextAnchor = scene.RuntimeAuraTextAnchor
+        local LayoutAuraPreviewSwipe = scene.LayoutAuraPreviewSwipe
+        local LayoutAuraDurationBar = scene.LayoutAuraDurationBar
         local function TargetedAnchor(anchor)
             if anchor == "TOPLEFT" or anchor == "TOP" or anchor == "TOPRIGHT"
                 or anchor == "LEFT" or anchor == "CENTER" or anchor == "RIGHT"
@@ -1980,7 +1985,7 @@ function Render.Install(box, ctx, deps)
                 local effect = selectedItem and (item.frame or selectedSpellEffect) or nil
                 local handle = box:EnsureSpellIndicatorHandle(item, i)
                 local placedShown = placed and (placed.type or "icon") ~= "none"
-                if handle and placedShown and ConfigureSpellPreviewHandle(handle, item, placed, buffCfg) then
+                if handle and placedShown and ConfigureSpellPreviewHandle(handle, item, placed, item) then
                     if selectedItem then selectedRuntimeSpellHandleUsed = true end
                 elseif handle and effect then
                     handle:SetSize(1, 1)
@@ -2026,9 +2031,10 @@ function Render.Install(box, ctx, deps)
             selectedFallbackItem.specKey = scene.selectedSpellSpecKey
             selectedFallbackItem.auraName = scene.selectedSpellAuraName
             selectedFallbackItem.display = scene.selectedSpellAuraName or "Spell"
+            local selectedAppearance = selectedSpellCfg.cornerSlotKey == nil and buffCfg or nil
             ConfigureSpellPreviewHandle(spellHandle, selectedFallbackItem,
                 selectedPlaced or { type = "icon", size = 20, anchor = "TOPLEFT", x = 0, y = 0 },
-                buffCfg, selectedSpellIcon, { spellR, spellG, spellB, 1 })
+                selectedAppearance, selectedSpellIcon, { spellR, spellG, spellB, 1 })
             HideSpellEffectPreview(spellHandle)
         else
             HideSpellEffectPreview(spellHandle)
