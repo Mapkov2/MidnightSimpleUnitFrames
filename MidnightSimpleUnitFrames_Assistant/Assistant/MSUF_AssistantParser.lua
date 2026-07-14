@@ -4417,7 +4417,7 @@ function A._ParsePipelineWorkflow(normalized, raw, ctx)
     result = P.ParseGroupPowerBarSizeShortcut and P.ParseGroupPowerBarSizeShortcut(normalized); if result then return result end
     result = P.ParsePowerBarSizeShortcut and P.ParsePowerBarSizeShortcut(normalized); if result then return result end
     result = P.ParseMiscRegistryShortcut(normalized, raw); if result then return result end
-    result = ParseSupportWorkflow(normalized); if result then return result end
+    result = ParseSupportWorkflow(normalized, raw); if result then return result end
     result = ParseDashboardPanelAction(normalized); if result then return result end
     result = ParseNavRailAction(normalized); if result then return result end
     result = ParseMenuWindowAction(normalized); if result then return result end
@@ -7581,7 +7581,7 @@ function A.Parse(text, ctxOverride)
         end
     end
     if P.ContainsAny(normalized, P.RootPhrases[768]) then
-        local earlySupportParsed = P.ParseSupportWorkflow and P.ParseSupportWorkflow(normalized)
+        local earlySupportParsed = P.ParseSupportWorkflow and P.ParseSupportWorkflow(normalized, raw)
         if earlySupportParsed then
             earlySupportParsed.raw = raw
             earlySupportParsed.normalized = normalized
@@ -7604,7 +7604,7 @@ function A.Parse(text, ctxOverride)
             diagnosticParsed.normalized = normalized
             return diagnosticParsed
         end
-        local supportWorkflowParsed = P.ParseSupportWorkflow and P.ParseSupportWorkflow(normalized)
+        local supportWorkflowParsed = P.ParseSupportWorkflow and P.ParseSupportWorkflow(normalized, raw)
         if supportWorkflowParsed then
             supportWorkflowParsed.raw = raw
             supportWorkflowParsed.normalized = normalized

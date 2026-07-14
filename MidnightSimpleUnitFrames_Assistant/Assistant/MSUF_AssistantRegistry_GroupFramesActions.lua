@@ -55,6 +55,11 @@ Registry:RegisterAction({
     type = "reset",
     combatSafe = false,
     captureSnapshot = true,
+    aliases = {
+        "reset selected group status icon", "reset current group status icon",
+        "reset selected group status indicator",
+    },
+    aliasNoArgs = true,
     run = function()
         local gp = M and M.GroupPage
         local scope = gp and type(gp.CurrentScope) == "function" and gp.CurrentScope() or (M and M.gfScope)
