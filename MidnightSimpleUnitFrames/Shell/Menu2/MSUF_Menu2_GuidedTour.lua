@@ -159,6 +159,8 @@ local function PersonalQuestionsComplete()
 end
 
 local COOLDOWN_ANCHOR_PREFERENCE = "unitframeCooldownAnchor"
+local EDIT_MODE_MOVED_PREFERENCE = "editModeMoved"
+local EDIT_MODE_MOVED_KEY_PREFERENCE = "editModeMovedKey"
 local VALID_COOLDOWN_ANCHOR_DECISION = { cooldown = true, independent = true }
 local function CooldownAnchorDecision()
     local value = Preference(COOLDOWN_ANCHOR_PREFERENCE)
@@ -167,8 +169,14 @@ end
 local function CooldownAnchorDecisionComplete()
     return CooldownAnchorDecision() ~= nil
 end
+local function EditModePlacementComplete()
+    local ok, complete = Invoke(Tour(), "IsEditModePlacementComplete")
+    if ok then return complete == true end
+    return Preference(EDIT_MODE_MOVED_PREFERENCE) == true
+end
 M.GetGuidedCooldownAnchorDecision = CooldownAnchorDecision
 M.IsGuidedEditModePlacementUnlocked = CooldownAnchorDecisionComplete
+M.IsGuidedEditModePlacementComplete = EditModePlacementComplete
 
 local PREFERENCE_LABELS = {
     general = "General play",
@@ -238,11 +246,14 @@ local function StageCue(stage, position)
     end
     if stage.id == "edit_mode" then
         local decision = CooldownAnchorDecision()
+        if decision and EditModePlacementComplete() then
+            return Tr("Frame moved: placement is complete. Exit MSUF Edit Mode when you are happy, then continue.")
+        end
         if decision == "cooldown" then
-            return Tr("Anchor chosen: Unitframes follow Main Cooldowns. Now place the anchored layout in MSUF Edit Mode.")
+            return Tr("Anchor chosen: Unitframes follow Main Cooldowns. Open MSUF Edit Mode and drag the highlighted frame once to continue.")
         end
         if decision == "independent" then
-            return Tr("Anchor chosen: Unitframes stay independent of Main Cooldowns. Now place them in MSUF Edit Mode.")
+            return Tr("Anchor chosen: Unitframes stay independent of Main Cooldowns. Open MSUF Edit Mode and drag the highlighted frame once to continue.")
         end
         return Tr("Before moving any frame, choose whether all Unitframes should follow Main Cooldowns or use independent placement.")
     end
@@ -276,6 +287,7 @@ end
 
 local function SetGuidedCooldownAnchorDecision(value)
     if not VALID_COOLDOWN_ANCHOR_DECISION[value] or BlockedByCombat() then return false end
+    local previousDecision = CooldownAnchorDecision()
     local enabled = value == "cooldown"
     local general = type(M.GetGeneralDB) == "function" and M.GetGeneralDB() or nil
     if type(general) ~= "table" then
@@ -293,11 +305,87 @@ local function SetGuidedCooldownAnchorDecision(value)
     end
     local stored = Invoke(Tour(), "SetPreference", COOLDOWN_ANCHOR_PREFERENCE, value)
     if not stored then return false end
+    if previousDecision ~= value then
+        Invoke(Tour(), "SetPreference", EDIT_MODE_MOVED_PREFERENCE, nil)
+        Invoke(Tour(), "SetPreference", EDIT_MODE_MOVED_KEY_PREFERENCE, nil)
+    end
     local apply = M.ApplyService or _G.MSUF_Menu2_ApplyService
     if type(apply) == "table" and type(apply.Flush) == "function" then apply.Flush() end
     return true
 end
 M.SetGuidedCooldownAnchorDecision = SetGuidedCooldownAnchorDecision
+
+local function RefreshEditModePlacementCue()
+    local editMode = _G.MSUF_EM2
+    local movers = editMode and editMode.Movers
+    if movers and type(movers.RefreshGuidedPlacementCue) == "function" then
+        movers.RefreshGuidedPlacementCue()
+    end
+end
+
+local function ShouldShowEditModeOpenCue()
+    if not TourIsActive() or CurrentStage().id ~= "edit_mode" then return false end
+    if not CooldownAnchorDecisionComplete() or EditModePlacementComplete() then return false end
+    local status = type(M.EditModeLifecycleStatus) == "function" and M.EditModeLifecycleStatus() or {}
+    return status.active ~= true and status.combatLocked ~= true
+end
+M.ShouldShowGuidedEditModeOpenCue = ShouldShowEditModeOpenCue
+
+local function RefreshEditModeOpenCue(show)
+    local T = M.Theme
+    local button = M.dashboardToolbarEditModeButton
+    local cue = Runtime.editModeOpenCue
+    show = show == true and button ~= nil and T ~= nil
+    if not show then
+        if cue then cue:Hide() end
+        Runtime.editModeOpenCueVisible = nil
+        return
+    end
+    if not cue or cue:GetParent() ~= button then
+        if cue then cue:Hide() end
+        cue = CreateFrame("Frame", nil, button)
+        cue:SetAllPoints(button)
+        cue:EnableMouse(false)
+        cue:SetFrameLevel((button:GetFrameLevel() or 1) + 12)
+        local color = T.colors.ok or { 0.24, 0.82, 0.46, 1 }
+        local function Arrow(point, rotation)
+            local texture = cue:CreateTexture(nil, "OVERLAY", nil, 7)
+            local usedAtlas = texture.SetAtlas and pcall(texture.SetAtlas, texture, "NPE_ArrowRight", false)
+            if not usedAtlas and T.media then texture:SetTexture(T.media.collapseArrow) end
+            texture:SetSize(20, 20)
+            texture:SetPoint(point, cue, point, point == "LEFT" and 3 or -3, 0)
+            if rotation and texture.SetRotation then texture:SetRotation(rotation) end
+            texture:SetVertexColor(color[1], color[2], color[3], 1)
+            return texture
+        end
+        cue._leftArrow = Arrow("LEFT")
+        cue._rightArrow = Arrow("RIGHT", math.pi)
+        Runtime.editModeOpenCue = cue
+    end
+    cue:Show()
+    if not Runtime.editModeOpenCueVisible then
+        Runtime.editModeOpenCueVisible = true
+        if type(T.PlayMotion) == "function" then
+            T.PlayMotion(cue, "controlFocusIn", { fromAlpha = 0.30, toAlpha = 1, duration = 0.18 })
+        end
+        if type(T.PlayNeonFlash) == "function" then
+            T.PlayNeonFlash(button, "success", { alpha = 0.28, duration = 0.80 })
+        end
+    end
+end
+
+function M.NotifyGuidedEditModeMoved(moverKey)
+    local ok, marked = Invoke(Tour(), "MarkEditModePlacementComplete", moverKey)
+    if not ok or marked ~= true then return false end
+    RefreshEditModePlacementCue()
+    if M.activeKey == "guided_setup" and type(M.RequestRefresh) == "function" then
+        M.RequestRefresh(nil, "GUIDED_EDIT_MODE_MOVED")
+    end
+    if type(M.RefreshGuidedTourChrome) == "function" then
+        M.RefreshGuidedTourChrome("EDIT_MODE_MOVED")
+    end
+    return true
+end
 
 local function ExpectedPage(stage)
     stage = stage or CurrentStage()
@@ -703,7 +791,7 @@ local function EmphasizeControl(stage, section, controls, current)
         end
     end
     if T and type(T.PlayNeonFlash) == "function" and type(selectedWidget.CreateTexture) == "function" then
-        T.PlayNeonFlash(selectedWidget, "info", { alpha = 0.18, duration = 0.52 })
+        T.PlayNeonFlash(selectedWidget, "success", { alpha = 0.24, duration = 0.72 })
     end
 end
 
@@ -884,7 +972,7 @@ local function FocusGuidedWidget(widget, fallback, flash)
         end
         local T = M.Theme
         if pass == 1 and flash and outer and T and type(T.PlayNeonFlash) == "function" and type(outer.CreateTexture) == "function" then
-            T.PlayNeonFlash(outer, "info", { alpha = 0.18, duration = 0.52 })
+            T.PlayNeonFlash(outer, "success", { alpha = 0.24, duration = 0.72 })
         end
         -- The first scroll can activate or resize a pinned Preview. Re-run on
         -- the settled geometry so the target lands below that overlay.
@@ -965,7 +1053,11 @@ local function SelectExpectedPage(stage)
     Runtime.warning = nil
     if stage.special then InvalidateGuidedPage() end
     if M.frame and type(M.frame.IsShown) == "function" and M.frame:IsShown() then
-        if M.activeKey == pageKey then
+        -- Consecutive special stages share the guided_setup page key, but each
+        -- stage builds different page content. Invalidation removes the cached
+        -- wrapper, so only use the same-page refresh path while that wrapper
+        -- still exists; otherwise SelectPage must rebuild it immediately.
+        if M.activeKey == pageKey and M.cache and M.cache[pageKey] then
             if type(M.RefreshGuidedTourChrome) == "function" then M.RefreshGuidedTourChrome("SAME_PAGE_STAGE") end
             return true
         end
@@ -1418,6 +1510,83 @@ local function StopChromeTransition(chrome)
     for i = 1, #regions do T.StopMotion(regions[i]) end
 end
 
+local function RegisterSpecialClickTargets(stageId, key, widgets)
+    local targets = Runtime.specialClickTargets
+    if type(targets) ~= "table" or targets.stageId ~= stageId then
+        targets = { stageId = stageId, groups = {} }
+        Runtime.specialClickTargets = targets
+    end
+    targets.groups[key] = type(widgets) == "table" and widgets or {}
+end
+
+local function FlashGuidedClickTargets(chrome, stage, position, context, reason)
+    if reason == "HOST_SIZE" or reason == "WINDOW_RESIZE" then return end
+    local T = M.Theme
+    if not (T and type(T.PlayNeonFlash) == "function") then return end
+    context = context or {}
+    local editStatus = stage.id == "edit_mode"
+        and (type(M.EditModeLifecycleStatus) == "function" and M.EditModeLifecycleStatus() or {})
+        or {}
+    local signature = table.concat({
+        stage.id,
+        position.section and position.section.id or "overview",
+        position.control and position.control.id or "section",
+        context.profileMismatch and "profile" or "profile-ok",
+        context.manualAway and "away" or "here",
+        context.warning and tostring(context.warning.signature or "warning") or "normal",
+        tostring(Preference("playstyle") or ""),
+        tostring(Preference("informationStyle") or ""),
+        tostring(CooldownAnchorDecision() or ""),
+        EditModePlacementComplete() and "placed" or "unplaced",
+        editStatus.active and "edit-on" or "edit-off",
+    }, "\031")
+    if Runtime.lastClickCueSignature == signature then return end
+    Runtime.lastClickCueSignature = signature
+
+    local widgets, seen = {}, {}
+    local function Add(widget)
+        if widget and not seen[widget] then
+            seen[widget] = true
+            widgets[#widgets + 1] = widget
+        end
+    end
+    local function AddGroup(key)
+        local targets = Runtime.specialClickTargets
+        local group = targets and targets.stageId == stage.id and targets.groups and targets.groups[key]
+        for i = 1, #(group or {}) do Add(group[i]) end
+    end
+
+    if context.profileMismatch then
+        Add(chrome.back)
+    elseif context.manualAway then
+        Add(chrome.next)
+    elseif context.warning then
+        Add(chrome.skip)
+    elseif stage.id == "menu_basics" then
+        if Preference("playstyle") == nil then AddGroup("playstyle") end
+        if Preference("informationStyle") == nil then AddGroup("informationStyle") end
+        if PersonalQuestionsComplete() then Add(chrome.next) end
+    elseif stage.id == "edit_mode" then
+        if not CooldownAnchorDecisionComplete() then
+            AddGroup("anchor")
+        elseif EditModePlacementComplete() then
+            Add(chrome.next)
+        elseif editStatus.active ~= true then
+            Add(M.dashboardToolbarEditModeButton)
+        end
+    elseif stage.id == "final_review" or not position.control then
+        Add(chrome.next)
+    end
+
+    for i = 1, #widgets do
+        local widget = widgets[i]
+        T.PlayNeonFlash(widget, "success", { alpha = 0.28, duration = 0.82 })
+        if type(T.PlayMotion) == "function" then
+            T.PlayMotion(widget, "controlFocusIn", { fromAlpha = 0.52, toAlpha = 1, duration = 0.18 })
+        end
+    end
+end
+
 function M.RefreshGuidedTourChrome(reason)
     local chrome = Runtime.chrome
     if not chrome then return false end
@@ -1425,9 +1594,11 @@ function M.RefreshGuidedTourChrome(reason)
         Runtime.warning = nil
         Runtime.manualAway = nil
         Runtime.lastVisualSignature = nil
+        Runtime.lastClickCueSignature = nil
         ClearSectionEmphasis()
         StopChromeTransition(chrome)
         chrome:Hide()
+        RefreshEditModeOpenCue(false)
         AnchorTourScroll(chrome, false)
         return false
     end
@@ -1444,6 +1615,10 @@ function M.RefreshGuidedTourChrome(reason)
     if currentPage and currentPage ~= expected then Runtime.manualAway = true end
     local manualAway = Runtime.manualAway == true and currentPage ~= expected
     local warning = Runtime.warning
+    local showEditModeOpenCue = not profileMismatch
+        and not manualAway
+        and not warning
+        and ShouldShowEditModeOpenCue()
     local displayHelp = profileMismatch
         and format(Tr("This tour belongs to profile %s. You are now editing %s. Restart the tour here or switch back to continue safely."), tourProfile, activeProfile)
         or manualAway and Tr("Return to the guided page when you are ready to continue.")
@@ -1496,10 +1671,12 @@ function M.RefreshGuidedTourChrome(reason)
 
     local firstPosition = stage.index == 1 and (stage.special or position.overview)
     local final = stage.id == "final_review"
+    local waitingForAnchorDecision = stage.id == "edit_mode" and not CooldownAnchorDecisionComplete()
+    local waitingForEditModeMove = stage.id == "edit_mode" and not waitingForAnchorDecision and not EditModePlacementComplete()
     SetButtonText(chrome.back, profileMismatch and "Restart tour" or (warning and "Cancel" or "Back"))
     SetButtonText(chrome.keep, KeepLabel(stage, position))
     SetButtonText(chrome.skip, warning and "Confirm skip" or "Skip")
-    SetButtonText(chrome.next, manualAway and "Return" or (final and "Finish" or "Next"))
+    SetButtonText(chrome.next, manualAway and "Return" or (final and "Finish" or (waitingForEditModeMove and "Move a frame first" or "Next")))
     SetButtonText(chrome.pause, "Pause")
     LayoutChrome(chrome, alert ~= nil and alert ~= false, displayHelp)
 
@@ -1519,11 +1696,10 @@ function M.RefreshGuidedTourChrome(reason)
         SetButtonEnabled(chrome.skip, true)
         SetButtonEnabled(chrome.next, false)
     else
-        local waitingForAnchorDecision = stage.id == "edit_mode" and not CooldownAnchorDecisionComplete()
         SetButtonEnabled(chrome.back, not firstPosition)
-        SetButtonEnabled(chrome.keep, not final and stage.id ~= "menu_basics" and not waitingForAnchorDecision)
+        SetButtonEnabled(chrome.keep, not final and stage.id ~= "menu_basics" and not waitingForAnchorDecision and not waitingForEditModeMove)
         SetButtonEnabled(chrome.skip, not final)
-        SetButtonEnabled(chrome.next, (stage.id ~= "menu_basics" or PersonalQuestionsComplete()) and not waitingForAnchorDecision)
+        SetButtonEnabled(chrome.next, (stage.id ~= "menu_basics" or PersonalQuestionsComplete()) and not waitingForAnchorDecision and not waitingForEditModeMove)
     end
     SetButtonEnabled(chrome.pause, true)
     chrome:Show()
@@ -1535,6 +1711,13 @@ function M.RefreshGuidedTourChrome(reason)
     end
     local signature = table.concat({ stage.id, position.section and position.section.id or "overview", position.control and position.control.id or "section", profileMismatch and "profile" or (warning and "warning" or "normal"), manualAway and "away" or "guided" }, "\031")
     PlayChromeTransition(chrome, signature, reason)
+    RefreshEditModeOpenCue(showEditModeOpenCue)
+    RefreshEditModePlacementCue()
+    FlashGuidedClickTargets(chrome, stage, position, {
+        profileMismatch = profileMismatch,
+        manualAway = manualAway,
+        warning = warning,
+    }, reason)
     return true
 end
 
@@ -1563,6 +1746,11 @@ end
 function M.RunGuidedTourStep(step)
     step = tostring(step or ""):lower()
     if BlockedByCombat() or not TourIsActive() then return false, "guided_setup_inactive" end
+    local stage = CurrentStage()
+    if (step == "keep" or step == "next") and stage.id == "edit_mode" then
+        if not CooldownAnchorDecisionComplete() then return false, "guided_edit_mode_anchor_required" end
+        if not EditModePlacementComplete() then return false, "guided_edit_mode_move_required" end
+    end
     if step == "back" then
         BackCurrent()
     elseif step == "keep" then
@@ -1888,6 +2076,7 @@ local function PersonalQuestion(ctx, builder, T, W, key, label, values)
         localized[i] = { value = values[i].value, text = Tr(values[i].text), icon = values[i].icon }
     end
     local segment = W.Segment(card, Tr(label), localized, max(240, builder.width - 28))
+    RegisterSpecialClickTargets("menu_basics", key, segment.buttons)
     local function Refresh()
         segment:SetValue(Preference(key))
     end
@@ -1925,6 +2114,7 @@ local function PersonalQuestion(ctx, builder, T, W, key, label, values)
 end
 
 local function BuildMenuBasicsPage(ctx, T, W)
+    Runtime.specialClickTargets = { stageId = "menu_basics", groups = {} }
     local b = W.PageBuilder(ctx)
     Header(b, format(Tr("Welcome, %s"), PlayerDisplayName()), "Two quick choices make the guide fit how you play.")
     PersonalQuestion(ctx, b, T, W, "playstyle", "Where do you spend most of your time?", {
@@ -1961,6 +2151,7 @@ local function RegisterGuidedPageButton(button, suffix, label, help)
 end
 
 local function BuildEditModePage(ctx, T, W)
+    Runtime.specialClickTargets = { stageId = "edit_mode", groups = {} }
     local b = W.PageBuilder(ctx)
     Header(b, "Choose the frame anchor first", "This decides what every Unitframe position is relative to. Choose before opening MSUF Edit Mode.")
 
@@ -1971,6 +2162,7 @@ local function BuildEditModePage(ctx, T, W)
         { value = "independent", text = Tr("Independent placement") },
     }
     local decision = W.Segment(decisionCard, Tr("Should all Unitframes follow the Cooldown Manager?"), decisionValues, max(240, b.width - 32))
+    RegisterSpecialClickTargets("edit_mode", "anchor", decision.buttons)
     if type(W.MoveWidget) == "function" then W.MoveWidget(decision, decisionCard, 16, -18, max(240, b.width - 32), "LEFT") end
     local decisionCopy = T.Font(decisionCard, "GameFontHighlightSmall", "", T.colors.muted)
     decisionCopy:SetPoint("TOPLEFT", decisionCard, "TOPLEFT", 16, -88)
@@ -2000,6 +2192,7 @@ local function BuildEditModePage(ctx, T, W)
         local status = type(M.EditModeLifecycleStatus) == "function" and M.EditModeLifecycleStatus() or {}
         local active = status.active == true
         local anchorDecision = CooldownAnchorDecision()
+        local placementComplete = EditModePlacementComplete()
         decision:SetValue(anchorDecision)
         if anchorDecision == "cooldown" then
             decisionCopy:SetText(Tr("Selected: Unitframes follow Essential Cooldown Manager. If Main Cooldowns move, the anchored Unitframe layout follows."))
@@ -2008,9 +2201,20 @@ local function BuildEditModePage(ctx, T, W)
         else
             decisionCopy:SetText(Tr("Required before placement. Changing this later can shift the whole layout because the saved offsets use a different anchor."))
         end
-        stateLabel:SetText(active and Tr("MSUF Edit Mode is active") or (anchorDecision and Tr("Anchor chosen - ready to place frames") or Tr("Choose anchoring before placement")))
-        stateCopy:SetText(active and Tr("Use the Edit Mode HUD; Exit keeps the result.") or (anchorDecision and Tr("This opens the in-game placement HUD.") or Tr("Edit Mode unlocks after the anchor choice above.")))
-        SetFontColor(stateLabel, active and (T.colors.ok or T.colors.accent) or T.colors.text)
+        if placementComplete then
+            stateLabel:SetText(Tr("Frame moved - placement complete"))
+            stateCopy:SetText(active and Tr("Exit keeps the result. You can now continue the guide.") or Tr("The required Edit Mode movement is complete."))
+        elseif active then
+            stateLabel:SetText(Tr("Move one highlighted frame to continue"))
+            stateCopy:SetText(Tr("Two arrows point to a movable frame. Drag it once; Next unlocks after a real position change."))
+        elseif anchorDecision then
+            stateLabel:SetText(Tr("Anchor chosen - open Edit Mode and move a frame"))
+            stateCopy:SetText(Tr("The placement step completes after you drag the highlighted frame once."))
+        else
+            stateLabel:SetText(Tr("Choose anchoring before placement"))
+            stateCopy:SetText(Tr("Edit Mode unlocks after the anchor choice above."))
+        end
+        SetFontColor(stateLabel, placementComplete and (T.colors.ok or T.colors.accent) or (active and (T.colors.warning or T.colors.accent) or T.colors.text))
         SetButtonText(button, active and "Exit and keep changes" or "Open MSUF Edit Mode")
         SetButtonEnabled(button, not status.combatLocked and (active or anchorDecision ~= nil))
     end

@@ -52,6 +52,71 @@ local pendingDragMover
 local pendingDragStartX
 local pendingDragStartY
 local PENDING_DRAG_THRESHOLD = 3
+local guidedCueMover
+
+local function GuidedPlacementPending()
+    local tour = MSUF and MSUF.GuidedTour6 or _G.MSUF_GuidedTour6
+    if not (tour and type(tour.GetState) == "function") then return false end
+    local state = tour:GetState()
+    local preferences = state and state.preferences
+    local anchor = preferences and preferences.unitframeCooldownAnchor
+    return state and state.status == "active"
+        and state.currentStageId == "edit_mode"
+        and (anchor == "cooldown" or anchor == "independent")
+        and preferences.editModeMoved ~= true
+end
+
+local function HideGuidedPlacementCue()
+    local cue = guidedCueMover and guidedCueMover._msufGuidedPlacementCue
+    if cue then cue:Hide() end
+    guidedCueMover = nil
+end
+
+local function EnsureGuidedPlacementCue(mover)
+    local cue = mover and mover._msufGuidedPlacementCue
+    if cue then return cue end
+    cue = CreateFrame("Frame", nil, mover)
+    cue:SetAllPoints(mover)
+    cue:EnableMouse(false)
+    cue:SetFrameLevel((mover:GetFrameLevel() or 1) + 20)
+
+    local function CreateArrow(point, relativePoint, x)
+        local arrow = cue:CreateTexture(nil, "OVERLAY", nil, 7)
+        local usedAtlas = arrow.SetAtlas and pcall(arrow.SetAtlas, arrow, "NPE_ArrowRight", false)
+        if not usedAtlas then arrow:SetTexture("Interface\\ChatFrame\\ChatFrameExpandArrow") end
+        arrow:SetSize(28, 28)
+        arrow:SetPoint(point, mover, relativePoint, x, 0)
+        local th = T()
+        arrow:SetVertexColor(th.titleR, th.titleG, th.titleB, 1)
+        return arrow
+    end
+
+    cue._leftArrow = CreateArrow("RIGHT", "LEFT", -10)
+    cue._rightArrow = CreateArrow("LEFT", "RIGHT", 10)
+    if cue._rightArrow.SetRotation then cue._rightArrow:SetRotation(math.pi) end
+    cue._label = cue:CreateFontString(nil, "OVERLAY")
+    cue._label:SetFont(FONT, FontSize("caption"), "OUTLINE")
+    cue._label:SetPoint("BOTTOM", mover, "TOP", 0, 18)
+    cue._label:SetText(Tr("Drag this frame once"))
+    local th = T()
+    cue._label:SetTextColor(th.titleR, th.titleG, th.titleB, 1)
+    mover._msufGuidedPlacementCue = cue
+    return cue
+end
+
+function Movers.RefreshGuidedPlacementCue()
+    HideGuidedPlacementCue()
+    if not (moverParent and moverParent:IsShown() and GuidedPlacementPending()) then return end
+    local target = movers.player
+    if not (target and target:IsShown()) then
+        for _, mover in pairs(movers) do
+            if mover:IsShown() then target = mover break end
+        end
+    end
+    if not target then return end
+    guidedCueMover = target
+    EnsureGuidedPlacementCue(target):Show()
+end
 
 local function RefreshUFPreview(reason)
     if _G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()) then return end
@@ -282,6 +347,7 @@ local function CreateMover(key, cfg)
         if BlockConfigCombatLocked() then return end
         if _G.MSUF_EM2_SetPreviewNudgeTarget then _G.MSUF_EM2_SetPreviewNudgeTarget(nil) end
         self._dragging = true
+        if self._msufGuidedPlacementCue then self._msufGuidedPlacementCue:Hide() end
         self._coordFS:Show()
         if EM2.Focus and EM2.Focus.ClearHover then EM2.Focus.ClearHover("drag") end
 
@@ -319,6 +385,7 @@ local function CreateMover(key, cfg)
         if EM2.Focus and EM2.Focus.SetHover and self:IsMouseOver() then
             EM2.Focus.SetHover(key, nil, nil, { source = "mover", force = true })
         end
+        Movers.RefreshGuidedPlacementCue()
     end
 
     mover._msufEM2BeginDrag = BeginMoverDrag
@@ -370,9 +437,11 @@ function Movers.Show()
         local f = c.getFrame and c.getFrame()
         if f then SyncMoverToFrame(m, f, c); m:Show(); m:UpdateLabelVisibility() else m:Hide() end
     end
+    Movers.RefreshGuidedPlacementCue()
 end
 
 function Movers.Hide()
+    HideGuidedPlacementCue()
     if moverParent then moverParent:Hide() end
     for _, m in pairs(movers) do m:Hide() end
 end
@@ -399,6 +468,7 @@ function Movers.SyncAll()
             end
         end
     end
+    Movers.RefreshGuidedPlacementCue()
 end
 
 --- MSUF_EM2_Elements.lua

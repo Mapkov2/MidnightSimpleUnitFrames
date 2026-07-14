@@ -13,6 +13,10 @@ local time = time
 
 local REVISION = 1
 local DEFAULT_STAGE = "menu_basics"
+local EDIT_MODE_STAGE = "edit_mode"
+local EDIT_MODE_MOVED_PREFERENCE = "editModeMoved"
+local EDIT_MODE_MOVED_KEY_PREFERENCE = "editModeMovedKey"
+local COOLDOWN_ANCHOR_PREFERENCE = "unitframeCooldownAnchor"
 local VALID_STATUS = {
     inactive = true,
     active = true,
@@ -163,6 +167,21 @@ function Tour:SetPreference(key, value)
     state.preferences[key] = value
     Touch()
     return true
+end
+
+function Tour:IsEditModePlacementComplete()
+    return state.preferences[EDIT_MODE_MOVED_PREFERENCE] == true
+end
+
+function Tour:MarkEditModePlacementComplete(moverKey)
+    if state.status ~= "active" or state.currentStageId ~= EDIT_MODE_STAGE then return false end
+    local anchor = state.preferences[COOLDOWN_ANCHOR_PREFERENCE]
+    if anchor ~= "cooldown" and anchor ~= "independent" then return false end
+    local changed = state.preferences[EDIT_MODE_MOVED_PREFERENCE] ~= true
+    state.preferences[EDIT_MODE_MOVED_PREFERENCE] = true
+    state.preferences[EDIT_MODE_MOVED_KEY_PREFERENCE] = tostring(moverKey or "")
+    Touch()
+    return true, changed
 end
 
 function Tour:GetCursor(stageId)

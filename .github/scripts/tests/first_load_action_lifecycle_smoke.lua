@@ -122,16 +122,67 @@ do
     Check(MSUF.GuidedTour6:Start("Default", "edit_mode") == true, "guided tour did not start at Edit Mode")
     Equal(M.GetGuidedCooldownAnchorDecision(), nil, "Edit Mode inferred an anchor choice without user input")
     Check(M.IsGuidedEditModePlacementUnlocked() == false, "frame placement unlocked before the anchor choice")
+    Check(M.IsGuidedEditModePlacementComplete() == false, "Edit Mode placement completed without a real move")
     Check(M.SetGuidedCooldownAnchorDecision("cooldown") == true, "Cooldown Manager anchor choice failed")
     Equal(_G.MSUF_DB.general.anchorToCooldown, true, "Cooldown Manager choice did not enable the real anchor setting")
     Equal(M.GetGuidedCooldownAnchorDecision(), "cooldown", "Cooldown Manager choice was not persisted in tour state")
     Check(M.IsGuidedEditModePlacementUnlocked() == true, "frame placement stayed locked after the anchor choice")
+    M.EditModeLifecycleStatus = function() return { active = false, combatLocked = false } end
+    Check(M.ShouldShowGuidedEditModeOpenCue() == true, "toolbar Edit Mode cue stayed hidden after the anchor choice")
+    M.EditModeLifecycleStatus = function() return { active = true, combatLocked = false } end
+    Check(M.ShouldShowGuidedEditModeOpenCue() == false, "toolbar Edit Mode cue remained visible after opening Edit Mode")
+    M.EditModeLifecycleStatus = function() return { active = false, combatLocked = false } end
+    local advanced, blockedReason = M.RunGuidedTourStep("next")
+    Check(advanced == false, "guided Edit Mode advanced before a real move")
+    Equal(blockedReason, "guided_edit_mode_move_required", "blocked Edit Mode advance returned the wrong reason")
+    Equal(MSUF.GuidedTour6:GetState().currentStageId, "edit_mode", "blocked Edit Mode advance changed stages")
+    Check(M.NotifyGuidedEditModeMoved("player") == true, "real Edit Mode movement was not accepted")
+    Check(M.IsGuidedEditModePlacementComplete() == true, "Edit Mode movement did not complete placement")
+    Check(M.ShouldShowGuidedEditModeOpenCue() == false, "toolbar Edit Mode cue returned after placement completed")
+    Equal(MSUF.GuidedTour6:GetState().preferences.editModeMovedKey, "player", "moved frame key was not persisted")
     Check(M.SetGuidedCooldownAnchorDecision("independent") == true, "independent anchor choice failed")
     Equal(_G.MSUF_DB.general.anchorToCooldown, false, "independent choice did not disable the Cooldown Manager anchor")
     Equal(M.GetGuidedCooldownAnchorDecision(), "independent", "independent choice was not persisted in tour state")
+    Check(M.IsGuidedEditModePlacementComplete() == false, "changing the anchor did not require fresh placement")
+    Check(M.NotifyGuidedEditModeMoved("target") == true, "fresh placement after anchor change was rejected")
+    Check(M.IsGuidedEditModePlacementComplete() == true, "fresh placement after anchor change was not recorded")
     Equal(effects.generalWrites, 2, "anchor choices did not use the real general setting mutation path")
     Equal(effects.applyFlushes, 2, "anchor choices were not applied before frame placement")
     Check(M.SetGuidedCooldownAnchorDecision("invalid") == false, "invalid anchor choice was accepted")
+end
+
+-- Menu Basics and Edit Mode are consecutive special stages that render
+-- different bodies into the same guided_setup page key. Advancing must rebuild
+-- the invalidated active page immediately; a later resize must not be required.
+do
+    local MSUF, M, _, effects = LoadFixture()
+    Check(MSUF.GuidedTour6:Start("Default", "menu_basics") == true, "guided tour did not start at Menu Basics")
+    Check(MSUF.GuidedTour6:SetPreference("playstyle", "dungeons") == true, "playstyle fixture preference failed")
+    Check(MSUF.GuidedTour6:SetPreference("informationStyle", "balanced") == true, "information-style fixture preference failed")
+    M.frame = { IsShown = function() return true end }
+    M.activeKey = "guided_setup"
+    M.cache = { guided_setup = { wrapper = {} } }
+    M.InvalidatePage = function(key)
+        effects.invalidates = effects.invalidates + 1
+        M.cache[key] = nil
+    end
+    M.SelectPage = function(key)
+        effects.selects = effects.selects + 1
+        effects.lastPage = key
+        M.activeKey = key
+        return true
+    end
+
+    Check(M.RunGuidedTourStep("next") == true, "Menu Basics did not advance")
+    Equal(MSUF.GuidedTour6:GetState().currentStageId, "edit_mode", "Menu Basics advanced to the wrong stage")
+    Equal(effects.invalidates, 1, "same-page guided transition did not invalidate the old body")
+    Equal(effects.selects, 1, "same-page guided transition did not rebuild immediately")
+    Equal(effects.lastPage, "guided_setup", "same-page guided transition rebuilt the wrong page")
+    M.cache.guided_setup = { wrapper = {} }
+    Check(M.RunGuidedTourStep("back") == true, "Edit Mode did not return to Menu Basics")
+    Equal(MSUF.GuidedTour6:GetState().currentStageId, "menu_basics", "Edit Mode returned to the wrong stage")
+    Equal(effects.invalidates, 2, "reverse same-page guided transition did not invalidate the Edit Mode body")
+    Equal(effects.selects, 2, "reverse same-page guided transition did not rebuild immediately")
 end
 
 -- Spell Icons own a complete guided stage on the Group Auras page. The normal

@@ -36,6 +36,18 @@ local IsConfigCombatLocked   = U.IsConfigCombatLocked
 local BlockConfigCombatLocked = U.BlockConfigCombatLocked
 local ThemeColor             = U.ThemeColor
 
+local function NotifyGuidedEditModeMoved(key)
+    local menu = (MSUF and MSUF.MSUF2) or _G.MSUF2
+    if menu and type(menu.NotifyGuidedEditModeMoved) == "function" then
+        return menu.NotifyGuidedEditModeMoved(key)
+    end
+    local tour = MSUF and MSUF.GuidedTour6 or _G.MSUF_GuidedTour6
+    if tour and type(tour.MarkEditModePlacementComplete) == "function" then
+        return tour:MarkEditModePlacementComplete(key)
+    end
+    return false
+end
+
 local function GroupGeometryMask(gf)
     return (gf and (gf.DIRTY_GEOMETRY or gf.DIRTY_LAYOUT or gf.DIRTY_VISUAL)) or nil
 end
@@ -1960,6 +1972,7 @@ function Ticker.EndDrag()
             if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(d.key, true) end
             RefreshUFPreview("EM2_UNIT_DRAG_END", d.key)
         end
+        NotifyGuidedEditModeMoved(d.key)
     end
 
     if tickerFrame and C_Timer and C_Timer.After then
