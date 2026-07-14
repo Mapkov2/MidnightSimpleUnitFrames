@@ -23,6 +23,10 @@ local U = EM2.Util or {}
 local ApplyAllSettingsSafe = U.ApplyAllSettingsSafe
 local ApplySettingsForKeySafe = U.ApplySettingsForKeySafe
 local SharedUI = U.SharedUI
+local function Space(role, fallback)
+    local ui = SharedUI and SharedUI()
+    return ui and ui.Space and ui.Space(role, fallback) or fallback
+end
 
 local hudFrame, row2Frame
 local previewBtn, previewAnimBtn, auraBtn, snapToggle, resetBtn, settingsBtn, cdmBtn, anchorBtn
@@ -39,15 +43,15 @@ local bgWidget, gridWidget
 local HelpText
 
 local R1_H    = 44
-local R2_H    = 34
+local R2_H    = 36
 local BTN_H   = 32
-local BTN_H2  = 26
-local BTN_GAP = 5
+local BTN_H2  = 28
+local BTN_GAP = Space("xs", 4)
 local SEP_W   = 16
-local CLUSTER_H     = 42
-local CLUSTER_BTN_H = 27
-local CLUSTER_GAP   = 8
-local CLUSTER_PAD_X = 6
+local CLUSTER_H     = 44
+local CLUSTER_BTN_H = 28
+local CLUSTER_GAP   = Space("sm", 8)
+local CLUSTER_PAD_X = Space("sm", 8)
 
 local TH = {
     r1Bg   = { 0.026, 0.032, 0.052, 0.94 },
@@ -91,9 +95,11 @@ local function ApplyHUDMaterial(frame, material)
     return frame
 end
 
-local function MakeFS(p, sz, r, g, b, a)
+local function MakeFS(p, fontRole, r, g, b, a)
     local fs = p:CreateFontString(nil, "OVERLAY")
-    fs:SetFont(FONT, sz or 12, ""); fs:SetShadowOffset(1, -1)
+    local ui = SharedUI()
+    local size = ui and ui.FontSize and ui.FontSize(fontRole or "body") or 13
+    fs:SetFont(FONT, size, ""); fs:SetShadowOffset(1, -1)
     fs:SetTextColor(r or 1, g or 1, b or 1, a or 1); return fs
 end
 
@@ -391,7 +397,7 @@ function HUD.ResetCurrentPosition()
     HUD.RefreshControls()
 end
 
-local function MakeBtn(parent, text, w, h, fontSize, onClick)
+local function MakeBtn(parent, text, w, h, fontRole, onClick)
     w = w or (#text * 8 + 18); h = h or BTN_H
     local ui = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
     local btn = ui and ui.Button and ui.Button(parent, HelpText(text), w, h, {
@@ -404,7 +410,7 @@ local function MakeBtn(parent, text, w, h, fontSize, onClick)
     if not label then
         local hl = btn:CreateTexture(nil, "HIGHLIGHT")
         hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.05)
-        label = MakeFS(btn, fontSize or 12, TH.textR, TH.textG, TH.textB, 0.92)
+        label = MakeFS(btn, fontRole or "body", TH.textR, TH.textG, TH.textB, 0.92)
         label:SetPoint("CENTER"); label:SetText(HelpText(text))
     end
     btn._label = label
@@ -466,7 +472,7 @@ local function MakeCluster(parent, label, height, showLabel)
     f:SetBackdropBorderColor(TH.edge[1], TH.edge[2], TH.edge[3], 0.34)
 
     if showLabel ~= false and label then
-        local fs = MakeFS(f, 8, TH.mutedR, TH.mutedG, TH.mutedB, 0.70)
+        local fs = MakeFS(f, "micro", TH.mutedR, TH.mutedG, TH.mutedB, 0.70)
         fs:SetPoint("TOPLEFT", f, "TOPLEFT", 7, -3)
         fs:SetText(HelpText(label))
         f._clusterLabel = fs
@@ -497,8 +503,8 @@ local function FinishCluster(cluster, items, height, yOff)
     return cluster
 end
 
-local function AddRowButton(row, parent, text, width, height, fontSize, onClick, tip)
-    local btn = MakeBtn(parent, text, width, height, fontSize, onClick)
+local function AddRowButton(row, parent, text, width, height, fontRole, onClick, tip)
+    local btn = MakeBtn(parent, text, width, height, fontRole, onClick)
     if tip then SetTip(btn, tip) end
     row[#row + 1] = btn
     return btn
@@ -512,7 +518,7 @@ local function AddAdjustWidget(row, parent, width, height, withStateBg, onMouseW
         stateBg:SetAllPoints(); stateBg:SetColorTexture(0, 0, 0, 0)
         f._stateBg = stateBg
     end
-    local fs = MakeFS(f, 11, TH.mutedR, TH.mutedG, TH.mutedB, 0.80)
+    local fs = MakeFS(f, "caption", TH.mutedR, TH.mutedG, TH.mutedB, 0.80)
     fs:SetPoint("CENTER")
     local hl = f:CreateTexture(nil, "HIGHLIGHT")
     hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.04)
@@ -683,14 +689,14 @@ local function EnsureHUD()
     ApplyHUDMaterial(hudFrame, "status")
     hudFrame:EnableMouse(true); hudFrame:Hide()
 
-    local title = MakeFS(hudFrame, 11, TH.titleR, TH.titleG, TH.titleB, 0.50)
-    title:SetPoint("LEFT", hudFrame, "LEFT", 14, 0)
+    local title = MakeFS(hudFrame, "caption", TH.titleR, TH.titleG, TH.titleB, 0.50)
+    title:SetPoint("LEFT", hudFrame, "LEFT", 16, 0)
     title:SetText(HelpText("EDIT MODE"))
 
     --- --- Prominent HELP button ---
     helpBtn = CreateFrame("Button", nil, hudFrame, "BackdropTemplate")
-    helpBtn:SetSize(72, 26)
-    helpBtn:SetPoint("LEFT", title, "RIGHT", 10, 0)
+    helpBtn:SetSize(72, 28)
+    helpBtn:SetPoint("LEFT", title, "RIGHT", 12, 0)
     helpBtn:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1,
                           insets = { left = 1, right = 1, top = 1, bottom = 1 } })
     helpBtn:SetBackdropColor(TH.onR * 0.20, TH.onG * 0.20, TH.onB * 0.20, 0.85)
@@ -704,7 +710,7 @@ local function EnsureHUD()
         local hl = helpBtn:CreateTexture(nil, "HIGHLIGHT")
         hl:SetAllPoints(); hl:SetColorTexture(TH.onR, TH.onG, TH.onB, 0.12)
 
-        local lbl = MakeFS(helpBtn, 12, TH.onR, TH.onG, TH.onB, 1)
+        local lbl = MakeFS(helpBtn, "body", TH.onR, TH.onG, TH.onB, 1)
         lbl:SetPoint("CENTER", 0, 0); lbl:SetText(HelpText("EM_HELP_BTN"))
         helpBtn._label = lbl
 
@@ -733,7 +739,7 @@ local function EnsureHUD()
     end)
 
     --- Right-side: Cancel All | Exit
-    exitBtn = MakeBtn(hudFrame, "Exit", 48, BTN_H, 12, function()
+    exitBtn = MakeBtn(hudFrame, "Exit", 48, BTN_H, "body", function()
         if EM2.State then EM2.State.Exit("hud_exit") end
     end)
     exitBtn:SetPoint("RIGHT", hudFrame, "RIGHT", -12, 0)
@@ -744,12 +750,12 @@ local function EnsureHUD()
     local rSep = MakeSep(hudFrame, BTN_H)
     rSep:SetPoint("RIGHT", exitBtn, "LEFT", -BTN_GAP, 0)
 
-    cancelAllBtn = MakeBtn(hudFrame, "Cancel All", 78, BTN_H, 12, function()
+    cancelAllBtn = MakeBtn(hudFrame, "Cancel All", 80, BTN_H, "body", function()
         if not EM2.State or not EM2.State.CancelAll then return end
         local cf = _G["MSUF_EM2_CancelConfirm"]
         if cf then cf:Show(); return end
         cf = CreateFrame("Frame", "MSUF_EM2_CancelConfirm", UIParent, "BackdropTemplate")
-        cf:SetSize(322, 118)
+        cf:SetSize(320, 120)
         cf:SetPoint("CENTER", UIParent, "CENTER", 0, 80)
         cf:SetFrameStrata("TOOLTIP"); cf:SetFrameLevel(999)
         cf:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=1,right=1,top=1,bottom=1} })
@@ -758,19 +764,19 @@ local function EnsureHUD()
         ApplyHUDMaterial(cf, "popup")
         cf:SetBackdropBorderColor(TH.edge[1], TH.edge[2], TH.edge[3], 0.90)
         cf:EnableMouse(true)
-        local msg = MakeFS(cf, 13, TH.textR, TH.textG, TH.textB, 1)
+        local msg = MakeFS(cf, "body", TH.textR, TH.textG, TH.textB, 1)
         msg:SetPoint("TOP", cf, "TOP", 0, -24)
         msg:SetText(HelpText("Discard all changes and exit?"))
         local function ConfBtn(text, xOff, role, onClick)
             local ui = SharedUI()
-            local b = ui and ui.Button and ui.Button(cf, HelpText(text), 112, 30, {
+            local b = ui and ui.Button and ui.Button(cf, HelpText(text), 112, 32, {
                 align = "CENTER",
                 skipHistory = true,
                 variant = role == "danger" and "danger" or nil,
                 onClick = onClick,
             }) or CreateFrame("Button", nil, cf, "BackdropTemplate")
-            b:SetSize(112, 30)
-            b:SetPoint("BOTTOM", cf, "BOTTOM", xOff, 18)
+            b:SetSize(112, 32)
+            b:SetPoint("BOTTOM", cf, "BOTTOM", xOff, 16)
             if ui and ui.ApplyButtonRole then ui.ApplyButtonRole(b, role or "normal") end
             if not (ui and ui.Button) then
                 b:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1 })
@@ -778,7 +784,7 @@ local function EnsureHUD()
                 b:SetBackdropBorderColor(TH.edge[1], TH.edge[2], TH.edge[3], 0.65)
                 local hl = b:CreateTexture(nil, "HIGHLIGHT")
                 hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.06)
-                local fs = MakeFS(b, 12, TH.textR, TH.textG, TH.textB, 1)
+                local fs = MakeFS(b, "body", TH.textR, TH.textG, TH.textB, 1)
                 fs:SetPoint("CENTER"); fs:SetText(HelpText(text))
                 b:SetScript("OnClick", onClick)
             end
@@ -807,7 +813,7 @@ local function EnsureHUD()
     local r1 = {}
 
     local previewCluster, previewItems = AddCluster(r1, c1, "Preview", CLUSTER_H, true)
-    previewBtn = AddRowButton(previewItems, previewCluster, "Preview", 64, CLUSTER_BTN_H, 11, function()
+    previewBtn = AddRowButton(previewItems, previewCluster, "Preview", 64, CLUSTER_BTN_H, "caption", function()
         ExportPublic("MSUF_UnitPreviewActive", not (_G.MSUF_UnitPreviewActive and true or false))
         if _G.MSUF_SyncAllUnitPreviews then _G.MSUF_SyncAllUnitPreviews() end
         SetActive(previewBtn, _G.MSUF_UnitPreviewActive)
@@ -815,10 +821,10 @@ local function EnsureHUD()
     end, "Show placeholder data on unitframes\nwithout real units (target, focus, etc.)")
 
     previewAddonSlot = CreateFrame("Frame", "MSUF_EM2_HUD_PreviewAddonSlot", previewCluster)
-    previewAddonSlot:SetSize(62, CLUSTER_BTN_H)
+    previewAddonSlot:SetSize(64, CLUSTER_BTN_H)
     previewItems[#previewItems+1] = previewAddonSlot
 
-    previewAnimBtn = AddRowButton(previewItems, previewCluster, "Motion", 58, CLUSTER_BTN_H, 11, function()
+    previewAnimBtn = AddRowButton(previewItems, previewCluster, "Motion", 60, CLUSTER_BTN_H, "caption", function()
         local toggle = _G.MSUF_TogglePreviewAnimation
         if type(toggle) ~= "function" then
             HUD.SetStatus(HelpText("Preview animation unavailable"), "warn")
@@ -836,7 +842,7 @@ local function EnsureHUD()
     end, "Animate visible preview dummy frames.\nStops automatically in combat\nor when previews are hidden.")
     RegisterPreviewAnimationRefreshOwner()
 
-    auraBtn = AddRowButton(previewItems, previewCluster, "Auras", 52, CLUSTER_BTN_H, 11, function()
+    auraBtn = AddRowButton(previewItems, previewCluster, "Auras", 52, CLUSTER_BTN_H, "caption", function()
         local db = _G.MSUF_DB; if not db then return end
         local a2 = db.auras3; if not a2 then return end
         local sh = a2.shared; if not sh then return end
@@ -850,10 +856,10 @@ local function EnsureHUD()
         end
         HUD.SetStatus(HelpText(sh.showInEditMode and "EM_AURAS_ON" or "EM_AURAS_OFF"), "info")
     end, "Toggle aura preview icons\nand aura mover boxes.")
-    FinishCluster(previewCluster, previewItems, CLUSTER_H, -6)
+    FinishCluster(previewCluster, previewItems, CLUSTER_H, -8)
 
     local layoutCluster, layoutItems = AddCluster(r1, c1, "Layout", CLUSTER_H, true)
-    snapToggle = AddRowButton(layoutItems, layoutCluster, "Snap", 48, CLUSTER_BTN_H, 11, function()
+    snapToggle = AddRowButton(layoutItems, layoutCluster, "Snap", 48, CLUSTER_BTN_H, "caption", function()
         if EM2.Snap then
             local on = not EM2.Snap.IsEnabled()
             EM2.Snap.SetEnabled(on); SetActive(snapToggle, on)
@@ -861,17 +867,17 @@ local function EnsureHUD()
         end
     end, "Snap frames to edges of\nother frames while dragging.")
 
-    resetBtn = AddRowButton(layoutItems, layoutCluster, "Reset", 52, CLUSTER_BTN_H, 11, function()
+    resetBtn = AddRowButton(layoutItems, layoutCluster, "Reset", 52, CLUSTER_BTN_H, "caption", function()
         HUD.ResetCurrentPosition()
     end, "Reset the selected frame position.\nSize stays unchanged.")
-    FinishCluster(layoutCluster, layoutItems, CLUSTER_H, -6)
+    FinishCluster(layoutCluster, layoutItems, CLUSTER_H, -8)
 
     local linksCluster, linksItems = AddCluster(r1, c1, "Tools", CLUSTER_H, true)
-    settingsBtn = AddRowButton(linksItems, linksCluster, "Settings", 66, CLUSTER_BTN_H, 11, function()
+    settingsBtn = AddRowButton(linksItems, linksCluster, "Settings", 68, CLUSTER_BTN_H, "caption", function()
         HUD.OpenSelectedSettings()
     end, "Open Menu2 at the selected\nframe or component settings.")
 
-    cdmBtn = AddRowButton(linksItems, linksCluster, "Cooldown", 72, CLUSTER_BTN_H, 11, function()
+    cdmBtn = AddRowButton(linksItems, linksCluster, "Cooldown", 72, CLUSTER_BTN_H, "caption", function()
         local db = _G.MSUF_DB; if not db then return end
         db.general = db.general or {}
         db.general.anchorToCooldown = not (db.general.anchorToCooldown and true or false)
@@ -884,7 +890,7 @@ local function EnsureHUD()
         end)
     end, "Anchor all unitframes to the\nEssential Cooldown Manager.")
 
-    anchorBtn = AddRowButton(linksItems, linksCluster, "Anchor", 58, CLUSTER_BTN_H, 11, function()
+    anchorBtn = AddRowButton(linksItems, linksCluster, "Anchor", 60, CLUSTER_BTN_H, "caption", function()
         local ov = type(_G.MSUF_EnsureAnchorPicker) == "function" and _G.MSUF_EnsureAnchorPicker()
         if not ov then return end
         ov._onPick = function(frameName)
@@ -901,7 +907,7 @@ local function EnsureHUD()
         end
         ov:Show()
     end, "Pick any frame as global anchor\nfor all unitframes.\nOverrides CDM anchor.")
-    FinishCluster(linksCluster, linksItems, CLUSTER_H, -6)
+    FinishCluster(linksCluster, linksItems, CLUSTER_H, -8)
 
     LayoutCenter(c1, r1, CLUSTER_GAP, SEP_W)
 
@@ -916,14 +922,14 @@ local function EnsureHUD()
     ApplyHUDMaterial(row2Frame, "status")
     row2Frame:EnableMouse(true)
 
-    selectionFS = MakeFS(row2Frame, 11, TH.textR, TH.textG, TH.textB, 0.88)
-    selectionFS:SetPoint("LEFT", row2Frame, "LEFT", 14, 0)
+    selectionFS = MakeFS(row2Frame, "caption", TH.textR, TH.textG, TH.textB, 0.88)
+    selectionFS:SetPoint("LEFT", row2Frame, "LEFT", 16, 0)
     selectionFS:SetWidth(420)
     selectionFS:SetJustifyH("LEFT")
     selectionFS:SetText("")
 
-    hintFS = MakeFS(row2Frame, 11, TH.mutedR, TH.mutedG, TH.mutedB, 0.78)
-    hintFS:SetPoint("RIGHT", row2Frame, "RIGHT", -14, 0)
+    hintFS = MakeFS(row2Frame, "caption", TH.mutedR, TH.mutedG, TH.mutedB, 0.78)
+    hintFS:SetPoint("RIGHT", row2Frame, "RIGHT", -16, 0)
     hintFS:SetWidth(420)
     hintFS:SetJustifyH("RIGHT")
     hintFS:SetText("")
@@ -933,14 +939,14 @@ local function EnsureHUD()
     local r2 = {}
 
     local historyCluster, historyItems = AddCluster(r2, c2, nil, BTN_H2 + 4, false)
-    undoBtn = AddRowButton(historyItems, historyCluster, "", 42, BTN_H2, 11, function()
+    undoBtn = AddRowButton(historyItems, historyCluster, "", 44, BTN_H2, "caption", function()
         if _G.MSUF_EM_UndoUndo then _G.MSUF_EM_UndoUndo() end
         HUD.RefreshControls()
     end, "Undo last position change.")
     ExportPublic("MSUF_EditModeUndoBtn", undoBtn)
     AttachHistoryIcon(undoBtn, MEDIA .. "msuf_history_undo_red.png")
 
-    redoBtn = AddRowButton(historyItems, historyCluster, "", 42, BTN_H2, 11, function()
+    redoBtn = AddRowButton(historyItems, historyCluster, "", 44, BTN_H2, "caption", function()
         if _G.MSUF_EM_UndoRedo then _G.MSUF_EM_UndoRedo() end
         HUD.RefreshControls()
     end, "Redo last undone change.")
@@ -963,7 +969,7 @@ local function EnsureHUD()
     end
 
     do
-        bgWidget, alphaFS = AddAdjustWidget(gridItems, gridCluster, 74, BTN_H2, false, function(_, d)
+        bgWidget, alphaFS = AddAdjustWidget(gridItems, gridCluster, 76, BTN_H2, false, function(_, d)
             if not EM2.Grid then return end
             EM2.Grid.SetBgAlpha(max(0, min(1, EM2.Grid.GetBgAlpha() + d * 0.05)))
             HUD.RefreshControls()

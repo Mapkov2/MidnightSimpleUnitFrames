@@ -192,7 +192,10 @@ local function BuildMisc(ctx)
     if navHoverHelp.SetWordWrap then navHoverHelp:SetWordWrap(true) end
     local startup = b:CollapsibleSection("misc_startup", "Startup", 124, true)
     BindMiscToggle(startup, "Show welcome message", "showWelcomeMessage", true, "MSUF2_WELCOME", 14, -42, 320)
-    BindMiscToggle(startup, "Enable version check (peer-to-peer)", "versionCheckEnabled", true, "MSUF2_VERSION_CHECK", 14, -76, 360)
+    BindMiscToggle(startup, "Enable version check (peer-to-peer)", "versionCheckEnabled", true, "MSUF2_VERSION_CHECK", 14, -76, 360, nil,
+        function()
+            Call("MSUF_ApplyModules")
+        end)
     local tooltips = b:CollapsibleSection("misc_tooltips", "Unitframe tooltips", 236, false)
     local tooltipW = tooltips._msuf2Width or ctx.width or 720
     local tooltipLeftX = 30
@@ -223,11 +226,14 @@ local function BuildMisc(ctx)
         function(v) WriteTooltipBehavior(ReadTooltipMode(), v) end,
         "tooltips.modifier")
     M.TrackRefresh(ctx, RefreshTooltipControls)
-    local tooltipHelp = W.Text(tooltips, "These settings apply to MSUF unit frames and group frames. GameTooltip keeps addon compatibility; MSUF custom panel uses the fixed or cursor position.", tooltipLeftX, -174, tooltipW - 68, T.colors.muted)
+    local tooltipHelp = W.Text(tooltips, "Applies to unit and group frames. Choose the WoW tooltip or the MSUF panel.", tooltipLeftX, -174, tooltipW - 68, T.colors.muted)
     if tooltipHelp.SetWordWrap then tooltipHelp:SetWordWrap(true) end
     local blizzard = b:CollapsibleSection("misc_blizzard_frames", "Blizzard Frames", 190, false)
     BindMiscToggle(blizzard, "Disable Blizzard unitframes", "disableBlizzardUnitFrames", true, "MSUF2_DISABLE_BLIZZARD_UF", nil, nil, nil, nil,
-        function() M.CallIf(print, "|cffffd700MSUF:|r Changing Blizzard unitframes visibility requires a /reload.") end)
+        function()
+            Call("MSUF_GF_DisableBlizzard")
+            M.CallIf(print, "|cffffd700MSUF:|r Changing Blizzard unitframes visibility requires a /reload.")
+        end)
     BindMiscToggle(blizzard, "Fully Hide Blizzard PlayerFrame - resource bar compatibility", "hardKillBlizzardPlayerFrame", false, "MSUF2_HARDKILL_PLAYERFRAME", nil, nil, nil, nil,
         function() M.CallIf(StaticPopup_Show, "MSUF_RELOAD_PLAYERFRAME_HIDE_MODE") end)
     BindMiscToggle(blizzard, "Show MSUF minimap icon", "showMinimapIcon", true, "MSUF2_MINIMAP_ICON", nil, nil, nil, nil,

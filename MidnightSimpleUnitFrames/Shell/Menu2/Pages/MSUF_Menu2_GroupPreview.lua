@@ -28,11 +28,11 @@ local function GFPreviewIntroMetrics(width)
     local charsPerLine = max(42, floor(noteW / 5.6))
     local lines = max(1, floor(((#tostring(translated or "") + charsPerLine - 1) / charsPerLine)))
     lines = min(lines, 4)
-    local noteTop = 38
+    local noteTop = 40
     local noteLineH = 14
-    local noteGap = 10
+    local noteGap = 12
     local boxY = -(noteTop + (lines * noteLineH) + noteGap)
-    local contentH = max(362, -boxY + 300 + 14)
+    local contentH = max(364, -boxY + 300 + 16)
     return contentH, boxY
 end
 local function IsCurrentPreviewBox(box)
@@ -155,7 +155,7 @@ local function AddGFPreview(ctx, builder)
         end
         if missingText and missingText.Hide then missingText:Hide() end
         box._msufGFPreviewHostShown = PreviewHostShown
-        box:SetPoint("TOPLEFT", body, "TOPLEFT", 14, boxY)
+        box:SetPoint("TOPLEFT", body, "TOPLEFT", 16, boxY)
         RegisterNativePreview(box, ctx)
         box:Show()
         if W.AttachPinnedPreview then

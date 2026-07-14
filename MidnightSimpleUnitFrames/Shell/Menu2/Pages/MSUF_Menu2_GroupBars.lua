@@ -54,7 +54,7 @@ local function BuildDispelOverlaySection(ctx, b)
     local dispelCardW = min(900, max(320, dispelW - 40))
     wide = dispelCardW >= 760
     local dispelCardH = wide and 348 or 458
-    local dispelCard = W.ControlCard(dispel, "Dispel Overlay", "Tints the health bar when a configured debuff condition is active.", 20, -38, dispelCardW, dispelCardH)
+    local dispelCard = W.ControlCard(dispel, "Behavior & Style", "Tints the health bar when a configured debuff condition is active.", 20, -38, dispelCardW, dispelCardH)
     local dispelToggle = BindScopeToggle(ctx, W.SwitchAt(dispelCard, "Dispel Overlay", dispelCardW - 62, -24, 0, "HIDDEN"), "dispelOverlayEnabled", false, "visual")
     local dispelPtrNotice = W.Text(dispelCard, DISPEL_OVERLAY_121_PTR_MESSAGE, 16, -58, min(420, dispelCardW - 32), T.colors.dim)
     if dispelPtrNotice and dispelPtrNotice.SetWordWrap then dispelPtrNotice:SetWordWrap(false) end
@@ -124,8 +124,8 @@ local function BuildGFBars(ctx)
         if raw and raw > 0 then return raw end
         return DefaultPowerHeight(kind)
     end
-    local powerMainCard = W.ControlCard(power, "Power bar", "Global visibility and size for this group scope.", powerLeftX, -38, powerLeftW, 178)
-    local powerRoleCard = W.ControlCard(power, "Roles", "Limit power display to selected group roles.", powerRightX, -38, powerRightW, 178)
+    local powerMainCard = W.ControlCard(power, "Visibility & Size", nil, powerLeftX, -38, powerLeftW, 178)
+    local powerRoleCard = W.ControlCard(power, "Roles", nil, powerRightX, -38, powerRightW, 178)
     local powerEnabled = W.SwitchAt(powerMainCard, "Show Power Bar", powerLeftW - 62, -24, 0, "HIDDEN")
     M.BindBoolWidget(ctx, powerEnabled,
         function() return IsPowerBarEnabled(CurrentScope()) end,
@@ -248,10 +248,10 @@ local function BuildGFBars(ctx)
     local hint = W.Text(text, "Font style is shared in Global Style > Fonts. Position can be adjusted here or dragged in Edit Mode.", 14, -38, textW - 210, { 0.60, 0.75, 1.00, 1 })
     if hint.SetWordWrap then hint:SetWordWrap(true) end
     local scopeLabel = T.Font(text, "GameFontDisableSmall", "", T.colors.dim)
-    scopeLabel:SetPoint("TOPRIGHT", text, "TOPRIGHT", -16, -38)
+    scopeLabel:SetPoint("TOPRIGHT", text, "TOPRIGHT", -16, -40)
     scopeLabel:SetJustifyH("RIGHT")
     scopeLabel:SetWidth(170)
-    text._msuf2CursorY = -62
+    text._msuf2CursorY = -64
     local tabValues = VT("name", "Name", "hp", "HP Text", "power", "Power Text", "advanced", "Advanced")
     M.gfTextTabSelection = M.gfTextTabSelection or {}
     local function CurrentTextTab()
@@ -376,7 +376,7 @@ local function BuildGFBars(ctx)
             badges = {
                 { text = nameOn and "Shown" or "Hidden", kind = nameOn and "ok" or "muted" },
                 { text = BadgeValue(OptionText(ANCHORS, Val(scope, "nameAnchor", "LEFT"))), kind = nameOn and "info" or "muted" },
-                { text = "X " .. BadgeNumber(Val(scope, "nameOffsetX", 0)) .. "  Y " .. BadgeNumber(Val(scope, "nameOffsetY", 0)), kind = nameOn and "accent" or "muted" },
+                { text = "X " .. BadgeNumber(Val(scope, "nameOffsetX", 28)) .. "  Y " .. BadgeNumber(Val(scope, "nameOffsetY", 0)), kind = nameOn and "accent" or "muted" },
             }
         end
         SetSectionBadgesAndStatus(text, badges)
@@ -419,20 +419,20 @@ local function BuildGFBars(ctx)
         x = 20, y = -68,
     })
     RegisterControl(textTabs, ctx, "text.workspace_tab", "Text area", "segment", "ephemeral")
-    local nameContent = TextCard(nameTab, "Name text", "Controls whether names are shown on group frames.", textLeftX, -4, textCardW, 158)
+    local nameContent = TextCard(nameTab, "Name text", nil, textLeftX, -4, textCardW, 158)
     PreviewText(nameContent, "Mapko", 16, -54, textCardW - 32)
     local showName = BindScopeToggle(ctx, W.SwitchAt(nameContent, "Show Name", textCardW - 62, -24, 0, "HIDDEN"), "showName", true, "font")
     local hideNameOnStatus = BindScopeToggle(ctx, W.ToggleAt(nameContent, "Hide name on dead/offline", 16, -104, textCardW - 32), "hideNameOnDeadOffline", false, "visual")
     local namePosition = TextCard(nameTab, "Position", nil, textLeftX, -178, textCardW, 260)
     local nameAnchor = ScopeDropdown(ctx, namePosition, "Anchor", ANCHORS, textDropW, "nameAnchor", "LEFT", "font", 16, -48, textCardW - 32)
-    local nameX = ScopeSlider(ctx, namePosition, "X Offset", -100, 100, 1, textSliderW, "nameOffsetX", 0, "font", 16, -112, textCardW - 72)
+    local nameX = ScopeSlider(ctx, namePosition, "X Offset", -100, 100, 1, textSliderW, "nameOffsetX", 28, "font", 16, -112, textCardW - 72)
     local nameY = ScopeSlider(ctx, namePosition, "Y Offset", -100, 100, 1, textSliderW, "nameOffsetY", 0, "font", 16, -174, textCardW - 72)
     local nameAppearance = TextCard(nameTab, "Appearance", nil, textRightX, -4, textRightW, 150)
     local nameSize = ScopeSlider(ctx, nameAppearance, "Size", 6, 48, 1, hpSliderW, "nameFontSize", 12, "font", 16, -58, textRightW - 58)
     local SLOT_VALUES = VT("left", "Left", "center", "Center", "right", "Right")
     local function BuildValueTextTab(kind, tab, cfg)
         local controls = {}
-        local content = TextCard(tab, "What text appears", "Slots are explained before advanced position controls.", textLeftX, -4, textCardW, 346)
+        local content = TextCard(tab, "Content", nil, textLeftX, -4, textCardW, 346)
         controls.preview = PreviewText(content, "", 16, -54, textCardW - 32)
         if cfg.showGet then
             controls.show = W.SwitchAt(content, cfg.showLabel, textCardW - 62, -24, 0, "HIDDEN")
@@ -652,7 +652,7 @@ local function BuildGFBars(ctx)
     local stripe = b:CollapsibleSection("dstripe", "Debuff Stripe", 284, false)
     local stripeW = stripe._msuf2Width or b.width or 720
     local stripeCardW = min(560, stripeW - 40)
-    local stripeCard = W.ControlCard(stripe, "Debuff Stripe", "Shows a thin colored stripe for debuffs matched by the debuff filter.", 20, -38, stripeCardW, 216)
+    local stripeCard = W.ControlCard(stripe, "Appearance & Placement", "Shows a thin colored stripe for debuffs matched by the debuff filter.", 20, -38, stripeCardW, 216)
     local stripeToggle = BindScopeToggle(ctx, W.SwitchAt(stripeCard, "Debuff Stripe", stripeCardW - 62, -24, 0, "HIDDEN"), "debuffStripeEnabled", false, "visual")
     local stripeEdge = ScopeDropdown(ctx, stripeCard, "Stripe edge", DEBUFF_STRIPE_EDGES, 260, "debuffStripeEdge", "BOTTOM", "visual", 16, -74, min(260, stripeCardW - 32))
     local stripeHeight = ScopeSlider(ctx, stripeCard, "Stripe height", 1, 8, 1, 300, "debuffStripeHeight", 3, "visual", 16, -126, min(360, stripeCardW - 72))
@@ -678,7 +678,7 @@ local function BuildGFBars(ctx)
     local rangeLeftWidth = floor((rangeInnerW - rangeGap) * 0.48)
     local rangeRightX = rangeLeftX + rangeLeftWidth + rangeGap
     local rangeRightWidth = rangeInnerW - rangeLeftWidth - rangeGap
-    local rangeEffectCard = W.ControlCard(range, "Range Fade", "Controls what fades when group members are not reachable.", rangeLeftX, -38, rangeLeftWidth, 160)
+    local rangeEffectCard = W.ControlCard(range, "Behavior", nil, rangeLeftX, -38, rangeLeftWidth, 160)
     local rangeAlphaCard = W.ControlCard(range, "Alpha", "Opacity values used by range and offline states.", rangeRightX, -38, rangeRightWidth, 160)
     local rangeToggle = BindScopeToggle(ctx, W.SwitchAt(rangeEffectCard, "Range Fade", rangeLeftWidth - 62, -24, 0, "HIDDEN"), "rangeFadeEnabled", false, "visual")
     local function BindRangeAlphaSlider(key, label, default, y)

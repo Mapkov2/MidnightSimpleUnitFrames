@@ -56,9 +56,9 @@ local max = math.max
 local min = math.min
 local IsEditModeActive
 local PREVIEW_WARNING_LINES = {
-    "|cffffd700MSUF 6.0 Beta:|r This build targets World of Warcraft 12.1 PTR APIs.",
-    "|cffffd700MSUF:|r Aura display uses native 12.1 AuraContainer and AuraButton objects.",
-    "|cff40ff40Thank you|r for helping test the beta! Please report bugs on Discord or GitHub.",
+    "|cffffd700MSUF 6.0 Beta|r · Built for WoW 12.1 PTR.",
+    "|cffffd700Auras|r use Blizzard's native 12.1 system.",
+    "|cff40ff40Thanks for testing!|r Report bugs on Discord or GitHub.",
 }
 local previewWarningShown = {}
 local function GetAddonVersion()
@@ -155,9 +155,9 @@ local DEFAULT_WINDOW_W, DEFAULT_WINDOW_H = 1360, 860
 local MIN_WINDOW_W, MIN_WINDOW_H = 700, 480
 local MAX_WINDOW_W, MAX_WINDOW_H = 1760, 1200
 local WINDOW_W, WINDOW_H = DEFAULT_WINDOW_W, DEFAULT_WINDOW_H
-local NAV_W = 198
-local CONTENT_W = WINDOW_W - NAV_W - 34
-local CONTENT_H = WINDOW_H - 74
+local NAV_W = 200
+local CONTENT_W = WINDOW_W - NAV_W - 32
+local CONTENT_H = WINDOW_H - 76
 local MENU_BASE_SCALE = 1.08
 local function ClampNumber(value, minValue, maxValue, fallback)
     value = tonumber(value) or fallback or minValue
@@ -179,8 +179,8 @@ local function WindowMaxBounds()
         local scale = 1
         local g = M.GetGeneralDB and M.GetGeneralDB()
         if type(g) == "table" then scale = EffectiveMenuScale(g.slashMenuScale) end
-        maxW = min(maxW, floor(((parent:GetWidth() or maxW) / scale) - 28))
-        maxH = min(maxH, floor(((parent:GetHeight() or maxH) / scale) - 28))
+        maxW = min(maxW, floor(((parent:GetWidth() or maxW) / scale) - 32))
+        maxH = min(maxH, floor(((parent:GetHeight() or maxH) / scale) - 32))
     end
     return max(MIN_WINDOW_W, maxW), max(MIN_WINDOW_H, maxH)
 end
@@ -198,7 +198,7 @@ local function SetWindowMetrics(width, height)
     local maxW, maxH = WindowMaxBounds()
     WINDOW_W = ClampNumber(width, MIN_WINDOW_W, maxW, DEFAULT_WINDOW_W)
     WINDOW_H = ClampNumber(height, MIN_WINDOW_H, maxH, DEFAULT_WINDOW_H)
-    CONTENT_W = math.max(420, WINDOW_W - NAV_W - 34)
+    CONTENT_W = math.max(420, WINDOW_W - NAV_W - 32)
     CONTENT_H = math.max(320, WINDOW_H - 74)
 end
 function M.GetContentMetrics()
@@ -240,12 +240,15 @@ end
 local RebuildActivePageForResize
 local SNAP_EDGE_PX = 24
 local SNAP_FRAME_EDGE_PX = 4
-local SNAP_SCREEN_MARGIN = 14
+local SNAP_SCREEN_MARGIN = 16
 local MINIMIZED_WINDOW_W, MINIMIZED_WINDOW_H = 286, 32
 local WINDOW_MAXIMIZE_ANIM_SECONDS = 0.38
 local WINDOW_MINIMIZE_ANIM_SECONDS = 0.34
 local WINDOW_RESTORE_ANIM_SECONDS = 0.36
 local WINDOW_SNAP_ANIM_SECONDS = 0.36
+local WINDOW_RESIZE_ANIM_SECONDS = 0.14
+local WINDOW_RESIZE_SETTLE_RATIO = 0.08
+local WINDOW_RESIZE_SETTLE_MAX_PX = 12
 local function IsSlashMenuSnapEnabled()
     local g = M.GetGeneralDB and M.GetGeneralDB()
     if type(g) ~= "table" then return true end
@@ -302,6 +305,12 @@ local function EaseWindowMorph(progress)
 end
 local function LerpNumber(fromValue, toValue, progress)
     return (fromValue or 0) + (((toValue or 0) - (fromValue or 0)) * progress)
+end
+local function ResizeSettleStartValue(fromValue, toValue)
+    local delta = (toValue or 0) - (fromValue or 0)
+    if delta == 0 then return toValue end
+    local offset = min(math.abs(delta) * WINDOW_RESIZE_SETTLE_RATIO, WINDOW_RESIZE_SETTLE_MAX_PX)
+    return (toValue or 0) - (delta > 0 and offset or -offset)
 end
 local function StopWindowLayoutAnimation(frame)
     local state = frame and frame._msuf2WindowLayoutAnim
@@ -379,7 +388,7 @@ end
 local function MinimizedBarTargetLayout(frame, bar)
     local layout = CaptureFrameLayout(bar, MINIMIZED_WINDOW_W, MINIMIZED_WINDOW_H)
     if not layout then
-        layout = { x = 18, yTop = 18 + MINIMIZED_WINDOW_H, w = MINIMIZED_WINDOW_W, h = MINIMIZED_WINDOW_H }
+        layout = { x = 16, yTop = 16 + MINIMIZED_WINDOW_H, w = MINIMIZED_WINDOW_W, h = MINIMIZED_WINDOW_H }
     end
     local scale = WindowVisualScale(frame)
     if scale <= 0 then scale = 1 end
@@ -630,8 +639,8 @@ local function ApplyScrollMetrics()
     local height = CONTENT_H
     local entry = M.activeKey and M.cache and M.cache[M.activeKey]
     if entry and tonumber(entry.height) then height = math.max(height, entry.height) end
-    M.scrollChild:SetSize(CONTENT_W - 10, height)
-    if entry and entry.wrapper then entry.wrapper:SetSize(CONTENT_W - 10, height) end
+    M.scrollChild:SetSize(CONTENT_W - 12, height)
+    if entry and entry.wrapper then entry.wrapper:SetSize(CONTENT_W - 12, height) end
     if M.scrollFrame and M.scrollFrame._msuf2RefreshScrollBar then M.scrollFrame:_msuf2RefreshScrollBar() end
 end
 function RebuildActivePageForResize(frame)
@@ -805,8 +814,8 @@ local function CreateContext(key, wrapper, entry)
         wrapper = wrapper,
         entry = entry,
         refreshers = entry.refreshers,
-        width = CONTENT_W - 34,
-        fullWidth = CONTENT_W - 34,
+        width = CONTENT_W - 32,
+        fullWidth = CONTENT_W - 32,
         hiddenBuild = entry.hiddenBuild == true,
     }
     function ctx:SetContentHeight(height)
@@ -835,8 +844,8 @@ end
 local SECONDARY_NAV_RAIL_W = 132
 local SECONDARY_NAV_GAP = 12
 local SECONDARY_NAV_MIN_RAIL_WIDTH = 680
-local SECONDARY_NAV_TAB_PAD_X = 14
-local SECONDARY_NAV_TAB_PAD_Y = 5
+local SECONDARY_NAV_TAB_PAD_X = 16
+local SECONDARY_NAV_TAB_PAD_Y = 4
 local function SecondaryNavButton(parent, label, width, active)
     local style = {
         bg = { 0.022, 0.032, 0.064, 0.94 },
@@ -855,7 +864,7 @@ local function BuildSecondaryTabs(ctx, key, group)
     ctx._msuf2TopInset = 44
     local bar = CreateFrame("Frame", nil, ctx.wrapper)
     bar:SetPoint("TOPLEFT", ctx.wrapper, "TOPLEFT", 12, -12)
-    bar:SetSize(ctx.width or 720, 34)
+    bar:SetSize(ctx.width or 720, 36)
     local x = SECONDARY_NAV_TAB_PAD_X
     for i = 1, #group.tabs do
         local tab = group.tabs[i]
@@ -868,7 +877,7 @@ local function BuildSecondaryTabs(ctx, key, group)
             M.RegisterMenuChromeControl(btn, "secondary-navigation." .. tostring(tab.key), tab.label, "navigation",
                 { navigationKey = tab.key })
         end
-        x = x + w + 6
+        x = x + w + 8
     end
     ctx._msuf2SecondaryNav = bar
 end
@@ -886,21 +895,21 @@ local function BuildSecondaryRail(ctx, key, group)
     rail:SetPoint("TOPLEFT", ctx.wrapper, "TOPLEFT", 12, -12)
     rail:SetSize(SECONDARY_NAV_RAIL_W, math.max(260, math.min(CONTENT_H - 24, 520)))
     local title = T.Font(rail, "GameFontNormalSmall", M.Tr(group.title or ""), T.colors.accent)
-    title:SetPoint("TOPLEFT", rail, "TOPLEFT", 10, -12)
-    title:SetPoint("TOPRIGHT", rail, "TOPRIGHT", -10, -12)
+    title:SetPoint("TOPLEFT", rail, "TOPLEFT", 12, -12)
+    title:SetPoint("TOPRIGHT", rail, "TOPRIGHT", -12, -12)
     title:SetJustifyH("LEFT")
-    local y = -38
+    local y = -40
     for i = 1, #group.tabs do
         local tab = group.tabs[i]
-        local btn = SecondaryNavButton(rail, tab.label, SECONDARY_NAV_RAIL_W - 20, key == tab.key)
+        local btn = SecondaryNavButton(rail, tab.label, SECONDARY_NAV_RAIL_W - 24, key == tab.key)
         btn._msuf2SkipHistoryCheckpoint = true
-        btn:SetPoint("TOPLEFT", rail, "TOPLEFT", 10, y)
+        btn:SetPoint("TOPLEFT", rail, "TOPLEFT", 12, y)
         btn:SetScript("OnClick", function() M.SelectPage(tab.key) end)
         if M.RegisterMenuChromeControl then
             M.RegisterMenuChromeControl(btn, "secondary-navigation." .. tostring(tab.key), tab.label, "navigation",
                 { navigationKey = tab.key })
         end
-        y = y - 30
+        y = y - 32
     end
     ctx._msuf2SecondaryNav = rail
 end
@@ -916,8 +925,8 @@ end
 local function BuildPlaceholderPage(ctx, requestedKey)
     local b = W.PageBuilder(ctx)
     local sec = b:Section("Native page missing", 130)
-    W.Text(sec, "This native page is not implemented yet.", 14, -42, ctx.width - 28, T.colors.muted)
-    W.Text(sec, M.Format("Requested page: %s", tostring(requestedKey or "unknown")), 14, -68, ctx.width - 28, T.colors.dim)
+    W.Text(sec, "This native page is not implemented yet.", 16, -40, ctx.width - 32, T.colors.muted)
+    W.Text(sec, M.Format("Requested page: %s", tostring(requestedKey or "unknown")), 16, -68, ctx.width - 32, T.colors.dim)
     ctx:SetContentHeight(210)
 end
 local function BuildPageEntry(key, hidden)
@@ -957,7 +966,7 @@ local function BuildPageEntry(key, hidden)
     ClearSearchRegistryPage(key)
     local wrapper = CreateFrame("Frame", nil, M.scrollChild)
     wrapper:SetPoint("TOPLEFT", M.scrollChild, "TOPLEFT", 0, 0)
-    wrapper:SetSize(CONTENT_W - 10, CONTENT_H)
+    wrapper:SetSize(CONTENT_W - 12, CONTENT_H)
     if hidden and wrapper.Hide then wrapper:Hide() end
     local entry = { key = key, wrapper = wrapper, refreshers = {}, height = CONTENT_H, version = specVersion, layoutVersion = layoutVersion, hiddenBuild = hidden and true or false }
     M.cache[key] = entry
@@ -1177,7 +1186,7 @@ local function CreateMinimizedBar(frame)
     local bar = T.Panel(UIParent, "MSUF2_MinimizedWindow", T.colors.glassShell or T.colors.bg, T.colors.border)
     T.ApplySurface(bar, "shell")
     bar:SetSize(MINIMIZED_WINDOW_W, MINIMIZED_WINDOW_H)
-    bar:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 18, 18)
+    bar:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 16, 16)
     ApplyMenuFramePriority(bar)
     bar:EnableMouse(true)
     bar:SetMovable(true)
@@ -1188,11 +1197,11 @@ local function CreateMinimizedBar(frame)
     bar:Hide()
     local title = T.Font(bar, "GameFontHighlightSmall", "MSUF Menu", T.colors.accent)
     title:SetPoint("LEFT", bar, "LEFT", 12, 0)
-    title:SetPoint("RIGHT", bar, "RIGHT", -62, 0)
+    title:SetPoint("RIGHT", bar, "RIGHT", -64, 0)
     title:SetJustifyH("LEFT")
     bar.title = title
     local restore = CreateWindowControlButton(bar, "maximize", "Restore", "Restore the minimized MSUF menu.")
-    restore:SetPoint("RIGHT", bar, "RIGHT", -31, 0)
+    restore:SetPoint("RIGHT", bar, "RIGHT", -32, 0)
     restore:SetScript("OnClick", function() RestoreMinimizedSlashMenu(frame) end)
     if M.RegisterMenuChromeControl then
         M.RegisterMenuChromeControl(restore, "window.restore", "Restore MSUF menu", "action", {
@@ -1257,7 +1266,7 @@ local function BuildWindowShell()
     title:SetAlpha(0.82)
     f.title = title
     local subtitle = T.Font(f, "GameFontDisableSmall", "", T.colors.muted)
-    subtitle:SetPoint("TOPRIGHT", f, "TOPRIGHT", -112, -14)
+    subtitle:SetPoint("TOPRIGHT", f, "TOPRIGHT", -112, -16)
     subtitle:SetJustifyH("RIGHT")
     subtitle:Hide()
     f.subtitle = subtitle
@@ -1471,9 +1480,29 @@ local function InstallWindowInteractions(state)
             or math.abs((h or state.startH) - state.startH) >= 1
         f._msuf2ResizeState = nil
         f._msuf2ResizeMetricsDirty = nil
-        if apply and changed then ApplyWindowLayout(f, { x = state.layout.x, yTop = state.layout.yTop, w = w, h = h }, true) end
         f._msuf2LiveResizing = nil
         f._msuf2FinishingResize = nil
+        if apply and changed then
+            local layout = { x = state.layout.x, yTop = state.layout.yTop, w = w, h = h }
+            local current = CaptureFrameLayout(f)
+            local settleStart = current and {
+                x = layout.x,
+                yTop = layout.yTop,
+                w = ResizeSettleStartValue(current.w, layout.w),
+                h = ResizeSettleStartValue(current.h, layout.h),
+            }
+            if settleStart and AnimateWindowLayout(f, layout, {
+                start = settleStart,
+                applyStart = true,
+                duration = WINDOW_RESIZE_ANIM_SECONDS,
+                onFinished = function()
+                    ApplyWindowLayout(f, layout, true)
+                end,
+            }) then
+                return
+            end
+            ApplyWindowLayout(f, layout, true)
+        end
     end
     function f:_msuf2CancelWindowInteractions()
         self._msuf2DraggingWindow = nil
@@ -1485,7 +1514,7 @@ local function InstallWindowInteractions(state)
         if FinishResizeProxy then FinishResizeProxy(false) end
     end
     local grip = CreateFrame("Button", nil, f)
-    grip:SetSize(18, 18)
+    grip:SetSize(20, 20)
     grip:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -3, 3)
     grip:SetFrameLevel(f:GetFrameLevel() + 20)
     grip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
@@ -1508,8 +1537,8 @@ end
 local function BuildWindowChrome(state)
     local f = state.frame
     local content = CreateFrame("Frame", nil, f)
-    content:SetPoint("TOPLEFT", f, "TOPLEFT", 14, -38)
-    content:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -14, 14)
+    content:SetPoint("TOPLEFT", f, "TOPLEFT", 16, -40)
+    content:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -16, 16)
     f.content = content
     local nav = T.Panel(content, nil, T.colors.glassRail or T.colors.panelNav or T.colors.panel, T.colors.borderSoft)
     T.ApplySurface(nav, "rail")
@@ -1532,7 +1561,7 @@ local function BuildWindowChrome(state)
     T.ApplySurface(status, "status")
     status:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
     status:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
-    status:SetHeight(58)
+    status:SetHeight(60)
     local function StatusDivider(edge, inset, alpha)
         local line = status:CreateTexture(nil, "ARTWORK", nil, 6)
         line:SetHeight(1)
@@ -1541,7 +1570,7 @@ local function BuildWindowChrome(state)
         line:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], alpha)
     end
     StatusDivider("TOP", 0, 0.25)
-    StatusDivider("BOTTOM", 14, 0.16)
+    StatusDivider("BOTTOM", 16, 0.16)
     local function StatusText(point, relativeTo, relativePoint, x, y, justify, alpha)
         local fs = T.Font(status, "GameFontDisableSmall", "", T.colors.muted)
         fs:SetPoint(point, relativeTo, relativePoint, x, y)
@@ -1550,10 +1579,10 @@ local function BuildWindowChrome(state)
         return fs
     end
     local sbProfile = StatusText("LEFT", status, "LEFT", 24, 15)
-    local sbEdit = StatusText("LEFT", sbProfile, "RIGHT", 14, 0)
-    local sbCombat = StatusText("LEFT", sbEdit, "RIGHT", 14, 0)
-    local sbVersion = StatusText("RIGHT", status, "RIGHT", -18, 15, "RIGHT", 0.50)
-    local sbFeedback = StatusText("RIGHT", sbVersion, "LEFT", -18, 15, "RIGHT", 0)
+    local sbEdit = StatusText("LEFT", sbProfile, "RIGHT", 16, 0)
+    local sbCombat = StatusText("LEFT", sbEdit, "RIGHT", 16, 0)
+    local sbVersion = StatusText("RIGHT", status, "RIGHT", -16, 15, "RIGHT", 0.50)
+    local sbFeedback = StatusText("RIGHT", sbVersion, "LEFT", -16, 15, "RIGHT", 0)
     sbFeedback:SetPoint("LEFT", sbCombat, "RIGHT", 16, 15)
     status.profileText = sbProfile
     status.editText = sbEdit
@@ -1599,8 +1628,8 @@ local function BuildWindowToolbar(state)
         RefreshDashboardEditModeButton()
         if f.RefreshStatus then f:RefreshStatus() end
     end
-    local toolbarEdit = T.Button(status, L_EDIT_MODE_OFF, 150, 24)
-    toolbarEdit:SetPoint("BOTTOMRIGHT", status, "BOTTOMRIGHT", -26, 10)
+    local toolbarEdit = T.Button(status, L_EDIT_MODE_OFF, 152, 24)
+    toolbarEdit:SetPoint("BOTTOMRIGHT", status, "BOTTOMRIGHT", -24, 12)
     T.CenterButtonLabel(toolbarEdit)
     if T.SkinPrimaryButton then T.SkinPrimaryButton(toolbarEdit) end
     toolbarEdit:SetScript("OnClick", RunToolbarEditMode)
@@ -1817,11 +1846,11 @@ local function BuildWindowScrollHost(state)
     local host, status = f.host, f.status
     local scroll = CreateFrame("ScrollFrame", nil, host)
     scroll:SetPoint("TOPLEFT", status, "BOTTOMLEFT", 0, 0)
-    scroll:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", -22, 0)
+    scroll:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", -24, 0)
     f.scrollFrame = scroll
     M.scrollFrame = scroll
     local child = CreateFrame("Frame", nil, scroll)
-    child:SetSize(CONTENT_W - 10, CONTENT_H)
+    child:SetSize(CONTENT_W - 12, CONTENT_H)
     scroll:SetScrollChild(child)
     M.scrollChild = child
     M.CallIf(T.StyleScrollFrame, scroll, host)

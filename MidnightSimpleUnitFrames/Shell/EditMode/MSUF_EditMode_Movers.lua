@@ -25,6 +25,11 @@ local ApplySettingsForKeySafe = U.ApplySettingsForKeySafe
 local ApplyAllSettingsSafe = U.ApplyAllSettingsSafe
 local Tr = U.Tr
 local ThemeColor = U.ThemeColor
+local SharedUI = U.SharedUI
+local function FontSize(role)
+    local ui = SharedUI and SharedUI()
+    return ui and ui.FontSize and ui.FontSize(role) or (role == "micro" and 9 or 11)
+end
 
 local function T()
     local legacy = _G.MSUF_THEME or {}
@@ -220,12 +225,12 @@ local function CreateMover(key, cfg)
     mover._brd = brd
 
     local label = mover:CreateFontString(nil, "OVERLAY")
-    label:SetFont(FONT, 10, "OUTLINE"); label:SetPoint("CENTER")
+    label:SetFont(FONT, FontSize("caption"), "OUTLINE"); label:SetPoint("CENTER")
     label:SetTextColor(th.textR, th.textG, th.textB, 0.85); label:SetText(MoverLabelText(key, cfg))
     mover._label = label
 
     local coordFS = mover:CreateFontString(nil, "OVERLAY")
-    coordFS:SetFont(FONT, 9, "OUTLINE"); coordFS:SetPoint("TOP", mover, "BOTTOM", 0, -2)
+    coordFS:SetFont(FONT, FontSize("micro"), "OUTLINE"); coordFS:SetPoint("TOP", mover, "BOTTOM", 0, -2)
     coordFS:SetTextColor(th.titleR, th.titleG, th.titleB, 0.90); coordFS:Hide()
     mover._coordFS = coordFS
 

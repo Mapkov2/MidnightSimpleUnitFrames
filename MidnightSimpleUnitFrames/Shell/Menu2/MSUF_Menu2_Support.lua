@@ -1071,7 +1071,7 @@ local function EnsureCopyLinkPopup()
     end
     copyLinkPopupSerial = copyLinkPopupSerial + 1
     local frame = _G.CreateFrame("Frame", "MSUF_CopyLinkPopup" .. tostring(copyLinkPopupSerial), _G.UIParent, "BackdropTemplate")
-    frame:SetSize(420, 150)
+    frame:SetSize(420, 152)
     frame:SetFrameStrata("FULLSCREEN_DIALOG")
     frame:SetFrameLevel(100)
     frame:SetClampedToScreen(true)
@@ -1093,12 +1093,12 @@ local function EnsureCopyLinkPopup()
         frame:SetBackdropBorderColor(0.10, 0.10, 0.10, 0.90)
     end
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    title:SetPoint("TOP", frame, "TOP", 0, -14)
+    title:SetPoint("TOP", frame, "TOP", 0, -16)
     title:SetText(Tr("Link"))
     if M.Theme and M.Theme.StyleFontString then M.Theme.StyleFontString(title, M.Theme.colors and M.Theme.colors.text or { 1, 1, 1, 1 }, 1) end
     frame._msufTitleFS = title
     local hint = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    hint:SetPoint("TOP", title, "BOTTOM", 0, -6)
+    hint:SetPoint("TOP", title, "BOTTOM", 0, -8)
     hint:SetText(Tr("Press Ctrl+C to copy:"))
     hint:SetTextColor(0.90, 0.90, 0.90, 1)
     if M.Theme and M.Theme.StyleFontString then M.Theme.StyleFontString(hint, M.Theme.colors and M.Theme.colors.text or { 0.90, 0.90, 0.90, 1 }, 0) end
@@ -1106,7 +1106,7 @@ local function EnsureCopyLinkPopup()
     editBox:EnableMouse(true)
     editBox:SetAutoFocus(false)
     editBox:SetSize(360, 32)
-    editBox:SetPoint("TOP", hint, "BOTTOM", 0, -10)
+    editBox:SetPoint("TOP", hint, "BOTTOM", 0, -12)
     if editBox.SetTextInsets then editBox:SetTextInsets(8, 8, 0, 0) end
     if M.Theme and M.Theme.SkinEditBox then M.Theme.SkinEditBox(editBox) end
     editBox:SetScript("OnEscapePressed", function() frame:Hide() end)
@@ -1533,7 +1533,7 @@ local function ResetStandaloneWindowGeometry(frame, silent)
         if win.SetScale then win:SetScale(scale) end
         if win.SetSize then win:SetSize(900, 700) end
         if win.ClearAllPoints then win:ClearAllPoints() end
-        if win.SetPoint then win:SetPoint("CENTER", _G.UIParent, "CENTER", -60, 10) end
+        if win.SetPoint then win:SetPoint("CENTER", _G.UIParent, "CENTER", -60, 12) end
     end
     if not silent then Print("MSUF menu size reset to default.") end
 end

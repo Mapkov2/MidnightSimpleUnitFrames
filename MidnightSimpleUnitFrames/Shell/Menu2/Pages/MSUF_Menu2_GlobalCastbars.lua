@@ -139,7 +139,7 @@ local function BuildCastbars(ctx)
         end
         ResetEmpowerBlinkState(preview)
         local subtitle = T.Font(section, "GameFontDisableSmall", "Normal / Channel / Empowered", T.colors.muted)
-        subtitle:SetPoint("TOPLEFT", section.title or section, "BOTTOMLEFT", 0, -5)
+        subtitle:SetPoint("TOPLEFT", section.title or section, "BOTTOMLEFT", 0, -4)
         subtitle:SetJustifyH("LEFT")
         subtitle:Hide()
         local function ReadPreviewCastbarSize(unit, g)
@@ -184,7 +184,7 @@ local function BuildCastbars(ctx)
                 local value = spec.key
                 btn._msuf2AllowCombatClick = true
                 btn._msuf2SkipHistoryCheckpoint = true
-                btn:SetPoint("LEFT", box, "LEFT", 6 + ((i - 1) * (buttonW + gap)), 0)
+                btn:SetPoint("LEFT", box, "LEFT", 8 + ((i - 1) * (buttonW + gap)), 0)
                 btn:SetScript("OnClick", function() onClick(value) end)
                 RegisterControl(btn, Meta(semanticPath .. ".option." .. tostring(value), "ephemeral"), spec.text, "button")
                 buttons[value] = btn
@@ -206,22 +206,22 @@ local function BuildCastbars(ctx)
         local interrupt = T.CenterButtonLabel(T.SkinDangerButton(T.Button(section, "Interrupt", interruptW, 24)))
         interrupt._msuf2AllowCombatClick = true
         interrupt._msuf2SkipHistoryCheckpoint = true
-        interrupt:SetPoint("TOPRIGHT", section, "TOPRIGHT", -14, -17)
+        interrupt:SetPoint("TOPRIGHT", section, "TOPRIGHT", -16, -16)
         interrupt:SetScript("OnClick", function()
             M.PlayCastbarPreviewInterrupt()
         end)
         RegisterControl(interrupt, Meta("preview.interrupt", "ephemeral"), "Interrupt", "button")
         local box = T.Panel(section, nil, { 0.018, 0.022, 0.044, 0.88 }, T.colors.borderSoft)
-        box:SetPoint("TOPLEFT", section, "TOPLEFT", 14, -50)
+        box:SetPoint("TOPLEFT", section, "TOPLEFT", 16, -52)
         box:SetSize(innerW, 62)
         local portrait = T.Panel(box, nil, { 0.040, 0.060, 0.120, 0.96 }, { 0.16, 0.22, 0.42, 0.75 })
         portrait:SetSize(52, 52)
-        portrait:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -19)
+        portrait:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -20)
         local portraitGlow = PreviewTexture(portrait, "ARTWORK", 0.45, 0.52, 1.00, 0.45)
-        portraitGlow:SetPoint("CENTER", portrait, "CENTER", 0, 7)
+        portraitGlow:SetPoint("CENTER", portrait, "CENTER", 0, 8)
         portraitGlow:SetSize(28, 28)
         local portraitBody = PreviewTexture(portrait, "OVERLAY", 0.10, 0.28, 0.34, 0.78)
-        portraitBody:SetPoint("BOTTOM", portrait, "BOTTOM", 0, 6)
+        portraitBody:SetPoint("BOTTOM", portrait, "BOTTOM", 0, 8)
         portraitBody:SetSize(38, 16)
         portrait:Hide()
         local mainX = 18
@@ -358,7 +358,7 @@ local function BuildCastbars(ctx)
         preview.outlineFrame = outlineFrame
         local kick = T.Panel(castRow, nil, { 0.12, 0.72, 0.36, 0.92 }, { 0.40, 1.00, 0.62, 0.70 })
         kick:SetSize(20, 20)
-        kick:SetPoint("LEFT", castbar, "RIGHT", 7, 0)
+        kick:SetPoint("LEFT", castbar, "RIGHT", 8, 0)
         kick:Hide()
         preview.kick = kick
         function preview:PlayShake(strength, interrupted)
@@ -696,7 +696,7 @@ local function BuildCastbars(ctx)
                 local kickSize = ReadGBool("kickReadyAutoSize", true) and sch or max(8, S(ReadG("kickReadySize", 16)))
                 self.kick:SetSize(kickSize, kickSize)
                 self.kick:ClearAllPoints()
-                self.kick:SetPoint("LEFT", self.bar, "LEFT", statusX + barWLocal + S(7), 0)
+                self.kick:SetPoint("LEFT", self.bar, "LEFT", statusX + barWLocal + S(8), 0)
             end
             self.fill:SetTexture(texture)
             self.fill:SetVertexColor(ir, ig, ib, 1)
@@ -1055,7 +1055,13 @@ local function BuildCastbars(ctx)
     end
     local focusControls = BuildCastControlSpecs(focusKick, {
         { "toggle", "Focus interrupt tracker", focusLeftX, -74, 260, "enableFocusKickIcon", false, "MSUF2_FOCUS_KICK_ENABLE", nil, { name = "enable", switch = true,
-            afterSet = function(_, enabled) ApplyFocusKickOptions(); if not enabled then Call("MSUF_FocusKick_SetPreviewEnabled", false) end; if syncFocusKick then syncFocusKick() end end } },
+            afterSet = function(_, enabled)
+                Call("MSUF_FocusKickDriver_ForceUpdate")
+                Call("MSUF_KickReady_RefreshAll")
+                ApplyFocusKickOptions()
+                if not enabled then Call("MSUF_FocusKick_SetPreviewEnabled", false) end
+                if syncFocusKick then syncFocusKick() end
+            end } },
         { "toggle", "Show on-screen preview", focusLeftX, -100, 300, nil, nil, nil, nil, { name = "preview",
             getValue = function()
                 local fn = _G.MSUF_FocusKick_IsPreviewEnabled
@@ -1091,11 +1097,10 @@ local function BuildCastbars(ctx)
     local focusKickControls = { focusControls.preview, focusControls.width, focusControls.height, focusControls.text, focusControls.x, focusControls.y, resetFocus }
     syncFocusKick = function() SetControlsEnabled(focusKickControls, ReadGBool("enableFocusKickIcon", false)) end
     M.TrackRefresh(ctx, syncFocusKick)
-    local kick = b:CollapsibleSection("castbar_interrupt_ready", "Interrupt Ready Indicator", 360, false)
-    W.Text(kick, "Shows a colored indicator on castbars when your interrupt is ready or on cooldown.", 14, -38, ctx.width - 28, T.colors.muted)
+    local kick = b:CollapsibleSection("castbar_interrupt_ready", "Interrupt Ready Indicator", 328, false)
     local kickLeftX, kickRightX = 14, 392
-    W.LabelAt(kick, "Castbars", kickLeftX, -70, 160, "GameFontNormalSmall", T.colors.accent)
-    W.LabelAt(kick, "Appearance", kickRightX, -70, 160, "GameFontNormalSmall", T.colors.accent)
+    W.LabelAt(kick, "Castbars", kickLeftX, -38, 160, "GameFontNormalSmall", T.colors.accent)
+    W.LabelAt(kick, "Appearance", kickRightX, -38, 160, "GameFontNormalSmall", T.colors.accent)
     local syncKickReady
     local function ApplyKickReady(reason, _, applyQueued)
         ApplyCastbarsIfNeeded(reason, nil, applyQueued)
@@ -1104,19 +1109,19 @@ local function BuildCastbars(ctx)
         if syncKickReady then syncKickReady() end
     end
     local kickControls = BuildCastControlSpecs(kick, {
-        { "toggle", "Show on Target castbar", kickLeftX, -88, 300, "kickReadyShowTarget", false, "MSUF2_KICK_READY_ENABLE", ApplyKickReady },
-        { "toggle", "Show on Focus castbar", kickLeftX, -114, 300, "kickReadyShowFocus", false, "MSUF2_KICK_READY_ENABLE", ApplyKickReady },
-        { "toggle", "Show on Boss castbars", kickLeftX, -140, 300, "kickReadyShowBoss", false, "MSUF2_KICK_READY_ENABLE", ApplyKickReady },
-        { "dropdown", "Indicator style", kickRightX, -88, 300, VT("border", "Castbar border", "box", "Color box next to cast", "fill", "Unavailable cast fill"), "kickReadyStyle", "border", "MSUF2_KICK_READY_STYLE", ApplyKickReady },
-        { "slider", "Indicator size", kickRightX, -142, 320, 8, 32, 1, "kickReadySize", 16, "MSUF2_KICK_READY_SIZE", ApplyAndRefresh },
-        { "toggle", "Auto-size to castbar height", kickRightX, -196, 360, "kickReadyAutoSize", true, "MSUF2_KICK_READY_AUTO", ApplyKickReady },
+        { "toggle", "Show on Target castbar", kickLeftX, -56, 300, "kickReadyShowTarget", false, "MSUF2_KICK_READY_ENABLE", ApplyKickReady },
+        { "toggle", "Show on Focus castbar", kickLeftX, -82, 300, "kickReadyShowFocus", false, "MSUF2_KICK_READY_ENABLE", ApplyKickReady },
+        { "toggle", "Show on Boss castbars", kickLeftX, -108, 300, "kickReadyShowBoss", false, "MSUF2_KICK_READY_ENABLE", ApplyKickReady },
+        { "dropdown", "Indicator style", kickRightX, -56, 300, VT("border", "Castbar border", "box", "Color box next to cast", "fill", "Unavailable cast fill"), "kickReadyStyle", "border", "MSUF2_KICK_READY_STYLE", ApplyKickReady },
+        { "slider", "Indicator size", kickRightX, -110, 320, 8, 32, 1, "kickReadySize", 16, "MSUF2_KICK_READY_SIZE", ApplyAndRefresh },
+        { "toggle", "Auto-size to castbar height", kickRightX, -164, 360, "kickReadyAutoSize", true, "MSUF2_KICK_READY_AUTO", ApplyKickReady },
     }, "interrupt_ready")
-    local colorHint = W.Text(kick, "Colors: Colors menu > Castbar Colors", kickRightX, -228, 370, T.colors.muted)
-    W.LabelAt(kick, "Placement", kickLeftX, -178, 160, "GameFontNormalSmall", T.colors.accent)
+    local colorHint = W.Text(kick, "Colors: Colors menu > Castbar Colors", kickRightX, -196, 370, T.colors.muted)
+    W.LabelAt(kick, "Placement", kickLeftX, -146, 160, "GameFontNormalSmall", T.colors.accent)
     M.Assign(kickControls, BuildCastControlSpecs(kick, {
-        { "dropdown", "Anchor", kickLeftX, -196, 260, VT("RIGHT", "Right", "LEFT", "Left", "TOP", "Top", "BOTTOM", "Bottom"), "kickReadyAnchor", "RIGHT", "MSUF2_KICK_READY_ANCHOR", ApplyCastbarsIfNeeded },
-        { "slider", "X offset", kickLeftX, -250, 320, -50, 50, 1, "kickReadyOffsetX", 4, "MSUF2_KICK_READY_X", ApplyCastbarsIfNeeded },
-        { "slider", "Y offset", kickLeftX, -304, 320, -50, 50, 1, "kickReadyOffsetY", 0, "MSUF2_KICK_READY_Y", ApplyCastbarsIfNeeded },
+        { "dropdown", "Anchor", kickLeftX, -164, 260, VT("RIGHT", "Right", "LEFT", "Left", "TOP", "Top", "BOTTOM", "Bottom"), "kickReadyAnchor", "RIGHT", "MSUF2_KICK_READY_ANCHOR", ApplyCastbarsIfNeeded },
+        { "slider", "X offset", kickLeftX, -218, 320, -50, 50, 1, "kickReadyOffsetX", 4, "MSUF2_KICK_READY_X", ApplyCastbarsIfNeeded },
+        { "slider", "Y offset", kickLeftX, -272, 320, -50, 50, 1, "kickReadyOffsetY", 0, "MSUF2_KICK_READY_Y", ApplyCastbarsIfNeeded },
     }, "interrupt_ready.placement"))
     local style, size, auto = kickControls.kickReadyStyle, kickControls.kickReadySize, kickControls.kickReadyAutoSize
     local placementControls = { kickControls.kickReadyAnchor, kickControls.kickReadyOffsetX, kickControls.kickReadyOffsetY }

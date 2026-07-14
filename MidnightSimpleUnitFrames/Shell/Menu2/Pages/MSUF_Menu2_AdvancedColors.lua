@@ -621,9 +621,9 @@ local function BuildGroupFrameColors(ctx, b)
     local rightW = wide and (innerW - leftW - gap) or innerW
     local secondY = wide and -394 or -690
     local health = Card(group, "Health Bars", "Shared by Party, Raid, and Mythic Raid.", leftX, -42, leftW, 282)
-    local background = Card(group, "Bar Background", "Shared bar fill texture, background texture, tint, and opacity.", rightX, wide and -42 or -340, rightW, 326)
+    local background = Card(group, "Bar Background", nil, rightX, wide and -42 or -340, rightW, 326)
     local state = Card(group, "State Tints", "Dead/offline tint and debuff stripe colors.", leftX, secondY, leftW, 300)
-    local highlights = Card(group, "Group Highlights", "Target, focus, group-border, and corner-indicator colors.", rightX, wide and secondY or -1008, rightW, 288)
+    local highlights = Card(group, "Group Highlights", nil, rightX, wide and secondY or -1008, rightW, 288)
 
     ValueDropdownAt(ctx, health, "Bar Color Mode", 16, -54, GROUP_BAR_MODES, min(280, leftW - 32),
         GroupBarMode,
@@ -1092,7 +1092,7 @@ local function BuildAuraAndPortraitColors(ctx, b, CH)
         box:SetPoint("LEFT", preview, "LEFT", 88 + (i - 1) * (sampleBoxW + sampleGap), -6)
         box:SetSize(sampleBoxW, 54)
         local fs = T.Font(box, nil, i == 1 and "60" or (i == 2 and "15" or "5"), T.colors.text)
-        fs:SetFont(FONT, 18, "OUTLINE")
+        fs:SetFont(FONT, T.FontSize("heading"), "OUTLINE")
         fs:SetPoint("CENTER", box, "CENTER", 0, 6)
         local label = T.Font(box, "GameFontDisableSmall", i == 1 and "Safe" or (i == 2 and "Warn" or "Urgent"), T.colors.muted)
         label:SetPoint("BOTTOM", box, "BOTTOM", 0, 5)

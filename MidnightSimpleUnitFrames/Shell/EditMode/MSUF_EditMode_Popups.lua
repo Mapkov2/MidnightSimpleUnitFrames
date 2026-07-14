@@ -225,7 +225,7 @@ function Sync()
         if pf.dpbPanel then
             pf.dpbPanel:SetShown(detachedOn)
             --- +44 reserved at the bottom for the Undo/Redo/Reset footer row.
-            pf:SetHeight(detachedOn and (key == "player" and 570 or 532) or (canDetach and 336 or 288))
+            pf:SetHeight(detachedOn and (key == "player" and 572 or 532) or (canDetach and 336 or 288))
             if detachedOn then pf.dpbPanel:SetHeight(key == "player" and 220 or 184) end
         end
         if detachedOn then
@@ -253,11 +253,11 @@ function Sync()
             end
             if pf.dpbWHRow then
                 pf.dpbWHRow:ClearAllPoints()
-                pf.dpbWHRow:SetPoint("TOPLEFT", pf.dpbPanel, "TOPLEFT", 16, firstY - 34)
+                pf.dpbWHRow:SetPoint("TOPLEFT", pf.dpbPanel, "TOPLEFT", 16, firstY - 36)
             end
             if pf.dpbLayerRow then
                 pf.dpbLayerRow:ClearAllPoints()
-                pf.dpbLayerRow:SetPoint("TOPLEFT", pf.dpbPanel, "TOPLEFT", 16, firstY - 68)
+                pf.dpbLayerRow:SetPoint("TOPLEFT", pf.dpbPanel, "TOPLEFT", 16, firstY - 72)
             end
         end
     end
@@ -436,17 +436,17 @@ local function Build()
     pf.detachBtn = Quick.ToggleAt(pf, "Detach powerbar", 20, -238, 394, 30, ApplyDetachPower, toggleOpts)
 
     pf.dpbPanel = CreateFrame("Frame", nil, pf, "BackdropTemplate")
-    pf.dpbPanel:SetPoint("TOPLEFT", pf, "TOPLEFT", 20, -282)
-    pf.dpbPanel:SetSize(394, 220)
+    pf.dpbPanel:SetPoint("TOPLEFT", pf, "TOPLEFT", 20, -284)
+    pf.dpbPanel:SetSize(396, 220)
     pf.dpbPanel:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=1,right=1,top=1,bottom=1} })
     pf.dpbPanel:SetBackdropColor(C.cardBg[1], C.cardBg[2], C.cardBg[3], 0.58)
     pf.dpbPanel:SetBackdropBorderColor(C.cardEdge[1], C.cardEdge[2], C.cardEdge[3], 0.72)
     Menu2Style.Card(pf.dpbPanel)
-    local dpbTitle = FS(pf.dpbPanel, 12, C.white)
+    local dpbTitle = FS(pf.dpbPanel, "body", C.white)
     dpbTitle:SetPoint("TOPLEFT", pf.dpbPanel, "TOPLEFT", 16, -12)
     dpbTitle:SetText(Tr("Detached power bar"))
-    local dpbHint = FS(pf.dpbPanel, 10, C.muted)
-    dpbHint:SetPoint("LEFT", dpbTitle, "RIGHT", 10, 0)
+    local dpbHint = FS(pf.dpbPanel, "caption", C.muted)
+    dpbHint:SetPoint("LEFT", dpbTitle, "RIGHT", 12, 0)
     dpbHint:SetText(Tr("position, size, and layer"))
     pf.dpbTextBtn = Quick.ToggleAt(pf.dpbPanel, "Text on bar", 16, -36, 112, 30, Apply, toggleOpts)
     pf.dpbSyncBtn = Quick.ToggleAt(pf.dpbPanel, "Sync class", 140, -36, 112, 30, Apply, toggleOpts)

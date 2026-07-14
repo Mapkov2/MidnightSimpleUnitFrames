@@ -114,8 +114,8 @@ function Shared.SetSectionHeaderStatus(sec, opts)
 end
 function Shared.CreateSectionNotice(sec, topY, buttonLabel, buttonWidth, gateKey)
     local notice = CreateFrame("Frame", nil, sec)
-    notice:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, topY)
-    notice:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -14, topY)
+    notice:SetPoint("TOPLEFT", sec, "TOPLEFT", 16, topY)
+    notice:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -16, topY)
     notice:SetHeight(24)
     gateKey = gateKey or "_msuf2UnitFrameGateAlwaysEnabled"
     notice[gateKey] = true
@@ -136,16 +136,16 @@ function Shared.CreateSectionNotice(sec, topY, buttonLabel, buttonWidth, gateKey
     bottom:SetHeight(1)
     bottom:SetColorTexture(coreSurface[1], coreSurface[2], coreSurface[3], 0.48)
     local text = T.Font(notice, "GameFontDisableSmall", "", T.colors.dim)
-    text:SetPoint("LEFT", notice, "LEFT", 10, 0)
+    text:SetPoint("LEFT", notice, "LEFT", 12, 0)
     text:SetJustifyH("LEFT")
     local button
     if buttonLabel and buttonLabel ~= "" then
         button = (W.StyleTopActionButton and W.StyleTopActionButton(T.Button(notice, buttonLabel, buttonWidth or 92, 20))) or T.Button(notice, buttonLabel, buttonWidth or 92, 20)
         button:SetPoint("RIGHT", notice, "RIGHT", -2, 0)
         button[gateKey] = true
-        text:SetPoint("RIGHT", notice, "RIGHT", -(buttonWidth or 92) - 18, 0)
+        text:SetPoint("RIGHT", notice, "RIGHT", -(buttonWidth or 92) - 20, 0)
     else
-        text:SetPoint("RIGHT", notice, "RIGHT", -10, 0)
+        text:SetPoint("RIGHT", notice, "RIGHT", -12, 0)
     end
     function notice:SetTone(kind)
         if kind == "warning" then
@@ -181,13 +181,13 @@ local COPY_POPUP_TARGET_STYLE = {
 local function CopyPopupButton(parent, text, width, role)
     local btn
     if role == "target" then
-        btn = W.TopButton(parent, text, width, 22, COPY_POPUP_TARGET_STYLE, false)
+        btn = W.TopButton(parent, text, width, 24, COPY_POPUP_TARGET_STYLE, false)
     elseif W.RoleButton then
-        btn = W.RoleButton(parent, text, role == "danger" and "danger" or (role == "action" and "primary" or "normal"), width, 22)
+        btn = W.RoleButton(parent, text, role == "danger" and "danger" or (role == "action" and "primary" or "normal"), width, 24)
     else
-        btn = W.TopButton(parent, text, width, 22, nil, false)
+        btn = W.TopButton(parent, text, width, 24, nil, false)
     end
-    btn:SetHeight(22)
+    btn:SetHeight(24)
     return btn
 end
 function Shared.MakeScopeCopyPopup(anchorButton, opts)
@@ -236,7 +236,7 @@ function Shared.MakeScopeCopyPopup(anchorButton, opts)
                 btn:SetShown(visible)
                 if visible then
                     btn:ClearAllPoints()
-                    btn:SetPoint("TOPLEFT", popup, "TOPLEFT", x, opts.targetY or -58)
+                    btn:SetPoint("TOPLEFT", popup, "TOPLEFT", x, opts.targetY or -60)
                     x = x + TargetWidth(key, btn) + (opts.targetGap or 6)
                 end
                 if btn.SetActive then btn:SetActive(selected == key) end
@@ -262,7 +262,7 @@ function Shared.MakeScopeCopyPopup(anchorButton, opts)
             popup._title = title
             local close = CopyPopupButton(popup, "x", 20, "danger")
             close:SetSize(20, 20)
-            close:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -12, -9)
+            close:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -12, -8)
             close:SetScript("OnClick", function() popup:Hide() end)
             RegisterSharedControl(close, opts, "close", "Close copy popup", "button", "ephemeral")
             local destLabel = T.Font(popup, "GameFontDisableSmall", M.Tr(opts.targetLabel or "Destination"), T.colors.dim)
@@ -304,12 +304,12 @@ function Shared.MakeScopeCopyPopup(anchorButton, opts)
             allBtn:SetScript("OnClick", function() SetAll(true, opts.allFeedback or "All copy categories selected") end)
             RegisterSharedControl(allBtn, opts, "categories.all", "All copy categories", "button", "ephemeral")
             local noneBtn = CopyPopupButton(popup, M.Tr("None"), 58, "normal")
-            noneBtn:SetPoint("LEFT", allBtn, "RIGHT", 6, 0)
+            noneBtn:SetPoint("LEFT", allBtn, "RIGHT", 8, 0)
             noneBtn:SetScript("OnClick", function() SetAll(false, opts.noneFeedback or "Copy categories cleared") end)
             RegisterSharedControl(noneBtn, opts, "categories.none", "No copy categories", "button", "ephemeral")
             if opts.runLabel then
                 local runBtn = CopyPopupButton(popup, M.Tr(opts.runLabel), opts.runWidth or 128, "action")
-                runBtn:SetPoint("BOTTOMRIGHT", popup, "BOTTOMRIGHT", -14, 11)
+                runBtn:SetPoint("BOTTOMRIGHT", popup, "BOTTOMRIGHT", -16, 12)
                 runBtn:SetScript("OnClick", function()
                     if opts.onRun then opts.onRun(api, popup) end
                 end)
@@ -320,7 +320,7 @@ function Shared.MakeScopeCopyPopup(anchorButton, opts)
         api.Refresh()
         M.ApplyPopupFramePriority(popup)
         popup:ClearAllPoints()
-        popup:SetPoint("TOPRIGHT", anchor or anchorButton, "BOTTOMRIGHT", 0, -6)
+        popup:SetPoint("TOPRIGHT", anchor or anchorButton, "BOTTOMRIGHT", 0, -8)
         popup:Show()
     end
     return api
@@ -438,7 +438,7 @@ function Shared.CustomAnchorEditor(ctx, parent, opts)
     local label = T.Font(parent, "GameFontHighlightSmall", M.Tr(opts.label or "Custom Anchor Frame"), opts.labelColor or { 0.62, 0.74, 0.96, 1 })
     label:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y); label:SetJustifyH("LEFT")
     local box = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
-    box:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y - 22); box:SetSize(width, 22); box:SetAutoFocus(false)
+    box:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y - 24); box:SetSize(width, 24); box:SetAutoFocus(false)
     box:SetMaxLetters(opts.maxLetters or 100); box:SetJustifyH("LEFT")
     box._msuf2Title, box._msuf2ControlKind = label, "textinput"
     M.CallIf(T.SkinEditBox, box)
@@ -459,7 +459,7 @@ function Shared.CustomAnchorEditor(ctx, parent, opts)
     box:SetScript("OnEditFocusLost", Refresh)
     RegisterSharedControl(box, opts, "value", opts.label or "Custom Anchor Frame", "textinput", "setting")
     local function SmallButton(after, labelText, widthText, gap, danger)
-        local btn = T.Button(parent, labelText, widthText, 22)
+        local btn = T.Button(parent, labelText, widthText, 24)
         if danger and T.SkinDangerButton then btn = T.SkinDangerButton(btn) end; btn:SetPoint("LEFT", after, "RIGHT", gap, 0)
         if T.CenterButtonLabel then T.CenterButtonLabel(btn) end; Attach(btn)
         return btn
@@ -589,7 +589,7 @@ function Shared.MakeDragSortRows(parent, defs, opts)
         stripe:SetColorTexture(def.r or 0.30, def.g or 0.55, def.b or 0.85, 1)
         frame._stripe = stripe
         local label = T.Font(frame, "GameFontHighlightSmall", def.label or "", T.colors.text)
-        label:SetPoint("LEFT", stripe, "RIGHT", opts.labelOffsetX or 7, 0)
+        label:SetPoint("LEFT", stripe, "RIGHT", opts.labelOffsetX or 8, 0)
         label:SetJustifyH("LEFT")
         frame._label = label
         local number = T.Font(frame, "GameFontNormalSmall", tostring(i), T.colors.dim)

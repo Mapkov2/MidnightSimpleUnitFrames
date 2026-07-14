@@ -166,8 +166,8 @@ local function BuildPortrait(ctx, builder, unit)
         return control
     end
     M._msuf2LastPortraitSide = M._msuf2LastPortraitSide or {}
-    local mainCard = W.ControlCard(sec, "Portrait", "Main portrait visibility and render mode.", leftX, layout.mainY, leftW, 168)
-    local geometryCard = W.ControlCard(sec, "Geometry", "Size, zoom, and local offset.", rightX, layout.geometryY, rightW, 278)
+    local mainCard = W.ControlCard(sec, "Visibility & Mode", nil, leftX, layout.mainY, leftW, 168)
+    local geometryCard = W.ControlCard(sec, "Geometry", nil, rightX, layout.geometryY, rightW, 278)
     local borderCard = W.ControlCard(sec, "Shape & Border", nil, leftX, layout.borderY, leftW, 312)
     local styleCard = W.ControlCard(sec, "Class & Background", nil, rightX, layout.styleY, rightW, 166)
     local portraitEnable = W.SwitchAt(mainCard, "Portrait", leftW - 62, -24, 0, "HIDDEN")
@@ -313,7 +313,7 @@ local function BuildPower(ctx, builder, unit)
             RefreshPowerEnabled()
         end)
     end
-    local mainCard = PowerCard("Power bar", "Main visibility and size for this unit.", leftX, -38, cardW, 220)
+    local mainCard = PowerCard("Visibility & Size", nil, leftX, -38, cardW, 220)
     local borderCard = PowerCard("Border & fill", "Outline and fill behavior.", rightX, -38, rightW, 220)
     local detachedCard = PowerCard("Detached placement", "Used only when the power bar is detached from the unit frame.", leftX, detachedCardY, fullW, detachedCardHeight)
     local show = W.SwitchAt(mainCard, "Show power bar", cardW - 62, -24, 0, "HIDDEN")
@@ -660,7 +660,7 @@ local function BuildCastbar(ctx, builder, unit)
     local sizeCard = W.ControlCard(generalTab, "Size", "Width can use manual bounds or follow another frame.", leftX, -154, sectionW - 32, 150)
     local iconCard = W.ControlCard(iconTab, "Icon", nil, leftX, -4, leftW, 370)
     local spellCard = W.ControlCard(spellTab, "Spell Name Text", nil, leftX, -4, leftW, 370)
-    local targetNameCard = fields.targetName and W.ControlCard(spellTab, "Cast Target Text", "Shows who the current cast is targeting.", rightX, -4, rightW, 370) or nil
+    local targetNameCard = fields.targetName and W.ControlCard(spellTab, "Cast Target Text", nil, rightX, -4, rightW, 370) or nil
     local timeCard = W.ControlCard(timeTab, "Cast Time Text", nil, leftX, -4, leftW, 370)
     local textAdvancedCard = W.ControlCard(advancedTab, "Spell Text Behavior", nil, leftX, -4, leftW, 190)
     local iconAdvancedCard = W.ControlCard(advancedTab, "Icon Style", nil, rightX, -4, rightW, 118)

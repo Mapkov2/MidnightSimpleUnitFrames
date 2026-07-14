@@ -203,7 +203,7 @@ local function ClampScrollOffset(offset)
     return offset
 end
 
-local SEARCH_ANCHOR_TOP_INSET = 42
+local SEARCH_ANCHOR_TOP_INSET = 44
 local SEARCH_ANCHOR_PIN_MARGIN = 12
 local function ActivePinnedPreviewInset()
     local scroll = M.scrollFrame
@@ -266,7 +266,7 @@ local function HighlightSearchAnchor(wrapper, region)
     end
     if highlight._msuf2Anim and highlight._msuf2Anim.Stop then highlight._msuf2Anim:Stop() end
     highlight:ClearAllPoints()
-    highlight:SetPoint("TOPLEFT", wrapper, "TOPLEFT", 8, -math.max(0, offset - 9))
+    highlight:SetPoint("TOPLEFT", wrapper, "TOPLEFT", 8, -math.max(0, offset - 8))
     highlight:SetSize(math.max(220, (wrapper.GetWidth and wrapper:GetWidth() or ContentWidth()) - 28), 32)
     highlight:SetAlpha(1)
     highlight:Show()

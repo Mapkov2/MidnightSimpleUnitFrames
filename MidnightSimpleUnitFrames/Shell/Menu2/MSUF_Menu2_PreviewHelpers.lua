@@ -393,17 +393,17 @@ function H.ShowPreviewHandleContext(handle, opts)
             popup:SetBackdropColor(0.014, 0.024, 0.050, 0.985)
             popup:SetBackdropBorderColor(0.10, 0.22, 0.44, 0.80)
         end
-        popup:SetSize(176, 74)
+        popup:SetSize(176, 76)
         popup:SetFrameStrata("FULLSCREEN_DIALOG")
         popup:EnableMouse(true)
         local title = T and T.Font and T.Font(popup, "GameFontDisableSmall", "", (T.colors and T.colors.muted) or { 0.72, 0.78, 0.90, 1 }) or popup:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-        title:SetPoint("TOPLEFT", popup, "TOPLEFT", 10, -8)
-        title:SetPoint("RIGHT", popup, "RIGHT", -10, 0)
+        title:SetPoint("TOPLEFT", popup, "TOPLEFT", 12, -8)
+        title:SetPoint("RIGHT", popup, "RIGHT", -12, 0)
         title:SetJustifyH("LEFT")
         popup._title = title
         local function MakeButton(label, y)
-            local btn = W and W.TopButton and W.TopButton(popup, tr(label), 154, 22) or (T and T.Button and T.Button(popup, tr(label), 154, 22)) or CreateFrame("Button", nil, popup, "BackdropTemplate")
-            btn:SetPoint("TOPLEFT", popup, "TOPLEFT", 10, y)
+            local btn = W and W.TopButton and W.TopButton(popup, tr(label), 152, 24) or (T and T.Button and T.Button(popup, tr(label), 152, 24)) or CreateFrame("Button", nil, popup, "BackdropTemplate")
+            btn:SetPoint("TOPLEFT", popup, "TOPLEFT", 12, y)
             if not btn.GetText then btn:SetText(tr(label)) end
             return btn
         end
@@ -583,17 +583,17 @@ function H.ShowPreviewControlsHelp(anchor, opts)
             popup:SetBackdropColor(0.014, 0.024, 0.050, 0.985)
             popup:SetBackdropBorderColor(0.10, 0.22, 0.44, 0.80)
         end
-        popup:SetSize(328, 186)
+        popup:SetSize(328, 188)
         popup:SetFrameStrata("FULLSCREEN_DIALOG")
         popup:EnableMouse(true)
         popup._title = T and T.Font and T.Font(popup, "GameFontNormalSmall", "", (T.colors and T.colors.accent) or { 0.78, 0.92, 1, 1 }) or popup:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        popup._title:SetPoint("TOPLEFT", popup, "TOPLEFT", 12, -10)
+        popup._title:SetPoint("TOPLEFT", popup, "TOPLEFT", 12, -12)
         popup._title:SetPoint("RIGHT", popup, "RIGHT", -12, 0)
         popup._title:SetJustifyH("LEFT")
         popup._lines = {}
         for i = 1, 6 do
             local fs = T and T.Font and T.Font(popup, "GameFontDisableSmall", "", (T.colors and T.colors.muted) or { 0.72, 0.78, 0.90, 1 }) or popup:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-            fs:SetPoint("TOPLEFT", popup, "TOPLEFT", 14, -32 - ((i - 1) * 20))
+            fs:SetPoint("TOPLEFT", popup, "TOPLEFT", 16, -32 - ((i - 1) * 20))
             fs:SetPoint("RIGHT", popup, "RIGHT", -12, 0)
             fs:SetJustifyH("LEFT")
             if fs.SetWordWrap then fs:SetWordWrap(false) end
@@ -601,8 +601,8 @@ function H.ShowPreviewControlsHelp(anchor, opts)
             if fs.SetMaxLines then fs:SetMaxLines(1) end
             popup._lines[i] = fs
         end
-        local close = W and W.TopButton and W.TopButton(popup, tr("Got it"), 82, 22) or (T and T.Button and T.Button(popup, tr("Got it"), 82, 22)) or CreateFrame("Button", nil, popup, "BackdropTemplate")
-        close:SetPoint("BOTTOMRIGHT", popup, "BOTTOMRIGHT", -10, 10)
+        local close = W and W.TopButton and W.TopButton(popup, tr("Got it"), 84, 24) or (T and T.Button and T.Button(popup, tr("Got it"), 84, 24)) or CreateFrame("Button", nil, popup, "BackdropTemplate")
+        close:SetPoint("BOTTOMRIGHT", popup, "BOTTOMRIGHT", -12, 12)
         if not close.GetText then close:SetText(tr("Got it")) end
         close:SetScript("OnClick", function(self)
             local p = self:GetParent()
@@ -636,7 +636,7 @@ function H.ShowPreviewControlsHelp(anchor, opts)
     if M2 and type(M2.ApplyPopupFramePriority) == "function" then M2.ApplyPopupFramePriority(popup) end
     popup:ClearAllPoints()
     if anchor and anchor.GetLeft then
-        popup:SetPoint("TOPRIGHT", anchor, "BOTTOMRIGHT", 0, -6)
+        popup:SetPoint("TOPRIGHT", anchor, "BOTTOMRIGHT", 0, -8)
     else
         popup:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     end
@@ -657,7 +657,7 @@ function H.EnsurePreviewControlsHint(box, anchor, opts)
     if not hint then
         local template = T and T.Template and T.Template() or "BackdropTemplate"
         hint = CreateFrame("Frame", nil, parent, template)
-        hint:SetSize(286, 48)
+        hint:SetSize(288, 48)
         hint:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", 8, 8)
         if hint.SetFrameLevel and parent.GetFrameLevel then hint:SetFrameLevel((parent:GetFrameLevel() or 0) + 90) end
         if hint.SetBackdrop then
@@ -667,13 +667,13 @@ function H.EnsurePreviewControlsHint(box, anchor, opts)
         end
         hint:EnableMouse(true)
         local text = T and T.Font and T.Font(hint, "GameFontDisableSmall", "", (T.colors and T.colors.text) or { 0.86, 0.90, 0.98, 1 }) or hint:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-        text:SetPoint("TOPLEFT", hint, "TOPLEFT", 10, -8)
-        text:SetPoint("RIGHT", hint, "RIGHT", -58, 0)
+        text:SetPoint("TOPLEFT", hint, "TOPLEFT", 12, -8)
+        text:SetPoint("RIGHT", hint, "RIGHT", -60, 0)
         text:SetJustifyH("LEFT")
         text:SetWordWrap(true)
         hint._text = text
         local close = CreateFrame("Button", nil, hint, "BackdropTemplate")
-        close:SetSize(44, 22)
+        close:SetSize(44, 24)
         close:SetPoint("RIGHT", hint, "RIGHT", -8, 0)
         close.fs = close.fs or close:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
         close.fs:SetPoint("CENTER")
@@ -1010,8 +1010,8 @@ function H.BuildZoomBar(box, surface, opts)
     end
     local prefix = opts.fieldPrefix or ""
     local zoomBar = CreateFrame("Frame", nil, surface, template)
-    zoomBar:SetSize(opts.width or 199, opts.height or 24)
-    zoomBar:SetPoint("TOPRIGHT", surface, "TOPRIGHT", -8, -6)
+    zoomBar:SetSize(opts.width or 200, opts.height or 24)
+    zoomBar:SetPoint("TOPRIGHT", surface, "TOPRIGHT", -8, -8)
     zoomBar:SetBackdrop({ bgFile = tex, edgeFile = tex, edgeSize = 1 })
     if opts.flatChrome ~= false and (opts.T or opts.flatChrome == true) then
         zoomBar:SetBackdropColor(0, 0, 0, 0)
@@ -1353,8 +1353,8 @@ function H.CreateLayerButton(parent, owner, def, index, sideW, opts)
     opts = opts or {}
     local tr = opts.Tr or F.Identity
     local btn = CreateFrame("Button", nil, parent)
-    local h = opts.height or 18
-    btn:SetSize((sideW or 80) - 10, h)
+    local h = opts.height or 20
+    btn:SetSize((sideW or 80) - 12, h)
     btn:SetPoint("TOP", parent, "TOP", 0, -((opts.topOffset or 20) + ((index or 1) - 1) * (opts.rowHeight or h)))
     btn:EnableMouse(true)
     btn.key, btn.color, btn.tooltip = def.key, def.color, def.tooltip
@@ -1364,8 +1364,8 @@ function H.CreateLayerButton(parent, owner, def, index, sideW, opts)
     btn.bar:SetSize(3, h - 5)
     btn.bar:SetPoint("LEFT", btn, "LEFT", 3, 0)
     btn.fs = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    btn.fs:SetPoint("LEFT", btn.bar, "RIGHT", 6, 0)
-    btn.fs:SetPoint("RIGHT", btn, "RIGHT", opts.showOffText == true and -22 or -7, 0)
+    btn.fs:SetPoint("LEFT", btn.bar, "RIGHT", 8, 0)
+    btn.fs:SetPoint("RIGHT", btn, "RIGHT", opts.showOffText == true and -24 or -8, 0)
     btn.fs:SetJustifyH("LEFT")
     btn.fs:SetText(tr(def.label))
     if T and T.StyleFontString then T.StyleFontString(btn.fs, { 0.78, 0.84, 0.96, 1 }, 0) end

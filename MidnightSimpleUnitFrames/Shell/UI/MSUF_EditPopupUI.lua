@@ -44,14 +44,24 @@ local C = {
 }
 
 local BOX_W    = 52
-local BOX_H    = 22
+local BOX_H    = 24
 local STEP_W   = 20
 
 local Tr = U.Tr
 
-local function FS(parent, size, color)
+local function FontSize(role)
+    local ui = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
+    if ui and type(role) == "number" and ui.NormalizeFontSize then return ui.NormalizeFontSize(role) end
+    return ui and ui.FontSize and ui.FontSize(role) or 13
+end
+local function Space(role, fallback)
+    local ui = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
+    return ui and ui.Space and ui.Space(role, fallback) or fallback
+end
+
+local function FS(parent, role, color)
     local fs = parent:CreateFontString(nil, "OVERLAY")
-    fs:SetFont(FONT, size or 12, "")
+    fs:SetFont(FONT, FontSize(role or "body"), "")
     fs:SetShadowOffset(1, -1); fs:SetShadowColor(0, 0, 0, 0.9)
     local c = color or C.white
     fs:SetTextColor(c[1], c[2], c[3], c[4] or 1)
@@ -119,14 +129,14 @@ function Menu2Style.Button(parent, text, width, height, onClick)
         }))
     end
     local b = CreateFrame("Button", nil, parent, "BackdropTemplate")
-    b:SetSize(width or 66, height or 24)
+    b:SetSize(width or 68, height or 24)
     b:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1 })
     b:SetBackdropColor(C.btnBg[1], C.btnBg[2], C.btnBg[3], 0.88)
     b:SetBackdropBorderColor(C.btnEdge[1], C.btnEdge[2], C.btnEdge[3], 0.82)
     local hl = b:CreateTexture(nil, "HIGHLIGHT")
     hl:SetAllPoints()
     hl:SetColorTexture(C.btnHover[1], C.btnHover[2], C.btnHover[3], 0.18)
-    local fs = FS(b, 11, C.white)
+    local fs = FS(b, "caption", C.white)
     fs:SetPoint("CENTER")
     fs:SetText(Tr(text or ""))
     b._label = fs
@@ -221,7 +231,7 @@ function Quick.RefreshPalette()
 end
 
 function Quick.Tr(text) return Tr(text) end
-function Quick.FS(parent, size, color) return FS(parent, size, color) end
+function Quick.FS(parent, role, color) return FS(parent, role, color) end
 function Quick.GetStep() return GetStep() end
 
 function Quick.San(value, fallback)
@@ -304,15 +314,15 @@ function Quick.Button(parent, text, w, h, onClick, opts)
     local c = Quick.RefreshPalette()
     local b
     if Menu2Style.Button then
-        b = Menu2Style.Button(parent, Tr(text), w or 66, h or 30, onClick)
+        b = Menu2Style.Button(parent, Tr(text), w or 68, h or 32, onClick)
         if Menu2Style.SetButtonText then Menu2Style.SetButtonText(b, text) end
     else
         b = CreateFrame("Button", nil, parent, "BackdropTemplate")
-        b:SetSize(w or 66, h or 30)
+        b:SetSize(w or 68, h or 32)
         b:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1 })
         b:SetBackdropColor(c.btnBg[1], c.btnBg[2], c.btnBg[3], c.btnBg[4])
         b:SetBackdropBorderColor(c.btnEdge[1], c.btnEdge[2], c.btnEdge[3], c.btnEdge[4])
-        b._label = FS(b, 11, c.white)
+        b._label = FS(b, "caption", c.white)
         b._label:SetPoint("CENTER")
     end
     if not Menu2Style.SetButtonText and b._label then b._label:SetText(Tr(text)) end
@@ -361,12 +371,12 @@ end
 function Quick.Box(parent, width, opts)
     local c = Quick.RefreshPalette()
     local b = CreateFrame("EditBox", nil, parent, "BackdropTemplate")
-    b:SetSize(width or 52, 22)
+    b:SetSize(width or 52, 24)
     b:SetAutoFocus(false)
     b:SetNumeric(false)
     b:SetJustifyH("CENTER")
     b:SetMaxLetters(7)
-    b:SetFont(FONT, 12, "")
+    b:SetFont(FONT, FontSize("body"), "")
     b:SetTextColor(c.white[1], c.white[2], c.white[3], c.white[4] or 1)
     if b.SetBackdrop then
         b:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1 })
@@ -397,21 +407,21 @@ function Quick.ValuePair(owner, parent, y, label1, key1, cb1, label2, key2, cb2,
     row:SetSize(400, 24)
     row:SetPoint("TOPLEFT", parent, "TOPLEFT", (opts and opts.x) or 20, y)
 
-    local l1 = FS(row, 11, c.white)
+    local l1 = FS(row, "caption", c.white)
     l1:SetPoint("LEFT", row, "LEFT", 0, 0)
     l1:SetText(Tr(label1))
     if key1 then owner[key1 .. "Label"] = l1 end
-    local m1 = Quick.Step(row, "-", opts); m1:SetPoint("LEFT", l1, "RIGHT", 6, 0)
+    local m1 = Quick.Step(row, "-", opts); m1:SetPoint("LEFT", l1, "RIGHT", Space("sm", 8), 0)
     local b1 = Quick.Box(row, opts and opts.boxWidth or 52, opts); b1:SetPoint("LEFT", m1, "RIGHT", 1)
     local p1 = Quick.Step(row, "+", opts); p1:SetPoint("LEFT", b1, "RIGHT", 1)
     Quick.WireStepper(m1, b1, p1, cb1)
     owner[key1] = b1
 
-    local l2 = FS(row, 11, c.white)
-    l2:SetPoint("LEFT", p1, "RIGHT", 18, 0)
+    local l2 = FS(row, "caption", c.white)
+    l2:SetPoint("LEFT", p1, "RIGHT", 16, 0)
     l2:SetText(Tr(label2))
     if key2 then owner[key2 .. "Label"] = l2 end
-    local m2 = Quick.Step(row, "-", opts); m2:SetPoint("LEFT", l2, "RIGHT", 6, 0)
+    local m2 = Quick.Step(row, "-", opts); m2:SetPoint("LEFT", l2, "RIGHT", Space("sm", 8), 0)
     local b2 = Quick.Box(row, opts and opts.boxWidth or 52, opts); b2:SetPoint("LEFT", m2, "RIGHT", 1)
     local p2 = Quick.Step(row, "+", opts); p2:SetPoint("LEFT", b2, "RIGHT", 1)
     Quick.WireStepper(m2, b2, p2, cb2)
@@ -426,10 +436,10 @@ function Quick.SingleValue(owner, parent, y, label, key, cb, opts)
     row:SetSize((opts and opts.rowWidth) or 360, 24)
     row:SetPoint("TOPLEFT", parent, "TOPLEFT", (opts and opts.x) or 20, y)
 
-    local l = FS(row, 11, c.white)
+    local l = FS(row, "caption", c.white)
     l:SetPoint("LEFT", row, "LEFT", 0, 0)
     l:SetText(Tr(label))
-    local m = Quick.Step(row, "-", opts); m:SetPoint("LEFT", l, "RIGHT", 6, 0)
+    local m = Quick.Step(row, "-", opts); m:SetPoint("LEFT", l, "RIGHT", Space("sm", 8), 0)
     local b = Quick.Box(row, opts and opts.boxWidth or 52, opts); b:SetPoint("LEFT", m, "RIGHT", 1)
     local p = Quick.Step(row, "+", opts); p:SetPoint("LEFT", b, "RIGHT", 1)
     Quick.WireStepper(m, b, p, cb)
@@ -502,17 +512,17 @@ function Quick.CreateShell(name, opts)
     pf:SetScript("OnDragStart", function(s) if not blocker() then s:StartMoving() end end)
     pf:SetScript("OnDragStop", function(s) s:StopMovingOrSizing() end)
 
-    pf._titleFS = FS(pf, 15, c.white)
-    pf._titleFS:SetPoint("TOPLEFT", pf, "TOPLEFT", 20, -18)
+    pf._titleFS = FS(pf, "section", c.white)
+    pf._titleFS:SetPoint("TOPLEFT", pf, "TOPLEFT", 20, -20)
     if opts.title then pf._titleFS:SetText(Tr(opts.title)) end
 
     local close = (Menu2Style.CloseButton and Menu2Style.CloseButton(pf, function() pf:Hide() end))
         or Quick.Button(pf, "x", 24, 24, function() pf:Hide() end, opts)
     FinishQuickButton(close, opts)
-    close:SetPoint("TOPRIGHT", pf, "TOPRIGHT", -10, -10)
+    close:SetPoint("TOPRIGHT", pf, "TOPRIGHT", -12, -12)
 
     if opts.subtitle then
-        pf._subtitleFS = FS(pf, 12, c.muted)
+        pf._subtitleFS = FS(pf, "body", c.muted)
         pf._subtitleFS:SetPoint("TOPLEFT", pf._titleFS, "BOTTOMLEFT", 0, -8)
         pf._subtitleFS:SetText(Tr(opts.subtitle))
     end
@@ -549,7 +559,7 @@ end
 --- underlying Quick.Button/ValuePair behavior; they only remove repeated
 --- SetPoint boilerplate from popup files.
 function Quick.ButtonAt(parent, text, x, y, w, h, onClick, opts)
-    local b = Quick.Button(parent, text, w, h or 30, onClick, opts)
+    local b = Quick.Button(parent, text, w, h or 32, onClick, opts)
     b:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     return b
 end
@@ -559,7 +569,7 @@ function Quick.MenuButtonAt(parent, text, x, y, w, h, entries, onSelect, opts)
     -- entries and the copy/apply callback; this helper owns only popup chrome and
     -- hover-close behaviour so individual popups do not rebuild small menus by hand.
     opts = opts or {}
-    local btn = Quick.ButtonAt(parent, text, x, y, w, h or 30, nil, opts.buttonOpts)
+    local btn = Quick.ButtonAt(parent, text, x, y, w, h or 32, nil, opts.buttonOpts)
     local c = opts.palette or Quick.RefreshPalette()
     local menu = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
     menu:SetFrameStrata(opts.strata or "TOOLTIP")
@@ -572,12 +582,12 @@ function Quick.MenuButtonAt(parent, text, x, y, w, h, entries, onSelect, opts)
     if Menu2Style.Shell then Menu2Style.Shell(menu) end
     menu:Hide()
 
-    local itemH = opts.itemHeight or 22
+    local itemH = opts.itemHeight or 24
     local function BuildRows()
         if menu._built then return end
         menu._built = true
         local rows = type(entries) == "function" and entries() or entries or {}
-        menu:SetSize(w, #rows * itemH + 6)
+        menu:SetSize(w, #rows * itemH + 8)
         for i = 1, #rows do
             local row = rows[i]
             local item = CreateFrame("Button", nil, menu)
@@ -586,7 +596,7 @@ function Quick.MenuButtonAt(parent, text, x, y, w, h, entries, onSelect, opts)
             local bg = item:CreateTexture(nil, "BACKGROUND")
             bg:SetAllPoints()
             bg:SetColorTexture(row.highlight and c.btnHover[1] or 0, row.highlight and c.btnHover[2] or 0, row.highlight and c.btnHover[3] or 0, row.highlight and 0.08 or 0)
-            local fs = FS(item, 10, row.highlight and c.title or c.white)
+            local fs = FS(item, "caption", row.highlight and c.title or c.white)
             fs:SetPoint("LEFT", 8, 0)
             fs:SetText(Tr(row.label))
             item:SetScript("OnEnter", function() bg:SetColorTexture(c.btnHover[1], c.btnHover[2], c.btnHover[3], 0.22) end)
@@ -623,7 +633,7 @@ function Quick.MenuButtonAt(parent, text, x, y, w, h, entries, onSelect, opts)
 end
 
 function Quick.ToggleAt(parent, text, x, y, w, h, onClick, opts)
-    local b = Quick.ToggleButton(parent, text, w, h or 30, onClick, opts)
+    local b = Quick.ToggleButton(parent, text, w, h or 32, onClick, opts)
     b:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     return b
 end

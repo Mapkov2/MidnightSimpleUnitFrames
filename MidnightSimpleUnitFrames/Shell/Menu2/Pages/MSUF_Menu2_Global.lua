@@ -368,7 +368,7 @@ local function BuildScopeOverrideSection(ctx, builder, opts)
     end, opts.setOverride or M.Noop, opts.overrideMeta)
     local overrideInfo = W.Text(scope, "", 14, overrideY, ctx.width - 130, T.colors.text)
     local reset = T.Button(scope, opts.resetLabel or "Reset", opts.resetWidth or 76, 22)
-    reset:SetPoint("TOPRIGHT", scope, "TOPRIGHT", -14, overrideY + 8)
+    reset:SetPoint("TOPRIGHT", scope, "TOPRIGHT", -16, overrideY + 8)
     T.CenterButtonLabel(reset)
     if type(opts.reset) == "function" then reset:SetScript("OnClick", opts.reset) end
     RegisterControl(reset, opts.resetMeta, opts.resetLabel or "Reset", "button")

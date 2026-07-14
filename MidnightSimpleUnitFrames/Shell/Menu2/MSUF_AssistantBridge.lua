@@ -291,11 +291,11 @@ BridgeBuildDashboardCard = function(parent, cardW, cardH)
     local kicker, maturity, title
     if T and type(T.Font) == "function" then
         kicker = T.Font(parent, "GameFontDisableSmall", "MSUF Assistant", T.colors and T.colors.accent or { 0.45, 0.75, 1, 1 })
-        kicker:SetPoint("TOPLEFT", parent, "TOPLEFT", 22, -22)
+        kicker:SetPoint("TOPLEFT", parent, "TOPLEFT", 24, -24)
         maturity = T.Font(parent, "GameFontDisableSmall", "(Early Alpha)", T.colors and T.colors.danger or { 1, 0.28, 0.28, 1 })
         maturity:SetPoint("LEFT", kicker, "RIGHT", 4, 0)
         title = T.Font(parent, "GameFontNormalLarge", "MSUF Assistant", T.colors and T.colors.text)
-        title:SetPoint("TOPLEFT", parent, "TOPLEFT", 22, -48)
+        title:SetPoint("TOPLEFT", parent, "TOPLEFT", 24, -48)
     end
     local welcome
     if W and type(W.Text) == "function" then
@@ -318,7 +318,7 @@ BridgeBuildDashboardCard = function(parent, cardW, cardH)
     local inputW = math.max(120, cardW - 44 - sendW - 10)
     local inputY = -(cardH - inputBottom - inputH)
     local input = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
-    input:SetPoint("TOPLEFT", parent, "TOPLEFT", 22, inputY)
+    input:SetPoint("TOPLEFT", parent, "TOPLEFT", 24, inputY)
     input:SetSize(inputW, inputH)
     input:SetAutoFocus(false)
     input:SetMaxLetters(20000)
@@ -340,8 +340,9 @@ BridgeBuildDashboardCard = function(parent, cardW, cardH)
     elseif placeholder.ClearAllPoints then
         placeholder:ClearAllPoints()
     end
-    placeholder:SetPoint("LEFT", input, "LEFT", 10, 0)
-    placeholder:SetPoint("RIGHT", input, "RIGHT", -10, 0)
+    placeholder:SetPoint("LEFT", input, "LEFT", 12, 0)
+    placeholder:SetPoint("RIGHT", input, "RIGHT", -12, 0)
+    if T and T.StyleFontString then T.StyleFontString(placeholder, T.colors and T.colors.muted, 0) end
     if placeholder.SetJustifyH then placeholder:SetJustifyH("LEFT") end
     if placeholder.SetWordWrap then placeholder:SetWordWrap(false) end
     SetText(placeholder, "Type your first message...")
@@ -357,7 +358,7 @@ BridgeBuildDashboardCard = function(parent, cardW, cardH)
         send:SetSize(sendW, inputH)
         send:SetText("Send")
     end
-    send:SetPoint("LEFT", input, "RIGHT", 10, 0)
+    send:SetPoint("LEFT", input, "RIGHT", 12, 0)
 
     local card = {
         parent = parent,

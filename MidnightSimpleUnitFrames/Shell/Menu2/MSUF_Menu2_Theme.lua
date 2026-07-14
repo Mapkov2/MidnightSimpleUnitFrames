@@ -5,6 +5,35 @@ MSUF.MSUF2 = M
 local T = M.Theme or {}
 M.Theme = T
 local WL = M.WordList
+local SharedUI = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
+
+T.fontSizes = (SharedUI and SharedUI.fontSizes) or T.fontSizes or {
+    micro = 9, caption = 11, body = 13, section = 15, heading = 17, hero = 21,
+}
+function T.FontSize(role, fallback)
+    if SharedUI and type(SharedUI.FontSize) == "function" then return SharedUI.FontSize(role, fallback) end
+    return T.fontSizes[role] or tonumber(fallback) or T.fontSizes.body
+end
+function T.NormalizeFontSize(size)
+    if SharedUI and type(SharedUI.NormalizeFontSize) == "function" then return SharedUI.NormalizeFontSize(size) end
+    local order, value = { 9, 11, 13, 15, 17, 21 }, tonumber(size) or T.fontSizes.body
+    local best, distance = order[1], math.huge
+    for i = 1, #order do
+        local nextDistance = math.abs(value - order[i])
+        if nextDistance < distance or (nextDistance == distance and order[i] > best) then
+            best, distance = order[i], nextDistance
+        end
+    end
+    return best
+end
+T.spacing = (SharedUI and SharedUI.spacing) or T.spacing or {
+    hairline = 1, optical = 2, xs = 4, sm = 8, md = 12, lg = 16, xl = 24, xxl = 32,
+}
+function T.Space(role, fallback)
+    if SharedUI and type(SharedUI.Space) == "function" then return SharedUI.Space(role, fallback) end
+    local value = type(role) == "string" and T.spacing[role] or tonumber(role)
+    return tonumber(value) or tonumber(fallback) or T.spacing.sm
+end
 
 -- Menu2 theme and widget styling layer.
 -- Owns reusable visual primitives, locale-aware labels, and skin helpers for the options UI.
@@ -318,7 +347,7 @@ local function ApplyStyledFont(fs)
     local orig = fs._msuf2FontOriginal
     if not orig then return false end
     local bump = tonumber(fs._msuf2FontBump) or T.fontBump or 0
-    local nextSize = math.max(8, (tonumber(orig.size) or tonumber(size) or 12) + bump)
+    local nextSize = T.NormalizeFontSize((tonumber(orig.size) or tonumber(size) or T.FontSize("body")) + bump)
     local nextFlags = orig.flags or flags or ""
     local menuFont = ResolveMenuFontPath(nextSize, nextFlags)
     local nextFont = menuFont or orig.font or font
@@ -1431,7 +1460,7 @@ end
 local function LayoutNavButtonLabel(btn, isChild, hasIcon)
     if not (btn and btn._msuf2Label) then return end
     btn._msuf2Label:ClearAllPoints()
-    btn._msuf2Label:SetPoint("LEFT", btn, "LEFT", hasIcon and (isChild and 27 or 29) or 10, 0)
+    btn._msuf2Label:SetPoint("LEFT", btn, "LEFT", hasIcon and 28 or 12, 0)
     btn._msuf2Label:SetPoint("RIGHT", btn, "RIGHT", -8, 0)
     btn._msuf2Label:SetJustifyH("LEFT")
 end
@@ -1488,10 +1517,11 @@ local function CreateProceduralNavIcon(btn, navKey)
     end
     if text then
         local label = holder:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+        local font, _, flags = label:GetFont()
+        label:SetFont(font, T.FontSize("micro"), flags or "")
         label:SetPoint("CENTER", holder, "CENTER", 0, -0.5)
         label:SetJustifyH("CENTER")
         label:SetText(text)
-        if label.SetScale then label:SetScale(0.90) end
         holder._msuf2GlyphParts[#holder._msuf2GlyphParts + 1] = { region = label, kind = "font" }
     end
     if navKey == "gameplay" then
@@ -1554,12 +1584,12 @@ function T.AttachNavIcon(btn, navKey, isChild, visible)
             icon:SetTexture(T.media.navIcons)
         end
         icon:SetSize(NAV_ICON_SIZE, NAV_ICON_SIZE)
-        icon:SetPoint("LEFT", btn, "LEFT", isChild and 8 or 10, 0)
+        icon:SetPoint("LEFT", btn, "LEFT", isChild and 8 or 12, 0)
         btn._msuf2NavIcon = icon
     else
         icon:ClearAllPoints()
         icon:SetSize(NAV_ICON_SIZE, NAV_ICON_SIZE)
-        icon:SetPoint("LEFT", btn, "LEFT", isChild and 8 or 10, 0)
+        icon:SetPoint("LEFT", btn, "LEFT", isChild and 8 or 12, 0)
     end
     local col, row = grid[1], grid[2]
     if icon.SetTexCoord then icon:SetTexCoord(col / 8, (col + 1) / 8, row / 8, (row + 1) / 8) end
@@ -2472,8 +2502,8 @@ function T.Button(parent, text, width, height)
     btn._msuf2Fill = fill
     btn._msuf2Edge = edge
     local label = T.Font(btn, "GameFontHighlightSmall", text or "", T.colors.muted)
-    label:SetPoint("LEFT", 10, 0)
-    label:SetPoint("RIGHT", -10, 0)
+    label:SetPoint("LEFT", 12, 0)
+    label:SetPoint("RIGHT", -12, 0)
     label:SetJustifyH("LEFT")
     btn._msuf2Label = label
     btn._msuf2SearchText = text or ""
@@ -2606,8 +2636,8 @@ function T.StyleScrollFrame(scroll, anchor)
     local bar = CreateFrame("Slider", nil, parent)
     bar:SetOrientation("VERTICAL")
     bar:SetWidth(10)
-    bar:SetPoint("TOPLEFT", scroll, "TOPRIGHT", 6, -8)
-    bar:SetPoint("BOTTOMLEFT", scroll, "BOTTOMRIGHT", 6, 8)
+    bar:SetPoint("TOPLEFT", scroll, "TOPRIGHT", 8, -8)
+    bar:SetPoint("BOTTOMLEFT", scroll, "BOTTOMRIGHT", 8, 8)
     bar:SetMinMaxValues(0, 1)
     bar:SetValueStep(1)
     if bar.SetObeyStepOnDrag then bar:SetObeyStepOnDrag(false) end

@@ -299,7 +299,7 @@ function Sync()
         pf.bossTogetherBtn:SetShown(isBoss)
         if isBoss then
             pf.bossTogetherBtn:ClearAllPoints()
-            pf.bossTogetherBtn:SetPoint("TOPLEFT", pf, "TOPLEFT", 20, -170)
+            pf.bossTogetherBtn:SetPoint("TOPLEFT", pf, "TOPLEFT", 20, -172)
         end
         pf.bossTogetherBtn:SetCheckedVisual(sh.bossEditTogether ~= false)
     end
