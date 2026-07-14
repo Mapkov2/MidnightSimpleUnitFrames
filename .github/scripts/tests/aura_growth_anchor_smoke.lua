@@ -213,7 +213,10 @@ function Frame:GetAuraGroup(groupKey)
     return self.groups and self.groups[groupKey]
 end
 function Frame:SetAuraGroupLayout(groupKey, options) self.groupLayouts[groupKey] = options end
-function Frame:SetAuraGroupMaxFrameCount() end
+function Frame:SetAuraGroupMaxFrameCount(groupKey, maxFrameCount)
+    self.maxFrameCountCalls = (self.maxFrameCountCalls or 0) + 1
+    self.groupOptions[groupKey].maxFrameCount = maxFrameCount
+end
 function Frame:SetAuraGroupCandidateFilters() end
 function Frame:SetAuraGroupSortMethod() end
 function Frame:AddAuraSlot() end
@@ -234,8 +237,12 @@ function Frame:SetAuraLayoutRowWidth(width)
     self.auraLayoutRowWidth = width
 end
 
+local auraContainerCreations = 0
 _G.CreateFrame = function(frameType, _, parent)
-    if frameType == "AuraContainer" then return NewAuraContainer(parent) end
+    if frameType == "AuraContainer" then
+        auraContainerCreations = auraContainerCreations + 1
+        return NewAuraContainer(parent)
+    end
     return NewFrame(parent)
 end
 _G.C_AddOns = {
@@ -245,7 +252,8 @@ _G.C_Timer = {
     After = function(_, callback) callback() end,
     NewTimer = function(_, callback) callback(); return { Cancel = function() end } end,
 }
-_G.InCombatLockdown = function() return false end
+local inCombat = false
+_G.InCombatLockdown = function() return inCombat end
 _G.issecretvalue = function() return false end
 _G.UnitExists = function() return true end
 _G.AuraContainerSortMethod = { Default = 0, Expiration = 1, Name = 2 }
@@ -271,6 +279,8 @@ local A3 = assert(MSUF.MSUF_Auras3)
 local AurasElement = assert(registeredElements.Auras)
 Check(type(A3.ResolveUnitFrameConfig) == "function", "unit aura compiler missing")
 Check(type(A3._ApplyNormalLaneContainers) == "function", "normal lane integration surface missing")
+Check(type(A3._ApplySharedAuraContainer) == "function", "shared aura integration surface missing")
+Check(type(A3._ShouldUseSharedAuraContainer) == "function", "adaptive shared aura selector missing")
 
 local ANCHORS = {
     "TOPLEFT", "TOP", "TOPRIGHT",
@@ -481,6 +491,139 @@ for _, anchor in ipairs(ANCHORS) do
 end
 Equal(matrixCases, 54, "unit anchor/growth matrix coverage")
 Check(horizontalChurnCovered and verticalChurnCovered, "native/fallback reorder coverage incomplete")
+
+-- Production unit frames use one native container for every normal aura lane
+-- on the same unit. Verify the shared cache/event owner, independent lane
+-- geometry, selective layout no-op, single forced refresh, max-count no-reparse,
+-- and in-combat unit-token reuse.
+do
+    _G.MSUF_DB = {
+        auras3 = {
+            enabled = true,
+            showPlayer = true,
+            showFocus = true,
+            shared = {
+                showBuffs = true,
+                showDebuffs = true,
+                maxBuffs = 3,
+                maxDebuffs = 2,
+                buffPerRow = 3,
+                debuffPerRow = 2,
+                buffGroupIconSize = 10,
+                debuffGroupIconSize = 12,
+                spacing = 2,
+                buffAnchor = "TOPRIGHT",
+                debuffAnchor = "BOTTOMLEFT",
+                buffGroupOffsetX = 7,
+                buffGroupOffsetY = -5,
+                debuffGroupOffsetX = -4,
+                debuffGroupOffsetY = 6,
+                buffGrowthX = "LEFTDOWN",
+                debuffGrowthX = "RIGHTUP",
+                buffShowCooldownSwipe = false,
+                debuffShowCooldownSwipe = false,
+                buffShowDurationBar = false,
+                debuffShowDurationBar = false,
+                buffShowCooldownText = false,
+                debuffShowCooldownText = false,
+                buffShowStackCount = false,
+                debuffShowStackCount = false,
+                buffShowTooltip = false,
+                debuffShowTooltip = false,
+            },
+        },
+    }
+    A3._runtimeConfigGen = (A3._runtimeConfigGen or 1) + 1
+    local frame = NewFrame(nil)
+    frame.unit = "player"
+    frame.MSUFSpec = {}
+    local creationsBefore = auraContainerCreations
+    Check(AurasElement.Enable(frame) == true, "production shared aura apply failed")
+    local auraRoot = assert(frame.Auras, "production aura root missing")
+    local shared = assert(auraRoot.UnitAuras, "production shared aura container missing")
+    Equal(auraContainerCreations, creationsBefore + 1,
+        "normal buff/debuff lanes allocated more than one native container")
+    Check(shared._msufA3SharedAuraGroups == true, "normal aura container is not shared")
+    Check(auraRoot.Buffs == nil and auraRoot.Debuffs == nil,
+        "legacy isolated normal containers survived shared apply")
+    Equal(shared:GetUnit(), "player", "shared aura unit")
+
+    local buffGroup = assert(shared:GetAuraGroup("msuf_buff"), "shared buff group missing")
+    local debuffGroup = assert(shared:GetAuraGroup("msuf_debuff"), "shared debuff group missing")
+    local buffFrames = buffGroup:GetFramesByIndex()
+    local debuffFrames = debuffGroup:GetFramesByIndex()
+    shared:ApplyLayout()
+    AssertPoint(buffFrames[1], "TOPRIGHT", shared, "TOPRIGHT", 7, -5, "shared buff anchor")
+    AssertPoint(debuffFrames[1], "BOTTOMLEFT", shared, "BOTTOMLEFT", -4, 6, "shared debuff anchor")
+
+    local buffPoints = GeometryCalls(buffFrames, "setPointCalls")
+    local debuffPoints = GeometryCalls(debuffFrames, "setPointCalls")
+    shared:ApplyLayout()
+    Equal(GeometryCalls(buffFrames, "setPointCalls"), buffPoints,
+        "unchanged shared buff group repeated geometry")
+    Equal(GeometryCalls(debuffFrames, "setPointCalls"), debuffPoints,
+        "unchanged shared debuff group repeated geometry")
+
+    buffGroup.frames = { buffFrames[2], buffFrames[1], buffFrames[3] }
+    shared:ApplyLayout()
+    Check(GeometryCalls(buffFrames, "setPointCalls") > buffPoints,
+        "reordered shared buff group did not refresh geometry")
+    Equal(GeometryCalls(debuffFrames, "setPointCalls"), debuffPoints,
+        "reordered shared buff group relaid the unchanged debuff group")
+
+    local updates = shared.updateAllAurasCalls or 0
+    Check(A3._RefreshAppliedNativeAuras(frame, true) == true,
+        "forced shared aura refresh failed")
+    Equal(shared.updateAllAurasCalls or 0, updates + 1,
+        "forced shared aura refresh did not parse exactly once")
+
+    _G.MSUF_DB.auras3.shared.maxBuffs = 4
+    A3._runtimeConfigGen = A3._runtimeConfigGen + 1
+    updates = shared.updateAllAurasCalls or 0
+    Check(AurasElement.Enable(frame) == true, "shared max-count reapply failed")
+    Check(frame.Auras.UnitAuras == shared, "shared max-count edit recreated the container")
+    Equal(shared.updateAllAurasCalls or 0, updates,
+        "shared max-count edit forced a redundant full aura parse")
+    Check((shared.maxFrameCountCalls or 0) >= 1,
+        "shared max-count edit did not update the native group limit")
+
+    local creationsBeforeCombatSwap = auraContainerCreations
+    inCombat = true
+    Check(A3.RenderUnitChangedFrame(frame, "player", "focus") == true,
+        "shared container could not be rebound during combat")
+    inCombat = false
+    Check(frame.Auras.UnitAuras == shared, "combat unit swap replaced the shared container")
+    Equal(auraContainerCreations, creationsBeforeCombatSwap,
+        "combat unit swap allocated a new aura container")
+    Equal(shared:GetUnit(), "focus", "combat-shared aura unit")
+
+    local foreign = NewFrame(nil)
+    buffGroup.frames[1].point = { "CENTER", foreign, "CENTER", 99, 88 }
+    updates = shared.updateAllAurasCalls or 0
+    Check(A3._DirectIdentityRefreshUnit("focus", true) == true,
+        "shared world-repair refresh did not run")
+    Equal(shared.updateAllAurasCalls or 0, updates + 1,
+        "shared world-repair refresh did not settle native auras exactly once")
+    AssertPoint(buffGroup.frames[1], "TOPRIGHT", shared, "TOPRIGHT", 7, -5,
+        "shared world-repair buff anchor")
+end
+
+-- A single normal lane has no duplicate cache/event work to eliminate. Keep it
+-- on Blizzard's lighter native-flow container instead of paying shared-layout
+-- bookkeeping for a one-group case.
+do
+    _G.MSUF_DB.auras3.shared.showDebuffs = false
+    A3._runtimeConfigGen = A3._runtimeConfigGen + 1
+    local frame = NewFrame(nil)
+    frame.unit = "player"
+    frame.MSUFSpec = {}
+    local creationsBefore = auraContainerCreations
+    Check(AurasElement.Enable(frame) == true, "single-lane production apply failed")
+    Equal(auraContainerCreations, creationsBefore + 1,
+        "single-lane production apply allocated more than one container")
+    Check(frame.Auras.Buffs ~= nil, "single-lane production apply lost native buff container")
+    Check(frame.Auras.UnitAuras == nil, "single-lane production apply used shared bookkeeping")
+end
 
 -- PLAYER_ENTERING_WORLD / ZONE_CHANGED_NEW_AREA use a one-shot geometry pass
 -- that deliberately bypasses desired-value caches. Cover a visible repair and
@@ -897,4 +1040,4 @@ Check(groupHandlesSource:find("return ResolveAnchor(rx, ry)", 1, true),
 Check(groupHandlesSource:find('externalHandle._cfgGroup = "externals"', 1, true),
     "group External aura handle no longer writes its persisted lane")
 
-print("PASS aura position parity: 54 unit + 144 group live layouts, 45 unit preview lanes, fixed active-count capacity, player/dispel zone repair, 1000x vertical churn")
+print("PASS aura position parity: shared multi-group runtime, selective layout, combat reuse, 54 unit + 144 group live layouts, 45 unit preview lanes, fixed active-count capacity, player/dispel zone repair, 1000x vertical churn")
