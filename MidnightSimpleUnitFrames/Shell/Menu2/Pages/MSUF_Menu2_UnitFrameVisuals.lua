@@ -677,7 +677,7 @@ local function BuildCastbar(ctx, builder, unit)
     local timeCard = W.ControlCard(timeTab, nil, nil, leftX, -4, leftW, 370)
     local textAdvancedCard = W.ControlCard(advancedTab, "Spell Text Behavior", nil, leftX, -4, leftW, 190)
     local iconAdvancedCard = W.ControlCard(advancedTab, "Icon Style", nil, rightX, -4, rightW, 118)
-    local castbarTabs = W.SegmentTabs(ctx, sec, {
+    local castbarTabs, RefreshCastbarTabs, ReadCastbarTab, SetGuidedCastbarTab = W.SegmentTabs(ctx, sec, {
         label = "", values = CASTBAR_TAB_VALUES, width = min(620, sectionW - 48),
         frames = tabFrames, defaultTab = "general",
         get = function() return CurrentCastbarTab(unit) end,
@@ -690,6 +690,18 @@ local function BuildCastbar(ctx, builder, unit)
     })
     if castbarTabs._msuf2Title then castbarTabs._msuf2Title:Hide() end
     RegisterControl(castbarTabs, ctx, "castbar.workspace_tab", "Castbar area", "segment", "ephemeral")
+    sec._msuf2GuidedSelectTab = function(tab)
+        tab = NormalizeCastbarTabKey(tab)
+        if type(ReadCastbarTab) == "function" and ReadCastbarTab() == tab then return true end
+        if type(SetGuidedCastbarTab) == "function" then
+            SetGuidedCastbarTab(tab)
+        else
+            M.unitCastbarTabSelection = M.unitCastbarTabSelection or {}
+            M.unitCastbarTabSelection[unit] = tab
+            if type(RefreshCastbarTabs) == "function" then RefreshCastbarTabs() end
+        end
+        return type(ReadCastbarTab) ~= "function" or ReadCastbarTab() == tab
+    end
     local castbarNotice, _, castbarNoticeButton = CreateSectionNotice(generalTab, -334, "Use MSUF", 96)
     if castbarNoticeButton then
         RegisterControl(castbarNoticeButton, ctx, "castbar.use_msuf", "Use MSUF", "button", "setting", {

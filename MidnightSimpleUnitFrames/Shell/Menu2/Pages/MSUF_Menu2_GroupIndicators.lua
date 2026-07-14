@@ -333,7 +333,7 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
     end
     local siconTabFrames = {}
     local siconBasicTab, siconAdvancedTab = M.UnitSectionsShared.MakeTabFrames(sicons, -64, siconW, siconTabFrames, "basic", "advanced")
-    local statusTabs = W.SegmentTabs(ctx, sicons, {
+    local statusTabs, RefreshStatusTabs, ReadStatusTab, SetGuidedStatusTab = W.SegmentTabs(ctx, sicons, {
         get = CurrentStatusIconTab,
         set = function(value) M.gfStatusIconTabSelection[CurrentScope()] = value or "basic" end,
         label = "", values = STATUS_ICON_TAB_VALUES, width = min(420, siconInnerW),
@@ -342,6 +342,17 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
     })
     if statusTabs._msuf2Title then statusTabs._msuf2Title:Hide() end
     RegisterControl(statusTabs, ctx, "status.workspace_tab", "Status icon controls", "segment", "ephemeral")
+    sicons._msuf2GuidedSelectTab = function(tab)
+        if tab ~= "basic" and tab ~= "advanced" then return false end
+        if type(ReadStatusTab) == "function" and ReadStatusTab() == tab then return true end
+        if type(SetGuidedStatusTab) == "function" then
+            SetGuidedStatusTab(tab)
+        else
+            M.gfStatusIconTabSelection[CurrentScope()] = tab
+            if type(RefreshStatusTabs) == "function" then RefreshStatusTabs() end
+        end
+        return type(ReadStatusTab) ~= "function" or ReadStatusTab() == tab
+    end
     local styleCard = W.ControlCard(siconBasicTab, "Style", nil, siconLeftX, -38, siconLeftW, 132)
     local selectedCard = W.ControlCard(siconBasicTab, "Selected Indicator", nil, siconLeftX, -188, siconLeftW, 316)
     local previewCard = W.ControlCard(siconBasicTab, "Status Preview", nil, siconRightX, -38, siconRightW, 164)

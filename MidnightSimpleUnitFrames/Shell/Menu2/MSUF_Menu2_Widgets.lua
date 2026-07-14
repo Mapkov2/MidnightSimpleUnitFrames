@@ -350,13 +350,13 @@ local function NextGuidedTourOrder(ctx)
     return entry._msuf2GuidedTourOrder
 end
 
-local function RegisterGuidedTourRegion(ctx, frame, title)
+local function RegisterGuidedTourRegion(ctx, frame, title, stableId)
     local pageEntry = ctx and ctx.entry
     if type(pageEntry) ~= "table" or not frame then return nil end
     local order = NextGuidedTourOrder(ctx)
     if not order then return nil end
     local region = {
-        id = "region_" .. tostring(order),
+        id = tostring(stableId or "") ~= "" and tostring(stableId) or ("region_" .. tostring(order)),
         pageKey = tostring(ctx.key or ""),
         label = tostring(title or "") ~= "" and tostring(title) or "Scope and overrides",
         body = frame,
@@ -370,12 +370,24 @@ local function RegisterGuidedTourRegion(ctx, frame, title)
     return region
 end
 
-function W.RegisterGuidedRegion(ctx, frame, title)
+function W.RegisterGuidedRegion(ctx, frame, title, stableId)
     if frame and frame._msuf2GuidedRegion then
-        if tostring(title or "") ~= "" then frame._msuf2GuidedRegion.label = tostring(title) end
-        return frame._msuf2GuidedRegion
+        local region = frame._msuf2GuidedRegion
+        if tostring(title or "") ~= "" then region.label = tostring(title) end
+        stableId = tostring(stableId or "")
+        if stableId ~= "" and region.id ~= stableId then
+            local regions = ctx and ctx.entry and ctx.entry.guidedRegions
+            if type(regions) == "table" then
+                for key, value in pairs(regions) do
+                    if value == region then regions[key] = nil end
+                end
+                region.id = stableId
+                regions[stableId] = region
+            end
+        end
+        return region
     end
-    return RegisterGuidedTourRegion(ctx, frame, title)
+    return RegisterGuidedTourRegion(ctx, frame, title, stableId)
 end
 
 function W.PageBuilder(ctx)
@@ -2374,6 +2386,13 @@ function W.AttachPinnedPreview(body, box, opts)
         return M.previewPinState[stateKey] ~= false
     end
     local function RefreshButton()
+        local guidedLayout = type(M.GuidedTourOwnsPreviewLayout) == "function"
+            and M.GuidedTourOwnsPreviewLayout() == true
+        if guidedLayout then
+            if pinBtn.Hide then pinBtn:Hide() end
+            return
+        end
+        if pinBtn.Show then pinBtn:Show() end
         local enabled = PinEnabled()
         local text = enabled and "Pinned" or "Pin Preview"
         if pinBtn._msuf2PinButtonText ~= text then
@@ -2387,6 +2406,7 @@ function W.AttachPinnedPreview(body, box, opts)
             -- preview remains the visual focus of the card.
             if pinBtn.SetActive then pinBtn:SetActive(opts.quietButton == true and false or enabled) end
         end
+        if pinBtn.SetEnabled then pinBtn:SetEnabled(true) end
     end
     local function EnsurePinnedScrim()
         if record and record.scrim then return record.scrim end
@@ -2485,7 +2505,9 @@ function W.AttachPinnedPreview(body, box, opts)
         return anchorTop + (tonumber(yOfs) or 0)
     end
     local function ShouldPin()
-        if not PinEnabled() or not BodyVisible() then return false end
+        local guidedLayout = type(M.GuidedTourOwnsPreviewLayout) == "function"
+            and M.GuidedTourOwnsPreviewLayout() == true
+        if guidedLayout or not PinEnabled() or not BodyVisible() then return false end
         local offset = (scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0
         local activateAt = opts.activateAfter or 64
         if offset <= (pinned and math.floor(activateAt * 0.45) or activateAt) then return false end
@@ -2536,7 +2558,10 @@ function W.AttachPinnedPreview(body, box, opts)
                 if box.SetFrameLevel then box:SetFrameLevel(level) end
                 ApplyPinnedPresentation(true, level)
                 if box.RequestRefresh then box:RequestRefresh("PINNED_PREVIEW_LAYOUT") end
-                if placeholder then placeholder:Show() end
+                if placeholder then
+                    placeholder:SetText(Tr("\226\134\145 Preview pinned at top"))
+                    placeholder:Show()
+                end
             end
             if pinned then LayoutPinnedScrim((box.GetFrameLevel and box:GetFrameLevel()) or originalFrameLevel) end
         else

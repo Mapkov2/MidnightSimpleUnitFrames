@@ -391,7 +391,7 @@ local function BuildGFTextSection(ctx, b)
     end
     local nameTab, hpTab, powerTab, advancedTab =
         M.UnitSectionsShared.MakeTabFrames(text, -64, textW, tabFrames, "name", "hp", "power", "advanced")
-    local textTabs, RefreshTextTabs = W.SegmentTabs(ctx, text, {
+    local textTabs, RefreshTextTabs, ReadTextTab, SetGuidedTextTab = W.SegmentTabs(ctx, text, {
         label = "", values = tabValues, width = min(520, textW - 48),
         frames = tabFrames, defaultTab = "name",
         get = CurrentTextTab,
@@ -404,6 +404,17 @@ local function BuildGFTextSection(ctx, b)
     })
     if textTabs._msuf2Title then textTabs._msuf2Title:Hide() end
     RegisterControl(textTabs, ctx, "text.workspace_tab", "Text area", "segment", "ephemeral")
+    text._msuf2GuidedSelectTab = function(tab)
+        if tab ~= "name" and tab ~= "hp" and tab ~= "power" and tab ~= "advanced" then return false end
+        if type(ReadTextTab) == "function" and ReadTextTab() == tab then return true end
+        if type(SetGuidedTextTab) == "function" then
+            SetGuidedTextTab(tab)
+        else
+            M.gfTextTabSelection[CurrentScope()] = tab
+            if type(RefreshTextTabs) == "function" then RefreshTextTabs() end
+        end
+        return type(ReadTextTab) ~= "function" or ReadTextTab() == tab
+    end
     local nameContent = TextCard(nameTab, nil, nil, textLeftX, -4, textCardW, 158)
     PreviewText(nameContent, "Mapko", 16, -54, textCardW - 32)
     local showName = BindScopeToggle(ctx, W.SwitchAt(nameContent, "Show Name", 16, -24, 0, "HIDDEN"), "showName", true, "font")

@@ -314,7 +314,9 @@ local function BuildGFAuras(ctx)
     local auraBuilder = CreateNestedGroupAuraBuilder(ctx, b, outer)
     local top = auraBuilder:Section("", 104)
     if top.title then top.title:Hide() end
-    if top._msuf2GuidedRegion then top._msuf2GuidedRegion.label = "Aura lane and tools" end
+    if W.RegisterGuidedRegion then
+        W.RegisterGuidedRegion(ctx, top, "Aura lane and tools", "group_aura_tools")
+    end
     BuildAuraWorkspaceTabs(ctx, top, scope, lane, top._msuf2Width or auraBuilder.width or 720)
 
     local rootSection = auraBuilder:Section("Group Aura Visibility", 78)

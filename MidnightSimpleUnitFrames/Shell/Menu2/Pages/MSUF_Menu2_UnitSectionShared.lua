@@ -59,6 +59,11 @@ local function RegisterSharedControl(widget, opts, suffix, label, kind, classifi
     M.RegisterSearchWidget(widget, meta)
     return widget
 end
+local function NotifyGuidedInteraction(widget)
+    if type(M.NotifyGuidedTourControlInteraction) == "function" then
+        M.NotifyGuidedTourControlInteraction(widget)
+    end
+end
 local function IsNameRelativeAnchor(value)
     return value == "NAMERIGHT" or value == "NAMELEFT"
 end
@@ -284,6 +289,7 @@ function Shared.MakeScopeCopyPopup(anchorButton, opts)
                 local btn = CopyPopupButton(popup, M.Tr(label), TargetWidth(key), "target")
                 btn._msuf2CopyTarget = key
                 btn:SetScript("OnClick", function()
+                    NotifyGuidedInteraction(btn)
                     if opts.onTargetClick then opts.onTargetClick(key, api, popup) end
                     RefreshTargets()
                 end)
@@ -300,7 +306,10 @@ function Shared.MakeScopeCopyPopup(anchorButton, opts)
                 local row = (i - 1) % rowsPerColumn
                 local cb = W.SwitchAt(popup, cat.label, 16 + col * (opts.categoryColumnWidth or 198), (opts.categoryY or -110) - row * (opts.categoryRowHeight or 28), opts.categoryWidth or 140)
                 cb:SetChecked(scopes[cat.key] == true)
-                cb:SetScript("OnClick", function(self) scopes[cat.key] = self:GetChecked() and true or false end)
+                cb:SetScript("OnClick", function(self)
+                    NotifyGuidedInteraction(self)
+                    scopes[cat.key] = self:GetChecked() and true or false
+                end)
                 RegisterSharedControl(cb, opts, "category." .. tostring(cat.key), cat.label, "toggle", "ephemeral")
                 if cat.description and M.AddTooltip then
                     M.AddTooltip(cb, cat.label, cat.description, { hook = true, titleAsLine = true })
@@ -309,21 +318,29 @@ function Shared.MakeScopeCopyPopup(anchorButton, opts)
             end
             local allBtn = CopyPopupButton(popup, M.Tr("All"), 48, "normal")
             allBtn:SetPoint("BOTTOMLEFT", popup, "BOTTOMLEFT", 16, 12)
-            allBtn:SetScript("OnClick", function() SetAll(true, opts.allFeedback or "All copy categories selected") end)
+            allBtn:SetScript("OnClick", function()
+                NotifyGuidedInteraction(allBtn)
+                SetAll(true, opts.allFeedback or "All copy categories selected")
+            end)
             RegisterSharedControl(allBtn, opts, "categories.all", "All copy categories", "button", "ephemeral")
             local noneBtn = CopyPopupButton(popup, M.Tr("None"), 58, "normal")
             noneBtn:SetPoint("LEFT", allBtn, "RIGHT", 8, 0)
-            noneBtn:SetScript("OnClick", function() SetAll(false, opts.noneFeedback or "Copy categories cleared") end)
+            noneBtn:SetScript("OnClick", function()
+                NotifyGuidedInteraction(noneBtn)
+                SetAll(false, opts.noneFeedback or "Copy categories cleared")
+            end)
             RegisterSharedControl(noneBtn, opts, "categories.none", "No copy categories", "button", "ephemeral")
             if opts.runLabel then
                 local runBtn = CopyPopupButton(popup, M.Tr(opts.runLabel), opts.runWidth or 128, "action")
                 runBtn:SetPoint("BOTTOMRIGHT", popup, "BOTTOMRIGHT", -16, 12)
                 runBtn:SetScript("OnClick", function()
+                    NotifyGuidedInteraction(runBtn)
                     if opts.onRun then opts.onRun(api, popup) end
                 end)
                 RegisterSharedControl(runBtn, opts, "run", opts.runLabel, "button", "action")
                 popup._runBtn = runBtn
             end
+            if type(opts.onPopupCreated) == "function" then opts.onPopupCreated(popup, api) end
         end
         api.Refresh()
         M.ApplyPopupFramePriority(popup)

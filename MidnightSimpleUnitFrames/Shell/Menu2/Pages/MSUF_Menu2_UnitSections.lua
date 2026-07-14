@@ -463,6 +463,7 @@ local function BuildTopActions(ctx, builder, unit, label)
     sec:SetPoint("TOPLEFT", builder.parent, "TOPLEFT", builder.x, builder.y)
     sec:SetSize(pageW, sectionH)
     sec._msuf2Width = pageW
+    if W.RegisterGuidedRegion then W.RegisterGuidedRegion(ctx, sec, "Player frame and Copy To", "unit_scope") end
     builder.y = builder.y - sectionH - 8
     if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(builder.y) + 28) end
     local rowY = -15
@@ -507,6 +508,10 @@ local function BuildTopActions(ctx, builder, unit, label)
         onTargetClick = function(key) M.unitCopyTarget = key end,
         runLabel = "Copy Selected",
         runWidth = 128,
+        onPopupCreated = function(popup)
+            popup._msuf2GuidedNoScroll = true
+            if W.RegisterGuidedRegion then W.RegisterGuidedRegion(ctx, popup, "Copy Player settings", "unit_copy_popup") end
+        end,
         onRun = function(api, popup)
             local dest = NormalizeCopyDest(unit)
             local function RunCopy()
@@ -521,6 +526,15 @@ local function BuildTopActions(ctx, builder, unit, label)
     copy:SetScript("OnClick", function(self)
         if copyPopup then copyPopup.Show(self) end
     end)
+    if type(M.RegisterGuidedCopyPopup) == "function" then
+        M.RegisterGuidedCopyPopup("unit", ctx.key, function()
+            local popup = copyPopup and copyPopup.GetPopup and copyPopup.GetPopup()
+            if popup and popup.IsShown and popup:IsShown() then return true end
+            if copyPopup then copyPopup.Show(copy) end
+            popup = copyPopup and copyPopup.GetPopup and copyPopup.GetPopup()
+            return popup and popup.IsShown and popup:IsShown() or false
+        end)
+    end
     sec:SetScript("OnHide", function()
         if copyPopup then copyPopup.Hide() end
     end)

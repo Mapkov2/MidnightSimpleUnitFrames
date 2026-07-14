@@ -1,8 +1,9 @@
 --- Menu-native MSUF 6.0 guided setup.
 ---
---- The guide walks native pages from a short section overview into every
---- registered control. It never copies settings into a second wizard and never
---- mutates a value when the user chooses Keep current/default or Skip.
+--- The guide walks native pages control by control. Every normal tour step owns
+--- one highlighted widget and asks for a real interaction before Next unlocks.
+--- It never copies settings into a second wizard and never mutates a value when
+--- the user deliberately chooses Keep unchanged or Skip.
 
 local _, MSUF = ...
 MSUF = MSUF or {}
@@ -25,45 +26,272 @@ end
 local STAGES = {
     {
         id = "menu_basics", special = true, pageKey = "guided_setup", icon = "home",
-        title = "Learn the MSUF menu",
-        impact = "Skipping this personal step uses neutral guidance and leaves navigation, Search, autosave, Undo/Redo and page reset unexplained.",
+        title = "What do you want to set up?",
+        impact = "Choose Unitframes, Group Frames, Class Resources, or the complete three-part tour.",
+    },
+    {
+        id = "unit_intro", special = true, pageKey = "guided_setup", icon = "uf_player", area = "unitframes",
+        title = "Part 1 - Unitframes",
+        impact = "Skipping starts at the next selected setup area.",
     },
     {
         id = "edit_mode", special = true, pageKey = "guided_setup", icon = "uf_player",
-        title = "Choose your anchor, then place frames",
-        impact = "Skipping frame placement also skips the important choice between following the Cooldown Manager and independent Unitframe placement.",
+        area = "unitframes",
+        title = "Place your frames",
+        impact = "Skipping leaves the current frame positions and anchoring unchanged.",
     },
-    { id = "uf_player", pageKey = "uf_player", icon = "uf_player", title = "Player frame", impact = "Skipping the Player frame leaves its layout, text, indicators and aura options unreviewed." },
-    { id = "uf_target", pageKey = "uf_target", icon = "uf_target", title = "Target frame", impact = "Skipping the Target frame leaves its layout, text, indicators and aura options unreviewed." },
-    { id = "uf_focus", pageKey = "uf_focus", icon = "uf_focus", title = "Focus frame", impact = "Skipping the Focus frame leaves its layout, text, indicators and aura options unreviewed." },
-    { id = "uf_pet", pageKey = "uf_pet", icon = "uf_pet", title = "Pet frame", impact = "Skipping the Pet frame leaves its layout, text, indicators and aura options unreviewed." },
-    { id = "uf_targettarget", pageKey = "uf_targettarget", icon = "uf_targettarget", title = "Target of target", impact = "Skipping Target of target leaves its layout, text and visibility options unreviewed." },
-    { id = "uf_focustarget", pageKey = "uf_focustarget", icon = "uf_focustarget", title = "Focus target", impact = "Skipping Focus target leaves its layout, text and visibility options unreviewed." },
-    { id = "uf_boss", pageKey = "uf_boss", icon = "uf_boss", title = "Boss frames", impact = "Skipping Boss frames leaves their shared layout, text, indicators and aura options unreviewed." },
-    { id = "gf_layout", pageKey = "gf_layout", icon = "gf_layout", title = "Party and raid layout", impact = "Skipping group layout leaves frame basics, text, resource bars, range fade, transparency, geometry, sorting, scaling and anchoring unreviewed." },
-    { id = "gf_bars", pageKey = "gf_bars", icon = "gf_bars", title = "Group dispel overlay", impact = "Skipping the group dispel overlay leaves Party, Raid and Mythic Raid dispel overlays and debuff stripes unreviewed." },
-    { id = "gf_indicators", pageKey = "gf_indicators", icon = "gf_indicators", title = "Group indicators", impact = "Skipping group indicators leaves status icons, targeted spells and corner indicators unreviewed." },
-    { id = "gf_auras", pageKey = "gf_auras", icon = "gf_auras", title = "Group auras", excludeSections = { si = true }, impact = "Skipping group auras leaves group buff and debuff behavior unreviewed." },
     {
-        id = "gf_spell_icons", pageKey = "gf_auras", icon = "gf_auras", title = "Spell Icons",
-        includeSections = { si = true }, includeEphemeralControls = true,
-        impact = "Skipping Spell Icons leaves spec selection, tracked spells, custom SpellIDs, icon placement, cooldowns and full-frame effects unreviewed.",
+        id = "uf_player", pageKey = "uf_player", icon = "uf_player", area = "unitframes", title = "Build your Player frame",
+        includeSections = { frame_basics = true }, controlLimit = 4,
+        impact = "Skipping keeps the current Player-frame basics.",
     },
-    { id = "opt_bars", pageKey = "opt_bars", icon = "opt_bars", title = "Bars and textures", impact = "Skipping Bars leaves global textures, absorbs, outlines, highlights and power behavior unreviewed." },
-    { id = "opt_castbar", pageKey = "opt_castbar", icon = "opt_castbar", title = "Cast bars", impact = "Skipping Cast Bars leaves cast appearance, text, empowered casts and interrupt cues unreviewed." },
-    { id = "opt_colors", pageKey = "opt_colors", icon = "opt_colors", title = "Colors", impact = "Skipping Colors leaves frame, power, aura, class, text and castbar colors unreviewed." },
-    { id = "opt_fonts", pageKey = "opt_fonts", icon = "opt_fonts", title = "Fonts and text", impact = "Skipping Fonts leaves the global font, text styling, colors and name shortening unreviewed." },
-    { id = "auras3_styling", pageKey = "auras3_styling", icon = "auras3_styling", title = "Aura styling", impact = "Skipping Aura styling leaves buff/debuff size, cooldown, stacks, duration bars and ordering unreviewed." },
-    { id = "opt_misc", pageKey = "opt_misc", icon = "opt_misc", title = "Menu and miscellaneous", impact = "Skipping Miscellaneous leaves language, menu behavior, startup, tooltips and Blizzard-frame integration unreviewed." },
-    { id = "classpower", pageKey = "classpower", icon = "classpower", title = "Class resources", impact = "Skipping Class Resources leaves class layout, behavior, style, visibility and alternative power displays unreviewed." },
-    { id = "gameplay", pageKey = "gameplay", icon = "gameplay", title = "Gameplay features", impact = "Skipping Gameplay leaves combat timers, state behavior, class toggles and the combat crosshair unreviewed." },
-    { id = "modules", pageKey = "modules", icon = "modules", title = "Modules and style", impact = "Skipping Modules leaves the optional MSUF Style module and its visual behavior unreviewed." },
-    { id = "profiles", pageKey = "profiles", icon = "profiles", title = "Profiles and backup", impact = "Skipping Profiles leaves profile management, specialization assignment and export/import backup unreviewed." },
+    {
+        id = "uf_player_auras", pageKey = "uf_player", icon = "uf_player", area = "unitframes", title = "Choose your Player auras",
+        includeSections = { auras = true, ["region:unit_aura_tools"] = true }, includeEphemeralControls = true, controlLimit = 2,
+        controlPaths = {
+            "auras/unit-workspace/container-selector",
+            "auras/unit-workspace/tool-selector",
+        },
+        impact = "Skipping keeps the current Player aura container and tool.",
+    },
+    {
+        id = "uf_player_name", pageKey = "uf_player", icon = "uf_player", area = "unitframes", title = "Set up the Player name",
+        includeSections = { text = true }, prepareSection = "text", prepareTab = "name", prepareState = "unitTextTabSelection", controlLimit = 3,
+        controlPaths = { "unit/text/name/show", "unit/text/name/anchor", "unit/text/name/size" },
+        impact = "Skipping keeps the current Player name text.",
+    },
+    {
+        id = "uf_player_hp_text", pageKey = "uf_player", icon = "uf_player", area = "unitframes", title = "Set up Player health text",
+        includeSections = { text = true }, prepareSection = "text", prepareTab = "hp", prepareState = "unitTextTabSelection", controlLimit = 3,
+        controlPaths = { "unit/text/hp/show", "unit/text/hp/slot/right/mode", "unit/text/hp/size" },
+        impact = "Skipping keeps the current Player health text.",
+    },
+    {
+        id = "uf_player_power_text", pageKey = "uf_player", icon = "uf_player", area = "unitframes", title = "Set up Player power text",
+        includeSections = { text = true }, prepareSection = "text", prepareTab = "power", prepareState = "unitTextTabSelection", controlLimit = 3,
+        controlPaths = { "unit/text/power/show", "unit/text/power/slot/right/mode", "unit/text/power/size" },
+        impact = "Skipping keeps the current Player power text.",
+    },
+    {
+        id = "uf_player_portrait", pageKey = "uf_player", icon = "uf_player", area = "unitframes", title = "Shape the Player portrait",
+        includeSections = { portrait = true }, controlLimit = 4,
+        controlPaths = { "unit/portrait/enabled", "unit/portrait/position", "unit/portrait/portraitrender", "unit/portrait/portraitshape" },
+        impact = "Skipping keeps the current Player portrait.",
+    },
+    {
+        id = "uf_player_power", pageKey = "uf_player", icon = "uf_player", area = "unitframes", title = "Build the Player power bar",
+        includeSections = { power_bar = true }, controlLimit = 4,
+        controlPaths = { "unit/power/show", "unit/power/powerbarheight", "unit/power/embedpowerbarintohealth", "unit/power/detached" },
+        impact = "Skipping keeps the current Player power bar.",
+    },
+    {
+        id = "uf_player_castbar", pageKey = "uf_player", icon = "uf_player", area = "unitframes", title = "Build the Player castbar",
+        includeSections = { castbar = true }, prepareSection = "castbar", prepareTab = "general", prepareState = "unitCastbarTabSelection", controlLimit = 5,
+        controlPaths = { "unit/castbar/enabled", "unit/castbar/provider", "unit/castbar/show_interrupt", "unit/castbar/width_mode", "unit/castbar/height" },
+        impact = "Skipping keeps the current Player castbar.",
+    },
+    {
+        id = "uf_player_status", pageKey = "uf_player", icon = "uf_player", area = "unitframes", title = "Choose Player indicators",
+        includeSections = { status_icons = true }, includeEphemeralControls = true,
+        prepareSection = "status_icons", prepareTab = "basic", prepareState = "unitStatusTabSelection", controlLimit = 4,
+        controlPaths = { "unit/status/selector", "unit/status/selected/enabled", "unit/status/selected/size", "unit/status/midnight_style" },
+        impact = "Skipping keeps the current Player status indicators.",
+    },
+    {
+        id = "unit_copy_open", pageKey = "uf_player", icon = "uf_player", area = "unitframes", title = "Copy your Player setup",
+        includeSections = { ["region:unit_scope"] = true }, includeEphemeralControls = true, controlLimit = 1,
+        controlPaths = { "unit/copy/open" },
+        impact = "Skipping leaves the other Unitframes unchanged.",
+    },
+    {
+        id = "unit_copy_all", pageKey = "uf_player", icon = "uf_player", area = "unitframes", title = "Choose what to copy",
+        ensureCopyPopup = "unit", includeSections = { ["region:unit_copy_popup"] = true }, includeEphemeralControls = true, controlLimit = 1,
+        controlPaths = { "unit/copy/categories/all" },
+        impact = "Skipping keeps the currently selected copy categories.",
+    },
+    {
+        id = "unit_copy_apply", pageKey = "uf_player", icon = "uf_player", area = "unitframes", title = "Copy Player to another Unitframe",
+        ensureCopyPopup = "unit", includeSections = { ["region:unit_copy_popup"] = true }, includeEphemeralControls = true, controlLimit = 1,
+        controlPaths = { "unit/copy/run" },
+        impact = "Skipping does not copy the Player setup.",
+    },
+    {
+        id = "group_intro", special = true, pageKey = "guided_setup", icon = "gf_layout", area = "groupframes",
+        title = "Part 2 - Group Frames",
+        impact = "Skipping starts at the next selected setup area.",
+    },
+    {
+        id = "group_edit_mode", special = true, pageKey = "guided_setup", icon = "gf_layout", area = "groupframes",
+        title = "Place your Party frames",
+        impact = "Skipping leaves the current Party-frame position unchanged.",
+    },
+    {
+        id = "gf_layout", pageKey = "gf_layout", icon = "gf_layout", area = "groupframes", title = "Build your Party frame",
+        includeSections = { general = true }, controlLimit = 5,
+        controlPaths = {
+            "group/layout/scope/enable_now",
+            "group/layout/field/showplayer",
+            "group/layout/field/showsolo",
+            "group/layout/field/smoothfill",
+            "group/layout/field/clickcastenabled",
+        },
+        impact = "Skipping keeps the current Group Frame basics.",
+    },
+    {
+        id = "gf_party_name", pageKey = "gf_layout", icon = "gf_layout", area = "groupframes", title = "Set up Party names",
+        includeSections = { text = true }, includeLockedControls = true,
+        prepareSection = "text", prepareTab = "name", prepareState = "gfTextTabSelection", prepareStateIndex = "party", controlLimit = 3,
+        controlPaths = { "group/layout/field/showname", "group/layout/field/nameanchor", "group/layout/field/namefontsize" },
+        impact = "Skipping keeps the current Party name text.",
+    },
+    {
+        id = "gf_party_hp_text", pageKey = "gf_layout", icon = "gf_layout", area = "groupframes", title = "Set up Party health text",
+        includeSections = { text = true }, includeLockedControls = true,
+        prepareSection = "text", prepareTab = "hp", prepareState = "gfTextTabSelection", prepareStateIndex = "party", controlLimit = 3,
+        controlPaths = { "group/layout/field/showhptext", "group/layout/text/hp/slot/center/mode", "group/layout/field/hpfontsize" },
+        impact = "Skipping keeps the current Party health text.",
+    },
+    {
+        id = "gf_party_power_text", pageKey = "gf_layout", icon = "gf_layout", area = "groupframes", title = "Set up Party power text",
+        includeSections = { text = true }, includeLockedControls = true,
+        prepareSection = "text", prepareTab = "power", prepareState = "gfTextTabSelection", prepareStateIndex = "party", controlLimit = 3,
+        controlPaths = { "group/layout/text/power/show", "group/layout/text/power/slot/center/mode", "group/layout/field/powerfontsize" },
+        impact = "Skipping keeps the current Party power text.",
+    },
+    {
+        id = "gf_party_resource", pageKey = "gf_layout", icon = "gf_layout", area = "groupframes", title = "Build the Party resource bar",
+        includeSections = { power = true }, includeLockedControls = true, controlLimit = 4,
+        controlPaths = { "group/layout/field/powerbarenabled", "group/layout/field/powerheight", "group/layout/field/powersmoothfill", "group/layout/field/powershowhealer" },
+        impact = "Skipping keeps the current Party resource bar.",
+    },
+    {
+        id = "gf_party_range", pageKey = "gf_layout", icon = "gf_layout", area = "groupframes", title = "Tune Party range fade",
+        includeSections = { range = true }, includeLockedControls = true, controlLimit = 4,
+        controlPaths = { "group/layout/field/rangefadeenabled", "group/layout/field/rangefadelayermode", "group/layout/field/rangefadealpha", "group/layout/field/offlinealpha" },
+        impact = "Skipping keeps the current Party range and offline opacity.",
+    },
+    {
+        id = "gf_party_dispel", pageKey = "gf_bars", icon = "gf_bars", area = "groupframes", title = "Build the Party dispel overlay",
+        includeSections = { dispel = true }, includeLockedControls = true, controlLimit = 4,
+        controlPaths = { "group/bars/field/dispeloverlayenabled", "group/bars/field/dispeloverlaytrigger", "group/bars/field/dispeloverlaystyle", "group/bars/field/dispeloverlayalpha" },
+        impact = "Skipping keeps the current Party dispel overlay.",
+    },
+    {
+        id = "gf_party_stripe", pageKey = "gf_bars", icon = "gf_bars", area = "groupframes", title = "Build the Party debuff stripe",
+        includeSections = { dstripe = true }, includeLockedControls = true, controlLimit = 3,
+        controlPaths = { "group/bars/field/debuffstripeenabled", "group/bars/field/debuffstripeedge", "group/bars/field/debuffstripeheight" },
+        impact = "Skipping keeps the current Party debuff stripe.",
+    },
+    {
+        id = "gf_party_indicators", pageKey = "gf_indicators", icon = "gf_indicators", area = "groupframes", title = "Choose Party frame indicators",
+        includeSections = { indicators = true }, controlLimit = 4,
+        controlPaths = { "group/indicators/field/targetindicator", "group/indicators/field/showgroupnumber", "group/indicators/field/hlfocusenabled", "group/indicators/field/groupborderenabled" },
+        impact = "Skipping keeps the current Party frame indicators.",
+    },
+    {
+        id = "gf_party_status", pageKey = "gf_indicators", icon = "gf_indicators", area = "groupframes", title = "Choose Party status icons",
+        includeSections = { sicons = true }, includeEphemeralControls = true, includeLockedControls = true,
+        prepareSection = "sicons", prepareTab = "basic", prepareState = "gfStatusIconTabSelection", prepareStateIndex = "party", controlLimit = 4,
+        controlPaths = { "group/indicators/status/selector", "group/indicators/status/selected/enabled", "group/indicators/status/selected/size", "group/indicators/field/usemidnighticons" },
+        impact = "Skipping keeps the current Party status icons.",
+    },
+    {
+        id = "gf_party_targeted_spells", pageKey = "gf_indicators", icon = "gf_indicators", area = "groupframes", title = "Build Party targeted spells",
+        includeSections = { targetedSpells = true }, includeLockedControls = true, controlLimit = 5,
+        controlPaths = { "group/indicators/targeted_spells/targetedspellsenabled", "group/indicators/targeted_spells/targetedspellsmode", "group/indicators/targeted_spells/targetedspellsiconsize", "group/indicators/targeted_spells/targetedspellsmaxicons", "group/indicators/targeted_spells/targetedspellsanchor" },
+        impact = "Skipping leaves the Party-only targeted-spell tracker unchanged.",
+    },
+    {
+        id = "gf_party_corner_icons", pageKey = "gf_indicators", icon = "gf_indicators", area = "groupframes", title = "Build Party corner indicators",
+        includeSections = { ci = true }, includeEphemeralControls = true, includeLockedControls = true, controlLimit = 5,
+        controlPaths = { "group/indicators/field/cienabled", "group/indicators/field/cisize", "group/indicators/corner/editor/slot", "group/indicators/corner/editor/category", "group/indicators/corner/editor/spell_ids" },
+        impact = "Skipping keeps Party corner assignments and custom spells unchanged.",
+    },
+    {
+        id = "gf_party_auras", pageKey = "gf_auras", icon = "gf_auras", area = "groupframes", title = "Choose your Party auras",
+        includeSections = { auras = true, ["region:group_aura_tools"] = true }, includeEphemeralControls = true, controlLimit = 2,
+        controlPaths = { "auras/group-workspace/container-selector", "auras/group-workspace/lane/buff/tool-selector" },
+        impact = "Skipping keeps the current Party aura lane and tool.",
+    },
+    {
+        id = "gf_spell_icons", pageKey = "gf_auras", icon = "gf_auras", area = "groupframes", title = "Spell Icons by spec",
+        includeSections = { si = true }, includeEphemeralControls = true, includeLockedControls = true, controlLimit = 16,
+        controlPaths = {
+            "group/auras/spell/enabled",
+            "group/auras/spell/spec",
+            "group/auras/spell/selected_aura",
+            "group/auras/spell/selected/enabled",
+            "group/auras/spell/selected/spell_ids",
+            "group/auras/spell/selected/only_mine",
+            "group/auras/spell/selected/auto_blacklist",
+            "group/auras/spell/selected/placed/type",
+            "group/auras/spell/placed/anchor",
+            "group/auras/spell/placed/size",
+            "group/auras/spell/placed/x",
+            "group/auras/spell/placed/y",
+            "group/auras/spell/placed/growth",
+            "group/auras/spell/placed/iconeffect",
+            "group/auras/spell/selected/frame/type",
+            "group/auras/spell/frame/alpha",
+        },
+        impact = "Skipping leaves Spell Icons unchanged; the Assistant can configure them later.",
+    },
+    {
+        id = "group_copy_open", pageKey = "gf_layout", icon = "gf_layout", area = "groupframes", title = "Copy your Party setup",
+        includeSections = { ["region:group_scope"] = true }, includeEphemeralControls = true, controlLimit = 1,
+        controlPaths = { "group/layout/copy/open" },
+        impact = "Skipping leaves Raid and Mythic Raid unchanged.",
+    },
+    {
+        id = "group_copy_all", pageKey = "gf_layout", icon = "gf_layout", area = "groupframes", title = "Choose what to copy",
+        ensureCopyPopup = "group", includeSections = { ["region:group_copy_popup"] = true }, includeEphemeralControls = true, controlLimit = 1,
+        controlPaths = { "group/copy/categories/all" },
+        impact = "Skipping keeps the currently selected copy categories.",
+    },
+    {
+        id = "group_copy_apply", pageKey = "gf_layout", icon = "gf_layout", area = "groupframes", title = "Copy Party to Raid",
+        ensureCopyPopup = "group", includeSections = { ["region:group_copy_popup"] = true }, includeEphemeralControls = true, controlLimit = 1,
+        controlPaths = { "group/copy/target/raid", "group/copy/target/mythicraid", "group/copy/target/party" },
+        impact = "Skipping does not copy the Party setup.",
+    },
+    {
+        id = "class_intro", special = true, pageKey = "guided_setup", icon = "classpower", area = "classresources",
+        title = "Part 3 - Class Resources",
+        impact = "Skipping leaves Class Resources unchanged.",
+    },
+    {
+        id = "classpower", pageKey = "classpower", icon = "classpower", area = "classresources", title = "Build your Class Resources",
+        includeSections = { classpower_display = true }, controlLimit = 4,
+        impact = "Skipping keeps the current Class Resource layout.",
+    },
+    {
+        id = "opt_bars", pageKey = "opt_bars", icon = "opt_bars", area = "shared_style", title = "Quick style: bars",
+        includeSections = { bars_textures = true }, controlLimit = 2,
+        impact = "Skipping keeps the current global bar textures and gradients.",
+    },
+    {
+        id = "opt_fonts", pageKey = "opt_fonts", icon = "opt_fonts", area = "shared_style", title = "Quick style: fonts",
+        includeSections = { fonts_global_font = true }, controlLimit = 2,
+        impact = "Skipping keeps the current global font settings.",
+    },
+    {
+        id = "power_moves", special = true, pageKey = "guided_setup", icon = "home",
+        title = "What makes MSUF different",
+        impact = "Skipping only hides the feature overview.",
+    },
     {
         id = "final_review", special = true, pageKey = "guided_setup", icon = "home",
-        title = "Review your guided setup",
-        impact = "Skipping the final review hides the summary, but does not change any setting.",
+        title = "Your setup is ready",
+        impact = "Finish the tour and use the Assistant for anything else.",
     },
+}
+
+local LEGACY_STAGE_TARGET = {
+    uf_focus = "uf_player", uf_pet = "uf_player", uf_target = "unit_copy_open", uf_boss = "unit_copy_open",
+    uf_targettarget = "uf_player", uf_focustarget = "uf_player",
+    gf_bars = "gf_layout", gf_indicators = "gf_spell_icons", gf_auras = "gf_spell_icons",
+    opt_misc = "power_moves", gameplay = "power_moves", modules = "power_moves", profiles = "power_moves",
+    opt_castbar = "opt_bars", opt_colors = "opt_bars", auras3_styling = "power_moves",
 }
 
 local STAGE_BY_ID = {}
@@ -72,6 +300,52 @@ for i = 1, #STAGES do
     STAGE_BY_ID[STAGES[i].id] = STAGES[i]
 end
 M.guidedTourStageCount = #STAGES
+
+local Tour, Invoke, CurrentStage
+local VALID_SETUP_AREA = {
+    unitframes = true,
+    groupframes = true,
+    classresources = true,
+    all = true,
+}
+
+local function SelectedSetupArea()
+    local ok, value = Invoke(Tour(), "GetPreference", "setupArea")
+    value = ok and tostring(value or "") or ""
+    return VALID_SETUP_AREA[value] and value or nil
+end
+
+local function StageEnabled(stage)
+    if type(stage) ~= "table" or not stage.area then return true end
+    local selected = SelectedSetupArea() or "all"
+    if selected == "all" then return true end
+    if stage.area == "shared_style" then
+        return selected == "unitframes" or selected == "groupframes"
+    end
+    return stage.area == selected
+end
+
+local function ActiveStages()
+    local stages = {}
+    for i = 1, #STAGES do
+        if StageEnabled(STAGES[i]) then stages[#stages + 1] = STAGES[i] end
+    end
+    return stages
+end
+
+local function ActiveStagePosition(stage, stages)
+    stages = stages or ActiveStages()
+    for i = 1, #stages do
+        if stages[i] == stage or stages[i].id == (stage and stage.id) then return i, #stages, stages end
+    end
+    return 1, #stages, stages
+end
+
+function M.GetGuidedTourStageProgress()
+    local stage = CurrentStage and CurrentStage() or STAGES[1]
+    local current, total = ActiveStagePosition(stage)
+    return current, total, stage and stage.id
+end
 
 local function StageIncludesSection(stage, sectionId)
     if type(stage) ~= "table" then return true end
@@ -91,7 +365,19 @@ end
 local Runtime = M._guidedTourRuntime or {}
 M._guidedTourRuntime = Runtime
 
-local function Tour()
+local function SetTourPreviewInlineMode(active)
+    active = active == true
+    Runtime.previewInlineMode = active
+    if Runtime.previewDockRecord and type(Runtime.previewDockRecord.restore) == "function" then
+        Runtime.previewDockRecord.restore(true)
+    end
+    Runtime.previewDockRecord = nil
+    local staleDock = Runtime.chrome and Runtime.chrome.previewDock
+    if staleDock and staleDock.Hide then staleDock:Hide() end
+    if type(M.RefreshPinnedPreviews) == "function" then M.RefreshPinnedPreviews() end
+end
+
+Tour = function()
     return type(MSUF.GuidedTour6) == "table" and MSUF.GuidedTour6 or nil
 end
 
@@ -99,7 +385,7 @@ local function FirstLoad()
     return type(MSUF.FirstLoad6) == "table" and MSUF.FirstLoad6 or nil
 end
 
-local function Invoke(object, method, ...)
+Invoke = function(object, method, ...)
     local fn = object and object[method]
     if type(fn) ~= "function" then return false end
     local ok, a, b, c = pcall(fn, object, ...)
@@ -112,14 +398,24 @@ local function TourIsActive()
     return ok and active == true
 end
 
+function M.GuidedTourOwnsPreviewLayout()
+    return TourIsActive()
+end
+
 local function TourState()
     local ok, state = Invoke(Tour(), "GetState")
     return ok and type(state) == "table" and state or {}
 end
 
-local function CurrentStage()
+CurrentStage = function()
     local state = TourState()
-    local stage = STAGE_BY_ID[tostring(state.currentStageId or "")]
+    local stateId = tostring(state.currentStageId or "")
+    local mappedId = LEGACY_STAGE_TARGET[stateId]
+    local stage = STAGE_BY_ID[stateId] or (mappedId and STAGE_BY_ID[mappedId])
+    if stage and not StageEnabled(stage) then stage = ActiveStages()[1] end
+    if stage and (stateId ~= stage.id or tonumber(state.currentStageIndex) ~= stage.index) then
+        Invoke(Tour(), "SetStage", stage.id, stage.index)
+    end
     if not stage then stage = STAGES[min(max(tonumber(state.currentStageIndex) or 1, 1), #STAGES)] end
     return stage or STAGES[1]
 end
@@ -154,8 +450,8 @@ local function Preference(key, fallback)
     return value
 end
 
-local function PersonalQuestionsComplete()
-    return Preference("playstyle") ~= nil and Preference("informationStyle") ~= nil
+local function SetupAreaDecisionComplete()
+    return SelectedSetupArea() ~= nil
 end
 
 local COOLDOWN_ANCHOR_PREFERENCE = "unitframeCooldownAnchor"
@@ -170,15 +466,28 @@ local function CooldownAnchorDecisionComplete()
     return CooldownAnchorDecision() ~= nil
 end
 local function EditModePlacementComplete()
-    local ok, complete = Invoke(Tour(), "IsEditModePlacementComplete")
-    if ok then return complete == true end
     return Preference(EDIT_MODE_MOVED_PREFERENCE) == true
+        and Preference("editModePopupOpened") == true
+end
+local function EditModeMovementComplete()
+    return Preference(EDIT_MODE_MOVED_PREFERENCE) == true
+end
+local function GroupEditModePlacementComplete()
+    return Preference("groupEditModeMoved") == true and Preference("groupEditModePopupOpened") == true
+end
+local function GroupEditModeMovementComplete()
+    return Preference("groupEditModeMoved") == true
 end
 M.GetGuidedCooldownAnchorDecision = CooldownAnchorDecision
 M.IsGuidedEditModePlacementUnlocked = CooldownAnchorDecisionComplete
 M.IsGuidedEditModePlacementComplete = EditModePlacementComplete
+M.IsGuidedGroupEditModePlacementComplete = GroupEditModePlacementComplete
 
 local PREFERENCE_LABELS = {
+    unitframes = "Unitframes",
+    groupframes = "Group Frames",
+    classresources = "Class Resources",
+    all = "Everything",
     general = "General play",
     solo = "Solo and world",
     dungeons = "Dungeons",
@@ -195,6 +504,11 @@ end
 local function PersonalizedTitle(stage)
     if stage.id == "menu_basics" then return format(Tr("Welcome, %s"), PlayerDisplayName()) end
     if stage.id == "final_review" then return format(Tr("%s, your setup is ready"), PlayerDisplayName()) end
+    if SelectedSetupArea() ~= "all" then
+        if stage.id == "unit_intro" then return Tr("Unitframes") end
+        if stage.id == "group_intro" then return Tr("Group Frames") end
+        if stage.id == "class_intro" then return Tr("Class Resources") end
+    end
     return Tr(stage.title)
 end
 
@@ -202,20 +516,71 @@ local function ControlIsAction(control)
     return control and (control.classification == "action" or control.kind == "button")
 end
 
-local function StageCue(stage, position)
+local function ShortControlHelp(control, limit)
+    local help = tostring(control and control.help or ""):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+    limit = tonumber(limit) or 112
+    if #help > limit then
+        help = help:sub(1, limit - 3):gsub("%s+%S*$", "") .. "..."
+    end
+    return help ~= "" and Tr(help) or nil
+end
+
+local function LockedControlCue(control)
+    local id = tostring(control and control.id or ""):lower()
+    if id:find("targeted_spells", 1, true) then
+        return Tr("UNLOCK, THEN CHANGE IT - Enable Targeted Spell Indicators first.")
+    end
+    if id:find("corner", 1, true) then
+        return Tr("UNLOCK, THEN CHANGE IT - Enable Corner Indicators, choose a slot, then select Custom Spell when requested.")
+    end
+    if id:find("spell", 1, true) then
+        if id:find("placed", 1, true) then
+            return Tr("UNLOCK, THEN CHANGE IT - Enable Spell Indicators, choose a spell, then set Indicator Type.")
+        end
+        if id:find("frame", 1, true) then
+            return Tr("UNLOCK, THEN CHANGE IT - Enable Spell Indicators, choose a spell, then select a Frame Effect.")
+        end
+        if id:find("selected", 1, true) then
+            return Tr("UNLOCK, THEN CHANGE IT - Enable Spell Indicators, choose a spec, then press a tracked spell tile.")
+        end
+        return Tr("UNLOCK, THEN CHANGE IT - Turn on Spell Indicators in the earlier checkpoint; use Back if you skipped it.")
+    end
+    return Tr("UNLOCK, THEN CHANGE IT - Enable the parent feature in this section first.")
+end
+
+local function ControlCue(control, touched)
+    if not control then return nil end
+    local label = Tr(control.label)
+    if control.actionable == false then return LockedControlCue(control) end
+    if touched then
+        return format(Tr("CHANGED +10 XP - %s updated. Fine-tune it or claim the checkpoint."), label)
+    end
+    local kind = tostring(control.kind or ""):lower()
+    local verb, action
+    if ControlIsAction(control) then
+        verb, action = "PRESS", Tr("Use the highlighted action now.")
+    elseif kind == "toggle" or kind == "switch" or kind == "checkbox" then
+        verb, action = "CHANGE", Tr("Click it to switch the value and watch the Live Preview.")
+    elseif kind == "dropdown" then
+        verb, action = "CHANGE", Tr("Open it and choose a different value.")
+    elseif kind == "slider" then
+        verb, action = "CHANGE", Tr("Drag it to a new value while watching the Live Preview.")
+    elseif kind == "textinput" or kind == "editbox" then
+        verb, action = "CHANGE", Tr("Type a new value, then press Enter.")
+    elseif kind == "color" then
+        verb, action = "CHANGE", Tr("Pick a different color and confirm it.")
+    elseif kind == "segment" or kind == "tabs" then
+        verb, action = "CHANGE", Tr("Press a different option and watch the Live Preview.")
+    else
+        verb, action = "CHANGE", ShortControlHelp(control) or Tr("Alter this setting and watch the result live.")
+    end
+    return format("%s %s - %s", Tr(verb), label, action)
+end
+
+local function StageCue(stage, position, touched)
     local section = position and position.section
     local control = position and position.control
-    if control then
-        local label = Tr(control.label)
-        local help = tostring(control.help or ""):gsub("^%s+", ""):gsub("%s+$", "")
-        if help ~= "" then
-            return format(Tr("The green arrow points to %s: %s"), label, Tr(help))
-        end
-        if ControlIsAction(control) then
-            return format(Tr("The green arrow points to %s; use this action now or keep it untouched and continue."), label)
-        end
-        return format(Tr("The green arrow points to %s; adjust this option live, keep its current/default value, or skip it."), label)
-    end
+    if control then return ControlCue(control, touched) end
     local sectionId = section and (tostring(section.id or "") .. " " .. tostring(section.label or "")):lower() or ""
     if section then
         if sectionId:find("preview", 1, true) then
@@ -236,48 +601,59 @@ local function StageCue(stage, position)
             end
             return Tr("Drag = inner position · gear/double-click = options · right-click = actions · Ctrl-wheel/drag = zoom/pan · Edit Mode = whole frame")
         end
-        return format(Tr("%s is highlighted. Adjust it live, keep it as is, or continue."), Tr(section.label))
+        return format(Tr("CHECKPOINT - Press Enter section to explore every setting in %s."), Tr(section.label))
     end
     if stage.id == "menu_basics" then
-        if PersonalQuestionsComplete() then
-            return format(Tr("Your focus: %s, with %s information."), PreferenceLabel(Preference("playstyle", "dungeons")), PreferenceLabel(Preference("informationStyle", "balanced")))
+        if SetupAreaDecisionComplete() then
+            return format(Tr("ROUTE READY - %s. Press Start tour."), PreferenceLabel(SelectedSetupArea()))
         end
-        return Tr("Choose one answer in each row. You can skip this personal step at any time.")
+        return Tr("YOUR MOVE - Choose one green setup route.")
     end
+    if stage.id == "unit_intro" then return Tr("PART 1 - Build Player once, then copy the finished setup to the other Unitframes.") end
     if stage.id == "edit_mode" then
         local decision = CooldownAnchorDecision()
         if decision and EditModePlacementComplete() then
-            return Tr("Frame moved: placement is complete. Exit MSUF Edit Mode when you are happy, then continue.")
+            return Tr("CHECKPOINT CLEAR - Exit Edit Mode when happy, then claim the checkpoint.")
+        end
+        if decision and EditModeMovementComplete() then
+            return Tr("YOUR MOVE - Click the highlighted Player mover to open its Width and Height popup.")
         end
         if decision == "cooldown" then
-            return Tr("Anchor chosen: Unitframes follow Main Cooldowns. Open MSUF Edit Mode and drag the highlighted frame once to continue.")
+            return Tr("YOUR MOVE - Press Open MSUF Edit Mode, then drag the double-arrow frame once.")
         end
         if decision == "independent" then
-            return Tr("Anchor chosen: Unitframes stay independent of Main Cooldowns. Open MSUF Edit Mode and drag the highlighted frame once to continue.")
+            return Tr("YOUR MOVE - Press Open MSUF Edit Mode, then drag the double-arrow frame once.")
         end
-        return Tr("Before moving any frame, choose whether all Unitframes should follow Main Cooldowns or use independent placement.")
+        return Tr("YOUR MOVE - Choose Follow Main Cooldowns or Independent placement below.")
     end
-    if stage.id:match("^uf_") then return Tr("Start with Preview, then follow each highlighted frame section.") end
+    if stage.id == "group_intro" then return Tr("PART 2 - Build Party once, then copy it to Raid or Mythic Raid.") end
+    if stage.id == "group_edit_mode" then
+        if GroupEditModePlacementComplete() then return Tr("CHECKPOINT CLEAR - Party Frames moved. Click the mover for its size and spacing popup whenever you need it.") end
+        if GroupEditModeMovementComplete() then return Tr("YOUR MOVE - Click the highlighted Party Frames mover to open Width, Height, and Spacing.") end
+        return Tr("YOUR MOVE - Open Edit Mode, drag Party Frames once, then click the mover to see its Width, Height, and Spacing popup.")
+    end
+    if stage.id == "class_intro" then return Tr("PART 3 - Shape Class Resources with its interactive preview and cooldown-aware anchoring.") end
+    if stage.id == "uf_player" then return Tr("PLAYER IS THE MASTER - Change the highlighted frame basics; the Live Preview updates immediately.") end
+    if stage.id == "uf_player_auras" then return Tr("AURA WORKSPACE - Choose Buffs, Debuffs, or a Custom lane, then choose Layout, Filters, or Blacklist.") end
+    if stage.id:match("^uf_player_") then return Tr("PLAYER CORE - Change the new green setting and watch the same Player Preview update.") end
+    if stage.id:match("^unit_copy_") then return Tr("COPY FLOW - Open Copy To, select All categories, then apply the Player setup to another Unitframe.") end
     if stage.id == "gf_spell_icons" then
-        return Tr("Configure Spell Icons completely: choose the scope and spec, select or add a spell, then review its icon, cooldown and frame effects.")
+        return Tr("MISSION BRIEF - Build Spell Icons from scope and spec through placement, cooldowns, and frame effects.")
     end
-    if stage.id:match("^gf_") then
-        local playstyle = Preference("playstyle", "general")
-        if playstyle == "raid" then return Tr("Raid focus: compare Raid and Mythic scopes before reviewing each highlighted section.") end
-        if playstyle == "solo" then return Tr("Solo focus: keep group defaults or prepare the Party scope for occasional groups.") end
-        if playstyle == "dungeons" then return Tr("Dungeon focus: begin with Party or Mythic scope, then review each highlighted section.") end
-        return Tr("Compare the Party, Raid or Mythic scope that matters to you, then follow the highlights.")
-    end
+    if stage.id == "gf_layout" then return Tr("PARTY IS THE MASTER - Adjust its frame basics, then copy the finished result to Raid or Mythic Raid.") end
+    if stage.id == "gf_party_auras" then return Tr("AURA WORKSPACE - Choose Buffs, Debuffs, or External Defensives, then choose the editing tool.") end
+    if stage.id == "gf_party_targeted_spells" then return Tr("MSUF POWER MOVE - Show incoming enemy casts directly on the Party member they target.") end
+    if stage.id == "gf_party_corner_icons" then return Tr("MSUF POWER MOVE - Assign each corner or bind a custom spell to the selected slot.") end
+    if stage.id:match("^gf_party_") then return Tr("PARTY CORE - Change the new green setting and watch the Party Preview update.") end
+    if stage.id:match("^group_copy_") then return Tr("COPY FLOW - Open Copy To, select All categories, then press a destination to copy Party instantly.") end
     if stage.id == "opt_bars" then return Tr("Sample = visual only · tests = temporary · scope = shared/unit/group") end
     if stage.id == "opt_castbar" then return Tr("Simulate casts here; position castbar handles in Preview or MSUF Edit Mode.") end
     if stage.id == "opt_fonts" then return Tr("Use the scope selector for shared, unit and group text; compare readability in Preview.") end
     if stage.id == "auras3_styling" then return Tr("Live/Dummy = display only · colored handles = saved positions · scope = shared/unit/group/custom") end
     if stage.id == "classpower" then return Tr("Use the interactive preview for layouts and states; use Edit Mode for whole-frame placement.") end
     if stage.id == "profiles" then return Tr("Finish with a profile check and export a backup of your setup.") end
-    if stage.id == "final_review" then return Tr("Review your choices and skipped areas. Finish adds no extra setting changes.") end
-    local informationStyle = Preference("informationStyle", "balanced")
-    if informationStyle == "calm" then return Tr("Clarity focus: prefer the simplest readable option in each highlighted section.") end
-    if informationStyle == "detailed" then return Tr("Combat-detail focus: inspect indicators, timers and visibility in each highlighted section.") end
+    if stage.id == "power_moves" then return Tr("MSUF POWER MOVES - Scan the highlights, then press Continue.") end
+    if stage.id == "final_review" then return Tr("MISSION COMPLETE - Press Finish to open the Assistant on your Dashboard.") end
     return Tr("Review the highlighted sections; previews update while your changes autosave.")
 end
 
@@ -308,6 +684,8 @@ local function SetGuidedCooldownAnchorDecision(value)
     if previousDecision ~= value then
         Invoke(Tour(), "SetPreference", EDIT_MODE_MOVED_PREFERENCE, nil)
         Invoke(Tour(), "SetPreference", EDIT_MODE_MOVED_KEY_PREFERENCE, nil)
+        Invoke(Tour(), "SetPreference", "editModePopupOpened", nil)
+        Invoke(Tour(), "SetPreference", "editModePopupOpenedKey", nil)
     end
     local apply = M.ApplyService or _G.MSUF_Menu2_ApplyService
     if type(apply) == "table" and type(apply.Flush) == "function" then apply.Flush() end
@@ -383,6 +761,19 @@ function M.NotifyGuidedEditModeMoved(moverKey)
     end
     if type(M.RefreshGuidedTourChrome) == "function" then
         M.RefreshGuidedTourChrome("EDIT_MODE_MOVED")
+    end
+    return true
+end
+
+function M.NotifyGuidedEditModePopupOpened(moverKey)
+    local ok, marked = Invoke(Tour(), "MarkEditModePopupOpened", moverKey)
+    if not ok or marked ~= true then return false end
+    RefreshEditModePlacementCue()
+    if M.activeKey == "guided_setup" and type(M.RequestRefresh) == "function" then
+        M.RequestRefresh(nil, "GUIDED_EDIT_MODE_POPUP_OPENED")
+    end
+    if type(M.RefreshGuidedTourChrome) == "function" then
+        M.RefreshGuidedTourChrome("EDIT_MODE_POPUP_OPENED")
     end
     return true
 end
@@ -475,14 +866,82 @@ local function SortedSections(pageKey)
     return sections
 end
 
+function M.RegisterGuidedCopyPopup(kind, pageKey, ensureVisible)
+    kind, pageKey = tostring(kind or ""), tostring(pageKey or "")
+    if kind == "" or pageKey == "" or type(ensureVisible) ~= "function" then return false end
+    Runtime.copyPopupOpeners = Runtime.copyPopupOpeners or {}
+    Runtime.copyPopupOpeners[kind] = Runtime.copyPopupOpeners[kind] or {}
+    Runtime.copyPopupOpeners[kind][pageKey] = ensureVisible
+    return true
+end
+
+local function EnsureStageSurface(stage)
+    if type(stage) == "table" and stage.area == "groupframes" and stage.special ~= true and M.gfScope ~= "party" then
+        local pageEntry = M.cache and M.cache[stage.pageKey]
+        local scopeRegion = pageEntry and pageEntry.guidedRegions and pageEntry.guidedRegions.group_scope
+        local selectScope = scopeRegion and scopeRegion.body and scopeRegion.body._msuf2GuidedSelectScope
+        local prepared
+        if type(selectScope) == "function" then
+            local ok, value = pcall(selectScope, "party")
+            prepared = ok and value ~= false
+        end
+        if not prepared then
+            if type(M.SetMenuStateValue) == "function" then M.SetMenuStateValue("gfScope", "party") else M.gfScope = "party" end
+        end
+    end
+    if type(stage) == "table" and stage.prepareSection and stage.prepareTab and stage.prepareState then
+        local pageEntry = M.cache and M.cache[stage.pageKey]
+        local section = pageEntry and pageEntry.sections and pageEntry.sections[stage.prepareSection]
+        local selectTab = section and section._msuf2GuidedSelectTab
+        local prepared
+        if type(selectTab) == "function" then
+            local ok, value = pcall(selectTab, stage.prepareTab)
+            prepared = ok and value ~= false
+        end
+        if not prepared then
+            local state = M[stage.prepareState]
+            if type(state) ~= "table" then
+                state = {}
+                M[stage.prepareState] = state
+            end
+            state[stage.prepareStateIndex or "player"] = stage.prepareTab
+        end
+    end
+    local kind = stage and stage.ensureCopyPopup
+    if not kind then return true end
+    if tostring(Runtime.touchedSignature or ""):match("^" .. tostring(stage.id or "") .. "\031") then return true end
+    local byKind = Runtime.copyPopupOpeners and Runtime.copyPopupOpeners[kind]
+    local ensureVisible = byKind and byKind[stage.pageKey]
+    if type(ensureVisible) ~= "function" then return false end
+    local ok, visible = pcall(ensureVisible)
+    return ok and visible ~= false
+end
+
 local function StageSections(stage)
+    EnsureStageSurface(stage)
     local sections = SortedSections(stage and stage.pageKey)
     if type(stage) ~= "table" then return sections end
-    local filtered = {}
-    for i = 1, #sections do
-        local section = sections[i]
-        if StageIncludesSection(stage, section.id) then filtered[#filtered + 1] = section end
+    local function Filter(source)
+        local filtered = {}
+        for i = 1, #source do
+            local section = source[i]
+            if StageIncludesSection(stage, section.id) then filtered[#filtered + 1] = section end
+        end
+        return filtered
     end
+    local filtered = Filter(sections)
+    local W = M.Widgets
+    local materialized
+    if W and type(W.FocusCollapsibleSection) == "function" then
+        for i = 1, #filtered do
+            local section = filtered[i]
+            if section.collapsible and section.entry and section.entry.open ~= true then
+                W.FocusCollapsibleSection(section.body, { persist = false, flash = false, scroll = false })
+                materialized = true
+            end
+        end
+    end
+    if materialized then filtered = Filter(SortedSections(stage.pageKey)) end
     return filtered
 end
 
@@ -556,16 +1015,11 @@ local function EmphasizeSection(pageKey, current, currentControl)
         local entry = section.entry
         local selected = current and section.id == current.id
         local outer = section.outer
-        local related = selected
-        if current and not related and outer and current.outer and IsWidgetInside then
-            related = IsWidgetInside(current.outer, outer) or IsWidgetInside(outer, current.outer)
-        end
-        if outer and outer.SetAlpha then
-            if outer._msuf2GuidedOriginalAlpha == nil then
-                outer._msuf2GuidedOriginalAlpha = outer.GetAlpha and outer:GetAlpha() or 1
-            end
-            local original = outer._msuf2GuidedOriginalAlpha
-            outer:SetAlpha(related and original or (original * 0.46))
+        if outer and outer.SetAlpha and outer._msuf2GuidedOriginalAlpha ~= nil then
+            -- Older tour builds dimmed every non-current section. Restore that
+            -- state once and keep the whole page readable and interactive.
+            outer:SetAlpha(outer._msuf2GuidedOriginalAlpha)
+            outer._msuf2GuidedOriginalAlpha = nil
         end
         local marker = entry._msuf2GuidedArrow
         if selected and not marker and outer and outer.CreateTexture and T and T.media then
@@ -637,7 +1091,42 @@ local function GuidedWidgetIsActionable(widget)
 end
 M.IsGuidedTourWidgetActionable = GuidedWidgetIsActionable
 
-local function SectionControls(pageKey, section, sections, records, includeEphemeral)
+local function GuidedDisplayLabel(value)
+    value = tostring(value or ""):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+    if value == "" then return nil end
+    -- Semantic identities are excellent stable keys, but terrible UI copy.
+    if value:find("/", 1, true) or value:match("^[%w_%-]+%.[%w_.%-]+$") then return nil end
+    return value
+end
+
+local function HumanizeGuidedIdentity(record)
+    local semantic = tostring(record and (record.controlPath or record.identityKey or record.settingKey or record.identityLabel) or "")
+    local leaf = semantic:match("([^/%.]+)$") or semantic
+    leaf = leaf:gsub("_", " "):gsub("%-", " "):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+    local lower = leaf:lower()
+    if lower == "enabled" then return Tr("Enable") end
+    if lower == "x" then return Tr("X position") end
+    if lower == "y" then return Tr("Y position") end
+    if lower == "selected aura" then return Tr("Spell") end
+    if leaf == "" then return Tr("Setting") end
+    return Tr(leaf:sub(1, 1):upper() .. leaf:sub(2))
+end
+
+local function GuidedControlLabel(record, widget)
+    local label = GuidedDisplayLabel(widget and SafeText(widget._msuf2Title))
+    if label then return label end
+    label = GuidedDisplayLabel(widget and SafeText(widget._msuf2Label))
+    if label then return label end
+    label = GuidedDisplayLabel(record and record.label)
+    if label then return label end
+    label = GuidedDisplayLabel(widget and widget._msuf2SearchText)
+    if label then return label end
+    label = GuidedDisplayLabel(record and record.identityLabel)
+    if label then return label end
+    return HumanizeGuidedIdentity(record)
+end
+
+local function SectionControls(pageKey, section, sections, records, includeEphemeral, includeLocked, controlLimit, controlPaths)
     local catalog = M.RuntimeControlCatalog
     if not (catalog and section and section.body) then return {} end
     records = type(records) == "table" and records or RuntimeControlRecords()
@@ -654,7 +1143,16 @@ local function SectionControls(pageKey, section, sections, records, includeEphem
         then
             local internal = type(catalog.Get) == "function" and catalog.Get(record.controlId) or nil
             local widget = internal and internal.widget
-            local owner = GuidedWidgetIsActionable(widget) and IsWidgetInside(widget, section.body) and section or nil
+            local shown = true
+            if widget and type(widget.IsVisible) == "function" then
+                local ok, value = pcall(widget.IsVisible, widget)
+                shown = not ok or value == true
+            elseif widget and type(widget.IsShown) == "function" then
+                local ok, value = pcall(widget.IsShown, widget)
+                shown = not ok or value == true
+            end
+            local actionable = GuidedWidgetIsActionable(widget)
+            local owner = widget and shown and (actionable or includeLocked == true) and IsWidgetInside(widget, section.body) and section or nil
             if owner then
                 for j = 1, #sections do
                     local candidate = sections[j]
@@ -671,11 +1169,14 @@ local function SectionControls(pageKey, section, sections, records, includeEphem
                 seen[record.controlId] = true
                 controls[#controls + 1] = {
                     id = record.controlId,
-                    label = tostring(record.label or record.identityLabel or record.controlId),
+                    label = GuidedControlLabel(record, widget),
                     help = tostring(record.help or ""),
                     kind = tostring(record.kind or ""),
                     classification = tostring(record.classification or ""),
+                    controlPath = tostring(record.controlPath or ""),
+                    settingKey = tostring(record.settingKey or ""),
                     widget = widget,
+                    actionable = actionable,
                     top = FrameTop(widget),
                     left = FrameLeft(widget),
                 }
@@ -696,6 +1197,34 @@ local function SectionControls(pageKey, section, sections, records, includeEphem
         local al, bl = a.label:lower(), b.label:lower()
         return al == bl and a.id < b.id or al < bl
     end)
+    if type(controlPaths) == "table" and #controlPaths > 0 then
+        local byPath, selected, selectedIds = {}, {}, {}
+        for i = 1, #controls do
+            local path = controls[i].controlPath
+            if path ~= "" and byPath[path] == nil then byPath[path] = controls[i] end
+        end
+        for i = 1, #controlPaths do
+            local control = byPath[controlPaths[i]]
+            if control and not selectedIds[control.id] then
+                selectedIds[control.id] = true
+                selected[#selected + 1] = control
+            end
+        end
+        -- Keep the tour resilient if a curated control is unavailable in a
+        -- future build: fill the remaining slots with the next visible setting.
+        for i = 1, #controls do
+            local control = controls[i]
+            if not selectedIds[control.id] then
+                selectedIds[control.id] = true
+                selected[#selected + 1] = control
+            end
+        end
+        controls = selected
+    end
+    controlLimit = max(0, tonumber(controlLimit) or 0)
+    if controlLimit > 0 then
+        for i = #controls, controlLimit + 1, -1 do controls[i] = nil end
+    end
     return controls
 end
 
@@ -733,7 +1262,7 @@ local function AllStageControls(stage)
     local records = RuntimeControlRecords()
     local controls, seen = {}, {}
     for i = 1, #sections do
-        local list = SectionControls(stage.pageKey, sections[i], sections, records, stage.includeEphemeralControls)
+        local list = SectionControls(stage.pageKey, sections[i], sections, records, stage.includeEphemeralControls, stage.includeLockedControls, stage.controlLimit, stage.controlPaths)
         for j = 1, #list do
             local control = list[j]
             if not seen[control.id] then
@@ -763,52 +1292,56 @@ local function EmphasizeControl(stage, section, controls, current)
     Runtime.controlEmphasis = {}
 
     local selectedWidget = current.widget
-    for i = 1, #controls do
-        local control = controls[i]
-        local widget = control.widget
-        if widget and type(widget.SetAlpha) == "function" then
-            local original = type(widget.GetAlpha) == "function" and widget:GetAlpha() or 1
-            local related = control.id == current.id
-                or IsWidgetInside(selectedWidget, widget)
-                or IsWidgetInside(widget, selectedWidget)
-            if not related then
-                local applied = original * 0.38
-                widget:SetAlpha(applied)
-                Runtime.controlEmphasis[#Runtime.controlEmphasis + 1] = {
-                    widget = widget,
-                    originalAlpha = original,
-                    appliedAlpha = applied,
-                }
-            end
-        end
-    end
-
     local T = M.Theme
     if type(CreateFrame) == "function" and T then
         local marker = Runtime.controlMarker
+        if marker and marker._msuf2DualPointer ~= true then
+            marker:Hide()
+            marker = nil
+        end
         if not marker then
             marker = CreateFrame("Frame", nil, selectedWidget)
-            marker:SetSize(20, 20)
-            local texture = marker:CreateTexture(nil, "OVERLAY", nil, 7)
-            texture:SetAllPoints()
-            local usedAtlas = false
-            if type(texture.SetAtlas) == "function" then
-                usedAtlas = pcall(texture.SetAtlas, texture, "NPE_ArrowRight", false)
+            marker._msuf2DualPointer = true
+            if type(marker.EnableMouse) == "function" then marker:EnableMouse(false) end
+            local function Arrow(rotation)
+                local texture = marker:CreateTexture(nil, "OVERLAY", nil, 7)
+                local usedAtlas = false
+                if type(texture.SetAtlas) == "function" then
+                    usedAtlas = pcall(texture.SetAtlas, texture, "NPE_ArrowRight", false)
+                end
+                if not usedAtlas and T.media then texture:SetTexture(T.media.collapseArrow) end
+                texture:SetSize(20, 20)
+                if rotation and type(texture.SetRotation) == "function" then texture:SetRotation(rotation) end
+                return texture
             end
-            if not usedAtlas and T.media then texture:SetTexture(T.media.collapseArrow) end
-            marker._msuf2Texture = texture
+            marker._msuf2LeftArrow = Arrow()
+            marker._msuf2RightArrow = Arrow(math.pi)
+            marker._msuf2Edges = {}
+            for i = 1, 4 do marker._msuf2Edges[i] = marker:CreateTexture(nil, "OVERLAY", nil, 6) end
             Runtime.controlMarker = marker
         else
             marker:SetParent(selectedWidget)
         end
         marker:ClearAllPoints()
-        marker:SetPoint("RIGHT", selectedWidget, "LEFT", -4, 0)
+        marker:SetPoint("TOPLEFT", selectedWidget, "TOPLEFT", -5, 5)
+        marker:SetPoint("BOTTOMRIGHT", selectedWidget, "BOTTOMRIGHT", 5, -5)
         if type(marker.SetFrameLevel) == "function" and type(selectedWidget.GetFrameLevel) == "function" then
             marker:SetFrameLevel(selectedWidget:GetFrameLevel() + 8)
         end
-        local color = T.colors and T.colors.accent
-        local texture = marker._msuf2Texture
-        if color and texture then texture:SetVertexColor(color[1], color[2], color[3], 1) end
+        local color = (T.colors and T.colors.ok) or { 0.24, 0.88, 0.40, 1 }
+        local leftArrow, rightArrow = marker._msuf2LeftArrow, marker._msuf2RightArrow
+        leftArrow:ClearAllPoints()
+        leftArrow:SetPoint("RIGHT", marker, "LEFT", -4, 0)
+        rightArrow:ClearAllPoints()
+        rightArrow:SetPoint("LEFT", marker, "RIGHT", 4, 0)
+        leftArrow:SetVertexColor(color[1], color[2], color[3], 1)
+        rightArrow:SetVertexColor(color[1], color[2], color[3], 1)
+        local top, right, bottom, left = marker._msuf2Edges[1], marker._msuf2Edges[2], marker._msuf2Edges[3], marker._msuf2Edges[4]
+        top:ClearAllPoints(); top:SetPoint("TOPLEFT"); top:SetPoint("TOPRIGHT"); top:SetHeight(2)
+        right:ClearAllPoints(); right:SetPoint("TOPRIGHT"); right:SetPoint("BOTTOMRIGHT"); right:SetWidth(2)
+        bottom:ClearAllPoints(); bottom:SetPoint("BOTTOMLEFT"); bottom:SetPoint("BOTTOMRIGHT"); bottom:SetHeight(2)
+        left:ClearAllPoints(); left:SetPoint("TOPLEFT"); left:SetPoint("BOTTOMLEFT"); left:SetWidth(2)
+        for i = 1, 4 do marker._msuf2Edges[i]:SetColorTexture(color[1], color[2], color[3], 0.92) end
         marker:Show()
         Runtime.controlEmphasis[#Runtime.controlEmphasis + 1] = { marker = marker }
         if type(T.PlayMotion) == "function" then
@@ -817,6 +1350,23 @@ local function EmphasizeControl(stage, section, controls, current)
     end
     if T and type(T.PlayNeonFlash) == "function" and type(selectedWidget.CreateTexture) == "function" then
         T.PlayNeonFlash(selectedWidget, "success", { alpha = 0.24, duration = 0.72 })
+    end
+    if ControlIsAction(current) then
+        local function HookActionTarget(target)
+            if not (target and type(target.HookScript) == "function") then return end
+            target._msuf2GuidedActionHooks = target._msuf2GuidedActionHooks or {}
+            if target._msuf2GuidedActionHooks[current.id] then return end
+            target._msuf2GuidedActionHooks[current.id] = true
+            target:HookScript("OnClick", function()
+                if type(M.NotifyGuidedTourControlInteraction) == "function" then
+                    M.NotifyGuidedTourControlInteraction(selectedWidget)
+                end
+            end)
+        end
+        HookActionTarget(selectedWidget)
+        for i = 1, type(selectedWidget.buttons) == "table" and #selectedWidget.buttons or 0 do
+            HookActionTarget(selectedWidget.buttons[i])
+        end
     end
 end
 
@@ -852,7 +1402,7 @@ end
 
 local function RecordSectionAndControls(stage, section, result, sections, records)
     records = type(records) == "table" and records or RuntimeControlRecords()
-    local controls = SectionControls(stage.pageKey, section, sections, records, stage.includeEphemeralControls)
+    local controls = SectionControls(stage.pageKey, section, sections, records, stage.includeEphemeralControls, stage.includeLockedControls, stage.controlLimit, stage.controlPaths)
     RecordControls(stage, section, controls, result)
     RecordSectionOnly(stage, section, result)
     return #controls
@@ -908,12 +1458,17 @@ local function RecordWholeStage(stage, sections, result)
     Invoke(Tour(), "RecordStage", stage.id, result)
 end
 
+local function InitialCursor(stage)
+    if stage and not stage.special then
+        return { overview = false, sectionIndex = 1, controlIndex = 1, controlTotal = 0 }
+    end
+    return { overview = true, sectionIndex = 0, controlIndex = 0, controlTotal = 0 }
+end
+
 local function ReadCursor(stage)
     local ok, cursor = Invoke(Tour(), "GetCursor", stage.id)
     cursor = ok and type(cursor) == "table" and cursor or nil
-    if not cursor then
-        return { overview = true, sectionIndex = 0, controlIndex = 0, controlTotal = 0 }
-    end
+    if not cursor then return InitialCursor(stage) end
     return {
         overview = cursor.overview ~= false,
         sectionId = type(cursor.sectionId) == "string" and cursor.sectionId or nil,
@@ -957,10 +1512,21 @@ local function FocusGuidedWidget(widget, fallback, flash)
     local child = M.scrollChild
     Runtime.focusRequest = (tonumber(Runtime.focusRequest) or 0) + 1
     local request = Runtime.focusRequest
+    local function OwnsFloatingGuidedSurface(frame)
+        local current = frame
+        for _ = 1, 24 do
+            if not current then return false end
+            if current._msuf2GuidedNoScroll then return true end
+            if type(current.GetParent) ~= "function" then return false end
+            local ok, parent = pcall(current.GetParent, current)
+            if not ok or parent == current then return false end
+            current = parent
+        end
+        return false
+    end
     local function FinishFocus(pass)
         if request ~= Runtime.focusRequest then return end
-        if type(M.RefreshPinnedPreviews) == "function" then M.RefreshPinnedPreviews(scroll) end
-        if outer and scroll and child
+        if outer and not OwnsFloatingGuidedSurface(outer) and scroll and child
             and outer.GetTop and scroll.GetTop and scroll.GetBottom
             and scroll.GetVerticalScroll and scroll.SetVerticalScroll
         then
@@ -968,30 +1534,16 @@ local function FocusGuidedWidget(widget, fallback, flash)
             local scrollTop, scrollBottom = scroll:GetTop(), scroll:GetBottom()
             if outerTop and scrollTop and scrollBottom then
                 local visibleTop = scrollTop
-                local activePreview = scroll._msuf2PinnedPreviewActiveRecord
-                local preview = activePreview and activePreview.box
-                local targetInsidePreview = preview and IsWidgetInside(outer, preview)
-                if preview and preview._msuf2PinnedFloating == true
-                    and (not preview.IsShown or preview:IsShown())
-                    and preview.GetBottom
-                then
-                    local previewBottom = preview:GetBottom()
-                    if previewBottom and previewBottom < visibleTop and previewBottom > scrollBottom then
-                        visibleTop = previewBottom
-                    end
-                end
-                if not targetInsidePreview then
-                    -- Leave enough room above a control to keep its section
-                    -- heading visible; section-only steps can sit nearer the top.
-                    local topInset = widget and 52 or 16
-                    local desiredTop = max(scrollBottom + 32, visibleTop - topInset)
-                    local current = tonumber(scroll:GetVerticalScroll()) or 0
-                    local childHeight = tonumber(child.GetHeight and child:GetHeight()) or 0
-                    local scrollHeight = tonumber(scroll.GetHeight and scroll:GetHeight()) or 0
-                    local maxScroll = max(0, childHeight - scrollHeight)
-                    local target = min(max(current + (desiredTop - outerTop), 0), maxScroll)
-                    if math.abs(target - current) >= 1 then scroll:SetVerticalScroll(floor(target + 0.5)) end
-                end
+                -- Guided setup never reparents or floats the live preview. The
+                -- target therefore uses the normal settings viewport geometry.
+                local topInset = widget and 52 or 16
+                local desiredTop = max(scrollBottom + 32, visibleTop - topInset)
+                local current = tonumber(scroll:GetVerticalScroll()) or 0
+                local childHeight = tonumber(child.GetHeight and child:GetHeight()) or 0
+                local scrollHeight = tonumber(scroll.GetHeight and scroll:GetHeight()) or 0
+                local maxScroll = max(0, childHeight - scrollHeight)
+                local target = min(max(current + (desiredTop - outerTop), 0), maxScroll)
+                if math.abs(target - current) >= 1 then scroll:SetVerticalScroll(floor(target + 0.5)) end
                 if scroll._msuf2RefreshScrollBar then scroll:_msuf2RefreshScrollBar() end
             end
         end
@@ -999,8 +1551,7 @@ local function FocusGuidedWidget(widget, fallback, flash)
         if pass == 1 and flash and outer and T and type(T.PlayNeonFlash) == "function" and type(outer.CreateTexture) == "function" then
             T.PlayNeonFlash(outer, "success", { alpha = 0.24, duration = 0.72 })
         end
-        -- The first scroll can activate or resize a pinned Preview. Re-run on
-        -- the settled geometry so the target lands below that overlay.
+        -- Accordion expansion and page relayout settle on the next frame.
         if pass == 1 and C_Timer and type(C_Timer.After) == "function" then
             C_Timer.After(0, function() FinishFocus(2) end)
         end
@@ -1024,10 +1575,10 @@ local function FocusCurrentSection(stage)
     local sections = StageSections(stage)
     local section, index = FindCursorSection(cursor, sections)
     if not section then
-        WriteCursor(stage, { overview = true, sectionIndex = 0, controlIndex = 0, controlTotal = 0 })
+        WriteCursor(stage, InitialCursor(stage))
         return
     end
-    local controls = SectionControls(stage.pageKey, section, sections, nil, stage.includeEphemeralControls)
+    local controls = SectionControls(stage.pageKey, section, sections, nil, stage.includeEphemeralControls, stage.includeLockedControls, stage.controlLimit, stage.controlPaths)
     local control, controlIndex = FindCursorControl(cursor, controls)
     if cursor.sectionId ~= section.id
         or cursor.sectionIndex ~= index
@@ -1074,6 +1625,7 @@ end
 
 local function SelectExpectedPage(stage)
     local pageKey = ExpectedPage(stage)
+    SetTourPreviewInlineMode(true)
     Runtime.manualAway = nil
     Runtime.warning = nil
     if stage.special then InvalidateGuidedPage() end
@@ -1100,35 +1652,56 @@ local function SetStage(stage, resetCursor)
     ClearSectionEmphasis()
     Invoke(Tour(), "SetStage", stage.id, stage.index)
     if resetCursor or not select(2, Invoke(Tour(), "GetCursor", stage.id)) then
-        WriteCursor(stage, { overview = true, sectionIndex = 0, controlIndex = 0, controlTotal = 0 })
+        WriteCursor(stage, InitialCursor(stage))
     end
     return SelectExpectedPage(stage)
 end
 
 local function CompleteTour()
     ClearSectionEmphasis()
+    SetTourPreviewInlineMode(false)
     Invoke(Tour(), "Complete")
     Invoke(FirstLoad(), "Complete", "guided_tour")
     Runtime.warning = nil
     Runtime.manualAway = nil
+    Runtime.touchedSignature = nil
     Runtime.lastVisualSignature = nil
     M.RefreshGuidedTourChrome("COMPLETE")
     if type(M.InvalidatePage) == "function" then M.InvalidatePage("home") end
     if type(M.SelectPage) == "function" then M.SelectPage("home") end
+    if type(M.StartNewAssistantTask) == "function" then M.StartNewAssistantTask() end
     return true
 end
 
 local function AdvanceStage(stage, resetCursor)
-    if stage.index >= #STAGES then return CompleteTour() end
-    return SetStage(STAGES[stage.index + 1], resetCursor ~= false)
+    local current, total, stages = ActiveStagePosition(stage)
+    if current >= total then return CompleteTour() end
+    return SetStage(stages[current + 1], resetCursor ~= false)
 end
 
 local function ReturnToPreviousStage(stage)
-    if stage.index <= 1 then return false end
-    local previous = STAGES[stage.index - 1]
+    local current, _, stages = ActiveStagePosition(stage)
+    if current <= 1 then return false end
+    local previous = stages[current - 1]
     ClearSectionEmphasis()
     Invoke(Tour(), "SetStage", previous.id, previous.index)
     return SelectExpectedPage(previous)
+end
+
+local function FindAvailableControl(stage, sections, startIndex, direction)
+    sections = type(sections) == "table" and sections or {}
+    direction = direction == -1 and -1 or 1
+    local index = min(max(tonumber(startIndex) or (direction == 1 and 1 or #sections), 1), max(1, #sections))
+    while sections[index] do
+        local section = sections[index]
+        local controls = SectionControls(stage.pageKey, section, sections, nil, stage.includeEphemeralControls, stage.includeLockedControls, stage.controlLimit, stage.controlPaths)
+        if #controls > 0 then
+            local controlIndex = direction == 1 and 1 or #controls
+            return section, index, controls, controls[controlIndex], controlIndex
+        end
+        index = index + direction
+    end
+    return nil, 0, {}, nil, 0
 end
 
 local function CurrentPosition(stage)
@@ -1136,12 +1709,35 @@ local function CurrentPosition(stage)
     local sections = StageSections(stage)
     local cursor = ReadCursor(stage)
     local section, index = FindCursorSection(cursor, sections)
-    if not section then cursor.overview = true end
-    local controls = section and SectionControls(stage.pageKey, section, sections, nil, stage.includeEphemeralControls) or {}
+    local controls = section and SectionControls(stage.pageKey, section, sections, nil, stage.includeEphemeralControls, stage.includeLockedControls, stage.controlLimit, stage.controlPaths) or {}
     local control, controlIndex = FindCursorControl(cursor, controls)
+    local normalized = false
+    if cursor.overview ~= false or not section or not control then
+        local startIndex = section and index or 1
+        section, index, controls, control, controlIndex = FindAvailableControl(stage, sections, startIndex, 1)
+        if not control and startIndex > 1 then
+            section, index, controls, control, controlIndex = FindAvailableControl(stage, sections, 1, 1)
+        end
+        if control then
+            cursor = {
+                overview = false,
+                sectionId = section.id,
+                sectionIndex = index,
+                controlId = control.id,
+                controlIndex = controlIndex,
+                controlTotal = #controls,
+            }
+            WriteCursor(stage, cursor)
+            normalized = true
+        else
+            cursor = InitialCursor(stage)
+            cursor.overview = true
+        end
+    end
     return {
-        overview = cursor.overview ~= false,
+        overview = control == nil,
         cursor = cursor,
+        cursorNormalized = normalized,
         sections = sections,
         section = section,
         index = index,
@@ -1151,31 +1747,77 @@ local function CurrentPosition(stage)
     }
 end
 
+local function TouchSignature(stage, position)
+    local control = position and position.control
+    if not (stage and control) then return nil end
+    return table.concat({ stage.id or "", position.section and position.section.id or "", control.id or "" }, "\031")
+end
+
+local function CurrentControlTouched(stage, position)
+    local signature = TouchSignature(stage, position)
+    return signature ~= nil and Runtime.touchedSignature == signature
+end
+
+local function TourExperience()
+    local summary = M.GetGuidedTourSummary and M.GetGuidedTourSummary() or {}
+    return ((tonumber(summary.reviewedControls) or 0) * 10)
+        + ((tonumber(summary.keptControls) or 0) * 5)
+        + ((tonumber(summary.reviewedSections) or 0) * 20)
+        + ((tonumber(summary.reviewedStages) or 0) * 50)
+end
+
+function M.NotifyGuidedTourControlInteraction(widget)
+    if not TourIsActive() or Runtime.manualAway or Runtime.warning or ProfileMismatch() then return false end
+    local stage = CurrentStage()
+    if stage.special then return false end
+    local position = CurrentPosition(stage)
+    local control = position.control
+    if not (control and control.actionable ~= false) then return false end
+    local command = widget and widget._msuf2CommandAction
+    local controlId = command and command.controlId or (widget and widget._msuf2ControlId)
+    if widget ~= control.widget and tostring(controlId or "") ~= tostring(control.id or "") then return false end
+    local signature = TouchSignature(stage, position)
+    if not signature then return false end
+    Runtime.touchedSignature = signature
+    local T = M.Theme
+    if T and type(T.PlayNeonFlash) == "function" and control.widget and type(control.widget.CreateTexture) == "function" then
+        T.PlayNeonFlash(control.widget, "success", { alpha = 0.34, duration = 0.92 })
+    end
+    if type(M.RefreshGuidedTourChrome) == "function" then M.RefreshGuidedTourChrome("CONTROL_USED") end
+    return true
+end
+
 local function KeepLabel(stage, position)
     if stage.special then return "Keep as is" end
-    if position.overview then return "Keep current" end
     if ControlIsAction(position.control) then return "Keep action" end
-    if position.control then return "Keep option" end
-    return "Keep section"
+    if position.control then return "Keep unchanged" end
+    return "Skip empty mission"
 end
 
 local function SetSectionCursor(stage, sections, sectionIndex, controlIndex, reason)
     local section = sections[sectionIndex]
     if not section then return false end
-    local controls = SectionControls(stage.pageKey, section, sections, nil, stage.includeEphemeralControls)
-    controlIndex = min(max(tonumber(controlIndex) or 0, 0), #controls)
-    local control = controlIndex > 0 and controls[controlIndex] or nil
+    local controls = SectionControls(stage.pageKey, section, sections, nil, stage.includeEphemeralControls, stage.includeLockedControls, stage.controlLimit, stage.controlPaths)
+    if #controls == 0 then return false end
+    controlIndex = min(max(tonumber(controlIndex) or 1, 1), #controls)
+    local control = controls[controlIndex]
     WriteCursor(stage, {
         overview = false,
         sectionId = section.id,
         sectionIndex = sectionIndex,
-        controlId = control and control.id or nil,
-        controlIndex = control and controlIndex or 0,
+        controlId = control.id,
+        controlIndex = controlIndex,
         controlTotal = #controls,
     })
     FocusCurrentSection(stage)
     M.RefreshGuidedTourChrome(reason or "GUIDED_POSITION")
     return true
+end
+
+local function SetAvailableControlCursor(stage, sections, startIndex, direction, reason)
+    local _, sectionIndex, _, _, controlIndex = FindAvailableControl(stage, sections, startIndex, direction)
+    if sectionIndex < 1 or controlIndex < 1 then return false end
+    return SetSectionCursor(stage, sections, sectionIndex, controlIndex, reason)
 end
 
 local function AdvanceCurrent(result)
@@ -1189,34 +1831,21 @@ local function AdvanceCurrent(result)
         Invoke(Tour(), "RecordStage", stage.id, result)
         return AdvanceStage(stage, true)
     end
-    if position.overview then
-        if result == "reviewed" and #position.sections > 0 then
-            return SetSectionCursor(stage, position.sections, 1, 0, "FIRST_SECTION")
-        end
+    if position.overview or not position.control then
+        if result == "reviewed" and SetAvailableControlCursor(stage, position.sections, 1, 1, "FIRST_CONTROL") then return true end
         RecordWholeStage(stage, position.sections, result)
         return AdvanceStage(stage, true)
     end
 
-    if not position.control then
-        if result == "reviewed" and #position.controls > 0 then
-            return SetSectionCursor(stage, position.sections, position.index, 1, "FIRST_CONTROL")
-        end
-        if result == "reviewed" then
-            RecordSectionOnly(stage, position.section, result)
-        else
-            RecordSectionAndControls(stage, position.section, result, position.sections)
-        end
-    else
-        RecordControl(stage, position.section, position.control, result)
-        if position.controlIndex < #position.controls then
-            return SetSectionCursor(stage, position.sections, position.index, position.controlIndex + 1, "NEXT_CONTROL")
-        end
-        RecordSectionOnly(stage, position.section, DerivedSectionResult(stage, position.controls, result))
+    RecordControl(stage, position.section, position.control, result)
+    if position.controlIndex < #position.controls then
+        return SetSectionCursor(stage, position.sections, position.index, position.controlIndex + 1, "NEXT_CONTROL")
     end
+    RecordSectionOnly(stage, position.section, DerivedSectionResult(stage, position.controls, result))
 
-    if position.index < #position.sections then
-        return SetSectionCursor(stage, position.sections, position.index + 1, 0, "NEXT_SECTION")
-    end
+    if position.index < #position.sections
+        and SetAvailableControlCursor(stage, position.sections, position.index + 1, 1, "NEXT_CONTROL")
+    then return true end
     Invoke(Tour(), "RecordStage", stage.id, DerivedStageResult(stage, position.sections, result))
     return AdvanceStage(stage, true)
 end
@@ -1241,16 +1870,14 @@ local function BackCurrent()
     if stage.special or position.overview then return ReturnToPreviousStage(stage) end
     if position.control then
         local previousControl = position.controlIndex - 1
-        return SetSectionCursor(stage, position.sections, position.index, max(0, previousControl), previousControl > 0 and "PREVIOUS_CONTROL" or "SECTION_OVERVIEW")
+        if previousControl > 0 then
+            return SetSectionCursor(stage, position.sections, position.index, previousControl, "PREVIOUS_CONTROL")
+        end
+        if position.index > 1
+            and SetAvailableControlCursor(stage, position.sections, position.index - 1, -1, "PREVIOUS_CONTROL")
+        then return true end
     end
-    if position.index <= 1 then
-        WriteCursor(stage, { overview = true, sectionIndex = 0, controlIndex = 0, controlTotal = 0 })
-        if type(M.CloseAutoFocusedSections) == "function" then M.CloseAutoFocusedSections(stage.pageKey) end
-        ClearSectionEmphasis(stage.pageKey)
-        M.RefreshGuidedTourChrome("SECTION_OVERVIEW")
-        return true
-    end
-    return SetSectionCursor(stage, position.sections, position.index - 1, 0, "PREVIOUS_SECTION")
+    return ReturnToPreviousStage(stage)
 end
 
 local function LabelList(controls, limit)
@@ -1278,39 +1905,21 @@ end
 
 local function SkipWarning(stage, position)
     if position.control then
-        local help = tostring(position.control.help or ""):gsub("^%s+", ""):gsub("%s+$", "")
-        local detail = help ~= "" and help or format(Tr("the %s option"), Tr(position.control.label))
-        return table.concat({
-            format(Tr("Skip %s?"), Tr(position.control.label)),
-            format(Tr("What you will miss: %s"), Tr(detail)),
-            position.control.classification == "action"
-                and Tr("The action is not run. Use Confirm skip to continue.")
-                or Tr("Its current/default value stays unchanged. Use Confirm skip to continue."),
-        }, "\n"), 1
+        return format(Tr("SKIP CHECKPOINT? %s stays unchanged. Press Confirm skip."), Tr(position.control.label)), 1
     end
 
     local controls = position.section and position.controls
         or (not stage.special and AllStageControls(stage, position.sections))
         or {}
-    local parts = { Tr(stage.impact) }
+    local parts = {}
     if position.section then
-        parts[1] = format(Tr("Skip the %s section?"), Tr(position.section.label))
-        if #controls > 0 then
-            parts[#parts + 1] = format(Tr("All %d options in this section stay unreviewed: %s."), #controls, LabelList(controls, 4))
-        else
-            parts[#parts + 1] = Tr("This section has no registered option, so only its guidance is skipped.")
-        end
+        parts[1] = format(Tr("SKIP CHECKPOINT? %s and %d settings stay unchanged."), Tr(position.section.label), #controls)
     elseif not stage.special and #position.sections > 0 then
-        parts[#parts + 1] = format(Tr("%d native sections."), #position.sections)
-        if #controls > 0 then
-            parts[#parts + 1] = format(Tr("All %d options stay unreviewed: %s."), #controls, LabelList(controls, 4))
-        end
-    elseif #controls > 0 then
-        parts[#parts + 1] = format(Tr("%d visible options: %s."), #controls, LabelList(controls, 4))
-    elseif not stage.special and #position.sections > 0 then
-        parts[#parts + 1] = Tr("Their current options remain unreviewed.")
+        parts[1] = format(Tr("SKIP MISSION? %d checkpoints and %d settings stay unchanged."), #position.sections, #controls)
+    else
+        parts[1] = format(Tr("SKIP MISSION? %s"), Tr(stage.impact))
     end
-    parts[#parts + 1] = Tr("Current/default values stay unchanged. Use Confirm skip to continue.")
+    parts[#parts + 1] = Tr("Press Confirm skip to continue.")
     return table.concat(parts, "\n"), #controls
 end
 
@@ -1345,6 +1954,7 @@ local function PauseTour()
     Runtime.warning = nil
     Runtime.manualAway = nil
     ClearSectionEmphasis()
+    SetTourPreviewInlineMode(false)
     local frame = M.frame
     if type(M.HideSlashMenuAndMinibar) == "function" then
         M.HideSlashMenuAndMinibar(frame)
@@ -1391,8 +2001,10 @@ end
 local function AnchorTourScroll(chrome, active)
     if not (chrome and chrome.scroll and chrome.host and chrome.status) then return end
     local scroll = chrome.scroll
+    local topOwner = chrome.status
+    if active then topOwner = chrome end
     scroll:ClearAllPoints()
-    scroll:SetPoint("TOPLEFT", active and chrome or chrome.status, "BOTTOMLEFT", 0, 0)
+    scroll:SetPoint("TOPLEFT", topOwner, "BOTTOMLEFT", 0, 0)
     scroll:SetPoint("BOTTOMRIGHT", chrome.host, "BOTTOMRIGHT", -24, 0)
     scroll._msuf2MaxScroll = nil
     scroll._msuf2SmoothScrollTarget = nil
@@ -1418,7 +2030,7 @@ local function LayoutChrome(chrome, warning, helpText)
     chrome.title:SetPoint("RIGHT", chrome.step, "LEFT", -12, 0)
     chrome.step:ClearAllPoints()
     chrome.step:SetPoint("TOPRIGHT", chrome, "TOPRIGHT", -16, -16)
-    chrome.step:SetWidth(compact and 84 or 112)
+    chrome.step:SetWidth(compact and 118 or 166)
     chrome.section:ClearAllPoints()
     chrome.section:SetPoint("TOPLEFT", chrome, "TOPLEFT", 60, -32)
     chrome.section:SetPoint("TOPRIGHT", chrome, "TOPRIGHT", -16, -32)
@@ -1509,23 +2121,24 @@ end
 
 local function ProgressFraction(stage, position)
     local within = 0
-    if not stage.special and not position.overview and #position.sections > 0 then
-        local total, completed = 1, 1 -- stage overview
+    if not stage.special and position.control and #position.sections > 0 then
+        local total, completed = 0, 0
         local records = RuntimeControlRecords()
         for i = 1, #position.sections do
-            local controls = SectionControls(stage.pageKey, position.sections[i], position.sections, records, stage.includeEphemeralControls)
-            total = total + 1 + #controls -- section overview plus every registered control
+            local controls = SectionControls(stage.pageKey, position.sections[i], position.sections, records, stage.includeEphemeralControls, stage.includeLockedControls, stage.controlLimit, stage.controlPaths)
+            total = total + #controls
             if i < position.index then
-                completed = completed + 1 + #controls
+                completed = completed + #controls
             elseif i == position.index and position.control then
-                completed = completed + 1 + max(0, position.controlIndex - 1)
+                completed = completed + max(0, position.controlIndex - 1)
             end
         end
         within = min(max(completed / max(1, total), 0), 0.99)
     elseif stage.id == "final_review" then
         within = 1
     end
-    return min(max(((stage.index - 1) + within) / #STAGES, 0), 1)
+    local current, total = ActiveStagePosition(stage)
+    return min(max(((current - 1) + within) / max(1, total), 0), 1)
 end
 
 local function PlayChromeTransition(chrome, signature, reason)
@@ -1560,7 +2173,7 @@ local function FlashGuidedClickTargets(chrome, stage, position, context, reason)
     local T = M.Theme
     if not (T and type(T.PlayNeonFlash) == "function") then return end
     context = context or {}
-    local editStatus = stage.id == "edit_mode"
+    local editStatus = (stage.id == "edit_mode" or stage.id == "group_edit_mode")
         and (type(M.EditModeLifecycleStatus) == "function" and M.EditModeLifecycleStatus() or {})
         or {}
     local signature = table.concat({
@@ -1570,10 +2183,10 @@ local function FlashGuidedClickTargets(chrome, stage, position, context, reason)
         context.profileMismatch and "profile" or "profile-ok",
         context.manualAway and "away" or "here",
         context.warning and tostring(context.warning.signature or "warning") or "normal",
-        tostring(Preference("playstyle") or ""),
-        tostring(Preference("informationStyle") or ""),
+        tostring(SelectedSetupArea() or ""),
         tostring(CooldownAnchorDecision() or ""),
         EditModePlacementComplete() and "placed" or "unplaced",
+        GroupEditModePlacementComplete() and "group-placed" or "group-unplaced",
         editStatus.active and "edit-on" or "edit-off",
     }, "\031")
     if Runtime.lastClickCueSignature == signature then return end
@@ -1599,15 +2212,25 @@ local function FlashGuidedClickTargets(chrome, stage, position, context, reason)
     elseif context.warning then
         Add(chrome.skip)
     elseif stage.id == "menu_basics" then
-        if Preference("playstyle") == nil then AddGroup("playstyle") end
-        if Preference("informationStyle") == nil then AddGroup("informationStyle") end
-        if PersonalQuestionsComplete() then Add(chrome.next) end
+        if not SetupAreaDecisionComplete() then
+            AddGroup("setupArea")
+        else
+            Add(chrome.next)
+        end
     elseif stage.id == "edit_mode" then
         if not CooldownAnchorDecisionComplete() then
             AddGroup("anchor")
         elseif EditModePlacementComplete() then
             Add(chrome.next)
         elseif editStatus.active ~= true then
+            AddGroup("edit_mode_toggle")
+            Add(M.dashboardToolbarEditModeButton)
+        end
+    elseif stage.id == "group_edit_mode" then
+        if GroupEditModePlacementComplete() then
+            Add(chrome.next)
+        elseif editStatus.active ~= true then
+            AddGroup("group_edit_mode_toggle")
             Add(M.dashboardToolbarEditModeButton)
         end
     elseif stage.id == "final_review" or not position.control then
@@ -1627,6 +2250,7 @@ function M.RefreshGuidedTourChrome(reason)
     local chrome = Runtime.chrome
     if not chrome then return false end
     if not TourIsActive() then
+        SetTourPreviewInlineMode(false)
         Runtime.warning = nil
         Runtime.manualAway = nil
         Runtime.lastVisualSignature = nil
@@ -1647,10 +2271,15 @@ function M.RefreshGuidedTourChrome(reason)
     end
     local expected = ExpectedPage(stage)
     local position = CurrentPosition(stage)
+    local touched = CurrentControlTouched(stage, position)
     local currentPage = M.activeKey
     if currentPage and currentPage ~= expected then Runtime.manualAway = true end
     local manualAway = Runtime.manualAway == true and currentPage ~= expected
     local warning = Runtime.warning
+    SetTourPreviewInlineMode(not profileMismatch and not manualAway)
+    if position.cursorNormalized and not profileMismatch and not manualAway then
+        FocusCurrentSection(stage)
+    end
     local showEditModeOpenCue = not profileMismatch
         and not manualAway
         and not warning
@@ -1659,7 +2288,7 @@ function M.RefreshGuidedTourChrome(reason)
         and format(Tr("This tour belongs to profile %s. You are now editing %s. Restart the tour here or switch back to continue safely."), tourProfile, activeProfile)
         or manualAway and Tr("Return to the guided page when you are ready to continue.")
         or warning and warning.text
-        or StageCue(stage, position)
+        or StageCue(stage, position, touched)
     if profileMismatch or manualAway then
         ClearSectionEmphasis()
     elseif stage.special or position.overview then
@@ -1669,7 +2298,8 @@ function M.RefreshGuidedTourChrome(reason)
         EmphasizeControl(stage, position.section, position.controls, position.control)
     end
     SetStageIcon(chrome, stage)
-    chrome.step:SetText(format(Tr("Step %d / %d"), stage.index, #STAGES))
+    local stagePosition, stageTotal = ActiveStagePosition(stage)
+    chrome.step:SetText(format(Tr("MISSION %d/%d - %d XP"), stagePosition, stageTotal, TourExperience()))
 
     if profileMismatch then
         chrome.title:SetText(Tr("Active profile changed"))
@@ -1682,37 +2312,65 @@ function M.RefreshGuidedTourChrome(reason)
     else
         chrome.title:SetText(PersonalizedTitle(stage))
         if stage.special then
-            chrome.section:SetText(stage.id == "final_review" and Tr("Final review") or Tr("Guided introduction"))
+            local labels = {
+                menu_basics = "QUICK START",
+                unit_intro = "PART 1 - UNITFRAMES",
+                edit_mode = "MOVE VS SIZE",
+                group_intro = "PART 2 - GROUP FRAMES",
+                group_edit_mode = "MOVE VS SIZE",
+                class_intro = "PART 3 - CLASS RESOURCES",
+                power_moves = "MSUF POWER MOVES",
+                final_review = "READY TO PLAY",
+            }
+            chrome.section:SetText(Tr(labels[stage.id] or "GUIDED SETUP"))
         elseif position.overview then
             local controls = AllStageControls(stage, position.sections)
-            chrome.section:SetText(format(Tr("Overview · %d sections · %d options"), #position.sections, #controls))
+            chrome.section:SetText(format(Tr("MISSION BRIEF - %d checkpoints - %d settings"), #position.sections, #controls))
         elseif position.control then
             if ControlIsAction(position.control) then
-                chrome.section:SetText(format(Tr("Section %d / %d · Action %d / %d · %s"), position.index, #position.sections, position.controlIndex, #position.controls, Tr(position.control.label)))
+                chrome.section:SetText(format(Tr("CHECKPOINT %d/%d - ACTION %d/%d - %s"), position.index, #position.sections, position.controlIndex, #position.controls, Tr(position.control.label)))
             else
-                chrome.section:SetText(format(Tr("Section %d / %d · Option %d / %d · %s"), position.index, #position.sections, position.controlIndex, #position.controls, Tr(position.control.label)))
+                chrome.section:SetText(format(Tr("CHECKPOINT %d/%d - SETTING %d/%d - %s"), position.index, #position.sections, position.controlIndex, #position.controls, Tr(position.control.label)))
             end
         elseif position.section then
-            chrome.section:SetText(format(Tr("Section %d / %d · %s · %d options"), position.index, #position.sections, Tr(position.section.label), #position.controls))
+            chrome.section:SetText(format(Tr("CHECKPOINT %d/%d - %s - %d settings"), position.index, #position.sections, Tr(position.section.label), #position.controls))
         end
         chrome.help:SetText(displayHelp)
     end
     local alert = profileMismatch or warning
-    SetFontColor(chrome.help, alert and (M.Theme.colors.warning or M.Theme.colors.warn) or M.Theme.colors.muted)
-    local cueColor = alert and (M.Theme.colors.warning or M.Theme.colors.warn) or M.Theme.colors.accent
+    local controlCue = not alert and not stage.special and position.control ~= nil
+    local guidedGreen = M.Theme.colors.ok or { 0.24, 0.88, 0.40, 1 }
+    SetFontColor(chrome.help, alert and (M.Theme.colors.warning or M.Theme.colors.warn)
+        or controlCue and guidedGreen
+        or M.Theme.colors.muted)
+    local cueColor = alert and (M.Theme.colors.warning or M.Theme.colors.warn)
+        or controlCue and guidedGreen
+        or M.Theme.colors.accent
     if cueColor then chrome.cueArrow:SetVertexColor(cueColor[1], cueColor[2], cueColor[3], 1) end
 
     local fraction = ProgressFraction(stage, position)
     chrome.progressFill:SetWidth(max(1, floor(((chrome.progress:GetWidth() or 1) - 2) * fraction)))
 
-    local firstPosition = stage.index == 1 and (stage.special or position.overview)
+    local firstPosition = stagePosition == 1 and stage.special
     local final = stage.id == "final_review"
     local waitingForAnchorDecision = stage.id == "edit_mode" and not CooldownAnchorDecisionComplete()
     local waitingForEditModeMove = stage.id == "edit_mode" and not waitingForAnchorDecision and not EditModePlacementComplete()
+    local waitingForGroupMove = stage.id == "group_edit_mode" and not GroupEditModePlacementComplete()
     SetButtonText(chrome.back, profileMismatch and "Restart tour" or (warning and "Cancel" or "Back"))
     SetButtonText(chrome.keep, KeepLabel(stage, position))
     SetButtonText(chrome.skip, warning and "Confirm skip" or "Skip")
-    SetButtonText(chrome.next, manualAway and "Return" or (final and "Finish" or (waitingForEditModeMove and "Move a frame first" or "Next")))
+    local nextLabel = "Next setting"
+    if manualAway then nextLabel = "Return"
+    elseif final then nextLabel = "Finish & open Assistant"
+    elseif waitingForEditModeMove then nextLabel = EditModeMovementComplete() and "Open size popup" or "Move Player first"
+    elseif waitingForGroupMove then nextLabel = GroupEditModeMovementComplete() and "Open size popup" or "Move Party first"
+    elseif touched then nextLabel = "Claim +10 XP"
+    elseif stage.id == "menu_basics" then nextLabel = "Start tour"
+    elseif stage.id == "edit_mode" then nextLabel = "Claim checkpoint"
+    elseif stage.id == "power_moves" then nextLabel = "Continue"
+    elseif position.control then nextLabel = "Change it first"
+    end
+    SetButtonText(chrome.next, nextLabel)
     SetButtonText(chrome.pause, "Pause")
     LayoutChrome(chrome, alert ~= nil and alert ~= false, displayHelp)
 
@@ -1732,10 +2390,13 @@ function M.RefreshGuidedTourChrome(reason)
         SetButtonEnabled(chrome.skip, true)
         SetButtonEnabled(chrome.next, false)
     else
+        local changeReady = stage.special or not position.control or touched
         SetButtonEnabled(chrome.back, not firstPosition)
-        SetButtonEnabled(chrome.keep, not final and stage.id ~= "menu_basics" and not waitingForAnchorDecision and not waitingForEditModeMove)
+        SetButtonEnabled(chrome.keep, not final and stage.id ~= "menu_basics" and not waitingForAnchorDecision and not waitingForEditModeMove and not waitingForGroupMove)
         SetButtonEnabled(chrome.skip, not final)
-        SetButtonEnabled(chrome.next, (stage.id ~= "menu_basics" or PersonalQuestionsComplete()) and not waitingForAnchorDecision and not waitingForEditModeMove)
+        SetButtonEnabled(chrome.next, changeReady
+            and (stage.id ~= "menu_basics" or SetupAreaDecisionComplete())
+            and not waitingForAnchorDecision and not waitingForEditModeMove and not waitingForGroupMove)
     end
     SetButtonEnabled(chrome.pause, true)
     chrome:Show()
@@ -1783,9 +2444,25 @@ function M.RunGuidedTourStep(step)
     step = tostring(step or ""):lower()
     if BlockedByCombat() or not TourIsActive() then return false, "guided_setup_inactive" end
     local stage = CurrentStage()
+    if step == "next" and stage.id == "menu_basics" and not SetupAreaDecisionComplete() then
+        return false, "guided_setup_area_required"
+    end
     if (step == "keep" or step == "next") and stage.id == "edit_mode" then
         if not CooldownAnchorDecisionComplete() then return false, "guided_edit_mode_anchor_required" end
         if not EditModePlacementComplete() then return false, "guided_edit_mode_move_required" end
+    end
+    if (step == "keep" or step == "next") and stage.id == "group_edit_mode"
+        and not GroupEditModePlacementComplete()
+    then
+        return false, "guided_group_edit_mode_move_required"
+    end
+    if step == "next" and not Runtime.manualAway and not Runtime.warning
+        and not select(1, ProfileMismatch()) and not stage.special
+    then
+        local position = CurrentPosition(stage)
+        if position.control and not CurrentControlTouched(stage, position) then
+            return false, "guided_setting_change_required"
+        end
     end
     if step == "back" then
         BackCurrent()
@@ -1882,10 +2559,10 @@ function M.InstallGuidedTourChrome(frame, status, host, scroll)
     chrome.pause = ChromeButton(chrome, T, "Pause", function() M.RunGuidedTourStep("pause") end)
     if type(T.SkinPrimaryButton) == "function" then T.SkinPrimaryButton(chrome.next) end
 
-    RegisterChromeControl(chrome.back, "back", "Guided setup: Back", "Returns to the previous section, overview or stage.")
-    RegisterChromeControl(chrome.keep, "keep", "Guided setup: Keep current/default", "Keeps current values unchanged and advances.")
+    RegisterChromeControl(chrome.back, "back", "Guided setup: Back", "Returns to the previous highlighted setting or mission.")
+    RegisterChromeControl(chrome.keep, "keep", "Guided setup: Keep unchanged", "Keeps the highlighted setting unchanged and moves to the next green target.")
     RegisterChromeControl(chrome.skip, "skip", "Guided setup: Skip", "Shows an inline impact warning before skipping.")
-    RegisterChromeControl(chrome.next, "next", "Guided setup: Next", "Opens the next guided section or stage.")
+    RegisterChromeControl(chrome.next, "next", "Guided setup: Next", "Unlocks after the highlighted setting changes, then marks the next setting in green.")
     RegisterChromeControl(chrome.pause, "pause", "Guided setup: Pause", "Closes the menu while preserving guided setup progress.")
 
     Runtime.chrome = chrome
@@ -1909,20 +2586,26 @@ end
 
 function M.GuidedTourOnPageSelected(pageKey)
     if not TourIsActive() then
+        SetTourPreviewInlineMode(false)
         M.RefreshGuidedTourChrome("PAGE_INACTIVE")
         return false
     end
     local stage = CurrentStage()
     local expected = ExpectedPage(stage)
     if tostring(pageKey or "") ~= expected then
+        SetTourPreviewInlineMode(false)
         Runtime.manualAway = true
         Runtime.warning = nil
         ClearSectionEmphasis()
         M.RefreshGuidedTourChrome("MANUAL_PAGE")
         return false
     end
+    SetTourPreviewInlineMode(true)
     Runtime.manualAway = nil
-    if not stage.special then FocusCurrentSection(stage) end
+    if not stage.special then
+        CurrentPosition(stage) -- migrate old overview/section cursors to a real control first
+        FocusCurrentSection(stage)
+    end
     M.RefreshGuidedTourChrome("GUIDED_PAGE")
     return true
 end
@@ -1941,9 +2624,10 @@ function M.StartGuidedTour(opts)
     Invoke(FirstLoad(), "Start", "guided_tour")
     Runtime.warning = nil
     Runtime.manualAway = nil
+    Runtime.touchedSignature = nil
     Runtime.lastVisualSignature = nil
     Invoke(Tour(), "SetStage", stage.id, stage.index)
-    WriteCursor(stage, { overview = true, sectionIndex = 0, controlIndex = 0, controlTotal = 0 })
+    WriteCursor(stage, InitialCursor(stage))
     if type(M.InvalidatePage) == "function" then
         M.InvalidatePage("home")
         M.InvalidatePage("guided_setup")
@@ -1970,7 +2654,7 @@ function M.OpenGuidedTourAtStage(stageId, opts)
     end
     ClearSectionEmphasis()
     Invoke(Tour(), "SetStage", stage.id, stage.index)
-    if opts.resetCursor == true then WriteCursor(stage, { overview = true, sectionIndex = 0, controlIndex = 0, controlTotal = 0 }) end
+    if opts.resetCursor == true then WriteCursor(stage, InitialCursor(stage)) end
     Runtime.warning = nil
     Runtime.manualAway = nil
     return SelectExpectedPage(stage)
@@ -1983,6 +2667,9 @@ end
 function M.GetGuidedTourSummary()
     local ok, source = Invoke(Tour(), "GetSummary")
     source = ok and type(source) == "table" and source or {}
+    local activeStages = ActiveStages()
+    local activeStageIds = {}
+    for i = 1, #activeStages do activeStageIds[activeStages[i].id] = true end
     local summary = {
         reviewedStages = tonumber(source.reviewedStages) or 0,
         keptStages = tonumber(source.keptStages) or 0,
@@ -1993,15 +2680,15 @@ function M.GetGuidedTourSummary()
         reviewedControls = tonumber(source.reviewedControls) or 0,
         keptControls = tonumber(source.keptControls) or 0,
         skippedControls = tonumber(source.skippedControls) or 0,
-        totalStages = #STAGES,
+        totalStages = #activeStages,
         skippedItems = {},
         skippedAreas = {},
         skippedSectionItems = {},
     }
     local state = TourState()
     local stageResults = type(state.stageResults) == "table" and state.stageResults or {}
-    for i = 1, #STAGES do
-        local stage = STAGES[i]
+    for i = 1, #activeStages do
+        local stage = activeStages[i]
         if stageResults[stage.id] == "s" then
             summary.skippedAreas[#summary.skippedAreas + 1] = Tr(stage.title)
         end
@@ -2013,7 +2700,7 @@ function M.GetGuidedTourSummary()
             local metadata = type(sectionMetadata[resultKey]) == "table" and sectionMetadata[resultKey] or {}
             local stageId = tostring(metadata.stageId or resultKey:match("^(.-)\031") or "")
             local stage = STAGE_BY_ID[stageId]
-            if stage and stageResults[stageId] ~= "s" then
+            if stage and activeStageIds[stageId] and stageResults[stageId] ~= "s" then
                 summary.skippedSectionItems[#summary.skippedSectionItems + 1] = {
                     stageIndex = stage.index,
                     stageLabel = Tr(stage.title),
@@ -2033,7 +2720,7 @@ function M.GetGuidedTourSummary()
             local sectionId = tostring(item.sectionId or "")
             local coveredByStage = stageResults[stageId] == "s"
             local coveredBySection = sectionId ~= "" and sectionResults[stageId .. "\031" .. sectionId] == "s"
-            if not coveredByStage and not coveredBySection then
+            if activeStageIds[stageId] and not coveredByStage and not coveredBySection then
                 local stage = STAGE_BY_ID[stageId]
                 summary.skippedItems[#summary.skippedItems + 1] = {
                     controlId = tostring(controlId),
@@ -2152,20 +2839,38 @@ end
 local function BuildMenuBasicsPage(ctx, T, W)
     Runtime.specialClickTargets = { stageId = "menu_basics", groups = {} }
     local b = W.PageBuilder(ctx)
-    Header(b, format(Tr("Welcome, %s"), PlayerDisplayName()), "Two quick choices make the guide fit how you play.")
-    PersonalQuestion(ctx, b, T, W, "playstyle", "Where do you spend most of your time?", {
-        { value = "solo", text = "Solo / World", icon = "uf_player" },
-        { value = "dungeons", text = "Dungeons", icon = "gf_layout" },
-        { value = "raid", text = "Raid / Mythic", icon = "gf_indicators" },
+    Header(b, format(Tr("Welcome, %s"), PlayerDisplayName()), "Choose one route. Everything is split into three short parts.")
+    PersonalQuestion(ctx, b, T, W, "setupArea", "What do you want to set up?", {
+        { value = "unitframes", text = "Unitframes", icon = "uf_player" },
+        { value = "groupframes", text = "Group Frames", icon = "gf_layout" },
+        { value = "classresources", text = "Class Resources", icon = "classpower" },
+        { value = "all", text = "Everything", icon = "home" },
     })
-    PersonalQuestion(ctx, b, T, W, "informationStyle", "How much combat information should stand out?", {
-        { value = "calm", text = "Clean", icon = "opt_fonts" },
-        { value = "balanced", text = "Balanced", icon = "opt_bars" },
-        { value = "detailed", text = "Combat detail", icon = "auras3_styling" },
-    })
-    InfoCard(b, T, "Navigate and find", "Use the left rail for pages and Search for an exact native control.", "home", 76)
-    InfoCard(b, T, "Autosave and history", "Changes autosave. Undo and Redo restore recent edits; Pause saves this exact tour position.", "profiles", 78)
-    InfoCard(b, T, "Reset with intent", "Reset All affects only the current supported page and asks first.", "gameplay", 76)
+    InfoCard(b, T, "Green means: press this now", "Every checkpoint marks one real control. Change it, see the result live, then follow the next green target.", "home", 82)
+    return math.abs(b.y) + 34
+end
+
+local function BuildChapterPage(ctx, T, W, stage)
+    Runtime.specialClickTargets = { stageId = stage.id, groups = {} }
+    local b = W.PageBuilder(ctx)
+    local selected = SelectedSetupArea()
+    local all = selected == "all"
+    if stage.id == "unit_intro" then
+        Header(b, all and "Part 1 of 3 - Unitframes" or "Unitframes", "Build Player once. Copy it when it feels right.")
+        InfoCard(b, T, "Move the whole frame", "Edit Mode: drag the Player mover to place the frame on screen.", "uf_player", 76)
+        InfoCard(b, T, "Change its size", "Click the mover in Edit Mode: its popup contains Width, Height, and other frame details.", "uf_player", 82)
+        InfoCard(b, T, "Then Copy To", "Tune Player in the Live Preview, select All, and copy the result to another Unitframe.", "uf_target", 82)
+    elseif stage.id == "group_intro" then
+        if type(M.SetMenuStateValue) == "function" then M.SetMenuStateValue("gfScope", "party") else M.gfScope = "party" end
+        Header(b, all and "Part 2 of 3 - Group Frames" or "Group Frames", "Build Party once. Copy it to Raid or Mythic Raid.")
+        InfoCard(b, T, "Move the group", "Edit Mode: drag the Party Frames mover to place the complete group container.", "gf_layout", 76)
+        InfoCard(b, T, "Change frame geometry", "Click the mover: its popup controls frame Width, Height, and Spacing.", "gf_layout", 82)
+        InfoCard(b, T, "Then Copy To", "Finish Party, select All, and press Raid or Mythic to copy the setup instantly.", "gf_indicators", 82)
+    else
+        Header(b, all and "Part 3 of 3 - Class Resources" or "Class Resources", "Use the interactive preview to shape your class display.")
+        InfoCard(b, T, "Class-aware preview", "Test the current class layout and change its size and arrangement live.", "classpower", 78)
+        InfoCard(b, T, "Cooldown-aware placement", "Anchor it to Essential Cooldowns or keep it independently placed in Edit Mode.", "classpower", 82)
+    end
     return math.abs(b.y) + 34
 end
 
@@ -2189,7 +2894,7 @@ end
 local function BuildEditModePage(ctx, T, W)
     Runtime.specialClickTargets = { stageId = "edit_mode", groups = {} }
     local b = W.PageBuilder(ctx)
-    Header(b, "Choose the frame anchor first", "This decides what every Unitframe position is relative to. Choose before opening MSUF Edit Mode.")
+    Header(b, "Move vs size", "Drag Player to move it. Click Player to open the popup for Width and Height.")
 
     local decisionCard = b:Section("", 146)
     if decisionCard.title then decisionCard.title:SetText("") end
@@ -2204,10 +2909,7 @@ local function BuildEditModePage(ctx, T, W)
     decisionCopy:SetPoint("TOPLEFT", decisionCard, "TOPLEFT", 16, -88)
     SetWrapped(decisionCopy, b.width - 32)
 
-    InfoCard(b, T, "What you can move", "Unitframes, supported castbars, group containers, aura groups and the tooltip preview. Boss 1 moves the shared Boss layout.", "uf_player", 86)
-    InfoCard(b, T, "Drag, select and align", "Drag to place; click for quick controls. Arrow keys nudge, while Grid and Snap align.", "gf_layout", 80)
-    InfoCard(b, T, "Undo, Cancel All, Exit", "Undo and Redo affect individual moves. Cancel All restores the entry snapshot; Exit keeps your work.", "gameplay", 82)
-    InfoCard(b, T, "Combat pauses safely", "Combat closes the menu and Edit Mode but keeps changes made so far. Reopen MSUF afterward to resume here.", "opt_misc", 82)
+    InfoCard(b, T, "Two different actions", "DRAG = move the whole frame. CLICK = open its size and detail popup. Arrow keys nudge; Undo stays available.", "uf_player", 82)
 
     local action = b:Section("", 84)
     if action.title then action.title:SetText("") end
@@ -2229,6 +2931,7 @@ local function BuildEditModePage(ctx, T, W)
         local active = status.active == true
         local anchorDecision = CooldownAnchorDecision()
         local placementComplete = EditModePlacementComplete()
+        local movementComplete = EditModeMovementComplete()
         decision:SetValue(anchorDecision)
         if anchorDecision == "cooldown" then
             decisionCopy:SetText(Tr("Selected: Unitframes follow Essential Cooldown Manager. If Main Cooldowns move, the anchored Unitframe layout follows."))
@@ -2240,6 +2943,9 @@ local function BuildEditModePage(ctx, T, W)
         if placementComplete then
             stateLabel:SetText(Tr("Frame moved - placement complete"))
             stateCopy:SetText(active and Tr("Exit keeps the result. You can now continue the guide.") or Tr("The required Edit Mode movement is complete."))
+        elseif movementComplete then
+            stateLabel:SetText(Tr("Player moved - now open its size popup"))
+            stateCopy:SetText(Tr("Click the highlighted Player mover. Width and Height live in that popup."))
         elseif active then
             stateLabel:SetText(Tr("Move one highlighted frame to continue"))
             stateCopy:SetText(Tr("Two arrows point to a movable frame. Drag it once; Next unlocks after a real position change."))
@@ -2283,60 +2989,89 @@ local function BuildEditModePage(ctx, T, W)
         end
         Refresh()
     end)
+    RegisterSpecialClickTargets("edit_mode", "edit_mode_toggle", { button })
     RegisterGuidedPageButton(button, "edit_mode_toggle", "Open or exit MSUF Edit Mode", "Moves whole MSUF frames and group containers; exiting keeps changes.")
     if type(ctx.AddRefresher) == "function" then ctx:AddRefresher(Refresh) end
     Refresh()
     return math.abs(b.y) + 34
 end
 
-local function SummaryCard(builder, T, title, value, body, color)
-    local card = builder:Section("", 78)
-    if card.title then card.title:SetText("") end
-    local number = T.Font(card, "GameFontNormalLarge", tostring(value or 0), color or T.colors.accent)
-    number:SetPoint("LEFT", card, "LEFT", 16, 8)
-    number:SetWidth(56)
-    number:SetJustifyH("CENTER")
-    local heading = T.Font(card, "GameFontNormal", Tr(title), T.colors.text)
-    heading:SetPoint("TOPLEFT", card, "TOPLEFT", 84, -16)
-    local copy = T.Font(card, "GameFontDisableSmall", Tr(body), T.colors.muted)
-    copy:SetPoint("TOPLEFT", card, "TOPLEFT", 84, -40)
-    SetWrapped(copy, builder.width - 98)
-    return card
+local function BuildGroupEditModePage(ctx, T, W)
+    Runtime.specialClickTargets = { stageId = "group_edit_mode", groups = {} }
+    local b = W.PageBuilder(ctx)
+    Header(b, "Move vs size", "Drag Party Frames to move the group. Click it for Width, Height, and Spacing.")
+    InfoCard(b, T, "Practice the real workflow", "DRAG the green-marked Party Frames mover once. CLICK the mover to inspect its geometry popup.", "gf_layout", 86)
+
+    local action = b:Section("", 92)
+    if action.title then action.title:SetText("") end
+    local stateLabel = T.Font(action, "GameFontNormal", "", T.colors.text)
+    stateLabel:SetPoint("TOPLEFT", action, "TOPLEFT", 16, -22)
+    stateLabel:SetWidth(max(120, b.width - 252))
+    stateLabel:SetJustifyH("LEFT")
+    local stateCopy = T.Font(action, "GameFontDisableSmall", "", T.colors.muted)
+    stateCopy:SetPoint("TOPLEFT", stateLabel, "BOTTOMLEFT", 0, -8)
+    stateCopy:SetWidth(max(120, b.width - 252))
+    stateCopy:SetJustifyH("LEFT")
+    local button = T.Button(action, Tr("Open MSUF Edit Mode"), min(210, max(150, floor(b.width * 0.30))), 28)
+    button:SetPoint("RIGHT", action, "RIGHT", -16, 0)
+    if type(T.CenterButtonLabel) == "function" then T.CenterButtonLabel(button) end
+    if type(T.SkinPrimaryButton) == "function" then T.SkinPrimaryButton(button) end
+
+    local function Refresh()
+        local status = type(M.EditModeLifecycleStatus) == "function" and M.EditModeLifecycleStatus() or {}
+        local complete = GroupEditModePlacementComplete()
+        local moved = GroupEditModeMovementComplete()
+        if complete then
+            stateLabel:SetText(Tr("Party Frames moved - checkpoint complete"))
+            stateCopy:SetText(Tr("Click its mover whenever you want the Width, Height, and Spacing popup."))
+        elseif moved then
+            stateLabel:SetText(Tr("Party moved - now open its geometry popup"))
+            stateCopy:SetText(Tr("Click the highlighted Party Frames mover for Width, Height, and Spacing."))
+        elseif status.active then
+            stateLabel:SetText(Tr("Drag the highlighted Party Frames mover"))
+            stateCopy:SetText(Tr("After the drag, click that mover once to see the geometry popup."))
+        else
+            stateLabel:SetText(Tr("Open Edit Mode and move Party Frames"))
+            stateCopy:SetText(Tr("The next checkpoint unlocks after a real Party-frame position change."))
+        end
+        SetFontColor(stateLabel, complete and (T.colors.ok or T.colors.accent) or T.colors.text)
+        SetButtonText(button, status.active and "Exit and keep changes" or "Open MSUF Edit Mode")
+        SetButtonEnabled(button, not status.combatLocked)
+    end
+    button:SetScript("OnClick", function()
+        if BlockedByCombat() then return end
+        local status = type(M.EditModeLifecycleStatus) == "function" and M.EditModeLifecycleStatus() or {}
+        if type(M.SetMSUFEditModeActive) == "function" then
+            M.SetMSUFEditModeActive(not status.active, nil, { source = "guided_tour" })
+        end
+        Refresh()
+    end)
+    RegisterSpecialClickTargets("group_edit_mode", "group_edit_mode_toggle", { button })
+    RegisterGuidedPageButton(button, "group_edit_mode_toggle", "Open or exit MSUF Edit Mode for Party Frames", "Drag moves the group container; clicking its mover opens Width, Height, and Spacing.")
+    if type(ctx.AddRefresher) == "function" then ctx:AddRefresher(Refresh) end
+    Refresh()
+    return math.abs(b.y) + 34
+end
+
+local function BuildPowerMovesPage(ctx, T, W)
+    Runtime.specialClickTargets = { stageId = "power_moves", groups = {} }
+    local b = W.PageBuilder(ctx)
+    Header(b, "MSUF power moves", "A focused frame workflow with direct control over the details that matter in combat.")
+    InfoCard(b, T, "Touch the preview", "Drag its handles. Double-click a handle or use its gear to open the exact setting; right-click exposes related actions.", "uf_player", 86)
+    InfoCard(b, T, "Spell Icons by spec", "Track presets or custom Spell IDs per spec, then choose icon or bar placement, cooldown behavior, and full-frame effects.", "gf_auras", 92)
+    InfoCard(b, T, "Party combat intelligence", "Targeted Spells show incoming enemy casts on their target; Corner Indicators and External Defensives keep critical group information compact.", "gf_indicators", 92)
+    InfoCard(b, T, "Cooldown-aware layouts", "Anchor Unitframes and Class Resources to Essential Cooldowns, or keep every frame independently placed.", "classpower", 86)
+    InfoCard(b, T, "Ask instead of hunting", "Describe the result you want. The Assistant finds the exact control, keeps safeguards in place, and leaves Undo available.", "home", 86)
+    return math.abs(b.y) + 34
 end
 
 local function BuildFinalReviewPage(ctx, T, W)
     local summary = M.GetGuidedTourSummary()
     local b = W.PageBuilder(ctx)
-    Header(b, format(Tr("%s, your setup is ready"), PlayerDisplayName()), "Finishing records the tour as complete and changes nothing else.")
-    InfoCard(b, T, "Your guide focus", format(Tr("%s · %s information"), PreferenceLabel(Preference("playstyle", "general")), PreferenceLabel(Preference("informationStyle", "balanced"))), "home", 72)
-    SummaryCard(b, T, "Reviewed sections", summary.reviewedSections, format(Tr("%d discovered options were actively reviewed."), summary.reviewedControls), T.colors.ok or T.colors.accent)
-    SummaryCard(b, T, "Kept sections", summary.keptSections, format(Tr("%d discovered options were deliberately left as they are."), summary.keptControls), T.colors.accent)
-    SummaryCard(b, T, "Skipped sections", summary.skippedSections, format(Tr("%d discovered options remain unchanged after warnings."), summary.skippedControls), summary.skippedSections > 0 and (T.colors.warning or T.colors.warn) or T.colors.muted)
-
-    if #summary.skippedAreas > 0 or #summary.skippedSectionItems > 0 or #summary.skippedItems > 0 then
-        local lines, limit = {}, 8
-        for i = 1, #summary.skippedAreas do
-            if #lines >= limit then break end
-            lines[#lines + 1] = "\226\128\162 " .. summary.skippedAreas[i]
-        end
-        for i = 1, #summary.skippedSectionItems do
-            if #lines >= limit then break end
-            local item = summary.skippedSectionItems[i]
-            lines[#lines + 1] = "\226\128\162 " .. item.stageLabel .. ": " .. item.label
-        end
-        for i = 1, #summary.skippedItems do
-            if #lines >= limit then break end
-            local item = summary.skippedItems[i]
-            lines[#lines + 1] = "\226\128\162 " .. item.stageLabel .. ": " .. Tr(item.label)
-        end
-        local detailTotal = #summary.skippedAreas + #summary.skippedSectionItems + #summary.skippedItems
-        if detailTotal > #lines then
-            lines[#lines + 1] = format(Tr("and %d more skipped items"), detailTotal - #lines)
-        end
-        InfoCard(b, T, "Skipped areas", table.concat(lines, "\n"), "opt_misc", 58 + (#lines * 15))
-    else
-        InfoCard(b, T, "Nothing was skipped", "Every guided section was reviewed or deliberately kept as is.", "home", 78)
-    end
+    local handled = (tonumber(summary.reviewedControls) or 0) + (tonumber(summary.keptControls) or 0)
+    Header(b, format(Tr("%s, your setup is ready"), PlayerDisplayName()), "Finish opens the Dashboard and puts the cursor straight into the Assistant.")
+    InfoCard(b, T, "Anything else? Just ask", "Try: 'make Party frames wider', 'set up Spell Icons for my spec', or 'move Class Resources'. The Assistant opens the exact place and helps you finish safely.", "home", 104)
+    InfoCard(b, T, "You trained on real settings", format(Tr("%d guided settings were changed or deliberately kept. Nothing was copied into a separate wizard."), handled), "uf_player", 82)
 
     local restorePoint = select(2, Invoke(Tour(), "GetRestorePoint"))
     if type(restorePoint) == "table" and type(M.RestoreGuidedTourRestorePoint) == "function" then
@@ -2390,7 +3125,12 @@ function M.BuildGuidedSetupPage(ctx)
     local T, W = M.Theme, M.Widgets
     if not (ctx and ctx.wrapper and T and W and type(W.PageBuilder) == "function") then return 240 end
     local stage = CurrentStage()
+    if stage.id == "unit_intro" or stage.id == "group_intro" or stage.id == "class_intro" then
+        return BuildChapterPage(ctx, T, W, stage)
+    end
     if stage.id == "edit_mode" then return BuildEditModePage(ctx, T, W) end
+    if stage.id == "group_edit_mode" then return BuildGroupEditModePage(ctx, T, W) end
+    if stage.id == "power_moves" then return BuildPowerMovesPage(ctx, T, W) end
     if stage.id == "final_review" then return BuildFinalReviewPage(ctx, T, W) end
     return BuildMenuBasicsPage(ctx, T, W)
 end

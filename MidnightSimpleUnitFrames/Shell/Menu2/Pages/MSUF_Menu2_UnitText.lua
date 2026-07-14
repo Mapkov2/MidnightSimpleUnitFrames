@@ -160,7 +160,7 @@ local function BuildText(ctx, builder, unit)
         widget:HookScript("OnLeave", RestorePreviewTextFocus)
     end
     local tabFrames = {}
-    local tabs, RefreshTextTabs
+    local tabs, RefreshTextTabs, ReadTextTab, SetGuidedTextTab
     local TextCard = UnitSectionShared.TextCard
     local PlaceDropdown, PlaceSlider = UnitSectionShared.PlaceDropdown, UnitSectionShared.PlaceSlider
     local function ReadSlot(unitKey, slotKey, legacyKey, fallback)
@@ -310,7 +310,7 @@ local function BuildText(ctx, builder, unit)
     end
     local nameTab, hpTab, powerTab, advancedTab =
         UnitSectionShared.MakeTabFrames(sec, -64, sectionW, tabFrames, "name", "hp", "power", "advanced")
-    tabs, RefreshTextTabs = W.SegmentTabs(ctx, sec, {
+    tabs, RefreshTextTabs, ReadTextTab, SetGuidedTextTab = W.SegmentTabs(ctx, sec, {
         label = "", values = tabValues, width = math.min(520, sectionW - 48),
         frames = tabFrames, defaultTab = "name",
         get = CurrentTextTab,
@@ -323,6 +323,17 @@ local function BuildText(ctx, builder, unit)
     })
     if tabs._msuf2Title then tabs._msuf2Title:Hide() end
     RegisterControl(tabs, ctx, "text.workspace_tab", "Text area", "segment", "ephemeral")
+    sec._msuf2GuidedSelectTab = function(tab)
+        if tab ~= "name" and tab ~= "hp" and tab ~= "power" and tab ~= "advanced" then return false end
+        if type(ReadTextTab) == "function" and ReadTextTab() == tab then return true end
+        if type(SetGuidedTextTab) == "function" then
+            SetGuidedTextTab(tab)
+        else
+            M.unitTextTabSelection[unit] = tab
+            if type(RefreshTextTabs) == "function" then RefreshTextTabs() end
+        end
+        return type(ReadTextTab) ~= "function" or ReadTextTab() == tab
+    end
     local nameContent = TextCard(nameTab, nil, nil, leftX, -4, cardW, 116)
     local _, namePreviewValue = PreviewText(nameContent, NamePreviewText(), 16, -54, cardW - 32)
     local showNameText = W.SwitchAt(nameContent, "Show Name", 16, -24, 0, "HIDDEN")
