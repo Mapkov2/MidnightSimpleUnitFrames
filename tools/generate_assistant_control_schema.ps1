@@ -9,6 +9,25 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+$schemaGateMutex = $null
+$schemaGateMutexHeld = $false
+if ($env:MSUF_ASSISTANT_SCHEMA_GATE_LOCK_HELD -ne "1") {
+    $schemaGateMutex = [System.Threading.Mutex]::new(
+        $false, "Local\MSUF_AssistantSchemaAndReleaseGate_v1")
+    Write-Host "[gate-lock] Waiting for exclusive Assistant schema/release access..."
+    try {
+        $schemaGateMutexHeld = $schemaGateMutex.WaitOne([TimeSpan]::FromMinutes(30))
+    } catch [System.Threading.AbandonedMutexException] {
+        $schemaGateMutexHeld = $true
+    }
+    if (-not $schemaGateMutexHeld) {
+        $schemaGateMutex.Dispose()
+        throw "Timed out waiting for exclusive Assistant schema/release access."
+    }
+    Write-Host "[gate-lock] Exclusive Assistant schema/release access acquired."
+}
+
+try {
 $repo = (git rev-parse --show-toplevel).Trim()
 if (-not $repo) { throw "Repository root was not found." }
 Set-Location $repo
@@ -361,4 +380,10 @@ if ($Check) {
     [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($absoluteOutput)) | Out-Null
     [IO.File]::WriteAllText($absoluteOutput, $content, [Text.UTF8Encoding]::new($false))
     Write-Host "wrote $absoluteOutput ($($records.Count) controls, $($contexts.Count) contexts, $($expectedStateIds.Count) finite states, $([Text.Encoding]::UTF8.GetByteCount($content)) bytes)"
+}
+} finally {
+    if ($schemaGateMutexHeld -and $schemaGateMutex) {
+        $schemaGateMutex.ReleaseMutex()
+    }
+    if ($schemaGateMutex) { $schemaGateMutex.Dispose() }
 }
