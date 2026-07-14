@@ -61,6 +61,7 @@ local COLOR_SETTING_KEY_BY_PATH = {
     ["general.unifiedBar"] = "general.unifiedBarColor",
     ["highlight.mouseover.color"] = "general.highlightColor",
     ["highlight.mouseover.enabled"] = "general.highlightEnabled",
+    ["prediction.heal_color"] = "general.healPredictionColor",
     ["npc.color.dead"] = "npcColors.dead",
     ["npc.color.enemy"] = "npcColors.enemy",
     ["npc.color.friendly"] = "npcColors.friendly",
@@ -1365,18 +1366,26 @@ local function BuildUnitAndNPCColors(ctx, b, CH)
 end
 
 local function BuildBarAndGroupColors(ctx, b, CH)
-    local barColors = b:CollapsibleSection("colors_bar_colors", "Bar Colors", 240, false)
+    local barColors = b:CollapsibleSection("colors_bar_colors", "Bar & Prediction Colors", 280, false)
     local barLeftX = 30
     local barRightX = max(430, floor((barColors._msuf2Width or ctx.width or 720) * 0.50))
     LabelAt(barColors, "Bar overlays", barLeftX, -8, 180, "GameFontNormalSmall", T.colors.text)
     LabelAt(barColors, "Borders & matching", barRightX, -8, 220, "GameFontNormalSmall", T.colors.text)
     local barColorControls = CH.ApiColorSpecs(ctx, barColors, {
         { "Absorb Bar Color", barLeftX, -38, "GetAbsorbOverlayColor", "SetAbsorbOverlayColor", 1, 1, 1 },
-        { "Heal-Absorb Bar Color", barLeftX, -74, "GetHealAbsorbOverlayColor", "SetHealAbsorbOverlayColor", 0.7, 0, 0 },
+        { "Heal-Absorb / Negative Heal", barLeftX, -74, "GetHealAbsorbOverlayColor", "SetHealAbsorbOverlayColor", 0.7, 0, 0 },
         { "Power Bar Background Color", barLeftX, -110, "GetPowerBarBackgroundColor", "SetPowerBarBackgroundColor", 0, 0, 0, nil, nil, nil, "powerBg" },
         { "Aggro Border Color", barRightX, -38, "GetAggroBorderColor", "SetAggroBorderColor", 1, 0.5, 0 },
     })
     local powerBg = barColorControls.powerBg
+    ColorValueAt(ctx, barColors, "Positive Heal Prediction", barLeftX, -146,
+        function() return GeneralRGB("healPredictionColor", 0, 1, 0) end,
+        function(r, g, c)
+            local general = G()
+            general.healPredictionColorR, general.healPredictionColorG, general.healPredictionColorB = r, g, c
+            ApplyColors()
+        end,
+        nil, nil, Meta("prediction.heal_color"))
     ColorValueAt(ctx, barColors, "Purge Border Color", barRightX, -74,
         function() return GeneralRGBAlias("hlPurgeColor", "purgeBorderColor", 1.00, 0.85, 0.00) end,
         function(r, g, c) SetGeneralRGBAlias("hlPurgeColor", "purgeBorderColor", r, g, c) end,
@@ -1401,9 +1410,10 @@ local function BuildBarAndGroupColors(ctx, b, CH)
             SetControlEnabled(powerBg, not (v and true or false))
         end,
         Meta("bar.power_background_match_health"))
-    CH.ButtonAt(barColors, "Reset Bar Colors", barLeftX, -194, 160, function()
+    CH.ButtonAt(barColors, "Reset Bar Colors", barLeftX, -234, 160, function()
         local g = G()
         ClearRGBAs(g, "absorbBarColor", "healAbsorbBarColor", "powerBarBgColor", "aggroBorder", "purgeBorderColor", "barOutlineColor")
+        ClearRGB(g, "healPredictionColor")
         g.barOutlineColorMode = nil
         ClearRGBs(g, "hlAggroColor", "hlPurgeColor", "aggroBorderColor")
         g.powerBarBgMatchBarColor = nil
@@ -1548,9 +1558,145 @@ local function BuildHighlightAndGameplayColors(ctx, b, CH)
     })
 end
 
+local function BuildColorPainter(ctx, b)
+    local painter = M.ColorPainter
+    if not (painter and type(painter.Build) == "function") then return end
+    M.colorsPowerToken = M.colorsPowerToken or "MANA"
+    M.colorsCPToken = M.colorsCPToken or "COMBO_POINTS"
+    local function ApiSpec(label, role, getName, setName, dr, dg, db, apply)
+        return {
+            label = label, role = role,
+            get = function() return ApiRGB(getName, dr, dg, db) end,
+            set = function(r, g, bcol)
+                if not ApiSetRGB(setName, r, g, bcol) then (apply or ApplyColors)() end
+            end,
+        }
+    end
+    local function GeneralSpec(label, role, prefix, dr, dg, db, apply)
+        return {
+            label = label, role = role,
+            get = function() return GeneralRGB(prefix, dr, dg, db) end,
+            set = function(r, g, bcol) SetGeneralRGB(prefix, r, g, bcol); (apply or ApplyColors)() end,
+        }
+    end
+    local function TableSpec(label, role, getTable, key, dr, dg, db, apply)
+        return {
+            label = label, role = role,
+            get = function() return TableRGB(getTable(), key, dr, dg, db) end,
+            set = function(r, g, bcol) SetTableRGB(getTable(), key, r, g, bcol); (apply or ApplyColors)() end,
+        }
+    end
+    local categories = {
+        {
+            key = "unit", title = "Unit Frames", shortTitle = "Bars & Text", subtitle = "Health, overlays, portrait and frame treatment.",
+            pickerNote = "HP, name and power text share Font Coloring and remain editable here.",
+            colors = {
+                GeneralSpec("Unified health", "health", "unifiedBar", 0.10, 0.60, 0.90, ApplyUnitframeColorWithReload),
+                GeneralSpec("Health gradient - low", "gradientLow", "healthGradientLow", 1, 0, 0, ApplyUnitframeColorWithReload),
+                GeneralSpec("Health gradient - mid", "gradientMid", "healthGradientMid", 1, 1, 0, ApplyUnitframeColorWithReload),
+                GeneralSpec("Health gradient - high", "gradientHigh", "healthGradientHigh", 0, 1, 0, ApplyUnitframeColorWithReload),
+                ApiSpec("Bar background", "background", "GetClassBarBgColor", "SetClassBarBgColor", 0, 0, 0, ApplyUnitframeColorWithReload),
+                ApiSpec("Power background", "powerBg", "GetPowerBarBackgroundColor", "SetPowerBarBackgroundColor", 0, 0, 0),
+                ApiSpec("Absorb overlay", "absorb", "GetAbsorbOverlayColor", "SetAbsorbOverlayColor", 1, 1, 1),
+                ApiSpec("Heal-absorb", "healAbsorb", "GetHealAbsorbOverlayColor", "SetHealAbsorbOverlayColor", 0.7, 0, 0),
+                GeneralSpec("Positive heal prediction", "healPrediction", "healPredictionColor", 0, 1, 0),
+                GeneralSpec("Frame outline", "outline", "barOutlineColor", 0, 0, 0, ApplyGlobalOutlineColor),
+                ApiSpec("HP / name / power text", "font", "GetGlobalFontColor", "SetGlobalFontColor", 1, 1, 1),
+                { label = "Portrait border", role = "portraitBorder", get = function() return GeneralRGB("portraitBorderColor", 1, 1, 1) end,
+                    set = function(r, g, bcol) SetAllPortraitRGB("portraitBorderColor", r, g, bcol) end },
+                { label = "Portrait background", role = "portraitBg", get = function() return GeneralRGB("portraitBgColor", 0.05, 0.05, 0.05) end,
+                    set = function(r, g, bcol) SetAllPortraitRGB("portraitBgColor", r, g, bcol) end },
+                { label = "Mouseover highlight", role = "mouseover", get = HighlightRGB, set = SetHighlightRGB },
+            },
+        },
+        {
+            key = "group", title = "Group Frames", shortTitle = "Group", subtitle = "Shared by Party, Raid and Mythic Raid.",
+            pickerNote = "Shared by Party, Raid and Mythic Raid.",
+            colors = {
+                { label = "Custom health", role = "health", get = function() return GroupRGB("healthCustom", 0.20, 0.80, 0.20) end,
+                    set = function(r, g, bcol) SetGroupRGB("healthCustom", r, g, bcol, "MSUF2_GROUP_PAINTER", "visual") end },
+                { label = "Background", role = "background", get = function() return GroupRGB("bg", 0.10, 0.10, 0.10) end,
+                    set = function(r, g, bcol) SetGroupRGB("bg", r, g, bcol, "MSUF2_GROUP_PAINTER", "visual") end },
+                { label = "Group border", role = "border", get = function() return GroupRGB("groupBorder", 0.38, 0.68, 1.00) end,
+                    set = function(r, g, bcol) SetGroupRGB("groupBorder", r, g, bcol, "MSUF2_GROUP_PAINTER", "visual") end },
+                { label = "Target highlight", role = "target", get = function() return GroupRGB("target", 1, 1, 1) end,
+                    set = function(r, g, bcol) SetGroupRGB("target", r, g, bcol, "MSUF2_GROUP_PAINTER", "visual") end },
+                { label = "Focus highlight", role = "focus", get = function() return GroupRGB("hlFocusColor", 0.50, 0.50, 1.00) end,
+                    set = function(r, g, bcol) SetGroupRGB("hlFocusColor", r, g, bcol, "MSUF2_GROUP_PAINTER", "visual") end },
+                { label = "Aggro corners", role = "aggro", get = function() return GroupRGB("ciAggroColor", 1, 0.55, 0) end,
+                    set = function(r, g, bcol) SetGroupRGB("ciAggroColor", r, g, bcol, "MSUF2_GROUP_PAINTER", "visual") end },
+                { label = "Dead / offline", role = "dead", get = function() return GroupRGB("deadBg", 0.60, 0.05, 0.05) end,
+                    set = function(r, g, bcol) SetGroupRGB("deadBg", r, g, bcol, "MSUF2_GROUP_PAINTER", "visual") end },
+                { label = "Debuff stripe", role = "debuff", get = function() return GroupRGB("debuffStripeColor", 0.80, 0.20, 0.20) end,
+                    set = function(r, g, bcol) SetGroupRGB("debuffStripeColor", r, g, bcol, "MSUF2_GROUP_PAINTER", "visual") end },
+                ApiSpec("Absorb overlay", "absorb", "GetAbsorbOverlayColor", "SetAbsorbOverlayColor", 1, 1, 1),
+                ApiSpec("Heal-absorb", "healAbsorb", "GetHealAbsorbOverlayColor", "SetHealAbsorbOverlayColor", 0.7, 0, 0),
+                GeneralSpec("Positive heal prediction", "healPrediction", "healPredictionColor", 0, 1, 0),
+            },
+        },
+        {
+            key = "cast", title = "Castbars", shortTitle = "Castbar", subtitle = "Interrupt states, text, border and kick feedback.",
+            pickerNote = "Cast states, feedback, text, border and background.",
+            colors = {
+                ApiSpec("Interruptible", "interruptible", "GetInterruptibleCastColor", "SetInterruptibleCastColor", 0, 0.9, 0.8, ApplyCastbarColors),
+                ApiSpec("Non-interruptible", "nonInterruptible", "GetNonInterruptibleCastColor", "SetNonInterruptibleCastColor", 0.4, 0.01, 0.01, ApplyCastbarColors),
+                ApiSpec("Interrupted", "interrupted", "GetInterruptFeedbackCastColor", "SetInterruptFeedbackCastColor", 1, 0.82, 0, ApplyCastbarColors),
+                ApiSpec("Kick unavailable", "unavailable", "GetInterruptUnavailableCastColor", "SetInterruptUnavailableCastColor", 1, 0.49, 0.14, ApplyCastbarColors),
+                ApiSpec("Cast text", "text", "GetCastbarTextColor", "SetCastbarTextColor", 1, 1, 1, ApplyCastbarColors),
+                ApiSpec("Cast border", "border", "GetCastbarBorderColor", "SetCastbarBorderColor", 0, 0, 0, ApplyCastbarColors),
+                ApiSpec("Cast background", "background", "GetCastbarBackgroundColor", "SetCastbarBackgroundColor", 0.10, 0.10, 0.10, ApplyCastbarColors),
+                TableSpec("Kick ready", "kickReady", G, "kickReadyColor", 0, 1, 0, ApplyCastbarColors),
+                TableSpec("Kick not ready", "kickNotReady", G, "kickNotReadyColor", 1, 0, 0, ApplyCastbarColors),
+            },
+        },
+        {
+            key = "auras", title = "Auras & Icons", shortTitle = "Auras", subtitle = "Timer urgency, ownership, stacks and pandemic state.",
+            pickerNote = "Timers, ownership, stacks, pandemic and purge.",
+            colors = {
+                TableSpec("Safe timer", "safe", G, "aurasCooldownTextSafeColor", 1, 1, 1, ApplyAuraColors),
+                TableSpec("Warning timer", "warning", G, "aurasCooldownTextWarningColor", 1, 0.85, 0.20, ApplyAuraColors),
+                TableSpec("Urgent timer", "urgent", G, "aurasCooldownTextUrgentColor", 1, 0.55, 0.10, ApplyAuraColors),
+                TableSpec("Own buff", "ownBuff", G, "aurasOwnBuffHighlightColor", 1, 0.85, 0.20, ApplyAuraColors),
+                TableSpec("Own debuff", "ownDebuff", G, "aurasOwnDebuffHighlightColor", 1, 0.30, 0.30, ApplyAuraColors),
+                TableSpec("Stack count", "stack", G, "aurasStackCountColor", 1, 1, 1, ApplyAuraColors),
+                { label = "Pandemic window", role = "pandemic", get = GetPandemicRGB, set = SetPandemicRGB },
+                { label = "Purge border", role = "purge", get = function() return GeneralRGBAlias("hlPurgeColor", "purgeBorderColor", 1, 0.85, 0) end,
+                    set = function(r, g, bcol) SetGeneralRGBAlias("hlPurgeColor", "purgeBorderColor", r, g, bcol) end },
+            },
+        },
+        {
+            key = "resources", title = "Resources", shortTitle = "Resources", subtitle = "Current power and Class Resource selections.",
+            pickerNote = "Power and Class Resource colors.",
+            colors = {
+                { label = "Selected power", role = "power", get = function() return GetPowerOverrideRGB(M.colorsPowerToken or "MANA") end,
+                    set = function(r, g, bcol) SetPowerOverrideRGB(M.colorsPowerToken or "MANA", r, g, bcol) end },
+                ApiSpec("Power background", "powerBg", "GetPowerBarBackgroundColor", "SetPowerBarBackgroundColor", 0, 0, 0),
+                { label = "Class Resource", role = "class", get = function() return GetClassPowerRGB(M.colorsCPToken or "COMBO_POINTS") end,
+                    set = function(r, g, bcol) SetClassPowerRGB(M.colorsCPToken or "COMBO_POINTS", r, g, bcol) end },
+                { label = "Resource background", role = "classBg", get = function() return GetClassPowerBgRGB(M.colorsCPToken or "COMBO_POINTS") end,
+                    set = function(r, g, bcol) SetClassPowerBgRGB(M.colorsCPToken or "COMBO_POINTS", r, g, bcol) end },
+                { label = "First custom slot", role = "slot", get = function() return GetClassPowerSlotRGB(M.colorsCPToken or "COMBO_POINTS", 1) end,
+                    set = function(r, g, bcol)
+                        local token = M.colorsCPToken or "COMBO_POINTS"
+                        if GetClassPowerSlotMode(token) ~= "custom" then SetClassPowerSlotMode(token, "custom") end
+                        SetClassPowerRGB(ClassPowerSlotToken(token, 1), r, g, bcol)
+                    end },
+                { label = "Full resource", role = "full", get = function() return GetClassPowerFullRGB(M.colorsCPToken or "COMBO_POINTS") end,
+                    set = function(r, g, bcol)
+                        local token = M.colorsCPToken or "COMBO_POINTS"
+                        if not ClassPowerFullColorEnabled(token) then SetClassPowerFullColorEnabled(token, true) end
+                        SetClassPowerRGB(ClassPowerFullColorToken(token), r, g, bcol)
+                    end },
+            },
+        },
+    }
+    painter.Build(ctx, b, categories)
+end
+
 local function BuildColors(ctx)
     local b, CH = W.PageBuilder(ctx), COLOR_HELPERS
     b:GlobalStyleHeader("Colors", "Frame, group-frame, bar, aura, castbar and resource colors.", 72)
+    BuildColorPainter(ctx, b)
     BuildFontAndClassColors(ctx, b, CH)
     BuildBackgroundAndAppearance(ctx, b, CH)
     BuildUnitAndNPCColors(ctx, b, CH)
@@ -1561,4 +1707,4 @@ local function BuildColors(ctx)
     BuildAuraAndPortraitColors(ctx, b, CH)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-M.RegisterPage("opt_colors", { title = "MSUF Colors", build = BuildColors, version = 7 })
+M.RegisterPage("opt_colors", { title = "MSUF Colors", build = BuildColors, version = 11 })

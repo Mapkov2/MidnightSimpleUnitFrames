@@ -1347,7 +1347,12 @@ function Render.Install(box, ctx, deps)
             healPredShown = H.HealPredictionEnabled(kind, conf)
         end
         mock._healPred:SetStatusBarTexture(runtimePrediction.texture or barTex)
-        mock._healPred:SetStatusBarColor(runtimePrediction.healR or 0, runtimePrediction.healG or 1, runtimePrediction.healB or 0.4, runtimePrediction.healA or 0.45)
+        mock._healPred:SetStatusBarColor(
+            runtimePrediction.healR or (gen and gen.healPredictionColorR) or 0,
+            runtimePrediction.healG or (gen and gen.healPredictionColorG) or 1,
+            runtimePrediction.healB or (gen and gen.healPredictionColorB) or 0,
+            runtimePrediction.healA or (gen and gen.healPredictionColorA) or 0.45
+        )
         mock._healPred:ClearAllPoints()
         if (healPredMode == 3 or healPredMode == 4) and hpTex then
             if hpReverse then
@@ -1369,7 +1374,12 @@ function Render.Install(box, ctx, deps)
         mock._healPred:SetShown(healPredShown)
         mock._absorb:ClearAllPoints()
         mock._absorb:SetStatusBarTexture(runtimePrediction.absorbTexture or runtimePrediction.texture or barTex)
-        mock._absorb:SetStatusBarColor(runtimePrediction.absorbR or 0.55, runtimePrediction.absorbG or 0.70, runtimePrediction.absorbB or 1, runtimePrediction.absorbA or 0.55)
+        mock._absorb:SetStatusBarColor(
+            runtimePrediction.absorbR or (gen and gen.absorbBarColorR) or 1,
+            runtimePrediction.absorbG or (gen and gen.absorbBarColorG) or 1,
+            runtimePrediction.absorbB or (gen and gen.absorbBarColorB) or 1,
+            runtimePrediction.absorbA or (gen and gen.absorbBarOpacity) or (gen and gen.absorbBarColorA) or 0.75
+        )
         local absorbMode = tonumber(runtimePrediction.absorbAnchorMode) or tonumber((conf.hlOverride and conf.absorbAnchorMode ~= nil and conf.absorbAnchorMode) or (gen and gen.absorbAnchorMode)) or 2
         if absorbMode < 1 or absorbMode > 5 then absorbMode = 2 end
         local absorbShown
@@ -1405,6 +1415,36 @@ function Render.Install(box, ctx, deps)
         if absorbFollows then mock._absorb:SetWidth(max(1, mockW * absorbPct)) end
         mock._absorb:SetValue(absorbFollows and 1 or absorbPct)
         mock._absorb:SetShown(absorbShown)
+        local healAbsorbShown
+        if runtimeSpec then
+            healAbsorbShown = runtimePrediction.healAbsorb == true
+        else
+            local enabled = gen and gen.healAbsorbEnabled
+            if conf.hlOverride == true and conf.healAbsorbEnabled ~= nil then enabled = conf.healAbsorbEnabled end
+            healAbsorbShown = absorbShown and enabled ~= false
+        end
+        mock._healAbsorb:ClearAllPoints()
+        mock._healAbsorb:SetStatusBarTexture(runtimePrediction.healAbsorbTexture or barTex)
+        mock._healAbsorb:SetStatusBarColor(
+            runtimePrediction.healAbsorbR or (gen and gen.healAbsorbBarColorR) or 0.7,
+            runtimePrediction.healAbsorbG or (gen and gen.healAbsorbBarColorG) or 0,
+            runtimePrediction.healAbsorbB or (gen and gen.healAbsorbBarColorB) or 0,
+            runtimePrediction.healAbsorbA or (gen and gen.healAbsorbBarOpacity) or (gen and gen.healAbsorbBarColorA) or 1
+        )
+        if hpReverse then
+            mock._healAbsorb:SetPoint("TOPLEFT", hpTex or mock._health, "TOPLEFT", 0, 0)
+            mock._healAbsorb:SetPoint("BOTTOMLEFT", hpTex or mock._health, "BOTTOMLEFT", 0, 0)
+            if mock._healAbsorb.SetReverseFill then mock._healAbsorb:SetReverseFill(false) end
+        else
+            mock._healAbsorb:SetPoint("TOPRIGHT", hpTex or mock._health, "TOPRIGHT", 0, 0)
+            mock._healAbsorb:SetPoint("BOTTOMRIGHT", hpTex or mock._health, "BOTTOMRIGHT", 0, 0)
+            if mock._healAbsorb.SetReverseFill then mock._healAbsorb:SetReverseFill(true) end
+        end
+        local healAbsorbW = tonumber(mock._health:GetWidth()) or 0
+        if healAbsorbW <= 0 then healAbsorbW = mockW end
+        mock._healAbsorb:SetWidth(max(1, healAbsorbW))
+        mock._healAbsorb:SetValue(0.07)
+        mock._healAbsorb:SetShown(healAbsorbShown)
         if powerH > 0 then
             mock._power:SetStatusBarTexture(runtimePower.texture or barTex)
             mock._power:ClearAllPoints()
