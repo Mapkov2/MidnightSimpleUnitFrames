@@ -2878,10 +2878,10 @@ A.RouterTryVisualSettingShortcut = function(norm, coreHandler)
 
     if R.ContainsAny(norm, { "heal prediction", "incoming heal prediction", "incoming heal overlay" }) and asksLocation then
         local label = scopeLabel and (scopeLabel .. " Heal Prediction Overlay") or "Heal Prediction Overlay"
-        local page = "Bars"
+        local pageLabel = "Bars"
         return R.VisualSettingReply(
             label .. " setting location",
-            label .. " is controlled through " .. page .. ". Group scopes can use scoped Heal Prediction Overlay options; the shared overlay controls live in Bars.",
+            label .. " is controlled through " .. pageLabel .. ". Group scopes can use scoped Heal Prediction Overlay options; the shared overlay controls live in Bars.",
             "open bars; turn off heal prediction overlay; set " .. tostring(scope or "raid") .. " heal prediction anchor to right.",
             "Open Bars | turn off heal prediction overlay"
         )
