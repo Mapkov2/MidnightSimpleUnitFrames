@@ -853,56 +853,44 @@ local function AssociationGroups(setting, page)
     return groups
 end
 
-local function CommonPrefixLength(left, right)
-    left, right = tostring(left or ""), tostring(right or "")
-    local limit = math.min(#left, #right)
-    local count = 0
-    while count < limit and left:byte(count + 1) == right:byte(count + 1) do
-        count = count + 1
-    end
-    return count
-end
-
 local ASSOCIATION_STOP_WORDS = {
     bars = true, bar = true, setting = true, option = true, global = true,
     player = true, target = true, focus = true, boss = true, party = true, raid = true,
 }
 
-local function AssociationWords(state, key)
-    state.associationWords = state.associationWords or {}
-    if state.associationWords[key] then return state.associationWords[key] end
-    local setting = state.settingsByKey[key]
+local function AssociationDescriptor(setting, key)
     local text = tostring(setting and setting.label or key):lower()
-    local words = {}
+    local words, wordList = {}, {}
     for word in text:gmatch("[%w]+") do
         if #word >= 3 and not ASSOCIATION_STOP_WORDS[word] then
             if word == "opacity" then word = "alpha" end
             if word == "background" or word == "bg" then word = "background" end
-            words[word] = true
+            if not words[word] then
+                words[word] = true
+                wordList[#wordList + 1] = word
+            end
         end
     end
-    state.associationWords[key] = words
-    return words
-end
-
-local function AssociationLeaf(state, key)
-    state.associationLeaves = state.associationLeaves or {}
-    local cached = state.associationLeaves[key]
-    if cached then return cached end
     local leaf = tostring(key or ""):match("([^.]+)$") or tostring(key or "")
-    state.associationLeaves[key] = leaf
-    return leaf
+    return { leaf = leaf, words = words, wordList = wordList }
 end
 
-local function AssociationSimilarity(state, left, right)
+local function AssociationSimilarity(left, right)
     -- Association groups already encode page/scope/category proximity. Scanning
     -- the repeated full key prefix (for example every "gf_party." byte) across
     -- thousands of candidate pairs added substantial work without improving
     -- the navigation-only match. Compare the meaningful leaf names instead.
-    local score = CommonPrefixLength(AssociationLeaf(state, left), AssociationLeaf(state, right))
-    local leftWords, rightWords = AssociationWords(state, left), AssociationWords(state, right)
-    for word in pairs(leftWords) do
-        if rightWords[word] then score = score + 100 + #word end
+    -- Leaf/word descriptors are built once per compared setting rather
+    -- than recovered through two cache lookups for every candidate pair.
+    local leftLeaf, rightLeaf = left.leaf, right.leaf
+    local limit = math.min(#leftLeaf, #rightLeaf)
+    local score = 0
+    while score < limit and leftLeaf:byte(score + 1) == rightLeaf:byte(score + 1) do
+        score = score + 1
+    end
+    for index = 1, #left.wordList do
+        local word = left.wordList[index]
+        if right.words[word] then score = score + 100 + #word end
     end
     return score
 end
@@ -919,6 +907,7 @@ local function ApplyRegistryAssociations(state, settings, groupRootsBuilt, build
 
     local groups = {}
     local candidatesByKey = {}
+    local descriptorByKey = {}
     state.userFacingKeys = {}
     state.standaloneUserFacing = {}
     state.intentionalStandaloneUserFacing = {}
@@ -953,6 +942,11 @@ local function ApplyRegistryAssociations(state, settings, groupRootsBuilt, build
             local selectedGroup
             local seenCandidates = {}
             local candidateGroups = candidatesByKey[key] or {}
+            local descriptor = descriptorByKey[key]
+            if not descriptor then
+                descriptor = AssociationDescriptor(setting, key)
+                descriptorByKey[key] = descriptor
+            end
             for groupIndex, groupKey in ipairs(candidateGroups) do
                 local specificityBonus = (#candidateGroups - groupIndex) * 10
                 for _, candidateKey in ipairs(groups[groupKey] or {}) do
@@ -960,7 +954,12 @@ local function ApplyRegistryAssociations(state, settings, groupRootsBuilt, build
                     if candidateWork % 128 == 0 and type(A.MaybeYield) == "function" then A.MaybeYield() end
                     if candidateKey ~= key and not seenCandidates[candidateKey] then
                         seenCandidates[candidateKey] = true
-                        local score = AssociationSimilarity(state, key, candidateKey) + specificityBonus
+                        local candidateDescriptor = descriptorByKey[candidateKey]
+                        if not candidateDescriptor then
+                            candidateDescriptor = AssociationDescriptor(state.settingsByKey[candidateKey], candidateKey)
+                            descriptorByKey[candidateKey] = candidateDescriptor
+                        end
+                        local score = AssociationSimilarity(descriptor, candidateDescriptor) + specificityBonus
                         if bestKey == nil or score > bestScore or (score == bestScore and candidateKey < bestKey) then
                             bestKey, bestScore, selectedGroup = candidateKey, score, groupKey
                         end
@@ -1063,8 +1062,6 @@ local function Build(includeGroupRoots, requestedKey)
         ApplyConflicts(state)
     end
     ApplyRegistryAssociations(state, settings, includeGroupRoots, auraOnly and "aura" or "all")
-    state.associationWords = nil
-    state.associationLeaves = nil
     Finalize(state, settings)
 
     G._state = state
