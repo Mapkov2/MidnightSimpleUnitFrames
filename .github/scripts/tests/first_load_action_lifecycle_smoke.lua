@@ -41,7 +41,7 @@ local function LoadFixture(saved)
 
     local MSUF = {}
     local registered = {}
-    local effects = { invalidates = 0, selects = 0, closes = 0, imports = 0 }
+    local effects = { invalidates = 0, selects = 0, closes = 0, imports = 0, generalWrites = 0, applyFlushes = 0 }
     -- Forward declaration: SetMenuStateValue/GetPersistentMenuStateTable close
     -- over M, which is not in scope inside its own table constructor.
     local M
@@ -74,6 +74,24 @@ local function LoadFixture(saved)
             M[key] = type(M[key]) == "table" and M[key] or {}
             return M[key]
         end,
+        GetGeneralDB = function()
+            _G.MSUF_DB = type(_G.MSUF_DB) == "table" and _G.MSUF_DB or {}
+            _G.MSUF_DB.general = type(_G.MSUF_DB.general) == "table" and _G.MSUF_DB.general or {}
+            return _G.MSUF_DB.general, _G.MSUF_DB
+        end,
+        SetGeneralValue = function(key, value)
+            local general = M.GetGeneralDB()
+            if general[key] == value then return false end
+            general[key] = value
+            effects.generalWrites = effects.generalWrites + 1
+            return true
+        end,
+        ApplyService = {
+            Flush = function()
+                effects.applyFlushes = effects.applyFlushes + 1
+                return true
+            end,
+        },
         SearchBridge = {
             OpenSearchTarget = function()
                 effects.imports = effects.imports + 1
@@ -87,11 +105,46 @@ local function LoadFixture(saved)
     _G.MSUF2 = M
 
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/State/MSUF_FirstLoad.lua"))("MidnightSimpleUnitFrames", MSUF)
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames/State/MSUF_UpgradeHighlights.lua"))("MidnightSimpleUnitFrames", MSUF)
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/State/MSUF_GuidedTour.lua"))("MidnightSimpleUnitFrames", MSUF)
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_FirstLoad.lua"))("MidnightSimpleUnitFrames", MSUF)
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_GuidedTour.lua"))("MidnightSimpleUnitFrames", MSUF)
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_UpgradeHighlights.lua"))("MidnightSimpleUnitFrames", MSUF)
 
     return MSUF, M, registered, effects
+end
+
+-- Frame placement must not start on an implicit default. The guided Edit Mode
+-- step records an explicit answer and writes the real global Unitframe anchor
+-- setting before any movers are opened.
+do
+    local MSUF, M, _, effects = LoadFixture({ db = { general = { anchorToCooldown = false } } })
+    Check(MSUF.GuidedTour6:Start("Default", "edit_mode") == true, "guided tour did not start at Edit Mode")
+    Equal(M.GetGuidedCooldownAnchorDecision(), nil, "Edit Mode inferred an anchor choice without user input")
+    Check(M.IsGuidedEditModePlacementUnlocked() == false, "frame placement unlocked before the anchor choice")
+    Check(M.SetGuidedCooldownAnchorDecision("cooldown") == true, "Cooldown Manager anchor choice failed")
+    Equal(_G.MSUF_DB.general.anchorToCooldown, true, "Cooldown Manager choice did not enable the real anchor setting")
+    Equal(M.GetGuidedCooldownAnchorDecision(), "cooldown", "Cooldown Manager choice was not persisted in tour state")
+    Check(M.IsGuidedEditModePlacementUnlocked() == true, "frame placement stayed locked after the anchor choice")
+    Check(M.SetGuidedCooldownAnchorDecision("independent") == true, "independent anchor choice failed")
+    Equal(_G.MSUF_DB.general.anchorToCooldown, false, "independent choice did not disable the Cooldown Manager anchor")
+    Equal(M.GetGuidedCooldownAnchorDecision(), "independent", "independent choice was not persisted in tour state")
+    Equal(effects.generalWrites, 2, "anchor choices did not use the real general setting mutation path")
+    Equal(effects.applyFlushes, 2, "anchor choices were not applied before frame placement")
+    Check(M.SetGuidedCooldownAnchorDecision("invalid") == false, "invalid anchor choice was accepted")
+end
+
+-- Spell Icons own a complete guided stage on the Group Auras page. The normal
+-- Aura stage excludes that section, while the dedicated stage includes its
+-- selector and preview controls as well as persistent settings/actions.
+do
+    local _, M = LoadFixture()
+    Check(M.IsGuidedTourSectionIncluded("gf_spell_icons", "si") == true, "Spell Icons stage lost the spell-indicator section")
+    Check(M.IsGuidedTourSectionIncluded("gf_spell_icons", "auras") == false, "Spell Icons stage includes unrelated Aura sections")
+    Check(M.IsGuidedTourSectionIncluded("gf_auras", "si") == false, "Group Auras stage still duplicates Spell Icons")
+    Check(M.IsGuidedTourSectionIncluded("gf_auras", "auras") == true, "Group Auras stage lost the Aura workspace")
+    Check(M.GuidedTourIncludesEphemeralControls("gf_spell_icons") == true, "Spell Icons stage omits selector or preview controls")
+    Check(M.GuidedTourIncludesEphemeralControls("gf_auras") == false, "ordinary Group Auras stage unexpectedly includes ephemeral controls")
 end
 
 -- MSUF 5.71 used MSUF_DB plus MSUF_GlobalDB.profiles/chars without a profile
@@ -115,10 +168,83 @@ do
     Check(detection.legacyProfile == true, "5.71 schema-less profile was not classified as legacy")
     Check(firstLoad:ShouldShowDashboard() == true, "5.71 profile lost the one-time continue choice")
 
-    local ok = MSUF.MSUF2.ExecuteFirstLoadDashboardAction("use_defaults")
-    Check(ok == true, "continue-current-profile action failed for 5.71 profile")
-    Equal(firstLoad:GetState().status, "completed", "continue-current-profile did not complete onboarding")
-    Equal(firstLoad:GetState().step, "current_profile", "upgrade action was recorded as fresh defaults")
+    local ok, message = MSUF.MSUF2.ExecuteFirstLoadDashboardAction("use_defaults")
+    Check(ok == false, "generic continue action bypassed the upgrade highlight warning")
+    Contains(message, "release highlights", "blocked generic action did not explain the upgrade flow")
+    Equal(firstLoad:GetState().status, "pending", "blocked generic action changed onboarding")
+end
+
+-- Existing 5.71 profiles receive the release highlights before the generic
+-- first-load chooser. Reviewing or skipping the tour never changes the profile
+-- and terminally closes only this release's one-time lifecycle.
+do
+    local legacyProfile = { general = { barTexture = "MSUF Flat" }, player = { width = 220 } }
+    local MSUF = LoadFixture({
+        db = legacyProfile,
+        globalDB = {
+            profiles = { Raid = legacyProfile },
+            chars = { ["Tester-Realm"] = { activeProfile = "Raid" } },
+        },
+        activeProfile = "Raid",
+    })
+    local highlights, firstLoad = MSUF.UpgradeHighlights, MSUF.FirstLoad6
+    Check(highlights:ShouldShow() == true, "5.71 profile did not receive the upgrade highlight tour")
+    local releaseKey, spec, record = highlights:GetCurrent()
+    Equal(releaseKey, "6.0", "wrong release highlight tour selected")
+    Equal(#spec.highlights, 7, "6.0 highlight tour lost its curated seven-item contract")
+    Equal(spec.highlights[1].id, "custom_aura_tracking", "first 6.0 highlight is not the new Unitframe Custom Aura gameplay feature")
+    Equal(spec.highlights[1].pageKey, "uf_player", "Custom Aura highlight does not open a supported Unitframe")
+    Equal(spec.highlights[1].route.unitAuraTab, "custom1", "Custom Aura highlight does not select a Custom lane")
+    Equal(spec.highlights[1].route.unitAuraTool, "whitelist", "Custom Aura highlight does not open its exact-spell whitelist")
+    Equal(spec.highlights[1].route.accordion, "uf_player:auras", "Custom Aura highlight does not expand the Unitframe Aura workspace")
+    Equal(spec.highlights[2].id, "auras3_rework", "second 6.0 highlight is not the full Auras3 menu rework")
+    local healthText = spec.highlights[4]
+    Equal(healthText.id, "health_text", "fourth 6.0 highlight is not the HP text editor")
+    Equal(healthText.pageKey, "uf_player", "HP values highlight does not open a Unitframe editor")
+    Equal(healthText.route.unit, "player", "HP values highlight does not target Player")
+    Equal(healthText.route.unitTextTab, "hp", "HP values highlight does not select the HP Text tab")
+    Equal(healthText.route.accordion, "uf_player:text", "HP values highlight does not expand the Text editor")
+    MSUF.MSUF2.ApplyUpgradeHighlightTargetRoute(healthText)
+    Equal(MSUF.MSUF2.unitTextTabSelection.player, "hp", "HP highlight route did not apply the HP Text tab")
+    Equal(MSUF.MSUF2.accordionState["uf_player:text"], true, "HP highlight route did not open the Text editor")
+    Equal(record.status, "pending", "upgrade highlight tour did not start pending")
+
+    Check(highlights:Start() == true, "upgrade highlight tour did not start")
+    Equal(record.status, "active", "started highlight tour is not active")
+    Equal(record.index, 1, "highlight tour did not start at the first item")
+    Check(highlights:Advance("reviewed") == true, "first highlight could not be reviewed")
+    Equal(record.index, 2, "reviewed highlight did not advance")
+    Equal(record.outcomes.custom_aura_tracking, "reviewed", "highlight outcome was not persisted")
+    Check(highlights:RequestSkip() == true, "skip warning could not be requested")
+    Equal(record.status, "skip_warning", "skip did not require the consequence warning")
+    Equal(record.pendingSkipCount, 6, "skip warning did not count only unreviewed highlights")
+    Check(highlights:CancelSkip() == true, "skip warning could not return to the tour")
+    Equal(record.status, "active", "cancelled skip did not resume the tour")
+    Check(highlights:RequestSkip() == true, "second skip warning could not be requested")
+    Check(highlights:ConfirmSkip() == true, "confirmed highlight skip failed")
+    Equal(record.status, "skipped", "confirmed release tour was not persisted as skipped")
+    Equal(record.skippedCount, 6, "confirmed skip lost the remaining-highlight count")
+    Check(highlights:ShouldShow() == false, "skipped release tour resurfaced")
+    Equal(firstLoad:GetState().status, "completed", "skipping release highlights did not close generic onboarding")
+end
+
+-- A genuine 6.0 fresh install baselines the current release. Adding a later
+-- release to the registry is enough to queue its own independent tour.
+do
+    local MSUF = LoadFixture()
+    local highlights, data = MSUF.UpgradeHighlights, MSUF.UpgradeHighlightData
+    Check(highlights:ShouldShow() == false, "fresh 6.0 install incorrectly received the upgrade tour")
+    Equal(highlights:GetState().releases["6.0"].status, "baseline", "fresh install did not baseline 6.0")
+
+    data.releaseOrder[#data.releaseOrder + 1] = "6.1"
+    data.releases["6.1"] = {
+        title = "6.1 test highlights",
+        highlights = { { id = "future", title = "Future release", pageKey = "home" } },
+    }
+    Check(highlights:ShouldShow() == true, "future release was not queued from the release registry")
+    local releaseKey, _, record = highlights:GetCurrent()
+    Equal(releaseKey, "6.1", "future release selection did not respect release order")
+    Equal(record.status, "pending", "future release was not initialized pending")
 end
 
 -- Very old installations may only have the single MSUF_DB table. They are
@@ -319,6 +445,19 @@ do
     Equal(firstLoad:GetState().status, "completed", "named imported profile left stale onboarding pending")
     Equal(firstLoad:GetState().step, "import_recovered", "stale imported profile stored the wrong recovery step")
     Check(_G.MSUF_GlobalDB.global.firstLoad6ProfileImported == true, "import recovery receipt was not persisted")
+end
+
+-- The debug command must be able to preview the fresh-install scene even when
+-- the currently active profile is named/imported. Normal stale-state recovery
+-- above remains enabled for organically detected fresh installs.
+do
+    local MSUF = LoadFixture()
+    local firstLoad = MSUF.FirstLoad6
+    _G.MSUF_ActiveProfile = "Imported Profile"
+    Check(firstLoad:Reset("fresh") == true, "fresh debug reset failed with a named profile")
+    Equal(firstLoad:GetState().installReason, "debug_forced_fresh", "fresh debug reset lost its force marker")
+    Check(firstLoad:ShouldShowDashboard() == true, "named profile immediately retired the forced fresh preview")
+    Equal(firstLoad:GetState().status, "pending", "forced fresh preview did not stay pending")
 end
 
 -- The completion hook belongs to the shared data mutation boundaries, not a
