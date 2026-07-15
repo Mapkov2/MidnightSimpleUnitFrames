@@ -109,28 +109,26 @@ local bridgeEvents = assert(createdFrames[1])
 
 assert(_G.MSUF_ApplyBlizzardCastbarOwnership() == true)
 assert(_G.PlayerCastingBarFrame.unit == "player", "player castbar lost its valid unit token")
-assert(_G.PetCastingBarFrame.unit == "pet", "pet castbar lost its valid unit token")
 assert(next(_G.PlayerCastingBarFrame.events) == nil, "suppressed player retained native event work")
 assert(_G.PetCastingBarFrame.events.UNIT_PET == true
-    and _G.PetCastingBarFrame.events.PLAYER_ENTERING_WORLD == nil,
-    "suppressed pet did not retain only its lifecycle event")
-assert(_G.PlayerCastingBarFrame.unregisterAllCount == 1 and _G.PetCastingBarFrame.unregisterAllCount == 1,
-    "native cast-event detachment did not run exactly once")
-assert(_G.PlayerCastingBarFrame.hookCount == 1 and _G.PetCastingBarFrame.hookCount == 1,
-    "native hide guard was not installed exactly once")
+    and _G.PetCastingBarFrame.events.PLAYER_ENTERING_WORLD == true,
+    "player ownership mutated Blizzard's independent pet event lifecycle")
+assert(_G.PlayerCastingBarFrame.unregisterAllCount == 1 and _G.PetCastingBarFrame.unregisterAllCount == 0,
+    "player ownership detached the wrong native castbar")
+assert(_G.PlayerCastingBarFrame.hookCount == 1 and _G.PetCastingBarFrame.hookCount == 0,
+    "player ownership installed a guard on the pet castbar")
 
--- Regression: PLAYER_ENTERING_WORLD may already be in Blizzard's dispatch
--- snapshot when suppression runs. The unit token must remain valid throughout.
-assert(_G.PetCastingBarFrame.unit ~= nil, "world dispatch would call UnitChannelInfo(nil)")
+-- Regression: the player backend must never manage PetCastingBarFrame. Doing
+-- so can race Blizzard's PLAYER_ENTERING_WORLD dispatch and reach
+-- UnitChannelInfo(nil) from PetCastingBarMixin:OnEvent.
 _G.PetCastingBarFrame:Show()
-assert(_G.PetCastingBarFrame.shown == false, "gated native show guard did not suppress the pet bar")
+assert(_G.PetCastingBarFrame.shown == true, "player ownership suppressed the pet castbar")
 
 _G.MSUF_ApplyBlizzardCastbarOwnership()
-assert(_G.PlayerCastingBarFrame.unit == "player" and _G.PetCastingBarFrame.unit == "pet",
-    "idempotent suppression changed ownership")
-assert(_G.PlayerCastingBarFrame.unregisterAllCount == 1 and _G.PetCastingBarFrame.unregisterAllCount == 1,
+assert(_G.PlayerCastingBarFrame.unit == "player", "idempotent suppression changed ownership")
+assert(_G.PlayerCastingBarFrame.unregisterAllCount == 1 and _G.PetCastingBarFrame.unregisterAllCount == 0,
     "idempotent suppression repeated event detachment")
-assert(_G.PlayerCastingBarFrame.hookCount == 1 and _G.PetCastingBarFrame.hookCount == 1,
+assert(_G.PlayerCastingBarFrame.hookCount == 1 and _G.PetCastingBarFrame.hookCount == 0,
     "idempotent suppression installed another show guard")
 
 _G.MSUF_SetCastbarBackend("player", "BLIZZARD")
@@ -141,9 +139,9 @@ assert(_G.PlayerCastingBarFrame.events.PLAYER_ENTERING_WORLD == true,
     "Blizzard-owned player cast events were not restored")
 assert(_G.PetCastingBarFrame.events.UNIT_PET == true
     and _G.PetCastingBarFrame.events.PLAYER_ENTERING_WORLD == true,
-    "Blizzard-owned pet events were not restored")
+    "player restore mutated Blizzard's pet events")
 _G.PetCastingBarFrame:Show()
-assert(_G.PetCastingBarFrame.shown == true, "disabled show guard hid a Blizzard-owned pet bar")
+assert(_G.PetCastingBarFrame.shown == true, "player show guard hid a Blizzard-owned pet bar")
 
 _G.MSUF_SetCastbarBackend("player", "HIDE")
 _G.MSUF_Castbars_OnSettingsChanged("test_hide")
@@ -159,16 +157,19 @@ assert(bridgeEvents.events.PLAYER_REGEN_ENABLED, "combat restore did not queue o
 inCombat = false
 assert(bridgeEvents.scripts.OnEvent)
 bridgeEvents.scripts.OnEvent(bridgeEvents, "PLAYER_REGEN_ENABLED")
-assert(_G.PlayerCastingBarFrame.unit == "player" and _G.PetCastingBarFrame.unit == "pet",
-    "queued native ownership did not restore after combat")
+assert(_G.PlayerCastingBarFrame.unit == "player", "queued native ownership did not restore after combat")
 
 _G.MSUF_SetCastbarBackend("player", "MSUF")
-_G.MSUF_Castbars_OnSettingsChanged("test_late_pet")
-local latePet = newFrame("pet", true)
-_G.PetCastingBarFrame = latePet
-bridgeEvents.scripts.OnEvent(bridgeEvents, "ADDON_LOADED", "Blizzard_UnitFrame")
-assert(latePet.unit == "pet" and latePet.events.UNIT_PET == true
-    and latePet.events.PLAYER_ENTERING_WORLD == nil,
-    "late-created pet castbar escaped suppression")
+_G.MSUF_Castbars_OnSettingsChanged("test_late_player")
+local latePlayer = newFrame("player", false)
+_G.PlayerCastingBarFrame = latePlayer
+_G.CastingBarFrame = latePlayer
+bridgeEvents.scripts.OnEvent(bridgeEvents, "ADDON_LOADED", "Blizzard_CastingBarFrame")
+assert(latePlayer.unit == "player" and next(latePlayer.events) == nil,
+    "late-created player castbar escaped suppression")
+assert(_G.PetCastingBarFrame.events.UNIT_PET == true
+    and _G.PetCastingBarFrame.events.PLAYER_ENTERING_WORLD == true
+    and _G.PetCastingBarFrame.unregisterAllCount == 0,
+    "late player suppression crossed into pet ownership")
 
 print("castbar native ownership smoke: ok")

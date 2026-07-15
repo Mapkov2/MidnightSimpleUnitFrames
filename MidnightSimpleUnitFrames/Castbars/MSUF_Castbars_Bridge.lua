@@ -98,10 +98,11 @@ if type(IsCastTimeEnabled) ~= "function" then
 end
 ExportPublic("MSUF_IsCastTimeEnabled", IsCastTimeEnabled)
 
---- Reversible ownership for Blizzard's player and pet castbars. Suppression
---- keeps Blizzard's unit token valid, removes cast-event work, and preserves
---- the pet frame's UNIT_PET lifecycle. A shared OnShow guard is installed once
---- per frame and is a no-op whenever Blizzard owns the bars.
+--- Reversible ownership for Blizzard's player castbar. PetCastingBarFrame is
+--- owned by Blizzard's PetFrame lifecycle and must stay outside this bridge;
+--- coupling it to the player backend can leave Blizzard dispatching
+--- PLAYER_ENTERING_WORLD with a nil pet unit. A shared OnShow guard is
+--- installed once per player frame and is a no-op whenever Blizzard owns it.
 local nativeOwnershipPending = false
 local eventFrame
 local nativeRecords = setmetatable({}, { __mode = "k" })
@@ -114,20 +115,11 @@ local function SetBlizzardPlayerCastbarAllowed(allowed)
     ns.UF.blizzardCastbarOwner = allowed and "Blizzard" or GetBackend("player")
 end
 
-local function ForEachBlizzardCastbar(callback)
+local function ForEachBlizzardPlayerCastbar(callback)
     local player = rawget(_G, "PlayerCastingBarFrame")
     local legacyPlayer = rawget(_G, "CastingBarFrame")
-    local pet = rawget(_G, "PetCastingBarFrame")
     if player then callback(player) end
     if legacyPlayer and legacyPlayer ~= player then callback(legacyPlayer) end
-    if pet and pet ~= player and pet ~= legacyPlayer then callback(pet) end
-end
-
-local function NativeUnitForFrame(frame)
-    if frame == rawget(_G, "PetCastingBarFrame") then
-        return "pet"
-    end
-    return "player"
 end
 
 local function HideSuppressedNativeFrame(frame)
@@ -146,21 +138,11 @@ local function EnsureNativeHideGuard(frame, record)
     record.hideGuardInstalled = true
 end
 
-local function RegisterPetLifecycle(frame, isPet)
-    if not isPet then return end
-
-    if type(frame.RegisterUnitEvent) == "function" then
-        pcall(frame.RegisterUnitEvent, frame, "UNIT_PET", "player")
-    elseif type(frame.RegisterEvent) == "function" then
-        pcall(frame.RegisterEvent, frame, "UNIT_PET")
-    end
-end
-
 local function SetNativeFrameSuppressed(frame, suppressed)
     if not frame then return false end
 
     local record = nativeRecords[frame]
-    local unit = NativeUnitForFrame(frame)
+    local unit = "player"
 
     if suppressed then
         if record and record.suppressed then
@@ -173,14 +155,12 @@ local function SetNativeFrameSuppressed(frame, suppressed)
         record.unit = frame.unit or unit
         record.showTradeSkills = frame.showTradeSkills
         record.showShield = frame.showShield
-        record.isPet = unit == "pet"
         record.suppressed = true
 
         EnsureNativeHideGuard(frame, record)
         if type(frame.UnregisterAllEvents) == "function" then
             record.detached = pcall(frame.UnregisterAllEvents, frame) == true
         end
-        RegisterPetLifecycle(frame, record.isPet)
         if frame.Hide then frame:Hide() end
         return true
     end
@@ -201,7 +181,6 @@ local function SetNativeFrameSuppressed(frame, suppressed)
             frame.unit = restoredUnit
         end
     end
-    RegisterPetLifecycle(frame, record.isPet)
     record.detached = nil
     return true
 end
@@ -212,7 +191,7 @@ function NativeOwner:Apply()
 
     if type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() then
         nativeOwnershipPending = true
-        ForEachBlizzardCastbar(function(frame)
+        ForEachBlizzardPlayerCastbar(function(frame)
             if suppress and frame.Hide then frame:Hide() end
         end)
         if eventFrame then eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED") end
@@ -221,7 +200,7 @@ function NativeOwner:Apply()
 
     nativeOwnershipPending = false
     local foundAny = false
-    ForEachBlizzardCastbar(function(frame)
+    ForEachBlizzardPlayerCastbar(function(frame)
         foundAny = true
         SetNativeFrameSuppressed(frame, suppress)
     end)
