@@ -1138,6 +1138,8 @@ L["Show placeholder data on unitframes\nwithout real units (target, focus, etc.)
 L["Druid - Balance (no class bar)"] = "Druid — Balance · no class resource"
 L["CDM detected (no class resource for this spec)"] = "CDM detected · no class resource for this specialization"
 L["Show channel tick lines (5)"] = "Show 5 channel tick lines"
+L["Spell-specific channel tick markers"] = "Spell-specific channel tick markers"
+L["Shows tick separators on the Player castbar while channeling.\n\nSupported spells use their actual tick count, including supported talent and channel-duration changes. Unsupported channels keep five evenly spaced fallback lines. Custom channel tick settings override the automatic layout.\n\nThe markers are event-driven and add no recurring channel polling."] = "Shows tick separators on the Player castbar while channeling.\n\nSupported spells use their actual tick count, including supported talent and channel-duration changes. Unsupported channels keep five evenly spaced fallback lines. Custom channel tick settings override the automatic layout.\n\nThe markers are event-driven and add no recurring channel polling."
 L["Show spark (leading edge highlight)"] = "Show leading-edge spark"
 
 L["The Assistant dashboard module is not available. Use the navigation pages and search to configure MSUF."] = "Assistant unavailable. Use navigation or search to configure MSUF."

@@ -797,10 +797,10 @@ local function BuildCastbars(ctx)
             for i = 1, #self.ticks do self.ticks[i]:Hide() end
             if kind == "channel" and ReadGBool("castbarShowChannelTicks", false) then
                 local count = 5
-                for i = 1, count - 1 do
+                for i = 1, count do
                     local tick = self.ticks[i]
                     if tick then
-                        local x = floor(barWLocal * (i / count) + 0.5)
+                        local x = floor(barWLocal * (i / (count + 1)) + 0.5)
                         tick:ClearAllPoints()
                         tick:SetPoint("TOPLEFT", self.bar, "TOPLEFT", statusX + x, -1)
                         tick:SetHeight(barHLocal)
@@ -1006,14 +1006,20 @@ local function BuildCastbars(ctx)
     end
     local behavior = b:CollapsibleSection("castbar_behavior", "Shake & Fill Direction", 196, true)
     local leftX, rightX = 14, 392
-    BuildCastControlSpecs(behavior, {
+    local behaviorControls = BuildCastControlSpecs(behavior, {
         { "toggle", "Shake on interrupt", leftX, -42, 260, "castbarInterruptShake", false, "MSUF2_CASTBAR_SHAKE", ApplyAndRefresh },
         { "slider", "Shake strength", leftX, -72, 320, 0, 30, 1, "castbarShakeStrength", 8, "MSUF2_CASTBAR_SHAKE_STRENGTH", function(reason, value, applyQueued) ApplyCastbarsIfNeeded(reason, nil, applyQueued); ShakeCastPreview(value) end },
         { "toggle", "Always use fill direction for all casts", rightX, -42, 360, "castbarUnifiedDirection", false, "MSUF2_CASTBAR_UNIFIED_DIRECTION", ApplyAndRefresh },
         { "dropdown", "Castbar fill direction", rightX, -72, 300, VT("RTL", "Right to left (default)", "LTR", "Left to right"), "castbarFillDirection", "RTL", "MSUF2_CASTBAR_FILL_DIRECTION", ApplyAndRefresh },
         { "toggle", "Use opposite fill direction for target", rightX, -126, 360, "castbarOpositeDirectionTarget", false, "MSUF2_CASTBAR_TARGET_DIRECTION", ApplyAndRefresh },
-        { "toggle", "Show channel tick lines (5)", rightX, -150, 360, "castbarShowChannelTicks", false, "MSUF2_CASTBAR_TICKS", ApplyAndRefresh },
+        { "toggle", "Spell-specific channel tick markers", rightX, -150, 360, "castbarShowChannelTicks", false, "MSUF2_CASTBAR_TICKS", ApplyAndRefresh },
     }, "behavior")
+    if M.AddTooltip then
+        M.AddTooltip(behaviorControls.castbarShowChannelTicks,
+            "Spell-specific channel tick markers",
+            "Shows tick separators on the Player castbar while channeling.\n\nSupported spells use their actual tick count, including supported talent and channel-duration changes. Unsupported channels keep five evenly spaced fallback lines. Custom channel tick settings override the automatic layout.\n\nThe markers are event-driven and add no recurring channel polling.",
+            { hook = true, titleAsLine = true, labelHit = true, owner = "ANCHOR_RIGHT" })
+    end
     local textures = b:CollapsibleSection("castbar_textures", "Textures & Outline", 220, false)
     local texLeftX, texRightX = 14, 392
     local function ApplyTexturesAndPreview(reason, _, applyQueued)

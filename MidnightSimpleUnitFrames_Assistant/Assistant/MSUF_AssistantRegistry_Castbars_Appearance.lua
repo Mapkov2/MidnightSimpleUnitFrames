@@ -163,7 +163,7 @@ function A.CastbarsRegistry.RegisterAppearanceSettings(ctx)
     local tickCategory = "Appearance / Cast Bars / Channel Ticks"
     Registry:RegisterSetting({
         key = "general.castbarShowChannelTicks",
-        label = "Show Channel Tick Lines",
+        label = "Spell-Specific Channel Tick Markers",
         category = tickCategory,
         unit = "global",
         frameType = "castbar",
@@ -180,7 +180,7 @@ function A.CastbarsRegistry.RegisterAppearanceSettings(ctx)
         end,
         apply = ApplyChannelTicks,
         combatSafe = false,
-        description = "Authoritative visibility gate for player channel tick lines; custom layout state cannot override Off.",
+        description = "Shows spell-specific player channel tick markers with talent and duration handling, a five-line fallback for unsupported channels, and custom-layout override support.",
     })
 
     Registry:RegisterSetting({

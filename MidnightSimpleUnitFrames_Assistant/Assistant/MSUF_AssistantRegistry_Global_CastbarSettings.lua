@@ -35,7 +35,7 @@ function A.GlobalRegistry.RegisterCastbarSettings(ctx)
     RegisterGeneralBoolean("castbarSparkOverflow", "sparkOverflow", "Cast Bar Spark Overflow", true, {
         "spark overflow", "castbar spark overflow", "spark extends beyond bar",
     }, { category = "Global / Cast Bar", frameType = "castbarGlobal", apply = ApplyCastbar, reason = "MSUF_ASSISTANT_CASTBAR_SPARK_OVERFLOW" })
-    RegisterGeneralBoolean("castbarShowChannelTicks", "channelTicks", "Cast Bar Channel Tick Lines", false, {
+    RegisterGeneralBoolean("castbarShowChannelTicks", "channelTicks", "Spell-Specific Channel Tick Markers", false, {
         "channel ticks", "castbar ticks", "tick lines", "kanal ticks",
     }, { category = "Global / Cast Bar", frameType = "castbarGlobal", apply = ApplyCastbar, reason = "MSUF_ASSISTANT_CASTBAR_TICKS" })
     RegisterGeneralBoolean("castbarInterruptShake", "interruptShake", "Cast Bar Interrupt Shake", false, {
