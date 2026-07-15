@@ -25,6 +25,11 @@ local function GeneralDB()
 end
 
 local function GetBackend(unit)
+    local backend = ns.MSUF_CastbarBackend
+    if backend and type(backend.Resolve) == "function" then
+        return backend.Resolve(unit)
+    end
+
     local getBackend = _G.MSUF_GetCastbarBackend
     if type(getBackend) == "function" then
         return getBackend(unit)
@@ -93,62 +98,148 @@ if type(IsCastTimeEnabled) ~= "function" then
 end
 ExportPublic("MSUF_IsCastTimeEnabled", IsCastTimeEnabled)
 
---- Blizzard only has a native player castbar path. When MSUF owns the player
---- castbar, stop Blizzard's event stream without writing addon-owned state onto
---- the protected CastingBarFrame objects.
-local blizzardPlayerCastbarAllowed = true
+--- Reversible ownership for Blizzard's player and pet castbars. Suppression
+--- keeps Blizzard's unit token valid, removes cast-event work, and preserves
+--- the pet frame's UNIT_PET lifecycle. A shared OnShow guard is installed once
+--- per frame and is a no-op whenever Blizzard owns the bars.
+local nativeOwnershipPending = false
+local eventFrame
+local nativeRecords = setmetatable({}, { __mode = "k" })
+
+ns.Castbars = ns.Castbars or {}
+local NativeOwner = ns.Castbars.NativeOwner or {}
+ns.Castbars.NativeOwner = NativeOwner
 
 local function SetBlizzardPlayerCastbarAllowed(allowed)
-    blizzardPlayerCastbarAllowed = allowed and true or false
-    ns.UF.blizzardCastbarOwner = blizzardPlayerCastbarAllowed and "Blizzard" or "MSUF"
+    ns.UF.blizzardCastbarOwner = allowed and "Blizzard" or GetBackend("player")
 end
 
-local function ForEachBlizzardPlayerCastbar(callback)
-    local frames = {
-        rawget(_G, "PlayerCastingBarFrame"),
-        rawget(_G, "CastingBarFrame"),
-    }
+local function ForEachBlizzardCastbar(callback)
+    local player = rawget(_G, "PlayerCastingBarFrame")
+    local legacyPlayer = rawget(_G, "CastingBarFrame")
+    local pet = rawget(_G, "PetCastingBarFrame")
+    if player then callback(player) end
+    if legacyPlayer and legacyPlayer ~= player then callback(legacyPlayer) end
+    if pet and pet ~= player and pet ~= legacyPlayer then callback(pet) end
+end
 
-    for index = 1, #frames do
-        local frame = frames[index]
-        if frame then
-            callback(frame)
-        end
+local function NativeUnitForFrame(frame)
+    if frame == rawget(_G, "PetCastingBarFrame") then
+        return "pet"
     end
+    return "player"
 end
 
-local function HideIfSuppressed(frame)
-    if frame and not blizzardPlayerCastbarAllowed and frame.Hide then
+local function HideSuppressedNativeFrame(frame)
+    local record = nativeRecords[frame]
+    if record and record.suppressed and frame.Hide then
         frame:Hide()
     end
 end
 
-local function SuppressBlizzardPlayerCastbars()
-    if ShouldUseBlizzard("player") then
-        SetBlizzardPlayerCastbarAllowed(true)
+local function EnsureNativeHideGuard(frame, record)
+    if record.hideGuardInstalled or type(frame.HookScript) ~= "function" then
+        return
+    end
+
+    frame:HookScript("OnShow", HideSuppressedNativeFrame)
+    record.hideGuardInstalled = true
+end
+
+local function RegisterPetLifecycle(frame, isPet)
+    if not isPet then return end
+
+    if type(frame.RegisterUnitEvent) == "function" then
+        pcall(frame.RegisterUnitEvent, frame, "UNIT_PET", "player")
+    elseif type(frame.RegisterEvent) == "function" then
+        pcall(frame.RegisterEvent, frame, "UNIT_PET")
+    end
+end
+
+local function SetNativeFrameSuppressed(frame, suppressed)
+    if not frame then return false end
+
+    local record = nativeRecords[frame]
+    local unit = NativeUnitForFrame(frame)
+
+    if suppressed then
+        if record and record.suppressed then
+            if frame.Hide then frame:Hide() end
+            return true
+        end
+
+        record = record or {}
+        nativeRecords[frame] = record
+        record.unit = frame.unit or unit
+        record.showTradeSkills = frame.showTradeSkills
+        record.showShield = frame.showShield
+        record.isPet = unit == "pet"
+        record.suppressed = true
+
+        EnsureNativeHideGuard(frame, record)
+        if type(frame.UnregisterAllEvents) == "function" then
+            record.detached = pcall(frame.UnregisterAllEvents, frame) == true
+        end
+        RegisterPetLifecycle(frame, record.isPet)
+        if frame.Hide then frame:Hide() end
+        return true
+    end
+
+    if not (record and record.suppressed) then
         return false
     end
 
-    SetBlizzardPlayerCastbarAllowed(false)
-
-    local hookedAny = false
-    ForEachBlizzardPlayerCastbar(function(frame)
-        hookedAny = true
-        if frame.UnregisterAllEvents then
-            frame:UnregisterAllEvents()
+    -- Disable the show guard before SetUnit performs its synchronous world
+    -- refresh. SetUnit(nil) and SetUnit(unit) execute in the same Lua call, so
+    -- Blizzard never observes a nil unit from a subsequent event dispatch.
+    record.suppressed = nil
+    if record.detached and type(frame.SetUnit) == "function" then
+        pcall(frame.SetUnit, frame, nil)
+        local restoredUnit = record.unit or unit
+        local restored = pcall(frame.SetUnit, frame, restoredUnit, record.showTradeSkills, record.showShield)
+        if not restored and frame.unit == nil then
+            frame.unit = restoredUnit
         end
-        HideIfSuppressed(frame)
-    end)
+    end
+    RegisterPetLifecycle(frame, record.isPet)
+    record.detached = nil
+    return true
+end
 
-    return hookedAny
+function NativeOwner:Apply()
+    local suppress = not ShouldUseBlizzard("player")
+    SetBlizzardPlayerCastbarAllowed(not suppress)
+
+    if type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() then
+        nativeOwnershipPending = true
+        ForEachBlizzardCastbar(function(frame)
+            if suppress and frame.Hide then frame:Hide() end
+        end)
+        if eventFrame then eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED") end
+        return false
+    end
+
+    nativeOwnershipPending = false
+    local foundAny = false
+    ForEachBlizzardCastbar(function(frame)
+        foundAny = true
+        SetNativeFrameSuppressed(frame, suppress)
+    end)
+    return foundAny
+end
+
+local function SuppressBlizzardPlayerCastbars()
+    return NativeOwner:Apply()
 end
 ExportPublic("MSUF_SuppressBlizzardPlayerCastbars", SuppressBlizzardPlayerCastbars)
+ExportPublic("MSUF_ApplyBlizzardCastbarOwnership", SuppressBlizzardPlayerCastbars)
 
-local eventFrame = CreateFrame("Frame")
+eventFrame = CreateFrame("Frame")
 eventFrame:SetScript("OnEvent", function(_, event, addonName)
     if event == "ADDON_LOADED"
         and addonName ~= "Blizzard_CastingBarFrame"
         and addonName ~= "Blizzard_CastingBar"
+        and addonName ~= "Blizzard_UnitFrame"
     then
         return
     end
@@ -157,13 +248,14 @@ eventFrame:SetScript("OnEvent", function(_, event, addonName)
 end)
 
 local function SyncBlizzardCastbarEvents()
-    local wanted = ShouldUseMSUF("player")
+    local wanted = not ShouldUseBlizzard("player")
     eventFrame:UnregisterAllEvents()
     if wanted then
         eventFrame:RegisterEvent("PLAYER_LOGIN")
         eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
         eventFrame:RegisterEvent("ADDON_LOADED")
     end
+    if nativeOwnershipPending then eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED") end
     return wanted
 end
 SyncBlizzardCastbarEvents()

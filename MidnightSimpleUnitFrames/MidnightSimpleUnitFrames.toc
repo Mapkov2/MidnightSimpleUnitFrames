@@ -124,7 +124,6 @@ Runtime\MSUF_TextureRuntime.lua
 # CASTBARS / CLASS POWER
 # ---------------------------------------------------------------
 Castbars\MSUF_Castbars_Core.lua
-Castbars\MSUF_CastbarRegistry.lua
 Castbars\MSUF_CastbarStyle.lua
 Castbars\MSUF_CastbarUtils.lua
 Castbars\MSUF_CastbarRuntime.lua

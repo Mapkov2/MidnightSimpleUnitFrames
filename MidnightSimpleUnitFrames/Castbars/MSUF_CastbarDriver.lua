@@ -29,6 +29,14 @@ local UIParent = _G.UIParent
 local type = type
 local tonumber = tonumber
 local tostring = tostring
+local castbarEngine = MSUF.Castbars and MSUF.Castbars.Engine
+
+local function CastbarEngine()
+    if castbarEngine then return castbarEngine end
+    local getter = _G.MSUF_GetCastbarEngine
+    castbarEngine = type(getter) == "function" and getter() or nil
+    return castbarEngine
+end
 
 ExportPublic("MSUF_INTERRUPT_FEEDBACK_DURATION", _G.MSUF_INTERRUPT_FEEDBACK_DURATION or 0.5)
 
@@ -408,15 +416,22 @@ local function ClearFrameOnUpdate(frame)
 end
 
 local function BuildState(frame)
-    local engine = (_G.MSUF_GetCastbarEngine and _G.MSUF_GetCastbarEngine()) or nil
+    local engine = CastbarEngine()
     if engine and engine.BuildState then
         return engine:BuildState(frame.unit, frame)
     end
     return nil
 end
 
+local function PublishState(frame, state, event)
+    local engine = CastbarEngine()
+    if engine and engine.Notify and frame and frame.unit then
+        engine:Notify(frame.unit, state, event)
+    end
+end
+
 local function InvalidateBuildState(unit)
-    local engine = (_G.MSUF_GetCastbarEngine and _G.MSUF_GetCastbarEngine()) or nil
+    local engine = CastbarEngine()
     if engine and engine.Invalidate then
         engine:Invalidate(unit)
     end
@@ -572,15 +587,17 @@ local function CastbarAlreadyIdle(frame)
     return true
 end
 
-local function RefreshFromEngine(frame)
+local function RefreshFromEngine(frame, event)
     if frame.interrupted then return end
 
     local state = BuildState(frame)
     StoreActiveStateIdentity(frame, state)
     if not CastStateHasSpell(state) and CastbarAlreadyIdle(frame) then
+        PublishState(frame, state, event)
         return state, false
     end
     frame:Cast(state)
+    PublishState(frame, state, event)
     return state, true
 end
 
@@ -617,6 +634,7 @@ local function StopDriverFrame(frame, reason, unregisterCastbar)
         frame.castTargetText:Hide()
     end
     _G.MSUF_CB_ResetStateOnStop(frame, reason)
+    PublishState(frame, nil, reason)
     if unregisterCastbar and _G.MSUF_UnregisterCastbar then
         _G.MSUF_UnregisterCastbar(frame)
     end
@@ -815,6 +833,13 @@ local function ApplyCastTargetTextColor(frame, classFilename)
         fs:SetTextColor(classColor:GetRGB())
     else
         fs:SetTextColor(1, 1, 1)
+    end
+end
+
+local function AdvanceBuildStateGeneration(unit)
+    local engine = CastbarEngine()
+    if engine and engine.AdvanceGeneration then
+        return engine:AdvanceGeneration(unit)
     end
 end
 
@@ -1057,10 +1082,11 @@ local function HandleDriverEvent(frame, event, eventUnit)
         or event == "UNIT_SPELLCAST_EMPOWER_START" then
         ClearStopExpectation(frame)
         ClearStartRetry(frame)
+        AdvanceBuildStateGeneration(frame.unit)
         local token = AdvanceCastToken(frame)
         frame.isNotInterruptible = false
         frame.MSUF_kickInterruptibleConfirmed = nil
-        local state = RefreshFromEngine(frame)
+        local state = RefreshFromEngine(frame, event)
 
         if not CastStateHasSpell(state) then
             EnsureDriverCallbacks(frame)
@@ -1078,12 +1104,13 @@ local function HandleDriverEvent(frame, event, eventUnit)
         or event == "UNIT_SPELLCAST_CHANNEL_UPDATE"
         or event == "UNIT_SPELLCAST_EMPOWER_UPDATE" then
         CancelTargetFocusRefresh(frame)
+        InvalidateBuildState(frame.unit)
         if event == "UNIT_SPELLCAST_CHANNEL_UPDATE"
             and (frame._msufStopTimer1 or frame._msufStopTimer2 or frame._msufStopTimer3) then
             ClearStopExpectation(frame)
             AdvanceCastToken(frame)
         end
-        RefreshFromEngine(frame)
+        RefreshFromEngine(frame, event)
         return
     end
 
@@ -1110,8 +1137,9 @@ local function HandleDriverEvent(frame, event, eventUnit)
 
     if event == "UNIT_SPELLCAST_SUCCEEDED" then
         CancelTargetFocusRefresh(frame)
+        InvalidateBuildState(frame.unit)
         if frame.unit ~= "player" then
-            RefreshFromEngine(frame)
+            RefreshFromEngine(frame, event)
             return
         end
 
@@ -1130,6 +1158,12 @@ local function HandleDriverEvent(frame, event, eventUnit)
         frame._msufApiNotInterruptibleRaw = false
         if frame.UpdateColorForInterruptible then _G.MSUF_CB_ApplyColor(frame) end
         if _G.MSUF_KickReady_RefreshFrame then _G.MSUF_KickReady_RefreshFrame(frame, nil) end
+        local state = frame._msufCastState
+        if state then
+            state.isNotInterruptible = false
+            state.apiNotInterruptibleRaw = false
+        end
+        PublishState(frame, state, event)
         return
     end
 
@@ -1140,6 +1174,12 @@ local function HandleDriverEvent(frame, event, eventUnit)
         frame._msufApiNotInterruptibleRaw = true
         if frame.UpdateColorForInterruptible then _G.MSUF_CB_ApplyColor(frame) end
         if _G.MSUF_KickReady_RefreshFrame then _G.MSUF_KickReady_RefreshFrame(frame, nil) end
+        local state = frame._msufCastState
+        if state then
+            state.isNotInterruptible = true
+            state.apiNotInterruptibleRaw = true
+        end
+        PublishState(frame, state, event)
         return
     end
 
@@ -1149,6 +1189,7 @@ local function HandleDriverEvent(frame, event, eventUnit)
         ClearStopExpectation(frame)
         frame.MSUF_kickInterruptibleConfirmed = nil
         frame:SetInterrupted()
+        PublishState(frame, nil, event)
         return
     end
 
@@ -1410,6 +1451,7 @@ local function CreateCastBar(frameName, unit)
 
         ClearFrameOnUpdate(self)
         _G.MSUF_CB_ResetStateOnStop(self, "SUCCEEDED")
+        PublishState(self, nil, "SUCCEEDED")
     end
 
     SetDriverEventsRegistered(frame, unit, true)
@@ -1578,19 +1620,6 @@ local function MSUF_CastbarDriver_OnEnteringWorld()
     if type(any) == "function" and not any() then return end
     ApplyDriverBackendState("target")
     ApplyDriverBackendState("focus")
-
-    local general = _G.MSUF_DB and _G.MSUF_DB.general
-    local shouldUse = _G.MSUF_ShouldUseMSUFCastbar
-    local ownsPlayerCastbar = type(shouldUse) == "function"
-        and shouldUse("player", general) == true
-        or (type(shouldUse) ~= "function" and (not general or general.enablePlayerCastbar ~= false))
-    if ownsPlayerCastbar and _G.PetCastingBarFrame then
-        _G.PetCastingBarFrame:UnregisterAllEvents()
-        _G.PetCastingBarFrame:Hide()
-        _G.PetCastingBarFrame:HookScript("OnShow", function(frame)
-            frame:Hide()
-        end)
-    end
 
     if _G.MSUF_EventBus_Unregister then
         _G.MSUF_EventBus_Unregister("PLAYER_ENTERING_WORLD", "MSUF_CASTBAR_DRIVER_WORLD")

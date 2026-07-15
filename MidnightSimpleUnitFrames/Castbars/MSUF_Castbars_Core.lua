@@ -657,19 +657,32 @@ local function ApplyCastbarBaseGeometry(frame, general, forcedUnit)
     if frame:GetWidth() ~= width then frame:SetWidth(width) end
     if frame:GetHeight() ~= height then frame:SetHeight(height) end
 
-    return general, height
+    return general, height, width
 end
 
 local function ApplyCastbarVisualFrameCold(frame, general, forcedUnit)
     if not (frame and frame.statusBar) then return false end
-    general = ApplyCastbarBaseGeometry(frame, general, forcedUnit)
+    local height, width
+    general, height, width = ApplyCastbarBaseGeometry(frame, general, forcedUnit)
+    local globalRevision = _G.MSUF__castbarStyleGlobalRev or 1
+    local textureRevision = _G.MSUF_CastbarStyleRevision or 1
+    if frame._msufCastbarColdGlobalRev == globalRevision
+        and frame._msufCastbarColdTextureRev == textureRevision
+        and frame._msufCastbarColdUnit == forcedUnit
+        and frame._msufCastbarColdWidth == width
+        and frame._msufCastbarColdHeight == height then
+        return true
+    end
     if type(_G.MSUF_RefreshCastbarFrame) == "function" then
         _G.MSUF_RefreshCastbarFrame(frame, forcedUnit, general)
     end
     ApplyCastbarSparkVisual(frame, general)
-    if _G.MSUF__castbarStyleGlobalRev then
-        frame._msufCastbarStyleRev = _G.MSUF__castbarStyleGlobalRev
-    end
+    frame._msufCastbarStyleRev = globalRevision
+    frame._msufCastbarColdGlobalRev = globalRevision
+    frame._msufCastbarColdTextureRev = textureRevision
+    frame._msufCastbarColdUnit = forcedUnit
+    frame._msufCastbarColdWidth = width
+    frame._msufCastbarColdHeight = height
     return true
 end
 

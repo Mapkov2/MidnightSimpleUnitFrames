@@ -74,10 +74,22 @@ do
     Check(sent == 0, "disabled version module sent a queued broadcast")
 end
 
--- Focus interrupt tracker: no login/focus/spellcast routes before enable or after disable.
+-- Focus interrupt tracker: disabled state owns no subscription, event frame, or queued work.
 do
     local frame
     local timers = {}
+    local subscriber
+    local engine = {}
+    function engine:Subscribe(key, callback)
+        Check(key == "focus", "focus interrupt subscribed to wrong state key")
+        subscriber = callback
+        return true
+    end
+    function engine:Unsubscribe(key, callback)
+        Check(key == "focus" and callback == subscriber, "focus interrupt unsubscribed wrong callback")
+        subscriber = nil
+        return true
+    end
     _G.MSUF_DB = {
         general = { enableFocusKickIcon = false, enableFocusCastbar = true },
         focus = { enabled = true },
@@ -92,20 +104,19 @@ do
     _G.MSUF_FocusCastbar = nil
     _G.FocusCastBar = nil
 
-    LoadAddon("Castbars/MSUF_FocusKick_StateDriver.lua", {})
-    NoEvents(frame, "focus interrupt tracker startup")
+    LoadAddon("Castbars/MSUF_FocusKick_StateDriver.lua", { MSUF_CastbarEngine = engine })
+    Check(frame == nil and subscriber == nil, "disabled focus interrupt tracker acquired runtime ownership")
     Check(#timers == 0, "disabled focus interrupt tracker queued startup work")
 
     _G.MSUF_DB.general.enableFocusKickIcon = true
     _G.MSUF_FocusKickDriver_ForceUpdate()
+    Check(type(subscriber) == "function", "focus interrupt enable missed canonical state subscription")
     Check(#timers == 1, "focus interrupt enable did not queue refresh")
     timers[1]()
-    Check(frame.events.PLAYER_FOCUS_CHANGED == true, "focus interrupt enable missed focus route")
-    Check(frame.events.UNIT_SPELLCAST_START == true, "focus interrupt enable missed cast routes")
 
     _G.MSUF_DB.general.enableFocusKickIcon = false
     _G.MSUF_FocusKickDriver_ForceUpdate()
-    NoEvents(frame, "focus interrupt tracker teardown")
+    Check(frame == nil and subscriber == nil, "focus interrupt teardown retained runtime ownership")
     Check(#timers == 1, "focus interrupt disable queued work instead of tearing down immediately")
 end
 

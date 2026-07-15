@@ -7,8 +7,7 @@ names stable unless every caller is updated.
 
 - `MSUF_Castbars_Backend.lua` resolves MSUF/Blizzard/hidden backend state and keeps legacy enable flags in sync.
 - `MSUF_Castbars_Bridge.lua` bridges castbar settings into the UnitFrames module lifecycle and Blizzard player castbar suppression.
-- `MSUF_CastbarRegistry.lua` stores registered castbar frames by key.
-- `MSUF_CastbarEngine.lua` converts WoW casting/channel APIs into the shared cast state table.
+- `MSUF_CastbarEngine.lua` converts WoW casting/channel APIs into the canonical cast state and enabled-only subscriber stream.
 - `MSUF_CastbarRuntime.lua` applies active, interrupted, and stopped cast states to frames.
 - `MSUF_CastbarStyle.lua` owns castbar outline and time-text layout helpers.
 - `MSUF_CastbarUtils.lua` contains shared color, reverse-fill, glow, shake, text-shortening, and empower cleanup helpers.

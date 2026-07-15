@@ -16,6 +16,8 @@ end
 
 local Backend = {}
 ns.MSUF_CastbarBackend = Backend
+ns.Castbars = ns.Castbars or {}
+ns.Castbars.Backend = Backend
 
 local BACKEND_KEYS = {
     player = "castbarPlayerBackend",
@@ -120,9 +122,9 @@ function Backend.LegacyEnableKey(unit)
     return LEGACY_ENABLE_KEYS[NormalizeUnit(unit)]
 end
 
---- Read-through normalization: every get also repairs the profile's paired
---- backend and legacy boolean fields.
-function Backend.Get(unit, general)
+--- Pure backend resolution for runtime ownership checks. Profile repair belongs
+--- to Get/Sync so ordinary reads never mutate SavedVariables.
+function Backend.Resolve(unit, general)
     unit = NormalizeUnit(unit)
 
     local backendKey = BACKEND_KEYS[unit]
@@ -143,8 +145,22 @@ function Backend.Get(unit, general)
             or "MSUF"
     end
 
-    general[backendKey] = backend
-    general[legacyEnableKey] = backend == "MSUF"
+    return backend
+end
+
+--- Compatibility read-through normalization. Older callers expect Get() to
+--- repair the paired backend and legacy boolean fields.
+function Backend.Get(unit, general)
+    unit = NormalizeUnit(unit)
+    general = ResolveGeneralDB(general)
+
+    local backend = Backend.Resolve(unit, general)
+    local backendKey = BACKEND_KEYS[unit]
+    local legacyEnableKey = LEGACY_ENABLE_KEYS[unit]
+    if general and backendKey then
+        general[backendKey] = backend
+        general[legacyEnableKey] = backend == "MSUF"
+    end
     return backend
 end
 
@@ -181,15 +197,15 @@ function Backend.Sync(general)
 end
 
 function Backend.IsMSUF(unit, general)
-    return Backend.Get(unit, general) == "MSUF"
+    return Backend.Resolve(unit, general) == "MSUF"
 end
 
 function Backend.IsBlizzard(unit, general)
-    return Backend.Get(unit, general) == "BLIZZARD"
+    return Backend.Resolve(unit, general) == "BLIZZARD"
 end
 
 function Backend.IsHide(unit, general)
-    return Backend.Get(unit, general) == "HIDE"
+    return Backend.Resolve(unit, general) == "HIDE"
 end
 
 ExportPublic("MSUF_NormalizeCastbarBackend", Backend.Normalize)

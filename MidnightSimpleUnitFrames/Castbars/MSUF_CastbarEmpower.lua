@@ -71,7 +71,7 @@ local function GetEmpowerStageDuration(unit, stageIndex)
     return duration
 end
 
-local function BuildEmpowerTimeline(unit)
+local function BuildEmpowerTimeline(unit, castState)
     local stageEnds = {}
     local totalStage = 0
     local stageCount
@@ -110,8 +110,14 @@ local function BuildEmpowerTimeline(unit)
     end
 
     local castStartSec, castEndSec, castTotal
-    if type(_G.UnitCastingInfo) == "function" then
-        local _, _, _, startMS, endMS = _G.UnitCastingInfo(unit)
+    if castState or type(_G.UnitCastingInfo) == "function" then
+        local startMS, endMS
+        if castState then
+            startMS, endMS = castState.startTimeMS, castState.endTimeMS
+        else
+            local _, _, _, apiStartMS, apiEndMS = _G.UnitCastingInfo(unit)
+            startMS, endMS = apiStartMS, apiEndMS
+        end
         startMS = PlainNumber(startMS)
         endMS = PlainNumber(endMS)
         if startMS and endMS and endMS > startMS then
@@ -524,9 +530,12 @@ local function PlayerCastbarEmpowerStart(frame)
     frame.interruptFeedbackEndTime = nil
     if frame.latencyBar then frame.latencyBar:Hide() end
 
-    local spellName, _, icon = _G.UnitCastingInfo("player")
+    local castState = type(_G.MSUF_BuildCastState) == "function" and _G.MSUF_BuildCastState("player") or nil
+    local spellName = castState and castState.spellName
+    local icon = castState and castState.icon
     if not spellName then
-        spellName, _, icon = _G.UnitChannelInfo("player")
+        spellName, _, icon = _G.UnitCastingInfo("player")
+        if not spellName then spellName, _, icon = _G.UnitChannelInfo("player") end
     end
 
     if frame.icon and icon then
@@ -540,7 +549,7 @@ local function PlayerCastbarEmpowerStart(frame)
         end
     end
 
-    local timeline = BuildEmpowerTimeline("player")
+    local timeline = BuildEmpowerTimeline("player", castState)
     local now = ((_G.GetTimePreciseSec and _G.GetTimePreciseSec()) or _G.GetTime())
     frame.empowerStartTime = timeline.castStartSec or now
     frame.empowerStageEnds = timeline.stageEnds
@@ -562,12 +571,17 @@ local function PlayerCastbarEmpowerStart(frame)
     end
 
     local reverseFill = _G.MSUF_GetReverseFillSafe(frame, true)
-    local durationObj
-    if type(_G.UnitCastingDuration) == "function" then
+    local durationObj = castState and castState.durationObj
+    if not durationObj and type(_G.UnitCastingDuration) == "function" then
         durationObj = _G.UnitCastingDuration("player")
+    end
+    local runtime = _G.MSUF_CastbarRuntime
+    if runtime and type(runtime.RetainDuration) == "function" then
+        durationObj = runtime:RetainDuration(frame, durationObj)
     end
 
     _G.MSUF_ApplyTimerAndFill(frame.statusBar, durationObj, reverseFill, false)
+    frame.MSUF_durationObj = durationObj
     frame.statusBar:SetMinMaxValues(0, frame.empowerTotalWithGrace)
 
     local elapsed = now - (frame.empowerStartTime or now)
