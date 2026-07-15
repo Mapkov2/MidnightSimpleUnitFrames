@@ -8,10 +8,39 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-Beta18",
-    previousVersion = "6.0-Beta17",
-    rangeLabel = "6.0-Beta17 -> 6.0-Beta18",
+    currentVersion = "6.0-Beta19",
+    previousVersion = "6.0-Beta18",
+    rangeLabel = "6.0-Beta18 -> 6.0-Beta19",
     entries = {
+        {
+            version = "6.0-Beta19",
+            date = "2026-07-15",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Added separate Health and Power gradient colors, strengths, and directions, plus configurable cast-target name colors.",
+                        "Added maximum-duration Aura filters and improved Aura, Color Painter, and automatic group-scale previews.",
+                        "Tightened Group Frame lifecycle, role, aggro, and load-condition routing to avoid stale or duplicate updates.",
+                        "Fixed Blizzard castbar ownership and first-load Dashboard state transitions.",
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Added scoped gradient controls with independent Health and Power settings and live preview updates.",
+                        "Added configurable cast-target name colors across live castbars and previews.",
+                        "Added native maximum-duration filtering for unit and group-frame Debuffs.",
+                        "Improved Aura preview sizing, pinning, and lane navigation.",
+                        "Added interactive previews for automatic Group Frame scaling breakpoints.",
+                        "Consolidated Group Frame lifecycle routes and refreshed role-filtered aggro visuals only on the required cold paths.",
+                        "Rebuilt load-condition visibility after world and zone transitions.",
+                        "Limited Blizzard castbar suppression to the native player frame so the pet castbar keeps its own lifecycle.",
+                        "Kept first-load state synchronized after SavedVariables repair and highlighted unfinished Guided Setup without reopening onboarding.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-Beta18",
             date = "2026-07-15",
@@ -101,39 +130,6 @@ local data = {
                         "Fixed guided setup selecting disabled controls and improved skip, highlight, and placement behavior.",
                         "Hardened Assistant value safety, direct Search navigation, ambiguous commands, undo/action routing, and generated schema coverage.",
                         "Added reproducible serialized release gates, self-contained Graphify inventory checks, and broader Menu2/preview regression coverage.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-Beta15",
-            date = "2026-07-14",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Added a guided Beta 15 upgrade highlights flow and refined first-load onboarding.",
-                        "Added configurable castbar name/target text.",
-                        "Added group-frame role icons and mouse-drag positioning for spell icons directly in the preview.",
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Refined first-load routing and guided setup behavior.",
-                        "Added configurable castbar target text.",
-                        "Added NPC class colors and name-relative status anchors for unit frames.",
-                        "Stabilized spell-indicator geometry and aura filtering.",
-                        "Hardened Menu2 scrolling for secret values and refreshed layout behavior.",
-                        "Expanded regression smoke coverage for the updated runtime paths.",
-                        "Gated castbar lifecycle and hotpath events to active features.",
-                        "Reseeded visible prediction bars after world entry and cold-start recovery.",
-                        "Added group-frame role icons and live spell-indicator preview placement.",
-                        "Detached event routes for disabled features to reduce idle work.",
-                        "Unified Menu2 and Edit Mode layout tokens.",
-                        "Updated prediction and locale-aware default baselines.",
-                        "Added the Beta 15 upgrade highlights flow and onboarding integration.",
-                        "Added lifecycle and group-frame regression coverage for the Beta 15 changes.",
                     },
                 },
             },

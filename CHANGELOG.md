@@ -1,5 +1,26 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-Beta19 - 2026-07-15
+
+### Highlights
+
+- Added separate Health and Power gradient colors, strengths, and directions, plus configurable cast-target name colors.
+- Added maximum-duration Aura filters and improved Aura, Color Painter, and automatic group-scale previews.
+- Tightened Group Frame lifecycle, role, aggro, and load-condition routing to avoid stale or duplicate updates.
+- Fixed Blizzard castbar ownership and first-load Dashboard state transitions.
+
+### Changes
+
+- Added scoped gradient controls with independent Health and Power settings and live preview updates.
+- Added configurable cast-target name colors across live castbars and previews.
+- Added native maximum-duration filtering for unit and group-frame Debuffs.
+- Improved Aura preview sizing, pinning, and lane navigation.
+- Added interactive previews for automatic Group Frame scaling breakpoints.
+- Consolidated Group Frame lifecycle routes and refreshed role-filtered aggro visuals only on the required cold paths.
+- Rebuilt load-condition visibility after world and zone transitions.
+- Limited Blizzard castbar suppression to the native player frame so the pet castbar keeps its own lifecycle.
+- Kept first-load state synchronized after SavedVariables repair and highlighted unfinished Guided Setup without reopening onboarding.
+
 ## 6.0-Beta18 - 2026-07-15
 
 ### Highlights
