@@ -302,8 +302,9 @@ local function BuildGFAuras(ctx)
     local lane = CurrentAuraWorkspaceLane(scope)
     local tool = CurrentAuraWorkspaceTool(scope, lane)
     local anchors = (#STATUS_ICON_ANCHORS > 0 and STATUS_ICON_ANCHORS) or AURA_ANCHORS
-    local growthValues = (#SPELL_GROWTH_VALUES > 0 and SPELL_GROWTH_VALUES)
-        or VT("RIGHTDOWN", "Right then Down", "LEFTDOWN", "Left then Down", "RIGHTUP", "Right then Up", "LEFTUP", "Left then Up")
+    local growthValues = VT("RIGHTDOWN", "Right then Down", "LEFTDOWN", "Left then Down",
+        "RIGHTUP", "Right then Up", "LEFTUP", "Left then Up",
+        "UP", "Up (Single Column)", "DOWN", "Down (Single Column)")
     local defaults = lane == "buff"
         and { anchor = "BOTTOMRIGHT", growth = "LEFTUP", size = 22, perRow = 4, max = 6, spacing = 1, layer = 5 }
         or lane == "externals"
@@ -343,6 +344,7 @@ local function BuildGFAuras(ctx)
                 AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".layout." .. AuraCatalogToken(key)))
             W.MoveWidget(widget, section, x, -34, dropdownW, "LEFT")
             controls[#controls + 1] = widget
+            return widget
         end
         Dropdown("Anchor", anchorX, anchors, "anchor", defaults.anchor)
         Dropdown("Growth", growthX, growthValues, "growth", defaults.growth)
@@ -353,12 +355,13 @@ local function BuildGFAuras(ctx)
                 AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".layout." .. AuraCatalogToken(key)))
             W.MoveWidget(widget, section, 24 + (col - 1) * (col4 + gap), y, col4)
             controls[#controls + 1] = widget
+            return widget
         end
         Slider("X", 1, -92, -300, 300, "x", 0)
         Slider("Y", 2, -92, -300, 300, "y", 0)
         Slider("Max", 3, -92, 0, 20, "max", defaults.max)
         Slider("Size", 4, -92, 8, 80, "size", defaults.size)
-        Slider("Per row", 1, -146, 1, 20, "perRow", defaults.perRow)
+        local perRowControl = Slider("Per row", 1, -146, 1, 20, "perRow", defaults.perRow)
         Slider("Gap", 2, -146, 0, 12, "spacing", defaults.spacing)
         Slider("Layer", 3, -146, 0, 30, "layer", defaults.layer)
         local strata = BindNestedStrataSlider(ctx, W.Slider(section, "Strata", 0, (FrameStrataCount or 9) - 1, 1, col4),
@@ -370,6 +373,8 @@ local function BuildGFAuras(ctx)
             local shown = LaneBackendEnabled(CurrentScope(), lane)
             SetOptionEnabled(enable, true)
             SetOptionsEnabled(controls, shown)
+            local growth = tostring(AuraGroup(CurrentScope(), lane).growth or defaults.growth):upper()
+            SetOptionEnabled(perRowControl, shown and growth ~= "UP" and growth ~= "DOWN")
         end)
     elseif type(M.BuildAuras3GroupLaneWorkspace) == "function" then
         M.BuildAuras3GroupLaneWorkspace(ctx, auraBuilder, scope, lane, { tool = tool, compact = true })

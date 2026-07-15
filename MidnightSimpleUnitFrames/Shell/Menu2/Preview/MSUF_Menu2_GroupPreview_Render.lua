@@ -559,9 +559,9 @@ local function RenderAuras(scene)
         elseif growth == "RIGHTUP" then
             return 1, 1, false, "BOTTOMLEFT"
         elseif growth == "UP" or growth == "UPRIGHT" or growth == "UPLEFT" then
-            return 1, 1, false, "BOTTOMLEFT"
+            return 1, 1, true, "BOTTOMLEFT"
         elseif growth == "DOWN" or growth == "DOWNRIGHT" or growth == "DOWNLEFT" then
-            return 1, -1, false, "TOPLEFT"
+            return 1, -1, true, "TOPLEFT"
         end
         return 1, -1, false, "TOPLEFT"
     end
@@ -691,8 +691,7 @@ local function RenderAuras(scene)
         count = max(Round(count), 1)
         perRow = max(Round(perRow), 1)
         if verticalGrowth == true then
-            local rows = min(count, perRow)
-            return math.ceil(count / perRow), rows
+            return 1, count
         end
         local cols = min(count, perRow)
         return cols, math.ceil(count / perRow)
@@ -772,8 +771,7 @@ local function RenderAuras(scene)
                 local idx = i - 1
                 local col, row
                 if verticalGrowth == true then
-                    row = idx % perRow
-                    col = (idx - row) / perRow
+                    col, row = 0, idx
                 else
                     col = idx % perRow
                     row = (idx - col) / perRow

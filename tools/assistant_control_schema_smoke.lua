@@ -57,7 +57,7 @@ for i = 1, #(Data.collectionStates or {}) do
 end
 Check(#(Data.collectionStates or {}) == #expectedStateIds, "complete 138-state inventory")
 Check(collectionStates.base == 2073, "reviewed complete-catalog baseline")
-Check(Data.collectionUnionControls == 2756 and #Data.records == Data.collectionUnionControls,
+Check(Data.collectionUnionControls == 2748 and #Data.records == Data.collectionUnionControls,
     "reviewed exhaustive finite-state control union")
 for i = 1, #Data.columns do columns[Data.columns[i]] = i end
 for _, column in ipairs({ "actionFixedArgs", "actionInputArg", "actionInputKind", "actionInputDomain",
@@ -158,7 +158,7 @@ Check(FunctionFree(Data), "generated schema data must remain function-free")
 local before = Schema.Stats()
 Check(before.version == 3, "schema version must be 3")
 Check(before.contexts == 40, "all 40 class/spec contexts must be present")
-Check(before.records == 2756, "public control inventory must equal the reviewed exhaustive finite-state union")
+Check(before.records == 2748, "public control inventory must equal the reviewed exhaustive finite-state union")
 Check(before.indexed == false, "schema index must remain lazy")
 
 local coldStart = os.clock()

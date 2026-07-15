@@ -24,11 +24,11 @@ local ANCHOR_VALUE_ALIASES = {
 local GROWTH_VALUE_ALIASES = {
     rightdown = "RIGHTDOWN",
     right = "RIGHTDOWN",
-    down = "RIGHTDOWN",
+    down = "DOWN",
     leftdown = "LEFTDOWN",
     left = "LEFTDOWN",
     rightup = "RIGHTUP",
-    up = "RIGHTUP",
+    up = "UP",
     leftup = "LEFTUP",
 }
 

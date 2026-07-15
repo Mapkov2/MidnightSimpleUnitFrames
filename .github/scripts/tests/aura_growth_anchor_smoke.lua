@@ -3,8 +3,8 @@
 -- The selected lane anchor pins the lane bounding box to the unit frame. The
 -- growth-derived initialAnchor belongs to Blizzard's internal element flow.
 -- PTR 5 leaves AuraButton layout entirely inside Blizzard's native code. A
--- fixed MSUF-owned host keeps the configured full-capacity anchor stable while
--- legacy UP/DOWN values are translated to row-major RIGHTUP/RIGHTDOWN.
+-- fixed MSUF-owned host keeps the configured full-capacity anchor stable.
+-- Native one-icon rows provide true PTR 5-safe single-column UP/DOWN growth.
 local root = arg and arg[1] or "."
 
 local function Check(value, message)
@@ -293,8 +293,8 @@ local GROWTHS = {
     LEFTDOWN = { x = -1, y = -1, initial = "TOPRIGHT", vertical = false },
     RIGHTUP = { x = 1, y = 1, initial = "BOTTOMLEFT", vertical = false },
     LEFTUP = { x = -1, y = 1, initial = "BOTTOMRIGHT", vertical = false },
-    UP = { x = 1, y = 1, initial = "BOTTOMLEFT", vertical = false },
-    DOWN = { x = 1, y = -1, initial = "TOPLEFT", vertical = false },
+    UP = { x = 1, y = 1, initial = "BOTTOMLEFT", vertical = true, rowWidth = 10 },
+    DOWN = { x = 1, y = -1, initial = "TOPLEFT", vertical = true, rowWidth = 10 },
 }
 local GROWTH_ORDER = { "RIGHTDOWN", "LEFTDOWN", "RIGHTUP", "LEFTUP", "UP", "DOWN" }
 
@@ -357,13 +357,17 @@ local function AssertLayoutSetters(container, expected, label)
     Equal(container.auraLayoutAnchorPoint, expected.initial, label .. " native anchor")
     Equal(container.auraLayoutHorizontalDirection, expected.x, label .. " native horizontal growth")
     Equal(container.auraLayoutVerticalDirection, expected.y, label .. " native vertical growth")
-    Near(container.auraLayoutRowWidth, 34, label .. " native row width")
+    Near(container.auraLayoutRowWidth, expected.rowWidth or 34, label .. " native row width")
 end
 
 local function AssertGrid(frames, container, expected, label)
     local step = 12
     local expectedOffsets
-    expectedOffsets = { { 0, 0 }, { step * expected.x, 0 }, { 2 * step * expected.x, 0 }, { 0, step * expected.y } }
+    if expected.vertical == true then
+        expectedOffsets = { { 0, 0 }, { 0, step * expected.y }, { 0, 2 * step * expected.y }, { 0, 3 * step * expected.y } }
+    else
+        expectedOffsets = { { 0, 0 }, { step * expected.x, 0 }, { 2 * step * expected.x, 0 }, { 0, step * expected.y } }
+    end
     for index = 1, #expectedOffsets do
         local offset = expectedOffsets[index]
         AssertPoint(frames[index], expected.initial, container, expected.initial, offset[1], offset[2],
@@ -568,9 +572,9 @@ do
         "deferred dispel AuraSlot marker survived successful sync")
 end
 
--- Legacy vertical values are translated to native row-major values. Equivalent
--- UP/RIGHTUP configs reuse a container; a real layout change recreates it so all
--- AuraButton setup remains inside initializeFrame.
+-- UP/DOWN use native one-icon rows. Switching between vertical and horizontal
+-- growth recreates the container so all AuraButton setup remains inside
+-- initializeFrame.
 do
     local upLane = UnitLane("TOPRIGHT", "UP")
     local container, auraRoot, parent = ApplyLane(upLane)
@@ -578,6 +582,12 @@ do
     local frames = group:GetFramesByIndex()
     container:ApplyLayout()
     local host = assert(container._msufA3LayoutHost)
+    Equal(upLane.verticalGrowth, true, "UP did not compile as vertical growth")
+    Equal(upLane.cols, 1, "UP did not compile to one column")
+    Equal(upLane.rows, 6, "UP row count")
+    Near(upLane.width, 10, "UP lane width")
+    Near(upLane.height, 70, "UP lane height")
+    AssertGrid(frames, container, GROWTHS.UP, "native up")
 
     local activeCounts = { 1, 2, 3, 4, 5, 6 }
     for i = 1, #activeCounts do
@@ -593,26 +603,30 @@ do
 
     local rightUpLane = UnitLane("TOPRIGHT", "RIGHTUP")
     local ok, any = A3._ApplyNormalLaneContainers(auraRoot, { buff = rightUpLane }, parent, false)
-    Check(ok == true and any == true and auraRoot.Buffs == container,
-        "equivalent legacy/native growth recreated container")
-    container:ApplyLayout()
-    AssertGrid(frames, container, GROWTHS.RIGHTUP, "vertical-to-horizontal switch")
+    local rightUpContainer = assert(auraRoot.Buffs)
+    Check(ok == true and any == true and rightUpContainer ~= container,
+        "vertical-to-horizontal growth did not recreate its PTR 5 container")
+    rightUpContainer:ApplyLayout()
+    local rightUpGroup = rightUpContainer:GetAuraGroup(rightUpContainer._msufA3ManagedGroupKey)
+    local rightUpFrames = rightUpGroup:GetFramesByIndex()
+    local rightUpHost = assert(rightUpContainer._msufA3LayoutHost)
+    AssertGrid(rightUpFrames, rightUpContainer, GROWTHS.RIGHTUP, "vertical-to-horizontal switch")
     for _, activeCount in ipairs({ 1, 2, 4, 6 }) do
         local active = {}
-        for index = 1, activeCount do active[index] = frames[index] end
-        group.frames = active
-        container:ApplyLayout()
-        Near(host.width, rightUpLane.width,
+        for index = 1, activeCount do active[index] = rightUpFrames[index] end
+        rightUpGroup.frames = active
+        rightUpContainer:ApplyLayout()
+        Near(rightUpHost.width, rightUpLane.width,
             "native fixed host width at active count " .. tostring(activeCount))
-        Near(host.height, rightUpLane.height,
+        Near(rightUpHost.height, rightUpLane.height,
             "native fixed host height at active count " .. tostring(activeCount))
     end
-    group.frames = frames
+    rightUpGroup.frames = rightUpFrames
 
     local downLane = UnitLane("TOPRIGHT", "DOWN")
     ok, any = A3._ApplyNormalLaneContainers(auraRoot, { buff = downLane }, parent, false)
     local downContainer = assert(auraRoot.Buffs)
-    Check(ok == true and any == true and downContainer ~= container,
+    Check(ok == true and any == true and downContainer ~= rightUpContainer,
         "layout-changing growth did not recreate its PTR 5 container")
     downContainer:ApplyLayout()
     local downFrames = downContainer:GetAuraGroup(downContainer._msufA3ManagedGroupKey):GetFramesByIndex()
@@ -620,13 +634,15 @@ do
 end
 
 -- Group frames compile a different DB/spec shape but feed the same native lane
--- runtime. Exercise all four group horizontal growth pairs so this cannot regress
+-- runtime. Exercise horizontal and vertical growth so this cannot regress
 -- independently behind the group config cache.
 local GROUP_GROWTHS = {
     { name = "RIGHTDOWN", xName = "RIGHT", yName = "DOWN", expected = GROWTHS.RIGHTDOWN },
     { name = "LEFTDOWN", xName = "LEFT", yName = "DOWN", expected = GROWTHS.LEFTDOWN },
     { name = "RIGHTUP", xName = "RIGHT", yName = "UP", expected = GROWTHS.RIGHTUP },
     { name = "LEFTUP", xName = "LEFT", yName = "UP", expected = GROWTHS.LEFTUP },
+    { name = "UP", xName = "UP", yName = "UP", expected = GROWTHS.UP },
+    { name = "DOWN", xName = "DOWN", yName = "DOWN", expected = GROWTHS.DOWN },
 }
 local GROUP_LANES = {
     {
@@ -694,7 +710,7 @@ for _, laneSpec in ipairs(GROUP_LANES) do
         end
     end
 end
-Equal(groupCases, 144, "group lane/anchor/growth coverage")
+Equal(groupCases, 216, "group lane/anchor/growth coverage")
 
 -- Execute the Menu2 unit-preview geometry provider directly. This keeps the
 -- preview side of the contract covered without constructing WoW UI regions:
@@ -798,6 +814,13 @@ do
     Near(fallback.laneLeft, 200 - 2 - 34, "custom preview fallback runtime-rounded X")
     Near(fallback.laneBottom, 50 + 5 - 11, "custom preview fallback runtime-rounded Y")
     Equal(fallback.shown, 4, "custom preview fallback sample count")
+
+    customItems[1].placed.growth = "UP"
+    local verticalFallback = assert(previewAuras.BuildState("player", 200, 100).custom1)
+    Near(verticalFallback.laneW, 10, "vertical custom preview fallback width")
+    Near(verticalFallback.laneH, 70, "vertical custom preview fallback full-capacity height")
+    Near(verticalFallback.laneLeft, 200 - 2 - 10, "vertical custom preview fallback anchored X")
+    Near(verticalFallback.laneBottom, 50 + 5 - 35, "vertical custom preview fallback anchored Y")
 end
 
 -- Static integration guards: live, Edit Mode, Menu2 unit/group previews, and
@@ -809,6 +832,9 @@ Check(runtimeSource:find("layoutHost:SetPoint(lane.anchor, parentFrame, lane.anc
 Check(runtimeSource:find("SetAuraLayoutAnchorPoint", 1, true), "native layout anchor setter missing")
 Check(runtimeSource:find("SetAuraLayoutGrowthDirection", 1, true), "native growth setter missing")
 Check(runtimeSource:find("SetAuraLayoutRowWidth", 1, true), "native row-width setter missing")
+Check(runtimeSource:find("lane.verticalGrowth == true", 1, true)
+    and runtimeSource:find("and (lane.size or 1) or (lane.width or lane.size or 1)", 1, true),
+    "native vertical layout no longer forces one-icon rows")
 Check(Count(runtimeSource, "initialAnchor = ButtonAnchor(xSign, ySign)") >= 2,
     "unit/group compilers no longer share initial-anchor derivation")
 Check(runtimeSource:find("local NativeRuntime = (function()", 1, true),
@@ -857,6 +883,8 @@ Check(unitPreviewSource:find('icon:SetPoint(bounds.initialAnchor or "TOPLEFT", v
     "unit preview no longer flows icons from initialAnchor")
 Check(unitPreviewSource:find("local cols, rows = GridShape(count, perRow, vertical)", 1, true),
     "unit custom preview no longer sizes fallback bounds from full capacity")
+Check(unitPreviewSource:find("if vertical then return 1, count end", 1, true),
+    "unit preview no longer mirrors single-column vertical growth")
 
 local menuModelSource = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Menu_Model.lua")
 Check(menuModelSource:find("TOPLEFT=true, TOP=true, TOPRIGHT=true", 1, true)
@@ -865,6 +893,17 @@ Check(menuModelSource:find("TOPLEFT=true, TOP=true, TOPRIGHT=true", 1, true)
     "unit aura menu model no longer accepts all nine anchors")
 Check(menuModelSource:find("customMetrics[index] = buildMetrics", 1, true),
     "unit aura preview no longer consumes compiled custom-lane metrics")
+Check(menuModelSource:find('text = "Up (Single Column)"', 1, true)
+    and menuModelSource:find('text = "Down (Single Column)"', 1, true),
+    "unit aura menu no longer exposes explicit vertical growth choices")
+
+local aurasMenuSource = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_Auras.lua")
+Check(not aurasMenuSource:find('BindDropdown(ctx, section, "Exclusive"', 1, true)
+    and not aurasMenuSource:find("DEBUFF_EXCLUSIVE", 1, true),
+    "redundant Exclusive/Raid dropdown returned to the compact Aura filters")
+Check(aurasMenuSource:find('Model.ReadFilter(unit, lane, "exclusive", "none") == "raid"', 1, true)
+    and aurasMenuSource:find('Model.WriteFilter(unit, lane, "exclusive", "none")', 1, true),
+    "legacy Exclusive=Raid profiles are no longer bridged by the visible Raid switch")
 
 local groupPreviewSource = Read("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Render.lua")
 Check(groupPreviewSource:find("handle:SetPoint(anchor, mock, anchor", 1, true),
@@ -882,4 +921,4 @@ Check(groupHandlesSource:find("return ResolveAnchor(rx, ry)", 1, true),
 Check(groupHandlesSource:find('externalHandle._cfgGroup = "externals"', 1, true),
     "group External aura handle no longer writes its persisted lane")
 
-print("PASS aura position parity: 54 unit + 144 group live layouts, 45 unit preview lanes, PTR5 forbidden-button guard, fixed host capacity, player/dispel zone repair, 1000x native churn")
+print("PASS aura position parity: 54 unit + 216 group live layouts, 45 unit preview lanes, vertical fallback, PTR5 forbidden-button guard, fixed host capacity, player/dispel zone repair, 1000x native churn")

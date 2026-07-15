@@ -347,9 +347,9 @@ local function Growth(cfg, kind)
     local gy = rowWrap == "UP" and 1 or -1
     local vertical = false
     if growth == "UP" then
-        gx, gy = 1, 1
+        gx, gy, vertical = 1, 1, true
     elseif growth == "DOWN" then
-        gx, gy = 1, -1
+        gx, gy, vertical = 1, -1, true
     end
     return gx, gy, vertical, ButtonAnchor(gx, gy)
 end
@@ -378,15 +378,14 @@ end
 local function GridShape(count, perRow, vertical)
     count = max(1, RoundOffset(count))
     perRow = max(1, RoundOffset(perRow))
-    if vertical then return max(1, ceil(count / perRow)), min(count, perRow) end
+    if vertical then return 1, count end
     return min(count, perRow), max(1, ceil(count / perRow))
 end
 local function IconGridCoord(index, perRow, vertical)
     local per = max(1, RoundOffset(perRow))
     local idx = index - 1
     if vertical then
-        local row = idx % per
-        return (idx - row) / per, row
+        return 0, idx
     end
     local col = idx % per
     return col, (idx - col) / per
@@ -495,8 +494,8 @@ local function CustomGrowth(growth)
     if growth == "LEFTUP" then return -1, 1, false end
     if growth == "RIGHTUP" then return 1, 1, false end
     if growth == "RIGHTDOWN" then return 1, -1, false end
-    if growth == "UP" then return 1, 1, false end
-    if growth == "DOWN" then return 1, -1, false end
+    if growth == "UP" then return 1, 1, true end
+    if growth == "DOWN" then return 1, -1, true end
     return -1, -1, false
 end
 

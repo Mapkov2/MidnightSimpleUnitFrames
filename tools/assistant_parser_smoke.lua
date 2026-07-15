@@ -2620,7 +2620,7 @@ do
     assertAuraBulkValue("set all unit aura anchor to bottom right", 8, "auras3.player.buff.anchor", "auras3.boss.debuff.anchor", "BOTTOMRIGHT", ".anchor")
     assertAuraBulkValue("set all auras anchor to bottom right", 14, "auras3.player.buff.anchor", "gf_mythicraid.auras.debuff.anchor", "BOTTOMRIGHT", ".anchor")
     assertAuraBulkValue("set all group aura anchor to bottom right", 6, "gf_party.auras.buff.anchor", "gf_mythicraid.auras.debuff.anchor", "BOTTOMRIGHT", ".anchor")
-    assertAuraBulkValue("set all auras growth to up", 14, "auras3.player.buff.growth", "gf_mythicraid.auras.debuff.growth", { byFrame = true, aura = "UP", groupAura = "RIGHTUP" }, ".growth")
+    assertAuraBulkValue("set all auras growth to up", 14, "auras3.player.buff.growth", "gf_mythicraid.auras.debuff.growth", "UP", ".growth")
     assertAuraBulkValue("set all group aura growth to right up", 6, "gf_party.auras.buff.growth", "gf_mythicraid.auras.debuff.growth", "RIGHTUP", ".growth")
 
     assertAuraBulkValue("set target auras icon size to 24", 2, "auras3.target.buff.size", "auras3.target.debuff.size", 24, ".size")
@@ -2629,7 +2629,7 @@ do
     assertAuraBulkValue("set target auras spacing to 4", 2, "auras3.target.buff.spacing", "auras3.target.debuff.spacing", 4, ".spacing")
     assertAuraBulkValue("set party auras layer to 9", 2, "gf_party.auras.buff.layer", "gf_party.auras.debuff.layer", 9, ".layer")
     assertAuraBulkValue("set raid auras anchor to bottom right", 2, "gf_raid.auras.buff.anchor", "gf_raid.auras.debuff.anchor", "BOTTOMRIGHT", ".anchor")
-    assertAuraBulkValue("set party auras growth to up", 2, "gf_party.auras.buff.growth", "gf_party.auras.debuff.growth", "RIGHTUP", ".growth")
+    assertAuraBulkValue("set party auras growth to up", 2, "gf_party.auras.buff.growth", "gf_party.auras.debuff.growth", "UP", ".growth")
 
     local function assertAuraBulkDelta(text, expectedCount, expectedFirstKey, expectedLastKey, expectedDelta, expectedKeySuffix)
         local bulkParsed = A.Parse(text)

@@ -129,16 +129,16 @@ local LANE_GROWTH_VALUES = {
     { value = "LEFTDOWN", text = "Left then Down" },
     { value = "RIGHTUP", text = "Right then Up" },
     { value = "LEFTUP", text = "Left then Up" },
+    { value = "UP", text = "Up (Single Column)" },
+    { value = "DOWN", text = "Down (Single Column)" },
 }
 local LANE_GROWTH_PARTS = {
     RIGHTDOWN = { "RIGHT", "DOWN" },
     LEFTDOWN = { "LEFT", "DOWN" },
     RIGHTUP = { "RIGHT", "UP" },
     LEFTUP = { "LEFT", "UP" },
-    -- Legacy column-major values are presented as their PTR 5 native
-    -- row-major equivalents.
-    UP = { "RIGHT", "UP" },
-    DOWN = { "RIGHT", "DOWN" },
+    UP = { "UP", "UP" },
+    DOWN = { "DOWN", "DOWN" },
 }
 
 local LAYOUT_KEYS = {
@@ -1487,8 +1487,7 @@ end
 function Model.ReadLaneGrowthPair(unit, kind)
     kind = NormalizeKind(kind)
     local growth = Model.ReadLaneGrowth(unit, kind)
-    if growth == "UP" then return "RIGHTUP" end
-    if growth == "DOWN" then return "RIGHTDOWN" end
+    if growth == "UP" or growth == "DOWN" then return growth end
     local rowWrap = Model.ReadLaneRowWrap(unit, kind)
     local pair = tostring(growth or "RIGHT") .. tostring(rowWrap or "DOWN")
     return LANE_GROWTH_PARTS[pair] and pair or "RIGHTDOWN"

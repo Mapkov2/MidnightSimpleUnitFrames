@@ -98,22 +98,31 @@ local function SyncFrameStrata(frame, strata)
     return false
 end
 
+local VALID_NATIVE_FILTER_TOKENS = {
+    HELPFUL = true, HARMFUL = true, PLAYER = true, RAID = true,
+    CANCELABLE = true, MAW = true, INCLUDE_NAME_PLATE_ONLY = true,
+    EXTERNAL_DEFENSIVE = true, CROWD_CONTROL = true, RAID_IN_COMBAT = true,
+    RAID_PLAYER_DISPELLABLE = true, BIG_DEFENSIVE = true, IMPORTANT = true,
+    DISPELLABLE = true,
+}
+
 local function AddNativeFilterToken(out, seen, token, baseToken)
-    token = tostring(token or ""):upper():gsub("%s+", "")
-    if token == "" then return end
+    token = tostring(token or ""):upper():gsub("^%s+", ""):gsub("%s+$", "")
+    local negated = token:sub(1, 1) == "!"
+    if negated then token = token:sub(2):gsub("^%s+", ""):gsub("%s+$", "") end
     if token == "PLAYER_CAST" or token == "CAST_BY_ME" or token == "MINE" then token = "PLAYER" end
     if token == "ALL" or token == "ANY" then return end
+    if token == "NOT_CANCELABLE" then token, negated = "CANCELABLE", true end
     if token == "BUFF" then token = "HELPFUL" end
     if token == "DEBUFF" then token = "HARMFUL" end
+    if token == "" or not VALID_NATIVE_FILTER_TOKENS[token] then return end
+    if negated and (token == "HELPFUL" or token == "HARMFUL") then return end
+    if (token == "HELPFUL" or token == "HARMFUL") and token ~= baseToken then return end
+    if negated then token = "!" .. token end
     if token == "!PLAYER" and seen.PLAYER then return end
     if token == "PLAYER" and seen["!PLAYER"] then
         seen["!PLAYER"] = nil
-        for i = #out, 1, -1 do
-            if out[i] == "!PLAYER" then table.remove(out, i) end
-        end
-    end
-    if token == "HELPFUL" or token == "HARMFUL" then
-        if token ~= baseToken then return end
+        for i = #out, 1, -1 do if out[i] == "!PLAYER" then table.remove(out, i) end end
     end
     if seen[token] then return end
     seen[token] = true
@@ -123,7 +132,17 @@ end
 local function NormalizeNativeFilterString(filter, fallback)
     fallback = tostring(fallback or "")
     filter = tostring(filter or "")
-    local baseToken = (fallback:find("HARMFUL", 1, true) or filter:find("HARMFUL", 1, true)) and "HARMFUL" or "HELPFUL"
+    local baseToken = "HELPFUL"
+    for token in (fallback .. "|" .. filter):gmatch("[^|]+") do
+        token = token:upper():gsub("^%s+", ""):gsub("%s+$", "")
+        if token == "HARMFUL" or token == "DEBUFF" then
+            baseToken = "HARMFUL"
+            break
+        elseif token == "HELPFUL" or token == "BUFF" then
+            baseToken = "HELPFUL"
+            break
+        end
+    end
     local out, seen = {}, {}
     AddNativeFilterToken(out, seen, baseToken, baseToken)
     for token in fallback:gmatch("[^|]+") do AddNativeFilterToken(out, seen, token, baseToken) end
@@ -1001,13 +1020,18 @@ function Runtime.SyncGeometry(container, slotRoot, parentFrame, forceGeometry)
     SyncFrameStrata(container, ResolveFrameStrata(parentFrame, slotRoot.strata))
     if container.SetFrameLevel then container:SetFrameLevel(parentFrame:GetFrameLevel() or 0) end
     local slots = container._msufA3SpellIndicatorButtonSlots
-    -- PTR 5 makes initialized AuraButtons forbidden while aura data is secret.
-    -- Slot layout/visual changes are structural and recreate the container, so
-    -- this repair path only updates addon-owned missing/effect frames.
+    -- Initialized AuraButtons can be forbidden while aura data is secret. This
+    -- path updates only addon-owned geometry; a force request with live native
+    -- buttons remains pending until Runtime.Recreate replaces the container.
+    local requiresRecreate = false
     if slots then
         for i = 1, #slots do
-            if slots[i] and not container[i] then
-                SyncMissingFrame(parentFrame, slots[i], nil)
+            if slots[i] then
+                if container[i] then
+                    requiresRecreate = forceGeometry == true or requiresRecreate
+                else
+                    SyncMissingFrame(parentFrame, slots[i], nil)
+                end
             end
         end
     end
@@ -1018,7 +1042,7 @@ function Runtime.SyncGeometry(container, slotRoot, parentFrame, forceGeometry)
         end
     end
     Runtime.RefreshFrameEffects(parentFrame)
-    if forceGeometry == true then container._msufA3ForceSpellIndicatorGeometry = nil end
+    if forceGeometry == true and not requiresRecreate then container._msufA3ForceSpellIndicatorGeometry = nil end
     return true
 end
 
@@ -1111,4 +1135,15 @@ function Runtime.Apply(root, slotRoot, parentFrame, forceRecreate)
         root[key] = current
     end
     return current
+end
+
+function Runtime.Recreate(container)
+    if not (container and container._msufA3SpellIndicatorRoot == true) then return nil end
+    local slotRoot = container._msufA3NativeLaneConfig
+    local parentFrame = container._msufA3ParentFrame
+    local root = container.GetParent and container:GetParent() or nil
+    if not (root and Runtime.IsRoot(slotRoot) and parentFrame) then return nil end
+    local replacement = Runtime.Apply(root, slotRoot, parentFrame, true)
+    if replacement then replacement._msufA3ForceSpellIndicatorGeometry = nil end
+    return replacement
 end
