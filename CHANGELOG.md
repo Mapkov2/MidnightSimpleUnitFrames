@@ -1,6 +1,6 @@
 # Midnight Simple Unit Frames Changelog
 
-## 6.0-Beta19 - 2026-07-15
+## 6.0-Beta19 - 2026-07-16
 
 ### Highlights
 
@@ -10,16 +10,22 @@
 - Added maximum-duration Aura filters, a full-health absorb stripe, and richer live previews for Auras, absorbs, detached power, Color Painter, and automatic group scaling.
 - Tightened Group Frame, boss-castbar, prediction, aggro, role, and load-condition lifecycles to prevent stale or duplicate runtime work.
 - Expanded the Assistant with direct Color Painter handoff, safer exact-setting changes, better failure recovery, and offline addon-compatibility guidance.
+- Added spell-specific channel tick markers and the new MSUF Lucent bar texture.
+- Kept Group Frame foreground indicators above full-frame Aura effects and made expiring effects PTR-safe.
 - Fixed Blizzard castbar ownership, first-load Dashboard state transitions, group-frame login anchors, and scaled-menu screen-edge snapping.
 
 ### Changes
 
 - Added scoped gradient controls with independent Health and Power settings and live preview updates.
 - Added configurable cast-target name colors across live castbars and previews.
+- Replaced fixed channel lines with spell-specific tick markers and a safe fallback for unsupported channels.
+- Added the bundled MSUF Lucent status-bar texture across the addon and Assistant media resolver.
 - Added native maximum-duration filtering for unit and group-frame Debuffs.
 - Reorganized Spell Indicators into outcome-focused spell, placement, health-bar highlight, and appearance cards.
 - Added configurable expiring thresholds for Spell Indicator icon glows and frame effects while keeping protected Aura duration decisions C-side.
 - Anchored Spell Indicator frame effects to the live health fill and added independent effect layers, priorities, and safer automatic ordering with dispel effects.
+- Kept expiring Spell Indicator effects on the protected-duration-safe PTR path without runtime duration reads.
+- Raised Group Frame text, status icons, targeted spells, Aura icons, and corner indicators above full-frame effects in live frames and previews.
 - Added an on-demand Layer Overview with editable 0-30 layers across frame text, status icons, auras, borders, bar outlines, group indicators, and class resources.
 - Normalized imported and existing numeric layer settings without adding idle events or timers.
 - Added a full-health absorb stripe with protected-value-safe rendering and matching absorb-anchor previews.
