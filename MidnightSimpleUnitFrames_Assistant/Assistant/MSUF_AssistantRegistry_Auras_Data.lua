@@ -23,7 +23,7 @@ Data.AURA_LANES = {
 Data.GF_AURA_GROUPS = { "party", "raid", "mythicraid" }
 Data.GF_AURA_CATEGORY_SCOPES = { "party", "raid" }
 Data.GF_AURA_ANCHORS = { "CENTER", "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT" }
-Data.GF_AURA_GROWTH = { "RIGHTDOWN", "LEFTDOWN", "RIGHTUP", "LEFTUP" }
+Data.GF_AURA_GROWTH = { "RIGHTDOWN", "LEFTDOWN", "RIGHTUP", "LEFTUP", "UP", "DOWN" }
 Data.GF_AURA_FILTER_VALUES = {
     buff = {
         "ALL", "Player", "BigDefensivePlayer", "ExternalDefensivePlayer", "RaidInCombatPlayer",

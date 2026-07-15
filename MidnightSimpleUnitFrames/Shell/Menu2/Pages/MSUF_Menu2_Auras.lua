@@ -82,7 +82,6 @@ local DEBUFF_TYPE_BORDER_PREVIEW_ATLAS = {
     BORDER = "ui-debuff-border-magic-noicon",
     SYMBOL = "ui-debuff-border-magic-icon",
 }
-local DEBUFF_EXCLUSIVE = VTP "none=None|raid=Raid"
 local NATIVE_EXACT_AURA_FILTERS_ENABLED = true
 local NATIVE_EXACT_AURA_FILTERS_TEXT = "Exact Spell IDs are used when Blizzard exposes them."
 local GROUP_NATIVE_FILTER_LABELS = {
@@ -1043,8 +1042,7 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
         cfg.cooldownY = tonumber(group.cooldownY) or 0
         cfg.cooldownDecimalSeconds = tonumber(group.cooldownDecimalSeconds) or 3
         local growthX, growthY = tostring(group.growthX or "RIGHT"), tostring(group.growthY or "DOWN")
-        cfg.growth = growthX == "UP" and "RIGHTUP"
-            or (growthX == "DOWN" and "RIGHTDOWN" or (growthX .. growthY))
+        cfg.growth = (growthX == "UP" or growthX == "DOWN") and growthX or (growthX .. growthY)
         cfg.showDurationBar = group.showDurationBar == true
         cfg.durationBarHeight = tonumber(group.durationBarHeight) or 2
         cfg.durationBarDisplay = group.durationBarDisplay == "OVERLAY" and "OVERLAY" or "BAR_ONLY"
@@ -1130,9 +1128,9 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
     local maxCols = max(1, floor(((width or 300) - 20 + cfg.spacing) / max(1, cfg.size + cfg.spacing)))
     cfg.columns = min(cfg.perRow, maxCols)
     cfg.maxRows = max(1, floor(((height or 104) - 38 + cfg.spacing) / max(1, cfg.size + cfg.spacing)))
-    local vertical = false
-    cfg.rowsPerColumn = vertical and min(cfg.perRow, cfg.maxRows) or cfg.maxRows
-    cfg.columns = vertical and maxCols or cfg.columns
+    local vertical = cfg.growth == "UP" or cfg.growth == "DOWN"
+    cfg.rowsPerColumn = cfg.maxRows
+    cfg.columns = vertical and 1 or cfg.columns
     cfg.count = min(14, cfg.maxIcons, cfg.columns * cfg.rowsPerColumn)
     cfg.stackSize = max(7, tonumber(cfg.stackSize) or 10)
     cfg.cooldownSize = max(7, tonumber(cfg.cooldownSize) or 9)
@@ -1185,9 +1183,9 @@ local function ReadCustomAuraPreviewConfig(scope, index, width, height)
     local maxCols = max(1, floor(((width or 300) - 20 + cfg.spacing) / max(1, cfg.size + cfg.spacing)))
     cfg.columns = min(cfg.perRow, maxCols)
     cfg.maxRows = max(1, floor(((height or 104) - 38 + cfg.spacing) / max(1, cfg.size + cfg.spacing)))
-    local vertical = false
-    cfg.rowsPerColumn = vertical and min(cfg.perRow, cfg.maxRows) or cfg.maxRows
-    cfg.columns = vertical and maxCols or cfg.columns
+    local vertical = cfg.growth == "UP" or cfg.growth == "DOWN"
+    cfg.rowsPerColumn = cfg.maxRows
+    cfg.columns = vertical and 1 or cfg.columns
     cfg.count = min(14, cfg.maxIcons, cfg.columns * cfg.rowsPerColumn)
     cfg.stackSize = max(7, cfg.stackSize)
     cfg.cooldownSize = max(7, cfg.cooldownSize)
@@ -2334,7 +2332,7 @@ local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
         function(v) Model.WriteNumber(unit, LaneMaxKey(kind), v, 0, 80); ApplyUnit(ctx, unit, "AURAS3_UNIT_MAX") end, "max-icons")
     Number("Size", 4, -92, 10, 80, function() return Model.ReadNumber(unit, LaneSizeKey(kind), 26, 1, 128) end,
         function(v) Model.WriteNumber(unit, LaneSizeKey(kind), v, 1, 128); ApplyUnit(ctx, unit, "AURAS3_UNIT_SIZE") end, "icon-size")
-    Number("Per row", 1, -146, 1, 40, function() return Model.ReadLanePerRow(unit, kind) end,
+    local perRowControl = Number("Per row", 1, -146, 1, 40, function() return Model.ReadLanePerRow(unit, kind) end,
         function(v) Model.WriteLanePerRow(unit, kind, v); ApplyUnit(ctx, unit, "AURAS3_UNIT_PER_ROW") end, "per-row")
     Number("Gap", 2, -146, 0, 12, function() return Model.ReadNumber(unit, "spacing", 2, 0, 64) end,
         function(v) Model.WriteNumber(unit, "spacing", v, 0, 64); ApplyUnit(ctx, unit, "AURAS3_UNIT_SPACING") end, "spacing")
@@ -2345,6 +2343,10 @@ local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
         local shown = UnitLaneShown(unit, kind)
         W.SetControlEnabled(enable, true)
         W.SetControlsEnabled(controls, shown)
+        local growth = type(Model.ReadLaneGrowthPair) == "function" and Model.ReadLaneGrowthPair(unit, kind)
+            or Model.ReadLaneGrowth(unit, kind)
+        growth = tostring(growth or ""):upper()
+        W.SetControlEnabled(perRowControl, shown and growth ~= "UP" and growth ~= "DOWN")
     end)
 end
 
@@ -2413,9 +2415,18 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
         local col = ((i - 1) % 4)
         local row = floor((i - 1) / 4)
         local control = BindSwitch(ctx, section, spec[1], 24 + col * (colW + gap), -78 - row * 32, colW,
-            function() return Model.ReadFilter(unit, lane, spec[2], false) == true end,
+            function()
+                if spec[2] == "raid" and Model.ReadFilter(unit, lane, "exclusive", "none") == "raid" then
+                    return true
+                end
+                return Model.ReadFilter(unit, lane, spec[2], false) == true
+            end,
             function(value)
                 if value == true and type(spec[4]) == "table" then for j = 1, #spec[4] do Model.WriteFilter(unit, lane, spec[4][j], false) end end
+                -- Older profiles stored the same RAID token in a second
+                -- Exclusive dropdown. Fold it into the visible Raid switch so
+                -- the legacy restriction can also be turned off here.
+                if spec[2] == "raid" then Model.WriteFilter(unit, lane, "exclusive", "none") end
                 Model.WriteFilter(unit, lane, spec[2], value)
                 ApplyUnit(ctx, unit, "AURAS3_FILTER_" .. lane .. "_" .. spec[2], true)
                 if spec[4] then QueueAurasPageRefresh(ctx, "auras-filter-conflict") end
@@ -2424,14 +2435,6 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
                 "auras3." .. unit .. "." .. lane .. ".filter." .. spec[2]))
         AddTooltip(control, spec[1], spec[3])
         filterControls[#filterControls + 1] = control
-    end
-    if lane == "debuff" then
-        local exclusive = BindDropdown(ctx, section, "Exclusive", 24 + 2 * (colW + gap), -92, DEBUFF_EXCLUSIVE, colW * 2 + gap,
-            function() return Model.ReadFilter(unit, lane, "exclusive", "none") end,
-            function(value) Model.WriteFilter(unit, lane, "exclusive", value or "none"); ApplyUnit(ctx, unit, "AURAS3_FILTER_DEBUFF_EXCLUSIVE", true) end,
-            AuraControlMeta(ctx, "unit-workspace.lane.debuff.filters.exclusive", nil,
-                "auras3." .. unit .. ".debuff.filter.exclusive"))
-        filterControls[#filterControls + 1] = exclusive
     end
     M.TrackRefresh(ctx, function()
         local editable = not Model.UseSharedRules(unit)
@@ -3014,8 +3017,12 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             local col = (i - 1) % 4
             local row = floor((i - 1) / 4)
             local control = BindSwitch(ctx, section, spec[1], 24 + col * (colW + gap), -76 - row * 32, colW,
-                function() return item.filters[spec[2]] == true end,
+                function()
+                    if spec[2] == "raid" and item.filters.exclusive == "raid" then return true end
+                    return item.filters[spec[2]] == true
+                end,
                 function(value)
+                    if spec[2] == "raid" then item.filters.exclusive = nil end
                     item.filters[spec[2]] = value == true
                     if value == true and spec[3] then for j = 1, #spec[3] do item.filters[spec[3][j]] = false end end
                     Apply("AURAS3_CUSTOM_FILTER")
@@ -3023,12 +3030,6 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                 end,
                 AuraControlMeta(ctx, "custom-container.filters." .. AuraCatalogToken(spec[2])))
             controls[#controls + 1] = control
-        end
-        if item.auraType == "DEBUFF" then
-            controls[#controls + 1] = BindDropdown(ctx, section, "Exclusive", 24 + 2 * (colW + gap), -92, DEBUFF_EXCLUSIVE, colW * 2 + gap,
-                function() return item.filters.exclusive or "none" end,
-                function(value) item.filters.exclusive = value or "none"; Apply("AURAS3_CUSTOM_FILTER_EXCLUSIVE") end,
-                AuraControlMeta(ctx, "custom-container.filters.exclusive"))
         end
         M.TrackRefresh(ctx, function()
             W.SetControlEnabled(master, true)
@@ -3059,18 +3060,24 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             { "X", "x", -300, 300, 0 }, { "Y", "y", -300, 300, 0 }, { "Max", "max", 0, 40, 8 }, { "Size", "size", 8, 128, 24 },
             { "Per row", "perRow", 1, 20, 4 }, { "Gap", "spacing", 0, 24, 2 }, { "Layer", "layer", 0, 30, 9 },
         }
+        local perRowControl
         for i = 1, #values do
             local spec = values[i]
             local row = i <= 4 and 0 or 1
             local col = row == 0 and (i - 1) or (i - 5)
-            BindSlider(ctx, section, spec[1], 24 + col * (col4 + gap4), row == 0 and -92 or -146, spec[3], spec[4], 1, col4,
+            local control = BindSlider(ctx, section, spec[1], 24 + col * (col4 + gap4), row == 0 and -92 or -146, spec[3], spec[4], 1, col4,
                 function() return tonumber(spec[2] == "layer" and item.layer or item.placed[spec[2]]) or spec[5] end,
                 function(value)
                     if spec[2] == "layer" then item.layer = floor(tonumber(value) or spec[5]) else item.placed[spec[2]] = tonumber(value) or spec[5] end
                     Apply("AURAS3_CUSTOM_" .. spec[2]:upper())
                 end,
                 AuraControlMeta(ctx, "custom-container.layout." .. AuraCatalogToken(spec[2])))
+            if spec[2] == "perRow" then perRowControl = control end
         end
+        M.TrackRefresh(ctx, function()
+            local growth = tostring(item.placed.growth or "LEFTDOWN"):upper()
+            W.SetControlEnabled(perRowControl, growth ~= "UP" and growth ~= "DOWN")
+        end)
         W.Text(section, "Move the colored Custom handle; Live and dummy previews are display-only.", 24 + 3 * (col4 + gap4), -154, col4, T.colors.muted)
         return
     end

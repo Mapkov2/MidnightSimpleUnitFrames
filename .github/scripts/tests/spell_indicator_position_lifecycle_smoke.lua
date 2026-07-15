@@ -68,114 +68,18 @@ local chunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Aur
 chunk("MidnightSimpleUnitFrames", MSUF)
 
 local Runtime = assert(MSUF.MSUF_Auras3.SpellIndicators)
-local genericPrepareCalls = 0
-Runtime.Install({
-  ValidateAuraButton = function() end,
-  -- Mirror the shared aura preparer's final grid-layout pass. Spell Indicators
-  -- are manually anchored, so a cached sync must not re-run this destructive
-  -- preparation and then trust stale desired-geometry metadata.
-  PrepareAuraButton = function(preparedButton, preparedSlot)
-    genericPrepareCalls = genericPrepareCalls + 1
-    preparedButton:ClearAllPoints()
-    preparedButton:SetSize(preparedSlot.size, preparedSlot.size)
-    preparedButton:SetPoint("TOPLEFT", preparedButton:GetParent(), "TOPLEFT", 0, 0)
-  end,
-})
-
-local parent = NewFrame(nil)
-parent.frameLevel = 40
-local auraRoot = NewFrame(parent)
-local container = NewFrame(auraRoot)
-local button = NewFrame(container)
-button.Icon = NewFrame(button)
-
-local slot = {
-  visual = "icon",
-  anchor = "BOTTOMRIGHT",
-  x = 17,
-  y = -9,
-  size = 23,
-  width = 23,
-  height = 23,
-  layer = 9,
-  strata = "AUTO",
-  color = { 1, 1, 1, 1 },
-}
-local slotRoot = {
+-- Imported filters must never pass unknown components to Blizzard's asserted
+-- AuraUtil.IsValidFilterString boundary.
+local compiled = assert(Runtime.CompileSlots("party1", {
   enabled = true,
-  spellIndicatorRoot = true,
-  kind = "spellIndicators",
-  strata = "AUTO",
-  slots = { slot },
-}
-container[1] = button
-container._msufA3SpellIndicatorButtonSlots = { slot }
-
-local function AssertExactGeometry(label)
-  local point = button.point
-  Check(type(point) == "table", label .. " has no anchor")
-  Equal(point[1], slot.anchor, label .. " point")
-  Equal(point[2], parent, label .. " parent")
-  Equal(point[3], slot.anchor, label .. " relative point")
-  Equal(point[4], slot.x, label .. " X")
-  Equal(point[5], slot.y, label .. " Y")
-  Equal(button.width, slot.width, label .. " width")
-  Equal(button.height, slot.height, label .. " height")
-end
-
-Check(Runtime.SyncGeometry(container, slotRoot, parent) == true, "initial live geometry sync failed")
-AssertExactGeometry("initial live geometry")
-Equal(genericPrepareCalls, 1, "initial sync did not prepare the slot exactly once")
-
-local normalPointCalls = button.setPointCalls or 0
-local normalSizeCalls = button.setSizeCalls or 0
-local normalClearCalls = button.clearPointCalls or 0
-Check(Runtime.SyncGeometry(container, slotRoot, parent) == true, "cached live geometry sync failed")
-AssertExactGeometry("cached live geometry")
-Equal(genericPrepareCalls, 1, "cached sync repeated destructive generic preparation")
-Equal(button.setPointCalls or 0, normalPointCalls, "cached sync repeated SetPoint")
-Equal(button.setSizeCalls or 0, normalSizeCalls, "cached sync repeated SetSize")
-Equal(button.clearPointCalls or 0, normalClearCalls, "cached sync repeated ClearAllPoints")
-
--- Simulate a reused native AuraSlot whose actual point changed during a loading
--- screen. The desired-value cache remains unchanged, which is the important
--- failure mode regardless of which lifecycle owner moved it.
-local foreign = NewFrame(nil)
-button.point = { "CENTER", foreign, "CENTER", 99, 88 }
-button.width, button.height = 5, 7
-
-local repairPointCalls = button.setPointCalls or 0
-local repairSizeCalls = button.setSizeCalls or 0
-local repairClearCalls = button.clearPointCalls or 0
-Check(Runtime.SyncGeometry(container, slotRoot, parent, true) == true, "forced world-entry geometry repair failed")
-AssertExactGeometry("forced world-entry geometry")
-Equal((button.setPointCalls or 0) - repairPointCalls, 1, "forced repair did not SetPoint exactly once")
-Equal((button.setSizeCalls or 0) - repairSizeCalls, 1, "forced repair did not SetSize exactly once")
-Equal((button.clearPointCalls or 0) - repairClearCalls, 1, "forced repair did not ClearAllPoints exactly once")
-
-normalPointCalls = button.setPointCalls or 0
-normalSizeCalls = button.setSizeCalls or 0
-normalClearCalls = button.clearPointCalls or 0
-Check(Runtime.SyncGeometry(container, slotRoot, parent) == true, "post-repair cached sync failed")
-Equal(button.setPointCalls or 0, normalPointCalls, "post-repair sync repeated SetPoint")
-Equal(button.setSizeCalls or 0, normalSizeCalls, "post-repair sync repeated SetSize")
-Equal(button.clearPointCalls or 0, normalClearCalls, "post-repair sync repeated ClearAllPoints")
-
--- If the native container is hidden during world entry, the lifecycle driver
--- leaves a pending repair on it. Its next ordinary geometry/config sync must
--- consume that request exactly once rather than requiring another zone event.
-button.point = { "CENTER", foreign, "CENTER", -77, 66 }
-button.width, button.height = 4, 6
-container._msufA3ForceSpellIndicatorGeometry = true
-repairPointCalls = button.setPointCalls or 0
-repairSizeCalls = button.setSizeCalls or 0
-repairClearCalls = button.clearPointCalls or 0
-Check(Runtime.SyncGeometry(container, slotRoot, parent) == true, "deferred hidden-container repair failed")
-AssertExactGeometry("deferred hidden-container geometry")
-Equal((button.setPointCalls or 0) - repairPointCalls, 1, "deferred repair did not SetPoint exactly once")
-Equal((button.setSizeCalls or 0) - repairSizeCalls, 1, "deferred repair did not SetSize exactly once")
-Equal((button.clearPointCalls or 0) - repairClearCalls, 1, "deferred repair did not ClearAllPoints exactly once")
-Equal(container._msufA3ForceSpellIndicatorGeometry, nil, "deferred repair marker survived successful sync")
+  items = {{
+    enabled = true,
+    nativeFilter = "HELPFUL|BOGUS|!PLAYER|!HARMFUL",
+    includeSpellIDs = { [355941] = true },
+    placed = { type = "icon", anchor = "BOTTOMRIGHT", x = 17, y = -9, size = 23 },
+  }},
+}))
+Equal(compiled.slots[1].nativeFilter, "HELPFUL|!PLAYER", "invalid native filter tokens survived normalization")
 
 -- Native button recreation must not resurrect pre-edit geometry. The
 -- initializeFrame closure outlives config edits (it runs on every aura
@@ -220,7 +124,7 @@ do
       unit = "party1", enabled = true, max = 1, layer = 9, strata = "AUTO",
       slots = { LiveSlot(x) },
       _msufA3TrackingSignature = "track-1",
-      _msufA3StructuralSignature = "struct-1",
+      _msufA3StructuralSignature = "struct-" .. layoutTag,
       _msufA3LayoutSignature = layoutTag,
     }
   end
@@ -236,21 +140,40 @@ do
   options.initializeFrame(button1)
   Equal(button1.point and button1.point[4], 17, "initial native button X")
 
-  -- Config edit: same structure, new X. The update path must re-anchor the
-  -- existing button.
-  assert(Runtime.Apply(liveAuraRoot, LiveRoot(40, "layout-b"), liveParent) == liveContainer,
-    "structural-match update did not reuse the container")
-  Equal(button1.point and button1.point[4], 40, "edited X did not reach the live button")
+  -- Config edits are structural on PTR: replace the native container rather
+  -- than mutating an initialized forbidden AuraButton.
+  local editedContainer = assert(Runtime.Apply(liveAuraRoot, LiveRoot(40, "layout-b"), liveParent),
+    "structural edit did not create a replacement container")
+  Check(editedContainer ~= liveContainer, "structural edit reused the native container")
+  local editedOptions = assert(capturedOptions.msuf_si_live, "replacement AddAuraSlot options were not captured")
+  local editedButton = NewFrame(editedContainer)
+  editedButton.Icon = NewFrame(editedButton)
+  editedOptions.initializeFrame(editedButton)
+  Equal(editedButton.point and editedButton.point[4], 40, "edited X did not reach the replacement button")
 
   -- Aura reapplication: native recreates the slot button through the closure
   -- captured at container creation. It must use the edited slot, not x=17.
-  local button2 = NewFrame(liveContainer)
+  local button2 = NewFrame(editedContainer)
   button2.Icon = NewFrame(button2)
-  options.initializeFrame(button2)
+  editedOptions.initializeFrame(button2)
   Equal(button2.point and button2.point[4], 40,
     "recreated native button resurrected pre-edit geometry")
-  Equal(liveContainer._msufA3SpellIndicatorButtonSlots[1].x, 40,
+  Equal(editedContainer._msufA3SpellIndicatorButtonSlots[1].x, 40,
     "recreated native button re-installed the stale slot table")
+
+  -- World-transition recovery follows the same safe replacement path. A
+  -- direct SyncGeometry pass must leave the request pending while a native
+  -- button exists; Runtime.Recreate consumes it by replacing the container.
+  editedContainer[1] = editedButton
+  editedContainer._msufA3ForceSpellIndicatorGeometry = true
+  local pointCalls = editedButton.setPointCalls or 0
+  Check(Runtime.SyncGeometry(editedContainer, LiveRoot(40, "layout-b"), liveParent, true) == true,
+    "pending recovery sync failed")
+  Equal(editedButton.setPointCalls or 0, pointCalls, "recovery touched an initialized native AuraButton")
+  Equal(editedContainer._msufA3ForceSpellIndicatorGeometry, true, "recovery request was cleared without replacement")
+  local recoveredContainer = assert(Runtime.Recreate(editedContainer), "safe recovery did not recreate the container")
+  Check(recoveredContainer ~= editedContainer, "safe recovery returned the stale container")
+  Equal(recoveredContainer._msufA3ForceSpellIndicatorGeometry, nil, "replacement retained the recovery marker")
 end
 
 -- Static preview/live parity guard: both paths pin the same configured anchor
@@ -291,15 +214,12 @@ local unitStart = assert(unitFramesSource:find("A3._DirectIdentityRefreshUnit = 
 local unitStop = assert(unitFramesSource:find("A3._DirectIdentityRefreshAll = function", unitStart, true))
 local unitBlock = unitFramesSource:sub(unitStart, unitStop - 1)
 local updateAt = unitBlock:find("container:UpdateAllAuras()", 1, true)
--- The forced repair is dispatched through the shared managed-container sync,
--- which routes spell-indicator roots to SpellIndicatorsRuntime.SyncGeometry.
-local forceAt = unitBlock:find("A3._SyncManagedAuraContainerGeometry(container, true)", 1, true)
 Check(updateAt ~= nil, "direct identity refresh lost UpdateAllAuras")
-Check(forceAt ~= nil and forceAt > updateAt,
-  "forced Spell Indicator geometry must run after UpdateAllAuras")
 Check(unitBlock:find("forceSpellIndicatorGeometry", 1, true),
   "direct identity refresh does not gate the exceptional repair")
-Check(unitBlock:find("container._msufA3ForceSpellIndicatorGeometry = true", 1, true),
-  "hidden Spell Indicator containers do not retain a deferred repair")
+Check(unitBlock:find("SpellIndicatorsRuntime.Recreate", 1, true),
+  "world-transition repair no longer recreates Spell Indicator containers")
+Check(unitBlock:find("the set is never mutated", 1, true),
+  "Spell Indicator replacement is not deferred until after container iteration")
 
-print("PASS spell indicator position lifecycle: preview/live parity, cached no-op, forced and deferred zone repair")
+print("PASS spell indicator position lifecycle: validated filters, preview/live parity, structural edits, safe zone recreation")

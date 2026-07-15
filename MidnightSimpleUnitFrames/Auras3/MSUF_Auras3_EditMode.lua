@@ -592,6 +592,7 @@ local function GrowthParts(growth, rowWrap)
     if growth == "UP" or growth == "DOWN" then
         xSign = 1
         ySign = growth == "UP" and 1 or -1
+        return xSign, ySign, true, ButtonAnchor(xSign, ySign)
     end
     return xSign, ySign, false, ButtonAnchor(xSign, ySign)
 end
@@ -601,8 +602,8 @@ local function GridDimensions(maxN, perRow, size, spacing, vertical)
     local per = math_max(Round(perRow), 1)
     local cols, rows
     if vertical == true then
-        rows = math_min(count, per)
-        cols = math_ceil(count / per)
+        rows = count
+        cols = 1
     else
         cols = math_min(count, per)
         rows = math_ceil(count / per)
@@ -619,8 +620,7 @@ local function IconGridCoord(index, perRow, vertical)
     local per = math_max(Round(perRow), 1)
     local idx = index - 1
     if vertical == true then
-        local row = idx % per
-        return (idx - row) / per, row
+        return 0, idx
     end
     local col = idx % per
     return col, (idx - col) / per

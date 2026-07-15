@@ -144,6 +144,7 @@ local LANE_SPECS = {
         sizeKey = "buffGroupIconSize",
         anchorKey = "buffAnchor",
         layerKey = "buffLayer",
+        strataKey = "buffStrata",
         perRowKey = "buffPerRow",
         growthKey = "buffGrowthX",
         wrapKey = "buffGrowthY",
@@ -182,6 +183,7 @@ local LANE_SPECS = {
         sizeKey = "debuffGroupIconSize",
         anchorKey = "debuffAnchor",
         layerKey = "debuffLayer",
+        strataKey = "debuffStrata",
         perRowKey = "debuffPerRow",
         growthKey = "debuffGrowthX",
         wrapKey = "debuffGrowthY",
@@ -774,12 +776,12 @@ local function GrowthParts(growth, rowWrap)
     if growth == "RIGHTUP" then return "RIGHT", "UP", 1, 1, false end
     if growth == "RIGHTDOWN" then return "RIGHT", "DOWN", 1, -1, false end
     if growth == "LEFT" then return "LEFT", rowWrap, -1, rowWrap == "UP" and 1 or -1, false end
-    -- PTR 5 forbids tainted AuraButton access while aura data is secret. The
-    -- native AuraContainer layout is row-major, so the former column-major
-    -- UP/DOWN pass can no longer be implemented safely. Preserve legacy
-    -- profiles by translating them to the matching native row direction.
-    if growth == "UP" then return "RIGHT", "UP", 1, 1, false end
-    if growth == "DOWN" then return "RIGHT", "DOWN", 1, -1, false end
+    -- PTR 5-safe vertical growth: Blizzard's native flow remains row-major,
+    -- but a one-icon row width makes every following aura start a new row.
+    -- This preserves true single-column UP/DOWN without touching initialized
+    -- AuraButtons. Multi-column column-major wrapping is intentionally absent.
+    if growth == "UP" then return "RIGHT", "UP", 1, 1, true end
+    if growth == "DOWN" then return "RIGHT", "DOWN", 1, -1, true end
     return "RIGHT", rowWrap, 1, rowWrap == "UP" and 1 or -1, false
 end
 
@@ -787,7 +789,7 @@ local function GroupGrowthParts(growthX, growthY)
     growthX = tostring(growthX or "RIGHT")
     growthY = tostring(growthY or "DOWN")
     if growthX == "UP" or growthX == "DOWN" then
-        return "RIGHT", growthX, 1, growthX == "UP" and 1 or -1, false
+        return "RIGHT", growthX, 1, growthX == "UP" and 1 or -1, true
     end
     local xSign = growthX == "LEFT" and -1 or 1
     local ySign = growthY == "UP" and 1 or -1
@@ -862,9 +864,9 @@ local function GridShape(maxCount, perRow, verticalGrowth)
     maxCount = Round(maxCount)
     perRow = math_max(Round(perRow), 1)
     if maxCount <= 0 then return 1, 1 end
+    if verticalGrowth then return 1, maxCount end
     local major = math_min(perRow, maxCount)
     local minor = math_floor((maxCount + perRow - 1) / perRow)
-    if verticalGrowth then return minor, major end
     return major, minor
 end
 
@@ -1031,6 +1033,10 @@ end
 local function CompileUnitLane(unit, shared, layout, filtersRoot, kind, candidateFilters, candidateFilterSignature)
     local spec = LANE_SPECS[kind]
     local filters = type(filtersRoot) == "table" and type(filtersRoot[spec.filterKey]) == "table" and filtersRoot[spec.filterKey] or nil
+    candidateFilters, candidateFilterSignature = AddHidePermanentCandidateFilter(
+        candidateFilters, candidateFilterSignature,
+        kind == "buff" and type(filtersRoot) == "table"
+            and (filtersRoot.hidePermanent == true or (filters and filters.hidePermanent == true)))
     local sizeDefault = ReadRaw(layout, shared, spec.sizeKey) or ReadRaw(layout, shared, "iconSize") or DEFAULT_SHARED.iconSize
     local size = ClampNumber(sizeDefault, DEFAULT_SHARED.iconSize, 1, 128)
     local spacing = ReadNumber(layout, shared, "spacing", DEFAULT_SHARED.spacing, 0, 64)
@@ -1043,6 +1049,8 @@ local function CompileUnitLane(unit, shared, layout, filtersRoot, kind, candidat
     local cols, rows = GridShape(maxCount, perRow, verticalGrowth)
     local debuffTypeBorderMode = kind == "debuff" and ReadDebuffTypeBorderMode(layout, shared) or "OFF"
     local cooldownAnchor = ReadAnchor(shared, nil, "cooldownTextAnchor", DEFAULT_SHARED.cooldownTextAnchor)
+    local rawStrata = ReadRaw(layout, shared, spec.strataKey)
+    if issecretvalue(rawStrata) == true then rawStrata = nil end
     return FinalizeLane({
         kind = kind,
         rootKey = spec.rootKey,
@@ -1064,6 +1072,7 @@ local function CompileUnitLane(unit, shared, layout, filtersRoot, kind, candidat
         y = Round(ReadNumber(layout, shared, spec.yKey, DEFAULT_SHARED[spec.yKey] or 0, -4096, 4096)),
         anchor = ReadAnchor(layout, shared, spec.anchorKey, spec.defaultAnchor),
         layer = Round(ReadNumber(layout, shared, spec.layerKey, spec.defaultLayer, 0, 30)),
+        strata = NormalizeFrameStrata(rawStrata, "AUTO"),
         alpha = 1,
         growthX = growthX,
         growthY = growthY,
@@ -2217,7 +2226,7 @@ local function LayoutButton(button, lane, index)
     local minor = math_floor(n / perRow)
     local col, row
     if lane.verticalGrowth then
-        col, row = minor, major
+        col, row = 0, n
     else
         col, row = major, minor
     end
@@ -2389,7 +2398,10 @@ local function SyncContainerGeometry(container, lane, parentFrame, forceGeometry
     local initialAnchor = lane.initialAnchor or "TOPLEFT"
     container:SetAuraLayoutAnchorPoint(initialAnchor)
     container:SetAuraLayoutGrowthDirection(lane.xSign or 1, lane.ySign or -1)
-    container:SetAuraLayoutRowWidth(lane.width or lane.size or 1)
+    -- A one-icon native row is the secret-safe vertical layout primitive.
+    -- Horizontal lanes retain their configured full row width.
+    container:SetAuraLayoutRowWidth(lane.verticalGrowth == true
+        and (lane.size or 1) or (lane.width or lane.size or 1))
     container.createdButtons = lane.max
     container:SetSize(lane.size or 1, lane.size or 1)
     if parentFrame and layoutHost then
@@ -3029,6 +3041,9 @@ A3._SyncManagedAuraContainerGeometry = function(container, forceGeometry)
         ok = type(A3._SyncSharedAuraContainerGeometry) == "function"
             and A3._SyncSharedAuraContainerGeometry(container, container._msufA3SharedLanes, parentFrame, forceGeometry)
     elseif container._msufA3SpellIndicatorRoot == true then
+        -- This boolean sync API cannot hand a replacement back to callers
+        -- holding the old container. Keep a native-button repair pending here;
+        -- the direct identity pass recreates it after leaving the set iterator.
         ok = type(SpellIndicatorsRuntime.SyncGeometry) == "function"
             and SpellIndicatorsRuntime.SyncGeometry(container, lane, parentFrame, forceGeometry)
     elseif lane and lane.sensorRoot == true then
@@ -3040,7 +3055,9 @@ A3._SyncManagedAuraContainerGeometry = function(container, forceGeometry)
     end
     if ok == true and forceGeometry == true then
         container._msufA3ForceManagedAuraGeometry = nil
-        container._msufA3ForceSpellIndicatorGeometry = nil
+        if container._msufA3SpellIndicatorRoot ~= true then
+            container._msufA3ForceSpellIndicatorGeometry = nil
+        end
     end
     return ok == true
 end
@@ -3109,8 +3126,15 @@ A3._DirectIdentityRefreshUnit = function(unit, forceSpellIndicatorGeometry)
     local byUnit = A3._directIdentityAuraContainers
     local containers = byUnit and byUnit[unit]
     if not containers then return false end
-    local any = false
+    local any, spellRecreates = false, nil
     for container in pairs(containers) do
+        local deferSpellRecreate = container and forceSpellIndicatorGeometry == true
+            and container._msufA3SpellIndicatorRoot == true
+        if deferSpellRecreate then
+            spellRecreates = spellRecreates or {}
+            spellRecreates[#spellRecreates + 1] = container
+            any = true
+        else
         if container and forceSpellIndicatorGeometry == true
             and A3._ManagedAuraContainerSupportsGeometryRepair(container) then
             -- Hidden containers cannot be repaired in this pass. Keep the
@@ -3133,6 +3157,17 @@ A3._DirectIdentityRefreshUnit = function(unit, forceSpellIndicatorGeometry)
                 A3._SyncManagedAuraContainerGeometry(container, true)
             end
             any = true
+        end
+        end
+    end
+    -- Recreating unregisters the old container and registers a replacement in
+    -- the same per-unit set. Do it after iteration so the set is never mutated
+    -- under pairs(). This is the safe PTR path for forbidden native buttons.
+    if spellRecreates then
+        for i = 1, #spellRecreates do
+            if type(SpellIndicatorsRuntime.Recreate) == "function" then
+                any = SpellIndicatorsRuntime.Recreate(spellRecreates[i]) ~= nil or any
+            end
         end
     end
     return any
