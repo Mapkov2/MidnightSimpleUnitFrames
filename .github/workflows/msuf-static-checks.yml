@@ -1,6 +1,11 @@
 name: MSUF Static Checks
 
 on:
+  push:
+    branches:
+      - main
+      - 6.0-beta-branch
+  pull_request:
   workflow_dispatch:
 
 jobs:
@@ -14,3 +19,6 @@ jobs:
           sudo apt-get install -y lua5.1
       - name: Run static checks
         run: python3 .github/scripts/msuf_static_checks.py
+      - name: Run core Lua 5.1 smokes
+        shell: pwsh
+        run: ./tools/run-core-smoke-tests.ps1 -LuaCommand lua5.1

@@ -54,6 +54,18 @@ jobs:
           ref: ${{ github.event.release.tag_name || inputs.tag_name || github.ref_name }}
           fetch-depth: 0
 
+      - name: Install Lua verification runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.1
+
+      - name: Run static checks
+        run: python3 .github/scripts/msuf_static_checks.py
+
+      - name: Run core Lua 5.1 smokes
+        shell: pwsh
+        run: ./tools/run-core-smoke-tests.ps1 -LuaCommand lua5.1
+
       - name: Resolve publish target
         id: publish
         shell: pwsh
