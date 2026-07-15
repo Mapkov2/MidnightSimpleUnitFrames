@@ -10,6 +10,8 @@ local combat = false
 local runtimeFrame
 local roleUpdates = 0
 local unrelatedUpdates = 0
+local roleAggroBorderUpdates = 0
+local roleAggroCornerUpdates = 0
 
 _G.InCombatLockdown = function() return combat end
 _G.IsInGroup = function() return true end
@@ -27,7 +29,7 @@ _G.CreateFrame = function()
 end
 
 local elements = {}
-local UF = {}
+local UF = { elements = elements }
 function UF.RegisterElement(name, element)
   elements[name] = element
 end
@@ -78,7 +80,13 @@ local status = {
 }
 local liveFrame = {
   unit = "party1",
-  MSUFSpec = { scope = "group", status = status },
+  MSUFSpec = {
+    scope = "group",
+    status = status,
+    border = { aggro = true, aggroMode = "TANK" },
+    cornerIndicators = { enabled = true, needsThreat = true, aggroMode = "HEALER" },
+  },
+  _msufActiveElements = { Borders = true, GroupCornerIndicators = true },
   IsShown = function() return true end,
 }
 GF.frames[liveFrame] = true
@@ -90,6 +98,13 @@ end
 local groupStatus = assert(elements.GroupStatusRuntime, "group status element missing")
 groupStatus.Apply(liveFrame)
 Check(roleUpdates == 1 and unrelatedUpdates == 0, "initial status apply was not role-only")
+
+elements.Borders = {
+  Update = function() roleAggroBorderUpdates = roleAggroBorderUpdates + 1 end,
+}
+elements.GroupCornerIndicators = {
+  Update = function() roleAggroCornerUpdates = roleAggroCornerUpdates + 1 end,
+}
 
 groupStatus.Update(liveFrame, "UNIT_HEALTH", liveFrame.unit)
 Check(roleUpdates == 1, "health hot path re-read the group role")
@@ -105,10 +120,14 @@ end
 
 Fire("PLAYER_ROLES_ASSIGNED")
 Check(roleUpdates == 2, "OOC role assignment did not catch up reused group frame")
+Check(roleAggroBorderUpdates == 1 and roleAggroCornerUpdates == 1,
+  "OOC role assignment did not refresh role-filtered aggro visuals")
 Check(unrelatedUpdates == 0, "OOC role assignment repainted unrelated status regions")
 
 Fire("ROLE_CHANGED_INFORM")
 Check(roleUpdates == 3, "OOC role-change inform did not use targeted role refresh")
+Check(roleAggroBorderUpdates == 2 and roleAggroCornerUpdates == 2,
+  "role-change inform left role-filtered aggro visuals stale")
 Check(unrelatedUpdates == 0, "role-change inform repainted unrelated status regions")
 
 combat = true
@@ -116,15 +135,21 @@ Fire("PLAYER_REGEN_DISABLED")
 Fire("PLAYER_ROLES_ASSIGNED")
 Fire("ROLE_CHANGED_INFORM")
 Check(roleUpdates == 3, "combat role events touched live frames")
+Check(roleAggroBorderUpdates == 2 and roleAggroCornerUpdates == 2,
+  "combat role events touched aggro visuals before the cold-path flush")
 Check(GF._pendingGroupRuntime == true and GF._pendingGroupRuntimeReason == "roster", "combat role events were not coalesced")
 
 combat = false
 Fire("PLAYER_REGEN_ENABLED")
 Check(roleUpdates == 4, "post-combat cold-path flush did not apply final role once")
+Check(roleAggroBorderUpdates == 3 and roleAggroCornerUpdates == 3,
+  "post-combat cold-path flush did not refresh aggro visuals once")
 Check(unrelatedUpdates == 0, "post-combat role catch-up repainted unrelated status regions")
 Check(GF._pendingGroupRuntime == nil, "post-combat pending role state survived flush")
 
 Fire("PLAYER_REGEN_ENABLED")
 Check(roleUpdates == 4, "idle regen event repeated role apply")
+Check(roleAggroBorderUpdates == 3 and roleAggroCornerUpdates == 3,
+  "idle regen event repeated role-filtered aggro work")
 
 print("PASS group role cold path: targeted OOC apply, combat coalescing, single regen catch-up")

@@ -283,7 +283,13 @@ function LoadConditions.Apply(frame, spec)
   RegisterVisibility(frame, spec)
 end
 
-function LoadConditions.Update(frame)
+function LoadConditions.Update(frame, event)
+  if event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
+    -- Instance/housing checks are resolved into the visibility expression, so
+    -- these zone boundaries must rebuild it. RegisterVisibility already defers
+    -- protected changes when combat lockdown makes that necessary.
+    return RegisterVisibility(frame, frame and frame.MSUFSpec)
+  end
   -- Identity refreshes (target/focus swap) call this on every unit change, but a
   -- unit swap NEVER changes the visibility expression: BuildRuntimeVisibility
   -- depends only on the spec (load rules + the frame's fixed unit token like

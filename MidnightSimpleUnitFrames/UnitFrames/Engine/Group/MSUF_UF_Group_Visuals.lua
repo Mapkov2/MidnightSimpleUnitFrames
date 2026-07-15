@@ -64,12 +64,7 @@ end
 local EMPTY_EVENTS = {}
 local VISUAL_HEALTH_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH" }
 local VISUAL_HEALTH_FLAGS_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_FLAGS" }
-local VISUAL_OFFLINE_EVENTS = { "UNIT_CONNECTION" }
 local VISUAL_FLAGS_EVENTS = { "UNIT_FLAGS" }
-local VISUAL_FLAGS_OFFLINE_EVENTS = { "UNIT_CONNECTION", "UNIT_FLAGS" }
-local VISUAL_HEALTH_OFFLINE_EVENTS = {
-  "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_FLAGS",
-}
 local EDGE_KEYS = { "top", "bottom", "left", "right" }
 local HEALTH_FADE_SECRET_THROTTLE = 0.1
 
@@ -995,14 +990,13 @@ function GroupVisuals.GetEvents(frame, spec)
   local cfg = spec and spec.group
   if not cfg then return EMPTY_EVENTS end
   local health = HealthFadeActive(cfg)
-  local offline = cfg.deadBgEnabled == true and cfg.deadBgOffline == true
   local flags = cfg.deadBgEnabled == true
-  if health and offline then return VISUAL_HEALTH_OFFLINE_EVENTS end
   if health and flags then return VISUAL_HEALTH_FLAGS_EVENTS end
   if health then return VISUAL_HEALTH_EVENTS end
-  if flags and offline then return VISUAL_FLAGS_OFFLINE_EVENTS end
   if flags then return VISUAL_FLAGS_EVENTS end
-  if offline then return VISUAL_OFFLINE_EVENTS end
+  -- Health owns UNIT_CONNECTION and forwards the resolved connection state to
+  -- the dead-background follower. Do not add a second route that would perform
+  -- the same work and break the fused health/connection fast path.
   return EMPTY_EVENTS
 end
 

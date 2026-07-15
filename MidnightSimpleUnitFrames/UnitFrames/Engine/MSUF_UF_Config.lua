@@ -1716,6 +1716,8 @@ local function CompileUnitBorder(out, conf, general, bars)
   border.dispelTrigger = NormalizeDispelDetectTrigger(ScopedValue(conf, general, "dispelBorderTrigger", "DISPEL_TYPE"))
   border.purge = OutlineModeEnabled(ScopedValue(conf, general, "purgeOutlineMode", nil),
     general.purgeBorderEnabled == true or general.hlPurgeBorderEnabled == true)
+  border.bossTarget = OutlineModeEnabled(ScopedValue(conf, general, "bossTargetOutlineMode", nil),
+    general.bossTargetHighlightEnabled ~= false)
 end
 
 local function CompileUnitTail(out, unit, key, conf, general, bars)
