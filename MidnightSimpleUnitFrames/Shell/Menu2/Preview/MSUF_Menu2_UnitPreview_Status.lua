@@ -7,6 +7,21 @@ local addonName, addonNS = ...
 local MSUF = addonNS or (_G.MSUF_NS) or {}
 local MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\"
 local SYMBOL_MEDIA = MEDIA .. "Symbols\\"
+local VALID_STATE_SYMBOLS = {
+    weapon_axes_crossed = true, weapon_bows_crossed = true,
+    weapon_crossbows_crossed = true, weapon_daggers_crossed = true,
+    weapon_fishing_poles_crossed = true, weapon_fist_crossed = true,
+    weapon_guns_crossed = true, weapon_maces_crossed = true,
+    weapon_polearms_crossed = true, weapon_shuriken = true,
+    weapon_staves_crossed = true, weapon_swords_crossed = true,
+    weapon_thrown_crossed = true, weapon_wands_crossed = true,
+    weapon_warglaives_crossed = true,
+    rested_moonzzz = true, rested_moonzzzz = true,
+    rested_sleep_zzzz = true, rested_zzz_compact = true,
+    rested_zzz_diag = true, rested_zzz_stack = true,
+    resurrection_ankh = true, resurrection_cross = true,
+    resurrection_soul = true, resurrection_wings = true,
+}
 local PVP_ALLIANCE_ATLAS = "UI-HUD-UnitFrame-Player-PVP-AllianceIcon"
 local PVP_HORDE_ATLAS = "UI-HUD-UnitFrame-Player-PVP-HordeIcon"
 local Preview = MSUF.UFPreview or {}
@@ -57,6 +72,7 @@ function Status.PositionLevelPreview(frame, anchor, x, y, mock, gap)
 end
 local function StatusSymbolTexture(symbolKey)
     if type(symbolKey) ~= "string" or symbolKey == "" or symbolKey == "DEFAULT" then return nil end
+    if not VALID_STATE_SYMBOLS[symbolKey] then return nil end
     local g = _G.MSUF_DB and _G.MSUF_DB.general or {}
     local mid = g.statusIconsUseMidnightStyle == true
     local folder, suffix = "Combat", mid and "_midnight_128_clean.tga" or "_classic_128_clean.tga"
@@ -173,7 +189,8 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg)
             tex:SetTexture(path)
         elseif tex and ApplyStatusIconPackPreview(tex, spec, conf, g, runtimeCfg, "combat", "combat") then
             -- Custom texture applied above.
-        elseif tex and tex.SetAtlas then
+        elseif tex and tex.SetAtlas and C_Texture and C_Texture.GetAtlasInfo
+            and C_Texture.GetAtlasInfo("UI-HUD-UnitFrame-Player-PortraitCombatIcon") then
             tex:SetAtlas("UI-HUD-UnitFrame-Player-PortraitCombatIcon")
         elseif tex then
             tex:SetTexture("Interface\\CharacterFrame\\UI-StateIcon")
