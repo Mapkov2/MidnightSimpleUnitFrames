@@ -153,9 +153,10 @@ local function DirectSetMenuScalePercent(value)
     if not db then return false end
     local scale = DirectSnapPercent(value, 25, 150, 5) / 100
     db.slashMenuScale = scale
-    if M.frame and type(M.frame.SetScale) == "function" then
-        local effective = type(M.GetEffectiveMenuScale) == "function" and M.GetEffectiveMenuScale(scale) or scale
-        M.frame:SetScale(effective)
+    if M.frame and type(M.ApplyMenuFrameScale) == "function" then
+        M.ApplyMenuFrameScale(M.frame)
+    elseif M.frame and type(M.frame.SetScale) == "function" then
+        M.frame:SetScale((type(M.GetEffectiveMenuScale) == "function" and M.GetEffectiveMenuScale(scale)) or scale)
     end
     return true
 end
@@ -1059,7 +1060,8 @@ local function BuildDashboardUX(ctx)
                 local dbScale = M.GetGeneralDB()
                 dbScale.slashMenuScale = scaleValue
                 pendingMenuScale = nil
-                if M.frame and M.frame.SetScale then M.frame:SetScale((M.GetEffectiveMenuScale and M.GetEffectiveMenuScale(scaleValue)) or scaleValue) end
+                if M.frame and M.ApplyMenuFrameScale then M.ApplyMenuFrameScale(M.frame)
+                elseif M.frame and M.frame.SetScale then M.frame:SetScale((M.GetEffectiveMenuScale and M.GetEffectiveMenuScale(scaleValue)) or scaleValue) end
             end,
         })
         M.TrackRefresh(ctx, RefreshGlobalScale)
