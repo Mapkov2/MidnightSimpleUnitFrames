@@ -208,6 +208,7 @@ local stateText
 local CombatStateOnEvent
 local crosshairFrame
 local crosshairEventFrame
+local crosshairZoomHooksInstalled = false
 
 local RequestCrosshairRangeRefresh
 local function ResolveCrosshairRangeSpellID(g)
@@ -667,8 +668,23 @@ local function ScheduleCombatCrosshairAnchor()
     end)
 end
 
+local function InstallCombatCrosshairZoomHooks()
+    if crosshairZoomHooksInstalled or type(_G.hooksecurefunc) ~= "function" then return end
+    crosshairZoomHooksInstalled = true
+    local function CameraZoomChanged()
+        local g = GetGameplayDB()
+        if g and g.enableCombatCrosshair == true and MSUF_ShouldCrosshairFollowCamera() then
+            ScheduleCombatCrosshairAnchor()
+        end
+    end
+    for _, name in ipairs({ "CameraZoomIn", "CameraZoomOut" }) do
+        if type(_G[name]) == "function" then _G.hooksecurefunc(name, CameraZoomChanged) end
+    end
+end
+
 local function EnsureCombatCrosshair()
     local g = GameplayDefaults()
+    InstallCombatCrosshairZoomHooks()
 
     if not crosshairFrame then
         crosshairFrame = CreateFrame("Frame", "MSUF_CombatCrosshairFrame", UIParent)
@@ -712,7 +728,7 @@ local function EnsureCombatCrosshair()
                     AnchorCombatCrosshair()
                 elseif event == "SPELL_RANGE_CHECK_UPDATE" then
                     RequestCrosshairRangeRefresh()
-                elseif event == "CVAR_UPDATE" and arg1 == "nameplateShowSelf" then
+                elseif event == "CVAR_UPDATE" and (arg1 == "nameplateShowSelf" or arg1 == "cameraDistanceMaxZoomFactor") then
                     ScheduleCombatCrosshairAnchor()
                 end
             end
