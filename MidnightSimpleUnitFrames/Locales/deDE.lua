@@ -884,6 +884,7 @@ local MSUF2_NAV_deDE = {
     ["Style"] = "Stil",
     ["Target"] = "Ziel",
     ["Target Name Color"] = "Ziel-Namensfarbe",
+    ["Cast Target Name Color"] = "Farbe des Zauberziels",
     ["Target of Target"] = "Ziel des Ziels",
     ["ToT Name Color"] = "ToT-Namensfarbe",
     ["Unit Auras"] = "Einheitenauren",
