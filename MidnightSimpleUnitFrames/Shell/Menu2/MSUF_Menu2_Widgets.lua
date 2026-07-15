@@ -472,7 +472,7 @@ function W.PageBuilder(ctx)
         section._msuf2CursorY = -40
         section._msuf2ContentX = 16
         section._msuf2Width = self.width
-        local fs = T.Font(section, "GameFontNormal", Tr(title or ""), T.colors.text)
+        local fs = T.Font(section, "GameFontNormal", Tr(title or ""), T.colors.text, "section")
         SetSearchText(fs, title)
         fs:SetPoint("TOPLEFT", 16, -12)
         section.title = fs
@@ -522,7 +522,7 @@ function W.PageBuilder(ctx)
         arrow:SetSize(10, 10)
         arrow:SetPoint("LEFT", header, "LEFT", 12, 0)
         arrow:SetTexture(T.media.collapseArrow)
-        local label = T.Font(header, "GameFontNormal", Tr(title or ""), T.colors.text)
+        local label = T.Font(header, "GameFontNormal", Tr(title or ""), T.colors.text, "section")
         SetSearchText(label, title)
         label:SetJustifyH("LEFT")
         local hint = T.Font(header, "GameFontDisableSmall", "", T.colors.dim)
@@ -761,7 +761,7 @@ function W.PageBuilder(ctx)
         RegisterSearchObject(section, title, "section")
         section:SetPoint("TOPLEFT", self.parent, "TOPLEFT", self.x, self.y)
         section:SetSize(self.width, height or 78)
-        local fs = T.Font(section, "GameFontNormalLarge", Tr(title or ""), T.colors.text)
+        local fs = T.Font(section, "GameFontNormalLarge", Tr(title or ""), T.colors.text, "heading")
         SetSearchText(fs, title)
         fs:SetPoint("TOPLEFT", 16, -12)
         section.title = fs
@@ -1417,7 +1417,7 @@ local function RefreshSwitchVisual(button, hover)
         if knob.SetAlpha then knob:SetAlpha(alpha) end
     end
     if button._msuf2Label and button._msuf2Label.SetTextColor then
-        local tx = enabled and (hover and T.colors.title or T.colors.text) or T.colors.dim
+        local tx = enabled and (hover and T.colors.title or T.colors.text) or (T.colors.disabled or T.colors.dim)
         button._msuf2Label:SetTextColor(tx[1], tx[2], tx[3], tx[4] or 1)
     end
 end
@@ -1477,7 +1477,7 @@ local function CreateToggle(section, label, x, y, labelWidth)
     btn._msuf2QuietCheckBox = true
     btn:SetPoint("TOPLEFT", x, y)
     btn:SetSize(28, 28)
-    btn._msuf2Label = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text)
+    btn._msuf2Label = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text, "control")
     SetSearchText(btn._msuf2Label, label)
     btn._msuf2Label:SetPoint("LEFT", btn, "RIGHT", 8, 0)
     btn._msuf2Label:SetJustifyH("LEFT")
@@ -1548,7 +1548,7 @@ local function CreateToggle(section, label, x, y, labelWidth)
             and (checked and (down and 1.00 or hover and 0.96 or 0.88) or (down and 0.90 or hover and 0.80 or 0.68))
             or 0.30
         local alpha = enabled and 1 or 0.58
-        local tx = enabled and (hover and T.colors.title or T.colors.text) or T.colors.dim
+        local tx = enabled and (hover and T.colors.title or T.colors.text) or (T.colors.disabled or T.colors.dim)
         local visualKey = tostring(enabled) .. "\030" .. tostring(checked) .. "\030" .. tostring(hover) .. "\030" .. tostring(down)
             .. "\030" .. tostring(bg[1]) .. "\030" .. tostring(bg[2]) .. "\030" .. tostring(bg[3]) .. "\030" .. tostring(bg[4])
             .. "\030" .. tostring(br[1]) .. "\030" .. tostring(br[2]) .. "\030" .. tostring(br[3]) .. "\030" .. tostring(br[4])
@@ -1597,7 +1597,7 @@ local function CreateToggle(section, label, x, y, labelWidth)
     return btn
 end
 function W.Text(parent, text, x, y, width, color)
-    local fs = T.Font(parent, "GameFontHighlightSmall", Tr(text or ""), color or T.colors.muted)
+    local fs = T.Font(parent, "GameFontHighlightSmall", Tr(text or ""), color or T.colors.muted, "supporting")
     SetSearchText(fs, text)
     RegisterSearchObject(fs, text, "text")
     fs:SetPoint("TOPLEFT", x or 0, y or 0)
@@ -1624,7 +1624,7 @@ function W.ControlCard(parent, title, subtitle, x, y, width, height)
     card._msuf2ContentX = 16
     card._msuf2CursorY = -52
     if card.EnableMouse then card:EnableMouse(false) end
-    local heading = T.Font(card, "GameFontNormal", Tr(title or ""), T.colors.text)
+    local heading = T.Font(card, "GameFontNormal", Tr(title or ""), T.colors.text, "card")
     SetSearchText(heading, title)
     heading:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -16)
     heading:SetWidth(max(24, width - 32))
@@ -1700,7 +1700,7 @@ function W.SwitchAt(section, label, x, y, labelWidth, labelSide)
     btn._msuf2ProxyBaseWidth = switchW + 12
     btn._msuf2UpdateToggleProxyBounds = UpdateToggleProxyBounds
     local side = labelSide or "RIGHT"
-    local labelFS = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text)
+    local labelFS = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text, "control")
     SetSearchText(labelFS, label)
     labelFS:SetJustifyH(side == "LEFT" and "RIGHT" or "LEFT")
     if not labelWidth and section and section._msuf2Width then labelWidth = max(40, (section._msuf2Width or 0) - (x or 0) - switchW - 30) end
@@ -1810,7 +1810,7 @@ function W.ScopeOverrideBar(ctx, section, opts)
         maxRight = maxRight,
         startX = startX,
     })
-    local label = T.Font(section, opts.labelFont or "GameFontHighlightSmall", Tr(opts.label or "Editing:"), opts.labelColor or T.colors.text)
+    local label = T.Font(section, opts.labelFont or "GameFontHighlightSmall", Tr(opts.label or "Editing:"), opts.labelColor or T.colors.text, "control")
     SetSearchText(label, opts.label or "Editing:")
     RegisterSearchObject(label, opts.label or "Editing:", "text")
     label:SetPoint("LEFT", section, "TOPLEFT", labelX, centerY)
@@ -1923,7 +1923,7 @@ local function SetEnabledState(frame, enabled)
 end
 local function SetTextEnabledColor(fontString, enabled)
     if not (fontString and fontString.SetTextColor) then return end
-    local c = enabled and T.colors.text or T.colors.dim
+    local c = enabled and T.colors.text or (T.colors.disabled or T.colors.dim)
     local r, g, b, a = c[1], c[2], c[3], c[4] or 1
     if fontString._msuf2EnabledColorState == enabled
         and fontString._msuf2TextColorR == r
@@ -2000,7 +2000,7 @@ local function ApplyControlEnabled(control)
     end
     ApplyEnabledVisuals(control, enabled)
     if control._msuf2Chevron and control._msuf2Chevron.SetVertexColor then
-        local c = enabled and T.colors.muted or T.colors.dim
+        local c = enabled and T.colors.muted or (T.colors.disabled or T.colors.dim)
         control._msuf2Chevron:SetVertexColor(c[1], c[2], c[3], enabled and 0.95 or 0.55)
     end
 end
@@ -2652,7 +2652,7 @@ function W.Slider(section, label, minVal, maxVal, step, width)
         local available = section._msuf2Width - x - 14
         if available > 0 and width > available then width = max(72, available) end
     end
-    local title = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text)
+    local title = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text, "control")
     SetSearchText(title, label)
     title:SetPoint("TOPLEFT", x, y)
     title:SetWidth(width)
@@ -2871,7 +2871,7 @@ function W.Slider(section, label, minVal, maxVal, step, width)
 end
 function W.Segment(section, label, values, width)
     local x, y = NextRow(section, 48)
-    local title = T.Font(section, "GameFontHighlightSmall", label or "", T.colors.text)
+    local title = T.Font(section, "GameFontHighlightSmall", label or "", T.colors.text, "control")
     SetSearchText(title, label)
     title:SetPoint("TOPLEFT", x, y)
     local holder = CreateFrame("Frame", nil, section)
@@ -2959,7 +2959,7 @@ local function TextInputSetOnValueCommitted(self, fn) self._msuf2OnCommit = fn e
 function W.TextInput(section, label, width)
     local x, y = NextRow(section, 48)
     width = width or 260
-    local title = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text)
+    local title = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text, "control")
     SetSearchText(title, label)
     title:SetPoint("TOPLEFT", x, y)
     local edit = CreateFrame("EditBox", nil, section, "InputBoxTemplate")
@@ -3086,9 +3086,9 @@ local function EnsureColorPickerPlus()
     panel:SetFrameLevel((picker:GetFrameLevel() or 1) + 20)
     if T and T.ApplySurface then T.ApplySurface(panel, "popup") end
 
-    local title = T.Font(panel, "GameFontNormalLarge", Tr("Precision color editor"), T.colors.text)
+    local title = T.Font(panel, "GameFontNormalLarge", Tr("Precision color editor"), T.colors.text, "heading")
     title:SetPoint("TOPLEFT", 16, -14)
-    local target = T.Font(panel, "GameFontHighlightSmall", "", T.colors.muted)
+    local target = T.Font(panel, "GameFontHighlightSmall", "", T.colors.muted, "supporting")
     target:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
     target:SetWidth(310)
     target:SetJustifyH("LEFT")
@@ -3339,7 +3339,7 @@ end
 --- values on the button so cancel can restore the UI state.
 function W.Color(section, label)
     local x, y = NextRow(section, 32)
-    local title = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text)
+    local title = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text, "control")
     SetSearchText(title, label)
     title:SetPoint("TOPLEFT", x, y)
     title:SetWidth(230)

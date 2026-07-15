@@ -8,7 +8,8 @@ local WL = M.WordList
 local SharedUI = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
 
 T.fontSizes = (SharedUI and SharedUI.fontSizes) or T.fontSizes or {
-    micro = 9, caption = 11, body = 13, section = 15, heading = 17, hero = 21,
+    micro = 9, caption = 11, supporting = 11, body = 13, control = 13,
+    card = 13, section = 15, heading = 17, hero = 21,
 }
 function T.FontSize(role, fallback)
     if SharedUI and type(SharedUI.FontSize) == "function" then return SharedUI.FontSize(role, fallback) end
@@ -318,13 +319,13 @@ local function MenuGeneralDB()
     db.general = type(db.general) == "table" and db.general or {}
     return db.general
 end
-local function ResolveMenuFontPath(size, flags)
+local function ResolveMenuFontPath(size, flags, role)
     local g = MenuGeneralDB()
     local key = type(g) == "table" and g.menuFontKey or nil
     if type(key) ~= "string" or key == "" then return nil end
     size = tonumber(size) or 14
     flags = flags or ""
-    local cacheKey = key .. "|" .. tostring(size) .. "|" .. tostring(flags)
+    local cacheKey = key .. "|" .. tostring(size) .. "|" .. tostring(flags) .. "|" .. tostring(role or "")
     if cacheKey == menuFontCacheKey then return menuFontCachePath end
     local path = key
     if not (path:find("\\", 1, true) or path:find("/", 1, true)) then
@@ -333,6 +334,9 @@ local function ResolveMenuFontPath(size, flags)
     end
     local resolveSafe = _G.MSUF_ResolveSafeFontPath
     if type(resolveSafe) == "function" then path = resolveSafe(path, size, flags, key) end
+    if SharedUI and type(SharedUI.ResolveRoleFontPath) == "function" then
+        path = SharedUI.ResolveRoleFontPath(path, role)
+    end
     if type(path) ~= "string" or path == "" then path = nil end
     menuFontCacheKey, menuFontCachePath = cacheKey, path
     return path
@@ -346,10 +350,12 @@ local function ApplyStyledFont(fs)
     if font and size and not fs._msuf2FontOriginal then fs._msuf2FontOriginal = { font = font, size = size, flags = flags } end
     local orig = fs._msuf2FontOriginal
     if not orig then return false end
+    local role = fs._msuf2FontRole
     local bump = tonumber(fs._msuf2FontBump) or T.fontBump or 0
-    local nextSize = T.NormalizeFontSize((tonumber(orig.size) or tonumber(size) or T.FontSize("body")) + bump)
+    local nextSize = role and T.FontSize(role)
+        or T.NormalizeFontSize((tonumber(orig.size) or tonumber(size) or T.FontSize("body")) + bump)
     local nextFlags = orig.flags or flags or ""
-    local menuFont = ResolveMenuFontPath(nextSize, nextFlags)
+    local menuFont = ResolveMenuFontPath(nextSize, nextFlags, role)
     local nextFont = menuFont or orig.font or font
     local fontKey = tostring(nextFont or "") .. "\030" .. tostring(nextSize or "") .. "\030" .. tostring(nextFlags or "")
     if fs._msuf2AppliedFontKey == fontKey then return true end
@@ -369,8 +375,9 @@ local function ApplyStyledFont(fs)
     if ok and applied ~= false then fs._msuf2AppliedFontKey = fontKey end
     return ok and applied ~= false
 end
-function T.StyleFontString(fs, color, bump)
+function T.StyleFontString(fs, color, bump, role)
     if not fs then return fs end
+    if role ~= nil then fs._msuf2FontRole = role end
     local c = color or T.colors.text
     local cr, cg, cb, ca = c[1], c[2], c[3], c[4] or 1
     if fs.SetTextColor
@@ -382,9 +389,9 @@ function T.StyleFontString(fs, color, bump)
         fs._msuf2TextColorR, fs._msuf2TextColorG, fs._msuf2TextColorB, fs._msuf2TextColorA = cr, cg, cb, ca
         fs:SetTextColor(cr, cg, cb, ca)
     end
-    if fs.SetShadowColor and fs._msuf2ShadowColorKey ~= "0:0:0:0.7" then
-        fs._msuf2ShadowColorKey = "0:0:0:0.7"
-        fs:SetShadowColor(0, 0, 0, 0.70)
+    if fs.SetShadowColor and fs._msuf2ShadowColorKey ~= "0:0:0:0.35" then
+        fs._msuf2ShadowColorKey = "0:0:0:0.35"
+        fs:SetShadowColor(0, 0, 0, 0.35)
     end
     if fs.SetShadowOffset and fs._msuf2ShadowOffsetKey ~= "1:-1" then
         fs._msuf2ShadowOffsetKey = "1:-1"
@@ -1973,12 +1980,13 @@ function T.SkinEditBox(editBox)
     return editBox
 end
 local function FontSetText(self, value) return self._msuf2RawSetText(self, Tr(value or "")) end
-function T.Font(parent, template, text, color)
+function T.Font(parent, template, text, color, role)
     local fs = parent:CreateFontString(nil, "OVERLAY", template or "GameFontHighlight")
+    fs._msuf2FontRole = role
     fs._msuf2RawSetText = fs.SetText
     fs.SetText = FontSetText
     fs:SetText(text or "")
-    return T.StyleFontString(fs, color or T.colors.text, 1)
+    return T.StyleFontString(fs, color or T.colors.text, 1, role)
 end
 function T.CenterButtonLabel(btn)
     if btn and btn._msuf2Label then

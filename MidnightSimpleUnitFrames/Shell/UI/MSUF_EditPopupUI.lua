@@ -61,8 +61,13 @@ end
 
 local function FS(parent, role, color)
     local fs = parent:CreateFontString(nil, "OVERLAY")
-    fs:SetFont(FONT, FontSize(role or "body"), "")
-    fs:SetShadowOffset(1, -1); fs:SetShadowColor(0, 0, 0, 0.9)
+    local ui = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
+    if ui and ui.ApplyFontRole then
+        ui.ApplyFontRole(fs, role or "body", FONT, "")
+    else
+        fs:SetFont(FONT, FontSize(role or "body"), "")
+    end
+    fs:SetShadowOffset(1, -1); fs:SetShadowColor(0, 0, 0, 0.35)
     local c = color or C.white
     fs:SetTextColor(c[1], c[2], c[3], c[4] or 1)
     return fs
@@ -376,7 +381,12 @@ function Quick.Box(parent, width, opts)
     b:SetNumeric(false)
     b:SetJustifyH("CENTER")
     b:SetMaxLetters(7)
-    b:SetFont(FONT, FontSize("body"), "")
+    local ui = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
+    if ui and ui.ApplyFontRole then
+        ui.ApplyFontRole(b, "body", FONT, "")
+    else
+        b:SetFont(FONT, FontSize("body"), "")
+    end
     b:SetTextColor(c.white[1], c.white[2], c.white[3], c.white[4] or 1)
     if b.SetBackdrop then
         b:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1 })
