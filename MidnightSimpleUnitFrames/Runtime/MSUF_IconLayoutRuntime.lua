@@ -64,8 +64,8 @@ function MSUF.Icons._layout.Layer(conf, g, key, defaultVal)
     local util = MSUF.Util and MSUF.Util.Num
     local v = util and util(conf, g, key, defaultVal or 7) or (defaultVal or 7)
     v = math_floor((tonumber(v) or defaultVal or 7) + 0.5)
-    if v < 1 then return 1 end
-    if v > 10 then return 10 end
+    if v < 0 then return 0 end
+    if v > 30 then return 30 end
     return v
 end
 
@@ -92,7 +92,7 @@ function MSUF.Icons._layout.ApplyLayer(region, layer, owner)
     if not region then return end
     local l = tonumber(layer) or 7
     l = math_floor(l + 0.5)
-    if l < 1 then l = 1 elseif l > 10 then l = 10 end
+    if l < 0 then l = 0 elseif l > 30 then l = 30 end
 
     local layerFrame = region._msufLayerFrame
     if layerFrame and layerFrame.SetFrameLevel then

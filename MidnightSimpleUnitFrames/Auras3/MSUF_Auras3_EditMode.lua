@@ -36,6 +36,8 @@ A3.__editModeLoaded = true
 
 A3.EditMode = (type(A3.EditMode) == "table") and A3.EditMode or {}
 local EM = A3.EditMode
+local FrameLayers = MSUF.UF and MSUF.UF.Layers or {}
+local SPELL_FRAME_EFFECT_BASE_OFFSET = tonumber(FrameLayers.SPELL_FRAME_EFFECT_BASE_OFFSET) or 1
 
 local AURA_DRAG_RUNTIME_INTERVAL = 0.05
 local AURA_PENDING_DRAG_THRESHOLD = 3
@@ -1569,6 +1571,12 @@ local function ApplyEditModeCustomEffect(group, frame, item)
         if root then root:Hide() end
         return
     end
+    local health = frame and (frame.hpBar or frame.Health or frame.health)
+    local target = health and health.GetStatusBarTexture and health:GetStatusBarTexture()
+    if not (health and target) then
+        if root then root:Hide() end
+        return
+    end
     if not root then
         root = CreateFrame("Frame", nil, group)
         root:EnableMouse(false)
@@ -1582,22 +1590,25 @@ local function ApplyEditModeCustomEffect(group, frame, item)
         group._msufA3CustomEffectPreview = root
     end
     root:ClearAllPoints()
-    root:SetAllPoints(frame)
-    if root.SetFrameLevel then root:SetFrameLevel((group:GetFrameLevel() or 900) + 24 + (11 - Clamp(effect.priority, 5, 1, 10))) end
+    root:SetAllPoints(health)
+    if root.SetFrameLevel then
+        root:SetFrameLevel((group:GetFrameLevel() or 900) + SPELL_FRAME_EFFECT_BASE_OFFSET
+            + (11 - Clamp(effect.priority, 5, 1, 10)))
+    end
     root.tint:Hide()
     for i = 1, 4 do root.edges[i]:Hide() end
     local color = effect.color or {}
     local r, g, b, a = color[1] or 1, color[2] or 1, color[3] or 1, color[4] or 0.8
     if kind == "healthtint" then
         root.tint:ClearAllPoints()
-        root.tint:SetAllPoints(frame.hpBar or frame.Health or frame)
+        root.tint:SetAllPoints(target)
         root.tint:SetVertexColor(r, g, b, tonumber(effect.tintAlpha) or a)
         root.tint:Show()
     elseif kind == "border" or kind == "glow" or kind == "pulse" then
         local thickness = Clamp(effect.thickness, kind == "glow" and 3 or 2, 1, 16)
         local top, bottom, left, right = root.edges[1], root.edges[2], root.edges[3], root.edges[4]
-        top:ClearAllPoints(); top:SetPoint("TOPLEFT", frame, "TOPLEFT", -thickness, thickness); top:SetPoint("TOPRIGHT", frame, "TOPRIGHT", thickness, thickness); top:SetHeight(thickness)
-        bottom:ClearAllPoints(); bottom:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", -thickness, -thickness); bottom:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", thickness, -thickness); bottom:SetHeight(thickness)
+        top:ClearAllPoints(); top:SetPoint("TOPLEFT", target, "TOPLEFT", -thickness, thickness); top:SetPoint("TOPRIGHT", target, "TOPRIGHT", thickness, thickness); top:SetHeight(thickness)
+        bottom:ClearAllPoints(); bottom:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", -thickness, -thickness); bottom:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", thickness, -thickness); bottom:SetHeight(thickness)
         left:ClearAllPoints(); left:SetPoint("TOPLEFT", top, "BOTTOMLEFT"); left:SetPoint("BOTTOMLEFT", bottom, "TOPLEFT"); left:SetWidth(thickness)
         right:ClearAllPoints(); right:SetPoint("TOPRIGHT", top, "BOTTOMRIGHT"); right:SetPoint("BOTTOMRIGHT", bottom, "TOPRIGHT"); right:SetWidth(thickness)
         for i = 1, 4 do root.edges[i]:SetVertexColor(r, g, b, kind == "glow" and math_min(1, a * 0.85) or a); root.edges[i]:Show() end
@@ -1718,7 +1729,7 @@ function EM.RefreshUnit(unit)
                 PositionPreviewGroup(group, frame, anchor, x, y, laneW, laneH)
                 group:SetSize(laneW, laneH + HEADER_H)
                 if group.Body then group.Body:SetSize(laneW, laneH) end
-                group:SetFrameLevel(900 + (tonumber(cfg.layer) or 5))
+                group:SetFrameLevel(900 + Clamp(cfg.layer, 5, 0, 30))
                 if group.Hitbox and group.Hitbox.SetFrameLevel then
                     group.Hitbox:SetFrameLevel((group:GetFrameLevel() or 0) + 20)
                 end

@@ -22,7 +22,7 @@ local AccessibleNumber = M.AccessibleNumber or function(value, fallback)
     if type(issecretvalue) == "function" and issecretvalue(value) == true then return fallback end
     return tonumber(value) or fallback
 end
-local AURA_ANCHORS, STATUS_ICON_ANCHORS, SPELL_GROWTH_VALUES, ScopeSection, CurrentScope, AuraGroup, AurasRoot, QueueGF, RefreshContext, BindNestedSlider, BindNestedStrataSlider, BindNestedDropdown, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, OnOffBadge, BadgeNumber, OptionText, FrameStrataCount = M.Pick(GP, [[AURA_ANCHORS STATUS_ICON_ANCHORS SPELL_GROWTH_VALUES ScopeSection CurrentScope AuraGroup AurasRoot QueueGF RefreshContext BindNestedSlider BindNestedStrataSlider BindNestedDropdown SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus OnOffBadge BadgeNumber OptionText FrameStrataCount]])
+local AURA_ANCHORS, STATUS_ICON_ANCHORS, SPELL_GROWTH_VALUES, ScopeSection, CurrentScope, AuraGroup, AurasRoot, QueueGF, RefreshContext, BindNestedSlider, BindNestedDropdown, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, OnOffBadge, BadgeNumber, OptionText = M.Pick(GP, [[AURA_ANCHORS STATUS_ICON_ANCHORS SPELL_GROWTH_VALUES ScopeSection CurrentScope AuraGroup AurasRoot QueueGF RefreshContext BindNestedSlider BindNestedDropdown SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus OnOffBadge BadgeNumber OptionText]])
 AURA_ANCHORS = AURA_ANCHORS or {}
 STATUS_ICON_ANCHORS = STATUS_ICON_ANCHORS or {}
 SPELL_GROWTH_VALUES = SPELL_GROWTH_VALUES or {}
@@ -350,9 +350,18 @@ local function BuildGFAuras(ctx)
         Dropdown("Growth", growthX, growthValues, "growth", defaults.growth)
         local col4 = floor((inner - gap * 3) / 4)
         local function Slider(label, col, y, minValue, maxValue, key, fallback)
+            local assistantContract
+            if lane == "externals" and key == "layer" then
+                assistantContract = {
+                    assistantDisposition = "dynamic",
+                    assistantDispositionReason = "Layer targets the selected Group scope's External Defensive container.",
+                    assistantSettingKeys = GroupAuraSettingKeys(scope, ".auras.externals.layer"),
+                }
+            end
             local widget = BindNestedSlider(ctx, W.Slider(section, label, minValue, maxValue, 1, col4),
                 function() return AuraGroup(CurrentScope(), lane) end, key, fallback, "auras",
-                AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".layout." .. AuraCatalogToken(key)))
+                AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".layout." .. AuraCatalogToken(key), nil,
+                    assistantContract))
             W.MoveWidget(widget, section, 24 + (col - 1) * (col4 + gap), y, col4)
             controls[#controls + 1] = widget
             return widget
@@ -363,12 +372,7 @@ local function BuildGFAuras(ctx)
         Slider("Size", 4, -92, 8, 80, "size", defaults.size)
         local perRowControl = Slider("Per row", 1, -146, 1, 20, "perRow", defaults.perRow)
         Slider("Gap", 2, -146, 0, 12, "spacing", defaults.spacing)
-        Slider("Layer", 3, -146, 0, 30, "layer", defaults.layer)
-        local strata = BindNestedStrataSlider(ctx, W.Slider(section, "Strata", 0, (FrameStrataCount or 9) - 1, 1, col4),
-            function() return AuraGroup(CurrentScope(), lane) end, "strata", "AUTO", "auras",
-            AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".layout.strata"))
-        W.MoveWidget(strata, section, 24 + 3 * (col4 + gap), -146, col4)
-        controls[#controls + 1] = strata
+        Slider("Layer (0-30)", 3, -146, 0, 30, "layer", defaults.layer)
         M.TrackRefresh(ctx, function()
             local shown = LaneBackendEnabled(CurrentScope(), lane)
             SetOptionEnabled(enable, true)

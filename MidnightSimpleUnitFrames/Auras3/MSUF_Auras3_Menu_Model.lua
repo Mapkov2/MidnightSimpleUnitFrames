@@ -123,6 +123,10 @@ local AURA_ANCHOR_OK = {
     LEFT=true, CENTER=true, RIGHT=true,
     BOTTOMLEFT=true, BOTTOM=true, BOTTOMRIGHT=true,
 }
+local FRAME_STRATA_OK = {
+    AUTO=true, BACKGROUND=true, LOW=true, MEDIUM=true, HIGH=true,
+    DIALOG=true, FULLSCREEN=true, FULLSCREEN_DIALOG=true, TOOLTIP=true,
+}
 
 local LANE_GROWTH_VALUES = {
     { value = "RIGHTDOWN", text = "Right then Down" },
@@ -156,6 +160,8 @@ local LAYOUT_KEYS = {
     debuffAnchor = true,
     buffLayer = true,
     debuffLayer = true,
+    buffStrata = true,
+    debuffStrata = true,
     stackTextSize = true,
     stackTextOffsetX = true,
     stackTextOffsetY = true,
@@ -319,6 +325,7 @@ local GROUPS = {
         sizeKey = "buffGroupIconSize",
         anchorKey = "buffAnchor",
         layerKey = "buffLayer",
+        strataKey = "buffStrata",
         perRowKey = "buffPerRow",
         growthKey = "buffGrowthX",
         wrapKey = "buffGrowthY",
@@ -333,6 +340,7 @@ local GROUPS = {
         sizeKey = "debuffGroupIconSize",
         anchorKey = "debuffAnchor",
         layerKey = "debuffLayer",
+        strataKey = "debuffStrata",
         perRowKey = "debuffPerRow",
         growthKey = "debuffGrowthX",
         wrapKey = "debuffGrowthY",
@@ -1536,6 +1544,13 @@ function Model.ReadLaneLayer(unit, kind)
     return Model.ReadNumber(unit, spec and spec.layerKey or "buffLayer", spec and spec.defaultLayer or 5, 0, 30)
 end
 
+function Model.ReadLaneStrata(unit, kind)
+    kind = NormalizeKind(kind)
+    local spec = GROUPS[kind]
+    local value = tostring(Model.ReadValue(unit, spec and spec.strataKey or "buffStrata", "AUTO") or "AUTO"):upper()
+    return FRAME_STRATA_OK[value] and value or "AUTO"
+end
+
 local function CustomDisplayRoot()
     local auras = Model.EnsureDB()
     return auras and auras.customDisplays
@@ -1608,7 +1623,7 @@ function Model.AddCustomDisplay(scope)
             size = 24, barWidth = 54, showCooldown = true,
             showCooldownSwipe = true, showStacks = true,
         },
-        frame = { type = "none", color = { 0.69, 0.50, 0.88, 0.80 }, priority = 5, thickness = 2, strata = "AUTO" },
+        frame = { type = "none", color = { 0.69, 0.50, 0.88, 0.80 }, priority = 5, thickness = 2, layer = 0, strata = "AUTO" },
     }
     items[#items + 1] = item
     return item
@@ -1668,7 +1683,7 @@ local function NewCustomContainer(index)
         strata = "AUTO",
         frame = {
             type = "none", color = { 0.69, 0.50, 0.88, 0.80 },
-            priority = 5, thickness = 2, strata = "AUTO",
+            priority = 5, thickness = 2, layer = 0, strata = "AUTO",
         },
     }
 end
@@ -1828,6 +1843,14 @@ function Model.WriteLaneLayer(unit, kind, value)
     kind = NormalizeKind(kind)
     local spec = GROUPS[kind]
     Model.WriteNumber(unit, spec and spec.layerKey or "buffLayer", value, 0, 30)
+end
+
+function Model.WriteLaneStrata(unit, kind, value)
+    kind = NormalizeKind(kind)
+    local spec = GROUPS[kind]
+    value = tostring(value or "AUTO"):upper()
+    if not FRAME_STRATA_OK[value] then value = "AUTO" end
+    Model.WriteValue(unit, spec and spec.strataKey or "buffStrata", value)
 end
 
 function Model.ReadStackAnchor(unit)

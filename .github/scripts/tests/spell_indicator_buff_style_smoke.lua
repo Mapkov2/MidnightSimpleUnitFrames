@@ -32,12 +32,22 @@ local spellItem = {
   enabled = true,
   key = "spec:spell",
   includeSpellIDs = { [12345] = true },
+  frame = {
+    type = "glow",
+    timing = "expiring",
+    expireThreshold = 7,
+    layer = 44,
+    color = { 1, 0.8, 0.2, 0.9 },
+  },
   placed = {
     type = "icon",
     anchor = "TOPLEFT",
     x = 17,
     y = -9,
     size = 31,
+    iconEffect = "glow",
+    iconEffectTiming = "expiring",
+    iconExpireThreshold = 9,
     showCooldown = true,
     showCooldownSwipe = false,
     showStacks = true,
@@ -72,6 +82,26 @@ local compiled = assert(Runtime.CompileSlots("party1", {
   items = { spellItem },
 }, style), "styled Spell Indicator root did not compile")
 local slot = assert(compiled.slots[1], "styled Spell Indicator slot missing")
+local sensor = assert(compiled.slots[2], "expiring-effect sensor slot missing")
+Equal(#compiled.slots, 2, "expiring visible icon did not compile exactly one sensor sibling")
+Equal(slot.frameEffect, nil, "visible icon retained ownership of the expiring frame effect")
+Equal(slot.iconEffect, "none", "visible icon retained ownership of the expiring icon glow")
+Equal(sensor.frameEffect.timing, "expiring", "per-spell expiration timing was dropped")
+Equal(sensor.frameEffect.expireThreshold, 7, "per-spell expiration threshold was dropped")
+Equal(sensor.iconEffect, "glow", "expiration sensor dropped the timed icon glow")
+Equal(sensor.iconEffectTiming, "expiring", "icon-glow expiration timing was dropped")
+Equal(sensor.iconExpireThreshold, 9, "icon-glow expiration threshold was dropped")
+Equal(sensor.expiringIconEffect, true, "expiration sensor did not mark its timed icon glow")
+Equal(sensor.size, 31, "icon-glow sensor lost the placed icon geometry")
+Equal(sensor.frameEffect.layer, 30, "per-spell frame-effect Layer did not cold-clamp to 0..30")
+Equal(sensor.visual, "none", "expiration sensor unexpectedly renders an icon")
+Equal(sensor.hiddenVisual, true, "expiration sensor is not hidden")
+Equal(sensor.showCooldownText, false, "expiration sensor can replace visible cooldown text")
+Equal(sensor.showCooldownSwipe, false, "expiration sensor can replace the visible cooldown swipe")
+Equal(sensor.showDurationBar, false, "expiration sensor can replace the visible duration bar")
+Equal(sensor.showStacks, false, "expiration sensor can replace visible aura stacks")
+Equal(sensor.slotKey, slot.slotKey .. ":expiring",
+  "expiration sensor key can collide with a sanitized custom-spell key")
 
 -- Placement remains owned by the individual Spell Indicator.
 Equal(slot.size, 31, "Buff style overwrote per-spell icon size")
@@ -139,6 +169,10 @@ Equal(corner.slots[1].showTooltip, false, "corner slot inherited Buff tooltip")
 
 local unitFrames = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua")
 local groupConfig = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Config.lua")
+local indicatorConfig = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Config_Indicators.lua")
+local spellRuntime = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_SpellIndicators.lua")
+local menuSupport = Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Support.lua")
+local groupPage = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_Group.lua")
 local previewNative = Read("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Native.lua")
 local previewRender = Read("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Render.lua")
 local menu = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupIndicators.lua")
@@ -147,6 +181,18 @@ Check(unitFrames:find("SpellIndicatorsRuntime.CompileSlots(unit, combinedSpellSo
   "live group config no longer passes Buff style to Spell Indicators")
 Check(groupConfig:find('out[prefix .. "CooldownDecimalSeconds"]', 1, true),
   "group compiler dropped the Buff decimal threshold")
+Check(indicatorConfig:find('timing = timing', 1, true),
+  "group compiler dropped frame-effect timing")
+Check(indicatorConfig:find('expireThreshold = expireThreshold', 1, true),
+  "group compiler dropped frame-effect expiration threshold")
+Check(indicatorConfig:find('iconEffectTiming = tostring(placed.iconEffectTiming or "always")', 1, true),
+  "group compiler dropped icon-glow timing")
+Check(indicatorConfig:find('iconExpireThreshold = math.max(1, math.min(30, Num(placed.iconExpireThreshold, 5)))', 1, true),
+  "group compiler dropped the clamped icon-glow expiration threshold")
+Check(spellRuntime:find("EvaluateRemainingDuration", 1, true),
+  "Spell Indicator runtime lost secret-safe remaining-duration evaluation")
+Check(spellRuntime:find('slot.frameEffect.timing == "expiring"', 1, true),
+  "Spell Indicator runtime lost the expiring-effect dispatch")
 Check(previewNative:find('showDurationBar = auras[prefix .. "ShowDurationBar"]', 1, true),
   "group preview adapter dropped Buff duration-bar style")
 Check(previewRender:find("ConfigureSpellPreviewHandle(handle, item, placed, item)", 1, true),
@@ -163,8 +209,22 @@ Check(previewRender:find("local LayoutAuraPreviewSwipe = scene.LayoutAuraPreview
   "group Spell Indicator rendering did not bind Aura swipe layout")
 Check(previewRender:find("local LayoutAuraDurationBar = scene.LayoutAuraDurationBar", 1, true),
   "group Spell Indicator rendering did not bind Aura duration-bar layout")
-Check(menu:find("Open Buff Aura Style", 1, true),
+Check(menu:find("Edit Buff Style", 1, true),
   "Spell Indicator menu lost its direct Buff Aura Style navigation")
+Check(menu:find("Start effect at (seconds remaining)", 1, true),
+  "Spell Indicator menu lost the expiration-threshold control")
+Check(menu:find("Start glow at (seconds remaining)", 1, true),
+  "Spell Indicator menu lost the icon-glow expiration threshold")
+Check(menu:find('"iconEffectTiming", "always", %-924'),
+  "Spell Indicator menu lost the icon-glow timing control")
+Check(menu:find('"iconEffectTiming", "always", %-924, RefreshSpellIndicatorState'),
+  "icon-glow timing dropdown no longer refreshes its dependent threshold control")
+Check(menu:find('"timing", "always", %-544, RefreshSpellIndicatorState'),
+  "frame-effect timing dropdown no longer refreshes its dependent threshold control")
+Check(menuSupport:find("FRAME_EFFECT_TYPES FRAME_EFFECT_TIMINGS ICON_EFFECT_TYPES", 1, true),
+  "frame-effect timing values are not exported from GroupSpecs")
+Check(groupPage:find("FRAME_EFFECT_TIMINGS = FRAME_EFFECT_TIMINGS", 1, true),
+  "Group page did not publish frame-effect timing values to its subpages")
 Check(not menu:find('BindPlacedToggle("Show Cooldown Text"', 1, true),
   "Spell Indicator menu reintroduced a duplicate cooldown-text owner")
 
