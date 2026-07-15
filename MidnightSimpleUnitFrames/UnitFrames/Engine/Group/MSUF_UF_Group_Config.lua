@@ -849,6 +849,7 @@ local function ApplyAuraLane(out, prefix, groupKey, group, defaults, maxCount, i
   out[prefix .. "Filter"] = AuraFilterString(groupKey, group)
   local blacklist = type(group.blacklist) == "table" and group.blacklist or nil
   out[prefix .. "HidePermanent"] = group.hidePermanent == true or (blacklist and blacklist.hidePermanent == true) or false
+  if prefix == "debuff" then out.debuffMaxDuration = Num(blacklist and blacklist.maxDuration, 0) end
   if group.showTooltip ~= nil then
     out[prefix .. "ShowTooltip"] = group.showTooltip == true
   end

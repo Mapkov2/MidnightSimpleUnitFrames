@@ -2248,6 +2248,23 @@ function Model.WriteBlacklistHidePermanent(scope, kind, value)
     return changed
 end
 
+function Model.ReadBlacklistMaxDuration(scope, kind)
+    local list = EnsureBlacklist(scope, false, kind)
+    return ClampNumber(type(list) == "table" and list.maxDuration, 0, 0, 180)
+end
+
+function Model.WriteBlacklistMaxDuration(scope, kind, value)
+    local nextValue = Round(ClampNumber(value, 0, 0, 180))
+    local changed = false
+    ForEachFrameBlacklist(scope, true, kind, function(list)
+        if type(list) == "table" and (tonumber(list.maxDuration) or 0) ~= nextValue then
+            list.maxDuration = nextValue
+            changed = true
+        end
+    end)
+    return changed
+end
+
 function Model.RemoveBlacklistSpell(scope, value, kind)
     local raw = tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
     local spellID = SpellIDFromInput(raw)
@@ -2537,6 +2554,31 @@ function Model.WriteGroupBlacklistHidePermanent(scope, groupKey, value)
         if type(group.blacklist) ~= "table" then group.blacklist = {} end
         if group.blacklist.hidePermanent ~= nextValue then
             group.blacklist.hidePermanent = nextValue
+            changed = true
+        end
+    end
+    Write(a)
+    if b then Write(b) end
+    if changed then InvalidateGroupBlacklist(scope, groupKey) end
+    return changed
+end
+
+function Model.ReadGroupBlacklistMaxDuration(scope, groupKey)
+    local kind = GroupScopeKinds(scope)
+    local group = GroupAuraGroup(kind, groupKey)
+    local blacklist = type(group.blacklist) == "table" and group.blacklist or nil
+    return ClampNumber(blacklist and blacklist.maxDuration, 0, 0, 180)
+end
+
+function Model.WriteGroupBlacklistMaxDuration(scope, groupKey, value)
+    local nextValue = Round(ClampNumber(value, 0, 0, 180))
+    local changed = false
+    local a, b = GroupScopeKinds(scope)
+    local function Write(kind)
+        local group = GroupAuraGroup(kind, groupKey)
+        if type(group.blacklist) ~= "table" then group.blacklist = {} end
+        if (tonumber(group.blacklist.maxDuration) or 0) ~= nextValue then
+            group.blacklist.maxDuration = nextValue
             changed = true
         end
     end
