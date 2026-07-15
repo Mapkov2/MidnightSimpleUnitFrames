@@ -1384,6 +1384,8 @@ local function RenderDetachedPower(preview, bars, player, classFrame)
     frame:ClearAllPoints()
     if classFrame and classFrame.IsShown and classFrame:IsShown() then
         frame:SetPoint("TOP", classFrame, "BOTTOM", x, y)
+    elseif tostring(player.detachedPowerBarAnchorMode or ""):upper() == "LEGACY_TOPLEFT" then
+        frame:SetPoint("TOPLEFT", preview.playerRef, "BOTTOMLEFT", x, y)
     else
         frame:SetPoint("TOP", preview.playerRef, "BOTTOM", x, y)
     end

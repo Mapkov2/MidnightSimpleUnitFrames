@@ -341,6 +341,9 @@ local function ResolveDetachedAnchor(power)
     and (not anchor.IsShown or anchor:IsShown()) then
     return anchor, "TOP", "BOTTOM"
   end
+  if power.detachedAnchorMode == "LEGACY_TOPLEFT" then
+    return nil, "TOPLEFT", "BOTTOMLEFT"
+  end
   return nil, "TOP", "BOTTOM"
 end
 

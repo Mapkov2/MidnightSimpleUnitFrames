@@ -1590,6 +1590,7 @@ local function CompileUnitPower(out, unit, key, conf, general, bars, health)
   end
   power.detachedX = Number(conf.detachedPowerBarOffsetX, 0)
   power.detachedY = Number(conf.detachedPowerBarOffsetY, -4)
+  power.detachedAnchorMode = tostring(conf.detachedPowerBarAnchorMode or "CENTER"):upper()
   power.detachedLevel = Number(conf.detachedPowerBarFrameLevelOffset, 6)
   power.textOnDetached = conf.detachedPowerBarTextOnBar == true
   power.detachedSyncClass = key == "player" and conf.detachedPowerBarSyncClassPower ~= false
