@@ -20,7 +20,7 @@ A.GroupFramesRegistryData.GROUP_TEXT_MODE_VALUES = {
 }
 A.GroupFramesRegistryData.GROUP_ANCHOR_VALUES = { "LEFT", "CENTER", "RIGHT" }
 A.GroupFramesRegistryData.GROUP_CORNER_ANCHOR_VALUES = { "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT" }
-A.GroupFramesRegistryData.GROUP_DISPEL_TRIGGER_VALUES = { "BORDER", "BY_ME", "DISPEL_TYPE", "ANY_DEBUFF" }
+A.GroupFramesRegistryData.GROUP_DISPEL_TRIGGER_VALUES = { "BORDER", "BY_ME", "BY_RAID", "DISPEL_TYPE" }
 A.GroupFramesRegistryData.GROUP_DISPEL_STYLE_VALUES = { "FULL", "BOTTOM", "TOP", "LEFT", "RIGHT" }
 A.GroupFramesRegistryData.GROUP_STRIPE_EDGE_VALUES = { "BOTTOM", "TOP" }
 A.GroupFramesRegistryData.GROUP_RANGE_LAYER_VALUES = { "frame", "health" }

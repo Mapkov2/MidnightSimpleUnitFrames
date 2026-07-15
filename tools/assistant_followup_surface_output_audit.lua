@@ -345,7 +345,7 @@ partyGroup.dispelOverlayEnabled = true
 partyGroup.dispelOverlayStyle = "TOP"
 partyGroup.dispelOverlayOnHealth = false
 partyGroup.dispelOverlayAlpha = 0.77
-partyGroup.dispelOverlayTrigger = "ANY_DEBUFF"
+partyGroup.dispelOverlayTrigger = "DISPEL_TYPE"
 partyGroup.dispelOverlayStrata = "HIGH"
 partyGroup.dispelEnabled = true
 raidGroup.dispelOverlayEnabled = false
@@ -363,7 +363,7 @@ assert(raidGroup.dispelOverlayEnabled == true
     and raidGroup.dispelOverlayStyle == "TOP"
     and raidGroup.dispelOverlayOnHealth == false
     and raidGroup.dispelOverlayAlpha == 0.77
-    and raidGroup.dispelOverlayTrigger == "ANY_DEBUFF"
+    and raidGroup.dispelOverlayTrigger == "DISPEL_TYPE"
     and raidGroup.dispelOverlayStrata == "HIGH",
     "explicit Dispel Overlay copy omitted reviewed overlay controls")
 assert(raidGroup.powerHeight == 3 and raidGroup.bgR == 0.12,

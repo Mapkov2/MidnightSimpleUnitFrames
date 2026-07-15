@@ -551,7 +551,9 @@ local AURA_FILTER_LABELS = {
     notCancelable = "Not Cancelable",
     externalDefensive = "External Defensive",
     bigDefensive = "Big Defensive",
-    includeDispellable = "Dispellable",
+    includeDispellable = "Dispellable by Group",
+    dispellableAny = "Any Dispel Type",
+    onlyImportant = "Important",
     crowdControl = "Crowd Control",
 }
 
@@ -564,7 +566,9 @@ local AURA_FILTER_EFFECTS = {
     notCancelable = "shows buffs you cannot cancel.",
     externalDefensive = "focuses external defensive cooldown buffs.",
     bigDefensive = "focuses major personal defensive cooldown buffs.",
-    includeDispellable = "shows debuffs your character can dispel.",
+    includeDispellable = "shows debuffs someone in your group can dispel.",
+    dispellableAny = "shows debuffs with any dispel type, regardless of group capability.",
+    onlyImportant = "shows auras Blizzard flags as important.",
     crowdControl = "focuses crowd-control debuffs.",
 }
 
@@ -573,7 +577,7 @@ local GROUP_AURA_FILTER_EFFECTS = {
     Player = "shows only your own auras.",
     RaidPlayer = "shows raid-relevant auras applied by you.",
     RaidInCombatPlayer = "shows combat raid-frame auras applied by you.",
-    Raid = "shows raid-relevant auras not applied by you.",
+    Raid = "shows player-actionable RAID auras not applied by you (harmful means player-dispellable).",
     RaidInCombat = "shows combat raid-frame auras not applied by you.",
     BigDefensivePlayer = "shows major defensive cooldown buffs applied by you.",
     ExternalDefensivePlayer = "shows external defensive cooldown buffs applied by you.",
@@ -584,9 +588,11 @@ local GROUP_AURA_FILTER_EFFECTS = {
     Cancelable = "shows cancelable buffs not applied by you.",
     NotCancelable = "shows non-cancelable buffs not applied by you.",
     PLAYER = "shows only your own auras.",
-    RAID = "shows raid-relevant auras.",
+    RAID = "shows helpful auras the player can apply or harmful auras the player can dispel.",
     RAID_IN_COMBAT = "shows a cleaner raid-relevant set during combat.",
-    RAID_PLAYER_DISPELLABLE = "shows debuffs your character can dispel.",
+    RAID_PLAYER_DISPELLABLE = "shows auras someone in your group can dispel, including helpful enrages on enemies.",
+    DISPELLABLE = "shows auras with any dispel type, even when nobody in your group can remove them.",
+    IMPORTANT = "shows auras Blizzard flags as important.",
     BIG_DEFENSIVE = "shows major defensive cooldown buffs.",
     EXTERNAL_DEFENSIVE = "shows external defensive cooldown buffs.",
     CROWD_CONTROL = "shows crowd-control effects.",
@@ -633,11 +639,11 @@ local function AuraFilterGuidanceRecommendation()
         "For a new player, filters are a sieve: the aura lane still exists, but the filter decides which icons are allowed through.",
         "Good raid starting points:",
         "- Raid or Mythic Raid debuffs: set the Debuff filter to Raid. If the frame is still too noisy, try RaidInCombat.",
-        "- Healer dispels: use RAID_PLAYER_DISPELLABLE on debuffs when you only want debuffs your character can remove.",
+        "- Group dispels: use RAID_PLAYER_DISPELLABLE for auras someone in your group can remove; use DISPELLABLE for every aura with a dispel type.",
         "- DPS personal tracking: use Player on target debuffs when you only care about your own DoTs.",
         "- Defensive cooldown tracking: use BigDefensive for non-player major defensives, BigDefensivePlayer for your own, or ExternalDefensive for externals.",
         "MSUF detail: Player/Target/Focus/Boss use separate filter toggles. Party/Raid/Mythic Raid use one live dropdown token per Buff or Debuff lane.",
-        "Examples: set raid debuff filter to Raid; set raid debuff filter to RaidInCombat; set raid debuff filter to RAID_PLAYER_DISPELLABLE; turn on target debuff player filter.",
+        "Examples: set raid debuff filter to Raid; set raid debuff filter to RAID_PLAYER_DISPELLABLE; set target debuffs to any dispel type; set target buffs to Important.",
     }
     return { kind = "answer", status = "info", result = "info", text = table.concat(lines, "\n"), summary = "Recommends beginner-friendly aura filters for raid use." }
 end
@@ -650,7 +656,10 @@ local function AuraFilterGuidanceOverview()
         "- Player: only your own buffs/debuffs. Good for tracking your DoTs or HoTs.",
         "- Raid / RaidPlayer: Blizzard's raid-frame relevant list, split by not-player vs player-applied auras.",
         "- RaidInCombat / RaidInCombatPlayer: stricter raid list while fighting, split by not-player vs player-applied auras.",
-        "- RAID_PLAYER_DISPELLABLE: debuffs your character can dispel. Good for healers.",
+        "- RAID: harmful auras your character can dispel.",
+        "- RAID_PLAYER_DISPELLABLE: auras someone in your group can dispel.",
+        "- DISPELLABLE: every aura with a dispel type, regardless of group capability.",
+        "- IMPORTANT: auras Blizzard flags as important.",
         "- BigDefensive / ExternalDefensive and their Player variants: defensive cooldown tracking.",
         "To read the exact active state I need the frame and lane, for example Target Debuffs, Player Buffs, Raid Debuffs, or Party Buffs.",
     }
@@ -722,7 +731,7 @@ local function AuraGroupFilterGuidance(scope, scopeLabel, lane, laneLabel)
     lines[#lines + 1] = (laneEnabled == false) and laneLabel .. " lane is disabled, so the filter cannot show icons yet." or laneLabel .. " lane is enabled or using its default enabled state."
     lines[#lines + 1] = "Current live filter token: " .. token .. ". Plain English: it " .. tostring(GROUP_AURA_FILTER_EFFECTS[token] or "uses that group aura filter token for the lane.")
     lines[#lines + 1] = lane == "debuff"
-        and "Raid beginner tip: Raid is the usual not-player pick, RaidPlayer is your own raid auras, and RAID_PLAYER_DISPELLABLE is the healer-cleanse view."
+        and "Raid beginner tip: Raid is the player-dispellable view, RAID_PLAYER_DISPELLABLE covers the whole group's dispels, and DISPELLABLE includes every dispel type."
         or "Raid beginner tip: Raid is the usual not-player buff view; BigDefensive and ExternalDefensive are for non-player defensive cooldown tracking."
     lines[#lines + 1] = "Safe next commands: 'set " .. tostring(scope) .. " " .. tostring(lane) .. " filter to Raid', 'set " .. tostring(scope) .. " " .. tostring(lane) .. " filter to RaidInCombat', or 'set " .. tostring(scope) .. " " .. tostring(lane) .. " filter to ALL'."
     return { kind = "answer", status = "info", result = "info", text = table.concat(lines, "\n"), summary = "Explains active group aura filter." }
@@ -1722,7 +1731,7 @@ local function GroupAuraFilterLaneForText(text, value)
         or value == "CancelablePlayer" or value == "NotCancelablePlayer" or value == "ExternalDefensivePlayer" or value == "BigDefensivePlayer" then
         return "buff"
     end
-    if value == "RAID_PLAYER_DISPELLABLE" or value == "CROWD_CONTROL" then return "debuff" end
+    if value == "RAID_PLAYER_DISPELLABLE" or value == "DISPELLABLE" or value == "CROWD_CONTROL" then return "debuff" end
     return nil
 end
 

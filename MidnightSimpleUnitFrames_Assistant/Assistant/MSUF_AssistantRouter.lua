@@ -4041,7 +4041,10 @@ end
 R.AURA_UNIT_FILTER_SPECS = {
     buff = {
         { key = "onlyMine", label = "Player filter", token = "PLAYER", effect = "shows only buffs cast by you, your pet, or your vehicle.", bestFor = "tracking your own HoTs, short buffs, or personal maintenance buffs without seeing everyone else's versions.", caution = "It is usually too strict for raid support buffs because it hides buffs cast by other players." },
-        { key = "raid", label = "Raid filter", token = "RAID", effect = "keeps buffs Blizzard marks as raid-frame relevant.", bestFor = "a clean raid setup where you want important buffs and fewer harmless background icons.", caution = "It is not a hand-written MSUF spell list; Blizzard decides which buffs count as raid-relevant." },
+        { key = "onlyImportant", label = "Important", token = "IMPORTANT", effect = "shows buffs Blizzard flags as important.", bestFor = "a compact important-aura view.", caution = "Blizzard, not MSUF, owns the importance flag." },
+        { key = "includeDispellable", label = "Dispellable / stealable by group", token = "RAID_PLAYER_DISPELLABLE", effect = "shows helpful enemy auras someone in your group can dispel, purge, or steal.", bestFor = "enemy-buff removal awareness.", caution = "It has no useful result on friendly units." },
+        { key = "dispellableAny", label = "Any dispel / steal type", token = "DISPELLABLE", effect = "shows helpful enemy auras with any dispel type.", bestFor = "seeing removable enemy buffs regardless of current group capability.", caution = "Some shown buffs may not be removable by your group." },
+        { key = "raid", label = "Raid filter", token = "RAID", effect = "shows helpful auras the player can apply.", bestFor = "a compact actionable buff view.", caution = "PTR 5 defines RAID by player capability, not generic encounter importance." },
         { key = "raidInCombat", label = "Raid in combat filter", token = "RAID_IN_COMBAT", effect = "uses Blizzard's combat-aware raid-frame visibility set.", bestFor = "the cleanest raid-combat view when you only care about things Blizzard expects raid frames to show during the pull.", caution = "It can hide useful out-of-combat or low-priority buffs." },
         { key = "includeNameplateOnly", label = "Nameplate-only filter", token = "INCLUDE_NAME_PLATE_ONLY", effect = "also allows auras Blizzard normally marks for nameplates instead of unit frames.", bestFor = "fixing a specific missing aura that appears on nameplates but not on MSUF unit frames.", caution = "Do not use it as your first raid filter; it can add nameplate-style combat noise to unit frames." },
         { key = "cancelable", label = "Cancelable filter", token = "CANCELABLE", effect = "shows buffs that can be canceled by the player.", bestFor = "debugging or trimming personal removable buffs.", caution = "Cancelable does not mean dangerous or important. It only means the buff can be removed." },
@@ -4051,10 +4054,12 @@ R.AURA_UNIT_FILTER_SPECS = {
     },
     debuff = {
         { key = "onlyMine", label = "Player filter", token = "PLAYER", effect = "shows only debuffs applied by you, your pet, or your vehicle.", bestFor = "DPS players tracking their own DoTs, bleeds, or personal debuffs on target/focus.", caution = "It hides raid mechanics and other players' debuffs, so it is bad as a general raid-warning filter." },
-        { key = "raid", label = "Raid filter", token = "RAID", effect = "keeps debuffs Blizzard marks as raid-frame relevant.", bestFor = "most raid frames: it removes random minor debuffs and keeps the ones Blizzard expects raid frames to care about.", caution = "It can still show debuffs you cannot dispel; use Dispellable if your job is dispels." },
+        { key = "raid", label = "Raid filter", token = "RAID", effect = "shows harmful auras the player can dispel.", bestFor = "your character's cleanse view.", caution = "Use Dispellable by group when you want the whole group's removal coverage." },
         { key = "raidInCombat", label = "Raid in combat filter", token = "RAID_IN_COMBAT", effect = "uses Blizzard's stricter combat-aware raid-frame debuff visibility.", bestFor = "progression raid frames where clutter is worse than missing low-priority out-of-combat debuffs.", caution = "It is stricter than Raid and may hide some debuffs outside combat." },
         { key = "includeNameplateOnly", label = "Nameplate-only filter", token = "INCLUDE_NAME_PLATE_ONLY", effect = "also allows debuffs Blizzard normally marks for nameplates instead of unit frames.", bestFor = "a specific missing combat debuff that Blizzard expects on nameplates.", caution = "It can add extra enemy/nameplate tracking noise to unit frames." },
-        { key = "includeDispellable", label = "Dispellable filter", token = "RAID_PLAYER_DISPELLABLE", effect = "shows debuffs with a dispel type your character can remove.", bestFor = "healers and support players who need to know what they can actually cleanse right now.", caution = "It hides important mechanics you cannot dispel, so it is not a full raid-mechanics filter by itself." },
+        { key = "includeDispellable", label = "Dispellable by group", token = "RAID_PLAYER_DISPELLABLE", effect = "shows auras someone in your group can remove.", bestFor = "group cleanse coverage.", caution = "It hides important mechanics your group cannot dispel." },
+        { key = "dispellableAny", label = "Any dispel type", token = "DISPELLABLE", effect = "shows every aura with a dispel type.", bestFor = "seeing purge or cleanse types regardless of the current group.", caution = "Some shown auras may not be removable by your group." },
+        { key = "onlyImportant", label = "Important", token = "IMPORTANT", effect = "shows auras Blizzard flags as important.", bestFor = "a compact important-aura view.", caution = "Blizzard, not MSUF, owns the importance flag." },
         { key = "crowdControl", label = "Crowd-control filter", token = "CROWD_CONTROL", effect = "shows crowd-control debuffs such as control or lockout-style effects Blizzard classifies as CC.", bestFor = "PvP, crowd-control tracking, and knowing when a unit is controlled.", caution = "It is usually not the first choice for raid PvE debuff cleanup." },
     },
 }
@@ -4064,7 +4069,7 @@ R.AURA_GROUP_FILTER_EFFECTS = {
     Player = "shows only auras cast by you, your pet, or your vehicle.",
     RaidPlayer = "keeps raid-frame relevant auras cast by you, your pet, or your vehicle.",
     RaidInCombatPlayer = "uses Blizzard's stricter combat-aware raid-frame visibility for your own auras.",
-    Raid = "keeps raid-frame relevant auras not cast by you.",
+    Raid = "keeps player-actionable RAID auras not cast by you (harmful means player-dispellable).",
     RaidInCombat = "uses Blizzard's stricter combat-aware raid-frame visibility for auras not cast by you.",
     CancelablePlayer = "shows cancelable buffs cast by you, your pet, or your vehicle.",
     NotCancelablePlayer = "shows non-cancelable buffs cast by you, your pet, or your vehicle.",
@@ -4075,14 +4080,16 @@ R.AURA_GROUP_FILTER_EFFECTS = {
     ExternalDefensive = "shows external defensive cooldown buffs not cast by you.",
     BigDefensive = "shows major defensive buffs not cast by you.",
     PLAYER = "shows only auras cast by you, your pet, or your vehicle.",
-    RAID = "keeps auras Blizzard marks as raid-frame relevant.",
+    RAID = "shows helpful auras the player can apply or harmful auras the player can dispel.",
     RAID_IN_COMBAT = "uses Blizzard's stricter combat-aware raid-frame visibility.",
     INCLUDE_NAME_PLATE_ONLY = "also includes auras Blizzard normally marks for nameplates instead of unit frames.",
     CANCELABLE = "shows buffs that can be canceled by the player.",
     NOT_CANCELABLE = "shows buffs that cannot be canceled by the player.",
     EXTERNAL_DEFENSIVE = "shows defensive cooldowns placed on the unit by someone else.",
     BIG_DEFENSIVE = "shows major defensive buffs Blizzard classifies as big defensives.",
-    RAID_PLAYER_DISPELLABLE = "shows debuffs with a dispel type your character can remove.",
+    RAID_PLAYER_DISPELLABLE = "shows auras someone in your group can dispel.",
+    DISPELLABLE = "shows every aura with a dispel type, regardless of group capability.",
+    IMPORTANT = "shows auras Blizzard flags as important.",
     CROWD_CONTROL = "shows crowd-control debuffs.",
 }
 
@@ -4106,6 +4113,8 @@ function R.AuraFilterKeyFromText(norm)
     if R.ContainsAny(norm, { "exclusive filter", "exclusive" }) then return "exclusive" end
     if R.ContainsAny(norm, { "raid in combat", "combat raid" }) then return "raidInCombat" end
     if R.ContainsAny(norm, { "nameplate only", "nameplate-only", "include nameplate" }) then return "includeNameplateOnly" end
+    if R.ContainsAny(norm, { "any dispel type", "all dispel types", "regardless who can dispel" }) then return "dispellableAny" end
+    if R.ContainsAny(norm, { "important aura", "important buff", "important debuff" }) then return "onlyImportant" end
     if R.ContainsAny(norm, { "dispellable", "dispelable", "purgeable" }) then return "includeDispellable" end
     if R.ContainsAny(norm, { "crowd control", "cc debuff", "cc debuffs" }) then return "crowdControl" end
     if R.ContainsAny(norm, { "not cancelable", "not cancellable", "non cancelable", "uncancelable" }) then return "notCancelable" end
@@ -4119,7 +4128,7 @@ end
 
 function R.AuraFilterLaneForKey(key, lane)
     if lane then return lane end
-    if key == "includeDispellable" or key == "crowdControl" then return "debuff" end
+    if key == "includeDispellable" or key == "dispellableAny" or key == "crowdControl" then return "debuff" end
     if key == "cancelable" or key == "notCancelable" or key == "externalDefensive" or key == "bigDefensive" then return "buff" end
     return nil
 end
@@ -4523,12 +4532,12 @@ function R.AuraRaidFilterRecommendationReply(norm)
     lines[#lines + 1] = "For a new player, think of filters as a sieve. The aura lane still exists, but the filter decides which icons are allowed through."
     lines[#lines + 1] = "Good raid starting points:"
     lines[#lines + 1] = "- Raid or Mythic Raid debuffs: set the Debuff filter to Raid. If the frame is still too noisy, try RaidInCombat."
-    lines[#lines + 1] = "- Healer dispels: use RAID_PLAYER_DISPELLABLE on debuffs when you only want debuffs your character can remove."
+    lines[#lines + 1] = "- Group dispels: use RAID_PLAYER_DISPELLABLE for auras someone in your group can remove; use DISPELLABLE for every aura with a dispel type."
     lines[#lines + 1] = "- DPS personal tracking: use Player on target debuffs when you only care about your own DoTs."
     lines[#lines + 1] = "- Defensive cooldown tracking: use BigDefensive for non-player major defensives, BigDefensivePlayer for yours, or ExternalDefensive for externals."
     lines[#lines + 1] = "I would not start with Include Nameplate-only. Use that only when you know a specific aura appears on nameplates but is missing from MSUF."
     lines[#lines + 1] = "MSUF detail: Player/Target/Focus/Boss use separate filter toggles. Party/Raid/Mythic Raid use one live dropdown token per Buff or Debuff lane."
-    lines[#lines + 1] = "Examples: set raid debuff filter to Raid; set raid debuff filter to RaidInCombat; set raid debuff filter to RAID_PLAYER_DISPELLABLE; turn on target debuff player filter."
+    lines[#lines + 1] = "Examples: set raid debuff filter to Raid; set raid debuff filter to RAID_PLAYER_DISPELLABLE; set target debuffs to any dispel type; set target buffs to Important."
     return {
         kind = "answer",
         status = "info",
@@ -4549,7 +4558,10 @@ function R.AuraFilterOverviewReply(norm)
     lines[#lines + 1] = "- Player: only your own buffs/debuffs. Good for tracking your DoTs or HoTs."
     lines[#lines + 1] = "- Raid / RaidPlayer: Blizzard's raid-frame relevant list, split by not-player vs player-applied auras."
     lines[#lines + 1] = "- RaidInCombat / RaidInCombatPlayer: stricter raid list while fighting, split by not-player vs player-applied auras."
-    lines[#lines + 1] = "- RAID_PLAYER_DISPELLABLE: debuffs your character can dispel. Good for healers."
+    lines[#lines + 1] = "- RAID: harmful auras your character can dispel."
+    lines[#lines + 1] = "- RAID_PLAYER_DISPELLABLE: auras someone in your group can dispel."
+    lines[#lines + 1] = "- DISPELLABLE: every aura with a dispel type, regardless of group capability."
+    lines[#lines + 1] = "- IMPORTANT: auras Blizzard flags as important."
     lines[#lines + 1] = "- BigDefensive / ExternalDefensive and their Player variants: defensive cooldown tracking."
     lines[#lines + 1] = "- CROWD_CONTROL: CC effects, usually more useful in PvP or control-heavy situations."
     lines[#lines + 1] = "To read the exact active state I need the frame and lane, for example Target Debuffs, Player Buffs, Raid Debuffs, or Party Buffs."
@@ -4660,7 +4672,7 @@ function R.AuraGroupFilterStatusReply(norm, scope, scopeLabel, lane, laneLabel, 
         lines[#lines + 1] = "That means normal auras outside this token may be hidden even when the lane itself is enabled."
     end
     if lane == "debuff" then
-        lines[#lines + 1] = "Raid beginner tip: Raid is the usual not-player pick, RaidPlayer is your own raid auras, and RAID_PLAYER_DISPELLABLE is the healer-cleanse view."
+        lines[#lines + 1] = "Raid beginner tip: Raid is the player-dispellable view, RAID_PLAYER_DISPELLABLE covers the whole group's dispels, and DISPELLABLE includes every dispel type."
     else
         lines[#lines + 1] = "Raid beginner tip: Raid is the usual not-player buff view; BigDefensive and ExternalDefensive are for non-player defensive cooldown tracking."
     end
@@ -8271,7 +8283,7 @@ A.RouterSafePlanningTerms = A.RouterSafePlanningTerms or {
         "open first page from checklist", "skip this", "next recommendation",
     },
     subjectiveAura = {
-        "useless", "important", "less noisy", "too noisy", "noisy",
+        "useless", "less noisy", "too noisy", "noisy",
         "less cluttered", "cluttered", "declutter", "decluttered",
         "clean up buffs", "clean up debuffs", "clean up auras",
     },
