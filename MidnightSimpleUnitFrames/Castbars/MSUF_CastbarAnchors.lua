@@ -879,8 +879,8 @@ local function ReanchorTargetOrFocusCastbarBase(unit)
 
     local def = UNIT_CASTBAR[unit]
     local anchorFrame = GetUnitframe(unit)
-    local offsetX = Round((tonumber(g[def.x]) or (unit == "focus" and tonumber(g.castbarTargetOffsetX)) or def.dx) + 0.5)
-    local offsetY = Round((tonumber(g[def.y]) or (unit == "focus" and tonumber(g.castbarTargetOffsetY)) or def.dy) + 0.5)
+    local offsetX = Round(tonumber(g[def.x]) or (unit == "focus" and tonumber(g.castbarTargetOffsetX)) or def.dx)
+    local offsetY = Round(tonumber(g[def.y]) or (unit == "focus" and tonumber(g.castbarTargetOffsetY)) or def.dy)
 
     if g[def.detached] then
         SetPoint(frame, "CENTER", UIParent, "CENTER", offsetX, offsetY)
@@ -967,8 +967,8 @@ local function ReanchorPlayerCastBarBase()
         return
     end
 
-    local offsetX = Round((g.castbarPlayerOffsetX or 0) + 0.5)
-    local offsetY = Round((g.castbarPlayerOffsetY or 5) + 0.5)
+    local offsetX = Round(g.castbarPlayerOffsetX or 0)
+    local offsetY = Round(g.castbarPlayerOffsetY or 5)
     if g.castbarPlayerDetached then
         SetPoint(_G.MSUF_PlayerCastbar, "CENTER", UIParent, "CENTER", offsetX, offsetY)
     else
