@@ -402,6 +402,7 @@ local function FinalizeScene(scene)
     local baseLevel = mock.GetFrameLevel and mock:GetFrameLevel() or 1
     local healthBaseLevel = S.Layers.HealthLevel and S.Layers.HealthLevel(baseLevel)
         or (baseLevel + (S.Layers.HEALTH_OFFSET or 1))
+    local foregroundBase = S.Layers.GROUP_FOREGROUND_BASE_OFFSET or 64
     PlaceTextHandles(scene)
     local liveStrata, hostStrata = PreviewHostStrata(scene)
     local auraHandles = {
@@ -413,8 +414,8 @@ local function FinalizeScene(scene)
     for i = 1, #auraHandles do
         local item, handle = auraHandles[i], auraHandles[i][1]
         if handle then
-            SetPreviewFrameLevel(handle, baseLevel
-                + ApplyHandleStrata(scene, handle, item[2].strata, liveStrata, hostStrata)
+            SetPreviewFrameLevel(handle, baseLevel + foregroundBase
+                + ApplyHandleStrata(scene, handle, "AUTO", liveStrata, hostStrata)
                 + S.ClampLayer(item[2].layer, item[3]))
         end
     end
@@ -423,7 +424,8 @@ local function FinalizeScene(scene)
         local spec = handle and handle._statusSpec
         if handle then
             local cfg = S.RuntimeStatusConfig(runtimeStatus, spec)
-            SetPreviewFrameLevel(handle, healthBaseLevel + S.ClampLayer(cfg and cfg.layer or spec and conf[spec.layer], spec and spec.defaultLayer or 7))
+            SetPreviewFrameLevel(handle, healthBaseLevel + foregroundBase
+                + S.ClampLayer(cfg and cfg.layer or spec and conf[spec.layer], spec and spec.defaultLayer or 7))
         end
     end
     local rawIndicators = conf.spellIndicators or {}
@@ -431,8 +433,8 @@ local function FinalizeScene(scene)
     local spellLayer = runtimeIndicators.layer ~= nil and runtimeIndicators.layer or rawIndicators.layer
     local spellStrata = runtimeIndicators.strata ~= nil and runtimeIndicators.strata or rawIndicators.strata
     local selected = scene.selectedSpellCfg
-    SetPreviewFrameLevel(S.spellHandle, baseLevel
-        + ApplyHandleStrata(scene, S.spellHandle, selected and selected.strata or spellStrata, liveStrata, hostStrata)
+    SetPreviewFrameLevel(S.spellHandle, baseLevel + foregroundBase
+        + ApplyHandleStrata(scene, S.spellHandle, "AUTO", liveStrata, hostStrata)
         + S.ClampLayer(selected and selected.layer or spellLayer, 9))
     local selectedEffectOwner = box._msufGFSelectedSpellEffectOwner
     local selectedEffectRoot = selectedEffectOwner and selectedEffectOwner._msufSpellPreviewEffectRoot
@@ -458,17 +460,15 @@ local function FinalizeScene(scene)
         SetPreviewFrameLevel(selectedIconEffectRoot, S.spellHandle:GetFrameLevel() + 4)
     end
     for _, handle in pairs(scene.dynamicSpellHandlesActive or {}) do
-        SetPreviewFrameLevel(handle, baseLevel
-            + ApplyHandleStrata(scene, handle, handle._msufSpellIndicatorStrata or spellStrata, liveStrata, hostStrata)
+        SetPreviewFrameLevel(handle, baseLevel + foregroundBase
+            + ApplyHandleStrata(scene, handle, "AUTO", liveStrata, hostStrata)
             + S.ClampLayer(handle._msufSpellIndicatorLayer or spellLayer, 9))
         local effectRoot = handle._msufSpellPreviewEffectRoot
         if effectRoot and effectRoot.IsShown and effectRoot:IsShown() then
             local priority = max(1, min(10, floor((tonumber(effectRoot._msufSpellPreviewPriority) or 5) + 0.5)))
             local effectLayer = S.ClampLayer(effectRoot._msufSpellPreviewLayer, 0)
             SetPreviewFrameLevel(effectRoot, baseLevel
-                + ApplyHandleStrata(scene, effectRoot,
-                    effectRoot._msufSpellPreviewStrata or handle._msufSpellIndicatorStrata or spellStrata,
-                    liveStrata, hostStrata)
+                + ApplyHandleStrata(scene, effectRoot, "AUTO", liveStrata, hostStrata)
                 + (S.Layers.SPELL_FRAME_EFFECT_BASE_OFFSET or 1) + (11 - priority) + effectLayer)
         end
         local iconEffectRoot = handle._msufSpellPreviewIconEffectRoot
@@ -1486,7 +1486,7 @@ function Render.Install(box, ctx, deps)
         end
         local textBaseLevel = (Layers.HealthLevel and Layers.HealthLevel((mock.GetFrameLevel and mock:GetFrameLevel()) or 1)
             or (((mock.GetFrameLevel and mock:GetFrameLevel()) or 1) + (Layers.HEALTH_OFFSET or 1)))
-            + (Layers.TEXT_BASE_OFFSET or 10)
+            + (Layers.GROUP_FOREGROUND_BASE_OFFSET or 64)
         if mock._nameTextLayer then
             if mock._nameTextLayer.GetParent and mock._nameTextLayer:GetParent() ~= mock and mock._nameTextLayer.SetParent then mock._nameTextLayer:SetParent(mock) end
             mock._nameTextLayer:ClearAllPoints()

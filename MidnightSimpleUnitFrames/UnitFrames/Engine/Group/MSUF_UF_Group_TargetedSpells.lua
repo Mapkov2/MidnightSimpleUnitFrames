@@ -375,7 +375,7 @@ local function ApplyIconFrame(icon, frame)
       holder._msufTSStrata = strata
     end
   end
-  local holderLevel = BaseFrameLevel(frame) + (Layers.TARGETED_SPELLS_BASE_OFFSET or 40) + settings.layer
+  local holderLevel = BaseFrameLevel(frame) + (Layers.TARGETED_SPELLS_BASE_OFFSET or 64) + settings.layer
   if holder.SetFrameLevel and holder._msufTSLevel ~= holderLevel then
     holder:SetFrameLevel(holderLevel)
     holder._msufTSLevel = holderLevel

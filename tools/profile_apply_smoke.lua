@@ -162,6 +162,207 @@ combat = false
 deferFrame.scripts.OnEvent(deferFrame, "PLAYER_REGEN_ENABLED")
 assert(applyCalls == 1 and notifyCalls == 1, "deferred profile switch must apply unit frames exactly once")
 
+-- Every persisted ordering value must survive both the normal in-game profile
+-- string and the stateless external API. Include the override gates because a
+-- copied numeric value is ineffective if its scoped override is lost.
+local orderingFixture = {
+    general = {},
+    bars = {
+        barOutlineLayer = 18,
+        barOutlineStrata = "BACKGROUND",
+        classPowerFrameLevelOffset = 16,
+        playerHPBarFrameLevelOffset = 17,
+    },
+    player = {
+        nameTextLayer = 11,
+        hpTextLayer = 12,
+        powerTextLayer = 13,
+        detachedPowerBarFrameLevelOffset = 14,
+        raidMarkerLayer = 15,
+        hlOverride = true,
+        barOutlineLayer = 19,
+        barOutlineStrata = "DIALOG",
+    },
+    auras3 = {
+        shared = {
+            buffLayer = 3,
+            debuffLayer = 4,
+            buffStrata = "LOW",
+            debuffStrata = "HIGH",
+        },
+        perUnit = {
+            player = {
+                overrideLayout = true,
+                layout = {
+                    buffLayer = 5,
+                    debuffLayer = 6,
+                    buffStrata = "MEDIUM",
+                    debuffStrata = "FULLSCREEN",
+                },
+            },
+        },
+        customContainers = {
+            perUnit = {
+                player = {
+                    items = {
+                        {
+                            id = "roundtrip",
+                            layer = 7,
+                            strata = "HIGH",
+                            frame = { type = "border", layer = 8, strata = "DIALOG" },
+                        },
+                    },
+                },
+            },
+        },
+    },
+    gf_party = {
+        nameTextLayer = 1,
+        textLayer = 2,
+        powerTextLayer = 3,
+        groupNumberLayer = 4,
+        ciLayer = 5,
+        ciStrata = "LOW",
+        dispelOverlayLayer = 6,
+        dispelOverlayStrata = "MEDIUM",
+        targetedSpellsLayer = 7,
+        auras = {
+            buff = { layer = 8, strata = "HIGH" },
+            debuff = { layer = 9, strata = "DIALOG" },
+            externals = { layer = 10, strata = "FULLSCREEN" },
+        },
+        spellIndicators = {
+            layer = 11,
+            strata = "TOOLTIP",
+            specs = {
+                [71] = {
+                    [12345] = {
+                        layer = 12,
+                        strata = "HIGH",
+                        frame = { type = "border", layer = 13, strata = "DIALOG" },
+                    },
+                },
+            },
+        },
+    },
+    gf_raid = {
+        hlOverride = true,
+        barOutlineLayer = 20,
+        barOutlineStrata = "HIGH",
+    },
+    gf_mythicraid = {
+        hlOverride = true,
+        barOutlineLayer = 20,
+        barOutlineStrata = "HIGH",
+    },
+}
+
+local function IsOrderingKey(key)
+    if type(key) ~= "string" then return false end
+    local lower = key:lower()
+    return lower == "layer"
+        or (lower:sub(-5) == "layer" and lower:sub(-6) ~= "player")
+        or lower:sub(-16) == "frameleveloffset"
+        or lower == "strata"
+        or lower:sub(-6) == "strata"
+        or lower == "hloverride"
+        or lower == "overridelayout"
+        or lower == "overridesharedlayout"
+end
+
+local function CaptureOrdering(root)
+    local out = {}
+    local function Visit(value, path)
+        if type(value) ~= "table" then return end
+        for key, child in pairs(value) do
+            local childPath = path == "" and tostring(key) or (path .. "." .. tostring(key))
+            if type(child) == "table" then
+                Visit(child, childPath)
+            elseif IsOrderingKey(key) then
+                out[childPath] = child
+            end
+        end
+    end
+    Visit(root, "")
+    return out
+end
+
+local function AssertOrderingEqual(expected, actual, label)
+    for pathKey, value in pairs(expected) do
+        assert(actual[pathKey] == value,
+            label .. " lost " .. pathKey .. " (expected " .. tostring(value) .. ", got " .. tostring(actual[pathKey]) .. ")")
+    end
+end
+
+_G.MSUF_DB = _G.MSUF_GlobalDB.profiles.Other
+for key in pairs(_G.MSUF_DB) do _G.MSUF_DB[key] = nil end
+for key, value in pairs(orderingFixture) do _G.MSUF_DB[key] = copyTable(value) end
+local expectedOrdering = CaptureOrdering(_G.MSUF_DB)
+
+local profileString = assert(_G.MSUF_ExportSelectionToString("all"))
+local _, compatibleBuffLayerCount = profileString:gsub("buffLayer = 3,", "")
+local _, compatibleDebuffLayerCount = profileString:gsub("debuffLayer = 4,", "")
+assert(compatibleBuffLayerCount >= 2 and compatibleDebuffLayerCount >= 2,
+    "Wago-compatible export payload stripped Unit Aura Layer values")
+
+local activeProfileRef = _G.MSUF_DB
+_G.MSUF_DB.auras3.shared.buffLayer = 30
+_G.MSUF_DB.gf_party.spellIndicators.layer = 30
+assert(_G.MSUF_ImportFromString(profileString) == true, "normal profile ordering round-trip import failed")
+assert(_G.MSUF_DB == activeProfileRef, "normal profile ordering round-trip replaced the active profile table")
+AssertOrderingEqual(expectedOrdering, CaptureOrdering(_G.MSUF_DB), "normal profile ordering round-trip")
+
+local externalOK, externalString = _G.MSUF_Profiles_ExportExternal("Other")
+assert(externalOK == true and type(externalString) == "string", "external ordering export failed")
+local importedExternal, externalError = _G.MSUF_Profiles_ImportExternal(externalString, "Default")
+assert(importedExternal == true, tostring(externalError or "external ordering import failed"))
+AssertOrderingEqual(expectedOrdering, CaptureOrdering(_G.MSUF_GlobalDB.profiles.Default),
+    "external profile ordering round-trip")
+
+local compatibilityOnly = [[
+return {
+    addon = "MSUF",
+    fmt = 2,
+    schema = 1,
+    kind = "all",
+    payload = {
+        auras2 = {
+            shared = {
+                buffLayer = 21,
+                debuffLayer = 22,
+                buffStrata = "LOW",
+                debuffStrata = "HIGH",
+            },
+            perUnit = {
+                player = {
+                    layout = {
+                        buffLayer = 23,
+                        debuffLayer = 24,
+                        buffStrata = "MEDIUM",
+                        debuffStrata = "DIALOG",
+                    },
+                },
+            },
+        },
+    },
+}
+]]
+local compatibilityImported, compatibilityError = _G.MSUF_Profiles_ImportExternal(compatibilityOnly, "Default")
+assert(compatibilityImported == true, tostring(compatibilityError or "compatibility-only ordering import failed"))
+local compatibilityAuras = assert(_G.MSUF_GlobalDB.profiles.Default.auras3)
+assert(compatibilityAuras.shared.buffLayer == 21
+    and compatibilityAuras.shared.debuffLayer == 22
+    and compatibilityAuras.shared.buffStrata == "LOW"
+    and compatibilityAuras.shared.debuffStrata == "HIGH",
+    "compatibility-only import lost shared Unit Aura Layer/FrameStrata values")
+local compatibilityPlayer = assert(compatibilityAuras.perUnit.player)
+assert(compatibilityPlayer.overrideLayout == true
+    and compatibilityPlayer.layout.buffLayer == 23
+    and compatibilityPlayer.layout.debuffLayer == 24
+    and compatibilityPlayer.layout.buffStrata == "MEDIUM"
+    and compatibilityPlayer.layout.debuffStrata == "DIALOG",
+    "compatibility-only import lost scoped Unit Aura ordering values or its override gate")
+
 local translate = assert(_G.MSUF_ProfileIO_TranslateProfileToCurrent)
 
 -- A current-schema table without the normalization revision is not trusted yet

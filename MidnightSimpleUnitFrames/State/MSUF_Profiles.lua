@@ -3224,8 +3224,8 @@ local MSUF_PROFILEIO_WAGO_AURA_DROP_KEYS = {
     cooldownDecimalSeconds = true,
     buffAnchor = true,
     debuffAnchor = true,
-    buffLayer = true,
-    debuffLayer = true,
+    -- buffLayer/debuffLayer intentionally remain portable. Some external tools
+    -- keep only this compatibility payload and omit the embedded msuf6 table.
     debuffTypeBorderMode = true,
     useDebuffTypeBorders = true,
 }

@@ -9,6 +9,12 @@ MSUF.UF = UF
 local Layers = UF.Layers or {}
 UF.Layers = Layers
 
+-- Full-frame Spell effects occupy at most base + 41 and the full-frame Dispel
+-- overlay at most base + 42 (their own 0..30 Layer controls included). Keep
+-- every readable Group Frame foreground surface in one higher, fixed band so
+-- text and icons can never be painted underneath those effects. This changes
+-- only cold layout levels; it adds no runtime update work.
+Layers.GROUP_FOREGROUND_BASE_OFFSET = 64
 Layers.TEXT_BASE_OFFSET = 10
 Layers.STATUS_BASE_OFFSET = 10
 Layers.HEALTH_OFFSET = 1
@@ -16,7 +22,10 @@ Layers.PORTRAIT_OFFSET = 6
 Layers.PORTRAIT_BORDER_OFFSET = 7
 Layers.POWER_INLINE_OFFSET = 1
 Layers.POWER_DETACHED_DEFAULT = 6
-Layers.TARGETED_SPELLS_BASE_OFFSET = 40
+Layers.TARGETED_SPELLS_BASE_OFFSET = Layers.GROUP_FOREGROUND_BASE_OFFSET
+Layers.AURA_ICON_BASE_OFFSET = Layers.GROUP_FOREGROUND_BASE_OFFSET
+Layers.SPELL_ICON_BASE_OFFSET = Layers.GROUP_FOREGROUND_BASE_OFFSET
+Layers.CORNER_ICON_BASE_OFFSET = Layers.GROUP_FOREGROUND_BASE_OFFSET
 -- At user Layer 0, health-bar effects stay in the bar-local band below the
 -- default text/status overlays: Spell priority adds 1..10 and Dispel sits one
 -- level above the strongest Spell effect. Their independent 0..30 controls are
@@ -56,12 +65,18 @@ end
 
 function Layers.TextLevel(frameOrLevel, layer, fallback)
   local base = type(frameOrLevel) == "number" and frameOrLevel or Layers.BaseFrameLevel(frameOrLevel)
-  return base + Layers.TEXT_BASE_OFFSET + Layers.ClampLayer(layer, fallback)
+  local offset = type(frameOrLevel) ~= "number" and frameOrLevel and frameOrLevel.MSUFSpec
+    and frameOrLevel.MSUFSpec.scope == "group" and Layers.GROUP_FOREGROUND_BASE_OFFSET
+    or Layers.TEXT_BASE_OFFSET
+  return base + offset + Layers.ClampLayer(layer, fallback)
 end
 
 function Layers.StatusLevel(frameOrLevel, layer, fallback)
   local base = type(frameOrLevel) == "number" and frameOrLevel or Layers.BaseFrameLevel(frameOrLevel)
-  return base + Layers.STATUS_BASE_OFFSET + Layers.ClampLayer(layer, fallback or 7)
+  local offset = type(frameOrLevel) ~= "number" and frameOrLevel and frameOrLevel.MSUFSpec
+    and frameOrLevel.MSUFSpec.scope == "group" and Layers.GROUP_FOREGROUND_BASE_OFFSET
+    or Layers.STATUS_BASE_OFFSET
+  return base + offset + Layers.ClampLayer(layer, fallback or 7)
 end
 
 function Layers.PreviewBoundsLevel(frameOrLevel)
