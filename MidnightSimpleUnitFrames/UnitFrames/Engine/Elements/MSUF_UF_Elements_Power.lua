@@ -5,6 +5,7 @@ MSUF = MSUF or _G.MSUF_NS or {}
 local C = MSUF.UFBarTextCommon
 local UF = C and C.UF or MSUF.UF
 if not UF then return end
+local Health = UF.Elements and UF.Elements.Health
 
 local CreateFrame = C and C.CreateFrame or CreateFrame
 local UnitPower = C and C.UnitPower or UnitPower
@@ -25,6 +26,7 @@ local tostring = tostring
 local type = type
 local math_floor = math.floor
 local math_max = math.max
+local math_min = math.min
 local issecretvalue = _G.issecretvalue or function(_) return false end
 
 local Power = {}
@@ -475,7 +477,7 @@ local function LayoutDetached(frame, bar, power, defaultHeight)
     bar:SetPoint(point, frame, relativePoint, x, y)
   end
   if bar.SetFrameLevel and frame.GetFrameLevel then
-    local level = (frame:GetFrameLevel() or 1) + RoundNonNegative(power.detachedLevel, 6)
+    local level = (frame:GetFrameLevel() or 1) + math_min(30, RoundNonNegative(power.detachedLevel, 6))
     SetPowerFrameLevel(bar, level)
   end
   bar._msufDetached = true
@@ -525,7 +527,10 @@ function Power.Disable(frame)
   SetShown(frame, false)
   HidePowerBorder(frame and frame.targetPowerBar)
   if HideBarGradient and frame then HideBarGradient(frame.powerGradients) end
-  if frame then frame._msufPowerBarDetached = nil end
+  if frame then
+    frame._msufPowerBarDetached = nil
+    if Health and Health.Layout then Health.Layout(frame, frame.MSUFSpec, false) end
+  end
 end
 
 function Power.Create(frame, spec)
@@ -556,6 +561,7 @@ function Power.Apply(frame, spec)
   local power = spec and spec.power or {}
   local h = tonumber(power.height) or 3
   frame._msufPowerBarDetached = power.detached == true and true or nil
+  if Health and Health.Layout then Health.Layout(frame, spec, power.enabled == true) end
   if power.detached == true then
     LayoutDetached(frame, bar, power, h)
   else

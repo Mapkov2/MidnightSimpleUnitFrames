@@ -768,7 +768,7 @@ builders.PLAYER_HP = function(E)
             width = h
         end
         local anchor, anchorMode = ResolveAnchor(playerFrame, b.playerHPBarAnchor)
-        local levelOffset = Clamp(b.playerHPBarFrameLevelOffset, 7, 0, 30)
+        local levelOffset = math_floor(Clamp(b.playerHPBarFrameLevelOffset, 7, 0, 30) + 0.5)
         local baseLevel = playerFrame and playerFrame.GetFrameLevel and (playerFrame:GetFrameLevel() or 1) or 1
         local outline = Clamp(b.playerHPBarOutline, 1, 0, 8)
         local compactText = shape == "ORB" or (shapeInfo ~= nil and width <= (h * 3))

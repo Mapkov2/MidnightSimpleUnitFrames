@@ -71,6 +71,10 @@ local BASIC_ELEMENTS = {
 UF.basicElements = BASIC_ELEMENTS
 
 local EVENT_ELEMENTS = {
+  -- Native AuraContainer owns steady-state UNIT_AURA deltas, but party aura
+  -- access can change without a catch-up delta on range/connection edges.
+  -- Auras declares only those rare, unit-filtered recovery events.
+  Auras = true,
   Portrait = true,
   Prediction = true,
   -- These elements own live state that is not covered by the basic bar/text

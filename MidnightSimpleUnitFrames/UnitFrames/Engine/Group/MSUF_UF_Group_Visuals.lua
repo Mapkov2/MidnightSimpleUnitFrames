@@ -287,10 +287,12 @@ local function UpdateFocus(frame, cfg, showOverride)
 end
 
 local function AuraVisualTarget(frame, onHealth)
+  local health = frame and (frame.hpBar or frame.Health or frame.health)
+  if not health then return nil end
   if onHealth ~= false then
-    return frame and (frame.hpBar or frame.Health or frame.health) or frame
+    return health.GetStatusBarTexture and health:GetStatusBarTexture() or nil
   end
-  return frame
+  return health
 end
 
 local function LayoutAuraVisual(tex, target, edge, size)

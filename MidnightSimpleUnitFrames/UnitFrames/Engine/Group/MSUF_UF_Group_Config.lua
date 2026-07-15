@@ -523,7 +523,7 @@ local GROUP_STATUS_REGIONS = {
   statusText = { "statusTextSize", 14, "statusTextAnchor", "CENTER", "statusOffsetX", 0, "statusOffsetY", 0, "statusTextLayer", 7 },
   statusGhost = { "statusGhostTextSize", 14, "statusGhostTextAnchor", "CENTER", "statusGhostOffsetX", 0, "statusGhostOffsetY", 0, "statusGhostTextLayer", 7 },
   statusAFK = { "statusAFKTextSize", 14, "statusAFKTextAnchor", "CENTER", "statusAFKOffsetX", 0, "statusAFKOffsetY", 0, "statusAFKTextLayer", 7 },
-  raidGroup = { "groupNumberSize", 10, "groupNumberAnchor", "BOTTOMRIGHT", "groupNumberX", -2, "groupNumberY", 2, "statusTextLayer", 7 },
+  raidGroup = { "groupNumberSize", 10, "groupNumberAnchor", "BOTTOMRIGHT", "groupNumberX", -2, "groupNumberY", 2, "groupNumberLayer", 7 },
 }
 
 local function StatusRegionDef(conf, enabled, key)
@@ -656,6 +656,7 @@ local function CompilePrediction(kind, conf, texture)
     healAnchorMode = Num(ScopedValue(conf, general, "healPredAnchorMode", 3), 3),
     absorbAnchorMode = Num(ScopedValue(conf, general, "absorbAnchorMode", 2), 2),
     overAbsorbOverlay = ScopedValue(conf, general, "overAbsorbOverlay", false) == true,
+    fullHealthAbsorbStripe = general.fullHealthAbsorbStripe == true,
     texture = texture,
     absorbTexture = ScopedValue(conf, general, "absorbBarTexture", nil),
     healAbsorbTexture = ScopedValue(conf, general, "healAbsorbBarTexture", nil),
@@ -722,6 +723,7 @@ local function CompileGroupVisuals(kind, conf)
     dispelOverlayAlpha = Clamp01(conf.dispelOverlayAlpha, 0.35),
     dispelOverlayTrigger = NormalizeDispelOverlayTrigger(conf.dispelOverlayTrigger),
     dispelOverlayOnHealth = conf.dispelOverlayOnHealth ~= false,
+    dispelOverlayLayer = Layer(conf.dispelOverlayLayer, 0),
     dispelOverlayStrata = NormalizeFrameOutlineStrata(conf.dispelOverlayStrata),
     debuffStripeEnabled = conf.debuffStripeEnabled == true,
     debuffStripeEdge = conf.debuffStripeEdge or "BOTTOM",
@@ -1138,7 +1140,7 @@ local function CompileCoreAuras(kind, conf)
     anchor = buff.trackedAnchor or "TOPLEFT",
     x = Num(buff.trackedX, 0),
     y = Num(buff.trackedY, 0),
-    layer = Num(buff.trackedLayer, Num(conf.spellIndicators and conf.spellIndicators.layer, 9)),
+    layer = Layer(buff.trackedLayer, Layer(conf.spellIndicators and conf.spellIndicators.layer, 9)),
     strata = buff.trackedStrata or buff.trackedFrameStrata or (conf.spellIndicators and conf.spellIndicators.strata),
     filterToken = buff.trackedOnlyOwn ~= false and "PLAYER" or "ALL",
     -- The tracked lane is a SpellID whitelist derived from the same Buff
@@ -1295,9 +1297,11 @@ local function CompileBorderSpec(kind, conf, general)
   local borderThickness = GF.GetBarOutlineThickness and GF.GetBarOutlineThickness(kind) or Num(conf.borderSize, 1)
   local bars = _G.MSUF_DB and _G.MSUF_DB.bars or nil
   local borderStrata = NormalizeFrameOutlineStrata(conf.hlOverride == true and conf.barOutlineStrata ~= nil and conf.barOutlineStrata or (bars and bars.barOutlineStrata))
+  local borderLayer = Layer(conf.hlOverride == true and conf.barOutlineLayer ~= nil and conf.barOutlineLayer or (bars and bars.barOutlineLayer), 0)
   return {
     enabled = conf.borderEnabled ~= false,
     thickness = borderThickness,
+    layer = borderLayer,
     strata = borderStrata,
     r = Num(ScopedValue(conf, general, "barOutlineColorR", conf.borderR or general and general.barBorderR), 0),
     g = Num(ScopedValue(conf, general, "barOutlineColorG", conf.borderG or general and general.barBorderG), 0),

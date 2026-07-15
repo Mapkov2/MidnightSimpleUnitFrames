@@ -17,7 +17,7 @@ local floor = math.floor
 local max = math.max
 local min = math.min
 local Specs = M.GroupSpecs or {}
-local SCOPE_VALUES, GROWTH_VALUES, BLIZZARD_FALLBACK_VALUES, HEALTH_MODES, TEXT_MODES, DELIMITER_VALUES, ANCHORS, AURA_ANCHORS, SORT_MODES, GF_BAR_MODES, GF_ANCHOR_TO, GF_ANCHOR_POINTS, STATUS_ICON_ANCHORS, GF_STATUS_ICON_SPECS, GF_STATUS_ICON_VALUES, PLACED_INDICATOR_TYPES, FRAME_EFFECT_TYPES, ICON_EFFECT_TYPES, SPELL_GROWTH_VALUES, CI_SLOT_VALUES, CI_SLOT_DEFAULTS, DISPEL_OVERLAY_STYLES, DEBUFF_STRIPE_EDGES = M.PickDefaults(Specs, M.GROUP_SPEC_TABLE_KEYS)
+local SCOPE_VALUES, GROWTH_VALUES, BLIZZARD_FALLBACK_VALUES, HEALTH_MODES, TEXT_MODES, DELIMITER_VALUES, ANCHORS, AURA_ANCHORS, SORT_MODES, GF_BAR_MODES, GF_ANCHOR_TO, GF_ANCHOR_POINTS, STATUS_ICON_ANCHORS, GF_STATUS_ICON_SPECS, GF_STATUS_ICON_VALUES, PLACED_INDICATOR_TYPES, FRAME_EFFECT_TYPES, FRAME_EFFECT_TIMINGS, ICON_EFFECT_TYPES, SPELL_GROWTH_VALUES, CI_SLOT_VALUES, CI_SLOT_DEFAULTS, DISPEL_OVERLAY_STYLES, DEBUFF_STRIPE_EDGES = M.PickDefaults(Specs, M.GROUP_SPEC_TABLE_KEYS)
 local SIMPLE_TEXTURES = Specs.SimpleTextures or function() return {} end
 local pendingGF = {}
 local gfFlushQueued = false
@@ -80,7 +80,7 @@ local function ResolveGroupControlMeta(ctx, semanticPath, fallbackPath)
     return GroupControlMeta(ctx, semanticPath or fallbackPath)
 end
 local GF_INDICATOR_COPY_FIELDS = M.CopyFieldsFromSpecs(GF_STATUS_ICON_SPECS, "pvpIcon statusText statusGhostText statusAFKText",
-    [[showGroupNumber groupNumberSize groupNumberAnchor groupNumberX groupNumberY groupBorderEnabled groupBorderSize groupBorderPadding groupBorderR groupBorderG groupBorderB groupBorderA iconStyle useMidnightIcons roleIconStyle leaderIconStyle assistIconStyle raidMarkerStyle readyCheckIconStyle summonIconStyle resurrectIconStyle pvpIconStyle phaseIconStyle roleIconCustomIcon leaderIconCustomIcon assistIconCustomIcon raidMarkerCustomIcon readyCheckIconCustomIcon summonIconCustomIcon resurrectIconCustomIcon pvpIconCustomIcon phaseIconCustomIcon]], "enabled iconStyle customIcon size anchor x y layer")
+    [[showGroupNumber groupNumberSize groupNumberAnchor groupNumberX groupNumberY groupNumberLayer groupBorderEnabled groupBorderSize groupBorderPadding groupBorderR groupBorderG groupBorderB groupBorderA iconStyle useMidnightIcons roleIconStyle leaderIconStyle assistIconStyle raidMarkerStyle readyCheckIconStyle summonIconStyle resurrectIconStyle pvpIconStyle phaseIconStyle roleIconCustomIcon leaderIconCustomIcon assistIconCustomIcon raidMarkerCustomIcon readyCheckIconCustomIcon summonIconCustomIcon resurrectIconCustomIcon pvpIconCustomIcon phaseIconCustomIcon]], "enabled iconStyle customIcon size anchor x y layer")
 local function NormalizeFrameStrata(value, fallback)
     local normalize = _G.MSUF_NormalizeFrameStrata
     if type(normalize) == "function" then return normalize(value, fallback or "AUTO") end
@@ -362,7 +362,7 @@ local GF_SHARED_COLOR_KEYS = M.KeySetFromWords [[
 local GF_COPY_CATEGORIES = {
     { key = "general", label = "Basics", keys = WL [[enabled blizzardFallbackMode showPlayer showSolo clickCastEnabled width height spacing growth groupFilter sortMode sortByRole roleOrder playerFirstInRole unitsPerColumn maxColumns preserveRaidGroups reverseFill smoothFill hideInClientScene hideInHousing hideOfflineEnabled hideOfflineInCombat hideOfflineDelay frameScaleMode frameScaleManual scaleAt10 scaleAt20 scaleAt25 scaleOver25]] },
     { key = "health", label = "Health & Bars", keys = WL [[gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB gfUnifiedR gfUnifiedG gfUnifiedB barTexture barBackgroundTexture barBgTexture hpBarAlpha hpBgAlpha alphaExcludeTextPortrait powerBarEnabled powerHeight showPower showPowerText powerTextLeft powerTextCenter powerTextRight powerTextLeftHidePercentSymbol powerTextCenterHidePercentSymbol powerTextRightHidePercentSymbol powerTextDelimiter powerFontSize powerOffsetX powerOffsetY powerTextLayer powerSmoothFill powerShowTank powerShowHealer powerShowDamager deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB deadBgA]] },
-    { key = "dispel", label = "Dispel Overlay", keys = WL [[dispelOverlayEnabled dispelOverlayStyle dispelOverlayOnHealth dispelOverlayAlpha dispelOverlayTrigger dispelOverlayStrata]] },
+    { key = "dispel", label = "Dispel Overlay", keys = WL [[dispelOverlayEnabled dispelOverlayStyle dispelOverlayOnHealth dispelOverlayAlpha dispelOverlayTrigger dispelOverlayLayer dispelOverlayStrata]] },
     { key = "text", label = "Text & Name", keys = WL [[showName hideNameOnDeadOffline nameFontSize nameAnchor nameOffsetX nameOffsetY nameTextLayer nameColorMode nameColorR nameColorG nameColorB nameShortenEnabled nameClipSide nameMaxChars nameNoEllipsis showHPText hpFontSize textLeft textCenter textRight hpTextLeftHidePercentSymbol hpTextCenterHidePercentSymbol hpTextRightHidePercentSymbol textDelimiter hpTextReverse healthTextDecimals hpFullValueShort hpOffsetX hpOffsetY textLayer]] },
     { key = "font", label = "Font Override", keys = WL [[fontOverride fontOutline useGlobalFontColor fontR fontG fontB]] },
     { key = "range", label = "Range Fade", keys = WL [[rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode offlineAlpha]] },
@@ -1235,7 +1235,7 @@ end
 local function FrameEffectConfig(kind, create)
     local cfg = CurrentSpellConfig(kind, create)
     if not cfg then return nil end
-    if create and type(cfg.frame) ~= "table" then cfg.frame = { type = "none" } end
+    if create and type(cfg.frame) ~= "table" then cfg.frame = { type = "none", layer = 0, strata = "AUTO" } end
     return cfg.frame
 end
 local function CICategoryValues()
@@ -1385,6 +1385,7 @@ M.Assign(GroupPage, {
     GF_STATUS_ICON_VALUES = GF_STATUS_ICON_VALUES,
     PLACED_INDICATOR_TYPES = PLACED_INDICATOR_TYPES,
     FRAME_EFFECT_TYPES = FRAME_EFFECT_TYPES,
+    FRAME_EFFECT_TIMINGS = FRAME_EFFECT_TIMINGS,
     ICON_EFFECT_TYPES = ICON_EFFECT_TYPES,
     SPELL_GROWTH_VALUES = SPELL_GROWTH_VALUES,
     CI_SLOT_VALUES = CI_SLOT_VALUES,

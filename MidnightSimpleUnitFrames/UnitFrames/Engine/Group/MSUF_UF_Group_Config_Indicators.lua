@@ -380,6 +380,8 @@ local function NormalizePlaced(placed)
     barWidth = Num(placed.barWidth, Num(placed.width, 54)),
     growth = placed.growth,
     iconEffect = tostring(placed.iconEffect or "none"):lower(),
+    iconEffectTiming = tostring(placed.iconEffectTiming or "always"):lower() == "expiring" and "expiring" or "always",
+    iconExpireThreshold = math.max(1, math.min(30, Num(placed.iconExpireThreshold, 5))),
     missing = false,
     showCooldownSwipe = placed.showCooldownSwipe ~= false,
     showCooldown = placed.showCooldown ~= false,
@@ -393,8 +395,15 @@ local function NormalizeFrameEffect(frame)
   local kind = tostring(frame.type or "none"):lower()
   if kind == "" or kind == "none" then return nil end
   local color = type(frame.color) == "table" and frame.color or {}
+  local timing = tostring(frame.timing or "always"):lower()
+  if timing ~= "expiring" then timing = "always" end
+  local expireThreshold = Num(frame.expireThreshold, 5)
+  if expireThreshold < 1 then expireThreshold = 1 end
+  if expireThreshold > 30 then expireThreshold = 30 end
   return {
     type = kind,
+    timing = timing,
+    expireThreshold = expireThreshold,
     color = {
       Alpha(color[1] or color.r, 1),
       Alpha(color[2] or color.g, 1),
@@ -404,6 +413,7 @@ local function NormalizeFrameEffect(frame)
     priority = Num(frame.priority, 5),
     tintAlpha = Alpha(frame.tintAlpha or frame.alpha, color[4] or color.a or 0.20),
     thickness = Num(frame.thickness, 2),
+    layer = Layer(frame.layer, 0),
     strata = NormalizeFrameStrata(frame.strata, "AUTO"),
   }
 end

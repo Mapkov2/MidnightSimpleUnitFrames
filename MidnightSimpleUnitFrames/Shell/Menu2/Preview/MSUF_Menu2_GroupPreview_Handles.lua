@@ -533,6 +533,10 @@ function Handles.Install(box, deps)
         if button and button ~= "LeftButton" then return end
         handle = handle or (box._dragFrame and box._dragFrame._handle)
         local wasDragging = handle and handle._dragging == true
+        local openSettingsOnRelease = handle and handle._openSettingsOnClick == true
+            and button == "LeftButton"
+            and handle._suppressSettingsOnRelease ~= true
+            and handle._lastDragX == nil and handle._lastDragY == nil
         if box._dragFrame then
             box._dragFrame:SetScript("OnUpdate", nil)
             box._dragFrame._handle = nil
@@ -556,6 +560,7 @@ function Handles.Install(box, deps)
             handle._dragCursorX = nil
             handle._dragCursorY = nil
             handle._dragScale = nil
+            handle._suppressSettingsOnRelease = nil
         end
         local didFinalRefresh
         if wasDragging and textDrag then
@@ -581,6 +586,7 @@ function Handles.Install(box, deps)
             ReleaseTextDragRegions(handle)
             box._dragFrozenScale = nil
         end
+        if openSettingsOnRelease then OpenHandleSettings(handle) end
     end
     box._dragFrame:SetScript("OnMouseUp", function(_, button)
         StopHandleDrag(nil, button)
@@ -627,6 +633,7 @@ function Handles.Install(box, deps)
         if button and button ~= "LeftButton" then return end
         if button == "LeftButton" and IsControlKeyDown and IsControlKeyDown() and StartPan(box._stage, box, button) then
             handle._suppressNextClick = true
+            handle._suppressSettingsOnRelease = true
             return
         end
         SelectHandle(handle)
@@ -730,6 +737,10 @@ function Handles.Install(box, deps)
             end
             if button == "RightButton" then
                 SelectHandle(self)
+                if self._openSettingsOnClick == true then
+                    OpenHandleSettings(self)
+                    return
+                end
                 if PreviewHelpers.ShowPreviewHandleContext then
                     PreviewHelpers.ShowPreviewHandleContext(self, {
                         M = M,
@@ -849,6 +860,10 @@ function Handles.Install(box, deps)
     AddIconPool(debuffHandle, 6)
     local externalHandle = CreatePreviewHandle("external", "externals", { 0.30, 0.72, 1.00 }, "EXTERNAL", 86, 34, false)
     externalHandle._cfgGroup = "externals"
+    externalHandle._openSettingsOnClick = true
+    -- The blue EXTERNAL label sits just above the icon rectangle. Keep that
+    -- visible affordance inside the handle's mouse hit area as well.
+    if externalHandle.SetHitRectInsets then externalHandle:SetHitRectInsets(0, 0, -14, 0) end
     AddIconPool(externalHandle, 2)
     local statusHandles = {}
     local statusSpecs = H.StatusSpecs()

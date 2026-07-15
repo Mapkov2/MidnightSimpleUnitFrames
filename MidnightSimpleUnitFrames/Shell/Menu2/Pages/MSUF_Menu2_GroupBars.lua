@@ -17,7 +17,7 @@ local VT = M.ValueTextList
 local DISPEL_OVERLAY_121_PTR_DISABLED = false
 local DISPEL_OVERLAY_121_PTR_MESSAGE = "Uses native 12.1 AuraContainer dispellable debuff detection."
 local SCOPE_VALUES, HEALTH_MODES, TEXT_MODES, DELIMITER_VALUES, ANCHORS, GF_BAR_MODES, SIMPLE_TEXTURES, DISPEL_OVERLAY_STYLES, DEBUFF_STRIPE_EDGES = M.PickDefaults(GP, [[SCOPE_VALUES HEALTH_MODES TEXT_MODES DELIMITER_VALUES ANCHORS GF_BAR_MODES SIMPLE_TEXTURES DISPEL_OVERLAY_STYLES DEBUFF_STRIPE_EDGES]])
-local GF, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, BindScopeDropdown, ScopeDropdown, ScopeSlider, ScopeColor, BindNestedStrataSlider, FrameStrataCount, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, TrackSectionRefresh, OnOffBadge, BadgeNumber, OptionText, ControlMeta, RegisterControl = M.Pick(GP, [[GF Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle BindScopeDropdown ScopeDropdown ScopeSlider ScopeColor BindNestedStrataSlider FrameStrataCount SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus TrackSectionRefresh OnOffBadge BadgeNumber OptionText ControlMeta RegisterControl]])
+local GF, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, BindScopeDropdown, ScopeDropdown, ScopeSlider, ScopeColor, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, TrackSectionRefresh, OnOffBadge, BadgeNumber, OptionText, ControlMeta, RegisterControl = M.Pick(GP, [[GF Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle BindScopeDropdown ScopeDropdown ScopeSlider ScopeColor SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus TrackSectionRefresh OnOffBadge BadgeNumber OptionText ControlMeta RegisterControl]])
 OnOffBadge = OnOffBadge or M.OnOffBadge
 BadgeNumber = BadgeNumber or M.BadgeNumber
 OptionText = OptionText or M.OptionText
@@ -72,11 +72,9 @@ local function BuildDispelOverlaySection(ctx, b)
     local dispelStyle = ScopeDropdown(ctx, dispelCard, "Overlay style", DISPEL_OVERLAY_STYLES, 300, "dispelOverlayStyle", "FULL", "visual", 16, -140, min(300, dispelCardW - 32))
     local dispelCurrent = BindScopeToggle(ctx, W.ToggleAt(dispelCard, "Show on current health only", 16, -188, dispelCardW - 32), "dispelOverlayOnHealth", true, "visual")
     local dispelAlpha = ScopeNumberSlider(ctx, dispelCard, "Overlay opacity", 0.05, 1, 0.05, 340, "dispelOverlayAlpha", 0.35, "visual", 16, -232, min(360, dispelCardW - 72))
-    local dispelStrata = BindNestedStrataSlider(ctx,
-        W.Slider(dispelCard, (M.Tr and M.Tr("Frame Strata")) or "Frame Strata", 0, (FrameStrataCount or 9) - 1, 1, min(360, dispelCardW - 72)),
-        function() return Conf(CurrentScope()) end, "dispelOverlayStrata", "AUTO", "visual", "field.dispelOverlayStrata")
-    W.MoveWidget(dispelStrata, dispelCard, 16, -286, min(360, dispelCardW - 72), "LEFT")
-    local dispelControls = { dispelTrigger, dispelStyle, dispelCurrent, dispelAlpha, dispelStrata }
+    local dispelLayer = ScopeNumberSlider(ctx, dispelCard, "Effect Layer (0-30)", 0, 30, 1, 340,
+        "dispelOverlayLayer", 0, "visual", 16, -286, min(360, dispelCardW - 72))
+    local dispelControls = { dispelTrigger, dispelStyle, dispelCurrent, dispelAlpha, dispelLayer }
     local function RefreshDispelState()
         if DISPEL_OVERLAY_121_PTR_DISABLED and Bool(CurrentScope(), "dispelOverlayEnabled", false) then
             Set(CurrentScope(), "dispelOverlayEnabled", false, "visual")

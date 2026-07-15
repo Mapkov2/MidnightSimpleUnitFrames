@@ -1542,6 +1542,9 @@ local function UpdateStatusText(frame, status, event, seedHP)
     local oldValue = frame._msufStatusTextValue
     frame._msufStatusTextValue = text
     frame._msufStatusTextLayout = layout
+    if layout ~= cfg then
+      AdoptRegion(frame, fs, layout.layer)
+    end
     LayoutRegion(fs, frame, frame.MSUFSpec, layout, true)
     SetText(fs, text)
     SetShown(fs, true)
