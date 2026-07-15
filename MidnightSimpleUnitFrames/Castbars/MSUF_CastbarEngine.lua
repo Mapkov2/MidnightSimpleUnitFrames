@@ -13,8 +13,6 @@ local ExportPublic = ns.ExportPublic or function(name, value)
     return value
 end
 
-local Registry = ns.MSUF_CastbarRegistry
-
 local PlainNumber = _G.MSUF_CastbarRuntime_PlainNumber or function(value)
     if value == nil then
         return nil
@@ -40,6 +38,8 @@ end
 ns.MSUF_CastbarEngine = ns.MSUF_CastbarEngine or {}
 
 local Engine = ns.MSUF_CastbarEngine
+ns.Castbars = ns.Castbars or {}
+ns.Castbars.Engine = Engine
 local buildStateCacheTime = {}
 local INACTIVE_STATE = { active = false }
 local GetTime = _G.GetTime
@@ -54,9 +54,10 @@ local UnitSpellTargetClass = _G.UnitSpellTargetClass
 local ToPlain = _G.ToPlain
 local issecretvalue = _G.issecretvalue or function(_) return false end
 
-Engine.VERSION = 3
+Engine.VERSION = 4
 Engine._subs = Engine._subs or {}
 Engine._state = Engine._state or {}
+Engine._generation = Engine._generation or {}
 
 --- Tiny pub/sub hook for code that wants cast-state notifications without
 --- taking ownership of the castbar frames themselves.
@@ -74,28 +75,33 @@ local function SubscriptionList(key)
     return subscriptions
 end
 
-function Engine:RegisterBar(key, unit, frame, meta)
-    if Registry and Registry.Register then
-        Registry:Register(key, unit, frame, meta)
-    end
-end
-
-function Engine:UnregisterBar(key)
-    if Registry and Registry.Unregister then
-        Registry:Unregister(key)
-    end
-end
-
 function Engine:Subscribe(key, callback)
     if not key or type(callback) ~= "function" then
-        return
+        return false
     end
 
     local subscriptions = SubscriptionList(key)
+    for index = 1, #subscriptions do
+        if subscriptions[index] == callback then return true end
+    end
     subscriptions[#subscriptions + 1] = callback
+    return true
 end
 
-function Engine:Notify(key, payload)
+function Engine:Unsubscribe(key, callback)
+    local subscriptions = key and self._subs and self._subs[key]
+    if not subscriptions then return false end
+    for index = #subscriptions, 1, -1 do
+        if subscriptions[index] == callback then
+            table.remove(subscriptions, index)
+            if #subscriptions == 0 then self._subs[key] = nil end
+            return true
+        end
+    end
+    return false
+end
+
+function Engine:Notify(key, payload, event)
     local subscriptions = Engine._subs and Engine._subs[key]
     if not subscriptions then
         return
@@ -104,9 +110,17 @@ function Engine:Notify(key, payload)
     for index = 1, #subscriptions do
         local callback = subscriptions[index]
         if type(callback) == "function" then
-            callback(payload)
+            callback(payload, event)
         end
     end
+end
+
+function Engine:AdvanceGeneration(unit)
+    if not unit then return 0 end
+    local generation = (self._generation[unit] or 0) + 1
+    self._generation[unit] = generation
+    self:Invalidate(unit)
+    return generation
 end
 
 function Engine:ForceRefresh()
@@ -125,6 +139,40 @@ end
 
 function Engine:GetState(unit)
     return Engine._state and Engine._state[unit]
+end
+
+local function ApplyIdentity(state)
+    local generation = Engine._generation[state.unit] or 0
+    if generation == 0 and state.active == true then
+        generation = 1
+        Engine._generation[state.unit] = generation
+    end
+
+    local sequenceID = type(state.castBarID) == "number" and state.castBarID or generation
+    state.spellSequenceID = sequenceID
+    local identity = state.identity
+    if not identity then
+        identity = {}
+        state.identity = identity
+    end
+    identity.unit = state.unit
+    identity.castType = state.castType
+    identity.castBarID = type(state.castBarID) == "number" and state.castBarID or nil
+    identity.generation = generation
+    identity.sequenceID = sequenceID
+    identity.active = state.active == true
+    return identity
+end
+
+function Engine:SameIdentity(left, right)
+    left = left and (left.identity or left)
+    right = right and (right.identity or right)
+    if not (left and right and left.active ~= false and right.active ~= false) then return false end
+    if left.unit ~= right.unit or left.castType ~= right.castType then return false end
+    if left.castBarID ~= nil or right.castBarID ~= nil then
+        return left.castBarID ~= nil and left.castBarID == right.castBarID
+    end
+    return left.generation ~= nil and left.generation == right.generation
 end
 
 local EnsureDBLazy = _G.MSUF_EnsureDBLazy or function()
@@ -223,6 +271,7 @@ function Engine:BuildState(unit, previousState)
     state.spellId = nil
     state.castID = nil
     state.castBarID = nil
+    state.spellSequenceID = nil
     state.delayTimeMS = nil
     state.isTradeskill = nil
     state.isEmpowered = nil
@@ -265,6 +314,7 @@ function Engine:BuildState(unit, previousState)
         end
 
         state.reverseFill = ReverseFillForCastType(state.castType, state.unit)
+        ApplyIdentity(state)
         return state
     end
 
@@ -291,9 +341,11 @@ function Engine:BuildState(unit, previousState)
         end
 
         state.reverseFill = ReverseFillForCastType(state.castType, state.unit)
+        ApplyIdentity(state)
         return state
     end
 
+    ApplyIdentity(state)
     return state
 end
 

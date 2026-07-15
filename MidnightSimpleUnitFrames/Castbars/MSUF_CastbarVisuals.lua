@@ -12,6 +12,9 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
     _G[name] = value
     return value
 end
+MSUF.Castbars = MSUF.Castbars or {}
+local Visuals = MSUF.Castbars.Visuals or {}
+MSUF.Castbars.Visuals = Visuals
 
 local issecretvalue = _G.issecretvalue
 
@@ -656,6 +659,7 @@ end
 
 ExportPublic("MSUF_ApplyCastbarDetailLayout", ApplyCastbarDetailLayout)
 ExportPublic("MSUF_ApplyCastbarDetailTextLayout", ApplyCastbarDetailLayout)
+Visuals.ApplyDetailLayout = ApplyCastbarDetailLayout
 
 --- Refreshes one existing frame without touching cast state. This is used by the
 --- global visual refresh and by profile/style changes.
@@ -696,3 +700,4 @@ local function RefreshCastbarFrame(frame, forcedUnit, general)
     ApplyCastbarDetailLayout(frame, forcedUnit, general)
 end
 ExportPublic("MSUF_RefreshCastbarFrame", RefreshCastbarFrame)
+Visuals.RefreshFrame = RefreshCastbarFrame

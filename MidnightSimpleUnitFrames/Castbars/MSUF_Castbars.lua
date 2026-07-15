@@ -201,19 +201,20 @@ local function InitializeExistingPlayerCast()
     local playerFrame = _G.MSUF_PlayerCastbar
     if not (playerFrame and playerFrame._msufPlayerEventsRegistered and PlayerCastbarCast) then return end
 
-    local cast = UnitCastingInfo("player")
-    local channel = UnitChannelInfo("player")
-    if not (cast or channel)
+    local buildState = _G.MSUF_BuildCastState
+    local state = type(buildState) == "function" and buildState("player") or nil
+    local active = state and state.active == true
+    if not active
         and type(UnitHasVehicleUI) == "function"
         and UnitHasVehicleUI("player")
         and type(UnitExists) == "function"
         and UnitExists("vehicle")
     then
-        cast = UnitCastingInfo("vehicle")
-        channel = UnitChannelInfo("vehicle")
+        state = type(buildState) == "function" and buildState("vehicle") or nil
+        active = state and state.active == true
     end
 
-    if cast or channel then PlayerCastbarCast(playerFrame) end
+    if active then PlayerCastbarCast(playerFrame) end
 end
 
 local function CreatePlayerCastbarFrame()

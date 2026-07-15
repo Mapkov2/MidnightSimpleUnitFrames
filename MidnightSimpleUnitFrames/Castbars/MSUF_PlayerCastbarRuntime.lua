@@ -21,6 +21,17 @@ local tostring = tostring
 local select = select
 local math_max = math.max
 local issecretvalue = _G.issecretvalue or function(_) return false end
+local castbarEngine
+
+local function CastbarEngine()
+    if castbarEngine then return castbarEngine end
+    castbarEngine = MSUF.Castbars and MSUF.Castbars.Engine
+    if not castbarEngine then
+        local getter = _G.MSUF_GetCastbarEngine
+        castbarEngine = type(getter) == "function" and getter() or nil
+    end
+    return castbarEngine
+end
 
 local ACTIVE_DURATION_OPTIONS = {
     skipColor = true,
@@ -324,77 +335,20 @@ end
 
 local INTERRUPT_FEEDBACK_DURATION = _G.MSUF_INTERRUPT_FEEDBACK_DURATION or 0.5
 
-local fallbackCastState = {}
-
 local function InvalidateCastState(unit)
     if not unit then return end
-    local getEngine = _G.MSUF_GetCastbarEngine
-    local engine = type(getEngine) == "function" and getEngine() or nil
+    local engine = CastbarEngine()
     if engine and type(engine.Invalidate) == "function" then
         engine:Invalidate(unit)
     end
 end
 
 local function BuildCastState(unit, frame)
-    local buildState = _G.MSUF_BuildCastState
-    if type(buildState) == "function" then
-        return buildState(unit, frame and frame._msufPlayerState or frame)
+    local engine = CastbarEngine()
+    if engine and type(engine.BuildState) == "function" then
+        return engine:BuildState(unit, frame and frame._msufPlayerState or frame)
     end
-
-    local state = fallbackCastState
-    state.active = false
-    state.unit = unit
-    state.castType = "NONE"
-    state.spellName = nil
-    state.text = nil
-    state.icon = nil
-    state.spellId = nil
-    state.castID = nil
-    state.castBarID = nil
-    state.startTimeMS = nil
-    state.endTimeMS = nil
-    state.durationObj = nil
-    state.apiNotInterruptibleRaw = nil
-    if not unit then return state end
-
-    local spellName, text, icon, startMS, endMS, _, castGUID, apiNotInterruptibleRaw, spellID, castBarID =
-        _G.UnitCastingInfo(unit)
-    if spellName then
-        state.active = true
-        state.castType = "CAST"
-        state.spellName = spellName
-        state.text = text or spellName
-        state.icon = icon
-        state.startTimeMS = startMS
-        state.endTimeMS = endMS
-        state.apiNotInterruptibleRaw = apiNotInterruptibleRaw
-        state.spellId = spellID
-        state.castID = castGUID
-        state.castBarID = castBarID
-        if type(_G.UnitCastingDuration) == "function" then
-            state.durationObj = _G.UnitCastingDuration(unit)
-        end
-        return state
-    end
-
-    spellName, text, icon, startMS, endMS, _, apiNotInterruptibleRaw, spellID, _, _, castBarID =
-        _G.UnitChannelInfo(unit)
-    if spellName then
-        state.active = true
-        state.castType = "CHANNEL"
-        state.spellName = spellName
-        state.text = text or spellName
-        state.icon = icon
-        state.startTimeMS = startMS
-        state.endTimeMS = endMS
-        state.apiNotInterruptibleRaw = apiNotInterruptibleRaw
-        state.spellId = spellID
-        state.castBarID = castBarID
-        if type(_G.UnitChannelDuration) == "function" then
-            state.durationObj = _G.UnitChannelDuration(unit)
-        end
-    end
-    return state
+    return nil
 end
 
 local function GetEffectiveUnit(frame)
@@ -529,6 +483,7 @@ local function ApplyActiveCast(
     spellID,
     castGUID,
     castBarID,
+    spellSequenceID,
     durationObj
 )
     local isChannel = castType == "CHANNEL"
@@ -562,6 +517,8 @@ local function ApplyActiveCast(
         state.startTimeMS = startMS
         state.endTimeMS = endMS
         state.durationObj = durationObj
+        state.castBarID = castBarID
+        state.spellSequenceID = spellSequenceID or castBarID
         state.reverseFill = reverseFill
         _G.MSUF_Castbar_ApplyActiveDuration(frame, state, ACTIVE_DURATION_OPTIONS)
         timerDriven = frame.MSUF_timerDriven == true
@@ -615,7 +572,7 @@ local function ApplyActiveCast(
 
     UpdateLatencyZone(frame, isChannel, totalDuration)
     ClearFrameOnUpdateScript(frame)
-    frame.MSUF_durationObj = durationObj
+    frame.MSUF_durationObj = frame.MSUF_durationObj or durationObj
     frame.MSUF_timerDriven = timerDriven and true or nil
 
     frame:Show()
@@ -646,6 +603,7 @@ local function ApplyCastState(frame, state)
         state.spellId,
         state.castID,
         state.castBarID,
+        state.spellSequenceID,
         state.durationObj
     )
     return true
@@ -668,6 +626,8 @@ local CHANNEL_START_EVENTS = {
 }
 
 local function StopPlayerCastbar(frame)
+    frame._msufSoftResyncToken = (frame._msufSoftResyncToken or 0) + 1
+    frame._msufSoftResyncScheduledToken = nil
     frame._msufChanNilSince = nil
     frame._msufCastNilSince = nil
     frame._msufHardStopNilSince = nil
@@ -891,6 +851,8 @@ local function ShowInterruptFeedback(frame, label)
 end
 
 local function DisablePlayerCastbar(frame)
+    frame._msufSoftResyncToken = (frame._msufSoftResyncToken or 0) + 1
+    frame._msufSoftResyncScheduledToken = nil
     InvalidatePlayerInterruptHide(frame)
     DisableFrameOnUpdate(frame)
     ReleaseRuntimeActive(frame)
@@ -942,6 +904,14 @@ local function PlayerCastbarOnEventImpl(frame, event, ...)
     if frame.MSUF_testMode then return end
 
     local eventUnit = select(1, ...)
+    if event == "UNIT_SPELLCAST_START"
+        or event == "UNIT_SPELLCAST_CHANNEL_START"
+        or event == "UNIT_SPELLCAST_EMPOWER_START" then
+        local engine = CastbarEngine()
+        if engine and type(engine.AdvanceGeneration) == "function" then
+            engine:AdvanceGeneration(eventUnit)
+        end
+    end
     InvalidateCastState(eventUnit)
     if eventUnit == "player" then
         InvalidateCastState("vehicle")

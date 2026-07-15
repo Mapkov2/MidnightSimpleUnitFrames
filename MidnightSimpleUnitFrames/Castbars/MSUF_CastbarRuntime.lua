@@ -16,6 +16,8 @@ end
 
 local Runtime = ns.MSUF_CastbarRuntime or {}
 ns.MSUF_CastbarRuntime = Runtime
+ns.Castbars = ns.Castbars or {}
+ns.Castbars.Runtime = Runtime
 ExportPublic("MSUF_CastbarRuntime", Runtime)
 
 local StatusBarInterpolation = _G.Enum and _G.Enum.StatusBarInterpolation
@@ -63,6 +65,22 @@ Runtime.WorkMask = Runtime.WorkMask or {
     DURATION_FALLBACK = WORK_DURATION_FALLBACK,
     UNIT_FAILSAFE = WORK_UNIT_FAILSAFE,
 }
+
+Runtime.Phase = Runtime.Phase or {
+    IDLE = "IDLE",
+    CAST = "CAST",
+    CHANNEL = "CHANNEL",
+    EMPOWER = "EMPOWER",
+    INTERRUPT_HOLD = "INTERRUPT_HOLD",
+    HIDDEN = "HIDDEN",
+}
+
+function Runtime:SetPhase(frame, phase)
+    if not frame then return end
+    frame._msufCastPhase = phase
+    local state = frame._msufCastState
+    if state then state.phase = phase end
+end
 
 local activeDurationFrames = Runtime._activeDurationFrames
 if not activeDurationFrames then
@@ -245,6 +263,44 @@ local function DisableNativeTimeText(frame)
     end
 end
 
+--- Keep one duration container per frame. Blizzard's native statusbar and text
+--- binding remain attached to that object while Assign updates its contents.
+--- Clients without Copy/Assign retain the existing direct-object fallback.
+local function StableDuration(frame, incoming)
+    if not (frame and incoming) then return incoming end
+
+    local stable = frame._msufStableDurationObj
+    if stable == incoming then
+        frame._msufLastIncomingDuration = incoming
+        return stable
+    end
+
+    if stable then
+        if type(stable.Assign) == "function" then
+            local ok = pcall(stable.Assign, stable, incoming)
+            if ok then
+                frame._msufLastIncomingDuration = incoming
+                return stable
+            end
+        end
+        stable = nil
+    end
+
+    if not stable and type(incoming.Copy) == "function" then
+        local ok, copy = pcall(incoming.Copy, incoming)
+        if ok and copy then stable = copy end
+    end
+
+    stable = stable or incoming
+    frame._msufStableDurationObj = stable
+    frame._msufLastIncomingDuration = incoming
+    return stable
+end
+
+function Runtime:RetainDuration(frame, incoming)
+    return StableDuration(frame, incoming)
+end
+
 local function ApplyNativeTimeText(frame, durationObj, format)
     if not (frame and frame.timeText and durationObj) then return false end
 
@@ -294,7 +350,8 @@ local function ApplyNativeTimeText(frame, durationObj, format)
         frame._msufDurationTextConfigured = true
     end
 
-    if frame._msufDurationTextFormat ~= format then
+    local formatChanged = frame._msufDurationTextFormat ~= format
+    if formatChanged then
         local ok = type(binding.SetTextFormat) == "function"
             and pcall(binding.SetTextFormat, binding, formatSpec[1], formatSpec[2])
         if not ok then
@@ -305,23 +362,31 @@ local function ApplyNativeTimeText(frame, durationObj, format)
         frame._msufDurationTextFormat = format
     end
 
-    local ok = type(binding.SetDuration) == "function"
-        and pcall(binding.SetDuration, binding, durationObj)
-    if not ok then
-        frame._msufNativeTextUnsafe = true
-        DisableNativeTimeText(frame)
-        return false
+    local durationChanged = frame._msufDurationTextDuration ~= durationObj
+    if durationChanged then
+        local ok = type(binding.SetDuration) == "function"
+            and pcall(binding.SetDuration, binding, durationObj)
+        if not ok then
+            frame._msufNativeTextUnsafe = true
+            DisableNativeTimeText(frame)
+            return false
+        end
+        frame._msufDurationTextDuration = durationObj
     end
 
-    ok = type(binding.SetEnabled) == "function"
-        and pcall(binding.SetEnabled, binding, true)
-    if not ok then
-        frame._msufNativeTextUnsafe = true
-        DisableNativeTimeText(frame)
-        return false
+    local wasBound = frame._msufNativeTimeBound == true
+    if not wasBound then
+        local ok = type(binding.SetEnabled) == "function"
+            and pcall(binding.SetEnabled, binding, true)
+        if not ok then
+            frame._msufNativeTextUnsafe = true
+            DisableNativeTimeText(frame)
+            return false
+        end
     end
 
-    if type(binding.UpdateFontString) == "function" then
+    if (durationChanged or formatChanged or not wasBound)
+        and type(binding.UpdateFontString) == "function" then
         pcall(binding.UpdateFontString, binding)
     end
     frame.timeText._msufLastText = nil
@@ -474,10 +539,12 @@ function Runtime:CancelNativeCompletion(frame)
     if not frame then return end
     CancelTimerHandle(frame._msufNativeCompletionTimer)
     frame._msufNativeCompletionTimer = nil
+    frame._msufNativeCompletionDeadline = nil
 end
 
 local function NativeCompletionCallback(frame)
     frame._msufNativeCompletionTimer = nil
+    frame._msufNativeCompletionDeadline = nil
     local workMask = frame._msufCastbarWorkMask
     if frame.MSUF_castActive ~= true
         or (workMask ~= 0 and workMask ~= WORK_UNIT_FAILSAFE)
@@ -531,14 +598,21 @@ function Runtime:ArmNativeCompletion(frame)
     local timerAPI = _G.C_Timer
     if not (timerAPI and type(timerAPI.NewTimer) == "function") then return false end
 
+    local deadline = frame._msufPlainEndTime + 0.05
+    if frame._msufNativeCompletionTimer
+        and frame._msufNativeCompletionDeadline
+        and math.abs(frame._msufNativeCompletionDeadline - deadline) <= 0.001 then
+        return true
+    end
     self:CancelNativeCompletion(frame)
+
     if not frame._msufNativeCompletionCallback then
         frame._msufNativeCompletionCallback = function()
             NativeCompletionCallback(frame)
         end
     end
 
-    local delay = frame._msufPlainEndTime - Now() + 0.05
+    local delay = deadline - Now()
     if delay < 0.05 then delay = 0.05 end
     local ok, timer = pcall(timerAPI.NewTimer, delay, frame._msufNativeCompletionCallback)
     if not ok or not timer then
@@ -548,6 +622,7 @@ function Runtime:ArmNativeCompletion(frame)
     end
 
     frame._msufNativeCompletionTimer = timer
+    frame._msufNativeCompletionDeadline = deadline
     return true
 end
 
@@ -569,6 +644,9 @@ function Runtime:ReleaseActive(frame)
     self:DeactivateNative(frame)
     frame.MSUF_castActive = false
     frame.MSUF_durationObj = nil
+    frame._msufLastIncomingDuration = nil
+    frame._msufActiveDurationSeq = nil
+    frame._msufActiveDurationType = nil
     frame.MSUF_timerDriven = nil
     frame.MSUF_timerRangeSet = nil
     frame._msufPlainEndTime = nil
@@ -654,8 +732,10 @@ function Runtime:ApplyTimer(statusBar, durationObj, reverseFill, isChanneled)
         return false
     end
 
-    if statusBar.SetReverseFill then
+    reverseFill = reverseFill and true or false
+    if statusBar.SetReverseFill and statusBar._msufTimerReverseFill ~= reverseFill then
         statusBar:SetReverseFill(reverseFill and true or false)
+        statusBar._msufTimerReverseFill = reverseFill
     end
 
     if not durationObj or not statusBar.SetTimerDuration then
@@ -664,6 +744,10 @@ function Runtime:ApplyTimer(statusBar, durationObj, reverseFill, isChanneled)
 
     local parent = statusBar.GetParent and statusBar:GetParent() or nil
     local timerDirection = TimerDirection(parent, isChanneled)
+    if statusBar._msufTimerDuration == durationObj
+        and statusBar._msufTimerDirection == timerDirection then
+        return true
+    end
 
     local ok
     if INTERPOLATION_IMMEDIATE ~= nil and timerDirection ~= nil then
@@ -672,10 +756,19 @@ function Runtime:ApplyTimer(statusBar, durationObj, reverseFill, isChanneled)
         ok = pcall(statusBar.SetTimerDuration, statusBar, durationObj)
     end
 
-    return ok == true
+    if ok == true then
+        statusBar._msufTimerDuration = durationObj
+        statusBar._msufTimerDirection = timerDirection
+        return true
+    end
+    return false
 end
 
-function Runtime:ClearTimer()
+function Runtime:ClearTimer(statusBar)
+    if statusBar then
+        statusBar._msufTimerDuration = nil
+        statusBar._msufTimerDirection = nil
+    end
     return false
 end
 
@@ -726,7 +819,7 @@ function Runtime:ApplyActive(frame, state, options)
         return false
     end
 
-    local durationObj = state.durationObj
+    local durationObj = StableDuration(frame, state.durationObj)
     local spellName = state.spellName
     if not durationObj or not spellName then
         return false
@@ -734,7 +827,6 @@ function Runtime:ApplyActive(frame, state, options)
 
     options = options or EMPTY_OPTIONS
 
-    self:CancelNativeCompletion(frame)
     frame._msufNativeCompletionUnsafe = nil
     frame._msufNativeTimerUnsafe = nil
     frame._msufDurationSnapshotUnsafe = nil
@@ -744,11 +836,18 @@ function Runtime:ApplyActive(frame, state, options)
     local castType = state.castType or state.phase or "CAST"
     local isChanneled = castType == "CHANNEL"
     local unit = frame.unit or state.unit
+    local sequenceID = state.spellSequenceID or state.castBarID
+    local sameCast = frame.MSUF_castActive == true
+        and frame._msufActiveDurationSeq == sequenceID
+        and frame._msufActiveDurationType == castType
 
     frame.interrupted = nil
     frame.MSUF_castActive = true
     frame.MSUF_durationObj = durationObj
     frame.MSUF_isChanneled = isChanneled
+    frame._msufActiveDurationSeq = sequenceID
+    frame._msufActiveDurationType = castType
+    self:SetPhase(frame, castType)
 
     if options.channelDirect ~= nil then
         frame.MSUF_channelDirect = options.channelDirect and true or nil
@@ -758,7 +857,7 @@ function Runtime:ApplyActive(frame, state, options)
         frame.MSUF_channelDirect = nil
     end
 
-    if options.resetRuntime ~= false then
+    if options.resetRuntime ~= false and not sameCast then
         frame.castDuration = nil
         frame.castElapsed = nil
         frame.endTime = nil
@@ -841,6 +940,7 @@ function Runtime:ApplyInterrupt(frame, options)
 
     options = options or EMPTY_OPTIONS
     self:ReleaseActive(frame)
+    self:SetPhase(frame, self.Phase.INTERRUPT_HOLD)
 
     local statusBar = frame.statusBar
     if not statusBar then
@@ -905,6 +1005,13 @@ function Runtime:Stop(frame, reasonOrOptions)
         reason = REASON_STOPPED
     end
 
+    frame._msufHideToken = (frame._msufHideToken or 0) + 1
+    for index = 1, #STOP_TIMERS do
+        local timerKey = STOP_TIMERS[index]
+        CancelTimerHandle(frame[timerKey])
+        frame[timerKey] = nil
+    end
+
     DisableFrameOnUpdate(frame)
     activeDurationFrames[frame] = nil
     local setLifecycleActive = _G.MSUF_Castbar_SetLifecycleActive
@@ -916,6 +1023,9 @@ function Runtime:Stop(frame, reasonOrOptions)
     end
 
     frame.MSUF_durationObj = nil
+    frame._msufLastIncomingDuration = nil
+    frame._msufActiveDurationSeq = nil
+    frame._msufActiveDurationType = nil
     frame._msufPlainEndTime = nil
     frame._msufRemaining = nil
     frame._msufFastText = nil
@@ -940,12 +1050,14 @@ function Runtime:Stop(frame, reasonOrOptions)
         castState.unit = frame.unit
         castState.key = frame._msufBarKey or frame.unit
         castState.active = false
-        castState.phase = (reason == REASON_INTERRUPTED) and "INTERRUPT" or "IDLE"
+        castState.phase = (reason == REASON_INTERRUPTED) and self.Phase.INTERRUPT_HOLD or self.Phase.IDLE
         castState.durationObj = nil
         castState.holdUntil = nil
     end
 
     if reason == REASON_HARDHIDE then
+        self:SetPhase(frame, self.Phase.HIDDEN)
+        self:ClearTimer(frame.statusBar)
         SetText(frame, "timeText", "")
 
         if frame.latencyBar then
@@ -960,6 +1072,7 @@ function Runtime:Stop(frame, reasonOrOptions)
     end
 
     if reason == REASON_STOPPED then
+        self:SetPhase(frame, self.Phase.IDLE)
         SetText(frame, "timeText", "")
         SetText(frame, "castText", "")
 
@@ -972,15 +1085,6 @@ function Runtime:Stop(frame, reasonOrOptions)
         end
 
         return
-    end
-
-    for index = 1, #STOP_TIMERS do
-        local timerKey = STOP_TIMERS[index]
-        local timer = frame[timerKey]
-
-        CancelTimerHandle(timer)
-
-        frame[timerKey] = nil
     end
 
     if frame.isEmpower and type(_G.MSUF_ClearEmpowerState) == "function" then

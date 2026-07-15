@@ -85,6 +85,8 @@ local function DetachTimeDriver()
     if runtime and runtime.DisableNativeTimeText then
         runtime:DisableNativeTimeText(iconFrame)
     end
+    iconFrame._msufFocusTimeDuration = nil
+    iconFrame._msufFocusTimeFormat = nil
 
     local source = iconFrame._msufTimeFollowerSource
     if source and source._msufTimeTextFollower == iconFrame.timeText then
@@ -104,10 +106,10 @@ end
 
 local function AttachTimeDriver(state)
     if not (iconFrame and iconFrame.timeText) then return end
-    DetachTimeDriver()
 
     local general = EnsureOptions()
     if general.showFocusCastTime == false then
+        DetachTimeDriver()
         iconFrame.timeText:SetText("")
         iconFrame.timeText:SetAlpha(0)
         return
@@ -120,21 +122,39 @@ local function AttachTimeDriver(state)
     end
 
     local runtime = _G.MSUF_CastbarRuntime
-    if state and state.durationObj
+    local source = FocusSourceCastbar()
+    local durationObj = (source and source.MSUF_durationObj) or (state and state.durationObj)
+    if durationObj
         and runtime and runtime.BindNativeTimeText
-        and runtime:BindNativeTimeText(iconFrame, state.durationObj, format)
     then
-        return
+        if iconFrame._msufNativeTimeBound == true
+            and iconFrame._msufFocusTimeDuration == durationObj
+            and iconFrame._msufFocusTimeFormat == format then
+            return
+        end
+        DetachTimeDriver()
+        if runtime:BindNativeTimeText(iconFrame, durationObj, format) then
+            iconFrame._msufFocusTimeDuration = durationObj
+            iconFrame._msufFocusTimeFormat = format
+            return
+        end
     end
 
     -- Degraded clients reuse the source castbar's already-required manager
     -- cadence.  The follower is written only when that source text changes.
-    local source = FocusSourceCastbar()
     if not (source and source.timeText) then
+        DetachTimeDriver()
         iconFrame.timeText:SetText("")
         iconFrame.timeText:SetAlpha(0)
         return
     end
+
+    if iconFrame._msufTimeFollowerSource == source
+        and source._msufTimeTextFollower == iconFrame.timeText then
+        return
+    end
+
+    DetachTimeDriver()
 
     source._msufTimeTextFollower = iconFrame.timeText
     source._msufForceLuaTimeTextFollower = true
