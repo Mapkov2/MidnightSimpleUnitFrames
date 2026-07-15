@@ -515,7 +515,10 @@ local function ApplyNameClip(frame, spec, text)
   if shorten then
     local approx = ApproxNameWidth(fs, maxChars)
     if approx > 0 then
-      local w = floor(approx + 0.5) - reservedRight
+      -- NameRightReservation already reduces the frame-space cap above. Keep
+      -- the configured character cap independent so anchoring Level/Raid Group
+      -- to NAMERIGHT cannot silently turn 10 requested characters into fewer.
+      local w = floor(approx + 0.5)
       if w < nameWidth then
         nameWidth = w
         if nameWidth < 40 then nameWidth = 40 end
