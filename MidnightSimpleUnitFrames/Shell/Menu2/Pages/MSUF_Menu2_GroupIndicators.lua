@@ -1703,8 +1703,6 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
             placed.size = tonumber(placed.size) or 18
             placed.cooldownSize = tonumber(placed.cooldownSize) or 8
             if placed.showCooldownSwipe == nil then placed.showCooldownSwipe = true end
-            placed.iconEffectTiming = placed.iconEffectTiming or "always"
-            placed.iconExpireThreshold = tonumber(placed.iconExpireThreshold) or 5
         end,
         RefreshPage)
     local placedAnchor = BindPlacedDropdown("Anchor", STATUS_ICON_ANCHORS, "anchor", "TOPLEFT", -546)
@@ -1714,13 +1712,6 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
     local placedBarWidth = BindPlacedSlider("Bar Width", 8, 120, 1, "barWidth", 42, -762)
     local placedGrowth = BindPlacedDropdown("Growth", SPELL_GROWTH_VALUES, "growth", "RIGHTDOWN", -816)
     local placedIconEffect = BindPlacedDropdown("Icon Effect", ICON_EFFECT_TYPES, "iconEffect", "none", -870, RefreshSpellIndicatorState)
-    local placedIconEffectTiming = BindPlacedDropdown("Glow When", FRAME_EFFECT_TIMINGS, "iconEffectTiming", "always", -924, RefreshSpellIndicatorState)
-    local placedIconExpireThreshold = BindPlacedSlider("Start glow at (seconds remaining)", 1, 30, 1, "iconExpireThreshold", 5, -978)
-    if M.AddTooltip then
-        M.AddTooltip(placedIconExpireThreshold, "Glow expiration threshold",
-            "Starts the icon glow when the aura reaches the selected time remaining. Permanent auras never trigger it.",
-            { hook = true, titleAsLine = true })
-    end
     local frameType = BindSpellSubType("Effect", FRAME_EFFECT_TYPES, siRightX, -490, siRightW, "frame",
         function(frame)
             if not frame.color then
@@ -1819,8 +1810,6 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         W.MoveWidget(placedBarWidth, spells, siLeftX, -762 - extra, siLeftW, "LEFT")
         W.MoveWidget(placedGrowth, spells, siLeftX, -816 - extra, siLeftW, "LEFT")
         W.MoveWidget(placedIconEffect, spells, siLeftX, -870 - extra, siLeftW, "LEFT")
-        W.MoveWidget(placedIconEffectTiming, spells, siLeftX, -924 - extra, siLeftW, "LEFT")
-        W.MoveWidget(placedIconExpireThreshold, spells, siLeftX, -978 - extra, siLeftW, "LEFT")
         local contentHeight = max(1154, 930 + extra)
         local entry = spells._msuf2CollapsibleEntry
         if entry and entry.contentHeight ~= contentHeight then
@@ -1858,8 +1847,6 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         local expiringFrame = hasFrame and frame and frame.timing == "expiring"
         RefreshPreviewAllButton()
         local cdRelevant = placedEnabled and placed.type == "icon"
-        local hasIconGlow = cdRelevant and placed.iconEffect == "glow"
-        local expiringIconGlow = hasIconGlow and placed.iconEffectTiming == "expiring"
         local barRelevant = placedEnabled and placed.type == "bar"
         SetOptionEnabled(siEnable, not SPELL_INDICATORS_121_PTR_DISABLED)
         SetManyEnabled(indicatorsOn, siLayer, specDrop)
@@ -1870,8 +1857,6 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         SetManyEnabled(placedEnabled, placedAnchor, placedSize, placedX, placedY, placedGrowth)
         SetOptionEnabled(placedBarWidth, barRelevant)
         SetOptionEnabled(placedIconEffect, cdRelevant)
-        SetOptionEnabled(placedIconEffectTiming, hasIconGlow)
-        SetOptionEnabled(placedIconExpireThreshold, expiringIconGlow)
         SetOptionEnabled(frameType, hasSpell)
         SetManyEnabled(hasFrame, frameTiming, frameColor, framePriority, frameAlpha, frameThickness, frameLayer)
         SetOptionEnabled(frameExpireThreshold, expiringFrame)

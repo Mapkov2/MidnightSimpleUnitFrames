@@ -100,14 +100,21 @@ local GF_AURA_WORKSPACE_LANES = {
     { value = "debuff", text = "Debuffs" },
     { value = "externals", text = "External Defensives" },
 }
-local GF_AURA_WORKSPACE_TOOL_OK = { layout = true, filters = true, blacklist = true }
+-- Native 12.1 AuraContainers do not currently expose a working SpellID blacklist
+-- path. Keep the workspace visible so the missing feature is explicit, but do not
+-- let stale menu state or a click open controls that cannot affect live auras.
+local GF_AURA_BLACKLIST_AVAILABLE = false
+local GF_AURA_WORKSPACE_TOOL_OK = { layout = true, filters = true, blacklist = GF_AURA_BLACKLIST_AVAILABLE }
 local function CurrentAuraWorkspaceTool(scope, lane)
     M.gfAuraToolSelection = M.gfAuraToolSelection or {}
     local scopeState = M.gfAuraToolSelection[scope]
     if type(scopeState) ~= "table" then scopeState = {}; M.gfAuraToolSelection[scope] = scopeState end
     local tool = scopeState[lane]
     if lane == "externals" then tool = "layout" end
-    if not GF_AURA_WORKSPACE_TOOL_OK[tool] then tool = "layout"; scopeState[lane] = tool end
+    if not GF_AURA_WORKSPACE_TOOL_OK[tool] then
+        tool = tool == "blacklist" and "filters" or "layout"
+        scopeState[lane] = tool
+    end
     return tool
 end
 local function SetAuraWorkspaceTool(scope, lane, tool)
@@ -182,6 +189,15 @@ local function BuildAuraWorkspaceTabs(ctx, section, scope, lane, width)
     })
     RegisterAuraControl(ctx, toolBar, "Edit", "segment",
         "group-workspace.lane." .. AuraCatalogToken(lane, "lane") .. ".tool-selector", "ephemeral")
+    if not GF_AURA_BLACKLIST_AVAILABLE then
+        for i = 1, #(toolBar.buttons or {}) do
+            local button = toolBar.buttons[i]
+            if button and button._msuf2Value == "blacklist" and button.SetEnabled then
+                button:SetEnabled(false)
+                break
+            end
+        end
+    end
     if lane ~= "externals" then
         local openStyle = T.Button(section, "Open Aura Style", 126, 22)
         openStyle:SetPoint("TOPRIGHT", section, "TOPRIGHT", -16, -76)
@@ -195,7 +211,10 @@ local function BuildAuraWorkspaceTabs(ctx, section, scope, lane, width)
             if M.SelectPage then M.SelectPage("auras3_styling") end
         end)
         RegisterAuraControl(ctx, openStyle, "Open Aura Style", "button", "group-workspace.open-aura-style", "navigation", "auras3_styling")
-        W.Text(section, "All icon styling: Appearance > Auras.", 16, -84, sectionW - 174, MUTED)
+        local hint = GF_AURA_BLACKLIST_AVAILABLE
+            and "All icon styling: Appearance > Auras."
+            or "Blacklist is unavailable in WoW 12.1. All icon styling: Appearance > Auras."
+        W.Text(section, hint, 16, -84, sectionW - 174, MUTED)
     else
         W.Text(section, "External defensives use their dedicated layout below.", 16, -84, sectionW - 32, MUTED)
     end
@@ -387,4 +406,4 @@ local function BuildGFAuras(ctx)
     if GP.BuildSpellIndicatorsSection then GP.BuildSpellIndicatorsSection(ctx, b, RefreshPage) end
     FinalizeScopePage(ctx, b)
 end
-M.RegisterPage("gf_auras", { title = "MSUF Group Auras", build = BuildGFAuras, version = 27 })
+M.RegisterPage("gf_auras", { title = "MSUF Group Auras", build = BuildGFAuras, version = 28 })

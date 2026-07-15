@@ -138,6 +138,13 @@ _G.CreateFrame = function(_, _, parent)
   createdFrames[#createdFrames + 1] = frame
   return frame
 end
+_G.hooksecurefunc = function(target, method, hook)
+  local original = assert(target[method], "mock secure hook target missing")
+  target[method] = function(self, ...)
+    original(self, ...)
+    hook(self, ...)
+  end
+end
 _G.issecretvalue = function() return false end
 _G.Enum = {
   LuaCurveType = { Step = 1 },
@@ -173,8 +180,12 @@ function Frame:SetDurationBar(bar, options)
   self._mockPrivateDurationBar = bar
   self._mockPrivateDurationBarOptions = options
   bar:SetTimerDuration(mockDuration)
+  -- PTR makes the delegated StatusBar forbidden immediately. Any later method
+  -- access reproduces the live error reported by the client.
+  bar.GetTimerDuration = function()
+    error("attempt to access forbidden delegated StatusBar", 2)
+  end
 end
-
 local MSUF = { MSUF_Auras3 = {}, UF = {} }
 _G.MSUF_NS = MSUF
 local layersChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Layers.lua"))
@@ -320,7 +331,7 @@ do
       includeSpellIDs = { [355941] = true },
       placed = {
         type = "icon", anchor = "BOTTOMLEFT", x = 0, y = 1, size = 20,
-        iconEffect = "glow", iconEffectTiming = "expiring", iconExpireThreshold = 5,
+        iconEffect = "glow",
         showCooldown = true, showCooldownSwipe = true, showStacks = true,
       },
       frame = {
@@ -330,11 +341,11 @@ do
       },
     }},
   }), "timed Spell Indicator root did not compile")
-  Equal(#timedRoot.slots, 2, "timed icon did not receive an isolated expiration sensor")
-  Equal(timedRoot.slots[1].iconEffect, "none",
-    "visible timed icon retained the expiring glow")
-  Equal(timedRoot.slots[2].iconEffect, "glow",
-    "expiration sensor did not receive the timed icon glow")
+  Equal(#timedRoot.slots, 2, "timed frame effect did not receive an isolated expiration sensor")
+  Equal(timedRoot.slots[1].iconEffect, "glow",
+    "visible icon lost its normal animated glow")
+  Equal(timedRoot.slots[2].iconEffect, "none",
+    "frame-effect sensor unexpectedly received an icon glow")
   local timedContainer = assert(Runtime.Apply(timedAuraRoot, timedRoot, timedParent),
     "timed-effect container creation failed")
   local visibleOptions = assert(capturedOptions[timedRoot.slots[1].slotKey],
@@ -354,6 +365,8 @@ do
     "expiration setup cleared the visible icon's duration bar")
   Equal(visibleButton.clearApplicationCountCalls or 0, 0,
     "expiration setup cleared the visible icon's aura stacks")
+  Check(visibleButton._msufA3SpellIndicatorIconEffectRoot ~= nil,
+    "visible icon did not create its normal animated glow")
   Equal(timedParent._msufA3SpellIndicatorExpiringEffectGates, nil,
     "visible icon incorrectly created the expiration gate")
   local sensorButton = NewFrame(timedContainer)
@@ -377,30 +390,18 @@ do
     "expiration StatusBar sensor became visually visible")
   local firstBindingSetupCalls = sensorButton.setDurationBarCalls
   sensorOptions.initializeFrame(sensorButton)
-  Equal(sensorButton.setDurationBarCalls, firstBindingSetupCalls + 1,
-    "expiration StatusBar ownership was not restored after duration display cleanup")
+  Equal(sensorButton.setDurationBarCalls, firstBindingSetupCalls,
+    "expiration setup touched the forbidden StatusBar binding a second time")
+  Equal(sensorButton._msufA3ExpiringEffectDurationBridge.duration, mockDuration,
+    "secure SetTimerDuration hook did not capture Blizzard's LuaDuration")
   local gates = assert(timedParent._msufA3SpellIndicatorExpiringEffectGates,
     "expiring frame-effect gate was not created")
   local gate = next(gates)
   Check(gate ~= nil, "expiring frame-effect gate was not registered")
-  local iconGates = assert(timedParent._msufA3SpellIndicatorExpiringIconEffectGates,
-    "expiring icon-effect gate was not created")
-  local iconGate = next(iconGates)
-  Check(iconGate ~= nil, "expiring icon-effect gate was not registered")
-  Equal(iconGate.parent, timedParent,
-    "expiring icon glow remained inside the restricted native AuraButton tree")
-  Equal(iconGate.point and iconGate.point[2], timedParent,
-    "expiring icon glow is not anchored to the normal unit frame")
-  Equal(iconGate.point and iconGate.point[4], 0,
-    "expiring icon glow lost its placed X offset")
-  Equal(iconGate.point and iconGate.point[5], 1,
-    "expiring icon glow lost its placed Y offset")
   Equal(sensorButton._msufA3SpellIndicatorIconEffectRoot, nil,
-    "timed icon glow created a forbidden AuraButton descendant")
+    "hidden frame-effect sensor created an icon glow")
   Equal(gate.alpha, 1,
     "expiring frame effect was not evaluated immediately during registration")
-  Equal(iconGate.alpha, 1,
-    "expiring icon glow was not evaluated immediately during registration")
   local driver
   for i = 1, #createdFrames do
     if createdFrames[i]:GetScript("OnUpdate") then driver = createdFrames[i] end
@@ -409,12 +410,10 @@ do
   mockRemaining = 10
   driver:GetScript("OnUpdate")(driver, 0.2)
   Equal(gate.alpha, 0, "frame effect activated above its expiration threshold")
-  Equal(iconGate.alpha, 0, "icon glow activated above its expiration threshold")
   mockRemaining = 4
   timedParent.nameText:SetText("Updated Name")
   driver:GetScript("OnUpdate")(driver, 0.2)
   Equal(gate.alpha, 1, "frame effect did not activate below its expiration threshold")
-  Equal(iconGate.alpha, 1, "icon glow did not activate below its expiration threshold")
   local effectRoot = assert(gate._msufA3ExpiringEffectRoot,
     "expiring effect root was not created")
   Equal(gate.allPoints, timedParent.hpBar,
@@ -433,12 +432,43 @@ do
   mockRemaining = 0
   driver:GetScript("OnUpdate")(driver, 0.2)
   Equal(gate.alpha, 0, "missing or permanent aura left the expiration effect active")
-  Equal(iconGate.alpha, 0, "missing or permanent aura left the icon glow active")
   Runtime.HideFrameEffects(timedParent)
-  Check(driver:GetScript("OnUpdate") ~= nil,
-    "expiration driver stopped while the icon-glow gate was still active")
-  Runtime.HideIconEffects(timedParent)
   Equal(driver:GetScript("OnUpdate"), nil, "expiration driver kept running without active gates")
+
+  -- Profiles can retain removed timer keys. They must be ignored so the
+  -- normal animated icon glow remains active after upgrading or reloading.
+  local legacyParent = NewFrame(nil)
+  local legacyAuraRoot = NewFrame(legacyParent)
+  local legacyRoot = assert(Runtime.CompileSlots("party1", {
+    enabled = true,
+    items = {{
+      enabled = true,
+      key = "legacy:timed-icon",
+      includeSpellIDs = { [355941] = true },
+      placed = {
+        type = "icon", anchor = "TOPRIGHT", x = -3, y = -2, size = 24,
+        iconEffect = "glow", iconEffectTiming = "expiring", iconExpireThreshold = 6,
+      },
+    }},
+  }), "legacy timed-icon profile did not compile")
+  Equal(#legacyRoot.slots, 1, "removed icon timer still creates a sensor sibling")
+  Equal(legacyRoot.slots[1].iconEffect, "glow", "legacy timer keys disabled the normal icon glow")
+  Equal(legacyRoot.slots[1].iconEffectTiming, nil, "legacy icon timing leaked into runtime state")
+  local legacyContainer = assert(Runtime.Apply(legacyAuraRoot, legacyRoot, legacyParent),
+    "legacy timed-icon container creation failed")
+  local legacyOptions = assert(capturedOptions[legacyRoot.slots[1].slotKey],
+    "legacy timed-icon options were not captured")
+  local legacyButton = NewFrame(legacyContainer)
+  legacyButton.Icon = NewFrame(legacyButton)
+  legacyOptions.initializeFrame(legacyButton)
+  Check(legacyButton._msufA3SpellIndicatorIconEffectRoot ~= nil,
+    "legacy timer keys prevented the normal animated glow")
+  Equal(legacyButton.setDurationBarCalls, nil,
+    "removed icon timer still installed a StatusBar bridge")
+  Equal(legacyParent._msufA3SpellIndicatorExpiringEffectGates, nil,
+    "removed icon timer still installed a Lua-polled effect gate")
+  Equal(driver:GetScript("OnUpdate"), nil,
+    "removed icon timer restarted the Lua expiration driver")
 
   -- Every effect owner stays on the stable HP rectangle while every visible
   -- tint/edge/glow follows the distinct C-side current-health fill.
