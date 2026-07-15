@@ -169,6 +169,18 @@ end
 local function HasConcreteGroupAuraGeometryScope(text)
     return ContainsAny(text, AurasPhrases[3])
 end
+
+local function RaidFilterTokenIsValue(text)
+    local explicitRaidScopeJoin = HasPhrase(text, "party and raid")
+        or HasPhrase(text, "party und raid")
+        or HasPhrase(text, "party plus raid")
+    if explicitRaidScopeJoin then return false end
+    return HasPhrase(text, "filter to raid")
+        or HasPhrase(text, "filters to raid")
+        or HasPhrase(text, "filter raid")
+        or HasPhrase(text, "filter auf raid")
+end
+
 local function AuraGeometryLanes(text)
     if ContainsAny(text, AurasPhrases[4]) then return { "buff" } end
     if ContainsAny(text, AurasPhrases[5]) then return { "debuff" } end
@@ -180,9 +192,12 @@ local function AuraGeometryScopes(text)
     local groups = DetectGroups(text)
     if #groups > 0 then
         local out = {}
+        local raidIsFilterValue = #groups > 1 and RaidFilterTokenIsValue(text)
         for i = 1, #groups do
             if groups[i] == "party" or groups[i] == "raid" or groups[i] == "mythicraid" then
-                AddAuraGeometryScope(out, "group", groups[i])
+                if not (groups[i] == "raid" and raidIsFilterValue) then
+                    AddAuraGeometryScope(out, "group", groups[i])
+                end
             end
         end
         if #out > 0 then return out end
@@ -322,6 +337,14 @@ end
 
 local function ParseAuraGeometryShortcut(text)
     if not ContainsAny(text, AurasPhrases[24]) then return nil end
+    if ContainsAny(text, { "private aura", "private auras", "private-aura", "private-auras" }) then
+        return {
+            kind = "answer",
+            status = "info",
+            text = "MSUF has no standalone Private Aura layout control here, so I kept every Buff and Debuff option unchanged. Name a normal Buff or Debuff lane if that is what you want to resize or move.",
+            summary = "Keeps retired private-aura layout wording from changing ordinary Aura lanes.",
+        }
+    end
     if ContainsAny(text, AurasPhrases[25]) then return nil end
     local explicitNonGroupAuraScope = ContainsAny(text, AurasPhrases[26])
     local groupFastIntent = not explicitNonGroupAuraScope
@@ -1707,13 +1730,18 @@ local function GroupAuraFilterExplicitScopes(text, value)
     local hasParty = ContainsAny(text, AurasPhrases[168])
     local hasMythic = ContainsAny(text, AurasPhrases[169])
     local hasRaidFrameScope = ContainsAny(text, AurasPhrases[170])
-    local hasRaidLanePhrase = ContainsAny(text, AurasPhrases[171])
     local hasRaidScope = not hasMythic and ContainsAny(text, AurasPhrases[172])
     if hasParty then scopes[#scopes + 1] = "party" end
     if hasMythic then scopes[#scopes + 1] = "mythicraid" end
     if hasRaidScope then
+        -- "Raid" is both a real group-frame scope and a native filter value.
+        -- Once another concrete scope is already present, value-bearing syntax
+        -- such as "set party debuff filter to Raid" must keep Party as the
+        -- scope instead of silently adding Raid frames as a second target.
+        -- An explicit "party and raid" join still names both frame scopes.
         local raidPhraseLooksLikeFilterValue = (value == "RAID" or value == "Raid" or value == "RaidPlayer")
-            and hasRaidLanePhrase and not hasRaidFrameScope and (hasParty or hasMythic)
+            and not hasRaidFrameScope and (hasParty or hasMythic)
+            and RaidFilterTokenIsValue(text)
         if not raidPhraseLooksLikeFilterValue then scopes[#scopes + 1] = "raid" end
     end
     if #scopes > 0 then return scopes, true end

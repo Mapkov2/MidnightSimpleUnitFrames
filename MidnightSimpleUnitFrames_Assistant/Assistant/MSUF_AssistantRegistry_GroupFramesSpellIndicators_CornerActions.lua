@@ -62,7 +62,7 @@ function A.GroupFramesRegistry.RegisterSpellIndicatorCornerResetActions(ctx)
         run = function(args)
             local scope = Scope(args and args.scope)
             local conf = GroupDB(scope)
-            conf.ciEnabled, conf.ciSize, conf.ciAlpha, conf.ciStrata = false, 8, 1, "AUTO"
+            conf.ciEnabled, conf.ciSize, conf.ciAlpha, conf.ciLayer, conf.ciStrata = false, 8, 1, 7, "AUTO"
             for i = 1, #CI_SLOTS do
                 local slot = CI_SLOTS[i]
                 conf["ciSlot" .. slot.key] = slot.default or "none"

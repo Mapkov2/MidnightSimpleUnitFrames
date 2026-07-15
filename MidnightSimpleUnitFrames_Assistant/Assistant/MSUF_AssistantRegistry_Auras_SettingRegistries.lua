@@ -89,9 +89,13 @@ function A.AurasRegistry.InstallSettingRegistries(ctx)
     if type(RegisterAuraUnitLaneSettings) == "function" then
         RegisterAuraUnitLaneSettings({
             A = ARef,
+            Registry = Registry,
+            UNIT_LABELS = C.UNIT_LABELS,
             AURA_UNITS = Data.AURA_UNITS,
             AURA_LANES = Data.AURA_LANES,
             AddAliasesForAuraScope = AliasHelpers.AddAliasesForAuraScope,
+            AuraModel = C.AuraModel,
+            ApplyAura = C.ApplyAura,
             AddAuraLaneAliases = AliasHelpers.AddAuraLaneAliases,
             AddAuraLaneRelativeSizeAliases = AliasHelpers.AddAuraLaneRelativeSizeAliases,
             RegisterAuraUnitLaneBoolean = RegistrationHelpers.RegisterAuraUnitLaneBoolean,

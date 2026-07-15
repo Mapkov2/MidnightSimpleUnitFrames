@@ -190,6 +190,8 @@ function A.GroupFramesRegistry.RegisterStatusIconSettings(ctx, scope)
         aliases = {}
         AddGroupStatusIconAliases(aliases, scope, spec, "layer")
         AddGroupStatusIconAliases(aliases, scope, spec, "draw layer")
+        AddGroupStatusIconAliases(aliases, scope, spec, "strata")
+        AddGroupStatusIconAliases(aliases, scope, spec, "frame strata")
         RegisterGroupNumber(scope, "statusIcon" .. spec.value .. "Layer", spec.layer, spec.label .. " Layer", spec.defaultLayer, 0, 30, 1, "visual", aliases)
 
     end

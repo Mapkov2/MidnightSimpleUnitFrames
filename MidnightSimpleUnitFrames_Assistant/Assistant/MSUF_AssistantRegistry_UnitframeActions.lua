@@ -200,6 +200,7 @@ Registry:RegisterAction({
             conf[spec.x] = nil
             conf[spec.y] = nil
             conf[spec.anchor] = nil
+            conf[spec.layer] = nil
             conf.raidGroupNameStyle = nil
         else
             conf[spec.x] = nil

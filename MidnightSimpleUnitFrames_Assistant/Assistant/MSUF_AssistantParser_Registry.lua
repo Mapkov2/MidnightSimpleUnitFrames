@@ -5474,12 +5474,50 @@ local function ShouldTryFullRegistryAliasFallback(text)
 end
 
 local function ParseRegistryAliasCandidatesWithFuzzy(text, raw, settings)
-    local previous = P._allowFuzzyAliasMatch
-    P._allowFuzzyAliasMatch = true
-    local ok, result = pcall(P.ParseRegistryAliasCandidates, text, raw, settings)
-    P._allowFuzzyAliasMatch = previous
-    if not ok then error(result) end
-    return result
+    -- Lua 5.1 cannot yield through pcall/xpcall. Run the yieldable fuzzy scan in
+    -- its own coroutine and proxy cooperative yields to the Assistant job
+    -- coroutine. coroutine.resume is the error boundary, so the per-coroutine
+    -- fuzzy scope is cleared on success and failure without leaking a shared
+    -- flag when a job is cancelled between frames.
+    local function PackValues(...)
+        return { n = select("#", ...), ... }
+    end
+    if type(coroutine) ~= "table" or type(coroutine.create) ~= "function"
+        or type(coroutine.resume) ~= "function" or type(coroutine.status) ~= "function"
+        or type(P.SetFuzzyAliasCoroutineScope) ~= "function"
+    then
+        error("yield-safe fuzzy parser coroutine support is unavailable", 0)
+    end
+
+    local outer, outerIsMain = coroutine.running()
+    local outerYieldable = outer ~= nil and outerIsMain ~= true
+    local worker = coroutine.create(function()
+        return P.ParseRegistryAliasCandidates(text, raw, settings)
+    end)
+    P.SetFuzzyAliasCoroutineScope(worker, true)
+
+    local resumeValues = { n = 0 }
+    while true do
+        local resumed = PackValues(coroutine.resume(worker, unpack(resumeValues, 1, resumeValues.n)))
+        if resumed[1] ~= true then
+            P.SetFuzzyAliasCoroutineScope(worker, false)
+            local detail = resumed[2]
+            if type(debug) == "table" and type(debug.traceback) == "function" then
+                local traced, value = pcall(debug.traceback, worker, tostring(detail), 0)
+                if traced and type(value) == "string" and value ~= "" then detail = value end
+            end
+            error(detail, 0)
+        end
+        if coroutine.status(worker) == "dead" then
+            P.SetFuzzyAliasCoroutineScope(worker, false)
+            return unpack(resumed, 2, resumed.n)
+        end
+        if not outerYieldable or type(coroutine.yield) ~= "function" then
+            P.SetFuzzyAliasCoroutineScope(worker, false)
+            error("fuzzy parser yielded outside a deferred Assistant job", 0)
+        end
+        resumeValues = PackValues(coroutine.yield(unpack(resumed, 2, resumed.n)))
+    end
 end
 
 local function ParseTargetInlinePartialAmbiguity(text)

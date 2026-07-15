@@ -71,6 +71,14 @@ function A.GlobalBarRegistry.RegisterScopedOverlaySettings(ctx, scope)
         apply = ApplyAbsorbBars,
         reason = "MSUF_ASSISTANT_SCOPED_OVER_ABSORB_OVERLAY",
     })
+    RegisterScopedSetting("barScope", scope, "fullHealthAbsorbStripe", "fullHealthAbsorbStripe", "Full-Health Absorb Stripe", "boolean", false, GlobalScopeAliases(scope, {
+        "full-health absorb stripe", "full health absorb stripe", "full hp absorb stripe",
+        "absorb stripe at full health", "absorb stripe on full health",
+    }), {
+        flag = "hlOverride",
+        apply = ApplyAbsorbBars,
+        reason = "MSUF_ASSISTANT_SCOPED_FULL_HEALTH_ABSORB_STRIPE",
+    })
     RegisterScopedSetting("barScope", scope, "absorbBarOpacity", "absorbOpacity", "Absorb Bar Opacity", "number", 0.75, GlobalScopeAliases(scope, {
         "absorb bar opacity", "absorb opacity", "absorb alpha",
     }), {

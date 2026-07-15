@@ -70,7 +70,12 @@ end
 local function StringContainsPhrase(haystack, phrase)
     phrase = Normalize(phrase)
     if phrase == "" then return false end
-    return (" " .. haystack .. " "):find(" " .. phrase .. " ", 1, true) ~= nil or haystack:find(phrase, 1, true) ~= nil
+    local wholePhrase = (" " .. haystack .. " "):find(" " .. phrase .. " ", 1, true) ~= nil
+    -- Two-character terms such as German "wo" and technical "hp" are words,
+    -- not stems. A raw substring fallback made "wo" match English "work" and
+    -- incorrectly changed help questions into location searches.
+    if wholePhrase or #phrase <= 2 then return wholePhrase end
+    return haystack:find(phrase, 1, true) ~= nil
 end
 
 local function CurrentPageKey()
@@ -1649,8 +1654,395 @@ local function HasConceptDefinitionIntent(norm)
     return false
 end
 
+local ADDON_COMPANION_CATALOG = {
+    { id = "betterfriendlist", label = "BetterFriendList", aliases = { "betterfriendlist", "better friend list" } },
+    { id = "clique", label = "Clique", aliases = { "clique" } },
+    { id = "sharedmedia", label = "SharedMedia", aliases = { "sharedmedia", "shared media" } },
+    { id = "plater", label = "Plater", aliases = { "plater" } },
+    { id = "bigwigs", label = "BigWigs", aliases = { "bigwigs", "big wigs" } },
+    { id = "littlewigs", label = "LittleWigs", aliases = { "littlewigs", "little wigs" } },
+    { id = "leatrix", label = "Leatrix Plus", aliases = { "leatrix plus" } },
+    { id = "weakauras", label = "WeakAuras", aliases = { "weakauras", "weak auras", "weakaura" } },
+    { id = "eqol", label = "Enhance QoL (EQoL)", aliases = { "eqol", "enhance qol", "enhance quality of life" } },
+}
+
+local ADDON_COMPANION_RELATION_WORDS = {
+    "compatible", "compatibility", "recommend", "recommended", "recommendation", "recommendations",
+    "suggest", "suggested", "suggestion", "suggestions", "integrate", "integrates", "integration",
+    "complement", "complements", "complementary", "companion", "companions",
+    "pair", "pairs", "paired", "pairing", "alongside", "together", "safe", "well", "nicely",
+    "go", "goes", "going", "overlap", "overlaps", "conflict", "conflicts", "disable", "disabled",
+    "work", "works", "working", "use", "using", "run", "running", "good", "best", "play", "plays",
+    "install", "installed", "turn off",
+    "kompatibel", "kompatibilitaet", "empfehlung", "empfehlungen", "empfehlen", "empfiehlst", "empfohlen", "empfehlenswert",
+    "vorschlag", "vorschlaege", "integriert", "integrieren", "ergaenzt", "ergaenzen",
+    "passt", "passen", "geht", "gehen", "funktioniert", "funktionieren", "klappt", "laufen", "laeuft", "vertraegt", "vertragen",
+    "ueberlappt", "ueberlappen", "ueberschneidet", "ueberschneiden", "konflikt", "konflikte", "deaktivieren", "abschalten",
+    "zusammen", "neben", "benutzen", "nutzen", "verwenden", "sicher", "gut", "beste", "besten",
+}
+
+local ADDON_COMPANION_INTERNAL_WORDS = {
+    "setting", "settings", "option", "options", "control", "controls",
+    "player", "target", "focus", "boss", "party", "raid", "unitframe", "unitframes", "frame", "frames",
+    "width", "height", "color", "texture", "aura", "buff", "debuff", "castbar", "profile", "profiles", "search", "version",
+    "einstellung", "einstellungen", "optionen", "steuerung", "spieler", "ziel", "breite", "hoehe", "farbe", "profil", "suche", "version",
+}
+
+local ADDON_COMPANION_REQUEST_STARTS = {
+    "what", "which", "any", "can i", "could i", "should i", "can you", "could you", "does", "do", "is", "are", "will", "would",
+    "recommend", "suggest", "show", "list", "tell", "give me", "help", "looking for", "i need", "i want",
+    "addon recommendation", "addon recommendations", "recommended addon", "recommended addons", "best addon", "best addons",
+    "welche", "welcher", "welches", "was", "kann ich", "kannst du", "koenntest du", "sollte ich", "funktioniert", "funktionieren",
+    "passt", "passen", "geht", "gehen", "laeuft", "laufen", "empfiehl", "empfehle", "empfehlen", "nenne", "zeig", "liste",
+    "ich suche", "ich brauche", "ich moechte", "addon empfehlung", "addon empfehlungen",
+}
+
+local ADDON_COMPANION_OVERLAP_PHRASES = {
+    "incompatible", "not compatible", "overlap", "overlaps", "overlapping", "conflict", "conflicts",
+    "duplicate", "duplicates", "disable", "turn off",
+    "nicht kompatibel", "inkompatibel", "ueberlappt", "ueberlappen", "ueberschneidet", "ueberschneiden",
+    "konflikt", "konflikte", "doppelt", "deaktivieren", "abschalten",
+}
+
+local ADDON_COMPANION_PROBLEM_PHRASES = {
+    "does not work", "doesnt work", "do not work", "will not work", "wont work", "not work", "not working", "stopped working", "stop working",
+    "breaks msuf", "broke msuf", "lua error", "lua errors", "causes errors", "causes an error", "taint", "not showing", "disappears",
+    "funktioniert nicht", "funktionieren nicht", "geht nicht", "gehen nicht", "klappt nicht", "laufen nicht", "laeuft nicht",
+    "macht msuf kaputt", "lua fehler", "fehler", "wird nicht angezeigt", "verschwindet",
+}
+
+local function HasWholePhrase(text, phrase)
+    text = Normalize(text)
+    phrase = Normalize(phrase)
+    if text == "" or phrase == "" then return false end
+    return (" " .. text .. " "):find(" " .. phrase .. " ", 1, true) ~= nil
+end
+
+local function HasAnyWholePhrase(text, phrases)
+    for i = 1, #(phrases or {}) do
+        if HasWholePhrase(text, phrases[i]) then return true end
+    end
+    return false
+end
+
+local function StartsWithAnyWholePhrase(text, phrases)
+    text = Normalize(text)
+    for i = 1, #(phrases or {}) do
+        local phrase = Normalize(phrases[i])
+        if text == phrase or text:sub(1, #phrase + 1) == phrase .. " " then return true end
+    end
+    return false
+end
+
+local function CanonicalAddonQuery(query)
+    local norm = Normalize(query)
+    norm = norm:gsub("addon%-empfehlungen", "addon empfehlungen")
+    norm = norm:gsub("addon%-empfehlung", "addon empfehlung")
+    local padded = " " .. norm .. " "
+    padded = padded:gsub(" midnight simple unitframes ", " msuf ")
+    padded = padded:gsub(" midnightsimpleunitframes ", " msuf ")
+    return Trim(padded:gsub("%s+", " "))
+end
+
+local function DetailsAddonMention(query, norm)
+    if HasWholePhrase(norm, "details addon")
+        or HasWholePhrase(norm, "details damage meter")
+    then return true end
+    -- Normalisation removes Details!' punctuation. Recognise the bare name only
+    -- in a rigid coexistence sentence so conversational "more details" cannot
+    -- become a compatibility request.
+    return norm:match("^does%s+details%s+.-%s+with%s+msuf$") ~= nil
+        or norm:match("^can%s+i%s+.-details%s+with%s+msuf$") ~= nil
+        or norm:match("^is%s+details%s+.-%s+with%s+msuf$") ~= nil
+        or norm:match("^do%s+i%s+need%s+details%s+.-msuf$") ~= nil
+        or norm:match("^why%s+.-details%s+.-msuf$") ~= nil
+        or norm:match("^details%s+.-%s+with%s+msuf$") ~= nil
+        or norm:match("^can%s+i%s+uninstall%s+details%s+.-msuf$") ~= nil
+        or norm:match("^details%s+and%s+msuf$") ~= nil
+        or norm:match("^msuf%s+and%s+details$") ~= nil
+end
+
+local function FindKnownAddon(query, norm)
+    if DetailsAddonMention(query, norm) then
+        return { id = "details", label = "Details!" }
+    end
+    for i = 1, #ADDON_COMPANION_CATALOG do
+        local addon = ADDON_COMPANION_CATALOG[i]
+        if HasAnyWholePhrase(norm, addon.aliases) then return addon end
+    end
+    return nil
+end
+
+local function ExternalSubjectIsPlausible(subject)
+    subject = Trim(subject)
+    if subject == "" or subject == "it" or subject == "this" or subject == "that" or subject == "the addon" then return false end
+    if HasWholePhrase(subject, "msuf") or HasAnyWholePhrase(subject, ADDON_COMPANION_INTERNAL_WORDS)
+        or HasAnyWholePhrase(subject, { "wow", "retail", "classic", "midnight", "patch" })
+    then return false end
+    local count = 0
+    for _ in subject:gmatch("%S+") do count = count + 1 end
+    if count > 6 then return false end
+    return true
+end
+
+local function StructuredExternalAddonSubject(norm)
+    local patterns = {
+        "^does%s+(.+)%s+work%s+with%s+msuf$", "^does%s+(.+)%s+not%s+work%s+with%s+msuf$",
+        "^can%s+i%s+use%s+(.+)%s+with%s+msuf$", "^could%s+i%s+use%s+(.+)%s+with%s+msuf$",
+        "^is%s+(.+)%s+compatible%s+with%s+msuf$", "^will%s+(.+)%s+work%s+with%s+msuf$",
+        "^does%s+msuf%s+work%s+with%s+(.+)$", "^can%s+i%s+use%s+msuf%s+without%s+(.+)$",
+        "^do%s+i%s+need%s+(.+)%s+for%s+msuf$", "^is%s+(.+)%s+required%s+for%s+msuf$",
+        "^funktioniert%s+(.+)%s+mit%s+msuf$", "^funktioniert%s+(.+)%s+nicht%s+mit%s+msuf$",
+        "^kann%s+ich%s+(.+)%s+mit%s+msuf%s+benutzen$", "^kann%s+ich%s+(.+)%s+mit%s+msuf%s+verwenden$",
+        "^kann%s+ich%s+msuf%s+ohne%s+(.+)%s+benutzen$", "^brauche%s+ich%s+(.+)%s+fuer%s+msuf$",
+        "^msuf%s+and%s+(.+)$", "^(.+)%s+and%s+msuf$", "^msuf%s+und%s+(.+)$", "^(.+)%s+und%s+msuf$",
+    }
+    for i = 1, #patterns do
+        local subject = norm:match(patterns[i])
+        if subject and ExternalSubjectIsPlausible(subject) then return subject end
+    end
+    return nil
+end
+
+local function AddonRecommendationOptOut(norm)
+    return norm:match("^do not recommend%s+") ~= nil
+        or norm:match("^dont recommend%s+") ~= nil
+        or norm:match("^please do not recommend%s+") ~= nil
+        or norm:match("^please dont recommend%s+") ~= nil
+        or norm:match("^i do not want%s+.-addon") ~= nil
+        or norm:match("^i dont want%s+.-addon") ~= nil
+        or norm:match("^no addon recommendations") ~= nil
+        or norm:match("^empfiehl%s+.-%s+nicht") ~= nil
+        or norm:match("^empfehle%s+.-%s+nicht") ~= nil
+        or norm:match("^bitte%s+.-%s+nicht%s+empfehlen") ~= nil
+        or norm:match("^keine addon empfehlung") ~= nil
+        or norm:match("^keine addon empfehlungen") ~= nil
+        or norm:match("^ich%s+.-keine%s+addon%s+empfehlung") ~= nil
+        or norm:match("^ich%s+.-keine%s+addon%s+empfehlungen") ~= nil
+        or norm:match("^.-keine%s+addons%s+empfehlen") ~= nil
+end
+
+local function AddonDependencyQuestion(norm)
+    return norm:match("^can%s+i%s+use%s+msuf%s+without%s+.+$") ~= nil
+        or norm:match("^could%s+i%s+use%s+msuf%s+without%s+.+$") ~= nil
+        or norm:match("^do%s+i%s+need%s+.+%s+for%s+msuf$") ~= nil
+        or norm:match("^is%s+.+%s+required%s+for%s+msuf$") ~= nil
+        or norm:match("^can%s+i%s+uninstall%s+.+%s+and%s+.-msuf$") ~= nil
+        or norm:match("^can%s+i%s+remove%s+.+%s+and%s+.-msuf$") ~= nil
+        or norm:match("^kann%s+ich%s+msuf%s+ohne%s+.+%s+benutzen$") ~= nil
+        or norm:match("^brauche%s+ich%s+.+%s+fuer%s+msuf$") ~= nil
+        or norm:match("^ist%s+.+%s+fuer%s+msuf%s+noetig$") ~= nil
+end
+
+local function MSUFOwnControlRequest(norm, knownAddon)
+    if HasAnyWholePhrase(norm, {
+        "msuf setting", "msuf settings", "msuf option", "msuf options", "msuf control", "msuf controls",
+        "msuf addon setting", "msuf addon settings", "msuf addon option", "msuf addon options",
+        "msuf einstellung", "msuf einstellungen", "msuf optionen",
+    }) then return true end
+    if norm:match("%f[%w]msuf%s+.-%s+settings?%f[%W]")
+        or norm:match("%f[%w]msuf%s+.-%s+options?%f[%W]")
+        or norm:match("%f[%w]msuf%s+.-%s+controls?%f[%W]")
+    then return true end
+    if knownAddon and (norm:match("^where%s+is%s+.-%s+in%s+msuf$") or norm:match("^wo%s+ist%s+.-%s+in%s+msuf$")) then
+        return true
+    end
+    return false
+end
+
+local function AddonProblemIntent(norm)
+    return HasAnyWholePhrase(norm, ADDON_COMPANION_PROBLEM_PHRASES)
+end
+
+local function AddonOverlapIntent(norm)
+    return HasAnyWholePhrase(norm, ADDON_COMPANION_OVERLAP_PHRASES)
+end
+
+local function ComplementaryAddonIntent(query)
+    local norm = CanonicalAddonQuery(query)
+    if norm == "" or not HasWholePhrase(norm, "msuf") then return nil end
+
+    local knownAddon = FindKnownAddon(query, norm)
+    local namedCompanion = knownAddon ~= nil
+    local pluralSubject = HasAnyWholePhrase(norm, { "addons", "mods" })
+    local singularSubject = HasWholePhrase(norm, "addon")
+    local shapedSubject = HasAnyWholePhrase(norm, {
+        "other addon", "other addons", "other mod", "other mods",
+        "companion addon", "companion addons", "companion mod", "companion mods",
+        "addon recommendation", "addon recommendations", "recommended addons", "best addons",
+        "andere addons", "begleitende addons", "addon empfehlung", "addon empfehlungen",
+    })
+    local externalSubject = StructuredExternalAddonSubject(norm)
+    if not namedCompanion and not pluralSubject and not singularSubject and not shapedSubject and not externalSubject then return nil end
+
+    if AddonRecommendationOptOut(norm) then
+        return { kind = "preference", addon = knownAddon, subject = externalSubject }
+    end
+
+    -- "the MSUF addon" is a support/version question about MSUF itself, not a
+    -- request for companions. A concrete second addon name removes ambiguity.
+    if not namedCompanion and not externalSubject and HasAnyWholePhrase(norm, {
+        "msuf addon", "msufs addon", "midnight simple unit frames addon", "midnight simple unitframes addon",
+    }) then
+        return nil
+    end
+
+    -- Questions about MSUF's own controls stay in the setting/help lanes. A
+    -- concrete external addon is the exception: "Which EQoL settings overlap"
+    -- is an addon-compatibility question even though it contains "settings".
+    if MSUFOwnControlRequest(norm, knownAddon) then return nil end
+    if not namedCompanion and not externalSubject and HasAnyWholePhrase(norm, ADDON_COMPANION_INTERNAL_WORDS) then return nil end
+
+    local relation = HasAnyWholePhrase(norm, ADDON_COMPANION_RELATION_WORDS)
+    local explicitForMSUF = HasAnyWholePhrase(norm, {
+        "addon for msuf", "addons for msuf", "mod for msuf", "mods for msuf",
+        "addon with msuf", "addons with msuf", "mod with msuf", "mods with msuf",
+        "addon fuer msuf", "addons fuer msuf", "mod fuer msuf", "mods fuer msuf",
+        "addon zu msuf", "addons zu msuf", "zusammen mit msuf", "neben msuf",
+    })
+    local linkedToMSUF = HasAnyWholePhrase(norm, {
+        "with msuf", "alongside msuf", "for msuf", "mit msuf", "zu msuf", "fuer msuf", "neben msuf",
+    })
+    local namedLink = namedCompanion and HasAnyWholePhrase(norm, { "with", "mit", "zu", "for", "fuer", "and", "und" })
+    local rawQuestion = tostring(query or ""):find("?", 1, true) ~= nil
+    local requestIntent = rawQuestion or StartsWithAnyWholePhrase(norm, ADDON_COMPANION_REQUEST_STARTS)
+
+    if AddonDependencyQuestion(norm) then
+        return { kind = "optout", addon = knownAddon, subject = externalSubject }
+    end
+    if AddonProblemIntent(norm) and (namedCompanion or externalSubject) then
+        return { kind = "problem", addon = knownAddon, subject = externalSubject }
+    end
+    if requestIntent and AddonOverlapIntent(norm) then
+        return { kind = "overlap", addon = knownAddon, subject = externalSubject }
+    end
+
+    -- Positive status statements are context, not commands. In particular they
+    -- must not cancel a pending Assistant choice or dump a recommendation list.
+    if not requestIntent and not shapedSubject then return nil end
+    if not relation and not explicitForMSUF and not namedLink and not externalSubject then return nil end
+
+    -- A bare singular "addon" is useful only when the wording clearly treats
+    -- it as something paired with MSUF, rather than another name for MSUF.
+    if singularSubject and not namedCompanion and not pluralSubject and not shapedSubject
+        and not externalSubject and not explicitForMSUF and not linkedToMSUF
+    then
+        return nil
+    end
+    if (singularSubject or pluralSubject or shapedSubject) and not namedCompanion and not externalSubject then
+        return { kind = "recommendation" }
+    end
+    return { kind = "compatibility", addon = knownAddon, subject = externalSubject }
+end
+
+local function LooksLikeComplementaryAddonQuestion(query)
+    return ComplementaryAddonIntent(query) ~= nil
+end
+K.LooksLikeComplementaryAddonQuestion = LooksLikeComplementaryAddonQuestion
+K.ClassifyAddonEcosystemIntent = ComplementaryAddonIntent
+
+local ADDON_COMPATIBILITY_LINES = {
+    clique = "Yes. Clique is a verified MSUF integration: MSUF explicitly registers its unit and group frames for click and hover casting.",
+    sharedmedia = "Yes. SharedMedia packs are a verified MSUF integration through LibSharedMedia, adding fonts and bar textures without replacing MSUF frames.",
+    betterfriendlist = "Yes. BetterFriendList manages Friends, WHO, Quick Join, and social tools, so it stays separate from MSUF unit frames.",
+    plater = "Yes. Plater manages nameplates, a separate frame system from MSUF unit and group frames.",
+    bigwigs = "Yes. BigWigs can provide raid encounter alerts beside MSUF. Avoid running a second encounter-alert family with duplicate bars and sounds.",
+    littlewigs = "Yes. LittleWigs can provide dungeon encounter alerts beside MSUF. Avoid running a second encounter-alert family with duplicate bars and sounds.",
+    details = "Yes. Details! uses separate combat-analysis windows and does not need to own MSUF unit frames.",
+    leatrix = "Yes. Leatrix Plus is modular and can run beside MSUF; enable only the quality-of-life modules you want.",
+    weakauras = "Yes, with one boundary: keep WeakAuras alerts that add information, and disable groups that redraw MSUF frames, auras, cast bars, or resources.",
+    eqol = "Yes. Enhance QoL (EQoL) can run beside MSUF with overlapping modules disabled: turn off EQoL Unit Frames and any EQoL resource bar, aura container, group/raid overlay, or mover that duplicates the MSUF surface you use.",
+}
+
+local function AddonIntentLabel(intent)
+    local addon = intent and intent.addon
+    if type(addon) == "table" and Trim(addon.label) ~= "" then return addon.label end
+    local subject = Trim(intent and intent.subject)
+    subject = subject:gsub("^the%s+", ""):gsub("%s+addon$", "")
+    if subject ~= "" then return subject end
+    return "that addon"
+end
+
+local function ComplementaryAddonAnswer(query)
+    local intent = ComplementaryAddonIntent(query)
+    if not intent then return nil end
+    if intent.kind == "preference" then
+        return {
+            text = "Addon recommendation preference\nUnderstood. I will not recommend the named companion addon in this answer. I did not change any MSUF setting.",
+            status = "info", result = "info", summary = "Assistant addon recommendation preference",
+        }
+    end
+    if intent.kind == "optout" then
+        return {
+            text = "MSUF addon dependency\nYes. MSUF runs without " .. AddonIntentLabel(intent)
+                .. ". Removing or disabling that addon does not change MSUF settings. You only lose the features supplied by that addon.",
+            status = "info", result = "info", summary = "Assistant addon dependency guidance",
+        }
+    end
+    if intent.kind == "problem" then
+        return {
+            text = table.concat({
+                "Possible addon conflict with MSUF",
+                "I understand that " .. AddonIntentLabel(intent) .. " is failing beside MSUF. I did not change any setting.",
+                "First disable the other addon's unit frames, aura or cast overlays, resource displays, cooldown displays, and frame movers wherever they duplicate MSUF. Then test MSUF and that addon alone after a reload.",
+                "If the failure remains, capture the first Lua error and check both current Retail/Midnight changelogs; MSUF's bundled offline guidance cannot verify live addon versions.",
+            }, "\n"),
+            status = "info", result = "info", summary = "Assistant addon conflict guidance",
+        }
+    end
+    if intent.kind == "overlap" then
+        return {
+            text = table.concat({
+                "Addon overlap and compatibility with MSUF",
+                "MSUF does not keep a reliable offline blacklist of incompatible addons. Most conflicts come from two addons trying to own the same UI surface.",
+                "Keep MSUF as the only owner of Player, Target, Party, Raid, and Boss frames. Disable duplicate unit frames, aura or cast overlays, resource displays, cooldown displays, and frame movers in the companion addon.",
+                "For Enhance QoL (EQoL), disable EQoL Unit Frames and every EQoL resource bar, aura container, group/raid overlay, or mover that duplicates the MSUF surface you use.",
+                "For WeakAuras, keep alerts that add information and remove groups that redraw MSUF frames, auras, cast bars, or resources.",
+                "If an addon still fails after overlap is removed, test the two addons alone and check both current Retail/Midnight changelogs. This is bundled offline guidance, not a live compatibility scan.",
+            }, "\n"),
+            status = "info", result = "info", summary = "Assistant addon overlap guidance",
+        }
+    end
+    if intent.kind == "compatibility" then
+        local addon = intent.addon
+        local line = addon and ADDON_COMPATIBILITY_LINES[addon.id]
+        if not line then
+            line = "I cannot verify " .. AddonIntentLabel(intent)
+                .. " from MSUF's bundled offline knowledge. Keep MSUF as the only owner of its unit and group frames, disable overlapping modules, and check that addon's current Retail/Midnight page."
+        end
+        return {
+            text = "Addon compatibility with MSUF\n" .. line .. "\nI did not change any MSUF setting.",
+            status = "info", result = "info", summary = "Assistant addon compatibility guidance",
+        }
+    end
+    return {
+        text = table.concat({
+            "Addons that pair well with MSUF",
+            "Verified MSUF integrations:",
+            "1. Clique - click and hover casting; MSUF explicitly registers its unit and group frames for click casting.",
+            "2. SharedMedia packs - extra fonts and bar textures through MSUF's LibSharedMedia support.",
+            "Good separate-system companions:",
+            "3. BetterFriendList - Friends, WHO, Quick Join, and social tools; it does not replace MSUF unit frames.",
+            "4. Plater - nameplates, a separate frame system from MSUF.",
+            "5. BigWigs + LittleWigs - raid and dungeon encounter alerts. Use one encounter-alert family to avoid duplicate bars and sounds.",
+            "6. Details! - combat analysis in separate meter windows.",
+            "7. Leatrix Plus - modular quality-of-life features; enable only the modules you want.",
+            "Useful with overlapping modules disabled:",
+            "8. WeakAuras - custom alerts and overlays. Avoid groups that duplicate MSUF unit-frame auras, cast bars, or resource displays.",
+            "9. Enhance QoL (EQoL) - useful modular quality-of-life tools. Disable EQoL Unit Frames, and turn off any EQoL resource bars, aura containers, group/raid overlays, or movers that duplicate the MSUF surface you use.",
+            "Compatibility rule: keep MSUF as the only addon that owns Player, Target, Party, Raid, and Boss frames. Disable overlapping unit-frame modules and avoid duplicate aura, cast, cooldown, or frame-mover overlays.",
+            "This is bundled offline guidance, not a live compatibility scan. Check each addon's current Retail/Midnight file and changelog before installing.",
+        }, "\n"),
+        status = "info",
+        result = "info",
+        summary = "Assistant addon compatibility guidance",
+    }
+end
+
 local function DirectHelpAnswer(query, opts)
     local norm = Normalize(query)
+    local addonCompanions = ComplementaryAddonAnswer(query)
+    if addonCompanions then return addonCompanions end
     if norm == "help" or norm == "show commands" or norm == "commands" or norm == "what can you do"
         or norm == "what can i ask" or norm == "what can i ask you" or norm == "what can the assistant do"
         or norm == "what can msuf assistant do" or norm == "what can msuf do" or norm == "assistant help"

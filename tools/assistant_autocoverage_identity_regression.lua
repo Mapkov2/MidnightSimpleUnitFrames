@@ -128,5 +128,67 @@ assert(A.Registry:GetSetting("target.trainingNested.display.opacity") == nil,
 assert(A.Registry:GetSetting("general.minimapIconDB.hide") == nil,
     "nested minimap state became a public Assistant setting")
 
+for _, identity in ipairs({
+    { "player", "nameNoEllipsis" },
+    { "player", "nameAnchor" },
+    { "target", "nameAnchor" },
+    { "gf_party", "nameTextAnchor" },
+    { "gf_raid", "nameTextAnchor" },
+    { "target", "nameClipSide" },
+    { "boss", "nameClipSide" },
+    { "gf_party", "barBgTexture" },
+    { "general", "barOutlineColorR" },
+    { "bars", "classPowerOutlineColorR" },
+    { "gf_party", "auraSpacing" },
+    { "gf_raid", "privateAuraAnchor" },
+}) do
+    assert(A.Registry:GetSetting(identity[1] .. "." .. identity[2]) == nil,
+        identity[1] .. "." .. identity[2] .. " became a duplicate generated identity")
+end
+
+local canonicalOwners = assert(A.AutoCoverage.CanonicalPathOwners,
+    "canonical owner ledger missing")
+local canonicalOwnerCount = 0
+for scope, paths in pairs(canonicalOwners) do
+    for dbKey in pairs(paths) do
+        canonicalOwnerCount = canonicalOwnerCount + 1
+        assert(A.Registry:GetSetting(scope .. "." .. dbKey) == nil,
+            scope .. "." .. dbKey .. " became a duplicate generated identity")
+    end
+end
+assert(canonicalOwnerCount == 92,
+    "canonical owner ledger count drifted: " .. tostring(canonicalOwnerCount))
+
+local compatibilityProjectionCount = 0
+for scope, paths in pairs(assert(A.AutoCoverage.CompatibilityProjections,
+    "compatibility projection ledger missing")) do
+    for dbKey, reason in pairs(paths) do
+        compatibilityProjectionCount = compatibilityProjectionCount + 1
+        assert(type(reason) == "string" and reason ~= "",
+            scope .. "." .. dbKey .. " has no retirement rationale")
+        assert(A.Registry:GetSetting(scope .. "." .. dbKey) == nil,
+            scope .. "." .. dbKey .. " became a retired generated identity")
+    end
+end
+assert(compatibilityProjectionCount == 52,
+    "compatibility projection ledger count drifted: " .. tostring(compatibilityProjectionCount))
+
+-- The canonical ledger must fail closed when its reviewed owner is absent,
+-- then claim the exact raw path once that owner exists.
+local ownerCovered = {}
+local claimed, missing = A.AutoCoverage.ApplyCanonicalPathOwnership(ownerCovered, A.Registry)
+assert(claimed == 0 and missing == canonicalOwnerCount and ownerCovered.general.barOutlineColorR == nil,
+    "missing canonical owners were silently claimed")
+local outlineOwner = { key = "general.barOutlineColor", generated = false }
+A.Registry:RegisterSetting(outlineOwner)
+ownerCovered = {}
+claimed, missing = A.AutoCoverage.ApplyCanonicalPathOwnership(ownerCovered, A.Registry)
+assert(claimed == 3 and missing > 0,
+    "exact canonical owner did not claim all three Bar Outline RGB channels")
+assert(ownerCovered.general.barOutlineColorR == outlineOwner
+        and ownerCovered.general.barOutlineColorG == outlineOwner
+        and ownerCovered.general.barOutlineColorB == outlineOwner,
+    "Bar Outline RGB ownership did not resolve to the composite controller")
+
 io.write(("assistant_autocoverage_identity_regression: ok exact_keys=%d scopes=%d profile_noise_ignored=true\n")
     :format(#expectedKeys, #scopes))

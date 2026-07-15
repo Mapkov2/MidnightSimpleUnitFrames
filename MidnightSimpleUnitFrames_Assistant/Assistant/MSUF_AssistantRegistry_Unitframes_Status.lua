@@ -229,9 +229,20 @@ function A.UnitframesRegistry.RegisterStatusIconSettings(ctx, unit)
                 local alias = spec.aliases[a] .. " layer"
                 aliases[#aliases + 1] = alias
                 AddAliasesForUnit(aliases, unit, alias)
+                alias = spec.aliases[a] .. " strata"
+                aliases[#aliases + 1] = alias
+                AddAliasesForUnit(aliases, unit, alias)
             end
-            RegisterUnitNumberSetting(unit, spec.value .. "Layer", spec.layer, spec.label .. " Layer", spec.defaultLayer, 1, 10, aliases, StatusIconOpts(spec, {
+            RegisterUnitNumberSetting(unit, spec.value .. "Layer", spec.layer, spec.label .. " Layer", spec.defaultLayer, 0, 30, aliases, StatusIconOpts(spec, {
                 keySuffix = spec.layer,
+                get = function(unitKey)
+                    local conf, general = UnitDB(unitKey), GeneralDB()
+                    return tonumber(conf[spec.layer])
+                        or (spec.legacyLayer and tonumber(conf[spec.legacyLayer]))
+                        or tonumber(general[spec.layer])
+                        or (spec.legacyLayer and tonumber(general[spec.legacyLayer]))
+                        or spec.defaultLayer
+                end,
             }))
 
             if spec.value == "raidgroupname" then

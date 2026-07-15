@@ -321,6 +321,12 @@ local function FilterSpecByID(id)
 end
 
 local function FindFilterSpec(text)
+    -- Raid is both a group-frame scope and a native filter value. Value-bearing
+    -- syntax must establish the filter goal before scope detection sees the
+    -- trailing word and treats it as a second frame target.
+    if HasAny(text, { "filter to raid", "filters to raid", "filter raid", "filter auf raid" }) then
+        return FilterSpecByID("raid")
+    end
     if HasAny(text, { "buff", "buffs" }) and HasAny(text, { "any dispel type", "all dispel types", "any steal type" }) then
         return FilterSpecByID("dispellableAnyBuff")
     end
@@ -916,7 +922,7 @@ local function FilterPlan(text, ctx)
     if not lane or lane == "both" then
         return {
             kind = "answer", status = "ambiguous",
-            text = "Should this filter apply to Buffs or Debuffs? Also name the frame if it is not already clear—for example: 'show only my target buffs' or 'show only dispellable raid debuffs'. I changed nothing.",
+            text = "Which aura lane should this filter apply to: Buffs or Debuffs? Also name the frame if it is not already clear—for example: 'show only my target buffs' or 'show only dispellable raid debuffs'. I changed nothing.",
             summary = "Asks for the missing aura lane.",
         }
     end

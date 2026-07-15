@@ -118,4 +118,68 @@ function Loader.LoadAssistantRuntime(MSUF, options)
     return loaded, private
 end
 
+local FINGERPRINT_MOD_A = 4294967291
+local FINGERPRINT_MOD_B = 4294967279
+
+function Loader.RegistryInventoryFingerprintFromLists(settings, actions)
+    local rows = {}
+    for i = 1, #(settings or {}) do
+        local key = tostring(settings[i] and settings[i].key or "")
+        assert(key ~= "", "Registry setting inventory contains an empty key")
+        rows[#rows + 1] = "setting\t" .. key
+    end
+    for i = 1, #(actions or {}) do
+        local key = tostring(actions[i] and actions[i].key or "")
+        assert(key ~= "", "Registry action inventory contains an empty key")
+        rows[#rows + 1] = "action\t" .. key
+    end
+    table.sort(rows)
+
+    local hashA, hashB = 2166136261, 5381
+    for i = 1, #rows do
+        local row = rows[i] .. "\n"
+        for j = 1, #row do
+            local byte = row:byte(j)
+            -- Both products remain below Lua 5.1's exact integer range before
+            -- the modulus. Decimal output also avoids C integer-width-specific
+            -- hexadecimal formatting between Windows Lua and CI runtimes.
+            hashA = (hashA * 131 + byte) % FINGERPRINT_MOD_A
+            hashB = (hashB * 65599 + byte) % FINGERPRINT_MOD_B
+        end
+    end
+    return string.format("v1-%.0f-%.0f", hashA, hashB)
+end
+
+function Loader.RegistryInventoryFingerprint(registry)
+    assert(type(registry) == "table", "Registry is required for inventory fingerprint")
+    local settings = assert(type(registry.AllSettings) == "function" and registry:AllSettings(),
+        "Registry settings inventory is unavailable")
+    local actions = assert(type(registry.AllActions) == "function" and registry:AllActions(),
+        "Registry actions inventory is unavailable")
+    return Loader.RegistryInventoryFingerprintFromLists(settings, actions)
+end
+
+function Loader.AssertRegistryInventoryFingerprintContract()
+    local baseline = Loader.RegistryInventoryFingerprintFromLists(
+        { { key = "general.alpha" }, { key = "player.enabled" } },
+        { { key = "open_page" }, { key = "reset_profile" } })
+    local reordered = Loader.RegistryInventoryFingerprintFromLists(
+        { { key = "player.enabled" }, { key = "general.alpha" } },
+        { { key = "reset_profile" }, { key = "open_page" } })
+    assert(baseline == reordered, "Registry fingerprint depends on registration order")
+
+    local sameCountReplacement = Loader.RegistryInventoryFingerprintFromLists(
+        { { key = "general.alpha" }, { key = "target.enabled" } },
+        { { key = "open_page" }, { key = "reset_profile" } })
+    assert(baseline ~= sameCountReplacement,
+        "Registry fingerprint did not detect a same-count setting replacement")
+
+    local kindReplacement = Loader.RegistryInventoryFingerprintFromLists(
+        { { key = "general.alpha" }, { key = "player.enabled" }, { key = "open_page" } },
+        { { key = "reset_profile" } })
+    assert(baseline ~= kindReplacement,
+        "Registry fingerprint did not distinguish setting and action identities")
+    return true
+end
+
 return Loader

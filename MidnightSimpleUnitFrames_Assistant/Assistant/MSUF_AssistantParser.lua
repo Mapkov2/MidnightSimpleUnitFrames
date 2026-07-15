@@ -1658,6 +1658,31 @@ local GLOBAL_BAR_COLOR_SCOPE_BLOCKERS = {
     "castbar", "cast bar", "class power", "class resource",
 }
 
+P.BAR_OUTLINE_COLOR_SEMANTIC_BLOCKERS = P.BAR_OUTLINE_COLOR_SEMANTIC_BLOCKERS or {
+    "castbar", "cast bar", "font", "text", "portrait", "highlight", "aggro",
+    "dispel", "purge", "aura", "buff", "debuff", "spell",
+}
+P.BAR_OUTLINE_COLOR_CONFLICT_TERMS = P.BAR_OUTLINE_COLOR_CONFLICT_TERMS or {
+    "thickness", "thicker", "thinner", "size", "width", "strata", "layer", "offset", "style",
+    "texture", "gradient", "opacity", "alpha", "name", "show", "hide", "enable", "disable",
+    "move", "position", "anchor", "rounded", "rounding", "dicke", "breite", "textur",
+    "deckkraft", "anzeigen", "verstecken", "aktivieren", "deaktivieren",
+    -- Component/channel requests are not composite color requests. Class
+    -- Resources do not expose an independent reviewed outline-color control.
+    "channel", "channels", "component", "components", "class power", "class resource",
+}
+P.BAR_OUTLINE_COLOR_MUTATION_WORDS = P.BAR_OUTLINE_COLOR_MUTATION_WORDS or {
+    set = true, change = true, make = true, use = true, paint = true, want = true,
+    turn = true, give = true,
+    setze = true, stelle = true, aendere = true, mach = true, mache = true, verwende = true,
+}
+P.BAR_OUTLINE_COLOR_SHORTHAND_OBJECTS = P.BAR_OUTLINE_COLOR_SHORTHAND_OBJECTS or {
+    "bar outline", "bar outlines", "bars outline", "bars outlines",
+    "bar border", "bar borders", "bars border", "bars borders",
+    "balken kontur", "balken konturfarbe", "leiste kontur", "leisten kontur",
+    "balkenkontur", "balkenkonturen", "leistenkontur", "leistenkonturen",
+}
+
 local function ParseGlobalUnitFrameColorFastShortcut(normalized, raw)
     if ContainsAny(normalized, GLOBAL_BAR_COLOR_SCOPE_BLOCKERS) then return nil end
     if ContainsAny(normalized, P.RootPhrases[228]) then return nil end
@@ -1983,6 +2008,7 @@ P.CastbarColorFastTerms = P.CastbarColorFastTerms or {
     interruptFeedback = { "interrupt feedback color", "castbar interrupt feedback color", "cast bar interrupt feedback color", "interrupted cast color", "interrupted castbar color", "interrupted cast bar color", "after interrupt cast color" },
     nonInterruptible = { "non interruptible", "noninterruptible", "not interruptible", "uninterruptible", "unkickable", "not kickable", "cannot interrupt", "cant interrupt" },
     playerOverride = { "player castbar override color", "player cast bar override color", "player castbar custom color", "player cast custom color", "custom player castbar color" },
+    targetName = { "castbar target name color", "cast bar target name color", "cast target name color", "cast target text color", "target name on castbar color", "target name on cast bar color", "castbar target text color" },
     text = { "castbar text color", "castbar font color", "cast bar text color", "cast bar font color", "castbar spell name color", "castbar spell text color", "spell name color", "spell text color" },
     border = { "castbar border color", "cast bar border color", "castbar outline color", "cast bar outline color" },
     background = { "castbar background color", "cast bar background color", "castbar bg color", "cast bar bg color" },
@@ -1993,7 +2019,8 @@ local function ParseCastbarColorFastShortcut(normalized, raw)
     local terms = P.CastbarColorFastTerms
     if ContainsAny(normalized, terms.blocked) then return nil end
     if ContainsAny(normalized, terms.aura) then return nil end
-    if not ContainsAny(normalized, terms.root) then return nil end
+    local targetNameIntent = ContainsAny(normalized, terms.targetName)
+    if not targetNameIntent and not ContainsAny(normalized, terms.root) then return nil end
 
     local extract = P.ExtractColor
     if type(extract) ~= "function" then return nil end
@@ -2014,6 +2041,8 @@ local function ParseCastbarColorFastShortcut(normalized, raw)
         key = "general.castbarNonInterruptibleColor"
     elseif ContainsAny(normalized, terms.playerOverride) then
         key = "general.playerCastbarOverrideColor"
+    elseif targetNameIntent then
+        key = "general.castbarTargetNameColor"
     elseif ContainsAny(normalized, terms.text) then
         key = "general.castbarFontColor"
     elseif ContainsAny(normalized, terms.border) then
@@ -2250,33 +2279,261 @@ A._ParseExactColorSettingFastShortcut = A._ParseExactColorSettingFastShortcut or
 end
 
 local function ParseScopedBarOutlineColorFastShortcut(normalized, raw)
-    if ContainsAny(normalized, P.RootPhrases[285]) then return nil end
-    if ContainsAny(normalized, P.RootPhrases[286]) then return nil end
-    if not ContainsAny(normalized, P.RootPhrases[287]) then return nil end
-
-    local units = DetectUnits(normalized)
-    local groups = DetectGroups(normalized)
-    if (#units + #groups) ~= 1 then return nil end
-
-    local scope
-    if #units == 1 then
-        scope = tostring(units[1])
-    else
-        local group = tostring(groups[1])
-        scope = group == "party" and "gf_party" or "gf_raid"
-    end
-
+    -- Resolve the bounded semantic frame behind ordinary bar-outline color
+    -- wording without making the full registry matcher order-insensitive.
+    -- Explicit bar/bars language owns the global domain unless the user also
+    -- names a concrete frame scope; the open Party/Raid page is not a scope.
+    local padded = " " .. Normalize(normalized):gsub("[-_/]", " ") .. " "
+    if not (padded:find(" bar ", 1, true) or padded:find(" bars ", 1, true)
+        or padded:find(" balken ", 1, true) or padded:find(" leiste ", 1, true)
+        or padded:find(" leisten ", 1, true) or padded:find(" spielerbalken ", 1, true)
+        or padded:find(" gruppenbalken ", 1, true) or padded:find(" gruppenleisten ", 1, true)
+        or padded:find(" balkenkontur ", 1, true) or padded:find(" balkenkonturen ", 1, true)
+        or padded:find(" leistenkontur ", 1, true) or padded:find(" leistenkonturen ", 1, true)
+        or (padded:find(" konturfarbe ", 1, true)
+            and (padded:find(" spieler ", 1, true) or padded:find(" gruppe ", 1, true)
+                or padded:find(" spielers ", 1, true) or padded:find(" gruppen ", 1, true))))
+    then return nil end
+    if not (padded:find(" outline ", 1, true) or padded:find(" outlines ", 1, true)
+        or padded:find(" border ", 1, true) or padded:find(" borders ", 1, true)
+        or padded:find(" kontur ", 1, true) or padded:find(" konturen ", 1, true)
+        or padded:find(" konturfarbe ", 1, true) or padded:find(" balkenkontur ", 1, true)
+        or padded:find(" balkenkonturen ", 1, true) or padded:find(" leistenkontur ", 1, true)
+        or padded:find(" leistenkonturen ", 1, true))
+    then return nil end
+    -- A second, fully named color control belongs to the established value-
+    -- token compound parser. Deferring only these reviewed aliases preserves
+    -- valid atomic commands such as "player border color red bar background
+    -- color black" without weakening fail-closed handling for color
+    -- alternatives or incomplete clauses such as "and thickness 2".
+    if padded:find(" bar background color ", 1, true)
+        or padded:find(" bar background tint ", 1, true)
+        or padded:find(" class bar background color ", 1, true)
+        or padded:find(" class bar background tint ", 1, true)
+    then return nil end
     local extract = P.ExtractColor
     if type(extract) ~= "function" then return nil end
     local r, g, b, label = extract(raw or normalized, normalized)
+    if not r and type(A.ColorFromName) == "function" then
+        for word in Normalize(normalized):gmatch("%S+") do
+            r, g, b, label = A.ColorFromName(word)
+            if r then break end
+        end
+        if not r and padded:find(" rote ", 1, true) then r, g, b, label = A.ColorFromName("rot") end
+    end
     if not r then return nil end
-    local setting = A.Registry and A.Registry:GetSetting("barScope." .. scope .. ".barOutlineColor")
-    if not setting then return nil end
+    if ContainsAny(normalized, P.BAR_OUTLINE_COLOR_SEMANTIC_BLOCKERS) then return nil end
+
+    local semanticText = Normalize(normalized)
+    local distinctColors, distinctColorCount = {}, 0
+    if type(A.ColorFromName) == "function" then
+        for word in semanticText:gmatch("%S+") do
+            local cr, cg, cb, colorLabel = A.ColorFromName(word)
+            if cr then
+                local colorKey = tostring(colorLabel or (tostring(cr) .. ":" .. tostring(cg) .. ":" .. tostring(cb)))
+                if not distinctColors[colorKey] then
+                    distinctColors[colorKey] = true
+                    distinctColorCount = distinctColorCount + 1
+                end
+            end
+        end
+    end
+    local rawColorText = tostring(raw or normalized):lower()
+    local _, hashHexCount = rawColorText:gsub("#%x%x%x%x%x%x", "")
+    local _, prefixedHexCount = rawColorText:gsub("0x%x%x%x%x%x%x", "")
+    local rgbSpecCount = 0
+    for _ in semanticText:gmatch("rgb%s+[-+]?%d") do rgbSpecCount = rgbSpecCount + 1 end
+    local bareRgbSpecCount = 0
+    for _ in rawColorText:gmatch("[-+]?%d+%.?%d*%s*,%s*[-+]?%d+%.?%d*%s*,%s*[-+]?%d+%.?%d*") do
+        bareRgbSpecCount = bareRgbSpecCount + 1
+    end
+    local explicitColorSpecCount = distinctColorCount + hashHexCount + prefixedHexCount
+        + math.max(rgbSpecCount, bareRgbSpecCount)
+    local metaOrConditional = semanticText:match("^if%s+")
+        or semanticText:match("^when%s+")
+        or semanticText:match("^should%s+")
+        or semanticText:match("^do%s+you%s+")
+        or semanticText:match("^say%s+")
+        or semanticText:match("^quote%s+")
+        or semanticText:match("^pretend%s+")
+        or semanticText:find(" example ", 1, true)
+        or semanticText:find(" example command ", 1, true)
+        or semanticText:find(" when i say ", 1, true)
+        or semanticText:find(" do nothing ", 1, true)
+        or semanticText:find(" dont do ", 1, true)
+        or semanticText:find(" hypothetical ", 1, true)
+    local readOnlyOrNegated = explicitColorSpecCount > 1 or metaOrConditional
+        or padded:find(" or ", 1, true)
+        or padded:find(" oder ", 1, true)
+        or semanticText:find(" instead of ", 1, true)
+        or rawColorText:find("/", 1, true)
+        or padded:find(" do not ", 1, true)
+        or padded:find(" dont ", 1, true)
+        or padded:find(" never ", 1, true)
+        or padded:find(" not ", 1, true)
+        or padded:find(" anything but ", 1, true)
+        or padded:find(" except ", 1, true)
+        or padded:find(" nicht ", 1, true)
+        or padded:find(" kein ", 1, true)
+        or padded:find(" keine ", 1, true)
+        or padded:find(" ohne ", 1, true)
+        or padded:find(" want to know ", 1, true)
+        or padded:find(" would like to know ", 1, true)
+        or padded:find(" whether ", 1, true)
+        or padded:find(" possible ", 1, true)
+    if readOnlyOrNegated or (P.NonMutatingIntent and P.NonMutatingIntent(normalized)) then
+        return {
+            kind = "unknown",
+            status = "info",
+            text = "I read that as a question or statement, so I kept MSUF unchanged. If you want the change, say 'set the bar outline color to " .. tostring(label or "that color") .. "'.",
+            summary = "Keeps non-mutating bar-outline color language read-only.",
+        }
+    end
+
+    local actionable = P.ActionableText and P.ActionableText(normalized) or Normalize(normalized)
+    local mutation = false
+    local firstActionWord = tostring(actionable or ""):match("^(%S+)")
+    if firstActionWord and P.BAR_OUTLINE_COLOR_MUTATION_WORDS[firstActionWord] then mutation = true end
+    if tostring(actionable or ""):match("^i%s+want%s+")
+        or tostring(actionable or ""):match("^ich%s+will%s+")
+        or tostring(actionable or ""):match("^for%s+.-%s+use%s+")
+        or tostring(actionable or "") == "rote balkenkontur"
+        or tostring(actionable or "") == "rote balkenkonturen"
+        or tostring(actionable or "") == "rote leistenkontur"
+        or tostring(actionable or "") == "rote leistenkonturen"
+    then mutation = true end
+    local firstWord = tostring(actionable or ""):match("^(%S+)")
+    if firstWord == "color" or firstWord == "colour" or firstWord == "faerbe" then mutation = true end
+    if not mutation then
+        local colorToken = Normalize(label)
+        local shorthandAction = tostring(actionable or ""):gsub("%s*=%s*", " "):gsub("%s+", " ")
+        for i = 1, #P.BAR_OUTLINE_COLOR_SHORTHAND_OBJECTS do
+            local object = P.BAR_OUTLINE_COLOR_SHORTHAND_OBJECTS[i]
+            if shorthandAction == object .. " " .. colorToken
+                or shorthandAction == colorToken .. " " .. object
+                or shorthandAction == object .. " color " .. colorToken
+                or shorthandAction == object .. " colour " .. colorToken
+            then
+                mutation = true
+                break
+            end
+        end
+    end
+    if not mutation then
+        return {
+            kind = "unknown",
+            status = "info",
+            text = "I read that as a statement, so I kept MSUF unchanged. To apply it, say 'set the bar outline color to " .. tostring(label or "that color") .. "'.",
+            summary = "Keeps declarative bar-outline color language read-only.",
+        }
+    end
+
+    if padded:find(" here ", 1, true)
+        or padded:find(" this page ", 1, true)
+        or padded:find(" this pages ", 1, true)
+        or padded:find(" this frame ", 1, true)
+        or padded:find(" this frames ", 1, true)
+        or padded:find(" current frame ", 1, true)
+        or padded:find(" selected frame ", 1, true)
+    then
+        return {
+            kind = "unknown",
+            status = "info",
+            text = "I kept MSUF unchanged because that wording points at the current page or frame. Name Player, Target, Party, Raid, or say shared bars so I do not change the wrong outline.",
+            summary = "Keeps deictic bar-outline scope fail-closed until the user names a frame.",
+        }
+    end
+
+    local scopeKeys, seen = {}, {}
+    local function AddScope(key)
+        if not seen[key] then seen[key] = true; scopeKeys[#scopeKeys + 1] = key end
+    end
+    -- Scope detection here is deliberately text-only. Generic bar/bars words
+    -- must not inherit the currently open Unit or Group page.
+    local scopeText = padded
+    if scopeText:find(" target of target ", 1, true) or scopeText:find(" targettarget ", 1, true) then
+        AddScope("barScope.targettarget.barOutlineColor")
+        scopeText = scopeText:gsub(" target of target ", " "):gsub(" targettarget ", " ")
+    end
+    if scopeText:find(" focus target ", 1, true) or scopeText:find(" focustarget ", 1, true) then
+        AddScope("barScope.focustarget.barOutlineColor")
+        scopeText = scopeText:gsub(" focus target ", " "):gsub(" focustarget ", " ")
+    end
+    if scopeText:find(" player ", 1, true) or scopeText:find(" spieler ", 1, true)
+        or scopeText:find(" spielers ", 1, true)
+        or scopeText:find(" spielerbalken ", 1, true)
+    then AddScope("barScope.player.barOutlineColor") end
+    if scopeText:find(" target ", 1, true) or scopeText:find(" ziel ", 1, true) then AddScope("barScope.target.barOutlineColor") end
+    if scopeText:find(" focus ", 1, true) or scopeText:find(" fokus ", 1, true) then AddScope("barScope.focus.barOutlineColor") end
+    if scopeText:find(" pet ", 1, true) or scopeText:find(" begleiter ", 1, true) then AddScope("barScope.pet.barOutlineColor") end
+    if scopeText:find(" boss ", 1, true) then AddScope("barScope.boss.barOutlineColor") end
+    if scopeText:find(" mythic raid ", 1, true) or scopeText:find(" mythicraid ", 1, true) then
+        AddScope("barScope.gf_raid.barOutlineColor")
+        scopeText = scopeText:gsub(" mythic raid ", " "):gsub(" mythicraid ", " ")
+    end
+    local explicitParty = scopeText:find(" party ", 1, true) ~= nil
+    local explicitRaid = scopeText:find(" raid ", 1, true) ~= nil or scopeText:find(" schlachtzug ", 1, true) ~= nil
+    if explicitParty then AddScope("barScope.gf_party.barOutlineColor") end
+    if explicitRaid then AddScope("barScope.gf_raid.barOutlineColor") end
+    if scopeText:find(" group frame ", 1, true) or scopeText:find(" group frames ", 1, true) then
+        AddScope("barScope.gf_party.barOutlineColor")
+        AddScope("barScope.gf_raid.barOutlineColor")
+    end
+    local genericGroup = (scopeText:find(" group ", 1, true) ~= nil
+        or scopeText:find(" groups ", 1, true) ~= nil
+        or scopeText:find(" gruppe ", 1, true) ~= nil
+        or scopeText:find(" gruppen ", 1, true) ~= nil
+        or scopeText:find(" gruppenbalken ", 1, true) ~= nil
+        or scopeText:find(" gruppenleisten ", 1, true) ~= nil)
+        and not explicitParty and not explicitRaid
+    if genericGroup then
+        AddScope("barScope.gf_party.barOutlineColor")
+        AddScope("barScope.gf_raid.barOutlineColor")
+    end
+
+    local _, joinCount = Normalize(normalized):gsub(" and ", " ")
+    local conflict = ContainsAny(normalized, P.BAR_OUTLINE_COLOR_CONFLICT_TERMS)
+        or padded:find(" then ", 1, true) ~= nil
+        or (joinCount > 0 and (#scopeKeys < 2 or joinCount > 1))
+    if conflict then
+        return {
+            kind = "unknown",
+            status = "info",
+            text = "I understood the " .. tostring(label or "requested") .. " bar-outline color, but that sentence also asks for another detail. I kept MSUF unchanged. Send the color and the other change as separate requests.",
+            summary = "Keeps a compound bar-outline request fail-closed instead of dropping a clause.",
+        }
+    end
+    if #scopeKeys == 0 then scopeKeys[1] = "general.barOutlineColor" end
+
+    local choices = {}
+    for i = 1, #scopeKeys do
+        local setting = A.Registry and A.Registry:GetSetting(scopeKeys[i])
+        if setting then
+            choices[#choices + 1] = {
+                setting = setting,
+                value = { r = r, g = g, b = b, label = label },
+                valueLabel = label,
+                label = tostring(setting.label or "Bar Outline Color") .. ": " .. tostring(label or "custom color"),
+            }
+        end
+    end
+    if #choices == 0 then return nil end
+    if #choices > 1 then
+        return {
+            kind = "ambiguous",
+            choices = choices,
+            label = "Choose which bar outline color to change",
+            choiceIntro = genericGroup
+                and "'Group' can mean Party or Raid. Choose one; I retained the requested " .. tostring(label or "custom") .. " color."
+                or "You named more than one bar scope. Choose one; I retained the requested " .. tostring(label or "custom") .. " color.",
+            summary = "Retains the requested color while asking for one explicit bar scope.",
+        }
+    end
     return {
         kind = "changes",
-        changes = { { setting = setting, value = { r = r, g = g, b = b, label = label } } },
-        label = setting.label or "Bar Outline Color",
-        summary = "Changes a target-specific bar outline color.",
+        changes = choices,
+        label = choices[1].setting.label or "Bar Outline Color",
+        summary = "Changes the requested bar outline color independent of word order.",
     }
 end
 
@@ -3308,20 +3565,26 @@ local function ParseGroupNumberFastShortcut(normalized)
     if #explicitUnits > 0 and not hasConcreteGroupScope then
         -- Unit-frame "group number in name" is a different setting. An
         -- explicit Player/Target/etc. scope must not fan out to every group.
-        local unitValue = DetectBoolean(normalized)
-        if unitValue == nil then unitValue = true end
+        local isLayer = ContainsAny(normalized, {
+            "layer", "draw layer", "frame level", "strata", "frame strata", "ebene", "schicht",
+        })
+        local unitValue = isLayer and FirstNumber(normalized) or DetectBoolean(normalized)
+        if unitValue == nil and not isLayer then unitValue = true end
+        if unitValue == nil then return nil end
         local unitChanges = {}
         for i = 1, #explicitUnits do
-            local setting = A.Registry and A.Registry:GetSetting(tostring(explicitUnits[i]) .. ".showRaidGroupInName")
+            local suffix = isLayer and ".raidGroupNameLayer" or ".showRaidGroupInName"
+            local setting = A.Registry and A.Registry:GetSetting(tostring(explicitUnits[i]) .. suffix)
             if setting then unitChanges[#unitChanges + 1] = { setting = setting, value = unitValue } end
         end
         if #unitChanges == 0 then return nil end
         return {
             kind = "changes",
             changes = unitChanges,
-            label = #unitChanges == 1 and (unitChanges[1].setting.label or "Raid Group Name") or "Raid Group Names",
+            label = #unitChanges == 1 and (unitChanges[1].setting.label or (isLayer and "Raid Group Name Layer" or "Raid Group Name")) or (isLayer and "Raid Group Name Layers" or "Raid Group Names"),
             bulkSafe = #unitChanges > 1,
-            summary = "Changes the unit-frame raid-group number shown with the name.",
+            summary = isLayer and "Changes the unit-frame raid-group number layer."
+                or "Changes the unit-frame raid-group number shown with the name.",
         }
     end
     if #groups == 0 and ContainsAny(normalized, P.RootPhrases[467]) then
@@ -3354,6 +3617,12 @@ local function ParseGroupNumberFastShortcut(normalized)
     elseif ContainsAny(normalized, P.RootPhrases[471]) then
         attr = "groupNumberSize"
         label = "Group Number Size"
+        value = FirstNumber(normalized)
+    elseif ContainsAny(normalized, {
+        "layer", "draw layer", "frame level", "strata", "frame strata", "ebene", "schicht",
+    }) then
+        attr = "groupNumberLayer"
+        label = "Group Number Layer"
         value = FirstNumber(normalized)
     else
         attr = "showGroupNumber"
@@ -5497,6 +5766,13 @@ function A.Parse(text, ctxOverride)
     local normalized = P.Normalize(raw)
     local ctx = type(ctxOverride) == "table" and ctxOverride or (A.GetContext and A.GetContext() or {})
     if normalized == "" then return { kind = "empty" } end
+    local semanticBarOutlineColor = A._ParseScopedBarOutlineColorFastShortcut
+        and A._ParseScopedBarOutlineColorFastShortcut(normalized, raw)
+    if semanticBarOutlineColor then
+        semanticBarOutlineColor.raw = raw
+        semanticBarOutlineColor.normalized = normalized
+        return semanticBarOutlineColor
+    end
     local textPositionCopy = A._ParseUnitTextPositionCopyShortcut and A._ParseUnitTextPositionCopyShortcut(normalized)
     if textPositionCopy then
         textPositionCopy.raw = raw
@@ -5530,6 +5806,16 @@ function A.Parse(text, ctxOverride)
         auraFilteringPriority.raw = raw
         auraFilteringPriority.normalized = normalized
         return auraFilteringPriority
+    end
+    -- Aura layout terms such as growth and spacing own both lane-specific
+    -- controls. Resolve them before generated exact aliases (for example the
+    -- legacy Party Aura Spacing field) can collapse a reviewed Buff+Debuff
+    -- request into one unrelated/generated setting.
+    local auraGeometryPriority = P.AuraGeometryShortcut and P.AuraGeometryShortcut(normalized)
+    if auraGeometryPriority then
+        auraGeometryPriority.raw = raw
+        auraGeometryPriority.normalized = normalized
+        return auraGeometryPriority
     end
     -- Slot color-mode settings intentionally use resource names such as
     -- "maelstrom" too. Keep reset-color phrases out of the broad exact-setting
@@ -5926,6 +6212,16 @@ function A.Parse(text, ctxOverride)
                 label = setting.label or "Global Font Size", summary = "Changes the global MSUF font size.",
                 raw = raw, normalized = normalized }
         end
+    end
+    -- "cast target name" also looks like a scoped unit-frame name-color
+    -- request. Resolve the explicit Castbar phrase first so it cannot be
+    -- consumed by the broader target-name font shortcut.
+    local castbarTargetNameColorPriorityParsed = ContainsAny(normalized, P.CastbarColorFastTerms.targetName)
+        and A._ParseCastbarColorFastShortcut and A._ParseCastbarColorFastShortcut(normalized, raw)
+    if castbarTargetNameColorPriorityParsed then
+        castbarTargetNameColorPriorityParsed.raw = raw
+        castbarTargetNameColorPriorityParsed.normalized = normalized
+        return castbarTargetNameColorPriorityParsed
     end
     local multiFontColorIntent = normalized:find("name", 1, true)
         and (normalized:find("health text", 1, true) or normalized:find("hp text", 1, true)

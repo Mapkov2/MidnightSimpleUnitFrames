@@ -36,6 +36,193 @@ local UNIT_SCOPES = {
 }
 local GROUP_SCOPES = { gf_party = "party", gf_raid = "raid", gf_mythicraid = "mythicraid" }
 local FLAT_SCOPES = { general = true, bars = true, gameplay = true }
+
+-- Exact raw-storage projections which are already owned by a reviewed public
+-- setting.  AutoCoverage must not publish a second controller for these keys:
+-- doing so makes a natural request compete with the real control and can even
+-- bypass its value semantics (for example, treating one RGB channel as an
+-- independent unbounded number).  CoverageAudit verifies the named owner at
+-- runtime; if an owner is removed or renamed, the raw path becomes a hard
+-- coverage gap instead of silently falling back to a generated setting.
+local CANONICAL_PATH_OWNERS = {
+    player = {
+        anchorMyPoint = "player.point",
+        anchorRelPoint = "player.point",
+        nameAnchor = "player.nameTextAnchor",
+        nameClipSide = "fontScope.shared.shortenNameClipSide",
+        nameMaxChars = "fontScope.shared.shortenNameMaxChars",
+        nameNoEllipsis = "fontScope.shared.shortenNameNoEllipsis",
+        nameShortenEnabled = "fontScope.shared.shortenNames",
+        relativePoint = "player.point",
+        shortenNameClipSide = "fontScope.shared.shortenNameClipSide",
+        shortenNameMaxChars = "fontScope.shared.shortenNameMaxChars",
+        shortenNameShowDots = "fontScope.shared.shortenNameNoEllipsis",
+        shortenNames = "fontScope.shared.shortenNames",
+    },
+    target = {
+        anchorMyPoint = "target.point",
+        anchorRelPoint = "target.point",
+        nameAnchor = "target.nameTextAnchor",
+        nameClipSide = "fontScope.target.shortenNameClipSide",
+        nameMaxChars = "fontScope.target.shortenNameMaxChars",
+        nameNoEllipsis = "fontScope.target.shortenNameNoEllipsis",
+        nameShortenEnabled = "fontScope.target.shortenNames",
+        relativePoint = "target.point",
+        shortenNameShowDots = "fontScope.target.shortenNameNoEllipsis",
+    },
+    targettarget = {
+        anchorMyPoint = "targettarget.point",
+        anchorRelPoint = "targettarget.point",
+        nameAnchor = "targettarget.nameTextAnchor",
+        nameClipSide = "fontScope.targettarget.shortenNameClipSide",
+        nameMaxChars = "fontScope.targettarget.shortenNameMaxChars",
+        nameNoEllipsis = "fontScope.targettarget.shortenNameNoEllipsis",
+        nameShortenEnabled = "fontScope.targettarget.shortenNames",
+        relativePoint = "targettarget.point",
+        shortenNameShowDots = "fontScope.targettarget.shortenNameNoEllipsis",
+    },
+    focustarget = {
+        anchorMyPoint = "focustarget.point",
+        anchorRelPoint = "focustarget.point",
+        nameAnchor = "focustarget.nameTextAnchor",
+        nameClipSide = "fontScope.focustarget.shortenNameClipSide",
+        nameMaxChars = "fontScope.focustarget.shortenNameMaxChars",
+        nameNoEllipsis = "fontScope.focustarget.shortenNameNoEllipsis",
+        nameShortenEnabled = "fontScope.focustarget.shortenNames",
+        relativePoint = "focustarget.point",
+        shortenNameShowDots = "fontScope.focustarget.shortenNameNoEllipsis",
+    },
+    focus = {
+        anchorMyPoint = "focus.point",
+        anchorRelPoint = "focus.point",
+        nameAnchor = "focus.nameTextAnchor",
+        nameClipSide = "fontScope.focus.shortenNameClipSide",
+        nameMaxChars = "fontScope.focus.shortenNameMaxChars",
+        nameNoEllipsis = "fontScope.focus.shortenNameNoEllipsis",
+        nameShortenEnabled = "fontScope.focus.shortenNames",
+        relativePoint = "focus.point",
+        shortenNameShowDots = "fontScope.focus.shortenNameNoEllipsis",
+    },
+    pet = {
+        anchorMyPoint = "pet.point",
+        anchorRelPoint = "pet.point",
+        nameAnchor = "pet.nameTextAnchor",
+        nameClipSide = "fontScope.pet.shortenNameClipSide",
+        nameMaxChars = "fontScope.pet.shortenNameMaxChars",
+        nameNoEllipsis = "fontScope.pet.shortenNameNoEllipsis",
+        nameShortenEnabled = "fontScope.pet.shortenNames",
+        relativePoint = "pet.point",
+        shortenNameShowDots = "fontScope.pet.shortenNameNoEllipsis",
+    },
+    boss = {
+        anchorMyPoint = "boss.point",
+        anchorRelPoint = "boss.point",
+        nameAnchor = "boss.nameTextAnchor",
+        nameClipSide = "fontScope.boss.shortenNameClipSide",
+        nameMaxChars = "fontScope.boss.shortenNameMaxChars",
+        nameNoEllipsis = "fontScope.boss.shortenNameNoEllipsis",
+        nameShortenEnabled = "fontScope.boss.shortenNames",
+        relativePoint = "boss.point",
+        shortenNameShowDots = "fontScope.boss.shortenNameNoEllipsis",
+    },
+    gf_party = {
+        barBgTexture = "barScope.gf_party.barBackgroundTexture",
+        hpTextSeparator = "gf_party.textDelimiter",
+        nameTextAnchor = "gf_party.nameAnchor",
+        point = "gf_party.anchorPoint",
+        powerTextSeparator = "gf_party.powerTextDelimiter",
+        shortenNameClipSide = "gf_party.nameClipSide",
+        shortenNameMaxChars = "gf_party.nameMaxChars",
+        shortenNameShowDots = "gf_party.nameNoEllipsis",
+        shortenNames = "gf_party.nameShortenEnabled",
+    },
+    gf_raid = {
+        nameTextAnchor = "gf_raid.nameAnchor",
+        point = "gf_raid.anchorPoint",
+        shortenNameClipSide = "gf_raid.nameClipSide",
+        shortenNameMaxChars = "gf_raid.nameMaxChars",
+        shortenNameShowDots = "gf_raid.nameNoEllipsis",
+        shortenNames = "gf_raid.nameShortenEnabled",
+    },
+    gf_mythicraid = {
+        nameTextAnchor = "gf_mythicraid.nameAnchor",
+        point = "gf_mythicraid.anchorPoint",
+        shortenNameClipSide = "gf_mythicraid.nameClipSide",
+        shortenNameMaxChars = "gf_mythicraid.nameMaxChars",
+        shortenNameShowDots = "gf_mythicraid.nameNoEllipsis",
+        shortenNames = "gf_mythicraid.nameShortenEnabled",
+    },
+    general = {
+        barBgTexture = "general.barBackgroundTexture",
+        barOutlineColorR = "general.barOutlineColor",
+        barOutlineColorG = "general.barOutlineColor",
+        barOutlineColorB = "general.barOutlineColor",
+        shortenNameShowDots = "fontScope.shared.shortenNameNoEllipsis",
+    },
+}
+
+-- Exact compatibility fields retained in old/default profile shapes but no
+-- longer read by the runtime.  They have no independent Menu2 or Assistant
+-- identity.  Keep this review ledger narrow and evidence-backed: unlike a
+-- broad name-pattern exclusion, any newly introduced field remains visible to
+-- the normal coverage gate.
+local COMPATIBILITY_PROJECTIONS = {
+    bars = {
+        classPowerOutlineColorR = "Retired class-resource outline color channel; the runtime exposes outline thickness only.",
+        classPowerOutlineColorG = "Retired class-resource outline color channel; the runtime exposes outline thickness only.",
+        classPowerOutlineColorB = "Retired class-resource outline color channel; the runtime exposes outline thickness only.",
+    },
+    player = {
+        hpTextAnchor = "Retired saved text-anchor field with no runtime or Menu2 consumer.",
+        powerTextAnchor = "Retired saved text-anchor field with no runtime or Menu2 consumer.",
+    },
+    target = {
+        hpTextAnchor = "Retired saved text-anchor field with no runtime or Menu2 consumer.",
+        powerTextAnchor = "Retired saved text-anchor field with no runtime or Menu2 consumer.",
+    },
+    targettarget = {
+        hpTextAnchor = "Retired saved text-anchor field with no runtime or Menu2 consumer.",
+        powerTextAnchor = "Retired saved text-anchor field with no runtime or Menu2 consumer.",
+    },
+    focus = {
+        hpTextAnchor = "Retired saved text-anchor field with no runtime or Menu2 consumer.",
+        powerTextAnchor = "Retired saved text-anchor field with no runtime or Menu2 consumer.",
+    },
+    pet = {
+        hpTextAnchor = "Retired saved text-anchor field with no runtime or Menu2 consumer.",
+        powerTextAnchor = "Retired saved text-anchor field with no runtime or Menu2 consumer.",
+    },
+    boss = {
+        hpTextAnchor = "Retired saved text-anchor field with no runtime or Menu2 consumer.",
+        powerTextAnchor = "Retired saved text-anchor field with no runtime or Menu2 consumer.",
+    },
+}
+local GROUP_COMPATIBILITY_PROJECTIONS = {
+    auraSpacing = "Retired flat aura spacing mirror; live group aura geometry uses the nested Buff and Debuff controls.",
+    nameShorten = "Retired pre-normalization group-name shortening field; the canonical group controls own the effective state.",
+    nameShortenMax = "Retired pre-normalization group-name length field; the canonical group controls own the effective state.",
+    privateAuraAnchor = "Retired private-aura layout field with no runtime or Menu2 consumer.",
+    privateAuraCountdown = "Retired private-aura layout field with no runtime or Menu2 consumer.",
+    privateAuraMax = "Retired private-aura layout field with no runtime or Menu2 consumer.",
+    privateAuraSize = "Retired private-aura layout field with no runtime or Menu2 consumer.",
+    privateAuraX = "Retired private-aura layout field with no runtime or Menu2 consumer.",
+    privateAuraY = "Retired private-aura layout field with no runtime or Menu2 consumer.",
+    privateAurasEnabled = "Retired private-aura layout field with no runtime or Menu2 consumer.",
+    shortenNameFrontMaskPx = "Retired unit-only name-mask implementation field; group-frame runtime never consumes it.",
+}
+local function CopyGroupCompatibilityProjections(includeRetiredTextAnchors)
+    local out = {}
+    for key, reason in pairs(GROUP_COMPATIBILITY_PROJECTIONS) do out[key] = reason end
+    if includeRetiredTextAnchors then
+        out.hpTextAnchor = "Retired saved text-anchor field with no runtime or Menu2 consumer."
+        out.powerTextAnchor = "Retired saved text-anchor field with no runtime or Menu2 consumer."
+    end
+    return out
+end
+COMPATIBILITY_PROJECTIONS.gf_party = CopyGroupCompatibilityProjections(true)
+COMPATIBILITY_PROJECTIONS.gf_raid = CopyGroupCompatibilityProjections(true)
+COMPATIBILITY_PROJECTIONS.gf_mythicraid = CopyGroupCompatibilityProjections(false)
+
 local GENERATED_EXCLUSIONS = {
     general = {
         disableScaling = true, -- retired migration flag; never a public setting
@@ -43,11 +230,62 @@ local GENERATED_EXCLUSIONS = {
     },
 }
 
+local function CanonicalPathOwner(scope, key)
+    local scoped = CANONICAL_PATH_OWNERS[scope]
+    return scoped and scoped[key] or nil
+end
+Auto.CanonicalPathOwner = CanonicalPathOwner
+Auto.CanonicalPathOwners = CANONICAL_PATH_OWNERS
+
+local function CompatibilityProjectionReason(scope, key)
+    local scoped = COMPATIBILITY_PROJECTIONS[scope]
+    return scoped and scoped[key] or nil
+end
+Auto.CompatibilityProjectionReason = CompatibilityProjectionReason
+Auto.CompatibilityProjections = COMPATIBILITY_PROJECTIONS
+
 local function IsGeneratedPathAllowed(scope, key)
     local excluded = GENERATED_EXCLUSIONS[scope]
-    return not (excluded and excluded[key] == true)
+    return not ((excluded and excluded[key] == true)
+        or CanonicalPathOwner(scope, key) ~= nil
+        or CompatibilityProjectionReason(scope, key) ~= nil)
 end
 Auto.IsGeneratedPathAllowed = IsGeneratedPathAllowed
+
+-- Adds reviewed raw-path ownership to a CoverageAudit result without mutating
+-- the public registry descriptors.  This keeps the storage ledger centralized
+-- in AutoCoverage and makes owner drift fail closed: an absent owner is not
+-- claimed and will remain a visible DB coverage gap.
+function Auto.ApplyCanonicalPathOwnership(covered, Registry)
+    if type(covered) ~= "table" or type(Registry) ~= "table"
+        or type(Registry.GetSetting) ~= "function" then return 0, 0 end
+    local Audit = A.CoverageAudit
+    local NormalizeKey = Audit and Audit.NormalizeCoverageKey
+        or function(value) return tostring(value or ""):lower():gsub("[^%w]", "") end
+    local claimed, missing = 0, 0
+    for scope, paths in pairs(CANONICAL_PATH_OWNERS) do
+        local scopeSet = covered[scope]
+        if not scopeSet then
+            scopeSet = { _norm = {} }
+            covered[scope] = scopeSet
+        elseif type(scopeSet._norm) ~= "table" then
+            scopeSet._norm = {}
+        end
+        for dbKey, ownerKey in pairs(paths) do
+            local owner = Registry:GetSetting(ownerKey)
+            if type(owner) == "table" and owner.generated ~= true then
+                scopeSet[dbKey] = owner
+                scopeSet._norm[NormalizeKey(dbKey)] = owner
+                claimed = claimed + 1
+            else
+                missing = missing + 1
+            end
+        end
+    end
+    Auto.lastCanonicalOwnershipClaimed = claimed
+    Auto.lastCanonicalOwnershipMissing = missing
+    return claimed, missing
+end
 
 -- "Channel" keeps these distinct from color VALUE words ("set X color to red")
 -- that the color parser owns.

@@ -369,6 +369,10 @@ end
 
 A.RouterSafePlanningReply = function(title, body, examples, actions, planItems, summary)
     A.RouterClearPendingResultsForRoute()
+    -- A full planning request starts a new topic just like a new search. Do
+    -- not leave a previous setting/repair choice live behind the read-only
+    -- answer, where a later unit name could silently apply that stale choice.
+    A.RouterClearPendingChoicesForRoute()
     title = tostring(title or "Safe planning guidance")
     body = tostring(body or "")
     examples = tostring(examples or "guided setup; run checks; open player.")

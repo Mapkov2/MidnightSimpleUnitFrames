@@ -73,6 +73,38 @@ local targetTargetNameXSetting, targetTargetNameXBox, targetTargetNameXOriginal 
     "targettarget.nameOffsetX", 0)
 local targetTargetRootXSetting, targetTargetRootXBox, targetTargetRootXOriginal = patchSetting(
     "targettarget.offsetX", 37)
+local partyNameAnchorSetting, partyNameAnchorBox, partyNameAnchorOriginal = patchSetting(
+    "gf_party.nameAnchor", "RIGHT")
+local raidNameAnchorSetting, raidNameAnchorBox, raidNameAnchorOriginal = patchSetting(
+    "gf_raid.nameAnchor", "LEFT")
+local unitNameAnchorCases = {
+    { scope = "player", key = "player.nameTextAnchor" },
+    { scope = "target", key = "target.nameTextAnchor" },
+    { scope = "focus", key = "focus.nameTextAnchor" },
+    { scope = "pet", key = "pet.nameTextAnchor" },
+    { scope = "boss", key = "boss.nameTextAnchor" },
+    { scope = "focus target", key = "focustarget.nameTextAnchor" },
+}
+for i = 1, #unitNameAnchorCases do
+    local item = unitNameAnchorCases[i]
+    item.setting, item.box, item.original = patchSetting(item.key, "LEFT")
+end
+local groupAuraSpacingCases = {
+    { scope = "party", prefix = "gf_party" },
+    { scope = "raid", prefix = "gf_raid" },
+    { scope = "mythic raid", prefix = "gf_mythicraid" },
+}
+for i = 1, #groupAuraSpacingCases do
+    local item = groupAuraSpacingCases[i]
+    item.buffSetting, item.buffBox, item.buffOriginal = patchSetting(
+        item.prefix .. ".auras.buff.spacing", 2)
+    item.debuffSetting, item.debuffBox, item.debuffOriginal = patchSetting(
+        item.prefix .. ".auras.debuff.spacing", 2)
+end
+local partyBuffSizeSetting, partyBuffSizeBox, partyBuffSizeOriginal = patchSetting(
+    "gf_party.auras.buff.size", 24)
+local partyDebuffSizeSetting, partyDebuffSizeBox, partyDebuffSizeOriginal = patchSetting(
+    "gf_party.auras.debuff.size", 26)
 local playerRaidMarkerAnchorSetting, playerRaidMarkerAnchorBox, playerRaidMarkerAnchorOriginal = patchSetting(
     "player.raidMarkerAnchor", "TOPLEFT")
 local playerRaidMarkerXSetting, playerRaidMarkerXBox, playerRaidMarkerXOriginal = patchSetting(
@@ -132,6 +164,68 @@ assert(status(relativeNameMove) == "applied" or status(relativeNameMove) == "unc
     "existing relative name follow-up stopped working")
 assert(targetTargetNameXBox.value == 10, "relative name follow-up did not use Name X Position")
 assert(targetTargetRootXBox.value == 37, "relative name follow-up changed the Target of Target frame root")
+
+resetTask()
+targetTargetNameAnchorBox.value, targetTargetNameXBox.value, targetTargetRootXBox.value = "RIGHT", 0, 37
+local explicitNameAnchor = assert(A.HandleInput("set target of target name anchor to right"))
+assert(status(explicitNameAnchor) == "unchanged", "explicit reviewed name-anchor no-op was not unchanged")
+assert(lower(explicitNameAnchor.text):find("already set", 1, true),
+    "explicit reviewed name-anchor no-op did not explain that the value was already set")
+assert(targetTargetNameAnchorBox.value == "RIGHT", "explicit name-anchor no-op changed Name Text Anchor")
+assert(targetTargetNameXBox.value == 0, "explicit name-anchor no-op leaked into Name X Position")
+assert(targetTargetRootXBox.value == 37, "explicit name-anchor no-op changed the Target of Target frame root")
+assert(#A.undoStack == 0, "explicit name-anchor no-op created an undoable mutation")
+
+for i = 1, #unitNameAnchorCases do
+    resetTask()
+    local item = unitNameAnchorCases[i]
+    item.box.value = "LEFT"
+    local prompt = "set " .. item.scope .. " name anchor to right"
+    local result = assert(A.HandleInput(prompt), prompt .. ": missing result")
+    assert(status(result) == "applied", prompt .. ": public handler did not apply reviewed Name Text Anchor")
+    assert(item.box.value == "RIGHT", prompt .. ": changed the wrong setting owner")
+    assert(not lower(result.text):find("raw fallback", 1, true),
+        prompt .. ": was intercepted by a generated compatibility shadow")
+end
+
+for i = 1, #groupAuraSpacingCases do
+    resetTask()
+    local item = groupAuraSpacingCases[i]
+    item.buffBox.value, item.debuffBox.value = 2, 2
+    local prompt = "set " .. item.scope .. " aura spacing to 4"
+    local result = assert(A.HandleInput(prompt), prompt .. ": missing result")
+    assert(status(result) == "applied", prompt .. ": public handler did not apply shared Aura Spacing")
+    assert(item.buffBox.value == 4 and item.debuffBox.value == 4,
+        prompt .. ": did not update the reviewed Buff and Debuff spacing pair")
+    assert(#A.undoStack == 1, prompt .. ": did not create one compound undo transaction")
+end
+
+resetTask()
+partyBuffSizeBox.value, partyDebuffSizeBox.value = 24, 26
+local privateAuraLayout = assert(A.HandleInput("set party private aura size to 20"))
+assert(status(privateAuraLayout) == "info", "Private Aura layout request did not fail closed as info")
+assert(lower(privateAuraLayout.text):find("no standalone private aura", 1, true),
+    "Private Aura layout request omitted the explicit capability boundary")
+assert(partyBuffSizeBox.value == 24 and partyDebuffSizeBox.value == 26,
+    "Private Aura layout request changed an ordinary Buff or Debuff size")
+assert(#A.undoStack == 0, "Private Aura layout request created an undoable mutation")
+
+resetTask()
+partyNameAnchorBox.value = "RIGHT"
+local explicitPartyNameAnchor = assert(A.HandleInput("set party name text anchor to left"))
+assert(status(explicitPartyNameAnchor) == "applied", "reviewed Party Name Anchor write was not applied")
+assert(partyNameAnchorBox.value == "LEFT", "Party name-text anchor wording did not write reviewed Party Name Anchor")
+assert(not lower(explicitPartyNameAnchor.text):find("raw fallback", 1, true),
+    "Party name-text anchor wording was intercepted by its generated compatibility shadow")
+
+resetTask()
+raidNameAnchorBox.value = "LEFT"
+local explicitRaidNameAnchor = assert(A.HandleInput("set raid name text anchor to left"))
+assert(status(explicitRaidNameAnchor) == "unchanged", "reviewed Raid Name Anchor no-op was not unchanged")
+assert(lower(explicitRaidNameAnchor.text):find("already set", 1, true),
+    "reviewed Raid Name Anchor no-op did not explain that the value was already set")
+assert(raidNameAnchorBox.value == "LEFT", "Raid name-text anchor no-op changed the reviewed owner")
+assert(#A.undoStack == 0, "Raid name-text anchor no-op created an undoable mutation")
 
 resetTask()
 playerRaidMarkerAnchorBox.value, playerRaidMarkerXBox.value, playerRootXBox.value = "TOPLEFT", 16, -2
@@ -271,7 +365,20 @@ playerRootXSetting.get, playerRootXSetting.set, playerRootXSetting.apply = playe
 targetTargetNameAnchorSetting.get, targetTargetNameAnchorSetting.set, targetTargetNameAnchorSetting.apply = targetTargetNameAnchorOriginal.get, targetTargetNameAnchorOriginal.set, targetTargetNameAnchorOriginal.apply
 targetTargetNameXSetting.get, targetTargetNameXSetting.set, targetTargetNameXSetting.apply = targetTargetNameXOriginal.get, targetTargetNameXOriginal.set, targetTargetNameXOriginal.apply
 targetTargetRootXSetting.get, targetTargetRootXSetting.set, targetTargetRootXSetting.apply = targetTargetRootXOriginal.get, targetTargetRootXOriginal.set, targetTargetRootXOriginal.apply
+partyNameAnchorSetting.get, partyNameAnchorSetting.set, partyNameAnchorSetting.apply = partyNameAnchorOriginal.get, partyNameAnchorOriginal.set, partyNameAnchorOriginal.apply
+raidNameAnchorSetting.get, raidNameAnchorSetting.set, raidNameAnchorSetting.apply = raidNameAnchorOriginal.get, raidNameAnchorOriginal.set, raidNameAnchorOriginal.apply
+for i = 1, #unitNameAnchorCases do
+    local item = unitNameAnchorCases[i]
+    item.setting.get, item.setting.set, item.setting.apply = item.original.get, item.original.set, item.original.apply
+end
+for i = 1, #groupAuraSpacingCases do
+    local item = groupAuraSpacingCases[i]
+    item.buffSetting.get, item.buffSetting.set, item.buffSetting.apply = item.buffOriginal.get, item.buffOriginal.set, item.buffOriginal.apply
+    item.debuffSetting.get, item.debuffSetting.set, item.debuffSetting.apply = item.debuffOriginal.get, item.debuffOriginal.set, item.debuffOriginal.apply
+end
+partyBuffSizeSetting.get, partyBuffSizeSetting.set, partyBuffSizeSetting.apply = partyBuffSizeOriginal.get, partyBuffSizeOriginal.set, partyBuffSizeOriginal.apply
+partyDebuffSizeSetting.get, partyDebuffSizeSetting.set, partyDebuffSizeSetting.apply = partyDebuffSizeOriginal.get, partyDebuffSizeOriginal.set, partyDebuffSizeOriginal.apply
 playerRaidMarkerAnchorSetting.get, playerRaidMarkerAnchorSetting.set, playerRaidMarkerAnchorSetting.apply = playerRaidMarkerAnchorOriginal.get, playerRaidMarkerAnchorOriginal.set, playerRaidMarkerAnchorOriginal.apply
 playerRaidMarkerXSetting.get, playerRaidMarkerXSetting.set, playerRaidMarkerXSetting.apply = playerRaidMarkerXOriginal.get, playerRaidMarkerXOriginal.set, playerRaidMarkerXOriginal.apply
 
-io.write("assistant_router_safety_regression: ok cases=36\n")
+io.write("assistant_router_safety_regression: ok cases=48\n")

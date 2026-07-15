@@ -45,7 +45,7 @@ for _, relative in ipairs(files) do
     for _ in content:gmatch("T%.Button%s*%(") do factorySites = factorySites + 1 end
     for _ in content:gmatch("CreateFrame%s*%(%s*['\"]Button['\"]") do factorySites = factorySites + 1 end
 end
-if factorySites ~= 95 then Fail(string.format("global/advanced interactive factory inventory drifted: expected 95, got %d", factorySites)) end
+if factorySites ~= 97 then Fail(string.format("global/advanced interactive factory inventory drifted: expected 97, got %d", factorySites)) end
 
 local function BalancedCall(content, openAt)
     local depth, quote, escaped = 0, nil, false
@@ -187,7 +187,7 @@ for _, relative in ipairs(files) do
 end
 
 local requiredRawCoverage = {
-    ["Shell/Menu2/Pages/MSUF_Menu2_GlobalBars.lua"] = { "RegisterControl(btn, Meta(\"gradient.direction.", "RegisterSegment(W.SegmentTabs", "RegisterDragRows(" },
+    ["Shell/Menu2/Pages/MSUF_Menu2_GlobalBars.lua"] = { "RegisterControl(btn, Meta(\"gradient.\" .. kind .. \".direction.", "RegisterSegment(W.SegmentTabs", "RegisterDragRows(" },
     ["Shell/Menu2/Pages/MSUF_Menu2_GlobalCastbars.lua"] = { "RegisterControl(btn, Meta(semanticPath", "RegisterControl(interrupt", "RegisterControl(resetFocus" },
     ["Shell/Menu2/Pages/MSUF_Menu2_AdvancedGameplay.lua"] = { "RegisterControl(previewBtn", "RegisterControl(resetTotemBtn" },
     ["Shell/Menu2/Pages/MSUF_Menu2_AdvancedProfiles.lua"] = { "RegisterControl(profileDrop", "RegisterControl(import,", "RegisterControl(importCreateNew", "RegisterControl(importProfileName" },
@@ -234,7 +234,7 @@ end
 print("GLOBAL/ADVANCED CONTROL CATALOG STATIC AUDIT PASS")
 print(string.format("Files: %d; annotated Bind call sites: %d/%d; direct semantic declarations: %d",
     #files, annotatedBinds, bindCalls, declarations))
-print(string.format("Interactive factory drift sentinel: %d/%d", factorySites, 95))
+print(string.format("Interactive factory drift sentinel: %d/%d", factorySites, 97))
 print("Normalized semantic-path collisions: 0; required raw-button/selector coverage markers: present")
 print(string.format("Class Resources preview: %d registration call sites; %d generated canonical controls; collisions: 0",
     previewRegistrationCalls, #previewSemanticPaths))

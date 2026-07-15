@@ -57,6 +57,10 @@ M.aliasOwners = {
     ["general.barBorderB"] = "general.barOutlineColor",
     ["general.barBorderG"] = "general.barOutlineColor",
     ["general.barBorderR"] = "general.barOutlineColor",
+    ["general.barBgTexture"] = "general.barBackgroundTexture",
+    ["general.barOutlineColorB"] = "general.barOutlineColor",
+    ["general.barOutlineColorG"] = "general.barOutlineColor",
+    ["general.barOutlineColorR"] = "general.barOutlineColor",
     ["general.castbarInterruptUnavailableB"] = "general.castbarInterruptUnavailableColor",
     ["general.castbarInterruptUnavailableG"] = "general.castbarInterruptUnavailableColor",
     ["general.castbarInterruptUnavailableR"] = "general.castbarInterruptUnavailableColor",
@@ -79,6 +83,7 @@ M.aliasOwners = {
     ["general.purgeBorderColorB"] = "general.purgeBorderColor",
     ["general.purgeBorderColorG"] = "general.purgeBorderColor",
     ["general.purgeBorderColorR"] = "general.purgeBorderColor",
+    ["general.shortenNameShowDots"] = "fontScope.shared.shortenNameNoEllipsis",
     ["gf_party.barOutlineColorA"] = "barScope.gf_party.barOutlineColor",
     ["gf_raid.barOutlineColorA"] = "barScope.gf_raid.barOutlineColor",
 }
@@ -93,9 +98,14 @@ Bars._DarkTint
 Bars._DetachedPowerBarTextures
 Bars._MatchHPColor
 Castbars.Apply
+Castbars.Backend
 Castbars.Disable
+Castbars.Engine
 Castbars.Enable
 Castbars.IsEnabled
+Castbars.NativeOwner
+Castbars.Runtime
+Castbars.Visuals
 ClassPower.Apply
 ClassPower.Disable
 ClassPower.Enable
@@ -216,10 +226,14 @@ general.aggroBorderB
 general.aggroBorderG
 general.aggroBorderR
 general.barBackgroundAlpha
+general.barBgTexture
 general.barBorderA
 general.barBorderB
 general.barBorderG
 general.barBorderR
+general.barOutlineColorB
+general.barOutlineColorG
+general.barOutlineColorR
 general.barOutlineColorMode
 general.boldText
 general.bossCastNameFontSize
@@ -325,6 +339,7 @@ general.rangeFadeLayerMode
 general.reducedMotion
 general.shortenNameClipSide
 general.shortenNameMaxChars
+general.shortenNameShowDots
 general.shortenNames
 general.statusIndicators
 general.textBackdrop
@@ -362,6 +377,8 @@ player.showHPText
 profile.Units
 profile._msufDefaultsRevision
 profile._msufDispelPriorityMigration
+profile._msufLegacy55FrameOutlineBackground_v1
+profile._msufLegacy55PowerTextVisibility_v1
 profile._msufLegacyProfileSchema
 profile._msufProfileNormalizationRevision
 profile._msufProfileSchema
@@ -369,6 +386,7 @@ profile.aura
 profile.auras
 profile.auras2
 profile.auras3
+profile.auras3._msufAuras3LegacyGeometry_v3
 profile.auras3._msufAuras3TranslatedFromLegacyAuras2
 profile.bars
 profile.boss
@@ -449,8 +467,10 @@ target.gate
 target.geometry
 target.h
 target.hpPowerTextOverride
+target._msuf2GuidedActionHooks
 target.key
 target.keys
+target.layer
 target.layout
 target.norms
 target.playerHP
@@ -458,6 +478,7 @@ target.playerHPTextures
 target.prefix
 target.reanchor
 target.scope
+target.strata
 target.structure
 target.syncNow
 target.textures
@@ -705,11 +726,7 @@ general.aggroBorderColorR
 general.aggroIndicatorMode
 general.anchorName
 general.anchorToCooldown
-general.barBgTexture
 general.barBorderStyle
-general.barOutlineColorB
-general.barOutlineColorG
-general.barOutlineColorR
 general.bossCastSpellNameFont
 general.bossCastSpellNameOutline
 general.bossCastTimeFont
@@ -792,6 +809,9 @@ general.gradientDirRight
 general.gradientDirUp
 general.hasMovedFramesInEditMode
 general.healAbsorbEnabled
+general.healthBarGradientColorB
+general.healthBarGradientColorG
+general.healthBarGradientColorR
 general.healthGradientHighB
 general.healthGradientHighG
 general.healthGradientHighR
@@ -827,6 +847,8 @@ general.levelIndicatorLayer
 general.levelIndicatorOffsetX
 general.levelIndicatorOffsetY
 general.linkEditModes
+general.msuf2WindowH
+general.msuf2WindowW
 general.nameFontSize
 general.npcClassColorBar
 general.petFrameColorB
@@ -855,7 +877,16 @@ general.portraitOffsetY
 general.portraitShape
 general.portraitSizeOverride
 general.portraitZoom
+general.powerBarGradientColorB
+general.powerBarGradientColorG
+general.powerBarGradientColorR
 general.powerFontSize
+general.powerGradientDirDown
+general.powerGradientDirLeft
+general.powerGradientDirRight
+general.powerGradientDirUp
+general.powerGradientDirection
+general.powerGradientStrength
 general.powerTextMode
 general.powerTextSeparator
 general.powerTextSpacerEnabled
@@ -883,7 +914,6 @@ general.restedStateIndicatorSize
 general.restedStateIndicatorSymbol
 general.roundedUnitframes
 general.shortenNameFrontMaskPx
-general.shortenNameShowDots
 general.showBossCastTargetName
 general.showCombatStateIndicator
 general.showGCDBar
@@ -923,6 +953,27 @@ end
 
 M.categoryPolicy.runtime_metadata = {
     reason = "This exact generated scalar stores migration, preview, test-mode, edit-mode, backend, tutorial, or throttling state and has no independent visible Menu2 control.",
+}
+M.categoryPolicy.menu_window_geometry = {
+    reason = "This exact generated scalar persists the internal Menu2 window dimensions; it is not an independent user-facing setting.",
+}
+M.categoryPolicy.compound_control_channel = {
+    reason = "This exact generated scalar is a backing channel or shared fallback for a selector-bound compound Bars control; the runtime catalog closure owns the visible scoped operation, so the scalar is not a second independent Menu target.",
+}
+
+local GENERATED_COMPOUND_CONTROL_CHANNELS = {
+    ["general.healthBarGradientColorB"] = true,
+    ["general.healthBarGradientColorG"] = true,
+    ["general.healthBarGradientColorR"] = true,
+    ["general.powerBarGradientColorB"] = true,
+    ["general.powerBarGradientColorG"] = true,
+    ["general.powerBarGradientColorR"] = true,
+    ["general.powerGradientDirDown"] = true,
+    ["general.powerGradientDirLeft"] = true,
+    ["general.powerGradientDirRight"] = true,
+    ["general.powerGradientDirUp"] = true,
+    ["general.powerGradientDirection"] = true,
+    ["general.powerGradientStrength"] = true,
 }
 
 local GENERATED_ALIAS_PREFIX_OWNERS = {
@@ -974,8 +1025,14 @@ function M.ClassifyGeneratedNoMenuSetting(setting)
     if owner then
         return { category = "canonical_alias", ownerSetting = owner, policy = M.categoryPolicy.canonical_alias }
     end
+    if GENERATED_COMPOUND_CONTROL_CHANNELS[key] then
+        return { category = "compound_control_channel", policy = M.categoryPolicy.compound_control_channel }
+    end
     if IsGeneratedRuntimeMetadata(key) then
         return { category = "runtime_metadata", policy = M.categoryPolicy.runtime_metadata }
+    end
+    if key == "general.msuf2WindowH" or key == "general.msuf2WindowW" then
+        return { category = "menu_window_geometry", policy = M.categoryPolicy.menu_window_geometry }
     end
     return { category = "compatibility_fallback", policy = M.categoryPolicy.compatibility_fallback }
 end

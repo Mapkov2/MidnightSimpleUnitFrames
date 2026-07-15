@@ -131,6 +131,42 @@ for _, key in ipairs({
     "bars.highlightBorderThickness",
     "player.fontOverride",
     "gf_mythicraid.fontOverride",
+    "player.nameNoEllipsis",
+    "target.nameNoEllipsis",
+    "targettarget.nameNoEllipsis",
+    "focustarget.nameNoEllipsis",
+    "focus.nameNoEllipsis",
+    "pet.nameNoEllipsis",
+    "boss.nameNoEllipsis",
+    "player.nameAnchor",
+    "target.nameAnchor",
+    "targettarget.nameAnchor",
+    "focustarget.nameAnchor",
+    "focus.nameAnchor",
+    "pet.nameAnchor",
+    "boss.nameAnchor",
+    "target.nameClipSide",
+    "targettarget.nameClipSide",
+    "focustarget.nameClipSide",
+    "focus.nameClipSide",
+    "pet.nameClipSide",
+    "boss.nameClipSide",
+    "gf_party.nameTextAnchor",
+    "gf_raid.nameTextAnchor",
+    "gf_mythicraid.nameTextAnchor",
+    "gf_party.barBgTexture",
+    "general.barOutlineColorR",
+    "general.barOutlineColorG",
+    "general.barOutlineColorB",
+    "bars.classPowerOutlineColorR",
+    "bars.classPowerOutlineColorG",
+    "bars.classPowerOutlineColorB",
+    "gf_party.auraSpacing",
+    "gf_raid.auraSpacing",
+    "gf_mythicraid.auraSpacing",
+    "gf_party.privateAuraAnchor",
+    "gf_raid.privateAuraMax",
+    "gf_mythicraid.privateAuraSize",
 }) do
     assert(runtimeRegistry:GetSetting(key) == nil,
         key .. " was exposed as a duplicate/non-public raw AutoCoverage control")
@@ -144,6 +180,28 @@ local function assertCuratedOwner(scope, dbKey, expectedKey)
     assert(owner.key == expectedKey,
         scope .. "." .. dbKey .. " owner mismatch: " .. tostring(owner.key) .. " ~= " .. expectedKey)
 end
+
+-- Exhaust the exact central ledger. This simultaneously catches owner-key
+-- drift, a raw AutoCoverage duplicate being reintroduced, and a reviewed path
+-- silently falling back to a generated owner.
+local canonicalOwners = assert(runtimeA.AutoCoverage and runtimeA.AutoCoverage.CanonicalPathOwners,
+    "AutoCoverage canonical-owner ledger missing")
+local canonicalOwnerCount = 0
+for scope, paths in pairs(canonicalOwners) do
+    for dbKey, expectedKey in pairs(paths) do
+        canonicalOwnerCount = canonicalOwnerCount + 1
+        local owner = assert(runtimeRegistry:GetSetting(expectedKey),
+            scope .. "." .. dbKey .. " owner is missing: " .. tostring(expectedKey))
+        assert(owner.generated ~= true,
+            scope .. "." .. dbKey .. " owner became generated: " .. tostring(expectedKey))
+        assert(runtimeRegistry:GetSetting(scope .. "." .. dbKey) == nil,
+            scope .. "." .. dbKey .. " was exposed as a duplicate raw setting")
+        assertCuratedOwner(scope, dbKey, expectedKey)
+    end
+end
+assert(canonicalOwnerCount == 92,
+    "canonical-owner identity count drifted: " .. tostring(canonicalOwnerCount))
+
 assertCuratedOwner("gf_party", "groupBorderR", "gf_party.groupBorderColor")
 assertCuratedOwner("gf_party", "groupBorderG", "gf_party.groupBorderColor")
 assertCuratedOwner("gf_party", "groupBorderB", "gf_party.groupBorderColor")
@@ -153,6 +211,166 @@ assertCuratedOwner("gf_mythicraid", "fontOutline", "fontScope.gf_raid.outline")
 assertCuratedOwner("general", "colorHealthTextByHealth", "fontScope.shared.colorHealthTextByHealth")
 assertCuratedOwner("player", "fontOverride", "fontScope.player.override")
 assertCuratedOwner("gf_mythicraid", "fontOverride", "fontScope.gf_raid.override")
+assertCuratedOwner("player", "nameNoEllipsis", "fontScope.shared.shortenNameNoEllipsis")
+assertCuratedOwner("target", "nameNoEllipsis", "fontScope.target.shortenNameNoEllipsis")
+assertCuratedOwner("targettarget", "nameNoEllipsis", "fontScope.targettarget.shortenNameNoEllipsis")
+assertCuratedOwner("focustarget", "nameNoEllipsis", "fontScope.focustarget.shortenNameNoEllipsis")
+assertCuratedOwner("focus", "nameNoEllipsis", "fontScope.focus.shortenNameNoEllipsis")
+assertCuratedOwner("pet", "nameNoEllipsis", "fontScope.pet.shortenNameNoEllipsis")
+assertCuratedOwner("boss", "nameNoEllipsis", "fontScope.boss.shortenNameNoEllipsis")
+assertCuratedOwner("player", "nameAnchor", "player.nameTextAnchor")
+assertCuratedOwner("target", "nameAnchor", "target.nameTextAnchor")
+assertCuratedOwner("targettarget", "nameAnchor", "targettarget.nameTextAnchor")
+assertCuratedOwner("focustarget", "nameAnchor", "focustarget.nameTextAnchor")
+assertCuratedOwner("focus", "nameAnchor", "focus.nameTextAnchor")
+assertCuratedOwner("pet", "nameAnchor", "pet.nameTextAnchor")
+assertCuratedOwner("boss", "nameAnchor", "boss.nameTextAnchor")
+assertCuratedOwner("target", "nameClipSide", "fontScope.target.shortenNameClipSide")
+assertCuratedOwner("targettarget", "nameClipSide", "fontScope.targettarget.shortenNameClipSide")
+assertCuratedOwner("focustarget", "nameClipSide", "fontScope.focustarget.shortenNameClipSide")
+assertCuratedOwner("focus", "nameClipSide", "fontScope.focus.shortenNameClipSide")
+assertCuratedOwner("pet", "nameClipSide", "fontScope.pet.shortenNameClipSide")
+assertCuratedOwner("boss", "nameClipSide", "fontScope.boss.shortenNameClipSide")
+assertCuratedOwner("gf_party", "nameTextAnchor", "gf_party.nameAnchor")
+assertCuratedOwner("gf_raid", "nameTextAnchor", "gf_raid.nameAnchor")
+assertCuratedOwner("gf_mythicraid", "nameTextAnchor", "gf_mythicraid.nameAnchor")
+assertCuratedOwner("gf_party", "barBgTexture", "barScope.gf_party.barBackgroundTexture")
+assertCuratedOwner("general", "barOutlineColorR", "general.barOutlineColor")
+assertCuratedOwner("general", "barOutlineColorG", "general.barOutlineColor")
+assertCuratedOwner("general", "barOutlineColorB", "general.barOutlineColor")
+
+local compatibilityReason = assert(runtimeA.AutoCoverage and runtimeA.AutoCoverage.CompatibilityProjectionReason,
+    "AutoCoverage compatibility-projection policy missing")
+local retiredProjectionIdentities = {
+    { "bars", "classPowerOutlineColorR" },
+    { "bars", "classPowerOutlineColorG" },
+    { "bars", "classPowerOutlineColorB" },
+    { "player", "hpTextAnchor" },
+    { "player", "powerTextAnchor" },
+    { "target", "hpTextAnchor" },
+    { "target", "powerTextAnchor" },
+    { "targettarget", "hpTextAnchor" },
+    { "targettarget", "powerTextAnchor" },
+    { "focus", "hpTextAnchor" },
+    { "focus", "powerTextAnchor" },
+    { "pet", "hpTextAnchor" },
+    { "pet", "powerTextAnchor" },
+    { "boss", "hpTextAnchor" },
+    { "boss", "powerTextAnchor" },
+    { "gf_party", "auraSpacing" },
+    { "gf_party", "nameShorten" },
+    { "gf_party", "nameShortenMax" },
+    { "gf_party", "shortenNameFrontMaskPx" },
+    { "gf_party", "hpTextAnchor" },
+    { "gf_party", "powerTextAnchor" },
+    { "gf_raid", "auraSpacing" },
+    { "gf_raid", "nameShorten" },
+    { "gf_raid", "nameShortenMax" },
+    { "gf_raid", "shortenNameFrontMaskPx" },
+    { "gf_raid", "hpTextAnchor" },
+    { "gf_raid", "powerTextAnchor" },
+    { "gf_mythicraid", "auraSpacing" },
+    { "gf_mythicraid", "nameShorten" },
+    { "gf_mythicraid", "nameShortenMax" },
+    { "gf_mythicraid", "shortenNameFrontMaskPx" },
+    { "gf_party", "privateAuraAnchor" },
+    { "gf_party", "privateAuraCountdown" },
+    { "gf_party", "privateAuraMax" },
+    { "gf_party", "privateAuraSize" },
+    { "gf_party", "privateAuraX" },
+    { "gf_party", "privateAuraY" },
+    { "gf_party", "privateAurasEnabled" },
+    { "gf_raid", "privateAuraAnchor" },
+    { "gf_raid", "privateAuraCountdown" },
+    { "gf_raid", "privateAuraMax" },
+    { "gf_raid", "privateAuraSize" },
+    { "gf_raid", "privateAuraX" },
+    { "gf_raid", "privateAuraY" },
+    { "gf_raid", "privateAurasEnabled" },
+    { "gf_mythicraid", "privateAuraAnchor" },
+    { "gf_mythicraid", "privateAuraCountdown" },
+    { "gf_mythicraid", "privateAuraMax" },
+    { "gf_mythicraid", "privateAuraSize" },
+    { "gf_mythicraid", "privateAuraX" },
+    { "gf_mythicraid", "privateAuraY" },
+    { "gf_mythicraid", "privateAurasEnabled" },
+}
+assert(#retiredProjectionIdentities == 52,
+    "retired compatibility-projection identity count drifted")
+for _, identity in ipairs(retiredProjectionIdentities) do
+    local scope, dbKey = identity[1], identity[2]
+    assert(type(compatibilityReason(scope, dbKey)) == "string" and compatibilityReason(scope, dbKey) ~= "",
+        scope .. "." .. dbKey .. " lacks an exact compatibility-projection rationale")
+    assert(runtimeRegistry:GetSetting(scope .. "." .. dbKey) == nil,
+        scope .. "." .. dbKey .. " was exposed as a retired generated setting")
+    assert(runtimeA.CoverageAudit.IsIgnored(scope, dbKey) == true,
+        scope .. "." .. dbKey .. " is not excluded from public DB coverage")
+end
+
+-- These similarly named paths are deliberately not aliases. They remain
+-- visible, read-only generated state until a reviewed public control exists.
+for _, key in ipairs({
+    "general.shortenNameFrontMaskPx",
+    "player.shortenNameFrontMaskPx",
+    "target.shortenNameFrontMaskPx",
+    "targettarget.shortenNameFrontMaskPx",
+    "focustarget.shortenNameFrontMaskPx",
+    "focus.shortenNameFrontMaskPx",
+    "pet.shortenNameFrontMaskPx",
+    "boss.shortenNameFrontMaskPx",
+    "gf_party.relativePoint",
+    "gf_raid.relativePoint",
+    "gf_mythicraid.relativePoint",
+    "general.hpTextSeparator",
+    "general.powerTextSeparator",
+}) do
+    local setting = assert(runtimeRegistry:GetSetting(key), key .. " was over-suppressed")
+    assert(setting.generated == true and setting.assistantMutationSafe == false,
+        key .. " must remain a read-only generated setting")
+end
+
+local function submitPublic(prompt)
+    if type(runtimeA.StartNewTask) == "function" then runtimeA.StartNewTask() end
+    local completed
+    local immediate = assert(runtimeA.SubmitDeferred(prompt, function(result) completed = result end),
+        "public submit returned nil: " .. prompt)
+    if (immediate.status or immediate.result) == "queued" then
+        local guard = 0
+        while type(runtimeA.IsBusy) == "function" and runtimeA.IsBusy() and guard < 100 do
+            guard = guard + 1
+            assert(type(runtimeA._RunJobPump) == "function", "queued public submit has no test pump")
+            runtimeA._RunJobPump()
+        end
+        assert(not (type(runtimeA.IsBusy) == "function" and runtimeA.IsBusy()),
+            "public submit did not finish: " .. prompt)
+    end
+    return completed or immediate
+end
+
+-- Public commands must mutate the effective canonical owner, not a stale raw
+-- compatibility spelling which happens to look like the request.
+local targetClipOwner = assert(runtimeRegistry:GetSetting("fontScope.target.shortenNameClipSide"))
+targetClipOwner.set("RIGHT")
+_G.MSUF_DB.target.nameClipSide = "RIGHT"
+local targetClipResult = submitPublic("set target name truncation style to LEFT")
+assert((targetClipResult.status or targetClipResult.result) == "applied",
+    "public target truncation command did not apply")
+assert(targetClipOwner.get() == "LEFT" and _G.MSUF_DB.target.shortenNameClipSide == "LEFT",
+    "public target truncation command missed the effective canonical field")
+assert(_G.MSUF_DB.target.nameClipSide == "RIGHT",
+    "public target truncation command wrote the stale raw alias")
+
+local partyBackgroundOwner = assert(runtimeRegistry:GetSetting("barScope.gf_party.barBackgroundTexture"))
+partyBackgroundOwner.set("Blizzard")
+_G.MSUF_DB.gf_party.barBgTexture = "LegacyRaw"
+local partyBackgroundResult = submitPublic("set party bar background texture to Minimalist")
+assert((partyBackgroundResult.status or partyBackgroundResult.result) == "applied",
+    "public Party background-texture command did not apply")
+assert(tostring(partyBackgroundOwner.get()):lower() == "minimalist"
+        and tostring(_G.MSUF_DB.gf_party.barBackgroundTexture):lower() == "minimalist",
+    "public Party background-texture command missed the effective canonical field")
+assert(_G.MSUF_DB.gf_party.barBgTexture == "LegacyRaw",
+    "public Party background-texture command wrote the stale raw alias")
 
 -- Raid is the visible aggregate style scope and must write both underlying
 -- Raid DB tables. This is controller behavior, not merely parser metadata.

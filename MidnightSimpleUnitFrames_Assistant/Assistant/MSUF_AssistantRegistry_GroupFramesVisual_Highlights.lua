@@ -90,6 +90,14 @@ function A.GroupFramesRegistry.RegisterVisualHighlightSettings(ctx, scope)
     RegisterGroupNumber(scope, "groupNumberY", "groupNumberY", "Group Number Y Offset", 2, -100, 100, 1, "geometry", aliases)
 
     aliases = {}
+    AddAliasesForUnit(aliases, scope, "group number layer")
+    AddAliasesForUnit(aliases, scope, "group number draw layer")
+    AddAliasesForUnit(aliases, scope, "group number strata")
+    AddAliasesForUnit(aliases, scope, "group number frame strata")
+    AddAliasesForUnit(aliases, scope, "group index layer")
+    RegisterGroupNumber(scope, "groupNumberLayer", "groupNumberLayer", "Group Number Layer", 7, 0, 30, 1, "visual", aliases)
+
+    aliases = {}
     AddAliasesForUnit(aliases, scope, "hover highlight thickness")
     AddAliasesForUnit(aliases, scope, "mouseover highlight thickness")
     AddAliasesForUnit(aliases, scope, "hover border thickness")

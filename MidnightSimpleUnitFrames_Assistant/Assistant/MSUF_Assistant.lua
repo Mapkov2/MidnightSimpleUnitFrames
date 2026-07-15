@@ -1130,6 +1130,10 @@ local function FailurePageHints(query)
         else
             AddFailurePageHint(hints, seen, "gf_layout", "Group Layout", "Choose the intended group scope and inspect its health, resource, text, or layout control.")
         end
+    elseif FailureContainsAny(normalized, { " bar ", " bars " })
+        and FailureContainsAny(normalized, { " outline ", " outlines ", " border ", " borders " })
+    then
+        AddFailurePageHint(hints, seen, "opt_bars", "Bars", "Shared bar outline, border, texture, and appearance controls live here.")
     elseif FailureContainsAny(normalized, { " font ", " outline ", " monochrome " }) then
         AddFailurePageHint(hints, seen, "opt_fonts", "Fonts", "Shared and frame-specific font controls live here.")
     elseif FailureContainsAny(normalized, { " color ", " colour ", " colored ", " coloured " }) then
@@ -1164,6 +1168,7 @@ function AP.AssistantFailureResult(err, context)
         label = tostring(context.label or (context.job and context.job.label) or "assistant.runtime"),
         message = message,
         stack = type(err) == "table" and err.stack or nil,
+        requestText = tostring(context.text or (context.job and context.job.requestText) or ""),
     }
     local hints = FailurePageHints(context.text)
     local lines = {
@@ -1181,6 +1186,7 @@ function AP.AssistantFailureResult(err, context)
         summary = "Assistant job failed: " .. message,
         searchResults = hints,
         selectPendingResult = #hints == 1 and 1 or nil,
+        retryText = tostring(context.text or (context.job and context.job.requestText) or ""),
     }
 end
 
@@ -5892,17 +5898,19 @@ function AP.RunApplies(changedSettings)
         local setting = changedSettings[i]
         if setting and type(setting.apply) == "function" and not applied[setting.key] then
             applied[setting.key] = true
-            local ok, err = pcall(setting.apply)
-            if not ok then
-                return false, "apply", setting.key or setting.label or i, err
+            local ok, applied, detail = pcall(setting.apply)
+            if not ok or applied == false then
+                return false, "apply", setting.key or setting.label or i,
+                    ok and (detail or "apply callback returned false") or applied
             end
         end
     end
     local apply = (MSUF and MSUF.MSUF2 and MSUF.MSUF2.ApplyService) or _G.MSUF_Menu2_ApplyService
     if apply and type(apply.Flush) == "function" then
-        local ok, err = pcall(apply.Flush)
-        if not ok then
-            return false, "flush", "ApplyService.Flush", err
+        local ok, flushed, detail = pcall(apply.Flush)
+        if not ok or flushed == false then
+            return false, "flush", "ApplyService.Flush",
+                ok and (detail or "ApplyService.Flush returned false") or flushed
         end
     end
     return true
@@ -6430,6 +6438,63 @@ function A.RestoreNameShorteningStates(states)
     return true
 end
 
+-- Open the real Menu2 Color Painter on an Assistant-resolved setting. This is
+-- intentionally a cold, user-triggered bridge: the Assistant does not own a
+-- second picker and does not keep any picker state while idle.
+function A.OpenColorSettingPickerForSetting(setting, page, label)
+    if not (type(setting) == "table" and setting.type == "color") then return false, "not_color" end
+    local settingKey = tostring(setting.key or "")
+    if settingKey == "" then return false, "missing_setting_key" end
+
+    page = tostring(page or setting.page or "")
+    label = tostring(label or setting.label or settingKey)
+    local schema = A.ControlSchema
+    if page == "" and schema and type(schema.GetBySettingKey) == "function" then
+        local descriptors = schema.GetBySettingKey(settingKey)
+        for i = 1, #(descriptors or {}) do
+            local descriptor = descriptors[i]
+            if tostring(descriptor and descriptor.kind or "") == "color"
+                and tostring(descriptor.pageKey or "") ~= ""
+            then
+                page = tostring(descriptor.pageKey)
+                if label == settingKey and tostring(descriptor.label or "") ~= "" then
+                    label = tostring(descriptor.label)
+                end
+                break
+            end
+        end
+    end
+    if page == "" then
+        local router = A.RouterPrivate
+        local item = router and type(router.RegistrySettingItemForKey) == "function"
+            and router.RegistrySettingItemForKey(settingKey) or nil
+        page = tostring(item and item.page or "")
+        if label == settingKey and item and item.label then label = tostring(item.label) end
+    end
+    if page == "" then return false, "missing_page" end
+
+    local openPicker = _G.MSUF_OpenExactColorSettingPicker
+        or (M and M.OpenExactColorSettingPicker)
+    if type(openPicker) ~= "function" then return false, "picker_unavailable" end
+    local called, opened, message = pcall(openPicker, settingKey, label, page)
+    if not called then return false, tostring(opened or "picker_failed") end
+    return opened ~= false, message
+end
+
+function AP.TryOpenSingleColorSettingPicker(changes)
+    local selected, selectedKey
+    for i = 1, #(changes or {}) do
+        local setting = changes[i] and changes[i].setting
+        if setting and setting.type == "color" then
+            local key = tostring(setting.key or setting)
+            if selected and key ~= selectedKey then return false, "multiple_color_settings" end
+            selected, selectedKey = setting, key
+        end
+    end
+    if not selected then return false, "no_color_setting" end
+    return A.OpenColorSettingPickerForSetting(selected)
+end
+
 local function ExecuteChanges(plan)
     local changes = plan.changes or {}
     local nameStateScopes = NameShorteningStateScopes(changes)
@@ -6622,10 +6687,14 @@ local function ExecuteChanges(plan)
             if not ok then return AP.TransactionFailure(plan, phase, target, err) end
             AP.RememberUnchangedChangeContext(plan, changes)
             local first = unchangedApplySettings[1]
-            return { text = AP.RefreshedAlreadySetResponse(first), result = "unchanged", summary = plan.summary }
+            local pickerOpened = AP.TryOpenSingleColorSettingPicker(changes)
+            return { text = AP.RefreshedAlreadySetResponse(first), result = "unchanged", summary = plan.summary,
+                colorPickerOpened = pickerOpened == true or nil }
         end
         AP.RememberUnchangedChangeContext(plan, changes)
-        return { text = AP.AlreadySetResponse(changes), result = "unchanged", summary = plan.summary }
+        local pickerOpened = AP.TryOpenSingleColorSettingPicker(changes)
+        return { text = AP.AlreadySetResponse(changes), result = "unchanged", summary = plan.summary,
+            colorPickerOpened = pickerOpened == true or nil }
     end
 
     local applyOk, applyPhase, applyTarget, applyErr = AP.RunApplies(changedSettings)
@@ -6703,7 +6772,9 @@ local function ExecuteChanges(plan)
     if requiresReload then text = text .. " Reload the UI for this change to fully take effect." end
     if not requiresReload and #undoChanges >= 6 then text = AP.AppendLargeChangeReloadHint(text) end
     text = AP.AppendUndoFollowupHint(text)
-    return { text = text, result = "applied", summary = plan.summary }
+    local pickerOpened = AP.TryOpenSingleColorSettingPicker(committed)
+    return { text = text, result = "applied", summary = plan.summary,
+        colorPickerOpened = pickerOpened == true or nil }
 end
 
 AP.ExecuteChanges = ExecuteChanges
@@ -7603,6 +7674,41 @@ function AP.AdvanceTurnSerial()
     return serial
 end
 
+function AP.BarOutlineColorSemanticPlan(text)
+    local parser = A.Parser
+    if type(parser) ~= "table" or type(parser.Normalize) ~= "function"
+        or type(A._ParseScopedBarOutlineColorFastShortcut) ~= "function"
+    then return nil end
+    local normalized = parser.Normalize(text)
+    if normalized == "" then return nil end
+    return A._ParseScopedBarOutlineColorFastShortcut(normalized, text)
+end
+
+function AP.ExecuteBarOutlineColorSemanticPlan(plan)
+    if type(plan) ~= "table" then return nil end
+    AP.RememberMentionedContext(plan)
+    if plan.kind == "ambiguous" then
+        A.pendingChoices = plan.choices or {}
+        AP.SetPendingCandidates(A.pendingChoices)
+        local ctx = A.GetContext and A.GetContext()
+        if ctx then ctx.pendingChoices = SerializeChoices(A.pendingChoices) end
+        local choiceText = ChoiceText(A.pendingChoices)
+        if type(plan.choiceIntro) == "string" and Trim(plan.choiceIntro) ~= "" then
+            choiceText = Trim(plan.choiceIntro) .. "\n" .. choiceText
+        end
+        return NormalizePlanResult({ text = choiceText, result = "ambiguous", summary = plan.summary })
+    end
+    if plan.kind == "unknown" then
+        return NormalizePlanResult({
+            text = plan.text or "I kept MSUF unchanged because that bar-outline request needs clarification.",
+            result = plan.status or "info",
+            kind = "unknown",
+            summary = plan.summary,
+        })
+    end
+    return NormalizePlanResult(A.ExecutePlan(plan))
+end
+
 function A.HandleInput(text, handleOpts)
     if InCombat() then return NormalizePlanResult(CombatSubmitResult()) end
     if not MenuRuntimeActive() then return NormalizePlanResult(InactiveSubmitResult()) end
@@ -7618,7 +7724,11 @@ function A.HandleInput(text, handleOpts)
     A._pendingResultFollowupHandled = nil
     local result
     local routed, routeResult
+    local semanticBarOutlineColor = AP.BarOutlineColorSemanticPlan(text)
     local function RunRoute()
+        if semanticBarOutlineColor then
+            return AP.ExecuteBarOutlineColorSemanticPlan(semanticBarOutlineColor)
+        end
         if type(A.RouteInput) == "function" then return A.RouteInput(text, A.HandleCommandInput) end
         return A.HandleCommandInput(text)
     end
@@ -8164,6 +8274,7 @@ function AP.TryImmediateSubmitResult(text, opts)
     if AP.SplitBatchCommands(text) then return nil end
     local parser = A.Parser or {}
     local normalized = type(parser.Normalize) == "function" and parser.Normalize(text) or tostring(text or ""):lower()
+    if AP.BarOutlineColorSemanticPlan(text) then return nil end
     if type(A.RouterIsFailClosedReadOnlyRequest) == "function"
         and A.RouterIsFailClosedReadOnlyRequest(text)
     then
@@ -8383,7 +8494,19 @@ function AP.TryImmediateMutationResult(text, opts)
     if type(normalize) ~= "function" then return nil end
     local normalized = normalize(text)
     if normalized == "" then return nil end
+    if AP.BarOutlineColorSemanticPlan(text) then return nil end
     local routePrivate = A.RouterPrivate
+    -- Context-aware Aura filtering intentionally bypasses some broad
+    -- read-only heuristics for concrete filter commands. Subjective planning
+    -- phrases are the exception: a retained group-Aura scope must never turn
+    -- "show important debuffs" into an Important-token write (or the
+    -- transaction guard's generic reply) before RouteInput can explain the
+    -- missing preference. Hand these exact phrases to the Router first.
+    if routePrivate and type(routePrivate.IsSubjectiveSafePlanningRequest) == "function"
+        and routePrivate.IsSubjectiveSafePlanningRequest(text)
+    then
+        return nil
+    end
     if routePrivate and type(routePrivate.IsExplicitNavigationCommand) == "function"
         and routePrivate.IsExplicitNavigationCommand(text)
     then

@@ -50,6 +50,10 @@ function A.GlobalBarRegistry.RegisterAbsorbSettings(ctx)
         "over absorb overlay", "over-absorb overlay", "over absorb glow", "overshield overlay",
         "full hp absorb overlay", "full health absorb overlay",
     }, { category = "Global / Bars / Absorb", frameType = "globalBars", apply = ApplyAbsorbBars, reason = "MSUF_ASSISTANT_OVER_ABSORB_OVERLAY" })
+    RegisterGeneralBoolean("fullHealthAbsorbStripe", "fullHealthAbsorbStripe", "Full-Health Absorb Stripe", false, {
+        "full-health absorb stripe", "full health absorb stripe", "full hp absorb stripe",
+        "absorb stripe at full health", "absorb stripe on full health",
+    }, { category = "Global / Bars / Absorb", frameType = "globalBars", apply = ApplyAbsorbBars, reason = "MSUF_ASSISTANT_FULL_HEALTH_ABSORB_STRIPE" })
     RegisterGeneralBoolean("showSelfHealPrediction", "healPrediction", "Heal Prediction Overlay", false, {
         "heal prediction", "heal prediction overlay", "incoming heal prediction", "self heal prediction",
     }, {

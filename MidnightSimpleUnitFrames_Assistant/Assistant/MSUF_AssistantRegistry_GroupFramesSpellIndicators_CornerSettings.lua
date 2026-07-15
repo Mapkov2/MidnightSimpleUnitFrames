@@ -62,6 +62,19 @@ function A.GroupFramesRegistry.RegisterCornerIndicatorSettings(ctx)
         })
 
         aliases = {}
+        AddAliasesForUnit(aliases, scope, "corner indicator layer", "ecken indikator ebene")
+        AddAliasesForUnit(aliases, scope, "corner indicators layer", "ecken indikatoren ebene")
+        AddAliasesForUnit(aliases, scope, "corner dot layer", "ecken punkt ebene")
+        AddAliasesForUnit(aliases, scope, "corner indicator draw layer", "ecken indikator zeichnungsebene")
+        AddAliasesForUnit(aliases, scope, "corner indicator strata", "ecken indikator strata")
+        AddAliasesForUnit(aliases, scope, "corner indicator frame strata", "ecken indikator frame strata")
+        RegisterGroupNested(scope, "ciLayer", "cornerIndicatorLayer", "Corner Indicator Layer", "number", aliases, {
+            min = 0, max = 30, step = 1,
+            get = function() return tonumber(GroupDB(scope).ciLayer) or 7 end,
+            set = function(value) GroupDB(scope).ciLayer = ClampNumber(value, 0, 30, 1) end,
+        })
+
+        aliases = {}
         AddAliasesForUnit(aliases, scope, "corner indicator alpha", "ecken indikator alpha")
         AddAliasesForUnit(aliases, scope, "corner indicator opacity", "ecken indikator deckkraft")
         AddAliasesForUnit(aliases, scope, "corner dot opacity", "ecken punkt deckkraft")

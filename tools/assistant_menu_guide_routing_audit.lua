@@ -191,22 +191,40 @@ local guidedTourPath = "MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_GuidedTo
 local guidedTourFile = assert(io.open(guidedTourPath, "rb"), "native guided-tour source is missing")
 local guidedTourSource = guidedTourFile:read("*a") or ""
 guidedTourFile:close()
-local stageBlock = guidedTourSource:match("local STAGES%s*=%s*{(.-)\n}\r?\n\r?\nlocal STAGE_BY_ID")
+local stageBlock = guidedTourSource:match("local STAGES%s*=%s*{(.-)\n}\r?\n\r?\nlocal LEGACY_STAGE_TARGET")
 Check(stageBlock ~= nil, "Native guided-tour stage catalog could not be parsed")
 local nativeStageIds = {}
 local nativeStages = 0
-for row in tostring(stageBlock or ""):gmatch("%b{}") do
-    local stageId = row:match("%f[%w]id%s*=%s*\"([^\"]+)\"")
-    local page = row:match("%f[%w]pageKey%s*=%s*\"([^\"]+)\"")
-    if stageId and page then
-        nativeStages = nativeStages + 1
+local stageCatalogChunk, stageCatalogError = loadstring(
+    "return {" .. tostring(stageBlock or "") .. "}", "@assistant_guided_tour_stage_catalog")
+Check(stageCatalogChunk ~= nil, "Native guided-tour stage catalog is not data-only Lua: "
+    .. tostring(stageCatalogError))
+local nativeStageCatalog = stageCatalogChunk and stageCatalogChunk() or {}
+Check(type(nativeStageCatalog) == "table", "Native guided-tour stage catalog did not return a table")
+nativeStages = #nativeStageCatalog
+for i = 1, nativeStages do
+    local row = nativeStageCatalog[i]
+    local stageId = type(row) == "table" and tostring(row.id or "") or ""
+    local page = type(row) == "table" and tostring(row.pageKey or "") or ""
+    Check(stageId ~= "", "Native guided-tour stage " .. tostring(i) .. " has no stable id")
+    Check(page ~= "", "Native guided-tour stage " .. tostring(stageId ~= "" and stageId or i)
+        .. " has no pageKey")
+    if stageId ~= "" then
         Check(not nativeStageIds[stageId], "Duplicate native guided-tour stage: " .. tostring(stageId))
         nativeStageIds[stageId] = true
+    end
+    if page ~= "" then
         Check(actualPages[page], "Native guided-tour stage points at an old page: "
             .. tostring(stageId) .. " -> " .. tostring(page))
     end
 end
-Check(nativeStages == 25, "Native guided-tour stage matrix drifted: expected 25, got " .. tostring(nativeStages))
+-- Forty reviewed native stages are the production baseline. Derive the live
+-- count from STAGES so additions do not require an unrelated audit update,
+-- while an accidental catalog collapse still fails closed.
+Check(nativeStages >= 40, "Native guided-tour stage matrix collapsed below the 40-stage baseline: got "
+    .. tostring(nativeStages))
+Check(guidedTourSource:find("M.guidedTourStageCount = #STAGES", 1, true) ~= nil,
+    "Native guided-tour runtime count is no longer derived from STAGES")
 if nativeStages > 0 then
     guideCount = guideCount + 1
     guideStepCount = guideStepCount + nativeStages

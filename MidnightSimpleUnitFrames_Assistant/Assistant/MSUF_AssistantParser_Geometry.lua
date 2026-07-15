@@ -2864,6 +2864,7 @@ end
 local function AbsorbBarGlobalKey(attr)
     if attr == "absorbTextMode" then return "general.absorbTextMode" end
     if attr == "absorbAnchorMode" then return "general.absorbAnchorMode" end
+    if attr == "fullHealthAbsorbStripe" then return "general.fullHealthAbsorbStripe" end
     if attr == "overAbsorbOverlay" then return "general.overAbsorbOverlay" end
     if attr == "showSelfHealPrediction" then return "general.showSelfHealPrediction" end
     if attr == "healPredAnchorMode" then return "general.healPredAnchorMode" end
@@ -2892,6 +2893,9 @@ local function AbsorbBarSpec(text)
     end
     if ContainsAny(text, GeometryPhrases[168]) then
         return "absorbAnchorMode", "Absorb Bar Anchor", "enum", false
+    end
+    if ContainsAny(text, GeometryPhrases[284]) then
+        return "fullHealthAbsorbStripe", "Full-Health Absorb Stripe", "boolean", false
     end
     if ContainsAny(text, GeometryPhrases[169]) then
         return "overAbsorbOverlay", "Over-Absorb Overlay", "boolean", false

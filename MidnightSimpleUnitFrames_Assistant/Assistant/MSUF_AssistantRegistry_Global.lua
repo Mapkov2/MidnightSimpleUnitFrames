@@ -131,6 +131,7 @@ A.GlobalRegistry.ColorSettings = {
     ApplyClassPowerColors = ApplyClassPowerColors,
     ApplyAuraColors = ApplyAuraColors,
     ApplyPortraitColors = ApplyPortraitColors,
+    ApplyBarGradients = ApplyBarGradients,
     ApplyBarOutline = ApplyBarOutline,
     RegisterGeneralBoolean = RegisterGeneralBoolean,
     RegisterGeneralNumberSetting = RegisterGeneralNumberSetting,
