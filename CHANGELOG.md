@@ -1,5 +1,28 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-Beta18 - 2026-07-15
+
+### Highlights
+
+- Rebuilt castbar state, timing, and Blizzard-frame ownership for smoother updates, lower runtime work, and safer player/pet transitions.
+- Moved class-resource timing to native duration smoothing and tightened active-only runtime paths.
+- Improved legacy profile compatibility, including power anchors, status symbols, aura geometry, and import migration.
+- Refined typography, Color Painter scrolling, gameplay camera tracking, and prerelease version detection.
+
+### Changes
+
+- Consolidated player, target, focus, channel, and empower casts around one canonical cast identity and stable duration state.
+- Fixed Blizzard pet castbar suppression during world entry while preserving its native pet lifecycle.
+- Removed duplicate focus-cast event ownership and detached focus interrupt tracking completely while disabled.
+- Reduced redundant castbar timer binding, completion scheduling, visual refreshes, and cold-layout work.
+- Added native duration smoothing for class resources without adding idle polling.
+- Hardened legacy profile imports and preserved established power-bar anchors and status-symbol styles.
+- Aligned aura filtering, lane geometry, preview behavior, and live positioning.
+- Added semantic typography roles for more consistent text across frames, menus, Edit Mode, and popup tools.
+- Fixed mouse-wheel scrolling through Color Painter overlays and kept combat crosshair zoom synchronized with camera changes.
+- Corrected prerelease version comparisons across beta and stable version formats.
+- Expanded Lua 5.1 regression coverage for castbars, class resources, profiles, menus, unit frames, and runtime hot paths.
+
 ## 6.0-Beta17 - 2026-07-15
 
 ### Highlights
