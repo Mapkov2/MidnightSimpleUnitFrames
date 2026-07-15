@@ -2,10 +2,9 @@
 --
 -- The selected lane anchor pins the lane bounding box to the unit frame. The
 -- growth-derived initialAnchor belongs to Blizzard's internal element flow.
--- Horizontal-first lanes delegate to Blizzard's native layout, then restore the
--- configured full-capacity bounds. Vertical-first UP/DOWN lanes use MSUF's small
--- ApplyLayout fallback because the native flow cannot swap its major axis; both
--- paths keep the outer anchor stable as the active aura count changes.
+-- PTR 5 leaves AuraButton layout entirely inside Blizzard's native code. A
+-- fixed MSUF-owned host keeps the configured full-capacity anchor stable while
+-- legacy UP/DOWN values are translated to row-major RIGHTUP/RIGHTDOWN.
 local root = arg and arg[1] or "."
 
 local function Check(value, message)
@@ -43,28 +42,37 @@ end
 
 local Frame = {}
 Frame.__index = Frame
+local nativeButtonAccess = false
+
+local function CheckButtonAccess(frame)
+    if frame and frame._ptr5Forbidden and not nativeButtonAccess then
+        error("PTR 5 forbidden AuraButton access outside Blizzard native code", 3)
+    end
+end
 
 function Frame:GetParent() return self.parent end
 function Frame:SetParent(parent) self.parent = parent end
 function Frame:ClearAllPoints()
+    CheckButtonAccess(self)
     self.clearAllPointsCalls = (self.clearAllPointsCalls or 0) + 1
     self.point = nil
 end
 function Frame:SetPoint(point, relativeTo, relativePoint, x, y)
+    CheckButtonAccess(self)
     self.setPointCalls = (self.setPointCalls or 0) + 1
     self.point = { point, relativeTo, relativePoint, x or 0, y or 0 }
 end
 function Frame:SetAllPoints(relativeTo) self.allPoints = relativeTo or true end
-function Frame:SetSize(width, height) self.width, self.height = width, height end
+function Frame:SetSize(width, height) CheckButtonAccess(self); self.width, self.height = width, height end
 function Frame:SetWidth(width) self.width = width end
 function Frame:SetHeight(height) self.height = height end
 function Frame:GetWidth() return self.width or 0 end
 function Frame:GetHeight() return self.height or 0 end
 function Frame:SetAlpha(alpha) self.alpha = alpha end
 function Frame:GetAlpha() return self.alpha or 1 end
-function Frame:SetFrameLevel(level) self.frameLevel = level end
+function Frame:SetFrameLevel(level) CheckButtonAccess(self); self.frameLevel = level end
 function Frame:GetFrameLevel() return self.frameLevel or 0 end
-function Frame:SetFrameStrata(strata) self.frameStrata = strata end
+function Frame:SetFrameStrata(strata) CheckButtonAccess(self); self.frameStrata = strata end
 function Frame:GetFrameStrata() return self.frameStrata or "MEDIUM" end
 function Frame:Show() self.shown = true end
 function Frame:Hide() self.shown = false end
@@ -149,6 +157,7 @@ local function NewAuraButton(parent)
 end
 
 local function NativeAuraApplyLayout(self)
+    nativeButtonAccess = true
     self.nativeApplyLayoutCalls = (self.nativeApplyLayoutCalls or 0) + 1
     local groupKey = self._msufA3ManagedGroupKey
     local group = groupKey and self.groups[groupKey]
@@ -182,6 +191,7 @@ local function NativeAuraApplyLayout(self)
         math.max(1, cols * size + math.max(cols - 1, 0) * spacing),
         math.max(1, rows * size + math.max(rows - 1, 0) * spacing)
     )
+    nativeButtonAccess = false
 end
 
 local function NewAuraContainer(parent)
@@ -206,6 +216,7 @@ function Frame:AddAuraGroup(groupKey, filter, options)
         local button = NewAuraButton(self)
         group.frames[index] = button
         options.initializeFrame(button)
+        button._ptr5Forbidden = true
     end
 end
 function Frame:GetAuraGroup(groupKey)
@@ -213,10 +224,7 @@ function Frame:GetAuraGroup(groupKey)
     return self.groups and self.groups[groupKey]
 end
 function Frame:SetAuraGroupLayout(groupKey, options) self.groupLayouts[groupKey] = options end
-function Frame:SetAuraGroupMaxFrameCount(groupKey, maxFrameCount)
-    self.maxFrameCountCalls = (self.maxFrameCountCalls or 0) + 1
-    self.groupOptions[groupKey].maxFrameCount = maxFrameCount
-end
+function Frame:SetAuraGroupMaxFrameCount() end
 function Frame:SetAuraGroupCandidateFilters() end
 function Frame:SetAuraGroupSortMethod() end
 function Frame:AddAuraSlot() end
@@ -237,12 +245,8 @@ function Frame:SetAuraLayoutRowWidth(width)
     self.auraLayoutRowWidth = width
 end
 
-local auraContainerCreations = 0
 _G.CreateFrame = function(frameType, _, parent)
-    if frameType == "AuraContainer" then
-        auraContainerCreations = auraContainerCreations + 1
-        return NewAuraContainer(parent)
-    end
+    if frameType == "AuraContainer" then return NewAuraContainer(parent) end
     return NewFrame(parent)
 end
 _G.C_AddOns = {
@@ -252,8 +256,7 @@ _G.C_Timer = {
     After = function(_, callback) callback() end,
     NewTimer = function(_, callback) callback(); return { Cancel = function() end } end,
 }
-local inCombat = false
-_G.InCombatLockdown = function() return inCombat end
+_G.InCombatLockdown = function() return false end
 _G.issecretvalue = function() return false end
 _G.UnitExists = function() return true end
 _G.AuraContainerSortMethod = { Default = 0, Expiration = 1, Name = 2 }
@@ -279,8 +282,6 @@ local A3 = assert(MSUF.MSUF_Auras3)
 local AurasElement = assert(registeredElements.Auras)
 Check(type(A3.ResolveUnitFrameConfig) == "function", "unit aura compiler missing")
 Check(type(A3._ApplyNormalLaneContainers) == "function", "normal lane integration surface missing")
-Check(type(A3._ApplySharedAuraContainer) == "function", "shared aura integration surface missing")
-Check(type(A3._ShouldUseSharedAuraContainer) == "function", "adaptive shared aura selector missing")
 
 local ANCHORS = {
     "TOPLEFT", "TOP", "TOPRIGHT",
@@ -292,8 +293,8 @@ local GROWTHS = {
     LEFTDOWN = { x = -1, y = -1, initial = "TOPRIGHT", vertical = false },
     RIGHTUP = { x = 1, y = 1, initial = "BOTTOMLEFT", vertical = false },
     LEFTUP = { x = -1, y = 1, initial = "BOTTOMRIGHT", vertical = false },
-    UP = { x = 1, y = 1, initial = "BOTTOMLEFT", vertical = true },
-    DOWN = { x = 1, y = -1, initial = "TOPLEFT", vertical = true },
+    UP = { x = 1, y = 1, initial = "BOTTOMLEFT", vertical = false },
+    DOWN = { x = 1, y = -1, initial = "TOPLEFT", vertical = false },
 }
 local GROWTH_ORDER = { "RIGHTDOWN", "LEFTDOWN", "RIGHTUP", "LEFTUP", "UP", "DOWN" }
 
@@ -356,20 +357,13 @@ local function AssertLayoutSetters(container, expected, label)
     Equal(container.auraLayoutAnchorPoint, expected.initial, label .. " native anchor")
     Equal(container.auraLayoutHorizontalDirection, expected.x, label .. " native horizontal growth")
     Equal(container.auraLayoutVerticalDirection, expected.y, label .. " native vertical growth")
-    -- Horizontal native flow wraps after three 10px icons plus two 2px gaps.
-    -- Vertical lanes are column-major in the fallback; their compiled bounding
-    -- box width (two icons plus one gap) is still the harmless native value.
-    Near(container.auraLayoutRowWidth, expected.vertical and 22 or 34, label .. " native row width")
+    Near(container.auraLayoutRowWidth, 34, label .. " native row width")
 end
 
 local function AssertGrid(frames, container, expected, label)
     local step = 12
     local expectedOffsets
-    if expected.vertical then
-        expectedOffsets = { { 0, 0 }, { 0, step * expected.y }, { 0, 2 * step * expected.y }, { step, 0 } }
-    else
-        expectedOffsets = { { 0, 0 }, { step * expected.x, 0 }, { 2 * step * expected.x, 0 }, { 0, step * expected.y } }
-    end
+    expectedOffsets = { { 0, 0 }, { step * expected.x, 0 }, { 2 * step * expected.x, 0 }, { 0, step * expected.y } }
     for index = 1, #expectedOffsets do
         local offset = expectedOffsets[index]
         AssertPoint(frames[index], expected.initial, container, expected.initial, offset[1], offset[2],
@@ -391,7 +385,6 @@ end
 
 local matrixCases = 0
 local horizontalChurnCovered = false
-local verticalChurnCovered = false
 for _, anchor in ipairs(ANCHORS) do
     for _, growth in ipairs(GROWTH_ORDER) do
         local expected = GROWTHS[growth]
@@ -402,9 +395,13 @@ for _, anchor in ipairs(ANCHORS) do
         Equal(lane.verticalGrowth, expected.vertical, label .. " compiled axis")
         local container, auraRoot, parent = ApplyLane(lane)
 
-        -- Selected anchor owns the lane bounds. Growth must not silently replace
-        -- this with initialAnchor on the outer container.
-        AssertPoint(container, anchor, parent, anchor, 7, -5, label .. " container")
+        -- Selected anchor owns the fixed host. The native container is anchored
+        -- at its flow origin inside that host and may resize with active auras.
+        local host = assert(container._msufA3LayoutHost)
+        AssertPoint(host, anchor, parent, anchor, 7, -5, label .. " host")
+        AssertPoint(container, expected.initial, host, expected.initial, 0, 0, label .. " container")
+        Near(host.width, lane.width, label .. " fixed-capacity host width")
+        Near(host.height, lane.height, label .. " fixed-capacity host height")
         AssertLayoutSetters(container, expected, label)
 
         local group = assert(container:GetAuraGroup(container._msufA3ManagedGroupKey))
@@ -424,17 +421,9 @@ for _, anchor in ipairs(ANCHORS) do
         Equal(container.layoutSetterCalls.width, setterCallsBeforeChurn.width,
             label .. " layout churn repeated native width setter")
         AssertGrid(frames, container, expected, label)
-        Near(container.width, lane.width, label .. " fixed-capacity width after layout")
-        Near(container.height, lane.height, label .. " fixed-capacity height after layout")
-
-        if expected.vertical then
-            Check(container.ApplyLayout ~= NativeAuraApplyLayout, label .. " did not install vertical layout fallback")
-        else
-            Check(container.ApplyLayout ~= NativeAuraApplyLayout,
-                label .. " did not install fixed-capacity native layout wrapper")
-            Check((container.nativeApplyLayoutCalls or 0) >= 1,
-                label .. " horizontal wrapper did not delegate to Blizzard")
-        end
+        Check(container.ApplyLayout == NativeAuraApplyLayout,
+            label .. " replaced Blizzard's native ApplyLayout")
+        Check((container.nativeApplyLayoutCalls or 0) >= 1, label .. " native layout did not run")
 
         -- Reapplying an unchanged compiled lane is a cold-path no-op for layout
         -- setters and visual bindings.
@@ -448,182 +437,29 @@ for _, anchor in ipairs(ANCHORS) do
         Equal(container.layoutSetterCalls.width, widthCalls, label .. " repeated native width setter")
         Equal(BindingCalls(frames), bindingsBefore, label .. " cold reapply rebuilt visual bindings")
 
-        if not expected.vertical and not horizontalChurnCovered then
+        if not horizontalChurnCovered then
             local reordered = { frames[3], frames[1], frames[2], frames[4], frames[5], frames[6] }
             group.frames = reordered
             container:ApplyLayout()
             AssertGrid(reordered, container, expected, label .. " reordered native churn")
             Equal(BindingCalls(frames), bindingsBefore, label .. " reordered native churn rebuilt visual bindings")
-            horizontalChurnCovered = true
-        elseif expected.vertical and not verticalChurnCovered then
-            local reordered = { frames[3], frames[1], frames[2], frames[4], frames[5], frames[6] }
-            group.frames = reordered
-            container:ApplyLayout()
-            AssertGrid(reordered, container, expected, label .. " reordered vertical churn")
-            Equal(BindingCalls(frames), bindingsBefore, label .. " vertical fallback rebuilt visual bindings")
-
-            -- Stress the vertical UNIT_AURA layout route. The stable AuraGroup
-            -- is cached, while Blizzard's reordered framesByIndex is fetched on
-            -- every pass. Each active icon gets exactly one ClearAllPoints and
-            -- one SetPoint; no styling or native setters are repeated.
-            local groupLookups = container.getAuraGroupCalls or 0
             local clears = GeometryCalls(reordered, "clearAllPointsCalls")
             local points = GeometryCalls(reordered, "setPointCalls")
             local stressPasses = 1000
             for _ = 1, stressPasses do container:ApplyLayout() end
-            Equal(container.getAuraGroupCalls or 0, groupLookups, label .. " repeated AuraGroup lookup")
             Equal(GeometryCalls(reordered, "clearAllPointsCalls") - clears, #reordered * stressPasses,
-                label .. " vertical clear-point work")
+                label .. " native clear-point work")
             Equal(GeometryCalls(reordered, "setPointCalls") - points, #reordered * stressPasses,
-                label .. " vertical set-point work")
+                label .. " native set-point work")
             Equal(BindingCalls(frames), bindingsBefore, label .. " stress churn rebuilt visual bindings")
-            Equal(container.layoutSetterCalls.anchor, setterCallsBeforeChurn.anchor,
-                label .. " stress churn repeated native anchor setter")
-            Equal(container.layoutSetterCalls.growth, setterCallsBeforeChurn.growth,
-                label .. " stress churn repeated native growth setter")
-            Equal(container.layoutSetterCalls.width, setterCallsBeforeChurn.width,
-                label .. " stress churn repeated native width setter")
-            verticalChurnCovered = true
+            horizontalChurnCovered = true
         end
 
         matrixCases = matrixCases + 1
     end
 end
 Equal(matrixCases, 54, "unit anchor/growth matrix coverage")
-Check(horizontalChurnCovered and verticalChurnCovered, "native/fallback reorder coverage incomplete")
-
--- Production unit frames use one native container for every normal aura lane
--- on the same unit. Verify the shared cache/event owner, independent lane
--- geometry, selective layout no-op, single forced refresh, max-count no-reparse,
--- and in-combat unit-token reuse.
-do
-    _G.MSUF_DB = {
-        auras3 = {
-            enabled = true,
-            showPlayer = true,
-            showFocus = true,
-            shared = {
-                showBuffs = true,
-                showDebuffs = true,
-                maxBuffs = 3,
-                maxDebuffs = 2,
-                buffPerRow = 3,
-                debuffPerRow = 2,
-                buffGroupIconSize = 10,
-                debuffGroupIconSize = 12,
-                spacing = 2,
-                buffAnchor = "TOPRIGHT",
-                debuffAnchor = "BOTTOMLEFT",
-                buffGroupOffsetX = 7,
-                buffGroupOffsetY = -5,
-                debuffGroupOffsetX = -4,
-                debuffGroupOffsetY = 6,
-                buffGrowthX = "LEFTDOWN",
-                debuffGrowthX = "RIGHTUP",
-                buffShowCooldownSwipe = false,
-                debuffShowCooldownSwipe = false,
-                buffShowDurationBar = false,
-                debuffShowDurationBar = false,
-                buffShowCooldownText = false,
-                debuffShowCooldownText = false,
-                buffShowStackCount = false,
-                debuffShowStackCount = false,
-                buffShowTooltip = false,
-                debuffShowTooltip = false,
-            },
-        },
-    }
-    A3._runtimeConfigGen = (A3._runtimeConfigGen or 1) + 1
-    local frame = NewFrame(nil)
-    frame.unit = "player"
-    frame.MSUFSpec = {}
-    local creationsBefore = auraContainerCreations
-    Check(AurasElement.Enable(frame) == true, "production shared aura apply failed")
-    local auraRoot = assert(frame.Auras, "production aura root missing")
-    local shared = assert(auraRoot.UnitAuras, "production shared aura container missing")
-    Equal(auraContainerCreations, creationsBefore + 1,
-        "normal buff/debuff lanes allocated more than one native container")
-    Check(shared._msufA3SharedAuraGroups == true, "normal aura container is not shared")
-    Check(auraRoot.Buffs == nil and auraRoot.Debuffs == nil,
-        "legacy isolated normal containers survived shared apply")
-    Equal(shared:GetUnit(), "player", "shared aura unit")
-
-    local buffGroup = assert(shared:GetAuraGroup("msuf_buff"), "shared buff group missing")
-    local debuffGroup = assert(shared:GetAuraGroup("msuf_debuff"), "shared debuff group missing")
-    local buffFrames = buffGroup:GetFramesByIndex()
-    local debuffFrames = debuffGroup:GetFramesByIndex()
-    shared:ApplyLayout()
-    AssertPoint(buffFrames[1], "TOPRIGHT", shared, "TOPRIGHT", 7, -5, "shared buff anchor")
-    AssertPoint(debuffFrames[1], "BOTTOMLEFT", shared, "BOTTOMLEFT", -4, 6, "shared debuff anchor")
-
-    local buffPoints = GeometryCalls(buffFrames, "setPointCalls")
-    local debuffPoints = GeometryCalls(debuffFrames, "setPointCalls")
-    shared:ApplyLayout()
-    Equal(GeometryCalls(buffFrames, "setPointCalls"), buffPoints,
-        "unchanged shared buff group repeated geometry")
-    Equal(GeometryCalls(debuffFrames, "setPointCalls"), debuffPoints,
-        "unchanged shared debuff group repeated geometry")
-
-    buffGroup.frames = { buffFrames[2], buffFrames[1], buffFrames[3] }
-    shared:ApplyLayout()
-    Check(GeometryCalls(buffFrames, "setPointCalls") > buffPoints,
-        "reordered shared buff group did not refresh geometry")
-    Equal(GeometryCalls(debuffFrames, "setPointCalls"), debuffPoints,
-        "reordered shared buff group relaid the unchanged debuff group")
-
-    local updates = shared.updateAllAurasCalls or 0
-    Check(A3._RefreshAppliedNativeAuras(frame, true) == true,
-        "forced shared aura refresh failed")
-    Equal(shared.updateAllAurasCalls or 0, updates + 1,
-        "forced shared aura refresh did not parse exactly once")
-
-    _G.MSUF_DB.auras3.shared.maxBuffs = 4
-    A3._runtimeConfigGen = A3._runtimeConfigGen + 1
-    updates = shared.updateAllAurasCalls or 0
-    Check(AurasElement.Enable(frame) == true, "shared max-count reapply failed")
-    Check(frame.Auras.UnitAuras == shared, "shared max-count edit recreated the container")
-    Equal(shared.updateAllAurasCalls or 0, updates,
-        "shared max-count edit forced a redundant full aura parse")
-    Check((shared.maxFrameCountCalls or 0) >= 1,
-        "shared max-count edit did not update the native group limit")
-
-    local creationsBeforeCombatSwap = auraContainerCreations
-    inCombat = true
-    Check(A3.RenderUnitChangedFrame(frame, "player", "focus") == true,
-        "shared container could not be rebound during combat")
-    inCombat = false
-    Check(frame.Auras.UnitAuras == shared, "combat unit swap replaced the shared container")
-    Equal(auraContainerCreations, creationsBeforeCombatSwap,
-        "combat unit swap allocated a new aura container")
-    Equal(shared:GetUnit(), "focus", "combat-shared aura unit")
-
-    local foreign = NewFrame(nil)
-    buffGroup.frames[1].point = { "CENTER", foreign, "CENTER", 99, 88 }
-    updates = shared.updateAllAurasCalls or 0
-    Check(A3._DirectIdentityRefreshUnit("focus", true) == true,
-        "shared world-repair refresh did not run")
-    Equal(shared.updateAllAurasCalls or 0, updates + 1,
-        "shared world-repair refresh did not settle native auras exactly once")
-    AssertPoint(buffGroup.frames[1], "TOPRIGHT", shared, "TOPRIGHT", 7, -5,
-        "shared world-repair buff anchor")
-end
-
--- A single normal lane has no duplicate cache/event work to eliminate. Keep it
--- on Blizzard's lighter native-flow container instead of paying shared-layout
--- bookkeeping for a one-group case.
-do
-    _G.MSUF_DB.auras3.shared.showDebuffs = false
-    A3._runtimeConfigGen = A3._runtimeConfigGen + 1
-    local frame = NewFrame(nil)
-    frame.unit = "player"
-    frame.MSUFSpec = {}
-    local creationsBefore = auraContainerCreations
-    Check(AurasElement.Enable(frame) == true, "single-lane production apply failed")
-    Equal(auraContainerCreations, creationsBefore + 1,
-        "single-lane production apply allocated more than one container")
-    Check(frame.Auras.Buffs ~= nil, "single-lane production apply lost native buff container")
-    Check(frame.Auras.UnitAuras == nil, "single-lane production apply used shared bookkeeping")
-end
+Check(horizontalChurnCovered, "native reorder coverage incomplete")
 
 -- PLAYER_ENTERING_WORLD / ZONE_CHANGED_NEW_AREA use a one-shot geometry pass
 -- that deliberately bypasses desired-value caches. Cover a visible repair and
@@ -637,17 +473,18 @@ do
         "player aura container was not registered for world repair")
 
     local foreign = NewFrame(nil)
-    container.point = { "CENTER", foreign, "CENTER", 99, 88 }
-    container.width, container.height = 3, 4
+    local host = assert(container._msufA3LayoutHost)
+    host.point = { "CENTER", foreign, "CENTER", 99, 88 }
+    host.width, host.height = 3, 4
     local updates = container.updateAllAurasCalls or 0
     Check(A3._DirectIdentityRefreshUnit("player", true) == true,
         "visible player world repair did not run")
     Equal(container.updateAllAurasCalls or 0, updates + 1,
         "visible player world repair did not settle native auras first")
-    AssertPoint(container, lane.anchor, parent, lane.anchor, lane.x, lane.y,
+    AssertPoint(host, lane.anchor, parent, lane.anchor, lane.x, lane.y,
         "visible player world repair")
-    Near(container.width, lane.width, "visible player world repair width")
-    Near(container.height, lane.height, "visible player world repair height")
+    Near(host.width, lane.width, "visible player world repair width")
+    Near(host.height, lane.height, "visible player world repair height")
     Equal(container._msufA3ForceManagedAuraGeometry, nil,
         "visible player world repair marker was not consumed")
 
@@ -655,25 +492,25 @@ do
     -- one-shot geometry repair immediately, so a lane hidden during a loading
     -- screen does not wait for another zone event to reclaim its saved point.
     container:Hide()
-    container.point = { "CENTER", foreign, "CENTER", -77, 66 }
-    container.width, container.height = 5, 6
+    host.point = { "CENTER", foreign, "CENTER", -77, 66 }
+    host.width, host.height = 5, 6
     updates = container.updateAllAurasCalls or 0
     A3._DirectIdentityRefreshUnit("player", true)
     Equal(container.updateAllAurasCalls or 0, updates,
         "hidden player container refreshed native auras")
-    AssertPoint(container, lane.anchor, parent, lane.anchor, lane.x, lane.y,
+    AssertPoint(host, lane.anchor, parent, lane.anchor, lane.x, lane.y,
         "hidden player world repair")
-    Near(container.width, lane.width, "hidden player world repair width")
-    Near(container.height, lane.height, "hidden player world repair height")
+    Near(host.width, lane.width, "hidden player world repair width")
+    Near(host.height, lane.height, "hidden player world repair height")
     Equal(container._msufA3ForceManagedAuraGeometry, nil,
         "hidden player world repair marker was not consumed")
     local ok, any = A3._ApplyNormalLaneContainers(auraRoot, { buff = lane }, parent, false)
     Check(ok == true and any == true and auraRoot.Buffs == container,
         "hidden player container was not reused on its next config sync")
-    AssertPoint(container, lane.anchor, parent, lane.anchor, lane.x, lane.y,
+    AssertPoint(host, lane.anchor, parent, lane.anchor, lane.x, lane.y,
         "post-repair player config sync")
-    Near(container.width, lane.width, "post-repair player config sync width")
-    Near(container.height, lane.height, "post-repair player config sync height")
+    Near(host.width, lane.width, "post-repair player config sync width")
+    Near(host.height, lane.height, "post-repair player config sync height")
 end
 
 -- Dispel border/overlay/corner sensors use native AuraSlots rather than aura
@@ -711,41 +548,36 @@ do
     container._msufA3NativeLaneConfig = sensorRoot
     container._msufA3ParentFrame = parent
     container._msufA3SensorButtonSlots = { { sensor = sensor, sensorIndex = 1 } }
-
-    Check(A3._SyncManagedAuraContainerGeometry(container, true) == true,
-        "forced dispel AuraSlot geometry sync failed")
-    AssertPoint(button, "BOTTOM", parent, "BOTTOM", 3, -2,
-        "forced dispel AuraSlot geometry")
-    Near(button.width, 12, "forced dispel AuraSlot width")
-    Near(button.height, 12, "forced dispel AuraSlot height")
-
     local foreign = NewFrame(nil)
     button.point = { "CENTER", foreign, "CENTER", 90, 80 }
     button.width, button.height = 2, 3
+    button._ptr5Forbidden = true
+    Check(A3._SyncManagedAuraContainerGeometry(container, true) == true,
+        "forced dispel AuraSlot geometry sync failed")
+    Equal(button.point[2], foreign, "forced dispel sync touched a forbidden AuraButton")
+    Near(button.width, 2, "forced dispel sync changed forbidden AuraButton width")
+    Near(button.height, 3, "forced dispel sync changed forbidden AuraButton height")
     Check(A3._SyncManagedAuraContainerGeometry(container, false) == true,
         "cached dispel AuraSlot sync failed")
     Equal(button.point[2], foreign, "cached dispel sync unexpectedly bypassed geometry cache")
     container._msufA3ForceManagedAuraGeometry = true
     Check(A3._SyncManagedAuraContainerGeometry(container, false) == true,
         "deferred dispel AuraSlot repair failed")
-    AssertPoint(button, "BOTTOM", parent, "BOTTOM", 3, -2,
-        "deferred dispel AuraSlot geometry")
-    Near(button.width, 12, "deferred dispel AuraSlot width")
-    Near(button.height, 12, "deferred dispel AuraSlot height")
+    Equal(button.point[2], foreign, "deferred dispel repair touched a forbidden AuraButton")
     Equal(container._msufA3ForceManagedAuraGeometry, nil,
         "deferred dispel AuraSlot marker survived successful sync")
 end
 
--- Reusing a lane container across axis changes must keep one stable wrapper:
--- horizontal layouts delegate to Blizzard; vertical layouts return to the
--- column-major point-only fallback without recreating the container.
+-- Legacy vertical values are translated to native row-major values. Equivalent
+-- UP/RIGHTUP configs reuse a container; a real layout change recreates it so all
+-- AuraButton setup remains inside initializeFrame.
 do
     local upLane = UnitLane("TOPRIGHT", "UP")
     local container, auraRoot, parent = ApplyLane(upLane)
     local group = container:GetAuraGroup(container._msufA3ManagedGroupKey)
     local frames = group:GetFramesByIndex()
     container:ApplyLayout()
-    local nativeCalls = container.nativeApplyLayoutCalls or 0
+    local host = assert(container._msufA3LayoutHost)
 
     local activeCounts = { 1, 2, 3, 4, 5, 6 }
     for i = 1, #activeCounts do
@@ -754,40 +586,37 @@ do
         for index = 1, activeCount do active[index] = frames[index] end
         group.frames = active
         container:ApplyLayout()
-        Near(container.width, upLane.width, "vertical fixed width at active count " .. tostring(activeCount))
-        Near(container.height, upLane.height, "vertical fixed height at active count " .. tostring(activeCount))
+        Near(host.width, upLane.width, "fixed host width at active count " .. tostring(activeCount))
+        Near(host.height, upLane.height, "fixed host height at active count " .. tostring(activeCount))
     end
     group.frames = frames
 
     local rightUpLane = UnitLane("TOPRIGHT", "RIGHTUP")
     local ok, any = A3._ApplyNormalLaneContainers(auraRoot, { buff = rightUpLane }, parent, false)
     Check(ok == true and any == true and auraRoot.Buffs == container,
-        "vertical-to-horizontal switch recreated container")
+        "equivalent legacy/native growth recreated container")
     container:ApplyLayout()
-    Equal(container.nativeApplyLayoutCalls or 0, nativeCalls + 1,
-        "vertical wrapper did not delegate horizontal layout to Blizzard")
     AssertGrid(frames, container, GROWTHS.RIGHTUP, "vertical-to-horizontal switch")
     for _, activeCount in ipairs({ 1, 2, 4, 6 }) do
         local active = {}
         for index = 1, activeCount do active[index] = frames[index] end
         group.frames = active
         container:ApplyLayout()
-        Near(container.width, rightUpLane.width,
-            "horizontal fixed width at active count " .. tostring(activeCount))
-        Near(container.height, rightUpLane.height,
-            "horizontal fixed height at active count " .. tostring(activeCount))
+        Near(host.width, rightUpLane.width,
+            "native fixed host width at active count " .. tostring(activeCount))
+        Near(host.height, rightUpLane.height,
+            "native fixed host height at active count " .. tostring(activeCount))
     end
     group.frames = frames
 
     local downLane = UnitLane("TOPRIGHT", "DOWN")
     ok, any = A3._ApplyNormalLaneContainers(auraRoot, { buff = downLane }, parent, false)
-    Check(ok == true and any == true and auraRoot.Buffs == container,
-        "horizontal-to-vertical switch recreated container")
-    nativeCalls = container.nativeApplyLayoutCalls or 0
-    container:ApplyLayout()
-    Equal(container.nativeApplyLayoutCalls or 0, nativeCalls,
-        "vertical layout unexpectedly delegated to Blizzard")
-    AssertGrid(frames, container, GROWTHS.DOWN, "horizontal-to-vertical switch")
+    local downContainer = assert(auraRoot.Buffs)
+    Check(ok == true and any == true and downContainer ~= container,
+        "layout-changing growth did not recreate its PTR 5 container")
+    downContainer:ApplyLayout()
+    local downFrames = downContainer:GetAuraGroup(downContainer._msufA3ManagedGroupKey):GetFramesByIndex()
+    AssertGrid(downFrames, downContainer, GROWTHS.DOWN, "native down switch")
 end
 
 -- Group frames compile a different DB/spec shape but feed the same native lane
@@ -849,15 +678,18 @@ for _, laneSpec in ipairs(GROUP_LANES) do
             Equal(lane.anchor, anchor, label .. " compiled bounding-box anchor")
             Equal(lane.initialAnchor, growth.expected.initial, label .. " compiled initial anchor")
             local container, _, parent = ApplyLane(lane)
-            AssertPoint(container, anchor, parent, anchor, 7, -5, label .. " container")
+            local host = assert(container._msufA3LayoutHost)
+            AssertPoint(host, anchor, parent, anchor, 7, -5, label .. " host")
+            AssertPoint(container, growth.expected.initial, host, growth.expected.initial, 0, 0,
+                label .. " container")
             AssertLayoutSetters(container, growth.expected, label)
             local frames = container:GetAuraGroup(container._msufA3ManagedGroupKey):GetFramesByIndex()
             container:ApplyLayout()
             AssertGrid(frames, container, growth.expected, label)
-            Check(container.ApplyLayout ~= NativeAuraApplyLayout,
-                label .. " did not install fixed-capacity native layout wrapper")
-            Near(container.width, lane.width, label .. " fixed-capacity width")
-            Near(container.height, lane.height, label .. " fixed-capacity height")
+            Check(container.ApplyLayout == NativeAuraApplyLayout,
+                label .. " replaced Blizzard's native ApplyLayout")
+            Near(host.width, lane.width, label .. " fixed-capacity host width")
+            Near(host.height, lane.height, label .. " fixed-capacity host height")
             groupCases = groupCases + 1
         end
     end
@@ -972,8 +804,8 @@ end
 -- the group External lane all preserve the same full-capacity rectangle and
 -- selected-anchor/internal-flow split.
 local runtimeSource = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua")
-Check(runtimeSource:find("container:SetPoint(lane.anchor, parentFrame, lane.anchor, lane.x, lane.y)", 1, true),
-    "live lane no longer anchors its bounding box with lane.anchor")
+Check(runtimeSource:find("layoutHost:SetPoint(lane.anchor, parentFrame, lane.anchor, lane.x, lane.y)", 1, true),
+    "live lane host no longer anchors its bounding box with lane.anchor")
 Check(runtimeSource:find("SetAuraLayoutAnchorPoint", 1, true), "native layout anchor setter missing")
 Check(runtimeSource:find("SetAuraLayoutGrowthDirection", 1, true), "native growth setter missing")
 Check(runtimeSource:find("SetAuraLayoutRowWidth", 1, true), "native row-width setter missing")
@@ -981,20 +813,30 @@ Check(Count(runtimeSource, "initialAnchor = ButtonAnchor(xSign, ySign)") >= 2,
     "unit/group compilers no longer share initial-anchor derivation")
 Check(runtimeSource:find("local NativeRuntime = (function()", 1, true),
     "native backend no longer has an isolated local-budget boundary")
-Check(runtimeSource:find("local function LayoutVerticalAuraContainer", 1, true),
-    "vertical layout helper leaked out of the local runtime")
-Check(not runtimeSource:find("function A3._LayoutVerticalAuraContainer", 1, true),
-    "vertical churn uses an A3 namespace lookup")
-Check(runtimeSource:find("container._msufA3ManagedAuraGroup = group", 1, true),
-    "vertical layout no longer caches the stable AuraGroup")
-Check(runtimeSource:find("InstallVerticalAuraLayoutFallback(container)", 1, true),
-    "normal lanes no longer install the fixed-capacity ApplyLayout wrapper")
-Check(Count(runtimeSource, "container:SetSize(lane.width or lane.size or 1, lane.height or lane.size or 1)") >= 2,
-    "native horizontal/vertical layout no longer restores full lane capacity")
+Check(not runtimeSource:find("ApplyVerticalAwareAuraLayout", 1, true)
+    and not runtimeSource:find("InstallVerticalAuraLayoutFallback", 1, true),
+    "PTR 5 runtime still overrides Blizzard's native ApplyLayout")
+Check(runtimeSource:find("container._msufA3LayoutHost = host", 1, true),
+    "fixed native-layout host is missing")
+Check(not runtimeSource:find("container.ApplyLayout =", 1, true),
+    "PTR 5 runtime assigns a tainted ApplyLayout wrapper")
+Check(runtimeSource:find('filter = filter .. "|DISPELLABLE"', 1, true)
+    and runtimeSource:find('filter = filter .. "|IMPORTANT"', 1, true),
+    "PTR 5 DISPELLABLE/IMPORTANT native filters are missing")
+Check(runtimeSource:find('return "HARMFUL|RAID", 1', 1, true)
+    and runtimeSource:find('return "HARMFUL|RAID_PLAYER_DISPELLABLE", 1', 1, true)
+    and runtimeSource:find('return "HARMFUL|DISPELLABLE", 3', 1, true),
+    "dispel trigger modes no longer map to the three distinct PTR 5 filters")
 Check(runtimeSource:find("player = true", 1, true),
     "player aura containers are no longer eligible for world repair")
 Check(runtimeSource:find("A3._SyncManagedAuraContainerGeometry", 1, true),
     "generic managed-aura world repair dispatcher missing")
+
+local spellIndicatorSource = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_SpellIndicators.lua")
+Check(not spellIndicatorSource:find("hooksecurefunc(source", 1, true),
+    "PTR 5 spell indicators retain a post-initializer write hook into forbidden AuraButton descendants")
+Check(not spellIndicatorSource:find("for button in pairs(buttons) do HideButton", 1, true),
+    "PTR 5 spell indicator teardown still calls APIs on initialized AuraButtons")
 
 local editModeSource = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_EditMode.lua")
 Check(editModeSource:find("PositionPreviewGroup(group, frame, anchor, x, y, laneW, laneH)", 1, true),
@@ -1040,4 +882,4 @@ Check(groupHandlesSource:find("return ResolveAnchor(rx, ry)", 1, true),
 Check(groupHandlesSource:find('externalHandle._cfgGroup = "externals"', 1, true),
     "group External aura handle no longer writes its persisted lane")
 
-print("PASS aura position parity: shared multi-group runtime, selective layout, combat reuse, 54 unit + 144 group live layouts, 45 unit preview lanes, fixed active-count capacity, player/dispel zone repair, 1000x vertical churn")
+print("PASS aura position parity: 54 unit + 144 group live layouts, 45 unit preview lanes, PTR5 forbidden-button guard, fixed host capacity, player/dispel zone repair, 1000x native churn")

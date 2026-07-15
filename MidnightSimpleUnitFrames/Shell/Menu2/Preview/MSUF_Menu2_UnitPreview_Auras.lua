@@ -347,10 +347,8 @@ local function Growth(cfg, kind)
     local gy = rowWrap == "UP" and 1 or -1
     local vertical = false
     if growth == "UP" then
-        vertical = true
         gx, gy = 1, 1
     elseif growth == "DOWN" then
-        vertical = true
         gx, gy = 1, -1
     end
     return gx, gy, vertical, ButtonAnchor(gx, gy)
@@ -497,8 +495,8 @@ local function CustomGrowth(growth)
     if growth == "LEFTUP" then return -1, 1, false end
     if growth == "RIGHTUP" then return 1, 1, false end
     if growth == "RIGHTDOWN" then return 1, -1, false end
-    if growth == "UP" then return 1, 1, true end
-    if growth == "DOWN" then return 1, -1, true end
+    if growth == "UP" then return 1, 1, false end
+    if growth == "DOWN" then return 1, -1, false end
     return -1, -1, false
 end
 

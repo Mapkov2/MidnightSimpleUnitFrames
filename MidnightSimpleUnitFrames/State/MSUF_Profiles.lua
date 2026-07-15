@@ -2863,14 +2863,13 @@ local function MSUF_ProfileIO_NormalizeAuraFilterForWago(filter)
     local function normalizeGroup(group)
         if type(group) ~= "table" then return end
         group.includeNameplateOnly = nil
-        group.onlyImportant = nil
         group.cancelable = nil
         group.notCancelable = nil
         group.externalDefensive = nil
         group.bigDefensive = nil
         group.exclusive = nil
         group.crowdControl = nil
-        if group.filterToken == nil or group.filterToken == "IMPORTANT" then
+        if group.filterToken == nil then
             group.filterToken = "ALL"
         end
     end
@@ -2919,7 +2918,7 @@ end
 local function MSUF_ProfileIO_NormalizeGFAuraGroupForWago(auras, groupKey, defaultToken)
     local group = auras and auras[groupKey]
     if type(group) ~= "table" then return end
-    if group.filterToken == nil or group.filterToken == "IMPORTANT" then
+    if group.filterToken == nil then
         group.filterToken = defaultToken
     end
     if type(group.blacklist) == "table" then
