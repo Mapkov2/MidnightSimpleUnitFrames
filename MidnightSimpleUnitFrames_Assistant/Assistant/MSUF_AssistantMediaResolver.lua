@@ -128,7 +128,7 @@ function R.StatusbarItems()
     if #out == 0 then
         local fallback = {
             "Blizzard", "Solid", "Flat", "RaidHP", "RaidPower", "Skills", "Outline", "TooltipBorder", "DialogBG", "Parchment",
-            "MSUF Charcoal", "MSUF Minimalist", "MSUF Slickrock", "MSUF Smooth", "MSUF Smooth v2", "MSUF Smoother", "Better Blizzard",
+            "MSUF Charcoal", "MSUF Lucent", "MSUF Minimalist", "MSUF Slickrock", "MSUF Smooth", "MSUF Smooth v2", "MSUF Smoother", "Better Blizzard",
         }
         for i = 1, #fallback do AddItem(out, usedValue, usedLabel, fallback[i], fallback[i], fallback[i], nil, "Fallback") end
     end

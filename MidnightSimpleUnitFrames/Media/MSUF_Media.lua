@@ -34,6 +34,7 @@ local function Reg(name, file)
 end
 
 Reg("MSUF Charcoal",   "Charcoal.tga")
+Reg("MSUF Lucent",     "MSUF_Lucent_v2.tga")
 Reg("MSUF Minimalist", "Minimalist.tga")
 Reg("MSUF Slickrock",  "Slickrock.tga")
 Reg("MSUF Smooth",     "MSUF_Smooth.tga")
