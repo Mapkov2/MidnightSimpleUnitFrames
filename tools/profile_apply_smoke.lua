@@ -177,7 +177,7 @@ local _, firstChanged = translate(malformedStored, {
 })
 assert(firstChanged == true, "unversioned current profile must be normalized once")
 assert(malformedStored.general.nameOffsetX == 500, "stored malformed numeric field was not clamped")
-assert(malformedStored._msufProfileNormalizationRevision == 4, "normalization revision was not persisted")
+assert(malformedStored._msufProfileNormalizationRevision == 5, "normalization revision was not persisted")
 
 -- The second trusted pass must return before walking the full profile tree.
 local nestedWalks = 0
@@ -189,7 +189,7 @@ local watchedGeneral = setmetatable({}, {
 })
 local alreadyCurrent = {
     _msufProfileSchema = 600,
-    _msufProfileNormalizationRevision = 4,
+    _msufProfileNormalizationRevision = 5,
     general = watchedGeneral,
 }
 local _, fastChanged = translate(alreadyCurrent, {
@@ -203,7 +203,7 @@ assert(nestedWalks == 0, "normalization fast path walked nested profile tables")
 -- External payloads never get to assert their own trust markers.
 local spoofedImport = {
     _msufProfileSchema = 600,
-    _msufProfileNormalizationRevision = 4,
+    _msufProfileNormalizationRevision = 5,
     _msufDefaultsRevision = 1,
     _msufDispelPriorityMigration = 3,
     general = { nameOffsetX = "900" },
@@ -246,10 +246,37 @@ local defaultsChunk, defaultsError = loadfile(defaultsPath)
 assert(defaultsChunk, defaultsError)
 defaultsChunk("MidnightSimpleUnitFrames", MSUF)
 
+local normalizeLayers = assert(_G.MSUF_NormalizeNumericLayers)
+local layerFixture = {
+    player = {
+        nameTextLayer = -4,
+        detachedPowerBarFrameLevelOffset = 42,
+        showPlayer = 77,
+    },
+    bars = { classPowerFrameLevelOffset = "12.6" },
+    gf_party = {
+        spellIndicators = {
+            layer = "30.9",
+            specs = { [1] = { layer = 4.4, strata = "HIGH" } },
+        },
+    },
+}
+assert(normalizeLayers(layerFixture) == true, "addon-wide layer normalization did not report changes")
+assert(layerFixture.player.nameTextLayer == 0
+    and layerFixture.player.detachedPowerBarFrameLevelOffset == 30
+    and layerFixture.bars.classPowerFrameLevelOffset == 13
+    and layerFixture.gf_party.spellIndicators.layer == 30
+    and layerFixture.gf_party.spellIndicators.specs[1].layer == 4,
+    "numeric MSUF layers were not rounded and clamped to 0..30")
+assert(layerFixture.player.showPlayer == 77
+    and layerFixture.gf_party.spellIndicators.specs[1].strata == "HIGH",
+    "layer normalization touched a non-layer or Blizzard FrameStrata field")
+assert(normalizeLayers(layerFixture) == false, "layer normalization is not idempotent")
+
 local function currentDefaultsProfile()
     local profile = {
         _msufProfileSchema = 600,
-        _msufDefaultsRevision = 4,
+        _msufDefaultsRevision = 5,
         shortenNames = false,
     }
     for _, key in ipairs({

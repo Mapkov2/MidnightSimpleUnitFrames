@@ -438,13 +438,15 @@ local function FinalizeScene(scene)
     local selectedEffectRoot = selectedEffectOwner and selectedEffectOwner._msufSpellPreviewEffectRoot
     if selectedEffectRoot and selectedEffectRoot.IsShown and selectedEffectRoot:IsShown() then
         local priority = max(1, min(10, floor((tonumber(selectedEffectRoot._msufSpellPreviewPriority) or 5) + 0.5)))
+        local effectLayer = S.ClampLayer(selectedEffectRoot._msufSpellPreviewLayer, 0)
         -- Only one selected full-frame effect is rendered. Its configured live
         -- strata must not be translated relative to an Edit Mode preview frame:
         -- that live frame can remain on a higher strata during teardown and
         -- produce a negative local offset below the menu mock. Keep the preview
         -- root on the host strata and express priority in a bounded local band.
         ApplyHandleStrata(scene, selectedEffectRoot, "AUTO", liveStrata, hostStrata)
-        SetPreviewFrameLevel(selectedEffectRoot, baseLevel + 24 + (11 - priority))
+        SetPreviewFrameLevel(selectedEffectRoot, baseLevel
+            + (S.Layers.SPELL_FRAME_EFFECT_BASE_OFFSET or 1) + (11 - priority) + effectLayer)
     end
     if selectedEffectOwner then
         SetPreviewFrameLevel(selectedEffectOwner, baseLevel + 1)
@@ -462,11 +464,12 @@ local function FinalizeScene(scene)
         local effectRoot = handle._msufSpellPreviewEffectRoot
         if effectRoot and effectRoot.IsShown and effectRoot:IsShown() then
             local priority = max(1, min(10, floor((tonumber(effectRoot._msufSpellPreviewPriority) or 5) + 0.5)))
+            local effectLayer = S.ClampLayer(effectRoot._msufSpellPreviewLayer, 0)
             SetPreviewFrameLevel(effectRoot, baseLevel
                 + ApplyHandleStrata(scene, effectRoot,
                     effectRoot._msufSpellPreviewStrata or handle._msufSpellIndicatorStrata or spellStrata,
                     liveStrata, hostStrata)
-                + 24 + (11 - priority))
+                + (S.Layers.SPELL_FRAME_EFFECT_BASE_OFFSET or 1) + (11 - priority) + effectLayer)
         end
         local iconEffectRoot = handle._msufSpellPreviewIconEffectRoot
         if iconEffectRoot and iconEffectRoot.IsShown and iconEffectRoot:IsShown() then
@@ -1104,16 +1107,16 @@ function Render.Install(box, ctx, deps)
             root._msufSpellPreviewGlow = glow
             return glow
         end
-        local function ShowPreviewGlow(root, r, g, b, a, padding)
+        local function ShowPreviewGlow(root, target, r, g, b, a, padding)
             local glow = EnsurePreviewGlow(root)
-            if not glow then return end
+            if not (glow and target) then return end
             local haloPadding = padding * 1.55
             glow.halo:ClearAllPoints()
-            glow.halo:SetPoint("TOPLEFT", root, "TOPLEFT", -haloPadding, haloPadding)
-            glow.halo:SetPoint("BOTTOMRIGHT", root, "BOTTOMRIGHT", haloPadding, -haloPadding)
+            glow.halo:SetPoint("TOPLEFT", target, "TOPLEFT", -haloPadding, haloPadding)
+            glow.halo:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", haloPadding, -haloPadding)
             glow.ants:ClearAllPoints()
-            glow.ants:SetPoint("TOPLEFT", root, "TOPLEFT", -padding, padding)
-            glow.ants:SetPoint("BOTTOMRIGHT", root, "BOTTOMRIGHT", padding, -padding)
+            glow.ants:SetPoint("TOPLEFT", target, "TOPLEFT", -padding, padding)
+            glow.ants:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", padding, -padding)
             glow.halo:SetDesaturated(true)
             glow.ants:SetDesaturated(true)
             glow.halo:SetVertexColor(r, g, b, a)
@@ -1122,12 +1125,19 @@ function Render.Install(box, ctx, deps)
             glow.ants:Show()
             if not glow.animation:IsPlaying() then glow.animation:Play() end
         end
+        local function SpellPreviewHealthBar()
+            return mock._health
+        end
+        local function SpellPreviewHealthFill()
+            local health = SpellPreviewHealthBar()
+            return health and health.GetStatusBarTexture and health:GetStatusBarTexture() or nil
+        end
         local function EnsureSpellEffectPreview(handle)
             local root = handle and handle._msufSpellPreviewEffectRoot
             if root then return root end
             root = CreateFrame("Frame", nil, handle)
             root:EnableMouse(false)
-            root:SetAllPoints(mock)
+            root:SetAllPoints(SpellPreviewHealthBar())
             handle._msufSpellPreviewEffectRoot = root
             return root
         end
@@ -1178,7 +1188,7 @@ function Render.Install(box, ctx, deps)
             overlay:SetTextColor(r, g, b, a)
             overlay:SetShown(source.IsShown == nil or source:IsShown())
         end
-        local function LayoutSpellPreviewEdges(root, effect, r, g, b, a)
+        local function LayoutSpellPreviewEdges(root, target, effect, r, g, b, a)
             local edges = EnsureSpellPreviewEdges(root)
             local glowLike = effect.type == "glow" or effect.type == "pulse"
             local rawThickness = tonumber(effect.thickness) or (effect.type == "glow" and 3 or 2)
@@ -1186,12 +1196,12 @@ function Render.Install(box, ctx, deps)
             if glowLike then a = min(1, a * 0.85) end
             local top, bottom, left, right = edges[1], edges[2], edges[3], edges[4]
             top:ClearAllPoints()
-            top:SetPoint("TOPLEFT", mock, "TOPLEFT", -thickness, thickness)
-            top:SetPoint("TOPRIGHT", mock, "TOPRIGHT", thickness, thickness)
+            top:SetPoint("TOPLEFT", target, "TOPLEFT", -thickness, thickness)
+            top:SetPoint("TOPRIGHT", target, "TOPRIGHT", thickness, thickness)
             top:SetHeight(thickness)
             bottom:ClearAllPoints()
-            bottom:SetPoint("BOTTOMLEFT", mock, "BOTTOMLEFT", -thickness, -thickness)
-            bottom:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", thickness, -thickness)
+            bottom:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", -thickness, -thickness)
+            bottom:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", thickness, -thickness)
             bottom:SetHeight(thickness)
             left:ClearAllPoints()
             left:SetPoint("TOPLEFT", top, "BOTTOMLEFT", 0, 0)
@@ -1210,11 +1220,18 @@ function Render.Install(box, ctx, deps)
         local function ApplySpellEffectPreview(handle, effect)
             if not (handle and type(effect) == "table") then return end
             local root = EnsureSpellEffectPreview(handle)
+            local healthBar = SpellPreviewHealthBar()
+            local target = SpellPreviewHealthFill()
+            if not (root and healthBar and target) then
+                HideSpellEffectPreview(handle)
+                return
+            end
             HideSpellPreviewRegions(root)
             root:ClearAllPoints()
-            root:SetAllPoints(mock)
+            root:SetAllPoints(healthBar)
             root._msufSpellPreviewStrata = effect.strata or handle._msufSpellIndicatorStrata
             root._msufSpellPreviewPriority = max(1, min(10, floor((tonumber(effect.priority) or 5) + 0.5)))
+            root._msufSpellPreviewLayer = S.ClampLayer(effect.layer, 0)
             local color = effect.color or {}
             local r, g, b = color[1] or 1, color[2] or 1, color[3] or 1
             local a = color[4] or 1
@@ -1227,7 +1244,7 @@ function Render.Install(box, ctx, deps)
                     root._msufSpellPreviewTint = tint
                 end
                 tint:ClearAllPoints()
-                tint:SetAllPoints(mock._health or mock)
+                tint:SetAllPoints(target)
                 tint:SetBlendMode("BLEND")
                 local tintAlpha = tonumber(effect.tintAlpha or effect.alpha)
                 if tintAlpha == nil then tintAlpha = a > 0 and a or 0.20 end
@@ -1237,9 +1254,9 @@ function Render.Install(box, ctx, deps)
                 SyncSpellPreviewName(root, mock._nameFS, r, g, b, a)
             elseif kind == "glow" then
                 local padding = max(1, ScaleValue((tonumber(effect.thickness) or 3) + 2, mock._previewScale or 1, 1))
-                ShowPreviewGlow(root, r, g, b, a, padding)
+                ShowPreviewGlow(root, target, r, g, b, a, padding)
             elseif kind == "border" or kind == "pulse" then
-                LayoutSpellPreviewEdges(root, effect, r, g, b, a)
+                LayoutSpellPreviewEdges(root, target, effect, r, g, b, a)
                 if kind == "pulse" then
                     local pulse = root._msufSpellPreviewPulse
                     if not pulse then
@@ -1891,7 +1908,7 @@ function Render.Install(box, ctx, deps)
             root:ClearAllPoints()
             root:SetAllPoints(handle)
             local color = handle._msufSpellIndicatorColor or { 1, 1, 1, 1 }
-            ShowPreviewGlow(root, color[1] or 1, color[2] or 1, color[3] or 1, color[4] or 1,
+            ShowPreviewGlow(root, root, color[1] or 1, color[2] or 1, color[3] or 1, color[4] or 1,
                 max(2, spellSize * 0.15))
             root:Show()
         end

@@ -377,8 +377,17 @@ local COMMON_FALLBACKS = {
 }
 M.Fallbacks = M.Fallbacks or COMMON_FALLBACKS
 function M.SetMenuStateValue(field, value)
-    if type(M.PersistMenuStateValue) == "function" then return M.PersistMenuStateValue(field, value) end
-    M[field] = value; return value
+    local result
+    if type(M.PersistMenuStateValue) == "function" then
+        result = M.PersistMenuStateValue(field, value)
+    else
+        M[field] = value
+        result = value
+    end
+    if (field == "gfScope" or field == "auraScope") and type(M.RefreshLayerOverviewContext) == "function" then
+        M.RefreshLayerOverviewContext()
+    end
+    return result
 end
 function M.TextSlotOffsetKeys(kind, slot)
     if kind == "name" then return "nameOffsetX", "nameOffsetY" end
@@ -996,7 +1005,7 @@ end
 local GROUP_KEYS_A = "SCOPE_VALUES GROWTH_VALUES "
 local GROUP_KEYS_B = "HEALTH_MODES TEXT_MODES "
 local GROUP_KEYS_C = "ANCHORS AURA_ANCHORS SORT_MODES GF_BAR_MODES "
-local GROUP_KEYS_D = "GF_ANCHOR_TO GF_ANCHOR_POINTS STATUS_ICON_ANCHORS GF_STATUS_ICON_SPECS GF_STATUS_ICON_VALUES PLACED_INDICATOR_TYPES FRAME_EFFECT_TYPES ICON_EFFECT_TYPES SPELL_GROWTH_VALUES CI_SLOT_VALUES CI_SLOT_DEFAULTS DISPEL_OVERLAY_STYLES DEBUFF_STRIPE_EDGES"
+local GROUP_KEYS_D = "GF_ANCHOR_TO GF_ANCHOR_POINTS STATUS_ICON_ANCHORS GF_STATUS_ICON_SPECS GF_STATUS_ICON_VALUES PLACED_INDICATOR_TYPES FRAME_EFFECT_TYPES FRAME_EFFECT_TIMINGS ICON_EFFECT_TYPES SPELL_GROWTH_VALUES CI_SLOT_VALUES CI_SLOT_DEFAULTS DISPEL_OVERLAY_STYLES DEBUFF_STRIPE_EDGES"
 M.GROUP_SPEC_TABLE_KEYS = GROUP_KEYS_A .. "BLIZZARD_FALLBACK_VALUES " .. GROUP_KEYS_B .. "DELIMITER_VALUES " .. GROUP_KEYS_C .. GROUP_KEYS_D
 local tips = {}
 for tip in ([[
@@ -1229,6 +1238,12 @@ local function GetSavedMsufScale()
     local g = EnsureGeneral()
     return Clamp(tonumber(g.msufUiScale) or tonumber(g.uiScale) or 1, 0.25, 1.5)
 end
+local function RefreshGroupFrameGeometryAfterScale()
+    local gf = MSUF and MSUF.GF
+    if gf and type(gf.RefreshHeaderLayout) == "function" then
+        gf.RefreshHeaderLayout()
+    end
+end
 local function ScheduleUnitframeReanchorAfterScale()
     if _G.MSUF_ScaleReanchorPending then return end
     ExportPublic("MSUF_ScaleReanchorPending", true)
@@ -1237,6 +1252,7 @@ local function ScheduleUnitframeReanchorAfterScale()
         if _G.InCombatLockdown and _G.InCombatLockdown() then
             local UF = _G.MSUF_NS and _G.MSUF_NS.UF
             if UF and UF.RequestReanchorAfterCombat then UF.RequestReanchorAfterCombat() end
+            RefreshGroupFrameGeometryAfterScale()
             return
         end
         if type(_G.MSUF_UpdateAllExternalAnchorProxies) == "function" then _G.MSUF_UpdateAllExternalAnchorProxies() end
@@ -1246,6 +1262,7 @@ local function ScheduleUnitframeReanchorAfterScale()
             _G.MSUF_ForceReanchorAllUnitFrames_Once(true)
             ExportPublic("MSUF_ExternalAnchorForceReanchor", previous)
         end
+        RefreshGroupFrameGeometryAfterScale()
     end
     _G.C_Timer.After(0, flush)
 end

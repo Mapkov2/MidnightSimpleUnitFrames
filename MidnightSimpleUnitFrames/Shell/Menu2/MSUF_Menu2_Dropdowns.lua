@@ -46,11 +46,18 @@ local DROPDOWN_ICON_TEXT_LEFT = 36
 local DROPDOWN_TEXTURE_PREVIEW_W = 72
 local DROPDOWN_TEXTURE_PREVIEW_H = 12
 local DROPDOWN_TEXTURE_TEXT_LEFT = 92
+local DROPDOWN_BAR_PREVIEW_W = 132
+local DROPDOWN_BAR_PREVIEW_H = 8
+local DROPDOWN_BAR_PREVIEW_RIGHT = 24
+local DROPDOWN_BAR_PREVIEW_TEXT_RIGHT = -(DROPDOWN_BAR_PREVIEW_W + DROPDOWN_BAR_PREVIEW_RIGHT + 42)
+local DROPDOWN_BAR_PREVIEW_ROW_H = 38
+local DROPDOWN_ABSORB_EDGE_TEXTURE = "Interface\\RaidFrame\\Shield-Overshield"
 local DROPDOWN_SCROLLBAR_W = 12
 local DROPDOWN_POSITION_INTERVAL = 0.10
 local DROPDOWN_SMOOTH_SCROLL_SPEED = 14
 local DROPDOWN_SMOOTH_SCROLL_MAX_ELAPSED = 0.050
 local DROPDOWN_SMOOTH_SCROLL_EPSILON = 0.45
+local dropdownActiveRowHeight = DROPDOWN_ROW_H
 local CloseDropdown
 local IsDescendantOf
 local function PixelBarTexture(texture)
@@ -205,7 +212,7 @@ end
 local function DropdownWheel(delta)
     if not (dropdownScroll and delta and delta ~= 0) then return end
     local current = dropdownScroll._msuf2SmoothScrollTarget or (dropdownScroll:GetVerticalScroll() or 0)
-    SmoothDropdownScrollTo(current - (delta or 0) * DROPDOWN_ROW_H * 3)
+    SmoothDropdownScrollTo(current - (delta or 0) * dropdownActiveRowHeight * 3)
 end
 local function SetDropdownScroll(value)
     if not dropdownScroll then return end
@@ -251,14 +258,15 @@ local function DropdownAvailableSpace(owner)
     if not (ownerTop and ownerBottom and screenTop and screenBottom) then return nil, nil end
     return max(0, ownerBottom - screenBottom - 10), max(0, screenTop - ownerTop - 10)
 end
-local function DropdownVisibleRows(owner, rowCount, preferred)
+local function DropdownVisibleRows(owner, rowCount, preferred, rowHeight)
     preferred = min(rowCount or 0, preferred or 12)
+    rowHeight = tonumber(rowHeight) or DROPDOWN_ROW_H
     local below, above = DropdownAvailableSpace(owner)
     if not below then return preferred, false end
-    local preferredH = preferred * DROPDOWN_ROW_H + 4
+    local preferredH = preferred * rowHeight + 4
     local openAbove = below < preferredH and above > below
     local maxSpace = openAbove and above or below
-    local fit = floor((maxSpace - 4) / DROPDOWN_ROW_H)
+    local fit = floor((maxSpace - 4) / rowHeight)
     if fit > 0 then preferred = min(preferred, max(3, fit)) end
     return max(1, preferred), openAbove
 end
@@ -474,6 +482,15 @@ local function DropdownItemStatusbarTexture(item)
     end
     return nil
 end
+local function DropdownItemBarPreview(item)
+    if type(item) ~= "table" or item.previewKind ~= "barOverlay" then return nil end
+    local preview = item.barPreview or item.overlayPreview or item.preview
+    if type(preview) == "function" then
+        local ok, resolved = pcall(preview, item)
+        preview = ok and resolved or nil
+    end
+    return type(preview) == "table" and preview or nil
+end
 local function DropdownColorTuple(color)
     if type(color) == "function" then color = color() end
     if type(color) ~= "table" then return nil end
@@ -565,9 +582,168 @@ local function SetDropdownIconTexture(texture, icon)
     texture:SetVertexColor(1, 1, 1, 1)
     texture:Show()
 end
-local function PaintDropdownChoice(frame, label, icon, sr, sg, sb, sa, rightInset, statusbarTexture)
+local function HideDropdownBarPreview(frame)
+    local preview = frame and frame._msuf2BarPreview
+    if not preview then return end
+    for i = 1, #preview do
+        local lane = preview[i]
+        lane.border:Hide()
+        lane.background:Hide()
+        lane.health:Hide()
+        lane.overlay:Hide()
+        lane.maxMarker:Hide()
+        lane.edgeGlow:Hide()
+        lane.direction:Hide()
+    end
+end
+local function AddDropdownBarPreviewLane(frame)
+    local lane = {}
+    local border = frame:CreateTexture(nil, "ARTWORK")
+    border:SetSize(DROPDOWN_BAR_PREVIEW_W + 2, DROPDOWN_BAR_PREVIEW_H + 2)
+    border:SetColorTexture(0, 0, 0, 0.96)
+    border:Hide()
+    lane.border = border
+    local background = frame:CreateTexture(nil, "ARTWORK")
+    background:SetPoint("CENTER", border, "CENTER", 0, 0)
+    background:SetSize(DROPDOWN_BAR_PREVIEW_W, DROPDOWN_BAR_PREVIEW_H)
+    background:Hide()
+    lane.background = background
+    local health = frame:CreateTexture(nil, "OVERLAY")
+    health:Hide()
+    lane.health = health
+    local overlay = frame:CreateTexture(nil, "OVERLAY")
+    overlay:Hide()
+    lane.overlay = overlay
+    local maxMarker = frame:CreateTexture(nil, "OVERLAY")
+    maxMarker:SetSize(2, DROPDOWN_BAR_PREVIEW_H + 6)
+    maxMarker:Hide()
+    lane.maxMarker = maxMarker
+    local edgeGlow = frame:CreateTexture(nil, "OVERLAY", nil, 5)
+    edgeGlow:SetTexture(DROPDOWN_ABSORB_EDGE_TEXTURE)
+    if edgeGlow.SetBlendMode then edgeGlow:SetBlendMode("ADD") end
+    edgeGlow:SetWidth(16)
+    edgeGlow:Hide()
+    lane.edgeGlow = edgeGlow
+    local direction = T.Font(frame, "GameFontHighlightSmall", "", T.colors.muted)
+    direction:SetJustifyH("RIGHT")
+    direction:Hide()
+    lane.direction = direction
+    return lane
+end
+local function AddDropdownBarPreviewAssets(frame)
+    local preview = frame._msuf2BarPreview
+    if preview then return preview end
+    preview = { AddDropdownBarPreviewLane(frame), AddDropdownBarPreviewLane(frame) }
+    frame._msuf2BarPreview = preview
+    return preview
+end
+local function PreviewColor(color, fallbackR, fallbackG, fallbackB, fallbackA)
+    local r, g, b, a = DropdownColorTuple(color)
+    return r or fallbackR, g or fallbackG, b or fallbackB, a or fallbackA
+end
+local function PaintDropdownBarPreviewLane(frame, lane, config, hpReverse, yOffset)
+    local background, health, overlay = lane.background, lane.health, lane.overlay
+    local hpFraction = max(0.05, min(0.95, tonumber(config.healthFraction) or 0.68))
+    local overlayFraction = max(0.04, min(0.34, tonumber(config.overlayFraction) or 0.20))
+    local hpWidth = max(1, floor(DROPDOWN_BAR_PREVIEW_W * hpFraction + 0.5))
+    local overlayWidth = max(1, floor(DROPDOWN_BAR_PREVIEW_W * overlayFraction + 0.5))
+    local mode = tonumber(config.mode) or 3
+    if mode < 1 or mode > 5 then mode = 3 end
+
+    lane.border:ClearAllPoints()
+    lane.border:SetPoint("RIGHT", frame, "RIGHT", -DROPDOWN_BAR_PREVIEW_RIGHT, yOffset or 0)
+    background:SetTexture(config.backgroundTexture or "Interface\\Buttons\\WHITE8X8")
+    background:SetVertexColor(PreviewColor(config.backgroundColor, 0.035, 0.080, 0.055, 1))
+    background:Show()
+    health:SetTexture(config.healthTexture or "Interface\\Buttons\\WHITE8X8")
+    health:SetVertexColor(PreviewColor(config.healthColor, 0.12, 0.62, 0.25, 1))
+    health:ClearAllPoints()
+    health:SetWidth(hpWidth)
+    health:SetPoint("TOP", background, "TOP", 0, 0)
+    health:SetPoint("BOTTOM", background, "BOTTOM", 0, 0)
+    health:SetPoint(hpReverse and "RIGHT" or "LEFT", background, hpReverse and "RIGHT" or "LEFT", 0, 0)
+    health:Show()
+
+    overlay:SetTexture(config.overlayTexture or config.healthTexture or "Interface\\Buttons\\WHITE8X8")
+    overlay:SetVertexColor(PreviewColor(config.overlayColor, 1, 1, 1, 0.82))
+    overlay:ClearAllPoints()
+    overlay:SetPoint("TOP", background, "TOP", 0, 0)
+    overlay:SetPoint("BOTTOM", background, "BOTTOM", 0, 0)
+    if mode == 3 or mode == 4 then
+        if mode == 3 then
+            overlayWidth = min(overlayWidth, max(1, DROPDOWN_BAR_PREVIEW_W - hpWidth))
+        end
+        overlay:SetWidth(overlayWidth)
+        if hpReverse then
+            overlay:SetPoint("RIGHT", health, "LEFT", 0, 0)
+        else
+            overlay:SetPoint("LEFT", health, "RIGHT", 0, 0)
+        end
+    else
+        overlay:SetWidth(overlayWidth)
+        local anchorLeft = mode == 1 or (mode == 5 and hpReverse)
+        overlay:SetPoint(anchorLeft and "LEFT" or "RIGHT", background, anchorLeft and "LEFT" or "RIGHT", 0, 0)
+    end
+    overlay:Show()
+    lane.border:Show()
+
+    if config.showAbsorbEdgeGlow == true then
+        lane.maxMarker:Hide()
+        lane.edgeGlow:ClearAllPoints()
+        if hpReverse then
+            lane.edgeGlow:SetPoint("TOPRIGHT", background, "TOPLEFT", 7, 0)
+            lane.edgeGlow:SetPoint("BOTTOMRIGHT", background, "BOTTOMLEFT", 7, 0)
+        else
+            lane.edgeGlow:SetPoint("TOPLEFT", background, "TOPRIGHT", -7, 0)
+            lane.edgeGlow:SetPoint("BOTTOMLEFT", background, "BOTTOMRIGHT", -7, 0)
+        end
+        lane.edgeGlow:Show()
+    else
+        lane.edgeGlow:Hide()
+        lane.maxMarker:ClearAllPoints()
+        lane.maxMarker:SetPoint(hpReverse and "LEFT" or "RIGHT", background, hpReverse and "LEFT" or "RIGHT", 0, 0)
+        lane.maxMarker:SetColorTexture(1, 0.67, 0.10, 1)
+        lane.maxMarker:Show()
+    end
+    lane.direction:ClearAllPoints()
+    lane.direction:SetPoint("RIGHT", lane.border, "LEFT", -4, 0)
+    lane.direction:SetText(hpReverse and "< HP" or "HP >")
+    lane.direction:Show()
+end
+local function PaintDropdownBarPreview(frame, config)
+    if not (frame and type(config) == "table") then
+        HideDropdownBarPreview(frame)
+        return
+    end
+    local preview = AddDropdownBarPreviewAssets(frame)
+    local frameHeight = frame.GetHeight and frame:GetHeight() or 0
+    local dualDirection = config.dualDirection == true and frameHeight >= 30
+    PaintDropdownBarPreviewLane(frame, preview[1], config, false, dualDirection and 7 or 0)
+    if dualDirection then
+        PaintDropdownBarPreviewLane(frame, preview[2], config, true, -7)
+    else
+        local lane = preview[2]
+        lane.border:Hide()
+        lane.background:Hide()
+        lane.health:Hide()
+        lane.overlay:Hide()
+        lane.maxMarker:Hide()
+        lane.edgeGlow:Hide()
+        lane.direction:Hide()
+    end
+end
+local function PaintDropdownChoice(frame, label, icon, sr, sg, sb, sa, rightInset, statusbarTexture, barPreview)
     local left = 12
-    if statusbarTexture and frame._msuf2TexturePreview then
+    if barPreview then
+        if frame._msuf2Icon then frame._msuf2Icon:Hide() end
+        if frame._msuf2Swatch then frame._msuf2Swatch:Hide() end
+        if frame._msuf2SwatchBorder then frame._msuf2SwatchBorder:Hide() end
+        if frame._msuf2TexturePreview then frame._msuf2TexturePreview:Hide() end
+        if frame._msuf2TexturePreviewBorder then frame._msuf2TexturePreviewBorder:Hide() end
+        PaintDropdownBarPreview(frame, barPreview)
+        rightInset = min(rightInset or -8, DROPDOWN_BAR_PREVIEW_TEXT_RIGHT)
+    elseif statusbarTexture and frame._msuf2TexturePreview then
+        HideDropdownBarPreview(frame)
         if frame._msuf2Icon then frame._msuf2Icon:Hide() end
         if frame._msuf2Swatch then frame._msuf2Swatch:Hide() end
         if frame._msuf2SwatchBorder then frame._msuf2SwatchBorder:Hide() end
@@ -577,6 +753,7 @@ local function PaintDropdownChoice(frame, label, icon, sr, sg, sb, sa, rightInse
         frame._msuf2TexturePreview:Show()
         left = DROPDOWN_TEXTURE_TEXT_LEFT
     elseif icon then
+        HideDropdownBarPreview(frame)
         if frame._msuf2TexturePreview then frame._msuf2TexturePreview:Hide() end
         if frame._msuf2TexturePreviewBorder then frame._msuf2TexturePreviewBorder:Hide() end
         SetDropdownIconTexture(frame._msuf2Icon, icon)
@@ -584,6 +761,7 @@ local function PaintDropdownChoice(frame, label, icon, sr, sg, sb, sa, rightInse
         if frame._msuf2SwatchBorder then frame._msuf2SwatchBorder:Hide() end
         left = DROPDOWN_ICON_TEXT_LEFT
     elseif sr then
+        HideDropdownBarPreview(frame)
         if frame._msuf2TexturePreview then frame._msuf2TexturePreview:Hide() end
         if frame._msuf2TexturePreviewBorder then frame._msuf2TexturePreviewBorder:Hide() end
         if frame._msuf2Icon then frame._msuf2Icon:Hide() end
@@ -592,6 +770,7 @@ local function PaintDropdownChoice(frame, label, icon, sr, sg, sb, sa, rightInse
         frame._msuf2SwatchBorder:Show()
         left = 34
     else
+        HideDropdownBarPreview(frame)
         if frame._msuf2TexturePreview then frame._msuf2TexturePreview:Hide() end
         if frame._msuf2TexturePreviewBorder then frame._msuf2TexturePreviewBorder:Hide() end
         if frame._msuf2Icon then frame._msuf2Icon:Hide() end
@@ -698,20 +877,25 @@ local function OpenDropdown(owner, valuesTable)
     dropdownClosing = nil
     dropdownClosingOwner = nil
     dropdownFrame._msuf2CloseToken = (dropdownFrame._msuf2CloseToken or 0) + 1
-    local hasIcons, hasStatusbarPreviews = false, false
+    local hasIcons, hasStatusbarPreviews, hasBarPreviews = false, false, false
     for i = 1, #valuesTable do
-        if DropdownItemStatusbarTexture(valuesTable[i]) then
+        if DropdownItemBarPreview(valuesTable[i]) then
+            hasBarPreviews = true
+        elseif DropdownItemStatusbarTexture(valuesTable[i]) then
             hasStatusbarPreviews = true
         elseif DropdownItemIcon(valuesTable[i]) then
             hasIcons = true
         end
     end
     local ownerWidth = (owner.GetWidth and owner:GetWidth()) or 240
-    local rowWidth = math.max(ownerWidth, hasStatusbarPreviews and 360 or (hasIcons and 300 or 180))
-    local visible, openAbove = DropdownVisibleRows(owner, #valuesTable, (hasIcons or hasStatusbarPreviews) and 12 or 14)
+    local rowHeight = hasBarPreviews and DROPDOWN_BAR_PREVIEW_ROW_H or DROPDOWN_ROW_H
+    dropdownActiveRowHeight = rowHeight
+    local rowWidth = math.max(ownerWidth, hasBarPreviews and 430 or (hasStatusbarPreviews and 360 or (hasIcons and 300 or 180)))
+    local visible, openAbove = DropdownVisibleRows(owner, #valuesTable,
+        (hasIcons or hasStatusbarPreviews or hasBarPreviews) and 12 or 14, rowHeight)
     owner._msuf2DropdownOpenAbove = openAbove
-    local listHeight = visible * DROPDOWN_ROW_H + 4
-    local totalHeight = #valuesTable * DROPDOWN_ROW_H
+    local listHeight = visible * rowHeight + 4
+    local totalHeight = #valuesTable * rowHeight
     local needsScroll = #valuesTable > visible
     dropdownFrame:SetSize(rowWidth + (needsScroll and 20 or 4), listHeight)
     dropdownChild:SetSize(rowWidth, totalHeight)
@@ -734,6 +918,7 @@ local function OpenDropdown(owner, valuesTable)
         local value = DropdownItemValue(item)
         local icon = DropdownItemIcon(item)
         local statusbarTexture = DropdownItemStatusbarTexture(item)
+        local barPreview = DropdownItemBarPreview(item)
         local selectedValue = owner._msuf2DropdownListValue
         local isHeader = DropdownItemHeader(item)
         local disabled = DropdownItemDisabled(item)
@@ -742,9 +927,11 @@ local function OpenDropdown(owner, valuesTable)
         row._msuf2Value = value
         row._msuf2Item = item
         row._msuf2DropdownDisabled = disabled
+        row:SetHeight(rowHeight)
+        row._msuf2Selected:SetHeight(rowHeight - 4)
         if row.SetAlpha then row:SetAlpha(isHeader and 1 or (disabled and 0.62 or 1)) end
         row:ClearAllPoints()
-        row:SetPoint("TOPLEFT", dropdownChild, "TOPLEFT", 0, -((i - 1) * DROPDOWN_ROW_H))
+        row:SetPoint("TOPLEFT", dropdownChild, "TOPLEFT", 0, -((i - 1) * rowHeight))
         row:SetWidth(rowWidth)
         row._msuf2Selected:SetShown((not isHeader) and value == selectedValue)
         if (not isHeader) and value == selectedValue then selectedIndex = i end
@@ -756,7 +943,8 @@ local function OpenDropdown(owner, valuesTable)
         end
         if DropdownItemHasFontPreview(item) then ApplyDropdownItemFont(row._msuf2Text, item) end
         local sr, sg, sb, sa = DropdownItemSwatch(item)
-        PaintDropdownChoice(row, row._msuf2Text, isHeader and nil or icon, isHeader and nil or sr, sg, sb, sa, -6, isHeader and nil or statusbarTexture)
+        PaintDropdownChoice(row, row._msuf2Text, isHeader and nil or icon, isHeader and nil or sr, sg, sb, sa, -6,
+            isHeader and nil or statusbarTexture, isHeader and nil or barPreview)
         row:Show()
     end
     for i = #valuesTable + 1, #dropdownRows do
@@ -770,8 +958,26 @@ local function OpenDropdown(owner, valuesTable)
     dropdownFrame:Show()
     dropdownFrame._msuf2AnchorKey = nil
     PositionDropdown(owner)
-    SetDropdownScroll((selectedIndex > visible) and ((selectedIndex - visible) * DROPDOWN_ROW_H) or 0)
+    SetDropdownScroll((selectedIndex > visible) and ((selectedIndex - visible) * rowHeight) or 0)
     PlayMotion(dropdownFrame, "dropdownIn", { fromAlpha = 0 })
+end
+function W.OpenDropdown(owner, values, currentValue, onSelect)
+    if not owner then return false end
+    if M.BlockCombatAction and M.BlockCombatAction() then
+        CloseDropdown()
+        return false
+    end
+    if dropdownOwner == owner and dropdownFrame and dropdownFrame:IsShown() then
+        CloseDropdown()
+        return false
+    end
+    CloseDropdown()
+    owner._msuf2DropdownListValue = currentValue
+    owner._msuf2DropdownListSelect = function(value, item)
+        if type(onSelect) == "function" then onSelect(value, item) end
+    end
+    OpenDropdown(owner, values)
+    return true
 end
 function W.Dropdown(section, label, values, width)
     local x, y = NextRow(section, 48)
@@ -835,14 +1041,18 @@ function W.Dropdown(section, label, values, width)
         end
         local icon = DropdownItemIcon(selectedItem)
         local statusbarTexture = DropdownItemStatusbarTexture(selectedItem)
+        local barPreview = DropdownItemBarPreview(selectedItem)
         local sr, sg, sb, sa = DropdownItemSwatch(selectedItem)
-        PaintDropdownChoice(self, self._msuf2Label, icon, sr, sg, sb, sa, -26, statusbarTexture)
+        PaintDropdownChoice(self, self._msuf2Label, icon, sr, sg, sb, sa, -26, statusbarTexture, barPreview)
         RestoreDropdownDefaultFont(self._msuf2Label)
         self:SetText(selectedItem and DropdownItemText(selectedItem) or TextFor(value))
         if DropdownItemHasFontPreview(selectedItem) then ApplyDropdownItemFont(self._msuf2Label, selectedItem) end
     end
     function btn:GetValue()
         return self.value
+    end
+    function btn:RefreshPreview()
+        self:SetValue(self.value)
     end
     function btn:SetOnValueChanged(fn)
         self._msuf2OnValueChanged = fn

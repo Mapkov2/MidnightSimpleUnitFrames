@@ -90,6 +90,41 @@ end
 M.OpenExactSettingControl = OpenExactSettingControl
 ExportPublic("MSUF_OpenExactSettingControl", OpenExactSettingControl)
 
+-- Assistant-facing bridge for color settings. Reuse the real Menu2 color
+-- button so the Color Painter gets the same live setter, history transaction,
+-- context label, and cancellation behavior as a direct user click.
+local function OpenExactColorSettingPicker(settingKey, fallbackLabel, fallbackPage)
+    local opened, message = OpenExactSettingControl(settingKey, fallbackLabel, fallbackPage)
+    if opened == false then return false, message end
+
+    local catalog = M.RuntimeControlCatalog
+    if not (catalog and type(catalog.FindBySettingKey) == "function") then
+        return false, "I opened the setting, but the exact color control is not available yet."
+    end
+    local record, widget = catalog.FindBySettingKey(settingKey, fallbackPage)
+    if not (record and widget and tostring(record.kind or "") == "color"
+        and type(widget.GetRGB) == "function" and type(widget.SetRGB) == "function")
+    then
+        return false, "I opened the setting, but it is not exposed as a Color Painter control."
+    end
+
+    local openPicker = M.OpenColorContextPicker
+        or (M.Widgets and M.Widgets.OpenColorContextPicker)
+    if type(openPicker) ~= "function" then
+        return false, "I opened the color setting, but Color Painter is not available yet."
+    end
+
+    local label = tostring(record.label or record.identityLabel or fallbackLabel or settingKey)
+    local owners = type(widget._msuf2ColorContextOwners) == "table"
+        and widget._msuf2ColorContextOwners or { widget }
+    openPicker(widget._msuf2ColorContextTitle or label, owners,
+        widget._msuf2ColorContextNote or "Opened from the MSUF Assistant.", widget)
+    return true, "Opened Color Painter for " .. label .. "."
+end
+
+M.OpenExactColorSettingPicker = OpenExactColorSettingPicker
+ExportPublic("MSUF_OpenExactColorSettingPicker", OpenExactColorSettingPicker)
+
 local function OpenExactCatalogControl(semanticId, fallbackLabel, fallbackPage)
     semanticId = tostring(semanticId or "")
     fallbackPage = tostring(fallbackPage or "")

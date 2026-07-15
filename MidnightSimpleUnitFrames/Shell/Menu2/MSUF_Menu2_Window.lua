@@ -557,10 +557,14 @@ local function GetSlashMenuSnapLayout(frame)
     if not cursorX then return false end
     local screenW, screenH = parent:GetWidth() or 0, parent:GetHeight() or 0
     if screenW <= 0 or screenH <= 0 then return false end
-    local frameLeft = (frame.GetLeft and frame:GetLeft()) or cursorX
-    local frameRight = (frame.GetRight and frame:GetRight()) or cursorX
-    local frameTop = (frame.GetTop and frame:GetTop()) or cursorY
-    local frameBottom = (frame.GetBottom and frame:GetBottom()) or cursorY
+    -- Region bounds are expressed in the frame's scaled coordinate space.
+    -- Compare visual bounds in UIParent space so reduced menu scale cannot
+    -- make an edge appear to reach the screen hundreds of pixels too early.
+    local frameLeft, frameRight, frameTop, frameBottom = FrameRectToUIParent(frame)
+    frameLeft = frameLeft or cursorX
+    frameRight = frameRight or cursorX
+    frameTop = frameTop or cursorY
+    frameBottom = frameBottom or cursorY
     local left = cursorX <= SNAP_EDGE_PX or frameLeft <= SNAP_FRAME_EDGE_PX
     local right = cursorX >= (screenW - SNAP_EDGE_PX) or frameRight >= (screenW - SNAP_FRAME_EDGE_PX)
     if left and right then
@@ -1144,6 +1148,7 @@ function M.SelectPage(key)
         if hasPendingFocus and type(M.FocusRequestedSection) == "function" then M.FocusRequestedSection(key, { flash = true }) end
         if M.RefreshToolbarPageReset then M.RefreshToolbarPageReset() end
         M.CallIf(M.GuidedTourOnPageSelected, key)
+        M.CallIf(M.RefreshLayerOverviewContext)
         return true
     end
     local previousKey = M.activeKey
@@ -1159,6 +1164,7 @@ function M.SelectPage(key)
     if not entry then return false end
     entry.hiddenBuild = false
     M.activeKey = key
+    M.CallIf(M.RefreshLayerOverviewContext)
     if not suppressPageHistory then RecordPageNavigation(previousKey, key) end
     M.sessionLastPage = key
     if M.frame then M.frame._msufCurrentKey = key end
@@ -1945,6 +1951,7 @@ local function InstallWindowLifecycle(state)
         M.CallIf(M.UpdateMenuCombatListener)
     end)
     f:SetScript("OnHide", function()
+        M.CallIf(M.HideLayerOverview)
         SetAssistantMenuRuntimeActive(false, "menu-hide")
         if M.StopWindowLayoutAnimation then M.StopWindowLayoutAnimation(f) end
         if f._msuf2CancelWindowInteractions then

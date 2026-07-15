@@ -49,4 +49,12 @@ end
 assert(not source:find("PostponeAssistantPerformanceWarmup", 1, true),
     "removed Assistant warmup path returned")
 
+local snapStart = assert(source:find("local function GetSlashMenuSnapLayout", 1, true),
+    "missing slash-menu snap layout")
+local snapEnd = assert(source:find("local function ApplySlashMenuSnap", snapStart, true),
+    "missing slash-menu snap apply boundary")
+local snapSource = source:sub(snapStart, snapEnd - 1)
+assert(snapSource:find("FrameRectToUIParent(frame)", 1, true),
+    "menu snap must compare scaled frame bounds in UIParent space")
+
 print("window build contract smoke: ok")

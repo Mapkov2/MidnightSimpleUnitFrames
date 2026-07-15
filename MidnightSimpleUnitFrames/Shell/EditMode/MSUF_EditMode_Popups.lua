@@ -182,7 +182,7 @@ local function Apply()
         local dy=pf.dpbYBox and tonumber(pf.dpbYBox:GetText()); if dy then conf.detachedPowerBarOffsetY=San(dy,-4) end
         local dw=pf.dpbWBox and tonumber(pf.dpbWBox:GetText()); if dw then conf.detachedPowerBarWidth=floor(max(20,min(800,dw))+0.5) end
         local dh=pf.dpbHBox and tonumber(pf.dpbHBox:GetText()); if dh then conf.detachedPowerBarHeight=floor(max(2,min(80,dh))+0.5) end
-        local dl=pf.dpbLevelBox and tonumber(pf.dpbLevelBox:GetText()); if dl then conf.detachedPowerBarFrameLevelOffset=floor(max(0,min(20,dl))+0.5) end
+        local dl=pf.dpbLevelBox and tonumber(pf.dpbLevelBox:GetText()); if dl then conf.detachedPowerBarFrameLevelOffset=floor(max(0,min(30,dl))+0.5) end
         if pf.dpbTextBtn then conf.detachedPowerBarTextOnBar = pf.dpbTextBtn._checked and true or false end
         if key == "player" then
             if pf.dpbSyncBtn then conf.detachedPowerBarSyncClassPower = pf.dpbSyncBtn._checked and true or false end
@@ -454,6 +454,46 @@ local function Build()
     pf.dpbXYRow = Quick.ValuePairAt(pf, pf.dpbPanel, 16, -92, "X", "dpbXBox", Apply, "Y", "dpbYBox", Apply)
     pf.dpbWHRow = Quick.ValuePairAt(pf, pf.dpbPanel, 16, -126, "Width", "dpbWBox", Apply, "Height", "dpbHBox", Apply)
     pf.dpbLayerRow = Quick.SingleValueAt(pf, pf.dpbPanel, 16, -160, "Layer", "dpbLevelBox", Apply)
+    do
+        local ui = (MSUF and MSUF.UI) or _G.MSUF_UI
+        local info
+        if ui and type(ui.Button) == "function" then
+            info = ui.Button(pf.dpbLayerRow, "I", 20, 20, {
+                variant = "success",
+                skipHistory = true,
+                align = "CENTER",
+                onClick = function(self)
+                    local show = _G.MSUF_ShowLayerOverview
+                    if type(show) == "function" then show(self) end
+                end,
+            })
+        elseif type(Quick.Button) == "function" then
+            info = Quick.Button(pf.dpbLayerRow, "I", 20, 20, function(self)
+                local show = _G.MSUF_ShowLayerOverview
+                if type(show) == "function" then show(self) end
+            end)
+        end
+        if info then
+            info:SetPoint("RIGHT", pf.dpbLayerRow, "RIGHT", 0, 0)
+            info._msuf2SkipHistoryCheckpoint = true
+            info._msuf2LayerOverviewButton = true
+            if info.HookScript then
+                info:HookScript("OnEnter", function(self)
+                    if not _G.GameTooltip then return end
+                    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                    GameTooltip:SetText(Tr("Layer overview"), 0.35, 1.00, 0.62)
+                    GameTooltip:AddLine(Tr("Shows all configurable MSUF layers on the unified 0-30 scale."), 0.78, 0.86, 0.96, true)
+                    GameTooltip:Show()
+                end)
+                info:HookScript("OnLeave", function() if _G.GameTooltip then GameTooltip:Hide() end end)
+                info:HookScript("OnHide", function(self)
+                    local hide = _G.MSUF_HideLayerOverviewForAnchor
+                    if type(hide) == "function" then hide(self) end
+                end)
+            end
+            pf.dpbLayerInfoButton = info
+        end
+    end
     pf.dpbPanel:Hide()
 
     if Quick.AddFooterControls then

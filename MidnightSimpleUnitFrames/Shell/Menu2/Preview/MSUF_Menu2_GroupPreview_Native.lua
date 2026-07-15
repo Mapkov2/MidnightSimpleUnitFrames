@@ -159,9 +159,9 @@ local function OpenGFSection(sectionKey)
             changedAt = GetTime and GetTime() or 0,
         })
         -- Group Auras builds its lane-specific controls from gfAuraLaneSelection.
-        -- Selecting another preview lane while this page is already open must
-        -- rebuild that cached page; refreshers alone still target the old lane.
-        if pageKey == M.activeKey and requestedAuraLane and requestedAuraLane ~= previousAuraLane
+        -- Selecting another preview lane must rebuild any cached Group Auras
+        -- page, whether it is active or hidden; refreshers still target the old lane.
+        if requestedAuraLane and requestedAuraLane ~= previousAuraLane
             and type(M.InvalidatePage) == "function" then
             M.InvalidatePage(pageKey)
         end
