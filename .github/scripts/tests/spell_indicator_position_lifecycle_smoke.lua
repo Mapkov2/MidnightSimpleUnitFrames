@@ -20,6 +20,7 @@ local function Read(relativePath)
   return text
 end
 
+local mockRemaining = 0
 local Frame = {}
 Frame.__index = Frame
 
@@ -43,31 +44,150 @@ function Frame:GetFrameStrata() return self.frameStrata or "MEDIUM" end
 function Frame:SetFrameStrata(strata) self.frameStrata = strata end
 function Frame:SetAlpha(alpha) self.alpha = alpha end
 function Frame:SetVertexColor() end
-function Frame:Show() self.shown = true end
-function Frame:Hide() self.shown = false end
+function Frame:SetTextColor(r, g, b, a) self.textColor = { r, g, b, a } end
+function Frame:GetTextColor()
+  local color = self.textColor or { 1, 1, 1, 1 }
+  return color[1], color[2], color[3], color[4]
+end
+function Frame:SetText(value) self.text = value end
+function Frame:GetText() return self.text or "" end
+function Frame:GetFont() return "Fonts\\FRIZQT__.TTF", 12, "" end
+function Frame:SetFont() end
+function Frame:GetJustifyH() return "LEFT" end
+function Frame:GetJustifyV() return "MIDDLE" end
+function Frame:SetJustifyH() end
+function Frame:SetJustifyV() end
+function Frame:GetShadowColor() return 0, 0, 0, 1 end
+function Frame:GetShadowOffset() return 1, -1 end
+function Frame:SetShadowColor() end
+function Frame:SetShadowOffset() end
+function Frame:SetTexture() end
+function Frame:SetTexCoord() end
+function Frame:SetDesaturated() end
+function Frame:SetBlendMode() end
+function Frame:GetStatusBarTexture() return self.statusBarTexture end
+function Frame:SetHeight(height) self.height = height end
+function Frame:SetWidth(width) self.width = width end
+function Frame:SetScript(script, handler) self.scripts = self.scripts or {}; self.scripts[script] = handler end
+function Frame:GetScript(script) return self.scripts and self.scripts[script] or nil end
+function Frame:Show()
+  local changed = self.shown ~= true
+  self.shown = true
+  local effectivelyShown = true
+  local parent = self.parent
+  while parent do
+    if parent.shown ~= true then effectivelyShown = false; break end
+    parent = parent.parent
+  end
+  if changed and effectivelyShown and self:GetScript("OnShow") then self:GetScript("OnShow")(self) end
+end
+function Frame:Hide()
+  local changed = self.shown == true
+  self.shown = false
+  if changed and self:GetScript("OnHide") then self:GetScript("OnHide")(self) end
+end
 function Frame:EnableMouse() end
 function Frame:SetMouseMotionEnabled() end
 function Frame:ClearIcon() end
-function Frame:ClearApplicationCount() end
-function Frame:ClearDurationCooldown() end
-function Frame:ClearDurationText() end
-function Frame:ClearDurationBar() end
+function Frame:ClearApplicationCount() self.clearApplicationCountCalls = (self.clearApplicationCountCalls or 0) + 1 end
+function Frame:ClearDurationCooldown() self.clearDurationCooldownCalls = (self.clearDurationCooldownCalls or 0) + 1 end
+function Frame:ClearDurationText()
+  self.clearDurationTextCalls = (self.clearDurationTextCalls or 0) + 1
+  self.durationText = nil
+end
+function Frame:ClearDurationBar()
+  self.clearDurationBarCalls = (self.clearDurationBarCalls or 0) + 1
+  self._mockPrivateDurationBar = nil
+end
 function Frame:ClearAuraBorder() end
 function Frame:ClearAuraSymbol() end
+function Frame:CreateTexture() return NewFrame(self) end
+function Frame:CreateFontString() return NewFrame(self) end
+function Frame:GetTimerDuration() return self.timerDuration end
+function Frame:SetTimerDuration(duration) self.timerDuration = duration end
+function Frame:CreateAnimationGroup()
+  local group = { playing = false }
+  function group:SetLooping() end
+  function group:IsPlaying() return self.playing == true end
+  function group:Play() self.playing = true end
+  function group:Stop() self.playing = false end
+  function group:CreateAnimation()
+    return setmetatable({}, {
+      __index = function()
+        return function() end
+      end,
+    })
+  end
+  return group
+end
 
-local function NewFrame(parent)
+function NewFrame(parent)
   return setmetatable({ parent = parent, shown = true, frameLevel = 20, frameStrata = "MEDIUM" }, Frame)
 end
 
-_G.CreateFrame = function(_, _, parent) return NewFrame(parent) end
-_G.issecretvalue = function() return false end
+local function NewHealthBar(parent)
+  local bar = NewFrame(parent)
+  local fill = NewFrame(bar)
+  bar.statusBarTexture = fill
+  return bar, fill
+end
 
-local MSUF = { MSUF_Auras3 = {} }
+local createdFrames = {}
+_G.CreateFrame = function(_, _, parent)
+  local frame = NewFrame(parent)
+  createdFrames[#createdFrames + 1] = frame
+  return frame
+end
+_G.issecretvalue = function() return false end
+_G.Enum = {
+  LuaCurveType = { Step = 1 },
+  StatusBarInterpolation = { Immediate = 0 },
+  StatusBarTimerDirection = { RemainingTime = 1 },
+}
+local Curve = {}
+Curve.__index = Curve
+function Curve:SetType(curveType) self.curveType = curveType end
+function Curve:AddPoint(x, value) self.points[#self.points + 1] = { x, value } end
+function Curve:Evaluate(x)
+  local value = self.points[1] and self.points[1][2] or 0
+  for i = 1, #self.points do
+    if x < self.points[i][1] then break end
+    value = self.points[i][2]
+  end
+  return value
+end
+_G.C_CurveUtil = {
+  CreateCurve = function() return setmetatable({ points = {} }, Curve) end,
+}
+_G.MSUF_FRAME_STRATA_RANK = {
+  BACKGROUND = 1, LOW = 2, MEDIUM = 3, HIGH = 4, DIALOG = 5,
+  FULLSCREEN = 6, FULLSCREEN_DIALOG = 7, TOOLTIP = 8,
+}
+local mockDuration = {
+  EvaluateRemainingDuration = function(_, curve) return curve:Evaluate(mockRemaining) end,
+}
+function Frame:SetDurationBar(bar, options)
+  self.setDurationBarCalls = (self.setDurationBarCalls or 0) + 1
+  -- Blizzard stores this ownership in the forbidden/private button partition.
+  -- Do not expose a public DurationBar field in the mock.
+  self._mockPrivateDurationBar = bar
+  self._mockPrivateDurationBarOptions = options
+  bar:SetTimerDuration(mockDuration)
+end
+
+local MSUF = { MSUF_Auras3 = {}, UF = {} }
 _G.MSUF_NS = MSUF
+local layersChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Layers.lua"))
+layersChunk("MidnightSimpleUnitFrames", MSUF)
 local chunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_SpellIndicators.lua"))
 chunk("MidnightSimpleUnitFrames", MSUF)
 
 local Runtime = assert(MSUF.MSUF_Auras3.SpellIndicators)
+local Layers = assert(MSUF.UF.Layers)
+Check(Layers.SPELL_FRAME_EFFECT_BASE_OFFSET + 10 < Layers.DISPEL_OVERLAY_EFFECT_OFFSET,
+  "strongest Spell frame effect is not below the Dispel overlay AUTO level")
+Check(Layers.DISPEL_OVERLAY_EFFECT_OFFSET < Layers.TEXT_BASE_OFFSET + 5,
+  "health effects escaped above the default text layer")
 -- Imported filters must never pass unknown components to Blizzard's asserted
 -- AuraUtil.IsValidFilterString boundary.
 local compiled = assert(Runtime.CompileSlots("party1", {
@@ -89,7 +209,11 @@ do
   local capturedOptions = {}
   Runtime.Install({
     ValidateAuraButton = function() end,
-    PrepareAuraButton = function() end,
+    PrepareAuraButton = function(button, slot)
+      if slot.showCooldownText == true then
+        button.visibleDurationTextOwned = true
+      end
+    end,
     EnsureLoaded = function() return true end,
     CreateContainer = function(containerRoot)
       local c = NewFrame(containerRoot)
@@ -174,6 +298,206 @@ do
   local recoveredContainer = assert(Runtime.Recreate(editedContainer), "safe recovery did not recreate the container")
   Check(recoveredContainer ~= editedContainer, "safe recovery returned the stale container")
   Equal(recoveredContainer._msufA3ForceSpellIndicatorGeometry, nil, "replacement retained the recovery marker")
+
+  -- Expiration timing stays secret-safe: the duration object evaluates a
+  -- public step curve and the frame consumes only the resulting alpha. Build
+  -- it while the owner is hidden to ensure driver registration does not rely
+  -- on an OnShow transition that Blizzard cannot deliver yet.
+  local timedParent = NewFrame(nil)
+  timedParent:Hide()
+  local timedHealthFill
+  timedParent.hpBar, timedHealthFill = NewHealthBar(timedParent)
+  Check(timedHealthFill ~= timedParent.hpBar,
+    "expiration smoke did not model a distinct StatusBar fill")
+  timedParent.nameText = NewFrame(timedParent)
+  timedParent.nameText:SetText("Initial Name")
+  local timedAuraRoot = NewFrame(timedParent)
+  local timedRoot = assert(Runtime.CompileSlots("party1", {
+    enabled = true,
+    items = {{
+      enabled = true,
+      key = "timed:aura",
+      includeSpellIDs = { [355941] = true },
+      placed = {
+        type = "icon", anchor = "BOTTOMLEFT", x = 0, y = 1, size = 20,
+        iconEffect = "glow", iconEffectTiming = "expiring", iconExpireThreshold = 5,
+        showCooldown = true, showCooldownSwipe = true, showStacks = true,
+      },
+      frame = {
+        type = "namecolor", timing = "expiring", expireThreshold = 5,
+        priority = 1, strata = "AUTO",
+        color = { 0.56, 0.93, 0.56, 0.8 },
+      },
+    }},
+  }), "timed Spell Indicator root did not compile")
+  Equal(#timedRoot.slots, 2, "timed icon did not receive an isolated expiration sensor")
+  Equal(timedRoot.slots[1].iconEffect, "none",
+    "visible timed icon retained the expiring glow")
+  Equal(timedRoot.slots[2].iconEffect, "glow",
+    "expiration sensor did not receive the timed icon glow")
+  local timedContainer = assert(Runtime.Apply(timedAuraRoot, timedRoot, timedParent),
+    "timed-effect container creation failed")
+  local visibleOptions = assert(capturedOptions[timedRoot.slots[1].slotKey],
+    "visible timed-icon AddAuraSlot options were not captured")
+  local sensorOptions = assert(capturedOptions[timedRoot.slots[2].slotKey],
+    "expiration-sensor AddAuraSlot options were not captured")
+  local visibleButton = NewFrame(timedContainer)
+  visibleButton.Icon = NewFrame(visibleButton)
+  visibleOptions.initializeFrame(visibleButton)
+  Equal(visibleButton.visibleDurationTextOwned, true,
+    "visible timed icon lost its normal duration-text owner")
+  Equal(visibleButton.clearDurationTextCalls or 0, 0,
+    "expiration setup cleared the visible icon's duration text")
+  Equal(visibleButton.clearDurationCooldownCalls or 0, 0,
+    "expiration setup cleared the visible icon's cooldown swipe")
+  Equal(visibleButton.clearDurationBarCalls or 0, 0,
+    "expiration setup cleared the visible icon's duration bar")
+  Equal(visibleButton.clearApplicationCountCalls or 0, 0,
+    "expiration setup cleared the visible icon's aura stacks")
+  Equal(timedParent._msufA3SpellIndicatorExpiringEffectGates, nil,
+    "visible icon incorrectly created the expiration gate")
+  local sensorButton = NewFrame(timedContainer)
+  sensorButton.Icon = NewFrame(sensorButton)
+  mockRemaining = 4
+  sensorOptions.initializeFrame(sensorButton)
+  local durationSensor = sensorButton._msufA3ExpiringEffectDurationBar
+  Check(durationSensor ~= nil,
+    "expiration sensor did not install its native duration StatusBar")
+  Equal(sensorButton.DurationBar, nil,
+    "expiration smoke incorrectly exposed Blizzard's private DurationBar owner")
+  Equal(sensorButton.DurationTextBinding, nil,
+    "expiration smoke incorrectly exposed Blizzard's private duration binding")
+  Equal(sensorButton._mockPrivateDurationBarOptions.interpolation, 0,
+    "expiration StatusBar does not use immediate timer interpolation")
+  Equal(sensorButton._mockPrivateDurationBarOptions.direction, 1,
+    "expiration StatusBar does not use remaining-time direction")
+  Equal(durationSensor.shown, false,
+    "expiration StatusBar sensor was left on the render path")
+  Equal(durationSensor.alpha, 0,
+    "expiration StatusBar sensor became visually visible")
+  local firstBindingSetupCalls = sensorButton.setDurationBarCalls
+  sensorOptions.initializeFrame(sensorButton)
+  Equal(sensorButton.setDurationBarCalls, firstBindingSetupCalls + 1,
+    "expiration StatusBar ownership was not restored after duration display cleanup")
+  local gates = assert(timedParent._msufA3SpellIndicatorExpiringEffectGates,
+    "expiring frame-effect gate was not created")
+  local gate = next(gates)
+  Check(gate ~= nil, "expiring frame-effect gate was not registered")
+  local iconGates = assert(timedParent._msufA3SpellIndicatorExpiringIconEffectGates,
+    "expiring icon-effect gate was not created")
+  local iconGate = next(iconGates)
+  Check(iconGate ~= nil, "expiring icon-effect gate was not registered")
+  Equal(iconGate.parent, timedParent,
+    "expiring icon glow remained inside the restricted native AuraButton tree")
+  Equal(iconGate.point and iconGate.point[2], timedParent,
+    "expiring icon glow is not anchored to the normal unit frame")
+  Equal(iconGate.point and iconGate.point[4], 0,
+    "expiring icon glow lost its placed X offset")
+  Equal(iconGate.point and iconGate.point[5], 1,
+    "expiring icon glow lost its placed Y offset")
+  Equal(sensorButton._msufA3SpellIndicatorIconEffectRoot, nil,
+    "timed icon glow created a forbidden AuraButton descendant")
+  Equal(gate.alpha, 1,
+    "expiring frame effect was not evaluated immediately during registration")
+  Equal(iconGate.alpha, 1,
+    "expiring icon glow was not evaluated immediately during registration")
+  local driver
+  for i = 1, #createdFrames do
+    if createdFrames[i]:GetScript("OnUpdate") then driver = createdFrames[i] end
+  end
+  Check(driver ~= nil, "expiring frame-effect driver did not start")
+  mockRemaining = 10
+  driver:GetScript("OnUpdate")(driver, 0.2)
+  Equal(gate.alpha, 0, "frame effect activated above its expiration threshold")
+  Equal(iconGate.alpha, 0, "icon glow activated above its expiration threshold")
+  mockRemaining = 4
+  timedParent.nameText:SetText("Updated Name")
+  driver:GetScript("OnUpdate")(driver, 0.2)
+  Equal(gate.alpha, 1, "frame effect did not activate below its expiration threshold")
+  Equal(iconGate.alpha, 1, "icon glow did not activate below its expiration threshold")
+  local effectRoot = assert(gate._msufA3ExpiringEffectRoot,
+    "expiring effect root was not created")
+  Equal(gate.allPoints, timedParent.hpBar,
+    "expiring effect gate is not attached to the health bar")
+  Equal(effectRoot.allPoints, timedParent.hpBar,
+    "expiring frame-effect owner is not attached to the health bar")
+  Equal(effectRoot.frameLevel,
+    timedParent:GetFrameLevel() + Layers.SPELL_FRAME_EFFECT_BASE_OFFSET + 10,
+    "strongest Spell frame effect did not use the shared layer contract")
+  Equal(effectRoot.frameStrata, timedParent:GetFrameStrata(),
+    "AUTO Spell frame effect did not inherit the unit-frame strata")
+  local nameOverlay = assert(effectRoot._msufA3SpellIndicatorNameOverlay,
+    "expiring Name Color overlay was not created")
+  Equal(nameOverlay.text, "Updated Name",
+    "expiring Name Color overlay did not follow the current unit name")
+  mockRemaining = 0
+  driver:GetScript("OnUpdate")(driver, 0.2)
+  Equal(gate.alpha, 0, "missing or permanent aura left the expiration effect active")
+  Equal(iconGate.alpha, 0, "missing or permanent aura left the icon glow active")
+  Runtime.HideFrameEffects(timedParent)
+  Check(driver:GetScript("OnUpdate") ~= nil,
+    "expiration driver stopped while the icon-glow gate was still active")
+  Runtime.HideIconEffects(timedParent)
+  Equal(driver:GetScript("OnUpdate"), nil, "expiration driver kept running without active gates")
+
+  -- Every effect owner stays on the stable HP rectangle while every visible
+  -- tint/edge/glow follows the distinct C-side current-health fill.
+  local frameEffectKinds = { "healthtint", "border", "glow", "pulse", "namecolor" }
+  for i = 1, #frameEffectKinds do
+    local kind = frameEffectKinds[i]
+    local effectStrata = kind == "border" and "HIGH" or "AUTO"
+    local parent = NewFrame(nil)
+    local healthFill
+    parent.hpBar, healthFill = NewHealthBar(parent)
+    parent.nameText = NewFrame(parent)
+    parent.nameText:SetText("Name")
+    local auraRoot = NewFrame(parent)
+    local compiledRoot = assert(Runtime.CompileSlots("party1", {
+      enabled = true,
+      items = {{
+        enabled = true,
+        key = "effect:" .. kind,
+        includeSpellIDs = { [355941] = true },
+        placed = { type = "icon", size = 20, anchor = "TOPLEFT" },
+        frame = {
+          type = kind, timing = "always", priority = 1, strata = effectStrata,
+          layer = i, thickness = 2, color = { 0.2, 0.8, 1, 0.7 },
+        },
+      }},
+    }), kind .. " frame effect did not compile")
+    local container = assert(Runtime.Apply(auraRoot, compiledRoot, parent),
+      kind .. " frame-effect container creation failed")
+    local options = assert(capturedOptions[compiledRoot.slots[1].slotKey],
+      kind .. " AddAuraSlot options were not captured")
+    local button = NewFrame(container)
+    button.Icon = NewFrame(button)
+    options.initializeFrame(button)
+    local rootFrame = assert(button._msufA3SpellIndicatorEffectRoot,
+      kind .. " effect root was not created")
+    Equal(rootFrame.allPoints, parent.hpBar,
+      kind .. " effect root escaped the health bar")
+    Equal(rootFrame.frameLevel,
+      parent:GetFrameLevel() + Layers.SPELL_FRAME_EFFECT_BASE_OFFSET + 10 + i,
+      kind .. " effect root ignored its compiled 0..30 Layer")
+    Equal(rootFrame.frameStrata, effectStrata == "AUTO" and parent:GetFrameStrata() or effectStrata,
+      kind .. " effect did not apply its configured strata")
+    if kind == "healthtint" then
+      Equal(button._msufA3SpellIndicatorHealthTint.allPoints, healthFill,
+        "Health Tint did not follow the current-health fill")
+    elseif kind == "border" or kind == "pulse" then
+      Equal(button._msufA3SpellIndicatorEdges[1].point[2], healthFill,
+        kind .. " top edge did not follow the current-health fill")
+      Equal(button._msufA3SpellIndicatorEdges[2].point[2], healthFill,
+        kind .. " bottom edge did not follow the current-health fill")
+    elseif kind == "glow" then
+      Equal(rootFrame._msufA3AnimatedGlow.halo.point[2], healthFill,
+        "Glow did not follow the current-health fill")
+    elseif kind == "namecolor" then
+      Equal(button._msufA3SpellIndicatorNameOverlay.allPoints, parent.nameText,
+        "Name Color lost its name-text target")
+    end
+    Runtime.HideFrameEffects(parent)
+  end
 end
 
 -- Static preview/live parity guard: both paths pin the same configured anchor
@@ -183,6 +507,8 @@ local liveSource = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_SpellIndica
 local previewSource = Read("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Render.lua")
 local previewHandlesSource = Read("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Handles.lua")
 local indicatorMenuSource = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupIndicators.lua")
+local groupBarsMenuSource = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupBars.lua")
+local editModeSource = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_EditMode.lua")
 Check(liveSource:find("button:SetPoint(anchor, parentFrame, anchor, x, y)", 1, true),
   "live Spell Indicator no longer anchors point-to-identical-point")
 Check(previewSource:find("handle:SetPoint(anchor, mock, anchor, ConfigToOffset(x or 0, previewScale), ConfigToOffset(y or 0, previewScale))", 1, true),
@@ -199,6 +525,24 @@ Check(indicatorMenuSource:find("preview.DropSpellIndicatorAtCursor(tile._specKey
   "tracked spell tiles no longer drop into the Group Frame Preview")
 Check(indicatorMenuSource:find("preview.UpdateSpellDropTarget(true", 1, true),
   "tracked spell drag lost its visible preview drop target")
+Check(previewSource:find("local function SpellPreviewHealthFill()", 1, true),
+  "group preview has no current-health fill resolver")
+Check(previewSource:find("root:SetAllPoints(healthBar)", 1, true),
+  "group preview frame-effect owner is not attached to the health bar")
+Check(previewSource:find("tint:SetAllPoints(target)", 1, true),
+  "group preview Health Tint does not follow the current-health fill")
+Check(editModeSource:find("local target = health and health.GetStatusBarTexture and health:GetStatusBarTexture()", 1, true),
+  "Edit Mode frame effects do not resolve the current-health fill")
+Check(editModeSource:find('top:SetPoint("TOPLEFT", target', 1, true),
+  "Edit Mode border/glow effects escaped the current-health fill")
+Check(previewSource:find("LayoutSpellPreviewEdges(root, target, effect", 1, true),
+  "group preview border/pulse effects no longer use the health-bar target")
+Check(indicatorMenuSource:find('Tr("Highlight Health Bar")', 1, true),
+  "Spell frame-effect card does not describe its health-bar target")
+Check(indicatorMenuSource:find('"Effect Layer (0-30)", 0, 30, 1, "layer", 0', 1, true),
+  "Spell frame-effect Layer 0-30 control is missing")
+Check(groupBarsMenuSource:find('"dispelOverlayLayer", 0, "visual"', 1, true),
+  "Dispel overlay effect Layer 0-30 control is missing")
 
 -- PLAYER_ENTERING_WORLD must opt into the exceptional repair path. The native
 -- aura update settles first so later lifecycle work cannot immediately replace

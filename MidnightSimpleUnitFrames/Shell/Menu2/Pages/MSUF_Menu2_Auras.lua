@@ -2465,9 +2465,8 @@ local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
         function(v) Model.WriteLanePerRow(unit, kind, v); ApplyUnit(ctx, unit, "AURAS3_UNIT_PER_ROW") end, "per-row")
     Number("Gap", 2, -146, 0, 12, function() return Model.ReadNumber(unit, "spacing", 2, 0, 64) end,
         function(v) Model.WriteNumber(unit, "spacing", v, 0, 64); ApplyUnit(ctx, unit, "AURAS3_UNIT_SPACING") end, "spacing")
-    Number("Layer", 3, -146, 0, 30, function() return type(Model.ReadLaneLayer) == "function" and Model.ReadLaneLayer(unit, kind) or (kind == "buff" and 5 or 6) end,
+    Number("Layer (0-30)", 3, -146, 0, 30, function() return type(Model.ReadLaneLayer) == "function" and Model.ReadLaneLayer(unit, kind) or (kind == "buff" and 5 or 6) end,
         function(v) if type(Model.WriteLaneLayer) == "function" then Model.WriteLaneLayer(unit, kind, v); ApplyUnit(ctx, unit, "AURAS3_UNIT_LAYER") end end, "layer")
-    W.Text(section, "Move the colored Preview handle; Live Tracked is display-only.", 24 + (col4 + gap) * 3, -154, col4, T.colors.muted)
     M.TrackRefresh(ctx, function()
         local shown = UnitLaneShown(unit, kind)
         W.SetControlEnabled(enable, true)
@@ -3054,7 +3053,6 @@ end
 
 local CUSTOM_AURA_TYPES = VTP "BUFF=Buff|DEBUFF=Debuff"
 local CUSTOM_FRAME_EFFECTS = VTP "none=None|healthtint=Health Tint|border=Border|glow=Glow|pulse=Pulse|namecolor=Name Overlay"
-local CUSTOM_STRATA_VALUES = VTP "AUTO=Auto|BACKGROUND=Background|LOW=Low|MEDIUM=Medium|HIGH=High|DIALOG=Dialog|FULLSCREEN=Fullscreen|FULLSCREEN_DIALOG=Fullscreen Dialog|TOOLTIP=Tooltip"
 
 --- Compact, task-focused Custom Aura editor used inside UnitFrame > Auras.
 --- Only one tool is rendered at a time; all values still write to the same
@@ -3069,7 +3067,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
     if not item then return end
     item.filters = type(item.filters) == "table" and item.filters or {}
     item.placed = type(item.placed) == "table" and item.placed or {}
-    item.frame = type(item.frame) == "table" and item.frame or { type = "none", color = { 0.69, 0.50, 0.88, 0.8 }, priority = 5, thickness = 2, strata = "AUTO" }
+    item.frame = type(item.frame) == "table" and item.frame or { type = "none", color = { 0.69, 0.50, 0.88, 0.8 }, priority = 5, thickness = 2, layer = 0, strata = "AUTO" }
     if type(item.frame.color) ~= "table" then item.frame.color = { 0.69, 0.50, 0.88, 0.8 } end
     local function Apply(reason, rebuild)
         ApplyUnit(ctx, unit, reason or "AURAS3_CUSTOM_CONTAINER", rebuild == true)
@@ -3242,27 +3240,36 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             function() return item.placed.growth or "LEFTDOWN" end,
             function(value) item.placed.growth = value or "LEFTDOWN"; Apply("AURAS3_CUSTOM_GROWTH") end,
             AuraControlMeta(ctx, "custom-container.layout.growth"))
-        BindDropdown(ctx, section, "Strata", 24 + 2 * (col3 + gap3), -34, CUSTOM_STRATA_VALUES, col3,
-            function() return item.strata or "AUTO" end,
-            function(value) item.strata = value or "AUTO"; Apply("AURAS3_CUSTOM_STRATA") end,
-            AuraControlMeta(ctx, "custom-container.layout.strata"))
         local col4, gap4 = Grid(w, 4)
         local values = {
             { "X", "x", -300, 300, 0 }, { "Y", "y", -300, 300, 0 }, { "Max", "max", 0, 40, 8 }, { "Size", "size", 8, 128, 24 },
-            { "Per row", "perRow", 1, 20, 4 }, { "Gap", "spacing", 0, 24, 2 }, { "Layer", "layer", 0, 30, 9 },
+            { "Per row", "perRow", 1, 20, 4 }, { "Gap", "spacing", 0, 24, 2 }, { "Layer (0-30)", "layer", 0, 30, 9 },
         }
         local perRowControl
         for i = 1, #values do
             local spec = values[i]
             local row = i <= 4 and 0 or 1
             local col = row == 0 and (i - 1) or (i - 5)
+            local assistantContract
+            if spec[2] == "layer" then
+                local layerSettingKeys = {}
+                for customIndex = 1, 3 do
+                    layerSettingKeys[#layerSettingKeys + 1] =
+                        "auras3." .. tostring(unit) .. ".custom" .. tostring(customIndex) .. ".layer"
+                end
+                assistantContract = {
+                    assistantDisposition = "dynamic",
+                    assistantDispositionReason = "Layer targets the selected unit Custom Aura container.",
+                    assistantSettingKeys = layerSettingKeys,
+                }
+            end
             local control = BindSlider(ctx, section, spec[1], 24 + col * (col4 + gap4), row == 0 and -92 or -146, spec[3], spec[4], 1, col4,
                 function() return tonumber(spec[2] == "layer" and item.layer or item.placed[spec[2]]) or spec[5] end,
                 function(value)
                     if spec[2] == "layer" then item.layer = floor(tonumber(value) or spec[5]) else item.placed[spec[2]] = tonumber(value) or spec[5] end
                     Apply("AURAS3_CUSTOM_" .. spec[2]:upper())
                 end,
-                AuraControlMeta(ctx, "custom-container.layout." .. AuraCatalogToken(spec[2])))
+                AuraControlMeta(ctx, "custom-container.layout." .. AuraCatalogToken(spec[2]), nil, assistantContract))
             if spec[2] == "perRow" then perRowControl = control end
         end
         M.TrackRefresh(ctx, function()
@@ -3335,32 +3342,32 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
     end
 
     if tool == "effect" then
-        local section = b:Section("Custom " .. tostring(index) .. " Full-Frame", 156)
+        local section = b:Section("Custom " .. tostring(index) .. " Full-Frame", 210)
         local w = section._msuf2Width or b.width or 720
         local col3, gap = Grid(w, 3)
         BindDropdown(ctx, section, "Effect", 24, -34, CUSTOM_FRAME_EFFECTS, col3,
             function() return item.frame.type or "none" end,
             function(value) item.frame.type = value or "none"; Apply("AURAS3_CUSTOM_EFFECT") end,
             AuraControlMeta(ctx, "custom-container.effect.type"))
-        BindDropdown(ctx, section, "Strata", 24 + col3 + gap, -34, CUSTOM_STRATA_VALUES, col3,
-            function() return item.frame.strata or "AUTO" end,
-            function(value) item.frame.strata = value or "AUTO"; Apply("AURAS3_CUSTOM_EFFECT_STRATA") end,
-            AuraControlMeta(ctx, "custom-container.effect.strata"))
         local color = W.Color(section, "Color")
         M.BindColor(ctx, color,
             function() local c = item.frame.color; return c[1] or 0.69, c[2] or 0.50, c[3] or 0.88 end,
             function(r, g, blue) local a = item.frame.color[4] or 0.8; item.frame.color = { r, g, blue, a }; Apply("AURAS3_CUSTOM_EFFECT_COLOR") end,
             AuraControlMeta(ctx, "custom-container.effect.color"))
-        W.MoveWidget(color, section, 24 + 2 * (col3 + gap), -34, col3, "LEFT")
+        W.MoveWidget(color, section, 24 + col3 + gap, -34, col3, "LEFT")
         BindSlider(ctx, section, "Opacity", 24, -96, 5, 100, 5, col3,
             function() return floor(((item.frame.color[4] or 0.8) * 100) + 0.5) end,
             function(value) item.frame.color[4] = (tonumber(value) or 80) / 100; item.frame.tintAlpha = item.frame.color[4]; Apply("AURAS3_CUSTOM_EFFECT_ALPHA") end,
             AuraControlMeta(ctx, "custom-container.effect.opacity"))
-        BindSlider(ctx, section, "Thickness", 24 + col3 + gap, -96, 1, 16, 1, col3,
+        BindSlider(ctx, section, "Layer (0-30)", 24 + col3 + gap, -96, 0, 30, 1, col3,
+            function() return tonumber(item.frame.layer) or 0 end,
+            function(value) item.frame.layer = floor(tonumber(value) or 0); Apply("AURAS3_CUSTOM_EFFECT_LAYER") end,
+            AuraControlMeta(ctx, "custom-container.effect.layer"))
+        BindSlider(ctx, section, "Thickness", 24 + 2 * (col3 + gap), -96, 1, 16, 1, col3,
             function() return tonumber(item.frame.thickness) or 2 end,
             function(value) item.frame.thickness = tonumber(value) or 2; Apply("AURAS3_CUSTOM_EFFECT_THICKNESS") end,
             AuraControlMeta(ctx, "custom-container.effect.thickness"))
-        BindSlider(ctx, section, "Priority", 24 + 2 * (col3 + gap), -96, 1, 10, 1, col3,
+        BindSlider(ctx, section, "Priority", 24, -150, 1, 10, 1, col3,
             function() return tonumber(item.frame.priority) or 5 end,
             function(value) item.frame.priority = tonumber(value) or 5; Apply("AURAS3_CUSTOM_EFFECT_PRIORITY") end,
             AuraControlMeta(ctx, "custom-container.effect.priority"))

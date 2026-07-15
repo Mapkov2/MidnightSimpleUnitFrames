@@ -119,6 +119,7 @@ function Frame:SetJustifyH() end
 function Frame:SetJustifyV() end
 function Frame:SetText() end
 function Frame:SetStatusBarTexture() end
+function Frame:GetStatusBarTexture() return self.statusBarTexture end
 function Frame:SetStatusBarColor() end
 function Frame:SetMinMaxValues() end
 function Frame:SetValue() end
@@ -131,6 +132,13 @@ function Frame:SetReverse() end
 
 local function NewFrame(parent)
     return setmetatable({ parent = parent, shown = true, frameLevel = 17, frameStrata = "MEDIUM" }, Frame)
+end
+
+local function NewHealthBar(parent)
+    local bar = NewFrame(parent)
+    local fill = NewFrame(bar)
+    bar.statusBarTexture = fill
+    return bar, fill
 end
 
 local AURA_BUTTON_BINDINGS = {
@@ -227,7 +235,15 @@ function Frame:SetAuraGroupLayout(groupKey, options) self.groupLayouts[groupKey]
 function Frame:SetAuraGroupMaxFrameCount() end
 function Frame:SetAuraGroupCandidateFilters() end
 function Frame:SetAuraGroupSortMethod() end
-function Frame:AddAuraSlot() end
+function Frame:AddAuraSlot(slotKey, filter, options)
+    self.auraSlotOptions = self.auraSlotOptions or {}
+    self.auraSlotOptions[slotKey] = { filter = filter, options = options }
+    if options and options.initializeFrame then
+        local button = NewAuraButton(self)
+        options.initializeFrame(button)
+        button._ptr5Forbidden = true
+    end
+end
 function Frame:SetAuraSlotCandidateFilters() end
 function Frame:AddItemEnchantment() end
 function Frame:UpdateAllAuras() self.updateAllAurasCalls = (self.updateAllAurasCalls or 0) + 1 end
@@ -261,6 +277,10 @@ _G.issecretvalue = function() return false end
 _G.UnitExists = function() return true end
 _G.AuraContainerSortMethod = { Default = 0, Expiration = 1, Name = 2 }
 _G.AuraContainerSortDirection = { Normal = 0, Reverse = 1 }
+_G.MSUF_FRAME_STRATA_RANK = {
+    BACKGROUND = 1, LOW = 2, MEDIUM = 3, HIGH = 4, DIALOG = 5,
+    FULLSCREEN = 6, FULLSCREEN_DIALOG = 7, TOOLTIP = 8,
+}
 
 local registeredElements = {}
 local MSUF = {
@@ -275,6 +295,8 @@ local MSUF = {
 }
 _G.MSUF_NS = MSUF
 
+local layersChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Layers.lua"))
+layersChunk("MidnightSimpleUnitFrames", MSUF)
 local backendChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua"))
 backendChunk("MidnightSimpleUnitFrames", MSUF)
 
@@ -282,6 +304,11 @@ local A3 = assert(MSUF.MSUF_Auras3)
 local AurasElement = assert(registeredElements.Auras)
 Check(type(A3.ResolveUnitFrameConfig) == "function", "unit aura compiler missing")
 Check(type(A3._ApplyNormalLaneContainers) == "function", "normal lane integration surface missing")
+local Layers = assert(MSUF.UF.Layers)
+Check(Layers.SPELL_FRAME_EFFECT_BASE_OFFSET + 10 < Layers.DISPEL_OVERLAY_EFFECT_OFFSET,
+    "Dispel overlay AUTO level is not above the strongest Spell frame effect")
+Check(Layers.DISPEL_OVERLAY_EFFECT_OFFSET < Layers.TEXT_BASE_OFFSET + 5,
+    "health effects escaped above the default text layer")
 
 local ANCHORS = {
     "TOPLEFT", "TOP", "TOPRIGHT",
@@ -517,6 +544,79 @@ do
     Near(host.height, lane.height, "post-repair player config sync height")
 end
 
+-- The native Dispel overlay and Spell frame effects share the health bar. At
+-- AUTO/equal strata Dispel must win by frame level; an explicit strata remains
+-- an intentional user override and is never normalized back to AUTO.
+do
+    local function ApplyOverlay(strata, onHealth, layer)
+        local parent = NewFrame(nil)
+        parent.unit = "party1"
+        parent._msufIsGroupFrame = true
+        parent._msufGFKind = "party"
+        local healthFill
+        parent.hpBar, healthFill = NewHealthBar(parent)
+        parent.MSUFSpec = {
+            auras = {
+                enabled = true,
+                showBuffs = false,
+                maxBuffs = 0,
+                showDebuffs = false,
+                maxDebuffs = 0,
+            },
+            border = { dispel = false, dispelTrigger = "BY_ME" },
+            group = {
+                dispelOverlayEnabled = true,
+                dispelOverlayOnHealth = onHealth ~= false,
+                dispelOverlayStyle = "FULL",
+                dispelOverlayAlpha = 0.35,
+                dispelOverlayTrigger = "BORDER",
+                dispelOverlayLayer = layer,
+                dispelOverlayStrata = strata,
+            },
+        }
+        Check(AurasElement.IsEnabled(parent) == true, "Dispel-only group aura config did not enable")
+        Check(AurasElement.Enable(parent) == true, "native Dispel overlay did not apply")
+        local container = assert(parent.Auras and parent.Auras.DispelSensor,
+            "combined Dispel sensor container missing")
+        local button = assert(container[1], "native Dispel overlay AuraButton missing")
+        return parent, button, healthFill, container
+    end
+
+    local autoParent, autoButton, autoFill, autoContainer = ApplyOverlay("AUTO", true)
+    Equal(autoButton.allPoints, autoParent.hpBar,
+        "Dispel AuraButton owner is not attached to the health bar")
+    Equal(autoButton._msufA3DispelSensorRegion.allPoints, autoFill,
+        "Dispel overlay did not follow the current-health fill")
+    Equal(autoButton.frameLevel,
+        autoParent:GetFrameLevel() + Layers.DISPEL_OVERLAY_EFFECT_OFFSET,
+        "AUTO Dispel overlay ignored the shared effect level")
+    Equal(autoButton.frameStrata, autoParent:GetFrameStrata(),
+        "AUTO Dispel overlay did not inherit parent strata")
+    Check(autoContainer.frameLevel < autoButton.frameLevel,
+        "Dispel assignment container inherited above its health effect")
+    Check(autoButton.frameLevel
+        > autoParent:GetFrameLevel() + Layers.SPELL_FRAME_EFFECT_BASE_OFFSET + 10,
+        "AUTO Dispel overlay is not above strongest-priority Spell effect")
+
+    local explicitParent, explicitButton = ApplyOverlay("HIGH", true)
+    Equal(explicitButton.frameStrata, "HIGH",
+        "explicit Dispel effect strata was normalized back to AUTO")
+    Equal(explicitButton.frameLevel,
+        explicitParent:GetFrameLevel() + Layers.DISPEL_OVERLAY_EFFECT_OFFSET,
+        "explicit Dispel strata changed the same-strata level contract")
+
+    local layeredParent, layeredButton = ApplyOverlay("AUTO", true, 13)
+    Equal(layeredButton.frameLevel,
+        layeredParent:GetFrameLevel() + Layers.DISPEL_OVERLAY_EFFECT_OFFSET + 13,
+        "Dispel overlay ignored its compiled 0..30 Layer")
+
+    local fullHealthParent, fullHealthButton = ApplyOverlay("AUTO", false)
+    Equal(fullHealthButton.allPoints, fullHealthParent.hpBar,
+        "full-health Dispel AuraButton escaped the health bar")
+    Equal(fullHealthButton._msufA3DispelSensorRegion.allPoints, fullHealthParent.hpBar,
+        "full-health Dispel overlay escaped onto the unit frame")
+end
+
 -- Dispel border/overlay/corner sensors use native AuraSlots rather than aura
 -- groups. Their geometry cache must honor the same one-shot world marker.
 do
@@ -712,6 +812,105 @@ for _, laneSpec in ipairs(GROUP_LANES) do
 end
 Equal(groupCases, 216, "group lane/anchor/growth coverage")
 
+-- Party aura access can change without UNIT_AURA. The element must request the
+-- two rare per-unit recovery events and invalidate only the already-registered
+-- native containers for that party member. Raid and preview frames deliberately
+-- stay off this path so the fix cannot add a 40-frame range subscription.
+do
+    local frame = NewFrame(nil)
+    frame.unit = "party1"
+    frame._msufIsGroupFrame = true
+    frame._msufGFKind = "party"
+    frame.MSUFSpec = {
+        auras = {
+            enabled = true,
+            showBuffs = true,
+            maxBuffs = 3,
+            buffIconSize = 10,
+            buffSpacing = 2,
+            buffPerRow = 3,
+            showDebuffs = true,
+            maxDebuffs = 2,
+            debuffIconSize = 12,
+            debuffSpacing = 2,
+            debuffPerRow = 2,
+        },
+    }
+
+    local events = AurasElement.GetEvents(frame)
+    Equal(#events, 2, "party aura access event count")
+    Equal(events[1], "UNIT_CONNECTION", "party aura connection event")
+    Equal(events[2], "UNIT_IN_RANGE_UPDATE", "party aura range event")
+
+    A3._directIdentityAuraContainers = nil
+    Check(AurasElement.IsEnabled(frame) == true, "party aura access config did not enable")
+    Check(AurasElement.Enable(frame) == true, "party aura access runtime did not enable")
+    local containers = assert(A3._directIdentityAuraContainers.party1,
+        "party aura containers were not indexed by unit")
+    local containerCount = 0
+    local geometry = {}
+    local function TotalUpdates()
+        local total = 0
+        for container in pairs(containers) do
+            total = total + (container.updateAllAurasCalls or 0)
+        end
+        return total
+    end
+    for container in pairs(containers) do
+        containerCount = containerCount + 1
+        geometry[container] = {
+            clears = container.clearAllPointsCalls or 0,
+            points = container.setPointCalls or 0,
+        }
+    end
+    Check(containerCount > 0, "party aura access runtime created no native containers")
+
+    local rangeUpdate = AurasElement.SelectEventUpdate(frame, frame.MSUFSpec,
+        "UNIT_IN_RANGE_UPDATE", AurasElement.Update)
+    Equal(rangeUpdate, AurasElement.UpdatePartyAuraAccess,
+        "party range event did not select its secret-safe refresh route")
+    local updates = TotalUpdates()
+    rangeUpdate(frame, "UNIT_IN_RANGE_UPDATE", {}, {})
+    Equal(TotalUpdates(), updates + containerCount,
+        "party range transition did not refresh every native container exactly once")
+
+    local connectionUpdate = AurasElement.SelectEventUpdate(frame, frame.MSUFSpec,
+        "UNIT_CONNECTION", AurasElement.Update)
+    Equal(connectionUpdate, AurasElement.UpdatePartyAuraAccess,
+        "party connection event did not select its refresh route")
+    updates = TotalUpdates()
+    connectionUpdate(frame, "UNIT_CONNECTION", {}, false)
+    Equal(TotalUpdates(), updates + containerCount,
+        "party connection transition did not refresh every native container exactly once")
+
+    local current = assert(A3._directIdentityAuraContainers.party1)
+    local currentCount = 0
+    for container in pairs(current) do
+        currentCount = currentCount + 1
+        Check(containers[container] == true, "party access refresh replaced a native container")
+        Equal(container.clearAllPointsCalls or 0, geometry[container].clears,
+            "party access refresh repeated container clear-point geometry")
+        Equal(container.setPointCalls or 0, geometry[container].points,
+            "party access refresh repeated container point geometry")
+    end
+    Equal(currentCount, containerCount, "party access refresh changed native container count")
+
+    local preview = NewFrame(nil)
+    preview.unit = "party1"
+    preview._msufGFKind = "party"
+    preview._msufGFIsPreviewFrame = true
+    Equal(#AurasElement.GetEvents(preview), 0, "party preview registered aura access events")
+
+    local raid = NewFrame(nil)
+    raid.unit = "raid1"
+    raid._msufGFKind = "raid"
+    Equal(#AurasElement.GetEvents(raid), 0, "raid registered party aura access events")
+
+    local target = NewFrame(nil)
+    target.unit = "target"
+    Equal(#AurasElement.GetEvents(target), 0, "single unit registered party aura access events")
+end
+
 -- Native maximum-duration filtering is compiled once into every Debuff
 -- AuraContainer. Zero keeps the filter disabled; corrupt/out-of-range profile
 -- values are clamped to the menu's 180-second ceiling.
@@ -899,6 +1098,11 @@ end
 -- the group External lane all preserve the same full-capacity rectangle and
 -- selected-anchor/internal-flow split.
 local runtimeSource = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua")
+local coreSource = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Core.lua")
+local eventElementsStart = assert(coreSource:find("local EVENT_ELEMENTS = {", 1, true))
+local eventElementsStop = assert(coreSource:find("local STATUS_EVENT_ELEMENTS = {", eventElementsStart, true))
+Check(coreSource:sub(eventElementsStart, eventElementsStop):find("Auras = true", 1, true),
+    "Auras element is not admitted to the core event router")
 Check(runtimeSource:find("layoutHost:SetPoint(lane.anchor, parentFrame, lane.anchor, lane.x, lane.y)", 1, true),
     "live lane host no longer anchors its bounding box with lane.anchor")
 Check(runtimeSource:find("SetAuraLayoutAnchorPoint", 1, true), "native layout anchor setter missing")

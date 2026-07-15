@@ -885,6 +885,7 @@ local MSUF2_NAV_deDE = {
     ["Target"] = "Ziel",
     ["Target Name Color"] = "Ziel-Namensfarbe",
     ["Cast Target Name Color"] = "Farbe des Zauberziels",
+    ["Opened from the MSUF Assistant."] = "Vom MSUF Assistant geöffnet.",
     ["Target of Target"] = "Ziel des Ziels",
     ["ToT Name Color"] = "ToT-Namensfarbe",
     ["Unit Auras"] = "Einheitenauren",
@@ -3093,6 +3094,30 @@ L["Moon (4 z)"] = "Mond · 4 z"
 L["Show auras"] = "Auren anzeigen"
 L["Only one filter can be active."] = "Es kann nur ein Filter aktiv sein."
 L["Applies to unit and group frames. Choose the WoW tooltip or the MSUF panel."] = "Gilt für Einheiten- und Gruppenframes. Wähle den WoW-Tooltip oder das MSUF-Panel."
+
+-- Zauberindikatoren: ergebnisorientierte Karten- und Steuerelementtexte.
+L["Choose Spells"] = "Zauber auswählen"
+L["Edit Spell"] = "Zauber bearbeiten"
+L["Show on Frame"] = "Auf Frame anzeigen"
+L["Highlight Frame"] = "Frame hervorheben"
+L["Highlight Health Bar"] = "Lebensleiste hervorheben"
+L["Icon Details"] = "Symboldetails"
+L["Show spell indicators"] = "Zauberindikatoren anzeigen"
+L["Preview all spells"] = "Alle Zauber anzeigen"
+L["Spells for this spec"] = "Zauber für diese Spezialisierung"
+L["Click: edit. Right-click: toggle. Drag: reorder or preview."] = "Klick: bearbeiten. Rechtsklick: umschalten. Ziehen: sortieren oder Vorschau."
+L["No spells for this spec."] = "Keine Zauber für diese Spezialisierung."
+L["Choose spell"] = "Zauber auswählen"
+L["Show this spell"] = "Diesen Zauber anzeigen"
+L["Only show my casts"] = "Nur meine Zauber anzeigen"
+L["Hide duplicate Buff icon"] = "Doppeltes Buffsymbol ausblenden"
+L["Display as"] = "Anzeigen als"
+L["Effect"] = "Effekt"
+L["Effect Strata"] = "Effekt-Strata"
+L["Auto keeps this Dispel health-bar effect above Spell Indicator frame effects. Choosing another strata overrides that order."] = "Auto hält diesen Dispel-Effekt auf der Lebensleiste über den Frame-Effekten der Zauberindikatoren. Eine andere Strata überschreibt diese Reihenfolge."
+L["Auto keeps this health-bar effect below the Dispel Overlay. Choosing another strata overrides that order."] = "Auto hält diesen Lebensleisten-Effekt unter dem Dispel-Overlay. Eine andere Strata überschreibt diese Reihenfolge."
+L["Cooldowns, stacks, and tooltips use the Buff style for this frame."] = "Abklingzeiten, Stapel und Tooltips verwenden den Buffstil dieses Frames."
+L["Edit Buff Style"] = "Buffstil bearbeiten"
 
 -- Edit-Mode-Tooltips erklären nur Verhalten oder Folgen, nicht den Button-Titel.
 L["Discard ALL changes made in Edit Mode\nand restore settings to the state\nbefore Edit Mode was opened."] = "Alle Änderungen verwerfen und den Startzustand wiederherstellen."

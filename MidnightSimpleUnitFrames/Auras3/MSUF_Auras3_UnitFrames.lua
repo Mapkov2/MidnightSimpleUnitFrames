@@ -30,6 +30,8 @@ A3.__unitFrameBackendLoaded = true
 local type, tostring, tonumber, pairs, next = type, tostring, tonumber, pairs, next
 local table_concat, table_sort = table.concat, table.sort
 local math_floor, math_min, math_max = math.floor, math.min, math.max
+local FrameLayers = UF.Layers or {}
+local DISPEL_OVERLAY_EFFECT_OFFSET = tonumber(FrameLayers.DISPEL_OVERLAY_EFFECT_OFFSET) or 12
 local CreateFrame = _G.CreateFrame
 local C_AddOns = _G.C_AddOns
 local C_Timer = _G.C_Timer
@@ -1035,7 +1037,8 @@ local function CompileDispelSensor(unit, frameSpec, groupMode, visual)
         size = cornerSlots and ClampNumber(corner and corner.size, 8, 1, 64) or nil,
         slots = cornerSlots,
         slotSignature = cornerSignature,
-        layer = visual == "corner" and (30 + ClampNumber(corner and corner.layer, 7, 0, 30)) or (visual == "overlay" and 2 or 45),
+        layer = visual == "corner" and (30 + ClampNumber(corner and corner.layer, 7, 0, 30))
+            or (visual == "overlay" and ClampNumber(groupMode and overlay.dispelOverlayLayer or overlay.layer, 0, 0, 30) or 45),
         strata = NormalizeFrameStrata(strata, "AUTO"),
         trigger = trigger,
     }
@@ -2628,12 +2631,18 @@ end
 local function DispelSensorTarget(parentFrame, sensor)
     if sensor and sensor.visual == "overlay" and parentFrame then
         local hp = parentFrame.hpBar or parentFrame.Health or parentFrame.health
-        if hp then
-            if sensor.target == "healthFill" and hp.GetStatusBarTexture then
-                return hp:GetStatusBarTexture() or hp
-            end
-            return hp
+        if not hp then return nil end
+        if sensor.target == "healthFill" then
+            return hp.GetStatusBarTexture and hp:GetStatusBarTexture() or nil
         end
+        return hp
+    end
+    return parentFrame
+end
+
+local function DispelSensorButtonTarget(parentFrame, sensor)
+    if sensor and sensor.visual == "overlay" then
+        return parentFrame and (parentFrame.hpBar or parentFrame.Health or parentFrame.health)
     end
     return parentFrame
 end
@@ -2645,14 +2654,21 @@ local function DispelSensorFrameLevel(parentFrame, sensor, target)
         local targetLevel = target and target.GetFrameLevel and target:GetFrameLevel()
             or (targetParent and targetParent.GetFrameLevel and targetParent:GetFrameLevel())
             or parentLevel
-        return targetLevel + 1
+        -- Geometry follows the health target, but AUTO/equal-strata ordering is
+        -- based on the unit frame so Dispel deterministically wins the shared
+        -- health-effect band above every Spell Indicator priority.
+        return math_max(targetLevel + 1, parentLevel + DISPEL_OVERLAY_EFFECT_OFFSET + (sensor.layer or 0))
     end
     return parentLevel + (sensor and sensor.layer or 14)
 end
 
 local function LayoutDispelSensorButton(button, sensor, parentFrame, index)
     if not (button and sensor and parentFrame) then return false end
-    local target = DispelSensorTarget(parentFrame, sensor) or parentFrame
+    -- The AuraButton owns native assignment/visibility, but its stable geometry
+    -- is the health-bar rectangle. The visible region is anchored separately to
+    -- the current fill when requested, avoiding a whole-unit-frame fallback.
+    local target = DispelSensorButtonTarget(parentFrame, sensor)
+    if not target then return false end
     button:ClearAllPoints()
     if sensor.visual == "corner" then
         local slot = sensor.slots and sensor.slots[index or 1]
@@ -2668,40 +2684,43 @@ local function LayoutDispelSensorButton(button, sensor, parentFrame, index)
     return true
 end
 
-local function LayoutDispelSensorOverlay(region, button, sensor)
-    if not (region and button and sensor) then return end
+local function LayoutDispelSensorOverlay(region, button, sensor, visualTarget)
+    if not (region and button and sensor) then return false end
     local style = sensor.style or "FULL"
     local thickness = ClampNumber(sensor.thickness, 3, 1, 32)
     region:ClearAllPoints()
     if sensor.visual == "corner" then
         region:SetAllPoints(button)
-        return
+        return true
     end
     if sensor.visual == "border" then
         local pad = math_min(2, math_max(0, math_floor((thickness * 0.5) + 0.5)))
         region:SetPoint("TOPLEFT", button, "TOPLEFT", -pad, pad)
         region:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", pad, -pad)
-        return
+        return true
     end
+    local target = visualTarget
+    if not target then return false end
     if style == "TOP" then
-        region:SetPoint("TOPLEFT", button, "TOPLEFT", 0, 0)
-        region:SetPoint("TOPRIGHT", button, "TOPRIGHT", 0, 0)
+        region:SetPoint("TOPLEFT", target, "TOPLEFT", 0, 0)
+        region:SetPoint("TOPRIGHT", target, "TOPRIGHT", 0, 0)
         region:SetHeight(thickness)
     elseif style == "BOTTOM" then
-        region:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", 0, 0)
-        region:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 0, 0)
+        region:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", 0, 0)
+        region:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 0, 0)
         region:SetHeight(thickness)
     elseif style == "LEFT" then
-        region:SetPoint("TOPLEFT", button, "TOPLEFT", 0, 0)
-        region:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", 0, 0)
+        region:SetPoint("TOPLEFT", target, "TOPLEFT", 0, 0)
+        region:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", 0, 0)
         region:SetWidth(thickness)
     elseif style == "RIGHT" then
-        region:SetPoint("TOPRIGHT", button, "TOPRIGHT", 0, 0)
-        region:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 0, 0)
+        region:SetPoint("TOPRIGHT", target, "TOPRIGHT", 0, 0)
+        region:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 0, 0)
         region:SetWidth(thickness)
     else
-        region:SetAllPoints(button)
+        region:SetAllPoints(target)
     end
+    return true
 end
 
 local function GetSensorOverlayOptions()
@@ -2723,7 +2742,7 @@ local function PrepareDispelSensorButton(button, sensor, parentFrame, index)
     button._msufA3DispelSensor = sensor.visual
     if button.EnableMouse then button:EnableMouse(false) end
     button:SetMouseMotionEnabled(false)
-    LayoutDispelSensorButton(button, sensor, parentFrame, index)
+    if not LayoutDispelSensorButton(button, sensor, parentFrame, index) then return false end
 
     local icon = button.Icon
     if not icon then
@@ -2745,7 +2764,11 @@ local function PrepareDispelSensorButton(button, sensor, parentFrame, index)
         region = button:CreateTexture(nil, "OVERLAY")
         button._msufA3DispelSensorRegion = region
     end
-    LayoutDispelSensorOverlay(region, button, sensor)
+    local visualTarget = DispelSensorTarget(parentFrame, sensor)
+    if not LayoutDispelSensorOverlay(region, button, sensor, visualTarget) then
+        region:Hide()
+        return false
+    end
     if sensor.visual == "corner" then
         region:SetTexture("Interface\\Buttons\\WHITE8X8")
         region:SetAlpha(Clamp01(sensor.alpha, 1))
@@ -2920,7 +2943,10 @@ local function SyncDispelSensorRootGeometry(container, sensorRoot, parentFrame, 
     local root = container:GetParent()
     if root then container:SetAllPoints(root) end
     if parentFrame and container.SetFrameLevel then
-        container:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + (sensorRoot.layer or 14))
+        -- The container owns native assignment only. Keep it at the health
+        -- base so each AuraButton's explicit effect level remains authoritative
+        -- and is not inherited above text/status overlays.
+        container:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + 1)
     end
     -- AuraButton setup is callback-only on PTR 5. Layout changes are part of
     -- the structural signature and replace this container instead.
@@ -3000,7 +3026,7 @@ SyncDispelSensorGeometry = function(container, sensor, parentFrame, forceGeometr
     local root = container:GetParent()
     if root then container:SetAllPoints(root) end
     if parentFrame and container.SetFrameLevel then
-        container:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + (sensor.layer or 14))
+        container:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + 1)
     end
     -- Do not touch already initialized AuraButtons here; they may be forbidden
     -- while aura data is secret.
@@ -4505,6 +4531,39 @@ local AurasElement = {
     events = EMPTY_EVENTS,
     unitlessEvents = EMPTY_EVENTS,
 }
+
+local PARTY_AURA_ACCESS_EVENTS = {
+    "UNIT_CONNECTION",
+    "UNIT_IN_RANGE_UPDATE",
+}
+
+function AurasElement.GetEvents(frame)
+    if not (IsGroupFrame(frame) and frame._msufGFIsPreviewFrame ~= true) then
+        return EMPTY_EVENTS
+    end
+    local unit = frame.unit
+    if frame._msufGFKind == "party"
+        or (issecretvalue(unit) ~= true and type(unit) == "string" and unit:match("^party%d+$")) then
+        return PARTY_AURA_ACCESS_EVENTS
+    end
+    return EMPTY_EVENTS
+end
+
+-- RegisterUnitEvent has already filtered these callbacks to frame.unit. Ignore
+-- the event payload itself because UNIT_IN_RANGE_UPDATE can be secret in 12.1.
+-- Blizzard AuraContainer only subscribes to UNIT_AURA, so explicitly request
+-- its full native parse when aura access disappears or becomes available again.
+function AurasElement.UpdatePartyAuraAccess(frame)
+    local unit = frame and frame.unit
+    if issecretvalue(unit) == true or type(unit) ~= "string" or unit == "" then return false end
+    return A3._DirectIdentityRefreshUnit(unit)
+end
+
+function AurasElement.SelectEventUpdate(_frame, _spec, event)
+    if event == "UNIT_CONNECTION" or event == "UNIT_IN_RANGE_UPDATE" then
+        return AurasElement.UpdatePartyAuraAccess
+    end
+end
 
 function AurasElement.IsEnabled(frame)
     if IsGroupFrame(frame) and frame._msufGFIsPreviewFrame == true

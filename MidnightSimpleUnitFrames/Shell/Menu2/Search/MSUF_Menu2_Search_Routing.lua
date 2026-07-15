@@ -812,7 +812,7 @@ local function SearchRouteGroupPage(route, pageKey, normalized)
         local cornerSlot = SearchFirstMatch(normalized, CORNER_SLOT_TERMS)
         if cornerSlot then SearchRouteSetState(route, "gfCornerSlotSelection", cornerSlot) end
     elseif pageKey == "gf_auras" and SearchRouteHasAny(normalized,
-        "aura|auras|buff|buffs|debuff|debuffs|blacklist|filter|layout|position|anchor|growth|icon size")
+        "aura|auras|buff|buffs|debuff|debuffs|blacklist|filter|layout|position|anchor|growth|icon size|external defensive|external defensives|externals|layer")
     then
         local activeScope = scope or M.gfScope or "party"
         local lane = SearchRouteHasAny(normalized, "external defensives|external defensive|externals") and "externals"
