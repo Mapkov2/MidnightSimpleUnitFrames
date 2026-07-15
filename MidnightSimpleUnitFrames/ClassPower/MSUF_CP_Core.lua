@@ -101,6 +101,7 @@ builders.BUILD = function(E)
     local _cpDB = E._cpDB
     local CreateFrame = E.CreateFrame
     local CP_ResolveTexture = E.CP_ResolveTexture
+    local math_floor = E.math_floor or math.floor
 
     local function CP_EnsureRuneText(bar)
         if not bar then return nil, false end
@@ -201,6 +202,7 @@ builders.BUILD = function(E)
         local b = _cpDB.bars or {}
         local levelOffset = tonumber(b.classPowerFrameLevelOffset) or 5
         if levelOffset < 0 then levelOffset = 0 elseif levelOffset > 30 then levelOffset = 30 end
+        levelOffset = math_floor(levelOffset + 0.5)
         c:SetFrameLevel(playerFrame:GetFrameLevel() + levelOffset)  --- above hpBar (Unhalted overlay approach)
         c:Hide()
         CP.container = c
@@ -273,6 +275,7 @@ builders.LAYOUT = function(E)
         local layoutCache = type(_G.MSUF_GetProfileScopedCache) == "function" and _G.MSUF_GetProfileScopedCache("classPowerLayoutCache") or nil
         local levelOffset = tonumber(b.classPowerFrameLevelOffset) or 5
         if levelOffset < 0 then levelOffset = 0 elseif levelOffset > 30 then levelOffset = 30 end
+        levelOffset = math_floor(levelOffset + 0.5)
         if playerFrame.GetFrameLevel and CP.container.SetFrameLevel then
             local targetLevel = (playerFrame:GetFrameLevel() or 0) + levelOffset
             if CP.container._msufFrameLevelStamp ~= targetLevel then

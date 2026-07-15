@@ -454,11 +454,13 @@ local function MSUF_Defaults_NormalizeStatusScope(scope, groupScope)
         { "statusGhostOffsetX", "statusGhostTextOffsetX" }, { "statusGhostOffsetY", "statusGhostTextOffsetY" },
         { "statusAFKOffsetX", "statusAFKTextOffsetX" }, { "statusAFKOffsetY", "statusAFKTextOffsetY" },
         { "groupNumberX", "raidGroupNameOffsetX" }, { "groupNumberY", "raidGroupNameOffsetY" },
+        { "groupNumberLayer", "raidGroupNameLayer" },
     } or {
         { "leaderIconOffsetX", "leaderIconX" }, { "leaderIconOffsetY", "leaderIconY" },
         { "raidMarkerOffsetX", "raidMarkerX" }, { "raidMarkerOffsetY", "raidMarkerY" },
         { "statusTextOffsetX", "statusOffsetX" }, { "statusTextOffsetY", "statusOffsetY" },
         { "raidGroupNameOffsetX", "groupNumberX" }, { "raidGroupNameOffsetY", "groupNumberY" },
+        { "raidGroupNameLayer", "groupNumberLayer" },
     }
     for i = 1, #offsetAliases do
         changed = MSUF_Defaults_CopyIfMissing(scope, offsetAliases[i][1], offsetAliases[i][2]) or changed
@@ -480,6 +482,7 @@ local function MSUF_Defaults_NormalizeStatusScope(scope, groupScope)
         }) do
             changed = MSUF_Defaults_NormalizeNumberField(scope, key, -500, 500) or changed
         end
+        changed = MSUF_Defaults_NormalizeNumberField(scope, "groupNumberLayer", 0, 30) or changed
         for _, key in ipairs({ "roleIconAnchor", "raidMarkerAnchor", "leaderIconAnchor", "assistIconAnchor", "statusTextAnchor", "statusGhostTextAnchor", "statusAFKTextAnchor", "groupNumberAnchor" }) do
             changed = MSUF_Defaults_UpperStringField(scope, key) or changed
         end
@@ -580,6 +583,48 @@ local function MSUF_Defaults_NormalizeUnitPositionAliases(db)
     return changed
 end
 
+--- Numeric MSUF element layers share one addon-wide contract. This deliberately
+--- ignores Blizzard draw-layer/FrameStrata strings while catching both the
+--- common `*Layer` fields and frame-level offsets used by detached bars.
+local function MSUF_Defaults_NormalizeNumericLayers(root)
+    if type(root) ~= "table" then return false end
+    local changed = false
+    local seen = {}
+    local function IsLayerKey(key)
+        if type(key) ~= "string" or key:sub(1, 1) == "_" then return false end
+        local lower = string.lower(key)
+        return lower == "layer"
+            or (lower:sub(-5) == "layer" and lower:sub(-6) ~= "player")
+            or lower:sub(-16) == "frameleveloffset"
+    end
+    local function Visit(tbl)
+        if seen[tbl] then return end
+        seen[tbl] = true
+        for key, value in pairs(tbl) do
+            if type(value) == "table" then
+                Visit(value)
+            elseif IsLayerKey(key) then
+                local number = tonumber(value)
+                if number ~= nil and (number - number) == 0 then
+                    if number < 0 then
+                        number = 0
+                    elseif number > 30 then
+                        number = 30
+                    end
+                    number = math.floor(number + 0.5)
+                    if value ~= number then
+                        tbl[key] = number
+                        changed = true
+                    end
+                end
+            end
+        end
+    end
+    Visit(root)
+    return changed
+end
+ExportPublic("MSUF_NormalizeNumericLayers", MSUF_Defaults_NormalizeNumericLayers)
+
 local function MSUF_Defaults_NormalizeProfileTo60Defaults(db)
     if type(db) ~= "table" then return false end
     local sharedTranslator = _G.MSUF_ProfileIO_TranslateProfileToCurrent
@@ -596,6 +641,7 @@ local function MSUF_Defaults_NormalizeProfileTo60Defaults(db)
             db.auras2 = nil
             changed = true
         end
+        changed = MSUF_Defaults_NormalizeNumericLayers(db) or changed
         return changed == true
     end
     local changed = false
@@ -609,6 +655,7 @@ local function MSUF_Defaults_NormalizeProfileTo60Defaults(db)
         changed = MSUF_Defaults_NormalizeTextScope(db[key], true) or changed
         changed = MSUF_Defaults_NormalizeStatusScope(db[key], true) or changed
     end
+    changed = MSUF_Defaults_NormalizeNumericLayers(db) or changed
     return changed
 end
 ExportPublic("MSUF_NormalizeProfileTo60Defaults", MSUF_Defaults_NormalizeProfileTo60Defaults)
@@ -1035,7 +1082,7 @@ local MSUF_DEFAULTS_CURRENT_PROFILE_SCHEMA = 600
 --- Persisted completion marker for the broad default-fill/repair pass below.
 --- Bump this whenever MSUF_EnsureDB_Heavy gains a new mandatory default or
 --- one-shot repair; current profiles can then be repaired exactly once again.
-local MSUF_DEFAULTS_CURRENT_REVISION = 4
+local MSUF_DEFAULTS_CURRENT_REVISION = 5
 
 --- Root tables are the contract every other module assumes after EnsureDB.
 --- Add new top-level SavedVariables buckets here before modules start reading
@@ -2489,6 +2536,9 @@ end
     if g.overAbsorbOverlay == nil then
         g.overAbsorbOverlay = true
     end
+    if g.fullHealthAbsorbStripe == nil then
+        g.fullHealthAbsorbStripe = false
+    end
 
     --- v2 absorb-colour cleanup. Pre-v2 the picker in MSUF_ColorsCore wrote to
     --- absorbColor* / healAbsorbColor*, but every reader (UF, GF, Reset) used
@@ -2868,6 +2918,10 @@ if MSUF_DB.bars.barOutlineThickness == nil then
         local map = { THIN = 2, THICK = 3, SHADOW = 4, GLOW = 4 }
         MSUF_DB.bars.barOutlineThickness = map[style] or 2
     end
+end
+if MSUF_DB.bars.barOutlineLayer == nil then
+    -- Additive 0..30 FrameLevel offset. Zero preserves legacy outline order.
+    MSUF_DB.bars.barOutlineLayer = 0
 end
 --- Bar background alpha (0..100). Independent from unit alpha in/out of combat.
 if MSUF_DB.bars.barBackgroundAlpha == nil then

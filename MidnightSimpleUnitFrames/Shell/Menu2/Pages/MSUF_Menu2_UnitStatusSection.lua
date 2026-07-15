@@ -175,7 +175,8 @@ local function BuildStatus(ctx, builder, unit)
             function()
                 local spec = CurrentStatusSpec(unit)
                 if not spec then return fallback end
-                local value = ReadStatusNumber(unit, spec[specKey], spec[defaultKey])
+                local legacyKey = specKey == "layer" and spec.legacyLayer or nil
+                local value = ReadStatusNumber(unit, spec[specKey], spec[defaultKey], legacyKey)
                 return normalize and normalize(value, spec) or value
             end,
             function(value)
@@ -498,7 +499,7 @@ local function BuildStatus(ctx, builder, unit)
         local function ResetSelectedStatus()
             local conf = GetConf(unit)
             if spec.inlineName then
-                conf[spec.x], conf[spec.y], conf[spec.anchor], conf.raidGroupNameStyle = nil, nil, nil, nil
+                conf[spec.x], conf[spec.y], conf[spec.anchor], conf[spec.layer], conf.raidGroupNameStyle = nil, nil, nil, nil, nil
             else
                 conf[spec.x], conf[spec.y], conf[spec.anchor], conf[spec.size], conf[spec.layer] = nil, nil, nil, nil, nil
                 if spec.symbol then conf[spec.symbol] = nil end
@@ -587,8 +588,8 @@ local function BuildStatus(ctx, builder, unit)
     advanced.all = StatusPreviewButton(advanced.card, "Show all", placeRightX, -252, min(112, placeRightW), "all", "Advanced show all status indicators", {
         "advanced show all", "status icon advanced preview all",
     }, "status.preview.advanced.all")
-    local statusEnabledControls = { anchor, x, y, advanced.x, advanced.y }
-    local statusDetachedControls = { size, layer, advanced.layer }
+    local statusEnabledControls = { anchor, x, y, layer, advanced.x, advanced.y, advanced.layer }
+    local statusDetachedControls = { size }
     local function LayoutSelectedControls(hasSymbol, hasIconPack, hasCustomIcon)
         local y = -106
         if hasSymbol then
@@ -609,6 +610,7 @@ local function BuildStatus(ctx, builder, unit)
             Shared.PlaceDropdown(placementCard, anchor, placeLeftX, -54, placeLeftW)
             Shared.PlaceSlider(placementCard, x, placeLeftX, -116, placeLeftW)
             Shared.PlaceSlider(placementCard, y, placeRightX, -116, placeRightW)
+            Shared.PlaceSlider(placementCard, layer, placeLeftX, -178, placeLeftW)
             PlaceButton(reset, placementCard, placeRightX, -178, min(220, placeRightW))
             return
         end
@@ -652,8 +654,8 @@ local function BuildStatus(ctx, builder, unit)
         ShowControl(statusTextStates, isStatusText)
         ShowControl(raidGroupStyle, inlineName)
         ShowControl(test, showTestMode)
-        ShowControls(true, anchor, x, y, advanced.x, advanced.y)
-        ShowControls(not inlineName, size, layer, previewLabel, current, all, previewCard, advanced.layer, advanced.current, advanced.all)
+        ShowControls(true, anchor, x, y, layer, advanced.x, advanced.y, advanced.layer)
+        ShowControls(not inlineName, size, previewLabel, current, all, previewCard, advanced.current, advanced.all)
         ShowControls(spec ~= nil, reset, advanced.reset)
         ShowControl(advanced.test, showTestMode and not inlineName)
         local isEnabled = spec and ReadStatusBool(unit, spec.show, spec.defaultShow)

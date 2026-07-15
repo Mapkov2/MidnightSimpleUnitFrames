@@ -1844,7 +1844,7 @@ local MSUF_PROFILEIO_LEGACY_PROFILE_SCHEMA_56 = 560
 --- MSUF_ProfileIO_TranslateProfileToCurrent, independently from the broad
 --- default-fill revision owned by MSUF_Defaults.lua. Bump it whenever that
 --- translation pipeline gains a new mandatory repair.
-local MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = 4
+local MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = 5
 local MSUF_PROFILEIO_TEXT_SCOPE_KEYS = {
     "general",
     "player", "target", "targettarget", "tot", "targetoftarget",
@@ -1940,6 +1940,7 @@ local MSUF_PROFILEIO_GROUP_STATUS_NUMERIC_KEYS = {
     groupNumberSize = { 1, 256 },
     groupNumberX = { -500, 500 },
     groupNumberY = { -500, 500 },
+    groupNumberLayer = { 0, 30 },
 }
 local MSUF_PROFILEIO_GROUP_STATUS_ANCHOR_KEYS = {
     "roleIconAnchor",
@@ -1973,6 +1974,7 @@ local MSUF_PROFILEIO_UNIT_STATUS_OFFSET_ALIASES = {
     { "statusTextOffsetY", "statusOffsetY" },
     { "raidGroupNameOffsetX", "groupNumberX" },
     { "raidGroupNameOffsetY", "groupNumberY" },
+    { "raidGroupNameLayer", "groupNumberLayer" },
 }
 local MSUF_PROFILEIO_GROUP_STATUS_BOOL_ALIASES = {
     { "roleIcon", "showRoleIcon" },
@@ -2001,6 +2003,7 @@ local MSUF_PROFILEIO_GROUP_STATUS_OFFSET_ALIASES = {
     { "statusAFKOffsetY", "statusAFKTextOffsetY" },
     { "groupNumberX", "raidGroupNameOffsetX" },
     { "groupNumberY", "raidGroupNameOffsetY" },
+    { "groupNumberLayer", "raidGroupNameLayer" },
 }
 local MSUF_PROFILEIO_LEGACY_SIGNAL_UNIT_KEYS = {
     "player", "target", "targettarget", "tot", "targetoftarget",
@@ -2804,6 +2807,13 @@ MSUF_ProfileIO_TranslateProfileToCurrent = function(profile, context)
     end
     changed = MSUF.ProfileIONormalizeLegacy55VisualCompatibility(profile, legacyProfile, context) or changed
     changed = MSUF_ProfileIO_NormalizeLegacyAuras(profile, legacyProfile) or changed
+    local normalizeLayers = _G.MSUF_NormalizeNumericLayers
+    if type(normalizeLayers) ~= "function" and type(MSUF) == "table" then
+        normalizeLayers = MSUF.MSUF_NormalizeNumericLayers
+    end
+    if type(normalizeLayers) == "function" then
+        changed = normalizeLayers(profile) or changed
+    end
     if context.markProfile ~= false then
         if profile._msufProfileSchema ~= MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA then
             profile._msufProfileSchema = MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA

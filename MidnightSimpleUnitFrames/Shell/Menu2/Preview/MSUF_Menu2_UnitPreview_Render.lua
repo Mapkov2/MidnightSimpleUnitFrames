@@ -609,9 +609,7 @@ function Preview.Refresh(box, reason)
     if cpH < 2 then cpH = 2 elseif cpH > 30 then cpH = 30 end
     local classPowerSegCount = PreviewClassPowerSegmentCount(classPowerPreviewSpec, 10)
     box._runtimeClassPowerW = classPowerOn and PreviewClassPowerWidth(bars, w, cpH, classPowerSegCount) or 0
-    box._runtimeDetachedPowerW = tonumber(runtimePower and runtimePower.detachedWidth) or tonumber(conf.detachedPowerBarWidth) or w
     box._runtimeDetachedPowerSyncClass = key == "player" and ((runtimePower and runtimePower.detachedSyncClass == true) or (runtimePower == nil and conf.detachedPowerBarSyncClassPower ~= false)) or false
-    if detachedPower and box._runtimeDetachedPowerSyncClass then box._runtimeDetachedPowerW = classPowerOn and (box._runtimeClassPowerW or w) or w end
     box._runtimeDetachedPowerX = tonumber(runtimePower and runtimePower.detachedX) or tonumber(conf.detachedPowerBarOffsetX) or 0
     box._runtimeDetachedPowerY = tonumber(runtimePower and runtimePower.detachedY) or tonumber(conf.detachedPowerBarOffsetY) or -4
     box._runtimeDetachedPowerAnchorMode = tostring((runtimePower and runtimePower.detachedAnchorMode)
@@ -621,6 +619,22 @@ function Preview.Refresh(box, reason)
     box._runtimeDetachedPowerShape = key == "player"
         and ResolvePreviewPowerShape((runtimePower and runtimePower.shape) or conf.detachedPowerBarShape or "FOLLOW_CLASS", bars.classPowerShape)
         or "BAR"
+    local resolveDetachedPowerWidth = CPPreview.ResolveDetachedPowerWidth
+    if detachedPower and type(resolveDetachedPowerWidth) == "function" then
+        box._runtimeDetachedPowerW = resolveDetachedPowerWidth({
+            shape = box._runtimeDetachedPowerShape,
+            orbSize = (runtimePower and runtimePower.orbSize) or conf.detachedPowerOrbSize,
+            syncClass = box._runtimeDetachedPowerSyncClass,
+            classWidth = classPowerOn and box._runtimeClassPowerW or nil,
+            classFallbackWidth = (runtimePower and runtimePower.detachedClassWidth) or (w - 4),
+            widthFrameName = runtimePower and runtimePower.detachedWidthFrameName,
+            widthMode = bars.detachedPowerBarWidthMode,
+            manualWidth = (runtimePower and runtimePower.detachedWidth) or conf.detachedPowerBarWidth,
+            frameWidth = w,
+        })
+    else
+        box._runtimeDetachedPowerW = tonumber(runtimePower and runtimePower.detachedWidth) or tonumber(conf.detachedPowerBarWidth) or w
+    end
     local detachedH = detachedPower and (tonumber(runtimePower and runtimePower.detachedHeight) or tonumber(conf.detachedPowerBarHeight) or 6) or 0
     if detachedH < 2 then detachedH = 2 elseif detachedH > 80 then detachedH = 80 end
     if detachedPower and box._runtimeDetachedPowerShape == "ORB" then
@@ -854,6 +868,7 @@ function Preview.Refresh(box, reason)
     if mock.cast and mock.cast.SetFrameLevel then mock.cast:SetFrameLevel(baseLevel + 2) end
     if mock.textFrame and mock.textFrame.SetFrameLevel then mock.textFrame:SetFrameLevel(textBase) end
     if mock.nameLayer and mock.nameLayer.SetFrameLevel then mock.nameLayer:SetFrameLevel(textBase + ClampPreviewLayer(runtimeText and runtimeText.nameLayer or conf.nameTextLayer or g.nameTextLayer, 5)) end
+    if mock.raidGroupLayer and mock.raidGroupLayer.SetFrameLevel then mock.raidGroupLayer:SetFrameLevel(textBase + ClampPreviewLayer(runtimeStatus and runtimeStatus.raidGroup and runtimeStatus.raidGroup.layer or conf.raidGroupNameLayer or conf.nameTextLayer or g.raidGroupNameLayer or g.nameTextLayer, 5)) end
     if mock.hpLayer and mock.hpLayer.SetFrameLevel then mock.hpLayer:SetFrameLevel(textBase + ClampPreviewLayer(runtimeText and runtimeText.healthLayer or conf.hpTextLayer or conf.textLayer or g.hpTextLayer or g.textLayer, 5)) end
     if mock.powerLayer and mock.powerLayer.SetFrameLevel then mock.powerLayer:SetFrameLevel(textBase + ClampPreviewLayer(runtimeText and runtimeText.powerLayer or conf.powerTextLayer or g.powerTextLayer, 2)) end
     if mock.bounds and mock.bounds.SetFrameLevel then mock.bounds:SetFrameLevel(baseLevel + (Layers.PREVIEW_BOUNDS_OFFSET or 48)) end
@@ -1199,7 +1214,6 @@ function Preview.Refresh(box, reason)
     if detachedPowerInUnitPreview then
         mock.detachedPower:Show()
         local dW = box._runtimeDetachedPowerW
-        if box._runtimeDetachedPowerShape ~= "ORB" and key == "player" and (box._runtimeDetachedPowerSyncClass or (bars.detachedPowerBarWidthMode and bars.detachedPowerBarWidthMode ~= "manual")) then dW = classPowerOn and (mock.classPower:GetWidth() / max(scale, 0.01)) or w end
         if dW < 20 then dW = 20 elseif dW > 800 then dW = 800 end
         mock.detachedPower:SetSize(S(dW), max(2, S(detachedH)))
         mock.detachedPower:ClearAllPoints()

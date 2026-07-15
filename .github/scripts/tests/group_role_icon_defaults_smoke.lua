@@ -34,6 +34,8 @@ Check(GF.PARTY_DEFAULTS.roleIconAnchor == "LEFT" and GF.PARTY_DEFAULTS.roleIconX
     "party role icon is not safely inset at frame left")
 Check(GF.PARTY_DEFAULTS.nameOffsetX == 28,
     "party name does not reserve the enlarged role-icon lane")
+Check(GF.PARTY_DEFAULTS.groupNumberLayer == 7,
+    "party group number has no independent default layer")
 Check(GF.RAID_DEFAULTS.iconStyle == "MSUF_ROLES", "raid did not inherit MSUF Roles")
 Check(GF.RAID_DEFAULTS.roleIconSize == 14, "raid role icon default is not 14px")
 Check(GF.RAID_DEFAULTS.nameOffsetX == 28,
@@ -74,5 +76,16 @@ for _, item in ipairs({ { "party", 16 }, { "raid", 14 }, { "mythicraid", 14 } })
     Check(compiled.status.role.x + compiled.status.role.size + 4 <= compiled.text.nameX,
         item[1] .. " compiled role icon overlaps the name lane")
 end
+
+_G.MSUF_DB.gf_party.showGroupNumber = true
+_G.MSUF_DB.gf_party.statusTextLayer = 2
+_G.MSUF_DB.gf_party.groupNumberLayer = 29
+GF.InvalidateConfCache()
+GF.InvalidateCompiledSpecs("party")
+local partyWithGroupNumber = GF.CompileSpec("party", nil, "party1")
+Check(partyWithGroupNumber.status.raidGroup.enabled == true,
+    "party group number did not compile as enabled")
+Check(partyWithGroupNumber.status.raidGroup.layer == 29,
+    "party group number still reused the dead-text layer")
 
 print("PASS MSUF role icons: default style, larger sizes, asset resolution, and safe fallback")

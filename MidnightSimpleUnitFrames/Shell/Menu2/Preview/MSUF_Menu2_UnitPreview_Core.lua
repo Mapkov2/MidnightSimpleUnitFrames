@@ -141,7 +141,9 @@ local function EnsureFrameBorderOverlay(mock, border)
         mock._msufPreviewFrameBorder = overlay
     end
     if overlay.SetFrameLevel and mock.GetFrameLevel then
-        overlay:SetFrameLevel((mock:GetFrameLevel() or 0) + (Layers.FRAME_BORDER_NORMAL_OFFSET or Layers.PREVIEW_FRAME_BORDER_OFFSET or 35))
+        local layer = floor((tonumber(border and border.layer) or 0) + 0.5)
+        if layer < 0 then layer = 0 elseif layer > 30 then layer = 30 end
+        overlay:SetFrameLevel((mock:GetFrameLevel() or 0) + (Layers.FRAME_BORDER_NORMAL_OFFSET or Layers.PREVIEW_FRAME_BORDER_OFFSET or 35) + layer)
     end
     if overlay.SetFrameStrata and border and border.strata and border.strata ~= "AUTO" then
         local currentStrata = overlay.GetFrameStrata and overlay:GetFrameStrata() or nil

@@ -914,7 +914,7 @@ function Page:BuildDetachedPower()
         { "x", "slider", "Power X", -1000, 1000, 1, 300, "detachedPowerBarOffsetX", 0, group = "detachedPlayer" },
         { "y", "slider", "Power Y", -1000, 1000, 1, 300, "detachedPowerBarOffsetY", -4, group = "detachedPlayer" },
         { "height", "slider", "Power height", 2, 80, 1, 300, "detachedPowerBarHeight", 6, group = "detachedPlayer" },
-        { "layer", "slider", "Power layer", 0, 20, 1, 300, "detachedPowerBarFrameLevelOffset", 6, group = "detachedPlayer" },
+        { "layer", "slider", "Power layer", 0, 30, 1, 300, "detachedPowerBarFrameLevelOffset", 6, group = "detachedPlayer" },
     })
     AddTooltip(self.dpbUse, "Detached Player Power", "Moves the Player power bar out of the unit frame. Anchor connects it to the Class Resources stack; Sync only follows the stack width.")
     AddTooltip(self.dpb.anchor, "Anchor To Class Resource", "Keeps detached Player power attached to the Class Resource bar. Player power controls are disabled while this connection is active.")

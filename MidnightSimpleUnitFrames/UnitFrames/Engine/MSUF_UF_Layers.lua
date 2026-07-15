@@ -17,6 +17,12 @@ Layers.PORTRAIT_BORDER_OFFSET = 7
 Layers.POWER_INLINE_OFFSET = 1
 Layers.POWER_DETACHED_DEFAULT = 6
 Layers.TARGETED_SPELLS_BASE_OFFSET = 40
+-- At user Layer 0, health-bar effects stay in the bar-local band below the
+-- default text/status overlays: Spell priority adds 1..10 and Dispel sits one
+-- level above the strongest Spell effect. Their independent 0..30 controls are
+-- explicit same-strata overrides and may intentionally change that ordering.
+Layers.SPELL_FRAME_EFFECT_BASE_OFFSET = 1
+Layers.DISPEL_OVERLAY_EFFECT_OFFSET = 12
 Layers.FRAME_BORDER_NORMAL_OFFSET = 35
 Layers.FRAME_BORDER_DEFAULT_OFFSET = 40
 Layers.FRAME_BORDER_OVER_NATIVE_DISPEL_OFFSET = 50

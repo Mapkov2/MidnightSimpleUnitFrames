@@ -22,7 +22,7 @@ local tonumber = tonumber
 local tostring = tostring
 local pairs = pairs
 local byte, sub = string.byte, string.sub
-local max, abs, floor = math.max, math.abs, math.floor
+local max, min, abs, floor = math.max, math.min, math.abs, math.floor
 local CreateFrame = _G.CreateFrame
 local InCombatLockdown = _G.InCombatLockdown
 local IsInInstance = _G.IsInInstance
@@ -903,7 +903,7 @@ local function AddEvent(list, event)
   list[#list + 1] = event
 end
 
-local function CompileStatusEntry(status, id, conf, general, key, showKey, fallbackShow, sizeKey, fallbackSize, anchorKey, fallbackAnchor, xKey, fallbackX, yKey, fallbackY, layerKey, fallbackLayer)
+local function CompileStatusEntry(status, id, conf, general, key, showKey, fallbackShow, sizeKey, fallbackSize, anchorKey, fallbackAnchor, xKey, fallbackX, yKey, fallbackY, layerKey, fallbackLayer, legacyLayerKey)
   local entry = status[id] or {}
   status[id] = entry
   entry.enabled = StatusAllowed(key, id) and StatusBool(conf, general, showKey, fallbackShow) or false
@@ -911,12 +911,12 @@ local function CompileStatusEntry(status, id, conf, general, key, showKey, fallb
   entry.anchor = StatusString(conf, general, anchorKey, fallbackAnchor)
   entry.x = StatusNumber(conf, general, xKey, fallbackX)
   entry.y = StatusNumber(conf, general, yKey, fallbackY)
-  entry.layer = ClampStatusLayer(StatusNumber(conf, general, layerKey, fallbackLayer), fallbackLayer)
+  entry.layer = ClampStatusLayer(StatusNumber(conf, general, layerKey, fallbackLayer, legacyLayerKey), fallbackLayer)
   return entry
 end
 
-local function StatusEntryDef(id, showKey, showDefault, sizeKey, sizeDefault, anchorKey, anchorDefault, xKey, xDefault, yKey, yDefault, layerKey, layerDefault, style, symbol, customIcon)
-  return { id, showKey, showDefault, sizeKey, sizeDefault, anchorKey, anchorDefault, xKey, xDefault, yKey, yDefault, layerKey, layerDefault, style = style, symbol = symbol, customIcon = customIcon }
+local function StatusEntryDef(id, showKey, showDefault, sizeKey, sizeDefault, anchorKey, anchorDefault, xKey, xDefault, yKey, yDefault, layerKey, layerDefault, style, symbol, customIcon, legacyLayerKey)
+  return { id, showKey, showDefault, sizeKey, sizeDefault, anchorKey, anchorDefault, xKey, xDefault, yKey, yDefault, layerKey, layerDefault, style = style, symbol = symbol, customIcon = customIcon, legacyLayerKey = legacyLayerKey }
 end
 
 local function PrefixedStatusDef(id, showKey, showDefault, prefix, sizeDefault, anchorDefault, xDefault, yDefault, layerDefault, style, symbol, customIcon)
@@ -931,7 +931,7 @@ local UNIT_STATUS_ENTRY_DEFS = {
   PrefixedStatusDef("assist", "showLeaderIcon", true, "leaderIcon", 14, "TOPLEFT", 0, 3, 7, { "assistIconStyle", "BLIZZARD", "leaderIconStyle" }, nil, { "assistIconCustomIcon", "" }),
   PrefixedStatusDef("raidMarker", "showRaidMarker", true, "raidMarker", 18, "TOPLEFT", 16, 3, 7, nil, nil, { "raidMarkerCustomIcon", "" }),
   PrefixedStatusDef("level", "showLevelIndicator", true, "levelIndicator", 14, "NAMERIGHT", 0, 0, 7),
-  StatusEntryDef("raidGroup", "showRaidGroupInName", false, "nameFontSize", 12, "raidGroupNameAnchor", "NAMERIGHT", "raidGroupNameOffsetX", 3, "raidGroupNameOffsetY", 0, "nameTextLayer", 5, { "raidGroupNameStyle", "PAREN" }),
+  StatusEntryDef("raidGroup", "showRaidGroupInName", false, "nameFontSize", 12, "raidGroupNameAnchor", "NAMERIGHT", "raidGroupNameOffsetX", 3, "raidGroupNameOffsetY", 0, "raidGroupNameLayer", 5, { "raidGroupNameStyle", "PAREN" }, nil, nil, "nameTextLayer"),
   PrefixedStatusDef("elite", "showEliteIcon", true, "eliteIcon", 20, "TOPRIGHT", 2, 2, 7, nil, nil, { "eliteIconCustomIcon", "" }),
   PrefixedStatusDef("statusText", "statusTextEnabled", true, "statusText", 14, "CENTER", 0, 0, 7),
   PrefixedStatusDef("combat", "showCombatStateIndicator", true, "combatStateIndicator", 18, "TOPLEFT", 0, 0, 7, nil, { "combatStateIndicatorSymbol", "DEFAULT" }, { "combatStateIndicatorCustomIcon", "" }),
@@ -943,7 +943,7 @@ local UNIT_STATUS_ENTRY_DEFS = {
 local function CompileStatusEntryDef(status, conf, general, key, def, fallbackSize)
   local entry = CompileStatusEntry(status, def[1], conf, general, key,
     def[2], def[3], def[4], fallbackSize or def[5], def[6], def[7],
-    def[8], def[9], def[10], def[11], def[12], def[13])
+    def[8], def[9], def[10], def[11], def[12], def[13], def.legacyLayerKey)
   local style = def.style
   if style then
     entry.style = StatusString(conf, general, style[1], style[2])
@@ -1489,9 +1489,9 @@ local function CompileUnitText(out, db, unit, key, conf, general, bars)
   text.powerX = Number(conf.powerOffsetX or conf.powerTextOffsetX or general.powerOffsetX or general.powerTextOffsetX, -4)
   text.powerY = Number(conf.powerOffsetY or conf.powerTextOffsetY or general.powerOffsetY or general.powerTextOffsetY, 4) + fontBaselineOffset
   ApplySideTextOffsets(text, "power", "powerText", "power", text.powerX, text.powerY, conf, general)
-  text.nameLayer = Number(conf.nameTextLayer or general.nameTextLayer, 5)
-  text.healthLayer = Number(conf.hpTextLayer or conf.textLayer or general.hpTextLayer or general.textLayer, 5)
-  text.powerLayer = Number(conf.powerTextLayer or general.powerTextLayer, 2)
+  text.nameLayer = ClampStatusLayer(conf.nameTextLayer or general.nameTextLayer, 5)
+  text.healthLayer = ClampStatusLayer(conf.hpTextLayer or conf.textLayer or general.hpTextLayer or general.textLayer, 5)
+  text.powerLayer = ClampStatusLayer(conf.powerTextLayer or general.powerTextLayer, 2)
   ResolveNameShortening(db, general, conf, unit, text)
   text.nameClassColor, text.nameNpcColor, text.nameNpcClassColor = ResolveNameColorFlags(general, conf)
   ApplyNpcTypeFlags(text, general, "npcTypeColorText")
@@ -1591,7 +1591,7 @@ local function CompileUnitPower(out, unit, key, conf, general, bars, health)
   power.detachedX = Number(conf.detachedPowerBarOffsetX, 0)
   power.detachedY = Number(conf.detachedPowerBarOffsetY, -4)
   power.detachedAnchorMode = tostring(conf.detachedPowerBarAnchorMode or "CENTER"):upper()
-  power.detachedLevel = Number(conf.detachedPowerBarFrameLevelOffset, 6)
+  power.detachedLevel = ClampStatusLayer(conf.detachedPowerBarFrameLevelOffset, 6)
   power.textOnDetached = conf.detachedPowerBarTextOnBar == true
   power.detachedSyncClass = key == "player" and conf.detachedPowerBarSyncClassPower ~= false
   power.detachedAnchorClass = key == "player" and conf.detachedPowerBarAnchorToClassPower == true
@@ -1658,6 +1658,10 @@ local function CompileUnitPrediction(out, conf, general, key)
   pred.healAnchorMode = Number(ScopedValue(conf, general, "healPredAnchorMode", 3), 3)
   pred.absorbAnchorMode = Number(ScopedValue(conf, general, "absorbAnchorMode", 2), 2)
   pred.overAbsorbOverlay = ScopedValue(conf, general, "overAbsorbOverlay", false) == true
+  -- The Blizzard-style full-health edge is one global behavior toggle. Do not
+  -- let pre-existing per-unit bar overrides silently pin a newly added option
+  -- to false while the Shared menu and preview show it enabled.
+  pred.fullHealthAbsorbStripe = general.fullHealthAbsorbStripe == true
   pred.absorbTexture = ScopedValue(conf, general, "absorbBarTexture", nil)
   pred.healAbsorbTexture = ScopedValue(conf, general, "healAbsorbBarTexture", nil)
   FillPredictionColors(pred, general, conf, ScopedValue, Number)
@@ -1688,6 +1692,8 @@ local function CompileUnitBorder(out, conf, general, bars)
   end
   border.thickness = Number(outlineThickness, 1)
   border.enabled = bars.showBarBorder ~= false and border.thickness > 0
+  local outlineLayer = conf.hlOverride == true and conf.barOutlineLayer ~= nil and conf.barOutlineLayer or bars.barOutlineLayer
+  border.layer = max(0, min(30, floor((tonumber(outlineLayer) or 0) + 0.5)))
   border.strata = NormalizeFrameOutlineStrata(conf.hlOverride == true and conf.barOutlineStrata ~= nil and conf.barOutlineStrata or bars.barOutlineStrata)
   border.r = Number(ScopedValue(conf, general, "barOutlineColorR", general.barBorderR), 0)
   border.g = Number(ScopedValue(conf, general, "barOutlineColorG", general.barBorderG), 0)

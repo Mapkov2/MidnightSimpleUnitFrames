@@ -126,6 +126,25 @@ local function ApplyRuntimeColor(frame, event, unit, hp, maxHP)
   return true
 end
 
+function Health.Layout(frame, spec, powerEnabled)
+  local bar = frame and frame.hpBar
+  if not bar then return end
+  spec = spec or frame.MSUFSpec
+  local power = spec and spec.power
+  if powerEnabled == nil then powerEnabled = power and power.enabled == true end
+  local powerInset = 0
+  if powerEnabled == true and power and power.embed ~= false and power.detached ~= true then
+    powerInset = tonumber(power.height) or 3
+    if not IsFiniteNumber(powerInset) or powerInset < 0 then powerInset = 0 end
+  end
+  if bar._msufHealthPowerInset == powerInset and bar._msufHealthLayoutFrame == frame then return end
+  bar:ClearAllPoints()
+  bar:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+  bar:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, powerInset)
+  bar._msufHealthPowerInset = powerInset
+  bar._msufHealthLayoutFrame = frame
+end
+
 function Health.Create(frame, spec)
   if frame.hpBar then return end
   local bg = frame:CreateTexture(nil, "BACKGROUND", nil, -7)
@@ -136,14 +155,13 @@ function Health.Create(frame, spec)
   frame.healthBg = bg
 
   local bar = CreateFrame("StatusBar", nil, frame)
-  bar:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
-  bar:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
   bar:SetMinMaxValues(0, 100)
   bar:SetValue(100)
   bar:SetStatusBarTexture((spec and spec.texture) or WHITE)
   frame.hpBar = bar
   frame.Health = bar
   frame.health = bar
+  Health.Layout(frame, spec)
 end
 
 function Health.Apply(frame, spec)
@@ -151,6 +169,7 @@ function Health.Apply(frame, spec)
   frame.Health = frame.hpBar
   frame.health = frame.hpBar
   frame.healthBg = frame.hpBarBG or frame.bg
+  Health.Layout(frame, spec)
   frame._msufIsGroupFrame = spec and spec.scope == "group" or nil
   local h = spec and spec.health or nil
   local mode = h and h.mode

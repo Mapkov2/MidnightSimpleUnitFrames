@@ -103,9 +103,11 @@ local function SetBorderOverlayStrata(frame, overlay, strata)
   end
 end
 
-local function SetBorderOverlayLevel(frame, offset, strata)
+local function SetBorderOverlayLevel(frame, offset, strata, layer)
   if not frame then return end
-  offset = offset or BORDER_LEVEL_DEFAULT
+  -- `layer` is clamped by the cold config compiler. Runtime event updates only
+  -- add the already-compiled value and never touch SavedVariables.
+  offset = (offset or BORDER_LEVEL_DEFAULT) + (layer or 0)
   if frame._msufBorderLevelOffset ~= offset then
     frame._msufBorderLevelOffset = offset
     if frame.MSUFBorderOverlay then
@@ -517,13 +519,13 @@ local function ApplyHighlightBorder(frame, cfg, key, testActive)
   if key == "dispel" then
     if testActive and DispelTestApplies(frame) then
       local r, g, b, a = DispelTestColor(frame)
-      SetBorderOverlayLevel(frame, HighlightBorderLevel(cfg, key), cfg and cfg.strata)
+      SetBorderOverlayLevel(frame, HighlightBorderLevel(cfg, key), cfg and cfg.strata, cfg and cfg.layer)
       LayoutBorder(frame, BorderHighlightThickness(cfg))
       SetBorder(frame, true, r, g, b, a)
       return true
     end
     if cfg.dispel == true and frame._msufA3DispelActive == true then
-      SetBorderOverlayLevel(frame, HighlightBorderLevel(cfg, key), cfg and cfg.strata)
+      SetBorderOverlayLevel(frame, HighlightBorderLevel(cfg, key), cfg and cfg.strata, cfg and cfg.layer)
       LayoutBorder(frame, BorderHighlightThickness(cfg))
       SetBorder(frame, true,
         frame._msufA3DispelR or 0.25,
@@ -534,21 +536,21 @@ local function ApplyHighlightBorder(frame, cfg, key, testActive)
     end
   elseif key == "aggro" then
     if (testActive and AggroTestApplies(frame)) or (cfg.aggro and IsAggroBorderUnit(frame) and ThreatState(frame)) then
-      SetBorderOverlayLevel(frame, HighlightBorderLevel(cfg, key), cfg and cfg.strata)
+      SetBorderOverlayLevel(frame, HighlightBorderLevel(cfg, key), cfg and cfg.strata, cfg and cfg.layer)
       LayoutBorder(frame, BorderHighlightThickness(cfg))
       SetBorder(frame, true, AggroColor(cfg))
       return true
     end
   elseif key == "purge" then
     if testActive and PurgeTestApplies(frame) then
-      SetBorderOverlayLevel(frame, HighlightBorderLevel(cfg, key), cfg and cfg.strata)
+      SetBorderOverlayLevel(frame, HighlightBorderLevel(cfg, key), cfg and cfg.strata, cfg and cfg.layer)
       LayoutBorder(frame, BorderHighlightThickness(cfg))
       SetBorder(frame, true, PurgeColor(cfg))
       return true
     end
   elseif key == "bossTarget" then
     if (testActive and BossTargetTestApplies(frame)) or BossTargetState(frame, cfg) then
-      SetBorderOverlayLevel(frame, HighlightBorderLevel(cfg, key), cfg and cfg.strata)
+      SetBorderOverlayLevel(frame, HighlightBorderLevel(cfg, key), cfg and cfg.strata, cfg and cfg.layer)
       LayoutBorder(frame, BorderHighlightThickness(cfg))
       SetBorder(frame, true, BossTargetColor(cfg))
       return true
@@ -578,7 +580,7 @@ function Borders.Apply(frame, spec)
     LayoutBorder(frame, BorderHighlightThickness(cfg))
     Borders.Update(frame, "MSUF_BORDER_APPLY", frame.unit)
   else
-    SetBorderOverlayLevel(frame, BORDER_LEVEL_NORMAL, cfg and cfg.strata)
+    SetBorderOverlayLevel(frame, BORDER_LEVEL_NORMAL, cfg and cfg.strata, cfg and cfg.layer)
     LayoutBorder(frame, BorderNormalThickness(cfg))
     SetBorder(frame, true, NormalBorderColor(cfg))
   end
@@ -670,7 +672,7 @@ function Borders.Update(frame)
     SetBorder(frame, false)
     return
   end
-  SetBorderOverlayLevel(frame, BORDER_LEVEL_NORMAL, cfg and cfg.strata)
+  SetBorderOverlayLevel(frame, BORDER_LEVEL_NORMAL, cfg and cfg.strata, cfg and cfg.layer)
   LayoutBorder(frame, BorderNormalThickness(cfg))
   SetBorder(frame, true, NormalBorderColor(cfg))
 end

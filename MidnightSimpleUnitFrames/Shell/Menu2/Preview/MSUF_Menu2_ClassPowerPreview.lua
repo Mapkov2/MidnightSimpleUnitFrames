@@ -1300,10 +1300,21 @@ local function DetachedPowerShown(player)
 end
 local function DetachedPowerWidth(preview, bars, player, classFrame)
     local shape = ResolvePowerShape(player.detachedPowerBarShape or "BAR", bars.classPowerShape)
+    local resolveWidth = CPPreview.ResolveDetachedPowerWidth
+    if type(resolveWidth) == "function" then
+        return resolveWidth({
+            shape = shape,
+            orbSize = player.detachedPowerOrbSize,
+            syncClass = player.detachedPowerBarSyncClassPower ~= false,
+            classWidth = classFrame and classFrame.GetWidth and classFrame:GetWidth() or nil,
+            classFallbackWidth = (tonumber(preview.playerW) or 275) - 4,
+            widthMode = bars.detachedPowerBarWidthMode,
+            manualWidth = player.detachedPowerBarWidth,
+            frameWidth = preview.playerW,
+        }), shape
+    end
     if shape == "ORB" then return Clamp(player.detachedPowerOrbSize, 54, 20, 160), shape end
     if player.detachedPowerBarSyncClassPower ~= false and classFrame and classFrame.GetWidth then return max(20, floor(classFrame:GetWidth() + 0.5)), shape end
-    local widthMode = bars.detachedPowerBarWidthMode
-    if widthMode and widthMode ~= "manual" and classFrame and classFrame.GetWidth then return max(20, floor(classFrame:GetWidth() + 0.5)), shape end
     return Clamp(player.detachedPowerBarWidth, preview.playerW, 20, 800), shape
 end
 local function ApplyMeterText(frame, size, x, y, leftText, centerText, rightText, layout)

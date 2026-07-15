@@ -10,6 +10,7 @@ _G.issecretvalue = function() return false end
 local elements = {}
 local percentReads = 0
 local UF = {
+    Elements = elements,
     RegisterElement = function(name, element) elements[name] = element end,
 }
 local common = {
@@ -26,6 +27,8 @@ local common = {
     WHITE = "white",
 }
 local addon = { UF = UF, UFBarTextCommon = common }
+local healthChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Health.lua"))
+healthChunk("MidnightSimpleUnitFrames", addon)
 local powerChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Power.lua"))
 powerChunk("MidnightSimpleUnitFrames", addon)
 
@@ -64,4 +67,58 @@ update(frame, "UNIT_POWER_UPDATE", "target", "MANA")
 Check(percentReads == 2 and isShownCalls == 1,
     "uncached pre-Apply bar lost its native visibility fallback")
 
-print("Power bar visibility hotpath smoke passed (cached show/hide + legacy fallback)")
+local healthBar = {
+    points = {},
+    clearCalls = 0,
+    ClearAllPoints = function(self)
+        self.clearCalls = self.clearCalls + 1
+        self.points = {}
+    end,
+    SetPoint = function(self, ...)
+        self.points[#self.points + 1] = { ... }
+    end,
+}
+local powerBar = {
+    ClearAllPoints = function(self) self.points = {} end,
+    SetPoint = function(self, ...) self.points[#self.points + 1] = { ... } end,
+    SetHeight = function(self, height) self.height = height end,
+    SetSize = function(self, width, height) self.width, self.height = width, height end,
+    SetStatusBarTexture = function(self, texture) self.texture = texture end,
+    SetStatusBarColor = function(self, r, g, b, a) self.color = { r, g, b, a } end,
+    Show = function(self) self.shown = true end,
+    Hide = function(self) self.shown = false end,
+}
+local layoutFrame = {
+    unit = "target",
+    hpBar = healthBar,
+    targetPowerBar = powerBar,
+    GetFrameLevel = function() return 1 end,
+}
+
+local function ApplyPower(power)
+    local spec = { power = power }
+    layoutFrame.MSUFSpec = spec
+    elements.Power.Apply(layoutFrame, spec)
+end
+
+ApplyPower({ enabled = true, height = 7 })
+Check(healthBar.points[1][1] == "TOPLEFT" and healthBar.points[1][2] == layoutFrame,
+    "Health layout lost its frame TOPLEFT anchor")
+Check(healthBar.points[2][1] == "BOTTOMRIGHT" and healthBar.points[2][5] == 7,
+    "embedded Power height did not inset the Health bar")
+local cachedClearCalls = healthBar.clearCalls
+ApplyPower({ enabled = true, height = 7 })
+Check(healthBar.clearCalls == cachedClearCalls, "unchanged Health inset rebuilt its anchors")
+
+ApplyPower({ enabled = true, embed = false, height = 7 })
+Check(healthBar.points[2][5] == 0, "external Power left a stale Health inset")
+
+ApplyPower({ enabled = true, height = 7 })
+ApplyPower({ enabled = true, detached = true, detachedWidth = 40, height = 7 })
+Check(healthBar.points[2][5] == 0, "detached Power left a stale Health inset")
+
+ApplyPower({ enabled = true, height = 7 })
+elements.Power.Disable(layoutFrame)
+Check(healthBar.points[2][5] == 0, "disabled Power left a stale Health inset")
+
+print("Power bar visibility hotpath smoke passed (cached visibility + Health geometry)")

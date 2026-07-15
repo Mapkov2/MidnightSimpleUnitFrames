@@ -22,6 +22,19 @@ _G.UnitHealthPercent = function() return health end
 _G.UnitInPartyIsAI = function() return false end
 _G.GetTime = function() return 1 end
 
+local function NewFrame(parent)
+    local frame = { parent = parent, frameLevel = 0 }
+    function frame:SetAllPoints() end
+    function frame:EnableMouse() end
+    function frame:SetClipsChildren() end
+    function frame:SetFrameLevel(value) self.frameLevel = value end
+    function frame:GetFrameLevel() return self.frameLevel end
+    function frame:GetParent() return self.parent end
+    function frame:SetParent(value) self.parent = value end
+    return frame
+end
+_G.CreateFrame = function(_, _, parent) return NewFrame(parent) end
+
 local elements = {}
 local UF = {
     elements = elements,
@@ -55,8 +68,8 @@ MSUF.UFBarTextCommon = {
 }
 _G.MSUF_NS = MSUF
 
-local function NewTextRegion()
-    local region = { shown = false, text = "", textWrites = 0, shownWrites = 0 }
+local function NewTextRegion(parent)
+    local region = { parent = parent, shown = false, text = "", textWrites = 0, shownWrites = 0 }
     function region:SetText(value)
         self.text = value or ""
         self.textWrites = self.textWrites + 1
@@ -75,15 +88,18 @@ local function NewTextRegion()
     function region:SetAlpha() end
     function region:ClearAllPoints() end
     function region:SetPoint() end
+    function region:GetParent() return self.parent end
+    function region:SetParent(value) self.parent = value end
     return region
 end
 
 local function NewBar()
-    local bar = {}
+    local bar = { frameLevel = 40 }
     function bar:SetMinMaxValues(minimum, maximum) self.minimum, self.maximum = minimum, maximum end
     function bar:SetValue(value) self.value = value end
     function bar:SetStatusBarColor() end
     function bar:SetStatusBarTexture() end
+    function bar:GetFrameLevel() return self.frameLevel end
     return bar
 end
 
@@ -99,6 +115,19 @@ local statusText = {
 }
 local status = { enabled = true, alpha = 1, statusText = statusText }
 local spec = { enabled = true, scope = "single", health = { mode = "dark" }, status = status }
+local function GroupStatusLayout(layer)
+    return { enabled = true, size = 14, anchor = "CENTER", x = 0, y = 0, layer = layer }
+end
+local groupStatusText = GroupStatusLayout(3)
+groupStatusText.showDead = true
+groupStatusText.showGhost = true
+groupStatusText.showAFK = true
+groupStatusText.showDND = true
+groupStatusText.dead = GroupStatusLayout(3)
+groupStatusText.ghost = GroupStatusLayout(21)
+groupStatusText.afk = GroupStatusLayout(27)
+local groupStatus = { enabled = true, group = true, alpha = 1, statusText = groupStatusText }
+local groupSpec = { enabled = true, scope = "group", health = { mode = "dark" }, status = groupStatus }
 
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Status.lua"))(
     "MidnightSimpleUnitFrames", MSUF)
@@ -109,18 +138,22 @@ local StatusTextIndicator = assert(elements.StatusTextIndicator, "status text el
 local Health = assert(elements.Health, "health element missing")
 local UpdateStatusText = assert(MSUF.UFStatusRuntime and MSUF.UFStatusRuntime.UpdateStatusText,
     "shared status runtime missing")
+local ApplyConfiguredRegions = assert(MSUF.UFStatusRuntime.ApplyConfiguredRegions,
+    "configured status-region runtime missing")
 
 local function NewUnitFrame(scope)
+    local activeSpec = scope == "group" and groupSpec or spec
     local frame = {
         unit = scope == "group" and "party1" or "target",
-        MSUFSpec = spec,
+        MSUFSpec = activeSpec,
         hpBar = NewBar(),
-        statusIndicatorText = NewTextRegion(),
         _msufHealthRuntimeColorEnabled = false,
         _msufIsGroupFrame = scope == "group" or nil,
         _msufActiveElements = { Health = true, StatusTextIndicator = scope ~= "group" },
     }
-    StatusTextIndicator.Apply(frame, spec)
+    frame.statusIndicatorText = NewTextRegion(frame)
+    StatusTextIndicator.Apply(frame, activeSpec)
+    ApplyConfiguredRegions(frame, activeSpec)
     return frame
 end
 
@@ -179,6 +212,8 @@ Check(single._msufStatusTextValue == nil, "online connection event left OFFLINE 
 afk = true
 StatusTextIndicator.Update(single, "UNIT_FLAGS", "target")
 Check(single._msufStatusTextValue == "AFK", "UNIT_FLAGS did not preserve AFK status")
+Check(single.statusIndicatorText:GetParent() == single.MSUFStatusLayers[7],
+    "flat unit status text moved away from its configured holder")
 afk, dnd = false, true
 StatusTextIndicator.Update(single, "UNIT_FLAGS", "target")
 Check(single._msufStatusTextValue == "DND", "UNIT_FLAGS did not preserve DND status")
@@ -194,10 +229,13 @@ Check(single._msufStatusTextValue == nil, "positive health recovery left transie
 
 -- Group frames reuse the same resolver and the Health-owned transition handoff.
 local group = NewUnitFrame("group")
+Check(group.statusIndicatorText:GetParent() == group.MSUFStatusLayers[3]
+    and group.MSUFStatusLayers[3].frameLevel == 53,
+    "group dead-text holder did not use its configured frame level")
 local groupStatusCalls = 0
 group._msufUpdateGroupStatusState = function(frame, event, _, seedHP)
     groupStatusCalls = groupStatusCalls + 1
-    UpdateStatusText(frame, status, event, seedHP)
+    UpdateStatusText(frame, groupStatus, event, seedHP)
 end
 for _ = 1, 100 do Health.Update(group, "UNIT_HEALTH", "party1") end
 Check(groupStatusCalls == 0, "living health ticks entered the group status resolver")
@@ -208,6 +246,23 @@ Check(group._msufStatusTextValue == "DEAD", "group health boundary did not show 
 health, dead = 100, false
 Health.Update(group, "UNIT_HEALTH", "party1")
 Check(group._msufStatusTextValue == nil, "positive group health did not clear DEAD")
+
+health, ghost = 0, true
+Health.Update(group, "UNIT_HEALTH", "party1")
+Check(group._msufStatusTextValue == "GHOST"
+    and group.statusIndicatorText:GetParent() == group.MSUFStatusLayers[21]
+    and group.MSUFStatusLayers[21].frameLevel == 71,
+    "group GHOST text did not adopt its independent layer holder")
+health, ghost = 100, false
+Health.Update(group, "UNIT_HEALTH", "party1")
+afk = true
+group._msufUpdateGroupStatusState(group, "UNIT_FLAGS", "party1")
+Check(group._msufStatusTextValue == "AFK"
+    and group.statusIndicatorText:GetParent() == group.MSUFStatusLayers[27]
+    and group.MSUFStatusLayers[27].frameLevel == 77,
+    "group AFK text did not adopt its independent layer holder")
+afk = false
+group._msufUpdateGroupStatusState(group, "UNIT_FLAGS", "party1")
 
 connected = false
 group._msufUpdateGroupStatusState(group, "UNIT_CONNECTION", "party1")

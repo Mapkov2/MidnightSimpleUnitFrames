@@ -415,7 +415,7 @@ local function BuildPower(ctx, builder, unit)
         { "slider", "Detached Y", detachedRightX, sliderTop, detachedSliderW, -1000, 1000, 1, "detachedPowerBarOffsetY", -4, "MSUF2_POWER_DETACHED_Y", opts = DETACHED_POWER_OPTS },
         { "slider", "Detached width", 16, sliderTop - 66, detachedSliderW, 20, 800, 1, "detachedPowerBarWidth", function() return ReadNumber(unit, "width", 250) end, "MSUF2_POWER_DETACHED_W", nil, "width", opts = DETACHED_POWER_OPTS },
         { "slider", "Detached height", detachedRightX, sliderTop - 66, detachedSliderW, 2, 80, 1, "detachedPowerBarHeight", 6, "MSUF2_POWER_DETACHED_H", nil, "height", opts = DETACHED_POWER_OPTS },
-        { "slider", "Detached layer", 16, sliderTop - 132, detachedSliderW, 0, 20, 1, "detachedPowerBarFrameLevelOffset", 6, "MSUF2_POWER_DETACHED_LAYER", opts = DETACHED_POWER_OPTS },
+        { "slider", "Detached layer", 16, sliderTop - 132, detachedSliderW, 0, 30, 1, "detachedPowerBarFrameLevelOffset", 6, "MSUF2_POWER_DETACHED_LAYER", opts = DETACHED_POWER_OPTS },
     })
     detachedWidth, detachedHeight = detachedFields.width, detachedFields.height
     if isPlayer then
