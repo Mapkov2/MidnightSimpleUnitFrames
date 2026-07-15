@@ -324,9 +324,12 @@ local function BuildProfiles(ctx)
     local create = ProfileButton(current, "Create profile", function()
         if BlockCombatAction() then return end
         local name = Trim(nameInput:GetText())
-        if name and name ~= "" and CallMSUF("MSUF_CreateProfile", name) then
-            CallMSUF("MSUF_SwitchProfile", name)
-            ClearProfileHistory()
+        if name and name ~= "" then
+            local called, created = CallMSUF("MSUF_CreateProfile", name)
+            if called and created == true then
+                CallMSUF("MSUF_SwitchProfile", name)
+                ClearProfileHistory()
+            end
         end
         M.profileCreateCopyName = ""
         nameInput:SetText("")
