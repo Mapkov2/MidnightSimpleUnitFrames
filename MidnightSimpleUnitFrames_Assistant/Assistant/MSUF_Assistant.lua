@@ -2297,6 +2297,36 @@ function A.HasNudgeMovementVerb(text)
         or AP.ContextNormalizedHasPhrase(normalized, "lower")
 end
 
+function AP.IsSpatialRelationshipIntent(text)
+    local normalized = NormalizeReply(text)
+    if normalized == "" then return false end
+    -- These phrases describe where one MSUF object belongs relative to its
+    -- owner or another object. They are not requests to add pixels after an
+    -- already-satisfied side/anchor choice. Keep this list deliberately about
+    -- relationships; comparative follow-ups such as "more to the right" must
+    -- still reach the component-local nudge path.
+    local phrases = {
+        "next to", "beside", "alongside", "adjacent to", "relative to",
+        "attached to", "attach to", "anchored to", "anchor to", "docked to", "dock to",
+        "left side", "right side", "on top of", "at the top of", "at the bottom of",
+        "top left", "top right", "bottom left", "bottom right",
+        "top center", "bottom center", "center left", "center right",
+        "on the left side", "on left side", "at the left side", "at left side",
+        "on the right side", "on right side", "at the right side", "at right side",
+        "to the left of", "left side of", "to the right of", "right side of",
+        "above the", "above my", "above player", "above target", "above focus",
+        "below the", "below my", "below player", "below target", "below focus",
+        "under the", "under my", "under player", "under target", "under focus",
+        "above frame", "below frame", "under frame", "over frame",
+        "above boss", "below boss", "under boss", "over boss",
+        "above pet", "below pet", "under pet", "over pet",
+    }
+    for i = 1, #phrases do
+        if AP.ContextNormalizedHasPhrase(normalized, phrases[i]) then return true end
+    end
+    return false
+end
+
 function A.ExtractNudgeDirection(text)
     local normalized = NormalizeReply(text)
     if normalized == "" then return nil end
@@ -6183,7 +6213,7 @@ function AP.ContextAxisAttributeStem(attribute)
     -- Preserve the semantic text subject when a layer/strata setting is
     -- followed by movement. powerTextLayer -> powerText -> powerOffsetY,
     -- instead of falling through to the Unit Frame's generic offsetY.
-    local suffixes = { "Alignment", "Anchor", "Align", "Side", "Layer" }
+    local suffixes = { "Alignment", "Anchor", "Align", "Side", "Layer", "Mode" }
     for i = 1, #suffixes do
         local suffix = suffixes[i]
         if #attribute > #suffix and attribute:sub(-#suffix) == suffix then
@@ -6191,6 +6221,15 @@ function AP.ContextAxisAttributeStem(attribute)
         end
     end
     return attribute
+end
+
+function AP.ContextSettingOwnsFrameRoot(setting)
+    if type(setting) ~= "table" then return false end
+    local category = tostring(setting.category or "")
+    if category == "Frame" or category == "Anchoring" then return true end
+    local attribute = tostring(setting.attribute or "")
+    return attribute == "point" or attribute == "anchorPoint" or attribute == "anchorToUnitframe"
+        or attribute == "offsetX" or attribute == "offsetY" or attribute == "x" or attribute == "y"
 end
 
 function AP.PickContextAxisSetting(candidates)
@@ -6243,8 +6282,13 @@ function A.ResolveContextAxisSetting(setting, direction)
         end
     end
 
-    AP.AddContextAxisCandidate(attrs, seen, "offset" .. axisSuffix)
-    AP.AddContextAxisCandidate(attrs, seen, axisLower)
+    -- Root X/Y is a valid companion only for a root-frame setting. A missing
+    -- portrait/text/icon companion must fail closed instead of moving the
+    -- entire unit frame as a seemingly reasonable fallback.
+    if AP.ContextSettingOwnsFrameRoot(setting) then
+        AP.AddContextAxisCandidate(attrs, seen, "offset" .. axisSuffix)
+        AP.AddContextAxisCandidate(attrs, seen, axisLower)
+    end
 
     local registry = A.Registry or Registry
     if not (registry and type(registry.FindSettings) == "function") then return nil end
@@ -6279,6 +6323,7 @@ function AP.TryNoOpEscalation(plan, changes)
 
     local sourceText = tostring(plan.sourceText or A._currentInputText or "")
     if sourceText == "" then return nil end
+    if AP.IsSpatialRelationshipIntent(sourceText) then return nil end
     local direction = A.ExtractNudgeDirection and A.ExtractNudgeDirection(sourceText) or nil
     if not direction then return nil end
 
@@ -8127,6 +8172,16 @@ function AP.TryImmediateSubmitResult(text, opts)
     if AP.RequiresExactMovementRouting and AP.RequiresExactMovementRouting(text) then return nil end
     if AP.RequiresCrossFrameTextRouting and AP.RequiresCrossFrameTextRouting(text) then return nil end
     local context = type(A.GetContext) == "function" and A.GetContext() or {}
+    -- A retained object owns pronoun follow-ups before the generic
+    -- conversational lane. Otherwise "move it down" can be reinterpreted as
+    -- moving the whole last unit frame before the follow-up parser sees the
+    -- portrait/icon/text object stored in lastChangeBundle.
+    if AP.LastChangeBundleIsImmediate(context)
+        and AP.LooksLikeImmediateLastChangeFollowup
+        and AP.LooksLikeImmediateLastChangeFollowup(normalized)
+    then
+        return nil
+    end
     local nameDotsPlan = type(parser.ParseNameShorteningDotsShortcut) == "function"
         and parser.ParseNameShorteningDotsShortcut(normalized, context, text) or nil
     if type(nameDotsPlan) == "table" and nameDotsPlan.kind == "ambiguous" then
@@ -8184,6 +8239,16 @@ function AP.LastChangeBundleAvailable(ctx)
     return type(ctx) == "table" and type(ctx.lastChangeBundle) == "table" and #ctx.lastChangeBundle > 0
 end
 
+function AP.LastChangeBundleIsImmediate(ctx)
+    if not AP.LastChangeBundleAvailable(ctx) then return false end
+    local currentTurn = tonumber(ctx.turnSerial or ctx.lastTurnSerial) or 0
+    local subjectTurn = tonumber(ctx.lastSubjectTurn)
+    -- Bare retained-object wording is safe only on the very next turn. Once
+    -- the conversation has moved through help, navigation, or examples, it
+    -- must name an MSUF area instead of reviving an older mutation target.
+    return subjectTurn ~= nil and currentTurn - subjectTurn == 1
+end
+
 function AP.NormalizedHasPhrase(text, phrase)
     text = tostring(text or "")
     phrase = tostring(phrase or "")
@@ -8223,6 +8288,22 @@ function AP.LooksLikeImmediateLastChangeFollowup(normalized)
         or normalized == "nochmal"
         or normalized == "noch mal"
     then
+        return true
+    end
+    local hasRetainedReference = AP.NormalizedHasAnyPhrase(normalized, {
+        "it", "its", "that", "this", "them", "those", "these", "their",
+        "the frame", "the bar", "the text", "the icon", "the icons",
+    })
+    if hasRetainedReference and AP.NormalizedHasAnyPhrase(normalized, {
+        "make", "change", "set", "move", "nudge", "shift", "resize",
+        "bigger", "larger", "smaller", "shrink", "wider", "narrower", "taller", "shorter",
+        "left", "right", "up", "down", "size", "width", "height", "anchor", "layer",
+        "color", "colour", "red", "green", "blue", "yellow", "orange", "purple", "white", "black", "gray", "grey",
+        "shape", "circle", "circular", "round", "rounded", "square", "diamond", "style", "render",
+        "2d", "3d", "zoom", "spacing", "gap", "thickness", "border", "align", "alignment",
+        "opacity", "alpha", "transparent", "opaque",
+        "show", "hide", "enable", "disable", "turn on", "turn off",
+    }) then
         return true
     end
     return AP.NormalizedHasAnyPhrase(normalized, {
@@ -8275,10 +8356,22 @@ function AP.RequiresExactCastbarPositionRouting(text)
         and router.CastbarIconFixedPositionIntent(text) ~= nil
 end
 
+function AP.RequiresOwnedComponentMovementRouting(text)
+    local parser = A.Parser or {}
+    if type(parser.Normalize) ~= "function" or type(parser.ParseUnitDetailMove) ~= "function" then return false end
+    local normalized = parser.Normalize(text)
+    -- Numeric component movement must reach the geometry owner before an enum
+    -- shortcut can consume only "left/right" and silently discard the amount.
+    if not normalized:match("[%+%-]?%d") then return false end
+    local plan = parser.ParseUnitDetailMove(normalized)
+    return type(plan) == "table" and plan.kind == "changes" and type(plan.changes) == "table" and #plan.changes > 0
+end
+
 function AP.RequiresExactMovementRouting(text)
     return AP.RequiresExactCastbarMovementRouting(text)
         or AP.RequiresExactCastbarPositionRouting(text)
         or AP.RequiresExactTextMovementRouting(text)
+        or AP.RequiresOwnedComponentMovementRouting(text)
 end
 
 function AP.TryImmediateMutationResult(text, opts)
@@ -8313,6 +8406,7 @@ function AP.TryImmediateMutationResult(text, opts)
     if AP.RequiresExactCastbarMovementRouting(text)
         or AP.RequiresExactCastbarPositionRouting(text)
         or AP.RequiresDirectionalTextMovementRouting(text)
+        or AP.RequiresOwnedComponentMovementRouting(text)
     then
         return nil
     end
@@ -8333,12 +8427,15 @@ function AP.TryImmediateMutationResult(text, opts)
     local ctx = A.GetContext and A.GetContext() or {}
     local auraFilteringIntent = type(parser.LooksLikeAuraFilteringConversation) == "function"
         and parser.LooksLikeAuraFilteringConversation(normalized, ctx)
-    -- This exact value-less request has a reviewed two-choice parser. Preserve
-    -- that O(1) clarification before the generic open-ended guard classifies
-    -- the word "color" as an underspecified setting idea and sends it through
-    -- fuzzy page guidance instead.
-    local priorityClarification = parser.ParseBareHPTextColorModeChoice
-        and parser.ParseBareHPTextColorModeChoice(normalized) or nil
+    -- Exact value-less font text-color requests have a reviewed enum-choice
+    -- parser. Preserve that O(1) clarification before the generic open-ended
+    -- guard either guesses a mode or sends the request through fuzzy guidance.
+    local priorityClarification
+    if parser.ParseBareFontTextColorModeChoice then
+        priorityClarification = parser.ParseBareFontTextColorModeChoice(normalized)
+    elseif parser.ParseBareHPTextColorModeChoice then
+        priorityClarification = parser.ParseBareHPTextColorModeChoice(normalized)
+    end
     -- Multiple explicit clauses must stay together.  Let the deferred batch
     -- path parse and apply them atomically instead of allowing a warm exact-
     -- alias index to consume only the final frame name.
@@ -8420,11 +8517,21 @@ function AP.TryImmediateMutationResult(text, opts)
     then
         return nil
     end
-    if type(A.RouterShouldPreferPageContext) == "function" and A.RouterShouldPreferPageContext(text) then return nil end
+    if not priorityClarification and type(A.RouterShouldPreferPageContext) == "function"
+        and A.RouterShouldPreferPageContext(text)
+    then
+        return nil
+    end
 
     local plan = priorityClarification
     if not plan and auraFilteringIntent and parser.ParseAuraFilteringConversationShortcut then
         plan = parser.ParseAuraFilteringConversationShortcut(normalized, ctx, text)
+    end
+    if not plan and AP.LastChangeBundleIsImmediate(ctx)
+        and AP.LooksLikeImmediateLastChangeFollowup(normalized)
+        and type(parser.BuildFollowup) == "function"
+    then
+        plan = parser.BuildFollowup(normalized, ctx)
     end
     -- Dots/ellipsis wording has a narrow semantic owner and can stay on the
     -- constant-time path. The full name-shortening specialist must not run
@@ -8481,7 +8588,7 @@ function AP.TryImmediateMutationResult(text, opts)
     if parser.BuildContinuationFollowup then
         plan = plan or parser.BuildContinuationFollowup(normalized, ctx)
     end
-    if not plan and AP.LastChangeBundleAvailable(ctx)
+    if not plan and AP.LastChangeBundleIsImmediate(ctx)
         and AP.LooksLikeImmediateLastChangeFollowup(normalized)
         and type(A.ParseSimpleChange) == "function"
     then
