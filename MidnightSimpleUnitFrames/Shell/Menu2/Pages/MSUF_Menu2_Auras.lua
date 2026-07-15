@@ -377,6 +377,25 @@ local function ApplyUnit(ctx, unit, reason, refresh)
 end
 local BindSwitch, BindToggle, BindSlider = M.BindSwitchAt, M.BindToggleAt, M.BindSliderAt
 local BindDropdown, BindTextInput = M.BindDropdownAt, M.BindTextInputAt
+local function ConfigureMaxDurationSlider(slider)
+    if not slider then return slider end
+    if slider.SetValueFormatter then
+        slider:SetValueFormatter(function(value)
+            value = Round(value)
+            return value <= 0 and "Off" or (tostring(value) .. "s")
+        end)
+    end
+    if slider.SetValueParser then
+        slider:SetValueParser(function(value)
+            value = tostring(value or ""):lower()
+            if value == "off" then return 0 end
+            return tonumber(value:match("%d+"))
+        end)
+    end
+    AddTooltip(slider, "Maximum debuff duration",
+        "Off shows debuffs of any duration. Otherwise, debuffs whose total duration exceeds this number of seconds are hidden.")
+    return slider
+end
 local UNIT_AURA_WORKSPACE_TAB_STYLE = {
     bg = { 0.012, 0.025, 0.052, 0.90 },
     border = { 0.070, 0.130, 0.235, 0.52 },
@@ -1219,8 +1238,13 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
         if meta.SetWordWrap then meta:SetWordWrap(false) end
     end
     local icons = {}
-    local iconCapacity = min(14, max(1, tonumber(opts.iconCapacity) or 14))
+    local iconCapacity = opts.focused == true and 0 or min(14, max(1, tonumber(opts.iconCapacity) or 14))
     for i = 1, iconCapacity do icons[i] = CreateAuraPreviewIcon(box) end
+    local function EnsureIconCapacity(count)
+        count = min(opts.focused == true and 80 or iconCapacity, max(0, Round(count)))
+        for i = #icons + 1, count do icons[i] = CreateAuraPreviewIcon(box) end
+        return count
+    end
     local buffTex = { 135987, 136116, 135932, 136085, 132333, 135981, 136048 }
     local debuffTex = { 136118, 136139, 136197, 135817, 132851, 136188, 136170 }
     local function HidePreviewIcon(icon)
@@ -1292,6 +1316,7 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
     end
     local function RefreshPreview()
         if AurasMenuCombatLocked() then return end
+        if opts.focused == true and parent.IsShown and not parent:IsShown() then return end
         local previewScope = type(opts.getPreviewScope) == "function" and opts.getPreviewScope() or scope
         if not AURA_SCOPE_VALID[previewScope] then previewScope = scope end
         local mode = type(opts.getMode) == "function" and opts.getMode() or "sample"
@@ -1326,21 +1351,58 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
         if opts.focused == true then
             local cfg = opts.customIndex and ReadCustomAuraPreviewConfig(previewScope, opts.customIndex, width, height)
                 or ReadMiniAuraPreviewConfig(previewScope, lane, width, height)
-            cfg.size = min(cfg.size, T.Space("xxl", 32) * 2)
-            local count = min(#icons, tonumber(opts.sampleCount) or 4)
-            local gap = max(T.Space("sm", 8), tonumber(cfg.spacing) or 0)
+            local count = EnsureIconCapacity(cfg.maxIcons)
+            local naturalSize = max(1, tonumber(cfg.actualSize) or tonumber(cfg.size) or 24)
+            local naturalGap = max(0, tonumber(cfg.spacing) or 0)
             local boxW, boxH = width or 300, height or 104
-            local totalW = count * cfg.size + max(0, count - 1) * gap
-            local startX = max(innerPad, floor((boxW - totalW) / 2))
             local headerH = T.Space("xxl", 32) + T.Space("optical", 2)
             local footerH = T.Space("xxl", 32) - T.Space("optical", 2)
-            local usableH = max(cfg.size, boxH - headerH - footerH)
-            local startY = -(headerH + max(0, floor((usableH - cfg.size) / 2)))
+            local availableW = max(1, boxW - innerPad * 2)
+            local availableH = max(1, boxH - headerH - footerH)
+            local growth = tostring(cfg.growth or "RIGHTDOWN"):upper()
+            local vertical = growth == "UP" or growth == "DOWN"
+            local perLine = max(1, Round(cfg.perRow or count or 1))
+            local columns, rows
+            if count <= 0 then
+                columns, rows = 1, 1
+            elseif vertical then
+                rows = min(perLine, count)
+                columns = max(1, ceil(count / rows))
+            else
+                columns = min(perLine, count)
+                rows = max(1, ceil(count / columns))
+            end
+            local naturalW = columns * naturalSize + max(0, columns - 1) * naturalGap
+            local naturalH = rows * naturalSize + max(0, rows - 1) * naturalGap
+            local scale = min(1, availableW / max(1, naturalW), availableH / max(1, naturalH))
+            cfg.size = max(2, naturalSize * scale)
+            cfg.spacing = naturalGap * scale
+            cfg.stackSize = max(5, (tonumber(cfg.stackSize) or 10) * scale)
+            cfg.cooldownSize = max(5, (tonumber(cfg.cooldownSize) or 9) * scale)
+            cfg.durationBarHeight = max(1, (tonumber(cfg.durationBarHeight) or 2) * scale)
+            local totalW = columns * cfg.size + max(0, columns - 1) * cfg.spacing
+            local totalH = rows * cfg.size + max(0, rows - 1) * cfg.spacing
+            local startX = innerPad + max(0, (availableW - totalW) * 0.5)
+            local startY = -(headerH + max(0, (availableH - totalH) * 0.5))
+            local left = growth:find("LEFT", 1, true) ~= nil
+            local up = growth:find("UP", 1, true) ~= nil
             for i = 1, #icons do
                 local icon = icons[i]
                 if i <= count then
+                    local col, row
+                    if vertical then
+                        row = (i - 1) % rows
+                        col = floor((i - 1) / rows)
+                    else
+                        col = (i - 1) % columns
+                        row = floor((i - 1) / columns)
+                    end
+                    if left then col = columns - 1 - col end
+                    if up then row = rows - 1 - row end
                     icon:ClearAllPoints()
-                    icon:SetPoint("TOPLEFT", box, "TOPLEFT", startX + (i - 1) * (cfg.size + gap), startY)
+                    icon:SetPoint("TOPLEFT", box, "TOPLEFT",
+                        startX + col * (cfg.size + cfg.spacing),
+                        startY - row * (cfg.size + cfg.spacing))
                     RenderPreviewIcon(icon, i, cfg, opts.customIndex and cfg.isBuff or lane == "buff", false)
                 else
                     HidePreviewIcon(icon)
@@ -1415,7 +1477,8 @@ local function BuildAuraStylePreviewWorkbench(ctx, b, scope, lane)
     local panelY = rowY - T.Space("xxl", 32) - T.Space("optical", 2)
     local panelH = T.Space("xxl", 32) * 4 + T.Space("lg", 16) + T.Space("xs", 4)
     local sectionH = abs(panelY) + panelH + T.Space("lg", 16)
-    local section = b:Section(LaneTitle(lane) .. " Preview", sectionH)
+    local sectionId = "aura_style_" .. tostring(lane or "auras") .. "_preview"
+    local section = b:CollapsibleSection(sectionId, LaneTitle(lane) .. " Preview", sectionH, true)
     local width = section._msuf2Width or b.width or 720
     local pad = T.Space("xl", 24)
     local labelW = T.Space("xl", 24) * 3 + T.Space("md", 12)
@@ -1442,8 +1505,6 @@ local function BuildAuraStylePreviewWorkbench(ctx, b, scope, lane)
     local box
     box, refreshPreview = BuildMiniAuraPreview(ctx, section, scope, pad, panelY, panelW, panelH, lane, {
         focused = true,
-        iconCapacity = 4,
-        sampleCount = 4,
         getPreviewScope = PreviewScope,
         getMode = CurrentAuraPreviewMode,
         getSampleMeta = function(cfg, previewScope)
@@ -1461,7 +1522,8 @@ local function BuildAuraStylePreviewWorkbench(ctx, b, scope, lane)
     })
     if box then
         local modeW = T.Space("xxl", 32) * 4 + T.Space("md", 12)
-        BuildActionTabs(ctx, box, AURA_PREVIEW_MODE_VALUES, panelW - T.Space("md", 12) - modeW, -8, modeW,
+        local pinReserve = 90
+        BuildActionTabs(ctx, box, AURA_PREVIEW_MODE_VALUES, panelW - T.Space("md", 12) - modeW - pinReserve, -8, modeW,
             CurrentAuraPreviewMode,
             function(value)
                 M.SetMenuStateValue("auraStylePreviewMode", value == "live" and "live" or "sample")
@@ -1469,7 +1531,56 @@ local function BuildAuraStylePreviewWorkbench(ctx, b, scope, lane)
             end,
             T.Space("xs", 4), nil, "style.preview.mode")
     end
-    if refreshPreview then refreshPreview() end
+    if box and W.AttachPinnedPreview then
+        W.AttachPinnedPreview(section, box, {
+            stateKey = "auraStylePreview",
+            left = 14,
+            right = 14,
+            top = -8,
+            buttonWidth = 78,
+            buttonHeight = 20,
+            centerButton = true,
+            quietButton = true,
+            pinnedHeight = panelH,
+            pageKey = ctx and ctx.key,
+            wrapper = ctx and ctx.wrapper,
+            restoreParent = section,
+            restorePoint = { "TOPLEFT", section, "TOPLEFT", pad, panelY },
+            restoreWidth = panelW,
+            restoreHeight = panelH,
+        })
+        RegisterAuraControl(ctx, box._msuf2PinButton, "Pin Aura Preview", "toggle",
+            "style.preview.pin.toggle", "ephemeral")
+    end
+    local previewShowSerial = 0
+    local function RefreshVisibleAuraPreview()
+        if type(refreshPreview) ~= "function" then return end
+        if ctx and ctx.key and M.activeKey and M.activeKey ~= ctx.key then return end
+        if ctx and ctx.wrapper and ctx.wrapper.IsShown and not ctx.wrapper:IsShown() then return end
+        if section.IsShown and not section:IsShown() then return end
+        refreshPreview()
+    end
+    local function QueueVisibleAuraPreview()
+        previewShowSerial = previewShowSerial + 1
+        local serial = previewShowSerial
+        RefreshVisibleAuraPreview()
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, function()
+                if serial == previewShowSerial then RefreshVisibleAuraPreview() end
+            end)
+            C_Timer.After(0.05, function()
+                if serial == previewShowSerial then RefreshVisibleAuraPreview() end
+            end)
+        end
+    end
+    if section.HookScript then
+        section:HookScript("OnShow", QueueVisibleAuraPreview)
+        section:HookScript("OnHide", function() previewShowSerial = previewShowSerial + 1 end)
+    end
+    if ctx and ctx.wrapper and ctx.wrapper.HookScript then
+        ctx.wrapper:HookScript("OnShow", QueueVisibleAuraPreview)
+    end
+    QueueVisibleAuraPreview()
     return refreshPreview
 end
 local function BuildUnitStyle(ctx, b, scope)
@@ -2052,7 +2163,7 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
     local half = ceil(#meta / 2)
     local categoryHeight = max(356, 180 + half * 30)
     local originY = embedded and (tonumber(opts.originY) or -400) or 0
-    local blacklistY = showFilter and (originY - 304) or (originY - 42)
+    local blacklistY = showFilter and (originY - (laneKey == "debuff" and 362 or 304)) or (originY - 42)
     local directY = blacklistY - categoryHeight - 24
     local standaloneHeight = max(930, abs(directY) + 324)
     local section = opts.parent or b:CollapsibleSection("group_aura_filters_" .. tostring(scope) .. "_" .. laneKey, "Group Frame Blizzard Filters & Lists", standaloneHeight, false)
@@ -2071,6 +2182,16 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
             QueueGroupScope(scope, "visual")
         end
     end
+    local function ReadMaxDuration()
+        return type(Model.ReadGroupBlacklistMaxDuration) == "function"
+            and Model.ReadGroupBlacklistMaxDuration(scope, lane) or 0
+    end
+    local function WriteMaxDuration(value)
+        if type(Model.WriteGroupBlacklistMaxDuration) == "function"
+            and Model.WriteGroupBlacklistMaxDuration(scope, lane, value) then
+            QueueGroupScope(scope, "visual")
+        end
+    end
     local function AddHidePermanentTooltip(control)
         AddTooltip(control, "Hide permanent auras", "Always excludes auras without a duration. This native rule wins over SpellID blacklists and whitelists.")
     end
@@ -2080,7 +2201,7 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
         W.LabelAt(section, "Blizzard Filters & Lists", 24, originY - 24, w - 48, "GameFontNormal", T.colors.accent)
     end
     if showFilter then
-        local filter = Card(section, "Native " .. laneText .. " Filter", "Filter token for " .. ScopeLabel(scope) .. " group-frame " .. laneText .. "s.", 24, originY - 42, filterW, 234)
+        local filter = Card(section, "Native " .. laneText .. " Filter", "Filter token for " .. ScopeLabel(scope) .. " group-frame " .. laneText .. "s.", 24, originY - 42, filterW, lane == "debuff" and 296 or 234)
         W.LabelAt(filter, fixedLane and (laneText .. " Content") or "Filter Type", 16, -72, fixedLane and 260 or 90, "GameFontNormalSmall", T.colors.accent)
         if not fixedLane then BuildLaneTabs(ctx, filter, "auraFilterLane", 112, -68, min(300, w - 180)) end
         local dropdownW = min(360, max(240, floor((filterW - 48) * 0.55)))
@@ -2090,6 +2211,14 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
             ReadHidePermanent, WriteHidePermanent,
             AuraControlMeta(ctx, "group-filter.lane." .. AuraCatalogToken(lane) .. ".hide-permanent"))
         AddHidePermanentTooltip(hidePermanent)
+        if lane == "debuff" then
+            ConfigureMaxDurationSlider(BindSlider(ctx, filter, "Maximum duration", 16, -230, 0, 180, 1, filterW - 32,
+                ReadMaxDuration, WriteMaxDuration,
+                AuraControlMeta(ctx, "group-filter.lane.debuff.max-duration", nil, {
+                    assistantDisposition = "compound",
+                    assistantDispositionReason = "The native candidate-filter duration limit has no Assistant setting contract yet.",
+                })))
+        end
     end
     if not showBlacklist then return end
     local blacklist = Card(section, "Category Blacklist", nil, 24, blacklistY, w - 48, categoryHeight)
@@ -2351,7 +2480,7 @@ local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
 end
 
 local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
-    local section = b:Section((lane == "debuff" and "Debuff" or "Buff") .. " Filters", 182)
+    local section = b:Section((lane == "debuff" and "Debuff" or "Buff") .. " Filters", lane == "debuff" and 224 or 182)
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48
     local gap = 12
@@ -2388,6 +2517,24 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
         AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.hide-permanent", nil,
             "auras3." .. unit .. "." .. lane .. ".blacklist.hidePermanent"))
     AddTooltip(hidePermanent, "Hide permanent auras", "Always excludes auras without a duration, even when Blizzard token filters are disabled.")
+    local maxDuration
+    if lane == "debuff" then
+        maxDuration = ConfigureMaxDurationSlider(BindSlider(ctx, section, "Maximum duration", 24, -142, 0, 180, 1, inner,
+            function()
+                return type(Model.ReadBlacklistMaxDuration) == "function"
+                    and Model.ReadBlacklistMaxDuration(unit, lane) or 0
+            end,
+            function(value)
+                if type(Model.WriteBlacklistMaxDuration) == "function"
+                    and Model.WriteBlacklistMaxDuration(unit, lane, value) then
+                    ApplyUnit(ctx, unit, "AURAS3_DEBUFF_MAX_DURATION", true)
+                end
+            end,
+            AuraControlMeta(ctx, "unit-workspace.lane.debuff.filters.max-duration", nil, {
+                assistantDisposition = "compound",
+                assistantDispositionReason = "The native candidate-filter duration limit has no Assistant setting contract yet.",
+            })))
+    end
     local specs = lane == "buff" and {
         { "Only mine", "onlyMine", "Only auras applied by the player." },
         { "Important", "onlyImportant", "Only auras Blizzard flags as important." },
@@ -2414,6 +2561,17 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
         local spec = specs[i]
         local col = ((i - 1) % 4)
         local row = floor((i - 1) / 4)
+        local settingContract = "auras3." .. unit .. "." .. lane .. ".filter." .. spec[2]
+        if lane == "debuff" and spec[2] == "raid" then
+            settingContract = {
+                assistantDisposition = "dynamic",
+                assistantDispositionReason = "The visible Raid switch folds the legacy exclusive Raid value into the canonical Debuff Raid filter.",
+                assistantSettingKeys = {
+                    "auras3." .. unit .. ".debuff.filter.raid",
+                    "auras3." .. unit .. ".debuff.filter.exclusive",
+                },
+            }
+        end
         local control = BindSwitch(ctx, section, spec[1], 24 + col * (colW + gap), -78 - row * 32, colW,
             function()
                 if spec[2] == "raid" and Model.ReadFilter(unit, lane, "exclusive", "none") == "raid" then
@@ -2432,7 +2590,7 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
                 if spec[4] then QueueAurasPageRefresh(ctx, "auras-filter-conflict") end
             end,
             AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".filters." .. AuraCatalogToken(spec[2]), nil,
-                "auras3." .. unit .. "." .. lane .. ".filter." .. spec[2]))
+                settingContract))
         AddTooltip(control, spec[1], spec[3])
         filterControls[#filterControls + 1] = control
     end
@@ -2441,6 +2599,7 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
         W.SetControlEnabled(own, true)
         W.SetControlEnabled(enabled, editable)
         W.SetControlEnabled(hidePermanent, true)
+        W.SetControlEnabled(maxDuration, true)
         W.SetControlsEnabled(filterControls, editable and Model.ScopeFiltersEnabled(unit))
     end)
 end
@@ -2578,7 +2737,8 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
     local laneTitle = lane == "debuff" and "Debuff" or "Buff"
     local values = GroupFilterValues(lane)
     local optionRows = max(1, ceil(#values / 4))
-    local section = b:Section(laneTitle .. " Filters", max(150, 104 + optionRows * 32))
+    local sectionHeight = max(150, 104 + optionRows * 32) + (lane == "debuff" and 58 or 0)
+    local section = b:Section(laneTitle .. " Filters", sectionHeight)
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48
     local gap = 12
@@ -2627,6 +2787,23 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
                         ".auras." .. lane .. ".filterToken"),
                 } or nil))
         AddTooltip(control, item.text or item.value, "Only one filter can be active.")
+    end
+    if lane == "debuff" then
+        ConfigureMaxDurationSlider(BindSlider(ctx, section, "Maximum duration", 24, -78 - optionRows * 32, 0, 180, 1, inner,
+            function()
+                return type(Model.ReadGroupBlacklistMaxDuration) == "function"
+                    and Model.ReadGroupBlacklistMaxDuration(scope, lane) or 0
+            end,
+            function(value)
+                if type(Model.WriteGroupBlacklistMaxDuration) == "function"
+                    and Model.WriteGroupBlacklistMaxDuration(scope, lane, value) then
+                    QueueGroupScope(scope, "visual")
+                end
+            end,
+            AuraControlMeta(ctx, "group-workspace.lane.debuff.filters.max-duration", nil, {
+                assistantDisposition = "compound",
+                assistantDispositionReason = "The native candidate-filter duration limit has no Assistant setting contract yet.",
+            })))
     end
 end
 
@@ -2989,7 +3166,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
     end
 
     if tool == "filters" then
-        local section = b:Section("Custom " .. tostring(index) .. " Filters", 182)
+        local section = b:Section("Custom " .. tostring(index) .. " Filters", item.auraType == "DEBUFF" and 224 or 182)
         local w = section._msuf2Width or b.width or 720
         local colW, gap = Grid(w, 4)
         local controls = {}
@@ -3004,11 +3181,11 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
         AddTooltip(hidePermanent, "Hide permanent auras", "Always excludes auras without a duration. It remains active when token filters are disabled.")
         local specs = item.auraType == "DEBUFF" and {
             { "Only mine", "onlyMine" }, { "Raid", "raid" }, { "Raid combat", "raidInCombat" }, { "Nameplate-only", "includeNameplateOnly" },
-            { "Dispellable by group", "includeDispellable" }, { "Any dispel type", "dispellableAny" },
+            { "Removable by group", "includeDispellable" }, { "Any removable type", "dispellableAny" },
             { "Important", "onlyImportant" }, { "Crowd control", "crowdControl" },
         } or {
             { "Only mine", "onlyMine" }, { "Important", "onlyImportant" }, { "Raid", "raid" }, { "Raid combat", "raidInCombat" }, { "Nameplate-only", "includeNameplateOnly" },
-            { "Dispellable / stealable by group", "includeDispellable" }, { "Any dispel / steal type", "dispellableAny" },
+            { "Removable by group", "includeDispellable" }, { "Any removable type", "dispellableAny" },
             { "Cancelable", "cancelable", { "notCancelable" } }, { "Not cancelable", "notCancelable", { "cancelable" } },
             { "External defensive", "externalDefensive" }, { "Big defensive", "bigDefensive" },
         }
@@ -3031,9 +3208,23 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                 AuraControlMeta(ctx, "custom-container.filters." .. AuraCatalogToken(spec[2])))
             controls[#controls + 1] = control
         end
+        local maxDuration
+        if item.auraType == "DEBUFF" then
+            maxDuration = ConfigureMaxDurationSlider(BindSlider(ctx, section, "Maximum duration", 24, -140, 0, 180, 1, w - 48,
+                function() return min(180, max(0, tonumber(item.filters.maxDuration) or 0)) end,
+                function(value)
+                    item.filters.maxDuration = Round(min(180, max(0, tonumber(value) or 0)))
+                    Apply("AURAS3_CUSTOM_DEBUFF_MAX_DURATION", true)
+                end,
+                AuraControlMeta(ctx, "custom-container.filters.max-duration", nil, {
+                    assistantDisposition = "compound",
+                    assistantDispositionReason = "The native candidate-filter duration limit has no Assistant setting contract yet.",
+                })))
+        end
         M.TrackRefresh(ctx, function()
             W.SetControlEnabled(master, true)
             W.SetControlEnabled(hidePermanent, true)
+            W.SetControlEnabled(maxDuration, true)
             W.SetControlsEnabled(controls, item.filters.enabled ~= false)
         end)
         return

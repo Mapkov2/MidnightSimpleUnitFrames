@@ -712,6 +712,78 @@ for _, laneSpec in ipairs(GROUP_LANES) do
 end
 Equal(groupCases, 216, "group lane/anchor/growth coverage")
 
+-- Native maximum-duration filtering is compiled once into every Debuff
+-- AuraContainer. Zero keeps the filter disabled; corrupt/out-of-range profile
+-- values are clamped to the menu's 180-second ceiling.
+do
+    local function ResolveUnit(blacklist)
+        _G.MSUF_DB = {
+            auras3 = {
+                enabled = true,
+                showPlayer = true,
+                shared = { showBuffs = false, showDebuffs = true, maxDebuffs = 3 },
+                perUnit = { player = { blacklist = { debuffs = blacklist } } },
+            },
+        }
+        A3._runtimeConfigGen = (A3._runtimeConfigGen or 1) + 1
+        return assert(A3.ResolveUnitFrameConfig("player", {})).lanes.debuff
+    end
+
+    local limited = assert(ResolveUnit({ maxDuration = 61 }))
+    Equal(assert(limited.candidateFilters).maxDuration, 61, "unit Debuff maximum duration")
+
+    local clamped = assert(ResolveUnit({ maxDuration = 999 }))
+    Equal(assert(clamped.candidateFilters).maxDuration, 180, "unit Debuff maximum duration clamp")
+
+    local unlimited = assert(ResolveUnit({ maxDuration = 0 }))
+    Check(unlimited.candidateFilters == nil or unlimited.candidateFilters.maxDuration == nil,
+        "zero unit Debuff maximum duration still filters")
+
+    local permanentHidden = assert(ResolveUnit({ maxDuration = 0, hidePermanent = true }))
+    Check(assert(permanentHidden.candidateFilters).maxDuration > 180,
+        "Hide Permanent no longer retains its finite-ceiling candidate filter")
+
+    _G.MSUF_DB = {
+        auras3 = {
+            enabled = true,
+            showPlayer = false,
+            customContainers = {
+                perUnit = {
+                    player = {
+                        items = {
+                            {
+                                enabled = true,
+                                auraType = "DEBUFF",
+                                spellIDs = "12345",
+                                filters = { maxDuration = 44 },
+                                placed = { max = 1 },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    }
+    A3._runtimeConfigGen = (A3._runtimeConfigGen or 1) + 1
+    local custom = assert(assert(A3.ResolveUnitFrameConfig("player", {})).lanes.custom1)
+    Equal(assert(custom.candidateFilters).maxDuration, 44, "custom Debuff maximum duration")
+
+    local groupFrame = NewFrame(nil)
+    groupFrame.unit = "party1"
+    groupFrame._msufIsGroupFrame = true
+    groupFrame.MSUFSpec = {
+        auras = {
+            enabled = true,
+            showDebuffs = true,
+            maxDebuffs = 3,
+            debuffMaxDuration = 47,
+        },
+    }
+    Check(AurasElement.IsEnabled(groupFrame) == true, "group Debuff duration config did not enable")
+    local groupDebuff = assert(assert(groupFrame._msufA3NativeGroupConfig).lanes.debuff)
+    Equal(assert(groupDebuff.candidateFilters).maxDuration, 47, "group Debuff maximum duration")
+end
+
 -- Execute the Menu2 unit-preview geometry provider directly. This keeps the
 -- preview side of the contract covered without constructing WoW UI regions:
 -- all nine anchors, both normal lanes, all three custom lanes, compiled metrics,
@@ -904,6 +976,18 @@ Check(not aurasMenuSource:find('BindDropdown(ctx, section, "Exclusive"', 1, true
 Check(aurasMenuSource:find('Model.ReadFilter(unit, lane, "exclusive", "none") == "raid"', 1, true)
     and aurasMenuSource:find('Model.WriteFilter(unit, lane, "exclusive", "none")', 1, true),
     "legacy Exclusive=Raid profiles are no longer bridged by the visible Raid switch")
+Check(aurasMenuSource:find('"Maximum duration", 24, -142, 0, 180, 1', 1, true)
+    and aurasMenuSource:find('"Maximum duration", 24, -78 - optionRows * 32, 0, 180, 1', 1, true)
+    and aurasMenuSource:find('"Maximum duration", 24, -140, 0, 180, 1', 1, true),
+    "unit, group, and custom Debuff filters no longer expose the 0-180 second slider")
+
+Check(menuModelSource:find("function Model.WriteBlacklistMaxDuration", 1, true)
+    and menuModelSource:find("function Model.WriteGroupBlacklistMaxDuration", 1, true),
+    "Debuff maximum-duration menu persistence helpers are missing")
+
+local groupConfigSource = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Config.lua")
+Check(groupConfigSource:find("out.debuffMaxDuration = Num(blacklist and blacklist.maxDuration, 0)", 1, true),
+    "group Debuff maximum duration no longer reaches the native AuraContainer compiler")
 
 local groupPreviewSource = Read("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Render.lua")
 Check(groupPreviewSource:find("handle:SetPoint(anchor, mock, anchor", 1, true),

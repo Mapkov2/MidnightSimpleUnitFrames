@@ -38,6 +38,7 @@ local STANDARD_TEXT_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 
 local EMPTY_EVENTS = {}
 local AURA_CONTAINER_ADDON = "Blizzard_AuraContainer"
+local MAX_CONFIGURABLE_DEBUFF_DURATION = 180
 -- Blizzard's native maxDuration candidate filter also rejects duration == 0.
 -- Use a practically unreachable finite ceiling so this behaves as an
 -- "exclude permanent" rule without dropping normal long-duration auras.
@@ -353,6 +354,7 @@ local GROUP_LANE_SPECS = {
         strataKey = "debuffStrata",
         blacklistHashKey = "debuffBlacklistHash",
         hidePermanentKey = "debuffHidePermanent",
+        maxDurationKey = "debuffMaxDuration",
         showTextKey = "debuffShowCooldown", showStackKey = "debuffShowStacks", swipeKey = "debuffShowCooldownSwipe",
         swipeReverseKey = "debuffCooldownSwipeReverse", tooltipKey = "debuffShowTooltip",
         sortMethodKey = "debuffSortMethod", sortReverseKey = "debuffSortReverse",
@@ -748,19 +750,28 @@ local function CandidateFiltersFromIncludeAndExcludeSpellIDs(includeSpellIDs, ex
     return includeFilters, includeSignature
 end
 
-local function AddHidePermanentCandidateFilter(candidateFilters, candidateFilterSignature, hidePermanent)
-    if hidePermanent ~= true then return candidateFilters, candidateFilterSignature end
+local function AddMaxDurationCandidateFilter(candidateFilters, candidateFilterSignature, maxDuration, hidePermanent)
+    maxDuration = Round(ClampNumber(maxDuration, 0, 0, MAX_CONFIGURABLE_DEBUFF_DURATION))
+    if maxDuration <= 0 then
+        if hidePermanent ~= true then return candidateFilters, candidateFilterSignature end
+        maxDuration = MAX_FINITE_AURA_DURATION
+    end
     candidateFilters = candidateFilters or {}
-    candidateFilters.maxDuration = MAX_FINITE_AURA_DURATION
-    local part = "maxDuration:" .. tostring(MAX_FINITE_AURA_DURATION)
+    candidateFilters.maxDuration = maxDuration
+    local part = "maxDuration:" .. tostring(maxDuration)
     candidateFilterSignature = candidateFilterSignature and (candidateFilterSignature .. ";" .. part) or part
     return candidateFilters, candidateFilterSignature
+end
+
+local function AddHidePermanentCandidateFilter(candidateFilters, candidateFilterSignature, hidePermanent)
+    return AddMaxDurationCandidateFilter(candidateFilters, candidateFilterSignature, nil, hidePermanent)
 end
 
 local function CandidateFiltersFromBlacklist(blacklist)
     local spells = type(blacklist) == "table" and blacklist.spells or nil
     local candidateFilters, candidateFilterSignature = CandidateFiltersFromExcludeSpellIDs(spells)
-    return AddHidePermanentCandidateFilter(candidateFilters, candidateFilterSignature,
+    return AddMaxDurationCandidateFilter(candidateFilters, candidateFilterSignature,
+        type(blacklist) == "table" and blacklist.maxDuration,
         type(blacklist) == "table" and blacklist.hidePermanent == true)
 end
 
@@ -1115,8 +1126,9 @@ local function CompileGroupLane(unit, source, kind)
     else
         candidateFilters, candidateFilterSignature = CandidateFiltersFromBlacklistHash(source[spec.blacklistHashKey])
     end
-    candidateFilters, candidateFilterSignature = AddHidePermanentCandidateFilter(
-        candidateFilters, candidateFilterSignature, source[spec.hidePermanentKey] == true)
+    candidateFilters, candidateFilterSignature = AddMaxDurationCandidateFilter(
+        candidateFilters, candidateFilterSignature,
+        spec.maxDurationKey and source[spec.maxDurationKey], source[spec.hidePermanentKey] == true)
     local size = ClampNumber(source[spec.sizeKey] or source.iconSize, spec.defaultSize, 1, 128)
     local spacing = ClampNumber(source[spec.spacingKey] or source.spacing, 1, 0, 64)
     local perRow = ClampNumber(source[spec.perRowKey] or source.perRow, spec.defaultPerRow, 1, 40)
@@ -1315,9 +1327,10 @@ local function CompileUnitCustomLane(unit, entry, index)
     local candidateFilters, candidateFilterSignature = CandidateFiltersFromSpellIDs(includeSpellIDs, "includeSpellIDs")
     local placed = type(entry.placed) == "table" and entry.placed or {}
     local filters = type(entry.filters) == "table" and entry.filters or { enabled = true, onlyMine = entry.onlyOwn == true }
-    candidateFilters, candidateFilterSignature = AddHidePermanentCandidateFilter(
-        candidateFilters, candidateFilterSignature, filters.hidePermanent == true)
     local helpful = tostring(entry.auraType or "BUFF"):upper() ~= "DEBUFF"
+    candidateFilters, candidateFilterSignature = AddMaxDurationCandidateFilter(
+        candidateFilters, candidateFilterSignature,
+        not helpful and filters.maxDuration or nil, filters.hidePermanent == true)
     local size = ClampNumber(placed.size, 24, 1, 128)
     local spacing = ClampNumber(placed.spacing, 2, 0, 64)
     local perRow = ClampNumber(placed.perRow, 4, 1, 40)

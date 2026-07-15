@@ -123,6 +123,8 @@ local function OpenGFSection(sectionKey)
     local pageKey = PageForGFSection(sectionKey)
     if pageKey and M.SelectPage then
         local scope = CurrentScope()
+        local previousAuraLane
+        local requestedAuraLane
         if M.SetMenuStateValue then
             M.SetMenuStateValue("gfScope", scope)
             if pageKey == "gf_auras" then
@@ -137,6 +139,8 @@ local function OpenGFSection(sectionKey)
                 end
                 if lane then
                     M.gfAuraLaneSelection = M.gfAuraLaneSelection or {}
+                    previousAuraLane = M.gfAuraLaneSelection[scope] or "buff"
+                    requestedAuraLane = lane
                     M.gfAuraLaneSelection[scope] = lane
                     if lane ~= "externals" then M.SetMenuStateValue("auraStyleGFLane", lane) end
                 end
@@ -154,6 +158,13 @@ local function OpenGFSection(sectionKey)
             explicit = true,
             changedAt = GetTime and GetTime() or 0,
         })
+        -- Group Auras builds its lane-specific controls from gfAuraLaneSelection.
+        -- Selecting another preview lane while this page is already open must
+        -- rebuild that cached page; refreshers alone still target the old lane.
+        if pageKey == M.activeKey and requestedAuraLane and requestedAuraLane ~= previousAuraLane
+            and type(M.InvalidatePage) == "function" then
+            M.InvalidatePage(pageKey)
+        end
         return M.SelectPage(pageKey) ~= false
     end
     return false
