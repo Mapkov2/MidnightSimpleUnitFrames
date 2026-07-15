@@ -241,10 +241,13 @@ UF.NumberWithFallback = NumberWithFallback
 
 local function NormalizeDispelDetectTrigger(value)
   value = tostring(value or ""):upper()
+  if value == "BY_RAID" or value == "RAID" or value == "GROUP" or value == "BY_GROUP" then
+    return "BY_RAID"
+  end
   if value == "DISPEL_TYPE" or value == "TYPE" or value == "ANY_DISPEL_TYPE" then
     return "DISPEL_TYPE"
   elseif value == "ANY_DEBUFF" or value == "DEBUFF" or value == "ANY" or value == "ALL_DEBUFFS" then
-    return "ANY_DEBUFF"
+    return "DISPEL_TYPE"
   elseif value == "PLAYER_CAST" or value == "CAST_BY_ME" or value == "MY_DEBUFF" then
     return "PLAYER_CAST"
   end

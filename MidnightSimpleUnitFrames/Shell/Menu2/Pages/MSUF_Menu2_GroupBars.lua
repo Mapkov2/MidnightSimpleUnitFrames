@@ -21,7 +21,8 @@ local GF, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindSc
 OnOffBadge = OnOffBadge or M.OnOffBadge
 BadgeNumber = BadgeNumber or M.BadgeNumber
 OptionText = OptionText or M.OptionText
-local GF_DISPEL_OVERLAY_TRIGGERS = VT("BORDER", "Use Dispel border detects", "BY_ME", "Dispellable by me", "DISPEL_TYPE", "Any dispel-type debuff", "ANY_DEBUFF", "Any debuff")
+local GF_DISPEL_OVERLAY_TRIGGERS = VT("BORDER", "Use Dispel border detects", "BY_ME", "Dispellable by me",
+    "BY_RAID", "Dispellable by group", "DISPEL_TYPE", "Any dispel type")
 local function RequestGroupBarsRefresh(ctx, reason)
     if M.RequestRefresh then M.RequestRefresh(ctx, reason or "gf-bars-ui") elseif M.Refresh then M.Refresh(ctx) end
 end
@@ -41,8 +42,9 @@ local function NormalizeGFDispelOverlayTrigger(value)
     local fn = _G.MSUF_NormalizeUnitDispelOverlayTrigger
     if type(fn) == "function" then return fn(value) end
     if value == "BORDER" or value == "INHERIT" or value == "SAME" then return "BORDER" end
+    if value == "BY_RAID" or value == "RAID" or value == "GROUP" or value == "BY_GROUP" then return "BY_RAID" end
     if value == "DISPEL_TYPE" or value == "TYPE" or value == "ANY_DISPEL_TYPE" then return "DISPEL_TYPE" end
-    if value == "ANY_DEBUFF" or value == "ANY" or value == "ALL_DEBUFFS" then return "ANY_DEBUFF" end
+    if value == "ANY_DEBUFF" or value == "ANY" or value == "ALL_DEBUFFS" then return "DISPEL_TYPE" end
     return "BY_ME"
 end
 local function BuildDispelOverlaySection(ctx, b)
