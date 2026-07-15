@@ -58,6 +58,7 @@ function Methods:GetStatusBarTexture()
     return self.statusTexture
 end
 function Methods:SetStatusBarColor(r, g, b, a) self.r, self.g, self.b, self.a = r, g, b, a end
+function Methods:SetAlpha(alpha) self.alpha = alpha end
 function Methods:SetTexture(texture) self.path = texture end
 function Methods:SetColorTexture(r, g, b, a) self.r, self.g, self.b, self.a = r, g, b, a end
 function Methods:SetBlendMode(mode) self.blendMode = mode end
@@ -105,15 +106,35 @@ _G.Enum = {
     UnitDamageAbsorbClampMode = { MissingHealthWithoutIncomingHeals = 1, MaximumHealth = 2 },
     UnitHealAbsorbClampMode = { CurrentHealth = 0 },
     UnitHealAbsorbMode = { Total = 1 },
+    LuaCurveType = { Step = 1 },
 }
 _G.issecretvalue = function(value) return type(value) == "table" and value.__secret == true end
+local healthPercentAlpha = 1
+_G.C_CurveUtil = {
+    CreateCurve = function()
+        return {
+            SetType = function() end,
+            AddPoint = function() end,
+        }
+    end,
+}
+_G.UnitHealthPercent = function() return healthPercentAlpha end
 local unitExists = true
 _G.UnitExists = function() return unitExists end
 _G.UnitIsConnected = function() return true end
 _G.UnitHealth = function() return 60 end
-_G.UnitHealthMax = function() return 100 end
+local healthMaxReads = 0
+_G.UnitHealthMax = function()
+    healthMaxReads = healthMaxReads + 1
+    return 100
+end
 _G.UnitGetIncomingHeals = function() return 12 end
-_G.UnitGetTotalAbsorbs = function() return 18 end
+local totalAbsorbValue = 18
+local totalAbsorbReads = 0
+_G.UnitGetTotalAbsorbs = function()
+    totalAbsorbReads = totalAbsorbReads + 1
+    return totalAbsorbValue
+end
 _G.UnitGetTotalHealAbsorbs = function() return 7 end
 
 local function NewCalculator()
@@ -308,12 +329,154 @@ FlushDriver()
 Equal(calls.detailed, 0, "absorb-only path unexpectedly created a detailed calculator read")
 Equal(absorbOnly.absorbBar._msufMaxReady, true, "absorb-only bar lost its native max state")
 
+-- UNIT_MAXHEALTH owns prediction-bar max invalidation. Once a health-aware
+-- frame has been seeded, ordinary health ticks reuse that native max and a
+-- disabled over-absorb overlay performs no threshold read.
+local healthAwareConfig = {
+    enabled = true,
+    heal = true,
+    absorb = true,
+    healAbsorb = false,
+    healAnchorMode = 3,
+    absorbAnchorMode = 3,
+    overAbsorbOverlay = false,
+}
+local healthAware = MakeFrame("party1", healthAwareConfig)
+local steadyMaxReads = healthMaxReads
+for _ = 1, 20 do
+    Prediction.UpdateHealthValue(healthAware, "UNIT_HEALTH", "party1", 60, nil)
+end
+Equal(healthMaxReads, steadyMaxReads,
+    "steady UNIT_HEALTH reread an unchanged prediction max")
+Check(healthAware.overAbsorbGlow == nil,
+    "disabled over-absorb overlay created runtime texture work")
+
+-- Enabled over-absorb still requires the numeric max and must preserve its
+-- visual threshold behavior.
+local overAbsorbConfig = {
+    enabled = true,
+    heal = true,
+    absorb = true,
+    healAbsorb = false,
+    healAnchorMode = 3,
+    absorbAnchorMode = 3,
+    overAbsorbOverlay = true,
+}
+local overAbsorb = MakeFrame("party2", overAbsorbConfig)
+overAbsorb._msufPredictionAbsorb = 50
+local overlayMaxReads = healthMaxReads
+Prediction.UpdateHealthValue(overAbsorb, "UNIT_HEALTH", "party2", 60, nil)
+Equal(healthMaxReads, overlayMaxReads + 1,
+    "enabled over-absorb overlay skipped its numeric max read")
+Check(overAbsorb.overAbsorbGlowBar and overAbsorb.overAbsorbGlowBar.shown == true,
+    "enabled over-absorb overlay lost its threshold visual")
+Prediction.UpdateHealthValue(overAbsorb, "UNIT_HEALTH", "party2", 100, 100)
+Check(overAbsorb.overAbsorbGlowBar.shown == false,
+    "partial-health over-absorb overlay bypassed the full-health stripe toggle")
+
+-- The optional full-health stripe reuses the same Blizzard edge texture but
+-- only subscribes to health-aware work while enabled. It must not inherit the
+-- broader partial-health over-absorb threshold.
+local fullHealthStripeConfig = {
+    enabled = true,
+    heal = false,
+    absorb = true,
+    healAbsorb = false,
+    absorbAnchorMode = 2,
+    overAbsorbOverlay = false,
+    fullHealthAbsorbStripe = true,
+}
+local fullHealthStripe, fullHealthStripeSpec = MakeFrame("party3", fullHealthStripeConfig)
+fullHealthStripe._msufPredictionAbsorb = 18
+local stripeMaxReads = healthMaxReads
+Prediction.UpdateHealthValue(fullHealthStripe, "UNIT_HEALTH", "party3", 100, nil)
+Equal(healthMaxReads, stripeMaxReads + 1,
+    "enabled full-health stripe skipped its numeric max read")
+Check(fullHealthStripe.overAbsorbGlowBar and fullHealthStripe.overAbsorbGlowBar.shown == true,
+    "full-health absorb stripe did not show at maximum health")
+Equal(fullHealthStripe.overAbsorbGlowBar:GetParent(), fullHealthStripe,
+    "live full-health absorb stripe holder was not owned by the unitframe")
+Equal(fullHealthStripe.overAbsorbGlow:GetParent(), fullHealthStripe.overAbsorbGlowBar,
+    "live full-health absorb stripe texture was not owned by its status gate")
+Check(fullHealthStripe.overAbsorbGlowBar:GetFrameLevel() > fullHealthStripe.hpBar:GetFrameLevel(),
+    "live full-health absorb stripe did not render above the health bar")
+local protectedAbsorb = { __secret = true }
+fullHealthStripe._msufPredictionAbsorb = protectedAbsorb
+Prediction.UpdateHealthValue(fullHealthStripe, "UNIT_HEALTH", "party3", 100, 100)
+Equal(fullHealthStripe.overAbsorbGlowBar.value, protectedAbsorb,
+    "full-health stripe did not feed a protected absorb value into its status gate")
+Check(fullHealthStripe.overAbsorbGlowBar.shown == true,
+    "protected absorb value was rejected by the live full-health stripe")
+local protectedHealth = { __secret = true }
+local protectedFullAlpha = { __secret = true }
+healthPercentAlpha = protectedFullAlpha
+Prediction.UpdateHealthValue(fullHealthStripe, "UNIT_HEALTH", "party3", protectedHealth, protectedHealth)
+Equal(fullHealthStripe.overAbsorbGlowBar.alpha, protectedFullAlpha,
+    "protected full-health gate was not passed directly to the live stripe")
+healthPercentAlpha = 1
+fullHealthStripe._msufPredictionAbsorb = 18
+Prediction.UpdateHealthValue(fullHealthStripe, "UNIT_HEALTH", "party3", 99, 100)
+Check(fullHealthStripe.overAbsorbGlowBar.shown == false,
+    "full-health absorb stripe leaked into partial health")
+
+-- Follow-HP clamps the displayed absorb to missing health, so its cached value
+-- is zero at full HP. The stripe must use the real (potentially protected)
+-- absorb value without changing the clamped display bar.
+local followFullHealthConfig = {
+    enabled = true,
+    heal = false,
+    absorb = true,
+    healAbsorb = false,
+    absorbAnchorMode = 3,
+    overAbsorbOverlay = false,
+    fullHealthAbsorbStripe = true,
+}
+local followFullHealth = MakeFrame("party4", followFullHealthConfig)
+local protectedFollowAbsorb = { __secret = true }
+totalAbsorbValue = protectedFollowAbsorb
+followFullHealth._msufPredictionAbsorb = 0
+local followRawReads = totalAbsorbReads
+Prediction.UpdateHealthValue(followFullHealth, "UNIT_HEALTH", "party4", 99, 100)
+Equal(totalAbsorbReads, followRawReads,
+    "follow-HP stripe queried the raw absorb amount below full health")
+Prediction.UpdateHealthValue(followFullHealth, "UNIT_HEALTH", "party4", 100, 100)
+Equal(totalAbsorbReads, followRawReads + 1,
+    "follow-HP stripe did not query the raw absorb amount on its full-health cold path")
+Equal(followFullHealth.overAbsorbGlowBar.value, protectedFollowAbsorb,
+    "follow-HP stripe used the zero missing-health clamp instead of the real absorb")
+Check(followFullHealth.overAbsorbGlowBar.shown == true,
+    "follow-HP stripe rejected the protected real absorb at full health")
+totalAbsorbValue = 18
+
+local fullHealthStripeTestConfig = {
+    enabled = true,
+    test = true,
+    heal = false,
+    absorb = true,
+    healAbsorb = false,
+    absorbAnchorMode = 3,
+    overAbsorbOverlay = false,
+    fullHealthAbsorbStripe = true,
+}
+totalAbsorbValue = 0
+local fullHealthStripeTest = MakeFrame("party5", fullHealthStripeTestConfig)
+Check(fullHealthStripeTest.overAbsorbGlowBar and fullHealthStripeTest.overAbsorbGlowBar.shown == true,
+    "prediction test mode did not show the full-health absorb stripe")
+Equal(fullHealthStripeTest.overAbsorbGlowBar.value, 25,
+    "follow-HP test mode replaced its synthetic stripe with the live absorb value")
+totalAbsorbValue = 18
+
 local function HasEvent(events, wanted)
     for index = 1, #events do
         if events[index] == wanted then return true end
     end
     return false
 end
+
+Check(not HasEvent(Prediction.GetEvents(absorbOnly, absorbOnlySpec), "UNIT_HEALTH"),
+    "disabled full-health stripe added health-event work to absorb-only frames")
+Check(HasEvent(Prediction.GetEvents(fullHealthStripe, fullHealthStripeSpec), "UNIT_HEALTH"),
+    "enabled full-health stripe did not subscribe to its cold health path")
 
 -- Dependent frames must expose UNIT_TARGET as a normal unit event. The core
 -- can then bind it to the exact parent unit (target/focus) instead of turning

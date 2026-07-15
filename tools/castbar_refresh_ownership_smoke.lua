@@ -24,7 +24,6 @@ local utils = read(root .. "Castbars/MSUF_CastbarUtils.lua")
 local fonts = read(root .. "Runtime/MSUF_FontRuntime.lua")
 local interruptReady = read(root .. "Castbars/MSUF_InterruptReady.lua")
 local focusKickIcon = read(root .. "Castbars/MSUF_FocusKickIcon.lua")
-local ufCore = read(root .. "UnitFrames/Engine/MSUF_UF_Core.lua")
 
 local function ownerCountFor(needle, sources)
     local count = 0
@@ -118,8 +117,13 @@ assert(contains(focusKickIcon, "source._msufForceLuaTimeTextFollower = true"),
     "focus-kick degraded path must attach to the existing castbar manager")
 assert(contains(manager, 'ExportPublic("MSUF_Castbar_SyncTimeTextFollower", SyncTimeTextFollower)'),
     "castbar manager must own detached fallback text propagation")
-assert(contains(driver, '"UNIT_HEALTH",') and contains(driver, '"UNIT_CONNECTION",'),
+local lifecycleStart = assert(driver:find("local ACTIVE_LIFECYCLE_EVENTS", 1, true))
+local lifecycleEnd = assert(driver:find("local SetCastLifecycleActive", lifecycleStart, true))
+local lifecycleBody = driver:sub(lifecycleStart, lifecycleEnd - 1)
+assert(contains(lifecycleBody, '"UNIT_FLAGS",') and contains(lifecycleBody, '"UNIT_CONNECTION",'),
     "target/focus active lifecycle event set is incomplete")
+assert(not contains(lifecycleBody, '"UNIT_HEALTH",'),
+    "target/focus active lifecycle retained high-frequency UNIT_HEALTH")
 assert(contains(driver, 'ExportPublic("MSUF_Castbar_SetLifecycleActive", SetCastLifecycleActive)'),
     "castbar lifecycle owner must be shared with Runtime stop paths")
 assert(contains(driver, "local function ToKnownPlainBool(value)"),
@@ -128,22 +132,22 @@ assert(contains(runtime, "frame._msufCastLifecycleOwned ~= true"),
     "unit failsafe must remain limited to missing/degraded lifecycle ownership")
 assert(contains(boss, "frame._msufCastLifecycleOwned = true"),
     "boss encounter lifecycle must suppress redundant unit polling")
-assert(contains(driver, "UF.SetHealthLifecycleSink(frame.unit, SharedUFHealthLifecycleSink, frame)"),
-    "target/focus must borrow the existing UF health route first")
-assert(contains(driver, 'frame._msufCastLifecycleMode = "UF"'),
-    "driver must distinguish the zero-registration UF lifecycle fastpath")
-local sinkAttach = assert(driver:find("UF.SetHealthLifecycleSink", 1, true))
-local nativeRegister = assert(driver:find("pcall(frame.RegisterUnitEvent", sinkAttach, true))
-assert(sinkAttach < nativeRegister,
-    "native UNIT_HEALTH fallback was attempted before the UF lifecycle sink")
-assert(contains(ufCore, "local function HealthLifecycleSinkRoute"),
-    "UF Core must provide one shared lifecycle route wrapper")
-assert(contains(ufCore, "function UF.SetHealthLifecycleSink(unit, sink, owner)"),
-    "UF Core lifecycle sink API missing")
-assert(contains(ufCore, "function UF.ClearHealthLifecycleSink(frame, owner)"),
-    "UF Core lifecycle sink detach API missing")
-assert(contains(ufCore, 'sink(owner, frame, "MSUF_UF_LIFECYCLE_DETACH", frame.unit)'),
-    "UF route loss must promote active castbars to the native fallback")
+assert(not contains(boss, 'frame:RegisterUnitEvent("UNIT_HEALTH", frame.unit)'),
+    "inactive boss castbars must not retain the UNIT_HEALTH hotpath")
+assert(contains(driver, 'pcall(frame.RegisterUnitEvent, frame, "UNIT_HEALTH", frame.unit)')
+    and contains(driver, 'frame:UnregisterEvent("UNIT_HEALTH")'),
+    "boss UNIT_HEALTH must follow active cast lifecycle ownership")
+assert(contains(driver,
+        'if event == "UNIT_HEALTH" or event == "UNIT_FLAGS" or event == "UNIT_CONNECTION" then')
+    and contains(driver, 'if event ~= "UNIT_HEALTH" and unit then'),
+    "active boss UNIT_HEALTH registration is not routed through its lean death fastpath")
+assert(not contains(driver, "SharedUFHealthLifecycleSink")
+    and not contains(driver, "UF.SetHealthLifecycleSink"),
+    "target/focus castbars still borrow the high-frequency UF health route")
+assert(contains(driver, 'frame._msufCastLifecycleMode = "FLAGS"'),
+    "driver must identify the low-frequency flags lifecycle route")
+assert(contains(driver, "pcall(frame.RegisterUnitEvent"),
+    "active target/focus lifecycle did not retain unit-filtered registration")
 
 assert(contains(anchors, 'ExportPublic("MSUF_ReanchorPlayerCastBarBase", ReanchorPlayerCastBarBase)'))
 assert(contains(anchors, 'ExportPublic("MSUF_ReanchorTargetCastBarBase", ReanchorTargetCastBarBase)'))

@@ -29,9 +29,16 @@ _G.MSUF_FRAME_STRATA_RANK = {
     AUTO = true, BACKGROUND = true, LOW = true, MEDIUM = true, HIGH = true,
     DIALOG = true, FULLSCREEN = true, FULLSCREEN_DIALOG = true, TOOLTIP = true,
 }
+_G.MSUF_ResolveStatusbarTextureKey = function(key) return "resolved:" .. tostring(key) end
 
 local db = {
-    general = { hpPowerTextSelectedKey = "shared", barTexture = "Blizzard" },
+    general = {
+        hpPowerTextSelectedKey = "shared",
+        barTexture = "Blizzard",
+        absorbBarTexture = "Shield Texture",
+        absorbBarOpacity = 0.65,
+        fullHealthAbsorbStripe = true,
+    },
     bars = { roundedUnitFrames = true, roundedGroupFrames = true, roundedPowerBars = true, roundedMouseover = true },
 }
 local registeredPage, sections, bindings, controls = nil, {}, {}, {}
@@ -72,8 +79,26 @@ GP.ScopeHasOverride = function(scope) return scope == "shared" or db[scope] and 
 GP.ScopeSetOverride = function(scope, _, value) db[scope] = db[scope] or {}; db[scope].hlOverride = value end
 GP.CurrentBarsScope = function() return db.general.hpPowerTextSelectedKey end
 GP.IsGFScope = function(scope) return scope == "gf_party" or scope == "gf_raid" or scope == "gf_mythicraid" end
-GP.BarScopeGet = function(key, fallback) local v = db.general[key]; return v == nil and fallback or v end
-GP.BarScopeSet = function(key, value) db.general[key] = value end
+GP.BarScopeGet = function(key, fallback)
+    local scope = db.general.hpPowerTextSelectedKey
+    local scoped = scope ~= "shared" and db[scope]
+    local v
+    if scoped and scoped.hlOverride == true and scoped[key] ~= nil then
+        v = scoped[key]
+    else
+        v = db.general[key]
+    end
+    return v == nil and fallback or v
+end
+GP.BarScopeSet = function(key, value)
+    local scope = db.general.hpPowerTextSelectedKey
+    if scope ~= "shared" then
+        db[scope] = db[scope] or { hlOverride = true }
+        db[scope][key] = value
+    else
+        db.general[key] = value
+    end
+end
 GP.BarScopeGetBars = function(key, fallback) local v = db.bars[key]; return v == nil and fallback or v end
 GP.BarScopeSetBars = function(key, value) db.bars[key] = value end
 GP.GradientScopeGet = function(key, fallback, legacyKey)
@@ -131,7 +156,11 @@ M.Widgets = {
         end
         return builder
     end,
-    Dropdown = function(_, label) return Widget("dropdown:" .. tostring(label)) end,
+    Dropdown = function(_, label, values)
+        local widget = Widget("dropdown:" .. tostring(label))
+        widget.values = values
+        return widget
+    end,
     Slider = function(_, label) return Widget("slider:" .. tostring(label)) end,
     Toggle = function(_, label) return Widget("toggle:" .. tostring(label)) end,
     ToggleAt = function(_, label) return Widget("toggle:" .. tostring(label)) end,
@@ -219,6 +248,42 @@ assert(loadfile("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GlobalBar
 assert(registeredPage and type(registeredPage.build) == "function", "Bars page was not registered")
 local ctx = { width = 900, key = "opt_bars", SetContentHeight = function(self, value) self.contentHeight = value end }
 registeredPage.build(ctx)
+
+local absorbAnchor
+for _, binding in ipairs(bindings) do
+    if binding.control.name == "dropdown:Absorb bar anchoring" then absorbAnchor = binding.control break end
+end
+assert(absorbAnchor and type(absorbAnchor.values) == "function", "absorb anchor preview values missing")
+local absorbAnchorValues = absorbAnchor.values()
+assert(#absorbAnchorValues == 5, "absorb anchor preview must cover all five modes")
+for mode, item in ipairs(absorbAnchorValues) do
+    assert(item.value == mode and item.previewKind == "barOverlay" and type(item.barPreview) == "function",
+        "absorb anchor preview metadata missing for mode " .. mode)
+    local preview = item.barPreview(item)
+    assert(preview.mode == mode, "absorb anchor preview mode drift: " .. mode)
+    assert(preview.dualDirection == true, "absorb anchor preview must show both health directions")
+    assert(preview.showAbsorbEdgeGlow == true, "full-health stripe toggle not reflected in dropdown preview")
+    assert(preview.overlayTexture == "resolved:Shield Texture", "selected absorb texture not used by preview")
+    assert(preview.overlayColor[4] == 0.65, "selected absorb opacity not used by preview")
+end
+
+local fullHealthStripeBinding
+for _, binding in ipairs(bindings) do
+    if binding.control.name == "toggle:Full-health absorb stripe" then
+        fullHealthStripeBinding = binding
+        break
+    end
+end
+assert(fullHealthStripeBinding, "full-health absorb stripe binding missing")
+db.player = { hlOverride = true, fullHealthAbsorbStripe = false }
+db.general.hpPowerTextSelectedKey = "player"
+assert(fullHealthStripeBinding.get() == true,
+    "global full-health stripe was shadowed by a pre-existing unit override")
+fullHealthStripeBinding.set(false)
+assert(db.general.fullHealthAbsorbStripe == false and db.player.fullHealthAbsorbStripe == false,
+    "full-health stripe did not write its global behavior toggle")
+db.general.fullHealthAbsorbStripe = true
+db.general.hpPowerTextSelectedKey = "shared"
 
 for _, key in ipairs({ "bars_textures", "bars_absorb", "bars_outline", "bars_rounded", "bars_highlight", "bars_unit_dispel_overlay", "bars_power" }) do
     assert(sections[key], "missing section: " .. key)

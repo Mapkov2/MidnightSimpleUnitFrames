@@ -463,4 +463,23 @@ bossSpec = assert(UF.Config.RefreshUnit("boss1"))
 Check(bossSpec.border and bossSpec.border.bossTarget == true,
   "boss-specific bossTargetOutlineMode override was not compiled")
 
+-- Raid Group owns a status layer, but profiles from before that split must
+-- continue to inherit the normal name layer until the new key is set.
+_G.MSUF_DB = {
+  general = {},
+  bars = {},
+  target = { showRaidGroupInName = true, nameTextLayer = 19 },
+}
+local targetSpec = assert(UF.Config.RefreshUnit("target"))
+Check(targetSpec.status.raidGroup.layer == 19,
+  "raid-group name did not inherit the legacy name layer")
+_G.MSUF_DB.target.raidGroupNameLayer = 27
+targetSpec = assert(UF.Config.RefreshUnit("target"))
+Check(targetSpec.status.raidGroup.layer == 27,
+  "raid-group name ignored its independent layer")
+_G.MSUF_DB.target.raidGroupNameLayer = 41
+targetSpec = assert(UF.Config.RefreshUnit("target"))
+Check(targetSpec.status.raidGroup.layer == 30,
+  "raid-group name layer was not clamped to the 0-30 contract")
+
 print("aggro runtime routing smoke: ok")
