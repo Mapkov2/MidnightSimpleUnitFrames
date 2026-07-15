@@ -23,46 +23,211 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
     return value
 end
 
---- Legacy import accepts only table literals. The sandboxed loadstring path is
---- intentionally kept narrow so old exports still work without letting arbitrary
---- chunks observe addon globals.
-local function MSUF_ProfileIO_NormalizeLegacyTableChunk(str)
-    if type(str) ~= "string" then
-        return nil
+local MSUF_PROFILE_IMPORT_LIMITS = {
+    encodedBytes = 8 * 1024 * 1024,
+    decodedBytes = 32 * 1024 * 1024,
+    depth = 64,
+    nodes = 250000,
+}
+
+--- Parse the narrow Lua-table syntax emitted by the legacy serializer without
+--- compiling or executing user input. Supported values are tables, finite
+--- numbers, quoted strings, booleans, and nil. Functions, expressions,
+--- metatables, long strings, and arbitrary identifiers are rejected.
+local function MSUF_ProfileIO_ParseLegacyTable(str)
+    if type(str) ~= "string" then return nil, "legacy import must be text" end
+    if #str > MSUF_PROFILE_IMPORT_LIMITS.encodedBytes then return nil, "legacy import is too large" end
+
+    local state = { text = str, pos = 1, len = #str, nodes = 0, stringBytes = 0 }
+    local parseValue
+    local function Fail(message)
+        return nil, tostring(message or "invalid legacy table") .. " at byte " .. tostring(state.pos)
     end
-    local trimmed = str:match("^%s*(.-)%s*$")
-    if not trimmed or trimmed == "" then
-        return nil
+    local function SkipSpace()
+        while state.pos <= state.len do
+            local ch = state.text:sub(state.pos, state.pos)
+            if ch:match("%s") then
+                state.pos = state.pos + 1
+            elseif state.text:sub(state.pos, state.pos + 1) == "--" then
+                if state.text:sub(state.pos + 2, state.pos + 3) == "[[" then
+                    local close = state.text:find("]]", state.pos + 4, true)
+                    if not close then return false, "unterminated comment" end
+                    state.pos = close + 2
+                else
+                    local newline = state.text:find("\n", state.pos + 2, true)
+                    state.pos = newline and (newline + 1) or (state.len + 1)
+                end
+            else
+                break
+            end
+        end
+        return true
     end
-    local payload = trimmed
-    local returned = trimmed:match("^return%s*(.+)$")
-    if returned then
-        payload = returned:match("^%s*(.-)%s*$")
+    local function CountNode()
+        state.nodes = state.nodes + 1
+        if state.nodes > MSUF_PROFILE_IMPORT_LIMITS.nodes then return false, "legacy table has too many values" end
+        return true
     end
-    if payload and payload:sub(1, 1) == "{" and payload:sub(-1) == "}" then
-        return "return " .. payload
+    local function ParseIdentifier()
+        local start = state.pos
+        local first = state.text:sub(state.pos, state.pos)
+        if not first:match("[_%a]") then return nil end
+        state.pos = state.pos + 1
+        while state.pos <= state.len and state.text:sub(state.pos, state.pos):match("[_%w]") do
+            state.pos = state.pos + 1
+        end
+        return state.text:sub(start, state.pos - 1)
     end
-    return nil
-end
-local function MSUF_ProfileIO_SandboxLoadstring(fn)
-    if type(fn) == "function" and type(setfenv) == "function" then
-        pcall(setfenv, fn, {})
+    local function ParseString()
+        local quote = state.text:sub(state.pos, state.pos)
+        state.pos = state.pos + 1
+        local out, count = {}, 0
+        while state.pos <= state.len do
+            local ch = state.text:sub(state.pos, state.pos)
+            state.pos = state.pos + 1
+            if ch == quote then
+                local value = table.concat(out)
+                state.stringBytes = state.stringBytes + #value
+                if state.stringBytes > MSUF_PROFILE_IMPORT_LIMITS.decodedBytes then
+                    return nil, "legacy table strings are too large"
+                end
+                return value
+            end
+            if ch == "\n" or ch == "\r" then return nil, "unterminated string" end
+            if ch == "\\" then
+                if state.pos > state.len then return nil, "unterminated escape" end
+                local esc = state.text:sub(state.pos, state.pos)
+                state.pos = state.pos + 1
+                local mapped = ({ a = "\a", b = "\b", f = "\f", n = "\n", r = "\r", t = "\t", v = "\v", ["\\"] = "\\", ['"'] = '"', ["'"] = "'" })[esc]
+                if mapped then
+                    ch = mapped
+                elseif esc:match("%d") then
+                    local digits = esc
+                    for _ = 1, 2 do
+                        local digit = state.text:sub(state.pos, state.pos)
+                        if not digit:match("%d") then break end
+                        digits = digits .. digit
+                        state.pos = state.pos + 1
+                    end
+                    local byte = tonumber(digits)
+                    if not byte or byte > 255 then return nil, "invalid decimal escape" end
+                    ch = string.char(byte)
+                elseif esc == "\n" then
+                    ch = "\n"
+                else
+                    return nil, "unsupported string escape"
+                end
+            end
+            count = count + 1
+            out[count] = ch
+        end
+        return nil, "unterminated string"
     end
-    return fn
+    local function ParseNumber()
+        local rest = state.text:sub(state.pos)
+        local token = rest:match("^[+-]?0[xX][%da-fA-F]+")
+            or rest:match("^[+-]?%d+%.?%d*[eE][+-]?%d+")
+            or rest:match("^[+-]?%d*%.%d+[eE][+-]?%d+")
+            or rest:match("^[+-]?%d+%.?%d*")
+            or rest:match("^[+-]?%d*%.%d+")
+        if not token or token == "" or token == "+" or token == "-" then return nil, "invalid number" end
+        local value = tonumber(token)
+        if not value or value ~= value or value == math.huge or value == -math.huge then return nil, "invalid number" end
+        state.pos = state.pos + #token
+        return value
+    end
+    local function ParseTable(depth)
+        if depth > MSUF_PROFILE_IMPORT_LIMITS.depth then return nil, "legacy table is too deep" end
+        state.pos = state.pos + 1
+        local tbl, arrayIndex = {}, 1
+        while true do
+            local ok, why = SkipSpace()
+            if not ok then return nil, why end
+            local ch = state.text:sub(state.pos, state.pos)
+            if ch == "}" then state.pos = state.pos + 1; return tbl end
+            if ch == "" then return nil, "unterminated table" end
+
+            local key, value
+            if ch == "[" then
+                state.pos = state.pos + 1
+                key, why = parseValue(depth + 1)
+                if why then return nil, why end
+                ok, why = SkipSpace()
+                if not ok then return nil, why end
+                if state.text:sub(state.pos, state.pos) ~= "]" then return Fail("expected ]") end
+                state.pos = state.pos + 1
+                ok, why = SkipSpace()
+                if not ok then return nil, why end
+                if state.text:sub(state.pos, state.pos) ~= "=" then return Fail("expected =") end
+                state.pos = state.pos + 1
+                value, why = parseValue(depth + 1)
+            else
+                local saved = state.pos
+                local identifier = ParseIdentifier()
+                if identifier then
+                    ok, why = SkipSpace()
+                    if not ok then return nil, why end
+                end
+                if identifier and state.text:sub(state.pos, state.pos) == "=" then
+                    key = identifier
+                    state.pos = state.pos + 1
+                    value, why = parseValue(depth + 1)
+                else
+                    state.pos = saved
+                    key = arrayIndex
+                    arrayIndex = arrayIndex + 1
+                    value, why = parseValue(depth + 1)
+                end
+            end
+            if why then return nil, why end
+            if type(key) ~= "string" and type(key) ~= "number" then return nil, "unsupported table key" end
+            if value ~= nil then tbl[key] = value end
+            ok, why = SkipSpace()
+            if not ok then return nil, why end
+            ch = state.text:sub(state.pos, state.pos)
+            if ch == "," or ch == ";" then
+                state.pos = state.pos + 1
+            elseif ch ~= "}" then
+                return Fail("expected table separator")
+            end
+        end
+    end
+    parseValue = function(depth)
+        local ok, why = SkipSpace()
+        if not ok then return nil, why end
+        ok, why = CountNode()
+        if not ok then return nil, why end
+        local ch = state.text:sub(state.pos, state.pos)
+        if ch == "{" then return ParseTable(depth) end
+        if ch == '"' or ch == "'" then return ParseString() end
+        if ch:match("[+%-%d%.]") then return ParseNumber() end
+        local identifier = ParseIdentifier()
+        if identifier == "true" then return true end
+        if identifier == "false" then return false end
+        if identifier == "nil" then return nil end
+        return nil, "unsupported value"
+    end
+
+    local ok, why = SkipSpace()
+    if not ok then return nil, why end
+    if state.text:sub(state.pos, state.pos + 5) == "return"
+        and not state.text:sub(state.pos + 6, state.pos + 6):match("[_%w]") then
+        state.pos = state.pos + 6
+    end
+    local value
+    value, why = parseValue(1)
+    if why then return nil, why end
+    if type(value) ~= "table" then return nil, "legacy import must contain a table" end
+    ok, why = SkipSpace()
+    if not ok then return nil, why end
+    if state.pos <= state.len then return Fail("unexpected trailing input") end
+    return value
 end
 local function MSUF_ProfileIO_LoadLegacyChunk(str)
-    if type(loadstring) ~= "function" then
-        return nil, "loadstring unavailable"
-    end
-    local chunk = MSUF_ProfileIO_NormalizeLegacyTableChunk(str)
-    if not chunk then
-        return nil, "legacy import must be a table literal"
-    end
-    local func, err = loadstring(chunk)
-    if func then
-        MSUF_ProfileIO_SandboxLoadstring(func)
-    end
-    return func, err
+    local tbl, err = MSUF_ProfileIO_ParseLegacyTable(str)
+    if not tbl then return nil, err end
+    -- Preserve the old internal callable contract without compiling input.
+    return function() return tbl end
 end
 
 --- Small runtime bridge helpers. Profile code owns the DB mutation, then asks
@@ -468,15 +633,16 @@ do
     local TryDeserialize
     local function TryBlizzardDecompress(E, compressed)
         if not E or type(compressed) ~= "string" then  return nil end
+        if #compressed > MSUF_PROFILE_IMPORT_LIMITS.encodedBytes then return nil end
         if type(E.DecompressString) ~= "function" then  return nil end
         local method = GetDeflateEnum()
         local ok, res
         if method ~= nil then
             ok, res = pcall(E.DecompressString, compressed, method)
-            if ok and type(res) == "string" then  return res end
+            if ok and type(res) == "string" and #res <= MSUF_PROFILE_IMPORT_LIMITS.decodedBytes then return res end
         end
         ok, res = pcall(E.DecompressString, compressed)
-        if ok and type(res) == "string" then  return res end
+        if ok and type(res) == "string" and #res <= MSUF_PROFILE_IMPORT_LIMITS.decodedBytes then return res end
          return nil
     end
     local function GetLibDeflate()
@@ -495,12 +661,14 @@ do
     local function TryLibDeflateDecompress(compressed)
         local lib = GetLibDeflate()
         if not lib or type(compressed) ~= "string" then return nil end
+        if #compressed > MSUF_PROFILE_IMPORT_LIMITS.encodedBytes then return nil end
         local ok, plain = pcall(lib.DecompressDeflate, lib, compressed)
-        if ok and type(plain) == "string" then return plain end
+        if ok and type(plain) == "string" and #plain <= MSUF_PROFILE_IMPORT_LIMITS.decodedBytes then return plain end
         return nil
     end
     local function TryDeserializeMaybeCompressed(E, payload)
         if type(payload) ~= "string" then return nil end
+        if #payload > MSUF_PROFILE_IMPORT_LIMITS.encodedBytes then return nil end
         local plain = TryBlizzardDecompress(E, payload)
         local t = TryDeserialize(E, plain or payload)
         if t then return t end
@@ -533,6 +701,7 @@ do
     end
     TryDeserialize = function(E, payload)
         if not E or type(payload) ~= "string" then  return nil end
+        if #payload > MSUF_PROFILE_IMPORT_LIMITS.decodedBytes then return nil end
         --- 1) CBOR via Blizzard
         local ok, tbl = pcall(E.DeserializeCBOR, payload)
         if ok and type(tbl) == "table" then
@@ -626,6 +795,7 @@ do
     end
     local function TryDecodeCompactString(str)
         if type(str) ~= "string" then  return nil end
+        if #str > MSUF_PROFILE_IMPORT_LIMITS.encodedBytes then return nil end
         local E = GetEncodingUtil()
         if not E then  return nil end
         local s = str:match("^%s*(.-)%s*$")
@@ -672,9 +842,9 @@ do
             local ld = _G.LibDeflate
             if ld and type(ld.DecodeForPrint) == "function" and type(ld.DecompressDeflate) == "function" then
                 local okDec, raw = pcall(ld.DecodeForPrint, ld, payload)
-                if okDec and type(raw) == "string" then
+                if okDec and type(raw) == "string" and #raw <= MSUF_PROFILE_IMPORT_LIMITS.encodedBytes then
                     local okDecomp, plain = pcall(ld.DecompressDeflate, ld, raw)
-                    if okDecomp and type(plain) == "string" then
+                    if okDecomp and type(plain) == "string" and #plain <= MSUF_PROFILE_IMPORT_LIMITS.decodedBytes then
                         local t = TryDeserialize(E, plain)
                         if t then  return t end
                     else
@@ -772,11 +942,11 @@ function MSUF_InitProfiles()
     MSUF_ProfileIO_RunEnsureDB(false, true)
  end
 function MSUF_CreateProfile(name)
-    if not name or name == "" then  return end
+    if type(name) ~= "string" or name == "" then return false, "invalid profile name" end
     local profiles = MSUF_ProfileIO_EnsureProfileRoots()
     if profiles[name] then
         print("|cffff0000MSUF:|r Profile '"..name.."' already exists.")
-         return
+        return false, "profile already exists"
     end
     profiles[name] = CopyTable(type(MSUF_DB) == "table" and MSUF_DB or {})
     if MSUF_ProfileIO_TranslateProfileToCurrent then
@@ -787,12 +957,13 @@ function MSUF_CreateProfile(name)
     end
     MSUF_ProfileIO_EnsureProfileMenuDefaults(profiles[name])
     print("|cff00ff00MSUF:|r Created new profile '"..name.."'.")
+    return true
  end
 function MSUF_SwitchProfile(name)
     local profiles, chars = MSUF_ProfileIO_EnsureProfileRoots()
     if not name or type(profiles[name]) ~= "table" then
         print("|cffff0000MSUF:|r Unknown profile: "..tostring(name))
-         return
+        return false, "unknown profile"
     end
     local charKey = MSUF_GetCharKey()
     local char = type(chars[charKey]) == "table" and chars[charKey] or {}
@@ -825,11 +996,12 @@ function MSUF_SwitchProfile(name)
         MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_SWITCH", false)
     end
     print("|cff00ff00MSUF:|r Switched to profile '"..name.."'.")
+    return true
  end
 function MSUF_ResetProfile(name)
     name = name or MSUF_ActiveProfile
     local profiles = MSUF_ProfileIO_EnsureProfileRoots()
-    if not name or not profiles[name] then return end
+    if not name or not profiles[name] then return false, "unknown profile" end
     profiles[name] = {}
     if name == MSUF_ActiveProfile then
         MSUF_DB = profiles[name]
@@ -842,14 +1014,15 @@ function MSUF_ResetProfile(name)
         MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_RESET", false)
     end
     print("|cffffd700MSUF:|r Profile '"..name.."' reset to defaults.")
+    return true
  end
 function MSUF_DeleteProfile(name)
     name = name or MSUF_ActiveProfile
     local profiles, chars = MSUF_ProfileIO_EnsureProfileRoots()
-    if not name or not profiles[name] then return end
+    if not name or not profiles[name] then return false, "unknown profile" end
     if name == "Default" then
         print("|cffff0000MSUF:|r You cannot delete the 'Default' profile. Use Reset instead.")
-         return
+        return false, "default profile is protected"
     end
     local fallbackName
     for profileName, tbl in pairs(profiles) do
@@ -859,12 +1032,17 @@ function MSUF_DeleteProfile(name)
     end
     if not fallbackName then
         print("|cffff0000MSUF:|r Cannot delete the last remaining profile.")
-         return
+        return false, "cannot delete last profile"
     end
     if chars then
         for _, char in pairs(chars) do
-            if type(char) == "table" and char.activeProfile == name then
-                char.activeProfile = fallbackName
+            if type(char) == "table" then
+                if char.activeProfile == name then char.activeProfile = fallbackName end
+                if type(char.specProfileMap) == "table" then
+                    for specID, profileName in pairs(char.specProfileMap) do
+                        if profileName == name then char.specProfileMap[specID] = nil end
+                    end
+                end
             end
         end
     end
@@ -873,6 +1051,7 @@ function MSUF_DeleteProfile(name)
         MSUF_SwitchProfile(fallbackName)
     end
     print("|cffffd700MSUF:|r Profile '"..name.."' deleted.")
+    return true
  end
 function MSUF_CopyProfile(sourceName, destName)
     if not sourceName or sourceName == "" then
@@ -1143,20 +1322,55 @@ local function MSUF_WipeTable(t)
         t[k] = nil
     end
  end
-local function MSUF_DeepCopy(v)
+local function MSUF_DeepCopy(v, seen, depth)
     if not v then  return v end
     if type(v) ~= "table" then
         return v
     end
-    if type(CopyTable) == "function" then
-        return CopyTable(v)
-    end
-    --- Fallback deep copy (should rarely be needed)
+    depth = (depth or 0) + 1
+    if depth > MSUF_PROFILE_IMPORT_LIMITS.depth then error("profile table is too deep") end
+    seen = seen or {}
+    if seen[v] then return seen[v] end
     local out = {}
+    seen[v] = out
     for k, vv in pairs(v) do
-        out[k] = MSUF_DeepCopy(vv)
+        out[MSUF_DeepCopy(k, seen, depth)] = MSUF_DeepCopy(vv, seen, depth)
     end
      return out
+end
+
+MSUF.ProfileIOValidateImportValue = function(root)
+    local seen, nodes, stringBytes = {}, 0, 0
+    local function Walk(value, depth)
+        nodes = nodes + 1
+        if nodes > MSUF_PROFILE_IMPORT_LIMITS.nodes then return false, "profile has too many values" end
+        local valueType = type(value)
+        if valueType == "string" then
+            stringBytes = stringBytes + #value
+            if stringBytes > MSUF_PROFILE_IMPORT_LIMITS.decodedBytes then return false, "profile strings are too large" end
+            return true
+        end
+        if valueType == "number" then
+            if value ~= value or value == math.huge or value == -math.huge then return false, "profile contains an invalid number" end
+            return true
+        end
+        if valueType == "nil" or valueType == "boolean" then return true end
+        if valueType ~= "table" then return false, "profile contains unsupported " .. valueType end
+        if depth > MSUF_PROFILE_IMPORT_LIMITS.depth then return false, "profile is too deep" end
+        if seen[value] then return false, "profile contains a cyclic or shared table" end
+        seen[value] = true
+        for key, child in pairs(value) do
+            local keyType = type(key)
+            if keyType ~= "string" and keyType ~= "number" then return false, "profile contains an unsupported table key" end
+            local ok, why = Walk(key, depth + 1)
+            if not ok then return false, why end
+            ok, why = Walk(child, depth + 1)
+            if not ok then return false, why end
+        end
+        return true
+    end
+    if type(root) ~= "table" then return false, "profile is not a table" end
+    return Walk(root, 1)
 end
 
 local MSUF_ProfileIO_ImportWarningMap = {}
@@ -1630,7 +1844,7 @@ local MSUF_PROFILEIO_LEGACY_PROFILE_SCHEMA_56 = 560
 --- MSUF_ProfileIO_TranslateProfileToCurrent, independently from the broad
 --- default-fill revision owned by MSUF_Defaults.lua. Bump it whenever that
 --- translation pipeline gains a new mandatory repair.
-local MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = 1
+local MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = 4
 local MSUF_PROFILEIO_TEXT_SCOPE_KEYS = {
     "general",
     "player", "target", "targettarget", "tot", "targetoftarget",
@@ -1825,8 +2039,8 @@ local MSUF_PROFILEIO_AURA_NUMERIC_KEYS = {
     cooldownTextOffsetX = { -2000, 2000 },
     cooldownTextOffsetY = { -2000, 2000 },
     cooldownDecimalSeconds = { 0, 30 },
-    buffLayer = { 1, 15 },
-    debuffLayer = { 1, 15 },
+    buffLayer = { 0, 30 },
+    debuffLayer = { 0, 30 },
     buffStackTextSize = { 1, 128 },
     debuffStackTextSize = { 1, 128 },
     buffCooldownTextSize = { 1, 128 },
@@ -1849,6 +2063,7 @@ local MSUF_PROFILEIO_AURA_STRING_KEYS = {
     "stackCountAnchor", "cooldownTextAnchor", "buffAnchor", "debuffAnchor",
     "buffStackCountAnchor", "debuffStackCountAnchor",
     "buffCooldownTextAnchor", "debuffCooldownTextAnchor",
+    "buffStrata", "debuffStrata",
     "debuffTypeBorderMode", "dispelBorderMode", "pandemicMode",
 }
 
@@ -1981,19 +2196,63 @@ local function MSUF_ProfileIO_A2AuraReadNumber(primary, secondary, key, fallback
 end
 
 local function MSUF_ProfileIO_ConvertLegacyAuras2Geometry(auras, profile)
-    if type(auras) ~= "table" or auras._msufAuras3LegacyGeometry_v2 == true then return false end
+    if type(auras) ~= "table" or auras._msufAuras3LegacyGeometry_v3 == true then return false end
     local shared = type(auras.shared) == "table" and auras.shared or {}
     auras.shared = shared
     local repairV1 = auras._msufAuras3LegacyGeometry_v1 == true
+    local repairV2 = auras._msufAuras3LegacyGeometry_v2 == true
     local changed = false
 
-    local function ConvertScope(unit, unitCfg)
+    local function ReadRaw(primary, secondary, ...)
+        for i = 1, select("#", ...) do
+            local key = select(i, ...)
+            local value = type(primary) == "table" and primary[key] or nil
+            if value ~= nil then return value end
+            value = type(secondary) == "table" and secondary[key] or nil
+            if value ~= nil then return value end
+        end
+        return nil
+    end
+
+    local function GrowthParts(value, wrap)
+        value = tostring(value or "RIGHT"):upper()
+        wrap = tostring(wrap or "DOWN"):upper()
+        local combined = MSUF_PROFILEIO_AURA_GROWTH_PARTS[value]
+        if combined then
+            value = combined[1]
+            wrap = combined[2] or wrap
+        end
+        if value ~= "LEFT" and value ~= "UP" and value ~= "DOWN" then value = "RIGHT" end
+        if wrap ~= "UP" then wrap = "DOWN" end
+        if value == "LEFT" then return -1, wrap == "UP" and 1 or -1, false end
+        if value == "UP" then return 1, 1, true end
+        if value == "DOWN" then return 1, -1, true end
+        return 1, wrap == "UP" and 1 or -1, false
+    end
+
+    local function InitialAnchor(xSign, ySign)
+        return (ySign > 0 and "BOTTOM" or "TOP") .. (xSign > 0 and "LEFT" or "RIGHT")
+    end
+
+    local function LegacyFirstIconAnchor(growth)
+        growth = tostring(growth or "RIGHT"):upper()
+        local combined = MSUF_PROFILEIO_AURA_GROWTH_PARTS[growth]
+        if combined then growth = combined[1] end
+        if growth == "LEFT" then return "BOTTOMRIGHT" end
+        if growth == "DOWN" then return "TOPLEFT" end
+        return "BOTTOMLEFT"
+    end
+
+    local function ConvertScope(unit, unitCfg, existedBeforeV3)
         if type(unitCfg) ~= "table" then return end
         local layout = type(unitCfg.layout) == "table" and unitCfg.layout or {}
         unitCfg.layout = layout
+        local effectiveLayout = unitCfg.overrideLayout == true and layout or nil
+        local layoutShared = unitCfg.overrideSharedLayout == true and type(unitCfg.layoutShared) == "table"
+            and unitCfg.layoutShared or nil
         local width, height = MSUF_ProfileIO_A2AuraFrameSize(profile, unit)
-        local baseX = MSUF_ProfileIO_A2AuraReadNumber(layout, shared, "offsetX", 0)
-        local baseY = MSUF_ProfileIO_A2AuraReadNumber(layout, shared, "offsetY", 0)
+        local baseX = MSUF_ProfileIO_A2AuraReadNumber(effectiveLayout, shared, "offsetX", 0)
+        local baseY = MSUF_ProfileIO_A2AuraReadNumber(effectiveLayout, shared, "offsetY", 0)
 
         local function ReadLaneNumber(primary, secondary, key, aliasKey, fallback)
             local n = type(primary) == "table" and MSUF_ProfileIO_ToNumber(primary[key]) or nil
@@ -2007,13 +2266,18 @@ local function MSUF_ProfileIO_ConvertLegacyAuras2Geometry(auras, profile)
             return fallback or 0
         end
 
-        local function ConvertLane(xKey, yKey, anchorKey, legacyXKey, legacyYKey)
-            local anchor = "BOTTOMLEFT"
-            local x
-            local y
-            if repairV1 then
-                x = ReadLaneNumber(layout, nil, xKey, legacyXKey, 0)
-                y = ReadLaneNumber(layout, nil, yKey, legacyYKey, 0)
+        local function ConvertLane(kind, xKey, yKey, anchorKey, legacyXKey, legacyYKey)
+            local originX
+            local originY
+            if repairV2 and existedBeforeV3 then
+                -- v2 stored the old Aura2 container's BOTTOMLEFT origin. It
+                -- still anchored Auras3's full-capacity lane there, which is
+                -- why LEFT/UP and RIGHT/DOWN profiles drifted by whole rows.
+                originX = ReadLaneNumber(layout, nil, xKey, legacyXKey, 0)
+                originY = ReadLaneNumber(layout, nil, yKey, legacyYKey, 0)
+            elseif repairV1 and existedBeforeV3 then
+                local x = ReadLaneNumber(layout, nil, xKey, legacyXKey, 0)
+                local y = ReadLaneNumber(layout, nil, yKey, legacyYKey, 0)
                 local oldAnchor = tostring(layout[anchorKey] or ""):upper()
                 if oldAnchor == "TOPRIGHT" or oldAnchor == "BOTTOMRIGHT" then
                     x = x + width
@@ -2021,27 +2285,64 @@ local function MSUF_ProfileIO_ConvertLegacyAuras2Geometry(auras, profile)
                 if oldAnchor == "TOPLEFT" or oldAnchor == "TOPRIGHT" then
                     y = y + height
                 end
+                originX, originY = x, y
             else
-                x = baseX + ReadLaneNumber(layout, shared, xKey, legacyXKey, 0)
-                y = height + baseY + ReadLaneNumber(layout, shared, yKey, legacyYKey, 0)
+                originX = baseX + ReadLaneNumber(effectiveLayout, shared, xKey, legacyXKey, 0)
+                originY = height + baseY + ReadLaneNumber(effectiveLayout, shared, yKey, legacyYKey, 0)
             end
+
+            local growth = ReadRaw(layoutShared, shared, kind .. "GrowthX", kind .. "Growth", "growth") or "RIGHT"
+            local wrap = ReadRaw(layoutShared, shared, kind .. "GrowthY", kind .. "RowWrap", "rowWrap") or "DOWN"
+            local xSign, ySign = GrowthParts(growth, wrap)
+            local anchor = InitialAnchor(xSign, ySign)
+            local oldIconAnchor = LegacyFirstIconAnchor(growth)
+            local size = MSUF_ProfileIO_ToNumber(ReadRaw(effectiveLayout, shared,
+                kind .. "GroupIconSize", kind .. "IconSize", "iconSize")) or 26
+            if size < 1 then size = 26 end
+
+            -- Preserve the first Aura2 icon's rectangle, not the old empty
+            -- container origin. Auras3 anchors a full-capacity layout host, so
+            -- TOP/RIGHT anchors must be expressed relative to that host's far
+            -- edge while keeping the first icon pixel-identical.
+            local oldLeft = originX - (oldIconAnchor:find("RIGHT", 1, true) and size or 0)
+            local oldBottom = originY - (oldIconAnchor:find("TOP", 1, true) and size or 0)
+            local absoluteAnchorX = oldLeft + (anchor:find("RIGHT", 1, true) and size or 0)
+            local absoluteAnchorY = oldBottom + (anchor:find("TOP", 1, true) and size or 0)
+            local x = absoluteAnchorX - (anchor:find("RIGHT", 1, true) and width or 0)
+            local y = absoluteAnchorY - (anchor:find("TOP", 1, true) and height or 0)
             if layout[anchorKey] ~= anchor then layout[anchorKey] = anchor; changed = true end
             if layout[xKey] ~= x then layout[xKey] = x; changed = true end
             if layout[yKey] ~= y then layout[yKey] = y; changed = true end
+
+            local layerKey = kind .. "Layer"
+            local strataKey = kind .. "Strata"
+            if layout[layerKey] == nil then layout[layerKey] = 30; changed = true end
+            if layout[strataKey] == nil then layout[strataKey] = "MEDIUM"; changed = true end
         end
 
-        ConvertLane("buffGroupOffsetX", "buffGroupOffsetY", "buffAnchor", "buffOffsetX", "buffOffsetY")
-        ConvertLane("debuffGroupOffsetX", "debuffGroupOffsetY", "debuffAnchor", "debuffOffsetX", "debuffOffsetY")
+        ConvertLane("buff", "buffGroupOffsetX", "buffGroupOffsetY", "buffAnchor", "buffOffsetX", "buffOffsetY")
+        ConvertLane("debuff", "debuffGroupOffsetX", "debuffGroupOffsetY", "debuffAnchor", "debuffOffsetX", "debuffOffsetY")
         if unitCfg.overrideLayout ~= true then unitCfg.overrideLayout = true; changed = true end
     end
 
-    if type(auras.perUnit) == "table" then
-        for unit, unitCfg in pairs(auras.perUnit) do
-            ConvertScope(unit, unitCfg)
-        end
+    local perUnit = type(auras.perUnit) == "table" and auras.perUnit or {}
+    auras.perUnit = perUnit
+    local existing = {}
+    for unit in pairs(perUnit) do existing[unit] = true end
+    -- Aura2 supported these scopes even when no per-unit override table had
+    -- ever been created. Materialize them because their frame heights differ;
+    -- one converted shared Y value cannot preserve all four geometries.
+    local scopes = { "player", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" }
+    for i = 1, #scopes do
+        local unit = scopes[i]
+        if type(perUnit[unit]) ~= "table" then perUnit[unit] = {}; changed = true end
+    end
+    for unit, unitCfg in pairs(perUnit) do
+        ConvertScope(unit, unitCfg, existing[unit] == true)
     end
     auras._msufAuras3LegacyGeometry_v1 = true
     auras._msufAuras3LegacyGeometry_v2 = true
+    auras._msufAuras3LegacyGeometry_v3 = true
     return true
 end
 
@@ -2211,6 +2512,14 @@ end
 local function MSUF_ProfileIO_ProfileNeedsLegacyRepair(profile)
     if type(profile) ~= "table" then return false end
     if type(profile.auras2) == "table" then return true end
+    local translatedAuras = type(profile.auras3) == "table"
+        and profile.auras3._msufAuras3TranslatedFromLegacyAuras2 == true
+    local legacyVisualProfile = translatedAuras
+        or profile._msufLegacy55FrameOutlineBackground_v1 == true
+    if translatedAuras
+        and (profile.auras3._msufAuras3LegacyGeometry_v3 ~= true
+            or profile._msufLegacy55FrameOutlineBackground_v1 ~= true) then return true end
+    if legacyVisualProfile and profile._msufLegacy55PowerTextVisibility_v1 ~= true then return true end
     if MSUF_ProfileIO_AuraOverridesNeedRepair(profile) then return true end
     if MSUF_ProfileIO_LegacyAliasBeatsCanonical(profile, "targettarget", "tot", "targetoftarget") then return true end
     if MSUF_ProfileIO_LegacyAliasBeatsCanonical(profile, "focustarget", "focus_target", "focustargettarget") then return true end
@@ -2312,6 +2621,93 @@ local function MSUF_ProfileIO_NormalizeAuraLayoutTable(tbl)
     return changed
 end
 
+MSUF.ProfileIONormalizeLegacy55VisualCompatibility = function(profile, legacyProfile, context)
+    if type(profile) ~= "table" then return false end
+    local source = tostring(type(context) == "table" and context.source or ""):lower()
+    -- UUF conversion already emits 6.0 geometry. This compatibility mode is
+    -- exclusively for native MSUF 5.5 profiles and SavedVariables.
+    if source:find("uuf", 1, true) then return false end
+    local translatedAuras = type(profile.auras3) == "table"
+        and profile.auras3._msufAuras3TranslatedFromLegacyAuras2 == true
+    local storedLegacyVisualProfile = profile._msufLegacy55FrameOutlineBackground_v1 == true
+    if legacyProfile ~= true and translatedAuras ~= true and storedLegacyVisualProfile ~= true then return false end
+
+    local changed = false
+    local units = {
+        "player", "target", "focus", "targettarget", "focustarget", "pet", "boss",
+        "boss1", "boss2", "boss3", "boss4", "boss5",
+    }
+    local powerTextDefaults60 = {
+        player = true, target = true, focus = false,
+        targettarget = false, focustarget = false, pet = true,
+        boss = true, boss1 = true, boss2 = true, boss3 = true, boss4 = true, boss5 = true,
+    }
+    local repairPreviouslySeededPowerText = profile._msufLegacy55PowerTextVisibility_v1 ~= true
+        and (translatedAuras == true or storedLegacyVisualProfile == true)
+    for i = 1, #units do
+        local unit = units[i]
+        local conf = profile[unit]
+        if type(conf) == "table" and conf.showPower ~= nil then
+            local legacyShown = conf.showPower ~= false
+            local currentShown = conf.showPowerText ~= false
+            if conf.showPowerText == nil
+                or (repairPreviouslySeededPowerText
+                    and currentShown == powerTextDefaults60[unit]
+                    and currentShown ~= legacyShown) then
+                -- Native 5.5 owned Power Text visibility through showPower.
+                -- 6.0 split that state into showPowerText, then its nil-only
+                -- defaults could seed the opposite value before compilation.
+                conf.showPowerText = legacyShown
+                changed = true
+            end
+        end
+        if type(conf) == "table" and conf.detachedPowerBarAnchorMode == nil
+            and (conf.powerBarDetached ~= nil
+                or conf.detachedPowerBarOffsetX ~= nil or conf.detachedPowerBarOffsetY ~= nil
+                or conf.detachedPowerBarWidth ~= nil or conf.detachedPowerBarHeight ~= nil) then
+            -- 5.5 interpreted detached offsets from the unit frame's left
+            -- edge. 6.0 defaults to a centered TOP/BOTTOM relationship.
+            conf.detachedPowerBarAnchorMode = "LEGACY_TOPLEFT"
+            changed = true
+        end
+    end
+    if profile._msufLegacy55PowerTextVisibility_v1 ~= true then
+        profile._msufLegacy55PowerTextVisibility_v1 = true
+        changed = true
+    end
+
+    local bars = profile.bars
+    if type(bars) ~= "table" then
+        bars = {}
+        profile.bars = bars
+        changed = true
+    end
+    if bars.barOutlineStrata ~= "BACKGROUND" then
+        bars.barOutlineStrata = "BACKGROUND"
+        changed = true
+    end
+    -- Scope overrides win over bars.barOutlineStrata when Highlight Override
+    -- is active. Pin existing legacy scopes too, so no migrated page can fall
+    -- back to AUTO after the global value has been corrected.
+    local outlineScopes = {
+        "player", "target", "focus", "targettarget", "focustarget", "pet", "boss",
+        "boss1", "boss2", "boss3", "boss4", "boss5",
+        "gf_party", "gf_raid", "gf_mythicraid",
+    }
+    for i = 1, #outlineScopes do
+        local conf = profile[outlineScopes[i]]
+        if type(conf) == "table" and conf.barOutlineStrata ~= "BACKGROUND" then
+            conf.barOutlineStrata = "BACKGROUND"
+            changed = true
+        end
+    end
+    if profile._msufLegacy55FrameOutlineBackground_v1 ~= true then
+        profile._msufLegacy55FrameOutlineBackground_v1 = true
+        changed = true
+    end
+    return changed
+end
+
 local function MSUF_ProfileIO_NormalizeLegacyAuras(profile, legacyProfile)
     if type(profile) ~= "table" then return false end
     local changed = false
@@ -2332,7 +2728,7 @@ local function MSUF_ProfileIO_NormalizeLegacyAuras(profile, legacyProfile)
     end
     local auras = profile.auras3
     if type(auras) ~= "table" then return changed end
-    if fromLegacyAuras2 or (auras._msufAuras3TranslatedFromLegacyAuras2 == true and auras._msufAuras3LegacyGeometry_v2 ~= true) then
+    if fromLegacyAuras2 or (auras._msufAuras3TranslatedFromLegacyAuras2 == true and auras._msufAuras3LegacyGeometry_v3 ~= true) then
         changed = MSUF_ProfileIO_ConvertLegacyAuras2Geometry(auras, profile) or changed
     end
     local repairAuraOverrides = legacyProfile == true or MSUF_ProfileIO_AuraOverridesNeedRepair(profile)
@@ -2406,6 +2802,7 @@ MSUF_ProfileIO_TranslateProfileToCurrent = function(profile, context)
             changed = MSUF_ProfileIO_NormalizeStatusScope(scope, isGroupScope) or changed
         end
     end
+    changed = MSUF.ProfileIONormalizeLegacy55VisualCompatibility(profile, legacyProfile, context) or changed
     changed = MSUF_ProfileIO_NormalizeLegacyAuras(profile, legacyProfile) or changed
     if context.markProfile ~= false then
         if profile._msufProfileSchema ~= MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA then
@@ -3303,6 +3700,11 @@ local function MSUF_ProfileIO_PostImportApply_UnitAlphas(kind, payload)
 end
 local function MSUF_ApplySnapshotToActiveProfile(snapshot)
     if not snapshot then  return false, "not a table" end
+    local valid, validationError = MSUF.ProfileIOValidateImportValue(snapshot)
+    if not valid then return false, validationError end
+    local copied, stagedSnapshot = pcall(MSUF_DeepCopy, snapshot)
+    if not copied then return false, "profile staging failed: " .. tostring(stagedSnapshot) end
+    snapshot = stagedSnapshot
     snapshot = MSUF_ProfileIO_SelectWagoFullSnapshot(snapshot)
     local kind = snapshot.kind
     if kind == "groupframes" then
@@ -5267,14 +5669,28 @@ local function MSUF_ApplyLegacyTableToActiveProfile(tbl, isUUFImport)
          return false
     end
     isUUFImport = isUUFImport == true or MSUF_ProfileIO_IsUUFConvertedPayload(tbl)
+    local valid, validationError = MSUF.ProfileIOValidateImportValue(tbl)
+    if not valid then
+        print("|cffff0000MSUF:|r Legacy import failed: " .. tostring(validationError))
+        return false
+    end
+    local prepared, staged = pcall(function()
+        local copy = MSUF_DeepCopy(tbl)
+        MSUF_ProfileIO_TranslateProfileToCurrent(copy, {
+            source = isUUFImport and "uuf_import" or "legacy_import",
+            markProfile = true,
+        })
+        return copy
+    end)
+    if not prepared or type(staged) ~= "table" then
+        print("|cffff0000MSUF:|r Legacy import failed during staging: " .. tostring(staged))
+        return false
+    end
+    tbl = staged
     MSUF_ProfileIO_RunEnsureDB()
     if isUUFImport then
         MSUF_ProfileIO_ClearUUFUnitFrameScreenCache()
     end
-    MSUF_ProfileIO_TranslateProfileToCurrent(tbl, {
-        source = isUUFImport and "uuf_import" or "legacy_import",
-        markProfile = true,
-    })
     MSUF_ProfileIO_CollectProfileMediaWarnings(tbl)
     --- Keep profile table reference stable; wipe + copy.
     if type(MSUF_DB) ~= "table" then
@@ -5283,7 +5699,7 @@ local function MSUF_ApplyLegacyTableToActiveProfile(tbl, isUUFImport)
     MSUF_WipeTable(MSUF_DB)
     for k, v in pairs(tbl) do
         if MSUF_ProfileIO_ShouldPersistRootProfileKey(k) then
-            MSUF_DB[k] = MSUF_DeepCopy(v)
+            MSUF_DB[k] = v
         end
     end
     if type(MSUF_GlobalDB) == "table" and type(MSUF_GlobalDB.profiles) == "table" and MSUF_ActiveProfile then
@@ -5585,17 +6001,25 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable, isUUFImport
          return false, "not a table"
     end
     isUUFImport = isUUFImport == true or MSUF_ProfileIO_IsUUFConvertedPayload(newTable)
-    MSUF_ProfileIO_TranslateProfileToCurrent(newTable, {
-        source = isUUFImport and "external_uuf_import" or "external_import",
-        markProfile = true,
-    })
+    local valid, validationError = MSUF.ProfileIOValidateImportValue(newTable)
+    if not valid then return false, validationError end
+    local prepared, staged = pcall(function()
+        local copy = MSUF_DeepCopy(newTable)
+        MSUF_ProfileIO_TranslateProfileToCurrent(copy, {
+            source = isUUFImport and "external_uuf_import" or "external_import",
+            markProfile = true,
+        })
+        if type(_G.MSUF_NormalizePortraitRenderDB) == "function" then
+            _G.MSUF_NormalizePortraitRenderDB(copy)
+        end
+        if type(_G.MSUF_MigrateDispelPriorityProfile) == "function" then
+            _G.MSUF_MigrateDispelPriorityProfile(copy, true)
+        end
+        return copy
+    end)
+    if not prepared or type(staged) ~= "table" then return false, "profile staging failed: " .. tostring(staged) end
+    newTable = staged
     MSUF_ProfileIO_CollectProfileMediaWarnings(newTable)
-    if type(_G.MSUF_NormalizePortraitRenderDB) == "function" then
-        _G.MSUF_NormalizePortraitRenderDB(newTable)
-    end
-    if type(_G.MSUF_MigrateDispelPriorityProfile) == "function" then
-        _G.MSUF_MigrateDispelPriorityProfile(newTable, true)
-    end
     MSUF_ProfileIO_EnsureProfileSystemInitialized()
     MSUF_ProfileIO_EnsureProfilesTable()
     local existing = MSUF_GlobalDB.profiles[profileKey]
@@ -5614,7 +6038,7 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable, isUUFImport
         MSUF_WipeTable(target)
         for k, v in pairs(newTable) do
             if MSUF_ProfileIO_ShouldPersistRootProfileKey(k) then
-                target[k] = MSUF_DeepCopy(v)
+                target[k] = v
             end
         end
         MSUF_GlobalDB.profiles[profileKey] = target
@@ -5642,7 +6066,7 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable, isUUFImport
         MSUF_WipeTable(existing)
         for k, v in pairs(newTable) do
             if MSUF_ProfileIO_ShouldPersistRootProfileKey(k) then
-                existing[k] = MSUF_DeepCopy(v)
+                existing[k] = v
             end
         end
         MSUF_GlobalDB.profiles[profileKey] = existing
@@ -5653,7 +6077,7 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable, isUUFImport
     local stored = {}
     for k, v in pairs(newTable) do
         if MSUF_ProfileIO_ShouldPersistRootProfileKey(k) then
-            stored[k] = MSUF_DeepCopy(v)
+            stored[k] = v
         end
     end
     MSUF_GlobalDB.profiles[profileKey] = stored
