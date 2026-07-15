@@ -380,8 +380,6 @@ local function NormalizePlaced(placed)
     barWidth = Num(placed.barWidth, Num(placed.width, 54)),
     growth = placed.growth,
     iconEffect = tostring(placed.iconEffect or "none"):lower(),
-    iconEffectTiming = tostring(placed.iconEffectTiming or "always"):lower() == "expiring" and "expiring" or "always",
-    iconExpireThreshold = math.max(1, math.min(30, Num(placed.iconExpireThreshold, 5))),
     missing = false,
     showCooldownSwipe = placed.showCooldownSwipe ~= false,
     showCooldown = placed.showCooldown ~= false,

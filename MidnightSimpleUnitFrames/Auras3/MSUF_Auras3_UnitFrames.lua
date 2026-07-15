@@ -32,6 +32,7 @@ local table_concat, table_sort = table.concat, table.sort
 local math_floor, math_min, math_max = math.floor, math.min, math.max
 local FrameLayers = UF.Layers or {}
 local DISPEL_OVERLAY_EFFECT_OFFSET = tonumber(FrameLayers.DISPEL_OVERLAY_EFFECT_OFFSET) or 12
+local AURA_ICON_BASE_OFFSET = tonumber(FrameLayers.AURA_ICON_BASE_OFFSET) or 64
 local CreateFrame = _G.CreateFrame
 local C_AddOns = _G.C_AddOns
 local C_Timer = _G.C_Timer
@@ -477,6 +478,11 @@ local function ReadParentFrameStrata(parentFrame)
 end
 
 local function ResolveFrameStrata(parentFrame, value)
+    -- Group foreground and full-frame effects must stay on one strata; their
+    -- shared layer contract then guarantees that text/icons remain readable.
+    if parentFrame and parentFrame.MSUFSpec and parentFrame.MSUFSpec.scope == "group" then
+        return ReadParentFrameStrata(parentFrame)
+    end
     if issecretvalue(value) == true then value = nil end
     if value == nil or value == "" or value == "AUTO" then
         return ReadParentFrameStrata(parentFrame)
@@ -763,6 +769,11 @@ local function AddMaxDurationCandidateFilter(candidateFilters, candidateFilterSi
     local part = "maxDuration:" .. tostring(maxDuration)
     candidateFilterSignature = candidateFilterSignature and (candidateFilterSignature .. ";" .. part) or part
     return candidateFilters, candidateFilterSignature
+end
+
+local function AuraIconBaseOffset(parentFrame)
+    return parentFrame and parentFrame.MSUFSpec and parentFrame.MSUFSpec.scope == "group"
+        and AURA_ICON_BASE_OFFSET or 0
 end
 
 local function AddHidePermanentCandidateFilter(candidateFilters, candidateFilterSignature, hidePermanent)
@@ -2361,7 +2372,7 @@ local function SyncButtonGeometry(button, lane, index)
         SyncFrameStrata(button, ResolveFrameStrata(parentFrame, lane.strata))
     end
     if parentFrame and button.SetFrameLevel then
-        button:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + (lane.layer or 1) + 1)
+        button:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + AuraIconBaseOffset(parentFrame) + (lane.layer or 1) + 1)
     end
     if button.Icon then
         button.Icon:ClearAllPoints()
@@ -2433,9 +2444,9 @@ local function SyncContainerGeometry(container, lane, parentFrame, forceGeometry
     container:SetAlpha(lane.alpha or 1)
     if parentFrame then
         if layoutHost and layoutHost.SetFrameLevel then
-            layoutHost:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + (lane.layer or 1))
+            layoutHost:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + AuraIconBaseOffset(parentFrame) + (lane.layer or 1))
         end
-        container:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + (lane.layer or 1))
+        container:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + AuraIconBaseOffset(parentFrame) + (lane.layer or 1))
     end
     container._msufA3ButtonFrameStrata = resolvedStrata
     if forceGeometry == true then container._msufA3ForceManagedAuraGeometry = nil end
@@ -2451,7 +2462,7 @@ local function PrepareAuraButton(button, lane, index)
     button:SetAlpha(buttonParent and buttonParent._msufA3SharedAuraGroups == true and (lane.alpha or 1) or 1)
     local parentFrame = button._msufA3ParentFrame
     if parentFrame then
-        button:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + (lane.layer or 1) + 1)
+        button:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + AuraIconBaseOffset(parentFrame) + (lane.layer or 1) + 1)
     else
         button:SetFrameLevel((buttonParent:GetFrameLevel() or 0) + 1)
     end
@@ -2658,6 +2669,9 @@ local function DispelSensorFrameLevel(parentFrame, sensor, target)
         -- based on the unit frame so Dispel deterministically wins the shared
         -- health-effect band above every Spell Indicator priority.
         return math_max(targetLevel + 1, parentLevel + DISPEL_OVERLAY_EFFECT_OFFSET + (sensor.layer or 0))
+    end
+    if sensor and sensor.visual == "corner" then
+        return parentLevel + AuraIconBaseOffset(parentFrame) + (sensor.layer or 14)
     end
     return parentLevel + (sensor and sensor.layer or 14)
 end

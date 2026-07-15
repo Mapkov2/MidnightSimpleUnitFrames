@@ -11,6 +11,7 @@ _G.MSUF = MSUF
 local UF = MSUF.UF
 local GF = MSUF.GF or {}
 MSUF.GF = GF
+local Layers = UF.Layers or {}
 
 if not (UF and UF.RegisterElement) then return end
 
@@ -82,7 +83,7 @@ local function EnsureHolder(frame, key, layer)
     holder:EnableMouse(false)
     frame.MSUFGFIndicatorHolders[layerKey] = holder
   end
-  local level = BaseFrameLevel(frame) + ClampLayer(layer, 7)
+  local level = BaseFrameLevel(frame) + (Layers.CORNER_ICON_BASE_OFFSET or 64) + ClampLayer(layer, 7)
   if holder.SetFrameLevel and holder._msufGFLevel ~= level then
     holder:SetFrameLevel(level)
     holder._msufGFLevel = level

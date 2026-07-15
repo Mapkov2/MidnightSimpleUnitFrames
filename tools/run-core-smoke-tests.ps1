@@ -65,6 +65,7 @@ $tests = @(
     ".github/scripts/tests/group_frame_login_anchor_repair_smoke.lua",
     ".github/scripts/tests/group_frame_position_smoke.lua",
     ".github/scripts/tests/group_frame_scale_roster_smoke.lua",
+    ".github/scripts/tests/group_foreground_layer_smoke.lua",
     ".github/scripts/tests/group_lifecycle_workplan_smoke.lua",
     ".github/scripts/tests/group_preview_chrome_parity_smoke.lua",
     ".github/scripts/tests/group_preview_external_menu_click_smoke.lua",
