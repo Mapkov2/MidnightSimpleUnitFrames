@@ -14,6 +14,7 @@ local UF = MSUF.UF
 local Metadata = GF.Metadata or {}
 
 local CreateFrame = CreateFrame
+local C_Timer = C_Timer
 local InCombatLockdown = InCombatLockdown
 local IsInGroup = IsInGroup
 local IsInRaid = IsInRaid
@@ -417,6 +418,41 @@ function GF.RefreshHeaderLayout(kind)
   return result
 end
 
+-- SecureGroupHeader can change its measured footprint after MSUF's roster or
+-- entering-world handler returns (including from our layout nonce). Re-read the
+-- live kind/count once on the next frame so anchor sizing and screen clamping
+-- use Blizzard's settled bounds instead of the transient login footprint.
+local headerLayoutSettlePending = false
+local headerLayoutSettleNeedsRosterState = false
+
+local function FlushHeaderLayoutSettle()
+  local refreshRosterState = headerLayoutSettleNeedsRosterState
+  headerLayoutSettlePending = false
+  headerLayoutSettleNeedsRosterState = false
+
+  if not AnyGroupFrameEnabled() then return false end
+  if InCombat() then
+    return GF.DeferGroupRuntime(refreshRosterState and "roster" or "layout")
+  end
+
+  local did = GF.RefreshHeaderLayout()
+  if not refreshRosterState then return did end
+  did = RefreshVisiblePartyState("GROUP_ROSTER_UPDATE") or did
+  return RefreshVisibleRoleState("PLAYER_ROLES_ASSIGNED") or did
+end
+
+local function ScheduleHeaderLayoutSettle(refreshRosterState)
+  if refreshRosterState == true then headerLayoutSettleNeedsRosterState = true end
+  if headerLayoutSettlePending then return false end
+  headerLayoutSettlePending = true
+  if C_Timer and type(C_Timer.After) == "function" then
+    C_Timer.After(0, FlushHeaderLayoutSettle)
+  else
+    FlushHeaderLayoutSettle()
+  end
+  return true
+end
+
 function GF.RefreshUnitBindings(kind)
   if InCombat() then return GF.DeferGroupRuntime("roster", kind, GF.DIRTY_UNIT_BINDING) end
   local did = false
@@ -587,6 +623,7 @@ local function RuntimeOnEvent(self, event)
     if event == "PLAYER_ENTERING_WORLD" then
       RefreshVisiblePartyState(event)
       RefreshVisibleRoleState("PLAYER_ROLES_ASSIGNED")
+      ScheduleHeaderLayoutSettle()
     end
     return
   end
@@ -608,16 +645,18 @@ local function RuntimeOnEvent(self, event)
   elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED" or event == "ROLE_CHANGED_INFORM" then
     if InCombat() then
       GF.DeferGroupRuntime("roster")
+    elseif event == "GROUP_ROSTER_UPDATE" then
+      -- Let Blizzard's SecureGroupHeader finish the current roster dispatch;
+      -- repeated roster churn in the same frame collapses into this one pass.
+      ScheduleHeaderLayoutSettle(true)
     else
       GF.RefreshHeaderLayout(event)
-      if event == "GROUP_ROSTER_UPDATE" then
-        RefreshVisiblePartyState(event)
-      end
-      RefreshVisibleRoleState(event == "GROUP_ROSTER_UPDATE" and "PLAYER_ROLES_ASSIGNED" or event)
+      RefreshVisibleRoleState(event)
     end
     return
   elseif event == "PLAYER_DIFFICULTY_CHANGED" or event == "ZONE_CHANGED_NEW_AREA" then
     GF.RefreshHeaderLayout(event)
+    ScheduleHeaderLayoutSettle()
   end
 end
 

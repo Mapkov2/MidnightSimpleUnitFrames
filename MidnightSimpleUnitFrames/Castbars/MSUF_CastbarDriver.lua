@@ -103,36 +103,47 @@ local CASTBAR_UNIT_EVENTS = {
 }
 
 local ACTIVE_LIFECYCLE_EVENTS = {
-    "UNIT_HEALTH",
+    "UNIT_FLAGS",
     "UNIT_CONNECTION",
 }
 
 local SetCastLifecycleActive
 local HandleUnitDeathEvent
 
-local function SharedUFHealthLifecycleSink(owner, _, event)
-    if not owner then return end
-    if event == "MSUF_UF_LIFECYCLE_DETACH" then
-        owner._msufUFLifecycleFrame = nil
-        owner._msufCastLifecycleMode = nil
-        owner._msufCastLifecycleOwned = nil
-        if owner.MSUF_castActive == true then
-            SetCastLifecycleActive(owner, true)
-            if HandleUnitDeathEvent then HandleUnitDeathEvent(owner, "UNIT_CONNECTION") end
-        end
-        return
-    end
-    if HandleUnitDeathEvent then HandleUnitDeathEvent(owner, event) end
-end
-
 -- Target/focus token changes are owned by the permanent driver events, while
--- death/disconnect events are needed only for the short lifetime of an active
--- cast. Boss frames already own a richer persistent encounter lifecycle.
+-- dead/ghost and disconnect events are needed only for the short lifetime of
+-- an active cast. UNIT_FLAGS is Blizzard's authoritative dead/ghost lifecycle
+-- signal and avoids routing every high-frequency UNIT_HEALTH tick through the
+-- castbar fallback. Boss frames already own a richer encounter lifecycle.
 SetCastLifecycleActive = function(frame, active)
     if not frame or frame.unit == "player" then return true end
 
     if frame._msufIsBossCastbar then
-        frame._msufCastLifecycleOwned = frame._msufBossEventsRegistered == true or nil
+        local lifecycleReady = frame._msufBossEventsRegistered == true
+        if not lifecycleReady then
+            if frame._msufBossHealthEventRegistered then
+                frame:UnregisterEvent("UNIT_HEALTH")
+                frame._msufBossHealthEventRegistered = nil
+            end
+            frame._msufCastLifecycleOwned = nil
+            return false
+        end
+
+        if active then
+            if not frame._msufBossHealthEventRegistered then
+                local ok = pcall(frame.RegisterUnitEvent, frame, "UNIT_HEALTH", frame.unit)
+                if not ok then
+                    frame._msufCastLifecycleOwned = nil
+                    return false
+                end
+                frame._msufBossHealthEventRegistered = true
+            end
+        elseif frame._msufBossHealthEventRegistered then
+            frame:UnregisterEvent("UNIT_HEALTH")
+            frame._msufBossHealthEventRegistered = nil
+        end
+
+        frame._msufCastLifecycleOwned = true
         return frame._msufCastLifecycleOwned == true
     end
 
@@ -144,16 +155,9 @@ SetCastLifecycleActive = function(frame, active)
     if not active then
         if frame._msufCastLifecycleMode == nil
             and frame._msufActiveLifecycleEventsRegistered == nil
-            and frame._msufUFLifecycleFrame == nil
             and frame._msufCastLifecycleOwned == nil
         then
             return true
-        end
-        if frame._msufCastLifecycleMode == "UF" then
-            local UF = MSUF and MSUF.UF
-            if UF and type(UF.ClearHealthLifecycleSink) == "function" then
-                UF.ClearHealthLifecycleSink(frame._msufUFLifecycleFrame, frame)
-            end
         end
         if frame._msufActiveLifecycleEventsRegistered then
             for index = 1, #ACTIVE_LIFECYCLE_EVENTS do
@@ -161,33 +165,14 @@ SetCastLifecycleActive = function(frame, active)
             end
         end
         frame._msufActiveLifecycleEventsRegistered = nil
-        frame._msufUFLifecycleFrame = nil
         frame._msufCastLifecycleMode = nil
         frame._msufCastLifecycleOwned = nil
-        return true
-    end
-
-    if frame._msufCastLifecycleMode == "UF"
-        and frame._msufUFLifecycleFrame ~= nil
-        and frame._msufCastLifecycleOwned == true
-    then
         return true
     end
 
     if frame._msufActiveLifecycleEventsRegistered then
         frame._msufCastLifecycleOwned = true
         return true
-    end
-
-    local UF = MSUF and MSUF.UF
-    if UF and type(UF.SetHealthLifecycleSink) == "function" then
-        local attached, ufFrame = UF.SetHealthLifecycleSink(frame.unit, SharedUFHealthLifecycleSink, frame)
-        if attached == true then
-            frame._msufUFLifecycleFrame = ufFrame
-            frame._msufCastLifecycleMode = "UF"
-            frame._msufCastLifecycleOwned = true
-            return true
-        end
     end
 
     for index = 1, #ACTIVE_LIFECYCLE_EVENTS do
@@ -203,6 +188,7 @@ SetCastLifecycleActive = function(frame, active)
     end
 
     frame._msufActiveLifecycleEventsRegistered = true
+    frame._msufCastLifecycleMode = "FLAGS"
     frame._msufCastLifecycleOwned = true
     return true
 end
@@ -1056,6 +1042,9 @@ HandleUnitDeathEvent = function(frame, event)
 
     local unit = frame.unit
     local exists, dead, connected
+    -- UNIT_HEALTH is the active-boss fast signal. Keep that hot path to the
+    -- single authoritative death read; sparse FLAGS/CONNECTION events own the
+    -- missing-unit and connection fallbacks.
     if event ~= "UNIT_HEALTH" and unit then
         exists = ToKnownPlainBool(UnitExists(unit))
         if UnitIsConnected then connected = ToKnownPlainBool(UnitIsConnected(unit)) end
@@ -1107,7 +1096,7 @@ local function HandleDriverEvent(frame, event, eventUnit)
         return
     end
 
-    if event == "UNIT_HEALTH" or event == "UNIT_CONNECTION" then
+    if event == "UNIT_HEALTH" or event == "UNIT_FLAGS" or event == "UNIT_CONNECTION" then
         HandleUnitDeathEvent(frame, event)
         return
     end

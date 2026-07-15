@@ -199,6 +199,14 @@ Power.Apply(frame, spec)
 assert(frame._msufPowerBarDetached == true, "detached power runtime state was not published")
 assert(bar.width == 320 and bar.height == 9, "detached power dimensions were not applied")
 assert(bar.frameLevel == 16, "detached power layer was not applied")
+power.detachedLevel = 99
+Power.Apply(frame, spec)
+assert(bar.frameLevel == 40, "detached power layer was not capped at 30")
+power.detachedLevel = -9
+Power.Apply(frame, spec)
+assert(bar.frameLevel == 10, "detached power layer was not clamped at 0")
+power.detachedLevel = 6
+Power.Apply(frame, spec)
 assert(border.shown == true and bar._msufPowerBorderThickness == 3, "detached outline was not restored")
 local centeredPoint = bar.points[1]
 assert(centeredPoint and centeredPoint[1] == "TOP" and centeredPoint[2] == frame

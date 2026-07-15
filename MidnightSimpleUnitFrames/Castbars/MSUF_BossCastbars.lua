@@ -16,6 +16,9 @@ local MAX_BOSS_FRAMES = tonumber(_G.MSUF_MAX_BOSS_FRAMES or _G.MAX_BOSS_FRAMES) 
 if MAX_BOSS_FRAMES < 1 or MAX_BOSS_FRAMES > 12 then
     MAX_BOSS_FRAMES = 5
 end
+local UnitExists = _G.UnitExists
+local UnitIsDeadOrGhost = _G.UnitIsDeadOrGhost
+local UnitIsUnconscious = _G.UnitIsUnconscious
 
 local CAST_EVENTS = {
     "UNIT_SPELLCAST_START",
@@ -201,16 +204,62 @@ local function UpdateBossCastbarAnchor(frame, forceLayout)
     return changed
 end
 
+local function BossUnitUnavailable(unit)
+    if not unit or unit == "" then
+        return true
+    end
+
+    if UnitExists and not UnitExists(unit) then
+        return true
+    end
+
+    if UnitIsDeadOrGhost and UnitIsDeadOrGhost(unit) then
+        return true
+    end
+
+    return UnitIsUnconscious and UnitIsUnconscious(unit) or false
+end
+
 local function StopBossCastbar(frame)
     if not frame then
         return
     end
+
+    -- Boss lifecycle teardown is terminal. It must override the short
+    -- interrupted-feedback hold or Runtime:Stop intentionally keeps the bar
+    -- visible while invalidating that hold's delayed hide callback.
+    frame.interrupted = nil
 
     if type(_G.MSUF_CB_ResetStateOnStop) == "function" then
         _G.MSUF_CB_ResetStateOnStop(frame, "STOPPED")
     elseif frame.Hide then
         frame:Hide()
     end
+end
+
+local function InvalidateBossCastState(unit)
+    local getEngine = _G.MSUF_GetCastbarEngine
+    local engine = type(getEngine) == "function" and getEngine() or nil
+    if engine and type(engine.Invalidate) == "function" then
+        engine:Invalidate(unit)
+    end
+end
+
+local function RefreshBossCastbarFromUnit(frame, refreshLayout)
+    if not frame then return false end
+    if BossUnitUnavailable(frame.unit) then
+        StopBossCastbar(frame)
+        return false
+    end
+
+    -- A roster/targetability refresh owns the current boss token. Release any
+    -- stale interrupt hold before Cast() rebuilds (or clears) that unit state.
+    if frame.interrupted then StopBossCastbar(frame) end
+
+    if refreshLayout then frame:UpdateAnchor(true) end
+    InvalidateBossCastState(frame.unit)
+    if frame.Cast then frame:Cast() end
+    return true
 end
 
 --- Boss castbars listen to the same spellcast events as target/focus plus
@@ -229,8 +278,12 @@ local function SetBossEventsRegistered(frame, enabled)
             frame:RegisterUnitEvent(CAST_EVENTS[index], frame.unit)
         end
 
-        frame:RegisterUnitEvent("UNIT_HEALTH", frame.unit)
+        -- UNIT_HEALTH is attached only for active casts by the generic driver.
+        -- UNIT_FLAGS stays sparse/persistent so delayed death and interrupted
+        -- feedback states still terminate without a ticker or combat-log hook.
+        frame:RegisterUnitEvent("UNIT_FLAGS", frame.unit)
         frame:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
+        frame:RegisterEvent("UNIT_TARGETABLE_CHANGED")
         frame:RegisterEvent("ENCOUNTER_START")
         frame:RegisterEvent("ENCOUNTER_END")
         frame:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -243,6 +296,7 @@ local function SetBossEventsRegistered(frame, enabled)
     frame:UnregisterAllEvents()
     frame._msufDriverEventsRegistered = nil
     frame._msufBossEventsRegistered = nil
+    frame._msufBossHealthEventRegistered = nil
     frame._msufCastLifecycleOwned = nil
 end
 
@@ -277,7 +331,11 @@ local function EnsureBossCastbar(index)
 
     if not frame._msufBossHooked then
         frame._msufBossHooked = true
-        frame:HookScript("OnEvent", function(eventFrame, event)
+        frame:HookScript("OnEvent", function(eventFrame, event, eventUnit)
+            -- The generic driver owns active-only UNIT_HEALTH. Keep its hot
+            -- path out of the boss lifecycle branch chain below.
+            if event == "UNIT_HEALTH" then return end
+
             if event == "ENCOUNTER_END" then
                 StopBossCastbar(eventFrame)
                 return
@@ -288,14 +346,17 @@ local function EnsureBossCastbar(index)
                 or event == "PLAYER_ENTERING_WORLD"
             then
                 if BossCastbarsEnabled() then
-                    eventFrame:UpdateAnchor(true)
-                    if eventFrame.Cast then
-                        eventFrame:Cast()
-                    end
+                    RefreshBossCastbarFromUnit(eventFrame, true)
                 end
-            elseif event == "UNIT_HEALTH"
+            elseif event == "UNIT_TARGETABLE_CHANGED"
+                and eventUnit == eventFrame.unit
+            then
+                if BossCastbarsEnabled() then
+                    RefreshBossCastbarFromUnit(eventFrame, false)
+                end
+            elseif event == "UNIT_FLAGS"
                 and eventFrame:IsShown()
-                and (not UnitExists(eventFrame.unit) or (UnitIsDeadOrGhost and UnitIsDeadOrGhost(eventFrame.unit)))
+                and BossUnitUnavailable(eventFrame.unit)
             then
                 StopBossCastbar(eventFrame)
             end

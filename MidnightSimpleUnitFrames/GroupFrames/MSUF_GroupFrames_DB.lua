@@ -410,6 +410,7 @@ local PARTY_DEFAULTS = {
     groupNumberAnchor     = "BOTTOMRIGHT",
     groupNumberX          = -2,
     groupNumberY          = 2,
+    groupNumberLayer      = 7,
     --- Reverse fill
     reverseFill           = false,
     --- Smooth fill
@@ -420,6 +421,7 @@ local PARTY_DEFAULTS = {
     dispelOverlayOnHealth = true,     --- true = clip to current health fill
     dispelOverlayAlpha    = 0.35,
     dispelOverlayTrigger  = "BORDER", --- BORDER / BY_ME(dispellable by player) / DISPEL_TYPE / ANY_DEBUFF
+    dispelOverlayLayer    = 0,        --- additive 0..30 local FrameLevel offset
     dispelOverlayStrata   = "AUTO",
 
     --- Debuff stripe (thin edge indicator for any debuff)
@@ -471,6 +473,7 @@ local PARTY_DEFAULTS = {
     ciEnabled         = true,
     ciSize            = 8,
     ciAlpha           = 1.0,
+    ciLayer           = 7,
     ciStrata          = "AUTO",
     ciSlotTL          = "dispel",
     ciSlotTR          = "aggro",

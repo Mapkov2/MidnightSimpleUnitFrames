@@ -14,19 +14,6 @@ local floor = math.floor
 local max = math.max
 local min = math.min
 local unpack = unpack or table.unpack
-local OutlineStrata = {}
-OutlineStrata.values = {
-    { value = "AUTO", text = "Auto (Frame)" },
-    { value = "BACKGROUND", text = "BACKGROUND" },
-    { value = "LOW", text = "LOW" },
-    { value = "MEDIUM", text = "MEDIUM" },
-    { value = "HIGH", text = "HIGH" },
-    { value = "DIALOG", text = "DIALOG" },
-    { value = "FULLSCREEN", text = "FULLSCREEN" },
-    { value = "FULLSCREEN_DIALOG", text = "FULLSCREEN_DIALOG" },
-    { value = "TOOLTIP", text = "TOOLTIP" },
-}
-OutlineStrata.count = #OutlineStrata.values
 local DISPEL_BORDER_121_PTR_DISABLED = false
 local PURGE_BORDER_121_PTR_DISABLED = true
 local DISPEL_PURGE_BORDER_121_PTR_MESSAGE = "Dispel uses native 12.1 AuraContainer detection. Purge border stays disabled until Blizzard exposes a safe purge/stealable filter."
@@ -73,8 +60,9 @@ local BAR_DYNAMIC_SETTING_KEYS_BY_PATH = {
     ["absorb.healPredAnchorMode"] = { "general.healPredAnchorMode" },
     ["absorb.heal_prediction.enabled"] = { "general.showSelfHealPrediction" },
     ["absorb.over_absorb_overlay"] = { "general.overAbsorbOverlay" },
+    ["absorb.full_health_stripe"] = { "general.fullHealthAbsorbStripe" },
     ["outline.thickness"] = { "bars.barOutlineThickness" },
-    ["outline.strata"] = { "bars.barOutlineStrata" },
+    ["outline.layer"] = { "bars.barOutlineLayer" },
     ["outline.color"] = { "general.barOutlineColor" },
     ["highlight.border_thickness"] = { "general.highlightBorderThickness" },
     ["highlight.border_mode.aggroOutlineMode"] = { "general.aggroOutlineMode" },
@@ -108,7 +96,7 @@ local BAR_DYNAMIC_SETTING_SUFFIX_BY_PATH = {
     ["absorb.heal_prediction.enabled"] = "healPredEnabled",
     ["absorb.over_absorb_overlay"] = "overAbsorbOverlay",
     ["outline.thickness"] = "barOutlineThickness",
-    ["outline.strata"] = "barOutlineStrata",
+    ["outline.layer"] = "barOutlineLayer",
     ["outline.color"] = "barOutlineColor",
     ["highlight.border_thickness"] = "highlightBorderThickness",
     ["highlight.border_mode.aggroOutlineMode"] = "aggroOutlineMode",
@@ -233,49 +221,6 @@ local function RegisterDragRows(container, path)
         end
     end
     return container
-end
-function OutlineStrata.Normalize(value)
-    local normalize = _G.MSUF_NormalizeFrameStrata
-    if type(normalize) == "function" then return normalize(value, "AUTO") end
-    if value == nil or value == "" then return "AUTO" end
-    value = tostring(value):upper()
-    local rank = _G.MSUF_FRAME_STRATA_RANK
-    return rank and rank[value] and value or "AUTO"
-end
-function OutlineStrata.Index(value)
-    value = OutlineStrata.Normalize(value)
-    local values = OutlineStrata.values
-    for i = 1, #values do
-        if values[i].value == value then return i - 1 end
-    end
-    return 0
-end
-function OutlineStrata.Value(index)
-    index = floor((tonumber(index) or 0) + 0.5) + 1
-    if index < 1 then index = 1 elseif index > OutlineStrata.count then index = OutlineStrata.count end
-    return OutlineStrata.values[index].value
-end
-function OutlineStrata.Label(valueOrIndex)
-    local value = type(valueOrIndex) == "number" and OutlineStrata.Value(valueOrIndex) or OutlineStrata.Normalize(valueOrIndex)
-    local values = OutlineStrata.values
-    for i = 1, #values do
-        if values[i].value == value then return M.Tr(values[i].text) end
-    end
-    return M.Tr("Auto (Frame)")
-end
-function OutlineStrata.Parse(text)
-    text = tostring(text or ""):upper()
-    local values = OutlineStrata.values
-    for i = 1, #values do
-        if text == values[i].value or text == tostring(values[i].text):upper() then return i - 1 end
-    end
-    return OutlineStrata.Index(text)
-end
-function OutlineStrata.RefreshLabel(slider, value)
-    if not slider then return end
-    if slider._msuf2Title then
-        slider._msuf2Title:SetText(M.Tr("Frame outline strata") .. ": " .. OutlineStrata.Label(value))
-    end
 end
 local function AnyUnitFrameAuraEnabled()
     local a3 = MSUF and MSUF.MSUF_Auras3
@@ -827,7 +772,7 @@ local function BuildTextureSection(ctx, b)
 end
 
 local function BuildAbsorbSection(ctx, b)
-    local absorb = b:CollapsibleSection("bars_absorb", "Absorb Display", 420, true)
+    local absorb = b:CollapsibleSection("bars_absorb", "Absorb Display", 460, true)
     local absorbW = absorb._msuf2Width or ctx.width or 720
     local absorbLeftX = 30
     local absorbRightX = max(430, min(560, floor(absorbW * 0.52)))
@@ -842,6 +787,48 @@ local function BuildAbsorbSection(ctx, b)
     local function ApplyAbsorbRuntime(reason) ApplyBars(reason) end
     local SyncAbsorbControls = M.RefreshProxy()
     local function AbsorbDefault(value) return type(value) == "function" and value() or value end
+    local function ResolveBarPreviewTexture(key, fallback)
+        key = type(key) == "string" and key ~= "" and key or fallback
+        local resolve = _G.MSUF_ResolveStatusbarTextureKey
+        if type(resolve) == "function" then
+            local texture = resolve(key)
+            if type(texture) == "string" and texture ~= "" then return texture end
+        end
+        return "Interface\\Buttons\\WHITE8X8"
+    end
+    local function AbsorbAnchorPreview(item)
+        local foregroundKey = BarTextureForScope()
+        local backgroundKey = BarBackgroundTextureForScope()
+        local absorbKey = BarScopeGet("absorbBarTexture", ReadG("absorbBarTexture", ""))
+        local opacity = tonumber(BarScopeGet("absorbBarOpacity", ReadG("absorbBarOpacity", 0.75))) or 0.75
+        return {
+            mode = tonumber(item and item.value) or 3,
+            dualDirection = true,
+            showAbsorbEdgeGlow = ReadGBool("fullHealthAbsorbStripe", false),
+            healthFraction = tonumber(item and item.value) == 4 and 0.84 or 0.68,
+            overlayFraction = 0.22,
+            healthTexture = ResolveBarPreviewTexture(foregroundKey, "Blizzard"),
+            backgroundTexture = ResolveBarPreviewTexture(backgroundKey, foregroundKey),
+            overlayTexture = ResolveBarPreviewTexture(absorbKey, foregroundKey),
+            healthColor = { 0.12, 0.62, 0.25, 1 },
+            backgroundColor = { 0.025, 0.075, 0.045, 0.92 },
+            overlayColor = {
+                tonumber(BarScopeGet("absorbBarColorR", ReadG("absorbBarColorR", 1))) or 1,
+                tonumber(BarScopeGet("absorbBarColorG", ReadG("absorbBarColorG", 1))) or 1,
+                tonumber(BarScopeGet("absorbBarColorB", ReadG("absorbBarColorB", 1))) or 1,
+                max(0, min(1, opacity)),
+            },
+        }
+    end
+    local function AbsorbAnchorValues()
+        return {
+            { value = 1, text = "Anchor to left side", previewKind = "barOverlay", barPreview = AbsorbAnchorPreview },
+            { value = 2, text = "Anchor to right side", previewKind = "barOverlay", barPreview = AbsorbAnchorPreview },
+            { value = 3, text = "Follow HP bar", previewKind = "barOverlay", barPreview = AbsorbAnchorPreview },
+            { value = 4, text = "Follow HP bar (overflow)", previewKind = "barOverlay", barPreview = AbsorbAnchorPreview },
+            { value = 5, text = "Reverse from max", previewKind = "barOverlay", barPreview = AbsorbAnchorPreview },
+        }
+    end
     local function BindAbsorbDropdown(label, values, key, defaultValue, reason, x, y, width, numeric)
         local control = W.Dropdown(absorb, label, values, width)
         M.BindDropdownWidget(ctx, control,
@@ -854,6 +841,7 @@ local function BuildAbsorbSection(ctx, b)
                 local fallback = AbsorbDefault(defaultValue)
                 BarScopeSet(key, numeric and (tonumber(v) or fallback) or (v or fallback), reason, true)
                 ApplyAbsorbRuntime(reason)
+                SyncAbsorbControls()
             end,
             Meta("absorb." .. key))
         W.MoveWidget(control, absorb, x, y, width, "LEFT")
@@ -866,6 +854,7 @@ local function BuildAbsorbSection(ctx, b)
             function(v)
                 BarScopeSet(key, tonumber(v) or defaultValue, reason, true)
                 ApplyAbsorbRuntime(reason)
+                SyncAbsorbControls()
             end,
             defaultValue,
             Meta("absorb." .. key))
@@ -888,16 +877,16 @@ local function BuildAbsorbSection(ctx, b)
         end,
         Meta("absorb.display_mode"))
     W.MoveWidget(absorbMode, absorb, absorbLeftX, -70, absorbLeftW, "LEFT")
-    local absorbAnchors = VT(
+    local predictionAnchors = VT(
         1, "Anchor to left side", 2, "Anchor to right side", 3, "Follow HP bar",
         4, "Follow HP bar (overflow)", 5, "Reverse from max")
     local absorbControls = BuildAbsorbControlSpecs({
-        { "dropdown", "Absorb bar anchoring", absorbAnchors, "absorbAnchorMode", 2, "MSUF2_ABSORB_ANCHOR", absorbLeftX, -124, absorbLeftW, true, "anchor" },
-        { "dropdown", "Heal prediction anchoring", absorbAnchors, "healPredAnchorMode", 3, "MSUF2_HEALPRED_ANCHOR", absorbLeftX, -240, absorbLeftW, true, "healAnchor" },
+        { "dropdown", "Absorb bar anchoring", AbsorbAnchorValues, "absorbAnchorMode", 2, "MSUF2_ABSORB_ANCHOR", absorbLeftX, -124, absorbLeftW, true, "anchor" },
+        { "dropdown", "Heal prediction anchoring", predictionAnchors, "healPredAnchorMode", 3, "MSUF2_HEALPRED_ANCHOR", absorbLeftX, -240, absorbLeftW, true, "healAnchor" },
         { "slider", "Absorb bar opacity", 0, 1, 0.05, "absorbBarOpacity", 0.75, "MSUF2_ABSORB_OPACITY", absorbLeftX, -294, absorbLeftW, "opacity" },
         { "dropdown", "Absorb bar texture (SharedMedia)", function() return TextureValues("Use foreground texture") end, "absorbBarTexture", function() return ReadG("absorbBarTexture", "") end, "MSUF2_ABSORB_TEXTURE", absorbRightX, -70, absorbRightW, nil, "texture" },
         { "dropdown", "Heal-absorb texture", function() return TextureValues("Use foreground texture") end, "healAbsorbBarTexture", function() return ReadG("healAbsorbBarTexture", "") end, "MSUF2_HEAL_ABSORB_TEXTURE", absorbRightX, -124, absorbRightW, nil, "healTexture" },
-        { "slider", "Heal-absorb bar opacity", 0, 1, 0.05, "healAbsorbBarOpacity", 1, "MSUF2_HEAL_ABSORB_OPACITY", absorbRightX, -294, absorbRightW, "healOpacity" },
+        { "slider", "Heal-absorb bar opacity", 0, 1, 0.05, "healAbsorbBarOpacity", 1, "MSUF2_HEAL_ABSORB_OPACITY", absorbRightX, -348, absorbRightW, "healOpacity" },
     })
     local healPredToggle = W.ToggleAt(absorb, "Heal Prediction Overlay", absorbLeftX, -186, absorbLeftW)
     M.BindBoolWidget(ctx, healPredToggle,
@@ -933,6 +922,19 @@ local function BuildAbsorbSection(ctx, b)
             SyncAbsorbControls()
         end,
         Meta("absorb.over_absorb_overlay"))
+    local fullHealthStripe = W.ToggleAt(absorb, "Full-health absorb stripe", absorbRightX, -294, absorbRightW)
+    M.BindBoolWidget(ctx, fullHealthStripe,
+        function() return ReadGBool("fullHealthAbsorbStripe", false) end,
+        function(v)
+            G().fullHealthAbsorbStripe = v and true or false
+            ApplyAbsorbRuntime("MSUF2_FULL_HEALTH_ABSORB_STRIPE")
+            SyncAbsorbControls()
+        end,
+        Meta("absorb.full_health_stripe"))
+    if M.AddTooltip then
+        M.AddTooltip(fullHealthStripe, "Full-health absorb stripe",
+            "Show Blizzard's shield edge when health is full and an absorb is active.", { hook = true })
+    end
     local absorbBarControls = { absorbControls.anchor, absorbControls.texture, absorbControls.healTexture, absorbControls.opacity, absorbControls.healOpacity, overAbsorbOverlay }
     M.TrackRefresh(ctx, SyncAbsorbControls(function()
         local mode = ReadAbsorbDisplayMode()
@@ -948,9 +950,11 @@ local function BuildAbsorbSection(ctx, b)
         end
         SetControlEnabled(absorbMode, scopedActive)
         SetControlsEnabled(absorbBarControls, scopedActive and showBar)
+        SetControlEnabled(fullHealthStripe, showBar)
         SetControlEnabled(absorbTest, true)
         SetControlEnabled(healPredToggle, groupScope and scopedActive or sharedActive)
         SetControlEnabled(absorbControls.healAnchor, scopedActive and healPredOn)
+        if absorbControls.anchor.RefreshPreview then absorbControls.anchor:RefreshPreview() end
     end))
 end
 
@@ -964,24 +968,14 @@ local function BuildOutlineSection(ctx, b)
             RequestOutlineRuntime()
         end,
         1, Meta("outline.thickness", "setting", { step = 1, roundStep = true }))
-    outline._msuf2OutlineStrata = W.Slider(outline, "", 0, OutlineStrata.count - 1, 1, 300)
-    outline._msuf2OutlineStrata:SetValueFormatter(function(value) return OutlineStrata.Label(value) end)
-    outline._msuf2OutlineStrata:SetValueParser(function(text) return OutlineStrata.Parse(text) end)
-    M.BindSlider(ctx, outline._msuf2OutlineStrata,
-        function()
-            return OutlineStrata.Index(BarScopeGetBars("barOutlineStrata", "AUTO"))
-        end,
+    local outlineLayer = W.Slider(outline, "Frame outline layer (0-30)", 0, 30, 1, 300)
+    M.BindNumberWidget(ctx, outlineLayer,
+        function() return tonumber(BarScopeGetBars("barOutlineLayer", 0)) or 0 end,
         function(v)
-            BarScopeSetBars("barOutlineStrata", OutlineStrata.Value(v), "MSUF2_BAR_OUTLINE_STRATA", true)
+            BarScopeSetBars("barOutlineLayer", floor((tonumber(v) or 0) + 0.5), "MSUF2_BAR_OUTLINE_LAYER", true)
             RequestOutlineRuntime()
         end,
-        Meta("outline.strata"))
-    outline._msuf2OutlineStrata:HookScript("OnValueChanged", function(self, value)
-        if self._msuf2Refreshing then return end
-        OutlineStrata.RefreshLabel(self, value)
-    end)
-    M.AddRefresher(ctx, function() OutlineStrata.RefreshLabel(outline._msuf2OutlineStrata, BarScopeGetBars("barOutlineStrata", "AUTO")) end)
-    OutlineStrata.RefreshLabel(outline._msuf2OutlineStrata, BarScopeGetBars("barOutlineStrata", "AUTO"))
+        0, Meta("outline.layer", "setting", { step = 1, roundStep = true }))
     local outlineColor = W.Color(outline, "Outline color")
     W.MoveWidget(outlineColor, outline, 30, -150)
     M.BindColor(ctx, outlineColor,
@@ -997,7 +991,7 @@ local function BuildOutlineSection(ctx, b)
         end,
         Meta("outline.color"))
     M.BindGateGroup(ctx, nil, {
-        { controls = { outlineSlider, outline._msuf2OutlineStrata, outlineColor }, on = ScopedControls },
+        { controls = { outlineSlider, outlineLayer, outlineColor }, on = ScopedControls },
     })
 end
 
