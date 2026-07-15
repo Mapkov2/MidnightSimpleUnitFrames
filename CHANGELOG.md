@@ -1,5 +1,33 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-Beta17 - 2026-07-15
+
+### Highlights
+
+- Reworked the Color menu into an interactive Color Painter with contextual targets, live Unit/Group previews, a color wheel, and recent/saved palettes.
+- Streamlined guided setup so its recommendations, navigation, and Edit Mode steps stay focused on the active configuration path.
+- Modernized Aura configuration for PTR 5 with safer native handling and more precise filtering choices.
+- Made Assistant follow-ups more reliable: actions now remain bound to the exact frame component you just changed.
+
+### Changes
+
+- Rebuilt the Color menu workflow with interactive previews for unit and group frames, direct color-context switching, and streamlined color editing.
+- Added live color previews for the refreshed Color Painter controls.
+- Refined the guided tour lifecycle, suggested next steps, navigation, and Edit Mode interaction flow.
+- Limited NPC class colors to friendly NPCs for clearer hostile-target presentation.
+- Updated native Aura handling for PTR 5, keeping configured anchors stable without accessing protected AuraButtons.
+- Removed legacy shared AuraButton layout work that conflicts with PTR 5 native ownership restrictions.
+- Added Important filters for Buffs and Debuffs.
+- Added separate group-dispellable and any-dispel-type filters for unit and group auras.
+- Added the matching Assistant commands, help text, control-catalog entries, and regression coverage for Aura filters.
+- Added group-aware dispel detection for borders and overlays, including Assistant routing and menu labels.
+- Added a direct in-window menu-scale slider with mouse-wheel support and immediate application.
+- Refreshed the modern factory profile: cleaner player stacking, compact power text, adjusted elite markers, and updated name presentation.
+- Fixed shortened-name limits beside level anchors, including safe handling while name widths are unavailable.
+- Improved Assistant routing for streamlined Group Frame pages and canonical guided-page references.
+- Hardened Assistant follow-ups for portraits, icons, text, colors, borders, sizing, and movement so they keep the intended component instead of falling back to the whole frame.
+- Expanded Assistant regression coverage for Group Frame contracts, retained-object follow-ups, exact text-color choices, and Aura filtering.
+
 ## 6.0-Beta16 - 2026-07-14
 
 ### Highlights
