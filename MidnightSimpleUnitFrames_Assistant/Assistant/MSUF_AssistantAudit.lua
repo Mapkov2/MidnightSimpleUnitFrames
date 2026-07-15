@@ -66,22 +66,24 @@ Audit.ignore = Audit.ignore or {
         showSelfHealPrediction = true,
     },
     -- Legacy flat mirrors copied from unit-frame fields into the group scopes;
-    -- the canonical group settings are nameShortenEnabled, powerHeight, and
-    -- the nested auras.buff/debuff tables that curated registrations control.
+    -- the canonical group settings are powerHeight and the nested
+    -- auras.buff/debuff tables that curated registrations control. Exact
+    -- name-shortening ownership lives in AutoCoverage's reviewed ledger so an
+    -- absent owner fails closed instead of being hidden by this ignore table.
     -- groupGrowth is secondary secure-header/import state, not the visible
     -- primary Growth control. Exposing it as an unconstrained string would let
     -- the Assistant write invalid layout state. Party's copied heal-prediction
     -- field is likewise inert; the reviewed owner is barScope.gf_party.
     gf_party = {
-        auraIconSize = true, auraMaxIcons = true, powerBarHeight = true, shortenNames = true,
+        auraIconSize = true, auraMaxIcons = true, powerBarHeight = true,
         groupGrowth = true, showSelfHealPrediction = true,
     },
     gf_raid = {
-        auraIconSize = true, auraMaxIcons = true, powerBarHeight = true, shortenNames = true,
+        auraIconSize = true, auraMaxIcons = true, powerBarHeight = true,
         groupGrowth = true,
     },
     gf_mythicraid = {
-        auraIconSize = true, auraMaxIcons = true, powerBarHeight = true, shortenNames = true,
+        auraIconSize = true, auraMaxIcons = true, powerBarHeight = true,
         groupGrowth = true,
     },
 }
@@ -111,7 +113,13 @@ local function IsIgnored(scope, key)
     local star = Audit.ignore["*"]
     if star and star[key] then return true end
     local scoped = Audit.ignore[scope]
-    return (scoped and scoped[key]) and true or false
+    if scoped and scoped[key] then return true end
+    -- AutoCoverage owns the exact reviewed compatibility-projection ledger.
+    -- Resolve it dynamically because this audit module loads immediately
+    -- before AutoCoverage in the LoD manifest.
+    local auto = A.AutoCoverage
+    return auto and type(auto.CompatibilityProjectionReason) == "function"
+        and auto.CompatibilityProjectionReason(scope, key) ~= nil or false
 end
 Audit.IsIgnored = IsIgnored
 
@@ -237,6 +245,10 @@ local function BuildCoveredSets()
                 end
             end
         end
+    end
+    local auto = A.AutoCoverage
+    if auto and type(auto.ApplyCanonicalPathOwnership) == "function" then
+        auto.ApplyCanonicalPathOwnership(covered, registry)
     end
     return covered, #settings, unmapped, generated
 end

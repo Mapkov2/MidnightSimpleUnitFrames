@@ -56,8 +56,8 @@ for i = 1, #(Data.collectionStates or {}) do
     stateOrder[stateId] = i
 end
 Check(#(Data.collectionStates or {}) == #expectedStateIds, "complete 138-state inventory")
-Check(collectionStates.base == 2073, "reviewed complete-catalog baseline")
-Check(Data.collectionUnionControls == 2748 and #Data.records == Data.collectionUnionControls,
+Check(collectionStates.base == 2093, "reviewed complete-catalog baseline")
+Check(Data.collectionUnionControls == 2772 and #Data.records == Data.collectionUnionControls,
     "reviewed exhaustive finite-state control union")
 for i = 1, #Data.columns do columns[Data.columns[i]] = i end
 for _, column in ipairs({ "actionFixedArgs", "actionInputArg", "actionInputKind", "actionInputDomain",
@@ -158,7 +158,7 @@ Check(FunctionFree(Data), "generated schema data must remain function-free")
 local before = Schema.Stats()
 Check(before.version == 3, "schema version must be 3")
 Check(before.contexts == 40, "all 40 class/spec contexts must be present")
-Check(before.records == 2748, "public control inventory must equal the reviewed exhaustive finite-state union")
+Check(before.records == 2772, "public control inventory must equal the reviewed exhaustive finite-state union")
 Check(before.indexed == false, "schema index must remain lazy")
 
 local coldStart = os.clock()
@@ -193,6 +193,16 @@ Check(unknown == false and reason == "unknown_control", "unknown semantic IDs mu
 
 local modes = Schema.ListModes({ contextId = "MAGE-62" })
 Check(type(modes) == "table" and #modes == 66, "reviewed test and preview mode inventory")
+local modeSemanticIds = {}
+for i = 1, #modes do
+    if modes[i].semanticId then modeSemanticIds[modes[i].semanticId] = true end
+end
+for _, category in ipairs({ "auras", "cast", "group", "resources", "unit" }) do
+    local path = "opt/colors/advanced/preview/scope/option/" .. category
+    local semanticId = "control:opt_colors/" .. path .. "@opt_colors/" .. path
+    Check(semanticIds[semanticId] == true, "missing Color Painter selector identity " .. category)
+    Check(not modeSemanticIds[semanticId], "Color Painter selector leaked into executable preview modes: " .. category)
+end
 local expectedModeActions = {
     class_power_preview_animate=true, preview_castbar=true, preview_group_status_icon=true,
     preview_player_totems=true, preview_unit_status_indicator=true, set_castbar_test_mode=true,

@@ -245,7 +245,7 @@ end
 -- Current inventory includes the explicitly cataloged Group Indicator tile,
 -- Group Preview button, Group Layout transparency/bar controls,
 -- spell-indicator style controls, and the remaining in-scope product factories.
-Check(factorySites == 198, string.format("interactive factory inventory drifted: expected 198, got %d", factorySites))
+Check(factorySites == 199, string.format("interactive factory inventory drifted: expected 199, got %d", factorySites))
 
 local function AddUnique(list, seen, value)
     value = tostring(value or "")

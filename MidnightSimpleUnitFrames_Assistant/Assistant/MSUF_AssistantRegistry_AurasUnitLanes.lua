@@ -11,8 +11,86 @@ M.Assistant = A
 
 A.AurasRegistry = A.AurasRegistry or {}
 
+local CUSTOM_CONTAINER_COUNT = 3
+
+local function ClampLayer(value, fallback)
+    value = tonumber(value)
+    if value == nil then value = tonumber(fallback) or 9 end
+    value = math.floor(value + 0.5)
+    if value < 0 then return 0 end
+    if value > 30 then return 30 end
+    return value
+end
+
+function A.AurasRegistry.RegisterUnitCustomContainerLayerSettings(ctx)
+    if type(ctx) ~= "table" then return end
+
+    local Registry = ctx.Registry
+    local UNIT_LABELS = ctx.UNIT_LABELS or {}
+    local AURA_UNITS = ctx.AURA_UNITS or {}
+    local AddAliasesForAuraScope = ctx.AddAliasesForAuraScope
+    local AuraModel = ctx.AuraModel
+    local ApplyAura = ctx.ApplyAura
+
+    if not (Registry and type(Registry.RegisterSetting) == "function") then return end
+    if type(AddAliasesForAuraScope) ~= "function" or type(AuraModel) ~= "function" then return end
+    if type(ApplyAura) ~= "function" then return end
+
+    for _, unit in ipairs(AURA_UNITS) do
+        for index = 1, CUSTOM_CONTAINER_COUNT do
+            local unitKey, customIndex = unit, index
+            local lane = "custom" .. tostring(index)
+            local aliases = {
+                unit .. " custom " .. tostring(index) .. " aura layer",
+                unit .. " custom aura " .. tostring(index) .. " layer",
+                unit .. " custom container " .. tostring(index) .. " layer",
+                unit .. " custom aura container " .. tostring(index) .. " layer",
+            }
+            AddAliasesForAuraScope(aliases, unit, "custom " .. tostring(index) .. " aura layer")
+
+            Registry:RegisterSetting({
+                key = "auras3." .. unit .. "." .. lane .. ".layer",
+                label = (UNIT_LABELS[unit] or unit) .. " Custom Aura " .. tostring(index) .. " Layer",
+                category = (UNIT_LABELS[unit] or unit) .. " / Auras",
+                page = "uf_" .. unit,
+                unit = unit,
+                frameType = "aura",
+                -- The visible slider is one selected-container control. Keep
+                -- its semantic attribute index-neutral; the setting key and
+                -- aliases retain the concrete Custom 1/2/3 identity.
+                attribute = "customContainerLayer",
+                type = "number",
+                aliases = aliases,
+                exactAliases = aliases,
+                min = 0,
+                max = 30,
+                step = 1,
+                get = function()
+                    local model = AuraModel()
+                    local item = model and type(model.CustomContainer) == "function"
+                        and model.CustomContainer(unitKey, customIndex, false) or nil
+                    return ClampLayer(item and item.layer, 9)
+                end,
+                set = function(value)
+                    local model = AuraModel()
+                    local item = model and type(model.CustomContainer) == "function"
+                        and model.CustomContainer(unitKey, customIndex, true) or nil
+                    if item then item.layer = ClampLayer(value, 9) end
+                end,
+                apply = function() ApplyAura(unitKey, "MSUF_ASSISTANT_AURA_CUSTOM_CONTAINER_LAYOUT") end,
+                combatSafe = false,
+            })
+        end
+    end
+end
+
 function A.AurasRegistry.RegisterUnitLaneSettings(ctx)
     if type(ctx) ~= "table" then return end
+
+    local RegisterUnitCustomContainerLayerSettings = A.AurasRegistry.RegisterUnitCustomContainerLayerSettings
+    if type(RegisterUnitCustomContainerLayerSettings) == "function" then
+        RegisterUnitCustomContainerLayerSettings(ctx)
+    end
 
     local Assistant = ctx.A or A
     local AURA_UNITS = ctx.AURA_UNITS or {}

@@ -34,6 +34,7 @@ end
 
 local broadApplyCount = 0
 local flushShouldFail = false
+local flushReturnsFalse = false
 local M = MSUF.MSUF2
 M.EnsureDB = function() return _G.MSUF_DB end
 M.RequestGeneralApply = function()
@@ -43,6 +44,7 @@ end
 M.ApplyService = {
     Flush = function()
         if flushShouldFail then error("flush failure") end
+        if flushReturnsFalse then return false, "flush rejected the refresh" end
     end,
 }
 
@@ -64,6 +66,7 @@ assert(type(A.RestoreSnapshot) == "function", "RestoreSnapshot missing")
 local values = { first = 1, second = 2, normalized = 4 }
 local settings = {}
 local applyFailure = false
+local applyReturnsFalse = false
 local secondSetFailure = false
 local verificationMismatch = false
 local settingSetCalls = {}
@@ -91,6 +94,7 @@ local function makeSetting(key)
     end
     setting.apply = function()
         if applyFailure then error("apply failure") end
+        if applyReturnsFalse then return false, "setting rejected the refresh" end
     end
     settings[setting.key] = setting
     return setting
@@ -118,8 +122,10 @@ local function resetRuntime()
     values.normalized = 4
     secondSetFailure = false
     applyFailure = false
+    applyReturnsFalse = false
     verificationMismatch = false
     flushShouldFail = false
+    flushReturnsFalse = false
     A.undoStack = {}
     A.redoStack = {}
     A.lastAssistantTransactionError = nil
@@ -169,11 +175,25 @@ assert(values.first == 1 and values.second == 2, "apply failure left a partial s
 assert(#A.undoStack == 0, "apply failure created undo state")
 
 resetRuntime()
+applyReturnsFalse = true
+result = A.ExecutePlan(changePlan({ { setting = first, value = 10 } }))
+assert(status(result) == "failed", "false-returning apply callback was accepted")
+assert(values.first == 1, "false-returning apply callback was not rolled back")
+assert(#A.undoStack == 0, "false-returning apply callback created undo state")
+
+resetRuntime()
 flushShouldFail = true
 result = A.ExecutePlan(changePlan({ { setting = first, value = 10 } }))
 assert(status(result) == "failed", "flush failure was not reported")
 assert(values.first == 1, "flush failure was not rolled back")
 assert(#A.undoStack == 0, "flush failure created undo state")
+
+resetRuntime()
+flushReturnsFalse = true
+result = A.ExecutePlan(changePlan({ { setting = first, value = 10 } }))
+assert(status(result) == "failed", "false-returning ApplyService.Flush was accepted")
+assert(values.first == 1, "false-returning ApplyService.Flush was not rolled back")
+assert(#A.undoStack == 0, "false-returning ApplyService.Flush created undo state")
 
 -- A committed transaction is verifiable and produces one undo bundle only after Apply succeeds.
 resetRuntime()
@@ -190,9 +210,28 @@ assert(undoOk == false, "failing undo was reported as successful")
 assert(values.first == 10 and values.second == 20, "failing undo left a partial state")
 assert(#A.undoStack == 1 and #A.redoStack == 0, "failing undo lost or moved its bundle")
 applyFailure = false
+
+applyReturnsFalse = true
+undoOk = A.UndoLast()
+assert(undoOk == false, "false-returning undo apply callback was accepted")
+assert(values.first == 10 and values.second == 20, "false-returning undo apply left a partial state")
+assert(#A.undoStack == 1 and #A.redoStack == 0, "false-returning undo apply lost or moved its bundle")
+applyReturnsFalse = false
+
 undoOk = A.UndoLast()
 assert(undoOk == true, "transaction undo failed")
 assert(values.first == 1 and values.second == 2, "transaction undo restored wrong values")
+
+flushReturnsFalse = true
+local redoOk = A.RedoLast()
+assert(redoOk == false, "false-returning redo ApplyService.Flush was accepted")
+assert(values.first == 1 and values.second == 2, "false-returning redo flush left a partial state")
+assert(#A.undoStack == 0 and #A.redoStack == 1, "false-returning redo flush lost or moved its bundle")
+flushReturnsFalse = false
+
+redoOk = A.RedoLast()
+assert(redoOk == true, "redo after clearing false-returning flush failed")
+assert(values.first == 10 and values.second == 20, "successful redo restored wrong values")
 
 -- No-op is successful but never counted as a mutation and never creates undo state.
 resetRuntime()

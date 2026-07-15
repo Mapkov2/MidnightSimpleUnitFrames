@@ -23,6 +23,7 @@ function A.GlobalRegistry.InstallColorResetActions(ctx, colorCore, auraPortraitC
         ColorAPI = colorCore.ColorAPI,
         ApplyColors = ctx.ApplyColors,
         ApplyCastbarColors = ctx.ApplyCastbarColors,
+        ApplyBarGradients = ctx.ApplyBarGradients,
         ApplyGameplayColors = ctx.ApplyGameplayColors,
         ApplyAuraColors = ctx.ApplyAuraColors,
         ApplyPortraitColors = ctx.ApplyPortraitColors,

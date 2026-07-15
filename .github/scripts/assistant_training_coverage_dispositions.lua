@@ -50,7 +50,6 @@ return {
         ["pet.portraitBgColorB"] = { resolvesTo = "pet.portraitBackgroundColorB", reason = "The abbreviation Bg expands to the longer Background label." },
         ["pet.portraitBgColorG"] = { resolvesTo = "pet.portraitBackgroundColorG", reason = "The abbreviation Bg expands to the longer Background label." },
         ["pet.portraitBgColorR"] = { resolvesTo = "pet.portraitBackgroundColorR", reason = "The abbreviation Bg expands to the longer Background label." },
-        ["gf_party.barBgTexture"] = { resolvesTo = "barScope.gf_party.barBackgroundTexture", reason = "The native scoped Background Texture controller owns this compatibility storage spelling." },
     },
 
     actions = {

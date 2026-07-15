@@ -594,5 +594,9 @@ Data.GEOMETRY_PARSER = {
         "use global color", "use global colors", "use default color", "use default colors",
         "global colors", "default colors", "inherit colors",
     },
+        [284] = {
+        "full-health absorb stripe", "full health absorb stripe", "full hp absorb stripe",
+        "absorb stripe at full health", "absorb stripe on full health",
+    },
     },
 }

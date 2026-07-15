@@ -230,8 +230,8 @@ assert(choiceText:find("I found multiple matches:", 1, true), "Choice text missi
 assert(choiceText:find("Player Name: off", 1, true), "Choice text did not use English display labels")
 assert(choiceText:find("Cancel and keep it as it is", 1, true), "Choice text missing English cancel option")
 
-local noMatch = expectStatus("zeige mir befehle", "info", "I'm not sure which MSUF request you mean yet.")
-assertNoRaw(noMatch.text, "zeige mir befehle", "NoMatch response")
+local germanHelp = expectStatus("zeige mir befehle", "info", "MSUF Assistant: what I can do")
+assertNoRaw(germanHelp.text, "zeige mir befehle", "German help response")
 
 for i = 1, 5 do A.RecordNoMatch("target mystery texture color", { status = "failed" }, "smoke") end
 for i = 1, 2 do A.RecordNoMatch("anchor minimap to cooldownmanager", { status = "failed" }, "smoke") end

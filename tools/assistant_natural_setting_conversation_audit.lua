@@ -1144,7 +1144,12 @@ local cases = {
         input = "move target name text down 5",
         pre = {
             "set target power text y offset to 0",
-            "set target name text y offset to 0",
+            {
+                input = "set target name text y offset to 0",
+                coldKnowledge = true,
+                status = "applied",
+                equals = { "target", "nameOffsetY", 0 },
+            },
             "can you help me move target power text",
         },
         status = "applied",
@@ -1226,7 +1231,7 @@ local cases = {
     {
         input = "why is Boss Debuff Dispellable Filter missing?",
         status = "info",
-        contains = { "Boss Debuff Dispellable Filter troubleshooting help", "Boss Frames", "I did not change it" },
+        contains = { "Boss Debuff Dispellable by Group Filter troubleshooting help", "Boss Frames", "I did not change it" },
         notContains = { "Already set", "Done. I changed", "Done. Opened" },
     },
     {
@@ -1824,8 +1829,29 @@ local cases = {
 for _, case in ipairs(cases) do
     clearAssistantState()
     if type(case.pre) == "table" then
-        for _, preInput in ipairs(case.pre) do
-            A.Submit(preInput)
+        for _, pre in ipairs(case.pre) do
+            local preInput = type(pre) == "table" and pre.input or pre
+            if type(pre) == "table" and pre.coldKnowledge
+                and A.Knowledge and type(A.Knowledge.MarkDirty) == "function"
+            then
+                A.Knowledge.MarkDirty()
+            end
+            local preResult = A.Submit(preInput)
+            assert(type(preResult) == "table", tostring(preInput) .. ": missing precondition result")
+            if type(pre) == "table" and pre.status then
+                local preStatus = preResult.status or preResult.result
+                assert(preStatus == pre.status or (pre.status == "applied" and preStatus == "unchanged"),
+                    tostring(preInput) .. ": expected precondition status " .. tostring(pre.status)
+                        .. ", got " .. tostring(preStatus) .. ": " .. tostring(preResult.text or ""))
+            end
+            if type(pre) == "table" and pre.equals then
+                local path = {}
+                for i = 1, #pre.equals - 1 do path[#path + 1] = pre.equals[i] end
+                local after = dbValue(path)
+                local expected = pre.equals[#pre.equals]
+                assert(after == expected, tostring(preInput) .. ": expected precondition DB value "
+                    .. tostring(expected) .. ", got " .. tostring(after))
+            end
         end
     end
     local before

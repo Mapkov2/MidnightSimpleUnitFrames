@@ -30,8 +30,6 @@ function A.GlobalBarRegistry.RegisterBaseBarSettings(ctx)
     local RegisterBarsBoolean = ctx.RegisterBarsBoolean
     local RegisterBarsNumber = ctx.RegisterBarsNumber
     local RegisterBarsEnum = ctx.RegisterBarsEnum
-    local OUTLINE_STRATA_VALUES = ctx.OUTLINE_STRATA_VALUES or {}
-    local OUTLINE_STRATA_ALIASES = ctx.OUTLINE_STRATA_ALIASES
     local ON_OFF_STORAGE = ctx.ON_OFF_STORAGE or {}
     local ON_OFF_VALUES = ctx.ON_OFF_VALUES or {}
     local ON_OFF_ALIASES = ctx.ON_OFF_ALIASES
@@ -59,16 +57,16 @@ function A.GlobalBarRegistry.RegisterBaseBarSettings(ctx)
         "make frame outline bigger", "make frame outline smaller", "make outline bigger", "make outline smaller",
         "border thicker", "border thinner", "border bigger", "border smaller", "outline thicker", "outline thinner", "outline bigger", "outline smaller",
     }, { category = "Global / Bars / Outline", frameType = "globalBars", apply = ApplyBarOutline, reason = "MSUF_ASSISTANT_BAR_OUTLINE" })
-    RegisterBarsEnum("barOutlineStrata", "strata", "Global Bar Outline Strata", "AUTO", OUTLINE_STRATA_VALUES, {
+    RegisterBarsNumber("barOutlineLayer", "layer", "Global Bar Outline Layer", 0, 0, 30, {
         "bar outline strata", "bar outline layer", "frame outline strata", "frame outline layer",
         "global bar outline strata", "global frame outline strata", "outline strata", "outline layer",
     }, {
         category = "Global / Bars / Outline",
         frameType = "globalBars",
-        valueAliases = OUTLINE_STRATA_ALIASES,
         apply = ApplyBarOutline,
-        reason = "MSUF_ASSISTANT_BAR_OUTLINE_STRATA",
-        description = "Chooses the frame strata used by the shared bar and frame outline.",
+        reason = "MSUF_ASSISTANT_BAR_OUTLINE_LAYER",
+        step = 1,
+        description = "Controls the shared bar and frame outline draw order on the unified Layer 0-30 scale.",
     })
     RegisterGeneralNumberSetting("barOutlineColorA", "barOutlineOpacity", "Global Bar Outline Opacity", 1, 0, 1, {
         "bar outline opacity", "bar outline alpha", "frame outline opacity", "frame outline alpha",

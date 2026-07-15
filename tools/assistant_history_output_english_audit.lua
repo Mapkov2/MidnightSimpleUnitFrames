@@ -105,7 +105,7 @@ end
 
 _G.MSUF_DB.player.showName = true
 submit("German command history", "spieler name aus", "applied", "I changed Player Name")
-submit("German help no-match history", "zeige mir befehle", "info", "I'm not sure which MSUF request you mean yet.")
+submit("German help history", "zeige mir befehle", "info", "MSUF Assistant: what I can do")
 submit("German edit mode status history", "bearbeitungsmodus status", "info", "MSUF Edit Mode")
 submit("German diagnostics history", "diagnosebericht", "info", "MSUF Assistant details")
 _G.MSUF_DB.target.showName = true

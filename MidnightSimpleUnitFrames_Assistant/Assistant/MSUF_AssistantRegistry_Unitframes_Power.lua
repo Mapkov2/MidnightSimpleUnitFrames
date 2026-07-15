@@ -266,7 +266,7 @@ function A.UnitframesRegistry.RegisterPowerSettings(ctx, unit)
         )
     end
     RegisterUnitNumberSetting(unit, "detachedPowerBarFrameLevelOffset", "detachedPowerBarFrameLevelOffset",
-        "Detached Power Bar Layer", 6, 0, 20,
+        "Detached Power Bar Layer", 6, 0, 30,
         detachedPowerLayerAliases,
         { category = "Power Bar", power = true })
 end

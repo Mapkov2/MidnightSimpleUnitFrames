@@ -101,6 +101,7 @@ _G.min, _G.max, _G.abs = _G.min or math.min, _G.max or math.max, _G.abs or math.
 -- function.  Tighten that one behavior for real Menu2 construction.
 do
     local patched = setmetatable({}, { __mode = "k" })
+    local regionMinMaxValues = setmetatable({}, { __mode = "k" })
     local absentDataMember = {
         Instructions = true, Left = true, Middle = true, Right = true,
         Text = true, Low = true, High = true,
@@ -123,7 +124,18 @@ do
             if key == "GetLeft" or key == "GetBottom" then return function() return 0 end end
             if key == "GetRight" or key == "GetTop" then return function() return 100 end end
             if key == "GetCenter" then return function() return 50, 50 end end
-            if key == "GetMinMaxValues" then return function() return 0, 100 end end
+            if key == "SetMinMaxValues" then
+                return function(self, minValue, maxValue)
+                    regionMinMaxValues[self] = { minValue, maxValue }
+                end
+            end
+            if key == "GetMinMaxValues" then
+                return function(self)
+                    local values = regionMinMaxValues[self]
+                    if values then return values[1], values[2] end
+                    return 0, 100
+                end
+            end
             if key == "GetText" then return function() return "" end end
             if key == "GetChecked" then return function() return false end end
             local value = oldIndex(object, key)
@@ -428,6 +440,40 @@ local catalogRecords = Catalog.GetRecords()
 local catalogCoverage = assert(Catalog.GetCoverageReport, "RuntimeControlCatalog.GetCoverageReport is missing")()
 local catalogRecordById = {}
 for i = 1, #catalogRecords do catalogRecordById[catalogRecords[i].controlId] = catalogRecords[i] end
+local layerContract = { total = 0, failures = {}, infoHooks = 0, infoHookMismatches = {} }
+local function IsNumericLayerControl(record)
+    if tostring(record and record.kind or "") ~= "slider" then return false end
+    local label = tostring(record.label or ""):lower()
+    if label:find("%f[%a]layer%f[^%a]") or label == "frame level" then return true end
+    local key = tostring(record.settingKey or ""):lower()
+    local leaf = key:match("([%w_]+)$") or ""
+    return leaf == "layer"
+        or (leaf:sub(-5) == "layer" and leaf:sub(-6) ~= "player")
+        or leaf:sub(-16) == "frameleveloffset"
+end
+local function ReceivesLayerInfoHook(record)
+    if tostring(record and record.kind or "") ~= "slider" then return false end
+    local command = record.command or {}
+    if tonumber(command.min) ~= 0 or tonumber(command.max) ~= 30 then return false end
+    local label = tostring(record.label or ""):lower()
+    return label:find("layer", 1, true) ~= nil or label == "frame level" or label == "frame layer"
+end
+for i = 1, #catalogRecords do
+    local record = catalogRecords[i]
+    local numericLayer = IsNumericLayerControl(record)
+    local infoHook = ReceivesLayerInfoHook(record)
+    if infoHook then layerContract.infoHooks = layerContract.infoHooks + 1 end
+    if numericLayer ~= infoHook then
+        layerContract.infoHookMismatches[#layerContract.infoHookMismatches + 1] = record
+    end
+    if numericLayer then
+        layerContract.total = layerContract.total + 1
+        local command = record.command or {}
+        if tonumber(command.min) ~= 0 or tonumber(command.max) ~= 30 or tonumber(command.step) ~= 1 then
+            layerContract.failures[#layerContract.failures + 1] = record
+        end
+    end
+end
 local catalogRuntimeUnresolvedByPage = {}
 local catalogSemanticGapBuckets = {}
 local function AddSemanticGapBucket(bucket)
@@ -738,6 +784,27 @@ assert(barModeControl and barModeControl.pageKey == "opt_colors"
         and barModeSource == "explicit",
     "general.barMode reverse lookup did not resolve its exact Advanced Colors control")
 
+-- Global Bars exposes one outline-color swatch whose target follows the
+-- explicit Bars scope. Shared must remain a reviewed finite route instead of
+-- falling through to the duplicate Global Colors row, while scoped keys use
+-- the narrow barScope pattern declared by that same live control.
+local sharedOutlineSetting = assert(Registry:GetSetting("general.barOutlineColor"),
+    "general.barOutlineColor Registry setting is missing")
+local sharedOutlineControl, _, sharedOutlineSource = Catalog.FindBySettingKey(
+    "general.barOutlineColor", "opt_bars", sharedOutlineSetting)
+assert(sharedOutlineControl
+        and sharedOutlineControl.controlId == "menu2.opt.bars.global.outline.color"
+        and sharedOutlineSource == "reviewed_dynamic_key",
+    "Global Bars outline color must route Shared to general.barOutlineColor")
+local playerOutlineSetting = assert(Registry:GetSetting("barScope.player.barOutlineColor"),
+    "barScope.player.barOutlineColor Registry setting is missing")
+local playerOutlineControl, _, playerOutlineSource = Catalog.FindBySettingKey(
+    "barScope.player.barOutlineColor", "opt_bars", playerOutlineSetting)
+assert(playerOutlineControl
+        and playerOutlineControl.controlId == sharedOutlineControl.controlId
+        and playerOutlineSource == "reviewed_dynamic_pattern",
+    "Global Bars outline color must route explicit scopes through the barScope pattern")
+
 local requiredCatalogActions = {
     ["dashboard.globalUiScale.apply"] = "ephemeral",
     ["dashboard.globalUiScale.revertPending"] = "ephemeral",
@@ -838,6 +905,8 @@ print(string.format("runtimeCatalogRecords=%d stateChanging=%d explicitV1Setting
     #catalogCrosswalk.explicitV1Setting, #catalogCrosswalk.generatedV1Setting,
     #catalogCrosswalk.explicitV1Action, #catalogCrosswalk.directMenuExecutable,
     #catalogCrosswalk.noExplicitV1Link, #catalogCrosswalk.invalidCapability))
+print(string.format("catalogLayerContract=controls:%d,invalid:%d,greenInfoHooks:%d,hookMismatches:%d,range:0-30,step:1",
+    layerContract.total, #layerContract.failures, layerContract.infoHooks, #layerContract.infoHookMismatches))
 print(string.format("catalogRuntimeValidation=persisted:%d,resolvedTargets:%d,reviewedDispositions:%d,unresolvedTargets:%d,registryValidated:%d,registryMissing:%d,invalidCapabilities:%d,assistantContractComplete:%s",
     tonumber(catalogCoverage.persistedControls) or 0,
     tonumber(catalogCoverage.resolvedTargets) or 0,
@@ -1031,6 +1100,19 @@ assert(graphDispositionReview.pass == true, string.format(
     #graphDispositionReview.missingEvidence, #graphDispositionReview.invalidOwners,
     table.concat(graphDispositionReview.invalidOwners, ", ")))
 assert(tonumber(catalogCoverage.total) == #catalogRecords, "catalog public records/coverage report drifted")
+local layerContractFailureIds = {}
+for i = 1, #layerContract.failures do
+    layerContractFailureIds[i] = tostring(layerContract.failures[i].controlId or "unknown")
+end
+assert(layerContract.total > 0, "RuntimeControlCatalog did not discover any numeric MSUF Layer controls")
+assert(#layerContract.failures == 0,
+    "numeric MSUF Layer control escaped the 0..30/step 1 contract: " .. table.concat(layerContractFailureIds, ", "))
+local layerInfoHookMismatchIds = {}
+for i = 1, #layerContract.infoHookMismatches do
+    layerInfoHookMismatchIds[i] = tostring(layerContract.infoHookMismatches[i].controlId or "unknown")
+end
+assert(#layerContract.infoHookMismatches == 0,
+    "numeric MSUF Layer controls and shared green I hooks diverged: " .. table.concat(layerInfoHookMismatchIds, ", "))
 assert(tonumber(catalogCoverage.invalidCapabilityCount) == 0,
     "RuntimeControlCatalog contains a setting/action with an invalid executable capability")
 assert(catalogCoverage.catalogComplete == true,
@@ -1050,7 +1132,9 @@ if not unitGroupOnly then
     -- The explicit standalone inventory includes the three channel-tick
     -- controllers and minimap position; these are intentionally controller-
     -- owned settings without a scalar Menu2 widget (23 historical + 4).
-    assert(globalReverse.standaloneGenerated == 150 and globalReverse.standaloneExplicit == 27,
+    -- The three raw Bar Outline RGB channels are now claimed by the canonical
+    -- composite color controller instead of counted as generated standalones.
+    assert(globalReverse.standaloneGenerated == 147 and globalReverse.standaloneExplicit == 27,
         "reviewed Global standalone split changed; classify new generated or explicit no-widget settings")
     assert(globalReverse.generatedTotal
             == globalReverse.standaloneGenerated + globalReverse.generatedRouted,

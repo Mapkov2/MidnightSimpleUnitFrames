@@ -18,6 +18,24 @@ local GeneralDB = ctx.GeneralDB
 local ColorAPI = ctx.ColorAPI
 local ApplyColors = ctx.ApplyColors
 local ApplyCastbarColors = ctx.ApplyCastbarColors
+local ApplyBarGradients = ctx.ApplyBarGradients
+
+local BAR_GRADIENT_COLOR_KEYS = {
+    "healthBarGradientColorR", "healthBarGradientColorG", "healthBarGradientColorB",
+    "powerBarGradientColorR", "powerBarGradientColorG", "powerBarGradientColorB",
+}
+local BAR_SCOPE_LABELS = {
+    shared = "Shared",
+    player = "Player",
+    target = "Target",
+    targettarget = "Target of Target",
+    focustarget = "Focus Target",
+    focus = "Focus",
+    pet = "Pet",
+    boss = "Boss",
+    gf_party = "Party",
+    gf_raid = "Raid",
+}
 
 if not (Registry and type(Registry.RegisterAction) == "function") then return end
 if type(GeneralDB) ~= "function" or type(ColorAPI) ~= "function" then return end
@@ -94,6 +112,40 @@ Registry:RegisterAction({
 })
 
 Registry:RegisterAction({
+    key = "reset_bar_gradient_colors",
+    label = "Reset Bar Gradient Colors",
+    type = "color",
+    aliases = {
+        "reset bar gradient colors",
+        "reset bar gradient colours",
+        "restore bar gradient colors",
+        "restore bar gradient colours",
+        "reset health and power bar gradient colors",
+        "reset health and power bar gradient colours",
+    },
+    aliasNoArgs = true,
+    combatSafe = false,
+    captureSnapshot = true,
+    run = function()
+        local globalPage = M and M.GlobalPage
+        if type(globalPage) ~= "table"
+            or type(globalPage.CurrentBarsScope) ~= "function"
+            or type(globalPage.GradientScopeSet) ~= "function"
+            or type(ApplyBarGradients) ~= "function"
+        then
+            return false, "Bar gradient color controls are unavailable right now."
+        end
+        local scope = globalPage.CurrentBarsScope()
+        for i = 1, #BAR_GRADIENT_COLOR_KEYS do
+            globalPage.GradientScopeSet(BAR_GRADIENT_COLOR_KEYS[i], 0)
+        end
+        ApplyBarGradients("MSUF_ASSISTANT_RESET_BAR_GRADIENT_COLORS", scope)
+        local scopeLabel = BAR_SCOPE_LABELS[scope] or tostring(scope or "Selected")
+        return true, "Done. " .. scopeLabel .. " bar gradient colors reset."
+    end,
+})
+
+Registry:RegisterAction({
     key = "reset_npc_type_colors",
     label = "Reset NPC Type Colors",
     type = "color",
@@ -136,10 +188,12 @@ Registry:RegisterAction({
     run = function()
         local api = ColorAPI()
         if type(api.ResetCastbarTextColorToGlobal) == "function" then api.ResetCastbarTextColorToGlobal() end
+        if type(api.ResetCastbarTargetNameColor) == "function" then api.ResetCastbarTargetNameColor() end
         if type(api.ResetCastbarBorderColor) == "function" then api.ResetCastbarBorderColor() end
         if type(api.ResetCastbarBackgroundColor) == "function" then api.ResetCastbarBackgroundColor() end
         local g = GeneralDB()
         g.castbarFontR, g.castbarFontG, g.castbarFontB = nil, nil, nil
+        g.castbarTargetNameR, g.castbarTargetNameG, g.castbarTargetNameB = nil, nil, nil
         g.castbarBorderR, g.castbarBorderG, g.castbarBorderB, g.castbarBorderA = nil, nil, nil, nil
         g.castbarBgR, g.castbarBgG, g.castbarBgB, g.castbarBgA = nil, nil, nil, nil
         g.castbarInterruptibleR, g.castbarInterruptibleG, g.castbarInterruptibleB = nil, nil, nil

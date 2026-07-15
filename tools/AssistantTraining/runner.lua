@@ -7,9 +7,11 @@ local function dirname(path)
 end
 
 local TOOL_DIR = dirname(arg and arg[0] or "Tools/AssistantTraining/runner.lua")
-package.path = TOOL_DIR .. "/?.lua;" .. TOOL_DIR .. "\\?.lua;" .. package.path
+package.path = TOOL_DIR .. "/?.lua;" .. TOOL_DIR .. "\\?.lua;"
+    .. TOOL_DIR .. "/../?.lua;" .. TOOL_DIR .. "\\..\\?.lua;" .. package.path
 
 local stubs = require("wow_stubs")
+local RuntimeManifestLoader = require("assistant_runtime_manifest_loader")
 
 local sep = package.config:sub(1, 1)
 
@@ -460,6 +462,7 @@ local ACTION_SAMPLE_PROMPTS = {
     reset_bar_background_color = "reset bar background color",
     reset_unitframe_colors = "reset unit frame colors",
     reset_health_gradient_colors = "reset health gradient colors",
+    reset_bar_gradient_colors = "reset bar gradient colors",
     reset_npc_type_colors = "reset npc type colors",
     reset_bar_colors = "reset bar colors",
     reset_dispel_colors = "reset dispel colors",
@@ -961,6 +964,12 @@ local seedCases = {
         category = "castbar-color",
     },
     {
+        id = "castbar-target-name-color-fast",
+        prompt = "set castbar target name color to red",
+        expect = { kind = "changes", key = "general.castbarTargetNameColor", valueColor = "red" },
+        category = "castbar-color",
+    },
+    {
         id = "player-castbar-override-color-fast",
         prompt = "set player castbar override color to yellow",
         expect = { kind = "changes", key = "general.playerCastbarOverrideColor", valueColor = "yellow" },
@@ -1078,6 +1087,12 @@ local seedCases = {
         id = "health-gradient-high-color-fast",
         prompt = "set health gradient high to yellow",
         expect = { kind = "changes", key = "general.healthGradientHigh", valueColor = "yellow" },
+        category = "global-color",
+    },
+    {
+        id = "bar-gradient-colors-reset-action",
+        prompt = "reset bar gradient colors",
+        expect = { kind = "action", actionKey = "reset_bar_gradient_colors" },
         category = "global-color",
     },
     {
@@ -3964,6 +3979,7 @@ local function markdownReport(summary, loadReport, results)
     lines[#lines + 1] = "- Slow cases: " .. tostring(summary.slow)
     lines[#lines + 1] = "- Parser warmup ms: " .. string.format("%.2f", tonumber(summary.warmupMs) or 0)
     lines[#lines + 1] = "- Registry settings loaded: " .. tostring(summary.registrySettings)
+    lines[#lines + 1] = "- Registry key fingerprint: " .. tostring(summary.registryKeyFingerprint)
     lines[#lines + 1] = "- AutoCoverage fallbacks filled: " .. tostring(summary.autoCoverageFilled or 0)
     lines[#lines + 1] = "- Generated writable setting cases: " .. tostring(summary.generatedCases)
     lines[#lines + 1] = "- Generated read-only getter + fail-closed probes: " .. tostring(summary.generatedReadOnlySettingCases)
@@ -4108,6 +4124,7 @@ else
     local actions = Registry and Registry.AllActions and Registry:AllActions() or {}
     registryActions = #actions
 end
+local registryKeyFingerprint = RuntimeManifestLoader.RegistryInventoryFingerprint(assert(A.Registry))
 
 local cases = {}
 for i = 1, #seedCases do cases[#cases + 1] = seedCases[i] end
@@ -4236,6 +4253,7 @@ local summary = {
     failSlow = opts.failSlow == true,
     warmupMs = warmupMs,
     registrySettings = registrySettings,
+    registryKeyFingerprint = registryKeyFingerprint,
     autoCoverageFilled = autoCoverageFilled,
     registryActions = registryActions,
     loadMisses = loadMisses,

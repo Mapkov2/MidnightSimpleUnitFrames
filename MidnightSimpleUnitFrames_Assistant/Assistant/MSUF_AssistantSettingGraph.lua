@@ -478,10 +478,9 @@ local function ApplyUnitStatusComponentGates(state)
             if type(spec) == "table" and (not spec.units or spec.units[unit] == true) then
                 local parent = unit .. "." .. tostring(spec.show or "")
                 for _, field in ipairs(fields) do
-                    -- Inline raid-group text reuses the normal name font/layer;
-                    -- those shared fields are not exclusively gated by this
-                    -- status component.
-                    if not (spec.inlineName and (field == "size" or field == "layer")) then
+                    -- Inline raid-group text reuses the normal name font, but
+                    -- owns its independent status layer.
+                    if not (spec.inlineName and field == "size") then
                         local child = spec[field]
                         if type(child) == "string" and child ~= "" then
                             AddComponentGate(state, seen, unit .. "." .. child, parent,
@@ -563,7 +562,7 @@ local function ApplyGroupIndicatorGates(state)
     local families = {
         {
             parent = "showGroupNumber",
-            children = { "groupNumberSize", "groupNumberAnchor", "groupNumberX", "groupNumberY" },
+            children = { "groupNumberSize", "groupNumberAnchor", "groupNumberX", "groupNumberY", "groupNumberLayer" },
             id = "group-number-component",
             reason = "Group Number layout is visible only while Show Group Number is enabled.",
             evidence = "MSUF_Menu2_GroupIndicators.lua group-number enablement and MSUF_AssistantRegistry_GroupFramesVisual_Highlights.lua",

@@ -368,6 +368,19 @@ for _, sample in ipairs(searchSamples) do
 end
 
 local answerProbes = {
+    { "what other addons work well with msuf?", "Addons that pair well with MSUF" },
+    { "does EQoL work with MSUF", "Addon compatibility with MSUF" },
+    { "Which addons work well with MidnightSimpleUnitFrames?", "Addons that pair well with MSUF" },
+    { "Does Details! work with MSUF?", "Addon compatibility with MSUF" },
+    { "Can I use WeakAuras with MSUF?", "Addon compatibility with MSUF" },
+    { "Does Cell work with MSUF?", "Addon compatibility with MSUF" },
+    { "Which EQoL settings overlap with MSUF?", "Addon overlap and compatibility with MSUF" },
+    { "which addons are incompatible with MSUF", "Addon overlap and compatibility with MSUF" },
+    { "Can I use MSUF without EQoL?", "MSUF addon dependency" },
+    { "Do not recommend EQoL for MSUF", "Addon recommendation preference" },
+    { "EQoL does not work with MSUF", "Possible addon conflict with MSUF" },
+    { "WeakAuras breaks MSUF", "Possible addon conflict with MSUF" },
+    { "Details! causes Lua errors with MSUF", "Possible addon conflict with MSUF" },
     { "where can I change raid frame width", "Group frame layout help" },
     { "where can I hide offline players in raid frames", "Group frame layout help" },
     { "where can I change party health text", "Group Layout" },
@@ -385,6 +398,89 @@ local answerProbes = {
     { "where do I hide healer power bars in raid", "Group role Resource Bar help" },
     { "where is group frame role sorting", "Group role sorting help" },
 }
+
+local addonIntentProbes = {
+    "what other addons work well with msuf?",
+    "which addons complement MSUF",
+    "Which addons work well with MidnightSimpleUnitFrames?",
+    "addon recommendations for MSUF",
+    "best addons to use alongside MSUF",
+    "does BetterFriendList work with MSUF",
+    "Can I use EQoL with MSUF?",
+    "Does Enhance QoL play nicely with MSUF?",
+    "MSUF companion addons?",
+    "What other mods work well with MSUF?",
+    "Do Clique and MSUF work together?",
+    "Can I run Clique with MSUF?",
+    "Is BetterFriendList safe to use together with MSUF?",
+    "What addon works well with MSUF?",
+    "Does Details! work with MSUF?",
+    "Can I use WeakAuras with MSUF?",
+    "Does Cell work with MSUF?",
+    "Does the FooBars addon work with MSUF?",
+    "Which EQoL settings overlap with MSUF?",
+    "which addons are incompatible with MSUF",
+    "Which EQoL modules should I disable when using MSUF?",
+    "Can I use MSUF without EQoL?",
+    "Do not recommend EQoL for MSUF",
+    "I don't want addon recommendations for MSUF",
+    "EQoL does not work with MSUF",
+    "WeakAuras breaks MSUF",
+    "Details! causes Lua errors with MSUF",
+    "welche Addons passen gut zu MSUF",
+    "funktioniert EQoL mit MSUF",
+    "Kann ich EQoL mit MSUF benutzen?",
+    "Welche Addons vertragen sich mit MSUF?",
+    "Welche Addons empfiehlst du fuer MSUF?",
+    "Welche Addons wuerdest du zu MSUF empfehlen?",
+}
+for _, probe in ipairs(addonIntentProbes) do
+    if not Knowledge.LooksLikeComplementaryAddonQuestion(probe) then
+        addFailure("addon companion intent", probe, "not detected")
+    end
+end
+for _, probe in ipairs({
+    "which MSUF setting controls party frames",
+    "show loaded addons",
+    "does MSUF work",
+    "EQoL works with MSUF.",
+    "I use WeakAuras with MSUF.",
+    "I installed BetterFriendList with MSUF.",
+    "WeakAuras is installed with MSUF.",
+    "I do not use EQoL with MSUF.",
+    "Ich benutze EQoL mit MSUF.",
+    "Which MSUF settings overlap with EQoL?",
+    "Which MSUF aura setting should I use with WeakAuras?",
+    "Where is the EQoL setting in MSUF?",
+    "Does target width work with MSUF?",
+    "Does WoW work with MSUF?",
+    "Does Retail work with MSUF?",
+    "Does Midnight work with MSUF?",
+    "Can I use profiles with MSUF?",
+    "Is the MSUF addon compatible with Midnight?",
+    "Does the MSUF addon work with WoW 12.1?",
+    "Is the MSUF addon compatible with Classic?",
+    "What is the recommended target frame width for the MSUF addon?",
+    "Recommend MSUF addon settings for party frames",
+    "Which MSUF addon setting works well with raid frames?",
+    "Welche Einstellung funktioniert gut mit dem MSUF Addon?",
+    "Which setting controls addon compatibility in MSUF?",
+    "Recommend details for my MSUF target frame",
+    "I need details: which settings work well with MSUF?",
+}) do
+    if Knowledge.LooksLikeComplementaryAddonQuestion(probe) then
+        addFailure("addon companion false positive", probe, "incorrectly detected")
+    end
+end
+
+local englishWorkQuestion = Knowledge.Answer("how does target width work", { currentPage = "home" })
+if type(englishWorkQuestion) ~= "table"
+    or tostring(englishWorkQuestion.summary or "") == "Assistant search result"
+    or contains(englishWorkQuestion.text, "I found this in MSUF")
+then
+    addFailure("knowledge intent boundary", "how does target width work",
+        "German wo was matched inside English work")
+end
 
 for _, probe in ipairs(answerProbes) do
     local answer = Knowledge.Answer(probe[1], { currentPage = "home" })

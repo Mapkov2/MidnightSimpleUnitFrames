@@ -188,6 +188,21 @@ local function TranslatePattern(line)
     name = line:match("^Good night, (.+)%. I am ready to help with MSUF%.$")
     if name then return "Gute Nacht, " .. name .. ". Ich bin bereit, dir mit MSUF zu helfen.", true end
 
+    label = line:match("^Yes%. MSUF runs without (.+)%. Removing or disabling that addon does not change MSUF settings%. You only lose the features supplied by that addon%.$")
+    if label then
+        return "Ja. MSUF läuft ohne " .. label .. ". Das Entfernen oder Deaktivieren dieses Addons ändert keine MSUF-Einstellungen; nur dessen eigene Funktionen entfallen.", true
+    end
+
+    label = line:match("^I understand that (.+) is failing beside MSUF%. I did not change any setting%.$")
+    if label then
+        return "Ich habe verstanden, dass " .. label .. " neben MSUF ausfällt. Ich habe keine Einstellung geändert.", true
+    end
+
+    label = line:match("^I cannot verify (.+) from MSUF's bundled offline knowledge%. Keep MSUF as the only owner of its unit and group frames, disable overlapping modules, and check that addon's current Retail/Midnight page%.$")
+    if label then
+        return "Ich kann " .. label .. " mit dem gebündelten Offline-Wissen von MSUF nicht prüfen. Lass MSUF allein seine Unit- und Gruppenframes verwalten, deaktiviere überschneidende Module und prüfe die aktuelle Retail-/Midnight-Seite dieses Addons.", true
+    end
+
     label = line:match("^Assistant help for (.+):$")
     if label then return "Assistant-Hilfe für " .. label .. ":", true end
     label = line:match("^(.+) help$")

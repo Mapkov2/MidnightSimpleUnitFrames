@@ -107,6 +107,7 @@ assert(D.DetectPromptLanguage("open it", "de", "en") == "de", "English-form foll
 assert(D.DetectPromptLanguage("why", "de", "en") == "de", "short follow-up did not retain German context")
 assert(D.DetectPromptLanguage("bitte answer in English", "de", "de") == "en", "explicit English did not win")
 assert(D.DetectPromptLanguage("please answer in German", "en", "en") == "de", "explicit German did not win")
+assert(D.DetectPromptLanguage("welche addons passen gut zu msuf", "en", "en") == "de", "German addon question detection failed")
 
 -- Canonical technical names and keys remain byte-for-byte intact in localized
 -- dynamic templates.
@@ -191,6 +192,22 @@ assert((_G.MSUF_DB.player and _G.MSUF_DB.player.showName) == showNameBeforeQuest
 local neutralFollowup = assert(A.Submit("option 1"), "neutral follow-up result missing")
 assert(D.GetLanguage() == "de", "neutral follow-up did not retain German")
 assert(hasGermanScaffold(neutralFollowup.text), "neutral German-context follow-up was not localized")
+
+-- Curated addon guidance is natural prose, so every line must be translated
+-- instead of falling back to an English technical wrapper.
+clearConversationState()
+D.ResetSession("en")
+local germanAddons = assert(A.Submit("welche addons passen gut zu msuf"), "German addon result missing")
+local germanAddonText = tostring(germanAddons.text or "")
+assert(statusOf(germanAddons) == "info", "German addon guidance was not read-only info")
+assert(D.GetLanguage() == "de", "German addon question did not retain German")
+assert(germanAddonText:find("Addons, die gut zu MSUF passen", 1, true),
+    "German addon heading was not localized: " .. germanAddonText)
+assert(germanAddonText:find("Enhance QoL (EQoL)", 1, true), "German addon guidance omitted EQoL")
+assert(not germanAddonText:find("Technische Details", 1, true),
+    "German addon guidance fell back to the mixed-language technical wrapper: " .. germanAddonText)
+assert(not germanAddonText:find("Verified MSUF integrations", 1, true),
+    "German addon guidance retained untranslated natural prose: " .. germanAddonText)
 
 -- An explicit English turn switches back and stays canonical English.
 clearConversationState()

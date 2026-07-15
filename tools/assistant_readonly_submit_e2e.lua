@@ -114,6 +114,8 @@ local acceptance = {
 }
 
 local extraReadOnly = {
+    { input = "what other addons work well with msuf?", all = { "msuf", "clique", "betterfriendlist", "eqol" }, none = { "i found this in msuf", "group layout" } },
+    { input = "Can I use EQoL with MSUF?", all = { "msuf", "enhance qol", "unit frames" }, none = { "copy party", "confirmation", "i found this in msuf" } },
     { input = "what is aura filtering", all = { "aura", "filter" } },
     { input = "answer in English what is aura filtering", all = { "aura", "filter" }, language = "en" },
     { input = "wie kann ich die target breite aendern", all = { "target" } },

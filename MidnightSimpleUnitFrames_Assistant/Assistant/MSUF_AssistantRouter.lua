@@ -232,6 +232,9 @@ function R.IsExactGenericDiagnosticRequest(text)
         or norm == "show assistant status"
         or norm == "diagnostic report"
         or norm == "show diagnostic report"
+        or norm == "diagnostik"
+        or norm == "diagnosebericht"
+        or norm == "fehlerbericht"
         or norm == "support text"
         or norm == "show support text"
         or norm == "assistant support text"
@@ -781,9 +784,54 @@ function R.ScopedMutationExclusion(text)
     return { keep = keep, excluded = excluded }
 end
 
+function R.ReviewedSemanticMutationKind(text)
+    local norm = R.Normalize(text)
+    local unitScope, anchorValue = norm:match(
+        "^set%s+(.+)%s+name%s+anchor%s+to%s+(%S+)$")
+    local reviewedUnitScopes = {
+        player = true, target = true, focus = true, pet = true, boss = true,
+        targettarget = true, focustarget = true,
+        ["target of target"] = true, ["focus target"] = true,
+    }
+    local reviewedAnchorValues = { left = true, center = true, middle = true, right = true }
+    if reviewedUnitScopes[unitScope] and reviewedAnchorValues[anchorValue] then
+        return "unit-name-anchor"
+    end
+
+    local groupScope, spacingValue = norm:match(
+        "^set%s+(.+)%s+aura%s+spacing%s+to%s+([%+%-]?%d+%.?%d*)$")
+    local reviewedGroupScopes = {
+        party = true, raid = true, ["mythic raid"] = true, mythicraid = true,
+    }
+    if reviewedGroupScopes[groupScope] and tonumber(spacingValue) ~= nil then
+        return "group-aura-spacing"
+    end
+    return nil
+end
+
+function R.IsSubjectiveSafePlanningRequest(text)
+    local norm = R.StripResponseLanguageDirective(text)
+    if norm == "" then return false end
+    -- Submit's low-latency mutation lane runs before RouteInput. Keep exact
+    -- subjective planning requests out of that lane so words such as
+    -- "important" cannot be mistaken for a concrete Aura filter token or a
+    -- frame toggle before the Router can ask what signal the player means.
+    local planningTerms = A.RouterSafePlanningTerms or {}
+    local broadImportantAura = norm == "show important debuffs"
+        or norm == "show important buffs"
+    return broadImportantAura
+        or R.ContainsAny(norm, planningTerms.vagueTarget or {})
+        or (R.ContainsAny(norm, planningTerms.subjectiveAura or {})
+            and R.ContainsAny(norm, planningTerms.aura or {}))
+end
+
 function A.RouterIsFailClosedReadOnlyRequest(text)
     local norm = R.StripResponseLanguageDirective(text)
     if norm == "" then return true end
+    if R.IsSubjectiveSafePlanningRequest(norm) then return true end
+    if type(R.AuraGrowthMutationAmbiguity) == "function" and R.AuraGrowthMutationAmbiguity(norm) then
+        return true
+    end
     if type(R.IsExplicitNavigationCommand) == "function" and R.IsExplicitNavigationCommand(norm) then
         -- Navigation wording grants permission to open/focus a control, never
         -- to change its value. Force it past every mutation fast path.
@@ -827,12 +875,16 @@ function A.RouterIsFailClosedReadOnlyRequest(text)
     -- Value-less setting ideas must reach the Router before the direct-write
     -- fast path. The Router can then show the exact control, range, or enum
     -- choices without letting a label word masquerade as a value.
-    if R.HasUnmistakableMutationRequest(norm)
-        and type(R.IsExactRegistrySettingMutation) == "function"
+    if type(R.IsExactRegistrySettingMutation) == "function"
         and R.IsExactRegistrySettingMutation(text)
     then
         return false
     end
+    -- The parser owns these complete, reviewed semantic shapes even though
+    -- the generic open-ended search sees multiple related controls. Their
+    -- closed scope/value grammar prevents this exemption from authorizing a
+    -- broader or value-less write.
+    if R.ReviewedSemanticMutationKind(norm) then return false end
     if type(R.OpenEndedSettingAnalysis) == "function" then
         local openEnded = R.OpenEndedSettingAnalysis(norm)
         if openEnded and (openEnded.explicitValue ~= true
@@ -893,6 +945,11 @@ end
 
 function R.LooksLikeKnowledgeFirstRequest(text)    local norm = R.Normalize(text)
     if norm == "" then return false end
+    if A.Knowledge and type(A.Knowledge.LooksLikeComplementaryAddonQuestion) == "function"
+        and A.Knowledge.LooksLikeComplementaryAddonQuestion(norm)
+    then
+        return true
+    end
     if R.LooksLikeKnowledgeQuestionPrefix(norm) then return true end
     if R.ContainsAny(norm, R.MUTATION_TERMS) then return false end
     if R.ContainsAny(norm, { "open", "go to", "show settings", "show me settings", "oeffne" }) then return false end
@@ -1264,6 +1321,10 @@ R.ASSISTANT_LIMIT_QUESTIONS = R.ASSISTANT_LIMIT_QUESTIONS or {
 function R.TryEarlyAssistantMetaConversationReply(text)
     local norm = R.Normalize(text)
     if R.ASSISTANT_LIMIT_QUESTIONS[norm] then return A.RouterLimitsReply() end
+    -- This common German imperative is a capability/help request. Keep it in
+    -- the early meta lane so an open Party/Raid page cannot reinterpret
+    -- "zeige" as permission to toggle the page's first visible control.
+    if norm == "zeige mir befehle" then return R.AssistantCapabilityReply() end
     return nil
 end
 
@@ -3394,29 +3455,160 @@ function R.AuraDetailPageForScope(groupScope, lane)
     return lane == "buff" and "Aura Buffs" or "Aura Debuffs"
 end
 
-function R.TryScopedAuraGrowthChoice(text, coreHandler)
-    if type(coreHandler) ~= "function" then return nil end
-    local norm = R.Normalize(text)
-    local lane = R.AuraLaneFromText(norm)
-    local scope = R.AuraScopeForDetailText(norm)
-    if not lane or not scope then return nil end
+R.AURA_GROWTH_MUTATION_PHRASES = {
+    "want to change", "want change", "change how", "want to adjust", "adjust how",
+    "would like to change", "like to change", "need to change",
+    "help me change", "help me to change", "help me adjust", "help me to adjust",
+    "help me configure", "help me to configure",
+    "grow differently", "grows differently", "switch the growth", "switch growth",
+}
 
-    local growthIntent = R.ContainsAny(norm, { "growth direction", "grow direction", "growth", "grow differently", "grows differently" })
+function R.HasAuraGrowthIntent(norm)
+    norm = R.Normalize(norm)
+    return R.ContainsAny(norm, { "growth direction", "grow direction", "growth", "grow differently", "grows differently" })
         or ((R.HasNormalizedPhrase(norm, "grow") or R.HasNormalizedPhrase(norm, "grows"))
             and not R.ContainsAny(norm, {
                 "icon size", "icons size", "bigger", "larger", "smaller", "shrink",
                 "cooldown text", "timer text", "stack text", "stack count", "font size", "text size",
             }))
-    if not growthIntent then return nil end
+end
 
-    local mutationIntent = R.StartsWithMutationCommand(norm)
+function R.HasAuraGrowthMutationIntent(norm)
+    norm = R.Normalize(norm)
+    return R.StartsWithMutationCommand(norm)
         or R.HasUnmistakableMutationRequest(norm)
-        or R.ContainsAny(norm, {
-            "want to change", "want change", "change how", "want to adjust", "adjust how",
-            "would like to change", "like to change", "need to change", "help me change",
-            "grow differently", "grows differently", "switch the growth", "switch growth",
-        })
-    if not mutationIntent then return nil end
+        or R.ContainsAny(norm, R.AURA_GROWTH_MUTATION_PHRASES)
+end
+
+function R.AuraGrowthNamedScopes(norm)
+    norm = R.Normalize(norm)
+    local scopes, seen = {}, {}
+    local function Add(key, label)
+        if not seen[key] then
+            seen[key] = true
+            scopes[#scopes + 1] = { key = key, label = label }
+        end
+    end
+
+    local direct = norm:gsub("target of target", " "):gsub("targettarget", " ")
+        :gsub("focus target", " "):gsub("focustarget", " ")
+    if R.ContainsAny(direct, { "player", "player frame", "my frame" }) then Add("player", "Player") end
+    if R.ContainsAny(direct, { "target", "target frame" }) then Add("target", "Target") end
+    if R.ContainsAny(direct, { "focus", "focus frame" }) then Add("focus", "Focus") end
+    if R.ContainsAny(direct, { "boss", "boss frame", "boss frames" }) then Add("boss", "Boss") end
+    if R.ContainsAny(direct, { "party", "party frame", "party frames", "group frame", "group frames" }) then
+        Add("party", "Party")
+    end
+
+    local groups = direct
+    if R.ContainsAny(groups, { "mythic raid", "mythic raid frame", "mythic raid frames", "mythicraid" }) then
+        Add("mythicraid", "Mythic Raid")
+        groups = groups:gsub("mythic%s+raid%s+frames", " ")
+            :gsub("mythic%s+raid%s+frame", " ")
+            :gsub("mythic%s+raid", " ")
+            :gsub("mythicraid", " ")
+    end
+    if R.ContainsAny(groups, { "raid", "raid frame", "raid frames" }) then Add("raid", "Raid") end
+    return scopes
+end
+
+function R.ScopedAuraGrowthSetting(norm)
+    norm = R.Normalize(norm)
+    local lane, laneLabel = R.AuraLaneFromText(norm)
+    local scope, scopeLabel, groupScope = R.AuraScopeForDetailText(norm)
+    if not lane or not scope then return nil end
+    local settingKey = groupScope
+        and ("gf_" .. tostring(scope) .. ".auras." .. tostring(lane) .. ".growth")
+        or ("auras3." .. tostring(scope) .. "." .. tostring(lane) .. ".growth")
+    local registry = A.Registry
+    local setting = registry and type(registry.GetSetting) == "function"
+        and registry:GetSetting(settingKey) or nil
+    return setting, settingKey, lane, laneLabel, scope, scopeLabel, groupScope
+end
+
+function R.AuraGrowthMutationAmbiguity(text)
+    local norm = R.Normalize(text)
+    if not R.HasAuraGrowthIntent(norm) or not R.HasAuraGrowthMutationIntent(norm) then return nil end
+    local scopes = R.AuraGrowthNamedScopes(norm)
+    if #scopes > 1 then return "scopes", scopes end
+    if #scopes == 0 then return nil end
+    local hasBuff = R.ContainsAny(norm, { "buff", "buffs" })
+    local hasDebuff = R.ContainsAny(norm, { "debuff", "debuffs" })
+    if hasBuff and hasDebuff then return "lanes", scopes end
+    if not hasBuff and not hasDebuff and R.ContainsAny(norm, { "aura", "auras" }) then
+        return "missing_lane", scopes
+    end
+    return nil
+end
+
+function R.TryScopedAuraGrowthClarification(text)
+    local kind, scopes = R.AuraGrowthMutationAmbiguity(text)
+    if not kind then return nil end
+    if type(A.CancelPendingMutationState) == "function" then A.CancelPendingMutationState() end
+    local scopeLabel = scopes and scopes[1] and scopes[1].label or "that frame"
+    local body
+    if kind == "scopes" then
+        local labels = {}
+        for i = 1, #(scopes or {}) do labels[#labels + 1] = tostring(scopes[i].label) end
+        body = "You named more than one frame scope (" .. table.concat(labels, " and ")
+            .. "), so I kept every Aura growth setting unchanged. Send one complete frame-and-lane command at a time."
+    elseif kind == "lanes" then
+        body = "You named both " .. scopeLabel .. " Buff Growth and " .. scopeLabel
+            .. " Debuff Growth, so I kept both unchanged. Choose one lane, or send the two complete changes as separate messages."
+    else
+        body = "Do you mean " .. scopeLabel .. " Buff Growth or " .. scopeLabel
+            .. " Debuff Growth? I kept both unchanged because the Aura lane was not specified."
+    end
+    return {
+        text = body .. "\nExamples: change " .. scopeLabel:lower()
+            .. " buff growth direction; set " .. scopeLabel:lower() .. " debuff growth to left.",
+        status = "ambiguous",
+        result = "ambiguous",
+        summary = "Clarifies a compound Aura growth request before changing any setting.",
+    }
+end
+
+function R.TryScopedAuraGrowthReadOnly(text, coreHandler)
+    local norm = R.Normalize(text)
+    if not R.HasAuraGrowthIntent(norm) or R.HasAuraGrowthMutationIntent(norm) then return nil end
+    local scopes = R.AuraGrowthNamedScopes(norm)
+    if #scopes ~= 1 or R.AuraHasBothLanes(norm) then return nil end
+    local setting, settingKey = R.ScopedAuraGrowthSetting(norm)
+    if not setting then return nil end
+    local locationQuestion = R.LooksLikeRegistrySettingLocationQuestion(norm)
+    local currentQuestion = R.LooksLikeRegistrySettingCurrentValueQuestion(norm)
+    local explainQuestion = R.LooksLikeRegistrySettingExplainQuestion(norm)
+        or norm:match("^why%s+") or norm:match("^what%s+is%s+")
+        or norm:match("^what%s+does%s+") or norm:match("^explain%s+")
+    if not locationQuestion and not currentQuestion and not explainQuestion then return nil end
+
+    if type(A.CancelPendingMutationState) == "function" then A.CancelPendingMutationState() end
+    local item = R.RegistrySettingItemForKey and R.RegistrySettingItemForKey(settingKey) or nil
+    if not item then return nil end
+    local entries = { { item = item, score = 40000, rawScore = 40000 } }
+    if locationQuestion and A.RouterTryRegistrySettingLocationShortcut then
+        return A.RouterTryRegistrySettingLocationShortcut(text, coreHandler, entries)
+    end
+    if currentQuestion and A.RouterTryRegistrySettingCurrentValueShortcut then
+        return A.RouterTryRegistrySettingCurrentValueShortcut(text, coreHandler, entries)
+    end
+    if A.RouterTryRegistrySettingExplainShortcut then
+        local explainText = R.LooksLikeRegistrySettingExplainQuestion(norm)
+            and text or ("explain " .. tostring(setting.label or settingKey))
+        return A.RouterTryRegistrySettingExplainShortcut(explainText, coreHandler, entries)
+    end
+    return nil
+end
+
+function R.TryScopedAuraGrowthChoice(text, coreHandler)
+    if type(coreHandler) ~= "function" then return nil end
+    local norm = R.Normalize(text)
+    local lane = R.AuraLaneFromText(norm)
+    local scope, _, groupScope = R.AuraScopeForDetailText(norm)
+    if not lane or not scope then return nil end
+
+    if not R.HasAuraGrowthIntent(norm) or not R.HasAuraGrowthMutationIntent(norm) then return nil end
+    if R.AuraGrowthMutationAmbiguity(norm) then return nil end
 
     -- A concrete direction belongs on the normal mutation path. This helper
     -- exists for the open-ended form where the user named the exact control
@@ -3435,7 +3627,19 @@ function R.TryScopedAuraGrowthChoice(text, coreHandler)
         return nil
     end
 
-    local canonical = "change " .. tostring(scope) .. " " .. tostring(lane) .. " growth direction"
+    -- Use the exact registered control label instead of adding the natural
+    -- word "direction" to it.  The latter required a warm fuzzy-search index
+    -- because the real labels are "Player Buff Growth", "Raid Debuff Growth",
+    -- and so on; on a cold first request it could fall back to the Aura Style
+    -- page even though scope and lane were already known exactly.
+    local settingKey = groupScope
+        and ("gf_" .. tostring(scope) .. ".auras." .. tostring(lane) .. ".growth")
+        or ("auras3." .. tostring(scope) .. "." .. tostring(lane) .. ".growth")
+    local registry = A.Registry
+    local setting = registry and type(registry.GetSetting) == "function"
+        and registry:GetSetting(settingKey) or nil
+    local canonical = "change " .. tostring(setting and setting.label
+        or (tostring(scope) .. " " .. tostring(lane) .. " growth"))
     local result = type(R.TryOpenEndedSettingIdea) == "function" and R.TryOpenEndedSettingIdea(canonical, coreHandler)
         or coreHandler("set " .. tostring(scope) .. " " .. tostring(lane) .. " growth direction")
     if result and not A.RouterIsUnknownResult(result) then return result end
@@ -5334,6 +5538,26 @@ function R.TextMovementIntent(text)
     }
 end
 
+function R.IsAbsoluteTextOffsetAssignment(text, intent)
+    if type(intent) ~= "table" or intent.readOnly or intent.direction
+        or intent.conflictingDirections or intent.numberCount ~= 1
+        or (intent.axis ~= "x" and intent.axis ~= "y")
+    then
+        return false
+    end
+    local parser = A.Parser or {}
+    local actionable = type(parser.ActionableText) == "function" and parser.ActionableText(text) or text
+    actionable = R.Normalize(actionable)
+    if actionable == "" or actionable:find(" by ", 1, true) then return false end
+    if not (actionable:match("^set%s+") or actionable:match("^change%s+")
+        or actionable:match("^adjust%s+") or actionable:match("^configure%s+")
+        or actionable:match("^make%s+"))
+    then
+        return false
+    end
+    return actionable:match("%f[%a]" .. tostring(intent.axis) .. "%s+offset%f[%A]") ~= nil
+end
+
 function R.TextMovementFixedAnchorResult(intent)
     if type(intent) ~= "table" or not intent.fixedAnchorValue then return nil end
     local item = intent.anchorKey and R.RegistrySettingItemForKey and R.RegistrySettingItemForKey(intent.anchorKey) or nil
@@ -5433,6 +5657,14 @@ end
 function R.TryTextMovementConversation(text, coreHandler)
     local intent = R.TextMovementIntent(text)
     if not intent then return nil end
+    -- "set ... X/Y offset to N" is an absolute registry assignment, not a
+    -- direction-less relative movement request. Let the deterministic parser
+    -- own it even when the Knowledge index is cold and an alias lookup cannot
+    -- yet resolve labels such as "name text" to "Name Y Offset".
+    if R.IsAbsoluteTextOffsetAssignment(text, intent) and type(coreHandler) == "function" then
+        local result = coreHandler(text)
+        if result and not A.RouterIsUnknownResult(result) then return result end
+    end
     if intent.fixedAnchorValue then return R.TextMovementFixedAnchorResult(intent) end
     if intent.readOnly or not intent.direction or intent.conflictingDirections or intent.amountMappingAmbiguous then
         return R.TextMovementGuidance(intent, intent.readOnly)
@@ -8558,7 +8790,9 @@ A.RouterTrySafePlanningShortcut = function(text, coreHandler)
         )
     end
 
-    if R.ContainsAny(norm, terms.subjectiveAura)
+    local broadImportantAura = norm == "show important debuffs"
+        or norm == "show important buffs"
+    if (broadImportantAura or R.ContainsAny(norm, terms.subjectiveAura))
         and R.ContainsAny(norm, terms.aura)
         and (R.ContainsAny(norm, terms.action) or R.ContainsAny(norm, { "noise", "clutter", "track" }))
     then
@@ -10773,22 +11007,34 @@ function R.RegistrySettingPurpose(item)
         if desc:sub(-1) ~= "." then desc = desc .. "." end
         return desc
     end
-    if R.ContainsAny(normLabel, { "font size", "text size" }) then return label .. " controls how large that text is drawn." end
-    if R.ContainsAny(normLabel, { "spell name font size" }) then return label .. " controls the cast-bar spell-name text size." end
-    if R.ContainsAny(normLabel, { "range fade alpha", "range fade opacity" }) then return label .. " controls how faded out-of-range frames become." end
-    if R.ContainsAny(normLabel, { "range fade" }) then return label .. " controls whether frames fade when units are out of range." end
-    if R.ContainsAny(normLabel, { "dead background color" }) then return label .. " controls the color used behind dead group members so they are easier to spot." end
-    if R.ContainsAny(normLabel, { "background color", "backdrop color" }) then return label .. " controls the background color used by that frame or element." end
-    if R.ContainsAny(normLabel, { "border padding" }) then return label .. " controls the spacing around the group border so the outline has room around the frames." end
-    if R.ContainsAny(normLabel, { "border thickness", "outline" }) then return label .. " controls how thick the border or outline is." end
-    if R.ContainsAny(normLabel, { "border" }) then return label .. " controls the border style around that visual element." end
-    if R.ContainsAny(normLabel, { "hidden aura preset", "blacklist preset" }) then return label .. " applies a preset for hidden/blacklisted aura handling so common noisy auras can be filtered faster." end
-    if R.ContainsAny(normLabel, { "health color scheme", "health color mode" }) then return label .. " chooses how MSUF colors the health bar, such as class coloring or another health-color mode." end
     local kind = tostring(item.controlType or setting.type or "setting")
-    if kind == "boolean" then return label .. " turns that MSUF option on or off." end
-    if kind == "number" then return label .. " changes the numeric amount for that MSUF option." end
-    if kind == "color" then return label .. " sets the color used by that MSUF option." end
-    if kind == "enum" then return label .. " chooses which mode or style MSUF uses for that option." end
+    -- The declared control type owns the meaning. Label words only refine an
+    -- explanation inside a compatible type, so a boolean Border is never
+    -- described as a style and an enum Outline is never called thickness.
+    if kind == "boolean" then
+        if R.ContainsAny(normLabel, { "range fade" }) then return label .. " turns out-of-range frame fading on or off." end
+        return label .. " turns that MSUF option on or off."
+    end
+    if kind == "color" then
+        if R.ContainsAny(normLabel, { "dead background color" }) then return label .. " controls the color used behind dead group members so they are easier to spot." end
+        if R.ContainsAny(normLabel, { "background color", "backdrop color" }) then return label .. " controls the background color used by that frame or element." end
+        return label .. " sets the color used by that MSUF option."
+    end
+    if kind == "number" then
+        if R.ContainsAny(normLabel, { "spell name font size" }) then return label .. " controls the cast-bar spell-name text size." end
+        if R.ContainsAny(normLabel, { "font size", "text size" }) then return label .. " controls how large that text is drawn." end
+        if R.ContainsAny(normLabel, { "range fade alpha", "range fade opacity" }) then return label .. " controls how faded out-of-range frames become." end
+        if R.ContainsAny(normLabel, { "opacity", "alpha" }) then return label .. " controls the opacity amount for that MSUF option." end
+        if R.ContainsAny(normLabel, { "border padding" }) then return label .. " controls the spacing around the group border so the outline has room around the frames." end
+        if R.ContainsAny(normLabel, { "border thickness", "outline thickness", "outline size" }) then return label .. " controls how thick the border or outline is." end
+        return label .. " changes the numeric amount for that MSUF option."
+    end
+    if kind == "enum" then
+        if R.ContainsAny(normLabel, { "hidden aura preset", "blacklist preset" }) then return label .. " chooses a preset for hidden/blacklisted aura handling." end
+        if R.ContainsAny(normLabel, { "health color scheme", "health color mode" }) then return label .. " chooses how MSUF colors the health bar." end
+        if R.ContainsAny(normLabel, { "outline", "border" }) then return label .. " chooses which outline or border style MSUF uses." end
+        return label .. " chooses which mode or style MSUF uses for that option."
+    end
     if kind == "string" then return label .. " stores the text, media name, or free-form value used by that option." end
     return label .. " is an MSUF setting on this area of the menu."
 end
@@ -11371,9 +11617,34 @@ function R.IsExactRegistrySettingMutation(text)
     return ExactMutationMatch(text) ~= nil
 end
 
+function R.OpenColorSettingPickerResult(item, summary)
+    local setting = item and item.setting
+    if not (setting and setting.type == "color"
+        and type(A.OpenColorSettingPickerForSetting) == "function")
+    then
+        return nil
+    end
+    local opened, message = A.OpenColorSettingPickerForSetting(
+        setting, item.page, item.label or setting.label)
+    if opened ~= true then return nil end
+    return {
+        text = tostring(message or ("Opened Color Painter for " .. tostring(item.label or setting.label or "that color") .. "."))
+            .. "\nColor changes preview live. Done keeps the selected color; Cancel restores the original color.",
+        status = "navigated",
+        result = "navigated",
+        summary = summary or "Opens Color Painter for the exact Assistant color setting.",
+        colorPickerOpened = true,
+        settingKey = setting.key,
+    }
+end
+
 local function ExactSettingValuePrompt(item, invalidValue)
     local setting = item and item.setting
     if not setting then return nil end
+    local pickerResult = R.OpenColorSettingPickerResult(item,
+        invalidValue and "Opens Color Painter after an invalid color value."
+            or "Opens Color Painter for a value-less color request.")
+    if pickerResult then return pickerResult end
     local current = R.OpenEndedSettingCurrentValue(setting)
     local location = R.RegistryLocationLine(1, item):gsub("^1%.%s*", "")
     local lines = {
@@ -11708,6 +11979,9 @@ function R.TryOpenEndedSettingIdea(text, coreHandler)
     local item = entries[1].item
     local setting = item and item.setting
     if not setting then return nil end
+    local pickerResult = R.OpenColorSettingPickerResult(item,
+        "Opens Color Painter for an open-ended color request.")
+    if pickerResult then return pickerResult end
     local current = R.OpenEndedSettingCurrentValue(setting)
     local location = R.RegistryLocationLine(1, item):gsub("^1%.%s*", "")
     local prefix = "I found the exact MSUF control, but you did not choose a value, so I kept it unchanged.\n" .. location
@@ -12453,6 +12727,25 @@ function R.RegistrySettingItemForKey(settingKey)
     local registry = A.Registry
     local setting = registry and type(registry.GetSetting) == "function" and registry:GetSetting(settingKey) or nil
     if not setting then return nil end
+
+    -- AutoCoverage retains inverse legacy name-anchor spellings as raw
+    -- compatibility fallbacks: unit frames own `nameTextAnchor`, while group
+    -- frames own `nameAnchor`. An exact visible-label lookup can otherwise let
+    -- the generated string shadow win before the semantic parser reaches the
+    -- reviewed enum, turning a harmless explicit no-op into an unsafe refusal.
+    if setting.generated == true and setting.type == "string" then
+        local owner = settingKey:match("^(.-)%.nameAnchor$")
+        local reviewedKey = owner and (owner .. ".nameTextAnchor") or nil
+        if not reviewedKey then
+            owner = settingKey:match("^(.-)%.nameTextAnchor$")
+            reviewedKey = owner and (owner .. ".nameAnchor") or nil
+        end
+        local reviewed = reviewedKey and registry:GetSetting(reviewedKey) or nil
+        if reviewed and reviewed.generated ~= true and reviewed.type == "enum" then
+            settingKey, setting = reviewedKey, reviewed
+        end
+    end
+
     local page = setting.page or R.FallbackPageForSetting(setting)
     local pageLabel = page and A.DisplayPageLabel and A.DisplayPageLabel(page, "MSUF page") or nil
     local label = type(A.DisplaySettingLabel) == "function" and A.DisplaySettingLabel(setting) or tostring(setting.label or settingKey)
@@ -12923,13 +13216,14 @@ function A.RouterTryRegistrySettingExplainShortcut(text, coreHandler, precompute
     }
 end
 
-function A.RouterTryRegistrySettingCurrentValueShortcut(text, coreHandler)
+function A.RouterTryRegistrySettingCurrentValueShortcut(text, coreHandler, precomputedEntries)
     local norm = R.Normalize(text)
     if not R.LooksLikeRegistrySettingCurrentValueQuestion(norm) then return nil end
     local subject = R.RegistryCurrentValueSubject(norm)
     local directKey = R.RegistryVisibilityCurrentValueSettingKey(subject, norm)
     local directItem = directKey and R.RegistrySettingItemForKey(directKey) or nil
-    local entries = directItem and { { item = directItem, score = 9999, rawScore = 9999 } }
+    local entries = precomputedEntries
+        or (directItem and { { item = directItem, score = 9999, rawScore = 9999 } })
         or R.RegistrySettingSearchEntries(subject ~= "" and subject or text, norm, 16)
     if not entries or #entries == 0 then return R.RegistryCurrentValueClarification(subject, nil, 0) end
     local top = entries[1]
@@ -13711,6 +14005,37 @@ end
 function A.RouteInput(text, coreHandler)
     text = R.Trim(text)
     if text == "" then return nil end
+    -- A concrete ecosystem question starts a new topic. Handle it before any
+    -- pending confirmation or free-form workflow can reinterpret an addon name
+    -- as "yes", a profile destination, or a setting value.
+    if A.Knowledge and type(A.Knowledge.LooksLikeComplementaryAddonQuestion) == "function"
+        and A.Knowledge.LooksLikeComplementaryAddonQuestion(text)
+        and type(A.Knowledge.Answer) == "function"
+    then
+        local answer = A.Knowledge.Answer(text, { currentPage = M and M.activeKey })
+        if answer then
+            local hadPending = type(A.RouterHasBlockingPendingAssistantState) == "function"
+                and A.RouterHasBlockingPendingAssistantState() == true
+            local hadPendingResults = (type(A.RouterHasPendingSearchResults) == "function" and A.RouterHasPendingSearchResults())
+                or (type(A.RouterHasPendingSelectedResult) == "function" and A.RouterHasPendingSelectedResult())
+            if hadPending and type(A.CancelPendingMutationState) == "function" then
+                A.CancelPendingMutationState()
+            end
+            if type(A.RouterClearPendingChoicesForRoute) == "function" then
+                A.RouterClearPendingChoicesForRoute()
+            end
+            if type(A.RouterClearPendingResultsForRoute) == "function" then
+                A.RouterClearPendingResultsForRoute()
+            end
+            A.lastAssistantHelpContext = nil
+            A.lastAssistantPlanningContext = nil
+            if hadPending or hadPendingResults then
+                answer.text = tostring(answer.text or "")
+                    .. "\nI cleared the previous pending choice or change because you started a new topic."
+            end
+            return answer
+        end
+    end
     -- Pending workflows must see the user's original casing and punctuation.
     -- The routing-language normalizer below intentionally lowercases ordinary
     -- intent text, which is correct for matching but would corrupt free-form
@@ -13791,6 +14116,14 @@ function A.RouteInput(text, coreHandler)
         end
         return coreCache[value] ~= false and coreCache[value] or nil
     end
+
+    local scopedAuraGrowthClarification = R.TryScopedAuraGrowthClarification
+        and R.TryScopedAuraGrowthClarification(text)
+    if scopedAuraGrowthClarification then return scopedAuraGrowthClarification end
+
+    local scopedAuraGrowthReadOnly = R.TryScopedAuraGrowthReadOnly
+        and R.TryScopedAuraGrowthReadOnly(text, Core)
+    if scopedAuraGrowthReadOnly then return scopedAuraGrowthReadOnly end
 
     local runtimeVersion = R.TryRuntimeVersionQuestion and R.TryRuntimeVersionQuestion(text)
     if runtimeVersion then return runtimeVersion end
@@ -14039,15 +14372,53 @@ function A.RouteInput(text, coreHandler)
     do
         local normalized = R.Normalize(text)
         local terms = A.RouterSafePlanningTerms or {}
+        local broadImportantAura = normalized == "show important debuffs"
+            or normalized == "show important buffs"
         local earlyPlanningIntent = R.ContainsAny(normalized, terms.compare or {})
             or R.ContainsAny(normalized, terms.overload or {})
             or R.ContainsAny(normalized, terms.recommendationFollowup or {})
+            or R.ContainsAny(normalized, terms.vagueTarget or {})
+            or broadImportantAura
             or (R.ContainsAny(normalized, terms.subjectiveAura or {})
                 and R.ContainsAny(normalized, terms.aura or {}))
         if earlyPlanningIntent then
             local earlySafePlanning = A.RouterTrySafePlanningShortcut
                 and A.RouterTrySafePlanningShortcut(text, Core)
             if earlySafePlanning then return earlySafePlanning end
+        end
+    end
+
+    -- Retired Private Aura layout labels still exist in generated read-only
+    -- inventory data, but they must never alias ordinary Buff/Debuff lanes.
+    -- Resolve this safety boundary before the setting browser or visible-page
+    -- context can reinterpret the requested size/anchor/count as a live Aura
+    -- mutation. The parser owns the canonical explanation when available;
+    -- the local fallback keeps the public route fail-closed during partial
+    -- runtime loads as well.
+    do
+        local normalized = R.Normalize(text)
+        if R.ContainsAny(normalized, {
+            "private aura", "private auras", "private-aura", "private-auras",
+        }) then
+            local parsed = type(A.Parse) == "function" and A.Parse(text) or nil
+            if type(parsed) == "table" and parsed.kind == "answer"
+                and tostring(parsed.status or "info") == "info"
+            then
+                return {
+                    text = parsed.text,
+                    status = "info",
+                    result = "info",
+                    kind = "unsupported",
+                    summary = parsed.summary,
+                }
+            end
+            return {
+                text = "MSUF has no standalone Private Aura layout control here, so I kept every Buff and Debuff option unchanged. Name a normal Buff or Debuff lane if that is what you want to resize or move.",
+                status = "info",
+                result = "info",
+                kind = "unsupported",
+                summary = "Keeps retired private-aura layout wording from changing ordinary Aura lanes.",
+            }
         end
     end
 
@@ -14063,6 +14434,19 @@ function A.RouteInput(text, coreHandler)
 
     local settingBrowserResult = R.TrySettingBrowserShortcut and R.TrySettingBrowserShortcut(text)
     if settingBrowserResult then return settingBrowserResult end
+
+    -- Complete reviewed semantic commands outrank page-local terse context.
+    -- Scope and value are deliberately closed so this cannot broaden writes:
+    -- unit Name Anchor owns the reviewed unit text enum, while shared group
+    -- Aura Spacing owns the reviewed Buff+Debuff pair as one transaction.
+    if hasCore and not A.RouterHasPendingConfirmationOrFlow()
+        and R.ReviewedSemanticMutationKind(text)
+    then
+        local reviewedSemanticMutation = Core(text)
+        if reviewedSemanticMutation and not A.RouterIsUnknownResult(reviewedSemanticMutation) then
+            return reviewedSemanticMutation
+        end
+    end
 
     -- Resolve referential help replies before broad navigation parses
     -- "open that" as a fuzzy setting name. The help context already owns a

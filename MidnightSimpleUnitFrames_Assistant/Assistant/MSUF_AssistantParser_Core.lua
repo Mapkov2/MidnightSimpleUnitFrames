@@ -923,6 +923,30 @@ local fuzzyAliasPrefilterText
 local fuzzyAliasPrefilterTokens = {}
 local fuzzyAliasPrefilterSet = {}
 
+-- Full-registry fuzzy scans can cooperatively yield while the Dashboard job is
+-- active. Keep that temporary capability on the scan coroutine instead of a
+-- shared parser flag: a cancelled or failed job can then never leave fuzzy
+-- matching enabled for a later request. The weak keys also make abandoned job
+-- coroutines self-cleaning without an idle timer or explicit sweep.
+local fuzzyAliasCoroutineScopes = setmetatable({}, { __mode = "k" })
+
+function P.SetFuzzyAliasCoroutineScope(co, enabled)
+    if type(co) ~= "thread" then return false end
+    if enabled == true then
+        fuzzyAliasCoroutineScopes[co] = true
+    else
+        fuzzyAliasCoroutineScopes[co] = nil
+    end
+    return true
+end
+
+function P.FuzzyAliasMatchEnabled()
+    if P._allowFuzzyAliasMatch == true then return true end
+    if type(coroutine) ~= "table" or type(coroutine.running) ~= "function" then return false end
+    local co = coroutine.running()
+    return co ~= nil and fuzzyAliasCoroutineScopes[co] == true
+end
+
 local function EnsureFuzzyAliasPrefilter(text)
     text = Normalize(text)
     if fuzzyAliasPrefilterText == text then
@@ -1333,7 +1357,7 @@ local function TextMatchesAlias(text, relationText, alias)
     local normalizedText = Normalize(text)
     local normalizedRelation = Normalize(relationText or AliasRelationText(text))
     local normalizedAlias = Normalize(alias)
-    if P._allowFuzzyAliasMatch == true then
+    if P.FuzzyAliasMatchEnabled() then
         if FuzzyAliasWorthTrying(normalizedText, normalizedAlias) and FuzzyPhraseMatch(normalizedText, normalizedAlias) then return true end
         if FuzzyAliasWorthTrying(normalizedRelation, normalizedAlias) and FuzzyPhraseMatch(normalizedRelation, normalizedAlias) then return true end
     end

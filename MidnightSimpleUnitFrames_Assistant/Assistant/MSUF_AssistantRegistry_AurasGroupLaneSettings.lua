@@ -7,8 +7,80 @@ local A = MSUF.Assistant or {}
 MSUF.Assistant = A
 A.AurasRegistry = A.AurasRegistry or {}
 
+local function ClampLayer(value, fallback)
+    value = tonumber(value)
+    if value == nil then value = tonumber(fallback) or 7 end
+    value = math.floor(value + 0.5)
+    if value < 0 then return 0 end
+    if value > 30 then return 30 end
+    return value
+end
+
+function A.AurasRegistry.RegisterGroupExternalLayerSettings(ctx)
+    if type(ctx) ~= "table" then return end
+
+    local Registry = ctx.Registry
+    local UNIT_LABELS = ctx.UNIT_LABELS or {}
+    local GF_AURA_GROUPS = ctx.GF_AURA_GROUPS or {}
+    local AddAliasesForUnit = ctx.AddAliasesForUnit
+    local GFAurasRoot = ctx.GFAurasRoot
+    local ApplyGroup = ctx.ApplyGroup
+
+    if not (Registry and type(Registry.RegisterSetting) == "function") then return end
+    if type(AddAliasesForUnit) ~= "function" or type(GFAurasRoot) ~= "function" then return end
+    if type(ApplyGroup) ~= "function" then return end
+
+    for _, scope in ipairs(GF_AURA_GROUPS) do
+        local scopeKey = scope
+        local aliases = {
+            scope .. " external defensive layer",
+            scope .. " external defensives layer",
+            scope .. " externals layer",
+            scope .. " external aura layer",
+        }
+        AddAliasesForUnit(aliases, scope, "external defensive layer")
+        AddAliasesForUnit(aliases, scope, "externals layer")
+
+        Registry:RegisterSetting({
+            key = "gf_" .. scope .. ".auras.externals.layer",
+            label = (UNIT_LABELS[scope] or scope) .. " External Defensive Layer",
+            category = (UNIT_LABELS[scope] or scope) .. " / Group Auras",
+            page = "gf_auras",
+            unit = scope,
+            frameType = "groupAura",
+            -- The selected Group scope/lane is UI state; this attribute names
+            -- the visible External Defensive Layer control itself.
+            attribute = "externalLayer",
+            type = "number",
+            aliases = aliases,
+            exactAliases = aliases,
+            min = 0,
+            max = 30,
+            step = 1,
+            get = function()
+                local root = GFAurasRoot(scopeKey)
+                local externals = root and root.externals
+                return ClampLayer(externals and externals.layer, 7)
+            end,
+            set = function(value)
+                local root = GFAurasRoot(scopeKey)
+                if not root then return end
+                root.externals = type(root.externals) == "table" and root.externals or {}
+                root.externals.layer = ClampLayer(value, 7)
+            end,
+            apply = function() ApplyGroup(scopeKey, "auras") end,
+            combatSafe = false,
+        })
+    end
+end
+
 function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
     if type(ctx) ~= "table" then return end
+
+    local RegisterGroupExternalLayerSettings = A.AurasRegistry.RegisterGroupExternalLayerSettings
+    if type(RegisterGroupExternalLayerSettings) == "function" then
+        RegisterGroupExternalLayerSettings(ctx)
+    end
 
     local Assistant = ctx.A or A
     local Registry = ctx.Registry

@@ -64,6 +64,35 @@ local prompts = {
     "click casting help",
     "what are nameplates",
     "can msuf change nameplates",
+    "what other addons work well with msuf?",
+    "which addons complement msuf",
+    "does EQoL work with MSUF",
+    "Can I use EQoL with MSUF?",
+    "Which addons work well with MidnightSimpleUnitFrames?",
+    "Does Details! work with MSUF?",
+    "Can I use WeakAuras with MSUF?",
+    "Does Cell work with MSUF?",
+    "Which EQoL settings overlap with MSUF?",
+    "Can I use MSUF without EQoL?",
+    "Do not recommend EQoL for MSUF",
+    "I don't want addon recommendations for MSUF",
+    "EQoL does not work with MSUF",
+    "WeakAuras breaks MSUF",
+    "Details! causes Lua errors with MSUF",
+    "EQoL works with MSUF.",
+    "I use WeakAuras with MSUF.",
+    "I installed BetterFriendList with MSUF.",
+    "WeakAuras is installed with MSUF.",
+    "I do not use EQoL with MSUF.",
+    "Which addons are incompatible with MSUF?",
+    "Which MSUF settings overlap with EQoL?",
+    "Which MSUF aura setting should I use with WeakAuras?",
+    "Where is the EQoL setting in MSUF?",
+    "Does target width work with MSUF?",
+    "Does WoW work with MSUF?",
+    "Does Retail work with MSUF?",
+    "Does Midnight work with MSUF?",
+    "Can I use profiles with MSUF?",
     "what are unit frames",
     "can msuf change unit frames",
     "what are party frames",
@@ -591,6 +620,22 @@ local expectedContains = {
     ["click casting help"] = "Mouseover and click casting help",
     ["what are nameplates"] = "Nameplates help",
     ["can msuf change nameplates"] = "Nameplates help",
+    ["what other addons work well with msuf?"] = "Addons that pair well with MSUF",
+    ["which addons complement msuf"] = "Verified MSUF integrations:",
+    ["does EQoL work with MSUF"] = "Addon compatibility with MSUF",
+    ["Can I use EQoL with MSUF?"] = "Addon compatibility with MSUF",
+    ["Which addons work well with MidnightSimpleUnitFrames?"] = "Addons that pair well with MSUF",
+    ["Does Details! work with MSUF?"] = "Addon compatibility with MSUF",
+    ["Can I use WeakAuras with MSUF?"] = "Addon compatibility with MSUF",
+    ["Does Cell work with MSUF?"] = "Addon compatibility with MSUF",
+    ["Which EQoL settings overlap with MSUF?"] = "Addon overlap and compatibility with MSUF",
+    ["Which addons are incompatible with MSUF?"] = "Addon overlap and compatibility with MSUF",
+    ["Can I use MSUF without EQoL?"] = "MSUF addon dependency",
+    ["Do not recommend EQoL for MSUF"] = "Addon recommendation preference",
+    ["I don't want addon recommendations for MSUF"] = "Addon recommendation preference",
+    ["EQoL does not work with MSUF"] = "Possible addon conflict with MSUF",
+    ["WeakAuras breaks MSUF"] = "Possible addon conflict with MSUF",
+    ["Details! causes Lua errors with MSUF"] = "Possible addon conflict with MSUF",
     ["what are unit frames"] = "Unit Frames help",
     ["can msuf change unit frames"] = "Unit Frames help",
     ["what are party frames"] = "Party and raid frame help",
@@ -1028,6 +1073,35 @@ local expectedContains = {
     ["profil fehlt"] = "I treated that as a problem report",
     ["import geht nicht"] = "Profile import help",
     ["profile import not working"] = "Profile import help",
+}
+
+-- Declarative coexistence statements and MSUF-owned control/platform questions
+-- must not be captured by the early addon-ecosystem route. Strong failure
+-- reports above are the intentional exception.
+local addonHeadingMustBeAbsent = {
+    ["EQoL works with MSUF."] = true,
+    ["I use WeakAuras with MSUF."] = true,
+    ["I installed BetterFriendList with MSUF."] = true,
+    ["WeakAuras is installed with MSUF."] = true,
+    ["I do not use EQoL with MSUF."] = true,
+    ["Which MSUF settings overlap with EQoL?"] = true,
+    ["Which MSUF aura setting should I use with WeakAuras?"] = true,
+    ["Where is the EQoL setting in MSUF?"] = true,
+    ["Does target width work with MSUF?"] = true,
+    ["Does WoW work with MSUF?"] = true,
+    ["Does Retail work with MSUF?"] = true,
+    ["Does Midnight work with MSUF?"] = true,
+    ["Can I use profiles with MSUF?"] = true,
+}
+
+local addonResponseHeadings = {
+    "Addons that pair well with MSUF",
+    "Addon compatibility with MSUF",
+    "Addon overlap and compatibility with MSUF",
+    "Possible addon conflict with MSUF",
+    "MSUF addon dependency",
+    "Addon recommendation preference",
+    "Addon compatibility note",
 }
 
 local rawEchoBlocked = {
@@ -1481,6 +1555,29 @@ for _, input in ipairs(prompts) do
             tostring(expected),
             tostring(text or "")
         )
+    end
+    if addonHeadingMustBeAbsent[input] then
+        for i = 1, #addonResponseHeadings do
+            local heading = addonResponseHeadings[i]
+            if tostring(text or ""):find(heading, 1, true) then
+                failures[#failures + 1] = string.format(
+                    "%s was incorrectly captured by addon ecosystem heading %q: %q",
+                    input,
+                    heading,
+                    tostring(text or "")
+                )
+            end
+        end
+    end
+    if input == "what other addons work well with msuf?" then
+        if tostring(text or ""):find("I found this in MSUF", 1, true)
+            or tostring(text or ""):find("I found these MSUF matches", 1, true)
+        then
+            failures[#failures + 1] = input .. " fell through to internal setting search: " .. tostring(text or "")
+        end
+        if type(result and result.searchResults) == "table" then
+            failures[#failures + 1] = input .. " returned setting-search follow-ups"
+        end
     end
     local panel = A.largeTextPanel
     if type(panel) == "table" then

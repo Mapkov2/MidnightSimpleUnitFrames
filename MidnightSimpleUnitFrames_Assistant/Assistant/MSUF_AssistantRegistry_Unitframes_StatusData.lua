@@ -79,7 +79,7 @@ Data.STATUS_CONTROL_SPECS = {
         defaultShow = false, size = "nameFontSize", defaultSize = 14,
         anchor = "raidGroupNameAnchor", defaultAnchor = "NAMERIGHT",
         x = "raidGroupNameOffsetX", defaultX = 3, y = "raidGroupNameOffsetY", defaultY = 0,
-        layer = "nameTextLayer", defaultLayer = 5,
+        layer = "raidGroupNameLayer", defaultLayer = 5, legacyLayer = "nameTextLayer",
         refresh = "MSUF_RefreshRaidGroupNameFrames", inlineName = true, nameAnchors = true,
         units = { player = true, target = true, targettarget = true, focustarget = true, focus = true },
         aliases = {

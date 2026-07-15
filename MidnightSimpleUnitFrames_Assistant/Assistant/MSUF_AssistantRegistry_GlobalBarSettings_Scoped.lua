@@ -31,8 +31,6 @@ function A.GlobalBarRegistry.RegisterScopedBarSettings(ctx)
     local GRADIENT_DIRECTION_VALUES = ctx.GRADIENT_DIRECTION_VALUES
     local GRADIENT_DIRECTION_KEYS = ctx.GRADIENT_DIRECTION_KEYS
     local GRADIENT_DIRECTION_ALIASES = ctx.GRADIENT_DIRECTION_ALIASES
-    local OUTLINE_STRATA_VALUES = ctx.OUTLINE_STRATA_VALUES
-    local OUTLINE_STRATA_ALIASES = ctx.OUTLINE_STRATA_ALIASES
 
     if type(GeneralDB) ~= "function" or type(ApplyHighlightBorders) ~= "function" then return false end
     if type(RegisterScopedSetting) ~= "function" or type(RegisterScopedOverlaySettings) ~= "function" then return false end
@@ -41,7 +39,6 @@ function A.GlobalBarRegistry.RegisterScopedBarSettings(ctx)
     if type(GlobalScopeSetOverride) ~= "function" or type(GlobalScopeRead) ~= "function" or type(GlobalScopeWrite) ~= "function" then return false end
     if type(NormalizeTextureKeyForAssistant) ~= "function" then return false end
     if type(GRADIENT_DIRECTION_VALUES) ~= "table" or type(GRADIENT_DIRECTION_KEYS) ~= "table" then return false end
-    if type(OUTLINE_STRATA_VALUES) ~= "table" or type(OUTLINE_STRATA_ALIASES) ~= "table" then return false end
 
     local HIGHLIGHT_KEYS = { "dispel", "aggro", "purge", "bossTarget" }
     local HIGHLIGHT_ALLOWED = { dispel = true, aggro = true, purge = true, bossTarget = true }
@@ -264,17 +261,18 @@ function A.GlobalBarRegistry.RegisterScopedBarSettings(ctx)
             apply = ApplyBarGradients,
             reason = "MSUF_ASSISTANT_SCOPED_GRADIENT_DIRECTION",
         })
-        RegisterScopedSetting("barScope", scope, "barOutlineStrata", "strata", "Bar Outline Strata", "enum", "AUTO", GlobalScopeAliases(scope, {
+        RegisterScopedSetting("barScope", scope, "barOutlineLayer", "layer", "Bar Outline Layer", "number", 0, GlobalScopeAliases(scope, {
             "bar outline strata", "bar outline layer", "frame outline strata", "frame outline layer",
             "outline strata", "outline layer",
         }), {
             flag = "hlOverride",
             shared = "bars",
-            values = OUTLINE_STRATA_VALUES,
-            valueAliases = OUTLINE_STRATA_ALIASES,
+            min = 0,
+            max = 30,
+            step = 1,
             apply = ctx.ApplyBarOutline,
-            reason = "MSUF_ASSISTANT_SCOPED_BAR_OUTLINE_STRATA",
-            description = "Chooses the frame strata used by this scope's bar and frame outline.",
+            reason = "MSUF_ASSISTANT_SCOPED_BAR_OUTLINE_LAYER",
+            description = "Controls this scope's bar and frame outline draw order on the unified Layer 0-30 scale.",
         })
         if RegisterScopedOverlaySettings(ctx, scope) == false then return false end
     end

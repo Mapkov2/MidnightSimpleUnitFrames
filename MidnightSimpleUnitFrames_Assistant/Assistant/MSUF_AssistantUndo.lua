@@ -811,14 +811,18 @@ local function ApplyChangeList(changes, useOld)
             local key = setting.key or setting
             if not seen[key] and type(setting.apply) == "function" then
                 seen[key] = true
-                local ok, err = pcall(setting.apply)
-                if not ok then return false, err end
+                local ok, applied, detail = pcall(setting.apply)
+                if not ok or applied == false then
+                    return false, ok and (detail or "apply callback returned false") or applied
+                end
             end
         end
         local service = CurrentApplyService()
         if service and type(service.Flush) == "function" then
-            local ok, err = pcall(service.Flush)
-            if not ok then return false, err end
+            local ok, flushed, detail = pcall(service.Flush)
+            if not ok or flushed == false then
+                return false, ok and (detail or "ApplyService.Flush returned false") or flushed
+            end
         end
         return true
     end

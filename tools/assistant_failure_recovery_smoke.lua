@@ -225,4 +225,18 @@ assert(A.dashboardUI.input.enabled and A.dashboardUI.send.enabled and A.dashboar
 assert(type(A.lastAssistantJobError) == "table" and tostring(A.lastAssistantJobError.message):find("synthetic completion failure", 1, true),
     "completion exception was not retained for diagnostics")
 
+-- Composite bar-outline wording must outrank the generic font-outline hint and
+-- retain the original request for diagnostics/retry UI.
+local outlineQuery = "make the outline color for bars red"
+local outlineRecovery = AP.AssistantFailureResult("synthetic outline failure", {
+    label = "assistant.route",
+    text = outlineQuery,
+})
+assert(type(outlineRecovery.searchResults) == "table" and outlineRecovery.searchResults[1].page == "opt_bars",
+    "bar outline recovery did not prefer the Bars page")
+assert(not tostring(outlineRecovery.text):find("Fonts", 1, true),
+    "bar outline recovery suggested Fonts")
+assert(outlineRecovery.retryText == outlineQuery and A.lastAssistantJobError.requestText == outlineQuery,
+    "failure recovery did not retain the original request text")
+
 io.write("assistant_failure_recovery_smoke: ok\n")
