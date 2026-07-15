@@ -112,6 +112,65 @@ function Get-ReferenceHash {
     }
 }
 
+function Assert-GraphifySourceInventoryFreshness {
+    param(
+        [Parameter(Mandatory = $true)][string]$SourceSnapshotScript,
+        [Parameter(Mandatory = $true)][string]$InventoryPath
+    )
+
+    Write-Host "[gate] Graphify source-snapshot freshness"
+    $actualRows = @(& $SourceSnapshotScript -RepositoryRoot $script:repoRoot)
+    if ($actualRows.Count -ne 1) {
+        throw "Graphify source snapshot calculator returned $($actualRows.Count) objects; expected exactly one."
+    }
+    $actual = $actualRows[0]
+
+    $inventoryText = [System.IO.File]::ReadAllText($InventoryPath)
+    $blockMatch = [regex]::Match(
+        $inventoryText,
+        'sourceSnapshot\s*=\s*\{(?<body>.*?)\}\s*,',
+        [System.Text.RegularExpressions.RegexOptions]::Singleline)
+    if (-not $blockMatch.Success) {
+        throw "Tracked Graphify inventory has no sourceSnapshot metadata block."
+    }
+    $body = $blockMatch.Groups['body'].Value
+
+    $readString = {
+        param([string]$Name)
+        $match = [regex]::Match($body, ('\b{0}\s*=\s*"([^"]+)"' -f [regex]::Escape($Name)))
+        if (-not $match.Success) { throw "Tracked Graphify source snapshot is missing '$Name'." }
+        return $match.Groups[1].Value
+    }
+    $readInteger = {
+        param([string]$Name)
+        $match = [regex]::Match($body, ('\b{0}\s*=\s*(\d+)' -f [regex]::Escape($Name)))
+        if (-not $match.Success) { throw "Tracked Graphify source snapshot is missing '$Name'." }
+        return [int]$match.Groups[1].Value
+    }
+
+    $tracked = [pscustomobject]@{
+        schemaVersion = & $readInteger "schemaVersion"
+        manifestFormat = & $readString "manifestFormat"
+        algorithm = & $readString "algorithm"
+        manifestSha256 = & $readString "manifestSha256"
+        fileCount = & $readInteger "fileCount"
+    }
+    if ($tracked.schemaVersion -ne 1 -or
+        $tracked.manifestFormat -ne "msuf-addon-source-sha256-v1" -or
+        $tracked.algorithm -ne "SHA256" -or
+        $tracked.manifestSha256 -notmatch '^[0-9A-F]{64}$' -or
+        $tracked.fileCount -le 0) {
+        throw "Tracked Graphify inventory has invalid source-snapshot metadata."
+    }
+
+    foreach ($property in @("schemaVersion", "manifestFormat", "algorithm", "manifestSha256", "fileCount")) {
+        if ($tracked.$property -ne $actual.$property) {
+            throw "Tracked Graphify inventory is stale for addon source ($property tracked='$($tracked.$property)' current='$($actual.$property)'). Rebuild through tools/update_assistant_graphify_snapshot.ps1, then regenerate and review the tracked inventory."
+        }
+    }
+    Write-Host ("  PASS: {0} files, SHA256 {1}" -f $actual.fileCount, $actual.manifestSha256)
+}
+
 function Get-AssistantManifestFiles {
     $assistantRoot = Join-Path $script:repoRoot "MidnightSimpleUnitFrames_Assistant"
     $manifestPath = Join-Path $assistantRoot "MSUF_AssistantRuntime.xml"
@@ -262,6 +321,9 @@ $luaGates = @(
 
     [pscustomobject]@{ Category = "controller"; Path = "tools/assistant_exact_setting_control_contract.lua"; Args = @() },
     [pscustomobject]@{ Category = "controller"; Path = "tools/assistant_parser_smoke.lua"; Args = @() },
+    [pscustomobject]@{ Category = "controller/color"; Path = ".github/scripts/tests/assistant_color_picker_bridge_smoke.lua"; Args = @() },
+    [pscustomobject]@{ Category = "controller/color"; Path = ".github/scripts/tests/assistant_bar_gradient_reset_smoke.lua"; Args = @() },
+    [pscustomobject]@{ Category = "controller/layer"; Path = ".github/scripts/tests/layer_contract_smoke.lua"; Args = @() },
     [pscustomobject]@{ Category = "controller"; Path = "tools/assistant_actual_parse_audit.lua"; Args = @() },
     [pscustomobject]@{ Category = "controller"; Path = ".github/scripts/tests/assistant_three_controller_gaps_smoke.lua"; Args = @() },
     [pscustomobject]@{ Category = "controller"; Path = "tools/assistant_autocoverage_identity_regression.lua"; Args = @() },
@@ -356,6 +418,8 @@ $transitiveGateDependencies = @(
 $releaseAssets = @(
     "tools/generate_assistant_control_schema.ps1",
     "tools/generate_assistant_graphify_inventory.lua",
+    "tools/assistant_graphify_source_snapshot.ps1",
+    "tools/update_assistant_graphify_snapshot.ps1",
     "tools/AssistantTraining/run.ps1",
     "tools/assistant_v1_training_oracle.lua",
     "tools/assistant_graphify_inventory.lua",
@@ -419,6 +483,10 @@ try {
     Write-Host "  repo: $repoRoot"
     Write-Host "  Lua: $lua"
     Write-Host "  output: $outputPath"
+
+    Assert-GraphifySourceInventoryFreshness `
+        -SourceSnapshotScript (Join-Path $repoRoot "tools/assistant_graphify_source_snapshot.ps1") `
+        -InventoryPath (Join-Path $repoRoot "tools/assistant_graphify_inventory_data.lua")
 
     Test-AssistantManifestCompilation -Compiler $luac -Files $manifestFiles
 
