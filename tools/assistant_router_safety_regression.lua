@@ -49,6 +49,138 @@ end
 local hideSetting, hideBox, hideOriginal = patchSetting(
     "auras3.player.buff.blacklist.hidePermanent", false)
 local widthSetting, widthBox, widthOriginal = patchSetting("target.width", 275)
+local sharedHealthTextSetting, sharedHealthTextBox, sharedHealthTextOriginal = patchSetting(
+    "fontScope.shared.colorHealthTextByHealth", "DEFAULT")
+local playerHealthTextSetting, playerHealthTextBox, playerHealthTextOriginal = patchSetting(
+    "fontScope.player.colorHealthTextByHealth", "DEFAULT")
+local sharedPowerTextSetting, sharedPowerTextBox, sharedPowerTextOriginal = patchSetting(
+    "fontScope.shared.colorPowerTextByType", "DEFAULT")
+local playerPowerTextSetting, playerPowerTextBox, playerPowerTextOriginal = patchSetting(
+    "fontScope.player.colorPowerTextByType", "DEFAULT")
+local sharedNameTextSetting, sharedNameTextBox, sharedNameTextOriginal = patchSetting(
+    "fontScope.shared.nameColorMode", "DEFAULT")
+local targetNPCNameTextSetting, targetNPCNameTextBox, targetNPCNameTextOriginal = patchSetting(
+    "fontScope.target.npcNameRed", "DEFAULT")
+local playerPortraitModeSetting, playerPortraitModeBox, playerPortraitModeOriginal = patchSetting(
+    "player.portraitMode", "OFF")
+local playerPortraitXSetting, playerPortraitXBox, playerPortraitXOriginal = patchSetting(
+    "player.portraitOffsetX", 0)
+local playerRootXSetting, playerRootXBox, playerRootXOriginal = patchSetting(
+    "player.offsetX", -2)
+local targetTargetNameAnchorSetting, targetTargetNameAnchorBox, targetTargetNameAnchorOriginal = patchSetting(
+    "targettarget.nameTextAnchor", "RIGHT")
+local targetTargetNameXSetting, targetTargetNameXBox, targetTargetNameXOriginal = patchSetting(
+    "targettarget.nameOffsetX", 0)
+local targetTargetRootXSetting, targetTargetRootXBox, targetTargetRootXOriginal = patchSetting(
+    "targettarget.offsetX", 37)
+local playerRaidMarkerAnchorSetting, playerRaidMarkerAnchorBox, playerRaidMarkerAnchorOriginal = patchSetting(
+    "player.raidMarkerAnchor", "TOPLEFT")
+local playerRaidMarkerXSetting, playerRaidMarkerXBox, playerRaidMarkerXOriginal = patchSetting(
+    "player.raidMarkerOffsetX", 16)
+
+local portraitOwnerUnits = { "player", "target", "focus", "pet", "targettarget", "focustarget", "boss" }
+for i = 1, #portraitOwnerUnits do
+    local unit = portraitOwnerUnits[i]
+    local mode = assert(Registry:GetSetting(unit .. ".portraitMode"), "missing " .. unit .. " portrait mode")
+    local offset = assert(Registry:GetSetting(unit .. ".portraitOffsetX"), "missing " .. unit .. " portrait X offset")
+    assert(A.ResolveContextAxisSetting(mode, "left") == offset,
+        unit .. " portrait mode did not resolve to its own X offset")
+end
+assert(A.ResolveContextAxisSetting({
+    unit = "player", frameType = "unitframe", category = "Portrait", attribute = "missingMode",
+}, "left") == nil, "component without a local X companion fell back to the Player frame root")
+
+resetTask()
+playerPortraitModeBox.value, playerPortraitXBox.value, playerRootXBox.value = "OFF", 0, -2
+local initialPortraitPlacement = assert(A.Submit("now move player portrait next to player left side"))
+assert(status(initialPortraitPlacement) == "applied" or status(initialPortraitPlacement) == "unchanged",
+    "initial portrait side relationship was not actionable")
+assert(playerPortraitModeBox.value == "LEFT", "portrait relationship did not select the left portrait side")
+assert(playerPortraitXBox.value == 0, "portrait relationship was misread as a local pixel nudge")
+assert(playerRootXBox.value == -2, "portrait relationship moved the Player frame root")
+
+resetTask()
+playerPortraitModeBox.value, playerPortraitXBox.value, playerRootXBox.value = "LEFT", 0, -2
+local repeatedPortraitPlacement = assert(A.Submit("now move player portrait next to player left side"))
+assert(status(repeatedPortraitPlacement) == "unchanged", "repeated portrait relationship was not a no-op")
+assert(playerPortraitModeBox.value == "LEFT" and playerPortraitXBox.value == 0,
+    "repeated portrait relationship changed portrait state")
+assert(playerRootXBox.value == -2, "repeated portrait relationship leaked into Player X Position")
+assert(#A.undoStack == 0, "repeated portrait relationship created an undoable mutation")
+
+resetTask()
+playerPortraitModeBox.value, playerPortraitXBox.value, playerRootXBox.value = "LEFT", 0, -2
+local numericPortraitMove = assert(A.Submit("move player portrait left 10"))
+assert(status(numericPortraitMove) == "applied" or status(numericPortraitMove) == "unchanged",
+    "numeric portrait movement was not actionable")
+assert(playerPortraitModeBox.value == "LEFT", "numeric portrait movement changed its side mode")
+assert(playerPortraitXBox.value == -10, "numeric portrait movement did not change Portrait X Position")
+assert(playerRootXBox.value == -2, "numeric portrait movement changed Player X Position")
+
+resetTask()
+playerPortraitModeBox.value, playerPortraitXBox.value, playerRootXBox.value = "LEFT", 0, -2
+local relativePortraitMove = assert(A.Submit("move player portrait more to the left"))
+assert(status(relativePortraitMove) == "applied" or status(relativePortraitMove) == "unchanged",
+    "relative portrait follow-up was not actionable")
+assert(playerPortraitXBox.value == -10, "relative portrait follow-up did not use Portrait X Position")
+assert(playerRootXBox.value == -2, "relative portrait follow-up changed Player X Position")
+
+resetTask()
+targetTargetNameAnchorBox.value, targetTargetNameXBox.value, targetTargetRootXBox.value = "RIGHT", 0, 37
+local relativeNameMove = assert(A.Submit("move target of target name more to the right"))
+assert(status(relativeNameMove) == "applied" or status(relativeNameMove) == "unchanged",
+    "existing relative name follow-up stopped working")
+assert(targetTargetNameXBox.value == 10, "relative name follow-up did not use Name X Position")
+assert(targetTargetRootXBox.value == 37, "relative name follow-up changed the Target of Target frame root")
+
+resetTask()
+playerRaidMarkerAnchorBox.value, playerRaidMarkerXBox.value, playerRootXBox.value = "TOPLEFT", 16, -2
+local repeatedRaidMarkerPlacement = assert(A.Submit("move player raid marker to top left"))
+assert(status(repeatedRaidMarkerPlacement) == "unchanged", "repeated fixed-corner placement was not a no-op")
+assert(playerRaidMarkerXBox.value == 16, "fixed-corner placement became a Raid Marker pixel nudge")
+assert(playerRootXBox.value == -2, "fixed-corner placement changed Player X Position")
+
+local valueLessTextColorPrompts = {
+    { "change global hp text color", sharedHealthTextBox, "shared health text color mode", { "default", "health" } },
+    { "change shared health text color", sharedHealthTextBox, "shared health text color mode", { "default", "health" } },
+    { "change player hp text color", playerHealthTextBox, "player health text color mode", { "default", "health" } },
+    { "change global power text color", sharedPowerTextBox, "shared power text color mode", { "default", "resource" } },
+    { "change player power text color", playerPowerTextBox, "player power text color mode", { "default", "resource" } },
+    { "please change global name text color", sharedNameTextBox, "shared name text color mode", { "default", "class" } },
+    { "modify target npc name color please", targetNPCNameTextBox, "target npc name text color", { "default", "npc", "class" } },
+}
+for i = 1, #valueLessTextColorPrompts do
+    resetTask()
+    local prompt, box, expectedControl, expectedValues = unpack(valueLessTextColorPrompts[i])
+    box.value = "DEFAULT"
+    local result = assert(A.Submit(prompt), prompt .. ": missing result")
+    local output = lower(result.text)
+    assert(status(result) == "ambiguous", prompt .. ": expected a retained exact-control choice")
+    assert(box.value == "DEFAULT", prompt .. ": guessed and wrote a text-color mode without a value")
+    assert(#A.undoStack == 0, prompt .. ": created an undoable mutation without a value")
+    assert(output:find(expectedControl, 1, true), prompt .. ": omitted the exact scoped text-color control: " .. output)
+    for j = 1, #expectedValues do
+        assert(output:find(expectedValues[j], 1, true), prompt .. ": omitted real value " .. expectedValues[j])
+    end
+    assert(not output:find("best place to start", 1, true), prompt .. ": fell back to generic page guidance")
+    assert(not output:find("current group layout page", 1, true), prompt .. ": fell back to unrelated page choices")
+end
+
+resetTask()
+sharedHealthTextBox.value = "DEFAULT"
+assert(status(assert(A.Submit("change global hp text color"))) == "ambiguous")
+local selectedHealthText = assert(A.Submit("2"), "global HP text color follow-up missing result")
+assert(status(selectedHealthText) == "applied" or status(selectedHealthText) == "unchanged",
+    "global HP text color follow-up did not apply the retained setting")
+assert(sharedHealthTextBox.value == "HEALTH", "global HP text color follow-up changed the wrong value")
+
+resetTask()
+sharedPowerTextBox.value = "DEFAULT"
+assert(status(assert(A.Submit("change global power text color"))) == "ambiguous")
+local selectedPowerText = assert(A.Submit("2"), "global power text color follow-up missing result")
+assert(status(selectedPowerText) == "applied" or status(selectedPowerText) == "unchanged",
+    "global power text color follow-up did not apply the retained setting")
+assert(sharedPowerTextBox.value == "RESOURCE", "global power text color follow-up changed the wrong value")
 
 local refusalPrompts = {
     { "do not hide player buffs with no duration", true },
@@ -127,5 +259,19 @@ assert(auraOutput:find("rejuvenation", 1, true) or auraOutput:find("blacklist", 
 
 hideSetting.get, hideSetting.set, hideSetting.apply = hideOriginal.get, hideOriginal.set, hideOriginal.apply
 widthSetting.get, widthSetting.set, widthSetting.apply = widthOriginal.get, widthOriginal.set, widthOriginal.apply
+sharedHealthTextSetting.get, sharedHealthTextSetting.set, sharedHealthTextSetting.apply = sharedHealthTextOriginal.get, sharedHealthTextOriginal.set, sharedHealthTextOriginal.apply
+playerHealthTextSetting.get, playerHealthTextSetting.set, playerHealthTextSetting.apply = playerHealthTextOriginal.get, playerHealthTextOriginal.set, playerHealthTextOriginal.apply
+sharedPowerTextSetting.get, sharedPowerTextSetting.set, sharedPowerTextSetting.apply = sharedPowerTextOriginal.get, sharedPowerTextOriginal.set, sharedPowerTextOriginal.apply
+playerPowerTextSetting.get, playerPowerTextSetting.set, playerPowerTextSetting.apply = playerPowerTextOriginal.get, playerPowerTextOriginal.set, playerPowerTextOriginal.apply
+sharedNameTextSetting.get, sharedNameTextSetting.set, sharedNameTextSetting.apply = sharedNameTextOriginal.get, sharedNameTextOriginal.set, sharedNameTextOriginal.apply
+targetNPCNameTextSetting.get, targetNPCNameTextSetting.set, targetNPCNameTextSetting.apply = targetNPCNameTextOriginal.get, targetNPCNameTextOriginal.set, targetNPCNameTextOriginal.apply
+playerPortraitModeSetting.get, playerPortraitModeSetting.set, playerPortraitModeSetting.apply = playerPortraitModeOriginal.get, playerPortraitModeOriginal.set, playerPortraitModeOriginal.apply
+playerPortraitXSetting.get, playerPortraitXSetting.set, playerPortraitXSetting.apply = playerPortraitXOriginal.get, playerPortraitXOriginal.set, playerPortraitXOriginal.apply
+playerRootXSetting.get, playerRootXSetting.set, playerRootXSetting.apply = playerRootXOriginal.get, playerRootXOriginal.set, playerRootXOriginal.apply
+targetTargetNameAnchorSetting.get, targetTargetNameAnchorSetting.set, targetTargetNameAnchorSetting.apply = targetTargetNameAnchorOriginal.get, targetTargetNameAnchorOriginal.set, targetTargetNameAnchorOriginal.apply
+targetTargetNameXSetting.get, targetTargetNameXSetting.set, targetTargetNameXSetting.apply = targetTargetNameXOriginal.get, targetTargetNameXOriginal.set, targetTargetNameXOriginal.apply
+targetTargetRootXSetting.get, targetTargetRootXSetting.set, targetTargetRootXSetting.apply = targetTargetRootXOriginal.get, targetTargetRootXOriginal.set, targetTargetRootXOriginal.apply
+playerRaidMarkerAnchorSetting.get, playerRaidMarkerAnchorSetting.set, playerRaidMarkerAnchorSetting.apply = playerRaidMarkerAnchorOriginal.get, playerRaidMarkerAnchorOriginal.set, playerRaidMarkerAnchorOriginal.apply
+playerRaidMarkerXSetting.get, playerRaidMarkerXSetting.set, playerRaidMarkerXSetting.apply = playerRaidMarkerXOriginal.get, playerRaidMarkerXOriginal.set, playerRaidMarkerXOriginal.apply
 
-io.write("assistant_router_safety_regression: ok cases=12\n")
+io.write("assistant_router_safety_regression: ok cases=36\n")

@@ -1635,6 +1635,7 @@ local CONCEPT_HELP_INTENT_TERMS = {
 }
 
 local function HasConceptHelpIntent(norm)
+    if Normalize(norm):match("^show%s+") and not Normalize(norm):match("^show%s+me%s+") then return false end
     return ContainsAny(norm, CONCEPT_HELP_INTENT_TERMS)
 end
 

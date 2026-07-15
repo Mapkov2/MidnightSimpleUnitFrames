@@ -2399,23 +2399,119 @@ P._FontTextColorDefaultIntent = function(text, spec)
     return false
 end
 
-function P.ParseBareHPTextColorModeChoice(text)
-    if not (
-        text == "set hp color text" or text == "set hp text color"
-        or text == "change hp color text" or text == "change hp text color"
-        or text == "set health color text" or text == "set health text color"
-    ) then return nil end
-    local setting = Registry and Registry:GetSetting("fontScope.shared.colorHealthTextByHealth")
-    if not setting then return nil end
-    return {
-        kind = "ambiguous",
-        choices = {
-            { setting = setting, value = "DEFAULT", label = "Single color (Font Color)", summary = "Uses the configured fixed font color for HP text." },
-            { setting = setting, value = "HEALTH", label = "Health Gradient", summary = "Colors HP text dynamically by current health." },
-        },
-        label = "Choose HP Text Color Mode",
+P.BARE_FONT_TEXT_COLOR_MODES = P.BARE_FONT_TEXT_COLOR_MODES or {
+    {
+        key = "colorHealthTextByHealth",
+        subjects = { "hp color text", "hp text color", "health color text", "health text color" },
+        label = "Choose Health Text Color Mode",
         summary = "Asks whether HP text should use one fixed font color or the health gradient.",
-    }
+        choices = {
+            { value = "DEFAULT", label = "Single color (Font Color)", summary = "Uses the configured fixed font color for HP text." },
+            { value = "HEALTH", label = "Health Gradient", summary = "Colors HP text dynamically by current health." },
+        },
+    },
+    {
+        key = "colorPowerTextByType",
+        subjects = { "power color text", "power text color", "mana color text", "mana text color", "resource color text", "resource text color" },
+        label = "Choose Power Text Color Mode",
+        summary = "Asks whether power text should use one fixed font color or the unit's resource color.",
+        choices = {
+            { value = "DEFAULT", label = "Single color (Font Color)", summary = "Uses the configured fixed font color for power text." },
+            { value = "RESOURCE", label = "Resource Type Color", summary = "Colors power text by the unit's current resource type." },
+        },
+    },
+    {
+        key = "nameColorMode",
+        subjects = { "name color", "name text color" },
+        label = "Choose Name Text Color Mode",
+        summary = "Asks whether names should use one fixed font color or class colors.",
+        choices = {
+            { value = "DEFAULT", label = "Single color (Font Color)", summary = "Uses the configured fixed font color for names." },
+            { value = "CLASS", label = "Class Color", summary = "Colors player names by class." },
+        },
+    },
+    {
+        key = "npcNameRed",
+        subjects = { "npc name color", "npc name text color", "npc text color" },
+        label = "Choose NPC Name Text Color Mode",
+        summary = "Asks which supported color mode NPC names should use.",
+        choices = {
+            { value = "DEFAULT", label = "Single color (Font Color)", summary = "Uses the configured fixed font color for NPC names." },
+            { value = "NPC", label = "NPC Reaction Color", summary = "Colors NPC names by reaction." },
+            { value = "CLASS", label = "NPC Class Color", summary = "Uses the configured NPC class-color mode." },
+        },
+    },
+}
+
+P.BARE_FONT_SCOPE_PREFIXES = P.BARE_FONT_SCOPE_PREFIXES or {
+    "target of target", "focus target", "mythic raid",
+    "targettarget", "focustarget", "global", "shared", "player",
+    "target", "focus", "pet", "boss", "party", "raid",
+}
+
+-- Value-less text-color commands are exact control requests, not permission to
+-- guess a mode. Resolve their shared/scoped owner in constant time and retain
+-- that exact setting while the user chooses one of its real enum values.
+function P.ParseBareFontTextColorModeChoice(text)
+    text = tostring(text or ""):lower()
+    if not text:find("color", 1, true) and not text:find("colour", 1, true) then return nil end
+    text = text:gsub("colour", "color"):gsub("[%p%c]", " "):gsub("%s+", " "):match("^%s*(.-)%s*$") or ""
+    text = text:gsub("^please%s+", "")
+        :gsub("^can you%s+", "")
+        :gsub("^could you%s+", "")
+        :gsub("^would you%s+", "")
+        :gsub("^i want to%s+", "")
+        :gsub("^i would like to%s+", "")
+    local action = text:match("^(%S+)%s+")
+    if action ~= "set" and action ~= "change" and action ~= "adjust"
+        and action ~= "modify" and action ~= "update"
+    then
+        return nil
+    end
+    text = text:sub(#action + 2)
+    text = text:gsub("^the%s+", ""):gsub("%s+please$", "")
+
+    local scope = DetectGlobalScope(text) or "shared"
+    for _, prefix in ipairs(P.BARE_FONT_SCOPE_PREFIXES) do
+        if text == prefix then return nil end
+        if text:sub(1, #prefix + 1) == prefix .. " " then
+            text = text:sub(#prefix + 2)
+            break
+        end
+    end
+    if scope == "gf_mythicraid" then scope = "gf_raid" end
+
+    for _, spec in ipairs(P.BARE_FONT_TEXT_COLOR_MODES) do
+        for _, subject in ipairs(spec.subjects) do
+            if text == subject then
+                local setting = Registry and Registry:GetSetting("fontScope." .. tostring(scope) .. "." .. spec.key)
+                if not setting then return nil end
+                local choices = {}
+                for i = 1, #spec.choices do
+                    local choice = spec.choices[i]
+                    choices[i] = {
+                        setting = setting,
+                        value = choice.value,
+                        label = tostring(setting.label or spec.label) .. ": " .. choice.label,
+                        summary = choice.summary,
+                    }
+                end
+                return {
+                    kind = "ambiguous",
+                    choices = choices,
+                    label = spec.label,
+                    summary = spec.summary,
+                    textColorModeKey = spec.key,
+                }
+            end
+        end
+    end
+    return nil
+end
+
+function P.ParseBareHPTextColorModeChoice(text)
+    local plan = P.ParseBareFontTextColorModeChoice(text)
+    return plan and plan.textColorModeKey == "colorHealthTextByHealth" and plan or nil
 end
 
 function P.ParseHPTextColorModePriority(text)

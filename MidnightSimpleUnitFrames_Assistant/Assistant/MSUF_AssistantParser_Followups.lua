@@ -699,6 +699,16 @@ local function BuildFollowup(text, ctx)
     local function GenericFollowupTargetAttr(textValue, direction)
         if ContainsAny(textValue, FollowupData.GENERIC_ENABLE_TERMS) then return "enabled" end
         if ContainsAny(textValue, FollowupData.GROWTH_TERMS) then return "growth" end
+        if ContainsAny(textValue, FollowupData.BORDER_STYLE_TERMS) then return "borderStyle" end
+        if ContainsAny(textValue, FollowupData.THICKNESS_TERMS) then return "thickness" end
+        if ContainsAny(textValue, FollowupData.SHAPE_TERMS) then return "shape" end
+        if ContainsAny(textValue, FollowupData.RENDER_TERMS) then return "render" end
+        if ContainsAny(textValue, FollowupData.ZOOM_TERMS) then return "zoom" end
+        if ContainsAny(textValue, FollowupData.COLOR_TERMS) then return "color" end
+        if ContainsAny(textValue, FollowupData.OPACITY_TERMS) then return "opacity" end
+        if ContainsAny(textValue, FollowupData.SPACING_TERMS) then return "spacing" end
+        if ContainsAny(textValue, FollowupData.ALIGNMENT_TERMS) then return "alignment" end
+        if ContainsAny(textValue, FollowupData.STYLE_TERMS) then return "style" end
         if ContainsAny(textValue, FollowupData.ANCHOR_TERMS) then return "anchor" end
         if direction and ContainsAny(textValue, FollowupData.MOVEMENT_TERMS) then
             if direction == "left" or direction == "right" then return "offsetX" end
@@ -716,6 +726,8 @@ local function BuildFollowup(text, ctx)
     local function RelatedPrefixAliases(prefix)
         local out, seen = {}, {}
         AddUniqueValue(out, seen, prefix)
+        local shownObject = tostring(prefix or ""):gsub("^show(%u)", function(first) return first:lower() end)
+        if shownObject ~= prefix then AddUniqueValue(out, seen, shownObject) end
         if prefix == "hp" then
             AddUniqueValue(out, seen, "healthText")
         elseif prefix == "healthText" then
@@ -736,9 +748,17 @@ local function BuildFollowup(text, ctx)
         return out
     end
 
+    -- Registry attributes describe both an object and one of its properties.
+    -- Keep the longest property suffixes first so a retained setting such as
+    -- portraitSizeOverride, spellNamePosition, auraBuffanchor, or
+    -- statusIconreadyCheckIconAnchor resolves back to its owning object.
     local relatedPrefixSuffixes = {
-        "OffsetX", "OffsetY", "MaxWidth", "FontSize", "TextLayer", "TextAnchor",
-        "Width", "Height", "Size", "Layer", "Anchor", "Enabled", "X", "Y",
+        "SizeOverride", "BorderThickness", "MaxWidth", "FontSize", "TextSize",
+        "OffsetX", "OffsetY", "PositionX", "PositionY", "TextLayer", "TextAnchor",
+        "Visibility", "Position", "Alignment", "Direction", "Thickness",
+        "Width", "Height", "Size", "Layer", "Anchor", "Enabled", "Visible",
+        "Mode", "Style", "Shape", "Render", "Color", "Align", "Side",
+        "Growth", "X", "Y",
     }
     local relatedDirectAttributes = {
         "offsetX", "offsetY", "width", "height", "size", "layer", "anchor", "enabled",
@@ -747,9 +767,10 @@ local function BuildFollowup(text, ctx)
     local function RelatedPrefixFromAttribute(attribute)
         local attr = tostring(attribute or "")
         if attr == "" then return "" end
+        local lowerAttr = attr:lower()
         for i = 1, #relatedPrefixSuffixes do
             local suffix = relatedPrefixSuffixes[i]
-            if attr:sub(-#suffix) == suffix then return attr:sub(1, #attr - #suffix) end
+            if lowerAttr:sub(-#suffix) == suffix:lower() then return attr:sub(1, #attr - #suffix) end
         end
         for i = 1, #relatedDirectAttributes do
             local suffix = relatedDirectAttributes[i]
@@ -758,10 +779,22 @@ local function BuildFollowup(text, ctx)
         return attr
     end
 
+    local function GenericOwnerIdentity(prev)
+        local setting = prev and prev.key and Registry and Registry:GetSetting(prev.key) or nil
+        local unit = tostring((prev and prev.unit) or (setting and setting.unit) or "")
+        local frameType = tostring((prev and prev.frameType) or (setting and setting.frameType) or "")
+        local attribute = (prev and prev.attribute) or (setting and setting.attribute)
+        local prefix = RelatedPrefixFromAttribute(attribute)
+        if prefix == "" then prefix = "<root>" end
+        prefix = tostring(prefix):gsub("^show(%u)", function(first) return first:lower() end):lower()
+        return frameType .. "|" .. unit .. "|" .. prefix
+    end
+
     local function GenericRelatedAttributeCandidates(previousAttr, targetAttr)
         local out, seen = {}, {}
         local prefix = RelatedPrefixFromAttribute(previousAttr)
         local prefixes = RelatedPrefixAliases(prefix)
+        local allowRootAttribute = prefix == ""
         local function addForPrefix(suffix)
             for i = 1, #prefixes do
                 local p = prefixes[i]
@@ -769,6 +802,8 @@ local function BuildFollowup(text, ctx)
                     AddUniqueValue(out, seen, suffix)
                 else
                     AddUniqueValue(out, seen, p .. suffix)
+                    local lowerSuffix = suffix:sub(1, 1):lower() .. suffix:sub(2)
+                    if lowerSuffix ~= suffix then AddUniqueValue(out, seen, p .. lowerSuffix) end
                 end
             end
         end
@@ -776,30 +811,103 @@ local function BuildFollowup(text, ctx)
         if targetAttr == "offsetX" then
             addForPrefix("OffsetX")
             addForPrefix("X")
-            AddUniqueValue(out, seen, "offsetX")
+            if allowRootAttribute then AddUniqueValue(out, seen, "offsetX") end
         elseif targetAttr == "offsetY" then
             addForPrefix("OffsetY")
             addForPrefix("Y")
-            AddUniqueValue(out, seen, "offsetY")
+            if allowRootAttribute then AddUniqueValue(out, seen, "offsetY") end
         elseif targetAttr == "size" then
+            addForPrefix("SizeOverride")
             addForPrefix("Size")
             addForPrefix("FontSize")
-            AddUniqueValue(out, seen, "size")
+            addForPrefix("TextSize")
+            addForPrefix("Thickness")
+            if allowRootAttribute then AddUniqueValue(out, seen, "size") end
+        elseif targetAttr == "width" then
+            addForPrefix("Width")
+            addForPrefix("MaxWidth")
+            if allowRootAttribute then AddUniqueValue(out, seen, "width") end
+        elseif targetAttr == "height" then
+            addForPrefix("Height")
+            if allowRootAttribute then AddUniqueValue(out, seen, "height") end
+        elseif targetAttr == "growth" then
+            addForPrefix("Growth")
+            addForPrefix("Direction")
+            if allowRootAttribute then AddUniqueValue(out, seen, "growth") end
+        elseif targetAttr == "borderStyle" then
+            addForPrefix("BorderStyle")
+            addForPrefix("Style")
+        elseif targetAttr == "thickness" then
+            addForPrefix("BorderThickness")
+            addForPrefix("Thickness")
+            addForPrefix("Size")
+        elseif targetAttr == "shape" then
+            addForPrefix("Shape")
+        elseif targetAttr == "render" then
+            addForPrefix("Render")
+        elseif targetAttr == "zoom" then
+            addForPrefix("Zoom")
+        elseif targetAttr == "color" then
+            addForPrefix("Color")
+            addForPrefix("BorderColor")
+        elseif targetAttr == "opacity" then
+            addForPrefix("Opacity")
+            addForPrefix("Alpha")
+        elseif targetAttr == "spacing" then
+            addForPrefix("Spacing")
+            addForPrefix("Gap")
+        elseif targetAttr == "alignment" then
+            addForPrefix("Alignment")
+            addForPrefix("Align")
         elseif targetAttr == "layer" then
             addForPrefix("Layer")
             addForPrefix("TextLayer")
-            AddUniqueValue(out, seen, "layer")
+            if allowRootAttribute then AddUniqueValue(out, seen, "layer") end
         elseif targetAttr == "anchor" then
             addForPrefix("Anchor")
             addForPrefix("TextAnchor")
-            AddUniqueValue(out, seen, "anchor")
+            if allowRootAttribute then AddUniqueValue(out, seen, "anchor") end
         elseif targetAttr == "enabled" then
             addForPrefix("Enabled")
-            AddUniqueValue(out, seen, "enabled")
+            addForPrefix("Visible")
+            if allowRootAttribute then AddUniqueValue(out, seen, "enabled") end
         else
-            AddUniqueValue(out, seen, targetAttr)
+            addForPrefix(targetAttr:sub(1, 1):upper() .. targetAttr:sub(2))
+            if allowRootAttribute then AddUniqueValue(out, seen, targetAttr) end
         end
         return out
+    end
+
+    local function GenericPropertyForSetting(setting)
+        if type(setting) ~= "table" then return nil end
+        local attr = tostring(setting.attribute or ""):lower()
+        if attr == "offsetx" or attr == "x" or attr:find("offsetx$") or attr:find("positionx$") then return "offsetX" end
+        if attr == "offsety" or attr == "y" or attr:find("offsety$") or attr:find("positiony$") then return "offsetY" end
+        if attr == "width" or attr:find("width$") then return "width" end
+        if attr == "height" or attr:find("height$") then return "height" end
+        if attr == "size" or attr:find("size$") or attr:find("sizeoverride$")
+            or attr:find("fontsize$") or attr:find("textsize$") or attr:find("thickness$")
+            or attr:find("scale$")
+        then
+            return "size"
+        end
+        if attr == "layer" or attr:find("layer$") then return "layer" end
+        if attr == "anchor" or attr:find("anchor$") or attr:find("position$") then return "anchor" end
+        if attr == "growth" or attr:find("growth$") or attr:find("direction$") then return "growth" end
+        if attr == "enabled" or attr == "visible" or attr:find("enabled$") or attr:find("visible$") then return "enabled" end
+        return nil
+    end
+
+    local function PreviousSettingOwnsRequestedNumber(previousSetting, targetAttr)
+        if not (previousSetting and previousSetting.type == "number") then return false end
+        local property = GenericPropertyForSetting(previousSetting)
+        if property == targetAttr then return true end
+        if targetAttr ~= "size" then return false end
+        if property == "offsetX" or property == "offsetY" then return false end
+        -- "Make it smaller" after an actual numeric property naturally means
+        -- lower that retained value. Only positional X/Y values switch from
+        -- the property to the owning object's dimensions.
+        return true
     end
 
     local function PickGenericRelatedCandidate(candidates, previousSetting)
@@ -817,8 +925,8 @@ local function BuildFollowup(text, ctx)
         return categoryMatch
     end
 
-    local function FindGenericRelatedSetting(prev, targetAttr)
-        if not (Registry and type(Registry.FindSettings) == "function") then return nil end
+    local function FindGenericRelatedSettings(prev, targetAttr)
+        if not (Registry and type(Registry.FindSettings) == "function") then return {} end
         local previousSetting = prev and prev.key and Registry:GetSetting(prev.key) or nil
         if targetAttr == "enabled" and previousSetting and previousSetting.type == "boolean"
             and ContainsAny(text, FollowupData.BOOLEAN_CORRECTION_TERMS)
@@ -827,24 +935,84 @@ local function BuildFollowup(text, ctx)
             -- the exact boolean that was just changed. Searching siblings for
             -- a generic Enabled attribute can otherwise redirect the command
             -- from Target Name to the whole Target Frame.
-            return previousSetting
+            return { previousSetting }
         end
         local unit = (prev and prev.unit) or (previousSetting and previousSetting.unit)
         local frameType = (prev and prev.frameType) or (previousSetting and previousSetting.frameType)
         local attribute = (prev and prev.attribute) or (previousSetting and previousSetting.attribute)
-        if type(frameType) ~= "string" or frameType == "" then return nil end
+        if type(frameType) ~= "string" or frameType == "" then return {} end
+        if targetAttr == "enabled" and previousSetting and previousSetting.type == "enum" then
+            for i = 1, #(previousSetting.values or {}) do
+                local value = tostring(previousSetting.values[i] or ""):upper()
+                if value == "OFF" or value == "NONE" or value == "HIDDEN" or value == "DISABLED" then
+                    return { previousSetting }
+                end
+            end
+        end
+        if PreviousSettingOwnsRequestedNumber(previousSetting, targetAttr) then return { previousSetting } end
         local attrCandidates = GenericRelatedAttributeCandidates(attribute, targetAttr)
+        local ownerCandidates
         for i = 1, #attrCandidates do
             local filter = { frameType = frameType, attribute = attrCandidates[i] }
             if type(unit) == "string" and unit ~= "" then filter.unit = unit end
-            local setting = PickGenericRelatedCandidate(Registry:FindSettings(filter), previousSetting)
-            if setting then return setting end
+            local candidates = Registry:FindSettings(filter)
+            if #candidates == 0 then
+                ownerCandidates = ownerCandidates or Registry:FindSettings({ unit = unit, frameType = frameType })
+                local expected = tostring(attrCandidates[i]):lower()
+                candidates = {}
+                for j = 1, #ownerCandidates do
+                    local candidate = ownerCandidates[j]
+                    if tostring(candidate and candidate.attribute or ""):lower() == expected then
+                        candidates[#candidates + 1] = candidate
+                    end
+                end
+            end
+            local setting = PickGenericRelatedCandidate(candidates, previousSetting)
+            if setting then return { setting } end
         end
-        return nil
+
+        -- A root frame/castbar/group-frame offset has no component prefix. In
+        -- that one reviewed case, "make it smaller" refers to the retained
+        -- frame object and therefore owns both dimensions. Component-prefixed
+        -- settings never receive this fallback.
+        local prefix = RelatedPrefixFromAttribute(attribute)
+        local lowerAttr = tostring(attribute or ""):lower()
+        local rootSubject = prefix == "" or lowerAttr == "point" or lowerAttr == "anchorpoint"
+            or lowerAttr == "anchortounitframe" or lowerAttr == "anchortoframe"
+        if targetAttr == "size" and rootSubject then
+            local dimensions = {}
+            for _, attr in ipairs({ "width", "height" }) do
+                local filter = { frameType = frameType, attribute = attr }
+                if type(unit) == "string" and unit ~= "" then filter.unit = unit end
+                local setting = PickGenericRelatedCandidate(Registry:FindSettings(filter), previousSetting)
+                if setting then dimensions[#dimensions + 1] = setting end
+            end
+            if #dimensions > 0 then return dimensions end
+        end
+        return {}
     end
 
-    local function GenericEnumFollowupValue(setting, targetAttr, direction)
+    local function GenericEnumFollowupValue(setting, targetAttr, direction, prev)
         if not (setting and setting.type == "enum") then return nil end
+        if targetAttr == "enabled" then
+            local enabled = DetectBoolean(text)
+            if enabled == false then
+                for i = 1, #(setting.values or {}) do
+                    local value = setting.values[i]
+                    local upper = tostring(value or ""):upper()
+                    if upper == "OFF" or upper == "NONE" or upper == "HIDDEN" or upper == "DISABLED" then return value end
+                end
+            elseif enabled == true then
+                local oldValue = prev and prev.oldValue
+                local oldUpper = tostring(oldValue or ""):upper()
+                if oldValue ~= nil and oldUpper ~= "OFF" and oldUpper ~= "NONE"
+                    and oldUpper ~= "HIDDEN" and oldUpper ~= "DISABLED"
+                then
+                    return oldValue
+                end
+            end
+        end
+        if targetAttr == "shape" and HasNormalizedPhrase(text, "circular") then return "CIRCLE" end
         local compactText = Compact and Compact(text) or Normalize(text):gsub("%s+", "")
         local aliases = setting.valueAliases
         local bestValue, bestLen
@@ -857,6 +1025,10 @@ local function BuildFollowup(text, ctx)
             end
         end
         if bestValue ~= nil then return bestValue end
+        if P and type(P.EnumValueForText) == "function" then
+            local value = P.EnumValueForText(setting, text)
+            if value ~= nil then return value end
+        end
         if targetAttr == "growth" and direction then
             local dir = tostring(direction):upper()
             if setting.values then
@@ -919,6 +1091,12 @@ local function BuildFollowup(text, ctx)
             return nil, amount
         end
 
+        if targetAttr == "zoom" then
+            local amount = A._RelativeNumberAmountForText(text) or tonumber(setting.step) or 1
+            if HasNormalizedPhrase(text, "zoom out") or HasNormalizedPhrase(text, "zoom it out") then return nil, -math.abs(amount) end
+            if HasNormalizedPhrase(text, "zoom in") or HasNormalizedPhrase(text, "zoom it in") then return nil, math.abs(amount) end
+        end
+
         local relative = RelativeNumberDeltaForText and RelativeNumberDeltaForText(setting, text) or nil
         if relative ~= nil then return nil, relative end
         local value = A._ExplicitNumberValue and A._ExplicitNumberValue(text) or nil
@@ -932,9 +1110,12 @@ local function BuildFollowup(text, ctx)
         if setting.type == "boolean" then
             return DetectBoolean(text), nil
         elseif setting.type == "enum" then
-            return GenericEnumFollowupValue(setting, targetAttr, direction), nil
+            return GenericEnumFollowupValue(setting, targetAttr, direction, prev), nil
         elseif setting.type == "number" then
             return GenericNumberFollowupValue(setting, targetAttr, direction, prev)
+        elseif setting.type == "color" and type(P.ExtractColor) == "function" then
+            local r, g, b, label = P.ExtractColor(text, text)
+            if r ~= nil then return { r = r, g = g, b = b, label = label }, nil end
         end
         return nil, nil
     end
@@ -1041,28 +1222,55 @@ local function BuildFollowup(text, ctx)
         )
 
     local genericObjectFollowupReference = HasGenericObjectFollowupReference(text) or bareDirectionalFollowup
-    if #units == 0 and #groups == 0 and genericObjectFollowupReference and not textSlotFollowupShouldHandle then
-        local targetAttr = GenericFollowupTargetAttr(text, followDirection)
+    local genericTargetAttr = genericObjectFollowupReference and GenericFollowupTargetAttr(text, followDirection) or nil
+    local genericContextEligible = ContextSubjectRecent(ctx, 3)
+        or (bareDirectionalFollowup and ctx.lastSubjectTurn == nil and ctx.lastMentionedTurn == nil)
+    if #units == 0 and #groups == 0 and genericContextEligible
+        and genericObjectFollowupReference and not textSlotFollowupShouldHandle
+    then
+        local targetAttr = genericTargetAttr
         if targetAttr then
             local genericChanges = {}
             local seenGenericKeys = {}
+            local genericOwners = {}
+            local genericOwnerCount = 0
             for i = 1, #ctx.lastChangeBundle do
                 local prev = ctx.lastChangeBundle[i]
-                local setting = FindGenericRelatedSetting(prev, targetAttr)
-                if setting and not seenGenericKeys[setting.key] then
-                    local value, relativeDelta = GenericRelatedFollowupValue(setting, targetAttr, followDirection, prev)
-                    if value ~= nil or relativeDelta ~= nil then
-                        seenGenericKeys[setting.key] = true
-                        genericChanges[#genericChanges + 1] = {
-                            setting = setting,
-                            value = value,
-                            relativeDelta = relativeDelta,
-                            direction = followDirection,
-                        }
+                local settings = FindGenericRelatedSettings(prev, targetAttr)
+                local ownerProduced = false
+                for j = 1, #settings do
+                    local setting = settings[j]
+                    if setting and not seenGenericKeys[setting.key] then
+                        local value, relativeDelta = GenericRelatedFollowupValue(setting, targetAttr, followDirection, prev)
+                        if value ~= nil or relativeDelta ~= nil then
+                            seenGenericKeys[setting.key] = true
+                            genericChanges[#genericChanges + 1] = {
+                                setting = setting,
+                                value = value,
+                                relativeDelta = relativeDelta,
+                                direction = followDirection,
+                            }
+                            ownerProduced = true
+                        end
+                    end
+                end
+                if ownerProduced then
+                    local owner = GenericOwnerIdentity(prev)
+                    if not genericOwners[owner] then
+                        genericOwners[owner] = true
+                        genericOwnerCount = genericOwnerCount + 1
                     end
                 end
             end
             if #genericChanges > 0 then
+                if genericOwnerCount > 1 and not pluralExactValueReference then
+                    return {
+                        kind = "ambiguous",
+                        choices = genericChanges,
+                        label = "Multiple retained MSUF objects",
+                        summary = "Asks which previously changed object owns the singular follow-up.",
+                    }
+                end
                 return {
                     kind = "changes",
                     changes = genericChanges,
@@ -1070,6 +1278,17 @@ local function BuildFollowup(text, ctx)
                     summary = "Continues from the last Assistant change.",
                 }
             end
+            local previous = ctx.lastChangeBundle[1]
+            local previousSetting = previous and previous.key and Registry:GetSetting(previous.key) or nil
+            local subject = tostring(previousSetting and (previousSetting.category or previousSetting.label) or "the retained MSUF object")
+            local property = type(A.HumanizeDisplayKey) == "function" and A.HumanizeDisplayKey(targetAttr) or tostring(targetAttr)
+            return {
+                kind = "answer",
+                status = "ambiguous",
+                text = "I kept MSUF unchanged. " .. subject .. " does not expose one unambiguous "
+                    .. tostring(property) .. " control from that context. Name the exact object or property you want instead.",
+                summary = "Refuses to redirect an unresolved contextual property to another MSUF object.",
+            }
         end
     end
 
@@ -1482,6 +1701,7 @@ local function BuildFollowup(text, ctx)
             or tooPositiveIntent or tooNegativeIntent or notEnoughIntent or leftIntent or rightIntent
             or relativeNumberIntent)
         and (not commandIntent or explicitFollowupReference or bareDirectionalFollowup)
+        and (not genericContextEligible or genericTargetAttr == nil)
     then
         local repeatChanges = {}
         for i = 1, #ctx.lastChangeBundle do
