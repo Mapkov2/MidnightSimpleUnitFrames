@@ -608,6 +608,8 @@ function Preview.Refresh(box, reason)
     if detachedPower and box._runtimeDetachedPowerSyncClass then box._runtimeDetachedPowerW = classPowerOn and (box._runtimeClassPowerW or w) or w end
     box._runtimeDetachedPowerX = tonumber(runtimePower and runtimePower.detachedX) or tonumber(conf.detachedPowerBarOffsetX) or 0
     box._runtimeDetachedPowerY = tonumber(runtimePower and runtimePower.detachedY) or tonumber(conf.detachedPowerBarOffsetY) or -4
+    box._runtimeDetachedPowerAnchorMode = tostring((runtimePower and runtimePower.detachedAnchorMode)
+        or conf.detachedPowerBarAnchorMode or "CENTER"):upper()
     box._runtimeDetachedPowerAnchorClass = key == "player" and ((runtimePower and runtimePower.detachedAnchorClass == true) or (runtimePower == nil and conf.detachedPowerBarAnchorToClassPower == true))
     box._runtimeDetachedPowerTextOnBar = (runtimePower and runtimePower.textOnDetached == true) or (runtimePower == nil and conf.detachedPowerBarTextOnBar == true)
     box._runtimeDetachedPowerShape = key == "player"
@@ -749,7 +751,8 @@ function Preview.Refresh(box, reason)
         local dW = box._runtimeDetachedPowerW
         local dx = box._runtimeDetachedPowerX
         local dy = box._runtimeDetachedPowerY
-        local dLeft, dBottom = (w - dW) * 0.5 + dx, -detachedH + dy
+        local dLeft = box._runtimeDetachedPowerAnchorMode == "LEGACY_TOPLEFT" and dx or ((w - dW) * 0.5 + dx)
+        local dBottom = -detachedH + dy
         if box._runtimeDetachedPowerAnchorClass and classPowerOn then
             local cpW = box._runtimeClassPowerW or PreviewClassPowerWidth(bars, w, cpH, classPowerSegCount)
             local cx = 2 + (tonumber(bars.classPowerOffsetX) or 0)
@@ -1198,6 +1201,8 @@ function Preview.Refresh(box, reason)
         local dy = S(box._runtimeDetachedPowerY)
         if box._runtimeDetachedPowerAnchorClass and classPowerOn and mock.classPower:IsShown() then
             mock.detachedPower:SetPoint("TOP", mock.classPower, "BOTTOM", dx, dy)
+        elseif box._runtimeDetachedPowerAnchorMode == "LEGACY_TOPLEFT" then
+            mock.detachedPower:SetPoint("TOPLEFT", mock, "BOTTOMLEFT", dx, dy)
         else
             mock.detachedPower:SetPoint("TOP", mock, "BOTTOM", dx, dy)
         end
