@@ -45,15 +45,25 @@ end
 local COLOR_SHIELD_LEVEL = 40
 local COLOR_TARGET_LEVEL = 50
 
+local function ForwardMenuScrollWheel(frame)
+    if not (frame and frame.EnableMouseWheel and frame.SetScript) then return end
+    frame:EnableMouseWheel(true)
+    if frame.SetPropagateMouseWheel then frame:SetPropagateMouseWheel(false) end
+    frame:SetScript("OnMouseWheel", function(_, delta)
+        local scroll = M.scrollFrame
+        local handler = scroll and scroll.GetScript and scroll:GetScript("OnMouseWheel")
+        if type(handler) == "function" then handler(scroll, delta) end
+    end)
+end
+
 local function InstallColorOnlyShield(parent)
     local shield = CreateFrame("Button", nil, parent)
     shield:SetAllPoints(parent)
     shield:EnableMouse(true)
-    shield:EnableMouseWheel(true)
     shield:RegisterForClicks("LeftButtonDown", "LeftButtonUp", "RightButtonDown", "RightButtonUp")
     local popupLevel = tonumber(M.MENU_POPUP_FRAME_LEVEL) or 120
     shield:SetFrameLevel(min((parent:GetFrameLevel() or 0) + COLOR_SHIELD_LEVEL, popupLevel - 20))
-    shield:SetScript("OnMouseWheel", function() end)
+    ForwardMenuScrollWheel(shield)
     shield:SetScript("OnClick", function() end)
     return shield
 end
@@ -288,6 +298,7 @@ local function AddClickTarget(host, anchor, onClick, label, priority)
     hover:SetAllPoints()
     hover:SetColorTexture(0.18, 0.66, 1, 0.18)
     if M.AddTooltip then M.AddTooltip(button, label, Tr("Open the matching color section below."), { owner = "ANCHOR_CURSOR" }) end
+    ForwardMenuScrollWheel(button)
     button:SetScript("OnClick", onClick)
     return button
 end
