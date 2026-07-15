@@ -1901,6 +1901,9 @@ function W.SetControlShown(control, shown)
             control._msuf2StepButtons[i]:SetShown(shown)
         end
     end
+    if control._msuf2LayerInfoButton then
+        control._msuf2LayerInfoButton:SetShown(shown)
+    end
     if shown and control._msuf2SetLayoutWidth then control:_msuf2SetLayoutWidth(control._msuf2RowWidth or control._msuf2RequestedWidth) end
 end
 local function SetEnabledState(frame, enabled)
@@ -2634,6 +2637,45 @@ function W.AttachPinnedPreview(body, box, opts)
     return record
 end
 
+local function IsNumericLayerControl(label, minValue, maxValue)
+    if tonumber(minValue) ~= 0 or tonumber(maxValue) ~= 30 then return false end
+    local text = tostring(label or ""):lower()
+    if text:find("layer", 1, true) then return true end
+    local translatedLayer = tostring(Tr("Layer") or ""):lower()
+    if translatedLayer ~= "" and text:find(translatedLayer, 1, true) then return true end
+    local frameLevel = tostring(Tr("Frame level") or ""):lower()
+    local frameLayer = tostring(Tr("Frame layer") or ""):lower()
+    return text == "frame level" or text == "frame layer"
+        or (frameLevel ~= "" and text == frameLevel)
+        or (frameLayer ~= "" and text == frameLayer)
+end
+
+local function AttachLayerOverviewButton(section, slider, title, label, minValue, maxValue)
+    if not (section and slider and title and IsNumericLayerControl(label, minValue, maxValue)) then return nil end
+    local info = W.RoleButton(section, "I", "success", 18, 18)
+    info:SetPoint("TOPRIGHT", title, "TOPRIGHT", 0, 2)
+    info._msuf2SkipHistoryCheckpoint = true
+    info._msuf2LayerOverviewButton = true
+    if info.SetFrameLevel and slider.GetFrameLevel then info:SetFrameLevel(slider:GetFrameLevel() + 4) end
+    if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(info, slider)
+    else info._msuf2ControlPartOf = slider end
+    info:SetScript("OnClick", function(self)
+        local show = M.ShowLayerOverview or _G.MSUF_ShowLayerOverview
+        if type(show) == "function" then show(self) end
+    end)
+    if info.HookScript then
+        info:HookScript("OnHide", function(self)
+            local hide = M.HideLayerOverviewForAnchor or _G.MSUF_HideLayerOverviewForAnchor
+            if type(hide) == "function" then hide(self) end
+        end)
+    end
+    if type(M.AddTooltip) == "function" then
+        M.AddTooltip(info, "Layer overview", "Shows every configurable MSUF layer on the unified 0-30 scale.", { hook = true, owner = "ANCHOR_RIGHT" })
+    end
+    slider._msuf2LayerInfoButton = info
+    return info
+end
+
 --- Slider wraps Blizzard's slider template but hides native art and stamps
 --- callbacks so profile writes only happen when the effective value changes.
 function W.Slider(section, label, minVal, maxVal, step, width)
@@ -2867,6 +2909,7 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     end)
     minus:SetScript("OnClick", function() StepBy(-1) end)
     plus:SetScript("OnClick", function() StepBy(1) end)
+    AttachLayerOverviewButton(section, slider, title, label, minVal, maxVal)
     return slider
 end
 function W.Segment(section, label, values, width)

@@ -44,6 +44,48 @@ function CP.ResolvePowerShape(value, classShape)
     end
     return "BAR"
 end
+local DETACHED_POWER_WIDTH_FRAMES = {
+    cooldown = "EssentialCooldownViewer",
+    utility = "UtilityCooldownViewer",
+    tracked_buffs = "BuffIconCooldownViewer",
+}
+local function PreviewFrameWidth(frame)
+    if not (frame and frame.GetWidth) then return nil end
+    if frame._msufLegacyCooldownAnchor == true then return nil end
+    if frame.IsShown and not frame:IsShown() then return nil end
+    local width = frame:GetWidth()
+    if type(width) == "number" and width > 1 then return width end
+    return nil
+end
+local function ClampDetachedPowerWidth(value, fallback, minValue, maxValue)
+    value = tonumber(value) or tonumber(fallback) or 1
+    minValue, maxValue = minValue or 20, maxValue or 800
+    if value < minValue then value = minValue elseif value > maxValue then value = maxValue end
+    return floor(value + 0.5)
+end
+function CP.ResolveDetachedPowerWidth(opts)
+    opts = opts or {}
+    if tostring(opts.shape or "BAR"):upper() == "ORB" then
+        return ClampDetachedPowerWidth(opts.orbSize, 54, 20, 160)
+    end
+    if opts.syncClass == true then
+        local classWidth = tonumber(opts.classWidth)
+        if not classWidth or classWidth <= 1 then classWidth = tonumber(opts.classFallbackWidth) end
+        if classWidth and classWidth > 1 then return ClampDetachedPowerWidth(classWidth) end
+    end
+    local frameName = opts.widthFrameName
+    if type(frameName) ~= "string" or frameName == "" then
+        local cdmFrames = _G.MSUF_CP_CONST and _G.MSUF_CP_CONST.CDM_FRAMES or DETACHED_POWER_WIDTH_FRAMES
+        frameName = cdmFrames and cdmFrames[opts.widthMode]
+    end
+    if type(frameName) == "string" and frameName ~= "" then
+        local resolver = _G.MSUF_GetEffectiveCooldownFrame
+        local source = type(resolver) == "function" and resolver(frameName) or nil
+        local sourceWidth = PreviewFrameWidth(source or _G[frameName])
+        if sourceWidth then return ClampDetachedPowerWidth(sourceWidth) end
+    end
+    return ClampDetachedPowerWidth(opts.manualWidth, opts.frameWidth)
+end
 CP.FALLBACK_COLORS = CP.FALLBACK_COLORS or {
     ARCANE_CHARGES = { 0.45, 0.55, 1.00 },
     CHARGED = { 0.60, 0.20, 0.80 },
