@@ -559,9 +559,9 @@ local function RenderAuras(scene)
         elseif growth == "RIGHTUP" then
             return 1, 1, false, "BOTTOMLEFT"
         elseif growth == "UP" or growth == "UPRIGHT" or growth == "UPLEFT" then
-            return 1, 1, true, "BOTTOMLEFT"
+            return 1, 1, false, "BOTTOMLEFT"
         elseif growth == "DOWN" or growth == "DOWNRIGHT" or growth == "DOWNLEFT" then
-            return 1, -1, true, "TOPLEFT"
+            return 1, -1, false, "TOPLEFT"
         end
         return 1, -1, false, "TOPLEFT"
     end
