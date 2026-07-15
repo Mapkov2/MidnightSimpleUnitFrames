@@ -5,7 +5,8 @@ local function Check(condition, message)
     if not condition then error(message or "check failed", 2) end
 end
 
-_G.issecretvalue = function() return false end
+local secretWidth = {}
+_G.issecretvalue = function(value) return value == secretWidth end
 _G.UnitName = function() return "Captain Garrick" end
 
 local elements = {}
@@ -61,6 +62,13 @@ Check(level.relPoint == "CENTER" and level.x == 70, "centered name right edge wa
 name._msufJustifyH = "RIGHT"
 StatusRuntime.RefreshNameRelativeAnchors(frame)
 Check(level.relPoint == "RIGHT" and level.x == 10, "right-justified name right edge was calculated incorrectly")
+
+name._msufJustifyH = "LEFT"
+nameWidth = secretWidth
+StatusRuntime.RefreshNameRelativeAnchors(frame)
+Check(level.relPoint == "LEFT" and level.x == 10,
+    "secret name width reached anchor arithmetic instead of using the safe zero-width fallback")
+nameWidth = 87
 
 local refreshCalls = 0
 local originalRefresh = StatusRuntime.RefreshNameRelativeAnchors
