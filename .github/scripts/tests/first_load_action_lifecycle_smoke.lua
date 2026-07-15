@@ -431,6 +431,34 @@ local function ResetEffects(effects)
     effects.lastPage = nil
 end
 
+-- FirstLoad loads before profile normalization. If a later bootstrap repair
+-- replaces the SavedVariables root, lifecycle reads and writes must follow the
+-- live root instead of leaving the menu attached to a stale pending table.
+do
+    local MSUF, M = LoadFixture()
+    local firstLoad = MSUF.FirstLoad6
+    local detachedState = firstLoad:GetState()
+    _G.MSUF_GlobalDB = {
+        global = {
+            firstLoad6 = {
+                schema = detachedState.schema,
+                revision = detachedState.revision,
+                installKind = detachedState.installKind,
+                status = "pending",
+                step = "welcome",
+            },
+        },
+    }
+    Check(firstLoad:GetState() == _G.MSUF_GlobalDB.global.firstLoad6,
+        "FirstLoad did not adopt the live replacement SavedVariables root")
+    Check(M.ExecuteFirstLoadDashboardAction("use_defaults") == true,
+        "defaults failed after SavedVariables root replacement")
+    Equal(_G.MSUF_GlobalDB.global.firstLoad6.status, "completed",
+        "defaults completion was written only to the detached FirstLoad table")
+    Check(firstLoad:ShouldShowDashboard() == false,
+        "live completed defaults state still rendered the first-load scene")
+end
+
 -- Completing the welcome via defaults makes every stale/virtual FirstLoad
 -- action unavailable before it can navigate, start a tour, or mutate state.
 do
@@ -439,6 +467,14 @@ do
     local ok = M.ExecuteFirstLoadDashboardAction("use_defaults")
     Check(ok == true, "pending defaults action failed")
     Equal(firstLoad:GetState().status, "completed", "defaults did not complete onboarding")
+    Check(firstLoad:ShouldHighlightGuidedSetup() == true,
+        "fresh defaults did not highlight the unfinished guided setup")
+    Check(firstLoad:ShouldShowDashboard() == false,
+        "fresh defaults left the one-time welcome scene visible")
+    Equal(effects.invalidates, 1, "fresh defaults did not invalidate the cached welcome scene")
+    Equal(effects.selects, 1, "fresh defaults did not open the normal Dashboard immediately")
+    Equal(effects.lastPage, "home", "fresh defaults rebuilt the wrong Dashboard page")
+    Equal(effects.closes, 0, "fresh defaults closed the menu instead of showing the normal Dashboard")
     ResetEffects(effects)
 
     for i = 1, #ACTIONS do
@@ -467,8 +503,25 @@ do
     local guidedStarted = M.StartGuidedTour({ source = "dashboard", restart = true })
     Check(guidedStarted == true, "independent guided tour did not restart")
     Equal(tour:GetState().status, "active", "guided tour restart did not become active")
+    Check(firstLoad:ShouldHighlightGuidedSetup() == true,
+        "active unfinished guided setup lost the fresh-player highlight")
     Equal(firstLoad:GetState().status, "completed", "guided tour restart revived FirstLoad")
     Check(firstLoad:ShouldShowDashboard() == false, "guided restart resurfaced the one-time dashboard")
+    Check(tour:Complete() == true, "guided tour completion failed")
+    Check(firstLoad:ShouldHighlightGuidedSetup() == false,
+        "completed guided setup kept the fresh-player highlight")
+end
+
+-- A successful profile import is an alternative to Guided Setup for a fresh
+-- defaults player and removes the Dashboard cue without reopening onboarding.
+do
+    local MSUF, M = LoadFixture()
+    local firstLoad = MSUF.FirstLoad6
+    Check(M.ExecuteFirstLoadDashboardAction("use_defaults") == true, "fresh defaults action failed")
+    Check(firstLoad:ShouldHighlightGuidedSetup() == true, "fresh defaults cue was not active before import")
+    firstLoad:CompleteProfileImport("import")
+    Check(firstLoad:ShouldHighlightGuidedSetup() == false, "profile import did not clear the guided setup cue")
+    Check(firstLoad:ShouldShowDashboard() == false, "profile import revived the one-time welcome scene")
 end
 
 -- Dismissal is equally terminal, but still permits the separate tour launcher.

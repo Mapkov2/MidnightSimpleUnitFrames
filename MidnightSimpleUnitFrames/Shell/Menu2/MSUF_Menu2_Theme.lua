@@ -2398,7 +2398,7 @@ local function ButtonVisual(btn, active, hover)
             if btn._msuf2NavStripe then btn._msuf2NavStripe:Hide() end
             HideNavPillArt(btn)
             SetLabelColor(btn._msuf2Label, tx)
-            PaintStoredNavIcon(btn, 0.64)
+            PaintNavIcon(btn, tx[1], tx[2], tx[3], tx[4] or 1)
         end
         return
     end
