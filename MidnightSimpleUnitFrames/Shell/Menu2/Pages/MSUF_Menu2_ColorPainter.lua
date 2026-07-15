@@ -11,6 +11,8 @@ local W = M.Widgets
 local T = M.Theme
 local P = M.ColorPainter or {}
 M.ColorPainter = P
+local AP = M.AdvancedPage or {}
+local ControlMeta, RegisterControl = M.Pick(AP, [[ControlMeta RegisterControl]])
 local floor, max, min = math.floor, math.max, math.min
 local Tr = M.TranslateText or M.Tr or function(text) return text end
 
@@ -345,6 +347,9 @@ function P.Build(ctx, builder, categories)
         local category = categories[i]
         local tab = T.Button(section, category.shortTitle or category.title, tabW, 26)
         tab:SetPoint("TOPLEFT", section, "TOPLEFT", 16 + (i - 1) * (tabW + gap), tabsY)
+        RegisterControl(tab,
+            ControlMeta("opt_colors", "advanced", "preview.scope.option." .. tostring(category.key), "ephemeral"),
+            category.shortTitle or category.title, "button")
         tabButtons[category.key] = tab
     end
 
@@ -400,11 +405,39 @@ function P.Build(ctx, builder, categories)
             ShowCategory(key)
         end)
     end
+    local initialRefreshSerial = 0
+    local function RefreshVisiblePreview(reason)
+        if ctx and ctx.key and M.activeKey and M.activeKey ~= ctx.key then return end
+        if ctx and ctx.wrapper and ctx.wrapper.IsShown and not ctx.wrapper:IsShown() then return end
+        if section.IsShown and not section:IsShown() then return end
+        ShowCategory(Current())
+        RefreshPreviews(reason or "MSUF2_COLOR_PAINTER_VISIBLE")
+    end
+    local function QueueVisiblePreviewRefresh(reason)
+        initialRefreshSerial = initialRefreshSerial + 1
+        local serial = initialRefreshSerial
+        RefreshVisiblePreview(reason)
+        local timer = _G.C_Timer
+        if timer and timer.After then
+            timer.After(0, function()
+                if serial == initialRefreshSerial then RefreshVisiblePreview(reason) end
+            end)
+            timer.After(0.05, function()
+                if serial == initialRefreshSerial then RefreshVisiblePreview(reason) end
+            end)
+        end
+    end
     if section.HookScript then
-        section:HookScript("OnShow", function() ShowCategory(Current()) end)
+        section:HookScript("OnShow", function() QueueVisiblePreviewRefresh("MSUF2_COLOR_PAINTER_SHOW") end)
         section:HookScript("OnHide", function()
+            initialRefreshSerial = initialRefreshSerial + 1
             for i = 1, #unitBoxes do unitBoxes[i]:Hide() end
             if groupBox then groupBox:Hide() end
+        end)
+    end
+    if ctx and ctx.wrapper and ctx.wrapper.HookScript then
+        ctx.wrapper:HookScript("OnShow", function()
+            QueueVisiblePreviewRefresh("MSUF2_COLOR_PAINTER_PAGE_SHOW")
         end)
     end
     ShowCategory(Current())
@@ -414,8 +447,34 @@ function P.Build(ctx, builder, categories)
     end
     M.TrackRefresh(ctx, function()
         if not section:IsShown() then return end
-        ShowCategory(Current())
-        RefreshPreviews("MSUF2_COLOR_PAINTER_REFRESH")
+        QueueVisiblePreviewRefresh("MSUF2_COLOR_PAINTER_REFRESH")
     end)
+    if W.AttachPinnedPreview then
+        W.AttachPinnedPreview(section, host, {
+            stateKey = "colorPreview",
+            left = 14,
+            right = 14,
+            top = -8,
+            buttonWidth = 78,
+            buttonHeight = 20,
+            centerButton = true,
+            quietButton = true,
+            pinnedHeight = 350,
+            pageKey = ctx and ctx.key,
+            wrapper = ctx and ctx.wrapper,
+            restoreParent = section,
+            restorePoint = { "TOPLEFT", section, "TOPLEFT", 16, -46 },
+            restoreWidth = previewW,
+            restoreHeight = 350,
+        })
+        if host._msuf2PinButton and host._msuf2PinButton.SetFrameLevel then
+            local popupLevel = tonumber(M.MENU_POPUP_FRAME_LEVEL) or 120
+            host._msuf2PinButton:SetFrameLevel(min((host:GetFrameLevel() or 1) + COLOR_TARGET_LEVEL + 12, popupLevel - 5))
+        end
+        RegisterControl(host._msuf2PinButton,
+            ControlMeta("opt_colors", "advanced", "preview.pin.toggle", "ephemeral"),
+            "Pin Color Preview", "toggle")
+    end
+    QueueVisiblePreviewRefresh("MSUF2_COLOR_PAINTER_INITIAL")
     return section
 end
