@@ -421,8 +421,10 @@ function M.ExecuteFirstLoadDashboardAction(action)
     elseif action == "use_defaults" then
         local installKind = InstallKind(firstLoad, FirstLoadState(firstLoad))
         CallLifecycle(firstLoad, "Complete", installKind == "upgrade" and "current_profile" or "defaults")
-        InvalidateHomeCache()
-        if not CloseMenu() and type(M.SelectPage) == "function" then M.SelectPage("home") end
+        -- Replace the one-time scene immediately with the normal Dashboard.
+        -- Rebuilding `home` after the terminal state is persisted guarantees
+        -- the cached welcome wrapper cannot survive the defaults choice.
+        InvalidateHome()
         return true, installKind == "upgrade"
             and Tr("Continued with the current profile.")
             or Tr("Kept the current/default setup.")

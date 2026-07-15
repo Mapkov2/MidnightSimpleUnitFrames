@@ -160,15 +160,42 @@ MSUF.FirstLoad6 = FirstLoad
 -- "pending" (for example by an Assistant undo of a first-load action).
 FirstLoad.deferredThisSession = false
 
-function FirstLoad:GetState()
+-- Some profile/bootstrap paths can repair or replace the SavedVariables root
+-- after this early module has loaded. Always follow the currently exported
+-- root before reading or mutating onboarding state, otherwise the menu can
+-- render a stale `pending` table even though the saved state is completed.
+local function SyncLiveState()
+    local liveDB = rawget(_G, "MSUF_GlobalDB")
+    if type(liveDB) ~= "table" then
+        _G.MSUF_GlobalDB = globalDB
+        return state
+    end
+    if type(liveDB.global) ~= "table" then
+        liveDB.global = {}
+    end
+    globalDB = liveDB
+    local liveState = globalDB.global.firstLoad6
+    if liveState ~= state then
+        if type(liveState) == "table" and liveState.revision == REVISION and VALID_STATUS[liveState.status] then
+            state = liveState
+        else
+            globalDB.global.firstLoad6 = state
+        end
+    end
     return state
 end
 
+function FirstLoad:GetState()
+    return SyncLiveState()
+end
+
 function FirstLoad:GetInstallKind()
+    SyncLiveState()
     return state.installKind
 end
 
 function FirstLoad:GetDetection()
+    SyncLiveState()
     return {
         installKind = state.installKind,
         reason = state.installReason,
@@ -181,10 +208,12 @@ function FirstLoad:GetDetection()
 end
 
 function FirstLoad:IsTerminal()
+    SyncLiveState()
     return TERMINAL_STATUS[state.status] == true
 end
 
 function FirstLoad:ShouldShowDashboard()
+    SyncLiveState()
     if self.deferredThisSession then
         return false
     end
@@ -213,7 +242,25 @@ function FirstLoad:ShouldShowDashboard()
     return state.status == "pending"
 end
 
+-- Fresh players who close the one-time welcome with the default setup still
+-- benefit from a clear next step on the normal Dashboard. Keep that cue until
+-- they either import a profile or finish Guided Setup; neither path is allowed
+-- to revive the welcome scene itself.
+function FirstLoad:ShouldHighlightGuidedSetup()
+    SyncLiveState()
+    if state.installKind ~= "fresh" or state.status ~= "completed" or state.step ~= "defaults" then
+        return false
+    end
+    if globalDB.global.firstLoad6ProfileImported == true then
+        return false
+    end
+    local tour = MSUF and MSUF.GuidedTour6
+    local tourState = type(tour) == "table" and type(tour.GetState) == "function" and tour:GetState() or nil
+    return not (type(tourState) == "table" and tourState.status == "completed")
+end
+
 local function Transition(status, step)
+    SyncLiveState()
     if not VALID_STATUS[status] then
         return false
     end
@@ -242,6 +289,7 @@ function FirstLoad:DeferForSession(step)
 end
 
 function FirstLoad:Complete(step)
+    SyncLiveState()
     self.deferredThisSession = false
     state.completedAt = Now()
     return Transition("completed", step or "defaults")
@@ -251,6 +299,7 @@ end
 -- card on the welcome scene. Treat that successful direct import as the same
 -- explicit setup choice, but do not interrupt an unrelated active guided tour.
 function FirstLoad:CompleteProfileImport(step)
+    SyncLiveState()
     globalDB.global.firstLoad6ProfileImported = true
     if self:IsTerminal() then return false, state.status end
     if state.status ~= "pending" and not (state.status == "active" and state.step == "import") then
@@ -260,6 +309,7 @@ function FirstLoad:CompleteProfileImport(step)
 end
 
 function FirstLoad:Dismiss(step)
+    SyncLiveState()
     self.deferredThisSession = false
     state.dismissedAt = Now()
     return Transition("dismissed", step or "full_settings")
@@ -269,6 +319,7 @@ end
 --- scene as if the addon had just been installed, optionally forcing the
 --- fresh or upgrade variant. Deliberately bypasses the terminal-status guard.
 function FirstLoad:Reset(installKind)
+    SyncLiveState()
     if installKind ~= "fresh" and installKind ~= "upgrade" then
         installKind = state.installKind
     end

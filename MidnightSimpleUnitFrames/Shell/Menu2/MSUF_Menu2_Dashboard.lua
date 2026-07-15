@@ -553,6 +553,7 @@ local function BuildDashboardUX(ctx)
         btn:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
         T.CenterButtonLabel(btn)
         if skin == "primary" and T.SkinPrimaryButton then T.SkinPrimaryButton(btn) end
+        if skin == "success" and T.SkinSuccessButton then T.SkinSuccessButton(btn) end
         if skin == "danger" and T.SkinDangerButton then T.SkinDangerButton(btn) end
         if onClick then btn:SetScript("OnClick", onClick) end
         RegisterDashboardControl(btn, DashboardMeta(semanticPath, classification or "action", exact), text, "button")
@@ -718,6 +719,10 @@ local function BuildDashboardUX(ctx)
     local tourState = type(tour) == "table" and type(tour.GetState) == "function" and tour:GetState() or nil
     local tourActive = type(tourState) == "table" and tourState.status == "active"
     local tourCompleted = type(tourState) == "table" and tourState.status == "completed"
+    local firstLoad = MSUF and MSUF.FirstLoad6
+    local highlightGuidedSetup = type(firstLoad) == "table"
+        and type(firstLoad.ShouldHighlightGuidedSetup) == "function"
+        and firstLoad:ShouldHighlightGuidedSetup()
     local launcherNarrow = mainW < 520
     local launcherH = launcherNarrow and 126 or 78
     local launcher = Card(root, "", x0, mainTop, mainW, launcherH, T.colors.panel2, T.colors.borderSoft)
@@ -747,7 +752,7 @@ local function BuildDashboardUX(ctx)
         elseif type(M.StartGuidedTour) == "function" then
             M.StartGuidedTour({ source = "dashboard", restart = tourCompleted })
         end
-    end, "primary", "guided_setup.start_or_resume", "action", { actionKey = "guided_setup" })
+    end, highlightGuidedSetup and "success" or "primary", "guided_setup.start_or_resume", "action", { actionKey = "guided_setup" })
     M.CallIf(T.AttachNavIcon, action, "home", false, true)
 
     mainTop = mainTop - launcherH - 10
