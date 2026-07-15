@@ -173,6 +173,9 @@ local function RunStatusApply(frame, status, event)
   if status.runtimePVP == true and UpdatePVP then
     UpdatePVP(frame, status)
   end
+  if status.role and status.role.enabled == true then
+    UpdateRole(frame, status)
+  end
 end
 
 --- Convert a compiled status config into a small dispatch table so Update can
@@ -236,7 +239,14 @@ local function RunStatusRuntimeFrame(frame, event, unit, seedHP)
     dispatch = status.runtimeDispatch or CompileStatusDispatch(status)
   end
   local kind = STATUS_EVENT_KIND[event]
-  local runner = kind and dispatch[kind] or dispatch.apply
+  -- A known event with no compiled owner is intentionally a no-op. Only
+  -- synthetic lifecycle/identity reasons (which have no event kind) need the
+  -- full apply fallback; using `and/or` here made a missing specialized runner
+  -- repaint every status region and could re-read unrelated state.
+  local runner = kind and dispatch[kind] or nil
+  if not kind then
+    runner = dispatch.apply
+  end
   if runner then
     runner(frame, status, event, seedHP)
   end
@@ -460,10 +470,6 @@ function GroupStatusRuntime.Apply(frame)
     frame._msufUpdateGroupStatusState = RunStatusRuntimeFrame
   end
   dispatch.apply(frame, status, "MSUF_GF_STATUS_APPLY")
-  local applyRole = dispatch[10]
-  if applyRole then
-    applyRole(frame, status)
-  end
 end
 
 function GroupStatusRuntime.Disable(frame)

@@ -82,7 +82,9 @@ UF.RegisterElement("GroupRangeFade", {
 })
 UF.RegisterElement("GroupStatusRuntime", {
     IsEnabled = function(_, spec) return spec.groupLifecycle == true end,
-    GetEvents = function() return { "PARTY_MEMBER_ENABLE", "PARTY_MEMBER_DISABLE" } end,
+    -- Core's shared lifecycle plan owns PARTY_MEMBER_ENABLE/DISABLE and calls
+    -- this active follower once; the element must not declare duplicate routes.
+    GetEvents = function() return {} end,
     Update = function(runtimeFrame, _, unit)
         statusUpdateCalls = statusUpdateCalls + 1
         statusUnits[runtimeFrame] = unit

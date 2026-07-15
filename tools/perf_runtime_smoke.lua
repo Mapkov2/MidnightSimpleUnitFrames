@@ -362,7 +362,8 @@ local function smokeGroupRuntime()
         if event == "PARTY_MEMBER_DISABLE" then hasPartyDisable = true end
     end
     assert(not hasStatusHealthEvent, "status text must reuse the health element event instead of adding a handler")
-    assert(hasPartyEnable and hasPartyDisable, "group status must refresh on party lifecycle events")
+    assert(not hasPartyEnable and not hasPartyDisable,
+        "group status must reuse the shared lifecycle plan instead of adding duplicate handlers")
 
     MSUF.UF.elements.GroupStatusRuntime.Apply(f)
     assert(type(f.MSUFSpec.status.runtimeDispatch) == "table", "status runtimeDispatch missing")

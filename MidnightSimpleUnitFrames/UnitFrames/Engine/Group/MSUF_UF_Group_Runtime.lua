@@ -21,6 +21,7 @@ local GetNumGroupMembers = GetNumGroupMembers
 local floor = math.floor
 local pairs = pairs
 local tonumber = tonumber
+local tostring = tostring
 local type = type
 local issecretvalue = _G.issecretvalue or function(_) return false end
 
@@ -84,11 +85,51 @@ local function RefreshVisiblePartyState(reason)
   return GF.ForEachFrame(RefreshPartyStateFrame, false, reason)
 end
 
+local function RoleFilteredAggroMode(mode)
+  mode = tostring(mode or "ALL"):upper()
+  if mode == "TANK_ONLY" then mode = "TANK"
+  elseif mode == "HEALER_ONLY" then mode = "HEALER" end
+  return mode == "TANK" or mode == "HEALER" or mode == "NON_TANK"
+end
+
 local function RefreshRoleStateFrame(frame, _, _, reason)
-  local update = frame and frame._msufUpdateGroupStatusState
-  if type(update) ~= "function" then return false end
-  update(frame, reason or "PLAYER_ROLES_ASSIGNED", frame.unit)
-  return true
+  if not frame then return false end
+  reason = reason or "PLAYER_ROLES_ASSIGNED"
+  local did = false
+
+  local update = frame._msufUpdateGroupStatusState
+  if type(update) == "function" then
+    update(frame, reason, frame.unit)
+    did = true
+  end
+
+  -- Role-filtered aggro visuals depend on UnitGroupRolesAssigned in addition
+  -- to threat. A role change does not guarantee a follow-up threat event, so
+  -- refresh just those enabled visual owners on this existing cold path.
+  local active = frame._msufActiveElements
+  local spec = frame.MSUFSpec
+  local elements = UF and UF.elements
+  if active and spec and elements then
+    local borderCfg = spec.border
+    local borders = active.Borders == true and elements.Borders or nil
+    if borders and type(borders.Update) == "function"
+      and borderCfg and borderCfg.aggro == true
+      and RoleFilteredAggroMode(borderCfg.aggroMode) then
+      borders.Update(frame, reason, frame.unit)
+      did = true
+    end
+
+    local cornerCfg = spec.cornerIndicators
+    local corners = active.GroupCornerIndicators == true and elements.GroupCornerIndicators or nil
+    if corners and type(corners.Update) == "function"
+      and cornerCfg and cornerCfg.enabled == true and cornerCfg.needsThreat == true
+      and RoleFilteredAggroMode(cornerCfg.aggroMode) then
+      corners.Update(frame, reason, frame.unit)
+      did = true
+    end
+  end
+
+  return did
 end
 
 -- SecureGroupHeader may rescan an unchanged child without reapplying its spec.

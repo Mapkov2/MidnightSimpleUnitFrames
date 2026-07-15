@@ -11,6 +11,7 @@ $lua = Get-Command $LuaCommand -ErrorAction Stop
 # it here fails the manifest check instead of silently leaving CI coverage red.
 $tests = @(
     "tools/advanced_colors_page_contract_smoke.lua",
+    ".github/scripts/tests/aggro_runtime_routing_smoke.lua",
     "tools/apply_service_dedup_smoke.lua",
     "tools/castbar_native_manager_smoke.lua",
     "tools/castbar_refresh_ownership_smoke.lua",

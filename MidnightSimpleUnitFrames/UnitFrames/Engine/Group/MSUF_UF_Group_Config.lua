@@ -458,22 +458,18 @@ local function AddEvent(list, event)
   return list
 end
 
-local function CompileStatusRuntimeEvents(leader, assist, readyCheck, summon, phase, raidMarker, raidGroup, statusTextConnection, statusTextFlags, statusTextPlayerFlags, incomingRes, pvp)
+local function CompileStatusRuntimeEvents(leader, assist, readyCheck, summon, phase, raidMarker, raidGroup, statusTextFlags, statusTextPlayerFlags, incomingRes, pvp)
   local events, unitlessEvents
   if phase then
     events = AddEvent(events, "UNIT_PHASE")
     events = AddEvent(events, "UNIT_OTHER_PARTY_CHANGED")
   end
-  if statusTextConnection then
-    events = AddEvent(events, "UNIT_CONNECTION")
-  end
   if statusTextFlags then
     events = AddEvent(events, "UNIT_FLAGS")
   end
-  if statusTextConnection or statusTextFlags then
-    events = AddEvent(events, "PARTY_MEMBER_ENABLE")
-    events = AddEvent(events, "PARTY_MEMBER_DISABLE")
-  end
+  -- Health forwards UNIT_CONNECTION directly, and Core's shared group
+  -- lifecycle plan owns PARTY_MEMBER_ENABLE/DISABLE. Keeping them here would
+  -- run the same status transition twice on the fused health/lifecycle paths.
   if statusTextPlayerFlags then
     unitlessEvents = AddEvent(unitlessEvents, "PLAYER_FLAGS_CHANGED")
   end
@@ -488,6 +484,9 @@ local function CompileStatusRuntimeEvents(leader, assist, readyCheck, summon, ph
   end
   if leader or assist then
     unitlessEvents = AddEvent(unitlessEvents, "PARTY_LEADER_CHANGED")
+  end
+  if leader or assist or raidGroup then
+    unitlessEvents = AddEvent(unitlessEvents, "GROUP_ROSTER_UPDATE")
   end
   if readyCheck then
     unitlessEvents = AddEvent(unitlessEvents, "READY_CHECK")
@@ -550,7 +549,7 @@ local function CompileStatus(kind, conf)
   local raidGroupEnabled = conf.showGroupNumber == true
   local runtimeEvents, runtimeUnitlessEvents = CompileStatusRuntimeEvents(
     leaderEnabled, assistEnabled, readyCheckEnabled, summonEnabled, phaseEnabled,
-    raidMarkerEnabled, raidGroupEnabled, statusConnectionTextEnabled, statusFlagTextEnabled, statusPlayerFlagTextEnabled, incomingResEnabled, pvpEnabled
+    raidMarkerEnabled, raidGroupEnabled, statusFlagTextEnabled, statusPlayerFlagTextEnabled, incomingResEnabled, pvpEnabled
   )
   local runtimeEnabled = roleEnabled or leaderEnabled or assistEnabled
     or readyCheckEnabled or summonEnabled or phaseEnabled

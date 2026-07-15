@@ -28,7 +28,7 @@ local NotSecretValue = V.NotSecretValue or function(_) return true end
 local IsSecretValue = _G.issecretvalue or function(_) return false end
 local EMPTY_EVENTS = V.EMPTY_EVENTS or {}
 local BORDER_THREAT_EVENTS = V.BORDER_THREAT_EVENTS or { "UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE" }
-local BOSS_TARGET_EVENTS = { "PLAYER_TARGET_CHANGED" }
+local TARGET_CHANGE_EVENTS = { "PLAYER_TARGET_CHANGED" }
 local SetShown = V.SetShown
 
 local Borders = {}
@@ -48,8 +48,15 @@ end
 
 function Borders.GetUnitlessEvents(frame, spec)
   local cfg = spec and spec.border
-  if cfg and cfg.bossTarget == true and IsBossUnit(frame and frame.unit) then
-    return BOSS_TARGET_EVENTS
+  local unit = frame and frame.unit
+  -- The player-frame aggro query compares player against the current target.
+  -- A target swap can therefore change the answer without producing a threat
+  -- event for player; seed it explicitly from the target lifecycle event.
+  if cfg and cfg.aggro == true and unit == "player" then
+    return TARGET_CHANGE_EVENTS
+  end
+  if cfg and cfg.bossTarget == true and IsBossUnit(unit) then
+    return TARGET_CHANGE_EVENTS
   end
   return EMPTY_EVENTS
 end

@@ -73,6 +73,13 @@ UF.basicElements = BASIC_ELEMENTS
 local EVENT_ELEMENTS = {
   Portrait = true,
   Prediction = true,
+  -- These elements own live state that is not covered by the basic bar/text
+  -- routes or by a separate shared driver. Keep them frame-routed so their
+  -- option-gated GetEvents/GetUnitlessEvents declarations actually run.
+  Borders = true,
+  GroupCornerIndicators = true,
+  GroupStatusRuntime = true,
+  GroupVisuals = true,
   -- Group range events must stay unit-filtered per frame. A shared
   -- RegisterUnitEvent subscription is capped at four unit tokens and cannot
   -- safely dispatch a secret UNIT_IN_RANGE_UPDATE unit payload.
@@ -101,6 +108,7 @@ local IDENTITY_ELEMENTS = {
   PowerText = true,
   InlineToT = true,
   Portrait = true,
+  Borders = true,
   -- These values belong to the bound unit and must be reseeded when target,
   -- focus, dependent, pet, or boss identity changes. Resting is player-only
   -- and owns PLAYER_UPDATE_RESTING/PLAYER_ENTERING_WORLD directly.
@@ -575,10 +583,10 @@ local function RunCompiledGroupLifecycle(frame, event, mode)
 end
 
 --- Refresh one secure group child from a coherent authoritative snapshot.
---- The caller's reason is diagnostic only: canonical lifecycle semantics keep
---- Health/Prediction/Text and all group followers on the same narrow path.
-local function RefreshGroupFrameState(frame, _reason)
-  return RunCompiledGroupLifecycle(frame, "PARTY_MEMBER_ENABLE", "full")
+--- Preserve identity/roster/show reasons so stateful followers can choose their
+--- full reseed branch while sharing the same compiled lifecycle path.
+local function RefreshGroupFrameState(frame, reason)
+  return RunCompiledGroupLifecycle(frame, reason or "PARTY_MEMBER_ENABLE", "full")
 end
 UF.RefreshGroupFrameState = RefreshGroupFrameState
 
@@ -761,8 +769,9 @@ local function IsRegisteredElementFunction(fn)
   return false
 end
 
-local function RouteCacheLeaf(root, fn1, fn2, fn3, mode, target)
-  local key1, key2, key3 = fn1 or NIL_ROUTE_KEY, fn2 or NIL_ROUTE_KEY, fn3 or NIL_ROUTE_KEY
+local function RouteCacheLeaf(root, fn1, fn2, fn3, fn4, mode, target)
+  local key1, key2, key3, key4 = fn1 or NIL_ROUTE_KEY, fn2 or NIL_ROUTE_KEY,
+    fn3 or NIL_ROUTE_KEY, fn4 or NIL_ROUTE_KEY
   local node = root[key1]
   if not node then node = {}; root[key1] = node end
   local nextNode = node[key2]
@@ -771,12 +780,15 @@ local function RouteCacheLeaf(root, fn1, fn2, fn3, mode, target)
   nextNode = node[key3]
   if not nextNode then nextNode = {}; node[key3] = nextNode end
   node = nextNode
+  nextNode = node[key4]
+  if not nextNode then nextNode = {}; node[key4] = nextNode end
+  node = nextNode
   nextNode = node[mode]
   if not nextNode then nextNode = {}; node[mode] = nextNode end
   return nextNode, target or NIL_ROUTE_KEY
 end
 
-local function BuildHealthRoute(barFn, textFn, predictionFn, routeUnitless, target)
+local function BuildHealthRoute(barFn, textFn, predictionFn, visualsFn, routeUnitless, target)
   if target then
     return function(self, ev, _unit, ...)
       BeginFrameEvent(self)
@@ -788,6 +800,7 @@ local function BuildHealthRoute(barFn, textFn, predictionFn, routeUnitless, targ
       if textFn then
         if percentReady == true then textFn(self, ev, target, nil, nil, ...) else textFn(self, ev, target, hp, hpMax, ...) end
       end
+      if visualsFn then visualsFn(self, ev, target, hp, hpMax, ...) end
       EndFrameEvent(self)
     end
   end
@@ -802,6 +815,7 @@ local function BuildHealthRoute(barFn, textFn, predictionFn, routeUnitless, targ
     if textFn then
       if percentReady == true then textFn(self, ev, u, nil, nil, ...) else textFn(self, ev, u, hp, hpMax, ...) end
     end
+    if visualsFn then visualsFn(self, ev, u, hp, hpMax, ...) end
     EndFrameEvent(self)
   end
 end
@@ -868,7 +882,7 @@ RefreshHealthLifecycleSinkRoutes = function(frame)
   return true
 end
 
-local function BuildPowerRoute(barFn, textFn, _unused, routeUnitless, target)
+local function BuildPowerRoute(barFn, textFn, _unused, _unusedFollower, routeUnitless, target)
   if target then
     return function(self, ev, _unit, ...)
       local power, powerMax, powerType, powerToken, metaChanged
@@ -884,17 +898,18 @@ local function BuildPowerRoute(barFn, textFn, _unused, routeUnitless, target)
   end
 end
 
-local function SharedDirectRoute(cache, builder, fn1, fn2, fn3, routeUnitless, target)
+local function SharedDirectRoute(cache, builder, fn1, fn2, fn3, fn4, routeUnitless, target)
   if (fn1 and not IsRegisteredElementFunction(fn1))
     or (fn2 and not IsRegisteredElementFunction(fn2))
-    or (fn3 and not IsRegisteredElementFunction(fn3)) then
-    return builder(fn1, fn2, fn3, routeUnitless, target)
+    or (fn3 and not IsRegisteredElementFunction(fn3))
+    or (fn4 and not IsRegisteredElementFunction(fn4)) then
+    return builder(fn1, fn2, fn3, fn4, routeUnitless, target)
   end
   local mode = target and "target" or (routeUnitless == true and "unitless" or "unit")
-  local leaf, key = RouteCacheLeaf(cache, fn1, fn2, fn3, mode, target)
+  local leaf, key = RouteCacheLeaf(cache, fn1, fn2, fn3, fn4, mode, target)
   local route = leaf[key]
   if not route then
-    route = builder(fn1, fn2, fn3, routeUnitless, target)
+    route = builder(fn1, fn2, fn3, fn4, routeUnitless, target)
     leaf[key] = route
   end
   sharedFrameEventRoutes[route] = true
@@ -950,13 +965,18 @@ local function CompileFrameEventPath(frame, event, list)
     local barUpdate = healthEvent and frame[GetUpdateKey("Health")] or frame[GetUpdateKey("Power")]
     local textUpdate = healthEvent and frame[GetUpdateKey("HealthText")] or frame[GetUpdateKey("PowerText")]
     local predictionUpdate
+    local visualsUpdate
     if healthEvent then
       local predictionBase = frame[GetUpdateKey("Prediction")]
       if predictionBase then
         predictionUpdate = SelectElementEventUpdate(UF.elements.Prediction, frame, event, predictionBase)
       end
+      local visualsBase = frame[GetUpdateKey("GroupVisuals")]
+      if visualsBase then
+        visualsUpdate = SelectElementEventUpdate(UF.elements.GroupVisuals, frame, event, visualsBase)
+      end
     end
-    local barFn, textFn, predictionFn
+    local barFn, textFn, predictionFn, visualsFn
     local routeUnitless
     local direct = true
     for i = 1, count, 2 do
@@ -974,18 +994,20 @@ local function CompileFrameEventPath(frame, event, list)
         textFn = update
       elseif predictionUpdate and update == predictionUpdate then
         predictionFn = update
+      elseif visualsUpdate and update == visualsUpdate then
+        visualsFn = update
       else
         direct = false
         break
       end
     end
-    if direct == true and (barFn or textFn or predictionFn) then
+    if direct == true and (barFn or textFn or predictionFn or visualsFn) then
       if healthEvent then
         return SharedDirectRoute(directHealthRouteCache, BuildHealthRoute,
-          barFn, textFn, predictionFn, routeUnitless, target)
+          barFn, textFn, predictionFn, visualsFn, routeUnitless, target)
       end
       return SharedDirectRoute(directPowerRouteCache, BuildPowerRoute,
-        barFn, textFn, nil, routeUnitless, target)
+        barFn, textFn, nil, nil, routeUnitless, target)
     end
   end
   if count == 2 then
@@ -1026,7 +1048,8 @@ local function LifecycleCachedHealth(frame, unit)
 end
 
 local function BuildLifecycleFullPath(healthPath, powerUpdate, powerTextUpdate,
-    nameUpdate, portraitUpdate, statusUpdate, rangeUpdate, visualsUpdate)
+    nameUpdate, portraitUpdate, statusUpdate, rangeUpdate, visualsUpdate,
+    bordersUpdate, cornerUpdate)
   return function(frame, event)
     local unit = frame.unit
     frame._msufGroupStateRefresh = true
@@ -1047,6 +1070,8 @@ local function BuildLifecycleFullPath(healthPath, powerUpdate, powerTextUpdate,
     if statusUpdate then statusUpdate(frame, event, unit, hp) end
     if rangeUpdate then rangeUpdate(frame, event, unit) end
     if visualsUpdate then visualsUpdate(frame, event, unit, hp, hpMax) end
+    if bordersUpdate then bordersUpdate(frame, event, unit) end
+    if cornerUpdate then cornerUpdate(frame, event, unit) end
 
     frame._msufDeferDispatchEnd = nil
     EndFrameEvent(frame)
@@ -1109,10 +1134,12 @@ local function BuildLifecycleGlobalPath(healthPath, healthMetadata, powerUpdate,
 end
 
 local function NewGroupLifecyclePlan(healthPath, healthMetadata, powerUpdate,
-    powerTextUpdate, nameUpdate, namePresenceUpdate, portraitUpdate, statusUpdate, rangeUpdate, visualsUpdate)
+    powerTextUpdate, nameUpdate, namePresenceUpdate, portraitUpdate, statusUpdate,
+    rangeUpdate, visualsUpdate, bordersUpdate, cornerUpdate)
   return {
     fullPath = BuildLifecycleFullPath(healthPath, powerUpdate, powerTextUpdate,
-      nameUpdate, portraitUpdate, statusUpdate, rangeUpdate, visualsUpdate),
+      nameUpdate, portraitUpdate, statusUpdate, rangeUpdate, visualsUpdate,
+      bordersUpdate, cornerUpdate),
     globalPath = BuildLifecycleGlobalPath(healthPath, healthMetadata, powerUpdate,
       powerTextUpdate, namePresenceUpdate, statusUpdate, rangeUpdate, visualsUpdate),
   }
@@ -1126,7 +1153,8 @@ local function InternLifecycleNode(node, value)
 end
 
 local function InternGroupLifecyclePlan(healthPath, healthMetadata, powerUpdate,
-    powerTextUpdate, nameUpdate, namePresenceUpdate, portraitUpdate, statusUpdate, rangeUpdate, visualsUpdate)
+    powerTextUpdate, nameUpdate, namePresenceUpdate, portraitUpdate, statusUpdate,
+    rangeUpdate, visualsUpdate, bordersUpdate, cornerUpdate)
   local shared = (not healthPath or sharedFrameEventRoutes[healthPath] == true)
   shared = shared
     and (not healthMetadata or IsRegisteredElementFunction(healthMetadata))
@@ -1138,9 +1166,12 @@ local function InternGroupLifecyclePlan(healthPath, healthMetadata, powerUpdate,
     and (not statusUpdate or IsRegisteredElementFunction(statusUpdate))
     and (not rangeUpdate or IsRegisteredElementFunction(rangeUpdate))
     and (not visualsUpdate or IsRegisteredElementFunction(visualsUpdate))
+    and (not bordersUpdate or IsRegisteredElementFunction(bordersUpdate))
+    and (not cornerUpdate or IsRegisteredElementFunction(cornerUpdate))
   if not shared then
     return NewGroupLifecyclePlan(healthPath, healthMetadata, powerUpdate,
-      powerTextUpdate, nameUpdate, namePresenceUpdate, portraitUpdate, statusUpdate, rangeUpdate, visualsUpdate)
+      powerTextUpdate, nameUpdate, namePresenceUpdate, portraitUpdate, statusUpdate,
+      rangeUpdate, visualsUpdate, bordersUpdate, cornerUpdate)
   end
 
   local node = InternLifecycleNode(groupLifecyclePlanIntern, healthPath)
@@ -1153,9 +1184,12 @@ local function InternGroupLifecyclePlan(healthPath, healthMetadata, powerUpdate,
   node = InternLifecycleNode(node, statusUpdate)
   node = InternLifecycleNode(node, rangeUpdate)
   node = InternLifecycleNode(node, visualsUpdate)
+  node = InternLifecycleNode(node, bordersUpdate)
+  node = InternLifecycleNode(node, cornerUpdate)
   if not node.plan then
     node.plan = NewGroupLifecyclePlan(healthPath, healthMetadata, powerUpdate,
-      powerTextUpdate, nameUpdate, namePresenceUpdate, portraitUpdate, statusUpdate, rangeUpdate, visualsUpdate)
+      powerTextUpdate, nameUpdate, namePresenceUpdate, portraitUpdate, statusUpdate,
+      rangeUpdate, visualsUpdate, bordersUpdate, cornerUpdate)
   end
   return node.plan
 end
@@ -1189,7 +1223,9 @@ CompileGroupLifecyclePlan = function(frame)
     ActiveLifecycleUpdate(frame, "Portrait"),
     ActiveLifecycleUpdate(frame, "GroupStatusRuntime"),
     ActiveLifecycleUpdate(frame, "GroupRangeFade"),
-    ActiveLifecycleUpdate(frame, "GroupVisuals")
+    ActiveLifecycleUpdate(frame, "GroupVisuals"),
+    ActiveLifecycleUpdate(frame, "Borders"),
+    ActiveLifecycleUpdate(frame, "GroupCornerIndicators")
   )
   frame._msufGroupLifecyclePlan = plan
   return plan
