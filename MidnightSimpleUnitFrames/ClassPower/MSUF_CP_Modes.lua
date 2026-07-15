@@ -1259,24 +1259,34 @@ modeBuilders.TIMER = function(E)
         local endOK, endTime = pcall(sourceDuration.GetEndTime, sourceDuration)
         if not endOK then return false end
         local comparableEndTime = NotSecret(endTime)
-        local needsBarSync = forceBarSync == true
+        local needsDurationSync = forceBarSync == true
             or bar._timerNativeActive ~= true
             or bar._timerNativeAuraID ~= auraInstanceID
             or not comparableEndTime
             or bar._timerNativeEndTime ~= endTime
-        if needsBarSync then
+        if needsDurationSync then
             if not nativeTimer.SetTimeFromEnd(displayDuration, endTime, EBON.MAX_DURATION) then return false end
-            if not nativeTimer.ApplyRemaining(bar, displayDuration) then return false end
-            bar._timerNativeAuraID = auraInstanceID
-            bar._timerNativeEndTime = comparableEndTime and endTime or nil
         end
+        --- SetTimerDuration binds the mutable duration object to the bar. Ebon
+        --- extensions only need to update that object; rebinding the StatusBar
+        --- on every (often secret) aura refresh restarts its native interpolation
+        --- and can visibly flicker while the player is casting.
+        if forceBarSync == true or bar._timerNativeActive ~= true then
+            if not nativeTimer.ApplyRemaining(bar, displayDuration) then return false end
+        end
+        bar._timerNativeAuraID = auraInstanceID
+        bar._timerNativeEndTime = comparableEndTime and endTime or nil
 
         local showText = visual and visual.timerShowText == true
         if showText then
             local txt, created
             if EnsureMainText then txt, created = EnsureMainText() end
             if created and ApplyFont then ApplyFont() end
-            if not nativeTimer.BindRemainingText(CP, "_msufCPTimerBinding", txt, sourceDuration, "{}s") then
+            --- The display duration has the same end time as the aura. Binding
+            --- text to this stable object keeps the FontString attached while
+            --- extensions mutate the timer, instead of swapping duration
+            --- objects during cast-driven UNIT_AURA bursts.
+            if not nativeTimer.BindRemainingText(CP, "_msufCPTimerBinding", txt, displayDuration, "{}s") then
                 StopNativeTimer()
                 return false
             end

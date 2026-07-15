@@ -409,7 +409,7 @@ local QUICK_CDM_GAP = 4
 local QUICK_FALLBACK_Y_FRAC = 0.60
 local QUICK_KEYS = {
     bars = M.WordList [[showClassPower classPowerShape classPowerShapeAlign classPowerShowText classPowerAnchorToCooldown classPowerWidthMode showEleMaelstrom showEbonMight showChargedComboPoints runeShowTime runeShowTimeText classPowerOffsetX classPowerOffsetY classPowerOutline detachedPowerBarWidthMode smoothPowerBar realtimePowerText classPowerSmoothFill altManaSmoothFill]],
-    player = M.WordList [[showPowerBar powerBarDetached detachedPowerBarShape detachedPowerOrbSize detachedPowerBarWidth detachedPowerBarHeight detachedPowerBarOffsetX detachedPowerBarOffsetY detachedPowerBarFrameLevelOffset detachedPowerBarTextOnBar detachedPowerBarSyncClassPower detachedPowerBarAnchorToClassPower powerSmoothFill]],
+    player = M.WordList [[showPowerBar powerBarDetached detachedPowerBarShape detachedPowerOrbSize detachedPowerBarWidth detachedPowerBarHeight detachedPowerBarOffsetX detachedPowerBarOffsetY detachedPowerBarAnchorMode detachedPowerBarFrameLevelOffset detachedPowerBarTextOnBar detachedPowerBarSyncClassPower detachedPowerBarAnchorToClassPower powerSmoothFill]],
 }
 local quickSetupUndoSnapshot
 local quickSetupFirstRunChecked = false
