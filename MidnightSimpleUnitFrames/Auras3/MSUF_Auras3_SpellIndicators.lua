@@ -199,11 +199,14 @@ local function SlotTrackingSignature(slot)
         .. "\030" .. tostring(slot.candidateFilterSignature)
 end
 
+local SlotLayoutSignature
+
 local function SlotStructuralSignature(slot)
     return tostring(slot.slotKey) .. "\030" .. tostring(slot.nativeFilter)
+        .. "\030" .. tostring(SlotLayoutSignature(slot))
 end
 
-local function SlotLayoutSignature(slot)
+SlotLayoutSignature = function(slot)
     local frame = slot.frameEffect
     local color = slot.color or {}
     local effectColor = frame and frame.color or {}
@@ -531,10 +534,7 @@ end
 
 local function UnregisterNameOverlay(button)
     local overlay = button and button._msufA3SpellIndicatorNameOverlay
-    local registry = overlay and overlay._msufA3NameRegistry
-    if registry then registry[overlay] = nil end
     if overlay then
-        overlay._msufA3NameRegistry = nil
         overlay._msufA3NameSource = nil
         overlay:Hide()
     end
@@ -566,23 +566,10 @@ local function RegisterNameOverlay(button, parentFrame, root)
     if overlay._msufA3NameSource ~= source then
         UnregisterNameOverlay(button)
         overlay._msufA3NameSource = source
-        local registry = source._msufA3SpellIndicatorNameOverlays
-        if not registry then
-            registry = {}
-            source._msufA3SpellIndicatorNameOverlays = registry
-        end
-        registry[overlay] = true
-        overlay._msufA3NameRegistry = registry
-        if hooksecurefunc and source._msufA3SpellIndicatorNameHooked ~= true then
-            local function SyncRegisteredNameOverlays()
-                local value = source:GetText()
-                for target in pairs(registry) do target:SetText(value) end
-            end
-            hooksecurefunc(source, "SetText", SyncRegisteredNameOverlays)
-            hooksecurefunc(source, "SetFormattedText", SyncRegisteredNameOverlays)
-            source._msufA3SpellIndicatorNameHooked = true
-        end
     end
+    -- PTR 5 applies AuraButton access restrictions immediately after this
+    -- initializer returns. Do not retain a SetText hook that would later write
+    -- to this descendant while aura data is secret.
     SyncNameOverlayFont(overlay, source)
     return overlay
 end
@@ -631,10 +618,8 @@ end
 
 function Runtime.HideFrameEffects(parentFrame)
     if not parentFrame then return end
-    local buttons = parentFrame._msufA3SpellIndicatorEffectButtons
-    if buttons then
-        for button in pairs(buttons) do HideButtonFrameEffect(button) end
-    end
+    -- The owning native container is hidden before this cleanup. Its effect
+    -- descendants may be forbidden on PTR 5, so never call their APIs here.
     parentFrame._msufA3SpellIndicatorEffectButtons = nil
     -- Clean up objects created by the pre-native implementation, if a profile
     -- was hot-reloaded from an older build in the same session.
@@ -643,10 +628,6 @@ end
 
 function Runtime.HideIconEffects(parentFrame)
     if not parentFrame then return end
-    local buttons = parentFrame._msufA3SpellIndicatorIconEffectButtons
-    if buttons then
-        for button in pairs(buttons) do HideButtonIconEffect(button) end
-    end
     parentFrame._msufA3SpellIndicatorIconEffectButtons = nil
 end
 
@@ -816,16 +797,13 @@ end
 function Runtime.ReleaseContainerEffects(container, parentFrame)
     if not container then return end
     parentFrame = parentFrame or container._msufA3ParentFrame
-    local buttons = parentFrame and parentFrame._msufA3SpellIndicatorEffectButtons
-    local iconButtons = parentFrame and parentFrame._msufA3SpellIndicatorIconEffectButtons
-    for i = 1, (container.createdButtons or 0) do
-        local button = container[i]
-        if button then
-            HideButtonFrameEffect(button)
-            HideButtonIconEffect(button)
-            if buttons then buttons[button] = nil end
-            if iconButtons then iconButtons[button] = nil end
-        end
+    -- PTR 5 can make every initialized AuraButton (and objects inheriting its
+    -- forbidden aspects) inaccessible to tainted code while aura data is
+    -- secret. Hiding the owning container is sufficient to hide descendant
+    -- effects; only discard our Lua lookup tables here.
+    if parentFrame then
+        parentFrame._msufA3SpellIndicatorEffectButtons = nil
+        parentFrame._msufA3SpellIndicatorIconEffectButtons = nil
     end
 end
 
@@ -1023,11 +1001,12 @@ function Runtime.SyncGeometry(container, slotRoot, parentFrame, forceGeometry)
     SyncFrameStrata(container, ResolveFrameStrata(parentFrame, slotRoot.strata))
     if container.SetFrameLevel then container:SetFrameLevel(parentFrame:GetFrameLevel() or 0) end
     local slots = container._msufA3SpellIndicatorButtonSlots
+    -- PTR 5 makes initialized AuraButtons forbidden while aura data is secret.
+    -- Slot layout/visual changes are structural and recreate the container, so
+    -- this repair path only updates addon-owned missing/effect frames.
     if slots then
         for i = 1, #slots do
-            if slots[i] and container[i] then
-                PrepareButton(container[i], slots[i], parentFrame, forceGeometry)
-            elseif slots[i] then
+            if slots[i] and not container[i] then
                 SyncMissingFrame(parentFrame, slots[i], nil)
             end
         end

@@ -129,16 +129,16 @@ local LANE_GROWTH_VALUES = {
     { value = "LEFTDOWN", text = "Left then Down" },
     { value = "RIGHTUP", text = "Right then Up" },
     { value = "LEFTUP", text = "Left then Up" },
-    { value = "UP", text = "Up" },
-    { value = "DOWN", text = "Down" },
 }
 local LANE_GROWTH_PARTS = {
     RIGHTDOWN = { "RIGHT", "DOWN" },
     LEFTDOWN = { "LEFT", "DOWN" },
     RIGHTUP = { "RIGHT", "UP" },
     LEFTUP = { "LEFT", "UP" },
-    UP = { "UP", "DOWN" },
-    DOWN = { "DOWN", "DOWN" },
+    -- Legacy column-major values are presented as their PTR 5 native
+    -- row-major equivalents.
+    UP = { "RIGHT", "UP" },
+    DOWN = { "RIGHT", "DOWN" },
 }
 
 local LAYOUT_KEYS = {
@@ -393,8 +393,8 @@ local LANE_STYLE_KEYS = {
 }
 
 local RUNTIME_FILTER_KEYS = {
-    buffs = { "onlyMine", "raid", "raidInCombat", "includeNameplateOnly", "cancelable", "notCancelable", "externalDefensive", "bigDefensive", "exclusive" },
-    debuffs = { "onlyMine", "raid", "raidInCombat", "includeNameplateOnly", "includeDispellable", "crowdControl", "exclusive" },
+    buffs = { "onlyMine", "onlyImportant", "raid", "raidInCombat", "includeNameplateOnly", "includeDispellable", "dispellableAny", "cancelable", "notCancelable", "externalDefensive", "bigDefensive", "exclusive" },
+    debuffs = { "onlyMine", "onlyImportant", "raid", "raidInCombat", "includeNameplateOnly", "includeDispellable", "dispellableAny", "crowdControl", "exclusive" },
 }
 
 local DEFAULT_SHARED = {
@@ -489,6 +489,9 @@ local DEFAULT_SHARED = {
         enabled = true,
         buffs = {
             onlyMine = false,
+            onlyImportant = false,
+            includeDispellable = false,
+            dispellableAny = false,
             raid = false,
             raidInCombat = false,
             includeNameplateOnly = false,
@@ -500,7 +503,9 @@ local DEFAULT_SHARED = {
         },
         debuffs = {
             onlyMine = false,
+            onlyImportant = false,
             includeDispellable = false,
+            dispellableAny = false,
             raid = false,
             raidInCombat = false,
             includeNameplateOnly = false,
@@ -920,17 +925,20 @@ GF_AURA_FILTER.BUFF_FILTER_ITEMS = {
     { value = "RaidInCombat", text = "Raid In Combat" },
     { value = "Cancelable", text = "Cancelable" },
     { value = "NotCancelable", text = "Not Cancelable" },
-    { value = "Raid", text = "Raid" },
+    { value = "Raid", text = "Applicable by Me (Raid)" },
+    { value = "IMPORTANT", text = "Important" },
 }
 GF_AURA_FILTER.DEBUFF_FILTER_ITEMS = {
     { value = "ALL", text = "All Debuffs" },
     { value = "Player", text = "Player" },
     { value = "RaidPlayer", text = "Raid Player" },
     { value = "RaidInCombatPlayer", text = "Raid In Combat Player" },
-    { value = "Raid", text = "Raid" },
+    { value = "Raid", text = "Dispellable by Me (Raid)" },
     { value = "RaidInCombat", text = "Raid In Combat" },
     { value = "INCLUDE_NAME_PLATE_ONLY", text = "Include Nameplate-only" },
-    { value = "RAID_PLAYER_DISPELLABLE", text = "Dispellable" },
+    { value = "RAID_PLAYER_DISPELLABLE", text = "Dispellable by Group" },
+    { value = "DISPELLABLE", text = "Any Dispel Type" },
+    { value = "IMPORTANT", text = "Important" },
     { value = "CROWD_CONTROL", text = "Crowd Control" },
 }
 local function GFNativeFilterKey(token)
@@ -951,6 +959,7 @@ local GF_NATIVE_BUFF_FILTERS = {
     CANCELABLE = "CANCELABLE|!PLAYER",
     NOTCANCELABLE = "!CANCELABLE|!PLAYER",
     RAID = "RAID|!PLAYER",
+    IMPORTANT = "IMPORTANT",
     INCLUDENAMEPLATEONLY = "INCLUDE_NAME_PLATE_ONLY",
 }
 local GF_NATIVE_DEBUFF_FILTERS = {
@@ -962,7 +971,8 @@ local GF_NATIVE_DEBUFF_FILTERS = {
     RAIDINCOMBAT = "RAID_IN_COMBAT|!PLAYER",
     INCLUDENAMEPLATEONLY = "INCLUDE_NAME_PLATE_ONLY",
     RAIDPLAYERDISPELLABLE = "RAID_PLAYER_DISPELLABLE",
-    DISPELLABLE = "RAID_PLAYER_DISPELLABLE",
+    DISPELLABLE = "DISPELLABLE",
+    IMPORTANT = "IMPORTANT",
     CROWDCONTROL = "CROWD_CONTROL",
 }
 local function ResolveGFNativeFilter(token, baseFilter, filterMap)
@@ -1095,7 +1105,7 @@ function Model.EnsureDB()
     if auras.enabled == nil then auras.enabled = true end
     Default(auras, "showPlayer", false)
     Default(auras, "showTarget", true)
-    Default(auras, "showFocus", true)
+    Default(auras, "showFocus", false)
     Default(auras, "showBoss", true)
     if type(auras.perUnit) ~= "table" then auras.perUnit = {} end
     if type(shared) ~= "table" then shared = {}; auras.shared = shared end
@@ -1477,7 +1487,8 @@ end
 function Model.ReadLaneGrowthPair(unit, kind)
     kind = NormalizeKind(kind)
     local growth = Model.ReadLaneGrowth(unit, kind)
-    if growth == "UP" or growth == "DOWN" then return growth end
+    if growth == "UP" then return "RIGHTUP" end
+    if growth == "DOWN" then return "RIGHTDOWN" end
     local rowWrap = Model.ReadLaneRowWrap(unit, kind)
     local pair = tostring(growth or "RIGHT") .. tostring(rowWrap or "DOWN")
     return LANE_GROWTH_PARTS[pair] and pair or "RIGHTDOWN"
@@ -1635,12 +1646,14 @@ local function NewCustomContainer(index)
             enabled = true,
             hidePermanent = false,
             onlyMine = false,
+            onlyImportant = false,
             raid = false,
             raidInCombat = false,
             includeNameplateOnly = false,
+            includeDispellable = false,
+            dispellableAny = false,
             cancelable = false,
             notCancelable = false,
-            includeDispellable = false,
             crowdControl = false,
             externalDefensive = false,
             bigDefensive = false,
@@ -2133,9 +2146,12 @@ function Model.SetScopeFiltersEnabled(scope, enabled)
 
     if type(filters.buffs) == "table" then
         filters.buffs.onlyMine = false
+        filters.buffs.onlyImportant = false
         filters.buffs.raid = false
         filters.buffs.raidInCombat = false
         filters.buffs.includeNameplateOnly = false
+        filters.buffs.includeDispellable = false
+        filters.buffs.dispellableAny = false
         filters.buffs.cancelable = false
         filters.buffs.notCancelable = false
         filters.buffs.externalDefensive = false
@@ -2144,10 +2160,12 @@ function Model.SetScopeFiltersEnabled(scope, enabled)
     end
     if type(filters.debuffs) == "table" then
         filters.debuffs.onlyMine = false
+        filters.debuffs.onlyImportant = false
         filters.debuffs.raid = false
         filters.debuffs.raidInCombat = false
         filters.debuffs.includeNameplateOnly = false
         filters.debuffs.includeDispellable = false
+        filters.debuffs.dispellableAny = false
         filters.debuffs.crowdControl = false
         filters.debuffs.exclusive = "none"
     end

@@ -589,13 +589,11 @@ local function GrowthParts(growth, rowWrap)
     if rowWrap ~= "UP" then rowWrap = "DOWN" end
     local xSign = growth == "LEFT" and -1 or 1
     local ySign = rowWrap == "UP" and 1 or -1
-    local vertical = false
     if growth == "UP" or growth == "DOWN" then
-        vertical = true
         xSign = 1
         ySign = growth == "UP" and 1 or -1
     end
-    return xSign, ySign, vertical, ButtonAnchor(xSign, ySign)
+    return xSign, ySign, false, ButtonAnchor(xSign, ySign)
 end
 
 local function GridDimensions(maxN, perRow, size, spacing, vertical)

@@ -101,7 +101,9 @@ local GROUP_NATIVE_FILTER_LABELS = {
     NotCancelable = "Not Cancelable",
     Raid = "Raid",
     INCLUDE_NAME_PLATE_ONLY = "Include Nameplate-only",
-    RAID_PLAYER_DISPELLABLE = "Dispellable",
+    RAID_PLAYER_DISPELLABLE = "Dispellable by Group",
+    DISPELLABLE = "Any Dispel Type",
+    IMPORTANT = "Important",
     CROWD_CONTROL = "Crowd Control",
 }
 local GROUP_NATIVE_FILTER_ALLOWED = {
@@ -109,12 +111,12 @@ local GROUP_NATIVE_FILTER_ALLOWED = {
         ALL = true, Player = true, BigDefensivePlayer = true, ExternalDefensivePlayer = true,
         RaidInCombatPlayer = true, CancelablePlayer = true, NotCancelablePlayer = true,
         RaidPlayer = true, BigDefensive = true, ExternalDefensive = true, RaidInCombat = true,
-        Cancelable = true, NotCancelable = true, Raid = true,
+        Cancelable = true, NotCancelable = true, Raid = true, IMPORTANT = true,
     },
     debuff = {
         ALL = true, Player = true, RaidPlayer = true, RaidInCombatPlayer = true,
         Raid = true, RaidInCombat = true, INCLUDE_NAME_PLATE_ONLY = true,
-        RAID_PLAYER_DISPELLABLE = true, CROWD_CONTROL = true,
+        RAID_PLAYER_DISPELLABLE = true, DISPELLABLE = true, IMPORTANT = true, CROWD_CONTROL = true,
     },
 }
 local GROUP_NATIVE_FILTER_CANONICAL = {
@@ -134,7 +136,8 @@ local GROUP_NATIVE_FILTER_CANONICAL = {
     RAID = "Raid",
     INCLUDENAMEPLATEONLY = "INCLUDE_NAME_PLATE_ONLY",
     RAIDPLAYERDISPELLABLE = "RAID_PLAYER_DISPELLABLE",
-    DISPELLABLE = "RAID_PLAYER_DISPELLABLE",
+    DISPELLABLE = "DISPELLABLE",
+    IMPORTANT = "IMPORTANT",
     CROWDCONTROL = "CROWD_CONTROL",
 }
 local function CanonicalGroupFilterValue(value)
@@ -801,7 +804,8 @@ local function GroupFilterValues(groupKey)
             "RaidInCombat", "Raid In Combat",
             "Cancelable", "Cancelable",
             "NotCancelable", "Not Cancelable",
-            "Raid", "Raid"
+            "Raid", "Applicable by Me (Raid)",
+            "IMPORTANT", "Important"
         )
     end
     return VT(
@@ -809,10 +813,12 @@ local function GroupFilterValues(groupKey)
         "Player", "Player",
         "RaidPlayer", "Raid Player",
         "RaidInCombatPlayer", "Raid In Combat Player",
-        "Raid", "Raid",
+        "Raid", "Dispellable by Me (Raid)",
         "RaidInCombat", "Raid In Combat",
         "INCLUDE_NAME_PLATE_ONLY", "Include Nameplate-only",
-        "RAID_PLAYER_DISPELLABLE", "Dispellable",
+        "RAID_PLAYER_DISPELLABLE", "Dispellable by Group",
+        "DISPELLABLE", "Any Dispel Type",
+        "IMPORTANT", "Important",
         "CROWD_CONTROL", "Crowd Control"
     )
 end
@@ -1037,7 +1043,8 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
         cfg.cooldownY = tonumber(group.cooldownY) or 0
         cfg.cooldownDecimalSeconds = tonumber(group.cooldownDecimalSeconds) or 3
         local growthX, growthY = tostring(group.growthX or "RIGHT"), tostring(group.growthY or "DOWN")
-        cfg.growth = (growthX == "UP" or growthX == "DOWN") and growthX or (growthX .. growthY)
+        cfg.growth = growthX == "UP" and "RIGHTUP"
+            or (growthX == "DOWN" and "RIGHTDOWN" or (growthX .. growthY))
         cfg.showDurationBar = group.showDurationBar == true
         cfg.durationBarHeight = tonumber(group.durationBarHeight) or 2
         cfg.durationBarDisplay = group.durationBarDisplay == "OVERLAY" and "OVERLAY" or "BAR_ONLY"
@@ -1123,7 +1130,7 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
     local maxCols = max(1, floor(((width or 300) - 20 + cfg.spacing) / max(1, cfg.size + cfg.spacing)))
     cfg.columns = min(cfg.perRow, maxCols)
     cfg.maxRows = max(1, floor(((height or 104) - 38 + cfg.spacing) / max(1, cfg.size + cfg.spacing)))
-    local vertical = cfg.growth == "UP" or cfg.growth == "DOWN"
+    local vertical = false
     cfg.rowsPerColumn = vertical and min(cfg.perRow, cfg.maxRows) or cfg.maxRows
     cfg.columns = vertical and maxCols or cfg.columns
     cfg.count = min(14, cfg.maxIcons, cfg.columns * cfg.rowsPerColumn)
@@ -1178,7 +1185,7 @@ local function ReadCustomAuraPreviewConfig(scope, index, width, height)
     local maxCols = max(1, floor(((width or 300) - 20 + cfg.spacing) / max(1, cfg.size + cfg.spacing)))
     cfg.columns = min(cfg.perRow, maxCols)
     cfg.maxRows = max(1, floor(((height or 104) - 38 + cfg.spacing) / max(1, cfg.size + cfg.spacing)))
-    local vertical = cfg.growth == "UP" or cfg.growth == "DOWN"
+    local vertical = false
     cfg.rowsPerColumn = vertical and min(cfg.perRow, cfg.maxRows) or cfg.maxRows
     cfg.columns = vertical and maxCols or cfg.columns
     cfg.count = min(14, cfg.maxIcons, cfg.columns * cfg.rowsPerColumn)
@@ -2342,7 +2349,7 @@ local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
 end
 
 local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
-    local section = b:Section((lane == "debuff" and "Debuff" or "Buff") .. " Filters", 150)
+    local section = b:Section((lane == "debuff" and "Debuff" or "Buff") .. " Filters", 182)
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48
     local gap = 12
@@ -2381,19 +2388,24 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
     AddTooltip(hidePermanent, "Hide permanent auras", "Always excludes auras without a duration, even when Blizzard token filters are disabled.")
     local specs = lane == "buff" and {
         { "Only mine", "onlyMine", "Only auras applied by the player." },
-        { "Raid", "raid", "Blizzard's raid-useful Buff filter." },
+        { "Important", "onlyImportant", "Only auras Blizzard flags as important." },
+        { "Applicable by me", "raid", "Helpful auras your character can apply (Blizzard RAID token)." },
         { "Raid combat", "raidInCombat", "Blizzard's in-combat raid Buff filter." },
         { "Nameplate-only", "includeNameplateOnly", "Include Buffs marked nameplate-only." },
+        { "Dispellable / stealable by group", "includeDispellable", "Helpful enemy auras someone in your group can dispel, purge, or steal." },
+        { "Any dispel / steal type", "dispellableAny", "Helpful enemy auras with any dispel type, even when your group cannot remove them." },
         { "External defensive", "externalDefensive", "External defensive Buffs." },
         { "Big defensive", "bigDefensive", "Major defensive Buffs." },
         { "Cancelable", "cancelable", "Only cancelable Buffs.", { "notCancelable" } },
         { "Not cancelable", "notCancelable", "Only non-cancelable Buffs.", { "cancelable" } },
     } or {
         { "Only mine", "onlyMine", "Only Debuffs applied by the player." },
-        { "Raid", "raid", "Blizzard's raid Debuff filter." },
+        { "Important", "onlyImportant", "Only Debuffs Blizzard flags as important." },
+        { "Dispellable by me", "raid", "Harmful auras your character can dispel (Blizzard RAID token)." },
         { "Raid combat", "raidInCombat", "Blizzard's in-combat raid Debuff filter." },
         { "Nameplate-only", "includeNameplateOnly", "Include Debuffs marked nameplate-only." },
-        { "Dispellable", "includeDispellable", "Debuffs Blizzard marks dispellable." },
+        { "Dispellable by group", "includeDispellable", "Debuffs someone in your group can dispel." },
+        { "Any dispel type", "dispellableAny", "Debuffs with a dispel type, even when your group cannot remove them." },
         { "Crowd control", "crowdControl", "Crowd-control Debuffs." },
     }
     for i = 1, #specs do
@@ -2974,7 +2986,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
     end
 
     if tool == "filters" then
-        local section = b:Section("Custom " .. tostring(index) .. " Filters", 150)
+        local section = b:Section("Custom " .. tostring(index) .. " Filters", 182)
         local w = section._msuf2Width or b.width or 720
         local colW, gap = Grid(w, 4)
         local controls = {}
@@ -2989,9 +3001,11 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
         AddTooltip(hidePermanent, "Hide permanent auras", "Always excludes auras without a duration. It remains active when token filters are disabled.")
         local specs = item.auraType == "DEBUFF" and {
             { "Only mine", "onlyMine" }, { "Raid", "raid" }, { "Raid combat", "raidInCombat" }, { "Nameplate-only", "includeNameplateOnly" },
-            { "Dispellable", "includeDispellable" }, { "Crowd control", "crowdControl" },
+            { "Dispellable by group", "includeDispellable" }, { "Any dispel type", "dispellableAny" },
+            { "Important", "onlyImportant" }, { "Crowd control", "crowdControl" },
         } or {
-            { "Only mine", "onlyMine" }, { "Raid", "raid" }, { "Raid combat", "raidInCombat" }, { "Nameplate-only", "includeNameplateOnly" },
+            { "Only mine", "onlyMine" }, { "Important", "onlyImportant" }, { "Raid", "raid" }, { "Raid combat", "raidInCombat" }, { "Nameplate-only", "includeNameplateOnly" },
+            { "Dispellable / stealable by group", "includeDispellable" }, { "Any dispel / steal type", "dispellableAny" },
             { "Cancelable", "cancelable", { "notCancelable" } }, { "Not cancelable", "notCancelable", { "cancelable" } },
             { "External defensive", "externalDefensive" }, { "Big defensive", "bigDefensive" },
         }

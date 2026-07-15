@@ -774,8 +774,12 @@ local function GrowthParts(growth, rowWrap)
     if growth == "RIGHTUP" then return "RIGHT", "UP", 1, 1, false end
     if growth == "RIGHTDOWN" then return "RIGHT", "DOWN", 1, -1, false end
     if growth == "LEFT" then return "LEFT", rowWrap, -1, rowWrap == "UP" and 1 or -1, false end
-    if growth == "UP" then return "UP", "UP", 1, 1, true end
-    if growth == "DOWN" then return "DOWN", "DOWN", 1, -1, true end
+    -- PTR 5 forbids tainted AuraButton access while aura data is secret. The
+    -- native AuraContainer layout is row-major, so the former column-major
+    -- UP/DOWN pass can no longer be implemented safely. Preserve legacy
+    -- profiles by translating them to the matching native row direction.
+    if growth == "UP" then return "RIGHT", "UP", 1, 1, false end
+    if growth == "DOWN" then return "RIGHT", "DOWN", 1, -1, false end
     return "RIGHT", rowWrap, 1, rowWrap == "UP" and 1 or -1, false
 end
 
@@ -783,7 +787,7 @@ local function GroupGrowthParts(growthX, growthY)
     growthX = tostring(growthX or "RIGHT")
     growthY = tostring(growthY or "DOWN")
     if growthX == "UP" or growthX == "DOWN" then
-        return growthX, growthX, 1, growthX == "UP" and 1 or -1, true
+        return "RIGHT", growthX, 1, growthX == "UP" and 1 or -1, false
     end
     local xSign = growthX == "LEFT" and -1 or 1
     local ySign = growthY == "UP" and 1 or -1
@@ -810,11 +814,12 @@ local VALID_NATIVE_FILTER_TOKENS = {
     RAID_IN_COMBAT = true,
     RAID_PLAYER_DISPELLABLE = true,
     BIG_DEFENSIVE = true,
+    IMPORTANT = true,
+    DISPELLABLE = true,
 }
 
 local LEGACY_NATIVE_FILTER_TOKENS = {
     ALL = false,
-    DISPELLABLE = "RAID_PLAYER_DISPELLABLE",
     NOT_CANCELABLE = "!CANCELABLE",
 }
 
@@ -892,8 +897,10 @@ local function NativeFilter(baseFilter, filters)
         if filters.cancelable == true and helpful then filter = filter .. "|CANCELABLE" end
         if filters.notCancelable == true and helpful then filter = filter .. "|!CANCELABLE" end
         if filters.raidInCombat == true then filter = filter .. "|RAID_IN_COMBAT" end
-        if filters.includeDispellable == true and harmful then filter = filter .. "|RAID_PLAYER_DISPELLABLE" end
-        if filters.dispellable == true and harmful then filter = filter .. "|RAID_PLAYER_DISPELLABLE" end
+        if filters.includeDispellable == true then filter = filter .. "|RAID_PLAYER_DISPELLABLE" end
+        if filters.dispellable == true then filter = filter .. "|RAID_PLAYER_DISPELLABLE" end
+        if filters.dispellableAny == true then filter = filter .. "|DISPELLABLE" end
+        if filters.onlyImportant == true then filter = filter .. "|IMPORTANT" end
         if filters.crowdControl == true and harmful then filter = filter .. "|CROWD_CONTROL" end
         if filters.externalDefensive == true and helpful then filter = filter .. "|EXTERNAL_DEFENSIVE" end
         if filters.bigDefensive == true and helpful then filter = filter .. "|BIG_DEFENSIVE" end
@@ -909,8 +916,11 @@ end
 local function NormalizeDispelSensorTrigger(value, fallback)
     value = tostring(value or fallback or "BY_ME"):upper()
     if value == "BORDER" or value == "INHERIT" or value == "SAME" then return "BORDER" end
+    if value == "BY_RAID" or value == "RAID" or value == "GROUP" or value == "BY_GROUP" then return "BY_RAID" end
     if value == "DISPEL_TYPE" or value == "TYPE" or value == "ANY_DISPEL_TYPE" then return "DISPEL_TYPE" end
-    if value == "ANY_DEBUFF" or value == "DEBUFF" or value == "ANY" or value == "ALL_DEBUFFS" then return "ANY_DEBUFF" end
+    -- True any-debuff highlighting is not representable without reading aura
+    -- payloads. Migrate the old UI value to PTR 5's exact type-only filter.
+    if value == "ANY_DEBUFF" or value == "DEBUFF" or value == "ANY" or value == "ALL_DEBUFFS" then return "DISPEL_TYPE" end
     if value == "PLAYER_CAST" or value == "CAST_BY_ME" or value == "MY_DEBUFF" then return "PLAYER_CAST" end
     return "BY_ME"
 end
@@ -918,22 +928,15 @@ end
 local function DispelSensorNativeFilter(trigger)
     trigger = NormalizeDispelSensorTrigger(trigger, "BY_ME")
     if trigger == "DISPEL_TYPE" then
-        -- Use the raid-filtered harmful list as the best current native path for
-        -- typed/important debuffs without class-specific dispellability. Keeping
-        -- the candidate window small prevents stacked full-frame borders and
-        -- avoids rebuilding large hidden button pools on target swaps.
-        return "HARMFUL|RAID", 3
+        return "HARMFUL|DISPELLABLE", 3
+    end
+    if trigger == "BY_RAID" then
+        return "HARMFUL|RAID_PLAYER_DISPELLABLE", 1
     end
     if trigger == "PLAYER_CAST" then
         return "HARMFUL|PLAYER", 3
     end
-    if trigger == "ANY_DEBUFF" then
-        -- AuraButton border/symbol visibility is driven by auraData.dispelName,
-        -- so true any-debuff frame highlights are not representable without an
-        -- addon aura scan. Keep this secret-safe by falling back to dispellable.
-        return "HARMFUL|RAID_PLAYER_DISPELLABLE", 1
-    end
-    return "HARMFUL|RAID_PLAYER_DISPELLABLE", 1
+    return "HARMFUL|RAID", 1
 end
 
 local function NormalizeDispelOverlayStyle(value)
@@ -2077,7 +2080,11 @@ LaneTrackingSignature = function(lane)
 end
 
 LaneStructuralSignature = function(lane)
+    -- PTR 5 applies access restrictions immediately after initializeFrame.
+    -- Any option that changes a button must therefore create a fresh native
+    -- container so all setup remains inside that callback.
     return tostring(lane.kind) .. "\030" .. tostring(lane.nativeFilter)
+        .. "\030" .. tostring(LaneLayoutSignature(lane))
 end
 
 LaneLayoutSignature = function(lane)
@@ -2126,6 +2133,7 @@ end
 SensorStructuralSignature = function(sensor)
     return tostring(sensor.kind) .. "\030" .. tostring(sensor.nativeFilter)
         .. "\030" .. tostring(sensor.max) .. "\030" .. tostring(sensor.filterCount) .. "\030" .. tostring(sensor.filterMax)
+        .. "\030" .. tostring(SensorLayoutSignature(sensor))
 end
 
 SensorLayoutSignature = function(sensor)
@@ -2348,80 +2356,17 @@ local function SyncButtonGeometry(button, lane, index)
     return true
 end
 
-local function LayoutVerticalAuraContainer(container, lane)
-    local group = container and container._msufA3ManagedAuraGroup
-    if not group and container then
-        group = container:GetAuraGroup(container._msufA3ManagedGroupKey)
-        container._msufA3ManagedAuraGroup = group
-    end
-    -- The AuraGroup is stable for the container lifetime; framesByIndex is not
-    -- and must be read after every Blizzard assignment/reorder.
-    local frames = group and group:GetFramesByIndex() or nil
-    if type(frames) ~= "table" then
-        container:SetSize(lane.width or lane.size or 1, lane.height or lane.size or 1)
-        return false
-    end
-    local count = #frames
-    local perColumn = math_max(lane.perRow or 1, 1)
-    local step = lane.step or lane.size or 1
-    local stepX = step * (lane.xSign or 1)
-    local stepY = step * (lane.ySign or -1)
-    local initialAnchor = lane.initialAnchor or "TOPLEFT"
-    for index = 1, count do
-        local button = frames[index]
-        if button then
-            -- Blizzard has already refreshed/ordered the active frame list. The
-            -- vertical-only fallback changes points and nothing else: no DB,
-            -- aura payload, font, cooldown, or visual work on UNIT_AURA churn.
-            local n = index - 1
-            button:ClearAllPoints()
-            button:SetPoint(initialAnchor, container, initialAnchor,
-                math_floor(n / perColumn) * stepX, (n % perColumn) * stepY)
-        end
-    end
-    -- The configured lane rectangle is the preview/live geometry contract.
-    -- Do not let the current visible aura count shrink the container because a
-    -- TOP/RIGHT/BOTTOM anchor would then move the active buttons around.
-    container:SetSize(lane.width or lane.size or 1, lane.height or lane.size or 1)
-    return count > 0
-end
-
-local function ApplyVerticalAwareAuraLayout(container)
-    local lane = container and container._msufA3NativeLaneConfig
-    if lane and lane.verticalGrowth == true then
-        return LayoutVerticalAuraContainer(container, lane)
-    end
-    local original = container and container._msufA3OriginalVerticalApplyLayout
-    if type(original) == "function" then
-        local result = original(container)
-        -- Blizzard's flow layout sizes the container to the currently visible
-        -- frames. Restore the full compiled lane rectangle after every native
-        -- layout so live anchors keep the same stable origin as the preview.
-        if lane then
-            container:SetSize(lane.width or lane.size or 1, lane.height or lane.size or 1)
-        end
-        return result
-    end
-end
-
-local function InstallVerticalAuraLayoutFallback(container)
-    -- Historical field/function names are retained for compatibility; the
-    -- wrapper now also stabilizes horizontal native-flow container bounds.
-    if not container or container._msufA3VerticalLayoutInstalled == true then return end
-    container._msufA3VerticalLayoutInstalled = true
-    container._msufA3OriginalVerticalApplyLayout = container.ApplyLayout
-    container.ApplyLayout = ApplyVerticalAwareAuraLayout
-end
-
 local function SyncContainerGeometry(container, lane, parentFrame, forceGeometry)
     if not (container and lane) then return false end
     forceGeometry = forceGeometry == true or container._msufA3ForceManagedAuraGeometry == true
     parentFrame = parentFrame or container._msufA3ParentFrame or container:GetParent()
     container._msufA3NativeLaneConfig = lane
     container._msufA3ParentFrame = parentFrame
+    local layoutHost = container._msufA3LayoutHost
     local resolvedStrata
     if parentFrame then
         resolvedStrata = ResolveFrameStrata(parentFrame, lane.strata)
+        if layoutHost then SyncFrameStrata(layoutHost, resolvedStrata) end
         SyncFrameStrata(container, resolvedStrata)
     end
     -- Geometry depends only on the lane's layout signature (size/spacing/anchor/
@@ -2433,14 +2378,6 @@ local function SyncContainerGeometry(container, lane, parentFrame, forceGeometry
     local sig = lane._msufA3LayoutSignature
     if forceGeometry ~= true
         and sig ~= nil and container._msufA3GeomSig == sig and container._msufA3GeomParent == parentFrame then
-        local cachedButtonStrata = container._msufA3ButtonFrameStrata
-        if resolvedStrata and (issecretvalue(cachedButtonStrata) == true or cachedButtonStrata ~= resolvedStrata) then
-            container._msufA3ButtonFrameStrata = resolvedStrata
-            for i = 1, (container.createdButtons or lane.max or 0) do
-                local button = container[i]
-                if button then SyncFrameStrata(button, resolvedStrata) end
-            end
-        end
         return true
     end
     container._msufA3GeomSig = sig
@@ -2453,24 +2390,24 @@ local function SyncContainerGeometry(container, lane, parentFrame, forceGeometry
     container:SetAuraLayoutAnchorPoint(initialAnchor)
     container:SetAuraLayoutGrowthDirection(lane.xSign or 1, lane.ySign or -1)
     container:SetAuraLayoutRowWidth(lane.width or lane.size or 1)
-    -- Native flow is row-major only. UP/DOWN lanes need a column-major
-    -- placement pass; horizontal lanes still delegate to Blizzard and then
-    -- restore the full compiled rectangle that native flow would shrink.
-    InstallVerticalAuraLayoutFallback(container)
     container.createdButtons = lane.max
-    container:SetSize(lane.width, lane.height)
-    if parentFrame then
+    container:SetSize(lane.size or 1, lane.size or 1)
+    if parentFrame and layoutHost then
+        layoutHost:ClearAllPoints()
+        layoutHost:SetPoint(lane.anchor, parentFrame, lane.anchor, lane.x, lane.y)
+        layoutHost:SetSize(lane.width, lane.height)
+        container:ClearAllPoints()
+        container:SetPoint(initialAnchor, layoutHost, initialAnchor, 0, 0)
+    elseif parentFrame then
         container:ClearAllPoints()
         container:SetPoint(lane.anchor, parentFrame, lane.anchor, lane.x, lane.y)
     end
     container:SetAlpha(lane.alpha or 1)
     if parentFrame then
-        container:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + (lane.layer or 1))
-    end
-    if container._msufA3ManagedAuraGroups ~= true then
-        for i = 1, (container.createdButtons or lane.max or 0) do
-            SyncButtonGeometry(container[i], lane, i)
+        if layoutHost and layoutHost.SetFrameLevel then
+            layoutHost:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + (lane.layer or 1))
         end
+        container:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + (lane.layer or 1))
     end
     container._msufA3ButtonFrameStrata = resolvedStrata
     if forceGeometry == true then container._msufA3ForceManagedAuraGeometry = nil end
@@ -2837,56 +2774,19 @@ local function ManagedAuraGroupLayoutOptions(lane)
 end
 
 local function PrepareManagedAuraGroupFrames(container, groupKey, lane)
-    if not (container and groupKey and lane) then return false end
-    container._msufA3ButtonConfigSignatures = container._msufA3ButtonConfigSignatures or {}
-    local configSignature = LaneButtonConfigSignature(lane)
-    local fullPrepare = container._msufA3ButtonConfigSignatures[groupKey] ~= configSignature
-    local seen = {}
-    local any = false
-    local function Prepare(button, index)
-        if not button or seen[button] then return end
-        seen[button] = true
-        button._msufA3ParentFrame = container._msufA3ParentFrame
-        if fullPrepare then
-            PrepareAuraButton(button, lane, index)
-        else
-            -- Size/spacing/anchor/layer changes need geometry only. Avoid
-            -- rebuilding cooldown, font, tooltip, and aura-display bindings on
-            -- every coalesced slider step.
-            SyncButtonGeometry(button, lane, index)
-            button._msufA3LaneLayoutSignature = lane._msufA3LayoutSignature
-        end
-        any = true
-    end
-
-    -- GetFramesByIndex is the authoritative list for frames that currently
-    -- display auras. The cached provider list also covers pooled frames so a
-    -- later assignment cannot revive the old size.
-    local group = type(container.GetAuraGroup) == "function" and container:GetAuraGroup(groupKey) or nil
-    local frames = group and type(group.GetFramesByIndex) == "function" and group:GetFramesByIndex() or nil
-    if type(frames) == "table" then
-        for index = 1, #frames do Prepare(frames[index], index) end
-    end
-    local cached = container._msufA3SharedAuraGroups == true
-        and container._msufA3GroupButtons and container._msufA3GroupButtons[groupKey]
-        or container
-    if type(cached) == "table" then
-        local cachedCount = math_max(tonumber(container.createdButtons) or 0, tonumber(lane.max) or 0, #cached)
-        for index = 1, cachedCount do Prepare(cached[index], index) end
-    end
-    container._msufA3ButtonConfigSignatures[groupKey] = configSignature
-    return any
+    -- PTR 5 AuraButtons are access-restricted immediately after initializeFrame.
+    -- All button setup is performed by BuildManagedAuraGroupOptions instead.
+    return false
 end
 
 local function ApplyManagedAuraGroupLayout(container, groupKey, lane)
     container:SetAuraGroupLayout(groupKey, ManagedAuraGroupLayoutOptions(lane))
-    PrepareManagedAuraGroupFrames(container, groupKey, lane)
     A3.nativeAuraRuntimeLayoutError = nil
     return true
 end
 
-local function CreateNativeAuraContainer(root)
-    local container = CreateFrame("AuraContainer", nil, root, "CustomAuraContainerTemplate")
+local function CreateNativeAuraContainer(root, parentOverride)
+    local container = CreateFrame("AuraContainer", nil, parentOverride or root, "CustomAuraContainerTemplate")
     if not container then
         A3.nativeAuraRuntimeAvailable = false
         A3.nativeAuraRuntimeError = "CustomAuraContainerTemplate is unavailable"
@@ -2896,6 +2796,7 @@ local function CreateNativeAuraContainer(root)
         if container.Hide then container:Hide() end
         return nil
     end
+    container._msufA3Root = root
     return container
 end
 
@@ -2996,15 +2897,8 @@ local function SyncDispelSensorRootGeometry(container, sensorRoot, parentFrame, 
     if parentFrame and container.SetFrameLevel then
         container:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + (sensorRoot.layer or 14))
     end
-    local slots = container._msufA3SensorButtonSlots
-    if slots then
-        for buttonIndex = 1, #slots do
-            local slot = slots[buttonIndex]
-            if slot then
-                PrepareDispelSensorButton(container[buttonIndex], slot.sensor, parentFrame, slot.sensorIndex)
-            end
-        end
-    end
+    -- AuraButton setup is callback-only on PTR 5. Layout changes are part of
+    -- the structural signature and replace this container instead.
     if forceGeometry == true then container._msufA3ForceManagedAuraGeometry = nil end
     return true
 end
@@ -3083,9 +2977,8 @@ SyncDispelSensorGeometry = function(container, sensor, parentFrame, forceGeometr
     if parentFrame and container.SetFrameLevel then
         container:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + (sensor.layer or 14))
     end
-    for i = 1, (container.createdButtons or sensor.max or 0) do
-        PrepareDispelSensorButton(container[i], sensor, parentFrame, i)
-    end
+    -- Do not touch already initialized AuraButtons here; they may be forbidden
+    -- while aura data is secret.
     if forceGeometry == true then container._msufA3ForceManagedAuraGeometry = nil end
     return true
 end
@@ -3410,7 +3303,18 @@ A3._CreateNativeLane = function(root, lane, parentFrame)
         return nil
     end
 
-    local container = CreateNativeAuraContainer(root)
+    -- Blizzard sizes AuraContainers to their current visible contents. Keep the
+    -- user-selected MSUF anchor on a fixed addon-owned host so that native
+    -- layout can remain completely unwrapped without shifting right/bottom
+    -- anchored lanes as aura counts change.
+    local host = CreateFrame("Frame", nil, root)
+    if not host then return nil end
+    local container = CreateNativeAuraContainer(root, host)
+    if not container then
+        if host.Hide then host:Hide() end
+        return nil
+    end
+    container._msufA3LayoutHost = host
     if not container then return nil end
     return CreateManagedNativeLane(container, lane, parentFrame)
 end
@@ -3419,6 +3323,9 @@ A3._HideLane = function(lane)
     if lane then
         A3._UnregisterNativeContainer(lane)
         lane:Hide()
+        if lane._msufA3LayoutHost and lane._msufA3LayoutHost.Hide then
+            lane._msufA3LayoutHost:Hide()
+        end
     end
 end
 
@@ -3445,12 +3352,7 @@ function A3._ForEachEnabledNormalLane(lanes, fn)
         local lane = lanes[order[i]]
         if lane and lane.enabled == true then
             any = true
-            local groupKey = lane._msufA3ManagedGroupKey
-            if not groupKey then
-                groupKey = ManagedAuraKey(lane)
-                lane._msufA3ManagedGroupKey = groupKey
-            end
-            fn(lane, groupKey)
+            fn(lane, ManagedAuraKey(lane))
         end
     end
     return any
@@ -3500,29 +3402,6 @@ A3._HideNormalLaneContainers = function(root, lanes)
             A3._HideLane(root[key])
             root[key] = nil
         end
-    end
-end
-
-function A3._ShouldUseSharedAuraContainer(lanes)
-    if type(lanes) ~= "table" then return false end
-    local count = 0
-    local order = A3._normalAuraLaneOrder
-    for i = 1, #order do
-        local lane = lanes[order[i]]
-        if lane and lane.enabled == true then
-            count = count + 1
-            if count > 1 then return true end
-        end
-    end
-    return false
-end
-
-A3._HideSeparateNormalLaneContainers = function(root)
-    if not root then return end
-    for i = 1, #NORMAL_LANE_ROOT_KEYS do
-        local key = NORMAL_LANE_ROOT_KEYS[i]
-        A3._HideLane(root[key])
-        root[key] = nil
     end
 end
 
@@ -3577,109 +3456,16 @@ function A3._SharedAuraContainerLayoutSignature(lanes)
 end
 
 function A3._LayoutSharedAuraGroups(container)
-    if not (container and container._msufA3SharedAuraGroups == true) then return false end
-    local groupLanes = container._msufA3GroupLanes
-    if type(groupLanes) ~= "table" then return false end
-    local forceLayout = container._msufA3ForceSharedAuraLayout == true
-    container._msufA3ForceSharedAuraLayout = nil
-    local layoutStates = container._msufA3SharedLayoutStates
-    if type(layoutStates) ~= "table" then
-        layoutStates = {}
-        container._msufA3SharedLayoutStates = layoutStates
-    end
-    local any = false
-    local order = A3._normalAuraLaneOrder
-    for i = 1, #order do
-        local laneKind = order[i]
-        local lane = container._msufA3SharedLanes and container._msufA3SharedLanes[laneKind]
-        if lane and lane.enabled == true then
-            local groupKey = lane._msufA3ManagedGroupKey
-            if not groupKey then
-                groupKey = ManagedAuraKey(lane)
-                lane._msufA3ManagedGroupKey = groupKey
-            end
-            local group = type(container.GetAuraGroup) == "function" and container:GetAuraGroup(groupKey) or nil
-            local frames = group and type(group.GetFramesByIndex) == "function" and group:GetFramesByIndex()
-                or (container._msufA3GroupButtons and container._msufA3GroupButtons[groupKey])
-            if type(frames) == "table" then
-                local frameCount = #frames
-                local state = layoutStates[groupKey]
-                local needsLayout = forceLayout
-                    or type(state) ~= "table"
-                    or state.signature ~= lane._msufA3LayoutSignature
-                    or state.count ~= frameCount
-                if not needsLayout then
-                    for index = 1, frameCount do
-                        if state[index] ~= frames[index] then
-                            needsLayout = true
-                            break
-                        end
-                    end
-                end
-                if needsLayout then
-                    for index = 1, frameCount do
-                        local button = frames[index]
-                        if button then
-                            button._msufA3ParentFrame = container._msufA3ParentFrame
-                            if button._msufA3LaneLayoutSignature ~= lane._msufA3LayoutSignature then
-                                PrepareAuraButton(button, lane, index)
-                            else
-                                SyncButtonGeometry(button, lane, index)
-                            end
-                            any = true
-                        end
-                    end
-                    if type(state) ~= "table" then
-                        state = {}
-                        layoutStates[groupKey] = state
-                    end
-                    local oldCount = tonumber(state.count) or 0
-                    for index = 1, frameCount do state[index] = frames[index] end
-                    for index = frameCount + 1, oldCount do state[index] = nil end
-                    state.count = frameCount
-                    state.signature = lane._msufA3LayoutSignature
-                end
-            end
-        end
-    end
-    return any
+    return false
 end
 
 local function SyncSharedAuraButtonLayering(container)
-    if not (container and container._msufA3SharedAuraGroups == true) then return false end
-    local groupLanes = container._msufA3GroupLanes
-    if type(groupLanes) ~= "table" then return false end
-    local any = false
-    for groupKey in pairs(groupLanes) do
-        local lane = groupLanes[groupKey]
-        local group = type(container.GetAuraGroup) == "function" and container:GetAuraGroup(groupKey) or nil
-        local frames = group and type(group.GetFramesByIndex) == "function" and group:GetFramesByIndex()
-            or (container._msufA3GroupButtons and container._msufA3GroupButtons[groupKey])
-        if type(frames) == "table" then
-            for index = 1, #frames do
-                local button = frames[index]
-                if button then
-                    SyncFrameStrata(button, ResolveFrameStrata(container._msufA3ParentFrame, lane and lane.strata))
-                    SyncCooldownTextLayering(button)
-                    any = true
-                end
-            end
-        end
-    end
-    return any
+    return false
 end
 
 function A3._InstallSharedAuraContainerLayout(container)
-    if not container or container._msufA3SharedLayoutInstalled == true then return end
-    container._msufA3SharedLayoutInstalled = true
-    container._msufA3OriginalApplyLayout = container.ApplyLayout
-    container._msufA3OriginalRebuildLayoutGroups = container.RebuildLayoutGroups
-    container.ApplyLayout = function(self)
-        return A3._LayoutSharedAuraGroups(self)
-    end
-    container.RebuildLayoutGroups = function(self)
-        self.flowLayoutGroups = nil
-    end
+    -- Retained as a compatibility no-op. PTR 5 requires Blizzard's native
+    -- ApplyLayout/RebuildLayoutGroups methods to run without tainted wrappers.
 end
 
 function A3._BuildSharedAuraGroupOptions(container, lane, groupKey)
@@ -3711,17 +3497,8 @@ function A3._SyncSharedAuraContainerGeometry(container, lanes, parentFrame, forc
     container._msufA3SharedLanes = lanes
     SyncFrameStrata(container, ResolveSharedContainerStrata(lanes, parentFrame))
     local sig = A3._SharedAuraContainerLayoutSignature(lanes)
-    local parentLevel = parentFrame.GetFrameLevel and parentFrame:GetFrameLevel() or 0
-    local parentStrata = ResolveFrameStrata(parentFrame, "AUTO")
-    local layeringChanged = container._msufA3SharedLayerParentLevel ~= parentLevel
-        or container._msufA3SharedLayerParentStrata ~= parentStrata
     if forceGeometry ~= true
         and sig ~= nil and container._msufA3GeomSig == sig and container._msufA3GeomParent == parentFrame then
-        if layeringChanged then
-            SyncSharedAuraButtonLayering(container)
-            container._msufA3SharedLayerParentLevel = parentLevel
-            container._msufA3SharedLayerParentStrata = parentStrata
-        end
         return true
     end
     container._msufA3GeomSig = sig
@@ -3731,12 +3508,11 @@ function A3._SyncSharedAuraContainerGeometry(container, lanes, parentFrame, forc
         container:ClearAllPoints()
         container:SetAllPoints(root)
     end
-    if container.SetFrameLevel then container:SetFrameLevel(parentLevel) end
-    if forceGeometry == true then container._msufA3ForceSharedAuraLayout = true end
-    A3._LayoutSharedAuraGroups(container)
-    if layeringChanged then SyncSharedAuraButtonLayering(container) end
-    container._msufA3SharedLayerParentLevel = parentLevel
-    container._msufA3SharedLayerParentStrata = parentStrata
+    local maxLayer = 1
+    A3._ForEachEnabledNormalLane(lanes, function(lane)
+        maxLayer = math_max(maxLayer, lane.layer or 1)
+    end)
+    if container.SetFrameLevel then container:SetFrameLevel(parentFrame:GetFrameLevel() or 0) end
     if forceGeometry == true then container._msufA3ForceManagedAuraGeometry = nil end
     return true
 end
@@ -3761,7 +3537,6 @@ function A3._CreateSharedNativeAuraContainer(root, lanes, parentFrame)
     container._msufA3GroupCandidateFilterSignatures = {}
     container._msufA3GroupSortSignatures = {}
     container._msufA3GroupLayoutSignatures = {}
-    container._msufA3SharedLayoutStates = {}
     container.unit = unit
     ConfigurePTR4AuraContainer(container, unit)
     A3._InstallSharedAuraContainerLayout(container)
@@ -3791,12 +3566,10 @@ end
 function A3._ApplySharedAuraContainer(root, lanes, parentFrame, forceRecreate)
     local rootKey = A3._sharedAuraRootKey
     if not A3._HasEnabledNormalLane(lanes) then
-        A3._HideSeparateNormalLaneContainers(root)
         A3._HideLane(root and root[rootKey])
         if root then root[rootKey] = nil end
         return nil
     end
-    A3._HideSeparateNormalLaneContainers(root)
     local trackingSignature = A3._SharedAuraContainerTrackingSignature(lanes)
     local structuralSignature = A3._SharedAuraContainerStructuralSignature(lanes)
     local layoutSignature = A3._SharedAuraContainerLayoutSignature(lanes)
@@ -3805,11 +3578,13 @@ function A3._ApplySharedAuraContainer(root, lanes, parentFrame, forceRecreate)
         A3._RebindNativeContainerUnit(current, A3._SharedAuraContainerUnit(lanes))
         current._msufA3SharedLanes = lanes
         current._msufA3GroupSortSignatures = current._msufA3GroupSortSignatures or {}
+        local refresh = false
         A3._ForEachEnabledNormalLane(lanes, function(lane, groupKey)
             current._msufA3GroupLanes[groupKey] = lane
             if current._msufA3GroupMaxFrameCounts[groupKey] ~= lane.max then
                 current:SetAuraGroupMaxFrameCount(groupKey, lane.max)
                 current._msufA3GroupMaxFrameCounts[groupKey] = lane.max
+                refresh = true
             end
             if current._msufA3GroupCandidateFilterSignatures[groupKey] ~= lane.candidateFilterSignature then
                 current:SetAuraGroupCandidateFilters(groupKey, lane.candidateFilters)
@@ -3830,6 +3605,9 @@ function A3._ApplySharedAuraContainer(root, lanes, parentFrame, forceRecreate)
         A3._SyncSharedAuraContainerGeometry(current, lanes, parentFrame)
         current:Show()
         if not RegisterNativeContainer(current) then return nil end
+        if refresh == true and A3._NativeContainerVisible(current) and type(current.UpdateAllAuras) == "function" then
+            current:UpdateAllAuras()
+        end
         current._msufA3TrackingSignature = trackingSignature
         current._msufA3StructuralSignature = structuralSignature
         current._msufA3LayoutSignature = layoutSignature
@@ -3856,10 +3634,12 @@ ApplyLane = function(root, lane, parentFrame, forceRecreate)
     local current = root[key]
     if forceRecreate ~= true and current and current._msufA3StructuralSignature == structuralSignature then
         A3._RebindNativeContainerUnit(current, lane.unit)
+        local refresh = false
         local layoutChanged = current._msufA3LayoutSignature ~= layoutSignature
         if current._msufA3MaxFrameCount ~= lane.max then
             current:SetAuraGroupMaxFrameCount(current._msufA3ManagedGroupKey, lane.max)
             current._msufA3MaxFrameCount = lane.max
+            refresh = true
         end
         if current._msufA3CandidateFilterSignature ~= lane.candidateFilterSignature then
             current:SetAuraGroupCandidateFilters(current._msufA3ManagedGroupKey, lane.candidateFilters)
@@ -3877,6 +3657,9 @@ ApplyLane = function(root, lane, parentFrame, forceRecreate)
         SyncContainerGeometry(current, lane, parentFrame)
         current:Show()
         if not RegisterNativeContainer(current) then return nil end
+        if refresh == true and A3._NativeContainerVisible(current) and type(current.UpdateAllAuras) == "function" then
+            current:UpdateAllAuras()
+        end
         current._msufA3TrackingSignature = trackingSignature
         current._msufA3StructuralSignature = structuralSignature
         current._msufA3LayoutSignature = layoutSignature
@@ -4072,18 +3855,12 @@ RefreshAppliedNativeRoot = function(root, forceRefresh)
     if not lanes then return false end
 
     local ok, any = true, false
-    local shared = root[A3._sharedAuraRootKey]
-    if shared and shared._msufA3SharedAuraGroups == true and A3._HasEnabledNormalLane(lanes) then
-        any = true
-        ok = RefreshNativeContainer(shared, forceRefresh, nil, root:GetParent()) and ok
-    else
-        local order = A3._normalAuraLaneOrder
-        for i = 1, #order do
-            local lane = lanes[order[i]]
-            if lane and lane.enabled == true then
-                any = true
-                ok = RefreshNativeContainer(root[lane.rootKey], forceRefresh, lane, root:GetParent()) and ok
-            end
+    local order = A3._normalAuraLaneOrder
+    for i = 1, #order do
+        local lane = lanes[order[i]]
+        if lane and lane.enabled == true then
+            any = true
+            ok = RefreshNativeContainer(root[lane.rootKey], forceRefresh, lane, root:GetParent()) and ok
         end
     end
     local sensorRoot = GetDispelSensorRootConfig(cfg)
@@ -4177,24 +3954,7 @@ local function ApplyConfig(frame, cfg, reason)
     local forceRecreate = false
     local ok = true
     local lanesOk = true
-    if A3._ShouldUseSharedAuraContainer(lanes) then
-        local shared = root[A3._sharedAuraRootKey]
-        if not (InCombat() and not shared) then
-            shared = A3._ApplySharedAuraContainer(root, lanes, frame, forceRecreate)
-        end
-        if not shared then
-            -- Native contract/setup failures keep the old isolated-lane path as
-            -- a cold fallback. During combat an existing fallback stays isolated
-            -- because protected shared-container creation is not permitted.
-            lanesOk = A3._ApplyNormalLaneContainers(root, lanes, frame, forceRecreate)
-        end
-    elseif A3._HasEnabledNormalLane(lanes) then
-        lanesOk = A3._ApplyNormalLaneContainers(root, lanes, frame, forceRecreate)
-    else
-        A3._HideSeparateNormalLaneContainers(root)
-        A3._HideLane(root[A3._sharedAuraRootKey])
-        root[A3._sharedAuraRootKey] = nil
-    end
+    lanesOk = A3._ApplyNormalLaneContainers(root, lanes, frame, forceRecreate)
     ok = lanesOk and ok
     if sensorRoot and sensorRoot.enabled and not ApplyDispelSensorRoot(root, sensorRoot, frame, forceRecreate) then ok = false end
     if not (sensorRoot and sensorRoot.enabled) then A3._HideLane(root.DispelSensor) end
@@ -4224,39 +3984,19 @@ local function RootCanReuseContainersForConfig(root, cfg)
     end
     local lanes = cfg.lanes or {}
     local shared = root[A3._sharedAuraRootKey]
-    if A3._HasEnabledNormalLane(lanes) then
-        if shared and shared.IsShown and shared:IsShown() == true then
-            if shared._msufA3StructuralSignature ~= A3._SharedAuraContainerStructuralSignature(lanes) then
+    if shared and shared.IsShown and shared:IsShown() == true then
+        return false
+    end
+    for i = 1, #NORMAL_LANE_ROOT_KEYS do
+        local key = NORMAL_LANE_ROOT_KEYS[i]
+        local lane = A3._NormalLaneForRootKey(lanes, key)
+        local current = root[key]
+        if lane and lane.enabled == true then
+            if not (current and current._msufA3StructuralSignature == (lane._msufA3StructuralSignature or LaneStructuralSignature(lane))) then
                 return false
             end
-            for i = 1, #NORMAL_LANE_ROOT_KEYS do
-                local current = root[NORMAL_LANE_ROOT_KEYS[i]]
-                if current and current.IsShown and current:IsShown() == true then return false end
-            end
-        else
-            -- Cold fallback parity: if native shared-container setup failed,
-            -- existing isolated lanes may still be rebound without allocation.
-            for i = 1, #NORMAL_LANE_ROOT_KEYS do
-                local key = NORMAL_LANE_ROOT_KEYS[i]
-                local lane = A3._NormalLaneForRootKey(lanes, key)
-                local current = root[key]
-                if lane and lane.enabled == true then
-                    if not (current and current._msufA3StructuralSignature
-                        == (lane._msufA3StructuralSignature or LaneStructuralSignature(lane))) then
-                        return false
-                    end
-                elseif current and current.IsShown and current:IsShown() == true then
-                    return false
-                end
-            end
-        end
-    else
-        if shared and shared.IsShown and shared:IsShown() == true then return false end
-        for i = 1, #NORMAL_LANE_ROOT_KEYS do
-            local current = root[NORMAL_LANE_ROOT_KEYS[i]]
-            if current and current.IsShown and current:IsShown() == true then
-                return false
-            end
+        elseif current and current.IsShown and current:IsShown() == true then
+            return false
         end
     end
     local sensorRoot = GetDispelSensorRootConfig(cfg)
