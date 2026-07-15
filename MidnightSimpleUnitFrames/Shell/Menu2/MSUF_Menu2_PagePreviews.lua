@@ -177,7 +177,34 @@ local function CurrentGFMenuScope()
     if scope == "party" or scope == "raid" or scope == "mythicraid" then return scope end
     return "party"
 end
+local gfScalingBreakpointPreview = M._gfScalingBreakpointPreview
+if type(gfScalingBreakpointPreview) ~= "table" then
+    gfScalingBreakpointPreview = {}
+    M._gfScalingBreakpointPreview = gfScalingBreakpointPreview
+end
+local function ApplyGFScalingBreakpointTransform(gf, kind)
+    local layout = gf and gf._previewLayoutFrame and gf._previewLayoutFrame[kind]
+    if not (layout and layout.SetScale) then return false end
+    local state = gfScalingBreakpointPreview[kind]
+    local ratio = 1
+    if state then
+        local liveScale = type(gf.ResolveFrameScale) == "function" and tonumber(gf.ResolveFrameScale(kind)) or 1
+        if not liveScale or liveScale <= 0 then liveScale = 1 end
+        local targetScale = (tonumber(state.scalePct) or 100) / 100
+        if targetScale < 0.5 then targetScale = 0.5 elseif targetScale > 1.5 then targetScale = 1.5 end
+        ratio = targetScale / liveScale
+        if ratio < 0.2 then ratio = 0.2 elseif ratio > 3 then ratio = 3 end
+    end
+    if layout._msufGFMenuBreakpointScale ~= ratio then
+        layout._msufGFMenuBreakpointScale = ratio
+        layout:SetScale(ratio)
+    end
+    return true
+end
 local function GFPreviewCount(kind)
+    local state = gfScalingBreakpointPreview[kind]
+    local count = state and tonumber(state.count)
+    if count and count > 0 then return math.floor(count + 0.5) end
     if kind == "mythicraid" then return 20 end
     if kind == "raid" then return 30 end
     return 5
@@ -209,10 +236,13 @@ end
 local function ShowGFPreviewWhenNoLiveFrames(gf, kind, count)
     if not (gf and type(gf.ShowPreview) == "function" and type(gf.HidePreview) == "function") then return false end
     if LiveGroupFramesCoverKind(gf, kind) then
+        ApplyGFScalingBreakpointTransform(gf, kind)
         gf.HidePreview(kind)
         return false
     end
-    return gf.ShowPreview(kind, count or GFPreviewCount(kind)) == true
+    local shown = gf.ShowPreview(kind, count or GFPreviewCount(kind)) == true
+    ApplyGFScalingBreakpointTransform(gf, kind)
+    return shown
 end
 
 -- The global Bars page only needs one representative frame per group scope to show textures,
@@ -240,6 +270,10 @@ end
 local function HideGFRuntimePreviews(gf, restoreHeaders)
     if not (gf and type(gf.HidePreview) == "function") then return end
     SetGFPagePreviewFlag(false)
+    for _, kind in ipairs({ "party", "raid", "mythicraid" }) do
+        gfScalingBreakpointPreview[kind] = nil
+        ApplyGFScalingBreakpointTransform(gf, kind)
+    end
     gf.HidePreview("party")
     gf.HidePreview("raid")
     gf.HidePreview("mythicraid")
@@ -332,6 +366,33 @@ local function RequestGroupPagePreviewForKey(key, force)
         if M.activeKey ~= key then return end
         SyncGroupPagePreviewForKey(key, force)
     end)
+end
+function M.SetGFScalingBreakpointPreview(kind, count, scalePct)
+    if kind ~= "party" and kind ~= "raid" and kind ~= "mythicraid" then return false end
+    local previous = gfScalingBreakpointPreview[kind]
+    count, scalePct = tonumber(count), tonumber(scalePct)
+    if count and count > 0 and scalePct and scalePct > 0 then
+        gfScalingBreakpointPreview[kind] = {
+            count = math.floor(count + 0.5),
+            scalePct = scalePct,
+        }
+    else
+        gfScalingBreakpointPreview[kind] = nil
+    end
+    local gf = MSUF and MSUF.GF
+    local current = gfScalingBreakpointPreview[kind]
+    if previous and current and previous.count == current.count then
+        ApplyGFScalingBreakpointTransform(gf, kind)
+        return true
+    end
+    local editMode = M.IsMSUFEditModeActive and M.IsMSUFEditModeActive() and true or false
+    if editMode and gf and type(gf.ShowPreview) == "function" then
+        gf.ShowPreview(kind, GFPreviewCount(kind))
+        ApplyGFScalingBreakpointTransform(gf, kind)
+        return true
+    end
+    RequestGroupPagePreviewForKey(M.activeKey, true)
+    return true
 end
 local previousCollapsibleSectionStateChanged = M.OnCollapsibleSectionStateChanged
 function M.OnCollapsibleSectionStateChanged(pageKey, sectionId, open, entry)
