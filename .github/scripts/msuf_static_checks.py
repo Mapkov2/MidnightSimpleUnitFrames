@@ -859,12 +859,15 @@ def check_unit_preview_lifecycle_contracts() -> None:
         raise CheckError("Group preview render must route every frame-level write through its bounded API helper")
     require(group_render, "SetPreviewFrameLevel(mock, previewRootLevel + PREVIEW_LOCAL_BASE_OFFSET)",
             "Cached Group preview rebases its mock before every render")
-    require(group_render, "SetPreviewFrameLevel(selectedEffectRoot, baseLevel",
-            "Selected fallback spell frame effect is assigned a deterministic level")
+    selected_effect_level = group_render.find("SetPreviewFrameLevel(selectedEffectRoot, baseLevel")
+    if selected_effect_level < 0:
+        raise CheckError("Selected fallback spell frame effect is not assigned a deterministic level")
     require(group_render, 'ApplyHandleStrata(scene, selectedEffectRoot, "AUTO", liveStrata, hostStrata)',
             "Selected full-frame effect inherits menu host strata without live Edit Mode offsets")
-    require(group_render, "SetPreviewFrameLevel(selectedEffectRoot, baseLevel + 24 + (11 - priority))",
-            "Selected full-frame effect uses a bounded preview-local priority band")
+    selected_effect_level_block = group_render[selected_effect_level:selected_effect_level + 240]
+    require(selected_effect_level_block,
+            "(S.Layers.SPELL_FRAME_EFFECT_BASE_OFFSET or 1) + (11 - priority)",
+            "Selected full-frame effect uses the shared bounded health-effect priority band")
     require(theme, "function M.ResetFocusVeil(variant, opts)",
             "Menu modal focus veil has an explicit lifecycle reset")
     require(theme, "StopAlphaMotion(overlay)",

@@ -7,6 +7,7 @@ param(
   [string]$LuaLanguageServer = "",
   [string]$OutputDir = "dist/perfy",
   [string]$WorkDir = "dist/perfy-work",
+  [ValidatePattern('^\d+$')][string]$InterfaceVersion = "120000",
   [bool]$InstrumentAllLua = $true,
   [switch]$KeepStage
 )
@@ -533,7 +534,7 @@ if ($strippedBomCount -gt 0) {
 $perfyAddonTarget = Join-Path $stageRoot "!!!Perfy"
 Write-Host "Adding Perfy AddOn as $perfyAddonTarget"
 Copy-Item -LiteralPath $perfyAddonSource -Destination $perfyAddonTarget -Recurse -Force
-Set-PerfyInterfaceVersion -PerfyAddonDir $perfyAddonTarget -InterfaceVersion "120000"
+Set-PerfyInterfaceVersion -PerfyAddonDir $perfyAddonTarget -InterfaceVersion $InterfaceVersion
 Add-MSUFPerfyFpsSampler -PerfyAddonDir $perfyAddonTarget
 
 Write-Host "Instrumenting TOC/XML reachable Lua files with Perfy"
