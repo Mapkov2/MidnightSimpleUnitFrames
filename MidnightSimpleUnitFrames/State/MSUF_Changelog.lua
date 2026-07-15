@@ -8,10 +8,41 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-Beta17",
-    previousVersion = "6.0-Beta16",
-    rangeLabel = "6.0-Beta16 -> 6.0-Beta17",
+    currentVersion = "6.0-Beta18",
+    previousVersion = "6.0-Beta17",
+    rangeLabel = "6.0-Beta17 -> 6.0-Beta18",
     entries = {
+        {
+            version = "6.0-Beta18",
+            date = "2026-07-15",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Rebuilt castbar state, timing, and Blizzard-frame ownership for smoother updates, lower runtime work, and safer player/pet transitions.",
+                        "Moved class-resource timing to native duration smoothing and tightened active-only runtime paths.",
+                        "Improved legacy profile compatibility, including power anchors, status symbols, aura geometry, and import migration.",
+                        "Refined typography, Color Painter scrolling, gameplay camera tracking, and prerelease version detection.",
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Consolidated player, target, focus, channel, and empower casts around one canonical cast identity and stable duration state.",
+                        "Fixed Blizzard pet castbar suppression during world entry while preserving its native pet lifecycle.",
+                        "Removed duplicate focus-cast event ownership and detached focus interrupt tracking completely while disabled.",
+                        "Reduced redundant castbar timer binding, completion scheduling, visual refreshes, and cold-layout work.",
+                        "Added native duration smoothing for class resources without adding idle polling.",
+                        "Hardened legacy profile imports and preserved established power-bar anchors and status-symbol styles.",
+                        "Aligned aura filtering, lane geometry, preview behavior, and live positioning.",
+                        "Added semantic typography roles for more consistent text across frames, menus, Edit Mode, and popup tools.",
+                        "Fixed mouse-wheel scrolling through Color Painter overlays and kept combat crosshair zoom synchronized with camera changes.",
+                        "Corrected prerelease version comparisons across beta and stable version formats.",
+                        "Expanded Lua 5.1 regression coverage for castbars, class resources, profiles, menus, unit frames, and runtime hot paths.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-Beta17",
             date = "2026-07-15",
@@ -103,40 +134,6 @@ local data = {
                         "Updated prediction and locale-aware default baselines.",
                         "Added the Beta 15 upgrade highlights flow and onboarding integration.",
                         "Added lifecycle and group-frame regression coverage for the Beta 15 changes.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-Beta14",
-            date = "2026-07-13",
-            sections = {
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Coalesced and interned core runtime update paths to reduce duplicate work.",
-                        "Added compact/abbreviated HP values and full-value HP formatting support where relevant.",
-                        "Stabilized group layout behavior with adaptive roster scaling and improved group runtime refresh ordering.",
-                        "Added configurable aura lane sorting, filtering, and improved aura growth/local budget handling.",
-                        "Improved class text and group text settings to keep health formatting and preview states in sync.",
-                        "Expanded assistant setting routes, guided actions, and conversational workflow behavior.",
-                        "Improved assistant diagnostics and control routing to match current menu pages and workflows.",
-                        "Refreshed release/tooling inventories and updated runtime release metadata handling.",
-                        "Wired HP abbreviation into group text runtime specs and kept runtime specs aligned with feature changes.",
-                        "Interned group lifecycle work plans and tightened status updates for gone-state and lifecycle transitions.",
-                        "Scaled castbar lifecycle and hotpath handling to active casts only for lower per-frame overhead.",
-                        "Compiled ClassPower mode runtime state and improved aurawork layout stability in active runtime paths.",
-                        "Optimized frequent color pathups with font/color fast paths.",
-                        "Reduced redundant visibility, metadata, and power-cached update work in hot paths.",
-                        "Streamlined prediction geometry caching and dependent-unit routing.",
-                        "Fixed player profile refresh to correctly apply alpha state.",
-                        "Refreshed menu theme/history feedback and exact setting-control resolution flow.",
-                        "Restored event-driven profile lifecycle behavior for target-sound handling.",
-                        "Updated Menu2 runtime and onboarding UX: first-load plus guided-tour states and pages.",
-                        "Expanded and cleaned Menu2 page/preview/runtime navigation for onboarding and grouped workflows.",
-                        "Updated smoke tests (including hotpath/coldpath coverage) and hardened release helper scripts.",
-                        "Extended Menu2/runtime coverage for new UI/locale paths and connected frame, aura, castbar, chat, EventBus, edit-mode, and range-fade behavior.",
-                        "Fixed Auras3 positioning after zone transitions so Auras3 layout remains correct after entering a new zone.",
                     },
                 },
             },
