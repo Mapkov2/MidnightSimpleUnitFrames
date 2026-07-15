@@ -759,6 +759,7 @@ end
 local FALLBACK_STATUSBAR_TEXTURES = {
     { key = "Blizzard",      path = "Interface\\TargetingFrame\\UI-StatusBar" },
     { key = "Solid",         path = "Interface\\Buttons\\WHITE8X8" },
+    { key = "MSUF Lucent",   path = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Bars\\MSUF_Lucent_v2.tga" },
     { key = "Flat",          path = "Interface\\Buttons\\WHITE8x8" },
     { key = "RaidHP",        path = "Interface\\RaidFrame\\Raid-Bar-Hp-Fill" },
     { key = "RaidPower",     path = "Interface\\RaidFrame\\Raid-Bar-Resource-Fill" },
@@ -910,6 +911,7 @@ RegisterBundledFonts = function()
     end
 
     Reg("MSUF Charcoal",   "Charcoal.tga")
+    Reg("MSUF Lucent",     "MSUF_Lucent_v2.tga")
     Reg("MSUF Minimalist", "Minimalist.tga")
     Reg("MSUF Slickrock",  "Slickrock.tga")
     Reg("MSUF Smooth",     "MSUF_Smooth.tga")
