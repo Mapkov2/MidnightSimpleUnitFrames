@@ -353,21 +353,67 @@ local function BuildGFLayout(ctx)
         M.TrackRefresh(ctx, RefreshLabel)
         return widget
     end
+    local function BeginAutoScalePreview(slider, previewCount)
+        if not (slider and previewCount and type(M.SetGFScalingBreakpointPreview) == "function") then return end
+        if Val(CurrentScope(), "frameScaleMode", "off") ~= "auto" then return end
+        if (_G.InCombatLockdown and _G.InCombatLockdown()) or _G.MSUF_InCombat == true then return end
+        local kind = CurrentScope()
+        slider._msuf2ScalingPreviewKind = kind
+        slider._msuf2ScalingPreviewCount = previewCount
+        M.SetGFScalingBreakpointPreview(kind, previewCount, slider:GetValue())
+    end
+    local function UpdateAutoScalePreview(slider, value)
+        local kind = slider and slider._msuf2ScalingPreviewKind
+        local count = slider and slider._msuf2ScalingPreviewCount
+        if kind and count and type(M.SetGFScalingBreakpointPreview) == "function" then
+            M.SetGFScalingBreakpointPreview(kind, count, value)
+        end
+    end
+    local function EndAutoScalePreview(slider)
+        local kind = slider and slider._msuf2ScalingPreviewKind
+        if not kind then return end
+        slider._msuf2ScalingPreviewKind = nil
+        slider._msuf2ScalingPreviewCount = nil
+        if type(M.SetGFScalingBreakpointPreview) == "function" then
+            M.SetGFScalingBreakpointPreview(kind, nil, nil)
+        end
+    end
+    local function BindAutoScalePreview(slider, previewCount)
+        if not (slider and previewCount) then return end
+        local function Begin() BeginAutoScalePreview(slider, previewCount) end
+        local function End() EndAutoScalePreview(slider) end
+        slider:HookScript("OnMouseDown", Begin)
+        slider:HookScript("OnValueChanged", function(_, value) UpdateAutoScalePreview(slider, value) end)
+        slider:HookScript("OnLeave", End)
+        slider:HookScript("OnHide", End)
+        if slider.editBox and slider.editBox.HookScript then
+            slider.editBox:HookScript("OnEditFocusGained", Begin)
+            slider.editBox:HookScript("OnEditFocusLost", End)
+            slider.editBox:HookScript("OnHide", End)
+        end
+        for i = 1, #(slider._msuf2StepButtons or {}) do
+            local button = slider._msuf2StepButtons[i]
+            button:HookScript("OnClick", Begin)
+            button:HookScript("OnLeave", End)
+            button:HookScript("OnHide", End)
+        end
+    end
     local function AddScaleSlider(parent, spec, width)
         local label = spec.label
         local slider = BindScaleSlider(W.Slider(parent, "", 50, spec.max or 100, 5, width), spec.key, spec.default,
             spec.labelFn or function(v) return string.format("%s: %d%%", label, v) end)
         W.MoveWidget(slider, parent, 16, spec.y, width - 58, "LEFT")
+        BindAutoScalePreview(slider, spec.previewCount)
         return slider
     end
     local manualScale = AddScaleSlider(manualCard, { key = "frameScaleManual", default = 100, max = 150, y = -64, label = "Manual Scale" }, scaleLeftW)
     local autoLabel = autoCard and autoCard.title
     local autoScaleControls = {}
     for i, spec in ipairs({
-        { key = "scaleAt10", default = 100, y = -66, label = "1-10 players" },
-        { key = "scaleAt20", default = 85, y = -120, label = "11-20 players" },
-        { key = "scaleAt25", default = 80, y = -174, label = "21-25 players" },
-        { key = "scaleOver25", default = 70, y = -228, label = "26+ players" },
+        { key = "scaleAt10", default = 100, y = -66, label = "1-10 players", previewCount = 10 },
+        { key = "scaleAt20", default = 85, y = -120, label = "11-20 players", previewCount = 20 },
+        { key = "scaleAt25", default = 80, y = -174, label = "21-25 players", previewCount = 25 },
+        { key = "scaleOver25", default = 70, y = -228, label = "26+ players", previewCount = 30 },
     }) do autoScaleControls[i] = AddScaleSlider(autoCard, spec, scaleRightW) end
     local scaleHint = manualCard and manualCard.subtitle
     if scaleHint.SetWordWrap then scaleHint:SetWordWrap(true) end
