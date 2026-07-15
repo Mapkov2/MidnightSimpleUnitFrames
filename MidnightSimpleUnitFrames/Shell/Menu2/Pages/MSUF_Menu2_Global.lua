@@ -170,6 +170,68 @@ local function ScopeWrite(scope, flag, sharedTable, key, value)
         db[keys[i]][key] = value
     end
 end
+local CurrentBarsScope
+local function GradientKeyActive(entry, key)
+    if not (entry and entry.hlOverride == true and entry.gradientOverride == true) then return false end
+    if entry.gradientOverrideVersion ~= 2 then return entry[key] ~= nil end
+    return type(entry.gradientOverrideKeys) == "table" and entry.gradientOverrideKeys[key] == true
+end
+local function MarkGradientKey(entry, key)
+    if not entry then return end
+    entry.hlOverride, entry.gradientOverride, entry.gradientOverrideVersion = true, true, 2
+    if type(entry.gradientOverrideKeys) ~= "table" then entry.gradientOverrideKeys = {} end
+    entry.gradientOverrideKeys[key] = true
+end
+local function GradientScopeEntryValue(scope, key)
+    if scope == "shared" or not ScopeHasOverride(scope, "hlOverride") then return nil, false end
+    local db, keys = DB(), ScopeDBKeys(scope)
+    for i = 1, #(keys or {}) do
+        local entry = db[keys[i]]
+        if entry and entry[key] ~= nil and not GradientKeyActive(entry, key)
+            and entry[key] ~= G()[key]
+        then
+            MarkGradientKey(entry, key)
+        end
+        if GradientKeyActive(entry, key) and entry[key] ~= nil then return entry[key], true end
+    end
+    return nil, false
+end
+local function GradientScopeGet(key, defaultValue, legacyKey)
+    local scope = CurrentBarsScope()
+    local value, found = GradientScopeEntryValue(scope, key)
+    if found then return value end
+    if legacyKey then
+        value, found = GradientScopeEntryValue(scope, legacyKey)
+        if found then return value end
+    end
+    value = G()[key]
+    if value ~= nil then return value end
+    if legacyKey then
+        value = G()[legacyKey]
+        if value ~= nil then return value end
+    end
+    return defaultValue
+end
+local function GradientScopeHasExplicit(key)
+    local scope = CurrentBarsScope()
+    if scope == "shared" then return G()[key] ~= nil end
+    local _, found = GradientScopeEntryValue(scope, key)
+    return found
+end
+local function GradientScopeSet(key, value)
+    local scope = CurrentBarsScope()
+    if scope == "shared" then
+        G()[key] = value
+        return
+    end
+    local db, keys = DB(), ScopeDBKeys(scope)
+    for i = 1, #(keys or {}) do
+        local entryKey = keys[i]
+        db[entryKey] = db[entryKey] or {}
+        MarkGradientKey(db[entryKey], key)
+        db[entryKey][key] = value
+    end
+end
 local function CurrentFontScope()
     local g = G()
     local raw = g._fontScopeKey
@@ -177,7 +239,7 @@ local function CurrentFontScope()
     if raw ~= scope then g._fontScopeKey = scope end
     return scope
 end
-local function CurrentBarsScope()
+CurrentBarsScope = function()
     local g = G()
     local raw = g.hpPowerTextSelectedKey
     local scope = NormalizeScopeKey(raw or "shared")
@@ -606,6 +668,8 @@ M.Assign(GlobalPage, {
     ReadG = ReadG, Targeted = Targeted, SetG = SetG, ReadGBool = ReadGBool, SetGBool = SetGBool,
     ReadB = ReadB, SetB = SetB, NormalizeScopeKey = NormalizeScopeKey, ScopeDBKeys = ScopeDBKeys,
     ScopeHasOverride = ScopeHasOverride, ScopeSetOverride = ScopeSetOverride, ScopeRead = ScopeRead, ScopeWrite = ScopeWrite,
+    GradientKeyActive = GradientKeyActive, MarkGradientKey = MarkGradientKey,
+    GradientScopeGet = GradientScopeGet, GradientScopeSet = GradientScopeSet, GradientScopeHasExplicit = GradientScopeHasExplicit,
     CurrentFontScope = CurrentFontScope, CurrentBarsScope = CurrentBarsScope, IsGFScope = IsGFScope, BarsFlagForKey = BarsFlagForKey,
     FontScopeGet = FontScopeGet, FontScopeSet = FontScopeSet, BarScopeGet = BarScopeGet, BarScopeSet = BarScopeSet,
     BarScopeGetBars = BarScopeGetBars, BarScopeSetBars = BarScopeSetBars, NormalizeFontKey = NormalizeFontKey,

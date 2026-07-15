@@ -203,6 +203,7 @@ local function _PushCastbarVisuals_Flush()
     if not _Call(_G.MSUF_UpdateCastbarVisuals) then
         _Call(_G.MSUF_UpdateBossCastbarPreview)
     end
+    _Call(_G.MSUF_RefreshAllCastTargetTextColors)
     _Call(_G.MSUF_UFPreview_RequestRefresh, "MSUF_CASTBAR_COLOR_CHANGE")
     _castbarPushPending = false
 end
@@ -345,6 +346,28 @@ end
 local function ResetCastbarTextColorToGlobal()
     local g = _general(); if not g then return end
     g.castbarFontR, g.castbarFontG, g.castbarFontB = nil, nil, nil; PushCastbarVisualUpdates()
+end
+
+--- - Castbar Target Name Color -
+--- The fourth return value preserves the legacy class-color fallback until a
+--- user explicitly chooses a custom target-name color.
+local function GetCastbarTargetNameColor()
+    local g = _general()
+    if not g then return 1, 1, 1, false end
+    local r = tonumber(g.castbarTargetNameR)
+    local green = tonumber(g.castbarTargetNameG)
+    local b = tonumber(g.castbarTargetNameB)
+    if r ~= nil and green ~= nil and b ~= nil then return r, green, b, true end
+    return 1, 1, 1, false
+end
+ExportPublic("MSUF_GetCastbarTargetNameColor", GetCastbarTargetNameColor)
+local function SetCastbarTargetNameColor(r, g, b)
+    _setRGB("castbarTargetNameR", "castbarTargetNameG", "castbarTargetNameB", r, g, b, 1, 1, 1, PushCastbarVisualUpdates)
+end
+local function ResetCastbarTargetNameColor()
+    local g = _general(); if not g then return end
+    g.castbarTargetNameR, g.castbarTargetNameG, g.castbarTargetNameB = nil, nil, nil
+    PushCastbarVisualUpdates()
 end
 
 --- - Castbar Border Color -
@@ -542,6 +565,9 @@ MSUF._colorsAPI = {
     GetCastbarTextColor             = GetCastbarTextColor,
     SetCastbarTextColor             = SetCastbarTextColor,
     ResetCastbarTextColorToGlobal   = ResetCastbarTextColorToGlobal,
+    GetCastbarTargetNameColor       = GetCastbarTargetNameColor,
+    SetCastbarTargetNameColor       = SetCastbarTargetNameColor,
+    ResetCastbarTargetNameColor     = ResetCastbarTargetNameColor,
     GetCastbarBorderColor           = GetCastbarBorderColor,
     SetCastbarBorderColor           = SetCastbarBorderColor,
     ResetCastbarBorderColor         = ResetCastbarBorderColor,

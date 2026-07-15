@@ -112,7 +112,7 @@ local function BuildCastbars(ctx)
             W.Text(section, "Castbar preview is built when this page is opened.", 14, -42, ctx.width - 28, T.colors.muted)
             return nil
         end
-        local section = b:Section("Preview", 132)
+        local section = b:Section("Preview", 148)
         local sectionW = section._msuf2Width or b.width or ctx.width or 720
         local innerW = max(360, sectionW - 28)
         local preview = {
@@ -166,6 +166,12 @@ local function BuildCastbars(ctx)
                 or (unit == "target" and "showTargetCastTime")
                 or (unit == "focus" and "showFocusCastTime")
             return not (key and g and g[key] == false)
+        end
+        local function CastbarShowTargetName(unit, g)
+            if unit == "target" then return g and g.castbarTargetShowTargetName == true end
+            if unit == "focus" then return g and g.castbarFocusShowTargetName == true end
+            if unit == "boss" then return g and g.showBossCastTargetName == true end
+            return false
         end
         local function PreviewTexture(parent, layer, r, g, b, a, texture, subLevel)
             local tex = parent:CreateTexture(nil, layer, nil, subLevel)
@@ -288,6 +294,11 @@ local function BuildCastbars(ctx)
         time:SetJustifyH("RIGHT")
         preview.time = time
         preview.timeText = time
+        local castTargetText = T.Font(castRow, "GameFontHighlightSmall", "", { 1, 0.82, 0.20, 1 })
+        castTargetText:SetWidth(max(120, barW - 4))
+        castTargetText:SetJustifyH("RIGHT")
+        castTargetText:Hide()
+        preview.castTargetText = castTargetText
         local barBg = PreviewTexture(castbar, "BACKGROUND", 0.10, 0.10, 0.10, 0.85)
         barBg:SetPoint("TOPLEFT", castbar, "TOPLEFT", 1, -1)
         barBg:SetPoint("BOTTOMRIGHT", castbar, "BOTTOMRIGHT", -1, 1)
@@ -601,6 +612,31 @@ local function BuildCastbars(ctx)
             end
             local tr, tg, tb = 1, 1, 1
             if type(_G.MSUF_GetCastbarTextColor) == "function" then tr, tg, tb = _G.MSUF_GetCastbarTextColor() end
+            local showTargetName = CastbarShowTargetName(unit, g)
+            self.castTargetText:SetShown(showTargetName)
+            if showTargetName then
+                local targetSize = ReadCastbarNum(g, unit, "TargetNameFontSize", "bossCastTargetNameFontSize", 10)
+                if not targetSize or targetSize <= 0 then targetSize = 10 end
+                if fontPath and self.castTargetText.SetFont then
+                    pcall(self.castTargetText.SetFont, self.castTargetText, fontPath, max(7, S(targetSize)), fontFlags)
+                end
+                local targetR, targetG, targetB = 1, 0.82, 0.20
+                local getTargetColor = _G.MSUF_GetCastbarTargetNameColor
+                if type(getTargetColor) == "function" then
+                    local r, gColor, b, custom = getTargetColor()
+                    if custom == true then targetR, targetG, targetB = r, gColor, b end
+                end
+                self.castTargetText:SetTextColor(targetR, targetG, targetB, 1)
+                self.castTargetText:SetText("Cleave Training Dummy")
+                self.castTargetText:SetWidth(max(20, scw - S(4)))
+                self.castTargetText:ClearAllPoints()
+                local targetX = ReadCastbarNum(g, unit, "TargetNameOffsetX", "bossCastTargetNameOffsetX", 0)
+                local targetY = ReadCastbarNum(g, unit, "TargetNameOffsetY", "bossCastTargetNameOffsetY", 1)
+                self.castTargetText:SetPoint("TOP", self.bar, "BOTTOM", S(targetX), S(targetY) - 2)
+                self.castTargetText:SetJustifyH("RIGHT")
+            else
+                self.castTargetText:SetText("")
+            end
             local showTime = CastbarShowTime(unit, g)
             local timeW = 0
             self.time:SetShown(showTime)

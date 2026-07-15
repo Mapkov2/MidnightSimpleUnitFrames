@@ -76,6 +76,13 @@ GP.BarScopeGet = function(key, fallback) local v = db.general[key]; return v == 
 GP.BarScopeSet = function(key, value) db.general[key] = value end
 GP.BarScopeGetBars = function(key, fallback) local v = db.bars[key]; return v == nil and fallback or v end
 GP.BarScopeSetBars = function(key, value) db.bars[key] = value end
+GP.GradientScopeGet = function(key, fallback, legacyKey)
+    local value = db.general[key]
+    if value == nil and legacyKey then value = db.general[legacyKey] end
+    return value == nil and fallback or value
+end
+GP.GradientScopeSet = function(key, value) db.general[key] = value end
+GP.GradientScopeHasExplicit = function(key) return db.general[key] ~= nil end
 GP.TextureValues = function() return M.ValueTextList("Blizzard", "Blizzard") end
 GP.CurrentPowerBarScopeUnit = function() return "player" end
 GP.SmoothPowerGet = function() return true end
@@ -218,10 +225,13 @@ for _, key in ipairs({ "bars_textures", "bars_absorb", "bars_outline", "bars_rou
 end
 assert(ctx.contentHeight and ctx.contentHeight > 0, "content height was not finalized")
 assert(#bindings >= 25, "unexpected binding count: " .. #bindings)
-assert(#controls == 9, "control metadata registration changed: " .. #controls)
+assert(#controls == 14, "control metadata registration changed: " .. #controls)
 local expectedControlPaths = {
-    ["gradient.direction.UP"] = true,
-    ["gradient.direction.DOWN"] = true,
+    ["gradient.health.direction.UP"] = true,
+    ["gradient.health.direction.DOWN"] = true,
+    ["gradient.power.direction.UP"] = true,
+    ["gradient.power.direction.DOWN"] = true,
+    ["gradient.colors"] = true,
     ["highlight.workspace_tab"] = true,
     ["highlight.priority.order.order"] = true,
 }

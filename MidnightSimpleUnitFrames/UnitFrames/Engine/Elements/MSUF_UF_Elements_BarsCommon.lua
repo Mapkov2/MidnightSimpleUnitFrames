@@ -384,11 +384,12 @@ local function AnchorGradientTexture(tex, target)
   tex._msufGradientTarget = target
 end
 
-local function ConfigureGradientTexture(tex, direction, alpha)
+local function ConfigureGradientTexture(tex, direction, alpha, r, g, b)
   if not tex then
     return
   end
   alpha = Clamp01(alpha, 0.45)
+  r, g, b = Clamp01(r, 0), Clamp01(g, 0), Clamp01(b, 0)
   local orientation = (direction == "up" or direction == "down") and "VERTICAL" or "HORIZONTAL"
   local minA, maxA
   if direction == "left" or direction == "down" then
@@ -398,6 +399,9 @@ local function ConfigureGradientTexture(tex, direction, alpha)
   end
   if tex._msufGradientDirection == direction
     and tex._msufGradientAlpha == alpha
+    and tex._msufGradientR == r
+    and tex._msufGradientG == g
+    and tex._msufGradientB == b
     and tex._msufGradientReady == true then
     return
   end
@@ -406,23 +410,26 @@ local function ConfigureGradientTexture(tex, direction, alpha)
     tex:SetBlendMode("BLEND")
   end
   if tex.SetGradient and CreateColor then
-    tex:SetGradient(orientation, CreateColor(0, 0, 0, minA), CreateColor(0, 0, 0, maxA))
+    tex:SetGradient(orientation, CreateColor(r, g, b, minA), CreateColor(r, g, b, maxA))
     tex._msufGradientReady = true
     tex._msufGradientDirection = direction
     tex._msufGradientAlpha = alpha
+    tex._msufGradientR, tex._msufGradientG, tex._msufGradientB = r, g, b
     return
   end
   if tex.SetGradientAlpha then
-    tex:SetGradientAlpha(orientation, 0, 0, 0, minA, 0, 0, 0, maxA)
+    tex:SetGradientAlpha(orientation, r, g, b, minA, r, g, b, maxA)
     tex._msufGradientReady = true
     tex._msufGradientDirection = direction
     tex._msufGradientAlpha = alpha
+    tex._msufGradientR, tex._msufGradientG, tex._msufGradientB = r, g, b
     return
   end
-  tex:SetColorTexture(0, 0, 0, alpha)
+  tex:SetColorTexture(r, g, b, alpha)
   tex._msufGradientReady = true
   tex._msufGradientDirection = direction
   tex._msufGradientAlpha = alpha
+  tex._msufGradientR, tex._msufGradientG, tex._msufGradientB = r, g, b
 end
 
 local function EnsureGradientTexture(bar, grads, direction)
@@ -458,13 +465,14 @@ local function ApplyBarGradient(frame, bar, spec, storeKey)
   end
   local target = GradientTarget(bar)
   local alpha = Clamp01(spec.strength, 0.45)
+  local r, g, b = Clamp01(spec.r, 0), Clamp01(spec.g, 0), Clamp01(spec.b, 0)
   for i = 1, #GRADIENT_DIRS do
     local direction = GRADIENT_DIRS[i]
     local tex = grads[direction]
     if spec[direction] == true then
       tex = EnsureGradientTexture(bar, grads, direction)
       AnchorGradientTexture(tex, target)
-      ConfigureGradientTexture(tex, direction, alpha)
+      ConfigureGradientTexture(tex, direction, alpha, r, g, b)
       SetShownCached(tex, true)
     else
       SetShownCached(tex, false)

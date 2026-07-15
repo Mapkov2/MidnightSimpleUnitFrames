@@ -202,6 +202,9 @@ local function ApplyBossCastbarPreviewLayout(preview, index)
     if preview.castTargetText then
         local showTargetName = general.showBossCastTargetName == true
         preview.castTargetText:SetText(showTargetName and "Cleave Training Dummy" or "")
+        if type(_G.MSUF_ApplyCastTargetTextColor) == "function" then
+            _G.MSUF_ApplyCastTargetTextColor(preview)
+        end
         preview.castTargetText:SetShown(showTargetName)
     end
 

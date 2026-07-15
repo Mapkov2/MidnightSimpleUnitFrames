@@ -828,13 +828,24 @@ end
 local function ApplyCastTargetTextColor(frame, classFilename)
     local fs = frame and frame.castTargetText
     if not fs then return end
-    if type(C_ClassColor_GetClassColor) == "function" then
-        local classColor = C_ClassColor_GetClassColor(classFilename)
-        fs:SetTextColor(classColor:GetRGB())
-    else
-        fs:SetTextColor(1, 1, 1)
+    local getCustomColor = _G.MSUF_GetCastbarTargetNameColor
+    if type(getCustomColor) == "function" then
+        local r, g, b, custom = getCustomColor()
+        if custom == true then
+            fs:SetTextColor(r, g, b)
+            return
+        end
     end
+    if classFilename and type(C_ClassColor_GetClassColor) == "function" then
+        local classColor = C_ClassColor_GetClassColor(classFilename)
+        if classColor and type(classColor.GetRGB) == "function" then
+            fs:SetTextColor(classColor:GetRGB())
+            return
+        end
+    end
+    fs:SetTextColor(1, 1, 1)
 end
+ExportPublic("MSUF_ApplyCastTargetTextColor", ApplyCastTargetTextColor)
 
 local function AdvanceBuildStateGeneration(unit)
     local engine = CastbarEngine()
@@ -893,6 +904,32 @@ local function RefreshCastTargetText(frame)
     UpdateCastTargetText(frame, BuildState(frame))
 end
 ExportPublic("MSUF_RefreshCastTargetText", RefreshCastTargetText)
+
+local function RefreshAllCastTargetTextColors()
+    local function RefreshLive(frame)
+        if frame and frame.castTargetText then RefreshCastTargetText(frame) end
+    end
+    local function RefreshPreview(frame)
+        if frame and frame.castTargetText then ApplyCastTargetTextColor(frame) end
+    end
+
+    RefreshLive(_G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar)
+    RefreshLive(_G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar)
+    RefreshPreview(_G.MSUF_TargetCastbarPreview)
+    RefreshPreview(_G.MSUF_FocusCastbarPreview)
+
+    local bossCastbars = _G.MSUF_BossCastbars
+    local maxBossFrames = tonumber(_G.MSUF_MAX_BOSS_FRAMES or _G.MAX_BOSS_FRAMES) or 5
+    if maxBossFrames < 1 or maxBossFrames > 12 then maxBossFrames = 5 end
+    for index = 1, maxBossFrames do
+        RefreshLive((bossCastbars and bossCastbars[index])
+            or _G["MSUF_BossCastbar" .. index]
+            or _G["MSUF_boss" .. index .. "CastBar"])
+        RefreshPreview(index == 1 and (_G.MSUF_BossCastbarPreview or _G.MSUF_BossCastbarPreview1)
+            or _G["MSUF_BossCastbarPreview" .. index])
+    end
+end
+ExportPublic("MSUF_RefreshAllCastTargetTextColors", RefreshAllCastTargetTextColors)
 
 local function RefreshTargetFocusImmediate(frame)
     local state = BuildState(frame)

@@ -4,6 +4,17 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF or MSUF.LOCALE ~= "deDE" then return end
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("deDE")) or (MSUF.L or {})
 
+L["Gradient colors"] = "Gradientenfarben"
+L["Health gradient"] = "Lebensleisten-Gradient"
+L["Power gradient"] = "Ressourcenleisten-Gradient"
+L["Health strength"] = "Lebensleisten-Stärke"
+L["Power strength"] = "Ressourcenleisten-Stärke"
+L["Bar Gradient Colors"] = "Balken-Gradientenfarben"
+L["Health gradient color"] = "Lebensleisten-Gradientenfarbe"
+L["Power gradient color"] = "Ressourcenleisten-Gradientenfarbe"
+L["Reset gradient colors"] = "Gradientenfarben zurücksetzen"
+L["Health and Power use separate gradient colors. Choosing a color creates a custom Bars override for the selected scope."] = "Lebens- und Ressourcenleiste verwenden getrennte Gradientenfarben. Eine Farbauswahl erstellt eigene Balken-Einstellungen für den gewählten Bereich."
+
 -- Release-basierte Highlight-Tour fuer bestehende Profile.
 L["UPGRADED TO MSUF %s"] = "AKTUALISIERT AUF MSUF %s"
 L["Your MSUF 6.0 highlights"] = "Deine MSUF-6.0-Highlights"
