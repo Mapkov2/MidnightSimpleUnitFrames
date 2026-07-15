@@ -307,6 +307,9 @@ local function UpdatePreviewTest(frame)
     if frame.castTargetText then
         local showTargetName = config and config.showTargetName and general[config.showTargetName] == true
         SetTextIfChanged(frame.castTargetText, showTargetName and Translate("Cleave Training Dummy") or "")
+        if type(_G.MSUF_ApplyCastTargetTextColor) == "function" then
+            _G.MSUF_ApplyCastTargetTextColor(frame)
+        end
         frame.castTargetText:SetShown(showTargetName == true)
     end
 

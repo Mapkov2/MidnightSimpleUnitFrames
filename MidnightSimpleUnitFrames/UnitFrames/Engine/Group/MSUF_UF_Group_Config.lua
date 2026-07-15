@@ -118,25 +118,46 @@ local function GradientKeyActive(conf, key)
   return type(conf.gradientOverrideKeys) == "table" and conf.gradientOverrideKeys[key] == true
 end
 
-local function GradientScopedValue(conf, general, key, fallback)
+local function GradientScopedValue(conf, general, key, fallback, legacyKey)
   if GradientKeyActive(conf, key) and conf[key] ~= nil then return conf[key] end
+  if legacyKey and GradientKeyActive(conf, legacyKey) and conf[legacyKey] ~= nil then return conf[legacyKey] end
   if general and general[key] ~= nil then return general[key] end
+  if legacyKey and general and general[legacyKey] ~= nil then return general[legacyKey] end
   return fallback
 end
 
 local function FallbackResolveBarGradient(conf, general, enabledKey)
-  local left = GradientScopedValue(conf, general, "gradientDirLeft", false) == true
-  local right = GradientScopedValue(conf, general, "gradientDirRight", false) == true
-  local up = GradientScopedValue(conf, general, "gradientDirUp", false) == true
-  local down = GradientScopedValue(conf, general, "gradientDirDown", false) == true
+  local power = enabledKey == "enablePowerGradient"
+  local useLegacyDirections = false
+  if power then
+    local scopedPower = GradientKeyActive(conf, "powerGradientDirLeft") or GradientKeyActive(conf, "powerGradientDirRight")
+      or GradientKeyActive(conf, "powerGradientDirUp") or GradientKeyActive(conf, "powerGradientDirDown")
+    local scopedLegacy = GradientKeyActive(conf, "gradientDirLeft") or GradientKeyActive(conf, "gradientDirRight")
+      or GradientKeyActive(conf, "gradientDirUp") or GradientKeyActive(conf, "gradientDirDown")
+    local generalPower = general and (general.powerGradientDirLeft ~= nil or general.powerGradientDirRight ~= nil
+      or general.powerGradientDirUp ~= nil or general.powerGradientDirDown ~= nil)
+    useLegacyDirections = not scopedPower and (scopedLegacy or not generalPower)
+  end
+  local prefix = power and not useLegacyDirections and "powerGradientDir" or "gradientDir"
+  local left = GradientScopedValue(conf, general, prefix .. "Left", false) == true
+  local right = GradientScopedValue(conf, general, prefix .. "Right", false) == true
+  local up = GradientScopedValue(conf, general, prefix .. "Up", false) == true
+  local down = GradientScopedValue(conf, general, prefix .. "Down", false) == true
   if not (left or right or up or down) then
-    local legacy = GradientScopedValue(conf, general, "gradientDirection", "RIGHT")
+    local directionKey = power and not useLegacyDirections and "powerGradientDirection" or "gradientDirection"
+    local legacy = GradientScopedValue(conf, general, directionKey, "RIGHT")
     if not GRADIENT_DIR_KEYS[legacy] then legacy = "RIGHT" end
     left, right, up, down = legacy == "LEFT", legacy == "RIGHT", legacy == "UP", legacy == "DOWN"
   end
+  local strengthKey = power and "powerGradientStrength" or "gradientStrength"
+  local colorPrefix = power and "powerBarGradientColor" or "healthBarGradientColor"
   return {
     enabled = GradientScopedValue(conf, general, enabledKey, false) == true,
-    strength = Clamp01(GradientScopedValue(conf, general, "gradientStrength", 0.45), 0.45),
+    strength = Clamp01(GradientScopedValue(conf, general, strengthKey, 0.45,
+      power and "gradientStrength" or nil), 0.45),
+    r = Clamp01(GradientScopedValue(conf, general, colorPrefix .. "R", 0), 0),
+    g = Clamp01(GradientScopedValue(conf, general, colorPrefix .. "G", 0), 0),
+    b = Clamp01(GradientScopedValue(conf, general, colorPrefix .. "B", 0), 0),
     left = left,
     right = right,
     up = up,

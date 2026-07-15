@@ -306,7 +306,13 @@ local function ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, s
         local targetSize = ReadCastbarNum(g, key, "TargetNameFontSize", "bossCastTargetNameFontSize", 10)
         if not targetSize or targetSize <= 0 then targetSize = 10 end
         ApplyPreviewFont(mock.cast.target, max(7, S(targetSize)))
-        mock.cast.target:SetTextColor(1, 0.82, 0.20, 1)
+        local targetR, targetG, targetB = 1, 0.82, 0.20
+        local getTargetColor = _G.MSUF_GetCastbarTargetNameColor
+        if type(getTargetColor) == "function" then
+            local r, gColor, b, custom = getTargetColor()
+            if custom == true then targetR, targetG, targetB = r, gColor, b end
+        end
+        mock.cast.target:SetTextColor(targetR, targetG, targetB, 1)
         mock.cast.target:SetText(TR("Cleave Training Dummy"))
         local targetX = ReadCastbarNum(g, key, "TargetNameOffsetX", "bossCastTargetNameOffsetX", 0)
         local targetY = ReadCastbarNum(g, key, "TargetNameOffsetY", "bossCastTargetNameOffsetY", 1)

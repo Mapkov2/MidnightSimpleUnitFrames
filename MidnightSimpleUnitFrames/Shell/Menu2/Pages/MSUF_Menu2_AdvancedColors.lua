@@ -9,14 +9,17 @@ MSUF.MSUF2 = M
 local W = M.Widgets
 local T = M.Theme
 local AP = M.AdvancedPage or {}
+local GP = M.GlobalPage or {}
 local floor = math.floor
 local max = math.max
 local min = math.min
 local FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local CallGlobal, DB, G, Bars, Gameplay, BindTableToggle, ApplyAuras, MoveWidget, LabelAt, SwitchAt, ValueToggleAt, ValueSwitchAt, SliderAt, ValueSliderAt, ValueDropdownAt, SetControlEnabled, ControlMeta, RegisterControl = M.Pick(AP, [[CallGlobal DB G Bars Gameplay BindTableToggle ApplyAuras MoveWidget LabelAt SwitchAt ValueToggleAt ValueSwitchAt SliderAt ValueSliderAt ValueDropdownAt SetControlEnabled ControlMeta RegisterControl]])
+local CurrentBarsScope, NormalizeScopeKey, ScopeHasOverride, GradientScopeGet, GradientScopeSet = M.Pick(GP, [[CurrentBarsScope NormalizeScopeKey ScopeHasOverride GradientScopeGet GradientScopeSet]])
 local COLOR_SETTING_KEY_BY_PATH = {
     ["api.SetAbsorbOverlayColor"] = "general.absorbBarColor",
     ["api.SetAggroBorderColor"] = "general.aggroBorderColor",
+    ["api.SetCastbarTargetNameColor"] = "general.castbarTargetNameColor",
     ["api.SetCastbarTextColor"] = "general.castbarFontColor",
     ["api.SetGlobalFontColor"] = "general.customFontColor",
     ["api.SetHealAbsorbOverlayColor"] = "general.healAbsorbBarColor",
@@ -61,7 +64,6 @@ local COLOR_SETTING_KEY_BY_PATH = {
     ["general.unifiedBar"] = "general.unifiedBarColor",
     ["highlight.mouseover.color"] = "general.highlightColor",
     ["highlight.mouseover.enabled"] = "general.highlightEnabled",
-    ["prediction.heal_color"] = "general.healPredictionColor",
     ["npc.color.dead"] = "npcColors.dead",
     ["npc.color.enemy"] = "npcColors.enemy",
     ["npc.color.friendly"] = "npcColors.friendly",
@@ -93,6 +95,7 @@ local COLOR_ACTION_KEY_BY_PATH = {
     ["appearance.gradient.reset"] = "reset_health_gradient_colors",
     ["auras.reset"] = "reset_aura_colors",
     ["background.reset_to_black"] = "reset_bar_background_color",
+    ["bar_gradient.reset"] = "reset_bar_gradient_colors",
     ["bar.reset"] = "reset_bar_colors",
     ["castbar.reset"] = "reset_castbar_colors",
     ["class_bar.reset_all"] = "reset_class_colors",
@@ -124,6 +127,17 @@ local function PrefixedSettingKeys(prefix, tokens)
     return keys
 end
 local COLOR_DYNAMIC_SETTING_KEYS_BY_PATH = {
+    ["bar_gradient.health.color"] = {
+        "general.healthBarGradientColorR", "general.healthBarGradientColorG", "general.healthBarGradientColorB",
+    },
+    ["bar_gradient.power.color"] = {
+        "general.powerBarGradientColorR", "general.powerBarGradientColorG", "general.powerBarGradientColorB",
+    },
+    ["prediction.heal_color"] = {
+        "general.healPredictionColorR",
+        "general.healPredictionColorG",
+        "general.healPredictionColorB",
+    },
     ["power.editor.color"] = PrefixedSettingKeys("general.powerColorOverrides.",
         "MANA RAGE ENERGY FOCUS RUNIC_POWER INSANITY FURY PAIN ESSENCE LUNAR_POWER MAELSTROM"),
     ["class_power.editor.foreground_color"] = PrefixedSettingKeys("general.classPowerColorOverrides.",
@@ -149,12 +163,20 @@ for slot = 1, 10 do
     COLOR_DYNAMIC_SETTING_KEYS_BY_PATH["class_power.resource_slots.slot." .. slot] = keys
 end
 local COLOR_DYNAMIC_SETTING_PATTERNS_BY_PATH = {
+    ["bar_gradient.health.color"] = { "^barScope%.[%w_]+%.healthBarGradientColor[RGB]$" },
+    ["bar_gradient.power.color"] = { "^barScope%.[%w_]+%.powerBarGradientColor[RGB]$" },
     ["class_power.editor.background_color"] = { "^general%.classPowerBgColorOverrides%.[A-Z0-9_]+$" },
     ["class_power.full_resource.color"] = { "^general%.classPowerColorOverrides%.[A-Z_]+_FULL$" },
     ["class_power.full_resource.enabled"] = { "^bars%.classPowerFullColorEnabled%.[A-Z_]+$" },
     ["class_power.resource_slots.mode"] = { "^bars%.classPowerSlotColorModes%.[A-Z_]+$" },
 }
 local function ColorReviewedDisposition(path)
+    if path:match("^bar_gradient%.") then
+        return "dynamic", "This color targets the explicit Bars scope shared with the Health and Power gradient controls."
+    end
+    if path == "prediction.heal_color" then
+        return "dynamic", "This RGB swatch writes the three persisted heal-prediction color channels as one visible color."
+    end
     if path == "group_frame.health.color" then
         return "dynamic", "This swatch writes the active health-color mode across Party, Raid, and Mythic Raid."
     end
@@ -1194,6 +1216,79 @@ local function BuildFontAndClassColors(ctx, b, CH)
     end, "class_bar.reset_all")
 end
 
+local function ApplyScopedBarGradientColors(reason)
+    local apply = CurrentApplyService()
+    local scope = CurrentBarsScope()
+    if apply and type(apply.RequestBarGradients) == "function" then
+        return apply.RequestBarGradients(reason or "MSUF2_BAR_GRADIENT_COLORS", scope)
+    end
+    return RequestGeneral(reason or "MSUF2_BAR_GRADIENT_COLORS", {
+        preview = true,
+        applyAll = false,
+        notify = false,
+        barGradients = true,
+        barsScope = scope,
+    })
+end
+
+local function BuildBarGradientColors(ctx, b, CH)
+    local values = GP.SCOPE_VALUES or {}
+    local sectionW = ctx.width or 720
+    local scopeMetrics = W.MeasureScopeOverrideBar and W.MeasureScopeOverrideBar(values, { width = sectionW })
+    local scopeBottom = (scopeMetrics and scopeMetrics.bottomY) or -40
+    local colorY = math.min(-104, scopeBottom - 54)
+    local compact = sectionW < 560
+    local resetY = compact and (colorY - 86) or (colorY - 44)
+    local section = b:CollapsibleSection("colors_bar_gradients", "Bar Gradient Colors", math.abs(resetY) + 54, true)
+    local scopeBar = W.ScopeOverrideBar(ctx, section, {
+        values = values,
+        width = sectionW,
+        getValue = CurrentBarsScope,
+        setValue = function(value)
+            G().hpPowerTextSelectedKey = NormalizeScopeKey(value)
+            if M.RequestRefresh then M.RequestRefresh(ctx, "bar-gradient-color-scope")
+            elseif M.Refresh then M.Refresh(ctx) end
+        end,
+        hasOverride = function(value)
+            return value ~= "shared" and ScopeHasOverride(value, "hlOverride")
+        end,
+    })
+    RegisterControl(scopeBar, Meta("bar_gradient.scope.selector", "ephemeral"), "Editing:", "segment", values)
+    local hint = W.Text(section, "Health and Power use separate gradient colors. Choosing a color creates a custom Bars override for the selected scope.",
+        14, colorY + 28, sectionW - 28, T.colors.muted)
+    hint:SetJustifyH("LEFT")
+    local function GradientRGB(prefix)
+        return tonumber(GradientScopeGet(prefix .. "R", 0)) or 0,
+            tonumber(GradientScopeGet(prefix .. "G", 0)) or 0,
+            tonumber(GradientScopeGet(prefix .. "B", 0)) or 0
+    end
+    local function SetGradientRGB(prefix, r, g, bcol, reason)
+        GradientScopeSet(prefix .. "R", r)
+        GradientScopeSet(prefix .. "G", g)
+        GradientScopeSet(prefix .. "B", bcol)
+        ApplyScopedBarGradientColors(reason)
+    end
+    local powerX = compact and 14 or math.max(360, floor(sectionW * 0.50))
+    local powerY = compact and (colorY - 38) or colorY
+    ColorValueAt(ctx, section, "Health gradient color", 14, colorY,
+        function() return GradientRGB("healthBarGradientColor") end,
+        function(r, g, bcol) SetGradientRGB("healthBarGradientColor", r, g, bcol, "MSUF2_HP_GRADIENT_COLOR") end,
+        compact and 180 or 190, 52, Meta("bar_gradient.health.color"))
+    ColorValueAt(ctx, section, "Power gradient color", powerX, powerY,
+        function() return GradientRGB("powerBarGradientColor") end,
+        function(r, g, bcol) SetGradientRGB("powerBarGradientColor", r, g, bcol, "MSUF2_POWER_GRADIENT_COLOR") end,
+        compact and 180 or 190, 52, Meta("bar_gradient.power.color"))
+    CH.ButtonAt(section, "Reset gradient colors", 14, resetY, 180, function()
+        GradientScopeSet("healthBarGradientColorR", 0)
+        GradientScopeSet("healthBarGradientColorG", 0)
+        GradientScopeSet("healthBarGradientColorB", 0)
+        GradientScopeSet("powerBarGradientColorR", 0)
+        GradientScopeSet("powerBarGradientColorG", 0)
+        GradientScopeSet("powerBarGradientColorB", 0)
+        ApplyScopedBarGradientColors("MSUF2_RESET_GRADIENT_COLORS")
+    end, "bar_gradient.reset")
+end
+
 local function BuildBackgroundAndAppearance(ctx, b, CH)
     local background = b:CollapsibleSection("colors_background", "Bar Background Tint", 226, false)
     LabelAt(background, "Tint applied to the bar background in *all* bar modes. Dark Mode uses this tint too.", 12, -8, 660, "GameFontHighlightSmall", T.colors.muted)
@@ -1426,26 +1521,27 @@ local function BuildBarAndGroupColors(ctx, b, CH)
 end
 
 local function BuildCastbarColors(ctx, b, CH)
-    local castbar = b:CollapsibleSection("colors_castbar", "Castbar Colors", 544, false)
+    local castbar = b:CollapsibleSection("colors_castbar", "Castbar Colors", 580, false)
     local castW = castbar._msuf2Width or ctx.width or 720
     CH.ApiColorSpecs(ctx, castbar, {
         { "Interruptible cast color", 12, -10, "GetInterruptibleCastColor", "SetInterruptibleCastColor", 0, 0.9, 0.8 },
         { "Non-interruptible cast color", 12, -46, "GetNonInterruptibleCastColor", "SetNonInterruptibleCastColor", 0.4, 0.01, 0.01 },
         { "Interrupt color (all castbars)", 12, -82, "GetInterruptFeedbackCastColor", "SetInterruptFeedbackCastColor", 1.0, 0.82, 0.0 },
         { "Castbar text color", 360, -10, "GetCastbarTextColor", "SetCastbarTextColor", 1, 1, 1 },
+        { "Cast Target Name Color", 360, -118, "GetCastbarTargetNameColor", "SetCastbarTargetNameColor", 1, 1, 1 },
     }, ApplyCastbarColors)
     CH.ApiOrGeneralColorSpecs(ctx, castbar, {
         { "Castbar border color", 360, -46, "GetCastbarBorderColor", "SetCastbarBorderColor", "castbarBorder", 0, 0, 0, nil, 1 },
         { "Castbar background color", 360, -82, "GetCastbarBackgroundColor", "SetCastbarBackgroundColor", "castbarBg", 0.10, 0.10, 0.10, nil, 0.85 },
     }, ApplyCastbarColors)
-    LabelAt(castbar, "Player castbar override", 12, -134, 260, "GameFontNormal", T.colors.text)
+    LabelAt(castbar, "Player castbar override", 12, -170, 260, "GameFontNormal", T.colors.text)
     local overrideModeX, overrideModeW = 300, 190
     local overrideColorX = min(max(overrideModeX + overrideModeW + 36, floor(castW * 0.56)), castW - 236)
     local overrideColorLabelW = max(120, min(168, castW - overrideColorX - 76))
-    local overrideColorY = -154
+    local overrideColorY = -190
     if overrideColorX < overrideModeX + overrideModeW + 24 then
         overrideColorX = overrideModeX
-        overrideColorY = -210
+        overrideColorY = -246
         overrideColorLabelW = max(120, min(230, castW - overrideColorX - 76))
     end
     local overrideColor = ColorValueAt(ctx, castbar, "Custom color", overrideColorX, overrideColorY,
@@ -1455,7 +1551,7 @@ local function BuildCastbarColors(ctx, b, CH)
         end,
         overrideColorLabelW, nil, Meta("castbar.player_override.custom_color"))
     local overrideEnable
-    local overrideMode = ValueDropdownAt(ctx, castbar, "Mode", overrideModeX, -154, ValueTextPairs "CLASS=Class color|CUSTOM=Custom color", overrideModeW,
+    local overrideMode = ValueDropdownAt(ctx, castbar, "Mode", overrideModeX, -190, ValueTextPairs "CLASS=Class color|CUSTOM=Custom color", overrideModeW,
         function() return ApiValue("GetPlayerCastbarOverrideMode", function() return G().playerCastbarOverrideMode or "CLASS" end) end,
         function(v)
             if not ApiCall("SetPlayerCastbarOverrideMode", v) then
@@ -1470,7 +1566,7 @@ local function BuildCastbarColors(ctx, b, CH)
         SetControlEnabled(overrideMode, enabled)
         SetControlEnabled(overrideColor, enabled and ((overrideMode.GetValue and overrideMode:GetValue()) == "CUSTOM"))
     end
-    overrideEnable = ValueSwitchAt(ctx, castbar, "Player override", 12, -154, 260,
+    overrideEnable = ValueSwitchAt(ctx, castbar, "Player override", 12, -190, 260,
         function() return ApiValue("GetPlayerCastbarOverrideEnabled", function() return G().playerCastbarOverrideEnabled == true end) end,
         function(v)
             if not ApiCall("SetPlayerCastbarOverrideEnabled", v) then
@@ -1480,18 +1576,20 @@ local function BuildCastbarColors(ctx, b, CH)
             RefreshCastbarOverrideControls(v and true or false)
         end,
         Meta("castbar.player_override.enabled"))
-    LabelAt(castbar, "Interrupt Ready Indicator", 12, -244, 260, "GameFontNormal", T.colors.text)
+    LabelAt(castbar, "Interrupt Ready Indicator", 12, -280, 260, "GameFontNormal", T.colors.text)
     CH.TableColorSpecs(ctx, castbar, G, {
-        { "Ready color (kick available)", 12, -274, "kickReadyColor", 0, 1, 0 },
-        { "Not ready color (kick on cooldown)", 12, -310, "kickNotReadyColor", 1, 0, 0 },
+        { "Ready color (kick available)", 12, -310, "kickReadyColor", 0, 1, 0 },
+        { "Not ready color (kick on cooldown)", 12, -346, "kickNotReadyColor", 1, 0, 0 },
     }, ApplyCastbarColors)
-    CH.ApiColorAt(ctx, castbar, "Unavailable fill color", 12, -346, "GetInterruptUnavailableCastColor", "SetInterruptUnavailableCastColor", 1.0, 0.494117647, 0.137254902, ApplyCastbarColors)
-    CH.ButtonAt(castbar, "Reset castbar colors", 12, -470, 170, function()
+    CH.ApiColorAt(ctx, castbar, "Unavailable fill color", 12, -382, "GetInterruptUnavailableCastColor", "SetInterruptUnavailableCastColor", 1.0, 0.494117647, 0.137254902, ApplyCastbarColors)
+    CH.ButtonAt(castbar, "Reset castbar colors", 12, -506, 170, function()
         local apiOwnsRefresh = ApiCall("ResetCastbarTextColorToGlobal")
+        apiOwnsRefresh = ApiCall("ResetCastbarTargetNameColor") or apiOwnsRefresh
         apiOwnsRefresh = ApiCall("ResetCastbarBorderColor") or apiOwnsRefresh
         apiOwnsRefresh = ApiCall("ResetCastbarBackgroundColor") or apiOwnsRefresh
         local g = G()
         ClearRGBs(g, "castbarInterruptible", "castbarNonInterruptible", "castbarInterruptFeedback", "castbarInterruptUnavailable")
+        ClearRGB(g, "castbarTargetName")
         g.castbarInterruptUnavailableColor = nil
         g.playerCastbarOverrideEnabled = false
         g.playerCastbarOverrideMode = "CLASS"
@@ -1643,6 +1741,7 @@ local function BuildColorPainter(ctx, b)
                 ApiSpec("Interrupted", "interrupted", "GetInterruptFeedbackCastColor", "SetInterruptFeedbackCastColor", 1, 0.82, 0, ApplyCastbarColors),
                 ApiSpec("Kick unavailable", "unavailable", "GetInterruptUnavailableCastColor", "SetInterruptUnavailableCastColor", 1, 0.49, 0.14, ApplyCastbarColors),
                 ApiSpec("Cast text", "text", "GetCastbarTextColor", "SetCastbarTextColor", 1, 1, 1, ApplyCastbarColors),
+                ApiSpec("Cast Target Name", "targetName", "GetCastbarTargetNameColor", "SetCastbarTargetNameColor", 1, 1, 1, ApplyCastbarColors),
                 ApiSpec("Cast border", "border", "GetCastbarBorderColor", "SetCastbarBorderColor", 0, 0, 0, ApplyCastbarColors),
                 ApiSpec("Cast background", "background", "GetCastbarBackgroundColor", "SetCastbarBackgroundColor", 0.10, 0.10, 0.10, ApplyCastbarColors),
                 TableSpec("Kick ready", "kickReady", G, "kickReadyColor", 0, 1, 0, ApplyCastbarColors),
@@ -1701,6 +1800,7 @@ local function BuildColors(ctx)
     BuildBackgroundAndAppearance(ctx, b, CH)
     BuildUnitAndNPCColors(ctx, b, CH)
     BuildBarAndGroupColors(ctx, b, CH)
+    BuildBarGradientColors(ctx, b, CH)
     BuildCastbarColors(ctx, b, CH)
     BuildHighlightAndGameplayColors(ctx, b, CH)
     BuildPowerAndClassPowerColors(ctx, b, CH)

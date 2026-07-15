@@ -7,6 +7,17 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF or MSUF.LOCALE ~= "enUS" then return end
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("enUS")) or (MSUF.L or {})
 
+L["Gradient colors"] = "Gradient colors"
+L["Health gradient"] = "Health gradient"
+L["Power gradient"] = "Power gradient"
+L["Health strength"] = "Health strength"
+L["Power strength"] = "Power strength"
+L["Bar Gradient Colors"] = "Bar Gradient Colors"
+L["Health gradient color"] = "Health gradient color"
+L["Power gradient color"] = "Power gradient color"
+L["Reset gradient colors"] = "Reset gradient colors"
+L["Health and Power use separate gradient colors. Choosing a color creates a custom Bars override for the selected scope."] = "Health and Power use separate gradient colors. Choosing a color creates a custom Bars override for the selected scope."
+
 -- Release-based upgrade highlight tour.
 L["UPGRADED TO MSUF %s"] = "UPGRADED TO MSUF %s"
 L["Your MSUF 6.0 highlights"] = "Your MSUF 6.0 highlights"

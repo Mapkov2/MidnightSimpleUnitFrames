@@ -44,7 +44,7 @@ local UNIT_DISPEL_TRIGGERS = VT("BORDER", "Use Dispel border detects", "BY_ME", 
     "BY_RAID", "Dispellable by group", "DISPEL_TYPE", "Any dispel type")
 local UNIT_DISPEL_STYLES = VT("FULL", "Full Frame", "TOP", "Top Fade", "BOTTOM", "Bottom Fade",
     "LEFT", "Left Fade", "RIGHT", "Right Fade")
-local Call, DB, G, Bars, ReadG, ReadGBool, ReadB, NormalizeScopeKey, ScopeDBKeys, ScopeHasOverride, ScopeSetOverride, CurrentBarsScope, IsGFScope, BarScopeGet, BarScopeSet, BarScopeGetBars, BarScopeSetBars, TextureValues, CurrentPowerBarScopeUnit, SmoothPowerGet, SmoothPowerSet, PriorityOrder, PriorityColor, RefreshBorderTestModes, SetAbsorbTextureTest, SetControlEnabled, SetControlsEnabled, ApplyBars, ControlMeta, RegisterControl = M.Pick(GP, [[Call DB G Bars ReadG ReadGBool ReadB NormalizeScopeKey ScopeDBKeys ScopeHasOverride ScopeSetOverride CurrentBarsScope IsGFScope BarScopeGet BarScopeSet BarScopeGetBars BarScopeSetBars TextureValues CurrentPowerBarScopeUnit SmoothPowerGet SmoothPowerSet PriorityOrder PriorityColor RefreshBorderTestModes SetAbsorbTextureTest SetControlEnabled SetControlsEnabled ApplyBars ControlMeta RegisterControl]])
+local Call, DB, G, Bars, ReadG, ReadGBool, ReadB, NormalizeScopeKey, ScopeDBKeys, ScopeHasOverride, ScopeSetOverride, CurrentBarsScope, IsGFScope, BarScopeGet, BarScopeSet, BarScopeGetBars, BarScopeSetBars, GradientScopeGet, GradientScopeSet, GradientScopeHasExplicit, TextureValues, CurrentPowerBarScopeUnit, SmoothPowerGet, SmoothPowerSet, PriorityOrder, PriorityColor, RefreshBorderTestModes, SetAbsorbTextureTest, SetControlEnabled, SetControlsEnabled, ApplyBars, ControlMeta, RegisterControl = M.Pick(GP, [[Call DB G Bars ReadG ReadGBool ReadB NormalizeScopeKey ScopeDBKeys ScopeHasOverride ScopeSetOverride CurrentBarsScope IsGFScope BarScopeGet BarScopeSet BarScopeGetBars BarScopeSetBars GradientScopeGet GradientScopeSet GradientScopeHasExplicit TextureValues CurrentPowerBarScopeUnit SmoothPowerGet SmoothPowerSet PriorityOrder PriorityColor RefreshBorderTestModes SetAbsorbTextureTest SetControlEnabled SetControlsEnabled ApplyBars ControlMeta RegisterControl]])
 local BAR_SETTING_BY_PATH = {
     ["highlight.boss_target.mode"] = "general.bossTargetOutlineMode",
     ["rounded.roundedFramesEnabled"] = "bars.roundedFramesEnabled",
@@ -62,7 +62,8 @@ local BAR_DYNAMIC_SETTING_KEYS_BY_PATH = {
     ["textures.background"] = { "general.barBackgroundTexture" },
     ["gradient.enableGradient"] = { "general.enableGradient" },
     ["gradient.enablePowerGradient"] = { "general.enablePowerGradient" },
-    ["gradient.strength"] = { "general.gradientStrength" },
+    ["gradient.health.strength"] = { "general.gradientStrength" },
+    ["gradient.power.strength"] = { "general.powerGradientStrength" },
     ["absorb.display_mode"] = { "general.absorbTextMode" },
     ["absorb.absorbAnchorMode"] = { "general.absorbAnchorMode" },
     ["absorb.absorbBarOpacity"] = { "general.absorbBarOpacity" },
@@ -74,6 +75,7 @@ local BAR_DYNAMIC_SETTING_KEYS_BY_PATH = {
     ["absorb.over_absorb_overlay"] = { "general.overAbsorbOverlay" },
     ["outline.thickness"] = { "bars.barOutlineThickness" },
     ["outline.strata"] = { "bars.barOutlineStrata" },
+    ["outline.color"] = { "general.barOutlineColor" },
     ["highlight.border_thickness"] = { "general.highlightBorderThickness" },
     ["highlight.border_mode.aggroOutlineMode"] = { "general.aggroOutlineMode" },
     ["highlight.aggro.roles"] = { "general.aggroMode" },
@@ -94,7 +96,8 @@ local BAR_DYNAMIC_SETTING_SUFFIX_BY_PATH = {
     ["textures.background"] = "barBackgroundTexture",
     ["gradient.enableGradient"] = "enableGradient",
     ["gradient.enablePowerGradient"] = "enablePowerGradient",
-    ["gradient.strength"] = "gradientStrength",
+    ["gradient.health.strength"] = "gradientStrength",
+    ["gradient.power.strength"] = "powerGradientStrength",
     ["absorb.display_mode"] = "absorbTextMode",
     ["absorb.absorbAnchorMode"] = "absorbAnchorMode",
     ["absorb.absorbBarOpacity"] = "absorbBarOpacity",
@@ -479,72 +482,68 @@ local function NormalizeAggroMode(value)
     return (value == "NON_TANK" or value == "HEALER" or value == "TANK") and value or "ALL"
 end
 
-local function GradientKeyActive(entry, key)
-    return entry and entry.hlOverride == true and entry.gradientOverride == true
-        and entry.gradientOverrideVersion == 2 and type(entry.gradientOverrideKeys) == "table"
-        and entry.gradientOverrideKeys[key] == true
-end
-local function MarkGradientKey(entry, key)
-    if not entry then return end
-    entry.hlOverride, entry.gradientOverride, entry.gradientOverrideVersion = true, true, 2
-    if type(entry.gradientOverrideKeys) ~= "table" then entry.gradientOverrideKeys = {} end
-    entry.gradientOverrideKeys[key] = true
-end
-local function GradientScopeGet(key, defaultValue)
-    local scope = CurrentBarsScope()
-    if scope ~= "shared" and ScopeHasOverride(scope, "hlOverride") then
-        local db, keys = DB(), ScopeDBKeys(scope)
-        for i = 1, #(keys or {}) do
-            local entry = db[keys[i]]
-            if entry and entry.hlOverride == true and entry[key] ~= nil and not GradientKeyActive(entry, key)
-                and entry[key] ~= ReadG(key, defaultValue) then MarkGradientKey(entry, key) end
-            if GradientKeyActive(entry, key) and entry[key] ~= nil then return entry[key] end
-        end
-    end
-    return ReadG(key, defaultValue)
-end
-local function GradientScopeSet(key, value)
-    local scope = CurrentBarsScope()
-    if scope == "shared" then
-        G()[key] = value
-        return
-    end
-    local db, keys = DB(), ScopeDBKeys(scope)
-    for i = 1, #(keys or {}) do
-        local entryKey = keys[i]
-        db[entryKey] = db[entryKey] or {}
-        MarkGradientKey(db[entryKey], key)
-        db[entryKey][key] = value
-    end
-end
 local function GradientControlsActive() return ScopedControls() end
 local function TextureControlsActive() return SharedScope() or GroupScope() and ScopedControls() end
-local function CurrentGradientDirectionsForScope()
+local POWER_GRADIENT_DIR_KEYS = {
+    LEFT = "powerGradientDirLeft",
+    RIGHT = "powerGradientDirRight",
+    UP = "powerGradientDirUp",
+    DOWN = "powerGradientDirDown",
+}
+local function GradientDirectionKeys(kind)
+    return kind == "power" and POWER_GRADIENT_DIR_KEYS or GRADIENT_DIR_KEYS
+end
+local function CurrentGradientDirectionsForScope(kind)
+    local keys = GradientDirectionKeys(kind)
+    if kind == "power" then
+        local hasPower, hasLegacy = false, false
+        for direction, key in pairs(POWER_GRADIENT_DIR_KEYS) do
+            hasPower = hasPower or GradientScopeHasExplicit(key)
+            hasLegacy = hasLegacy or GradientScopeHasExplicit(GRADIENT_DIR_KEYS[direction])
+        end
+        if not hasPower and hasLegacy then keys = GRADIENT_DIR_KEYS end
+    end
     local directions, any = {}, false
-    for direction, key in pairs(GRADIENT_DIR_KEYS) do
+    for direction, key in pairs(keys) do
         directions[direction] = GradientScopeGet(key, false) == true
         any = any or directions[direction]
     end
     if not any then
-        local legacy = GradientScopeGet("gradientDirection", "RIGHT")
-        directions[GRADIENT_DIR_KEYS[legacy] and legacy or "RIGHT"] = true
+        local directionKey = kind == "power" and "powerGradientDirection" or "gradientDirection"
+        local legacyKey = kind == "power" and "gradientDirection" or nil
+        local legacy = GradientScopeGet(directionKey, "RIGHT", legacyKey)
+        directions[keys[legacy] and legacy or "RIGHT"] = true
     end
     return directions
 end
-local function ToggleGradientDirectionForScope(direction)
+local function FreezePowerGradientScope()
+    local current = CurrentGradientDirectionsForScope("power")
+    for direction, key in pairs(POWER_GRADIENT_DIR_KEYS) do
+        if not GradientScopeHasExplicit(key) then GradientScopeSet(key, current[direction] == true) end
+    end
+    if not GradientScopeHasExplicit("powerGradientStrength") then
+        GradientScopeSet("powerGradientStrength", GradientScopeGet("powerGradientStrength", 0.45, "gradientStrength"))
+    end
+end
+local function ToggleGradientDirectionForScope(kind, direction)
     direction = GRADIENT_DIR_KEYS[direction] and direction or "RIGHT"
-    local directions = CurrentGradientDirectionsForScope()
+    if kind == "health" then FreezePowerGradientScope() end
+    local keys = GradientDirectionKeys(kind)
+    local directions = CurrentGradientDirectionsForScope(kind)
     directions[direction] = not directions[direction]
     local any = false
     for candidate in pairs(GRADIENT_DIR_KEYS) do any = any or directions[candidate] == true end
     if not any then directions[direction] = true end
-    for candidate, key in pairs(GRADIENT_DIR_KEYS) do GradientScopeSet(key, directions[candidate] == true) end
-    GradientScopeSet("gradientDirection", direction)
+    for candidate, key in pairs(keys) do GradientScopeSet(key, directions[candidate] == true) end
+    GradientScopeSet(kind == "power" and "powerGradientDirection" or "gradientDirection", direction)
 end
-local function ApplyGradientRuntime(reason)
-    if GradientScopeGet("enableGradient", false) == true or GradientScopeGet("enablePowerGradient", false) == true then
-        local strength = tonumber(GradientScopeGet("gradientStrength"))
-        if not (strength and strength > 0) then GradientScopeSet("gradientStrength", 0.45) end
+local function ApplyGradientRuntime(reason, kind)
+    local enabledKey = kind == "power" and "enablePowerGradient" or "enableGradient"
+    local strengthKey = kind == "power" and "powerGradientStrength" or "gradientStrength"
+    local legacyStrengthKey = kind == "power" and "gradientStrength" or nil
+    if GradientScopeGet(enabledKey, false) == true then
+        local strength = tonumber(GradientScopeGet(strengthKey, 0.45, legacyStrengthKey))
+        if not (strength and strength > 0) then GradientScopeSet(strengthKey, 0.45) end
     end
     return RequestApply("RequestBarGradients", reason or "MSUF2_GRADIENT", CurrentBarsScope())
 end
@@ -684,7 +683,7 @@ end
 
 local function BuildTextureSection(ctx, b)
     local compactTextures = (ctx.width or 720) < 560
-    local textures = b:CollapsibleSection("bars_textures", "Textures & Gradient", compactTextures and 326 or 214, true)
+    local textures = b:CollapsibleSection("bars_textures", "Textures & Gradient", compactTextures and 458 or 330, true)
     local leftX, topY = 14, -42
     local rightX = compactTextures and leftX or math.max(340, math.floor((ctx.width or 720) * 0.50))
     local leftW = compactTextures and math.max(220, (ctx.width or 720) - 42) or math.min(300, math.max(220, rightX - 48))
@@ -710,76 +709,119 @@ local function BuildTextureSection(ctx, b)
     local gradLabel = T.Font(textures, "GameFontHighlightSmall", M.Tr("Gradient"), T.colors.muted)
     gradLabel:SetPoint("TOPLEFT", textures, "TOPLEFT", rightX, gradientY)
     local SyncGradientControls = M.RefreshProxy()
-    local function BindGradientToggle(label, y, width, key, reason)
+    local function BindGradientToggle(label, y, width, key, reason, kind)
         local control = W.ToggleAt(textures, label, rightX, y, width)
         M.BindBoolWidget(ctx, control,
             function() return GradientScopeGet(key, false) == true end,
             function(v)
                 GradientScopeSet(key, v and true or false)
-                ApplyGradientRuntime(reason)
+                ApplyGradientRuntime(reason, kind)
                 SyncGradientControls()
             end,
             Meta("gradient." .. key))
         return control
     end
-    local hpGradient = BindGradientToggle("HP bar gradient", gradientY - 24, compactTextures and 150 or 180, "enableGradient", "MSUF2_HP_GRADIENT")
-    local powerGradient = BindGradientToggle("Power bar gradient", gradientY - 54, compactTextures and 170 or 190, "enablePowerGradient", "MSUF2_POWER_GRADIENT")
-    local strength = W.Slider(textures, "Gradient strength", 0, 1, 0.05, 220)
-    M.BindNumberWidget(ctx, strength,
-        function() return tonumber(GradientScopeGet("gradientStrength", 0.45)) or 0.45 end,
-        function(v)
-            GradientScopeSet("gradientStrength", tonumber(v) or 0.45)
-            ApplyGradientRuntime("MSUF2_GRADIENT_STRENGTH")
-        end,
-        0.45,
-        Meta("gradient.strength"))
-    W.MoveWidget(strength, textures, rightX, gradientY - 90, compactTextures and math.min(leftW, 300) or 220, "LEFT")
+    local colors = T.Button(textures, "Gradient colors", 142, 22)
+    colors:SetPoint("TOPLEFT", textures, "TOPLEFT", rightX + 88, gradientY + 8)
+    T.CenterButtonLabel(colors)
+    if M.AddTooltip then
+        M.AddTooltip(colors, "Gradient colors", "Open Colors > Bar Gradient Colors for separate Health and Power gradient colors in the selected Bars scope.", { hook = true })
+    end
+    colors:SetScript("OnClick", function()
+        _G.MSUF_EM2_MenuFocusRequest = {
+            pageKey = "opt_colors",
+            sectionId = "colors_bar_gradients",
+            explicit = true,
+            consumed = false,
+            source = "bars-gradient-colors",
+            changedAt = GetTime and GetTime() or 0,
+        }
+        if M.SelectPage and M.SelectPage("opt_colors") == false then _G.MSUF_EM2_MenuFocusRequest = nil end
+    end)
+    RegisterControl(colors, Meta("gradient.colors", "navigation", { navigationKey = "opt_colors" }), "Gradient colors", "button")
+    local hpY = gradientY - 28
+    local powerY = gradientY - 138
     local padX = compactTextures and math.min(rightX + 210, (ctx.width or 720) - 104) or math.min(rightX + 238, (ctx.width or 720) - 104)
+    local compactStrengthW = math.max(150, padX - rightX - 14)
+    local hpGradient = BindGradientToggle("Health gradient", hpY, compactTextures and 150 or 180, "enableGradient", "MSUF2_HP_GRADIENT", "health")
+    local powerGradient = BindGradientToggle("Power gradient", powerY, compactTextures and 170 or 190, "enablePowerGradient", "MSUF2_POWER_GRADIENT", "power")
+    local function BindGradientStrength(kind, y, key, legacyKey, path, reason)
+        local label = kind == "power" and "Power strength" or "Health strength"
+        local control = W.Slider(textures, label, 0, 1, 0.05, 220)
+        M.BindNumberWidget(ctx, control,
+            function() return tonumber(GradientScopeGet(key, 0.45, legacyKey)) or 0.45 end,
+            function(v)
+                if kind == "health" then FreezePowerGradientScope() end
+                GradientScopeSet(key, tonumber(v) or 0.45)
+                ApplyGradientRuntime(reason, kind)
+            end,
+            0.45,
+            Meta(path))
+        W.MoveWidget(control, textures, rightX, y, compactTextures and compactStrengthW or 220, "LEFT")
+        return control
+    end
+    local hpStrength = BindGradientStrength("health", hpY - 36, "gradientStrength", nil,
+        "gradient.health.strength", "MSUF2_HP_GRADIENT_STRENGTH")
+    local powerStrength = BindGradientStrength("power", powerY - 36, "powerGradientStrength", "gradientStrength",
+        "gradient.power.strength", "MSUF2_POWER_GRADIENT_STRENGTH")
     local padW, padH = 104, 78
     local padButtonW, padButtonH = 22, 18
-    local pad = T.Panel(textures, nil, T.colors.panel2 or { 0.014, 0.038, 0.072, 0.55 }, T.colors.borderSoft)
-    pad:SetPoint("TOPLEFT", textures, "TOPLEFT", padX, gradientY - 20)
-    pad:SetSize(padW, padH)
-    local center = pad:CreateTexture(nil, "ARTWORK")
-    center:SetPoint("CENTER", pad, "CENTER", 0, 0)
-    center:SetSize(10, 10)
-    local centerColor = T.colors.coreRim or { 0.043, 0.096, 0.150 }
-    center:SetColorTexture(centerColor[1], centerColor[2], centerColor[3], 0.95)
-    local directionButtons = {}
-    local function PadButton(text, value, x, y)
-        local btn = T.Button(pad, text, padButtonW, padButtonH)
-        btn:SetPoint("TOPLEFT", pad, "TOPLEFT", x, y)
-        T.CenterButtonLabel(btn)
-        btn:SetScript("OnClick", function()
-            ToggleGradientDirectionForScope(value or "RIGHT")
-            ApplyGradientRuntime("MSUF2_GRADIENT_DIRECTION")
-            SyncGradientControls()
-        end)
-        RegisterControl(btn, Meta("gradient.direction." .. tostring(value), "action"), text, "button")
-        directionButtons[value] = btn
-        return btn
+    local directionButtons = { health = {}, power = {} }
+    local pads = {}
+    local function BuildDirectionPad(kind, y)
+        local pad = T.Panel(textures, nil, T.colors.panel2 or { 0.014, 0.038, 0.072, 0.55 }, T.colors.borderSoft)
+        pad:SetPoint("TOPLEFT", textures, "TOPLEFT", padX, y)
+        pad:SetSize(padW, padH)
+        local center = pad:CreateTexture(nil, "ARTWORK")
+        center:SetPoint("CENTER", pad, "CENTER", 0, 0)
+        center:SetSize(10, 10)
+        local centerColor = T.colors.coreRim or { 0.043, 0.096, 0.150 }
+        center:SetColorTexture(centerColor[1], centerColor[2], centerColor[3], 0.95)
+        local function PadButton(text, value, x, buttonY)
+            local btn = T.Button(pad, text, padButtonW, padButtonH)
+            btn:SetPoint("TOPLEFT", pad, "TOPLEFT", x, buttonY)
+            T.CenterButtonLabel(btn)
+            btn:SetScript("OnClick", function()
+                ToggleGradientDirectionForScope(kind, value or "RIGHT")
+                ApplyGradientRuntime(kind == "power" and "MSUF2_POWER_GRADIENT_DIRECTION" or "MSUF2_HP_GRADIENT_DIRECTION", kind)
+                SyncGradientControls()
+            end)
+            RegisterControl(btn, Meta("gradient." .. kind .. ".direction." .. tostring(value), "action"), text, "button")
+            directionButtons[kind][value] = btn
+        end
+        local centerX = (padW - padButtonW) * 0.5
+        local centerY = (padH - padButtonH) * 0.5
+        local sideOffset = 23
+        PadButton("^", "UP", centerX, -(centerY - sideOffset))
+        PadButton("<", "LEFT", centerX - sideOffset, -centerY)
+        PadButton(">", "RIGHT", centerX + sideOffset, -centerY)
+        PadButton("v", "DOWN", centerX, -(centerY + sideOffset))
+        pads[kind] = pad
     end
-    local centerX = (padW - padButtonW) * 0.5
-    local centerY = (padH - padButtonH) * 0.5
-    local sideOffset = 23
-    PadButton("^", "UP", centerX, -(centerY - sideOffset))
-    PadButton("<", "LEFT", centerX - sideOffset, -centerY)
-    PadButton(">", "RIGHT", centerX + sideOffset, -centerY)
-    PadButton("v", "DOWN", centerX, -(centerY + sideOffset))
+    BuildDirectionPad("health", hpY - 2)
+    BuildDirectionPad("power", powerY - 2)
     local textureControls = { barTexture, bgTexture }
     local gradientControls = { hpGradient, powerGradient }
     M.TrackRefresh(ctx, SyncGradientControls(function()
-        local current = CurrentGradientDirectionsForScope()
+        local hpDirections = CurrentGradientDirectionsForScope("health")
+        local powerDirections = CurrentGradientDirectionsForScope("power")
         local textureControlsActive = TextureControlsActive()
         local gradientControlsActive = GradientControlsActive()
-        local valueControlsActive = gradientControlsActive and ((GradientScopeGet("enableGradient", false) == true) or (GradientScopeGet("enablePowerGradient", false) == true))
+        local hpActive = gradientControlsActive and GradientScopeGet("enableGradient", false) == true
+        local powerActive = gradientControlsActive and GradientScopeGet("enablePowerGradient", false) == true
         SetControlsEnabled(textureControls, textureControlsActive)
         SetControlsEnabled(gradientControls, gradientControlsActive)
-        SetControlEnabled(strength, valueControlsActive)
-        pad:SetAlpha(valueControlsActive and 1 or 0.45)
-        for value, btn in pairs(directionButtons) do
-            btn:SetActive(current[value] == true)
-            SetControlEnabled(btn, valueControlsActive)
+        SetControlEnabled(hpStrength, hpActive)
+        SetControlEnabled(powerStrength, powerActive)
+        pads.health:SetAlpha(hpActive and 1 or 0.45)
+        pads.power:SetAlpha(powerActive and 1 or 0.45)
+        for value, btn in pairs(directionButtons.health) do
+            btn:SetActive(hpDirections[value] == true)
+            SetControlEnabled(btn, hpActive)
+        end
+        for value, btn in pairs(directionButtons.power) do
+            btn:SetActive(powerDirections[value] == true)
+            SetControlEnabled(btn, powerActive)
         end
     end))
 end
