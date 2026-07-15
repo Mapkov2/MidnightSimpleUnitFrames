@@ -142,6 +142,36 @@ local PVP_TEXTURE_BY_ATLAS = {
   [PVP_ALLIANCE_ATLAS] = "Interface\\TargetingFrame\\UI-PVP-Alliance",
 }
 local SYMBOL_BASE = ADDON_PATH .. "\\Media\\Symbols\\"
+-- These are the complete symbol identifiers written by native MSUF 5.5.
+-- Never synthesize a texture path for an unknown value: WoW renders a missing
+-- file assigned to an existing Texture region as an opaque white rectangle.
+local VALID_STATE_SYMBOLS = {
+  weapon_axes_crossed = true,
+  weapon_bows_crossed = true,
+  weapon_crossbows_crossed = true,
+  weapon_daggers_crossed = true,
+  weapon_fishing_poles_crossed = true,
+  weapon_fist_crossed = true,
+  weapon_guns_crossed = true,
+  weapon_maces_crossed = true,
+  weapon_polearms_crossed = true,
+  weapon_shuriken = true,
+  weapon_staves_crossed = true,
+  weapon_swords_crossed = true,
+  weapon_thrown_crossed = true,
+  weapon_wands_crossed = true,
+  weapon_warglaives_crossed = true,
+  rested_moonzzz = true,
+  rested_moonzzzz = true,
+  rested_sleep_zzzz = true,
+  rested_zzz_compact = true,
+  rested_zzz_diag = true,
+  rested_zzz_stack = true,
+  resurrection_ankh = true,
+  resurrection_cross = true,
+  resurrection_soul = true,
+  resurrection_wings = true,
+}
 local SUMMON_TEXTURES = {
   [1] = "Interface\\RaidFrame\\Raid-Icon-SummonPending",
   [2] = "Interface\\RaidFrame\\Raid-Icon-SummonAccepted",
@@ -240,6 +270,18 @@ local function SetAtlas(region, atlas)
     region._aColorTexture = nil
     region._msufStatusL, region._msufStatusR, region._msufStatusT, region._msufStatusB = nil, nil, nil, nil
   end
+end
+
+local function AtlasAvailable(region, atlas)
+  if not (region and region.SetAtlas and type(atlas) == "string" and atlas ~= "") then
+    return false
+  end
+  local textureAPI = _G.C_Texture
+  if not (textureAPI and type(textureAPI.GetAtlasInfo) == "function") then
+    return false
+  end
+  local ok, info = pcall(textureAPI.GetAtlasInfo, atlas)
+  return ok and info ~= nil
 end
 
 local function SetTexCoord(region, l, r, t, b)
@@ -484,6 +526,9 @@ local function SymbolPath(symbol, useMidnight)
   if type(symbol) ~= "string" or symbol == "" or symbol == "DEFAULT" then
     return nil
   end
+  if not VALID_STATE_SYMBOLS[symbol] then
+    return nil
+  end
   local cacheKey = symbol .. (useMidnight and "\001M" or "\001C")
   local cached = SYMBOL_PATH_CACHE[cacheKey]
   if cached then
@@ -511,7 +556,7 @@ local function ApplyStateIconTexture(tex, kind, cfg, status)
     return
   end
   if kind == "combat" then
-    if tex.SetAtlas then
+    if AtlasAvailable(tex, "UI-HUD-UnitFrame-Player-PortraitCombatIcon") then
       SetAtlas(tex, "UI-HUD-UnitFrame-Player-PortraitCombatIcon")
     else
       SetTexture(tex, STATE_TEXTURE)
