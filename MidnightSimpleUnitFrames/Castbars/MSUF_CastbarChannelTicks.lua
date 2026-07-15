@@ -1,5 +1,5 @@
 -- Player channel tick marker support.
--- Adds optional haste/channel tick markers to the player castbar using existing DB fields.
+-- Adds optional spell-aware channel markers to the player castbar using existing DB fields.
 -- This augments castbar visuals only; cast/channel state remains in the shared runtime.
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
@@ -8,10 +8,115 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
     return value
 end
 
-local DEFAULT_TICK_COUNT = 5
-local MAX_TICK_COUNT = 10
+local DEFAULT_MARKER_COUNT = 5
+local MAX_CUSTOM_MARKER_COUNT = 10
+local MAX_AUTO_TICK_COUNT = 12
 
-local function TickConfig()
+-- Fixed tick counts keep their number of ticks under haste; interval entries
+-- gain ticks when the channel duration grows. Unknown channels deliberately
+-- retain the legacy five-line layout instead of losing their markers.
+local CHANNEL_TICK_DATA = {
+    -- Evoker
+    [356995] = { ticks = 4, modSpell = 1219723, modTicks = 5 }, -- Disintegrate / Azure Celerity
+    -- Priest
+    [15407] = { ticks = 6 }, -- Mind Flay
+    [48045] = { ticks = 6 }, -- Mind Sear
+    [64843] = { ticks = 4 }, -- Divine Hymn
+    [47757] = { ticks = 3 }, -- Penance (Heal)
+    [47758] = { ticks = 3 }, -- Penance (Damage)
+    [373129] = { ticks = 3 }, -- Dark Reprimand (Damage)
+    [400171] = { ticks = 3 }, -- Dark Reprimand (Heal)
+    -- Mage
+    [5143] = { ticks = 5 }, -- Arcane Missiles
+    [12051] = { ticks = 6 }, -- Evocation
+    [205021] = { ticks = 5 }, -- Ray of Frost
+    -- Druid
+    [740] = { ticks = 4 }, -- Tranquility
+    -- Demon Hunter
+    [198013] = { tickInterval = 0.2 }, -- Eye Beam
+    [473728] = { tickInterval = 0.2 }, -- Void Ray
+    [212084] = { ticks = 10 }, -- Fel Devastation
+    -- Warlock
+    [198590] = { ticks = 5 }, -- Drain Soul
+    [755] = { ticks = 5 }, -- Health Funnel
+    [234153] = { ticks = 5 }, -- Drain Life
+    -- Death Knight
+    [206931] = { ticks = 3 }, -- Blooddrinker
+    -- Monk
+    [113656] = { ticks = 4 }, -- Fists of Fury
+    [115175] = { ticks = 12 }, -- Soothing Mist
+    [443028] = { ticks = 4 }, -- Celestial Conduit
+    -- Racial
+    [291944] = { ticks = 6 }, -- Regeneratin'
+}
+
+local issecretvalue = _G.issecretvalue or function() return false end
+local IsPlayerSpell = _G.IsPlayerSpell
+
+local function PlainNumber(value)
+    if issecretvalue(value) == true or type(value) ~= "number" then return nil end
+    if value ~= value or value == math.huge or value == -math.huge then return nil end
+    return value
+end
+
+local function ActiveSpellID(frame)
+    if not frame then return nil end
+    local spellID = PlainNumber(frame._msufActiveSpellID)
+    if spellID then return spellID end
+    local state = frame._msufPlayerState
+    return PlainNumber(state and state.spellId)
+end
+
+local function ChannelDurationSeconds(frame)
+    local state = frame and frame._msufPlayerState
+    local startTimeMS = PlainNumber(state and state.startTimeMS)
+    local endTimeMS = PlainNumber(state and state.endTimeMS)
+    if startTimeMS and endTimeMS and endTimeMS > startTimeMS then
+        return (endTimeMS - startTimeMS) / 1000
+    end
+
+    local total = PlainNumber(frame and frame._msufPlainTotal)
+    if total and total > 0 then return total end
+    return nil
+end
+
+local function PlayerKnowsSpell(spellID)
+    if type(IsPlayerSpell) ~= "function" then return false end
+    local ok, known = pcall(IsPlayerSpell, spellID)
+    return ok and issecretvalue(known) ~= true and known == true
+end
+
+local function AutomaticMarkerLayout(frame)
+    local tickData = CHANNEL_TICK_DATA[ActiveSpellID(frame)]
+    if not tickData then
+        return DEFAULT_MARKER_COUNT, DEFAULT_MARKER_COUNT + 1
+    end
+
+    local tickCount
+    if tickData.tickInterval then
+        local duration = ChannelDurationSeconds(frame)
+        if duration then
+            tickCount = math.floor((duration / tickData.tickInterval) + 0.0001)
+        end
+    else
+        tickCount = tickData.ticks
+        if tickData.modSpell and tickData.modTicks and PlayerKnowsSpell(tickData.modSpell) then
+            tickCount = tickData.modTicks
+        end
+    end
+
+    tickCount = PlainNumber(tickCount)
+    if not tickCount then
+        return DEFAULT_MARKER_COUNT, DEFAULT_MARKER_COUNT + 1
+    end
+
+    tickCount = math.floor(tickCount + 0.5)
+    if tickCount < 1 then tickCount = 1 end
+    if tickCount > MAX_AUTO_TICK_COUNT then tickCount = MAX_AUTO_TICK_COUNT end
+    return math.max(0, tickCount - 1), tickCount
+end
+
+local function TickConfig(frame)
     local db = MSUF_DB
     local general = db and db.general or nil
     local playerCastbar = db and db.player and db.player.castbar or nil
@@ -23,27 +128,33 @@ local function TickConfig()
     end
 
     local useCustom = playerCastbar and playerCastbar.channelTickUseCustom == true
-    local tickCount = useCustom and tonumber(playerCastbar.channelTickCount) or DEFAULT_TICK_COUNT
-    tickCount = tickCount or DEFAULT_TICK_COUNT
+    if not useCustom then
+        local markerCount, divisor = AutomaticMarkerLayout(frame)
+        return markerCount > 0, markerCount, nil, false, divisor
+    end
+
+    local tickCount = tonumber(playerCastbar.channelTickCount) or DEFAULT_MARKER_COUNT
 
     if tickCount ~= tickCount or tickCount == math.huge or tickCount == -math.huge then
-        tickCount = DEFAULT_TICK_COUNT
+        tickCount = DEFAULT_MARKER_COUNT
     end
     tickCount = math.floor(tickCount + 0.5)
 
     if tickCount < 0 then
         tickCount = 0
-    elseif tickCount > MAX_TICK_COUNT then
-        tickCount = MAX_TICK_COUNT
+    elseif tickCount > MAX_CUSTOM_MARKER_COUNT then
+        tickCount = MAX_CUSTOM_MARKER_COUNT
     end
 
-    return tickCount > 0, tickCount, useCustom and playerCastbar.channelTickPosPct or nil, useCustom
+    return tickCount > 0, tickCount, playerCastbar.channelTickPosPct, true, tickCount + 1
 end
 
 local function ChannelTickLinesEnabled()
     local enabled = TickConfig()
     return enabled == true
 end
+
+local UpdatePlayerChannelHasteMarkers
 
 local function EnsurePlayerChannelTickMarkers(frame, tickCount)
     if not (frame and frame.unit == "player") then
@@ -61,7 +172,7 @@ local function EnsurePlayerChannelTickMarkers(frame, tickCount)
         frame._msufPlayerChannelHasteMarkers = markers
     end
 
-    tickCount = tickCount or DEFAULT_TICK_COUNT
+    tickCount = tickCount or DEFAULT_MARKER_COUNT
     for index = 1, tickCount do
         if not markers[index] then
             local marker = statusBar:CreateTexture(nil, "OVERLAY", nil, 7)
@@ -82,8 +193,8 @@ local function EnsurePlayerChannelTickMarkers(frame, tickCount)
     if not frame._msufPlayerChannelHasteMarkersHooked and statusBar.HookScript then
         frame._msufPlayerChannelHasteMarkersHooked = true
         statusBar:HookScript("OnSizeChanged", function()
-            if frame and frame._msufPlayerChannelTickRuntimeActive == true then
-                frame._msufPlayerChannelHasteMarkersForce = true
+            if frame and frame._msufPlayerChannelTickRuntimeActive == true and UpdatePlayerChannelHasteMarkers then
+                UpdatePlayerChannelHasteMarkers(frame, true)
             end
         end)
     end
@@ -119,22 +230,23 @@ local function HidePlayerChannelTickMarkers(frame)
     if frame then
         frame._msufPlayerChannelHasteMarkersLastW = nil
         frame._msufPlayerChannelHasteMarkersLastF = nil
+        frame._msufPlayerChannelTickRuntimeActive = nil
     end
 end
 
-local function UpdatePlayerChannelHasteMarkers(frame, force)
+UpdatePlayerChannelHasteMarkers = function(frame, force)
     if not (frame and frame.unit == "player") then
         return
     end
 
-    local enabled, tickCount, customPositions, useCustom = TickConfig()
-    frame._msufPlayerChannelTickRuntimeActive = enabled and true or nil
-    if not enabled then
+    if not (frame.MSUF_isChanneled and not frame.isEmpower) then
         HidePlayerChannelTickMarkers(frame)
         return
     end
 
-    if not (frame.MSUF_isChanneled and not frame.isEmpower) then
+    local enabled, tickCount, customPositions, useCustom, divisor = TickConfig(frame)
+    frame._msufPlayerChannelTickRuntimeActive = enabled and true or nil
+    if not enabled then
         HidePlayerChannelTickMarkers(frame)
         return
     end
@@ -154,12 +266,6 @@ local function UpdatePlayerChannelHasteMarkers(frame, force)
     local width = statusBar:GetWidth() or 0
     if width <= 1 then
         width = frame._msufPlayerChannelHasteMarkersLastW or 200
-        frame._msufPlayerChannelHasteMarkersForce = true
-    end
-
-    if frame._msufPlayerChannelHasteMarkersForce then
-        force = true
-        frame._msufPlayerChannelHasteMarkersForce = nil
     end
 
     local lastWidth = frame._msufPlayerChannelHasteMarkersLastW
@@ -168,7 +274,7 @@ local function UpdatePlayerChannelHasteMarkers(frame, force)
         frame._msufPlayerChannelHasteMarkersLastF = nil
 
         local reverseFill = frame._msufStripeReverseFill == true
-        local divisor = tickCount + 1
+        divisor = divisor or (tickCount + 1)
 
         for index = 1, tickCount do
             local marker = markers[index]

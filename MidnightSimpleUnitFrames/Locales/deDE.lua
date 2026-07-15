@@ -3011,6 +3011,8 @@ L["Show placeholder data on unitframes\nwithout real units (target, focus, etc.)
 L["Druid - Balance (no class bar)"] = "Druide — Gleichgewicht · keine Klassenressource"
 L["CDM detected (no class resource for this spec)"] = "CDM erkannt · keine Klassenressource für diese Spezialisierung"
 L["Show channel tick lines (5)"] = "5 Kanalisierungsmarken anzeigen"
+L["Spell-specific channel tick markers"] = "Spellgenaue Kanalisierungsmarken"
+L["Shows tick separators on the Player castbar while channeling.\n\nSupported spells use their actual tick count, including supported talent and channel-duration changes. Unsupported channels keep five evenly spaced fallback lines. Custom channel tick settings override the automatic layout.\n\nThe markers are event-driven and add no recurring channel polling."] = "Zeigt Tick-Trennlinien auf der Spieler-Castbar während einer Kanalisierung.\n\nUnterstützte Spells verwenden ihre tatsächliche Tick-Anzahl, einschließlich unterstützter Talent- und Kanalisierungsdauer-Änderungen. Nicht unterstützte Kanalisierungen behalten fünf gleichmäßig verteilte Fallback-Linien. Benutzerdefinierte Channel-Tick-Einstellungen überschreiben das automatische Layout.\n\nDie Marker arbeiten ereignisgesteuert und erzeugen kein wiederkehrendes Channel-Polling."
 L["Show spark (leading edge highlight)"] = "Funken an der Vorderkante anzeigen"
 
 L["The Assistant dashboard module is not available. Use the navigation pages and search to configure MSUF."] = "Assistant nicht verfügbar. Nutze Navigation oder Suche, um MSUF einzurichten."

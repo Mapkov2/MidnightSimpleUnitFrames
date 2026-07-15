@@ -18,7 +18,6 @@ local UpdateLatencyZone = _G.MSUF_PlayerCastbar_UpdateLatencyZone
 local LayoutEmpowerTicks = _G.MSUF_LayoutEmpowerTicks
 local BlinkEmpowerTick = _G.MSUF_BlinkEmpowerTick
 local IsEmpowerStageBlinkEnabled = _G.MSUF_IsEmpowerStageBlinkEnabled
-local UpdateChannelHasteMarkers = _G.MSUF_PlayerChannelHasteMarkers_Update
 
 local PLAYER_EMPOWER_EVENTS = {
     "UNIT_SPELLCAST_EMPOWER_START",
@@ -1110,14 +1109,6 @@ local function CheckChannelHardStop(frame, sampleTime)
     return false
 end
 
-local function UpdatePlayerChannelHasteMarkers(frame, sampleTime)
-    if frame.unit ~= "player" or not frame.MSUF_isChanneled or not frame._msufPlayerChannelHasteMarkers then return end
-    if sampleTime < (frame._msufHasteMarkersNext or 0) then return end
-
-    frame._msufHasteMarkersNext = sampleTime + 0.15
-    if UpdateChannelHasteMarkers then UpdateChannelHasteMarkers(frame, false) end
-end
-
 local function InferRemainingFromStatusBar(frame)
     local statusBar = frame.statusBar
     if not (statusBar and statusBar.GetMinMaxValues and statusBar.GetValue) then return nil, nil end
@@ -1323,7 +1314,6 @@ UpdateCastbarFrame = function(frame, elapsed, now, sampleTime)
     end
 
     if CheckChannelHardStop(frame, sampleTime) then return end
-    UpdatePlayerChannelHasteMarkers(frame, sampleTime)
 
     now = now or Now()
     if UpdateDurationObjectFrame(frame, now) then return end
