@@ -154,6 +154,7 @@ local ALIASES = M.ALIASES or {}
 local DEFAULT_WINDOW_W, DEFAULT_WINDOW_H = 1360, 860
 local MIN_WINDOW_W, MIN_WINDOW_H = 700, 480
 local MAX_WINDOW_W, MAX_WINDOW_H = 1760, 1200
+local MENU_SCALE_MIN, MENU_SCALE_MAX, MENU_SCALE_STEP = 0.25, 1.50, 0.05
 local WINDOW_W, WINDOW_H = DEFAULT_WINDOW_W, DEFAULT_WINDOW_H
 local NAV_W = 200
 local CONTENT_W = WINDOW_W - NAV_W - 32
@@ -166,7 +167,7 @@ local function ClampNumber(value, minValue, maxValue, fallback)
 end
 local function ClampScale(value)
     value = tonumber(value) or 1
-    if value < 0.25 then value = 0.25 elseif value > 1.5 then value = 1.5 end
+    if value < MENU_SCALE_MIN then value = MENU_SCALE_MIN elseif value > MENU_SCALE_MAX then value = MENU_SCALE_MAX end
     return value
 end
 local function EffectiveMenuScale(value)
@@ -238,6 +239,7 @@ local function SaveWindowSize(frame)
     g.msuf2WindowH = WINDOW_H
 end
 local RebuildActivePageForResize
+local ApplyMenuFrameScale
 local SNAP_EDGE_PX = 24
 local SNAP_FRAME_EDGE_PX = 4
 local SNAP_SCREEN_MARGIN = 16
@@ -1318,6 +1320,138 @@ local function BuildWindowShell()
     return { frame = f }
 end
 
+local function InstallMenuScaleControl(f)
+    if not (f and T and type(T.Panel) == "function" and type(T.Font) == "function") then return end
+    local control = T.Panel(f, nil, T.colors.glassStatus or T.colors.header, T.colors.borderSoft)
+    if type(T.ApplySurface) == "function" then T.ApplySurface(control, "status") end
+    control:SetSize(190, 22)
+    control:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -28, 4)
+    control:SetFrameLevel(f:GetFrameLevel() + 20)
+    control:EnableMouse(true)
+
+    local label = T.Font(control, "GameFontDisableSmall", "", T.colors.muted)
+    label:SetPoint("LEFT", control, "LEFT", 8, 0)
+    label:SetWidth(76)
+    label:SetJustifyH("LEFT")
+
+    local slider = CreateFrame("Slider", nil, control)
+    slider:SetPoint("LEFT", label, "RIGHT", 6, 0)
+    slider:SetPoint("RIGHT", control, "RIGHT", -8, 0)
+    slider:SetHeight(20)
+    slider:SetOrientation("HORIZONTAL")
+    slider:SetMinMaxValues(MENU_SCALE_MIN * 100, MENU_SCALE_MAX * 100)
+    slider:SetValueStep(MENU_SCALE_STEP * 100)
+    if slider.SetObeyStepOnDrag then slider:SetObeyStepOnDrag(true) end
+    if slider.SetStepsPerPage then slider:SetStepsPerPage(1) end
+    if slider.EnableMouseWheel then slider:EnableMouseWheel(true) end
+    if slider.SetPropagateMouseWheel then slider:SetPropagateMouseWheel(false) end
+    if type(T.StyleSlider) == "function" then T.StyleSlider(slider) end
+
+    local function Percent(value)
+        local pct = tonumber(value) or 100
+        if pct < MENU_SCALE_MIN * 100 then pct = MENU_SCALE_MIN * 100
+        elseif pct > MENU_SCALE_MAX * 100 then pct = MENU_SCALE_MAX * 100 end
+        return floor((pct / (MENU_SCALE_STEP * 100)) + 0.5) * (MENU_SCALE_STEP * 100)
+    end
+    local function UpdateVisual(value)
+        local pct = Percent(value or slider:GetValue())
+        label:SetText(string.format("%s %d%%", M.Tr("Menu"), pct))
+        local fill = slider._msufFill
+        if fill then
+            local span = (MENU_SCALE_MAX - MENU_SCALE_MIN) * 100
+            local fraction = span > 0 and ((pct - (MENU_SCALE_MIN * 100)) / span) or 0
+            fill:SetWidth(max(1, max(1, slider:GetWidth() - 2) * fraction))
+        end
+        if slider._msuf2UpdateThumb then slider:_msuf2UpdateThumb() end
+    end
+    slider._msuf2UpdateFill = function(self) UpdateVisual(self:GetValue()) end
+
+    local function Refresh()
+        local g = M.GetGeneralDB and M.GetGeneralDB()
+        local pct = Percent(ClampScale(type(g) == "table" and g.slashMenuScale or 1) * 100)
+        slider._msuf2Refreshing = true
+        slider:SetValue(pct)
+        slider._msuf2Refreshing = nil
+        UpdateVisual(pct)
+    end
+    local function Commit(value)
+        local g = M.GetGeneralDB and M.GetGeneralDB()
+        if type(g) ~= "table" then return false end
+        local pct = Percent(value or slider:GetValue())
+        g.slashMenuScale = ClampScale(pct / 100)
+        if ApplyMenuFrameScale then
+            ApplyMenuFrameScale(f)
+        elseif f.SetScale then
+            f:SetScale(EffectiveMenuScale(g.slashMenuScale))
+            ApplyWindowResizeBounds(f)
+        end
+        Refresh()
+        return true
+    end
+    local function SetValueFromCursor()
+        if not (_G.GetCursorPosition and slider.GetLeft and slider.GetWidth) then return end
+        local left, width = slider:GetLeft(), slider:GetWidth()
+        if not left or not width or width <= 0 then return end
+        local cursorX = _G.GetCursorPosition()
+        local effectiveScale = slider.GetEffectiveScale and slider:GetEffectiveScale() or 1
+        if not effectiveScale or effectiveScale == 0 then effectiveScale = 1 end
+        local fraction = ((cursorX / effectiveScale) - left) / width
+        if fraction < 0 then fraction = 0 elseif fraction > 1 then fraction = 1 end
+        slider:SetValue(Percent((MENU_SCALE_MIN * 100) + (((MENU_SCALE_MAX - MENU_SCALE_MIN) * 100) * fraction)))
+    end
+
+    slider:HookScript("OnValueChanged", function(self, value)
+        if not self._msuf2Refreshing then UpdateVisual(value) end
+    end)
+    slider:SetScript("OnMouseDown", function(self, button)
+        if button and button ~= "LeftButton" then return end
+        self._msuf2MenuScaleDragging = true
+        SetValueFromCursor()
+    end)
+    slider:SetScript("OnMouseUp", function(self, button)
+        if button and button ~= "LeftButton" then return end
+        self._msuf2MenuScaleDragging = nil
+        Commit(self:GetValue())
+    end)
+    slider:SetScript("OnMouseWheel", function(self, delta)
+        if not delta or delta == 0 then return end
+        local step = MENU_SCALE_STEP * 100
+        self:SetValue(Percent((tonumber(self:GetValue()) or 100) + (delta > 0 and step or -step)))
+        Commit(self:GetValue())
+    end)
+    slider:HookScript("OnHide", function(self) self._msuf2MenuScaleDragging = nil end)
+
+    local tooltip = "Scales only the MSUF menu. Drag the bar or use the mouse wheel; changes apply immediately."
+    if type(M.AddTooltip) == "function" then
+        M.AddTooltip(control, "MSUF Menu Scale", tooltip, { hook = true, owner = "ANCHOR_TOP" })
+        M.AddTooltip(slider, "MSUF Menu Scale", tooltip, { hook = true, owner = "ANCHOR_TOP" })
+    end
+    if type(M.RegisterMenuChromeControl) == "function" then
+        M.RegisterMenuChromeControl(slider, "window.menu-scale", "MSUF Menu Scale", "setting", {
+            kind = "slider",
+            settingKey = "general.slashMenuScale",
+            historyMode = "none",
+            help = "Reads and applies the MSUF configuration-menu scale percentage directly.",
+            command = {
+                kind = "slider", min = 25, max = 150, step = 5, percentIsValue = true, historyMode = "none",
+                get = function()
+                    local g = M.GetGeneralDB and M.GetGeneralDB()
+                    return Percent(ClampScale(type(g) == "table" and g.slashMenuScale or 1) * 100)
+                end,
+                set = function(value)
+                    slider:SetValue(Percent(value))
+                    return Commit(slider:GetValue())
+                end,
+                refresh = Refresh,
+            },
+        })
+    end
+    control.slider, control.label, control.Refresh = slider, label, Refresh
+    f.menuScaleControl, f.menuScaleSlider = control, slider
+    f.RefreshMenuScaleControl = Refresh
+    Refresh()
+end
+
 -- Drag, snap and resize share transient proxy state but no page/chrome state.
 local function InstallWindowInteractions(state)
     local f = state.frame
@@ -1531,6 +1665,7 @@ local function InstallWindowInteractions(state)
         FinishResizeProxy(false)
     end)
     f.resizeGrip = grip
+    InstallMenuScaleControl(f)
     CreateMinimizedBar(f)
     M.CallIf(M.RefreshWindowControls, f)
 end
@@ -1539,7 +1674,7 @@ local function BuildWindowChrome(state)
     local f = state.frame
     local content = CreateFrame("Frame", nil, f)
     content:SetPoint("TOPLEFT", f, "TOPLEFT", 16, -40)
-    content:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -16, 16)
+    content:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -16, 30)
     f.content = content
     local nav = T.Panel(content, nil, T.colors.glassRail or T.colors.panelNav or T.colors.panel, T.colors.borderSoft)
     T.ApplySurface(nav, "rail")
@@ -1871,12 +2006,13 @@ local function BuildWindow()
     M.frame = f
     return f
 end
-local function ApplyMenuFrameScale(frame)
+ApplyMenuFrameScale = function(frame)
     if not (frame and frame.SetScale) then return end
     local g = M.GetGeneralDB()
     frame:SetScale(EffectiveMenuScale(g.slashMenuScale))
     ApplyWindowResizeBounds(frame)
     ClampWindowSize(frame)
+    if type(frame.RefreshMenuScaleControl) == "function" then frame:RefreshMenuScaleControl() end
 end
 M.AssignNamedValues(M, [[
     ShowPreviewWarning UpdateNav RunEntryRefreshers RefreshDashboardEditModeButton BuildPageEntry
