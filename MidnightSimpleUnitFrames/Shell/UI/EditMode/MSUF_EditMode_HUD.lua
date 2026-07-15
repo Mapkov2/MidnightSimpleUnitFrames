@@ -98,8 +98,14 @@ end
 local function MakeFS(p, fontRole, r, g, b, a)
     local fs = p:CreateFontString(nil, "OVERLAY")
     local ui = SharedUI()
-    local size = ui and ui.FontSize and ui.FontSize(fontRole or "body") or 13
-    fs:SetFont(FONT, size, ""); fs:SetShadowOffset(1, -1)
+    if ui and ui.ApplyFontRole then
+        ui.ApplyFontRole(fs, fontRole or "body", FONT, "")
+    else
+        local size = ui and ui.FontSize and ui.FontSize(fontRole or "body") or 13
+        fs:SetFont(FONT, size, "")
+    end
+    fs:SetShadowOffset(1, -1)
+    if fs.SetShadowColor then fs:SetShadowColor(0, 0, 0, 0.35) end
     fs:SetTextColor(r or 1, g or 1, b or 1, a or 1); return fs
 end
 

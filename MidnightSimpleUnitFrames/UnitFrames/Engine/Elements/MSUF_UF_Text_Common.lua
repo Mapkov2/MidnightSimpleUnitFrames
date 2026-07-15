@@ -79,6 +79,19 @@ local nativeSecrets = _G.issecretvalue ~= nil
 local issecretvalue = _G.issecretvalue or function(_) return false end
 
 local STANDARD_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+local EXPRESSWAY_REGULAR = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Fonts\\Expressway Regular.ttf"
+local EXPRESSWAY_SEMIBOLD = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Fonts\\Expressway SemiBold.ttf"
+
+local function ResolveRoleFont(font, role, size)
+  if type(font) ~= "string" or font == "" then return font end
+  local normalized = font:gsub("/", "\\"):lower()
+  local regular = EXPRESSWAY_REGULAR:lower()
+  if normalized ~= regular and not normalized:match("\\expressway regular%.ttf$") then return font end
+  if role == "name" or ((role == "health" or role == "power") and (tonumber(size) or 12) <= 10) then
+    return EXPRESSWAY_SEMIBOLD
+  end
+  return font
+end
 
 local function FontApplied(fs, requested)
   if type(fs.GetFont) ~= "function" then return true end
@@ -96,14 +109,14 @@ local function ApplyFontChecked(fs, requested, size, flags)
   return applied ~= false and FontApplied(fs, requested)
 end
 
-local function SetFont(fs, spec, size)
+local function SetFont(fs, spec, size, role)
   if not fs then
     return
   end
-  local font = (spec and spec.font) or STANDARD_FONT
   local fontSize = tonumber(size) or 12
   if fontSize <= 0 then fontSize = 12 end
   if fontSize < 6 then fontSize = 6 elseif fontSize > 128 then fontSize = 128 end
+  local font = ResolveRoleFont((spec and spec.font) or STANDARD_FONT, role, fontSize)
   local flags = spec and spec.fontFlags or "OUTLINE"
   if fs._msufFont ~= font or fs._msufFontSize ~= fontSize or fs._msufFontFlags ~= flags then
     if ApplyFontChecked(fs, font, fontSize, flags) then
@@ -529,6 +542,7 @@ Text.HealthColor = HealthColor
 Text.ApplyBackgrounds = ApplyBackgrounds
 Text.PowerColor = PowerColor
 Text.SetFont = SetFont
+Text.ResolveRoleFont = ResolveRoleFont
 Text.SetPowerTextColor = SetPowerTextColor
 Text.SetHealthTextColor = SetHealthTextColor
 Text.HealthTextColor = HealthTextColor

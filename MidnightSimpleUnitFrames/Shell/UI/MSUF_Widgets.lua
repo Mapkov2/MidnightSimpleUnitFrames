@@ -19,6 +19,8 @@ ExportPublic("MSUF_UI", UI)
 
 local W8 = "Interface\\Buttons\\WHITE8X8"
 local FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+local EXPRESSWAY_REGULAR = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Fonts\\Expressway Regular.ttf"
+local EXPRESSWAY_SEMIBOLD = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Fonts\\Expressway SemiBold.ttf"
 local max = math.max
 
 -- One shared type scale for Menu2 and Edit Mode. Preview content may use the
@@ -26,10 +28,24 @@ local max = math.max
 UI.fontSizes = {
     micro = 9,
     caption = 11,
+    supporting = 11,
     body = 13,
+    control = 13,
+    card = 13,
     section = 15,
     heading = 17,
     hero = 21,
+}
+UI.fontWeights = UI.fontWeights or {
+    micro = "regular",
+    caption = "regular",
+    supporting = "regular",
+    body = "regular",
+    control = "regular",
+    card = "semibold",
+    section = "semibold",
+    heading = "semibold",
+    hero = "semibold",
 }
 UI.spacing = {
     hairline = 1,
@@ -70,6 +86,48 @@ function UI.ApplyFontSize(fs, roleOrSize, fontPath, flags)
     if not (fs and fs.SetFont) then return fs end
     local currentFont, _, currentFlags = fs.GetFont and fs:GetFont()
     fs:SetFont(fontPath or currentFont or FONT, UI.FontSize(roleOrSize), flags or currentFlags or "")
+    return fs
+end
+
+local function NormalizeFontPath(path)
+    return type(path) == "string" and path:gsub("/", "\\"):lower() or ""
+end
+
+function UI.ResolveRoleFontPath(fontPath, role)
+    if type(fontPath) ~= "string" or fontPath == "" then return fontPath end
+    if UI.fontWeights[role] ~= "semibold" then return fontPath end
+    local normalized = NormalizeFontPath(fontPath)
+    if normalized == NormalizeFontPath(EXPRESSWAY_REGULAR)
+        or normalized:match("\\expressway regular%.ttf$") then
+        return EXPRESSWAY_SEMIBOLD
+    end
+    return fontPath
+end
+
+function UI.ResolveConfiguredFontPath(role, fallback, size, flags)
+    local db = _G.MSUF_DB
+    local general = type(db) == "table" and db.general or nil
+    local key = type(general) == "table" and general.menuFontKey or nil
+    local path = type(key) == "string" and key ~= "" and key or fallback or FONT
+    if type(path) == "string" and not (path:find("\\", 1, true) or path:find("/", 1, true)) then
+        local resolver = _G.MSUF_ResolveFontKeyPath or _G.MSUF_GetFontPathForKey
+        if type(resolver) == "function" then path = resolver(path, size, flags) or path end
+    end
+    local safe = _G.MSUF_ResolveSafeFontPath
+    if type(safe) == "function" then path = safe(path, size, flags, key) or path end
+    return UI.ResolveRoleFontPath(path, role)
+end
+
+function UI.ApplyFontRole(fs, role, fallback, flags)
+    if not (fs and fs.SetFont) then return fs end
+    role = type(role) == "string" and role or "body"
+    local currentFont, _, currentFlags = fs.GetFont and fs:GetFont()
+    local size = UI.FontSize(role)
+    local fontPath = UI.ResolveConfiguredFontPath(role, fallback or currentFont or FONT, size, flags or currentFlags or "")
+    local ok, applied = pcall(fs.SetFont, fs, fontPath or fallback or currentFont or FONT, size, flags or currentFlags or "")
+    if (not ok or applied == false) and fontPath ~= fallback and fallback then
+        pcall(fs.SetFont, fs, fallback, size, flags or currentFlags or "")
+    end
     return fs
 end
 
@@ -173,17 +231,21 @@ function UI.ApplyMaterial(frame, material)
     return frame
 end
 
-function UI.Font(parent, template, text, color)
+function UI.Font(parent, template, text, color, role)
     local theme = UI.GetMenu2Theme()
-    if theme and theme.Font then return theme.Font(parent, template or "GameFontHighlight", text or "", color or UI.Color("text", UI.colors.text)) end
+    if theme and theme.Font then return theme.Font(parent, template or "GameFontHighlight", text or "", color or UI.Color("text", UI.colors.text), role) end
     local fs = parent:CreateFontString(nil, "OVERLAY", template or "GameFontHighlight")
     local _, inheritedSize = fs.GetFont and fs:GetFont()
-    UI.ApplyFontSize(fs, UI.NormalizeFontSize(inheritedSize or UI.fontSizes.body))
+    if role then
+        UI.ApplyFontRole(fs, role)
+    else
+        UI.ApplyFontSize(fs, UI.NormalizeFontSize(inheritedSize or UI.fontSizes.body))
+    end
     fs:SetText(Tr(text or ""))
     local c = color or UI.Color("text", UI.colors.text)
     fs:SetTextColor(c[1], c[2], c[3], c[4] or 1)
     if fs.SetShadowOffset then fs:SetShadowOffset(1, -1) end
-    if fs.SetShadowColor then fs:SetShadowColor(0, 0, 0, 0.75) end
+    if fs.SetShadowColor then fs:SetShadowColor(0, 0, 0, 0.35) end
     return fs
 end
 

@@ -556,7 +556,7 @@ local function ApplyNameClip(frame, spec, text)
 
   if shorten and text.nameShortenDots == true then
     local dots = EnsureDotsFS(frame, "_msufNameDotsFS", "GameFontNormal", text.nameLayer)
-    SetFont(dots, spec, spec and spec.nameFontSize)
+    SetFont(dots, spec, spec and spec.nameFontSize, "name")
     LayoutDots(dots, fs, clipSide)
   else
     HideDots(frame._msufNameDotsFS)
@@ -622,7 +622,7 @@ local function ApplyInlineNameClip(frame, spec, text)
 
   if inline.nameShortenDots == true then
     local dots = EnsureDotsFS(frame, "_msufInlineDotsFS", "GameFontNormal", text.nameLayer)
-    SetFont(dots, spec, spec and spec.nameFontSize)
+    SetFont(dots, spec, spec and spec.nameFontSize, "name")
     LayoutDots(dots, fs, clipSide)
   else
     HideDots(frame._msufInlineDotsFS)
@@ -753,7 +753,7 @@ function Text.Create(frame, spec)
 end
 
 local SIG_SPEC_KEYS = { "key", "scope", "width", "height", "font", "fontFlags", "nameFontSize", "healthFontSize", "powerFontSize", "fontShadow", "fontShadowAlpha", "fontShadowX", "fontShadowY", "_msufTextLayoutRevision" }
-local SIG_POWER_KEYS = { "enabled", "detached", "textOnDetached", "shape", "orbSize", "detachedLevel", "detachedHeight", "detachedWidth", "detachedX", "detachedY", "detachedSyncClass", "detachedAnchorClass", "detachedClassWidth", "detachedWidthFrameName", "detachedClassWidthFrameName" }
+local SIG_POWER_KEYS = { "enabled", "detached", "textOnDetached", "shape", "orbSize", "detachedLevel", "detachedHeight", "detachedWidth", "detachedX", "detachedY", "detachedAnchorMode", "detachedSyncClass", "detachedAnchorClass", "detachedClassWidth", "detachedWidthFrameName", "detachedClassWidthFrameName" }
 local SIG_TEXT_KEYS = {
   "anchorToBars", "nameAnchor", "nameX", "nameY", "nameLayer", "nameShorten", "nameShortenSide", "nameShortenDots", "nameShortenMax", "nameShortenWidth", "nameLeftWidth",
   "nameShortenMaskPx",
@@ -859,17 +859,17 @@ function Text.Apply(frame, spec)
     HideDots(frame._msufInlineDotsFS)
     frame._msufInlineRaw, frame._msufInlineText, frame._msufInlineStamp = nil, nil, nil
   end
-  SetFont(frame.nameText, spec, spec and spec.nameFontSize)
+  SetFont(frame.nameText, spec, spec and spec.nameFontSize, "name")
   if inlineEnabled then
-    SetFont(frame.totInlineSep, spec, spec and spec.nameFontSize)
-    SetFont(frame.totInlineText, spec, spec and spec.nameFontSize)
+    SetFont(frame.totInlineSep, spec, spec and spec.nameFontSize, "name")
+    SetFont(frame.totInlineText, spec, spec and spec.nameFontSize, "name")
   end
-  SetFont(frame.hpTextLeft, spec, spec and spec.healthFontSize)
-  SetFont(frame.hpTextCenter, spec, spec and spec.healthFontSize)
-  SetFont(frame.hpTextRight, spec, spec and spec.healthFontSize)
-  SetFont(frame.powerTextLeft, spec, spec and spec.powerFontSize)
-  SetFont(frame.powerTextCenter, spec, spec and spec.powerFontSize)
-  SetFont(frame.powerTextRight, spec, spec and spec.powerFontSize)
+  SetFont(frame.hpTextLeft, spec, spec and spec.healthFontSize, "health")
+  SetFont(frame.hpTextCenter, spec, spec and spec.healthFontSize, "health")
+  SetFont(frame.hpTextRight, spec, spec and spec.healthFontSize, "health")
+  SetFont(frame.powerTextLeft, spec, spec and spec.powerFontSize, "power")
+  SetFont(frame.powerTextCenter, spec, spec and spec.powerFontSize, "power")
+  SetFont(frame.powerTextRight, spec, spec and spec.powerFontSize, "power")
   frame._msufNameTextR, frame._msufNameTextG, frame._msufNameTextB, frame._msufNameTextA = nil, nil, nil, nil
   frame._msufLastNameRaw, frame._msufLastNameText, frame._msufLastNameShortenStamp = nil, nil, nil
   frame._msufPowerTextColorInitialized = nil

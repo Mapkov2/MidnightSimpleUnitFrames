@@ -35,6 +35,13 @@ local function FontSize(role)
     return ui and ui.FontSize and ui.FontSize(role) or 13
 end
 
+local function ApplyFontRole(fs, role, fallback, flags)
+    local ui = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
+    if ui and ui.ApplyFontRole then return ui.ApplyFontRole(fs, role, fallback, flags) end
+    fs:SetFont(fallback, FontSize(role), flags or "")
+    return fs
+end
+
 local function IsBlocked(frame)
     -- Never let the picker select root/protected/runtime-owned frames as anchors.
     if not frame then return true end
@@ -170,7 +177,7 @@ local function EnsureAnchorPicker()
     local info = topPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
     info:SetPoint("TOP", topPanel, "TOP", 0, -8)
     info:SetJustifyH("CENTER")
-    info:SetFont(font, FontSize("section"), "OUTLINE")
+    ApplyFontRole(info, "section", font, "OUTLINE")
     info:SetTextColor(accent[1], accent[2], accent[3], 1)
     info:SetShadowColor(0, 0, 0, 1)
     info:SetShadowOffset(1, -1)
@@ -180,20 +187,20 @@ local function EnsureAnchorPicker()
     sub:SetPoint("TOP", info, "BOTTOM", 0, -8)
     sub:SetJustifyH("CENTER")
     sub:SetWidth(720)
-    sub:SetFont(font, FontSize("body"), "OUTLINE")
+    ApplyFontRole(sub, "body", font, "OUTLINE")
     sub:SetTextColor(text[1], text[2], text[3], 1)
     sub:SetShadowColor(0, 0, 0, 1)
     sub:SetShadowOffset(1, -1)
     ov._sub = sub
 
     local hover = ov:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    hover:SetFont(font, FontSize("body"), "")
+    ApplyFontRole(hover, "body", font, "")
     hover:SetPoint("BOTTOMLEFT", ov, "BOTTOMLEFT", 24, 24)
     hover:SetTextColor(muted[1], muted[2], muted[3], muted[4] or 1)
     ov._hover = hover
 
     local ctrl = ov:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    ctrl:SetFont(font, FontSize("heading"), "")
+    ApplyFontRole(ctrl, "heading", font, "")
     ctrl:SetPoint("BOTTOM", ov, "BOTTOM", 0, 56)
     ctrl:SetJustifyH("CENTER")
     ov._ctrlHint = ctrl

@@ -775,7 +775,7 @@ local function OpenDropdown(owner, valuesTable)
 end
 function W.Dropdown(section, label, values, width)
     local x, y = NextRow(section, 48)
-    local title = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text)
+    local title = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text, "control")
     SetSearchText(title, label)
     title:SetPoint("TOPLEFT", x, y)
     local btn = T.Button(section, "", width or 240, 22)
