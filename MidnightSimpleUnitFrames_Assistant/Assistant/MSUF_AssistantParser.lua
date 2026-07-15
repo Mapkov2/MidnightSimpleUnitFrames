@@ -3095,9 +3095,9 @@ local function ParseGroupTextFormatFastShortcut(normalized)
 end
 
 local function GroupDispelOverlayTriggerValue(normalized)
+    if ContainsAny(normalized, P.RootPhrases[434]) then return "BY_RAID" end
     if ContainsAny(normalized, P.RootPhrases[432]) then return "BY_ME" end
     if ContainsAny(normalized, P.RootPhrases[433]) then return "DISPEL_TYPE" end
-    if ContainsAny(normalized, P.RootPhrases[434]) then return "ANY_DEBUFF" end
     if ContainsAny(normalized, P.RootPhrases[435]) then return "BORDER" end
     return nil
 end
@@ -3117,11 +3117,12 @@ function A._HasDispelOverlayAlphaIntent(normalized)
 end
 
 function A._HasDispelOverlayImplicitTriggerIntent(normalized)
-    return ContainsAny(normalized, { "by me", "byme", "dispellable by me", "any debuff", "all debuffs", "dispel type", "dispeltype" })
+    return ContainsAny(normalized, { "by me", "byme", "dispellable by me", "by group", "by raid", "dispellable by group", "any debuff", "all debuffs", "any dispel type", "dispel type", "dispeltype" })
         and not ContainsAny(normalized, { "turn on", "enable", "enabled", "on", "turn off", "disable", "disabled", "off" })
 end
 
 local function ParseGroupDispelOverlayFastShortcut(normalized)
+    if ContainsAny(normalized, { "unitframe", "unit frame" }) then return nil end
     if not ContainsAny(normalized, P.RootPhrases[441]) then
         return nil
     end

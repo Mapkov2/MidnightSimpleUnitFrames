@@ -35,12 +35,12 @@ local GROUP_SCOPE_ORDER = { "party", "raid", "mythicraid" }
 
 local UNIT_FILTER_KEYS = {
     buff = {
-        "onlyMine", "raid", "raidInCombat", "includeNameplateOnly",
+        "onlyMine", "onlyImportant", "raid", "raidInCombat", "includeNameplateOnly", "includeDispellable", "dispellableAny",
         "cancelable", "notCancelable", "externalDefensive", "bigDefensive",
     },
     debuff = {
-        "onlyMine", "raid", "raidInCombat", "includeNameplateOnly",
-        "includeDispellable", "crowdControl",
+        "onlyMine", "onlyImportant", "raid", "raidInCombat", "includeNameplateOnly",
+        "includeDispellable", "dispellableAny", "crowdControl",
     },
 }
 
@@ -51,9 +51,34 @@ local FILTER_SPECS = {
         terms = { "raid in combat", "combat raid", "raid combat", "during raid combat" },
     },
     {
+        id = "dispellableByMe", unitKey = "raid", groupValue = "Raid",
+        label = "Dispellable by me", lane = "debuff",
+        terms = { "dispellable by me", "dispelable by me", "i can dispel", "i can cleanse", "player can dispel" },
+    },
+    {
+        id = "dispellableBuffByGroup", unitKey = "includeDispellable", groupValue = nil,
+        label = "Dispellable / stealable by group", lane = "buff",
+        terms = { "dispellable buff", "dispellable buffs", "stealable buff", "stealable buffs", "purgeable buff", "purgeable buffs", "buffs the group can dispel", "buffs the group can steal" },
+    },
+    {
+        id = "dispellableAnyBuff", unitKey = "dispellableAny", groupValue = nil,
+        label = "Any dispel / steal type", lane = "buff",
+        terms = { "buff with any dispel type", "buffs with any dispel type", "buff with any steal type", "buffs with any steal type" },
+    },
+    {
+        id = "dispellableAny", unitKey = "dispellableAny", groupValue = "DISPELLABLE",
+        label = "Any dispel type", lane = "debuff",
+        terms = { "any dispel type", "any dispellable type", "regardless who can dispel", "all dispel types" },
+    },
+    {
         id = "dispellable", unitKey = "includeDispellable", groupValue = "RAID_PLAYER_DISPELLABLE",
-        label = "Dispellable", lane = "debuff",
-        terms = { "dispellable", "dispelable", "purgeable", "cleanseable", "cleansable", "can dispel", "can cleanse" },
+        label = "Dispellable by group", lane = "debuff",
+        terms = { "dispellable by group", "dispelable by group", "group can dispel", "raid can dispel", "dispellable", "dispelable", "purgeable", "cleanseable", "cleansable" },
+    },
+    {
+        id = "important", unitKey = "onlyImportant", groupValue = "IMPORTANT",
+        label = "Important", lane = nil,
+        terms = { "important aura", "important auras", "important buff", "important buffs", "important debuff", "important debuffs" },
     },
     {
         id = "crowdControl", unitKey = "crowdControl", groupValue = "CROWD_CONTROL",
@@ -288,11 +313,29 @@ local function DurationValue(text)
     return nil
 end
 
+local function FilterSpecByID(id)
+    for i = 1, #FILTER_SPECS do
+        if FILTER_SPECS[i].id == id then return FILTER_SPECS[i] end
+    end
+    return nil
+end
+
 local function FindFilterSpec(text)
+    if HasAny(text, { "buff", "buffs" }) and HasAny(text, { "any dispel type", "all dispel types", "any steal type" }) then
+        return FilterSpecByID("dispellableAnyBuff")
+    end
+    if HasAny(text, { "buff", "buffs" }) and HasAny(text, { "dispellable by group", "stealable by group", "purgeable by group", "group can dispel", "group can steal" }) then
+        return FilterSpecByID("dispellableBuffByGroup")
+    end
+    if text:find("%f[%a]important%f[%A]")
+        and HasAny(text, { "aura", "auras", "buff", "buffs", "debuff", "debuffs", "filter" })
+    then
+        return FilterSpecByID("important")
+    end
     if HasAny(text, { "raid", "raid relevant", "raid-relevant" })
         and HasAny(text, { "combat", "in combat", "during combat" })
     then
-        return FILTER_SPECS[1]
+        return FilterSpecByID("raidInCombat")
     end
     if HasAny(text, { "raid" })
         and HasAny(text, {
@@ -302,7 +345,7 @@ local function FindFilterSpec(text)
             "boss frame buff", "boss frame buffs", "boss frame debuff", "boss frame debuffs",
         })
     then
-        return FILTER_SPECS[10]
+        return FilterSpecByID("raid")
     end
     if HasAny(text, { "boss", "encounter" })
         and HasAny(text, {
@@ -311,25 +354,18 @@ local function FindFilterSpec(text)
             "player buff", "player buffs", "player debuff", "player debuffs",
         })
     then
-        return FILTER_SPECS[10]
+        return FilterSpecByID("raid")
     end
     local destination = ExplicitDestinationUnit(text)
     if destination and destination ~= "boss"
         and HasAny(text, { "boss", "encounter" })
         and HasAny(text, { "buff", "buffs", "debuff", "debuffs", "aura", "auras" })
     then
-        return FILTER_SPECS[10]
+        return FilterSpecByID("raid")
     end
     for i = 1, #FILTER_SPECS do
         local spec = FILTER_SPECS[i]
         if HasAny(text, spec.terms) then return spec end
-    end
-    return nil
-end
-
-local function FilterSpecByID(id)
-    for i = 1, #FILTER_SPECS do
-        if FILTER_SPECS[i].id == id then return FILTER_SPECS[i] end
     end
     return nil
 end
@@ -403,6 +439,7 @@ local function ExistingAuraFilterSpecialistOwns(text)
     if HasAny(text, {
         "aura filter lane", "aura editing scope", "native group aura", "blizzard aura type", "blizzard aura types",
         "highlight my buffs", "highlight my debuffs", "highlight own buffs", "highlight own debuffs",
+        "dispel overlay", "dispel border", "overlay detects", "overlay trigger",
         "cooldown text", "timer text", "cooldown swipe", "duration bar", "stack text",
         "icon size", "aura size", "buff size", "debuff size", "aura growth", "buff growth", "debuff growth",
     }) then
@@ -1019,7 +1056,11 @@ function P.ParseAuraFilteringConversationShortcut(text, ctx, raw)
     -- A few native sort comparators share names with filter tokens (for
     -- example Big Defensive). Exact lane-sort aliases own explicit sorting
     -- language and must not be converted into live-filter mutations.
-    if type(P.IsAuraSortRequest) == "function" and P.IsAuraSortRequest(text) then return nil end
+    if type(P.IsAuraSortRequest) == "function" and P.IsAuraSortRequest(text)
+        and HasAny(text, { "sort", "sorting", "order", "ordered", "first" })
+    then
+        return nil
+    end
     if not P.LooksLikeAuraFilteringConversation(text, ctx) then return nil end
 
     local categoryPlan = GroupCategoryPlan(text, ctx)

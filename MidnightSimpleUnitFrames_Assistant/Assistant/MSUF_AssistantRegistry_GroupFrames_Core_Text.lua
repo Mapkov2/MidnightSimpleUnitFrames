@@ -109,7 +109,8 @@ function A.GroupFramesRegistry.BuildTextCoreContext(ctx)
 
     local function NormalizeGroupDispelTrigger(value)
         if value == "DISPEL_TYPE" or value == "TYPE" or value == "ANY_DISPEL_TYPE" then return "DISPEL_TYPE" end
-        if value == "ANY_DEBUFF" or value == "DEBUFF" or value == "ANY" or value == "ALL_DEBUFFS" then return "ANY_DEBUFF" end
+        if value == "BY_RAID" or value == "RAID" or value == "DISPELLABLE_BY_GROUP" then return "BY_RAID" end
+        if value == "ANY_DEBUFF" or value == "DEBUFF" or value == "ANY" or value == "ALL_DEBUFFS" then return "DISPEL_TYPE" end
         if value == "BY_ME" or value == "PLAYER" or value == "DISPELLABLE_BY_ME" then return "BY_ME" end
         return "BORDER"
     end

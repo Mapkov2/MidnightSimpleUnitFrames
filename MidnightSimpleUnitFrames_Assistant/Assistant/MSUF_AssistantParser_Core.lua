@@ -1570,7 +1570,7 @@ local CAPABILITY_ACTION_TERMS = {
 }
 
 local SUBJECTIVE_SETTING_TERMS = {
-    "useless", "unimportant", "important", "irrelevant", "best", "optimal", "automatically",
+    "useless", "unimportant", "irrelevant", "best", "optimal", "automatically",
     "less noisy", "too noisy", "noisy", "less cluttered", "cluttered", "declutter",
     "clean up", "cleaner", "spam", "unwichtig", "wichtig", "nutzlos", "automatisch",
 }
@@ -1620,10 +1620,17 @@ local function NonMutatingIntent(text)
     local presentationLookup = StartsWithAnyPhrase(actionable, { "show me", "zeige mir" })
         and (HasAnyExactPhrase(actionable, INFORMATION_TARGET_TERMS)
             or HasAnyExactPhrase(actionable, { "where", "location", "wo", "seite", "page" }))
+    local explicitImportantAuraFilter = explicitMutation
+        and HasAnyExactPhrase(normalized, { "aura", "auras", "buff", "buffs", "debuff", "debuffs" })
+        and HasAnyExactPhrase(normalized, {
+            "important aura", "important auras", "important buff", "important buffs",
+            "important debuff", "important debuffs", "filter to important", "important filter",
+        })
 
     -- Subjective labels describe a desired policy, not one concrete toggle.
     -- This intentionally wins over an imperative prefix ("hide useless buffs").
-    if HasAnyExactPhrase(normalized, SUBJECTIVE_SETTING_TERMS)
+    if not explicitImportantAuraFilter
+        and HasAnyExactPhrase(normalized, SUBJECTIVE_SETTING_TERMS)
         and HasAnyExactPhrase(normalized, SUBJECTIVE_SETTING_AREAS)
         and HasAnyExactPhrase(actionable, SUBJECTIVE_ACTION_TERMS)
     then
