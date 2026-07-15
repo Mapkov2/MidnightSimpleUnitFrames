@@ -46,8 +46,6 @@ local spellItem = {
     y = -9,
     size = 31,
     iconEffect = "glow",
-    iconEffectTiming = "expiring",
-    iconExpireThreshold = 9,
     showCooldown = true,
     showCooldownSwipe = false,
     showStacks = true,
@@ -85,14 +83,14 @@ local slot = assert(compiled.slots[1], "styled Spell Indicator slot missing")
 local sensor = assert(compiled.slots[2], "expiring-effect sensor slot missing")
 Equal(#compiled.slots, 2, "expiring visible icon did not compile exactly one sensor sibling")
 Equal(slot.frameEffect, nil, "visible icon retained ownership of the expiring frame effect")
-Equal(slot.iconEffect, "none", "visible icon retained ownership of the expiring icon glow")
+Equal(slot.iconEffect, "glow", "visible icon lost its normal icon glow")
 Equal(sensor.frameEffect.timing, "expiring", "per-spell expiration timing was dropped")
 Equal(sensor.frameEffect.expireThreshold, 7, "per-spell expiration threshold was dropped")
-Equal(sensor.iconEffect, "glow", "expiration sensor dropped the timed icon glow")
-Equal(sensor.iconEffectTiming, "expiring", "icon-glow expiration timing was dropped")
-Equal(sensor.iconExpireThreshold, 9, "icon-glow expiration threshold was dropped")
-Equal(sensor.expiringIconEffect, true, "expiration sensor did not mark its timed icon glow")
-Equal(sensor.size, 31, "icon-glow sensor lost the placed icon geometry")
+Equal(sensor.iconEffect, "none", "frame-effect sensor unexpectedly owns an icon glow")
+Equal(sensor.iconEffectTiming, nil, "removed icon-glow timing leaked into the compiled sensor")
+Equal(sensor.iconExpireThreshold, nil, "removed icon-glow threshold leaked into the compiled sensor")
+Equal(sensor.expiringIconEffect, nil, "frame-effect sensor retained the removed timed-icon marker")
+Equal(sensor.size, 1, "frame-effect sensor did not keep its minimal geometry")
 Equal(sensor.frameEffect.layer, 30, "per-spell frame-effect Layer did not cold-clamp to 0..30")
 Equal(sensor.visual, "none", "expiration sensor unexpectedly renders an icon")
 Equal(sensor.hiddenVisual, true, "expiration sensor is not hidden")
@@ -185,12 +183,20 @@ Check(indicatorConfig:find('timing = timing', 1, true),
   "group compiler dropped frame-effect timing")
 Check(indicatorConfig:find('expireThreshold = expireThreshold', 1, true),
   "group compiler dropped frame-effect expiration threshold")
-Check(indicatorConfig:find('iconEffectTiming = tostring(placed.iconEffectTiming or "always")', 1, true),
-  "group compiler dropped icon-glow timing")
-Check(indicatorConfig:find('iconExpireThreshold = math.max(1, math.min(30, Num(placed.iconExpireThreshold, 5)))', 1, true),
-  "group compiler dropped the clamped icon-glow expiration threshold")
+Check(not indicatorConfig:find("iconEffectTiming", 1, true),
+  "group compiler still exports the removed icon-glow timing")
+Check(not indicatorConfig:find("iconExpireThreshold", 1, true),
+  "group compiler still exports the removed icon-glow threshold")
 Check(spellRuntime:find("EvaluateRemainingDuration", 1, true),
   "Spell Indicator runtime lost secret-safe remaining-duration evaluation")
+Check(not spellRuntime:find("GetTimerDuration", 1, true),
+  "Spell Indicator runtime still reads the forbidden PTR StatusBar")
+Check(spellRuntime:find('hooksecurefunc(sensor, "SetTimerDuration"', 1, true),
+  "Spell Indicator runtime lost the PTR-safe LuaDuration bridge")
+Check(not spellRuntime:find("iconEffectTiming", 1, true),
+  "Spell Indicator runtime still contains timed icon-glow dispatch")
+Check(not spellRuntime:find("iconExpireThreshold", 1, true),
+  "Spell Indicator runtime still contains the timed icon-glow threshold")
 Check(spellRuntime:find('slot.frameEffect.timing == "expiring"', 1, true),
   "Spell Indicator runtime lost the expiring-effect dispatch")
 Check(previewNative:find('showDurationBar = auras[prefix .. "ShowDurationBar"]', 1, true),
@@ -213,12 +219,10 @@ Check(menu:find("Edit Buff Style", 1, true),
   "Spell Indicator menu lost its direct Buff Aura Style navigation")
 Check(menu:find("Start effect at (seconds remaining)", 1, true),
   "Spell Indicator menu lost the expiration-threshold control")
-Check(menu:find("Start glow at (seconds remaining)", 1, true),
-  "Spell Indicator menu lost the icon-glow expiration threshold")
-Check(menu:find('"iconEffectTiming", "always", %-924'),
-  "Spell Indicator menu lost the icon-glow timing control")
-Check(menu:find('"iconEffectTiming", "always", %-924, RefreshSpellIndicatorState'),
-  "icon-glow timing dropdown no longer refreshes its dependent threshold control")
+Check(not menu:find("Start glow at (seconds remaining)", 1, true),
+  "Spell Indicator menu still exposes the unsupported icon-glow timer")
+Check(not menu:find("Glow When", 1, true),
+  "Spell Indicator menu still exposes the unsupported icon-glow timing dropdown")
 Check(menu:find('"timing", "always", %-544, RefreshSpellIndicatorState'),
   "frame-effect timing dropdown no longer refreshes its dependent threshold control")
 Check(menuSupport:find("FRAME_EFFECT_TYPES FRAME_EFFECT_TIMINGS ICON_EFFECT_TYPES", 1, true),
