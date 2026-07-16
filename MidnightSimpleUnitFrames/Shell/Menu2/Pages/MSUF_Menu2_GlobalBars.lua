@@ -95,6 +95,7 @@ local BAR_DYNAMIC_SETTING_SUFFIX_BY_PATH = {
     ["absorb.healPredAnchorMode"] = "healPredAnchorMode",
     ["absorb.heal_prediction.enabled"] = "healPredEnabled",
     ["absorb.over_absorb_overlay"] = "overAbsorbOverlay",
+    ["absorb.full_health_stripe"] = "fullHealthAbsorbStripe",
     ["outline.thickness"] = "barOutlineThickness",
     ["outline.layer"] = "barOutlineLayer",
     ["outline.color"] = "barOutlineColor",

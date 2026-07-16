@@ -34,7 +34,11 @@ local UNIT_SCOPES = {
     player = true, target = true, targettarget = true, focustarget = true,
     focus = true, pet = true, boss = true,
 }
-local GROUP_SCOPES = { gf_party = "party", gf_raid = "raid", gf_mythicraid = "mythicraid" }
+local GROUP_SCOPES = {
+    gf_party = "party",
+    gf_raid = "raid",
+    gf_mythicraid = "mythicraid",
+}
 local FLAT_SCOPES = { general = true, bars = true, gameplay = true }
 
 -- Exact raw-storage projections which are already owned by a reviewed public

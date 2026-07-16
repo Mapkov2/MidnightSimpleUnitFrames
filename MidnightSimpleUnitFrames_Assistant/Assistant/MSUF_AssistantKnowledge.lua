@@ -20,7 +20,7 @@ local K = A.Knowledge or {}
 A.Knowledge = K
 
 local MAX_RESULTS = 6
-local INDEX_VERSION = 10
+local INDEX_VERSION = 11
 local SEARCH_CACHE_LIMIT = 32
 local SEARCH_TEXT_LIMIT = 360
 local KNOWLEDGE_COMBINED_ALIAS_LIMIT = 2
@@ -107,6 +107,7 @@ local PAGE_FRAME_TYPES = {
     gf_bars = { group = true },
     gf_indicators = { group = true },
     gf_auras = { groupAura = true, group = true },
+    gf_priority = { priority = true },
     auras3 = { aura = true },
     auras3_buffs = { aura = true },
     auras3_debuffs = { aura = true },
@@ -130,6 +131,7 @@ local PAGE_CATEGORY_TERMS = {
     gf_bars = { "group", "dispel", "overlay", "effects", "stripe", "debuff stripe" },
     gf_indicators = { "indicator", "status", "corner" },
     gf_auras = { "group aura", "aura" },
+    gf_priority = { "priority frame", "priority frames", "pinned frame", "pinned frames", "automatic tank", "co tank" },
 }
 
 local function SettingPageBoost(setting, pageKey)
@@ -188,6 +190,7 @@ local PAGE_LABEL_OVERRIDES = {
     gf_bars = "Group Dispel Overlay",
     gf_indicators = "Group Status & Indicators",
     gf_auras = "Group Auras",
+    gf_priority = "Priority Frames",
 
     auras3 = "Auras",
     auras3_buffs = "Aura Buffs",
@@ -312,6 +315,7 @@ local function SettingLikelyPage(setting)
     if ft == "classPower" or ft == "classPowerPlayerHP" or ft == "detachedPowerBar" or ft == "altMana" then return "classpower" end
     if ft == "gameplay" or ft == "combatTimer" or ft == "combatState" or ft == "playerTotems" or ft == "combatCrosshair" then return "gameplay" end
     if ft == "modules" then return "modules" end
+    if ft == "priority" or tostring(setting.key or ""):find("^gf_priority%.") then return "gf_priority" end
     if ft == "group" then return GroupSettingLikelyPage(setting) end
     if ft == "groupAura" then return "gf_auras" end
     if ft == "aura" then return "auras3_styling" end
@@ -334,6 +338,7 @@ local function ActionLikelyPage(action)
     if type(action.pageKey) == "string" and action.pageKey ~= "" then return action.pageKey end
     local key = tostring(action.key or "")
     local typ = tostring(action.type or "")
+    if key:find("priority", 1, true) then return "gf_priority" end
     if key:find("aura_group", 1, true) or key:find("group_aura", 1, true) then return "gf_auras" end
     if key:find("aura_blacklist", 1, true) or key:find("aura_group_category_blacklist", 1, true) then return "auras3_filters" end
     if key:find("aura", 1, true) then return "auras3" end
@@ -1158,6 +1163,15 @@ local PAGE_HELP = {
         actions = { "Open Group Status & Indicators" },
     },
     gf_auras = { title = "Group Auras help", lines = { "Party, Raid, and Mythic Raid Buff/Debuff content is configured here: visibility, layout, preview, native filter tokens, Hide Permanent, and live category/SpellID blacklists.", "Choose Party or Raid and then Buffs or Debuffs before changing content. Spell Indicators remain here; cooldown, stack, and duration-bar styling is scope-aware under Appearance > Auras and does not decide which auras appear." }, actions = { "Open Group Auras" } },
+    gf_priority = {
+        title = "Priority Frames help",
+        lines = {
+            "Priority Frames duplicate automatic tanks and manually pinned current group members into a stable extra strip without removing them from the normal Party or Raid frames. They work in parties, raids, and Mythic raids and require the matching base group frames to be enabled.",
+            "Set a hover hotkey, then hover an MSUF Party, Raid, or Priority frame and press it to pin or unpin that player. Layout is profile-wide, pins are character-specific, and the strip inherits the active group-frame appearance and click-cast behavior.",
+            "Automatic selection currently supports tanks only. Augmentation Evokers and other class/spec targets must be pinned manually.",
+        },
+        actions = { "Open Priority Frames", "Priority Frames pinning help", "Priority Frames co-tank help" },
+    },
     classpower = { title = "Class Resources help", lines = { "You can change class resource mode, size, position, colors, and gameplay-specific class resource options available in MSUF." }, actions = { "Open Class Resources" } },
     gameplay = { title = "Gameplay help", lines = { "You can change gameplay features such as combat timer, sounds, totem/statue frame behavior, and related options." }, actions = { "Open Gameplay" } },
 }
@@ -1184,6 +1198,7 @@ local SCOPED_HELP_ALIASES = {
     { terms = { "group effects help", "debuff stripe help", "help group effects", "group dispel help", "group dispel overlay help", "help group dispel", "help group dispel overlay" }, page = "gf_bars" },
     { terms = { "indicator help", "help indicator", "group indicator help", "help group indicator", "corner indicator help", "help corner indicator", "targeted spell help", "targeted spells help", "targeted spell indicator help" }, page = "gf_indicators" },
     { terms = { "group aura help", "group auras help", "help group aura", "help group auras", "party aura help", "raid aura help", "mythic raid aura help" }, page = "gf_auras" },
+    { terms = { "priority frame help", "priority frames help", "help priority frames", "pinned frame help", "pinned frames help", "help pinned frames", "tank frames help", "prioritaetsframes hilfe", "hilfe prioritaetsframes" }, page = "gf_priority" },
     { terms = { "class resource help", "help class resource", "class power help", "help class power" }, page = "classpower" },
     { terms = { "gameplay help", "help gameplay" }, page = "gameplay" },
 }
@@ -1333,6 +1348,7 @@ local WHAT_CAN_DIRECT_HELP_TERMS = {
 }
 
 local WHAT_CAN_PAGE_HELP_TARGETS = {
+    { page = "gf_priority", terms = { "priority frame", "priority frames", "priorityframe", "priorityframes", "pinned frame", "pinned frames", "priority strip", "tank frame", "tank frames", "co tank frame", "co tank frames" } },
     { page = "gf_layout", terms = { "group health and text", "group health", "group text", "group resource", "group power", "party health", "party text", "party power", "raid health", "raid text", "raid power", "mythic raid health", "mythic raid text" } },
     { page = "gf_layout", terms = { "group range", "range fade" } },
     { page = "gf_bars", terms = { "group effects", "debuff stripe", "group dispel", "group dispel overlay", "dispel overlay" } },
@@ -2039,6 +2055,214 @@ local function ComplementaryAddonAnswer(query)
     }
 end
 
+local PRIORITY_FRAME_TERMS = {
+    "priority frame", "priority frames", "priorityframe", "priorityframes", "priority strip",
+    "pinned frame", "pinned frames", "pin frame", "pin frames", "tank frame", "tank frames",
+    "prioritaetsframe", "prioritaetsframes", "prioritaetsrahmen", "angehefteter frame", "angeheftete frames",
+}
+
+local PRIORITY_CO_TANK_TERMS = {
+    "co tank", "co-tank", "cotank", "other tank", "second tank", "both tanks", "two tanks",
+    "mitank", "anderen tank", "anderer tank", "zweiten tank", "zweiter tank", "beide tanks",
+}
+
+local PRIORITY_AUGMENTATION_TERMS = {
+    "augmentation evoker", "augementation evoker", "augmentation", "augementation", "aug evoker",
+    "augmentation rufer", "augementation rufer", "augmentierungsrufer",
+}
+
+local PRIORITY_FEATURE_REQUEST_TERMS = {
+    "feature request", "request a feature", "request feature", "suggest a feature", "feature suggestion",
+    "please add", "can you add", "could you add", "add support", "new feature", "feature wuensch", "featurewunsch",
+}
+
+local function PriorityFramesResult(title, lines)
+    local text = { title }
+    for i = 1, #(lines or {}) do text[#text + 1] = lines[i] end
+    text[#text + 1] = "You can also ask: Open Priority Frames | Priority Frames pinning help | Priority Frames troubleshooting"
+    return {
+        text = table.concat(text, "\n"),
+        status = "applied",
+        summary = "Assistant Priority Frames help",
+    }
+end
+
+local function PriorityFramesAnswer(norm)
+    norm = Normalize(norm)
+    if norm == "" then return nil end
+
+    -- Leave imperative navigation and setting changes to the router. This
+    -- helper owns explanations, troubleshooting, and feature-request guidance.
+    if norm:match("^open%s+") or norm:match("^go%s+to%s+") or norm:match("^navigate%s+to%s+")
+        or norm:match("^enable%s+") or norm:match("^disable%s+")
+        or norm:match("^turn%s+on%s+") or norm:match("^turn%s+off%s+")
+        or norm:match("^oeffne%s+") or norm:match("^aktiviere%s+") or norm:match("^deaktiviere%s+")
+    then
+        return nil
+    end
+
+    local hasPriority = ContainsAny(norm, PRIORITY_FRAME_TERMS)
+    local hasCoTank = ContainsAny(norm, PRIORITY_CO_TANK_TERMS)
+    local hasAugmentation = ContainsAny(norm, PRIORITY_AUGMENTATION_TERMS)
+    if not hasPriority then
+        local hasFrameContext = ContainsAny(norm, { "priority", "frame", "frames", "pin", "pinned", "strip", "rahmen", "anheften" })
+        if not ((hasCoTank or hasAugmentation) and hasFrameContext) then return nil end
+    end
+
+    local isFeatureRequest = ContainsAny(norm, PRIORITY_FEATURE_REQUEST_TERMS)
+    local asksAutomatic = ContainsAny(norm, {
+        "automatic", "automatically", "auto select", "auto-select", "detect", "detection", "recognize",
+        "automatisch", "automatisch erkennen", "erkennen", "erkannt",
+    })
+
+    if isFeatureRequest then
+        local lines = {
+            "The in-game Assistant can explain or help phrase a Priority Frames feature request, but it cannot submit one. Post it in MSUF Discord: " .. DISCORD_INVITE .. ".",
+            "Include whether the request is for Party, Raid, or both; who should be selected; how automatic and manual entries should be ordered; the expected one-to-five-slot behavior; and what should happen during combat.",
+            "Current behavior supports automatic WoW-assigned tanks plus manually pinned current group members. Open Group Frames > Priority to review the existing controls first.",
+        }
+        if hasAugmentation then
+            lines[#lines + 1] = "Priority Frames does not automatically detect other players' specializations, so an Augmentation Evoker currently needs a manual pin."
+        elseif hasCoTank then
+            lines[#lines + 1] = "Co-tank frames are already supported: use Include tanks automatically for both tanks, or disable it and manually pin only your co-tank."
+        end
+        return PriorityFramesResult("Priority Frames feature request help", lines)
+    end
+
+    if hasAugmentation then
+        local lines = {
+            "Priority Frames does not automatically detect other players' specializations. Automatic selection currently uses WoW's assigned TANK role only; there is no automatic Augmentation or other-spec scan.",
+            "While grouped, set the Priority Frames hover hotkey, hover the Augmentation Evoker's MSUF Party or Raid frame, and press the hotkey to pin that player manually.",
+            "Priority Frames can keep that player visible for monitoring and click-casting, but it does not decide the ideal Prescience or Ebon Might target. Group Frames > Auras > Spell Indicators can show Prescience, Ebon Might, and other configured Augmentation effects on the inherited frames.",
+        }
+        if asksAutomatic or isFeatureRequest then
+            lines[#lines + 1] = "For automatic Augmentation selection as a feature request, describe the desired Party/Raid rules and combat behavior in MSUF Discord: " .. DISCORD_INVITE .. ". The in-game Assistant can explain the request but cannot submit it for you."
+        end
+        return PriorityFramesResult("Augmentation Evoker Priority Frames help", lines)
+    end
+
+    if hasCoTank then
+        if ContainsAny(norm, { "only", "just", "without me", "exclude me", "not myself", "nur", "ohne mich", "ausser mich" }) then
+            return PriorityFramesResult("Priority Frames co-tank help", {
+                "To show only your co-tank, turn off Include tanks automatically, then manually pin the other tank with the Priority Frames hover hotkey. Automatic tanks cannot exclude only your own tank frame while that option remains enabled.",
+                "If WoW has not assigned the other player the TANK role, manual pinning is also the correct fallback. The player must be in your current party or raid to appear.",
+            })
+        end
+        return PriorityFramesResult("Priority Frames co-tank help", {
+            "Turn on Include tanks automatically to include current group members whose WoW role is TANK. In a two-tank group this normally includes both you and your co-tank, subject to the visible-slot limit.",
+            "If you want only your co-tank, disable automatic tanks and manually pin the other tank. If WoW has not assigned the co-tank the TANK role, pin that player manually.",
+        })
+    end
+
+    if asksAutomatic and ContainsAny(norm, {
+        "healer", "healers", "heal", "dps", "damager", "damage dealer", "class", "classes", "spec", "specs",
+        "specialization", "specializations", "role", "roles", "evoker", "support", "spieler", "klasse", "spezialisierung",
+    }) then
+        local lines = {
+            "Priority Frames automatically select only current group members whose WoW-assigned role is TANK. They do not automatically select healers, DPS, classes, specializations, or support targets.",
+            "Use the hover hotkey to pin any other current Party or Raid member manually. That keeps selection deterministic and avoids background inspection or polling.",
+        }
+        if isFeatureRequest then
+            lines[#lines + 1] = "To request another automatic selector, share the exact role/class/spec rule, ordering, slot behavior, and combat expectation in MSUF Discord: " .. DISCORD_INVITE .. ". The in-game Assistant cannot submit feature requests."
+        end
+        return PriorityFramesResult("Priority Frames automatic selection help", lines)
+    end
+
+    if ContainsAny(norm, { "party", "parties", "dungeon", "dungeons", "mythic plus", "mythic+", "m+", "raid", "raids", "solo", "gruppe", "gruppen", "schlachtzug" })
+        and ContainsAny(norm, { "work", "works", "use", "usable", "available", "show", "party", "raid", "solo", "funktioniert", "nutzen", "benutzen", "anzeigen" })
+    then
+        return PriorityFramesResult("Priority Frames Party and Raid help", {
+            "Priority Frames work in parties, raids, and Mythic raids. In a party or dungeon they use the Party Frames setup; in a raid they use the active Raid or Mythic Raid setup.",
+            "They do not create a solo strip: join a group, enable Priority Frames, and keep the matching base Party or Raid frames enabled. Then include tanks automatically or manually pin a current group member.",
+        })
+    end
+
+    if ContainsAny(norm, { "persist", "persistence", "save", "saved", "remember", "character specific", "profile wide", "profile-wide", "alt", "character", "gespeichert", "merken", "charakter", "profil" }) then
+        return PriorityFramesResult("Priority Frames pin persistence help", {
+            "For Priority Frames, layout is profile-wide, while pins are character-specific. Each pin stores the group member identity by GUID and name for that character.",
+            "A saved pin appears only while that player is in your current party or raid. If the player is absent, the pin stays saved and waits for that player to rejoin; it does not create an empty or offline frame.",
+        })
+    end
+
+    if ContainsAny(norm, { "order", "ordering", "sort", "reorder", "move up", "move down", "first", "limit", "maximum", "max", "slot", "slots", "how many", "reihenfolge", "limit", "plaetze" }) then
+        return PriorityFramesResult("Priority Frames order and limits help", {
+            "Visible slots can be set from one to five. Automatic tanks fill slots first in current roster order; manual pins follow in their saved order, and a player selected both ways appears only once.",
+            "You can move manual pins up or down on the Priority Frames page. Up to five manual pins can be saved; a saved player can still be hidden when automatic tanks or earlier pins have already filled the visible slots.",
+        })
+    end
+
+    if ContainsAny(norm, { "click cast", "clickcast", "click casting", "clique", "appearance", "style", "look", "visual", "aura", "indicator", "spell indicator", "aussehen", "klick", "zauberindikator" }) then
+        return PriorityFramesResult("Priority Frames appearance and click-casting help", {
+            "Priority Frames inherit the active Party, Raid, or Mythic Raid frame appearance, including the configured bars, text, auras, status indicators, and spell indicators. They do not maintain a separate visual style.",
+            "They also use the same MSUF click-casting registration and unit behavior as the inherited group frames, so existing click-cast bindings work on the duplicated Priority frames.",
+        })
+    end
+
+    if ContainsAny(norm, { "position", "placement", "place", "attach", "attached", "anchor", "left", "right", "above", "below", "free position", "edit mode", "mover", "growth", "spacing", "positionieren", "platzieren", "anheften", "bearbeitungsmodus" }) then
+        return PriorityFramesResult("Priority Frames placement help", {
+            "Open Group Frames > Priority > Placement. Attach the strip to the right, left, top, or bottom of the active Party/Raid container, or choose Free position and place the dedicated Priority Frames mover in Edit Mode.",
+            "Attached placement follows whichever Party, Raid, or Mythic Raid container is active. Growth, spacing, attachment gap, and alignment offset are configured on the same page.",
+        })
+    end
+
+    if ContainsAny(norm, { "combat", "in combat", "during combat", "fight", "fighting", "kampf", "im kampf", "waehrend des kampfs" }) then
+        return PriorityFramesResult("Priority Frames combat help", {
+            "Existing Priority frames remain usable in combat, but WoW protects secure group-frame membership and layout changes. A pin, roster, slot, or placement change that needs a secure refresh is applied after combat ends.",
+            "Set or change the Priority Frames keybinding out of combat. This avoids blocked protected-frame work while preserving normal click-casting on the frames already shown.",
+        })
+    end
+
+    if ContainsAny(norm, { "empty", "missing", "not showing", "does not show", "doesn't show", "cannot see", "can't see", "invisible", "gone", "why no", "leer", "fehlt", "nicht sichtbar", "wird nicht angezeigt" }) then
+        return PriorityFramesResult("Priority Frames troubleshooting", {
+            "Check that Priority Frames are enabled, you are in a party or raid, and the matching base Party/Raid frames are enabled. Then confirm that an assigned tank or manually pinned player is currently in the group and that Visible slots is not already full.",
+            "Saved players who are not in the current group do not create empty placeholders. If the roster or selection changed during combat, leave combat so the protected membership refresh can finish.",
+        })
+    end
+
+    if ContainsAny(norm, { "performance", "cpu", "fps", "poll", "polling", "ticker", "onupdate", "overhead", "leistung", "performance kosten" }) then
+        return PriorityFramesResult("Priority Frames performance help", {
+            "Priority selection is event-driven and has no continuous polling ticker or OnUpdate loop. It resolves the current roster only when configuration, pins, group state, or relevant unit identity changes require a refresh.",
+            "Automatic selection reads WoW's assigned TANK role; it does not inspect every group member for class specializations in the background.",
+        })
+    end
+
+    if ContainsAny(norm, {
+        "clear all priority pin", "clear all priority pins", "clear priority pin", "clear priority pins",
+        "clear all priority frame pin", "clear all priority frame pins",
+        "clear all pinned frame", "clear all pinned frames",
+        "delete all priority pin", "delete all priority pins", "remove all priority pin", "remove all priority pins",
+    }) then
+        return PriorityFramesResult("Priority Frames pin manager help", {
+            "Character-specific Priority pins were not cleared from chat. Open Group Frames > Priority > Manual pins, choose Clear all, and confirm the warning after reviewing the current character's saved list.",
+            "The hover hotkey toggles one current group member; it is not the Clear all workflow. Ask 'Open Priority Frames' to go to the pin manager safely.",
+        })
+    end
+
+    if ContainsAny(norm, {
+        "remove pinned player", "remove priority pin", "delete priority pin", "reorder priority pin",
+        "move pinned player up", "move pinned player down", "priority pin order", "priority pins order",
+    }) then
+        return PriorityFramesResult("Priority Frames pin manager help", {
+            "Character-specific pins were not changed from chat. Open Group Frames > Priority > Manual pins and use the exact saved player's Up, Down, or Remove button.",
+            "Those rows depend on the live character-specific pin order, so the Assistant navigates to the manager instead of guessing an index or player.",
+        })
+    end
+
+    if ContainsAny(norm, { "pin", "pinned", "unpin", "hotkey", "keybind", "binding", "by name", "offline", "add player", "remove player", "select player", "anheften", "loesen", "hotkey", "tastenbelegung" }) then
+        return PriorityFramesResult("Priority Frames pinning help", {
+            "While grouped, set a hover hotkey on Group Frames > Priority. Then hover an MSUF Party, Raid, or Priority frame and press the Priority Frames hotkey to pin or unpin that player.",
+            "Players cannot be added by typing a name or while they are outside the current group. A previously saved pin waits silently and reappears when that player rejoins your party or raid.",
+            "If the player is already included by Include tanks automatically, removing a manual pin does not remove the automatic tank entry; disable automatic tanks if you need manual-only control.",
+        })
+    end
+
+    return PriorityFramesResult("Priority Frames help", {
+        "Priority Frames duplicate automatic tanks and manually pinned current group members into a stable extra strip without removing them from the normal Party or Raid frames.",
+        "They work in parties, raids, and Mythic raids, inherit the active group-frame appearance and click-cast behavior, and require the matching base group frames to be enabled.",
+        "Open Group Frames > Priority to enable the strip, set one to five visible slots, configure the hover hotkey, manage pins, and choose attached or Free placement.",
+    })
+end
+
 local function DirectHelpAnswer(query, opts)
     local norm = Normalize(query)
     local addonCompanions = ComplementaryAddonAnswer(query)
@@ -2064,6 +2288,8 @@ local function DirectHelpAnswer(query, opts)
     end
     local pageHelp = TryWhatCanPageHelp(norm)
     if pageHelp then return pageHelp end
+    local priorityFrames = PriorityFramesAnswer(norm)
+    if priorityFrames then return priorityFrames end
     if ContainsAny(norm, { "gcd", "global cooldown", "global cool down" })
         and ContainsAny(norm, { "what", "what is", "what does", "help", "explain", "mean" })
     then
@@ -2759,6 +2985,7 @@ local NO_MATCH_SEARCH_SIGNAL_TERMS = {
     "width", "height", "size", "scale", "alpha", "opacity", "anchor", "position", "offset", "spacing", "gap",
     "border", "portrait", "indicator", "status", "cooldown", "stack", "filter", "profile", "copy", "reset",
     "gameplay", "crosshair", "totem", "class power", "class resource", "resource",
+    "priority frame", "priority frames", "pinned frame", "pinned frames", "co tank", "co-tank", "augmentation evoker",
 }
 
 local NO_MATCH_SEARCH_LOW_SIGNAL_TOKENS = {

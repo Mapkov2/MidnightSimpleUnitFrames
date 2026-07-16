@@ -109,6 +109,32 @@ local playerRaidMarkerAnchorSetting, playerRaidMarkerAnchorBox, playerRaidMarker
     "player.raidMarkerAnchor", "TOPLEFT")
 local playerRaidMarkerXSetting, playerRaidMarkerXBox, playerRaidMarkerXOriginal = patchSetting(
     "player.raidMarkerOffsetX", 16)
+local prioritySettingCases = {
+    { key = "gf_priority.enabled", initial = false },
+    { key = "gf_priority.autoTanks", initial = true },
+    { key = "gf_priority.maxFrames", initial = 5 },
+    { key = "gf_priority.anchorMode", initial = "RAID_LEFT" },
+    { key = "gf_priority.growth", initial = "DOWN" },
+    { key = "gf_priority.spacing", initial = 2 },
+    { key = "gf_priority.attachGap", initial = 8 },
+    { key = "gf_priority.attachOffset", initial = 0 },
+}
+local priorityByKey = {}
+for i = 1, #prioritySettingCases do
+    local item = prioritySettingCases[i]
+    item.setting, item.box, item.original = patchSetting(item.key, item.initial)
+    priorityByKey[item.key] = item
+end
+local priorityNeighborCases = {
+    { key = "gf_party.spacing", initial = 7 },
+    { key = "gf_raid.spacing", initial = 9 },
+    { key = "gf_party.growth", initial = "LEFT" },
+    { key = "gf_raid.growth", initial = "RIGHT" },
+}
+for i = 1, #priorityNeighborCases do
+    local item = priorityNeighborCases[i]
+    item.setting, item.box, item.original = patchSetting(item.key, item.initial)
+end
 
 local portraitOwnerUnits = { "player", "target", "focus", "pet", "targettarget", "focustarget", "boss" }
 for i = 1, #portraitOwnerUnits do
@@ -351,6 +377,65 @@ assert(not auraOutput:find("could not verify that as an msuf capability", 1, tru
 assert(auraOutput:find("rejuvenation", 1, true) or auraOutput:find("blacklist", 1, true),
     "polite aura-list action did not reach aura guidance")
 
+local function assertPriorityWrite(prompt, key, initial, expected)
+    resetTask()
+    local target = assert(priorityByKey[key], "missing Priority test target " .. tostring(key))
+    target.box.value = initial
+    local before = {}
+    for i = 1, #prioritySettingCases do
+        local item = prioritySettingCases[i]
+        before[item.key] = item.box.value
+    end
+    for i = 1, #priorityNeighborCases do
+        local item = priorityNeighborCases[i]
+        before[item.key] = item.box.value
+    end
+
+    local result = assert(A.Submit(prompt), prompt .. ": missing result")
+    assert(status(result) == "applied" or status(result) == "unchanged",
+        prompt .. ": expected an exact Priority Frames mutation; " .. tostring(result.text))
+    assert(target.box.value == expected,
+        prompt .. ": changed " .. key .. " to " .. tostring(target.box.value)
+            .. " instead of " .. tostring(expected))
+    for i = 1, #prioritySettingCases do
+        local item = prioritySettingCases[i]
+        if item.key ~= key then
+            assert(item.box.value == before[item.key],
+                prompt .. ": also changed unrelated Priority setting " .. item.key)
+        end
+    end
+    for i = 1, #priorityNeighborCases do
+        local item = priorityNeighborCases[i]
+        assert(item.box.value == before[item.key],
+            prompt .. ": changed ordinary group-frame setting " .. item.key)
+    end
+end
+
+assertPriorityWrite("enable priority frames", "gf_priority.enabled", false, true)
+assertPriorityWrite("turn off priority frames auto tanks", "gf_priority.autoTanks", true, false)
+assertPriorityWrite("set priority frame slots to 3", "gf_priority.maxFrames", 5, 3)
+assertPriorityWrite("set priority frame placement to right", "gf_priority.anchorMode", "FREE", "RAID_RIGHT")
+assertPriorityWrite("set priority frame placement to left", "gf_priority.anchorMode", "FREE", "RAID_LEFT")
+assertPriorityWrite("set priority frame placement to above", "gf_priority.anchorMode", "FREE", "RAID_TOP")
+assertPriorityWrite("set priority frame placement to below", "gf_priority.anchorMode", "FREE", "RAID_BOTTOM")
+assertPriorityWrite("set priority frame placement to free", "gf_priority.anchorMode", "RAID_RIGHT", "FREE")
+assertPriorityWrite("set priority frame growth to up", "gf_priority.growth", "DOWN", "UP")
+assertPriorityWrite("set priority frame spacing to 4", "gf_priority.spacing", 2, 4)
+assertPriorityWrite("set priority frame attachment gap to 12", "gf_priority.attachGap", 8, 12)
+assertPriorityWrite("set priority frame alignment offset to -15", "gf_priority.attachOffset", 0, -15)
+assertPriorityWrite("can you enable priority frames?", "gf_priority.enabled", false, true)
+assertPriorityWrite("could you set priority frame slots to 3?", "gf_priority.maxFrames", 5, 3)
+assertPriorityWrite("would you place priority frames right of group frames?", "gf_priority.anchorMode", "FREE", "RAID_RIGHT")
+
+resetTask()
+local clearPinsHelp = assert(A.Submit("Clear all Priority Frame pins"), "Priority Clear all guidance missing")
+local clearPinsText = lower(clearPinsHelp.text)
+assert(status(clearPinsHelp) == "info", "Priority Clear all did not remain a safe guided request")
+assert(clearPinsText:find("clear all", 1, true) and clearPinsText:find("manual pins", 1, true),
+    "Priority Clear all did not guide to the live character pin manager")
+assert(not clearPinsText:find("typed name", 1, true),
+    "Priority Clear all was incorrectly described as a typed-name pin request")
+
 hideSetting.get, hideSetting.set, hideSetting.apply = hideOriginal.get, hideOriginal.set, hideOriginal.apply
 widthSetting.get, widthSetting.set, widthSetting.apply = widthOriginal.get, widthOriginal.set, widthOriginal.apply
 sharedHealthTextSetting.get, sharedHealthTextSetting.set, sharedHealthTextSetting.apply = sharedHealthTextOriginal.get, sharedHealthTextOriginal.set, sharedHealthTextOriginal.apply
@@ -380,5 +465,13 @@ partyBuffSizeSetting.get, partyBuffSizeSetting.set, partyBuffSizeSetting.apply =
 partyDebuffSizeSetting.get, partyDebuffSizeSetting.set, partyDebuffSizeSetting.apply = partyDebuffSizeOriginal.get, partyDebuffSizeOriginal.set, partyDebuffSizeOriginal.apply
 playerRaidMarkerAnchorSetting.get, playerRaidMarkerAnchorSetting.set, playerRaidMarkerAnchorSetting.apply = playerRaidMarkerAnchorOriginal.get, playerRaidMarkerAnchorOriginal.set, playerRaidMarkerAnchorOriginal.apply
 playerRaidMarkerXSetting.get, playerRaidMarkerXSetting.set, playerRaidMarkerXSetting.apply = playerRaidMarkerXOriginal.get, playerRaidMarkerXOriginal.set, playerRaidMarkerXOriginal.apply
+for i = 1, #prioritySettingCases do
+    local item = prioritySettingCases[i]
+    item.setting.get, item.setting.set, item.setting.apply = item.original.get, item.original.set, item.original.apply
+end
+for i = 1, #priorityNeighborCases do
+    local item = priorityNeighborCases[i]
+    item.setting.get, item.setting.set, item.setting.apply = item.original.get, item.original.set, item.original.apply
+end
 
-io.write("assistant_router_safety_regression: ok cases=48\n")
+io.write("assistant_router_safety_regression: ok cases=64\n")

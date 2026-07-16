@@ -62,6 +62,11 @@ local function snapshotConfigDB()
     return out
 end
 
+local function snapshotPriorityCharacterState()
+    local global = type(_G.MSUF_GlobalDB) == "table" and _G.MSUF_GlobalDB or nil
+    return clone(global and global.char or nil)
+end
+
 local function assertNoSettingWrite(prompt)
     local before = snapshotSettings()
     local dbBefore = snapshotConfigDB()
@@ -120,6 +125,70 @@ local readOnlyPrompts = {
 }
 
 for i = 1, #readOnlyPrompts do assertNoSettingWrite(readOnlyPrompts[i]) end
+
+local priorityQuestionCases = {
+    {
+        prompt = "what are Priority Frames?",
+        contains = { "Priority Frames help", "stable extra strip", "without removing them" },
+    },
+    {
+        prompt = "do Priority Frames work in a party?",
+        contains = { "Priority Frames Party and Raid help", "work in parties, raids, and Mythic raids" },
+    },
+    {
+        prompt = "can Priority Frames show only my co-tank?",
+        contains = { "Priority Frames co-tank help", "Include tanks automatically", "only your co-tank" },
+    },
+    {
+        prompt = "would Priority Frames help my Augmentation Evoker track Prescience or Ebon Might targets?",
+        contains = {
+            "Augmentation Evoker Priority Frames help",
+            "does not automatically detect other players' specializations",
+            "pin", "manually", "Prescience or Ebon Might",
+        },
+    },
+    {
+        prompt = "are Priority Frame pins profile-wide?",
+        contains = { "Priority Frames pin persistence help", "layout is profile-wide", "pins are character-specific" },
+    },
+    {
+        prompt = "how do I pin someone to Priority Frames?",
+        contains = { "Priority Frames pinning help", "hover", "Priority Frames hotkey" },
+    },
+    {
+        prompt = "feature request: add co-tank frames",
+        contains = { "Priority Frames feature request help", "Priority Frames" },
+    },
+}
+for i = 1, #priorityQuestionCases do
+    local case = priorityQuestionCases[i]
+    if type(A.StartNewTask) == "function" then A.StartNewTask() end
+    local characterBefore = snapshotPriorityCharacterState()
+    local result = assertNoSettingWrite(case.prompt)
+    assert(tostring(result.status or result.result or "") == "info",
+        case.prompt .. ": expected a read-only Priority Frames answer; " .. tostring(result.text))
+    local output = tostring(result.text or "")
+    for j = 1, #case.contains do
+        assert(output:find(case.contains[j], 1, true),
+            case.prompt .. ": missing " .. case.contains[j] .. "; " .. output)
+    end
+    assert(equal(characterBefore, snapshotPriorityCharacterState()),
+        case.prompt .. ": changed character-specific Priority Frame pins")
+end
+
+if type(A.StartNewTask) == "function" then A.StartNewTask() end
+local characterBeforeNamePin = snapshotPriorityCharacterState()
+local namePin = assertNoSettingWrite("pin Bob in Priority Frames")
+local namePinStatus = tostring(namePin.status or namePin.result or "")
+local namePinText = tostring(namePin.text or "")
+assert(namePinStatus == "info" or namePinStatus == "ambiguous",
+    "name-based Priority pin did not fail closed: " .. namePinText)
+assert(namePinText:lower():find("hover", 1, true) and namePinText:lower():find("hotkey", 1, true),
+    "name-based Priority pin did not explain the supported hover-hotkey path: " .. namePinText)
+assert(not namePinText:lower():find("pinned bob", 1, true),
+    "name-based Priority pin falsely claimed success: " .. namePinText)
+assert(equal(characterBeforeNamePin, snapshotPriorityCharacterState()),
+    "name-based Priority pin changed character-specific pin state")
 
 local marker = assert(Registry:GetSetting("target.showRaidMarker"), "target raid marker setting missing")
 marker.set(true)

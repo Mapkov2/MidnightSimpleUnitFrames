@@ -17,6 +17,7 @@ local function NormalizeScope(scope)
     if scope == "gf_party" then return "party" end
     if scope == "gf_raid" then return "raid" end
     if scope == "gf_mythicraid" then return "mythicraid" end
+    if scope == "gf_priority" or scope == "priority" then return "priority" end
     if scope == "party" or scope == "raid" or scope == "mythicraid" then return scope end
     return nil
 end

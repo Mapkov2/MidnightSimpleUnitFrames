@@ -127,11 +127,13 @@ local UNIT_FRAME = Enum({
 })
 local EDIT_UNIT = Enum({
     "player", "target", "targettarget", "focustarget", "focus", "pet", "boss",
-    "party", "raid", "mythicraid",
+    "party", "raid", "mythicraid", "gf_priority",
 }, {
     ["target of target"] = "targettarget", tot = "targettarget",
     ["focus target"] = "focustarget", boss1 = "boss", bosses = "boss",
     group = "party", ["mythic raid"] = "mythicraid",
+    priority = "gf_priority", ["priority frame"] = "gf_priority", ["priority frames"] = "gf_priority",
+    ["pinned frame"] = "gf_priority", ["pinned frames"] = "gf_priority",
 })
 local CASTBAR_UNIT = Enum({ "player", "target", "focus", "boss" }, {
     boss1 = "boss", bosses = "boss",

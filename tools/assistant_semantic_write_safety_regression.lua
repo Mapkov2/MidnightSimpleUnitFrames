@@ -112,6 +112,8 @@ local targetCastbarX = patchSetting("general.castbarTargetOffsetX", 11)
 local targetCastbarY = patchSetting("general.castbarTargetOffsetY", -7)
 local targetCastbarIconX = patchSetting("general.castbarTargetIconOffsetX", 3)
 local targetCastbarIconY = patchSetting("general.castbarTargetIconOffsetY", -2)
+local priorityEnabled = patchSetting("gf_priority.enabled", false)
+local prioritySlots = patchSetting("gf_priority.maxFrames", 5)
 
 local cases = 0
 local function counted()
@@ -477,6 +479,45 @@ assert(targetWidth.value == 300 and targetWidth.writes == 1,
 local remainingFlow = type(A.Workflow) == "table" and type(A.Workflow.PendingFlow) == "function"
     and A.Workflow.PendingFlow() or A.pendingFlow
 assert(remainingFlow == nil, "settingValue flow survived its successful numeric follow-up")
+counted()
+
+-- Priority Frames questions and feature ideas are read-only even when they
+-- contain the complete visible label. Unsupported name-based pinning must not
+-- partially apply another valid control from the same sentence.
+local priorityQuestion = assertNoWrite(
+    "would enabling Priority Frames help my co-tank?", priorityEnabled, false)
+assert(status(priorityQuestion) == "info", resultText(priorityQuestion))
+assert(resultText(priorityQuestion):find("Priority Frames", 1, true),
+    "Priority Frames decision question lost its feature context")
+counted()
+
+resetTask()
+resetBox(priorityEnabled, false)
+resetBox(prioritySlots, 5)
+local mixedNamePin = submit("enable Priority Frames and pin Bob by name")
+local mixedNamePinStatus = status(mixedNamePin)
+assert(mixedNamePinStatus == "info" or mixedNamePinStatus == "ambiguous",
+    "unsupported name pin did not fail closed: " .. resultText(mixedNamePin))
+assert(priorityEnabled.value == false and priorityEnabled.writes == 0,
+    "unsupported name pin partially enabled Priority Frames")
+assert(prioritySlots.value == 5 and prioritySlots.writes == 0,
+    "unsupported name pin changed Priority Frame slots")
+assert(#A.undoStack == 0, "unsupported name pin created a partial undo transaction")
+assert(resultText(mixedNamePin):lower():find("hover", 1, true)
+        and resultText(mixedNamePin):lower():find("hotkey", 1, true),
+    "unsupported name pin did not explain hover-hotkey pinning: " .. resultText(mixedNamePin))
+counted()
+
+local highlightQuestion = assertNoWrite(
+    "what does custom highlight priority do?", priorityEnabled, false)
+assert(not resultText(highlightQuestion):find("stable extra strip", 1, true),
+    "highlight-priority question was misrouted to Priority Frames")
+counted()
+
+local augmentationResourceQuestion = assertNoWrite(
+    "what are Augmentation Evoker resources?", priorityEnabled, false)
+assert(not resultText(augmentationResourceQuestion):find("Priority Frames help", 1, true),
+    "generic Augmentation resource question was misrouted to Priority Frames")
 counted()
 
 for i = #patched, 1, -1 do

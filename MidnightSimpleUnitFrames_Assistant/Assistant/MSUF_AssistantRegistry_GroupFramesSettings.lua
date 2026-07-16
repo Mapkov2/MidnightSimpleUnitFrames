@@ -23,6 +23,7 @@ local RegisterGroupVisualSettings = A.GroupFramesRegistry and A.GroupFramesRegis
 local RegisterGroupScalingSettings = A.GroupFramesRegistry and A.GroupFramesRegistry.RegisterScalingSettings
 local RegisterGroupLayoutSettings = A.GroupFramesRegistry and A.GroupFramesRegistry.RegisterLayoutSettings
 local RegisterGroupBasicSettings = A.GroupFramesRegistry and A.GroupFramesRegistry.RegisterBasicSettings
+local RegisterPrioritySettings = A.GroupFramesRegistry and A.GroupFramesRegistry.RegisterPrioritySettings
 local RegisterGroupBarAndPowerSettings = A.GroupFramesRegistry and A.GroupFramesRegistry.RegisterBarAndPowerSettings
 local RegisterFramePowerToggleSettings = A.GroupFramesRegistry and A.GroupFramesRegistry.RegisterFramePowerToggleSettings
 local RegisterFrameOrderingSettings = A.GroupFramesRegistry and A.GroupFramesRegistry.RegisterFrameOrderingSettings
@@ -92,4 +93,8 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
     if type(RegisterGroupTargetedSpellSettings) == "function" then RegisterGroupTargetedSpellSettings(ctx, scope) end
 
 end
+end
+
+if type(RegisterPrioritySettings) == "function" then
+    RegisterPrioritySettings(ctx)
 end

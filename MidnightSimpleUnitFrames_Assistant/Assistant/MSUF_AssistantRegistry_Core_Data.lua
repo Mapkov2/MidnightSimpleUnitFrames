@@ -25,6 +25,7 @@ Data.UNIT_LABELS = {
     party = "Party",
     raid = "Raid",
     mythicraid = "Mythic Raid",
+    priority = "Priority Frames",
 }
 
 Data.UNIT_ALIASES = {
@@ -38,6 +39,10 @@ Data.UNIT_ALIASES = {
     party = { "party", "party frame", "party frames", "partyframe", "group", "group frames", "gruppenframes", "gruppe" },
     raid = { "raid", "raid frame", "raid frames", "raidframe", "schlachtzug" },
     mythicraid = { "mythicraid", "mythic raid", "mythic raid frame", "mythic raid frames", "mythicraidframe" },
+    priority = {
+        "priority frames", "priority frame", "pinned frames", "pinned frame",
+        "extra group frames", "tank frames",
+    },
 }
 
 Data.AURA_LANE_FIELDS = {
