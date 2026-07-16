@@ -23,6 +23,7 @@ LOCALE_TOC = REPO_ROOT / "MidnightSimpleUnitFrames_Locales" / "MidnightSimpleUni
 ASSISTANT_TOC = REPO_ROOT / "MidnightSimpleUnitFrames_Assistant" / "MidnightSimpleUnitFrames_Assistant.toc"
 ASSISTANT_ROOT = ASSISTANT_TOC.parent
 ASSISTANT_MANIFEST = ASSISTANT_ROOT / "MSUF_AssistantRuntime.xml"
+MENU_LOCALE_AUDIT = REPO_ROOT / ".github" / "scripts" / "tests" / "full_menu_locale_coverage_smoke.py"
 ASSISTANT_SCRIPT_COUNT = 328
 ASSISTANT_ORDER_SHA256 = "6D93B5BB79D3EDAFDF14D2838216E6ACEE814645ED37AFDEFB28863A9F232A39"
 LUA_MAIN_CHUNK_LOCAL_BUDGETS = {
@@ -178,6 +179,20 @@ def check_locale_contracts() -> None:
             f"{locale} active-pack guard",
         )
         require(main_toc, locale_ref, f"main TOC {locale} source")
+
+
+def check_full_menu_locale_coverage() -> None:
+    result = subprocess.run(
+        [sys.executable, str(MENU_LOCALE_AUDIT), str(REPO_ROOT)],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if result.returncode != 0:
+        detail = (result.stdout + result.stderr).strip()
+        raise CheckError("full Menu2 locale coverage failed" + (f":\n{detail}" if detail else ""))
 
 
 def toc_field(text: str, name: str) -> str:
@@ -890,6 +905,7 @@ def main() -> int:
     lua_files = all_lua_files()
     check_luac(lua_files)
     check_locale_contracts()
+    check_full_menu_locale_coverage()
     check_assistant_runtime_contracts()
     check_load_reachability(lua_files)
     check_kernel_castbar_contracts()

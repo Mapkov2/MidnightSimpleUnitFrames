@@ -22,8 +22,16 @@ local routing = Read("MidnightSimpleUnitFrames/Shell/Menu2/Search/MSUF_Menu2_Sea
 local faq = Read("MidnightSimpleUnitFrames/Shell/Menu2/Search/MSUF_Menu2_Search_FAQ_Catalog_02.lua")
 local window = Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Window.lua")
 local bindings = Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Bindings.lua")
-local enUS = Read("MidnightSimpleUnitFrames/Locales/enUS.lua")
-local deDE = Read("MidnightSimpleUnitFrames/Locales/deDE.lua")
+local util = Read("MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua")
+local toc = Read("MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc")
+local priorityFAQLocales = Read("MidnightSimpleUnitFrames/Locales/MSUF_PriorityFrames_FAQ.lua")
+local localeNames = { "enUS", "enGB", "deDE", "esES", "esMX", "frFR", "itIT", "koKR", "ptBR", "ruRU", "zhCN", "zhTW" }
+local localeSources = {}
+for i = 1, #localeNames do
+  local name = localeNames[i]
+  localeSources[name] = Read("MidnightSimpleUnitFrames/Locales/" .. name .. ".lua")
+end
+local enUS = localeSources.enUS
 
 Has(xml, 'Pages\\MSUF_Menu2_GroupPriority.lua', "Priority page is not loaded")
 Has(group, '{ key = "gf_priority"', "Priority is not the fifth Group workspace tab")
@@ -91,12 +99,51 @@ Has(faq, "In a party they inherit Party Frames", "Priority FAQ does not explain 
 Has(window, '"PLAYER_SPECIALIZATION_CHANGED", "UPDATE_BINDINGS"', "Visible Menu2 state events do not refresh Priority state")
 Has(bindings, "gf_priority = GROUP_RESET_INFO", "Priority page reset mapping missing")
 Has(bindings, 'ReplaceRootTable(db, defaults, "gf_priority")', "Priority reset fallback missing")
+Has(util, 'MSUF.Translate("Pin or unpin hovered group member")', "Priority binding name bypasses localization")
+Has(toc, 'Locales\\MSUF_PriorityFrames_FAQ.lua', "Priority FAQ locale supplement is not loaded")
 
-for _, locale in ipairs({ enUS, deDE }) do
-  Has(locale, 'L["Waiting — enable Party frames first."]', "Party waiting locale missing")
-  Has(locale, 'L["Saved · Party frames disabled"]', "Party pin-state locale missing")
-  Has(locale, 'L["Right of group frames"]', "generic placement locale missing")
-  Has(locale, 'L["Use the hover hotkey above to add or remove players."]', "hover-hotkey hint locale missing")
+local priorityBlock = assert(enUS:match(
+  '%-%- Priority Frames workspace%.(.-)%-%- MSUF FULL CORE MENU SOURCE INVENTORY'),
+  "enUS Priority locale block missing")
+local priorityLocaleKeys = {}
+for key in priorityBlock:gmatch('L%["(.-)"%]') do priorityLocaleKeys[#priorityLocaleKeys + 1] = key end
+assert(#priorityLocaleKeys >= 90, "Priority locale contract unexpectedly small: " .. tostring(#priorityLocaleKeys))
+for i = 1, #localeNames do
+  local name = localeNames[i]
+  local source = localeSources[name]
+  local untranslated = 0
+  for k = 1, #priorityLocaleKeys do
+    local key = priorityLocaleKeys[k]
+    Has(source, 'L["' .. key .. '"]', name .. " Priority translation missing")
+    if name ~= "enUS" and name ~= "enGB" then
+      local escaped = key:gsub("([%%%-%+%*%?%[%]%^%$%(%)%.])", "%%%1")
+      local value = source:match('L%["' .. escaped .. '"%]%s*=%s*"(.-)"')
+      if value == key then untranslated = untranslated + 1 end
+    end
+  end
+  assert(untranslated <= 4, name .. " retained too many English Priority values: " .. tostring(untranslated))
+end
+
+local faqKeys = {}
+for question, answer in faq:gmatch('{ "([^"]+)", "([^"]+)", "gf_priority",') do
+  faqKeys[#faqKeys + 1] = question
+  faqKeys[#faqKeys + 1] = answer
+end
+assert(#faqKeys == 28, "Priority FAQ source contract changed: " .. tostring(#faqKeys))
+for i = 1, #localeNames do
+  local name = localeNames[i]
+  local translated = {}
+  local ns = { LOCALE = name, L = translated }
+  assert(loadfile(root .. "/MidnightSimpleUnitFrames/Locales/MSUF_PriorityFrames_FAQ.lua"))(
+    "MidnightSimpleUnitFrames", ns)
+  for k = 1, #faqKeys do
+    local key = faqKeys[k]
+    assert(type(translated[key]) == "string" and translated[key] ~= "",
+      name .. " Priority FAQ translation missing: " .. key)
+    if name ~= "enUS" and name ~= "enGB" then
+      assert(translated[key] ~= key, name .. " Priority FAQ retained English: " .. key)
+    end
+  end
 end
 
 print("PASS priority frames Menu2: Party/Raid UX, live listener, managed hotkey, pooled pins, search/reset wiring, zero polling")

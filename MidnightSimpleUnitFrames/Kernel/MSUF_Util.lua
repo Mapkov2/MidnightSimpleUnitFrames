@@ -983,7 +983,9 @@ ExportPublic("MSUF_GetProfileScopedCache", GetProfileScopedCache)
 BINDING_HEADER_MSUF_HEADER = "Midnight Simple Unit Frames"
 BINDING_NAME_MSUF_TOGGLE_OPTIONS = "Toggle MSUF Options"
 BINDING_NAME_MSUF_TOGGLE_EDITMODE = "Toggle MSUF Edit Mode"
-BINDING_NAME_MSUF_PRIORITY_TOGGLE = "Pin or unpin hovered group member"
+BINDING_NAME_MSUF_PRIORITY_TOGGLE = type(MSUF.Translate) == "function"
+    and MSUF.Translate("Pin or unpin hovered group member")
+    or "Pin or unpin hovered group member"
 local MSUF_BINDING_COMMANDS = {
     "MSUF_TOGGLE_OPTIONS",
     "MSUF_TOGGLE_EDITMODE",
