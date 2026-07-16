@@ -9309,6 +9309,7 @@ R.PAGE_LOCATION_TERMS = {    { label = "Support Links", terms = { "support link"
     { label = "Group Dispel Overlay", terms = { "group effects", "debuff stripe", "group dispel", "group dispel overlay", "dispel overlay" } },
     { label = "Group Status & Indicators", terms = { "group status and indicators", "group indicators", "group indicator", "ready check", "ready checks", "role icon", "raid marker", "corner indicator", "corner indicators" } },
     { label = "Group Auras", terms = { "group aura", "group auras", "party auras", "raid auras", "mythic raid auras", "group buffs", "group debuffs", "party buffs", "party debuffs", "raid buffs", "raid debuffs" } },
+    { label = "Priority Frames", terms = { "priority frame", "priority frames", "pinned frame", "pinned frames", "priority strip", "pinned players", "co tank frame", "co-tank frame", "off tank frame", "off-tank frame", "extra party frames", "extra raid frames" } },
     { label = "Group Layout", terms = { "group layout", "group frames", "party frames", "raid frames", "mythic raid frames", "party layout", "raid layout" } },
     { label = "Target of Target", terms = { "target of target", "targettarget" } },
     { label = "Focus Target", terms = { "focus target", "focustarget" } },
@@ -12109,6 +12110,10 @@ local DIRECT_NAVIGATION_PAGE_SUBJECTS = {
     ["group status"] = "open group status and indicators",
     ["group status and indicators"] = "open group status and indicators",
     ["group aura"] = "open group auras", ["group auras"] = "open group auras",
+    ["priority"] = "open priority frames", ["priority frame"] = "open priority frames",
+    ["priority frames"] = "open priority frames", ["priority strip"] = "open priority frames",
+    ["pinned frame"] = "open priority frames", ["pinned frames"] = "open priority frames",
+    ["co tank frames"] = "open priority frames", ["co-tank frames"] = "open priority frames",
     ["party"] = "open group layout",
     ["party frames"] = "open group layout", ["raid"] = "open group layout",
     ["raid frames"] = "open group layout", ["group frames"] = "open group layout",
@@ -14115,6 +14120,129 @@ function A.RouteInput(text, coreHandler)
             coreCache[value] = result or false
         end
         return coreCache[value] ~= false and coreCache[value] or nil
+    end
+
+    -- Priority Frames have two state owners: eight profile settings are safe
+    -- direct writes, while character pins require a live hovered group unit.
+    -- Resolve questions and pin-by-name wording before Aura "show only" and
+    -- generic Name parsers can reinterpret co-tank/player language. Compound
+    -- requests containing an unsafe pin operation fail as one atomic request.
+    do
+        local normalized = R.Normalize(text)
+        local priorityTopic = R.ContainsAny(normalized, {
+            "priority frame", "priority frames", "priorityframe", "priorityframes", "priority strip",
+            "priority pin", "priority pins", "pinned frame", "pinned frames", "pinned player", "pinned players",
+            "co tank frame", "co tank frames", "co-tank frame", "co-tank frames", "cotank frame", "cotank frames",
+            "off tank frame", "off tank frames", "off-tank frame", "off-tank frames",
+            "prioritaetsframe", "prioritaetsframes", "prioritaetsrahmen",
+        })
+        if priorityTopic then
+            local clearPinMutation = normalized:match("^clear%s+.-pin")
+                or normalized:match("%s+and%s+clear%s+.-pin")
+            local rowPinMutation = normalized:match("^remove%s+.-pin")
+                or normalized:match("^reorder%s+.-pin")
+                or normalized:match("^move%s+.-pinned%s+player")
+                or normalized:match("%s+and%s+remove%s+.-pin")
+                or normalized:match("%s+and%s+move%s+.-pinned%s+player")
+            local typedPinMutation = not clearPinMutation and not rowPinMutation and (
+                normalized:find("%f[%a]pin%f[%A]")
+                or normalized:find("%f[%a]unpin%f[%A]")
+            )
+            local pinMutation = clearPinMutation or rowPinMutation or typedPinMutation
+
+            local function PlacementValue(valueText)
+                if R.ContainsAny(valueText, { "free position", " freely", " detached", " free" }) then
+                    return "free"
+                elseif R.ContainsAny(valueText, { "above", " on top", " top of" }) then
+                    return "above"
+                elseif R.ContainsAny(valueText, { "below", " underneath", " bottom of" }) then
+                    return "below"
+                elseif R.ContainsAny(valueText, { "left", "links" }) then
+                    return "left"
+                elseif R.ContainsAny(valueText, { "right", "rechts" }) then
+                    return "right"
+                end
+            end
+
+            -- "Can/could/would you ..." is a polite command when it carries
+            -- a concrete mutation verb. Preserve question safety for "can I"
+            -- and "can Priority Frames ..." capability questions, but do not
+            -- turn an explicit polite setting request into read-only help.
+            local politeSubject = normalized:match("^can%s+you%s+(.+)$")
+                or normalized:match("^could%s+you%s+(.+)$")
+                or normalized:match("^would%s+you%s+(.+)$")
+                or normalized:match("^please%s+(.+)$")
+            local politeMutation = politeSubject and (
+                politeSubject:match("^enable%s+") or politeSubject:match("^disable%s+")
+                or politeSubject:match("^set%s+") or politeSubject:match("^change%s+")
+                or politeSubject:match("^make%s+") or politeSubject:match("^turn%s+")
+                or politeSubject:match("^show%s+priority%s+") or politeSubject:match("^show%s+pinned%s+")
+                or politeSubject:match("^hide%s+priority%s+") or politeSubject:match("^hide%s+pinned%s+")
+                or politeSubject:match("^place%s+") or politeSubject:match("^position%s+")
+                or politeSubject:match("^attach%s+")
+            )
+            if politeMutation and not pinMutation then
+                local placementVerb = politeSubject:match("^place%s+") or politeSubject:match("^position%s+")
+                    or politeSubject:match("^attach%s+")
+                local placementValue = placementVerb and PlacementValue(politeSubject) or nil
+                local command = placementValue and ("set priority frame placement to " .. placementValue)
+                    or politeSubject
+                local result = Core(command)
+                if result and not A.RouterIsUnknownResult(result) then return result end
+            end
+
+            local questionOrRequest = normalized:match("^what%s+") or normalized:match("^why%s+")
+                or normalized:match("^how%s+") or normalized:match("^where%s+")
+                or normalized:match("^when%s+") or normalized:match("^which%s+")
+                or normalized:match("^who%s+") or (not politeMutation and normalized:match("^can%s+"))
+                or (not politeMutation and normalized:match("^could%s+"))
+                or (not politeMutation and normalized:match("^would%s+"))
+                or normalized:match("^should%s+") or normalized:match("^do%s+")
+                or normalized:match("^does%s+") or normalized:match("^is%s+")
+                or normalized:match("^are%s+") or normalized:match("^will%s+")
+                or normalized:find("feature request", 1, true)
+                or normalized:find("feature suggestion", 1, true)
+                or normalized:match("^please%s+add%s+.-frame")
+
+            if pinMutation or questionOrRequest then
+                local query = typedPinMutation and "how do I pin or unpin a player in Priority Frames?" or text
+                local answer = A.Knowledge and type(A.Knowledge.Answer) == "function"
+                    and A.Knowledge.Answer(query, { currentPage = "gf_priority" }) or nil
+                if answer then
+                    answer = R.AsReadOnlyResult(answer)
+                    if typedPinMutation then
+                        answer.text = "I kept the whole request unchanged because Priority players cannot be selected safely by a typed name.\n"
+                            .. tostring(answer.text or "")
+                        answer.summary = "Keeps name-based Priority pin requests atomic and guides the hover hotkey workflow."
+                    end
+                    return answer
+                end
+                if pinMutation then
+                    return {
+                        text = typedPinMutation
+                            and "I kept the whole request unchanged. Set the Priority Frames hover hotkey, then hover the player's MSUF Party or Raid frame and press it to pin or unpin that current group member."
+                            or "I kept the character-specific pins unchanged. Open Group Frames > Priority and use the Manual pins controls for Clear, Remove, or Reorder.",
+                        status = "info",
+                        result = "info",
+                        summary = typedPinMutation and "Priority pins require a live hovered group unit."
+                            or "Priority pin management requires the live character-specific pin list.",
+                    }
+                end
+            end
+
+            -- Natural container-placement commands map to the reviewed enum;
+            -- pixel nudges remain Edit Mode-owned and intentionally do not use
+            -- this shortcut.
+            local placementVerb = normalized:match("^place%s+") or normalized:match("^position%s+")
+                or normalized:match("^attach%s+")
+            if placementVerb then
+                local value = PlacementValue(normalized)
+                if value then
+                    local result = Core("set priority frame placement to " .. value)
+                    if result and not A.RouterIsUnknownResult(result) then return result end
+                end
+            end
+        end
     end
 
     local scopedAuraGrowthClarification = R.TryScopedAuraGrowthClarification

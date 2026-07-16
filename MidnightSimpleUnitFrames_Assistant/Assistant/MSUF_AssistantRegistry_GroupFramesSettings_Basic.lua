@@ -165,3 +165,130 @@ function A.GroupFramesRegistry.RegisterBasicSettings(ctx, scope)
         booleanAliases = type(GroupReverseFillBooleanAliases) == "function" and GroupReverseFillBooleanAliases(scope) or nil,
     })
 end
+
+-- Priority Frames inherit the active Party/Raid visual spec, so their public
+-- Assistant surface is intentionally limited to the eight selection and
+-- container controls exposed by Menu2. Character-local pins and keybindings
+-- have different state owners and are not registered as profile settings.
+function A.GroupFramesRegistry.RegisterPrioritySettings(ctx)
+    if type(ctx) ~= "table" then return end
+
+    local GroupDB = ctx.GroupDB
+    local RegisterGroupBoolean = ctx.RegisterGroupBoolean
+    local RegisterGroupNumber = ctx.RegisterGroupNumber
+    local RegisterGroupEnum = ctx.RegisterGroupEnum
+    if type(GroupDB) ~= "function"
+        or type(RegisterGroupBoolean) ~= "function"
+        or type(RegisterGroupNumber) ~= "function"
+        or type(RegisterGroupEnum) ~= "function"
+    then
+        return
+    end
+
+    local scope = "priority"
+    local function Options(description, extra)
+        local opts = {
+            page = "gf_priority",
+            description = description,
+        }
+        for key, value in pairs(extra or {}) do opts[key] = value end
+        return opts
+    end
+
+    RegisterGroupBoolean(scope, "enabled", "enabled", "Enabled", false, "rebuild", {
+        "priority frames", "priority frame", "pinned frames", "pinned frame",
+        "enable priority frames", "disable priority frames", "show priority frames", "hide priority frames",
+        "enable pinned frames", "disable pinned frames", "show pinned frames", "hide pinned frames",
+        "extra group frames", "extra party frames", "extra raid frames",
+    }, Options(
+        "Shows a small duplicate strip for automatic tanks and manually pinned Party or Raid members.",
+        {
+            -- Normal group-frame enable toggles show a reload notice. Priority
+            -- Frames own a combat-safe secure refresh and never need it.
+            set = function(_, value) GroupDB(scope).enabled = value == true end,
+        }
+    ))
+
+    RegisterGroupBoolean(scope, "autoTanks", "autoTanks", "Include Tanks Automatically", true, "rebuild", {
+        "priority frame auto tanks", "priority frames auto tanks", "pinned frame auto tanks",
+        "include tanks automatically in priority frames", "automatic tanks in priority frames",
+        "auto pin tanks", "automatically pin tanks", "priority tank frames",
+        "co tank priority frame", "co tank priority frames", "off tank priority frame", "off tank priority frames",
+    }, Options(
+        "Adds every current group member whose assigned group role is Tank before manual pins are filled."
+    ))
+
+    RegisterGroupNumber(scope, "maxFrames", "maxFrames", "Visible Slots", 5, 1, 5, 1, "rebuild", {
+        "priority frame slots", "priority frames slots", "priority visible slots",
+        "pinned frame slots", "pinned frames slots", "max priority frames", "maximum priority frames",
+        "max pinned frames", "maximum pinned frames", "priority frame count", "priority frame limit",
+    }, Options(
+        "Sets the one-to-five visible Priority Frame limit; automatic tanks take slots before manual pins."
+    ))
+
+    RegisterGroupEnum(scope, "anchorMode", "anchorMode", "Placement", "RAID_RIGHT", {
+        "RAID_RIGHT", "RAID_LEFT", "RAID_TOP", "RAID_BOTTOM", "FREE",
+    }, {
+        right = "RAID_RIGHT",
+        ["right of group frames"] = "RAID_RIGHT",
+        ["right of party frames"] = "RAID_RIGHT",
+        ["right of raid frames"] = "RAID_RIGHT",
+        left = "RAID_LEFT",
+        ["left of group frames"] = "RAID_LEFT",
+        ["left of party frames"] = "RAID_LEFT",
+        ["left of raid frames"] = "RAID_LEFT",
+        top = "RAID_TOP",
+        above = "RAID_TOP",
+        ["above group frames"] = "RAID_TOP",
+        ["above party frames"] = "RAID_TOP",
+        ["above raid frames"] = "RAID_TOP",
+        bottom = "RAID_BOTTOM",
+        below = "RAID_BOTTOM",
+        ["below group frames"] = "RAID_BOTTOM",
+        ["below party frames"] = "RAID_BOTTOM",
+        ["below raid frames"] = "RAID_BOTTOM",
+        free = "FREE",
+        detached = "FREE",
+        ["free position"] = "FREE",
+    }, "geometry", {
+        "priority frame placement", "priority frames placement", "pinned frame placement",
+        "priority frame position mode", "priority strip placement", "attach priority frames",
+    }, Options(
+        "Attaches the strip beside the active group container or uses the dedicated free-position mover."
+    ))
+
+    RegisterGroupEnum(scope, "growth", "growth", "Growth", "DOWN", {
+        "DOWN", "UP", "RIGHT", "LEFT",
+    }, {
+        down = "DOWN", downward = "DOWN", below = "DOWN",
+        up = "UP", upward = "UP", above = "UP",
+        right = "RIGHT", rightward = "RIGHT",
+        left = "LEFT", leftward = "LEFT",
+    }, "geometry", {
+        "priority frame growth", "priority frames growth", "pinned frame growth",
+        "priority strip growth", "priority frame growth direction", "priority strip direction",
+    }, Options(
+        "Controls the direction in which additional Priority Frames are laid out."
+    ))
+
+    RegisterGroupNumber(scope, "spacing", "spacing", "Spacing", 2, 0, 40, 1, "geometry", {
+        "priority frame spacing", "priority frames spacing", "pinned frame spacing",
+        "priority strip spacing", "space between priority frames", "gap between priority frames",
+    }, Options(
+        "Sets the pixel gap between frames inside the Priority Frame strip."
+    ))
+
+    RegisterGroupNumber(scope, "attachGap", "attachGap", "Attachment Gap", 8, 0, 100, 1, "geometry", {
+        "priority frame attachment gap", "priority frames attachment gap", "priority attach gap",
+        "priority strip attachment gap", "priority frame group gap", "distance from group frames",
+    }, Options(
+        "Sets the pixel distance between an attached Priority Frame strip and the active group container."
+    ))
+
+    RegisterGroupNumber(scope, "attachOffset", "attachOffset", "Alignment Offset", 0, -200, 200, 1, "geometry", {
+        "priority frame alignment offset", "priority frames alignment offset", "priority attach offset",
+        "priority strip alignment offset", "priority frame attached offset", "slide priority frames",
+    }, Options(
+        "Slides an attached Priority Frame strip along the edge of the active group container."
+    ))
+end

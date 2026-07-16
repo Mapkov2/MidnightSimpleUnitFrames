@@ -102,6 +102,7 @@ local PAGE_LABELS = {
     gf_bars = "Group Frames > Dispel Overlay",
     gf_indicators = "Group Frames > Indicators",
     gf_layout = "Group Frames > Layout",
+    gf_priority = "Group Frames > Priority",
     guided_setup = "Guided Setup",
     home = "MSUF Home",
     menu_chrome = "MSUF Menu",

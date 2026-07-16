@@ -30,7 +30,7 @@ local Audit = A.CoverageAudit or {}
 A.CoverageAudit = Audit
 
 local UNIT_SCOPES = { "player", "target", "targettarget", "focustarget", "focus", "pet", "boss" }
-local GROUP_SCOPES = { "gf_party", "gf_raid", "gf_mythicraid" }
+local GROUP_SCOPES = { "gf_party", "gf_raid", "gf_mythicraid", "gf_priority" }
 local FLAT_SCOPES = { "general", "bars", "gameplay" }
 
 -- DB keys that are bookkeeping, not user-facing settings. Extend via
@@ -85,6 +85,12 @@ Audit.ignore = Audit.ignore or {
     gf_mythicraid = {
         auraIconSize = true, auraMaxIcons = true, powerBarHeight = true,
         groupGrowth = true,
+    },
+    -- Free Priority Frame coordinates are owned by the dedicated Edit Mode
+    -- mover. They are persisted implementation state, not independent scalar
+    -- controls; the public Assistant surface owns placement mode/gap/offset.
+    gf_priority = {
+        point = true, relativePoint = true, offsetX = true, offsetY = true,
     },
 }
 

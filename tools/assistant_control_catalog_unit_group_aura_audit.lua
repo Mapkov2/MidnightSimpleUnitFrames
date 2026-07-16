@@ -503,7 +503,7 @@ for _, pageKey in ipairs(unitPages) do
     end
 end
 
-local groupPages = { "gf_layout", "gf_bars", "gf_auras", "gf_indicators" }
+local groupPages = { "gf_layout", "gf_bars", "gf_auras", "gf_indicators", "gf_priority" }
 local groupBaseRoles = {
     "preview.combat_animation", "preview.zoom.surface", "preview.zoom.out", "preview.zoom.fit", "preview.zoom.one_to_one",
     "preview.zoom.in", "preview.zoom.help", "preview.hint.dismiss", "preview.canvas", "preview.pin.toggle",

@@ -56,8 +56,8 @@ for i = 1, #(Data.collectionStates or {}) do
     stateOrder[stateId] = i
 end
 Check(#(Data.collectionStates or {}) == #expectedStateIds, "complete 138-state inventory")
-Check(collectionStates.base == 2093, "reviewed complete-catalog baseline")
-Check(Data.collectionUnionControls == 2772 and #Data.records == Data.collectionUnionControls,
+Check(collectionStates.base == 2126, "reviewed complete-catalog baseline")
+Check(Data.collectionUnionControls == 2781 and #Data.records == Data.collectionUnionControls,
     "reviewed exhaustive finite-state control union")
 for i = 1, #Data.columns do columns[Data.columns[i]] = i end
 for _, column in ipairs({ "actionFixedArgs", "actionInputArg", "actionInputKind", "actionInputDomain",
@@ -158,7 +158,7 @@ Check(FunctionFree(Data), "generated schema data must remain function-free")
 local before = Schema.Stats()
 Check(before.version == 3, "schema version must be 3")
 Check(before.contexts == 40, "all 40 class/spec contexts must be present")
-Check(before.records == 2772, "public control inventory must equal the reviewed exhaustive finite-state union")
+Check(before.records == 2781, "public control inventory must equal the reviewed exhaustive finite-state union")
 Check(before.indexed == false, "schema index must remain lazy")
 
 local coldStart = os.clock()
@@ -192,7 +192,7 @@ local unknown, reason = Schema.Resolve("setting:does.not.exist")
 Check(unknown == false and reason == "unknown_control", "unknown semantic IDs must fail closed")
 
 local modes = Schema.ListModes({ contextId = "MAGE-62" })
-Check(type(modes) == "table" and #modes == 66, "reviewed test and preview mode inventory")
+Check(type(modes) == "table" and #modes == 68, "reviewed test and preview mode inventory")
 local modeSemanticIds = {}
 for i = 1, #modes do
     if modes[i].semanticId then modeSemanticIds[modes[i].semanticId] = true end
@@ -211,7 +211,7 @@ local expectedModeActions = {
     ["assistant.action.editMode.preview"]=true, toggle_highlight_border_test=true,
 }
 local expectedControlPages = {
-    gameplay=1, gf_auras=1, gf_indicators=4, opt_bars=5, opt_castbar=1,
+    gameplay=1, gf_auras=1, gf_indicators=4, gf_priority=2, opt_bars=5, opt_castbar=1,
     uf_boss=6, uf_focus=6, uf_focustarget=6, uf_pet=6, uf_player=6,
     uf_target=6, uf_targettarget=6,
 }

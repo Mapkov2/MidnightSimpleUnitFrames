@@ -314,7 +314,6 @@ for _, key in ipairs({
     "player.shortenNameFrontMaskPx",
     "target.shortenNameFrontMaskPx",
     "targettarget.shortenNameFrontMaskPx",
-    "focustarget.shortenNameFrontMaskPx",
     "focus.shortenNameFrontMaskPx",
     "pet.shortenNameFrontMaskPx",
     "boss.shortenNameFrontMaskPx",
@@ -328,6 +327,14 @@ for _, key in ipairs({
     assert(setting.generated == true and setting.assistantMutationSafe == false,
         key .. " must remain a read-only generated setting")
 end
+-- The factory Focus Target scope intentionally inherits the shared front-mask
+-- value instead of persisting an independent scalar. The checked-in manifest
+-- is AutoCoverage's identity authority, so a saved-profile-only field must not
+-- create an environment-dependent public setting.
+assert(runtimeA.AutoCoverageManifest.defaults.focustarget.shortenNameFrontMaskPx == nil,
+    "Focus Target factory manifest unexpectedly gained a front-mask override")
+assert(runtimeRegistry:GetSetting("focustarget.shortenNameFrontMaskPx") == nil,
+    "Focus Target saved-profile-only front mask escaped manifest authority")
 
 local function submitPublic(prompt)
     if type(runtimeA.StartNewTask) == "function" then runtimeA.StartNewTask() end

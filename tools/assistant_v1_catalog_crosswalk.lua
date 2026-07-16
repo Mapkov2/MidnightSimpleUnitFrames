@@ -596,7 +596,7 @@ end
 local unitGroupPageSet = {
     uf_player = true, uf_target = true, uf_targettarget = true, uf_focustarget = true,
     uf_focus = true, uf_pet = true, uf_boss = true,
-    gf_layout = true, gf_bars = true, gf_indicators = true, gf_auras = true,
+    gf_layout = true, gf_bars = true, gf_indicators = true, gf_auras = true, gf_priority = true,
 }
 local unitGroupContractGaps, unitGroupRegistryMissing = 0, 0
 for page, count in pairs(catalogRuntimeUnresolvedByPage) do
@@ -1134,7 +1134,7 @@ if not unitGroupOnly then
     -- owned settings without a scalar Menu2 widget (23 historical + 4).
     -- The three raw Bar Outline RGB channels are now claimed by the canonical
     -- composite color controller instead of counted as generated standalones.
-    assert(globalReverse.standaloneGenerated == 147 and globalReverse.standaloneExplicit == 27,
+    assert(globalReverse.standaloneGenerated == 148 and globalReverse.standaloneExplicit == 27,
         "reviewed Global standalone split changed; classify new generated or explicit no-widget settings")
     assert(globalReverse.generatedTotal
             == globalReverse.standaloneGenerated + globalReverse.generatedRouted,

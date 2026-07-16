@@ -55,7 +55,16 @@ function A.RegistryCoreBuilders.BuildDBHelpers(ctx)
 
     local function GroupDB(scope)
         local db = EnsureDB()
-        local key = scope == "raid" and "gf_raid" or (scope == "mythicraid" and "gf_mythicraid" or "gf_party")
+        local key
+        if scope == "raid" or scope == "gf_raid" then
+            key = "gf_raid"
+        elseif scope == "mythicraid" or scope == "gf_mythicraid" then
+            key = "gf_mythicraid"
+        elseif scope == "priority" or scope == "gf_priority" then
+            key = "gf_priority"
+        else
+            key = "gf_party"
+        end
         db[key] = type(db[key]) == "table" and db[key] or {}
         return db[key]
     end

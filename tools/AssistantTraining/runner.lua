@@ -580,6 +580,8 @@ local SCOPE_TERMS = {
     gf_party = { "party" },
     gf_raid = { "raid" },
     gf_mythicraid = { "mythicraid", "mythic raid" },
+    priority = { "priority frames", "pinned frames", "priority" },
+    gf_priority = { "priority frames", "pinned frames", "priority" },
 }
 
 local SCOPE_PREFIX = {
@@ -596,6 +598,8 @@ local SCOPE_PREFIX = {
     gf_party = "party",
     gf_raid = "raid",
     gf_mythicraid = "mythic raid",
+    priority = "priority frames",
+    gf_priority = "priority frames",
 }
 
 local function normalizeWords(text)

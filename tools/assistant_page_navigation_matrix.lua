@@ -68,6 +68,7 @@ local pages = {
     { "gf_bars", "group dispel overlay", "Group Dispel Overlay", "gf_bars" },
     { "gf_indicators", "group status and indicators", "Group Status & Indicators", "gf_indicators" },
     { "gf_auras", "group auras", "Group Auras", "gf_auras" },
+    { "gf_priority", "priority frames", "Priority", "gf_priority" },
     { "opt_bars", "bars", "Bars", "opt_bars" },
     { "opt_castbar", "cast bars", "Cast Bars", "opt_castbar" },
     { "opt_colors", "colors", "Colors", "opt_colors" },
@@ -129,6 +130,6 @@ for i = 1, #pages do
     checks = checks + 1
 end
 
-assert(#pages == 27, "canonical page matrix drifted")
+assert(#pages == 28, "canonical page matrix drifted")
 print(string.format("assistant_page_navigation_matrix: ok pages=%d intents=%d zero_profile_writes=true",
     #pages, checks))

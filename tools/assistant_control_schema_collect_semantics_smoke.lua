@@ -32,6 +32,8 @@ local sliderHelp = ResolveHelp({ kind = "slider", label = "Opacity", pageKey = "
 Check(sliderHelp:find("Controls frame opacity.", 1, true), "registry description fallback")
 Check(sliderHelp:find("Group Frames > Dispel Overlay", 1, true), "human page fallback")
 Check(sliderHelp:find("Allowed range: 0 to 1 in increments of 0.05.", 1, true), "numeric constraints")
+local priorityHelp = ResolveHelp({ kind = "toggle", label = "Enable Priority Frames", pageKey = "gf_priority" })
+Check(priorityHelp:find("Group Frames > Priority", 1, true), "Priority Frames page fallback")
 
 local enumValues = {}
 for i = 1, 10 do enumValues[i] = { value = "VALUE_" .. i, text = "Choice " .. i } end

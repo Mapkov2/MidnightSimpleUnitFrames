@@ -397,6 +397,14 @@ local answerProbes = {
     { "where do I change target powerbar offset", "Power Bar offset help" },
     { "where do I hide healer power bars in raid", "Group role Resource Bar help" },
     { "where is group frame role sorting", "Group role sorting help" },
+    { "what are Priority Frames?", "Priority Frames help" },
+    { "do Priority Frames work in a party?", "Priority Frames Party and Raid help" },
+    { "can Priority Frames show only my co-tank?", "Priority Frames co-tank help" },
+    { "can an Augmentation Evoker use Priority Frames for Prescience targets?", "Augmentation Evoker Priority Frames help" },
+    { "are Priority Frame pins profile-wide?", "Priority Frames pin persistence help" },
+    { "how do I pin someone to Priority Frames?", "Priority Frames pinning help" },
+    { "feature request: add co-tank frames", "Priority Frames feature request help" },
+    { "why are my Priority Frames empty?", "Priority Frames troubleshooting" },
 }
 
 local addonIntentProbes = {

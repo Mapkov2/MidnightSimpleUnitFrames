@@ -141,6 +141,7 @@ function A.GroupFramesRegistry.BuildRegisterCoreContext(ctx)
             end,
             apply = function() ApplyGroup(scope, opts.mode or mode or "visual") end,
             combatSafe = false,
+            description = opts.description,
         })
     end
 
