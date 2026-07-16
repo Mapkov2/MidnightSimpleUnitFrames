@@ -146,6 +146,7 @@ local GROUP_KEY_TO_KIND = {
     gf_party = "party",
     gf_raid = "raid",
     gf_mythicraid = "mythicraid",
+    gf_priority = "priority",
 }
 
 local function GroupGeometryMask(gf)
@@ -212,6 +213,7 @@ local LABEL_BY_KEY = {
     gf_party = "Party Frames",
     gf_raid = "Raid Frames",
     gf_mythicraid = "Mythic Raid Frames",
+    gf_priority = "Priority Frames",
 }
 
 local COMPONENT_LABEL = {
@@ -361,8 +363,15 @@ function HUD.ResetCurrentPosition()
                 if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
                     _G.MSUF_EM_UndoBeforeChange("gf", groupKind)
                 end
-                conf.offsetX = (groupKind == "party") and -400 or -500
+                conf.offsetX = groupKind == "party" and -400 or groupKind == "priority" and -120 or -500
                 conf.offsetY = 0
+                if groupKind == "priority" then
+                    conf.anchorMode = "RAID_RIGHT"
+                    conf.attachGap = 8
+                    conf.attachOffset = 0
+                    conf.point = "CENTER"
+                    conf.relativePoint = "CENTER"
+                end
                 RefreshGroupGeometryScoped(groupKind)
                 if type(_G.MSUF_EM2_SyncGFPopups) == "function" then _G.MSUF_EM2_SyncGFPopups() end
                 if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end

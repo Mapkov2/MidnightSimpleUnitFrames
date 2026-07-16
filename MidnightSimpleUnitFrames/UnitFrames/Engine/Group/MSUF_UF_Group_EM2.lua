@@ -39,21 +39,25 @@ local KIND_TO_KEY = {
   party = "gf_party",
   raid = "gf_raid",
   mythicraid = "gf_mythicraid",
+  priority = "gf_priority",
 }
 
 local KEY_TO_KIND = {
   gf_party = "party",
   gf_raid = "raid",
   gf_mythicraid = "mythicraid",
+  gf_priority = "priority",
 }
 
 local LABELS = {
   party = "Group: Party",
   raid = "Group: Raid",
   mythicraid = "Group: Mythic Raid",
+  priority = "Priority Frames",
 }
 
 local GROUP_KINDS = { "party", "raid", "mythicraid" }
+local MOVER_KINDS = { "party", "raid", "mythicraid", "priority" }
 local _containers = {}
 local _previewAnchors = {}
 local _popups = {}
@@ -80,12 +84,15 @@ local function GF()
 end
 
 local function NormalizeKind(kind)
-  if kind == "party" or kind == "raid" or kind == "mythicraid" then return kind end
+  if kind == "party" or kind == "raid" or kind == "mythicraid" or kind == "priority" then return kind end
   return KEY_TO_KIND[kind]
 end
 
 local function GetConf(kind)
   local gf = GF()
+  if kind == "priority" and gf and type(gf.GetPriorityConf) == "function" then
+    return gf.GetPriorityConf()
+  end
   if gf and type(gf.GetConf) == "function" then return gf.GetConf(kind) end
   local db = _G.MSUF_DB
   local key = KIND_TO_KEY[kind]
@@ -154,6 +161,7 @@ local function BlockConfigLocked()
 end
 
 local function GetDefaultCenter(kind)
+  if kind == "priority" then return -120, 0 end
   if kind == "raid" or kind == "mythicraid" then return -500, 0 end
   return -400, 0
 end
@@ -172,10 +180,16 @@ end
 local function RuntimeHeaderKey(kind)
   if kind == "party" then return "party" end
   if kind == "raid" or kind == "mythicraid" then return "raid" end
+  if kind == "priority" then return "priority" end
   return nil
 end
 
 local function UsesRuntimeAnchor(kind)
+  if NormalizeKind(kind) == "priority" then
+    local gf = GF()
+    local anchor = gf and gf.anchors and gf.anchors.priority
+    return anchor and anchor.IsShown and anchor:IsShown() and anchor.GetLeft and anchor:GetLeft() ~= nil or false
+  end
   local live = GetLiveGroupKind()
   if not live then return false end
   return NormalizeKind(kind) == live
@@ -200,6 +214,11 @@ local function EnsureRuntimeAnchor(kind)
   if not (kind and UsesRuntimeAnchor(kind)) then return nil end
   local anchor = RuntimeAnchor(kind)
   if anchor then return anchor end
+
+  -- Priority's secure header is selection-driven. Edit Mode must not create a
+  -- protected header merely to obtain a drag target; its logical placeholder
+  -- handles the empty/no-raid case instead.
+  if kind == "priority" then return nil end
 
   local gf = GF()
   local headerKey = RuntimeHeaderKey(kind)
@@ -227,6 +246,11 @@ end
 
 local function GetRuntimePreviewCount(kind)
   kind = NormalizeKind(kind)
+  if kind == "priority" then
+    -- Runtime bounds come from the live header children below. Avoid rescanning
+    -- the raid roster merely to size an EditMode proxy.
+    return nil
+  end
   if not (kind and UsesRuntimeAnchor(kind)) then return nil end
 
   if kind == "party" then
@@ -247,9 +271,32 @@ end
 local function GetRequestedPreviewCount(kind)
   local liveCount = GetRuntimePreviewCount(kind)
   if liveCount then return liveCount end
+  if kind == "priority" then
+    local conf = GetConf(kind)
+    return min(5, max(1, floor((tonumber(conf and conf.maxFrames) or 5) + 0.5)))
+  end
   if kind == "mythicraid" then return 20 end
   if kind == "raid" then return 30 end
   return 5
+end
+
+local function PriorityMetrics(conf, count)
+  local gf = GF()
+  local baseKind = GetLiveGroupKind() or "party"
+  local w, h = 80, 32
+  if gf and type(gf.GetScaledFrameMetrics) == "function" then
+    w, h = gf.GetScaledFrameMetrics(baseKind)
+  else
+    local base = gf and type(gf.GetConf) == "function" and gf.GetConf(baseKind) or nil
+    w, h = tonumber(base and base.width) or w, tonumber(base and base.height) or h
+  end
+  w, h = max(tonumber(w) or 80, 1), max(tonumber(h) or 32, 1)
+  count = min(5, max(1, floor((tonumber(count) or 5) + 0.5)))
+  local spacing = min(40, max(0, floor((tonumber(conf and conf.spacing) or 2) + 0.5)))
+  local horizontal = conf and (conf.growth == "LEFT" or conf.growth == "RIGHT")
+  local totalW = horizontal and (w * count + spacing * (count - 1)) or w
+  local totalH = horizontal and h or (h * count + spacing * (count - 1))
+  return totalW, totalH
 end
 
 local function GetSelectedPreviewKind()
@@ -364,9 +411,15 @@ local function ClampAnchorOffsetOnScreen(point, relativePoint, parent, offsetX, 
 end
 
 local function IsPreviewActive(kind)
-  if not (_em2Active and _previewShownByEM2 and KindEnabled(kind) and ShouldShowPreviewKind(kind)) then
+  if not (_em2Active and _previewShownByEM2 and ShouldShowPreviewKind(kind)) then
     return false
   end
+  if kind == "priority" then
+    -- An explicit Menu2/EditMode focus may position the inert placeholder
+    -- before enabling the feature. Never create the secure runtime header here.
+    return KindEnabled(kind) or GetSelectedPreviewKind() == "priority"
+  end
+  if not KindEnabled(kind) then return false end
   if UsesRuntimeAnchor(kind) then
     return true
   end
@@ -420,6 +473,7 @@ local function EnsureContainer(kind)
 end
 
 local function GetPositionCount(kind)
+  if kind == "priority" then return GetRequestedPreviewCount(kind) end
   local gf = GF()
   if gf and type(gf.GetPositionCount) == "function" then
     return gf.GetPositionCount(kind)
@@ -459,6 +513,39 @@ local function FrameCenterToUI(frame)
   local l, r, t, b = FrameRectToUI(frame)
   if not l then return nil, nil end
   return (l + r) * 0.5, (b + t) * 0.5
+end
+
+local function DetachPriorityForFreeMove(conf, sourceFrame)
+  if not conf or conf.anchorMode == "FREE" then return false end
+  local anchor = RuntimeAnchor("priority") or sourceFrame or _previewAnchors.priority or _containers.priority
+  local cx, cy = FrameCenterToUI(anchor)
+  local uiCX, uiCY = FrameCenterToUI(UIParent)
+  if not uiCX then
+    uiCX = ((UIParent and UIParent.GetWidth and UIParent:GetWidth()) or 0) * 0.5
+    uiCY = ((UIParent and UIParent.GetHeight and UIParent:GetHeight()) or 0) * 0.5
+  end
+  if not cx then
+    cx = uiCX + (tonumber(conf.offsetX) or -120)
+    cy = uiCY + (tonumber(conf.offsetY) or 0)
+  end
+  conf.anchorMode = "FREE"
+  conf.point = "CENTER"
+  conf.relativePoint = "CENTER"
+  conf.offsetX = floor((cx - uiCX) + 0.5)
+  conf.offsetY = floor((cy - uiCY) + 0.5)
+  conf.positionMode = STABLE_GRID_POSITION_MODE
+  return true
+end
+
+local function RequestPriorityApply(gf, reason)
+  if not gf then return false end
+  if type(gf.RequestPriorityApply) == "function" then
+    return gf:RequestPriorityApply(reason or "edit-mode")
+  end
+  if type(gf.RefreshPriorityFrames) == "function" then
+    return gf.RefreshPriorityFrames(reason or "edit-mode")
+  end
+  return RefreshGroupGeometry(gf, "priority")
 end
 
 local function PreviewBounds(kind)
@@ -521,6 +608,8 @@ local function HidePreviewVisualsForCombat()
     if _containers[kind] then _containers[kind]:Hide() end
     if _previewAnchors[kind] then _previewAnchors[kind]:Hide() end
   end
+  if _containers.priority then _containers.priority:Hide() end
+  if _previewAnchors.priority then _previewAnchors.priority:Hide() end
 end
 
 local function PositionLogicalPreviewAnchor(kind, conf, totalW, totalH)
@@ -528,6 +617,27 @@ local function PositionLogicalPreviewAnchor(kind, conf, totalW, totalH)
   if not anchor then return nil end
   anchor:SetSize(max(totalW or 1, 1), max(totalH or 1, 1))
   anchor:ClearAllPoints()
+  if kind == "priority" and conf and conf.anchorMode ~= "FREE" then
+    local gf = GF()
+    local baseKind = GetLiveGroupKind() or "party"
+    local baseAnchorKey = baseKind == "party" and "party" or "raid"
+    local baseAnchor = gf and gf.anchors and gf.anchors[baseAnchorKey]
+    if baseAnchor and baseAnchor.GetLeft and baseAnchor:GetLeft() ~= nil then
+      local gap = min(100, max(0, floor((tonumber(conf.attachGap) or 8) + 0.5)))
+      local cross = floor((tonumber(conf.attachOffset) or 0) + 0.5)
+      if conf.anchorMode == "RAID_LEFT" then
+        anchor:SetPoint("TOPRIGHT", baseAnchor, "TOPLEFT", -gap, cross)
+      elseif conf.anchorMode == "RAID_TOP" then
+        anchor:SetPoint("BOTTOMLEFT", baseAnchor, "TOPLEFT", cross, gap)
+      elseif conf.anchorMode == "RAID_BOTTOM" then
+        anchor:SetPoint("TOPLEFT", baseAnchor, "BOTTOMLEFT", cross, -gap)
+      else
+        anchor:SetPoint("TOPLEFT", baseAnchor, "TOPRIGHT", gap, cross)
+      end
+      anchor:Show()
+      return anchor
+    end
+  end
   local defX, defY = GetDefaultCenter(kind)
   local cx = tonumber(conf and conf.offsetX)
   local cy = tonumber(conf and conf.offsetY)
@@ -565,13 +675,17 @@ local function SyncContainer(kind)
   local totalW, totalH = tonumber(conf.width) or 80, tonumber(conf.height) or 32
   local gridDX, gridDY = 0, 0
   local positionCount = GetPositionCount(kind)
-  if gf and type(gf.EnsureStableGridPosition) == "function" then
-    gf.EnsureStableGridPosition(kind, positionCount, conf)
-  end
-  if gf and type(gf.GetGridMetrics) == "function" then
-    local _, _, w, h = gf.GetGridMetrics(kind, positionCount)
-    totalW = tonumber(w) or totalW
-    totalH = tonumber(h) or totalH
+  if kind == "priority" then
+    totalW, totalH = PriorityMetrics(conf, positionCount)
+  else
+    if gf and type(gf.EnsureStableGridPosition) == "function" then
+      gf.EnsureStableGridPosition(kind, positionCount, conf)
+    end
+    if gf and type(gf.GetGridMetrics) == "function" then
+      local _, _, w, h = gf.GetGridMetrics(kind, positionCount)
+      totalW = tonumber(w) or totalW
+      totalH = tonumber(h) or totalH
+    end
   end
 
   local runtime = RuntimeAnchor(kind) or ((not ConfigLocked()) and EnsureRuntimeAnchor(kind)) or nil
@@ -608,7 +722,7 @@ local function SyncContainer(kind)
       container:SetPoint(point, ResolveAnchorFrame(conf), point, floor(cx + 0.5), floor(cy + 0.5))
     end
   end
-  local nativeActive = HasNativePreviewAPI(gf)
+  local nativeActive = kind ~= "priority" and HasNativePreviewAPI(gf)
     and not ConfigLocked()
     and gf._previewActive
     and gf._previewActive[kind] == true
@@ -656,7 +770,7 @@ local function SyncContainer(kind)
 end
 
 local function SyncAllContainers()
-  for _, kind in ipairs(GROUP_KINDS) do
+  for _, kind in ipairs(MOVER_KINDS) do
     SyncContainer(kind)
   end
 end
@@ -697,9 +811,18 @@ local function BeginGroupDrag(frame, kind, source)
   if BlockConfigLocked() then return end
   frame._msufGFEM2Dragging = true
   if EM2.Focus and EM2.Focus.SetSelection then
-    EM2.Focus.SetSelection(key, nil, nil, { source = source or "group-drag" })
+    EM2.Focus.SetSelection(key, kind == "priority" and "placement" or nil, nil, { source = source or "group-drag" })
   end
-  if _G.MSUF_EM_UndoBeforeChange then _G.MSUF_EM_UndoBeforeChange("unit", key) end
+  if _G.MSUF_EM_UndoBeforeChange then
+    if kind == "priority" then
+      _G.MSUF_EM_UndoBeforeChange("gf", kind)
+    else
+      _G.MSUF_EM_UndoBeforeChange("unit", key)
+    end
+  end
+  if kind == "priority" then
+    DetachPriorityForFreeMove(GetConf(kind), frame)
+  end
   EM2.Ticker.BeginDrag(mover, key, cfg)
   mover._msufGFEM2DragSourceFrame = frame
   return true
@@ -778,7 +901,7 @@ local function ClickGroupFrame(frame, kind, button, source)
   if not key then return end
   if EM2.State then EM2.State.SetUnitKey(key) end
   if EM2.Focus and EM2.Focus.SetSelection then
-    EM2.Focus.SetSelection(key, nil, nil, { source = source or "group-preview" })
+    EM2.Focus.SetSelection(key, kind == "priority" and "placement" or nil, nil, { source = source or "group-preview" })
   end
   if EM2.Popups and EM2.Popups.Open then
     EM2.Popups.Open(key, frame)
@@ -898,7 +1021,7 @@ local function ShowPreviewOnly()
   end
 
   SyncAllContainers()
-  for _, kind in ipairs(GROUP_KINDS) do
+  for _, kind in ipairs(MOVER_KINDS) do
     if _containers[kind] then WireDragFrame(_containers[kind], kind, "group-container") end
   end
   SyncMoversSoon(0)
@@ -920,7 +1043,7 @@ local function HidePreviewOnly()
     end
   end
 
-  for _, kind in ipairs(GROUP_KINDS) do
+  for _, kind in ipairs(MOVER_KINDS) do
     if _containers[kind] then _containers[kind]:Hide() end
     if _previewAnchors[kind] then _previewAnchors[kind]:Hide() end
   end
@@ -953,11 +1076,15 @@ local function NudgePreviewKind(kind, dx, dy)
   local conf = GetConf(kind)
   if not conf then return false end
   local gf = GF()
-  if gf and type(gf.EnsureStableGridPosition) == "function" then
+  if kind ~= "priority" and gf and type(gf.EnsureStableGridPosition) == "function" then
     gf.EnsureStableGridPosition(kind, GetPositionCount(kind), conf)
   end
   if _G.MSUF_EM_UndoBeforeChange then
     _G.MSUF_EM_UndoBeforeChange("gf", kind, true)
+  end
+
+  if kind == "priority" then
+    DetachPriorityForFreeMove(conf, RuntimeAnchor(kind) or _containers[kind])
   end
 
   local defX, defY = GetDefaultCenter(kind)
@@ -966,7 +1093,9 @@ local function NudgePreviewKind(kind, dx, dy)
   conf.positionMode = STABLE_GRID_POSITION_MODE
 
   SyncContainer(kind)
-  if gf and HasNativePreviewAPI(gf) and gf.RefreshPreviewLayout then
+  if kind == "priority" then
+    RequestPriorityApply(gf, "edit-mode-nudge")
+  elseif gf and HasNativePreviewAPI(gf) and gf.RefreshPreviewLayout then
     gf.RefreshPreviewLayout(kind)
   elseif gf then
     RefreshGroupGeometry(gf, kind)
@@ -1037,7 +1166,7 @@ local function ExitEditMode()
     end
   end
 
-  for _, kind in ipairs(GROUP_KINDS) do
+  for _, kind in ipairs(MOVER_KINDS) do
     if _containers[kind] then _containers[kind]:Hide() end
     if _previewAnchors[kind] then _previewAnchors[kind]:Hide() end
     if _popups[kind] then _popups[kind]:Hide() end
@@ -1066,6 +1195,21 @@ local function RegisterGF()
       onExit    = ExitEditMode,
     })
   end
+  Reg.Register({
+    key       = KIND_TO_KEY.priority,
+    label     = LABELS.priority,
+    order     = 73,
+    popupType = KIND_TO_KEY.priority,
+    canResize = false,
+    canNudge  = true,
+    getFrame  = function() return SyncContainer("priority") end,
+    getConf   = function() return GetConf("priority") end,
+    isEnabled = function()
+      return KindEnabled("priority") or GetSelectedPreviewKind() == "priority"
+    end,
+    onEnter   = EnterEditMode,
+    onExit    = ExitEditMode,
+  })
 
   if EM2.State and EM2.State.IsActive and EM2.State.IsActive() then
     EnterEditMode()
@@ -1316,6 +1460,18 @@ local function RefreshAfterPopupApply(mode)
   local gf = GF()
   if not gf then return end
 
+  if mode == "priority" then
+    RequestPriorityApply(gf, "edit-mode-placement")
+    if _em2Active then
+      SyncContainer(mode)
+      _G.MSUF_GF_EM2_SetPreviewNudgeTarget(mode)
+    end
+    C_Timer.After(0.05, function()
+      if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+    end)
+    return
+  end
+
   -- Group popups edit bounds only. Route them through the geometry dirty path
   -- so Auras3 config and text/color-only runtime work are not swept every time.
   RefreshGroupBounds(gf, mode)
@@ -1375,12 +1531,19 @@ local function GF_EM2_ResetPosition(kind)
   conf.offsetX = x
   conf.offsetY = y
   conf.positionMode = STABLE_GRID_POSITION_MODE
+  if kind == "priority" then
+    conf.anchorMode = "RAID_RIGHT"
+    conf.attachGap = 8
+    conf.attachOffset = 0
+    conf.point = "CENTER"
+    conf.relativePoint = "CENTER"
+  end
   RefreshAfterPopupApply(kind)
   RefreshGFPositionUI(kind)
   SetHUDStatus("Reset group position", "ok")
   local key = KIND_TO_KEY[kind]
   if key and EM2.Focus and EM2.Focus.Pulse then
-    EM2.Focus.Pulse(key, "layout", nil, { source = "group-reset", duration = 0.32 })
+    EM2.Focus.Pulse(key, kind == "priority" and "placement" or "layout", nil, { source = "group-reset", duration = 0.32 })
   end
   return true
 end

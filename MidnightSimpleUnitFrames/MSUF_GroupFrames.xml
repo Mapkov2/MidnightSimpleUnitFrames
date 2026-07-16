@@ -6,6 +6,7 @@
     <Script file="UnitFrames\Engine\Group\MSUF_UF_Group_Config.lua"/>
     <Script file="UnitFrames\Engine\Group\MSUF_UF_Group_Headers.lua"/>
     <Script file="UnitFrames\Engine\Group\MSUF_UF_Group_Adapter.lua"/>
+    <Script file="UnitFrames\Engine\Group\MSUF_UF_Group_Priority.lua"/>
     <Script file="UnitFrames\Engine\Group\MSUF_UF_Group_Blizzard.lua"/>
     <Script file="UnitFrames\Engine\Group\MSUF_UF_Group_Metadata.lua"/>
     <Script file="UnitFrames\Engine\Group\MSUF_UF_Group_Runtime.lua"/>

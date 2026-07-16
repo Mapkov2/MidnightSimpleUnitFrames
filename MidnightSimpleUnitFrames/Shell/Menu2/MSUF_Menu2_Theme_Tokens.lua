@@ -184,6 +184,7 @@ gf_layout 2 2
 gf_bars 3 2
 gf_auras 3 1
 gf_indicators 6 1
+gf_priority 1 2
 modules 4 2
 profiles 5 2
 ]]
@@ -193,7 +194,7 @@ uf_player uf_target uf_targettarget uf_focustarget uf_focus uf_boss uf_pet=0.231
 opt_bars opt_fonts auras3 auras3_buffs auras3_debuffs auras3_custom auras3_styling auras3_filters opt_castbar opt_misc opt_colors=0.659,0.706,0.780
 classpower=0.659,0.706,0.780
 gameplay=0.659,0.706,0.780
-groupframes gf_layout gf_bars gf_auras gf_indicators=0.659,0.706,0.780
+groupframes gf_layout gf_bars gf_auras gf_indicators gf_priority=0.659,0.706,0.780
 modules=0.231,0.510,0.965
 profiles=0.659,0.706,0.780
 ]]

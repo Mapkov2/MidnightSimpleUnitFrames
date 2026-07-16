@@ -8,6 +8,7 @@
   <Script file="..\..\Engine\Group\MSUF_UF_Group_Config.lua"/>
   <Script file="..\..\Engine\Group\MSUF_UF_Group_Headers.lua"/>
   <Script file="..\..\Engine\Group\MSUF_UF_Group_Adapter.lua"/>
+  <Script file="..\..\Engine\Group\MSUF_UF_Group_Priority.lua"/>
   <Script file="..\..\Engine\Group\MSUF_UF_Group_Blizzard.lua"/>
   <Script file="..\..\Range\MSUF_UF_Group_RangeFade.lua"/>
   <Script file="..\..\Engine\Group\MSUF_UF_Group_Visuals.lua"/>

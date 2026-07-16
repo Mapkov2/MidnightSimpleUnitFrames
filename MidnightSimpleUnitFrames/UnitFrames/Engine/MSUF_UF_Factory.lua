@@ -8,6 +8,7 @@ end
 
 local UF = MSUF.UF
 if not UF then return end
+local Highlight = MSUF.Highlight
 
 UF.Factory = UF.Factory or {}
 local Factory = UF.Factory
@@ -492,6 +493,13 @@ local function EnsureRuntimeOnShow(frame)
   end
 end
 
+local function EnsureMouseoverHooks(frame)
+  if not (Highlight and frame and frame.HookScript) or frame._msufMouseoverHighlightHooked == true then return end
+  frame:HookScript("OnEnter", Highlight.UnitEnter)
+  frame:HookScript("OnLeave", Highlight.UnitLeave)
+  frame._msufMouseoverHighlightHooked = true
+end
+
 local function SpawnFrame(unit)
   if not (UF.IsManagedUnit and UF.IsManagedUnit(unit)) then return nil end
   if UF.ShouldUseMSUFUnitFrame and UF.ShouldUseMSUFUnitFrame(unit) == false then return nil end
@@ -506,6 +514,7 @@ local function SpawnFrame(unit)
   end
   UF.AttachFrame(frame, { scope = "single" })
   EnsureRuntimeOnShow(frame)
+  EnsureMouseoverHooks(frame)
   SetSecureUnitAttributes(frame, unit)
   frame.Enable = function(self)
     if RegisterUnitWatch then RegisterUnitWatch(self) end
@@ -527,6 +536,7 @@ local function ApplyFrame(frame, spec, applyMask)
   if InCombat() then return DeferApply(frame.unit) end
 
   EnsureRuntimeOnShow(frame)
+  EnsureMouseoverHooks(frame)
   UF.SetFrameSpec(frame, spec, frame.unit)
   SetSecureUnitAttributes(frame, frame.unit)
 

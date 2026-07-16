@@ -479,6 +479,7 @@ local GROUP_PAGE_TABS = {
     { key = "gf_bars", label = NAV_SUBPAGE_LABELS.gf_bars or "Dispel Overlay", width = 108 },
     { key = "gf_indicators", label = NAV_SUBPAGE_LABELS.gf_indicators or "Status & Indicators", width = 138 },
     { key = "gf_auras", label = NAV_SUBPAGE_LABELS.gf_auras or "Auras", width = 58 },
+    { key = "gf_priority", label = NAV_SUBPAGE_LABELS.gf_priority or "Priority", width = 72 },
 }
 local GROUP_FLOW_TAB_STYLE = {
     bg = { 0.018, 0.032, 0.064, 0.95 },
@@ -500,15 +501,19 @@ local GROUP_SCOPE_BUTTON_STYLE = {
     activeBorder = { 0.220, 0.520, 0.960, 0.98 },
     activeTextColor = { 0.96, 0.99, 1.00, 1 },
 }
-local function ScopeSection(ctx, builder)
+local function ScopeSection(ctx, builder, opts)
+    opts = opts or {}
+    local priorityMode = opts.priorityMode == true
     local pageW = tonumber(builder.width) or 720
-    local h = 86
+    local h = priorityMode and 70 or 86
     local sec = T.Panel(builder.parent, nil, T.colors.glassStatus or T.colors.header, T.colors.borderSoft)
     T.ApplySurface(sec, "status")
     sec:SetPoint("TOPLEFT", builder.parent, "TOPLEFT", builder.x, builder.y)
     sec:SetSize(pageW, h)
     sec._msuf2Width = pageW
-    if W.RegisterGuidedRegion then W.RegisterGuidedRegion(ctx, sec, "Party frame and Copy To", "group_scope") end
+    if W.RegisterGuidedRegion then
+        W.RegisterGuidedRegion(ctx, sec, priorityMode and "Priority Frames workspace" or "Party frame and Copy To", "group_scope")
+    end
     builder.y = builder.y - h - 8
     if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(builder.y) + 28) end
 
@@ -537,14 +542,22 @@ local function ScopeSection(ctx, builder)
     local pageBar = W.ScopeOverrideBar(ctx, command, {
         values = pageValues,
         width = pageW,
-        maxRight = pageW - 112,
+        maxRight = priorityMode and (pageW - 16) or (pageW - 112),
         label = "Page:",
         labelWidth = 64,
-        centerY = -28,
+        centerY = priorityMode and -24 or -28,
         getValue = function() return ctx and ctx.key end,
         setValue = function(pageKey) if pageKey and pageKey ~= ctx.key then M.SelectPage(pageKey) end end,
     })
     RegisterGroupControl(pageBar, ctx, "navigation.section.selector", "Page", "segment", "ephemeral")
+
+    if priorityMode then
+        local note = W.Text(sec,
+            "Profile-wide · follows the active Party, Raid, or Mythic Raid frame appearance",
+            16, -50, pageW - 32, T.colors.muted)
+        if note and note.SetJustifyH then note:SetJustifyH("LEFT") end
+        return sec
+    end
 
     local copy = (W.RoleButton and W.RoleButton(sec, M.Tr("Copy To"), "normal", 86, 24)) or W.TopButton(sec, M.Tr("Copy To"), 86, 24, {})
     copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -16, -16)

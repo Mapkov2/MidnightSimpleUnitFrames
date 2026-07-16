@@ -61,6 +61,14 @@ local GROUP_KIND_BY_KEY = {
     gf_mythicraid = "mythicraid",
 }
 
+local function PrioritySection(component)
+    if component == "placement" or component == "layout" or component == "anchor"
+        or component == "frame" or component == "bounds" or component == "size" then
+        return "placement"
+    end
+    return "overview"
+end
+
 local NormalizeKey = U.NormalizeFocusKey
 local NormalizeComponent = U.NormalizeFocusComponent
 local NormalizeSlot = U.NormalizeFocusSlot
@@ -157,7 +165,11 @@ local function ApplyMenuSelection(key, component, slot, opts)
     local pageKey
     local sectionId
     local unitPage = UnitPageKey(key, false)
-    if unitPage then
+    local priorityPage = key == "gf_priority"
+    if priorityPage then
+        pageKey = "gf_priority"
+        sectionId = PrioritySection(component)
+    elseif unitPage then
         pageKey = unitPage
         sectionId = UnitSectionForComponent(component)
     else
@@ -192,6 +204,10 @@ local function ApplyMenuSelection(key, component, slot, opts)
         pageKey = pageKey,
         sectionId = sectionId,
     }
+
+    -- Priority Frames are profile-wide and intentionally do not participate in
+    -- the Party/Raid/Mythic scope selector.
+    if priorityPage then return pageKey end
 
     if unitPage then
         if component == "name" or component == "hp" or component == "power" then

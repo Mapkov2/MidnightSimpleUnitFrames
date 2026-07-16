@@ -817,13 +817,14 @@ local UNIT_CASTBAR_GENERAL_KEYS = {
 local function ResetInfo(label, kind, summary)
     return { label = label, kind = kind, summary = summary }
 end
-local GROUP_RESET_INFO = ResetInfo("Group Frames", "group", "Party, Raid, and Mythic Raid Group Frame layout, bars, auras, indicators, scope overrides and positions")
+local GROUP_RESET_INFO = ResetInfo("Group Frames", "group", "Party, Raid, Mythic Raid, and Priority Frame layout, bars, auras, indicators, scope overrides and positions; character-specific Priority pins are retained")
 local AURA_STYLE_SUMMARY = "scope-aware Buff and Debuff basics, cooldown and stack styling"
 local PAGE_RESET_INFO = {
     gf_layout = GROUP_RESET_INFO,
     gf_bars = GROUP_RESET_INFO,
     gf_auras = GROUP_RESET_INFO,
     gf_indicators = GROUP_RESET_INFO,
+    gf_priority = GROUP_RESET_INFO,
     opt_bars = ResetInfo("Bars", "bars", "shared bar textures, gradients, rounded frame corners, absorb display, outlines, highlight borders, power smoothing and all per-unit/group bar overrides"),
     opt_fonts = ResetInfo("Fonts", "fonts", "shared font family, text style, name/power text coloring, name shortening and all per-unit/group font overrides"),
     auras3 = ResetInfo("Aura Style", "auras", AURA_STYLE_SUMMARY),
@@ -1043,6 +1044,7 @@ local function ResetGroupFrames(db, defaults)
     ReplaceRootTable(db, defaults, "gf_party")
     ReplaceRootTable(db, defaults, "gf_raid")
     ReplaceRootTable(db, defaults, "gf_mythicraid")
+    ReplaceRootTable(db, defaults, "gf_priority")
     return true
 end
 local function ResetBarsPage(db, defaults)

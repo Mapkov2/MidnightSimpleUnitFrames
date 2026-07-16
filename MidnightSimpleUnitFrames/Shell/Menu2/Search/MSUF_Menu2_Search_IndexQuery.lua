@@ -1202,6 +1202,7 @@ local function AssistantRegistryGroupPage(setting)
     local attr = tostring(setting and setting.attribute or "")
     local attrNorm = NormalizeSearchText(attr):gsub("%s+", "")
     local keyNorm = NormalizeSearchText(setting and setting.key or ""):gsub("%s+", "")
+    if attrNorm:find("priority", 1, true) or keyNorm:find("priority", 1, true) then return "gf_priority" end
     for part in pairs(ASSISTANT_GROUP_INDICATOR_PARTS) do
         if attrNorm:find(part, 1, true) or keyNorm:find(part, 1, true) then return "gf_indicators" end
     end
@@ -1238,6 +1239,7 @@ local function AssistantRegistryPageForAction(action)
     if type(action.pageKey) == "string" and action.pageKey ~= "" then return action.pageKey end
     local key = NormalizeSearchText(action.key or ""):gsub("%s+", "")
     local typ = tostring(action.type or "")
+    if key:find("priority", 1, true) then return "gf_priority" end
     if key:find("profile", 1, true) or typ == "profile" then return "profiles" end
     if key:find("aura", 1, true) then return key:find("group", 1, true) and "gf_auras" or "auras3" end
     if key:find("groupstatus", 1, true) or key:find("groupcorner", 1, true) then return "gf_indicators" end

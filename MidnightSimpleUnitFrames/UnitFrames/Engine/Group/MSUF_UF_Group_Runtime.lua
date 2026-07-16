@@ -182,6 +182,16 @@ local function SetRuntimeEventsEnabled(enabled, regenOnly)
   for i = 1, #RUNTIME_EVENTS do
     eventFrame:RegisterEvent(RUNTIME_EVENTS[i])
   end
+  local priorityKind = type(GF.GetPriorityBaseKind) == "function" and GF.GetPriorityBaseKind() or nil
+  if not priorityKind and IsInRaid and IsInRaid() then
+    priorityKind = type(GF.GetLiveRaidKind) == "function" and GF.GetLiveRaidKind() or "raid"
+  elseif not priorityKind and IsInGroup and IsInGroup() then
+    priorityKind = "party"
+  end
+  if priorityKind and ConfEnabled(priorityKind)
+    and type(GF.PriorityFramesConfigured) == "function" and GF.PriorityFramesConfigured() == true then
+    eventFrame:RegisterEvent("UNIT_NAME_UPDATE")
+  end
 end
 
 local function LiveRaidKind()
@@ -209,6 +219,22 @@ local function PreviewSuppressesHeader(key)
   if not active then return false end
   if key == "party" then return active.party == true end
   if key == "raid" then return active.raid == true or active.mythicraid == true end
+  if key == "priority" then return active.priority == true end
+  return false
+end
+
+local function LivePriorityKind()
+  if type(GF.GetPriorityBaseKind) == "function" then return GF.GetPriorityBaseKind() end
+  if IsInRaid and IsInRaid() then return LiveRaidKind() end
+  if IsInGroup and IsInGroup() then return "party" end
+  return nil
+end
+
+local function WantPriorityBase(kind)
+  if kind == "party" then
+    return IsInGroup and IsInGroup() and not (IsInRaid and IsInRaid()) and ConfEnabled("party")
+  end
+  if kind == "raid" or kind == "mythicraid" then return WantRaid() end
   return false
 end
 
@@ -223,7 +249,34 @@ end
 local function HeaderScope(kind)
   if kind == "party" then return "party" end
   if kind == "raid" or kind == "mythicraid" then return "raid" end
+  if kind == "priority" or kind == "gf_priority" then return "priority" end
   return nil
+end
+
+local function SetupWantedPriority()
+  GF._pendingPriorityRefresh = nil
+  local priorityKind = LivePriorityKind()
+  local wanted = WantPriorityBase(priorityKind)
+    and not PreviewSuppressesHeader("priority")
+    and type(GF.PriorityFramesConfigured) == "function"
+    and GF.PriorityFramesConfigured() == true
+  if not wanted then
+    return RetireHeader("priority")
+  end
+  local resolve = GF.ResolvePrioritySelection
+  local setup = GF.SetupPriorityHeader
+  if type(resolve) ~= "function" or type(setup) ~= "function" then
+    return RetireHeader("priority")
+  end
+  local nameList, count = resolve()
+  if not nameList or not count or count < 1 then
+    if type(GF.NotifyPriorityListeners) == "function" then GF.NotifyPriorityListeners("runtime-empty", 0) end
+    return RetireHeader("priority")
+  end
+  local header = setup(priorityKind, nameList, count)
+  if header and header.Show then header:Show() end
+  if type(GF.NotifyPriorityListeners) == "function" then GF.NotifyPriorityListeners("runtime", count) end
+  return header ~= nil
 end
 
 local function SetupWantedHeaders(kind)
@@ -231,6 +284,7 @@ local function SetupWantedHeaders(kind)
   if not AnyGroupFrameEnabled() then
     if not scope or scope == "party" then RetireHeader("party") end
     if not scope or scope == "raid" then RetireHeader("raid") end
+    RetireHeader("priority")
     return true
   end
 
@@ -238,23 +292,27 @@ local function SetupWantedHeaders(kind)
   local wantRaid = WantRaid() and not PreviewSuppressesHeader("raid")
   local raidKind = LiveRaidKind()
 
-  if scope ~= "raid" and wantParty then
+  if scope ~= "raid" and scope ~= "priority" and wantParty then
     local header, scanned
     header, scanned = SetupLiveHeader("party", "party")
     if header and header.Show then header:Show() end
     if not scanned and GF.ScheduleScan then GF.ScheduleScan("party", "party") end
-  elseif scope ~= "raid" then
+  elseif scope ~= "raid" and scope ~= "priority" then
     RetireHeader("party")
   end
 
-  if scope ~= "party" and wantRaid then
+  if scope ~= "party" and scope ~= "priority" and wantRaid then
     local header, scanned
     header, scanned = SetupLiveHeader("raid", raidKind)
     if header and header.Show then header:Show() end
     if not scanned and GF.ScheduleScan then GF.ScheduleScan("raid", raidKind) end
-  elseif scope ~= "party" then
+  elseif scope ~= "party" and scope ~= "priority" then
     RetireHeader("raid")
   end
+
+  -- Priority inherits whichever base group kind is active, so both Party and
+  -- Raid scoped layout changes must update the one switching secure header.
+  SetupWantedPriority()
 
   if GF.ApplyBlizzardGroupFrameOwnership then
     GF.ApplyBlizzardGroupFrameOwnership("lean-runtime")
@@ -453,6 +511,27 @@ local function ScheduleHeaderLayoutSettle(refreshRosterState)
   return true
 end
 
+-- UNIT_NAME_UPDATE can arrive in a burst while a group roster is initializing.
+-- Collapse that burst into one cold-path secure nameList rebuild instead of
+-- repeatedly scanning 40 members and cycling the conditional event set.
+local priorityNameSettlePending = false
+
+local function FlushPriorityNameSettle()
+  priorityNameSettlePending = false
+  return GF.RefreshPriorityFrames("unit-name-settle")
+end
+
+local function SchedulePriorityNameSettle()
+  if priorityNameSettlePending then return false end
+  priorityNameSettlePending = true
+  if C_Timer and type(C_Timer.After) == "function" then
+    C_Timer.After(0, FlushPriorityNameSettle)
+  else
+    FlushPriorityNameSettle()
+  end
+  return true
+end
+
 function GF.RefreshUnitBindings(kind)
   if InCombat() then return GF.DeferGroupRuntime("roster", kind, GF.DIRTY_UNIT_BINDING) end
   local did = false
@@ -464,8 +543,30 @@ function GF.RefreshUnitBindings(kind)
     if (not kind or kind == "raid" or kind == "mythicraid" or kind == raidKind) and GF.headers.raid then
       did = GF.ScheduleScan("raid", raidKind) or did
     end
+    local priorityHeader = GF.headers.priority
+    local priorityKind = LivePriorityKind() or (priorityHeader and priorityHeader._msufGFKind) or raidKind
+    local priorityRaidLike = priorityKind == "raid" or priorityKind == "mythicraid"
+    local priorityMatches = not kind or kind == "priority" or kind == "gf_priority" or kind == priorityKind
+      or (priorityRaidLike and (kind == "raid" or kind == "mythicraid"))
+    if priorityMatches and priorityHeader then
+      did = GF.ScheduleScan("priority", priorityKind) or did
+    end
   end
   return did
+end
+
+function GF.RefreshPriorityFrames(reason)
+  if InCombat() then
+    GF._pendingPriorityRefresh = reason or true
+    GF._pendingGroupRuntime = true
+    if not GF._pendingGroupRuntimeReason or GF._pendingGroupRuntimeReason == "refresh" then
+      GF._pendingGroupRuntimeReason = "priority"
+    end
+    return false
+  end
+  local result = SetupWantedPriority()
+  SetRuntimeEventsEnabled(AnyGroupFrameEnabled())
+  return NotifyRuntimeObservers("refreshPriority", LivePriorityKind(), GF.DIRTY_UNIT_BINDING, result)
 end
 
 function GF.RebuildAll()
@@ -540,18 +641,20 @@ function GF.MarkAllDirty(mask)
   return GF.RefreshVisuals(nil, mask)
 end
 
+local function RefreshGroupNameFrame(frame)
+  return UF and UF.RunLeanIdentity and UF.RunLeanIdentity(frame, "MSUF_GF_NAME_UPDATE") == true or false
+end
+
 function GF.RefreshGroupNames(unit)
   if not (UF and GF.ForEachFrame) then return false end
-  local did = false
-  if unit and GF.FrameForUnit then
-    local frame = GF.FrameForUnit(unit)
-    if frame and UF.RunLeanIdentity then did = UF.RunLeanIdentity(frame, "MSUF_GF_NAME_UPDATE") or did end
-    return did
+  if unit then
+    if type(GF.ForEachFrameForUnit) == "function" then
+      return GF.ForEachFrameForUnit(unit, RefreshGroupNameFrame)
+    end
+    local frame = GF.FrameForUnit and GF.FrameForUnit(unit)
+    return frame and RefreshGroupNameFrame(frame) or false
   end
-  GF.ForEachFrame(function(frame)
-    if UF.RunLeanIdentity then did = UF.RunLeanIdentity(frame, "MSUF_GF_NAME_UPDATE") or did end
-  end, true)
-  return did
+  return GF.ForEachFrame(RefreshGroupNameFrame, true)
 end
 
 function GF.BuildFrameCache(frame)
@@ -610,10 +713,17 @@ local function FlushDeferred()
     return NotifyRuntimeObservers("rebuildAll", nil, GF.DIRTY_ALL, result)
   end
   if reason == "refreshAll" then return GF.RefreshAll() end
+  if reason == "priority" then
+    local did = GF.RefreshPriorityFrames("deferred")
+    if mask and type(GF.RefreshVisuals) == "function" then
+      did = GF.RefreshVisuals(kind, mask) or did
+    end
+    return did
+  end
   return GF.RefreshAll()
 end
 
-local function RuntimeOnEvent(self, event)
+local function RuntimeOnEvent(self, event, unit)
   -- SavedVariables/config caches are only reliable at the startup event
   -- boundary. Handle it before the disabled fast-exit so a cold cache cannot
   -- unregister the very events that perform the first live header setup.
@@ -634,6 +744,9 @@ local function RuntimeOnEvent(self, event)
   if event == "PLAYER_REGEN_ENABLED" then
     SyncCombatState(false)
     if GF._pendingGroupRuntime then FlushDeferred() end
+    -- Priority selection is orthogonal to the broader pending reason. Catch up
+    -- once unless the broad flush already rebuilt the active Priority header.
+    if GF._pendingPriorityRefresh then GF.RefreshPriorityFrames("deferred-priority") end
     SetRuntimeEventsEnabled(AnyGroupFrameEnabled())
     return
   elseif event == "PLAYER_REGEN_DISABLED" then
@@ -652,6 +765,23 @@ local function RuntimeOnEvent(self, event)
     else
       GF.RefreshHeaderLayout(event)
       RefreshVisibleRoleState(event)
+    end
+    return
+  elseif event == "UNIT_NAME_UPDATE" then
+    if not IsUnitToken(unit) then return end
+    local valid
+    if type(GF.IsPriorityGroupUnit) == "function" then
+      valid = GF.IsPriorityGroupUnit(unit)
+    elseif IsInRaid and IsInRaid() then
+      valid = unit:match("^raid%d+$") ~= nil
+    else
+      valid = unit == "player" or unit:match("^party[1-4]$") ~= nil
+    end
+    if valid ~= true then return end
+    if InCombat() then
+      GF.RefreshPriorityFrames("unit-name")
+    else
+      SchedulePriorityNameSettle()
     end
     return
   elseif event == "PLAYER_DIFFICULTY_CHANGED" or event == "ZONE_CHANGED_NEW_AREA" then
@@ -675,6 +805,7 @@ local GF_PUBLIC_ALIASES = {
   { "MSUF_GF_RefreshVisuals", "RefreshVisuals" },
   { "MSUF_GF_RefreshHeaderLayout", "RefreshHeaderLayout" },
   { "MSUF_GF_RefreshUnitBindings", "RefreshUnitBindings" },
+  { "MSUF_GF_RefreshPriorityFrames", "RefreshPriorityFrames" },
   { "MSUF_GF_RefreshGeometry", "RefreshGeometry" },
   { "MSUF_GF_UpdateGroupVisibility", "UpdateGroupVisibility" },
   { "MSUF_GF_RefreshOverlays", "RefreshOverlays" },

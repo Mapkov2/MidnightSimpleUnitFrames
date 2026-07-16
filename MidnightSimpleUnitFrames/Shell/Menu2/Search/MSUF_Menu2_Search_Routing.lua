@@ -659,6 +659,11 @@ indicators=indicators|focus glow|frame effects
 sicons=status icons|status icon|dead icon|ghost text|offline icon|afk|dnd|ready check|summon|resurrect|phase|leader icon|assist icon|role icon|raid marker|advanced status|advanced x offset|advanced y offset|advanced placement|extended x offset|extended y offset
 ci=corner indicators|corner dots|corner indicator|custom spell editor|slot assignments
 ]],
+    gf_priority = [[
+overview=priority frames|enable priority|disable priority|important players|priority group frames|priority party frames|duplicate party frames|duplicate raid frames|extra party frames|extra raid frames|dungeon priority frames
+who_appears=pin player|pinned players|manual pins|automatic tanks|auto tanks|visible slots|hover hotkey|keybind|remove pin|clear pins
+placement=priority placement|attach priority|right of group|left of group|above group|below group|right of party|left of party|right of raid|left of raid|free position|growth|spacing|attachment gap|alignment offset|priority mover|edit mode
+]],
     profiles = [[
 profiles_management=profile management|active profile|rename|copy profile|reset profile
 profiles_specs=spec profiles|specialization|auto switch
@@ -798,7 +803,7 @@ local function SearchRouteUnitPage(route, pageKey, normalized)
 end
 
 local function SearchRouteGroupPage(route, pageKey, normalized)
-    local scope = SearchGroupScopeForText(normalized)
+    local scope = pageKey ~= "gf_priority" and SearchGroupScopeForText(normalized) or nil
     if scope then SearchRouteSetState(route, "gfScope", scope) end
     if pageKey == "gf_layout" then
         if SearchTextKindForText(normalized) then SearchRouteOpenAccordion(route, pageKey, "text") end

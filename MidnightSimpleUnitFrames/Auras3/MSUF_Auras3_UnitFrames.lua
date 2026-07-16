@@ -4366,10 +4366,20 @@ function A3._RequestGroupKindNow(kind)
     return didWork
 end
 
+local function ApplyRequestedGroupUnitFrame(frame, unit, gf)
+    if type(gf.MarkDirty) == "function" then
+        return gf.MarkDirty(frame, gf.DIRTY_AURAS) == true
+    end
+    return A3._ApplyGroupAuraFrame(frame, unit, frame._msufGFKind) == true
+end
+
 function A3._RequestGroupUnitNow(unit)
     local gf = A3._GroupAPI()
     if not (gf and type(unit) == "string" and unit ~= "") then return false end
     if InCombat() then return A3._QueueDeferredAuraRuntime(unit, "AURAS3_GROUP_UNIT") end
+    if type(gf.ForEachFrameForUnit) == "function" then
+        return gf.ForEachFrameForUnit(unit, ApplyRequestedGroupUnitFrame, gf)
+    end
     local frame = type(gf.FrameForUnit) == "function" and gf.FrameForUnit(unit) or nil
     if frame and type(gf.MarkDirty) == "function" then
         return gf.MarkDirty(frame, gf.DIRTY_AURAS) == true

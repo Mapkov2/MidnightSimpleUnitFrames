@@ -13,6 +13,7 @@ local lastGroupKind
 local lastGroupMask
 local lastGroupPreviewKind
 local lastGroupPreviewOpts
+local lastPriorityReason
 local lastNotifyMask
 local lastApplyMask
 local function Count(name)
@@ -24,7 +25,7 @@ local function ResetCalls()
     for key in pairs(calls) do calls[key] = nil end
     for i = #order, 1, -1 do order[i] = nil end
     lastBarArgs, lastFontArgs, lastGroupKind, lastGroupMask = nil, nil, nil, nil
-    lastGroupPreviewKind, lastGroupPreviewOpts = nil, nil
+    lastGroupPreviewKind, lastGroupPreviewOpts, lastPriorityReason = nil, nil, nil
     lastNotifyMask, lastApplyMask = nil, nil
 end
 local function FlushOne()
@@ -125,6 +126,11 @@ local MSUF = {
             lastGroupPreviewOpts = opts
             return Count("groupPreview")
         end,
+        RequestPriorityApply = function(self, reason)
+            assert(self and self.DIRTY_COLOR == 8, "priority apply lost its method owner")
+            lastPriorityReason = reason
+            return Count("priorityApply")
+        end,
     },
 }
 
@@ -217,6 +223,14 @@ FlushOne()
 assert(calls.groupPreview == 1 and lastGroupPreviewKind == "party", "group preview must refresh exactly once for its scope")
 assert(type(lastGroupPreviewOpts) == "table" and lastGroupPreviewOpts.dirtyMask == 16,
     "group preview must retain the precise dirty mask")
+
+ResetCalls()
+assert(Apply.RequestGroup("gf_priority", "geometry", "TEST_PRIORITY_GEOMETRY") == true)
+FlushOne()
+assert(calls.priorityApply == 1 and lastPriorityReason == "TEST_PRIORITY_GEOMETRY",
+    "gf_priority must use the dedicated priority apply contract exactly once")
+assert(calls.groupPreview == nil and calls.groupBorders == nil and lastGroupKind == nil,
+    "gf_priority must never alias into Party preview or generic group visuals")
 
 ResetCalls()
 assert(Apply.RequestGeneral("TEST_FULL_VISUAL", {

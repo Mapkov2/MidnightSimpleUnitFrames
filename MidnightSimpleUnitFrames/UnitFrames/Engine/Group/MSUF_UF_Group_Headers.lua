@@ -102,10 +102,26 @@ end
 function GF.RetireHeader(key)
   if not (GF.headers and key) then return false end
   local header = GF.headers[key]
-  if not header then return false end
+  if not header then
+    if key == "priority" then
+      local anchor = GF.anchors and GF.anchors.priority
+      if anchor and anchor.Hide then anchor:Hide() end
+    end
+    return false
+  end
   RetireHeader(header)
+  if key == "priority" and header.UnregisterAllEvents then
+    -- SecureGroupHeaderTemplate otherwise retains its two Blizzard roster
+    -- events while pooled. Priority Frames promise a truly inert disabled state.
+    header:UnregisterAllEvents()
+    header._msufGFPriorityHeaderEvents = nil
+  end
   GF._headerPool[key] = header
   GF.headers[key] = nil
+  if key == "priority" then
+    local anchor = GF.anchors and GF.anchors.priority
+    if anchor and anchor.Hide then anchor:Hide() end
+  end
   return true
 end
 
@@ -121,13 +137,18 @@ local function HeaderName(key)
   if key == "party" then
     GF._partyHeaderSerial = (GF._partyHeaderSerial or 0) + 1
     return "MSUF_GF_PartyHeader" .. GF._partyHeaderSerial
+  elseif key == "priority" then
+    GF._priorityHeaderSerial = (GF._priorityHeaderSerial or 0) + 1
+    return "MSUF_GF_PriorityHeader" .. GF._priorityHeaderSerial
   end
   GF._raidHeaderSerial = (GF._raidHeaderSerial or 0) + 1
   return "MSUF_GF_RaidHeader" .. GF._raidHeaderSerial
 end
 
 local function AnchorName(key)
-  return key == "party" and "MSUF_GF_PartyAnchor" or "MSUF_GF_RaidAnchor"
+  if key == "party" then return "MSUF_GF_PartyAnchor" end
+  if key == "priority" then return "MSUF_GF_PriorityAnchor" end
+  return "MSUF_GF_RaidAnchor"
 end
 
 local UNKNOWN_RAID_LAYOUT_COUNT = 10
@@ -925,6 +946,190 @@ local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCou
     changed = ApplySortAttributes(header, sortState) or changed
   end
   return changed, shouldHide
+end
+
+local PRIORITY_SECURE_INIT_VERSION = 1
+
+local function PriorityLayoutParts(kind, conf, count)
+  local w, h = 80, 32
+  if GF.GetScaledFrameMetrics then
+    w, h = GF.GetScaledFrameMetrics(kind)
+  else
+    local raid = GF.GetConf and GF.GetConf(kind) or {}
+    w, h = tonumber(raid.width) or w, tonumber(raid.height) or h
+  end
+  local spacing = floor((tonumber(conf and conf.spacing) or 2) + 0.5)
+  if spacing < 0 then spacing = 0 elseif spacing > 40 then spacing = 40 end
+  count = ClampInt(count, 1, 1, 5)
+  local horizontal = conf and (conf.growth == "LEFT" or conf.growth == "RIGHT")
+  local totalW = horizontal and (w * count + spacing * (count - 1)) or w
+  local totalH = horizontal and h or (h * count + spacing * (count - 1))
+  return w, h, spacing, totalW, totalH
+end
+
+local function PositionPriorityAnchor(anchor, conf, totalW, totalH, kind)
+  local mode = conf and conf.anchorMode or "RAID_RIGHT"
+  local baseAnchorKey = kind == "party" and "party" or "raid"
+  local baseAnchor = GF.anchors and GF.anchors[baseAnchorKey]
+  if mode ~= "FREE" and baseAnchor then
+    local gap = floor((tonumber(conf.attachGap) or 8) + 0.5)
+    local cross = floor((tonumber(conf.attachOffset) or 0) + 0.5)
+    if gap < 0 then gap = 0 elseif gap > 100 then gap = 100 end
+    anchor:ClearAllPoints()
+    if mode == "RAID_LEFT" then
+      anchor:SetPoint("TOPRIGHT", baseAnchor, "TOPLEFT", -gap, cross)
+      ClampAnchorOnScreen(anchor, "TOPRIGHT", "TOPLEFT", baseAnchor, -gap, cross, totalW, totalH)
+    elseif mode == "RAID_TOP" then
+      anchor:SetPoint("BOTTOMLEFT", baseAnchor, "TOPLEFT", cross, gap)
+      ClampAnchorOnScreen(anchor, "BOTTOMLEFT", "TOPLEFT", baseAnchor, cross, gap, totalW, totalH)
+    elseif mode == "RAID_BOTTOM" then
+      anchor:SetPoint("TOPLEFT", baseAnchor, "BOTTOMLEFT", cross, -gap)
+      ClampAnchorOnScreen(anchor, "TOPLEFT", "BOTTOMLEFT", baseAnchor, cross, -gap, totalW, totalH)
+    else
+      anchor:SetPoint("TOPLEFT", baseAnchor, "TOPRIGHT", gap, cross)
+      ClampAnchorOnScreen(anchor, "TOPLEFT", "TOPRIGHT", baseAnchor, gap, cross, totalW, totalH)
+    end
+  end
+  anchor:SetSize(totalW, totalH)
+  anchor._msufGFPriorityAnchor = true
+  anchor._msufIsGroupFrame = true
+  anchor.msufConfigKey = "gf_priority"
+  anchor._msufGFKind = "priority"
+  anchor:Show()
+end
+
+local function ConfigurePriorityHeader(header, kind, conf, nameList, w, h, spacing)
+  local kindChanged = header._msufGFKind ~= nil and header._msufGFKind ~= kind
+  local point, xOffset, yOffset, columnAnchor = GrowthAttributes(conf.growth, spacing)
+  local initialWidth = floor((w or 80) + 0.5)
+  local initialHeight = floor((h or 32) + 0.5)
+  local sizeChanged = AttrChanged(header, "initial-width", initialWidth)
+    or AttrChanged(header, "initial-height", initialHeight)
+  local secureInitChanged = AttrChanged(header, "_msufPrioritySecureInitVersion", PRIORITY_SECURE_INIT_VERSION)
+  local topologyChanged = AttrChanged(header, "point", point)
+    or AttrChanged(header, "xOffset", xOffset)
+    or AttrChanged(header, "yOffset", yOffset)
+    or AttrChanged(header, "unitsPerColumn", 5)
+  local shouldHide = header.IsShown and header:IsShown()
+    and (kindChanged or sizeChanged or secureInitChanged or topologyChanged
+      or AttrChanged(header, "template", ButtonTemplate())
+      or AttrChanged(header, "nameList", nameList))
+
+  if shouldHide then header:Hide() end
+  if topologyChanged then ResetManagedChildAnchors(header) end
+
+  local changed = kindChanged
+  changed = SetAttrIfChanged(header, "template", ButtonTemplate()) or changed
+  changed = SetAttrIfChanged(header, "templateType", "Button") or changed
+  changed = SetAttrIfChanged(header, "initial-width", initialWidth) or changed
+  changed = SetAttrIfChanged(header, "initial-height", initialHeight) or changed
+  changed = SetAttrIfChanged(header, "_msufPrioritySecureInitVersion", PRIORITY_SECURE_INIT_VERSION) or changed
+  changed = SetAttrIfChanged(header, "oUF-headerType", "group") or changed
+  changed = SetAttrIfChanged(header, "_msufPriorityHeader", true) or changed
+  if UF and type(UF.ForEachPingBindingAttribute) == "function" then
+    UF.ForEachPingBindingAttribute(function(attribute, key)
+      changed = SetAttrIfChanged(header, attribute, key) or changed
+    end)
+  end
+  if sizeChanged or secureInitChanged then
+    header:SetAttribute("initialConfigFunction", BuildInitialConfigFunction(initialWidth, initialHeight))
+    changed = true
+  end
+  changed = SetAttrIfChanged(header, "showPlayer", true) or changed
+  changed = SetAttrIfChanged(header, "showSolo", false) or changed
+  changed = SetAttrIfChanged(header, "showParty", kind == "party") or changed
+  changed = SetAttrIfChanged(header, "showRaid", kind ~= "party") or changed
+  changed = SetAttrIfChanged(header, "groupFilter", nil) or changed
+  changed = SetAttrIfChanged(header, "roleFilter", nil) or changed
+  changed = SetAttrIfChanged(header, "groupBy", nil) or changed
+  changed = SetAttrIfChanged(header, "groupingOrder", nil) or changed
+  changed = SetAttrIfChanged(header, "nameList", nameList) or changed
+  changed = SetAttrIfChanged(header, "sortMethod", "NAMELIST") or changed
+  changed = SetAttrIfChanged(header, "sortDir", "ASC") or changed
+  changed = SetAttrIfChanged(header, "point", point) or changed
+  changed = SetAttrIfChanged(header, "xOffset", xOffset) or changed
+  changed = SetAttrIfChanged(header, "yOffset", yOffset) or changed
+  changed = SetAttrIfChanged(header, "columnSpacing", spacing) or changed
+  changed = SetAttrIfChanged(header, "columnAnchorPoint", columnAnchor) or changed
+  changed = SetAttrIfChanged(header, "unitsPerColumn", 5) or changed
+  changed = SetAttrIfChanged(header, "maxColumns", 1) or changed
+  header._msufGFKind = kind
+  header._msufGFKey = "priority"
+  header._msufGFPriorityHeader = true
+  return changed, shouldHide
+end
+
+--- Configure the protected duplicate strip from a resolved full-name list.
+--- Every protected mutation remains on this OOC-only header ownership path.
+function GF.SetupPriorityHeader(kind, nameList, count)
+  if InCombat() then
+    Defer("priority")
+    return nil
+  end
+  if type(nameList) ~= "string" or nameList == "" or (tonumber(count) or 0) < 1 then
+    GF.RetireHeader("priority")
+    return nil
+  end
+  if GF.EnsureDB then GF.EnsureDB() end
+  local conf = GF.GetPriorityConf and GF.GetPriorityConf() or {}
+  local w, h, spacing, totalW, totalH = PriorityLayoutParts(kind, conf, count)
+  local anchor = EnsureAnchor("priority", conf, totalW, totalH)
+  PositionPriorityAnchor(anchor, conf, totalW, totalH, kind)
+
+  local header = GF.headers.priority
+  local newHeader, reused = false, false
+  if not header and GF._forceRecreateHeaders ~= true then
+    header = GF._headerPool.priority
+    if header then
+      GF._headerPool.priority = nil
+      GF.headers.priority = header
+      reused = true
+    end
+  end
+  if header and GF._forceRecreateHeaders == true then
+    RetireHeader(header)
+    if header.UnregisterAllEvents then header:UnregisterAllEvents() end
+    header._msufGFPriorityHeaderEvents = nil
+    GF.headers.priority = nil
+    GF._headerPool.priority = nil
+    header = nil
+  end
+  if not header then
+    header = CreateFrame("Frame", HeaderName("priority"), anchor, "SecureGroupHeaderTemplate")
+    GF.headers.priority = header
+    newHeader = true
+  end
+
+  if header._msufGFPriorityHeaderEvents ~= true and header.RegisterEvent then
+    header:RegisterEvent("GROUP_ROSTER_UPDATE")
+    header:RegisterEvent("UNIT_NAME_UPDATE")
+    header._msufGFPriorityHeaderEvents = true
+  end
+
+  local changed, wasHidden = ConfigurePriorityHeader(header, kind, conf, nameList, w, h, spacing)
+  if header:GetParent() ~= anchor then header:SetParent(anchor) end
+  header:ClearAllPoints()
+  local origin = conf.growth == "UP" and "BOTTOMLEFT"
+    or conf.growth == "LEFT" and "TOPRIGHT"
+    or "TOPLEFT"
+  header:SetPoint(origin, anchor, origin, 0, 0)
+  header:Show()
+  if (changed or newHeader or reused or wasHidden) and header.SetAttribute then
+    header:SetAttribute("_msufLayoutNonce", (header:GetAttribute("_msufLayoutNonce") or 0) + 1)
+  end
+
+  local needsScan = changed or newHeader or reused or wasHidden or GF._forceScanHeaders == true
+  if needsScan and header.GetChildren then
+    for i = 1, select("#", header:GetChildren()) do
+      local child = select(i, header:GetChildren())
+      if child then
+        child._msufGFPriorityFrame = true
+        child._msufGFKind = kind
+      end
+    end
+  end
+  if needsScan and GF.ScheduleScan then GF.ScheduleScan("priority", kind) end
+  return header, needsScan
 end
 
 function GF.SetupHeader(key, kind)

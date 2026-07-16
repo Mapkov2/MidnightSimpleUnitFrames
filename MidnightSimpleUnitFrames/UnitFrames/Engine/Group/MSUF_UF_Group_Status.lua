@@ -258,6 +258,17 @@ local unitlessIndexByEvent = {}
 local unitlessCountByEvent = {}
 local unitlessRegistered = {}
 
+local function RunTargetedReadyCheckConfirm(frame, unit, event, registered, live)
+  if frame and (not live or live[frame] == true) then
+    local active = frame._msufActiveElements
+    if active and active.GroupStatusRuntime == true and registered and registered[frame] then
+      RunStatusRuntimeFrame(frame, event, unit)
+      return true
+    end
+  end
+  return false
+end
+
 local function EnsureUnitlessDriver()
   if unitlessDriver or not CreateFrame then
     return unitlessDriver
@@ -274,13 +285,22 @@ local function EnsureUnitlessDriver()
     -- frame avoids broadcasting every confirmation across the entire raid.
     -- READY_CHECK and READY_CHECK_FINISHED remain intentional broadcasts.
     if event == "READY_CHECK_CONFIRM" and type(unitTarget) == "string" then
-      local frame = GF and type(GF.FrameForUnit) == "function" and GF.FrameForUnit(unitTarget)
-      if frame and (not live or live[frame] == true) then
-        local active = frame._msufActiveElements
-        local registered = unitlessIndexByEvent[event]
-        if active and active.GroupStatusRuntime == true and registered and registered[frame] then
-          RunStatusRuntimeFrame(frame, event, unitTarget)
+      local registered = unitlessIndexByEvent[event]
+      local duplicateBucket = GF and GF.priorityUnitFrames and GF.priorityUnitFrames[unitTarget]
+      local forEach = GF and GF.ForEachFrameForUnit
+      if duplicateBucket and type(forEach) == "function" then
+        if forEach(unitTarget, RunTargetedReadyCheckConfirm, event, registered, live) == true then
           return
+        end
+        -- A stale duplicate index falls through to the correctness broadcast.
+      else
+        local frame = GF and type(GF.FrameForUnit) == "function" and GF.FrameForUnit(unitTarget)
+        if frame and (not live or live[frame] == true) then
+          local active = frame._msufActiveElements
+          if active and active.GroupStatusRuntime == true and registered and registered[frame] then
+            RunStatusRuntimeFrame(frame, event, unitTarget)
+            return
+          end
         end
       end
       -- A secure-header unit can be rebound before the adapter's unit index is
