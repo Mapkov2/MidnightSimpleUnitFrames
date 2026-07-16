@@ -364,9 +364,13 @@ end
 
 local Runtime = M._guidedTourRuntime or {}
 M._guidedTourRuntime = Runtime
+local EnsureGuidedTourChrome
 
 local function SetTourPreviewInlineMode(active)
     active = active == true
+    if not active and Runtime.previewInlineMode == false and Runtime.previewDockRecord == nil then
+        return false
+    end
     Runtime.previewInlineMode = active
     if Runtime.previewDockRecord and type(Runtime.previewDockRecord.restore) == "function" then
         Runtime.previewDockRecord.restore(true)
@@ -375,6 +379,7 @@ local function SetTourPreviewInlineMode(active)
     local staleDock = Runtime.chrome and Runtime.chrome.previewDock
     if staleDock and staleDock.Hide then staleDock:Hide() end
     if type(M.RefreshPinnedPreviews) == "function" then M.RefreshPinnedPreviews() end
+    return true
 end
 
 Tour = function()
@@ -805,30 +810,67 @@ end
 
 local IsWidgetInside
 
+local function RefreshCachedSectionDescriptors(cached)
+    local sections = cached and cached.sections
+    if type(sections) ~= "table" then return false end
+    for i = 1, #sections do
+        local section = sections[i]
+        local entry = section.entry
+        if type(entry) ~= "table" or tonumber(entry.guidedOrder) ~= section.guidedOrder then return false end
+        if section.region then
+            local body = entry.body or entry.outer
+            local outer = entry.outer or body
+            if body ~= section.body or outer ~= section.outer then return false end
+            local label = SafeText(entry.label)
+            if label == "" then label = SafeText(body and body.title) end
+            section.label = label ~= "" and label or "Scope and overrides"
+        else
+            if entry.body ~= section.body or entry.outer ~= section.outer then return false end
+            local label = SafeText(entry.label)
+            section.label = label ~= "" and label or tostring(section.id or "Section")
+        end
+    end
+    return true
+end
+
 local function SortedSections(pageKey)
     local entry = M.cache and M.cache[pageKey]
     local source = entry and entry.sections
+    local regions = entry and entry.guidedRegions
+    local cached = entry and entry._msuf2GuidedSortedSections
+    if cached and cached.source == source and cached.regions == regions
+        and RefreshCachedSectionDescriptors(cached)
+    then
+        return cached.sections
+    end
+    if entry then entry._msuf2GuidedSortedSections = nil end
     local sections = {}
+    local orders = {}
+    local stableOrder = true
     if type(source) == "table" then
         for sectionId, body in pairs(source) do
             local collapsible = body and body._msuf2CollapsibleEntry
             if collapsible then
                 local label = SafeText(collapsible.label)
                 if label == "" then label = tostring(sectionId or "Section") end
+                local guidedOrder = tonumber(collapsible.guidedOrder)
+                if guidedOrder == nil or orders[guidedOrder] then
+                    stableOrder = false
+                else
+                    orders[guidedOrder] = true
+                end
                 sections[#sections + 1] = {
                     id = tostring(sectionId or ""),
                     body = body,
                     outer = collapsible.outer,
                     entry = collapsible,
                     label = label,
-                    top = FrameTop(collapsible.outer),
-                    guidedOrder = tonumber(collapsible.guidedOrder),
+                    guidedOrder = guidedOrder,
                     collapsible = true,
                 }
             end
         end
     end
-    local regions = entry and entry.guidedRegions
     if type(regions) == "table" then
         for regionId, region in pairs(regions) do
             local body = type(region) == "table" and (region.body or region.outer) or nil
@@ -837,18 +879,26 @@ local function SortedSections(pageKey)
                 local label = SafeText(region.label)
                 if label == "" then label = SafeText(body.title) end
                 if label == "" then label = "Scope and overrides" end
+                local guidedOrder = tonumber(region.guidedOrder)
+                if guidedOrder == nil or orders[guidedOrder] then
+                    stableOrder = false
+                else
+                    orders[guidedOrder] = true
+                end
                 sections[#sections + 1] = {
                     id = "region:" .. tostring(region.id or regionId or ""),
                     body = body,
                     outer = outer,
                     entry = region,
                     label = label,
-                    top = FrameTop(outer),
-                    guidedOrder = tonumber(region.guidedOrder),
+                    guidedOrder = guidedOrder,
                     region = true,
                 }
             end
         end
+    end
+    if not stableOrder then
+        for i = 1, #sections do sections[i].top = FrameTop(sections[i].outer) end
     end
     sort(sections, function(a, b)
         if a.guidedOrder ~= b.guidedOrder then
@@ -863,6 +913,9 @@ local function SortedSections(pageKey)
         end
         return a.id < b.id
     end)
+    if entry and stableOrder then
+        entry._msuf2GuidedSortedSections = { source = source, regions = regions, sections = sections }
+    end
     return sections
 end
 
@@ -1626,6 +1679,7 @@ end
 local function SelectExpectedPage(stage)
     local pageKey = ExpectedPage(stage)
     SetTourPreviewInlineMode(true)
+    if EnsureGuidedTourChrome then EnsureGuidedTourChrome() end
     Runtime.manualAway = nil
     Runtime.warning = nil
     if stage.special then InvalidateGuidedPage() end
@@ -2003,9 +2057,13 @@ local function AnchorTourScroll(chrome, active)
     local scroll = chrome.scroll
     local topOwner = chrome.status
     if active then topOwner = chrome end
-    scroll:ClearAllPoints()
-    scroll:SetPoint("TOPLEFT", topOwner, "BOTTOMLEFT", 0, 0)
-    scroll:SetPoint("BOTTOMRIGHT", chrome.host, "BOTTOMRIGHT", -24, 0)
+    if scroll._msuf2TourAnchorOwner ~= topOwner or scroll._msuf2TourAnchorHost ~= chrome.host then
+        scroll:ClearAllPoints()
+        scroll:SetPoint("TOPLEFT", topOwner, "BOTTOMLEFT", 0, 0)
+        scroll:SetPoint("BOTTOMRIGHT", chrome.host, "BOTTOMRIGHT", -24, 0)
+        scroll._msuf2TourAnchorOwner = topOwner
+        scroll._msuf2TourAnchorHost = chrome.host
+    end
     scroll._msuf2MaxScroll = nil
     scroll._msuf2SmoothScrollTarget = nil
     if type(scroll._msuf2RefreshScrollBar) == "function" then scroll:_msuf2RefreshScrollBar() end
@@ -2251,6 +2309,7 @@ function M.RefreshGuidedTourChrome(reason)
     if not chrome then return false end
     if not TourIsActive() then
         SetTourPreviewInlineMode(false)
+        if Runtime.tourVisualsDirty ~= true then return false end
         Runtime.warning = nil
         Runtime.manualAway = nil
         Runtime.lastVisualSignature = nil
@@ -2260,8 +2319,10 @@ function M.RefreshGuidedTourChrome(reason)
         chrome:Hide()
         RefreshEditModeOpenCue(false)
         AnchorTourScroll(chrome, false)
+        Runtime.tourVisualsDirty = nil
         return false
     end
+    Runtime.tourVisualsDirty = true
 
     local stage = CurrentStage()
     local profileMismatch, tourProfile, activeProfile = ProfileMismatch()
@@ -2489,14 +2550,20 @@ function M.RunGuidedTourStep(step)
 end
 
 function M.InstallGuidedTourChrome(frame, status, host, scroll)
+    Runtime.chromeFrame = frame or Runtime.chromeFrame
+    Runtime.chromeStatus = status or Runtime.chromeStatus
+    Runtime.chromeHost = host or Runtime.chromeHost
+    Runtime.chromeScroll = scroll or Runtime.chromeScroll
     if Runtime.chrome then
-        Runtime.chrome.frame = frame or Runtime.chrome.frame
-        Runtime.chrome.status = status or Runtime.chrome.status
-        Runtime.chrome.host = host or Runtime.chrome.host
-        Runtime.chrome.scroll = scroll or Runtime.chrome.scroll
+        Runtime.chrome.frame = Runtime.chromeFrame or Runtime.chrome.frame
+        Runtime.chrome.status = Runtime.chromeStatus or Runtime.chrome.status
+        Runtime.chrome.host = Runtime.chromeHost or Runtime.chrome.host
+        Runtime.chrome.scroll = Runtime.chromeScroll or Runtime.chrome.scroll
         M.RefreshGuidedTourChrome("REINSTALL")
         return Runtime.chrome
     end
+    if not TourIsActive() then return nil end
+    frame, status, host, scroll = Runtime.chromeFrame, Runtime.chromeStatus, Runtime.chromeHost, Runtime.chromeScroll
     local T = M.Theme
     if not (frame and status and host and scroll and T and type(T.Panel) == "function" and type(T.Font) == "function" and type(T.Button) == "function") then
         return nil
@@ -2584,12 +2651,21 @@ function M.InstallGuidedTourChrome(frame, status, host, scroll)
     return chrome
 end
 
+EnsureGuidedTourChrome = function()
+    if Runtime.chrome then return Runtime.chrome end
+    if not TourIsActive() then return nil end
+    if not (Runtime.chromeFrame and Runtime.chromeStatus and Runtime.chromeHost and Runtime.chromeScroll) then return nil end
+    return M.InstallGuidedTourChrome(
+        Runtime.chromeFrame, Runtime.chromeStatus, Runtime.chromeHost, Runtime.chromeScroll)
+end
+
 function M.GuidedTourOnPageSelected(pageKey)
     if not TourIsActive() then
         SetTourPreviewInlineMode(false)
-        M.RefreshGuidedTourChrome("PAGE_INACTIVE")
+        if Runtime.tourVisualsDirty == true then M.RefreshGuidedTourChrome("PAGE_INACTIVE") end
         return false
     end
+    EnsureGuidedTourChrome()
     local stage = CurrentStage()
     local expected = ExpectedPage(stage)
     if tostring(pageKey or "") ~= expected then

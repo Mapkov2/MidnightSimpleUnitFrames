@@ -366,6 +366,7 @@ local function RegisterGuidedTourRegion(ctx, frame, title, stableId)
     }
     pageEntry.guidedRegions = pageEntry.guidedRegions or {}
     pageEntry.guidedRegions[region.id] = region
+    pageEntry._msuf2GuidedSortedSections = nil
     frame._msuf2GuidedRegion = region
     return region
 end
@@ -373,7 +374,11 @@ end
 function W.RegisterGuidedRegion(ctx, frame, title, stableId)
     if frame and frame._msuf2GuidedRegion then
         local region = frame._msuf2GuidedRegion
-        if tostring(title or "") ~= "" then region.label = tostring(title) end
+        local changed = false
+        if tostring(title or "") ~= "" and region.label ~= tostring(title) then
+            region.label = tostring(title)
+            changed = true
+        end
         stableId = tostring(stableId or "")
         if stableId ~= "" and region.id ~= stableId then
             local regions = ctx and ctx.entry and ctx.entry.guidedRegions
@@ -383,8 +388,10 @@ function W.RegisterGuidedRegion(ctx, frame, title, stableId)
                 end
                 region.id = stableId
                 regions[stableId] = region
+                changed = true
             end
         end
+        if changed and ctx and ctx.entry then ctx.entry._msuf2GuidedSortedSections = nil end
         return region
     end
     return RegisterGuidedTourRegion(ctx, frame, title, stableId)
@@ -622,6 +629,7 @@ function W.PageBuilder(ctx)
         if ctx.entry then
             ctx.entry.sections = ctx.entry.sections or {}
             ctx.entry.sections[sectionId] = body
+            ctx.entry._msuf2GuidedSortedSections = nil
         end
         self.collapsibles[#self.collapsibles + 1] = entry
         local function RefreshHeaderTone(hover)

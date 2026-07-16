@@ -1024,23 +1024,49 @@ local function AddSearchRecord(records, seenRecords, pageInfo, label, anchor, ki
         for i = 1, #extraParts do AddSearchText(parts, extraParts[i]) end
     end
 
+    local idLabelNorm = NormalizeSearchText(label)
+    local idHintNorm = NormalizeSearchText(hint)
     local recordId = table.concat({
         tostring(pageInfo.key or ""),
         tostring(kind or ""),
         tostring(anchor or ""),
-        NormalizeSearchText(label),
-        NormalizeSearchText(hint),
+        idLabelNorm,
+        idHintNorm,
     }, "\031")
     if seenRecords[recordId] then return end
     seenRecords[recordId] = true
 
     displayHint = DisplaySearchText(displayHint)
-    local displayGroup = (kind == "faq") and "" or SearchDisplayText(pageInfo.group or "")
-    local displayTitle = (kind == "faq") and "" or SearchDisplayText(pageInfo.title or pageInfo.label or "")
-    local labelNorm = NormalizeSearchText(displayLabel)
-    local titleNorm = (kind == "faq") and "" or NormalizeSearchText(displayTitle)
-    local groupNorm = (kind == "faq") and "" or NormalizeSearchText(displayGroup)
-    local hintNorm = (kind == "faq") and "" or NormalizeSearchText(displayHint)
+    local displayGroup, displayTitle, titleNorm, groupNorm = "", "", "", ""
+    if kind ~= "faq" then
+        local groupSource = pageInfo.group or ""
+        local titleSource = pageInfo.title or pageInfo.label or ""
+        local localeKey = SEARCH_STATE.localeKey or SearchEffectiveLocale()
+        local cached = pageInfo._msuf2SearchPageTextCache
+        if not cached
+            or cached.localeKey ~= localeKey
+            or cached.groupSource ~= groupSource
+            or cached.titleSource ~= titleSource
+        then
+            displayGroup = SearchDisplayText(groupSource)
+            displayTitle = SearchDisplayText(titleSource)
+            cached = {
+                localeKey = localeKey,
+                groupSource = groupSource,
+                titleSource = titleSource,
+                displayGroup = displayGroup,
+                displayTitle = displayTitle,
+                groupNorm = NormalizeSearchText(displayGroup),
+                titleNorm = NormalizeSearchText(displayTitle),
+            }
+            pageInfo._msuf2SearchPageTextCache = cached
+        else
+            displayGroup, displayTitle = cached.displayGroup, cached.displayTitle
+        end
+        groupNorm, titleNorm = cached.groupNorm, cached.titleNorm
+    end
+    local labelNorm = displayLabel == label and idLabelNorm or NormalizeSearchText(displayLabel)
+    local hintNorm = (kind == "faq") and "" or (displayHint == hint and idHintNorm or NormalizeSearchText(displayHint))
     local haystackText = table.concat(parts, " ")
     if kind ~= "faq" and kind ~= "page" and #haystackText > SEARCH_CONTROL_HAYSTACK_MAX_LEN then
         haystackText = haystackText:sub(1, SEARCH_CONTROL_HAYSTACK_MAX_LEN)
