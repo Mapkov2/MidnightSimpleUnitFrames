@@ -52,6 +52,7 @@ Locales\ptBR.lua
 Locales\ruRU.lua
 Locales\zhCN.lua
 Locales\zhTW.lua
+Locales\MSUF_PriorityFrames_FAQ.lua
 
 # ---------------------------------------------------------------
 # KERNEL / STATE / UI PRIMITIVES

@@ -105,7 +105,7 @@ local function SetPriorityOption(ctx, key, value, label)
         return changed
     end
     if type(M.RunWithHistory) == "function" then
-        M.RunWithHistory(label or ("Priority Frames " .. tostring(key)), "group:priority:" .. tostring(key), Write)
+        M.RunWithHistory(Tr(label or ("Priority Frames " .. tostring(key))), "group:priority:" .. tostring(key), Write)
     else
         Write()
     end
@@ -398,8 +398,8 @@ local function BuildPriorityPage(ctx)
         end
         SetSectionBadgesAndStatus(overview, {
             OnOffBadge(enabled, "Enabled", "Disabled"),
-            { text = BadgeNumber(active) .. " visible", kind = active > 0 and "accent" or "muted" },
-            { text = BadgeNumber(pins) .. " pinned", kind = pins > 0 and "info" or "muted" },
+            { text = BadgeNumber(active) .. " " .. Tr("visible"), kind = active > 0 and "accent" or "muted" },
+            { text = BadgeNumber(pins) .. " " .. Tr("pinned"), kind = pins > 0 and "info" or "muted" },
             { text = Tr(inParty and "In party" or (state.inRaid == true and "In raid" or "Not grouped")),
               kind = inGroup and "ok" or "muted" },
         })
@@ -543,8 +543,8 @@ local function BuildPriorityPage(ctx)
         end
         SetSectionBadgesAndStatus(who, {
             OnOffBadge(stateScratch.autoTanks == true, "Auto tanks", "Manual only"),
-            { text = BadgeNumber(stateScratch.maxFrames or 5) .. " slots", kind = "info" },
-            { text = BadgeNumber(count) .. " saved", kind = count > 0 and "accent" or "muted" },
+            { text = BadgeNumber(stateScratch.maxFrames or 5) .. " " .. Tr("slots"), kind = "info" },
+            { text = BadgeNumber(count) .. " " .. Tr("saved"), kind = count > 0 and "accent" or "muted" },
         })
     end
     for i = 1, PIN_ROWS_PER_PAGE do
@@ -640,7 +640,7 @@ local function BuildPriorityPage(ctx)
         placementHint:SetText(attached and Tr("The strip follows the active Party, Raid, or Mythic Raid container automatically.")
             or Tr("Free position uses the dedicated Priority Frames mover."))
         SetSectionBadgesAndStatus(placement, {
-            { text = attached and "Attached" or "Free", kind = attached and "info" or "accent" },
+            { text = Tr(attached and "Attached" or "Free"), kind = attached and "info" or "accent" },
             { text = Tr("Growth: ") .. Tr((conf.growth or "DOWN"):sub(1, 1) .. (conf.growth or "DOWN"):sub(2):lower()), kind = "muted" },
             { text = BadgeNumber(conf.spacing or 2) .. " px", kind = "muted" },
         })
