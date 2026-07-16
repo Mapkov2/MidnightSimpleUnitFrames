@@ -175,6 +175,7 @@ local function SmoothTexture(tex)
     if tex.SetTexelSnappingBias then tex:SetTexelSnappingBias(0) end
 end
 local Clamp01 = M.Clamp01
+local DEFAULT_PANEL_COLOR = { 0.04, 0.05, 0.08, 1 }
 local gradientColorCache = {}
 local function GradientColor(r, g, b, a)
     local byG = gradientColorCache[r]
@@ -211,8 +212,8 @@ local function SetTextureColorCached(tex, r, g, b, a)
         if tex.SetVertexColor then tex:SetVertexColor(r, g, b, a) end
     end
 end
-local function ShadeColorInto(out, c, amount, alphaMul)
-    c = c or T.colors.panel2 or { 0.04, 0.05, 0.08, 1 }
+local function ShadeColorComponents(c, amount, alphaMul)
+    c = c or T.colors.panel2 or DEFAULT_PANEL_COLOR
     amount = tonumber(amount) or 0
     local r, g, b = c[1] or 0, c[2] or 0, c[3] or 0
     if amount >= 0 then
@@ -223,11 +224,11 @@ local function ShadeColorInto(out, c, amount, alphaMul)
         local f = 1 + amount
         r, g, b = r * f, g * f, b * f
     end
+    return Clamp01(r), Clamp01(g), Clamp01(b), Clamp01((c[4] or 1) * (alphaMul or 1))
+end
+local function ShadeColorInto(out, c, amount, alphaMul)
     out = out or {}
-    out[1] = Clamp01(r)
-    out[2] = Clamp01(g)
-    out[3] = Clamp01(b)
-    out[4] = Clamp01((c[4] or 1) * (alphaMul or 1))
+    out[1], out[2], out[3], out[4] = ShadeColorComponents(c, amount, alphaMul)
     return out
 end
 local function ShadeColor(c, amount, alphaMul)
@@ -235,7 +236,7 @@ local function ShadeColor(c, amount, alphaMul)
 end
 local function ApplyTextureGradient(tex, orientation, fromColor, toColor, preserveTexture)
     if not tex then return false end
-    fromColor = fromColor or T.colors.panel2 or { 0.04, 0.05, 0.08, 1 }
+    fromColor = fromColor or T.colors.panel2 or DEFAULT_PANEL_COLOR
     toColor = toColor or fromColor
     orientation = orientation or "VERTICAL"
     local fr, fg, fb, fa = fromColor[1] or 0, fromColor[2] or 0, fromColor[3] or 0, fromColor[4] or 1
@@ -290,13 +291,32 @@ local function ApplyGradientToParts(parts, orientation, fromColor, toColor)
 end
 local function SetFillGradient(fill, baseColor, amountTop, amountBottom, alphaMul)
     if not fill then return end
-    baseColor = baseColor or T.colors.pillBase
+    baseColor = baseColor or T.colors.pillBase or T.colors.panel2 or DEFAULT_PANEL_COLOR
+    amountTop = amountTop or 0.16
+    amountBottom = amountBottom or -0.20
+    alphaMul = alphaMul or 1
     local top = fill._msuf2GradientTopColor or {}
     local bottom = fill._msuf2GradientBottomColor or {}
     fill._msuf2GradientTopColor = top
     fill._msuf2GradientBottomColor = bottom
-    ShadeColorInto(top, baseColor, amountTop or 0.16, alphaMul)
-    ShadeColorInto(bottom, baseColor, amountBottom or -0.20, alphaMul)
+    local topR, topG, topB, topA = ShadeColorComponents(baseColor, amountTop, alphaMul)
+    local bottomR, bottomG, bottomB, bottomA = ShadeColorComponents(baseColor, amountBottom, alphaMul)
+    local gradientReady
+    if fill.L and fill.M and fill.R then
+        gradientReady = fill.L._msuf2TextureMode == "gradient"
+            and fill.M._msuf2TextureMode == "gradient"
+            and fill.R._msuf2TextureMode == "gradient"
+    else
+        gradientReady = fill._msuf2TextureMode == "gradient"
+    end
+    if gradientReady
+        and top[1] == topR and top[2] == topG and top[3] == topB and top[4] == topA
+        and bottom[1] == bottomR and bottom[2] == bottomG and bottom[3] == bottomB and bottom[4] == bottomA
+    then
+        return
+    end
+    top[1], top[2], top[3], top[4] = topR, topG, topB, topA
+    bottom[1], bottom[2], bottom[3], bottom[4] = bottomR, bottomG, bottomB, bottomA
     if fill.L and fill.M and fill.R then
         ApplyTextureGradient(fill.L, "VERTICAL", top, bottom, true)
         ApplyTextureGradient(fill.M, "VERTICAL", top, bottom, true)
@@ -429,11 +449,6 @@ function T.RefreshMenuFonts(root)
     RefreshMenuFonts(M.frame, seen)
     RefreshMenuFonts(M.minimizedBar, seen)
 end
-local SUPERELLIPSE_SPECS = {
-    { "L", 0.00, 0.25 },
-    { "M", 0.25, 0.75 },
-    { "R", 0.75, 1.00 },
-}
 local function SetSuperellipseVertexColor(self, r, g, b, a)
     a = a or 1
     self.L:SetVertexColor(r, g, b, a)
@@ -441,19 +456,22 @@ local function SetSuperellipseVertexColor(self, r, g, b, a)
     self.R:SetVertexColor(r, g, b, a)
 end
 local function CreateSuperellipseParts(frame, layer, subLevel)
-    local parts = {}
     -- The pill/superellipse skin is three textures, not a nine-slice frame. This keeps
     -- allocation cheap for dense option rows while still allowing gradient fills.
-    for i = 1, #SUPERELLIPSE_SPECS do
-        local spec = SUPERELLIPSE_SPECS[i]
-        local tex = frame:CreateTexture(nil, layer, nil, subLevel or 0)
-        tex:SetTexture(T.media.superellipse)
-        tex:SetTexCoord(spec[2], spec[3], 0, 1)
-        SmoothTexture(tex)
-        parts[spec[1]] = tex
-    end
-    parts.SetVertexColor = SetSuperellipseVertexColor
-    return parts
+    subLevel = subLevel or 0
+    local left = frame:CreateTexture(nil, layer, nil, subLevel)
+    left:SetTexture(T.media.superellipse)
+    left:SetTexCoord(0.00, 0.25, 0, 1)
+    SmoothTexture(left)
+    local middle = frame:CreateTexture(nil, layer, nil, subLevel)
+    middle:SetTexture(T.media.superellipse)
+    middle:SetTexCoord(0.25, 0.75, 0, 1)
+    SmoothTexture(middle)
+    local right = frame:CreateTexture(nil, layer, nil, subLevel)
+    right:SetTexture(T.media.superellipse)
+    right:SetTexCoord(0.75, 1.00, 0, 1)
+    SmoothTexture(right)
+    return { L = left, M = middle, R = right, SetVertexColor = SetSuperellipseVertexColor }
 end
 local function LayoutSuperellipseParts(parts, frame, inset, capW)
     parts.L:ClearAllPoints()
@@ -2470,27 +2488,29 @@ local function ButtonSetEnabled(self, enabled)
     end
     ButtonVisual(self, self._msuf2Active, self._msuf2Hover)
 end
+local function ButtonClickProxy(self, ...)
+    if not self._msuf2AllowCombatClick then
+        local blocked = false
+        if M and type(M.BlockCombatAction) == "function" then
+            blocked = M.BlockCombatAction() and true or false
+        elseif type(_G.MSUF_BlockConfigCombatLocked) == "function" then
+            blocked = _G.MSUF_BlockConfigCombatLocked() and true or false
+        elseif (_G.InCombatLockdown and _G.InCombatLockdown())
+            or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
+        then
+            blocked = true
+            if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then _G.MSUF_ShowConfigCombatLockMessage() end
+        end
+        if blocked then return end
+    end
+    local handler = self._msuf2OnClickHandler
+    if handler then return handler(self, ...) end
+end
 local function ButtonSetScript(self, scriptType, handler)
     local rawSetScript = self._msuf2RawSetScript
-    if scriptType == "OnClick" and type(handler) == "function" then
-        local wrapped = function(...)
-            if not self._msuf2AllowCombatClick then
-                local blocked = false
-                if M and type(M.BlockCombatAction) == "function" then
-                    blocked = M.BlockCombatAction() and true or false
-                elseif type(_G.MSUF_BlockConfigCombatLocked) == "function" then
-                    blocked = _G.MSUF_BlockConfigCombatLocked() and true or false
-                elseif (_G.InCombatLockdown and _G.InCombatLockdown())
-                    or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
-                then
-                    blocked = true
-                    if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then _G.MSUF_ShowConfigCombatLockMessage() end
-                end
-                if blocked then return end
-            end
-            return handler(...)
-        end
-        return rawSetScript(self, scriptType, wrapped)
+    if scriptType == "OnClick" then
+        self._msuf2OnClickHandler = type(handler) == "function" and handler or nil
+        return rawSetScript(self, scriptType, self._msuf2OnClickHandler and ButtonClickProxy or handler)
     end
     return rawSetScript(self, scriptType, handler)
 end

@@ -140,8 +140,9 @@ end
 
 local function CleanText(value)
     if value == nil then return "" end
-    if type(value) ~= "string" and type(value) ~= "number" then return "" end
-    local text = tostring(value)
+    local kind = type(value)
+    if kind ~= "string" and kind ~= "number" then return "" end
+    local text = kind == "string" and value or tostring(value)
     if text:find("|", 1, true) then
         text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
     end
@@ -371,21 +372,28 @@ local function SemanticIdentity(meta, command, widget, label)
     meta = type(meta) == "table" and meta or {}
     command = type(command) == "table" and command or {}
 
-    local candidates = {
-        { meta.identityKey, "identity_key" },
-        { meta.controlPath, "control_path" },
-        { meta.settingKey or command.settingKey, "setting_key" },
-        { meta.actionKey or command.actionKey, "action_key" },
-        { meta.navigationKey or command.navigationKey, "navigation_key" },
-        { meta.identityLabel, "source_label" },
-        { widget and widget._msuf2SearchText, "source_label" },
-        { CommandSource(command, label), "command_source" },
-        { label, "display_label" },
-    }
-    for i = 1, #candidates do
-        local value = CleanText(candidates[i][1])
-        if value ~= "" then return value, candidates[i][2] end
-    end
+    -- CommandSource was evaluated eagerly by the former candidate-table
+    -- construction.  Keep that exact behavior while avoiding ten temporary
+    -- tables for every registered control.
+    local commandSource = CommandSource(command, label)
+    local value = CleanText(meta.identityKey)
+    if value ~= "" then return value, "identity_key" end
+    value = CleanText(meta.controlPath)
+    if value ~= "" then return value, "control_path" end
+    value = CleanText(meta.settingKey or command.settingKey)
+    if value ~= "" then return value, "setting_key" end
+    value = CleanText(meta.actionKey or command.actionKey)
+    if value ~= "" then return value, "action_key" end
+    value = CleanText(meta.navigationKey or command.navigationKey)
+    if value ~= "" then return value, "navigation_key" end
+    value = CleanText(meta.identityLabel)
+    if value ~= "" then return value, "source_label" end
+    value = CleanText(widget and widget._msuf2SearchText)
+    if value ~= "" then return value, "source_label" end
+    value = CleanText(commandSource)
+    if value ~= "" then return value, "command_source" end
+    value = CleanText(label)
+    if value ~= "" then return value, "display_label" end
     return "unidentified", "missing"
 end
 
@@ -655,18 +663,29 @@ local function InferClassification(meta, command, kind)
     return "unknown", "missing_command_metadata"
 end
 
+local REVISION_KEY_PARTS = {}
 local function RevisionKey(record)
     if type(record) ~= "table" then return nil end
-    return table.concat({
-        tostring(record.controlId or ""), tostring(record.pageKey or ""), tostring(record.kind or ""),
-        tostring(record.label or ""), tostring(record.identityLabel or ""), tostring(record.controlPath or ""),
-        tostring(record.settingKey or ""), tostring(record.actionKey or ""), tostring(record.navigationKey or ""),
-        ActionValueFingerprint(record.actionFixedArgs), tostring(record.actionInputArg or ""),
-        tostring(record.assistantDisposition or ""), tostring(record.assistantDispositionReason or ""),
-        AssistantRouteFingerprint(record),
-        tostring(record.help or ""), tostring(record.classification or ""),
-        record.confirmRequired and "1" or "0", tostring(record.command or ""),
-    }, "\031")
+    local parts = REVISION_KEY_PARTS
+    parts[1] = tostring(record.controlId or "")
+    parts[2] = tostring(record.pageKey or "")
+    parts[3] = tostring(record.kind or "")
+    parts[4] = tostring(record.label or "")
+    parts[5] = tostring(record.identityLabel or "")
+    parts[6] = tostring(record.controlPath or "")
+    parts[7] = tostring(record.settingKey or "")
+    parts[8] = tostring(record.actionKey or "")
+    parts[9] = tostring(record.navigationKey or "")
+    parts[10] = ActionValueFingerprint(record.actionFixedArgs)
+    parts[11] = tostring(record.actionInputArg or "")
+    parts[12] = tostring(record.assistantDisposition or "")
+    parts[13] = tostring(record.assistantDispositionReason or "")
+    parts[14] = AssistantRouteFingerprint(record)
+    parts[15] = tostring(record.help or "")
+    parts[16] = tostring(record.classification or "")
+    parts[17] = record.confirmRequired and "1" or "0"
+    parts[18] = tostring(record.command or "")
+    return table.concat(parts, "\031", 1, 18)
 end
 
 local function RemoveRecord(record)
