@@ -8,10 +8,45 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-Beta19",
-    previousVersion = "6.0-Beta18",
-    rangeLabel = "6.0-Beta18 -> 6.0-Beta19",
+    currentVersion = "6.0-Beta20",
+    previousVersion = "6.0-Beta19",
+    rangeLabel = "6.0-Beta19 -> 6.0-Beta20",
     entries = {
+        {
+            version = "6.0-Beta20",
+            date = "2026-07-16",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Added Pinned Frames (Priority Frames): keep up to five manually pinned group members or automatic tanks in a stable extra strip with hover-hotkey pinning, inherited Party/Raid visuals and click-casting, plus attached or free Edit Mode placement.",
+                        "Kept Auras, status indicators, targeted spells, identity updates, and group lifecycles synchronized across normal and duplicated Priority Frames.",
+                        "Improved Range Fade for PTR-restricted unit payloads and movement-driven target/focus fallbacks without restoring continuous polling.",
+                        "Fixed resurrection status recovery, removed duplicate dependent-unit prediction reads, and tightened mouseover-highlight hot paths.",
+                        "Expanded profile compatibility, Priority Frames import/export, Menu and Edit Mode integration, Assistant guidance, and regression coverage.",
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Added character-specific manual pins, automatic tank selection, one-to-five visible slots, stable ordering, and duplicate prevention for Priority Frames.",
+                        "Added a managed hover hotkey with conflict handling, manual pin controls, attached placement, configurable growth and spacing, and a dedicated free-position mover.",
+                        "Inherited the active Party, Raid, or Mythic Raid appearance and click-cast behavior while keeping Priority layout settings profile-wide.",
+                        "Deferred secure Priority roster and layout changes safely during combat and kept selection event-driven with no ticker or OnUpdate loop.",
+                        "Updated Auras, ready checks, targeted-spell icons, names, group status, lifecycle fanout, and visual refreshes for every exact frame copy of a unit.",
+                        "Hardened Range Fade for secret UNIT_IN_RANGE_UPDATE payloads, split filtered unit registrations safely, and limited fallback checks to movement while needed.",
+                        "Rechecked dead, ghost, and offline labels after resurrection even when PTR group health values remain protected.",
+                        "Coalesced dependent-unit prediction with the authoritative identity refresh to avoid duplicate calculator reads.",
+                        "Corrected legacy Aura2 offsets, legacy range-fade portrait migration, partial 5.57 snapshot detection, and Priority Frames profile payload handling.",
+                        "Removed per-hover DB/global reads from rounded and standard mouseover highlights and kept disabled paths lean.",
+                        "Improved power-color preview parity, binding and specialization status refreshes, Priority Edit Mode cancel/reset behavior, and Menu search routing.",
+                        "Added Assistant navigation, safe setting control, pinning guidance, troubleshooting, and performance help for Priority Frames.",
+                        "Expanded Lua 5.1 runtime, secure-header, lifecycle, migration, binding, Menu, Assistant, Range Fade, prediction, and duplicate-frame regression coverage.",
+                        "Removed obsolete development mockups and audit artifacts from the addon source tree.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-Beta19",
             date = "2026-07-16",
@@ -127,32 +162,6 @@ local data = {
                         "Improved Assistant routing for streamlined Group Frame pages and canonical guided-page references.",
                         "Hardened Assistant follow-ups for portraits, icons, text, colors, borders, sizing, and movement so they keep the intended component instead of falling back to the whole frame.",
                         "Expanded Assistant regression coverage for Group Frame contracts, retained-object follow-ups, exact text-color choices, and Aura filtering.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-Beta16",
-            date = "2026-07-14",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Streamlined Unit, Group, Cast Bar, and Class Resource menus with cleaner layouts, less redundant text, and fewer clipping issues.",
-                        "Reworked Group Frame navigation: Text, Resource Bar, and Range Fade now live in Layout; Dispel Overlay and Debuff Stripe share a focused Dispel Overlay page.",
-                        "Unified Unit, Group, and Class Resource previews and added live font previews in dropdowns.",
-                        "Expanded the Assistant with safer exact menu actions, broader control coverage, faster search, and lower cold-start cost.",
-                        "Improved guided setup and Edit Mode placement, and stabilized aura positioning after zone transitions.",
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Added shared group Buff Aura Style support for spell indicators plus configurable bar gradients, textures, transparency, and minimap-icon positioning.",
-                        "Fixed bar gradients, castbar channel-tick visibility, and aura repositioning after entering a new zone.",
-                        "Fixed guided setup selecting disabled controls and improved skip, highlight, and placement behavior.",
-                        "Hardened Assistant value safety, direct Search navigation, ambiguous commands, undo/action routing, and generated schema coverage.",
-                        "Added reproducible serialized release gates, self-contained Assistant settings-catalog checks, and broader Menu2/preview regression coverage.",
                     },
                 },
             },
