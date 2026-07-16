@@ -1844,7 +1844,7 @@ local MSUF_PROFILEIO_LEGACY_PROFILE_SCHEMA_56 = 560
 --- MSUF_ProfileIO_TranslateProfileToCurrent, independently from the broad
 --- default-fill revision owned by MSUF_Defaults.lua. Bump it whenever that
 --- translation pipeline gains a new mandatory repair.
-local MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = 5
+local MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = 7
 local MSUF_PROFILEIO_TEXT_SCOPE_KEYS = {
     "general",
     "player", "target", "targettarget", "tot", "targetoftarget",
@@ -2202,6 +2202,11 @@ local function MSUF_ProfileIO_ConvertLegacyAuras2Geometry(auras, profile)
     if type(auras) ~= "table" or auras._msufAuras3LegacyGeometry_v3 == true then return false end
     local shared = type(auras.shared) == "table" and auras.shared or {}
     auras.shared = shared
+    -- Aura2 v11f/5.57 kept the old buff/debuffOffset fields in its DB, but its
+    -- renderer positioned the containers exclusively with the corresponding
+    -- buff/debuffGroupOffset fields. In particular, buffOffsetY = 30 was a
+    -- retired default, not an additional visible lane offset.
+    local useRetiredLaneOffsetAliases = shared._msufA2_migrated_v11f ~= true
     local repairV1 = auras._msufAuras3LegacyGeometry_v1 == true
     local repairV2 = auras._msufAuras3LegacyGeometry_v2 == true
     local changed = false
@@ -2260,12 +2265,16 @@ local function MSUF_ProfileIO_ConvertLegacyAuras2Geometry(auras, profile)
         local function ReadLaneNumber(primary, secondary, key, aliasKey, fallback)
             local n = type(primary) == "table" and MSUF_ProfileIO_ToNumber(primary[key]) or nil
             if n ~= nil then return n end
-            n = type(primary) == "table" and MSUF_ProfileIO_ToNumber(primary[aliasKey]) or nil
-            if n ~= nil then return n end
+            if useRetiredLaneOffsetAliases then
+                n = type(primary) == "table" and MSUF_ProfileIO_ToNumber(primary[aliasKey]) or nil
+                if n ~= nil then return n end
+            end
             n = type(secondary) == "table" and MSUF_ProfileIO_ToNumber(secondary[key]) or nil
             if n ~= nil then return n end
-            n = type(secondary) == "table" and MSUF_ProfileIO_ToNumber(secondary[aliasKey]) or nil
-            if n ~= nil then return n end
+            if useRetiredLaneOffsetAliases then
+                n = type(secondary) == "table" and MSUF_ProfileIO_ToNumber(secondary[aliasKey]) or nil
+                if n ~= nil then return n end
+            end
             return fallback or 0
         end
 
@@ -2544,6 +2553,14 @@ local function MSUF_ProfileIO_DetectProfileSchema(profile, context)
         return MSUF_PROFILEIO_LEGACY_PROFILE_SCHEMA_56
     end
     local contextSchema = type(context) == "table" and tonumber(context.schema) or nil
+    -- MSUF 5.57 snapshots used the outer snapshot schema `1`, including
+    -- category-only exports that do not carry an Aura2 root or other full-
+    -- profile legacy signals. Treat every positive pre-6.0 snapshot schema as
+    -- legacy so partial Unit/Group imports receive the same compatibility pass
+    -- as a complete 5.57 profile.
+    if contextSchema and contextSchema > 0 and contextSchema < MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA then
+        return MSUF_PROFILEIO_LEGACY_PROFILE_SCHEMA_56
+    end
     if contextSchema and contextSchema >= MSUF_PROFILEIO_LEGACY_PROFILE_SCHEMA_56 then
         return contextSchema
     end
@@ -2636,6 +2653,8 @@ MSUF.ProfileIONormalizeLegacy55VisualCompatibility = function(profile, legacyPro
     if legacyProfile ~= true and translatedAuras ~= true and storedLegacyVisualProfile ~= true then return false end
 
     local changed = false
+    local general = type(profile.general) == "table" and profile.general or nil
+    local legacyRangeFadePortrait = general and general.rangeFadePortrait
     local units = {
         "player", "target", "focus", "targettarget", "focustarget", "pet", "boss",
         "boss1", "boss2", "boss3", "boss4", "boss5",
@@ -2650,6 +2669,14 @@ MSUF.ProfileIONormalizeLegacy55VisualCompatibility = function(profile, legacyPro
     for i = 1, #units do
         local unit = units[i]
         local conf = profile[unit]
+        if type(conf) == "table" and legacyRangeFadePortrait ~= nil and conf.rangeFadeLayerMode == nil then
+            -- 5.57 could keep the portrait opaque while its other range-faded
+            -- frame layers dimmed. 6.0 has two supported ownership modes; map
+            -- the old toggle to the closest loss-minimizing equivalent instead
+            -- of silently falling back to whole-frame fade.
+            conf.rangeFadeLayerMode = legacyRangeFadePortrait == true and "frame" or "health"
+            changed = true
+        end
         if type(conf) == "table" and conf.showPower ~= nil then
             local legacyShown = conf.showPower ~= false
             local currentShown = conf.showPowerText ~= false
@@ -3185,6 +3212,7 @@ local MSUF_PROFILEIO_WAGO_PAYLOAD_KEYS = {
     general = true,
     gf_mythicraid = true,
     gf_party = true,
+    gf_priority = true,
     gf_raid = true,
     group = true,
     groupFrames = true,
@@ -3437,6 +3465,9 @@ local function MSUF_CopyGroupFramePayload()
         payload.gf_mythicraid = MSUF_DeepCopy(MSUF_DB.gf_mythicraid)
         MSUF_ProfileIO_NormalizeGroupFrameForExport(payload.gf_mythicraid)
     end
+    if type(MSUF_DB.gf_priority) == "table" then
+        payload.gf_priority = MSUF_DeepCopy(MSUF_DB.gf_priority)
+    end
     return payload
 end
 local function MSUF_SnapshotForKind(kind)
@@ -3599,6 +3630,7 @@ local function MSUF_ProfileIO_PostImportApply_GroupFrames(kind, payload, isUUFIm
     if type(payload.gf_party) == "table" then AddKind("party") end
     if type(payload.gf_raid) == "table" then AddKind("raid") end
     if type(payload.gf_mythicraid) == "table" then AddKind("mythicraid") end
+    if type(payload.gf_priority) == "table" then AddKind("priority") end
     local touched = (kind == "groupframe") or (kind == "groupframes")
     if not touched then
         touched = (#touchedKinds > 0)
@@ -3608,6 +3640,7 @@ local function MSUF_ProfileIO_PostImportApply_GroupFrames(kind, payload, isUUFIm
         AddKind("party")
         AddKind("raid")
         AddKind("mythicraid")
+        AddKind("priority")
     end
     MSUF_ProfileIO_EnsureGroupFramesDB()
     local af = MSUF_ProfileIO_GetGFAuraFilter()
@@ -3806,6 +3839,19 @@ local function MSUF_ApplySnapshotToActiveProfile(snapshot)
                 end
             else
                 MSUF_DB.gf_mythicraid = MSUF_DeepCopy(payload.gf_mythicraid)
+            end
+        end
+        if payload.gf_priority ~= nil then
+            if type(payload.gf_priority) == "table" then
+                if type(MSUF_DB.gf_priority) ~= "table" then
+                    MSUF_DB.gf_priority = {}
+                end
+                MSUF_WipeTable(MSUF_DB.gf_priority)
+                for kk, vv in pairs(payload.gf_priority) do
+                    MSUF_DB.gf_priority[kk] = MSUF_DeepCopy(vv)
+                end
+            else
+                MSUF_DB.gf_priority = MSUF_DeepCopy(payload.gf_priority)
             end
         end
     elseif kind == "castbar" then

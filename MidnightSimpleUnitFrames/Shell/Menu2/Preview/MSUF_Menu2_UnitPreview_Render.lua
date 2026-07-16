@@ -103,6 +103,15 @@ local function CopyPreviewAnimationData(box, data, hpFrac, powerFrac)
     copy.power = powerFrac
     return copy
 end
+local function ResolvePreviewPowerColor(renderState, data, power)
+    local mode = power and power.mode
+    if mode == "dark" or mode == "unified" or mode == "static" then
+        return power.r or 0.1, power.g or 0.35, power.b or 0.95
+    elseif mode == "class" then
+        return renderState.ClassColor(data.class)
+    end
+    return renderState.PowerColor(data.powerToken)
+end
 local function UnitPreviewAnimationState(box, index, key)
     if not (box and box._animationEnabled == true) then return nil end
     local previewAnimation = MSUF and MSUF.PreviewAnimation
@@ -975,8 +984,7 @@ function Preview.Refresh(box, reason)
         mock.powerBG:ClearAllPoints()
         SetBottomSpan(mock.powerBG, mock)
         mock.powerBG:SetHeight(powerH)
-        local pr, pg, pb = runtimePower and runtimePower.r, runtimePower and runtimePower.g, runtimePower and runtimePower.b
-        if not pr then pr, pg, pb = R.PowerColor(data.powerToken) end
+        local pr, pg, pb = ResolvePreviewPowerColor(R, data, runtimePower)
         local pbr, pbg, pbb, pba
         local powerBg = runtimePower and runtimePower.background
         if powerBg then
@@ -993,8 +1001,7 @@ function Preview.Refresh(box, reason)
         mock.powerBG:Hide(); mock.power:Hide()
     end
     local fr, fg, fb = R.FontColor()
-    local pr, pg, pb = runtimePower and runtimePower.r, runtimePower and runtimePower.g, runtimePower and runtimePower.b
-    if not pr then pr, pg, pb = R.PowerColor(data.powerToken) end
+    local pr, pg, pb = ResolvePreviewPowerColor(R, data, runtimePower)
     if classPowerOn then
         mock.classPower:Show()
         local cpW = box._runtimeClassPowerW or PreviewClassPowerWidth(bars, w, cpH, classPowerSegCount)

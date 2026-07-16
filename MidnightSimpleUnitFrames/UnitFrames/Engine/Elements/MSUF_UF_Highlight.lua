@@ -79,12 +79,9 @@ local function ResolveHighlightRGB(general)
   return 1, 1, 1
 end
 
-local function RoundedOwnsMouseover()
-  return _G.MSUF_RoundedUF_MouseoverActive == true
-end
-
 local ShowImpl, HideImpl
-local function NoOp() end
+local roundedUnitMouseover
+local roundedGroupMouseover
 
 function Highlight.Refresh()
   local db = _G.MSUF_DB
@@ -106,12 +103,7 @@ function Highlight.Refresh()
 
   cfgGen = cfgGen + 1
 
-  if enabled then
-    Highlight.Show = ShowImpl
-    Highlight.Hide = HideImpl
-  else
-    Highlight.Show = NoOp
-    Highlight.Hide = HideImpl
+  if not enabled then
     HideExistingHighlights()
   end
   return true
@@ -179,11 +171,6 @@ ShowImpl = function(frame)
     Highlight.Refresh()
     if not cfgEnabled then return end
   end
-  if RoundedOwnsMouseover() then
-    local hb = frame._msufHL
-    if hb then hb:Hide() end
-    return
-  end
   local hb = EnsureBorder(frame)
   if hb then hb:Show() end
 end
@@ -193,6 +180,52 @@ HideImpl = function(frame)
   local hb = frame._msufHL
   if hb then hb:Hide() end
 end
+
+-- These are the callbacks installed directly on live buttons. Rounded state is
+-- resolved only when settings change, so mouseover never reads globals or DB.
+local function UnitEnter(frame)
+  local rounded = roundedUnitMouseover
+  if rounded then return rounded(frame, true) end
+  if not cfgEnabled then return end
+  return ShowImpl(frame)
+end
+
+local function UnitLeave(frame)
+  local rounded = roundedUnitMouseover
+  if rounded then return rounded(frame, false) end
+  if not cfgEnabled then return end
+  return HideImpl(frame)
+end
+
+local function GroupEnter(frame)
+  local rounded = roundedGroupMouseover
+  if rounded then return rounded(frame, true) end
+  if not cfgEnabled then return end
+  return ShowImpl(frame)
+end
+
+local function GroupLeave(frame)
+  local rounded = roundedGroupMouseover
+  if rounded then return rounded(frame, false) end
+  if not cfgEnabled then return end
+  return HideImpl(frame)
+end
+
+function Highlight.SetRoundedMouseoverState(unitActive, groupActive, unitHandler, groupHandler)
+  local nextUnit = unitActive == true and unitHandler or nil
+  local nextGroup = groupActive == true and groupHandler or nil
+  local changed = roundedUnitMouseover ~= nextUnit or roundedGroupMouseover ~= nextGroup
+  roundedUnitMouseover = nextUnit
+  roundedGroupMouseover = nextGroup
+  if changed and (nextUnit or nextGroup) then HideExistingHighlights() end
+end
+
+Highlight.UnitEnter = UnitEnter
+Highlight.UnitLeave = UnitLeave
+Highlight.GroupEnter = GroupEnter
+Highlight.GroupLeave = GroupLeave
+Highlight.Show = UnitEnter
+Highlight.Hide = UnitLeave
 
 Highlight.Refresh()
 
@@ -204,7 +237,7 @@ local function HighlightDebug()
   p("MSUF Highlight: loaded=YES enabled=" .. tostring(cfgEnabled)
     .. " color=" .. string.format("%.2f,%.2f,%.2f", cfgR, cfgG, cfgB)
     .. " size=" .. tostring(cfgSize)
-    .. " roundedOwns=" .. tostring(RoundedOwnsMouseover()))
+    .. " roundedOwns=" .. tostring(roundedUnitMouseover ~= nil))
   local f = _G.MSUF_target
   if not f then
     local uf = MSUF and MSUF.UF

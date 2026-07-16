@@ -333,14 +333,19 @@ local function NeedsGroupAIRefresh(frame, event, unit)
 end
 
 local function HealthStatusTransitionNeeded(frame, seedHP)
-  if seedHP == nil or frame._msufStatusTextHealthRefresh == true then
+  if frame._msufStatusTextHealthRefresh == true then
     return false
   end
   local value = frame._msufStatusTextValue
   if value == "DEAD" or value == "GHOST" or value == "OFFLINE" then
-    return seedHP > 0
+    -- PTR group health can be secret after a resurrection. While a gone label
+    -- is visible, let the event-driven status resolver recheck the safe
+    -- UnitIsDeadOrGhost/connection state even when health cannot be inspected.
+    -- Once the label clears, secret living UNIT_HEALTH ticks stay on the normal
+    -- zero-status-work path below.
+    return seedHP == nil or seedHP > 0
   end
-  return seedHP <= 0
+  return seedHP ~= nil and seedHP <= 0
 end
 
 local function NotifyHealthState(frame, event, unit, hp)

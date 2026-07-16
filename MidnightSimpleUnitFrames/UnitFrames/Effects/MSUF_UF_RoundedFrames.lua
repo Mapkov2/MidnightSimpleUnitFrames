@@ -20,6 +20,8 @@ local BASE_BORDER_R, BASE_BORDER_G, BASE_BORDER_B, BASE_BORDER_A = 0, 0, 0, 1
 local ACTIVE_BORDER_A = 1.00
 
 local forceDisabled = false
+local unitMouseoverHotEnabled = false
+local groupMouseoverHotEnabled = false
 
 local SUPPRESS_NATIVE_OUTLINE = true
 
@@ -584,7 +586,7 @@ local function ApplyUnitRoundedHoverEdge(f, enabled)
 end
 
 local function HandleUnitMouseover(f, active)
-  if not (f and RoundedUnitFramesEnabled() and RoundedMouseoverEnabled()) then return false end
+  if not (f and unitMouseoverHotEnabled) then return false end
   if f.highlightBorder and f.highlightBorder.Hide then
     f.highlightBorder:Hide()
   end
@@ -937,12 +939,8 @@ end
 
 local function HandleGroupMouseover(f, active)
   if not f then return false end
-  local groupEnabled = RoundedGroupFramesEnabled()
-  if not (groupEnabled and RoundedMouseoverEnabled()) then
+  if not groupMouseoverHotEnabled then
     f._msufRUF_GroupMouseoverActive = nil
-    if groupEnabled and f._msufRGF_Edge then
-      SetGroupRoundedEdgeColor(f)
-    end
     return false
   end
   if not f._msufRGF_Edge and IsCombatLocked() then return false end
@@ -1155,12 +1153,29 @@ local function ForEachGroupFrame(fn)
   end
 end
 
+local function UpdateMouseoverHotState(enabled)
+  local mouseoverEnabled = enabled == true and RoundedMouseoverEnabled()
+  unitMouseoverHotEnabled = mouseoverEnabled and RoundedUnitFramesEnabled() or false
+  groupMouseoverHotEnabled = mouseoverEnabled and RoundedGroupFramesEnabled() or false
+  ExportPublic("MSUF_RoundedUF_MouseoverActive", (unitMouseoverHotEnabled or groupMouseoverHotEnabled) and true or nil)
+  local highlight = MSUF and MSUF.Highlight
+  if highlight and type(highlight.SetRoundedMouseoverState) == "function" then
+    highlight.SetRoundedMouseoverState(
+      unitMouseoverHotEnabled,
+      groupMouseoverHotEnabled,
+      HandleUnitMouseover,
+      HandleGroupMouseover
+    )
+  end
+end
+
 local function ApplyAll()
   EnsureDB()
   MSUF.__msufRoundedPending = nil
   local enabled = IsEnabled()
   if not enabled and not MSUF.__msufRoundedUF_Hooked then
     ExportPublic("MSUF_RoundedUF_Active", nil)
+    UpdateMouseoverHotState(false)
     return
   end
   if IsCombatLocked() then
@@ -1168,7 +1183,7 @@ local function ApplyAll()
     return
   end
   ExportPublic("MSUF_RoundedUF_Active", enabled and true or nil)
-  ExportPublic("MSUF_RoundedUF_MouseoverActive", (enabled and RoundedMouseoverEnabled()) and true or nil)
+  UpdateMouseoverHotState(enabled)
   local bulkGF = ResolveGF()
   local restoreKinds = bulkGF and type(bulkGF.RefreshVisuals) == "function" and {} or nil
   roundedBulkRestoreKinds = restoreKinds
@@ -1196,7 +1211,6 @@ local function ApplyAll()
   end
   if not enabled then
     ExportPublic("MSUF_RoundedUF_Active", nil)
-    ExportPublic("MSUF_RoundedUF_MouseoverActive", nil)
     local eventFrame = MSUF.__msufRoundedEventFrame
     if eventFrame and eventFrame.UnregisterEvent then
       eventFrame:UnregisterEvent("PLAYER_REGEN_ENABLED")
@@ -1211,7 +1225,7 @@ local function ApplyVisualRefreshUnit(unit)
     return
   end
   ExportPublic("MSUF_RoundedUF_Active", true)
-  ExportPublic("MSUF_RoundedUF_MouseoverActive", RoundedMouseoverEnabled() and true or nil)
+  UpdateMouseoverHotState(true)
 
   local UF = MSUF and MSUF.UF
   if unit ~= nil and unit ~= "*" then

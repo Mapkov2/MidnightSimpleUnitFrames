@@ -16,6 +16,17 @@ _G.UnitIsConnected = function() return true end
 _G.UnitIsDead = function() return false end
 _G.UnitIsDeadOrGhost = function() return false end
 
+local scheduled = {}
+_G.MSUF_ScheduleOnce = function(key, callback)
+    if scheduled[key] == nil then scheduled[key] = callback end
+end
+
+local function FlushScheduled()
+    local pending = scheduled
+    scheduled = {}
+    for _, callback in pairs(pending) do callback() end
+end
+
 local Frame = {}
 Frame.__index = Frame
 
@@ -41,7 +52,7 @@ local function NewFrame(unit)
     }, Frame)
 end
 
-local MSUF = { UF = { Metadata = {} } }
+local MSUF = { UF = { Metadata = { defaultApplyMask = { Prediction = true } } } }
 _G.MSUF_NS = MSUF
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Core.lua"))(
     "MidnightSimpleUnitFrames", MSUF)
@@ -107,6 +118,15 @@ function InlineToT.Update(frame)
     Record(frame, "InlineToT")
 end
 UF.RegisterElement("InlineToT", InlineToT)
+
+local Prediction = { IsEnabled = function() return true end, GetEvents = function() return {} end }
+function Prediction.Update(frame, event, unit)
+    Record(frame, "Prediction")
+    frame.predictionCalls = (frame.predictionCalls or 0) + 1
+    frame.lastPredictionEvent = event
+    frame.lastPredictionUnit = unit
+end
+UF.RegisterElement("Prediction", Prediction)
 
 local spec = { enabled = true, key = "target", unit = "target", scope = "single" }
 
@@ -201,4 +221,53 @@ CheckOrder(textOnly, { "PowerText" })
 Check(textOnly.lastPowerPayload.power == nil and textOnly.lastPowerPayload.powerMax == nil,
     "text-only identity did not preserve the API fallback contract")
 
-print("PASS identity payload hotpath: local health/power forwarding, order, interning, dispatch")
+-- Prediction owns a cached snapshot for the stable unit token. Every identity
+-- lifecycle must therefore reseed it exactly once when the unit behind that
+-- token changes, including coalesced dependent-unit notifications.
+local function NewPredictionFrame(unit)
+    local frame = NewFrame(unit)
+    local predictionSpec = { enabled = true, key = unit, unit = unit, scope = "single" }
+    UF.AttachFrame(frame, { scope = "single" })
+    Check(UF.ApplyElementToFrame(frame, "Prediction", predictionSpec) == true,
+        "failed to apply Prediction to " .. unit)
+    return frame
+end
+
+local function CheckImmediateIdentity(unit, event, source)
+    local frame = NewPredictionFrame(unit)
+    Check(type(frame[event]) == "function", unit .. " did not register " .. event)
+    frame[event](frame, event, source)
+    Check(frame.predictionCalls == 1, unit .. " identity did not run Prediction exactly once")
+    Check(frame.lastPredictionEvent == event and frame.lastPredictionUnit == unit,
+        unit .. " identity forwarded the wrong Prediction payload")
+    return frame
+end
+
+CheckImmediateIdentity("target", "PLAYER_TARGET_CHANGED")
+CheckImmediateIdentity("focus", "PLAYER_FOCUS_CHANGED")
+CheckImmediateIdentity("boss1", "INSTANCE_ENCOUNTER_ENGAGE_UNIT")
+local pet = CheckImmediateIdentity("pet", "UNIT_PET", "player")
+Check(pet.registered.UNIT_PET == "player", "pet identity did not bind UNIT_PET to player")
+
+local function CheckDependentIdentity(unit, parent, playerEvent)
+    local frame = NewPredictionFrame(unit)
+    Check(type(frame[playerEvent]) == "function" and type(frame.UNIT_TARGET) == "function",
+        unit .. " did not register both dependent identity events")
+    Check(frame.registered.UNIT_TARGET == parent,
+        unit .. " UNIT_TARGET was not bound to its parent unit")
+
+    frame[playerEvent](frame, playerEvent)
+    frame.UNIT_TARGET(frame, "UNIT_TARGET", parent)
+    Check(frame.predictionCalls == nil,
+        unit .. " Prediction ran before dependent notifications were coalesced")
+    FlushScheduled()
+    Check(frame.predictionCalls == 1,
+        unit .. " coalesced identity did not run Prediction exactly once")
+    Check(frame.lastPredictionUnit == unit,
+        unit .. " coalesced identity forwarded the parent instead of the dependent unit")
+end
+
+CheckDependentIdentity("targettarget", "target", "PLAYER_TARGET_CHANGED")
+CheckDependentIdentity("focustarget", "focus", "PLAYER_FOCUS_CHANGED")
+
+print("PASS identity payload hotpath: payload forwarding plus exact Prediction identity reseeds")

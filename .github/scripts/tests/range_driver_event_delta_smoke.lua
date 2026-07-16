@@ -21,6 +21,7 @@ local SPELL_UPDATE_EVENTS = {
 }
 local ACTIVE_EVENTS = {
     "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
+    "PLAYER_STARTED_MOVING", "PLAYER_STOPPED_MOVING",
 }
 for i = 1, #SPELL_UPDATE_EVENTS do
     ACTIVE_EVENTS[#ACTIVE_EVENTS + 1] = SPELL_UPDATE_EVENTS[i]
@@ -28,6 +29,11 @@ end
 
 local operations = {}
 local driver
+local secondaryUnitDriver
+local secretValue
+local spellRangeByUnit = {}
+local unitRangeByUnit = {}
+local movingUnits = {}
 
 local function Record(operation, event, units)
     operations[#operations + 1] = {
@@ -81,6 +87,7 @@ end
 
 function DriverMethods:RegisterUnitEvent(event, ...)
     local units = { ... }
+    Check(#units <= 4, event .. " registered more than four unit filters")
     Record("register-unit", event, units)
     self.registered[event] = { kind = "unit", units = units }
 end
@@ -96,28 +103,41 @@ function DriverMethods:UnregisterAllEvents()
 end
 
 _G.CreateFrame = function()
-    driver = setmetatable({ scripts = {}, registered = {} }, { __index = DriverMethods })
-    return driver
+    local created = setmetatable({ scripts = {}, registered = {} }, { __index = DriverMethods })
+    if not driver then
+        driver = created
+    else
+        secondaryUnitDriver = created
+    end
+    return created
 end
 
 _G.C_Timer = { After = function() end }
-_G.UnitCanAssist = function() return true end
-_G.UnitCanAttack = function() return false end
+_G.UnitCanAssist = function(_, unit) return not tostring(unit):match("^boss%d+$") end
+_G.UnitCanAttack = function(_, unit) return tostring(unit):match("^boss%d+$") ~= nil end
 _G.UnitIsDeadOrGhost = function() return false end
-_G.UnitInRange = function() return true, true end
+_G.UnitInRange = function(unit)
+    local result = unitRangeByUnit[unit]
+    if result == nil then result = true end
+    return result, true
+end
 _G.UnitClass = function() return "Mage", "MAGE" end
 _G.InCombatLockdown = function() return false end
 _G.CheckInteractDistance = function() return true end
-_G.GetUnitSpeed = function() return 0 end
+_G.GetUnitSpeed = function(unit) return movingUnits[unit] and 7 or 0 end
 _G.GetTime = function() return 1 end
-_G.issecretvalue = function() return false end
+_G.issecretvalue = function(value) return value == secretValue end
 _G.IsPlayerSpell = function() return true end
 _G.Enum = { SpellBookSpellBank = { Player = 1 } }
 _G.C_SpellBook = {
     IsSpellKnownOrInSpellBook = function() return true end,
 }
 _G.C_Spell = {
-    IsSpellInRange = function() return true end,
+    IsSpellInRange = function(_, unit)
+        local result = spellRangeByUnit[unit]
+        if result == nil then return true end
+        return result
+    end,
     EnableSpellRangeCheck = function() end,
     GetSpellIDForSpellIdentifier = function(value) return tonumber(value) end,
     GetOverrideSpell = function(spellID) return spellID end,
@@ -188,6 +208,19 @@ for i = 1, #UNIT_EVENTS do
     AssertUnitFilter(UNIT_EVENTS[i], { "target", "focus", "pet", "boss1" })
 end
 
+-- Once an idle poll has settled, player movement must re-arm the fallback for
+-- friendly target aliases whose range event can arrive under a group token.
+unitRangeByUnit.target = false
+movingUnits.player = true
+driver.scripts.OnEvent(driver, "PLAYER_STARTED_MOVING")
+Equal(target.appliedRangeMultiplier, 0.4,
+    "movement start did not refresh a stale friendly target range")
+unitRangeByUnit.target = true
+movingUnits.player = nil
+driver.scripts.OnEvent(driver, "PLAYER_STOPPED_MOVING")
+Equal(target.appliedRangeMultiplier, 1,
+    "movement stop did not settle friendly target range")
+
 -- Hiding target changes its unit filter and target-specific plain events only.
 ResetOperations()
 SetVisible(target, false)
@@ -234,13 +267,46 @@ Equal(OperationCount("UNIT_TARGET"), 0, "unchanged target-unit filter was rebuil
 Equal(OperationCount("SPELL_RANGE_CHECK_UPDATE", "unregister"), 1,
     "target hide with targettarget did not remove target spell event")
 
+-- Boss2-5 exceed one RegisterUnitEvent block. They must spill into one second
+-- four-unit driver, and a secret event payload must still refresh that block.
+local boss2 = NewUnitFrame("boss2")
+local boss3 = NewUnitFrame("boss3")
+local boss4 = NewUnitFrame("boss4")
+local boss5 = NewUnitFrame("boss5")
+ApplyRange(boss2)
+ApplyRange(boss3)
+ApplyRange(boss4)
+ApplyRange(boss5)
+Check(secondaryUnitDriver ~= nil, "boss unit filters did not create a second driver block")
+for i = 1, #UNIT_EVENTS do
+    local registration = secondaryUnitDriver.registered[UNIT_EVENTS[i]]
+    Check(registration and registration.kind == "unit", UNIT_EVENTS[i] .. " missing second unit block")
+    Check(#registration.units <= 4, UNIT_EVENTS[i] .. " second unit block exceeded filter limit")
+end
+
+spellRangeByUnit.boss1 = false
+spellRangeByUnit.boss5 = false
+secretValue = {}
+driver.scripts.OnEvent(driver, "UNIT_IN_RANGE_UPDATE", secretValue, secretValue)
+Equal(boss1.appliedRangeMultiplier, 0.4,
+    "secret UNIT_IN_RANGE_UPDATE did not refresh boss1 range fade")
+secondaryUnitDriver.scripts.OnEvent(secondaryUnitDriver, "UNIT_IN_RANGE_UPDATE", secretValue, secretValue)
+Equal(boss5.appliedRangeMultiplier, 0.4,
+    "secret UNIT_IN_RANGE_UPDATE did not refresh boss range fade")
+secretValue = nil
+
 -- The final active frame still performs the intentional full shutdown.
 SetVisible(targettarget, false)
 SetVisible(pet, false)
 SetVisible(boss1, false)
+SetVisible(boss2, false)
+SetVisible(boss3, false)
+SetVisible(boss4, false)
+SetVisible(boss5, false)
 ResetOperations()
 SetVisible(focus, false)
-Equal(OperationCount(nil, "unregister-all"), 1, "last active frame did not fully unregister driver")
+Equal(OperationCount(nil, "unregister-all"), 2, "last active frame did not fully unregister both drivers")
 Check(next(driver.registered) == nil, "driver retained events after full shutdown")
+Check(next(secondaryUnitDriver.registered) == nil, "secondary driver retained events after full shutdown")
 
-print("PASS range driver event deltas: exact masks, target churn isolation, dependency retention, full shutdown")
+print("PASS range driver event deltas: exact masks, bounded unit blocks, secret boss refresh, full shutdown")
