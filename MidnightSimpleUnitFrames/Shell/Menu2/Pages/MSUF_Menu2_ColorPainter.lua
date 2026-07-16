@@ -405,11 +405,53 @@ function P.Build(ctx, builder, categories)
             ShowCategory(key)
         end)
     end
+    local function EnsurePreviewAttachment()
+        if not W.AttachPinnedPreview then return end
+        local pageKey = ctx and ctx.key
+        local wrapper = ctx and ctx.wrapper
+        local record = host._msuf2PinnedPreviewRecord
+        if not record or record.pageKey ~= pageKey or record.pageWrapper ~= wrapper then
+            W.AttachPinnedPreview(section, host, {
+                stateKey = "colorPreview",
+                left = 14,
+                right = 14,
+                top = -8,
+                buttonWidth = 78,
+                buttonHeight = 20,
+                centerButton = true,
+                quietButton = true,
+                pinnedHeight = 350,
+                pageKey = pageKey,
+                wrapper = wrapper,
+                restoreParent = section,
+                restorePoint = { "TOPLEFT", section, "TOPLEFT", 16, -46 },
+                restoreWidth = previewW,
+                restoreHeight = 350,
+            })
+        end
+        if host._msuf2PinButton and host._msuf2PinButton.SetFrameLevel then
+            local popupLevel = tonumber(M.MENU_POPUP_FRAME_LEVEL) or 120
+            host._msuf2PinButton:SetFrameLevel(min((host:GetFrameLevel() or 1) + COLOR_TARGET_LEVEL + 12, popupLevel - 5))
+        end
+        if host._msuf2PinButton and not host._msuf2ColorPainterPinRegistered then
+            host._msuf2ColorPainterPinRegistered = true
+            RegisterControl(host._msuf2PinButton,
+                ControlMeta("opt_colors", "advanced", "preview.pin.toggle", "ephemeral"),
+                "Pin Color Preview", "toggle")
+        end
+    end
     local initialRefreshSerial = 0
     local function RefreshVisiblePreview(reason)
         if ctx and ctx.key and M.activeKey and M.activeKey ~= ctx.key then return end
         if ctx and ctx.wrapper and ctx.wrapper.IsShown and not ctx.wrapper:IsShown() then return end
         if section.IsShown and not section:IsShown() then return end
+        -- Page changes release pinned previews and explicitly Hide() their box,
+        -- while Menu2 keeps the Colors page itself cached. Reassert both the
+        -- host's local shown state and its pin record before touching children.
+        -- Showing only Player/Target here cannot make them visible below a
+        -- released (hidden) host.
+        if host.Show then host:Show() end
+        EnsurePreviewAttachment()
         ShowCategory(Current())
         RefreshPreviews(reason or "MSUF2_COLOR_PAINTER_VISIBLE")
     end
@@ -449,32 +491,7 @@ function P.Build(ctx, builder, categories)
         if not section:IsShown() then return end
         QueueVisiblePreviewRefresh("MSUF2_COLOR_PAINTER_REFRESH")
     end)
-    if W.AttachPinnedPreview then
-        W.AttachPinnedPreview(section, host, {
-            stateKey = "colorPreview",
-            left = 14,
-            right = 14,
-            top = -8,
-            buttonWidth = 78,
-            buttonHeight = 20,
-            centerButton = true,
-            quietButton = true,
-            pinnedHeight = 350,
-            pageKey = ctx and ctx.key,
-            wrapper = ctx and ctx.wrapper,
-            restoreParent = section,
-            restorePoint = { "TOPLEFT", section, "TOPLEFT", 16, -46 },
-            restoreWidth = previewW,
-            restoreHeight = 350,
-        })
-        if host._msuf2PinButton and host._msuf2PinButton.SetFrameLevel then
-            local popupLevel = tonumber(M.MENU_POPUP_FRAME_LEVEL) or 120
-            host._msuf2PinButton:SetFrameLevel(min((host:GetFrameLevel() or 1) + COLOR_TARGET_LEVEL + 12, popupLevel - 5))
-        end
-        RegisterControl(host._msuf2PinButton,
-            ControlMeta("opt_colors", "advanced", "preview.pin.toggle", "ephemeral"),
-            "Pin Color Preview", "toggle")
-    end
+    EnsurePreviewAttachment()
     QueueVisiblePreviewRefresh("MSUF2_COLOR_PAINTER_INITIAL")
     return section
 end
