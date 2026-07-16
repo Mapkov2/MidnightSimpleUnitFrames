@@ -1084,7 +1084,7 @@ local function NudgeTarget(dx, dy, exactDelta)
     end
 
     local key = EM2.State.GetUnitKey() or "player"
-    if (key == "gf_party" or key == "gf_raid" or key == "gf_mythicraid")
+    if (key == "gf_party" or key == "gf_raid" or key == "gf_mythicraid" or key == "gf_priority")
         and type(_G.MSUF_GF_EM2_NudgePreview) == "function"
         and _G.MSUF_GF_EM2_NudgePreview(key, ndx, ndy)
     then
@@ -1768,10 +1768,11 @@ function Ticker.BeginDrag(mover, key, cfg)
         castbarUnit = key:sub(9)
     end
 
-    local isGroupFrame = (key == "gf_party" or key == "gf_raid" or key == "gf_mythicraid") or (bar and bar._msufIsGroupFrame == true) or false
+    local isGroupFrame = (key == "gf_party" or key == "gf_raid" or key == "gf_mythicraid" or key == "gf_priority") or (bar and bar._msufIsGroupFrame == true) or false
     local groupKind = (key == "gf_party" and "party")
         or (key == "gf_raid" and "raid")
         or (key == "gf_mythicraid" and "mythicraid")
+        or (key == "gf_priority" and "priority")
         or (bar and bar._msufGFKind)
     local anchor = isCastbar and UIParent or (isGroupFrame and ResolveGroupAnchor(conf)) or ResolveAnchor(key, conf)
 

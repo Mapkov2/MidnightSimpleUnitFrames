@@ -10,4 +10,10 @@
              >
         MSUF_Keybind_ToggleEditMode()
     </Binding>
+
+    <Binding name="MSUF_PRIORITY_TOGGLE"
+             category="Midnight Simple Unitframes (MSUF)"
+             >
+        MSUF_Keybind_TogglePriorityFrame()
+    </Binding>
 </Bindings>

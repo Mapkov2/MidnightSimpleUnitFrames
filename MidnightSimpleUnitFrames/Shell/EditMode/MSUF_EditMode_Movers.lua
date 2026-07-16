@@ -193,6 +193,7 @@ end
 local function IsGroupMoverConfig(cfg)
     local popupType = cfg and cfg.popupType
     return popupType == "gf_party" or popupType == "gf_raid" or popupType == "gf_mythicraid"
+        or popupType == "gf_priority"
 end
 
 local function SyncMoverToFrame(mover, frame, cfg)

@@ -1880,7 +1880,11 @@ local function InstallWindowStatusRuntime(state)
         RefreshDashboardEditModeButton()
         RefreshToolbarPageReset()
     end
-    local STATUS_EVENTS = { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "GROUP_ROSTER_UPDATE", "PLAYER_ENTERING_WORLD", "PLAYER_DIFFICULTY_CHANGED" }
+    local STATUS_EVENTS = {
+        "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "GROUP_ROSTER_UPDATE",
+        "PLAYER_ENTERING_WORLD", "PLAYER_DIFFICULTY_CHANGED",
+        "PLAYER_SPECIALIZATION_CHANGED", "UPDATE_BINDINGS",
+    }
     local function SetStatusEventsRegistered(registered)
         if (status._msuf2EventsRegistered == true) == (registered == true) then return end
         status._msuf2EventsRegistered = registered and true or nil

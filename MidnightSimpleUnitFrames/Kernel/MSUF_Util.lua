@@ -983,10 +983,16 @@ ExportPublic("MSUF_GetProfileScopedCache", GetProfileScopedCache)
 BINDING_HEADER_MSUF_HEADER = "Midnight Simple Unit Frames"
 BINDING_NAME_MSUF_TOGGLE_OPTIONS = "Toggle MSUF Options"
 BINDING_NAME_MSUF_TOGGLE_EDITMODE = "Toggle MSUF Edit Mode"
+BINDING_NAME_MSUF_PRIORITY_TOGGLE = "Pin or unpin hovered group member"
 local MSUF_BINDING_COMMANDS = {
     "MSUF_TOGGLE_OPTIONS",
     "MSUF_TOGGLE_EDITMODE",
+    "MSUF_PRIORITY_TOGGLE",
 }
+local MSUF_MANAGED_BINDING_COMMANDS = {}
+for i = 1, #MSUF_BINDING_COMMANDS do
+    MSUF_MANAGED_BINDING_COMMANDS[MSUF_BINDING_COMMANDS[i]] = true
+end
 
 local function MSUF_EnsureGlobalBindingState()
     ExportPublic("MSUF_GlobalDB", _G.MSUF_GlobalDB or {})
@@ -1096,15 +1102,6 @@ local function MSUF_SyncCurrentBindingsIntoGlobalStore()
     end
 end
 
-local function MSUF_HasAnyStoredGlobalBindings()
-    for i = 1, #MSUF_BINDING_COMMANDS do
-        if #MSUF_GetStoredBindingKeys(MSUF_BINDING_COMMANDS[i]) > 0 then
-            return true
-        end
-    end
-    return false
-end
-
 function MSUF_Keybind_ToggleOptions()
     if type(_G.MSUF_OpenStandaloneOptionsWindow) == "function" then
         local win = _G.MSUF_StandaloneOptionsWindow
@@ -1130,6 +1127,92 @@ function MSUF_Keybind_ToggleEditMode()
         _G.MSUF_SetMSUFEditModeDirect(nextActive, nil)
     elseif type(_G.MSUF_ToggleEditMode) == "function" then
         _G.MSUF_ToggleEditMode()
+    end
+end
+
+local function MSUF_SyncMissingBindingsIntoGlobalStore()
+    local commands = MSUF_EnsureGlobalBindingState()
+    for i = 1, #MSUF_BINDING_COMMANDS do
+        local command = MSUF_BINDING_COMMANDS[i]
+        if commands[command] == nil then
+            MSUF_SetStoredBindingKeys(command, MSUF_GetBindingKeysForCommand(command))
+        end
+    end
+end
+
+local function MSUF_SaveCurrentBindings()
+    if type(_G.SaveBindings) ~= "function" then return end
+    local set = type(_G.GetCurrentBindingSet) == "function" and _G.GetCurrentBindingSet() or 1
+    _G.SaveBindings(set)
+end
+
+local function MSUF_GetManagedBindingKeys(command)
+    if not MSUF_MANAGED_BINDING_COMMANDS[command] then return {} end
+    return MSUF_GetBindingKeysForCommand(command)
+end
+ExportPublic("MSUF_GetManagedBindingKeys", MSUF_GetManagedBindingKeys)
+
+local function MSUF_SetManagedBinding(command, key, replaceConflict)
+    if not MSUF_MANAGED_BINDING_COMMANDS[command] then return false, "INVALID_COMMAND" end
+    if type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() then
+        return false, "COMBAT"
+    end
+    key = type(key) == "string" and key:upper() or nil
+    if not key or key == "" then return false, "INVALID_KEY" end
+    if type(_G.SetBinding) ~= "function" then return false, "UNAVAILABLE" end
+    local action = type(_G.GetBindingAction) == "function" and _G.GetBindingAction(key) or nil
+    if type(action) == "string" and action ~= "" and action ~= command and replaceConflict ~= true then
+        return false, "CONFLICT", action
+    end
+    local live = MSUF_GetBindingKeysForCommand(command)
+    if _G.SetBinding(key, command) == false then return false, "SET_FAILED" end
+    local cleared = {}
+    for i = 1, #live do
+        local oldKey = live[i]
+        if oldKey ~= key then
+            if _G.SetBinding(oldKey) == false then
+                for j = 1, #cleared do _G.SetBinding(cleared[j], command) end
+                if action and action ~= "" and action ~= command then
+                    _G.SetBinding(key, action)
+                elseif action ~= command then
+                    _G.SetBinding(key)
+                end
+                return false, "CLEAR_FAILED", oldKey
+            end
+            cleared[#cleared + 1] = oldKey
+        end
+    end
+    MSUF_SetStoredBindingKeys(command, { key })
+    MSUF_SaveCurrentBindings()
+    return true
+end
+ExportPublic("MSUF_SetManagedBinding", MSUF_SetManagedBinding)
+
+local function MSUF_ClearManagedBinding(command)
+    if not MSUF_MANAGED_BINDING_COMMANDS[command] then return false, "INVALID_COMMAND" end
+    if type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() then
+        return false, "COMBAT"
+    end
+    if type(_G.SetBinding) ~= "function" then return false, "UNAVAILABLE" end
+    local live = MSUF_GetBindingKeysForCommand(command)
+    local cleared = {}
+    for i = 1, #live do
+        local key = live[i]
+        if _G.SetBinding(key) == false then
+            for j = 1, #cleared do _G.SetBinding(cleared[j], command) end
+            return false, "CLEAR_FAILED", key
+        end
+        cleared[#cleared + 1] = key
+    end
+    MSUF_SetStoredBindingKeys(command, {})
+    MSUF_SaveCurrentBindings()
+    return true
+end
+ExportPublic("MSUF_ClearManagedBinding", MSUF_ClearManagedBinding)
+
+function MSUF_Keybind_TogglePriorityFrame()
+    if type(_G.MSUF_GF_ToggleHoveredPriority) == "function" then
+        return _G.MSUF_GF_ToggleHoveredPriority()
     end
 end
 
@@ -1163,9 +1246,10 @@ do
     f:RegisterEvent("PLAYER_REGEN_ENABLED")
     f:SetScript("OnEvent", function(_, event)
         if event == "PLAYER_LOGIN" then
-            if not MSUF_HasAnyStoredGlobalBindings() then
-                MSUF_SyncCurrentBindingsIntoGlobalStore()
-            end
+            -- New managed commands must adopt the user's existing Blizzard
+            -- binding once instead of being cleared merely because older MSUF
+            -- commands already exist in the account-wide mirror.
+            MSUF_SyncMissingBindingsIntoGlobalStore()
             MSUF_ApplyStoredBindingsToCurrentSet()
             return
         end

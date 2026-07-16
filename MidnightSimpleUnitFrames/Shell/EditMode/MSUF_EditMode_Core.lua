@@ -38,6 +38,7 @@ local function EditGroupKindForKey(key)
     if key == "gf_party" or key == "party" then return "party" end
     if key == "gf_raid" or key == "raid" then return "raid" end
     if key == "gf_mythicraid" or key == "mythicraid" then return "mythicraid" end
+    if key == "gf_priority" or key == "priority" then return "priority" end
 end
 
 local function EditCastbarUnitForKey(key)
@@ -505,7 +506,7 @@ end
 --- Global snapshot for Cancel All (restore pre-edit-mode state)
 local SNAPSHOT_KEYS = {
     "player", "target", "focus", "focustarget", "targettarget", "pet", "boss",
-    "general", "auras3", "gf_party", "gf_raid", "gf_mythicraid",
+    "general", "auras3", "gf_party", "gf_raid", "gf_mythicraid", "gf_priority",
 }
 local _snapshot = nil
 
@@ -849,6 +850,10 @@ function State.CancelAll()
         if _G.MSUF_ForceReanchorAllUnitFrames_Once then
             _G.MSUF_ForceReanchorAllUnitFrames_Once()
         end
+        -- Cancel replaces the top-level config tables. Force the dedicated
+        -- Priority Frames owner to reacquire gf_priority and restore its secure
+        -- header/anchor immediately, just like unit frames above.
+        ApplyGroupSettingsForKeySafe("priority")
     else
         --- Snapshot was unavailable - best-effort exit.
         ApplyAllSettingsSafe()
@@ -940,7 +945,8 @@ local function ResolveGFDBKey(key)
     if key == "party" then return "gf_party" end
     if key == "raid" then return "gf_raid" end
     if key == "mythicraid" then return "gf_mythicraid" end
-    if key == "gf_party" or key == "gf_raid" or key == "gf_mythicraid" then return key end
+    if key == "priority" then return "gf_priority" end
+    if key == "gf_party" or key == "gf_raid" or key == "gf_mythicraid" or key == "gf_priority" then return key end
     return nil
 end
 
@@ -948,7 +954,8 @@ local function ResolveGFKind(key)
     if key == "gf_party" then return "party" end
     if key == "gf_raid" then return "raid" end
     if key == "gf_mythicraid" then return "mythicraid" end
-    if key == "party" or key == "raid" or key == "mythicraid" then return key end
+    if key == "gf_priority" then return "priority" end
+    if key == "party" or key == "raid" or key == "mythicraid" or key == "priority" then return key end
     return nil
 end
 

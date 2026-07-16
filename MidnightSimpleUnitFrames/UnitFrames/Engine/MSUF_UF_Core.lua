@@ -112,6 +112,7 @@ local IDENTITY_ELEMENTS = {
   PowerText = true,
   InlineToT = true,
   Portrait = true,
+  Prediction = true,
   Borders = true,
   -- These values belong to the bound unit and must be reseeded when target,
   -- focus, dependent, pet, or boss identity changes. Resting is player-only
@@ -604,6 +605,26 @@ local function BroadcastGroupLifecycle(event, mode, exceptFrame)
   end
 end
 
+local function RunExactGroupLifecycleCopy(frame, _, event)
+  if frame
+    and frame._msufCoreScope == "group"
+    and UF.attachedFrames[frame] == true then
+    RunCompiledGroupLifecycle(frame, event, "full")
+    return true
+  end
+  return false
+end
+
+local function BroadcastGroupLifecycleExceptUnit(event, mode, exceptUnit)
+  local frames = UF.attachedFrameList
+  for i = 1, #frames do
+    local frame = frames[i]
+    if frame and frame.unit ~= exceptUnit and frame._msufCoreScope == "group" then
+      RunCompiledGroupLifecycle(frame, event, mode)
+    end
+  end
+end
+
 local RegisterFrameEvent
 local RefreshHealthLifecycleSinkRoutes
 
@@ -658,6 +679,17 @@ local function EnsureGroupLifecycleDriver()
         and targetFrame
         and targetFrame._msufCoreScope == "group"
         and UF.attachedFrames[targetFrame] == true then
+        local duplicateBucket = GF.priorityUnitFrames and GF.priorityUnitFrames[unitTarget]
+        local forEach = GF.ForEachFrameForUnit
+        if duplicateBucket and type(forEach) == "function" then
+          if forEach(unitTarget, RunExactGroupLifecycleCopy, event) == true then
+            BroadcastGroupLifecycleExceptUnit(event, "global", unitTarget)
+            return
+          end
+          -- A stale duplicate registry must take the full authoritative path.
+          BroadcastGroupLifecycle(event, "full")
+          return
+        end
         RunCompiledGroupLifecycle(targetFrame, event, "full")
         BroadcastGroupLifecycle(event, "global", targetFrame)
         return

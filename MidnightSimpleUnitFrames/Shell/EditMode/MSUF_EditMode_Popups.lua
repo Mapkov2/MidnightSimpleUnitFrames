@@ -62,7 +62,7 @@ function Popups.Open(key, anchorFrame)
             pType = "castbar"
         elseif key:sub(1, 5) == "aura_" then
             pType = "aura"
-        elseif key == "gf_party" or key == "gf_raid" or key == "gf_mythicraid" then
+        elseif key == "gf_party" or key == "gf_raid" or key == "gf_mythicraid" or key == "gf_priority" then
             pType = key
         end
     end
@@ -99,6 +99,18 @@ function Popups.Open(key, anchorFrame)
         if _G.MSUF_EM2_ShowGFPopup then
             _G.MSUF_EM2_ShowGFPopup(mode)
             if EM2.State then EM2.State.SetPopupOpen(true) end
+        end
+    elseif pType == "gf_priority" then
+        ExportPublic("MSUF_EM2_ActiveAuraGroup", nil)
+        ExportPublic("MSUF_EM2_ActiveAuraUnit", nil)
+        if EM2.Focus and EM2.Focus.SetSelection then
+            EM2.Focus.SetSelection("gf_priority", "placement", nil, {
+                source = "priority-mover",
+                openSettings = true,
+            })
+        end
+        if EM2.Focus and EM2.Focus.OpenFullSettings then
+            EM2.Focus.OpenFullSettings("gf_priority")
         end
     end
     if Popups.IsAnyOpen and Popups.IsAnyOpen() then

@@ -554,9 +554,28 @@ do
     end
 end
 
+--- Priority Frames are a small secure duplicate strip for important raid
+--- members. Visuals intentionally inherit the active raid/mythic-raid spec;
+--- this table owns only activation, selection policy, and container geometry.
+local PRIORITY_DEFAULTS = {
+    enabled       = false,
+    autoTanks     = true,
+    maxFrames     = 5,
+    growth        = "DOWN",
+    spacing       = 2,
+    anchorMode    = "RAID_RIGHT", --- RAID_RIGHT / RAID_LEFT / RAID_TOP / RAID_BOTTOM / FREE
+    attachGap     = 8,
+    attachOffset  = 0,
+    point         = "CENTER",
+    relativePoint = "CENTER",
+    offsetX       = -120,
+    offsetY       = 0,
+}
+
 GF.PARTY_DEFAULTS = PARTY_DEFAULTS
 GF.RAID_DEFAULTS  = RAID_DEFAULTS
 GF.MYTHIC_RAID_DEFAULTS = MYTHIC_RAID_DEFAULTS
+GF.PRIORITY_DEFAULTS = PRIORITY_DEFAULTS
 
 function GF.ShouldShowNameText(frame, conf)
     return conf and conf.showName ~= false and not (frame and frame._msufGFNameHiddenForStatus == true)
@@ -1115,7 +1134,7 @@ end
 --- are skipped. The memo is defensive: it misses when the frame time changes,
 --- when any gf_* table was replaced (profile switch/import changes identity),
 --- or when a table was wiped in place (next() canary), so resets always rerun.
-local ensureDBStamp, ensureDBRoot, ensureDBParty, ensureDBRaid, ensureDBMythic
+local ensureDBStamp, ensureDBRoot, ensureDBParty, ensureDBRaid, ensureDBMythic, ensureDBPriority
 
 function GF.EnsureDB()
     local db = _G.MSUF_DB
@@ -1125,15 +1144,18 @@ function GF.EnsureDB()
         and ensureDBParty == db.gf_party and next(ensureDBParty) ~= nil
         and ensureDBRaid == db.gf_raid and next(ensureDBRaid) ~= nil
         and ensureDBMythic == db.gf_mythicraid and next(ensureDBMythic) ~= nil
+        and ensureDBPriority == db.gf_priority and next(ensureDBPriority) ~= nil
     then
         return
     end
     local _partyFresh = type(db.gf_party) ~= "table"
     local _raidFresh  = type(db.gf_raid)  ~= "table"
     local _mythicFresh = type(db.gf_mythicraid) ~= "table"
+    local _priorityFresh = type(db.gf_priority) ~= "table"
     if _partyFresh then db.gf_party = {} end
     if _raidFresh  then db.gf_raid  = {} end
     if _mythicFresh then db.gf_mythicraid = {} end
+    if _priorityFresh then db.gf_priority = {} end
     NormalizeFontField(db.gf_party)
     NormalizeFontField(db.gf_raid)
     NormalizeFontField(db.gf_mythicraid)
@@ -1166,6 +1188,7 @@ function GF.EnsureDB()
     applyDefaults(db.gf_party, PARTY_DEFAULTS)
     applyDefaults(db.gf_raid,  RAID_DEFAULTS)
     applyDefaults(db.gf_mythicraid, MYTHIC_RAID_DEFAULTS)
+    applyDefaults(db.gf_priority, PRIORITY_DEFAULTS)
     MigrateGroupPositionToGridCenter(db.gf_party, "party")
     MigrateGroupPositionToGridCenter(db.gf_raid, "raid")
     MigrateGroupPositionToGridCenter(db.gf_mythicraid, "mythicraid")
@@ -1294,13 +1317,13 @@ function GF.EnsureDB()
 
     ensureDBStamp = now
     ensureDBRoot = db
-    ensureDBParty, ensureDBRaid, ensureDBMythic = db.gf_party, db.gf_raid, db.gf_mythicraid
+    ensureDBParty, ensureDBRaid, ensureDBMythic, ensureDBPriority = db.gf_party, db.gf_raid, db.gf_mythicraid, db.gf_priority
 end
 
 ---
 --- Config resolution (cached - eliminates _G.MSUF_DB + type() per call)
 ---
-local _confParty, _confRaid, _confMythicRaid
+local _confParty, _confRaid, _confMythicRaid, _confPriority
 
 function GF.IsMythicRaidContext()
     local inGroup = (IsInGroup and IsInGroup()) or false
@@ -1344,16 +1367,169 @@ function GF.GetConf(kind)
     return _confParty or PARTY_DEFAULTS
 end
 
+--- MSUF <= 5.57 stored early Group Frame aura settings as flat fields. The
+--- 5.57 runtime migrated them through GF.MigrateAuraConfig, but that owner no
+--- longer exists in 6.0. Keep the migration in the DB layer so it runs for
+--- SavedVariables startup, profile switches, full imports, and group-only
+--- snapshot imports before the compiled Group Frame spec consumes the data.
+local function LegacyAuraGrowth(conf, fallback)
+    local x = tostring(conf and conf.auraGrowthX or ""):upper()
+    local y = tostring(conf and conf.auraGrowthY or ""):upper()
+    if x == "UP" or x == "DOWN" then return x end
+    if x ~= "LEFT" and x ~= "RIGHT" then return fallback end
+    if y ~= "UP" and y ~= "DOWN" then return x .. (fallback:find("UP", 1, true) and "UP" or "DOWN") end
+    return x .. y
+end
+
+local function LegacyBuffDefaults()
+    return {
+        enabled = true, anchor = "BOTTOMRIGHT", growth = "LEFTUP",
+        x = 0, y = 0, size = 22, perRow = 4, max = 6, spacing = 1,
+        layer = 5, filterMode = "RAID_PLAYER",
+        showCooldownSwipe = true, showCooldown = true, cooldownAnchor = "CENTER",
+        cooldownOffsetX = 0, cooldownOffsetY = 0, cooldownSize = 8, cooldownOutline = "OUTLINE",
+        showStacks = true, stackAnchor = "BOTTOMRIGHT",
+        stackOffsetX = 2, stackOffsetY = -2, stackSize = 10, stackOutline = "OUTLINE",
+    }
+end
+
+local function LegacyDebuffDefaults()
+    return {
+        enabled = true, anchor = "TOPLEFT", growth = "RIGHTDOWN",
+        x = 0, y = 0, size = 20, perRow = 3, max = 6, spacing = 1,
+        layer = 6, showDispelBorder = true,
+        showCooldownSwipe = true, showCooldown = true, cooldownAnchor = "CENTER",
+        cooldownOffsetX = 0, cooldownOffsetY = 0, cooldownSize = 8, cooldownOutline = "OUTLINE",
+        showStacks = true, stackAnchor = "BOTTOMRIGHT",
+        stackOffsetX = 2, stackOffsetY = -2, stackSize = 10, stackOutline = "OUTLINE",
+    }
+end
+
+local function LegacyExternalDefaults()
+    return {
+        enabled = true, anchor = "CENTER", growth = "RIGHTDOWN",
+        x = 0, y = 0, size = 28, perRow = 3, max = 2, spacing = 1,
+        layer = 7,
+        showCooldownSwipe = true, showCooldown = true, cooldownAnchor = "CENTER",
+        cooldownOffsetX = 0, cooldownOffsetY = 0, cooldownSize = 10, cooldownOutline = "OUTLINE",
+        showStacks = false, stackAnchor = "BOTTOMRIGHT",
+        stackOffsetX = 2, stackOffsetY = -2, stackSize = 10, stackOutline = "OUTLINE",
+    }
+end
+
+local function LegacyPrivateAuraDefaults()
+    return {
+        enabled = true, max = 4, size = 20, anchor = "TOPRIGHT",
+        direction = "LEFT", spacing = 1, x = 0, y = 0, layer = 8,
+        showCountdown = true, showNumbers = false,
+        showDispelType = false, showDuration = false,
+        durationAnchor = "BOTTOM", durationOffsetX = 0, durationOffsetY = -1,
+    }
+end
+
+local function FillMissingAuraFields(group, defaults)
+    if type(group) ~= "table" then return end
+    for key, value in pairs(defaults) do
+        if group[key] == nil then group[key] = value end
+    end
+end
+
+function GF.MigrateAuraConfig(conf, isRaid)
+    if type(conf) ~= "table" then return false end
+    local changed = false
+    local hadFlatAuras = conf.aurasEnabled ~= nil and type(conf.auras) ~= "table"
+    if hadFlatAuras then
+        local buff = LegacyBuffDefaults()
+        local debuff = LegacyDebuffDefaults()
+        local enabled = conf.aurasEnabled ~= false
+        local iconSize = tonumber(conf.auraIconSize) or 20
+        local maxIcons = tonumber(conf.auraMaxIcons) or 4
+        local perRow = tonumber(conf.auraPerRow) or maxIcons
+        local spacing = tonumber(conf.auraSpacing) or 1
+        buff.enabled = enabled
+        buff.anchor = conf.auraAnchor or "BOTTOMLEFT"
+        buff.growth = LegacyAuraGrowth(conf, buff.growth)
+        buff.size, buff.max, buff.perRow, buff.spacing = iconSize, maxIcons, perRow, spacing
+        debuff.size, debuff.max, debuff.spacing = iconSize, maxIcons, spacing
+        conf.auras = {
+            enabled = enabled,
+            buff = buff,
+            debuff = debuff,
+            externals = LegacyExternalDefaults(),
+        }
+        -- This was an explicit user setting, not the old broken default that
+        -- _auraMigV2 was designed to force on. Preserve an intentional false.
+        conf._auraMigV2 = true
+        conf.aurasEnabled = nil
+        conf.auraMaxIcons = nil
+        conf.auraIconSize = nil
+        conf.auraAnchor = nil
+        conf.auraGrowthX = nil
+        conf.auraGrowthY = nil
+        conf.auraSpacing = nil
+        conf.auraPerRow = nil
+        changed = true
+    end
+    if type(conf.auras) ~= "table" then
+        local buff, debuff, externals = LegacyBuffDefaults(), LegacyDebuffDefaults(), LegacyExternalDefaults()
+        if isRaid == true then
+            buff.size, buff.max, buff.perRow = 16, 3, 3
+            debuff.size, debuff.max, debuff.perRow = 14, 3, 3
+            externals.size, externals.max, externals.perRow = 24, 2, 2
+        end
+        conf.auras = { enabled = true, buff = buff, debuff = debuff, externals = externals }
+        changed = true
+    end
+    if conf.privateAurasEnabled ~= nil and type(conf.privateAuras) ~= "table" then
+        local private = LegacyPrivateAuraDefaults()
+        private.enabled = conf.privateAurasEnabled ~= false
+        private.max = tonumber(conf.privateAuraMax) or 4
+        private.size = tonumber(conf.privateAuraSize) or 20
+        private.anchor = conf.privateAuraAnchor or "TOPRIGHT"
+        private.x = tonumber(conf.privateAuraX) or 0
+        private.y = tonumber(conf.privateAuraY) or 0
+        private.showCountdown = conf.privateAuraCountdown ~= false
+        conf.privateAuras = private
+        conf.privateAurasEnabled = nil
+        conf.privateAuraMax = nil
+        conf.privateAuraSize = nil
+        conf.privateAuraAnchor = nil
+        conf.privateAuraX = nil
+        conf.privateAuraY = nil
+        conf.privateAuraCountdown = nil
+        changed = true
+    elseif type(conf.privateAuras) ~= "table" then
+        conf.privateAuras = LegacyPrivateAuraDefaults()
+        changed = true
+    end
+    if type(conf.auras.buff) ~= "table" then conf.auras.buff = LegacyBuffDefaults(); changed = true end
+    if type(conf.auras.debuff) ~= "table" then conf.auras.debuff = LegacyDebuffDefaults(); changed = true end
+    if type(conf.auras.externals) ~= "table" then conf.auras.externals = LegacyExternalDefaults(); changed = true end
+    FillMissingAuraFields(conf.auras.buff, LegacyBuffDefaults())
+    FillMissingAuraFields(conf.auras.debuff, LegacyDebuffDefaults())
+    FillMissingAuraFields(conf.auras.externals, LegacyExternalDefaults())
+    if type(conf.spellIndicators) ~= "table" then
+        conf.spellIndicators = { enabled = false, spec = "auto", specs = {}, layer = 9 }
+        changed = true
+    end
+    return changed
+end
+
+function GF.GetPriorityConf()
+    return _confPriority or PRIORITY_DEFAULTS
+end
+
 --- Call after any DB mutation (EnsureDB, profile swap, options apply)
 function GF.InvalidateConfCache()
     local db = _G.MSUF_DB
     if not db then
-        _confParty, _confRaid, _confMythicRaid = nil, nil, nil
+        _confParty, _confRaid, _confMythicRaid, _confPriority = nil, nil, nil, nil
         return
     end
     _confParty = (type(db.gf_party) == "table" and db.gf_party) or nil
     _confRaid  = (type(db.gf_raid)  == "table" and db.gf_raid)  or nil
     _confMythicRaid = (type(db.gf_mythicraid) == "table" and db.gf_mythicraid) or nil
+    _confPriority = (type(db.gf_priority) == "table" and db.gf_priority) or nil
 end
 
 function GF.GetDefault(kind, key)
@@ -1393,11 +1569,13 @@ function GF.ResetAllToDefaults()
     db.gf_party = db.gf_party or {}
     db.gf_raid  = db.gf_raid or {}
     db.gf_mythicraid = db.gf_mythicraid or {}
+    db.gf_priority = db.gf_priority or {}
 
     local partyDefaults, raidDefaults, mythicRaidDefaults = GetFactoryGroupFrameDefaults()
     ResetConfToDefaults(db.gf_party, partyDefaults or PARTY_DEFAULTS)
     ResetConfToDefaults(db.gf_raid, raidDefaults or RAID_DEFAULTS)
     ResetConfToDefaults(db.gf_mythicraid, mythicRaidDefaults or MYTHIC_RAID_DEFAULTS)
+    ResetConfToDefaults(db.gf_priority, PRIORITY_DEFAULTS)
 
     GF.EnsureDB()
 
@@ -2953,7 +3131,9 @@ end)
 --- name. Stable ABI -- keep exported even when internal callers are few.
 ---
 ExportPublic("MSUF_GF_EnsureDB", GF.EnsureDB)
+ExportPublic("MSUF_GF_MigrateAuraConfig", GF.MigrateAuraConfig)
 ExportPublic("MSUF_GF_GetConf", GF.GetConf)
+ExportPublic("MSUF_GF_GetPriorityConf", GF.GetPriorityConf)
 ExportPublic("MSUF_GF_Val", GF.Val)
 ExportPublic("MSUF_GF_GetHighlightVal", GF.GetHighlightVal)
 ExportPublic("MSUF_GF_InvalidateConfCache", GF.InvalidateConfCache)

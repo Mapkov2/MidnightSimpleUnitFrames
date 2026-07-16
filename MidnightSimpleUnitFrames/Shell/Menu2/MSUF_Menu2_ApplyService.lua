@@ -520,6 +520,7 @@ local function GroupKindsForScope(scope)
     if scope == "gf_party" or scope == "party" then return "party" end
     if scope == "gf_raid" or scope == "raid" then return "raid", "mythicraid" end
     if scope == "gf_mythicraid" or scope == "mythicraid" then return "mythicraid" end
+    if scope == "gf_priority" or scope == "priority" then return "priority" end
     return nil
 end
 
@@ -528,6 +529,7 @@ local function GroupKindForApplyScope(scope)
     if scope == "gf_party" or scope == "party" then return "party" end
     if scope == "gf_raid" or scope == "raid" then return "raid" end
     if scope == "gf_mythicraid" or scope == "mythicraid" then return "mythicraid" end
+    if scope == "gf_priority" or scope == "priority" then return "priority" end
     if scope == "group" or scope == "groups" then return "*" end
     if IsGlobalApplyScope(scope) then return "*" end
     return nil
@@ -577,6 +579,9 @@ local function RefreshGroupPreview(kind, reason, dirtyMask)
     -- Preview work is menu/edit-only. Combat transactions already defer their
     -- runtime mutation; do not allocate options or enter preview code here.
     if InCombatLockdown and InCombatLockdown() then return end
+    -- Priority Frames own a dedicated EditMode proxy. Passing this synthetic
+    -- kind through the regular group preview normalizer would alias to Party.
+    if kind == "priority" then return end
     local gf = MSUF and MSUF.GF
     local opts = { reason = reason or "MSUF2_GROUP", dirtyMask = dirtyMask }
     if gf and type(gf.RefreshPreviewLayout) == "function" then
@@ -587,6 +592,29 @@ local function RefreshGroupPreview(kind, reason, dirtyMask)
     if type(M.RefreshGFNativePreviews) == "function" then
         Apply.SafeInvoke(M.RefreshGFNativePreviews, reason or "MSUF2_GROUP")
     end
+end
+
+local function ApplyPriorityRecord(gf, reason)
+    if type(gf) ~= "table" then return false end
+    if type(gf.RequestPriorityApply) == "function" then
+        -- RequestPriorityApply is a method-shaped public contract so Menu2,
+        -- EditMode, and the SettingGraph all share one combat-safe cold path.
+        local ok = Apply.SafeInvoke(gf.RequestPriorityApply, gf, reason or "MSUF2_PRIORITY")
+        return ok == true
+    end
+    if InCombatLockdown and InCombatLockdown() and type(gf.DeferGroupRuntime) == "function" then
+        Apply.SafeInvoke(gf.DeferGroupRuntime, "layout", "priority")
+        return true
+    end
+    if type(gf.RefreshPriorityFrames) == "function" then
+        local ok = Apply.SafeInvoke(gf.RefreshPriorityFrames, reason or "MSUF2_PRIORITY")
+        return ok == true
+    end
+    if type(gf.RefreshGeometry) == "function" then
+        local ok = Apply.SafeInvoke(gf.RefreshGeometry, "priority")
+        return ok == true
+    end
+    return false
 end
 
 local function FinishGroupRecord(gf, rec, kind, reason, did)
@@ -602,6 +630,9 @@ local function ApplyGroupRecord(kindKey, rec, reason)
     local gf = MSUF and MSUF.GF
     if not rec then return false end
     local kind = kindKey ~= "*" and kindKey or nil
+    if kind == "priority" then
+        return ApplyPriorityRecord(gf, reason)
+    end
     local dirty = rec.dirtyMask
     local did = false
 

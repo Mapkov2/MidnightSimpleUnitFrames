@@ -2,7 +2,8 @@
 --- Party-only targeted spell indicators.
 ---
 --- Watches enemy nameplate casts, resolves a single targeted party member from
---- exposed target metadata, then shows the cast icon on that party frame.
+--- exposed target metadata, then shows the cast icon on every exact Party-frame
+--- copy for that member.
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
@@ -109,6 +110,7 @@ local trackedCasters = {}
 local casterGeneration = {}
 local activeByCaster = {}
 local frameIcons = setmetatable({}, { __mode = "k" })
+local displaySerial = 0
 
 local partyUnitsByClass = {}
 local partyRoleByUnit = {}
@@ -529,17 +531,28 @@ local function ApplyCooldown(cooldown, durationObj, startMS, endMS)
   cooldown:Hide()
 end
 
-local function ReleaseCasterIndicator(caster)
-  local icon = caster and activeByCaster[caster]
+local function ReleaseIcon(icon)
   if not icon then return end
-  activeByCaster[caster] = nil
   local frame = icon._msufTSFrame
   icon._msufTSCaster = nil
   icon._msufTSFrame = nil
   icon._msufTSUnit = nil
+  icon._msufTSVisit = nil
+  icon._msufTSNext = nil
   SetShown(icon, false)
   ApplyCooldown(icon.cooldown)
   LayoutFrame(frame)
+end
+
+local function ReleaseCasterIndicator(caster)
+  local icon = caster and activeByCaster[caster]
+  if not icon then return end
+  activeByCaster[caster] = nil
+  while icon do
+    local nextIcon = icon._msufTSNext
+    ReleaseIcon(icon)
+    icon = nextIcon
+  end
 end
 
 local function DropCasterState(caster)
@@ -627,6 +640,63 @@ local function FirstPartyFrame()
   return firstPartyFrameMatched
 end
 
+local function FindCasterFrameIcon(caster, frame)
+  local icon = activeByCaster[caster]
+  while icon do
+    if icon._msufTSFrame == frame then return icon end
+    icon = icon._msufTSNext
+  end
+  return nil
+end
+
+local function DisplayOnPartyFrame(frame, unit, caster, texture, durationObj, startMS, endMS, serial)
+  if not frame or frame._msufGFKind ~= "party" then return false end
+  if frame.IsShown and not frame:IsShown() then return false end
+
+  local icon = FindCasterFrameIcon(caster, frame)
+  local created
+  if not icon then
+    icon = AcquireIcon(frame)
+    if not icon then return true end
+    created = true
+    icon._msufTSCaster = caster
+    icon._msufTSFrame = frame
+    icon._msufTSUnit = unit
+    icon._msufTSNext = activeByCaster[caster]
+    activeByCaster[caster] = icon
+    ApplyIconFrame(icon, frame)
+  end
+
+  icon._msufTSUnit = unit
+  icon._msufTSVisit = serial
+  icon.tex:SetTexture(texture or FALLBACK_ICON)
+  ApplyCooldown(icon.cooldown, durationObj, startMS, endMS)
+  if created then
+    SetShown(icon, true)
+    LayoutFrame(frame)
+  end
+  return true
+end
+
+local function PruneCasterIndicators(caster, serial)
+  local icon = activeByCaster[caster]
+  local previous
+  while icon do
+    local nextIcon = icon._msufTSNext
+    if icon._msufTSVisit ~= serial then
+      if previous then
+        previous._msufTSNext = nextIcon
+      else
+        activeByCaster[caster] = nextIcon
+      end
+      ReleaseIcon(icon)
+    else
+      previous = icon
+    end
+    icon = nextIcon
+  end
+end
+
 local function DisplayIndicator(caster, unit, texture, durationObj, startMS, endMS)
   local frame = FrameForPartyUnit(unit)
   if not frame then
@@ -635,7 +705,12 @@ local function DisplayIndicator(caster, unit, texture, durationObj, startMS, end
   end
 
   local activeIcon = activeByCaster[caster]
-  if activeIcon and activeIcon._msufTSUnit == unit and activeIcon._msufTSFrame == frame then
+  local duplicateBucket = GF.priorityUnitFrames and GF.priorityUnitFrames[unit]
+  if not duplicateBucket
+    and activeIcon
+    and activeIcon._msufTSNext == nil
+    and activeIcon._msufTSUnit == unit
+    and activeIcon._msufTSFrame == frame then
     if activeIcon.tex then
       activeIcon.tex:SetTexture(texture or FALLBACK_ICON)
       ApplyCooldown(activeIcon.cooldown, durationObj, startMS, endMS)
@@ -643,9 +718,20 @@ local function DisplayIndicator(caster, unit, texture, durationObj, startMS, end
     return
   end
 
-  if activeIcon then
-    ReleaseCasterIndicator(caster)
+  if duplicateBucket and type(GF.ForEachFrameForUnit) == "function" then
+    displaySerial = displaySerial + 1
+    local serial = displaySerial
+    GF.ForEachFrameForUnit(unit, DisplayOnPartyFrame,
+      caster, texture, durationObj, startMS, endMS, serial)
+    local selectedIcon = FindCasterFrameIcon(caster, frame)
+    if not selectedIcon or selectedIcon._msufTSVisit ~= serial then
+      DisplayOnPartyFrame(frame, unit, caster, texture, durationObj, startMS, endMS, serial)
+    end
+    PruneCasterIndicators(caster, serial)
+    return
   end
+
+  if activeIcon then ReleaseCasterIndicator(caster) end
 
   local icon = AcquireIcon(frame)
   if not icon then return end
@@ -1051,20 +1137,12 @@ function TS.ShowTest(unit, seconds)
   if not frame then return false, "no party frame" end
   local caster = "__MSUF_TS_TEST"
   DropCasterState(caster)
-  local icon = AcquireIcon(frame)
-  if not icon then return false, "no free icon" end
-  icon._msufTSCaster = caster
-  icon._msufTSFrame = frame
-  icon._msufTSUnit = frame.unit or unit
-  icon.tex:SetTexture(FALLBACK_ICON)
-  ApplyIconFrame(icon, frame)
   local now = GetTime and GetTime() or 0
   local duration = tonumber(seconds) or 8
-  ApplyCooldown(icon.cooldown, nil, now * 1000, (now + duration) * 1000)
-  SetShown(icon, true)
-  activeByCaster[caster] = icon
-  LayoutFrame(frame)
-  return true, frame.unit or unit
+  unit = frame.unit or unit
+  DisplayIndicator(caster, unit, FALLBACK_ICON, nil, now * 1000, (now + duration) * 1000)
+  if not activeByCaster[caster] then return false, "no free icon" end
+  return true, unit
 end
 
 function TS.HideTest()
@@ -1075,6 +1153,14 @@ local function OnGroupRuntimeMutation(operation, kind, mask)
   if operation == "refreshVisuals" then
     if (kind == nil or kind == "party") and RefreshMaskAffectsTargetedSpells(mask) then
       TS.RefreshConfig(false)
+    end
+  elseif operation == "refreshPriority" then
+    if active then
+      -- A secure Priority child can be retired or rebound without another cast
+      -- event. Clear linked copies immediately, then re-import live casts; the
+      -- normal delayed sampler runs after the secure header/index has settled.
+      DropAllCasterState()
+      SeedNameplates()
     end
   elseif operation == "rebuildAll" then
     TS.RefreshConfig(true)

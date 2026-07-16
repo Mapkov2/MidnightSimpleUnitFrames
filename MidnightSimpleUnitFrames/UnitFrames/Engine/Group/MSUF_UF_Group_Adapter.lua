@@ -6,17 +6,25 @@ _G.MSUF = MSUF
 local UF = MSUF.UF
 local GF = MSUF.GF or {}
 MSUF.GF = GF
+local Highlight = MSUF.Highlight
 
 if not (UF and UF.AttachFrame and UF.ApplySpec) then return end
 
 local type = type
 local table_remove = table.remove
+local next = next
 local InCombatLockdown = InCombatLockdown
 local issecretvalue = _G.issecretvalue or function(_) return false end
 
 GF.frames = GF.frames or setmetatable({}, { __mode = "k" })
 GF.frameList = GF.frameList or {}
 GF.unitFrames = GF.unitFrames or {}
+-- Priority frames are additional views of an existing group unit. Keep their
+-- index separate so the normal party/raid child remains the authoritative
+-- O(1) result for FrameForUnit and every existing primary-frame consumer.
+-- Buckets use weak frame keys and are removed eagerly when their last tracked
+-- duplicate moves or retires. The outer registry itself stays lazy so an
+-- account that never enables Priority Frames pays no allocation for it.
 
 local attrUnit = setmetatable({}, { __mode = "k" })
 local attrHooked = setmetatable({}, { __mode = "k" })
@@ -76,6 +84,16 @@ local function IsPreviewFrame(shell, visual)
     or (visual and visual._msufGFIsPreviewFrame == true)
 end
 
+local function IsPriorityFrame(frame)
+  if not frame then return false end
+  if frame._msufGFPriorityFrame == true then return true end
+  local shell = ShellFrame(frame)
+  if shell and shell._msufGFPriorityFrame == true then return true end
+  local visual = VisualFrame(shell)
+  return visual and visual._msufGFPriorityFrame == true or false
+end
+GF.IsPriorityFrame = IsPriorityFrame
+
 local function EnsureGroupVisual(shell)
   if not shell then return nil end
   local visual = shell
@@ -84,6 +102,13 @@ local function EnsureGroupVisual(shell)
   shell._msufVisualFrame = visual
   shell._msufIsGroupFrameShell = true
   return visual
+end
+
+local function EnsureMouseoverHooks(frame)
+  if not (Highlight and frame and frame.HookScript) or frame._msufGFMouseoverHighlightHooked == true then return end
+  frame:HookScript("OnEnter", Highlight.GroupEnter)
+  frame:HookScript("OnLeave", Highlight.GroupLeave)
+  frame._msufGFMouseoverHighlightHooked = true
 end
 
 local function RegisterDefaultClicks(frame)
@@ -127,27 +152,72 @@ local function StoredAttrUnit(frame)
   return frame and frame.unit or nil
 end
 
+local function RemovePriorityUnitIndex(frame, unit)
+  if not (frame and IsUnitToken(unit)) then return end
+  local buckets = GF.priorityUnitFrames
+  local bucket = buckets and buckets[unit]
+  if not (bucket and bucket[frame] == true) then return end
+  bucket[frame] = nil
+  if next(bucket) == nil then
+    buckets[unit] = nil
+    if next(buckets) == nil then GF.priorityUnitFrames = nil end
+  end
+end
+
+local function AddPriorityUnitIndex(frame, unit)
+  local buckets = GF.priorityUnitFrames
+  if not buckets then
+    buckets = {}
+    GF.priorityUnitFrames = buckets
+  end
+  local bucket = buckets[unit]
+  if not bucket then
+    bucket = setmetatable({}, { __mode = "k" })
+    buckets[unit] = bucket
+  end
+  bucket[frame] = true
+end
+
 local function IndexFrameUnit(frame, unit)
   if not frame then return end
   local old = frame._msufGFIndexedUnit
-  if IsUnitToken(old) and (not IsUnitToken(unit) or old ~= unit) and GF.unitFrames[old] == frame then
-    GF.unitFrames[old] = nil
+  local wasPriority = frame._msufGFIndexedPriority == true
+  local isPriority = IsPriorityFrame(frame)
+  if IsUnitToken(old)
+    and (not IsUnitToken(unit) or old ~= unit or wasPriority ~= isPriority) then
+    if wasPriority then
+      RemovePriorityUnitIndex(frame, old)
+    elseif GF.unitFrames[old] == frame then
+      GF.unitFrames[old] = nil
+    end
   end
   if IsUnitToken(unit) then
-    GF.unitFrames[unit] = frame
+    if isPriority then
+      AddPriorityUnitIndex(frame, unit)
+      frame._msufGFIndexedPriority = true
+    else
+      GF.unitFrames[unit] = frame
+      frame._msufGFIndexedPriority = nil
+    end
     frame._msufGFIndexedUnit = unit
   else
     frame._msufGFIndexedUnit = nil
+    frame._msufGFIndexedPriority = nil
   end
 end
 
 local function UnindexFrameUnit(frame)
   if not frame then return end
   local indexed = frame._msufGFIndexedUnit
-  if IsUnitToken(indexed) and GF.unitFrames[indexed] == frame then
-    GF.unitFrames[indexed] = nil
+  if IsUnitToken(indexed) then
+    if frame._msufGFIndexedPriority == true then
+      RemovePriorityUnitIndex(frame, indexed)
+    elseif GF.unitFrames[indexed] == frame then
+      GF.unitFrames[indexed] = nil
+    end
   end
   frame._msufGFIndexedUnit = nil
+  frame._msufGFIndexedPriority = nil
 end
 
 local function TrackFrame(frame, unit)
@@ -167,6 +237,33 @@ function GF.FrameForUnit(unit)
   return nil
 end
 
+--- Visit the authoritative group frame followed by exact tracked priority
+--- duplicates for a plain unit token. The common no-duplicate path allocates
+--- nothing and performs no frame-list scan. Return true when any callback
+--- reports successful handling, matching GF.ForEachFrame semantics.
+function GF.ForEachFrameForUnit(unit, fn, ...)
+  if not IsUnitToken(unit) or type(fn) ~= "function" then return false end
+  local any = false
+  local primary = GF.FrameForUnit(unit)
+  if primary and GF.frames[primary] == true then
+    if fn(primary, unit, ...) == true then any = true end
+  end
+
+  local bucket = GF.priorityUnitFrames and GF.priorityUnitFrames[unit]
+  if not bucket then return any end
+  for frame in next, bucket do
+    if frame ~= primary
+      and GF.frames[frame] == true
+      and frame._msufGFIndexedPriority == true
+      and frame._msufGFIndexedUnit == unit
+      and frame.unit == unit
+      and IsPriorityFrame(frame) then
+      if fn(frame, unit, ...) == true then any = true end
+    end
+  end
+  return any
+end
+
 local function BeginUnitIndexRebind()
   unitIndexRebindDepth = unitIndexRebindDepth + 1
 end
@@ -181,23 +278,65 @@ end
 --- Resolve a PARTY_MEMBER_ENABLE/DISABLE target only when the secure child,
 --- adapter index and visual binding all agree on the exact same plain token.
 --- Core falls back to a full group barrier for every non-exact result.
+local function IsExactLifecycleFrame(frame, unit)
+  if not frame
+    or GF.frames[frame] ~= true
+    or frame.unit ~= unit
+    or frame._msufGFIndexedUnit ~= unit
+    or frame._msufGFIsPreviewFrame == true then
+    return false
+  end
+  local shell = ShellFrame(frame)
+  if shell and shell._msufGFIsPreviewFrame == true then return false end
+  if shell and shell.GetAttribute then
+    local secureUnit = shell:GetAttribute(UNIT_ATTR)
+    if not IsUnitToken(secureUnit) or secureUnit ~= unit then return false end
+  end
+  return true
+end
+
 function GF.ResolveLifecycleFrame(unit)
   if unitIndexRebindDepth > 0 or not IsUnitToken(unit) then
     return nil, false
   end
-  local frame = GF.FrameForUnit(unit)
-  if not frame or GF.frames[frame] ~= true or frame._msufGFIsPreviewFrame == true then
-    return nil, false
-  end
-  local shell = ShellFrame(frame)
-  if shell and shell._msufGFIsPreviewFrame == true then return nil, false end
-  if shell and shell.GetAttribute then
-    local secureUnit = shell:GetAttribute(UNIT_ATTR)
-    if not IsUnitToken(secureUnit) or secureUnit ~= unit then
+  local primary = GF.unitFrames and GF.unitFrames[unit]
+  if primary then
+    if not IsExactLifecycleFrame(primary, unit) then
+      -- A stale authoritative index is a rebind hazard even when a priority
+      -- copy already looks current. Force Core's full correctness barrier.
       return nil, false
     end
+    local priorityBucket = GF.priorityUnitFrames and GF.priorityUnitFrames[unit]
+    if priorityBucket then
+      local foundPriority
+      for frame in next, priorityBucket do
+        if GF.frames[frame] == true and frame._msufGFIndexedPriority == true then
+          if not IsExactLifecycleFrame(frame, unit) or not IsPriorityFrame(frame) then
+            return nil, false
+          end
+          foundPriority = true
+        end
+      end
+      if not foundPriority then return nil, false end
+    end
+    return primary, true
   end
-  return frame, true
+
+  -- A priority header may legitimately expose a member that the active main
+  -- header filters out. Accept that exact duplicate-only target, but require
+  -- every live duplicate in its bucket to agree with the secure unit binding.
+  local bucket = GF.priorityUnitFrames and GF.priorityUnitFrames[unit]
+  if not bucket then return nil, false end
+  local exact
+  for frame in next, bucket do
+    if GF.frames[frame] == true and frame._msufGFIndexedPriority == true then
+      if not IsExactLifecycleFrame(frame, unit) or not IsPriorityFrame(frame) then
+        return nil, false
+      end
+      exact = exact or frame
+    end
+  end
+  return exact, exact ~= nil
 end
 
 function GF.ValidateUnitFrameMap(frame, unit)
@@ -317,9 +456,7 @@ function GF.UntrackFrame(frame)
   if UF and UF.DetachFrame then UF.DetachFrame(visual) end
   if UF and UF.DisablePingCompatibility then UF.DisablePingCompatibility(shell) end
   GF.frames[visual] = nil
-  local indexed = visual._msufGFIndexedUnit
-  if indexed and GF.unitFrames[indexed] == visual then GF.unitFrames[indexed] = nil end
-  visual._msufGFIndexedUnit = nil
+  UnindexFrameUnit(visual)
   attrUnit[shell] = nil
   childKind[shell] = nil
   appliedSerial[visual] = nil
@@ -351,6 +488,7 @@ local function ApplyUnitFrame(frame, kind, unit, reason, applyMask, forceApply)
   local shell = ShellFrame(frame)
   local visual = EnsureGroupVisual(shell)
   if not visual then return false end
+  EnsureMouseoverHooks(shell)
   childKind[shell] = kind
   shell._msufGFKind = kind
   visual._msufGFKind = kind
@@ -422,7 +560,7 @@ local function OnChildAttributeChanged(self, name, value)
     -- SecureGroupHeader rewrites unchanged partyN attributes on roster updates.
     -- Treat that write as the event-driven catch-up barrier instead of dropping
     -- it; raid headers stay on their normal per-unit paths to avoid 40 refreshes.
-    if (kind or visual._msufGFKind) == "party" then
+    if (kind or visual._msufGFKind) == "party" or IsPriorityFrame(visual) then
       RefreshGroupUnitState(visual, UNIT_CHANGED_REASON)
     end
     EndUnitIndexRebind()
