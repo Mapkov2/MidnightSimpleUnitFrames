@@ -12,6 +12,8 @@ local Highlight = MSUF.Highlight
 
 UF.Factory = UF.Factory or {}
 local Factory = UF.Factory
+local EnsureCooldownWidthObservers
+local ScheduleCooldownWidthRefresh
 
 local type = type
 local tonumber = tonumber
@@ -600,6 +602,7 @@ function Factory.SpawnAll(applyMask)
   UF.spawned = true
   UF.initialized = true
   if UF.FlushDeferredRefreshes then UF.FlushDeferredRefreshes() end
+  if EnsureCooldownWidthObservers then EnsureCooldownWidthObservers() end
   return true
 end
 
@@ -620,6 +623,7 @@ function Factory.Apply(unit, applyMask)
   end
 
   if UF.FlushDeferredRefreshes then UF.FlushDeferredRefreshes() end
+  if EnsureCooldownWidthObservers then EnsureCooldownWidthObservers() end
   return true
 end
 
@@ -669,6 +673,130 @@ function Factory.EnsureDeferredDriver()
 end
 
 local LATE_ANCHOR_KEYS = { "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }
+local COOLDOWN_WIDTH_MODES = {
+  cooldown = "EssentialCooldownViewer",
+  utility = "UtilityCooldownViewer",
+  tracked_buffs = "BuffIconCooldownViewer",
+}
+local DETACHED_POWER_KEYS = { "player", "target", "focus" }
+local cooldownWidthObserved = setmetatable({}, { __mode = "k" })
+local cooldownWidthRefreshPending = false
+local cooldownWidthRefreshAfterCombat = false
+local cooldownWidthObserverAfterCombat = false
+local cooldownWidthRegenDriver
+
+local function HasCooldownWidthConfig()
+  local db = _G.MSUF_DB
+  local bars = type(db) == "table" and type(db.bars) == "table" and db.bars or nil
+  if not bars then return false end
+  if COOLDOWN_WIDTH_MODES[bars.classPowerWidthMode or ""] and bars.showClassPower ~= false then return true end
+  if not COOLDOWN_WIDTH_MODES[bars.detachedPowerBarWidthMode or ""] then return false end
+  for i = 1, #DETACHED_POWER_KEYS do
+    local conf = db[DETACHED_POWER_KEYS[i]]
+    if type(conf) == "table" and conf.powerBarDetached == true then return true end
+  end
+  return false
+end
+
+local function EnsureCooldownWidthRegenDriver()
+  if not cooldownWidthRegenDriver then
+    cooldownWidthRegenDriver = CreateFrame("Frame")
+    cooldownWidthRegenDriver:SetScript("OnEvent", function(self)
+      if InCombat() then return end
+      self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+      local refresh = cooldownWidthRefreshAfterCombat
+      local observe = cooldownWidthObserverAfterCombat
+      cooldownWidthRefreshAfterCombat = false
+      cooldownWidthObserverAfterCombat = false
+      if observe or refresh then
+        EnsureCooldownWidthObservers()
+        ScheduleCooldownWidthRefresh()
+      end
+    end)
+  end
+  cooldownWidthRegenDriver:RegisterEvent("PLAYER_REGEN_ENABLED")
+  return true
+end
+
+local function FlushCooldownWidthRefresh()
+  if InCombat() then
+    cooldownWidthRefreshPending = false
+    cooldownWidthRefreshAfterCombat = true
+    EnsureCooldownWidthRegenDriver()
+    return false
+  end
+  cooldownWidthRefreshPending = false
+  if not HasCooldownWidthConfig() then return false end
+
+  local db = _G.MSUF_DB
+  local bars = db and db.bars or nil
+  if bars and COOLDOWN_WIDTH_MODES[bars.classPowerWidthMode or ""] then
+    if type(_G.MSUF_ClassPower_Apply) == "function" then
+      _G.MSUF_ClassPower_Apply({ anchor = true, cdm = true, syncNow = false })
+    elseif type(_G.MSUF_ClassPower_Refresh) == "function" then
+      _G.MSUF_ClassPower_Refresh()
+    end
+  end
+
+  if type(UF.RefreshPowerLayout) == "function" then
+    UF.RefreshPowerLayout()
+  elseif type(_G.MSUF_ApplyPowerBarEmbedLayout_All) == "function" then
+    _G.MSUF_ApplyPowerBarEmbedLayout_All()
+  end
+  if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
+    _G.MSUF_UFPreview_RequestRefresh("MSUF_COOLDOWN_WIDTH_SOURCE")
+  end
+  return true
+end
+
+ScheduleCooldownWidthRefresh = function()
+  if not HasCooldownWidthConfig() then return false end
+  if InCombat() then
+    cooldownWidthRefreshAfterCombat = true
+    EnsureCooldownWidthRegenDriver()
+    return true
+  end
+  if cooldownWidthRefreshPending then return true end
+  cooldownWidthRefreshPending = true
+  if _G.C_Timer and _G.C_Timer.After then
+    _G.C_Timer.After(0, FlushCooldownWidthRefresh)
+  else
+    FlushCooldownWidthRefresh()
+  end
+  return true
+end
+
+local function OnCooldownWidthSourceChanged()
+  ScheduleCooldownWidthRefresh()
+end
+
+local function ObserveCooldownWidthFrame(frame)
+  if not (frame and frame.HookScript) then return false end
+  if cooldownWidthObserved[frame] then return true end
+  if InCombat() and frame.IsProtected and frame:IsProtected() then
+    cooldownWidthObserverAfterCombat = true
+    EnsureCooldownWidthRegenDriver()
+    return false
+  end
+  cooldownWidthObserved[frame] = true
+  frame:HookScript("OnSizeChanged", OnCooldownWidthSourceChanged)
+  frame:HookScript("OnShow", OnCooldownWidthSourceChanged)
+  frame:HookScript("OnHide", OnCooldownWidthSourceChanged)
+  return true
+end
+
+EnsureCooldownWidthObservers = function()
+  if not HasCooldownWidthConfig() then return false end
+  local found = false
+  for frameName in pairs(COOLDOWN_ANCHORS) do
+    found = ObserveCooldownWidthFrame(_G[frameName]) or found
+    found = ObserveCooldownWidthFrame(ResolveCooldownViewerAnchor(frameName)) or found
+  end
+  return found
+end
+
+ExportPublic("MSUF_ScheduleCooldownWidthRefresh", ScheduleCooldownWidthRefresh)
+ExportPublic("MSUF_EnsureCooldownWidthObservers", EnsureCooldownWidthObservers)
 
 local function HasLateAnchorConfig()
   local db = _G.MSUF_DB
@@ -777,15 +905,19 @@ do
   lateAnchorEvents:RegisterEvent("ADDON_LOADED")
   lateAnchorEvents:SetScript("OnEvent", function(_, event, addon)
     if event == "ADDON_LOADED" and addon ~= "Blizzard_EditMode" and addon ~= "Blizzard_CooldownViewer" then return end
+    EnsureCooldownWidthObservers()
+    if event == "EDIT_MODE_LAYOUTS_UPDATED" then ScheduleCooldownWidthRefresh() end
     if event == "PLAYER_ENTERING_WORLD" then
       -- Blizzard finalizes UIParent and secure layout state on this event. Run
       -- one cold-path forced SetPoint on the next frame so stale geometry cannot
       -- survive an instance transition even when the saved anchor is GLOBAL.
       ScheduleLateAnchorReanchor(true)
+      ScheduleCooldownWidthRefresh()
     elseif HasLateAnchorConfig() then
       ScheduleLateAnchorReanchor()
     end
   end)
+  EnsureCooldownWidthObservers()
 end
 
 function UF.Initialize()

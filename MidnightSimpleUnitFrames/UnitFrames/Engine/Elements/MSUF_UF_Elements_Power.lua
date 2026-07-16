@@ -21,6 +21,8 @@ local SnapBarInterpolation = C and C.SnapBarInterpolation
 local ApplyBackgrounds = C and C.ApplyBackgrounds
 local ApplyBarGradient = C and C.ApplyBarGradient
 local HideBarGradient = C and C.HideBarGradient
+local ExternalFrameWidth = C and C.ExternalFrameWidth
+local InCombatLockdown = C and C.InCombatLockdown or _G.InCombatLockdown
 local tonumber = tonumber
 local tostring = tostring
 local type = type
@@ -326,16 +328,53 @@ local function ResolveCooldownWidthFrame(name)
   return frame or _G[name]
 end
 
+-- External cooldown frames may not be safe to re-measure while protected
+-- layouts are locked. Keep the last scale-correct measurement on the actual
+-- Power bar so differently scaled Player/Target/Focus frames cannot overwrite
+-- one shared cache entry. Outside combat a hidden/unavailable source
+-- intentionally falls through to the configured manual width.
+local function CachedExternalFrameWidth(name, relativeTo)
+  if type(name) ~= "string" or name == "" then return nil end
+  local inLockdown = InCombatLockdown and InCombatLockdown() or false
+  local cache = relativeTo and relativeTo._msufDetachedExternalWidths
+  if inLockdown then
+    local cached = cache and Number(cache[name], nil)
+    return cached and cached >= 20 and cached or nil
+  end
+  local width = type(ExternalFrameWidth) == "function" and ExternalFrameWidth(name, relativeTo)
+    or FrameWidth(ResolveCooldownWidthFrame(name))
+  if relativeTo then
+    if width and not cache then
+      cache = {}
+      relativeTo._msufDetachedExternalWidths = cache
+    end
+    if width then
+      cache[name] = math_floor(width + 0.5)
+    elseif cache then
+      -- The OOC fallback will now be applied to the physical live bar. Drop
+      -- the obsolete external value so a preview opened in combat resolves to
+      -- that same fallback instead of resurrecting an older visible width.
+      cache[name] = nil
+    end
+  end
+  return width
+end
+
 local function ResolveDetachedWidth(frame, power)
+  local bar = frame and frame.targetPowerBar
   local width
   if power.detachedSyncClass == true then
-    width = FrameWidth(_G.MSUF_ClassPowerContainer) or Number(power.detachedClassWidth, nil)
+    width = FrameWidth(_G.MSUF_ClassPowerContainer)
+      or CachedExternalFrameWidth(power.detachedClassWidthFrameName, bar)
+      or Number(power.detachedClassWidth, nil)
+  else
+    width = CachedExternalFrameWidth(power.detachedWidthFrameName, bar)
   end
-  width = width or FrameWidth(ResolveCooldownWidthFrame(power.detachedWidthFrameName))
   width = width or Number(power.detachedWidth, nil)
   width = width or FrameWidth(frame)
   return RoundPositive(width, 1)
 end
+Power.ResolveDetachedWidth = ResolveDetachedWidth
 
 local function ResolveDetachedAnchor(power)
   local anchor = _G.MSUF_ClassPowerContainer

@@ -112,6 +112,17 @@ local function ResolvePreviewPowerColor(renderState, data, power)
     end
     return renderState.PowerColor(data.powerToken)
 end
+local function PreviewLiveFrame(key)
+    local uf = MSUF and MSUF.UF
+    local unit = key == "boss" and "boss1" or key
+    local frame = uf and type(uf.GetFrame) == "function" and uf.GetFrame(unit) or nil
+    if not frame then frame = uf and uf.frames and uf.frames[unit] or nil end
+    return frame
+end
+local function PreviewLivePowerBar(key)
+    local frame = PreviewLiveFrame(key)
+    return frame and (frame.targetPowerBar or frame.powerBar or frame.Power) or nil
+end
 local function UnitPreviewAnimationState(box, index, key)
     if not (box and box._animationEnabled == true) then return nil end
     local previewAnimation = MSUF and MSUF.PreviewAnimation
@@ -631,6 +642,8 @@ function Preview.Refresh(box, reason)
     local resolveDetachedPowerWidth = CPPreview.ResolveDetachedPowerWidth
     if detachedPower and type(resolveDetachedPowerWidth) == "function" then
         box._runtimeDetachedPowerW = resolveDetachedPowerWidth({
+            liveFrame = PreviewLiveFrame(key),
+            livePower = runtimePower,
             shape = box._runtimeDetachedPowerShape,
             orbSize = (runtimePower and runtimePower.orbSize) or conf.detachedPowerOrbSize,
             syncClass = box._runtimeDetachedPowerSyncClass,
@@ -640,6 +653,7 @@ function Preview.Refresh(box, reason)
             widthMode = bars.detachedPowerBarWidthMode,
             manualWidth = (runtimePower and runtimePower.detachedWidth) or conf.detachedPowerBarWidth,
             frameWidth = w,
+            relativeTo = PreviewLivePowerBar(key),
         })
     else
         box._runtimeDetachedPowerW = tonumber(runtimePower and runtimePower.detachedWidth) or tonumber(conf.detachedPowerBarWidth) or w
