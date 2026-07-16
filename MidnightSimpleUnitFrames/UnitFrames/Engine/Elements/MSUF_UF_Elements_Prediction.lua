@@ -101,7 +101,7 @@ local PREDICTION_DIRTY_PLAN_KEYS = {
   [7] = "MSUF_PREDICTION_DIRTY_ALL",
 }
 
-local function BuildPredictionEventTable(healthAware, includeConnection, includeDependentTarget)
+local function BuildPredictionEventTable(healthAware, includeConnection)
   -- Specs opt into only the prediction pieces they display. Build the event lists from bit
   -- masks once so runtime registration stays compact even with several overlay combinations.
   local out = {}
@@ -116,7 +116,6 @@ local function BuildPredictionEventTable(healthAware, includeConnection, include
     end
     events[#events + 1] = "UNIT_MAXHEALTH"
     if includeConnection then events[#events + 1] = "UNIT_CONNECTION" end
-    if includeDependentTarget then events[#events + 1] = "UNIT_TARGET" end
     out[mask] = events
   end
   return out
@@ -126,8 +125,11 @@ local PREDICTION_EVENTS = BuildPredictionEventTable(false, true)
 local PREDICTION_HEALTH_EVENTS = BuildPredictionEventTable(true, true)
 local PREDICTION_EVENTS_PLAYER = BuildPredictionEventTable(false, false)
 local PREDICTION_HEALTH_EVENTS_PLAYER = BuildPredictionEventTable(true, false)
-local PREDICTION_EVENTS_DEPENDENT = BuildPredictionEventTable(false, true, true)
-local PREDICTION_HEALTH_EVENTS_DEPENDENT = BuildPredictionEventTable(true, true, true)
+-- Core coalesces PLAYER_*_CHANGED + UNIT_TARGET into one authoritative identity
+-- refresh for dependent units. Prediction participates in that identity plan;
+-- registering UNIT_TARGET here as well would perform a second calculator read.
+local PREDICTION_EVENTS_DEPENDENT = PREDICTION_EVENTS
+local PREDICTION_HEALTH_EVENTS_DEPENDENT = PREDICTION_HEALTH_EVENTS
 local GROUP_LIFECYCLE_EVENTS = { "PARTY_MEMBER_ENABLE", "PARTY_MEMBER_DISABLE" }
 
 local PLAN_REFRESH_HEAL = 1

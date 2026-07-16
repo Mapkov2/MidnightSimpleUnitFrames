@@ -478,9 +478,9 @@ Check(not HasEvent(Prediction.GetEvents(absorbOnly, absorbOnlySpec), "UNIT_HEALT
 Check(HasEvent(Prediction.GetEvents(fullHealthStripe, fullHealthStripeSpec), "UNIT_HEALTH"),
     "enabled full-health stripe did not subscribe to its cold health path")
 
--- Dependent frames must expose UNIT_TARGET as a normal unit event. The core
--- can then bind it to the exact parent unit (target/focus) instead of turning
--- every UNIT_TARGET notification into global fanout.
+-- Core's coalesced identity route owns dependent UNIT_TARGET. Prediction must
+-- not subscribe a second time or one parent/target burst performs two complete
+-- calculator reads.
 local dependentSpec = {
     key = "targettarget",
     unit = "targettarget",
@@ -489,7 +489,8 @@ local dependentSpec = {
 }
 local dependentFrame = { unit = "targettarget" }
 local dependentEvents = Prediction.GetEvents(dependentFrame, dependentSpec)
-Check(HasEvent(dependentEvents, "UNIT_TARGET"), "dependent prediction UNIT_TARGET was not a normal unit event")
+Check(not HasEvent(dependentEvents, "UNIT_TARGET"),
+    "dependent Prediction duplicated Core's UNIT_TARGET identity route")
 Check(not HasEvent(Prediction.GetUnitlessEvents(dependentFrame, dependentSpec), "UNIT_TARGET"),
     "dependent prediction retained global UNIT_TARGET fanout")
 Check(Prediction.GetEvents(dependentFrame, dependentSpec) == dependentEvents,
@@ -642,6 +643,7 @@ local coreChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/
 coreChunk("MidnightSimpleUnitFrames", RoutedMSUF)
 local worldEntryRegistration
 local scheduledWorldSeed
+local scheduledDependentIdentity
 _G.MSUF_EventBus_Register = function(event, key, callback, unitFilter, once)
     if key == "MSUF_UF_PREDICTION_WORLD_ENTRY" then
         worldEntryRegistration = {
@@ -654,7 +656,11 @@ _G.MSUF_EventBus_Register = function(event, key, callback, unitFilter, once)
     return true
 end
 _G.MSUF_ScheduleOnce = function(key, callback)
-    if key == "UF_PREDICTION_WORLD_ENTRY" then scheduledWorldSeed = callback end
+    if key == "UF_PREDICTION_WORLD_ENTRY" then
+        scheduledWorldSeed = callback
+    elseif type(key) == "function" and callback == key then
+        scheduledDependentIdentity = callback
+    end
 end
 local routedPredictionChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Prediction.lua"))
 local driverCountBeforeRoutedPrediction = #drivers
@@ -695,7 +701,14 @@ Equal(routedTargetTarget.registered.UNIT_TARGET, "target",
 Equal(routedTargetTarget._msufFrameUnitEventTargets.UNIT_TARGET, "targettarget",
     "Core lost targettarget route destination")
 ResetCalls()
+routedTargetTarget.PLAYER_TARGET_CHANGED(routedTargetTarget, "PLAYER_TARGET_CHANGED")
 routedTargetTarget.UNIT_TARGET(routedTargetTarget, "UNIT_TARGET", "target")
+Equal(calls.detailed, 0, "dependent identity ran before its coalesced flush")
+Check(type(scheduledDependentIdentity) == "function",
+    "targettarget identity did not schedule its coalesced refresh")
+scheduledDependentIdentity()
+scheduledDependentIdentity = nil
+Equal(calls.detailed, 1, "targettarget identity did not coalesce to one prediction read")
 Equal(calls.lastUnit, "targettarget", "compiled targettarget route leaked its source unit")
 
 local routedFocusTarget = MakeRoutedDependent("focustarget")
@@ -703,6 +716,16 @@ Equal(routedFocusTarget.registered.UNIT_TARGET, "focus",
     "Core did not bind focustarget UNIT_TARGET to focus")
 Equal(routedFocusTarget._msufFrameUnitEventTargets.UNIT_TARGET, "focustarget",
     "Core lost focustarget route destination")
+ResetCalls()
+routedFocusTarget.PLAYER_FOCUS_CHANGED(routedFocusTarget, "PLAYER_FOCUS_CHANGED")
+routedFocusTarget.UNIT_TARGET(routedFocusTarget, "UNIT_TARGET", "focus")
+Equal(calls.detailed, 0, "focus-target identity ran before its coalesced flush")
+Check(type(scheduledDependentIdentity) == "function",
+    "focustarget identity did not schedule its coalesced refresh")
+scheduledDependentIdentity()
+scheduledDependentIdentity = nil
+Equal(calls.detailed, 1, "focustarget identity did not coalesce to one prediction read")
+Equal(calls.lastUnit, "focustarget", "focus-target identity read the parent unit")
 
 -- PLAYER_ENTERING_WORLD uses the shared EventBus and shared next-frame
 -- scheduler. It reseeds already-active frames once unit data is authoritative,

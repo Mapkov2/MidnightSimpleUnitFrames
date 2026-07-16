@@ -271,6 +271,20 @@ connected = true
 Health.Update(group, "UNIT_HEALTH", "party1")
 Check(group._msufStatusTextValue == nil, "group health recovery left OFFLINE stuck")
 
+-- PTR can protect group health across the resurrection boundary. A visible
+-- DEAD label must still use the safe unit-death state to recover, then return
+-- to the zero-status-work living hot path while health remains secret.
+health, dead = 0, true
+Health.Update(group, "UNIT_HEALTH", "party1")
+Check(group._msufStatusTextValue == "DEAD", "secret recovery setup did not show group DEAD")
+health, dead = SECRET, false
+Health.Update(group, "UNIT_HEALTH", "party1")
+Check(group._msufStatusTextValue == nil, "secret positive group health left DEAD stuck after resurrection")
+local callsAfterSecretRecovery = groupStatusCalls
+for _ = 1, 100 do Health.Update(group, "UNIT_HEALTH", "party1") end
+Check(groupStatusCalls == callsAfterSecretRecovery,
+    "secret living group health retained status-resolver hotpath work")
+
 -- Secret health is unknown: it must not fabricate DEAD/OFFLINE or enter the sink.
 health = SECRET
 local callsBeforeSecret = singleStatusCalls

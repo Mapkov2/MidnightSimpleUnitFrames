@@ -9,6 +9,7 @@ local translate = assert(_G.MSUF_ProfileIO_TranslateProfileToCurrent)
 local function legacyFixture()
     return {
         general = {
+            rangeFadePortrait = false,
             statusIconsUseMidnightStyle = false,
             restedStateIndicatorSymbol = "rested_moonzzz",
             castbarPlayerBarWidth = 288,
@@ -32,6 +33,11 @@ local function legacyFixture()
         player = {
             width = 242,
             height = 30,
+            anchorMyPoint = "TOPLEFT",
+            anchorRelPoint = "BOTTOMRIGHT",
+            anchorFrameName = "UIParent",
+            offsetX = -333.25,
+            offsetY = 77.5,
             showPower = false,
             showCombatStateIndicator = true,
             showRestingIndicator = true,
@@ -136,6 +142,14 @@ assert(fresh.auras2 == nil and fresh.auras3._msufAuras3LegacyGeometry_v3 == true
     "Aura2 payload did not reach geometry v3")
 assert(fresh.target.detachedPowerBarAnchorMode == "LEGACY_TOPLEFT",
     "detached power did not retain 5.5 left-edge semantics")
+assert(fresh.player.point == "TOPLEFT" and fresh.player.relativePoint == "BOTTOMRIGHT"
+    and fresh.player.anchorFrameName == "UIParent"
+    and fresh.player.offsetX == -333.25 and fresh.player.offsetY == 77.5,
+    "5.57 unit-frame anchor or screen position changed during migration")
+assert(fresh.player.rangeFadeLayerMode == "health"
+    and fresh.target.rangeFadeLayerMode == "health"
+    and fresh.boss.rangeFadeLayerMode == "health",
+    "5.57 keep-portrait-visible range fade was not mapped to the closest 6.0 mode")
 assert(fresh.bars.barOutlineStrata == "BACKGROUND"
     and fresh.target.barOutlineStrata == "BACKGROUND"
     and fresh.gf_party.barOutlineStrata == "BACKGROUND"
@@ -253,7 +267,7 @@ local _, repaired = translate(storedV2, {
     markProfile = true,
     trustNormalizationMarker = true,
 })
-assert(repaired == true and storedV2._msufProfileNormalizationRevision == 5,
+assert(repaired == true and storedV2._msufProfileNormalizationRevision == 7,
     "stored v2 SavedVariables did not re-enter migration")
 assert(storedV2.auras3._msufAuras3LegacyGeometry_v3 == true
     and storedV2.auras3.perUnit.target.layout.buffAnchor == "TOPLEFT"
@@ -291,7 +305,7 @@ local _, repairedV3 = translate(storedV3, {
     markProfile = true,
     trustNormalizationMarker = true,
 })
-assert(repairedV3 == true and storedV3._msufProfileNormalizationRevision == 5
+assert(repairedV3 == true and storedV3._msufProfileNormalizationRevision == 7
     and storedV3.bars.barOutlineStrata == "BACKGROUND"
     and storedV3.target.barOutlineStrata == "BACKGROUND"
     and storedV3._msufLegacy55FrameOutlineBackground_v1 == true,
@@ -341,6 +355,63 @@ for _, growth in ipairs({ "RIGHT", "LEFT", "UP", "DOWN" }) do
     end
 end
 
+-- Real 5.57 profiles retain buffOffsetY = 30 even though Aura2 v11f no longer
+-- used that retired field for container placement. Only offsetX/Y plus the
+-- explicit buff/debuffGroupOffset fields contributed to the visible position.
+-- This distilled fixture mirrors the attached 5.57 export.
+local function legacy557AuraPositionFixture()
+    return {
+        player = { width = 275, height = 40 },
+        target = { width = 276, height = 40 },
+        focus = { width = 216, height = 30 },
+        boss = { width = 264, height = 35 },
+        auras2 = {
+            shared = {
+                _msufA2_migrated_v11f = true,
+                offsetX = 0,
+                offsetY = 6,
+                buffOffsetY = 30,
+                iconSize = 26,
+                growth = "RIGHT",
+                rowWrap = "DOWN",
+            },
+            perUnit = {
+                target = { overrideLayout = true, layout = { offsetX = -1, offsetY = 0, iconSize = 26 } },
+                focus = { overrideLayout = true, layout = { offsetX = 0, offsetY = -1, iconSize = 26 } },
+                boss1 = { overrideLayout = true, layout = { offsetX = 0, offsetY = 0, iconSize = 26 } },
+            },
+        },
+    }
+end
+
+local function assertLegacy557AuraPositions(profile, label)
+    local expected = {
+        player = { 0, 32 },
+        target = { -1, 26 },
+        focus = { 0, 25 },
+        boss1 = { 0, 26 },
+    }
+    for unit, position in pairs(expected) do
+        local layout = assert(profile.auras3.perUnit[unit].layout, label .. ": missing " .. unit .. " layout")
+        assert(layout.buffAnchor == "TOPLEFT" and layout.debuffAnchor == "TOPLEFT"
+            and layout.buffGroupOffsetX == position[1] and layout.debuffGroupOffsetX == position[1]
+            and layout.buffGroupOffsetY == position[2] and layout.debuffGroupOffsetY == position[2],
+            label .. ": 5.57 " .. unit .. " aura position changed")
+    end
+end
+
+local attachedImport = legacy557AuraPositionFixture()
+translate(attachedImport, { source = "legacy_import", markProfile = true })
+assertLegacy557AuraPositions(attachedImport, "profile import")
+
+-- SavedVariables run through Defaults before Profiles. Exercise that exact
+-- two-stage startup path as well, because Defaults owns the first Aura2 copy.
+local attachedSavedVariables = legacy557AuraPositionFixture()
+assert(_G.MSUF_NormalizeProfileTo60Defaults, "defaults migration entrypoint missing")
+_G.MSUF_NormalizeProfileTo60Defaults(attachedSavedVariables)
+translate(attachedSavedVariables, { source = "profiles", markProfile = true })
+assertLegacy557AuraPositions(attachedSavedVariables, "SavedVariables load")
+
 local native60 = {
     _msufProfileSchema = 600,
     _msufProfileNormalizationRevision = 1,
@@ -362,5 +433,70 @@ assert(native60.bars.barOutlineStrata == "AUTO"
 assert(native60.target.showPowerText == true
     and native60._msufLegacy55PowerTextVisibility_v1 == nil,
     "native 6.0 split Power Text visibility was incorrectly changed")
+
+-- MSUF 5.57 category snapshots use outer schema 1. A Group-only snapshot has
+-- no Aura2 root, so its schema must still route it through legacy visual
+-- compatibility before the selected roots are applied to the active profile.
+local legacyGroupSnapshot = {
+    gf_party = { hlOverride = true, barOutlineStrata = "AUTO" },
+}
+translate(legacyGroupSnapshot, {
+    source = "snapshot_import",
+    schema = 1,
+    markProfile = false,
+    createGeneral = false,
+    normalizePositions = false,
+})
+assert(legacyGroupSnapshot.gf_party.barOutlineStrata == "BACKGROUND",
+    "5.57 schema-1 Group-only snapshot bypassed legacy compatibility")
+
+-- The 5.57 Group Frame DB migrated these flat fields through
+-- GF.MigrateAuraConfig. 6.0 must retain that loader for SavedVariables and
+-- partial imports, including explicit disabled states and placement controls.
+local previousDB = _G.MSUF_DB
+_G.MSUF_DB = {
+    general = {},
+    gf_party = {
+        enabled = true,
+        aurasEnabled = false,
+        auraMaxIcons = 7,
+        auraIconSize = 23,
+        auraAnchor = "TOPRIGHT",
+        auraGrowthX = "LEFT",
+        auraGrowthY = "UP",
+        auraSpacing = 3,
+        auraPerRow = 5,
+        privateAurasEnabled = false,
+        privateAuraMax = 2,
+        privateAuraSize = 19,
+        privateAuraAnchor = "BOTTOMLEFT",
+        privateAuraX = 6,
+        privateAuraY = -4,
+        privateAuraCountdown = false,
+    },
+    gf_raid = {},
+    gf_mythicraid = {},
+}
+dofile("MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB.lua")
+assert(_G.MSUF_GF_EnsureDB, "6.0 Group Frame DB loader missing")
+_G.MSUF_GF_EnsureDB()
+local migratedGroup = _G.MSUF_DB.gf_party
+local migratedAuras = assert(migratedGroup.auras, "5.57 flat Group auras were not materialized")
+local migratedBuff = assert(migratedAuras.buff, "5.57 Group buff lane missing")
+assert(migratedAuras.enabled == false and migratedBuff.enabled == false
+    and migratedBuff.anchor == "TOPRIGHT" and migratedBuff.growth == "LEFTUP"
+    and migratedBuff.size == 23 and migratedBuff.max == 7
+    and migratedBuff.perRow == 5 and migratedBuff.spacing == 3,
+    "5.57 Group aura visibility, placement, size, count, growth, or spacing changed")
+local migratedPrivate = assert(migratedGroup.privateAuras, "5.57 private aura config missing")
+assert(migratedPrivate.enabled == false and migratedPrivate.max == 2
+    and migratedPrivate.size == 19 and migratedPrivate.anchor == "BOTTOMLEFT"
+    and migratedPrivate.x == 6 and migratedPrivate.y == -4
+    and migratedPrivate.showCountdown == false,
+    "5.57 private aura settings changed during migration")
+assert(migratedGroup.aurasEnabled == nil and migratedGroup.auraAnchor == nil
+    and migratedGroup.privateAurasEnabled == nil and migratedGroup._auraMigV2 == true,
+    "5.57 flat Group aura keys were not retired after lossless migration")
+_G.MSUF_DB = previousDB
 
 io.write("legacy55_profile_migration_smoke: ok\n")

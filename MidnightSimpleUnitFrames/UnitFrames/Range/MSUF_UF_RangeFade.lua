@@ -83,7 +83,12 @@ local SPELL_UPDATE_EVENTS = {
   "ACTIVE_PLAYER_SPECIALIZATION_CHANGED", "TRAIT_CONFIG_UPDATED",
 }
 
+local MOVEMENT_EVENTS = {
+  "PLAYER_STARTED_MOVING", "PLAYER_STOPPED_MOVING",
+}
+
 local BOSS_UNITS = { "boss1", "boss2", "boss3", "boss4", "boss5" }
+local UNIT_EVENT_FILTER_LIMIT = 4
 
 local ENEMY_SPELLS = {
   DEATHKNIGHT = { 49576, 47541 },
@@ -619,14 +624,20 @@ local function OnTargetSpellRange(spellIdentifier, isInRange, checksRange)
 end
 
 local function UnitNeedsPoll(unit)
-  if unit == "target" then return false end
   local frame = FrameForUnit(unit)
   if not FrameRangeActive(frame) or not FrameVisible(frame) or not UnitExistsPlain(unit) then return false end
 
   local canAssist = UnitCanAssist and PlainBool(UnitCanAssist("player", unit))
   if canAssist == true then
     local _, checked = UnitInRangeChecked(unit)
-    if checked then return false end
+    -- UNIT_IN_RANGE_UPDATE is emitted for the group token backing a friendly
+    -- target/focus on some transitions, not necessarily for that alias. Keep
+    -- those alias frames in the movement-only fallback set even when
+    -- UnitInRange itself is currently available.
+    if checked then
+      return unit == "target" or unit == "focus"
+        or unit == "targettarget" or unit == "focustarget"
+    end
     return friendlySpell ~= nil or CanUseInteractDistance()
   end
 
@@ -728,6 +739,7 @@ local function RebuildPollSet()
 end
 
 local driver
+local secondaryUnitDriver
 local SyncRuntime
 
 local function SetFrameDriverActive(frame, active)
@@ -868,7 +880,22 @@ local function SetDriverEventBundleRegistered(frame, events, wanted, registered)
   end
 end
 
-local function DriverOnEvent(_, event, unit, a, b, c)
+local function EvaluateDriverUnitChunk(source, force)
+  local first = source and source._msufRangeUnitFirst
+  local last = source and source._msufRangeUnitLast
+  if not (first and last) then
+    EvaluateAll(force)
+    return
+  end
+  for i = first, last do
+    local scheduledUnit = unitEventUnits[i]
+    if scheduledUnit then
+      EvaluateIfActive(scheduledUnit, force)
+    end
+  end
+end
+
+local function DriverOnEvent(source, event, unit, a, b, c)
   if event == "SPELL_RANGE_CHECK_UPDATE" then
     OnTargetSpellRange(unit, a, b)
     return
@@ -884,7 +911,38 @@ local function DriverOnEvent(_, event, unit, a, b, c)
   end
 
   if unit and issecretvalue(unit) == true then
-    unit = nil
+    -- Restricted encounters can make UNIT_IN_RANGE_UPDATE's unit payload
+    -- secret. RegisterUnitEvent already filtered the event to this driver's
+    -- small unit block, so re-evaluate only that block with plain unit tokens.
+    -- This preserves live boss fading in combat without restoring a poller.
+    MarkPollSetDirty()
+    EvaluateDriverUnitChunk(source, true)
+    RebuildPollSet()
+    return
+  end
+
+  if event == "PLAYER_STARTED_MOVING" or event == "PLAYER_STOPPED_MOVING" then
+    if RangePollCombatBlocked() then return end
+    MarkPollSetDirty()
+    RebuildPollSet()
+    if pollCount <= 0 then return end
+
+    -- Evaluate immediately at both edges. While movement continues the
+    -- existing sparse timer remains armed; stopping performs the final settle
+    -- and lets at most the already queued callback retire itself.
+    for i = 1, pollCount do
+      EvaluateUnit(pollUnits[i])
+    end
+    if event == "PLAYER_STARTED_MOVING" then
+      pollSettlePending = true
+      SchedulePoll()
+    else
+      pollSettlePending = false
+      -- Do not logically cancel an already queued C_Timer.After callback.
+      -- Reusing it if movement restarts avoids overlapping timer generations;
+      -- if the player stays still, that one callback retires itself.
+    end
+    return
   end
 
   if event == "PLAYER_TARGET_CHANGED" then
@@ -935,6 +993,41 @@ local function EnsureDriver()
   driver = CreateFrame("Frame")
   driver:SetScript("OnEvent", DriverOnEvent)
   return driver
+end
+
+local function EnsureSecondaryUnitDriver()
+  if secondaryUnitDriver then return secondaryUnitDriver end
+  if not CreateFrame then return nil end
+  secondaryUnitDriver = CreateFrame("Frame")
+  secondaryUnitDriver:SetScript("OnEvent", DriverOnEvent)
+  return secondaryUnitDriver
+end
+
+local function ClearDriverUnitSpan(frame)
+  if not frame then return end
+  frame._msufRangeUnitFirst = nil
+  frame._msufRangeUnitLast = nil
+end
+
+local function RegisterDriverUnitChunk(frame, first, last)
+  if not (frame and first and last and first <= last) then
+    ClearDriverUnitSpan(frame)
+    return false
+  end
+  frame._msufRangeUnitFirst = first
+  frame._msufRangeUnitLast = last
+  for i = 1, #UNIT_EVENTS do
+    frame:RegisterUnitEvent(UNIT_EVENTS[i], unpack(unitEventUnits, first, last))
+  end
+  return true
+end
+
+local function UnregisterDriverUnitEvents(frame)
+  if not frame then return end
+  for i = 1, #UNIT_EVENTS do
+    frame:UnregisterEvent(UNIT_EVENTS[i])
+  end
+  ClearDriverUnitSpan(frame)
 end
 
 local function BuildDriverUnitLists()
@@ -1003,14 +1096,20 @@ local function RegisterDriver()
   -- evaluation itself needs to be.
   if not driverRegistered or driverUnitMask ~= unitMask then
     if driverRegistered and driverUnitMask and driverUnitMask ~= 0 then
-      for i = 1, #UNIT_EVENTS do
-        f:UnregisterEvent(UNIT_EVENTS[i])
-      end
+      UnregisterDriverUnitEvents(f)
+      UnregisterDriverUnitEvents(secondaryUnitDriver)
     end
     if unitCount > 0 then
-      for i = 1, #UNIT_EVENTS do
-        f:RegisterUnitEvent(UNIT_EVENTS[i], unpack(unitEventUnits, 1, unitCount))
+      local firstLast = math.min(unitCount, UNIT_EVENT_FILTER_LIMIT)
+      RegisterDriverUnitChunk(f, 1, firstLast)
+      if unitCount > firstLast then
+        RegisterDriverUnitChunk(EnsureSecondaryUnitDriver(), firstLast + 1, unitCount)
+      elseif secondaryUnitDriver then
+        ClearDriverUnitSpan(secondaryUnitDriver)
       end
+    else
+      ClearDriverUnitSpan(f)
+      ClearDriverUnitSpan(secondaryUnitDriver)
     end
   end
 
@@ -1030,6 +1129,7 @@ local function RegisterDriver()
   SetDriverEventRegistered(f, "PLAYER_REGEN_DISABLED", activeEventsWanted, activeEventsRegistered)
   SetDriverEventRegistered(f, "PLAYER_REGEN_ENABLED", activeEventsWanted, activeEventsRegistered)
   SetDriverEventBundleRegistered(f, SPELL_UPDATE_EVENTS, activeEventsWanted, activeEventsRegistered)
+  SetDriverEventBundleRegistered(f, MOVEMENT_EVENTS, activeEventsWanted, activeEventsRegistered)
   SetDriverEventRegistered(
     f, "PLAYER_TARGET_CHANGED", targetDependent,
     DriverMaskHas(oldEventMask, DRIVER_EVENT_TARGET_BIT)
@@ -1060,6 +1160,11 @@ end
 local function UnregisterDriver()
   if not driverRegistered or not driver then return end
   driver:UnregisterAllEvents()
+  ClearDriverUnitSpan(driver)
+  if secondaryUnitDriver then
+    secondaryUnitDriver:UnregisterAllEvents()
+    ClearDriverUnitSpan(secondaryUnitDriver)
+  end
   driverRegistered = false
   driverUnitMask = nil
   driverTargetMask = nil

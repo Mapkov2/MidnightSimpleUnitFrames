@@ -77,7 +77,12 @@ _G.MSUF_GlobalDB = {
         Other = { general = {} },
     },
     char = {
-        ["Tester-Realm"] = { activeProfile = "Default" },
+        ["Tester-Realm"] = {
+            activeProfile = "Default",
+            priorityFrames = {
+                pins = { { guid = "PRIVATE-PRIORITY-GUID", name = "PrivatePin-Realm" } },
+            },
+        },
     },
 }
 _G.MSUF_ActiveProfile = "Default"
@@ -255,6 +260,18 @@ local orderingFixture = {
         barOutlineLayer = 20,
         barOutlineStrata = "HIGH",
     },
+    gf_priority = {
+        enabled = true,
+        autoTanks = false,
+        maxFrames = 4,
+        growth = "RIGHT",
+        spacing = 3,
+        anchorMode = "FREE",
+        point = "CENTER",
+        relativePoint = "CENTER",
+        offsetX = 144,
+        offsetY = -36,
+    },
 }
 
 local function IsOrderingKey(key)
@@ -299,7 +316,30 @@ for key in pairs(_G.MSUF_DB) do _G.MSUF_DB[key] = nil end
 for key, value in pairs(orderingFixture) do _G.MSUF_DB[key] = copyTable(value) end
 local expectedOrdering = CaptureOrdering(_G.MSUF_DB)
 
+-- Priority layout is profile-owned, while player identities are deliberately
+-- character-local and must never enter any profile string.
+local priorityString = assert(_G.MSUF_ExportSelectionToString("groupframe"))
+assert(priorityString:find("gf_priority", 1, true), "group-frame export omitted Priority settings")
+assert(not priorityString:find("PRIVATE-PRIORITY-GUID", 1, true)
+    and not priorityString:find("PrivatePin-Realm", 1, true),
+    "group-frame export leaked character-local Priority pins")
+_G.MSUF_DB.gf_priority.enabled = false
+_G.MSUF_DB.gf_priority.offsetX = 0
+assert(_G.MSUF_ImportFromString(priorityString) == true, "Priority group-frame round-trip import failed")
+assert(_G.MSUF_DB.gf_priority.enabled == true and _G.MSUF_DB.gf_priority.offsetX == 144,
+    "Priority profile settings did not round-trip")
+local privatePins = _G.MSUF_GlobalDB.char["Tester-Realm"].priorityFrames.pins
+assert(#privatePins == 1 and privatePins[1].guid == "PRIVATE-PRIORITY-GUID"
+    and privatePins[1].name == "PrivatePin-Realm",
+    "Priority profile import replaced character-local pins")
+
 local profileString = assert(_G.MSUF_ExportSelectionToString("all"))
+local _, priorityPayloadCount = profileString:gsub("gf_priority =", "")
+assert(priorityPayloadCount >= 2,
+    "Priority settings missing from the Wago-compatible or embedded full payload")
+assert(not profileString:find("PRIVATE-PRIORITY-GUID", 1, true)
+    and not profileString:find("PrivatePin-Realm", 1, true),
+    "full profile export leaked character-local Priority pins")
 local _, compatibleBuffLayerCount = profileString:gsub("buffLayer = 3,", "")
 local _, compatibleDebuffLayerCount = profileString:gsub("debuffLayer = 4,", "")
 assert(compatibleBuffLayerCount >= 2 and compatibleDebuffLayerCount >= 2,
@@ -310,6 +350,16 @@ _G.MSUF_DB.auras3.shared.buffLayer = 30
 _G.MSUF_DB.gf_party.spellIndicators.layer = 30
 assert(_G.MSUF_ImportFromString(profileString) == true, "normal profile ordering round-trip import failed")
 assert(_G.MSUF_DB == activeProfileRef, "normal profile ordering round-trip replaced the active profile table")
+assert(_G.MSUF_DB.gf_priority.enabled == true
+    and _G.MSUF_DB.gf_priority.autoTanks == false
+    and _G.MSUF_DB.gf_priority.maxFrames == 4
+    and _G.MSUF_DB.gf_priority.anchorMode == "FREE"
+    and _G.MSUF_DB.gf_priority.offsetX == 144,
+    "Priority settings did not survive all-profile round trip")
+privatePins = _G.MSUF_GlobalDB.char["Tester-Realm"].priorityFrames.pins
+assert(#privatePins == 1 and privatePins[1].guid == "PRIVATE-PRIORITY-GUID"
+    and privatePins[1].name == "PrivatePin-Realm",
+    "all-profile import replaced character-local Priority pins")
 AssertOrderingEqual(expectedOrdering, CaptureOrdering(_G.MSUF_DB), "normal profile ordering round-trip")
 
 local externalOK, externalString = _G.MSUF_Profiles_ExportExternal("Other")
@@ -378,7 +428,7 @@ local _, firstChanged = translate(malformedStored, {
 })
 assert(firstChanged == true, "unversioned current profile must be normalized once")
 assert(malformedStored.general.nameOffsetX == 500, "stored malformed numeric field was not clamped")
-assert(malformedStored._msufProfileNormalizationRevision == 5, "normalization revision was not persisted")
+assert(malformedStored._msufProfileNormalizationRevision == 7, "normalization revision was not persisted")
 
 -- The second trusted pass must return before walking the full profile tree.
 local nestedWalks = 0
@@ -390,7 +440,7 @@ local watchedGeneral = setmetatable({}, {
 })
 local alreadyCurrent = {
     _msufProfileSchema = 600,
-    _msufProfileNormalizationRevision = 5,
+    _msufProfileNormalizationRevision = 7,
     general = watchedGeneral,
 }
 local _, fastChanged = translate(alreadyCurrent, {
@@ -404,7 +454,7 @@ assert(nestedWalks == 0, "normalization fast path walked nested profile tables")
 -- External payloads never get to assert their own trust markers.
 local spoofedImport = {
     _msufProfileSchema = 600,
-    _msufProfileNormalizationRevision = 5,
+    _msufProfileNormalizationRevision = 7,
     _msufDefaultsRevision = 1,
     _msufDispelPriorityMigration = 3,
     general = { nameOffsetX = "900" },
