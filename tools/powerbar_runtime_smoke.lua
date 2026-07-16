@@ -8,6 +8,9 @@ local INTERP = {}
 local SECRET = {}
 local currentPercent = 75
 local backgroundApplies, gradientApplies, gradientHides, interpolationSnaps = 0, 0, 0, 0
+local externalWidths = { EssentialCooldownViewer = 222, UtilityCooldownViewer = 246 }
+local externalShown, positionLocked = true, false
+local externalRelativeWidths = setmetatable({}, { __mode = "k" })
 
 local function NewRegion(parent)
     local region = { parent = parent, shown = true, points = {}, frameLevel = 1 }
@@ -99,6 +102,11 @@ local Common = {
     HideBarGradient = function()
         gradientHides = gradientHides + 1
     end,
+    ExternalFrameWidth = function(name, relativeTo)
+        local relative = relativeTo and externalRelativeWidths[relativeTo]
+        return externalShown and ((relative and relative[name]) or externalWidths[name]) or nil
+    end,
+    InCombatLockdown = function() return positionLocked end,
 }
 
 local MSUF = { UF = UF, UFBarTextCommon = Common }
@@ -212,6 +220,48 @@ local centeredPoint = bar.points[1]
 assert(centeredPoint and centeredPoint[1] == "TOP" and centeredPoint[2] == frame
     and centeredPoint[3] == "BOTTOM" and centeredPoint[4] == 4 and centeredPoint[5] == -7,
     "native 6.0 detached power anchor changed")
+
+power.detachedSyncClass = false
+power.detachedWidthFrameName = "EssentialCooldownViewer"
+externalShown, positionLocked = true, false
+externalRelativeWidths[bar] = { EssentialCooldownViewer = 222, UtilityCooldownViewer = 246 }
+Power.Apply(frame, spec)
+assert(bar.width == 222, "visible cooldown width source did not own detached Target width")
+assert(bar._msufDetachedExternalWidths and bar._msufDetachedExternalWidths.EssentialCooldownViewer == 222,
+    "visible cooldown width was not cached on its live Power bar")
+
+local focusFrame = NewRegion(nil)
+local focusBar = NewRegion(focusFrame)
+focusFrame.targetPowerBar = focusBar
+focusFrame.width = 275
+externalRelativeWidths[focusBar] = { EssentialCooldownViewer = 198 }
+assert(Power.ResolveDetachedWidth(focusFrame, power) == 198,
+    "differently scaled Focus width did not resolve independently")
+focusBar:SetWidth(198)
+
+externalShown = false
+Power.Apply(frame, spec)
+assert(bar.width == 320, "hidden cooldown source did not return to the configured manual width")
+assert(bar._msufDetachedExternalWidths.EssentialCooldownViewer == nil,
+    "hidden OOC source retained a stale external width cache")
+
+positionLocked = true
+assert(Power.ResolveDetachedWidth(frame, power) == 320 and bar.width == 320,
+    "combat preview resurrected a stale visible width after the live bar fell back OOC")
+assert(Power.ResolveDetachedWidth(focusFrame, power) == 198,
+    "Target combat cache overwrote the differently scaled Focus width")
+positionLocked = false
+
+power.detachedSyncClass = true
+power.detachedClassWidthFrameName = "UtilityCooldownViewer"
+power.detachedClassWidth = 276
+externalShown = true
+Power.Apply(frame, spec)
+assert(bar.width == 246, "Class Resource sync did not use its own cooldown width source")
+power.detachedSyncClass = false
+power.detachedClassWidthFrameName = nil
+power.detachedWidthFrameName = nil
+externalShown = true
 
 power.detachedAnchorMode = "LEGACY_TOPLEFT"
 Power.Apply(frame, spec)

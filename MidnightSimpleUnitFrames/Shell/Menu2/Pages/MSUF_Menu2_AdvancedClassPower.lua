@@ -174,6 +174,7 @@ local CLASSPOWER_TEXT = { fonts = true, text = true }
 local CLASSPOWER_QUICK_RUNTIME = { full = true, cdm = true, playerHP = true, anchor = true, syncNow = false }
 local CLASSPOWER_QUICK_FLAGS = { unit = "player", preview = true, applyAll = false, power = true, classpower = true, classpowerApplied = true }
 local function ApplyClassPowerRuntime(reason, runtime, flags)
+    CallGlobal("MSUF_EnsureCooldownWidthObservers")
     local ApplyService = M.ApplyService or _G.MSUF_Menu2_ApplyService
     if ApplyService and type(ApplyService.RequestClassPower) == "function" then
         RefreshClassPowerInlinePreview()
@@ -307,12 +308,17 @@ local function BindBarsAlphaPercent(ctx, section, label, key, default, apply, st
 end
 local APPLY_DETACHED_POWER = { preview = true, power = true, detachedPowerBar = true, applyAll = false, unit = "player", classpowerApplied = true }
 local APPLY_DETACHED_POWER_TEXT = { preview = true, power = true, text = true, fonts = true, applyAll = false, unit = "player", classpowerApplied = true }
+-- detachedPowerBarWidthMode lives in the shared bars table and is compiled for
+-- Player, Target, and Focus. Route only this global control through the
+-- all-Power cold path; the remaining controls on this page stay Player-scoped.
+local APPLY_DETACHED_POWER_WIDTH_MODE = { preview = true, power = true, applyAll = false, classpowerApplied = true }
 local APPLY_PLAYER_HP = { preview = true, applyAll = false, classpower = true, classpowerApplied = true }
 local CP_APPLY_DETACHED_POWER = { anchor = true, cdm = true, playerHP = true, syncNow = false }
 local CP_APPLY_PLAYER_HP = { playerHP = true }
 local CP_APPLY_PLAYER_HP_TEXTURES = { playerHPTextures = true }
 
 local function ApplyClassPowerPage(reason, flags, runtime)
+    CallGlobal("MSUF_EnsureCooldownWidthObservers")
     local ApplyService = M.ApplyService or _G.MSUF_Menu2_ApplyService
     if ApplyService and type(ApplyService.RequestClassPower) == "function" then
         RefreshClassPowerInlinePreview()
@@ -327,6 +333,7 @@ local function ApplyClassPowerPage(reason, flags, runtime)
     end
 end
 local function ApplyDetachedPowerBar() ApplyClassPowerPage("MSUF2_DETACHED_POWER_BAR", APPLY_DETACHED_POWER, CP_APPLY_DETACHED_POWER) end
+local function ApplyDetachedPowerWidthMode() ApplyClassPowerPage("MSUF2_DETACHED_POWER_WIDTH_MODE", APPLY_DETACHED_POWER_WIDTH_MODE, CP_APPLY_DETACHED_POWER) end
 local function ApplyDetachedPlayerPowerSmoothing()
     RefreshClassPowerInlinePreview()
     M.RequestUnitApply("player", "MSUF2_CLASSPOWER_PLAYER_POWER_SMOOTH", {
@@ -904,7 +911,7 @@ function Page:BuildDetachedPower()
         end, Meta("detached_power.enabled"))
     local smooth = SwitchAt(self.ctx, layout, "Smooth fill", twoColumns and rightX or 32, twoColumns and -104 or -138, controlW,
         Player, "powerSmoothFill", true, ApplyDetachedPlayerPowerSmoothing, Meta("detached_power.layout.smooth_fill"))
-    local mode = self:Controls(layout, Bars, ApplyDetachedPowerBar, "detached_power.layout", {
+    local mode = self:Controls(layout, Bars, ApplyDetachedPowerWidthMode, "detached_power.layout", {
         { "mode", "nilDefaultDropdown", "Width mode", VT("manual", "Manual", "cooldown", "Essential Cooldowns", "utility", "Utility Cooldowns", "tracked_buffs", "Tracked Buffs"), 260, "detachedPowerBarWidthMode", "manual", group = "detached" },
     })
     self.dpb = self:Controls(layout, Player, ApplyDetachedPowerBar, "detached_power.layout", {

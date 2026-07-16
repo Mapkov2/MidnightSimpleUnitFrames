@@ -186,6 +186,15 @@ assert(calls.notify == nil and calls.ufApply == 1, "explicit full notify=false m
 assert(lastApplyMask == MSUF.UF.Metadata.coordinatedApplyMask, "direct full apply must use the coordinated bridge-free mask")
 
 ResetCalls()
+assert(Apply.RequestClassPower("TEST_DETACHED_WIDTH_MODE",
+    { anchor = true, cdm = true, syncNow = false },
+    { preview = true, power = true, applyAll = false, classpowerApplied = true }) == true)
+FlushOne()
+assert(calls.powerAll == 1 and calls.power == nil,
+    "global detached width mode must refresh Player, Target, and Focus instead of Player only")
+assert(calls.classpower == 1, "global detached width mode lost its Class Resource companion apply")
+
+ResetCalls()
 assert(Apply.RequestUnit("target", "TEST_UNIT", { text = true, power = true, fonts = true, alpha = true, auras = true, castbar = true }) == true)
 FlushOne()
 assert(calls.notify == 1, "unit request must notify once")

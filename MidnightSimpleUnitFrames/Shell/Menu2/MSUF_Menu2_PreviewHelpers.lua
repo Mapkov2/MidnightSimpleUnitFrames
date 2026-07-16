@@ -57,6 +57,14 @@ local function PreviewFrameWidth(frame)
     if type(width) == "number" and width > 1 then return width end
     return nil
 end
+local function PreviewExternalFrameWidth(frameName, relativeTo)
+    local common = MSUF and MSUF.UFBarTextCommon
+    local resolve = common and common.ExternalFrameWidth
+    if type(resolve) == "function" then return resolve(frameName, relativeTo) end
+    local resolver = _G.MSUF_GetEffectiveCooldownFrame
+    local source = type(resolver) == "function" and resolver(frameName) or nil
+    return PreviewFrameWidth(source or _G[frameName])
+end
 local function ClampDetachedPowerWidth(value, fallback, minValue, maxValue)
     value = tonumber(value) or tonumber(fallback) or 1
     minValue, maxValue = minValue or 20, maxValue or 800
@@ -67,6 +75,14 @@ function CP.ResolveDetachedPowerWidth(opts)
     opts = opts or {}
     if tostring(opts.shape or "BAR"):upper() == "ORB" then
         return ClampDetachedPowerWidth(opts.orbSize, 54, 20, 160)
+    end
+    local liveFrame, livePower = opts.liveFrame, opts.livePower
+    local powerElement = MSUF and MSUF.UF and MSUF.UF.Elements and MSUF.UF.Elements.Power
+    local liveResolver = powerElement and powerElement.ResolveDetachedWidth
+    if liveFrame and livePower and type(liveResolver) == "function" then
+        -- Unit Preview must not maintain a second width policy. When the live
+        -- unit exists, consume the same resolver and its per-bar combat cache.
+        return liveResolver(liveFrame, livePower)
     end
     if opts.syncClass == true then
         local classWidth = tonumber(opts.classWidth)
@@ -79,9 +95,7 @@ function CP.ResolveDetachedPowerWidth(opts)
         frameName = cdmFrames and cdmFrames[opts.widthMode]
     end
     if type(frameName) == "string" and frameName ~= "" then
-        local resolver = _G.MSUF_GetEffectiveCooldownFrame
-        local source = type(resolver) == "function" and resolver(frameName) or nil
-        local sourceWidth = PreviewFrameWidth(source or _G[frameName])
+        local sourceWidth = PreviewExternalFrameWidth(frameName, opts.relativeTo)
         if sourceWidth then return ClampDetachedPowerWidth(sourceWidth) end
     end
     return ClampDetachedPowerWidth(opts.manualWidth, opts.frameWidth)
