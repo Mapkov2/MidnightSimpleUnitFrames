@@ -974,8 +974,10 @@ local function BuildBasics(ctx, builder, unit, label)
     end
 
     local notice = CreateFrame("Frame", nil, sec)
-    notice:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, -70)
-    notice:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -14, -70)
+    -- Keep the disabled notice below the second Basics row. The Blizzard
+    -- ownership control is shared by every unitframe and occupies -74..-96.
+    notice:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, -104)
+    notice:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -14, -104)
     notice:SetHeight(24)
     notice._msuf2UnitFrameGateAlwaysEnabled = true
     local noticeBg = notice:CreateTexture(nil, "BACKGROUND")
