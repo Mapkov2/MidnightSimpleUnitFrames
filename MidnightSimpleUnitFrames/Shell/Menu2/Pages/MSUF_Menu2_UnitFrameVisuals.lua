@@ -323,6 +323,7 @@ local function BuildPower(ctx, builder, unit)
                 return
             end
             SetBool(unit, "showPowerBar", true, "MSUF2_POWER_SHOW", { power = true, preview = true })
+            Call("MSUF_EnsureCooldownWidthObservers")
             RefreshPowerEnabled()
         end)
     end
@@ -335,6 +336,7 @@ local function BuildPower(ctx, builder, unit)
         function() return ReadBool(unit, "showPowerBar", true) end,
         function(v)
             SetBool(unit, "showPowerBar", v, "MSUF2_POWER_SHOW", { power = true, preview = true })
+            Call("MSUF_EnsureCooldownWidthObservers")
             RefreshPowerEnabled()
         end,
         SettingMeta(ctx, "power.show", unit, "showPowerBar"))
@@ -381,6 +383,7 @@ local function BuildPower(ctx, builder, unit)
                 if isPlayer and conf.detachedPowerBarShape == nil then conf.detachedPowerBarShape = "BAR" end
                 if isPlayer and conf.detachedPowerOrbSize == nil then conf.detachedPowerOrbSize = 54 end
             end
+            Call("MSUF_EnsureCooldownWidthObservers")
             M.RequestUnitApply(unit, "MSUF2_POWER_DETACHED", DETACHED_POWER_OPTS)
             RefreshPowerEnabled()
             RefreshClassPowerDetachedState()
@@ -405,7 +408,8 @@ local function BuildPower(ctx, builder, unit)
         sliderTop = -148
         local playerDetached = BuildPowerControls(detachedCard, AddDetachedControl, {
             { "toggle", "Sync width to Class Resource", 16, -94, detachedLeftW, "detachedPowerBarSyncClassPower", true, "MSUF2_POWER_DETACHED_SYNC",
-            function() return GetConf(unit).detachedPowerBarSyncClassPower ~= false end, nil, DETACHED_POWER_OPTS, "sync" },
+            function() return GetConf(unit).detachedPowerBarSyncClassPower ~= false end,
+            function() Call("MSUF_EnsureCooldownWidthObservers") end, DETACHED_POWER_OPTS, "sync" },
             { "toggle", "Anchor to Class Resource", detachedRightX, -94, detachedRightW, "detachedPowerBarAnchorToClassPower", false, "MSUF2_POWER_DETACHED_ANCHOR", nil, nil, DETACHED_POWER_OPTS },
         })
         detachedSync = playerDetached.sync
@@ -430,6 +434,7 @@ local function BuildPower(ctx, builder, unit)
                 local conf = GetConf(unit)
                 conf.detachedPowerBarShape = v
                 if v == "ORB" and conf.detachedPowerOrbSize == nil then conf.detachedPowerOrbSize = 54 end
+                Call("MSUF_EnsureCooldownWidthObservers")
                 M.RequestUnitApply(unit, "MSUF2_POWER_DETACHED_SHAPE", DETACHED_POWER_OPTS)
                 RefreshPowerEnabled()
                 RefreshClassPowerDetachedState()

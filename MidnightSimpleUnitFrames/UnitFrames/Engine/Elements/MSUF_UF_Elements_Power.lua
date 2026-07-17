@@ -510,6 +510,7 @@ local function LayoutDetached(frame, bar, power, defaultHeight)
 
   bar:ClearAllPoints()
   bar:SetSize(math_max(1, width), math_max(1, height))
+  bar._msufDetachedWidth = width
   if anchor then
     bar:SetPoint(point, anchor, relativePoint, x, y)
   else
@@ -520,6 +521,31 @@ local function LayoutDetached(frame, bar, power, defaultHeight)
     SetPowerFrameLevel(bar, level)
   end
   bar._msufDetached = true
+end
+
+-- Cooldown-viewer size changes only affect the physical width of an already
+-- laid-out detached bar. Keep this path deliberately narrower than Power.Apply:
+-- no config compile, element routing, event rebinding, text/media/color work,
+-- or protected anchor mutation is needed here.
+function Power.RefreshDetachedExternalWidth(frame, sourceName, power)
+  local bar = frame and frame.targetPowerBar
+  power = power or SpecPower(frame)
+  if not (bar and power and power.enabled == true and power.detached == true) then return false end
+  if power.shape == "ORB" then return false end
+
+  local configuredSource = power.detachedSyncClass == true
+    and power.detachedClassWidthFrameName
+    or power.detachedWidthFrameName
+  if configuredSource ~= sourceName then return false end
+
+  -- Resolve even when the last width stamp matches: outside combat this also
+  -- clears the per-bar protected fallback cache when a source becomes hidden.
+  local width = ResolveDetachedWidth(frame, power)
+  if bar._msufDetachedWidth ~= width then
+    bar:SetWidth(math_max(1, width))
+    bar._msufDetachedWidth = width
+  end
+  return true
 end
 
 local function SetColor(frame, force)
@@ -605,6 +631,7 @@ function Power.Apply(frame, spec)
     LayoutDetached(frame, bar, power, h)
   else
     bar._msufDetached = nil
+    bar._msufDetachedWidth = nil
     local inlineLevel = frame.GetFrameLevel and ((frame:GetFrameLevel() or 1) + 1) or nil
     if inlineLevel then SetPowerFrameLevel(bar, inlineLevel) end
     bar:ClearAllPoints()

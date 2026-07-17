@@ -174,7 +174,6 @@ local CLASSPOWER_TEXT = { fonts = true, text = true }
 local CLASSPOWER_QUICK_RUNTIME = { full = true, cdm = true, playerHP = true, anchor = true, syncNow = false }
 local CLASSPOWER_QUICK_FLAGS = { unit = "player", preview = true, applyAll = false, power = true, classpower = true, classpowerApplied = true }
 local function ApplyClassPowerRuntime(reason, runtime, flags)
-    CallGlobal("MSUF_EnsureCooldownWidthObservers")
     local ApplyService = M.ApplyService or _G.MSUF_Menu2_ApplyService
     if ApplyService and type(ApplyService.RequestClassPower) == "function" then
         RefreshClassPowerInlinePreview()
@@ -185,6 +184,10 @@ local function ApplyClassPowerRuntime(reason, runtime, flags)
     M.RequestGeneralApply(reason or "MSUF2_CLASSPOWER", flags or APPLY_CLASSPOWER_GENERAL)
 end
 local function ApplyClassPower() ApplyClassPowerRuntime("MSUF2_CLASSPOWER", CLASSPOWER_FULL, APPLY_CLASSPOWER_GENERAL) end
+local function ApplyClassPowerSource()
+    CallGlobal("MSUF_EnsureCooldownWidthObservers")
+    ApplyClassPower()
+end
 local function ApplyClassPowerVisuals() ApplyClassPowerRuntime("MSUF2_CLASSPOWER_VISUALS", CLASSPOWER_VISUALS, APPLY_CLASSPOWER_GENERAL) end
 local function ApplyClassPowerSmoothing() ApplyClassPowerRuntime("MSUF2_CLASSPOWER_SMOOTH", CLASSPOWER_SMOOTH, APPLY_CLASSPOWER_GENERAL) end
 local function ApplyClassPowerText() ApplyClassPowerRuntime("MSUF2_CLASSPOWER_TEXT", CLASSPOWER_TEXT, APPLY_CLASSPOWER_GENERAL) end
@@ -318,7 +321,6 @@ local CP_APPLY_PLAYER_HP = { playerHP = true }
 local CP_APPLY_PLAYER_HP_TEXTURES = { playerHPTextures = true }
 
 local function ApplyClassPowerPage(reason, flags, runtime)
-    CallGlobal("MSUF_EnsureCooldownWidthObservers")
     local ApplyService = M.ApplyService or _G.MSUF_Menu2_ApplyService
     if ApplyService and type(ApplyService.RequestClassPower) == "function" then
         RefreshClassPowerInlinePreview()
@@ -333,7 +335,14 @@ local function ApplyClassPowerPage(reason, flags, runtime)
     end
 end
 local function ApplyDetachedPowerBar() ApplyClassPowerPage("MSUF2_DETACHED_POWER_BAR", APPLY_DETACHED_POWER, CP_APPLY_DETACHED_POWER) end
-local function ApplyDetachedPowerWidthMode() ApplyClassPowerPage("MSUF2_DETACHED_POWER_WIDTH_MODE", APPLY_DETACHED_POWER_WIDTH_MODE, CP_APPLY_DETACHED_POWER) end
+local function ApplyDetachedPowerSource()
+    CallGlobal("MSUF_EnsureCooldownWidthObservers")
+    ApplyDetachedPowerBar()
+end
+local function ApplyDetachedPowerWidthMode()
+    CallGlobal("MSUF_EnsureCooldownWidthObservers")
+    ApplyClassPowerPage("MSUF2_DETACHED_POWER_WIDTH_MODE", APPLY_DETACHED_POWER_WIDTH_MODE, CP_APPLY_DETACHED_POWER)
+end
 local function ApplyDetachedPlayerPowerSmoothing()
     RefreshClassPowerInlinePreview()
     M.RequestUnitApply("player", "MSUF2_CLASSPOWER_PLAYER_POWER_SMOOTH", {
@@ -518,6 +527,7 @@ local function QuickApplyPhase1(offsets)
 end
 local function QuickRefreshAll(reason)
     reason = reason or "ClassPowerQuickSetup"
+    CallGlobal("MSUF_EnsureCooldownWidthObservers")
     local ApplyService = M.ApplyService or _G.MSUF_Menu2_ApplyService
     if ApplyService and type(ApplyService.RequestClassPower) == "function" then
         RefreshClassPowerInlinePreview()
@@ -766,11 +776,12 @@ function Page:BuildClassLayout()
     local compact, width = self.width < 620, self.width
     local section = self.b:CollapsibleSection("classpower_display", "Layout", compact and 760 or 440, true)
     local applyRefresh = self:WithRefresh(ApplyClassPower)
-    self.cpEnable = SwitchAt(self.ctx, section, "Class Resource", 32, -64, 180, Bars, "showClassPower", true, applyRefresh, Meta("layout.enabled"))
+    local applySourceRefresh = self:WithRefresh(ApplyClassPowerSource)
+    self.cpEnable = SwitchAt(self.ctx, section, "Class Resource", 32, -64, 180, Bars, "showClassPower", true, applySourceRefresh, Meta("layout.enabled"))
     self.cp = self:Controls(section, Bars, ApplyClassPower, "layout", {
         { "shape", "dropdown", "Class Resource shape", VT("BAR", "Bar", "CIRCLE", "Circle", "DIAMOND", "Diamond", "HEX", "Hex"), 260, "classPowerShape", "BAR", applyRefresh },
         { "height", "slider", "Height", 1, 40, 1, 300, "classPowerHeight", 4 },
-        { "widthMode", "dropdown", "Width mode", VT("player", "Player frame", "auto_pips", "Auto fit pips", "cooldown", "Essential Cooldowns", "utility", "Utility Cooldowns", "tracked_buffs", "Tracked Buffs", "custom", "Custom"), 260, "classPowerWidthMode", "player", applyRefresh,
+        { "widthMode", "dropdown", "Width mode", VT("player", "Player frame", "auto_pips", "Auto fit pips", "cooldown", "Essential Cooldowns", "utility", "Utility Cooldowns", "tracked_buffs", "Tracked Buffs", "custom", "Custom"), 260, "classPowerWidthMode", "player", applySourceRefresh,
             help = "Auto fit pips is active only for Circle, Diamond and Hex. It uses pip count x pip size plus gaps." },
         { "width", "slider", "Width", 30, 800, 1, 300, "classPowerWidth", 0 },
         { "x", "slider", "Offset X", -800, 800, 1, 300, "classPowerOffsetX", 0 },
@@ -790,7 +801,7 @@ function Page:BuildClassLayout()
             local player = Player()
             player.detachedPowerBarShape = NormalizeDetachedPowerShape(value)
             if player.detachedPowerBarShape == "ORB" and player.detachedPowerOrbSize == nil then player.detachedPowerOrbSize = 54 end
-            ApplyDetachedPowerBar(); self.refresh()
+            ApplyDetachedPowerSource(); self.refresh()
         end,
         Meta("layout.independent_powerbar_shape", "setting", { settingKey = "player.detachedPowerBarShape" }))
     AddTooltip(self.cpPowerShape, "Independent Powerbar Shape", "Changes only the detached Player Powerbar. Class Resource shape on the left changes only Class Resources.")
@@ -907,7 +918,7 @@ function Page:BuildDetachedPower()
                 player.detachedPowerBarHeight = tonumber(player.detachedPowerBarHeight) or 6
                 player.detachedPowerBarFrameLevelOffset = tonumber(player.detachedPowerBarFrameLevelOffset) or 6
             end
-            ApplyDetachedPowerBar(); self.refresh()
+            ApplyDetachedPowerSource(); self.refresh()
         end, Meta("detached_power.enabled"))
     local smooth = SwitchAt(self.ctx, layout, "Smooth fill", twoColumns and rightX or 32, twoColumns and -104 or -138, controlW,
         Player, "powerSmoothFill", true, ApplyDetachedPlayerPowerSmoothing, Meta("detached_power.layout.smooth_fill"))
@@ -916,7 +927,7 @@ function Page:BuildDetachedPower()
     })
     self.dpb = self:Controls(layout, Player, ApplyDetachedPowerBar, "detached_power.layout", {
         { "anchor", "toggle", "Anchor to Class Resource", "detachedPowerBarAnchorToClassPower", false, group = "detachedPlayer" },
-        { "sync", "toggle", "Sync width to Class Resource", "detachedPowerBarSyncClassPower", true, group = "detachedPlayer" },
+        { "sync", "toggle", "Sync width to Class Resource", "detachedPowerBarSyncClassPower", true, ApplyDetachedPowerSource, group = "detachedPlayer" },
         { "orbSize", "slider", "Orb size", 20, 160, 1, 300, "detachedPowerOrbSize", 54, group = "detachedPlayer" },
         { "x", "slider", "Power X", -1000, 1000, 1, 300, "detachedPowerBarOffsetX", 0, group = "detachedPlayer" },
         { "y", "slider", "Power Y", -1000, 1000, 1, 300, "detachedPowerBarOffsetY", -4, group = "detachedPlayer" },

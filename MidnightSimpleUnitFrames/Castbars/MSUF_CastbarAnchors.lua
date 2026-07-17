@@ -43,6 +43,10 @@ local UNIT_CASTBAR = {
 
 -- Valid width-source kinds.
 local WIDTH_SOURCE_KINDS = { unitframe = true, essential = true, utility = true }
+local COOLDOWN_VIEWER_KINDS = {
+    EssentialCooldownViewer = "essential",
+    UtilityCooldownViewer = "utility",
+}
 
 -- Units that participate in width-source sync.
 local CASTBAR_UNITS = { "player", "target", "focus", "boss" }
@@ -530,6 +534,13 @@ end
 -- or, when unit is nil, all units. keepSignature avoids clearing cached sigs.
 function MSUF_UpdateCastbarWidthSourceSync(g, unit, keepSignature)
     g = g or GeneralDB()
+    -- Cooldown-kind castbars share the central source observer instead of
+    -- installing duplicate hooks. Its generation fastpath makes unchanged
+    -- castbar applies O(1), while profile/import changes still activate the
+    -- newly selected viewer immediately.
+    if type(_G.MSUF_EnsureCooldownWidthObservers) == "function" then
+        _G.MSUF_EnsureCooldownWidthObservers()
+    end
     if SyncWidthSourceLifecycle and not SyncWidthSourceLifecycle(g) then
         InvalidateWidthSourceSignature(unit)
         return
@@ -845,6 +856,29 @@ ApplyCastbarEffectiveSizeUnit = function(unit, g)
     return false
 end
 
+-- Shared Cooldown Viewer observers call this after coalescing a real source
+-- transition. Refresh only castbars configured for that exact viewer; this
+-- also applies the manual fallback immediately when the viewer becomes hidden.
+local function RefreshCastbarCooldownWidthSource(sourceName)
+    local kind = COOLDOWN_VIEWER_KINDS[sourceName]
+    if not kind then return false end
+    if InCombat() then
+        widthSourcePendingAfterCombat = true
+        return false
+    end
+
+    local g = GeneralDB()
+    local applied = false
+    for i = 1, #CASTBAR_UNITS do
+        local unit = CASTBAR_UNITS[i]
+        if ConfiguredWidthSource(g, unit) == kind then
+            applied = ApplyCastbarEffectiveSizeUnit(unit, g) or applied
+            widthSourceSignatures[unit] = WidthSourceSignature(g, unit)
+        end
+    end
+    return applied
+end
+
 ------------------------------------------------------------------------
 -- Re-anchor entry points
 ------------------------------------------------------------------------
@@ -1028,6 +1062,7 @@ end)
 ExportPublic("MSUF_GetCastbarDesiredSize", MSUF_GetCastbarDesiredSize)
 ExportPublic("MSUF_UpdateCastbarWidthSourceSync", MSUF_UpdateCastbarWidthSourceSync)
 ExportPublic("MSUF_ApplyCastbarEffectiveSizeUnit", ApplyCastbarEffectiveSizeUnit)
+ExportPublic("MSUF_RefreshCastbarCooldownWidthSource", RefreshCastbarCooldownWidthSource)
 ExportPublic("MSUF_GetPlayerCastbarDesiredSize", function(g, bar, fallbackW, fallbackH)
     return MSUF_GetCastbarDesiredSize("player", g, bar, fallbackW, fallbackH)
 end)
