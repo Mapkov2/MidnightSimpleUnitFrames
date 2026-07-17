@@ -45,7 +45,7 @@ local function General()
     return type(db) == "table" and type(db.general) == "table" and db.general or nil
 end
 
-local function ShouldUseMSUFUnitFrames()
+local function ShouldHideBlizzardUnitFrames()
     local g = General()
     return not (g and g.disableBlizzardUnitFrames == false)
 end
@@ -63,7 +63,7 @@ local function UnitGroup(unit)
     return unit
 end
 
-local function ShouldUseMSUFUnitFrame(unit)
+local function ShouldHideBlizzardUnitFrame(unit)
     local g = General()
     if g and g.disableBlizzardUnitFrames == false then
         return false
@@ -75,6 +75,16 @@ local function ShouldUseMSUFUnitFrame(unit)
     local db = _G.MSUF_DB
     local conf = type(db) == "table" and type(db[key]) == "table" and db[key] or nil
     return not (conf and conf.useBlizzardFrame == true)
+end
+
+-- MSUF frame creation is intentionally independent from Blizzard ownership.
+-- The actual MSUF enabled state is applied by the unitframe factory spec.
+local function ShouldUseMSUFUnitFrame()
+    return true
+end
+
+local function ShouldUseBlizzardUnitFrame(unit)
+    return not ShouldHideBlizzardUnitFrame(unit)
 end
 
 local function CastbarUnit(unit)
@@ -271,20 +281,35 @@ local function HandleFrame(frame, doNotReparent, unit)
 end
 
 local function DisableBlizzardFrames()
-    if not ShouldUseMSUFUnitFrames() then
+    if not ShouldHideBlizzardUnitFrames() then
         return
     end
 
-    if ShouldUseMSUFUnitFrame("player") then HandleFrame(_G.PlayerFrame, nil, "player") end
-    if ShouldUseMSUFUnitFrame("pet") then HandleFrame(_G.PetFrame, nil, "pet") end
-    if ShouldUseMSUFUnitFrame("target") then HandleFrame(_G.TargetFrame, nil, "target") end
-    if ShouldUseMSUFUnitFrame("targettarget") then HandleFrame(_G.TargetFrameToT, nil, "targettarget") end
-    if ShouldUseMSUFUnitFrame("focus") then HandleFrame(_G.FocusFrame, nil, "focus") end
-    if ShouldUseMSUFUnitFrame("focustarget") and _G.FocusFrame and _G.FocusFrame.totFrame then
-        HandleFrame(_G.FocusFrame.totFrame, nil, "focustarget")
+    if ShouldHideBlizzardUnitFrame("player") then HandleFrame(_G.PlayerFrame, nil, "player") end
+    if ShouldHideBlizzardUnitFrame("pet") then HandleFrame(_G.PetFrame, nil, "pet") end
+
+    -- Blizzard Target-of-Target and Focus-Target are children of their parent
+    -- frames. Keeping either child therefore also keeps its Blizzard parent.
+    -- A parent can still be kept while its child is suppressed independently.
+    local hideTarget = ShouldHideBlizzardUnitFrame("target")
+    local hideTargetTarget = ShouldHideBlizzardUnitFrame("targettarget")
+    if hideTargetTarget then
+        HandleFrame(_G.TargetFrameToT or (_G.TargetFrame and _G.TargetFrame.totFrame), nil, "targettarget")
+    end
+    if hideTarget and hideTargetTarget then
+        HandleFrame(_G.TargetFrame, nil, "target")
     end
 
-    if ShouldUseMSUFUnitFrame("boss") then
+    local hideFocus = ShouldHideBlizzardUnitFrame("focus")
+    local hideFocusTarget = ShouldHideBlizzardUnitFrame("focustarget")
+    if hideFocusTarget then
+        HandleFrame(_G.FocusFrameToT or (_G.FocusFrame and _G.FocusFrame.totFrame), nil, "focustarget")
+    end
+    if hideFocus and hideFocusTarget then
+        HandleFrame(_G.FocusFrame, nil, "focus")
+    end
+
+    if ShouldHideBlizzardUnitFrame("boss") then
         HandleFrame(_G.BossTargetFrameContainer, nil, "boss")
         for i = 1, MAX_BOSS_FRAMES do
             HandleFrame(_G["Boss" .. i .. "TargetFrame"], true, "boss")
@@ -320,14 +345,13 @@ local function GetBlizzardCastbarOwner()
 end
 
 UF.DisableBlizzardFrames = DisableBlizzardFrames
-UF.ShouldUseMSUFUnitFrames = ShouldUseMSUFUnitFrames
+UF.ShouldUseMSUFUnitFrames = ShouldHideBlizzardUnitFrames
 UF.ShouldUseMSUFUnitFrame = ShouldUseMSUFUnitFrame
+UF.ShouldHideBlizzardUnitFrame = ShouldHideBlizzardUnitFrame
 UF.ShouldUseMSUFCastbar = ShouldUseMSUFCastbar
 UF.ShouldUseBlizzardCastbar = ShouldUseBlizzardCastbar
 UF.ShouldHideCastbar = ShouldHideCastbar
-UF.ShouldUseBlizzardUnitFrame = function(unit)
-    return not ShouldUseMSUFUnitFrame(unit)
-end
+UF.ShouldUseBlizzardUnitFrame = ShouldUseBlizzardUnitFrame
 UF.SafeDisableMouse = SafeDisableMouse
 UF.ClaimBlizzardCastbarOwnership = ClaimBlizzardCastbarOwnership
 UF.GetBlizzardCastbarOwner = GetBlizzardCastbarOwner

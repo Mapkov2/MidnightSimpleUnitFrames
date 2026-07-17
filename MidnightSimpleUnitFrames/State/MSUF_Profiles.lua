@@ -4880,7 +4880,6 @@ local UUFGroup = {
 
 local function MSUF_ProfileIO_MakeUUFUnitVisible(dst)
     if type(dst) ~= "table" then return end
-    dst.useBlizzardFrame = false
     dst.showHP = true
     dst.showHealth = true
     dst.hpBarAlpha = tonumber(dst.hpBarAlpha) or 1
@@ -4914,6 +4913,7 @@ local function MSUF_ProfileIO_ConvertUUFUnit(unitKey, src, outProfile)
     outProfile[unitKey] = dst
     dst.enabled = src.Enabled == nil and defaults.enabled or src.Enabled ~= false
     dst.forceHideBlizzard = src.ForceHideBlizzard == nil and defaults.forceHide or src.ForceHideBlizzard == true
+    dst.useBlizzardFrame = dst.forceHideBlizzard == false
     MSUF_ProfileIO_MakeUUFUnitVisible(dst)
     MSUF_ProfileIO_ResetUUFText(dst)
 

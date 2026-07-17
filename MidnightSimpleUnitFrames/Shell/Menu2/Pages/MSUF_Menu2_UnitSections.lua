@@ -614,7 +614,7 @@ local function AttachBasicsHeaderStatus(sec, unit)
     return RefreshBasicsState
 end
 local function BuildBasics(ctx, builder, unit, label)
-    local sec = builder:CollapsibleSection("frame_basics", "Frame Basics", 170, false)
+    local sec = builder:CollapsibleSection("frame_basics", "Frame Basics", 202, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local gap = 24
     local colW = math.floor((sectionW - 28 - (gap * 2)) / 3)
@@ -643,8 +643,39 @@ local function BuildBasics(ctx, builder, unit, label)
         function() return ReadBool(unit, "smoothFill", true) end,
         function(v) SetBool(unit, "smoothFill", v, "MSUF2_SMOOTH_FILL", { preview = true }) end,
         SettingMeta(ctx, "basics.smooth_fill", unit, "smoothFill"))
+    local blizzard = W.SwitchAt(sec, "Force Blizzard frame on", x1, -76, math.max(196, colW + 24))
+    blizzard._msuf2UnitFrameGateAlwaysEnabled = true
+    M.BindBoolWidget(ctx, blizzard,
+        function() return ReadBool(unit, "useBlizzardFrame", false) end,
+        function(v)
+            if ReadBool(unit, "useBlizzardFrame", false) == (v == true) then return end
+            SetBool(unit, "useBlizzardFrame", v, "MSUF2_BLIZZARD_FRAME_OWNERSHIP", { preview = false })
+            local reloadLabel = (label or UnitTopLabel(unit)) .. " Blizzard frame ownership"
+            if type(_G.MSUF_ShowReloadRecommendedPopup) == "function" then
+                _G.MSUF_ShowReloadRecommendedPopup(reloadLabel)
+            elseif print then
+                print("|cffffd700MSUF:|r Changing Blizzard frame ownership requires a /reload.")
+            end
+        end,
+        SettingMeta(ctx, "basics.force_blizzard_frame", unit, "useBlizzardFrame"))
+    local blizzardHint = "Independent from MSUF Enable; /reload required."
+    if unit == "targettarget" then
+        blizzardHint = "Also keeps Blizzard Target visible; /reload required."
+    elseif unit == "focustarget" then
+        blizzardHint = "Also keeps Blizzard Focus visible; /reload required."
+    end
+    W.Text(sec, blizzardHint, x2, -80, math.max(190, sectionW - x2 - 14), T.colors.muted)
+    if M.AddTooltip then
+        local tooltip = "Keeps Blizzard's native frame active independently of the MSUF frame. Leave MSUF Enable on to show both, or turn MSUF Enable off to use only Blizzard. A UI reload is required."
+        if unit == "targettarget" then
+            tooltip = tooltip .. " Blizzard Target of Target is a child of Blizzard Target, so both native frames must remain active."
+        elseif unit == "focustarget" then
+            tooltip = tooltip .. " Blizzard Focus Target is a child of Blizzard Focus, so both native frames must remain active."
+        end
+        M.AddTooltip(blizzard, "Force Blizzard frame on", tooltip, { hook = true, owner = "ANCHOR_RIGHT" })
+    end
     local colorMode = W.Dropdown(sec, "Health Color Scheme", HealthColorModeOptions, math.min(270, math.max(220, colW * 2)))
-    UnitSectionShared.PlaceDropdown(sec, colorMode, x1, -84, math.min(270, math.max(220, colW * 2)))
+    UnitSectionShared.PlaceDropdown(sec, colorMode, x1, -116, math.min(270, math.max(220, colW * 2)))
     M.BindDropdownWidget(ctx, colorMode,
         function()
             return NormalizeHealthColorMode(GetConf(unit).healthColorMode) or HEALTH_COLOR_GLOBAL
@@ -659,13 +690,13 @@ local function BuildBasics(ctx, builder, unit, label)
         M.AddTooltip(colorMode, "Health Color Scheme", "Use Global follows the Unitframe Global Coloring mode from Colors. Other choices override only this frame.", { hook = true, owner = "ANCHOR_RIGHT" })
     end
     if W.AttachUnitEditFocus then
-        for _, control in ipairs({ enable, reverse, smooth, colorMode }) do W.AttachUnitEditFocus(control, unit, "frame") end
+        for _, control in ipairs({ enable, reverse, smooth, blizzard, colorMode }) do W.AttachUnitEditFocus(control, unit, "frame") end
     end
     local sectionEntry = sec and sec._msuf2CollapsibleEntry
     local RefreshBasicsState = AttachBasicsHeaderStatus(sec, unit) or function() end
     if sectionEntry then sectionEntry._msuf2RefreshState = RefreshBasicsState end
     local unitLabel = label or UnitTopLabel(unit)
-    local notice, _, enableNow = UnitSectionShared.CreateSectionNotice(sec, -132, "Enable", 92)
+    local notice, _, enableNow = UnitSectionShared.CreateSectionNotice(sec, -164, "Enable", 92)
     local enableShortcutMeta
     if unit ~= "focustarget" then
         enableShortcutMeta = {
@@ -695,6 +726,7 @@ local function BuildBasics(ctx, builder, unit, label)
         local ownOn = ReadBool(unit, "enabled", true)
         local parentOff = unit == "focustarget" and not ReadBool("focus", "enabled", true)
         SetControlEnabled(enable, true)
+        SetControlEnabled(blizzard, true)
         SetControlsEnabled(basicsDependentControls, ownOn)
         if parentOff then
             notice:SetMessage("Focus Target follows the Focus frame. Enable Focus to show it.", "warning")

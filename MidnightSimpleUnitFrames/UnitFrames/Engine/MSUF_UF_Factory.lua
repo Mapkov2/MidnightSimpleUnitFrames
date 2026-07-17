@@ -517,7 +517,6 @@ end
 
 local function SpawnFrame(unit)
   if not (UF.IsManagedUnit and UF.IsManagedUnit(unit)) then return nil end
-  if UF.ShouldUseMSUFUnitFrame and UF.ShouldUseMSUFUnitFrame(unit) == false then return nil end
 
   local name = UF.FrameName(unit)
   local parent = ResolvePetBattleFrameHider()
@@ -591,15 +590,6 @@ end
 
 local function ApplyOne(unit, config, applyMask)
   if not (UF.IsManagedUnit and UF.IsManagedUnit(unit)) then return false end
-  if UF.ShouldUseMSUFUnitFrame and UF.ShouldUseMSUFUnitFrame(unit) == false then
-    local frame = UF.frames[unit]
-    if frame then
-      DisableFrame(frame)
-      if UF.DetachFrame then UF.DetachFrame(frame) end
-      frame._msufDisabledByConfig = true
-    end
-    return true
-  end
   local frame = UF.frames[unit] or SpawnFrame(unit)
   if not frame then return false end
   return ApplyFrame(frame, config.GetSpec(unit), applyMask)
