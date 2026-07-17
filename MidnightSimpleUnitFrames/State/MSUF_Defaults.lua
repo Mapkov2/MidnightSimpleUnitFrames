@@ -3616,6 +3616,11 @@ local function fill(key, defaults)
         if u.enabled == nil then
             u.enabled = true
         end
+        -- Blizzard ownership is independent from the MSUF enabled state:
+        -- both frames may coexist, or MSUF can be disabled while Blizzard stays.
+        if u.useBlizzardFrame == nil then
+            u.useBlizzardFrame = false
+        end
         --- Per-unitframe: smooth health fill animation (matches Group Frames default).
         if u.smoothFill == nil then
             u.smoothFill = true
