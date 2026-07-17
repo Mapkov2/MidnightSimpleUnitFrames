@@ -611,23 +611,35 @@ local function RefreshBorderTestModes()
     if _G.MSUF_AggroBorderTestMode and type(_G.MSUF_SetAggroBorderTestMode) == "function" then _G.MSUF_SetAggroBorderTestMode(true, scope) end
     if _G.MSUF_PurgeBorderTestMode and type(_G.MSUF_SetPurgeBorderTestMode) == "function" then _G.MSUF_SetPurgeBorderTestMode(true, scope) end
 end
-local function SetAbsorbTextureTest(enabled)
-    if enabled and (_G.MSUF_InCombat or (_G.InCombatLockdown and _G.InCombatLockdown())) then enabled = false end
+local function CurrentAbsorbTestScope()
     local scope = CurrentBarsScope()
-    if scope == "gf_party" then scope = "party" elseif scope == "gf_raid" or scope == "gf_mythicraid" then scope = "raid" end
+    if scope == "gf_party" then return "party" end
+    if scope == "gf_raid" or scope == "gf_mythicraid" then return "raid" end
+    return scope
+end
+local function IsAbsorbTextureTestEnabled(category)
+    local scope = CurrentAbsorbTestScope()
+    if type(_G.MSUF_ShouldShowAbsorbTextureTest) == "function" then
+        return _G.MSUF_ShouldShowAbsorbTextureTest(nil, scope, category) == true
+    end
+    return _G.MSUF_AbsorbTextureTestMode == true
+end
+local function SetAbsorbTextureTest(enabled, category)
+    if enabled and (_G.MSUF_InCombat or (_G.InCombatLockdown and _G.InCombatLockdown())) then enabled = false end
+    local scope = CurrentAbsorbTestScope()
     if type(_G.MSUF_SetAbsorbTextureTestMode) == "function" then
-        _G.MSUF_SetAbsorbTextureTestMode(enabled and true or false, scope)
+        _G.MSUF_SetAbsorbTextureTestMode(enabled and true or false, scope, category)
     else
         ExportPublic("MSUF_AbsorbTextureTestMode", enabled and true or false)
         ExportPublic("MSUF_AbsorbTextureTestScope", enabled and scope or nil)
     end
     if type(_G.MSUF_RefreshPredictionBars) == "function" then
-        _G.MSUF_RefreshPredictionBars(scope, "MSUF2_ABSORB_TEST")
+        _G.MSUF_RefreshPredictionBars(scope, "MSUF2_PREDICTION_TEST")
     end
     if type(_G.MSUF_Bars_RefreshAbsorbTextureTestPreview) == "function" then
         _G.MSUF_Bars_RefreshAbsorbTextureTestPreview()
     else
-        ApplyBars("MSUF2_ABSORB_TEST")
+        ApplyBars("MSUF2_PREDICTION_TEST")
     end
 end
 local function ClearAbsorbTextureTest()
@@ -682,6 +694,7 @@ M.Assign(GlobalPage, {
     NormalizeHpMode = NormalizeHpMode, NormalizePowerMode = NormalizePowerMode,
     PriorityOrder = PriorityOrder, PriorityColor = PriorityColor, SetPriorityOrder = SetPriorityOrder,
     RefreshBorderTestModes = RefreshBorderTestModes, SetAbsorbTextureTest = SetAbsorbTextureTest,
+    IsAbsorbTextureTestEnabled = IsAbsorbTextureTestEnabled,
     ClearAbsorbTextureTest = ClearAbsorbTextureTest, SetControlEnabled = SetControlEnabled, SetControlsEnabled = SetControlsEnabled,
     ApplyFonts = ApplyFonts, ApplyBars = ApplyBars, ApplyCastbars = ApplyCastbars,
 })

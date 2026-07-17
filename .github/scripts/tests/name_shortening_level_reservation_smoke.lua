@@ -112,4 +112,77 @@ Check(withoutLevel == 70, "10-character baseline width changed: " .. tostring(wi
 Check(withLevel == withoutLevel,
     "NAMERIGHT level reduced 10-character name width: " .. tostring(withLevel))
 
-print("PASS name shortening level reservation: character cap stays independent and secret-safe")
+local function Read(path)
+    local handle = assert(io.open(path, "r"))
+    local source = handle:read("*a")
+    handle:close()
+    return source
+end
+
+local configSource = Read(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Config.lua")
+Check(not configSource:find('if unit == "player" and not %(conf', 1),
+    "runtime config still suppresses Shared name shortening for Player")
+
+local fontsSource = Read(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GlobalFonts.lua")
+Check(fontsSource:find('{ "player", "target", "targettarget", "focustarget", "focus", "pet", "boss" }', 1, true),
+    "Shared name-shortening apply does not include Player")
+Check(not fontsSource:find('nameScope ~= "player"', 1, true),
+    "Player scope still hides the Name Shortening controls")
+Check(not fontsSource:find("except Player", 1, true),
+    "Name Shortening UI still describes Player as excluded")
+
+local modelNamespace = {
+    MSUF2 = {
+        KeySetFromWords = function(words)
+            local out = {}
+            for word in words:gmatch("%S+") do out[word] = true end
+            return out
+        end,
+        WordList = function(words)
+            local out = {}
+            for word in words:gmatch("%S+") do out[#out + 1] = word end
+            return unpack(out)
+        end,
+        AssignNamedValues = function(target, names, ...)
+            local index = 0
+            for name in names:gmatch("%S+") do
+                index = index + 1
+                target[name] = select(index, ...)
+            end
+        end,
+    },
+}
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Model.lua"))(
+    "MidnightSimpleUnitFrames", modelNamespace)
+local shortenPreviewName = assert(modelNamespace.UFPreview and modelNamespace.UFPreview.Model
+    and modelNamespace.UFPreview.Model.ShortenPreviewName, "preview name-shortening resolver missing")
+
+local oldDB = _G.MSUF_DB
+_G.MSUF_DB = {
+    shortenNames = true,
+    general = {
+        shortenNameMaxChars = 5,
+        shortenNameClipSide = "RIGHT",
+        shortenNameShowDots = true,
+    },
+    player = { fontOverride = false },
+}
+Check(shortenPreviewName("MarcoLong", "player", { nameTextAnchor = "LEFT" }) == "Marco...",
+    "Player preview does not inherit Shared name shortening")
+
+_G.MSUF_DB.player = { fontOverride = true, shortenNames = false }
+Check(shortenPreviewName("MarcoLong", "player", { nameTextAnchor = "LEFT" }) == "MarcoLong",
+    "Player preview ignores a disabled scoped override")
+
+_G.MSUF_DB.player = {
+    fontOverride = true,
+    shortenNames = true,
+    shortenNameMaxChars = 4,
+    shortenNameClipSide = "LEFT",
+    shortenNameShowDots = false,
+}
+Check(shortenPreviewName("MarcoLong", "player", { nameTextAnchor = "LEFT" }) == "Long",
+    "Player preview does not apply its scoped shortening values")
+_G.MSUF_DB = oldDB
+
+print("PASS name shortening: Player scope, preview, character cap, and secret-safe layout")

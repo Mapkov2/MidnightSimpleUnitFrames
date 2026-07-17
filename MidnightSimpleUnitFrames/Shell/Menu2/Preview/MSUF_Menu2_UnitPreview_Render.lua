@@ -12,6 +12,18 @@ local F = MenuState.Fallbacks or {}
 local PreviewHelpers = MenuState.PreviewHelpers or {}
 local CPPreview = MenuState.ClassPowerPreview or {}
 local Layers = MSUF.UF and MSUF.UF.Layers or {}
+local function ResolvePreviewBodyOffsets(centerX, centerY, scale, manualZoom, frozenX, frozenY)
+    if frozenX ~= nil and frozenY ~= nil then return frozenX, frozenY end
+    -- Fit mode centers the complete configured footprint. At a manual zoom,
+    -- keep the unit body as the stable focal point instead: valid auxiliary
+    -- layouts can sit hundreds of pixels away and must not exile the body from
+    -- the canvas. Explicit canvas pan is applied separately below.
+    if manualZoom ~= nil then return 0, 0 end
+    scale = tonumber(scale) or 1
+    return -math.floor(((tonumber(centerX) or 0) * scale) + 0.5),
+        -math.floor(((tonumber(centerY) or 0) * scale) + 0.5)
+end
+Render.ResolvePreviewBodyOffsets = ResolvePreviewBodyOffsets
 local function CastbarPreviewDetailPrefix(unitKey)
     if unitKey == "player" then return "castbarPlayer" end
     if unitKey == "target" then return "castbarTarget" end
@@ -111,6 +123,21 @@ local function ResolvePreviewPowerColor(renderState, data, power)
         return renderState.ClassColor(data.class)
     end
     return renderState.PowerColor(data.powerToken)
+end
+
+local function ResolvePreviewHealthTextColor(renderState, runtimeText, conf, general, data, fr, fg, fb)
+    local mode = general.colorHealthTextByHealth
+    if conf.fontOverride == true and conf.colorHealthTextByHealth ~= nil then mode = conf.colorHealthTextByHealth end
+    local byHealth = runtimeText and runtimeText.healthColorByHealth == true
+        or (not runtimeText and (mode == true or mode == "HEALTH"))
+    local byClass = runtimeText and runtimeText.healthColorByClass == true
+        or (not runtimeText and mode == "CLASS")
+    if byClass then return renderState.ClassColor(data.class) end
+    if not byHealth then return fr, fg, fb end
+    local pct = tonumber(data.hp) or 1
+    if pct < 0 then pct = 0 elseif pct > 1 then pct = 1 end
+    if pct <= 0.5 then return 1, pct * 2, 0 end
+    return (1 - pct) * 2, 1, 0
 end
 local function PreviewLiveFrame(key)
     local uf = MSUF and MSUF.UF
@@ -872,8 +899,14 @@ function Preview.Refresh(box, reason)
             S(tonumber(statusCfg and statusCfg.y) or tonumber(conf[spec.y]) or tonumber(g[spec.y]) or spec.defaultY or 0)
     end
     local sw, sh, sp = S(w), S(h), S(pSize)
-    local mockOffsetX = -S(centerX)
-    local mockOffsetY = -S(centerY)
+    local mockOffsetX, mockOffsetY = ResolvePreviewBodyOffsets(
+        centerX,
+        centerY,
+        scale,
+        manualZoom,
+        tonumber(box._dragFrozenBaseOffsetX),
+        tonumber(box._dragFrozenBaseOffsetY)
+    )
     local panX, panY = tonumber(box._zoomPanX) or 0, tonumber(box._zoomPanY) or 0
     box._mockBaseOffsetX, box._mockBaseOffsetY = mockOffsetX, mockOffsetY
     box._detachedCastPreview = nil
@@ -934,7 +967,10 @@ function Preview.Refresh(box, reason)
     if not (runtimeSpec and runtimeSpec.prediction) then
         local enabled = g and g.healAbsorbEnabled
         if conf and conf.hlOverride == true and conf.healAbsorbEnabled ~= nil then enabled = conf.healAbsorbEnabled end
-        healAbsorbShown = absorbShown and enabled ~= false
+        healAbsorbShown = enabled ~= false
+        if _G.MSUF_ShouldShowAbsorbTextureTest and _G.MSUF_ShouldShowAbsorbTextureTest(nil, key, "healAbsorb") then
+            healAbsorbShown = true
+        end
     end
     local healPredFrac = ((healPredMode == 3) and min(0.14, max(0.02, 1 - hpFrac))) or 0.14
     if healPredShown then
@@ -1357,18 +1393,7 @@ function Preview.Refresh(box, reason)
     SetTextColorSet(fr, fg, fb, box._fontPreviewTextAlpha, mock.nameText, mock.raidGroupNameText)
     mock.totInlineSep:SetTextColor(0.72, 0.76, 0.84, box._fontPreviewTextAlpha)
     mock.totInlineText:SetTextColor(fr, fg, fb, box._fontPreviewTextAlpha)
-    local hpTextR, hpTextG, hpTextB = fr, fg, fb
-    local healthTextByHealth = g.colorHealthTextByHealth == true
-    if conf.fontOverride == true and conf.colorHealthTextByHealth ~= nil then healthTextByHealth = conf.colorHealthTextByHealth == true end
-    if healthTextByHealth then
-        local pct = tonumber(data.hp) or 1
-        if pct < 0 then pct = 0 elseif pct > 1 then pct = 1 end
-        if pct <= 0.5 then
-            hpTextR, hpTextG, hpTextB = 1, pct * 2, 0
-        else
-            hpTextR, hpTextG, hpTextB = (1 - pct) * 2, 1, 0
-        end
-    end
+    local hpTextR, hpTextG, hpTextB = ResolvePreviewHealthTextColor(R, runtimeText, conf, g, data, fr, fg, fb)
     SetTextColorSet(hpTextR, hpTextG, hpTextB, box._fontPreviewTextAlpha, mock.hpTextLeft, mock.hpTextCenter, mock.hpText, mock.hpTextPct)
     if g.colorPowerTextByType == true then
         local prt, pgt, pbt = R.PowerColor(data.powerToken)

@@ -32,6 +32,7 @@ local UNIT_DISPEL_TRIGGERS = VT("BORDER", "Use Dispel border detects", "BY_ME", 
 local UNIT_DISPEL_STYLES = VT("FULL", "Full Frame", "TOP", "Top Fade", "BOTTOM", "Bottom Fade",
     "LEFT", "Left Fade", "RIGHT", "Right Fade")
 local Call, DB, G, Bars, ReadG, ReadGBool, ReadB, NormalizeScopeKey, ScopeDBKeys, ScopeHasOverride, ScopeSetOverride, CurrentBarsScope, IsGFScope, BarScopeGet, BarScopeSet, BarScopeGetBars, BarScopeSetBars, GradientScopeGet, GradientScopeSet, GradientScopeHasExplicit, TextureValues, CurrentPowerBarScopeUnit, SmoothPowerGet, SmoothPowerSet, PriorityOrder, PriorityColor, RefreshBorderTestModes, SetAbsorbTextureTest, SetControlEnabled, SetControlsEnabled, ApplyBars, ControlMeta, RegisterControl = M.Pick(GP, [[Call DB G Bars ReadG ReadGBool ReadB NormalizeScopeKey ScopeDBKeys ScopeHasOverride ScopeSetOverride CurrentBarsScope IsGFScope BarScopeGet BarScopeSet BarScopeGetBars BarScopeSetBars GradientScopeGet GradientScopeSet GradientScopeHasExplicit TextureValues CurrentPowerBarScopeUnit SmoothPowerGet SmoothPowerSet PriorityOrder PriorityColor RefreshBorderTestModes SetAbsorbTextureTest SetControlEnabled SetControlsEnabled ApplyBars ControlMeta RegisterControl]])
+local IsAbsorbTextureTestEnabled = GP.IsAbsorbTextureTestEnabled or function() return _G.MSUF_AbsorbTextureTestMode == true end
 local BAR_SETTING_BY_PATH = {
     ["highlight.boss_target.mode"] = "general.bossTargetOutlineMode",
     ["rounded.roundedFramesEnabled"] = "bars.roundedFramesEnabled",
@@ -58,7 +59,27 @@ local BAR_DYNAMIC_SETTING_KEYS_BY_PATH = {
     ["absorb.healAbsorbBarOpacity"] = { "general.healAbsorbBarOpacity" },
     ["absorb.healAbsorbBarTexture"] = { "general.healAbsorbBarTexture" },
     ["absorb.healPredAnchorMode"] = { "general.healPredAnchorMode" },
-    ["absorb.heal_prediction.enabled"] = { "general.showSelfHealPrediction" },
+    ["absorb.heal_prediction.enabled"] = { "general.healPredEnabled", "general.showSelfHealPrediction" },
+    ["absorb.healPredEnabled"] = { "general.healPredEnabled", "general.showSelfHealPrediction" },
+    ["absorb.positive.enabled"] = { "general.enableAbsorbBar", "general.absorbTextMode" },
+    ["absorb.positive.anchor"] = { "general.absorbAnchorMode" },
+    ["absorb.positive.height"] = { "general.absorbBarHeight" },
+    ["absorb.positive.offset_y"] = { "general.absorbBarOffsetY" },
+    ["absorb.positive.texture"] = { "general.absorbBarTexture" },
+    ["absorb.positive.opacity"] = { "general.absorbBarOpacity" },
+    ["absorb.positive.over_absorb"] = { "general.overAbsorbOverlay" },
+    ["absorb.positive.full_health_stripe"] = { "general.fullHealthAbsorbStripe" },
+    ["absorb.negative.enabled"] = { "general.healAbsorbEnabled" },
+    ["absorb.negative.anchor"] = { "general.healAbsorbAnchorMode" },
+    ["absorb.negative.height"] = { "general.healAbsorbBarHeight" },
+    ["absorb.negative.offset_y"] = { "general.healAbsorbBarOffsetY" },
+    ["absorb.negative.texture"] = { "general.healAbsorbBarTexture" },
+    ["absorb.negative.opacity"] = { "general.healAbsorbBarOpacity" },
+    ["absorb.heal_prediction.anchor"] = { "general.healPredAnchorMode" },
+    ["absorb.heal_prediction.height"] = { "general.healPredictionBarHeight" },
+    ["absorb.heal_prediction.offset_y"] = { "general.healPredictionBarOffsetY" },
+    ["absorb.heal_prediction.texture"] = { "general.healPredictionBarTexture" },
+    ["absorb.heal_prediction.opacity"] = { "general.healPredictionBarOpacity" },
     ["absorb.over_absorb_overlay"] = { "general.overAbsorbOverlay" },
     ["absorb.full_health_stripe"] = { "general.fullHealthAbsorbStripe" },
     ["outline.thickness"] = { "bars.barOutlineThickness" },
@@ -94,6 +115,26 @@ local BAR_DYNAMIC_SETTING_SUFFIX_BY_PATH = {
     ["absorb.healAbsorbBarTexture"] = "healAbsorbBarTexture",
     ["absorb.healPredAnchorMode"] = "healPredAnchorMode",
     ["absorb.heal_prediction.enabled"] = "healPredEnabled",
+    ["absorb.healPredEnabled"] = "healPredEnabled",
+    ["absorb.positive.enabled"] = "enableAbsorbBar",
+    ["absorb.positive.anchor"] = "absorbAnchorMode",
+    ["absorb.positive.height"] = "absorbBarHeight",
+    ["absorb.positive.offset_y"] = "absorbBarOffsetY",
+    ["absorb.positive.texture"] = "absorbBarTexture",
+    ["absorb.positive.opacity"] = "absorbBarOpacity",
+    ["absorb.positive.over_absorb"] = "overAbsorbOverlay",
+    ["absorb.positive.full_health_stripe"] = "fullHealthAbsorbStripe",
+    ["absorb.negative.enabled"] = "healAbsorbEnabled",
+    ["absorb.negative.anchor"] = "healAbsorbAnchorMode",
+    ["absorb.negative.height"] = "healAbsorbBarHeight",
+    ["absorb.negative.offset_y"] = "healAbsorbBarOffsetY",
+    ["absorb.negative.texture"] = "healAbsorbBarTexture",
+    ["absorb.negative.opacity"] = "healAbsorbBarOpacity",
+    ["absorb.heal_prediction.anchor"] = "healPredAnchorMode",
+    ["absorb.heal_prediction.height"] = "healPredictionBarHeight",
+    ["absorb.heal_prediction.offset_y"] = "healPredictionBarOffsetY",
+    ["absorb.heal_prediction.texture"] = "healPredictionBarTexture",
+    ["absorb.heal_prediction.opacity"] = "healPredictionBarOpacity",
     ["absorb.over_absorb_overlay"] = "overAbsorbOverlay",
     ["absorb.full_health_stripe"] = "fullHealthAbsorbStripe",
     ["outline.thickness"] = "barOutlineThickness",
@@ -111,6 +152,12 @@ local BAR_DYNAMIC_SETTING_SUFFIX_BY_PATH = {
     ["unit_dispel_overlay.unitDispelOverlayStyle"] = "unitDispelOverlayStyle",
     ["unit_dispel_overlay.unitDispelOverlayOnHealth"] = "unitDispelOverlayOnHealth",
     ["unit_dispel_overlay.unitDispelOverlayAlpha"] = "unitDispelOverlayAlpha",
+}
+local BAR_DYNAMIC_SETTING_PATTERNS_BY_PATH = {
+    ["absorb.positive.enabled"] = {
+        "^barScope%.[%w_]+%.enableAbsorbBar$",
+        "^barScope%.[%w_]+%.absorbTextMode$",
+    },
 }
 local function IsDynamicBarPath(path)
     path = tostring(path or "")
@@ -138,6 +185,8 @@ local function Meta(path, classification, exact)
         resolved.assistantDispositionReason = resolved.assistantDispositionReason
             or "The exact DB and Registry target is selected by the explicit Bars scope; Shared, unit, Party, and Raid scopes own distinct setting keys."
         resolved.assistantSettingKeys = resolved.assistantSettingKeys or BAR_DYNAMIC_SETTING_KEYS_BY_PATH[path]
+        resolved.assistantSettingKeyPatterns = resolved.assistantSettingKeyPatterns
+            or BAR_DYNAMIC_SETTING_PATTERNS_BY_PATH[path]
         local suffix = BAR_DYNAMIC_SETTING_SUFFIX_BY_PATH[path]
         if suffix and not resolved.assistantSettingKeyPatterns then
             resolved.assistantSettingKeyPatterns = { "^barScope%.[%w_]+%." .. suffix .. "$" }
@@ -585,7 +634,6 @@ local function BuildScopeSection(ctx, b)
         getValue = function() return CurrentBarsScope() end,
         setValue = function(v)
             G().hpPowerTextSelectedKey = NormalizeScopeKey(v)
-            if _G.MSUF_AbsorbTextureTestMode then SetAbsorbTextureTest(true) end
             RefreshBorderTestModes()
             RefreshBarsPage("bars-scope-change")
         end,
@@ -772,7 +820,7 @@ local function BuildTextureSection(ctx, b)
     end))
 end
 
-local function BuildAbsorbSection(ctx, b)
+local function BuildAbsorbSectionLegacy(ctx, b)
     local absorb = b:CollapsibleSection("bars_absorb", "Absorb Display", 460, true)
     local absorbW = absorb._msuf2Width or ctx.width or 720
     local absorbLeftX = 30
@@ -956,6 +1004,258 @@ local function BuildAbsorbSection(ctx, b)
         SetControlEnabled(healPredToggle, groupScope and scopedActive or sharedActive)
         SetControlEnabled(absorbControls.healAnchor, scopedActive and healPredOn)
         if absorbControls.anchor.RefreshPreview then absorbControls.anchor:RefreshPreview() end
+    end))
+end
+
+local function BuildAbsorbSection(ctx, b)
+    local section = b:CollapsibleSection("bars_absorb", "Absorb Display", 414, true)
+    local sectionW = section._msuf2Width or ctx.width or 720
+    local leftX = 30
+    local rightX = max(430, min(560, floor(sectionW * 0.52)))
+    local leftW = max(300, min(380, rightX - leftX - 58))
+    local rightW = max(300, min(420, sectionW - rightX - 42))
+    local tabFrames = {}
+    local tabValues = VT(
+        "positive", "Absorb (positive)",
+        "negative", "Absorb (negative)",
+        "heal", "Heal Prediction")
+    M.globalBarsAbsorbTabSelection = M.globalBarsAbsorbTabSelection or {}
+    local function CurrentTab()
+        local key = M.globalBarsAbsorbTabSelection[CurrentBarsScope()] or "positive"
+        if key ~= "positive" and key ~= "negative" and key ~= "heal" then key = "positive" end
+        return key
+    end
+    local positive, negative, heal = M.UnitSectionsShared.MakeTabFrames(
+        section, -64, sectionW, tabFrames, "positive", "negative", "heal")
+    local tabs = W.SegmentTabs(ctx, section, {
+        label = "", values = tabValues, width = min(660, sectionW - 48),
+        frames = tabFrames, defaultTab = "positive", get = CurrentTab,
+        set = function(value) M.globalBarsAbsorbTabSelection[CurrentBarsScope()] = value or "positive" end,
+        x = 20, y = -12,
+    })
+    if tabs._msuf2Title then tabs._msuf2Title:Hide() end
+    RegisterControl(tabs, Meta("absorb.workspace_tab", "ephemeral"), "Absorb area", "segment")
+
+    local SyncControls = M.RefreshProxy()
+    local function Apply(reason)
+        ApplyBars(reason)
+        SyncControls()
+    end
+    local function TextureDefault(key)
+        return function() return ReadG(key, "") end
+    end
+    local function ResolveDefault(value)
+        return type(value) == "function" and value() or value
+    end
+    local function BindDropdown(parent, label, values, key, defaultValue, reason, x, y, width, numeric, path)
+        local control = W.Dropdown(parent, label, values, width)
+        M.BindDropdownWidget(ctx, control,
+            function()
+                local fallback = ResolveDefault(defaultValue)
+                local value = BarScopeGet(key, fallback)
+                return numeric and (tonumber(value) or fallback) or value
+            end,
+            function(value)
+                local fallback = ResolveDefault(defaultValue)
+                BarScopeSet(key, numeric and (tonumber(value) or fallback) or (value or fallback), reason, true)
+                Apply(reason)
+            end,
+            Meta(path or ("absorb." .. key)))
+        W.MoveWidget(control, parent, x, y, width, "LEFT")
+        return control
+    end
+    local function BindSlider(parent, label, minValue, maxValue, step, key, defaultValue, reason, x, y, width, path)
+        local control = W.Slider(parent, label, minValue, maxValue, step, width)
+        M.BindNumberWidget(ctx, control,
+            function() return tonumber(BarScopeGet(key, defaultValue)) or defaultValue end,
+            function(value)
+                BarScopeSet(key, tonumber(value) or defaultValue, reason, true)
+                Apply(reason)
+            end,
+            defaultValue, Meta(path or ("absorb." .. key)))
+        W.MoveWidget(control, parent, x, y, width, "LEFT")
+        return control
+    end
+    local function BindToggle(parent, label, key, defaultValue, reason, x, y, width, path, onSet)
+        local control = W.ToggleAt(parent, label, x, y, width)
+        M.BindBoolWidget(ctx, control,
+            function() return BarScopeGet(key, defaultValue) == true end,
+            function(value)
+                value = value and true or false
+                BarScopeSet(key, value, reason, true)
+                if onSet then onSet(value) end
+                Apply(reason)
+            end,
+            Meta(path or ("absorb." .. key)))
+        return control
+    end
+    local function BindTest(parent, category, x, y, width, path)
+        local control = W.ToggleAt(parent, "Test prediction bars", x, y, width)
+        M.BindBoolWidget(ctx, control,
+            function() return IsAbsorbTextureTestEnabled(category) == true end,
+            function(value) SetAbsorbTextureTest(value and true or false, category) end,
+            Meta(path, "ephemeral"))
+        return control
+    end
+    local function ResolveBarPreviewTexture(key, fallback)
+        key = type(key) == "string" and key ~= "" and key or fallback
+        local resolve = _G.MSUF_ResolveStatusbarTextureKey
+        if type(resolve) == "function" then
+            local texture = resolve(key)
+            if type(texture) == "string" and texture ~= "" then return texture end
+        end
+        return "Interface\\Buttons\\WHITE8X8"
+    end
+    local function AnchorPreview(category)
+        return function(item)
+            local foregroundKey = BarTextureForScope()
+            local backgroundKey = BarBackgroundTextureForScope()
+            local mode = tonumber(item and item.value) or 3
+            local textureKey, opacity, color, showAbsorbEdgeGlow
+            if category == "negative" then
+                textureKey = BarScopeGet("healAbsorbBarTexture", ReadG("healAbsorbBarTexture", ""))
+                opacity = tonumber(BarScopeGet("healAbsorbBarOpacity", ReadG("healAbsorbBarOpacity", 1))) or 1
+                color = {
+                    tonumber(ReadG("healAbsorbBarColorR", 0.70)) or 0.70,
+                    tonumber(ReadG("healAbsorbBarColorG", 0)) or 0,
+                    tonumber(ReadG("healAbsorbBarColorB", 0)) or 0,
+                    max(0, min(1, opacity)),
+                }
+            elseif category == "heal" then
+                textureKey = BarScopeGet("healPredictionBarTexture", ReadG("healPredictionBarTexture", ""))
+                opacity = tonumber(BarScopeGet("healPredictionBarOpacity", ReadG("healPredictionColorA", 0.45))) or 0.45
+                color = {
+                    tonumber(ReadG("healPredictionColorR", 0)) or 0,
+                    tonumber(ReadG("healPredictionColorG", 1)) or 1,
+                    tonumber(ReadG("healPredictionColorB", 0)) or 0,
+                    max(0, min(1, opacity)),
+                }
+            else
+                textureKey = BarScopeGet("absorbBarTexture", ReadG("absorbBarTexture", ""))
+                opacity = tonumber(BarScopeGet("absorbBarOpacity", ReadG("absorbBarOpacity", 0.75))) or 0.75
+                color = {
+                    tonumber(ReadG("absorbBarColorR", 1)) or 1,
+                    tonumber(ReadG("absorbBarColorG", 1)) or 1,
+                    tonumber(ReadG("absorbBarColorB", 1)) or 1,
+                    max(0, min(1, opacity)),
+                }
+                showAbsorbEdgeGlow = BarScopeGet("fullHealthAbsorbStripe", ReadGBool("fullHealthAbsorbStripe", false)) == true
+            end
+            return {
+                mode = mode,
+                category = category,
+                dualDirection = true,
+                followInsideHealth = category == "negative",
+                showAbsorbEdgeGlow = showAbsorbEdgeGlow,
+                healthFraction = mode == 4 and 0.84 or 0.68,
+                overlayFraction = category == "negative" and 0.16 or 0.22,
+                healthTexture = ResolveBarPreviewTexture(foregroundKey, "Blizzard"),
+                backgroundTexture = ResolveBarPreviewTexture(backgroundKey, foregroundKey),
+                overlayTexture = ResolveBarPreviewTexture(textureKey, foregroundKey),
+                healthColor = { 0.12, 0.62, 0.25, 1 },
+                backgroundColor = { 0.025, 0.075, 0.045, 0.92 },
+                overlayColor = color,
+            }
+        end
+    end
+    local positivePreview = AnchorPreview("positive")
+    local negativePreview = AnchorPreview("negative")
+    local healPreview = AnchorPreview("heal")
+    local anchorValues = {
+        { value = 1, text = "Anchor to left side", previewKind = "barOverlay", barPreview = positivePreview },
+        { value = 2, text = "Anchor to right side", previewKind = "barOverlay", barPreview = positivePreview },
+        { value = 3, text = "Follow HP bar", previewKind = "barOverlay", barPreview = positivePreview },
+        { value = 4, text = "Follow HP bar (overflow)", previewKind = "barOverlay", barPreview = positivePreview },
+        { value = 5, text = "Reverse from max", previewKind = "barOverlay", barPreview = positivePreview },
+    }
+    local negativeAnchorValues = {
+        { value = 1, text = "Anchor to left side", previewKind = "barOverlay", barPreview = negativePreview },
+        { value = 2, text = "Anchor to right side", previewKind = "barOverlay", barPreview = negativePreview },
+        { value = 3, text = "Follow HP bar", previewKind = "barOverlay", barPreview = negativePreview },
+        { value = 5, text = "Reverse from max", previewKind = "barOverlay", barPreview = negativePreview },
+    }
+    local healAnchorValues = {
+        { value = 1, text = "Anchor to left side", previewKind = "barOverlay", barPreview = healPreview },
+        { value = 2, text = "Anchor to right side", previewKind = "barOverlay", barPreview = healPreview },
+        { value = 3, text = "Follow HP bar", previewKind = "barOverlay", barPreview = healPreview },
+        { value = 4, text = "Follow HP bar (overflow)", previewKind = "barOverlay", barPreview = healPreview },
+        { value = 5, text = "Reverse from max", previewKind = "barOverlay", barPreview = healPreview },
+    }
+
+    local positiveEnabled = BindToggle(positive, "Show positive absorbs", "enableAbsorbBar", true,
+        "MSUF2_ABSORB_ENABLED", leftX, -10, leftW, "absorb.positive.enabled", function(value)
+            BarScopeSet("absorbTextMode", value and 2 or 1, "MSUF2_ABSORB_ENABLED", true)
+        end)
+    local positiveAnchor = BindDropdown(positive, "Anchor", anchorValues, "absorbAnchorMode", 2,
+        "MSUF2_ABSORB_ANCHOR", leftX, -64, leftW, true, "absorb.positive.anchor")
+    local positiveHeight = BindSlider(positive, "Bar height (0 = full)", 0, 100, 1, "absorbBarHeight", 0,
+        "MSUF2_ABSORB_HEIGHT", leftX, -118, leftW, "absorb.positive.height")
+    local positiveOffset = BindSlider(positive, "Vertical offset", -100, 100, 1, "absorbBarOffsetY", 0,
+        "MSUF2_ABSORB_OFFSET", leftX, -182, leftW, "absorb.positive.offset_y")
+    local positiveTexture = BindDropdown(positive, "Texture", function() return TextureValues("Use foreground texture") end,
+        "absorbBarTexture", TextureDefault("absorbBarTexture"), "MSUF2_ABSORB_TEXTURE",
+        rightX, -10, rightW, false, "absorb.positive.texture")
+    local positiveOpacity = BindSlider(positive, "Opacity", 0, 1, 0.05, "absorbBarOpacity", 0.75,
+        "MSUF2_ABSORB_OPACITY", rightX, -64, rightW, "absorb.positive.opacity")
+    local positiveTest = BindTest(positive, "absorb", rightX, -128, rightW, "absorb.positive.preview.test")
+    local overAbsorb = BindToggle(positive, "Over-absorb overlay", "overAbsorbOverlay", false,
+        "MSUF2_OVER_ABSORB_OVERLAY", rightX, -182, rightW, "absorb.positive.over_absorb")
+    local fullStripe = BindToggle(positive, "Full-health absorb stripe", "fullHealthAbsorbStripe", false,
+        "MSUF2_FULL_HEALTH_ABSORB_STRIPE", rightX, -236, rightW, "absorb.positive.full_health_stripe")
+
+    local negativeEnabled = BindToggle(negative, "Show negative heal absorbs", "healAbsorbEnabled", true,
+        "MSUF2_HEAL_ABSORB_ENABLED", leftX, -10, leftW, "absorb.negative.enabled")
+    local negativeAnchor = BindDropdown(negative, "Anchor", negativeAnchorValues, "healAbsorbAnchorMode", 3,
+        "MSUF2_HEAL_ABSORB_ANCHOR", leftX, -64, leftW, true, "absorb.negative.anchor")
+    local negativeHeight = BindSlider(negative, "Bar height (0 = full)", 0, 100, 1, "healAbsorbBarHeight", 0,
+        "MSUF2_HEAL_ABSORB_HEIGHT", leftX, -118, leftW, "absorb.negative.height")
+    local negativeOffset = BindSlider(negative, "Vertical offset", -100, 100, 1, "healAbsorbBarOffsetY", 0,
+        "MSUF2_HEAL_ABSORB_OFFSET", leftX, -182, leftW, "absorb.negative.offset_y")
+    local negativeTexture = BindDropdown(negative, "Texture", function() return TextureValues("Use foreground texture") end,
+        "healAbsorbBarTexture", TextureDefault("healAbsorbBarTexture"), "MSUF2_HEAL_ABSORB_TEXTURE",
+        rightX, -10, rightW, false, "absorb.negative.texture")
+    local negativeOpacity = BindSlider(negative, "Opacity", 0, 1, 0.05, "healAbsorbBarOpacity", 1,
+        "MSUF2_HEAL_ABSORB_OPACITY", rightX, -64, rightW, "absorb.negative.opacity")
+    local negativeTest = BindTest(negative, "healAbsorb", rightX, -128, rightW, "absorb.negative.preview.test")
+
+    local healEnabled = BindToggle(heal, "Show heal prediction", "healPredEnabled",
+        ReadGBool("showSelfHealPrediction", false), "MSUF2_HEAL_PRED_ENABLED", leftX, -10, leftW,
+        "absorb.heal_prediction.enabled", function(value)
+            if SharedScope() then
+                G().showSelfHealPrediction = value
+                Call("MSUF_RefreshSelfHealPredUnitEvent")
+            end
+        end)
+    local healAnchor = BindDropdown(heal, "Anchor", healAnchorValues, "healPredAnchorMode", 3,
+        "MSUF2_HEALPRED_ANCHOR", leftX, -64, leftW, true, "absorb.heal_prediction.anchor")
+    local healHeight = BindSlider(heal, "Bar height (0 = full)", 0, 100, 1, "healPredictionBarHeight", 0,
+        "MSUF2_HEALPRED_HEIGHT", leftX, -118, leftW, "absorb.heal_prediction.height")
+    local healOffset = BindSlider(heal, "Vertical offset", -100, 100, 1, "healPredictionBarOffsetY", 0,
+        "MSUF2_HEALPRED_OFFSET", leftX, -182, leftW, "absorb.heal_prediction.offset_y")
+    local healTexture = BindDropdown(heal, "Texture", function() return TextureValues("Use foreground texture") end,
+        "healPredictionBarTexture", "", "MSUF2_HEALPRED_TEXTURE", rightX, -10, rightW, false,
+        "absorb.heal_prediction.texture")
+    local healOpacity = BindSlider(heal, "Opacity", 0, 1, 0.05, "healPredictionBarOpacity", 0.45,
+        "MSUF2_HEALPRED_OPACITY", rightX, -64, rightW, "absorb.heal_prediction.opacity")
+    local healTest = BindTest(heal, "heal", rightX, -128, rightW, "absorb.heal_prediction.preview.test")
+
+    local positiveOptions = { positiveAnchor, positiveHeight, positiveOffset, positiveTexture, positiveOpacity, overAbsorb, fullStripe }
+    local negativeOptions = { negativeAnchor, negativeHeight, negativeOffset, negativeTexture, negativeOpacity }
+    local healOptions = { healAnchor, healHeight, healOffset, healTexture, healOpacity }
+    M.TrackRefresh(ctx, SyncControls(function()
+        local scopedActive = ScopedControls()
+        SetControlEnabled(positiveEnabled, scopedActive)
+        SetControlEnabled(negativeEnabled, scopedActive)
+        SetControlEnabled(healEnabled, scopedActive)
+        SetControlsEnabled(positiveOptions, scopedActive and BarScopeGet("enableAbsorbBar", true) ~= false)
+        SetControlsEnabled(negativeOptions, scopedActive and BarScopeGet("healAbsorbEnabled", true) ~= false)
+        SetControlsEnabled(healOptions, scopedActive and BarScopeGet("healPredEnabled", ReadGBool("showSelfHealPrediction", false)) == true)
+        SetControlEnabled(positiveTest, true)
+        SetControlEnabled(negativeTest, true)
+        SetControlEnabled(healTest, true)
+        if positiveAnchor.RefreshPreview then positiveAnchor:RefreshPreview() end
+        if negativeAnchor.RefreshPreview then negativeAnchor:RefreshPreview() end
+        if healAnchor.RefreshPreview then healAnchor:RefreshPreview() end
     end))
 end
 

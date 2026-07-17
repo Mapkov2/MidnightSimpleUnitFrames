@@ -188,6 +188,7 @@ end
 local function HealthColorValues()
     return {
         { value = "DEFAULT", text = "Default (Font Color)", swatchColor = ConfiguredFontColorPreview },
+        { value = "CLASS", text = "Class Color", swatchColor = PlayerClassColorPreview },
         { value = "HEALTH", text = "Health Gradient", swatchColor = CurrentHealthGradientPreview },
     }
 end
@@ -254,7 +255,7 @@ local function ApplyNameShortening(reason)
     local scope = CurrentFontScope()
     if IsGFScope(scope) then return end
     if scope == "shared" then
-        for _, unit in ipairs({ "target", "targettarget", "focustarget", "focus", "pet", "boss" }) do
+        for _, unit in ipairs({ "player", "target", "targettarget", "focustarget", "focus", "pet", "boss" }) do
             M.RequestUnitApply(unit, reason or "MSUF2_SHORTEN_NAMES", { text = true, preview = true })
         end
     elseif UNIT_SCOPE_KEYS[scope] then
@@ -538,7 +539,18 @@ local function BuildFonts(ctx)
         end,
         nil,
         "colors.npc_name")
-    local healthColor = BindFontModeDropdown(colors, "HP Text Color", HealthColorValues, "colorHealthTextByHealth", "HEALTH", "MSUF2_HP_TEXT_COLOR")
+    local healthColor = BindFontDropdown(colors, "HP Text Color", HealthColorValues,
+        function()
+            local value = FontScopeGet("colorHealthTextByHealth", false)
+            if value == "CLASS" then return "CLASS" end
+            return (value == true or value == "HEALTH") and "HEALTH" or "DEFAULT"
+        end,
+        function(v)
+            local value = v == "CLASS" and "CLASS" or (v == "HEALTH")
+            SetFontAndApply("colorHealthTextByHealth", value, "MSUF2_HP_TEXT_COLOR")
+        end,
+        nil,
+        "colors.colorHealthTextByHealth")
     local powerColor = BindFontModeDropdown(colors, "Power Text Color", PowerColorValues, "colorPowerTextByType", "RESOURCE", "MSUF2_POWER_TEXT_COLOR")
     local scopedFontControls = { outline, sharp, shadow, opacity, baseline, nameColor, healthColor }
     RefreshScopedFontControls = RefreshScopedFontControls(function()
@@ -622,7 +634,7 @@ local function BuildFonts(ctx)
             end
         end
         M.TrackRefresh(ctx, RefreshGFNameShorteningControls)
-    elseif nameScope ~= "player" then
+    else
         local names = b:CollapsibleSection("fonts_name_shortening", "Name Shortening", 294, true)
         local shorten, side, chars, noEllipsis, scopeNotice, nameShorteningControls
         local function CanEditNameShortening()
@@ -646,7 +658,7 @@ local function BuildFonts(ctx)
                             .. table.concat(active, ", ")
                             .. ". Shared name-shortening changes do not affect those scopes.")
                     else
-                        scopeNotice:SetText("Shared name shortening affects all non-player unit names and group frames unless a scope has custom font settings.")
+                        scopeNotice:SetText("Shared name shortening affects all unit names and group frames unless a scope has custom font settings.")
                     end
                 elseif ScopeHasOverride(current, "fontOverride") then
                     scopeNotice:SetText("This scope uses custom font settings. Shared name-shortening changes will not affect it until the override is reset.")
@@ -660,7 +672,7 @@ local function BuildFonts(ctx)
             if (not onlyWhenEnabled) or NameShorteningEnabled() then ApplyNameShortening(reason) end
         end
         local controls = BuildNameShorteningControls(names,
-            nameScope == "shared" and "Shorten names (except Player)" or "Shorten unit names (except Player)",
+            nameScope == "shared" and "Shorten names" or "Shorten unit names",
             4, -194, NameShorteningEnabled,
             function(v)
                 FontScopeSet("shortenNames", v and true or false, "MSUF2_SHORTEN_NAMES", "shortenNames")

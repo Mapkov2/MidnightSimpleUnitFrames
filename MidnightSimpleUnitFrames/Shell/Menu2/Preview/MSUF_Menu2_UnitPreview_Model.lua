@@ -239,7 +239,7 @@ end
 local function ShortenPreviewName(name, key, layoutConf)
     name = tostring(name or "")
     key = CanonKey(key)
-    if key == "player" or name == "" then return name end
+    if name == "" then return name end
     EnsureDB()
     local db = _G.MSUF_DB or {}
     local g = db.general or {}
@@ -717,6 +717,7 @@ local function PreviewHealPredictionEnabled(conf, g)
     if g == nil then g, conf = conf, nil end
     if UnitPreviewBarOverrideEnabled(conf) and conf.healPredEnabled ~= nil then return conf.healPredEnabled == true end
     if g then
+        if g.healPredEnabled ~= nil then return g.healPredEnabled == true end
         if g.showSelfHealPrediction ~= nil then return g.showSelfHealPrediction == true end
         if g.enableHealPrediction ~= nil then return g.enableHealPrediction ~= false end
     end
@@ -731,7 +732,11 @@ local function PreviewResolveAbsorbAnchorMode(conf, g)
     return NormalizePreviewAnchorMode(g and g.absorbAnchorMode, 2)
 end
 local function PreviewAbsorbBarEnabled(conf, g, key)
-    if _G.MSUF_ShouldShowAbsorbTextureTest and _G.MSUF_ShouldShowAbsorbTextureTest(nil, key) then return true end
+    if _G.MSUF_ShouldShowAbsorbTextureTest and _G.MSUF_ShouldShowAbsorbTextureTest(nil, key, "absorb") then return true end
+    local enabled
+    if UnitPreviewBarOverrideEnabled(conf) and conf.enableAbsorbBar ~= nil then enabled = conf.enableAbsorbBar end
+    if enabled == nil and g and g.enableAbsorbBar ~= nil then enabled = g.enableAbsorbBar end
+    if enabled ~= nil then return enabled ~= false end
     local mode
     if UnitPreviewBarOverrideEnabled(conf) and conf.absorbTextMode ~= nil then mode = tonumber(conf.absorbTextMode) end
     if mode == nil and g then mode = tonumber(g.absorbTextMode) end
@@ -791,6 +796,14 @@ local function ResolveNameAnchor(anchor, x)
     if anchor == "CENTER" then return "TOP", "TOP", x, "CENTER" end
     return "TOPLEFT", "TOPLEFT", x, "LEFT"
 end
+local function ResolveNameOffsetDelta(anchor, dx, dy)
+    dx, dy = tonumber(dx) or 0, tonumber(dy) or 0
+    -- RIGHT stores an inward-positive X offset and ResolveNameAnchor negates
+    -- it. Direct manipulation must therefore invert only the stored X delta
+    -- so the text continues to follow the cursor/arrow direction on screen.
+    if tostring(anchor or "LEFT"):upper() == "RIGHT" then dx = -dx end
+    return dx, dy
+end
 local function NumText(v, shortNumbers)
     if shortNumbers == false then
         if PreviewFullNumbers then return PreviewFullNumbers(v) end
@@ -847,7 +860,7 @@ M.AssignNamedValues(Model, [[
     ClassPortraitVisual UnitPreviewPortraitTexture FontColor NormalizeToTInlineColorMode PreviewNameColorFlags PreviewNameColor
     PreviewToTInlineColor SetTex NormalizePreviewAnchorMode UnitPreviewBarOverrideEnabled PreviewHealPredictionEnabled
     PreviewResolveHealPredAnchorMode PreviewResolveAbsorbAnchorMode PreviewAbsorbBarEnabled PreviewOverlayWidth LayoutUnitPreviewOverlay
-    MakeFS ReadPowerBarEnabled CanDetachPowerBarKey ReadPowerBarHeight ResolveNameAnchor NumText JoinSep FormatMode UnitPreviewText
+    MakeFS ReadPowerBarEnabled CanDetachPowerBarKey ReadPowerBarHeight ResolveNameAnchor ResolveNameOffsetDelta NumText JoinSep FormatMode UnitPreviewText
 ]],
     UNIT_KEYS, UNIT_SET, UNIT_LABELS, UNIT_DATA, PreviewRaidGroupNameAllowed, PreviewRaidGroupNameText, NormalizePreviewRaidGroupNameAnchor,
     TEXT_ANCHORS, HP_MODES, POWER_MODES, SEP_ITEMS, PORTRAIT_MODE_ITEMS, PORTRAIT_RENDER_ITEMS, PortraitClassItems,
@@ -861,4 +874,4 @@ M.AssignNamedValues(Model, [[
     ClassPortraitVisual, UnitPreviewPortraitTexture, FontColor, NormalizeToTInlineColorMode, PreviewNameColorFlags, PreviewNameColor,
     PreviewToTInlineColor, SetTex, NormalizePreviewAnchorMode, UnitPreviewBarOverrideEnabled, PreviewHealPredictionEnabled,
     PreviewResolveHealPredAnchorMode, PreviewResolveAbsorbAnchorMode, PreviewAbsorbBarEnabled, PreviewOverlayWidth, LayoutUnitPreviewOverlay,
-    MakeFS, ReadPowerBarEnabled, CanDetachPowerBarKey, ReadPowerBarHeight, ResolveNameAnchor, NumText, JoinSep, FormatMode, UnitPreviewText)
+    MakeFS, ReadPowerBarEnabled, CanDetachPowerBarKey, ReadPowerBarHeight, ResolveNameAnchor, ResolveNameOffsetDelta, NumText, JoinSep, FormatMode, UnitPreviewText)

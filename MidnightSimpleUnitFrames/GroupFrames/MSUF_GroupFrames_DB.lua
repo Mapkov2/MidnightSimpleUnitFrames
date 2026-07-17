@@ -395,12 +395,21 @@ local PARTY_DEFAULTS = {
     --- shared UnitFrame heal-prediction toggle is the fallback.
     healPredEnabled      = true,
     healPredAnchorMode   = 3,
+    healPredictionBarHeight = 0,
+    healPredictionBarOffsetY = 0,
+    healPredictionBarOpacity = 0.45,
+    healPredictionBarTexture = "",
     enableAbsorbBar      = true,
     healAbsorbEnabled    = true,
     absorbTextMode       = 2,
     absorbAnchorMode     = 5,
+    absorbBarHeight      = 0,
+    absorbBarOffsetY     = 0,
     absorbBarOpacity     = 1,
     absorbBarTexture     = "MSUF Smooth v2",
+    healAbsorbAnchorMode = 3,
+    healAbsorbBarHeight  = 0,
+    healAbsorbBarOffsetY = 0,
     healAbsorbBarOpacity = 1,
     healAbsorbBarTexture = "Solid",
     overAbsorbOverlay    = true,
@@ -1030,6 +1039,7 @@ end
 local function ResolveLegacyHealPredictionEnabled()
     local gen = _G.MSUF_DB and _G.MSUF_DB.general
     if type(gen) ~= "table" then return false end
+    if gen.healPredEnabled ~= nil then return gen.healPredEnabled == true end
     if gen.showSelfHealPrediction ~= nil then return gen.showSelfHealPrediction == true end
     if gen.enableHealPrediction ~= nil then return gen.enableHealPrediction ~= false end
     return false

@@ -301,12 +301,41 @@ local function NormalizeAbsorbTestScope(scope)
 end
 UF.NormalizeAbsorbTestScope = NormalizeAbsorbTestScope
 
-local function AbsorbTextureTestEnabledForScope(scope)
+local PREDICTION_TEST_CATEGORIES = {
+  heal = true,
+  absorb = true,
+  healAbsorb = true,
+}
+
+local function NormalizePredictionTestCategory(category)
+  if category == "heal" or category == "prediction" or category == "healPrediction" then return "heal" end
+  if category == "healAbsorb" or category == "negative" or category == "negativeAbsorb" then return "healAbsorb" end
+  if category == "absorb" or category == "positive" or category == "positiveAbsorb" then return "absorb" end
+  return nil
+end
+UF.NormalizePredictionTestCategory = NormalizePredictionTestCategory
+
+local function PredictionTestBucketEnabled(bucket, category)
+  if type(bucket) ~= "table" then return false end
+  category = NormalizePredictionTestCategory(category)
+  if category then return bucket[category] == true end
+  return bucket.heal == true or bucket.absorb == true or bucket.healAbsorb == true
+end
+
+local function AbsorbTextureTestEnabledForScope(scope, category)
+  local modes = _G.MSUF_PredictionTestModes
+  if type(modes) == "table" then
+    local normalized = NormalizeAbsorbTestScope(scope)
+    if PredictionTestBucketEnabled(modes.shared, category) then return true end
+    if normalized ~= "shared" and PredictionTestBucketEnabled(modes[normalized], category) then return true end
+    return normalized == "shared" and PredictionTestBucketEnabled(modes.shared, category) or false
+  end
   if _G.MSUF_AbsorbTextureTestMode ~= true then return false end
   local wanted = NormalizeAbsorbTestScope(_G.MSUF_AbsorbTextureTestScope)
   return wanted == "shared" or wanted == NormalizeAbsorbTestScope(scope)
 end
 UF.AbsorbTextureTestEnabledForScope = AbsorbTextureTestEnabledForScope
+UF.PREDICTION_TEST_CATEGORIES = PREDICTION_TEST_CATEGORIES
 
 local function ConfigScopedValue(conf, general, key, fallback)
   if conf and conf.hlOverride == true and conf[key] ~= nil then return conf[key] end
@@ -424,7 +453,7 @@ function UF.FillPredictionColors(dst, general, conf, scopedValue, numberFn)
   dst.healR = numberFn(general and general.healPredictionColorR, 0)
   dst.healG = numberFn(general and general.healPredictionColorG, 1)
   dst.healB = numberFn(general and general.healPredictionColorB, 0)
-  dst.healA = Clamp01(general and general.healPredictionColorA, 0.45)
+  dst.healA = Clamp01(scopedValue(conf, general, "healPredictionBarOpacity", general and general.healPredictionColorA), 0.45)
   dst.absorbR = numberFn(general and general.absorbBarColorR, 1)
   dst.absorbG = numberFn(general and general.absorbBarColorG, 1)
   dst.absorbB = numberFn(general and general.absorbBarColorB, 1)

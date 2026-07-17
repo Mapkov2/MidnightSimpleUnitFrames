@@ -669,7 +669,15 @@ local function PaintDropdownBarPreviewLane(frame, lane, config, hpReverse, yOffs
     overlay:ClearAllPoints()
     overlay:SetPoint("TOP", background, "TOP", 0, 0)
     overlay:SetPoint("BOTTOM", background, "BOTTOM", 0, 0)
-    if mode == 3 or mode == 4 then
+    if mode == 3 and config.followInsideHealth == true then
+        overlayWidth = min(overlayWidth, hpWidth)
+        overlay:SetWidth(overlayWidth)
+        if hpReverse then
+            overlay:SetPoint("LEFT", health, "LEFT", 0, 0)
+        else
+            overlay:SetPoint("RIGHT", health, "RIGHT", 0, 0)
+        end
+    elseif mode == 3 or mode == 4 then
         if mode == 3 then
             overlayWidth = min(overlayWidth, max(1, DROPDOWN_BAR_PREVIEW_W - hpWidth))
         end

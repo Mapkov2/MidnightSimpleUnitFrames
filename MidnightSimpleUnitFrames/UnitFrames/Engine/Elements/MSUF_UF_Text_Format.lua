@@ -982,6 +982,7 @@ local function CompileTextRuntime(frame, spec, text)
   rt.healthNeedsCurrent = needsCurrent
   rt.healthNeedsMax = needsMax
   rt.healthColorByHealth = text.healthColorByHealth == true
+  rt.healthColorByClass = text.healthColorByClass == true
   if (needsPercent == true or rt.healthColorByHealth == true) and needsCurrent ~= true then
     rt.healthDispatchKeyMode = needsMax == true and 5 or 4
   elseif needsCurrent == true and needsMax == true then

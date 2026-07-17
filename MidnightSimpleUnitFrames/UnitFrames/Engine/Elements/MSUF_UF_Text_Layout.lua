@@ -759,7 +759,7 @@ local SIG_TEXT_KEYS = {
   "nameShortenMaskPx",
   "directLayout", "directNamePoint", "directNameRelativePoint", "directNameX", "directNameY",
   "nameClassColor", "nameNpcColor", "nameNpcClassColor", "npcColorMode", "npcTypeColorText", "npcTypeTarget", "npcTypeFocus", "npcTypeBoss", "npcTypeToT",
-  "healthLayer", "healthLeft", "healthCenter", "healthRight", "healthLeftHidePercentSymbol", "healthCenterHidePercentSymbol", "healthRightHidePercentSymbol", "healthReverse", "healthDelimiter", "healthPercentDecimals", "healthShortNumbers", "healthColorByHealth", "healthLeftX", "healthLeftY", "healthCenterX", "healthCenterY", "healthRightX", "healthRightY",
+  "healthLayer", "healthLeft", "healthCenter", "healthRight", "healthLeftHidePercentSymbol", "healthCenterHidePercentSymbol", "healthRightHidePercentSymbol", "healthReverse", "healthDelimiter", "healthPercentDecimals", "healthShortNumbers", "healthColorByHealth", "healthColorByClass", "healthLeftX", "healthLeftY", "healthCenterX", "healthCenterY", "healthRightX", "healthRightY",
   "directHealthLeftPoint", "directHealthLeftRelativePoint", "directHealthLeftX", "directHealthLeftY", "directHealthCenterPoint", "directHealthCenterRelativePoint", "directHealthCenterX", "directHealthCenterY", "directHealthRightPoint", "directHealthRightRelativePoint", "directHealthRightX", "directHealthRightY",
   "powerLayer", "powerLeft", "powerCenter", "powerRight", "powerLeftHidePercentSymbol", "powerCenterHidePercentSymbol", "powerRightHidePercentSymbol", "powerDelimiter", "powerColorByType", "powerLeftX", "powerLeftY", "powerCenterX", "powerCenterY", "powerRightX", "powerRightY",
   "directPowerLeftPoint", "directPowerLeftRelativePoint", "directPowerLeftX", "directPowerLeftY", "directPowerCenterPoint", "directPowerCenterRelativePoint", "directPowerCenterX", "directPowerCenterY", "directPowerRightPoint", "directPowerRightRelativePoint", "directPowerRightX", "directPowerRightY",
@@ -805,7 +805,7 @@ local function RefreshAppliedTextColors(frame, spec, text)
     rt._textGradientPct = nil
   end
   if text and text.directLayout == true then
-    if text.healthColorByHealth ~= true then
+    if text.healthColorByHealth ~= true and text.healthColorByClass ~= true then
       ApplyTextColor(frame.hpTextLeft, text.directHealthLeftColor)
       ApplyTextColor(frame.hpTextCenter, text.directHealthCenterColor)
       ApplyTextColor(frame.hpTextRight, text.directHealthRightColor)
@@ -964,7 +964,7 @@ function Text.Apply(frame, spec)
   SetTextLayer(frame.powerTextCenter, text.powerLayer)
   SetTextLayer(frame.powerTextRight, text.powerLayer)
   if directText then
-    if text.healthColorByHealth ~= true then
+    if text.healthColorByHealth ~= true and text.healthColorByClass ~= true then
       ApplyTextColor(frame.hpTextLeft, text.directHealthLeftColor)
       ApplyTextColor(frame.hpTextCenter, text.directHealthCenterColor)
       ApplyTextColor(frame.hpTextRight, text.directHealthRightColor)

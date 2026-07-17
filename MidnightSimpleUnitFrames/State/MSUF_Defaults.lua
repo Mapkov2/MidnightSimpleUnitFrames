@@ -752,13 +752,23 @@ local function MSUF_Defaults_GetMenuFontDefault()
 end
 
 local MSUF_DEFAULT_PREDICTION_BAR_VALUES = {
+    healPredEnabled = true,
+    healPredictionBarHeight = 0,
+    healPredictionBarOffsetY = 0,
+    healPredictionBarOpacity = 0.45,
+    healPredictionBarTexture = "",
     enableAbsorbBar = true,
     healAbsorbEnabled = true,
     absorbTextMode = 2,
     absorbAnchorMode = 5,
+    absorbBarHeight = 0,
+    absorbBarOffsetY = 0,
     healPredAnchorMode = 3,
     absorbBarOpacity = 1,
     absorbBarTexture = "MSUF Smooth v2",
+    healAbsorbAnchorMode = 3,
+    healAbsorbBarHeight = 0,
+    healAbsorbBarOffsetY = 0,
     healAbsorbBarOpacity = 1,
     healAbsorbBarTexture = "Solid",
     overAbsorbOverlay = true,
@@ -2522,12 +2532,23 @@ end
     if g.showSelfHealPrediction == nil then
         g.showSelfHealPrediction = true
     end
+    if g.healPredEnabled == nil then
+        g.healPredEnabled = g.showSelfHealPrediction == true
+    end
     if g.healPredAnchorMode == nil then
         g.healPredAnchorMode = 3
     end
     if g.healAbsorbEnabled == nil then
         g.healAbsorbEnabled = true
     end
+    if g.healAbsorbAnchorMode == nil then g.healAbsorbAnchorMode = 3 end
+    if g.healPredictionBarHeight == nil then g.healPredictionBarHeight = 0 end
+    if g.healPredictionBarOffsetY == nil then g.healPredictionBarOffsetY = 0 end
+    if g.healPredictionBarOpacity == nil then g.healPredictionBarOpacity = g.healPredictionColorA or 0.45 end
+    if g.absorbBarHeight == nil then g.absorbBarHeight = 0 end
+    if g.absorbBarOffsetY == nil then g.absorbBarOffsetY = 0 end
+    if g.healAbsorbBarHeight == nil then g.healAbsorbBarHeight = 0 end
+    if g.healAbsorbBarOffsetY == nil then g.healAbsorbBarOffsetY = 0 end
 
     --- Absorb display is bar-only in 6.0; collapse legacy text modes on load.
     if g.absorbTextMode == nil then

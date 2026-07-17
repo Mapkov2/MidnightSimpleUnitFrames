@@ -310,9 +310,21 @@ local function HealthTextColor(frame, unit, hp, hpMax, rt)
 end
 
 local function UpdateHealthTextColor(frame, rt, unit, hp, hpMax)
-  if not (rt and rt.healthColorByHealth == true and frame) then
+  if not (rt and frame) then
     return
   end
+  if rt.healthColorByClass == true then
+    local r, g, b = ClassColor(unit or frame.unit)
+    local a = rt.healthTextAlpha
+    if a == nil then
+      local _
+      _, _, _, a = BaseTextColor(frame)
+    end
+    SetHealthTextColor(frame, rt, r, g, b, a)
+    rt._textGradientPct = nil
+    return
+  end
+  if rt.healthColorByHealth ~= true then return end
   -- Bucket non-secret health percentages to avoid text-color churn on every
   -- health tick while preserving exact updates for secret/runtime-only values.
   -- With native secrets present, plain values are detected via issecretvalue so

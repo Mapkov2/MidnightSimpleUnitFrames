@@ -43,6 +43,7 @@ local db = {
 }
 local registeredPage, sections, bindings, controls = nil, {}, {}, {}
 local applyCalls = {}
+local predictionTests = {}
 local M = {}
 local MSUF = { MSUF2 = M, MSUF_Auras3 = { MenuModel = { UnitEnabled = function() return true end } } }
 
@@ -115,7 +116,10 @@ GP.SmoothPowerSet = function() end
 GP.PriorityOrder = function() return { "AGGRO", "DISPEL", "PURGE", "BOSS" } end
 GP.PriorityColor = function() return 1, 0.5, 0 end
 GP.RefreshBorderTestModes = function() end
-GP.SetAbsorbTextureTest = function() end
+GP.SetAbsorbTextureTest = function(enabled, category)
+    predictionTests[category] = enabled == true or nil
+end
+GP.IsAbsorbTextureTestEnabled = function(category) return predictionTests[category] == true end
 GP.SetControlEnabled = function(control, value) if control then control.enabled = value end end
 GP.SetControlsEnabled = function(list, value)
     if type(list) ~= "table" or list.SetShown then list = { list } end
@@ -249,23 +253,36 @@ assert(registeredPage and type(registeredPage.build) == "function", "Bars page w
 local ctx = { width = 900, key = "opt_bars", SetContentHeight = function(self, value) self.contentHeight = value end }
 registeredPage.build(ctx)
 
-local absorbAnchor
+local anchorCount, testCount = 0, 0
+local anchorPreviewCategories = {}
 for _, binding in ipairs(bindings) do
-    if binding.control.name == "dropdown:Absorb bar anchoring" then absorbAnchor = binding.control break end
+    if binding.control.name == "dropdown:Anchor" then
+        anchorCount = anchorCount + 1
+        local values = binding.control.values
+        assert(type(values) == "table" and #values >= 4, "anchor preview values missing")
+        local category
+        for _, item in ipairs(values) do
+            assert(item.previewKind == "barOverlay" and type(item.barPreview) == "function",
+                "anchor option has no visual bar preview")
+            local preview = item.barPreview(item)
+            assert(type(preview) == "table" and preview.mode == item.value,
+                "anchor preview does not reflect its option")
+            assert(type(preview.overlayTexture) == "string" and type(preview.overlayColor) == "table",
+                "anchor preview does not reflect texture/color settings")
+            category = category or preview.category
+            assert(preview.category == category, "anchor dropdown mixed prediction categories")
+            if preview.category == "negative" then
+                assert(preview.followInsideHealth == true, "negative follow-current-HP preview is not inside health")
+            end
+        end
+        anchorPreviewCategories[category] = true
+    end
+    if binding.control.name == "toggle:Test prediction bars" then testCount = testCount + 1 end
 end
-assert(absorbAnchor and type(absorbAnchor.values) == "function", "absorb anchor preview values missing")
-local absorbAnchorValues = absorbAnchor.values()
-assert(#absorbAnchorValues == 5, "absorb anchor preview must cover all five modes")
-for mode, item in ipairs(absorbAnchorValues) do
-    assert(item.value == mode and item.previewKind == "barOverlay" and type(item.barPreview) == "function",
-        "absorb anchor preview metadata missing for mode " .. mode)
-    local preview = item.barPreview(item)
-    assert(preview.mode == mode, "absorb anchor preview mode drift: " .. mode)
-    assert(preview.dualDirection == true, "absorb anchor preview must show both health directions")
-    assert(preview.showAbsorbEdgeGlow == true, "full-health stripe toggle not reflected in dropdown preview")
-    assert(preview.overlayTexture == "resolved:Shield Texture", "selected absorb texture not used by preview")
-    assert(preview.overlayColor[4] == 0.65, "selected absorb opacity not used by preview")
-end
+assert(anchorCount == 3, "the three prediction categories need independent anchors")
+assert(testCount == 3, "the three prediction categories need independent test toggles")
+assert(anchorPreviewCategories.positive and anchorPreviewCategories.negative and anchorPreviewCategories.heal,
+    "the three anchor dropdowns need category-specific previews")
 
 local fullHealthStripeBinding
 for _, binding in ipairs(bindings) do
@@ -277,11 +294,10 @@ end
 assert(fullHealthStripeBinding, "full-health absorb stripe binding missing")
 db.player = { hlOverride = true, fullHealthAbsorbStripe = false }
 db.general.hpPowerTextSelectedKey = "player"
-assert(fullHealthStripeBinding.get() == true,
-    "global full-health stripe was shadowed by a pre-existing unit override")
-fullHealthStripeBinding.set(false)
-assert(db.general.fullHealthAbsorbStripe == false and db.player.fullHealthAbsorbStripe == false,
-    "full-health stripe did not write its global behavior toggle")
+assert(fullHealthStripeBinding.get() == false, "full-health stripe did not read the selected scope")
+fullHealthStripeBinding.set(true)
+assert(db.general.fullHealthAbsorbStripe == true and db.player.fullHealthAbsorbStripe == true,
+    "full-health stripe did not stay inside the selected scope")
 db.general.fullHealthAbsorbStripe = true
 db.general.hpPowerTextSelectedKey = "shared"
 
@@ -290,13 +306,14 @@ for _, key in ipairs({ "bars_textures", "bars_absorb", "bars_outline", "bars_rou
 end
 assert(ctx.contentHeight and ctx.contentHeight > 0, "content height was not finalized")
 assert(#bindings >= 25, "unexpected binding count: " .. #bindings)
-assert(#controls == 14, "control metadata registration changed: " .. #controls)
+assert(#controls == 15, "control metadata registration changed: " .. #controls)
 local expectedControlPaths = {
     ["gradient.health.direction.UP"] = true,
     ["gradient.health.direction.DOWN"] = true,
     ["gradient.power.direction.UP"] = true,
     ["gradient.power.direction.DOWN"] = true,
     ["gradient.colors"] = true,
+    ["absorb.workspace_tab"] = true,
     ["highlight.workspace_tab"] = true,
     ["highlight.priority.order.order"] = true,
 }
