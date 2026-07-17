@@ -64,6 +64,7 @@ function A.UnitframesRegistry.BuildSettingBaseUnitContext(ctx)
             end,
             combatSafe = opts.combatSafe == true,
             applyWhenUnchanged = opts.applyWhenUnchanged == true,
+            requiresReload = opts.requiresReload == true,
             description = opts.description,
         })
     end

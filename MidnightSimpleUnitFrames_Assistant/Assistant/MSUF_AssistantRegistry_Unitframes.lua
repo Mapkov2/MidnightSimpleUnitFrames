@@ -72,6 +72,7 @@ if type(RegisterCoreLoopSettings) == "function" then
         CallGlobal = CallGlobal,
         ApplyLoadCondition = UnitframesCore.ApplyLoadCondition,
         UNIT_KEYS = UnitframesCore.UNIT_KEYS or UNIT_KEYS,
+        UNIT_LABELS = UNIT_LABELS,
         LOAD_CONDITION_SPECS = UnitframesCore.LOAD_CONDITION_SPECS,
         UnitAnchoringSettings = UnitframesCore.UnitAnchoringSettings,
         UnitPortraitSettings = UnitframesCore.UnitPortraitSettings,

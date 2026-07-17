@@ -27,8 +27,8 @@ local Data = assert(Assistant.ControlSchemaData, "generated control schema data 
 Check(Data.version == 3, "reviewed schema version")
 Check(#(Data.contexts or {}) == 40, "reviewed 40 class/spec contexts")
 Check(#(Data.collectionStates or {}) == 138, "reviewed 138-state finite UI matrix")
-Check(Data.collectionUnionControls == 2781 and #(Data.records or {}) == 2781,
-    "reviewed 2781-control exhaustive union")
+Check(Data.collectionUnionControls == 2796 and #(Data.records or {}) == 2796,
+    "reviewed 2796-control exhaustive union")
 
 local columns, contextIds, stateCounts = {}, {}, {}
 for i = 1, #Data.columns do columns[Data.columns[i]] = i end
@@ -180,7 +180,7 @@ for _, group in pairs(labelGroups) do
         if #group > maxCollision then maxCollision = #group end
     end
 end
-Check(collisionGroups == 267 and collisionRows == 2199 and maxCollision == 57,
+Check(collisionGroups == 273 and collisionRows == 2225 and maxCollision == 57,
     string.format("reviewed label-collision inventory drift: groups=%d rows=%d max=%d",
         collisionGroups, collisionRows, maxCollision))
 
@@ -258,7 +258,9 @@ local expectedModes = {
     ["control:opt_bars/opt/bars/global/highlight/preview/aggro@opt_bars/opt/bars/global/highlight/preview/aggro"] = true,
     ["control:opt_bars/opt/bars/global/highlight/preview/boss/target@opt_bars/opt/bars/global/highlight/preview/boss/target"] = true,
     ["control:opt_bars/opt/bars/global/highlight/preview/dispel@opt_bars/opt/bars/global/highlight/preview/dispel"] = true,
-    ["control:opt_bars/opt/bars/global/absorb/preview/test@opt_bars/opt/bars/global/absorb/preview/test"] = true,
+    ["control:opt_bars/opt/bars/global/absorb/heal/prediction/preview/test@opt_bars/opt/bars/global/absorb/heal/prediction/preview/test"] = true,
+    ["control:opt_bars/opt/bars/global/absorb/negative/preview/test@opt_bars/opt/bars/global/absorb/negative/preview/test"] = true,
+    ["control:opt_bars/opt/bars/global/absorb/positive/preview/test@opt_bars/opt/bars/global/absorb/positive/preview/test"] = true,
     ["control:opt_bars/opt/bars/global/highlight/preview/purge@opt_bars/opt/bars/global/highlight/preview/purge"] = true,
     ["control:opt_castbar/opt/castbar/global/focus/kick/preview@opt_castbar/opt/castbar/global/focus/kick/preview"] = true,
 }
@@ -278,7 +280,7 @@ for _, pageKey in ipairs({ "uf_boss", "uf_focus", "uf_focustarget", "uf_pet", "u
 end
 
 local modes = Schema.ListModes({ contextId = "MAGE-62" })
-Check(#modes == 68, "reviewed test/preview mode count")
+Check(#modes == 70, "reviewed test/preview mode count")
 local seenModes, actionRuns, controlNavigations = {}, 0, 0
 local originalActionRuns = {}
 for i = 1, #modes do
@@ -317,7 +319,7 @@ for i = 1, #modes do
             "explicit action-mode navigation reported execution for " .. tostring(mode.actionKey))
     end
 end
-Check(controlNavigations == 56 and actionRuns == 0, "reviewed mode navigation totals")
+Check(controlNavigations == 58 and actionRuns == 0, "reviewed mode navigation totals")
 
 for action, run in pairs(originalActionRuns) do action.run = run end
 Menu.OpenExactSettingControl = originalOpenSetting
