@@ -6,9 +6,60 @@ dofile("tools/profile_apply_smoke.lua")
 
 local translate = assert(_G.MSUF_ProfileIO_TranslateProfileToCurrent)
 
+local legacyGroupImport = [[
+return {
+    addon = "MSUF",
+    fmt = 2,
+    schema = 1,
+    kind = "groupframe",
+    payload = {
+        gf_party = {
+            nameMaxChars = 10,
+            nameNoEllipsis = true,
+        },
+        gf_raid = {
+            fontOverride = true,
+            nameMaxChars = 8,
+            nameNoEllipsis = true,
+            nameAnchor = "CENTER",
+            nameOffsetX = 2,
+            nameOffsetY = 13,
+        },
+    },
+}
+]]
+assert(_G.MSUF_ImportFromString(legacyGroupImport) == true,
+    "5.57 Group-only profile import failed")
+assert(_G.MSUF_DB.gf_party.nameAnchor == "LEFT"
+    and _G.MSUF_DB.gf_party.nameOffsetX == 0
+    and _G.MSUF_DB.gf_party.nameOffsetY == 0
+    and _G.MSUF_DB.gf_party.fontOverride == false,
+    "5.57 Group-only import received 6.0 name geometry or override semantics: "
+        .. tostring(_G.MSUF_DB.gf_party.nameAnchor) .. ","
+        .. tostring(_G.MSUF_DB.gf_party.nameOffsetX) .. ","
+        .. tostring(_G.MSUF_DB.gf_party.nameOffsetY) .. ","
+        .. tostring(_G.MSUF_DB.gf_party.fontOverride))
+assert(_G.MSUF_DB.gf_raid.fontOverride == true
+    and _G.MSUF_DB.gf_raid.nameAnchor == "CENTER"
+    and _G.MSUF_DB.gf_raid.nameOffsetX == 2
+    and _G.MSUF_DB.gf_raid.nameOffsetY == 13,
+    "5.57 explicit Raid name geometry changed during full import: "
+        .. tostring(_G.MSUF_DB.gf_raid.fontOverride) .. ","
+        .. tostring(_G.MSUF_DB.gf_raid.nameAnchor) .. ","
+        .. tostring(_G.MSUF_DB.gf_raid.nameOffsetX) .. ","
+        .. tostring(_G.MSUF_DB.gf_raid.nameOffsetY))
+
 local function legacyFixture()
     return {
+        shortenNames = true,
         general = {
+            hpTextMode = "CURPERCENT",
+            powerTextMode = "PERCENT",
+            hpTextSeparator = "|",
+            powerTextSeparator = "|",
+            shortenNameMaxChars = 15,
+            shortenNameClipSide = "RIGHT",
+            shortenNameShowDots = true,
             rangeFadePortrait = false,
             statusIconsUseMidnightStyle = false,
             restedStateIndicatorSymbol = "rested_moonzzz",
@@ -57,6 +108,14 @@ local function legacyFixture()
         target = {
             width = 242,
             height = 30,
+            nameOffsetX = 4,
+            nameOffsetY = -12,
+            hpOffsetX = -4,
+            hpOffsetY = -12,
+            hpTextAnchor = "RIGHT",
+            powerOffsetX = 0,
+            powerOffsetY = -8,
+            powerTextAnchor = "CENTER",
             showPower = false,
             hlOverride = true,
             barOutlineStrata = "AUTO",
@@ -77,11 +136,44 @@ local function legacyFixture()
             detachedPowerBarOffsetY = 2,
         },
         focus = { showPower = false },
-        targettarget = { showPower = false },
+        targettarget = {
+            showPower = false,
+            nameOffsetX = 4,
+            nameOffsetY = -8,
+            hpOffsetX = -4,
+            hpOffsetY = -8,
+            hpTextAnchor = "RIGHT",
+            powerOffsetX = -4,
+            powerOffsetY = 4,
+            powerTextAnchor = "RIGHT",
+        },
         focustarget = { showPower = false },
         pet = { showPower = true },
         boss = { width = 185, height = 32, showPower = true },
-        gf_party = { hlOverride = true, barOutlineStrata = "AUTO", raidGroupNameLayer = 28 },
+        gf_party = {
+            hlOverride = true,
+            barOutlineStrata = "AUTO",
+            raidGroupNameLayer = 28,
+            nameMaxChars = 10,
+            nameNoEllipsis = true,
+        },
+        gf_raid = {
+            fontOverride = true,
+            nameMaxChars = 8,
+            nameNoEllipsis = true,
+            nameAnchor = "CENTER",
+            nameOffsetX = 2,
+            nameOffsetY = 13,
+            hpOffsetX = -3,
+            hpOffsetY = 4,
+            powerOffsetX = 5,
+            powerOffsetY = -6,
+        },
+        gf_mythicraid = {
+            nameAnchor = "RIGHT",
+            nameOffsetX = -7,
+            nameOffsetY = 9,
+        },
         auras2 = {
             shared = {
                 offsetX = 0,
@@ -146,6 +238,41 @@ assert(fresh.player.point == "TOPLEFT" and fresh.player.relativePoint == "BOTTOM
     and fresh.player.anchorFrameName == "UIParent"
     and fresh.player.offsetX == -333.25 and fresh.player.offsetY == 77.5,
     "5.57 unit-frame anchor or screen position changed during migration")
+assert(fresh.target.nameOffsetX == 4 and fresh.target.nameOffsetY == -12
+    and fresh.target.hpOffsetX == -4 and fresh.target.hpOffsetY == -12
+    and fresh.target.powerOffsetX == 0 and fresh.target.powerOffsetY == -8
+    and fresh.targettarget.nameOffsetX == 4 and fresh.targettarget.nameOffsetY == -8
+    and fresh.targettarget.hpOffsetX == -4 and fresh.targettarget.hpOffsetY == -8
+    and fresh.targettarget.powerOffsetX == -4 and fresh.targettarget.powerOffsetY == 4,
+    "5.57 Target-family text X/Y offsets changed during migration")
+for _, unit in ipairs({ "target", "targettarget" }) do
+    local text = fresh[unit]
+    assert(text.textLeft == "NONE" and text.textCenter == "NONE" and text.textRight == "CURPERCENT"
+        and text.powerTextLeft == "NONE" and text.powerTextCenter == "NONE" and text.powerTextRight == "PERCENT"
+        and text.hpTextSeparator == "|" and text.powerTextSeparator == "|",
+        "5.57 Target-family text slots were not materialized for " .. unit)
+end
+assert(fresh._msufLegacy55UnitTextSlots_v1 == true,
+    "5.57 per-unit text migration marker was not persisted")
+assert(fresh.gf_party.nameAnchor == "LEFT"
+    and fresh.gf_party.nameOffsetX == 0 and fresh.gf_party.nameOffsetY == 0
+    and fresh.gf_party.hpOffsetX == 0 and fresh.gf_party.hpOffsetY == 0
+    and fresh.gf_party.powerOffsetX == 0 and fresh.gf_party.powerOffsetY == 0,
+    "missing 5.57 Group text coordinates did not retain their legacy defaults")
+assert(fresh.gf_raid.nameAnchor == "CENTER"
+    and fresh.gf_raid.nameOffsetX == 2 and fresh.gf_raid.nameOffsetY == 13
+    and fresh.gf_raid.hpOffsetX == -3 and fresh.gf_raid.hpOffsetY == 4
+    and fresh.gf_raid.powerOffsetX == 5 and fresh.gf_raid.powerOffsetY == -6
+    and fresh.gf_mythicraid.nameAnchor == "RIGHT"
+    and fresh.gf_mythicraid.nameOffsetX == -7 and fresh.gf_mythicraid.nameOffsetY == 9,
+    "explicit 5.57 Party/Raid text coordinates were overwritten")
+assert(fresh._msufLegacy55GroupTextGeometry_v1 == true,
+    "5.57 Group text geometry migration marker was not persisted")
+assert(fresh.gf_party.fontOverride == false
+    and fresh.gf_party.nameMaxChars == 10 and fresh.gf_party.nameNoEllipsis == true,
+    "dormant 5.57 Group shortening values incorrectly enabled a local font override")
+assert(fresh.gf_raid.fontOverride == true,
+    "explicit 5.57 Group font override was lost")
 assert(fresh.player.rangeFadeLayerMode == "health"
     and fresh.target.rangeFadeLayerMode == "health"
     and fresh.boss.rangeFadeLayerMode == "health",
@@ -267,7 +394,7 @@ local _, repaired = translate(storedV2, {
     markProfile = true,
     trustNormalizationMarker = true,
 })
-assert(repaired == true and storedV2._msufProfileNormalizationRevision == 7,
+assert(repaired == true and storedV2._msufProfileNormalizationRevision == 9,
     "stored v2 SavedVariables did not re-enter migration")
 assert(storedV2.auras3._msufAuras3LegacyGeometry_v3 == true
     and storedV2.auras3.perUnit.target.layout.buffAnchor == "TOPLEFT"
@@ -305,7 +432,7 @@ local _, repairedV3 = translate(storedV3, {
     markProfile = true,
     trustNormalizationMarker = true,
 })
-assert(repairedV3 == true and storedV3._msufProfileNormalizationRevision == 7
+assert(repairedV3 == true and storedV3._msufProfileNormalizationRevision == 9
     and storedV3.bars.barOutlineStrata == "BACKGROUND"
     and storedV3.target.barOutlineStrata == "BACKGROUND"
     and storedV3._msufLegacy55FrameOutlineBackground_v1 == true,
@@ -423,6 +550,10 @@ local native60 = {
         showPower = false,
         showPowerText = true,
     },
+    gf_party = {
+        nameMaxChars = 10,
+        nameNoEllipsis = true,
+    },
 }
 translate(native60, { source = "profiles", markProfile = true, trustNormalizationMarker = true })
 assert(native60.target.detachedPowerBarAnchorMode == nil,
@@ -433,6 +564,32 @@ assert(native60.bars.barOutlineStrata == "AUTO"
 assert(native60.target.showPowerText == true
     and native60._msufLegacy55PowerTextVisibility_v1 == nil,
     "native 6.0 split Power Text visibility was incorrectly changed")
+assert(native60._msufLegacy55UnitTextSlots_v1 == nil,
+    "native 6.0 profile was incorrectly routed through legacy text migration")
+assert(native60._msufLegacy55GroupTextGeometry_v1 == nil,
+    "native 6.0 profile was incorrectly routed through legacy Group text migration")
+assert(native60.gf_party.fontOverride == true,
+    "native 6.0 scoped Group text values no longer infer their font override")
+
+local explicitLegacyText = {
+    general = { hpTextMode = "CURPERCENT", powerTextMode = "PERCENT" },
+    target = {
+        textLeft = "CURRENT",
+        textCenter = "PERCENT",
+        textRight = "NONE",
+        powerTextLeft = "PERCENT",
+        powerTextCenter = "NONE",
+        powerTextRight = "CURRENT",
+    },
+}
+translate(explicitLegacyText, { source = "snapshot_import", schema = 1, markProfile = true })
+assert(explicitLegacyText.target.textLeft == "CURRENT"
+    and explicitLegacyText.target.textCenter == "PERCENT"
+    and explicitLegacyText.target.textRight == "NONE"
+    and explicitLegacyText.target.powerTextLeft == "PERCENT"
+    and explicitLegacyText.target.powerTextCenter == "NONE"
+    and explicitLegacyText.target.powerTextRight == "CURRENT",
+    "explicit 5.57 text-slot choices were overwritten")
 
 -- MSUF 5.57 category snapshots use outer schema 1. A Group-only snapshot has
 -- no Aura2 root, so its schema must still route it through legacy visual
@@ -449,6 +606,10 @@ translate(legacyGroupSnapshot, {
 })
 assert(legacyGroupSnapshot.gf_party.barOutlineStrata == "BACKGROUND",
     "5.57 schema-1 Group-only snapshot bypassed legacy compatibility")
+assert(legacyGroupSnapshot.gf_party.nameAnchor == "LEFT"
+    and legacyGroupSnapshot.gf_party.nameOffsetX == 0
+    and legacyGroupSnapshot.gf_party.nameOffsetY == 0,
+    "5.57 Group-only snapshot received 6.0 Group name defaults")
 
 -- The 5.57 Group Frame DB migrated these flat fields through
 -- GF.MigrateAuraConfig. 6.0 must retain that loader for SavedVariables and

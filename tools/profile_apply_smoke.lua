@@ -428,7 +428,7 @@ local _, firstChanged = translate(malformedStored, {
 })
 assert(firstChanged == true, "unversioned current profile must be normalized once")
 assert(malformedStored.general.nameOffsetX == 500, "stored malformed numeric field was not clamped")
-assert(malformedStored._msufProfileNormalizationRevision == 7, "normalization revision was not persisted")
+assert(malformedStored._msufProfileNormalizationRevision == 9, "normalization revision was not persisted")
 
 -- The second trusted pass must return before walking the full profile tree.
 local nestedWalks = 0
@@ -440,7 +440,7 @@ local watchedGeneral = setmetatable({}, {
 })
 local alreadyCurrent = {
     _msufProfileSchema = 600,
-    _msufProfileNormalizationRevision = 7,
+    _msufProfileNormalizationRevision = 9,
     general = watchedGeneral,
 }
 local _, fastChanged = translate(alreadyCurrent, {
@@ -454,7 +454,7 @@ assert(nestedWalks == 0, "normalization fast path walked nested profile tables")
 -- External payloads never get to assert their own trust markers.
 local spoofedImport = {
     _msufProfileSchema = 600,
-    _msufProfileNormalizationRevision = 7,
+    _msufProfileNormalizationRevision = 9,
     _msufDefaultsRevision = 1,
     _msufDispelPriorityMigration = 3,
     general = { nameOffsetX = "900" },
