@@ -14,6 +14,10 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF or MSUF.LOCALE ~= "zhCN" then return end
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("zhCN")) or (MSUF.L or {})
 
+L["Force Blizzard frame on"] = "强制启用暴雪框体"
+L["Keeps Blizzard's native frame active independently of the MSUF frame. Leave MSUF Enable on to show both, or turn MSUF Enable off to use only Blizzard. A UI reload is required."] = "使暴雪原生框体独立于 MSUF 框体保持启用。保持启用 MSUF 可同时显示两者，关闭启用 MSUF 则仅使用暴雪框体。需要重载界面。"
+L["Shared name shortening affects all unit names and group frames unless a scope has custom font settings."] = "共享名称缩短会影响所有单位名称和团队框体，除非某个范围使用自定义字体设置。"
+
 --- Add / edit translations below.
 local T = {
     ["Pips & Border"] = "点数与边框",

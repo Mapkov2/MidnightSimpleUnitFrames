@@ -11,6 +11,10 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF or MSUF.LOCALE ~= "zhTW" then return end
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("zhTW")) or (MSUF.L or {})
 
+L["Force Blizzard frame on"] = "強制啟用暴雪框架"
+L["Keeps Blizzard's native frame active independently of the MSUF frame. Leave MSUF Enable on to show both, or turn MSUF Enable off to use only Blizzard. A UI reload is required."] = "讓暴雪原生框架獨立於 MSUF 框架保持啟用。保持啟用 MSUF 可同時顯示兩者，關閉啟用 MSUF 則只使用暴雪框架。需要重新載入介面。"
+L["Shared name shortening affects all unit names and group frames unless a scope has custom font settings."] = "共享名稱縮短會影響所有單位名稱與隊伍框架，除非某個範圍使用自訂字型設定。"
+
 local T = {
     ["Pips & Border"] = "點數與邊框",
     ["Open MSUF Menu"] = "開啟 MSUF 選單",
