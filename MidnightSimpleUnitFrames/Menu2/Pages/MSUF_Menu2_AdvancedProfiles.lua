@@ -58,6 +58,34 @@ local function Trim(value)
     return tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
 end
 
+local function IsUUFImportString(value)
+    local fn = _G.MSUF_IsUUFImportString
+    if type(fn) == "function" then
+        local ok, result = pcall(fn, value)
+        if ok then return result == true end
+    end
+    return type(value) == "string" and value:match("^%s*!UUF_") ~= nil
+end
+
+local function IsUUFLoaded()
+    local fn = _G.MSUF_IsUUFLoaded
+    if type(fn) == "function" then
+        local ok, loaded = pcall(fn)
+        if ok then return loaded == true end
+    end
+    local addons = _G.C_AddOns
+    local checker = addons and addons.IsAddOnLoaded or _G.IsAddOnLoaded
+    if type(checker) ~= "function" then return false end
+    local ok, loaded = pcall(checker, "UnhaltedUnitFrames")
+    return ok and loaded == true
+end
+
+local function RunImportTransaction(callback, onError)
+    local ok, result, detail = pcall(callback)
+    if not ok and type(onError) == "function" then pcall(onError) end
+    return ok, result, detail
+end
+
 local function ProfileValues(includeNone)
     local values = {}
     if includeNone then values[#values + 1] = { value = "None", text = "None" } end
@@ -87,6 +115,23 @@ end
 
 local function PrintProfileMessage(color, message)
     print((color or "|cffffd700") .. "MSUF:|r " .. tostring(message or ""))
+end
+
+local UUF_LOADED_BLOCK_MESSAGE = "UUF import blocked: UnhaltedUnitFrames is currently loaded. Disable it and reload the UI before importing into the active MSUF profile."
+
+local function BlockLoadedUUFImport(value)
+    if not IsUUFImportString(value) or not IsUUFLoaded() then return false end
+    PrintProfileMessage("|cffff0000", UUF_LOADED_BLOCK_MESSAGE)
+    return true
+end
+
+local function RunSimpleImportMutation(callback, failurePrefix)
+    local ok, imported = RunImportTransaction(callback)
+    if not ok then
+        PrintProfileMessage("|cffff0000", (failurePrefix or "Import failed: ") .. tostring(imported))
+        return false
+    end
+    return imported == true
 end
 
 local function BlockCombatAction()
@@ -149,6 +194,23 @@ local function EnsureProfilePopups()
         }
     end
 
+    if not _G.StaticPopupDialogs.MSUF2_CONFIRM_UUF_IMPORT_BEST_EFFORT then
+        _G.StaticPopupDialogs.MSUF2_CONFIRM_UUF_IMPORT_BEST_EFFORT = {
+            text = M.Tr("This is an UnhaltedUnitFrames profile.\n\nMSUF will translate supported unit-frame, party/raid-frame, and aura settings as a best-effort import. Unsupported UUF-only settings may not map 1:1.\n\nIf UnhaltedUnitFrames is loaded, the import is blocked before any profile change. Disable it and /reload first.\n\nImport anyway?"),
+            button1 = M.Tr("Import"),
+            button2 = _G.CANCEL or M.Tr("Cancel"),
+            timeout = 0,
+            whileDead = true,
+            hideOnEscape = true,
+            preferredIndex = 3,
+            OnAccept = function(_, data)
+                if BlockCombatAction() then return end
+                if data and BlockLoadedUUFImport(data.value) then return end
+                if data and type(data.after) == "function" then data.after() end
+            end,
+        }
+    end
+
     if not _G.StaticPopupDialogs.MSUF2_CONFIRM_RESET_PROFILE then
         _G.StaticPopupDialogs.MSUF2_CONFIRM_RESET_PROFILE = {
             text = M.Tr("Reset profile '%s' to defaults?\n\nThis resets the entire selected profile to the current MSUF factory defaults. Every menu in that profile will be affected."),
@@ -192,6 +254,26 @@ local function EnsureProfilePopups()
     end
 end
 
+local function ConfirmUUFBestEffortImport(text, after)
+    if not IsUUFImportString(text) then
+        if type(after) == "function" then return after() end
+        return false
+    end
+    if BlockLoadedUUFImport(text) then return false end
+    if _G.StaticPopup_Show
+        and _G.StaticPopupDialogs
+        and _G.StaticPopupDialogs.MSUF2_CONFIRM_UUF_IMPORT_BEST_EFFORT
+    then
+        _G.StaticPopup_Show("MSUF2_CONFIRM_UUF_IMPORT_BEST_EFFORT", nil, nil, {
+            value = text,
+            after = after,
+        })
+        return true
+    end
+    PrintProfileMessage("|cffff0000", "Import blocked: UUF best-effort confirmation is not available.")
+    return false
+end
+
 local function ShowImportReloadPrompt()
     if _G.InCombatLockdown and _G.InCombatLockdown() then
         PrintProfileMessage("|cffffd700", "Profile imported. Reload after combat with /reload.")
@@ -218,6 +300,23 @@ local function ReloadAfterNewProfileImport(profileName)
     else
         PrintProfileMessage("|cffffd700", "Imported profile '" .. tostring(profileName) .. "'. Reload the UI with /reload.")
     end
+end
+
+local function FinishSuccessfulImport(ctx, applyReason, mode, input, profileName)
+    if M.ClearHistory then M.ClearHistory() end
+
+    local refreshed = mode == "new"
+    if refreshed then RefreshAfterProfileChange(ctx) end
+    if input and input.SetText then input:SetText("") end
+
+    M.RequestGeneralApply(applyReason, { preview = true })
+    if not refreshed then RefreshAfterProfileChange(ctx) end
+    if mode == "current" then
+        ShowImportReloadPrompt()
+    elseif mode == "new" and profileName then
+        ReloadAfterNewProfileImport(profileName)
+    end
+    return true
 end
 
 local function ProfileExists(name)
@@ -438,19 +537,13 @@ local function BuildProfiles(ctx)
             PrintProfileMessage("|cffff0000", "Import failed: profile import API is not available.")
             return false
         end
-        local ok, imported = pcall(_G.MSUF_ImportFromString, text)
-        if not ok then
-            PrintProfileMessage("|cffff0000", "Import failed: " .. tostring(imported))
-            return false
-        end
-        if imported ~= true then
-            return false
-        end
-        if M.ClearHistory then M.ClearHistory() end
-        M.RequestGeneralApply("MSUF2_PROFILE_IMPORT", { preview = true })
-        RefreshAfterProfileChange(ctx)
-        ShowImportReloadPrompt()
-        return true
+        return ConfirmUUFBestEffortImport(text, function()
+            local imported = RunSimpleImportMutation(function()
+                return _G.MSUF_ImportFromString(text)
+            end, "Import failed: ")
+            if not imported then return false end
+            return FinishSuccessfulImport(ctx, "MSUF2_PROFILE_IMPORT", "current")
+        end)
     end
 
     local function ImportIntoNewProfile(rawName)
@@ -477,37 +570,63 @@ local function BuildProfiles(ctx)
             return false
         end
 
-        local previous = _G.MSUF_ActiveProfile or "Default"
-        pcall(_G.MSUF_CreateProfile, name)
-        if not ProfileExists(name) then
-            PrintProfileMessage("|cffff0000", "Import failed: could not create profile '" .. name .. "'.")
-            return false
-        end
-        local previousExists = ProfileExists(previous)
+        return ConfirmUUFBestEffortImport(text, function()
+            local previous = _G.MSUF_ActiveProfile or "Default"
+            local previousExists = ProfileExists(previous)
+            local created = false
+            local rollbackFailure
+            local function RollbackCreatedProfile()
+                if previousExists and _G.MSUF_ActiveProfile ~= previous then
+                    pcall(_G.MSUF_SwitchProfile, previous)
+                end
+                if _G.MSUF_ActiveProfile == name then
+                    rollbackFailure = "MSUF could not switch back to profile '" .. tostring(previous)
+                        .. "'. The failed import profile '" .. tostring(name) .. "' was retained to keep the active profile reference valid."
+                    PrintProfileMessage("|cffff0000", rollbackFailure)
+                    return false
+                end
+                if created or ProfileExists(name) then DeleteCreatedProfile(name) end
+                return true
+            end
 
-        pcall(_G.MSUF_SwitchProfile, name)
-        if _G.MSUF_ActiveProfile ~= name then
-            if previousExists then pcall(_G.MSUF_SwitchProfile, previous) end
-            DeleteCreatedProfile(name)
-            PrintProfileMessage("|cffff0000", "Import failed: could not switch to profile '" .. name .. "'.")
-            return false
-        end
+            local ok, imported, failure = RunImportTransaction(function()
+                pcall(_G.MSUF_CreateProfile, name)
+                if not ProfileExists(name) then
+                    return false, "Import failed: could not create profile '" .. name .. "'."
+                end
+                created = true
 
-        local ok, imported = pcall(_G.MSUF_ImportFromString, text)
-        if not ok or imported ~= true then
-            if previousExists then pcall(_G.MSUF_SwitchProfile, previous) end
-            DeleteCreatedProfile(name)
-            PrintProfileMessage("|cffff0000", ok and "Import failed." or ("Import failed: " .. tostring(imported)))
-            RefreshAfterProfileChange(ctx)
-            return false
-        end
+                pcall(_G.MSUF_SwitchProfile, name)
+                if _G.MSUF_ActiveProfile ~= name then
+                    RollbackCreatedProfile()
+                    return false, "Import failed: could not switch to profile '" .. name .. "'."
+                end
 
-        if M.ClearHistory then M.ClearHistory() end
-        M.RequestGeneralApply("MSUF2_PROFILE_IMPORT_NEW", { preview = true })
-        RefreshAfterProfileChange(ctx)
-        importProfileName:SetText("")
-        ReloadAfterNewProfileImport(name)
-        return true
+                local importOK, importResult = pcall(_G.MSUF_ImportFromString, text)
+                if not importOK then
+                    RollbackCreatedProfile()
+                    error(importResult, 0)
+                end
+                if importResult ~= true then
+                    RollbackCreatedProfile()
+                    return false, "Import failed."
+                end
+                return true
+            end, RollbackCreatedProfile)
+
+            if not ok then
+                PrintProfileMessage("|cffff0000", "Import failed: " .. tostring(imported))
+                RefreshAfterProfileChange(ctx)
+                return false
+            end
+            if imported ~= true then
+                PrintProfileMessage("|cffff0000", tostring(rollbackFailure or failure or "Import failed."))
+                RefreshAfterProfileChange(ctx)
+                return false
+            end
+
+            return FinishSuccessfulImport(ctx, "MSUF2_PROFILE_IMPORT_NEW", "new", importProfileName, name)
+        end)
     end
 
     import:SetScript("OnClick", function()
@@ -540,10 +659,13 @@ local function BuildProfiles(ctx)
         if BlockCombatAction() then return end
         local text = blob:GetText()
         if text and text ~= "" and type(_G.MSUF_ImportLegacyFromString) == "function" then
-            pcall(_G.MSUF_ImportLegacyFromString, text)
-            if M.ClearHistory then M.ClearHistory() end
-            M.RequestGeneralApply("MSUF2_PROFILE_LEGACY_IMPORT", { preview = true })
-            RefreshAfterProfileChange(ctx)
+            ConfirmUUFBestEffortImport(text, function()
+                local imported = RunSimpleImportMutation(function()
+                    return _G.MSUF_ImportLegacyFromString(text)
+                end, "Legacy import failed: ")
+                if not imported then return false end
+                return FinishSuccessfulImport(ctx, "MSUF2_PROFILE_LEGACY_IMPORT")
+            end)
         end
     end)
     local wago = T.Button(io, "Browse Wago Profiles", buttonW, buttonH)

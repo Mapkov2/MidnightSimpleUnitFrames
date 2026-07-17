@@ -29,6 +29,74 @@ local function EnsureDBSafe()
     end
 end
 
+local function TextureScopeKey(frameOrUnit)
+    local key = frameOrUnit
+    if type(frameOrUnit) == "table" then
+        key = frameOrUnit.msufConfigKey or frameOrUnit._msufConfigKey or frameOrUnit.unitKey or frameOrUnit.unit
+    end
+    if type(key) ~= "string" or key == "" then return nil end
+    local getConfigKey = _G.MSUF_GetConfigKeyForUnit
+    if type(getConfigKey) == "function" then
+        key = getConfigKey(key) or key
+    elseif key == "tot" then
+        key = "targettarget"
+    elseif key:sub(1, 4) == "boss" then
+        key = "boss"
+    end
+    return key
+end
+
+local function ScopedTextureKey(frameOrUnit, key)
+    EnsureDBSafe()
+    local db = _G.MSUF_DB
+    local scopeKey = TextureScopeKey(frameOrUnit)
+    local conf = scopeKey and db and db[scopeKey]
+    local value = conf and conf.hlOverride == true and conf[key] or nil
+    if type(value) == "string" and value ~= "" then return value end
+    return nil
+end
+
+local function ResolveTextureKey(key)
+    local resolve = _G.MSUF_ResolveStatusbarTextureKey
+    if type(resolve) == "function" then return resolve(key) end
+    return nil
+end
+
+local function GetBarTextureForFrame(frameOrUnit)
+    local key = ScopedTextureKey(frameOrUnit, "barTexture")
+    if key then return ResolveTextureKey(key) end
+    local getShared = _G.MSUF_GetBarTexture
+    return type(getShared) == "function" and getShared() or nil
+end
+
+local function GetBarBackgroundTextureForFrame(frameOrUnit)
+    local key = ScopedTextureKey(frameOrUnit, "barBgTexture")
+    if key then return ResolveTextureKey(key) end
+    local getShared = _G.MSUF_GetBarBackgroundTexture
+    return type(getShared) == "function" and getShared() or nil
+end
+
+local function GetAbsorbBarTextureForFrame(frameOrUnit)
+    EnsureDBSafe()
+    local g = (_G.MSUF_DB and _G.MSUF_DB.general) or nil
+    local key = g and g.absorbBarTexture
+    if type(key) == "string" and key ~= "" then return ResolveTextureKey(key) end
+    return GetBarTextureForFrame(frameOrUnit)
+end
+
+local function GetHealAbsorbBarTextureForFrame(frameOrUnit)
+    EnsureDBSafe()
+    local g = (_G.MSUF_DB and _G.MSUF_DB.general) or nil
+    local key = g and g.healAbsorbBarTexture
+    if type(key) == "string" and key ~= "" then return ResolveTextureKey(key) end
+    return GetBarTextureForFrame(frameOrUnit)
+end
+
+Export("MSUF_GetBarTextureForFrame", GetBarTextureForFrame)
+Export("MSUF_GetBarBackgroundTextureForFrame", GetBarBackgroundTextureForFrame)
+Export("MSUF_GetAbsorbBarTextureForFrame", GetAbsorbBarTextureForFrame)
+Export("MSUF_GetHealAbsorbBarTextureForFrame", GetHealAbsorbBarTextureForFrame)
+
 local function ForEachUnitFrame(fn)
     local forEach = _G.MSUF_ForEachUnitFrame
     if type(forEach) == "function" then
@@ -74,13 +142,16 @@ end
 
 local function _Iter_ApplyAllBarTex(f)
     local S = _iterState
-    _ApplyTexCached(f.hpBar, S.texHP)
-    _ApplyTexCached(f.absorbBar, S.texAbs)
-    _ApplyTexCached(f.healAbsorbBar, S.texHeal)
-    _ApplyTexCached(f.incomingHealBar or f.selfHealPredBar, S.texHP)
+    local texHP = (S.getFrameHP and S.getFrameHP(f)) or S.texHP
+    local texAbs = (S.getFrameAbs and S.getFrameAbs(f)) or S.texAbs or texHP
+    local texHeal = (S.getFrameHeal and S.getFrameHeal(f)) or S.texHeal or texHP
+    _ApplyTexCached(f.hpBar, texHP)
+    _ApplyTexCached(f.absorbBar, texAbs)
+    _ApplyTexCached(f.healAbsorbBar, texHeal)
+    _ApplyTexCached(f.incomingHealBar or f.selfHealPredBar, texHP)
     if S.applyBg then S.applyBg(f) end
 
-    local pbTex = S.texHP
+    local pbTex = texHP
     if f._msufPowerBarDetached and S.texDPB then
         pbTex = S.texDPB
     end
@@ -89,8 +160,10 @@ end
 
 local function _Iter_ApplyAbsorbTex(f)
     local S = _iterState
-    _ApplyTexCached(f.absorbBar, S.texAbs)
-    _ApplyTexCached(f.healAbsorbBar, S.texHeal)
+    local texAbs = (S.getFrameAbs and S.getFrameAbs(f)) or S.texAbs
+    local texHeal = (S.getFrameHeal and S.getFrameHeal(f)) or S.texHeal
+    _ApplyTexCached(f.absorbBar, texAbs)
+    _ApplyTexCached(f.healAbsorbBar, texHeal)
 end
 
 local function UpdateAllBarTextures()
@@ -110,6 +183,9 @@ local function UpdateAllBarTextures()
     _iterState.texHeal = texHeal or texHP
     _iterState.texDPB = (dpb and dpb.ResolveFg and dpb.ResolveFg()) or texHP
     _iterState.applyBg = _G.MSUF_ApplyBarBackgroundVisual
+    _iterState.getFrameHP = GetBarTextureForFrame
+    _iterState.getFrameAbs = GetAbsorbBarTextureForFrame
+    _iterState.getFrameHeal = GetHealAbsorbBarTextureForFrame
 
     ForEachUnitFrame(_Iter_ApplyAllBarTex)
     if _G.MSUF_RoundedUF_Active == true then
@@ -142,6 +218,8 @@ local function UpdateAbsorbBarTextures()
 
     _iterState.texAbs = texAbs
     _iterState.texHeal = texHeal
+    _iterState.getFrameAbs = GetAbsorbBarTextureForFrame
+    _iterState.getFrameHeal = GetHealAbsorbBarTextureForFrame
     ForEachUnitFrame(_Iter_ApplyAbsorbTex)
     if _G.MSUF_RoundedUF_Active == true then
         local applyRounded = _G.MSUF_RoundedUF_OnApplyAll

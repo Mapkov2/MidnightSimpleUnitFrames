@@ -218,7 +218,9 @@ local function _AlphaApplyPreserveTexture(sb, preserve)
         tex = _AlphaResolveUnhaltedTexture()
         if not tex then return end
     else
-        tex = (type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture()) or nil
+        local getBarTexture = _G.MSUF_GetBarTextureForFrame or _G.MSUF_GetBarTexture
+        local owner = sb.GetParent and sb:GetParent() or nil
+        tex = (type(getBarTexture) == "function" and getBarTexture(owner)) or nil
         sb._msufAlphaPreserveTexture = nil
     end
     local fill = sb.GetStatusBarTexture and sb:GetStatusBarTexture()
@@ -311,8 +313,9 @@ local function _AlphaEnsureMissingHPBackground(frame)
         if lvl < 0 then lvl = 0 end
         bg:SetFrameLevel(lvl)
     end
+    local getBarBgTexture = _G.MSUF_GetBarBackgroundTextureForFrame or _G.MSUF_GetBarBackgroundTexture
     local tex = _AlphaResolveUnhaltedTexture()
-        or (type(_G.MSUF_GetBarBackgroundTexture) == "function" and _G.MSUF_GetBarBackgroundTexture())
+        or (type(getBarBgTexture) == "function" and getBarBgTexture(frame))
         or "Interface\\Buttons\\WHITE8x8"
     if bg._msufMissingBgTex ~= tex then
         bg:SetStatusBarTexture(tex)

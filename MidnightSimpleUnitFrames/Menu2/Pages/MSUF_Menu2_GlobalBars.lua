@@ -167,6 +167,44 @@ local function BuildBars(ctx)
         end
     end
 
+    local function CurrentTextureScopeKeys()
+        local scope = CurrentBarsScope()
+        if scope == "shared" then return nil end
+        return ScopeDBKeys(scope)
+    end
+
+    local function TextureScopeGet(groupKey, sharedKey, sharedDefault)
+        local scope = CurrentBarsScope()
+        local keys = CurrentTextureScopeKeys()
+        if keys and ScopeHasOverride(scope, "hlOverride") then
+            local db = DB()
+            for i = 1, #keys do
+                local conf = db[keys[i]]
+                if conf and conf[groupKey] ~= nil then return conf[groupKey] end
+            end
+            return ""
+        end
+        return ReadG(sharedKey, sharedDefault)
+    end
+
+    local function TextureScopeSet(groupKey, sharedKey, value, sharedDefault, reason)
+        local scope = CurrentBarsScope()
+        local keys = CurrentTextureScopeKeys()
+        if keys then
+            ScopeSetOverride(scope, "hlOverride", true)
+            local db = DB()
+            for i = 1, #keys do
+                local key = keys[i]
+                db[key] = db[key] or {}
+                db[key][groupKey] = value or ""
+            end
+        else
+            SetG(sharedKey, value or sharedDefault, reason, { preview = true })
+        end
+        ApplyBars(reason)
+        RefreshGroupFrameVisuals()
+    end
+
     local function RefreshGroupFrameBorders()
         local GF = _G.MSUF_NS and _G.MSUF_NS.GF
         if not GF then return end
@@ -725,7 +763,10 @@ local function BuildBars(ctx)
     local leftW = compactTextures and math.max(220, (ctx.width or 720) - 42) or math.min(300, math.max(220, rightX - 48))
     local gradientY = compactTextures and (topY - 126) or topY
 
-    local barTexture = W.Dropdown(textures, "Bar textures (SharedMedia)", function() return TextureValues(nil) end, 280)
+    local scopedTextureScope = CurrentBarsScope() ~= "shared"
+    local barTexture = W.Dropdown(textures, "Bar textures (SharedMedia)", function()
+        return TextureValues(scopedTextureScope and "Follow Global Style" or nil)
+    end, 280)
     if barTexture._msuf2Title then
         barTexture._msuf2Title:ClearAllPoints()
         barTexture._msuf2Title:SetPoint("TOPLEFT", textures, "TOPLEFT", leftX, topY)
@@ -734,13 +775,13 @@ local function BuildBars(ctx)
     barTexture:SetPoint("TOPLEFT", textures, "TOPLEFT", leftX, topY - 22)
     barTexture:SetWidth(leftW)
     M.BindDropdown(ctx, barTexture,
-        function() return ReadG("barTexture", "Blizzard") end,
+        function() return TextureScopeGet("barTexture", "barTexture", "Blizzard") end,
         function(v)
-            SetG("barTexture", v or "Blizzard", "MSUF2_BAR_TEXTURE", { preview = true })
-            ApplyBars("MSUF2_BAR_TEXTURE")
-            RefreshGroupFrameVisuals()
+            TextureScopeSet("barTexture", "barTexture", v, "Blizzard", "MSUF2_BAR_TEXTURE")
         end)
-    local bgTexture = W.Dropdown(textures, "Background texture", function() return TextureValues("Use foreground texture") end, 280)
+    local bgTexture = W.Dropdown(textures, "Background texture", function()
+        return TextureValues(scopedTextureScope and "Follow Global Style" or "Use foreground texture")
+    end, 280)
     if bgTexture._msuf2Title then
         bgTexture._msuf2Title:ClearAllPoints()
         bgTexture._msuf2Title:SetPoint("TOPLEFT", textures, "TOPLEFT", leftX, topY - 54)
@@ -749,11 +790,9 @@ local function BuildBars(ctx)
     bgTexture:SetPoint("TOPLEFT", textures, "TOPLEFT", leftX, topY - 76)
     bgTexture:SetWidth(leftW)
     M.BindDropdown(ctx, bgTexture,
-        function() return ReadG("barBackgroundTexture", "") end,
+        function() return TextureScopeGet("barBgTexture", "barBackgroundTexture", "") end,
         function(v)
-            SetG("barBackgroundTexture", v or "", "MSUF2_BAR_BG_TEXTURE", { preview = true })
-            ApplyBars("MSUF2_BAR_BG_TEXTURE")
-            RefreshGroupFrameVisuals()
+            TextureScopeSet("barBgTexture", "barBackgroundTexture", v, "", "MSUF2_BAR_BG_TEXTURE")
         end)
 
     local gradLabel = T.Font(textures, "GameFontHighlightSmall", M.Tr("Gradient"), T.colors.muted)
@@ -831,8 +870,9 @@ local function BuildBars(ctx)
         local controlsActive = GradientControlsActive()
         local sharedActive = SharedBarsControlsActive()
         local valueControlsActive = controlsActive and ((GradientScopeGet("enableGradient", false) == true) or (GradientScopeGet("enablePowerGradient", false) == true))
-        SetControlEnabled(barTexture, sharedActive)
-        SetControlEnabled(bgTexture, sharedActive)
+        local textureScopeActive = ScopedBarsControlsActive()
+        SetControlEnabled(barTexture, textureScopeActive)
+        SetControlEnabled(bgTexture, textureScopeActive)
         SetControlEnabled(hpGradient, controlsActive)
         SetControlEnabled(powerGradient, controlsActive)
         SetControlEnabled(strength, valueControlsActive)
@@ -1671,4 +1711,4 @@ local function BuildBars(ctx)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 
-M.RegisterPage("opt_bars", { title = "MSUF Bars", build = BuildBars, version = 13 })
+M.RegisterPage("opt_bars", { title = "MSUF Bars", build = BuildBars, version = 14 })

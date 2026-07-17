@@ -1024,6 +1024,7 @@ local function ApplyFonts(f, kind)
         set(f.groupNumberText, gnSize, fr, fg, fb, 0.7)
     end
 end
+GF.ApplyFrameFonts = ApplyFonts
 
 ------------------------------------------------------------------------
 -- Apply: geometry (bar anchors, power height)
@@ -1714,6 +1715,7 @@ local function ApplyTextLayout(f, kind)
         end
     end
 end
+GF.ApplyFrameTextLayout = ApplyTextLayout
 
 ------------------------------------------------------------------------
 -- Apply: icon layout (spec-driven)
@@ -1770,6 +1772,7 @@ local function ApplyIconLayout(f, kind)
         end
     end
 end
+GF.ApplyFrameIconLayout = ApplyIconLayout
 
 ------------------------------------------------------------------------
 -- Apply: health prediction overlay colors (from global MSUF_DB.general)
