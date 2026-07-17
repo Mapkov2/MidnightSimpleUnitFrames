@@ -2091,27 +2091,42 @@ local function ApplyGroupIcon(dst, source, keys)
 end
 
 local function ConvertGroupIndicators(kind, source, defaults, dst, report)
-    source = Merge(source, defaults)
+    local rawSource = type(source) == "table" and source or {}
+    source = Merge(rawSource, defaults)
+
+    -- Older UUF profiles used shorter SavedVariables keys for two oUF status
+    -- elements. Prefer the current V12.1 keys when both exist, but do not let
+    -- converter defaults hide an explicitly configured legacy size/layout.
+    local function ResolveIndicator(primary, aliasOne, aliasTwo)
+        local value = rawSource[primary]
+        if type(value) == "table" then return value end
+        value = aliasOne and rawSource[aliasOne]
+        if type(value) == "table" then return value end
+        value = aliasTwo and rawSource[aliasTwo]
+        if type(value) == "table" then return value end
+        return source[primary]
+    end
+
     local iconMaps = {
-        {"RaidTargetMarker", {enabled="raidMarker", size="raidMarkerSize", anchor="raidMarkerAnchor", x="raidMarkerX", y="raidMarkerY", defaultSize=14}},
-        {"Role", {enabled="roleIcon", size="roleIconSize", anchor="roleIconAnchor", x="roleIconX", y="roleIconY", defaultSize=12}},
-        {"ReadyCheckIndicator", {enabled="readyCheckIcon", size="readyCheckSize", anchor="readyCheckAnchor", x="readyCheckX", y="readyCheckY", defaultSize=16}},
-        {"Summon", {enabled="summonIcon", size="summonIconSize", anchor="summonAnchor", x="summonX", y="summonY", defaultSize=16}},
-        {"ResurrectIndicator", {enabled="resurrectIcon", size="resurrectIconSize", anchor="resurrectAnchor", x="resurrectX", y="resurrectY", defaultSize=16}},
-        {"Phase", {enabled="phaseIcon", size="phaseIconSize", anchor="phaseAnchor", x="phaseX", y="phaseY", defaultSize=14}},
+        {ResolveIndicator("RaidTargetMarker"), {enabled="raidMarker", size="raidMarkerSize", anchor="raidMarkerAnchor", x="raidMarkerX", y="raidMarkerY", defaultSize=14}},
+        {ResolveIndicator("Role"), {enabled="roleIcon", size="roleIconSize", anchor="roleIconAnchor", x="roleIconX", y="roleIconY", defaultSize=12}},
+        {ResolveIndicator("ReadyCheckIndicator", "ReadyCheck"), {enabled="readyCheckIcon", size="readyCheckSize", anchor="readyCheckAnchor", x="readyCheckX", y="readyCheckY", defaultSize=16}},
+        {ResolveIndicator("Summon"), {enabled="summonIcon", size="summonIconSize", anchor="summonAnchor", x="summonX", y="summonY", defaultSize=16}},
+        {ResolveIndicator("ResurrectIndicator", "Resurrection", "Resurrect"), {enabled="resurrectIcon", size="resurrectIconSize", anchor="resurrectAnchor", x="resurrectX", y="resurrectY", defaultSize=16}},
+        {ResolveIndicator("Phase"), {enabled="phaseIcon", size="phaseIconSize", anchor="phaseAnchor", x="phaseX", y="phaseY", defaultSize=14}},
     }
     for i = 1, #iconMaps do
         local entry = iconMaps[i]
-        ApplyGroupIcon(dst, source[entry[1]], entry[2])
+        ApplyGroupIcon(dst, entry[1], entry[2])
     end
 
-    local leader = source.LeaderAssistantIndicator
+    local leader = ResolveIndicator("LeaderAssistantIndicator")
     if type(leader) == "table" then
         ApplyGroupIcon(dst, leader, {enabled="leaderIcon", size="leaderIconSize", anchor="leaderIconAnchor", x="leaderIconX", y="leaderIconY", defaultSize=12})
         ApplyGroupIcon(dst, leader, {enabled="assistIcon", size="assistIconSize", anchor="assistIconAnchor", x="assistIconX", y="assistIconY", defaultSize=12})
     end
 
-    local role = source.Role
+    local role = ResolveIndicator("Role")
     if type(role) == "table" then
         dst.roleIconShowTank = role.ShowTank ~= false
         dst.roleIconShowHealer = role.ShowHealer ~= false
