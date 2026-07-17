@@ -1,18 +1,25 @@
 # Changelog
 
-## 5.72 - 2026-07-17
+## 5.72 - 2026-07-18
 
-### Profile Import
+### Highlights
 
-- Added a dedicated load-on-demand converter for UnhaltedUnitFrames 12.1 profile strings that writes only native MSUF 5.7 profile settings.
-- Added best-effort translation for unit, group, aura, castbar, indicator, color, texture, alpha, range, text, and geometry settings where MSUF has a native equivalent.
-- Added an explicit import warning, transactional profile handling, conversion reports, and protection against importing into the active profile while UnhaltedUnitFrames is loaded.
+- New load-on-demand importer for UnhaltedUnitFrames 12.1 profiles.
+- New Unit and Group preview controls: zoom, pan, quick actions, and direct settings links.
+- Per-unit Blizzard frame ownership for Player, Pet, Target, Target of Target, Focus, Focus Target, and Boss frames.
 
-### Import Fidelity
+### Import & Layout Fidelity
 
-- Preserved compact Target of Target name and health text, including combined FontStrings, health value modes, positions, font sizes, separators, and dynamic UUF color prefixes.
-- Improved imported per-frame foreground, background, absorb, and heal-absorb texture resolution without adding converter work to normal runtime hot paths.
-- Added regression coverage for decoding, native-only output, profile integration, geometry, text, castbars, abbreviations, alpha, and range-fade behavior.
+- Native conversion of supported frame, aura, castbar, indicator, color, texture, alpha, range, text, and position settings.
+- Safer imports with warnings, conversion reports, transactional profiles, and active-profile protection.
+- Improved Target of Target text, per-frame textures, legacy indicator sizes, custom status icons, and matching previews.
+- Automatic on-screen correction for imported and manually moved Unit and Group Frames.
+
+### Fixes & Polish
+
+- Fixed range fading for complete Unit Frames.
+- Improved Group previews, aura controls, Edit Mode dragging, change history, font previews, menu scaling, and search.
+- Fixed overlapping Blizzard-frame notices in compact Unit Basics layouts.
 
 ## 5.71 - 2026-07-11
 
