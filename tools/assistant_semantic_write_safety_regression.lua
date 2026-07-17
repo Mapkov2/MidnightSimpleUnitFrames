@@ -120,6 +120,39 @@ local function counted()
     cases = cases + 1
 end
 
+-- A broad all-frames request owns the guarded /msuf reset recovery action. It
+-- must never fall through to a fuzzy single-widget Position setting such as
+-- Focus Kick Position.
+resetTask()
+local frameRecovery = submit("reset the position of all my frames")
+assert(status(frameRecovery) == "confirmation_needed",
+    "all-frames recovery did not ask for confirmation: " .. resultText(frameRecovery))
+assert(type(A.pendingConfirmation) == "table"
+        and A.pendingConfirmation.action
+        and A.pendingConfirmation.action.key == "recover_frames",
+    "all-frames recovery selected "
+        .. tostring(A.pendingConfirmation and A.pendingConfirmation.action
+            and A.pendingConfirmation.action.key))
+assert(not resultText(frameRecovery):find("Focus Kick", 1, true),
+    "all-frames recovery fell through to Focus Kick Position")
+local hadSlashTable = type(_G.SlashCmdList) == "table"
+local slashTable = hadSlashTable and _G.SlashCmdList or {}
+local originalResetSlash = slashTable["MIDNIGHTSUF"]
+local resetSlashCommand
+_G.SlashCmdList = slashTable
+slashTable["MIDNIGHTSUF"] = function(command) resetSlashCommand = command end
+local appliedFrameRecovery = submit("yes")
+assert(status(appliedFrameRecovery) == "applied",
+    "confirmed all-frames recovery did not execute: " .. resultText(appliedFrameRecovery))
+assert(resetSlashCommand == "reset",
+    "confirmed all-frames recovery did not invoke /msuf reset")
+assert(resultText(appliedFrameRecovery):find("unit%-frame and group%-frame positions")
+        and resultText(appliedFrameRecovery):find("visible again", 1, true),
+    "confirmed all-frames recovery did not report its complete recovery scope")
+slashTable["MIDNIGHTSUF"] = originalResetSlash
+if not hadSlashTable then _G.SlashCmdList = nil end
+counted()
+
 -- A visible Aura Style reset action must win over the similarly worded
 -- generated show-buffs setting. The destructive reset remains confirmation
 -- gated and must not write an unrelated lane-visibility control.

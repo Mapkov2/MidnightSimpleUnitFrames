@@ -2656,7 +2656,9 @@ local FRAME_RECOVERY_SUBJECT_TERMS = {
 -- Standalone recovery phrases: unambiguous rescue requests. Exact
 -- "reset [all] frame positions" phrases are intentionally excluded because the
 -- dedicated reset_all_unit_positions action already owns those explicit
--- commands; this parser is for the symptom/rescue framing.
+-- commands. Broad collective wording such as "all my frames" instead owns the
+-- full recovery action because it includes group frames and visibility, just
+-- like /msuf reset.
 local FRAME_RECOVERY_STANDALONE_TERMS = {
     "reset my frames", "reset all frames", "reset frames to screen", "reset to screen",
     "bring my frames back", "bring back my frames", "bring frames back",
@@ -2668,6 +2670,20 @@ local FRAME_RECOVERY_STANDALONE_TERMS = {
     "frames verschwunden", "frames weg", "rahmen weg",
     "frames zuruecksetzen", "frames zurucksetzen", "rahmen zuruecksetzen",
     "frames zentrieren", "frames zur mitte",
+}
+local FRAME_RECOVERY_POSITION_RESET_TERMS = {
+    "reset", "restore", "recover", "recenter",
+    "zuruecksetzen", "zurucksetzen", "wiederherstellen", "zentrieren",
+}
+local FRAME_RECOVERY_POSITION_TERMS = {
+    "position", "positions", "placement", "layout", "anchor", "anchors",
+    "positionen", "platzierung", "anker",
+}
+local FRAME_RECOVERY_ALL_FRAMES_TERMS = {
+    "all my frames", "all of my frames", "all frames", "every frame",
+    "every unit frame", "every unitframe", "all msuf frames",
+    "all unit and group frames", "alle meine frames", "alle frames",
+    "alle rahmen", "jeden rahmen",
 }
 -- Guard: these clearly ask about a single setting or a "how do I" concept and
 -- should stay on their normal paths, not trigger a full reset offer.
@@ -2683,7 +2699,11 @@ local function ParseFrameRecovery(text)
     local action = Registry and Registry:GetAction("recover_frames")
     if not action then return nil end
 
-    local standalone = ContainsAny(text, FRAME_RECOVERY_STANDALONE_TERMS)
+    local broadPositionRecovery = ContainsAny(text, FRAME_RECOVERY_POSITION_RESET_TERMS)
+        and ContainsAny(text, FRAME_RECOVERY_POSITION_TERMS)
+        and ContainsAny(text, FRAME_RECOVERY_ALL_FRAMES_TERMS)
+        and not ContainsAny(text, FRAME_RECOVERY_BLOCK_TERMS)
+    local standalone = broadPositionRecovery or ContainsAny(text, FRAME_RECOVERY_STANDALONE_TERMS)
     if not standalone then
         if ContainsAny(text, FRAME_RECOVERY_BLOCK_TERMS) then return nil end
         if not ContainsAny(text, FRAME_RECOVERY_SYMPTOM_TERMS) then return nil end

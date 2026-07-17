@@ -2404,9 +2404,10 @@ P.BARE_FONT_TEXT_COLOR_MODES = P.BARE_FONT_TEXT_COLOR_MODES or {
         key = "colorHealthTextByHealth",
         subjects = { "hp color text", "hp text color", "health color text", "health text color" },
         label = "Choose Health Text Color Mode",
-        summary = "Asks whether HP text should use one fixed font color or the health gradient.",
+        summary = "Asks whether HP text should use the font color, class color, or health gradient.",
         choices = {
             { value = "DEFAULT", label = "Single color (Font Color)", summary = "Uses the configured fixed font color for HP text." },
+            { value = "CLASS", label = "Class Color", summary = "Colors HP text by the unit's class." },
             { value = "HEALTH", label = "Health Gradient", summary = "Colors HP text dynamically by current health." },
         },
     },
@@ -2523,7 +2524,8 @@ function P.ParseHPTextColorModePriority(text)
     })
     local gradient = ContainsAny(text, { "health gradient", "hp gradient", "by health" })
         or (text:find("gradient", 1, true) and not single)
-    if not single and not gradient then return P.ParseBareHPTextColorModeChoice(text) end
+    local class = ContainsAny(text, { "class color", "class colour", "by class" })
+    if not single and not gradient and not class then return P.ParseBareHPTextColorModeChoice(text) end
     local scope = DetectGlobalScope(text) or "shared"
     if scope == "gf_mythicraid" then scope = "gf_raid" end
     if scope == "gf_party" or scope == "gf_raid" then scope = "shared" end
@@ -2532,14 +2534,16 @@ function P.ParseHPTextColorModePriority(text)
     local changes = {}
     local override = scope ~= "shared" and Registry:GetSetting("fontScope." .. tostring(scope) .. ".override") or nil
     if override then changes[#changes + 1] = { setting = override, value = true } end
-    changes[#changes + 1] = { setting = setting, value = single and "DEFAULT" or "HEALTH" }
+    local value = single and "DEFAULT" or (class and "CLASS" or "HEALTH")
+    changes[#changes + 1] = { setting = setting, value = value }
     return {
         kind = "changes",
         changes = changes,
         bulkSafe = #changes > 1,
         label = "Health Text Color Mode",
-        summary = single and "Changes HP text from the health gradient to one configured font color."
-            or "Colors HP text dynamically with the health gradient.",
+        summary = single and "Changes HP text to the configured font color."
+            or (class and "Colors HP text by the unit's class."
+                or "Colors HP text dynamically with the health gradient."),
     }
 end
 
@@ -2559,7 +2563,8 @@ local function ParseScopedFontTextColorShortcut(text)
     ) then
         spec = { key = "colorPowerTextByType", on = "RESOURCE", label = "Power Text Color Mode" }
     elseif ContainsAny(text, RegistryPhrases[86]) then
-        spec = { key = "colorHealthTextByHealth", on = "HEALTH", label = "Health Text Color Mode" }
+        local class = ContainsAny(text, { "class color", "class colour", "by class" })
+        spec = { key = "colorHealthTextByHealth", on = class and "CLASS" or "HEALTH", label = "Health Text Color Mode" }
     elseif ContainsAny(text, RegistryPhrases[87]) then
         local npcClass = ContainsAny(text, RegistryPhrases[88])
         spec = {

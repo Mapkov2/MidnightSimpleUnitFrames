@@ -86,7 +86,7 @@ FontData.DEFAULT_NPC_ALIASES = {
     ["npc class color"] = "CLASS",
 }
 
-FontData.DEFAULT_HEALTH_VALUES = { "DEFAULT", "HEALTH" }
+FontData.DEFAULT_HEALTH_VALUES = { "DEFAULT", "CLASS", "HEALTH" }
 FontData.DEFAULT_HEALTH_ALIASES = {
     default = "DEFAULT",
     palette = "DEFAULT",
@@ -99,6 +99,10 @@ FontData.DEFAULT_HEALTH_ALIASES = {
     ["solid colour"] = "DEFAULT",
     ["fixed color"] = "DEFAULT",
     ["font color"] = "DEFAULT",
+    class = "CLASS",
+    classcolor = "CLASS",
+    ["class color"] = "CLASS",
+    ["by class"] = "CLASS",
     health = "HEALTH",
     hp = "HEALTH",
     healthcolor = "HEALTH",

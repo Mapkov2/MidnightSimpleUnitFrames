@@ -68,12 +68,20 @@ function A.GlobalRegistry.RegisterScopedUnitFontTextSettings(ctx, scope)
         "color text by health", "text color by health", "color health text",
         "health color text", "hp color text", "health text by health",
         "health text color by health", "hp text color by health",
+        "health text class color", "hp text class color", "color hp text by class",
     }), {
         flag = "fontOverride",
         values = DEFAULT_HEALTH_VALUES,
         valueAliases = DEFAULT_HEALTH_ALIASES,
-        get = function(scopeKey) return GlobalScopeRead(scopeKey, "fontOverride", GeneralDB(), "colorHealthTextByHealth", false) and "HEALTH" or "DEFAULT" end,
-        set = function(scopeKey, value) GlobalScopeWrite(scopeKey, "fontOverride", GeneralDB(), "colorHealthTextByHealth", value == "HEALTH") end,
+        get = function(scopeKey)
+            local value = GlobalScopeRead(scopeKey, "fontOverride", GeneralDB(), "colorHealthTextByHealth", false)
+            if value == "CLASS" then return "CLASS" end
+            return (value == true or value == "HEALTH") and "HEALTH" or "DEFAULT"
+        end,
+        set = function(scopeKey, value)
+            GlobalScopeWrite(scopeKey, "fontOverride", GeneralDB(), "colorHealthTextByHealth",
+                value == "CLASS" and "CLASS" or (value == "HEALTH"))
+        end,
         apply = ApplyFonts,
         reason = "MSUF_ASSISTANT_HEALTH_TEXT_COLOR",
     })
