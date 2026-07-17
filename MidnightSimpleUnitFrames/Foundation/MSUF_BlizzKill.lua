@@ -26,6 +26,15 @@ local _msufRegenListening = false      -- true when guard is listening to PLAYER
 local _MSUF_ReassertKilledFrames       -- forward decl
 local _MSUF_FlushDeferred              -- forward decl
 
+-- Per-unit Blizzard ownership is evaluated only while applying/reasserting
+-- configuration.  There is no polling or unitframe hot-path cost.
+local function MSUF_UseBlizzardUnitFrame(unitKey)
+    local db = _G.MSUF_DB
+    local conf = type(db) == "table" and type(db[unitKey]) == "table" and db[unitKey] or nil
+    return conf and conf.useBlizzardFrame == true or false
+end
+_G.MSUF_UseBlizzardUnitFrame = MSUF_UseBlizzardUnitFrame
+
 local function _MSUF_ApplyStateDriverHide(frame)
     if not (frame and RegisterStateDriver) then return false end
     if _G.MSUF_InCombat then
@@ -243,6 +252,10 @@ local function MSUF_ApplyCompatAnchor_PlayerFrame()
     if not MSUF_DB or not MSUF_DB.general then return end
     local g = MSUF_DB.general
     if g.disableBlizzardUnitFrames == false then return end
+    if MSUF_UseBlizzardUnitFrame("player") then
+        PlayerFrame.MSUF_CompatAnchorActive = nil
+        return
+    end
     if g.hardKillBlizzardPlayerFrame == true then
         PlayerFrame.MSUF_CompatAnchorActive = nil
         return
@@ -300,32 +313,60 @@ local function HideDefaultFrames()
     if g.disableBlizzardUnitFrames == false then
         return
     end
-    if g.hardKillBlizzardPlayerFrame == true then
-        KillFrame(PlayerFrame)
-    else
-        MSUF_ApplyCompatAnchor_PlayerFrame()
+
+    if not MSUF_UseBlizzardUnitFrame("player") then
+        if g.hardKillBlizzardPlayerFrame == true then
+            KillFrame(PlayerFrame)
+        else
+            MSUF_ApplyCompatAnchor_PlayerFrame()
+        end
     end
-    KillFrame(TargetFrameToT)
-    KillFrame(PetFrame)
-    KillFrame(TargetFrame)
-    KillFrame(FocusFrame)
-    for i = 1, 5 do
-        local bossFrame = _G["Boss"..i.."TargetFrame"]
-        KillFrame(bossFrame)
+
+    if not MSUF_UseBlizzardUnitFrame("pet") then
+        KillFrame(PetFrame)
     end
-    if BossTargetFrameContainer then
-        KillFrame(BossTargetFrameContainer)
-        if BossTargetFrameContainer.Selection then
-            local sel = BossTargetFrameContainer.Selection
-            if sel.UnregisterAllEvents then
-                sel:UnregisterAllEvents()
-            end
-            _MSUF_SafeDisableMouse(sel)
-            sel:Hide()
-            if sel.SetScript then
-                sel:SetScript("OnShow", function(f) f:Hide() end)
-                sel:SetScript("OnEnter", nil)
-                sel:SetScript("OnLeave", nil)
+
+    -- Blizzard creates Target-of-Target and Focus-Target as children of their
+    -- respective parent frames.  Keeping either child therefore also requires
+    -- keeping its Blizzard parent alive.  The child can still be suppressed
+    -- independently when only the parent is requested.
+    local keepTarget = MSUF_UseBlizzardUnitFrame("target")
+    local keepTargetTarget = MSUF_UseBlizzardUnitFrame("targettarget")
+    if not keepTargetTarget then
+        KillFrame(TargetFrameToT or (TargetFrame and TargetFrame.totFrame))
+    end
+    if not keepTarget and not keepTargetTarget then
+        KillFrame(TargetFrame)
+    end
+
+    local keepFocus = MSUF_UseBlizzardUnitFrame("focus")
+    local keepFocusTarget = MSUF_UseBlizzardUnitFrame("focustarget")
+    if not keepFocusTarget then
+        KillFrame(_G.FocusFrameToT or (FocusFrame and FocusFrame.totFrame))
+    end
+    if not keepFocus and not keepFocusTarget then
+        KillFrame(FocusFrame)
+    end
+
+    if not MSUF_UseBlizzardUnitFrame("boss") then
+        for i = 1, 5 do
+            local bossFrame = _G["Boss"..i.."TargetFrame"]
+            KillFrame(bossFrame)
+        end
+        if BossTargetFrameContainer then
+            KillFrame(BossTargetFrameContainer)
+            if BossTargetFrameContainer.Selection then
+                local sel = BossTargetFrameContainer.Selection
+                if sel.UnregisterAllEvents then
+                    sel:UnregisterAllEvents()
+                end
+                _MSUF_SafeDisableMouse(sel)
+                sel:Hide()
+                if sel.SetScript then
+                    sel:SetScript("OnShow", function(f) f:Hide() end)
+                    sel:SetScript("OnEnter", nil)
+                    sel:SetScript("OnLeave", nil)
+                end
             end
         end
     end

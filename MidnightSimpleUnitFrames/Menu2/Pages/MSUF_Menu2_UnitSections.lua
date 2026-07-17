@@ -877,7 +877,7 @@ local function BuildTopActions(ctx, builder, unit, label)
 end
 
 local function BuildBasics(ctx, builder, unit, label)
-    local sec = builder:CollapsibleSection("frame_basics", "Frame Basics", 104, false)
+    local sec = builder:CollapsibleSection("frame_basics", "Frame Basics", 136, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local gap = 24
     local colW = math.floor((sectionW - 28 - (gap * 2)) / 3)
@@ -896,6 +896,41 @@ local function BuildBasics(ctx, builder, unit, label)
             SetBool(unit, "enabled", v, "MSUF2_FRAME_ENABLED", { preview = true })
             if M.Refresh then M.Refresh(ctx) end
         end)
+
+    local blizzard = W.SwitchAt(sec, "Force Blizzard frame on", x1, -74, max(196, colW + 24))
+    -- Blizzard ownership remains editable when the MSUF frame itself is off.
+    blizzard._msuf2UnitFrameGateAlwaysEnabled = true
+    M.BindToggle(ctx, blizzard,
+        function() return ReadBool(unit, "useBlizzardFrame", false) end,
+        function(v)
+            if ReadBool(unit, "useBlizzardFrame", false) == (v and true or false) then return end
+            SetBool(unit, "useBlizzardFrame", v, "MSUF2_BLIZZARD_FRAME_OWNERSHIP", { preview = false })
+            local reloadLabel = (label or UnitTopLabel(unit)) .. " Blizzard frame ownership"
+            if type(_G.MSUF_ShowReloadRecommendedPopup) == "function" then
+                _G.MSUF_ShowReloadRecommendedPopup(reloadLabel)
+            elseif _G.StaticPopup_Show and _G.StaticPopupDialogs and _G.StaticPopupDialogs.MSUF_RELOAD_PLAYERFRAME_HIDE_MODE then
+                _G.StaticPopup_Show("MSUF_RELOAD_PLAYERFRAME_HIDE_MODE")
+            elseif print then
+                print("|cffffd700MSUF:|r Changing Blizzard frame ownership requires a /reload.")
+            end
+        end)
+
+    local blizzardHint = "Independent from MSUF Enable; /reload required."
+    if unit == "targettarget" then
+        blizzardHint = "Also keeps Blizzard Target visible; /reload required."
+    elseif unit == "focustarget" then
+        blizzardHint = "Also keeps Blizzard Focus visible; /reload required."
+    end
+    W.Text(sec, blizzardHint, x2, -78, max(190, (sectionW - x2 - 14)), T.colors.muted)
+    if type(_G.MSUF_AddTooltip) == "function" then
+        local tooltip = "Keeps Blizzard's native frame active independently of the MSUF frame. Leave MSUF Enable on to show both, or turn MSUF Enable off to use only Blizzard. A UI reload is required."
+        if unit == "targettarget" then
+            tooltip = tooltip .. " Blizzard Target of Target is a child of Blizzard Target, so both native frames must remain active."
+        elseif unit == "focustarget" then
+            tooltip = tooltip .. " Blizzard Focus Target is a child of Blizzard Focus, so both native frames must remain active."
+        end
+        _G.MSUF_AddTooltip(blizzard, "Force Blizzard frame on", tooltip)
+    end
 
     local reverse = W.ToggleAt(sec, "Reverse fill direction", x2, row1, labelW)
     M.BindToggle(ctx, reverse,

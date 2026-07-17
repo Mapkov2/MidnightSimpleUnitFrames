@@ -1348,4 +1348,185 @@ ReportContains(report, "skipped", "MONOCHROME", "dead MONOCHROME flag is reporte
 Truthy(type(report.approximated) == "table" and #report.approximated > 0, "report has approximations")
 Truthy(type(report.skipped) == "table" and #report.skipped > 0, "report has skipped semantics")
 
+-- Per-unit Blizzard ownership must map without weakening the global hide
+-- policy, so one native frame does not bring every Blizzard frame back.
+do
+    local converted, ownershipReport = Import.Convert({
+        Units = {
+            player = {
+                Enabled = false,
+                ForceHideBlizzard = false,
+                Frame = {Layout = {"RIGHT", "LEFT", -211.7, -223.4}},
+                HealthBar = {AnchorToCooldownViewer = true},
+            },
+            target = {
+                Enabled = true,
+                -- Real exports can retain false here because UUF disables the
+                -- toggle while its own frame is enabled.
+                ForceHideBlizzard = false,
+                Frame = {Layout = {"LEFT", "RIGHT", -870.48220214844, -271.02883300781}},
+                HealthBar = {AnchorToCooldownViewer = true},
+            },
+            targettarget = { Enabled = false, ForceHideBlizzard = false },
+            pet = { Enabled = false, ForceHideBlizzard = false },
+            boss = { Enabled = true, ForceHideBlizzard = false },
+        },
+    })
+    Equal(converted.player.enabled, false, "UUF MSUF-player enabled state remains independent")
+    Equal(converted.player.useBlizzardFrame, true, "UUF player Blizzard ownership maps per unit")
+    Equal(converted.pet.useBlizzardFrame, true, "UUF pet Blizzard ownership maps per unit")
+    Equal(converted.target.useBlizzardFrame, false, "enabled UUF target suppresses Blizzard despite stale false flag")
+    Equal(converted.targettarget.useBlizzardFrame, true, "UUF targettarget ownership maps per unit")
+    Equal(converted.focus.useBlizzardFrame, false, "missing UUF focus exemption stays suppressed")
+    Equal(converted.focustarget.useBlizzardFrame, false, "missing UUF focustarget exemption stays suppressed")
+    Equal(converted.boss.useBlizzardFrame, false, "enabled UUF boss suppresses Blizzard despite stale false flag")
+    Equal(converted.general.disableBlizzardUnitFrames, true, "per-unit exemptions keep global suppression enabled")
+    Equal(converted.general.hardKillBlizzardPlayerFrame, true, "player exemption bypasses compat-anchor mode")
+    Equal(converted.player.anchorFrameName, "EssentialCooldownViewer", "real player keeps per-unit cooldown anchor")
+    Near(converted.player.offsetX, -191.7, "real player cooldown X uses MSUF point rule")
+    Near(converted.player.offsetY, -223.4, "real player cooldown Y remains exact")
+    Equal(converted.target.anchorFrameName, "EssentialCooldownViewer", "real target keeps per-unit cooldown anchor")
+    Near(converted.target.offsetX, -890.48220214844, "real target cooldown X uses MSUF point rule")
+    Near(converted.target.offsetY, -271.02883300781, "real target cooldown Y remains exact")
+    ReportContains(ownershipReport, "mapped", "player: Blizzard frame kept active", "player ownership is reported as mapped")
+    ReportContains(ownershipReport, "approximated", "targettarget: Blizzard child also requires Blizzard Target", "child dependency is reported")
+end
+
+-- Imported profiles use per-unit ECV anchors while native profiles commonly
+-- use the global toggle. Edit Mode must recognize both contracts or dragging
+-- an imported player/target writes CENTER offsets which the runtime later
+-- reinterprets as point-to-point offsets, making the frame jump.
+do
+    local editModePath = addonRoot .. "/EditMode2/MSUF_EM2_Layout.lua"
+    local editModeFile = assert(io.open(editModePath, "rb"))
+    local editModeSource = editModeFile:read("*a")
+    editModeFile:close()
+    Truthy(
+        editModeSource:find('conf.anchorFrameName == "EssentialCooldownViewer"', 1, true),
+        "Edit Mode recognizes per-unit ECV frame-name anchors"
+    )
+    Truthy(
+        editModeSource:find("UsesEssentialCooldownAnchor(conf, _g)", 1, true),
+        "Edit Mode drag path uses the shared per-unit ECV contract"
+    )
+end
+
+-- Named custom anchors must stay as real frame-to-frame relationships. The
+-- 5.72 proxy snapshot path made the profile look configured while the live
+-- unitframe stopped following its selected anchor target.
+do
+    local mainPath = addonRoot .. "/MidnightSimpleUnitFrames.lua"
+    local mainFile = assert(io.open(mainPath, "rb"))
+    local mainSource = mainFile:read("*a")
+    mainFile:close()
+    Truthy(
+        mainSource:find(
+            "local isExternal = external and _G.MSUF_IsCooldownExternalAnchorKey",
+            1,
+            true
+        ),
+        "only cooldown-viewer anchors use the legacy stable snapshot path"
+    )
+    Truthy(
+        mainSource:find("MSUF_AnchorWouldCreateCycle(f, anchor)", 1, true),
+        "custom unitframe anchors reject recursive frame relationships"
+    )
+    local positionStart = assert(mainSource:find("local function PositionUnitFrame", 1, true))
+    local positionEnd = assert(mainSource:find("_G.MSUF_SCREEN_CLAMP_UNITS", positionStart, true))
+    local positionSource = mainSource:sub(positionStart, positionEnd - 1)
+    Truthy(
+        not positionSource:find("MSUF_GetExternalAnchorProxy(anchor)", 1, true),
+        "generic custom anchors are not replaced by a UIParent proxy"
+    )
+end
+
+-- Runtime ownership is cold-path only. Verify every Blizzard-native unit and
+-- both child-frame dependencies with lightweight frame mocks.
+do
+    local function NativeFrame(name)
+        local frame = { name = name, hidden = false, unregisters = 0, scripts = {} }
+        function frame:UnregisterAllEvents() self.unregisters = self.unregisters + 1 end
+        function frame:Hide() self.hidden = true end
+        function frame:Show()
+            self.hidden = false
+            if self.scripts.OnShow then self.scripts.OnShow(self) end
+        end
+        function frame:IsProtected() return false end
+        function frame:IsForbidden() return false end
+        function frame:IsShown() return not self.hidden end
+        function frame:SetScript(kind, callback) self.scripts[kind] = callback end
+        function frame:HookScript() end
+        function frame:EnableMouse(value) self.mouseEnabled = value end
+        function frame:RegisterEvent() end
+        function frame:UnregisterEvent() end
+        return frame
+    end
+
+    _G.RegisterStateDriver = function(frame) frame.stateDriverHidden = true end
+    _G.CreateFrame = function() return NativeFrame("event") end
+    _G.C_Timer = { After = function(_, callback) callback() end }
+    _G.MSUF_InCombat = false
+    LoadAddonFile("Foundation/MSUF_BlizzKill.lua", "MidnightSimpleUnitFrames", {})
+
+    local unitKeys = { "player", "target", "targettarget", "focus", "focustarget", "pet", "boss" }
+    local function ResetNativeFrames(flags)
+        _G.MSUF_DB = { general = { disableBlizzardUnitFrames = true, hardKillBlizzardPlayerFrame = true } }
+        for i = 1, #unitKeys do
+            local key = unitKeys[i]
+            _G.MSUF_DB[key] = { enabled = true, useBlizzardFrame = flags and flags[key] == true or false }
+        end
+        _G.PlayerFrame = NativeFrame("player")
+        _G.PetFrame = NativeFrame("pet")
+        _G.TargetFrame = NativeFrame("target")
+        _G.TargetFrameToT = NativeFrame("targettarget")
+        _G.TargetFrame.totFrame = _G.TargetFrameToT
+        _G.FocusFrame = NativeFrame("focus")
+        _G.FocusFrameToT = NativeFrame("focustarget")
+        _G.FocusFrame.totFrame = _G.FocusFrameToT
+        _G.BossTargetFrameContainer = NativeFrame("bossContainer")
+        _G.BossTargetFrameContainer.Selection = NativeFrame("bossSelection")
+        for i = 1, 5 do _G["Boss" .. i .. "TargetFrame"] = NativeFrame("boss" .. i) end
+    end
+
+    local function Killed(frame)
+        return frame.hidden == true and frame.unregisters > 0
+    end
+
+    ResetNativeFrames({})
+    _G.MSUF_HideDefaultFrames()
+    Equal(Killed(_G.PlayerFrame), true, "default player is suppressed")
+    Equal(Killed(_G.PetFrame), true, "default pet is suppressed")
+    Equal(Killed(_G.TargetFrame), true, "default target is suppressed")
+    Equal(Killed(_G.TargetFrameToT), true, "default targettarget is suppressed")
+    Equal(Killed(_G.FocusFrame), true, "default focus is suppressed")
+    Equal(Killed(_G.FocusFrameToT), true, "default focustarget is suppressed")
+    Equal(Killed(_G.BossTargetFrameContainer), true, "default boss container is suppressed")
+
+    ResetNativeFrames({ player = true, pet = true, target = true, targettarget = true, focus = true, focustarget = true, boss = true })
+    _G.MSUF_HideDefaultFrames()
+    Equal(_G.PlayerFrame.unregisters, 0, "forced player remains Blizzard-owned")
+    Equal(_G.PetFrame.unregisters, 0, "forced pet remains Blizzard-owned")
+    Equal(_G.TargetFrame.unregisters, 0, "forced target remains Blizzard-owned")
+    Equal(_G.TargetFrameToT.unregisters, 0, "forced targettarget remains Blizzard-owned")
+    Equal(_G.FocusFrame.unregisters, 0, "forced focus remains Blizzard-owned")
+    Equal(_G.FocusFrameToT.unregisters, 0, "forced focustarget remains Blizzard-owned")
+    Equal(_G.BossTargetFrameContainer.unregisters, 0, "forced boss container remains Blizzard-owned")
+    for i = 1, 5 do
+        Equal(_G["Boss" .. i .. "TargetFrame"].unregisters, 0, "forced boss member remains Blizzard-owned " .. i)
+    end
+
+    ResetNativeFrames({ targettarget = true, focustarget = true })
+    _G.MSUF_HideDefaultFrames()
+    Equal(_G.TargetFrame.unregisters, 0, "forced targettarget keeps Blizzard target parent")
+    Equal(_G.TargetFrameToT.unregisters, 0, "forced targettarget remains Blizzard-owned")
+    Equal(_G.FocusFrame.unregisters, 0, "forced focustarget keeps Blizzard focus parent")
+    Equal(_G.FocusFrameToT.unregisters, 0, "forced focustarget remains Blizzard-owned")
+
+    ResetNativeFrames({ player = true })
+    _G.MSUF_DB.player.enabled = false
+    _G.MSUF_HideDefaultFrames()
+    Equal(_G.PlayerFrame.unregisters, 0, "Blizzard player is independent from MSUF enabled")
+    Equal(_G.PlayerFrame.hidden, false, "Blizzard-only player remains visible")
+end
+
 Finish()
