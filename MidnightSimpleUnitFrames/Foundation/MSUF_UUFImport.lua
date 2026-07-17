@@ -1555,12 +1555,17 @@ local STATUS_ICON_INSET = {
     LEFT={2, 0}, CENTER={0, 0}, RIGHT={-2, 0},
     BOTTOMLEFT={2, 2}, BOTTOM={0, 2}, BOTTOMRIGHT={-2, 2},
 }
+local UUF_CUSTOM_STATUS_ICON_SCALE = 2
+local MAX_IMPORTED_STATUS_ICON_SIZE = 256
 
 local function ApplyIcon(dst, source, fields, fallback, family)
     source = type(source) == "table" and source or fallback
     if type(source) ~= "table" then return false end
     local layout = Layout(source.Layout, fallback and fallback.Layout)
     local size = SafeNumber(source.Size, fallback and fallback.Size or 16, 8, 256)
+    if family == "status" then
+        size = math.min(size * UUF_CUSTOM_STATUS_ICON_SCALE, MAX_IMPORTED_STATUS_ICON_SIZE)
+    end
     local sourcePointX, sourcePointY = Fraction(layout[1])
     local anchor = Anchor(layout[2])
     local nativePoint = family == "status" and anchor or (ICON_SELF_POINT[anchor] or anchor)
@@ -2080,6 +2085,9 @@ local function ApplyGroupIcon(dst, source, keys)
     if type(source) ~= "table" then return end
     local layout = Layout(source.Layout)
     local size = SafeNumber(source.Size, keys.defaultSize, 4, 256)
+    if keys.doubleSize == true then
+        size = math.min(size * UUF_CUSTOM_STATUS_ICON_SCALE, MAX_IMPORTED_STATUS_ICON_SIZE)
+    end
     local sourceX, sourceY = Fraction(layout[1])
     local anchor = Anchor(layout[2])
     local nativeX, nativeY = Fraction(anchor)
@@ -2112,8 +2120,8 @@ local function ConvertGroupIndicators(kind, source, defaults, dst, report)
         {ResolveIndicator("Role"), {enabled="roleIcon", size="roleIconSize", anchor="roleIconAnchor", x="roleIconX", y="roleIconY", defaultSize=12}},
         {ResolveIndicator("ReadyCheckIndicator", "ReadyCheck"), {enabled="readyCheckIcon", size="readyCheckSize", anchor="readyCheckAnchor", x="readyCheckX", y="readyCheckY", defaultSize=16}},
         {ResolveIndicator("Summon"), {enabled="summonIcon", size="summonIconSize", anchor="summonAnchor", x="summonX", y="summonY", defaultSize=16}},
-        {ResolveIndicator("ResurrectIndicator", "Resurrection", "Resurrect"), {enabled="resurrectIcon", size="resurrectIconSize", anchor="resurrectAnchor", x="resurrectX", y="resurrectY", defaultSize=16}},
-        {ResolveIndicator("Phase"), {enabled="phaseIcon", size="phaseIconSize", anchor="phaseAnchor", x="phaseX", y="phaseY", defaultSize=14}},
+        {ResolveIndicator("ResurrectIndicator", "Resurrection", "Resurrect"), {enabled="resurrectIcon", size="resurrectIconSize", anchor="resurrectAnchor", x="resurrectX", y="resurrectY", defaultSize=16, doubleSize=true}},
+        {ResolveIndicator("Phase"), {enabled="phaseIcon", size="phaseIconSize", anchor="phaseAnchor", x="phaseX", y="phaseY", defaultSize=14, doubleSize=true}},
     }
     for i = 1, #iconMaps do
         local entry = iconMaps[i]

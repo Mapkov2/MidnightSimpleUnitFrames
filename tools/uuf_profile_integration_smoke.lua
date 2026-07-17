@@ -13,6 +13,7 @@ local repoRoot = scriptDir:gsub("tools/$", "")
 if repoRoot == "" then repoRoot = "." end
 
 local profileSource = repoRoot .. "/MidnightSimpleUnitFrames/Foundation/MSUF_Profiles.lua"
+local statusSource = repoRoot .. "/MidnightSimpleUnitFrames/Core/MSUF_StatusIndicators.lua"
 
 local passed, failed = 0, 0
 local failures = {}
@@ -65,6 +66,7 @@ local importerMode = "success"
 local capturedBase
 local capturedInput
 local requestedAddon
+local inCombat = false
 
 local convertedTemplate = {
     converterMarker = "native-uuf-converter",
@@ -109,6 +111,7 @@ local mutationGlobals = {
     MSUF_Auras2_ApplyFontsFromGlobal = "auraFonts",
     MSUF_UpdateTargetAuras = "targetAuras",
     MSUF_RefreshAllUnitAlphas = "alphaRefresh",
+    MSUF_RefreshStatusIndicators = "statusRefresh",
 }
 
 local function MutationCallCount()
@@ -122,14 +125,16 @@ end
 local ns = {}
 _G.MSUF_NS = ns
 _G.CopyTable = DeepCopy
-_G.InCombatLockdown = function() return false end
+_G.InCombatLockdown = function() return inCombat end
 _G.GetRealmName = function() return "SmokeRealm" end
 _G.UnitName = function() return "SmokeCharacter" end
 _G.CreateFrame = function()
     return {
-        SetScript = function() end,
-        RegisterEvent = function() end,
-        UnregisterEvent = function() end,
+        SetScript = function(self, event, callback) self[event] = callback end,
+        RegisterEvent = function(self, event) self.registeredEvent = event end,
+        UnregisterEvent = function(self, event)
+            if self.registeredEvent == event then self.registeredEvent = nil end
+        end,
     }
 end
 
@@ -229,6 +234,12 @@ local function FreshProfiles()
     return active, other
 end
 
+local function EventIndex(name)
+    for index, eventName in ipairs(events) do
+        if eventName == name then return index end
+    end
+end
+
 -- Loaded UUF must block every route that can replace the active profile before
 -- the converter, a generic decoder, or any DB/runtime mutator is reached.
 local blockedEntrypoints = {
@@ -281,6 +292,101 @@ for _, scenario in ipairs(blockedEntrypoints) do
     )
 end
 
+-- A successful UUF replacement of the active profile must synchronously drop
+-- and rebuild status-icon geometry after the normal profile runtime apply.
+local activeSuccessEntrypoints = {
+    {
+        name = "active standard import",
+        call = function() return ImportActive("!UUF_active_standard_success") end,
+    },
+    {
+        name = "external active-profile import",
+        call = function() return ImportExternal("!UUF_active_external_success", "Active") end,
+    },
+}
+
+for _, scenario in ipairs(activeSuccessEntrypoints) do
+    local active = FreshProfiles()
+    ResetInstrumentation()
+    ns.MSUF_UUFImport = nil
+    uufLoaded = false
+    importerMode = "success"
+
+    local result, why = scenario.call()
+
+    Check(scenario.name .. " succeeds", result == true, why)
+    Check(scenario.name .. " loads LoD converter exactly once", (counts.loadAddon or 0) == 1, counts.loadAddon)
+    Check(scenario.name .. " invokes native converter exactly once", (counts.convert or 0) == 1, counts.convert)
+    Check(scenario.name .. " passes active table as converter base", capturedBase == active)
+    Check(
+        scenario.name .. " preserves active table reference",
+        _G.MSUF_DB == active and _G.MSUF_GlobalDB.profiles.Active == active
+    )
+    Check(
+        scenario.name .. " stores converter output",
+        active.converterMarker == "native-uuf-converter"
+            and active.nested and active.nested.translated == true
+            and active.marker == nil
+    )
+    Check(scenario.name .. " refreshes status-icon runtime exactly once", (counts.statusRefresh or 0) == 1, counts.statusRefresh)
+    Check(scenario.name .. " emits converter report exactly once", (counts.report or 0) == 1, counts.report)
+    Check(
+        scenario.name .. " refreshes status icons after core notify and before report",
+        EventIndex("notify") and EventIndex("statusRefresh") and EventIndex("report")
+            and EventIndex("notify") < EventIndex("statusRefresh")
+            and EventIndex("statusRefresh") < EventIndex("report"),
+        table.concat(events, ",")
+    )
+    Check(
+        scenario.name .. " bypasses generic decoders",
+        (counts.compactDecode or 0) == 0 and (counts.legacyDecode or 0) == 0
+    )
+end
+
+-- Combat keeps the same UUF-only refresh request attached to the existing
+-- deferred profile apply instead of touching live frame geometry immediately.
+do
+    FreshProfiles()
+    ResetInstrumentation()
+    ns.MSUF_UUFImport = nil
+    uufLoaded = false
+    importerMode = "success"
+    inCombat = true
+
+    local result = ImportActive("!UUF_active_combat_success")
+    local pending = _G.MSUF_ProfileIO_PendingPostProfileRuntimeApply
+    local deferFrame = _G.MSUF_ProfileIO_PostProfileDeferFrame
+
+    Check("combat UUF import stores successful profile conversion", result == true)
+    Check("combat UUF import does not refresh protected runtime immediately", (counts.statusRefresh or 0) == 0)
+    Check("combat UUF import preserves pending status refresh", pending and pending.refreshStatus == true)
+    Check("combat UUF import registers deferred runtime apply", deferFrame and deferFrame.registeredEvent == "PLAYER_REGEN_ENABLED")
+
+    inCombat = false
+    assert(deferFrame and type(deferFrame.OnEvent) == "function")
+    deferFrame:OnEvent("PLAYER_REGEN_ENABLED")
+    Check("deferred UUF apply refreshes status icons after combat", (counts.statusRefresh or 0) == 1, counts.statusRefresh)
+    Check("deferred UUF apply consumes pending request", _G.MSUF_ProfileIO_PendingPostProfileRuntimeApply == nil)
+end
+
+-- Native MSUF imports retain the established runtime path; the extra icon
+-- refresh is requested only by the UUF converter routes above.
+do
+    FreshProfiles()
+    ResetInstrumentation()
+    local decodeCompact = _G.MSUF_TryDecodeCompactString
+    _G.MSUF_TryDecodeCompactString = function()
+        return { addon = "MSUF", fmt = 2, kind = "all", payload = DeepCopy(convertedTemplate) }
+    end
+
+    local result = ImportActive("MSUF3:native_profile_smoke")
+    _G.MSUF_TryDecodeCompactString = decodeCompact
+
+    Check("native MSUF import still succeeds", result == true)
+    Check("native MSUF import does not request UUF status refresh", (counts.statusRefresh or 0) == 0, counts.statusRefresh)
+    Check("native MSUF import does not load UUF converter", (counts.loadAddon or 0) == 0, counts.loadAddon)
+end
+
 -- With UUF inactive, an external import must load the dedicated companion and
 -- apply only the table returned by its native converter.
 do
@@ -316,6 +422,7 @@ do
         "inactive external import leaves active profile untouched",
         _G.MSUF_DB == active and DeepEqual(active, activeSnapshot)
     )
+    Check("inactive external import does not refresh active status icons", (counts.statusRefresh or 0) == 0, counts.statusRefresh)
     Check(
         "converter completes before profile normalization",
         events[1] == "loadAddon" and events[2] == "convert"
@@ -367,6 +474,65 @@ end
 -- fully transactional, for non-active and active destinations respectively.
 RunFailureScenario("returned failure on non-active profile", "Other", "return-failure")
 RunFailureScenario("thrown failure on active profile", "Active", "throw")
+
+-- The public refresh used by the UUF import must replace stale custom status-
+-- icon geometry and immediately apply the imported UUF size to the live frame.
+do
+    local function Region()
+        return {
+            SetText = function(self, value) self.text = value end,
+            SetSize = function(self, width, height) self.width, self.height = width, height end,
+            ClearAllPoints = function(self) self.point = nil end,
+            SetPoint = function(self, ...) self.point = { ... } end,
+            SetTexture = function(self, value) self.texture = value end,
+            GetTexture = function(self) return self.texture end,
+            SetTexCoord = function(self, ...) self.texCoord = { ... } end,
+            SetAlpha = function(self, value) self.alpha = value end,
+            Show = function(self) self.shown = true end,
+            Hide = function(self) self.shown = false end,
+        }
+    end
+
+    local staleIconCache = { showRest = true, restSize = 16, restSymbol = "rested_moonzzz" }
+    local restingIcon = Region()
+    local statusFrame = {
+        unit = "player",
+        _msufIsPlayer = true,
+        _msufStatusConf = { stale = true },
+        _msufStatusIconsConf = staleIconCache,
+        statusIndicatorText = Region(),
+        restingIndicatorIcon = restingIcon,
+    }
+    _G.MSUF_DB = {
+        general = { stateIconsTestMode = true },
+        player = {
+            statusTextEnabled = false,
+            showRestingIndicator = true,
+            restedStateIndicatorSize = 32,
+            restedStateIndicatorAnchor = "TOPLEFT",
+            restedStateIndicatorOffsetX = 1,
+            restedStateIndicatorOffsetY = 10,
+            restedStateIndicatorSymbol = "rested_moonzzzz",
+        },
+    }
+    _G.MSUF_UnitFrames = { player = statusFrame }
+
+    local statusChunk, statusLoadError = loadfile(statusSource)
+    assert(statusChunk, statusLoadError)
+    statusChunk("MidnightSimpleUnitFrames", ns)
+    assert(type(_G.MSUF_RefreshStatusIndicators) == "function")
+    _G.MSUF_RefreshStatusIndicators()
+
+    Check("UUF refresh discards stale custom-icon cache", statusFrame._msufStatusIconsConf ~= staleIconCache)
+    Check("UUF refresh rebuilds doubled custom-icon size", statusFrame._msufStatusIconsConf.restSize == 32)
+    Check("UUF refresh applies doubled custom-icon width", restingIcon.width == 32, restingIcon.width)
+    Check("UUF refresh applies doubled custom-icon height", restingIcon.height == 32, restingIcon.height)
+    Check(
+        "UUF refresh applies selected custom status symbol",
+        type(restingIcon.texture) == "string" and restingIcon.texture:find("rested_moonzzzz", 1, true) ~= nil,
+        restingIcon.texture
+    )
+end
 
 io.write(string.format(
     "uuf_profile_integration_smoke: %d/%d checks passed\n",

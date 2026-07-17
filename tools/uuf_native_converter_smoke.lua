@@ -568,13 +568,16 @@ if type(sparseDefaultOut) == "table" and type(explicitDefaultOut) == "table" the
     EqualAt(sparseDefaultOut, "gf_party.powerShowDamager", false)
     EqualAt(sparseDefaultOut, "gf_party.roleIcon", true)
     EqualAt(sparseDefaultOut, "gf_party.roleIconShowDPS", true)
+    EqualAt(sparseDefaultOut, "gf_party.resurrectIconSize", 48)
     EqualAt(sparseDefaultOut, "gf_party.privateAuras.enabled", true)
     EqualAt(sparseDefaultOut, "gf_party.privateAuras.max", 1)
     EqualAt(sparseDefaultOut, "gf_party.privateAuras.size", 32)
     EqualAt(sparseDefaultOut, "gf_party.privateAuras.direction", "LEFT")
     EqualAt(sparseDefaultOut, "gf_raid.roleIcon", false)
     EqualAt(sparseDefaultOut, "gf_raid.roleIconShowDPS", false)
-    EqualAt(sparseDefaultOut, "gf_raid.resurrectIconSize", 18)
+    EqualAt(sparseDefaultOut, "gf_party.phaseIconSize", 32)
+    EqualAt(sparseDefaultOut, "gf_raid.phaseIconSize", 24)
+    EqualAt(sparseDefaultOut, "gf_raid.resurrectIconSize", 36)
     EqualAt(sparseDefaultOut, "gf_raid.privateAuras.enabled", true)
 end
 
@@ -629,7 +632,7 @@ EqualAt(indicatorAliasOutput, "gf_party.readyCheckAnchor", "CENTER")
 EqualAt(indicatorAliasOutput, "gf_party.readyCheckX", 4)
 EqualAt(indicatorAliasOutput, "gf_party.readyCheckY", -5)
 EqualAt(indicatorAliasOutput, "gf_party.resurrectIcon", true)
-EqualAt(indicatorAliasOutput, "gf_party.resurrectIconSize", 13)
+EqualAt(indicatorAliasOutput, "gf_party.resurrectIconSize", 26)
 EqualAt(indicatorAliasOutput, "gf_party.resurrectAnchor", "RIGHT")
 EqualAt(indicatorAliasOutput, "gf_party.resurrectX", -2)
 EqualAt(indicatorAliasOutput, "gf_party.resurrectY", 3)
@@ -637,8 +640,17 @@ EqualAt(indicatorAliasOutput, "gf_raid.readyCheckIcon", true)
 EqualAt(indicatorAliasOutput, "gf_raid.readyCheckSize", 17)
 EqualAt(indicatorAliasOutput, "gf_raid.readyCheckAnchor", "LEFT")
 EqualAt(indicatorAliasOutput, "gf_raid.resurrectIcon", false)
-EqualAt(indicatorAliasOutput, "gf_raid.resurrectIconSize", 19)
+EqualAt(indicatorAliasOutput, "gf_raid.resurrectIconSize", 38)
 EqualAt(indicatorAliasOutput, "gf_raid.resurrectAnchor", "TOP")
+
+local customIconLimitOutput = assert(Import.Convert({
+    Units = {
+        player = {Indicators = {Combat = {Enabled = true, Size = 200}}},
+        party = {Indicators = {Phase = {Enabled = true, Size = 200}}},
+    },
+}, {}))
+EqualAt(customIconLimitOutput, "player.combatStateIndicatorSize", 256)
+EqualAt(customIconLimitOutput, "gf_party.phaseIconSize", 256)
 
 -- One representative V12 profile deliberately combines the real Default
 -- geometry/text layout with exact native mappings and a few unsupported source
@@ -1102,12 +1114,12 @@ EqualAt(output, "target.raidMarkerOffsetY", 0)
 -- (+2, -2). The stored offsets compensate so the final reader geometry stays
 -- at the original UUF (+3, -3) position.
 EqualAt(output, "player.showCombatStateIndicator", true)
-EqualAt(output, "player.combatStateIndicatorSize", 16)
+EqualAt(output, "player.combatStateIndicatorSize", 32)
 EqualAt(output, "player.combatStateIndicatorAnchor", "TOPLEFT")
 EqualAt(output, "player.combatStateIndicatorOffsetX", 1)
 EqualAt(output, "player.combatStateIndicatorOffsetY", -1)
 EqualAt(output, "player.showRestingIndicator", true)
-EqualAt(output, "player.restedStateIndicatorSize", 16)
+EqualAt(output, "player.restedStateIndicatorSize", 32)
 EqualAt(output, "player.restedStateIndicatorAnchor", "TOPLEFT")
 EqualAt(output, "player.restedStateIndicatorOffsetX", 1)
 EqualAt(output, "player.restedStateIndicatorOffsetY", -1)
@@ -1320,12 +1332,12 @@ do
     _G.MSUF_UpdateStatusIndicatorForFrame(playerFrame)
 
     CheckReaderPoint(
-        playerFrame.combatStateIndicatorIcon, playerFrame, 16,
+        playerFrame.combatStateIndicatorIcon, playerFrame, 32,
         "TOPLEFT", "TOPLEFT", 3, -3,
         "real combat-indicator reader preserves UUF TOPLEFT geometry"
     )
     CheckReaderPoint(
-        playerFrame.restingIndicatorIcon, playerFrame, 16,
+        playerFrame.restingIndicatorIcon, playerFrame, 32,
         "TOPLEFT", "TOPLEFT", 3, -3,
         "real resting-indicator reader preserves UUF TOPLEFT geometry"
     )

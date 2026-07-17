@@ -66,13 +66,15 @@ local MSUF_ProfileIO_PostProfileRuntimeApply
 local function MSUF_ProfileIO_InCombatLockdown()
     return (_G.InCombatLockdown and _G.InCombatLockdown()) and true or false
 end
-local function MSUF_ProfileIO_DeferPostProfileRuntimeApply(reason, applyAll)
+local function MSUF_ProfileIO_DeferPostProfileRuntimeApply(reason, applyAll, refreshStatus)
     if not MSUF_ProfileIO_InCombatLockdown() then
         return false
     end
+    local previous = _G.MSUF_ProfileIO_PendingPostProfileRuntimeApply
     _G.MSUF_ProfileIO_PendingPostProfileRuntimeApply = {
         reason = reason or "PROFILE_APPLY",
         applyAll = applyAll == true,
+        refreshStatus = refreshStatus == true or (previous and previous.refreshStatus == true),
     }
     local f = _G.MSUF_ProfileIO_PostProfileDeferFrame
     if not f and type(_G.CreateFrame) == "function" then
@@ -85,7 +87,11 @@ local function MSUF_ProfileIO_DeferPostProfileRuntimeApply(reason, applyAll)
             local pending = _G.MSUF_ProfileIO_PendingPostProfileRuntimeApply
             _G.MSUF_ProfileIO_PendingPostProfileRuntimeApply = nil
             if pending and MSUF_ProfileIO_PostProfileRuntimeApply then
-                MSUF_ProfileIO_PostProfileRuntimeApply(pending.reason or "PROFILE_APPLY_AFTER_COMBAT", pending.applyAll == true)
+                MSUF_ProfileIO_PostProfileRuntimeApply(
+                    pending.reason or "PROFILE_APPLY_AFTER_COMBAT",
+                    pending.applyAll == true,
+                    pending.refreshStatus == true
+                )
             end
         end)
     end
@@ -97,9 +103,9 @@ local function MSUF_ProfileIO_DeferPostProfileRuntimeApply(reason, applyAll)
     end
     return true
 end
-MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll)
+MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll, refreshStatus)
     reason = reason or "PROFILE_APPLY"
-    if MSUF_ProfileIO_DeferPostProfileRuntimeApply(reason, applyAll) then
+    if MSUF_ProfileIO_DeferPostProfileRuntimeApply(reason, applyAll, refreshStatus) then
         return
     end
     if applyAll == true then
@@ -121,6 +127,9 @@ MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll)
     MSUF_ProfileIO_CallGlobal("MSUF_ApplyPowerBarEmbedLayout_All")
     MSUF_ProfileIO_CallGlobal("MSUF_Portraits_ForceRefresh")
     MSUF_ProfileIO_CallGlobal("MSUF_PortraitDecoration_RefreshAll")
+    if refreshStatus == true then
+        MSUF_ProfileIO_CallGlobal("MSUF_RefreshStatusIndicators")
+    end
 end
 -- Compact codec (backward compatible)
 -- New export format (preferred):
@@ -1421,7 +1430,7 @@ function MSUF_ExportSelectionToString(kind)
     -- 0-regression fallback
     return MSUF_SerializeLuaTable(snap)
 end
-local function MSUF_ApplyLegacyTableToActiveProfile(tbl)
+local function MSUF_ApplyLegacyTableToActiveProfile(tbl, refreshStatus)
     if type(tbl) ~= "table" then
         print("|cffff0000MSUF:|r Legacy import failed: not a table.")
          return false
@@ -1441,7 +1450,7 @@ local function MSUF_ApplyLegacyTableToActiveProfile(tbl)
     MSUF_ProfileIO_PostImportApply_Auras("all", tbl)
     MSUF_ProfileIO_PostImportApply_GroupFrames("all", tbl)
     MSUF_ProfileIO_PostImportApply_UnitAlphas("all", tbl)
-    MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_LEGACY_IMPORT", true)
+    MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_LEGACY_IMPORT", true, refreshStatus)
     print("|cff00ff00MSUF:|r Legacy profile imported into the active profile.")
      return true
 end
@@ -1459,7 +1468,7 @@ local function MSUF_ProfileIO_TryImportUUFIntoActiveProfile(value)
         return false
     end
 
-    local imported = MSUF_ApplyLegacyTableToActiveProfile(converted)
+    local imported = MSUF_ApplyLegacyTableToActiveProfile(converted, true)
     if imported then MSUF_ProfileIO_PrintUUFReport(report) end
     return imported == true
 end
@@ -1606,7 +1615,7 @@ local function MSUF_ProfileIO_GetProfileTable(profileKey)
     MSUF_ProfileIO_EnsureProfilesTable()
     return MSUF_GlobalDB.profiles[profileKey]
 end
-local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable)
+local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable, refreshStatus)
     if type(profileKey) ~= "string" or profileKey == "" then
          return false, "invalid profileKey"
     end
@@ -1636,7 +1645,7 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable)
         MSUF_ProfileIO_PostImportApply_Auras("all", target)
         MSUF_ProfileIO_PostImportApply_GroupFrames("all", target)
         MSUF_ProfileIO_PostImportApply_UnitAlphas("all", target)
-        MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_EXTERNAL_IMPORT", true)
+        MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_EXTERNAL_IMPORT", true, refreshStatus)
          return true
     end
     if type(existing) == "table" then
@@ -1696,7 +1705,7 @@ function MSUF_ImportExternal(profileString, profileKey)
         local converted, report, why = MSUF_ProfileIO_ConvertUUFString(profileString, baseProfile or {})
         if not converted then return false, "UUF import failed: " .. tostring(why) end
 
-        local imported, importError = MSUF_ProfileIO_OverwriteProfile(profileKey, converted)
+        local imported, importError = MSUF_ProfileIO_OverwriteProfile(profileKey, converted, isActive)
         if imported then MSUF_ProfileIO_PrintUUFReport(report) end
         return imported, importError
     end
