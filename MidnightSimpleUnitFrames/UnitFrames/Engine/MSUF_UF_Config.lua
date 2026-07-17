@@ -1515,6 +1515,14 @@ local function CompileUnitText(out, db, unit, key, conf, general, bars)
   text.hidePercentSymbol = general.hidePercentSymbol == true
 end
 
+local function PetFrameColorEnabled(general)
+  -- The color picker has no separate enable toggle. As in the legacy runtime,
+  -- a complete stored RGB tuple is the opt-in signal for the pet override.
+  return type(general.petFrameColorR) == "number"
+    and type(general.petFrameColorG) == "number"
+    and type(general.petFrameColorB) == "number"
+end
+
 local function CompileUnitHealth(out, conf, general, bars)
   local health = out.health or {}
   out.health = health
@@ -1538,7 +1546,7 @@ local function CompileUnitHealth(out, conf, general, bars)
   -- Boss frames keep reaction coloring (hostile red / friendly green). The
   -- optional NPC class-color override only applies to non-boss NPC frames.
   health.npcClassColorBar = general.npcClassColorBar == true and out.key ~= "boss"
-  health.petColorEnabled = general.petFrameColorEnabled == true
+  health.petColorEnabled = PetFrameColorEnabled(general)
   health.petR = Number(general.petFrameColorR, 0)
   health.petG = Number(general.petFrameColorG, 0.8)
   health.petB = Number(general.petFrameColorB, 0)
@@ -1885,7 +1893,7 @@ local function BuildSettingsCache(db)
   cache.barBgClassColor = general.barBgClassColor == true
   cache.barBgMatchHPColor = general.barBgMatchHPColor == true
   cache.powerBarBgMatchHPColor = general.powerBarBgMatchBarColor == true or bars.powerBarBgMatchBarColor == true
-  cache.petFrameColorEnabled = general.petFrameColorEnabled == true
+  cache.petFrameColorEnabled = PetFrameColorEnabled(general)
   cache.petFrameColorR = Number(general.petFrameColorR, 0)
   cache.petFrameColorG = Number(general.petFrameColorG, 0.8)
   cache.petFrameColorB = Number(general.petFrameColorB, 0)
