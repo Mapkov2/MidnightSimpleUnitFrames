@@ -1047,3 +1047,115 @@ do
         end
     end)
 end
+
+-- Cold-path screen-boundary helpers shared by Unit Frames, Group Frames and
+-- profile import. Coordinates are normalized into UIParent space so anchors
+-- with a different effective scale cannot push a frame outside the screen.
+function U.ClampRectCenterToScreen(centerX, centerY, width, height, screenWidth, screenHeight)
+    centerX, centerY = tonumber(centerX) or 0, tonumber(centerY) or 0
+    width, height = math_max(0, tonumber(width) or 0), math_max(0, tonumber(height) or 0)
+    screenWidth = math_max(0, tonumber(screenWidth) or 0)
+    screenHeight = math_max(0, tonumber(screenHeight) or 0)
+    if screenWidth <= 0 or screenHeight <= 0 then return centerX, centerY, false end
+
+    local halfWidth, halfHeight = width * 0.5, height * 0.5
+    local clampedX, clampedY
+    if width <= screenWidth then
+        clampedX = math_max(halfWidth, math_min(screenWidth - halfWidth, centerX))
+    else
+        clampedX = screenWidth * 0.5
+    end
+    if height <= screenHeight then
+        clampedY = math_max(halfHeight, math_min(screenHeight - halfHeight, centerY))
+    else
+        clampedY = screenHeight * 0.5
+    end
+    return clampedX, clampedY, clampedX ~= centerX or clampedY ~= centerY
+end
+_G.MSUF_ClampRectCenterToScreen = U.ClampRectCenterToScreen
+
+function U.FramePointInParent(frame, point, parent)
+    if not (frame and parent) then return nil, nil end
+    local left = frame.GetLeft and frame:GetLeft()
+    local right = frame.GetRight and frame:GetRight()
+    local top = frame.GetTop and frame:GetTop()
+    local bottom = frame.GetBottom and frame:GetBottom()
+    if not (left and right and top and bottom) then return nil, nil end
+
+    local frameScale = (frame.GetEffectiveScale and frame:GetEffectiveScale()) or 1
+    local parentScale = (parent.GetEffectiveScale and parent:GetEffectiveScale()) or 1
+    if frameScale == 0 then frameScale = 1 end
+    if parentScale == 0 then parentScale = 1 end
+    local ratio = frameScale / parentScale
+    left, right, top, bottom = left * ratio, right * ratio, top * ratio, bottom * ratio
+    local centerX, centerY = (left + right) * 0.5, (top + bottom) * 0.5
+    point = type(point) == "string" and point:upper() or "CENTER"
+    if point == "TOPLEFT" then return left, top end
+    if point == "TOP" then return centerX, top end
+    if point == "TOPRIGHT" then return right, top end
+    if point == "LEFT" then return left, centerY end
+    if point == "RIGHT" then return right, centerY end
+    if point == "BOTTOMLEFT" then return left, bottom end
+    if point == "BOTTOM" then return centerX, bottom end
+    if point == "BOTTOMRIGHT" then return right, bottom end
+    return centerX, centerY
+end
+_G.MSUF_FramePointInParent = U.FramePointInParent
+
+function U.ClampAnchoredRectOffsets(anchor, anchorPoint, offsetX, offsetY, width, height, parent)
+    if not (anchor and parent) then return offsetX, offsetY, false end
+    local anchorX, anchorY = U.FramePointInParent(anchor, anchorPoint, parent)
+    if not (anchorX and anchorY) then return offsetX, offsetY, false end
+
+    local anchorScale = (anchor.GetEffectiveScale and anchor:GetEffectiveScale()) or 1
+    local parentScale = (parent.GetEffectiveScale and parent:GetEffectiveScale()) or 1
+    if anchorScale == 0 then anchorScale = 1 end
+    if parentScale == 0 then parentScale = 1 end
+    local ratio = anchorScale / parentScale
+    offsetX, offsetY = tonumber(offsetX) or 0, tonumber(offsetY) or 0
+    local centerX = anchorX + offsetX * ratio
+    local centerY = anchorY + offsetY * ratio
+    local clampedX, clampedY, changed = U.ClampRectCenterToScreen(
+        centerX, centerY, width, height,
+        parent.GetWidth and parent:GetWidth() or 0,
+        parent.GetHeight and parent:GetHeight() or 0
+    )
+    if not changed then return offsetX, offsetY, false end
+    return (clampedX - anchorX) / ratio, (clampedY - anchorY) / ratio, true
+end
+_G.MSUF_ClampAnchoredRectOffsets = U.ClampAnchoredRectOffsets
+
+function U.FrameUnionClampDelta(frames, parent)
+    if not (frames and parent) then return 0, 0, false end
+    if frames.GetLeft then frames = {frames} end
+    local parentScale = (parent.GetEffectiveScale and parent:GetEffectiveScale()) or 1
+    if parentScale == 0 then parentScale = 1 end
+    local minLeft, maxRight, minBottom, maxTop
+    for i = 1, #frames do
+        local frame = frames[i]
+        local left = frame and frame.GetLeft and frame:GetLeft()
+        local right = frame and frame.GetRight and frame:GetRight()
+        local top = frame and frame.GetTop and frame:GetTop()
+        local bottom = frame and frame.GetBottom and frame:GetBottom()
+        if left and right and top and bottom then
+            local frameScale = (frame.GetEffectiveScale and frame:GetEffectiveScale()) or 1
+            if frameScale == 0 then frameScale = 1 end
+            local ratio = frameScale / parentScale
+            left, right, top, bottom = left * ratio, right * ratio, top * ratio, bottom * ratio
+            minLeft = minLeft and math_min(minLeft, left) or left
+            maxRight = maxRight and math_max(maxRight, right) or right
+            minBottom = minBottom and math_min(minBottom, bottom) or bottom
+            maxTop = maxTop and math_max(maxTop, top) or top
+        end
+    end
+    if not minLeft then return 0, 0, false end
+
+    local centerX, centerY = (minLeft + maxRight) * 0.5, (minBottom + maxTop) * 0.5
+    local clampedX, clampedY, changed = U.ClampRectCenterToScreen(
+        centerX, centerY, maxRight - minLeft, maxTop - minBottom,
+        parent.GetWidth and parent:GetWidth() or 0,
+        parent.GetHeight and parent:GetHeight() or 0
+    )
+    return clampedX - centerX, clampedY - centerY, changed
+end
+_G.MSUF_FrameUnionClampDelta = U.FrameUnionClampDelta

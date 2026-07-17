@@ -173,6 +173,7 @@ local function SyncContainer(kind)
     -- configured columns.
     local count = (gf.GetPositionCount and gf.GetPositionCount(kind)) or GetPreviewCount(kind)
     local _, _, totalW, totalH = gf.GetGridMetrics(kind, count)
+    if gf.ClampPositionToScreen then gf.ClampPositionToScreen(kind, count) end
     local cx = conf.offsetX
     local cy = conf.offsetY
     if cx == nil or cy == nil then
@@ -236,6 +237,7 @@ local function NudgePreviewKind(kind, dx, dy)
 
     conf.offsetX = math_floor(((tonumber(conf.offsetX) or defX) + (dx or 0)) + 0.5)
     conf.offsetY = math_floor(((tonumber(conf.offsetY) or defY) + (dy or 0)) + 0.5)
+    if gf.ClampPositionToScreen then gf.ClampPositionToScreen(kind) end
 
     SyncContainer(kind)
     if gf.RefreshPreviewLayout then

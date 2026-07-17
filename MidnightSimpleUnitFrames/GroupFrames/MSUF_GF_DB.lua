@@ -700,6 +700,41 @@ function GF.GetGridMetrics(kind, count)
     return dx, dy, totalW, totalH, w, h, sp, growth, upc, count, firstDX, firstDY
 end
 
+function GF.ClampPositionToScreen(kind, count)
+    local conf = GF.GetConf(kind)
+    local clamp = _G.MSUF_ClampAnchoredRectOffsets
+    if not (conf and UIParent and type(clamp) == "function") then return false end
+    count = count or (GF.GetPositionCount and GF.GetPositionCount(kind))
+    local _, _, totalWidth, totalHeight = GF.GetGridMetrics(kind, count)
+    local anchor = (GF.ResolveAnchorFrame and GF.ResolveAnchorFrame(kind)) or UIParent
+    local point = conf.anchorPoint or conf.point or "CENTER"
+    local offsetX = tonumber(conf.offsetX) or 0
+    local offsetY = tonumber(conf.offsetY) or 0
+    local clampedX, clampedY, changed = clamp(
+        anchor, point, offsetX, offsetY, totalWidth, totalHeight, UIParent
+    )
+    if not changed then return false end
+    conf.offsetX = clampedX
+    conf.offsetY = clampedY
+    conf.positionMode = "GRID_CENTER_V1"
+    return true
+end
+_G.MSUF_GF_ClampPositionToScreen = GF.ClampPositionToScreen
+
+function GF.ClampAllPositionsToScreen()
+    if _G.InCombatLockdown and _G.InCombatLockdown() then return false end
+    local changed = false
+    for _, kind in ipairs({"party", "raid", "mythicraid"}) do
+        if GF.ClampPositionToScreen(kind) then
+            changed = true
+            if GF.SyncHeaderPosition then GF.SyncHeaderPosition(kind) end
+            if GF.RefreshPreviewLayout then GF.RefreshPreviewLayout(kind) end
+        end
+    end
+    return changed
+end
+_G.MSUF_GF_ClampAllPositionsToScreen = GF.ClampAllPositionsToScreen
+
 local function GetMigrationCount(kind, conf)
     if IsRaidLikeKind(kind) then
         local isInRaid = _G.IsInRaid
