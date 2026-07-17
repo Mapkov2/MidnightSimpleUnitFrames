@@ -8,6 +8,10 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF or MSUF.LOCALE ~= "enGB" then return end
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("enGB")) or (MSUF.L or {})
 
+L["Force Blizzard frame on"] = "Force Blizzard frame on"
+L["Keeps Blizzard's native frame active independently of the MSUF frame. Leave MSUF Enable on to show both, or turn MSUF Enable off to use only Blizzard. A UI reload is required."] = "Keeps Blizzard's native frame active independently of the MSUF frame. Leave MSUF Enable on to show both, or turn MSUF Enable off to use only Blizzard. A UI reload is required."
+L["Shared name shortening affects all unit names and group frames unless a scope has custom font settings."] = "Shared name shortening affects all unit names and group frames unless a scope has custom font settings."
+
 --- enGB uses enUS keys as fallback. Add British spelling overrides below:
 --- L["Color player names by class"] = "Colour player names by class"
 L["Language"] = "Language"

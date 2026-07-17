@@ -11,6 +11,10 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF or MSUF.LOCALE ~= "koKR" then return end
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("koKR")) or (MSUF.L or {})
 
+L["Force Blizzard frame on"] = "Blizzard 프레임 강제 활성화"
+L["Keeps Blizzard's native frame active independently of the MSUF frame. Leave MSUF Enable on to show both, or turn MSUF Enable off to use only Blizzard. A UI reload is required."] = "MSUF 프레임과 독립적으로 Blizzard 기본 프레임을 활성 상태로 유지합니다. 둘 다 표시하려면 MSUF 활성화를 켜 두고, Blizzard 프레임만 사용하려면 MSUF 활성화를 끄세요. UI 다시 불러오기가 필요합니다."
+L["Shared name shortening affects all unit names and group frames unless a scope has custom font settings."] = "공유 이름 줄임은 범위에 사용자 지정 글꼴 설정이 없는 한 모든 유닛 이름과 그룹 프레임에 적용됩니다."
+
 local T = {
     ["Pips & Border"] = "표시점 및 테두리",
     ["Open MSUF Menu"] = "MSUF 메뉴 열기",

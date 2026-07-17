@@ -11,6 +11,10 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF or MSUF.LOCALE ~= "itIT" then return end
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("itIT")) or (MSUF.L or {})
 
+L["Force Blizzard frame on"] = "Forza l'attivazione del riquadro Blizzard"
+L["Keeps Blizzard's native frame active independently of the MSUF frame. Leave MSUF Enable on to show both, or turn MSUF Enable off to use only Blizzard. A UI reload is required."] = "Mantiene attivo il riquadro nativo di Blizzard indipendentemente dal riquadro MSUF. Lascia attivo Abilita MSUF per mostrarli entrambi, oppure disattivalo per usare solo Blizzard. È necessario ricaricare l'interfaccia."
+L["Shared name shortening affects all unit names and group frames unless a scope has custom font settings."] = "L'abbreviazione condivisa dei nomi interessa tutti i nomi delle unità e i riquadri di gruppo, salvo che un ambito utilizzi impostazioni del carattere personalizzate."
+
 local T = {
     ["Pips & Border"] = "Indicatori e bordo",
     ["Open MSUF Menu"] = "Apri menu MSUF",

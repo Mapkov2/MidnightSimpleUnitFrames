@@ -4,6 +4,10 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF or MSUF.LOCALE ~= "deDE" then return end
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("deDE")) or (MSUF.L or {})
 
+L["Force Blizzard frame on"] = "Blizzard-Frame erzwingen"
+L["Keeps Blizzard's native frame active independently of the MSUF frame. Leave MSUF Enable on to show both, or turn MSUF Enable off to use only Blizzard. A UI reload is required."] = "Hält den nativen Blizzard-Frame unabhängig vom MSUF-Frame aktiv. Lasse MSUF Aktivieren eingeschaltet, um beide anzuzeigen, oder schalte MSUF Aktivieren aus, um nur Blizzard zu verwenden. Ein UI-Neuladen ist erforderlich."
+L["Shared name shortening affects all unit names and group frames unless a scope has custom font settings."] = "Die gemeinsame Namenskürzung betrifft alle Einheitennamen und Gruppenframes, sofern ein Bereich keine benutzerdefinierten Schrifteinstellungen verwendet."
+
 L["Gradient colors"] = "Gradientenfarben"
 L["Health gradient"] = "Lebensleisten-Gradient"
 L["Power gradient"] = "Ressourcenleisten-Gradient"

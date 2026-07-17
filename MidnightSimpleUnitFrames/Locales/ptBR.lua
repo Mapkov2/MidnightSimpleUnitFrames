@@ -11,6 +11,10 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF or MSUF.LOCALE ~= "ptBR" then return end
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("ptBR")) or (MSUF.L or {})
 
+L["Force Blizzard frame on"] = "Forçar quadro da Blizzard ativo"
+L["Keeps Blizzard's native frame active independently of the MSUF frame. Leave MSUF Enable on to show both, or turn MSUF Enable off to use only Blizzard. A UI reload is required."] = "Mantém o quadro nativo da Blizzard ativo independentemente do quadro do MSUF. Deixe Ativar MSUF ligado para mostrar ambos ou desligue-o para usar somente o da Blizzard. É necessário recarregar a interface."
+L["Shared name shortening affects all unit names and group frames unless a scope has custom font settings."] = "O encurtamento de nomes compartilhado afeta todos os nomes de unidades e quadros de grupo, a menos que um escopo use configurações de fonte personalizadas."
+
 local T = {
     ["Pips & Border"] = "Pontos e borda",
     ["Open MSUF Menu"] = "Abrir menu MSUF",
