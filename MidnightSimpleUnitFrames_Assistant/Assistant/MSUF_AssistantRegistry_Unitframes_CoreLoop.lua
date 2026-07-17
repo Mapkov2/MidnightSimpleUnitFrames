@@ -16,6 +16,7 @@ function A.UnitframesRegistry.RegisterCoreLoopSettings(ctx)
     if type(ctx) ~= "table" then return end
 
     local UNIT_KEYS = ctx.UNIT_KEYS or {}
+    local UNIT_LABELS = ctx.UNIT_LABELS or {}
     local LOAD_CONDITION_SPECS = ctx.LOAD_CONDITION_SPECS or {}
     local RegisterUnitBooleanSetting = ctx.RegisterUnitBooleanSetting
     local RegisterUnitEnum = ctx.RegisterUnitEnum
@@ -48,6 +49,17 @@ function A.UnitframesRegistry.RegisterCoreLoopSettings(ctx)
         RegisterUnitBooleanSetting(unit, "smoothFill", "smoothFill", "Smooth Health Fill", true, MakeAliases(unit, "smooth fill", "smooth health fill", "smooth frame fill"), {
             category = "Frame",
             reason = "MSUF_ASSISTANT_SMOOTH_FILL",
+        })
+        RegisterUnitBooleanSetting(unit, "useBlizzardFrame", "useBlizzardFrame", "Force Blizzard Frame On", false,
+            MakeAliases(unit, "force blizzard frame on", "show blizzard frame", "enable blizzard frame", "keep blizzard frame", "use blizzard frame", "default wow frame"), {
+            category = "Frame",
+            apply = function(unitKey)
+                if type(_G.MSUF_ShowReloadRecommendedPopup) == "function" then
+                    _G.MSUF_ShowReloadRecommendedPopup((UNIT_LABELS[unitKey] or unitKey) .. " Blizzard frame")
+                end
+            end,
+            requiresReload = true,
+            description = "Keeps the native Blizzard frame enabled independently of the matching MSUF frame. Target-of-target and focus-target require their Blizzard parent frame internally.",
         })
         RegisterUnitEnum(unit, "healthColorMode", "healthColorMode", "Health Color Scheme", "GLOBAL", HEALTH_COLOR_MODE_VALUES,
             MakeAliases(unit, "health color scheme", "health color mode", "health bar color scheme", "health bar color mode", "unitframe color scheme"), {

@@ -2,7 +2,7 @@ package.path = "tools/?.lua;" .. package.path
 
 local Inventory = require("assistant_graphify_inventory")
 local tracked = Inventory.Load("tools/assistant_graphify_inventory_data.lua")
-assert(tracked.recordCount == 1706, "reviewed Graphify setting-inventory count drifted")
+assert(tracked.recordCount == 1725, "reviewed Graphify setting-inventory count drifted")
 assert(tracked.schemaVersion == 2, "Graphify inventory source-snapshot contract is not current")
 assert(tracked.sourceSnapshot.schemaVersion == 1
         and tracked.sourceSnapshot.manifestFormat == "msuf-addon-source-sha256-v1"
