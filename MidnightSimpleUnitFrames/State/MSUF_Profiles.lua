@@ -1844,7 +1844,7 @@ local MSUF_PROFILEIO_LEGACY_PROFILE_SCHEMA_56 = 560
 --- MSUF_ProfileIO_TranslateProfileToCurrent, independently from the broad
 --- default-fill revision owned by MSUF_Defaults.lua. Bump it whenever that
 --- translation pipeline gains a new mandatory repair.
-local MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = 7
+local MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = 9
 local MSUF_PROFILEIO_TEXT_SCOPE_KEYS = {
     "general",
     "player", "target", "targettarget", "tot", "targetoftarget",
@@ -2532,6 +2532,8 @@ local function MSUF_ProfileIO_ProfileNeedsLegacyRepair(profile)
         and (profile.auras3._msufAuras3LegacyGeometry_v3 ~= true
             or profile._msufLegacy55FrameOutlineBackground_v1 ~= true) then return true end
     if legacyVisualProfile and profile._msufLegacy55PowerTextVisibility_v1 ~= true then return true end
+    if legacyVisualProfile and profile._msufLegacy55UnitTextSlots_v1 ~= true then return true end
+    if legacyVisualProfile and profile._msufLegacy55GroupTextGeometry_v1 ~= true then return true end
     if MSUF_ProfileIO_AuraOverridesNeedRepair(profile) then return true end
     if MSUF_ProfileIO_LegacyAliasBeatsCanonical(profile, "targettarget", "tot", "targetoftarget") then return true end
     if MSUF_ProfileIO_LegacyAliasBeatsCanonical(profile, "focustarget", "focus_target", "focustargettarget") then return true end
@@ -2544,6 +2546,164 @@ local function MSUF_ProfileIO_ProfileNeedsLegacyRepair(profile)
         end
     end
     return false
+end
+
+MSUF.ProfileIOMaterializeLegacy55UnitTextSlots = function(profile)
+    if type(profile) ~= "table" or profile._msufLegacy55UnitTextSlots_v1 == true then return false end
+
+    local changed = false
+    local general = type(profile.general) == "table" and profile.general or nil
+    local function MigrateHealthMode(value)
+        if value == "FULL_ONLY" then return "CURRENT" end
+        if value == "PERCENT_ONLY" then return "PERCENT" end
+        if value == "FULL_PLUS_PERCENT" then return "CURPERCENT" end
+        if value == "PERCENT_PLUS_FULL" then return "PERCENTCUR" end
+        return value
+    end
+    local function MigratePowerMode(value)
+        if value == "FULL_SLASH_MAX" then return "CURMAX" end
+        if value == "FULL_ONLY" then return "CURRENT" end
+        if value == "PERCENT_ONLY" then return "PERCENT" end
+        if value == "FULL_PLUS_PERCENT" or value == "PERCENT_PLUS_FULL" then return "CURPERCENT" end
+        return value
+    end
+    local hpMode = MigrateHealthMode(general and general.hpTextMode) or "CURPERCENT"
+    local powerMode = MigratePowerMode(general and general.powerTextMode) or "CURPERCENT"
+    if general then
+        if general.hpTextMode ~= hpMode then
+            general.hpTextMode = hpMode
+            changed = true
+        end
+        if general.powerTextMode ~= powerMode then
+            general.powerTextMode = powerMode
+            changed = true
+        end
+    end
+
+    -- These are the exact values the 5.57 loader materialized when an older
+    -- exported profile still only carried hpTextMode/powerTextMode. Do this in
+    -- the import pipeline before 6.0 defaults can assign a different slot.
+    local defaults = {
+        hpTextMode = hpMode,
+        hpTextReverse = general and general.hpTextReverse == true or false,
+        powerTextMode = powerMode,
+        hpTextLeftOffsetX = 0,
+        hpTextLeftOffsetY = 0,
+        hpTextCenterOffsetX = 0,
+        hpTextCenterOffsetY = 0,
+        hpTextRightOffsetX = 0,
+        hpTextRightOffsetY = 0,
+        powerTextLeftOffsetX = 0,
+        powerTextLeftOffsetY = 0,
+        powerTextCenterOffsetX = 0,
+        powerTextCenterOffsetY = 0,
+        powerTextRightOffsetX = 0,
+        powerTextRightOffsetY = 0,
+        hpTextSeparator = general and general.hpTextSeparator ~= nil and general.hpTextSeparator or "-",
+        powerTextSeparator = general and general.powerTextSeparator ~= nil and general.powerTextSeparator
+            or (general and general.hpTextSeparator ~= nil and general.hpTextSeparator or "-"),
+        nameTextLayer = tonumber(general and general.nameTextLayer) or 5,
+        hpTextLayer = tonumber(general and (general.hpTextLayer or general.textLayer)) or 5,
+        powerTextLayer = tonumber(general and general.powerTextLayer) or 2,
+    }
+    local units = {
+        "player", "target", "focus", "targettarget", "focustarget", "pet", "boss",
+        "boss1", "boss2", "boss3", "boss4", "boss5",
+    }
+    for i = 1, #units do
+        local conf = profile[units[i]]
+        if type(conf) == "table" then
+            for field, fallback in pairs(defaults) do
+                if conf[field] == nil then
+                    conf[field] = fallback
+                    changed = true
+                end
+            end
+            local unitHpMode = MigrateHealthMode(conf.hpTextMode) or hpMode
+            local unitPowerMode = MigratePowerMode(conf.powerTextMode) or powerMode
+            if conf.hpTextMode ~= unitHpMode then
+                conf.hpTextMode = unitHpMode
+                changed = true
+            end
+            if conf.powerTextMode ~= unitPowerMode then
+                conf.powerTextMode = unitPowerMode
+                changed = true
+            end
+            if conf.textLeft == nil and conf.textCenter == nil and conf.textRight == nil then
+                conf.textLeft, conf.textCenter, conf.textRight = "NONE", "NONE", unitHpMode
+                changed = true
+            else
+                if conf.textLeft == nil then conf.textLeft = "NONE"; changed = true end
+                if conf.textCenter == nil then conf.textCenter = "NONE"; changed = true end
+                if conf.textRight == nil then conf.textRight = hpMode; changed = true end
+            end
+            if conf.powerTextLeft == nil and conf.powerTextCenter == nil and conf.powerTextRight == nil then
+                conf.powerTextLeft, conf.powerTextCenter, conf.powerTextRight = "NONE", "NONE", unitPowerMode
+                changed = true
+            else
+                if conf.powerTextLeft == nil then conf.powerTextLeft = "NONE"; changed = true end
+                if conf.powerTextCenter == nil then conf.powerTextCenter = "NONE"; changed = true end
+                if conf.powerTextRight == nil then conf.powerTextRight = powerMode; changed = true end
+            end
+            if conf.hpPowerTextOverride ~= nil then
+                conf.hpPowerTextOverride = nil
+                changed = true
+            end
+        end
+    end
+    if general and general._msufUFTextPerUnitMigrated_v4325 ~= true then
+        general._msufUFTextPerUnitMigrated_v4325 = true
+        changed = true
+    end
+    profile._msufLegacy55UnitTextSlots_v1 = true
+    changed = true
+    return changed
+end
+
+MSUF.ProfileIOMaterializeLegacy55GroupTextGeometry = function(profile)
+    if type(profile) ~= "table" or profile._msufLegacy55GroupTextGeometry_v1 == true then return false end
+
+    local changed = false
+    -- 5.57 resolved every missing Group Frame text coordinate against these
+    -- values. In 6.0 the Name X factory default is intentionally 28 to reserve
+    -- the status-icon lane, so letting the new defaults fill an omitted legacy
+    -- field visibly moves imported names. Materialize the old coordinate set
+    -- before EnsureDB runs while preserving every explicit profile value.
+    local defaults = {
+        nameAnchor = "LEFT",
+        nameOffsetX = 0,
+        nameOffsetY = 0,
+        hpOffsetX = 0,
+        hpOffsetY = 0,
+        hpTextLeftOffsetX = 0,
+        hpTextLeftOffsetY = 0,
+        hpTextCenterOffsetX = 0,
+        hpTextCenterOffsetY = 0,
+        hpTextRightOffsetX = 0,
+        hpTextRightOffsetY = 0,
+        powerOffsetX = 0,
+        powerOffsetY = 0,
+        powerTextLeftOffsetX = 0,
+        powerTextLeftOffsetY = 0,
+        powerTextCenterOffsetX = 0,
+        powerTextCenterOffsetY = 0,
+        powerTextRightOffsetX = 0,
+        powerTextRightOffsetY = 0,
+    }
+    local scopes = { "gf_party", "gf_raid", "gf_mythicraid" }
+    for i = 1, #scopes do
+        local conf = profile[scopes[i]]
+        if type(conf) == "table" then
+            for field, fallback in pairs(defaults) do
+                if conf[field] == nil then
+                    conf[field] = fallback
+                    changed = true
+                end
+            end
+        end
+    end
+    profile._msufLegacy55GroupTextGeometry_v1 = true
+    return true
 end
 
 local function MSUF_ProfileIO_DetectProfileSchema(profile, context)
@@ -2705,6 +2865,8 @@ MSUF.ProfileIONormalizeLegacy55VisualCompatibility = function(profile, legacyPro
         profile._msufLegacy55PowerTextVisibility_v1 = true
         changed = true
     end
+    changed = MSUF.ProfileIOMaterializeLegacy55UnitTextSlots(profile) or changed
+    changed = MSUF.ProfileIOMaterializeLegacy55GroupTextGeometry(profile) or changed
 
     local bars = profile.bars
     if type(bars) ~= "table" then
@@ -2828,7 +2990,22 @@ MSUF_ProfileIO_TranslateProfileToCurrent = function(profile, context)
         local scope = profile[key]
         if type(scope) == "table" then
             local isGroupScope = key == "gf_party" or key == "gf_raid" or key == "gf_mythicraid"
-            changed = MSUF_ProfileIO_NormalizeTextScope(scope, isGroupScope, key ~= "general") or changed
+            local inferFontOverride = key ~= "general"
+            if legacyProfile and isGroupScope and scope.fontOverride == nil then
+                -- 5.57 always stored local Group name-shortening values, but
+                -- they only owned runtime behavior when fontOverride was
+                -- explicitly true. Inferring the override from those dormant
+                -- fields switches imported names from the global 5.57 layout
+                -- to 6.0's local clipping layout and changes their position.
+                -- Persist false inside the selected Group scope. A group-only
+                -- import does not copy root migration markers into MSUF_DB, so
+                -- leaving this nil would let a later current-schema defaults
+                -- pass infer true again from nameMaxChars/nameNoEllipsis.
+                scope.fontOverride = false
+                inferFontOverride = false
+                changed = true
+            end
+            changed = MSUF_ProfileIO_NormalizeTextScope(scope, isGroupScope, inferFontOverride) or changed
             changed = MSUF_ProfileIO_NormalizeStatusScope(scope, isGroupScope) or changed
         end
     end
