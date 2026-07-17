@@ -1,4 +1,4 @@
-﻿local addonName, ns = ...
+local addonName, ns = ...
 ns = ns or {}
 
 local M = ns.MSUF2 or {}
@@ -102,7 +102,48 @@ end
 local function OpenGFSection(sectionKey)
     M.gfPreviewFocus = sectionKey
     local pageKey = PageForGFSection(sectionKey)
-    if pageKey and M.SelectPage then M.SelectPage(pageKey) end
+    if not (pageKey and M.SelectPage) then return false end
+
+    local stateKey = pageKey .. ":" .. tostring(sectionKey or "")
+    if type(M.GetPersistentMenuStateTable) == "function" then
+        M.accordionState = M.GetPersistentMenuStateTable("accordionState")
+    else
+        M.accordionState = M.accordionState or {}
+    end
+    M.accordionState[stateKey] = true
+    M.SelectPage(pageKey)
+
+    local function FindEntry(root, visited)
+        if not (root and root.GetChildren) or visited[root] then return nil end
+        visited[root] = true
+        local entry = root._msuf2CollapsibleEntry
+        if entry and entry.stateKey == stateKey then return entry end
+        local children = { root:GetChildren() }
+        for i = 1, #children do
+            local found = FindEntry(children[i], visited)
+            if found then return found end
+        end
+        return nil
+    end
+
+    local function Reveal()
+        local cached = M.cache and M.cache[pageKey]
+        local entry = cached and FindEntry(cached.wrapper, {})
+        if not entry then return end
+        if not entry.open and entry.header and entry.header.Click then entry.header:Click() end
+
+        local scroll, child = M.scrollFrame, M.scrollChild
+        local childTop = child and child.GetTop and child:GetTop()
+        local targetTop = entry.outer and entry.outer.GetTop and entry.outer:GetTop()
+        if not (scroll and scroll.SetVerticalScroll and childTop and targetTop) then return end
+        local offset = math.max(0, childTop - targetTop - 4)
+        local range = scroll.GetVerticalScrollRange and scroll:GetVerticalScrollRange()
+        if type(range) == "number" then offset = math.min(offset, math.max(0, range)) end
+        scroll:SetVerticalScroll(offset)
+        if scroll._msuf2RefreshScrollBar then scroll:_msuf2RefreshScrollBar() end
+    end
+    if C_Timer and C_Timer.After then C_Timer.After(0, Reveal) else Reveal() end
+    return true
 end
 
 local function PreviewScopeLabel(kind)
@@ -1318,6 +1359,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     end
 
     local function StopHandleDrag(handle, button)
+        if box._stopPreviewPan then box._stopPreviewPan() end
         if button and button ~= "LeftButton" then return end
         handle = handle or (box._dragFrame and box._dragFrame._handle)
         local wasDragging = handle and handle._dragging == true
@@ -1358,6 +1400,10 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     local function UpdateHandleDrag(df)
         local handle = df and df._handle
         if not (handle and handle._dragging) then return end
+        if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then
+            StopHandleDrag(handle, "LeftButton")
+            return
+        end
         local cx, cy = GetCursorPosition()
         if not (cx and cy) then return end
         if handle._cfgText then
@@ -1391,6 +1437,14 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
 
     local function StartHandleDrag(handle, button)
         if button and button ~= "LeftButton" then return end
+        if handle and (handle._dragging == true or (box._dragFrame and box._dragFrame._handle == handle)) then return true end
+        if button == "LeftButton" and IsControlKeyDown and IsControlKeyDown()
+            and box._startPreviewPan and box._startPreviewPan(button) then
+            handle._suppressNextClick = true
+            return true
+        end
+        local staleHandle = box._dragFrame and box._dragFrame._handle
+        if staleHandle and staleHandle ~= handle then StopHandleDrag(staleHandle, "LeftButton") end
         SelectHandle(handle)
         if not handle or handle._locked then return end
         local point, relativeTo, relativePoint, xOfs, yOfs = handle:GetPoint(1)
@@ -1426,6 +1480,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         handle:SetSize(width or 32, height or 32)
         handle:SetMovable(true)
         handle:EnableMouse(true)
+        if handle.RegisterForClicks then handle:RegisterForClicks("LeftButtonDown", "LeftButtonUp", "RightButtonUp") end
         if handle.RegisterForDrag then handle:RegisterForDrag("LeftButton") end
         handle:SetBackdrop({ bgFile = WHITE8X8, edgeFile = WHITE8X8, edgeSize = 1 })
         handle:SetBackdropColor(color[1] * 0.12, color[2] * 0.12, color[3] * 0.12, 0.42)
@@ -1466,6 +1521,8 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
                     GameTooltip:AddLine((M.Tr and M.Tr("Drag this preview element to adjust the same placement offsets used by Group Frames.")) or "Drag this preview element to adjust the same placement offsets used by Group Frames.", 0.82, 0.82, 0.82, true)
                     GameTooltip:AddLine((M.Tr and M.Tr("Arrow keys nudge the selected element. Shift = 5, Ctrl = 10.")) or "Arrow keys nudge the selected element. Shift = 5, Ctrl = 10.", 0.55, 0.62, 0.72, true)
                 end
+                GameTooltip:AddLine((M.Tr and M.Tr("Double-click to open this element's settings.")) or "Double-click to open this element's settings.", 0.50, 0.78, 0.92, true)
+                GameTooltip:AddLine((M.Tr and M.Tr("Right-click opens quick actions.")) or "Right-click opens quick actions.", 0.50, 0.78, 0.92, true)
                 GameTooltip:Show()
             end
         end)
@@ -1474,11 +1531,37 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             GFPreviewRefreshHandleSelection(box)
             if GameTooltip then GameTooltip:Hide() end
         end)
-        handle:SetScript("OnClick", function(self)
+        handle:SetScript("OnClick", function(self, button)
+            if self._suppressNextClick then
+                self._suppressNextClick = nil
+                return
+            end
+            if button == "RightButton" then
+                SelectHandle(self)
+                if PreviewHelpers.ShowPreviewHandleContext then
+                    PreviewHelpers.ShowPreviewHandleContext(self, {
+                        M = M,
+                        T = T,
+                        Tr = M.Tr,
+                        title = GFPreviewHandleText(self),
+                        openSettings = function(target)
+                            return target and target._sectionKey and OpenGFSection(target._sectionKey)
+                        end,
+                    })
+                end
+                return
+            end
             SelectHandle(self)
+        end)
+        handle:SetScript("OnDoubleClick", function(self, button)
+            if button and button ~= "LeftButton" then return end
+            SelectHandle(self)
+            if self._sectionKey then OpenGFSection(self._sectionKey) end
         end)
         handle:SetScript("OnMouseDown", StartHandleDrag)
         handle:SetScript("OnMouseUp", StopHandleDrag)
+        handle:SetScript("OnDragStart", StartHandleDrag)
+        handle:SetScript("OnDragStop", StopHandleDrag)
         handle:HookScript("OnHide", function(self)
             StopHandleDrag(self)
             if box._selectedHandle == self then SelectHandle(nil) end
@@ -1652,8 +1735,12 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             liveW, liveH, frameScale = tonumber(w2) or liveW, tonumber(h2) or liveH, tonumber(sc2) or 1
         end
         liveW, liveH = max(1, liveW), max(1, liveH)
-        local zoom = min(GF_PREVIEW_MIN_W / liveW, GF_PREVIEW_MIN_H / liveH)
-        zoom = max(1.4, min(2.8, zoom))
+        local autoZoom = min(GF_PREVIEW_MIN_W / liveW, GF_PREVIEW_MIN_H / liveH)
+        autoZoom = max(1.4, min(2.8, autoZoom))
+        self._mockAutoScale = autoZoom
+        local zoom = self._manualZoom and ((PreviewHelpers.ClampZoom and PreviewHelpers.ClampZoom(self._manualZoom)) or self._manualZoom) or autoZoom
+        self._mockScale = zoom
+        if PreviewHelpers.UpdateZoomControls then PreviewHelpers.UpdateZoomControls(self) end
         local previewScale = zoom * (frameScale or 1)
         local mockW = max(48, GFPreviewRound(liveW * zoom))
         local mockH = max(20, GFPreviewRound(liveH * zoom))
@@ -1664,10 +1751,11 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         local inset = 0
         local startX = GFPreviewRound((stageW - mockW) * 0.5)
         local startY = -GFPreviewRound((stageH - mockH) * 0.5)
+        self._mockBaseOffsetX, self._mockBaseOffsetY = startX, startY
         local mock = self._mock
         mock._previewScale = previewScale
         mock:ClearAllPoints()
-        mock:SetPoint("TOPLEFT", self._stage, "TOPLEFT", startX, startY)
+        mock:SetPoint("TOPLEFT", self._stage, "TOPLEFT", startX + (tonumber(self._zoomPanX) or 0), startY + (tonumber(self._zoomPanY) or 0))
         mock:SetSize(mockW, mockH)
         mock:SetBackdrop({ bgFile = WHITE8X8 })
         mock:SetBackdropColor(conf.bgR or 0.08, conf.bgG or 0.08, conf.bgB or 0.09, conf.bgA or 0.88)
@@ -1790,7 +1878,9 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             mock._powerTextLayer:SetFrameLevel(textBaseLevel + (tonumber(conf.powerTextLayer) or 2))
         end
 
-        local showText = LayerOn("text") and (focus == "text" or focus == "overlay" or soloLayer == "text")
+        -- Page focus highlights the relevant controls; it must not hide enabled
+        -- preview text while the user is viewing another Group Frames page.
+        local showText = LayerOn("text")
         local fontPath = (gf and gf.ResolveFontPath and gf.ResolveFontPath(kind)) or (STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF")
         local fontFlags = (gf and gf.ResolveFontFlags and gf.ResolveFontFlags(kind)) or "OUTLINE"
         local db = _G.MSUF_DB
@@ -1815,7 +1905,9 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             end
         end
         mock._nameFS:SetText(previewName)
-        mock._nameFS:SetTextColor(fr or 1, fg or 1, fb or 1, 1)
+        local nr, ng, nb = fr, fg, fb
+        if gf and gf.ResolveNameColor then nr, ng, nb = gf.ResolveNameColor(kind, cls) end
+        mock._nameFS:SetTextColor(nr or 1, ng or 1, nb or 1, 1)
         mock._nameFS:ClearAllPoints()
         local pad3 = GFPreviewScaleValue(3, previewScale, 1)
         local pad2 = GFPreviewScaleValue(2, previewScale, 1)
@@ -2370,6 +2462,12 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         GFPreviewRefreshHandleSelection(self)
     end)
 
+    if PreviewHelpers.BuildZoomBar then
+        PreviewHelpers.BuildZoomBar(box, stage, {
+            anchorMode = "TOPLEFT",
+            refresh = function(previewBox) previewBox:Refresh() end,
+        })
+    end
     box:Refresh()
     box:HookScript("OnShow", function(self)
         self:Refresh()
@@ -2381,6 +2479,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     end)
     box:HookScript("OnHide", function(self)
         StopHandleDrag(self and self._selectedHandle)
+        if self and self._stopPreviewPan then self._stopPreviewPan() end
     end)
     box:HookScript("OnSizeChanged", function(self)
         if self:IsShown() then self:Refresh() end

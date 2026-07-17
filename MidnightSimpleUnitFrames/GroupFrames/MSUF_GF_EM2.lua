@@ -269,7 +269,7 @@ function _G.MSUF_GF_EM2_SetPreviewNudgeTarget(kind, source)
     })
 end
 
-local function BeginPreviewDrag(kind)
+local function BeginPreviewDrag(kind, source)
     if not _em2Active then return false end
     if InCombatLockdown and InCombatLockdown() then return false end
 
@@ -283,6 +283,7 @@ local function BeginPreviewDrag(kind)
     if not mover or not EM2.Ticker then return false end
 
     mover._dragging = true
+    mover._msufGFEM2DragSourceFrame = source
     if mover._coordFS then mover._coordFS:Show() end
     if _G.MSUF_EM_UndoBeforeChange then
         _G.MSUF_EM_UndoBeforeChange("unit", key)
@@ -296,6 +297,7 @@ local function EndPreviewDrag(kind, source)
     local mover = key and EM2.Movers and EM2.Movers.Get and EM2.Movers.Get(key)
     if mover then
         mover._dragging = false
+        mover._msufGFEM2DragSourceFrame = nil
         if mover._coordFS then mover._coordFS:Hide() end
     end
     if EM2.Snap and EM2.Snap.HideGuides then EM2.Snap.HideGuides() end
@@ -320,7 +322,7 @@ local function WirePreviewMouse(kind)
             if f.RegisterForDrag then f:RegisterForDrag("LeftButton") end
             if f.EnableMouse then f:EnableMouse(true) end
             f:SetScript("OnDragStart", function(self)
-                if BeginPreviewDrag(self._msufGFEM2Kind or kind) then
+                if BeginPreviewDrag(self._msufGFEM2Kind or kind, self) then
                     self._msufGFEM2Dragging = true
                 end
             end)

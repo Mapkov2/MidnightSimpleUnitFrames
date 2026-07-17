@@ -49,6 +49,7 @@ local ScopedSliderAt = AP.ScopedSliderAt
 local ScopedDropdownAt = AP.ScopedDropdownAt
 local TogglePillAt = AP.TogglePillAt
 local SetControlEnabled = AP.SetControlEnabled
+local QuickTr
 local function ApplyClassPower()
     CallGlobal("MSUF_ClassPower_Refresh")
     CallGlobal("MSUF_ClassPower_RefreshTextures")
@@ -177,7 +178,7 @@ local QUICK_PLAYER_KEYS = {
 local quickSetupUndoSnapshot
 local quickSetupFirstRunChecked = false
 
-local function QuickTr(text)
+function QuickTr(text)
     return (M.Tr and M.Tr(text)) or text
 end
 

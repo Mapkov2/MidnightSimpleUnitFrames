@@ -312,6 +312,9 @@ local function PushHistory(label, source, before, after)
         historySessionDirty = true
     end
     NotifyHistoryChanged()
+    if type(M.ShowHistoryFeedback) == "function" then
+        M.ShowHistoryFeedback(label or "MSUF2 change", 2.0)
+    end
     return true
 end
 
