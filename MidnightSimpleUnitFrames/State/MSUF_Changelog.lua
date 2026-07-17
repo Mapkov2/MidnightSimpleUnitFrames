@@ -8,10 +8,47 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-Beta20",
-    previousVersion = "6.0-Beta19",
-    rangeLabel = "6.0-Beta19 -> 6.0-Beta20",
+    currentVersion = "6.0-Beta21",
+    previousVersion = "6.0-Beta20",
+    rangeLabel = "6.0-Beta20 -> 6.0-Beta21",
     entries = {
+        {
+            version = "6.0-Beta21",
+            date = "2026-07-18",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Completed Menu2 and Priority Frames localization across all bundled locales and added ten new MSUF bar textures.",
+                        "Expanded scoped health/power text, absorb, heal-absorb, and heal-prediction controls with independent layouts and live previews.",
+                        "Kept detached Power bars and Class Resources synchronized with live Blizzard and Skiron cooldown-frame widths through event-driven, combat-safe updates.",
+                        "Added independent per-unit Blizzard-frame ownership so native and MSUF frames can coexist, with matching Menu, UUF import, and Assistant support.",
+                        "Reduced inactive Guided Tour, search, catalog, theme, and widget work while stabilizing Color Painter and visible-page preview lifecycles.",
+                        "Fixed frame clamping, boss and unit preview geometry, pet-frame color isolation, and legacy 5.57 text-layout migration.",
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Added complete Menu2 and Priority Frames translations for deDE, enGB, enUS, esES, esMX, frFR, itIT, koKR, ptBR, ruRU, zhCN, and zhTW.",
+                        "Added Arcane Pulse, Aurora Silk, Deep Current, Dragon Scale, Ember Weave, Forged Steel, Frosted Quartz, Lunar Mist, Obsidian Glass, and Runic Circuit status-bar textures.",
+                        "Split positive absorbs, negative heal absorbs, and heal prediction into dedicated scoped controls for enable state, anchor, height, offset, texture, opacity, and preview testing.",
+                        "Expanded scoped HP and Power text behavior, including class-colored health text, safer name shortening beside level text, and matching Unit/Group previews.",
+                        "Coalesced prediction refreshes and kept disabled prediction paths free of unnecessary runtime work.",
+                        "Tracked cooldown-width source show, hide, resize, replacement, and combat transitions without adding continuous polling.",
+                        "Shared the canonical live width resolver across detached Power bars, Class Resources, castbar anchors, third-party anchors, and previews.",
+                        "Removed inactive Guided Tour visual refreshes and reduced repeated control-catalog, search-index, theme, and widget work.",
+                        "Restored cached Color Painter previews, settled visible Menu layouts, and retained preview zoom across page refreshes.",
+                        "Kept unit and group frames within screen bounds and stabilized boss previews and draggable unit-text geometry.",
+                        "Prevented pet-frame coloring from inheriting unrelated unit-frame color state.",
+                        "Preserved legacy 5.57 unit and group text slots, offsets, anchors, layers, separators, and name-shortening behavior during profile migration.",
+                        "Improved Assistant all-frame recovery routing, scoped HP-text class-color handling, exact-setting safety, and Blizzard-frame ownership control.",
+                        "Added per-unit \"Force Blizzard frame on\" controls with reload guidance while keeping MSUF Enable independent; Target-of-Target and Focus-Target retain their required Blizzard parents.",
+                        "Expanded regression coverage for localization, prediction, external widths, Menu performance, previews, frame geometry, profiles, Assistant routing, and Blizzard-frame ownership.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-Beta20",
             date = "2026-07-16",
@@ -126,42 +163,6 @@ local data = {
                         "Fixed mouse-wheel scrolling through Color Painter overlays and kept combat crosshair zoom synchronized with camera changes.",
                         "Corrected prerelease version comparisons across beta and stable version formats.",
                         "Expanded Lua 5.1 regression coverage for castbars, class resources, profiles, menus, unit frames, and runtime hot paths.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-Beta17",
-            date = "2026-07-15",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Reworked the Color menu into an interactive Color Painter with contextual targets, live Unit/Group previews, a color wheel, and recent/saved palettes.",
-                        "Streamlined guided setup so its recommendations, navigation, and Edit Mode steps stay focused on the active configuration path.",
-                        "Modernized Aura configuration for PTR 5 with safer native handling and more precise filtering choices.",
-                        "Made Assistant follow-ups more reliable: actions now remain bound to the exact frame component you just changed.",
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Rebuilt the Color menu workflow with interactive previews for unit and group frames, direct color-context switching, and streamlined color editing.",
-                        "Added live color previews for the refreshed Color Painter controls.",
-                        "Refined the guided tour lifecycle, suggested next steps, navigation, and Edit Mode interaction flow.",
-                        "Limited NPC class colors to friendly NPCs for clearer hostile-target presentation.",
-                        "Updated native Aura handling for PTR 5, keeping configured anchors stable without accessing protected AuraButtons.",
-                        "Removed legacy shared AuraButton layout work that conflicts with PTR 5 native ownership restrictions.",
-                        "Added Important filters for Buffs and Debuffs.",
-                        "Added separate group-dispellable and any-dispel-type filters for unit and group auras.",
-                        "Added the matching Assistant commands, help text, control-catalog entries, and regression coverage for Aura filters.",
-                        "Added group-aware dispel detection for borders and overlays, including Assistant routing and menu labels.",
-                        "Added a direct in-window menu-scale slider with mouse-wheel support and immediate application.",
-                        "Refreshed the modern factory profile: cleaner player stacking, compact power text, adjusted elite markers, and updated name presentation.",
-                        "Fixed shortened-name limits beside level anchors, including safe handling while name widths are unavailable.",
-                        "Improved Assistant routing for streamlined Group Frame pages and canonical guided-page references.",
-                        "Hardened Assistant follow-ups for portraits, icons, text, colors, borders, sizing, and movement so they keep the intended component instead of falling back to the whole frame.",
-                        "Expanded Assistant regression coverage for Group Frame contracts, retained-object follow-ups, exact text-color choices, and Aura filtering.",
                     },
                 },
             },
