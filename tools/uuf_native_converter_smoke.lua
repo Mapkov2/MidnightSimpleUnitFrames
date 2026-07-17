@@ -578,6 +578,68 @@ if type(sparseDefaultOut) == "table" and type(explicitDefaultOut) == "table" the
     EqualAt(sparseDefaultOut, "gf_raid.privateAuras.enabled", true)
 end
 
+-- Profiles written by older UUF builds used ReadyCheck and Resurrection,
+-- while V12.1 uses ReadyCheckIndicator and ResurrectIndicator. Legacy values
+-- must beat converter defaults, and current keys must beat legacy aliases.
+local indicatorAliasOutput = assert(Import.Convert({
+    Units = {
+        party = {
+            Indicators = {
+                ReadyCheck = {
+                    Enabled = false,
+                    Size = 9,
+                    Layout = {"CENTER", "CENTER", 4, -5},
+                },
+                Resurrection = {
+                    Enabled = true,
+                    Size = 13,
+                    Layout = {"RIGHT", "RIGHT", -2, 3},
+                },
+            },
+        },
+        raid = {
+            Indicators = {
+                ReadyCheckIndicator = {
+                    Enabled = true,
+                    Size = 17,
+                    Layout = {"LEFT", "LEFT", 2, -1},
+                },
+                ReadyCheck = {
+                    Enabled = false,
+                    Size = 8,
+                    Layout = {"CENTER", "CENTER", 0, 0},
+                },
+                ResurrectIndicator = {
+                    Enabled = false,
+                    Size = 19,
+                    Layout = {"TOP", "TOP", 1, -3},
+                },
+                Resurrection = {
+                    Enabled = true,
+                    Size = 7,
+                    Layout = {"CENTER", "CENTER", 0, 0},
+                },
+            },
+        },
+    },
+}, {}))
+EqualAt(indicatorAliasOutput, "gf_party.readyCheckIcon", false)
+EqualAt(indicatorAliasOutput, "gf_party.readyCheckSize", 9)
+EqualAt(indicatorAliasOutput, "gf_party.readyCheckAnchor", "CENTER")
+EqualAt(indicatorAliasOutput, "gf_party.readyCheckX", 4)
+EqualAt(indicatorAliasOutput, "gf_party.readyCheckY", -5)
+EqualAt(indicatorAliasOutput, "gf_party.resurrectIcon", true)
+EqualAt(indicatorAliasOutput, "gf_party.resurrectIconSize", 13)
+EqualAt(indicatorAliasOutput, "gf_party.resurrectAnchor", "RIGHT")
+EqualAt(indicatorAliasOutput, "gf_party.resurrectX", -2)
+EqualAt(indicatorAliasOutput, "gf_party.resurrectY", 3)
+EqualAt(indicatorAliasOutput, "gf_raid.readyCheckIcon", true)
+EqualAt(indicatorAliasOutput, "gf_raid.readyCheckSize", 17)
+EqualAt(indicatorAliasOutput, "gf_raid.readyCheckAnchor", "LEFT")
+EqualAt(indicatorAliasOutput, "gf_raid.resurrectIcon", false)
+EqualAt(indicatorAliasOutput, "gf_raid.resurrectIconSize", 19)
+EqualAt(indicatorAliasOutput, "gf_raid.resurrectAnchor", "TOP")
+
 -- One representative V12 profile deliberately combines the real Default
 -- geometry/text layout with exact native mappings and a few unsupported source
 -- semantics which must be documented in the report.
