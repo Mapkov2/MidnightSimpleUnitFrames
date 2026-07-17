@@ -84,7 +84,7 @@ local contracts = {
     "showCooldownSwipe", "cooldownSwipeReverse", "showDurationBar", "durationBarDirection",
     "dispelBorderMode", "targetedSpellsEnabled", "readyCheckIcon", "resurrectIcon",
     "healthtint", "namecolor", "ApplyRounded", "FrameStrata", "healthLeftHidePercentSymbol",
-    "powerRightHidePercentSymbol", "HideUnusedSpellIndicatorHandles", "ApplyTextFocus",
+    "powerRightHidePercentSymbol", "HideUnusedSpellIndicatorHandles", "ApplyTextFocus", "ResolveNameColor",
 }
 for _, token in ipairs(contracts) do assert(source:find(token, 1, true), "missing render contract: " .. token) end
 assert(not source:match("function box:Refresh.-local function LayoutAuraGroup"),

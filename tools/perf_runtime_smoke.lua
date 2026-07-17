@@ -332,7 +332,17 @@ local function smokeGroupRuntime()
         statusText = true,
         statusGhostText = true,
         statusAFKText = true,
+        hlOverride = true,
+        enableAbsorbBar = false,
+        healAbsorbEnabled = true,
+        healPredEnabled = false,
+        healAbsorbAnchorMode = 2,
+        absorbBarHeight = 7,
+        absorbBarOffsetY = -2,
+        healAbsorbBarHeight = 5,
+        healAbsorbBarOffsetY = 3,
     }
+    _G.MSUF_PredictionTestModes = { party = { absorb = true } }
     MSUF.GF.GetConf = function() return conf end
 
     loadAddon("UnitFrames/Engine/Group/MSUF_UF_Group_Metadata.lua", MSUF)
@@ -354,6 +364,18 @@ local function smokeGroupRuntime()
     f.bg = region(f)
     f.hpBarBG = region(f)
     f.MSUFSpec = MSUF.GF.CompileSpec("party", f, "party1")
+    local prediction = f.MSUFSpec.prediction
+    assert(prediction.absorb == true and prediction.absorbTest == true,
+        "positive absorb test was not compiled for the selected scope")
+    assert(prediction.healAbsorb == true and prediction.healAbsorbTest == false,
+        "negative absorb remained coupled to the disabled positive live option")
+    assert(prediction.heal == false and prediction.healTest == false,
+        "positive absorb test leaked into heal prediction")
+    assert(prediction.healAbsorbAnchorMode == 2 and prediction.absorbHeight == 7
+        and prediction.absorbOffsetY == -2 and prediction.healAbsorbHeight == 5
+        and prediction.healAbsorbOffsetY == 3,
+        "scope-aware prediction geometry was not cold-compiled")
+    _G.MSUF_PredictionTestModes = nil
 
     local hasStatusHealthEvent, hasPartyEnable, hasPartyDisable = false, false, false
     for _, event in ipairs(f.MSUFSpec.status.groupRuntimeEvents or {}) do

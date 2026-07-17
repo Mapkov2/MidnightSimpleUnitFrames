@@ -33,6 +33,15 @@ local function Frame(frameType, name, parent)
   return frame
 end
 
+local function FontString()
+  local fs = { shown = true }
+  function fs:IsShown() return self.shown == true end
+  function fs:Show() self.shown = true end
+  function fs:SetText(value) self.text = value end
+  function fs:SetTextColor(r, g, b, a) self.color = { r, g, b, a } end
+  return fs
+end
+
 local UIParent = Frame("Frame", "UIParent")
 UIParent:SetSize(1920, 1080)
 function UIParent:GetLeft() return 0 end
@@ -79,6 +88,7 @@ GF.GetCompiledSpecRevision = function() return revision end
 GF.ApplyButton = function(frame)
   fullApplies = fullApplies + 1
   frame.MSUFSpec = { health = {}, status = {} }
+  frame.nameText = frame.nameText or FontString()
   if not frame._pooledRegion then
     frame._pooledRegion = {}
     regionCreates = regionCreates + 1
@@ -93,6 +103,12 @@ GF.UntrackFrame = function(frame)
   untracks = untracks + 1
   frame._untracked = (frame._untracked or 0) + 1
 end
+GF.ResolveNameColor = function(kind, classToken)
+  assert(kind == "party" or kind == "raid" or kind == "mythicraid", "preview name color received invalid kind")
+  assert(type(classToken) == "string" and classToken ~= "", "preview name color received no class token")
+  return 0.12, 0.34, 0.56
+end
+GF.ResolveFontTextAlpha = function() return 0.78 end
 
 assert(loadfile("MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Preview.lua"))(
   "MidnightSimpleUnitFrames",
@@ -105,6 +121,9 @@ local pooledRegion = first._pooledRegion
 assert(createdButtons == 1 and fullApplies == 1 and regionCreates == 1, "initial preview allocation mismatch")
 assert(first:IsShown() and first._msufGFPreviewDetached ~= true, "initial preview did not become active")
 assert(first.clickRegistrations == nil, "visual-only preview registered clicks")
+assert(first.nameText.color[1] == 0.12 and first.nameText.color[2] == 0.34
+  and first.nameText.color[3] == 0.56 and first.nameText.color[4] == 0.78,
+  "preview name did not use the live group-frame name color and opacity resolvers")
 
 assert(GF.HidePreview("party") == true, "preview did not hide")
 assert(not first:IsShown() and first._msufGFPreviewDetached == true, "hidden preview stayed active")

@@ -69,7 +69,17 @@ local NormalizeAbsorbTestScope = UF.NormalizeAbsorbTestScope or function(scope)
   if scope == "targetoftarget" or scope == "tot" then return "targettarget" end
   return scope
 end
-local AbsorbTextureTestEnabledForScope = UF.AbsorbTextureTestEnabledForScope or function(scope)
+local AbsorbTextureTestEnabledForScope = UF.AbsorbTextureTestEnabledForScope or function(scope, category)
+  local modes = _G.MSUF_PredictionTestModes
+  if type(modes) == "table" then
+    local normalized = NormalizeAbsorbTestScope(scope)
+    local function Enabled(bucket)
+      if type(bucket) ~= "table" then return false end
+      if category == "heal" or category == "absorb" or category == "healAbsorb" then return bucket[category] == true end
+      return bucket.heal == true or bucket.absorb == true or bucket.healAbsorb == true
+    end
+    return Enabled(modes.shared) or (normalized ~= "shared" and Enabled(modes[normalized]))
+  end
   if _G.MSUF_AbsorbTextureTestMode ~= true then return false end
   local wanted = NormalizeAbsorbTestScope(_G.MSUF_AbsorbTextureTestScope)
   return wanted == "shared" or wanted == NormalizeAbsorbTestScope(scope)
@@ -374,10 +384,12 @@ local function ResolveNameTextOptions(kind, conf)
     text.nameNpcColor = general and general.npcNameRed == true
     text.nameNpcClassColor = general and general.nameNpcClassColor == true
   end
-  text.healthColorByHealth = general and general.colorHealthTextByHealth == true
+  local healthTextColorMode = general and general.colorHealthTextByHealth
   if conf.fontOverride == true and conf.colorHealthTextByHealth ~= nil then
-    text.healthColorByHealth = conf.colorHealthTextByHealth == true
+    healthTextColorMode = conf.colorHealthTextByHealth
   end
+  text.healthColorByHealth = healthTextColorMode == true or healthTextColorMode == "HEALTH"
+  text.healthColorByClass = healthTextColorMode == "CLASS"
 
   local maxChars, noEllipsis, side
   if GF.ResolveNameTruncation then
@@ -627,25 +639,29 @@ end
 
 local function CompilePrediction(kind, conf, texture)
   local general = _G.MSUF_DB and _G.MSUF_DB.general or {}
-  local absorbMode = Num(ScopedValue(conf, general, "absorbTextMode", nil), nil)
-  local absorb
-  if absorbMode then
-    absorb = absorbMode == 2 or absorbMode == 3
-  else
-    local absorbEnabled = ScopedValue(conf, general, "enableAbsorbBar", nil)
-    if absorbEnabled == nil and conf and conf.hlOverride == true and conf.absorbEnabled ~= nil then
-      absorbEnabled = conf.absorbEnabled
-    end
-    if absorbEnabled == nil then absorbEnabled = true end
-    absorb = absorbEnabled ~= false
+  local absorbEnabled = ScopedValue(conf, general, "enableAbsorbBar", nil)
+  if absorbEnabled == nil and conf and conf.hlOverride == true and conf.absorbEnabled ~= nil then
+    absorbEnabled = conf.absorbEnabled
   end
+  if absorbEnabled == nil then
+    local absorbMode = Num(ScopedValue(conf, general, "absorbTextMode", nil), nil)
+    absorbEnabled = absorbMode == nil or absorbMode == 2 or absorbMode == 3
+  end
+  local absorb = absorbEnabled ~= false
   local heal = GF.IsHealPredictionEnabled and GF.IsHealPredictionEnabled(kind, conf) or conf.healPredEnabled == true
-  local healAbsorb = absorb == true and ScopedValue(conf, general, "healAbsorbEnabled", true) ~= false
-  local test = AbsorbTextureTestEnabledForScope(kind)
-  if test == true then
-    heal = true
-    absorb = true
-    healAbsorb = true
+  local healAbsorb = ScopedValue(conf, general, "healAbsorbEnabled", true) ~= false
+  local healTest = AbsorbTextureTestEnabledForScope(kind, "heal")
+  local absorbTest = AbsorbTextureTestEnabledForScope(kind, "absorb")
+  local healAbsorbTest = AbsorbTextureTestEnabledForScope(kind, "healAbsorb")
+  local test = healTest == true or absorbTest == true or healAbsorbTest == true
+  if healTest == true then heal = true end
+  if absorbTest == true then absorb = true end
+  if healAbsorbTest == true then healAbsorb = true end
+  local function Geometry(key, fallback, low, high)
+    local value = Num(ScopedValue(conf, general, key, fallback), fallback)
+    if value < low then return low end
+    if value > high then return high end
+    return value
   end
   local out = {
     enabled = heal == true or absorb == true or healAbsorb == true,
@@ -653,11 +669,21 @@ local function CompilePrediction(kind, conf, texture)
     absorb = absorb == true,
     healAbsorb = healAbsorb == true,
     test = test == true,
+    healTest = healTest == true,
+    absorbTest = absorbTest == true,
+    healAbsorbTest = healAbsorbTest == true,
     healAnchorMode = Num(ScopedValue(conf, general, "healPredAnchorMode", 3), 3),
     absorbAnchorMode = Num(ScopedValue(conf, general, "absorbAnchorMode", 2), 2),
+    healAbsorbAnchorMode = Num(ScopedValue(conf, general, "healAbsorbAnchorMode", 3), 3),
+    healHeight = Geometry("healPredictionBarHeight", 0, 0, 100),
+    healOffsetY = Geometry("healPredictionBarOffsetY", 0, -100, 100),
+    absorbHeight = Geometry("absorbBarHeight", 0, 0, 100),
+    absorbOffsetY = Geometry("absorbBarOffsetY", 0, -100, 100),
+    healAbsorbHeight = Geometry("healAbsorbBarHeight", 0, 0, 100),
+    healAbsorbOffsetY = Geometry("healAbsorbBarOffsetY", 0, -100, 100),
     overAbsorbOverlay = ScopedValue(conf, general, "overAbsorbOverlay", false) == true,
-    fullHealthAbsorbStripe = general.fullHealthAbsorbStripe == true,
-    texture = texture,
+    fullHealthAbsorbStripe = ScopedValue(conf, general, "fullHealthAbsorbStripe", false) == true,
+    texture = ScopedValue(conf, general, "healPredictionBarTexture", texture),
     absorbTexture = ScopedValue(conf, general, "absorbBarTexture", nil),
     healAbsorbTexture = ScopedValue(conf, general, "healAbsorbBarTexture", nil),
   }
@@ -1228,6 +1254,7 @@ local function CompileTextSpec(kind, conf, general, baselineOffset, nameTextOpti
     nameShortenDots = nameTextOptions.nameShortenDots,
     hideNameOnDeadOffline = nameTextOptions.hideNameOnDeadOffline == true,
     healthColorByHealth = nameTextOptions.healthColorByHealth == true,
+    healthColorByClass = nameTextOptions.healthColorByClass == true,
     healthLeft = healthLeft,
     healthCenter = healthCenter,
     healthRight = healthRight,
@@ -1573,6 +1600,7 @@ local function RefreshColorDomain(kind, base, conf)
   local text = base.text or {}
   base.text = text
   local oldHealthColorByHealth = text.healthColorByHealth == true
+  local oldHealthColorByClass = text.healthColorByClass == true
   local oldPowerColorByType = text.powerColorByType == true
   local nameTextOptions = ResolveNameTextOptions(kind, conf)
   if type(nameTextOptions.nameColor) == "table" then
@@ -1583,8 +1611,10 @@ local function RefreshColorDomain(kind, base, conf)
   text.nameNpcClassColor = nameTextOptions.nameNpcClassColor == true
   text.nameColor = nameTextOptions.nameColor
   text.healthColorByHealth = nameTextOptions.healthColorByHealth == true
+  text.healthColorByClass = nameTextOptions.healthColorByClass == true
   text.powerColorByType = ResolvePowerTextColorByType(conf, general)
   if oldHealthColorByHealth ~= (text.healthColorByHealth == true)
+    or oldHealthColorByClass ~= (text.healthColorByClass == true)
     or oldPowerColorByType ~= (text.powerColorByType == true) then
     BumpSpecDomain(base, "_msufTextLayoutRevision")
   end

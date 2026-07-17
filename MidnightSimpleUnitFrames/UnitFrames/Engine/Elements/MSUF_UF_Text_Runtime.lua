@@ -1139,6 +1139,9 @@ local HEALTH_TEXT_PLAYER_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH" }
 local HEALTH_TEXT_VALUE_EVENTS = { "UNIT_HEALTH", "UNIT_CONNECTION" }
 local HEALTH_TEXT_VALUE_PLAYER_EVENTS = { "UNIT_HEALTH" }
 local HEALTH_TEXT_MAX_EVENTS = { "UNIT_MAXHEALTH" }
+local HEALTH_TEXT_CLASS_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_NAME_UPDATE" }
+local HEALTH_TEXT_CLASS_VALUE_EVENTS = { "UNIT_HEALTH", "UNIT_CONNECTION", "UNIT_NAME_UPDATE" }
+local HEALTH_TEXT_CLASS_MAX_EVENTS = { "UNIT_MAXHEALTH", "UNIT_NAME_UPDATE" }
 local INLINE_TARGET_EVENTS = { "UNIT_TARGET" }
 local INLINE_NAME_UNITLESS_EVENTS = { "UNIT_NAME_UPDATE" }
 local INLINE_COLOR_UNITLESS_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_FACTION", "UNIT_FLAGS", "UNIT_CLASSIFICATION_CHANGED" }
@@ -1494,8 +1497,9 @@ function HealthText.GetEvents(frame, spec)
   if not HealthTextEnabled(spec) then
     return EMPTY_EVENTS
   end
+  local classColor = spec and spec.text and spec.text.healthColorByClass == true
   if not HealthTextNeedsValueTicks(spec) then
-    return HEALTH_TEXT_MAX_EVENTS
+    return classColor and HEALTH_TEXT_CLASS_MAX_EVENTS or HEALTH_TEXT_MAX_EVENTS
   end
   if (frame and frame.unit == "player") or (spec and spec.key == "player") then
     if not HealthTextNeedsMaxEvents(spec) then
@@ -1504,9 +1508,9 @@ function HealthText.GetEvents(frame, spec)
     return HEALTH_TEXT_PLAYER_EVENTS
   end
   if not HealthTextNeedsMaxEvents(spec) then
-    return HEALTH_TEXT_VALUE_EVENTS
+    return classColor and HEALTH_TEXT_CLASS_VALUE_EVENTS or HEALTH_TEXT_VALUE_EVENTS
   end
-  return HEALTH_TEXT_EVENTS
+  return classColor and HEALTH_TEXT_CLASS_EVENTS or HEALTH_TEXT_EVENTS
 end
 
 function HealthText.GetUnitlessEvents(frame, spec)
@@ -1515,6 +1519,10 @@ end
 
 function HealthText.Update(frame, event, unit, hp, hpMax)
   local rt = frame and frame._msufTextRuntime
+  if rt and rt.healthColorByClass == true and event ~= "UNIT_HEALTH" then
+    UpdateHealthTextColor(frame, rt, unit or frame.unit)
+    if event == "UNIT_NAME_UPDATE" then return end
+  end
   local percentFn = rt and rt.healthHotFromPercent
   if percentFn then
     local pct, pctReady

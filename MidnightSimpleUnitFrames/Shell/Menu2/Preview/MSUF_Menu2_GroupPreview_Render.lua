@@ -1401,13 +1401,13 @@ function Render.Install(box, ctx, deps)
         if runtimeSpec then
             absorbShown = runtimePrediction.absorb == true
         else
-            local displayMode = (conf.hlOverride and conf.absorbTextMode ~= nil) and conf.absorbTextMode or (gen and gen.absorbTextMode)
-            displayMode = tonumber(displayMode)
-            if displayMode then
-                absorbShown = displayMode == 2 or displayMode == 3
-            else
-                local enableAbsorbBar = (conf.hlOverride and conf.enableAbsorbBar ~= nil) and conf.enableAbsorbBar or (gen and gen.enableAbsorbBar)
+            local enableAbsorbBar = (conf.hlOverride and conf.enableAbsorbBar ~= nil) and conf.enableAbsorbBar or (gen and gen.enableAbsorbBar)
+            if enableAbsorbBar ~= nil then
                 absorbShown = enableAbsorbBar ~= false
+            else
+                local displayMode = (conf.hlOverride and conf.absorbTextMode ~= nil) and conf.absorbTextMode or (gen and gen.absorbTextMode)
+                displayMode = tonumber(displayMode)
+                absorbShown = displayMode == nil or displayMode == 2 or displayMode == 3
             end
         end
         local absorbAnchorTex = hpTex or mock._health
@@ -1436,7 +1436,7 @@ function Render.Install(box, ctx, deps)
         else
             local enabled = gen and gen.healAbsorbEnabled
             if conf.hlOverride == true and conf.healAbsorbEnabled ~= nil then enabled = conf.healAbsorbEnabled end
-            healAbsorbShown = absorbShown and enabled ~= false
+            healAbsorbShown = enabled ~= false
         end
         mock._healAbsorb:ClearAllPoints()
         mock._healAbsorb:SetStatusBarTexture(runtimePrediction.healAbsorbTexture or barTex)
@@ -1566,7 +1566,9 @@ function Render.Install(box, ctx, deps)
             if maxC and maxC > 0 then previewName = gf.TruncateName(previewName, maxC, noEllipsis, clipSide) end
         end
         mock._nameFS:SetText(previewName)
-        mock._nameFS:SetTextColor(fr or 1, fg or 1, fb or 1, textAlpha)
+        local nr, ng, nb = fr, fg, fb
+        if gf and gf.ResolveNameColor then nr, ng, nb = gf.ResolveNameColor(kind, cls) end
+        mock._nameFS:SetTextColor(nr or 1, ng or 1, nb or 1, textAlpha)
         mock._nameFS:ClearAllPoints()
         local pad4 = ScaleValue(4, previewScale, 1)
         local nox = ConfigToOffset(runtimeText.nameX or conf.nameOffsetX or 0, previewScale)
@@ -1622,7 +1624,15 @@ function Render.Install(box, ctx, deps)
         local fakeMax = 1000000
         local fakeHP = max(1, floor(fakeMax * hpPct + 0.5))
         local hpTextR, hpTextG, hpTextB = fr or 1, fg or 1, fb or 1
-        if runtimeText.healthColorByHealth == true then
+        local healthTextMode = (conf.fontOverride == true and conf.colorHealthTextByHealth ~= nil)
+            and conf.colorHealthTextByHealth or (gen and gen.colorHealthTextByHealth)
+        local healthTextByClass = runtimeText.healthColorByClass == true
+            or (not runtimeSpec and healthTextMode == "CLASS")
+        local healthTextByHealth = runtimeText.healthColorByHealth == true
+            or (not runtimeSpec and (healthTextMode == true or healthTextMode == "HEALTH"))
+        if healthTextByClass then
+            hpTextR, hpTextG, hpTextB = ClassColor(cls, hpTextR, hpTextG, hpTextB)
+        elseif healthTextByHealth then
             local pct = fakeHP / fakeMax
             if pct <= 0.5 then
                 hpTextR, hpTextG, hpTextB = 1, pct * 2, 0

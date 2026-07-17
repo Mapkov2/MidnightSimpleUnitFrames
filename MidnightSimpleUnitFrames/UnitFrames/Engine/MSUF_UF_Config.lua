@@ -407,23 +407,51 @@ local function ResolvePowerBackground(general, bars, health, dst, conf)
   return dst
 end
 
-local SetAbsorbTextureTestMode = _G.MSUF_SetAbsorbTextureTestMode or function(enabled, scope)
-  ExportPublic("MSUF_AbsorbTextureTestMode", enabled == true)
-  ExportPublic("MSUF_AbsorbTextureTestScope", enabled and NormalizeAbsorbTestScope(scope) or nil)
+local NormalizePredictionTestCategory = UF.NormalizePredictionTestCategory or function(category) return category end
+local function PredictionTestModesAny(modes)
+  if type(modes) ~= "table" then return false end
+  for _, bucket in pairs(modes) do
+    if type(bucket) == "table" and (bucket.heal == true or bucket.absorb == true or bucket.healAbsorb == true) then
+      return true
+    end
+  end
+  return false
+end
+
+local SetAbsorbTextureTestMode = _G.MSUF_SetAbsorbTextureTestMode or function(enabled, scope, category)
+  local normalizedScope = NormalizeAbsorbTestScope(scope)
+  local normalizedCategory = NormalizePredictionTestCategory(category)
+  local modes = _G.MSUF_PredictionTestModes
+  if type(modes) ~= "table" then modes = {} end
+  local bucket = modes[normalizedScope]
+  if type(bucket) ~= "table" then bucket = {}; modes[normalizedScope] = bucket end
+  if normalizedCategory then
+    bucket[normalizedCategory] = enabled == true or nil
+  else
+    bucket.heal = enabled == true or nil
+    bucket.absorb = enabled == true or nil
+    bucket.healAbsorb = enabled == true or nil
+  end
+  if not (bucket.heal or bucket.absorb or bucket.healAbsorb) then modes[normalizedScope] = nil end
+  local anyEnabled = PredictionTestModesAny(modes)
+  ExportPublic("MSUF_PredictionTestModes", anyEnabled and modes or nil)
+  ExportPublic("MSUF_AbsorbTextureTestMode", anyEnabled)
+  ExportPublic("MSUF_AbsorbTextureTestScope", enabled and normalizedScope or nil)
 end
 ExportPublic("MSUF_SetAbsorbTextureTestMode", SetAbsorbTextureTestMode)
 
 local ClearAbsorbTextureTestMode = _G.MSUF_ClearAbsorbTextureTestMode or function()
+  ExportPublic("MSUF_PredictionTestModes", nil)
   ExportPublic("MSUF_AbsorbTextureTestMode", false)
   ExportPublic("MSUF_AbsorbTextureTestScope", nil)
 end
 ExportPublic("MSUF_ClearAbsorbTextureTestMode", ClearAbsorbTextureTestMode)
 
-local ShouldShowAbsorbTextureTest = _G.MSUF_ShouldShowAbsorbTextureTest or function(frame, scope)
+local ShouldShowAbsorbTextureTest = _G.MSUF_ShouldShowAbsorbTextureTest or function(frame, scope, category)
   local key = scope
     or frame and (frame.configKey or frame.MSUFUnitKey or frame._msufGFKind or frame.unitKey)
     or nil
-  return AbsorbTextureTestEnabledForScope(key)
+  return AbsorbTextureTestEnabledForScope(key, category)
 end
 ExportPublic("MSUF_ShouldShowAbsorbTextureTest", ShouldShowAbsorbTextureTest)
 
@@ -481,9 +509,6 @@ local function ResolveNameShortening(db, general, conf, unit, text)
     end
   end
 
-  if unit == "player" and not (conf and conf.fontOverride == true and (conf.shortenNames == true or conf.nameShortenEnabled == true)) then
-    shorten = false
-  end
   if side ~= "RIGHT" then
     side = "LEFT"
   end
@@ -526,12 +551,14 @@ local function ResolveNameColorFlags(general, conf)
   return classColor, npcColor, npcClassColor
 end
 
-local function ResolveHealthTextColorByHealth(general, conf)
-  local enabled = general and general.colorHealthTextByHealth == true
+local function ResolveHealthTextColorMode(general, conf)
+  local value = general and general.colorHealthTextByHealth
   if conf and conf.fontOverride == true and conf.colorHealthTextByHealth ~= nil then
-    enabled = conf.colorHealthTextByHealth == true
+    value = conf.colorHealthTextByHealth
   end
-  return enabled
+  if value == "CLASS" then return "CLASS" end
+  if value == true or value == "HEALTH" then return "HEALTH" end
+  return "DEFAULT"
 end
 
 local function ResolvePowerTextColorByType(general, conf)
@@ -1496,7 +1523,9 @@ local function CompileUnitText(out, db, unit, key, conf, general, bars)
   text.nameClassColor, text.nameNpcColor, text.nameNpcClassColor = ResolveNameColorFlags(general, conf)
   ApplyNpcTypeFlags(text, general, "npcTypeColorText")
   ResolveToTInline(db, general, unit, text)
-  text.healthColorByHealth = ResolveHealthTextColorByHealth(general, conf)
+  local healthTextColorMode = ResolveHealthTextColorMode(general, conf)
+  text.healthColorByHealth = healthTextColorMode == "HEALTH"
+  text.healthColorByClass = healthTextColorMode == "CLASS"
   text.powerColorByType = ResolvePowerTextColorByType(general, conf)
   text.directLayout = conf.directTextLayout == true
   if text.directLayout == true then
@@ -1647,29 +1676,36 @@ end
 local function CompileUnitPrediction(out, conf, general, key)
   local pred = out.prediction or {}
   out.prediction = pred
-  local absorbMode = Number(ScopedValue(conf, general, "absorbTextMode", nil), nil)
-  if absorbMode then
-    pred.absorb = absorbMode == 2 or absorbMode == 3
-  else
-    pred.absorb = ScopedValue(conf, general, "enableAbsorbBar", true) ~= false
+  local absorbEnabled = ScopedValue(conf, general, "enableAbsorbBar", nil)
+  if absorbEnabled == nil then
+    local absorbMode = Number(ScopedValue(conf, general, "absorbTextMode", nil), nil)
+    absorbEnabled = absorbMode == nil or absorbMode == 2 or absorbMode == 3
   end
-  pred.heal = general.showSelfHealPrediction == true or general.enableHealPrediction == true
-  pred.healAbsorb = pred.absorb == true and ScopedValue(conf, general, "healAbsorbEnabled", true) ~= false
-  pred.test = AbsorbTextureTestEnabledForScope(key)
-  if pred.test == true then
-    pred.absorb = true
-    pred.heal = true
-    pred.healAbsorb = true
-  end
+  pred.absorb = absorbEnabled ~= false
+  local legacyHealEnabled = general.showSelfHealPrediction == true or general.enableHealPrediction == true
+  pred.heal = ScopedValue(conf, general, "healPredEnabled", legacyHealEnabled) == true
+  pred.healAbsorb = ScopedValue(conf, general, "healAbsorbEnabled", true) ~= false
+  pred.healTest = AbsorbTextureTestEnabledForScope(key, "heal")
+  pred.absorbTest = AbsorbTextureTestEnabledForScope(key, "absorb")
+  pred.healAbsorbTest = AbsorbTextureTestEnabledForScope(key, "healAbsorb")
+  pred.test = pred.healTest == true or pred.absorbTest == true or pred.healAbsorbTest == true
+  if pred.healTest == true then pred.heal = true end
+  if pred.absorbTest == true then pred.absorb = true end
+  if pred.healAbsorbTest == true then pred.healAbsorb = true end
   pred.enabled = pred.heal == true or pred.absorb == true or pred.healAbsorb == true
   pred.texture = out.texture
   pred.healAnchorMode = Number(ScopedValue(conf, general, "healPredAnchorMode", 3), 3)
   pred.absorbAnchorMode = Number(ScopedValue(conf, general, "absorbAnchorMode", 2), 2)
+  pred.healAbsorbAnchorMode = Number(ScopedValue(conf, general, "healAbsorbAnchorMode", 3), 3)
+  pred.healHeight = max(0, min(100, Number(ScopedValue(conf, general, "healPredictionBarHeight", 0), 0)))
+  pred.healOffsetY = max(-100, min(100, Number(ScopedValue(conf, general, "healPredictionBarOffsetY", 0), 0)))
+  pred.absorbHeight = max(0, min(100, Number(ScopedValue(conf, general, "absorbBarHeight", 0), 0)))
+  pred.absorbOffsetY = max(-100, min(100, Number(ScopedValue(conf, general, "absorbBarOffsetY", 0), 0)))
+  pred.healAbsorbHeight = max(0, min(100, Number(ScopedValue(conf, general, "healAbsorbBarHeight", 0), 0)))
+  pred.healAbsorbOffsetY = max(-100, min(100, Number(ScopedValue(conf, general, "healAbsorbBarOffsetY", 0), 0)))
   pred.overAbsorbOverlay = ScopedValue(conf, general, "overAbsorbOverlay", false) == true
-  -- The Blizzard-style full-health edge is one global behavior toggle. Do not
-  -- let pre-existing per-unit bar overrides silently pin a newly added option
-  -- to false while the Shared menu and preview show it enabled.
-  pred.fullHealthAbsorbStripe = general.fullHealthAbsorbStripe == true
+  pred.fullHealthAbsorbStripe = ScopedValue(conf, general, "fullHealthAbsorbStripe", false) == true
+  pred.texture = ScopedValue(conf, general, "healPredictionBarTexture", out.texture)
   pred.absorbTexture = ScopedValue(conf, general, "absorbBarTexture", nil)
   pred.healAbsorbTexture = ScopedValue(conf, general, "healAbsorbBarTexture", nil)
   FillPredictionColors(pred, general, conf, ScopedValue, Number)

@@ -72,6 +72,7 @@ function Methods:ClearAllPoints() Bump(self, "ClearAllPoints") end
 function Methods:SetPoint() Bump(self, "SetPoint") end
 function Methods:SetWidth(width) Bump(self, "SetWidth"); self.width = width end
 function Methods:GetWidth() Bump(self, "GetWidth"); return self.width end
+function Methods:SetHeight(height) Bump(self, "SetHeight"); self.height = height end
 function Methods:SetParent(parent) Bump(self, "SetParent"); self.parent = parent end
 function Methods:GetParent() Bump(self, "GetParent"); return self.parent end
 function Methods:SetFrameLevel(level) Bump(self, "SetFrameLevel"); self.frameLevel = level end
@@ -521,6 +522,13 @@ local layoutConfig = {
     healAbsorb = true,
     healAnchorMode = 2,
     absorbAnchorMode = 4,
+    healAbsorbAnchorMode = 3,
+    healHeight = 6,
+    healOffsetY = 1,
+    absorbHeight = 7,
+    absorbOffsetY = -2,
+    healAbsorbHeight = 8,
+    healAbsorbOffsetY = 3,
     overAbsorbOverlay = false,
 }
 local layoutFrame = MakeFrame("target", layoutConfig)
@@ -528,6 +536,11 @@ local absorbBar = layoutFrame.absorbBar
 local healAbsorbBar = layoutFrame.healAbsorbBar
 Equal(absorbBar._msufPredictionParent, layoutFrame, "mode-4 absorb parent cache")
 Equal(absorbBar:GetParent(), layoutFrame, "mode-4 absorb actual parent")
+Equal(layoutFrame.incomingHealBar._msufPredictionHeight, 6, "incoming-heal height was not compiled into layout")
+Equal(absorbBar._msufPredictionHeight, 7, "positive absorb height was not compiled into layout")
+Equal(absorbBar._msufPredictionOffsetY, -2, "positive absorb offset was not compiled into layout")
+Equal(healAbsorbBar._msufHealAbsorbHeight, 8, "negative absorb height was not compiled into layout")
+Equal(healAbsorbBar._msufHealAbsorbOffsetY, 3, "negative absorb offset was not compiled into layout")
 
 local absorbAnchors = OperationCount(absorbBar, "ClearAllPoints")
 local healAbsorbAnchors = OperationCount(healAbsorbBar, "ClearAllPoints")
@@ -629,6 +642,31 @@ Equal(OperationCount(absorbBar, "ClearAllPoints"), absorbAnchors,
     "missing-level fallback rewrote absorb geometry")
 layoutFrame.GetFrameLevel = savedFrameGetLevel
 layoutFrame.hpBar.GetFrameLevel = savedHealthGetLevel
+
+-- Category tests are independent: enabling only negative absorbs must hide the
+-- positive and incoming-heal synthetic bars even if all live categories are configured.
+local negativeTestFrame = MakeFrame("pet", {
+    enabled = true,
+    heal = true,
+    absorb = true,
+    healAbsorb = true,
+    test = true,
+    healTest = false,
+    absorbTest = false,
+    healAbsorbTest = true,
+    healAnchorMode = 3,
+    absorbAnchorMode = 2,
+    healAbsorbAnchorMode = 2,
+    healAbsorbHeight = 5,
+    healAbsorbOffsetY = -4,
+    overAbsorbOverlay = false,
+})
+Check(negativeTestFrame.incomingHealBar.shown == false, "negative test leaked incoming-heal bars")
+Check(negativeTestFrame.absorbBar.shown == false, "negative test leaked positive absorb bars")
+Check(negativeTestFrame.healAbsorbBar.shown == true, "negative test did not show heal absorbs")
+Equal(negativeTestFrame.healAbsorbBar._msufPredictionMode, 2, "negative absorb anchor did not use its own mode")
+Equal(negativeTestFrame.healAbsorbBar._msufPredictionHeight, 5, "negative absorb generic height cache")
+Equal(negativeTestFrame.healAbsorbBar._msufPredictionOffsetY, -4, "negative absorb generic offset cache")
 
 -- Integration proof: with the real Core, the normal dependent UNIT_TARGET
 -- event is bound to its parent source and the compiled route receives the

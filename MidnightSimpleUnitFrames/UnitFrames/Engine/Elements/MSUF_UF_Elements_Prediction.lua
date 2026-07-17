@@ -166,6 +166,13 @@ local PREDICTION_DISABLE_FIELDS = {
   "_msufPredictionHpReverse",
   "_msufPredictionHealMode",
   "_msufPredictionAbsorbMode",
+  "_msufPredictionHealAbsorbMode",
+  "_msufPredictionHealHeight",
+  "_msufPredictionHealOffsetY",
+  "_msufPredictionAbsorbHeight",
+  "_msufPredictionAbsorbOffsetY",
+  "_msufPredictionHealAbsorbHeight",
+  "_msufPredictionHealAbsorbOffsetY",
   "_msufPredictionHealReverse",
   "_msufPredictionAbsorbReverse",
   "_msufPredictionFollowAbsorb",
@@ -873,7 +880,7 @@ local function SetParentCached(bar, parent)
   return true
 end
 
-local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar)
+local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar, height, offsetY)
   local hpBar = frame.hpBar or frame.Health
   if not (bar and hpBar) then
     return
@@ -888,6 +895,8 @@ local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar)
   local anchorTarget = follow or hpBar
   local parent = (mode == 4) and frame or hpBar
   local parentCurrent = not bar.GetParent or bar:GetParent() == parent
+  height = height or 0
+  offsetY = offsetY or 0
 
   local layoutCurrent = bar._msufPredictionMode == mode
     and bar._msufPredictionReverse == reverse
@@ -896,6 +905,8 @@ local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar)
     and bar._msufPredictionWidth == width
     and bar._msufPredictionParent == parent
     and bar._msufPredictionLevelOffset == levelOffset
+    and bar._msufPredictionHeight == height
+    and bar._msufPredictionOffsetY == offsetY
     and bar._msufReverseFill == reverse
     and parentCurrent
   if layoutCurrent and PredictionLayerCurrent(frame, hpBar, bar, levelOffset) then
@@ -915,17 +926,33 @@ local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar)
     or bar._msufPredictionWidth ~= width
     or bar._msufPredictionParent ~= parent
     or bar._msufPredictionLevelOffset ~= levelOffset
+    or bar._msufPredictionHeight ~= height
+    or bar._msufPredictionOffsetY ~= offsetY
     or parentChanged then
     bar:ClearAllPoints()
     if follow then
       bar:SetWidth(width)
-      if reverse then
-        bar:SetPoint("TOPRIGHT", follow, "TOPLEFT", 0, 0)
-        bar:SetPoint("BOTTOMRIGHT", follow, "BOTTOMLEFT", 0, 0)
+      if height > 0 then
+        bar:SetHeight(height)
+        if reverse then
+          bar:SetPoint("RIGHT", follow, "LEFT", 0, offsetY)
+        else
+          bar:SetPoint("LEFT", follow, "RIGHT", 0, offsetY)
+        end
+      elseif reverse then
+        bar:SetPoint("TOPRIGHT", follow, "TOPLEFT", 0, offsetY)
+        bar:SetPoint("BOTTOMRIGHT", follow, "BOTTOMLEFT", 0, offsetY)
       else
-        bar:SetPoint("TOPLEFT", follow, "TOPRIGHT", 0, 0)
-        bar:SetPoint("BOTTOMLEFT", follow, "BOTTOMRIGHT", 0, 0)
+        bar:SetPoint("TOPLEFT", follow, "TOPRIGHT", 0, offsetY)
+        bar:SetPoint("BOTTOMLEFT", follow, "BOTTOMRIGHT", 0, offsetY)
       end
+    elseif height > 0 then
+      bar:SetHeight(height)
+      bar:SetPoint("LEFT", hpBar, "LEFT", 0, offsetY)
+      bar:SetPoint("RIGHT", hpBar, "RIGHT", 0, offsetY)
+    elseif offsetY ~= 0 then
+      bar:SetPoint("TOPLEFT", hpBar, "TOPLEFT", 0, offsetY)
+      bar:SetPoint("BOTTOMRIGHT", hpBar, "BOTTOMRIGHT", 0, offsetY)
     else
       bar:SetAllPoints(hpBar)
     end
@@ -936,6 +963,8 @@ local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar)
     bar._msufPredictionWidth = width
     bar._msufPredictionParent = parent
     bar._msufPredictionLevelOffset = levelOffset
+    bar._msufPredictionHeight = height
+    bar._msufPredictionOffsetY = offsetY
   end
   if bar.SetReverseFill and bar._msufReverseFill ~= reverse then
     bar:SetReverseFill(reverse)
@@ -943,7 +972,7 @@ local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar)
   end
 end
 
-local function PredictionLayoutCurrent(frame, bar, levelOffset, mode, reverse, followBar)
+local function PredictionLayoutCurrent(frame, bar, levelOffset, mode, reverse, followBar, height, offsetY)
   local hpBar = frame and (frame.hpBar or frame.Health)
   if not (bar and hpBar) then
     return false
@@ -957,6 +986,8 @@ local function PredictionLayoutCurrent(frame, bar, levelOffset, mode, reverse, f
   end
   local anchorTarget = follow or hpBar
   local parent = (mode == 4) and frame or hpBar
+  height = height or 0
+  offsetY = offsetY or 0
   return bar._msufPredictionMode == mode
     and bar._msufPredictionReverse == reverse
     and bar._msufPredictionFollowBar == followSource
@@ -964,22 +995,31 @@ local function PredictionLayoutCurrent(frame, bar, levelOffset, mode, reverse, f
     and bar._msufPredictionWidth == width
     and bar._msufPredictionParent == parent
     and bar._msufPredictionLevelOffset == levelOffset
+    and bar._msufPredictionHeight == height
+    and bar._msufPredictionOffsetY == offsetY
     and bar._msufReverseFill == reverse
     and (not bar.GetParent or bar:GetParent() == parent)
     and PredictionLayerCurrent(frame, hpBar, bar, levelOffset)
 end
 
-local function LayoutBarIfNeeded(frame, bar, levelOffset, mode, reverse, followBar)
-  if PredictionLayoutCurrent(frame, bar, levelOffset, mode, reverse, followBar) then
+local function LayoutBarIfNeeded(frame, bar, levelOffset, mode, reverse, followBar, height, offsetY)
+  if PredictionLayoutCurrent(frame, bar, levelOffset, mode, reverse, followBar, height, offsetY) then
     return
   end
-  LayoutBar(frame, bar, levelOffset, mode, reverse, followBar)
+  LayoutBar(frame, bar, levelOffset, mode, reverse, followBar, height, offsetY)
 end
 
-local function LayoutHealAbsorbBar(frame, bar, levelOffset, hpReverse)
+local function LayoutHealAbsorbBar(frame, bar, levelOffset, hpReverse, mode, height, offsetY)
   local hpBar = frame and (frame.hpBar or frame.Health)
   if not (bar and hpBar) then
     return
+  end
+  mode = mode or 3
+  height = height or 0
+  offsetY = offsetY or 0
+  if mode ~= 3 then
+    bar._msufHealAbsorbMode = nil
+    return LayoutBar(frame, bar, levelOffset, mode, ReverseForMode(mode, hpReverse), nil, height, offsetY)
   end
   local hpTexture = StatusTexture(hpBar) or hpBar
   local runtimeWidth = tonumber(frame._msufPredictionFrameWidth)
@@ -990,10 +1030,13 @@ local function LayoutHealAbsorbBar(frame, bar, levelOffset, hpReverse)
   local reverse = hpReverse ~= true
 
   local layoutCurrent = bar._msufHealAbsorbAnchorTarget == hpTexture
+    and bar._msufHealAbsorbMode == mode
     and bar._msufHealAbsorbWidth == width
     and bar._msufHealAbsorbHpReverse == hpReverse
     and bar._msufHealAbsorbParent == hpBar
     and bar._msufHealAbsorbLevelOffset == levelOffset
+    and bar._msufHealAbsorbHeight == height
+    and bar._msufHealAbsorbOffsetY == offsetY
     and bar._msufReverseFill == reverse
   if layoutCurrent and bar.GetParent and bar:GetParent() ~= hpBar then
     layoutCurrent = false
@@ -1013,23 +1056,37 @@ local function LayoutHealAbsorbBar(frame, bar, levelOffset, hpReverse)
   end
 
   if bar._msufHealAbsorbAnchorTarget ~= hpTexture
+    or bar._msufHealAbsorbMode ~= mode
     or bar._msufHealAbsorbWidth ~= width
     or bar._msufHealAbsorbHpReverse ~= hpReverse
     or bar._msufHealAbsorbParent ~= hpBar
+    or bar._msufHealAbsorbHeight ~= height
+    or bar._msufHealAbsorbOffsetY ~= offsetY
     or parentChanged then
     bar:ClearAllPoints()
     bar:SetWidth(width)
-    if hpReverse == true then
-      bar:SetPoint("TOPLEFT", hpTexture, "TOPLEFT", 0, 0)
-      bar:SetPoint("BOTTOMLEFT", hpTexture, "BOTTOMLEFT", 0, 0)
+    if height > 0 then
+      bar:SetHeight(height)
+      if hpReverse == true then
+        bar:SetPoint("LEFT", hpTexture, "LEFT", 0, offsetY)
+      else
+        bar:SetPoint("RIGHT", hpTexture, "RIGHT", 0, offsetY)
+      end
+    elseif hpReverse == true then
+      bar:SetPoint("TOPLEFT", hpTexture, "TOPLEFT", 0, offsetY)
+      bar:SetPoint("BOTTOMLEFT", hpTexture, "BOTTOMLEFT", 0, offsetY)
     else
-      bar:SetPoint("TOPRIGHT", hpTexture, "TOPRIGHT", 0, 0)
-      bar:SetPoint("BOTTOMRIGHT", hpTexture, "BOTTOMRIGHT", 0, 0)
+      bar:SetPoint("TOPRIGHT", hpTexture, "TOPRIGHT", 0, offsetY)
+      bar:SetPoint("BOTTOMRIGHT", hpTexture, "BOTTOMRIGHT", 0, offsetY)
     end
+    bar._msufPredictionMode = nil
     bar._msufHealAbsorbAnchorTarget = hpTexture
+    bar._msufHealAbsorbMode = mode
     bar._msufHealAbsorbWidth = width
     bar._msufHealAbsorbHpReverse = hpReverse
     bar._msufHealAbsorbParent = hpBar
+    bar._msufHealAbsorbHeight = height
+    bar._msufHealAbsorbOffsetY = offsetY
   end
   bar._msufHealAbsorbLevelOffset = levelOffset
 
@@ -1200,12 +1257,20 @@ local function CompilePredictionRuntime(frame, cfg, spec)
   local hpReverse = spec and spec.health and spec.health.reverse == true
   local healMode = NormalizeAnchorMode(cfg.healAnchorMode, 3)
   local absorbMode = NormalizeAnchorMode(cfg.absorbAnchorMode, 2)
+  local healAbsorbMode = NormalizeAnchorMode(cfg.healAbsorbAnchorMode, 3)
   local followAbsorb = cfg.absorb == true and (absorbMode == 3 or absorbMode == 4)
   frame._msufPredictionRuntimeCfg = cfg
   frame._msufPredictionFrameWidth = tonumber(spec and spec.width) or nil
   frame._msufPredictionHpReverse = hpReverse
   frame._msufPredictionHealMode = healMode
   frame._msufPredictionAbsorbMode = absorbMode
+  frame._msufPredictionHealAbsorbMode = healAbsorbMode
+  frame._msufPredictionHealHeight = tonumber(cfg.healHeight) or 0
+  frame._msufPredictionHealOffsetY = tonumber(cfg.healOffsetY) or 0
+  frame._msufPredictionAbsorbHeight = tonumber(cfg.absorbHeight) or 0
+  frame._msufPredictionAbsorbOffsetY = tonumber(cfg.absorbOffsetY) or 0
+  frame._msufPredictionHealAbsorbHeight = tonumber(cfg.healAbsorbHeight) or 0
+  frame._msufPredictionHealAbsorbOffsetY = tonumber(cfg.healAbsorbOffsetY) or 0
   frame._msufPredictionHealReverse = ReverseForMode(healMode, hpReverse)
   frame._msufPredictionAbsorbReverse = ReverseForMode(absorbMode, hpReverse)
   frame._msufPredictionMask = PredictionMask(cfg)
@@ -1287,9 +1352,9 @@ function Prediction.Create(frame, spec)
   end
 end
 
-local function ApplyPredictionBar(frame, cfg, spec, bar, active, level, mode, reverse, textureKey, rKey, gKey, bKey, aKey, follow)
+local function ApplyPredictionBar(frame, cfg, spec, bar, active, level, mode, reverse, textureKey, rKey, gKey, bKey, aKey, follow, height, offsetY)
   if not bar then return end
-  LayoutBar(frame, bar, level, mode, reverse, follow)
+  LayoutBar(frame, bar, level, mode, reverse, follow, height, offsetY)
   SetTextureCached(bar, ResolveTexture(cfg[textureKey], spec and spec.texture or WHITE))
   SetColorCached(bar, cfg[rKey], cfg[gKey], cfg[bKey], cfg[aKey])
   if active ~= true then HideBar(bar) end
@@ -1297,7 +1362,9 @@ end
 
 local function ApplyHealAbsorbBar(frame, cfg, spec, bar)
   if not bar then return end
-  LayoutHealAbsorbBar(frame, bar, 3, frame._msufPredictionHpReverse == true)
+  LayoutHealAbsorbBar(frame, bar, 3, frame._msufPredictionHpReverse == true,
+    frame._msufPredictionHealAbsorbMode,
+    frame._msufPredictionHealAbsorbHeight, frame._msufPredictionHealAbsorbOffsetY)
   SetTextureCached(bar, ResolveTexture(cfg.healAbsorbTexture, spec and spec.texture or WHITE))
   SetColorCached(bar, cfg.healAbsorbR, cfg.healAbsorbG, cfg.healAbsorbB, cfg.healAbsorbA)
   if cfg.healAbsorb ~= true then HideBar(bar) end
@@ -1329,11 +1396,13 @@ function Prediction.Apply(frame, spec)
 
   ApplyPredictionBar(frame, cfg, spec, frame.incomingHealBar, cfg.heal,
     1, healMode, frame._msufPredictionHealReverse,
-    "texture", "healR", "healG", "healB", "healA")
+    "texture", "healR", "healG", "healB", "healA", nil,
+    frame._msufPredictionHealHeight, frame._msufPredictionHealOffsetY)
   ApplyPredictionBar(frame, cfg, spec, frame.absorbBar, cfg.absorb,
     2, absorbMode, frame._msufPredictionAbsorbReverse,
     "absorbTexture", "absorbR", "absorbG", "absorbB", "absorbA",
-    VisibleFollowBar(cfg, frame.incomingHealBar))
+    VisibleFollowBar(cfg, frame.incomingHealBar),
+    frame._msufPredictionAbsorbHeight, frame._msufPredictionAbsorbOffsetY)
   if cfg.absorb == true and (cfg.overAbsorbOverlay == true or cfg.fullHealthAbsorbStripe == true) then
     PositionOverAbsorbGlow(frame, frame._msufPredictionHpReverse == true)
   else
@@ -1540,7 +1609,8 @@ function Prediction.UpdateHealthValue(frame, event, unit, seedHP, seedMaxHP)
   if frame._msufPredictionFollowAbsorb == true and absorbBar then
     local follow = cfg.heal == true and healBar and healBar._msufShown == true and healBar or nil
     local absorbMode = frame._msufPredictionAbsorbMode or NormalizeAnchorMode(cfg.absorbAnchorMode, 2)
-    LayoutBarIfNeeded(frame, absorbBar, 2, absorbMode, frame._msufPredictionAbsorbReverse, follow)
+    LayoutBarIfNeeded(frame, absorbBar, 2, absorbMode, frame._msufPredictionAbsorbReverse, follow,
+      frame._msufPredictionAbsorbHeight, frame._msufPredictionAbsorbOffsetY)
     ShowValue(absorbBar, maxHP, frame._msufPredictionAbsorb)
   end
   if absorbEdgeGlow then
@@ -1677,16 +1747,22 @@ UpdateFull = function(frame, event, unit, seedHP, seedMaxHP, seedCalc)
   end
 
   if cfg.test == true then
-    if cfg.heal == true and frame.incomingHealBar then
-      LayoutBar(frame, frame.incomingHealBar, 1, healMode, frame._msufPredictionHealReverse)
+    local explicitTests = cfg.healTest ~= nil or cfg.absorbTest ~= nil or cfg.healAbsorbTest ~= nil
+    local testHeal = cfg.healTest == true or not explicitTests
+    local testAbsorb = cfg.absorbTest == true or not explicitTests
+    local testHealAbsorb = cfg.healAbsorbTest == true or not explicitTests
+    if testHeal and frame.incomingHealBar then
+      LayoutBar(frame, frame.incomingHealBar, 1, healMode, frame._msufPredictionHealReverse, nil,
+        frame._msufPredictionHealHeight, frame._msufPredictionHealOffsetY)
       ShowValue(frame.incomingHealBar, TEST_MAX, TEST_INCOMING)
     elseif frame.incomingHealBar then
       HideBar(frame.incomingHealBar)
     end
-    if cfg.absorb == true and frame.absorbBar then
+    if testAbsorb and frame.absorbBar then
       if absorbMode == 3 or absorbMode == 4 then
         local follow = VisibleFollowBar(cfg, frame.incomingHealBar)
-        LayoutBar(frame, frame.absorbBar, 2, absorbMode, frame._msufPredictionAbsorbReverse, follow)
+        LayoutBar(frame, frame.absorbBar, 2, absorbMode, frame._msufPredictionAbsorbReverse, follow,
+          frame._msufPredictionAbsorbHeight, frame._msufPredictionAbsorbOffsetY)
       end
       ShowValue(frame.absorbBar, TEST_MAX, TEST_ABSORB)
       UpdateOverAbsorbGlow(frame, cfg, unit, TEST_MAX, TEST_MAX, TEST_ABSORB)
@@ -1694,8 +1770,10 @@ UpdateFull = function(frame, event, unit, seedHP, seedMaxHP, seedCalc)
       HideBar(frame.absorbBar)
       HideOverAbsorbGlow(frame)
     end
-    if cfg.healAbsorb == true and frame.healAbsorbBar then
-      LayoutHealAbsorbBar(frame, frame.healAbsorbBar, 3, frame._msufPredictionHpReverse == true)
+    if testHealAbsorb and frame.healAbsorbBar then
+      LayoutHealAbsorbBar(frame, frame.healAbsorbBar, 3, frame._msufPredictionHpReverse == true,
+        frame._msufPredictionHealAbsorbMode,
+        frame._msufPredictionHealAbsorbHeight, frame._msufPredictionHealAbsorbOffsetY)
       ShowValue(frame.healAbsorbBar, TEST_MAX, TEST_HEAL_ABSORB)
     elseif frame.healAbsorbBar then
       HideBar(frame.healAbsorbBar)
@@ -1796,7 +1874,8 @@ UpdateFull = function(frame, event, unit, seedHP, seedMaxHP, seedCalc)
   if showAbsorb and frame.absorbBar then
     if absorbMode == 3 or absorbMode == 4 then
       local follow = cfg.heal == true and frame.incomingHealBar and frame.incomingHealBar._msufShown == true and frame.incomingHealBar or nil
-      LayoutBarIfNeeded(frame, frame.absorbBar, 2, absorbMode, frame._msufPredictionAbsorbReverse, follow)
+      LayoutBarIfNeeded(frame, frame.absorbBar, 2, absorbMode, frame._msufPredictionAbsorbReverse, follow,
+        frame._msufPredictionAbsorbHeight, frame._msufPredictionAbsorbOffsetY)
     end
     if (forceMax == true or frame.absorbBar._msufMaxReady ~= true) and issecretvalue(maxHP) ~= true and maxHP == nil then
       maxHP = ReadHealthMax(frame, unit)
@@ -1808,7 +1887,9 @@ UpdateFull = function(frame, event, unit, seedHP, seedMaxHP, seedCalc)
   end
 
   if showHealAbsorb and frame.healAbsorbBar then
-    LayoutHealAbsorbBar(frame, frame.healAbsorbBar, 3, frame._msufPredictionHpReverse == true)
+    LayoutHealAbsorbBar(frame, frame.healAbsorbBar, 3, frame._msufPredictionHpReverse == true,
+      frame._msufPredictionHealAbsorbMode,
+      frame._msufPredictionHealAbsorbHeight, frame._msufPredictionHealAbsorbOffsetY)
     if (forceMax == true or frame.healAbsorbBar._msufMaxReady ~= true) and issecretvalue(maxHP) ~= true and maxHP == nil then
       maxHP = ReadHealthMax(frame, unit)
     end
