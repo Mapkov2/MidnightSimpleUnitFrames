@@ -980,6 +980,7 @@ _G.MSUF_RefreshStatusIndicators = function()
         if not f then return end
         if seen then seen[f] = true end
         f._msufStatusConf = nil
+        f._msufStatusIconsConf = nil
         f._msufAwayForceRefresh = true
         if f._msufIsGroupFrame and type(_G.MSUF_GF_UpdateStatus) == "function" then
             f._msufGFStatusState = nil
