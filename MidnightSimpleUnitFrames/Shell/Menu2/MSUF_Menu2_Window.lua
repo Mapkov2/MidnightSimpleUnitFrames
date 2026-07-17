@@ -649,6 +649,50 @@ local function ApplyScrollMetrics()
     if entry and entry.wrapper then entry.wrapper:SetSize(CONTENT_W - 12, height) end
     if M.scrollFrame and M.scrollFrame._msuf2RefreshScrollBar then M.scrollFrame:_msuf2RefreshScrollBar() end
 end
+local function QueueVisiblePageLayoutSettle(key, entry)
+    if type(entry) ~= "table" or entry._msuf2VisibleLayoutSettleQueued then return end
+    entry._msuf2VisibleLayoutSettleQueued = true
+    local function Settle()
+        entry._msuf2VisibleLayoutSettleQueued = nil
+        if M.activeKey ~= key or not M.cache or M.cache[key] ~= entry then return end
+        if not (M.frame and M.frame.IsShown and M.frame:IsShown()) then return end
+        if not (entry.wrapper and entry.wrapper.IsShown and entry.wrapper:IsShown()) then return end
+
+        -- A cached/new page can become visible in the same layout turn in
+        -- which its accordion headers were created. If their anchored width
+        -- resolved before OnSizeChanged was hooked, the first label layout can
+        -- retain a zero-width span until an unrelated menu scale/resize event.
+        -- Refresh once after visibility has settled; this is cold-path work and
+        -- installs no recurring handler.
+        local builders = {}
+        local seenBuilders = {}
+        for _, body in pairs(entry.sections or {}) do
+            local section = body and body._msuf2CollapsibleEntry
+            if section then
+                if type(section._msuf2RefreshLayout) == "function" then
+                    section._msuf2RefreshLayout()
+                end
+                local builder = section.builder
+                if builder and not seenBuilders[builder] then
+                    seenBuilders[builder] = true
+                    builders[#builders + 1] = builder
+                end
+            end
+        end
+        for i = 1, #builders do
+            local builder = builders[i]
+            if type(builder.RelayoutCollapsibles) == "function" then
+                builder:RelayoutCollapsibles()
+            end
+        end
+        ApplyScrollMetrics()
+    end
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, Settle)
+    else
+        Settle()
+    end
+end
 function RebuildActivePageForResize(frame)
     local key = M.activeKey or "home"
     SaveWindowSize(frame)
@@ -1141,6 +1185,7 @@ function M.SelectPage(key)
         M.CallIf(M.ReleasePinnedPreviews, "SELECT_CACHED", key)
         M.CallIf(M.ReleaseGFNativePreviews, "SELECT_CACHED", key)
         RunRefreshers(cached)
+        QueueVisiblePageLayoutSettle(key, cached)
         M.CallIf(M.ResumeClassPowerPreview, "SELECT_CACHED", key)
         M.CallIf(M.ResumeGFNativePreviews, "SELECT_CACHED", key)
         RequestBossPagePreviewForKey(key)
@@ -1179,6 +1224,7 @@ function M.SelectPage(key)
     entry.wrapper:Show()
     RememberPrimaryNavPage(key)
     RunRefreshers(entry)
+    QueueVisiblePageLayoutSettle(key, entry)
     M.CallIf(M.ResumeClassPowerPreview, "SELECT_PAGE", key)
     M.CallIf(M.ResumeGFNativePreviews, "SELECT_PAGE", key)
     SetTitle(key)
@@ -1946,6 +1992,8 @@ local function InstallWindowLifecycle(state)
         EnsureEditModeUIHook()
         if self.RefreshStatus then self:RefreshStatus() end
         if M.scrollFrame and M.scrollFrame._msuf2RefreshScrollBar then M.scrollFrame:_msuf2RefreshScrollBar() end
+        local activeEntry = M.activeKey and M.cache and M.cache[M.activeKey]
+        if activeEntry then QueueVisiblePageLayoutSettle(M.activeKey, activeEntry) end
         M.CallIf(M.RefreshGuidedTourChrome, "WINDOW_SHOW")
         M.CallIf(M.ResumePinnedPreviews, "WINDOW_SHOW")
         M.CallIf(M.ResumeClassPowerPreview, "WINDOW_SHOW", M.activeKey)
