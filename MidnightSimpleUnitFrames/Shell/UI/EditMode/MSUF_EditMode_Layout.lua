@@ -1357,6 +1357,26 @@ local function ResolveAnchor(key, conf)
     return anchor
 end
 
+local function SetBossPreviewPosition(point, anchor, relativePoint, x, y, conf)
+    local layoutDelta = _G.MSUF_GetBossLayoutDelta
+    if type(layoutDelta) ~= "function" then return false end
+    local uf = MSUF and MSUF.UF
+    local frames = uf and uf.frames
+    local moved = false
+    for i = 1, 5 do
+        local unit = "boss" .. i
+        local frame = (frames and frames[unit]) or _G["MSUF_" .. unit]
+        if frame then
+            local dx, dy = layoutDelta(i, conf)
+            frame._msufDragActive = true
+            frame:ClearAllPoints()
+            frame:SetPoint(point, anchor, relativePoint, x + (dx or 0), y + (dy or 0))
+            moved = true
+        end
+    end
+    return moved
+end
+
 local GROUP_VALID_POINTS = { CENTER = true, TOP = true, BOTTOM = true, LEFT = true, RIGHT = true, TOPLEFT = true, TOPRIGHT = true, BOTTOMLEFT = true, BOTTOMRIGHT = true }
 
 local function ResolveGroupAnchor(conf)
@@ -1707,8 +1727,11 @@ local function OnUpdate(self, elapsed)
                         if conf.offsetX ~= nextX or conf.offsetY ~= nextY then
                             conf.offsetX = nextX
                             conf.offsetY = nextY
-                            bar:ClearAllPoints()
-                            bar:SetPoint(point, ecv, relPoint, baseX + conf.offsetX, conf.offsetY + extraY)
+                            if not d.isBossLayout or not SetBossPreviewPosition(point, ecv, relPoint,
+                                baseX + conf.offsetX, conf.offsetY + extraY, conf) then
+                                bar:ClearAllPoints()
+                                bar:SetPoint(point, ecv, relPoint, baseX + conf.offsetX, conf.offsetY + extraY)
+                            end
                         end
                     else
                         --- Normal path mirrors Factory.ApplyPosition so anchored frames drag
@@ -1716,8 +1739,11 @@ local function OnUpdate(self, elapsed)
                         if conf.offsetX ~= nextX or conf.offsetY ~= nextY then
                             conf.offsetX = nextX
                             conf.offsetY = nextY
-                            bar:ClearAllPoints()
-                            bar:SetPoint(point, anchor, relativePoint, conf.offsetX, conf.offsetY)
+                            if not d.isBossLayout or not SetBossPreviewPosition(point, anchor, relativePoint,
+                                conf.offsetX, conf.offsetY, conf) then
+                                bar:ClearAllPoints()
+                                bar:SetPoint(point, anchor, relativePoint, conf.offsetX, conf.offsetY)
+                            end
                         end
                     end
                     bar._msufDragActive = true
@@ -1855,6 +1881,8 @@ function Ticker.BeginDrag(mover, key, cfg)
         end
     end
 
+    local isBossLayout = not isCastbar and key == "boss"
+
     activeDrag = {
         mover        = mover,
         key          = key,
@@ -1876,6 +1904,7 @@ function Ticker.BeginDrag(mover, key, cfg)
         popupSyncAcc = 0.05,
         focusNotifyAcc = 0.05,
         isGroupFrame = isGroupFrame,
+        isBossLayout = isBossLayout,
         groupKind    = groupKind,
         isCastbar    = isCastbar,
         castbarUnit  = castbarUnit,
@@ -1909,6 +1938,13 @@ function Ticker.EndDrag()
     activeDrag = nil
 
     if d.bar then d.bar._msufDragActive = false end
+    if d.isBossLayout then
+        local frames = MSUF and MSUF.UF and MSUF.UF.frames
+        for i = 1, 5 do
+            local frame = (frames and frames["boss" .. i]) or _G["MSUF_boss" .. i]
+            if frame then frame._msufDragActive = false end
+        end
+    end
     if d.bar and d.bar._msufGFLiveAnchor then d.bar._msufGFLiveAnchor._msufDragActive = false end
     if d.bar and d.bar._msufGFLogicalAnchor then d.bar._msufGFLogicalAnchor._msufDragActive = false end
     if d.mover and d.mover._msufGFEM2DragSourceFrame then

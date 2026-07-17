@@ -151,6 +151,19 @@ local function LayoutFrame(frame)
   return frame
 end
 
+--- Keep the visible root inside the screen without replacing its configured
+--- anchor. Blizzard performs the final clamp in physical screen space, so this
+--- remains correct for CDM/custom anchors with a different effective scale.
+--- The flag makes this a creation/cold-path cost only.
+local function EnableScreenClamp(frame)
+  local layout = LayoutFrame(frame)
+  if not (layout and layout.SetClampedToScreen) then return false end
+  if layout._msufScreenClampEnabled == true then return true end
+  layout:SetClampedToScreen(true)
+  layout._msufScreenClampEnabled = true
+  return true
+end
+
 local function ShouldCacheScreenPosition(spec, requestedAnchor)
   return type(spec and spec.anchorFrameName) == "string"
     and spec.anchorFrameName ~= ""
@@ -514,6 +527,7 @@ local function SpawnFrame(unit)
   elseif frame.SetParent and frame:GetParent() ~= parent and not InCombat() then
     frame:SetParent(parent)
   end
+  EnableScreenClamp(frame)
   UF.AttachFrame(frame, { scope = "single" })
   EnsureRuntimeOnShow(frame)
   EnsureMouseoverHooks(frame)
