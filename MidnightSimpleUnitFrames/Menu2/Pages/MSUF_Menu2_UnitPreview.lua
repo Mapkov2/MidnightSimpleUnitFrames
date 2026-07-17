@@ -2762,10 +2762,12 @@ function Preview.Refresh(box, reason)
     if mock.hpLayer and mock.hpLayer.SetFrameLevel then mock.hpLayer:SetFrameLevel(textBase + ClampPreviewLayer(conf.hpTextLayer, 5)) end
     if mock.powerLayer and mock.powerLayer.SetFrameLevel then mock.powerLayer:SetFrameLevel(textBase + ClampPreviewLayer(conf.powerTextLayer, 2)) end
     if mock.bounds and mock.bounds.SetFrameLevel then mock.bounds:SetFrameLevel(baseLevel + 28) end
-    SetTex(mock.hp, type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture() or TEX_W8)
-    SetTex(mock.power, type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture() or TEX_W8)
-    SetTex(mock.hpBG, type(_G.MSUF_GetBarBackgroundTexture) == "function" and _G.MSUF_GetBarBackgroundTexture() or TEX_W8)
-    SetTex(mock.powerBG, type(_G.MSUF_GetBarBackgroundTexture) == "function" and _G.MSUF_GetBarBackgroundTexture() or TEX_W8)
+    local getBarTexture = _G.MSUF_GetBarTextureForFrame or _G.MSUF_GetBarTexture
+    local getBarBgTexture = _G.MSUF_GetBarBackgroundTextureForFrame or _G.MSUF_GetBarBackgroundTexture
+    SetTex(mock.hp, type(getBarTexture) == "function" and getBarTexture(key) or TEX_W8)
+    SetTex(mock.power, type(getBarTexture) == "function" and getBarTexture(key) or TEX_W8)
+    SetTex(mock.hpBG, type(getBarBgTexture) == "function" and getBarBgTexture(key) or TEX_W8)
+    SetTex(mock.powerBG, type(getBarBgTexture) == "function" and getBarBgTexture(key) or TEX_W8)
     SetTex(mock.detachedPower.fill, type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture() or TEX_W8)
     SetTex(mock.cast.fill, type(_G.MSUF_GetCastbarTexture) == "function" and _G.MSUF_GetCastbarTexture() or TEX_W8)
     mock:SetSize(sw, sh)

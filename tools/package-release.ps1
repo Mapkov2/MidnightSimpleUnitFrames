@@ -110,6 +110,7 @@ New-Item -ItemType Directory -Force -Path $stagePath | Out-Null
 
 Copy-Item -LiteralPath (Join-Path $RepoRoot "MidnightSimpleUnitFrames") -Destination $stagePath -Recurse -Force
 Copy-Item -LiteralPath (Join-Path $RepoRoot "MidnightSimpleUnitFrames_Castbars") -Destination $stagePath -Recurse -Force
+Copy-Item -LiteralPath (Join-Path $RepoRoot "MidnightSimpleUnitFrames_UUFImporter") -Destination $stagePath -Recurse -Force
 
 $perfyHookPath = Join-Path $stagePath "MidnightSimpleUnitFrames/MSUF_PerfyHook.lua"
 if (Test-Path -LiteralPath $perfyHookPath) {
@@ -125,6 +126,7 @@ if (Test-Path -LiteralPath $changelogGenerator) {
 
 Set-TocVersion -TocPath (Join-Path $stagePath "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc") -TocVersion $releaseVersion
 Set-TocVersion -TocPath (Join-Path $stagePath "MidnightSimpleUnitFrames_Castbars/MidnightSimpleUnitFrames_Castbars.toc") -TocVersion $releaseVersion
+Set-TocVersion -TocPath (Join-Path $stagePath "MidnightSimpleUnitFrames_UUFImporter/MidnightSimpleUnitFrames_UUFImporter.toc") -TocVersion $releaseVersion
 
 $zipPath = Join-Path $outputPath "MidnightSimpleUnitFrames$fileVersion.zip"
 if (Test-Path -LiteralPath $zipPath) {

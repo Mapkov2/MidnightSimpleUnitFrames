@@ -26,7 +26,6 @@ local GF_AURA_FILTERS = GP.GF_AURA_FILTERS or {}
 local GF_AURA_ORG = GP.GF_AURA_ORG or {}
 local SORT_MODES = GP.SORT_MODES or {}
 local GF_BAR_MODES = GP.GF_BAR_MODES or {}
-local SIMPLE_TEXTURES = GP.SIMPLE_TEXTURES or {}
 local GF_ANCHOR_TO = GP.GF_ANCHOR_TO or {}
 local GF_ANCHOR_POINTS = GP.GF_ANCHOR_POINTS or {}
 local TOOLTIP_MODES = GP.TOOLTIP_MODES or {}
@@ -247,9 +246,7 @@ local function BuildGFBars(ctx)
         if entry then entry._msuf2RefreshState = RefreshHealthColorState end
     end
 
-    local bars = b:CollapsibleSection("bars", "Bars  (Custom)", 206, false)
-    BindScopeDropdown(ctx, W.Dropdown(bars, "Foreground Texture", SIMPLE_TEXTURES, 280), "barTexture", "", "visual")
-    BindScopeDropdown(ctx, W.Dropdown(bars, "Background Texture", SIMPLE_TEXTURES, 280), "barBgTexture", "", "visual")
+    local bars = b:CollapsibleSection("bars", "Bars  (Custom)", 102, false)
     BindScopeDropdown(ctx, W.Dropdown(bars, "Health color mode", HEALTH_MODES, 220), "healthColorMode", "CLASS", "visual")
 
     local power = b:CollapsibleSection("power", "Power Bar", 240, false)
@@ -914,4 +911,4 @@ local function BuildGFBars(ctx)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 
-M.RegisterPage("gf_bars", { title = "MSUF Group Health & Text", build = BuildGFBars, version = 12 })
+M.RegisterPage("gf_bars", { title = "MSUF Group Health & Text", build = BuildGFBars, version = 13 })

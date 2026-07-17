@@ -340,8 +340,8 @@ _G.MSUF_GetEffectiveHealthBarBackgroundTintRGBA = MSUF_GetEffectiveHealthBarBack
 
 local function MSUF_ApplyBarBackgroundVisual(frame)
     if not frame then return end
-    local getBgTexture = _G.MSUF_GetBarBackgroundTexture
-    local tex = type(getBgTexture) == "function" and getBgTexture() or nil
+    local getBgTexture = _G.MSUF_GetBarBackgroundTextureForFrame or _G.MSUF_GetBarBackgroundTexture
+    local tex = type(getBgTexture) == "function" and getBgTexture(frame) or nil
     if not tex then return end
 
     local getCache = _MSUF_ResolveGetCache()

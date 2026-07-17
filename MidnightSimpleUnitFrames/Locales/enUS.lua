@@ -47,6 +47,7 @@ L["Language"] = "Language"
 L["Menu language"] = "Menu language"
 L["Follow Blizzard"] = "Follow Blizzard"
 L["Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus."] = "Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus."
+L["This is an UnhaltedUnitFrames profile.\n\nMSUF will translate supported unit-frame, party/raid-frame, and aura settings as a best-effort import. Unsupported UUF-only settings may not map 1:1.\n\nIf UnhaltedUnitFrames is loaded, the import is blocked before any profile change. Disable it and /reload first.\n\nImport anyway?"] = "This is an UnhaltedUnitFrames profile.\n\nMSUF will translate supported unit-frame, party/raid-frame, and aura settings as a best-effort import. Unsupported UUF-only settings may not map 1:1.\n\nIf UnhaltedUnitFrames is loaded, the import is blocked before any profile change. Disable it and /reload first.\n\nImport anyway?"
 
 -- MSUF 5.1 Beta 1
 L["Blizzard Renderer"] = "Blizzard Renderer"

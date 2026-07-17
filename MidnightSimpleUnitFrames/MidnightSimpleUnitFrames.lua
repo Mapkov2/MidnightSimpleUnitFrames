@@ -852,9 +852,9 @@ local function MSUF_ApplyOverlayTextureAlpha(bar, alpha)
 end
 ns.Bars._ApplyOverlayTextureAlpha = MSUF_ApplyOverlayTextureAlpha
 _G.MSUF_ApplyOverlayTextureAlpha = MSUF_ApplyOverlayTextureAlpha
-function ns.Bars.SetOverlayBarTexture(bar, texGetter)
+function ns.Bars.SetOverlayBarTexture(bar, texGetter, owner)
     if not bar or not bar.SetStatusBarTexture or not texGetter then return end
-    local tex = texGetter()
+    local tex = texGetter(owner)
     if tex then
         bar:SetStatusBarTexture(tex)
         bar.MSUF_cachedStatusbarTexture = tex
@@ -5913,7 +5913,8 @@ local function _CreateSelfHealPredBar(f, hpBar)
     f.selfHealPredClip = clip
     f.incomingHealClip = clip
     local bar = _G.CreateFrame("StatusBar", nil, clip)
-    bar:SetStatusBarTexture(MSUF_GetBarTexture())
+    local getBarTexture = _G.MSUF_GetBarTextureForFrame or MSUF_GetBarTexture
+    bar:SetStatusBarTexture(getBarTexture(f))
     bar:SetMinMaxValues(0, 1)
     bar:SetValue(0)
     bar.MSUF_lastValue = 0
@@ -5992,7 +5993,8 @@ local function CreateSimpleUnitFrame(unit)
     bg:SetVertexColor(0.15, 0.15, 0.15, 0.9)
     local hpBar = ns.UF.MakeBar(f, "hpBar", "self")
     hpBar:SetPoint("TOPLEFT", f, "TOPLEFT", 2, -2); hpBar:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -2, 2)
-    hpBar:SetStatusBarTexture(MSUF_GetBarTexture())
+    local getBarTexture = _G.MSUF_GetBarTextureForFrame or MSUF_GetBarTexture
+    hpBar:SetStatusBarTexture(getBarTexture(f))
     hpBar:SetMinMaxValues(0, 1)
     hpBar:SetValue(0); hpBar.MSUF_lastValue = 0
     hpBar:SetFrameLevel(f:GetFrameLevel() + 1)
@@ -6011,13 +6013,13 @@ local function CreateSimpleUnitFrame(unit)
     _CreateSelfHealPredBar(f, hpBar)
     f.absorbBar = MSUF_CreateOverlayStatusBar(f, hpBar, hpBar:GetFrameLevel() + 2, MSUF_GetAbsorbOverlayColor(), true)
     f.healAbsorbBar = MSUF_CreateOverlayStatusBar(f, hpBar, hpBar:GetFrameLevel() + 3, MSUF_GetHealAbsorbOverlayColor(), false)
-    ns.Bars.SetOverlayBarTexture(f.absorbBar, MSUF_GetAbsorbBarTexture)
-    ns.Bars.SetOverlayBarTexture(f.healAbsorbBar, MSUF_GetHealAbsorbBarTexture)
+    ns.Bars.SetOverlayBarTexture(f.absorbBar, _G.MSUF_GetAbsorbBarTextureForFrame or MSUF_GetAbsorbBarTexture, f)
+    ns.Bars.SetOverlayBarTexture(f.healAbsorbBar, _G.MSUF_GetHealAbsorbBarTextureForFrame or MSUF_GetHealAbsorbBarTexture, f)
     -- Layered alpha requires per-texture alpha; MSUF unitframes support it.
     f._msufAlphaSupportsLayered = true
     if unit == "player" or unit == "focus" or unit == "target" or isBossUnit then
         local pBar = ns.UF.MakeBar(f, "targetPowerBar", "self")
-        pBar:SetStatusBarTexture(MSUF_GetBarTexture())
+        pBar:SetStatusBarTexture(getBarTexture(f))
         local readHeight = _G.MSUF_ReadUnitPowerBarHeight
         local h = (type(readHeight) == "function" and readHeight(key)) or ((MSUF_DB and MSUF_DB.bars and type(MSUF_DB.bars.powerBarHeight) == "number" and MSUF_DB.bars.powerBarHeight > 0) and MSUF_DB.bars.powerBarHeight) or 3
         pBar:SetHeight(h)
