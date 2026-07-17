@@ -317,6 +317,10 @@ local function EnsureAnchor(key, conf, totalW, totalH)
   elseif anchor.GetParent and anchor.SetParent and anchor:GetParent() ~= desiredParent then
     anchor:SetParent(desiredParent)
   end
+  if anchor.SetClampedToScreen and anchor._msufScreenClampEnabled ~= true then
+    anchor:SetClampedToScreen(true)
+    anchor._msufScreenClampEnabled = true
+  end
   anchor:SetSize(totalW, totalH)
   anchor:ClearAllPoints()
   local point = AnchorPoint(conf)

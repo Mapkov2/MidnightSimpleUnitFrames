@@ -441,7 +441,7 @@ local function EnsureContainer(kind)
   f:SetPoint("CENTER", UIParent, "CENTER", GetDefaultCenter(kind))
   f:SetFrameStrata("FULLSCREEN")
   f:SetFrameLevel(320)
-  f:SetClampedToScreen(false)
+  f:SetClampedToScreen(true)
   f:EnableMouse(true)
   f:Hide()
   f.msufConfigKey = KIND_TO_KEY[kind]

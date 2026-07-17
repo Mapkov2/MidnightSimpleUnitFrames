@@ -240,6 +240,7 @@ local function EnsureContainer(kind, parent)
   if not container then
     container = CreateFrame("Frame", "MSUF_GFPreviewContainer_" .. kind, desiredParent)
     container:EnableMouse(false)
+    if container.SetClampedToScreen then container:SetClampedToScreen(true) end
     GF._previewContainer[kind] = container
   end
   if container:GetParent() ~= desiredParent then container:SetParent(desiredParent) end
@@ -329,9 +330,21 @@ local function SetBar(bar, value, maxValue, r, g, b, a)
 end
 
 local function ClassColor(class)
+  local fastClass = _G.MSUF_UFCore_GetClassBarColorFast
+  if type(fastClass) == "function" then
+    local r, g, b = fastClass(class)
+    if r then return r, g, b end
+  end
   local c = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
   if c then return c.r, c.g, c.b end
   return 0.25, 0.75, 0.30
+end
+
+local function PreviewNameColor(kind, class)
+  if GF.ResolveNameColor then
+    return GF.ResolveNameColor(kind, class)
+  end
+  return ClassColor(class)
 end
 
 local function PreviewHealthColor(frame, class, hpPct)
@@ -373,13 +386,19 @@ local function PercentFactory(pct)
   return function() return pct end
 end
 
-local function ApplyPreviewText(frame, hp, hpMax, power, powerMax)
+local function ApplyPreviewText(frame, hp, hpMax, power, powerMax, class)
   local text = MSUF and MSUF.UFText
   local rt = frame and frame._msufTextRuntime
   if not (text and rt and text.UpdateTextSlots) then return end
 
   rt.healthMissing = max(0, (hpMax or 0) - (hp or 0))
   text.UpdateTextSlots(rt.healthSlots, rt.healthSlotCount, hp, hpMax, frame.unit, PercentFactory((hp / max(hpMax, 1)) * 100), rt.healthNeedsPercent, rt)
+  if rt.healthColorByClass == true and text.SetHealthTextColor then
+    local r, g, b = ClassColor(class)
+    text.SetHealthTextColor(frame, rt, r, g, b, rt.healthTextAlpha or rt.textColorA or 1)
+  elseif rt.healthColorByHealth == true and text.UpdateHealthTextColor then
+    text.UpdateHealthTextColor(frame, rt, frame.unit, hp, hpMax)
+  end
 
   text.UpdateTextSlots(rt.powerSlots, rt.powerSlotCount, power, powerMax, frame.unit, PercentFactory((power / max(powerMax, 1)) * 100), rt.powerNeedsPercent, rt)
 end
@@ -484,7 +503,9 @@ local function ApplyPreviewData(frame, index, kind)
 
   if frame.nameText and frame.nameText:IsShown() then
     frame.nameText:SetText(ShortName(name or "Preview", frame))
-    frame.nameText:SetTextColor(ClassColor(class))
+    local r, g, b = PreviewNameColor(kind, class)
+    local a = GF.ResolveFontTextAlpha and GF.ResolveFontTextAlpha(kind) or 1
+    frame.nameText:SetTextColor(r, g, b, a)
     frame.nameText:Show()
   end
 
@@ -509,7 +530,7 @@ local function ApplyPreviewData(frame, index, kind)
     SetBar(powerBar, power, powerMax, 0.10, 0.45, 0.95, 1)
   end
 
-  ApplyPreviewText(frame, hp, hpMax, power, powerMax)
+  ApplyPreviewText(frame, hp, hpMax, power, powerMax, class)
   ApplyPreviewStatus(frame, kind, index, role)
   if animState and frame.combatStateIndicatorIcon then
     if frame.combatStateIndicatorIcon.SetAlpha then frame.combatStateIndicatorIcon:SetAlpha(0.55 + ((animState.pulse or 0) * 0.45)) end
