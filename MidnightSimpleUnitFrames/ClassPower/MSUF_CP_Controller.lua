@@ -2932,8 +2932,7 @@ CP.RefreshTexturesPublic = function()
 end
 ExportPublic("MSUF_ClassPower_RefreshTextures", CP.RefreshTexturesPublic)
 
-ExportPublic("MSUF_ClassPower_RefreshLayout", function()
-    _CP_RefreshConfig()
+CP.RefreshLayoutCurrent = function()
     if not (CP.visible and CP_Layout) then
         return false
     end
@@ -2952,6 +2951,27 @@ ExportPublic("MSUF_ClassPower_RefreshLayout", function()
     CP._pf = playerFrame
     CP._layoutH = cpHeight
     return true
+end
+
+ExportPublic("MSUF_ClassPower_RefreshLayout", function()
+    _CP_RefreshConfig()
+    return CP.RefreshLayoutCurrent()
+end)
+
+-- Source-size callbacks already run against the live profile table. Avoid the
+-- generic ClassPower apply/config/event path and redistribute only the visible
+-- resource layout whose configured cooldown source actually changed.
+ExportPublic("MSUF_ClassPower_RefreshExternalWidth", function(sourceName)
+    local b = _cpDB and _cpDB.bars
+    local sources = CPConst and CPConst.CDM_FRAMES
+    if not (b and sources and sources[b.classPowerWidthMode or ""] == sourceName) then
+        return false
+    end
+    local refreshed = CP.RefreshLayoutCurrent()
+    if refreshed and PHP.visible and tostring(b.playerHPBarWidthMode or "class"):lower() == "class" then
+        CP_PlayerHPRefresh(GetPlayerFrame())
+    end
+    return refreshed
 end)
 
 --- Refresh class power text font (called from UpdateAllFonts)

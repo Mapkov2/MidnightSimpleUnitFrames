@@ -678,24 +678,120 @@ local COOLDOWN_WIDTH_MODES = {
   utility = "UtilityCooldownViewer",
   tracked_buffs = "BuffIconCooldownViewer",
 }
-local DETACHED_POWER_KEYS = { "player", "target", "focus" }
-local cooldownWidthObserved = setmetatable({}, { __mode = "k" })
+local COOLDOWN_WIDTH_MODE_BITS = { cooldown = 1, utility = 2, tracked_buffs = 4 }
+local COOLDOWN_WIDTH_SOURCE_BITS = {
+  EssentialCooldownViewer = 1,
+  UtilityCooldownViewer = 2,
+  BuffIconCooldownViewer = 4,
+}
+local COOLDOWN_WIDTH_SOURCE_NAMES = {
+  "EssentialCooldownViewer",
+  "UtilityCooldownViewer",
+  "BuffIconCooldownViewer",
+}
+local COOLDOWN_WIDTH_SOURCE_BIT_ORDER = { 1, 2, 4 }
+local COOLDOWN_WIDTH_CASTBAR_CONTAINERS = {
+  "EssentialCooldownViewer_CDM_Container",
+  "UtilityCooldownViewer_AnchorContainer",
+}
+local COOLDOWN_WIDTH_ALL_SOURCES = 7
+local CASTBAR_WIDTH_CONFIG = {
+  { "castbarPlayerMatchWidth", "enablePlayerCastbar" },
+  { "castbarTargetMatchWidth", "enableTargetCastbar" },
+  { "castbarFocusMatchWidth", "enableFocusCastbar" },
+  { "bossCastbarMatchWidth", "enableBossCastbar" },
+}
+local CASTBAR_WIDTH_SOURCE_BITS = { essential = 1, utility = 2 }
+local cooldownWidthHooked = setmetatable({}, { __mode = "k" })
+local cooldownWidthActiveGeneration = setmetatable({}, { __mode = "k" })
+local cooldownWidthActiveMask = setmetatable({}, { __mode = "k" })
+local cooldownWidthActiveCastbarOnlyMask = setmetatable({}, { __mode = "k" })
+local cooldownWidthSourceGeneration = 0
+local cooldownWidthScannedGeneration = -1
+local cooldownWidthConfigMask = -1
+local cooldownWidthVisualConfigMask = 0
+local cooldownWidthCastbarConfigMask = 0
 local cooldownWidthRefreshPending = false
-local cooldownWidthRefreshAfterCombat = false
+local cooldownWidthRefreshPendingMask = 0
+local cooldownWidthVisualPendingMask = 0
+local cooldownWidthRefreshAfterCombatMask = 0
+local cooldownWidthVisualAfterCombatMask = 0
 local cooldownWidthObserverAfterCombat = false
 local cooldownWidthRegenDriver
 
-local function HasCooldownWidthConfig()
+local function MaskHas(mask, bit)
+  return mask and bit and mask % (bit * 2) >= bit
+end
+
+local function MaskAdd(mask, bit)
+  if not bit or MaskHas(mask, bit) then return mask end
+  return mask + bit
+end
+
+local function MaskIntersect(left, right)
+  local result = 0
+  for i = 1, #COOLDOWN_WIDTH_SOURCE_BIT_ORDER do
+    local bit = COOLDOWN_WIDTH_SOURCE_BIT_ORDER[i]
+    if MaskHas(left, bit) and MaskHas(right, bit) then result = result + bit end
+  end
+  return result
+end
+
+local function MaskSubtract(left, right)
+  local result = 0
+  for i = 1, #COOLDOWN_WIDTH_SOURCE_BIT_ORDER do
+    local bit = COOLDOWN_WIDTH_SOURCE_BIT_ORDER[i]
+    if MaskHas(left, bit) and not MaskHas(right, bit) then result = result + bit end
+  end
+  return result
+end
+
+local function NormalizeCooldownWidthMask(source)
+  if source == nil then return COOLDOWN_WIDTH_ALL_SOURCES end
+  if type(source) == "number" then
+    source = math.floor(source)
+    return source >= 0 and source <= COOLDOWN_WIDTH_ALL_SOURCES and source or 0
+  end
+  return COOLDOWN_WIDTH_SOURCE_BITS[source] or COOLDOWN_WIDTH_MODE_BITS[source] or 0
+end
+
+local function ConfiguredCooldownWidthMask()
   local db = _G.MSUF_DB
   local bars = type(db) == "table" and type(db.bars) == "table" and db.bars or nil
-  if not bars then return false end
-  if COOLDOWN_WIDTH_MODES[bars.classPowerWidthMode or ""] and bars.showClassPower ~= false then return true end
-  if not COOLDOWN_WIDTH_MODES[bars.detachedPowerBarWidthMode or ""] then return false end
-  for i = 1, #DETACHED_POWER_KEYS do
-    local conf = db[DETACHED_POWER_KEYS[i]]
-    if type(conf) == "table" and conf.powerBarDetached == true then return true end
+  if type(db) ~= "table" then return 0, 0, 0 end
+
+  local mask = 0
+  if bars then
+    local classBit = COOLDOWN_WIDTH_MODE_BITS[bars.classPowerWidthMode or ""]
+    local detachedBit = COOLDOWN_WIDTH_MODE_BITS[bars.detachedPowerBarWidthMode or ""]
+    if bars.showClassPower ~= false then mask = MaskAdd(mask, classBit) end
+
+    for i = 1, #LATE_ANCHOR_KEYS do
+      local key = LATE_ANCHOR_KEYS[i]
+      local conf = db[key]
+      if type(conf) == "table" and conf.powerBarDetached == true and conf.showPowerBar ~= false then
+        local bit = detachedBit
+        if key == "player" and conf.detachedPowerBarSyncClassPower ~= false then bit = classBit end
+        local shape = key == "player" and tostring(conf.detachedPowerBarShape or "BAR"):upper() or "BAR"
+        if shape ~= "ORB" then mask = MaskAdd(mask, bit) end
+      end
+    end
   end
-  return false
+  local visualMask = mask
+  local castbarMask = 0
+
+  local general = type(db.general) == "table" and db.general or nil
+  if general then
+    for i = 1, #CASTBAR_WIDTH_CONFIG do
+      local config = CASTBAR_WIDTH_CONFIG[i]
+      if general[config[2]] ~= false then
+        local bit = CASTBAR_WIDTH_SOURCE_BITS[general[config[1]]]
+        mask = MaskAdd(mask, bit)
+        castbarMask = MaskAdd(castbarMask, bit)
+      end
+    end
+  end
+  return mask, visualMask, castbarMask
 end
 
 local function EnsureCooldownWidthRegenDriver()
@@ -704,14 +800,22 @@ local function EnsureCooldownWidthRegenDriver()
     cooldownWidthRegenDriver:SetScript("OnEvent", function(self)
       if InCombat() then return end
       self:UnregisterEvent("PLAYER_REGEN_ENABLED")
-      local refresh = cooldownWidthRefreshAfterCombat
+      local refreshMask = cooldownWidthRefreshAfterCombatMask
+      local visualMask = cooldownWidthVisualAfterCombatMask
       local observe = cooldownWidthObserverAfterCombat
-      cooldownWidthRefreshAfterCombat = false
+      cooldownWidthRefreshAfterCombatMask = 0
+      cooldownWidthVisualAfterCombatMask = 0
       cooldownWidthObserverAfterCombat = false
-      if observe or refresh then
-        EnsureCooldownWidthObservers()
-        ScheduleCooldownWidthRefresh()
+      if observe then
+        EnsureCooldownWidthObservers(true)
+        -- The source could not fire callbacks before its protected hook was
+        -- installed. Reconcile every active consumer once after regen; the
+        -- normal pending masks below merge into this same next-frame pass.
+        ScheduleCooldownWidthRefresh(nil, false, true)
       end
+      if visualMask ~= 0 then ScheduleCooldownWidthRefresh(visualMask, false, true) end
+      local castbarOnlyMask = MaskSubtract(refreshMask, visualMask)
+      if castbarOnlyMask ~= 0 then ScheduleCooldownWidthRefresh(castbarOnlyMask, true, true) end
     end)
   end
   cooldownWidthRegenDriver:RegisterEvent("PLAYER_REGEN_ENABLED")
@@ -720,28 +824,65 @@ end
 
 local function FlushCooldownWidthRefresh()
   if InCombat() then
+    local pendingMask = cooldownWidthRefreshPendingMask
+    local visualMask = cooldownWidthVisualPendingMask
     cooldownWidthRefreshPending = false
-    cooldownWidthRefreshAfterCombat = true
+    cooldownWidthRefreshPendingMask = 0
+    cooldownWidthVisualPendingMask = 0
+    for i = 1, #COOLDOWN_WIDTH_SOURCE_BIT_ORDER do
+      local bit = COOLDOWN_WIDTH_SOURCE_BIT_ORDER[i]
+      if MaskHas(pendingMask, bit) then
+        cooldownWidthRefreshAfterCombatMask = MaskAdd(cooldownWidthRefreshAfterCombatMask, bit)
+      end
+      if MaskHas(visualMask, bit) then
+        cooldownWidthVisualAfterCombatMask = MaskAdd(cooldownWidthVisualAfterCombatMask, bit)
+      end
+    end
     EnsureCooldownWidthRegenDriver()
     return false
   end
+  local requestedMask = cooldownWidthRefreshPendingMask
+  local requestedVisualMask = cooldownWidthVisualPendingMask
   cooldownWidthRefreshPending = false
-  if not HasCooldownWidthConfig() then return false end
+  cooldownWidthRefreshPendingMask = 0
+  cooldownWidthVisualPendingMask = 0
+  local configuredMask, visualMask, castbarMask = ConfiguredCooldownWidthMask()
+  local refreshMask = MaskIntersect(requestedMask, configuredMask)
+  if refreshMask == 0 then return false end
+  local visualRefreshMask = MaskIntersect(requestedVisualMask, visualMask)
+  local castbarRefreshMask = MaskIntersect(refreshMask, castbarMask)
 
   local db = _G.MSUF_DB
   local bars = db and db.bars or nil
-  if bars and COOLDOWN_WIDTH_MODES[bars.classPowerWidthMode or ""] then
-    if type(_G.MSUF_ClassPower_Apply) == "function" then
-      _G.MSUF_ClassPower_Apply({ anchor = true, cdm = true, syncNow = false })
-    elseif type(_G.MSUF_ClassPower_Refresh) == "function" then
-      _G.MSUF_ClassPower_Refresh()
+  local classBit = bars and COOLDOWN_WIDTH_MODE_BITS[bars.classPowerWidthMode or ""] or nil
+  if bars and bars.showClassPower ~= false and MaskHas(visualRefreshMask, classBit) then
+    local sourceName = COOLDOWN_WIDTH_MODES[bars.classPowerWidthMode or ""]
+    if type(_G.MSUF_ClassPower_RefreshExternalWidth) == "function" then
+      _G.MSUF_ClassPower_RefreshExternalWidth(sourceName)
+    elseif type(_G.MSUF_ClassPower_RefreshLayout) == "function" then
+      _G.MSUF_ClassPower_RefreshLayout()
     end
   end
 
-  if type(UF.RefreshPowerLayout) == "function" then
-    UF.RefreshPowerLayout()
-  elseif type(_G.MSUF_ApplyPowerBarEmbedLayout_All) == "function" then
-    _G.MSUF_ApplyPowerBarEmbedLayout_All()
+  if visualRefreshMask ~= 0 then
+    local powerElement = UF.Elements and UF.Elements.Power
+    local refreshPowerWidth = powerElement and powerElement.RefreshDetachedExternalWidth
+    if type(refreshPowerWidth) == "function" then
+      for i = 1, #UF.unitOrder do
+        local frame = UF.frames and UF.frames[UF.unitOrder[i]]
+        local power = frame and frame.MSUFSpec and frame.MSUFSpec.power
+        local sourceName = power and (power.detachedSyncClass == true
+          and power.detachedClassWidthFrameName or power.detachedWidthFrameName)
+        local sourceBit = COOLDOWN_WIDTH_SOURCE_BITS[sourceName]
+        if MaskHas(visualRefreshMask, sourceBit) then refreshPowerWidth(frame, sourceName, power) end
+      end
+    end
+  end
+
+  local refreshCastbar = _G.MSUF_RefreshCastbarCooldownWidthSource
+  if type(refreshCastbar) == "function" then
+    if MaskHas(castbarRefreshMask, 1) then refreshCastbar("EssentialCooldownViewer") end
+    if MaskHas(castbarRefreshMask, 2) then refreshCastbar("UtilityCooldownViewer") end
   end
   if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
     _G.MSUF_UFPreview_RequestRefresh("MSUF_COOLDOWN_WIDTH_SOURCE")
@@ -749,12 +890,42 @@ local function FlushCooldownWidthRefresh()
   return true
 end
 
-ScheduleCooldownWidthRefresh = function()
-  if not HasCooldownWidthConfig() then return false end
+ScheduleCooldownWidthRefresh = function(source, castbarOnly, trustedConfig)
+  local requestedMask = NormalizeCooldownWidthMask(source)
+  if requestedMask == 0 then return false end
+  local configuredMask, visualMask, castbarMask
+  if trustedConfig == true then
+    configuredMask = cooldownWidthConfigMask >= 0 and cooldownWidthConfigMask or 0
+    visualMask = cooldownWidthVisualConfigMask
+    castbarMask = cooldownWidthCastbarConfigMask
+  else
+    configuredMask, visualMask, castbarMask = ConfiguredCooldownWidthMask()
+  end
+  if castbarOnly == true then configuredMask = castbarMask end
+  requestedMask = MaskIntersect(requestedMask, configuredMask)
+  if requestedMask == 0 then return false end
+  local requestedVisualMask = castbarOnly == true and 0 or MaskIntersect(requestedMask, visualMask)
   if InCombat() then
-    cooldownWidthRefreshAfterCombat = true
+    for i = 1, #COOLDOWN_WIDTH_SOURCE_BIT_ORDER do
+      local bit = COOLDOWN_WIDTH_SOURCE_BIT_ORDER[i]
+      if MaskHas(requestedMask, bit) then
+        cooldownWidthRefreshAfterCombatMask = MaskAdd(cooldownWidthRefreshAfterCombatMask, bit)
+      end
+      if MaskHas(requestedVisualMask, bit) then
+        cooldownWidthVisualAfterCombatMask = MaskAdd(cooldownWidthVisualAfterCombatMask, bit)
+      end
+    end
     EnsureCooldownWidthRegenDriver()
     return true
+  end
+  for i = 1, #COOLDOWN_WIDTH_SOURCE_BIT_ORDER do
+    local bit = COOLDOWN_WIDTH_SOURCE_BIT_ORDER[i]
+    if MaskHas(requestedMask, bit) then
+      cooldownWidthRefreshPendingMask = MaskAdd(cooldownWidthRefreshPendingMask, bit)
+    end
+    if MaskHas(requestedVisualMask, bit) then
+      cooldownWidthVisualPendingMask = MaskAdd(cooldownWidthVisualPendingMask, bit)
+    end
   end
   if cooldownWidthRefreshPending then return true end
   cooldownWidthRefreshPending = true
@@ -766,37 +937,102 @@ ScheduleCooldownWidthRefresh = function()
   return true
 end
 
-local function OnCooldownWidthSourceChanged()
-  ScheduleCooldownWidthRefresh()
+local function OnCooldownWidthSourceChanged(frame)
+  if cooldownWidthActiveGeneration[frame] ~= cooldownWidthSourceGeneration then return end
+  local sourceMask = cooldownWidthActiveMask[frame] or 0
+  if sourceMask ~= 0 then ScheduleCooldownWidthRefresh(sourceMask, false, true) end
+  local castbarOnlyMask = cooldownWidthActiveCastbarOnlyMask[frame] or 0
+  if castbarOnlyMask ~= 0 then ScheduleCooldownWidthRefresh(castbarOnlyMask, true, true) end
 end
 
-local function ObserveCooldownWidthFrame(frame)
+local function ObserveCooldownWidthFrame(frame, sourceBit, castbarOnly)
   if not (frame and frame.HookScript) then return false end
-  if cooldownWidthObserved[frame] then return true end
-  if InCombat() and frame.IsProtected and frame:IsProtected() then
+  if not cooldownWidthHooked[frame] then
+    if InCombat() and frame.IsProtected and frame:IsProtected() then
+      cooldownWidthObserverAfterCombat = true
+      EnsureCooldownWidthRegenDriver()
+      return false
+    end
+    cooldownWidthHooked[frame] = true
+    frame:HookScript("OnSizeChanged", OnCooldownWidthSourceChanged)
+    frame:HookScript("OnShow", OnCooldownWidthSourceChanged)
+    frame:HookScript("OnHide", OnCooldownWidthSourceChanged)
+  end
+  if cooldownWidthActiveGeneration[frame] ~= cooldownWidthSourceGeneration then
+    cooldownWidthActiveGeneration[frame] = cooldownWidthSourceGeneration
+    cooldownWidthActiveMask[frame] = 0
+    cooldownWidthActiveCastbarOnlyMask[frame] = 0
+  end
+  if castbarOnly == true then
+    cooldownWidthActiveCastbarOnlyMask[frame] = MaskAdd(cooldownWidthActiveCastbarOnlyMask[frame] or 0, sourceBit)
+  else
+    cooldownWidthActiveMask[frame] = MaskAdd(cooldownWidthActiveMask[frame] or 0, sourceBit)
+  end
+  return true
+end
+
+EnsureCooldownWidthObservers = function(force)
+  local configuredMask, visualMask, castbarMask = ConfiguredCooldownWidthMask()
+  if configuredMask ~= cooldownWidthConfigMask
+    or visualMask ~= cooldownWidthVisualConfigMask
+    or castbarMask ~= cooldownWidthCastbarConfigMask then
+    cooldownWidthConfigMask = configuredMask
+    cooldownWidthVisualConfigMask = visualMask
+    cooldownWidthCastbarConfigMask = castbarMask
+    cooldownWidthSourceGeneration = cooldownWidthSourceGeneration + 1
+  elseif force == true and cooldownWidthScannedGeneration == cooldownWidthSourceGeneration then
+    cooldownWidthSourceGeneration = cooldownWidthSourceGeneration + 1
+  end
+  if cooldownWidthScannedGeneration == cooldownWidthSourceGeneration then return configuredMask ~= 0 end
+  if InCombat() then
     cooldownWidthObserverAfterCombat = true
     EnsureCooldownWidthRegenDriver()
     return false
   end
-  cooldownWidthObserved[frame] = true
-  frame:HookScript("OnSizeChanged", OnCooldownWidthSourceChanged)
-  frame:HookScript("OnShow", OnCooldownWidthSourceChanged)
-  frame:HookScript("OnHide", OnCooldownWidthSourceChanged)
-  return true
-end
 
-EnsureCooldownWidthObservers = function()
-  if not HasCooldownWidthConfig() then return false end
+  cooldownWidthScannedGeneration = cooldownWidthSourceGeneration
+  if configuredMask == 0 then return false end
   local found = false
-  for frameName in pairs(COOLDOWN_ANCHORS) do
-    found = ObserveCooldownWidthFrame(_G[frameName]) or found
-    found = ObserveCooldownWidthFrame(ResolveCooldownViewerAnchor(frameName)) or found
+  for i = 1, #COOLDOWN_WIDTH_SOURCE_NAMES do
+    local sourceBit = COOLDOWN_WIDTH_SOURCE_BIT_ORDER[i]
+    if MaskHas(configuredMask, sourceBit) then
+      local frameName = COOLDOWN_WIDTH_SOURCE_NAMES[i]
+      found = ObserveCooldownWidthFrame(ResolveCooldownViewerAnchor(frameName), sourceBit) or found
+    end
+  end
+  for i = 1, #COOLDOWN_WIDTH_CASTBAR_CONTAINERS do
+    local sourceBit = COOLDOWN_WIDTH_SOURCE_BIT_ORDER[i]
+    if MaskHas(castbarMask, sourceBit) then
+      found = ObserveCooldownWidthFrame(_G[COOLDOWN_WIDTH_CASTBAR_CONTAINERS[i]], sourceBit, true) or found
+    end
   end
   return found
 end
 
 ExportPublic("MSUF_ScheduleCooldownWidthRefresh", ScheduleCooldownWidthRefresh)
 ExportPublic("MSUF_EnsureCooldownWidthObservers", EnsureCooldownWidthObservers)
+
+-- Rebind only unit frames that explicitly consume one external anchor. This is
+-- used for proxy acquisition/loss; a stable proxy-to-proxy source switch needs
+-- no unit-frame work because its identity never changes.
+function Factory.RefreshExternalAnchor(frameName)
+  if not (IsCooldownViewerAnchor(frameName) and UF.spawned) or InCombat() then return false end
+  local refreshed = false
+  for i = 1, #UF.unitOrder do
+    local frame = UF.frames and UF.frames[UF.unitOrder[i]]
+    local spec = frame and frame.MSUFSpec
+    if spec and spec.anchorFrameName == frameName then
+      InvalidateFramePositionCache(frame)
+      ApplyPosition(frame, spec)
+      refreshed = true
+    end
+  end
+  return refreshed
+end
+
+ExportPublic("MSUF_RefreshExternalUnitFrameAnchor", function(frameName)
+  return Factory.RefreshExternalAnchor(frameName)
+end)
 
 local function HasLateAnchorConfig()
   local db = _G.MSUF_DB
@@ -905,7 +1141,7 @@ do
   lateAnchorEvents:RegisterEvent("ADDON_LOADED")
   lateAnchorEvents:SetScript("OnEvent", function(_, event, addon)
     if event == "ADDON_LOADED" and addon ~= "Blizzard_EditMode" and addon ~= "Blizzard_CooldownViewer" then return end
-    EnsureCooldownWidthObservers()
+    EnsureCooldownWidthObservers(true)
     if event == "EDIT_MODE_LAYOUTS_UPDATED" then ScheduleCooldownWidthRefresh() end
     if event == "PLAYER_ENTERING_WORLD" then
       -- Blizzard finalizes UIParent and secure layout state on this event. Run

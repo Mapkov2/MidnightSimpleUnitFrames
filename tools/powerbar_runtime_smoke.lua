@@ -25,7 +25,7 @@ local function NewRegion(parent)
     function region:SetPoint(...) self.points[#self.points + 1] = { ... } end
     function region:SetAllPoints(value) self.allPoints = value or true end
     function region:SetSize(width, height) self.width, self.height = width, height end
-    function region:SetWidth(width) self.width = width end
+    function region:SetWidth(width) self.width = width; self.setWidthCalls = (self.setWidthCalls or 0) + 1 end
     function region:SetHeight(height) self.height = height end
     function region:GetWidth() return self.width or 275 end
     function region:GetHeight() return self.height or 40 end
@@ -230,6 +230,25 @@ assert(bar.width == 222, "visible cooldown width source did not own detached Tar
 assert(bar._msufDetachedExternalWidths and bar._msufDetachedExternalWidths.EssentialCooldownViewer == 222,
     "visible cooldown width was not cached on its live Power bar")
 
+local widthOnlyBackgrounds, widthOnlyGradients = backgroundApplies, gradientApplies
+local widthOnlyPoints, widthOnlyHeight = #bar.points, bar.height
+local widthOnlyCalls = bar.setWidthCalls or 0
+externalRelativeWidths[bar].EssentialCooldownViewer = 234
+assert(Power.RefreshDetachedExternalWidth(frame, "EssentialCooldownViewer") == true,
+    "matching cooldown source did not enter the width-only path")
+assert(bar.width == 234 and bar.height == widthOnlyHeight and #bar.points == widthOnlyPoints,
+    "width-only refresh changed detached height or anchors")
+assert(backgroundApplies == widthOnlyBackgrounds and gradientApplies == widthOnlyGradients,
+    "width-only refresh reapplied unrelated media")
+assert((bar.setWidthCalls or 0) == widthOnlyCalls + 1,
+    "width-only refresh did not perform exactly one physical width write")
+assert(Power.RefreshDetachedExternalWidth(frame, "UtilityCooldownViewer") == false and bar.width == 234,
+    "unconfigured cooldown source reached the detached bar")
+widthOnlyCalls = bar.setWidthCalls or 0
+assert(Power.RefreshDetachedExternalWidth(frame, "EssentialCooldownViewer") == true
+    and (bar.setWidthCalls or 0) == widthOnlyCalls,
+    "unchanged external width caused a redundant SetWidth")
+
 local focusFrame = NewRegion(nil)
 local focusBar = NewRegion(focusFrame)
 focusFrame.targetPowerBar = focusBar
@@ -240,7 +259,8 @@ assert(Power.ResolveDetachedWidth(focusFrame, power) == 198,
 focusBar:SetWidth(198)
 
 externalShown = false
-Power.Apply(frame, spec)
+assert(Power.RefreshDetachedExternalWidth(frame, "EssentialCooldownViewer") == true,
+    "hidden source did not enter the width-only fallback path")
 assert(bar.width == 320, "hidden cooldown source did not return to the configured manual width")
 assert(bar._msufDetachedExternalWidths.EssentialCooldownViewer == nil,
     "hidden OOC source retained a stale external width cache")
@@ -281,6 +301,8 @@ power.shape = "ORB"
 Power.Apply(frame, spec)
 assert(bar.width == 54 and bar.height == 54, "Orb size setting was not applied")
 assert(gradientHides > 0, "shape bars must hide rectangular gradients")
+assert(Power.RefreshDetachedExternalWidth(frame, "EssentialCooldownViewer") == false,
+    "Orb entered the external width path")
 
 power.detached = false
 power.shape = "BAR"

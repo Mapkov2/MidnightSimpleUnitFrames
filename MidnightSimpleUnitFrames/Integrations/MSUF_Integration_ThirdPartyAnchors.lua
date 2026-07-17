@@ -19,7 +19,13 @@ local registeredSkiron
 local refreshSkironAnchorProxy
 local watcher
 local skironSourceHookPending = false
+local skironProxyRefreshAfterCombat = false
+local skironResolveGeneration = 0
 local observedSkironSources = setmetatable({}, { __mode = "k" })
+
+local function InCombat()
+    return InCombatLockdown and InCombatLockdown() or false
+end
 
 local function IsFrameUsable(frame)
     if not (frame and frame ~= UIParent and frame ~= WorldFrame) then
@@ -60,18 +66,18 @@ local function ObserveSkironSource(source)
     if not (source and source.HookScript) then return false end
     if source.IsForbidden and source:IsForbidden() then return false end
     if observedSkironSources[source] then return true end
-    if InCombatLockdown and InCombatLockdown()
+    if InCombat()
         and source.IsProtected and source:IsProtected() then
         skironSourceHookPending = true
         if watcher then watcher:RegisterEvent("PLAYER_REGEN_ENABLED") end
         return false
     end
     observedSkironSources[source] = true
-    source:HookScript("OnSizeChanged", function(frame)
-        refreshSkironAnchorProxy(frame, true, true)
+    source:HookScript("OnSizeChanged", function()
+        refreshSkironAnchorProxy(nil, false, true)
     end)
-    source:HookScript("OnShow", function(frame)
-        refreshSkironAnchorProxy(frame, true, true)
+    source:HookScript("OnShow", function()
+        refreshSkironAnchorProxy(nil, false, true)
     end)
     source:HookScript("OnHide", function()
         refreshSkironAnchorProxy(nil, false, true)
@@ -87,14 +93,24 @@ local function EnsureSkironAnchorProxy(source, isActiveProxy)
     ObserveSkironSource(_G.SCM_GroupAnchor_1)
     source = ResolveSkironAnchorSource(source, isActiveProxy)
     local proxy = _G.MSUF_SkironCooldownAnchor
+    local previousSource = proxy and proxy.MSUFSkironSource or nil
+    local transition = previousSource ~= source
+        and (not previousSource and "acquired" or not source and "lost" or "switched")
+        or nil
+    if transition and InCombat() then
+        skironProxyRefreshAfterCombat = true
+        if watcher then watcher:RegisterEvent("PLAYER_REGEN_ENABLED") end
+        return previousSource and proxy or nil, false, nil, true
+    end
     if not source then
-        local changed = proxy and proxy.MSUFSkironSource ~= nil or false
-        if changed then
-            proxy:ClearAllPoints()
+        local changed = transition ~= nil
+        if changed and proxy then
+            -- Keep the last points while hidden. Clearing them can make secure
+            -- dependants jump before their targeted fallback rebind runs.
             proxy.MSUFSkironSource = nil
             if proxy.Hide then proxy:Hide() end
         end
-        return nil, changed
+        return nil, changed, transition, false
     end
     ObserveSkironSource(source)
 
@@ -114,67 +130,70 @@ local function EnsureSkironAnchorProxy(source, isActiveProxy)
         proxy.MSUFSkironSource = source
     end
     if proxy.Show then proxy:Show() end
-    return proxy, changed
+    return proxy, changed, transition, false
 end
 
 function MSUF.GetSkironCooldownAnchorProxy()
-    return EnsureSkironAnchorProxy()
+    -- Resolver reads must not consume a source transition. Creation, loss and
+    -- rebinding are owned by refreshSkironAnchorProxy so every state change
+    -- reaches the same targeted anchor/width notification path.
+    local proxy = _G.MSUF_SkironCooldownAnchor
+    if proxy and proxy.MSUFSkironSource ~= nil and (not proxy.IsShown or proxy:IsShown()) then
+        return proxy
+    end
 end
 
 _G.MSUF_GetSkironCooldownAnchorProxy = function()
     return MSUF.GetSkironCooldownAnchorProxy()
 end
 
-local function RequestSkironAnchorApply()
+local function RefreshSkironAnchorConsumers(transition)
+    if transition ~= "acquired" and transition ~= "lost" then return end
     local UF = MSUF.UF
-    if not (UF and UF.spawned) then
-        return
+    local factory = UF and UF.Factory
+    if factory and type(factory.RefreshExternalAnchor) == "function" then
+        factory.RefreshExternalAnchor("EssentialCooldownViewer")
     end
-    if InCombatLockdown and InCombatLockdown() then
-        if type(UF.RequestReanchorAfterCombat) == "function" then
-            UF.RequestReanchorAfterCombat()
-        end
-        -- ClassPower and the detached power bar are insecure frames; they may
-        -- re-anchor onto the proxy during lockdown (combat reload). Secure
-        -- unit-frame geometry stays queued for the regen driver above.
-        if type(_G.MSUF_ClassPower_Apply) == "function" then
-            _G.MSUF_ClassPower_Apply({ anchor = true, cdm = true, syncNow = false })
-        elseif type(_G.MSUF_ClassPower_Refresh) == "function" then
-            _G.MSUF_ClassPower_Refresh()
-        end
-        return
-    end
-    local factory = UF.Factory
-    if factory and type(factory.Apply) == "function" then
-        factory.Apply()
+
+    local bars = _G.MSUF_DB and _G.MSUF_DB.bars
+    if bars and bars.classPowerAnchorToCooldown == true
+        and bars.classPowerWidthMode ~= "cooldown"
+        and type(_G.MSUF_ClassPower_RefreshLayout) == "function" then
+        _G.MSUF_ClassPower_RefreshLayout()
     end
 end
 
 refreshSkironAnchorProxy = function(source, isActiveProxy, sizeChanged)
-    local proxy, changed = EnsureSkironAnchorProxy(source, isActiveProxy)
-    if proxy and type(_G.MSUF_EnsureCooldownWidthObservers) == "function" then
-        _G.MSUF_EnsureCooldownWidthObservers()
-    end
+    local proxy, changed, transition, deferred = EnsureSkironAnchorProxy(source, isActiveProxy)
+    if deferred then return proxy ~= nil end
     if changed then
-        RequestSkironAnchorApply()
+        if type(_G.MSUF_EnsureCooldownWidthObservers) == "function" then
+            _G.MSUF_EnsureCooldownWidthObservers(true)
+        end
+        RefreshSkironAnchorConsumers(transition)
     end
     if (changed or sizeChanged == true) and type(_G.MSUF_ScheduleCooldownWidthRefresh) == "function" then
-        _G.MSUF_ScheduleCooldownWidthRefresh()
+        _G.MSUF_ScheduleCooldownWidthRefresh("EssentialCooldownViewer", false, true)
     end
     return proxy ~= nil
 end
 
 local function ScheduleSkironAnchorResolve()
+    skironResolveGeneration = skironResolveGeneration + 1
+    local generation = skironResolveGeneration
+    local index = 1
     local function run()
-        refreshSkironAnchorProxy()
+        if generation ~= skironResolveGeneration then return end
+        if refreshSkironAnchorProxy() then return end
+        index = index + 1
+        local delay = SKIRON_RETRY_DELAYS[index]
+        if delay and C_Timer and C_Timer.After then C_Timer.After(delay, run) end
     end
     if not (C_Timer and C_Timer.After) then
         run()
         return
     end
-    for i = 1, #SKIRON_RETRY_DELAYS do
-        C_Timer.After(SKIRON_RETRY_DELAYS[i], run)
-    end
+    C_Timer.After(SKIRON_RETRY_DELAYS[index], run)
 end
 
 local function OnSkironAnchorProxySizeChanged(_, proxyGroup, proxy, _width, _height, _selectedAnchorRef, isActiveProxy)
@@ -210,9 +229,11 @@ watcher:RegisterEvent("PLAYER_ENTERING_WORLD")
 watcher:RegisterEvent("ADDON_LOADED")
 watcher:SetScript("OnEvent", function(self, event, addon)
     if event == "PLAYER_REGEN_ENABLED" then
-        if InCombatLockdown and InCombatLockdown() then return end
+        if InCombat() then return end
         self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+        if not skironSourceHookPending and not skironProxyRefreshAfterCombat then return end
         skironSourceHookPending = false
+        skironProxyRefreshAfterCombat = false
         refreshSkironAnchorProxy(nil, false, true)
         return
     end
