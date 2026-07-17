@@ -1,10 +1,10 @@
 -- MSUF_UUFImport.lua
 -- Native UnhaltedUnitFrames 12.1 -> MSUF 5.7 profile converter.
 --
--- The converter writes only settings already understood by an unmodified
--- MSUF 5.7 runtime. Source features which cannot be represented by that
--- schema are reported as approximated or skipped; no import-only renderer,
--- event path, hot-path branch, or private profile contract is required.
+-- The converter writes settings understood by the MSUF 5.7 runtime. Source
+-- features which cannot be represented by that schema are reported as
+-- approximated or skipped; no import-only renderer or hot-path branch is
+-- required.
 
 local addonName, ns = ...
 ns = (rawget(_G, "MSUF_NS") or ns) or {}
@@ -2395,17 +2395,34 @@ local function ConvertMouseover(units, out, report)
 end
 
 local function ConvertBlizzardPolicy(sources, out, report)
-    local hide = true
     for index = 1, #UNIT_ORDER do
-        local source = sources[UNIT_ORDER[index]]
-        if type(source) == "table" and source.ForceHideBlizzard == false then hide = false end
+        local unitKey = UNIT_ORDER[index]
+        local source = sources[unitKey]
+        out[unitKey] = type(out[unitKey]) == "table" and out[unitKey] or {}
+        -- UUF's ForceHideBlizzard toggle is editable only while its own unit
+        -- frame is disabled. An enabled UUF frame owns that unit regardless of
+        -- the stale toggle value stored in the profile. Mirror that effective
+        -- behavior instead of translating the raw flag in isolation.
+        local useBlizzardFrame = type(source) == "table"
+            and out[unitKey].enabled ~= true
+            and source.ForceHideBlizzard == false
+        out[unitKey].useBlizzardFrame = useBlizzardFrame
+        if useBlizzardFrame then
+            Mark(report, "mapped", unitKey .. ": Blizzard frame kept active")
+        end
     end
-    out.general.disableBlizzardUnitFrames = hide
-    out.general.hardKillBlizzardPlayerFrame = not (
-        type(sources.player) == "table" and sources.player.ForceHideBlizzard == false
-    )
-    if not hide then
-        Mark(report, "approximated", "unit frames: per-unit UUF Blizzard visibility uses native global policy")
+
+    -- Keep the global suppression policy active; the per-unit flags above are
+    -- explicit exemptions.  This avoids bringing back every Blizzard frame
+    -- when a UUF profile requests only one native frame.
+    out.general.disableBlizzardUnitFrames = true
+    out.general.hardKillBlizzardPlayerFrame = true
+
+    if out.targettarget.useBlizzardFrame and not out.target.useBlizzardFrame then
+        Mark(report, "approximated", "targettarget: Blizzard child also requires Blizzard Target")
+    end
+    if out.focustarget.useBlizzardFrame and not out.focus.useBlizzardFrame then
+        Mark(report, "approximated", "focustarget: Blizzard child also requires Blizzard Focus")
     end
 end
 
@@ -2471,7 +2488,6 @@ function Import.Convert(profile, baseProfile)
         end
     end
 
-    ConvertBlizzardPolicy(sources, out, report)
     ConvertMouseover(units, out, report)
     for index = 1, #UNIT_ORDER do
         local key = UNIT_ORDER[index]
@@ -2505,6 +2521,11 @@ function Import.Convert(profile, baseProfile)
         ConvertUnitAuras(key, source.Auras, spec, dst, out, report, general.CooldownText, power, secondary)
         Mark(report, "families", "unit frames")
     end
+
+    -- Apply ownership only after the native unit conversion has established
+    -- every destination table. Creating empty unit tables before that pass
+    -- changes legacy/base-profile fallback detection in unrelated converters.
+    ConvertBlizzardPolicy(sources, out, report)
 
     ConvertGroup("party", units.party, out, report, general.CooldownText)
     ConvertGroup("raid", units.raid, out, report, general.CooldownText)

@@ -2237,6 +2237,12 @@ local function fill(key, defaults)
         if u.enabled == nil then
             u.enabled = true
         end
+        -- Blizzard frame ownership is opt-in per unit.  This is intentionally
+        -- independent from `enabled`: users may show MSUF and Blizzard frames
+        -- together, or disable only the MSUF frame while keeping Blizzard's.
+        if u.useBlizzardFrame == nil then
+            u.useBlizzardFrame = false
+        end
         -- Per-unitframe: smooth health fill animation (matches Group Frames default).
         if u.smoothFill == nil then
             u.smoothFill = true
