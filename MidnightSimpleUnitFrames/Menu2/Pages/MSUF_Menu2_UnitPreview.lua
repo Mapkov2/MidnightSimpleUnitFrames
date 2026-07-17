@@ -1047,7 +1047,11 @@ local function PositionFromAnchor(frame, anchor, x, y, target, size)
 end
 
 local function ResolveRuntimeIconLayoutAnchor(anchor, allowCenter)
-    if allowCenter and anchor == "CENTER" then return "CENTER", "CENTER" end
+    if anchor == "CENTER" then return "CENTER", "CENTER" end
+    if anchor == "TOP" then return "TOP", "TOP" end
+    if anchor == "BOTTOM" then return "BOTTOM", "BOTTOM" end
+    if anchor == "LEFT" then return "LEFT", "LEFT" end
+    if anchor == "RIGHT" then return "RIGHT", "RIGHT" end
     if anchor == "TOPRIGHT" then return "RIGHT", "TOPRIGHT" end
     if anchor == "BOTTOMLEFT" then return "LEFT", "BOTTOMLEFT" end
     if anchor == "BOTTOMRIGHT" then return "RIGHT", "BOTTOMRIGHT" end
@@ -1070,6 +1074,14 @@ local function PositionStatusCornerPreview(frame, anchor, x, y, target, pad)
     pad = tonumber(pad) or 2
     if anchor == "CENTER" then
         frame:SetPoint("CENTER", target, "CENTER", x, y)
+    elseif anchor == "TOP" then
+        frame:SetPoint("TOP", target, "TOP", x, -pad + y)
+    elseif anchor == "BOTTOM" then
+        frame:SetPoint("BOTTOM", target, "BOTTOM", x, pad + y)
+    elseif anchor == "LEFT" then
+        frame:SetPoint("LEFT", target, "LEFT", pad + x, y)
+    elseif anchor == "RIGHT" then
+        frame:SetPoint("RIGHT", target, "RIGHT", -pad + x, y)
     elseif anchor == "TOPRIGHT" then
         frame:SetPoint("TOPRIGHT", target, "TOPRIGHT", -pad + x, -pad + y)
     elseif anchor == "BOTTOMLEFT" then
