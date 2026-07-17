@@ -128,7 +128,7 @@ local Pick = M2.Pick
 local AssignNamedValues = M2.AssignNamedValues
 local F = M2.Fallbacks or {}
 local PreviewModel = Preview.Model or {}
-local UNIT_LABELS, UNIT_DATA, PreviewRaidGroupNameAllowed, PreviewRaidGroupNameText, NormalizePreviewRaidGroupNameAnchor, CanonKey, CurrentPanelKey, UnitDB, NormalizeHpMode, NormalizePowerMode, TextScopeGet, TextScopeHasSlots, TextScopeSlotGet, ToTInlineSeparator, ShortenPreviewName, ForceTextUnit, ApplyPanelUnit, EnsureUnitPortraitStyle, PortraitStyleGet, ApplyPortrait, NormalizeStatusPreviewId, ClassColor, HealthColor, HealthBackgroundColor, PowerBackgroundColor, PowerColor, ClassPortraitVisual, UnitPreviewPortraitTexture, FontColor, PreviewNameColor, PreviewToTInlineColor, SetTex, PreviewHealPredictionEnabled, PreviewResolveHealPredAnchorMode, PreviewResolveAbsorbAnchorMode, PreviewAbsorbBarEnabled, LayoutUnitPreviewOverlay, MakeFS, ReadPowerBarEnabled, CanDetachPowerBarKey, ReadPowerBarHeight, ResolveNameAnchor, FormatMode, UnitPreviewText = Pick(PreviewModel, [[UNIT_LABELS UNIT_DATA PreviewRaidGroupNameAllowed PreviewRaidGroupNameText NormalizePreviewRaidGroupNameAnchor CanonKey CurrentPanelKey UnitDB NormalizeHpMode NormalizePowerMode TextScopeGet TextScopeHasSlots TextScopeSlotGet ToTInlineSeparator ShortenPreviewName ForceTextUnit ApplyPanelUnit EnsureUnitPortraitStyle PortraitStyleGet ApplyPortrait NormalizeStatusPreviewId ClassColor HealthColor HealthBackgroundColor PowerBackgroundColor PowerColor ClassPortraitVisual UnitPreviewPortraitTexture FontColor PreviewNameColor PreviewToTInlineColor SetTex PreviewHealPredictionEnabled PreviewResolveHealPredAnchorMode PreviewResolveAbsorbAnchorMode PreviewAbsorbBarEnabled LayoutUnitPreviewOverlay MakeFS ReadPowerBarEnabled CanDetachPowerBarKey ReadPowerBarHeight ResolveNameAnchor FormatMode UnitPreviewText]])
+local UNIT_LABELS, UNIT_DATA, PreviewRaidGroupNameAllowed, PreviewRaidGroupNameText, NormalizePreviewRaidGroupNameAnchor, CanonKey, CurrentPanelKey, UnitDB, NormalizeHpMode, NormalizePowerMode, TextScopeGet, TextScopeHasSlots, TextScopeSlotGet, ToTInlineSeparator, ShortenPreviewName, ForceTextUnit, ApplyPanelUnit, EnsureUnitPortraitStyle, PortraitStyleGet, ApplyPortrait, NormalizeStatusPreviewId, ClassColor, HealthColor, HealthBackgroundColor, PowerBackgroundColor, PowerColor, ClassPortraitVisual, UnitPreviewPortraitTexture, FontColor, PreviewNameColor, PreviewToTInlineColor, SetTex, PreviewHealPredictionEnabled, PreviewResolveHealPredAnchorMode, PreviewResolveAbsorbAnchorMode, PreviewAbsorbBarEnabled, LayoutUnitPreviewOverlay, MakeFS, ReadPowerBarEnabled, CanDetachPowerBarKey, ReadPowerBarHeight, ResolveNameAnchor, ResolveNameOffsetDelta, FormatMode, UnitPreviewText = Pick(PreviewModel, [[UNIT_LABELS UNIT_DATA PreviewRaidGroupNameAllowed PreviewRaidGroupNameText NormalizePreviewRaidGroupNameAnchor CanonKey CurrentPanelKey UnitDB NormalizeHpMode NormalizePowerMode TextScopeGet TextScopeHasSlots TextScopeSlotGet ToTInlineSeparator ShortenPreviewName ForceTextUnit ApplyPanelUnit EnsureUnitPortraitStyle PortraitStyleGet ApplyPortrait NormalizeStatusPreviewId ClassColor HealthColor HealthBackgroundColor PowerBackgroundColor PowerColor ClassPortraitVisual UnitPreviewPortraitTexture FontColor PreviewNameColor PreviewToTInlineColor SetTex PreviewHealPredictionEnabled PreviewResolveHealPredAnchorMode PreviewResolveAbsorbAnchorMode PreviewAbsorbBarEnabled LayoutUnitPreviewOverlay MakeFS ReadPowerBarEnabled CanDetachPowerBarKey ReadPowerBarHeight ResolveNameAnchor ResolveNameOffsetDelta FormatMode UnitPreviewText]])
 Preview.statusPreviewMode = "current"
 Preview.selectedStatusId = nil
 local SelectPreviewHandle
@@ -537,6 +537,19 @@ end
 local function ShouldSkipDuplicateNudge(box, dx, dy)
     return PreviewHelpers.ShouldSkipDuplicateNudge and PreviewHelpers.ShouldSkipDuplicateNudge(box, dx, dy) or false
 end
+local function StoredHandleDelta(handle, dx, dy)
+    local fields = handle and handle._fields
+    if fields and type(fields.resolveOffsetDelta) == "function" then
+        return fields.resolveOffsetDelta(handle, dx, dy)
+    end
+    return dx, dy
+end
+local function NameHandleOffsetDelta(handle, dx, dy)
+    local box = handle and handle._preview
+    local key = box and (box.key or (box._msufPanel and CurrentPanelKey(box._msufPanel))) or "player"
+    local conf = UnitDB(key)
+    return ResolveNameOffsetDelta(conf and conf.nameTextAnchor, dx, dy)
+end
 local function NudgeSelectedHandle(box, dx, dy)
     local h = box and box._selectedHandle
     if not h or not h.IsShown or not h:IsShown() then return false end
@@ -544,6 +557,7 @@ local function NudgeSelectedHandle(box, dx, dy)
     local step = GetNudgeStep()
     local ndx, ndy = dx * step, dy * step
     if ShouldSkipDuplicateNudge(box, ndx, ndy) then return true end
+    ndx, ndy = StoredHandleDelta(h, ndx, ndy)
     return WriteHandleOffsets(h, x + ndx, y + ndy, "UNIT_PREVIEW_NUDGE")
 end
 local function NudgeSelectedHandleDelta(box, dx, dy)
@@ -552,6 +566,7 @@ local function NudgeSelectedHandleDelta(box, dx, dy)
     local x, y = ReadHandleOffsets(h)
     local ndx, ndy = tonumber(dx) or 0, tonumber(dy) or 0
     if ShouldSkipDuplicateNudge(box, ndx, ndy) then return true end
+    ndx, ndy = StoredHandleDelta(h, ndx, ndy)
     return WriteHandleOffsets(h, x + ndx, y + ndy, "UNIT_PREVIEW_EM2_NUDGE")
 end
 local function FocusPreviewKeyboardTarget(box, handle, defer)
@@ -931,6 +946,8 @@ local function MakeHandle(preview, key, fields, label, color)
         self._lastDragY = nil
         self._dragging = true
         preview._dragFrozenScale = tonumber(preview._mockScale) or tonumber(preview._mockAutoScale) or 1
+        preview._dragFrozenBaseOffsetX = tonumber(preview._mockBaseOffsetX) or 0
+        preview._dragFrozenBaseOffsetY = tonumber(preview._mockBaseOffsetY) or 0
         self._msuf2PreviewHistoryTx = BeginMenuHistory(self, "Move")
         local cx, cy = GetCursorPosition()
         self._cursorX, self._cursorY = cx, cy
@@ -965,6 +982,8 @@ local function MakeHandle(preview, key, fields, label, color)
         end
         local hadFrozenScale = preview._dragFrozenScale ~= nil
         preview._dragFrozenScale = nil
+        preview._dragFrozenBaseOffsetX = nil
+        preview._dragFrozenBaseOffsetY = nil
         if type(fields.clearDragOffsets) == "function" then fields.clearDragOffsets(self) end
         self._dragging = nil
         self._lastDragX = nil
@@ -1571,6 +1590,7 @@ local function BuildPreview(parent, panel, width, height)
         if uiScale <= 0 then uiScale = 1 end
         local dx = (((cx or 0) - (h._cursorX or 0)) / uiScale) / scale
         local dy = (((cy or 0) - (h._cursorY or 0)) / uiScale) / scale
+        dx, dy = StoredHandleDelta(h, dx, dy)
         local nextX = RoundOffset((h._startX or 0) + dx)
         local nextY = RoundOffset((h._startY or 0) + dy)
         if h._lastDragX == nextX and h._lastDragY == nextY then return end
@@ -1578,7 +1598,7 @@ local function BuildPreview(parent, panel, width, height)
         h._lastDragY = nextY
         WriteHandleOffsets(h, nextX, nextY, "UNIT_PREVIEW_DRAG")
     end
-    box.handleName = MakeHandle(box, "name", { x = "nameOffsetX", y = "nameOffsetY", defaultX = 4, defaultY = -4, text = true, section = "text" }, "Name text", { 0.30, 0.66, 1.0 })
+    box.handleName = MakeHandle(box, "name", { x = "nameOffsetX", y = "nameOffsetY", defaultX = 4, defaultY = -4, text = true, resolveOffsetDelta = NameHandleOffsetDelta, section = "text" }, "Name text", { 0.30, 0.66, 1.0 })
     box.handleRaidGroupName = MakeHandle(box, "raidgroupname", { x = "raidGroupNameOffsetX", y = "raidGroupNameOffsetY", defaultX = 3, defaultY = 0, statusRefresh = "MSUF_RefreshRaidGroupNameFrames", section = "status" }, "Raid group", { 0.45, 0.70, 1.0 })
     box.handleHP = MakeHandle(box, "hp", { x = "hpOffsetX", y = "hpOffsetY", defaultX = -4, defaultY = -4, text = true, section = "text" }, "HP text", { 0.25, 0.90, 0.42 })
     box.handleHPLeft = MakeHandle(box, "hpLeft", { x = "hpTextLeftOffsetX", y = "hpTextLeftOffsetY", defaultX = 0, defaultY = 0, text = true, section = "text" }, "HP left text", { 0.25, 0.90, 0.42 })
