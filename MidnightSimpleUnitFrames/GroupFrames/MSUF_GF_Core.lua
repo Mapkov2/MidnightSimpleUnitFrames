@@ -1892,6 +1892,8 @@ local function PositionPreservedRaidHeaders(kind, headerOverride)
     local container = GF.raidGroupContainer
     if not container then return end
 
+    if GF.ClampPositionToScreen then GF.ClampPositionToScreen(kind) end
+
     local cx, cy = conf.offsetX, conf.offsetY
     if cx == nil or cy == nil then
         cx, cy = GetDefaultCenter(kind)
@@ -2234,6 +2236,7 @@ local function PositionHeaderFromGridCenter(kind, header, countOverride)
     if not header then return end
     local conf = GF.GetConf(kind)
     local count = countOverride or GF.GetPositionCount(kind)
+    if GF.ClampPositionToScreen then GF.ClampPositionToScreen(kind, count) end
     local dx, dy = GF.GetGridMetrics(kind, count)
     local cx, cy = conf.offsetX, conf.offsetY
     if cx == nil or cy == nil then
@@ -3553,6 +3556,7 @@ function GF.ShowPreview(kind, count)
     -- as the real group frames.
     local posCount = GF.GetPositionCount(kind)
     local _, _, posTotalW, posTotalH = GF.GetGridMetrics(kind, posCount)
+    if GF.ClampPositionToScreen then GF.ClampPositionToScreen(kind, posCount) end
     local cx, cy = conf.offsetX, conf.offsetY
     if cx == nil or cy == nil then cx, cy = GetDefaultCenter(kind) end
     container:SetSize(math_max(posTotalW, 1), math_max(posTotalH, 1))

@@ -1004,6 +1004,19 @@ local ECV_ANCHORS = {
     focustarget  = { "TOP",   "RIGHT",   0,  40 },
 }
 
+local function UsesEssentialCooldownAnchor(conf, general)
+    if type(general) == "table" and (
+        general.anchorToCooldown == true
+        or general.anchorName == "EssentialCooldownViewer"
+    ) then
+        return true
+    end
+    return type(conf) == "table" and (
+        conf.anchorFrameName == "EssentialCooldownViewer"
+        or conf.anchorToUnitframe == "EssentialCooldownViewer"
+    )
+end
+
 local function PointXY(fr, p)
     if not fr or not p then return nil, nil end
     if p == "CENTER" then return fr:GetCenter() end
@@ -1033,6 +1046,11 @@ local function ResolveAnchor(key, conf)
     end
     local atv = conf.anchorToUnitframe
     if type(atv) == "string" and atv ~= "" and atv ~= "GLOBAL" and atv ~= "FREE" and atv ~= "global" then
+        if atv == "EssentialCooldownViewer" then
+            local ecvFn = _G.MSUF_GetEffectiveCooldownFrame
+            local ecv = (type(ecvFn) == "function" and ecvFn(atv)) or _G[atv]
+            if ecv and ecv ~= UIParent and ecv ~= WorldFrame then return ecv end
+        end
         local uf = _G.MSUF_UnitFrames or _G.UnitFrames
         local rel = uf and uf[atv] or _G["MSUF_" .. atv]
         if rel and rel ~= UIParent and rel ~= WorldFrame then return rel end
@@ -1082,11 +1100,17 @@ local function ApplyGroupDragPosition(d, centerX, centerY)
     -- UIParent coordinates, including when the configured anchor is scaled.
     local nextX = round((centerX or d.startCX or 0) - ax)
     local nextY = round((centerY or d.startCY or 0) - ay)
-    local changed = d.conf.offsetX ~= nextX or d.conf.offsetY ~= nextY
+    local previousX, previousY = d.conf.offsetX, d.conf.offsetY
     d.conf.offsetX, d.conf.offsetY = nextX, nextY
     -- Current 5.72 Group Frames always consume offsets as grid-center values.
     -- Imported legacy flags must not switch the drag path back to top-left math.
     d.conf.positionMode = "GRID_CENTER_V1"
+    local clampGroup = _G.MSUF_GF_ClampPositionToScreen
+    if type(clampGroup) == "function" and d.groupKind then
+        clampGroup(d.groupKind)
+        nextX, nextY = d.conf.offsetX, d.conf.offsetY
+    end
+    local changed = previousX ~= nextX or previousY ~= nextY
 
     local bar = d.bar
     if bar and not IsConfigCombatLocked() then
@@ -1199,7 +1223,7 @@ local function OnUpdate(self, elapsed)
                         or _G["EssentialCooldownViewer"]
                     local ecvRule = d.ecvRule
 
-                    if _g and (_g.anchorToCooldown or _g.anchorName == "EssentialCooldownViewer") and ecv and anchor == ecv and ecvRule then
+                    if UsesEssentialCooldownAnchor(conf, _g) and ecv and anchor == ecv and ecvRule then
                         -- ECV path: PositionUnitFrame uses point-to-point
                         -- We wrote center-to-center offset above, need to convert for ECV
                         local point, relPoint, baseX, extraY = ecvRule[1], ecvRule[2], ecvRule[3] or 0, ecvRule[4] or 0

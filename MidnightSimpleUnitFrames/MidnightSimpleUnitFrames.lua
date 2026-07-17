@@ -1905,6 +1905,35 @@ local function MSUF_ShouldSnapshotExternalAnchor(anchor)
     return anchor and anchor ~= UIParent and anchor ~= WorldFrame and not anchor._msufStableAnchorProxy and not MSUF_IsUnitFrameAnchor(anchor)
 end
 
+function _G.MSUF_AnchorDependsOn(region, target, seen, depth)
+    if not (region and target) then return false end
+    if region == target then return true end
+    depth = (tonumber(depth) or 0) + 1
+    if depth > 16 then return false end
+    seen = seen or {}
+    if seen[region] then return false end
+    seen[region] = true
+    if not (region.GetNumPoints and region.GetPoint) then return false end
+
+    local okCount, count = pcall(region.GetNumPoints, region)
+    if not okCount or type(count) ~= "number" then return false end
+    for i = 1, count do
+        local okPoint, _, relativeTo = pcall(region.GetPoint, region, i)
+        if okPoint and relativeTo and (
+            relativeTo == target
+            or _G.MSUF_AnchorDependsOn(relativeTo, target, seen, depth)
+        ) then
+            return true
+        end
+    end
+    return false
+end
+
+function _G.MSUF_AnchorWouldCreateCycle(frame, anchor)
+    return frame and anchor and anchor ~= UIParent
+        and _G.MSUF_AnchorDependsOn(anchor, frame) == true
+end
+
 function _G.MSUF_IsSecretValue(v)
     local isv = _MSUF_issecretvalue
     if not isv then
@@ -2609,7 +2638,12 @@ function _G.MSUF_ShouldKeepStableExternalPoint(frame, anchor, sig)
 end
 
 local function MSUF_ApplyStableUnitFramePoint(frame, point, anchor, relPoint, x, y)
-    local isExternal = MSUF_ShouldSnapshotExternalAnchor(anchor)
+    -- Normal custom anchors must remain real frame-to-frame anchors so the
+    -- unitframe follows its configured target. Only cooldown-viewer anchors
+    -- use the legacy screen snapshot path that protects their combat layout.
+    local external = MSUF_ShouldSnapshotExternalAnchor(anchor)
+    local externalKey = external and _G.MSUF_GetExternalAnchorCacheKey(anchor) or nil
+    local isExternal = external and _G.MSUF_IsCooldownExternalAnchorKey(externalKey, anchor) == true
     local sig = isExternal and _G.MSUF_ExternalPointSignature(point, relPoint, x, y) or nil
     if isExternal then
         local hook = _G.MSUF_HookExternalAnchorForReanchor
@@ -2679,6 +2713,10 @@ local function PositionUnitFrame(f, unit, refreshConfig)
     local ecv = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer")) or _G["EssentialCooldownViewer"]
     local _g = MSUF_DB and MSUF_DB.general
     local anchor, missingAnchorName = MSUF_ResolveConfiguredAnchorFrame(key, conf, MSUF_GetAnchorFrame())
+    if _G.MSUF_AnchorWouldCreateCycle(f, anchor) then
+        anchor = UIParent
+        missingAnchorName = nil
+    end
     local wantsCooldownAnchor = MSUF_UsesEssentialCooldownAnchor(conf, _g)
     local isCooldownAnchor = false
     local usesExternalAnchor = false
@@ -2737,18 +2775,7 @@ local function PositionUnitFrame(f, unit, refreshConfig)
         if type(_G.MSUF_ScheduleLateAnchorReanchor) == "function" then
             _G.MSUF_ScheduleLateAnchorReanchor()
         end
-        local proxy
-        if _G.MSUF_GetExternalAnchorProxy then
-            if anchor == ecv then
-                proxy = _G.MSUF_GetExternalAnchorProxy("EssentialCooldownViewer", anchor)
-            else
-                proxy = _G.MSUF_GetExternalAnchorProxy(anchor)
-            end
-        end
-        if proxy then
-            if anchor == ecv then isCooldownAnchor = true end
-            anchor = proxy
-        elseif not MSUF_IsExternalAnchorUsable(anchor) then
+        if not MSUF_IsExternalAnchorUsable(anchor) then
             anchor._msufHookNeedsFirstUsableReanchor = true
             if inLockdown then
                 if _G.MSUF_RequestUnitFrameReanchorAfterCombat then
@@ -2870,6 +2897,105 @@ local function PositionUnitFrame(f, unit, refreshConfig)
         end
     end
  end
+
+_G.MSUF_SCREEN_CLAMP_UNITS = {
+    "player", "target", "targettarget", "focus", "focustarget", "pet",
+}
+
+function _G.MSUF_AdjustFrameOffsetsForScreenDelta(key, deltaX, deltaY)
+    local conf = key and MSUF_DB and MSUF_DB[key]
+    if not conf then return false end
+    local anchor = MSUF_ResolveConfiguredAnchorFrame(
+        key, conf, (MSUF_GetAnchorFrame and MSUF_GetAnchorFrame()) or UIParent
+    ) or UIParent
+    local anchorScale = (anchor.GetEffectiveScale and anchor:GetEffectiveScale()) or 1
+    local uiScale = (UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
+    if anchorScale == 0 then anchorScale = 1 end
+    if uiScale == 0 then uiScale = 1 end
+    conf.offsetX = (tonumber(conf.offsetX) or 0) + deltaX * uiScale / anchorScale
+    conf.offsetY = (tonumber(conf.offsetY) or 0) + deltaY * uiScale / anchorScale
+    return true
+end
+
+function _G.MSUF_ClampUnitFrameSetToScreen(frames, key)
+    if not (UIParent and type(_G.MSUF_FrameUnionClampDelta) == "function") then return false end
+    -- Measure the configured point without WoW's transient visual clamp so an
+    -- imported offscreen offset is corrected in the profile itself.
+    for i = 1, #frames do
+        local frame = frames[i]
+        if frame then
+            if frame.SetClampedToScreen then frame:SetClampedToScreen(false) end
+            PositionUnitFrame(frame, frame.unit or (key == "boss" and ("boss" .. i) or key), true)
+        end
+    end
+    local deltaX, deltaY, changed = _G.MSUF_FrameUnionClampDelta(frames, UIParent)
+    if changed then
+        changed = _G.MSUF_AdjustFrameOffsetsForScreenDelta(key, deltaX, deltaY)
+    end
+
+    for i = 1, #frames do
+        local frame = frames[i]
+        if frame then
+            if frame.SetClampedToScreen then frame:SetClampedToScreen(true) end
+            if changed then
+                if key == "boss" then
+                    PositionUnitFrame(frame, frame.unit or ("boss" .. i), true)
+                elseif i == 1 then
+                    PositionUnitFrame(frame, frame.unit or key, true)
+                end
+            end
+        end
+    end
+    return changed == true
+end
+
+function _G.MSUF_ClampUnitFramesToScreen(key)
+    if not UIParent or (InCombatLockdown and InCombatLockdown()) then return false end
+    local frames = UnitFrames or _G.MSUF_UnitFrames or _G.UnitFrames
+    if not frames then return false end
+    local changed = false
+
+    if key == "boss" or key == nil then
+        local bosses = {}
+        for i = 1, MSUF_MAX_BOSS_FRAMES do
+            local frame = frames["boss" .. i] or _G["MSUF_boss" .. i]
+            if frame then bosses[#bosses + 1] = frame end
+        end
+        if #bosses > 0 then changed = _G.MSUF_ClampUnitFrameSetToScreen(bosses, "boss") or changed end
+    end
+
+    if key and key ~= "boss" then
+        local frame = frames[key] or _G["MSUF_" .. key]
+        if frame then changed = _G.MSUF_ClampUnitFrameSetToScreen({frame}, key) or changed end
+    elseif key == nil then
+        for i = 1, #_G.MSUF_SCREEN_CLAMP_UNITS do
+            local unitKey = _G.MSUF_SCREEN_CLAMP_UNITS[i]
+            local frame = frames[unitKey] or _G["MSUF_" .. unitKey]
+            if frame then changed = _G.MSUF_ClampUnitFrameSetToScreen({frame}, unitKey) or changed end
+        end
+    end
+    return changed
+end
+_G.MSUF_ScreenClampScheduled = false
+function _G.MSUF_ClampAllFramesToScreen()
+    if InCombatLockdown and InCombatLockdown() then return false end
+    local changed = _G.MSUF_ClampUnitFramesToScreen()
+    local gfClamp = _G.MSUF_GF_ClampAllPositionsToScreen
+    if type(gfClamp) == "function" then changed = gfClamp() or changed end
+    return changed
+end
+function _G.MSUF_RequestClampAllFramesToScreen()
+    if InCombatLockdown and InCombatLockdown() then return false end
+    if _G.MSUF_ScreenClampScheduled then return false end
+    _G.MSUF_ScreenClampScheduled = true
+    local function Run()
+        _G.MSUF_ScreenClampScheduled = false
+        _G.MSUF_ClampAllFramesToScreen()
+    end
+    if C_Timer and C_Timer.After then C_Timer.After(0, Run) else Run() end
+    return true
+end
+
 MSUF_ForceReanchorAllUnitFrames_Once = function(refreshConfig)
     if _G.MSUF_IsUnitFramePositionLocked and _G.MSUF_IsUnitFramePositionLocked() then
         if _G.MSUF_RequestUnitFrameReanchorAfterCombat then
@@ -2900,6 +3026,7 @@ MSUF_ForceReanchorAllUnitFrames_Once = function(refreshConfig)
             PositionUnitFrame(frame, unit, refreshConfig ~= false)
         end
     end
+    _G.MSUF_ClampUnitFramesToScreen()
 end
 _G.MSUF_ForceReanchorAllUnitFrames_Once = MSUF_ForceReanchorAllUnitFrames_Once
 
@@ -4937,6 +5064,7 @@ local function _MSUF_ApplyToUnitFrame(unit, conf)
         end
     end
     PositionUnitFrame(f, unit)
+    if key ~= "boss" then _G.MSUF_ClampUnitFramesToScreen(key) end
     if f.portrait then
         MSUF_UpdateBossPortraitLayout(f, conf)
         -- Force full portrait render â€” layout alone only positions the widget
@@ -5132,6 +5260,7 @@ local function MSUF_ApplyUnitFrameKey_Immediate(key)
     if (key == "focus" or key == "focustarget") and type(_G.MSUF_RefreshFocusTargetLifecycle) == "function" then
         _G.MSUF_RefreshFocusTargetLifecycle("ApplyUnitFrameKey")
     end
+    _G.MSUF_ClampUnitFramesToScreen(key)
  end
 _G.MSUF_ApplyUnitFrameKey_Immediate = MSUF_ApplyUnitFrameKey_Immediate
 _G.MSUF_UnitFrameApplyState = _G.MSUF_UnitFrameApplyState or { dirty = {}, queued = false }
@@ -5418,7 +5547,7 @@ local function MSUF_EnableUnitFrameDrag(f, unit)
     if not f or not unit then return end
     f:EnableMouse(true)
     f:SetMovable(true)
-    f:SetClampedToScreen(false)
+    f:SetClampedToScreen(true)
     if f.RegisterForDrag then
         f:RegisterForDrag("LeftButton", "RightButton")
     end
@@ -5606,6 +5735,7 @@ local function MSUF_EnableUnitFrameDrag(f, unit)
             else
                 PositionUnitFrame(self, unit)
             end
+            _G.MSUF_ClampUnitFramesToScreen(key)
     end
      end)
     f:SetScript("OnMouseUp", function(self, button)
@@ -5982,6 +6112,7 @@ local function CreateSimpleUnitFrame(unit)
         _G.MSUF_ApplyInitialFrameScale(f)
     end
     PositionUnitFrame(f, unit)
+    if key ~= "boss" then _G.MSUF_ClampUnitFramesToScreen(key) end
     MSUF_EnableUnitFrameDrag(f, unit)
     f:RegisterForClicks("AnyUp")
     f:SetAttribute("unit", unit)

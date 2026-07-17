@@ -127,6 +127,7 @@ MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll, refreshStatu
     MSUF_ProfileIO_CallGlobal("MSUF_ApplyPowerBarEmbedLayout_All")
     MSUF_ProfileIO_CallGlobal("MSUF_Portraits_ForceRefresh")
     MSUF_ProfileIO_CallGlobal("MSUF_PortraitDecoration_RefreshAll")
+    MSUF_ProfileIO_CallGlobal("MSUF_RequestClampAllFramesToScreen")
     if refreshStatus == true then
         MSUF_ProfileIO_CallGlobal("MSUF_RefreshStatusIndicators")
     end
