@@ -421,7 +421,39 @@ local function BuildPreview(ctx, builder, unit)
             end
         end,
     }
-    panel._msufOpenUnitSection = function() end
+    panel._msufOpenUnitSection = function(sectionId)
+        sectionId = tostring(sectionId or "")
+        if sectionId == "" then return false end
+        local stateKey = tostring(ctx.key or ("uf_" .. tostring(unit))) .. ":" .. sectionId
+        local target
+        for i = 1, #(builder.collapsibles or {}) do
+            local entry = builder.collapsibles[i]
+            if entry and entry.stateKey == stateKey then
+                target = entry
+                break
+            end
+        end
+        if not target then return false end
+
+        target.open = true
+        M.accordionState = M.accordionState or {}
+        M.accordionState[stateKey] = true
+        builder:RelayoutCollapsibles()
+
+        local function Reveal()
+            local scroll, child = M.scrollFrame, M.scrollChild
+            local childTop = child and child.GetTop and child:GetTop()
+            local targetTop = target.outer and target.outer.GetTop and target.outer:GetTop()
+            if not (scroll and scroll.SetVerticalScroll and childTop and targetTop) then return end
+            local offset = max(0, childTop - targetTop - 4)
+            local range = scroll.GetVerticalScrollRange and scroll:GetVerticalScrollRange()
+            if type(range) == "number" then offset = min(offset, max(0, range)) end
+            scroll:SetVerticalScroll(offset)
+            if scroll._msuf2RefreshScrollBar then scroll:_msuf2RefreshScrollBar() end
+        end
+        if C_Timer and C_Timer.After then C_Timer.After(0, Reveal) else Reveal() end
+        return true
+    end
 
     local box = createPreview(sec, panel, ctx.width - 28, 292)
     box:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, -70)

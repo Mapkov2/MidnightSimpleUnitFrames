@@ -119,11 +119,11 @@ local function BuildGFAuras(ctx)
 
     local rendererBaseW = ctx.width or 720
     local rendererCompact = rendererBaseW < 700
-    local rendererBaseRightW = rendererCompact and max(300, rendererBaseW - 28) or max(330, min(390, rendererBaseW - 364))
+    local rendererBaseRightW = rendererCompact and max(220, rendererBaseW - 28) or max(330, min(390, rendererBaseW - 364))
     local rendererRouteStacked = rendererBaseRightW < 410
     local renderer = b:CollapsibleSection("blizzrenderer", "Aura Display Mode", rendererCompact and (rendererRouteStacked and 1130 or 1050) or (rendererRouteStacked and 670 or 590), false)
     local rendererW = renderer._msuf2Width or ctx.width or 720
-    local leftX, leftW = 14, rendererCompact and max(300, rendererW - 28) or 300
+    local leftX, leftW = 14, rendererCompact and max(220, rendererW - 28) or 300
     local rightCardX = rendererCompact and 14 or 340
     local rightCardW = rendererCompact and leftW or max(330, min(390, rendererW - 364))
     rendererRouteStacked = rightCardW < 410
@@ -139,7 +139,7 @@ local function BuildGFAuras(ctx)
         W.ControlCardBackdrop(renderer, leftX, -310, leftW, 234)
         W.ControlCardBackdrop(renderer, rightCardX, rightBottomY, rightCardW, 184)
     end
-    local desc = W.Text(renderer, "Blizzard mode lets WoW place the selected aura types. MSUF Custom mode lets MSUF control aura size, growth, position, filters, and styling. MSUF Dispel Highlights keep Blizzard icons while allowing MSUF's dispel border, glow, and overlay visuals.", leftX + 6, -48, max(260, min(rendererW - 40, rendererCompact and (leftW - 12) or 620)), T.colors.muted)
+    local desc = W.Text(renderer, "Blizzard mode lets WoW place the selected aura types. MSUF Custom mode lets MSUF control aura size, growth, position, filters, and styling. MSUF Dispel Highlights keep Blizzard icons while allowing MSUF's dispel border, glow, and overlay visuals.", leftX + 6, -48, max(180, min(rendererW - 40, rendererCompact and (leftW - 12) or 620)), T.colors.muted)
     if desc and desc.SetWordWrap then desc:SetWordWrap(true) end
 
     local function PlaceDropdown(dropdown, x, y, width, hideTitle)
@@ -223,20 +223,20 @@ local function BuildGFAuras(ctx)
     end
 
     local rendererMode = BindNestedDropdown(ctx, W.Dropdown(renderer, "", GF_RENDERERS, 180), function() return AurasRoot(CurrentScope()) end, "renderer", "BLIZZARD", "rebuild")
-    PlaceDropdown(rendererMode, leftX, -96, min(180, leftW - 28), true)
+    PlaceDropdown(rendererMode, leftX, -96, max(120, min(180, leftW - 28)), true)
     AddAuraTooltip(rendererMode, "Aura Display Mode", "Blizzard mode uses WoW placement and cannot be dragged. MSUF Custom mode gives MSUF full positioning and styling control. If the preview marks an aura area as Blizzard-owned, MSUF can show the area but cannot drag that native aura block.")
 
     local iconSize = BindRendererSlider(W.Slider(renderer, "", 8, 80, 1, 260), function() return AurasRoot(CurrentScope()) end, "blizzardIconSize", 20, "geometry",
         function(v) return string.format(Tr("Icon size: %d"), v) end)
-    PlaceSlider(iconSize, leftX, -156, min(260, leftW - 40))
+    PlaceSlider(iconSize, leftX, -156, max(140, min(260, leftW - 40)))
 
     local buffMax = BindRendererSlider(W.Slider(renderer, "", 0, 20, 1, 260), function() return AuraGroup(CurrentScope(), "buff") end, "max", 6, "visual",
         function(v) return string.format(Tr("Buff max: %d"), v) end)
-    PlaceSlider(buffMax, leftX, -208, min(260, leftW - 40))
+    PlaceSlider(buffMax, leftX, -208, max(140, min(260, leftW - 40)))
 
     local debuffMax = BindRendererSlider(W.Slider(renderer, "", 0, 20, 1, 260), function() return AuraGroup(CurrentScope(), "debuff") end, "max", 3, "visual",
         function(v) return string.format(Tr("Debuff max: %d"), v) end)
-    PlaceSlider(debuffMax, leftX, -260, min(260, leftW - 40))
+    PlaceSlider(debuffMax, leftX, -260, max(140, min(260, leftW - 40)))
 
     local function BlizzardTypes()
         local root = AurasRoot(CurrentScope())
@@ -280,7 +280,7 @@ local function BuildGFAuras(ctx)
     M.BindDropdown(ctx, strataMode,
         function() return GetAuraOption("blizzardContainerStrata", "AUTO") end,
         function(value) SetAuraOption("blizzardContainerStrata", value or "AUTO", false) end)
-    PlaceDropdown(strataMode, leftX, -398, min(180, leftW - 28), false)
+    PlaceDropdown(strataMode, leftX, -398, max(120, min(180, leftW - 28)), false)
     AddLayerTooltip(strataMode)
 
     local containerLevel = W.Slider(renderer, "", 0, 30, 1, 260)
@@ -299,10 +299,10 @@ local function BuildGFAuras(ctx)
     end)
     M.AddRefresher(ctx, RefreshContainerLevelLabel)
     RefreshContainerLevelLabel()
-    PlaceSlider(containerLevel, leftX, -452, min(260, leftW - 40))
+    PlaceSlider(containerLevel, leftX, -452, max(140, min(260, leftW - 40)))
     AddLayerTooltip(containerLevel)
 
-    local privateLayerFix = W.ToggleAt(renderer, "Keep private auras above frames", leftX, -512, min(260, leftW - 44))
+    local privateLayerFix = W.ToggleAt(renderer, "Keep private auras above frames", leftX, -512, max(140, min(260, leftW - 44)))
     M.BindToggle(ctx, privateLayerFix,
         function() return GetAuraOption("blizzardPrivateLayerFix", true) ~= false end,
         function(value) SetAuraOption("blizzardPrivateLayerFix", value and true or false, true) end)

@@ -66,6 +66,8 @@ local NAV_ITEM_RIGHT_PAD = 8
 local NAV_ITEM_INDENT = 12
 local NAV_SCROLL_GUTTER = 7
 local MENU_BASE_SCALE = 1.08
+local MENU_SCALE_MIN, MENU_SCALE_MAX, MENU_SCALE_STEP = 0.25, 1.50, 0.05
+local ApplyMenuFrameScale
 local MENU_NORMAL_FRAME_STRATA = "DIALOG"
 local MENU_EDIT_FRAME_STRATA = "FULLSCREEN"
 local MENU_NORMAL_FRAME_LEVEL = 10
@@ -393,7 +395,7 @@ end
 
 local function ClampScale(value)
     value = tonumber(value) or 1
-    if value < 0.25 then value = 0.25 elseif value > 1.5 then value = 1.5 end
+    if value < MENU_SCALE_MIN then value = MENU_SCALE_MIN elseif value > MENU_SCALE_MAX then value = MENU_SCALE_MAX end
     return value
 end
 
@@ -1540,7 +1542,7 @@ end
 local function CreateHistoryControls(parent)
     local row = CreateFrame("Frame", nil, parent)
     local rowW = NavItemWidth(0)
-    row:SetSize(rowW, 26)
+    row:SetSize(rowW, 44)
     local buttonGap = 6
     local buttonW = floor((rowW - buttonGap) * 0.5)
 
@@ -1568,7 +1570,7 @@ local function CreateHistoryControls(parent)
     undo._msuf2SkipHistoryCheckpoint = true
     undo._msuf2HistorySource = "history:undo"
     undo._msuf2HistoryLabel = "Undo"
-    undo:SetPoint("LEFT", row, "LEFT", 0, 0)
+    undo:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
     StyleHistoryButton(undo, "Undo", T.media.historyUndo)
     undo:SetScript("OnClick", function()
         if _G.IsShiftKeyDown and _G.IsShiftKeyDown() and M.ResetHistorySession then
@@ -1583,7 +1585,7 @@ local function CreateHistoryControls(parent)
     redo._msuf2SkipHistoryCheckpoint = true
     redo._msuf2HistorySource = "history:redo"
     redo._msuf2HistoryLabel = "Redo"
-    redo:SetPoint("LEFT", undo, "RIGHT", buttonGap, 0)
+    redo:SetPoint("TOPLEFT", undo, "TOPRIGHT", buttonGap, 0)
     StyleHistoryButton(redo, "Redo", T.media.historyRedo)
     redo:SetScript("OnClick", function()
         if M.Redo then M.Redo() end
@@ -1598,9 +1600,92 @@ local function CreateHistoryControls(parent)
         return s.redoLabel and ("Redo: " .. ShortLabel(s.redoLabel, 28)) or "Redo"
     end, function() return HistoryTooltipText("redo") end)
 
+    local feedbackFrame = CreateFrame("Frame", nil, row)
+    feedbackFrame:SetPoint("TOPLEFT", row, "TOPLEFT", 3, -27)
+    feedbackFrame:SetPoint("RIGHT", row, "RIGHT", -2, 0)
+    feedbackFrame:SetHeight(14)
+    feedbackFrame:Hide()
+
+    local feedbackIcon = feedbackFrame:CreateTexture(nil, "ARTWORK", nil, 5)
+    feedbackIcon:SetTexture(T.media.checkTick)
+    feedbackIcon:SetSize(9, 9)
+    feedbackIcon:SetPoint("LEFT", feedbackFrame, "LEFT", 0, 0)
+    feedbackIcon:SetVertexColor(T.colors.ok[1], T.colors.ok[2], T.colors.ok[3], 1)
+
+    local feedback = T.Font(feedbackFrame, "GameFontDisableSmall", "", T.colors.ok)
+    feedback:SetPoint("LEFT", feedbackIcon, "RIGHT", 4, 0)
+    feedback:SetPoint("RIGHT", feedbackFrame, "RIGHT", 0, 0)
+    feedback:SetJustifyH("LEFT")
+    if feedback.SetWordWrap then feedback:SetWordWrap(false) end
+
+    local feedbackAnim
+    local feedbackHold
+    if feedbackFrame.CreateAnimationGroup then
+        feedbackAnim = feedbackFrame:CreateAnimationGroup()
+        local fadeIn = feedbackAnim:CreateAnimation("Alpha")
+        fadeIn:SetOrder(1)
+        fadeIn:SetFromAlpha(0)
+        fadeIn:SetToAlpha(1)
+        fadeIn:SetDuration(0.14)
+        if fadeIn.SetSmoothing then fadeIn:SetSmoothing("OUT") end
+        feedbackHold = feedbackAnim:CreateAnimation("Alpha")
+        feedbackHold:SetOrder(2)
+        feedbackHold:SetFromAlpha(1)
+        feedbackHold:SetToAlpha(1)
+        feedbackHold:SetDuration(1.58)
+        local fadeOut = feedbackAnim:CreateAnimation("Alpha")
+        fadeOut:SetOrder(3)
+        fadeOut:SetFromAlpha(1)
+        fadeOut:SetToAlpha(0)
+        fadeOut:SetDuration(0.28)
+        if fadeOut.SetSmoothing then fadeOut:SetSmoothing("IN") end
+        feedbackAnim:SetScript("OnFinished", function()
+            feedbackFrame:Hide()
+            feedbackFrame:SetAlpha(1)
+        end)
+    end
+
     row.undo = undo
     row.redo = redo
+    row.feedbackFrame = feedbackFrame
+    row.feedback = feedback
+    row.feedbackIcon = feedbackIcon
+    row.feedbackAnim = feedbackAnim
     M.historyControls = row
+
+    function M.ShowHistoryFeedback(text, seconds)
+        local controls = M.historyControls
+        local frame = controls and controls.feedbackFrame
+        local message = controls and controls.feedback
+        local icon = controls and controls.feedbackIcon
+        text = ShortLabel(M.Tr(text or "MSUF2 change"), 28)
+        if not (frame and message and icon and text ~= "") then return end
+
+        controls._msuf2FeedbackSerial = (controls._msuf2FeedbackSerial or 0) + 1
+        local serial = controls._msuf2FeedbackSerial
+        message:SetText(text)
+        frame:Show()
+        frame:SetAlpha(1)
+
+        local animation = controls.feedbackAnim
+        if animation then
+            animation:Stop()
+            frame:SetAlpha(1)
+            if feedbackHold and feedbackHold.SetDuration then
+                local total = max(0.5, tonumber(seconds) or 2.0)
+                feedbackHold:SetDuration(max(0.05, total - 0.42))
+            end
+            animation:Play()
+            return
+        end
+
+        local timer = _G.C_Timer
+        if not (timer and timer.After) then return end
+        timer.After(tonumber(seconds) or 2.0, function()
+            if M.historyControls ~= controls or controls._msuf2FeedbackSerial ~= serial then return end
+            frame:Hide()
+        end)
+    end
 
     function M.RefreshHistoryControls()
         local controls = M.historyControls
@@ -1926,7 +2011,7 @@ local function BuildNav(parent)
                 frame:Show()
                 frame:ClearAllPoints()
                 frame:SetPoint("TOPLEFT", list, "TOPLEFT", NAV_ITEM_X, y - 2)
-                y = y - 32
+                y = y - 50
             elseif not item.group or M.navHeaderState[item.group] ~= false then
                 btn:Show()
                 btn:ClearAllPoints()
@@ -2133,6 +2218,137 @@ local function CreateMinimizedBar(frame)
     return bar
 end
 
+local function InstallMenuScaleControl(frame)
+    if not (frame and T and type(T.Panel) == "function" and type(T.Font) == "function") then return end
+
+    local control = T.Panel(frame, nil, T.colors.glassStatus or T.colors.header, T.colors.borderSoft)
+    if type(T.ApplySurface) == "function" then T.ApplySurface(control, "status") end
+    control:SetSize(190, 22)
+    control:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -28, 4)
+    control:SetFrameLevel(frame:GetFrameLevel() + 20)
+    control:EnableMouse(true)
+
+    local label = T.Font(control, "GameFontDisableSmall", "", T.colors.muted)
+    label:SetPoint("LEFT", control, "LEFT", 8, 0)
+    label:SetWidth(76)
+    label:SetJustifyH("LEFT")
+
+    local slider = CreateFrame("Slider", nil, control)
+    slider:SetPoint("LEFT", label, "RIGHT", 6, 0)
+    slider:SetPoint("RIGHT", control, "RIGHT", -8, 0)
+    slider:SetHeight(20)
+    slider:SetOrientation("HORIZONTAL")
+    slider:SetMinMaxValues(MENU_SCALE_MIN * 100, MENU_SCALE_MAX * 100)
+    slider:SetValueStep(MENU_SCALE_STEP * 100)
+    if slider.SetObeyStepOnDrag then slider:SetObeyStepOnDrag(true) end
+    if slider.SetStepsPerPage then slider:SetStepsPerPage(1) end
+    if slider.EnableMouseWheel then slider:EnableMouseWheel(true) end
+    if slider.SetPropagateMouseWheel then slider:SetPropagateMouseWheel(false) end
+    if type(T.StyleSlider) == "function" then T.StyleSlider(slider) end
+
+    local function Percent(value)
+        local pct = tonumber(value) or 100
+        local low, high, step = MENU_SCALE_MIN * 100, MENU_SCALE_MAX * 100, MENU_SCALE_STEP * 100
+        if pct < low then pct = low elseif pct > high then pct = high end
+        return floor((pct / step) + 0.5) * step
+    end
+
+    local function UpdateVisual(value)
+        local pct = Percent(value or slider:GetValue())
+        label:SetText(M.Format("%s %d%%", M.Tr("Menu"), pct))
+        local fill = slider._msufFill
+        if fill and slider.GetWidth then
+            local span = (MENU_SCALE_MAX - MENU_SCALE_MIN) * 100
+            local fraction = span > 0 and ((pct - (MENU_SCALE_MIN * 100)) / span) or 0
+            fill:SetWidth(max(1, max(1, slider:GetWidth() - 2) * fraction))
+        end
+    end
+    slider._msuf2UpdateFill = function(self) UpdateVisual(self:GetValue()) end
+
+    local function Refresh()
+        local g = M.GetGeneralDB and M.GetGeneralDB()
+        local pct = Percent(ClampScale(type(g) == "table" and g.slashMenuScale or 1) * 100)
+        slider._msuf2Refreshing = true
+        slider:SetValue(pct)
+        slider._msuf2Refreshing = nil
+        UpdateVisual(pct)
+    end
+
+    local function Commit(value)
+        local g = M.GetGeneralDB and M.GetGeneralDB()
+        if type(g) ~= "table" then return false end
+        local pct = Percent(value or slider:GetValue())
+        local scale = ClampScale(pct / 100)
+        if scale == ClampScale(g.slashMenuScale) then
+            Refresh()
+            return false
+        end
+
+        local function Apply()
+            g.slashMenuScale = scale
+            if ApplyMenuFrameScale then
+                ApplyMenuFrameScale(frame)
+            elseif frame.SetScale then
+                frame:SetScale(EffectiveMenuScale(scale))
+                ApplyWindowResizeBounds(frame)
+            end
+            Refresh()
+            return true
+        end
+
+        if type(M.CaptureHistory) == "function" then
+            return M.CaptureHistory("MSUF Menu Scale", "window:menu_scale", Apply)
+        end
+        local changed = Apply()
+        if changed and type(M.ShowHistoryFeedback) == "function" then
+            M.ShowHistoryFeedback("MSUF Menu Scale", 2.0)
+        end
+        return changed
+    end
+
+    local function SetValueFromCursor()
+        if not (_G.GetCursorPosition and slider.GetLeft and slider.GetWidth) then return end
+        local left, width = slider:GetLeft(), slider:GetWidth()
+        if not left or not width or width <= 0 then return end
+        local cursorX = _G.GetCursorPosition()
+        local effectiveScale = slider.GetEffectiveScale and slider:GetEffectiveScale() or 1
+        if not effectiveScale or effectiveScale == 0 then effectiveScale = 1 end
+        local fraction = ((cursorX / effectiveScale) - left) / width
+        if fraction < 0 then fraction = 0 elseif fraction > 1 then fraction = 1 end
+        slider:SetValue(Percent((MENU_SCALE_MIN * 100) + (((MENU_SCALE_MAX - MENU_SCALE_MIN) * 100) * fraction)))
+    end
+
+    slider:HookScript("OnValueChanged", function(self, value)
+        if not self._msuf2Refreshing then UpdateVisual(value) end
+    end)
+    slider:SetScript("OnMouseDown", function(self, button)
+        if button and button ~= "LeftButton" then return end
+        self._msuf2MenuScaleDragging = true
+        SetValueFromCursor()
+    end)
+    slider:SetScript("OnMouseUp", function(self, button)
+        if button and button ~= "LeftButton" then return end
+        self._msuf2MenuScaleDragging = nil
+        Commit(self:GetValue())
+    end)
+    slider:SetScript("OnMouseWheel", function(self, delta)
+        if not delta or delta == 0 then return end
+        local step = MENU_SCALE_STEP * 100
+        self:SetValue(Percent((tonumber(self:GetValue()) or 100) + (delta > 0 and step or -step)))
+        Commit(self:GetValue())
+    end)
+    slider:HookScript("OnHide", function(self) self._msuf2MenuScaleDragging = nil end)
+
+    local tooltip = M.Tr("Scales only the MSUF menu. Drag the bar or use the mouse wheel; changes apply immediately.")
+    AttachHistoryTooltip(control, "MSUF Menu Scale", tooltip)
+    AttachHistoryTooltip(slider, "MSUF Menu Scale", tooltip)
+
+    control.slider, control.label, control.Refresh = slider, label, Refresh
+    frame.menuScaleControl, frame.menuScaleSlider = control, slider
+    frame.RefreshMenuScaleControl = Refresh
+    Refresh()
+end
+
 local function BuildWindow()
     if M.frame then return M.frame end
 
@@ -2204,6 +2420,7 @@ local function BuildWindow()
     minimize:SetPoint("TOPRIGHT", maximize, "TOPLEFT", -2, 0)
     minimize:SetScript("OnClick", function() MinimizeSlashMenuWindow(f) end)
     f.minimizeButton = minimize
+    InstallMenuScaleControl(f)
 
     local function EnsureResizeProxy()
         if f._msuf2ResizeProxy then return f._msuf2ResizeProxy end
@@ -2405,7 +2622,7 @@ local function BuildWindow()
 
     local content = CreateFrame("Frame", nil, f)
     content:SetPoint("TOPLEFT", f, "TOPLEFT", 8, -30)
-    content:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -8, 8)
+    content:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -8, 30)
     f.content = content
 
     local nav = T.Panel(content, nil, T.colors.panelNav or T.colors.panel, T.colors.borderSoft)
@@ -2578,12 +2795,13 @@ local function BuildWindow()
     return f
 end
 
-local function ApplyMenuFrameScale(frame)
+ApplyMenuFrameScale = function(frame)
     if not (frame and frame.SetScale) then return end
     local g = M.GetGeneralDB()
     frame:SetScale(EffectiveMenuScale(g.slashMenuScale))
     ApplyWindowResizeBounds(frame)
     ClampWindowSize(frame)
+    if type(frame.RefreshMenuScaleControl) == "function" then frame:RefreshMenuScaleControl() end
 end
 
 M.GetEffectiveMenuScale = EffectiveMenuScale

@@ -464,7 +464,9 @@ local function ApplyDropdownItemFont(fs, item)
         return
     end
     local d = fs._msuf2DropdownDefaultFont
-    local size = (d and d[2]) or 14
+    -- SharedMedia fonts can have very different vertical metrics. Keep the
+    -- actual font-name preview inside both the dropdown row and selected field.
+    local size = max(8, ((d and d[2]) or 14) - 1)
     local fontKey = item.fontKey or item.fontPreviewKey
     local fontPath = item.fontPath or item.font
     if (type(fontPath) ~= "string" or fontPath == "") and type(fontKey) == "string" and fontKey ~= "" then
@@ -545,14 +547,6 @@ local function DropdownRow(index)
     text:SetJustifyH("LEFT")
     StoreDropdownDefaultFont(text)
     row._msuf2Text = text
-
-    local fontPreview = T.Font(row, "GameFontHighlightSmall", "AaBbCc", T.colors.muted)
-    fontPreview:SetPoint("RIGHT", row, "RIGHT", -6, 0)
-    fontPreview:SetWidth(76)
-    fontPreview:SetJustifyH("RIGHT")
-    StoreDropdownDefaultFont(fontPreview)
-    fontPreview:Hide()
-    row._msuf2FontPreview = fontPreview
 
     row:SetScript("OnClick", function(self)
         if self._msuf2DropdownDisabled then return end
@@ -645,15 +639,9 @@ local function OpenDropdown(owner, valuesTable)
             local c = disabled and (T.colors.dim or T.colors.muted) or T.colors.text
             row._msuf2Text:SetTextColor(c[1], c[2], c[3], c[4] or 1)
         end
-        local showFontPreview = DropdownItemHasFontPreview(item)
-        row._msuf2FontPreview:SetShown(showFontPreview)
-        if showFontPreview then
-            row._msuf2FontPreview:SetText("AaBbCc")
-            ApplyDropdownItemFont(row._msuf2FontPreview, item)
-        else
-            RestoreDropdownDefaultFont(row._msuf2FontPreview)
+        if DropdownItemHasFontPreview(item) then
+            ApplyDropdownItemFont(row._msuf2Text, item)
         end
-        local rightInset = showFontPreview and -88 or -6
         local sr, sg, sb, sa = DropdownItemSwatch(item)
         if icon then
             if type(MSUF_SetIconTexture) == "function" then
@@ -668,7 +656,7 @@ local function OpenDropdown(owner, valuesTable)
             row._msuf2SwatchBorder:Hide()
             row._msuf2Text:ClearAllPoints()
             row._msuf2Text:SetPoint("LEFT", row, "LEFT", 100, 0)
-            row._msuf2Text:SetPoint("RIGHT", row, "RIGHT", rightInset, 0)
+            row._msuf2Text:SetPoint("RIGHT", row, "RIGHT", -6, 0)
         elseif sr then
             row._msuf2Icon:Hide()
             row._msuf2Swatch:SetColorTexture(sr, sg, sb, sa or 1)
@@ -676,14 +664,14 @@ local function OpenDropdown(owner, valuesTable)
             row._msuf2SwatchBorder:Show()
             row._msuf2Text:ClearAllPoints()
             row._msuf2Text:SetPoint("LEFT", row, "LEFT", 34, 0)
-            row._msuf2Text:SetPoint("RIGHT", row, "RIGHT", rightInset, 0)
+            row._msuf2Text:SetPoint("RIGHT", row, "RIGHT", -6, 0)
         else
             row._msuf2Icon:Hide()
             row._msuf2Swatch:Hide()
             row._msuf2SwatchBorder:Hide()
             row._msuf2Text:ClearAllPoints()
             row._msuf2Text:SetPoint("LEFT", row, "LEFT", 10, 0)
-            row._msuf2Text:SetPoint("RIGHT", row, "RIGHT", rightInset, 0)
+            row._msuf2Text:SetPoint("RIGHT", row, "RIGHT", -6, 0)
         end
         row:Show()
     end
@@ -819,6 +807,9 @@ function W.Dropdown(section, label, values, width)
         end
         RestoreDropdownDefaultFont(self._msuf2Label)
         self:SetText(selectedItem and DropdownItemText(selectedItem) or TextFor(value))
+        if DropdownItemHasFontPreview(selectedItem) then
+            ApplyDropdownItemFont(self._msuf2Label, selectedItem)
+        end
     end
     function btn:GetValue()
         return self.value
