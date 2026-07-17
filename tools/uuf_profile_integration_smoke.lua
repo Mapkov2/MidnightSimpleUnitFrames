@@ -14,6 +14,7 @@ if repoRoot == "" then repoRoot = "." end
 
 local profileSource = repoRoot .. "/MidnightSimpleUnitFrames/Foundation/MSUF_Profiles.lua"
 local statusSource = repoRoot .. "/MidnightSimpleUnitFrames/Core/MSUF_StatusIndicators.lua"
+local previewSource = repoRoot .. "/MidnightSimpleUnitFrames/Menu2/Pages/MSUF_Menu2_UnitPreview.lua"
 
 local passed, failed = 0, 0
 local failures = {}
@@ -532,6 +533,60 @@ do
         type(restingIcon.texture) == "string" and restingIcon.texture:find("rested_moonzzzz", 1, true) ~= nil,
         restingIcon.texture
     )
+end
+
+-- UUF can legitimately import edge and side anchors, not just corners. Load
+-- the real preview helpers from source and prove their geometry matches the
+-- corresponding 5.72 runtime helpers for every supported anchor.
+do
+    local handle, openError = io.open(previewSource, "rb")
+    assert(handle, openError)
+    local source = handle:read("*a"):gsub("\r\n", "\n")
+    handle:close()
+
+    local function LoadPreviewHelper(name, nextName, parameters)
+        local pattern = "local function " .. name .. "%b()%s*(.-)\nend\n\nlocal function " .. nextName
+        local body = source:match(pattern)
+        assert(body, "unable to extract preview helper " .. name)
+        local chunk, chunkError = loadstring("return function(" .. parameters .. ")\n" .. body .. "\nend")
+        assert(chunk, chunkError)
+        return chunk()
+    end
+
+    local resolve = LoadPreviewHelper("ResolveRuntimeIconLayoutAnchor", "PositionRuntimeLayoutIconPreview", "anchor, allowCenter")
+    local position = LoadPreviewHelper("PositionStatusCornerPreview", "PositionSameAnchorPreview", "frame, anchor, x, y, target, pad")
+    local anchors = {
+        TOPLEFT = { "LEFT", "TOPLEFT", 5, 3 },
+        TOP = { "TOP", "TOP", 3, 3 },
+        TOPRIGHT = { "RIGHT", "TOPRIGHT", 1, 3 },
+        LEFT = { "LEFT", "LEFT", 5, 5 },
+        CENTER = { "CENTER", "CENTER", 3, 5 },
+        RIGHT = { "RIGHT", "RIGHT", 1, 5 },
+        BOTTOMLEFT = { "LEFT", "BOTTOMLEFT", 5, 7 },
+        BOTTOM = { "BOTTOM", "BOTTOM", 3, 7 },
+        BOTTOMRIGHT = { "RIGHT", "BOTTOMRIGHT", 1, 7 },
+    }
+
+    for anchor, expected in pairs(anchors) do
+        local point, relativePoint = resolve(anchor, false)
+        Check("UUF preview layout resolves " .. anchor, point == expected[1] and relativePoint == expected[2], point .. "/" .. relativePoint)
+
+        local target = {}
+        local placed
+        local frame = {
+            ClearAllPoints = function() end,
+            SetPoint = function(_, ...)
+                placed = { ... }
+            end,
+        }
+        position(frame, anchor, 3, 5, target, 2)
+        Check(
+            "UUF status preview positions " .. anchor,
+            placed and placed[1] == anchor and placed[2] == target and placed[3] == anchor
+                and placed[4] == expected[3] and placed[5] == expected[4],
+            placed and table.concat({ tostring(placed[1]), tostring(placed[3]), tostring(placed[4]), tostring(placed[5]) }, "/")
+        )
+    end
 end
 
 io.write(string.format(
