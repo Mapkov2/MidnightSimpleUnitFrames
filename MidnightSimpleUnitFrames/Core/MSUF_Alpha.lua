@@ -915,8 +915,9 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
                     return
                 else
                     alphaFG = alphaFG * m
+                    alphaBG = alphaBG * m
                     MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, layerMode, preserveHPColor,
-                        _AlphaShouldRangeFadePortrait() and m or 1, true)
+                        _AlphaShouldRangeFadePortrait() and m or 1)
                     MSUF_Alpha_SetTextAlpha(frame, m)
                     if isEditMode then
                         local curA = frame:GetAlpha()
@@ -981,7 +982,7 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
 
     if rangeMul < 1 and frame._msufAlphaSupportsLayered then
         local rangeA = a * rangeMul
-        MSUF_Alpha_ApplyLayered(frame, rangeA, a, "foreground", false, rangeA, true)
+        MSUF_Alpha_ApplyLayered(frame, rangeA, rangeA, "foreground", false, rangeA)
         MSUF_Alpha_SetTextAlpha(frame, rangeA)
         if isEditMode then
             local curA = frame:GetAlpha()
@@ -1054,8 +1055,8 @@ function _G.MSUF_ApplyRangeFadeAlphaFast(frame, key, mul)
             return true
         end
         if m < 1 then
-            MSUF_Alpha_ApplyLayered(frame, fg * m, bg, mode, preserveHPColor,
-                _AlphaShouldRangeFadePortrait() and m or 1, true)
+            MSUF_Alpha_ApplyLayered(frame, fg * m, bg * m, mode, preserveHPColor,
+                _AlphaShouldRangeFadePortrait() and m or 1)
             MSUF_Alpha_SetTextAlpha(frame, m)
             return true
         end
@@ -1074,7 +1075,7 @@ function _G.MSUF_ApplyRangeFadeAlphaFast(frame, key, mul)
         end
         if m < 1 and frame._msufAlphaSupportsLayered then
             local rangeA = a * m
-            MSUF_Alpha_ApplyLayered(frame, rangeA, a, "foreground", false, rangeA, true)
+            MSUF_Alpha_ApplyLayered(frame, rangeA, rangeA, "foreground", false, rangeA)
             MSUF_Alpha_SetTextAlpha(frame, rangeA)
             return true
         end
