@@ -31,7 +31,10 @@ end
 
 local function HidePreviewEditorChrome(box, surface, sidebar, zoomBar, animationButton)
     if sidebar then sidebar:Hide() end
-    if zoomBar then zoomBar:Hide() end
+    -- Color previews use the normal UF/GF renderer, so keep its existing zoom
+    -- controls available here as well. Only editing chrome (layers, handles,
+    -- animation and help hints) is suppressed on this color-only surface.
+    if zoomBar then zoomBar:Show() end
     if animationButton then animationButton:Hide() end
     if box and box._msuf2PreviewControlsHint then box._msuf2PreviewControlsHint:Hide() end
     if surface then
