@@ -339,11 +339,20 @@ local function BuildGFAuras(ctx)
     end
     BuildAuraWorkspaceTabs(ctx, top, scope, lane, top._msuf2Width or auraBuilder.width or 720)
 
-    local rootSection = auraBuilder:Section("Group Aura Visibility", 78)
+    local rootSection = auraBuilder:Section("Group Aura Visibility", 132)
     local rootWidth = rootSection._msuf2Width or auraBuilder.width or 720
     local rootEnabled = BindAuraRootEnabled(ctx,
         W.SwitchAt(rootSection, "Enable group auras", 24, -50, rootWidth - 48))
     rootEnabled._msuf2GroupFrameGateAlwaysEnabled = true
+    local rootZoom = BindNestedSlider(ctx,
+        W.Slider(rootSection, "Icon Zoom (%)", 100, 200, 1, min(320, rootWidth - 48)),
+        function() return AurasRoot(CurrentScope()) end, "iconZoom", 100, "auras",
+        AuraControlMeta(ctx, "group-workspace.root.icon_zoom", nil, {
+            assistantDisposition = "dynamic",
+            assistantDispositionReason = "Icon Zoom targets every Aura icon in the selected Group scope.",
+            assistantSettingKeys = GroupAuraSettingKeys(scope, ".auras.iconZoom"),
+        }))
+    W.MoveWidget(rootZoom, rootSection, 24, -88, min(320, rootWidth - 48), "LEFT")
 
     if tool == "layout" then
         local title = lane == "debuff" and "Debuff Layout"

@@ -1515,13 +1515,15 @@ function GF.MigrateAuraConfig(conf, isRaid)
     if type(conf.auras.buff) ~= "table" then conf.auras.buff = LegacyBuffDefaults(); changed = true end
     if type(conf.auras.debuff) ~= "table" then conf.auras.debuff = LegacyDebuffDefaults(); changed = true end
     if type(conf.auras.externals) ~= "table" then conf.auras.externals = LegacyExternalDefaults(); changed = true end
+    if conf.auras.iconZoom == nil then conf.auras.iconZoom = 100; changed = true end
     FillMissingAuraFields(conf.auras.buff, LegacyBuffDefaults())
     FillMissingAuraFields(conf.auras.debuff, LegacyDebuffDefaults())
     FillMissingAuraFields(conf.auras.externals, LegacyExternalDefaults())
     if type(conf.spellIndicators) ~= "table" then
-        conf.spellIndicators = { enabled = false, spec = "auto", specs = {}, layer = 9 }
+        conf.spellIndicators = { enabled = false, spec = "auto", specs = {}, layer = 9, iconZoom = 100 }
         changed = true
     end
+    if conf.spellIndicators.iconZoom == nil then conf.spellIndicators.iconZoom = 100; changed = true end
     return changed
 end
 

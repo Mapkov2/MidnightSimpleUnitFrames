@@ -1145,6 +1145,7 @@ local function CompileCoreAuras(kind, conf)
     stackAnchor = "BOTTOMRIGHT",
     dynamicScale = root and root.dynamicScale == true,
     dynamicScaleValue = auraScale,
+    iconZoom = Num(root and root.iconZoom, 100),
     iconSize = S(conf.auraIconSize, 20, 1),
     spacing = 1,
     perRow = 4,

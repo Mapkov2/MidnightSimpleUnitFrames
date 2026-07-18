@@ -58,6 +58,7 @@ local GROUPS = {
         xKey = "buffGroupOffsetX",
         yKey = "buffGroupOffsetY",
         sizeKey = "buffGroupIconSize",
+        iconZoomKey = "buffIconZoom",
         anchorKey = "buffAnchor",
         layerKey = "buffLayer",
         maxKey = "maxBuffs",
@@ -75,6 +76,7 @@ local GROUPS = {
         xKey = "debuffGroupOffsetX",
         yKey = "debuffGroupOffsetY",
         sizeKey = "debuffGroupIconSize",
+        iconZoomKey = "debuffIconZoom",
         anchorKey = "debuffAnchor",
         layerKey = "debuffLayer",
         maxKey = "maxDebuffs",
@@ -501,6 +503,10 @@ local function ReadGroupConfig(unit, kind)
         or (layout and type(layout.iconSize) == "number" and layout.iconSize)
         or (shared and type(shared.iconSize) == "number" and shared.iconSize)
         or 26
+    local iconZoom = (layout and type(layout[spec.iconZoomKey]) == "number" and layout[spec.iconZoomKey])
+        or (shared and type(shared[spec.iconZoomKey]) == "number" and shared[spec.iconZoomKey])
+        or (shared and type(shared.iconZoom) == "number" and shared.iconZoom)
+        or 100
 
     local spacing = ReadNumber(shared, layout, "spacing", 2, 0, 64)
     local perRow = (ls and type(ls[spec.perRowKey]) == "number" and ls[spec.perRowKey])
@@ -542,6 +548,7 @@ local function ReadGroupConfig(unit, kind)
         anchor = anchor,
         layer = Clamp(layer, spec.defaultLayer or 5, 0, 30),
         size = Clamp(size, 26, 1, 128),
+        iconZoom = Clamp(iconZoom, 100, 100, 200),
         spacing = spacing,
         perRow = Clamp(perRow, 12, 1, 40),
         max = Clamp(maxN, 12, 0, 80),
@@ -643,6 +650,7 @@ local function FallbackMetrics(cfg)
         enabled = cfg and cfg.show == true,
         num = cfg and Round(cfg.max) or 0,
         size = cfg and cfg.size or 26,
+        iconZoom = cfg and cfg.iconZoom or 100,
         spacing = cfg and cfg.spacing or 2,
         step = ((cfg and cfg.size) or 26) + ((cfg and cfg.spacing) or 2),
         perRow = cfg and cfg.perRow or 12,
@@ -1358,6 +1366,14 @@ local function EnsureIcon(group, index)
     return icon
 end
 
+local function ApplyIconZoom(texture, zoom)
+    if not (texture and texture.SetTexCoord) then return end
+    zoom = Clamp(zoom, 100, 100, 200)
+    local visible = 100 / zoom
+    local inset = (1 - visible) * 0.5
+    texture:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
+end
+
 local function ApplyPreviewIconText(icon, unit, cfg)
     cfg = cfg or ReadTextConfig(unit)
     local barOnly = cfg.showDurationBar == true and cfg.durationBarDisplay == "BAR_ONLY"
@@ -1644,6 +1660,7 @@ local function RefreshSignature(unit, kind, cfg, metrics, textCfg, shownIcons, s
         .. "\030" .. tostring(vertical) .. "\030" .. tostring(initialAnchor)
         .. "\030" .. tostring(x) .. "\030" .. tostring(y) .. "\030" .. tostring(anchor)
         .. "\030" .. tostring(metrics and metrics.enabled)
+        .. "\030" .. tostring(metrics and metrics.iconZoom or cfg and cfg.iconZoom)
         .. "\030" .. tostring(textCfg and textCfg.stackSize) .. "\030" .. tostring(textCfg and textCfg.stackX)
         .. "\030" .. tostring(textCfg and textCfg.stackY) .. "\030" .. tostring(textCfg and textCfg.cooldownSize)
         .. "\030" .. tostring(textCfg and textCfg.cooldownX) .. "\030" .. tostring(textCfg and textCfg.cooldownY)
@@ -1745,7 +1762,10 @@ function EM.RefreshUnit(unit)
                     local col, row = IconGridCoord(i, perRow, vertical)
                     local body = group.Body or group
                     icon:SetPoint(initialAnchor, body, initialAnchor, col * step * growthX, row * step * growthY)
-                    if icon.Icon then icon.Icon:SetTexture(cfg.texture or spec.texture) end
+                    if icon.Icon then
+                        icon.Icon:SetTexture(cfg.texture or spec.texture)
+                        ApplyIconZoom(icon.Icon, metrics and metrics.iconZoom or cfg.iconZoom)
+                    end
                     if icon.Count then icon.Count:SetText(i == 1 and "3" or "") end
                     if icon.CooldownText then icon.CooldownText:SetText(i == 1 and "1m" or "32") end
                     ApplyPreviewIconText(icon, unit, textCfg)

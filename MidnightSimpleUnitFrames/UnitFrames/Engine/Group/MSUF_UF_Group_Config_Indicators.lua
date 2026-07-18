@@ -39,6 +39,13 @@ local function Layer(value, fallback)
   return value
 end
 
+local function IconZoom(value)
+  value = Num(value, 100)
+  if value < 100 then return 100 end
+  if value > 200 then return 200 end
+  return value
+end
+
 local function NormalizeFrameStrata(value, fallback)
   local normalize = _G.MSUF_NormalizeFrameStrata
   if type(normalize) == "function" then return normalize(value, fallback or "AUTO") end
@@ -502,6 +509,7 @@ function GF.CompileSpellIndicators(conf)
     return {
       enabled = false,
       layer = 9,
+      iconZoom = IconZoom(siCfg and siCfg.iconZoom),
       strata = NormalizeFrameStrata(siCfg and siCfg.strata, "AUTO"),
       spec = siCfg and siCfg.spec or "auto",
       activeSpec = nil,
@@ -543,6 +551,7 @@ function GF.CompileSpellIndicators(conf)
   return {
     enabled = #items > 0,
     layer = layer,
+    iconZoom = IconZoom(siCfg.iconZoom),
     strata = strata,
     spec = siCfg.spec or "auto",
     activeSpec = specs[1],

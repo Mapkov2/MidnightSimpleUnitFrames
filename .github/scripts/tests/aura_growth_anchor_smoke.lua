@@ -360,6 +360,33 @@ local function UnitLane(anchor, growth)
     return lane
 end
 
+local function ScopedUnitZoom(sharedZoom, overrideZoom, overrideStyle)
+    _G.MSUF_DB = {
+        auras3 = {
+            enabled = true,
+            showPlayer = true,
+            shared = {
+                showBuffs = true,
+                showDebuffs = false,
+                maxBuffs = 1,
+                buffIconZoom = sharedZoom,
+            },
+            perUnit = {
+                player = {
+                    overrideStyle = overrideStyle,
+                    overrideLayout = true,
+                    layout = { buffIconZoom = overrideZoom },
+                },
+            },
+        },
+    }
+    A3._runtimeConfigGen = (A3._runtimeConfigGen or 1) + 1
+    return assert(assert(A3.ResolveUnitFrameConfig("player", {})).lanes.buff).iconZoom
+end
+
+Equal(ScopedUnitZoom(135, 175, false), 135, "inherited unit Aura Icon Zoom")
+Equal(ScopedUnitZoom(135, 175, true), 175, "overridden unit Aura Icon Zoom")
+
 local function ApplyLane(lane)
     local parent = NewFrame(nil)
     local auraRoot = NewFrame(parent)
@@ -1232,6 +1259,8 @@ Check(unitPreviewSource:find("local cols, rows = GridShape(count, perRow, vertic
     "unit custom preview no longer sizes fallback bounds from full capacity")
 Check(unitPreviewSource:find("if vertical then return 1, count end", 1, true),
     "unit preview no longer mirrors single-column vertical growth")
+Check(unitPreviewSource:find("ApplyIconZoom(icon.tex, bounds.iconZoom)", 1, true),
+    "unit-frame preview does not mirror scoped Aura Icon Zoom")
 
 local menuModelSource = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Menu_Model.lua")
 Check(menuModelSource:find("TOPLEFT=true, TOP=true, TOPRIGHT=true", 1, true)
@@ -1243,6 +1272,10 @@ Check(menuModelSource:find("customMetrics[index] = buildMetrics", 1, true),
 Check(menuModelSource:find('text = "Up (Single Column)"', 1, true)
     and menuModelSource:find('text = "Down (Single Column)"', 1, true),
     "unit aura menu no longer exposes explicit vertical growth choices")
+Check(menuModelSource:find('iconZoom = "buffIconZoom"', 1, true)
+    and menuModelSource:find('iconZoom = "debuffIconZoom"', 1, true)
+    and menuModelSource:find('buffIconZoom = buffMetrics and buffMetrics.iconZoom', 1, true),
+    "unit Aura Icon Zoom no longer follows Shared/unit and Buff/Debuff scopes")
 
 local aurasMenuSource = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_Auras.lua")
 Check(not aurasMenuSource:find('BindDropdown(ctx, section, "Exclusive"', 1, true)
@@ -1255,6 +1288,20 @@ Check(aurasMenuSource:find('"Maximum duration", 24, -142, 0, 180, 1', 1, true)
     and aurasMenuSource:find('"Maximum duration", 24, -78 - optionRows * 32, 0, 180, 1', 1, true)
     and aurasMenuSource:find('"Maximum duration", 24, -140, 0, 180, 1', 1, true),
     "unit, group, and custom Debuff filters no longer expose the 0-180 second slider")
+Check(aurasMenuSource:find('BindStyleSlider(features, "Icon Zoom (%)"', 1, true)
+    and aurasMenuSource:find('ApplyAuraPreviewIconZoom(icon.icon, cfg.iconZoom)', 1, true),
+    "unit Aura Style lacks its scope-aware Icon Zoom slider or sample preview")
+Check(runtimeSource:find('local zoomDefault = ReadRaw(layout, shared, spec.iconZoomKey)', 1, true)
+    and runtimeSource:find('iconZoom = ClampNumber(zoomDefault, DEFAULT_SHARED.iconZoom, 100, 200)', 1, true),
+    "unit Aura runtime does not compile scoped Icon Zoom")
+Check(editModeSource:find('ApplyIconZoom(icon.Icon, metrics and metrics.iconZoom or cfg.iconZoom)', 1, true),
+    "Edit Mode Aura preview does not mirror scoped Icon Zoom")
+local defaultsSource = Read("MidnightSimpleUnitFrames/State/MSUF_Defaults.lua")
+local profilesSource = Read("MidnightSimpleUnitFrames/State/MSUF_Profiles.lua")
+Check(defaultsSource:find('iconZoom = { 100, 200 }, buffIconZoom = { 100, 200 }, debuffIconZoom = { 100, 200 }', 1, true)
+    and profilesSource:find('buffIconZoom = { 100, 200 }', 1, true)
+    and profilesSource:find('debuffIconZoom = { 100, 200 }', 1, true),
+    "unit Aura Icon Zoom is missing from defaults/profile normalization")
 
 Check(menuModelSource:find("function Model.WriteBlacklistMaxDuration", 1, true)
     and menuModelSource:find("function Model.WriteGroupBlacklistMaxDuration", 1, true),
@@ -1273,6 +1320,18 @@ Check(groupPreviewSource:find("if GF_PREVIEW_ANCHOR_FRAC[anchor] then return anc
     "group aura preview no longer accepts all nine runtime anchors")
 Check(groupPreviewSource:find('LayoutAuraGroup(externalHandle, "external", externalCfg', 1, true),
     "group External aura lane is missing from the preview renderer")
+Check(groupConfigSource:find("iconZoom = Num(root and root.iconZoom, 100)", 1, true),
+    "Group Aura root Icon Zoom is missing from the compiled scope")
+Check(runtimeSource:find("iconZoom = ClampNumber(source.iconZoom, 100, 100, 200)", 1, true)
+    and runtimeSource:find("ApplyAuraIconZoom(icon, lane)", 1, true)
+    and runtimeSource:find('tostring(lane.iconZoom)', 1, true),
+    "Group Aura Icon Zoom is missing from the live cold-layout contract")
+Check(groupPreviewSource:find("ApplyPreviewIconZoom(tex, cfg.iconZoom or scene.auraIconZoom, 0)", 1, true),
+    "Group Aura preview does not mirror the scope-wide Icon Zoom")
+local groupAuraMenuSource = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupAuras.lua")
+Check(groupAuraMenuSource:find('W.Slider(rootSection, "Icon Zoom (%)", 100, 200, 1', 1, true)
+    and groupAuraMenuSource:find('GroupAuraSettingKeys(scope, ".auras.iconZoom")', 1, true),
+    "Group Aura scope-aware Icon Zoom slider is missing")
 
 local groupHandlesSource = Read("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Handles.lua")
 Check(groupHandlesSource:find("return ResolveAnchor(rx, ry)", 1, true),
@@ -1280,4 +1339,4 @@ Check(groupHandlesSource:find("return ResolveAnchor(rx, ry)", 1, true),
 Check(groupHandlesSource:find('externalHandle._cfgGroup = "externals"', 1, true),
     "group External aura handle no longer writes its persisted lane")
 
-print("PASS aura position parity: 54 unit + 216 group live layouts, 45 unit preview lanes, vertical fallback, PTR5 forbidden-button guard, fixed host capacity, player/dispel zone repair, 1000x native churn")
+print("PASS aura position parity: 54 unit + 216 group live layouts, 45 unit preview lanes, scope-aware icon zoom, vertical fallback, PTR5 forbidden-button guard, fixed host capacity, player/dispel zone repair, 1000x native churn")

@@ -536,6 +536,7 @@ local function CompiledAuraLane(auras, key, fallback)
         max = auras[maxKey],
         perRow = auras[prefix .. "PerRow"],
         size = auras[prefix .. "IconSize"],
+        iconZoom = auras.iconZoom,
         spacing = auras[prefix .. "Spacing"],
         anchor = auras[prefix .. "Anchor"],
         growth = GrowthFromCompiled(auras[prefix .. "GrowthX"], auras[prefix .. "GrowthY"], fallback and fallback.growth),

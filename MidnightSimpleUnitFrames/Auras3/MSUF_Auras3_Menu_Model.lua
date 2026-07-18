@@ -147,6 +147,8 @@ local LANE_GROWTH_PARTS = {
 
 local LAYOUT_KEYS = {
     iconSize = true,
+    buffIconZoom = true,
+    debuffIconZoom = true,
     spacing = true,
     offsetX = true,
     offsetY = true,
@@ -189,6 +191,8 @@ local LAYOUT_KEYS = {
 }
 
 local STYLE_LAYOUT_KEYS = {
+    buffIconZoom = true,
+    debuffIconZoom = true,
     stackTextSize = true,
     stackTextOffsetX = true,
     stackTextOffsetY = true,
@@ -351,6 +355,7 @@ local GROUPS = {
 
 local LANE_STYLE_KEYS = {
     buff = {
+        iconZoom = "buffIconZoom",
         showCooldownSwipe = "buffShowCooldownSwipe",
         cooldownSwipeReverse = "buffCooldownSwipeReverse",
         sortMethod = "buffSortMethod",
@@ -374,6 +379,7 @@ local LANE_STYLE_KEYS = {
         cooldownDecimalSeconds = "buffCooldownDecimalSeconds",
     },
     debuff = {
+        iconZoom = "debuffIconZoom",
         showCooldownSwipe = "debuffShowCooldownSwipe",
         cooldownSwipeReverse = "debuffCooldownSwipeReverse",
         sortMethod = "debuffSortMethod",
@@ -446,6 +452,9 @@ local DEFAULT_SHARED = {
     debuffShowStackCount = true,
     clickThroughAuras = false,
     iconSize = 26,
+    iconZoom = 100,
+    buffIconZoom = 100,
+    debuffIconZoom = 100,
     spacing = 2,
     perRow = 12,
     maxBuffs = 12,
@@ -2855,6 +2864,8 @@ function Model.ReadPreviewConfig(unit)
         debuffLayer = Model.ReadLaneLayer(unit, "debuff"),
         buffSize = buffMetrics and buffMetrics.size or Model.ReadNumber(unit, "buffGroupIconSize", Model.ReadNumber(unit, "iconSize", 26, 1, 128), 1, 128),
         debuffSize = debuffMetrics and debuffMetrics.size or Model.ReadNumber(unit, "debuffGroupIconSize", Model.ReadNumber(unit, "iconSize", 26, 1, 128), 1, 128),
+        buffIconZoom = buffMetrics and buffMetrics.iconZoom or Model.ReadLaneStyleNumber(unit, "buff", "iconZoom", 100, 100, 200),
+        debuffIconZoom = debuffMetrics and debuffMetrics.iconZoom or Model.ReadLaneStyleNumber(unit, "debuff", "iconZoom", 100, 100, 200),
         spacing = (buffMetrics and buffMetrics.spacing) or (debuffMetrics and debuffMetrics.spacing) or Model.ReadNumber(unit, "spacing", 2, 0, 64),
         perRow = (buffMetrics and buffMetrics.perRow) or (debuffMetrics and debuffMetrics.perRow) or Model.ReadNumber(unit, "perRow", 12, 1, 40),
         buffPerRow = buffMetrics and buffMetrics.perRow or Model.ReadLanePerRow(unit, "buff"),

@@ -573,6 +573,19 @@ Check(indicatorMenuSource:find('"Effect Layer (0-30)", 0, 30, 1, "layer", 0', 1,
   "Spell frame-effect Layer 0-30 control is missing")
 Check(groupBarsMenuSource:find('"dispelOverlayLayer", 0, "visual"', 1, true),
   "Dispel overlay effect Layer 0-30 control is missing")
+local indicatorConfigSource = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Config_Indicators.lua")
+Check(indicatorConfigSource:find("iconZoom = IconZoom(siCfg.iconZoom)", 1, true),
+  "Spell Indicator root Icon Zoom is missing from the compiled Group scope")
+Check(liveSource:find("tostring(slot.iconZoom)", 1, true)
+  and liveSource:find("iconZoom = ClampNumber(fallbackIconZoom, 100, 100, 200)", 1, true),
+  "Spell Indicator Icon Zoom is missing from the live slot layout signature")
+Check(previewSource:find("ApplyPreviewIconZoom(spellTex, scene.spellIconZoom, 0)", 1, true),
+  "Spell Indicator preview does not mirror its Group-scope Icon Zoom")
+Check(indicatorMenuSource:find('W.Slider(spells, Tr("Icon Zoom (%)"), 100, 200, 1', 1, true)
+  and indicatorMenuSource:find("cfg.iconZoom = tonumber(value) or 100", 1, true)
+  and indicatorMenuSource:find('"gf_party.spellIndicators.iconZoom"', 1, true)
+  and indicatorMenuSource:find('"gf_mythicraid.spellIndicators.iconZoom"', 1, true),
+  "Spell Indicator scope-aware Icon Zoom slider is missing")
 
 -- PLAYER_ENTERING_WORLD must opt into the exceptional repair path. The native
 -- aura update settles first so later lifecycle work cannot immediately replace
@@ -596,4 +609,4 @@ Check(unitBlock:find("SpellIndicatorsRuntime.Recreate", 1, true),
 Check(unitBlock:find("the set is never mutated", 1, true),
   "Spell Indicator replacement is not deferred until after container iteration")
 
-print("PASS spell indicator position lifecycle: validated filters, preview/live parity, structural edits, safe zone recreation")
+print("PASS spell indicator position lifecycle: validated filters, preview/live parity, scope-aware icon zoom, structural edits, safe zone recreation")

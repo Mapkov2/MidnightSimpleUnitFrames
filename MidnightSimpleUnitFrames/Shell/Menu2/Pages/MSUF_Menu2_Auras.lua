@@ -956,6 +956,14 @@ local function CreateAuraPreviewIcon(parent)
     f.timer:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 2, 1)
     return f
 end
+local function ApplyAuraPreviewIconZoom(texture, zoom)
+    if not (texture and texture.SetTexCoord) then return end
+    zoom = tonumber(zoom) or 100
+    if zoom < 100 then zoom = 100 elseif zoom > 200 then zoom = 200 end
+    local visible = 100 / zoom
+    local inset = (1 - visible) * 0.5
+    texture:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
+end
 local function ApplyAuraPreviewFont(fs, size)
     if not fs then return end
     local fontPath, fontFlags, r, g, b, _, useShadow
@@ -1040,9 +1048,12 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
         durationBarDisplay = "BAR_ONLY",
         durationBarPosition = "BOTTOM",
         durationBarDirection = "REMAINING",
+        iconZoom = 100,
     }
     if isGroup then
         local group = GFReadGroup(scope, lane or "debuff")
+        local root = GFReadRoot(scope)
+        cfg.iconZoom = tonumber(root and root.iconZoom) or 100
         cfg.size = tonumber(group.size) or GroupAuraPreviewDefaultSize(scope, lane)
         cfg.spacing = tonumber(group.spacing) or 1
         cfg.perRow = tonumber(group.perRow) or (lane == "buff" and 4 or 3)
@@ -1085,6 +1096,8 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
             cfg.maxIcons = cfg.perRow * 2
         end
         cfg.spacing = tonumber(runtimePreview and runtimePreview.spacing) or Model.ReadNumber(readScope, "spacing", 2, 0, 12)
+        cfg.iconZoom = lane and Model.ReadLaneStyleNumber(readScope, lane, "iconZoom", 100, 100, 200)
+            or Model.ReadNumber(readScope, "iconZoom", 100, 100, 200)
         cfg.growth = lane and type(Model.ReadLaneGrowthPair) == "function" and Model.ReadLaneGrowthPair(readScope, lane) or "RIGHTDOWN"
         if type(Model.ReadLaneStyleBool) == "function" and lane then
             cfg.showStacks = Model.ReadLaneStyleBool(readScope, lane, "showStackCount", true)
@@ -1260,6 +1273,7 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
         local previewTextures = cfg.previewTextures
         local previewTexture = previewTextures and previewTextures[((index - 1) % max(1, #previewTextures)) + 1]
         icon.icon:SetTexture(previewTexture or tex[((index - 1) % #tex) + 1])
+        ApplyAuraPreviewIconZoom(icon.icon, cfg.iconZoom)
         icon.bg:SetShown(not barOnly)
         icon.icon:SetShown(not barOnly)
         local r, g, b = isBuffIcon and 0.20 or 0.78, isBuffIcon and 0.72 or 0.20, isBuffIcon and 0.42 or 0.24
@@ -1743,7 +1757,7 @@ local function BuildUnitStyle(ctx, b, scope)
 
     refreshMiniPreview = BuildAuraStylePreviewWorkbench(ctx, b, unit, lane)
 
-    local featuresH = 188 + extraDebuffControls
+    local featuresH = 244 + extraDebuffControls
     local features = b:CollapsibleSection(baseId .. "_features", LaneTitle(lane) .. " Basics", featuresH, true)
     local fw = BodyWidth(features)
     local featuresY = -44
@@ -1752,11 +1766,12 @@ local function BuildUnitStyle(ctx, b, scope)
     colorsButton:SetScript("OnClick", OpenAuraColors)
     RegisterAuraControl(ctx, colorsButton, "Open Aura Colors", "button", "style.lane.colors", "navigation", "opt_colors")
     AddTooltip(colorsButton, "Aura colors", "Opens Colors > Auras for timer, stack, highlight, and pandemic colors.")
-    BindStyleSwitch(features, "Show Cooldown Text", 24, featuresY - 44, fw - 48, "showCooldownText", true, "AURAS3_SHOW_COOLDOWN_TEXT")
-    BindStyleSwitch(features, "Show Cooldown Swipe", 24, featuresY - 76, fw - 48, "showCooldownSwipe", true, "AURAS3_SHOW_COOLDOWN_SWIPE")
-    BindStyleSwitch(features, "Show Tooltip", 24, featuresY - 108, fw - 48, "showTooltip", true, "AURAS3_TOOLTIP")
+    BindStyleSlider(features, "Icon Zoom (%)", 24, featuresY - 44, 100, 200, 1, fw - 48, "iconZoom", 100, 100, 200, 100, 200, "AURAS3_ICON_ZOOM")
+    BindStyleSwitch(features, "Show Cooldown Text", 24, featuresY - 100, fw - 48, "showCooldownText", true, "AURAS3_SHOW_COOLDOWN_TEXT")
+    BindStyleSwitch(features, "Show Cooldown Swipe", 24, featuresY - 132, fw - 48, "showCooldownSwipe", true, "AURAS3_SHOW_COOLDOWN_SWIPE")
+    BindStyleSwitch(features, "Show Tooltip", 24, featuresY - 164, fw - 48, "showTooltip", true, "AURAS3_TOOLTIP")
     if lane == "debuff" then
-        BindStyleDropdown(features, "Dispel-type Border", 24, featuresY - 158,
+        BindStyleDropdown(features, "Dispel-type Border", 24, featuresY - 214,
             type(Model.DebuffTypeBorderModeValues) == "function" and Model.DebuffTypeBorderModeValues() or DEBUFF_TYPE_BORDER_MODE_VALUES,
             fw - 48, ReadScopeDebuffBorderMode, WriteScopeDebuffBorderMode, "AURAS3_DEBUFF_TYPE_BORDER_MODE")
     end

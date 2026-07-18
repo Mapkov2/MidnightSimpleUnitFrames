@@ -44,6 +44,15 @@ local function NormalizeCastbarPreviewIconPos(value)
     if value == "RIGHT" or value == "INSIDE_LEFT" or value == "INSIDE_RIGHT" then return value end
     return "LEFT"
 end
+local function ApplyCastbarPreviewIconZoom(icon, zoom)
+    local texture = icon and (icon.texture or icon.Texture or icon.Icon)
+    if not (texture and texture.SetTexCoord) then return end
+    zoom = tonumber(zoom) or 100
+    if zoom < 100 then zoom = 100 elseif zoom > 200 then zoom = 200 end
+    local visible = 100 / zoom
+    local inset = (1 - visible) * 0.5
+    texture:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
+end
 local function NormalizeCastbarPreviewTextPos(value, fallback)
     value = tostring(value or fallback or "LEFT"):upper():gsub("%s+", "_"):gsub("-", "_")
     if value == "CENTER" or value == "RIGHT" or value == "ABOVE" or value == "BELOW" then return value end
@@ -272,11 +281,13 @@ local function ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, s
     local iconSize = ReadCastbarNum(g, key, "IconSize", "bossCastIconSize", castBarH)
     if iconSize < 6 then iconSize = 6 elseif iconSize > 128 then iconSize = 128 end
     local sIcon = max(6, S(iconSize))
+    local iconZoom = ReadCastbarNum(g, key, "IconZoom", "bossCastIconZoom", 100)
     local iconPosition = NormalizeCastbarPreviewIconPos(ReadCastbarPreviewString(g, key, detailPrefix, "IconPosition", "bossCastIconPosition", "LEFT"))
     local iconSpacing = max(0, min(40, ReadCastbarNum(g, key, "IconSpacing", "bossCastIconSpacing", 1)))
     local iconBorderStyle = ReadCastbarPreviewString(g, key, detailPrefix, "IconBorderStyle", "bossCastIconBorderStyle", "NONE")
     if showIcon then
         ApplyCastbarPreviewIconBorder(mock.cast.icon, iconBorderStyle, g)
+        ApplyCastbarPreviewIconZoom(mock.cast.icon, iconZoom)
         mock.cast.icon:SetSize(sIcon, sIcon)
         mock.cast.icon:ClearAllPoints()
         if iconPosition == "RIGHT" then

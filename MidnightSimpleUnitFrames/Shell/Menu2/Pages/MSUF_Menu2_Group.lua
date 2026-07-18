@@ -1047,9 +1047,10 @@ local function AuraGroup(kind, groupKey)
 end
 local function SpellIndicators(kind)
     local conf = Conf(kind)
-    if type(conf.spellIndicators) ~= "table" then conf.spellIndicators = { enabled = false, spec = "auto", specs = {}, layer = 9, strata = "AUTO" } end
+    if type(conf.spellIndicators) ~= "table" then conf.spellIndicators = { enabled = false, spec = "auto", specs = {}, layer = 9, strata = "AUTO", iconZoom = 100 } end
     conf.spellIndicators.specs = conf.spellIndicators.specs or {}
     if conf.spellIndicators.strata == nil then conf.spellIndicators.strata = "AUTO" end
+    if conf.spellIndicators.iconZoom == nil then conf.spellIndicators.iconZoom = 100 end
     return conf.spellIndicators
 end
 local function IconStyleValues()

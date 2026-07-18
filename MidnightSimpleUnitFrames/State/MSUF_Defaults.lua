@@ -184,6 +184,7 @@ local MSUF_DEFAULTS_AURA_NUMERIC_KEYS = {
     buffGroupOffsetX = { -4096, 4096 }, buffGroupOffsetY = { -4096, 4096 },
     debuffGroupOffsetX = { -4096, 4096 }, debuffGroupOffsetY = { -4096, 4096 },
     iconSize = { 1, 256 }, buffIconSize = { 1, 256 }, debuffIconSize = { 1, 256 },
+    iconZoom = { 100, 200 }, buffIconZoom = { 100, 200 }, debuffIconZoom = { 100, 200 },
     buffGroupIconSize = { 1, 256 }, debuffGroupIconSize = { 1, 256 },
     spacing = { 0, 128 }, splitSpacing = { 0, 256 },
     perRow = { 1, 80 }, buffPerRow = { 1, 80 }, debuffPerRow = { 1, 80 },
@@ -2127,6 +2128,9 @@ end
     if g.castbarIconOffsetY == nil then
         g.castbarIconOffsetY = 0
     end
+    if g.castbarIconZoom == nil then
+        g.castbarIconZoom = 100
+    end
     if g.castbarTargetOffsetX == nil then
         g.castbarTargetOffsetX = 0
     end
@@ -2293,6 +2297,7 @@ end
     local function InitCastbarDetailDefaults(prefix)
         if g[prefix .. "FrameLevelOffset"] == nil then g[prefix .. "FrameLevelOffset"] = 6 end
         if g[prefix .. "IconPosition"] == nil then g[prefix .. "IconPosition"] = "LEFT" end
+        if g[prefix .. "IconZoom"] == nil then g[prefix .. "IconZoom"] = 100 end
         if g[prefix .. "IconSpacing"] == nil then g[prefix .. "IconSpacing"] = 1 end
         if g[prefix .. "IconBorderStyle"] == nil then g[prefix .. "IconBorderStyle"] = "NONE" end
         if g[prefix .. "SpellNamePosition"] == nil then g[prefix .. "SpellNamePosition"] = "LEFT" end
@@ -3029,6 +3034,9 @@ end
                 debuffGroupIconSize = 26,
                 cooldownTextSize = 14,
                 iconSize = 26,
+                iconZoom = 100,
+                buffIconZoom = 100,
+                debuffIconZoom = 100,
                 spacing = 2,
                 stackTextSize = 14,
                 growth = "RIGHT",

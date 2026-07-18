@@ -115,6 +115,7 @@ local DEFAULT_SHARED = {
     debuffTypeBorderMode = "OFF",
     useDebuffTypeBorders = false,
     iconSize = 26,
+    iconZoom = 100,
     spacing = 2,
     perRow = 12,
     maxBuffs = 12,
@@ -152,6 +153,7 @@ local LANE_SPECS = {
         xKey = "buffGroupOffsetX",
         yKey = "buffGroupOffsetY",
         sizeKey = "buffGroupIconSize",
+        iconZoomKey = "buffIconZoom",
         anchorKey = "buffAnchor",
         layerKey = "buffLayer",
         strataKey = "buffStrata",
@@ -191,6 +193,7 @@ local LANE_SPECS = {
         xKey = "debuffGroupOffsetX",
         yKey = "debuffGroupOffsetY",
         sizeKey = "debuffGroupIconSize",
+        iconZoomKey = "debuffIconZoom",
         anchorKey = "debuffAnchor",
         layerKey = "debuffLayer",
         strataKey = "debuffStrata",
@@ -224,6 +227,8 @@ local LANE_SPECS = {
 }
 
 local STYLE_LAYOUT_KEYS = {
+    buffIconZoom = true,
+    debuffIconZoom = true,
     stackTextSize = true,
     stackTextOffsetX = true,
     stackTextOffsetY = true,
@@ -777,6 +782,17 @@ local function AddMaxDurationCandidateFilter(candidateFilters, candidateFilterSi
     return candidateFilters, candidateFilterSignature
 end
 
+local function ApplyAuraIconZoom(texture, lane)
+    if not (texture and texture.SetTexCoord) then return end
+    local zoom = ClampNumber(lane and lane.iconZoom, 100, 100, 200)
+    local key = tostring(zoom)
+    if texture._msufA3IconZoomKey == key then return end
+    texture._msufA3IconZoomKey = key
+    local visible = 100 / zoom
+    local inset = (1 - visible) * 0.5
+    texture:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
+end
+
 local function AuraIconBaseOffset(parentFrame)
     return parentFrame and parentFrame.MSUFSpec and parentFrame.MSUFSpec.scope == "group"
         and AURA_ICON_BASE_OFFSET or 0
@@ -1084,6 +1100,7 @@ local function CompileUnitLane(unit, shared, layout, filtersRoot, kind, candidat
             and (filtersRoot.hidePermanent == true or (filters and filters.hidePermanent == true)))
     local sizeDefault = ReadRaw(layout, shared, spec.sizeKey) or ReadRaw(layout, shared, "iconSize") or DEFAULT_SHARED.iconSize
     local size = ClampNumber(sizeDefault, DEFAULT_SHARED.iconSize, 1, 128)
+    local zoomDefault = ReadRaw(layout, shared, spec.iconZoomKey) or ReadRaw(layout, shared, "iconZoom") or DEFAULT_SHARED.iconZoom
     local spacing = ReadNumber(layout, shared, "spacing", DEFAULT_SHARED.spacing, 0, 64)
     local perRow = ReadNumber(shared, nil, spec.perRowKey, ReadRaw(shared, nil, "perRow") or DEFAULT_SHARED.perRow, 1, 40)
     local maxCount = ReadNumber(shared, nil, spec.maxKey, DEFAULT_SHARED[spec.maxKey] or 12, 0, 80)
@@ -1106,6 +1123,7 @@ local function CompileUnitLane(unit, shared, layout, filtersRoot, kind, candidat
         candidateFilterSignature = candidateFilterSignature,
         max = Round(maxCount),
         size = size,
+        iconZoom = ClampNumber(zoomDefault, DEFAULT_SHARED.iconZoom, 100, 200),
         spacing = spacing,
         step = size + spacing,
         perRow = Round(perRow),
@@ -1188,6 +1206,7 @@ local function CompileGroupLane(unit, source, kind)
         candidateFilterSignature = candidateFilterSignature,
         max = Round(maxCount),
         size = size,
+        iconZoom = ClampNumber(source.iconZoom, 100, 100, 200),
         spacing = spacing,
         step = size + spacing,
         perRow = Round(perRow),
@@ -1575,6 +1594,7 @@ local function BuildGroupSpellIndicatorSource(spellSource, cornerSource)
         enabled = true,
         items = items,
         layer = type(spellSource) == "table" and spellSource.layer or (type(cornerSource) == "table" and cornerSource.layer or 9),
+        iconZoom = type(spellSource) == "table" and spellSource.iconZoom or 100,
         strata = type(spellSource) == "table" and spellSource.strata or "AUTO",
     }
 end
@@ -2147,7 +2167,7 @@ LaneStructuralSignature = function(lane)
 end
 
 LaneLayoutSignature = function(lane)
-    return tostring(lane.size) .. "\030" .. tostring(lane.spacing)
+    return tostring(lane.size) .. "\030" .. tostring(lane.iconZoom) .. "\030" .. tostring(lane.spacing)
         .. "\030" .. tostring(lane.step) .. "\030" .. tostring(lane.perRow)
         .. "\030" .. tostring(lane.cols) .. "\030" .. tostring(lane.rows)
         .. "\030" .. tostring(lane.width) .. "\030" .. tostring(lane.height)
@@ -2172,6 +2192,7 @@ end
 
 local function LaneButtonConfigSignature(lane)
     return tostring(lane.unit) .. "\030" .. tostring(lane.kind)
+        .. "\030" .. tostring(lane.iconZoom)
         .. "\030" .. tostring(lane.showCooldownText) .. "\030" .. tostring(lane.showCooldownSwipe)
         .. "\030" .. tostring(lane.cooldownSwipeReverse) .. "\030" .. tostring(lane.showDurationBar)
         .. "\030" .. tostring(lane.durationBarDisplay) .. "\030" .. tostring(lane.durationBarDirection)
@@ -2400,6 +2421,7 @@ local function SyncButtonGeometry(button, lane, index)
     if button.Icon then
         button.Icon:ClearAllPoints()
         button.Icon:SetAllPoints(button)
+        ApplyAuraIconZoom(button.Icon, lane)
     end
     if button._msufA3Cooldown then
         button._msufA3Cooldown:ClearAllPoints()
@@ -2508,6 +2530,7 @@ local function PrepareAuraButton(button, lane, index)
         end
         icon:ClearAllPoints()
         icon:SetAllPoints(button)
+        ApplyAuraIconZoom(icon, lane)
         icon:SetAlpha(1)
         icon:Show()
         button:SetIcon(icon)
