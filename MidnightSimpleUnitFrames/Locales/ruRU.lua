@@ -3528,6 +3528,23 @@ L["Yes. Priority Frames inherit the active Party, Raid, or Mythic Raid frame app
 L["Yes. Priority Frames work in parties, raids, and Mythic raids. In a party or dungeon they inherit Party Frames; in a raid they inherit the active Raid or Mythic Raid setup. They do not create a solo strip, and the matching base Party or Raid frames must be enabled."] = "Да. Рамки приоритета работают в группах, рейдах и эпохальных рейдах. В группе или подземелье они наследуют партийные рамки; в рейде они наследуют активную настройку рейда или мифического рейда. Они не создают одиночную полосу, и соответствующие базовые рамки Party или Raid должны быть включены."
 L["|cffffd200"] = "|cffffd200"
 L["|cffffffff"] = "|cffffffff"
+L["Icon Zoom (%)"] = "Масштаб значка (%)"
+
+-- Рабочий процесс для новичков и умный поиск.
+L["Best %d match(es). Open one or ask MSUF for a guided answer."] = "Лучшие совпадения: %d. Откройте одно или попросите MSUF дать пошаговый ответ."
+L["Choose one task. MSUF opens the right place for you."] = "Выберите одну задачу. MSUF откроет нужное место."
+L["Complete Tour - every detail"] = "Полный тур - все подробности"
+L["Discard"] = "Сбросить"
+L["No exact setting found for \"%s\"."] = "Точная настройка для \"%s\" не найдена."
+L["Profiles & backup"] = "Профили и резервная копия"
+L["Quick Setup - essentials"] = "Быстрая настройка - основные параметры"
+L["Quick Setup started."] = "Быстрая настройка запущена."
+L["ROUTE READY - %s, %s. Press Start."] = "МАРШРУТ ГОТОВ - %s, %s. Нажмите «Начать»."
+L["Set up Party & Raid"] = "Настроить группу и рейд"
+L["Start Quick Setup"] = "Начать быструю настройку"
+L["Style Unitframes"] = "Оформить рамки персонажей"
+L["What do you want to do?"] = "Что вы хотите сделать?"
+L["YOUR MOVE - Choose what you want to set up."] = "ВАШ ХОД - Выберите, что хотите настроить."
 
 -- MSUF FULL CORE MENU ENGLISH RETRY 2
 -- Generated missing non-Assistant core keys for ruRU.

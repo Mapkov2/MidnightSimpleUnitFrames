@@ -3911,6 +3911,23 @@ L["Yes. Priority Frames inherit the active Party, Raid, or Mythic Raid frame app
 L["Yes. Priority Frames work in parties, raids, and Mythic raids. In a party or dungeon they inherit Party Frames; in a raid they inherit the active Raid or Mythic Raid setup. They do not create a solo strip, and the matching base Party or Raid frames must be enabled."] = "Oui. Les cadres prioritaires fonctionnent dans les groupes, les raids et les raids mythiques. Dans un groupe ou un donjon, ils héritent des cadres de groupe ; dans un raid, ils héritent de la configuration active Raid ou Mythic Raid. Ils ne créent pas de bande solo et les images de base Party ou Raid correspondantes doivent être activées."
 L["|cffffd200"] = "|cffffd200"
 L["|cffffffff"] = "|cffffffff"
+L["Icon Zoom (%)"] = "Zoom de l'icône (%)"
+
+-- Parcours débutant et recherche intelligente.
+L["Best %d match(es). Open one or ask MSUF for a guided answer."] = "Les %d meilleurs résultats. Ouvrez-en un ou demandez à MSUF une réponse guidée."
+L["Choose one task. MSUF opens the right place for you."] = "Choisissez une tâche. MSUF ouvre le bon emplacement."
+L["Complete Tour - every detail"] = "Visite complète - tous les détails"
+L["Discard"] = "Abandonner"
+L["No exact setting found for \"%s\"."] = "Aucun réglage exact trouvé pour « %s »."
+L["Profiles & backup"] = "Profils et sauvegarde"
+L["Quick Setup - essentials"] = "Configuration rapide - l'essentiel"
+L["Quick Setup started."] = "Configuration rapide lancée."
+L["ROUTE READY - %s, %s. Press Start."] = "PARCOURS PRÊT - %s, %s. Appuyez sur Démarrer."
+L["Set up Party & Raid"] = "Configurer groupe et raid"
+L["Start Quick Setup"] = "Démarrer la configuration rapide"
+L["Style Unitframes"] = "Styliser les cadres d'unité"
+L["What do you want to do?"] = "Que voulez-vous faire ?"
+L["YOUR MOVE - Choose what you want to set up."] = "À VOUS - Choisissez ce que vous voulez configurer."
 
 -- MSUF FULL CORE MENU ENGLISH RETRY 2
 -- Generated missing non-Assistant core keys for frFR.
