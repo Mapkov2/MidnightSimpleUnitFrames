@@ -921,7 +921,14 @@ function Preview.Refresh(box, reason)
     if mock.detachedPower and mock.detachedPower.SetFrameLevel then mock.detachedPower:SetFrameLevel(baseLevel + ClampPreviewLayer(runtimePower and runtimePower.detachedLevel or conf.detachedPowerBarFrameLevelOffset, Layers.POWER_DETACHED_DEFAULT or 6)) end
     local textBase = (Layers.HealthLevel and Layers.HealthLevel(baseLevel) or (baseLevel + (Layers.HEALTH_OFFSET or 1))) + (Layers.TEXT_BASE_OFFSET or 10)
     if mock.portrait and mock.portrait.SetFrameLevel then mock.portrait:SetFrameLevel(textBase - (Layers.TEXT_BASE_OFFSET or 10) + (Layers.PORTRAIT_OFFSET or 6)) end
-    if mock.cast and mock.cast.SetFrameLevel then mock.cast:SetFrameLevel(baseLevel + 2) end
+    if type(_G.MSUF_GetCastbarFrameLevelOffset) == "function" then
+        box._runtimeCastbarLayer = _G.MSUF_GetCastbarFrameLevelOffset(key, g)
+    else
+        box._runtimeCastbarLayer = R.ReadCastbarNum(g, key, "FrameLevelOffset", "bossCastFrameLevelOffset", 6)
+    end
+    box._runtimeCastbarLayer = ClampPreviewLayer(box._runtimeCastbarLayer, 6)
+    if mock.cast and mock.cast.SetFrameLevel then mock.cast:SetFrameLevel((canvas.GetFrameLevel and canvas:GetFrameLevel() or 0) + box._runtimeCastbarLayer) end
+    if mock.cast and mock.cast.icon and mock.cast.icon.SetFrameLevel then mock.cast.icon:SetFrameLevel((canvas.GetFrameLevel and canvas:GetFrameLevel() or 0) + box._runtimeCastbarLayer + 7) end
     if mock.textFrame and mock.textFrame.SetFrameLevel then mock.textFrame:SetFrameLevel(textBase) end
     if mock.nameLayer and mock.nameLayer.SetFrameLevel then mock.nameLayer:SetFrameLevel(textBase + ClampPreviewLayer(runtimeText and runtimeText.nameLayer or conf.nameTextLayer or g.nameTextLayer, 5)) end
     if mock.raidGroupLayer and mock.raidGroupLayer.SetFrameLevel then mock.raidGroupLayer:SetFrameLevel(textBase + ClampPreviewLayer(runtimeStatus and runtimeStatus.raidGroup and runtimeStatus.raidGroup.layer or conf.raidGroupNameLayer or conf.nameTextLayer or g.raidGroupNameLayer or g.nameTextLayer, 5)) end

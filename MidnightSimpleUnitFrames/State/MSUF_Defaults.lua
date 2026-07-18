@@ -2291,6 +2291,7 @@ end
     if g.castbarPlayerIconOffsetX == nil then g.castbarPlayerIconOffsetX = 0 end
     if g.castbarPlayerIconOffsetY == nil then g.castbarPlayerIconOffsetY = 0 end
     local function InitCastbarDetailDefaults(prefix)
+        if g[prefix .. "FrameLevelOffset"] == nil then g[prefix .. "FrameLevelOffset"] = 6 end
         if g[prefix .. "IconPosition"] == nil then g[prefix .. "IconPosition"] = "LEFT" end
         if g[prefix .. "IconSpacing"] == nil then g[prefix .. "IconSpacing"] = 1 end
         if g[prefix .. "IconBorderStyle"] == nil then g[prefix .. "IconBorderStyle"] = "NONE" end
