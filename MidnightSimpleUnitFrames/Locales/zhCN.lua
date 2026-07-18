@@ -700,6 +700,7 @@ local T = {
     ["Style"] = "样式",
     ["Empowered casts"] = "强化施法",
     ["Shake on interrupt"] = "打断时抖动",
+    ["Interrupt display duration (sec)"] = "打断显示时间（秒）",
     ["Shake intensity"] = "抖动强度",
     ["Always use fill direction for all casts"]   = "所有施法均使用填充方向",
     ["Castbar fill direction"] = "施法条填充方向",
@@ -4139,6 +4140,37 @@ L["Yes. Priority Frames inherit the active Party, Raid, or Mythic Raid frame app
 L["Yes. Priority Frames work in parties, raids, and Mythic raids. In a party or dungeon they inherit Party Frames; in a raid they inherit the active Raid or Mythic Raid setup. They do not create a solo strip, and the matching base Party or Raid frames must be enabled."] = "是的。优先框架适用于聚会、突袭和神话突袭。在队伍或地下城中，他们继承队伍框架；在突袭中，他们继承活跃的突袭或神话突袭设置。它们不会创建单独的条带，并且必须启用匹配的基本派对或团队框架。"
 L["|cffffd200"] = "|cffffd200"
 L["|cffffffff"] = "|cffffffff"
+
+-- Beta 22 Menu2 additions.
+L["Advanced color tools"] = "高级颜色工具"
+L["Applies to the entire castbar: bar, icon, all text, effects, and border. The castbar shares its Unit Frame strata; this value directly sets its frame level, so higher values draw above lower values."] = "应用于整个施法条：条、图标、全部文字、效果和边框。施法条与单位框架共用层级；此值直接设置其框架层级，因此较高的值会显示在较低的值上方。"
+L["Ask MSUF"] = "询问 MSUF"
+L["Bar Background"] = "条背景"
+L["Best matches"] = "最佳匹配"
+L["Combat Feedback"] = "战斗反馈"
+L["Copies the complete Aura workspace: visibility, layout, Blizzard filters, Buff/Debuff blacklists, Custom 1-3, Dots on target, Strata, and Full-Frame effects."] = "复制完整的光环工作区：可见性、布局、暴雪过滤器、增益/减益黑名单、自定义 1-3、目标 DoT、层级和全框架效果。"
+L["Custom 1-3 and Dots on target are stored per frame. Icon styling and Full-Frame effects here only change "] = "自定义 1-3 和目标 DoT 按框架保存。这里的图标样式和全框架效果只会更改 "
+L["Dots on target"] = "目标 DoT"
+L["Fonts > Text Colors"] = "字体 > 文字颜色"
+L["Global font color"] = "全局字体颜色"
+L["Group Highlights"] = "小队高亮"
+L["Health Bars"] = "生命条"
+L["Live"] = "实时"
+L["More Aura Options"] = "更多光环选项"
+L["Move the colored aura handle; Live and dummy previews are display-only."] = "移动彩色光环控制柄；实时和模拟预览仅用于显示。"
+L["No DoT selected. Choose one above or add a custom Spell ID."] = "尚未选择 DoT。请在上方选择一个，或添加自定义法术 ID。"
+L["No exact setting found."] = "未找到完全匹配的设置。"
+L["Open Colors > Global Font Color to choose the default color used by font settings."] = "打开颜色 > 全局字体颜色，选择字体设置使用的默认颜色。"
+L["Open the Fonts page at its Text Colors section."] = "打开字体页面的文字颜色部分。"
+L["Open the frame and expand Auras. Buffs and Debuffs contain their own Blizzard filters and blacklists; Custom 1-3 use whitelists, and Dots on target uses its curated DoT list."] = "打开该框架并展开光环。增益和减益各有暴雪过滤器和黑名单；自定义 1-3 使用白名单，目标 DoT 使用精选 DoT 列表。"
+L["Opens the complete Aura Style page for icon appearance, cooldown and stack text, duration bars, and colors."] = "打开完整的光环样式页面，用于设置图标外观、冷却与层数文字、持续时间条和颜色。"
+L["Quick colors, precise RGB and HEX values, recent colors, saved colors, and class colors."] = "快速颜色、精确 RGB 和 HEX 值、最近颜色、已保存颜色和职业颜色。"
+L["Searching settings..."] = "正在搜索设置..."
+L["Searching..."] = "正在搜索..."
+L["Source: current target · Ownership: only mine · Harmful DoTs only · "] = "来源：当前目标 · 归属：仅自己 · 仅有害 DoT · "
+L["State Tints"] = "状态色调"
+L["Up/Down  Enter"] = "上/下  回车"
+L["Whole Castbar Layer"] = "整个施法条层级"
 L["Icon Zoom (%)"] = "图标缩放 (%)"
 
 -- 新手工作流和智能搜索。

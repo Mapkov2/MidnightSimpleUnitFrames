@@ -390,6 +390,7 @@ local T = {
     ["Style"] = "Style",
     ["Empowered casts"] = "Sorts renforcés",
     ["Shake on interrupt"] = "Tremblement à l'interruption",
+    ["Interrupt display duration (sec)"] = "Durée d'affichage de l'interruption (s)",
     ["Shake intensity"] = "Intensité du tremblement",
     ["Always use fill direction for all casts"] = "Toujours utiliser la direction de remplissage pour tous les sorts",
     ["Castbar fill direction"] = "Direction de remplissage de la barre de sort",
@@ -3911,6 +3912,37 @@ L["Yes. Priority Frames inherit the active Party, Raid, or Mythic Raid frame app
 L["Yes. Priority Frames work in parties, raids, and Mythic raids. In a party or dungeon they inherit Party Frames; in a raid they inherit the active Raid or Mythic Raid setup. They do not create a solo strip, and the matching base Party or Raid frames must be enabled."] = "Oui. Les cadres prioritaires fonctionnent dans les groupes, les raids et les raids mythiques. Dans un groupe ou un donjon, ils héritent des cadres de groupe ; dans un raid, ils héritent de la configuration active Raid ou Mythic Raid. Ils ne créent pas de bande solo et les images de base Party ou Raid correspondantes doivent être activées."
 L["|cffffd200"] = "|cffffd200"
 L["|cffffffff"] = "|cffffffff"
+
+-- Beta 22 Menu2 additions.
+L["Advanced color tools"] = "Outils de couleur avancés"
+L["Applies to the entire castbar: bar, icon, all text, effects, and border. The castbar shares its Unit Frame strata; this value directly sets its frame level, so higher values draw above lower values."] = "S’applique à toute la barre d’incantation : barre, icône, textes, effets et bordure. La barre partage la strate de son cadre d’unité ; cette valeur définit directement son niveau, les valeurs élevées étant affichées au-dessus des faibles."
+L["Ask MSUF"] = "Demander à MSUF"
+L["Bar Background"] = "Arrière-plan de barre"
+L["Best matches"] = "Meilleurs résultats"
+L["Combat Feedback"] = "Retour de combat"
+L["Copies the complete Aura workspace: visibility, layout, Blizzard filters, Buff/Debuff blacklists, Custom 1-3, Dots on target, Strata, and Full-Frame effects."] = "Copie tout l’espace de travail des auras : visibilité, disposition, filtres Blizzard, listes noires des améliorations/affaiblissements, Personnalisé 1-3, DoTs sur la cible, strate et effets plein cadre."
+L["Custom 1-3 and Dots on target are stored per frame. Icon styling and Full-Frame effects here only change "] = "Personnalisé 1-3 et les DoTs sur la cible sont enregistrés par cadre. Ici, le style des icônes et les effets plein cadre ne modifient que "
+L["Dots on target"] = "DoTs sur la cible"
+L["Fonts > Text Colors"] = "Polices > Couleurs du texte"
+L["Global font color"] = "Couleur globale de police"
+L["Group Highlights"] = "Surbrillances de groupe"
+L["Health Bars"] = "Barres de vie"
+L["Live"] = "En direct"
+L["More Aura Options"] = "Plus d’options d’aura"
+L["Move the colored aura handle; Live and dummy previews are display-only."] = "Déplacez la poignée d’aura colorée ; les aperçus en direct et factices servent uniquement à l’affichage."
+L["No DoT selected. Choose one above or add a custom Spell ID."] = "Aucun DoT sélectionné. Choisissez-en un ci-dessus ou ajoutez un ID de sort personnalisé."
+L["No exact setting found."] = "Aucun réglage exact trouvé."
+L["Open Colors > Global Font Color to choose the default color used by font settings."] = "Ouvrez Couleurs > Couleur globale de police pour choisir la couleur par défaut des réglages de police."
+L["Open the Fonts page at its Text Colors section."] = "Ouvrez la page Polices dans la section Couleurs du texte."
+L["Open the frame and expand Auras. Buffs and Debuffs contain their own Blizzard filters and blacklists; Custom 1-3 use whitelists, and Dots on target uses its curated DoT list."] = "Ouvrez le cadre et développez Auras. Améliorations et affaiblissements ont leurs propres filtres Blizzard et listes noires ; Personnalisé 1-3 utilise des listes blanches et DoTs sur la cible sa liste de DoTs sélectionnée."
+L["Opens the complete Aura Style page for icon appearance, cooldown and stack text, duration bars, and colors."] = "Ouvre la page complète Style d’aura pour l’apparence des icônes, les textes de recharge et de cumuls, les barres de durée et les couleurs."
+L["Quick colors, precise RGB and HEX values, recent colors, saved colors, and class colors."] = "Couleurs rapides, valeurs RVB et HEX précises, couleurs récentes, couleurs enregistrées et couleurs de classe."
+L["Searching settings..."] = "Recherche des réglages..."
+L["Searching..."] = "Recherche..."
+L["Source: current target · Ownership: only mine · Harmful DoTs only · "] = "Source : cible actuelle · Propriétaire : uniquement moi · DoTs néfastes seulement · "
+L["State Tints"] = "Teintes d’état"
+L["Up/Down  Enter"] = "Haut/Bas  Entrée"
+L["Whole Castbar Layer"] = "Niveau de toute la barre d’incantation"
 L["Icon Zoom (%)"] = "Zoom de l'icône (%)"
 
 -- Parcours débutant et recherche intelligente.

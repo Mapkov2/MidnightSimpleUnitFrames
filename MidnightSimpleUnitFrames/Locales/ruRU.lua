@@ -614,6 +614,7 @@ local MSUF2_MENU_AUTO_ruRU = {
     ["Shadow, Ret, Ele, Enh, Balance, Feral, WW"] = "Тень, Рет, Эле, Энх, Баланс, Ферал, WW",
     ["Shake & Fill Direction"] = "Встряхните и наполните направление",
     ["Shake on interrupt"] = "Встряхнуть при прерывании",
+    ["Interrupt display duration (sec)"] = "Время отображения прерывания (с)",
     ["Shake strength"] = "Встряхните силу",
     ["Shape"] = "Форма",
     ["Shared baseline plus per-unit and group-frame font overrides."] = "Общая базовая линия, а также переопределение шрифтов для отдельных единиц и групповых фреймов.",
@@ -3528,6 +3529,37 @@ L["Yes. Priority Frames inherit the active Party, Raid, or Mythic Raid frame app
 L["Yes. Priority Frames work in parties, raids, and Mythic raids. In a party or dungeon they inherit Party Frames; in a raid they inherit the active Raid or Mythic Raid setup. They do not create a solo strip, and the matching base Party or Raid frames must be enabled."] = "Да. Рамки приоритета работают в группах, рейдах и эпохальных рейдах. В группе или подземелье они наследуют партийные рамки; в рейде они наследуют активную настройку рейда или мифического рейда. Они не создают одиночную полосу, и соответствующие базовые рамки Party или Raid должны быть включены."
 L["|cffffd200"] = "|cffffd200"
 L["|cffffffff"] = "|cffffffff"
+
+-- Beta 22 Menu2 additions.
+L["Advanced color tools"] = "Расширенные инструменты цвета"
+L["Applies to the entire castbar: bar, icon, all text, effects, and border. The castbar shares its Unit Frame strata; this value directly sets its frame level, so higher values draw above lower values."] = "Применяется ко всей полосе заклинания: полосе, значку, тексту, эффектам и рамке. Полоса использует слой рамки персонажа; это значение напрямую задаёт её уровень, поэтому большие значения отображаются поверх меньших."
+L["Ask MSUF"] = "Спросить MSUF"
+L["Bar Background"] = "Фон полосы"
+L["Best matches"] = "Лучшие совпадения"
+L["Combat Feedback"] = "Отклик в бою"
+L["Copies the complete Aura workspace: visibility, layout, Blizzard filters, Buff/Debuff blacklists, Custom 1-3, Dots on target, Strata, and Full-Frame effects."] = "Копирует всю область аур: видимость, расположение, фильтры Blizzard, чёрные списки усилений/ослаблений, Пользовательские 1-3, DoT на цели, слой и эффекты всей рамки."
+L["Custom 1-3 and Dots on target are stored per frame. Icon styling and Full-Frame effects here only change "] = "Пользовательские 1-3 и DoT на цели сохраняются для каждой рамки. Стиль значков и эффекты всей рамки здесь изменяют только "
+L["Dots on target"] = "DoT на цели"
+L["Fonts > Text Colors"] = "Шрифты > Цвета текста"
+L["Global font color"] = "Общий цвет шрифта"
+L["Group Highlights"] = "Подсветка группы"
+L["Health Bars"] = "Полосы здоровья"
+L["Live"] = "В игре"
+L["More Aura Options"] = "Другие параметры аур"
+L["Move the colored aura handle; Live and dummy previews are display-only."] = "Перемещайте цветной маркер ауры; игровые и тестовые предпросмотры предназначены только для отображения."
+L["No DoT selected. Choose one above or add a custom Spell ID."] = "DoT не выбран. Выберите его выше или добавьте свой ID заклинания."
+L["No exact setting found."] = "Точная настройка не найдена."
+L["Open Colors > Global Font Color to choose the default color used by font settings."] = "Откройте Цвета > Общий цвет шрифта, чтобы выбрать цвет по умолчанию для настроек шрифта."
+L["Open the Fonts page at its Text Colors section."] = "Откройте страницу Шрифты в разделе Цвета текста."
+L["Open the frame and expand Auras. Buffs and Debuffs contain their own Blizzard filters and blacklists; Custom 1-3 use whitelists, and Dots on target uses its curated DoT list."] = "Откройте рамку и разверните Ауры. У усилений и ослаблений есть свои фильтры Blizzard и чёрные списки; Пользовательские 1-3 используют белые списки, а DoT на цели — выбранный список DoT."
+L["Opens the complete Aura Style page for icon appearance, cooldown and stack text, duration bars, and colors."] = "Открывает полную страницу стиля аур для вида значков, текста времени восстановления и стаков, полос длительности и цветов."
+L["Quick colors, precise RGB and HEX values, recent colors, saved colors, and class colors."] = "Быстрые цвета, точные значения RGB и HEX, недавние и сохранённые цвета, а также цвета классов."
+L["Searching settings..."] = "Поиск настроек..."
+L["Searching..."] = "Поиск..."
+L["Source: current target · Ownership: only mine · Harmful DoTs only · "] = "Источник: текущая цель · Владелец: только мои · Только вредоносные DoT · "
+L["State Tints"] = "Оттенки состояний"
+L["Up/Down  Enter"] = "Вверх/Вниз  Ввод"
+L["Whole Castbar Layer"] = "Уровень всей полосы заклинания"
 L["Icon Zoom (%)"] = "Масштаб значка (%)"
 
 -- Рабочий процесс для новичков и умный поиск.
