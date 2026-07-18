@@ -364,12 +364,12 @@ local function CreateMover(key, cfg)
         self._coordFS:Show()
         if EM2.Focus and EM2.Focus.ClearHover then EM2.Focus.ClearHover("drag") end
 
-        if _G.MSUF_EM_UndoBeforeChange then
-            if cfg.popupType == "castbar" then
-                _G.MSUF_EM_UndoBeforeChange("castbar", cfg.castbarUnit or key:sub(9))
-            else
-                _G.MSUF_EM_UndoBeforeChange("unit", key)
-            end
+        local historyCategory = cfg.popupType == "castbar" and "castbar" or "unit"
+        local historyKey = cfg.popupType == "castbar" and (cfg.castbarUnit or key:sub(9)) or key
+        if type(_G.MSUF_EM_UndoBeginChange) == "function" then
+            self._msufHistoryDrag = _G.MSUF_EM_UndoBeginChange(historyCategory, historyKey, "Move") == true
+        elseif _G.MSUF_EM_UndoBeforeChange then
+            _G.MSUF_EM_UndoBeforeChange(historyCategory, historyKey)
         end
 
         if EM2.Ticker then EM2.Ticker.BeginDrag(self, key, cfg) end
@@ -388,6 +388,10 @@ local function CreateMover(key, cfg)
 
         local moved = false
         if EM2.Ticker then moved = EM2.Ticker.EndDrag() end
+        if self._msufHistoryDrag and type(_G.MSUF_EM_UndoCommitChange) == "function" then
+            self._msufHistoryDrag = nil
+            _G.MSUF_EM_UndoCommitChange()
+        end
 
         --- Restore hover
         local t = T()

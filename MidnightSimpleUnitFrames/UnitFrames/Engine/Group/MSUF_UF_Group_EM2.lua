@@ -813,12 +813,10 @@ local function BeginGroupDrag(frame, kind, source)
   if EM2.Focus and EM2.Focus.SetSelection then
     EM2.Focus.SetSelection(key, kind == "priority" and "placement" or nil, nil, { source = source or "group-drag" })
   end
-  if _G.MSUF_EM_UndoBeforeChange then
-    if kind == "priority" then
-      _G.MSUF_EM_UndoBeforeChange("gf", kind)
-    else
-      _G.MSUF_EM_UndoBeforeChange("unit", key)
-    end
+  if type(_G.MSUF_EM_UndoBeginChange) == "function" then
+    frame._msufGFHistoryDrag = _G.MSUF_EM_UndoBeginChange("gf", kind, "Move") == true
+  elseif _G.MSUF_EM_UndoBeforeChange then
+    _G.MSUF_EM_UndoBeforeChange("gf", kind)
   end
   if kind == "priority" then
     DetachPriorityForFreeMove(GetConf(kind), frame)
@@ -833,6 +831,10 @@ local function EndGroupDrag(frame)
   frame._msufGFEM2Dragging = nil
   local moved = false
   if EM2.Ticker then moved = EM2.Ticker.EndDrag() == true end
+  if frame._msufGFHistoryDrag and type(_G.MSUF_EM_UndoCommitChange) == "function" then
+    frame._msufGFHistoryDrag = nil
+    _G.MSUF_EM_UndoCommitChange()
+  end
   if moved then frame._msufGFEM2LastDragEnd = GetTime and GetTime() or 0 end
   if EM2.Snap and EM2.Snap.HideGuides then EM2.Snap.HideGuides() end
   return moved
@@ -1744,6 +1746,14 @@ local function SyncGFPopups()
   end
 end
 
+local function RefreshGFHistoryControls()
+  for _, popup in pairs(_popups) do
+    if popup and popup.IsShown and popup:IsShown() and popup._refreshUndoRedo then
+      popup._refreshUndoRedo()
+    end
+  end
+end
+
 local function GFPopupIsOpen()
   for _, popup in pairs(_popups) do
     if popup and popup.IsShown and popup:IsShown() then return true end
@@ -1758,6 +1768,7 @@ end
 ExportPublic("MSUF_EM2_ShowGFPopup", ShowGFPopup)
 ExportPublic("MSUF_EM2_HideGFPopup", HideGFPopup)
 ExportPublic("MSUF_EM2_SyncGFPopups", SyncGFPopups)
+ExportPublic("MSUF_EM2_RefreshGFHistoryControls", RefreshGFHistoryControls)
 ExportPublic("MSUF_EM2_GFPopupIsOpen", GFPopupIsOpen)
 ExportPublic("MSUF_GF_EM2_ShowPreview", ShowPreviewOnly)
 ExportPublic("MSUF_GF_EM2_HidePreview", HidePreviewOnly)

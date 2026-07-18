@@ -532,6 +532,7 @@ function UnitPopup.Open(u, parent) if BlockConfigCombatLocked() then return fals
 function UnitPopup.Close() if pf then pf:Hide() end end
 function UnitPopup.IsOpen() return pf and pf:IsShown() or false end
 function UnitPopup.Sync() if pf and pf:IsShown() then Sync() end end
+function UnitPopup.RefreshHistory() if pf and pf:IsShown() and pf._refreshUndoRedo then pf._refreshUndoRedo() end end
 local ASSISTANT_UNIT_FIELDS = {
     x = { "xBox" }, y = { "yBox" }, width = { "wBox" }, height = { "hBox" },
     detachedX = { "dpbXBox" }, detachedY = { "dpbYBox" }, detachedWidth = { "dpbWBox" },

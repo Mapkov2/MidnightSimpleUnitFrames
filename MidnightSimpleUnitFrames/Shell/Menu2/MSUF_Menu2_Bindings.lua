@@ -24,9 +24,14 @@ local historySessionBaseSnapshot
 local historySessionSnapshot
 local historySessionDirty = false
 local historyTransaction
+local historySurfaces = {}
+local historySurfaceMarkers = {}
+local historySurfaceCount = 0
+local deferredHistoryCommit
 local refreshQueued = false
+local refreshTimer
 local MENU_REFRESH_DELAY = 0.04
-local C_Timer = _G.C_Timer
+local C_Timer = M.MenuTimer or _G.C_Timer
 local UNIT_KEYS = KS("player", "target", "targettarget", "focustarget", "focus", "pet", "boss")
 local TEXT_SLOT_SIDES = { "Left", "Center", "Right" }
 local TEXT_SLOT_SIDE_SET = { Left = true, Center = true, Right = true }
@@ -216,15 +221,21 @@ local function DeepEqual(a, b, seen)
     end
     return true
 end
-local function DeepReplace(dst, src)
+local function DeepReplace(dst, src, seen)
     if type(dst) ~= "table" or type(src) ~= "table" then return end
+    seen = seen or {}
+    seen[src] = dst
     for k in pairs(dst) do
         if src[k] == nil then dst[k] = nil end
     end
     for k, v in pairs(src) do
         if type(v) == "table" then
-            if type(dst[k]) ~= "table" then dst[k] = {} end
-            DeepReplace(dst[k], v)
+            if seen[v] then
+                dst[k] = seen[v]
+            else
+                if type(dst[k]) ~= "table" then dst[k] = {} end
+                DeepReplace(dst[k], v, seen)
+            end
         else
             dst[k] = v
         end
@@ -300,17 +311,29 @@ local function QueueMenuRefresh()
     refreshQueued = true
     local function Run()
         refreshQueued = false
+        refreshTimer = nil
+        if IsConfigCombatLocked() then return end
         if M.frame and M.frame.IsShown and M.frame:IsShown() and M.Refresh then M.Refresh() end
     end
-    if C_Timer and C_Timer.After then
+    if C_Timer and C_Timer.NewTimer then
+        refreshTimer = C_Timer.NewTimer(MENU_REFRESH_DELAY, Run)
+    elseif C_Timer and C_Timer.After then
         C_Timer.After(MENU_REFRESH_DELAY, Run)
     else
         Run()
     end
 end
+local function CancelQueuedMenuRefresh()
+    refreshQueued = false
+    if refreshTimer and refreshTimer.Cancel then refreshTimer:Cancel() end
+    refreshTimer = nil
+end
 local function NotifyHistoryChanged(refreshMenu)
     if M.RefreshHistoryControls then SafeInvoke(M.RefreshHistoryControls) end
     if M.frame and M.frame.RefreshStatus then SafeInvoke(M.frame.RefreshStatus, M.frame) end
+    if type(_G.MSUF_EM_RefreshHistoryControls) == "function" then
+        SafeInvoke(_G.MSUF_EM_RefreshHistoryControls)
+    end
     if refreshMenu == true then QueueMenuRefresh() end
 end
 local function FeedbackLabel(text, limit)
@@ -382,21 +405,48 @@ local HISTORY_PAGE_RESET_FEATURES = {
 local HISTORY_CLASSPOWER_RUNTIME = { full = true, cdm = true }
 local HISTORY_CLASSPOWER_FLAGS = { preview = true, applyAll = false, classpower = true, classpowerApplied = true }
 local COLOR_CLASSPOWER_RUNTIME = { colors = true, playerHP = true }
+local RequestHistoryAurasRuntime
+local RequestHistoryGroupRuntime
 local function HistoryUnitFromSource(source)
     if type(source) ~= "string" then return nil end
     local unit = source:match("^unit:([^:]+):")
     if unit then return NormalizeHistoryUnit(unit) end
     unit = source:match("^apply:unit:([^:]+):")
     if unit then return NormalizeHistoryUnit(unit) end
+    unit = source:match("^edit_mode:unit:([^:]+)")
+    if unit then return NormalizeHistoryUnit(unit) end
+    unit = source:match("^unitPreview:([^:]+):")
+    if unit then return NormalizeHistoryUnit(unit) end
+    unit = source:match("^status:reset:([^:]+):")
+    if unit then return NormalizeHistoryUnit(unit) end
     local pageKey = source:match("^page:reset:([^:]+)$")
+    if pageKey then return NormalizeHistoryUnit(HISTORY_PAGE_RESET_UNITS[pageKey]) end
+    pageKey = source:match("^([^:]+):")
     if pageKey then return NormalizeHistoryUnit(HISTORY_PAGE_RESET_UNITS[pageKey]) end
 end
 local function HistoryFeatureFromSource(source)
     if type(source) ~= "string" then return nil end
     local pageKey = source:match("^page:reset:([^:]+)$")
     if pageKey then return HISTORY_PAGE_RESET_FEATURES[pageKey] end
+    local editCategory, editKey = source:match("^edit_mode:([^:]+):?([^:]*)")
+    if editCategory == "castbar" then return "castbar", editKey end
+    if editCategory == "aura" then return "auras", editKey end
+    if editCategory == "gf" then return "group", editKey end
+    local scope = source:match("^groupPreview:([^:]+):") or source:match("^group:([^:]+):")
+    if scope then return "group", scope end
+    scope = source:match("^auras:([^:]+):")
+    if scope then return "auras", scope end
+    if source:match("^classPowerPreview:") or source:match("^classpower:") then return "classpower" end
+    pageKey = source:match("^([^:]+):")
+    if not pageKey then return nil end
+    if pageKey:match("^gf_") then return "group" end
+    if pageKey:match("^auras3") then return "auras" end
+    if pageKey == "opt_bars" then return "bars" end
+    if pageKey == "opt_fonts" then return "fonts" end
+    if pageKey == "opt_colors" then return "colors" end
+    return HISTORY_PAGE_RESET_FEATURES[pageKey]
 end
-local function ApplyScopedFeatureRuntime(kind, reason)
+local function ApplyScopedFeatureRuntime(kind, reason, scope)
     kind = tostring(kind or "")
     reason = reason or "MSUF2_HISTORY_FEATURE"
     if kind == "castbar" then
@@ -412,6 +462,27 @@ local function ApplyScopedFeatureRuntime(kind, reason)
             return true
         end
         return CallGlobal("MSUF_ClassPower_Apply", { full = true, cdm = true })
+    end
+    if kind == "auras" then
+        return RequestHistoryAurasRuntime and RequestHistoryAurasRuntime(reason, scope) or false
+    end
+    if kind == "group" then
+        return RequestHistoryGroupRuntime and RequestHistoryGroupRuntime(reason, scope) or false
+    end
+    if kind == "bars" and ApplyService.RequestBars then
+        return ApplyService.RequestBars(reason, scope) ~= false
+    end
+    if kind == "fonts" and ApplyService.RequestFonts then
+        return ApplyService.RequestFonts(reason, scope) ~= false
+    end
+    if kind == "colors" then
+        local did = ApplyService.RequestColors and ApplyService.RequestColors(reason, scope) ~= false or false
+        if RequestHistoryAurasRuntime then did = RequestHistoryAurasRuntime(reason, scope, true) or did end
+        if ApplyService.RequestClassPower then
+            ApplyService.RequestClassPower(reason, COLOR_CLASSPOWER_RUNTIME, { preview = true, applyAll = false, classpower = true })
+            did = true
+        end
+        return did
     end
     if kind == "gameplay" then
         if M.ApplyGameplay then
@@ -446,18 +517,18 @@ local function ApplyScopedHistoryRestore(reason, source)
         }
         return M.RequestUnitApply(unit, applyReason, opts) ~= false
     end
-    local feature = HistoryFeatureFromSource(source)
-    if feature then return ApplyScopedFeatureRuntime(feature, applyReason) end
+    local feature, scope = HistoryFeatureFromSource(source)
+    if feature then return ApplyScopedFeatureRuntime(feature, applyReason, scope) end
     return false
 end
 
-local function RequestHistoryAurasRuntime(reason)
-    if ApplyService.RequestAuraFonts then
-        ApplyService.RequestAuraFonts("shared", reason or "MSUF2_HISTORY_AURAS")
+RequestHistoryAurasRuntime = function(reason, scope, visuals)
+    if visuals and ApplyService.RequestAuraFonts then
+        ApplyService.RequestAuraFonts(scope or "shared", reason or "MSUF2_HISTORY_AURAS")
         return true
     end
     if ApplyService.RequestAuras then
-        ApplyService.RequestAuras("shared", reason or "MSUF2_HISTORY_AURAS")
+        ApplyService.RequestAuras(scope or "shared", reason or "MSUF2_HISTORY_AURAS")
         return true
     end
     local auras = MSUF and MSUF.MSUF_Auras3
@@ -468,7 +539,17 @@ local function RequestHistoryAurasRuntime(reason)
     return false
 end
 
-local function RequestHistoryGroupRuntime(reason)
+RequestHistoryGroupRuntime = function(reason, kind)
+    kind = kind and tostring(kind) or nil
+    if kind == "gf_party" then kind = "party" end
+    if kind == "gf_raid" then kind = "raid" end
+    if kind == "gf_mythicraid" then kind = "mythicraid" end
+    if kind == "gf_priority" then kind = "priority" end
+    if kind and kind ~= "party" and kind ~= "raid" and kind ~= "mythicraid" and kind ~= "priority" then kind = nil end
+    if kind and ApplyService.RequestGroup then
+        ApplyService.RequestGroup(kind, "reset", reason or "MSUF2_HISTORY_GROUP")
+        return true
+    end
     if ApplyService.RequestGroupReset then
         ApplyService.RequestGroupReset(reason or "MSUF2_HISTORY_GROUP")
         return true
@@ -507,8 +588,12 @@ local function ApplyHistorySnapshot(snapshot, reason, source)
     if historySessionActive then historySessionSnapshot = snapshot end
     historyRestoring = false
     if ApplyScopedHistoryRestore(reason, source) then
+        FlushApplyServiceNow()
         M.CallIf(M.MarkMenuDataDirty, reason or "history")
         RebuildActivePage()
+        if type(_G.MSUF_EM_RefreshAfterHistoryRestore) == "function" then
+            SafeInvoke(_G.MSUF_EM_RefreshAfterHistoryRestore, reason or "MSUF2_HISTORY", source)
+        end
         return true
     end
     -- A restored profile snapshot may span UnitFrames, Auras3, ClassPower, GroupFrames, and
@@ -551,6 +636,9 @@ local function ApplyHistorySnapshot(snapshot, reason, source)
     M.CallIf(M.ApplyLocaleSelection, M.GetLocaleSelection and M.GetLocaleSelection() or "auto")
     M.CallIf(M.MarkMenuDataDirty, reason or "history")
     RebuildActivePage()
+    if type(_G.MSUF_EM_RefreshAfterHistoryRestore) == "function" then
+        SafeInvoke(_G.MSUF_EM_RefreshAfterHistoryRestore, reason or "MSUF2_HISTORY", source)
+    end
     return true
 end
 
@@ -578,6 +666,10 @@ end
 function M.CaptureHistory(label, source, fn)
     if type(fn) ~= "function" then return nil end
     if M.BlockCombatAction() then return false end
+    if historyTransaction and source and historyTransaction.source ~= source then
+        M.CommitHistoryTransaction()
+        return M.CaptureHistory(label, source, fn)
+    end
     if historyDepth > 0 or historyRestoring then
         local ok, result = SafeInvoke(fn)
         if not ok then return nil end
@@ -607,33 +699,126 @@ function M.RunWithHistory(label, source, fn)
     if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then return M.CaptureHistory(label, source, fn) end
     return type(fn) == "function" and fn() or nil
 end
-function M.StartHistorySession()
-    if IsConfigCombatLocked() then return false end
-    if historyTransaction then
-        historyTransaction = nil
-        historyDepth = math.max(0, historyDepth - 1)
-    end
-    historySessionActive = true
-    historySessionBaseSnapshot = nil
-    historySessionSnapshot = nil
-    historySessionDirty = false
-    local undo, redo = EnsureHistoryStacks()
-    WipeTable(undo)
-    WipeTable(redo)
-    NotifyHistoryChanged()
+local function CopyStack(stack)
+    local copy = {}
+    for i = 1, #stack do copy[i] = stack[i] end
+    return copy
 end
-function M.EndHistorySession()
-    historySessionActive = false
-    if historyTransaction then
-        historyTransaction = nil
-        historyDepth = math.max(0, historyDepth - 1)
+local function RestoreStack(stack, saved)
+    WipeTable(stack)
+    for i = 1, #(saved or {}) do stack[i] = saved[i] end
+end
+local function DeferHistoryCommit(label, source, before)
+    -- Combat can interrupt a drag/debounced control between its before/after
+    -- snapshots. Preserve the earliest before-state without copying the DB or
+    -- waking previews in combat; the next config interaction finalizes it.
+    if deferredHistoryCommit then return true end
+    deferredHistoryCommit = {
+        label = label or "MSUF2 change",
+        source = source or "external:change",
+        before = before,
+    }
+    return true
+end
+function M.FlushDeferredHistory(afterSnapshot)
+    if IsConfigCombatLocked() or not deferredHistoryCommit then return false end
+    local pending = deferredHistoryCommit
+    deferredHistoryCommit = nil
+    afterSnapshot = type(afterSnapshot) == "table" and afterSnapshot or SnapshotDB()
+    local pushed = PushHistory(pending.label, pending.source, pending.before, afterSnapshot)
+    if pushed and M.MarkMenuDataDirty then M.MarkMenuDataDirty("history") end
+    return pushed, afterSnapshot
+end
+function M.DeferPreparedHistory(prepared)
+    if historyRestoring or type(prepared) ~= "table" or prepared._msuf2PreparedHistory ~= true then return false end
+    return DeferHistoryCommit(prepared.label, prepared.source, prepared.before)
+end
+function M.StartHistorySession(surface)
+    if IsConfigCombatLocked() then return false end
+    surface = tostring(surface or "menu")
+    if historySurfaces[surface] then
+        M.FlushDeferredHistory()
+        return true
     end
-    historySessionBaseSnapshot = nil
-    historySessionSnapshot = nil
-    historySessionDirty = false
+    local entrySnapshot
+    if deferredHistoryCommit or not historySessionActive or type(historySessionSnapshot) ~= "table" then
+        entrySnapshot = SnapshotDB()
+    else
+        entrySnapshot = historySessionSnapshot
+    end
+    M.FlushDeferredHistory(entrySnapshot)
+    local undo, redo = EnsureHistoryStacks()
+    historySurfaces[surface] = true
+    historySurfaceCount = historySurfaceCount + 1
+    historySurfaceMarkers[surface] = {
+        undo = CopyStack(undo),
+        redo = CopyStack(redo),
+        snapshot = entrySnapshot,
+    }
+    if not historySessionActive then
+        historySessionActive = true
+        historySessionBaseSnapshot = entrySnapshot
+        historySessionSnapshot = historySessionBaseSnapshot
+        historySessionDirty = false
+    end
+    NotifyHistoryChanged()
+    return true
+end
+function M.EndHistorySession(surface)
+    local combatLocked = IsConfigCombatLocked()
+    surface = tostring(surface or "menu")
+    if historyTransaction then
+        local txSurface = type(historyTransaction.source) == "string" and historyTransaction.source:match("^edit_mode:")
+            and "edit_mode" or "menu"
+        if txSurface == surface or historySurfaceCount <= 1 then M.CommitHistoryTransaction() end
+    end
+    if historySurfaces[surface] then
+        historySurfaces[surface] = nil
+        historySurfaceMarkers[surface] = nil
+        historySurfaceCount = math.max(0, historySurfaceCount - 1)
+    end
+    if historySurfaceCount == 0 then
+        historySessionActive = false
+        historySessionBaseSnapshot = nil
+        historySessionSnapshot = nil
+        historySessionDirty = false
+    end
+    if combatLocked then
+        CancelQueuedMenuRefresh()
+    else
+        NotifyHistoryChanged()
+    end
+    return true
+end
+function M.CancelHistorySurface(surface, restoreState)
+    if IsConfigCombatLocked() then return false end
+    surface = tostring(surface or "menu")
+    local marker = historySurfaceMarkers[surface]
+    if not marker then return false end
+    if historyTransaction then M.CancelHistoryTransaction() end
+    if restoreState == true and type(marker.snapshot) == "table" then
+        local profileDB = HistoryProfileDB(marker.snapshot)
+        if type(profileDB) ~= "table" then return false end
+        historyRestoring = true
+        DeepReplace(M.EnsureDB(), profileDB)
+        RestoreProfileRouting(marker.snapshot)
+        historyRestoring = false
+    end
+    local undo, redo = EnsureHistoryStacks()
+    RestoreStack(undo, marker.undo)
+    RestoreStack(redo, marker.redo)
+    historySessionSnapshot = restoreState == true and marker.snapshot or SnapshotDB()
+    historySessionDirty = historySessionActive and type(historySessionBaseSnapshot) == "table"
+        and not DeepEqual(historySessionBaseSnapshot, historySessionSnapshot) or false
+    NotifyHistoryChanged(true)
+    return true
+end
+function M.IsHistorySurfaceActive(surface)
+    return historySurfaces[tostring(surface or "menu")] == true
 end
 function M.CheckpointHistory(label, source)
     if M.BlockCombatAction() then return false end
+    if historyTransaction and source and historyTransaction.source ~= source then M.CommitHistoryTransaction() end
     if historyDepth > 0 or historyRestoring or not historySessionActive or historyTransaction then return false end
     local before = CurrentHistorySnapshot()
     local after = SnapshotDB()
@@ -643,6 +828,7 @@ function M.CheckpointHistory(label, source)
 end
 function M.BeginHistoryTransaction(label, source)
     if M.BlockCombatAction() then return false end
+    if historyTransaction and source and historyTransaction.source ~= source then M.CommitHistoryTransaction() end
     if historyDepth > 0 or historyRestoring or not historySessionActive or historyTransaction then return false end
     historyTransaction = {
         label = label or "MSUF2 change",
@@ -652,14 +838,44 @@ function M.BeginHistoryTransaction(label, source)
     historyDepth = historyDepth + 1
     return true
 end
+function M.PrepareHistoryChange(label, source)
+    if M.BlockCombatAction() then return nil end
+    if historyDepth > 0 or historyRestoring or historyTransaction then return nil end
+    return {
+        _msuf2PreparedHistory = true,
+        label = label or "MSUF change",
+        source = source or "external:change",
+        before = CurrentHistorySnapshot(),
+    }
+end
+function M.CommitPreparedHistory(prepared)
+    if historyRestoring or type(prepared) ~= "table" or prepared._msuf2PreparedHistory ~= true then return false end
+    if IsConfigCombatLocked() then
+        M.DeferPreparedHistory(prepared)
+        return false
+    end
+    local pushed = PushHistory(prepared.label, prepared.source, prepared.before, SnapshotDB())
+    if pushed and M.MarkMenuDataDirty then M.MarkMenuDataDirty("history") end
+    return pushed
+end
 function M.CommitHistoryTransaction()
     local tx = historyTransaction
     if not tx then return false end
     historyTransaction = nil
     historyDepth = math.max(0, historyDepth - 1)
+    if IsConfigCombatLocked() then
+        DeferHistoryCommit(tx.label, tx.source, tx.before)
+        return false
+    end
     local pushed = PushHistory(tx.label, tx.source, tx.before, SnapshotDB())
     if pushed and M.MarkMenuDataDirty then M.MarkMenuDataDirty("history") end
     return pushed
+end
+function M.CancelHistoryTransaction()
+    if not historyTransaction then return false end
+    historyTransaction = nil
+    historyDepth = math.max(0, historyDepth - 1)
+    return true
 end
 function M.ResetHistorySession()
     if M.BlockCombatAction() then return false end
@@ -670,15 +886,22 @@ function M.ResetHistorySession()
     return ok
 end
 function M.ClearHistory()
+    if IsConfigCombatLocked() then return false end
+    deferredHistoryCommit = nil
     local undo, redo = EnsureHistoryStacks()
     WipeTable(undo)
     WipeTable(redo)
+    local clearedSnapshot = next(historySurfaces) and SnapshotDB() or nil
+    for surface in pairs(historySurfaces) do
+        historySurfaceMarkers[surface] = { undo = {}, redo = {}, snapshot = clearedSnapshot }
+    end
     if historySessionActive then
-        historySessionBaseSnapshot = SnapshotDB()
+        historySessionBaseSnapshot = clearedSnapshot or SnapshotDB()
         historySessionSnapshot = historySessionBaseSnapshot
         historySessionDirty = false
     end
     NotifyHistoryChanged()
+    return true
 end
 function M.GetHistoryState()
     local undoStack, redoStack = EnsureHistoryStacks()
@@ -692,28 +915,43 @@ function M.GetHistoryState()
         redoLabel = redo and redo.label or nil,
         undoCount = #undoStack,
         redoCount = #redoStack,
+        activeSurfaces = historySurfaceCount,
     }
 end
 function M.Undo()
     if M.BlockCombatAction() then return false end
+    M.FlushDeferredHistory()
     local undo, redo = EnsureHistoryStacks()
     local entry = table.remove(undo)
     if not entry then return false end
-    redo[#redo + 1] = entry
     local ok = ApplyHistorySnapshot(entry.before, "MSUF2_HISTORY_UNDO", entry.source)
-    if ok and historySessionActive then historySessionDirty = #undo > 0 end
+    if ok then
+        redo[#redo + 1] = entry
+        if historySessionActive and type(historySessionBaseSnapshot) == "table" then
+            historySessionDirty = not DeepEqual(historySessionBaseSnapshot, entry.before)
+        end
+    else
+        undo[#undo + 1] = entry
+    end
     NotifyHistoryChanged()
     if ok then CommandFeedback("Undid " .. FeedbackLabel(entry.label), "info", 1.25) end
     return ok
 end
 function M.Redo()
     if M.BlockCombatAction() then return false end
+    M.FlushDeferredHistory()
     local undo, redo = EnsureHistoryStacks()
     local entry = table.remove(redo)
     if not entry then return false end
-    undo[#undo + 1] = entry
     local ok = ApplyHistorySnapshot(entry.after, "MSUF2_HISTORY_REDO", entry.source)
-    if ok and historySessionActive then historySessionDirty = true end
+    if ok then
+        undo[#undo + 1] = entry
+        if historySessionActive and type(historySessionBaseSnapshot) == "table" then
+            historySessionDirty = not DeepEqual(historySessionBaseSnapshot, entry.after)
+        end
+    else
+        redo[#redo + 1] = entry
+    end
     NotifyHistoryChanged()
     if ok then CommandFeedback("Redid " .. FeedbackLabel(entry.label), "info", 1.25) end
     return ok
@@ -733,7 +971,10 @@ end
 local function WidgetHistorySource(ctx, widget, suffix)
     local key = (ctx and ctx.key) or "page"
     local kind = widget and (widget._msuf2ControlKind or widget.GetObjectType and widget:GetObjectType()) or "control"
-    return tostring(key) .. ":" .. tostring(kind) .. ":" .. tostring(suffix or WidgetHistoryLabel(ctx, widget))
+    local tail = tostring(key) .. ":" .. tostring(kind) .. ":" .. tostring(suffix or WidgetHistoryLabel(ctx, widget))
+    if tostring(key):match("^gf_") then return "group:" .. tostring(M.gfScope or "party") .. ":" .. tail end
+    if tostring(key):match("^auras3") then return "auras:" .. tostring(M.auraScope or "shared") .. ":" .. tail end
+    return tail
 end
 local function CaptureWidgetChange(ctx, widget, label, fn)
     label = label or WidgetHistoryLabel(ctx, widget)
@@ -1724,4 +1965,9 @@ function M.BindColor(ctx, colorButton, getRGB, setRGB, metadata)
     end)
     colorButton:HookScript("OnHide", CommitColorHistory)
     M.AddRefresher(ctx, RefreshColor)
+    RefreshColor()
+    local widgets = M.Widgets
+    if widgets and type(widgets.AttachBoundColorToCollapsible) == "function" then
+        widgets.AttachBoundColorToCollapsible(ctx, colorButton)
+    end
 end

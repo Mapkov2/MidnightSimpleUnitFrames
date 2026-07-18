@@ -963,14 +963,14 @@ local function EnsureHUD()
     undoBtn = AddRowButton(historyItems, historyCluster, "", 44, BTN_H2, "caption", function()
         if _G.MSUF_EM_UndoUndo then _G.MSUF_EM_UndoUndo() end
         HUD.RefreshControls()
-    end, "Undo last position change.")
+    end, "Undo the last MSUF change from Edit Mode or the in-game menu.")
     ExportPublic("MSUF_EditModeUndoBtn", undoBtn)
     AttachHistoryIcon(undoBtn, MEDIA .. "msuf_history_undo_red.png")
 
     redoBtn = AddRowButton(historyItems, historyCluster, "", 44, BTN_H2, "caption", function()
         if _G.MSUF_EM_UndoRedo then _G.MSUF_EM_UndoRedo() end
         HUD.RefreshControls()
-    end, "Redo last undone change.")
+    end, "Redo the last MSUF change from Edit Mode or the in-game menu.")
     ExportPublic("MSUF_EditModeRedoBtn", redoBtn)
     AttachHistoryIcon(redoBtn, MEDIA .. "msuf_history_redo_green.png")
     FinishCluster(historyCluster, historyItems, BTN_H2 + 4, 0)

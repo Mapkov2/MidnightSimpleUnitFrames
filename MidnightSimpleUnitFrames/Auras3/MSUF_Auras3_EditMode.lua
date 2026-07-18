@@ -92,6 +92,7 @@ local GROUPS = {
     custom1 = { customIndex = 1, label = "Custom 1", texture = "Interface\\Icons\\INV_Misc_QuestionMark", color = { 0.45, 0.72, 1.00, 0.28 }, defaultAnchor = "TOPRIGHT", defaultLayer = 9 },
     custom2 = { customIndex = 2, label = "Custom 2", texture = "Interface\\Icons\\INV_Misc_QuestionMark", color = { 0.70, 0.48, 1.00, 0.28 }, defaultAnchor = "TOPRIGHT", defaultLayer = 9 },
     custom3 = { customIndex = 3, label = "Custom 3", texture = "Interface\\Icons\\INV_Misc_QuestionMark", color = { 1.00, 0.58, 0.28, 0.28 }, defaultAnchor = "TOPRIGHT", defaultLayer = 9 },
+    custom4 = { customIndex = 4, label = "Dots on target", texture = "Interface\\Icons\\Ability_Rogue_Garrote", color = { 0.88, 0.24, 0.42, 0.28 }, defaultAnchor = "TOPRIGHT", defaultLayer = 9 },
 }
 
 local LANE_STYLE_KEYS = {
@@ -264,7 +265,7 @@ local function UnitEnabled(auras, unit)
 end
 
 local function UnitHasCustomPreview(unit)
-    for index = 1, 3 do
+    for index = 1, 4 do
         local item = CustomItem and CustomItem(unit, index, false)
         local placed = item and item.placed
         if item and item.enabled == true and (tonumber(placed and placed.max) or 8) > 0 then return true end
@@ -972,11 +973,6 @@ BeginAuraGroupDrag = function(self, fromMotion)
     ExportPublic("MSUF_EM2_ActiveAuraGroup", self._msufA3MoverKind)
     ExportPublic("MSUF_EM2_ActiveAuraUnit", self._msufA3Unit)
 
-    local before = _G.MSUF_EM_UndoBeforeChange
-    if type(before) == "function" and not _G.MSUF__UndoRestoring then
-        before("aura", self._msufA3Unit)
-    end
-
     local cfg = ReadGroupConfig(self._msufA3Unit, self._msufA3MoverKind)
     self._dragStartOffsetX = cfg.x
     self._dragStartOffsetY = cfg.y
@@ -986,6 +982,12 @@ BeginAuraGroupDrag = function(self, fromMotion)
     if not scale or scale == 0 then scale = 1 end
     local cx, cy = GetCursorPosition()
     if not (cx and cy) then return false end
+    if type(_G.MSUF_EM_UndoBeginChange) == "function" and not _G.MSUF__UndoRestoring then
+        self._msufA3HistoryDrag = _G.MSUF_EM_UndoBeginChange("aura", self._msufA3Unit, "Move") == true
+    else
+        local before = _G.MSUF_EM_UndoBeforeChange
+        if type(before) == "function" and not _G.MSUF__UndoRestoring then before("aura", self._msufA3Unit) end
+    end
     self._dragStartCursorX = cx / scale
     self._dragStartCursorY = cy / scale
     self._dragMoved = false
@@ -1042,6 +1044,10 @@ local function EndAuraGroupDrag(self, button, suppressClick)
     self._dragRuntimePending = nil
     self._lastDragElapsed = nil
     self._dragStartedByMotion = nil
+    if self._msufA3HistoryDrag and type(_G.MSUF_EM_UndoCommitChange) == "function" then
+        self._msufA3HistoryDrag = nil
+        _G.MSUF_EM_UndoCommitChange()
+    end
     local Snap = _G.MSUF_EM2 and _G.MSUF_EM2.Snap
     if Snap and Snap.HideGuides then Snap.HideGuides() end
 

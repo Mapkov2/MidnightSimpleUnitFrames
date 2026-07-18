@@ -346,7 +346,9 @@ local function SetupCastbarPreviewEditHandlers(frame, unit)
             if not dragFrame.dragMoved then
                 dragFrame.dragMoved = true
 
-                if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
+                if type(_G.MSUF_EM_UndoBeginChange) == "function" then
+                    dragFrame._msufCastbarHistoryDrag = _G.MSUF_EM_UndoBeginChange("castbar", unit, "Move") == true
+                elseif type(_G.MSUF_EM_UndoBeforeChange) == "function" then
                     _G.MSUF_EM_UndoBeforeChange("castbar", unit, false)
                 end
             end
@@ -420,6 +422,10 @@ local function SetupCastbarPreviewEditHandlers(frame, unit)
         PulsePreview(unit)
         if moved then
             ApplyUnitAndSync(unit)
+        end
+        if self._msufCastbarHistoryDrag and type(_G.MSUF_EM_UndoCommitChange) == "function" then
+            self._msufCastbarHistoryDrag = nil
+            _G.MSUF_EM_UndoCommitChange()
         end
 
         if not moved
