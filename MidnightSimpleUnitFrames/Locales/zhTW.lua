@@ -3533,6 +3533,23 @@ L["Yes. Priority Frames inherit the active Party, Raid, or Mythic Raid frame app
 L["Yes. Priority Frames work in parties, raids, and Mythic raids. In a party or dungeon they inherit Party Frames; in a raid they inherit the active Raid or Mythic Raid setup. They do not create a solo strip, and the matching base Party or Raid frames must be enabled."] = "是的。優先框架適用於派對、突襲和神話突襲。在隊伍或地下城中，他們繼承隊伍框架；在突襲中，他們繼承活躍的突襲或神話突襲設置。它們不會創建單獨的條帶，並且必須啟用匹配的基本派對或團隊框架。"
 L["|cffffd200"] = "|cffffd200"
 L["|cffffffff"] = "|cffffffff"
+L["Icon Zoom (%)"] = "圖示縮放 (%)"
+
+-- 新手流程與智慧搜尋。
+L["Best %d match(es). Open one or ask MSUF for a guided answer."] = "最佳符合項目：%d 個。開啟一個，或向 MSUF 取得引導式回答。"
+L["Choose one task. MSUF opens the right place for you."] = "選擇一項工作，MSUF 會為你開啟正確的位置。"
+L["Complete Tour - every detail"] = "完整導覽 - 所有細節"
+L["Discard"] = "放棄變更"
+L["No exact setting found for \"%s\"."] = "找不到與「%s」完全符合的設定。"
+L["Profiles & backup"] = "設定檔與備份"
+L["Quick Setup - essentials"] = "快速設定 - 必要項目"
+L["Quick Setup started."] = "快速設定已開始。"
+L["ROUTE READY - %s, %s. Press Start."] = "路線已就緒 - %s，%s。按下開始。"
+L["Set up Party & Raid"] = "設定隊伍與團隊"
+L["Start Quick Setup"] = "開始快速設定"
+L["Style Unitframes"] = "美化單位框架"
+L["What do you want to do?"] = "你想做什麼？"
+L["YOUR MOVE - Choose what you want to set up."] = "輪到你了 - 選擇要設定的內容。"
 
 -- MSUF FULL CORE MENU ENGLISH RETRY 2
 -- Generated missing non-Assistant core keys for zhTW.

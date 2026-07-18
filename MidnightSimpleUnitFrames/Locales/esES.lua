@@ -3669,6 +3669,23 @@ L["Yes. Priority Frames inherit the active Party, Raid, or Mythic Raid frame app
 L["Yes. Priority Frames work in parties, raids, and Mythic raids. In a party or dungeon they inherit Party Frames; in a raid they inherit the active Raid or Mythic Raid setup. They do not create a solo strip, and the matching base Party or Raid frames must be enabled."] = "Sí. Los marcos de prioridad funcionan en grupos, incursiones y incursiones míticas. En un grupo o mazmorra heredan Party Frames; en una incursión heredan la configuración de Incursión activa o Incursión Mítica. No crean una franja en solitario y los marcos de grupo o incursión base correspondientes deben estar habilitados."
 L["|cffffd200"] = "|cffffd200"
 L["|cffffffff"] = "|cffffffff"
+L["Icon Zoom (%)"] = "Zoom de icono (%)"
+
+-- Flujo para principiantes y búsqueda inteligente.
+L["Best %d match(es). Open one or ask MSUF for a guided answer."] = "Las mejores %d coincidencias. Abre una o pregunta a MSUF para obtener ayuda guiada."
+L["Choose one task. MSUF opens the right place for you."] = "Elige una tarea. MSUF abre el lugar correcto."
+L["Complete Tour - every detail"] = "Recorrido completo - todos los detalles"
+L["Discard"] = "Descartar"
+L["No exact setting found for \"%s\"."] = "No se encontró una opción exacta para \"%s\"."
+L["Profiles & backup"] = "Perfiles y copia de seguridad"
+L["Quick Setup - essentials"] = "Configuración rápida - lo esencial"
+L["Quick Setup started."] = "Configuración rápida iniciada."
+L["ROUTE READY - %s, %s. Press Start."] = "RUTA LISTA - %s, %s. Pulsa Iniciar."
+L["Set up Party & Raid"] = "Configurar grupo y banda"
+L["Start Quick Setup"] = "Iniciar configuración rápida"
+L["Style Unitframes"] = "Diseñar marcos de unidad"
+L["What do you want to do?"] = "¿Qué quieres hacer?"
+L["YOUR MOVE - Choose what you want to set up."] = "TU TURNO - Elige qué quieres configurar."
 
 -- MSUF FULL CORE MENU ENGLISH RETRY 2
 -- Generated missing non-Assistant core keys for esES.

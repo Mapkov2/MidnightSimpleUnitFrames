@@ -3489,6 +3489,23 @@ L["Yes. Priority Frames inherit the active Party, Raid, or Mythic Raid frame app
 L["Yes. Priority Frames work in parties, raids, and Mythic raids. In a party or dungeon they inherit Party Frames; in a raid they inherit the active Raid or Mythic Raid setup. They do not create a solo strip, and the matching base Party or Raid frames must be enabled."] = "그렇습니다. 우선 순위 프레임은 파티, 공격대, 신화 공격대에서 작동합니다. 파티나 던전에서는 파티 프레임을 상속받습니다. 공격대에서는 활성 공격대 또는 신화 공격대 설정을 상속합니다. 솔로 스트립을 생성하지 않으며 일치하는 기본 파티 또는 Raid 프레임을 활성화해야 합니다."
 L["|cffffd200"] = "|cffffd200"
 L["|cffffffff"] = "|cffffffff"
+L["Icon Zoom (%)"] = "아이콘 확대/축소 (%)"
+
+-- 초보자 작업 흐름 및 스마트 검색.
+L["Best %d match(es). Open one or ask MSUF for a guided answer."] = "가장 적합한 결과 %d개입니다. 하나를 열거나 MSUF에게 안내 답변을 요청하세요."
+L["Choose one task. MSUF opens the right place for you."] = "작업 하나를 선택하세요. MSUF가 알맞은 위치를 엽니다."
+L["Complete Tour - every detail"] = "전체 둘러보기 - 모든 세부 정보"
+L["Discard"] = "버리기"
+L["No exact setting found for \"%s\"."] = "\"%s\"에 맞는 정확한 설정을 찾지 못했습니다."
+L["Profiles & backup"] = "프로필 및 백업"
+L["Quick Setup - essentials"] = "빠른 설정 - 필수 항목"
+L["Quick Setup started."] = "빠른 설정을 시작했습니다."
+L["ROUTE READY - %s, %s. Press Start."] = "경로 준비 완료 - %s, %s. 시작을 누르세요."
+L["Set up Party & Raid"] = "파티 및 공격대 설정"
+L["Start Quick Setup"] = "빠른 설정 시작"
+L["Style Unitframes"] = "유닛 프레임 꾸미기"
+L["What do you want to do?"] = "무엇을 하시겠어요?"
+L["YOUR MOVE - Choose what you want to set up."] = "이제 선택하세요 - 설정할 항목을 고르세요."
 
 -- MSUF FULL CORE MENU ENGLISH RETRY 2
 -- Generated missing non-Assistant core keys for koKR.
