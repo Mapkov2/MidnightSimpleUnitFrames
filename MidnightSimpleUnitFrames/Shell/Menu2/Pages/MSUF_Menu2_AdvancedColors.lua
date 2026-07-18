@@ -1179,6 +1179,23 @@ local function BuildAuraAndPortraitColors(ctx, b, CH)
         ApplyPortraitColors("PORTRAIT_COLOR_RESET")
     end, "portrait.reset")
 end
+local function OpenFontsTextColors()
+    if W.CloseDropdown then W.CloseDropdown() end
+    local request = {
+        pageKey = "opt_fonts",
+        sectionId = "fonts_name_power_colors",
+        explicit = true,
+        consumed = false,
+        source = "colors-global-font-to-fonts",
+        changedAt = GetTime and GetTime() or 0,
+    }
+    _G.MSUF_EM2_MenuFocusRequest = request
+    if type(M.SelectPage) ~= "function" or M.SelectPage("opt_fonts") == false then
+        if _G.MSUF_EM2_MenuFocusRequest == request then _G.MSUF_EM2_MenuFocusRequest = nil end
+        return false
+    end
+    return true
+end
 local function BuildFontAndClassColors(ctx, b, CH)
     local font = b:CollapsibleSection("colors_font", "Global Font Color", 100, false)
     CH.ApiColorAt(ctx, font, "Global font color", 12, -10, "GetGlobalFontColor", "SetGlobalFontColor", 1, 1, 1)
@@ -1189,6 +1206,14 @@ local function BuildFontAndClassColors(ctx, b, CH)
             ApplyColors()
         end
     end, "font.use_palette")
+    local openFonts = T.Button(font, "Fonts > Text Colors", 190, 22)
+    openFonts:SetPoint("TOPRIGHT", font, "TOPRIGHT", -16, -50)
+    if T.CenterButtonLabel then T.CenterButtonLabel(openFonts) end
+    if M.AddTooltip then
+        M.AddTooltip(openFonts, "Fonts > Text Colors", "Open the Fonts page at its Text Colors section.", { hook = true })
+    end
+    openFonts:SetScript("OnClick", OpenFontsTextColors)
+    RegisterControl(openFonts, Meta("font.open_text_colors", "navigation", { navigationKey = "opt_fonts" }), "Fonts > Text Colors", "button")
     local tokens = GetClassTokens()
     local classRows = max(1, floor((#tokens + 3) / 4))
     local classResetY = -36 - (classRows * 36)
@@ -1807,4 +1832,4 @@ local function BuildColors(ctx)
     BuildAuraAndPortraitColors(ctx, b, CH)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-M.RegisterPage("opt_colors", { title = "MSUF Colors", build = BuildColors, version = 11 })
+M.RegisterPage("opt_colors", { title = "MSUF Colors", build = BuildColors, version = 12 })
