@@ -1508,6 +1508,38 @@ do
     local mainSource = mainFile:read("*a")
     mainFile:close()
     Truthy(
+        mainSource:find("_G.MSUF_ScheduleLateAnchorReanchor = function(forcePosition)", 1, true)
+            and mainSource:find("if forcePosition then state.forcePosition = true end", 1, true),
+        "Blizzard CDM world-entry reanchors preserve the forced refresh bit"
+    )
+    Truthy(
+        mainSource:find('if event == "PLAYER_ENTERING_WORLD" then', 1, true)
+            and mainSource:find("_G.MSUF_ScheduleLateAnchorReanchor(true)", 1, true)
+            and mainSource:find('_G.MSUF_ScheduleCooldownWidthRefresh("EssentialCooldownViewer")', 1, true),
+        "world entry requests one forced CDM anchor and width refresh"
+    )
+    Truthy(
+        not mainSource:find("MSUF_LATE_ANCHOR_RETRY_DELAYS", 1, true),
+        "obsolete multi-second CDM anchor retry loop stays removed"
+    )
+    Truthy(
+        mainSource:find("MSUF_ForceReanchorAllUnitFrames_Once = function(refreshConfig, skipScreenClamp)", 1, true)
+            and mainSource:find("_G.MSUF_FlushCDMBridgeRefresh(forcePosition == true)", 1, true)
+            and mainSource:find("MSUF_ForceReanchorAllUnitFrames_Once(nil, skipScreenClamp == true)", 1, true),
+        "world-entry CDM reanchor cannot rewrite configured offsets through screen clamping"
+    )
+    Truthy(
+        mainSource:find("_G.MSUF_RunPostCombatReanchorPass(skipScreenClamp)", 1, true),
+        "CDM world-entry no-clamp state survives an in-combat zone transition"
+    )
+end
+
+do
+    local mainPath = addonRoot .. "/MidnightSimpleUnitFrames.lua"
+    local mainFile = assert(io.open(mainPath, "rb"))
+    local mainSource = mainFile:read("*a")
+    mainFile:close()
+    Truthy(
         mainSource:find(
             "local isExternal = external and _G.MSUF_IsCooldownExternalAnchorKey",
             1,

@@ -2471,9 +2471,8 @@ end
 
 _G.MSUF_LateAnchorReanchorState = _G.MSUF_LateAnchorReanchorState or {
     pending = false,
-    attempts = 0,
+    forcePosition = false,
 }
-local MSUF_LATE_ANCHOR_RETRY_DELAYS = { 0, 0.05, 0.20, 0.60, 1.20, 2.00 }
 local MSUF_LATE_ANCHOR_UNIT_KEYS = { "player", "target", "targettarget", "focus", "focustarget", "pet", "boss" }
 
 local function MSUF_HasLateAnchorConfig()
@@ -2496,7 +2495,7 @@ local function MSUF_HasLateAnchorConfig()
     return false
 end
 
-local function MSUF_LateAnchorReanchorFlush()
+local function MSUF_LateAnchorReanchorFlush(forcePosition)
     if InCombatLockdown and InCombatLockdown() then
         if _G.MSUF_RequestUnitFrameReanchorAfterCombat then
             _G.MSUF_RequestUnitFrameReanchorAfterCombat()
@@ -2508,15 +2507,22 @@ local function MSUF_LateAnchorReanchorFlush()
     end
     _G.MSUF_CDMBridgeDirty = true
     if type(_G.MSUF_FlushCDMBridgeRefresh) == "function" then
-        _G.MSUF_FlushCDMBridgeRefresh()
+        _G.MSUF_FlushCDMBridgeRefresh(forcePosition == true)
     elseif type(_G.MSUF_OnCDMExtensionChanged) == "function" then
         _G.MSUF_OnCDMExtensionChanged()
     end
     return true
 end
 
-_G.MSUF_ScheduleLateAnchorReanchor = function()
+_G.MSUF_ScheduleLateAnchorReanchor = function(forcePosition)
     _G.MSUF_CDMBridgeDirty = true
+    local state = _G.MSUF_LateAnchorReanchorState
+    if type(state) ~= "table" then
+        state = { pending = false, forcePosition = false }
+        _G.MSUF_LateAnchorReanchorState = state
+    end
+    if forcePosition then state.forcePosition = true end
+
     if InCombatLockdown and InCombatLockdown() then
         if _G.MSUF_RequestUnitFrameReanchorAfterCombat then
             _G.MSUF_RequestUnitFrameReanchorAfterCombat()
@@ -2524,59 +2530,50 @@ _G.MSUF_ScheduleLateAnchorReanchor = function()
         return false
     end
 
-    local state = _G.MSUF_LateAnchorReanchorState
-    if type(state) ~= "table" then
-        state = { pending = false, attempts = 0 }
-        _G.MSUF_LateAnchorReanchorState = state
-    end
     if state.pending then return false end
     state.pending = true
-    state.attempts = 0
 
     if not (C_Timer and C_Timer.After) then
-        MSUF_LateAnchorReanchorFlush()
         state.pending = false
+        local force = state.forcePosition == true
+        state.forcePosition = false
+        MSUF_LateAnchorReanchorFlush(force)
         return true
     end
 
-    for i = 1, #MSUF_LATE_ANCHOR_RETRY_DELAYS do
-        C_Timer.After(MSUF_LATE_ANCHOR_RETRY_DELAYS[i], function()
-            if not state.pending then return end
-            state.attempts = i
-            MSUF_LateAnchorReanchorFlush()
-            if i == #MSUF_LATE_ANCHOR_RETRY_DELAYS then
-                state.pending = false
-            end
-        end)
-    end
+    C_Timer.After(0, function()
+        if not state.pending then return end
+        state.pending = false
+        local force = state.forcePosition == true
+        state.forcePosition = false
+        MSUF_LateAnchorReanchorFlush(force)
+    end)
     return true
 end
 
 do
-    local function ScheduleLateAnchorFromEvent()
-        local function run()
-            if MSUF_HasLateAnchorConfig() and type(_G.MSUF_ScheduleLateAnchorReanchor) == "function" then
-                _G.MSUF_ScheduleLateAnchorReanchor()
-            end
-        end
-        if C_Timer and C_Timer.After then
-            C_Timer.After(0, run)
-        else
-            run()
-        end
-    end
-
     local lateAnchorEvents = CreateFrame("Frame")
     lateAnchorEvents:RegisterEvent("PLAYER_LOGIN")
     lateAnchorEvents:RegisterEvent("PLAYER_ENTERING_WORLD")
     lateAnchorEvents:RegisterEvent("EDIT_MODE_LAYOUTS_UPDATED")
     lateAnchorEvents:RegisterEvent("ADDON_LOADED")
     lateAnchorEvents:SetScript("OnEvent", function(_, event, addon)
-        if event == "ADDON_LOADED" then
-            if type(addon) ~= "string" then return end
-            if addon ~= "Blizzard_EditMode" and not string.find(addon, "Cooldown", 1, true) then return end
+        if event == "ADDON_LOADED" and addon ~= "Blizzard_EditMode" and addon ~= "Blizzard_CooldownViewer" then
+            return
         end
-        ScheduleLateAnchorFromEvent()
+        if event == "PLAYER_ENTERING_WORLD" then
+            -- Match the stable 6.0 lifecycle: Blizzard completes UIParent and
+            -- Cooldown Viewer layout on world entry, then MSUF performs one
+            -- forced cold-path SetPoint on the next frame. Repeated late
+            -- clamps can observe transient instance geometry and rewrite the
+            -- configured offsets.
+            _G.MSUF_ScheduleLateAnchorReanchor(true)
+            if type(_G.MSUF_ScheduleCooldownWidthRefresh) == "function" then
+                _G.MSUF_ScheduleCooldownWidthRefresh("EssentialCooldownViewer")
+            end
+        elseif MSUF_HasLateAnchorConfig() then
+            _G.MSUF_ScheduleLateAnchorReanchor()
+        end
     end)
 end
 
@@ -2593,7 +2590,7 @@ function _G.MSUF_IsUnitFramePositionLocked()
     return _msuf_inCombat == true or affectingCombat
 end
 
-function _G.MSUF_RunPostCombatReanchorPass()
+function _G.MSUF_RunPostCombatReanchorPass(skipScreenClamp)
     if InCombatLockdown and InCombatLockdown() then return false end
     _msuf_inCombat = false
     _G.MSUF_InCombat = false
@@ -2612,7 +2609,7 @@ function _G.MSUF_RunPostCombatReanchorPass()
     if type(force) == "function" then
         local prev = _G.MSUF_ExternalAnchorForceReanchor
         _G.MSUF_ExternalAnchorForceReanchor = true
-        force(true)
+        force(true, skipScreenClamp == true)
         _G.MSUF_ExternalAnchorForceReanchor = prev
     end
     return true
@@ -2630,15 +2627,18 @@ function _G.MSUF_RequestUnitFrameReanchorAfterCombat()
         _G.MSUF_InCombat = false
         if _G.MSUF_UnitFramePositionDirty then
             _G.MSUF_UnitFramePositionDirty = false
+            local state = _G.MSUF_LateAnchorReanchorState
+            local skipScreenClamp = state and state.forcePosition == true
+            if state then state.forcePosition = false end
             if type(_G.MSUF_RunPostCombatReanchorPass) == "function" then
-                _G.MSUF_RunPostCombatReanchorPass()
+                _G.MSUF_RunPostCombatReanchorPass(skipScreenClamp)
             end
             if C_Timer and C_Timer.After then
                 local delays = { 0.05, 0.25, 0.75, 1.5 }
                 for i = 1, #delays do
                     C_Timer.After(delays[i], function()
                         if type(_G.MSUF_RunPostCombatReanchorPass) == "function" then
-                            _G.MSUF_RunPostCombatReanchorPass()
+                            _G.MSUF_RunPostCombatReanchorPass(skipScreenClamp)
                         end
                     end)
                 end
@@ -3054,7 +3054,7 @@ function _G.MSUF_RequestClampAllFramesToScreen()
     return true
 end
 
-MSUF_ForceReanchorAllUnitFrames_Once = function(refreshConfig)
+MSUF_ForceReanchorAllUnitFrames_Once = function(refreshConfig, skipScreenClamp)
     if _G.MSUF_IsUnitFramePositionLocked and _G.MSUF_IsUnitFramePositionLocked() then
         if _G.MSUF_RequestUnitFrameReanchorAfterCombat then
             _G.MSUF_RequestUnitFrameReanchorAfterCombat()
@@ -3084,7 +3084,10 @@ MSUF_ForceReanchorAllUnitFrames_Once = function(refreshConfig)
             PositionUnitFrame(frame, unit, refreshConfig ~= false)
         end
     end
-    _G.MSUF_ClampUnitFramesToScreen()
+    if skipScreenClamp ~= true then
+        _G.MSUF_ClampUnitFramesToScreen()
+    end
+    return true
 end
 _G.MSUF_ForceReanchorAllUnitFrames_Once = MSUF_ForceReanchorAllUnitFrames_Once
 
@@ -3292,7 +3295,7 @@ function _G.MSUF_HookExternalAnchorForReanchor(frame)
     return false
 end
 
-function _G.MSUF_FlushCDMBridgeRefresh()
+function _G.MSUF_FlushCDMBridgeRefresh(skipScreenClamp)
     _G.MSUF_CDMBridgeFlushScheduled = false
     if not _G.MSUF_CDMBridgeDirty then return end
     if InCombatLockdown and InCombatLockdown() then return end
@@ -3313,7 +3316,7 @@ function _G.MSUF_FlushCDMBridgeRefresh()
     _G.MSUF_PowerBarLayoutDirty = nil
     local prev = _G.MSUF_ExternalAnchorForceReanchor
     _G.MSUF_ExternalAnchorForceReanchor = true
-    MSUF_ForceReanchorAllUnitFrames_Once()
+    MSUF_ForceReanchorAllUnitFrames_Once(nil, skipScreenClamp == true)
     _G.MSUF_ExternalAnchorForceReanchor = prev
 end
 
