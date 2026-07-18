@@ -14,7 +14,7 @@ local floor = math.floor
 local max = math.max
 local min = math.min
 local UNIT_SCOPE_KEYS = GP.UNIT_SCOPE_KEYS or {}
-local DB, G, Unit, NormalizeScopeKey, ScopeDBKeys, ScopeHasOverride, ScopeSetOverride, CurrentFontScope, IsGFScope, FontScopeGet, FontScopeSet, NormalizeFontKey, FontValues, FontKeyGet, FontKeySet, SetControlEnabled, SetControlsEnabled, ApplyFonts, ControlMeta = M.Pick(GP, [[DB G Unit NormalizeScopeKey ScopeDBKeys ScopeHasOverride ScopeSetOverride CurrentFontScope IsGFScope FontScopeGet FontScopeSet NormalizeFontKey FontValues FontKeyGet FontKeySet SetControlEnabled SetControlsEnabled ApplyFonts ControlMeta]])
+local DB, G, Unit, NormalizeScopeKey, ScopeDBKeys, ScopeHasOverride, ScopeSetOverride, CurrentFontScope, IsGFScope, FontScopeGet, FontScopeSet, NormalizeFontKey, FontValues, FontKeyGet, FontKeySet, SetControlEnabled, SetControlsEnabled, ApplyFonts, ControlMeta, RegisterControl = M.Pick(GP, [[DB G Unit NormalizeScopeKey ScopeDBKeys ScopeHasOverride ScopeSetOverride CurrentFontScope IsGFScope FontScopeGet FontScopeSet NormalizeFontKey FontValues FontKeyGet FontKeySet SetControlEnabled SetControlsEnabled ApplyFonts ControlMeta RegisterControl]])
 local FONT_DYNAMIC_SETTING_KEYS_BY_PATH = {
     ["name_shortening.enabled"] = { "gf_party.nameShortenEnabled", "gf_raid.nameShortenEnabled" },
     ["name_shortening.style"] = { "gf_party.nameClipSide", "gf_raid.nameClipSide" },
@@ -316,6 +316,31 @@ local function SetFontAndApply(key, value, reason, sourceKey)
     FontScopeSet(key, value, reason, sourceKey)
     ApplyFonts(reason)
 end
+local function OpenGlobalFontColor()
+    if W.CloseDropdown then W.CloseDropdown() end
+    local request = {
+        pageKey = "opt_colors",
+        sectionId = "colors_font",
+        explicit = true,
+        consumed = false,
+        source = "fonts-global-font-color",
+        changedAt = GetTime and GetTime() or 0,
+    }
+    _G.MSUF_EM2_MenuFocusRequest = request
+    if type(M.SelectPage) ~= "function" or M.SelectPage("opt_colors") == false then
+        if _G.MSUF_EM2_MenuFocusRequest == request then _G.MSUF_EM2_MenuFocusRequest = nil end
+        return false
+    end
+    local function FinishFocus()
+        if M.activeKey ~= "opt_colors" then return end
+        if request.consumed ~= true and type(M.FocusRequestedSection) == "function" then
+            M.FocusRequestedSection("opt_colors", { flash = true })
+        end
+    end
+    FinishFocus()
+    if C_Timer and C_Timer.After then C_Timer.After(0, FinishFocus) end
+    return true
+end
 local function BuildFonts(ctx)
     local b = W.PageBuilder(ctx)
     b:GlobalStyleHeader("Fonts", "Shared font, text style, name and power colors.", 72)
@@ -552,6 +577,14 @@ local function BuildFonts(ctx)
         nil,
         "colors.colorHealthTextByHealth")
     local powerColor = BindFontModeDropdown(colors, "Power Text Color", PowerColorValues, "colorPowerTextByType", "RESOURCE", "MSUF2_POWER_TEXT_COLOR")
+    local globalFontColor = T.Button(colors, "Global font color", 170, 22)
+    globalFontColor:SetPoint("TOPRIGHT", colors, "TOPRIGHT", -16, -16)
+    if T.CenterButtonLabel then T.CenterButtonLabel(globalFontColor) end
+    if M.AddTooltip then
+        M.AddTooltip(globalFontColor, "Global font color", "Open Colors > Global Font Color to choose the default color used by font settings.", { hook = true })
+    end
+    globalFontColor:SetScript("OnClick", OpenGlobalFontColor)
+    RegisterControl(globalFontColor, Meta("colors.global_font", "navigation", { navigationKey = "opt_colors" }), "Global font color", "button")
     local scopedFontControls = { outline, sharp, shadow, opacity, baseline, nameColor, healthColor }
     RefreshScopedFontControls = RefreshScopedFontControls(function()
         local scopeKey = CurrentFontScope()
@@ -698,4 +731,4 @@ local function BuildFonts(ctx)
     end
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-M.RegisterPage("opt_fonts", { title = "MSUF Fonts", build = BuildFonts, version = 3 })
+M.RegisterPage("opt_fonts", { title = "MSUF Fonts", build = BuildFonts, version = 6 })

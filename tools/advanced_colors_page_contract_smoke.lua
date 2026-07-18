@@ -45,7 +45,7 @@ local MSUF = { MSUF2 = M }
 local path = "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors.lua"
 assert(loadfile(path))("MidnightSimpleUnitFrames", MSUF)
 assert(registeredPage and type(registeredPage.build) == "function", "colors page was not registered")
-assert(registeredPage.version == 11, "colors page version changed")
+assert(registeredPage.version == 12, "colors page version changed")
 
 local upvalues, index = 0, 1
 while debug.getupvalue(registeredPage.build, index) do
