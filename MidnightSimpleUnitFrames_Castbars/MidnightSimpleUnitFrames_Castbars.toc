@@ -2,7 +2,7 @@
 ## Title: |cff38c7f0Midnight|r |cffcce0ffSimple Unit Frames - Castbars|r
 ## Notes: Castbar LoD for MSUF
 ## Author: Mapko 
-## Version: 5.72
+## Version: 5.73
 ## Category: Combat
 ## Dependencies: MidnightSimpleUnitFrames
 ## OptionalDeps:
