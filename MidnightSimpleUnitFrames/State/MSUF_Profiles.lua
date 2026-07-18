@@ -1844,7 +1844,7 @@ local MSUF_PROFILEIO_LEGACY_PROFILE_SCHEMA_56 = 560
 --- MSUF_ProfileIO_TranslateProfileToCurrent, independently from the broad
 --- default-fill revision owned by MSUF_Defaults.lua. Bump it whenever that
 --- translation pipeline gains a new mandatory repair.
-local MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = 9
+local MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = 10
 local MSUF_PROFILEIO_TEXT_SCOPE_KEYS = {
     "general",
     "player", "target", "targettarget", "tot", "targetoftarget",
@@ -2537,6 +2537,7 @@ local function MSUF_ProfileIO_ProfileNeedsLegacyRepair(profile)
     if legacyVisualProfile and profile._msufLegacy55PowerTextVisibility_v1 ~= true then return true end
     if legacyVisualProfile and profile._msufLegacy55UnitTextSlots_v1 ~= true then return true end
     if legacyVisualProfile and profile._msufLegacy55GroupTextGeometry_v1 ~= true then return true end
+    if legacyVisualProfile and profile._msufLegacy55GroupNameAnchorRoot_v1 ~= true then return true end
     if MSUF_ProfileIO_AuraOverridesNeedRepair(profile) then return true end
     if MSUF_ProfileIO_LegacyAliasBeatsCanonical(profile, "targettarget", "tot", "targetoftarget") then return true end
     if MSUF_ProfileIO_LegacyAliasBeatsCanonical(profile, "focustarget", "focus_target", "focustargettarget") then return true end
@@ -2709,6 +2710,25 @@ MSUF.ProfileIOMaterializeLegacy55GroupTextGeometry = function(profile)
     return true
 end
 
+MSUF.ProfileIOMaterializeLegacy55GroupNameAnchorRoot = function(profile)
+    if type(profile) ~= "table" or profile._msufLegacy55GroupNameAnchorRoot_v1 == true then return false end
+
+    -- 5.73 positioned Group names against barGroup, the complete visual slot.
+    -- The native 6.0 text element normally uses the Health bar instead, whose
+    -- bottom edge is raised by an embedded Power bar. Keep the legacy anchor
+    -- root explicit so identical saved offsets remain visually identical while
+    -- native 6.0 profiles retain their current Health-relative semantics.
+    local scopes = { "gf_party", "gf_raid", "gf_mythicraid" }
+    for i = 1, #scopes do
+        local conf = profile[scopes[i]]
+        if type(conf) == "table" and conf._msufLegacyNameAnchorToFrame ~= true then
+            conf._msufLegacyNameAnchorToFrame = true
+        end
+    end
+    profile._msufLegacy55GroupNameAnchorRoot_v1 = true
+    return true
+end
+
 local function MSUF_ProfileIO_DetectProfileSchema(profile, context)
     local schema = tonumber(profile and profile._msufProfileSchema)
     if schema and not MSUF_ProfileIO_ProfileNeedsLegacyRepair(profile) then return schema end
@@ -2870,6 +2890,7 @@ MSUF.ProfileIONormalizeLegacy55VisualCompatibility = function(profile, legacyPro
     end
     changed = MSUF.ProfileIOMaterializeLegacy55UnitTextSlots(profile) or changed
     changed = MSUF.ProfileIOMaterializeLegacy55GroupTextGeometry(profile) or changed
+    changed = MSUF.ProfileIOMaterializeLegacy55GroupNameAnchorRoot(profile) or changed
 
     local bars = profile.bars
     if type(bars) ~= "table" then

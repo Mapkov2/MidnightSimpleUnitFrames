@@ -5,6 +5,7 @@ MSUF = MSUF or {}
 local ExportPublic = MSUF.ExportPublic or function(name, value) _G[name] = value; return value end
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+local C_Timer = M.MenuTimer or _G.C_Timer
 local W = M.Widgets
 local T = M.Theme
 local AP = M.AdvancedPage or {}
@@ -421,6 +422,8 @@ local function SetDetachedPowerTextPreset(value)
 end
 local QUICK_SETUP_FLAG = "quickSetupClassBarOffered"
 local QUICK_CP_HEIGHT = 4
+local QUICK_DPB_HEIGHT = 6
+local QUICK_DPB_GAP = 4
 local QUICK_CDM_GAP = 4
 local QUICK_FALLBACK_Y_FRAC = 0.60
 local QUICK_KEYS = {
@@ -469,9 +472,41 @@ end
 local function QuickClassPowerVisible() local frame = _G.MSUF_ClassPowerContainer; return frame and frame.IsShown and frame:IsShown() end
 local function QuickCalcCPAboveCDM(ecv)
     local bars = Bars()
+    local player = M.EnsureDB().player or {}
     local cpH = tonumber(bars.classPowerHeight) or QUICK_CP_HEIGHT
+    local dpbH = tonumber(player.detachedPowerBarHeight) or QUICK_DPB_HEIGHT
     local ecvH = (ecv and ecv.GetHeight and ecv:GetHeight()) or 0
-    return { cpOffsetX = 0, cpOffsetY = math.ceil(ecvH + QUICK_CDM_GAP + cpH), anchorCPtoCDM = true }
+    return {
+        cpOffsetX = 0,
+        cpOffsetY = math.ceil(ecvH + QUICK_CDM_GAP + cpH + QUICK_DPB_GAP + dpbH),
+        anchorCPtoCDM = true,
+    }
+end
+local function QuickCalcDPBAboveCDMNoCP(ecv)
+    local player = M.EnsureDB().player or {}
+    local dpbH = tonumber(player.detachedPowerBarHeight) or QUICK_DPB_HEIGHT
+    local fallback = { dpbOffsetX = 0, dpbOffsetY = -QUICK_DPB_GAP, anchorDPBtoCP = true }
+    local pf = QuickPlayerFrame()
+    if not (pf and pf.GetCenter and pf.GetBottom and pf.GetEffectiveScale
+        and ecv and ecv.GetCenter and ecv.GetTop and ecv.GetEffectiveScale) then
+        return fallback
+    end
+    local pfCenterX = select(1, pf:GetCenter())
+    local pfBottom = pf:GetBottom()
+    local ecvCenterX = select(1, ecv:GetCenter())
+    local ecvTop = ecv:GetTop()
+    if not (pfCenterX and pfBottom and ecvCenterX and ecvTop) then return fallback end
+    local pfScale = pf:GetEffectiveScale() or 1
+    local ecvScale = ecv:GetEffectiveScale() or 1
+    if pfScale <= 0 then pfScale = 1 end
+    if ecvScale <= 0 then ecvScale = 1 end
+    local targetCenterX = ecvCenterX * ecvScale
+    local targetTop = ecvTop * ecvScale + (QUICK_CDM_GAP + dpbH) * pfScale
+    return {
+        dpbOffsetX = floor((targetCenterX - pfCenterX * pfScale) / pfScale + 0.5),
+        dpbOffsetY = floor((targetTop - pfBottom * pfScale) / pfScale + 0.5),
+        anchorDPBtoCP = false,
+    }
 end
 local function QuickCalcScreenCenter()
     local fallback = { cpOffsetX = 0, cpOffsetY = 0, anchorCPtoCDM = false }
@@ -519,11 +554,20 @@ local function QuickApplyPhase1(offsets)
         detachedPowerBarShape = "BAR",
         detachedPowerOrbSize = tonumber(player.detachedPowerOrbSize) or 54,
         detachedPowerBarOffsetX = 0,
-        detachedPowerBarOffsetY = -4,
+        detachedPowerBarOffsetY = -QUICK_DPB_GAP,
+        detachedPowerBarAnchorMode = "CENTER",
         detachedPowerBarHeight = tonumber(player.detachedPowerBarHeight) or 6,
         detachedPowerBarFrameLevelOffset = tonumber(player.detachedPowerBarFrameLevelOffset) or 6,
         powerSmoothFill = true,
     })
+end
+local function QuickApplyPhase2NoCP(offsets)
+    local player = M.EnsureDB().player or {}
+    player.detachedPowerBarSyncClassPower = offsets.anchorDPBtoCP and true or false
+    player.detachedPowerBarAnchorToClassPower = offsets.anchorDPBtoCP and true or false
+    player.detachedPowerBarAnchorMode = "CENTER"
+    player.detachedPowerBarOffsetX = offsets.dpbOffsetX
+    player.detachedPowerBarOffsetY = offsets.dpbOffsetY
 end
 local function QuickRefreshAll(reason)
     reason = reason or "ClassPowerQuickSetup"
@@ -588,7 +632,8 @@ local function ExecuteQuickSetup()
     ApplyClassPower()
     local popupText
     if ecv and not QuickClassPowerVisible() then
-        popupText = "Quick Setup applied!\n\nClass Resources are ready for\nEssential Cooldowns.\n\nYour spec has no visible class\nresource bar right now.\nPlayer Power is detached and will\nfollow the stack when available."
+        QuickApplyPhase2NoCP(QuickCalcDPBAboveCDMNoCP(ecv))
+        popupText = "Quick Setup applied!\n\nYour spec has no visible class\nresource bar right now.\n\nPlayer Power is positioned above\nEssential Cooldowns.\nIf you respec, Class Resources will\nappear automatically."
     elseif ecv then
         popupText = "Quick Setup applied!\n\nClass Power is now positioned\nabove Essential Cooldowns.\n\nPlayer Power is detached and\nattached below it.\nUse Edit Mode for fine-tuning."
     else

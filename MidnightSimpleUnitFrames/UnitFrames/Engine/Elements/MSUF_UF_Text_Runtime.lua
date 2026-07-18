@@ -620,6 +620,46 @@ local function RefreshNameRelativeStatus(frame)
   end
 end
 
+-- Native 5.73 Group Frames shortened the actual UTF-8 name and only added
+-- dots when its character count exceeded the configured cap. Preserve that
+-- behavior for migrated Group profiles instead of showing 6.0's separate
+-- clip-marker FontString for every name while shortening is merely enabled.
+local function TruncateLegacyGroupName(name, rt)
+  local maxChars = rt and rt.nameLegacyTruncation == true and tonumber(rt.nameLegacyShortenMax) or 0
+  maxChars = floor((maxChars or 0) + 0.5)
+  if name == nil or maxChars <= 0 or issecretvalue(name) == true then return name end
+
+  local function NextByte(pos)
+    local byte = string.byte(name, pos)
+    if not byte then return pos + 1 end
+    if byte < 128 then return pos + 1 end
+    if byte < 224 then return pos + 2 end
+    if byte < 240 then return pos + 3 end
+    return pos + 4
+  end
+
+  local count, pos, byteLength = 0, 1, #name
+  while pos <= byteLength do
+    count = count + 1
+    pos = NextByte(pos)
+  end
+  if count <= maxChars then return name end
+
+  local dots = rt.nameLegacyShortenDots == true and ".." or ""
+  if rt.nameShortenSide == "LEFT" then
+    pos = 1
+    for _ = 1, count - maxChars do pos = NextByte(pos) end
+    return dots .. string.sub(name, pos)
+  end
+
+  count, pos = 0, 1
+  while pos <= byteLength and count < maxChars do
+    count = count + 1
+    pos = NextByte(pos)
+  end
+  return string.sub(name, 1, pos - 1) .. dots
+end
+
 function Text.UpdateName(frame, event, unit)
   local frameUnit = frame and frame.MSUFUnitKey
   unit = unit or frameUnit
@@ -648,7 +688,7 @@ function Text.UpdateName(frame, event, unit)
     frame._msufNameStatusHidden = nil
     frame.nameText._msufShown = nil
     SetShownCached(frame.nameText, true)
-    SetTextCached(frame.nameText, previewName)
+    SetTextCached(frame.nameText, TruncateLegacyGroupName(previewName, rt))
     RefreshNameRelativeStatus(frame)
     frame._msufNameTextUnit = unit
     Text.UpdateNameColor(frame, event, unit)
@@ -715,7 +755,7 @@ function Text.UpdateName(frame, event, unit)
     Text.UpdateNameColor(frame, event, unit)
     return
   end
-  SetTextCached(frame.nameText, ReadDisplayName(unit))
+  SetTextCached(frame.nameText, TruncateLegacyGroupName(ReadDisplayName(unit), rt))
   RefreshNameRelativeStatus(frame)
   frame._msufNameTextUnit = unit
   Text.UpdateNameColor(frame, event, unit)

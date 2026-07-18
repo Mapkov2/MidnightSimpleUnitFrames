@@ -926,7 +926,8 @@ local function CompileTextRuntime(frame, spec, text)
   text = text or {}
   rt.showName = spec and spec.showName ~= false and frame.nameText ~= nil or false
   rt.hideNameOnDeadOffline = text.hideNameOnDeadOffline == true
-  rt.nameShortenMax = text.nameShorten == true and (tonumber(text.nameShortenMax) or 6) or 0
+  local configuredNameShortenMax = text.nameShorten == true and (tonumber(text.nameShortenMax) or 6) or 0
+  rt.nameShortenMax = configuredNameShortenMax
   if rt.nameShortenMax > 0 then
     rt.nameShortenMax = floor(max(4, rt.nameShortenMax) + 0.5)
     if rt.nameShortenMax > 40 then
@@ -935,6 +936,9 @@ local function CompileTextRuntime(frame, spec, text)
   end
   rt.nameShortenSide = text.nameShortenSide == "RIGHT" and "RIGHT" or "LEFT"
   rt.nameShortenDots = text.nameShortenDots ~= false and (text.nameAnchor or "LEFT") == "LEFT"
+  rt.nameLegacyTruncation = text.nameLegacyTruncation == true
+  rt.nameLegacyShortenMax = rt.nameLegacyTruncation and configuredNameShortenMax or 0
+  rt.nameLegacyShortenDots = text.nameShortenDots ~= false
   rt.nameShortenStamp = rt.nameShortenMax > 0 and (rt.nameShortenMax .. ":" .. rt.nameShortenSide .. ":" .. (rt.nameShortenDots and "1" or "0")) or false
   local inline = text.inlineToT
   if inline and inline.enabled == true and spec and spec.key == "target" then
