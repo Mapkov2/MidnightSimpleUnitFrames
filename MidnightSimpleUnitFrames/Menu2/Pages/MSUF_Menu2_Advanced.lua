@@ -252,6 +252,23 @@ local function AuraLayout()
     return AuraShared()
 end
 
+local function EffectiveAuraLaneSize(key)
+    local shared = AuraShared()
+    local size = tonumber(shared.iconSize) or 26
+    local scope = AuraScope()
+    local layout
+    if scope ~= "shared" then
+        local unit = AurasUnit(scope)
+        if unit.overrideLayout == true then
+            layout = unit.layout
+            size = tonumber(layout.iconSize) or size
+        end
+    end
+    size = tonumber(shared[key]) or size
+    if layout then size = tonumber(layout[key]) or size end
+    return size
+end
+
 local function AuraCaps()
     local scope = AuraScope()
     if scope == "shared" then return AuraShared() end
@@ -317,7 +334,10 @@ local function ForceAuraLayoutOverride()
     u.overrideLayout = true
     if type(u.layout) ~= "table" then u.layout = {} end
     local layout = u.layout
-    for _, key in ipairs({ "iconSize", "spacing", "cooldownTextSize", "stackTextSize", "reminderGrowth" }) do
+    for _, key in ipairs({
+        "iconSize", "buffGroupIconSize", "debuffGroupIconSize", "privateSize",
+        "spacing", "cooldownTextSize", "stackTextSize", "reminderGrowth",
+    }) do
         if layout[key] == nil then layout[key] = shared[key] end
     end
 end
@@ -585,6 +605,15 @@ local function ScopedSliderAt(ctx, section, label, x, y, minVal, maxVal, step, w
             v = tonumber(v) or default or 0
             if (step or 1) >= 1 then v = floor(v + 0.5) end
             SetValue(getTable(), key, v, afterSet)
+        end)
+end
+
+local function AuraLaneSizeSlider(ctx, section, label, x, y, width, key)
+    return ValueSliderAt(ctx, section, label, x, y, 10, 80, 1, width,
+        function() return EffectiveAuraLaneSize(key) end,
+        function(value)
+            ForceAuraLayoutOverride()
+            SetValue(AuraLayout(), key, value, ApplyAuras)
         end)
 end
 
@@ -889,6 +918,9 @@ local function BuildAuras(ctx)
         caps.buffGrowth, caps.debuffGrowth, caps.privateGrowth = p.buffGrowth, p.debuffGrowth, p.privateGrowth
         caps.buffRowWrap, caps.debuffRowWrap = p.buffRowWrap, p.debuffRowWrap
         layout.iconSize, layout.spacing = p.iconSize, p.spacing
+        layout.buffGroupIconSize = p.iconSize
+        layout.debuffGroupIconSize = p.iconSize
+        layout.privateSize = p.iconSize
         filters.hidePermanent = p.hidePermanent
         buffs.includeBoss, debuffs.includeBoss = p.buffIncludeBoss, p.debuffIncludeBoss
         buffs.includeStealable, debuffs.includeDispellable = p.includeStealable, p.includeDispellable
@@ -1493,7 +1525,7 @@ local function BuildAuras(ctx)
         end
     end)
 
-    local layout = b:CollapsibleSection("a2_layout", "Caps & Icons", 466, true)
+    local layout = b:CollapsibleSection("a2_layout", "Caps & Icons", 588, true)
     local layoutW = layout._msuf2Width or ctx.width or 900
     local layoutPad, layoutGap = 32, 26
     local layoutColW = floor((layoutW - layoutPad * 2 - layoutGap * 3) / 4)
@@ -1513,35 +1545,40 @@ local function BuildAuras(ctx)
     Track(capsOverrideControls, ScopedSliderAt(ctx, layout, "Block spacing", layoutCol4, -64, 0, 40, 1, layoutSliderW, function() return AuraCaps() end, "splitSpacing", 0, ForceAuraCapsOverride, ApplyAuras))
 
     DividerAt(layout, -138, layoutPad, 32)
-    LabelAt(layout, "Icon Layout", layoutCol1, -160, layoutColW, "GameFontNormalSmall", T.colors.accent)
-    LabelAt(layout, "Rows", layoutCol3, -160, layoutColW, "GameFontNormalSmall", T.colors.accent)
-    Track(layoutOverrideControls, ScopedSliderAt(ctx, layout, "Icon size", layoutCol1, -186, 12, 64, 1, layoutSliderW, function() return AuraLayout() end, "iconSize", 26, ForceAuraLayoutOverride, ApplyAuras))
-    Track(layoutOverrideControls, ScopedSliderAt(ctx, layout, "Spacing", layoutCol2, -186, 0, 12, 1, layoutSliderW, function() return AuraLayout() end, "spacing", 2, ForceAuraLayoutOverride, ApplyAuras))
-    Track(capsOverrideControls, ScopedDropdownAt(ctx, layout, "Row layout", layoutCol3, -186, {
+    LabelAt(layout, "Icon Sizes", layoutCol1, -160, layoutColW * 3 + layoutGap * 2, "GameFontNormalSmall", T.colors.accent)
+    LabelAt(layout, "Layout", layoutCol4, -160, layoutColW, "GameFontNormalSmall", T.colors.accent)
+    Track(layoutOverrideControls, AuraLaneSizeSlider(ctx, layout, "Buff Icon size", layoutCol1, -186, layoutSliderW, "buffGroupIconSize"))
+    Track(layoutOverrideControls, AuraLaneSizeSlider(ctx, layout, "Debuff Icon size", layoutCol2, -186, layoutSliderW, "debuffGroupIconSize"))
+    Track(layoutOverrideControls, AuraLaneSizeSlider(ctx, layout, "Private Icon size", layoutCol3, -186, layoutSliderW, "privateSize"))
+    Track(layoutOverrideControls, ScopedSliderAt(ctx, layout, "Spacing", layoutCol4, -186, 0, 12, 1, layoutSliderW, function() return AuraLayout() end, "spacing", 2, ForceAuraLayoutOverride, ApplyAuras))
+
+    DividerAt(layout, -260, layoutPad, 32)
+    LabelAt(layout, "Rows", layoutCol1, -282, layoutColW * 2 + layoutGap, "GameFontNormalSmall", T.colors.accent)
+    Track(capsOverrideControls, ScopedDropdownAt(ctx, layout, "Row layout", layoutCol1, -308, {
         { value = "SEPARATE", text = "Separate rows" },
         { value = "SINGLE", text = "Single row (Mixed)" },
     }, layoutDropdownW, function() return AuraCaps() end, "layoutMode", "SEPARATE", ForceAuraCapsOverride, ApplyAuras))
-    Track(capsOverrideControls, ScopedDropdownAt(ctx, layout, "Stack Anchor", layoutCol4, -186, AURA_STACK_ANCHORS, layoutDropdownW, function() return AuraCaps() end, "stackCountAnchor", "TOPRIGHT", ForceAuraCapsOverride, ApplyAuras))
+    Track(capsOverrideControls, ScopedDropdownAt(ctx, layout, "Stack Anchor", layoutCol2, -308, AURA_STACK_ANCHORS, layoutDropdownW, function() return AuraCaps() end, "stackCountAnchor", "TOPRIGHT", ForceAuraCapsOverride, ApplyAuras))
 
-    DividerAt(layout, -260, layoutPad, 32)
-    LabelAt(layout, "Growth", layoutCol1, -282, layoutColW, "GameFontNormalSmall", T.colors.accent)
-    LabelAt(layout, "Wrapping & Sorting", layoutCol3, -282, layoutColW * 2 + layoutGap, "GameFontNormalSmall", T.colors.accent)
-    Track(capsOverrideControls, ValueDropdownAt(ctx, layout, "Buff Growth", layoutCol1, -308, AURA_GROWTH, layoutDropdownW,
+    DividerAt(layout, -382, layoutPad, 32)
+    LabelAt(layout, "Growth", layoutCol1, -404, layoutColW, "GameFontNormalSmall", T.colors.accent)
+    LabelAt(layout, "Wrapping & Sorting", layoutCol3, -404, layoutColW * 2 + layoutGap, "GameFontNormalSmall", T.colors.accent)
+    Track(capsOverrideControls, ValueDropdownAt(ctx, layout, "Buff Growth", layoutCol1, -430, AURA_GROWTH, layoutDropdownW,
         function() local c = AuraCaps(); return c.buffGrowth or c.growth or "RIGHT" end,
         function(v) ForceAuraCapsOverride(); AuraCaps().buffGrowth = v or "RIGHT"; ApplyAuras() end))
-    Track(capsOverrideControls, ValueDropdownAt(ctx, layout, "Debuff Growth", layoutCol2, -308, AURA_GROWTH, layoutDropdownW,
+    Track(capsOverrideControls, ValueDropdownAt(ctx, layout, "Debuff Growth", layoutCol2, -430, AURA_GROWTH, layoutDropdownW,
         function() local c = AuraCaps(); return c.debuffGrowth or c.growth or "RIGHT" end,
         function(v) ForceAuraCapsOverride(); AuraCaps().debuffGrowth = v or "RIGHT"; ApplyAuras() end))
-    Track(capsOverrideControls, ValueDropdownAt(ctx, layout, "Private Growth", layoutCol1, -392, AURA_GROWTH, layoutDropdownW,
+    Track(capsOverrideControls, ValueDropdownAt(ctx, layout, "Private Growth", layoutCol1, -514, AURA_GROWTH, layoutDropdownW,
         function() local c = AuraCaps(); return c.privateGrowth or c.growth or "RIGHT" end,
         function(v) ForceAuraCapsOverride(); AuraCaps().privateGrowth = v or "RIGHT"; ApplyAuras() end))
-    Track(capsOverrideControls, ValueDropdownAt(ctx, layout, "Buff wrap rows", layoutCol3, -308, AURA_ROW_WRAP, layoutDropdownW,
+    Track(capsOverrideControls, ValueDropdownAt(ctx, layout, "Buff wrap rows", layoutCol3, -430, AURA_ROW_WRAP, layoutDropdownW,
         function() local c = AuraCaps(); return c.buffRowWrap or c.rowWrap or "DOWN" end,
         function(v) ForceAuraCapsOverride(); AuraCaps().buffRowWrap = v or "DOWN"; ApplyAuras() end))
-    Track(capsOverrideControls, ValueDropdownAt(ctx, layout, "Debuff wrap rows", layoutCol4, -308, AURA_ROW_WRAP, layoutDropdownW,
+    Track(capsOverrideControls, ValueDropdownAt(ctx, layout, "Debuff wrap rows", layoutCol4, -430, AURA_ROW_WRAP, layoutDropdownW,
         function() local c = AuraCaps(); return c.debuffRowWrap or c.rowWrap or "DOWN" end,
         function(v) ForceAuraCapsOverride(); AuraCaps().debuffRowWrap = v or "DOWN"; ApplyAuras() end))
-    Track(capsOverrideControls, ValueDropdownAt(ctx, layout, "Sort order", layoutCol3, -392, AURA_SORT_ORDER, layoutDropdownW * 2 + layoutGap,
+    Track(capsOverrideControls, ValueDropdownAt(ctx, layout, "Sort order", layoutCol3, -514, AURA_SORT_ORDER, layoutDropdownW * 2 + layoutGap,
         function()
             local c = AuraCaps()
             if type(c.sortOrder) == "number" then return c.sortOrder end

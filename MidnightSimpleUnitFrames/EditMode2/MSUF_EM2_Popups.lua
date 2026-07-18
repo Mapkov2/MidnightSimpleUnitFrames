@@ -1590,6 +1590,11 @@ local function San(v,d) v=tonumber(v) or d or 0; if v~=v or v>2000 or v<-2000 th
 local function IsBoss(u) return type(u)=="string" and u:match("^boss%d+$") end
 local pf
 
+local function RefreshAuraMenu()
+    local menu=_G.MSUF2
+    if menu and menu.activeKey=="auras2" and type(menu.Refresh)=="function" then menu.Refresh() end
+end
+
 local function SetPopupObjectEnabled(obj, enabled)
     if not obj then return end
     enabled=enabled and true or false
@@ -1656,6 +1661,7 @@ local function Apply()
     if type(_G.MSUF_Auras2_RefreshUnit)=="function" then for _,k in ipairs(keys) do _G.MSUF_Auras2_RefreshUnit(k) end
     elseif type(_G.MSUF_Auras2_RefreshAll)=="function" then _G.MSUF_Auras2_RefreshAll() end
     if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+    RefreshAuraMenu()
 end
 
 local SHARED_SNAP_KEYS = {"bossEditTogether","highlightPrivateAuras"}
@@ -1701,12 +1707,13 @@ local function Sync()
     local function SC(c,v) if c and c.SetChecked then c:SetChecked(v and true or false) end end
     local lbl=uk; if IsBoss(uk) then lbl="Boss "..(uk:match("%d+") or "1") end
     if pf._titleFS then pf._titleFS:SetText(Tr(lbl) .. " " .. Tr("Auras")) end
+    local iconSize=V("iconSize","iconSize",26)
     S(pf.spacingBox,V("spacing","spacing",2))
     S(pf.stSzBox,V("stackTextSize","stackTextSize",14)); S(pf.stXBox,V("stackTextOffsetX","stackTextOffsetX",0)); S(pf.stYBox,V("stackTextOffsetY","stackTextOffsetY",0))
     S(pf.cdSzBox,V("cooldownTextSize","cooldownTextSize",14)); S(pf.cdXBox,V("cooldownTextOffsetX","cooldownTextOffsetX",0)); S(pf.cdYBox,V("cooldownTextOffsetY","cooldownTextOffsetY",0))
-    S(pf.bXBox,V("buffGroupOffsetX","buffGroupOffsetX",0)); S(pf.bYBox,V("buffGroupOffsetY","buffGroupOffsetY",0)); S(pf.bSzBox,V("buffGroupIconSize","buffGroupIconSize",26))
-    S(pf.dXBox,V("debuffGroupOffsetX","debuffGroupOffsetX",0)); S(pf.dYBox,V("debuffGroupOffsetY","debuffGroupOffsetY",0)); S(pf.dSzBox,V("debuffGroupIconSize","debuffGroupIconSize",26))
-    S(pf.prXBox,V("privateOffsetX","privateOffsetX",0)); S(pf.prYBox,V("privateOffsetY","privateOffsetY",0)); S(pf.prSzBox,V("privateSize","privateSize",26))
+    S(pf.bXBox,V("buffGroupOffsetX","buffGroupOffsetX",0)); S(pf.bYBox,V("buffGroupOffsetY","buffGroupOffsetY",0)); S(pf.bSzBox,V("buffGroupIconSize","buffGroupIconSize",iconSize))
+    S(pf.dXBox,V("debuffGroupOffsetX","debuffGroupOffsetX",0)); S(pf.dYBox,V("debuffGroupOffsetY","debuffGroupOffsetY",0)); S(pf.dSzBox,V("debuffGroupIconSize","debuffGroupIconSize",iconSize))
+    S(pf.prXBox,V("privateOffsetX","privateOffsetX",0)); S(pf.prYBox,V("privateOffsetY","privateOffsetY",0)); S(pf.prSzBox,V("privateSize","privateSize",iconSize))
     SC(pf.prPreviewCB,sh.highlightPrivateAuras); SC(pf.bossTogetherCB,sh.bossEditTogether~=false)
     if pf._bossRow then pf._bossRow:SetShown(IsBoss(uk)) end
     ApplyNativePopupState()
@@ -1772,6 +1779,7 @@ local function Build()
         RestoreAura(pf._auraSnap)
         if type(_G.MSUF_Auras2_RefreshAll)=="function" then _G.MSUF_Auras2_RefreshAll() end
         if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+        RefreshAuraMenu()
         pf:Hide()
     end)
     pf:EnableKeyboard(true)
