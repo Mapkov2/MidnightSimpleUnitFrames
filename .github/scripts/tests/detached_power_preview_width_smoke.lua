@@ -149,6 +149,11 @@ assert(integrationSource:find('factory.RefreshExternalAnchor("EssentialCooldownV
     "Skiron source transitions do not use the targeted external-anchor refresh")
 assert(not integrationSource:find("factory.Apply(", 1, true),
     "Skiron lifecycle still invokes the full unit-frame Factory.Apply path")
+assert(integrationSource:find("CoolinatorPrimaryGroupAnchor", 1, true),
+    "Coolinator primary group anchor is not integrated")
+local barRuntimeSource = Read(Join(ROOT, "MidnightSimpleUnitFrames/Runtime/MSUF_BarBackgroundRuntime.lua"))
+assert(barRuntimeSource:find("MSUF_GetCoolinatorCooldownAnchor", 1, true),
+    "Essential cooldown resolver does not select the Coolinator anchor")
 
 -- Execute the real Factory lifecycle with fake frames. Only configured sources
 -- may be observed. A source event must call the Class Resource layout-only API
@@ -503,7 +508,7 @@ _G.SCM_GroupAnchorProxy_1 = skironSource
 _G.SCM_GroupAnchor_1 = skironFallback
 local externalAnchorRefreshes = 0
 FactoryMSUF.UF.Factory.RefreshExternalAnchor = function(frameName)
-    assert(frameName == "EssentialCooldownViewer", "Skiron refreshed the wrong external anchor")
+    assert(frameName == "EssentialCooldownViewer", "third-party provider refreshed the wrong external anchor")
     externalAnchorRefreshes = externalAnchorRefreshes + 1
     return true
 end
@@ -565,5 +570,51 @@ FlushTimers()
 AssertWidthOnlyBatch("EssentialCooldownViewer", "Skiron source reappearance")
 assert(externalAnchorRefreshes == 5,
     "Skiron source reappearance did not target external-anchor consumers")
+
+-- Coolinator exposes one stable frame that follows its first designer/runtime
+-- group. MSUF resolves EssentialCooldownViewer to that frame; the existing
+-- Factory observer owns width refreshes while direct anchors inherit movement.
+ResetRefreshTrace()
+skironSource:Hide()
+FlushTimers()
+AssertWidthOnlyBatch("EssentialCooldownViewer", "Skiron loss before Coolinator acquisition")
+assert(externalAnchorRefreshes == 6,
+    "Skiron loss before Coolinator did not target external-anchor consumers")
+
+local baseEffectiveResolver = _G.MSUF_GetEffectiveCooldownFrame
+_G.MSUF_GetEffectiveCooldownFrame = function(name)
+    if name == "EssentialCooldownViewer" then
+        local getSkiron = _G.MSUF_GetSkironCooldownAnchorProxy
+        local skiron = type(getSkiron) == "function" and getSkiron() or nil
+        if skiron then return skiron end
+        local getCoolinator = _G.MSUF_GetCoolinatorCooldownAnchor
+        local coolinator = type(getCoolinator) == "function" and getCoolinator() or nil
+        if coolinator then return coolinator end
+    end
+    return baseEffectiveResolver(name)
+end
+
+local coolinatorSource = FakeFrame("CoolinatorPrimaryGroupAnchor", 226, 24)
+_G.CoolinatorPrimaryGroupAnchor = coolinatorSource
+ResetRefreshTrace()
+FireEvent("ADDON_LOADED", "Coolinator")
+assert(_G.MSUF_GetCoolinatorCooldownAnchor() == nil,
+    "Coolinator getter consumed acquisition before its cold-path resolve")
+FlushTimers()
+assert(_G.MSUF_GetCoolinatorCooldownAnchor() == coolinatorSource,
+    "Coolinator primary group anchor was not acquired")
+AssertWidthOnlyBatch("EssentialCooldownViewer", "Coolinator initial acquisition")
+assert(externalAnchorRefreshes == 7,
+    "Coolinator acquisition did not target external-anchor consumers")
+assert(coolinatorSource.hooks.OnSizeChanged and coolinatorSource.hooks.OnShow and coolinatorSource.hooks.OnHide,
+    "Coolinator anchor lifecycle hooks were not installed")
+
+ResetRefreshTrace()
+coolinatorSource:SetSize(254, 24)
+assert(#timers == 1, "Coolinator designer resize was not coalesced")
+FlushTimers()
+AssertWidthOnlyBatch("EssentialCooldownViewer", "Coolinator designer resize")
+assert(externalAnchorRefreshes == 7,
+    "same-source Coolinator resize unnecessarily rebound unit-frame anchors")
 
 print("detached power preview width smoke: ok")

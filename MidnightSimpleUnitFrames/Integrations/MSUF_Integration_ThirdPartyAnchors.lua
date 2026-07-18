@@ -3,9 +3,11 @@ local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 
 -- Third-party anchor integration.
--- Tracks Skiron's cooldown anchor proxy after frames exist.
+-- Tracks Skiron's cooldown anchor proxy and Coolinator's primary group anchor
+-- after their frames exist.
 -- Integration is deferred in combat and must not take ownership of external addon layouts.
 local CreateFrame = CreateFrame
+local C_AddOns = C_AddOns
 local C_Timer = C_Timer
 local EventRegistry = EventRegistry
 local InCombatLockdown = InCombatLockdown
@@ -22,6 +24,12 @@ local skironSourceHookPending = false
 local skironProxyRefreshAfterCombat = false
 local skironResolveGeneration = 0
 local observedSkironSources = setmetatable({}, { __mode = "k" })
+local refreshCoolinatorAnchor
+local coolinatorSourceHookPending = false
+local coolinatorRefreshAfterCombat = false
+local coolinatorResolveGeneration = 0
+local coolinatorActiveSource
+local observedCoolinatorSources = setmetatable({}, { __mode = "k" })
 
 local function InCombat()
     return InCombatLockdown and InCombatLockdown() or false
@@ -60,6 +68,53 @@ local function ResolveSkironAnchorSource(preferredFrame, isActiveProxy)
     if IsFrameUsable(groupAnchor) then
         return groupAnchor
     end
+end
+
+local function ResolveCoolinatorAnchorSource()
+    local source = _G.CoolinatorPrimaryGroupAnchor
+    if IsFrameUsable(source) then return source end
+end
+
+local function ObserveCoolinatorSource(source)
+    if not (source and source.HookScript) then return false end
+    if source.IsForbidden and source:IsForbidden() then return false end
+    if observedCoolinatorSources[source] then return true end
+    if InCombat()
+        and source.IsProtected and source:IsProtected() then
+        coolinatorSourceHookPending = true
+        if watcher then watcher:RegisterEvent("PLAYER_REGEN_ENABLED") end
+        return false
+    end
+    observedCoolinatorSources[source] = true
+    source:HookScript("OnSizeChanged", function()
+        refreshCoolinatorAnchor()
+    end)
+    source:HookScript("OnShow", function()
+        refreshCoolinatorAnchor()
+    end)
+    source:HookScript("OnHide", function()
+        refreshCoolinatorAnchor()
+    end)
+    return true
+end
+
+local function EnsureCoolinatorAnchorSource()
+    -- Coolinator keeps this frame identity stable and repoints it at the first
+    -- designer/runtime group. Unit frames anchored to it therefore inherit
+    -- position and size changes without any recurring MSUF work.
+    ObserveCoolinatorSource(_G.CoolinatorPrimaryGroupAnchor)
+    local source = ResolveCoolinatorAnchorSource()
+    local previousSource = coolinatorActiveSource
+    local transition = previousSource ~= source
+        and (not previousSource and "acquired" or not source and "lost" or "switched")
+        or nil
+    if transition and InCombat() then
+        coolinatorRefreshAfterCombat = true
+        if watcher then watcher:RegisterEvent("PLAYER_REGEN_ENABLED") end
+        return previousSource, false, nil, true
+    end
+    coolinatorActiveSource = source
+    return source, transition ~= nil, transition, false
 end
 
 local function ObserveSkironSource(source)
@@ -147,7 +202,16 @@ _G.MSUF_GetSkironCooldownAnchorProxy = function()
     return MSUF.GetSkironCooldownAnchorProxy()
 end
 
-local function RefreshSkironAnchorConsumers(transition)
+function MSUF.GetCoolinatorCooldownAnchor()
+    local source = coolinatorActiveSource
+    if source and IsFrameUsable(source) then return source end
+end
+
+_G.MSUF_GetCoolinatorCooldownAnchor = function()
+    return MSUF.GetCoolinatorCooldownAnchor()
+end
+
+local function RefreshEssentialCooldownAnchorConsumers(transition)
     if transition ~= "acquired" and transition ~= "lost" then return end
     local UF = MSUF.UF
     local factory = UF and UF.Factory
@@ -170,12 +234,27 @@ refreshSkironAnchorProxy = function(source, isActiveProxy, sizeChanged)
         if type(_G.MSUF_EnsureCooldownWidthObservers) == "function" then
             _G.MSUF_EnsureCooldownWidthObservers(true)
         end
-        RefreshSkironAnchorConsumers(transition)
+        RefreshEssentialCooldownAnchorConsumers(transition)
     end
     if (changed or sizeChanged == true) and type(_G.MSUF_ScheduleCooldownWidthRefresh) == "function" then
         _G.MSUF_ScheduleCooldownWidthRefresh("EssentialCooldownViewer", false, true)
     end
     return proxy ~= nil
+end
+
+refreshCoolinatorAnchor = function()
+    local source, changed, transition, deferred = EnsureCoolinatorAnchorSource()
+    if deferred then return source ~= nil end
+    if changed then
+        if type(_G.MSUF_EnsureCooldownWidthObservers) == "function" then
+            _G.MSUF_EnsureCooldownWidthObservers(true)
+        end
+        RefreshEssentialCooldownAnchorConsumers(transition)
+        if type(_G.MSUF_ScheduleCooldownWidthRefresh) == "function" then
+            _G.MSUF_ScheduleCooldownWidthRefresh("EssentialCooldownViewer", false, true)
+        end
+    end
+    return source ~= nil
 end
 
 local function ScheduleSkironAnchorResolve()
@@ -185,6 +264,24 @@ local function ScheduleSkironAnchorResolve()
     local function run()
         if generation ~= skironResolveGeneration then return end
         if refreshSkironAnchorProxy() then return end
+        index = index + 1
+        local delay = SKIRON_RETRY_DELAYS[index]
+        if delay and C_Timer and C_Timer.After then C_Timer.After(delay, run) end
+    end
+    if not (C_Timer and C_Timer.After) then
+        run()
+        return
+    end
+    C_Timer.After(SKIRON_RETRY_DELAYS[index], run)
+end
+
+local function ScheduleCoolinatorAnchorResolve()
+    coolinatorResolveGeneration = coolinatorResolveGeneration + 1
+    local generation = coolinatorResolveGeneration
+    local index = 1
+    local function run()
+        if generation ~= coolinatorResolveGeneration then return end
+        if refreshCoolinatorAnchor() then return end
         index = index + 1
         local delay = SKIRON_RETRY_DELAYS[index]
         if delay and C_Timer and C_Timer.After then C_Timer.After(delay, run) end
@@ -217,8 +314,19 @@ local function RegisterSkironAnchorProxy()
     return true
 end
 
+local function RegisterCoolinatorAnchor()
+    if not _G.CoolinatorPrimaryGroupAnchor then
+        local isLoaded = C_AddOns and C_AddOns.IsAddOnLoaded
+        if type(isLoaded) ~= "function" or not isLoaded("Coolinator") then return false end
+    end
+    ScheduleCoolinatorAnchorResolve()
+    return true
+end
+
 local function RegisterThirdPartyAnchors()
-    return RegisterSkironAnchorProxy()
+    local skiron = RegisterSkironAnchorProxy()
+    local coolinator = RegisterCoolinatorAnchor()
+    return skiron or coolinator
 end
 
 MSUF.RegisterThirdPartyAnchors = RegisterThirdPartyAnchors
@@ -231,16 +339,26 @@ watcher:SetScript("OnEvent", function(self, event, addon)
     if event == "PLAYER_REGEN_ENABLED" then
         if InCombat() then return end
         self:UnregisterEvent("PLAYER_REGEN_ENABLED")
-        if not skironSourceHookPending and not skironProxyRefreshAfterCombat then return end
+        local refreshSkiron = skironSourceHookPending or skironProxyRefreshAfterCombat
+        local refreshCoolinator = coolinatorSourceHookPending or coolinatorRefreshAfterCombat
+        if not refreshSkiron and not refreshCoolinator then return end
         skironSourceHookPending = false
         skironProxyRefreshAfterCombat = false
-        refreshSkironAnchorProxy(nil, false, true)
+        coolinatorSourceHookPending = false
+        coolinatorRefreshAfterCombat = false
+        if refreshSkiron then refreshSkironAnchorProxy(nil, false, true) end
+        if refreshCoolinator then refreshCoolinatorAnchor() end
         return
     end
-    if event == "ADDON_LOADED" and addon ~= "SkironCooldownManager" then
+    if event == "ADDON_LOADED" then
+        if addon == "SkironCooldownManager" then
+            RegisterSkironAnchorProxy()
+        elseif addon == "Coolinator" then
+            RegisterCoolinatorAnchor()
+        end
         return
     end
     RegisterThirdPartyAnchors()
 end)
 
-RegisterSkironAnchorProxy()
+RegisterThirdPartyAnchors()
