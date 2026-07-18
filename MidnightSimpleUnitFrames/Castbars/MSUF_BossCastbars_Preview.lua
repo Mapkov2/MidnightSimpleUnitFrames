@@ -188,6 +188,10 @@ local function ApplyBossCastbarPreviewLayout(preview, index)
         preview:SetSize(width, height)
     end
 
+    if type(_G.MSUF_ApplyCastbarFrameLayer) == "function" then
+        _G.MSUF_ApplyCastbarFrameLayer(preview, general, "boss")
+    end
+
     if type(_G.MSUF_RefreshCastbarFrame) == "function" then
         _G.MSUF_RefreshCastbarFrame(preview, "boss", general)
         if type(_G.MSUF_ApplyCastbarSparkVisual) == "function" then

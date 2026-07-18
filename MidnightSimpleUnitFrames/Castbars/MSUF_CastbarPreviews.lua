@@ -234,6 +234,9 @@ local function PositionPreview(unit, frame)
     if type(_G.MSUF_HardSyncCastbarPreview) == "function" then
         _G.MSUF_HardSyncCastbarPreview(frame, SourceCastbarForUnit(unit))
     end
+    if type(_G.MSUF_ApplyCastbarFrameLayer) == "function" then
+        _G.MSUF_ApplyCastbarFrameLayer(frame, general, unit)
+    end
 end
 
 local function PositionPlayerCastbarPreview()

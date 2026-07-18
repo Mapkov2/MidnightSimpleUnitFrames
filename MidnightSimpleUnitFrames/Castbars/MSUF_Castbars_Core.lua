@@ -19,6 +19,7 @@ local tonumber = tonumber
 local tostring = tostring
 local pairs = pairs
 local math_max = math.max
+local math_floor = math.floor
 
 local lsm = (MSUF and MSUF.LSM) or _G.MSUF_LSM or (_G.LibStub and _G.LibStub("LibSharedMedia-3.0", true))
 local fontList = _G.MSUF_FONT_LIST
@@ -661,10 +662,86 @@ local function ApplyCastbarBaseGeometry(frame, general, forcedUnit)
     return general, height, width
 end
 
+local CASTBAR_FRAME_LEVEL_KEYS = {
+    player = "castbarPlayerFrameLevelOffset",
+    target = "castbarTargetFrameLevelOffset",
+    focus = "castbarFocusFrameLevelOffset",
+    boss = "bossCastFrameLevelOffset",
+}
+
+local function GetCastbarFrameLevelOffset(unit, general)
+    unit = NormalizeCastbarUnit(unit)
+    local key = unit and CASTBAR_FRAME_LEVEL_KEYS[unit]
+    local layer = tonumber(key and general and general[key]) or 6
+    layer = math_floor(layer + 0.5)
+    if layer < 0 then return 0 end
+    if layer > 30 then return 30 end
+    return layer
+end
+ExportPublic("MSUF_GetCastbarFrameLevelOffset", GetCastbarFrameLevelOffset)
+
+local function CastbarAnchorFrame(frame, unit)
+    local frameUnit = frame and tostring(frame.unit or "") or ""
+    if unit == "boss" and not frameUnit:match("^boss%d+$") then
+        frameUnit = "boss" .. tostring(tonumber(frame and frame._msufBossIndex) or 1)
+    end
+    if frameUnit == "" then frameUnit = unit end
+
+    local uf = MSUF and MSUF.UF
+    if uf and type(uf.GetFrame) == "function" then
+        local anchor = uf.GetFrame(frameUnit)
+        if anchor then return anchor end
+    end
+    if uf and uf.frames then
+        return uf.frames[frameUnit]
+    end
+    return _G["MSUF_" .. frameUnit]
+end
+
+local function SetCastbarFrameLevel(frame, level)
+    if not (frame and frame.SetFrameLevel) then return end
+    local current = frame.GetFrameLevel and frame:GetFrameLevel() or nil
+    if current ~= level then frame:SetFrameLevel(level) end
+end
+
+local function SyncCastbarFrameStrata(frame, anchor, unit)
+    if not (frame and frame.SetFrameStrata) then return end
+    local anchorStrata = anchor and anchor.GetFrameStrata and anchor:GetFrameStrata() or nil
+    -- The owning Unit Frame and castbar must share one strata. Otherwise WoW's
+    -- strata ordering always wins and the 0-30 frame-level control cannot move
+    -- the castbar behind or in front of Unit Frame content.
+    local wanted = anchorStrata or (unit == "boss" and "HIGH" or "MEDIUM")
+    local currentStrata = frame.GetFrameStrata and frame:GetFrameStrata() or nil
+    if wanted and wanted ~= "" and wanted ~= currentStrata then frame:SetFrameStrata(wanted) end
+end
+
+-- The user-facing 0-30 value is the castbar root's actual frame level. Keep
+-- every child frame at its established relative offset so the icon, texts,
+-- effects, and outline all move together with that root.
+local function ApplyCastbarFrameLayer(frame, general, forcedUnit)
+    if not frame then return end
+    local unit = NormalizeCastbarUnit(forcedUnit) or NormalizeCastbarUnit(frame.unit)
+    if not unit then return end
+    local layer = GetCastbarFrameLevelOffset(unit, general)
+
+    local anchor = CastbarAnchorFrame(frame, unit)
+    SyncCastbarFrameStrata(frame, anchor, unit)
+    local rootLevel = layer
+    local statusLevel = rootLevel + 1
+    SetCastbarFrameLevel(frame, rootLevel)
+    SetCastbarFrameLevel(frame.statusBar, statusLevel)
+    SetCastbarFrameLevel(frame._msufPCIconHost, statusLevel + 3)
+    SetCastbarFrameLevel(frame._msufDetailIconHost, statusLevel + 6)
+    SetCastbarFrameLevel(frame._msufTextOverlay, statusLevel + 10)
+    SetCastbarFrameLevel(frame._msufOutlineHost, statusLevel + 20)
+end
+ExportPublic("MSUF_ApplyCastbarFrameLayer", ApplyCastbarFrameLayer)
+
 local function ApplyCastbarVisualFrameCold(frame, general, forcedUnit)
     if not (frame and frame.statusBar) then return false end
     local height, width
     general, height, width = ApplyCastbarBaseGeometry(frame, general, forcedUnit)
+    ApplyCastbarFrameLayer(frame, general, forcedUnit)
     local globalRevision = _G.MSUF__castbarStyleGlobalRev or 1
     local textureRevision = _G.MSUF_CastbarStyleRevision or 1
     if frame._msufCastbarColdGlobalRev == globalRevision
