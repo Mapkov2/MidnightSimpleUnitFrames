@@ -1208,8 +1208,8 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     mock._powerBg = mock._power:CreateTexture(nil, "BACKGROUND")
     mock._powerBg:SetAllPoints()
 
-    mock._nameTextLayer = CreateFrame("Frame", nil, mock._health)
-    mock._nameTextLayer:SetAllPoints(mock._health)
+    mock._nameTextLayer = CreateFrame("Frame", nil, mock)
+    mock._nameTextLayer:SetAllPoints(mock)
     mock._healthTextLayer = CreateFrame("Frame", nil, mock._health)
     mock._healthTextLayer:SetAllPoints(mock._health)
     mock._powerTextLayer = CreateFrame("Frame", nil, mock)
@@ -1864,7 +1864,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         local textBaseLevel = (mock.GetFrameLevel and mock:GetFrameLevel()) or 1
         if mock._nameTextLayer then
             mock._nameTextLayer:ClearAllPoints()
-            mock._nameTextLayer:SetAllPoints(mock._health)
+            mock._nameTextLayer:SetAllPoints(mock)
             mock._nameTextLayer:SetFrameLevel(textBaseLevel + (tonumber(conf.nameTextLayer) or 5))
         end
         if mock._healthTextLayer then
@@ -1915,18 +1915,18 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         local noy = GFPreviewConfigToOffset(conf.nameOffsetY or 0, previewScale)
         local nameAnchor = conf.nameAnchor or "LEFT"
         if nameAnchor == "CENTER" then
-            mock._nameFS:SetPoint("LEFT", mock._health, "LEFT", pad3 + nox, noy)
-            mock._nameFS:SetPoint("RIGHT", mock._health, "RIGHT", -pad3 + nox, noy)
+            mock._nameFS:SetPoint("LEFT", mock, "LEFT", pad3 + nox, noy)
+            mock._nameFS:SetPoint("RIGHT", mock, "RIGHT", -pad3 + nox, noy)
             mock._nameFS:SetJustifyH("CENTER")
             mock._nameFS._msufPreviewJustifyH = "CENTER"
         elseif nameAnchor == "RIGHT" then
-            mock._nameFS:SetPoint("LEFT", mock._health, "LEFT", pad3 + nox, noy)
-            mock._nameFS:SetPoint("RIGHT", mock._health, "RIGHT", -pad3 + nox, noy)
+            mock._nameFS:SetPoint("LEFT", mock, "LEFT", pad3 + nox, noy)
+            mock._nameFS:SetPoint("RIGHT", mock, "RIGHT", -pad3 + nox, noy)
             mock._nameFS:SetJustifyH("RIGHT")
             mock._nameFS._msufPreviewJustifyH = "RIGHT"
         else
-            mock._nameFS:SetPoint("LEFT", mock._health, "LEFT", pad3 + nox, noy)
-            mock._nameFS:SetPoint("RIGHT", mock._health, "RIGHT", -pad3, noy)
+            mock._nameFS:SetPoint("LEFT", mock, "LEFT", pad3 + nox, noy)
+            mock._nameFS:SetPoint("RIGHT", mock, "RIGHT", -pad3, noy)
             mock._nameFS:SetJustifyH("LEFT")
             mock._nameFS._msufPreviewJustifyH = "LEFT"
         end

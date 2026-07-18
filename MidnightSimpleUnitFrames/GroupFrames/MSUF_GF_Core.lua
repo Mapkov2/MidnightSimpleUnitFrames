@@ -926,8 +926,8 @@ local function BuildFrameHierarchy(f, kind)
     f._msufGFDebuffStripe = debuffStripe
 
     -- Name text layer
-    local nameTextLayer = CreateFrame("Frame", nil, health)
-    nameTextLayer:SetAllPoints(health)
+    local nameTextLayer = CreateFrame("Frame", nil, barGroup)
+    nameTextLayer:SetAllPoints(barGroup)
     GF.SetFrameLayerLevel(nameTextLayer, f, conf.nameTextLayer, 5)
     f.nameTextLayer = nameTextLayer
 
@@ -3072,6 +3072,32 @@ local PREVIEW_CLASSES = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST",
 local PREVIEW_NAMES = { "Thrall", "Jaina", "Sylvanas", "Anduin", "Tyrande" }
 local PREVIEW_ROLES = { "TANK", "HEALER", "DAMAGER", "DAMAGER", "HEALER" }
 
+local function ApplyPreviewPowerGeometry(f, powerH)
+    if not f then return end
+    powerH = tonumber(powerH) or 0
+    if powerH < 0 then powerH = 0 end
+    local bars = f.barGroup or f
+
+    if f.health then
+        f.health:ClearAllPoints()
+        f.health:SetPoint("TOPLEFT", bars, "TOPLEFT", 0, 0)
+        f.health:SetPoint("BOTTOMRIGHT", bars, "BOTTOMRIGHT", 0, powerH > 0 and powerH or 0)
+    end
+
+    if f.power then
+        f.power:ClearAllPoints()
+        f.power:SetPoint("BOTTOMLEFT", bars, "BOTTOMLEFT", 0, 0)
+        f.power:SetPoint("BOTTOMRIGHT", bars, "BOTTOMRIGHT", 0, 0)
+        if powerH > 0 then
+            f.power:SetHeight(powerH)
+            f.power:Show()
+        else
+            f.power:SetHeight(0.001)
+            f.power:Hide()
+        end
+    end
+end
+
 function GF.ApplyPreviewData(f, index, kind)
     if not f then return end
     f._msufGFPreviewActive = true
@@ -3275,6 +3301,7 @@ function GF.ApplyPreviewData(f, index, kind)
     -- Power bar + independent power text preview
     local previewPowerH = (GF.GetEffectivePowerHeight and GF.GetEffectivePowerHeight(kind or "party", nil, role, conf))
         or (conf.powerHeight or 6)
+    ApplyPreviewPowerGeometry(f, previewPowerH)
     local powerTextOn = (GF.HasActivePowerTextSlot and GF.HasActivePowerTextSlot(kind, conf)) or false
     local fakePow = 50 + index * 10
     local fakePowMax = 100

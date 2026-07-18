@@ -1,5 +1,20 @@
 # Changelog
 
+## 5.73 - 2026-07-18
+
+### Highlight
+
+- Import UnhaltedUnitFrames 12.1 profiles directly into MSUF with the load-on-demand UUF importer.
+
+### Minor Bug Fixes
+
+- Fixed imported UUF profiles losing independent health-fill and missing-health transparency in live frames and previews.
+- Fixed aura icon size controls not staying synchronized between the menu and Edit Mode.
+- Fixed visible Group Frame power bars shifting name text vertically in live frames and previews.
+- Fixed split health text updates relying on secret-string comparisons.
+- Fixed unit frames anchored to Skiron or Coolinator not reliably following provider size, visibility, and primary-layout changes.
+- Fixed dragging third-party anchored unit frames and synchronizing cooldown-sized power bars.
+
 ## 5.72 - 2026-07-18
 
 ### Highlights
@@ -7,14 +22,6 @@
 - New load-on-demand importer for UnhaltedUnitFrames 12.1 profiles.
 - New Unit and Group preview controls: zoom, pan, quick actions, and direct settings links.
 - Per-unit Blizzard frame ownership for Player, Pet, Target, Target of Target, Focus, Focus Target, and Boss frames.
-
-### Latest Changes
-
-- Added native Skiron Cooldown Manager and Coolinator anchor integration without recurring polling.
-- Added separate icon size controls for buffs, debuffs, and private auras, synchronized with Edit Mode.
-- Preserved independent health-fill and missing-health transparency in imported UUF profiles and matching previews.
-- Improved dragging of third-party anchored frames and kept cooldown-sized power bars synchronized.
-- Avoided secret-string comparisons when updating split health text visibility.
 
 ### Import & Layout Fidelity
 

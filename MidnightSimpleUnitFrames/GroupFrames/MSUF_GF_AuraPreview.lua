@@ -929,7 +929,7 @@ local function BuildMockFrame(parent)
 
     -- Name text layer
     local nameLayer = CreateFrame("Frame", nil, f)
-    nameLayer:SetAllPoints(health)
+    nameLayer:SetAllPoints(f)
     nameLayer:SetFrameLevel(health:GetFrameLevel() + (conf.nameTextLayer or 5))
     f._nameLayer = nameLayer
 
@@ -942,7 +942,7 @@ local function BuildMockFrame(parent)
     -- Name text
     local nameFS = nameLayer:CreateFontString(nil, "OVERLAY")
     nameFS:SetFont(GF.ResolveFontPath(kind), conf.nameFontSize or 12, GF.ResolveFontFlags(kind))
-    nameFS:SetPoint("LEFT", health, "LEFT", 6, 0)
+    nameFS:SetPoint("LEFT", f, "LEFT", 6, 0)
     nameFS:SetText(PREVIEW_NAMES[_classIdx] or "Thrall")
     nameFS:SetShadowColor(0, 0, 0, 1)
     nameFS:SetShadowOffset(1, -1)
@@ -1323,16 +1323,16 @@ function GF.RefreshPreviewBox()
             local noy = PreviewTextValue(conf.nameOffsetY or 0)
             local pad = PreviewTextValue(3, 1)
             if nAnch == "CENTER" then
-                m._nameFS:SetPoint("LEFT", m._health, "LEFT", pad + nox, noy)
-                m._nameFS:SetPoint("RIGHT", m._health, "RIGHT", -pad + nox, noy)
+                m._nameFS:SetPoint("LEFT", m, "LEFT", pad + nox, noy)
+                m._nameFS:SetPoint("RIGHT", m, "RIGHT", -pad + nox, noy)
                 m._nameFS:SetJustifyH("CENTER")
             elseif nAnch == "RIGHT" then
-                m._nameFS:SetPoint("LEFT", m._health, "LEFT", pad + nox, noy)
-                m._nameFS:SetPoint("RIGHT", m._health, "RIGHT", -pad + nox, noy)
+                m._nameFS:SetPoint("LEFT", m, "LEFT", pad + nox, noy)
+                m._nameFS:SetPoint("RIGHT", m, "RIGHT", -pad + nox, noy)
                 m._nameFS:SetJustifyH("RIGHT")
             else
-                m._nameFS:SetPoint("LEFT", m._health, "LEFT", pad + nox, noy)
-                m._nameFS:SetPoint("RIGHT", m._health, "RIGHT", -pad + nox, noy)
+                m._nameFS:SetPoint("LEFT", m, "LEFT", pad + nox, noy)
+                m._nameFS:SetPoint("RIGHT", m, "RIGHT", -pad + nox, noy)
                 m._nameFS:SetJustifyH("LEFT")
             end
             if conf.showName ~= false then m._nameFS:Show() else m._nameFS:Hide() end
