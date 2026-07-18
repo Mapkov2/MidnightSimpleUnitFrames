@@ -17,6 +17,7 @@
   <Script file="..\..\Engine\Elements\MSUF_UF_Elements_LoadConditions.lua"/>
   <Script file="..\..\Engine\Elements\MSUF_UF_Elements_Bridges.lua"/>
   <Script file="..\..\..\Auras3\MSUF_Auras3_Core.lua"/>
+  <Script file="..\..\..\Auras3\MSUF_Auras3_DotData.lua"/>
   <Script file="..\..\..\Auras3\MSUF_Auras3_SpellIndicators.lua"/>
   <Script file="..\..\..\Auras3\MSUF_Auras3_UnitFrames.lua"/>
   <Script file="..\..\..\Auras3\MSUF_Auras3_EditMode.lua"/>
