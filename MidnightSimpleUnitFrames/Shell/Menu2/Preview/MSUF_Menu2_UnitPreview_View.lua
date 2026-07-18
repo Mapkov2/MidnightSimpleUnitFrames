@@ -456,7 +456,7 @@ OpenPreviewHandleSettings = function(handle, source)
     if section == "auras3" then
         local unit = box and box.key or "player"
         local lane = fields.auraPreviewKind
-        if lane ~= "debuff" and lane ~= "custom1" and lane ~= "custom2" and lane ~= "custom3" then lane = "buff" end
+        if lane ~= "debuff" and lane ~= "custom1" and lane ~= "custom2" and lane ~= "custom3" and lane ~= "custom4" then lane = "buff" end
         if menu then
             menu.unitAuraTabSelection = menu.unitAuraTabSelection or {}
             menu.unitAuraTabSelection[unit] = lane

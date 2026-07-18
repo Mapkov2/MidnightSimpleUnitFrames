@@ -9,6 +9,7 @@ MSUF = MSUF or {}
 
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+local C_Timer = M.MenuTimer or _G.C_Timer
 
 local T = M.Theme
 local W = M.Widgets
@@ -1531,7 +1532,7 @@ local function StartSearchBackgroundIndex()
     if SearchCombatLocked() then return end
     if not (M.frame and M.frame.IsShown and M.frame:IsShown()) then return end
     if not M.scrollChild then return end
-    if not (_G.C_Timer and type(_G.C_Timer.After) == "function") then return end
+    if not (C_Timer and type(C_Timer.After) == "function") then return end
 
     local pageInfos = BuildSearchPageInfos()
     local queue = {}
@@ -1561,13 +1562,13 @@ local function StartSearchBackgroundIndex()
         end
 
         if SEARCH_STATE.indexQueue and #SEARCH_STATE.indexQueue > 0 then
-            _G.C_Timer.After(SEARCH_BACKGROUND_STEP_SEC, Step)
+            C_Timer.After(SEARCH_BACKGROUND_STEP_SEC, Step)
         else
             FinishSearchBackgroundIndex()
         end
     end
 
-    _G.C_Timer.After(SEARCH_BACKGROUND_FIRST_STEP_SEC, Step)
+    C_Timer.After(SEARCH_BACKGROUND_FIRST_STEP_SEC, Step)
 end
 
 local function GetSearchRecords()
@@ -1832,7 +1833,7 @@ local function ScheduleSearchInputQuery(searchBox, query, openPage, onComplete)
         if type(onComplete) == "function" then onComplete(query) end
     end
 
-    _G.C_Timer.After(SEARCH_INPUT_DEBOUNCE_SEC, RunLatest)
+    C_Timer.After(SEARCH_INPUT_DEBOUNCE_SEC, RunLatest)
 end
 
 local function OpenSearchResults(query)

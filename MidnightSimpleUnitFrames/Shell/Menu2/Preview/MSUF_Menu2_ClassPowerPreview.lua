@@ -10,6 +10,7 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
 end
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+local C_Timer = M.MenuTimer or _G.C_Timer
 local Preview = M.ClassPowerStackPreview or {}
 M.ClassPowerStackPreview = Preview
 local W = M.Widgets

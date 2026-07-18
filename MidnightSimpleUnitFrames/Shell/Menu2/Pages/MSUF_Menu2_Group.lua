@@ -2,7 +2,7 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-local C_Timer = _G.C_Timer
+local C_Timer = M.MenuTimer or _G.C_Timer
 
 -- Menu2 Group page foundation.
 -- Owns party/raid/mythicraid option binding and preview sync. Apply work is routed through

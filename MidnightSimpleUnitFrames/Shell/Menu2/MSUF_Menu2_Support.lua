@@ -75,6 +75,125 @@ local function BlockConfigCombatLocked(silent)
     return true
 end
 M.IsConfigCombatLocked = M.IsConfigCombatLocked or IsConfigCombatLocked
+
+-- Every delayed Menu2-only task goes through this registry. C_Timer.After
+-- cannot be cancelled, so a callback queued while the menu is open would
+-- otherwise still wake once after combat starts even if its body immediately
+-- returned. Retail's NewTimer handle lets the combat/menu-hide teardown remove
+-- the callback itself: zero delayed Menu2 execution during combat.
+local rawTimerAPI = _G.C_Timer
+local menuRuntimeGeneration = 0
+local menuRuntimeTasks = {}
+local Runtime = M.MenuRuntime
+if type(Runtime) ~= "table" then
+    Runtime = {}
+    M.MenuRuntime = Runtime
+end
+
+function Runtime:CancelPendingTasks(reason)
+    menuRuntimeGeneration = menuRuntimeGeneration + 1
+    local cancelled = 0
+    while true do
+        local task = next(menuRuntimeTasks)
+        if task == nil then break end
+        menuRuntimeTasks[task] = nil
+        task.active = false
+        if task.timer and type(task.timer.Cancel) == "function" then
+            pcall(task.timer.Cancel, task.timer)
+        end
+        cancelled = cancelled + 1
+    end
+    self.lastReason = tostring(reason or "menu-hide")
+    return cancelled
+end
+
+function Runtime:Schedule(delay, callback, label)
+    if type(callback) ~= "function" or IsConfigCombatLocked() then return nil end
+    delay = math.max(0, tonumber(delay) or 0)
+    local generation = menuRuntimeGeneration
+    local task = {
+        active = true,
+        label = tostring(label or "menu-task"),
+    }
+    function task:Cancel()
+        if not self.active then return end
+        self.active = false
+        menuRuntimeTasks[self] = nil
+        if self.timer and type(self.timer.Cancel) == "function" then
+            pcall(self.timer.Cancel, self.timer)
+        end
+    end
+    menuRuntimeTasks[task] = true
+    local function Run(...)
+        if not task.active then return end
+        task.active = false
+        menuRuntimeTasks[task] = nil
+        if generation ~= menuRuntimeGeneration or IsConfigCombatLocked() then return end
+        return callback(...)
+    end
+    if rawTimerAPI and type(rawTimerAPI.NewTimer) == "function" then
+        local ok, timer = pcall(rawTimerAPI.NewTimer, delay, Run)
+        if ok and (timer or not task.active) then
+            task.timer = timer
+            return task
+        end
+    end
+    if rawTimerAPI and type(rawTimerAPI.After) == "function" then
+        -- Compatibility-only path for harnesses/old clients. The generation
+        -- gate keeps it inert; supported Retail clients use cancellable timers.
+        rawTimerAPI.After(delay, Run)
+        return task
+    end
+    Run()
+    return task
+end
+
+local MenuTimer = {}
+function MenuTimer.After(delay, callback)
+    Runtime:Schedule(delay, callback, "C_Timer.After")
+end
+function MenuTimer.NewTimer(delay, callback)
+    return Runtime:Schedule(delay, callback, "C_Timer.NewTimer")
+end
+M.MenuTimer = MenuTimer
+function Runtime:PendingTaskCount()
+    local count = 0
+    for _ in pairs(menuRuntimeTasks) do count = count + 1 end
+    return count
+end
+function Runtime:Resume(reason)
+    self.active = true
+    self.lastReason = tostring(reason or "menu-show")
+    local assistant = (MSUF and MSUF.Assistant) or M.Assistant
+    if assistant and type(assistant.SetMenuRuntimeActive) == "function" then
+        assistant.SetMenuRuntimeActive(true, self.lastReason)
+    elseif assistant then
+        assistant._menuRuntimeActive = true
+        assistant._menuRuntimeReason = self.lastReason
+    end
+    return true
+end
+function Runtime:Quiesce(reason)
+    reason = tostring(reason or "menu-hide")
+    local combat = IsConfigCombatLocked()
+    self.active = false
+    self:CancelPendingTasks(reason)
+    if type(self._quiesceScale) == "function" then self._quiesceScale(combat) end
+    local apply = M.ApplyService
+    if apply and type(apply.Quiesce) == "function" then apply.Quiesce(combat) end
+    local search = M.SearchBridge
+    if search and type(search.CancelSearchBackgroundIndex) == "function" then search.CancelSearchBackgroundIndex() end
+    local assistant = (MSUF and MSUF.Assistant) or M.Assistant
+    if assistant and type(assistant.SetMenuRuntimeActive) == "function" then
+        assistant.SetMenuRuntimeActive(false, reason)
+    elseif assistant then
+        assistant._menuRuntimeActive = false
+        assistant._menuRuntimeReason = reason
+    end
+    local theme = M.Theme
+    if theme and type(theme.StopAllMenuAnimations) == "function" then theme.StopAllMenuAnimations() end
+    return true
+end
 local function EnsureGeneral()
     local ensureDB = _G.MSUF_EnsureDB
     if type(ensureDB) == "function" then ensureDB() end
@@ -1072,6 +1191,9 @@ end
 ExportPublic("MSUF_ShowGroupFrameReloadRequiredPopup", ShowGroupFrameReloadRequiredPopup)
 local copyLinkPopup
 local copyLinkPopupSerial = 0
+function M.HideMenuCopyLinkPopup()
+    if copyLinkPopup and copyLinkPopup.Hide then copyLinkPopup:Hide() end
+end
 local function EnsureCopyLinkPopup()
     if not _G.CreateFrame then return nil end
     if copyLinkPopup then
@@ -1192,6 +1314,8 @@ local pendingDisableScaling
 local pendingReloadOnScalingOff
 local scaleApplyWatcher
 local scaleEvents
+local scaleReanchorTimer
+local restoreBlizzardScaleTimers = {}
 local UpdateGlobalScaleEvents
 local lastGlobalUiParentScale
 local blizzardUiParentScale
@@ -1244,30 +1368,54 @@ local function RefreshGroupFrameGeometryAfterScale()
         gf.RefreshHeaderLayout()
     end
 end
+local function FlushUnitframeReanchorAfterScale()
+    scaleReanchorTimer = nil
+    ExportPublic("MSUF_ScaleReanchorPending", false)
+    if _G.InCombatLockdown and _G.InCombatLockdown() then
+        local UF = _G.MSUF_NS and _G.MSUF_NS.UF
+        if UF and UF.RequestReanchorAfterCombat then UF.RequestReanchorAfterCombat() end
+        RefreshGroupFrameGeometryAfterScale()
+        return
+    end
+    if type(_G.MSUF_UpdateAllExternalAnchorProxies) == "function" then _G.MSUF_UpdateAllExternalAnchorProxies() end
+    if type(_G.MSUF_ForceReanchorAllUnitFrames_Once) == "function" then
+        local previous = _G.MSUF_ExternalAnchorForceReanchor
+        ExportPublic("MSUF_ExternalAnchorForceReanchor", true)
+        _G.MSUF_ForceReanchorAllUnitFrames_Once(true)
+        ExportPublic("MSUF_ExternalAnchorForceReanchor", previous)
+    end
+    RefreshGroupFrameGeometryAfterScale()
+end
 local function ScheduleUnitframeReanchorAfterScale()
     if _G.MSUF_ScaleReanchorPending then return end
     ExportPublic("MSUF_ScaleReanchorPending", true)
-    local function flush()
-        ExportPublic("MSUF_ScaleReanchorPending", false)
-        if _G.InCombatLockdown and _G.InCombatLockdown() then
-            local UF = _G.MSUF_NS and _G.MSUF_NS.UF
-            if UF and UF.RequestReanchorAfterCombat then UF.RequestReanchorAfterCombat() end
-            RefreshGroupFrameGeometryAfterScale()
-            return
-        end
-        if type(_G.MSUF_UpdateAllExternalAnchorProxies) == "function" then _G.MSUF_UpdateAllExternalAnchorProxies() end
-        if type(_G.MSUF_ForceReanchorAllUnitFrames_Once) == "function" then
-            local previous = _G.MSUF_ExternalAnchorForceReanchor
-            ExportPublic("MSUF_ExternalAnchorForceReanchor", true)
-            _G.MSUF_ForceReanchorAllUnitFrames_Once(true)
-            ExportPublic("MSUF_ExternalAnchorForceReanchor", previous)
-        end
-        RefreshGroupFrameGeometryAfterScale()
+    if _G.C_Timer and type(_G.C_Timer.NewTimer) == "function" then
+        scaleReanchorTimer = _G.C_Timer.NewTimer(0, FlushUnitframeReanchorAfterScale)
+    else
+        _G.C_Timer.After(0, FlushUnitframeReanchorAfterScale)
     end
-    _G.C_Timer.After(0, flush)
 end
 local EnsureScaleApplyAfterCombat
 local ResetGlobalUiScale
+local function CancelPendingScaleTimers()
+    local reanchorPending = _G.MSUF_ScaleReanchorPending == true
+    if scaleReanchorTimer and type(scaleReanchorTimer.Cancel) == "function" then
+        pcall(scaleReanchorTimer.Cancel, scaleReanchorTimer)
+    end
+    scaleReanchorTimer = nil
+    ExportPublic("MSUF_ScaleReanchorPending", false)
+    local restoreCount = 0
+    while true do
+        local record = next(restoreBlizzardScaleTimers)
+        if record == nil then break end
+        restoreBlizzardScaleTimers[record] = nil
+        if record.timer and type(record.timer.Cancel) == "function" then
+            pcall(record.timer.Cancel, record.timer)
+        end
+        restoreCount = restoreCount + 1
+    end
+    return reanchorPending, restoreCount
+end
 local function ApplyMsufScale(scale)
     scale = tonumber(scale)
     if not scale then return end
@@ -1378,11 +1526,38 @@ end
 local function RestoreBlizzardUiScale(silent)
     if BlockConfigCombatLocked(silent) then return false end
     RestoreBlizzardUiScaleOnce()
-    _G.C_Timer.After(0, RestoreBlizzardUiScaleOnce)
-    _G.C_Timer.After(0.25, RestoreBlizzardUiScaleOnce)
-    _G.C_Timer.After(1.0, RestoreBlizzardUiScaleOnce)
+    local function ScheduleRestore(delay)
+        local record = {}
+        restoreBlizzardScaleTimers[record] = true
+        local function Run()
+            restoreBlizzardScaleTimers[record] = nil
+            if IsConfigCombatLocked() then return end
+            RestoreBlizzardUiScaleOnce()
+        end
+        if _G.C_Timer and type(_G.C_Timer.NewTimer) == "function" then
+            record.timer = _G.C_Timer.NewTimer(delay, Run)
+        else
+            _G.C_Timer.After(delay, Run)
+        end
+    end
+    ScheduleRestore(0)
+    ScheduleRestore(0.25)
+    ScheduleRestore(1.0)
     lastGlobalUiParentScale = nil
     if not silent then Print("Global UI scale restored to Blizzard settings.") end
+    return true
+end
+Runtime._quiesceScale = function(inCombat)
+    local reanchorPending, restoreCount = CancelPendingScaleTimers()
+    if inCombat then
+        if reanchorPending then
+            pendingMsufScale = GetSavedMsufScale()
+            if EnsureScaleApplyAfterCombat then EnsureScaleApplyAfterCombat() end
+        end
+        return true
+    end
+    if reanchorPending then FlushUnitframeReanchorAfterScale() end
+    if restoreCount > 0 then RestoreBlizzardUiScaleOnce() end
     return true
 end
 local function WriteBlizzardUiScaleCVar(scale)

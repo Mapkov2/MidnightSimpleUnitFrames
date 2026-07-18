@@ -6,6 +6,7 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
 end
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+local C_Timer = M.MenuTimer or _G.C_Timer
 
 -- Menu2 Unit page definitions.
 -- Declares per-unit page metadata, value lists, copy categories, and shared control constants.
@@ -183,7 +184,7 @@ local UF_COPY_CATEGORIES = {
     { key = "text",         label = "Text",             default = true },
     { key = "portrait",     label = "Portrait",         default = true },
     { key = "power",        label = "Power Bar",        default = true },
-    { key = "auras",        label = "Auras · All",      default = true, description = "Copies the complete Aura workspace: visibility, layout, Blizzard filters, Buff/Debuff blacklists, Custom 1-3, their whitelists, Strata, and Full-Frame effects." },
+    { key = "auras",        label = "Auras · All",      default = true, description = "Copies the complete Aura workspace: visibility, layout, Blizzard filters, Buff/Debuff blacklists, Custom 1-3, Dots on target, Strata, and Full-Frame effects." },
     { key = "castbar",      label = "Castbar",          default = true },
     { key = "status",       label = "Status Icons",     default = true },
     { key = "load",         label = "Load Conditions",  default = true },

@@ -6,6 +6,7 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
 end
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+local C_Timer = M.MenuTimer or _G.C_Timer
 
 -- Native group preview renderer.
 -- Draws the Menu2 party/raid preview using lightweight mock data and page settings. It should

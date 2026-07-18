@@ -49,6 +49,7 @@ local pendingGroups = Apply.pendingGroups or {}
 local pendingGroupReason = Apply.pendingGroupReason
 local applyCombatDeferred = Apply.applyCombatDeferred == true
 local applyCombatDeferFrame
+local flushTimer
 local FlushApply
 
 Apply.pendingUnits = pendingUnits
@@ -1011,6 +1012,8 @@ local function ApplyColorRuntime(opt, unitFramesApplied)
 end
 
 FlushApply = function()
+    if flushTimer and type(flushTimer.Cancel) == "function" then pcall(flushTimer.Cancel, flushTimer) end
+    flushTimer = nil
     if InCombat() then
         return DeferApplyFlushUntilCombatEnds()
     end
@@ -1150,11 +1153,34 @@ function Apply.QueueFlush()
     if flushQueued then return true end
     flushQueued = true
     Apply.flushQueued = true
+    if InCombat() then return DeferApplyFlushUntilCombatEnds() end
+    if C_Timer and type(C_Timer.NewTimer) == "function" then
+        local fired = false
+        local function Run()
+            fired = true
+            flushTimer = nil
+            FlushApply()
+        end
+        local ok, timer = pcall(C_Timer.NewTimer, APPLY_FLUSH_DELAY, Run)
+        if ok and (timer or fired) then
+            if not fired then flushTimer = timer end
+            return true
+        end
+    end
     if C_Timer and C_Timer.After then
         C_Timer.After(APPLY_FLUSH_DELAY, FlushApply)
     else
         FlushApply()
     end
+    return true
+end
+
+function Apply.Quiesce(combat)
+    if flushTimer and type(flushTimer.Cancel) == "function" then pcall(flushTimer.Cancel, flushTimer) end
+    flushTimer = nil
+    if not flushQueued then return true end
+    if combat == true or InCombat() then return DeferApplyFlushUntilCombatEnds() end
+    FlushApply()
     return true
 end
 

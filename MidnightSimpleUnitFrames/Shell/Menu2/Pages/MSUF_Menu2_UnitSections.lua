@@ -2,6 +2,7 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+local C_Timer = M.MenuTimer or _G.C_Timer
 
 -- Shared Unit page sections.
 -- Builds reusable controls for per-unit basics, load rules, target-of-target text behavior,
@@ -402,7 +403,7 @@ local function BuildPreview(ctx, builder, unit)
             initialPreviewQueued = true
             previewQueueSerial = previewQueueSerial + 1
             local serial = previewQueueSerial
-            _G.C_Timer.After(0, function()
+            C_Timer.After(0, function()
                 if serial ~= previewQueueSerial then return end
                 initialPreviewQueued = nil
                 if PreviewHostShown() then RefreshThisPreview("MSUF2_UNIT_PAGE_INITIAL") end
