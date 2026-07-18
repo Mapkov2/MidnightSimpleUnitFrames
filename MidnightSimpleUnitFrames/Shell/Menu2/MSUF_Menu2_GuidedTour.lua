@@ -308,6 +308,28 @@ local VALID_SETUP_AREA = {
     classresources = true,
     all = true,
 }
+local VALID_SETUP_MODE = {
+    quick = true,
+    complete = true,
+}
+-- Quick Setup is the default beginner route. It reuses the real Menu2 pages,
+-- but only visits the decisions that produce an immediately useful layout.
+-- The complete tour remains available from the first route screen.
+local QUICK_STAGE_CONTROL_LIMITS = {
+    menu_basics = 0,
+    edit_mode = 0,
+    uf_player = 2,
+    uf_player_hp_text = 1,
+    uf_player_auras = 2,
+    group_edit_mode = 0,
+    gf_layout = 3,
+    gf_party_hp_text = 1,
+    gf_party_auras = 2,
+    classpower = 2,
+    opt_bars = 1,
+    opt_fonts = 1,
+    final_review = 0,
+}
 
 local function SelectedSetupArea()
     local ok, value = Invoke(Tour(), "GetPreference", "setupArea")
@@ -315,8 +337,25 @@ local function SelectedSetupArea()
     return VALID_SETUP_AREA[value] and value or nil
 end
 
+local function SelectedSetupMode()
+    local ok, value = Invoke(Tour(), "GetPreference", "setupMode")
+    value = ok and tostring(value or "") or ""
+    -- Existing in-progress tours predate setupMode and must keep their full
+    -- route. Every newly started tour writes an explicit mode below.
+    return VALID_SETUP_MODE[value] and value or "complete"
+end
+
+local function EffectiveStageControlLimit(stage)
+    if SelectedSetupMode() == "quick" then
+        return QUICK_STAGE_CONTROL_LIMITS[stage and stage.id] or 0
+    end
+    return stage and stage.controlLimit or 0
+end
+
 local function StageEnabled(stage)
-    if type(stage) ~= "table" or not stage.area then return true end
+    if type(stage) ~= "table" then return false end
+    if SelectedSetupMode() == "quick" and QUICK_STAGE_CONTROL_LIMITS[stage.id] == nil then return false end
+    if not stage.area then return true end
     local selected = SelectedSetupArea() or "all"
     if selected == "all" then return true end
     if stage.area == "shared_style" then
@@ -345,6 +384,9 @@ function M.GetGuidedTourStageProgress()
     local stage = CurrentStage and CurrentStage() or STAGES[1]
     local current, total = ActiveStagePosition(stage)
     return current, total, stage and stage.id
+end
+function M.GetGuidedTourMode()
+    return SelectedSetupMode()
 end
 
 local function StageIncludesSection(stage, sectionId)
@@ -489,6 +531,8 @@ M.IsGuidedEditModePlacementComplete = EditModePlacementComplete
 M.IsGuidedGroupEditModePlacementComplete = GroupEditModePlacementComplete
 
 local PREFERENCE_LABELS = {
+    quick = "Quick Setup",
+    complete = "Complete Tour",
     unitframes = "Unitframes",
     groupframes = "Group Frames",
     classresources = "Class Resources",
@@ -610,9 +654,9 @@ local function StageCue(stage, position, touched)
     end
     if stage.id == "menu_basics" then
         if SetupAreaDecisionComplete() then
-            return format(Tr("ROUTE READY - %s. Press Start tour."), PreferenceLabel(SelectedSetupArea()))
+            return format(Tr("ROUTE READY - %s, %s. Press Start."), PreferenceLabel(SelectedSetupMode()), PreferenceLabel(SelectedSetupArea()))
         end
-        return Tr("YOUR MOVE - Choose one green setup route.")
+        return Tr("YOUR MOVE - Choose what you want to set up.")
     end
     if stage.id == "unit_intro" then return Tr("PART 1 - Build Player once, then copy the finished setup to the other Unitframes.") end
     if stage.id == "edit_mode" then
@@ -780,6 +824,48 @@ function M.NotifyGuidedEditModePopupOpened(moverKey)
     if type(M.RefreshGuidedTourChrome) == "function" then
         M.RefreshGuidedTourChrome("EDIT_MODE_POPUP_OPENED")
     end
+    return true
+end
+
+local function LiveEditModePopupKey()
+    local editMode = _G.MSUF_EM2
+    local popups = editMode and editMode.Popups
+    if not (popups and type(popups.IsAnyOpen) == "function" and popups.IsAnyOpen()) then return nil end
+    local focus = editMode.Focus
+    local key = focus and type(focus.GetSelection) == "function" and focus.GetSelection() or nil
+    if not key then
+        local state = editMode.State
+        key = state and type(state.GetUnitKey) == "function" and state.GetUnitKey() or nil
+    end
+    return tostring(key or "")
+end
+
+local function ReconcileGuidedEditModePopup(stage)
+    if not TourIsActive() then return false end
+    stage = stage or CurrentStage()
+    local key = LiveEditModePopupKey()
+    if key == "" then return false end
+    if stage.id == "group_edit_mode" then
+        if key ~= "gf_party" and key ~= "party" then return false end
+    elseif stage.id == "edit_mode" then
+        if key ~= "player" then return false end
+    else
+        return false
+    end
+    local ok, accepted, changed = Invoke(Tour(), "MarkEditModePopupOpened", key)
+    return ok and accepted == true and changed == true
+end
+M.ReconcileGuidedEditModePopup = ReconcileGuidedEditModePopup
+
+local function OpenGuidedEditModePopup(key, stage)
+    local editMode = _G.MSUF_EM2
+    local popups = editMode and editMode.Popups
+    if not (popups and type(popups.Open) == "function") then return false end
+    local mover = editMode.Movers and type(editMode.Movers.Get) == "function" and editMode.Movers.Get(key) or nil
+    local opened = popups.Open(key, mover)
+    if opened ~= true and type(popups.IsAnyOpen) == "function" then opened = popups.IsAnyOpen() == true end
+    if not opened then return false end
+    ReconcileGuidedEditModePopup(stage)
     return true
 end
 
@@ -1315,7 +1401,7 @@ local function AllStageControls(stage)
     local records = RuntimeControlRecords()
     local controls, seen = {}, {}
     for i = 1, #sections do
-        local list = SectionControls(stage.pageKey, sections[i], sections, records, stage.includeEphemeralControls, stage.includeLockedControls, stage.controlLimit, stage.controlPaths)
+        local list = SectionControls(stage.pageKey, sections[i], sections, records, stage.includeEphemeralControls, stage.includeLockedControls, EffectiveStageControlLimit(stage), stage.controlPaths)
         for j = 1, #list do
             local control = list[j]
             if not seen[control.id] then
@@ -1455,7 +1541,7 @@ end
 
 local function RecordSectionAndControls(stage, section, result, sections, records)
     records = type(records) == "table" and records or RuntimeControlRecords()
-    local controls = SectionControls(stage.pageKey, section, sections, records, stage.includeEphemeralControls, stage.includeLockedControls, stage.controlLimit, stage.controlPaths)
+    local controls = SectionControls(stage.pageKey, section, sections, records, stage.includeEphemeralControls, stage.includeLockedControls, EffectiveStageControlLimit(stage), stage.controlPaths)
     RecordControls(stage, section, controls, result)
     RecordSectionOnly(stage, section, result)
     return #controls
@@ -1631,7 +1717,7 @@ local function FocusCurrentSection(stage)
         WriteCursor(stage, InitialCursor(stage))
         return
     end
-    local controls = SectionControls(stage.pageKey, section, sections, nil, stage.includeEphemeralControls, stage.includeLockedControls, stage.controlLimit, stage.controlPaths)
+    local controls = SectionControls(stage.pageKey, section, sections, nil, stage.includeEphemeralControls, stage.includeLockedControls, EffectiveStageControlLimit(stage), stage.controlPaths)
     local control, controlIndex = FindCursorControl(cursor, controls)
     if cursor.sectionId ~= section.id
         or cursor.sectionIndex ~= index
@@ -1712,6 +1798,7 @@ local function SetStage(stage, resetCursor)
 end
 
 local function CompleteTour()
+    local completedMode = SelectedSetupMode()
     ClearSectionEmphasis()
     SetTourPreviewInlineMode(false)
     Invoke(Tour(), "Complete")
@@ -1723,7 +1810,7 @@ local function CompleteTour()
     M.RefreshGuidedTourChrome("COMPLETE")
     if type(M.InvalidatePage) == "function" then M.InvalidatePage("home") end
     if type(M.SelectPage) == "function" then M.SelectPage("home") end
-    if type(M.StartNewAssistantTask) == "function" then M.StartNewAssistantTask() end
+    if completedMode == "complete" and type(M.StartNewAssistantTask) == "function" then M.StartNewAssistantTask() end
     return true
 end
 
@@ -1748,7 +1835,7 @@ local function FindAvailableControl(stage, sections, startIndex, direction)
     local index = min(max(tonumber(startIndex) or (direction == 1 and 1 or #sections), 1), max(1, #sections))
     while sections[index] do
         local section = sections[index]
-        local controls = SectionControls(stage.pageKey, section, sections, nil, stage.includeEphemeralControls, stage.includeLockedControls, stage.controlLimit, stage.controlPaths)
+        local controls = SectionControls(stage.pageKey, section, sections, nil, stage.includeEphemeralControls, stage.includeLockedControls, EffectiveStageControlLimit(stage), stage.controlPaths)
         if #controls > 0 then
             local controlIndex = direction == 1 and 1 or #controls
             return section, index, controls, controls[controlIndex], controlIndex
@@ -1763,7 +1850,7 @@ local function CurrentPosition(stage)
     local sections = StageSections(stage)
     local cursor = ReadCursor(stage)
     local section, index = FindCursorSection(cursor, sections)
-    local controls = section and SectionControls(stage.pageKey, section, sections, nil, stage.includeEphemeralControls, stage.includeLockedControls, stage.controlLimit, stage.controlPaths) or {}
+    local controls = section and SectionControls(stage.pageKey, section, sections, nil, stage.includeEphemeralControls, stage.includeLockedControls, EffectiveStageControlLimit(stage), stage.controlPaths) or {}
     local control, controlIndex = FindCursorControl(cursor, controls)
     local normalized = false
     if cursor.overview ~= false or not section or not control then
@@ -1851,7 +1938,7 @@ end
 local function SetSectionCursor(stage, sections, sectionIndex, controlIndex, reason)
     local section = sections[sectionIndex]
     if not section then return false end
-    local controls = SectionControls(stage.pageKey, section, sections, nil, stage.includeEphemeralControls, stage.includeLockedControls, stage.controlLimit, stage.controlPaths)
+    local controls = SectionControls(stage.pageKey, section, sections, nil, stage.includeEphemeralControls, stage.includeLockedControls, EffectiveStageControlLimit(stage), stage.controlPaths)
     if #controls == 0 then return false end
     controlIndex = min(max(tonumber(controlIndex) or 1, 1), #controls)
     local control = controls[controlIndex]
@@ -2183,7 +2270,7 @@ local function ProgressFraction(stage, position)
         local total, completed = 0, 0
         local records = RuntimeControlRecords()
         for i = 1, #position.sections do
-            local controls = SectionControls(stage.pageKey, position.sections[i], position.sections, records, stage.includeEphemeralControls, stage.includeLockedControls, stage.controlLimit, stage.controlPaths)
+            local controls = SectionControls(stage.pageKey, position.sections[i], position.sections, records, stage.includeEphemeralControls, stage.includeLockedControls, EffectiveStageControlLimit(stage), stage.controlPaths)
             total = total + #controls
             if i < position.index then
                 completed = completed + #controls
@@ -2242,6 +2329,7 @@ local function FlashGuidedClickTargets(chrome, stage, position, context, reason)
         context.manualAway and "away" or "here",
         context.warning and tostring(context.warning.signature or "warning") or "normal",
         tostring(SelectedSetupArea() or ""),
+        tostring(SelectedSetupMode()),
         tostring(CooldownAnchorDecision() or ""),
         EditModePlacementComplete() and "placed" or "unplaced",
         GroupEditModePlacementComplete() and "group-placed" or "group-unplaced",
@@ -2325,6 +2413,14 @@ function M.RefreshGuidedTourChrome(reason)
     Runtime.tourVisualsDirty = true
 
     local stage = CurrentStage()
+    local reconciledPopup = ReconcileGuidedEditModePopup(stage)
+    if reconciledPopup and M.activeKey == "guided_setup" and not Runtime.popupReconcileRefreshQueued then
+        Runtime.popupReconcileRefreshQueued = true
+        C_Timer.After(0, function()
+            Runtime.popupReconcileRefreshQueued = nil
+            if type(M.RequestRefresh) == "function" then M.RequestRefresh(nil, "GUIDED_POPUP_RECONCILED") end
+        end)
+    end
     local profileMismatch, tourProfile, activeProfile = ProfileMismatch()
     if profileMismatch then
         Runtime.warning = nil
@@ -2417,16 +2513,18 @@ function M.RefreshGuidedTourChrome(reason)
     local waitingForAnchorDecision = stage.id == "edit_mode" and not CooldownAnchorDecisionComplete()
     local waitingForEditModeMove = stage.id == "edit_mode" and not waitingForAnchorDecision and not EditModePlacementComplete()
     local waitingForGroupMove = stage.id == "group_edit_mode" and not GroupEditModePlacementComplete()
+    local editPopupActionReady = waitingForEditModeMove and EditModeMovementComplete()
+    local groupPopupActionReady = waitingForGroupMove and GroupEditModeMovementComplete()
     SetButtonText(chrome.back, profileMismatch and "Restart tour" or (warning and "Cancel" or "Back"))
     SetButtonText(chrome.keep, KeepLabel(stage, position))
     SetButtonText(chrome.skip, warning and "Confirm skip" or "Skip")
     local nextLabel = "Next setting"
     if manualAway then nextLabel = "Return"
-    elseif final then nextLabel = "Finish & open Assistant"
+    elseif final then nextLabel = SelectedSetupMode() == "quick" and "Finish setup" or "Finish & open Assistant"
     elseif waitingForEditModeMove then nextLabel = EditModeMovementComplete() and "Open size popup" or "Move Player first"
     elseif waitingForGroupMove then nextLabel = GroupEditModeMovementComplete() and "Open size popup" or "Move Party first"
     elseif touched then nextLabel = "Claim +10 XP"
-    elseif stage.id == "menu_basics" then nextLabel = "Start tour"
+    elseif stage.id == "menu_basics" then nextLabel = SelectedSetupMode() == "quick" and "Start Quick Setup" or "Start Complete Tour"
     elseif stage.id == "edit_mode" then nextLabel = "Claim checkpoint"
     elseif stage.id == "power_moves" then nextLabel = "Continue"
     elseif position.control then nextLabel = "Change it first"
@@ -2457,7 +2555,9 @@ function M.RefreshGuidedTourChrome(reason)
         SetButtonEnabled(chrome.skip, not final)
         SetButtonEnabled(chrome.next, changeReady
             and (stage.id ~= "menu_basics" or SetupAreaDecisionComplete())
-            and not waitingForAnchorDecision and not waitingForEditModeMove and not waitingForGroupMove)
+            and not waitingForAnchorDecision
+            and (not waitingForEditModeMove or editPopupActionReady)
+            and (not waitingForGroupMove or groupPopupActionReady))
     end
     SetButtonEnabled(chrome.pause, true)
     chrome:Show()
@@ -2505,16 +2605,25 @@ function M.RunGuidedTourStep(step)
     step = tostring(step or ""):lower()
     if BlockedByCombat() or not TourIsActive() then return false, "guided_setup_inactive" end
     local stage = CurrentStage()
+    ReconcileGuidedEditModePopup(stage)
     if step == "next" and stage.id == "menu_basics" and not SetupAreaDecisionComplete() then
         return false, "guided_setup_area_required"
     end
     if (step == "keep" or step == "next") and stage.id == "edit_mode" then
         if not CooldownAnchorDecisionComplete() then return false, "guided_edit_mode_anchor_required" end
-        if not EditModePlacementComplete() then return false, "guided_edit_mode_move_required" end
+        if not EditModePlacementComplete() then
+            if step == "next" and EditModeMovementComplete() and OpenGuidedEditModePopup("player", stage) then
+                return true, "guided_edit_mode_popup_opened"
+            end
+            return false, "guided_edit_mode_move_required"
+        end
     end
     if (step == "keep" or step == "next") and stage.id == "group_edit_mode"
         and not GroupEditModePlacementComplete()
     then
+        if step == "next" and GroupEditModeMovementComplete() and OpenGuidedEditModePopup("gf_party", stage) then
+            return true, "guided_group_edit_mode_popup_opened"
+        end
         return false, "guided_group_edit_mode_move_required"
     end
     if step == "next" and not Runtime.manualAway and not Runtime.warning
@@ -2697,6 +2806,14 @@ function M.StartGuidedTour(opts)
     end
     local ok = Invoke(Tour(), "Start", ActiveProfileName(), stage.id, restorePoint)
     if not ok then return false end
+    local requestedMode = tostring(opts.mode or "")
+    if not VALID_SETUP_MODE[requestedMode] then
+        requestedMode = opts.stageId and "complete" or "quick"
+    end
+    Invoke(Tour(), "SetPreference", "setupMode", requestedMode)
+    if VALID_SETUP_AREA[tostring(opts.setupArea or "")] then
+        Invoke(Tour(), "SetPreference", "setupArea", tostring(opts.setupArea))
+    end
     Invoke(FirstLoad(), "Start", "guided_tour")
     Runtime.warning = nil
     Runtime.manualAway = nil
@@ -2867,7 +2984,8 @@ local function Header(builder, title, subtitle)
     return builder:Header(Tr(title), Tr(subtitle), 72)
 end
 
-local function PersonalQuestion(ctx, builder, T, W, key, label, values)
+local function PersonalQuestion(ctx, builder, T, W, key, label, values, opts)
+    opts = type(opts) == "table" and opts or {}
     local card = builder:Section("", 100)
     if card.title then card.title:SetText("") end
     local localized = {}
@@ -2893,7 +3011,7 @@ local function PersonalQuestion(ctx, builder, T, W, key, label, values)
             M.RefreshGuidedTourChrome("PERSONAL_CHOICE")
         end)
     end
-    if type(M.RegisterSearchWidget) == "function" then
+    if opts.registerSearch ~= false and type(M.RegisterSearchWidget) == "function" then
         local identity = "guided_setup.preference." .. key
         M.RegisterSearchWidget(segment, {
             controlId = "menu2." .. identity,
@@ -2915,14 +3033,18 @@ end
 local function BuildMenuBasicsPage(ctx, T, W)
     Runtime.specialClickTargets = { stageId = "menu_basics", groups = {} }
     local b = W.PageBuilder(ctx)
-    Header(b, format(Tr("Welcome, %s"), PlayerDisplayName()), "Choose one route. Everything is split into three short parts.")
+    Header(b, format(Tr("Welcome, %s"), PlayerDisplayName()), "Choose a short setup or the complete learning tour.")
+    PersonalQuestion(ctx, b, T, W, "setupMode", "How much help do you want?", {
+        { value = "quick", text = "Quick Setup - essentials", icon = "home" },
+        { value = "complete", text = "Complete Tour - every detail", icon = "profiles" },
+    }, { registerSearch = false })
     PersonalQuestion(ctx, b, T, W, "setupArea", "What do you want to set up?", {
         { value = "unitframes", text = "Unitframes", icon = "uf_player" },
         { value = "groupframes", text = "Group Frames", icon = "gf_layout" },
         { value = "classresources", text = "Class Resources", icon = "classpower" },
         { value = "all", text = "Everything", icon = "home" },
     })
-    InfoCard(b, T, "Green means: press this now", "Every checkpoint marks one real control. Change it, see the result live, then follow the next green target.", "home", 82)
+    InfoCard(b, T, "Quick Setup stays focused", "It shows only the essential choices. The Complete Tour keeps every advanced checkpoint available.", "home", 82)
     return math.abs(b.y) + 34
 end
 
@@ -3145,8 +3267,13 @@ local function BuildFinalReviewPage(ctx, T, W)
     local summary = M.GetGuidedTourSummary()
     local b = W.PageBuilder(ctx)
     local handled = (tonumber(summary.reviewedControls) or 0) + (tonumber(summary.keptControls) or 0)
-    Header(b, format(Tr("%s, your setup is ready"), PlayerDisplayName()), "Finish opens the Dashboard and puts the cursor straight into the Assistant.")
-    InfoCard(b, T, "Anything else? Just ask", "Try: 'make Party frames wider', 'set up Spell Icons for my spec', or 'move Class Resources'. The Assistant opens the exact place and helps you finish safely.", "home", 104)
+    local quick = SelectedSetupMode() == "quick"
+    Header(b, format(Tr("%s, your setup is ready"), PlayerDisplayName()), quick
+        and "Finish returns to the Dashboard. Smart Search stays ready for settings and questions."
+        or "Finish opens the Dashboard and puts the cursor straight into the Assistant.")
+    InfoCard(b, T, quick and "You are ready to play" or "Anything else? Just ask", quick
+        and "Use the Dashboard for common tasks, or type a setting or full question into Smart Search."
+        or "Try: 'make Party frames wider', 'set up Spell Icons for my spec', or 'move Class Resources'. The Assistant opens the exact place and helps you finish safely.", "home", 104)
     InfoCard(b, T, "You trained on real settings", format(Tr("%d guided settings were changed or deliberately kept. Nothing was copied into a separate wizard."), handled), "uf_player", 82)
 
     local restorePoint = select(2, Invoke(Tour(), "GetRestorePoint"))

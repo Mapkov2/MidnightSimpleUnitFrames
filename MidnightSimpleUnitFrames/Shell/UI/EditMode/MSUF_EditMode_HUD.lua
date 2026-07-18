@@ -553,7 +553,7 @@ local HELP_KEYS = {
     "EM_AURAS_ON", "EM_AURAS_OFF", "EM_SNAP_ON", "EM_SNAP_OFF", "EM_GRID_ON", "EM_GRID_OFF",
     "EM_CDM_ON", "EM_CDM_OFF", "EM_ANCHOR_SET", "Drag & Move", "Arrow Key Nudge",
     "Click Popup", "Grid & Snap", "Background Opacity", "Preview & Auras", "Undo / Cancel All",
-    "CDM & Anchor", "Copy Settings", "Exit Edit Mode",
+    "CDM & Anchor", "Copy Settings", "Exit Edit Mode", "Discard",
 }
 
 local EN_HELP = (type(MSUF) == "table" and MSUF.LocaleRegistry and MSUF.LocaleRegistry.enUS) or {}
@@ -691,6 +691,8 @@ end
 local function EnsureHUD()
     if hudFrame then return end
     RefreshHUDTheme()
+    local db = _G.MSUF_DB
+    local advancedHUD = db and db.general and db.general.hideAdvancedMenu == false
 
     --- --- ROW 1 ---
     hudFrame = CreateFrame("Frame", "MSUF_EM2_HUD", UIParent, "BackdropTemplate")
@@ -754,18 +756,18 @@ local function EnsureHUD()
     end)
 
     --- Right-side: Cancel All | Exit
-    exitBtn = MakeBtn(hudFrame, "Exit", 48, BTN_H, "body", function()
+    exitBtn = MakeBtn(hudFrame, "EM_TOUR_DONE", 54, BTN_H, "body", function()
         if EM2.State then EM2.State.Exit("hud_exit") end
     end)
     exitBtn:SetPoint("RIGHT", hudFrame, "RIGHT", -12, 0)
     exitBtn._label:SetTextColor(TH.exitR, TH.exitG, TH.exitB, 1)
     exitBtn._dot:Hide()
-    SetTip(exitBtn, "Lock positions and exit Edit Mode.")
+    SetTip(exitBtn, "Keep the current positions and exit Edit Mode.")
 
     local rSep = MakeSep(hudFrame, BTN_H)
     rSep:SetPoint("RIGHT", exitBtn, "LEFT", -BTN_GAP, 0)
 
-    cancelAllBtn = MakeBtn(hudFrame, "Cancel All", 80, BTN_H, "body", function()
+    cancelAllBtn = MakeBtn(hudFrame, "Discard", 70, BTN_H, "body", function()
         if not EM2.State or not EM2.State.CancelAll then return end
         local cf = _G["MSUF_EM2_CancelConfirm"]
         if cf then cf:Show(); return end
@@ -839,6 +841,7 @@ local function EnsureHUD()
     previewAddonSlot:SetSize(64, CLUSTER_BTN_H)
     previewItems[#previewItems+1] = previewAddonSlot
 
+    if advancedHUD then
     previewAnimBtn = AddRowButton(previewItems, previewCluster, "Motion", 60, CLUSTER_BTN_H, "caption", function()
         local toggle = _G.MSUF_TogglePreviewAnimation
         if type(toggle) ~= "function" then
@@ -871,6 +874,7 @@ local function EnsureHUD()
         end
         HUD.SetStatus(HelpText(sh.showInEditMode and "EM_AURAS_ON" or "EM_AURAS_OFF"), "info")
     end, "Toggle aura preview icons\nand aura mover boxes.")
+    end
     FinishCluster(previewCluster, previewItems, CLUSTER_H, -8)
 
     local layoutCluster, layoutItems = AddCluster(r1, c1, "Layout", CLUSTER_H, true)
@@ -892,6 +896,7 @@ local function EnsureHUD()
         HUD.OpenSelectedSettings()
     end, "Open Menu2 at the selected\nframe or component settings.")
 
+    if advancedHUD then
     cdmBtn = AddRowButton(linksItems, linksCluster, "Cooldown", 72, CLUSTER_BTN_H, "caption", function()
         local db = _G.MSUF_DB; if not db then return end
         db.general = db.general or {}
@@ -922,6 +927,7 @@ local function EnsureHUD()
         end
         ov:Show()
     end, "Pick any frame as global anchor\nfor all unitframes.\nOverrides CDM anchor.")
+    end
     FinishCluster(linksCluster, linksItems, CLUSTER_H, -8)
 
     LayoutCenter(c1, r1, CLUSTER_GAP, SEP_W)
@@ -969,6 +975,7 @@ local function EnsureHUD()
     AttachHistoryIcon(redoBtn, MEDIA .. "msuf_history_redo_green.png")
     FinishCluster(historyCluster, historyItems, BTN_H2 + 4, 0)
 
+    if advancedHUD then
     local gridCluster, gridItems = AddCluster(r2, c2, nil, BTN_H2 + 4, false)
     do
         gridWidget, stepFS = AddAdjustWidget(gridItems, gridCluster, 80, BTN_H2, true, function(_, d)
@@ -991,6 +998,7 @@ local function EnsureHUD()
         end, nil, "Background overlay opacity.\nScroll to adjust.")
     end
     FinishCluster(gridCluster, gridItems, BTN_H2 + 4, 0)
+    end
 
     LayoutCenter(c2, r2, CLUSTER_GAP, SEP_W)
 end

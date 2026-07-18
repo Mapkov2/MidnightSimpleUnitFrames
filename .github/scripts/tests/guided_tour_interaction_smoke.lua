@@ -26,6 +26,8 @@ local groups = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_Group
 local groupBars = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupBars.lua")
 local groupIndicators = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupIndicators.lua")
 local groupAuras = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupAuras.lua")
+local editPopups = Read("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Popups.lua")
+local editMovers = Read("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Movers.lua")
 
 Contains(guided, "includeLockedControls = true", "Spell Icon Lab must include visible locked options")
 Contains(guided, 'id = "power_moves"', "short tour does not explain MSUF power moves")
@@ -68,6 +70,10 @@ Contains(guided, "CHANGED +10 XP", "guided interaction feedback missing")
 Contains(guided, "MISSION %d/%d - %d XP", "mission progress label missing")
 Contains(guided, "UNLOCK, THEN CHANGE IT - Enable Spell Indicators", "Spell Icon prerequisite coaching missing")
 Contains(guided, "function M.NotifyGuidedTourControlInteraction(widget)", "interaction receipt API missing")
+local refreshChromeBody = assert(guided:match("function M%.RefreshGuidedTourChrome%(reason%)(.-)function M%.RunGuidedTourStep"),
+    "could not inspect Guided Tour chrome refresh")
+Contains(refreshChromeBody, "ReconcileGuidedEditModePopup(stage)",
+    "chrome refresh does not reconcile an already-open geometry popup")
 Contains(guided, "guided_setting_change_required", "Next does not require an interaction with the highlighted setting")
 Contains(guided, "return { overview = false, sectionIndex = 1, controlIndex = 1", "normal missions do not start on a real control")
 Contains(guided, "local changeReady = stage.special or not position.control or touched", "Next button is not locked to the current interaction")
@@ -111,6 +117,9 @@ Contains(groupIndicators, '"targeted_spells." .. tostring(key)', "Targeted Spell
 Contains(groupIndicators, '"corner.editor.spell_ids"', "Corner custom spell input has no stable guided identity")
 Contains(groupAuras, '"group_aura_tools"', "Party Aura selectors do not have a stable guided region")
 Contains(groupAuras, '"group-workspace.container-selector"', "Party Aura container selector has no stable guided identity")
+Contains(editPopups, "NotifyGuidedPopupOpened(key)", "popup router does not acknowledge guided geometry popups")
+assert(not editMovers:find("menu.NotifyGuidedEditModePopupOpened", 1, true),
+    "mover still owns the popup acknowledgement instead of the popup router")
 
 assert(not guided:find("original * 0.46", 1, true), "guided sections must not be faded")
 assert(not guided:find("original * 0.38", 1, true), "guided controls must not be faded")
@@ -213,5 +222,49 @@ assert(not warningText:find(" Up ", 1, true), "transient option value leaked int
 assert(M.RunGuidedTourStep("back") == true, "skip warning could not be cancelled")
 advanced, blocked = M.RunGuidedTourStep("next")
 assert(advanced == false and blocked == "guided_setting_change_required", "new green setting inherited the previous interaction")
+
+-- Regression: entering the Party placement mission with its geometry popup
+-- already open used to leave "Open size popup" disabled forever.
+state.preferences = {
+    setupMode = "complete",
+    setupArea = "all",
+    groupEditModeMoved = true,
+}
+state.currentStageId = "group_edit_mode"
+function tour:GetPreference(key) return state.preferences[key] end
+function tour:SetStage(stageId, stageIndex)
+    state.currentStageId, state.currentStageIndex = stageId, stageIndex
+    return true
+end
+function tour:MarkEditModePopupOpened(key)
+    if state.currentStageId ~= "group_edit_mode" or (key ~= "gf_party" and key ~= "party") then return false end
+    local changed = state.preferences.groupEditModePopupOpened ~= true
+    state.preferences.groupEditModePopupOpened = true
+    return true, changed
+end
+local popupOpen, popupKey = true, "gf_party"
+_G.MSUF_EM2 = {
+    Popups = {
+        IsAnyOpen = function() return popupOpen end,
+        Open = function(key)
+            popupKey, popupOpen = key, true
+            return true
+        end,
+    },
+    Focus = { GetSelection = function() return popupKey end },
+    Movers = { Get = function() return {} end },
+}
+assert(M.ReconcileGuidedEditModePopup({ id = "group_edit_mode" }) == true,
+    "already-open Party popup was not reconciled")
+assert(state.preferences.groupEditModePopupOpened == true,
+    "already-open Party popup did not complete its requirement")
+
+state.preferences.groupEditModePopupOpened = nil
+popupOpen, popupKey = false, nil
+local opened, openedReason = M.RunGuidedTourStep("next")
+assert(opened == true and openedReason == "guided_group_edit_mode_popup_opened",
+    "Open size popup action did not open the Party geometry popup")
+assert(popupOpen == true and popupKey == "gf_party" and state.preferences.groupEditModePopupOpened == true,
+    "Party geometry popup action did not acknowledge the live popup")
 
 print("PASS guided tour interaction: every normal step highlights and requires a new setting interaction")

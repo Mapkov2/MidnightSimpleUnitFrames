@@ -37,6 +37,14 @@ local RefreshUFPreview = Factory.RefreshUFPreview or U.RefreshUFPreview or funct
 local Popups = {}
 EM2.Popups = Popups
 
+local function NotifyGuidedPopupOpened(key)
+    local menu = (MSUF and MSUF.MSUF2) or _G.MSUF2
+    if menu and type(menu.NotifyGuidedEditModePopupOpened) == "function" then
+        return menu.NotifyGuidedEditModePopupOpened(key)
+    end
+    return false
+end
+
 function Popups.CloseAll()
     if EM2.UnitPopup then EM2.UnitPopup.Close() end
     if EM2.CastPopup then EM2.CastPopup.Close() end
@@ -113,10 +121,13 @@ function Popups.Open(key, anchorFrame)
             EM2.Focus.OpenFullSettings("gf_priority")
         end
     end
-    if Popups.IsAnyOpen and Popups.IsAnyOpen() then
+    local opened = Popups.IsAnyOpen and Popups.IsAnyOpen() or false
+    if opened then
         if EM2.State then EM2.State.SetPopupOpen(true) end
         if EM2.Focus and EM2.Focus.SetPopupFocus then EM2.Focus.SetPopupFocus(key, anchorFrame) end
+        NotifyGuidedPopupOpened(key)
     end
+    return opened
 end
 
 function Popups.IsAnyOpen()

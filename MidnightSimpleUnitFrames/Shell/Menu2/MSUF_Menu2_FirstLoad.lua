@@ -408,8 +408,8 @@ function M.ExecuteFirstLoadDashboardAction(action)
     if not available then return false, unavailableMessage end
     if action == "personalize" then
         if type(M.StartGuidedTour) == "function" then
-            local started = M.StartGuidedTour({ source = "first_load" })
-            if started then return true, Tr("Guided setup started.") end
+            local started = M.StartGuidedTour({ source = "first_load", mode = "quick" })
+            if started then return true, Tr("Quick Setup started.") end
         end
         CallLifecycle(firstLoad, "Complete", "personalize_fallback")
         InvalidateHomeCache()
@@ -574,11 +574,11 @@ function M.BuildFirstLoadDashboardScene(ctx)
     local recommendGuided = installKind ~= "upgrade"
     local routes = {
         {
-            id = "personalize", meta = "FULL GUIDED SETUP", timing = "~10 min", icon = "opt_bars",
+            id = "personalize", meta = "QUICK SETUP", timing = "~5 min", icon = "opt_bars",
             recommended = recommendGuided,
-            title = "Start guided setup",
-            body = "Learn movement, every menu area, interactive previews, auras, and profiles at your own pace.",
-            hint = "You can pause and resume anytime. A restore point is saved before anything changes.",
+            title = "Start Quick Setup",
+            body = "Set the essentials first: placement, frame basics, text, auras, and shared style.",
+            hint = "You can choose the Complete Tour on the next screen. A restore point is saved first.",
             onClick = function() M.ExecuteFirstLoadDashboardAction("personalize") end,
         },
         {
