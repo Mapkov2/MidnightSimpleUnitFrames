@@ -28,7 +28,7 @@ local CASTBAR_FIELDS = {
     boss = { enable = "enableBossCastbar", backend = "bossCastbarBackend", providerMemory = "bossCastbarBackendBeforeHide", time = "showBossCastTime", icon = "showBossCastIcon", text = "showBossCastName", targetName = "showBossCastTargetName", timeFormat = "bossCastTimeFormat", w = "bossCastbarWidth", h = "bossCastbarHeight", match = "bossCastbarMatchWidth" },
 }
 local CASTBAR_PREFIX = { player = "castbarPlayer", target = "castbarTarget", focus = "castbarFocus", boss = "bossCast" }
-local CASTBAR_COPY_SUFFIXES = WL [[IconPosition IconSize IconOffsetX IconOffsetY IconSpacing IconBorderStyle SpellNamePosition SpellNameFontSize TextOffsetX TextOffsetY SpellNameAlign SpellNameMaxWidth SpellNameTruncate TimePosition TimeFontSize TimeOffsetX TimeOffsetY]]
+local CASTBAR_COPY_SUFFIXES = WL [[IconPosition IconSize IconZoom IconOffsetX IconOffsetY IconSpacing IconBorderStyle SpellNamePosition SpellNameFontSize TextOffsetX TextOffsetY SpellNameAlign SpellNameMaxWidth SpellNameTruncate TimePosition TimeFontSize TimeOffsetX TimeOffsetY]]
 local CASTBAR_TARGET_NAME_COPY_SUFFIXES = WL [[TargetNamePosition TargetNameFontSize TargetNameAlign TargetNameOffsetX TargetNameOffsetY]]
 local LOAD_CONDITIONS = KLR [[
 loadCondHideMounted=Mounted

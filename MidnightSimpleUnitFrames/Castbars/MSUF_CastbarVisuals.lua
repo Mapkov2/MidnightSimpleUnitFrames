@@ -177,6 +177,14 @@ local function Clamp(value, minValue, maxValue)
     return value
 end
 
+local function ApplyIconZoom(texture, zoom)
+    if not (texture and texture.SetTexCoord) then return end
+    zoom = Clamp(zoom, 100, 200)
+    local visible = 100 / zoom
+    local inset = (1 - visible) * 0.5
+    texture:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
+end
+
 local function CastbarTextColor(g, prefix, suffix)
     local r = prefix and g[prefix .. suffix .. "ColorR"] or nil
     local green = prefix and g[prefix .. suffix .. "ColorG"] or nil
@@ -380,6 +388,7 @@ local function ApplyIconLayout(frame, g, unit, prefix)
     local size = DetailNum(g, prefix, "IconSize", "castbarIconSize", barH)
     if size == nil or size <= 0 then size = barH end
     size = Clamp(size, 6, 128)
+    local zoom = Clamp(DetailNum(g, prefix, "IconZoom", "castbarIconZoom", 100), 100, 200)
     local spacing = Clamp(DetailNum(g, prefix, "IconSpacing", nil, 1), 0, 40)
     local x = DetailNum(g, prefix, "IconOffsetX", "castbarIconOffsetX", 0)
     local y = DetailNum(g, prefix, "IconOffsetY", "castbarIconOffsetY", 0)
@@ -391,6 +400,7 @@ local function ApplyIconLayout(frame, g, unit, prefix)
         .. KeyPart(barW) .. "|"
         .. KeyPart(barH) .. "|"
         .. KeyPart(size) .. "|"
+        .. KeyPart(zoom) .. "|"
         .. KeyPart(spacing) .. "|"
         .. KeyPart(x) .. "|"
         .. KeyPart(y) .. "|"
@@ -426,6 +436,7 @@ local function ApplyIconLayout(frame, g, unit, prefix)
             if icon.SetParent and ((not icon.GetParent) or icon:GetParent() ~= host) then icon:SetParent(host) end
             icon:ClearAllPoints()
             icon:SetAllPoints(host)
+            ApplyIconZoom(icon, zoom)
             if icon.SetDrawLayer then icon:SetDrawLayer("OVERLAY", 7) end
             if icon.SetShown then icon:SetShown(true) else icon:Show() end
             ApplyIconBorder(frame, host, g, prefix)

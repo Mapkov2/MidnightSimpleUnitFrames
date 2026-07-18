@@ -663,6 +663,8 @@ function MSUF_ApplyPlayerCastbarIconLayout(bar, g, topInset, bottomInset)
 
     local iconSize = tonumber(g.castbarPlayerIconSize) or tonumber(g.castbarIconSize) or height
     if iconSize < 6 then iconSize = 6 elseif iconSize > 128 then iconSize = 128 end
+    local iconZoom = tonumber(g.castbarPlayerIconZoom) or tonumber(g.castbarIconZoom) or 100
+    if iconZoom < 100 then iconZoom = 100 elseif iconZoom > 200 then iconZoom = 200 end
 
     local icon = bar.Icon or bar.icon or (bar.IconFrame and bar.IconFrame.Icon)
     local iconDetached = (iconOffsetX ~= 0) -- detach only on X
@@ -684,13 +686,18 @@ function MSUF_ApplyPlayerCastbarIconLayout(bar, g, topInset, bottomInset)
             end
             host:Show()
 
-            local key = "H:" .. (iconDetached and "D" or "A") .. ":" .. iconSize .. ":" .. iconOffsetX .. ":" .. iconOffsetY
+            local key = "H:" .. (iconDetached and "D" or "A") .. ":" .. iconSize .. ":" .. iconZoom .. ":" .. iconOffsetX .. ":" .. iconOffsetY
             if icon._msufPCIconKey ~= key or (icon.GetParent and icon:GetParent() ~= host) then
                 icon:SetParent(host)
                 icon:ClearAllPoints()
                 icon:SetAllPoints(host)
                 if icon.SetDrawLayer then
                     icon:SetDrawLayer("OVERLAY", 7) -- above bar texture, below texts
+                end
+                if icon.SetTexCoord then
+                    local visible = 100 / iconZoom
+                    local inset = (1 - visible) * 0.5
+                    icon:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
                 end
                 icon._msufPCIconKey = key
             end

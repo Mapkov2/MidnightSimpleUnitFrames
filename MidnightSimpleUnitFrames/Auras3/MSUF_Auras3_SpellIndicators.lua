@@ -259,6 +259,7 @@ SlotLayoutSignature = function(slot)
     return tostring(slot.visual) .. "\030" .. tostring(slot.hiddenVisual)
         .. "\030" .. tostring(slot.anchor) .. "\030" .. tostring(slot.x) .. "\030" .. tostring(slot.y)
         .. "\030" .. tostring(slot.size) .. "\030" .. tostring(slot.width) .. "\030" .. tostring(slot.height)
+        .. "\030" .. tostring(slot.iconZoom)
         .. "\030" .. tostring(slot.layer) .. "\030" .. tostring(slot.strata) .. "\030" .. tostring(slot.showCooldownText)
         .. "\030" .. tostring(slot.showCooldownSwipe) .. "\030" .. tostring(slot.cooldownSwipeReverse)
         .. "\030" .. tostring(slot.cooldownSize) .. "\030" .. tostring(slot.cooldownAnchor)
@@ -289,7 +290,7 @@ local function FinalizeSlot(slot)
     return slot
 end
 
-local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata, sharedBuffStyle)
+local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata, fallbackIconZoom, sharedBuffStyle)
     if not (type(unit) == "string" and unit ~= "" and type(item) == "table" and item.enabled == true) then return nil end
     local placed = type(item.placed) == "table" and item.placed or nil
     local frameEffect = type(item.frame) == "table" and item.frame or nil
@@ -359,6 +360,7 @@ local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata, sha
         iconEffect = iconEffect,
         frameEffect = frameEffect,
         size = size,
+        iconZoom = ClampNumber(fallbackIconZoom, 100, 100, 200),
         width = width,
         height = size,
         anchor = SpellIndicatorAnchor(placed and placed.anchor, "TOPLEFT"),
@@ -434,7 +436,7 @@ function Runtime.CompileSlots(unit, spellIndicators, sharedBuffStyle)
         return FinalizeSlot(sensor)
     end
     for i = 1, #spellIndicators.items do
-        local slot = CompileSlot(unit, spellIndicators.items[i], i, spellIndicators.layer, spellIndicators.strata, sharedBuffStyle)
+        local slot = CompileSlot(unit, spellIndicators.items[i], i, spellIndicators.layer, spellIndicators.strata, spellIndicators.iconZoom, sharedBuffStyle)
         if slot then
             local frameEffect = slot.frameEffect
             local timedFrameEffect = frameEffect and frameEffect.timing == "expiring"
@@ -460,6 +462,7 @@ function Runtime.CompileSlots(unit, spellIndicators, sharedBuffStyle)
         slots = slots,
         max = #slots,
         layer = spellIndicators.layer or 9,
+        iconZoom = ClampNumber(spellIndicators.iconZoom, 100, 100, 200),
         strata = NormalizeFrameStrata(spellIndicators.strata, "AUTO"),
         _msufA3TrackingSignature = table_concat(trackingParts, "\029"),
         _msufA3StructuralSignature = table_concat(structuralParts, "\029"),

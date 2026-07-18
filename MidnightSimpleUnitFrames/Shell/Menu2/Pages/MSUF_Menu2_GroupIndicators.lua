@@ -59,6 +59,19 @@ end
 local function StepMeta(ctx, path, step)
     local meta = ControlMeta(ctx, path)
     meta.step, meta.roundStep = step, true
+    if path == "spell.icon_zoom" then
+        local scope = CurrentScope()
+        meta.assistantDisposition = "dynamic"
+        meta.assistantDispositionReason = "Icon Zoom targets Spell Indicator icons in the selected Group scope."
+        if scope == "party" then
+            meta.assistantSettingKeys = { "gf_party.spellIndicators.iconZoom" }
+        else
+            meta.assistantSettingKeys = {
+                "gf_raid.spellIndicators.iconZoom",
+                "gf_mythicraid.spellIndicators.iconZoom",
+            }
+        end
+    end
     return meta
 end
 
@@ -1382,7 +1395,7 @@ function SpellTileGrid:Refresh()
 end
 
 local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
-    local spells = b:CollapsibleSection("si", Tr("Spell Indicators"), 1154, false)
+    local spells = b:CollapsibleSection("si", Tr("Spell Indicators"), 1208, false)
     local siW = spells._msuf2Width or ctx.width or 720
     local siGap = 28
     local siLeftX = 30
@@ -1396,7 +1409,7 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         W.ControlCard(spells, Tr("Edit Spell"), nil, siRightX - 14, -38, siRightW + 28, 404)
         placedIndicatorCard = W.ControlCard(spells, Tr("Show on Frame"), nil, siLeftX - 14, -456, siLeftW + 28, 570)
         W.ControlCard(spells, Tr("Highlight Health Bar"), nil, siRightX - 14, -456, siRightW + 28, 468)
-        W.ControlCard(spells, Tr("Icon Details"), nil, siRightX - 14, -936, siRightW + 28, 194)
+        W.ControlCard(spells, Tr("Icon Details"), nil, siRightX - 14, -936, siRightW + 28, 248)
     end
     local RefreshSpellIndicatorState = M.RefreshProxy()
     local function RequestSpellControlRefresh(reason)
@@ -1771,13 +1784,23 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
     W.MoveWidget(frameAlpha, spells, siRightX, -760, siRightW, "LEFT")
     local frameThickness = BindFrameSlider("Border / Glow Thickness", 1, 8, 1, "thickness", 2, -814)
     local frameLayer = BindFrameSlider("Effect Layer (0-30)", 0, 30, 1, "layer", 0, -868)
+    local spellIconZoom = W.Slider(spells, Tr("Icon Zoom (%)"), 100, 200, 1, siRightW)
+    M.BindNumberWidget(ctx, spellIconZoom,
+        function() return tonumber(SpellIndicators(CurrentScope()).iconZoom) or 100 end,
+        function(value)
+            local cfg = SpellIndicators(CurrentScope())
+            cfg.iconZoom = tonumber(value) or 100
+            QueueSpellIndicators(CurrentScope())
+        end,
+        100, StepMeta(ctx, "spell.icon_zoom", 1))
+    W.MoveWidget(spellIconZoom, spells, siRightX, -974, siRightW, "LEFT")
     local appearanceHint = W.Text(spells,
         Tr("Cooldowns, stacks, and tooltips use the Buff style for this frame."),
-        siRightX, -974, siRightW, T.colors.muted)
+        siRightX, -1028, siRightW, T.colors.muted)
     if appearanceHint.SetWordWrap then appearanceHint:SetWordWrap(true) end
     local openBuffAppearance = T.Button(spells, Tr("Edit Buff Style"), siRightW, 28)
     openBuffAppearance._msuf2GroupFrameGateAlwaysEnabled = true
-    openBuffAppearance:SetPoint("TOPLEFT", spells, "TOPLEFT", siRightX, -1038)
+    openBuffAppearance:SetPoint("TOPLEFT", spells, "TOPLEFT", siRightX, -1092)
     if T.CenterButtonLabel then T.CenterButtonLabel(openBuffAppearance) end
     openBuffAppearance:SetScript("OnClick", function()
         local scope = CurrentScope() == "party" and "party" or "raid"

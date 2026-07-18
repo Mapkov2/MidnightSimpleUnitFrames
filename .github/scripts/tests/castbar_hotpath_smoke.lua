@@ -407,4 +407,32 @@ do
     unregister(target)
 end
 
-print("PASS castbar hotpaths: shared ColorObjects, native-text transition cleanup, cooldown snapshot sharing, O(1) manager refresh, channel unit fastpath")
+local function ReadSource(relativePath)
+    local handle = assert(io.open(root .. "/MidnightSimpleUnitFrames/" .. relativePath, "rb"))
+    local source = handle:read("*a")
+    handle:close()
+    return source
+end
+
+local defaultsSource = ReadSource("State/MSUF_Defaults.lua")
+local castbarMenuSource = ReadSource("Shell/Menu2/Pages/MSUF_Menu2_UnitFrameVisuals.lua")
+local castbarCopySource = ReadSource("Shell/Menu2/Pages/MSUF_Menu2_Unit.lua")
+local castbarVisualSource = ReadSource("Castbars/MSUF_CastbarVisuals.lua")
+local castbarAnchorSource = ReadSource("Castbars/MSUF_CastbarAnchors.lua")
+local castbarPreviewSource = ReadSource("Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua")
+Check(defaultsSource:find('g[prefix .. "IconZoom"] = 100', 1, true),
+    "per-castbar Icon Zoom defaults are missing")
+Check(castbarMenuSource:find('DetailKey("IconZoom"), 100, "MSUF2_CASTBAR_ICON_ZOOM"', 1, true),
+    "scope-aware Castbar Icon Zoom slider is missing")
+Check(castbarCopySource:find("IconSize IconZoom IconOffsetX", 1, true),
+    "Castbar scope copy omits Icon Zoom")
+Check(castbarVisualSource:find('DetailNum(g, prefix, "IconZoom", "castbarIconZoom", 100)', 1, true)
+    and castbarVisualSource:find("texture:SetTexCoord(inset, 1 - inset, inset, 1 - inset)", 1, true),
+    "live Castbar Icon Zoom is not resolved per scope")
+Check(castbarAnchorSource:find("g.castbarPlayerIconZoom", 1, true),
+    "player Castbar icon layout omits its zoom scope")
+Check(castbarPreviewSource:find('ReadCastbarNum(g, key, "IconZoom", "bossCastIconZoom", 100)', 1, true)
+    and castbarPreviewSource:find("ApplyCastbarPreviewIconZoom(mock.cast.icon, iconZoom)", 1, true),
+    "Castbar preview does not mirror scoped Icon Zoom")
+
+print("PASS castbar hotpaths: shared ColorObjects, native-text transition cleanup, cooldown snapshot sharing, O(1) manager refresh, channel unit fastpath, scope-aware icon zoom")

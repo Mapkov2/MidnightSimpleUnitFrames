@@ -21,7 +21,7 @@ local CASTBAR_ICON_POSITIONS = VT("LEFT", "Left", "RIGHT", "Right", "INSIDE_LEFT
 local CASTBAR_TEXT_POSITIONS = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right", "ABOVE", "Above", "BELOW", "Below")
 local CASTBAR_TIME_FORMATS = VT("CURRENT", "Remaining", "ELAPSED", "Elapsed", "ELAPSED_MAX", "Elapsed / Total", "CURRENT_MAX", "Remaining / Total")
 local CASTBAR_TAB_VALUES = VT("general", "General", "icon", "Icon", "spell", "Spell Text", "time", "Time Text", "advanced", "Advanced")
-local CASTBAR_TAB_HEIGHTS = { general = 392, icon = 486, spell = 486, time = 486, advanced = 350 }
+local CASTBAR_TAB_HEIGHTS = { general = 392, icon = 540, spell = 486, time = 486, advanced = 350 }
 local CASTBAR_WIDTH_SOURCE_VALUES = VT("manual", "Manual width", "unitframe", "Auto: Unit Frame", "essential", "Auto: Essential Cooldowns", "utility", "Auto: Utility Cooldowns")
 local CASTBAR_TEXT_ALIGN = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right")
 local CASTBAR_TRUNCATE_VALUES = VT("AUTO", "Auto fit", "CLIP", "Manual width", "NONE", "No width limit")
@@ -676,7 +676,7 @@ local function BuildCastbar(ctx, builder, unit)
     local generalCard = W.ControlCard(generalTab, nil, nil, leftX, -4, leftW, 132)
     local providerCard = W.ControlCard(generalTab, "Provider", nil, rightX, -4, rightW, 132)
     local sizeCard = W.ControlCard(generalTab, "Size", "Width can use manual bounds or follow another frame.", leftX, -154, sectionW - 32, 166)
-    local iconCard = W.ControlCard(iconTab, nil, nil, leftX, -4, leftW, 370)
+    local iconCard = W.ControlCard(iconTab, nil, nil, leftX, -4, leftW, 424)
     local spellCard = W.ControlCard(spellTab, nil, nil, leftX, -4, leftW, 370)
     local targetNameCard = fields.targetName and W.ControlCard(spellTab, "Cast Target Text", nil, rightX, -4, rightW, 370) or nil
     local timeCard = W.ControlCard(timeTab, nil, nil, leftX, -4, leftW, 370)
@@ -813,9 +813,10 @@ local function BuildCastbar(ctx, builder, unit)
     BuildDetailControls(iconCard, iconControls, {
         { "dropdown", "Position", 16, -88, min(260, controlWLeft), CASTBAR_ICON_POSITIONS, DetailKey("IconPosition"), "LEFT", "MSUF2_CASTBAR_ICON_POSITION" },
         { "slider", "Size", 16, -142, controlWLeft, 0, 128, 1, DetailKey("IconSize"), 0, "MSUF2_CASTBAR_ICON_SIZE" },
-        { "slider", "X offset", 16, -196, controlWLeft, -300, 300, 1, DetailKey("IconOffsetX"), 0, "MSUF2_CASTBAR_ICON_X" },
-        { "slider", "Y offset", 16, -250, controlWLeft, -300, 300, 1, DetailKey("IconOffsetY"), 0, "MSUF2_CASTBAR_ICON_Y" },
-        { "slider", "Spacing", 16, -304, controlWLeft, 0, 40, 1, DetailKey("IconSpacing"), 1, "MSUF2_CASTBAR_ICON_SPACING" },
+        { "slider", "Icon Zoom (%)", 16, -196, controlWLeft, 100, 200, 1, DetailKey("IconZoom"), 100, "MSUF2_CASTBAR_ICON_ZOOM" },
+        { "slider", "X offset", 16, -250, controlWLeft, -300, 300, 1, DetailKey("IconOffsetX"), 0, "MSUF2_CASTBAR_ICON_X" },
+        { "slider", "Y offset", 16, -304, controlWLeft, -300, 300, 1, DetailKey("IconOffsetY"), 0, "MSUF2_CASTBAR_ICON_Y" },
+        { "slider", "Spacing", 16, -358, controlWLeft, 0, 40, 1, DetailKey("IconSpacing"), 1, "MSUF2_CASTBAR_ICON_SPACING" },
     })
     local text = BindCastbarFeatureToggle(spellCard, fields.text, "MSUF2_CASTBAR_TEXT")
     BuildDetailControls(spellCard, spellControls, {

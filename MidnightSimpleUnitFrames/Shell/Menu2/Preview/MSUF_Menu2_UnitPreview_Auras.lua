@@ -462,6 +462,7 @@ local function LaneBounds(cfg, kind, frameW, frameH)
         top = top,
         shown = shown,
         size = size,
+        iconZoom = ClampNumber(metrics and metrics.iconZoom or (isBuff and cfg.buffIconZoom or cfg.debuffIconZoom), 100, 100, 200),
         spacing = spacing,
         perRow = perRow,
         x = x,
@@ -655,6 +656,14 @@ local function CreateIcon(parent)
     f.timer = MakeFS(f, "OVERLAY", 7)
     f:Hide()
     return f
+end
+
+local function ApplyIconZoom(texture, zoom)
+    if not (texture and texture.SetTexCoord) then return end
+    zoom = ClampNumber(zoom, 100, 100, 200)
+    local visible = 100 / zoom
+    local inset = (1 - visible) * 0.5
+    texture:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
 end
 
 local function ForwardHandleScript(handle, scriptName, ...)
@@ -944,6 +953,7 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
         icon:ClearAllPoints()
         icon:SetPoint(bounds.initialAnchor or "TOPLEFT", visual, bounds.initialAnchor or "TOPLEFT", col * step * bounds.growthX, row * step * bounds.growthY)
         icon.tex:SetTexture(textures[((i - 1) % #textures) + 1])
+        ApplyIconZoom(icon.tex, bounds.iconZoom)
         if icon.bg then icon.bg:SetShown(not barOnly) end
         icon.tex:SetShown(not barOnly)
         icon.edge:SetVertexColor(0, 0, 0, 0)

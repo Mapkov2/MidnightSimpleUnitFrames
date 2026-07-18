@@ -137,6 +137,16 @@ local function AuraPreviewAlpha(cfg)
     return 1
 end
 
+local function ApplyPreviewIconZoom(texture, zoom, baseInset)
+    if not (texture and texture.SetTexCoord) then return end
+    zoom = tonumber(zoom) or 100
+    if zoom < 100 then zoom = 100 elseif zoom > 200 then zoom = 200 end
+    baseInset = tonumber(baseInset) or 0
+    local visible = (1 - (baseInset * 2)) * (100 / zoom)
+    local inset = (1 - visible) * 0.5
+    texture:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
+end
+
 local function BuildScene(box, reason)
     local S = box._msufGFRenderState
     local H, M, MSUF = S.H, S.M, S.MSUF
@@ -174,6 +184,7 @@ local function BuildScene(box, reason)
     local rawAuras = conf.auras or {}
     local trackedRaw = RawTrackedBuffLane(scene, rawAuras.buff)
     scene.rawAuras = rawAuras
+    scene.auraIconZoom = tonumber(scene.runtimeAuras and scene.runtimeAuras.iconZoom) or tonumber(rawAuras.iconZoom) or 100
     scene.buffCfg = scene.runtimeAuras
         and S.CompiledAuraLane(scene.runtimeAuras, "buff", rawAuras.buff or {}) or rawAuras.buff or {}
     scene.trackedBuffCfg = scene.runtimeAuras
@@ -201,6 +212,8 @@ local function BuildScene(box, reason)
         and (scene.selectedPlaced.type or "icon") ~= "none"
     scene.selectedSpellNeedsPlacementPreview = scene.selectedSpellCfg ~= nil and scene.rawSelectedPlaced == nil
     scene.runtimeSpellIndicators = runtimeSpec and runtimeSpec.spellIndicators
+    scene.spellIconZoom = tonumber(scene.runtimeSpellIndicators and scene.runtimeSpellIndicators.iconZoom)
+        or tonumber(conf.spellIndicators and conf.spellIndicators.iconZoom) or 100
     scene.runtimeSpellItems = scene.runtimeSpellIndicators and scene.runtimeSpellIndicators.items
     local previewSpellItems = box._msufGFPreviewSpellItemsScratch or {}
     box._msufGFPreviewSpellItemsScratch = previewSpellItems
@@ -819,6 +832,7 @@ local function RenderAuras(scene)
             if tex and rect then
                 local auraState = PreviewAuraState(groupKey, i, handle, cfg)
                 tex:SetTexture(MockSpellTexture(ids[((i - 1) % #ids) + 1]))
+                ApplyPreviewIconZoom(tex, cfg.iconZoom or scene.auraIconZoom, 0)
                 if tex.SetAlpha then tex:SetAlpha(barOnly and 0 or 1) end
                 tex:SetSize(size, size)
                 tex:ClearAllPoints()
@@ -1991,7 +2005,7 @@ function Render.Install(box, ctx, deps)
                 handle:SetSize(spellSize, spellSize)
                 if spellTex then
                     spellTex:SetTexture((item and item.icon) or fallbackTexture or CurrentSpellTexture(kind))
-                    spellTex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+                    ApplyPreviewIconZoom(spellTex, scene.spellIconZoom, 0)
                     spellTex:SetVertexColor(1, 1, 1, 1)
                     spellTex:ClearAllPoints()
                     spellTex:SetAllPoints(handle)
