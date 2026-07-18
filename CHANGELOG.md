@@ -5,6 +5,7 @@
 ### Highlight
 
 - Import UnhaltedUnitFrames 12.1 profiles directly into MSUF with the load-on-demand UUF importer.
+- Added full support for coolinator and Skiron CDM
 
 ### Minor Bug Fixes
 
