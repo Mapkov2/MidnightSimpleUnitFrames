@@ -46,6 +46,14 @@ assert(not mainSource:find("SkironCooldownManager.AnchorProxy.SizeChanged", 1, t
     "Skiron integration still lives in the monolithic unitframe file")
 assert(integrationSource:find("CoolinatorPrimaryGroupAnchor", 1, true),
     "Coolinator primary group anchor is not owned by the integration module")
+assert(integrationSource:find("if proxyGroup ~= 1 then return end", 1, true),
+    "Skiron callback is not restricted to the primary layout group")
+assert(not integrationSource:find('selectedAnchorRef == "ANCHOR:1"', 1, true),
+    "child-group events can still replace the primary Skiron source")
+assert(integrationSource:find(
+    "if changed or sizeChanged == true then ScheduleEssentialCooldownAnchorConsumerRefresh() end",
+    1, true
+), "Skiron layout changes do not schedule a targeted unitframe reanchor")
 
 local editModeDragSource = assert(editModeLayoutSource:match(
     "local function OnUpdate.-function Ticker%.BeginDrag"
@@ -107,6 +115,7 @@ local timers = {}
 local frames = {}
 local inCombat = false
 local coolinatorLoaded = false
+local eventCallbacks = {}
 
 local Frame = {}
 Frame.__index = Frame
@@ -176,7 +185,9 @@ _G.C_AddOns = {
     end,
 }
 _G.EventRegistry = {
-    RegisterCallback = function() end,
+    RegisterCallback = function(_, event, callback)
+        eventCallbacks[event] = callback
+    end,
 }
 
 -- Execute the real 5.72 anchor-resolution block. This is the architectural
@@ -245,6 +256,34 @@ end
 assert(loadfile(integrationPath))("MidnightSimpleUnitFrames", {})
 FlushTimers()
 
+local skironSource = NewFrame("SCM_GroupAnchor_1", 220, 40)
+FireEvent("PLAYER_ENTERING_WORLD")
+FlushTimers()
+assert(_G.MSUF_GetSkironCooldownAnchorProxy() ~= nil,
+    "Skiron primary anchor was not acquired")
+assert(rebinds == 1 and widthRefreshes == 1,
+    "Skiron acquisition did not refresh its consumers")
+
+skironSource:SetSize(264, 40)
+FlushTimers()
+assert(rebinds == 2,
+    "same-source Skiron layout change did not reanchor unitframes")
+assert(widthRefreshes == 2,
+    "same-source Skiron layout change did not refresh width consumers")
+
+local skironEvent = eventCallbacks["SkironCooldownManager.AnchorProxy.SizeChanged"]
+assert(type(skironEvent) == "function", "Skiron layout callback was not registered")
+local childGroup = NewFrame("SCM_GroupAnchorProxy_2", 190, 40)
+skironEvent(nil, 2, childGroup, 190, 40, "ANCHOR:1", false)
+FlushTimers()
+assert(_G.MSUF_GetSkironCooldownAnchorProxy().MSUFSkironSource == skironSource,
+    "child-group layout event replaced the primary Skiron source")
+assert(rebinds == 2 and widthRefreshes == 2,
+    "child-group layout event refreshed primary consumers")
+
+local skironRebindBase = rebinds
+local skironWidthBase = widthRefreshes
+
 local source = NewFrame("CoolinatorPrimaryGroupAnchor", 226, 24)
 coolinatorLoaded = true
 FireEvent("ADDON_LOADED", "Coolinator")
@@ -255,33 +294,38 @@ assert(_G.MSUF_GetCoolinatorCooldownAnchor() == source,
     "Coolinator primary anchor was not acquired")
 assert(_G.MSUF_IsThirdPartyCooldownAnchor(source) == true,
     "acquired Coolinator source is not classified as a native third-party anchor")
-assert(rebinds == 1, "Coolinator acquisition did not rebind targeted consumers exactly once")
-assert(widthRefreshes == 1, "Coolinator acquisition did not refresh width consumers exactly once")
+assert(rebinds == skironRebindBase + 1, "Coolinator acquisition did not rebind targeted consumers exactly once")
+assert(widthRefreshes == skironWidthBase + 1, "Coolinator acquisition did not refresh width consumers exactly once")
 assert(source.hooks.OnSizeChanged and source.hooks.OnShow and source.hooks.OnHide,
     "Coolinator lifecycle hooks were not installed")
 
 source:SetSize(254, 24)
-assert(rebinds == 1, "same-source resize unnecessarily rebound unitframes")
-assert(widthRefreshes == 2, "same-source resize did not refresh width consumers")
+assert(rebinds == skironRebindBase + 1, "same-source resize unnecessarily rebound unitframes")
+assert(widthRefreshes == skironWidthBase + 2, "same-source resize did not refresh width consumers")
 
 source:Hide()
 assert(_G.MSUF_GetCoolinatorCooldownAnchor() == nil, "hidden Coolinator source remained active")
-assert(rebinds == 2 and widthRefreshes == 3, "Coolinator loss did not refresh consumers")
+FlushTimers()
+assert(rebinds == skironRebindBase + 2 and widthRefreshes == skironWidthBase + 3,
+    "Coolinator loss did not refresh consumers")
 
 source:Show()
 assert(_G.MSUF_GetCoolinatorCooldownAnchor() == source, "shown Coolinator source was not reacquired")
-assert(rebinds == 3 and widthRefreshes == 4, "Coolinator reacquisition did not refresh consumers")
+FlushTimers()
+assert(rebinds == skironRebindBase + 3 and widthRefreshes == skironWidthBase + 4,
+    "Coolinator reacquisition did not refresh consumers")
 
 inCombat = true
 source:Hide()
 assert(_G.MSUF_GetCoolinatorCooldownAnchor() == nil,
     "public resolver exposed a hidden Coolinator source during combat")
-assert(rebinds == 3, "combat transition rebound protected consumers")
+assert(rebinds == skironRebindBase + 3, "combat transition rebound protected consumers")
 inCombat = false
 FireEvent("PLAYER_REGEN_ENABLED")
+FlushTimers()
 assert(_G.MSUF_GetCoolinatorCooldownAnchor() == nil,
     "deferred Coolinator loss was not reconciled after combat")
-assert(rebinds == 4 and widthRefreshes == 5,
+assert(rebinds == skironRebindBase + 4 and widthRefreshes == skironWidthBase + 5,
     "post-combat Coolinator reconciliation did not refresh consumers")
 
 print("coolinator anchor 5.72 smoke: OK")
