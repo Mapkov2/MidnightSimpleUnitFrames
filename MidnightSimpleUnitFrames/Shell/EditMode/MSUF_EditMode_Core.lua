@@ -503,11 +503,10 @@ function State.SetPopupOpen(open)
     if st then st.popupOpen = open and true or false end
 end
 
---- Global snapshot for Cancel All (restore pre-edit-mode state)
-local SNAPSHOT_KEYS = {
-    "player", "target", "focus", "focustarget", "targettarget", "pet", "boss",
-    "general", "auras3", "gf_party", "gf_raid", "gf_mythicraid", "gf_priority",
-}
+--- Global snapshot for Cancel All (restore pre-edit-mode state). This is the
+--- complete active profile, not only geometry keys: Menu2 can remain open
+--- while Edit Mode is active, so Cancel All must also roll back settings made
+--- from that surface during the same Edit Mode session.
 local _snapshot = nil
 
 local function GetDeepCopy()
@@ -517,10 +516,29 @@ end
 local function SnapshotDB()
     local dc = GetDeepCopy()
     local db = _G.MSUF_DB; if not db or not dc then _snapshot = nil; return end
-    _snapshot = {}
-    for _, k in ipairs(SNAPSHOT_KEYS) do
-        if db[k] ~= nil then _snapshot[k] = dc(db[k]) end
+    _snapshot = dc(db)
+end
+
+local function RestoreSnapshotTable(dst, src, seen)
+    if type(dst) ~= "table" or type(src) ~= "table" then return false end
+    seen = seen or {}
+    seen[src] = dst
+    for key in pairs(dst) do
+        if src[key] == nil then dst[key] = nil end
     end
+    for key, value in pairs(src) do
+        if type(value) == "table" then
+            if seen[value] then
+                dst[key] = seen[value]
+            else
+                if type(dst[key]) ~= "table" then dst[key] = {} end
+                RestoreSnapshotTable(dst[key], value, seen)
+            end
+        else
+            dst[key] = value
+        end
+    end
+    return true
 end
 
 local function InvalidateAllFrameCaches()
@@ -614,14 +632,17 @@ local function RestoreAfterCombatExit()
 end
 
 local function RestoreDB()
-    local dc = GetDeepCopy()
-    if not _snapshot or not dc then return false end
+    if type(_snapshot) ~= "table" then return false end
     local db = _G.MSUF_DB; if not db then return false end
-    for _, k in ipairs(SNAPSHOT_KEYS) do
-        if _snapshot[k] ~= nil then db[k] = dc(_snapshot[k]) end
-    end
+    RestoreSnapshotTable(db, _snapshot)
     _snapshot = nil
     return true
+end
+
+local function SharedHistoryService()
+    local menu = (type(MSUF) == "table" and MSUF.MSUF2) or _G.MSUF2
+    if type(menu) ~= "table" then return nil end
+    return menu
 end
 
 --- ENTER Edit Mode
@@ -646,6 +667,11 @@ function State.Enter(key)
     -- before exposing the active state so an immediate Assistant command cannot
     -- mutate settings ahead of the old deferred snapshot.
     SnapshotDB()
+
+    local history = SharedHistoryService()
+    if history and type(history.StartHistorySession) == "function" then
+        history.StartHistorySession("edit_mode")
+    end
 
     active  = true
     unitKey = key or "player"
@@ -675,11 +701,6 @@ function State.Enter(key)
     C_Timer.After(ENTER_DEFER_DELAY, function()
         if enterGeneration ~= enterToken or not (EM2.State and EM2.State.IsActive()) then return end
         if IsConfigCombatLocked() then return end
-
-        --- Clear undo history for new session
-        if _G.MSUF_EM_UndoClear then
-            _G.MSUF_EM_UndoClear()
-        end
 
         --- (Auras3 is refreshed inside MSUF_SyncAllUnitPreviews below; calling it
         --- here too just doubled the work on the entry frame and spiked the click.)
@@ -755,6 +776,12 @@ function State.Exit(source)
     --- Stop ticker FIRST (zero overhead from this point)
     if EM2.Ticker and EM2.Ticker.Stop then EM2.Ticker.Stop() end
 
+    --- Combat may interrupt an active drag or a debounced nudge. Cancel its
+    --- timers before hiding widgets can fire OnHide commits. The shared
+    --- history service retains the before-state and finalizes it only after
+    --- combat, without taking a DB snapshot here.
+    if combatLocked and EM2.Undo and EM2.Undo.CancelChange then EM2.Undo.CancelChange() end
+
     --- Hide movers + HUD + grid first (visual instant response)
     if EM2.Movers and EM2.Movers.Hide then EM2.Movers.Hide() end
     if EM2.HUD    and EM2.HUD.Hide    then EM2.HUD.Hide()    end
@@ -800,6 +827,10 @@ function State.Exit(source)
 
     --- Notify listeners
     NotifyListeners()
+    local history = SharedHistoryService()
+    if history and type(history.EndHistorySession) == "function" then
+        history.EndHistorySession("edit_mode")
+    end
     if State.UpdateCombatListenerRegistration then State.UpdateCombatListenerRegistration() end
 end
 
@@ -814,9 +845,18 @@ function State.CancelAll()
     --- Kill any pending async commits - they would re-apply dragged offsets
     --- after we restore the snapshot, overwriting our restore.
     FlushPendingCommits()
+    if EM2.Undo and EM2.Undo.CancelChange then EM2.Undo.CancelChange() end
 
-    --- Restore DB to pre-edit-mode snapshot.
-    local restored = RestoreDB()
+    local history = SharedHistoryService()
+    local restored = history and type(history.CancelHistorySurface) == "function"
+        and history.CancelHistorySurface("edit_mode", true) == true
+    if restored then
+        _snapshot = nil
+    else
+        --- Menu2 history can be unavailable during an early load failure. Keep
+        --- the complete local profile snapshot as a fail-safe Cancel All path.
+        restored = RestoreDB()
+    end
 
     --- Teardown UI
     if EM2.Movers and EM2.Movers.Hide then EM2.Movers.Hide() end
@@ -863,6 +903,9 @@ function State.CancelAll()
     RestoreRuntimeAfterEditModeExit()
 
     NotifyListeners()
+    if history and type(history.EndHistorySession) == "function" then
+        history.EndHistorySession("edit_mode")
+    end
     if State.UpdateCombatListenerRegistration then State.UpdateCombatListenerRegistration() end
 end
 
@@ -919,6 +962,42 @@ local MAX_UNDO = 30
 local debounceKey = nil
 local debounceTime = 0
 local DEBOUNCE_SEC = 0.5
+local sharedDebounceKey
+local sharedDebounceGeneration = 0
+local sharedDebounceTimer
+local pendingPreparedTimers = {}
+local activeFallbackPrepared
+local activeChangeUsesShared = false
+
+local HISTORY_CATEGORY_LABELS = {
+    unit = "Unit frame",
+    castbar = "Castbar",
+    general = "General layout",
+    aura = "Aura layout",
+    gf = "Group frame",
+}
+
+local function HistoryChangeLabel(category, key, action)
+    local label = HISTORY_CATEGORY_LABELS[tostring(category or "")] or "Edit Mode"
+    key = tostring(key or "")
+    if key ~= "" then label = label .. ": " .. key end
+    return tostring(action or "Change") .. " " .. label
+end
+
+local function HistoryChangeSource(category, key)
+    return "edit_mode:" .. tostring(category or "change") .. ":" .. tostring(key or "")
+end
+
+local function CommitSharedDebounce()
+    if not sharedDebounceKey then return false end
+    sharedDebounceKey = nil
+    sharedDebounceGeneration = sharedDebounceGeneration + 1
+    if sharedDebounceTimer and sharedDebounceTimer.Cancel then sharedDebounceTimer:Cancel() end
+    sharedDebounceTimer = nil
+    local history = SharedHistoryService()
+    return history and type(history.CommitHistoryTransaction) == "function"
+        and history.CommitHistoryTransaction() or false
+end
 
 local function DeepCopy(src)
     if type(src) ~= "table" then return src end
@@ -1110,11 +1189,26 @@ end
 -- not consume undo capacity or destroy the redo stack.
 function Undo.PrepareChange(category, key)
     if _G.MSUF__UndoRestoring then return nil end
+    local history = SharedHistoryService()
+    if history and type(history.PrepareHistoryChange) == "function" then
+        local prepared = history.PrepareHistoryChange(
+            HistoryChangeLabel(category, key),
+            HistoryChangeSource(category, key)
+        )
+        if prepared then
+            return { category = category, key = key, shared = prepared }
+        end
+    end
     return CaptureState(category, key)
 end
 
 function Undo.CommitPrepared(snap)
     if _G.MSUF__UndoRestoring or type(snap) ~= "table" or type(snap.category) ~= "string" then return false end
+    if snap.shared then
+        local history = SharedHistoryService()
+        return history and type(history.CommitPreparedHistory) == "function"
+            and history.CommitPreparedHistory(snap.shared) or false
+    end
     undoStack[#undoStack + 1] = snap
     if #undoStack > MAX_UNDO then table.remove(undoStack, 1) end
     for i = 1, #redoStack do redoStack[i] = nil end
@@ -1123,6 +1217,58 @@ end
 
 function Undo.BeforeChange(category, key, debounce)
     if _G.MSUF__UndoRestoring then return end
+    local history = SharedHistoryService()
+    if history and type(history.BeginHistoryTransaction) == "function" then
+        local dk = tostring(category or "") .. ":" .. tostring(key or "")
+        if debounce then
+            if sharedDebounceKey and sharedDebounceKey ~= dk then CommitSharedDebounce() end
+            if not sharedDebounceKey then
+                if not history.BeginHistoryTransaction(
+                    HistoryChangeLabel(category, key),
+                    HistoryChangeSource(category, key)
+                ) then return false end
+                sharedDebounceKey = dk
+            end
+            sharedDebounceGeneration = sharedDebounceGeneration + 1
+            local generation = sharedDebounceGeneration
+            if sharedDebounceTimer and sharedDebounceTimer.Cancel then sharedDebounceTimer:Cancel() end
+            sharedDebounceTimer = nil
+            local function CommitAfterDebounce()
+                sharedDebounceTimer = nil
+                if (InCombatLockdown and InCombatLockdown()) then return end
+                if sharedDebounceKey == dk and sharedDebounceGeneration == generation then CommitSharedDebounce() end
+            end
+            if C_Timer and C_Timer.NewTimer then
+                sharedDebounceTimer = C_Timer.NewTimer(DEBOUNCE_SEC, CommitAfterDebounce)
+            elseif C_Timer and C_Timer.After then
+                C_Timer.After(DEBOUNCE_SEC, function()
+                    if (InCombatLockdown and InCombatLockdown()) then return end
+                    if sharedDebounceKey == dk and sharedDebounceGeneration == generation then CommitSharedDebounce() end
+                end)
+            end
+            return true
+        end
+        CommitSharedDebounce()
+        local snap = Undo.PrepareChange(category, key)
+        if not snap then return false end
+        if snap.shared and C_Timer and (C_Timer.NewTimer or C_Timer.After) then
+            local pending = { snap = snap, active = true }
+            pendingPreparedTimers[pending] = true
+            local function CommitPreparedAfterFrame()
+                if not pending.active then return end
+                pending.active = false
+                pendingPreparedTimers[pending] = nil
+                Undo.CommitPrepared(snap)
+            end
+            if C_Timer.NewTimer then
+                pending.timer = C_Timer.NewTimer(0, CommitPreparedAfterFrame)
+            else
+                C_Timer.After(0, CommitPreparedAfterFrame)
+            end
+            return true
+        end
+        return Undo.CommitPrepared(snap)
+    end
     if debounce then
         local now = GetTime()
         local dk = (category or "") .. ":" .. (key or "")
@@ -1135,7 +1281,67 @@ function Undo.BeforeChange(category, key, debounce)
     return Undo.CommitPrepared(snap)
 end
 
+function Undo.BeginChange(category, key, action)
+    if _G.MSUF__UndoRestoring then return false end
+    CommitSharedDebounce()
+    local history = SharedHistoryService()
+    if history and type(history.BeginHistoryTransaction) == "function" then
+        activeChangeUsesShared = history.BeginHistoryTransaction(
+            HistoryChangeLabel(category, key, action or "Move"),
+            HistoryChangeSource(category, key)
+        ) == true
+        activeFallbackPrepared = nil
+        return activeChangeUsesShared
+    end
+    activeFallbackPrepared = CaptureState(category, key)
+    activeChangeUsesShared = false
+    return activeFallbackPrepared ~= nil
+end
+
+function Undo.CommitChange()
+    if activeChangeUsesShared then
+        activeChangeUsesShared = false
+        local history = SharedHistoryService()
+        return history and type(history.CommitHistoryTransaction) == "function"
+            and history.CommitHistoryTransaction() or false
+    end
+    local snap = activeFallbackPrepared
+    activeFallbackPrepared = nil
+    if not snap then return false end
+    return Undo.CommitPrepared(snap)
+end
+
+function Undo.CancelChange()
+    local combatLocked = (InCombatLockdown and InCombatLockdown()) and true or false
+    local history = SharedHistoryService()
+    if sharedDebounceTimer and sharedDebounceTimer.Cancel then sharedDebounceTimer:Cancel() end
+    sharedDebounceTimer = nil
+    for pending in pairs(pendingPreparedTimers) do
+        pending.active = false
+        if pending.timer and pending.timer.Cancel then pending.timer:Cancel() end
+        if combatLocked and pending.snap and pending.snap.shared
+            and history and type(history.DeferPreparedHistory) == "function" then
+            history.DeferPreparedHistory(pending.snap.shared)
+        end
+        pendingPreparedTimers[pending] = nil
+    end
+    local hadSharedChange = activeChangeUsesShared or sharedDebounceKey ~= nil
+    activeChangeUsesShared = false
+    activeFallbackPrepared = nil
+    sharedDebounceKey = nil
+    sharedDebounceGeneration = sharedDebounceGeneration + 1
+    if combatLocked and hadSharedChange and history and type(history.CommitHistoryTransaction) == "function" then
+        return history.CommitHistoryTransaction()
+    end
+    return history and type(history.CancelHistoryTransaction) == "function"
+        and history.CancelHistoryTransaction() or false
+end
+
 function Undo.DoUndo()
+    CommitSharedDebounce()
+    if activeChangeUsesShared or activeFallbackPrepared then Undo.CommitChange() end
+    local history = SharedHistoryService()
+    if history and type(history.Undo) == "function" then return history.Undo() end
     if #undoStack == 0 then return end
     local snap = undoStack[#undoStack]
     undoStack[#undoStack] = nil
@@ -1145,6 +1351,10 @@ function Undo.DoUndo()
 end
 
 function Undo.DoRedo()
+    CommitSharedDebounce()
+    if activeChangeUsesShared or activeFallbackPrepared then Undo.CommitChange() end
+    local history = SharedHistoryService()
+    if history and type(history.Redo) == "function" then return history.Redo() end
     if #redoStack == 0 then return end
     local snap = redoStack[#redoStack]
     redoStack[#redoStack] = nil
@@ -1154,24 +1364,84 @@ function Undo.DoRedo()
 end
 
 function Undo.Clear()
+    CommitSharedDebounce()
+    activeFallbackPrepared = nil
+    activeChangeUsesShared = false
     for i = 1, #undoStack do undoStack[i] = nil end
     for i = 1, #redoStack do redoStack[i] = nil end
     debounceKey = nil
+    local history = SharedHistoryService()
+    if history and type(history.ClearHistory) == "function" then history.ClearHistory() end
 end
 
-function Undo.CanUndo() return #undoStack > 0 end
-function Undo.CanRedo() return #redoStack > 0 end
+function Undo.CanUndo()
+    local history = SharedHistoryService()
+    if history and type(history.GetHistoryState) == "function" then
+        local state = history.GetHistoryState()
+        return state and state.canUndo == true
+    end
+    return #undoStack > 0
+end
+function Undo.CanRedo()
+    local history = SharedHistoryService()
+    if history and type(history.GetHistoryState) == "function" then
+        local state = history.GetHistoryState()
+        return state and state.canRedo == true
+    end
+    return #redoStack > 0
+end
+
+function Undo.RefreshControls()
+    if EM2.HUD and EM2.HUD.RefreshControls then EM2.HUD.RefreshControls() end
+    if EM2.UnitPopup and EM2.UnitPopup.RefreshHistory then EM2.UnitPopup.RefreshHistory() end
+    if EM2.CastPopup and EM2.CastPopup.RefreshHistory then EM2.CastPopup.RefreshHistory() end
+    if EM2.AuraPopup and EM2.AuraPopup.RefreshHistory then EM2.AuraPopup.RefreshHistory() end
+    if type(_G.MSUF_EM2_RefreshGFHistoryControls) == "function" then
+        _G.MSUF_EM2_RefreshGFHistoryControls()
+    end
+end
+
+function EM2.RefreshAfterHistoryRestore(reason)
+    Undo.RefreshControls()
+    if not (EM2.State and EM2.State.IsActive and EM2.State.IsActive()) then return end
+    if Util.IsConfigCombatLocked and Util.IsConfigCombatLocked() then return end
+
+    if EM2.UnitPopup and EM2.UnitPopup.Sync then EM2.UnitPopup.Sync() end
+    if EM2.CastPopup and EM2.CastPopup.Sync then EM2.CastPopup.Sync() end
+    if EM2.AuraPopup and EM2.AuraPopup.Sync then EM2.AuraPopup.Sync() end
+    if type(_G.MSUF_EM2_SyncGFPopups) == "function" then _G.MSUF_EM2_SyncGFPopups() end
+    Util.SyncMovers()
+    Util.RefreshUFPreview(reason or "EM2_HISTORY_RESTORE")
+
+    -- This is a cold, user-triggered restore path. The async preview pipeline
+    -- coalesces all UnitFrame preview work without adding an idle/combat loop.
+    if type(_G.MSUF_SyncAllUnitPreviewsAsync) == "function" then
+        _G.MSUF_SyncAllUnitPreviewsAsync()
+    elseif type(_G.MSUF_SyncAllUnitPreviews) == "function" then
+        _G.MSUF_SyncAllUnitPreviews()
+    end
+    local gf = MSUF and MSUF.GF
+    if gf and type(gf.RefreshPreviewLayout) == "function" then gf.RefreshPreviewLayout() end
+end
 
 --- Legacy globals
 local function MSUF_EM_UndoBeforeChange(category, key, debounce) Undo.BeforeChange(category, key, debounce) end
+local function MSUF_EM_UndoBeginChange(category, key, action) return Undo.BeginChange(category, key, action) end
+local function MSUF_EM_UndoCommitChange() return Undo.CommitChange() end
 local function MSUF_EM_UndoClear() Undo.Clear() end
 local function MSUF_EM_UndoUndo() Undo.DoUndo() end
 local function MSUF_EM_UndoRedo() Undo.DoRedo() end
+local function MSUF_EM_RefreshHistoryControls() Undo.RefreshControls() end
+local function MSUF_EM_RefreshAfterHistoryRestore(reason, source) return EM2.RefreshAfterHistoryRestore(reason, source) end
 
 ExportPublic("MSUF_EM_UndoBeforeChange", MSUF_EM_UndoBeforeChange)
+ExportPublic("MSUF_EM_UndoBeginChange", MSUF_EM_UndoBeginChange)
+ExportPublic("MSUF_EM_UndoCommitChange", MSUF_EM_UndoCommitChange)
 ExportPublic("MSUF_EM_UndoClear", MSUF_EM_UndoClear)
 ExportPublic("MSUF_EM_UndoUndo", MSUF_EM_UndoUndo)
 ExportPublic("MSUF_EM_UndoRedo", MSUF_EM_UndoRedo)
+ExportPublic("MSUF_EM_RefreshHistoryControls", MSUF_EM_RefreshHistoryControls)
+ExportPublic("MSUF_EM_RefreshAfterHistoryRestore", MSUF_EM_RefreshAfterHistoryRestore)
 
 --- MSUF_EM2_Init.lua
 

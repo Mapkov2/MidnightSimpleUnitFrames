@@ -8,6 +8,7 @@ local _, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+local C_Timer = M.MenuTimer or _G.C_Timer
 local T = M.Theme
 local NAV = M.navItems or {}
 local SearchBridge = M.SearchBridge or {}
@@ -409,7 +410,7 @@ local function CreateHistoryControls(parent)
             T.PlayMotion(message, "controlFocusIn", { fromAlpha = 0.25, toAlpha = 1, duration = 0.10 })
             T.PlayMotion(icon, "controlFocusIn", { fromAlpha = 0.25, toAlpha = 1, duration = 0.10 })
         end
-        local timer = _G.C_Timer
+        local timer = C_Timer
         if not (timer and timer.After) then return end
         timer.After(tonumber(seconds) or 2.0, function()
             if M.historyControls ~= controls or controls._msuf2FeedbackSerial ~= serial then return end
@@ -647,7 +648,7 @@ local function BuildNavRail(parent)
         local intro = EnsureSearchIntro()
         intro:Show()
         MarkSearchIntroSeen()
-        _G.C_Timer.After(10, function()
+        C_Timer.After(10, function()
             if intro and intro.Hide then intro:Hide() end
         end)
     end

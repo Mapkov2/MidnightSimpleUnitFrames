@@ -339,6 +339,10 @@ end
 local AuraPopup = {}
 EM2.AuraPopup = AuraPopup
 
+function AuraPopup.RefreshHistory()
+    if pf and pf:IsShown() and pf._refreshUndoRedo then pf._refreshUndoRedo() end
+end
+
 function AuraPopup.Open(unit, parent)
     if Quick.BlockConfigCombatLocked() then return false end
     unit = NormalizeAuraUnit(unit)
