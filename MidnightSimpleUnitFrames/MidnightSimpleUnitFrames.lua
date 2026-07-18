@@ -1834,50 +1834,100 @@ _G.MSUF_RefreshAllPowerTextColors = function()
 
 -- Gradient system + Absorb bars moved to MSUF_Gradients.lua
 
+local MSUF_COOLDOWN_VIEWER_ANCHORS = {
+    EssentialCooldownViewer = true,
+    UtilityCooldownViewer = true,
+    BuffIconCooldownViewer = true,
+}
+
+local function MSUF_IsCooldownViewerAnchorName(name)
+    return MSUF_COOLDOWN_VIEWER_ANCHORS[name] == true
+end
+
+-- Keep anchor precedence identical to the working 6.0 config compiler:
+-- explicit per-unit frame, explicit per-unit unitframe, global CDM toggle,
+-- then the normal global named anchor.
+local function MSUF_ResolveAnchorSettings(conf, general)
+    local anchorFrameName = conf and conf.anchorFrameName
+    if type(anchorFrameName) == "string" and anchorFrameName ~= "" then
+        return anchorFrameName, conf.anchorToUnitframe, MSUF_IsCooldownViewerAnchorName(anchorFrameName)
+    end
+
+    local anchorToUnitframe = conf and conf.anchorToUnitframe
+    if type(anchorToUnitframe) == "string"
+        and anchorToUnitframe ~= ""
+        and anchorToUnitframe ~= "GLOBAL"
+        and anchorToUnitframe ~= "global"
+        and anchorToUnitframe ~= "FREE" then
+        if MSUF_IsCooldownViewerAnchorName(anchorToUnitframe) then
+            return anchorToUnitframe, "GLOBAL", true
+        end
+        return nil, anchorToUnitframe, false
+    end
+
+    if general and general.anchorToCooldown == true then
+        return "EssentialCooldownViewer", "GLOBAL", true
+    end
+
+    local globalAnchor = general and general.anchorName
+    if MSUF_IsCooldownViewerAnchorName(globalAnchor) then
+        return globalAnchor, "GLOBAL", true
+    end
+    if type(globalAnchor) == "string"
+        and globalAnchor ~= ""
+        and globalAnchor ~= "UIParent"
+        and globalAnchor ~= "WorldFrame" then
+        return globalAnchor, "GLOBAL", false
+    end
+
+    return nil, anchorToUnitframe, false
+end
+
+
 local function MSUF_ResolveConfiguredAnchorFrame(key, conf, fallbackAnchor)
-    local anchor = fallbackAnchor or (MSUF_GetAnchorFrame and MSUF_GetAnchorFrame()) or UIParent
-    if not conf then return anchor end
+    local fallback = fallbackAnchor or UIParent
+    local general = MSUF_DB and MSUF_DB.general
+    local anchorFrameName, anchorToUnitframe, isCooldown = MSUF_ResolveAnchorSettings(conf, general)
 
-    local customName = conf.anchorFrameName
-    if customName == "UIParent" or customName == "WorldFrame" then
-        customName = nil
-    end
-    if type(customName) == "string" and customName ~= "" then
-        local custom = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and customName == "EssentialCooldownViewer") and _G.MSUF_GetEffectiveCooldownFrame(customName) or (_G and _G[customName])
-        if custom and custom ~= UIParent and custom ~= WorldFrame and (not custom.IsForbidden or not custom:IsForbidden()) then
-            return custom
+    if type(anchorFrameName) == "string" and anchorFrameName ~= "" then
+        local anchor
+        if isCooldown and type(_G.MSUF_GetEffectiveCooldownFrame) == "function" then
+            anchor = _G.MSUF_GetEffectiveCooldownFrame(anchorFrameName)
+        else
+            anchor = _G and _G[anchorFrameName]
         end
-        return anchor, customName
+        if anchor and anchor ~= WorldFrame and (not anchor.IsForbidden or not anchor:IsForbidden()) then
+            return anchor
+        end
+        return fallback, anchorFrameName
     end
 
-    local atv = conf.anchorToUnitframe
-    if type(atv) == "string" and atv ~= "" and atv ~= "GLOBAL" and atv ~= "FREE" and atv ~= "global" then
-        if atv == "EssentialCooldownViewer" then
-            local cdm = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame(atv)) or (_G and _G[atv])
-            if cdm and cdm ~= UIParent and cdm ~= WorldFrame and (not cdm.IsForbidden or not cdm:IsForbidden()) then
-                return cdm
-            end
-            return anchor, atv
-        end
+    if type(anchorToUnitframe) == "string"
+        and anchorToUnitframe ~= ""
+        and anchorToUnitframe ~= "GLOBAL"
+        and anchorToUnitframe ~= "global"
+        and anchorToUnitframe ~= "FREE" then
         local uf = _G and (_G.MSUF_UnitFrames or _G.UnitFrames)
-        local rel = uf and uf[atv] or nil
-        if not rel then rel = _G and _G["MSUF_" .. atv] or nil end
-        if rel and rel ~= UIParent and rel ~= WorldFrame and (not rel.IsForbidden or not rel:IsForbidden()) then
-            return rel
+        local relative = uf and uf[anchorToUnitframe] or nil
+        if not relative then relative = _G and _G["MSUF_" .. anchorToUnitframe] or nil end
+        if relative and relative ~= UIParent and relative ~= WorldFrame
+            and (not relative.IsForbidden or not relative:IsForbidden()) then
+            return relative
         end
-        return anchor, atv
+        return fallback, anchorToUnitframe
     end
 
-    return anchor
+    return fallback
 end
 
 local function MSUF_UsesEssentialCooldownAnchor(conf, general)
-    if general and general.anchorToCooldown == true then return true end
-    if general and general.anchorName == "EssentialCooldownViewer" then return true end
-    if type(conf) ~= "table" then return false end
-    return conf.anchorFrameName == "EssentialCooldownViewer"
-        or conf.anchorToUnitframe == "EssentialCooldownViewer"
+    local anchorFrameName, _, isCooldown = MSUF_ResolveAnchorSettings(conf, general)
+    return isCooldown == true and anchorFrameName == "EssentialCooldownViewer"
 end
+
+_G.MSUF_ResolveAnchorSettings = MSUF_ResolveAnchorSettings
+_G.MSUF_ResolveConfiguredAnchorFrame = MSUF_ResolveConfiguredAnchorFrame
+_G.MSUF_UsesEssentialCooldownAnchor = MSUF_UsesEssentialCooldownAnchor
 
 local function MSUF_IsDefaultAnchorName(anchorName)
     return anchorName == nil
@@ -2673,6 +2723,7 @@ local function MSUF_ApplyStableUnitFramePoint(frame, point, anchor, relPoint, x,
         frame._msufStableExternalAnchor = anchor
         frame._msufStableExternalSig = sig
         frame._msufDirectCooldownAnchor = nil
+        frame._msufNativeThirdPartyCooldownAnchor = nil
         frame._msufHardLockPoint = "CENTER"
     elseif frame then
         frame._msufPositionInitialized = true
@@ -2680,6 +2731,7 @@ local function MSUF_ApplyStableUnitFramePoint(frame, point, anchor, relPoint, x,
         frame._msufStableExternalAnchor = nil
         frame._msufStableExternalSig = nil
         frame._msufDirectCooldownAnchor = nil
+        frame._msufNativeThirdPartyCooldownAnchor = nil
         frame._msufHardLockPoint = nil
     end
     return true
@@ -2808,6 +2860,8 @@ local function PositionUnitFrame(f, unit, refreshConfig)
             f._msufStableExternalAnchor = nil
             f._msufStableExternalSig = nil
             f._msufDirectCooldownAnchor = true
+            f._msufNativeThirdPartyCooldownAnchor = type(_G.MSUF_IsThirdPartyCooldownAnchor) == "function"
+                and _G.MSUF_IsThirdPartyCooldownAnchor(anchor) == true
             f._msufHardLockPoint = point
             if not unresolvedConfiguredAnchor and _G.MSUF_CacheUnitFrameScreenPosition then
                 _G.MSUF_CacheUnitFrameScreenPosition(f, key, unit, point)
@@ -2847,6 +2901,8 @@ local function PositionUnitFrame(f, unit, refreshConfig)
             f._msufStableExternalAnchor = nil
             f._msufStableExternalSig = nil
             f._msufDirectCooldownAnchor = true
+            f._msufNativeThirdPartyCooldownAnchor = type(_G.MSUF_IsThirdPartyCooldownAnchor) == "function"
+                and _G.MSUF_IsThirdPartyCooldownAnchor(anchor) == true
             f._msufHardLockPoint = "CENTER"
             if not unresolvedConfiguredAnchor and _G.MSUF_CacheUnitFrameScreenPosition then
                 _G.MSUF_CacheUnitFrameScreenPosition(f, key, unit, "CENTER")
@@ -2878,6 +2934,8 @@ local function PositionUnitFrame(f, unit, refreshConfig)
             f._msufStableExternalAnchor = nil
             f._msufStableExternalSig = nil
             f._msufDirectCooldownAnchor = true
+            f._msufNativeThirdPartyCooldownAnchor = type(_G.MSUF_IsThirdPartyCooldownAnchor) == "function"
+                and _G.MSUF_IsThirdPartyCooldownAnchor(anchor) == true
             f._msufHardLockPoint = "CENTER"
             if not unresolvedConfiguredAnchor and _G.MSUF_CacheUnitFrameScreenPosition then
                 _G.MSUF_CacheUnitFrameScreenPosition(f, key, unit, "CENTER")
@@ -3030,8 +3088,79 @@ MSUF_ForceReanchorAllUnitFrames_Once = function(refreshConfig)
 end
 _G.MSUF_ForceReanchorAllUnitFrames_Once = MSUF_ForceReanchorAllUnitFrames_Once
 
+-- 5.72 adapter for the 6.0 third-party anchor lifecycle. Provider
+-- acquisition/loss only rebinds unitframes that actually consume that anchor;
+-- same-source movement remains a native frame-to-frame operation.
+function _G.MSUF_RefreshExternalUnitFrameAnchor(frameName)
+    if frameName ~= "EssentialCooldownViewer" then return false end
+    if _G.MSUF_IsUnitFramePositionLocked and _G.MSUF_IsUnitFramePositionLocked() then
+        if _G.MSUF_RequestUnitFrameReanchorAfterCombat then
+            _G.MSUF_RequestUnitFrameReanchorAfterCombat()
+        end
+        return false
+    end
+
+    local general = MSUF_DB and MSUF_DB.general
+    local refreshed = false
+    for i = 1, #UnitFramesList do
+        local frame = UnitFramesList[i]
+        local unit = frame and frame.unit
+        local key = frame and (frame.msufConfigKey or (unit and GetConfigKeyForUnit(unit)))
+        local conf = key and MSUF_DB and MSUF_DB[key]
+        local anchorFrameName, _, isCooldown = MSUF_ResolveAnchorSettings(conf, general)
+        if frame and anchorFrameName == frameName and isCooldown == true then
+            PositionUnitFrame(frame, unit, true)
+            refreshed = true
+        end
+    end
+    if refreshed then _G.MSUF_ClampUnitFramesToScreen() end
+    return refreshed
+end
+
+do
+    local pending = false
+
+    function _G.MSUF_ScheduleCooldownWidthRefresh(frameName)
+        if frameName ~= "EssentialCooldownViewer" then return false end
+        if _G.MSUF_IsUnitFramePositionLocked and _G.MSUF_IsUnitFramePositionLocked() then
+            if _G.MSUF_RequestUnitFrameReanchorAfterCombat then
+                _G.MSUF_RequestUnitFrameReanchorAfterCombat()
+            end
+            return false
+        end
+        if pending then return true end
+        pending = true
+
+        local function run()
+            pending = false
+            if _G.MSUF_IsUnitFramePositionLocked and _G.MSUF_IsUnitFramePositionLocked() then
+                if _G.MSUF_RequestUnitFrameReanchorAfterCombat then
+                    _G.MSUF_RequestUnitFrameReanchorAfterCombat()
+                end
+                return
+            end
+            local bars = MSUF_DB and MSUF_DB.bars
+            if bars and (bars.classPowerAnchorToCooldown == true or bars.classPowerWidthMode == "cooldown")
+                and type(_G.MSUF_ClassPower_Refresh) == "function" then
+                _G.MSUF_ClassPower_Refresh()
+            end
+            if bars and bars.detachedPowerBarWidthMode == "cooldown"
+                and type(_G.MSUF_ApplyPowerBarEmbedLayout_All) == "function" then
+                _G.MSUF_ApplyPowerBarEmbedLayout_All()
+            end
+        end
+
+        if C_Timer and C_Timer.After then C_Timer.After(0, run) else run() end
+        return true
+    end
+end
+
 local function MSUF_FrameShouldHardLockPosition(frame)
     if not frame then return false end
+    -- 6.0 keeps stable third-party cooldown anchors as a native WoW anchor
+    -- chain. Detaching that chain here is exactly what prevents Coolinator
+    -- designer/runtime geometry changes from reaching the unit frames.
+    if frame._msufNativeThirdPartyCooldownAnchor == true then return false end
     if frame._msufStableExternalAnchor or frame._msufDirectCooldownAnchor then return true end
 
     local key = frame.msufConfigKey
@@ -4829,157 +4958,6 @@ end
     end
  end
 
-do
-    local SKIRON_ANCHOR_EVENT = "SkironCooldownManager.AnchorProxy.SizeChanged"
-    local SKIRON_RETRY_DELAYS = { 0, 0.05, 0.20, 0.60, 1.20, 2.00, 4.00, 8.00, 12.00 }
-    local SKIRON_PRIMARY_GROUPS = { 1, 101 }
-    local registeredSkiron
-
-    local function MSUF_SkironFrameUsable(frame)
-        if not (frame and frame ~= UIParent and frame ~= WorldFrame) then return false end
-        if frame.IsForbidden and frame:IsForbidden() then return false end
-        if frame.IsShown and not frame:IsShown() then return false end
-        local width = frame.GetWidth and frame:GetWidth() or 0
-        local height = frame.GetHeight and frame:GetHeight() or 0
-        return width > 0 and height > 0 and frame.SetPoint ~= nil
-    end
-
-    local function MSUF_IsSkironGroupFrame(frame)
-        local name = frame and frame.GetName and frame:GetName()
-        return type(name) == "string"
-            and (name:match("^SCM_GroupAnchorProxy_%d+$") or name:match("^SCM_GroupAnchor_%d+$"))
-    end
-
-    local function MSUF_GetSkironAnchorFrame(prefix, group)
-        return _G[prefix .. tostring(group)]
-    end
-
-    local function MSUF_FindUsableSkironGroupAnchor(group)
-        local proxy = MSUF_GetSkironAnchorFrame("SCM_GroupAnchorProxy_", group)
-        if MSUF_SkironFrameUsable(proxy) then return proxy end
-
-        local groupAnchor = MSUF_GetSkironAnchorFrame("SCM_GroupAnchor_", group)
-        if MSUF_SkironFrameUsable(groupAnchor) then return groupAnchor end
-    end
-
-    local function MSUF_ResolveSkironAnchorSource(preferredFrame, isActiveProxy)
-        if MSUF_SkironFrameUsable(preferredFrame) and (isActiveProxy or MSUF_IsSkironGroupFrame(preferredFrame)) then
-            return preferredFrame
-        end
-
-        for i = 1, #SKIRON_PRIMARY_GROUPS do
-            local frame = MSUF_FindUsableSkironGroupAnchor(SKIRON_PRIMARY_GROUPS[i])
-            if frame then return frame end
-        end
-
-        for group = 1, 15 do
-            local frame = MSUF_FindUsableSkironGroupAnchor(group)
-            if frame then return frame end
-        end
-
-        for group = 101, 115 do
-            local frame = MSUF_FindUsableSkironGroupAnchor(group)
-            if frame then return frame end
-        end
-    end
-
-    local function MSUF_EnsureSkironAnchorProxy(source, isActiveProxy)
-        source = MSUF_ResolveSkironAnchorSource(source, isActiveProxy)
-        if not source then return nil, false end
-
-        local proxy = _G.MSUF_SkironCooldownAnchor
-        if not proxy then
-            proxy = CreateFrame("Frame", "MSUF_SkironCooldownAnchor", UIParent)
-            proxy._msufStableAnchorProxy = true
-            proxy._msufExternalAnchorCacheKey = "SkironCooldownManager"
-            if proxy.EnableMouse then proxy:EnableMouse(false) end
-            if proxy.SetAlpha then proxy:SetAlpha(0) end
-            _G.MSUF_SkironCooldownAnchor = proxy
-        end
-
-        local sourceWidth = source.GetWidth and source:GetWidth() or 0
-        local sourceHeight = source.GetHeight and source:GetHeight() or 0
-        local changed = proxy.MSUFSkironSource ~= source
-            or proxy.MSUFSkironSourceWidth ~= sourceWidth
-            or proxy.MSUFSkironSourceHeight ~= sourceHeight
-        if changed then
-            proxy:ClearAllPoints()
-            proxy:SetAllPoints(source)
-            proxy.MSUFSkironSource = source
-            proxy.MSUFSkironSourceWidth = sourceWidth
-            proxy.MSUFSkironSourceHeight = sourceHeight
-        end
-        if proxy.Show then proxy:Show() end
-        return proxy, changed
-    end
-
-    _G.MSUF_GetSkironCooldownAnchorProxy = function()
-        return MSUF_EnsureSkironAnchorProxy()
-    end
-
-    local function MSUF_RequestSkironAnchorApply()
-        if _G.MSUF_IsUnitFramePositionLocked and _G.MSUF_IsUnitFramePositionLocked() then
-            if _G.MSUF_RequestUnitFrameReanchorAfterCombat then
-                _G.MSUF_RequestUnitFrameReanchorAfterCombat()
-            end
-            return
-        end
-        if _G.MSUF_ForceReanchorAllUnitFrames_Once then
-            _G.MSUF_ForceReanchorAllUnitFrames_Once(true)
-        end
-    end
-
-    local function MSUF_RefreshSkironAnchorProxy(source, isActiveProxy)
-        local proxy, changed = MSUF_EnsureSkironAnchorProxy(source, isActiveProxy)
-        if changed and proxy then
-            MSUF_RequestSkironAnchorApply()
-        end
-        return proxy ~= nil
-    end
-
-    local function MSUF_ScheduleSkironAnchorResolve()
-        local function run()
-            MSUF_RefreshSkironAnchorProxy()
-        end
-        if not (C_Timer and C_Timer.After) then
-            run()
-            return
-        end
-        for i = 1, #SKIRON_RETRY_DELAYS do
-            C_Timer.After(SKIRON_RETRY_DELAYS[i], run)
-        end
-    end
-
-    local function MSUF_OnSkironAnchorProxySizeChanged(_, proxyGroup, proxy, _width, _height, selectedAnchorRef, isActiveProxy)
-        if not (isActiveProxy or proxyGroup == 1 or selectedAnchorRef == "ANCHOR:1") then return end
-        MSUF_RefreshSkironAnchorProxy(proxy, isActiveProxy)
-    end
-
-    _G.MSUF_RegisterSkironAnchorProxy = function()
-        if registeredSkiron then
-            MSUF_ScheduleSkironAnchorResolve()
-            return true
-        end
-        if not (EventRegistry and type(EventRegistry.RegisterCallback) == "function") then
-            return false
-        end
-        EventRegistry:RegisterCallback(SKIRON_ANCHOR_EVENT, MSUF_OnSkironAnchorProxySizeChanged, "MidnightSimpleUnitFrames")
-        registeredSkiron = true
-        MSUF_ScheduleSkironAnchorResolve()
-        return true
-    end
-
-    local f = CreateFrame("Frame")
-    f:RegisterEvent("ADDON_LOADED")
-    f:RegisterEvent("PLAYER_LOGIN")
-    f:RegisterEvent("PLAYER_ENTERING_WORLD")
-    f:SetScript("OnEvent", function(_, event, addon)
-        if event == "ADDON_LOADED" and addon ~= "SkironCooldownManager" then return end
-        _G.MSUF_RegisterSkironAnchorProxy()
-    end)
-    _G.MSUF_RegisterSkironAnchorProxy()
-end
-
 -- Borders system (aggro/dispel/purge outlines + UI_SCALE handler) moved to MSUF_Borders.lua
 
 -- Hoisted helpers for ApplyUnitFrameKey_Immediate (avoid closure allocation per call)
@@ -5697,8 +5675,26 @@ local function MSUF_EnableUnitFrameDrag(f, unit)
         self._msufDragActive = true
         self._msufDragKey = key
         self._msufDragConf = conf
+        local nativeThirdPartyDrag = self._msufNativeThirdPartyCooldownAnchor == true
+        self._msufDragDetachedThirdPartyAnchor = nativeThirdPartyDrag or nil
         _DisableClicks(self)
+
+        -- A native third-party anchor must remain live during normal runtime,
+        -- but resolving Coolinator-relative bounds, caches and popup state on
+        -- every drag tick makes StartMoving visibly trail the cursor. Detach
+        -- once in screen space, let Blizzard move the frame natively, then
+        -- convert back to provider-relative offsets once on drag stop.
+        if nativeThirdPartyDrag and type(_G.MSUF_SnapshotFrameToUIParentCenter) == "function" then
+            _G.MSUF_SnapshotFrameToUIParentCenter(self, self._msufHardLockPoint or "CENTER")
+        end
         self:StartMoving()
+
+        if nativeThirdPartyDrag then
+            self._msufDragAccum = nil
+            self:SetScript("OnUpdate", nil)
+            return
+        end
+
         self._msufDragAccum = 0
             self:SetScript("OnUpdate", function(s, elapsed)
                 if not s._msufDragActive then
@@ -5719,6 +5715,7 @@ local function MSUF_EnableUnitFrameDrag(f, unit)
         self._msufDragActive = false
         self._msufDragKey = nil
         self._msufDragConf = nil
+        self._msufDragDetachedThirdPartyAnchor = nil
         self:SetScript("OnUpdate", nil)
         _RestoreClicks(self)
         if key and conf then
