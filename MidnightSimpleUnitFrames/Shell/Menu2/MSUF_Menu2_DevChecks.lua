@@ -150,5 +150,5 @@ local function RunChecks()
 end
 
 _G.SLASH_MSUFMENUCHECK1 = "/msufmenucheck"
-_G.SlashCmdList = _G.SlashCmdList or {}
+-- Blizzard owns this table; reassigning the global taints protected commands such as /tm.
 _G.SlashCmdList.MSUFMENUCHECK = RunChecks
