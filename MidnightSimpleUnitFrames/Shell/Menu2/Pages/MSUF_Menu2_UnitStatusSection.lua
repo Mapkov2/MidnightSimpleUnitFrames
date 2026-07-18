@@ -481,13 +481,13 @@ local function BuildStatus(ctx, builder, unit)
         "level anchor", "level anchoring", "level text anchor", "level text anchoring",
         "right to player name", "left to player name", "top left", "top right", "bottom left", "bottom right",
     }, CurrentStatusAnchorValues)
-    local x = BindStatusPlacementSlider(placementCard, "X Offset", -500, 500, placeLeftX, -178, placeLeftW, "x", "defaultX", 0, "MSUF2_STATUS_X", "Status indicator X offset", {
+    local x = BindStatusPlacementSlider(placementCard, "X Offset", -500, 500, placeRightX, -54, placeRightW, "x", "defaultX", 0, "MSUF2_STATUS_X", "Status indicator X offset", {
         "x", "x offset", "horizontal offset", "level x", "level x offset", "move level left", "move level right",
     })
     local y = BindStatusPlacementSlider(placementCard, "Y Offset", -500, 500, placeRightX, -116, placeRightW, "y", "defaultY", 0, "MSUF2_STATUS_Y", "Status indicator Y offset", {
         "y", "y offset", "vertical offset", "level y", "level y offset", "move level up", "move level down",
     })
-    local layer = BindStatusPlacementSlider(placementCard, "Layer", 0, 30, placeLeftX, -212, placeLeftW, "layer", "defaultLayer", 7, "MSUF2_STATUS_LAYER", "Status indicator layer", {
+    local layer = BindStatusPlacementSlider(placementCard, "Layer", 0, 30, placeLeftX, -178, placeLeftW, "layer", "defaultLayer", 7, "MSUF2_STATUS_LAYER", "Status indicator layer", {
         "level layer", "level draw order", "indicator layer", "draw order", "above text", "behind text",
     }, ClampSelectedStatusLayer)
     local reset = W.Button(placementCard, "Reset selected", 150)
@@ -617,9 +617,9 @@ local function BuildStatus(ctx, builder, unit)
         Shared.PlaceDropdown(placementCard, raidGroupStyle, placeRightX, -54, min(180, placeRightW))
         Shared.PlaceSlider(placementCard, size, placeLeftX, -54, placeLeftW)
         Shared.PlaceDropdown(placementCard, anchor, placeLeftX, -116, placeLeftW)
-        Shared.PlaceSlider(placementCard, x, placeLeftX, -178, placeLeftW)
+        Shared.PlaceSlider(placementCard, x, placeRightX, -54, placeRightW)
         Shared.PlaceSlider(placementCard, y, placeRightX, -116, placeRightW)
-        Shared.PlaceSlider(placementCard, layer, placeLeftX, -212, placeLeftW)
+        Shared.PlaceSlider(placementCard, layer, placeLeftX, -178, placeLeftW)
         PlaceButton(reset, placementCard, placeRightX, -178, 150)
     end
     local function ShowControl(control, shown)
