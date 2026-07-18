@@ -569,7 +569,25 @@ local function IdentityUnitExists(frame, unit)
   return UnitExistsSafe(unit)
 end
 
-local function BeginFrameEvent(frame)
+-- Only data-only events may carry stable identity across dispatches. Status
+-- remains dispatch-local and is still refreshed by Health, while target,
+-- roster, connection, flags, name, faction, and lifecycle events fall through
+-- to the conservative identity invalidation below.
+local IDENTITY_STABLE_DISPATCH_EVENTS = {
+  UNIT_HEALTH = true,
+  UNIT_MAXHEALTH = true,
+  UNIT_MAX_HEALTH_MODIFIERS_CHANGED = true,
+  UNIT_POWER_UPDATE = true,
+  UNIT_POWER_FREQUENT = true,
+  UNIT_MAXPOWER = true,
+  UNIT_HEAL_PREDICTION = true,
+  UNIT_ABSORB_AMOUNT_CHANGED = true,
+  UNIT_HEAL_ABSORB_AMOUNT_CHANGED = true,
+  UNIT_IN_RANGE_UPDATE = true,
+  UNIT_DISTANCE_CHECK_UPDATE = true,
+}
+
+local function BeginFrameEvent(frame, event)
   frame._msufDispatchToken = (frame._msufDispatchToken or 0) + 1
   frame._msufDispatchActive = true
   -- Keep the per-frame state table allocated, but invalidate its contents for
@@ -579,7 +597,9 @@ local function BeginFrameEvent(frame)
   if state then
     state.ready = false
     state.dispatchToken = nil
-    state.identityReady = nil
+    if IDENTITY_STABLE_DISPATCH_EVENTS[event] ~= true then
+      state.identityReady = nil
+    end
   end
 end
 
@@ -856,7 +876,7 @@ end
 local function BuildHealthRoute(barFn, textFn, predictionFn, visualsFn, routeUnitless, target)
   if target then
     return function(self, ev, _unit, ...)
-      BeginFrameEvent(self)
+      BeginFrameEvent(self, ev)
       local hp, hpMax, percentReady
       if barFn then hp, hpMax, percentReady = barFn(self, ev, target, ...) end
       if predictionFn then
@@ -870,7 +890,7 @@ local function BuildHealthRoute(barFn, textFn, predictionFn, visualsFn, routeUni
     end
   end
   return function(self, ev, unit, ...)
-    BeginFrameEvent(self)
+    BeginFrameEvent(self, ev)
     local u = routeUnitless == true and self.MSUFUnitKey or (unit or self.MSUFUnitKey)
     local hp, hpMax, percentReady
     if barFn then hp, hpMax, percentReady = barFn(self, ev, u, ...) end
@@ -984,19 +1004,19 @@ end
 local function BuildSingleRoute(update, unitless, target)
   if unitless == true then
     return function(self, ev, _unit, ...)
-      BeginFrameEvent(self)
+      BeginFrameEvent(self, ev)
       update(self, ev, self.MSUFUnitKey, ...)
       EndFrameEvent(self)
     end
   elseif target then
     return function(self, ev, _unit, ...)
-      BeginFrameEvent(self)
+      BeginFrameEvent(self, ev)
       update(self, ev, target, ...)
       EndFrameEvent(self)
     end
   end
   return function(self, ev, unit, ...)
-    BeginFrameEvent(self)
+    BeginFrameEvent(self, ev)
     update(self, ev, unit or self.MSUFUnitKey, ...)
     EndFrameEvent(self)
   end
@@ -1082,7 +1102,7 @@ local function CompileFrameEventPath(frame, event, list)
 
   if target then
     return function(self, ev, unit, ...)
-      BeginFrameEvent(self)
+      BeginFrameEvent(self, ev)
       for i = 1, count, 2 do
         local update = list[i]
         update(self, ev, list[i + 1] == true and self.MSUFUnitKey or target, ...)
@@ -1092,7 +1112,7 @@ local function CompileFrameEventPath(frame, event, list)
   end
 
   return function(self, ev, unit, ...)
-    BeginFrameEvent(self)
+    BeginFrameEvent(self, ev)
     for i = 1, count, 2 do
       local update = list[i]
       update(self, ev, list[i + 1] == true and self.MSUFUnitKey or (unit or self.MSUFUnitKey), ...)
@@ -1119,7 +1139,7 @@ local function BuildLifecycleFullPath(healthPath, powerUpdate, powerTextUpdate,
     local unit = frame.MSUFUnitKey
     frame._msufGroupStateRefresh = true
     frame._msufDeferDispatchEnd = true
-    if healthPath then healthPath(frame, event, nil) else BeginFrameEvent(frame) end
+    if healthPath then healthPath(frame, event, nil) else BeginFrameEvent(frame, event) end
 
     local power, powerMax, powerType, powerToken, powerMetaChanged
     if powerUpdate then
@@ -1168,7 +1188,7 @@ local function BuildLifecycleGlobalPath(healthPath, healthMetadata, powerUpdate,
       healthPath(frame, event, nil)
       frame._msufGroupLifecycleAIMetadataReady = nil
     else
-      BeginFrameEvent(frame)
+      BeginFrameEvent(frame, event)
     end
 
     -- Blizzard treats PARTY_MEMBER_ENABLE/DISABLE as a group-wide alternate
@@ -1883,8 +1903,8 @@ function UF.RunLeanIdentity(frame, event)
   if not (path or barPath) then return false end
   local unit = frame.MSUFUnitKey
   if not IdentityUnitExists(frame, unit) then return false end
-  BeginFrameEvent(frame)
   event = event or "MSUF_UNIT_IDENTITY"
+  BeginFrameEvent(frame, event)
   local hp, hpMax, healthPercentReady
   local power, powerMax, powerType, powerToken, powerMetaChanged
   if barPath then
@@ -1904,9 +1924,9 @@ function UF.FrameRuntimeUpdate(frame, reason)
   if not FrameVisibleForEvent(frame) then return false end
   local path = frame._msufRuntimeAllPath
   if not path then return false end
-  BeginFrameEvent(frame)
   local unit = frame.MSUFUnitKey
   reason = reason or "MSUF_FORCE_UPDATE"
+  BeginFrameEvent(frame, reason)
   path(frame, reason, unit)
   EndFrameEvent(frame)
   return true

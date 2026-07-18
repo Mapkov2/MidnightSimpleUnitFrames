@@ -402,6 +402,10 @@ Equal(fullHealthStripe.overAbsorbGlow:GetParent(), fullHealthStripe.overAbsorbGl
     "live full-health absorb stripe texture was not owned by its status gate")
 Check(fullHealthStripe.overAbsorbGlowBar:GetFrameLevel() > fullHealthStripe.hpBar:GetFrameLevel(),
     "live full-health absorb stripe did not render above the health bar")
+local steadyGlowLevelReads = OperationCount(fullHealthStripe.hpBar, "GetFrameLevel")
+Prediction.UpdateHealthValue(fullHealthStripe, "UNIT_HEALTH", "party3", 100, 100)
+Equal(OperationCount(fullHealthStripe.hpBar, "GetFrameLevel"), steadyGlowLevelReads,
+    "steady full-health stripe repeated layout/frame-level work")
 local protectedAbsorb = { __secret = true }
 fullHealthStripe._msufPredictionAbsorb = protectedAbsorb
 Prediction.UpdateHealthValue(fullHealthStripe, "UNIT_HEALTH", "party3", 100, 100)

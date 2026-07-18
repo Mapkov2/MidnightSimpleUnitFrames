@@ -6,11 +6,12 @@ local function Check(condition, message)
 end
 
 local classification, classToken, reaction = "normal", "WARRIOR", 3
+local dead = false
 local classificationReads, playerReads, classReads, reactionReads = 0, 0, 0, 0
 
 _G.issecretvalue = function() return false end
 _G.UnitExists = function() return true end
-_G.UnitIsDeadOrGhost = function() return false end
+_G.UnitIsDeadOrGhost = function() return dead end
 _G.UnitIsConnected = function() return true end
 _G.UnitIsPlayer = function()
     playerReads = playerReads + 1
@@ -105,15 +106,30 @@ Text.NameTextColor(frame, "target")
 Check(classificationReads == 1, "bar/name color repeated NPC classification in one dispatch")
 Check(playerReads == 1, "name color repeated UnitIsPlayer in one dispatch")
 
-reaction = 4
+-- Core invalidates volatile status freshness on every dispatch but preserves
+-- identity for data-only health events. The first health color consumer must
+-- reuse the stable player/NPC/class snapshot while still rebuilding status.
+local stableClassificationReads = classificationReads
+local stablePlayerReads = playerReads
+local stableClassReads = classReads
+local stableReactionReads = reactionReads
+state.ready = false
+state.dispatchToken = nil
 frame._msufDispatchToken = 2
+state = Common.RefreshUnitState(frame, "target", spec, "UNIT_HEALTH")
+Check(classificationReads == stableClassificationReads and playerReads == stablePlayerReads
+    and classReads == stableClassReads and reactionReads == stableReactionReads,
+    "steady UNIT_HEALTH repeated stable identity API reads")
+
+reaction = 4
+frame._msufDispatchToken = 3
 state = Common.RefreshUnitState(frame, "target", spec, "MSUF_UNIT_IDENTITY")
 r, g, b = Common.HealthColor(frame, "target", 100, 100, false, "UNIT_HEALTH")
 Check(r == 1 and g == 1 and b == 0, "neutral NPC was overridden by friendly NPC class color")
 Check(classReads == 0, "neutral NPC class was read")
 
 reaction = 5
-frame._msufDispatchToken = 3
+frame._msufDispatchToken = 4
 state = Common.RefreshUnitState(frame, "target", spec, "MSUF_UNIT_IDENTITY")
 r, g, b = Common.HealthColor(frame, "target", 100, 100, false, "UNIT_HEALTH")
 Check(r == 0.8 and g == 0.6 and b == 0.4, "friendly NPC class color did not color the health bar")
@@ -126,7 +142,7 @@ spec.health.npcClassColorBar = true
 
 classification = "worldboss"
 classToken = "UNKNOWN"
-frame._msufDispatchToken = 4
+frame._msufDispatchToken = 5
 state = Common.RefreshUnitState(frame, "target", spec, "MSUF_UNIT_IDENTITY")
 Check(state.npcKind == "npcBoss", "new dispatch reused stale NPC classification")
 Check(classificationReads == 3 and playerReads == 4, "new dispatch did not refresh identity reads")
@@ -166,5 +182,37 @@ bossFrame._msufDispatchToken = 2
 Common.RefreshUnitState(bossFrame, "boss1", bossSpec, "MSUF_UNIT_IDENTITY")
 r, g, b = Common.HealthColor(bossFrame, "boss1", 100, 100, false, "UNIT_HEALTH")
 Check(r == 0 and g == 1 and b == 0, "friendly boss was overridden by NPC class color")
+
+-- Stable health events may reuse identity only while the volatile status tuple
+-- is unchanged. Death and revive transitions must force a fresh identity read
+-- so a dead-derived NPC kind can never survive resurrection.
+local beforeDeadClassification = classificationReads
+local beforeDeadPlayer = playerReads
+dead = true
+state.ready = false
+state.dispatchToken = nil
+frame._msufDispatchToken = 6
+state = Common.RefreshUnitState(frame, "target", spec, "UNIT_HEALTH")
+Check(state.dead == true and classificationReads == beforeDeadClassification + 1
+    and playerReads == beforeDeadPlayer + 1,
+    "death transition reused stale identity")
+
+local stableDeadClassification = classificationReads
+local stableDeadPlayer = playerReads
+state.ready = false
+state.dispatchToken = nil
+frame._msufDispatchToken = 7
+Common.RefreshUnitState(frame, "target", spec, "UNIT_HEALTH")
+Check(classificationReads == stableDeadClassification and playerReads == stableDeadPlayer,
+    "stable dead status repeated identity reads")
+
+dead = false
+state.ready = false
+state.dispatchToken = nil
+frame._msufDispatchToken = 8
+state = Common.RefreshUnitState(frame, "target", spec, "UNIT_HEALTH")
+Check(state.dead == false and classificationReads == stableDeadClassification + 1
+    and playerReads == stableDeadPlayer + 1,
+    "revive transition reused dead identity")
 
 print("PASS NPC dispatch cache: health/name colors share type and player identity reads")

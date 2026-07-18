@@ -587,10 +587,13 @@ local function FriendlyNPCClassToken(state, unit)
     state.npcClassRead = true
     local reaction = IsUnitToken(unit) and UnitReaction and SafeNumber(UnitReaction(unit, "player")) or nil
     if reaction and reaction >= 5 then
+      state.npcClassEligible = true
       local _, class = UnitClass(unit)
       if issecretvalue(class) ~= true then
         state.npcClass = class
       end
+    else
+      state.npcClassEligible = nil
     end
   end
   return state.npcClass
@@ -762,11 +765,8 @@ local function UnitNPCKind(frame, unit, spec, forText, keyOverride)
   return kind
 end
 
-local function ReadUnitBool(api, unit, defaultValue)
+local function ReadKnownUnitBool(api, unit, defaultValue)
   if not api then
-    return defaultValue, false
-  end
-  if not IsUnitToken(unit) then
     return defaultValue, false
   end
   local value = api(unit)
@@ -776,11 +776,24 @@ local function ReadUnitBool(api, unit, defaultValue)
   return value == true or value == 1, true
 end
 
+local function ReadUnitBool(api, unit, defaultValue)
+  if not IsUnitToken(unit) then
+    return defaultValue, false
+  end
+  return ReadKnownUnitBool(api, unit, defaultValue)
+end
+
 local function HealthModeNeedsIdentity(spec)
   local health = spec and spec.health
   local mode = health and health.mode
   return mode ~= "dark" and mode ~= "unified" and mode ~= "gradient"
 end
+
+local IDENTITY_STABLE_HEALTH_EVENTS = {
+  UNIT_HEALTH = true,
+  UNIT_MAXHEALTH = true,
+  UNIT_MAX_HEALTH_MODIFIERS_CHANGED = true,
+}
 
 local function RefreshUnitState(frame, unit, spec, event)
   if not frame then
@@ -819,26 +832,59 @@ local function RefreshUnitState(frame, unit, spec, event)
     end
   end
 
+  local preserveIdentity = needsIdentity == true
+    and IDENTITY_STABLE_HEALTH_EVENTS[event] == true
+    and state.unit == unit
+    and state.identityReady == true
+    and state.isPlayerKnown == true
+    and (state.isPlayer == true or state.npcKindKnown == true)
+    and (state.npcClassEligible ~= true or state.npcClass ~= nil)
+  local oldExists, oldExistsKnown = state.exists, state.existsKnown
+  local oldDead, oldDeadKnown = state.dead, state.deadKnown
+  local oldConnected, oldConnectedKnown = state.connected, state.connectedKnown
   local dispatchToken = frame._msufDispatchActive == true and frame._msufDispatchToken or nil
   state.unit = unit
   state.dispatchToken = dispatchToken
   state.ready = true
-  state.exists, state.existsKnown = ReadUnitBool(UnitExists, unit, true)
-  state.dead, state.deadKnown = ReadUnitBool(UnitIsDeadOrGhost, unit, false)
-  state.connected, state.connectedKnown = ReadUnitBool(UnitIsConnected, unit, true)
-  state.isPlayer = false
-  state.isPlayerKnown = false
-  state.npcKind = nil
-  state.npcKindKnown = false
-  state.npcClass = nil
-  state.npcClassRead = nil
-  state._npcKindTypeReady = nil
-  state._npcKindType = nil
-  state._npcKindReactionReady = nil
-  state._npcKindReaction = nil
-  state.identityReady = nil
-  if needsIdentity then
-    state.isPlayer, state.isPlayerKnown = ReadUnitBool(UnitIsPlayer, unit, false)
+  local validUnit = IsUnitToken(unit)
+  if validUnit then
+    state.exists, state.existsKnown = ReadKnownUnitBool(UnitExists, unit, true)
+    state.dead, state.deadKnown = ReadKnownUnitBool(UnitIsDeadOrGhost, unit, false)
+    state.connected, state.connectedKnown = ReadKnownUnitBool(UnitIsConnected, unit, true)
+  else
+    state.exists, state.existsKnown = true, false
+    state.dead, state.deadKnown = false, false
+    state.connected, state.connectedKnown = true, false
+  end
+
+  if preserveIdentity and (
+      oldExistsKnown ~= state.existsKnown
+      or (state.existsKnown == true and oldExists ~= state.exists)
+      or oldDeadKnown ~= state.deadKnown
+      or (state.deadKnown == true and oldDead ~= state.dead)
+      or oldConnectedKnown ~= state.connectedKnown
+      or (state.connectedKnown == true and oldConnected ~= state.connected)) then
+    preserveIdentity = false
+  end
+
+  if not preserveIdentity then
+    state.isPlayer = false
+    state.isPlayerKnown = false
+    state.npcKind = nil
+    state.npcKindKnown = false
+    state.npcClass = nil
+    state.npcClassRead = nil
+    state.npcClassEligible = nil
+    state._npcKindTypeReady = nil
+    state._npcKindType = nil
+    state._npcKindReactionReady = nil
+    state._npcKindReaction = nil
+    state.identityReady = nil
+  end
+  if needsIdentity and not preserveIdentity then
+    if validUnit then
+      state.isPlayer, state.isPlayerKnown = ReadKnownUnitBool(UnitIsPlayer, unit, false)
+    end
     if state.isPlayerKnown and not state.isPlayer then
       state.npcKind = UnitNPCKind(frame, unit, spec)
       state.npcKindKnown = state.npcKind ~= nil
@@ -847,6 +893,8 @@ local function RefreshUnitState(frame, unit, spec, event)
         FriendlyNPCClassToken(state, unit)
       end
     end
+    state.identityReady = true
+  elseif needsIdentity then
     state.identityReady = true
   end
   return state

@@ -25,6 +25,23 @@ end
 local Health = {}
 local EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION" }
 local STATUS_COLOR_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_FLAGS" }
+local IDENTITY_STATUS_COLOR_EVENTS = {
+  "UNIT_HEALTH",
+  "UNIT_MAXHEALTH",
+  "UNIT_CONNECTION",
+  "UNIT_FLAGS",
+  "UNIT_NAME_UPDATE",
+  "UNIT_FACTION",
+  "UNIT_CLASSIFICATION_CHANGED",
+  "UNIT_LEVEL",
+}
+local COLOR_ONLY_EVENTS = {
+  UNIT_FLAGS = true,
+  UNIT_NAME_UPDATE = true,
+  UNIT_FACTION = true,
+  UNIT_CLASSIFICATION_CHANGED = true,
+  UNIT_LEVEL = true,
+}
 local PLAYER_STATUS_COLOR_EVENTS = { "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST" }
 local GROUP_LIFECYCLE_EVENTS = { "PARTY_MEMBER_ENABLE", "PARTY_MEMBER_DISABLE" }
 local GROUP_LIFECYCLE_EVENT = {
@@ -87,6 +104,12 @@ local function RuntimeColorEnabledForSpec(spec)
   local health = spec and spec.health
   local mode = health and health.mode
   return mode ~= "dark" and mode ~= "unified"
+end
+
+local function RuntimeColorNeedsIdentityForSpec(spec)
+  local health = spec and spec.health
+  local mode = health and health.mode
+  return mode ~= "dark" and mode ~= "unified" and mode ~= "gradient"
 end
 
 local function RuntimeColorOnHealthEvent(frame, value)
@@ -197,7 +220,8 @@ function Health.Apply(frame, spec)
 end
 
 function Health.GetEvents(frame, spec)
-  return RuntimeColorEnabledForSpec(spec) and STATUS_COLOR_EVENTS or EVENTS
+  if not RuntimeColorEnabledForSpec(spec) then return EVENTS end
+  return RuntimeColorNeedsIdentityForSpec(spec) and IDENTITY_STATUS_COLOR_EVENTS or STATUS_COLOR_EVENTS
 end
 
 function Health.GetUnitlessEvents(frame, spec)
@@ -464,7 +488,9 @@ local function UpdateGroup(frame, event, unit)
       local maxAvailable = issecretvalue(detailedMax) == true or detailedMax ~= nil
       if hpAvailable and maxAvailable then
         local hp, maxHP, percentReady = UpdateAbsoluteValues(frame, unit, detailedHP, detailedMax)
-        if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
+        if event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, hp) then
+          if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
+        end
         NotifyHealthState(frame, event, unit, hp)
         return hp, maxHP, percentReady
       end
@@ -509,7 +535,9 @@ local function UpdateGroupAbsolute(frame, event, unit)
       local maxAvailable = issecretvalue(detailedMax) == true or detailedMax ~= nil
       if hpAvailable and maxAvailable then
         local hp, maxHP, percentReady = UpdateAbsoluteValues(frame, unit, detailedHP, detailedMax)
-        if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
+        if event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, hp) then
+          if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
+        end
         NotifyHealthState(frame, event, unit, hp)
         return hp, maxHP, percentReady
       end
@@ -545,7 +573,9 @@ local function UpdateGroupCurrent(frame, event, unit)
       local maxAvailable = issecretvalue(detailedMax) == true or detailedMax ~= nil
       if hpAvailable and maxAvailable then
         local hp, maxHP, percentReady = UpdateAbsoluteValues(frame, unit, detailedHP, detailedMax)
-        if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
+        if event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, hp) then
+          if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
+        end
         NotifyHealthState(frame, event, unit, hp)
         return hp, maxHP, percentReady
       end
@@ -619,7 +649,7 @@ function Health.SelectEventUpdate(_frame, _spec, event)
   -- color resolver performs the exact status and (for gradient mode) native
   -- curve reads it needs, so a second UnitHealthPercent + StatusBar write is
   -- redundant here.
-  if event == "UNIT_FLAGS" then
+  if COLOR_ONLY_EVENTS[event] == true then
     return UpdateColorOnly
   end
   return nil
