@@ -119,6 +119,7 @@ Core\MSUF_BarBackgroundRuntime.lua
 Core\MSUF_IconLayoutRuntime.lua
 Core\MSUF_FontRegistry.lua
 MidnightSimpleUnitFrames.lua
+Integrations\MSUF_Integration_ThirdPartyAnchors.lua
 Core\MSUF_FramePreview.lua
 Core\MSUF_SwapRecolor.lua
 Core\MSUF_FontRuntime.lua

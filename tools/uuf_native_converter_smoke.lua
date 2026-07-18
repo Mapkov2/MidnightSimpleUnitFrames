@@ -1412,8 +1412,12 @@ do
         "Edit Mode recognizes per-unit ECV frame-name anchors"
     )
     Truthy(
-        editModeSource:find("UsesEssentialCooldownAnchor(conf, _g)", 1, true),
-        "Edit Mode drag path uses the shared per-unit ECV contract"
+        editModeSource:find("local resolver = _G.MSUF_UsesEssentialCooldownAnchor", 1, true),
+        "Edit Mode delegates ECV classification to the shared runtime resolver"
+    )
+    Truthy(
+        editModeSource:find("UsesEssentialCooldownAnchor(conf, general)", 1, true),
+        "Edit Mode drag path uses the shared ECV contract"
     )
 end
 

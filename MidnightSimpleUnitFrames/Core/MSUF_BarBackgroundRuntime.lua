@@ -162,6 +162,12 @@ function _G.MSUF_GetEffectiveCooldownFrame(frameName)
         if skironProxy then
             return skironProxy
         end
+
+        local getCoolinatorAnchor = _G.MSUF_GetCoolinatorCooldownAnchor
+        local coolinatorAnchor = type(getCoolinatorAnchor) == "function" and getCoolinatorAnchor() or nil
+        if coolinatorAnchor then
+            return coolinatorAnchor
+        end
     end
     return frameName and _G[frameName] or nil
 end
