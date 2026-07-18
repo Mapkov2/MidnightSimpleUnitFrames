@@ -8,10 +8,35 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-Beta21",
-    previousVersion = "6.0-Beta20",
-    rangeLabel = "6.0-Beta20 -> 6.0-Beta21",
+    currentVersion = "6.0-Beta22",
+    previousVersion = "6.0-Beta21",
+    rangeLabel = "6.0-Beta21 -> 6.0-Beta22",
     entries = {
+        {
+            version = "6.0-Beta22",
+            date = "2026-07-19",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Added target DoT lanes with curated class spells and full-frame effects.",
+                        "Unified Undo and Redo across Menu2 and Edit Mode.",
+                        "Added beginner Quick Setup, Coolinator anchors, and scoped icon zoom.",
+                        "Refined color tools, Menu search, and window controls.",
+                    },
+                },
+                {
+                    title = "Fixes",
+                    bullets = {
+                        "Fixed clipped Level and status-indicator controls.",
+                        "Improved castbar interrupt feedback and inactive resync handling.",
+                        "Reduced Unit Frame and Menu runtime work, especially during combat.",
+                        "Preserved legacy group text geometry, class-resource stacks, and character keybindings.",
+                        "Completed Beta 22 Menu translations and regression coverage.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-Beta21",
             date = "2026-07-18",
@@ -124,37 +149,6 @@ local data = {
                         "Added safer scoped bar-outline color commands, read-only handling for subjective Aura requests, and clearer apply/flush failure recovery.",
                         "Added bundled guidance for addon compatibility, overlap, and dependency questions without changing MSUF settings.",
                         "Expanded generated Assistant catalogs, settings-inventory checks, release gates, Lua 5.1 runtime mocks, and regression coverage across Auras, castbars, layers, menus, predictions, profiles, and group frames.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-Beta18",
-            date = "2026-07-15",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Rebuilt castbar state, timing, and Blizzard-frame ownership for smoother updates, lower runtime work, and safer player/pet transitions.",
-                        "Moved class-resource timing to native duration smoothing and tightened active-only runtime paths.",
-                        "Improved legacy profile compatibility, including power anchors, status symbols, aura geometry, and import migration.",
-                        "Refined typography, Color Painter scrolling, gameplay camera tracking, and prerelease version detection.",
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Consolidated player, target, focus, channel, and empower casts around one canonical cast identity and stable duration state.",
-                        "Fixed Blizzard pet castbar suppression during world entry while preserving its native pet lifecycle.",
-                        "Removed duplicate focus-cast event ownership and detached focus interrupt tracking completely while disabled.",
-                        "Reduced redundant castbar timer binding, completion scheduling, visual refreshes, and cold-layout work.",
-                        "Added native duration smoothing for class resources without adding idle polling.",
-                        "Hardened legacy profile imports and preserved established power-bar anchors and status-symbol styles.",
-                        "Aligned aura filtering, lane geometry, preview behavior, and live positioning.",
-                        "Added semantic typography roles for more consistent text across frames, menus, Edit Mode, and popup tools.",
-                        "Fixed mouse-wheel scrolling through Color Painter overlays and kept combat crosshair zoom synchronized with camera changes.",
-                        "Corrected prerelease version comparisons across beta and stable version formats.",
-                        "Expanded Lua 5.1 regression coverage for castbars, class resources, profiles, menus, unit frames, and runtime hot paths.",
                     },
                 },
             },

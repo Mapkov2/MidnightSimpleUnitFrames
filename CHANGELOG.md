@@ -1,5 +1,22 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-Beta22 - 2026-07-19
+
+### Highlights
+
+- Added target DoT lanes with curated class spells and full-frame effects.
+- Unified Undo and Redo across Menu2 and Edit Mode.
+- Added beginner Quick Setup, Coolinator anchors, and scoped icon zoom.
+- Refined color tools, Menu search, and window controls.
+
+### Fixes
+
+- Fixed clipped Level and status-indicator controls.
+- Improved castbar interrupt feedback and inactive resync handling.
+- Reduced Unit Frame and Menu runtime work, especially during combat.
+- Preserved legacy group text geometry, class-resource stacks, and character keybindings.
+- Completed Beta 22 Menu translations and regression coverage.
+
 ## 6.0-Beta21 - 2026-07-18
 
 ### Highlights
