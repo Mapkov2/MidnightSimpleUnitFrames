@@ -37,8 +37,9 @@ local AURA_HANDLE_FIELDS = {
     custom1 = { customIndex = 1, defaultX = 0, defaultY = 0, label = "Custom 1", color = { 0.45, 0.72, 1.00 } },
     custom2 = { customIndex = 2, defaultX = 0, defaultY = 0, label = "Custom 2", color = { 0.70, 0.48, 1.00 } },
     custom3 = { customIndex = 3, defaultX = 0, defaultY = 0, label = "Custom 3", color = { 1.00, 0.58, 0.28 } },
+    custom4 = { customIndex = 4, defaultX = 0, defaultY = 0, label = "Dots on target", color = { 0.88, 0.24, 0.42 } },
 }
-local AURA_PREVIEW_KINDS = { "buff", "debuff", "custom1", "custom2", "custom3" }
+local AURA_PREVIEW_KINDS = { "buff", "debuff", "custom1", "custom2", "custom3", "custom4" }
 local AURA_ANCHOR_OK = {
     TOPLEFT=true, TOP=true, TOPRIGHT=true,
     LEFT=true, CENTER=true, RIGHT=true,
@@ -65,7 +66,7 @@ local function NormalizeKind(kind)
     if kind == "buffs" then kind = "buff" end
     if kind == "debuffs" then kind = "debuff" end
     local customIndex = kind:match("^custom(%d)$")
-    if customIndex and tonumber(customIndex) >= 1 and tonumber(customIndex) <= 3 then return "custom" .. customIndex end
+    if customIndex and tonumber(customIndex) >= 1 and tonumber(customIndex) <= 4 then return "custom" .. customIndex end
     return AURA_HANDLE_FIELDS[kind] and kind or nil
 end
 
@@ -315,7 +316,7 @@ function Auras.CreateHandles(box, makeHandle)
             section = "auras3",
         }, spec.label, spec.color)
     end
-    for index = 1, 3 do
+    for index = 1, 4 do
         local kind = "custom" .. tostring(index)
         local field = "handleAuraCustom" .. tostring(index)
         if not box[field] then
@@ -500,10 +501,13 @@ local function CustomGrowth(growth)
     return -1, -1, false
 end
 
-local function CustomLaneBounds(item, kind, frameW, frameH, metrics)
-    if not (type(item) == "table" and item.enabled == true) then return nil end
+local function CustomLaneBounds(item, kind, frameW, frameH, metrics, previewEntries)
+    if type(item) ~= "table" then return nil end
+    local trackedPreview = kind == "custom4" and type(previewEntries) == "table" and #previewEntries > 0
+    if item.enabled ~= true and not trackedPreview then return nil end
     local placed = type(item.placed) == "table" and item.placed or {}
     local count = metrics and metrics.num or RuntimeRound(ClampNumber(placed.max, 8, 0, 40))
+    if trackedPreview then count = min(count, #previewEntries) end
     if count <= 0 then return nil end
     local size = ClampNumber(metrics and metrics.size or placed.size, 24, 1, 128)
     local spacing = ClampNumber(metrics and metrics.spacing or placed.spacing, 2, 0, 64)
@@ -533,6 +537,11 @@ local function CustomLaneBounds(item, kind, frameW, frameH, metrics)
     local baseX, baseY = AnchorBase(anchor, frameW, frameH)
     local anchorLocalX, anchorLocalY = AnchorOffset(anchor, laneW, laneH)
     local laneLeft, laneBottom = baseX + x - anchorLocalX, baseY + y - anchorLocalY
+    local previewTextures
+    if trackedPreview then
+        previewTextures = {}
+        for i = 1, count do previewTextures[i] = previewEntries[i] and previewEntries[i].icon end
+    end
     return {
         kind = kind,
         left = laneLeft,
@@ -557,6 +566,7 @@ local function CustomLaneBounds(item, kind, frameW, frameH, metrics)
         custom = true,
         item = item,
         auraType = item.auraType == "DEBUFF" and "debuff" or "buff",
+        previewTextures = previewTextures,
     }
 end
 
@@ -570,12 +580,14 @@ function Auras.BuildState(key, frameW, frameH, runtimeSpec)
     local buff = LaneBounds(cfg, "buff", frameW, frameH)
     local debuff = LaneBounds(cfg, "debuff", frameW, frameH)
     local state = { unit = key, cfg = cfg, runtime = runtimeAuras, buff = buff, debuff = debuff }
-    for index = 1, 3 do
+    for index = 1, 4 do
         local kind = "custom" .. tostring(index)
         local metrics = type(cfg.customMetrics) == "table" and cfg.customMetrics[index] or nil
-        state[kind] = CustomLaneBounds(CustomItem(model, key, index, false), kind, frameW, frameH, metrics)
+        local previewEntries = index == 4 and type(model.CustomContainerSpellEntries) == "function"
+            and model.CustomContainerSpellEntries(key, index) or nil
+        state[kind] = CustomLaneBounds(CustomItem(model, key, index, false), kind, frameW, frameH, metrics, previewEntries)
     end
-    if not state.buff and not state.debuff and not state.custom1 and not state.custom2 and not state.custom3 then return nil end
+    if not state.buff and not state.debuff and not state.custom1 and not state.custom2 and not state.custom3 and not state.custom4 then return nil end
     return state
 end
 function Auras.ExpandFootprint(state, minX, maxX, minY, maxY)
@@ -711,7 +723,7 @@ function Auras.Hide(box)
     if not box then return end
     HideHandle(box.handleAuraBuffs)
     HideHandle(box.handleAuraDebuffs)
-    for index = 1, 3 do HideHandle(box["handleAuraCustom" .. tostring(index)]) end
+    for index = 1, 4 do HideHandle(box["handleAuraCustom" .. tostring(index)]) end
     if box.auraPreviewVisuals then
         for _, kind in ipairs(AURA_PREVIEW_KINDS) do HideVisual(box.auraPreviewVisuals[kind]) end
     end
@@ -952,7 +964,8 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
         icon:SetSize(size, size)
         icon:ClearAllPoints()
         icon:SetPoint(bounds.initialAnchor or "TOPLEFT", visual, bounds.initialAnchor or "TOPLEFT", col * step * bounds.growthX, row * step * bounds.growthY)
-        icon.tex:SetTexture(textures[((i - 1) % #textures) + 1])
+        local previewTexture = bounds.previewTextures and bounds.previewTextures[i]
+        icon.tex:SetTexture(previewTexture or textures[((i - 1) % #textures) + 1])
         ApplyIconZoom(icon.tex, bounds.iconZoom)
         if icon.bg then icon.bg:SetShown(not barOnly) end
         icon.tex:SetShown(not barOnly)
@@ -994,7 +1007,7 @@ function Auras.Layout(box, mock, state, S, baseLevel)
     end
     LayoutHandle(box, box.handleAuraBuffs, state, "buff", S, baseLevel)
     LayoutHandle(box, box.handleAuraDebuffs, state, "debuff", S, baseLevel)
-    for index = 1, 3 do
+    for index = 1, 4 do
         local kind = "custom" .. tostring(index)
         LayoutHandle(box, box["handleAuraCustom" .. tostring(index)], state, kind, S, baseLevel)
     end

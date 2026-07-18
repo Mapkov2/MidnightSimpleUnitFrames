@@ -149,7 +149,7 @@ MSUF.Assistant.AurasRegistry.RegisterUnitCustomContainerLayerSettings({
 })
 
 for _, unit in ipairs(auraUnits) do
-    for index = 1, 3 do
+    for index = 1, 4 do
         local key = "auras3." .. unit .. ".custom" .. tostring(index) .. ".layer"
         local setting = registered[key]
         AssertLayerContract(setting, key)
@@ -403,7 +403,7 @@ for _, area in ipairs(requiredOverviewAreas) do
 end
 
 -- Load the cold collector without a WoW UI and verify the actual combined
--- result, not just provider source strings. Missing Custom 1-3 records are
+-- result, not just provider source strings. Missing Custom/Dots records are
 -- intentional: every editable slot must still appear as Layer 9 / off.
 _G.MSUF_DB = {
     general = { nameTextLayer = 5, hpTextLayer = 5, powerTextLayer = 2 },
@@ -439,12 +439,12 @@ for _, row in ipairs(layerRows) do
     actualAreas[row.area] = true
     rowsById[row.id] = row
     assert(type(row.edit) == "table", "numeric Layer row is not editable: " .. tostring(row.id))
-    if tostring(row.id):match("^auras3%.[^.]+%.custom%.[123]%.layer$") then
+    if tostring(row.id):match("^auras3%.[^.]+%.custom%.[1234]%.layer$") then
         assert(row.layer == 9 and row.enabled == false, "missing Custom Aura slot did not remain Layer 9 / off")
         emptyCustomDefaults = emptyCustomDefaults + 1
     end
 end
-assert(emptyCustomDefaults == 12, "combined Layer collector must expose all 12 empty Custom 1-3 slots")
+assert(emptyCustomDefaults == 16, "combined Layer collector must expose all 16 empty Custom/Dots slots")
 assert(rowsById["unit.player.nameTextLayer"].layer == 30, "combined Layer collector did not clamp an upper sentinel")
 assert(rowsById["group.party.ciLayer"].layer == 0, "combined Layer collector did not clamp a lower sentinel")
 assert(rowsById["class-resources.classPowerFrameLevelOffset"].layer == 30,
@@ -518,6 +518,6 @@ for _, setting in pairs(layerSettings) do
     AssertLayerContract(setting, setting.key)
     count = count + 1
 end
-assert(count == 22, "focused layer inventory changed; expected 7 detached + 12 custom + 3 external settings")
+assert(count == 26, "focused layer inventory changed; expected 7 detached + 16 custom/Dots + 3 external settings")
 
-print("layer_contract_smoke: ok (22 Assistant MSUF Layer settings, 0..30/step 1)")
+print("layer_contract_smoke: ok (26 Assistant MSUF Layer settings, 0..30/step 1)")

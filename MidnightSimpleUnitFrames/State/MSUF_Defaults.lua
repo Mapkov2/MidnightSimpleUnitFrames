@@ -2116,6 +2116,13 @@ end
     if g.castbarShakeStrength == nil then
         g.castbarShakeStrength = 8   --- pixels; 0 = no movement
     end
+    if type(g.castbarInterruptFeedbackDuration) ~= "number" then
+        g.castbarInterruptFeedbackDuration = 0.5
+    elseif g.castbarInterruptFeedbackDuration < 0 then
+        g.castbarInterruptFeedbackDuration = 0
+    elseif g.castbarInterruptFeedbackDuration > 5 then
+        g.castbarInterruptFeedbackDuration = 5
+    end
     if g.castbarSpellNameFontSize == nil then
         g.castbarSpellNameFontSize = 0
     end
@@ -3067,6 +3074,18 @@ end
                 debuffTypeBorderMode = "OFF",
                 useDebuffTypeBorders = false,
                 showTooltip = true,
+                buffFrameEffectType = "none",
+                buffFrameEffectColor = { 0.69, 0.50, 0.88, 0.80 },
+                buffFrameEffectPriority = 5,
+                buffFrameEffectThickness = 2,
+                buffFrameEffectLayer = 0,
+                buffFrameEffectStrata = "AUTO",
+                debuffFrameEffectType = "none",
+                debuffFrameEffectColor = { 0.69, 0.50, 0.88, 0.80 },
+                debuffFrameEffectPriority = 5,
+                debuffFrameEffectThickness = 2,
+                debuffFrameEffectLayer = 0,
+                debuffFrameEffectStrata = "AUTO",
                 showInEditMode = true,
                 stackCountAnchor = "TOPRIGHT",
                 stackTextOffsetX = -1,

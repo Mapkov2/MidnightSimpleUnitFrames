@@ -15,7 +15,7 @@ local VTP = M.ValueTextPairs
 local PreviewHelpers = M.PreviewHelpers or {}
 if type(W) ~= "table" or type(T) ~= "table" or type(Model) ~= "table" then return end
 local CreateFrame = _G.CreateFrame
-local C_Timer = _G.C_Timer
+local C_Timer = M.MenuTimer or _G.C_Timer
 local MSUF_SetIconTexture = _G.MSUF_SetIconTexture
 local FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
@@ -38,7 +38,8 @@ local AURA_GROUP_SCOPES = M.KeySetFromWords "party raid mythicraid"
 local SHARED_PREVIEW_SCOPE_VALUES = VTP "player=Player|target=Target|focus=Focus|boss=Boss|party=Party|raid=Raid"
 local AURA_PREVIEW_MODE_VALUES = VTP "sample=Sample|live=Live"
 local LANE_VALUES = VTP "buff=Buffs|debuff=Debuffs"
-local UNIT_STYLE_CONTAINER_VALUES = VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3"
+local UNIT_STYLE_CONTAINER_VALUES = VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3|custom4=Dots on target"
+local CUSTOM_FRAME_EFFECTS = VTP "none=None|healthtint=Health Tint|border=Border|glow=Glow|pulse=Pulse|namecolor=Name Overlay"
 local DEBUFF_TYPE_BORDER_MODE_VALUES = VTP "OFF=Off|BORDER=Border|SYMBOL=Border + Symbol"
 local COOLDOWN_SWIPE_DIRECTION_VALUES = VTP "NORMAL=Normal|REVERSE=Reverse"
 local AURA_SORT_DIRECTION_VALUES = VTP "NORMAL=Normal|REVERSE=Reversed"
@@ -154,6 +155,12 @@ end
 local function AuraCatalogPageKey(value, fallback)
     local token = tostring(value or ""):lower():gsub("[^%w_%-]+", "-"):gsub("^%-+", ""):gsub("%-+$", "")
     return token ~= "" and token or (fallback or "auras")
+end
+local function LaneFrameEffectAssistantContract()
+    return {
+        assistantDisposition = "compound",
+        assistantDispositionReason = "This scope-aware Buff/Debuff Full-Frame effect writes the active shared or per-unit Aura style and has no Assistant setting contract yet.",
+    }
 end
 local function AuraControlMeta(ctx, path, classification, assistantContract)
     path = tostring(path or "control"):lower():gsub("[^%w%._/-]+", "-")
@@ -541,7 +548,7 @@ local function BuildAuraStyleScopeOverrideSection(ctx, b)
         local current = CurrentScope()
         local shared = current == "shared"
         local group = IsGroupScope(current)
-        local custom = not shared and not group and tostring(M.auraStyleContainer or ""):match("^custom[123]$") ~= nil
+        local custom = not shared and not group and tostring(M.auraStyleContainer or ""):match("^custom[1234]$") ~= nil
         local active = AuraStyleUnitOverrideLabels()
         local visibleActive = AuraStyleVisibleOverrideLabels(active)
         W.SetControlShown(override, not shared and not group and not custom)
@@ -556,7 +563,7 @@ local function BuildAuraStyleScopeOverrideSection(ctx, b)
             hint:SetText("")
         elseif custom then
             overrideInfo:SetText("|cffffffff" .. ScopeLabel(current) .. " Custom style|r")
-            hint:SetText("Custom 1-3 are always stored per frame. Icon styling and Full-Frame effects here only change " .. ScopeLabel(current) .. ".")
+            hint:SetText("Custom 1-3 and Dots on target are stored per frame. Icon styling and Full-Frame effects here only change " .. ScopeLabel(current) .. ".")
         elseif not Model.UseSharedVisuals(current) then
             hint:SetText("Override active: this scope keeps its own aura style. Shared style changes will not replace it until the override is reset.")
         else
@@ -595,7 +602,7 @@ local function LanePlural(kind)
 end
 local function CurrentAuraStyleContainer(scope)
     local container = M.auraStyleContainer or CurrentLane("auraStyleGFLane", "debuff")
-    local custom = tostring(container):match("^custom[123]$") ~= nil
+    local custom = tostring(container):match("^custom[1234]$") ~= nil
     if container ~= "buff" and container ~= "debuff" and not custom then container = "debuff" end
     if (scope == "shared" or IsGroupScope(scope)) and custom then
         container = CurrentLane("auraStyleGFLane", "debuff")
@@ -1164,6 +1171,7 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
     cfg.rowsPerColumn = cfg.maxRows
     cfg.columns = vertical and 1 or cfg.columns
     cfg.count = min(14, cfg.maxIcons, cfg.columns * cfg.rowsPerColumn)
+    if index == 4 and #entries > 0 then cfg.count = min(cfg.count, #entries) end
     cfg.stackSize = max(7, tonumber(cfg.stackSize) or 10)
     cfg.cooldownSize = max(7, tonumber(cfg.cooldownSize) or 9)
     cfg.cooldownDecimalSeconds = min(30, max(0, tonumber(cfg.cooldownDecimalSeconds) or 3))
@@ -1476,7 +1484,7 @@ local function BuildLiveAuraPreview(ctx, parent, scope, laneKind, x, y, width, h
             status:SetText("Updates after combat")
         elseif reason == "no-group-frame" then
             status:SetText("No live member")
-        elseif tostring(laneKind):match("^custom[123]$") then
+        elseif tostring(laneKind):match("^custom[1234]$") then
             status:SetText("Disabled or whitelist empty")
         else
             status:SetText("No matching aura active")
@@ -1824,6 +1832,65 @@ local function BuildUnitStyle(ctx, b, scope)
         type(Model.DurationBarDirectionValues) == "function" and Model.DurationBarDirectionValues() or DURATION_BAR_DIRECTION_VALUES,
         dbw - 48, ReadScopeDurationBarDirection, WriteScopeDurationBarDirection, "AURAS3_DURATION_BAR_DIRECTION")
 
+    local effectPrefix = lane == "buff" and "buff" or "debuff"
+    local function EffectKey(suffix) return effectPrefix .. "FrameEffect" .. suffix end
+    local function ReadEffectValue(suffix, fallback)
+        return Model.ReadValue(unit, EffectKey(suffix), fallback)
+    end
+    local function WriteEffectValue(suffix, value, reason)
+        Model.WriteValue(unit, EffectKey(suffix), value)
+        ApplyUnit(ctx, unit, reason)
+    end
+    local frameEffect = b:CollapsibleSection(baseId .. "_full_frame", LaneTitle(lane) .. " Full-Frame Effect", 210, false)
+    local few = BodyWidth(frameEffect)
+    local effectCol = max(140, floor((few - 68) / 3))
+    local effectGap = 10
+    AddStyleControl(BindDropdown(ctx, frameEffect, "Effect", 24, -34, CUSTOM_FRAME_EFFECTS, effectCol,
+        function() return tostring(ReadEffectValue("Type", "none")) end,
+        function(value) WriteEffectValue("Type", value or "none", "AURAS3_LANE_FRAME_EFFECT") end,
+        AuraControlMeta(ctx, "style.lane." .. AuraCatalogToken(lane) .. ".full-frame.type", nil,
+            LaneFrameEffectAssistantContract())))
+    local effectColor = W.Color(frameEffect, "Color")
+    M.BindColor(ctx, effectColor,
+        function()
+            local c = ReadEffectValue("Color", { 0.69, 0.50, 0.88, 0.80 })
+            return c[1] or 0.69, c[2] or 0.50, c[3] or 0.88
+        end,
+        function(r, g, blue)
+            local c = ReadEffectValue("Color", { 0.69, 0.50, 0.88, 0.80 })
+            WriteEffectValue("Color", { r, g, blue, c[4] or 0.80 }, "AURAS3_LANE_FRAME_EFFECT_COLOR")
+        end,
+        AuraControlMeta(ctx, "style.lane." .. AuraCatalogToken(lane) .. ".full-frame.color", nil,
+            LaneFrameEffectAssistantContract()))
+    W.MoveWidget(effectColor, frameEffect, 24 + effectCol + effectGap, -34, effectCol, "LEFT")
+    AddStyleControl(effectColor)
+    local function EffectSlider(label, col, y, minValue, maxValue, step, suffix, fallback, reason)
+        return AddStyleControl(BindSlider(ctx, frameEffect, label, 24 + col * (effectCol + effectGap), y,
+            minValue, maxValue, step, effectCol,
+            function()
+                local value = ReadEffectValue(suffix, fallback)
+                if suffix == "Alpha" then
+                    local c = ReadEffectValue("Color", { 0.69, 0.50, 0.88, 0.80 })
+                    return floor(((tonumber(c[4]) or fallback) * 100) + 0.5)
+                end
+                return tonumber(value) or fallback
+            end,
+            function(value)
+                if suffix == "Alpha" then
+                    local c = ReadEffectValue("Color", { 0.69, 0.50, 0.88, 0.80 })
+                    WriteEffectValue("Color", { c[1] or 0.69, c[2] or 0.50, c[3] or 0.88, (tonumber(value) or 80) / 100 }, reason)
+                else
+                    WriteEffectValue(suffix, tonumber(value) or fallback, reason)
+                end
+            end,
+            AuraControlMeta(ctx, "style.lane." .. AuraCatalogToken(lane) .. ".full-frame." .. AuraCatalogToken(suffix), nil,
+                LaneFrameEffectAssistantContract())))
+    end
+    EffectSlider("Opacity", 0, -96, 5, 100, 5, "Alpha", 0.80, "AURAS3_LANE_FRAME_EFFECT_ALPHA")
+    EffectSlider("Layer (0-30)", 1, -96, 0, 30, 1, "Layer", 0, "AURAS3_LANE_FRAME_EFFECT_LAYER")
+    EffectSlider("Thickness", 2, -96, 1, 16, 1, "Thickness", 2, "AURAS3_LANE_FRAME_EFFECT_THICKNESS")
+    EffectSlider("Priority", 0, -150, 1, 10, 1, "Priority", 5, "AURAS3_LANE_FRAME_EFFECT_PRIORITY")
+
     local behavior = b:CollapsibleSection(baseId .. "_behavior", LaneTitle(lane) .. " Ordering", 156, false)
     local bw = BodyWidth(behavior)
     local sortMethod = BindStyleDropdown(behavior, "Sort By", 24, -48, AuraSortMethodValues(lane), bw - 48,
@@ -1873,6 +1940,12 @@ local function BuildUnitStyle(ctx, b, scope)
             W.SetCollapsibleBadges(durationBar, {{
                 text = durationEnabled and (tostring(Round(ReadScopeNumber("durationBarHeight", 2, 1, 16))) .. "px / " .. ChoiceLabel(DURATION_BAR_DISPLAY_VALUES, ReadScopeDurationBarDisplay(), "Bar Only") .. " / " .. ChoiceLabel(DURATION_BAR_POSITION_VALUES, ReadScopeDurationBarPosition(), "Bottom")) or "Off",
                 kind = durationEnabled and "accent" or "muted", showWhenClosed = true,
+            }})
+
+            local effectType = tostring(ReadEffectValue("Type", "none"))
+            W.SetCollapsibleBadges(frameEffect, {{
+                text = ChoiceLabel(CUSTOM_FRAME_EFFECTS, effectType, effectType),
+                kind = effectType == "none" and "muted" or "accent", showWhenClosed = true,
             }})
 
             local sortKey = ReadScopeSortMethod()
@@ -2072,12 +2145,13 @@ local function RefreshCustomPreviewEffect(box, item)
     edges[4]:SetPoint("TOPRIGHT", box, "TOPRIGHT", -1, -1); edges[4]:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -1, 1); edges[4]:SetWidth(thickness)
 end
 local function BuildCustomAuraStylePreview(ctx, b, scope, index)
-    local section = b:Section("Custom " .. tostring(index) .. " Preview", 452)
+    local label = index == 4 and "Dots on target" or ("Custom " .. tostring(index))
+    local section = b:Section(label .. " Preview", 452)
     local w = section._msuf2Width or b.width or 720
     local liveRefresh = select(2, BuildLiveAuraPreview(ctx, section, scope, "custom" .. tostring(index), 24, -34, w - 48, 176))
     local dummyBox, dummyRefresh = BuildMiniAuraPreview(ctx, section, scope, 24, -220, w - 48, 176, nil, {
         customIndex = index,
-        title = "Dummy + Whitelist Style Preview",
+        title = index == 4 and "Tracked DoT Style Preview" or "Dummy + Whitelist Style Preview",
     })
     local meta = W.Text(section, "", 24, -414, w - 48, T.colors.muted)
     local function RefreshCustomPreview()
@@ -2102,7 +2176,7 @@ local function BuildAuraStylePage(ctx)
     b:GlobalStyleHeader("Aura Style", "Text, cooldown, stack and marker styling.", 72)
     local scope = BuildAuraStyleScopeOverrideSection(ctx, b)
     local container = BuildAuraStyleNav(ctx, b, scope)
-    if tostring(container):match("^custom[123]$") then
+    if tostring(container):match("^custom[1234]$") then
         local index = tonumber(container:match("(%d)$")) or 1
         BuildCustomAuraStylePreview(ctx, b, scope, index)
         M.BuildAuras3CompactCustomWorkspace(ctx, b, scope, index, "appearance")
@@ -2408,19 +2482,22 @@ local function UniformChoiceWidths(values, width)
     return values
 end
 local UNIT_AURA_CHOICE_WIDTH = 92
-local UNIT_AURA_WORKSPACE_TABS = UniformChoiceWidths(VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3", UNIT_AURA_CHOICE_WIDTH)
+local UNIT_AURA_WORKSPACE_TABS = UniformChoiceWidths(VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3|custom4=Dots on target", UNIT_AURA_CHOICE_WIDTH)
 local UNIT_AURA_NORMAL_TOOLS = UniformChoiceWidths(VTP "layout=Layout|filters=Filters|blacklist=Blacklist", UNIT_AURA_CHOICE_WIDTH)
 local UNIT_AURA_CUSTOM_TOOLS = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|filters=Filters|whitelist=Whitelist", UNIT_AURA_CHOICE_WIDTH)
+local UNIT_AURA_TARGET_DOT_TOOLS = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|dots=Dots", UNIT_AURA_CHOICE_WIDTH)
 local UNIT_AURA_NORMAL_TOOL_OK = { layout = true, filters = true, blacklist = true }
 local UNIT_AURA_CUSTOM_TOOL_OK = { setup = true, whitelist = true, filters = true, layout = true }
+local UNIT_AURA_TARGET_DOT_TOOL_OK = { setup = true, layout = true, dots = true }
 
 local function CurrentUnitAuraTool(unit, container)
     M.unitAuraToolSelection = M.unitAuraToolSelection or {}
     local unitState = M.unitAuraToolSelection[unit]
     if type(unitState) ~= "table" then unitState = {}; M.unitAuraToolSelection[unit] = unitState end
     local custom = tostring(container or ""):match("^custom") ~= nil
+    local targetDots = container == "custom4"
     local tool = unitState[container]
-    local valid = custom and UNIT_AURA_CUSTOM_TOOL_OK or UNIT_AURA_NORMAL_TOOL_OK
+    local valid = targetDots and UNIT_AURA_TARGET_DOT_TOOL_OK or (custom and UNIT_AURA_CUSTOM_TOOL_OK or UNIT_AURA_NORMAL_TOOL_OK)
     if not valid[tool] then tool = custom and "setup" or "layout"; unitState[container] = tool end
     return tool
 end
@@ -2999,7 +3076,7 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
     M.unitAuraTabSelection = M.unitAuraTabSelection or {}
     local function CurrentTab()
         local tab = M.unitAuraTabSelection[unit] or "buff"
-        if tab ~= "buff" and tab ~= "debuff" and tab ~= "custom1" and tab ~= "custom2" and tab ~= "custom3" then tab = "buff" end
+        if tab ~= "buff" and tab ~= "debuff" and tab ~= "custom1" and tab ~= "custom2" and tab ~= "custom3" and tab ~= "custom4" then tab = "buff" end
         return tab
     end
     local currentTab = CurrentTab()
@@ -3025,7 +3102,7 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
             Rebuild(ctx)
         end,
     }), UNIT_AURA_WORKSPACE_TABS, "unit-workspace.container-selector")
-    local tools = normalLane and UNIT_AURA_NORMAL_TOOLS or UNIT_AURA_CUSTOM_TOOLS
+    local tools = normalLane and UNIT_AURA_NORMAL_TOOLS or (currentTab == "custom4" and UNIT_AURA_TARGET_DOT_TOOLS or UNIT_AURA_CUSTOM_TOOLS)
     local toolBar = RegisterAuraChoiceBar(ctx, W.ScopeOverrideBar(ctx, top, {
         values = tools,
         width = sectionW,
@@ -3035,7 +3112,7 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
         getValue = function() return CurrentUnitAuraTool(unit, currentTab) end,
         setValue = function(value) SetUnitAuraTool(unit, currentTab, value); Rebuild(ctx) end,
     }), tools, "unit-workspace.tool-selector")
-    local openStyle = ActionButton(top, "Open Aura Style", 126, "normal")
+    local openStyle = ActionButton(top, "More Aura Options", 150, "normal")
     openStyle:SetPoint("TOPRIGHT", top, "TOPRIGHT", -16, -76)
     openStyle:SetScript("OnClick", function()
         SetCurrentScope(unit)
@@ -3043,8 +3120,10 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
         if normalLane then SetCurrentLane("auraStyleGFLane", currentTab) end
         SelectPage("auras3_styling", unit)
     end)
-    RegisterAuraControl(ctx, openStyle, "Open Aura Style", "button", "unit-workspace.open-aura-style", "navigation", "auras3_styling")
-    local workspaceHint = W.Text(top, "All icon and full-frame styling: Appearance > Auras.", 16, -84, sectionW - 174, T.colors.muted)
+    RegisterAuraControl(ctx, openStyle, "More Aura Options", "button", "unit-workspace.open-aura-style", "navigation", "auras3_styling")
+    AddTooltip(openStyle, "More Aura Options",
+        "Opens the complete Aura Style page for icon appearance, cooldown and stack text, duration bars, colors, and Full-Frame effects.")
+    local workspaceHint = W.Text(top, "All icon and full-frame styling: Appearance > Auras.", 16, -84, sectionW - 198, T.colors.muted)
     M.TrackRefresh(ctx, function()
         workspaceHint:SetText(normalLane and not AnyUnitFrameAuraEnabled()
             and UNIT_AURA_DISPEL_WARNING
@@ -3067,8 +3146,6 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
 end
 
 local CUSTOM_AURA_TYPES = VTP "BUFF=Buff|DEBUFF=Debuff"
-local CUSTOM_FRAME_EFFECTS = VTP "none=None|healthtint=Health Tint|border=Border|glow=Glow|pulse=Pulse|namecolor=Name Overlay"
-
 --- Compact, task-focused Custom Aura editor used inside UnitFrame > Auras.
 --- Only one tool is rendered at a time; all values still write to the same
 --- native Custom Container record consumed by runtime and previews.
@@ -3078,6 +3155,8 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
     -- identity.  Reusing one path for Custom 1/2/3 made the generated schema
     -- collapse three different fixed argument contracts into one action.
     local customActionPath = "custom-container.custom" .. tostring(index)
+    local isTargetDots = index == 4
+    local containerLabel = isTargetDots and "Dots on target" or ("Custom " .. tostring(index))
     local item = Model.CustomContainer(unit, index, true)
     if not item then return end
     item.filters = type(item.filters) == "table" and item.filters or {}
@@ -3093,8 +3172,112 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
         return floor(((w - 48) - gap * (count - 1)) / count), gap
     end
 
+    if tool == "dots" and isTargetDots then
+        local section = b:Section("Dots on target", 318)
+        local w = section._msuf2Width or b.width or 720
+        local inner = w - 48
+        local values = type(Model.TargetDotValues) == "function" and Model.TargetDotValues() or {}
+        local selected
+        for i = 1, #values do
+            if values[i].value then selected = values[i].value; break end
+        end
+        local dropdown = BindDropdown(ctx, section, "DoT", 24, -34, values, max(300, inner - 132),
+            function() return selected end,
+            function(value) selected = value end,
+            AuraControlMeta(ctx, "custom-container.target-dots.selection", "ephemeral"))
+        local add = ActionButton(section, "Track DoT", 108)
+        add:SetPoint("TOPRIGHT", section, "TOPRIGHT", -24, -56)
+        add:SetScript("OnClick", function()
+            local changed = selected and Model.AddCustomContainerSpell(unit, index, selected)
+            if changed then Apply("AURAS3_TARGET_DOT_ADD", true); Rebuild(ctx) end
+            return changed and true or false
+        end)
+        RegisterAuraControl(ctx, add, "Track DoT", "button", customActionPath .. ".dots.add", "action", {
+            assistantDisposition = "compound",
+            assistantDispositionReason = "The selected DoT dropdown value and add button form one compound list mutation without an Assistant action contract.",
+        })
+        AddTooltip(dropdown, "Target DoT", "Curated Retail 12.0+ and 12.1 DoT auras. Tracking is always restricted to your current target and your own aura source.")
+        local customInputValue = ""
+        local customInput = BindTextInput(ctx, section, "Custom Spell ID", 24, -94, max(300, inner - 132),
+            function() return customInputValue end,
+            function(value) customInputValue = value or "" end,
+            false, AuraControlMeta(ctx, "custom-container.target-dots.custom-id", "ephemeral"))
+        local addCustom = ActionButton(section, "Add Custom ID", 108)
+        addCustom:SetPoint("TOPRIGHT", section, "TOPRIGHT", -24, -116)
+        addCustom:SetScript("OnClick", function()
+            local value = customInput and customInput.GetText and customInput:GetText() or customInputValue
+            local changed = Model.AddCustomContainerSpell(unit, index, value, true)
+            if changed then
+                if customInput and customInput.SetText then customInput:SetText("") end
+                customInputValue = ""
+                Apply("AURAS3_TARGET_DOT_CUSTOM_ADD", true)
+                Rebuild(ctx)
+            end
+            return changed and true or false
+        end)
+        RegisterAuraTextAction(ctx, addCustom, customInput, "Add Custom ID", customActionPath .. ".dots.custom-id.add", {
+            assistantDisposition = "compound",
+            assistantDispositionReason = "This explicit custom DoT ID is stored as a manually approved target-aura candidate without an Assistant action contract.",
+        })
+        AddTooltip(customInput, "Custom Spell ID",
+            "Adds an exact harmful aura ID that is missing from the curated list. The aura is still restricted to your current target and your own aura source.")
+        local status = W.Text(section, "", 24, -162, inner, T.colors.accent)
+        local empty = W.Text(section, "No DoT selected. Choose one above or add a custom Spell ID.", 24, -194, inner, T.colors.muted)
+        local listScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
+        listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -188)
+        listScroll:SetSize(inner - 20, 104)
+        if listScroll.EnableMouseWheel then listScroll:EnableMouseWheel(true) end
+        local listChild = CreateFrame("Frame", nil, listScroll)
+        listChild:SetSize(inner - 44, 104)
+        listScroll:SetScrollChild(listChild)
+        if listScroll.SetPropagateMouseWheel then listScroll:SetPropagateMouseWheel(false) end
+        listScroll:SetScript("OnMouseWheel", function(self, delta) HandleNestedScrollWheel(self, delta, 32) end)
+        local rows = {}
+        local function EnsureRow(i)
+            local row = rows[i]
+            if row then return row end
+            row = CreateFrame("Button", nil, listChild)
+            row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((i - 1) * 24))
+            row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((i - 1) * 24))
+            row:SetHeight(20)
+            row.icon = row:CreateTexture(nil, "ARTWORK")
+            row.icon:SetPoint("LEFT", row, "LEFT", 3, 0)
+            row.icon:SetSize(17, 17)
+            row.text = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
+            row.text:SetPoint("LEFT", row.icon, "RIGHT", 8, 0)
+            row:SetScript("OnClick", function(self)
+                if self._spellID and Model.RemoveCustomContainerSpell(unit, index, self._spellID) then
+                    Apply("AURAS3_TARGET_DOT_REMOVE", true)
+                    Rebuild(ctx)
+                end
+            end)
+            rows[i] = row
+            return row
+        end
+        M.TrackRefresh(ctx, function()
+            local entries = Model.CustomContainerSpellEntries(unit, index)
+            status:SetText((#entries == 1 and "1 tracked DoT" or tostring(#entries) .. " tracked DoTs") .. " · click an entry to remove")
+            empty:SetShown(#entries == 0)
+            listScroll:SetShown(#entries > 0)
+            listChild:SetHeight(max(104, #entries * 24))
+            for i = 1, max(#rows, #entries) do
+                local row, entry = rows[i], entries[i]
+                if entry then
+                    row = EnsureRow(i)
+                    row._spellID = entry.spellID
+                    row.icon:SetTexture(entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
+                    row.text:SetText(entry.text or tostring(entry.spellID))
+                    RegisterAuraControl(ctx, row, entry.text or tostring(entry.spellID), "button",
+                        customActionPath .. ".dots.entry." .. AuraCatalogToken(entry.spellID) .. ".remove", "action")
+                    row:Show()
+                elseif row then row._spellID = nil; row:Hide() end
+            end
+        end)
+        return
+    end
+
     if tool == "whitelist" then
-        local section = b:Section("Custom " .. tostring(index) .. " Whitelist", 244)
+        local section = b:Section(containerLabel .. " Whitelist", 244)
         local w = section._msuf2Width or b.width or 720
         local inner = w - 48
         local inputValue = ""
@@ -3179,7 +3362,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
     end
 
     if tool == "filters" then
-        local section = b:Section("Custom " .. tostring(index) .. " Filters", item.auraType == "DEBUFF" and 224 or 182)
+        local section = b:Section(containerLabel .. " Filters", item.auraType == "DEBUFF" and 224 or 182)
         local w = section._msuf2Width or b.width or 720
         local colW, gap = Grid(w, 4)
         local controls = {}
@@ -3244,7 +3427,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
     end
 
     if tool == "layout" then
-        local section = b:Section("Custom " .. tostring(index) .. " Layout", 190)
+        local section = b:Section(containerLabel .. " Layout", 190)
         local w = section._msuf2Width or b.width or 720
         local col3, gap3 = Grid(w, 3)
         BindDropdown(ctx, section, "Anchor", 24, -34, Model.AuraAnchorValues(), col3,
@@ -3268,7 +3451,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             local assistantContract
             if spec[2] == "layer" then
                 local layerSettingKeys = {}
-                for customIndex = 1, 3 do
+                for customIndex = 1, 4 do
                     layerSettingKeys[#layerSettingKeys + 1] =
                         "auras3." .. tostring(unit) .. ".custom" .. tostring(customIndex) .. ".layer"
                 end
@@ -3291,12 +3474,12 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             local growth = tostring(item.placed.growth or "LEFTDOWN"):upper()
             W.SetControlEnabled(perRowControl, growth ~= "UP" and growth ~= "DOWN")
         end)
-        W.Text(section, "Move the colored Custom handle; Live and dummy previews are display-only.", 24 + 3 * (col4 + gap4), -154, col4, T.colors.muted)
+        W.Text(section, "Move the colored aura handle; Live and dummy previews are display-only.", 24 + 3 * (col4 + gap4), -154, col4, T.colors.muted)
         return
     end
 
     if tool == "appearance" then
-        local section = b:Section("Custom " .. tostring(index) .. " Icon Style", 292)
+        local section = b:Section(containerLabel .. " Icon Style", 292)
         local w = section._msuf2Width or b.width or 720
         local col4, gap = Grid(w, 4)
         local function X(col) return 24 + (col - 1) * (col4 + gap) end
@@ -3357,7 +3540,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
     end
 
     if tool == "effect" then
-        local section = b:Section("Custom " .. tostring(index) .. " Full-Frame", 210)
+        local section = b:Section(containerLabel .. " Full-Frame", 210)
         local w = section._msuf2Width or b.width or 720
         local col3, gap = Grid(w, 3)
         BindDropdown(ctx, section, "Effect", 24, -34, CUSTOM_FRAME_EFFECTS, col3,
@@ -3389,7 +3572,26 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
         return
     end
 
-    local section = b:Section("Custom " .. tostring(index) .. " Setup", 132)
+    if isTargetDots then
+        local section = b:Section("Dots on target Setup", 132)
+        local w = section._msuf2Width or b.width or 720
+        local inner = w - 48
+        BindSwitch(ctx, section, "Enabled", 24, -48, 112,
+            function() return item.enabled == true end,
+            function(value) item.enabled = value == true; Apply("AURAS3_TARGET_DOTS_ENABLE") end,
+            AuraControlMeta(ctx, "custom-container.target-dots.enabled"))
+        local reset = ActionButton(section, "Reset", 88)
+        reset:SetPoint("TOPRIGHT", section, "TOPRIGHT", -24, -42)
+        reset:SetScript("OnClick", function() Model.ResetCustomContainer(unit, index); Apply("AURAS3_TARGET_DOTS_RESET", true); Rebuild(ctx) end)
+        RegisterAuraControl(ctx, reset, "Reset", "button", customActionPath .. ".setup.reset", "action", {
+            actionKey = "reset_aura_custom_container", actionFixedArgs = { scope = unit, index = index },
+        })
+        local count = #Model.CustomContainerSpellEntries(unit, index)
+        W.Text(section, "Source: current target · Ownership: only mine · Harmful DoTs only · " .. tostring(count) .. " selected", 24, -94, inner, T.colors.muted)
+        return
+    end
+
+    local section = b:Section(containerLabel .. " Setup", 132)
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48
     local enabled = BindSwitch(ctx, section, "Enabled", 24, -62, 106,
@@ -3436,7 +3638,7 @@ local function BuildMovedAuraPage(ctx)
         RegisterAuraControl(ctx, button, page[1], "button", "moved-page.open." .. AuraCatalogToken(page[2]), "navigation", page[2])
         x = x + (i == 5 and 144 or 104)
     end
-    W.Text(section, "Open the frame and expand Auras. Buffs and Debuffs contain their own Blizzard filters and blacklists; Custom 1-3 contains its own whitelist. There is no separate Filter tab.", 24, -118, w - 48, T.colors.muted)
+    W.Text(section, "Open the frame and expand Auras. Buffs and Debuffs contain their own Blizzard filters and blacklists; Custom 1-3 use whitelists, and Dots on target uses its curated DoT list.", 24, -118, w - 48, T.colors.muted)
     FinishPage(ctx, b)
 end
 

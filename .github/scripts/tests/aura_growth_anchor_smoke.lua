@@ -1000,6 +1000,46 @@ do
     local custom = assert(assert(A3.ResolveUnitFrameConfig("player", {})).lanes.custom1)
     Equal(assert(custom.candidateFilters).maxDuration, 44, "custom Debuff maximum duration")
 
+    A3.TargetDotData = { ROGUE = { { 703, "Garrote" } } }
+    A3._targetDotRuntimeLookup = nil
+    _G.MSUF_DB = {
+        auras3 = {
+            enabled = true,
+            showPlayer = false,
+            customContainers = {
+                perUnit = {
+                    player = {
+                        items = {
+                            [4] = {
+                                enabled = true,
+                                targetDots = true,
+                                auraType = "DEBUFF",
+                                spellIDs = "703,17",
+                                filters = { enabled = true, onlyMine = true },
+                                placed = { max = 1 },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    }
+    A3._runtimeConfigGen = (A3._runtimeConfigGen or 1) + 1
+    local targetDots = assert(assert(A3.ResolveUnitFrameConfig("player", {})).lanes.custom4)
+    Equal(targetDots.unit, "target", "target DoT source unit")
+    Equal(targetDots.nativeFilter, "HARMFUL|PLAYER", "target DoT native ownership filter")
+    Check(assert(targetDots.candidateFilters).includeSpellIDs[703] == true,
+        "curated Garrote target DoT was not compiled")
+    Check(targetDots.candidateFilters.includeSpellIDs[17] == nil,
+        "non-DoT spell escaped the runtime target DoT registry")
+    _G.MSUF_DB.auras3.customContainers.perUnit.player.items[4].customSpellIDs = { [17] = true }
+    A3._runtimeConfigGen = (A3._runtimeConfigGen or 1) + 1
+    local manualTargetDots = assert(assert(A3.ResolveUnitFrameConfig("player", {})).lanes.custom4)
+    Check(assert(manualTargetDots.candidateFilters).includeSpellIDs[17] == true,
+        "manually approved target DoT ID was removed by the runtime registry guard")
+    local targetDotMetrics = assert(A3.BuildAuraLaneMetrics("player", "custom4"))
+    Equal(targetDotMetrics.num, 1, "custom4 lane metrics")
+
     local groupFrame = NewFrame(nil)
     groupFrame.unit = "party1"
     groupFrame.MSUFUnitKey = "party1"
@@ -1031,6 +1071,15 @@ do
     local menuModel = {
         ReadPreviewConfig = function() return previewConfig end,
         CustomContainer = function(_, index) return customItems[index] end,
+        CustomContainerSpellEntries = function(_, index)
+            if index == 4 then
+                return {
+                    { spellID = 703, icon = 100703 },
+                    { spellID = 1943, icon = 101943 },
+                }
+            end
+            return {}
+        end,
     }
     local previewNS = {
         UFPreview = { Model = previewModel },
@@ -1057,7 +1106,7 @@ do
         local buffMetrics = Metrics(anchor, 7, -5)
         local debuffMetrics = Metrics(anchor, -11, 8)
         local customMetrics = {
-            Metrics(anchor, 3, 4), Metrics(anchor, -6, 9), Metrics(anchor, 12, -7),
+            Metrics(anchor, 3, 4), Metrics(anchor, -6, 9), Metrics(anchor, 12, -7), Metrics(anchor, -9, -10),
         }
         previewConfig = {
             enabled = true,
@@ -1069,7 +1118,7 @@ do
             buffLayer = 5,
             debuffLayer = 6,
         }
-        for index = 1, 3 do
+        for index = 1, 4 do
             customItems[index] = {
                 enabled = true,
                 auraType = index == 2 and "DEBUFF" or "BUFF",
@@ -1082,22 +1131,32 @@ do
         end
         local state = assert(previewAuras.BuildState("player", 200, 100))
         local frac = fractions[anchor]
-        local function AssertPreviewLane(bounds, metrics, label)
+        local function AssertPreviewLane(bounds, metrics, label, expectedShown)
             Near(bounds.laneLeft, frac[1] * 200 + metrics.x - frac[1] * metrics.width,
                 label .. " left")
             Near(bounds.laneBottom, frac[2] * 100 + metrics.y - frac[2] * metrics.height,
                 label .. " bottom")
             Near(bounds.laneW, metrics.width, label .. " full-capacity width")
             Near(bounds.laneH, metrics.height, label .. " full-capacity height")
-            Equal(bounds.shown, 4, label .. " sample count")
+            Equal(bounds.shown, expectedShown or 4, label .. " sample count")
         end
         AssertPreviewLane(state.buff, buffMetrics, "unit preview buff " .. anchor)
         AssertPreviewLane(state.debuff, debuffMetrics, "unit preview debuff " .. anchor)
-        for index = 1, 3 do
+        for index = 1, 4 do
             AssertPreviewLane(state["custom" .. tostring(index)], customMetrics[index],
-                "unit preview custom" .. tostring(index) .. " " .. anchor)
+                "unit preview custom" .. tostring(index) .. " " .. anchor, index == 4 and 2 or 4)
         end
+        Equal(state.custom4.previewTextures[1], 100703,
+            "unit preview custom4 did not use the first tracked DoT icon")
+        Equal(state.custom4.previewTextures[2], 101943,
+            "unit preview custom4 did not use the second tracked DoT icon")
     end
+
+    customItems[4].enabled = false
+    local selectedWhileDisabled = assert(previewAuras.BuildState("player", 200, 100).custom4)
+    Equal(selectedWhileDisabled.shown, 2,
+        "selected target DoTs did not reveal the disabled unit-frame preview lane")
+    customItems[4].enabled = true
 
     previewConfig = {
         enabled = true, showBuffs = false, showDebuffs = false, customMetrics = {},
@@ -1275,4 +1334,4 @@ Check(groupHandlesSource:find("return ResolveAnchor(rx, ry)", 1, true),
 Check(groupHandlesSource:find('externalHandle._cfgGroup = "externals"', 1, true),
     "group External aura handle no longer writes its persisted lane")
 
-print("PASS aura position parity: 54 unit + 216 group live layouts, 45 unit preview lanes, scope-aware icon zoom, vertical fallback, PTR5 forbidden-button guard, fixed host capacity, player/dispel zone repair, 1000x native churn")
+print("PASS aura position parity: 54 unit + 216 group live layouts, 54 unit preview lanes, scope-aware icon zoom, vertical fallback, PTR5 forbidden-button guard, fixed host capacity, player/dispel zone repair, 1000x native churn")

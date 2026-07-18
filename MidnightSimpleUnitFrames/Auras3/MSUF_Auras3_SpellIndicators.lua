@@ -311,8 +311,12 @@ local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata, fal
         }
     end
     if not placed and not frameEffect then return nil end
-    local candidateFilters, candidateFilterSignature = CandidateFiltersFromSpellIDs(item.includeSpellIDs, "includeSpellIDs")
-    if not candidateFilters then return nil end
+    local candidateFilters = item.candidateFilters
+    local candidateFilterSignature = item.candidateFilterSignature
+    if candidateFilters == nil then
+        candidateFilters, candidateFilterSignature = CandidateFiltersFromSpellIDs(item.includeSpellIDs, "includeSpellIDs")
+    end
+    if not candidateFilters and item.allowAnyAura ~= true then return nil end
     candidateFilters, candidateFilterSignature = AddHidePermanentCandidateFilter(
         candidateFilters, candidateFilterSignature, item.hidePermanent == true)
 
@@ -456,7 +460,7 @@ function Runtime.CompileSlots(unit, spellIndicators, sharedBuffStyle)
     return {
         spellIndicatorRoot = true,
         kind = "spellIndicators",
-        rootKey = "SpellIndicators",
+        rootKey = spellIndicators.rootKey or "SpellIndicators",
         unit = unit,
         enabled = true,
         slots = slots,

@@ -19,6 +19,7 @@ local math_floor = math.floor
 local table_sort = table.sort
 local C_Spell = _G.C_Spell
 local GetSpellInfo = _G.GetSpellInfo
+local UnitClass = _G.UnitClass
 
 local A3 = MSUF.MSUF_Auras3
 if type(A3) ~= "table" then
@@ -273,6 +274,18 @@ local SHARED_LAYOUT_KEYS = {
     cooldownDecimalSeconds = true,
     buffCooldownDecimalSeconds = true,
     debuffCooldownDecimalSeconds = true,
+    buffFrameEffectType = true,
+    buffFrameEffectColor = true,
+    buffFrameEffectPriority = true,
+    buffFrameEffectThickness = true,
+    buffFrameEffectLayer = true,
+    buffFrameEffectStrata = true,
+    debuffFrameEffectType = true,
+    debuffFrameEffectColor = true,
+    debuffFrameEffectPriority = true,
+    debuffFrameEffectThickness = true,
+    debuffFrameEffectLayer = true,
+    debuffFrameEffectStrata = true,
 }
 
 local STYLE_SHARED_LAYOUT_KEYS = {
@@ -318,6 +331,18 @@ local STYLE_SHARED_LAYOUT_KEYS = {
     cooldownDecimalSeconds = true,
     buffCooldownDecimalSeconds = true,
     debuffCooldownDecimalSeconds = true,
+    buffFrameEffectType = true,
+    buffFrameEffectColor = true,
+    buffFrameEffectPriority = true,
+    buffFrameEffectThickness = true,
+    buffFrameEffectLayer = true,
+    buffFrameEffectStrata = true,
+    debuffFrameEffectType = true,
+    debuffFrameEffectColor = true,
+    debuffFrameEffectPriority = true,
+    debuffFrameEffectThickness = true,
+    debuffFrameEffectLayer = true,
+    debuffFrameEffectStrata = true,
 }
 
 local GROUPS = {
@@ -450,6 +475,18 @@ local DEFAULT_SHARED = {
     debuffShowTooltip = true,
     debuffShowCooldownText = true,
     debuffShowStackCount = true,
+    buffFrameEffectType = "none",
+    buffFrameEffectColor = { 0.69, 0.50, 0.88, 0.80 },
+    buffFrameEffectPriority = 5,
+    buffFrameEffectThickness = 2,
+    buffFrameEffectLayer = 0,
+    buffFrameEffectStrata = "AUTO",
+    debuffFrameEffectType = "none",
+    debuffFrameEffectColor = { 0.69, 0.50, 0.88, 0.80 },
+    debuffFrameEffectPriority = 5,
+    debuffFrameEffectThickness = 2,
+    debuffFrameEffectLayer = 0,
+    debuffFrameEffectStrata = "AUTO",
     clickThroughAuras = false,
     iconSize = 26,
     iconZoom = 100,
@@ -1657,10 +1694,35 @@ function Model.CustomDisplayByID(scope, id, editable)
     return items[1], 1
 end
 
-local CUSTOM_CONTAINER_MAX = 3
+local CUSTOM_CONTAINER_MAX = 4
+local TARGET_DOT_CONTAINER_INDEX = 4
+
+local function EnforceTargetDotContainer(item)
+    if type(item) ~= "table" then return item end
+    item.name = "Dots on target"
+    item.auraType = "DEBUFF"
+    item.sourceUnit = "target"
+    item.targetDots = true
+    item.filters = type(item.filters) == "table" and item.filters or {}
+    item.filters.enabled = true
+    item.filters.onlyMine = true
+    item.filters.onlyImportant = false
+    item.filters.raid = false
+    item.filters.raidInCombat = false
+    item.filters.includeNameplateOnly = false
+    item.filters.includeDispellable = false
+    item.filters.dispellableAny = false
+    item.filters.cancelable = false
+    item.filters.notCancelable = false
+    item.filters.crowdControl = false
+    item.filters.externalDefensive = false
+    item.filters.bigDefensive = false
+    item.filters.exclusive = "none"
+    return item
+end
 
 local function NewCustomContainer(index)
-    return {
+    local item = {
         enabled = false,
         name = "Custom " .. tostring(index),
         auraType = "BUFF",
@@ -1695,6 +1757,7 @@ local function NewCustomContainer(index)
             priority = 5, thickness = 2, layer = 0, strata = "AUTO",
         },
     }
+    return index == TARGET_DOT_CONTAINER_INDEX and EnforceTargetDotContainer(item) or item
 end
 
 local function UpgradeLegacyCustomContainer(dst, legacy, index)
@@ -1755,6 +1818,7 @@ function Model.CustomContainer(unit, index, create)
         item = NewCustomContainer(index)
         record.items[index] = item
     end
+    if index == TARGET_DOT_CONTAINER_INDEX then EnforceTargetDotContainer(item) end
     return item
 end
 
@@ -1797,15 +1861,30 @@ local function WriteCustomContainerSpellSet(item, set)
     item.spellIDs = table.concat(ids, ", ")
 end
 
-function Model.AddCustomContainerSpell(unit, index, value)
+function Model.AddCustomContainerSpell(unit, index, value, allowCustomID)
     local spellID = SpellIDFromInput(value)
     local item = Model.CustomContainer(unit, index, true)
     if not (spellID and item) then return false, "invalid" end
+    local customTargetDot = index == TARGET_DOT_CONTAINER_INDEX and not Model.IsTargetDotSpell(spellID)
+    if customTargetDot and allowCustomID ~= true then return false, "not-dot" end
     local set = CustomContainerSpellSet(item)
-    if set[spellID] == true then return false, "unchanged" end
+    if set[spellID] == true then
+        if customTargetDot then
+            item.customSpellIDs = type(item.customSpellIDs) == "table" and item.customSpellIDs or {}
+            if item.customSpellIDs[spellID] ~= true then
+                item.customSpellIDs[spellID] = true
+                return true
+            end
+        end
+        return false, "unchanged"
+    end
     local count = 0
     for _, enabled in pairs(set) do if enabled == true then count = count + 1 end end
     if count >= 40 then return false, "full" end
+    if customTargetDot then
+        item.customSpellIDs = type(item.customSpellIDs) == "table" and item.customSpellIDs or {}
+        item.customSpellIDs[spellID] = true
+    end
     set[spellID] = true
     WriteCustomContainerSpellSet(item, set)
     return true
@@ -1818,6 +1897,7 @@ function Model.RemoveCustomContainerSpell(unit, index, value)
     local set = CustomContainerSpellSet(item)
     if set[spellID] ~= true then return false, "unchanged" end
     set[spellID] = nil
+    if type(item.customSpellIDs) == "table" then item.customSpellIDs[spellID] = nil end
     WriteCustomContainerSpellSet(item, set)
     return true
 end
@@ -1830,11 +1910,13 @@ function Model.ClearCustomContainerSpells(unit, index)
         if enabled == true then count = count + 1 end
     end
     if count > 0 then WriteCustomContainerSpellSet(item, {}) end
+    item.customSpellIDs = nil
     return count
 end
 
 function Model.CustomContainerSpellEntries(unit, index)
     local item = Model.CustomContainer(unit, index, false)
+    local customSpellIDs = type(item and item.customSpellIDs) == "table" and item.customSpellIDs or nil
     local out = {}
     for spellID in pairs(CustomContainerSpellSet(item)) do
         local id, name, icon = SpellInfo(spellID)
@@ -1842,10 +1924,67 @@ function Model.CustomContainerSpellEntries(unit, index)
         out[#out + 1] = {
             value = tostring(id), spellID = id, icon = icon,
             text = (type(name) == "string" and name ~= "" and name or "Spell") .. " (#" .. tostring(id) .. ")",
+            customID = customSpellIDs and customSpellIDs[id] == true or false,
         }
     end
     table_sort(out, function(a, b) return tostring(a.text) < tostring(b.text) end)
     return out
+end
+
+local TARGET_DOT_CLASS_ORDER = {
+    "DEATHKNIGHT", "DEMONHUNTER", "DRUID", "EVOKER", "HUNTER", "MAGE", "MONK",
+    "PALADIN", "PRIEST", "ROGUE", "SHAMAN", "WARLOCK", "WARRIOR",
+}
+local TARGET_DOT_CLASS_LABELS = {
+    DEATHKNIGHT = "Death Knight", DEMONHUNTER = "Demon Hunter", DRUID = "Druid",
+    EVOKER = "Evoker", HUNTER = "Hunter", MAGE = "Mage", MONK = "Monk",
+    PALADIN = "Paladin", PRIEST = "Priest", ROGUE = "Rogue", SHAMAN = "Shaman",
+    WARLOCK = "Warlock", WARRIOR = "Warrior",
+}
+
+local function TargetDotLookup()
+    local lookup = A3._targetDotLookup
+    if lookup then return lookup end
+    lookup = {}
+    for _, spells in pairs(A3.TargetDotData or {}) do
+        for i = 1, #spells do lookup[tonumber(spells[i][1])] = true end
+    end
+    A3._targetDotLookup = lookup
+    return lookup
+end
+
+function Model.IsTargetDotSpell(value)
+    local spellID = SpellIDFromInput(value)
+    return spellID and TargetDotLookup()[spellID] == true or false
+end
+
+function Model.TargetDotValues()
+    local values = {}
+    local playerClass
+    if type(UnitClass) == "function" then local _; _, playerClass = UnitClass("player") end
+    local order = {}
+    if playerClass and A3.TargetDotData and A3.TargetDotData[playerClass] then order[#order + 1] = playerClass end
+    for i = 1, #TARGET_DOT_CLASS_ORDER do
+        local class = TARGET_DOT_CLASS_ORDER[i]
+        if class ~= playerClass then order[#order + 1] = class end
+    end
+    for i = 1, #order do
+        local class = order[i]
+        local spells = A3.TargetDotData and A3.TargetDotData[class]
+        if type(spells) == "table" and #spells > 0 then
+            values[#values + 1] = { text = TARGET_DOT_CLASS_LABELS[class] or class, header = true, disabled = true, translate = false }
+            for j = 1, #spells do
+                local spellID, fallback = tonumber(spells[j][1]), spells[j][2]
+                local id, name, icon = SpellInfo(spellID)
+                values[#values + 1] = {
+                    value = tostring(id or spellID), spellID = id or spellID, icon = icon,
+                    text = (type(name) == "string" and name ~= "" and name or fallback or "Spell") .. " (#" .. tostring(id or spellID) .. ")",
+                    class = class,
+                }
+            end
+        end
+    end
+    return values
 end
 
 function Model.WriteLaneLayer(unit, kind, value)
