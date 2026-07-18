@@ -28,8 +28,9 @@ assert(chunk, err)
 chunk("MidnightSimpleUnitFrames", MSUF)
 
 local UF = assert(MSUF.UF, "UF namespace missing")
-local healthEvents = { "UNIT_HEALTH" }
+local healthEvents = { "UNIT_HEALTH", "UNIT_CONNECTION" }
 local expectedUnitState
+local expectedIdentityReady
 local healthUpdateCalls = 0
 local powerUpdateCalls = 0
 local statusUpdateCalls = 0
@@ -53,8 +54,9 @@ UF.RegisterElement("Health", {
                 "dispatch must reuse the existing unit-state table")
             assert(expectedUnitState.ready == false,
                 "dispatch must invalidate reused unit-state contents before the first consumer")
-            assert(expectedUnitState.dispatchToken == nil and expectedUnitState.identityReady == nil,
-                "dispatch must clear freshness markers on the reused unit-state table")
+            assert(expectedUnitState.dispatchToken == nil
+                and expectedUnitState.identityReady == expectedIdentityReady,
+                "dispatch used the wrong event-specific identity invalidation policy")
             expectedUnitState.ready = true
             expectedUnitState.dispatchToken = runtimeFrame._msufDispatchToken
         end
@@ -122,6 +124,7 @@ assert(frame.genericEvents.UNIT_HEALTH == nil, "valid unit event must not fall b
 assert(frame.unregisterAllCount == 1, "initial spec must build routing once")
 
 expectedUnitState = { ready = true, dispatchToken = 0, identityReady = true }
+expectedIdentityReady = true
 frame._msufUnitState = expectedUnitState
 frame.OnEvent(frame, "UNIT_HEALTH", "targettarget")
 assert(healthUpdateCalls == 1, "health route did not execute")
@@ -131,7 +134,12 @@ assert(frame._msufDispatchActive == nil, "dispatch activity leaked after event c
 frame.OnEvent(frame, "UNIT_HEALTH", "targettarget")
 assert(healthUpdateCalls == 2 and frame._msufUnitState == expectedUnitState,
     "subsequent dispatch allocated or lost the reusable unit-state table")
+expectedIdentityReady = nil
+frame.OnEvent(frame, "UNIT_CONNECTION", "targettarget")
+assert(healthUpdateCalls == 3 and expectedUnitState.identityReady == nil,
+    "connection dispatch retained identity that may become newly readable")
 expectedUnitState = nil
+expectedIdentityReady = nil
 
 UF.Config = {
     RefreshUnit = function() return spec end,

@@ -177,6 +177,8 @@ local PREDICTION_DISABLE_FIELDS = {
   "_msufPredictionAbsorbReverse",
   "_msufPredictionFollowAbsorb",
   "_msufPredictionAbsorbEdgeGlow",
+  "_msufPredictionOverAbsorbOverlay",
+  "_msufPredictionFullHealthStripe",
   "_msufPredictionClampHealToMissing",
   "_msufPredictionClampAbsorbToMissing",
   "_msufUpdatePredictionHealthValue",
@@ -414,7 +416,8 @@ local function ConfigureCalc(calc, cfg)
 end
 
 local function UpdateCalc(frame, unit, cfg)
-  local calc = EnsureCalc(frame)
+  local calc = frame and frame._msufPredictionCalc
+  if not calc then calc = EnsureCalc(frame) end
   if not calc then
     return nil
   end
@@ -697,31 +700,31 @@ local function PositionOverAbsorbGlow(frame, reverse)
   return holder
 end
 
-local function PlainPositive(value)
-  if issecretvalue(value) == true or type(value) ~= "number" then return nil end
-  return value > 0 and value or nil
-end
-
 local function ReadHealthForOverAbsorb(frame, unit, hp, maxHP)
-  if PlainPositive(hp) == nil and issecretvalue(hp) ~= true then
+  local hpSecret = issecretvalue(hp) == true
+  if not hpSecret and (type(hp) ~= "number" or hp <= 0) then
     hp = CachedHealthValue(frame, unit)
-    if PlainPositive(hp) == nil and issecretvalue(hp) ~= true and UnitHealth then hp = UnitHealth(unit) end
+    hpSecret = issecretvalue(hp) == true
+    if not hpSecret and (type(hp) ~= "number" or hp <= 0) and UnitHealth then
+      hp = UnitHealth(unit)
+      hpSecret = issecretvalue(hp) == true
+    end
   end
-  if PlainPositive(maxHP) == nil and issecretvalue(maxHP) ~= true then
+  local maxSecret = issecretvalue(maxHP) == true
+  if not maxSecret and (type(maxHP) ~= "number" or maxHP <= 0) then
     maxHP = ReadHealthMax(frame, unit)
+    maxSecret = issecretvalue(maxHP) == true
   end
-  return hp, maxHP
+  return hp, maxHP, hpSecret, maxSecret
 end
 
-local function ResolveGlowAbsorb(frame, cfg, unit, hp, maxHP, absorb)
+local function ResolveGlowAbsorb(frame, cfg, unit, hp, maxHP, absorb, hpSecret, maxSecret)
   if not (cfg and cfg.test ~= true and cfg.fullHealthAbsorbStripe == true
       and frame and frame._msufPredictionAbsorbMode == 3
       and UnitGetTotalAbsorbs and unit) then
     return absorb
   end
 
-  local hpSecret = issecretvalue(hp) == true
-  local maxSecret = issecretvalue(maxHP) == true
   if not hpSecret and not maxSecret
     and type(hp) == "number" and type(maxHP) == "number" and maxHP > 0
     and hp < maxHP then
@@ -738,22 +741,30 @@ local function ResolveGlowAbsorb(frame, cfg, unit, hp, maxHP, absorb)
 end
 
 local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb)
-  local overAbsorbEnabled = cfg and cfg.overAbsorbOverlay == true
-  local fullHealthStripeEnabled = cfg and cfg.fullHealthAbsorbStripe == true
-  if not (frame and cfg and cfg.absorb == true and (overAbsorbEnabled or fullHealthStripeEnabled)) then
+  local overAbsorbEnabled = frame and frame._msufPredictionOverAbsorbOverlay == true
+  local fullHealthStripeEnabled = frame and frame._msufPredictionFullHealthStripe == true
+  if not (frame and (overAbsorbEnabled or fullHealthStripeEnabled)) then
     HideOverAbsorbGlow(frame)
     return
   end
-  hp, maxHP = ReadHealthForOverAbsorb(frame, unit, hp, maxHP)
-  absorb = ResolveGlowAbsorb(frame, cfg, unit, hp, maxHP, absorb)
+  local hpSecret, maxSecret
+  hp, maxHP, hpSecret, maxSecret = ReadHealthForOverAbsorb(frame, unit, hp, maxHP)
+  absorb = ResolveGlowAbsorb(frame, cfg, unit, hp, maxHP, absorb, hpSecret, maxSecret)
   local absorbSecret = issecretvalue(absorb) == true
   if not absorbSecret and (type(absorb) ~= "number" or absorb <= 0) then
     HideOverAbsorbGlow(frame)
     return
   end
-  local hpSecret = issecretvalue(hp) == true
-  local maxSecret = issecretvalue(maxHP) == true
-  local holder = PositionOverAbsorbGlow(frame, frame._msufPredictionHpReverse == true)
+  local reverse = frame._msufPredictionHpReverse == true
+  local hpBar = frame.hpBar or frame.Health
+  local holder = frame.overAbsorbGlowBar
+  -- Apply owns layout/frame-level changes. The combat health path can bypass
+  -- Ensure/position/frame-level work while the compiled anchor is unchanged.
+  if not (holder and hpBar
+      and holder._msufOverAbsorbReverse == reverse
+      and holder._msufOverAbsorbAnchor == hpBar) then
+    holder = PositionOverAbsorbGlow(frame, reverse)
+  end
   if not holder then return end
 
   -- Secret absorb values cannot be inspected in Lua. Feed them into the tiny
@@ -1282,6 +1293,8 @@ local function CompilePredictionRuntime(frame, cfg, spec)
   frame._msufPredictionFollowAbsorb = followAbsorb
   frame._msufPredictionAbsorbEdgeGlow = cfg.absorb == true
     and (cfg.overAbsorbOverlay == true or cfg.fullHealthAbsorbStripe == true)
+  frame._msufPredictionOverAbsorbOverlay = cfg.absorb == true and cfg.overAbsorbOverlay == true
+  frame._msufPredictionFullHealthStripe = cfg.absorb == true and cfg.fullHealthAbsorbStripe == true
   frame._msufPredictionClampHealToMissing = cfg.heal == true and healMode == 3
   frame._msufPredictionClampAbsorbToMissing = cfg.absorb == true and absorbMode == 3
   frame._msufPredictionEventPlans, frame._msufPredictionFullPlan = CompilePredictionPlans(cfg, healMode, absorbMode, followAbsorb)
