@@ -29,9 +29,10 @@ local NAV_SEARCH_TEXT_BUMP = 2
 local UpdateSearchPlaceholder = SearchBridge.UpdateSearchPlaceholder
 local ScheduleSearchInputQuery = SearchBridge.ScheduleSearchInputQuery
 local RunSearchInputQuery = SearchBridge.RunSearchInputQuery
-local OpenSearchResults = SearchBridge.OpenSearchResults
 local OpenSearchTarget = SearchBridge.OpenSearchTarget
 local BumpSearchInputSerial = SearchBridge.BumpSearchInputSerial
+local ShouldUseAssistantForQuery = SearchBridge.ShouldUseAssistantForQuery
+local SubmitAssistantQuery = SearchBridge.SubmitAssistantQuery
 local function IsAdvancedNavHidden()
     local g = M.GetGeneralDB and M.GetGeneralDB()
     if type(g) ~= "table" then return true end
@@ -164,42 +165,6 @@ function M.SetSearchIntroSeen(seen)
     seen = seen and true or false
     M.SetMenuStateValue("searchIntroSeen", seen)
     if seen and type(M.HideNavSearchIntro) == "function" then M.HideNavSearchIntro() end
-    return true
-end
-local function AssistantAPI()
-    return (MSUF and MSUF.Assistant) or M.Assistant
-end
-local function AssistantRuntimeReady()
-    -- The runtime always loads with the core addon; the Assistant only owns
-    -- the navigation search after the user engaged it this session (Dashboard
-    -- card built or an explicit query submitted). Until then, typing keeps
-    -- running classic Menu2 search, matching the former load-on-demand gate.
-    local A = AssistantAPI()
-    return A and A._assistantEngaged == true
-        and (type(A.SubmitDeferred) == "function" or type(A.Submit) == "function")
-end
-local function SubmitAssistantQuery(query)
-    query = TrimText(query)
-    if query == "" then return false end
-    local A = AssistantAPI()
-    if not A then return false end
-    local submitted, result
-    if type(A.SubmitExplicitQuery) == "function" then
-        submitted, result = A.SubmitExplicitQuery(query, "navrail-enter")
-        if not submitted then return false end
-    elseif AssistantRuntimeReady() then
-        local submit = type(A.SubmitDeferred) == "function" and A.SubmitDeferred or A.Submit
-        result = submit(query)
-    else
-        return false
-    end
-    if M.activeKey ~= "home" then M.CallIf(M.SelectPage, "home") end
-    if result and result.status == "combat" then return true end
-    if type(A.RequestRefreshUI) == "function" then
-        A.RequestRefreshUI("assistant.navrail")
-    elseif type(A.RefreshUI) == "function" then
-        A.RefreshUI()
-    end
     return true
 end
 local function CreateNavButton(parent, key, label, indent)
@@ -593,6 +558,14 @@ local function BuildNavRail(parent)
     search._msuf2SearchPlaceholder = placeholder
     UpdateSearchPlaceholder(search)
     parent.searchBox = search
+    local searchPalette = type(M.CreateNavSearchPalette) == "function"
+        and M.CreateNavSearchPalette(parent, search) or nil
+    local function SchedulePaletteQuery(searchBox, query)
+        ScheduleSearchInputQuery(searchBox, query, false, function(latest)
+            if searchPalette then searchPalette:Refresh(latest, false) end
+        end)
+        if searchPalette then searchPalette:Refresh(query, M.searchResultsPending == true) end
+    end
     local function HideSearchIntro()
         local intro = parent._msuf2SearchIntro
         if intro and intro.Hide then intro:Hide() end
@@ -608,7 +581,7 @@ local function BuildNavRail(parent)
             classification = "action",
             actionKey = "set_nav_search_intro",
             historyMode = "none",
-            help = "Dismisses the one-time search and Assistant introduction.",
+            help = "Dismisses the one-time settings-search introduction.",
             command = {
                 kind = "button",
                 historyMode = "none",
@@ -634,18 +607,18 @@ local function BuildNavRail(parent)
         intro:SetFrameLevel(search:GetFrameLevel() + 6)
         intro:EnableMouse(true)
         intro:Hide()
-        local title = T.Font(intro, "GameFontNormalSmall", "Ask MSUF", T.colors.text)
+        local title = T.Font(intro, "GameFontNormalSmall", "Search or ask MSUF", T.colors.text)
         T.StyleFontString(title, T.colors.text, NAV_TEXT_BUMP)
         title:SetPoint("TOPLEFT", intro, "TOPLEFT", 12, -12)
         title:SetPoint("TOPRIGHT", intro, "TOPRIGHT", -28, -12)
         title:SetJustifyH("LEFT")
-        local body = T.Font(intro, "GameFontDisableSmall", "Try: \"where do I move raid frames\" or \"make text bigger\".", T.colors.muted)
+        local body = T.Font(intro, "GameFontDisableSmall", "Try \"raid auras\" or ask \"can you make my text bigger?\"", T.colors.muted)
         T.StyleFontString(body, T.colors.muted, NAV_TEXT_BUMP)
         body:SetPoint("TOPLEFT", intro, "TOPLEFT", 12, -32)
         body:SetPoint("TOPRIGHT", intro, "TOPRIGHT", -12, -32)
         body:SetWordWrap(true)
         body:SetJustifyH("LEFT")
-        local foot = T.Font(intro, "GameFontDisableSmall", "Press Enter to ask the Assistant.", T.colors.dim)
+        local foot = T.Font(intro, "GameFontDisableSmall", "Matches appear while you type. Enter opens one or asks MSUF.", T.colors.dim)
         T.StyleFontString(foot, T.colors.dim, NAV_TEXT_BUMP)
         foot:SetPoint("BOTTOMLEFT", intro, "BOTTOMLEFT", 12, 12)
         foot:SetPoint("BOTTOMRIGHT", intro, "BOTTOMRIGHT", -12, 12)
@@ -663,7 +636,7 @@ local function BuildNavRail(parent)
             M.RegisterMenuChromeControl(close, "search.intro-dismiss", "Dismiss search help", "action", {
                 actionKey = "set_nav_search_intro",
                 historyMode = "none",
-                help = "Dismisses the one-time search and Assistant introduction.",
+                help = "Dismisses the one-time settings-search introduction.",
             })
         end
         parent._msuf2SearchIntro = intro
@@ -686,7 +659,12 @@ local function BuildNavRail(parent)
     search:HookScript("OnEditFocusGained", function(self)
         if self.HighlightText then self:HighlightText() end
         UpdateSearchPlaceholder(self)
-        if TrimText(self:GetText() or "") == "" then ShowSearchIntro() end
+        local query = TrimText(self:GetText() or "")
+        if query == "" then
+            ShowSearchIntro()
+        elseif searchPalette then
+            SchedulePaletteQuery(self, query)
+        end
     end)
     search:HookScript("OnEditFocusLost", function(self)
         if self.HighlightText then self:HighlightText(0, 0) end
@@ -697,7 +675,12 @@ local function BuildNavRail(parent)
         if self._msuf2SearchInternal then return end
         local query = TrimText(self:GetText() or "")
         if query ~= "" then HideSearchIntro() end
-        if not AssistantRuntimeReady() then ScheduleSearchInputQuery(self, query) end
+        SchedulePaletteQuery(self, query)
+    end)
+    search:SetScript("OnArrowPressed", function(_, key)
+        if not searchPalette then return end
+        if key == "UP" then searchPalette:MoveSelection(-1)
+        elseif key == "DOWN" then searchPalette:MoveSelection(1) end
     end)
     search:SetScript("OnEnterPressed", function(self)
         HideSearchIntro()
@@ -707,23 +690,30 @@ local function BuildNavRail(parent)
             return
         end
         BumpSearchInputSerial()
-        if SubmitAssistantQuery(query) then
-            self._msuf2SearchInternal = true
-            self:SetText("")
-            self._msuf2SearchInternal = nil
-            self:ClearFocus()
-            return
-        end
         RunSearchInputQuery(query, false)
-        if M.searchResults and M.searchResults[1] then
-            local first = M.searchResults[1]
+        local results = M.searchResults or {}
+        if searchPalette then searchPalette:Refresh(query, false) end
+        if searchPalette and searchPalette:OpenSelected(query) then
+            return
+        elseif results[1] then
+            local first = results[1]
             if first.noOpen then
                 self:ClearFocus()
             else
-                OpenSearchTarget(first.key, query, first.anchorFallback or first.label or first.title, first.anchor)
+                if searchPalette then searchPalette:Hide() end
+                OpenSearchTarget(first.key, query, first.anchorFallback or first.label or first.title,
+                    first.anchor, first.route, first.exactTarget)
             end
+        elseif ShouldUseAssistantForQuery(query, results) and SubmitAssistantQuery(query) then
+            self._msuf2SearchInternal = true
+            self:SetText("")
+            self._msuf2SearchInternal = nil
+            RunSearchInputQuery("", false)
+            if searchPalette then searchPalette:Hide() end
+            self:ClearFocus()
         else
-            OpenSearchResults(query)
+            if searchPalette then searchPalette:Hide() end
+            RunSearchInputQuery(query, true)
         end
     end)
     search:SetScript("OnEscapePressed", function(self)
@@ -731,9 +721,10 @@ local function BuildNavRail(parent)
         self._msuf2SearchInternal = true
         self:SetText("")
         self._msuf2SearchInternal = nil
+        if searchPalette then searchPalette:Hide() end
         self:ClearFocus()
         BumpSearchInputSerial()
-        if not AssistantRuntimeReady() then RunSearchInputQuery("", true) end
+        RunSearchInputQuery("", true)
     end)
     local clear = CreateFrame("Button", nil, parent)
     clear:SetSize(16, 16)
@@ -748,8 +739,9 @@ local function BuildNavRail(parent)
         search._msuf2SearchInternal = true
         search:SetText("")
         search._msuf2SearchInternal = nil
+        if searchPalette then searchPalette:Hide() end
         BumpSearchInputSerial()
-        if not AssistantRuntimeReady() then RunSearchInputQuery("", true) end
+        RunSearchInputQuery("", true)
         clear:Hide()
         search:SetFocus()
         return true
@@ -760,11 +752,14 @@ local function BuildNavRail(parent)
         M.RegisterMenuChromeControl(clear, "search.clear", "Clear menu search", "action", {
             actionKey = "menu_search_clear",
             historyMode = "none",
-            help = "Clears the current menu search or Assistant query text.",
+            help = "Clears the current settings search.",
         })
     end
     search:HookScript("OnTextChanged", function(self)
         clear:SetShown(TrimText(self:GetText() or "") ~= "")
+    end)
+    parent:HookScript("OnHide", function()
+        if searchPalette then searchPalette:Hide() end
     end)
     local listScroll = CreateFrame("ScrollFrame", nil, parent)
     listScroll:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -68)

@@ -424,6 +424,10 @@ local function SearchLooksLikeSupportQuestion(query)
     if normalized:find("how ", 1, true) or normalized:find("where ", 1, true) or normalized:find("why ", 1, true) then return true end
     if normalized:find("what ", 1, true) or normalized:find("help ", 1, true) then return true end
     if normalized:find("do i", 1, true) or normalized:find("can i", 1, true) then return true end
+    if normalized:find("can you", 1, true) or normalized:find("could you", 1, true)
+        or normalized:find("would you", 1, true) or normalized:find("please ", 1, true) then return true end
+    if normalized:find("kannst du", 1, true) or normalized:find("konntest du", 1, true)
+        or normalized:find("kannst ", 1, true) or normalized:find("bitte ", 1, true) then return true end
     for word in ("missing|gone|invisible|broken|bugged|wrong|offscreen|overlap|overlapping|lag|fps|lockdown"):gmatch("[^|]+") do
         if normalized:find(word, 1, true) then return true end
     end
@@ -1149,6 +1153,15 @@ BuildRegistrySearchRecord = function(entry)
     local rec = AddSearchRecord(tempRecords, seenRecords, info, entry.label, entry.anchor, entry.kind or "control", extra)
     if rec then
         rec.answer = entry.help
+        if type(entry.settingKey) == "string" and entry.settingKey ~= "" then
+            rec.exactTarget = {
+                pageKey = entry.pageKey,
+                settingKey = entry.settingKey,
+                identityKey = entry.identityKey,
+                controlPath = entry.controlPath,
+                label = entry.label,
+            }
+        end
         local widget = entry.widget
         local command = entry.command or (widget and widget._msuf2CommandAction) or BuildButtonCommandAction(widget, entry)
         if command then
@@ -1345,6 +1358,7 @@ local function AddAssistantRegistrySettingRecord(records, seenRecords, pageInfoB
         rec.answer = setting.description or setting.summary
         rec.target = info.title and ("Opens: " .. tostring(info.title)) or nil
         rec._msufAssistantSettingKey = setting.key
+        rec.exactTarget = { pageKey = pageKey, settingKey = setting.key, label = label }
         rec.priority = (tonumber(rec.priority) or 0) + 35
     end
 end
@@ -1474,6 +1488,10 @@ end
 
 local SearchPages, SetSearchResults
 
+local function SearchSurfaceActive()
+    return M.activeKey == "search" or M.searchPaletteActive == true
+end
+
 local function RefreshSearchResultsPage()
     if M.activeKey ~= "search" then return end
     local query = TrimText(M.searchQuery or "")
@@ -1487,12 +1505,24 @@ local function FinishSearchBackgroundIndex()
     SEARCH_STATE.indexing = false
     SEARCH_STATE.indexQueue = nil
     local query = TrimText(M.searchQuery or "")
-    local shouldRefresh = M.activeKey == "search" and query ~= "" and #NormalizeSearchText(query) >= MIN_SEARCH_QUERY_LEN
+    local refreshPage = M.activeKey == "search" and query ~= "" and #NormalizeSearchText(query) >= MIN_SEARCH_QUERY_LEN
+    local refreshPalette = M.searchPaletteActive == true and query ~= ""
+        and #NormalizeSearchText(query) >= MIN_SEARCH_QUERY_LEN
+    local shouldRefresh = refreshPage or refreshPalette
     if shouldRefresh and SEARCH_STATE.recordsDirty then
         SEARCH_STATE.records = BuildSearchRecords()
         SEARCH_STATE.recordsDirty = false
     end
-    if shouldRefresh then RefreshSearchResultsPage() end
+    if shouldRefresh then
+        SetSearchResults(SearchPages(query), query)
+        if refreshPage then
+            if M.InvalidatePage then M.InvalidatePage("search") end
+            if M.SelectPage then M.SelectPage("search") end
+        end
+        if refreshPalette and type(M.RefreshNavSearchPalette) == "function" then
+            M.RefreshNavSearchPalette(query)
+        end
+    end
 end
 
 local function StartSearchBackgroundIndex()
@@ -1519,7 +1549,7 @@ local function StartSearchBackgroundIndex()
 
     local function Step()
         if not SEARCH_STATE.indexing then return end
-        if M.activeKey ~= "search" or SearchCombatLocked() or not (M.frame and M.frame.IsShown and M.frame:IsShown()) then
+        if not SearchSurfaceActive() or SearchCombatLocked() or not (M.frame and M.frame.IsShown and M.frame:IsShown()) then
             CancelSearchBackgroundIndex()
             return
         end
@@ -1638,6 +1668,10 @@ function SearchPages(query)
             score = score + SearchResultSpecificityBoost(rec, clauses)
             if missedClauses > 0 then score = score - (missedClauses * 60) end
             if rec.kind ~= "page" then score = score + 45 end
+            local activeKey = M.activeKey
+            if activeKey ~= "home" and activeKey ~= "search" and rec.key == activeKey then
+                score = score + 120
+            end
             if rec.kind == "slider" or rec.kind == "dropdown" or rec.kind == "toggle" then score = score + 25 end
             if controlQuestion
                 and (rec.kind == "toggle" or rec.kind == "dropdown" or rec.kind == "slider" or rec.kind == "segment"
@@ -1673,6 +1707,28 @@ local function SearchQueryReady(query)
     return #NormalizeSearchText(query or "") >= MIN_SEARCH_QUERY_LEN
 end
 
+local function ShouldUseAssistantForQuery(query, results)
+    query = TrimText(query)
+    if not SearchQueryReady(query) or SearchCombatLocked() then return false end
+    results = type(results) == "table" and results or {}
+    if #results == 0 then return true end
+
+    local normalized = NormalizeSearchText(query)
+    if query:find("?", 1, true)
+        or normalized:find("can you", 1, true) or normalized:find("could you", 1, true)
+        or normalized:find("would you", 1, true) or normalized:find("please ", 1, true)
+        or normalized:find("kannst du", 1, true) or normalized:find("konntest du", 1, true)
+        or normalized:find("kannst ", 1, true) or normalized:find("bitte ", 1, true)
+        or SearchLooksLikeGenericLocationQuestion(query) then
+        return true
+    end
+
+    local _, clauses = BuildSearchQueryClauses(query)
+    if #clauses < 3 then return false end
+    return SearchLooksLikeSupportQuestion(query)
+        or (#clauses >= 5 and SearchLooksLikeControlQuestion(query))
+end
+
 SetSearchResults = function(results, query) M.searchResults = results or {}; M.searchResultsQuery = query or "" end
 
 local function ShowSearchPageForQuery(query)
@@ -1705,9 +1761,8 @@ local function SubmitAssistantSearchQuery(query)
     else
         return false
     end
-    if type(M.SelectPage) == "function" and M.activeKey ~= "home" then
-        M.SelectPage("home")
-    end
+    if type(M.InvalidatePage) == "function" then M.InvalidatePage("home") end
+    if type(M.SelectPage) == "function" then M.SelectPage("home") end
     if result and result.status == "combat" then return true end
     if type(A.RequestRefreshUI) == "function" then
         A.RequestRefreshUI("assistant.search")
@@ -1745,21 +1800,24 @@ local function RunSearchInputQuery(query, openPage)
     if openPage then ShowSearchPageForQuery(query) end
 end
 
-local function ScheduleSearchInputQuery(searchBox, query)
+local function ScheduleSearchInputQuery(searchBox, query, openPage, onComplete)
     query = TrimText(query)
+    openPage = openPage == true
     SEARCH_STATE.inputSerial = SEARCH_STATE.inputSerial + 1
     local serial = SEARCH_STATE.inputSerial
 
     M.searchQuery = query
 
     if query == "" or SearchCombatLocked() or not SearchQueryReady(query) then
-        RunSearchInputQuery(query, true)
+        RunSearchInputQuery(query, openPage)
+        if type(onComplete) == "function" then onComplete(query) end
         return
     end
 
     M.searchResultsPending = true
+    M.searchResults = {}
     M.searchResultsQuery = query
-    if M.activeKey ~= "search" then
+    if openPage and M.activeKey ~= "search" then
         M.searchResults = {}
         ShowSearchPageForQuery(query)
     end
@@ -1770,7 +1828,8 @@ local function ScheduleSearchInputQuery(searchBox, query)
             local latest = TrimText(searchBox:GetText() or "")
             if latest ~= query then return end
         end
-        RunSearchInputQuery(query, true)
+        RunSearchInputQuery(query, openPage)
+        if type(onComplete) == "function" then onComplete(query) end
     end
 
     _G.C_Timer.After(SEARCH_INPUT_DEBOUNCE_SEC, RunLatest)
@@ -1837,6 +1896,8 @@ Search._CoreAPI = {
     SearchBoxHasText = SearchBoxHasText,
     SearchPages = SearchPages,
     GetFAQRecords = function() return SEARCH_FAQ end,
+    ShouldUseAssistantForQuery = ShouldUseAssistantForQuery,
+    SubmitAssistantSearchQuery = SubmitAssistantSearchQuery,
     SearchPlaceholderText = SearchPlaceholderText,
     ShortLabel = ShortLabel,
     TrimText = TrimText,
