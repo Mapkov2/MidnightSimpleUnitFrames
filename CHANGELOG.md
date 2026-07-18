@@ -8,6 +8,14 @@
 - New Unit and Group preview controls: zoom, pan, quick actions, and direct settings links.
 - Per-unit Blizzard frame ownership for Player, Pet, Target, Target of Target, Focus, Focus Target, and Boss frames.
 
+### Latest Changes
+
+- Added native Skiron Cooldown Manager and Coolinator anchor integration without recurring polling.
+- Added separate icon size controls for buffs, debuffs, and private auras, synchronized with Edit Mode.
+- Preserved independent health-fill and missing-health transparency in imported UUF profiles and matching previews.
+- Improved dragging of third-party anchored frames and kept cooldown-sized power bars synchronized.
+- Avoided secret-string comparisons when updating split health text visibility.
+
 ### Import & Layout Fidelity
 
 - Native conversion of supported frame, aura, castbar, indicator, color, texture, alpha, range, text, and position settings.
