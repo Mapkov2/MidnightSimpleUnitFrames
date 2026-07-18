@@ -1241,6 +1241,8 @@ local function CompileTextSpec(kind, conf, general, baselineOffset, nameTextOpti
   local powerY = Num(conf.powerOffsetY, 0) + baselineOffset
   return {
     anchorToBars = true,
+    nameAnchorToFrame = conf._msufLegacyNameAnchorToFrame == true,
+    nameLegacyTruncation = conf._msufLegacyNameAnchorToFrame == true,
     nameClassColor = nameTextOptions.nameClassColor == true,
     nameNpcColor = nameTextOptions.nameNpcColor == true,
     nameNpcClassColor = nameTextOptions.nameNpcClassColor == true,

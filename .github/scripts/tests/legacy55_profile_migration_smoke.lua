@@ -33,6 +33,7 @@ assert(_G.MSUF_ImportFromString(legacyGroupImport) == true,
 assert(_G.MSUF_DB.gf_party.nameAnchor == "LEFT"
     and _G.MSUF_DB.gf_party.nameOffsetX == 0
     and _G.MSUF_DB.gf_party.nameOffsetY == 0
+    and _G.MSUF_DB.gf_party._msufLegacyNameAnchorToFrame == true
     and _G.MSUF_DB.gf_party.fontOverride == false,
     "5.57 Group-only import received 6.0 name geometry or override semantics: "
         .. tostring(_G.MSUF_DB.gf_party.nameAnchor) .. ","
@@ -42,7 +43,8 @@ assert(_G.MSUF_DB.gf_party.nameAnchor == "LEFT"
 assert(_G.MSUF_DB.gf_raid.fontOverride == true
     and _G.MSUF_DB.gf_raid.nameAnchor == "CENTER"
     and _G.MSUF_DB.gf_raid.nameOffsetX == 2
-    and _G.MSUF_DB.gf_raid.nameOffsetY == 13,
+    and _G.MSUF_DB.gf_raid.nameOffsetY == 13
+    and _G.MSUF_DB.gf_raid._msufLegacyNameAnchorToFrame == true,
     "5.57 explicit Raid name geometry changed during full import: "
         .. tostring(_G.MSUF_DB.gf_raid.fontOverride) .. ","
         .. tostring(_G.MSUF_DB.gf_raid.nameAnchor) .. ","
@@ -268,6 +270,11 @@ assert(fresh.gf_raid.nameAnchor == "CENTER"
     "explicit 5.57 Party/Raid text coordinates were overwritten")
 assert(fresh._msufLegacy55GroupTextGeometry_v1 == true,
     "5.57 Group text geometry migration marker was not persisted")
+assert(fresh._msufLegacy55GroupNameAnchorRoot_v1 == true
+    and fresh.gf_party._msufLegacyNameAnchorToFrame == true
+    and fresh.gf_raid._msufLegacyNameAnchorToFrame == true
+    and fresh.gf_mythicraid._msufLegacyNameAnchorToFrame == true,
+    "5.57 Group name anchor root was not preserved")
 assert(fresh.gf_party.fontOverride == false
     and fresh.gf_party.nameMaxChars == 10 and fresh.gf_party.nameNoEllipsis == true,
     "dormant 5.57 Group shortening values incorrectly enabled a local font override")
@@ -394,7 +401,7 @@ local _, repaired = translate(storedV2, {
     markProfile = true,
     trustNormalizationMarker = true,
 })
-assert(repaired == true and storedV2._msufProfileNormalizationRevision == 9,
+assert(repaired == true and storedV2._msufProfileNormalizationRevision == 10,
     "stored v2 SavedVariables did not re-enter migration")
 assert(storedV2.auras3._msufAuras3LegacyGeometry_v3 == true
     and storedV2.auras3.perUnit.target.layout.buffAnchor == "TOPLEFT"
@@ -432,7 +439,7 @@ local _, repairedV3 = translate(storedV3, {
     markProfile = true,
     trustNormalizationMarker = true,
 })
-assert(repairedV3 == true and storedV3._msufProfileNormalizationRevision == 9
+assert(repairedV3 == true and storedV3._msufProfileNormalizationRevision == 10
     and storedV3.bars.barOutlineStrata == "BACKGROUND"
     and storedV3.target.barOutlineStrata == "BACKGROUND"
     and storedV3._msufLegacy55FrameOutlineBackground_v1 == true,
@@ -568,6 +575,9 @@ assert(native60._msufLegacy55UnitTextSlots_v1 == nil,
     "native 6.0 profile was incorrectly routed through legacy text migration")
 assert(native60._msufLegacy55GroupTextGeometry_v1 == nil,
     "native 6.0 profile was incorrectly routed through legacy Group text migration")
+assert(native60._msufLegacy55GroupNameAnchorRoot_v1 == nil
+    and native60.gf_party._msufLegacyNameAnchorToFrame == nil,
+    "native 6.0 profile was incorrectly assigned legacy Group name anchoring")
 assert(native60.gf_party.fontOverride == true,
     "native 6.0 scoped Group text values no longer infer their font override")
 
@@ -608,7 +618,8 @@ assert(legacyGroupSnapshot.gf_party.barOutlineStrata == "BACKGROUND",
     "5.57 schema-1 Group-only snapshot bypassed legacy compatibility")
 assert(legacyGroupSnapshot.gf_party.nameAnchor == "LEFT"
     and legacyGroupSnapshot.gf_party.nameOffsetX == 0
-    and legacyGroupSnapshot.gf_party.nameOffsetY == 0,
+    and legacyGroupSnapshot.gf_party.nameOffsetY == 0
+    and legacyGroupSnapshot.gf_party._msufLegacyNameAnchorToFrame == true,
     "5.57 Group-only snapshot received 6.0 Group name defaults")
 
 -- The 5.57 Group Frame DB migrated these flat fields through

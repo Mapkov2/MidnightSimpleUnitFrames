@@ -169,7 +169,7 @@ local function LayoutBarAnchoredName(frame, text)
   if not fs then
     return
   end
-  local health = BarTextHealthAnchor(frame)
+  local health = text and text.nameAnchorToFrame == true and frame or BarTextHealthAnchor(frame)
   local anchor = text and text.nameAnchor or "LEFT"
   local x = tonumber(text and text.nameX) or 0
   local y = tonumber(text and text.nameY) or 0
@@ -493,7 +493,8 @@ local function ApplyNameClip(frame, spec, text)
     if nameWidth < 40 then nameWidth = 40 end
   end
 
-  local maxChars = text and text.nameShorten == true and tonumber(text.nameShortenMax) or 0
+  local legacyTruncation = text and text.nameLegacyTruncation == true
+  local maxChars = not legacyTruncation and text and text.nameShorten == true and tonumber(text.nameShortenMax) or 0
   local shorten = maxChars and maxChars > 0
   local clipSide = text and text.nameShortenSide == "RIGHT" and "RIGHT" or "LEFT"
   local anchor = text and text.nameAnchor or "LEFT"
@@ -755,7 +756,7 @@ end
 local SIG_SPEC_KEYS = { "key", "scope", "width", "height", "font", "fontFlags", "nameFontSize", "healthFontSize", "powerFontSize", "fontShadow", "fontShadowAlpha", "fontShadowX", "fontShadowY", "_msufTextLayoutRevision" }
 local SIG_POWER_KEYS = { "enabled", "detached", "textOnDetached", "shape", "orbSize", "detachedLevel", "detachedHeight", "detachedWidth", "detachedX", "detachedY", "detachedAnchorMode", "detachedSyncClass", "detachedAnchorClass", "detachedClassWidth", "detachedWidthFrameName", "detachedClassWidthFrameName" }
 local SIG_TEXT_KEYS = {
-  "anchorToBars", "nameAnchor", "nameX", "nameY", "nameLayer", "nameShorten", "nameShortenSide", "nameShortenDots", "nameShortenMax", "nameShortenWidth", "nameLeftWidth",
+  "anchorToBars", "nameAnchorToFrame", "nameLegacyTruncation", "nameAnchor", "nameX", "nameY", "nameLayer", "nameShorten", "nameShortenSide", "nameShortenDots", "nameShortenMax", "nameShortenWidth", "nameLeftWidth",
   "nameShortenMaskPx",
   "directLayout", "directNamePoint", "directNameRelativePoint", "directNameX", "directNameY",
   "nameClassColor", "nameNpcColor", "nameNpcClassColor", "npcColorMode", "npcTypeColorText", "npcTypeTarget", "npcTypeFocus", "npcTypeBoss", "npcTypeToT",
