@@ -11,7 +11,8 @@ local Tr = M.TranslateText or M.Tr or function(text) return text end
 -- path; contextual targets and the large palettes stay one deliberate click
 -- away. No runtime unit-frame hooks are installed.
 local picker
-local PANEL_WIDTH, PANEL_HEIGHT = 560, 438
+local SIMPLE_WIDTH, SIMPLE_HEIGHT = 420, 424
+local ADVANCED_WIDTH, ADVANCED_HEIGHT = 680, 548
 
 local function Clamp01(value)
     value = tonumber(value) or 0
@@ -241,7 +242,7 @@ local function EnsurePicker()
 
     local panel = T.Panel(parent, nil, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft)
     picker = panel
-    panel:SetSize(PANEL_WIDTH, PANEL_HEIGHT); panel:SetClampedToScreen(true)
+    panel:SetSize(SIMPLE_WIDTH, SIMPLE_HEIGHT); panel:SetClampedToScreen(true)
     panel:SetMovable(true); panel:EnableMouse(true); panel:EnableKeyboard(true)
     if panel.SetPropagateKeyboardInput then panel:SetPropagateKeyboardInput(true) end
     if T.ApplySurface then T.ApplySurface(panel, "popup") end
@@ -270,13 +271,13 @@ local function EnsurePicker()
     local title = Font(panel, "GameFontNormalLarge", "Color Painter", T.colors.text)
     title:SetPoint("TOPLEFT", 16, -13); panel.title = title
     local note = Font(panel, "GameFontDisableSmall", "", T.colors.muted)
-    note:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -3); note:SetWidth(510); note:SetJustifyH("LEFT"); panel.note = note
+    note:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -3); note:SetWidth(SIMPLE_WIDTH - 50); note:SetJustifyH("LEFT"); panel.note = note
     local moveHint = Font(panel, "GameFontDisableSmall", "drag to move", T.colors.dim)
     moveHint:SetPoint("TOPRIGHT", close or panel, close and "TOPLEFT" or "TOPRIGHT", close and -8 or -16, close and 0 or -16)
 
-    local selector = T.Button(panel, "", 528, 34)
+    local selector = T.Button(panel, "", SIMPLE_WIDTH - 32, 34)
     selector._msuf2SkipHistoryCheckpoint = true
-    selector:SetPoint("TOPLEFT", 16, -66); selector:SetSize(528, 34)
+    selector:SetPoint("TOPLEFT", 16, -66); selector:SetSize(SIMPLE_WIDTH - 32, 34)
     local selectorColor = ColorChip(selector, 20, 20); selectorColor:SetPoint("LEFT", 10, 0)
     local selectorLabel = selector._msuf2Label; selectorLabel:ClearAllPoints(); selectorLabel:SetPoint("LEFT", selectorColor, "RIGHT", 9, 0); selectorLabel:SetPoint("RIGHT", -34, 0); selectorLabel:SetJustifyH("LEFT")
     local selectorArrow = Font(selector, "GameFontNormal", "v", T.colors.muted); selectorArrow:SetPoint("RIGHT", -12, 0)
@@ -285,7 +286,7 @@ local function EnsurePicker()
     panel.selector = selector
 
     local contextList = T.Panel(panel, nil, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft)
-    contextList:SetPoint("TOPLEFT", selector, "BOTTOMLEFT", 0, -4); contextList:SetWidth(528)
+    contextList:SetPoint("TOPLEFT", selector, "BOTTOMLEFT", 0, -4); contextList:SetWidth(SIMPLE_WIDTH - 32)
     contextList:SetFrameLevel(panel:GetFrameLevel() + 40)
     if T.ApplySurface then T.ApplySurface(contextList, "popup") end
     if T.ApplyBackdrop then
@@ -302,14 +303,14 @@ local function EnsurePicker()
     panel.rows = {}
     for i = 1, 14 do panel.rows[i] = ContextRow(contextChild, i, contextScroll) end
 
-    local original = ColorChip(panel, 258, 30); original:SetPoint("TOPLEFT", 16, -126)
-    local current = ColorChip(panel, 258, 30); current:SetPoint("TOPRIGHT", -16, -126)
+    local original = ColorChip(panel, 186, 30); original:SetPoint("TOPLEFT", 16, -126)
+    local current = ColorChip(panel, 186, 30); current:SetPoint("TOPRIGHT", -16, -126)
     panel.original, panel.current = original, current
     local originalLabel = Font(panel, "GameFontDisableSmall", "Original", T.colors.dim); originalLabel:SetPoint("BOTTOMLEFT", original, "TOPLEFT", 0, 2)
     local currentLabel = Font(panel, "GameFontDisableSmall", "Current", T.colors.dim); currentLabel:SetPoint("BOTTOMLEFT", current, "TOPLEFT", 0, 2)
 
     local wheelCard = T.Panel(panel, nil, { 0.065, 0.120, 0.190, 0.99 }, T.colors.cardBorder or T.colors.borderSoft)
-    wheelCard:SetPoint("TOPLEFT", 16, -174); wheelCard:SetSize(218, 194)
+    wheelCard:SetPoint("TOPLEFT", 16, -174); wheelCard:SetSize(SIMPLE_WIDTH - 32, 196)
     if T.ApplySurface then T.ApplySurface(wheelCard, "card") end
     if T.ApplyBackdrop then T.ApplyBackdrop(wheelCard, { 0.065, 0.120, 0.190, 0.99 }, { 0.12, 0.40, 0.66, 0.94 }) end
     wheelCard._msuf2PickerBrightSurface = BrightSurface(wheelCard, 0.060, 0.115, 0.185, 0.96)
@@ -320,7 +321,7 @@ local function EnsurePicker()
     -- interaction as ColorPickerFrame, embedded in the MSUF surface so the
     -- target selector, live preview and palettes remain one compact workflow.
     local colorSelect = CreateFrame("ColorSelect", nil, wheelCard)
-    colorSelect:SetPoint("TOPLEFT", 12, -34); colorSelect:SetSize(194, 142)
+    colorSelect:SetPoint("TOPLEFT", 97, -34); colorSelect:SetSize(194, 142)
     local wheel = colorSelect:CreateTexture(nil, "ARTWORK")
     wheel:SetPoint("TOPLEFT", 0, -7); wheel:SetSize(128, 128)
     colorSelect:SetColorWheelTexture(wheel)
@@ -338,23 +339,30 @@ local function EnsurePicker()
     end)
     panel.colorSelect, panel.wheelCard = colorSelect, wheelCard
 
-    local spectrumTitle = Font(panel, "GameFontNormalSmall", "Quick colors", T.colors.text); panel.spectrumTitle = spectrumTitle
+    local advancedCard = T.Panel(panel, nil, { 0.055, 0.105, 0.170, 0.99 }, T.colors.cardBorder or T.colors.borderSoft)
+    advancedCard:SetPoint("TOPLEFT", 280, -174); advancedCard:SetSize(384, 310)
+    if T.ApplySurface then T.ApplySurface(advancedCard, "card") end
+    if T.ApplyBackdrop then T.ApplyBackdrop(advancedCard, { 0.055, 0.105, 0.170, 0.99 }, { 0.12, 0.40, 0.66, 0.94 }) end
+    advancedCard._msuf2PickerBrightSurface = BrightSurface(advancedCard, 0.050, 0.100, 0.165, 0.96)
+    advancedCard:Hide(); panel.advancedCard = advancedCard
+
+    local spectrumTitle = Font(advancedCard, "GameFontNormalSmall", "Quick colors", T.colors.text); panel.spectrumTitle = spectrumTitle
     panel.spectrum = {}
     local tones = { { 0.92, 1.00 }, { 0.70, 0.88 }, { 0.48, 0.62 } }
     for row = 1, 3 do
         for col = 1, 12 do
             local r, g, b = HSV((col - 1) / 12, tones[row][1], tones[row][2])
-            local swatch = Swatch(panel, 25, function(self) panel:Apply(self.r, self.g, self.b) end)
+            local swatch = Swatch(advancedCard, 25, function(self) panel:Apply(self.r, self.g, self.b) end)
             swatch.r, swatch.g, swatch.b, swatch.toneRow = r, g, b, row
             swatch.fill:SetColorTexture(r, g, b, 1); panel.spectrum[#panel.spectrum + 1] = swatch
         end
     end
 
-    local rgbTitle = Font(panel, "GameFontNormalSmall", "RGB", T.colors.muted); panel.rgbTitle = rgbTitle
+    local rgbTitle = Font(advancedCard, "GameFontNormalSmall", "RGB", T.colors.muted); panel.rgbTitle = rgbTitle
     panel.rgb, panel.rgbLabels = {}, {}
     for i, channel in ipairs({ "R", "G", "B" }) do
-        local input = Input(panel, 58, true)
-        local label = Font(panel, "GameFontDisableSmall", channel, T.colors.dim); panel.rgbLabels[i] = label
+        local input = Input(advancedCard, 58, true)
+        local label = Font(advancedCard, "GameFontDisableSmall", channel, T.colors.dim); panel.rgbLabels[i] = label
         input._commit = function(self)
             if not panel.owner then return end
             local r, g, b = panel.owner:GetRGB(); local values = { Byte(r), Byte(g), Byte(b) }
@@ -363,15 +371,15 @@ local function EnsurePicker()
         end
         panel.rgb[i] = input
     end
-    local hexTitle = Font(panel, "GameFontNormalSmall", "HEX", T.colors.muted); panel.hexTitle = hexTitle
-    local hex = Input(panel, 112, false); panel.hex = hex
+    local hexTitle = Font(advancedCard, "GameFontNormalSmall", "HEX", T.colors.muted); panel.hexTitle = hexTitle
+    local hex = Input(advancedCard, 112, false); panel.hex = hex
     hex._commit = function(self)
         local r, g, b = FromHex(self:GetText())
         if r then panel:Apply(r, g, b) else panel:Refresh() end
     end
-    local copy = T.Button(panel, Tr("Copy"), 64, 22); panel.copy = copy
+    local copy = T.Button(advancedCard, Tr("Copy"), 64, 22); panel.copy = copy
     copy:SetScript("OnClick", function() hex:SetFocus(); hex:HighlightText() end)
-    local save = T.Button(panel, Tr("Save"), 64, 22); panel.save = save
+    local save = T.Button(advancedCard, Tr("Save"), 64, 22); panel.save = save
     save:SetScript("OnClick", function()
         if not panel.owner then return end
         local store = Store(); if not store then return end
@@ -381,19 +389,19 @@ local function EnsurePicker()
         panel:RefreshPalettes()
     end)
 
-    local recentTitle = Font(panel, "GameFontNormalSmall", "Recent", T.colors.text); panel.recentTitle = recentTitle
+    local recentTitle = Font(advancedCard, "GameFontNormalSmall", "Recent", T.colors.text); panel.recentTitle = recentTitle
     panel.recent = {}
     for i = 1, 9 do
-        panel.recent[i] = Swatch(panel, 23, function(self)
+        panel.recent[i] = Swatch(advancedCard, 23, function(self)
             local r, g, b = FromHex(self.hex); if r then panel:Apply(r, g, b) end
         end)
     end
 
-    local savedTitle = Font(panel, "GameFontNormalSmall", "Saved colors", T.colors.text); panel.savedTitle = savedTitle
-    local savedHint = Font(panel, "GameFontDisableSmall", "right-click to remove", T.colors.dim); panel.savedHint = savedHint
+    local savedTitle = Font(advancedCard, "GameFontNormalSmall", "Saved colors", T.colors.text); panel.savedTitle = savedTitle
+    local savedHint = Font(advancedCard, "GameFontDisableSmall", "right-click to remove", T.colors.dim); panel.savedHint = savedHint
     panel.saved = {}
     for i = 1, 27 do
-        local swatch = Swatch(panel, 23, function(self, button)
+        local swatch = Swatch(advancedCard, 23, function(self, button)
             local store = Store()
             if button == "RightButton" and store then table.remove(store.saved, self.index); panel:RefreshPalettes(); return end
             local r, g, b = FromHex(self.hex); if r then panel:Apply(r, g, b) end
@@ -401,11 +409,11 @@ local function EnsurePicker()
         swatch.index = i; panel.saved[i] = swatch
     end
 
-    local classTitle = Font(panel, "GameFontNormalSmall", "Class colors", T.colors.text); panel.classTitle = classTitle
+    local classTitle = Font(wheelCard, "GameFontNormalSmall", "Class colors", T.colors.text); panel.classTitle = classTitle
     panel.classes = {}
     local tokens = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "DEATHKNIGHT", "SHAMAN", "MAGE", "WARLOCK", "MONK", "DRUID", "DEMONHUNTER", "EVOKER" }
     for i = 1, #tokens do
-        local swatch = Swatch(panel, 25, function(self)
+        local swatch = Swatch(wheelCard, 25, function(self)
             local color = _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[self.token]
             if color then panel:Apply(color.r, color.g, color.b) end
         end)
@@ -414,7 +422,11 @@ local function EnsurePicker()
     end
 
     local more = T.Button(panel, Tr("More colors"), 112, 24); panel.more = more
+    more._msuf2SkipHistoryCheckpoint = true
     more:SetScript("OnClick", function() panel:SetAdvanced(not panel.advanced) end)
+    if M.AddTooltip then
+        M.AddTooltip(more, "Advanced color tools", "Quick colors, precise RGB and HEX values, recent colors, saved colors, and class colors.")
+    end
     local cancel = T.Button(panel, Tr("Cancel"), 92, 24); panel.cancel = cancel
     cancel:SetScript("OnClick", function() panel:Finish(true) end)
     local done = T.Button(panel, Tr("Done"), 92, 24); panel.done = done
@@ -454,49 +466,67 @@ local function EnsurePicker()
 
     function panel:Layout()
         local advanced = self.advanced == true
-        self:SetHeight(PANEL_HEIGHT)
-        self.spectrumTitle:ClearAllPoints(); self.spectrumTitle:SetPoint("TOPLEFT", 250, -174)
-        self.spectrumTitle:SetText(Tr("Quick colors")); self.spectrumTitle:SetShown(not advanced)
+        local width = advanced and ADVANCED_WIDTH or SIMPLE_WIDTH
+        local height = advanced and ADVANCED_HEIGHT or SIMPLE_HEIGHT
+        local previewWidth = (width - 48) * 0.5
+        local selectorWidth = width - 32
+        local contextContentWidth = width - 82
+        self:SetSize(width, height)
+        self.note:SetWidth(width - 50)
+        self.selector:SetWidth(selectorWidth)
+        self.contextList:SetWidth(selectorWidth)
+        self.contextList.child:SetWidth(contextContentWidth)
+        for i = 1, #self.rows do self.rows[i]:SetWidth(contextContentWidth) end
+        self.original:SetWidth(previewWidth); self.current:SetWidth(previewWidth)
+
+        self.wheelCard:ClearAllPoints(); self.wheelCard:SetPoint("TOPLEFT", 16, -174)
+        self.wheelCard:SetSize(advanced and 248 or width - 32, advanced and 310 or 196)
+        self.colorSelect:ClearAllPoints()
+        self.colorSelect:SetPoint("TOPLEFT", advanced and 27 or 97, -34)
+        self.advancedCard:SetShown(advanced)
+
+        self.spectrumTitle:ClearAllPoints(); self.spectrumTitle:SetPoint("TOPLEFT", 16, -14)
+        self.spectrumTitle:SetText(Tr("Quick colors")); self.spectrumTitle:SetShown(advanced)
         for i = 1, #self.spectrum do
             local swatch = self.spectrum[i]; local slot = i - 1
-            local col, row = slot % 6, floor(slot / 6)
-            swatch:ClearAllPoints(); swatch:SetPoint("TOPLEFT", 250 + col * 43, -196 - row * 32)
-            swatch:SetShown(not advanced and swatch.toneRow == 1)
+            local col, row = slot % 12, floor(slot / 12)
+            swatch:ClearAllPoints(); swatch:SetPoint("TOPLEFT", 16 + col * 29, -36 - row * 26)
+            swatch:SetShown(advanced)
         end
-        local rgbY, hexY, recentY = -270, -306, -346
-        self.rgbTitle:ClearAllPoints(); self.rgbTitle:SetPoint("TOPLEFT", 250, rgbY)
+        local rgbY, hexY, recentY = -120, -154, -188
+        self.rgbTitle:ClearAllPoints(); self.rgbTitle:SetPoint("TOPLEFT", 16, rgbY)
         for i = 1, 3 do
-            self.rgb[i]:ClearAllPoints(); self.rgb[i]:SetPoint("TOPLEFT", 288 + (i - 1) * 72, rgbY + 4)
+            self.rgb[i]:ClearAllPoints(); self.rgb[i]:SetPoint("TOPLEFT", 54 + (i - 1) * 76, rgbY + 4)
             self.rgbLabels[i]:ClearAllPoints(); self.rgbLabels[i]:SetPoint("RIGHT", self.rgb[i], "LEFT", -3, 0)
-            self.rgb[i]:SetShown(not advanced); self.rgbLabels[i]:SetShown(not advanced)
+            self.rgb[i]:SetShown(advanced); self.rgbLabels[i]:SetShown(advanced)
         end
-        self.rgbTitle:SetShown(not advanced)
-        self.hexTitle:ClearAllPoints(); self.hexTitle:SetPoint("TOPLEFT", 250, hexY)
-        self.hex:ClearAllPoints(); self.hex:SetPoint("TOPLEFT", 288, hexY + 4)
+        self.rgbTitle:SetShown(advanced)
+        self.hexTitle:ClearAllPoints(); self.hexTitle:SetPoint("TOPLEFT", 16, hexY)
+        self.hex:ClearAllPoints(); self.hex:SetPoint("TOPLEFT", 54, hexY + 4)
         self.copy:ClearAllPoints(); self.copy:SetPoint("LEFT", self.hex, "RIGHT", 8, 0)
         self.save:ClearAllPoints(); self.save:SetPoint("LEFT", self.copy, "RIGHT", 6, 0)
-        self.hexTitle:SetShown(not advanced); self.hex:SetShown(not advanced); self.copy:SetShown(not advanced); self.save:SetShown(not advanced)
-        self.recentTitle:ClearAllPoints(); self.recentTitle:SetPoint("TOPLEFT", 250, recentY); self.recentTitle:SetShown(not advanced)
+        self.hexTitle:SetShown(advanced); self.hex:SetShown(advanced); self.copy:SetShown(advanced); self.save:SetShown(advanced)
+        self.recentTitle:ClearAllPoints(); self.recentTitle:SetPoint("TOPLEFT", 16, recentY); self.recentTitle:SetShown(advanced)
         for i = 1, #self.recent do
-            self.recent[i]:ClearAllPoints(); self.recent[i]:SetPoint("TOPLEFT", 250 + (i - 1) * 31, recentY - 20)
-            self.recent[i]:SetShown(not advanced and self.recent[i].hex ~= nil)
+            self.recent[i]:ClearAllPoints(); self.recent[i]:SetPoint("TOPLEFT", 16 + (i - 1) * 31, recentY - 20)
+            self.recent[i]:SetShown(advanced and self.recent[i].hex ~= nil)
         end
 
         self.savedTitle:SetShown(advanced); self.savedHint:SetShown(advanced); self.classTitle:SetShown(advanced)
-        self.savedTitle:ClearAllPoints(); self.savedTitle:SetPoint("TOPLEFT", 250, -174)
-        self.savedHint:ClearAllPoints(); self.savedHint:SetPoint("TOPRIGHT", -16, -174)
+        self.savedTitle:ClearAllPoints(); self.savedTitle:SetPoint("TOPLEFT", 16, -240)
+        self.savedHint:ClearAllPoints(); self.savedHint:SetPoint("TOPRIGHT", -16, -240)
         for i = 1, #self.saved do
-            local col, row = (i - 1) % 9, floor((i - 1) / 9)
-            self.saved[i]:ClearAllPoints(); self.saved[i]:SetPoint("TOPLEFT", 250 + col * 31, -196 - row * 27)
+            local col, row = (i - 1) % 14, floor((i - 1) / 14)
+            self.saved[i]:ClearAllPoints(); self.saved[i]:SetPoint("TOPLEFT", 16 + col * 26, -260 - row * 25)
             self.saved[i]:SetShown(advanced and self.saved[i].hex ~= nil)
         end
-        self.classTitle:ClearAllPoints(); self.classTitle:SetPoint("TOPLEFT", 250, -292)
+        self.classTitle:ClearAllPoints(); self.classTitle:SetPoint("TOPLEFT", 12, -192)
         for i = 1, #self.classes do
             local col, row = (i - 1) % 7, floor((i - 1) / 7)
-            self.classes[i]:ClearAllPoints(); self.classes[i]:SetPoint("TOPLEFT", 250 + col * 39, -314 - row * 32)
+            self.classes[i]:ClearAllPoints(); self.classes[i]:SetPoint("TOPLEFT", 12 + col * 32, -214 - row * 32)
             self.classes[i]:SetShown(advanced)
         end
-        self.more:SetSize(132, 24); self.more:SetText(Tr(advanced and "Back to controls" or "Saved & class"))
+        self.more:SetSize(132, 24); self.more:SetText(Tr(advanced and "Back to controls" or "Advanced"))
         self.more:ClearAllPoints(); self.more:SetPoint("BOTTOMLEFT", 16, 14)
         self.cancel:ClearAllPoints(); self.cancel:SetPoint("BOTTOMRIGHT", -112, 14)
         self.done:ClearAllPoints(); self.done:SetPoint("BOTTOMRIGHT", -14, 14)
@@ -523,11 +553,7 @@ local function EnsurePicker()
         local function Fill(buttons, values)
             for i = 1, #buttons do
                 local button, value = buttons[i], values and values[i]; button.hex = value
-                if buttons == self.recent then
-                    button:SetShown(not self.advanced and value ~= nil)
-                else
-                    button:SetShown(self.advanced and value ~= nil)
-                end
+                button:SetShown(self.advanced and value ~= nil)
                 if value then local r, g, b = FromHex(value); button.fill:SetColorTexture(r or 1, g or 1, b or 1, 1) end
             end
         end
