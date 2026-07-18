@@ -51,6 +51,9 @@ function A.GlobalRegistry.RegisterCastbarSettings(ctx)
     RegisterGeneralNumberSetting("castbarShakeStrength", "shakeStrength", "Cast Bar Shake Strength", 8, 0, 30, {
         "castbar shake strength", "shake strength", "interrupt shake strength",
     }, { category = "Global / Cast Bar", frameType = "castbarGlobal", apply = ApplyCastbar, reason = "MSUF_ASSISTANT_CASTBAR_SHAKE_STRENGTH" })
+    RegisterGeneralNumberSetting("castbarInterruptFeedbackDuration", "interruptDuration", "Interrupt Display Duration", 0.5, 0, 5, {
+        "interrupt display duration", "interrupt hold time", "interrupted castbar duration", "unterbrechungs anzeigedauer",
+    }, { category = "Global / Cast Bar", frameType = "castbarGlobal", step = 0.1, apply = ApplyCastbar, reason = "MSUF_ASSISTANT_CASTBAR_INTERRUPT_DURATION" })
     RegisterGeneralEnum("castbarFillDirection", "fillDirection", "Cast Bar Fill Direction", "RTL", { "RTL", "LTR" }, {
         "castbar fill direction", "fill direction", "cast direction", "zauberleiste fuellrichtung",
         "castbar reverse fill", "castbar fill backwards", "castbar fill normal", "castbar normal direction",

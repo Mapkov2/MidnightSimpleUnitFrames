@@ -1445,9 +1445,8 @@ local function CreateCastBar(frameName, unit)
             label = "Interrupted",
         })
 
-        local feedbackDuration = _G.MSUF_INTERRUPT_FEEDBACK_DURATION or 0.5
-        if type(feedbackDuration) ~= "number" then feedbackDuration = 0.5 end
-        if feedbackDuration < 0 then feedbackDuration = 0 end
+        local getFeedbackDuration = _G.MSUF_GetInterruptFeedbackDuration
+        local feedbackDuration = type(getFeedbackDuration) == "function" and getFeedbackDuration() or 0.5
 
         if self._msufCastState then
             local now = (type(GetTime) == "function") and GetTime() or 0

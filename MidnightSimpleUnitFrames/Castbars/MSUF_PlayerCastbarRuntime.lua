@@ -333,8 +333,6 @@ local function GetInterruptFeedbackColor()
     return 0.8, 0.1, 0.1, 1
 end
 
-local INTERRUPT_FEEDBACK_DURATION = _G.MSUF_INTERRUPT_FEEDBACK_DURATION or 0.5
-
 local function InvalidateCastState(unit)
     if not unit then return end
     local engine = CastbarEngine()
@@ -385,6 +383,15 @@ local function ActiveUnitMatches(frame, unit)
     if not unit then return true end
     if not frame._msufActiveCastUnit then return true end
     return unit == frame._msufActiveCastUnit
+end
+
+local function HasActivePlayerCast(frame)
+    if not frame then return false end
+    if frame.MSUF_castActive == true or frame._msufActiveCastUnit ~= nil then
+        return true
+    end
+    local state = frame._msufPlayerState
+    return state and state.active == true or false
 end
 
 local function ActiveCastBarIDMatches(frame, castBarID)
@@ -824,7 +831,9 @@ local function ShowInterruptFeedback(frame, label)
     frame._msufActiveSpellID = nil
     frame._msufActiveCastBarID = nil
     frame._msufChanNilSince = nil
-    frame.interruptFeedbackEndTime = _G.GetTime() + INTERRUPT_FEEDBACK_DURATION
+    local getFeedbackDuration = _G.MSUF_GetInterruptFeedbackDuration
+    local duration = type(getFeedbackDuration) == "function" and getFeedbackDuration() or 0.5
+    frame.interruptFeedbackEndTime = _G.GetTime() + duration
 
     local reverseFill = _G.MSUF_GetReverseFillSafe and _G.MSUF_GetReverseFillSafe(frame, false) or false
     _G.MSUF_ApplyInterruptBarVisuals(frame, {
@@ -835,10 +844,6 @@ local function ShowInterruptFeedback(frame, label)
         reverseFill = reverseFill,
         label = label or _G.INTERRUPTED,
     })
-
-    local duration = INTERRUPT_FEEDBACK_DURATION
-    if type(duration) ~= "number" then duration = 0.5 end
-    if duration < 0 then duration = 0 end
 
     frame._msufHideToken = (frame._msufHideToken or 0) + 1
     frame._msufPlayerInterruptHideToken = frame._msufHideToken
@@ -904,6 +909,15 @@ local function PlayerCastbarOnEventImpl(frame, event, ...)
     if frame.MSUF_testMode then return end
 
     local eventUnit = select(1, ...)
+    -- Failed-spell spam and duplicate channel-stop events are common while no
+    -- castbar exists. They cannot change visible state, so reject them before
+    -- invalidating both player/vehicle engine caches or arming a next-frame
+    -- rebuild. Active and empower casts retain the authoritative resync path.
+    if frame.isEmpower ~= true
+        and (event == "UNIT_SPELLCAST_FAILED" or event == "UNIT_SPELLCAST_CHANNEL_STOP")
+        and not HasActivePlayerCast(frame) then
+        return
+    end
     if event == "UNIT_SPELLCAST_START"
         or event == "UNIT_SPELLCAST_CHANNEL_START"
         or event == "UNIT_SPELLCAST_EMPOWER_START" then
