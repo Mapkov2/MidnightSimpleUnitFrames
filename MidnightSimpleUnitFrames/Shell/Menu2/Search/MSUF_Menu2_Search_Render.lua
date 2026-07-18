@@ -49,7 +49,8 @@ local function BuildSearchPage(ctx)
         M.searchResultsQuery = query
     end
     local b = W.PageBuilder(ctx)
-    b:Header("Search", query ~= "" and M.Format("Results for \"%s\"", query) or "Type in the search box on the left.", 78)
+    b:Header("Smart Search", query ~= "" and M.Format("Results for \"%s\"", query)
+        or "Type a setting or ask MSUF in your own words.", 78)
     local maxVisible = SEARCH_VISIBLE_RESULTS
     local visible = math.min(#results, maxVisible)
     local hasExpandedResult = false
@@ -65,8 +66,10 @@ local function BuildSearchPage(ctx)
     local rowH = hasExpandedResult and 62 or 30
     local resultTopY = SEARCH_STATE.indexing and -88 or -70
     local rows = math.max(3, math.ceil(math.max(visible, 1) / columns))
+    local showAssistantCTA = queryReady and not M.searchResultsPending
     local sectionH = math.max(160, 74 + rows * rowH + (SEARCH_STATE.indexing and 18 or 0))
-    local sec = b:Section("Search Results", sectionH)
+        + (showAssistantCTA and 42 or 0)
+    local sec = b:Section("Best matches", sectionH)
     if combatLocked then
         W.Text(sec, "Search is paused in combat.", 14, -44, width - 28, T.colors.muted)
     elseif query == "" then
@@ -76,10 +79,10 @@ local function BuildSearchPage(ctx)
     elseif M.searchResultsPending then
         W.Text(sec, M.Format("Searching for \"%s\"...", query), 14, -44, width - 28, T.colors.muted)
     elseif #results == 0 then
-        W.Text(sec, M.Format("No results for \"%s\".", query), 14, -44, width - 28, T.colors.muted)
-        W.Text(sec, SEARCH_STATE.indexing and "Still indexing menu pages..." or "Try a page name like bars, profiles, auras, castbar, colors, group, or target.", 14, -70, width - 28, T.colors.dim)
+        W.Text(sec, M.Format("No exact setting found for \"%s\".", query), 14, -44, width - 28, T.colors.muted)
+        W.Text(sec, SEARCH_STATE.indexing and "Still indexing menu pages..." or "Ask MSUF below and it will guide you to the right option.", 14, -70, width - 28, T.colors.dim)
     else
-        W.Text(sec, M.Format("Best %d match(es). Press Enter to open the first match.", visible), 14, -44, width - 28, T.colors.muted)
+        W.Text(sec, M.Format("Best %d match(es). Open one or ask MSUF for a guided answer.", visible), 14, -44, width - 28, T.colors.muted)
         if SEARCH_STATE.indexing then
             W.Text(sec, "Indexing more menu pages in the background.", 14, -62, width - 28, T.colors.dim)
         end
@@ -106,7 +109,7 @@ local function BuildSearchPage(ctx)
                     if M.nav and M.nav.searchBox then M.nav.searchBox:ClearFocus() end
                     return
                 end
-                OpenSearchTarget(pageKey, query, fallback, anchor, route)
+                OpenSearchTarget(pageKey, query, fallback, anchor, route, rec.exactTarget)
             end)
             if type(M.RegisterMenuChromeControl) == "function" then
                 M.RegisterMenuChromeControl(btn, "search.result." .. tostring(i),
@@ -138,6 +141,18 @@ local function BuildSearchPage(ctx)
         end
         if #results > maxVisible then
             W.Text(sec, M.Format("Showing the best %d matches. Add one more word to narrow it further.", maxVisible), 14, resultTopY - rows * rowH, width - 28, T.colors.dim)
+        end
+    end
+    if showAssistantCTA then
+        local assistantLabel = #results == 0 and "Ask MSUF for help" or "Ask MSUF about this"
+        local ask = T.Button(sec, assistantLabel, math.min(220, width - 28), 26)
+        ask:SetPoint("BOTTOMLEFT", sec, "BOTTOMLEFT", 14, 12)
+        ask:SetScript("OnClick", function() OpenSearchResults(query) end)
+        if type(M.RegisterMenuChromeControl) == "function" then
+            M.RegisterMenuChromeControl(ask, "search.ask-assistant", "Ask MSUF about the current search", "ephemeral", {
+                historyMode = "none",
+                help = "Sends the current natural-language search to the MSUF Assistant.",
+            })
         end
     end
     local quick = b:Section("Support Search Examples", 206)

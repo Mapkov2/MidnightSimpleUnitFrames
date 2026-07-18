@@ -31,14 +31,22 @@ end
 function Bridge.RefreshSearchResultsPage()
     SearchCall("RefreshResultsPage")
 end
-function Bridge.ScheduleSearchInputQuery(searchBox, query)
-    SearchCall("ScheduleInputQuery", searchBox, query)
+function Bridge.ScheduleSearchInputQuery(searchBox, query, openPage, onComplete)
+    SearchCall("ScheduleInputQuery", searchBox, query, openPage, onComplete)
 end
 function Bridge.RunSearchInputQuery(query, openPage)
     SearchCall("RunInputQuery", query, openPage)
 end
 function Bridge.OpenSearchResults(query)
     return SearchCall("OpenResults", query)
+end
+function Bridge.ShouldUseAssistantForQuery(query, results)
+    local called, preferred = SearchCall("ShouldUseAssistantForQuery", query, results)
+    return called and preferred == true
+end
+function Bridge.SubmitAssistantQuery(query)
+    local called, submitted = SearchCall("SubmitAssistantQuery", query)
+    return called and submitted == true
 end
 function Bridge.RunSearchQuery(query)
     query = tostring(query or "")

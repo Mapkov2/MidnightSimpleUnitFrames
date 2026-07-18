@@ -14,6 +14,7 @@
     <Script file="MSUF_Menu2_ApplyService.lua"/>
     <Script file="MSUF_Menu2_Bindings.lua"/>
     <Script file="MSUF_Menu2_SearchBridge.lua"/>
+    <Script file="MSUF_Menu2_SearchPalette.lua"/>
     <Script file="MSUF_Menu2_PagePreviews.lua"/>
     <Script file="MSUF_Menu2_NavRail.lua"/>
     <Script file="MSUF_Menu2_WindowControls.lua"/>
