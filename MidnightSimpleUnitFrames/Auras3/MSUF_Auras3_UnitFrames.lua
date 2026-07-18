@@ -135,6 +135,18 @@ local DEFAULT_SHARED = {
     cooldownTextOffsetX = 0,
     cooldownTextOffsetY = 0,
     cooldownDecimalSeconds = 3,
+    buffFrameEffectType = "none",
+    buffFrameEffectColor = { 0.69, 0.50, 0.88, 0.80 },
+    buffFrameEffectPriority = 5,
+    buffFrameEffectThickness = 2,
+    buffFrameEffectLayer = 0,
+    buffFrameEffectStrata = "AUTO",
+    debuffFrameEffectType = "none",
+    debuffFrameEffectColor = { 0.69, 0.50, 0.88, 0.80 },
+    debuffFrameEffectPriority = 5,
+    debuffFrameEffectThickness = 2,
+    debuffFrameEffectLayer = 0,
+    debuffFrameEffectStrata = "AUTO",
 }
 
 local LANE_SPECS = {
@@ -304,6 +316,18 @@ local STYLE_SHARED_LAYOUT_KEYS = {
     cooldownDecimalSeconds = true,
     buffCooldownDecimalSeconds = true,
     debuffCooldownDecimalSeconds = true,
+    buffFrameEffectType = true,
+    buffFrameEffectColor = true,
+    buffFrameEffectPriority = true,
+    buffFrameEffectThickness = true,
+    buffFrameEffectLayer = true,
+    buffFrameEffectStrata = true,
+    debuffFrameEffectType = true,
+    debuffFrameEffectColor = true,
+    debuffFrameEffectPriority = true,
+    debuffFrameEffectThickness = true,
+    debuffFrameEffectLayer = true,
+    debuffFrameEffectStrata = true,
 }
 
 local GROUP_LANE_SPECS = {
@@ -1316,6 +1340,20 @@ local function CustomSpellIDHash(value)
     return count > 0 and out or nil
 end
 
+local function TargetDotSpellIDHash()
+    local cached = A3._targetDotRuntimeLookup
+    if cached then return cached end
+    cached = {}
+    for _, spells in pairs(A3.TargetDotData or {}) do
+        for i = 1, #spells do
+            local spellID = tonumber(spells[i][1])
+            if spellID then cached[spellID] = true end
+        end
+    end
+    A3._targetDotRuntimeLookup = cached
+    return cached
+end
+
 local function CompileUnitCustomDisplays(auras, unit)
     local source = EffectiveUnitCustomDisplays(auras, unit)
     if type(source) ~= "table" then return nil end
@@ -1356,11 +1394,24 @@ end
 local function CompileUnitCustomLane(unit, entry, index)
     if type(entry) ~= "table" or entry.enabled ~= true then return nil, nil end
     local includeSpellIDs = CustomSpellIDHash(entry.spellIDs or entry.includeSpellIDs)
+    local targetDots = index == 4 or entry.targetDots == true
+    if targetDots and includeSpellIDs then
+        local allowed, customAllowed, count = TargetDotSpellIDHash(), CustomSpellIDHash(entry.customSpellIDs), 0
+        for spellID in pairs(includeSpellIDs) do
+            if allowed[spellID] ~= true and not (customAllowed and customAllowed[spellID] == true) then
+                includeSpellIDs[spellID] = nil
+            else
+                count = count + 1
+            end
+        end
+        if count == 0 then includeSpellIDs = nil end
+    end
     if not includeSpellIDs then return nil, nil end
     local candidateFilters, candidateFilterSignature = CandidateFiltersFromSpellIDs(includeSpellIDs, "includeSpellIDs")
     local placed = type(entry.placed) == "table" and entry.placed or {}
     local filters = type(entry.filters) == "table" and entry.filters or { enabled = true, onlyMine = entry.onlyOwn == true }
-    local helpful = tostring(entry.auraType or "BUFF"):upper() ~= "DEBUFF"
+    local sourceUnit = targetDots and "target" or unit
+    local helpful = not targetDots and tostring(entry.auraType or "BUFF"):upper() ~= "DEBUFF"
     candidateFilters, candidateFilterSignature = AddMaxDurationCandidateFilter(
         candidateFilters, candidateFilterSignature,
         not helpful and filters.maxDuration or nil, filters.hidePermanent == true)
@@ -1373,9 +1424,9 @@ local function CompileUnitCustomLane(unit, entry, index)
     local lane = FinalizeLane({
         kind = "custom" .. tostring(index),
         rootKey = "CustomAuras" .. tostring(index),
-        unit = unit,
+        unit = sourceUnit,
         enabled = maxCount > 0,
-        nativeFilter = NativeFilter(helpful and "HELPFUL" or "HARMFUL", filters),
+        nativeFilter = targetDots and "HARMFUL|PLAYER" or NativeFilter(helpful and "HELPFUL" or "HARMFUL", filters),
         candidateFilters = candidateFilters,
         candidateFilterSignature = candidateFilterSignature,
         max = Round(maxCount),
@@ -1443,35 +1494,75 @@ end
 local function CompileUnitCustomContainers(auras, unit)
     local source = EffectiveUnitCustomContainers(auras, unit)
     if type(source) ~= "table" then return nil, nil end
-    local lanes, effectItems = {}, {}
-    for i = 1, 3 do
+    local lanes, effectItems, targetDotEffectItems = {}, {}, {}
+    for i = 1, 4 do
         local lane, effect = CompileUnitCustomLane(unit, source[i], i)
         if lane then lanes["custom" .. tostring(i)] = lane end
-        if effect then effectItems[#effectItems + 1] = effect end
+        if effect then
+            local bucket = i == 4 and targetDotEffectItems or effectItems
+            bucket[#bucket + 1] = effect
+        end
     end
-    local effects
+    local effects, targetDotEffects
     if #effectItems > 0 and SpellIndicatorsRuntime.CompileSlots then
-        effects = SpellIndicatorsRuntime.CompileSlots(unit, { enabled = true, items = effectItems, layer = 9, strata = "AUTO" })
+        effects = SpellIndicatorsRuntime.CompileSlots(unit, { enabled = true, items = effectItems, layer = 9, strata = "AUTO", rootKey = "SpellIndicators" })
     end
-    return lanes, effects
+    if #targetDotEffectItems > 0 and SpellIndicatorsRuntime.CompileSlots then
+        targetDotEffects = SpellIndicatorsRuntime.CompileSlots("target", { enabled = true, items = targetDotEffectItems, layer = 9, strata = "AUTO", rootKey = "TargetDotEffects" })
+    end
+    return lanes, effects, targetDotEffects
 end
 A3._CompileUnitCustomContainers = CompileUnitCustomContainers
+
+local function CompileUnitLaneEffects(unit, shared, buff, debuff)
+    if not SpellIndicatorsRuntime.CompileSlots then return nil end
+    local items = {}
+    local function Add(kind, lane)
+        if not (lane and lane.enabled == true) then return end
+        local prefix = kind == "buff" and "buff" or "debuff"
+        local effectType = tostring(ReadRaw(shared, nil, prefix .. "FrameEffectType") or "none"):lower()
+        if effectType == "none" or effectType == "" then return end
+        local color = ReadRaw(shared, nil, prefix .. "FrameEffectColor")
+        items[#items + 1] = {
+            key = "uflane_effect:" .. kind,
+            display = kind == "buff" and "Buffs" or "Debuffs",
+            enabled = true,
+            allowAnyAura = true,
+            candidateFilters = lane.candidateFilters,
+            candidateFilterSignature = lane.candidateFilterSignature,
+            nativeFilter = lane.nativeFilter,
+            placed = { type = "none", anchor = "CENTER", x = 0, y = 0, size = 1 },
+            frame = {
+                type = effectType,
+                color = type(color) == "table" and color or { 0.69, 0.50, 0.88, 0.80 },
+                priority = ReadNumber(shared, nil, prefix .. "FrameEffectPriority", 5, 1, 10),
+                thickness = ReadNumber(shared, nil, prefix .. "FrameEffectThickness", 2, 1, 16),
+                layer = ReadNumber(shared, nil, prefix .. "FrameEffectLayer", 0, 0, 30),
+                strata = ReadRaw(shared, nil, prefix .. "FrameEffectStrata") or "AUTO",
+            },
+            layer = 9,
+            strata = "AUTO",
+        }
+    end
+    Add("buff", buff)
+    Add("debuff", debuff)
+    if #items == 0 then return nil end
+    return SpellIndicatorsRuntime.CompileSlots(unit, {
+        enabled = true, items = items, layer = 9, strata = "AUTO", rootKey = "LaneEffects",
+    })
+end
 
 local function BuildUnitFrameConfig(unit, frameSpec)
     unit = NormalizeRuntimeUnit(unit)
     if not unit then return nil end
     local auras = EnsureDB()
     local iconsEnabled = UnitAuraIconsEnabled(auras, unit)
-    local customLanes, customEffects = CompileUnitCustomContainers(auras, unit)
+    local customLanes, customEffects, targetDotEffects = CompileUnitCustomContainers(auras, unit)
     local hasCustomContainers = customLanes and next(customLanes) ~= nil
     local legacyCustomDisplays = not EffectiveUnitCustomContainers(auras, unit) and CompileUnitCustomDisplays(auras, unit) or nil
-    if not iconsEnabled and not hasCustomContainers and not customEffects and not legacyCustomDisplays then
-        return EmptyUnitFrameConfig(unit)
-    end
-
     local dispelBorder = iconsEnabled and CompileDispelSensor(unit, frameSpec, false, "border") or nil
     local dispelOverlay = iconsEnabled and CompileDispelSensor(unit, frameSpec, false, "overlay") or nil
-    local buff, debuff
+    local buff, debuff, laneEffects
     if iconsEnabled then
         local layout, sharedLayout, filtersRoot = EffectiveUnitTables(auras, unit)
         local blacklist = EffectiveUnitBlacklist(auras, unit)
@@ -1481,6 +1572,10 @@ local function BuildUnitFrameConfig(unit, frameSpec)
         local debuffCandidates, debuffCandidateSignature = CandidateFiltersFromBlacklist(debuffBlacklist)
         buff = CompileUnitLane(unit, sharedLayout, layout, filtersRoot, "buff", buffCandidates, buffCandidateSignature)
         debuff = CompileUnitLane(unit, sharedLayout, layout, filtersRoot, "debuff", debuffCandidates, debuffCandidateSignature)
+        laneEffects = CompileUnitLaneEffects(unit, sharedLayout, buff, debuff)
+    end
+    if not iconsEnabled and not hasCustomContainers and not customEffects and not targetDotEffects and not legacyCustomDisplays then
+        return EmptyUnitFrameConfig(unit)
     end
     local lanes = { buff = buff, debuff = debuff }
     if customLanes then
@@ -1491,10 +1586,13 @@ local function BuildUnitFrameConfig(unit, frameSpec)
         enabled = (buff and buff.enabled == true) or (debuff and debuff.enabled == true)
             or (dispelBorder and dispelBorder.enabled == true) or (dispelOverlay and dispelOverlay.enabled == true)
             or hasCustomContainers or (customEffects and customEffects.enabled == true)
+            or (targetDotEffects and targetDotEffects.enabled == true) or (laneEffects and laneEffects.enabled == true)
             or (legacyCustomDisplays and legacyCustomDisplays.enabled == true),
         lanes = lanes,
         sensors = { dispelBorder = dispelBorder, dispelOverlay = dispelOverlay },
         spellIndicators = customEffects or legacyCustomDisplays,
+        laneEffects = laneEffects,
+        targetDotEffects = targetDotEffects,
         group = false,
         _msufA3ConfigGen = A3._runtimeConfigGen or 1,
         _msufA3VisualGen = A3._nativeVisualGen or 0,
@@ -1737,7 +1835,7 @@ function A3.BuildAuraLaneMetrics(configOrUnit, kind)
     local rawKind = tostring(kind or "buff"):lower()
     local customIndex = rawKind:match("^custom(%d)$")
     if customIndex then
-        customIndex = math_min(3, math_max(1, tonumber(customIndex) or 1))
+        customIndex = math_min(4, math_max(1, tonumber(customIndex) or 1))
         kind = "custom" .. tostring(customIndex)
     else
         kind = (rawKind == "debuff" or rawKind == "debuffs") and "debuff" or "buff"
@@ -2202,9 +2300,9 @@ SensorLayoutSignature = function(sensor)
 end
 
 local DISPEL_SENSOR_ORDER = { "dispelBorder", "dispelOverlay", "dispelCorner" }
-A3._normalAuraLaneOrder = { "buff", "trackedBuff", "debuff", "external", "custom1", "custom2", "custom3" }
+A3._normalAuraLaneOrder = { "buff", "trackedBuff", "debuff", "external", "custom1", "custom2", "custom3", "custom4" }
 A3._sharedAuraRootKey = A3._sharedAuraRootKey or "UnitAuras"
-local NORMAL_LANE_ROOT_KEYS = { "Buffs", "TrackedBuffs", "Debuffs", "Externals", "CustomAuras1", "CustomAuras2", "CustomAuras3" }
+local NORMAL_LANE_ROOT_KEYS = { "Buffs", "TrackedBuffs", "Debuffs", "Externals", "CustomAuras1", "CustomAuras2", "CustomAuras3", "CustomAuras4" }
 
 local function BuildDispelSensorRootConfig(sensors)
     if type(sensors) ~= "table" then return nil end
@@ -3979,10 +4077,13 @@ RefreshAppliedNativeRoot = function(root, forceRefresh)
         any = true
         ok = RefreshNativeContainer(root.DispelSensor, forceRefresh, sensorRoot, root:GetParent()) and ok
     end
-    local spellIndicatorRoot = SpellIndicatorsRuntime.RootConfig and SpellIndicatorsRuntime.RootConfig(cfg) or nil
-    if spellIndicatorRoot and spellIndicatorRoot.enabled then
-        any = true
-        ok = RefreshNativeContainer(root.SpellIndicators, forceRefresh, spellIndicatorRoot, root:GetParent()) and ok
+    local effectRootFields = { "spellIndicators", "laneEffects", "targetDotEffects" }
+    for i = 1, #effectRootFields do
+        local spellIndicatorRoot = cfg[effectRootFields[i]]
+        if SpellIndicatorsRuntime.IsRoot and SpellIndicatorsRuntime.IsRoot(spellIndicatorRoot) then
+            any = true
+            ok = RefreshNativeContainer(root[spellIndicatorRoot.rootKey], forceRefresh, spellIndicatorRoot, root:GetParent()) and ok
+        end
     end
     if ok and any then A3.nativeAuraRuntimeError = nil end
     return ok and any
@@ -4009,11 +4110,14 @@ local function HideState(frame)
     A3._HideLane(root.CustomAuras1)
     A3._HideLane(root.CustomAuras2)
     A3._HideLane(root.CustomAuras3)
+    A3._HideLane(root.CustomAuras4)
     A3._HideLane(root.DispelSensor)
     A3._HideLane(root.DispelBorderSensor)
     A3._HideLane(root.DispelOverlaySensor)
     A3._HideLane(root.DispelCornerSensor)
     A3._HideLane(root.SpellIndicators)
+    A3._HideLane(root.LaneEffects)
+    A3._HideLane(root.TargetDotEffects)
     if SpellIndicatorsRuntime.HideAll then SpellIndicatorsRuntime.HideAll(frame) end
     root._msufA3Config = nil
     root._msufA3Applied = nil
@@ -4037,11 +4141,14 @@ local function HideState(frame)
     root.CustomAuras1 = nil
     root.CustomAuras2 = nil
     root.CustomAuras3 = nil
+    root.CustomAuras4 = nil
     root.DispelSensor = nil
     root.DispelBorderSensor = nil
     root.DispelOverlaySensor = nil
     root.DispelCornerSensor = nil
     root.SpellIndicators = nil
+    root.LaneEffects = nil
+    root.TargetDotEffects = nil
     if frame then frame._msufA3UnitAuraOwner = nil end
 end
 
@@ -4061,7 +4168,7 @@ local function ApplyConfig(frame, cfg, reason)
     root:Show()
     local lanes = cfg.lanes or {}
     local sensorRoot = GetDispelSensorRootConfig(cfg)
-    local spellIndicatorRoot = SpellIndicatorsRuntime.RootConfig and SpellIndicatorsRuntime.RootConfig(cfg) or nil
+    local effectRootFields = { "spellIndicators", "laneEffects", "targetDotEffects" }
     local forceRecreate = false
     local ok = true
     local lanesOk = true
@@ -4069,12 +4176,21 @@ local function ApplyConfig(frame, cfg, reason)
     ok = lanesOk and ok
     if sensorRoot and sensorRoot.enabled and not ApplyDispelSensorRoot(root, sensorRoot, frame, forceRecreate) then ok = false end
     if not (sensorRoot and sensorRoot.enabled) then A3._HideLane(root.DispelSensor) end
-    if spellIndicatorRoot and spellIndicatorRoot.enabled and (not SpellIndicatorsRuntime.Apply or not SpellIndicatorsRuntime.Apply(root, spellIndicatorRoot, frame, forceRecreate)) then ok = false end
-    if not (spellIndicatorRoot and spellIndicatorRoot.enabled) then
-        A3._HideLane(root.SpellIndicators)
-        root.SpellIndicators = nil
-        if SpellIndicatorsRuntime.HideAll then SpellIndicatorsRuntime.HideAll(frame) end
+    local anyEffectRoot = false
+    local effectRootKeys = { "SpellIndicators", "LaneEffects", "TargetDotEffects" }
+    for i = 1, #effectRootFields do
+        local spellIndicatorRoot = cfg[effectRootFields[i]]
+        local active = SpellIndicatorsRuntime.IsRoot and SpellIndicatorsRuntime.IsRoot(spellIndicatorRoot)
+        local key = active and spellIndicatorRoot.rootKey or effectRootKeys[i]
+        if active then
+            anyEffectRoot = true
+            if not SpellIndicatorsRuntime.Apply or not SpellIndicatorsRuntime.Apply(root, spellIndicatorRoot, frame, forceRecreate) then ok = false end
+        else
+            A3._HideLane(root[key])
+            root[key] = nil
+        end
     end
+    if not anyEffectRoot and SpellIndicatorsRuntime.HideAll then SpellIndicatorsRuntime.HideAll(frame) end
     A3._HideLane(root.DispelBorderSensor)
     A3._HideLane(root.DispelOverlaySensor)
     A3._HideLane(root.DispelCornerSensor)
@@ -4117,12 +4233,18 @@ local function RootCanReuseContainersForConfig(root, cfg)
     elseif root.DispelSensor and root.DispelSensor.IsShown and root.DispelSensor:IsShown() == true then
         return false
     end
-    local spellIndicatorRoot = SpellIndicatorsRuntime.RootConfig and SpellIndicatorsRuntime.RootConfig(cfg) or nil
-    if spellIndicatorRoot and spellIndicatorRoot.enabled == true then
-        local current = root.SpellIndicators
-        if not (current and current._msufA3StructuralSignature == spellIndicatorRoot._msufA3StructuralSignature) then return false end
-    elseif root.SpellIndicators and root.SpellIndicators.IsShown and root.SpellIndicators:IsShown() == true then
-        return false
+    local effectRootFields = { "spellIndicators", "laneEffects", "targetDotEffects" }
+    local effectRootKeys = { "SpellIndicators", "LaneEffects", "TargetDotEffects" }
+    for i = 1, #effectRootFields do
+        local spellIndicatorRoot = cfg[effectRootFields[i]]
+        local active = SpellIndicatorsRuntime.IsRoot and SpellIndicatorsRuntime.IsRoot(spellIndicatorRoot)
+        local key = active and spellIndicatorRoot.rootKey or effectRootKeys[i]
+        local current = root[key]
+        if active then
+            if not (current and current._msufA3StructuralSignature == spellIndicatorRoot._msufA3StructuralSignature) then return false end
+        elseif current and current.IsShown and current:IsShown() == true then
+            return false
+        end
     end
     return true
 end

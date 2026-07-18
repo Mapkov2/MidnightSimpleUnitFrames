@@ -57,7 +57,7 @@ if ($Quick) { $contexts = @($contexts | Where-Object { $_[0] -eq "MAGE" -and $_[
 
 # Build the reviewed finite matrix structurally. Individual page counts are
 # learned from the first clean context and must match every later context; this
-# avoids a brittle 138-entry magic map while still failing on drift.
+# avoids a brittle 154-entry magic map while still failing on drift.
 $expectedStateIds = [System.Collections.Generic.List[string]]::new()
 [void]$expectedStateIds.Add("base")
 $units = @("player", "target", "focus", "boss")
@@ -70,6 +70,7 @@ foreach ($unit in $units) {
     foreach ($index in 1..3) {
         foreach ($tool in $customTools) { [void]$expectedStateIds.Add("unit_${unit}_custom${index}_${tool}") }
     }
+    foreach ($tool in @("setup", "layout", "dots")) { [void]$expectedStateIds.Add("unit_${unit}_custom4_${tool}") }
     [void]$expectedStateIds.Add("unit_${unit}_custom1_filters_debuff")
 }
 foreach ($scope in @("party", "raid", "mythicraid")) {
@@ -80,7 +81,7 @@ foreach ($scope in @("party", "raid", "mythicraid")) {
 }
 foreach ($scope in @("shared", "player", "target", "focus", "boss", "party", "raid")) {
     $containers = if ($scope -in @("player", "target", "focus", "boss")) {
-        @("buff", "debuff", "custom1", "custom2", "custom3")
+        @("buff", "debuff", "custom1", "custom2", "custom3", "custom4")
     } else {
         @("buff", "debuff")
     }
@@ -89,7 +90,7 @@ foreach ($scope in @("shared", "player", "target", "focus", "boss", "party", "ra
 foreach ($scope in @("shared", "player", "target", "focus", "boss", "party", "raid")) {
     foreach ($lane in @("buff", "debuff")) { [void]$expectedStateIds.Add("compat_${lane}_${scope}") }
 }
-if ($expectedStateIds.Count -ne 138) { throw "Finite state-matrix definition drifted from 138 states." }
+if ($expectedStateIds.Count -ne 154) { throw "Finite state-matrix definition drifted from 154 states." }
 $expectedStateSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
 foreach ($stateId in $expectedStateIds) {
     if (-not $expectedStateSet.Add($stateId)) { throw "Duplicate expected collection state '$stateId'." }

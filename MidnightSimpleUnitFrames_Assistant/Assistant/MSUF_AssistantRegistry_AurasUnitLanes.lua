@@ -11,7 +11,7 @@ M.Assistant = A
 
 A.AurasRegistry = A.AurasRegistry or {}
 
-local CUSTOM_CONTAINER_COUNT = 3
+local CUSTOM_CONTAINER_COUNT = 4
 
 local function ClampLayer(value, fallback)
     value = tonumber(value)
@@ -57,7 +57,7 @@ function A.AurasRegistry.RegisterUnitCustomContainerLayerSettings(ctx)
                 frameType = "aura",
                 -- The visible slider is one selected-container control. Keep
                 -- its semantic attribute index-neutral; the setting key and
-                -- aliases retain the concrete Custom 1/2/3 identity.
+                -- aliases retain the concrete Custom 1/2/3/target-DoT identity.
                 attribute = "customContainerLayer",
                 type = "number",
                 aliases = aliases,

@@ -12,7 +12,7 @@ local GP = M.GroupPage or {}
 local floor, ceil, abs = math.floor, math.ceil, math.abs
 local max = math.max
 local min = math.min
-local C_Timer = _G.C_Timer
+local C_Timer = M.MenuTimer or _G.C_Timer
 local VT = M.ValueTextList
 local AccessibleNumber = M.AccessibleNumber or function(value, fallback)
     fallback = tonumber(fallback) or 0
@@ -199,7 +199,7 @@ local function BuildAuraWorkspaceTabs(ctx, section, scope, lane, width)
         end
     end
     if lane ~= "externals" then
-        local openStyle = T.Button(section, "Open Aura Style", 126, 22)
+        local openStyle = T.Button(section, "More Aura Options", 150, 22)
         openStyle:SetPoint("TOPRIGHT", section, "TOPRIGHT", -16, -76)
         if T.CenterButtonLabel then T.CenterButtonLabel(openStyle) end
         openStyle:SetScript("OnClick", function()
@@ -210,11 +210,16 @@ local function BuildAuraWorkspaceTabs(ctx, section, scope, lane, width)
             M.SetMenuStateValue("auraStyleGFLane", lane)
             if M.SelectPage then M.SelectPage("auras3_styling") end
         end)
-        RegisterAuraControl(ctx, openStyle, "Open Aura Style", "button", "group-workspace.open-aura-style", "navigation", "auras3_styling")
+        RegisterAuraControl(ctx, openStyle, "More Aura Options", "button", "group-workspace.open-aura-style", "navigation", "auras3_styling")
+        if type(M.AddTooltip) == "function" then
+            M.AddTooltip(openStyle, "More Aura Options",
+                "Opens the complete Aura Style page for icon appearance, cooldown and stack text, duration bars, and colors.",
+                { hook = true, titleAsLine = true })
+        end
         local hint = GF_AURA_BLACKLIST_AVAILABLE
             and "All icon styling: Appearance > Auras."
             or "Blacklist is unavailable in WoW 12.1. All icon styling: Appearance > Auras."
-        W.Text(section, hint, 16, -84, sectionW - 174, MUTED)
+        W.Text(section, hint, 16, -84, sectionW - 198, MUTED)
     else
         W.Text(section, "External defensives use their dedicated layout below.", 16, -84, sectionW - 32, MUTED)
     end
