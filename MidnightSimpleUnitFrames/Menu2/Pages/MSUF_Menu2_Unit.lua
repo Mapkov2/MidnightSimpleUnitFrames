@@ -422,7 +422,7 @@ local COPY_FRAME_BASIC_FIELDS = {
 
 local COPY_TRANSPARENCY_FIELDS = {
     "alphaInCombat", "alphaOutOfCombat", "alphaSync", "alphaSyncBoth",
-    "alphaExcludeTextPortrait", "alphaPreserveHPColor", "alphaLayerMode",
+    "alphaExcludeTextPortrait", "alphaPreserveHPColor", "alphaIndependentMissingHealth", "alphaMissingHealthBase", "alphaLayerMode",
     "alphaFGInCombat", "alphaFGOutOfCombat", "alphaBGInCombat", "alphaBGOutOfCombat", "alphaHPInCombat", "alphaHPOutOfCombat",
 }
 

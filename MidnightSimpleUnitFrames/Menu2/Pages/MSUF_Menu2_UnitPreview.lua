@@ -2016,6 +2016,9 @@ local function BuildPreview(parent, panel, width, height)
     mock.hpBG = mock:CreateTexture(nil, "BACKGROUND")
     mock.hpBG:SetTexture(TEX_W8)
     mock.hpBG:SetColorTexture(0, 0, 0, 0.82)
+    mock.hpMissingBG = mock:CreateTexture(nil, "BACKGROUND")
+    mock.hpMissingBG:SetTexture(TEX_W8)
+    mock.hpMissingBG:SetColorTexture(0, 0, 0, 0.82)
     mock.hp = mock:CreateTexture(nil, "ARTWORK")
     SetTex(mock.hp, type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture() or TEX_W8)
     mock.healPred = mock:CreateTexture(nil, "ARTWORK")
@@ -2394,6 +2397,7 @@ local function ApplyPreviewRounded(box, key, powerOn, outlineThickness)
 
     local bodyMask = EnsurePreviewRoundedMask(mock, "body", mock, mock.roundedBg)
     local hpBgMask = EnsurePreviewRoundedMask(mock, "health", mock.hpBG, mock.hpBG)
+    local hpMissingBgMask = EnsurePreviewRoundedMask(mock, "healthMissing", mock.hpBG, mock.hpMissingBG)
     local hpMask = EnsurePreviewRoundedMask(mock, "health", mock.hpBG, mock.hp)
     local healPredMask = EnsurePreviewRoundedMask(mock, "healPred", mock.hpBG, mock.healPred)
     local absorbMask = EnsurePreviewRoundedMask(mock, "absorb", mock.hpBG, mock.absorb)
@@ -2402,6 +2406,7 @@ local function ApplyPreviewRounded(box, key, powerOn, outlineThickness)
     local absorbMode = PreviewResolveAbsorbAnchorMode(conf, g)
     PreviewSetMask(mock, mock.roundedBg, bodyMask)
     PreviewSetMask(mock, mock.hpBG, hpBgMask)
+    PreviewSetMask(mock, mock.hpMissingBG, hpMissingBgMask)
     PreviewSetMask(mock, mock.hp, hpMask)
     PreviewSetMask(mock, mock.healPred, healPredMode == 4 and nil or healPredMask)
     PreviewSetMask(mock, mock.absorb, absorbMode == 4 and nil or absorbMask)
@@ -2468,6 +2473,7 @@ local function ApplyPreviewLayerVisibility(box)
         PreviewSetRoundedEdgeStackShown(mock, false)
     end
     SetShownSafe(mock.hpBG, bodyOn)
+    SetShownSafe(mock.hpMissingBG, bodyOn)
     SetShownSafe(mock.hp, bodyOn)
     if not bodyOn then
         SetShownSafe(mock.healPred, false)
@@ -2579,6 +2585,8 @@ local function PreviewAlphaState(conf)
         text = 1,
         portrait = 1,
         preserveHPColor = false,
+        independentMissingHealth = false,
+        missingHealthBase = 1,
     }
     if conf and conf.alphaExcludeTextPortrait == true then
         local mode = NormalizePreviewAlphaLayerMode(conf.alphaLayerMode)
@@ -2594,6 +2602,8 @@ local function PreviewAlphaState(conf)
         state.text = 1
         state.portrait = 1
         state.preserveHPColor = conf.alphaPreserveHPColor == true
+        state.independentMissingHealth = conf.alphaIndependentMissingHealth == true
+        state.missingHealthBase = Clamp01(conf.alphaMissingHealthBase, 1)
     end
     return state
 end
@@ -2631,10 +2641,15 @@ local function ApplyPreviewTransparency(box, conf)
         PreviewSetRoundedEdgeStackAlpha(mock, 0)
     end
 
-    if alpha.preserveHPColor then
+    if alpha.preserveHPColor and alpha.independentMissingHealth then
+        SetRegionAlpha(mock.hpBG, 0)
+        SetRegionAlpha(mock.hpMissingBG, alpha.bg * alpha.missingHealthBase)
+    elseif alpha.preserveHPColor then
         SetRegionAlpha(mock.hpBG, alpha.hp)
+        SetRegionAlpha(mock.hpMissingBG, 0)
     else
         SetRegionAlpha(mock.hpBG, alpha.flat and alpha.frame or alpha.bg)
+        SetRegionAlpha(mock.hpMissingBG, 0)
     end
     SetRegionAlpha(mock.hp, alpha.flat and alpha.frame or alpha.hp)
     SetRegionAlpha(mock.healPred, alpha.flat and alpha.frame or alpha.hp)
@@ -2870,6 +2885,7 @@ function Preview.Refresh(box, reason)
     SetTex(mock.hp, type(getBarTexture) == "function" and getBarTexture(key) or TEX_W8)
     SetTex(mock.power, type(getBarTexture) == "function" and getBarTexture(key) or TEX_W8)
     SetTex(mock.hpBG, type(getBarBgTexture) == "function" and getBarBgTexture(key) or TEX_W8)
+    SetTex(mock.hpMissingBG, type(getBarBgTexture) == "function" and getBarBgTexture(key) or TEX_W8)
     SetTex(mock.powerBG, type(getBarBgTexture) == "function" and getBarBgTexture(key) or TEX_W8)
     SetTex(mock.detachedPower.fill, type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture() or TEX_W8)
     SetTex(mock.cast.fill, type(_G.MSUF_GetCastbarTexture) == "function" and _G.MSUF_GetCastbarTexture() or TEX_W8)
@@ -2896,6 +2912,14 @@ function Preview.Refresh(box, reason)
     local hpAreaW = max(1, sw - S(4))
     local hpFrac = max(0, min(1, tonumber(data.hp) or 0.6))
     mock.hp:SetWidth(max(1, hpAreaW * hpFrac))
+    mock.hpMissingBG:ClearAllPoints()
+    if hpReverse then
+        mock.hpMissingBG:SetPoint("TOPLEFT", mock.hpBG, "TOPLEFT", 0, 0)
+        mock.hpMissingBG:SetPoint("BOTTOMRIGHT", mock.hp, "BOTTOMLEFT", 0, 0)
+    else
+        mock.hpMissingBG:SetPoint("TOPLEFT", mock.hp, "TOPRIGHT", 0, 0)
+        mock.hpMissingBG:SetPoint("BOTTOMRIGHT", mock.hpBG, "BOTTOMRIGHT", 0, 0)
+    end
     local healPredMode = PreviewResolveHealPredAnchorMode(conf, g)
     local absorbMode = PreviewResolveAbsorbAnchorMode(conf, g)
     local healPredShown = PreviewHealPredictionEnabled(g)
@@ -2922,6 +2946,7 @@ function Preview.Refresh(box, reason)
     local hr, hg, hb = HealthColor(key, data)
     local hbr, hbg, hbb, hba = HealthBackgroundColor(hr, hg, hb, data)
     mock.hpBG:SetVertexColor(hbr, hbg, hbb, hba)
+    mock.hpMissingBG:SetVertexColor(hbr, hbg, hbb, 1)
     mock.hp:SetVertexColor(hr, hg, hb, 1)
     if powerOn then
         mock.powerBG:Show(); mock.power:Show()

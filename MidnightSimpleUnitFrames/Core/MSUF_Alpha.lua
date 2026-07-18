@@ -445,6 +445,16 @@ local function _AlphaMissingHPBackgroundMatches(frame, targetAlpha)
     return _AlphaObjectMatches(bg, targetAlpha)
 end
 
+local function _AlphaUsesIndependentMissingHealth(frame)
+    local conf = frame and frame.cachedConfig
+    return conf and conf.alphaIndependentMissingHealth == true or false
+end
+
+local function _AlphaIndependentMissingHealthBase(frame)
+    local conf = frame and frame.cachedConfig
+    return _AlphaClamp01(conf and tonumber(conf.alphaMissingHealthBase) or 1)
+end
+
 local function _AlphaGradSetMatches(grads, target)
     if not grads then return true end
     if not _AlphaObjectMatches(grads.left, target) then return false end
@@ -469,6 +479,9 @@ local function _AlphaLayeredStateMatches(frame, fg, bg, mode, preserveHPColor, p
     local hpColorAlpha = 1
     local hpBgAlpha = (suppressBG or preserveHPColor) and 0 or bg
     local bgAlpha = suppressBG and 0 or bg
+    local independentMissingHealth = _AlphaUsesIndependentMissingHealth(frame)
+    local missingHPAlpha = independentMissingHealth and (bg * _AlphaIndependentMissingHealthBase(frame)) or fg
+    local frameBgAlpha = independentMissingHealth and 0 or bgAlpha
     local powerAlpha = (mode == "health") and 1 or fg
 
     local hpTex = _GetBarTexture(frame.hpBar)
@@ -488,13 +501,13 @@ local function _AlphaLayeredStateMatches(frame, fg, bg, mode, preserveHPColor, p
         and _AlphaBarColorMatches(frame.hpBar, hpColorAlpha)
         and ((not preserveHPColor) or _AlphaPreservedBarColorMatches(frame.hpBar, fg))
         and ((not preserveHPColor) or _AlphaPreserveTextureMatches(frame.hpBar))
-        and (suppressBG or (not preserveHPColor) or _AlphaMissingHPBackgroundMatches(frame, fg))
+        and (suppressBG or (not preserveHPColor) or _AlphaMissingHPBackgroundMatches(frame, missingHPAlpha))
         and _AlphaObjectMatches(powerTex, powerAlpha)
         and _AlphaObjectMatches(absorbTex, fg)
         and _AlphaObjectMatches(healAbsorbTex, fg)
         and _AlphaObjectMatches(frame.hpBarBG, hpBgAlpha)
         and _AlphaObjectMatches(frame.powerBarBG, bgAlpha)
-        and _AlphaObjectMatches(frame.bg, bgAlpha)
+        and _AlphaObjectMatches(frame.bg, frameBgAlpha)
         and _AlphaGradSetMatches(frame.hpGradients, fg)
         and _AlphaGradSetMatches(frame.powerGradients, powerAlpha)
         and _AlphaPortraitMatches(frame, portraitAlpha)
@@ -698,20 +711,23 @@ local function MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, mode, preserveHP
         end
     end
 
+    local independentMissingHealth = _AlphaUsesIndependentMissingHealth(frame)
+    local missingHPAlpha = independentMissingHealth and (bg * _AlphaIndependentMissingHealthBase(frame)) or fg
     local bgAlpha = suppressBG and 0 or bg
+    local frameBgAlpha = independentMissingHealth and 0 or bgAlpha
     _SetTexAlpha(frame.hpBarBG, (suppressBG or preserveHPColor) and 0 or bg)
     _SetTexAlpha(frame.powerBarBG, bgAlpha)
-    _SetTexAlpha(frame.bg, bgAlpha)
+    _SetTexAlpha(frame.bg, frameBgAlpha)
     if preserveHPColor then
         -- Preserve mode owns missing health separately, but it still uses the
         -- same resolved HP track color as the normal bar background pipeline.
-        frame._msufAlphaMissingHPAlpha = suppressBG and 0 or fg
+        frame._msufAlphaMissingHPAlpha = suppressBG and 0 or missingHPAlpha
         _SetBarColorAlpha(frame.hpBar, fg, true)
         _SetBarTexAlpha(frame.hpBar, fg)
         if suppressBG then
             _AlphaHideMissingHPBackground(frame)
         else
-            _AlphaSyncMissingHPBackground(frame, nil, nil, fg)
+            _AlphaSyncMissingHPBackground(frame, nil, nil, missingHPAlpha)
         end
     else
         frame._msufAlphaMissingHPAlpha = nil

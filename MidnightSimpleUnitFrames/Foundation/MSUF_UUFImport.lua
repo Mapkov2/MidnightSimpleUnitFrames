@@ -1179,7 +1179,14 @@ local function ApplyHealthAndPower(unitKey, source, spec, dst, out, report)
     dst.alphaBGOutOfCombat = rangeInAlpha
     dst.alphaHPInCombat = healthForegroundAlpha * rangeInAlpha
     dst.alphaHPOutOfCombat = dst.alphaHPInCombat
-    dst.alphaPreserveHPColor = false
+    -- Imported UUF health bars use a transparent inner container: the fill and
+    -- the complementary missing-health track must not be composited on top of
+    -- each other. The opt-in marker keeps existing native preserve-color
+    -- profiles unchanged while allowing foreground/background alpha to remain
+    -- independent for imports and newly enabled preserve-color profiles.
+    dst.alphaIndependentMissingHealth = healthForegroundAlpha ~= 1
+    dst.alphaMissingHealthBase = healthBackgroundAlpha
+    dst.alphaPreserveHPColor = healthForegroundAlpha ~= 1
 
     local general = out.general
     local baseline = report._unitHealthBaseline
