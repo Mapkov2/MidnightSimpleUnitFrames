@@ -118,6 +118,7 @@ local Portrait = assert(registered, "Portrait element was not registered")
 local function NewFrame(unit)
     local frame = NewRegion(nil)
     frame.unit = unit
+    frame.MSUFUnitKey = unit
     frame.Health = NewRegion(frame)
     frame.MSUFSpec = {
         height = 40,

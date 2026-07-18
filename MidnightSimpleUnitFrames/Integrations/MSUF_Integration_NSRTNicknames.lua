@@ -229,7 +229,7 @@ local function RefreshUnitFrameName(frame, _, runtime)
   end
   local touched = false
   if active.NameText == true and runtime.UpdateName then
-    runtime.UpdateName(frame, NICKNAME_EVENT, frame.unit)
+    runtime.UpdateName(frame, NICKNAME_EVENT, frame.MSUFUnitKey)
     touched = true
   end
   if active.Text == true and runtime.UpdateInline then

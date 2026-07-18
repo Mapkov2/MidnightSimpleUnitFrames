@@ -1139,7 +1139,7 @@ function TS.ShowTest(unit, seconds)
   DropCasterState(caster)
   local now = GetTime and GetTime() or 0
   local duration = tonumber(seconds) or 8
-  unit = frame.unit or unit
+  unit = frame.MSUFUnitKey or unit
   DisplayIndicator(caster, unit, FALLBACK_ICON, nil, now * 1000, (now + duration) * 1000)
   if not activeByCaster[caster] then return false, "no free icon" end
   return true, unit

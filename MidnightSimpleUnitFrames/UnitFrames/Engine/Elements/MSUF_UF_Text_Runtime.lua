@@ -563,7 +563,7 @@ end
 
 function Text.UpdateNameColor(frame, event, unit)
   if RegionShown(frame and frame.nameText) then
-    SetNameTextColor(frame, NameTextColor(frame, unit or frame.unit))
+    SetNameTextColor(frame, NameTextColor(frame, unit or frame.MSUFUnitKey))
     local rt = frame and frame._msufTextRuntime
     if rt and rt.inlineToT then
       Text.UpdateInline(frame, event, unit)
@@ -621,7 +621,7 @@ local function RefreshNameRelativeStatus(frame)
 end
 
 function Text.UpdateName(frame, event, unit)
-  local frameUnit = frame and frame.unit
+  local frameUnit = frame and frame.MSUFUnitKey
   unit = unit or frameUnit
   if frameUnit and unit ~= frameUnit then
     Text.UpdateInline(frame, event, unit)
@@ -722,7 +722,7 @@ function Text.UpdateName(frame, event, unit)
 end
 
 local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
-  unit = unit or frame.unit
+  unit = unit or frame.MSUFUnitKey
   local rt = frame._msufTextRuntime
   if not rt or not rt.healthSlotCount or rt.healthSlotCount <= 0 then
     return
@@ -911,7 +911,7 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
 end
 
 local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
-  unit = unit or frame.unit
+  unit = unit or frame.MSUFUnitKey
   local rt = frame._msufTextRuntime
   if not rt or not rt.powerSlotCount or rt.powerSlotCount <= 0 then
     return
@@ -1252,7 +1252,7 @@ end
 local function InlineEnabled(frame, spec)
   local text = spec and spec.text
   local inline = text and text.inlineToT
-  return frame and frame.unit == "target" and spec and spec.showName ~= false and inline and inline.enabled == true
+  return frame and frame.MSUFUnitKey == "target" and spec and spec.showName ~= false and inline and inline.enabled == true
 end
 
 local function GFHotHealthPercentNeedsUpdate(rt, pct)
@@ -1466,19 +1466,19 @@ function NameText.GetEvents(frame, spec)
   end
   local text = spec and spec.text
   if text and text.hideNameOnDeadOffline == true then
-    if (frame and frame.unit == "player") or (spec and spec.key == "player") then
+    if (frame and frame.MSUFUnitKey == "player") or (spec and spec.key == "player") then
       return NAME_STATUS_PLAYER_EVENTS
     end
     return NameNeedsNPCColorEvents(text) and NAME_STATUS_COLOR_EVENTS or NAME_STATUS_EVENTS
   end
-  if (frame and frame.unit == "player") or (spec and spec.key == "player") then
+  if (frame and frame.MSUFUnitKey == "player") or (spec and spec.key == "player") then
     return NAME_EVENTS
   end
   return NameNeedsNPCColorEvents(text) and NAME_COLOR_EVENTS or NAME_EVENTS
 end
 
 function NameText.Update(frame, event, unit)
-  Text.UpdateName(frame, event, unit or frame.unit)
+  Text.UpdateName(frame, event, unit or frame.MSUFUnitKey)
 end
 
 function NameText.Disable(frame)
@@ -1501,7 +1501,7 @@ function HealthText.GetEvents(frame, spec)
   if not HealthTextNeedsValueTicks(spec) then
     return classColor and HEALTH_TEXT_CLASS_MAX_EVENTS or HEALTH_TEXT_MAX_EVENTS
   end
-  if (frame and frame.unit == "player") or (spec and spec.key == "player") then
+  if (frame and frame.MSUFUnitKey == "player") or (spec and spec.key == "player") then
     if not HealthTextNeedsMaxEvents(spec) then
       return HEALTH_TEXT_VALUE_PLAYER_EVENTS
     end
@@ -1520,7 +1520,7 @@ end
 function HealthText.Update(frame, event, unit, hp, hpMax)
   local rt = frame and frame._msufTextRuntime
   if rt and rt.healthColorByClass == true and event ~= "UNIT_HEALTH" then
-    UpdateHealthTextColor(frame, rt, unit or frame.unit)
+    UpdateHealthTextColor(frame, rt, unit or frame.MSUFUnitKey)
     if event == "UNIT_NAME_UPDATE" then return end
   end
   local percentFn = rt and rt.healthHotFromPercent
@@ -1534,14 +1534,14 @@ function HealthText.Update(frame, event, unit, hp, hpMax)
       rt._dispatchHealthPercentReady = nil
     end
     if pctReady == true then
-      return percentFn(frame, event, unit or frame.unit, pct)
+      return percentFn(frame, event, unit or frame.MSUFUnitKey, pct)
     end
   end
   local fn = rt and rt.healthHot
   if fn then
-    return fn(frame, event, unit or frame.unit, hp, hpMax)
+    return fn(frame, event, unit or frame.MSUFUnitKey, hp, hpMax)
   end
-  return Text.UpdateHealth(frame, event, unit or frame.unit, hp, hpMax)
+  return Text.UpdateHealth(frame, event, unit or frame.MSUFUnitKey, hp, hpMax)
 end
 
 function HealthText.Disable(frame)
@@ -1584,14 +1584,14 @@ function PowerText.Update(frame, event, unit, power, powerMax, powerType, powerT
       rt._dispatchPowerPercentReady = nil
     end
     if pctReady == true then
-      return percentFn(frame, event, unit or frame.unit, pct)
+      return percentFn(frame, event, unit or frame.MSUFUnitKey, pct)
     end
   end
   local fn = rt and rt.powerHot
   if fn then
-    return fn(frame, event, unit or frame.unit, power, powerMax, powerType, powerToken, powerMetaChanged)
+    return fn(frame, event, unit or frame.MSUFUnitKey, power, powerMax, powerType, powerToken, powerMetaChanged)
   end
-  return Text.UpdatePower(frame, event, unit or frame.unit, power, powerMax, powerType, powerToken, powerMetaChanged)
+  return Text.UpdatePower(frame, event, unit or frame.MSUFUnitKey, power, powerMax, powerType, powerToken, powerMetaChanged)
 end
 
 function PowerText.Disable(frame)

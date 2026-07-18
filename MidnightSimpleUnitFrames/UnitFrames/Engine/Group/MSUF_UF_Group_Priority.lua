@@ -530,7 +530,7 @@ local function FindHoveredFrame(frame, unit, kind)
   if frame._msufGFIsPreviewFrame == true then return end
   if frame.IsShown and not frame:IsShown() then return end
   if frame.IsMouseOver and frame:IsMouseOver() then
-    local candidate = unit or frame.unit
+    local candidate = unit or frame.MSUFUnitKey
     if GF.IsPriorityGroupUnit(candidate) then hoveredUnit = candidate; return true end
   end
 end
@@ -550,7 +550,7 @@ function GF.GetHoveredPriorityUnit()
           local kind = visual and visual._msufGFKind
           if visual and visual._msufIsGroupFrame == true and visual._msufGFIsPreviewFrame ~= true
             and (kind == "party" or kind == "raid" or kind == "mythicraid") then
-            local unit = PlainString(shell.GetAttribute and shell:GetAttribute("unit") or visual.unit)
+            local unit = PlainString(shell.GetAttribute and shell:GetAttribute("unit") or visual.MSUFUnitKey)
             if GF.IsPriorityGroupUnit(unit) then return unit end
           end
           frame = frame.GetParent and frame:GetParent() or nil

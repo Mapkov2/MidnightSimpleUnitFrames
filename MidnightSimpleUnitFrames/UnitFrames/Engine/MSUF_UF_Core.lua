@@ -648,7 +648,7 @@ local function BroadcastGroupLifecycleExceptUnit(event, mode, exceptUnit)
   local frames = UF.attachedFrameList
   for i = 1, #frames do
     local frame = frames[i]
-    if frame and frame.unit ~= exceptUnit and frame._msufCoreScope == "group" then
+    if frame and frame.MSUFUnitKey ~= exceptUnit and frame._msufCoreScope == "group" then
       RunCompiledGroupLifecycle(frame, event, mode)
     end
   end
@@ -761,9 +761,9 @@ end
 
 local function DependentSource(frame, event)
   if event == "UNIT_TARGET" then
-    return frame and UF.ParentUnitForDependentUnit(frame.unit)
+    return frame and UF.ParentUnitForDependentUnit(frame.MSUFUnitKey)
   end
-  if event == "UNIT_PET" and frame and frame.unit == "pet" then
+  if event == "UNIT_PET" and frame and frame.MSUFUnitKey == "pet" then
     return "player"
   end
   return nil
@@ -871,7 +871,7 @@ local function BuildHealthRoute(barFn, textFn, predictionFn, visualsFn, routeUni
   end
   return function(self, ev, unit, ...)
     BeginFrameEvent(self)
-    local u = routeUnitless == true and self.unit or (unit or self.unit)
+    local u = routeUnitless == true and self.MSUFUnitKey or (unit or self.MSUFUnitKey)
     local hp, hpMax, percentReady
     if barFn then hp, hpMax, percentReady = barFn(self, ev, u, ...) end
     if predictionFn then
@@ -895,7 +895,7 @@ local function HealthLifecycleSinkRoute(self, ev, unit, ...)
     or self._msufHealthLifecycleHealthBase
   if base then base(self, ev, unit, ...) end
   local sink = self._msufHealthLifecycleSink
-  if sink then sink(self._msufHealthLifecycleSinkOwner, self, ev, unit or self.unit, ...) end
+  if sink then sink(self._msufHealthLifecycleSinkOwner, self, ev, unit or self.MSUFUnitKey, ...) end
 end
 
 local function ClearHealthLifecycleSink(frame, notify)
@@ -916,7 +916,7 @@ local function ClearHealthLifecycleSink(frame, notify)
   frame._msufHealthLifecycleHealthBase = nil
   frame._msufHealthLifecycleConnectionBase = nil
 
-  if notify == true then sink(owner, frame, "MSUF_UF_LIFECYCLE_DETACH", frame.unit) end
+  if notify == true then sink(owner, frame, "MSUF_UF_LIFECYCLE_DETACH", frame.MSUFUnitKey) end
   return true
 end
 
@@ -931,7 +931,7 @@ RefreshHealthLifecycleSinkRoutes = function(frame)
   local valid = UF.attachedFrames[frame] == true
     and frame._msufCoreSpecEnabled == true
     and frame._msufCoreVisible == true
-    and frame._msufHealthLifecycleSinkUnit == frame.unit
+    and frame._msufHealthLifecycleSinkUnit == frame.MSUFUnitKey
     and frame._msufActiveElements and frame._msufActiveElements.Health == true
     and type(health) == "function"
     and type(connection) == "function"
@@ -956,7 +956,7 @@ local function BuildPowerRoute(barFn, textFn, _unused, _unusedFollower, routeUni
     end
   end
   return function(self, ev, unit, ...)
-    local u = routeUnitless == true and self.unit or (unit or self.unit)
+    local u = routeUnitless == true and self.MSUFUnitKey or (unit or self.MSUFUnitKey)
     local power, powerMax, powerType, powerToken, metaChanged
     if barFn then power, powerMax, powerType, powerToken, metaChanged = barFn(self, ev, u, ...) end
     if textFn then textFn(self, ev, u, power, powerMax, powerType, powerToken, metaChanged, ...) end
@@ -985,7 +985,7 @@ local function BuildSingleRoute(update, unitless, target)
   if unitless == true then
     return function(self, ev, _unit, ...)
       BeginFrameEvent(self)
-      update(self, ev, self.unit, ...)
+      update(self, ev, self.MSUFUnitKey, ...)
       EndFrameEvent(self)
     end
   elseif target then
@@ -997,7 +997,7 @@ local function BuildSingleRoute(update, unitless, target)
   end
   return function(self, ev, unit, ...)
     BeginFrameEvent(self)
-    update(self, ev, unit or self.unit, ...)
+    update(self, ev, unit or self.MSUFUnitKey, ...)
     EndFrameEvent(self)
   end
 end
@@ -1085,7 +1085,7 @@ local function CompileFrameEventPath(frame, event, list)
       BeginFrameEvent(self)
       for i = 1, count, 2 do
         local update = list[i]
-        update(self, ev, list[i + 1] == true and self.unit or target, ...)
+        update(self, ev, list[i + 1] == true and self.MSUFUnitKey or target, ...)
       end
       EndFrameEvent(self)
     end
@@ -1095,7 +1095,7 @@ local function CompileFrameEventPath(frame, event, list)
     BeginFrameEvent(self)
     for i = 1, count, 2 do
       local update = list[i]
-      update(self, ev, list[i + 1] == true and self.unit or (unit or self.unit), ...)
+      update(self, ev, list[i + 1] == true and self.MSUFUnitKey or (unit or self.MSUFUnitKey), ...)
     end
     EndFrameEvent(self)
   end
@@ -1116,7 +1116,7 @@ local function BuildLifecycleFullPath(healthPath, powerUpdate, powerTextUpdate,
     nameUpdate, portraitUpdate, statusUpdate, rangeUpdate, visualsUpdate,
     bordersUpdate, cornerUpdate)
   return function(frame, event)
-    local unit = frame.unit
+    local unit = frame.MSUFUnitKey
     frame._msufGroupStateRefresh = true
     frame._msufDeferDispatchEnd = true
     if healthPath then healthPath(frame, event, nil) else BeginFrameEvent(frame) end
@@ -1147,7 +1147,7 @@ end
 local function BuildLifecycleGlobalPath(healthPath, healthMetadata, powerUpdate,
     powerTextUpdate, namePresenceUpdate, statusUpdate, rangeUpdate, visualsUpdate)
   return function(frame, event)
-    local unit = frame.unit
+    local unit = frame.MSUFUnitKey
 
     local refreshHealth
     if healthMetadata then
@@ -1307,17 +1307,17 @@ RegisterFrameEvent = function(frame, event, unitless)
     frame:RegisterEvent(event)
     return
   end
-  local source = DependentSource(frame, event) or frame.unit
+  local source = DependentSource(frame, event) or frame.MSUFUnitKey
   if not IsUnitToken(source) then
     frame:RegisterEvent(event)
     return
   end
   frame:RegisterUnitEvent(event, source)
-  if source ~= frame.unit then
+  if source ~= frame.MSUFUnitKey then
     frame._msufFrameUnitEvents = frame._msufFrameUnitEvents or {}
     frame._msufFrameUnitEventTargets = frame._msufFrameUnitEventTargets or {}
     frame._msufFrameUnitEvents[event] = source
-    frame._msufFrameUnitEventTargets[event] = frame.unit
+    frame._msufFrameUnitEventTargets[event] = frame.MSUFUnitKey
   end
 end
 
@@ -1368,7 +1368,7 @@ end
 local function IdentityEventUpdate(frame, event)
   if not frame then return end
   event = event or "MSUF_UNIT_IDENTITY"
-  local unit = frame.unit
+  local unit = frame.MSUFUnitKey
   if not IdentityUnitExists(frame, unit) then return end
   local barPath = frame._msufIdentityBarPath
   local hp, hpMax, healthPercentReady
@@ -1444,7 +1444,7 @@ end
 
 local function AddIdentityLifecycleHandlers(frame)
   if not FrameNeedsIdentityLifecycle(frame) then return end
-  local unit = frame.unit
+  local unit = frame.MSUFUnitKey
   AddEventHandler(frame, "PLAYER_ENTERING_WORLD", IdentityEventUpdate, true)
   if unit == "target" then
     AddEventHandler(frame, "PLAYER_TARGET_CHANGED", IdentityEventUpdate, true)
@@ -1744,7 +1744,7 @@ local function RebuildFrameEvents(frame)
   ClearFrameEvents(frame)
   local routes = {}
   frame._msufElementEventRoutes = routes
-  frame._msufEventRouteUnit = frame.unit
+  frame._msufEventRouteUnit = frame.MSUFUnitKey
   local active = frame._msufActiveElements
   if not active then
     frame._msufElementEventRoutes = InternRuntimeRoutePlan(routes)
@@ -1837,7 +1837,7 @@ end
 --- refresh label: health colours, text modes and prediction settings can all
 --- change an element's event membership without changing its update function.
 local function FrameEventRoutingMatches(frame)
-  if not frame or frame._msufEventRouteUnit ~= frame.unit then return false end
+  if not frame or frame._msufEventRouteUnit ~= frame.MSUFUnitKey then return false end
   local routes = frame._msufElementEventRoutes
   if type(routes) ~= "table" then return false end
   local active = frame._msufActiveElements
@@ -1881,7 +1881,7 @@ function UF.RunLeanIdentity(frame, event)
   local path = frame._msufIdentityPath
   local barPath = frame._msufIdentityBarPath
   if not (path or barPath) then return false end
-  local unit = frame.unit
+  local unit = frame.MSUFUnitKey
   if not IdentityUnitExists(frame, unit) then return false end
   BeginFrameEvent(frame)
   event = event or "MSUF_UNIT_IDENTITY"
@@ -1905,7 +1905,7 @@ function UF.FrameRuntimeUpdate(frame, reason)
   local path = frame._msufRuntimeAllPath
   if not path then return false end
   BeginFrameEvent(frame)
-  local unit = frame.unit
+  local unit = frame.MSUFUnitKey
   reason = reason or "MSUF_FORCE_UPDATE"
   path(frame, reason, unit)
   EndFrameEvent(frame)
@@ -2035,11 +2035,10 @@ end
 
 function UF.SetFrameSpec(frame, spec, unitFallback)
   if not (frame and spec) then return nil end
-  local unit = spec.unit or unitFallback or frame.unit
+  local unit = spec.unit or unitFallback or frame.MSUFUnitKey
   frame.MSUFSpec = spec
   frame._msufCoreSpecEnabled = spec.enabled ~= false
   frame.MSUFUnitKey = unit
-  frame.unit = unit
   frame.unitKey = unit
   frame.cachedConfig = spec
   frame.configKey = spec.key
@@ -2049,7 +2048,7 @@ end
 function UF.OnUnitChanged(frame, oldUnit, newUnit)
   if not frame then return false end
   if newUnit ~= nil then
-    frame.unit = newUnit
+    frame.MSUFUnitKey = newUnit
     frame.unitKey = newUnit
   end
   frame._msufUnitState = nil
@@ -2121,7 +2120,7 @@ function UF.SetHealthLifecycleSink(unit, sink, owner)
   local frame = UF.GetFrame(unit)
   if not (frame
     and UF.attachedFrames[frame] == true
-    and frame.unit == unit
+    and frame.MSUFUnitKey == unit
     and frame._msufCoreSpecEnabled == true
     and frame._msufCoreVisible == true
     and frame._msufActiveElements and frame._msufActiveElements.Health == true
@@ -2197,7 +2196,7 @@ function UF.ApplyElementToFrame(frame, name, spec, updateReason)
   if immediateReason == nil and element.UpdateOnApply == true then
     immediateReason = "MSUF_ELEMENT_APPLY"
   end
-  if immediateReason and update then update(frame, immediateReason, frame.unit) end
+  if immediateReason and update then update(frame, immediateReason, frame.MSUFUnitKey) end
   if frame._msufElementApplyBatch ~= true then RefreshFrameRoutingAfterElementApply(frame) end
   return true
 end

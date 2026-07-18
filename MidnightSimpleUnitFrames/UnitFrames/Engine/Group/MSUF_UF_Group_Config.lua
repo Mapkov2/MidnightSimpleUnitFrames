@@ -1388,7 +1388,7 @@ local function CompileSpecUncached(kind, frame, unit, conf)
     end
     conf = GF.GetConf and GF.GetConf(kind) or {}
   end
-  unit = unit or (frame and frame.unit)
+  unit = unit or (frame and frame.MSUFUnitKey)
 
   local w, h = 80, 32
   if GF.GetScaledFrameMetrics then
@@ -1862,7 +1862,7 @@ function GF.CompileSpec(kind, frame, unit)
     conf = GF.GetConf and GF.GetConf(kind) or {}
     base._msufGFConf = conf
   end
-  unit = unit or (frame and frame.unit)
+  unit = unit or (frame and frame.MSUFUnitKey)
   if frame then
     return PatchFrameSpec(base, kind, frame, unit, conf)
   end

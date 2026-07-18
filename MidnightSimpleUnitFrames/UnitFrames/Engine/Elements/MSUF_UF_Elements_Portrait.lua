@@ -212,7 +212,7 @@ local function ApplyPortraitUpdate(frame)
     local force = frame._msufPortraitForceRefresh == true
     frame._msufPortraitNeedsVisibleRefresh = nil
     frame._msufPortraitForceRefresh = nil
-    ApplyUnitPortrait(texture, frame.unit, frame, p, force)
+    ApplyUnitPortrait(texture, frame.MSUFUnitKey, frame, p, force)
   elseif p and p.enabled == true and texture and not PortraitFrameVisible(frame) then
     frame._msufPortraitNeedsVisibleRefresh = true
   end
@@ -271,7 +271,7 @@ local function BuildUnitPortraitKey(unit, frame, p, guid)
     end
     return "2D_PENDING|"
       .. PortraitKeyPart(unit) .. "|"
-      .. PortraitKeyPart(frame and frame.unit) .. "|"
+      .. PortraitKeyPart(frame and frame.MSUFUnitKey) .. "|"
       .. PortraitKeyPart(generation) .. "|"
       .. (available and "1" or "0") .. "|"
       .. PortraitKeyPart(p and p.render) .. "|"
@@ -282,7 +282,7 @@ local function BuildUnitPortraitKey(unit, frame, p, guid)
   end
   return "2D|"
     .. PortraitKeyPart(unit) .. "|"
-    .. PortraitKeyPart(frame and frame.unit) .. "|"
+    .. PortraitKeyPart(frame and frame.MSUFUnitKey) .. "|"
     .. PortraitKeyPart(guid) .. "|"
     .. (exists and "1" or "0") .. "|"
     .. (available and "1" or "0") .. "|"
@@ -314,7 +314,7 @@ end
 local function BuildClassPortraitKey(unit, frame, p, class)
   return "CLASS|"
     .. PortraitKeyPart(unit) .. "|"
-    .. PortraitKeyPart(frame and frame.unit) .. "|"
+    .. PortraitKeyPart(frame and frame.MSUFUnitKey) .. "|"
     .. PortraitKeyPart(class) .. "|"
     .. PortraitKeyPart(p and p.classStyle)
 end
@@ -333,7 +333,7 @@ local function EnsurePortrait(frame)
     frame:HookScript("OnShow", function(self)
       if self._msufPortraitNeedsVisibleRefresh == true and Portrait.Update then
         self._msufPortraitNeedsVisibleRefresh = nil
-        Portrait.Update(self, "MSUF_PORTRAIT_ONSHOW", self.unit)
+        Portrait.Update(self, "MSUF_PORTRAIT_ONSHOW", self.MSUFUnitKey)
       end
     end)
   end
@@ -474,7 +474,7 @@ end
 
 local function ApplyClassPortrait(texture, unit, p, class, frame, force)
   class = class or BossPreviewClassToken(unit, frame) or UnitClassToken(unit)
-  local frameUnit = frame and frame.unit
+  local frameUnit = frame and frame.MSUFUnitKey
   local classStyle = p and p.classStyle or "BLIZZARD"
   if texture
     and texture._msufPortraitClassReady == true
@@ -556,14 +556,14 @@ ResolvePortraitBorderColor = function(frame, p, class)
     return nil
   end
   if style == "CLASS_COLOR" then
-    class = class or BossPreviewClassToken(frame.unit, frame) or UnitClassToken(frame.unit)
+    class = class or BossPreviewClassToken(frame.MSUFUnitKey, frame) or UnitClassToken(frame.MSUFUnitKey)
     local c = class and _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[class]
     if c then
       return c.r or 1, c.g or 1, c.b or 1, 1
     end
     return 1, 1, 1, 1
   elseif style == "REACTION" then
-    local reaction = UnitReaction and UnitReaction(frame.unit, "player")
+    local reaction = UnitReaction and UnitReaction(frame.MSUFUnitKey, "player")
     reaction = tonumber(reaction)
     if reaction then
       if reaction <= 2 then return 1, 0, 0, 1 end
@@ -656,7 +656,7 @@ end
 function Portrait.GetEvents(frame, spec)
   local p = spec and spec.portrait
   if p and p.enabled == true then
-    local unit = frame and frame.unit or spec and spec.unit
+    local unit = frame and frame.MSUFUnitKey or spec and spec.unit
     if p.render == "CLASS" then
       return PORTRAIT_CLASS_EVENTS
     end
@@ -679,7 +679,7 @@ function Portrait.GetUnitlessEvents(frame, spec)
   if not (p and p.enabled == true) then
     return EMPTY_EVENTS
   end
-  local unit = frame and frame.unit or spec and spec.unit
+  local unit = frame and frame.MSUFUnitKey or spec and spec.unit
   if p.render == "CLASS" then
     return PORTRAIT_UNITLESS_EVENTS
   end
@@ -725,9 +725,9 @@ function Portrait.Apply(frame, spec)
       frame._msufPortraitNeedsVisibleRefresh = nil
       frame._msufPortraitForceRefresh = nil
       if p.render == "CLASS" then
-        ApplyClassPortrait(frame.portrait, frame.unit, p, nil, frame)
+        ApplyClassPortrait(frame.portrait, frame.MSUFUnitKey, p, nil, frame)
       else
-        ApplyUnitPortrait(frame.portrait, frame.unit, frame, p)
+        ApplyUnitPortrait(frame.portrait, frame.MSUFUnitKey, frame, p)
       end
     else
       frame._msufPortraitNeedsVisibleRefresh = true
@@ -772,7 +772,7 @@ function Portrait.UpdateConnectionState(frame, event, unit)
     frame._msufPortraitNeedsVisibleRefresh = true
     return
   end
-  unit = unit or frame.unit
+  unit = unit or frame.MSUFUnitKey
   if frame._msufPortraitForceRefresh == true or UnitPortraitKeyChanged(texture, unit, frame, p) then
     ApplyPortraitUpdate(frame)
   else
@@ -790,7 +790,7 @@ function Portrait.Update(frame, event, unit)
   if not (p and p.enabled == true and texture and frame.MSUFPortraitHolder) then
     return
   end
-  unit = unit or frame.unit
+  unit = unit or frame.MSUFUnitKey
   if p.render ~= "CLASS" and PORTRAIT_UNIT_STATE_EVENTS[event] == true then
     BumpPortraitGenerationForEvent(event, unit)
   end

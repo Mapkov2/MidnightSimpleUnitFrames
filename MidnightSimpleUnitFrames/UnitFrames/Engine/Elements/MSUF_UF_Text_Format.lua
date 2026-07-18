@@ -1001,7 +1001,7 @@ local function CompileTextRuntime(frame, spec, text)
   rt.textColorA = baseTextColor and baseTextColor.a or 1
   rt.healthTextAlpha = rt.textColorA
   rt._textGradientPct = nil
-  rt.healthPlain = nativeSecrets ~= true and frame.unit == "player"
+  rt.healthPlain = nativeSecrets ~= true and frame.MSUFUnitKey == "player"
   rt._lastHealthTextHP = nil
   rt._lastHealthTextMax = nil
   rt._lastHealthTextMissing = nil
@@ -1048,8 +1048,8 @@ local function CompileTextRuntime(frame, spec, text)
     and (rt.powerColorByType == true or needsMax == true or needsPercent == true)
     and true
     or nil
-  rt.powerPlain = nativeSecrets ~= true and frame.unit == "player"
-  rt.plainTextTrusted = nativeSecrets ~= true and frame.unit == "player"
+  rt.powerPlain = nativeSecrets ~= true and frame.MSUFUnitKey == "player"
+  rt.plainTextTrusted = nativeSecrets ~= true and frame.MSUFUnitKey == "player"
   rt._lastPowerTextPower = nil
   rt._lastPowerTextMax = nil
   rt._dispatchPowerTextPower = nil

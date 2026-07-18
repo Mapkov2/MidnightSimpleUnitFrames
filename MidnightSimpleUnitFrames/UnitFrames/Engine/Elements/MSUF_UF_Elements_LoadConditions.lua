@@ -99,7 +99,7 @@ local function ShouldForcePreview(frame)
   if not frame then
     return false
   end
-  local unit = frame.unit
+  local unit = frame.MSUFUnitKey
   if PREVIEW_UNITS[unit] == true then
     return _G.MSUF_PreviewTestMode == true
   end
@@ -120,7 +120,7 @@ local function BuildRuntimeVisibility(frame, spec)
     return "hide"
   end
 
-  local unit = spec.unit or frame.unit
+  local unit = spec.unit or frame.MSUFUnitKey
   if type(unit) ~= "string" or unit == "" then
     unit = "player"
   end
@@ -212,7 +212,7 @@ local function RegisterVisibility(frame, spec)
       -- installed we must defer the swap-out; otherwise the unit watch from
       -- spawn already covers us and there is nothing to do.
       if frame._msufVisibilityExpr ~= nil then
-        UF.MarkDirty(frame.unit)
+        UF.MarkDirty(frame.MSUFUnitKey)
         if UF.Factory and UF.Factory.EnsureDeferredDriver then
           UF.Factory.EnsureDeferredDriver()
         end
@@ -237,7 +237,7 @@ local function RegisterVisibility(frame, spec)
   if RegisterStateDriver then
     if frame._msufVisibilityExpr ~= visibility then
       if InCombatLockdown and InCombatLockdown() then
-        UF.MarkDirty(frame.unit)
+        UF.MarkDirty(frame.MSUFUnitKey)
         if UF.Factory and UF.Factory.EnsureDeferredDriver then
           UF.Factory.EnsureDeferredDriver()
         end
@@ -259,7 +259,7 @@ local function RegisterVisibility(frame, spec)
   if visibility ~= "hide" and SecureCmdOptionParse then
     show = SecureCmdOptionParse(visibility) == "show"
   elseif visibility ~= "hide" then
-    show = UnitExistsPlain(frame.unit)
+    show = UnitExistsPlain(frame.MSUFUnitKey)
   end
   if frame._msufLoadShown ~= show then
     visibilityFrame:SetShown(show)
@@ -312,7 +312,7 @@ function LoadConditions.Disable(frame)
     return
   end
   if UnregisterStateDriver and InCombatLockdown and InCombatLockdown() then
-    UF.MarkDirty(frame.unit)
+    UF.MarkDirty(frame.MSUFUnitKey)
     if UF.Factory and UF.Factory.EnsureDeferredDriver then
       UF.Factory.EnsureDeferredDriver()
     end
@@ -401,9 +401,9 @@ local function ApplyBossPreviewText(frame, hp, hpMax, power, powerMax)
     return
   end
   rt.healthMissing = nil
-  text.UpdateTextSlots(rt.healthSlots, rt.healthSlotCount, hp, hpMax, frame.unit, BossPreviewPercent, rt.healthNeedsPercent, rt)
+  text.UpdateTextSlots(rt.healthSlots, rt.healthSlotCount, hp, hpMax, frame.MSUFUnitKey, BossPreviewPercent, rt.healthNeedsPercent, rt)
 
-  text.UpdateTextSlots(rt.powerSlots, rt.powerSlotCount, power, powerMax, frame.unit, BossPreviewPowerPercent, rt.powerNeedsPercent, rt)
+  text.UpdateTextSlots(rt.powerSlots, rt.powerSlotCount, power, powerMax, frame.MSUFUnitKey, BossPreviewPowerPercent, rt.powerNeedsPercent, rt)
 end
 
 local function ApplyBossPreviewFrameData(frame, index)

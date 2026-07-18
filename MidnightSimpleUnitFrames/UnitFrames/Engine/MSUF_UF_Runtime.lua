@@ -86,11 +86,11 @@ function UF.RefreshElements(unit, names, reason)
   local function specFor(frame)
     if not frame then return nil end
     if refreshedAll and config and type(config.GetSpec) == "function" then
-      return config.GetSpec(frame.unit)
+      return config.GetSpec(frame.MSUFUnitKey)
     elseif config and type(config.RefreshUnit) == "function" then
-      return config.RefreshUnit(frame.unit)
+      return config.RefreshUnit(frame.MSUFUnitKey)
     elseif config and type(config.GetSpec) == "function" then
-      return config.GetSpec(frame.unit)
+      return config.GetSpec(frame.MSUFUnitKey)
     end
     return frame.MSUFSpec
   end
@@ -460,7 +460,7 @@ function UF.RefreshPowerLayout(unit)
 end
 
 function UF.RefreshPowerLayoutForFrame(frame)
-  return UF.RefreshPowerLayout(frame and frame.unit or nil)
+  return UF.RefreshPowerLayout(frame and frame.MSUFUnitKey or nil)
 end
 
 function UF.RefreshTextLayout(unit)

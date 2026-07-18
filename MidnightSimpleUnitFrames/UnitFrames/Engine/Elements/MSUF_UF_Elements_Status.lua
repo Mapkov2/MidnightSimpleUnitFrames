@@ -867,7 +867,7 @@ end
 local function UpdateRaidMarker(frame, status)
   local cfg = status and status.raidMarker
   local tex = frame.raidTargetIcon
-  local unit = frame.unit
+  local unit = frame.MSUFUnitKey
   local unitState = FreshUnitState(frame, unit)
   local exists = UnitExistsRuntime(unit, unitState)
   if not (cfg and cfg.enabled and tex and GetRaidTargetIndex and SetRaidTargetIconTexture and exists) then
@@ -907,7 +907,7 @@ end
 local function UpdateLeader(frame, status)
   local cfg = status and status.leader
   local tex = frame.LeaderIndicator
-  local unit = frame.unit
+  local unit = frame.MSUFUnitKey
   local unitState = FreshUnitState(frame, unit)
   local exists = UnitExistsRuntime(unit, unitState)
   if not (cfg and cfg.enabled and tex and exists) then
@@ -927,7 +927,7 @@ local function UpdateLeader(frame, status)
 end
 
 local function UpdateLeaderPair(frame, status)
-  local unit = frame and frame.unit
+  local unit = frame and frame.MSUFUnitKey
   local leaderCfg = status and status.leader
   local assistCfg = status and status.assist
   local leaderTex = frame and (frame.leaderIcon or frame.LeaderIndicator)
@@ -1083,7 +1083,7 @@ local function UpdatePowerRoleVisibility(frame, status)
   if not bar then
     return false
   end
-  local unit = frame.unit
+  local unit = frame.MSUFUnitKey
   local c = frame._c
   local gf = MSUF and MSUF.GF
   local role = status and status.roleValue
@@ -1130,7 +1130,7 @@ end
 local function UpdateRole(frame, status)
   local cfg = status and status.role
   local tex = frame and frame.roleIcon
-  local unit = frame and frame.unit
+  local unit = frame and frame.MSUFUnitKey
   local unitState = FreshUnitState(frame, unit)
   local exists = UnitExistsRuntime(unit, unitState)
   local role = UnitGroupRolesAssigned and unit and UnitGroupRolesAssigned(unit) or nil
@@ -1159,7 +1159,7 @@ end
 local function UpdateReadyCheck(frame, status, event)
   local cfg = status and status.readyCheck
   local tex = frame and frame.readyCheckIcon
-  local unit = frame and frame.unit
+  local unit = frame and frame.MSUFUnitKey
   if not (cfg and cfg.enabled and tex and unit) then
     SetShown(tex, false)
     CancelReadyCheckTimer(frame)
@@ -1187,7 +1187,7 @@ end
 local function UpdateSummon(frame, status)
   local cfg = status and status.summon
   local tex = frame and frame.summonIcon
-  local unit = frame and frame.unit
+  local unit = frame and frame.MSUFUnitKey
   if not (cfg and cfg.enabled and tex and unit) then
     SetShown(tex, false)
     if frame then frame._msufGFSummonActive = false end
@@ -1218,7 +1218,7 @@ end
 local function UpdatePhase(frame, status)
   local cfg = status and status.phase
   local tex = frame and frame.phaseIcon
-  local unit = frame and frame.unit
+  local unit = frame and frame.MSUFUnitKey
   if not (cfg and cfg.enabled and tex and unit) then
     SetShown(tex, false)
     return
@@ -1243,7 +1243,7 @@ end
 local function UpdateLevel(frame, status)
   local cfg = status and status.level
   local fs = frame.levelText
-  local unit = frame.unit
+  local unit = frame.MSUFUnitKey
   local unitState = FreshUnitState(frame, unit)
   local exists = UnitExistsRuntime(unit, unitState)
   if not (cfg and cfg.enabled and fs and UnitLevel and exists) then
@@ -1275,7 +1275,7 @@ end
 local function UpdateRaidGroup(frame, status)
   local cfg = status and status.raidGroup
   local fs = frame.raidGroupNameText
-  local unit = frame.unit
+  local unit = frame.MSUFUnitKey
   local unitState = FreshUnitState(frame, unit)
   local exists = UnitExistsRuntime(unit, unitState)
   if not (cfg and cfg.enabled and fs and UnitInRaid and GetRaidRosterInfo and exists) then
@@ -1358,7 +1358,7 @@ local function UpdateElite(frame, status)
   end
   -- Opposite gate: only NPCs are elite/rare/boss classifications, so a PLAYER
   -- target can never show this. Skip the classification query for players.
-  local unit = frame.unit
+  local unit = frame.MSUFUnitKey
   local unitState = FreshUnitState(frame, unit)
   if status.testMode ~= true and UnitIsPlayerRuntime(unit, unitState) == true then
     SetShown(tex, false)
@@ -1389,7 +1389,7 @@ local function SeedHealthDeadOverride(seedHP)
 end
 
 local function StatusText(frame, cfg, unitState, seedHP)
-  local unit = frame.unit
+  local unit = frame.MSUFUnitKey
   local healthDead = SeedHealthDeadOverride(seedHP)
   if cfg and cfg.showDead then
     local connected, connectedKnown = ReadConnectedCached(frame, unit, unitState)
@@ -1448,7 +1448,7 @@ local function RefreshHealthAfterGoneStatus(frame, oldValue)
   end
   local health = UF.elements and UF.elements.Health
   local update = health and health.Update
-  local unit = frame.unit
+  local unit = frame.MSUFUnitKey
   if not (type(update) == "function" and type(unit) == "string" and unit ~= "" and issecretvalue(unit) ~= true) then
     return
   end
@@ -1490,7 +1490,7 @@ end
 local function UpdateStatusText(frame, status, event, seedHP)
   local cfg = status and status.statusText
   local fs = frame.statusIndicatorText
-  local unit = frame.unit
+  local unit = frame.MSUFUnitKey
   if not (cfg and cfg.enabled and fs) then
     ClearStatusText(frame, fs)
     return
@@ -1559,7 +1559,7 @@ end
 local function UpdateCombat(frame, status)
   local cfg = status and status.combat
   local tex = frame.combatStateIndicatorIcon
-  local unit = frame.unit
+  local unit = frame.MSUFUnitKey
   local unitState = FreshUnitState(frame, unit)
   local exists = UnitExistsRuntime(unit, unitState)
   if not (cfg and cfg.enabled and tex and exists) then
@@ -1587,7 +1587,7 @@ local function UpdateResting(frame, status)
     return
   end
   local active = status.testMode
-  if not active and frame.unit == "player" and IsResting then
+  if not active and frame.MSUFUnitKey == "player" and IsResting then
     local activeRaw = IsResting()
     active = BoolTrue(activeRaw)
   end
@@ -1602,7 +1602,7 @@ end
 local function UpdateIncomingRes(frame, status)
   local cfg = status and status.incomingRes
   local tex = frame.incomingResIndicatorIcon
-  local unit = frame.unit
+  local unit = frame.MSUFUnitKey
   local unitState = FreshUnitState(frame, unit)
   local exists = UnitExistsRuntime(unit, unitState)
   if not (cfg and cfg.enabled and tex and exists) then
@@ -1641,7 +1641,7 @@ end
 local function UpdatePVP(frame, status)
   local cfg = status and status.pvp
   local tex = frame and frame.pvpIndicatorIcon
-  local unit = frame and frame.unit
+  local unit = frame and frame.MSUFUnitKey
   if not (cfg and cfg.enabled and tex and unit) then
     SetShown(tex, false)
     return
@@ -1720,7 +1720,7 @@ local function StatusTextEvents(spec, frame)
     return EMPTY_EVENTS
   end
   local cfg = spec.status.statusText
-  local player = frame and frame.unit == "player"
+  local player = frame and frame.MSUFUnitKey == "player"
   local needsConnection = cfg.showDead == true and player ~= true
   local needsFlags = cfg.showDead == true or cfg.showGhost == true or cfg.showAFK == true or cfg.showDND == true
   if needsConnection then
@@ -1733,7 +1733,7 @@ local function StatusTextUnitlessEvents(spec, frame)
   if not StatusEnabled(spec, "statusText") then
     return EMPTY_EVENTS
   end
-  if not (frame and frame.unit == "player") then
+  if not (frame and frame.MSUFUnitKey == "player") then
     return EMPTY_EVENTS
   end
   local cfg = spec.status.statusText
@@ -1754,7 +1754,7 @@ local function PVPEvents(spec)
 end
 
 local function CombatEvents(spec, frame)
-  if frame and frame.unit == "player" then
+  if frame and frame.MSUFUnitKey == "player" then
     return EMPTY_EVENTS
   end
   return StatusEnabled(spec, "combat") and COMBAT_EVENTS or EMPTY_EVENTS
@@ -1823,7 +1823,7 @@ local function RegisterStatusIndicator(def)
   local getUnitlessEvents, playerUnitlessEvents, updateWithEvent = def[10], def[11], def[12]
 
   function element.IsEnabled(frame, spec)
-    if playerOnly == true and not (frame and frame.unit == "player") then
+    if playerOnly == true and not (frame and frame.MSUFUnitKey == "player") then
       return false
     end
     if noGroup == true and spec and spec.status and spec.status.group == true then
@@ -1848,7 +1848,7 @@ local function RegisterStatusIndicator(def)
     end
   elseif playerUnitlessEvents then
     function element.GetUnitlessEvents(frame)
-      return frame and frame.unit == "player" and playerUnitlessEvents or EMPTY_EVENTS
+      return frame and frame.MSUFUnitKey == "player" and playerUnitlessEvents or EMPTY_EVENTS
     end
   elseif unitlessEvents then
     function element.GetUnitlessEvents()

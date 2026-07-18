@@ -39,6 +39,7 @@ function bar:SetShown(shown) self.shown = shown end
 
 local frame = {
   unit = "party1",
+  MSUFUnitKey = "party1",
   incomingHealBar = bar,
   _msufPredictionRuntimeCfg = cfg,
   _msufPredictionMask = 1,

@@ -97,14 +97,14 @@ end
 local Castbars = {}
 
 function Castbars.IsEnabled(frame, spec)
-  return IsCastbarUnit(frame.unit) and spec and spec.castbar and spec.castbar.enabled == true
+  return IsCastbarUnit(frame.MSUFUnitKey) and spec and spec.castbar and spec.castbar.enabled == true
 end
 
 function Castbars.Enable(frame)
-  if not IsCastbarUnit(frame.unit) then
+  if not IsCastbarUnit(frame.MSUFUnitKey) then
     return
   end
-  local unit = CastbarUnit(frame.unit)
+  local unit = CastbarUnit(frame.MSUFUnitKey)
   if type(UF.ClaimBlizzardCastbarOwnership) == "function" then
     UF.ClaimBlizzardCastbarOwnership("MSUF", unit)
   end
@@ -115,15 +115,15 @@ function Castbars.Enable(frame)
 end
 
 function Castbars.Disable(frame)
-  if not IsCastbarUnit(frame.unit) then
+  if not IsCastbarUnit(frame.MSUFUnitKey) then
     return
   end
-  HideMSUFCastbar(frame.unit)
-  QueueCastbarRefresh(frame.unit)
+  HideMSUFCastbar(frame.MSUFUnitKey)
+  QueueCastbarRefresh(frame.MSUFUnitKey)
 end
 
 function Castbars.Apply(frame, spec)
-  if not IsCastbarUnit(frame.unit) then
+  if not IsCastbarUnit(frame.MSUFUnitKey) then
     return
   end
   if spec and spec.castbar and spec.castbar.enabled == true then
@@ -136,7 +136,7 @@ end
 local ClassPower = {}
 
 function ClassPower.IsEnabled(frame, spec)
-  return frame.unit == "player" and spec and spec.classPower and spec.classPower.enabled == true
+  return frame.MSUFUnitKey == "player" and spec and spec.classPower and spec.classPower.enabled == true
 end
 
 local function ApplyClassPowerCold(opts)
@@ -155,7 +155,7 @@ local function ApplyClassPowerCold(opts)
 end
 
 function ClassPower.Enable(frame, full)
-  if frame and frame.unit ~= "player" then
+  if frame and frame.MSUFUnitKey ~= "player" then
     return
   end
   Queue(function()
@@ -167,7 +167,7 @@ function ClassPower.Enable(frame, full)
 end
 
 function ClassPower.Disable(frame)
-  if frame and frame.unit ~= "player" then
+  if frame and frame.MSUFUnitKey ~= "player" then
     return
   end
   HideFrame(_G.MSUF_ClassPowerContainer)
@@ -180,7 +180,7 @@ function ClassPower.Disable(frame)
 end
 
 function ClassPower.Apply(frame, spec)
-  if frame.unit ~= "player" then
+  if frame.MSUFUnitKey ~= "player" then
     return
   end
   local enabled = ClassPower.IsEnabled(frame, spec)

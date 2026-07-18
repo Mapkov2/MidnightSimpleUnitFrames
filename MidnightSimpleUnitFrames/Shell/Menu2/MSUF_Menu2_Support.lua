@@ -33,7 +33,7 @@ local function ForEachCoreFrame(fn)
     local uf = MSUF and MSUF.UF
     if uf and type(uf.ForEachFrame) == "function" then
         uf.ForEachFrame(function(frame)
-            if frame then fn(frame, frame.unit or frame.MSUFUnitKey) end
+            if frame then fn(frame, frame.MSUFUnitKey or frame.unit) end
         end)
         return true
     end

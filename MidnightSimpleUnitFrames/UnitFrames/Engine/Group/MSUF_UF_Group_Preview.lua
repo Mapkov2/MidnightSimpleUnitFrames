@@ -392,15 +392,15 @@ local function ApplyPreviewText(frame, hp, hpMax, power, powerMax, class)
   if not (text and rt and text.UpdateTextSlots) then return end
 
   rt.healthMissing = max(0, (hpMax or 0) - (hp or 0))
-  text.UpdateTextSlots(rt.healthSlots, rt.healthSlotCount, hp, hpMax, frame.unit, PercentFactory((hp / max(hpMax, 1)) * 100), rt.healthNeedsPercent, rt)
+  text.UpdateTextSlots(rt.healthSlots, rt.healthSlotCount, hp, hpMax, frame.MSUFUnitKey, PercentFactory((hp / max(hpMax, 1)) * 100), rt.healthNeedsPercent, rt)
   if rt.healthColorByClass == true and text.SetHealthTextColor then
     local r, g, b = ClassColor(class)
     text.SetHealthTextColor(frame, rt, r, g, b, rt.healthTextAlpha or rt.textColorA or 1)
   elseif rt.healthColorByHealth == true and text.UpdateHealthTextColor then
-    text.UpdateHealthTextColor(frame, rt, frame.unit, hp, hpMax)
+    text.UpdateHealthTextColor(frame, rt, frame.MSUFUnitKey, hp, hpMax)
   end
 
-  text.UpdateTextSlots(rt.powerSlots, rt.powerSlotCount, power, powerMax, frame.unit, PercentFactory((power / max(powerMax, 1)) * 100), rt.powerNeedsPercent, rt)
+  text.UpdateTextSlots(rt.powerSlots, rt.powerSlotCount, power, powerMax, frame.MSUFUnitKey, PercentFactory((power / max(powerMax, 1)) * 100), rt.powerNeedsPercent, rt)
 end
 
 local function ApplyRoleIcon(frame, kind, role)
@@ -609,9 +609,8 @@ local function ReleasePreviewFrame(frames, index)
   frame.configKey = nil
   frame.msufConfigKey = nil
   frame.MSUFSpec = nil
-  frame.unit = nil
-  frame.unitKey = nil
   frame.MSUFUnitKey = nil
+  frame.unitKey = nil
   if frame.SetAttribute then frame:SetAttribute("unit", nil) end
   if frame.ClearAllPoints then frame:ClearAllPoints() end
 
@@ -696,7 +695,7 @@ local function PreviewApplyRevision(kind)
 end
 
 local function PreviewApplyKey(frame, kind, w, h, revision)
-  local unit = (frame.GetAttribute and frame:GetAttribute("unit")) or frame.unit or "player"
+  local unit = (frame.GetAttribute and frame:GetAttribute("unit")) or frame.MSUFUnitKey or "player"
   return tostring(kind) .. "\030" .. tostring(unit) .. "\030" .. tostring(revision or PreviewApplyRevision(kind))
     .. "\030" .. tostring(w) .. "\030" .. tostring(h)
 end
@@ -779,9 +778,8 @@ local function EnsurePreviewFrame(kind, index, parent)
   frame._msufIsGroupFrame = true
   frame.msufConfigKey = GF.GetConfigDBKey and GF.GetConfigDBKey(kind) or ("gf_" .. kind)
   frame.configKey = "gf_" .. kind
-  frame.unit = "player"
-  frame.unitKey = "player"
   frame.MSUFUnitKey = "player"
+  frame.unitKey = "player"
   if frame.SetAttribute then frame:SetAttribute("unit", "player") end
   return frame
 end
@@ -789,7 +787,7 @@ end
 local function PreparePreviewFrame(kind, index, layout, w, h, spacing, growth, upc, primary, blockW, blockH)
   local frame = EnsurePreviewFrame(kind, index, layout)
   SetPreviewFrameSize(frame, w, h)
-  frame.unit = "player"
+  frame.MSUFUnitKey = "player"
   frame.unitKey = "player"
   if frame.SetAttribute then frame:SetAttribute("unit", "player") end
   PositionPreviewFrame(frame, layout, index, kind, w, h, spacing, growth, upc, primary, blockW, blockH)
