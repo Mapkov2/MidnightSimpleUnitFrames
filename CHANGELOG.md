@@ -4,30 +4,22 @@
 
 ### Highlights
 
-- Completed Menu2 and Priority Frames localization across all bundled locales and added ten new MSUF bar textures.
-- Expanded scoped health/power text, absorb, heal-absorb, and heal-prediction controls with independent layouts and live previews.
-- Kept detached Power bars and Class Resources synchronized with live Blizzard and Skiron cooldown-frame widths through event-driven, combat-safe updates.
-- Added independent per-unit Blizzard-frame ownership so native and MSUF frames can coexist, with matching Menu, UUF import, and Assistant support.
-- Reduced inactive Guided Tour, search, catalog, theme, and widget work while stabilizing Color Painter and visible-page preview lifecycles.
-- Fixed frame clamping, boss and unit preview geometry, pet-frame color isolation, and legacy 5.57 text-layout migration.
+- Added separate Blizzard-frame controls for each unit.
+- Completed all Menu2 and Priority Frames translations.
+- Added ten new bar textures.
+- Expanded text, absorb, and prediction settings.
+- Improved cooldown-frame width syncing.
+- Reduced Menu and Guided Tour workload.
 
-### Changes
+### Fixes
 
-- Added complete Menu2 and Priority Frames translations for deDE, enGB, enUS, esES, esMX, frFR, itIT, koKR, ptBR, ruRU, zhCN, and zhTW.
-- Added Arcane Pulse, Aurora Silk, Deep Current, Dragon Scale, Ember Weave, Forged Steel, Frosted Quartz, Lunar Mist, Obsidian Glass, and Runic Circuit status-bar textures.
-- Split positive absorbs, negative heal absorbs, and heal prediction into dedicated scoped controls for enable state, anchor, height, offset, texture, opacity, and preview testing.
-- Expanded scoped HP and Power text behavior, including class-colored health text, safer name shortening beside level text, and matching Unit/Group previews.
-- Coalesced prediction refreshes and kept disabled prediction paths free of unnecessary runtime work.
-- Tracked cooldown-width source show, hide, resize, replacement, and combat transitions without adding continuous polling.
-- Shared the canonical live width resolver across detached Power bars, Class Resources, castbar anchors, third-party anchors, and previews.
-- Removed inactive Guided Tour visual refreshes and reduced repeated control-catalog, search-index, theme, and widget work.
-- Restored cached Color Painter previews, settled visible Menu layouts, and retained preview zoom across page refreshes.
-- Kept unit and group frames within screen bounds and stabilized boss previews and draggable unit-text geometry.
-- Prevented pet-frame coloring from inheriting unrelated unit-frame color state.
-- Preserved legacy 5.57 unit and group text slots, offsets, anchors, layers, separators, and name-shortening behavior during profile migration.
-- Improved Assistant all-frame recovery routing, scoped HP-text class-color handling, exact-setting safety, and Blizzard-frame ownership control.
-- Added per-unit "Force Blizzard frame on" controls with reload guidance while keeping MSUF Enable independent; Target-of-Target and Focus-Target retain their required Blizzard parents.
-- Expanded regression coverage for localization, prediction, external widths, Menu performance, previews, frame geometry, profiles, Assistant routing, and Blizzard-frame ownership.
+- Frames and previews now stay on screen.
+- Fixed incorrect pet-frame colors.
+- Fixed Color Painter previews.
+- Preview zoom is now preserved.
+- Improved old profile migration.
+- Improved Assistant controls and recovery.
+- Added more regression tests.
 
 ## 6.0-Beta20 - 2026-07-16
 
