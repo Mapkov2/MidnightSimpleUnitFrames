@@ -551,6 +551,7 @@ do
     local function ApplyOverlay(strata, onHealth, layer)
         local parent = NewFrame(nil)
         parent.unit = "party1"
+        parent.MSUFUnitKey = "party1"
         parent._msufIsGroupFrame = true
         parent._msufGFKind = "party"
         local healthFill
@@ -784,6 +785,7 @@ for _, laneSpec in ipairs(GROUP_LANES) do
             source[laneSpec.y] = -5
             local frame = NewFrame(nil)
             frame.unit = "party1"
+            frame.MSUFUnitKey = "party1"
             frame._msufIsGroupFrame = true
             frame.MSUFSpec = { auras = source }
             Check(AurasElement.IsEnabled(frame) == true, "group aura config did not enable")
@@ -819,6 +821,7 @@ Equal(groupCases, 216, "group lane/anchor/growth coverage")
 do
     local frame = NewFrame(nil)
     frame.unit = "party1"
+    frame.MSUFUnitKey = "party1"
     frame._msufIsGroupFrame = true
     frame._msufGFKind = "party"
     frame.MSUFSpec = {
@@ -897,17 +900,20 @@ do
 
     local preview = NewFrame(nil)
     preview.unit = "party1"
+    preview.MSUFUnitKey = "party1"
     preview._msufGFKind = "party"
     preview._msufGFIsPreviewFrame = true
     Equal(#AurasElement.GetEvents(preview), 0, "party preview registered aura access events")
 
     local raid = NewFrame(nil)
     raid.unit = "raid1"
+    raid.MSUFUnitKey = "raid1"
     raid._msufGFKind = "raid"
     Equal(#AurasElement.GetEvents(raid), 0, "raid registered party aura access events")
 
     local target = NewFrame(nil)
     target.unit = "target"
+    target.MSUFUnitKey = "target"
     Equal(#AurasElement.GetEvents(target), 0, "single unit registered party aura access events")
 end
 
@@ -969,6 +975,7 @@ do
 
     local groupFrame = NewFrame(nil)
     groupFrame.unit = "party1"
+    groupFrame.MSUFUnitKey = "party1"
     groupFrame._msufIsGroupFrame = true
     groupFrame.MSUFSpec = {
         auras = {

@@ -160,7 +160,7 @@ local raidFirst, raidSecond = GF._previewFrames.raid[1], GF._previewFrames.raid[
 assert(raidFirst == first and raidSecond == second, "cross-kind reuse did not consume pooled buttons")
 assert(createdButtons == 2 and #GF._previewFreeFrames == 0, "sequential kind switch increased high-water memory")
 assert(raidFirst._msufGFKind == "raid" and raidFirst.configKey == "gf_raid"
-  and raidFirst.unit == "player" and raidFirst:GetParent() == GF._previewLayoutFrame.raid,
+  and raidFirst.MSUFUnitKey == "player" and raidFirst:GetParent() == GF._previewLayoutFrame.raid,
   "cross-kind frame state was not rebound")
 
 assert(GF.ShowPreview("party", 1, { immediate = true }) == true, "simultaneous party preview failed")

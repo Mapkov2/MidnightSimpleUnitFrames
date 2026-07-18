@@ -690,7 +690,7 @@ def check_portrait_refresh_contracts() -> None:
     )
     require(
         portrait,
-        "ApplyUnitPortrait(texture, frame.unit, frame, p, force)",
+        "ApplyUnitPortrait(texture, frame.MSUFUnitKey, frame, p, force)",
         "Portrait force must reach the queued update path",
     )
     require(

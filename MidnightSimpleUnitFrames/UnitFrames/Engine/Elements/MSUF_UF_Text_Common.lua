@@ -314,7 +314,7 @@ local function UpdateHealthTextColor(frame, rt, unit, hp, hpMax)
     return
   end
   if rt.healthColorByClass == true then
-    local r, g, b = ClassColor(unit or frame.unit)
+    local r, g, b = ClassColor(unit or frame.MSUFUnitKey)
     local a = rt.healthTextAlpha
     if a == nil then
       local _
@@ -336,12 +336,12 @@ local function UpdateHealthTextColor(frame, rt, unit, hp, hpMax)
     if rt._textGradientPct == bucket then
       return
     end
-    SetHealthTextColor(frame, rt, HealthTextColor(frame, unit or frame.unit, hp, hpMax, rt))
+    SetHealthTextColor(frame, rt, HealthTextColor(frame, unit or frame.MSUFUnitKey, hp, hpMax, rt))
     rt._textGradientPct = bucket
     return
   end
   rt._textGradientPct = nil
-  SetHealthTextColor(frame, rt, HealthTextColor(frame, unit or frame.unit, hp, hpMax, rt))
+  SetHealthTextColor(frame, rt, HealthTextColor(frame, unit or frame.MSUFUnitKey, hp, hpMax, rt))
 end
 
 local function SetNameTextColor(frame, r, g, b, a)
@@ -449,7 +449,7 @@ local function InlineTextColor(frame, unit, inline)
   if mode == "DEFAULT" then
     return fr, fg, fb, fa
   elseif mode == "TARGET_NAME" then
-    return NameTextColorFor(frame, frame.unit, inline.targetNameClassColor == true, inline.targetNameNpcColor == true, nil, inline.targetNameNpcClassColor == true)
+    return NameTextColorFor(frame, frame.MSUFUnitKey, inline.targetNameClassColor == true, inline.targetNameNpcColor == true, nil, inline.targetNameNpcClassColor == true)
   elseif mode == "TOT_NAME" then
     return NameTextColorFor(frame, unit, inline.totNameClassColor == true, inline.totNameNpcColor == true, "targettarget", inline.totNameNpcClassColor == true)
   end

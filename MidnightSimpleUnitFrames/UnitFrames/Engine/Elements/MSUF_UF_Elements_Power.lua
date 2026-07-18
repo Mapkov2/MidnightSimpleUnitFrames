@@ -561,10 +561,10 @@ local function SetColor(frame, force)
     local powerType, token
     local metaKnown = false
     if mode ~= "class" and UnitPowerType then
-      powerType, token = ReadPowerTypeCached(bar, frame.unit, true)
+      powerType, token = ReadPowerTypeCached(bar, frame.MSUFUnitKey, true)
       metaKnown = powerType ~= nil or token ~= nil
     end
-    r, g, b = ResolveDynamicPowerColor(frame, frame.unit, powerType, token, metaKnown)
+    r, g, b = ResolveDynamicPowerColor(frame, frame.MSUFUnitKey, powerType, token, metaKnown)
   end
   local a = power.alpha or 1
   if force or bar._msufR ~= r or bar._msufG ~= g or bar._msufB ~= b or bar._msufA ~= a then
@@ -582,7 +582,7 @@ function Power.GetEvents(frame, spec)
   local power = spec and spec.power
   -- Player power is driven by Blizzard's high-frequency event instead of also
   -- subscribing the bar to UNIT_POWER_UPDATE and doing duplicate value work.
-  if (frame and frame.unit == "player") or (power and power.frequent == true) then
+  if (frame and frame.MSUFUnitKey == "player") or (power and power.frequent == true) then
     return POWER_EVENTS_FAST
   end
   return POWER_EVENTS
@@ -799,7 +799,7 @@ local function UpdateAbsolute(frame, event, unit, animate)
 end
 
 local function UpdatePercentPath(frame, event, unit, eventPowerToken)
-  unit = unit or (frame and frame.unit)
+  unit = unit or (frame and frame.MSUFUnitKey)
   local rt = frame and frame._msufTextRuntime
   if rt and rt._dispatchPowerPercentReady == true then
     rt._dispatchPowerPercent = nil
@@ -820,7 +820,7 @@ local function UpdatePercentPath(frame, event, unit, eventPowerToken)
 end
 
 local function UpdateAbsolutePath(frame, event, unit, eventPowerToken)
-  unit = unit or (frame and frame.unit)
+  unit = unit or (frame and frame.MSUFUnitKey)
   local rt = frame and frame._msufTextRuntime
   if rt and rt._dispatchPowerPercentReady == true then
     rt._dispatchPowerPercent = nil
@@ -839,7 +839,7 @@ local function UpdateAbsolutePath(frame, event, unit, eventPowerToken)
 end
 
 local function UpdateCurrentPath(frame, event, unit, eventPowerToken)
-  unit = unit or (frame and frame.unit)
+  unit = unit or (frame and frame.MSUFUnitKey)
   local rt = frame and frame._msufTextRuntime
   if rt and rt._dispatchPowerPercentReady == true then
     rt._dispatchPowerPercent = nil

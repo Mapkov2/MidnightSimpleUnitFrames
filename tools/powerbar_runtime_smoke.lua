@@ -127,6 +127,7 @@ end
 
 local frame = NewRegion(nil)
 frame.unit = "player"
+frame.MSUFUnitKey = "player"
 frame.frameLevel = 10
 frame.width = 275
 

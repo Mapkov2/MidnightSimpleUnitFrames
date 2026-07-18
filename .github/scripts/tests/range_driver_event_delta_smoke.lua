@@ -166,6 +166,7 @@ local RangeFade = assert(captured, "RangeFade element was not registered")
 local function NewUnitFrame(unit)
     local frame = {
         unit = unit,
+        MSUFUnitKey = unit,
         visible = true,
         hooks = {},
     }

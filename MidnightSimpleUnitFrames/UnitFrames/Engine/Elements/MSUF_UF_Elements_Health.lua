@@ -122,7 +122,7 @@ local function ApplyRuntimeColor(frame, event, unit, hp, maxHP)
     and type(hp) == "number" then
     maxHP = 100
   end
-  ApplyHealthStatusColor(bar, frame, unit or frame.unit, hp, maxHP, nil, event)
+  ApplyHealthStatusColor(bar, frame, unit or frame.MSUFUnitKey, hp, maxHP, nil, event)
   return true
 end
 
@@ -193,7 +193,7 @@ function Health.Apply(frame, spec)
   if SetBarSmoothing then SetBarSmoothing(frame.hpBar, h and h.smooth == true) end
   if ApplyBarGradient then ApplyBarGradient(frame, frame.hpBar, h and h.barGradient, "hpGradients") end
   SetColor(frame, true)
-  ApplyRuntimeColor(frame, "MSUF_COLOR_CHANGE", frame.unit)
+  ApplyRuntimeColor(frame, "MSUF_COLOR_CHANGE", frame.MSUFUnitKey)
 end
 
 function Health.GetEvents(frame, spec)
@@ -204,7 +204,7 @@ function Health.GetUnitlessEvents(frame, spec)
   if spec and spec.scope == "group" then
     return GROUP_LIFECYCLE_EVENTS
   end
-  if frame and frame.unit == "player" and RuntimeColorEnabledForSpec(spec) then
+  if frame and frame.MSUFUnitKey == "player" and RuntimeColorEnabledForSpec(spec) then
     return PLAYER_STATUS_COLOR_EVENTS
   end
   return nil
@@ -380,7 +380,7 @@ local function NotifyHealthState(frame, event, unit, hp)
 end
 
 local function UpdateSingle(frame, event, unit)
-  unit = unit or frame.unit
+  unit = unit or frame.MSUFUnitKey
   local rt = frame and frame._msufTextRuntime
   if rt and rt._dispatchHealthPercentReady == true then
     rt._dispatchHealthPercent = nil
@@ -406,7 +406,7 @@ local function UpdateSingle(frame, event, unit)
 end
 
 local function UpdateSingleAbsolute(frame, event, unit)
-  unit = unit or frame.unit
+  unit = unit or frame.MSUFUnitKey
   local rt = frame and frame._msufTextRuntime
   if rt and rt._dispatchHealthPercentReady == true then
     rt._dispatchHealthPercent = nil
@@ -423,7 +423,7 @@ local function UpdateSingleAbsolute(frame, event, unit)
 end
 
 local function UpdateSingleCurrent(frame, event, unit)
-  unit = unit or frame.unit
+  unit = unit or frame.MSUFUnitKey
   local rt = frame and frame._msufTextRuntime
   if rt and rt._dispatchHealthPercentReady == true then
     rt._dispatchHealthPercent = nil
@@ -444,7 +444,7 @@ local function UpdateSingleCurrent(frame, event, unit)
 end
 
 local function UpdateGroup(frame, event, unit)
-  unit = unit or frame.unit
+  unit = unit or frame.MSUFUnitKey
   local rt = frame and frame._msufTextRuntime
   if rt and rt._dispatchHealthPercentReady == true then
     rt._dispatchHealthPercent = nil
@@ -489,7 +489,7 @@ local function UpdateGroup(frame, event, unit)
 end
 
 local function UpdateGroupAbsolute(frame, event, unit)
-  unit = unit or frame.unit
+  unit = unit or frame.MSUFUnitKey
   local rt = frame and frame._msufTextRuntime
   if rt and rt._dispatchHealthPercentReady == true then
     rt._dispatchHealthPercent = nil
@@ -525,7 +525,7 @@ local function UpdateGroupAbsolute(frame, event, unit)
 end
 
 local function UpdateGroupCurrent(frame, event, unit)
-  unit = unit or frame.unit
+  unit = unit or frame.MSUFUnitKey
   local rt = frame and frame._msufTextRuntime
   if rt and rt._dispatchHealthPercentReady == true then
     rt._dispatchHealthPercent = nil
@@ -582,7 +582,7 @@ end
 
 local function UpdateColorOnly(frame, event, unit)
   if not (frame and frame.hpBar) then return end
-  if not ApplyRuntimeColor(frame, event, unit or frame.unit) then
+  if not ApplyRuntimeColor(frame, event, unit or frame.MSUFUnitKey) then
     SetColor(frame)
   end
 end
@@ -646,7 +646,7 @@ Health.UpdateMaxValueStaticPlain = Health.Update
 Health.UpdateConnectionState = Health.Update
 Health.UpdateIdentityColor = Health.Update
 function Health.UpdateGroupLifecycleMetadata(frame, _event, unit)
-  local isAI, changed = RefreshGroupAIHealthMode(frame, unit or (frame and frame.unit))
+  local isAI, changed = RefreshGroupAIHealthMode(frame, unit or (frame and frame.MSUFUnitKey))
   -- Detailed AI health/prediction availability is committed by these lifecycle
   -- events. Refresh every active follower, but keep ordinary raid members on
   -- the metadata-only path unless their classification actually changed.
@@ -668,7 +668,7 @@ function Health.RefreshColor(frameOrUnit, event)
     frame = UF.frames and UF.frames[frameOrUnit]
   end
   if not (frame and frame.hpBar) then return false end
-  if ApplyRuntimeColor(frame, event or "MSUF_COLOR_CHANGE", frame.unit) then
+  if ApplyRuntimeColor(frame, event or "MSUF_COLOR_CHANGE", frame.MSUFUnitKey) then
     return true
   end
   SetColor(frame, true)

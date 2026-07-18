@@ -269,7 +269,7 @@ end
 
 MSUF.Bars._ClassBackgroundColor = function(frame, defR, defG, defB)
     if not frame then return defR, defG, defB end
-    local unit = frame.unit
+    local unit = frame.MSUFUnitKey or frame.unit
     if not unit or (UnitExists and not UnitExists(unit)) then
         frame._msufBarBgClassGuid = nil
         frame._msufBarBgClassToken = nil

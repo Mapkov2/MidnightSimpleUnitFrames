@@ -44,7 +44,8 @@ function MSUF.Icons._layout.GetConf(f)
     local db = _G.MSUF_DB
     if not db then return nil, nil, nil end
     local g = db.general or {}
-    local key = (f and f.unit) and GetConfigKeyForUnitSafe(f.unit) or nil
+    local unit = f and (f.MSUFUnitKey or f.unit)
+    local key = unit and GetConfigKeyForUnitSafe(unit) or nil
     return g, key, (key and db[key]) or nil
 end
 

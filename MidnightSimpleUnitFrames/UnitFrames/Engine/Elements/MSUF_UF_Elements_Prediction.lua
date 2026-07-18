@@ -1323,7 +1323,7 @@ function Prediction.GetEvents(frame, spec)
   return PredictionEventsForConfig(
     spec and spec.prediction,
     true,
-    (frame and frame.unit) or (spec and spec.key)
+    (frame and frame.MSUFUnitKey) or (spec and spec.key)
   )
 end
 
@@ -1527,7 +1527,7 @@ local function QueuePredictionDataEvent(frame, event)
   frame._msufPredictionQueued = nil
   mask = frame._msufPredictionDirtyMask
   frame._msufPredictionDirtyMask = nil
-  if mask then UpdateFull(frame, PREDICTION_DIRTY_PLAN_KEYS[mask], frame.unit) end
+  if mask then UpdateFull(frame, PREDICTION_DIRTY_PLAN_KEYS[mask], frame.MSUFUnitKey) end
 end
 
 FlushPredictionQueue = function()
@@ -1553,7 +1553,7 @@ FlushPredictionQueue = function()
         -- runtime plan after this event was registered. Let UpdateFull validate
         -- the current spec and rebuild that plan instead of stranding the bar
         -- until an unrelated health/lifecycle event happens.
-        UpdateFull(frame, PREDICTION_DIRTY_PLAN_KEYS[mask], frame.unit)
+        UpdateFull(frame, PREDICTION_DIRTY_PLAN_KEYS[mask], frame.MSUFUnitKey)
       end
     end
   end
@@ -1565,12 +1565,12 @@ end
 
 function Prediction.UpdateHealthValue(frame, event, unit, seedHP, seedMaxHP)
   if unit and issecretvalue(unit) == true then
-    unit = frame and frame.unit or nil
+    unit = frame and frame.MSUFUnitKey or nil
     seedHP, seedMaxHP = nil, nil
-  elseif unit and frame and unit ~= frame.unit then
+  elseif unit and frame and unit ~= frame.MSUFUnitKey then
     return UpdateFull(frame, event, unit, seedHP, seedMaxHP)
   end
-  unit = unit or frame.unit
+  unit = unit or frame.MSUFUnitKey
   local cfg = frame._msufPredictionRuntimeCfg
   if not (cfg and cfg.enabled == true)
     or cfg.test == true
@@ -1620,12 +1620,12 @@ end
 
 function Prediction.UpdateConnectionState(frame, event, unit, seedHP, seedMaxHP, seedCalc)
   if unit and issecretvalue(unit) == true then
-    unit = frame and frame.unit or nil
+    unit = frame and frame.MSUFUnitKey or nil
     seedHP, seedMaxHP, seedCalc = nil, nil, nil
-  elseif unit and frame and unit ~= frame.unit then
+  elseif unit and frame and unit ~= frame.MSUFUnitKey then
     return UpdateFull(frame, event, unit, seedHP, seedMaxHP, seedCalc)
   end
-  unit = unit or frame.unit
+  unit = unit or frame.MSUFUnitKey
   local cfg = frame._msufPredictionRuntimeCfg
   if not (cfg and cfg.enabled == true)
     or cfg.test == true
@@ -1695,13 +1695,13 @@ end
 
 UpdateFull = function(frame, event, unit, seedHP, seedMaxHP, seedCalc)
   if unit and issecretvalue(unit) == true then
-    unit = frame and frame.unit or nil
+    unit = frame and frame.MSUFUnitKey or nil
     seedHP, seedMaxHP, seedCalc = nil, nil, nil
-  elseif unit and frame and unit ~= frame.unit then
-    unit = frame.unit
+  elseif unit and frame and unit ~= frame.MSUFUnitKey then
+    unit = frame.MSUFUnitKey
     seedHP, seedMaxHP, seedCalc = nil, nil, nil
   else
-    unit = unit or frame.unit
+    unit = unit or frame.MSUFUnitKey
   end
   local unitSecret = issecretvalue(unit) == true
   local cfg = frame._msufPredictionRuntimeCfg
@@ -1935,7 +1935,7 @@ function Prediction.RefreshVisible(reason)
     local visible = frame and frame._msufCoreVisible
     if frame
       and frame._msufCoreSpecEnabled ~= false
-      and (not UF.IsUnitToken or UF.IsUnitToken(frame.unit))
+      and (not UF.IsUnitToken or UF.IsUnitToken(frame.MSUFUnitKey))
       and active and active.Prediction == true
       and type(update) == "function"
       and (visible == true
@@ -1947,7 +1947,7 @@ function Prediction.RefreshVisible(reason)
       -- a possibly pre-world UnitExists snapshot so UnitMissing reads live state.
       local state = frame._msufUnitState
       if state then state.ready = false end
-      update(frame, reason, frame.unit)
+      update(frame, reason, frame.MSUFUnitKey)
       did = true
     end
   end

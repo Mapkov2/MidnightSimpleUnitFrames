@@ -326,10 +326,11 @@ local function _MSUF_ApplyFontsToFrame(f)
     if not f then return end
     local S = _fontState
     local key = f.msufConfigKey
-    if (not key) and f.unit and MSUF and MSUF.UF and MSUF.UF.ConfigKeyForUnit then
-        key = MSUF.UF.ConfigKeyForUnit(f.unit)
+    local unit = f.MSUFUnitKey or f.unit
+    if (not key) and unit and MSUF and MSUF.UF and MSUF.UF.ConfigKeyForUnit then
+        key = MSUF.UF.ConfigKeyForUnit(unit)
     end
-    if S.onlyKey and NormalizeFontScopeKey(key or f.unit) ~= S.onlyKey then return end
+    if S.onlyKey and NormalizeFontScopeKey(key or unit) ~= S.onlyKey then return end
 
     local conf
     if key and _G.MSUF_DB then conf = _G.MSUF_DB[key] end

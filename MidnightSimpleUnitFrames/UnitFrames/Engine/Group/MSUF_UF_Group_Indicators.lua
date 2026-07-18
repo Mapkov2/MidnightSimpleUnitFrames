@@ -227,7 +227,7 @@ end
 --- do not repaint unchanged slots.
 local function RuntimeThreat(frame, cfg, event)
   if not (frame and cfg and cfg.enabled == true and cfg.needsThreat == true) then return end
-  local unit = frame.unit
+  local unit = frame.MSUFUnitKey
   if unit and UnitMissing(unit) then
     frame._msufGFCornerThreatCfg = cfg
     frame._msufGFCornerThreatState = false

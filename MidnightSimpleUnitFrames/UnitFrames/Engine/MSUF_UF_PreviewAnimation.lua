@@ -139,7 +139,7 @@ function PA.BuildFrameState(frame, index, kind, scratch, elapsed)
   scratch = scratch or frameStateScratch
   local i = tonumber(index) or tonumber(frame and frame._msufGFPreviewIndex) or 1
   elapsed = tonumber(elapsed) or 0
-  local offset = (i * 0.073) + ((tostring(kind or frame and frame.unit or ""):byte(1) or 0) * 0.001)
+  local offset = (i * 0.073) + ((tostring(kind or frame and frame.MSUFUnitKey or ""):byte(1) or 0) * 0.001)
   local hpWave = Triangle(elapsed, 0.145, offset)
   local powerWave = Triangle(elapsed, 0.21, offset + 0.31)
   local castPct = Saw(elapsed, 0.34, offset + 0.18)
@@ -360,7 +360,7 @@ end
 
 local function RuntimeStatusBarValues(frame, bar, role)
   if not bar then return nil, nil end
-  local unit = frame and frame.unit
+  local unit = frame and frame.MSUFUnitKey
   local value, maxValue
   if role == "health" and unit then
     if bar._msufHealthValueUnit == unit then value = bar._msufHealthValue end
@@ -481,7 +481,7 @@ end
 
 local function RefreshUnitFrameRuntimeAfterPreview(frame)
   if not frame then return end
-  local unit = frame.unit
+  local unit = frame.MSUFUnitKey
   local reason = RuntimeStopReason(frame)
 
   frame._msufPreviewNameText = nil
@@ -577,21 +577,21 @@ local function ApplyText(frame, hp, hpMax, power, powerMax, hpPct, powerPct)
 
   rt.healthMissing = max(0, (hpMax or 0) - (hp or 0))
   percentValue = floor((hpPct or 0) * 100 + 0.5)
-  text.UpdateTextSlots(rt.healthSlots, rt.healthSlotCount, hp, hpMax, frame.unit, PercentValue, rt.healthNeedsPercent, rt)
+  text.UpdateTextSlots(rt.healthSlots, rt.healthSlotCount, hp, hpMax, frame.MSUFUnitKey, PercentValue, rt.healthNeedsPercent, rt)
 
   percentValue = floor((powerPct or 0) * 100 + 0.5)
-  text.UpdateTextSlots(rt.powerSlots, rt.powerSlotCount, power, powerMax, frame.unit, PercentValue, rt.powerNeedsPercent, rt)
+  text.UpdateTextSlots(rt.powerSlots, rt.powerSlotCount, power, powerMax, frame.MSUFUnitKey, PercentValue, rt.powerNeedsPercent, rt)
 end
 
 local function ApplyPreviewName(frame, kind)
   local text = MSUF and MSUF.UFText
-  local label = PREVIEW_NAME_LABELS[kind or frame and frame.unit]
+  local label = PREVIEW_NAME_LABELS[kind or frame and frame.MSUFUnitKey]
   if not (frame and label and text and type(text.UpdateName) == "function") then
     if frame then frame._msufPreviewNameText = nil end
     return false
   end
   frame._msufPreviewNameText = label
-  text.UpdateName(frame, "MSUF_PREVIEW_NAME", frame.unit)
+  text.UpdateName(frame, "MSUF_PREVIEW_NAME", frame.MSUFUnitKey)
   return true
 end
 
@@ -606,7 +606,7 @@ local function StoreUnitFrameRestore(frame)
 
   restore = {
     source = PA.source,
-    unit = frame.unit,
+    unit = frame.MSUFUnitKey,
     healthBar = StoreStatusBarState(frame.hpBar or frame.Health or frame.health),
     powerBar = StoreStatusBarState(frame.targetPowerBar or frame.powerBar or frame.Power or frame.power),
     incomingHealBar = StoreStatusBarState(frame.incomingHealBar),
@@ -677,7 +677,7 @@ end
 local function FormatCastbarPreviewTime(frame, remaining, total)
   local fmt = "CURRENT"
   if type(_G.MSUF_GetCastbarTimeFormat) == "function" then
-    fmt = _G.MSUF_GetCastbarTimeFormat(frame and frame.unit) or fmt
+    fmt = _G.MSUF_GetCastbarTimeFormat(frame and frame.MSUFUnitKey) or fmt
   end
   if frame then frame._msufCastTimeFormat = fmt end
   if type(_G.MSUF_FormatCastbarTimeText) == "function" then
@@ -797,7 +797,7 @@ local function ApplyCastbarPreviewFrame(frame, index, kind, label)
 
   SetTextIfChanged(frame.castText, label or "Test Cast")
   if frame.timeText then
-    local showTime = CastbarTimeEnabled(frame.unit or kind)
+    local showTime = CastbarTimeEnabled(frame.MSUFUnitKey or kind)
     frame.timeText:Show()
     if frame.timeText.SetAlpha then frame.timeText:SetAlpha(showTime and 1 or 0) end
     SetTextIfChanged(frame.timeText, showTime and FormatCastbarPreviewTime(frame, remaining, duration) or "")

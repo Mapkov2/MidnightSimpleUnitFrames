@@ -67,7 +67,7 @@ local function CastbarRangeAlpha(frame, mul)
 end
 
 local function ApplyCastbarRangeAlpha(frame, mul, force)
-  local unit = frame and frame.unit
+  local unit = frame and frame.MSUFUnitKey
   local castbar = CastbarForUnit(unit)
   if not (castbar and castbar.SetAlpha) then
     return false

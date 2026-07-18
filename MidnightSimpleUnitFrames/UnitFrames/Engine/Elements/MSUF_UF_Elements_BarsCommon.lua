@@ -786,7 +786,7 @@ local function RefreshUnitState(frame, unit, spec, event)
   if not frame then
     return nil
   end
-  unit = unit or frame.unit
+  unit = unit or frame.MSUFUnitKey
   local needsIdentity = HealthModeNeedsIdentity(spec)
   local state = frame._msufUnitState
   if not state then

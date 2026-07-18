@@ -149,7 +149,7 @@ local function StoredAttrUnit(frame)
   local value = attrUnit[frame]
   if value == NO_UNIT then return nil end
   if value ~= nil then return value end
-  return frame and frame.unit or nil
+  return frame and frame.MSUFUnitKey or nil
 end
 
 local function RemovePriorityUnitIndex(frame, unit)
@@ -226,14 +226,14 @@ local function TrackFrame(frame, unit)
     GF.frames[frame] = true
     GF.frameList[#GF.frameList + 1] = frame
   end
-  IndexFrameUnit(frame, unit or frame.unit)
+  IndexFrameUnit(frame, unit or frame.MSUFUnitKey)
 end
 GF.TrackFrame = TrackFrame
 
 function GF.FrameForUnit(unit)
   if not IsUnitToken(unit) then return nil end
   local frame = GF.unitFrames and GF.unitFrames[unit]
-  if frame and frame.unit == unit then return frame end
+  if frame and frame.MSUFUnitKey == unit then return frame end
   return nil
 end
 
@@ -256,7 +256,7 @@ function GF.ForEachFrameForUnit(unit, fn, ...)
       and GF.frames[frame] == true
       and frame._msufGFIndexedPriority == true
       and frame._msufGFIndexedUnit == unit
-      and frame.unit == unit
+      and frame.MSUFUnitKey == unit
       and IsPriorityFrame(frame) then
       if fn(frame, unit, ...) == true then any = true end
     end
@@ -281,7 +281,7 @@ end
 local function IsExactLifecycleFrame(frame, unit)
   if not frame
     or GF.frames[frame] ~= true
-    or frame.unit ~= unit
+    or frame.MSUFUnitKey ~= unit
     or frame._msufGFIndexedUnit ~= unit
     or frame._msufGFIsPreviewFrame == true then
     return false
@@ -341,7 +341,7 @@ end
 
 function GF.ValidateUnitFrameMap(frame, unit)
   local visual = VisualFrame(frame)
-  return IsUnitToken(unit) and visual ~= nil and GF.unitFrames[unit] == visual and visual.unit == unit
+  return IsUnitToken(unit) and visual ~= nil and GF.unitFrames[unit] == visual and visual.MSUFUnitKey == unit
 end
 
 local function MarkApplied(frame, kind, unit, spec)
@@ -365,7 +365,7 @@ end
 local function NotifyGroupRangeUnitIdentity(frame)
   local update = frame and frame._msufUpdateGroupRangeFade
   if type(update) == "function" then
-    update(frame, UNIT_CHANGED_REASON, frame.unit)
+    update(frame, UNIT_CHANGED_REASON, frame.MSUFUnitKey)
   end
 end
 
@@ -402,11 +402,6 @@ local function ConfigureSecureClicks(frame)
     frame:SetAttribute("*type2", "togglemenu")
     frame:SetAttribute("*clickbutton2", nil)
   end
-  if UF and type(UF.ConfigurePingableUnitFrame) == "function" then
-    UF.ConfigurePingableUnitFrame(frame)
-  else
-    frame:SetAttribute("ping-receiver", true)
-  end
   secureClicksConfigured[frame] = true
   return true
 end
@@ -414,13 +409,11 @@ end
 local function SetButtonBasics(shell, visual, unit, spec)
   local preview = IsPreviewFrame(shell, visual)
   shell._msufIsGroupFrameShell = true
-  shell.unit = unit
-  shell.unitKey = unit
   shell.MSUFUnitKey = unit
+  shell.unitKey = unit
   visual._msufIsGroupFrame = true
-  visual.unit = unit
-  visual.unitKey = unit
   visual.MSUFUnitKey = unit
+  visual.unitKey = unit
   if preview then
     -- Preview buttons are visual-only. Keep them out of ClickCastFrames and do
     -- not configure secure/default click handling that can never be used while
@@ -477,7 +470,7 @@ local function SuspendUnitBinding(frame)
   UnindexFrameUnit(visual)
   attrUnit[shell] = NO_UNIT
   if visual then
-    visual.unit = nil
+    visual.MSUFUnitKey = nil
     visual.unitKey = nil
     NotifyGroupRangeUnitIdentity(visual)
   end
@@ -518,7 +511,7 @@ end
 
 function GF.ApplyButton(frame, kind, reason)
   if not frame then return false end
-  local unit = frame.GetAttribute and frame:GetAttribute("unit") or frame.unit
+  local unit = frame.GetAttribute and frame:GetAttribute("unit") or frame.MSUFUnitKey
   if not IsUnitToken(unit) then
     SuspendUnitBinding(frame)
     return false
@@ -532,7 +525,7 @@ end
 --- Unknown masks deliberately fall back to the full group mask.
 function GF.ApplyPreviewButtonDirty(frame, kind, reason, dirtyMask)
   if not frame then return false end
-  local unit = frame.GetAttribute and frame:GetAttribute("unit") or frame.unit
+  local unit = frame.GetAttribute and frame:GetAttribute("unit") or frame.MSUFUnitKey
   if not IsUnitToken(unit) then
     SuspendUnitBinding(frame)
     return false
@@ -573,11 +566,10 @@ local function OnChildAttributeChanged(self, name, value)
     return
   end
 
-  if visual.unit == rawUnit then
+  if visual.MSUFUnitKey == rawUnit then
     visual.MSUFSpec.unit = rawUnit
     visual.MSUFUnitKey = rawUnit
     visual.unitKey = rawUnit
-    self.unit = rawUnit
     self.MSUFUnitKey = rawUnit
     self.unitKey = rawUnit
     attrUnit[self] = rawUnit
@@ -593,12 +585,11 @@ local function OnChildAttributeChanged(self, name, value)
   if UF.OnUnitChanged then
     UF.OnUnitChanged(visual, oldUnit, rawUnit)
   else
-    visual.unit = rawUnit
+    visual.MSUFUnitKey = rawUnit
     visual.unitKey = rawUnit
   end
-  self.unit = rawUnit
-  self.unitKey = rawUnit
   self.MSUFUnitKey = rawUnit
+  self.unitKey = rawUnit
   visual.MSUFUnitKey = rawUnit
   attrUnit[self] = rawUnit
   appliedUnit[visual] = rawUnit
@@ -648,7 +639,7 @@ function GF.ForEachFrame(fn, includeHidden, a, b, c)
   for i = 1, #GF.frameList do
     local frame = GF.frameList[i]
     if frame and GF.frames[frame] == true and (includeHidden == true or not frame.IsShown or frame:IsShown()) then
-      if fn(frame, frame.unit, frame._msufGFKind, a, b, c) == true then any = true end
+      if fn(frame, frame.MSUFUnitKey, frame._msufGFKind, a, b, c) == true then any = true end
     end
   end
   return any

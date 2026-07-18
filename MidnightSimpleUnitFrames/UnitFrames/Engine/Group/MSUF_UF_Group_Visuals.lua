@@ -251,7 +251,7 @@ local function UpdateUnitEdges(frame, cfg, enabled, unit, edgesKey, shownKey, sh
     show = nil
   end
   if show == nil then
-    show = enabled and frame.unit and SameUnit(frame.unit, unit) or false
+    show = enabled and frame.MSUFUnitKey and SameUnit(frame.MSUFUnitKey, unit) or false
   else
     show = show == true and enabled
   end
@@ -461,7 +461,7 @@ local function RefreshIndicatorUnitGUID(frame)
     return nil
   end
   local oldGuid = frame._msufGFVisualUnitGUID
-  local guid = PlainUnitGUID(frame.unit)
+  local guid = PlainUnitGUID(frame.MSUFUnitKey)
   if oldGuid == guid then
     if guid and IndicatorFrameTracked(frame) then
       AddIndicatorGUIDFrame(frame, guid)
@@ -673,7 +673,7 @@ local function PercentFromPlainValues(hp, maxHP)
 end
 
 local function CachedHealthValues(frame)
-  local unit = frame and frame.unit
+  local unit = frame and frame.MSUFUnitKey
   local bar = frame and (frame.hpBar or frame.Health)
   if not (IsUnitToken(unit) and bar) then
     return nil, nil
@@ -744,7 +744,7 @@ local function UpdateHealthFade(frame, cfg, seedHP, seedMaxHP, event)
   end
 
   local alpha = 1
-  local unit = frame.unit
+  local unit = frame.MSUFUnitKey
   if cfg.healthFadeEnabled == true and IsUnitToken(unit) then
     local pct = keyCacheable and PercentFromPlainValues(keyHP, keyMax) or PercentFromValues(keyHP, keyMax)
     if pct == nil and UnitHealthPercent then
@@ -828,7 +828,7 @@ end
 local function RestoreHealthBackground(frame)
   local element = UF.elements and UF.elements.Health
   local active = frame and frame._msufActiveElements
-  local unit = frame and frame.unit
+  local unit = frame and frame.MSUFUnitKey
   if element and element.Update and active and active.Health == true and IsUnitToken(unit) then
     local bar = frame.hpBar
     if bar then
@@ -888,7 +888,7 @@ end
 
 local function UpdateDeadBg(frame, cfg, seedHP, event)
   local bg = frame.bg
-  local unit = frame.unit
+  local unit = frame.MSUFUnitKey
   if not (bg and IsUnitToken(unit)) then return end
   local cached = frame._msufGFDeadBgState
   local gone = ResolveGone(frame, cfg, unit, seedHP, event)
@@ -1010,7 +1010,7 @@ UpdateBordersFromVisualState = function(frame)
   local active = frame and frame._msufActiveElements
   local borders = active and active.Borders == true and UF.elements and UF.elements.Borders
   if borders and borders.Update then
-    borders.Update(frame, "MSUF_GF_VISUALS", frame.unit)
+    borders.Update(frame, "MSUF_GF_VISUALS", frame.MSUFUnitKey)
   end
 end
 

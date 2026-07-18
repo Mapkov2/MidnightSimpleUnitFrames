@@ -196,6 +196,7 @@ local config = {
 local function MakeFrame(unit, cfg)
     local frame = NewRegion("UnitFrame")
     frame.unit = unit
+    frame.MSUFUnitKey = unit
     frame.hpBar = NewRegion("StatusBar", frame)
     frame.hpBar:SetStatusBarTexture("health")
     frame.hpBar:SetMinMaxValues(0, 100)
@@ -488,7 +489,7 @@ local dependentSpec = {
     scope = "single",
     prediction = config,
 }
-local dependentFrame = { unit = "targettarget" }
+local dependentFrame = { unit = "targettarget", MSUFUnitKey = "targettarget" }
 local dependentEvents = Prediction.GetEvents(dependentFrame, dependentSpec)
 Check(not HasEvent(dependentEvents, "UNIT_TARGET"),
     "dependent Prediction duplicated Core's UNIT_TARGET identity route")
@@ -502,12 +503,12 @@ local focusTargetSpec = {
     scope = "single",
     prediction = config,
 }
-Check(Prediction.GetEvents({ unit = "focustarget" }, focusTargetSpec) == dependentEvents,
+Check(Prediction.GetEvents({ unit = "focustarget", MSUFUnitKey = "focustarget" }, focusTargetSpec) == dependentEvents,
     "equivalent dependent frames did not share their prebuilt event plan")
-Check(not HasEvent(Prediction.GetEvents({ unit = "target" }, {
+Check(not HasEvent(Prediction.GetEvents({ unit = "target", MSUFUnitKey = "target" }, {
     key = "target", unit = "target", scope = "single", prediction = config,
 }), "UNIT_TARGET"), "ordinary target prediction inherited dependent UNIT_TARGET")
-local groupUnitless = Prediction.GetUnitlessEvents({ unit = "party1" }, {
+local groupUnitless = Prediction.GetUnitlessEvents({ unit = "party1", MSUFUnitKey = "party1" }, {
     key = "party", unit = "party1", scope = "group", prediction = config,
 })
 Check(HasEvent(groupUnitless, "PARTY_MEMBER_ENABLE") and HasEvent(groupUnitless, "PARTY_MEMBER_DISABLE"),
@@ -710,6 +711,7 @@ local RoutedUF = RoutedMSUF.UF
 local function MakeRoutedDependent(unit)
     local routed = NewRegion("UnitFrame")
     routed.unit = unit
+    routed.MSUFUnitKey = unit
     routed.unitKey = unit
     routed.hpBar = NewRegion("StatusBar", routed)
     routed.hpBar:SetStatusBarTexture("health")
@@ -788,12 +790,12 @@ scheduledWorldSeed()
 Equal(calls.detailed, 0, "world-entry prediction seed performed protected combat work")
 routedInCombat = false
 
-local savedFocusTargetUnit = routedFocusTarget.unit
-routedFocusTarget.unit = nil
+local savedFocusTargetUnit = routedFocusTarget.MSUFUnitKey
+routedFocusTarget.MSUFUnitKey = nil
 ResetCalls()
 worldEntryRegistration.callback("PLAYER_ENTERING_WORLD")
 scheduledWorldSeed()
 Equal(calls.detailed, 1, "world-entry seed did not skip a suspended nil-unit group frame")
-routedFocusTarget.unit = savedFocusTargetUnit
+routedFocusTarget.MSUFUnitKey = savedFocusTargetUnit
 
 print("PASS prediction: startup seed/recovery, world-entry reseed, coalescing, exact routing, geometry caches")

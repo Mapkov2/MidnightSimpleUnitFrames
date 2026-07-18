@@ -87,7 +87,7 @@ local function UnitEventMatchesFrame(frame, unit)
   if issecretvalue(unit) == true then return false end
   if type(unit) ~= "string" then return false end
   if unit == "" then return true end
-  local frameUnit = frame and frame.unit
+  local frameUnit = frame and frame.MSUFUnitKey
   return type(frameUnit) == "string"
     and frameUnit ~= ""
     and frameUnit == unit
@@ -99,7 +99,7 @@ end
 
 local function ClearRange(frame)
   if not frame then return end
-  frame._msufGFRangeUnit = frame.unit
+  frame._msufGFRangeUnit = frame.MSUFUnitKey
   frame._msufGFRangeKnown = nil
   frame._msufGFInRangeRaw = nil
   frame._msufGFRangeSecret = nil
@@ -130,7 +130,7 @@ end
 
 local function StoreRange(frame, inRange)
   if not frame then return false end
-  local unit = frame.unit
+  local unit = frame.MSUFUnitKey
   if not IsUnitToken(unit) then
     local oldUnit = frame._msufGFRangeUnit
     local oldKnown = frame._msufGFRangeKnown
@@ -206,7 +206,7 @@ local function UnitIsPlayer(unit)
 end
 
 local function FrameIsPlayerUnit(frame)
-  local unit = frame and frame.unit
+  local unit = frame and frame.MSUFUnitKey
   if not IsUnitToken(unit) then
     return false
   end
@@ -329,7 +329,7 @@ local function RefreshSettledRange(frame)
   if FrameIsPlayerUnit(frame) then
     value, checked = true, true
   else
-    value, checked = PollCurrentRange(frame.unit)
+    value, checked = PollCurrentRange(frame.MSUFUnitKey)
     if not checked then
       value = nil
     end
@@ -821,7 +821,7 @@ local function OfflineHideReady(frame)
   if delay <= 0 then
     return true
   end
-  local unit = frame and frame.unit
+  local unit = frame and frame.MSUFUnitKey
   if not IsUnitToken(unit) then
     ClearOfflineDelay(frame)
     return true
@@ -873,7 +873,7 @@ end
 
 local function BaseAlpha(frame, event)
   if not frame then return 1, false end
-  local unit = frame.unit
+  local unit = frame.MSUFUnitKey
   if not IsUnitToken(unit) then
     ClearRange(frame)
     ClearOfflineDelay(frame)

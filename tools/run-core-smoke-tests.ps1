@@ -97,6 +97,7 @@ $tests = @(
     ".github/scripts/tests/power_text_meta_hotpath_smoke.lua",
     ".github/scripts/tests/mouseover_highlight_runtime_smoke.lua",
     ".github/scripts/tests/pet_frame_color_isolation_smoke.lua",
+    ".github/scripts/tests/pingable_unitframe_taint_smoke.lua",
     ".github/scripts/tests/prediction_coalescer_smoke.lua",
     ".github/scripts/tests/priority_frames_binding_smoke.lua",
     ".github/scripts/tests/priority_frames_duplicate_registry_smoke.lua",

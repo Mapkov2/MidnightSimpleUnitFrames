@@ -39,6 +39,7 @@ end
 local levelCfg = { enabled = true, anchor = "NAMERIGHT", x = 10, y = 2 }
 local frame = {
     unit = "target",
+    MSUFUnitKey = "target",
     nameText = name,
     levelText = level,
     _msufNameRelativeStatus = true,

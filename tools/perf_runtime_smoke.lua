@@ -133,14 +133,14 @@ local function smokeTextRuntime()
         power = { enabled = true },
         text = { healthLeft = "CURRENT", powerLeft = "CURRENT" },
     }
-    local healthTextEvents = MSUF.UF.elements.HealthText.GetUnitlessEvents({ unit = "party1" }, groupTextSpec)
+    local healthTextEvents = MSUF.UF.elements.HealthText.GetUnitlessEvents({ unit = "party1", MSUFUnitKey = "party1" }, groupTextSpec)
     local foundEnable, foundDisable = false, false
     for _, event in ipairs(healthTextEvents) do
         if event == "PARTY_MEMBER_ENABLE" then foundEnable = true end
         if event == "PARTY_MEMBER_DISABLE" then foundDisable = true end
     end
     assert(foundEnable and foundDisable, "HealthText must join the shared lifecycle health dispatch")
-    local powerTextEvents = MSUF.UF.elements.PowerText.GetEvents({ unit = "party1" }, groupTextSpec)
+    local powerTextEvents = MSUF.UF.elements.PowerText.GetEvents({ unit = "party1", MSUFUnitKey = "party1" }, groupTextSpec)
     foundEnable, foundDisable = false, false
     for _, event in ipairs(powerTextEvents) do
         if event == "PARTY_MEMBER_ENABLE" then foundEnable = true end
@@ -153,6 +153,7 @@ local function smokeTextRuntime()
     local rtFns = assert(Text.RuntimeHotFunctions, "text runtime hot functions missing")
     local f = {
         unit = "player",
+        MSUFUnitKey = "player",
         hpTextLeft = fontString(true),
         powerTextLeft = fontString(true),
     }
@@ -244,6 +245,7 @@ local function smokeHealthEventSelection()
     local Health = assert(MSUF.UF.elements.Health, "health element missing")
     local f = frame()
     f.unit = "target"
+    f.MSUFUnitKey = "target"
     f.hpBar = region(f)
     f.MSUFSpec = { scope = "single", health = { mode = "gradient" } }
 
@@ -355,6 +357,7 @@ local function smokeGroupRuntime()
 
     local f = frame()
     f.unit = "party1"
+    f.MSUFUnitKey = "party1"
     f._msufIsGroupFrame = true
     f.hpBar = region(f)
     f.hpText = fontString(true)
@@ -425,7 +428,7 @@ local function smokeGroupRuntime()
     assert(statusTickerCreates == 0,
         "group status recovery must remain fully event-driven")
     f.PARTY_MEMBER_ENABLE = function(self)
-        MSUF.UF.elements.GroupStatusRuntime.UpdateState(self, "PARTY_MEMBER_ENABLE", self.unit)
+        MSUF.UF.elements.GroupStatusRuntime.UpdateState(self, "PARTY_MEMBER_ENABLE", self.MSUFUnitKey)
     end
     statusDead = false
     f:PARTY_MEMBER_ENABLE("PARTY_MEMBER_ENABLE", "party1")
@@ -591,9 +594,9 @@ local function smokeGroupRuntimeRosterModes()
     local combat = false
     local stateRefreshes = {}
     local groupFrames = {
-        { unit = "party1", kind = "party", shown = true },
-        { unit = "party2", kind = "party", shown = false },
-        { unit = "raid1", kind = "raid", shown = true },
+        { unit = "party1", MSUFUnitKey = "party1", kind = "party", shown = true },
+        { unit = "party2", MSUFUnitKey = "party2", kind = "party", shown = false },
+        { unit = "raid1", MSUFUnitKey = "raid1", kind = "raid", shown = true },
     }
 
     MSUF.UF.RefreshGroupFrameState = function(groupFrame, reason)
@@ -719,8 +722,8 @@ local function smokeGroupRuntimeRefreshOwnership()
     }
     local appliedMasks = {}
     local frames = {
-        { unit = "party1", _msufGFKind = "party" },
-        { unit = "party2", _msufGFKind = "party" },
+        { unit = "party1", MSUFUnitKey = "party1", _msufGFKind = "party" },
+        { unit = "party2", MSUFUnitKey = "party2", _msufGFKind = "party" },
     }
     local eventFrame
     local combat = false

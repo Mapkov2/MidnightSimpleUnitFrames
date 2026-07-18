@@ -818,10 +818,10 @@ local function RefreshAppliedTextColors(frame, spec, text)
   end
   frame._msufPowerTextColorInitialized = nil
   if UpdateHealthTextColor then
-    UpdateHealthTextColor(frame, rt, frame.unit)
+    UpdateHealthTextColor(frame, rt, frame.MSUFUnitKey)
   end
   if frame.nameText then
-    SetNameTextColor(frame, NameTextColor(frame, frame.unit))
+    SetNameTextColor(frame, NameTextColor(frame, frame.MSUFUnitKey))
   end
   frame._msufTextColorRevision = spec and spec._msufTextColorRevision
 end
@@ -1014,10 +1014,10 @@ function Text.Apply(frame, spec)
     end
   end
   if UpdateHealthTextColor then
-    UpdateHealthTextColor(frame, rt, frame.unit)
+    UpdateHealthTextColor(frame, rt, frame.MSUFUnitKey)
   end
   if frame.nameText then
-    SetNameTextColor(frame, NameTextColor(frame, frame.unit))
+    SetNameTextColor(frame, NameTextColor(frame, frame.MSUFUnitKey))
   end
   if frame._msufNameRelativeStatus == true and RefreshNameRelativeStatusAnchors then
     RefreshNameRelativeStatusAnchors(frame)

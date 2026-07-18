@@ -42,6 +42,7 @@ assert(element, "group corner indicator element was not registered")
 
 local frame = {
   unit = "party1",
+  MSUFUnitKey = "party1",
   hpBar = { GetFrameLevel = function() return 1 end },
   MSUFSpec = {
     scope = "group",

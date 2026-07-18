@@ -743,7 +743,7 @@ local secondaryUnitDriver
 local SyncRuntime
 
 local function SetFrameDriverActive(frame, active)
-  local unit = frame and (frame._msufRangeUnit or frame.unit)
+  local unit = frame and (frame._msufRangeUnit or frame.MSUFUnitKey)
   if not unit then return false end
   active = active == true
     and FrameRangeActive(frame)
@@ -806,7 +806,7 @@ local function RangeFrameOnShow(self)
   if not spellsBuilt then
     RebuildSpells()
   end
-  EvaluateIfActive(self._msufRangeUnit or self.unit, true)
+  EvaluateIfActive(self._msufRangeUnit or self.MSUFUnitKey, true)
   if SyncRuntime then SyncRuntime() end
 end
 
@@ -1202,7 +1202,7 @@ function Range.RegisterFrame(frame, spec)
   if UF.CompileAlphaRuntime then
     UF.CompileAlphaRuntime(frame, spec)
   end
-  local unit = frame.unit
+  local unit = frame.MSUFUnitKey
   if frame._msufRangeUnit and frame._msufRangeUnit ~= unit and activeUnits[frame._msufRangeUnit] then
     if frame._msufRangeUnit == "target" then
       MarkTargetSpellSyncDirty()
@@ -1247,7 +1247,7 @@ function Range.RegisterFrame(frame, spec)
 end
 
 function Range.UnregisterFrame(frame)
-  local unit = frame and (frame._msufRangeUnit or frame.unit)
+  local unit = frame and (frame._msufRangeUnit or frame.MSUFUnitKey)
   if unit and activeUnits[unit] then
     if unit == "target" then
       MarkTargetSpellSyncDirty()
@@ -1281,7 +1281,7 @@ ExportPublic("MSUF_UF_RangeFade_Refresh", Range.Refresh)
 local RangeFade = {}
 
 function RangeFade.IsEnabled(frame, spec)
-  return spec and spec.range and spec.range.active == true and SUPPORTED_UNITS[frame and frame.unit] == true
+  return spec and spec.range and spec.range.active == true and SUPPORTED_UNITS[frame and frame.MSUFUnitKey] == true
 end
 
 function RangeFade.Apply(frame, spec)

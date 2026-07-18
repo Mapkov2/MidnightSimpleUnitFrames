@@ -58,7 +58,7 @@ local function UnitFrameInScope(frame, scope)
     scope = NormalizeScope(scope)
     if not scope then return true end
     if GroupKindsForScope(scope) then return false end
-    local unit = frame and frame.unit
+    local unit = frame and (frame.MSUFUnitKey or frame.unit)
     if unit == scope then return true end
     local UF = MSUF and MSUF.UF
     local units = UF and type(UF.UnitsForConfigKey) == "function" and UF.UnitsForConfigKey(scope) or nil

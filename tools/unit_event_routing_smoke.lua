@@ -61,7 +61,7 @@ UF.RegisterElement("Health", {
     end,
     UpdateGroupLifecycleMetadata = function(runtimeFrame, _, unit)
         healthMetadataCalls = healthMetadataCalls + 1
-        assert(runtimeFrame.unit == unit, "AI metadata gate received the wrong bound unit")
+        assert(runtimeFrame.MSUFUnitKey == unit, "AI metadata gate received the wrong bound unit")
         return false
     end,
 })

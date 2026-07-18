@@ -100,7 +100,7 @@ local function RefreshRoleStateFrame(frame, _, _, reason)
 
   local update = frame._msufUpdateGroupStatusState
   if type(update) == "function" then
-    update(frame, reason, frame.unit)
+    update(frame, reason, frame.MSUFUnitKey)
     did = true
   end
 
@@ -116,7 +116,7 @@ local function RefreshRoleStateFrame(frame, _, _, reason)
     if borders and type(borders.Update) == "function"
       and borderCfg and borderCfg.aggro == true
       and RoleFilteredAggroMode(borderCfg.aggroMode) then
-      borders.Update(frame, reason, frame.unit)
+      borders.Update(frame, reason, frame.MSUFUnitKey)
       did = true
     end
 
@@ -125,7 +125,7 @@ local function RefreshRoleStateFrame(frame, _, _, reason)
     if corners and type(corners.Update) == "function"
       and cornerCfg and cornerCfg.enabled == true and cornerCfg.needsThreat == true
       and RoleFilteredAggroMode(cornerCfg.aggroMode) then
-      corners.Update(frame, reason, frame.unit)
+      corners.Update(frame, reason, frame.MSUFUnitKey)
       did = true
     end
   end
@@ -322,11 +322,11 @@ end
 
 local function ApplyFrameDirty(frame, kind, mask, reason, applyMask)
   if not (frame and kind) then return false end
-  if not IsUnitToken(frame.unit) then return false end
+  if not IsUnitToken(frame.MSUFUnitKey) then return false end
   if not (UF and UF.ApplySpec and GF.CompileSpec) then
     return GF.ApplyButton and GF.ApplyButton(frame, kind, reason)
   end
-  local spec = GF.CompileSpec(kind, frame, frame.unit)
+  local spec = GF.CompileSpec(kind, frame, frame.MSUFUnitKey)
   if not spec then return false end
   applyMask = applyMask or (GF.ApplyMaskForDirtyMask and GF.ApplyMaskForDirtyMask(mask)) or Metadata.MASK_RUNTIME
   if GF.ApplyStructureSpec then

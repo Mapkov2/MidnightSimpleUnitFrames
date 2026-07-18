@@ -53,7 +53,7 @@ _G.CreateFrame = function()
   return frame
 end
 
-local frame = { unit = "target", hooks = {} }
+local frame = { unit = "target", MSUFUnitKey = "target", hooks = {} }
 function frame:HookScript(kind, callback)
   local callbacks = self.hooks[kind] or {}
   callbacks[#callbacks + 1] = callback

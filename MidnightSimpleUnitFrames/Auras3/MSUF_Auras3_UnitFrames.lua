@@ -648,7 +648,7 @@ end
 local function IsGroupFrame(frame)
     if not frame then return false end
     if frame._msufIsGroupFrame or frame._msufGFKind then return true end
-    local unit = frame.unit
+    local unit = frame.MSUFUnitKey
     return type(unit) == "string" and (unit:match("^party%d+$") or unit:match("^raid%d+$")) and true or false
 end
 
@@ -1561,7 +1561,7 @@ end
 
 local function ResolveGroupFrameConfig(frame, unit)
     if not frame then return nil end
-    unit = unit or frame.unit
+    unit = unit or frame.MSUFUnitKey
     local spec = frame.MSUFSpec
     local source = spec and (spec.auras or (spec.group and spec.group.auras))
     local spellSource = spec and spec.spellIndicators
@@ -1708,9 +1708,9 @@ end
 
 local function FrameAuraConfig(frame, unit)
     if IsGroupFrame(frame) then
-        return ResolveGroupFrameConfig(frame, unit or frame.unit)
+        return ResolveGroupFrameConfig(frame, unit or frame.MSUFUnitKey)
     end
-    return A3.ResolveUnitFrameConfig(unit or (frame and frame.unit), frame and frame.MSUFSpec)
+    return A3.ResolveUnitFrameConfig(unit or (frame and frame.MSUFUnitKey), frame and frame.MSUFSpec)
 end
 
 function A3.BuildAuraLaneMetrics(configOrUnit, kind)
@@ -2099,14 +2099,14 @@ local function RootAppliedConfigIsCurrent(root, frame, cfg, reason)
     if cfg and root._msufA3Config ~= cfg then return false end
     if root._msufA3ConfigGen ~= (cfg and ConfigGen(cfg) or (A3._runtimeConfigGen or 1)) then return false end
     if root._msufA3VisualGen ~= (cfg and VisualGen(cfg) or (A3._nativeVisualGen or 0)) then return false end
-    if root._msufA3AppliedUnit ~= (cfg and cfg.unit or (frame and frame.unit)) then return false end
+    if root._msufA3AppliedUnit ~= (cfg and cfg.unit or (frame and frame.MSUFUnitKey)) then return false end
     if root._msufA3FrameSpec ~= (frame and frame.MSUFSpec) then return false end
     return true
 end
 
 local function FrameAppliedConfigIsCurrent(frame, reason, cfg)
     if not frame then return false end
-    if cfg == nil then cfg = FrameAuraConfig(frame, frame.unit) end
+    if cfg == nil then cfg = FrameAuraConfig(frame, frame.MSUFUnitKey) end
     return RootAppliedConfigIsCurrent(frame.Auras, frame, cfg, reason)
 end
 
@@ -3783,8 +3783,8 @@ local function MenuPreviewGroupFrame(scope)
             or scope == "raid" and (kind == "raid" or kind == "mythicraid")
         local tracked = frame and gf.frames and gf.frames[frame] == true
         local shown = frame and (not frame.IsShown or frame:IsShown() == true)
-        if matches and tracked and shown and issecretvalue(frame.unit) ~= true
-            and type(frame.unit) == "string" and frame.unit ~= "" then
+        if matches and tracked and shown and issecretvalue(frame.MSUFUnitKey) ~= true
+            and type(frame.MSUFUnitKey) == "string" and frame.MSUFUnitKey ~= "" then
             return frame
         end
     end
@@ -3795,7 +3795,7 @@ local function MenuPreviewSourceLane(scope, laneKind)
     if scope == "party" or scope == "raid" then
         local frame = MenuPreviewGroupFrame(scope)
         if frame then
-            unit = frame.unit
+            unit = frame.MSUFUnitKey
             cfg = ResolveGroupFrameConfig(frame, unit)
         end
     else
@@ -3999,7 +3999,7 @@ local function HideState(frame)
     root._msufA3AppliedUnit = nil
     root._msufA3FrameSpec = nil
     root:Hide()
-    local unit = frame and frame.unit
+    local unit = frame and frame.MSUFUnitKey
     if unit and A3._runtimeFrames and A3._runtimeFrames[unit] == frame then
         A3._runtimeFrames[unit] = nil
     end
@@ -4033,7 +4033,7 @@ local function ApplyConfig(frame, cfg, reason)
         RefreshAppliedNativeRoot(root, false)
         return true
     end
-    root.unit = cfg.unit or frame.unit
+    root.unit = cfg.unit or frame.MSUFUnitKey
     root:SetAllPoints(frame)
     root:Show()
     local lanes = cfg.lanes or {}
@@ -4059,7 +4059,7 @@ local function ApplyConfig(frame, cfg, reason)
     root._msufA3Applied = ok == true
     root._msufA3ConfigGen = ConfigGen(cfg)
     root._msufA3VisualGen = VisualGen(cfg)
-    root._msufA3AppliedUnit = cfg.unit or frame.unit
+    root._msufA3AppliedUnit = cfg.unit or frame.MSUFUnitKey
     root._msufA3FrameSpec = frame.MSUFSpec
     root.needFullUpdate = nil
     root:Show()
@@ -4164,24 +4164,24 @@ function A3.SetUnitFrameOwner(unit, frame, owns)
 end
 
 function A3.EnableFrame(frame)
-    if not (frame and frame.unit and MANAGED_UNITS[frame.unit]) then return false end
+    if not (frame and frame.MSUFUnitKey and MANAGED_UNITS[frame.MSUFUnitKey]) then return false end
     if EnsureNativeAuraRefreshDriver then EnsureNativeAuraRefreshDriver() end
-    local cfg = A3.ResolveUnitFrameConfig(frame.unit, frame.MSUFSpec)
+    local cfg = A3.ResolveUnitFrameConfig(frame.MSUFUnitKey, frame.MSUFSpec)
     if not (cfg and cfg.enabled) then
         HideState(frame)
-        A3.SetUnitFrameOwner(frame.unit, frame, false)
+        A3.SetUnitFrameOwner(frame.MSUFUnitKey, frame, false)
         return false
     end
     A3._runtimeFrames = A3._runtimeFrames or {}
-    A3._runtimeFrames[frame.unit] = frame
-    A3.SetUnitFrameOwner(frame.unit, frame, true)
+    A3._runtimeFrames[frame.MSUFUnitKey] = frame
+    A3.SetUnitFrameOwner(frame.MSUFUnitKey, frame, true)
     return ApplyConfig(frame, cfg)
 end
 
 function A3.DisableFrame(frame)
     if not frame then return true end
     HideState(frame)
-    local unit = frame.unit
+    local unit = frame.MSUFUnitKey
     if unit and A3._runtimeFrames and A3._runtimeFrames[unit] == frame then
         A3._runtimeFrames[unit] = nil
     end
@@ -4199,7 +4199,7 @@ function A3.RenderFrame(frame, reason)
         -- Group identity stays synchronous so roster builds settle in one pass,
         -- but never forces filter reconstruction: keep geometry/registration
         -- current and let the container's UNIT_AURA own aura content.
-        if not cfgReady then cfg = FrameAuraConfig(frame, frame.unit) end
+        if not cfgReady then cfg = FrameAuraConfig(frame, frame.MSUFUnitKey) end
         cfgReady = true
         if not (cfg and cfg.enabled == true) then
             HideState(frame)
@@ -4211,7 +4211,7 @@ function A3.RenderFrame(frame, reason)
         end
         if InCombat() then return false end
     end
-    if not cfgReady then cfg = FrameAuraConfig(frame, frame.unit) end
+    if not cfgReady then cfg = FrameAuraConfig(frame, frame.MSUFUnitKey) end
     if FrameAppliedConfigIsCurrent(frame, reason, cfg) then
         A3._RefreshAppliedNativeAuras(frame, false)
         return true
@@ -4222,10 +4222,10 @@ end
 A3.RenderUnitChangedFrame = function(frame, oldUnit, newUnit)
     if not frame then return false end
     if type(newUnit) == "string" and newUnit ~= "" then
-        frame.unit = newUnit
+        frame.MSUFUnitKey = newUnit
         frame.unitKey = newUnit
     end
-    local cfg = FrameAuraConfig(frame, frame.unit)
+    local cfg = FrameAuraConfig(frame, frame.MSUFUnitKey)
     if not (cfg and cfg.enabled == true) then
         HideState(frame)
         return false
@@ -4565,7 +4565,7 @@ function AurasElement.GetEvents(frame)
     if not (IsGroupFrame(frame) and frame._msufGFIsPreviewFrame ~= true) then
         return EMPTY_EVENTS
     end
-    local unit = frame.unit
+    local unit = frame.MSUFUnitKey
     if frame._msufGFKind == "party"
         or (issecretvalue(unit) ~= true and type(unit) == "string" and unit:match("^party%d+$")) then
         return PARTY_AURA_ACCESS_EVENTS
@@ -4573,12 +4573,12 @@ function AurasElement.GetEvents(frame)
     return EMPTY_EVENTS
 end
 
--- RegisterUnitEvent has already filtered these callbacks to frame.unit. Ignore
+-- RegisterUnitEvent has already filtered these callbacks to frame.MSUFUnitKey. Ignore
 -- the event payload itself because UNIT_IN_RANGE_UPDATE can be secret in 12.1.
 -- Blizzard AuraContainer only subscribes to UNIT_AURA, so explicitly request
 -- its full native parse when aura access disappears or becomes available again.
 function AurasElement.UpdatePartyAuraAccess(frame)
-    local unit = frame and frame.unit
+    local unit = frame and frame.MSUFUnitKey
     if issecretvalue(unit) == true or type(unit) ~= "string" or unit == "" then return false end
     return A3._DirectIdentityRefreshUnit(unit)
 end
@@ -4595,7 +4595,7 @@ function AurasElement.IsEnabled(frame)
     then
         return false
     end
-    local cfg = FrameAuraConfig(frame, frame and frame.unit)
+    local cfg = FrameAuraConfig(frame, frame and frame.MSUFUnitKey)
     return cfg and cfg.enabled == true or false
 end
 
@@ -4620,7 +4620,7 @@ function AurasElement.Enable(frame)
             return false
         end
         frame._msufA3GroupRuntime = true
-        local cfg = ResolveGroupFrameConfig(frame, frame and frame.unit)
+        local cfg = ResolveGroupFrameConfig(frame, frame and frame.MSUFUnitKey)
         if not (cfg and cfg.enabled) then
             HideState(frame)
             return false

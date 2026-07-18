@@ -24,10 +24,6 @@ local UnregisterUnitWatch = UnregisterUnitWatch
 local UnitWatchRegistered = UnitWatchRegistered
 local RegisterStateDriver = RegisterStateDriver
 local UIParent = UIParent
-local Mixin = Mixin
-local PingableType_UnitFrameMixin = PingableType_UnitFrameMixin
-local UnitExists = UnitExists
-local UnitGUID = UnitGUID
 
 local COOLDOWN_ANCHORS = {
   EssentialCooldownViewer = true,
@@ -144,7 +140,7 @@ local function AnchorWouldCreateCycle(frame, anchor)
 end
 
 local function ScreenCacheKey(spec, frame)
-  return spec and spec.key or (UF.ConfigKeyForUnit and UF.ConfigKeyForUnit(frame and frame.unit)) or frame and frame.unit
+  return spec and spec.key or (UF.ConfigKeyForUnit and UF.ConfigKeyForUnit(frame and frame.MSUFUnitKey)) or frame and frame.MSUFUnitKey
 end
 
 local function LayoutFrame(frame)
@@ -227,7 +223,7 @@ end
 
 local function ApplyPosition(frame, spec)
   if frame._msufDragActive == true then return true end
-  if InCombat() then return DeferApply(frame.unit) end
+  if InCombat() then return DeferApply(frame.MSUFUnitKey) end
   local layout = LayoutFrame(frame)
 
   local point = spec.point or "CENTER"
@@ -243,7 +239,7 @@ local function ApplyPosition(frame, spec)
       _G.MSUF_ScheduleLateAnchorReanchor()
     end
     local applyCached = _G.MSUF_ApplyCachedUnitFrameScreenPosition
-    if type(applyCached) == "function" and applyCached(layout, key, frame.unit) then
+    if type(applyCached) == "function" and applyCached(layout, key, frame.MSUFUnitKey) then
       return true
     end
     if frame._msufPositionInitialized == true then return true end
@@ -276,7 +272,7 @@ local function ApplyPosition(frame, spec)
   if not missingAnchorName
     and ShouldCacheScreenPosition(spec, requestedAnchor)
     and type(_G.MSUF_CacheUnitFrameScreenPosition) == "function" then
-    _G.MSUF_CacheUnitFrameScreenPosition(layout, key, frame.unit, point)
+    _G.MSUF_CacheUnitFrameScreenPosition(layout, key, frame.MSUFUnitKey, point)
   end
   if not missingAnchorName then
     frame._msufHardLockedToUIParent = nil
@@ -287,7 +283,7 @@ local function ApplyPosition(frame, spec)
 end
 
 local function ApplySize(frame, spec)
-  if InCombat() then return DeferApply(frame.unit) end
+  if InCombat() then return DeferApply(frame.MSUFUnitKey) end
   local layout = LayoutFrame(frame)
   local width = tonumber(spec.width) or 220
   local height = tonumber(spec.height) or 34
@@ -365,7 +361,7 @@ function UF.ResolvePingUnit(frame)
     local unit = frame:GetAttribute("unit")
     if type(unit) == "string" and unit ~= "" then return unit end
   end
-  return type(frame.unit) == "string" and frame.unit or nil
+  return type(frame.MSUFUnitKey) == "string" and frame.MSUFUnitKey or nil
 end
 
 function UF.ForEachPingBindingAttribute()
@@ -391,26 +387,6 @@ end
 
 function UF.RefreshPingCompatibility()
   return false
-end
-
-function UF.ConfigurePingableUnitFrame(frame)
-  if not frame or InCombat() then return false end
-  if Mixin and PingableType_UnitFrameMixin and frame._msufPingableMixedIn ~= true then
-    Mixin(frame, PingableType_UnitFrameMixin)
-    frame._msufPingableMixedIn = true
-  end
-  if frame.SetAttribute and frame:GetAttribute("ping-receiver") ~= true then
-    frame:SetAttribute("ping-receiver", true)
-  end
-  if type(frame.GetTargetPingGUID) ~= "function" then
-    frame.GetTargetPingGUID = function(self)
-      local unit = self.GetAttribute and self:GetAttribute("unit") or self.unit
-      if unit and UnitExists and UnitExists(unit) and UnitGUID then
-        return UnitGUID(unit)
-      end
-    end
-  end
-  return true
 end
 
 function UF.EnsureNativePingIcon(frame)
@@ -451,7 +427,6 @@ local function ConfigureClickTarget(button, unit)
   button:SetAttribute("type1", nil)
   button:SetAttribute("*type1", "target")
   UF.AttachSecureUnitMenu(button)
-  UF.ConfigurePingableUnitFrame(button)
   button._msufSecureType1Target = true
   button._msufSecureType2Menu = true
   if button._msufSecureToggleVehicle ~= true then
@@ -483,7 +458,6 @@ local function EnsureClickOverlay(frame, unit)
 end
 
 local function SetSecureUnitAttributes(frame, unit)
-  frame.unit = unit
   frame.MSUFUnitKey = unit
   frame.unitKey = unit
   EnsureClickOverlay(frame, unit)
@@ -548,12 +522,12 @@ end
 
 local function ApplyFrame(frame, spec, applyMask)
   if not (frame and spec) then return false end
-  if InCombat() then return DeferApply(frame.unit) end
+  if InCombat() then return DeferApply(frame.MSUFUnitKey) end
 
   EnsureRuntimeOnShow(frame)
   EnsureMouseoverHooks(frame)
-  UF.SetFrameSpec(frame, spec, frame.unit)
-  SetSecureUnitAttributes(frame, frame.unit)
+  UF.SetFrameSpec(frame, spec, frame.MSUFUnitKey)
+  SetSecureUnitAttributes(frame, frame.MSUFUnitKey)
 
   if spec.enabled == false then
     DisableFrame(frame)

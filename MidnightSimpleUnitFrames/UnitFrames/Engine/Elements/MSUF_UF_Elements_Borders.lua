@@ -48,7 +48,7 @@ end
 
 function Borders.GetUnitlessEvents(frame, spec)
   local cfg = spec and spec.border
-  local unit = frame and frame.unit
+  local unit = frame and frame.MSUFUnitKey
   -- The player-frame aggro query compares player against the current target.
   -- A target swap can therefore change the answer without producing a threat
   -- event for player; seed it explicitly from the target lifecycle event.
@@ -182,7 +182,7 @@ function IsBossUnit(unit)
 end
 
 function IsAggroBorderUnit(frame)
-  local unit = frame and frame.unit
+  local unit = frame and frame.MSUFUnitKey
   if unit == "player" or unit == "target" or unit == "focus" then return true end
   return IsBossUnit(unit)
     or (frame and (frame._msufBorderRuntimeGroup == true
@@ -191,7 +191,7 @@ function IsAggroBorderUnit(frame)
 end
 
 local function IsPurgeBorderUnit(frame)
-  local unit = frame and frame.unit
+  local unit = frame and frame.MSUFUnitKey
   return unit == "target" or unit == "focus" or unit == "targettarget"
 end
 
@@ -210,9 +210,9 @@ local function TestScopeApplies(frame, scope)
   elseif groupKind then
     return false
   elseif scope == "boss" then
-    return IsBossUnit(frame.unit)
+    return IsBossUnit(frame.MSUFUnitKey)
   end
-  return frame.unit == scope or frame.configKey == scope or frame.unitKey == scope
+  return frame.MSUFUnitKey == scope or frame.configKey == scope or frame.unitKey == scope
 end
 
 local function RefreshBorderTestFrames()
@@ -289,14 +289,14 @@ end
 local function BossTargetTestApplies(frame)
   return _G.MSUF_BorderTestModesActive == true
     and _G.MSUF_BossTargetBorderTestMode == true
-    and IsBossUnit(frame and frame.unit)
+    and IsBossUnit(frame and frame.MSUFUnitKey)
 end
 
 local function BossTargetState(frame, cfg)
-  if not (cfg and cfg.bossTarget == true and UnitIsUnit and frame and IsBossUnit(frame.unit)) then
+  if not (cfg and cfg.bossTarget == true and UnitIsUnit and frame and IsBossUnit(frame.MSUFUnitKey)) then
     return false
   end
-  local isTarget = UnitIsUnit(frame.unit, "target")
+  local isTarget = UnitIsUnit(frame.MSUFUnitKey, "target")
   if IsNil(isTarget) or not NotSecretValue(isTarget) then
     return false
   end
@@ -310,7 +310,7 @@ local function BorderHighlightEnabled(frame, cfg)
   if cfg and cfg.dispel == true then
     return true
   end
-  if cfg and cfg.bossTarget == true and IsBossUnit(frame and frame.unit) then
+  if cfg and cfg.bossTarget == true and IsBossUnit(frame and frame.MSUFUnitKey) then
     return true
   end
   if _G.MSUF_BorderTestModesActive ~= true then
@@ -385,10 +385,10 @@ local function SetBorder(frame, show, r, g, b, a)
 end
 
 local function ThreatState(frame)
-  if not (UnitThreatSituation and frame and frame.unit) then
+  if not (UnitThreatSituation and frame and frame.MSUFUnitKey) then
     return false
   end
-  local unit = frame.unit
+  local unit = frame.MSUFUnitKey
   if frame._msufBorderRuntimeGroup == true
     or frame._msufIsGroupFrame == true
     or frame._msufCoreScope == "group" then
@@ -576,9 +576,9 @@ function Borders.Apply(frame, spec)
   if not cfg or not (BorderNormalEnabled(cfg) or BorderHighlightEnabled(frame, cfg)) then
     LayoutBorder(frame, 1)
     SetBorder(frame, false)
-  elseif cfg.aggro == true or cfg.dispel == true or (cfg.bossTarget == true and IsBossUnit(frame and frame.unit)) then
+  elseif cfg.aggro == true or cfg.dispel == true or (cfg.bossTarget == true and IsBossUnit(frame and frame.MSUFUnitKey)) then
     LayoutBorder(frame, BorderHighlightThickness(cfg))
-    Borders.Update(frame, "MSUF_BORDER_APPLY", frame.unit)
+    Borders.Update(frame, "MSUF_BORDER_APPLY", frame.MSUFUnitKey)
   else
     SetBorderOverlayLevel(frame, BORDER_LEVEL_NORMAL, cfg and cfg.strata, cfg and cfg.layer)
     LayoutBorder(frame, BorderNormalThickness(cfg))
@@ -681,7 +681,7 @@ UF.RegisterElement("Borders", Borders)
 
 local function RefreshUnitDispelFrame(frame)
   if frame then
-    Borders.Update(frame, "MSUF_A3_DISPEL_SENSOR", frame.unit)
+    Borders.Update(frame, "MSUF_A3_DISPEL_SENSOR", frame.MSUFUnitKey)
     return true
   end
   if UF and UF.RefreshBorders then
