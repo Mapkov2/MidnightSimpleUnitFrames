@@ -183,6 +183,12 @@ local function BindSeparateRGB(ctx, section, label, getTable, prefix, defaultR, 
 end
 
 local A2_APPLY_QUEUED = false
+local function RefreshAuraEditModePopup()
+    local editMode = _G.MSUF_EM2
+    local popup = editMode and editMode.AuraPopup
+    if popup and type(popup.Sync) == "function" then pcall(popup.Sync) end
+end
+
 local function ApplyAuras()
     if A2_APPLY_QUEUED then return end
     A2_APPLY_QUEUED = true
@@ -198,6 +204,7 @@ local function ApplyAuras()
         end
         if type(_G.MSUF_A2_InvalidateCooldownTextCurve) == "function" then pcall(_G.MSUF_A2_InvalidateCooldownTextCurve) end
         if type(_G.MSUF_A2_ForceCooldownTextRecolor) == "function" then pcall(_G.MSUF_A2_ForceCooldownTextRecolor) end
+        RefreshAuraEditModePopup()
     end
     if C_Timer and C_Timer.After then C_Timer.After(0, Run) else Run() end
 end

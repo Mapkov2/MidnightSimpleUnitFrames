@@ -1068,13 +1068,14 @@ local function ApplyGeometry(f, kind)
         f.powerTextLayer:Show()
     end
 
-    if f.nameTextLayer and f.health then
-        if f.nameTextLayer.GetParent and f.nameTextLayer:GetParent() ~= f.health
+    local nameRoot = f.barGroup or f
+    if f.nameTextLayer and nameRoot then
+        if f.nameTextLayer.GetParent and f.nameTextLayer:GetParent() ~= nameRoot
             and not (InCombatLockdown and InCombatLockdown()) then
-            f.nameTextLayer:SetParent(f.health)
+            f.nameTextLayer:SetParent(nameRoot)
         end
         f.nameTextLayer:ClearAllPoints()
-        f.nameTextLayer:SetAllPoints(f.health)
+        f.nameTextLayer:SetAllPoints(nameRoot)
         f.nameTextLayer:Show()
     end
 
@@ -1409,9 +1410,10 @@ local function RestoreHealthTextLayer(f)
     if not txtLayer or not f.health then return end
     local conf = GF.GetConf(f._msufGFKind or "party")
     local nameLayer = f.nameTextLayer
-    if nameLayer and (nameLayer._msufAlphaEscaped or nameLayer:GetParent() ~= f.health) then
-        nameLayer:SetParent(f.health)
-        nameLayer:SetAllPoints(f.health)
+    local nameRoot = f.barGroup or f
+    if nameLayer and nameRoot and (nameLayer._msufAlphaEscaped or nameLayer:GetParent() ~= nameRoot) then
+        nameLayer:SetParent(nameRoot)
+        nameLayer:SetAllPoints(nameRoot)
         GF.SetFrameLayerLevel(nameLayer, f, conf.nameTextLayer, 5)
         nameLayer._msufAlphaEscaped = nil
     end
@@ -1534,10 +1536,11 @@ local function ApplyTextLayout(f, kind)
     local pad2 = ScaleValue(2, fScale, 1)
     local nox = ScaleValue(conf.nameOffsetX or 0, fScale)
     local noy = ScaleValue(conf.nameOffsetY or 0, fScale)
+    local nameRoot = f.barGroup or f
 
-    if not f.nameTextLayer and f.health and CreateFrame and not (InCombatLockdown and InCombatLockdown()) then
-        f.nameTextLayer = CreateFrame("Frame", nil, f.health)
-        f.nameTextLayer:SetAllPoints(f.health)
+    if not f.nameTextLayer and nameRoot and CreateFrame and not (InCombatLockdown and InCombatLockdown()) then
+        f.nameTextLayer = CreateFrame("Frame", nil, nameRoot)
+        f.nameTextLayer:SetAllPoints(nameRoot)
     end
 
     if f.nameText then
@@ -1547,16 +1550,16 @@ local function ApplyTextLayout(f, kind)
         f.nameText:ClearAllPoints()
         local anchor = conf.nameAnchor or "LEFT"
         if anchor == "CENTER" then
-            f.nameText:SetPoint("LEFT", f.health, "LEFT", pad3 + nox, noy)
-            f.nameText:SetPoint("RIGHT", f.health, "RIGHT", -pad3 + nox, noy)
+            f.nameText:SetPoint("LEFT", nameRoot, "LEFT", pad3 + nox, noy)
+            f.nameText:SetPoint("RIGHT", nameRoot, "RIGHT", -pad3 + nox, noy)
             f.nameText:SetJustifyH("CENTER")
         elseif anchor == "RIGHT" then
-            f.nameText:SetPoint("LEFT", f.health, "LEFT", pad3 + nox, noy)
-            f.nameText:SetPoint("RIGHT", f.health, "RIGHT", -pad3 + nox, noy)
+            f.nameText:SetPoint("LEFT", nameRoot, "LEFT", pad3 + nox, noy)
+            f.nameText:SetPoint("RIGHT", nameRoot, "RIGHT", -pad3 + nox, noy)
             f.nameText:SetJustifyH("RIGHT")
         else
-            f.nameText:SetPoint("LEFT", f.health, "LEFT", pad3 + nox, noy)
-            f.nameText:SetPoint("RIGHT", f.health, "RIGHT", -pad3, noy)
+            f.nameText:SetPoint("LEFT", nameRoot, "LEFT", pad3 + nox, noy)
+            f.nameText:SetPoint("RIGHT", nameRoot, "RIGHT", -pad3, noy)
             f.nameText:SetJustifyH("LEFT")
         end
         f.nameText:SetWordWrap(false)

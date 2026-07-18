@@ -1421,6 +1421,84 @@ do
     )
 end
 
+-- Menu2 and the Edit Mode aura popup edit the same per-unit layout tables.
+-- Keep their open controls synchronized in both directions without polling.
+do
+    local menuPath = addonRoot .. "/Menu2/Pages/MSUF_Menu2_Advanced.lua"
+    local menuFile = assert(io.open(menuPath, "rb"))
+    local menuSource = menuFile:read("*a")
+    menuFile:close()
+    Truthy(
+        menuSource:find("local popup = editMode and editMode.AuraPopup", 1, true)
+            and menuSource:find("pcall(popup.Sync)", 1, true),
+        "Menu2 aura changes refresh the open Edit Mode aura popup"
+    )
+
+    local popupPath = addonRoot .. "/EditMode2/MSUF_EM2_Popups.lua"
+    local popupFile = assert(io.open(popupPath, "rb"))
+    local popupSource = popupFile:read("*a")
+    popupFile:close()
+    Truthy(
+        popupSource:find('menu.activeKey=="auras2"', 1, true)
+            and popupSource:find("menu.Refresh()", 1, true),
+        "Edit Mode aura changes refresh the open Menu2 aura page"
+    )
+end
+
+-- Role-specific preview power bars must immediately resize the health region
+-- so the preview matches the live health/power split.
+do
+    local corePath = addonRoot .. "/GroupFrames/MSUF_GF_Core.lua"
+    local coreFile = assert(io.open(corePath, "rb"))
+    local coreSource = coreFile:read("*a")
+    coreFile:close()
+    Truthy(
+        coreSource:find("local function ApplyPreviewPowerGeometry", 1, true)
+            and coreSource:find("ApplyPreviewPowerGeometry(f, previewPowerH)", 1, true),
+        "role-based Group Frame previews reflow health around the effective power height"
+    )
+    Truthy(
+        coreSource:find('f.health:SetPoint("BOTTOMRIGHT", bars, "BOTTOMRIGHT", 0, powerH > 0 and powerH or 0)', 1, true),
+        "Group Frame preview health geometry reserves the visible power-bar height"
+    )
+end
+
+-- A visible power bar shortens the health region. Group names belong to the
+-- full visual frame so their vertical position stays stable in live frames and
+-- in both standalone preview implementations.
+do
+    local renderPath = addonRoot .. "/GroupFrames/MSUF_GF_Render.lua"
+    local renderFile = assert(io.open(renderPath, "rb"))
+    local renderSource = renderFile:read("*a")
+    renderFile:close()
+    Truthy(
+        renderSource:find("local nameRoot = f.barGroup or f", 1, true)
+            and renderSource:find('f.nameText:SetPoint("LEFT", nameRoot', 1, true)
+            and renderSource:find('f.nameText:SetPoint("RIGHT", nameRoot', 1, true),
+        "live Group Frame names anchor to the full visual frame"
+    )
+
+    local auraPreviewPath = addonRoot .. "/GroupFrames/MSUF_GF_AuraPreview.lua"
+    local auraPreviewFile = assert(io.open(auraPreviewPath, "rb"))
+    local auraPreviewSource = auraPreviewFile:read("*a")
+    auraPreviewFile:close()
+    Truthy(
+        auraPreviewSource:find("nameLayer:SetAllPoints(f)", 1, true)
+            and auraPreviewSource:find('m._nameFS:SetPoint("LEFT", m,', 1, true),
+        "standalone Group Frame preview names anchor to the full mock frame"
+    )
+
+    local menuPreviewPath = addonRoot .. "/Menu2/Pages/MSUF_Menu2_GroupPreview.lua"
+    local menuPreviewFile = assert(io.open(menuPreviewPath, "rb"))
+    local menuPreviewSource = menuPreviewFile:read("*a")
+    menuPreviewFile:close()
+    Truthy(
+        menuPreviewSource:find("mock._nameTextLayer:SetAllPoints(mock)", 1, true)
+            and menuPreviewSource:find('mock._nameFS:SetPoint("LEFT", mock,', 1, true),
+        "Menu2 Group Frame preview names anchor to the full mock frame"
+    )
+end
+
 -- Named custom anchors must stay as real frame-to-frame relationships. The
 -- 5.72 proxy snapshot path made the profile look configured while the live
 -- unitframe stopped following its selected anchor target.

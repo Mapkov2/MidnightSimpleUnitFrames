@@ -4,10 +4,33 @@ local _, ns = ...
 ns = ns or {}
 
 local data = {
-    currentVersion = "5.72",
-    previousVersion = "5.71",
-    rangeLabel = "5.71 -> 5.72",
+    currentVersion = "5.73",
+    previousVersion = "5.72",
+    rangeLabel = "5.72 -> 5.73",
     entries = {
+        {
+            version = "5.73",
+            date = "2026-07-18",
+            sections = {
+                {
+                    title = "Highlight",
+                    bullets = {
+                        "Import UnhaltedUnitFrames 12.1 profiles directly into MSUF with the load-on-demand UUF importer.",
+                    },
+                },
+                {
+                    title = "Minor Bug Fixes",
+                    bullets = {
+                        "Fixed imported UUF profiles losing independent health-fill and missing-health transparency in live frames and previews.",
+                        "Fixed aura icon size controls not staying synchronized between the menu and Edit Mode.",
+                        "Fixed visible Group Frame power bars shifting name text vertically in live frames and previews.",
+                        "Fixed split health text updates relying on secret-string comparisons.",
+                        "Fixed unit frames anchored to Skiron or Coolinator not reliably following provider size, visibility, and primary-layout changes.",
+                        "Fixed dragging third-party anchored unit frames and synchronizing cooldown-sized power bars.",
+                    },
+                },
+            },
+        },
         {
             version = "5.72",
             date = "2026-07-18",
@@ -18,16 +41,6 @@ local data = {
                         "New load-on-demand importer for UnhaltedUnitFrames 12.1 profiles.",
                         "New Unit and Group preview controls: zoom, pan, quick actions, and direct settings links.",
                         "Per-unit Blizzard frame ownership for Player, Pet, Target, Target of Target, Focus, Focus Target, and Boss frames.",
-                    },
-                },
-                {
-                    title = "Latest Changes",
-                    bullets = {
-                        "Added native Skiron Cooldown Manager and Coolinator anchor integration without recurring polling.",
-                        "Added separate icon size controls for buffs, debuffs, and private auras, synchronized with Edit Mode.",
-                        "Preserved independent health-fill and missing-health transparency in imported UUF profiles and matching previews.",
-                        "Improved dragging of third-party anchored frames and kept cooldown-sized power bars synchronized.",
-                        "Avoided secret-string comparisons when updating split health text visibility.",
                     },
                 },
                 {
@@ -111,19 +124,6 @@ local data = {
                         "Removed the obsolete Important aura filter after WoW 12.0.7.",
                         "Added new aura filters for unit and group frames: Cancelable, Not Cancelable, Raid in Combat, Crowd Control, Big Defensive, External Defensive, and Player Dispellable.",
                         "Fixed group-frame right-click unit menus so the context menu opens directly in instanced combat without needing a prior left-click target selection.",
-                    },
-                },
-            },
-        },
-        {
-            version = "5.59",
-            date = "2026-06-13",
-            sections = {
-                {
-                    title = "WoW 12.0.7 Fixes",
-                    bullets = {
-                        "Fixed compound unit event routing for Target of Target and Focus Target so targettarget and focustarget updates keep health, power, name, and dependent visuals current even when client-specific RegisterUnitEvent filtering falls back to broader unit events.",
-                        "Fixed Interrupt Ready box and border repaint caching so secret RGBA values from cooldown color evaluation are never compared in Lua, preventing rare _kickReadyFillR taint errors during target, focus, or boss castbar updates.",
                     },
                 },
             },
