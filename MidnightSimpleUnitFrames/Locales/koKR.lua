@@ -540,6 +540,7 @@ local MSUF2_MENU_AUTO_koKR = {
     ["Shadow, Ret, Ele, Enh, Balance, Feral, WW"] = "섀도우, 레트, 엘레, 엔, 밸런스, 페럴, WW",
     ["Shake & Fill Direction"] = "흔들기 및 채우기 방향",
     ["Shake on interrupt"] = "인터럽트 시 흔들기",
+    ["Interrupt display duration (sec)"] = "차단 표시 시간(초)",
     ["Shake strength"] = "쉐이크 강도",
     ["Shape"] = "모양",
     ["Shared baseline plus per-unit and group-frame font overrides."] = "공유 기준선과 단위별 및 그룹 프레임 글꼴 재정의.",
@@ -3489,6 +3490,37 @@ L["Yes. Priority Frames inherit the active Party, Raid, or Mythic Raid frame app
 L["Yes. Priority Frames work in parties, raids, and Mythic raids. In a party or dungeon they inherit Party Frames; in a raid they inherit the active Raid or Mythic Raid setup. They do not create a solo strip, and the matching base Party or Raid frames must be enabled."] = "그렇습니다. 우선 순위 프레임은 파티, 공격대, 신화 공격대에서 작동합니다. 파티나 던전에서는 파티 프레임을 상속받습니다. 공격대에서는 활성 공격대 또는 신화 공격대 설정을 상속합니다. 솔로 스트립을 생성하지 않으며 일치하는 기본 파티 또는 Raid 프레임을 활성화해야 합니다."
 L["|cffffd200"] = "|cffffd200"
 L["|cffffffff"] = "|cffffffff"
+
+-- Beta 22 Menu2 additions.
+L["Advanced color tools"] = "고급 색상 도구"
+L["Applies to the entire castbar: bar, icon, all text, effects, and border. The castbar shares its Unit Frame strata; this value directly sets its frame level, so higher values draw above lower values."] = "시전 바 전체(바, 아이콘, 모든 글자, 효과, 테두리)에 적용됩니다. 시전 바는 유닛 프레임의 층을 공유하며 이 값이 프레임 레벨을 직접 설정하므로, 높은 값이 낮은 값 위에 표시됩니다."
+L["Ask MSUF"] = "MSUF에 질문"
+L["Bar Background"] = "바 배경"
+L["Best matches"] = "가장 일치하는 항목"
+L["Combat Feedback"] = "전투 피드백"
+L["Copies the complete Aura workspace: visibility, layout, Blizzard filters, Buff/Debuff blacklists, Custom 1-3, Dots on target, Strata, and Full-Frame effects."] = "오라 작업 공간 전체를 복사합니다: 표시, 배치, Blizzard 필터, 강화/약화 효과 차단 목록, 사용자 지정 1-3, 대상 DoT, 층 및 전체 프레임 효과."
+L["Custom 1-3 and Dots on target are stored per frame. Icon styling and Full-Frame effects here only change "] = "사용자 지정 1-3과 대상 DoT는 프레임별로 저장됩니다. 여기의 아이콘 스타일과 전체 프레임 효과는 다음 항목만 변경합니다: "
+L["Dots on target"] = "대상 DoT"
+L["Fonts > Text Colors"] = "글꼴 > 글자 색상"
+L["Global font color"] = "전역 글꼴 색상"
+L["Group Highlights"] = "그룹 강조"
+L["Health Bars"] = "생명력 바"
+L["Live"] = "실시간"
+L["More Aura Options"] = "추가 오라 옵션"
+L["Move the colored aura handle; Live and dummy previews are display-only."] = "색이 있는 오라 핸들을 이동하세요. 실시간 및 더미 미리보기는 표시 전용입니다."
+L["No DoT selected. Choose one above or add a custom Spell ID."] = "선택한 DoT가 없습니다. 위에서 선택하거나 사용자 지정 주문 ID를 추가하세요."
+L["No exact setting found."] = "정확히 일치하는 설정이 없습니다."
+L["Open Colors > Global Font Color to choose the default color used by font settings."] = "색상 > 전역 글꼴 색상을 열어 글꼴 설정의 기본 색상을 선택하세요."
+L["Open the Fonts page at its Text Colors section."] = "글꼴 페이지의 글자 색상 섹션을 엽니다."
+L["Open the frame and expand Auras. Buffs and Debuffs contain their own Blizzard filters and blacklists; Custom 1-3 use whitelists, and Dots on target uses its curated DoT list."] = "프레임을 열고 오라를 펼치세요. 강화 및 약화 효과에는 각각 Blizzard 필터와 차단 목록이 있고, 사용자 지정 1-3은 허용 목록을, 대상 DoT는 선별된 DoT 목록을 사용합니다."
+L["Opens the complete Aura Style page for icon appearance, cooldown and stack text, duration bars, and colors."] = "아이콘 모양, 재사용 대기시간 및 중첩 글자, 지속시간 바와 색상을 설정하는 전체 오라 스타일 페이지를 엽니다."
+L["Quick colors, precise RGB and HEX values, recent colors, saved colors, and class colors."] = "빠른 색상, 정확한 RGB 및 HEX 값, 최근 색상, 저장한 색상과 직업 색상."
+L["Searching settings..."] = "설정 검색 중..."
+L["Searching..."] = "검색 중..."
+L["Source: current target · Ownership: only mine · Harmful DoTs only · "] = "출처: 현재 대상 · 소유권: 내 것만 · 해로운 DoT만 · "
+L["State Tints"] = "상태 색조"
+L["Up/Down  Enter"] = "위/아래  Enter"
+L["Whole Castbar Layer"] = "전체 시전 바 레벨"
 L["Icon Zoom (%)"] = "아이콘 확대/축소 (%)"
 
 -- 초보자 작업 흐름 및 스마트 검색.
