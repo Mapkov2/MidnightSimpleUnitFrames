@@ -16,6 +16,7 @@ local data = {
                     title = "Highlight",
                     bullets = {
                         "Import UnhaltedUnitFrames 12.1 profiles directly into MSUF with the load-on-demand UUF importer.",
+                        "Added full support for Coolinator and Skiron CDM",
                     },
                 },
                 {
@@ -23,6 +24,7 @@ local data = {
                     bullets = {
                         "Fixed imported UUF profiles losing independent health-fill and missing-health transparency in live frames and previews.",
                         "Fixed aura icon size controls not staying synchronized between the menu and Edit Mode.",
+                        "Fixed edge case Blizzard Cooldown Manager anchors shifting unit frames after instance and zone transitions.",
                         "Fixed visible Group Frame power bars shifting name text vertically in live frames and previews.",
                         "Fixed split health text updates relying on secret-string comparisons.",
                         "Fixed unit frames anchored to Skiron or Coolinator not reliably following provider size, visibility, and primary-layout changes.",
