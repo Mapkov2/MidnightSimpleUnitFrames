@@ -14,7 +14,7 @@ local CastbarPreview = MSUF.UFPreviewCastbar or {}
 local floor = math.floor
 local max = math.max
 local min = math.min
-local C_Timer = _G.C_Timer
+local C_Timer = M.MenuTimer or _G.C_Timer
 local Call, G, ReadG, SetG, ReadGBool, SetGBool, TextureValues, SetControlEnabled, SetControlsEnabled, ApplyCastbars, ControlMeta, RegisterControl = M.Pick(GP, [[Call G ReadG SetG ReadGBool SetGBool TextureValues SetControlEnabled SetControlsEnabled ApplyCastbars ControlMeta RegisterControl]])
 local CASTBAR_ACTION_BY_PATH = {
     ["focus_kick.reset_position"] = "reset_focus_kick_position",
@@ -377,7 +377,10 @@ local function BuildCastbars(ctx)
             self.shakeStrength = max(0, tonumber(strength) or tonumber(ReadG("castbarShakeStrength", 8)) or 8)
             self.shakeStart = GetTime and GetTime() or 0
             self.shakeUntil = self.shakeStart + 0.36
-            if interrupted then self.interruptUntil = self.shakeStart + 0.58 end
+            if interrupted then
+                local duration = max(0, min(5, tonumber(ReadG("castbarInterruptFeedbackDuration", 0.5)) or 0.5))
+                self.interruptUntil = self.shakeStart + duration
+            end
             if self.Refresh then self:Refresh() end
         end
         function preview:SetRowOffset(x)
@@ -1009,6 +1012,14 @@ local function BuildCastbars(ctx)
     local behaviorControls = BuildCastControlSpecs(behavior, {
         { "toggle", "Shake on interrupt", leftX, -42, 260, "castbarInterruptShake", false, "MSUF2_CASTBAR_SHAKE", ApplyAndRefresh },
         { "slider", "Shake strength", leftX, -72, 320, 0, 30, 1, "castbarShakeStrength", 8, "MSUF2_CASTBAR_SHAKE_STRENGTH", function(reason, value, applyQueued) ApplyCastbarsIfNeeded(reason, nil, applyQueued); ShakeCastPreview(value) end },
+        { "slider", "Interrupt display duration (sec)", leftX, -126, 320, 0, 5, 0.1, "castbarInterruptFeedbackDuration", 0.5, "MSUF2_CASTBAR_INTERRUPT_DURATION", nil, {
+            precise = true,
+            setValue = function(value)
+                local duration = max(0, min(5, tonumber(value) or 0.5))
+                SetG("castbarInterruptFeedbackDuration", duration, "MSUF2_CASTBAR_INTERRUPT_DURATION", { preview = true })
+                M.PlayCastbarPreviewInterrupt()
+            end,
+        } },
         { "toggle", "Always use fill direction for all casts", rightX, -42, 360, "castbarUnifiedDirection", false, "MSUF2_CASTBAR_UNIFIED_DIRECTION", ApplyAndRefresh },
         { "dropdown", "Castbar fill direction", rightX, -72, 300, VT("RTL", "Right to left (default)", "LTR", "Left to right"), "castbarFillDirection", "RTL", "MSUF2_CASTBAR_FILL_DIRECTION", ApplyAndRefresh },
         { "toggle", "Use opposite fill direction for target", rightX, -126, 360, "castbarOpositeDirectionTarget", false, "MSUF2_CASTBAR_TARGET_DIRECTION", ApplyAndRefresh },

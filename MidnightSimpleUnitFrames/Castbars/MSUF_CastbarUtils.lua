@@ -33,6 +33,18 @@ local function PlainPositiveNumber(value)
     return value > 0 and value or nil
 end
 
+local function GetInterruptFeedbackDuration()
+    local general = _G.MSUF_DB and _G.MSUF_DB.general
+    local duration = general and tonumber(general.castbarInterruptFeedbackDuration)
+    if type(duration) ~= "number" then
+        duration = tonumber(_G.MSUF_INTERRUPT_FEEDBACK_DURATION) or 0.5
+    end
+    if duration < 0 then return 0 end
+    if duration > 5 then return 5 end
+    return duration
+end
+ExportPublic("MSUF_GetInterruptFeedbackDuration", GetInterruptFeedbackDuration)
+
 if type(_G.MSUF_HardSyncCastbarPreview) ~= "function" then
     local function HardSyncCastbarPreview(preview, source)
         if not preview or not source then return end

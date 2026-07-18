@@ -292,6 +292,10 @@ function A.CastbarsRegistry.RegisterAppearanceSettings(ctx)
     RegisterCastbarNumber("castbarShakeStrength", "shakeStrength", "Shake Strength", 8, 0, 30, CastbarAliases("shake strength", "interrupt shake strength"), {
         reason = "MSUF2_CASTBAR_SHAKE_STRENGTH",
     })
+    RegisterCastbarNumber("castbarInterruptFeedbackDuration", "interruptDuration", "Interrupt Display Duration", 0.5, 0, 5, CastbarAliases("interrupt duration", "interrupt hold time", "interrupted castbar duration", "unterbrechungs anzeigedauer"), {
+        step = 0.1,
+        reason = "MSUF2_CASTBAR_INTERRUPT_DURATION",
+    })
     RegisterCastbarBoolean("castbarUnifiedDirection", "unifiedDirection", "Always Use Fill Direction for All Casts", false, CastbarAliases("unified fill direction", "same fill direction for channels"), {
         reason = "MSUF2_CASTBAR_UNIFIED_DIRECTION",
     })
