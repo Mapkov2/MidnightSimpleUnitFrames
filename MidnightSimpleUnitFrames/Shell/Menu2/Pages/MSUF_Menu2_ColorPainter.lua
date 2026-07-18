@@ -2,6 +2,7 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+local C_Timer = M.MenuTimer or _G.C_Timer
 
 -- The Color Painter deliberately owns no renderer. It embeds the same unit and
 -- group preview objects used by their normal pages, then adds menu-only click
@@ -310,7 +311,11 @@ end
 
 function P.Build(ctx, builder, categories)
     if not (ctx and builder and type(categories) == "table" and #categories > 0) then return nil end
-    local section = builder:CollapsibleSection("colors_preview", "Color Preview", 410, false)
+    local section = builder:CollapsibleSection("colors_preview", "Color Preview", 410, true)
+    section._msuf2CollapsibleBadgesShowWhenClosed = true
+    if W.SetCollapsibleBadges then
+        W.SetCollapsibleBadges(section, {{ text = "Live", kind = "accent", showWhenClosed = true }})
+    end
     local width = section._msuf2Width or ctx.width or 720
     local innerW = width - 32
 
@@ -462,7 +467,7 @@ function P.Build(ctx, builder, categories)
         initialRefreshSerial = initialRefreshSerial + 1
         local serial = initialRefreshSerial
         RefreshVisiblePreview(reason)
-        local timer = _G.C_Timer
+        local timer = C_Timer
         if timer and timer.After then
             timer.After(0, function()
                 if serial == initialRefreshSerial then RefreshVisiblePreview(reason) end

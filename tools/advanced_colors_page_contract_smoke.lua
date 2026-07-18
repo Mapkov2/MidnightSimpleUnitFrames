@@ -45,7 +45,7 @@ local MSUF = { MSUF2 = M }
 local path = "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors.lua"
 assert(loadfile(path))("MidnightSimpleUnitFrames", MSUF)
 assert(registeredPage and type(registeredPage.build) == "function", "colors page was not registered")
-assert(registeredPage.version == 12, "colors page version changed")
+assert(registeredPage.version == 18, "colors page version changed")
 
 local upvalues, index = 0, 1
 while debug.getupvalue(registeredPage.build, index) do
@@ -65,15 +65,28 @@ local components = {
 for _, name in ipairs(components) do
     assert(source:find("local function " .. name, 1, true), "missing color-domain builder: " .. name)
 end
-local cursor = assert(source:find("local function BuildColors(ctx)", 1, true))
+local buildCursor = assert(source:find("local function BuildColors(ctx)", 1, true))
+local buildSource = source:sub(buildCursor)
 for _, name in ipairs(components) do
-    local call = name .. "(ctx, b, CH)"
-    cursor = assert(source:find(call, cursor, true), "color-domain order changed: " .. name) + #call
+    assert(buildSource:find(name .. "(ctx, ", 1, true), "missing color-domain build call: " .. name)
 end
+for _, id in ipairs({ "colors_group_general", "colors_group_units", "colors_group_groups", "colors_group_bars", "colors_group_additional" }) do
+    assert(buildSource:find('"' .. id .. '"', 1, true), "missing color group: " .. id)
+end
+assert(not source:find('stateKey = "colorsGroupFrameTab"', 1, true), "Group Frame colors should use accordions, not tabs")
+local widgetsFile = assert(io.open("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Widgets.lua", "rb"))
+local widgetsSource = widgetsFile:read("*a")
+widgetsFile:close()
+local bindingsFile = assert(io.open("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Bindings.lua", "rb"))
+local bindingsSource = bindingsFile:read("*a")
+bindingsFile:close()
+assert(widgetsSource:find("AttachBoundColorToCollapsible", 1, true), "missing automatic accordion color swatches")
+assert(bindingsSource:find("widgets.AttachBoundColorToCollapsible", 1, true), "color bindings do not attach header swatches")
 
 local sections = {
     "colors_font", "colors_classes", "colors_background", "colors_appearance", "colors_unit",
-    "colors_npc_type", "colors_bar_colors", "colors_group_frames", "colors_castbar",
+    "colors_npc_type", "colors_bar_colors", "colors_group_frames", "colors_group_frames_background",
+    "colors_group_frames_state", "colors_group_frames_highlights", "colors_castbar",
     "colors_highlight", "colors_gameplay", "colors_power", "colors_class_power",
     "colors_auras", "colors_portrait",
 }
