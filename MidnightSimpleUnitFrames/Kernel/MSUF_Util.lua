@@ -1063,38 +1063,7 @@ local function MSUF_SetStoredBindingKeys(command, keys)
     commands[command] = MSUF_CopyBindingKeys(keys)
 end
 
-local _msufBindingSyncInFlight = false
-local _msufBindingApplyPending = false
-
-local function MSUF_ApplyStoredBindingsToCurrentSet()
-    if _msufBindingSyncInFlight then return end
-    if type(_G.SetBinding) ~= "function" then return end
-    if type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() then
-        _msufBindingApplyPending = true
-        return
-    end
-
-    _msufBindingApplyPending = false
-    _msufBindingSyncInFlight = true
-
-    for i = 1, #MSUF_BINDING_COMMANDS do
-        local command = MSUF_BINDING_COMMANDS[i]
-        local liveKeys = MSUF_GetBindingKeysForCommand(command)
-        for j = 1, #liveKeys do
-            _G.SetBinding(liveKeys[j])
-        end
-
-        local storedKeys = MSUF_GetStoredBindingKeys(command)
-        for j = 1, #storedKeys do
-            _G.SetBinding(storedKeys[j], command)
-        end
-    end
-
-    _msufBindingSyncInFlight = false
-end
-
 local function MSUF_SyncCurrentBindingsIntoGlobalStore()
-    if _msufBindingSyncInFlight then return end
     for i = 1, #MSUF_BINDING_COMMANDS do
         local command = MSUF_BINDING_COMMANDS[i]
         local liveKeys = MSUF_GetBindingKeysForCommand(command)
@@ -1129,16 +1098,6 @@ function MSUF_Keybind_ToggleEditMode()
         _G.MSUF_SetMSUFEditModeDirect(nextActive, nil)
     elseif type(_G.MSUF_ToggleEditMode) == "function" then
         _G.MSUF_ToggleEditMode()
-    end
-end
-
-local function MSUF_SyncMissingBindingsIntoGlobalStore()
-    local commands = MSUF_EnsureGlobalBindingState()
-    for i = 1, #MSUF_BINDING_COMMANDS do
-        local command = MSUF_BINDING_COMMANDS[i]
-        if commands[command] == nil then
-            MSUF_SetStoredBindingKeys(command, MSUF_GetBindingKeysForCommand(command))
-        end
     end
 end
 
@@ -1245,24 +1204,14 @@ do
     local f = CreateFrame("Frame")
     f:RegisterEvent("PLAYER_LOGIN")
     f:RegisterEvent("UPDATE_BINDINGS")
-    f:RegisterEvent("PLAYER_REGEN_ENABLED")
     f:SetScript("OnEvent", function(_, event)
-        if event == "PLAYER_LOGIN" then
-            -- New managed commands must adopt the user's existing Blizzard
-            -- binding once instead of being cleared merely because older MSUF
-            -- commands already exist in the account-wide mirror.
-            MSUF_SyncMissingBindingsIntoGlobalStore()
-            MSUF_ApplyStoredBindingsToCurrentSet()
-            return
-        end
-
-        if event == "UPDATE_BINDINGS" then
+        if event == "PLAYER_LOGIN" or event == "UPDATE_BINDINGS" then
+            -- WoW owns the active account/character binding set. Keep the
+            -- SavedVariables copy observational only: replaying account-wide
+            -- MSUF keys here can steal spell/action bindings on another
+            -- character when both use the same physical key. Explicit menu
+            -- changes still use the conflict-aware managed-binding functions.
             MSUF_SyncCurrentBindingsIntoGlobalStore()
-            return
-        end
-
-        if event == "PLAYER_REGEN_ENABLED" and _msufBindingApplyPending then
-            MSUF_ApplyStoredBindingsToCurrentSet()
         end
     end)
 end

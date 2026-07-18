@@ -1,14 +1,17 @@
--- Priority Frames managed binding: one-time adoption, explicit conflicts,
--- combat safety, persistence, and rollback on partial Blizzard API failure.
+-- Priority Frames managed binding: login isolation, explicit conflicts, combat
+-- safety, persistence, and rollback on partial Blizzard API failure.
 local root = arg and arg[1] or "."
 
 local eventFrame
 local combat = false
 local savedSets = {}
+local setBindingCalls = 0
 local bindingByKey = {
   ["CTRL-O"] = "MSUF_TOGGLE_OPTIONS",
   ["ALT-P"] = "MSUF_PRIORITY_TOGGLE",
   ["CTRL-X"] = "SOME_OTHER_ACTION",
+  ["SHIFT-1"] = "ACTIONBUTTON6",
+  ["SHIFT-2"] = "ACTIONBUTTON7",
 }
 local failSet = {}
 
@@ -26,6 +29,7 @@ _G.GetBindingKey = function(command)
   return unpack(keys)
 end
 _G.SetBinding = function(key, command)
+  setBindingCalls = setBindingCalls + 1
   if failSet[key] then return false end
   bindingByKey[key] = command
   return true
@@ -42,8 +46,8 @@ _G.MSUF_GlobalDB = {
   global = {
     bindings = {
       commands = {
-        MSUF_TOGGLE_OPTIONS = { "CTRL-O" },
-        MSUF_TOGGLE_EDITMODE = {},
+        MSUF_TOGGLE_OPTIONS = { "SHIFT-1" },
+        MSUF_TOGGLE_EDITMODE = { "SHIFT-2" },
         -- Intentionally missing: simulates upgrading from before Priority Frames.
       },
     },
@@ -56,9 +60,16 @@ _G.MSUF_NS, _G.MSUF = MSUF, MSUF
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua"))("MidnightSimpleUnitFrames", MSUF)
 assert(eventFrame and eventFrame.events.PLAYER_LOGIN and eventFrame.events.UPDATE_BINDINGS,
   "managed binding event owner was not installed")
+assert(not eventFrame.events.PLAYER_REGEN_ENABLED,
+  "binding owner still registered a deferred automatic replay")
 
 eventFrame.onEvent(eventFrame, "PLAYER_LOGIN")
 local stored = _G.MSUF_GlobalDB.global.bindings.commands
+assert(setBindingCalls == 0 and bindingByKey["SHIFT-1"] == "ACTIONBUTTON6"
+  and bindingByKey["SHIFT-2"] == "ACTIONBUTTON7",
+  "login replay replaced character-specific action bindings")
+assert(stored.MSUF_TOGGLE_OPTIONS[1] == "CTRL-O" and #stored.MSUF_TOGGLE_EDITMODE == 0,
+  "login did not mirror the active character binding set")
 assert(stored.MSUF_PRIORITY_TOGGLE[1] == "ALT-P",
   "upgrade login erased the user's pre-existing Blizzard Priority binding")
 
@@ -101,4 +112,4 @@ eventFrame.onEvent(eventFrame, "UPDATE_BINDINGS")
 assert(stored.MSUF_PRIORITY_TOGGLE[1] == "BUTTON4",
   "external Blizzard binding change did not synchronize into the global mirror")
 
-print("PASS priority frames binding: migration, conflict, combat, persistence, and rollback")
+print("PASS priority frames binding: login isolation, conflict, combat, persistence, and rollback")
