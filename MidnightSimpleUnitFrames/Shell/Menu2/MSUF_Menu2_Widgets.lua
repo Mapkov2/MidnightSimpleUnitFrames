@@ -14,6 +14,7 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
 end
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+local C_Timer = M.MenuTimer or _G.C_Timer
 local T = M.Theme
 local W = M.Widgets or {}
 M.Widgets = W
@@ -166,7 +167,7 @@ local function CloseAutoFocusedSections(pageKey)
     local sections = entry and entry.sections
     if type(sections) ~= "table" then return false end
     local changed
-    local relayout
+    local relayout = {}
     for _, section in pairs(sections) do
         local collapsible = section and section._msuf2CollapsibleEntry
         if collapsible and collapsible._msuf2AutoOpened == true then
@@ -181,11 +182,15 @@ local function CloseAutoFocusedSections(pageKey)
             end
             if collapsible._msuf2RefreshHeaderTone then collapsible._msuf2RefreshHeaderTone(false) end
             if T.ApplyCollapseVisual then T.ApplyCollapseVisual(collapsible.arrow, collapsible.hint, false) end
-            relayout = relayout or collapsible.builder
+            if collapsible.builder then relayout[collapsible.builder] = true end
             changed = true
         end
     end
-    if changed and relayout and relayout.RelayoutCollapsibles then relayout:RelayoutCollapsibles() end
+    if changed then
+        for builder in pairs(relayout) do
+            if builder.RelayoutCollapsibles then builder:RelayoutCollapsibles() end
+        end
+    end
     return changed and true or false
 end
 local function NotifyCollapsibleSectionState(entry, open)
@@ -253,22 +258,30 @@ function W.FocusCollapsibleSection(section, opts)
     local entry = section and section._msuf2CollapsibleEntry
     if not entry then return false end
     opts = opts or {}
-    local wasOpen = entry.open == true
-    entry._msuf2MotionSerial = (entry._msuf2MotionSerial or 0) + 1
-    if entry._msuf2MotionActive then entry._msuf2MotionActive = nil end
-    entry.open = true
-    entry._msuf2Closing = nil
-    if opts.persist == true then
-        entry._msuf2AutoOpened = nil
-        if M.accordionState and entry.stateKey then M.accordionState[entry.stateKey] = true end
-    elseif not wasOpen or entry._msuf2AutoOpened == true then
-        entry._msuf2AutoOpened = true
+    local chain, cursor = {}, entry
+    while cursor do
+        table.insert(chain, 1, cursor)
+        cursor = cursor.ancestorEntry
     end
-    if entry.body then
-        entry.body:Show()
-        if entry.body.SetAlpha then entry.body:SetAlpha(1) end
+    for i = 1, #chain do
+        local current = chain[i]
+        local wasOpen = current.open == true
+        current._msuf2MotionSerial = (current._msuf2MotionSerial or 0) + 1
+        current._msuf2MotionActive = nil
+        current.open = true
+        current._msuf2Closing = nil
+        if opts.persist == true then
+            current._msuf2AutoOpened = nil
+            if M.accordionState and current.stateKey then M.accordionState[current.stateKey] = true end
+        elseif not wasOpen or current._msuf2AutoOpened == true then
+            current._msuf2AutoOpened = true
+        end
+        if current.body then
+            current.body:Show()
+            if current.body.SetAlpha then current.body:SetAlpha(1) end
+        end
+        if current.builder and current.builder.RelayoutCollapsibles then current.builder:RelayoutCollapsibles() end
     end
-    if entry.builder and entry.builder.RelayoutCollapsibles then entry.builder:RelayoutCollapsibles() end
     local function FinishFocus()
         if opts.scroll ~= false then ScrollToCollapsibleEntry(entry) end
         if opts.flash ~= false then FlashCollapsibleHeader(entry) end
@@ -397,16 +410,25 @@ function W.RegisterGuidedRegion(ctx, frame, title, stableId)
     return RegisterGuidedTourRegion(ctx, frame, title, stableId)
 end
 
-function W.PageBuilder(ctx)
+function W.PageBuilder(ctx, opts)
     if type(M.EnsurePersistentMenuState) == "function" then M.EnsurePersistentMenuState() end
-    local contentX = tonumber(ctx and ctx._msuf2ContentX) or 12
-    local topInset = tonumber(ctx and ctx._msuf2TopInset) or 0
+    opts = type(opts) == "table" and opts or {}
+    local contentX = tonumber(opts.contentX) or tonumber(ctx and ctx._msuf2ContentX) or 12
+    local topInset = tonumber(opts.topInset) or tonumber(ctx and ctx._msuf2TopInset) or 0
+    local function UpdateContentHeight(height)
+        if type(opts.onContentHeight) == "function" then
+            opts.onContentHeight(height)
+        elseif ctx.SetContentHeight then
+            ctx:SetContentHeight(height)
+        end
+    end
     local b = {
         ctx = ctx,
-        parent = ctx.wrapper,
+        parent = opts.parent or ctx.wrapper,
         x = contentX,
         y = -12 - topInset,
-        width = ctx.width or 720,
+        width = tonumber(opts.width) or ctx.width or 720,
+        ancestorEntry = opts.ancestorEntry,
         collapsibles = {},
         layoutEntries = {},
     }
@@ -461,12 +483,13 @@ function W.PageBuilder(ctx)
                 T.ApplyCollapseVisual(entry.arrow, entry.hint, open)
                 if entry._msuf2RefreshHeaderTone then entry._msuf2RefreshHeaderTone(false) end
                 if entry._msuf2RefreshState then entry._msuf2RefreshState(entry) end
+                if entry._msuf2RefreshColorSwatchVisibility then entry._msuf2RefreshColorSwatchVisibility() end
                 NotifyCollapsibleSectionState(entry, open)
                 y = y - entry.outer:GetHeight() - 8
             end
         end
         self.y = y
-        if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(y) + 42) end
+        UpdateContentHeight(math.abs(y) + 42)
         QueuePinnedPreviewGeometryRefresh(M.scrollFrame)
     end
     function b:Section(title, height)
@@ -484,7 +507,7 @@ function W.PageBuilder(ctx)
         fs:SetPoint("TOPLEFT", 16, -12)
         section.title = fs
         self.y = self.y - (height or 120) - 12
-        if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(self.y) + 28) end
+        UpdateContentHeight(math.abs(self.y) + 28)
         if self._collapsibleStartY then
             self.layoutEntries[#self.layoutEntries + 1] = {
                 kind = "section",
@@ -559,16 +582,18 @@ function W.PageBuilder(ctx)
             contentHeight = height or 120,
             stateKey = stateKey,
             guidedOrder = NextGuidedTourOrder(ctx),
+            ancestorEntry = self.ancestorEntry,
         }
         RefreshCollapseHintSuppression(entry)
         local function RefreshHeaderLayout()
             local headerW = (header.GetWidth and header:GetWidth()) or self.width or 240
             local reserve = math.max(120, math.min(136, math.floor(headerW * 0.38 + 0.5)))
+            local swatchReserve = tonumber(entry._msuf2ColorSwatchReserve) or 0
             if not entry._msuf2ManualHintLayout then
                 local badges = entry._msuf2Badges
                 if badges and #badges > 0 then
                     local availableBadges = {}
-                    local availableW = headerW - 12 - 28 - (headerW < 520 and 96 or 136)
+                    local availableW = headerW - 12 - 28 - (headerW < 520 and 96 or 136) - swatchReserve
                     local totalW = 0
                     for i = 1, #badges do
                         local badge = badges[i]
@@ -587,7 +612,7 @@ function W.PageBuilder(ctx)
                         availableBadges[#availableBadges] = nil
                     end
                     if #availableBadges == 1 and totalW > availableW then availableBadges[1] = nil end
-                    local right = -12
+                    local right = -12 - swatchReserve
                     for i = #badges, 1, -1 do
                         local badge = badges[i]
                         if badge then badge:SetShown(false) end
@@ -611,9 +636,9 @@ function W.PageBuilder(ctx)
                 end
                 if hint.Show then hint:Show() end
                 hint:ClearAllPoints()
-                hint:SetPoint("TOPRIGHT", header, "TOPRIGHT", -12, -1)
-                hint:SetPoint("BOTTOMRIGHT", header, "BOTTOMRIGHT", -12, 1)
-                hint:SetPoint("LEFT", header, "RIGHT", -(12 + reserve), 0)
+                hint:SetPoint("TOPRIGHT", header, "TOPRIGHT", -(12 + swatchReserve), -1)
+                hint:SetPoint("BOTTOMRIGHT", header, "BOTTOMRIGHT", -(12 + swatchReserve), 1)
+                hint:SetPoint("LEFT", header, "RIGHT", -(12 + reserve + swatchReserve), 0)
                 hint:SetJustifyH("RIGHT")
                 label:ClearAllPoints()
                 label:SetPoint("LEFT", arrow, "RIGHT", 8, 0)
@@ -782,7 +807,7 @@ function W.PageBuilder(ctx)
             section.subtitle = sub
         end
         self.y = self.y - (height or 78) - 12
-        if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(self.y) + 28) end
+        UpdateContentHeight(math.abs(self.y) + 28)
         if self._collapsibleStartY then
             self.layoutEntries[#self.layoutEntries + 1] = {
                 kind = "section",
@@ -798,7 +823,7 @@ function W.PageBuilder(ctx)
     end
     function b:Spacer(height)
         self.y = self.y - (height or 10)
-        if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(self.y) + 28) end
+        UpdateContentHeight(math.abs(self.y) + 28)
         if self._collapsibleStartY then
             self.layoutEntries[#self.layoutEntries + 1] = {
                 kind = "spacer",
@@ -1198,6 +1223,143 @@ function W.SetCollapsibleBadges(section, specs)
         end
     end
     if entry._msuf2RefreshLayout then entry._msuf2RefreshLayout() end
+end
+
+--- Mirrors existing bound color controls into compact, clickable accordion-header
+--- swatches. The header buttons proxy the original control, so color history,
+--- picker behavior, setting metadata, and runtime apply paths stay single-sourced.
+function W.SetCollapsibleColorSwatches(ctx, section, specs)
+    local entry = section and section._msuf2CollapsibleEntry
+    local header = entry and entry.header
+    if not header then return end
+    specs = specs or {}
+    entry._msuf2ColorSwatches = entry._msuf2ColorSwatches or {}
+    local count = #specs
+    local measuredW = header.GetWidth and header:GetWidth()
+    local headerW = (tonumber(measuredW) or 0) > 0 and measuredW or (entry.builder and entry.builder.width) or 720
+    local baseWidth = count > 12 and 16 or (count > 8 and 20 or (count > 5 and 24 or 32))
+    local gap = count > 8 and 3 or 5
+    local maxReserve = max(80, headerW - 220)
+    local visibleLimit = max(1, floor((maxReserve + gap) / (baseWidth + gap)))
+    local renderCount = min(count, visibleLimit)
+    local right = -12
+    local visibleCount = 0
+    for i = 1, renderCount do
+        local spec = specs[i] or {}
+        local control = spec.control or spec[1]
+        local swatch = entry._msuf2ColorSwatches[i]
+        if not swatch then
+            swatch = CreateFrame("Button", nil, header)
+            swatch:SetSize(32, 18)
+            swatch:SetFrameLevel((header.GetFrameLevel and header:GetFrameLevel() or 1) + 3)
+            swatch._msuf2Fill, swatch._msuf2Edge = T.CreateSuperellipseLayers(swatch, "_msuf2HeaderColor", 1, "ARTWORK", "OVERLAY")
+            local hover = swatch:CreateTexture(nil, "HIGHLIGHT")
+            hover:SetAllPoints()
+            hover:SetColorTexture(1, 1, 1, 0.10)
+            entry._msuf2ColorSwatches[i] = swatch
+        end
+        swatch._msuf2ColorControl = control
+        swatch._msuf2ColorPreviewAvailable = control and true or false
+        swatch:SetSize(tonumber(spec.width) or baseWidth, tonumber(spec.height) or (baseWidth < 24 and 14 or 18))
+        swatch:ClearAllPoints()
+        swatch:SetPoint("RIGHT", header, "RIGHT", right, 0)
+        right = right - swatch:GetWidth() - gap
+        visibleCount = visibleCount + 1
+        if M.MarkRuntimeControlComponent and control then
+            M.MarkRuntimeControlComponent(swatch, control)
+        elseif control then
+            swatch._msuf2ControlPartOf = control
+        end
+        local function RefreshSwatch(r, g, b)
+            if not control then swatch:Hide(); return end
+            if type(r) ~= "number" then r, g, b = nil, nil, nil end
+            if r == nil and control.GetRGB then r, g, b = control:GetRGB() end
+            r, g, b = tonumber(r) or 1, tonumber(g) or 1, tonumber(b) or 1
+            if swatch._msuf2Fill.SetColorTexture then swatch._msuf2Fill:SetColorTexture(r, g, b, 1)
+            else swatch._msuf2Fill:SetVertexColor(r, g, b, 1) end
+            local enabled = not control.IsEnabled or control:IsEnabled()
+            if enabled then swatch:Enable() else swatch:Disable() end
+            -- A header swatch previews the stored color, even while its setting is
+            -- conditionally inactive. Dimming the whole button falsifies that color.
+            swatch:SetAlpha(1)
+            swatch._msuf2Edge:SetVertexColor(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], enabled and 0.90 or 0.48)
+            swatch:SetShown(entry.open ~= true and swatch._msuf2ColorPreviewAvailable == true)
+        end
+        swatch._msuf2RefreshColor = RefreshSwatch
+        swatch:SetScript("OnClick", function(self)
+            local target = self._msuf2ColorControl
+            if not target or (target.IsEnabled and not target:IsEnabled()) then return end
+            if target.Click then target:Click("LeftButton")
+            else
+                local click = target.GetScript and target:GetScript("OnClick")
+                if type(click) == "function" then click(target, "LeftButton") end
+            end
+        end)
+        if M.AddTooltip and not swatch._msuf2ColorTooltipInstalled then
+            swatch._msuf2ColorTooltipInstalled = true
+            M.AddTooltip(swatch, spec.label or spec.text or "Color", spec.help or "Click to edit this color.", { hook = true })
+        end
+        if control and swatch._msuf2MirrorControl ~= control then
+            swatch._msuf2MirrorControl = control
+            control._msuf2ColorMirrors = control._msuf2ColorMirrors or {}
+            control._msuf2ColorMirrors[#control._msuf2ColorMirrors + 1] = RefreshSwatch
+            if control.HookScript then
+                control:HookScript("OnEnable", RefreshSwatch)
+                control:HookScript("OnDisable", RefreshSwatch)
+            end
+        end
+        RefreshSwatch()
+    end
+    for i = renderCount + 1, #entry._msuf2ColorSwatches do
+        local swatch = entry._msuf2ColorSwatches[i]
+        swatch._msuf2ColorPreviewAvailable = false
+        swatch:Hide()
+    end
+    entry._msuf2ClosedColorSwatchReserve = visibleCount > 0 and math.abs(right + 12) or 0
+    entry._msuf2RefreshColorSwatchVisibility = function()
+        local showPreviews = entry.open ~= true
+        entry._msuf2ColorSwatchReserve = showPreviews and entry._msuf2ClosedColorSwatchReserve or 0
+        for i = 1, #(entry._msuf2ColorSwatches or {}) do
+            local swatch = entry._msuf2ColorSwatches[i]
+            if swatch then
+                swatch:SetShown(showPreviews and swatch._msuf2ColorPreviewAvailable == true)
+            end
+        end
+        if entry._msuf2RefreshLayout then entry._msuf2RefreshLayout() end
+    end
+    if M.TrackRefresh and not entry._msuf2ColorSwatchRefreshTracked then
+        entry._msuf2ColorSwatchRefreshTracked = true
+        M.TrackRefresh(ctx, function()
+            for i = 1, #(entry._msuf2ColorSwatches or {}) do
+                local swatch = entry._msuf2ColorSwatches[i]
+                if swatch and swatch._msuf2ColorPreviewAvailable and swatch._msuf2RefreshColor then swatch._msuf2RefreshColor() end
+            end
+        end)
+    end
+    entry._msuf2RefreshColorSwatchVisibility()
+end
+
+--- Automatically place every bound color control on its nearest accordion header.
+--- This is cold Menu2 construction only; it adds no gameplay or combat runtime work.
+function W.AttachBoundColorToCollapsible(ctx, colorControl)
+    if not colorControl or colorControl._msuf2HeaderColorAttached then return false end
+    local parent = colorControl.GetParent and colorControl:GetParent()
+    local section, entry
+    for _ = 1, 12 do
+        if not parent then break end
+        entry = parent._msuf2CollapsibleEntry
+        if entry then section = entry.body or parent; break end
+        parent = parent.GetParent and parent:GetParent()
+    end
+    if not (section and entry) then return false end
+    colorControl._msuf2HeaderColorAttached = true
+    entry._msuf2BoundHeaderColors = entry._msuf2BoundHeaderColors or {}
+    entry._msuf2BoundHeaderColors[#entry._msuf2BoundHeaderColors + 1] = {
+        control = colorControl,
+        label = colorControl._msuf2ColorLabel or "Color",
+    }
+    W.SetCollapsibleColorSwatches(ctx, section, entry._msuf2BoundHeaderColors)
+    return true
 end
 local function NextRow(section, height)
     local y = section._msuf2CursorY or -40
@@ -3038,6 +3200,8 @@ local function ColorSetRGB(self, r, g, b)
     else
         self._msuf2Swatch:SetVertexColor(self._msuf2R, self._msuf2G, self._msuf2B, 1)
     end
+    local mirrors = self._msuf2ColorMirrors
+    for i = 1, #(mirrors or {}) do mirrors[i](self._msuf2R, self._msuf2G, self._msuf2B) end
 end
 local function ColorGetRGB(self) return self._msuf2R or 1, self._msuf2G or 1, self._msuf2B or 1 end
 local function ColorSetOnColorChanged(self, fn) self._msuf2OnColorChanged = fn end
@@ -3348,6 +3512,14 @@ local function EnsureColorPickerHideHook()
             btn:_msuf2CommitColorInteraction()
         end
     end)
+end
+function W.CloseMenuOwnedColorPicker()
+    if colorPickerPlus and colorPickerPlus.Hide then colorPickerPlus:Hide() end
+    local picker = _G.ColorPickerFrame
+    if not (picker and picker._msuf2ColorOwner) then return false end
+    if picker.Hide then picker:Hide() end
+    picker._msuf2ColorOwner = nil
+    return true
 end
 local function ColorButtonOnClick(self)
     if W and type(W.OpenColorContextPicker) == "function" then

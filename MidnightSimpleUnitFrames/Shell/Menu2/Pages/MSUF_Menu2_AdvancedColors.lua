@@ -517,24 +517,6 @@ local function GroupBool(key, defaultValue)
     local value = GroupRead(key, defaultValue and true or false)
     return value and true or false
 end
-local function GroupScopesDiffer(keys)
-    if type(keys) ~= "table" then return false end
-    local db = DB()
-    for i = 1, #keys do
-        local key = keys[i]
-        local first, haveFirst
-        for s = 1, #GROUP_COLOR_DB_KEYS do
-            local conf = db[GROUP_COLOR_DB_KEYS[s]]
-            local value = conf and conf[key]
-            if not haveFirst then
-                first, haveFirst = value, true
-            elseif value ~= first then
-                return true
-            end
-        end
-    end
-    return false
-end
 local function RequestGroupColorApply(reason, mode)
     local apply = CurrentApplyService()
     if apply and type(apply.RequestGroup) == "function" then
@@ -639,23 +621,14 @@ local function SetGroupHealthBarRGB(r, g, b)
     end
 end
 local function BuildGroupFrameColors(ctx, b)
-    local pageW = ctx.width or 720
-    local group = b:CollapsibleSection("colors_group_frames", "Group Frame Colors", pageW >= 840 and 624 or 1158, false)
-    local w = group._msuf2Width or pageW
-    local wide = w >= 840
-    local gap = 16
-    local leftX = 24
-    local innerW = max(320, w - 48)
-    local leftW = wide and floor((innerW - gap) * 0.48) or innerW
-    local rightX = wide and (leftX + leftW + gap) or leftX
-    local rightW = wide and (innerW - leftW - gap) or innerW
-    local secondY = wide and -270 or -498
-    local health = Card(group, "Health Bars", "Shared by Party, Raid, and Mythic Raid.", leftX, -42, leftW, 210)
-    local background = Card(group, "Bar Background", nil, rightX, wide and -42 or -270, rightW, 210)
-    local state = Card(group, "State Tints", "Dead/offline tint and debuff stripe colors.", leftX, secondY, leftW, 300)
-    local highlights = Card(group, "Group Highlights", nil, rightX, wide and secondY or -816, rightW, 288)
+    local pageW = b.width or ctx.width or 720
+    local cardW = max(320, pageW - 32)
+    local health = b:CollapsibleSection("colors_group_frames", "Health Bars", 112, true)
+    local background = b:CollapsibleSection("colors_group_frames_background", "Bar Background", 112, false)
+    local state = b:CollapsibleSection("colors_group_frames_state", "State Tints", 242, false)
+    local highlights = b:CollapsibleSection("colors_group_frames_highlights", "Group Highlights", 220, false)
 
-    ValueDropdownAt(ctx, health, "Bar Color Mode", 16, -54, GROUP_BAR_MODES, min(280, leftW - 32),
+    ValueDropdownAt(ctx, health, "Bar Color Mode", 12, -10, GROUP_BAR_MODES, min(360, cardW - 32),
         GroupBarMode,
         function(value)
             value = value or "GLOBAL"
@@ -666,70 +639,39 @@ local function BuildGroupFrameColors(ctx, b)
             if M.RequestRefresh then M.RequestRefresh(ctx, "group-colors-mode") end
         end,
         Meta("group_frame.health.mode"))
-    local healthColor = ColorValueAt(ctx, health, "Health bar color", 16, -108, GroupHealthBarRGB, SetGroupHealthBarRGB,
+    local healthColor = ColorValueAt(ctx, health, "Health bar color", 12, -64, GroupHealthBarRGB, SetGroupHealthBarRGB,
         nil, nil, Meta("group_frame.health.color"))
-    local healthHint = W.Text(health, "", 16, -156, leftW - 32, T.colors.muted)
-    if healthHint.SetWordWrap then healthHint:SetWordWrap(true) end
 
-    GroupColorAt(ctx, background, "Background Color", 16, -54, "bg", 0.10, 0.10, 0.10)
-    ValueDropdownAt(ctx, background, "Health color fallback", 16, -108, GROUP_HEALTH_MODES, min(290, rightW - 32),
+    GroupColorAt(ctx, background, "Background Color", 12, -10, "bg", 0.10, 0.10, 0.10)
+    ValueDropdownAt(ctx, background, "Health color fallback", 12, -56, GROUP_HEALTH_MODES, min(360, cardW - 32),
         function() return GroupRead("healthColorMode", "CLASS") or "CLASS" end,
         function(value) SetGroupValue("healthColorMode", value or "CLASS", "MSUF2_GROUP_HEALTH_FALLBACK", "visual") end,
         Meta("group_frame.health.fallback_mode"))
 
-    ValueSwitchAt(ctx, state, "Dead / Offline Background", 16, -54, min(260, leftW - 32),
+    ValueSwitchAt(ctx, state, "Dead / Offline Background", 12, -10, min(320, cardW - 32),
         function() return GroupBool("deadBgEnabled", false) end,
         function(value) SetGroupValue("deadBgEnabled", value and true or false, "MSUF2_GROUP_DEAD_BG", "visual") end,
         Meta("group_frame.state.dead_offline.enabled"))
-    local deadColor = GroupColorAt(ctx, state, "Background color", 16, -96, "deadBg", 0.60, 0.05, 0.05)
-    local deadAlpha = GroupAlphaSlider(ctx, state, "Dead/offline opacity", 16, -138, max(220, leftW - 58), "deadBgA", 0.90)
-    local offline = ValueToggleAt(ctx, state, "Also tint offline members", 16, -184,
+    local deadColor = GroupColorAt(ctx, state, "Background color", 12, -48, "deadBg", 0.60, 0.05, 0.05)
+    local deadAlpha = GroupAlphaSlider(ctx, state, "Dead/offline opacity", 12, -86, max(220, cardW - 58), "deadBgA", 0.90)
+    local offline = ValueToggleAt(ctx, state, "Also tint offline members", 12, -132,
         function() return GroupBool("deadBgOffline", true) end,
         function(value) SetGroupValue("deadBgOffline", value and true or false, "MSUF2_GROUP_DEAD_BG_OFFLINE", "visual") end,
         Meta("group_frame.state.dead_offline.include_offline"))
-    GroupColorAt(ctx, state, "Debuff stripe color", 16, -224, "debuffStripeColor", 0.80, 0.20, 0.20)
-    GroupAlphaSlider(ctx, state, "Debuff stripe opacity", 16, -264, max(220, leftW - 58), "debuffStripeAlpha", 0.60)
+    GroupColorAt(ctx, state, "Debuff stripe color", 12, -166, "debuffStripeColor", 0.80, 0.20, 0.20)
+    GroupAlphaSlider(ctx, state, "Debuff stripe opacity", 12, -202, max(220, cardW - 58), "debuffStripeAlpha", 0.60)
 
-    GroupColorAt(ctx, highlights, "Target Highlight Color", 16, -54, "target", 1, 1, 1)
-    GroupColorAt(ctx, highlights, "Focus Highlight Color", 16, -92, "hlFocusColor", 0.50, 0.50, 1.00)
-    GroupColorAt(ctx, highlights, "Group Border Color", 16, -130, "groupBorder", 0.38, 0.68, 1.00)
-    GroupAlphaSlider(ctx, highlights, "Group border opacity", 16, -172, max(220, rightW - 58), "groupBorderA", 0.95)
-    GroupColorAt(ctx, highlights, "Corner aggro color", 16, -224, "ciAggroColor", 1.00, 0.55, 0.00)
-
-    local syncNote = W.Text(group, "Applies to Party, Raid and Mythic Raid together.", 24, wide and -580 or -1114, w - 48, T.colors.muted)
-    if syncNote.SetWordWrap then syncNote:SetWordWrap(true) end
+    GroupColorAt(ctx, highlights, "Target Highlight Color", 12, -10, "target", 1, 1, 1)
+    GroupColorAt(ctx, highlights, "Focus Highlight Color", 12, -48, "hlFocusColor", 0.50, 0.50, 1.00)
+    GroupColorAt(ctx, highlights, "Group Border Color", 12, -86, "groupBorder", 0.38, 0.68, 1.00)
+    GroupAlphaSlider(ctx, highlights, "Group border opacity", 12, -128, max(220, cardW - 58), "groupBorderA", 0.95)
+    GroupColorAt(ctx, highlights, "Corner aggro color", 12, -174, "ciAggroColor", 1.00, 0.55, 0.00)
     M.BindGateGroup(ctx, nil, {
         { controls = healthColor, on = function()
             local current = GroupBarMode()
             return current == "dark" or current == "unified" or current == "CUSTOM"
         end },
         { controls = { deadColor, deadAlpha, offline }, on = function() return GroupBool("deadBgEnabled", false) end },
-    }, {
-        also = function()
-            local current = GroupBarMode()
-            if current == "GLOBAL" then
-                healthHint:SetText("Follows Unitframe Global Coloring. The swatch previews the current global bar color.")
-                healthHint:Show()
-            elseif current == "CLASS" or current == "GRADIENT" then
-                healthHint:SetText("Class Color and Health Gradient are runtime colors, not a single editable swatch.")
-                healthHint:Show()
-            else
-                healthHint:Hide()
-            end
-            if syncNote then
-                local mixed = GroupScopesDiffer({
-                    "gfBarMode", "healthColorMode", "healthCustomR", "healthCustomG", "healthCustomB",
-                    "gfDarkR", "gfDarkG", "gfDarkB", "gfUnifiedR", "gfUnifiedG", "gfUnifiedB",
-                    "bgR", "bgG", "bgB", "deadBgEnabled", "deadBgOffline", "deadBgR", "deadBgG", "deadBgB", "deadBgA",
-                    "debuffStripeAlpha", "debuffStripeColorR", "debuffStripeColorG", "debuffStripeColorB", "targetR", "targetG", "targetB",
-                    "hlFocusColorR", "hlFocusColorG", "hlFocusColorB", "groupBorderR", "groupBorderG", "groupBorderB",
-                    "groupBorderA", "ciAggroColorR", "ciAggroColorG", "ciAggroColorB",
-                })
-                syncNote:SetText(mixed
-                    and "Applies to Party, Raid and Mythic Raid together. Different existing scope values will sync on the next change."
-                    or "Applies to Party, Raid and Mythic Raid together.")
-            end
-        end,
     })
 end
 local function NPCColorAt(ctx, section, row, x, y, apply)
@@ -1196,7 +1138,8 @@ local function OpenFontsTextColors()
     end
     return true
 end
-local function BuildFontAndClassColors(ctx, b, CH)
+local function BuildFontAndClassColors(ctx, b, CH, part)
+    if part ~= "classes" then
     local font = b:CollapsibleSection("colors_font", "Global Font Color", 100, false)
     CH.ApiColorAt(ctx, font, "Global font color", 12, -10, "GetGlobalFontColor", "SetGlobalFontColor", 1, 1, 1)
     CH.ButtonAt(font, "Use font palette", 12, -50, 150, function()
@@ -1214,6 +1157,8 @@ local function BuildFontAndClassColors(ctx, b, CH)
     end
     openFonts:SetScript("OnClick", OpenFontsTextColors)
     RegisterControl(openFonts, Meta("font.open_text_colors", "navigation", { navigationKey = "opt_fonts" }), "Fonts > Text Colors", "button")
+    end
+    if part == "font" then return end
     local tokens = GetClassTokens()
     local classRows = max(1, floor((#tokens + 3) / 4))
     local classResetY = -36 - (classRows * 36)
@@ -1314,7 +1259,8 @@ local function BuildBarGradientColors(ctx, b, CH)
     end, "bar_gradient.reset")
 end
 
-local function BuildBackgroundAndAppearance(ctx, b, CH)
+local function BuildBackgroundAndAppearance(ctx, b, CH, part)
+    if part ~= "appearance" then
     local background = b:CollapsibleSection("colors_background", "Bar Background Tint", 226, false)
     LabelAt(background, "Tint applied to the bar background in *all* bar modes. Dark Mode uses this tint too.", 12, -8, 660, "GameFontHighlightSmall", T.colors.muted)
     ApiOrGeneralColorAt(ctx, background, "Bar background tint", 12, -46, "GetClassBarBgColor", "SetClassBarBgColor", "classBarBg", 0, 0, 0, ApplyUnitframeColorWithReload)
@@ -1348,6 +1294,8 @@ local function BuildBackgroundAndAppearance(ctx, b, CH)
             ApplyUnitframeColorWithReload()
         end
     end, "background.reset_to_black")
+    end
+    if part == "background" then return end
     local appearance = b:CollapsibleSection("colors_appearance", "Unitframe Global Coloring", 350, true)
     local refreshBarModeControls
     local function CurrentBarMode()
@@ -1485,7 +1433,7 @@ local function BuildUnitAndNPCColors(ctx, b, CH)
     M.TrackRefresh(ctx, RefreshNPCTypeControls)
 end
 
-local function BuildBarAndGroupColors(ctx, b, CH)
+local function BuildBarAndGroupColors(ctx, b, CH, includeGroup)
     local barColors = b:CollapsibleSection("colors_bar_colors", "Bar & Prediction Colors", 280, false)
     local barLeftX = 30
     local barRightX = max(430, floor((barColors._msuf2Width or ctx.width or 720) * 0.50))
@@ -1542,7 +1490,7 @@ local function BuildBarAndGroupColors(ctx, b, CH)
     M.BindGateGroup(ctx, nil, {
         { controls = powerBg, on = function() return not (powerBgMatch:GetChecked() and true or false) end },
     })
-    BuildGroupFrameColors(ctx, b)
+    if includeGroup ~= false then BuildGroupFrameColors(ctx, b) end
 end
 
 local function BuildCastbarColors(ctx, b, CH)
@@ -1625,7 +1573,8 @@ local function BuildCastbarColors(ctx, b, CH)
     M.TrackRefresh(ctx, RefreshCastbarOverrideControls)
 end
 
-local function BuildHighlightAndGameplayColors(ctx, b, CH)
+local function BuildHighlightAndGameplayColors(ctx, b, CH, part)
+    if part ~= "gameplay" then
     local highlight = b:CollapsibleSection("colors_highlight", "Mouseover Highlight", 210, false)
     local highlightColor = ColorValueAt(ctx, highlight, "Mouseover highlight color", 12, -48, HighlightRGB, SetHighlightRGB,
         nil, nil, Meta("highlight.mouseover.color"))
@@ -1637,7 +1586,9 @@ local function BuildHighlightAndGameplayColors(ctx, b, CH)
     M.BindGateGroup(ctx, nil, {
         { controls = highlightColor, on = function() return G().highlightEnabled ~= false end },
     })
-    local gameplay = b:CollapsibleSection("colors_gameplay", "Gameplay", 310, false)
+    end
+    if part == "highlight" then return end
+    local gameplay = b:CollapsibleSection("colors_gameplay", "Combat Feedback", 310, false)
     CH.TableColorSpecs(ctx, gameplay, Gameplay, {
         { "Combat timer text color", 12, -10, "combatTimerColor", 1, 1, 1 },
     }, ApplyGameplayColors)
@@ -1817,19 +1768,67 @@ local function BuildColorPainter(ctx, b)
     painter.Build(ctx, b, categories)
 end
 
+local function BuildColorGroup(ctx, builder, id, title, subtitle, defaultOpen, build)
+    local group = builder:CollapsibleSection(id, title, 96, defaultOpen)
+    local entry = group._msuf2CollapsibleEntry
+    local groupW = group._msuf2Width or ctx.width or 720
+    local hasSubtitle = subtitle and subtitle ~= ""
+    if hasSubtitle then
+        LabelAt(group, subtitle, 16, -8, groupW - 32, "GameFontHighlightSmall", T.colors.muted)
+    end
+
+    local inner
+    inner = W.PageBuilder(ctx, {
+        parent = group,
+        width = groupW,
+        contentX = 0,
+        topInset = hasSubtitle and 30 or 0,
+        ancestorEntry = entry,
+        onContentHeight = function(height)
+            height = max(72, tonumber(height) or 72)
+            if entry.contentHeight == height then return end
+            entry.contentHeight = height
+            if entry.body and entry.body.SetHeight then entry.body:SetHeight(height) end
+            if entry.outer and entry.outer.SetHeight then
+                entry.outer:SetHeight(entry.headerHeight + (entry.open and height or 0))
+            end
+            builder:RequestRelayoutCollapsibles()
+        end,
+    })
+    build(inner)
+    inner:RelayoutCollapsibles()
+    return group
+end
+
 local function BuildColors(ctx)
     local b, CH = W.PageBuilder(ctx), COLOR_HELPERS
     b:GlobalStyleHeader("Colors", "Frame, group-frame, bar, aura, castbar and resource colors.", 72)
     BuildColorPainter(ctx, b)
-    BuildFontAndClassColors(ctx, b, CH)
-    BuildBackgroundAndAppearance(ctx, b, CH)
-    BuildUnitAndNPCColors(ctx, b, CH)
-    BuildBarAndGroupColors(ctx, b, CH)
-    BuildBarGradientColors(ctx, b, CH)
-    BuildCastbarColors(ctx, b, CH)
-    BuildHighlightAndGameplayColors(ctx, b, CH)
-    BuildPowerAndClassPowerColors(ctx, b, CH)
-    BuildAuraAndPortraitColors(ctx, b, CH)
+
+    BuildColorGroup(ctx, b, "colors_group_general", "General", "The shared color rules used across MSUF.", false, function(inner)
+        BuildBackgroundAndAppearance(ctx, inner, CH, "appearance")
+        BuildFontAndClassColors(ctx, inner, CH, "font")
+    end)
+    BuildColorGroup(ctx, b, "colors_group_units", "Unit Frames", "Reaction colors and feedback for individual units.", false, function(inner)
+        BuildUnitAndNPCColors(ctx, inner, CH)
+        BuildHighlightAndGameplayColors(ctx, inner, CH, "highlight")
+    end)
+    BuildColorGroup(ctx, b, "colors_group_groups", "Group Frames", nil, false, function(inner)
+        BuildGroupFrameColors(ctx, inner)
+    end)
+    BuildColorGroup(ctx, b, "colors_group_bars", "Bars", "Health, power, class resources, castbars and predictions.", false, function(inner)
+        BuildFontAndClassColors(ctx, inner, CH, "classes")
+        BuildBackgroundAndAppearance(ctx, inner, CH, "background")
+        BuildBarAndGroupColors(ctx, inner, CH, false)
+        BuildBarGradientColors(ctx, inner, CH)
+        BuildCastbarColors(ctx, inner, CH)
+        BuildPowerAndClassPowerColors(ctx, inner, CH)
+    end)
+    BuildColorGroup(ctx, b, "colors_group_additional", "Additional", "Combat feedback, aura timers and portraits.", false, function(inner)
+        BuildHighlightAndGameplayColors(ctx, inner, CH, "gameplay")
+        BuildAuraAndPortraitColors(ctx, inner, CH)
+    end)
+    b:RelayoutCollapsibles()
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-M.RegisterPage("opt_colors", { title = "MSUF Colors", build = BuildColors, version = 12 })
+M.RegisterPage("opt_colors", { title = "MSUF Colors", build = BuildColors, version = 18 })
