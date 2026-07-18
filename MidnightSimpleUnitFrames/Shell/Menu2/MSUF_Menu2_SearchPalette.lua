@@ -246,9 +246,10 @@ local function CreatePaletteController(parent, searchBox)
             self.rows[i] = row
         end
 
-        local allResults = T.Button(palette, Tr("All results"), 118, 24)
-        allResults:SetPoint("BOTTOMLEFT", palette, "BOTTOMLEFT", PANEL_PAD, 7)
-        allResults:SetScript("OnClick", function()
+        local moreResults = T.Button(palette, Tr("More"), PALETTE_W - PANEL_PAD * 2, 24)
+        moreResults:SetPoint("BOTTOMLEFT", palette, "BOTTOMLEFT", PANEL_PAD, 7)
+        moreResults:SetPoint("BOTTOMRIGHT", palette, "BOTTOMRIGHT", -PANEL_PAD, 7)
+        moreResults:SetScript("OnClick", function()
             local query = TrimText(searchBox:GetText() or "")
             self:Hide()
             if searchBox.ClearFocus then searchBox:ClearFocus() end
@@ -268,10 +269,6 @@ local function CreatePaletteController(parent, searchBox)
             end
         end)
 
-        local footerHint = T.Font(palette, "GameFontDisableSmall", Tr("Enter opens the selected setting"), T.colors.dim)
-        T.StyleFontString(footerHint, T.colors.dim, 2)
-        footerHint:SetPoint("BOTTOMRIGHT", palette, "BOTTOMRIGHT", -12, 13)
-
         -- Match the standard dropdown/search lifecycle: close on a global mouse-down
         -- only when the pointer is outside both the popup and its edit box.
         -- Result rows activate on mouse-up, so an inside click remains alive
@@ -285,9 +282,8 @@ local function CreatePaletteController(parent, searchBox)
 
         self.frame = palette
         self.status = status
-        self.allResults = allResults
+        self.moreResults = moreResults
         self.ask = ask
-        self.footerHint = footerHint
         self.clickOff = clickOff
         return palette
     end
@@ -336,9 +332,23 @@ local function CreatePaletteController(parent, searchBox)
         local bridge = SearchBridge()
         local canAsk = not pending and type(bridge.ShouldUseAssistantForQuery) == "function"
             and bridge.ShouldUseAssistantForQuery(query, results)
-        self.allResults:SetShown(not pending and visible > 0)
+        local showMore = not pending
+        self.moreResults:SetShown(showMore)
         self.ask:SetShown(canAsk)
-        self.footerHint:SetShown(not pending and visible > 0 and not canAsk)
+        if showMore then
+            self.moreResults:SetText(Tr("More"))
+            self.moreResults:ClearAllPoints()
+            self.moreResults:SetPoint("BOTTOMLEFT", palette, "BOTTOMLEFT", PANEL_PAD, 7)
+            if canAsk then
+                local buttonW = math.floor((PALETTE_W - PANEL_PAD * 3) / 2)
+                self.moreResults:SetWidth(buttonW)
+                self.ask:ClearAllPoints()
+                self.ask:SetPoint("BOTTOMRIGHT", palette, "BOTTOMRIGHT", -PANEL_PAD, 7)
+                self.ask:SetWidth(buttonW)
+            else
+                self.moreResults:SetPoint("BOTTOMRIGHT", palette, "BOTTOMRIGHT", -PANEL_PAD, 7)
+            end
+        end
         palette:Show()
         RefreshRowVisuals(self)
         return true

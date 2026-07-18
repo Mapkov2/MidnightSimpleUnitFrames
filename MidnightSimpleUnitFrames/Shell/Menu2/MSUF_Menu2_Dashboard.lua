@@ -712,7 +712,8 @@ local function BuildDashboardUX(ctx)
     M.TrackRefresh(ctx, RefreshDashboardEditModeButtonSafe)
     local mainTop = y0
 
-    -- The complete setup remains available after onboarding. Keep this
+    -- Setup remains available after onboarding. Quick Setup is the default;
+    -- the first route screen still offers the complete learning tour.
     -- launcher deliberately compact; the persistent progress bar itself lives
     -- in the window chrome while the tour is active.
     local tour = MSUF and MSUF.GuidedTour6
@@ -728,7 +729,7 @@ local function BuildDashboardUX(ctx)
     local launcher = Card(root, "", x0, mainTop, mainW, launcherH, T.colors.panel2, T.colors.borderSoft)
     Kicker(launcher, tourActive and "GUIDED SETUP IN PROGRESS" or (tourCompleted and "GUIDED SETUP COMPLETE" or "GUIDED SETUP"), 16, -14)
     local launcherTitle = tourActive and "Continue your MSUF setup"
-        or (tourCompleted and "Review or run the guided setup again" or "Tune every essential system with hands-on guidance")
+        or (tourCompleted and "Review or run setup again" or "Get the essentials right in a few minutes")
     local title = T.Font(launcher, "GameFontNormal", M.Tr(launcherTitle), T.colors.text)
     title:SetPoint("TOPLEFT", launcher, "TOPLEFT", 16, -36)
     title:SetWidth(max(120, mainW - (launcherNarrow and 32 or 230)))
@@ -741,7 +742,7 @@ local function BuildDashboardUX(ctx)
         local step = T.Font(launcher, "GameFontDisableSmall", M.Format("Step %d of %d", current, total), T.colors.muted)
         step:SetPoint("TOPLEFT", launcher, "TOPLEFT", 16, launcherNarrow and -72 or -56)
     end
-    local actionText = tourActive and "Resume guided setup" or (tourCompleted and "Run guided setup again" or "Start guided setup")
+    local actionText = tourActive and "Resume setup" or (tourCompleted and "Run setup again" or "Start Quick Setup")
     local actionX = launcherNarrow and 16 or (mainW - 196)
     local actionY = launcherNarrow and -92 or -27
     local actionW = launcherNarrow and min(196, mainW - 32) or 180
@@ -750,7 +751,7 @@ local function BuildDashboardUX(ctx)
         if tourActive and type(M.ResumeGuidedTour) == "function" then
             M.ResumeGuidedTour()
         elseif type(M.StartGuidedTour) == "function" then
-            M.StartGuidedTour({ source = "dashboard", restart = tourCompleted })
+            M.StartGuidedTour({ source = "dashboard", restart = tourCompleted, mode = "quick" })
         end
     end, highlightGuidedSetup and "success" or "primary", "guided_setup.start_or_resume", "action", { actionKey = "guided_setup" })
     M.CallIf(T.AttachNavIcon, action, "home", false, true)

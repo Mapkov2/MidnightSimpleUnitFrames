@@ -425,10 +425,6 @@ local function CreateMover(key, cfg)
         if EM2.Focus and EM2.Focus.SetSelection then EM2.Focus.SetSelection(key, nil, nil, { source = "mover" }) end
         if EM2.Popups and EM2.Popups.Open then
             EM2.Popups.Open(key, self)
-            local menu = MSUF and MSUF.MSUF2
-            if menu and type(menu.NotifyGuidedEditModePopupOpened) == "function" then
-                menu.NotifyGuidedEditModePopupOpened(key)
-            end
         elseif EM2.Focus and EM2.Focus.NotifyPositionChanged then
             EM2.Focus.NotifyPositionChanged(key)
         end
