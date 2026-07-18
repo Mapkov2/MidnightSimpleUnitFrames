@@ -1,11 +1,6 @@
 name: MSUF Static Checks
 
 on:
-  push:
-    branches:
-      - main
-      - 6.0-beta-branch
-  pull_request:
   workflow_dispatch:
 
 jobs:
