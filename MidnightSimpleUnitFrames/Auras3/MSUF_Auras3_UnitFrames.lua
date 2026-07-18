@@ -47,7 +47,6 @@ local MAX_CONFIGURABLE_DEBUFF_DURATION = 180
 -- "exclude permanent" rule without dropping normal long-duration auras.
 local MAX_FINITE_AURA_DURATION = 2147483647
 local MSUF_AURA_SENSOR_EDGE_TEXTURE = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\msuf_frame_edge_thin_256x64.tga"
-local DISPEL_ICON_SIZE = 14
 local AURA_BORDER_OPTIONS = {
     showIcon = false,
     showWhenHarmful = true,
@@ -60,11 +59,6 @@ local AURA_SENSOR_BORDER_OPTIONS = {
 }
 local AURA_SENSOR_OVERLAY_OPTIONS = {
     showIcon = false,
-    showWhenHarmful = true,
-    showWhenHelpful = false,
-}
-local AURA_SENSOR_ICON_OPTIONS = {
-    showIcon = true,
     showWhenHarmful = true,
     showWhenHelpful = false,
 }
@@ -1027,11 +1021,9 @@ local function CompileDispelSensor(unit, frameSpec, groupMode, visual)
     end
     local borderOn = border and border.dispel == true
     local overlayOn = overlay and ((groupMode and overlay.dispelOverlayEnabled == true) or (not groupMode and overlay.enabled == true))
-    local iconOn = groupMode and borderOn
     if visual == "border" and not borderOn then return nil end
     if visual == "overlay" and not overlayOn then return nil end
     if visual == "corner" and not cornerSlots then return nil end
-    if visual == "icon" and not iconOn then return nil end
 
     local borderTrigger = NormalizeDispelSensorTrigger(border and border.dispelTrigger, "BY_ME")
     local trigger = borderTrigger
@@ -1043,17 +1035,6 @@ local function CompileDispelSensor(unit, frameSpec, groupMode, visual)
     end
 
     local nativeFilter, maxCount = DispelSensorNativeFilter(trigger)
-    if visual == "icon" then
-        -- Use the exact same proven native selection as the Dispel glow. The
-        -- secure AuraButton derives the assigned aura's concrete type/atlas;
-        -- an extra includeDispelTypes candidate gate is neither needed nor
-        -- reliable for the live assistable-unit path.
-        maxCount = 1
-    elseif visual ~= "corner" then
-        -- Border and overlay slots all choose the same highest-priority aura.
-        -- One native slot is sufficient; extra full-frame slots only overdraw.
-        maxCount = 1
-    end
     local overlayOnHealth = visual == "overlay" and ((groupMode and overlay.dispelOverlayOnHealth ~= false) or (not groupMode and overlay.onHealth ~= false))
     local target = visual == "overlay" and (overlayOnHealth and "healthFill" or "healthBar") or "frame"
     local cornerCount = cornerSlots and #cornerSlots or nil
@@ -1067,8 +1048,8 @@ local function CompileDispelSensor(unit, frameSpec, groupMode, visual)
     end
     return {
         sensor = true,
-        kind = visual == "icon" and "dispelIcon" or (visual == "corner" and "dispelCorner" or (visual == "overlay" and "dispelOverlay" or "dispelBorder")),
-        rootKey = visual == "icon" and "DispelIconSensor" or (visual == "corner" and "DispelCornerSensor" or (visual == "overlay" and "DispelOverlaySensor" or "DispelBorderSensor")),
+        kind = visual == "corner" and "dispelCorner" or (visual == "overlay" and "dispelOverlay" or "dispelBorder"),
+        rootKey = visual == "corner" and "DispelCornerSensor" or (visual == "overlay" and "DispelOverlaySensor" or "DispelBorderSensor"),
         unit = unit,
         enabled = true,
         nativeFilter = nativeFilter,
@@ -1080,12 +1061,11 @@ local function CompileDispelSensor(unit, frameSpec, groupMode, visual)
         style = visual == "overlay" and NormalizeDispelOverlayStyle(groupMode and overlay.dispelOverlayStyle or overlay.style) or "FULL",
         alpha = visual == "corner" and Clamp01(corner and corner.alpha, 1) or (visual == "overlay" and Clamp01(groupMode and overlay.dispelOverlayAlpha or overlay.alpha, 0.35) or 1),
         thickness = ClampNumber(border and border.highlightThickness, 3, 1, 32),
-        size = visual == "icon" and DISPEL_ICON_SIZE or (cornerSlots and ClampNumber(corner and corner.size, 8, 1, 64) or nil),
+        size = cornerSlots and ClampNumber(corner and corner.size, 8, 1, 64) or nil,
         slots = cornerSlots,
-        slotSignature = visual == "icon" and "native-dynamic" or cornerSignature,
-        layer = visual == "icon" and 14
-            or (visual == "corner" and (30 + ClampNumber(corner and corner.layer, 7, 0, 30))
-            or (visual == "overlay" and ClampNumber(groupMode and overlay.dispelOverlayLayer or overlay.layer, 0, 0, 30) or 45)),
+        slotSignature = cornerSignature,
+        layer = visual == "corner" and (30 + ClampNumber(corner and corner.layer, 7, 0, 30))
+            or (visual == "overlay" and ClampNumber(groupMode and overlay.dispelOverlayLayer or overlay.layer, 0, 0, 30) or 45),
         strata = NormalizeFrameStrata(strata, "AUTO"),
         trigger = trigger,
     }
@@ -1666,16 +1646,13 @@ local function ResolveGroupFrameConfig(frame, unit)
             or (debuff and debuff.enabled == true)
             or (external and external.enabled == true)
 
-        local dispelIcon = CompileDispelSensor(unit, spec, true, "icon")
         local dispelBorder = CompileDispelSensor(unit, spec, true, "border")
         local dispelOverlay = CompileDispelSensor(unit, spec, true, "overlay")
         local dispelCorner = CompileDispelSensor(unit, spec, true, "corner")
-        cfg.sensors.dispelIcon = dispelIcon
         cfg.sensors.dispelBorder = dispelBorder
         cfg.sensors.dispelOverlay = dispelOverlay
         cfg.sensors.dispelCorner = dispelCorner
         cfg.enabled = cfg.enabled == true
-            or (dispelIcon and dispelIcon.enabled == true)
             or (dispelBorder and dispelBorder.enabled == true)
             or (dispelOverlay and dispelOverlay.enabled == true)
             or (dispelCorner and dispelCorner.enabled == true)
@@ -2224,7 +2201,7 @@ SensorLayoutSignature = function(sensor)
         .. "\030" .. tostring(sensor.trigger) .. "\030" .. tostring(A3._nativeVisualGen or 0)
 end
 
-local DISPEL_SENSOR_ORDER = { "dispelIcon", "dispelBorder", "dispelOverlay", "dispelCorner" }
+local DISPEL_SENSOR_ORDER = { "dispelBorder", "dispelOverlay", "dispelCorner" }
 A3._normalAuraLaneOrder = { "buff", "trackedBuff", "debuff", "external", "custom1", "custom2", "custom3" }
 A3._sharedAuraRootKey = A3._sharedAuraRootKey or "UnitAuras"
 local NORMAL_LANE_ROOT_KEYS = { "Buffs", "TrackedBuffs", "Debuffs", "Externals", "CustomAuras1", "CustomAuras2", "CustomAuras3" }
@@ -2716,7 +2693,7 @@ local function DispelSensorFrameLevel(parentFrame, sensor, target)
         -- health-effect band above every Spell Indicator priority.
         return math_max(targetLevel + 1, parentLevel + DISPEL_OVERLAY_EFFECT_OFFSET + (sensor.layer or 0))
     end
-    if sensor and (sensor.visual == "icon" or sensor.visual == "corner") then
+    if sensor and sensor.visual == "corner" then
         return parentLevel + AuraIconBaseOffset(parentFrame) + (sensor.layer or 14)
     end
     return parentLevel + (sensor and sensor.layer or 14)
@@ -2730,11 +2707,7 @@ local function LayoutDispelSensorButton(button, sensor, parentFrame, index)
     local target = DispelSensorButtonTarget(parentFrame, sensor)
     if not target then return false end
     button:ClearAllPoints()
-    if sensor.visual == "icon" then
-        local size = ClampNumber(sensor.size, DISPEL_ICON_SIZE, 1, 64)
-        button:SetSize(size, size)
-        button:SetPoint("TOPLEFT", target, "TOPLEFT", 3, -2)
-    elseif sensor.visual == "corner" then
+    if sensor.visual == "corner" then
         local slot = sensor.slots and sensor.slots[index or 1]
         if not slot then return false end
         local size = ClampNumber(sensor.size, 8, 1, 64)
@@ -2753,7 +2726,7 @@ local function LayoutDispelSensorOverlay(region, button, sensor, visualTarget)
     local style = sensor.style or "FULL"
     local thickness = ClampNumber(sensor.thickness, 3, 1, 32)
     region:ClearAllPoints()
-    if sensor.visual == "icon" or sensor.visual == "corner" then
+    if sensor.visual == "corner" then
         region:SetAllPoints(button)
         return true
     end
@@ -2799,12 +2772,6 @@ local function GetSensorBorderOptions()
     return AURA_SENSOR_BORDER_OPTIONS
 end
 
-local function GetSensorIconOptions()
-    local styles = _G.AuraButtonBorderStyle
-    AURA_SENSOR_ICON_OPTIONS.style = styles and styles.Atlas or 0
-    return AURA_SENSOR_ICON_OPTIONS
-end
-
 local function PrepareDispelSensorButton(button, sensor, parentFrame, index)
     if not (button and sensor and parentFrame) then return false end
     ValidatePTR4AuraButtonContract(button)
@@ -2839,13 +2806,7 @@ local function PrepareDispelSensorButton(button, sensor, parentFrame, index)
         region:Hide()
         return false
     end
-    if sensor.visual == "icon" then
-        region:SetAlpha(1)
-        -- Bind the region to Blizzard's native aura-border display instead of
-        -- leaving a static texture behind. The secure AuraButton path derives
-        -- and shows RaidFrame-Icon-Debuff* from the assigned aura's dispelName.
-        button:SetAuraBorder(region, GetSensorIconOptions())
-    elseif sensor.visual == "corner" then
+    if sensor.visual == "corner" then
         region:SetTexture("Interface\\Buttons\\WHITE8X8")
         region:SetAlpha(Clamp01(sensor.alpha, 1))
         button:SetAuraBorder(region, GetSensorOverlayOptions())
@@ -2949,7 +2910,7 @@ local function CreateManagedNativeLane(container, lane, parentFrame)
 end
 
 local function BuildManagedAuraSlotOptions(container, sensor, parentFrame, buttonIndex, sensorIndex)
-    local options = {
+    return {
         maxFrameCount = 1,
         initializeFrame = function(button)
             button._msufA3ManagedAuraButton = true
@@ -2957,7 +2918,6 @@ local function BuildManagedAuraSlotOptions(container, sensor, parentFrame, butto
             PrepareDispelSensorButton(button, sensor, parentFrame, sensorIndex or buttonIndex)
         end,
     }
-    return options
 end
 
 local function CreateManagedDispelSensor(container, sensor, parentFrame)

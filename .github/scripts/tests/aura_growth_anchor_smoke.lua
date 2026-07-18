@@ -106,7 +106,7 @@ function Frame:CreateFontString()
 end
 
 -- Region/frame methods touched by the deliberately minimal aura-button style.
-function Frame:SetTexture(texture) self.texture = texture end
+function Frame:SetTexture() end
 function Frame:SetTexCoord() end
 function Frame:SetColorTexture() end
 function Frame:SetVertexColor() end
@@ -157,10 +157,8 @@ local function NewAuraButton(parent)
     button._bindingCalls = 0
     for i = 1, #AURA_BUTTON_BINDINGS do
         local methodName = AURA_BUTTON_BINDINGS[i]
-        button[methodName] = function(self, ...)
+        button[methodName] = function(self)
             self._bindingCalls = self._bindingCalls + 1
-            self._bindingArgs = self._bindingArgs or {}
-            self._bindingArgs[methodName] = { ... }
         end
     end
     return button
@@ -279,7 +277,6 @@ _G.issecretvalue = function() return false end
 _G.UnitExists = function() return true end
 _G.AuraContainerSortMethod = { Default = 0, Expiration = 1, Name = 2 }
 _G.AuraContainerSortDirection = { Normal = 0, Reverse = 1 }
-_G.AuraButtonBorderStyle = { Atlas = 0, Color = 1 }
 _G.MSUF_FRAME_STRATA_RANK = {
     BACKGROUND = 1, LOW = 2, MEDIUM = 3, HIGH = 4, DIALOG = 5,
     FULLSCREEN = 6, FULLSCREEN_DIALOG = 7, TOOLTIP = 8,
@@ -646,67 +643,6 @@ do
         "full-health Dispel AuraButton escaped the health bar")
     Equal(fullHealthButton._msufA3DispelSensorRegion.allPoints, fullHealthParent.hpBar,
         "full-health Dispel overlay escaped onto the unit frame")
-end
-
--- Group Dispel highlighting owns one native slot for the MSUF frame glow and
--- one icon slot using the exact same native filter. Blizzard's AuraBorder atlas
--- binding owns the exact RaidFrame-Icon-Debuff* art and secret-safe visibility
--- from the assigned aura's dispelName.
-do
-    local parent = NewFrame(nil)
-    parent.unit = "party1"
-    parent.MSUFUnitKey = "party1"
-    parent._msufIsGroupFrame = true
-    parent._msufGFKind = "party"
-    parent.hpBar = NewHealthBar(parent)
-    parent.MSUFSpec = {
-        auras = {
-            enabled = true,
-            showBuffs = false,
-            maxBuffs = 0,
-            showDebuffs = false,
-            maxDebuffs = 0,
-        },
-        border = {
-            dispel = true,
-            dispelTrigger = "DISPEL_TYPE",
-            highlightThickness = 3,
-            strata = "AUTO",
-        },
-        group = { dispelOverlayEnabled = false },
-    }
-
-    Check(AurasElement.Enable(parent) == true, "native Dispel icon/glow config did not apply")
-    local container = assert(parent.Auras and parent.Auras.DispelSensor,
-        "combined Dispel icon/glow sensor missing")
-    local button = assert(container[1], "native Dispel type button missing")
-    Equal(button._msufA3DispelSensor, "icon", "Dispel type button uses the wrong visual")
-    local borderArgs = assert(button._bindingArgs and button._bindingArgs.SetAuraBorder,
-        "Dispel type button is not bound to Blizzard's native aura-border display")
-    Equal(borderArgs[1], button._msufA3DispelSensorRegion,
-        "Dispel type button bound the wrong texture region")
-    Check(borderArgs[2].showIcon == true,
-        "Dispel type button did not request Blizzard's dispel icon atlas")
-    Equal(borderArgs[2].style, AuraButtonBorderStyle.Atlas,
-        "Dispel type button does not use Blizzard's atlas style")
-    Equal(button.width, 14, "Dispel type button width")
-    Equal(button.height, 14, "Dispel type button height")
-    Equal(button.point[1], "TOPLEFT", "Dispel type button anchor")
-    Equal(button.point[2], parent, "Dispel type button target")
-    Equal(button.point[4], 3, "Dispel type button x")
-    Equal(button.point[5], -2, "Dispel type button y")
-    local iconSlot = assert(container.auraSlotOptions.msuf_dispelIcon_1,
-        "Dispel type native AuraSlot missing")
-    Equal(iconSlot.filter, "HARMFUL|DISPELLABLE",
-        "Dispel type icon does not share the proven native Dispel filter")
-    Check(iconSlot.options.candidateFilters == nil,
-        "Dispel type icon retained the failing extra type candidate gate")
-    local glowButton = assert(container[2], "single MSUF Dispel glow slot missing")
-    Equal(glowButton._msufA3DispelSensor, "border", "MSUF Dispel glow uses the wrong visual")
-    Check((glowButton._msufA3DispelSensorRegion.texture or ""):find("msuf_frame_edge_thin_256x64.tga", 1, true) ~= nil,
-        "MSUF Dispel glow lost its frame-edge texture")
-    Equal(container.createdButtons, 2, "Dispel icon/glow slot count")
-    Check(container[3] == nil, "MSUF Dispel sensor still allocates redundant slots")
 end
 
 -- Dispel border/overlay/corner sensors use native AuraSlots rather than aura
