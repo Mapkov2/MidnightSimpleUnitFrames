@@ -6,6 +6,7 @@ local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
 local M = MSUF.MSUF2 or _G.MSUF2
 if not M then return end
+local MenuRuntime = M.MenuRuntime or {}
 
 local ExportPublic = MSUF.ExportPublic or function(name, value)
     _G[name] = value
@@ -186,8 +187,16 @@ do
     local function MenuVisible()
         local win = M.frame
         local bar = M.minimizedBar
-        return (win and win.IsShown and win:IsShown())
-            or (bar and bar.IsShown and bar:IsShown())
+        local barShown = bar and bar.IsShown and bar:IsShown()
+        if barShown then return true end
+        local winShown = win and win.IsShown and win:IsShown()
+        -- The full window's status frame already owns PLAYER_REGEN_DISABLED.
+        -- Keep this fallback listener only for the minimized bar (or an early
+        -- window lifecycle without its status events) so combat entry never
+        -- dispatches duplicate Menu2 teardown callbacks.
+        local status = win and win.status
+        if winShown and status and status._msuf2EventsRegistered == true then return false end
+        return winShown and true or false
     end
     local function EnsureCombatFrame()
         if combatFrame then return end
@@ -198,6 +207,11 @@ do
                 return
             end
             local win = M.frame
+            local winShown = win and win.IsShown and win:IsShown()
+            -- A visible full window quiesces from its synchronous OnHide.
+            -- The fallback owns teardown only when the minimized bar is the
+            -- remaining visible Menu2 surface.
+            if not winShown and type(MenuRuntime.Quiesce) == "function" then MenuRuntime:Quiesce("combat") end
             M.CallIf(M.BlockCombatAction)
             M.CallIf(M.HideSlashMenuAndMinibar, win)
             M.UpdateMenuCombatListener()

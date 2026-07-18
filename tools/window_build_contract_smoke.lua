@@ -1,5 +1,5 @@
 local M = {
-    Theme = {}, Widgets = {}, SearchBridge = {}, ALIASES = {},
+    Theme = {}, Widgets = {}, SearchBridge = {}, MenuRuntime = {}, ALIASES = {},
     AssignNamedValues = function(target, names, ...)
         local values, index = { ... }, 1
         for name in names:gmatch("%S+") do target[name], index = values[index], index + 1 end
@@ -41,13 +41,15 @@ local contracts = {
     "MinimizeSlashMenuWindow", "MaximizeSlashMenuWindow", "RestoreMinimizedSlashMenu",
     "BuildNav", "StartHistorySession", "EndHistorySession", "CancelSearchBackgroundIndex",
     "RequestBossPagePreviewForKey", "RequestGroupPagePreviewForKey", "RefreshToolbarPageReset",
-    "SetAssistantMenuRuntimeActive", "SetMenuRuntimeActive", "StyleScrollFrame",
+    "MenuRuntime:Resume", "MenuRuntime:Quiesce", "StyleScrollFrame",
 }
 for _, token in ipairs(contracts) do
     assert(source:find(token, 1, true), "missing window contract: " .. token)
 end
 assert(not source:find("PostponeAssistantPerformanceWarmup", 1, true),
     "removed Assistant warmup path returned")
+assert(not source:find("SetAssistantMenuRuntimeActive", 1, true),
+    "Window regained Assistant lifecycle orchestration")
 
 local snapStart = assert(source:find("local function GetSlashMenuSnapLayout", 1, true),
     "missing slash-menu snap layout")

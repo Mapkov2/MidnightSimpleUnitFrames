@@ -2,6 +2,7 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+local C_Timer = M.MenuTimer or _G.C_Timer
 local F = M.Fallbacks or {}
 local H = M.PreviewHelpers or {}
 M.PreviewHelpers = H
@@ -699,6 +700,13 @@ function H.ShowPreviewControlsHelp(anchor, opts)
     popup:Show()
     return popup
 end
+function H.HideTransientPopups()
+    local context = H._previewHandleContextPopup
+    if context and context.Hide then context:Hide() end
+    local help = H._previewControlsHelpPopup
+    if help and help.Hide then help:Hide() end
+end
+M.HideMenuPreviewPopups = H.HideTransientPopups
 function H.EnsurePreviewControlsHint(box, anchor, opts)
     opts = opts or {}
     if not box then return nil end
@@ -1296,7 +1304,7 @@ function H.FocusKeyboardTarget(owner, handle, defer, opts)
     end
     if defer then
         local selected = handle
-        _G.C_Timer.After(0, function()
+        C_Timer.After(0, function()
             if not (owner and owner.IsShown and owner:IsShown()) then return end
             if selected and selected.IsShown and not selected:IsShown() then return end
             if selected and selectedField and owner[selectedField] ~= selected then return end

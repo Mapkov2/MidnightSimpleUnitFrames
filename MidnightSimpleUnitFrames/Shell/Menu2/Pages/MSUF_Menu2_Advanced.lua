@@ -8,7 +8,7 @@ MSUF.MSUF2 = M
 -- pages. Keep page-specific controls in their domain files and common glue here.
 local W = M.Widgets
 local WL = M.WordList
-local C_Timer = _G.C_Timer
+local C_Timer = M.MenuTimer or _G.C_Timer
 local function NormalizeControlPath(value)
     local path = tostring(value or "")
     path = path:gsub("([%l%d])([%u])", "%1_%2"):lower()

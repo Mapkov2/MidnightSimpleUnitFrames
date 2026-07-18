@@ -2,6 +2,7 @@ local _, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+local C_Timer = M.MenuTimer or _G.C_Timer
 local UnitPage = M.UnitPage or {}
 M.UnitPage = UnitPage
 
@@ -101,8 +102,8 @@ local function BuildRegisteredSectionLazy(ctx, builder, unit, spec)
             if type(refresh) == "function" and refresh ~= LazyRefresh then refresh(shellEntry) end
             local relayout = shellEntry.builder
             if shellEntry.open and relayout and relayout.RelayoutCollapsibles then
-                if _G.C_Timer and _G.C_Timer.After then
-                    _G.C_Timer.After(0, function()
+                if C_Timer and C_Timer.After then
+                    C_Timer.After(0, function()
                         if shellEntry.open and relayout.RelayoutCollapsibles then relayout:RelayoutCollapsibles() end
                     end)
                 else

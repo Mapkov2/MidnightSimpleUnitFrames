@@ -13,7 +13,7 @@ MSUF.MSUF2 = M
 
 local _G = _G
 local CreateFrame = _G.CreateFrame
-local C_Timer = _G.C_Timer
+local C_Timer = M.MenuTimer or _G.C_Timer
 local ceil, floor, max, min = math.ceil, math.floor, math.max, math.min
 local format = string.format
 local pairs, ipairs, type, tostring = pairs, ipairs, type, tostring

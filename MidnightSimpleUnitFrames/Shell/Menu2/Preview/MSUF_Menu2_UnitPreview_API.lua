@@ -10,6 +10,7 @@ end
 local Preview = MSUF.UFPreview or MSUF.MSUF_UFPreview or _G.MSUF_UFPreview
 if not Preview then return end
 local M = (MSUF and MSUF.MSUF2) or _G.MSUF2 or {}
+local C_Timer = M.MenuTimer or _G.C_Timer
 local WordList = M.WordList
 local InstallPreviewHooks
 local UninstallPreviewHooks

@@ -15,6 +15,8 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
 end
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+local C_Timer = M.MenuTimer or _G.C_Timer
+local MenuRuntime = M.MenuRuntime or {}
 M.Tr = M.Tr or function(text)
     if text == nil then return "" end
     local key = tostring(text)
@@ -113,7 +115,7 @@ do
         loginWarningFrame:RegisterEvent("PLAYER_LOGIN")
         loginWarningFrame:SetScript("OnEvent", function(self)
             self:UnregisterEvent("PLAYER_LOGIN")
-            _G.C_Timer.After(2, function() ShowPreviewWarning("login") end)
+            C_Timer.After(2, function() ShowPreviewWarning("login") end)
         end)
     end
 end
@@ -1325,8 +1327,14 @@ local function BuildWindowShell()
     subtitle:SetJustifyH("RIGHT")
     subtitle:Hide()
     f.subtitle = subtitle
-    local close = M.CreateWindowControlButton(f, "close", "Close", "Close the MSUF menu window.")
-    close:SetPoint("TOPRIGHT", -4, -4)
+    local windowControls = M.CreateWindowControlGroup(f, 3)
+    -- The authored texture extends three pixels beyond the clickable group on
+    -- the horizontal axis. Offset the anchor by 11 so the visible right edge,
+    -- like the visible top edge, observes the rail's 8px outer spacing.
+    windowControls:SetPoint("TOPRIGHT", f, "TOPRIGHT", -11, -7)
+    f.windowControls = windowControls
+    local close = M.CreateWindowControlButton(windowControls, "close", "Close", "Close the MSUF menu window.", 3)
+    close:SetPoint("TOPRIGHT", windowControls, "TOPRIGHT", 0, 0)
     close:SetScript("OnClick", function() M.HideSlashMenuAndMinibar(f) end)
     if M.RegisterMenuChromeControl then
         M.RegisterMenuChromeControl(close, "window.close", "Close MSUF menu", "action", {
@@ -1339,8 +1347,8 @@ local function BuildWindowShell()
         M.MarkRuntimeControlComponent(M.minimizedBar.closeButton, close)
     end
     f.closeButton = close
-    local maximize = M.CreateWindowControlButton(f, "maximize", "Maximize", "Maximize or restore the MSUF menu window.")
-    maximize:SetPoint("TOPRIGHT", close, "TOPLEFT", -2, 0)
+    local maximize = M.CreateWindowControlButton(windowControls, "maximize", "Maximize", "Maximize or restore the MSUF menu window.", 2)
+    maximize:SetPoint("TOPRIGHT", close, "TOPLEFT", 0, 0)
     maximize:SetScript("OnClick", function() MaximizeSlashMenuWindow(f) end)
     if M.RegisterMenuChromeControl then
         M.RegisterMenuChromeControl(maximize, "window.maximize", "Maximize MSUF menu", "action", {
@@ -1358,8 +1366,8 @@ local function BuildWindowShell()
         })
     end
     f.maximizeButton = maximize
-    local minimize = M.CreateWindowControlButton(f, "minimize", "Minimize", "Collapse the MSUF menu to a small taskbar-style bar.")
-    minimize:SetPoint("TOPRIGHT", maximize, "TOPLEFT", -2, 0)
+    local minimize = M.CreateWindowControlButton(windowControls, "minimize", "Minimize", "Collapse the MSUF menu to a small taskbar-style bar.", 1)
+    minimize:SetPoint("TOPRIGHT", maximize, "TOPLEFT", 0, 0)
     minimize:SetScript("OnClick", function() MinimizeSlashMenuWindow(f) end)
     if M.RegisterMenuChromeControl then
         M.RegisterMenuChromeControl(minimize, "window.minimize", "Minimize MSUF menu", "action", {
@@ -1786,8 +1794,8 @@ local function BuildWindowToolbar(state)
     local function RunToolbarNewTask()
         if type(M.SelectPage) == "function" then M.SelectPage("home") end
         if type(M.StartNewAssistantTask) == "function" then return M.StartNewAssistantTask() end
-        if _G.C_Timer and _G.C_Timer.After then
-            _G.C_Timer.After(0, function()
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, function()
                 if type(M.StartNewAssistantTask) == "function" then
                     M.StartNewAssistantTask()
                     return
@@ -1937,24 +1945,12 @@ local function InstallWindowStatusRuntime(state)
         local method = registered and status.RegisterEvent or status.UnregisterEvent
         for i = 1, #STATUS_EVENTS do method(status, STATUS_EVENTS[i]) end
     end
-    local function SetAssistantMenuRuntimeActive(active, reason)
-        local assistant = (MSUF and MSUF.Assistant) or M.Assistant
-        if not assistant then return false end
-        if type(assistant.SetMenuRuntimeActive) == "function" then
-            return assistant.SetMenuRuntimeActive(active == true, reason)
-        end
-        assistant._menuRuntimeActive = active == true and true or false
-        assistant._menuRuntimeReason = tostring(reason or (active and "menu-show" or "menu-hide"))
-        return assistant._menuRuntimeActive
-    end
     status:SetScript("OnEvent", function(_, event)
         if not (f and f:IsShown()) then
             SetStatusEventsRegistered(false)
             return
         end
         if event == "PLAYER_REGEN_DISABLED" then
-            SetAssistantMenuRuntimeActive(false, "combat")
-            CancelSearchBackgroundIndex()
             M.CallIf(M.BlockCombatAction)
             M.HideSlashMenuAndMinibar(f)
             return
@@ -1967,19 +1963,17 @@ local function InstallWindowStatusRuntime(state)
         RequestGroupPagePreviewForKey(M.activeKey)
     end)
     state.SetStatusEventsRegistered = SetStatusEventsRegistered
-    state.SetAssistantMenuRuntimeActive = SetAssistantMenuRuntimeActive
 end
 
 local function InstallWindowLifecycle(state)
     local f = state.frame
     local SetStatusEventsRegistered = state.SetStatusEventsRegistered
-    local SetAssistantMenuRuntimeActive = state.SetAssistantMenuRuntimeActive
     f:SetScript("OnShow", function(self)
         if M.BlockCombatAction and M.BlockCombatAction() then
             self:Hide()
             return
         end
-        SetAssistantMenuRuntimeActive(true, "menu-show")
+        if type(MenuRuntime.Resume) == "function" then MenuRuntime:Resume("menu-show") end
         self._msuf2Closing = nil
         if self.SetAlpha then self:SetAlpha(1) end
         ShowPreviewWarning("menu")
@@ -1987,7 +1981,7 @@ local function InstallWindowLifecycle(state)
         M.CallIf(M.RefreshWindowControls, self)
         self._msuf2Minimized = nil
         if M.minimizedBar and M.minimizedBar.Hide then M.minimizedBar:Hide() end
-        M.CallIf(M.StartHistorySession)
+        M.CallIf(M.StartHistorySession, "menu")
         SetStatusEventsRegistered(true)
         EnsureEditModeUIHook()
         if self.RefreshStatus then self:RefreshStatus() end
@@ -2004,7 +1998,6 @@ local function InstallWindowLifecycle(state)
     end)
     f:SetScript("OnHide", function()
         M.CallIf(M.HideLayerOverview)
-        SetAssistantMenuRuntimeActive(false, "menu-hide")
         if M.StopWindowLayoutAnimation then M.StopWindowLayoutAnimation(f) end
         if f._msuf2CancelWindowInteractions then
             f:_msuf2CancelWindowInteractions()
@@ -2015,15 +2008,18 @@ local function InstallWindowLifecycle(state)
             f._msuf2PreMinimizeLayout = nil
             f._msuf2Minimized = nil
         end
-        CancelSearchBackgroundIndex()
         SetStatusEventsRegistered(false)
         -- The dropdown and its focus veil are UIParent-owned modal surfaces.
         -- They must be torn down synchronously when their menu owner disappears;
         -- an animated close can otherwise outlive the hidden window and veil the
         -- cached page when it is shown again.
         if W and type(W.CloseDropdown) == "function" then W.CloseDropdown({ immediate = true }) end
+        M.CallIf(M.HideNavSearchPalette)
+        M.CallIf(M.HideMenuPreviewPopups)
+        M.CallIf(M.HideMenuCopyLinkPopup)
+        if W and type(W.CloseMenuOwnedColorPicker) == "function" then W.CloseMenuOwnedColorPicker() end
         if type(M.ResetFocusVeil) == "function" then M.ResetFocusVeil(nil, { force = true }) end
-        M.CallIf(M.EndHistorySession)
+        M.CallIf(M.EndHistorySession, "menu")
         ResetStatusIndicatorTestModeOnMenuExit()
         SavePersistentMenuState()
         ResetBossPagePreviewCache()
@@ -2032,6 +2028,10 @@ local function InstallWindowLifecycle(state)
         SyncBossPagePreviewForKey(nil)
         RequestGroupPagePreviewForKey(nil)
         M.CallIf(M.UpdateMenuCombatListener)
+        if type(MenuRuntime.Quiesce) == "function" then
+            local reason = M.IsConfigCombatLocked and M.IsConfigCombatLocked() and "combat" or "menu-hide"
+            MenuRuntime:Quiesce(reason)
+        end
         f._msuf2Closing = nil
     end)
 end

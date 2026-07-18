@@ -13,6 +13,8 @@ end
 
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+local C_Timer = M.MenuTimer or _G.C_Timer
+local Theme = M.Theme or {}
 
 local Search = M.Search or {}
 M.Search = Search
@@ -254,6 +256,7 @@ local function HighlightSearchAnchor(wrapper, region)
         bottom:SetPoint("BOTTOMRIGHT")
         bottom:SetColorTexture(0.38, 0.78, 1.00, 0.45)
         highlight._msuf2Anim = highlight:CreateAnimationGroup()
+        if Theme.TrackMenuAnimationGroup then Theme.TrackMenuAnimationGroup(highlight._msuf2Anim) end
         local fade = highlight._msuf2Anim:CreateAnimation("Alpha")
         fade:SetFromAlpha(1)
         fade:SetToAlpha(0)
@@ -278,7 +281,7 @@ local function RunSoon(fn)
         fn()
         return
     end
-    _G.C_Timer.After(0, fn)
+    C_Timer.After(0, fn)
 end
 
 local function SearchRouteHasAny(normalized, terms)
@@ -596,7 +599,8 @@ local function SearchRouteAuraScope(route, normalized)
 end
 
 local function SearchAuraStyleContainer(normalized)
-    for index = 1, 3 do
+    if SearchRouteHasAny(normalized, "dots on target|target dots|dot tracker") then return "custom4" end
+    for index = 1, 4 do
         if SearchRouteHasAny(normalized, "custom " .. index .. "|custom" .. index) then
             return "custom" .. index
         end
@@ -770,10 +774,11 @@ local function SearchRouteUnitPage(route, pageKey, normalized)
         "status icons|status icon|indicator|level|raid group|group number|raid marker|leader|assist|elite|rare|dead|offline|combat icon|rested|incoming rez")
     SearchRouteUnitStatusSelection(route, unit, normalized)
     local auraQuery = SearchRouteHasAny(normalized,
-        "aura|auras|buff|buffs|debuff|debuffs|blacklist|whitelist|filter|custom display|custom aura|spell id")
+        "aura|auras|buff|buffs|debuff|debuffs|dot|dots|blacklist|whitelist|filter|custom display|custom aura|spell id")
     if auraQuery then
         local container
-        for index = 1, 3 do
+        if SearchRouteHasAny(normalized, "dots on target|target dots|dot tracker") then container = "custom4" end
+        for index = 1, 4 do
             if SearchRouteHasAny(normalized, "custom " .. index .. "|custom" .. index) then container = "custom" .. index; break end
         end
         if not container and SearchRouteHasAny(normalized, "custom aura|custom display|whitelist") then container = "custom1" end
@@ -782,7 +787,13 @@ local function SearchRouteUnitPage(route, pageKey, normalized)
         container = container or (type(M.unitAuraTabSelection) == "table" and M.unitAuraTabSelection[unit]) or "buff"
         local custom = tostring(container):match("^custom") ~= nil
         local tool
-        if custom then
+        if container == "custom4" then
+            if SearchRouteHasAny(normalized, "dot|dots|spell|track|list") then tool = "dots"
+            elseif SearchRouteHasAny(normalized, "layout|position|anchor|offset|size|strata|full frame|effect")
+                or SearchRouteHasWord(normalized, "layer")
+            then tool = "layout"
+            else tool = "setup" end
+        elseif custom then
             if SearchRouteHasAny(normalized, "whitelist|allow list|allowlist") then tool = "whitelist"
             elseif SearchRouteHasAny(normalized, "filter|only mine|hide permanent") then tool = "filters"
             -- `layer` must be a whole word: substring matching also finds it in
@@ -854,8 +865,8 @@ local function SearchRouteGlobalPage(route, pageKey, normalized)
         if pageKey == "auras3_buffs" then container = "buff"
         elseif pageKey == "auras3_debuffs" then container = "debuff" end
         local activeScope = scope or M.auraScope or "shared"
-        local custom = type(container) == "string" and container:match("^custom[123]$") ~= nil
-        -- Custom 1-3 only exist for unit-style scopes. Do not manufacture a
+        local custom = type(container) == "string" and container:match("^custom[1234]$") ~= nil
+        -- Custom containers only exist for unit-style scopes. Do not manufacture a
         -- group/shared custom branch when the query explicitly selected one of
         -- those scopes; the page itself exposes only Buffs/Debuffs there.
         if custom and (activeScope == "shared" or activeScope == "party"
@@ -1030,7 +1041,7 @@ local function ScrollToSearchAnchor(pageKey, query, fallback, preferredAnchor, e
     -- Rechecking twice keeps a compact-window target below that overlay without
     -- installing an OnUpdate, event listener, or any idle/combat work.
     RunSoon(finish)
-    if not SearchCombatLocked() and _G.C_Timer and _G.C_Timer.After then _G.C_Timer.After(0.05, finish) end
+    if not SearchCombatLocked() and C_Timer and C_Timer.After then C_Timer.After(0.05, finish) end
     return true
 end
 local function OpenSearchTarget(pageKey, query, fallback, preferredAnchor, route, exactTarget)

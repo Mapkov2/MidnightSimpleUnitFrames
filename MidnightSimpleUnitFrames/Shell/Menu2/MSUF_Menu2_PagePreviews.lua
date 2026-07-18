@@ -7,6 +7,7 @@ local _, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+local C_Timer = M.MenuTimer or _G.C_Timer
 local function BossPagePreviewInCombat()
     return (_G.InCombatLockdown and _G.InCombatLockdown())
         or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
@@ -74,7 +75,7 @@ local function RequestBossPagePreviewForKey(key, force)
         SyncBossPagePreviewForKey(key, force)
         return
     end
-    local timer = _G.C_Timer
+    local timer = C_Timer
     if not (timer and type(timer.After) == "function") then
         SyncBossPagePreviewForKey(key, force)
         return
@@ -355,7 +356,7 @@ local function RequestGroupPagePreviewForKey(key, force)
         SyncGroupPagePreviewForKey(key, force)
         return
     end
-    local timer = _G.C_Timer
+    local timer = C_Timer
     if not (timer and type(timer.After) == "function") then
         SyncGroupPagePreviewForKey(key, force)
         return

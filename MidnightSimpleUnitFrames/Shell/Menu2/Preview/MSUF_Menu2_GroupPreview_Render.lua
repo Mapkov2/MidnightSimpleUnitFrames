@@ -1110,6 +1110,7 @@ function Render.Install(box, ctx, deps)
             glow.ants:SetTexture([[Interface\SpellActivationOverlay\IconAlertAnts]])
             glow.ants:SetBlendMode("ADD")
             glow.animation = glow.ants:CreateAnimationGroup()
+            if T.TrackMenuAnimationGroup then T.TrackMenuAnimationGroup(glow.animation) end
             glow.animation:SetLooping("REPEAT")
             local flipbook = glow.animation:CreateAnimation("FlipBook")
             flipbook:SetFlipBookRows(5)
@@ -1275,6 +1276,7 @@ function Render.Install(box, ctx, deps)
                     local pulse = root._msufSpellPreviewPulse
                     if not pulse then
                         pulse = root:CreateAnimationGroup()
+                        if T.TrackMenuAnimationGroup then T.TrackMenuAnimationGroup(pulse) end
                         local alpha = pulse:CreateAnimation("Alpha")
                         alpha:SetFromAlpha(0.45)
                         alpha:SetToAlpha(1)
