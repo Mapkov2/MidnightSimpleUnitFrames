@@ -120,8 +120,7 @@ for _, legacy in ipairs({
     assert(not support:find(legacy, 1, true), "legacy lifecycle helper survived refactor: " .. legacy)
 end
 
-local menuRoot = Join("MidnightSimpleUnitFrames/Shell/Menu2")
-local command = 'rg --files "' .. menuRoot .. '" -g "*.lua"'
+local command = 'git ls-files -- ":(glob)MidnightSimpleUnitFrames/Shell/Menu2/**/*.lua"'
 local pipe = assert(io.popen(command, "r"))
 local exceptions = {
     ["MSUF_Menu2_Support.lua"] = true,       -- owns the tracked timer implementation and non-menu startup scale work
@@ -151,7 +150,7 @@ for path in pipe:lines() do
         end
     end
 end
-assert(pipe:close(), "rg Menu2 timer inventory failed")
+assert(pipe:close(), "git Menu2 timer inventory failed")
 assert(timerFiles >= 25 and proxiedFiles >= 20,
     "Menu2 timer inventory unexpectedly incomplete")
 
