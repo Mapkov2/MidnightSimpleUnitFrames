@@ -18,7 +18,6 @@ local type = type
 
 local SKIRON_ANCHOR_EVENT = "SkironCooldownManager.AnchorProxy.SizeChanged"
 local RETRY_DELAYS = { 0, 0.05, 0.20, 0.60, 1.20, 2.00 }
-local SKIRON_PRIMARY_GROUPS = { 1, 101 }
 
 local registeredSkiron
 local refreshSkironAnchorProxy
@@ -35,6 +34,7 @@ local coolinatorRefreshAfterCombat = false
 local coolinatorResolveGeneration = 0
 local coolinatorActiveSource
 local observedCoolinatorSources = setmetatable({}, { __mode = "k" })
+local essentialConsumerRefreshPending = false
 
 local function InCombat()
     return InCombatLockdown and InCombatLockdown() or false
@@ -49,36 +49,19 @@ local function IsFrameUsable(frame)
     return width > 0 and height > 0 and frame.SetPoint ~= nil
 end
 
-local function IsSkironGroupFrame(frame)
-    local name = frame and frame.GetName and frame:GetName()
-    return type(name) == "string"
-        and (name:match("^SCM_GroupAnchorProxy_%d+$") or name:match("^SCM_GroupAnchor_%d+$"))
-end
-
-local function FindUsableSkironGroupAnchor(group)
-    local proxy = _G["SCM_GroupAnchorProxy_" .. tostring(group)]
-    if IsFrameUsable(proxy) then return proxy end
-    local groupAnchor = _G["SCM_GroupAnchor_" .. tostring(group)]
-    if IsFrameUsable(groupAnchor) then return groupAnchor end
-end
-
 local function ResolveSkironAnchorSource(preferredFrame, isActiveProxy)
-    if IsFrameUsable(preferredFrame) and (isActiveProxy or IsSkironGroupFrame(preferredFrame)) then
+    if isActiveProxy and IsFrameUsable(preferredFrame) then
+        return preferredFrame
+    end
+    local preferredName = preferredFrame and preferredFrame.GetName and preferredFrame:GetName()
+    if preferredName == "SCM_GroupAnchor_1" and IsFrameUsable(preferredFrame) then
         return preferredFrame
     end
 
-    for i = 1, #SKIRON_PRIMARY_GROUPS do
-        local source = FindUsableSkironGroupAnchor(SKIRON_PRIMARY_GROUPS[i])
-        if source then return source end
-    end
-    for group = 1, 15 do
-        local source = FindUsableSkironGroupAnchor(group)
-        if source then return source end
-    end
-    for group = 101, 115 do
-        local source = FindUsableSkironGroupAnchor(group)
-        if source then return source end
-    end
+    local proxy = _G.SCM_GroupAnchorProxy_1
+    if IsFrameUsable(proxy) then return proxy end
+    local groupAnchor = _G.SCM_GroupAnchor_1
+    if IsFrameUsable(groupAnchor) then return groupAnchor end
 end
 
 local function ResolveCoolinatorAnchorSource()
@@ -226,14 +209,21 @@ _G.MSUF_IsThirdPartyCooldownAnchor = function(frame)
     return ns.IsThirdPartyCooldownAnchor(frame)
 end
 
-local function RefreshEssentialCooldownAnchorConsumers(transition)
-    if transition ~= "acquired" and transition ~= "lost" then return end
-    local refresh = _G.MSUF_RefreshExternalUnitFrameAnchor
-    if type(refresh) == "function" then
-        refresh("EssentialCooldownViewer")
-    elseif type(_G.MSUF_ForceReanchorAllUnitFrames_Once) == "function" then
-        _G.MSUF_ForceReanchorAllUnitFrames_Once(true)
+local function ScheduleEssentialCooldownAnchorConsumerRefresh()
+    if essentialConsumerRefreshPending then return end
+    essentialConsumerRefreshPending = true
+
+    local function run()
+        essentialConsumerRefreshPending = false
+        local refresh = _G.MSUF_RefreshExternalUnitFrameAnchor
+        if type(refresh) == "function" then
+            refresh("EssentialCooldownViewer")
+        elseif type(_G.MSUF_ForceReanchorAllUnitFrames_Once) == "function" then
+            _G.MSUF_ForceReanchorAllUnitFrames_Once(true)
+        end
     end
+
+    if C_Timer and C_Timer.After then C_Timer.After(0, run) else run() end
 end
 
 local function ScheduleEssentialCooldownWidthRefresh()
@@ -244,17 +234,17 @@ local function ScheduleEssentialCooldownWidthRefresh()
 end
 
 refreshSkironAnchorProxy = function(source, isActiveProxy, sizeChanged)
-    local proxy, changed, transition, deferred = EnsureSkironAnchorProxy(source, isActiveProxy)
+    local proxy, changed, _transition, deferred = EnsureSkironAnchorProxy(source, isActiveProxy)
     if deferred then return proxy ~= nil end
-    if changed then RefreshEssentialCooldownAnchorConsumers(transition) end
+    if changed or sizeChanged == true then ScheduleEssentialCooldownAnchorConsumerRefresh() end
     if changed or sizeChanged == true then ScheduleEssentialCooldownWidthRefresh() end
     return proxy ~= nil
 end
 
 refreshCoolinatorAnchor = function(sizeChanged)
-    local source, changed, transition, deferred = EnsureCoolinatorAnchorSource()
+    local source, changed, _transition, deferred = EnsureCoolinatorAnchorSource()
     if deferred then return source ~= nil end
-    if changed then RefreshEssentialCooldownAnchorConsumers(transition) end
+    if changed then ScheduleEssentialCooldownAnchorConsumerRefresh() end
     if changed or sizeChanged == true then ScheduleEssentialCooldownWidthRefresh() end
     return source ~= nil
 end
@@ -295,8 +285,8 @@ local function ScheduleCoolinatorAnchorResolve()
     C_Timer.After(RETRY_DELAYS[index], run)
 end
 
-local function OnSkironAnchorProxySizeChanged(_, proxyGroup, proxy, _width, _height, selectedAnchorRef, isActiveProxy)
-    if not (isActiveProxy or proxyGroup == 1 or selectedAnchorRef == "ANCHOR:1") then return end
+local function OnSkironAnchorProxySizeChanged(_, proxyGroup, proxy, _width, _height, _selectedAnchorRef, isActiveProxy)
+    if proxyGroup ~= 1 then return end
     refreshSkironAnchorProxy(proxy, isActiveProxy, true)
 end
 
