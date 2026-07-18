@@ -2036,6 +2036,12 @@ local function BuildAlpha(ctx, builder, unit)
         function(v)
             v = v and true or false
             SetBool(unit, "alphaPreserveHPColor", v, "MSUF2_ALPHA_HP_COLOR", { alpha = true, preview = true })
+            if v then
+                SetBool(unit, "alphaIndependentMissingHealth", true, "MSUF2_ALPHA_HP_TRACK", { alpha = true, preview = true })
+                if tonumber(GetConf(unit).alphaMissingHealthBase) == nil then
+                    SetNumber(unit, "alphaMissingHealthBase", 1, "MSUF2_ALPHA_HP_TRACK_BASE", { alpha = true, preview = true })
+                end
+            end
             if M.WarnPreserveHPColorIfNeeded then M.WarnPreserveHPColorIfNeeded(v) end
         end)
 

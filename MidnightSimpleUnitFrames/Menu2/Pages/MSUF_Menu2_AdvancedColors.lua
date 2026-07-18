@@ -68,7 +68,15 @@ end
 local function SetAllUnitframesPreserveHPColor(enabled)
     enabled = enabled and true or false
     for i = 1, #PRESERVE_HP_UNIT_KEYS do
-        M.SetUnitValue(PRESERVE_HP_UNIT_KEYS[i], "alphaPreserveHPColor", enabled, "MSUF2_PRESERVE_HP_COLOR_ALL", { alpha = true, preview = true })
+        local key = PRESERVE_HP_UNIT_KEYS[i]
+        M.SetUnitValue(key, "alphaPreserveHPColor", enabled, "MSUF2_PRESERVE_HP_COLOR_ALL", { alpha = true, preview = true })
+        if enabled then
+            local conf = DB()[key]
+            M.SetUnitValue(key, "alphaIndependentMissingHealth", true, "MSUF2_PRESERVE_HP_TRACK_ALL", { alpha = true, preview = true })
+            if not conf or tonumber(conf.alphaMissingHealthBase) == nil then
+                M.SetUnitValue(key, "alphaMissingHealthBase", 1, "MSUF2_PRESERVE_HP_TRACK_BASE_ALL", { alpha = true, preview = true })
+            end
+        end
     end
     if M.WarnPreserveHPColorIfNeeded then M.WarnPreserveHPColorIfNeeded(enabled) end
 end
