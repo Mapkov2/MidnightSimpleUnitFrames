@@ -4572,8 +4572,11 @@ end
     ns.Text.ClearField(self, "hpTextPct")
     end
     ns.Util.SetShown(self.hpText, show)
-    ns.Util.SetShown(self.hpTextLeft, show and self.hpTextLeft and self.hpTextLeft:GetText() ~= "")
-    ns.Util.SetShown(self.hpTextCenter, show and self.hpTextCenter and self.hpTextCenter:GetText() ~= "")
+    -- GetText() may return a secret string under tainted execution. The text
+    -- renderer already records whether a slot was intentionally hidden/empty,
+    -- so use that plain Lua state instead of comparing the returned text.
+    ns.Util.SetShown(self.hpTextLeft, show and self.hpTextLeft and self.hpTextLeft._msufTextHiddenEmpty ~= true)
+    ns.Util.SetShown(self.hpTextCenter, show and self.hpTextCenter and self.hpTextCenter._msufTextHiddenEmpty ~= true)
 end
 if self.powerText then
             local showPower = self.showPowerText
