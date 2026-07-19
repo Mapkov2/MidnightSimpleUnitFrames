@@ -174,16 +174,17 @@ local function ApplyBossCastbarPreviewLayout(preview, index)
     local general = GeneralDB()
     local width
     local height
+    local preserveWidth
 
     if type(_G.MSUF_GetCastbarDesiredSize) == "function" then
-        width, height = _G.MSUF_GetCastbarDesiredSize("boss" .. index, general, preview, 240, 18)
+        width, height, preserveWidth = _G.MSUF_GetCastbarDesiredSize("boss" .. index, general, preview, 240, 18)
     else
         width = tonumber(general.bossCastbarWidth) or 240
         height = tonumber(general.bossCastbarHeight) or 18
     end
 
     if type(_G.MSUF_ApplyPlayerCastbarSizeAndLayout) == "function" then
-        _G.MSUF_ApplyPlayerCastbarSizeAndLayout(preview, general, width, height)
+        _G.MSUF_ApplyPlayerCastbarSizeAndLayout(preview, general, width, height, preserveWidth)
     else
         preview:SetSize(width, height)
     end
@@ -256,7 +257,11 @@ local function PositionBossCastbarPreview(preview, index)
 
     local unitFrame = BossUnitFrame(index)
     if unitFrame then
-        preview:SetPoint("BOTTOMLEFT", unitFrame, "TOPLEFT", offsetX, offsetY + 2)
+        local autoX = 0
+        if type(_G.MSUF_GetCastbarAutoAnchorOffsetX) == "function" then
+            autoX = _G.MSUF_GetCastbarAutoAnchorOffsetX(general, "boss" .. index, preview)
+        end
+        preview:SetPoint("BOTTOMLEFT", unitFrame, "TOPLEFT", offsetX + autoX, offsetY + 2)
     else
         preview:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -420 + offsetX, (-220 + offsetY) - ((index - 1) * 34))
     end

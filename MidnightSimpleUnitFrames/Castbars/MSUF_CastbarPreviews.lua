@@ -198,10 +198,10 @@ local function PositionPreview(unit, frame)
 
     local general = EnsureGeneralDB()
     local config = PREVIEW_UNITS[unit]
-    local width, height = GetDesiredPreviewSize(unit, frame)
+    local width, height, preserveWidth = GetDesiredPreviewSize(unit, frame)
 
     if type(_G.MSUF_ApplyPlayerCastbarSizeAndLayout) == "function" then
-        _G.MSUF_ApplyPlayerCastbarSizeAndLayout(frame, general, width, height)
+        _G.MSUF_ApplyPlayerCastbarSizeAndLayout(frame, general, width, height, preserveWidth)
     else
         frame:SetSize(width or 250, height or 18)
     end
@@ -228,7 +228,11 @@ local function PositionPreview(unit, frame)
     elseif unit == "player" then
         frame:SetPoint("BOTTOM", parent, "TOP", offsetX, offsetY)
     else
-        frame:SetPoint("BOTTOMLEFT", parent, "TOPLEFT", offsetX, offsetY)
+        local autoX = 0
+        if type(_G.MSUF_GetCastbarAutoAnchorOffsetX) == "function" then
+            autoX = _G.MSUF_GetCastbarAutoAnchorOffsetX(general, unit, frame)
+        end
+        frame:SetPoint("BOTTOMLEFT", parent, "TOPLEFT", offsetX + autoX, offsetY)
     end
 
     if type(_G.MSUF_HardSyncCastbarPreview) == "function" then
