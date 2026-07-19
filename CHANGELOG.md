@@ -1,5 +1,18 @@
 # Changelog
 
+## 5.74 - 2026-07-19
+
+### Highlight
+
+- Rebuilt Castbar outlines for crisp, pixel-perfect borders at every UI scale across live Castbars, previews, and Boss Castbars.
+
+### Improvements & Fixes
+
+- Added independent Castbar icon-outline thickness using the configured Castbar border color.
+- Expanded Auto Width to Player, Target, Focus, and Boss Castbars with exact Unit Frame or Cooldown Manager matching and adjustable offsets.
+- Preserved character-specific keybindings by no longer replaying account-wide stored bindings automatically.
+- Reopened the options menu on its last active page and corrected custom scrollbar dragging without idle polling.
+
 ## 5.73 - 2026-07-18
 
 ### Highlight
