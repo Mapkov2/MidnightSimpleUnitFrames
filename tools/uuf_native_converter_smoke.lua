@@ -1520,9 +1520,10 @@ do
     )
     Truthy(
         mainSource:find("if not state.pending or state.flushing then return end", 1, true)
-            and mainSource:find("MSUF_LateAnchorReanchorFlush(force)", 1, true)
+            and mainSource:find("local ok, flushError = pcall(MSUF_LateAnchorReanchorFlush, force)", 1, true)
+            and mainSource:find("if not ok then error(flushError, 0) end", 1, true)
             and not mainSource:find("local function MSUF_FlushScheduledLateAnchorReanchor", 1, true),
-        "late-anchor retry stays guarded without consuming a main-chunk local"
+        "late-anchor retry stays guarded and self-cleans without consuming a main-chunk local"
     )
     Truthy(
         mainSource:find('if event == "PLAYER_ENTERING_WORLD" then', 1, true)
@@ -1564,10 +1565,11 @@ do
 
     local timers = {}
     local flushForces = {}
-    _G.C_Timer = { After = function(delay, callback)
+    local testTimer = { After = function(delay, callback)
         Equal(delay, 0, "late-anchor retry remains a next-frame one-shot")
         timers[#timers + 1] = callback
     end }
+    _G.C_Timer = testTimer
     _G.InCombatLockdown = function() return false end
     _G.MSUF_LateAnchorReanchorState = nil
     _G.MSUF_PositionLegacyCooldownViewerAnchor = nil
@@ -1601,6 +1603,29 @@ do
     Equal(flushForces[3], true, "no-timer fallback flushes exactly once")
     Equal(_G.MSUF_LateAnchorReanchorState.pending, false, "synchronous pending state clears")
     Equal(_G.MSUF_LateAnchorReanchorState.flushing, false, "synchronous flushing state clears")
+
+    -- Cleanup must survive an unexpected bridge failure without swallowing the
+    -- original Lua error or permanently disabling later reanchor requests.
+    _G.C_Timer = testTimer
+    _G.MSUF_FlushCDMBridgeRefresh = function()
+        error("injected late-anchor bridge failure")
+    end
+    Equal(_G.MSUF_ScheduleLateAnchorReanchor(), true, "failing late-anchor retry is queued")
+    local callbackOK, callbackError = pcall(table.remove(timers, 1))
+    Equal(callbackOK, false, "late-anchor bridge failure remains visible")
+    Truthy(tostring(callbackError):find("injected late-anchor bridge failure", 1, true),
+        "late-anchor bridge failure preserves the original error")
+    Equal(_G.MSUF_LateAnchorReanchorState.pending, false, "failed flush clears pending state")
+    Equal(_G.MSUF_LateAnchorReanchorState.flushing, false, "failed flush clears flushing state")
+
+    _G.MSUF_FlushCDMBridgeRefresh = function(force)
+        flushForces[#flushForces + 1] = force == true
+    end
+    Equal(_G.MSUF_ScheduleLateAnchorReanchor(), true, "scheduler recovers after a failed flush")
+    table.remove(timers, 1)()
+    Equal(#flushForces, 4, "recovered scheduler performs the next requested flush")
+    Equal(_G.MSUF_LateAnchorReanchorState.pending, false, "recovered scheduler clears pending state")
+    Equal(_G.MSUF_LateAnchorReanchorState.flushing, false, "recovered scheduler clears flushing state")
 
     _G.C_Timer = savedTimer
     _G.InCombatLockdown = savedCombat
