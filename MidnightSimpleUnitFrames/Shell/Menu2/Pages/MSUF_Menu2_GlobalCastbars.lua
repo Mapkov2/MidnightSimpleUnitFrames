@@ -266,14 +266,20 @@ local function BuildCastbars(ctx)
         iconGlow:SetPoint("CENTER", icon, "CENTER", 0, 0)
         iconGlow:SetSize(9, 9)
         local iconTexture = PreviewTexture(icon, "OVERLAY", nil, nil, nil, nil, 136235, 7)
-        iconTexture:SetPoint("TOPLEFT", icon, "TOPLEFT", 1, -1)
-        iconTexture:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -1, 1)
+        iconTexture:SetAllPoints(icon)
         iconTexture:SetTexCoord(0.08, 0.92, 0.08, 0.92)
         preview.iconTexture = iconTexture
         preview.icon = icon
+        if icon.SetBackdrop then icon:SetBackdrop(nil) end
+        local iconOutlineFrame = CreateFrame("Frame", nil, icon, "BackdropTemplate")
+        iconOutlineFrame:SetAllPoints(icon)
+        if iconOutlineFrame.SetFrameLevel and icon.GetFrameLevel then iconOutlineFrame:SetFrameLevel((icon:GetFrameLevel() or 1) + 6) end
+        iconOutlineFrame:Hide()
+        preview.iconOutlineFrame = iconOutlineFrame
         local castbar = T.Panel(castRow, nil, { 0.018, 0.020, 0.030, 0.98 }, T.colors.borderSoft)
         castbar:SetSize(max(180, barW), 20)
         castbar:SetPoint("CENTER", castRow, "CENTER", 0, 0)
+        if castbar.SetBackdrop then castbar:SetBackdrop(nil) end
         preview.bar = castbar
         local textLayer = CreateFrame("Frame", nil, castbar)
         textLayer:SetAllPoints(castbar)
@@ -358,15 +364,10 @@ local function BuildCastbars(ctx)
             tick.MSUF_baseAlpha = 0.85
             preview.stageTicks[i] = tick
         end
-        local outlineFrame = CreateFrame("Frame", nil, castbar)
+        local outlineFrame = CreateFrame("Frame", nil, castbar, "BackdropTemplate")
         outlineFrame:SetAllPoints(castbar)
         if outlineFrame.SetFrameLevel and castbar.GetFrameLevel then outlineFrame:SetFrameLevel((castbar:GetFrameLevel() or 1) + 6) end
-        outlineFrame.edges = {}
-        for _, key in ipairs({ "top", "bottom", "left", "right" }) do
-            local edge = PreviewTexture(outlineFrame, "OVERLAY")
-            edge:Hide()
-            outlineFrame.edges[key] = edge
-        end
+        outlineFrame:Hide()
         preview.outlineFrame = outlineFrame
         local kick = T.Panel(castRow, nil, { 0.12, 0.72, 0.36, 0.92 }, { 0.40, 1.00, 0.62, 0.70 })
         kick:SetSize(20, 20)
@@ -486,16 +487,19 @@ local function BuildCastbars(ctx)
         end
         local function LayoutOutline(frame, scale)
             local holder = frame and frame.outlineFrame
-            local edges = holder and holder.edges
-            if not edges then return end
+            if not (holder and holder.SetBackdrop) then return 0 end
             local thickness = floor((tonumber(ReadG("castbarOutlineThickness", 1)) or 1) + 0.5)
             if thickness < 0 then thickness = 0 end
             if thickness > 12 then thickness = 12 end
             if thickness <= 0 then
-                for _, edge in pairs(edges) do edge:Hide() end
-                return
+                holder:SetBackdrop(nil)
+                holder:Hide()
+                frame._outlinePreviewT = 0
+                frame._outlinePreviewEdge = 0
+                frame._outlinePreviewR, frame._outlinePreviewG, frame._outlinePreviewB, frame._outlinePreviewA = nil, nil, nil, nil
+                return 0
             end
-            thickness = max(1, floor((thickness * (scale or 1)) + 0.5))
+            local edgeSize = max(1, floor((thickness * (scale or 1)) + 0.5))
             local gdb = (type(G) == "function" and G()) or {}
             local r = tonumber(gdb.castbarBorderR) or 0
             local gg = tonumber(gdb.castbarBorderG) or 0
@@ -506,27 +510,67 @@ local function BuildCastbars(ctx)
                 r, gg, b = ReadColorTable(gdb.kickReadyColor, 0, 1, 0)
                 a = 1
             end
-            local top, bottom, left, right = edges.top, edges.bottom, edges.left, edges.right
-            top:ClearAllPoints()
-            top:SetPoint("BOTTOMLEFT", frame.bar, "TOPLEFT", 0, 0)
-            top:SetPoint("BOTTOMRIGHT", frame.bar, "TOPRIGHT", 0, 0)
-            top:SetHeight(thickness)
-            bottom:ClearAllPoints()
-            bottom:SetPoint("TOPLEFT", frame.bar, "BOTTOMLEFT", 0, 0)
-            bottom:SetPoint("TOPRIGHT", frame.bar, "BOTTOMRIGHT", 0, 0)
-            bottom:SetHeight(thickness)
-            left:ClearAllPoints()
-            left:SetPoint("TOPRIGHT", frame.bar, "TOPLEFT", 0, thickness)
-            left:SetPoint("BOTTOMRIGHT", frame.bar, "BOTTOMLEFT", 0, -thickness)
-            left:SetWidth(thickness)
-            right:ClearAllPoints()
-            right:SetPoint("TOPLEFT", frame.bar, "TOPRIGHT", 0, thickness)
-            right:SetPoint("BOTTOMLEFT", frame.bar, "BOTTOMRIGHT", 0, -thickness)
-            right:SetWidth(thickness)
-            for _, edge in pairs(edges) do
-                edge:SetVertexColor(r, gg, b, a)
-                edge:Show()
+            if frame._outlinePreviewT ~= thickness or frame._outlinePreviewEdge ~= edgeSize then
+                holder:SetBackdrop({
+                    bgFile = "Interface\\Buttons\\WHITE8X8",
+                    edgeFile = "Interface\\Buttons\\WHITE8X8",
+                    edgeSize = edgeSize,
+                    insets = { left = 0, right = 0, top = 0, bottom = 0 },
+                })
+                holder:SetBackdropColor(0, 0, 0, 0)
+                frame._outlinePreviewT = thickness
+                frame._outlinePreviewEdge = edgeSize
             end
+            if frame._outlinePreviewR ~= r or frame._outlinePreviewG ~= gg or frame._outlinePreviewB ~= b or frame._outlinePreviewA ~= a then
+                holder:SetBackdropBorderColor(r, gg, b, a)
+                frame._outlinePreviewR, frame._outlinePreviewG, frame._outlinePreviewB, frame._outlinePreviewA = r, gg, b, a
+            end
+            holder:Show()
+            return edgeSize
+        end
+        local function LayoutIconOutline(frame, scale, unit, gdb)
+            local holder = frame and frame.iconOutlineFrame
+            local iconFrame = frame and frame.icon
+            if not (holder and holder.SetBackdrop and iconFrame) then return end
+            local prefix = unit == "player" and "castbarPlayer"
+                or unit == "target" and "castbarTarget"
+                or unit == "focus" and "castbarFocus"
+                or unit == "boss" and "bossCast"
+            local thickness = prefix and tonumber(gdb and gdb[prefix .. "IconBorderThickness"]) or 0
+            local style = prefix and tostring((gdb and gdb[prefix .. "IconBorderStyle"]) or "NONE"):upper() or "NONE"
+            thickness = max(0, min(8, floor((thickness or 0) + 0.5)))
+            if thickness <= 0 or style == "NONE" or not iconFrame:IsShown() then
+                holder:SetBackdrop(nil)
+                holder:Hide()
+                frame._iconOutlinePreviewKey = nil
+                frame._iconOutlinePreviewColorKey = nil
+                return
+            end
+            local edgeSize = max(1, floor((thickness * (scale or 1)) + 0.5))
+            local key = tostring(edgeSize)
+            if frame._iconOutlinePreviewKey ~= key then
+                holder:SetBackdrop({
+                    bgFile = "Interface\\Buttons\\WHITE8X8",
+                    edgeFile = "Interface\\Buttons\\WHITE8X8",
+                    edgeSize = edgeSize,
+                    insets = { left = 0, right = 0, top = 0, bottom = 0 },
+                })
+                holder:SetBackdropColor(0, 0, 0, 0)
+                frame._iconOutlinePreviewKey = key
+            end
+            local r, gg, b, a = 0, 0, 0, 0.95
+            if style == "CASTBAR" then
+                r = tonumber(gdb.castbarBorderR) or 0
+                gg = tonumber(gdb.castbarBorderG) or 0
+                b = tonumber(gdb.castbarBorderB) or 0
+                a = tonumber(gdb.castbarBorderA) or 1
+            end
+            local colorKey = tostring(r) .. "|" .. tostring(gg) .. "|" .. tostring(b) .. "|" .. tostring(a)
+            if frame._iconOutlinePreviewColorKey ~= colorKey then
+                holder:SetBackdropBorderColor(r, gg, b, a)
+                frame._iconOutlinePreviewColorKey = colorKey
+            end
+            holder:Show()
         end
         function preview:Refresh()
             local now = GetTime and GetTime() or 0
@@ -557,14 +601,15 @@ local function BuildCastbars(ctx)
                 self.icon:ClearAllPoints()
                 self.icon:SetPoint("LEFT", self.bar, "LEFT", S(iconX), S(iconY))
             end
-            local statusX = (showIcon and not iconDetached) and (sIcon + S(1)) or 0
-            local barWLocal = max(1, scw - statusX)
-            local barHLocal = max(1, sch - S(2))
+            local outlineInset = LayoutOutline(self, scale) or 0
+            local statusX = (showIcon and not iconDetached) and (sIcon + S(1)) or outlineInset
+            local barWLocal = max(1, scw - statusX - outlineInset)
+            local barHLocal = max(1, sch - (outlineInset * 2))
             self.statusX, self.statusW, self.statusH, self.statusScale = statusX, barWLocal, barHLocal, scale
             if self.statusBar then
                 self.statusBar:ClearAllPoints()
-                self.statusBar:SetPoint("TOPLEFT", self.bar, "TOPLEFT", statusX, -1)
-                self.statusBar:SetPoint("BOTTOMRIGHT", self.bar, "TOPLEFT", statusX + barWLocal, -1 - barHLocal)
+                self.statusBar:SetPoint("TOPLEFT", self.bar, "TOPLEFT", statusX, -outlineInset)
+                self.statusBar:SetPoint("BOTTOMRIGHT", self.bar, "TOPLEFT", statusX + barWLocal, -outlineInset - barHLocal)
                 self.statusBar:SetSize(barWLocal, barHLocal)
             end
             local texture = (_G.MSUF_GetCastbarTexture and _G.MSUF_GetCastbarTexture()) or WHITE8
@@ -589,21 +634,17 @@ local function BuildCastbars(ctx)
                 baseR, baseG, baseB = ResolveUnavailablePreviewColor(g)
             end
             local ir, ig, ib = GlowBlend(baseR, baseG, baseB, progress)
-            if self.bar.SetBackdropBorderColor then
-                self.bar:SetBackdropBorderColor(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], T.colors.borderSoft[4] or 0.7)
-                if kickEnabled and kickStyle == "border" then self.bar:SetBackdropBorderColor(0.24, 0.86, 0.46, 0.95) end
-            end
             self.barBg:SetTexture(bgTexture)
             self.barBg:ClearAllPoints()
-            self.barBg:SetPoint("TOPLEFT", self.bar, "TOPLEFT", statusX, -1)
-            self.barBg:SetPoint("BOTTOMRIGHT", self.bar, "TOPLEFT", statusX + barWLocal, -1 - barHLocal)
+            self.barBg:SetPoint("TOPLEFT", self.bar, "TOPLEFT", statusX, -outlineInset)
+            self.barBg:SetPoint("BOTTOMRIGHT", self.bar, "TOPLEFT", statusX + barWLocal, -outlineInset - barHLocal)
             if type(_G.MSUF_GetCastbarBackgroundColor) == "function" then
                 local br, bg, bb, ba = _G.MSUF_GetCastbarBackgroundColor()
                 self.barBg:SetVertexColor(br or 0.10, bg or 0.10, bb or 0.10, ba or 0.85)
             else
                 self.barBg:SetVertexColor(0.10, 0.10, 0.10, 0.85)
             end
-            LayoutOutline(self, scale)
+            LayoutIconOutline(self, scale, unit, g)
             local remaining = max(0, (1 - progress) * duration)
             local previewTimeText = FormatPreviewTime(unit, g, remaining, duration)
             local fontPath = type(_G.MSUF_GetFontPath) == "function" and _G.MSUF_GetFontPath() or _G.STANDARD_TEXT_FONT
@@ -721,11 +762,11 @@ local function BuildCastbars(ctx)
             end
             self.latency:ClearAllPoints()
             if reverse then
-                self.latency:SetPoint("TOPLEFT", self.bar, "TOPLEFT", statusX, -1)
-                self.latency:SetPoint("BOTTOMLEFT", self.bar, "TOPLEFT", statusX, -1 - barHLocal)
+                self.latency:SetPoint("TOPLEFT", self.bar, "TOPLEFT", statusX, -outlineInset)
+                self.latency:SetPoint("BOTTOMLEFT", self.bar, "TOPLEFT", statusX, -outlineInset - barHLocal)
             else
-                self.latency:SetPoint("TOPRIGHT", self.bar, "TOPLEFT", statusX + barWLocal, -1)
-                self.latency:SetPoint("BOTTOMRIGHT", self.bar, "TOPLEFT", statusX + barWLocal, -1 - barHLocal)
+                self.latency:SetPoint("TOPRIGHT", self.bar, "TOPLEFT", statusX + barWLocal, -outlineInset)
+                self.latency:SetPoint("BOTTOMRIGHT", self.bar, "TOPLEFT", statusX + barWLocal, -outlineInset - barHLocal)
             end
             self.latency:SetWidth(max(6, floor(barWLocal * 0.12 + 0.5)))
             self.latency:SetShown(unit == "player" and kind ~= "empowered" and ReadGBool("castbarShowLatency", true))
@@ -742,11 +783,11 @@ local function BuildCastbars(ctx)
             self.fill:SetVertexColor(ir, ig, ib, 1)
             self.fill:ClearAllPoints()
             if reverse then
-                self.fill:SetPoint("TOPRIGHT", self.bar, "TOPLEFT", statusX + barWLocal, -1)
-                self.fill:SetPoint("BOTTOMRIGHT", self.bar, "TOPLEFT", statusX + barWLocal, -1 - barHLocal)
+                self.fill:SetPoint("TOPRIGHT", self.bar, "TOPLEFT", statusX + barWLocal, -outlineInset)
+                self.fill:SetPoint("BOTTOMRIGHT", self.bar, "TOPLEFT", statusX + barWLocal, -outlineInset - barHLocal)
             else
-                self.fill:SetPoint("TOPLEFT", self.bar, "TOPLEFT", statusX, -1)
-                self.fill:SetPoint("BOTTOMLEFT", self.bar, "TOPLEFT", statusX, -1 - barHLocal)
+                self.fill:SetPoint("TOPLEFT", self.bar, "TOPLEFT", statusX, -outlineInset)
+                self.fill:SetPoint("BOTTOMLEFT", self.bar, "TOPLEFT", statusX, -outlineInset - barHLocal)
             end
             self.fill:SetWidth(fillW)
             local useEmpowerSegs = kind == "empowered" and ReadGBool("empowerColorStages", true)
@@ -762,8 +803,8 @@ local function BuildCastbars(ctx)
                     if reverse then x = floor(barWLocal * (1 - endPct) + 0.5) end
                     local band = self.empowerBands[i]
                     band:ClearAllPoints()
-                    band:SetPoint("TOPLEFT", self.bar, "TOPLEFT", statusX + x, -1)
-                    band:SetPoint("BOTTOMLEFT", self.bar, "TOPLEFT", statusX + x, -1 - barHLocal)
+                    band:SetPoint("TOPLEFT", self.bar, "TOPLEFT", statusX + x, -outlineInset)
+                    band:SetPoint("BOTTOMLEFT", self.bar, "TOPLEFT", statusX + x, -outlineInset - barHLocal)
                     band:SetWidth(bandW)
                     local er, eg, eb = GlowBlend(empowerColors[i][1], empowerColors[i][2], empowerColors[i][3], progress)
                     band:SetVertexColor(er, eg, eb, 0.24)
@@ -785,8 +826,8 @@ local function BuildCastbars(ctx)
                         local x = floor(barWLocal * startPct + 0.5)
                         if reverse then x = floor(barWLocal * (1 - endPct) + 0.5) end
                         seg:ClearAllPoints()
-                        seg:SetPoint("TOPLEFT", self.bar, "TOPLEFT", statusX + x, -1)
-                        seg:SetPoint("BOTTOMLEFT", self.bar, "TOPLEFT", statusX + x, -1 - barHLocal)
+                        seg:SetPoint("TOPLEFT", self.bar, "TOPLEFT", statusX + x, -outlineInset)
+                        seg:SetPoint("BOTTOMLEFT", self.bar, "TOPLEFT", statusX + x, -outlineInset - barHLocal)
                         seg:SetWidth(segW)
                         local er, eg, eb = GlowBlend(empowerColors[i][1], empowerColors[i][2], empowerColors[i][3], progress)
                         seg:SetVertexColor(er, eg, eb, empowerColors[i][4])
@@ -805,7 +846,7 @@ local function BuildCastbars(ctx)
                     if tick then
                         local x = floor(barWLocal * (i / (count + 1)) + 0.5)
                         tick:ClearAllPoints()
-                        tick:SetPoint("TOPLEFT", self.bar, "TOPLEFT", statusX + x, -1)
+                        tick:SetPoint("TOPLEFT", self.bar, "TOPLEFT", statusX + x, -outlineInset)
                         tick:SetHeight(barHLocal)
                         tick:Show()
                     end
@@ -838,7 +879,7 @@ local function BuildCastbars(ctx)
                     local x = floor(barWLocal * (i / 4) + 0.5)
                     if reverse then x = barWLocal - x end
                     tick:ClearAllPoints()
-                    tick:SetPoint("CENTER", self.bar, "TOPLEFT", statusX + x, -1 - floor(barHLocal * 0.5))
+                    tick:SetPoint("CENTER", self.bar, "TOPLEFT", statusX + x, -outlineInset - floor(barHLocal * 0.5))
                     tick:SetHeight(barHLocal)
                     local flashStart = self._stageFlashStart and self._stageFlashStart[i]
                     local flashUntil = self._stageFlashUntil and self._stageFlashUntil[i]

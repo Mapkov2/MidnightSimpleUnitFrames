@@ -176,15 +176,66 @@ local function ShortenCastbarPreviewSpellName(key, text)
     if type(shorten) ~= "function" then return text end
     return shorten({ unit = key == "boss" and "boss1" or key }, text)
 end
-local function ApplyCastbarPreviewIconBorder(icon, style, g)
+local function HideCastbarPreviewIconBorder(icon)
+    local border = icon and icon._msufCastbarPreviewBorder
+    if border then
+        for _, key in ipairs({ "top", "bottom", "left", "right" }) do
+            if border[key] then border[key]:Hide() end
+        end
+    end
+    if icon and icon.SetBackdrop then icon:SetBackdrop(nil) end
+    if icon then
+        icon._msufCastbarPreviewBorderEdge = nil
+        icon._msufCastbarPreviewBorderR = nil
+        icon._msufCastbarPreviewBorderG = nil
+        icon._msufCastbarPreviewBorderB = nil
+        icon._msufCastbarPreviewBorderA = nil
+    end
+end
+local function ApplyCastbarPreviewIconBorder(icon, style, thickness, g)
     if not (icon and icon.SetBackdropBorderColor) then return end
     style = tostring(style or "NONE"):upper()
+    thickness = tonumber(thickness) or 0
+    if thickness < 0 then thickness = 0 elseif thickness > 8 then thickness = 8 end
+    local texture = icon.texture or icon.Texture or icon.Icon
+    if texture and texture.ClearAllPoints and texture.SetAllPoints then
+        texture:ClearAllPoints()
+        texture:SetAllPoints(icon)
+    end
+    if style == "NONE" or thickness <= 0 then
+        HideCastbarPreviewIconBorder(icon)
+        return
+    end
+    local legacy = icon._msufCastbarPreviewBorder
+    if legacy then
+        for _, key in ipairs({ "top", "bottom", "left", "right" }) do
+            if legacy[key] then legacy[key]:Hide() end
+        end
+    end
+    local r, green, b, a = 0, 0, 0, 0.95
     if style == "DARK" then
-        icon:SetBackdropBorderColor(0, 0, 0, 0.95)
+        r, green, b, a = 0, 0, 0, 0.95
     elseif style == "CASTBAR" then
-        icon:SetBackdropBorderColor(g.castbarBorderR or 0, g.castbarBorderG or 0, g.castbarBorderB or 0, g.castbarBorderA or 1)
-    else
-        icon:SetBackdropBorderColor(0, 0, 0, 0)
+        r, green, b, a = g.castbarBorderR or 0, g.castbarBorderG or 0, g.castbarBorderB or 0, g.castbarBorderA or 1
+    end
+    if icon._msufCastbarPreviewBorderEdge ~= thickness then
+        icon:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = thickness,
+            insets = { left = 0, right = 0, top = 0, bottom = 0 },
+        })
+        if icon.SetBackdropColor then icon:SetBackdropColor(0, 0, 0, 0) end
+        icon._msufCastbarPreviewBorderEdge = thickness
+    end
+    if icon._msufCastbarPreviewBorderR ~= r or icon._msufCastbarPreviewBorderG ~= green
+        or icon._msufCastbarPreviewBorderB ~= b or icon._msufCastbarPreviewBorderA ~= a
+    then
+        icon:SetBackdropBorderColor(r, green, b, a)
+        icon._msufCastbarPreviewBorderR = r
+        icon._msufCastbarPreviewBorderG = green
+        icon._msufCastbarPreviewBorderB = b
+        icon._msufCastbarPreviewBorderA = a
     end
 end
 local function AnchorCastbarPreviewText(fs, relativeTo, position, x, y, justify, S)
@@ -284,9 +335,10 @@ local function ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, s
     local iconZoom = ReadCastbarNum(g, key, "IconZoom", "bossCastIconZoom", 100)
     local iconPosition = NormalizeCastbarPreviewIconPos(ReadCastbarPreviewString(g, key, detailPrefix, "IconPosition", "bossCastIconPosition", "LEFT"))
     local iconSpacing = max(0, min(40, ReadCastbarNum(g, key, "IconSpacing", "bossCastIconSpacing", 1)))
+    local iconBorderThickness = max(0, min(8, ReadCastbarNum(g, key, "IconBorderThickness", "bossCastIconBorderThickness", 0)))
     local iconBorderStyle = ReadCastbarPreviewString(g, key, detailPrefix, "IconBorderStyle", "bossCastIconBorderStyle", "NONE")
     if showIcon then
-        ApplyCastbarPreviewIconBorder(mock.cast.icon, iconBorderStyle, g)
+        ApplyCastbarPreviewIconBorder(mock.cast.icon, iconBorderStyle, iconBorderThickness, g)
         ApplyCastbarPreviewIconZoom(mock.cast.icon, iconZoom)
         mock.cast.icon:SetSize(sIcon, sIcon)
         mock.cast.icon:ClearAllPoints()
@@ -302,13 +354,16 @@ local function ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, s
         box.handleCastbarIcon:SetSize(max(18, sIcon + 8), max(18, sIcon + 8))
         PlaceHandle(box.handleCastbarIcon, mock.cast.icon)
     else
+        HideCastbarPreviewIconBorder(mock.cast.icon)
         box.handleCastbarIcon:Hide()
     end
     mock.cast.fill:ClearAllPoints()
-    local fillLeft = S(1)
+    local outlineThickness = max(0, min(12, floor((tonumber(g.castbarOutlineThickness) or 1) + 0.5)))
+    local frameInset = outlineThickness > 0 and max(1, S(outlineThickness)) or 0
+    local fillLeft = frameInset
     if showIcon and iconPosition == "LEFT" then fillLeft = sIcon + S(iconSpacing) end
-    mock.cast.fill:SetPoint("TOPLEFT", mock.cast, "TOPLEFT", fillLeft, -S(1))
-    mock.cast.fill:SetPoint("BOTTOMLEFT", mock.cast, "BOTTOMLEFT", fillLeft, S(1))
+    mock.cast.fill:SetPoint("TOPLEFT", mock.cast, "TOPLEFT", fillLeft, -frameInset)
+    mock.cast.fill:SetPoint("BOTTOMLEFT", mock.cast, "BOTTOMLEFT", fillLeft, frameInset)
     local timeReserve = max(S(2), min(S(60), floor(scw * 0.34 + 0.5)))
     local fillRight = timeReserve
     if showIcon and iconPosition == "RIGHT" then
@@ -320,7 +375,7 @@ local function ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, s
         if castPct < 0 then castPct = 0 elseif castPct > 1 then castPct = 1 end
         mock.cast.fill:SetWidth(max(S(2), floor(fillMaxW * castPct + 0.5)))
     else
-        mock.cast.fill:SetPoint("BOTTOMRIGHT", mock.cast, "BOTTOMRIGHT", -fillRight, S(1))
+        mock.cast.fill:SetPoint("BOTTOMRIGHT", mock.cast, "BOTTOMRIGHT", -fillRight, frameInset)
     end
     local showText = CastbarShowText(key, g)
     mock.cast.text:SetShown(showText)
@@ -1667,9 +1722,29 @@ function Preview.Refresh(box, reason)
     end
     if castPreviewVisible then
         mock.cast:Show()
+        local castOutline = max(0, min(12, floor((tonumber(g.castbarOutlineThickness) or 1) + 0.5)))
+        local castEdge = castOutline > 0 and max(1, S(castOutline)) or 0
+        if mock.cast._msufCastbarBackdropEdge ~= castEdge then
+            if castEdge > 0 then
+                mock.cast:SetBackdrop({
+                    bgFile = "Interface\\Buttons\\WHITE8X8",
+                    edgeFile = "Interface\\Buttons\\WHITE8X8",
+                    edgeSize = castEdge,
+                    insets = { left = 0, right = 0, top = 0, bottom = 0 },
+                })
+            else
+                mock.cast:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8" })
+            end
+            mock.cast._msufCastbarBackdropEdge = castEdge
+        end
         if type(_G.MSUF_GetCastbarBackgroundColor) == "function" then
             local br, bg, bb, ba = _G.MSUF_GetCastbarBackgroundColor()
             mock.cast:SetBackdropColor(br or 0.10, bg or 0.10, bb or 0.10, ba or 0.85)
+        end
+        if castEdge > 0 then
+            mock.cast:SetBackdropBorderColor(g.castbarBorderR or 0, g.castbarBorderG or 0, g.castbarBorderB or 0, g.castbarBorderA or 1)
+        else
+            mock.cast:SetBackdropBorderColor(0, 0, 0, 0)
         end
         local scw, sch = max(20, S(castW)), max(6, S(castBarH))
         mock.cast:SetSize(scw, sch)

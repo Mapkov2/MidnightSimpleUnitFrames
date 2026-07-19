@@ -21,7 +21,7 @@ local CASTBAR_ICON_POSITIONS = VT("LEFT", "Left", "RIGHT", "Right", "INSIDE_LEFT
 local CASTBAR_TEXT_POSITIONS = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right", "ABOVE", "Above", "BELOW", "Below")
 local CASTBAR_TIME_FORMATS = VT("CURRENT", "Remaining", "ELAPSED", "Elapsed", "ELAPSED_MAX", "Elapsed / Total", "CURRENT_MAX", "Remaining / Total")
 local CASTBAR_TAB_VALUES = VT("general", "General", "icon", "Icon", "spell", "Spell Text", "time", "Time Text", "advanced", "Advanced")
-local CASTBAR_TAB_HEIGHTS = { general = 392, icon = 540, spell = 486, time = 486, advanced = 350 }
+local CASTBAR_TAB_HEIGHTS = { general = 392, icon = 594, spell = 486, time = 486, advanced = 350 }
 local CASTBAR_WIDTH_SOURCE_VALUES = VT("manual", "Manual width", "unitframe", "Auto: Unit Frame", "essential", "Auto: Essential Cooldowns", "utility", "Auto: Utility Cooldowns")
 local CASTBAR_TEXT_ALIGN = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right")
 local CASTBAR_TRUNCATE_VALUES = VT("AUTO", "Auto fit", "CLIP", "Manual width", "NONE", "No width limit")
@@ -574,14 +574,17 @@ local function BuildCastbar(ctx, builder, unit)
             SettingMeta(ctx, "castbar.detail." .. tostring(reason), "general", key))
         return control
     end
-    local function BindDetailSlider(parent, list, label, x, y, width, minValue, maxValue, step, key, defaultValue, reason)
+    local function BindDetailSlider(parent, list, label, x, y, width, minValue, maxValue, step, key, defaultValue, reason, beforeSet)
         local control = W.Slider(parent, label, minValue, maxValue, step, width)
         W.MoveWidget(control, parent, x, y, width)
         AddControl(list, control)
         W.AttachUnitEditFocus(control, unit, "castbar")
         M.BindNumberWidget(ctx, control,
             function() return ReadGeneralNumber(key, defaultValue) end,
-            function(v) SetGeneralNumber(key, v, reason) end,
+            function(v)
+                if beforeSet then beforeSet(v) end
+                SetGeneralNumber(key, v, reason)
+            end,
             defaultValue, (function()
                 local meta = SettingMeta(ctx, "castbar.detail." .. tostring(reason), "general", key)
                 meta.step, meta.roundStep = step, true
@@ -592,7 +595,7 @@ local function BuildCastbar(ctx, builder, unit)
     local function BuildDetailControls(parent, list, specs)
         M.BuildControlSpecs(specs, {
             dropdown = function(s) return BindDetailDropdown(parent, list, s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10]) end,
-            slider = function(s) return BindDetailSlider(parent, list, s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10], s[11]) end,
+            slider = function(s) return BindDetailSlider(parent, list, s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10], s[11], s[12]) end,
         })
     end
     local function NormalizeBackend(value)
@@ -676,7 +679,7 @@ local function BuildCastbar(ctx, builder, unit)
     local generalCard = W.ControlCard(generalTab, nil, nil, leftX, -4, leftW, 132)
     local providerCard = W.ControlCard(generalTab, "Provider", nil, rightX, -4, rightW, 132)
     local sizeCard = W.ControlCard(generalTab, "Size", "Width can use manual bounds or follow another frame.", leftX, -154, sectionW - 32, 166)
-    local iconCard = W.ControlCard(iconTab, nil, nil, leftX, -4, leftW, 424)
+    local iconCard = W.ControlCard(iconTab, nil, nil, leftX, -4, leftW, 478)
     local spellCard = W.ControlCard(spellTab, nil, nil, leftX, -4, leftW, 370)
     local targetNameCard = fields.targetName and W.ControlCard(spellTab, "Cast Target Text", nil, rightX, -4, rightW, 370) or nil
     local timeCard = W.ControlCard(timeTab, nil, nil, leftX, -4, leftW, 370)
@@ -817,6 +820,11 @@ local function BuildCastbar(ctx, builder, unit)
         { "slider", "X offset", 16, -250, controlWLeft, -300, 300, 1, DetailKey("IconOffsetX"), 0, "MSUF2_CASTBAR_ICON_X" },
         { "slider", "Y offset", 16, -304, controlWLeft, -300, 300, 1, DetailKey("IconOffsetY"), 0, "MSUF2_CASTBAR_ICON_Y" },
         { "slider", "Spacing", 16, -358, controlWLeft, 0, 40, 1, DetailKey("IconSpacing"), 1, "MSUF2_CASTBAR_ICON_SPACING" },
+        { "slider", "Border thickness", 16, -412, controlWLeft, 0, 8, 1, DetailKey("IconBorderThickness"), 0, "MSUF2_CASTBAR_ICON_BORDER_THICKNESS", function(v)
+            if tonumber(v) and tonumber(v) > 0 and tostring(ReadGeneralValue(DetailKey("IconBorderStyle"), "NONE")):upper() == "NONE" then
+                GetGeneral()[DetailKey("IconBorderStyle")] = "DARK"
+            end
+        end },
     })
     local text = BindCastbarFeatureToggle(spellCard, fields.text, "MSUF2_CASTBAR_TEXT")
     BuildDetailControls(spellCard, spellControls, {
@@ -889,7 +897,7 @@ local function BuildCastbar(ctx, builder, unit)
             return meta
         end)())
     BuildDetailControls(iconAdvancedCard, iconControls, {
-        { "dropdown", "Border style", 16, -52, min(260, controlWRight), CASTBAR_ICON_BORDER_VALUES, DetailKey("IconBorderStyle"), "NONE", "MSUF2_CASTBAR_ICON_BORDER" },
+        { "dropdown", "Border style", 16, -52, min(260, controlWRight), CASTBAR_ICON_BORDER_VALUES, DetailKey("IconBorderStyle"), "DARK", "MSUF2_CASTBAR_ICON_BORDER" },
     })
     local castbarLayer = W.Slider(layerAdvancedCard, "Layer (0-30)", 0, 30, 1, controlWRight)
     W.MoveWidget(castbarLayer, layerAdvancedCard, 16, -52, controlWRight)

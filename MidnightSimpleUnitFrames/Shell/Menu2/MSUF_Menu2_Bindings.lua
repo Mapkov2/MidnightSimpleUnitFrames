@@ -1038,7 +1038,7 @@ function M.SetGeneralValue(key, value, reason, opts)
     return true
 end
 local UNIT_PAGE_RESETS = { uf_player = { unit = "player", label = "Player" }, uf_target = { unit = "target", label = "Target" }, uf_targettarget = { unit = "targettarget", label = "Target of Target" }, uf_focustarget = { unit = "focustarget", label = "Focus Target" }, uf_focus = { unit = "focus", label = "Focus" }, uf_boss = { unit = "boss", label = "Boss Frames" }, uf_pet = { unit = "pet", label = "Pet" } }
-local CASTBAR_SUFFIX_KEYS = WL "TimeFormat FrameLevelOffset IconPosition IconSize IconOffsetX IconOffsetY IconSpacing IconBorderStyle SpellNamePosition SpellNameFontSize TextOffsetX TextOffsetY SpellNameAlign SpellNameMaxWidth SpellNameTruncate TimePosition TimeFontSize TimeOffsetX TimeOffsetY"
+local CASTBAR_SUFFIX_KEYS = WL "TimeFormat FrameLevelOffset IconPosition IconSize IconOffsetX IconOffsetY IconSpacing IconBorderThickness IconBorderStyle SpellNamePosition SpellNameFontSize TextOffsetX TextOffsetY SpellNameAlign SpellNameMaxWidth SpellNameTruncate TimePosition TimeFontSize TimeOffsetX TimeOffsetY"
 local CASTBAR_TARGET_NAME_SUFFIX_KEYS = WL "TargetNamePosition TargetNameFontSize TargetNameAlign TargetNameOffsetX TargetNameOffsetY"
 local function BuildUnitCastbarResetKeys(spec)
     local keys = { spec.enable, spec.backend .. "Backend", spec.backend .. "BackendBeforeHide", spec.time, spec.icon, spec.name }

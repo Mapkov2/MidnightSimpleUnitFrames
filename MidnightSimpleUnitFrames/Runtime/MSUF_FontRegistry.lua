@@ -515,6 +515,19 @@ end
 MSUF.MSUF_GetColorFromKey = MSUF_GetColorFromKey
 G.MSUF_GetColorFromKey = MSUF_GetColorFromKey
 
+-- Numeric-only runtime consumers should not force a ColorObject into
+-- existence. Share the canonical palette lookup while retaining the object
+-- API above for consumers that need it.
+local function MSUF_GetColorRGBFromKey(key)
+    if type(key) ~= "string" then return nil end
+    local rgb = MSUF_FONT_COLORS[key]
+    if not rgb then rgb = MSUF_FONT_COLORS[string_lower(key)] end
+    if not rgb then return nil end
+    return rgb[1] or 1, rgb[2] or 1, rgb[3] or 1
+end
+MSUF.MSUF_GetColorRGBFromKey = MSUF_GetColorRGBFromKey
+G.MSUF_GetColorRGBFromKey = MSUF_GetColorRGBFromKey
+
 G.MSUF_DARK_TONES = {
     black    = { 0.0, 0.0, 0.0 },
     darkgray = { 0.08, 0.08, 0.08 },

@@ -83,11 +83,11 @@ function G.MSUF_BuildCastbarFrameElements(frame)
 
     frame.background = frame:CreateTexture(nil, "BACKGROUND")
     frame.background:SetAllPoints(frame)
-    frame.background:SetColorTexture(0, 0, 0, 1)
+    frame.background:SetColorTexture(0, 0, 0, 0)
 
     local statusBar = CreateFrame("StatusBar", nil, frame)
     statusBar:SetPoint("LEFT", frame, "LEFT", barHeight + 1, 0)
-    statusBar:SetSize(frame:GetWidth() - barHeight - 1, frame:GetHeight() - 2)
+    statusBar:SetSize(frame:GetWidth() - barHeight - 1, frame:GetHeight())
     statusBar:SetStatusBarTexture(CastbarTexture())
 
     if statusBar:GetStatusBarTexture() then
@@ -151,7 +151,7 @@ function G.MSUF_CreateCastbarPreviewFrame(unit, name, options)
     local parent = options.parent or UIParent
     local width = tonumber(options.width) or 250
     local height = tonumber(options.height) or 18
-    local statusBarHeight = tonumber(options.statusBarHeight) or math.max(4, height - 2)
+    local statusBarHeight = tonumber(options.statusBarHeight) or height
 
     local frame = CreateFrame("Frame", name, parent, options.template or "BackdropTemplate")
     frame.unit = unit
@@ -162,7 +162,7 @@ function G.MSUF_CreateCastbarPreviewFrame(unit, name, options)
 
     frame._msufFrameBG = frame:CreateTexture(nil, "BACKGROUND")
     frame._msufFrameBG:SetAllPoints(frame)
-    frame._msufFrameBG:SetColorTexture(0, 0, 0, options.bgAlpha or 0.8)
+    frame._msufFrameBG:SetColorTexture(0, 0, 0, 0)
 
     local statusBar = CreateFrame("StatusBar", nil, frame)
     if frame.GetFrameLevel and statusBar.SetFrameLevel then

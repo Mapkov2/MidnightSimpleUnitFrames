@@ -435,6 +435,14 @@ local function OutlineTextures(frame)
 end
 
 local function TintOutline(frame, red, green, blue, alpha)
+    local host = frame and (frame._msufOutlineHost or (frame._msufOutline and frame._msufOutline._host))
+    if host and host.SetBackdropBorderColor and host.IsShown and host:IsShown() then
+        host:SetBackdropBorderColor(red, green, blue, alpha)
+        frame._kickReadyBorderTinted = true
+        return
+    end
+
+    -- Compatibility with frames created by an older in-session implementation.
     local top, bottom, left, right = OutlineTextures(frame)
     if not top then
         return
