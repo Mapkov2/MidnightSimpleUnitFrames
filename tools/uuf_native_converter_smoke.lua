@@ -1513,6 +1513,18 @@ do
         "Blizzard CDM world-entry reanchors preserve the forced refresh bit"
     )
     Truthy(
+        mainSource:find('if anchorFrameName == "UI_Parent" then anchorFrameName = "UIParent" end', 1, true)
+            and mainSource:find('if globalAnchor == "UI_Parent" then globalAnchor = "UIParent" end', 1, true)
+            and not mainSource:find("local function MSUF_CanonicalAnchorFrameName", 1, true),
+        "legacy UI_Parent anchors resolve without consuming a main-chunk local"
+    )
+    Truthy(
+        mainSource:find("if not state.pending or state.flushing then return end", 1, true)
+            and mainSource:find("MSUF_LateAnchorReanchorFlush(force)", 1, true)
+            and not mainSource:find("local function MSUF_FlushScheduledLateAnchorReanchor", 1, true),
+        "late-anchor retry stays guarded without consuming a main-chunk local"
+    )
+    Truthy(
         mainSource:find('if event == "PLAYER_ENTERING_WORLD" then', 1, true)
             and mainSource:find("_G.MSUF_ScheduleLateAnchorReanchor(true)", 1, true)
             and mainSource:find('_G.MSUF_ScheduleCooldownWidthRefresh("EssentialCooldownViewer")', 1, true),
@@ -1532,6 +1544,73 @@ do
         mainSource:find("_G.MSUF_RunPostCombatReanchorPass(skipScreenClamp)", 1, true),
         "CDM world-entry no-clamp state survives an in-combat zone transition"
     )
+
+    -- Execute the real scheduler block. The simulated bridge flush asks for
+    -- another retry just like an unresolved unitframe anchor does. One timer
+    -- must drain without creating a next-frame chain.
+    local normalizedMainSource = mainSource:gsub("\r\n", "\n")
+    local schedulerSource = assert(normalizedMainSource:match(
+        "(_G%.MSUF_LateAnchorReanchorState =.-\nend)\n\ndo\n    local lateAnchorEvents"
+    ), "could not extract the late-anchor scheduler")
+    local savedTimer = _G.C_Timer
+    local savedCombat = _G.InCombatLockdown
+    local savedState = _G.MSUF_LateAnchorReanchorState
+    local savedSchedule = _G.MSUF_ScheduleLateAnchorReanchor
+    local savedPositionLegacy = _G.MSUF_PositionLegacyCooldownViewerAnchor
+    local savedFlushBridge = _G.MSUF_FlushCDMBridgeRefresh
+    local savedExtensionChanged = _G.MSUF_OnCDMExtensionChanged
+    local savedRequestAfterCombat = _G.MSUF_RequestUnitFrameReanchorAfterCombat
+    local savedDirty = _G.MSUF_CDMBridgeDirty
+
+    local timers = {}
+    local flushForces = {}
+    _G.C_Timer = { After = function(delay, callback)
+        Equal(delay, 0, "late-anchor retry remains a next-frame one-shot")
+        timers[#timers + 1] = callback
+    end }
+    _G.InCombatLockdown = function() return false end
+    _G.MSUF_LateAnchorReanchorState = nil
+    _G.MSUF_PositionLegacyCooldownViewerAnchor = nil
+    _G.MSUF_OnCDMExtensionChanged = nil
+    _G.MSUF_RequestUnitFrameReanchorAfterCombat = nil
+    _G.MSUF_FlushCDMBridgeRefresh = function(force)
+        flushForces[#flushForces + 1] = force == true
+        Equal(_G.MSUF_ScheduleLateAnchorReanchor(), false,
+            "flush-time missing-anchor retry is suppressed")
+    end
+    assert(loadstring(schedulerSource, "5.74 late-anchor scheduler"))()
+
+    Equal(_G.MSUF_ScheduleLateAnchorReanchor(), true, "initial late-anchor retry is queued")
+    Equal(_G.MSUF_ScheduleLateAnchorReanchor(), false, "duplicate late-anchor retry is coalesced")
+    Equal(#timers, 1, "duplicate retry does not create another timer")
+    table.remove(timers, 1)()
+    Equal(#flushForces, 1, "late-anchor bridge flush runs exactly once")
+    Equal(#timers, 0, "flush-time retry cannot create an endless timer chain")
+    Equal(_G.MSUF_LateAnchorReanchorState.pending, false, "late-anchor pending state clears after flush")
+    Equal(_G.MSUF_LateAnchorReanchorState.flushing, false, "late-anchor flushing state clears after flush")
+
+    Equal(_G.MSUF_ScheduleLateAnchorReanchor(), true, "second late-anchor retry is queued")
+    Equal(_G.MSUF_ScheduleLateAnchorReanchor(true), false, "queued force retry is coalesced")
+    Equal(#timers, 1, "force upgrade does not create another timer")
+    table.remove(timers, 1)()
+    Equal(flushForces[2], true, "queued retry is upgraded to one forced flush")
+    Equal(#timers, 0, "forced flush cannot create an endless timer chain")
+
+    _G.C_Timer = nil
+    Equal(_G.MSUF_ScheduleLateAnchorReanchor(true), true, "no-timer fallback runs synchronously")
+    Equal(flushForces[3], true, "no-timer fallback flushes exactly once")
+    Equal(_G.MSUF_LateAnchorReanchorState.pending, false, "synchronous pending state clears")
+    Equal(_G.MSUF_LateAnchorReanchorState.flushing, false, "synchronous flushing state clears")
+
+    _G.C_Timer = savedTimer
+    _G.InCombatLockdown = savedCombat
+    _G.MSUF_LateAnchorReanchorState = savedState
+    _G.MSUF_ScheduleLateAnchorReanchor = savedSchedule
+    _G.MSUF_PositionLegacyCooldownViewerAnchor = savedPositionLegacy
+    _G.MSUF_FlushCDMBridgeRefresh = savedFlushBridge
+    _G.MSUF_OnCDMExtensionChanged = savedExtensionChanged
+    _G.MSUF_RequestUnitFrameReanchorAfterCombat = savedRequestAfterCombat
+    _G.MSUF_CDMBridgeDirty = savedDirty
 end
 
 do

@@ -1754,16 +1754,13 @@ local function BuildAuras(ctx)
     M.AddRefresher(ctx, function()
         local key = AuraScope()
         local isShared = key == "shared"
-        local isBoss = key == "boss1" or key == "boss2" or key == "boss3" or key == "boss4" or key == "boss5"
-        if isBoss then
-            ignoreLabel:SetText(M.Tr("Editing:") .. " |cff38c7f0" .. M.Tr("Shared (boss frames)") .. "|r")
-        elseif isShared then
+        if isShared then
             ignoreLabel:SetText(M.Tr("Editing:") .. " |cff38c7f0" .. M.Tr("Shared (all units)") .. "|r")
         else
             ignoreLabel:SetText(M.Tr("Editing:") .. " |cff38c7f0" .. M.Tr(tostring(key:gsub("^%l", string.upper))) .. "|r")
         end
-        SetControlEnabled(ignoreOverride, not isShared and not isBoss)
-        local canEdit = isShared or isBoss or AurasUnit(key).overrideIgnore == true
+        SetControlEnabled(ignoreOverride, not isShared)
+        local canEdit = isShared or AurasUnit(key).overrideIgnore == true
         for i = 1, #ignoreControls do SetControlEnabled(ignoreControls[i], canEdit) end
     end)
 

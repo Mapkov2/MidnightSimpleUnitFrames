@@ -1849,6 +1849,7 @@ end
 -- then the normal global named anchor.
 local function MSUF_ResolveAnchorSettings(conf, general)
     local anchorFrameName = conf and conf.anchorFrameName
+    if anchorFrameName == "UI_Parent" then anchorFrameName = "UIParent" end
     if type(anchorFrameName) == "string" and anchorFrameName ~= "" then
         return anchorFrameName, conf.anchorToUnitframe, MSUF_IsCooldownViewerAnchorName(anchorFrameName)
     end
@@ -1870,6 +1871,7 @@ local function MSUF_ResolveAnchorSettings(conf, general)
     end
 
     local globalAnchor = general and general.anchorName
+    if globalAnchor == "UI_Parent" then globalAnchor = "UIParent" end
     if MSUF_IsCooldownViewerAnchorName(globalAnchor) then
         return globalAnchor, "GLOBAL", true
     end
@@ -1930,6 +1932,7 @@ _G.MSUF_ResolveConfiguredAnchorFrame = MSUF_ResolveConfiguredAnchorFrame
 _G.MSUF_UsesEssentialCooldownAnchor = MSUF_UsesEssentialCooldownAnchor
 
 local function MSUF_IsDefaultAnchorName(anchorName)
+    if anchorName == "UI_Parent" then anchorName = "UIParent" end
     return anchorName == nil
         or anchorName == ""
         or anchorName == "UIParent"
@@ -2472,6 +2475,7 @@ end
 _G.MSUF_LateAnchorReanchorState = _G.MSUF_LateAnchorReanchorState or {
     pending = false,
     forcePosition = false,
+    flushing = false,
 }
 local MSUF_LATE_ANCHOR_UNIT_KEYS = { "player", "target", "targettarget", "focus", "focustarget", "pet", "boss" }
 
@@ -2515,12 +2519,19 @@ local function MSUF_LateAnchorReanchorFlush(forcePosition)
 end
 
 _G.MSUF_ScheduleLateAnchorReanchor = function(forcePosition)
-    _G.MSUF_CDMBridgeDirty = true
     local state = _G.MSUF_LateAnchorReanchorState
     if type(state) ~= "table" then
-        state = { pending = false, forcePosition = false }
+        state = { pending = false, forcePosition = false, flushing = false }
         _G.MSUF_LateAnchorReanchorState = state
     end
+    if state.pending then
+        -- Upgrade work that is queued but has not started. Requests emitted by
+        -- the running flush itself are deliberately ignored.
+        if forcePosition and not state.flushing then state.forcePosition = true end
+        return false
+    end
+
+    _G.MSUF_CDMBridgeDirty = true
     if forcePosition then state.forcePosition = true end
 
     if InCombatLockdown and InCombatLockdown() then
@@ -2530,23 +2541,29 @@ _G.MSUF_ScheduleLateAnchorReanchor = function(forcePosition)
         return false
     end
 
-    if state.pending then return false end
     state.pending = true
 
     if not (C_Timer and C_Timer.After) then
-        state.pending = false
         local force = state.forcePosition == true
         state.forcePosition = false
+        state.flushing = true
+        -- Keep pending=true until the full bridge/unitframe pass is finished.
+        -- ApplyPosition can request another retry during that pass; clearing
+        -- pending first creates an endless full-apply timer chain.
         MSUF_LateAnchorReanchorFlush(force)
+        state.flushing = false
+        state.pending = false
         return true
     end
 
     C_Timer.After(0, function()
-        if not state.pending then return end
-        state.pending = false
+        if not state.pending or state.flushing then return end
         local force = state.forcePosition == true
         state.forcePosition = false
+        state.flushing = true
         MSUF_LateAnchorReanchorFlush(force)
+        state.flushing = false
+        state.pending = false
     end)
     return true
 end

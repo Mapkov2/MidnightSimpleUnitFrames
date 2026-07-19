@@ -10,6 +10,8 @@
 
 - Added independent Castbar icon-outline thickness using the configured Castbar border color.
 - Expanded Auto Width to Player, Target, Focus, and Boss Castbars with exact Unit Frame or Cooldown Manager matching and adjustable offsets.
+- Fixed imported profiles with legacy `UI_Parent` anchors causing an endless full Unit Frame reanchor loop, extreme idle CPU usage, and severe FPS loss; affected profiles are now repaired automatically.
+- Expanded Skyriding aura filtering to include Thrill of the Skies and both Flight Style auras, with per-Boss Unit Aura ignore-list overrides available again.
 - Preserved character-specific keybindings by no longer replaying account-wide stored bindings automatically.
 - Reopened the options menu on its last active page and corrected custom scrollbar dragging without idle polling.
 

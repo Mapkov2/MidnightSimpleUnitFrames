@@ -219,6 +219,11 @@ assert(resolved == explicit,
 assert(_G.MSUF_UsesEssentialCooldownAnchor(
     { anchorFrameName = "ExplicitUnitAnchor", anchorToUnitframe = "GLOBAL" }, _G.MSUF_DB.general
 ) == false, "explicit per-unit anchor was incorrectly classified as a cooldown consumer")
+resolved, missing = _G.MSUF_ResolveConfiguredAnchorFrame(
+    "pet", { anchorFrameName = "UI_Parent", anchorToUnitframe = "GLOBAL" }, _G.UIParent
+)
+assert(resolved == _G.UIParent and missing == nil,
+    "legacy UI_Parent alias did not resolve directly to UIParent")
 
 local rebinds = 0
 local widthRefreshes = 0

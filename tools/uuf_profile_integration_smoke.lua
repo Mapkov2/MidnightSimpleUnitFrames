@@ -213,6 +213,18 @@ profileChunk("MidnightSimpleUnitFrames", ns)
 local ImportActive = assert(_G.MSUF_Profiles_ImportFromString)
 local ImportLegacy = assert(_G.MSUF_Profiles_ImportLegacyFromString)
 local ImportExternal = assert(_G.MSUF_Profiles_ImportExternal)
+local NormalizeAnchorAliases = assert(_G.MSUF_ProfileIO_NormalizeAnchorAliases)
+
+do
+    local profile = {
+        general = { anchorName = "UI_Parent" },
+        pet = { anchorFrameName = "UI_Parent", anchorToUnitframe = "GLOBAL" },
+    }
+    Check("UI_Parent alias normalization reports a repair", NormalizeAnchorAliases(profile) == true)
+    Check("UI_Parent aliases normalize to UIParent",
+        profile.general.anchorName == "UIParent" and profile.pet.anchorFrameName == "UIParent")
+    Check("anchor alias normalization is idempotent", NormalizeAnchorAliases(profile) == false)
+end
 
 local function FreshProfiles()
     local active = {
@@ -373,17 +385,23 @@ end
 -- Native MSUF imports retain the established runtime path; the extra icon
 -- refresh is requested only by the UUF converter routes above.
 do
-    FreshProfiles()
+    local active = FreshProfiles()
     ResetInstrumentation()
     local decodeCompact = _G.MSUF_TryDecodeCompactString
+    local importedProfile = DeepCopy(convertedTemplate)
+    importedProfile.general = { anchorName = "UI_Parent" }
+    importedProfile.pet = { anchorFrameName = "UI_Parent", anchorToUnitframe = "GLOBAL" }
     _G.MSUF_TryDecodeCompactString = function()
-        return { addon = "MSUF", fmt = 2, kind = "all", payload = DeepCopy(convertedTemplate) }
+        return { addon = "MSUF", fmt = 2, kind = "all", payload = importedProfile }
     end
 
     local result = ImportActive("MSUF3:native_profile_smoke")
     _G.MSUF_TryDecodeCompactString = decodeCompact
 
     Check("native MSUF import still succeeds", result == true)
+    Check("native MSUF import repairs the UI_Parent alias",
+        active.general and active.general.anchorName == "UIParent"
+            and active.pet and active.pet.anchorFrameName == "UIParent")
     Check("native MSUF import does not request UUF status refresh", (counts.statusRefresh or 0) == 0, counts.statusRefresh)
     Check("native MSUF import does not load UUF converter", (counts.loadAddon or 0) == 0, counts.loadAddon)
 end

@@ -175,6 +175,9 @@ local _IGNORE_CAT_SPELLS = {
         [71041]  = true,   -- Dungeon Deserter
     },
     SKYRIDING = {
+        [377234] = true,   -- Thrill of the Skies
+        [404464] = true,   -- Flight Style: Skyriding
+        [404468] = true,   -- Flight Style: Steady
         [427490] = true,   -- Ride Along Available
         [447959] = true,   -- Ride Along Active
         [447960] = true,   -- Ride Along Inactive
@@ -253,7 +256,7 @@ local _IGNORE_CAT_META = {
     { key = "ROGUE_POISONS",    label = "Rogue Poisons",           tooltip = "Self-applied poison buffs (Deadly, Wound, Crippling, etc.)." },
     { key = "SHAMAN_IMBUE",     label = "Shaman Imbuements",       tooltip = "Weapon enchant buffs (Windfury, Flametongue, Earthliving, etc.)." },
     { key = "DESERTER",         label = "Deserter",                tooltip = "BG and Dungeon deserter debuffs." },
-    { key = "SKYRIDING",        label = "Skyriding",               tooltip = "Ride Along auras (Available, Active, Inactive)." },
+    { key = "SKYRIDING",        label = "Skyriding",               tooltip = "Flight Style, Thrill of the Skies, and Ride Along auras." },
     { key = "SELF_BUFFS",       label = "Long-term Self Buffs",    tooltip = "Rite of Sanctification, Rite of Adjuration." },
     { key = "RESOURCE_AURAS",   label = "Resource-like Auras",     tooltip = "Mage Icicles, Hunter Tip of the Spear." },
     { key = "COOLDOWNS",        label = "Cooldowns",               tooltip = "Hearthstone, Reincarnation cooldown auras." },
