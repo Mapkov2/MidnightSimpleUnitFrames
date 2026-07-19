@@ -1803,6 +1803,7 @@ local function MSUF_ProfileIO_NormalizeUnitFramePositionDB(profile, legacyProfil
 
     local function NormalizeUnit(conf)
         if type(conf) ~= "table" then return end
+        if conf.anchorFrameName == "UI_Parent" then conf.anchorFrameName = "UIParent" end
         if conf.point == nil and conf.anchorMyPoint ~= nil then conf.point = conf.anchorMyPoint end
         if conf.relativePoint == nil and conf.anchorRelPoint ~= nil then conf.relativePoint = conf.anchorRelPoint end
         if conf.offsetX == nil and conf.x ~= nil then conf.offsetX = conf.x end
@@ -1835,6 +1836,9 @@ local function MSUF_ProfileIO_NormalizeUnitFramePositionDB(profile, legacyProfil
     for i = 1, 5 do
         NormalizeUnit(profile["boss" .. i])
     end
+    if type(profile.general) == "table" and profile.general.anchorName == "UI_Parent" then
+        profile.general.anchorName = "UIParent"
+    end
     return profile
 end
 
@@ -1844,7 +1848,7 @@ local MSUF_PROFILEIO_LEGACY_PROFILE_SCHEMA_56 = 560
 --- MSUF_ProfileIO_TranslateProfileToCurrent, independently from the broad
 --- default-fill revision owned by MSUF_Defaults.lua. Bump it whenever that
 --- translation pipeline gains a new mandatory repair.
-local MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = 10
+local MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = 11
 local MSUF_PROFILEIO_TEXT_SCOPE_KEYS = {
     "general",
     "player", "target", "targettarget", "tot", "targetoftarget",
