@@ -17,6 +17,9 @@ assert(settle:find("builder:RelayoutCollapsibles()", 1, true)
     "visible-page layout settle does not finish page/scroll geometry")
 assert(settle:find("C_Timer.After(0, Settle)", 1, true),
     "visible-page layout settle is not deferred until anchored widths resolve")
+assert(settle:find("entry._msuf2VisibleFontSettled", 1, true)
+    and settle:find("T.RefreshMenuFonts(entry.wrapper, true)", 1, true),
+    "visible-page layout settle does not retry cold custom-font application once")
 assert(not settle:find("OnUpdate", 1, true),
     "visible-page layout settle added recurring runtime work")
 

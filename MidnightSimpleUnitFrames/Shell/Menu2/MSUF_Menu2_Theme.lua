@@ -364,7 +364,40 @@ end
 function T.ClearMenuFontCache()
     menuFontCacheKey, menuFontCachePath = nil, nil
 end
-local function ApplyStyledFont(fs)
+local function NormalizeAppliedFontPath(path)
+    if type(path) ~= "string" then return nil end
+    return path:gsub("/", "\\"):lower()
+end
+local function FontPathMatches(expected, actual)
+    if expected == actual then return true end
+    local matches = _G.MSUF_FontPathMatches or _G.MSUF_FontPathEquals
+    if type(matches) == "function" then
+        local ok, same = pcall(matches, expected, actual)
+        if ok and same == true then return true end
+    end
+    expected, actual = NormalizeAppliedFontPath(expected), NormalizeAppliedFontPath(actual)
+    return expected ~= nil and actual ~= nil and expected == actual
+end
+local function FontHasRenderableText(fs)
+    if not (fs and fs.GetText and fs.GetStringWidth) then return true end
+    local okText, text = pcall(fs.GetText, fs)
+    if not okText or type(text) ~= "string" or not text:find("%S") then return true end
+    local okWidth, width = pcall(fs.GetStringWidth, fs)
+    return not okWidth or type(width) ~= "number" or width > 0
+end
+local function FontApplicationMatches(fs, expectedFont, expectedSize, expectedFlags)
+    local ok, actualFont, actualSize, actualFlags = pcall(fs.GetFont, fs)
+    if not ok or not FontPathMatches(expectedFont, actualFont) then return false end
+    if type(actualSize) == "number" and math.abs(actualSize - expectedSize) > 0.01 then return false end
+    if tostring(actualFlags or "") ~= tostring(expectedFlags or "") then return false end
+    return FontHasRenderableText(fs)
+end
+local function TryApplyStyledFont(fs, font, size, flags)
+    if type(font) ~= "string" or font == "" then return false end
+    local ok, applied = pcall(fs.SetFont, fs, font, size, flags)
+    return ok and applied ~= false and FontApplicationMatches(fs, font, size, flags)
+end
+local function ApplyStyledFont(fs, force)
     if not (fs and fs.GetFont and fs.SetFont) then return false end
     local font, size, flags = fs:GetFont()
     if font and size and not fs._msuf2FontOriginal then fs._msuf2FontOriginal = { font = font, size = size, flags = flags } end
@@ -378,22 +411,22 @@ local function ApplyStyledFont(fs)
     local menuFont = ResolveMenuFontPath(nextSize, nextFlags, role)
     local nextFont = menuFont or orig.font or font
     local fontKey = tostring(nextFont or "") .. "\030" .. tostring(nextSize or "") .. "\030" .. tostring(nextFlags or "")
-    if fs._msuf2AppliedFontKey == fontKey then return true end
-    local ok, applied = pcall(fs.SetFont, fs, nextFont, nextSize, nextFlags)
-    if (not ok or applied == false) and nextFont ~= orig.font and orig.font then
-        ok, applied = pcall(fs.SetFont, fs, orig.font, nextSize, nextFlags)
-        if ok and applied ~= false then
-            fontKey = tostring(orig.font or "") .. "\030" .. tostring(nextSize or "") .. "\030" .. tostring(nextFlags or "")
-        end
+    if not force and fs._msuf2AppliedFontKey == fontKey and FontApplicationMatches(fs, nextFont, nextSize, nextFlags) then
+        return true
     end
-    if ok and applied ~= false and fs._msuf2DropdownDefaultFont then
+    local applied = TryApplyStyledFont(fs, nextFont, nextSize, nextFlags)
+    if not applied and nextFont ~= orig.font and orig.font then
+        applied = TryApplyStyledFont(fs, orig.font, nextSize, nextFlags)
+        if applied then fontKey = tostring(orig.font or "") .. "\030" .. tostring(nextSize or "") .. "\030" .. tostring(nextFlags or "") end
+    end
+    if applied and fs._msuf2DropdownDefaultFont then
         local appliedFont, appliedSize, appliedFlags = fs:GetFont()
         if appliedFont and appliedSize then
             fs._msuf2DropdownDefaultFont = { appliedFont, appliedSize, appliedFlags or "" }
         end
     end
-    if ok and applied ~= false then fs._msuf2AppliedFontKey = fontKey end
-    return ok and applied ~= false
+    fs._msuf2AppliedFontKey = applied and fontKey or nil
+    return applied
 end
 function T.StyleFontString(fs, color, bump, role)
     if not fs then return fs end
@@ -423,31 +456,31 @@ function T.StyleFontString(fs, color, bump, role)
     end
     return fs
 end
-local function RefreshMenuFonts(root, seen)
+local function RefreshMenuFonts(root, seen, force)
     if not root or seen[root] then return end
     seen[root] = true
-    if root._msuf2FontOriginal then ApplyStyledFont(root) end
+    if root._msuf2FontOriginal then ApplyStyledFont(root, force) end
     if root.GetRegions then
         local regions = { root:GetRegions() }
         for i = 1, #regions do
             local region = regions[i]
-            if region and region._msuf2FontOriginal then ApplyStyledFont(region) end
+            if region and region._msuf2FontOriginal then ApplyStyledFont(region, force) end
         end
     end
     if root.GetChildren then
         local children = { root:GetChildren() }
-        for i = 1, #children do RefreshMenuFonts(children[i], seen) end
+        for i = 1, #children do RefreshMenuFonts(children[i], seen, force) end
     end
 end
-function T.RefreshMenuFonts(root)
+function T.RefreshMenuFonts(root, force)
     T.ClearMenuFontCache()
     local seen = {}
     if root then
-        RefreshMenuFonts(root, seen)
+        RefreshMenuFonts(root, seen, force == true)
         return
     end
-    RefreshMenuFonts(M.frame, seen)
-    RefreshMenuFonts(M.minimizedBar, seen)
+    RefreshMenuFonts(M.frame, seen, force == true)
+    RefreshMenuFonts(M.minimizedBar, seen, force == true)
 end
 local function SetSuperellipseVertexColor(self, r, g, b, a)
     a = a or 1
