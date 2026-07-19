@@ -4,10 +4,31 @@ local _, ns = ...
 ns = ns or {}
 
 local data = {
-    currentVersion = "5.73",
-    previousVersion = "5.72",
-    rangeLabel = "5.72 -> 5.73",
+    currentVersion = "5.74",
+    previousVersion = "5.73",
+    rangeLabel = "5.73 -> 5.74",
     entries = {
+        {
+            version = "5.74",
+            date = "2026-07-19",
+            sections = {
+                {
+                    title = "Highlight",
+                    bullets = {
+                        "Rebuilt Castbar outlines for crisp, pixel-perfect borders at every UI scale across live Castbars, previews, and Boss Castbars.",
+                    },
+                },
+                {
+                    title = "Improvements & Fixes",
+                    bullets = {
+                        "Added independent Castbar icon-outline thickness using the configured Castbar border color.",
+                        "Expanded Auto Width to Player, Target, Focus, and Boss Castbars with exact Unit Frame or Cooldown Manager matching and adjustable offsets.",
+                        "Preserved character-specific keybindings by no longer replaying account-wide stored bindings automatically.",
+                        "Reopened the options menu on its last active page and corrected custom scrollbar dragging without idle polling.",
+                    },
+                },
+            },
+        },
         {
             version = "5.73",
             date = "2026-07-18",
@@ -27,7 +48,6 @@ local data = {
                         "Fixed edge case Blizzard Cooldown Manager anchors shifting unit frames after instance and zone transitions.",
                         "Fixed visible Group Frame power bars shifting name text vertically in live frames and previews.",
                         "Fixed split health text updates relying on secret-string comparisons.",
-                        "Fixed unit frames anchored to Skiron or Coolinator not reliably following provider size, visibility, and primary-layout changes.",
                         "Fixed dragging third-party anchored unit frames and synchronizing cooldown-sized power bars.",
                     },
                 },
@@ -112,20 +132,6 @@ local data = {
                         "Added a WoW 12.1 compatibility warning for MSUF 5.x stable builds that points users to the current CurseForge Beta.",
                         "Kept the new outline strata, frame-level, smooth-scroll, icon, and layout apply work on cold menu paths.",
                         "Kept combat and castbar fixes event-driven and cache-aware without adding constant polling.",
-                    },
-                },
-            },
-        },
-        {
-            version = "5.60",
-            date = "2026-06-19",
-            sections = {
-                {
-                    title = "Fixes",
-                    bullets = {
-                        "Removed the obsolete Important aura filter after WoW 12.0.7.",
-                        "Added new aura filters for unit and group frames: Cancelable, Not Cancelable, Raid in Combat, Crowd Control, Big Defensive, External Defensive, and Player Dispellable.",
-                        "Fixed group-frame right-click unit menus so the context menu opens directly in instanced combat without needing a prior left-click target selection.",
                     },
                 },
             },
