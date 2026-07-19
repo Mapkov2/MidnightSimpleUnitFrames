@@ -931,6 +931,7 @@ local function BuildPowerAndClassPowerColors(ctx, b, CH)
     M.colorsCPToken = M.colorsCPToken or "COMBO_POINTS"
     local cpColor, cpBg, slotMode, slotReset, fullToggle, fullColor, fullReset
     local slotControls = {}
+    local visibleSlotCount, slotControlsAvailable
     local function RequestClassPowerEditorRefresh(reason)
         if M.RequestRefresh then
             M.RequestRefresh(ctx, reason or "class-power-resource-editor")
@@ -940,17 +941,29 @@ local function BuildPowerAndClassPowerColors(ctx, b, CH)
     end
     local function RefreshSlotControls()
         local resourceToken = M.colorsCPToken or "COMBO_POINTS"
-        local count = ClassPowerSlotCount(resourceToken)
+        local count = min(#slotControls, ClassPowerSlotCount(resourceToken))
         local hasSlots = count > 0
-        W.SetControlShown(slotMode, hasSlots)
-        W.SetControlShown(slotReset, hasSlots)
-        W.SetControlShown(fullToggle, hasSlots)
-        W.SetControlShown(fullColor, hasSlots)
-        W.SetControlShown(fullReset, hasSlots)
-        for i = 1, #slotControls do
-            local shown = i <= count
-            W.SetControlShown(slotControls[i], shown)
+        if slotControlsAvailable ~= hasSlots then
+            -- New controls start shown. Avoid reapplying that default on the
+            -- common slot-based resources; SetControlShown also refreshes the
+            -- control layout and is intentionally reserved for real deltas.
+            if slotControlsAvailable ~= nil or not hasSlots then
+                W.SetControlShown(slotMode, hasSlots)
+                W.SetControlShown(slotReset, hasSlots)
+                W.SetControlShown(fullToggle, hasSlots)
+                W.SetControlShown(fullColor, hasSlots)
+                W.SetControlShown(fullReset, hasSlots)
+            end
+            slotControlsAvailable = hasSlots
         end
+        if visibleSlotCount == nil then
+            for i = count + 1, #slotControls do W.SetControlShown(slotControls[i], false) end
+        elseif count < visibleSlotCount then
+            for i = count + 1, visibleSlotCount do W.SetControlShown(slotControls[i], false) end
+        elseif count > visibleSlotCount then
+            for i = visibleSlotCount + 1, count do W.SetControlShown(slotControls[i], true) end
+        end
+        visibleSlotCount = count
     end
     ValueDropdownAt(ctx, classPower, "Resource type", 12, -10, COLOR_DATA.CP_TOKENS, 310,
         function() return M.colorsCPToken or "COMBO_POINTS" end,
@@ -1026,7 +1039,6 @@ local function BuildPowerAndClassPowerColors(ctx, b, CH)
         RequestClassPowerEditorRefresh("class-power-full-color-reset")
     end, "class_power.full_resource.reset")
     M.TrackRefresh(ctx, RefreshSlotControls)
-    RefreshSlotControls()
 end
 local function BuildAuraAndPortraitColors(ctx, b, CH)
     local auras = b:CollapsibleSection("colors_auras", "Auras", 526, false)
@@ -1768,7 +1780,18 @@ local function BuildColorPainter(ctx, b)
     painter.Build(ctx, b, categories)
 end
 
-local function BuildColorGroup(ctx, builder, id, title, subtitle, defaultOpen, build)
+local function ColorGroupHasPendingFocus(ctx, sectionIds)
+    local request = _G.MSUF_EM2_MenuFocusRequest
+    if type(request) ~= "table" or request.explicit ~= true or request.consumed == true then return false end
+    if request.pageKey and tostring(request.pageKey) ~= tostring(ctx and ctx.key or "") then return false end
+    local wanted = tostring(request.sectionId or "")
+    for i = 1, #(sectionIds or {}) do
+        if wanted == sectionIds[i] then return true end
+    end
+    return false
+end
+
+local function BuildColorGroup(ctx, builder, id, title, subtitle, defaultOpen, sectionIds, build)
     local group = builder:CollapsibleSection(id, title, 96, defaultOpen)
     local entry = group._msuf2CollapsibleEntry
     local groupW = group._msuf2Width or ctx.width or 720
@@ -1777,26 +1800,55 @@ local function BuildColorGroup(ctx, builder, id, title, subtitle, defaultOpen, b
         LabelAt(group, subtitle, 16, -8, groupW - 32, "GameFontHighlightSmall", T.colors.muted)
     end
 
-    local inner
-    inner = W.PageBuilder(ctx, {
-        parent = group,
-        width = groupW,
-        contentX = 0,
-        topInset = hasSubtitle and 30 or 0,
-        ancestorEntry = entry,
-        onContentHeight = function(height)
-            height = max(72, tonumber(height) or 72)
-            if entry.contentHeight == height then return end
-            entry.contentHeight = height
-            if entry.body and entry.body.SetHeight then entry.body:SetHeight(height) end
-            if entry.outer and entry.outer.SetHeight then
-                entry.outer:SetHeight(entry.headerHeight + (entry.open and height or 0))
+    local inner, built, building
+    local function BuildContent()
+        if built or building or not entry then return false end
+        building = true
+        local refreshers = ctx and ctx.refreshers
+        local refreshStart = type(refreshers) == "table" and #refreshers or 0
+        local wasBuilding = ctx and ctx._msuf2Building
+        if ctx then ctx._msuf2Building = true end
+        inner = W.PageBuilder(ctx, {
+            parent = group,
+            width = groupW,
+            contentX = 0,
+            topInset = hasSubtitle and 30 or 0,
+            ancestorEntry = entry,
+            onContentHeight = function(height)
+                height = max(72, tonumber(height) or 72)
+                if entry.contentHeight == height then return end
+                entry.contentHeight = height
+                if entry.body and entry.body.SetHeight then entry.body:SetHeight(height) end
+                if entry.outer and entry.outer.SetHeight then
+                    entry.outer:SetHeight(entry.headerHeight + (entry.open and height or 0))
+                end
+                builder:RequestRelayoutCollapsibles()
+            end,
+        })
+        build(inner)
+        inner:RelayoutCollapsibles()
+        built = true
+        building = nil
+        if ctx then ctx._msuf2Building = wasBuilding end
+        if not wasBuilding and type(refreshers) == "table" then
+            for i = refreshStart + 1, #refreshers do
+                local refresh = refreshers[i]
+                if type(refresh) == "function" then refresh() end
             end
-            builder:RequestRelayoutCollapsibles()
-        end,
-    })
-    build(inner)
-    inner:RelayoutCollapsibles()
+            -- The current outer relayout reads the updated body height after
+            -- this callback, so its pending marker has already been satisfied.
+            builder._msuf2RelayoutPending = nil
+        end
+        return true
+    end
+    local function RefreshLazyGroup()
+        if entry.open and not built then return BuildContent() end
+    end
+    if (ctx and ctx.hiddenBuild) or entry.open or ColorGroupHasPendingFocus(ctx, sectionIds) then
+        BuildContent()
+    else
+        entry._msuf2RefreshState = RefreshLazyGroup
+    end
     return group
 end
 
@@ -1805,18 +1857,22 @@ local function BuildColors(ctx)
     b:GlobalStyleHeader("Colors", "Frame, group-frame, bar, aura, castbar and resource colors.", 72)
     BuildColorPainter(ctx, b)
 
-    BuildColorGroup(ctx, b, "colors_group_general", "General", "The shared color rules used across MSUF.", false, function(inner)
+    BuildColorGroup(ctx, b, "colors_group_general", "General", "The shared color rules used across MSUF.", false,
+        { "colors_appearance", "colors_font" }, function(inner)
         BuildBackgroundAndAppearance(ctx, inner, CH, "appearance")
         BuildFontAndClassColors(ctx, inner, CH, "font")
     end)
-    BuildColorGroup(ctx, b, "colors_group_units", "Unit Frames", "Reaction colors and feedback for individual units.", false, function(inner)
+    BuildColorGroup(ctx, b, "colors_group_units", "Unit Frames", "Reaction colors and feedback for individual units.", false,
+        { "colors_unit", "colors_npc_type", "colors_highlight" }, function(inner)
         BuildUnitAndNPCColors(ctx, inner, CH)
         BuildHighlightAndGameplayColors(ctx, inner, CH, "highlight")
     end)
-    BuildColorGroup(ctx, b, "colors_group_groups", "Group Frames", nil, false, function(inner)
+    BuildColorGroup(ctx, b, "colors_group_groups", "Group Frames", nil, false,
+        { "colors_group_frames", "colors_group_frames_background", "colors_group_frames_state", "colors_group_frames_highlights" }, function(inner)
         BuildGroupFrameColors(ctx, inner)
     end)
-    BuildColorGroup(ctx, b, "colors_group_bars", "Bars", "Health, power, class resources, castbars and predictions.", false, function(inner)
+    BuildColorGroup(ctx, b, "colors_group_bars", "Bars", "Health, power, class resources, castbars and predictions.", false,
+        { "colors_classes", "colors_background", "colors_bar_colors", "colors_bar_gradients", "colors_castbar", "colors_power", "colors_class_power" }, function(inner)
         BuildFontAndClassColors(ctx, inner, CH, "classes")
         BuildBackgroundAndAppearance(ctx, inner, CH, "background")
         BuildBarAndGroupColors(ctx, inner, CH, false)
@@ -1824,7 +1880,8 @@ local function BuildColors(ctx)
         BuildCastbarColors(ctx, inner, CH)
         BuildPowerAndClassPowerColors(ctx, inner, CH)
     end)
-    BuildColorGroup(ctx, b, "colors_group_additional", "Additional", "Combat feedback, aura timers and portraits.", false, function(inner)
+    BuildColorGroup(ctx, b, "colors_group_additional", "Additional", "Combat feedback, aura timers and portraits.", false,
+        { "colors_gameplay", "colors_auras", "colors_portrait" }, function(inner)
         BuildHighlightAndGameplayColors(ctx, inner, CH, "gameplay")
         BuildAuraAndPortraitColors(ctx, inner, CH)
     end)

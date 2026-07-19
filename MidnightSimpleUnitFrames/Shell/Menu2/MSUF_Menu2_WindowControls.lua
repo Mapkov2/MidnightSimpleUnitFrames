@@ -12,6 +12,10 @@ local max = math.max
 local min = math.min
 local CONTROL_HEIGHT = 24
 local SEGMENT_WIDTH = 30
+-- Window chrome only needs to sit above its own shell/header. Keeping this
+-- relative offset below the normal popup level prevents the cached main-menu
+-- controls from punching through modal Menu2 surfaces such as the color picker.
+local WINDOW_CONTROL_LEVEL_OFFSET = 16
 local GROUP_ATLAS_RIGHT = 0.75 -- authored control occupies 96px of a 128px atlas
 local GROUP_ATLAS_ROWS = {
     [1] = { 0.25, 0.50 }, -- minimize hover
@@ -209,7 +213,7 @@ local function RefreshWindowControls(frame)
     frame = frame or M.frame
     if not frame then return end
     local baseLevel = (frame.GetFrameLevel and frame:GetFrameLevel()) or 0
-    local controlLevel = baseLevel + 140
+    local controlLevel = baseLevel + WINDOW_CONTROL_LEVEL_OFFSET
     if frame.windowControls and frame.windowControls.SetFrameLevel then frame.windowControls:SetFrameLevel(controlLevel) end
     local buttonLevel = frame.windowControls and (controlLevel + 1) or controlLevel
     if frame.closeButton and frame.closeButton.SetFrameLevel then frame.closeButton:SetFrameLevel(buttonLevel) end
