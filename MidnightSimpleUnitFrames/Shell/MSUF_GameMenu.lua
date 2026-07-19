@@ -153,11 +153,11 @@ local function OpenMSUFOptions()
     end
 
     if type(_G.MSUF_OpenStandaloneOptionsWindow) == "function" then
-        _G.MSUF_OpenStandaloneOptionsWindow("home")
+        _G.MSUF_OpenStandaloneOptionsWindow()
         return
     end
     if type(_G.MSUF_ShowStandaloneOptionsWindow) == "function" then
-        _G.MSUF_ShowStandaloneOptionsWindow("home")
+        _G.MSUF_ShowStandaloneOptionsWindow()
         return
     end
     if type(_G.MSUF_OpenOptionsMenu) == "function" then
