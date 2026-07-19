@@ -107,6 +107,41 @@ local function SetAlphaCached(obj, alpha, field, force)
   end
 end
 
+-- Borders and group corner indicators are dispatched back-to-back for the
+-- same threat event. Share the raw C-side snapshots inside that one Core
+-- dispatch without retaining them across events.
+local function ReadGroupThreatStatus(frame, unit)
+  local token = frame and frame._msufDispatchActive == true and frame._msufDispatchToken or nil
+  if token
+    and frame._msufGroupThreatDispatchToken == token
+    and frame._msufGroupThreatDispatchUnit == unit then
+    return frame._msufGroupThreatDispatchValue
+  end
+  local status = UnitThreatSituation and UnitThreatSituation(unit) or nil
+  if token then
+    frame._msufGroupThreatDispatchToken = token
+    frame._msufGroupThreatDispatchUnit = unit
+    frame._msufGroupThreatDispatchValue = status
+  end
+  return status
+end
+
+local function ReadGroupRole(frame, unit)
+  local token = frame and frame._msufDispatchActive == true and frame._msufDispatchToken or nil
+  if token
+    and frame._msufGroupRoleDispatchToken == token
+    and frame._msufGroupRoleDispatchUnit == unit then
+    return frame._msufGroupRoleDispatchValue
+  end
+  local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit) or nil
+  if token then
+    frame._msufGroupRoleDispatchToken = token
+    frame._msufGroupRoleDispatchUnit = unit
+    frame._msufGroupRoleDispatchValue = role
+  end
+  return role
+end
+
 MSUF.UFVisuals = {
   UF = UF,
   CreateFrame = CreateFrame,
@@ -138,4 +173,6 @@ MSUF.UFVisuals = {
   Clamp01 = Clamp01,
   SetFrameAlpha = SetFrameAlpha,
   SetAlphaCached = SetAlphaCached,
+  ReadGroupThreatStatus = ReadGroupThreatStatus,
+  ReadGroupRole = ReadGroupRole,
 }

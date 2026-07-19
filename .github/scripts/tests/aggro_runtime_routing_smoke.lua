@@ -294,9 +294,12 @@ Check(party._msufBorderShown == false and corner.shown == false,
 
 combatByUnit.party1 = true
 threatByUnit.party1 = 1
+local partyThreatQueriesBefore = threatQueries.party1 or 0
 party:Fire("UNIT_THREAT_LIST_UPDATE", "party1")
 Check(party._msufBorderShown == true and corner.shown == true,
   "party aggro visuals did not react to threat-list gain")
+Check((threatQueries.party1 or 0) - partyThreatQueriesBefore == 1,
+  "border and corner indicator did not share one dispatch-local threat snapshot")
 threatByUnit.party1 = 0
 party:Fire("UNIT_THREAT_SITUATION_UPDATE", "party1")
 Check(party._msufBorderShown == false and corner.shown == false,
@@ -309,7 +312,7 @@ threatByUnit.party1 = nil
 party:Fire("UNIT_THREAT_LIST_UPDATE", "party1")
 Check(party._msufBorderShown == false and corner.shown == false,
   "party aggro visuals did not clear nil threat")
-Check((threatQueries.party1 or 0) >= 8,
+Check((threatQueries.party1 or 0) >= 4,
   "party aggro visuals did not use one-argument UnitThreatSituation(party1)")
 
 -- Hidden frames suppress runtime events. OnShow must reseed threat-driven state.

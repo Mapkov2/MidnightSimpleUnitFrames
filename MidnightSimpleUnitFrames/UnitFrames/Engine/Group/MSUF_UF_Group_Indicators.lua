@@ -35,6 +35,9 @@ local max = math.max
 local Secrets = MSUF.Secrets or {}
 local UnitMissing = Secrets.UnitMissing or function(_) return false end
 local issecretvalue = _G.issecretvalue or function(_) return false end
+local Visuals = MSUF.UFVisuals or {}
+local ReadGroupThreatStatus = Visuals.ReadGroupThreatStatus
+local ReadGroupRole = Visuals.ReadGroupRole
 local Apply = MSUF.Apply or {}
 local ApplyColorTexture = Apply.ColorTexture or function(tex, r, g, b, a)
   if not tex then return end
@@ -117,27 +120,41 @@ end
 
 --- Threat values can be secret/unknown. Treat those as "no visible aggro" rather
 --- than throwing or showing stale indicators.
-local function AggroModeAllows(unit, mode)
+local function NormalizeAggroMode(mode)
   mode = tostring(mode or "ALL"):upper()
   if mode == "TANK_ONLY" then mode = "TANK"
   elseif mode == "HEALER_ONLY" then mode = "HEALER" end
+  return mode
+end
+
+local function AggroModeAllows(frame, unit, mode)
   if mode == "ALL" or mode == "" then return true end
   if not UnitGroupRolesAssigned then return false end
-  local role = UnitGroupRolesAssigned(unit)
+  local role
+  if ReadGroupRole then
+    role = ReadGroupRole(frame, unit)
+  else
+    role = UnitGroupRolesAssigned(unit)
+  end
   if issecretvalue(role) == true or role == nil then return false end
   if mode == "NON_TANK" then return role ~= "TANK" end
   if mode == "TANK" or mode == "HEALER" then return role == mode end
   return true
 end
 
-local function HasThreat(unit, cfg)
+local function HasThreat(frame, unit, cfg)
   if not UnitThreatSituation or not unit then return false end
-  if not AggroModeAllows(unit, cfg and cfg.aggroMode) then return false end
+  if not AggroModeAllows(frame, unit, cfg and cfg.runtimeAggroMode or "ALL") then return false end
   if UnitAffectingCombat then
     local active = UnitAffectingCombat(unit)
     if issecretvalue(active) == true or (active ~= true and active ~= 1) then return false end
   end
-  local status = UnitThreatSituation(unit)
+  local status
+  if ReadGroupThreatStatus then
+    status = ReadGroupThreatStatus(frame, unit)
+  else
+    status = UnitThreatSituation(unit)
+  end
   if issecretvalue(status) == true or status == nil then return false end
   status = tonumber(status)
   return status ~= nil and status >= 1
@@ -235,7 +252,7 @@ local function RuntimeThreat(frame, cfg, event)
     return
   end
   if frame._msufGFCornerPreparedCfg ~= cfg then return end
-  local threat = HasThreat(unit, cfg)
+  local threat = HasThreat(frame, unit, cfg)
   if (event == "UNIT_THREAT_SITUATION_UPDATE" or event == "UNIT_THREAT_LIST_UPDATE")
     and frame._msufGFCornerThreatCfg == cfg
     and frame._msufGFCornerThreatState == threat then
@@ -258,6 +275,7 @@ end
 function GroupCornerIndicators.Apply(frame)
   local cfg = frame.MSUFSpec and frame.MSUFSpec.cornerIndicators
   if not (cfg and cfg.enabled == true) then HideCorners(frame); return end
+  cfg.runtimeAggroMode = NormalizeAggroMode(cfg.aggroMode)
   cfg.runtimeThreat = cfg.needsThreat == true and RuntimeThreat or nil
   PrepareCornerIndicators(frame, cfg)
   if cfg.runtimeThreat then
@@ -266,6 +284,7 @@ function GroupCornerIndicators.Apply(frame)
 end
 function GroupCornerIndicators.Update(frame, event) UpdateCornerIndicators(frame, event) end
 function GroupCornerIndicators.Disable(frame) HideCorners(frame) end
+GroupCornerIndicators.NoDispatchUpdates = { [GroupCornerIndicators.Update] = true }
 
 UF.RegisterElement("GroupCornerIndicators", GroupCornerIndicators)
 
