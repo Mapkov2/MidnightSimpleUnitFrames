@@ -237,14 +237,18 @@ function Style:ApplyCastbarOutline(frame, force)
     local blue = tonumber(general.castbarBorderB) or 0
     local alpha = tonumber(general.castbarBorderA) or 1
 
-    if force or frame._msufOutlineT ~= thickness or frame._msufOutlineEdge ~= edge then
+    local backdropChanged = force or frame._msufOutlineT ~= thickness or frame._msufOutlineEdge ~= edge
+    if backdropChanged then
         host:SetBackdrop(BackdropForEdge(edge))
         host:SetBackdropColor(0, 0, 0, 0)
         frame._msufOutlineT = thickness
         frame._msufOutlineEdge = edge
     end
 
-    if force
+    -- BackdropTemplateMixin:ApplyBackdrop resets every edge piece to white.
+    -- Reapply the configured color whenever SetBackdrop rebuilt the outline,
+    -- even when our RGB cache itself did not change.
+    if backdropChanged
         or frame._msufOutlineR ~= red
         or frame._msufOutlineG ~= green
         or frame._msufOutlineB ~= blue
