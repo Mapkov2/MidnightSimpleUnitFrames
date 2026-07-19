@@ -2550,9 +2550,10 @@ _G.MSUF_ScheduleLateAnchorReanchor = function(forcePosition)
         -- Keep pending=true until the full bridge/unitframe pass is finished.
         -- ApplyPosition can request another retry during that pass; clearing
         -- pending first creates an endless full-apply timer chain.
-        MSUF_LateAnchorReanchorFlush(force)
+        local ok, flushError = pcall(MSUF_LateAnchorReanchorFlush, force)
         state.flushing = false
         state.pending = false
+        if not ok then error(flushError, 0) end
         return true
     end
 
@@ -2561,9 +2562,10 @@ _G.MSUF_ScheduleLateAnchorReanchor = function(forcePosition)
         local force = state.forcePosition == true
         state.forcePosition = false
         state.flushing = true
-        MSUF_LateAnchorReanchorFlush(force)
+        local ok, flushError = pcall(MSUF_LateAnchorReanchorFlush, force)
         state.flushing = false
         state.pending = false
+        if not ok then error(flushError, 0) end
     end)
     return true
 end
