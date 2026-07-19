@@ -63,11 +63,11 @@ end
 
 local function ToggleOptionsWindow()
     if type(_G.MSUF_OpenStandaloneOptionsWindow) == "function" then
-        pcall(_G.MSUF_OpenStandaloneOptionsWindow, "home")
+        pcall(_G.MSUF_OpenStandaloneOptionsWindow)
         return
     end
     if type(_G.MSUF_ShowStandaloneOptionsWindow) == "function" then
-        pcall(_G.MSUF_ShowStandaloneOptionsWindow, "home")
+        pcall(_G.MSUF_ShowStandaloneOptionsWindow)
         return
     end
     if _G.SlashCmdList and type(_G.SlashCmdList["MIDNIGHTSUF"]) == "function" then
