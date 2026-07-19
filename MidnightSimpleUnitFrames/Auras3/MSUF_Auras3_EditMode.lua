@@ -201,7 +201,7 @@ local function IsEditModeActive()
 end
 
 local function UnitPreviewActive(unit)
-    return IsEditModeActive()
+    return IsEditModeActive() and rawget(_G, "MSUF_UnitPreviewActive") == true
 end
 
 local function IsConfigBlocked()
@@ -1815,14 +1815,18 @@ end
 local function RequestEditModeAurasRefresh(delay)
     CancelQueuedEditRefresh()
     if IsConfigBlocked() then return end
-    if not IsEditModeActive() then
+    if not UnitPreviewActive() then
         EM.HideAll()
         return
     end
     local serial = editRefreshSerial
     if C_Timer and C_Timer.After then
         C_Timer.After(delay or 0, function()
-            if serial ~= editRefreshSerial or not IsEditModeActive() then return end
+            if serial ~= editRefreshSerial then return end
+            if not UnitPreviewActive() then
+                EM.HideAll()
+                return
+            end
             EM.RefreshAll()
         end)
     else
@@ -1910,7 +1914,7 @@ end
 
 function A3.RefreshEditPreview(unit)
     if IsConfigBlocked() then return false end
-    if not IsEditModeActive() then
+    if not UnitPreviewActive(unit) then
         if unit then return EM.HideUnit(unit) end
         return EM.HideAll()
     end

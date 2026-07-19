@@ -548,8 +548,16 @@ local function ClearActiveGuides(fade)
     end
 end
 
-function Snap.HideGuides()
-    ClearActiveGuides(true)
+function Snap.HideGuides(immediate)
+    ClearActiveGuides(immediate ~= true)
+    if immediate then
+        for i = #fadingGuides, 1, -1 do
+            local guide = fadingGuides[i]
+            fadingGuides[i] = nil
+            ReleaseGuide(guide, false)
+        end
+        if guideFadeFrame then guideFadeFrame:Hide() end
+    end
 end
 
 local function ShowVGuide(x)
@@ -1413,17 +1421,13 @@ local function GroupOffsetFromCenter(bar, conf, centerX, centerY, gridDX, gridDY
 end
 
 local tickerFrame
+local tickerActive = false
 local activeDrag
-local idleMoverSyncAcc = 0
-local idleHUDSyncAcc = 0
-local idleMoverDirty = true
-local idleHUDDirty = true
-local EDIT_IDLE_MOVER_SYNC_INTERVAL = 5.00
-local EDIT_IDLE_HUD_SYNC_INTERVAL = 3.00
+local idleMoverDirty = false
+local idleHUDDirty = false
 local C_Timer = _G.C_Timer
-local idleTickerScheduled = false
-local lastIdleTickTime
-local idleTickerGeneration = 0
+local dirtyFlushScheduled = false
+local dirtyFlushGeneration = 0
 
 local function SyncUnitPopupDuringDrag(d, elapsed)
     if not d then return end
@@ -1564,45 +1568,31 @@ local function NotifyFocusDuringDrag(d, elapsed)
     EM2.Focus.NotifyPositionChanged(d.key, false)
 end
 
-local ScheduleIdleTick
-local function RunIdleWork(elapsed)
-    elapsed = tonumber(elapsed) or 0
-    idleMoverSyncAcc = idleMoverSyncAcc + elapsed
-    idleHUDSyncAcc = idleHUDSyncAcc + elapsed
-    if idleMoverDirty or idleMoverSyncAcc >= EDIT_IDLE_MOVER_SYNC_INTERVAL then
-        idleMoverDirty = false
-        idleMoverSyncAcc = 0
+local function FlushDirty()
+    if not tickerActive or activeDrag or (IsConfigCombatLocked and IsConfigCombatLocked()) then return end
+    local syncMovers, syncHUD = idleMoverDirty, idleHUDDirty
+    idleMoverDirty, idleHUDDirty = false, false
+    if syncMovers then
         if EM2.Movers and EM2.Movers.SyncAll and (not EM2.Movers.IsShown or EM2.Movers.IsShown()) then EM2.Movers.SyncAll() end
     end
-    if idleHUDDirty or idleHUDSyncAcc >= EDIT_IDLE_HUD_SYNC_INTERVAL then
-        idleHUDDirty = false
-        idleHUDSyncAcc = 0
+    if syncHUD then
         if EM2.HUD and EM2.HUD.RefreshControls and (not EM2.HUD.IsShown or EM2.HUD.IsShown()) then EM2.HUD.RefreshControls() end
     end
 end
 
-local function RunIdleTick()
-    idleTickerScheduled = false
-    if not (tickerFrame and tickerFrame.IsShown and tickerFrame:IsShown()) then return end
-    if activeDrag then
-        ScheduleIdleTick(EDIT_IDLE_HUD_SYNC_INTERVAL)
+local function ScheduleDirtyFlush(delay)
+    if not tickerActive or dirtyFlushScheduled or activeDrag then return end
+    if IsConfigCombatLocked and IsConfigCombatLocked() then return end
+    if not (C_Timer and C_Timer.After) then
+        FlushDirty()
         return
     end
-    local now = (_G.GetTime and _G.GetTime()) or 0
-    local elapsed = lastIdleTickTime and max(0, now - lastIdleTickTime) or 0
-    lastIdleTickTime = now
-    RunIdleWork(elapsed)
-    ScheduleIdleTick(min(EDIT_IDLE_HUD_SYNC_INTERVAL, EDIT_IDLE_MOVER_SYNC_INTERVAL))
-end
-
-ScheduleIdleTick = function(delay)
-    if idleTickerScheduled or not (C_Timer and C_Timer.After) then return end
-    if not (tickerFrame and tickerFrame.IsShown and tickerFrame:IsShown()) then return end
-    idleTickerScheduled = true
-    local generation = idleTickerGeneration
-    C_Timer.After(delay or min(EDIT_IDLE_HUD_SYNC_INTERVAL, EDIT_IDLE_MOVER_SYNC_INTERVAL), function()
-        if generation ~= idleTickerGeneration then return end
-        RunIdleTick()
+    dirtyFlushScheduled = true
+    local generation = dirtyFlushGeneration
+    C_Timer.After(delay or 0, function()
+        dirtyFlushScheduled = false
+        if generation ~= dirtyFlushGeneration then return end
+        FlushDirty()
     end)
 end
 
@@ -1757,12 +1747,9 @@ local function OnUpdate(self, elapsed)
         end
         NotifyFocusDuringDrag(d, elapsed)
     else
-        if C_Timer and C_Timer.After then
-            self:SetScript("OnUpdate", nil)
-            ScheduleIdleTick(min(EDIT_IDLE_HUD_SYNC_INTERVAL, EDIT_IDLE_MOVER_SYNC_INTERVAL))
-        else
-            RunIdleWork(elapsed)
-        end
+        self:SetScript("OnUpdate", nil)
+        self:Hide()
+        ScheduleDirtyFlush(0)
     end
 end
 
@@ -2012,10 +1999,11 @@ function Ticker.EndDrag()
         NotifyGuidedEditModeMoved(d.key)
     end
 
-    if tickerFrame and C_Timer and C_Timer.After then
+    if tickerFrame then
         tickerFrame:SetScript("OnUpdate", nil)
-        ScheduleIdleTick(0.06)
+        tickerFrame:Hide()
     end
+    ScheduleDirtyFlush(0)
     return moved
 end
 
@@ -2024,16 +2012,16 @@ function Ticker.IsDragging() return activeDrag ~= nil end
 function Ticker.RequestIdleSync(kind)
     if kind == "mover" then
         idleMoverDirty = true
-        ScheduleIdleTick(0.04)
+        ScheduleDirtyFlush(0)
         return
     elseif kind == "hud" then
         idleHUDDirty = true
-        ScheduleIdleTick(0.04)
+        ScheduleDirtyFlush(0)
         return
     end
     idleMoverDirty = true
     idleHUDDirty = true
-    ScheduleIdleTick(0.04)
+    ScheduleDirtyFlush(0)
 end
 
 function Ticker.Start()
@@ -2041,25 +2029,22 @@ function Ticker.Start()
         tickerFrame = CreateFrame("Frame", "MSUF_EM2_TickerFrame", UIParent)
         tickerFrame:Hide()
     end
-    idleMoverSyncAcc = 0; idleHUDSyncAcc = 0; activeDrag = nil
+    tickerActive = true
+    activeDrag = nil
     idleMoverDirty = true; idleHUDDirty = true
-    idleTickerGeneration = idleTickerGeneration + 1
-    tickerFrame:Show()
-    if C_Timer and C_Timer.After then
-        tickerFrame:SetScript("OnUpdate", nil)
-        lastIdleTickTime = (_G.GetTime and _G.GetTime()) or 0
-        ScheduleIdleTick(0)
-    else
-        tickerFrame:SetScript("OnUpdate", OnUpdate)
-    end
+    dirtyFlushGeneration = dirtyFlushGeneration + 1
+    tickerFrame:SetScript("OnUpdate", nil)
+    tickerFrame:Hide()
+    ScheduleDirtyFlush(0)
 end
 
 function Ticker.Stop()
+    tickerActive = false
     activeDrag = nil
-    idleMoverDirty = true; idleHUDDirty = true
-    idleTickerScheduled = false
-    lastIdleTickTime = nil
-    idleTickerGeneration = idleTickerGeneration + 1
+    idleMoverDirty = false; idleHUDDirty = false
+    dirtyFlushScheduled = false
+    dirtyFlushGeneration = dirtyFlushGeneration + 1
+    if EM2.Snap and EM2.Snap.HideGuides then EM2.Snap.HideGuides(true) end
     if tickerFrame then
         tickerFrame:SetScript("OnUpdate", nil)
         tickerFrame:Hide()
