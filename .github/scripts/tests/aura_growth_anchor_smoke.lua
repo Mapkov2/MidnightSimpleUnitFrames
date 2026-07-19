@@ -1234,6 +1234,11 @@ Check(not spellIndicatorSource:find("for button in pairs(buttons) do HideButton"
     "PTR 5 spell indicator teardown still calls APIs on initialized AuraButtons")
 
 local editModeSource = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_EditMode.lua")
+Check(editModeSource:find('return IsEditModeActive() and rawget(_G, "MSUF_UnitPreviewActive") == true', 1, true),
+    "Edit Mode Aura previews ignore the global Preview toggle")
+Check(editModeSource:find("if not UnitPreviewActive(unit) then", 1, true)
+    and editModeSource:find("if not UnitPreviewActive() then", 1, true),
+    "Aura preview refresh paths do not immediately hide when Preview is off")
 Check(editModeSource:find("PositionPreviewGroup(group, frame, anchor, x, y, laneW, laneH)", 1, true),
     "Edit Mode preview no longer anchors lane bounds with the selected anchor")
 Check(editModeSource:find("icon:SetPoint(initialAnchor, body, initialAnchor, col * step * growthX, row * step * growthY)", 1, true),

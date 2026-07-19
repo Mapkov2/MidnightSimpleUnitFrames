@@ -29,6 +29,8 @@ local function Space(role, fallback)
 end
 
 local hudFrame, row2Frame
+local DockUI = {}
+local ApplyDockLayout, RefreshPositionPopup, SetDockExpanded, ScheduleDockAutoHide
 local previewBtn, previewAnimBtn, auraBtn, snapToggle, resetBtn, settingsBtn, cdmBtn, anchorBtn
 local previewAddonSlot
 local previewAnimRefreshRegistered
@@ -37,13 +39,11 @@ local alphaFS, stepFS
 local selectionFS, hintFS
 local hudStatusText, hudStatusKind, hudStatusUntil
 local selectionLastText, hintLastText, hintLastR, hintLastG, hintLastB, hintLastA
-local helpBtn, tutorialPanel, tourState
+local helpBtn
 local guidedTourBridgeRequested = false
 local bgWidget, gridWidget
 local HelpText
 
-local R1_H    = 44
-local R2_H    = 36
 local BTN_H   = 32
 local BTN_H2  = 28
 local BTN_GAP = Space("xs", 4)
@@ -52,6 +52,11 @@ local CLUSTER_H     = 44
 local CLUSTER_BTN_H = 28
 local CLUSTER_GAP   = Space("sm", 8)
 local CLUSTER_PAD_X = Space("sm", 8)
+local DOCK_HORIZONTAL_W = 1240
+local DOCK_HORIZONTAL_H = 58
+local DOCK_VERTICAL_W   = 82
+local DOCK_EDGE_DEFAULT = 12
+local DOCK_ALLOWED = { TOP = true, BOTTOM = true, LEFT = true, RIGHT = true, FREE = true }
 
 local TH = {
     r1Bg   = { 0.026, 0.032, 0.052, 0.94 },
@@ -111,6 +116,9 @@ end
 
 local function SetActive(btn, on)
     if not btn or not btn._label then return end
+    on = on == true
+    if btn._msufActive == on then return end
+    btn._msufActive = on
     if on then
         btn._label:SetTextColor(TH.onR, TH.onG, TH.onB, 1)
         if btn._dot then btn._dot:Show() end
@@ -118,6 +126,28 @@ local function SetActive(btn, on)
         btn._label:SetTextColor(TH.offR, TH.offG, TH.offB, 0.85)
         if btn._dot then btn._dot:Hide() end
     end
+end
+
+local function SetControlEnabled(btn, enabled)
+    if not btn or not btn._label then return end
+    enabled = enabled == true
+    if btn._msufControlEnabled == enabled then return end
+    btn._msufControlEnabled = enabled
+    btn:SetAlpha(enabled and 1 or 0.45)
+    btn._label:SetTextColor(
+        enabled and TH.textR or TH.offR,
+        enabled and TH.textG or TH.offG,
+        enabled and TH.textB or TH.offB,
+        enabled and 0.92 or 0.55
+    )
+end
+
+local function SetHistoryEnabled(btn, enabled)
+    if not (btn and btn._historyIcon) then return end
+    enabled = enabled == true
+    if btn._msufHistoryEnabled == enabled then return end
+    btn._msufHistoryEnabled = enabled
+    btn._historyIcon:SetAlpha(enabled and 1 or 0.35)
 end
 
 local function RegisterPreviewAnimationRefreshOwner()
@@ -256,8 +286,7 @@ local function SelectionDetail(component, slot)
     return label
 end
 
-local function SelectionSummary()
-    local key, component, slot = CurrentFocusSelection()
+local function SelectionSummary(key, component, slot)
     if not key then return HelpText("No selection") end
     local db = _G.MSUF_DB
     local conf
@@ -296,11 +325,11 @@ local function SetHint(text, r, g, b, a)
     end
 end
 
-local function DefaultHintText()
+local function DefaultHintText(hasSelection)
     if EM2.Popups and EM2.Popups.IsAnyOpen and EM2.Popups.IsAnyOpen() then
         return HelpText("EM_HINT_POPUP")
     end
-    if CurrentSelectionKey() then
+    if hasSelection then
         return HelpText("EM_HINT_SELECTED")
     end
     return HelpText("EM_HINT_NONE")
@@ -449,26 +478,6 @@ local function AttachHistoryIcon(btn, texturePath)
     return icon
 end
 
-local function MakeSep(parent, h)
-    local s = parent:CreateTexture(nil, "OVERLAY")
-    s:SetSize(1, (h or BTN_H) - 8); s:SetColorTexture(0.35, 0.38, 0.45, 0.28)
-    return s
-end
-
-local function LayoutCenter(anchor, items, gap, sepW)
-    local totalW = 0
-    for i, b in ipairs(items) do
-        totalW = totalW + (b._isSep and sepW or b:GetWidth())
-        if i < #items then totalW = totalW + gap end
-    end
-    local x = -totalW / 2
-    for _, b in ipairs(items) do
-        local w = b._isSep and sepW or b:GetWidth()
-        b:SetPoint("LEFT", anchor, "CENTER", b._isSep and (x + w/2) or x, 0)
-        x = x + w + gap
-    end
-end
-
 local function RowItemsWidth(items, gap, sepW)
     local totalW = 0
     for i, b in ipairs(items) do
@@ -502,10 +511,17 @@ local function AddCluster(row, parent, label, height, showLabel)
 end
 
 local function FinishCluster(cluster, items, height, yOff)
+    cluster._dockItems = items
+    cluster._dockHorizontalHeight = height or CLUSTER_H
+    cluster._dockHorizontalYOffset = yOff or 0
     local w = RowItemsWidth(items, BTN_GAP, SEP_W) + CLUSTER_PAD_X * 2
     cluster:SetSize(w, height or CLUSTER_H)
     local x = CLUSTER_PAD_X
     for _, b in ipairs(items) do
+        if not b._dockHorizontalWidth then
+            b._dockHorizontalWidth = b:GetWidth()
+            b._dockHorizontalHeight = b:GetHeight()
+        end
         local bw = b._isSep and SEP_W or b:GetWidth()
         b:ClearAllPoints()
         if b._isSep then
@@ -553,7 +569,10 @@ local HELP_KEYS = {
     "EM_AURAS_ON", "EM_AURAS_OFF", "EM_SNAP_ON", "EM_SNAP_OFF", "EM_GRID_ON", "EM_GRID_OFF",
     "EM_CDM_ON", "EM_CDM_OFF", "EM_ANCHOR_SET", "Drag & Move", "Arrow Key Nudge",
     "Click Popup", "Grid & Snap", "Background Opacity", "Preview & Auras", "Undo / Cancel All",
-    "CDM & Anchor", "Copy Settings", "Exit Edit Mode", "Discard",
+    "CDM & Anchor", "Copy Settings", "Exit Edit Mode", "Discard", "Edit Mode", "Groups", "Frames",
+    "Position", "Toolbar position", "Top", "Bottom", "Left", "Right", "Snap to screen edge",
+    "Auto-hide", "Edge offset", "Drag the six-dot handle to move and dock the toolbar.",
+    "Dock the Edit Mode toolbar at any screen edge.", "Open settings for the selected frame or group.",
 }
 
 local EN_HELP = (type(MSUF) == "table" and MSUF.LocaleRegistry and MSUF.LocaleRegistry.enUS) or {}
@@ -578,6 +597,213 @@ do
     end
 end
 
+--- The toolbar is a cold, event-driven workspace preference.  It deliberately
+--- lives outside the active unit-frame profile so switching/importing profiles
+--- cannot move the user's Edit Mode chrome around the screen.
+local function DockCharKey()
+    local fn = rawget(_G, "MSUF_GetCharKey")
+    if type(fn) == "function" then
+        local ok, key = pcall(fn)
+        if ok and type(key) == "string" and key ~= "" then return key end
+    end
+    local name = (_G.UnitName and _G.UnitName("player")) or "Unknown"
+    local realm = (_G.GetRealmName and _G.GetRealmName()) or "Realm"
+    return tostring(name) .. "-" .. tostring(realm)
+end
+
+local function ClampDockNumber(value, low, high, fallback)
+    value = tonumber(value)
+    if not value then value = fallback end
+    if value < low then return low end
+    if value > high then return high end
+    return value
+end
+
+local function EnsureDockState()
+    if DockUI.state then return DockUI.state end
+    ExportPublic("MSUF_GlobalDB", type(_G.MSUF_GlobalDB) == "table" and _G.MSUF_GlobalDB or {})
+    local global = _G.MSUF_GlobalDB
+    global.char = type(global.char) == "table" and global.char or {}
+    local charKey = DockCharKey()
+    local charDB = type(global.char[charKey]) == "table" and global.char[charKey] or {}
+    global.char[charKey] = charDB
+    local state = type(charDB.editModeHUDState) == "table" and charDB.editModeHUDState or {}
+    charDB.editModeHUDState = state
+    state.version = 1
+    state.dock = DOCK_ALLOWED[state.dock] and state.dock or "TOP"
+    state.snapToEdge = state.snapToEdge ~= false
+    state.autoHide = state.autoHide == true
+    state.edgeOffset = ClampDockNumber(state.edgeOffset, 0, 64, DOCK_EDGE_DEFAULT)
+    state.freeX = ClampDockNumber(state.freeX, -4096, 4096, 0)
+    state.freeY = ClampDockNumber(state.freeY, -4096, 4096, 0)
+    DockUI.state = state
+    return state
+end
+
+local function IsVerticalDock(dock)
+    return dock == "LEFT" or dock == "RIGHT"
+end
+
+local function DockContextLabel(key)
+    if key == nil then key = CurrentSelectionKey() end
+    if GROUP_KEY_TO_KIND[key] then return HelpText("Groups") end
+    if key and LABEL_BY_KEY[key] then return HelpText(LABEL_BY_KEY[key]) end
+    return HelpText("Frames")
+end
+
+local function RefreshDockContext(key)
+    local btn = DockUI.contextBtn
+    if not (btn and btn._label) then return end
+    local text = DockContextLabel(key)
+    if btn._msufContextText == text then return end
+    btn._msufContextText = text
+    btn._label:SetText(text)
+end
+
+local function ApplyButtonRole(btn, role)
+    if not btn then return end
+    local ui = SharedUI()
+    if ui and ui.ApplyButtonRole then
+        ui.ApplyButtonRole(btn, role)
+        return
+    end
+    local menu = type(MSUF) == "table" and MSUF.MSUF2 or nil
+    local theme = menu and menu.Theme
+    if theme and theme.ApplyButtonRole then theme.ApplyButtonRole(btn, role) end
+end
+
+local function LayoutClusterHorizontal(cluster)
+    if not (cluster and type(cluster._dockItems) == "table") then return 0 end
+    local items = cluster._dockItems
+    local x = CLUSTER_PAD_X
+    local visibleCount = 0
+    if cluster._clusterLabel then cluster._clusterLabel:Show() end
+    for _, item in ipairs(items) do
+        item:Show()
+        item:ClearAllPoints()
+        local width = item._dockHorizontalWidth or item:GetWidth()
+        local height = item._dockHorizontalHeight or item:GetHeight()
+        if item.SetSize then item:SetSize(width, height) end
+        local slotWidth = item._isSep and SEP_W or width
+        if item._isSep then
+            item:SetSize(1, height - 8)
+            item:SetPoint("LEFT", cluster, "LEFT", x + slotWidth * 0.5, cluster._dockHorizontalYOffset or 0)
+        else
+            item:SetPoint("LEFT", cluster, "LEFT", x, cluster._dockHorizontalYOffset or 0)
+        end
+        x = x + slotWidth + BTN_GAP
+        visibleCount = visibleCount + 1
+    end
+    if visibleCount > 0 then x = x - BTN_GAP end
+    local width = x + CLUSTER_PAD_X
+    cluster:SetSize(width, cluster._dockHorizontalHeight or CLUSTER_H)
+    return width
+end
+
+local function LayoutClusterVertical(cluster)
+    if not (cluster and type(cluster._dockItems) == "table") then return 0 end
+    local items = cluster._dockItems
+    local y = cluster._clusterLabel and -17 or -6
+    local visibleCount = 0
+    if cluster._clusterLabel then
+        cluster._clusterLabel:Show()
+        cluster._clusterLabel:ClearAllPoints()
+        cluster._clusterLabel:SetPoint("TOP", cluster, "TOP", 0, -4)
+    end
+    for _, item in ipairs(items) do
+        item:ClearAllPoints()
+        if item._isSep then
+            item:Hide()
+        else
+            item:Show()
+            local height = item._dockHorizontalHeight or item:GetHeight()
+            item:SetSize(58, height)
+            item:SetPoint("TOP", cluster, "TOP", 0, y)
+            y = y - height - BTN_GAP
+            visibleCount = visibleCount + 1
+        end
+    end
+    if visibleCount > 0 then y = y + BTN_GAP end
+    local height = max(34, -y + 6)
+    cluster:SetSize(66, height)
+    return height
+end
+
+local function LayoutClusterRow(container, clusters)
+    local total = 0
+    for i, cluster in ipairs(clusters or {}) do
+        total = total + LayoutClusterHorizontal(cluster)
+        if i < #clusters then total = total + CLUSTER_GAP end
+    end
+    container:SetSize(max(1, total), CLUSTER_H)
+    local x = -total * 0.5
+    for _, cluster in ipairs(clusters or {}) do
+        cluster:ClearAllPoints()
+        cluster:SetPoint("LEFT", container, "CENTER", x, 0)
+        x = x + cluster:GetWidth() + CLUSTER_GAP
+    end
+    return total
+end
+
+local function LayoutClusterColumn(container, clusters)
+    local total = 0
+    for i, cluster in ipairs(clusters or {}) do
+        total = total + LayoutClusterVertical(cluster)
+        if i < #clusters then total = total + CLUSTER_GAP end
+    end
+    container:SetSize(66, max(1, total))
+    local y = total * 0.5
+    for _, cluster in ipairs(clusters or {}) do
+        cluster:ClearAllPoints()
+        cluster:SetPoint("TOP", container, "CENTER", 0, y)
+        y = y - cluster:GetHeight() - CLUSTER_GAP
+    end
+    return total
+end
+
+local function DockMouseOver(frame)
+    return frame and frame.IsShown and frame:IsShown() and frame.IsMouseOver and frame:IsMouseOver()
+end
+
+local autoHideGeneration = 0
+SetDockExpanded = function(expanded)
+    if not hudFrame then return end
+    local state = EnsureDockState()
+    if not state.autoHide or expanded or DockMouseOver(DockUI.positionPopup) then
+        hudFrame:SetAlpha(1)
+        if row2Frame and hudFrame:IsShown() then row2Frame:Show() end
+    else
+        hudFrame:SetAlpha(0.12)
+        if row2Frame then row2Frame:Hide() end
+    end
+end
+
+ScheduleDockAutoHide = function()
+    autoHideGeneration = autoHideGeneration + 1
+    local generation = autoHideGeneration
+    if not (hudFrame and hudFrame:IsShown()) then return end
+    if InCombatLockdown and InCombatLockdown() then return end
+    local state = EnsureDockState()
+    if not state.autoHide then SetDockExpanded(true); return end
+    C_Timer.After(0.45, function()
+        if generation ~= autoHideGeneration then return end
+        if not (hudFrame and hudFrame:IsShown()) then return end
+        if InCombatLockdown and InCombatLockdown() then return end
+        if DockMouseOver(hudFrame) or DockMouseOver(row2Frame) or DockMouseOver(DockUI.positionPopup) then return end
+        SetDockExpanded(false)
+    end)
+end
+
+local function AttachDockHover(frame)
+    if not (frame and frame.HookScript) or frame._msufDockHoverHooked then return end
+    frame._msufDockHoverHooked = true
+    frame:HookScript("OnEnter", function()
+        autoHideGeneration = autoHideGeneration + 1
+        SetDockExpanded(true)
+    end)
+    frame:HookScript("OnLeave", function() ScheduleDockAutoHide() end)
+end
+
 --- The full guided tour now lives inside the native MSUF menu.  Keep this
 --- bridge late-bound because Menu2 can be installed after the Edit Mode HUD.
 local function ResolveMenu2()
@@ -591,16 +817,6 @@ local function HideLegacyFrame(frame)
 end
 
 local function CleanupLegacyTourFrames()
-    local ts = tourState
-    if type(ts) == "table" then
-        if type(ts.masks) == "table" then
-            for i = 1, #ts.masks do HideLegacyFrame(ts.masks[i]) end
-        end
-        HideLegacyFrame(ts.ring)
-        HideLegacyFrame(ts.card)
-        ts.step = 0
-    end
-    HideLegacyFrame(tutorialPanel)
     HideLegacyFrame(_G.MSUF_EM2_TutorialPanel)
     HideLegacyFrame(_G.MSUF_EM2_TourCard)
 end
@@ -688,32 +904,447 @@ function HUD.SetTourStep(step)
     return OpenMenuGuidedTourAtEditMode()
 end
 
+local function UpdateDockSwitch(row, enabled)
+    if not row then return end
+    row._enabled = enabled and true or false
+    local r, g, b = TH.onR, TH.onG, TH.onB
+    if row._track then
+        if enabled then row._track:SetColorTexture(r * 0.42, g * 0.42, b * 0.42, 0.98)
+        else row._track:SetColorTexture(0.16, 0.19, 0.26, 0.98) end
+    end
+    if row._knob then
+        row._knob:ClearAllPoints()
+        row._knob:SetPoint(enabled and "RIGHT" or "LEFT", row, enabled and "RIGHT" or "LEFT", enabled and -3 or 3, 0)
+        row._knob:SetColorTexture(enabled and 0.92 or 0.66, enabled and 0.97 or 0.70, enabled and 1.00 or 0.76, 1)
+    end
+end
+
+local function CreateDockSwitch(parent, labelText, y, stateKey)
+    local label = MakeFS(parent, "caption", TH.textR, TH.textG, TH.textB, 0.92)
+    label:SetPoint("TOPLEFT", parent, "TOPLEFT", 18, y)
+    label:SetText(HelpText(labelText))
+    local row = CreateFrame("Button", nil, parent)
+    row:SetSize(40, 20)
+    row:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -18, y + 3)
+    row:RegisterForClicks("LeftButtonUp")
+    local track = row:CreateTexture(nil, "BACKGROUND")
+    track:SetAllPoints()
+    local knob = row:CreateTexture(nil, "ARTWORK")
+    knob:SetSize(14, 14)
+    row._track, row._knob = track, knob
+    row:SetScript("OnClick", function()
+        local state = EnsureDockState()
+        state[stateKey] = not state[stateKey]
+        if stateKey == "autoHide" then SetDockExpanded(true) end
+        if RefreshPositionPopup then RefreshPositionPopup() end
+        if stateKey == "autoHide" then ScheduleDockAutoHide() end
+    end)
+    AttachDockHover(row)
+    return row
+end
+
+local function PlacePositionPopup()
+    local positionPopup, positionBtn = DockUI.positionPopup, DockUI.positionBtn
+    if not (positionPopup and positionBtn) then return end
+    local dock = EnsureDockState().dock
+    positionPopup:ClearAllPoints()
+    if dock == "BOTTOM" then
+        positionPopup:SetPoint("BOTTOM", positionBtn, "TOP", 0, 10)
+    elseif dock == "LEFT" then
+        positionPopup:SetPoint("LEFT", positionBtn, "RIGHT", 10, 0)
+    elseif dock == "RIGHT" then
+        positionPopup:SetPoint("RIGHT", positionBtn, "LEFT", -10, 0)
+    else
+        positionPopup:SetPoint("TOP", positionBtn, "BOTTOM", 0, -10)
+    end
+end
+
+local function EnsurePositionPopup()
+    if DockUI.positionPopup then return DockUI.positionPopup end
+    local popup = CreateFrame("Frame", "MSUF_EM2_HUD_PositionPopup", UIParent, "BackdropTemplate")
+    popup:SetSize(356, 326)
+    popup:SetFrameStrata("FULLSCREEN_DIALOG")
+    popup:SetFrameLevel(180)
+    popup:SetClampedToScreen(true)
+    popup:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=1,right=1,top=1,bottom=1} })
+    popup:SetBackdropColor(TH.r1Bg[1], TH.r1Bg[2], TH.r1Bg[3], 0.985)
+    popup:SetBackdropBorderColor(TH.onR, TH.onG, TH.onB, 0.62)
+    ApplyHUDMaterial(popup, "popup")
+    popup:EnableMouse(true)
+    popup:Hide()
+    DockUI.positionPopup = popup
+
+    local heading = MakeFS(popup, "body", TH.textR, TH.textG, TH.textB, 1)
+    heading:SetPoint("TOPLEFT", popup, "TOPLEFT", 18, -15)
+    heading:SetText(HelpText("Toolbar position"))
+
+    local monitor = CreateFrame("Frame", nil, popup, "BackdropTemplate")
+    monitor:SetSize(170, 96)
+    monitor:SetPoint("TOPLEFT", popup, "TOPLEFT", 18, -46)
+    monitor:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=2,right=2,top=2,bottom=2} })
+    monitor:SetBackdropColor(0.025, 0.055, 0.090, 0.96)
+    monitor:SetBackdropBorderColor(TH.edge[1], TH.edge[2], TH.edge[3], 0.85)
+    local screen = monitor:CreateTexture(nil, "BACKGROUND", nil, 1)
+    screen:SetPoint("TOPLEFT", monitor, "TOPLEFT", 10, -10)
+    screen:SetPoint("BOTTOMRIGHT", monitor, "BOTTOMRIGHT", -10, 10)
+    screen:SetColorTexture(0.07, 0.12, 0.18, 0.96)
+    popup._dockPreviewDots = {}
+    local dotAnchors = {
+        TOP = { "TOP", monitor, "TOP", 0, -6 }, BOTTOM = { "BOTTOM", monitor, "BOTTOM", 0, 6 },
+        LEFT = { "LEFT", monitor, "LEFT", 6, 0 }, RIGHT = { "RIGHT", monitor, "RIGHT", -6, 0 },
+    }
+    for dock, point in pairs(dotAnchors) do
+        local dot = monitor:CreateTexture(nil, "OVERLAY")
+        dot:SetSize(10, 10)
+        dot:SetPoint(unpack(point))
+        dot:SetColorTexture(0.45, 0.53, 0.64, 0.92)
+        popup._dockPreviewDots[dock] = dot
+    end
+
+    popup._dockButtons = {}
+    local choices = { { "TOP", "Top" }, { "BOTTOM", "Bottom" }, { "LEFT", "Left" }, { "RIGHT", "Right" } }
+    for i, choice in ipairs(choices) do
+        local dock, label = choice[1], choice[2]
+        local button = MakeBtn(popup, label, 122, 26, "caption", function()
+            local state = EnsureDockState()
+            state.dock = dock
+            state.snapToEdge = true
+            if ApplyDockLayout then ApplyDockLayout() end
+            if RefreshPositionPopup then RefreshPositionPopup() end
+        end)
+        button:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -18, -43 - (i - 1) * 30)
+        popup._dockButtons[dock] = button
+        AttachDockHover(button)
+    end
+
+    local divider = popup:CreateTexture(nil, "ARTWORK")
+    divider:SetHeight(1)
+    divider:SetPoint("TOPLEFT", popup, "TOPLEFT", 18, -158)
+    divider:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -18, -158)
+    divider:SetColorTexture(TH.edge[1], TH.edge[2], TH.edge[3], 0.52)
+
+    popup._snapSwitch = CreateDockSwitch(popup, "Snap to screen edge", -178, "snapToEdge")
+    popup._autoHideSwitch = CreateDockSwitch(popup, "Auto-hide", -211, "autoHide")
+
+    local offsetLabel = MakeFS(popup, "caption", TH.textR, TH.textG, TH.textB, 0.92)
+    offsetLabel:SetPoint("TOPLEFT", popup, "TOPLEFT", 18, -249)
+    offsetLabel:SetText(HelpText("Edge offset"))
+    local minus = MakeBtn(popup, "-", 28, 24, "body", function()
+        local state = EnsureDockState()
+        state.edgeOffset = ClampDockNumber(state.edgeOffset - 2, 0, 64, DOCK_EDGE_DEFAULT)
+        if ApplyDockLayout then ApplyDockLayout() end
+        RefreshPositionPopup()
+    end)
+    minus:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -102, -243)
+    local plus = MakeBtn(popup, "+", 28, 24, "body", function()
+        local state = EnsureDockState()
+        state.edgeOffset = ClampDockNumber(state.edgeOffset + 2, 0, 64, DOCK_EDGE_DEFAULT)
+        if ApplyDockLayout then ApplyDockLayout() end
+        RefreshPositionPopup()
+    end)
+    plus:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -18, -243)
+    local offsetValue = MakeFS(popup, "caption", TH.onR, TH.onG, TH.onB, 1)
+    offsetValue:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -52, -249)
+    offsetValue:SetWidth(46)
+    offsetValue:SetJustifyH("CENTER")
+    popup._offsetValue = offsetValue
+    AttachDockHover(minus); AttachDockHover(plus)
+
+    local dragHelp = MakeFS(popup, "micro", TH.mutedR, TH.mutedG, TH.mutedB, 0.76)
+    dragHelp:SetPoint("BOTTOMLEFT", popup, "BOTTOMLEFT", 18, 14)
+    dragHelp:SetPoint("BOTTOMRIGHT", popup, "BOTTOMRIGHT", -18, 14)
+    dragHelp:SetJustifyH("LEFT")
+    dragHelp:SetText(HelpText("Drag the six-dot handle to move and dock the toolbar."))
+
+    DockUI.positionPopupEventFrame = CreateFrame("Frame")
+    DockUI.positionPopupEventFrame:SetScript("OnEvent", function()
+        C_Timer.After(0, function()
+            local openPopup, button = DockUI.positionPopup, DockUI.positionBtn
+            if openPopup and openPopup:IsShown()
+                and not DockMouseOver(openPopup) and not DockMouseOver(button) then
+                openPopup:Hide()
+            end
+        end)
+    end)
+    popup:SetScript("OnShow", function()
+        PlacePositionPopup()
+        RefreshPositionPopup()
+        DockUI.positionPopupEventFrame:RegisterEvent("GLOBAL_MOUSE_DOWN")
+        SetDockExpanded(true)
+    end)
+    popup:SetScript("OnHide", function()
+        DockUI.positionPopupEventFrame:UnregisterEvent("GLOBAL_MOUSE_DOWN")
+        local button = DockUI.positionBtn
+        if button and button.SetActive then button:SetActive(false) end
+        ScheduleDockAutoHide()
+    end)
+    AttachDockHover(popup); AttachDockHover(monitor)
+    return popup
+end
+
+RefreshPositionPopup = function()
+    local positionPopup, positionBtn = DockUI.positionPopup, DockUI.positionBtn
+    if not positionPopup then return end
+    local state = EnsureDockState()
+    for dock, button in pairs(positionPopup._dockButtons or {}) do
+        if button.SetActive then button:SetActive(state.dock == dock) end
+        local dot = positionPopup._dockPreviewDots and positionPopup._dockPreviewDots[dock]
+        if dot then
+            if state.dock == dock then dot:SetColorTexture(TH.onR, TH.onG, TH.onB, 1)
+            else dot:SetColorTexture(0.45, 0.53, 0.64, 0.92) end
+        end
+    end
+    UpdateDockSwitch(positionPopup._snapSwitch, state.snapToEdge)
+    UpdateDockSwitch(positionPopup._autoHideSwitch, state.autoHide)
+    if positionPopup._offsetValue then positionPopup._offsetValue:SetText(floor(state.edgeOffset + 0.5) .. " px") end
+    if positionBtn and positionBtn.SetActive then positionBtn:SetActive(positionPopup:IsShown()) end
+    PlacePositionPopup()
+end
+
+local function NearestDockEdge()
+    if not (hudFrame and UIParent) then return "TOP" end
+    local left, right = hudFrame:GetLeft(), hudFrame:GetRight()
+    local top, bottom = hudFrame:GetTop(), hudFrame:GetBottom()
+    local width, height = UIParent:GetWidth(), UIParent:GetHeight()
+    if not (left and right and top and bottom and width and height) then return "TOP" end
+    local distances = { LEFT = left, RIGHT = width - right, TOP = height - top, BOTTOM = bottom }
+    local nearest, best = "TOP", math.huge
+    for dock, distance in pairs(distances) do
+        distance = math.abs(tonumber(distance) or math.huge)
+        if distance < best then nearest, best = dock, distance end
+    end
+    return nearest
+end
+
+local function StopDockDrag()
+    if not hudFrame then return end
+    hudFrame:StopMovingOrSizing()
+    local state = EnsureDockState()
+    if state.snapToEdge then
+        state.dock = NearestDockEdge()
+    else
+        local cx, cy = hudFrame:GetCenter()
+        local ux, uy = UIParent:GetCenter()
+        if cx and cy and ux and uy then
+            state.freeX = ClampDockNumber(cx - ux, -4096, 4096, 0)
+            state.freeY = ClampDockNumber(cy - uy, -4096, 4096, 0)
+        end
+        state.dock = "FREE"
+    end
+    ApplyDockLayout()
+    RefreshPositionPopup()
+end
+
+ApplyDockLayout = function()
+    if not (hudFrame and UIParent) then return end
+    local state = EnsureDockState()
+    local dock = state.dock
+    local vertical = IsVerticalDock(dock)
+    local screenW = tonumber(UIParent:GetWidth()) or 1920
+    local screenH = tonumber(UIParent:GetHeight()) or 1080
+    local edge = state.edgeOffset
+
+    hudFrame:ClearAllPoints()
+    DockUI.primaryContainer:ClearAllPoints()
+    DockUI.historyContainer:ClearAllPoints()
+    DockUI.grip:ClearAllPoints(); DockUI.logo:ClearAllPoints(); DockUI.title:ClearAllPoints(); DockUI.contextBtn:ClearAllPoints()
+    helpBtn:ClearAllPoints(); cancelAllBtn:ClearAllPoints(); exitBtn:ClearAllPoints()
+    row2Frame:ClearAllPoints()
+    selectionFS:ClearAllPoints(); hintFS:ClearAllPoints()
+    if DockUI.primaryContainer.SetScale then DockUI.primaryContainer:SetScale(1) end
+    if vertical then
+        local historyHeight = LayoutClusterColumn(DockUI.historyContainer, DockUI.row2 or {})
+        local primaryHeight = LayoutClusterColumn(DockUI.primaryContainer, DockUI.row1 or {})
+        local totalHeight = min(screenH - 32, 38 + 34 + 32 + historyHeight + primaryHeight + 78)
+        hudFrame:SetSize(DOCK_VERTICAL_W, max(390, totalHeight))
+        if dock == "LEFT" then hudFrame:SetPoint("LEFT", UIParent, "LEFT", edge, 0)
+        else hudFrame:SetPoint("RIGHT", UIParent, "RIGHT", -edge, 0) end
+
+        DockUI.grip:SetSize(58, 16); DockUI.grip:SetPoint("TOP", hudFrame, "TOP", 0, -8)
+        DockUI.logo:SetSize(30, 30); DockUI.logo:SetPoint("TOP", DockUI.grip, "BOTTOM", 0, -4)
+        DockUI.title:Hide(); DockUI.contextBtn:Hide()
+        helpBtn:SetSize(58, 26); helpBtn:SetPoint("TOP", DockUI.logo, "BOTTOM", 0, -5)
+        DockUI.historyContainer:SetPoint("TOP", helpBtn, "BOTTOM", 0, -7)
+        DockUI.primaryContainer:SetPoint("TOP", DockUI.historyContainer, "BOTTOM", 0, -7)
+        exitBtn:SetSize(58, 28); exitBtn:SetPoint("BOTTOM", hudFrame, "BOTTOM", 0, 8)
+        cancelAllBtn:SetSize(58, 28); cancelAllBtn:SetPoint("BOTTOM", exitBtn, "TOP", 0, 4)
+
+        row2Frame:SetSize(320, 34)
+        if dock == "LEFT" then row2Frame:SetPoint("LEFT", hudFrame, "RIGHT", 8, 0)
+        else row2Frame:SetPoint("RIGHT", hudFrame, "LEFT", -8, 0) end
+        selectionFS:SetPoint("LEFT", row2Frame, "LEFT", 12, 0)
+        selectionFS:SetWidth(145)
+        hintFS:SetPoint("RIGHT", row2Frame, "RIGHT", -12, 0)
+        hintFS:SetWidth(145)
+    else
+        LayoutClusterRow(DockUI.historyContainer, DockUI.row2 or {})
+        LayoutClusterRow(DockUI.primaryContainer, DockUI.row1 or {})
+        local targetWidth = DockUI.horizontalWidth or DOCK_HORIZONTAL_W
+        local dockWidth = min(targetWidth, max(760, screenW - 32))
+        hudFrame:SetSize(dockWidth, DOCK_HORIZONTAL_H)
+        if dock == "BOTTOM" then
+            hudFrame:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, edge)
+        elseif dock == "FREE" then
+            hudFrame:SetPoint("CENTER", UIParent, "CENTER", state.freeX, state.freeY)
+        else
+            hudFrame:SetPoint("TOP", UIParent, "TOP", 0, -edge)
+        end
+
+        DockUI.grip:SetSize(20, 36); DockUI.grip:SetPoint("LEFT", hudFrame, "LEFT", 10, 0)
+        DockUI.logo:SetSize(30, 30); DockUI.logo:SetPoint("LEFT", DockUI.grip, "RIGHT", 4, 0)
+        local compact = dockWidth < 1080
+        DockUI.title:SetShown(not compact)
+        if not compact then DockUI.title:SetPoint("LEFT", DockUI.logo, "RIGHT", 7, 0) end
+        DockUI.contextBtn:Show(); DockUI.contextBtn:SetSize(compact and 72 or 88, 28)
+        DockUI.contextBtn:SetPoint("LEFT", compact and DockUI.logo or DockUI.title, "RIGHT", 8, 0)
+        helpBtn:SetSize(28, 28); helpBtn:SetPoint("LEFT", DockUI.contextBtn, "RIGHT", 5, 0)
+        DockUI.historyContainer:SetPoint("LEFT", helpBtn, "RIGHT", 7, 0)
+        exitBtn:SetSize(64, 30); exitBtn:SetPoint("RIGHT", hudFrame, "RIGHT", -10, 0)
+        cancelAllBtn:SetSize(76, 30); cancelAllBtn:SetPoint("RIGHT", exitBtn, "LEFT", -5, 0)
+
+        -- Keep the task groups centered in their actual free lane.  The old
+        -- screen-center anchor let wide Advanced controls run under Discard
+        -- after the dock was moved.  Narrow screens compress only this cold-
+        -- path container; no drag/idle OnUpdate work is introduced.
+        local laneLeft, laneRight = DockUI.historyContainer:GetRight(), cancelAllBtn:GetLeft()
+        local frameLeft = hudFrame:GetLeft()
+        if laneLeft and laneRight and frameLeft and laneRight > laneLeft then
+            local laneWidth = max(1, laneRight - laneLeft - 16)
+            local contentWidth = max(1, DockUI.primaryContainer:GetWidth())
+            if DockUI.primaryContainer.SetScale then
+                DockUI.primaryContainer:SetScale(min(1, laneWidth / contentWidth))
+            end
+            DockUI.primaryContainer:SetPoint("CENTER", hudFrame, "LEFT", (laneLeft + laneRight) * 0.5 - frameLeft, 0)
+        else
+            DockUI.primaryContainer:SetPoint("CENTER", hudFrame, "CENTER", compact and 35 or 70, 0)
+        end
+
+        row2Frame:SetSize(min(660, dockWidth - 80), 32)
+        if dock == "BOTTOM" then row2Frame:SetPoint("BOTTOM", hudFrame, "TOP", 0, 7)
+        else row2Frame:SetPoint("TOP", hudFrame, "BOTTOM", 0, -7) end
+        selectionFS:SetPoint("LEFT", row2Frame, "LEFT", 16, 0)
+        selectionFS:SetWidth(320)
+        hintFS:SetPoint("RIGHT", row2Frame, "RIGHT", -16, 0)
+        hintFS:SetWidth(300)
+    end
+
+    RefreshDockContext()
+    PlacePositionPopup()
+    if DockUI.positionPopup and DockUI.positionPopup:IsShown() then RefreshPositionPopup() end
+    SetDockExpanded(true)
+    if state.autoHide then ScheduleDockAutoHide() end
+end
+
+function HUD.GetDockState()
+    local state = EnsureDockState()
+    return state.dock, state.snapToEdge, state.autoHide, state.edgeOffset, state.freeX, state.freeY
+end
+
+function HUD.SetDockPosition(dock)
+    dock = type(dock) == "string" and dock:upper() or nil
+    if not (dock and dock ~= "FREE" and DOCK_ALLOWED[dock]) then return false end
+    local state = EnsureDockState()
+    state.dock = dock
+    state.snapToEdge = true
+    if hudFrame then ApplyDockLayout() end
+    return true
+end
+
+function HUD.SetDockSnap(enabled)
+    EnsureDockState().snapToEdge = enabled ~= false
+    if DockUI.positionPopup then RefreshPositionPopup() end
+    return true
+end
+
+function HUD.SetDockAutoHide(enabled)
+    EnsureDockState().autoHide = enabled == true
+    SetDockExpanded(true)
+    if DockUI.positionPopup then RefreshPositionPopup() end
+    if enabled == true then ScheduleDockAutoHide() end
+    return true
+end
+
+function HUD.SetDockEdgeOffset(offset)
+    local state = EnsureDockState()
+    state.edgeOffset = ClampDockNumber(offset, 0, 64, DOCK_EDGE_DEFAULT)
+    if hudFrame then ApplyDockLayout() end
+    if DockUI.positionPopup then RefreshPositionPopup() end
+    return state.edgeOffset
+end
+
 local function EnsureHUD()
-    if hudFrame then return end
+    if hudFrame then return false end
     RefreshHUDTheme()
     local db = _G.MSUF_DB
     local advancedHUD = db and db.general and db.general.hideAdvancedMenu == false
+    DockUI.horizontalWidth = advancedHUD and 1480 or DOCK_HORIZONTAL_W
 
-    --- --- ROW 1 ---
+    --- Compact MSUF command dock.  The existing actions remain unchanged;
+    --- only their chrome and cold-path layout are owned here.
     hudFrame = CreateFrame("Frame", "MSUF_EM2_HUD", UIParent, "BackdropTemplate")
     hudFrame:SetFrameStrata("FULLSCREEN"); hudFrame:SetFrameLevel(100)
-    hudFrame:SetHeight(R1_H)
-    hudFrame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 0, 0)
-    hudFrame:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", 0, 0)
-    hudFrame:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=0,right=0,top=0,bottom=0} })
+    hudFrame:SetSize(DockUI.horizontalWidth, DOCK_HORIZONTAL_H)
+    hudFrame:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=2,right=2,top=2,bottom=2} })
     hudFrame:SetBackdropColor(unpack(TH.r1Bg))
-    hudFrame:SetBackdropBorderColor(unpack(TH.edge))
+    hudFrame:SetBackdropBorderColor(TH.onR, TH.onG, TH.onB, 0.48)
     ApplyHUDMaterial(hudFrame, "status")
+    hudFrame:SetMovable(true)
+    hudFrame:SetClampedToScreen(true)
     hudFrame:EnableMouse(true); hudFrame:Hide()
 
-    local title = MakeFS(hudFrame, "caption", TH.titleR, TH.titleG, TH.titleB, 0.50)
-    title:SetPoint("LEFT", hudFrame, "LEFT", 16, 0)
-    title:SetText(HelpText("EDIT MODE"))
+    DockUI.grip = CreateFrame("Button", nil, hudFrame)
+    DockUI.grip:RegisterForDrag("LeftButton")
+    DockUI.grip:SetScript("OnDragStart", function()
+        if InCombatLockdown and InCombatLockdown() then return end
+        if DockUI.positionPopup then DockUI.positionPopup:Hide() end
+        SetDockExpanded(true)
+        DockUI.grip._dockDragging = true
+        hudFrame:StartMoving()
+    end)
+    DockUI.grip:SetScript("OnDragStop", function()
+        if not DockUI.grip._dockDragging then return end
+        DockUI.grip._dockDragging = nil
+        StopDockDrag()
+    end)
+    for row = 0, 2 do
+        for col = 0, 1 do
+            local dot = DockUI.grip:CreateTexture(nil, "ARTWORK")
+            dot:SetSize(2, 2)
+            dot:SetPoint("CENTER", DockUI.grip, "CENTER", (col - 0.5) * 6, (row - 1) * 6)
+            dot:SetColorTexture(TH.mutedR, TH.mutedG, TH.mutedB, 0.86)
+        end
+    end
+    SetTip(DockUI.grip, "Drag the six-dot handle to move and dock the toolbar.")
 
-    --- --- Prominent HELP button ---
+    DockUI.logo = CreateFrame("Frame", nil, hudFrame)
+    local logoTexture = DockUI.logo:CreateTexture(nil, "ARTWORK")
+    logoTexture:SetAllPoints(DockUI.logo)
+    logoTexture:SetTexture(MEDIA .. "MSUF_EditModeIcon.png")
+    if logoTexture.SetSnapToPixelGrid then
+        logoTexture:SetSnapToPixelGrid(false)
+        logoTexture:SetTexelSnappingBias(0)
+    end
+
+    DockUI.title = MakeFS(hudFrame, "body", TH.onR, TH.onG, TH.onB, 1)
+    DockUI.title:SetText(HelpText("Edit Mode"))
+
+    DockUI.contextBtn = MakeBtn(hudFrame, "Groups", 88, 28, "caption", function()
+        HUD.OpenSelectedSettings()
+    end)
+    if DockUI.contextBtn._label then
+        DockUI.contextBtn._label:ClearAllPoints()
+        DockUI.contextBtn._label:SetPoint("LEFT", DockUI.contextBtn, "LEFT", 9, 0)
+        DockUI.contextBtn._label:SetPoint("RIGHT", DockUI.contextBtn, "RIGHT", -18, 0)
+        DockUI.contextBtn._label:SetJustifyH("LEFT")
+    end
+    local contextChevron = MakeFS(DockUI.contextBtn, "micro", TH.mutedR, TH.mutedG, TH.mutedB, 0.88)
+    contextChevron:SetPoint("RIGHT", DockUI.contextBtn, "RIGHT", -7, 1)
+    contextChevron:SetText("v")
+    SetTip(DockUI.contextBtn, "Open settings for the selected frame or group.")
+
+    --- Guided help remains available, but no longer dominates the toolbar.
     helpBtn = CreateFrame("Button", nil, hudFrame, "BackdropTemplate")
-    helpBtn:SetSize(72, 28)
-    helpBtn:SetPoint("LEFT", title, "RIGHT", 12, 0)
+    helpBtn:SetSize(28, 28)
     helpBtn:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1,
                           insets = { left = 1, right = 1, top = 1, bottom = 1 } })
     helpBtn:SetBackdropColor(TH.onR * 0.20, TH.onG * 0.20, TH.onB * 0.20, 0.85)
@@ -728,7 +1359,7 @@ local function EnsureHUD()
         hl:SetAllPoints(); hl:SetColorTexture(TH.onR, TH.onG, TH.onB, 0.12)
 
         local lbl = MakeFS(helpBtn, "body", TH.onR, TH.onG, TH.onB, 1)
-        lbl:SetPoint("CENTER", 0, 0); lbl:SetText(HelpText("EM_HELP_BTN"))
+        lbl:SetPoint("CENTER", 0, 0); lbl:SetText("?")
         helpBtn._label = lbl
 
         local pulse = helpBtn:CreateAnimationGroup()
@@ -759,13 +1390,9 @@ local function EnsureHUD()
     exitBtn = MakeBtn(hudFrame, "EM_TOUR_DONE", 54, BTN_H, "body", function()
         if EM2.State then EM2.State.Exit("hud_exit") end
     end)
-    exitBtn:SetPoint("RIGHT", hudFrame, "RIGHT", -12, 0)
-    exitBtn._label:SetTextColor(TH.exitR, TH.exitG, TH.exitB, 1)
+    ApplyButtonRole(exitBtn, "primary")
     exitBtn._dot:Hide()
     SetTip(exitBtn, "Keep the current positions and exit Edit Mode.")
-
-    local rSep = MakeSep(hudFrame, BTN_H)
-    rSep:SetPoint("RIGHT", exitBtn, "LEFT", -BTN_GAP, 0)
 
     cancelAllBtn = MakeBtn(hudFrame, "Discard", 70, BTN_H, "body", function()
         if not EM2.State or not EM2.State.CancelAll then return end
@@ -819,17 +1446,17 @@ local function EnsureHUD()
         end)
         cf:Show()
     end)
-    cancelAllBtn:SetPoint("RIGHT", rSep, "LEFT", -BTN_GAP, 0)
-    cancelAllBtn._label:SetTextColor(TH.warnR, TH.warnG, TH.warnB, 0.90)
+    ApplyButtonRole(cancelAllBtn, "normal")
+    cancelAllBtn._label:SetTextColor(TH.mutedR, TH.mutedG, TH.mutedB, 0.90)
     cancelAllBtn._dot:Hide()
     SetTip(cancelAllBtn, "Discard ALL changes made in Edit Mode\nand restore settings to the state\nbefore Edit Mode was opened.")
 
     --- Center controls: grouped by task so the HUD scans as Preview | Layout | Tools.
-    local c1 = CreateFrame("Frame", nil, hudFrame)
-    c1:SetSize(1, CLUSTER_H); c1:SetPoint("CENTER", hudFrame, "CENTER", 0, 0)
-    local r1 = {}
+    DockUI.primaryContainer = CreateFrame("Frame", nil, hudFrame)
+    DockUI.primaryContainer:SetSize(1, CLUSTER_H)
+    DockUI.row1 = {}
 
-    local previewCluster, previewItems = AddCluster(r1, c1, "Preview", CLUSTER_H, true)
+    local previewCluster, previewItems = AddCluster(DockUI.row1, DockUI.primaryContainer, "Preview", CLUSTER_H, true)
     previewBtn = AddRowButton(previewItems, previewCluster, "Preview", 64, CLUSTER_BTN_H, "caption", function()
         ExportPublic("MSUF_UnitPreviewActive", not (_G.MSUF_UnitPreviewActive and true or false))
         if _G.MSUF_SyncAllUnitPreviews then _G.MSUF_SyncAllUnitPreviews() end
@@ -865,7 +1492,7 @@ local function EnsureHUD()
         local a2 = db.auras3; if not a2 then return end
         local sh = a2.shared; if not sh then return end
         sh.showInEditMode = not (sh.showInEditMode and true or false)
-        SetActive(auraBtn, sh.showInEditMode)
+        SetActive(auraBtn, sh.showInEditMode and _G.MSUF_UnitPreviewActive == true)
         local a3 = MSUF and MSUF.MSUF_Auras3
         if a3 and type(a3.RefreshEditPreview) == "function" then
             a3.RefreshEditPreview()
@@ -877,7 +1504,7 @@ local function EnsureHUD()
     end
     FinishCluster(previewCluster, previewItems, CLUSTER_H, -8)
 
-    local layoutCluster, layoutItems = AddCluster(r1, c1, "Layout", CLUSTER_H, true)
+    local layoutCluster, layoutItems = AddCluster(DockUI.row1, DockUI.primaryContainer, "Layout", CLUSTER_H, true)
     snapToggle = AddRowButton(layoutItems, layoutCluster, "Snap", 48, CLUSTER_BTN_H, "caption", function()
         if EM2.Snap then
             local on = not EM2.Snap.IsEnabled()
@@ -886,12 +1513,38 @@ local function EnsureHUD()
         end
     end, "Snap frames to edges of\nother frames while dragging.")
 
+    gridWidget, stepFS = AddAdjustWidget(layoutItems, layoutCluster, 80, CLUSTER_BTN_H, true, function(_, d)
+        if not EM2.Grid then return end
+        EM2.Grid.SetGridStep(max(4, min(80, EM2.Grid.GetGridStep() + d * 4)))
+        HUD.RefreshControls()
+    end, function(_, button)
+        if button ~= "LeftButton" or not EM2.Grid or not EM2.Grid.ToggleEnabled then return end
+        EM2.Grid.ToggleEnabled()
+        HUD.SetStatus(HelpText((not EM2.Grid.GetEnabled or EM2.Grid.GetEnabled()) and "EM_GRID_ON" or "EM_GRID_OFF"), "info")
+        HUD.RefreshControls()
+    end, "Left-click to toggle grid lines.\nScroll to adjust spacing.")
+
+    bgWidget, alphaFS = AddAdjustWidget(layoutItems, layoutCluster, 76, CLUSTER_BTN_H, false, function(_, d)
+        if not EM2.Grid then return end
+        EM2.Grid.SetBgAlpha(max(0, min(1, EM2.Grid.GetBgAlpha() + d * 0.05)))
+        HUD.RefreshControls()
+    end, nil, "Background overlay opacity.\nScroll to adjust.")
+
     resetBtn = AddRowButton(layoutItems, layoutCluster, "Reset", 52, CLUSTER_BTN_H, "caption", function()
         HUD.ResetCurrentPosition()
     end, "Reset the selected frame position.\nSize stays unchanged.")
     FinishCluster(layoutCluster, layoutItems, CLUSTER_H, -8)
+    layoutCluster._stepFS = stepFS
+    layoutCluster._alphaFS = alphaFS
+    layoutCluster._gridWidget = gridWidget
+    layoutCluster._bgWidget = bgWidget
+    ExportPublic("MSUF_EditModeGridTools", layoutCluster)
 
-    local linksCluster, linksItems = AddCluster(r1, c1, "Tools", CLUSTER_H, true)
+    local linksCluster, linksItems = AddCluster(DockUI.row1, DockUI.primaryContainer, "Tools", CLUSTER_H, true)
+    DockUI.positionBtn = AddRowButton(linksItems, linksCluster, "Position", 72, CLUSTER_BTN_H, "caption", function()
+        local popup = EnsurePositionPopup()
+        if popup:IsShown() then popup:Hide() else popup:Show() end
+    end, "Dock the Edit Mode toolbar at any screen edge.")
     settingsBtn = AddRowButton(linksItems, linksCluster, "Settings", 68, CLUSTER_BTN_H, "caption", function()
         HUD.OpenSelectedSettings()
     end, "Open Menu2 at the selected\nframe or component settings.")
@@ -930,14 +1583,12 @@ local function EnsureHUD()
     end
     FinishCluster(linksCluster, linksItems, CLUSTER_H, -8)
 
-    LayoutCenter(c1, r1, CLUSTER_GAP, SEP_W)
+    LayoutClusterRow(DockUI.primaryContainer, DockUI.row1)
 
-    --- --- ROW 2 ---
+    --- Compact contextual status capsule.  History lives in the main dock.
     row2Frame = CreateFrame("Frame", "MSUF_EM2_HUD_Row2", hudFrame, "BackdropTemplate")
-    row2Frame:SetHeight(R2_H)
-    row2Frame:SetPoint("TOPLEFT", hudFrame, "BOTTOMLEFT", 0, 0)
-    row2Frame:SetPoint("TOPRIGHT", hudFrame, "BOTTOMRIGHT", 0, 0)
-    row2Frame:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=0,right=0,top=0,bottom=0} })
+    row2Frame:SetSize(660, 32)
+    row2Frame:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=2,right=2,top=2,bottom=2} })
     row2Frame:SetBackdropColor(unpack(TH.r2Bg))
     row2Frame:SetBackdropBorderColor(unpack(TH.edge))
     ApplyHUDMaterial(row2Frame, "status")
@@ -955,52 +1606,59 @@ local function EnsureHUD()
     hintFS:SetJustifyH("RIGHT")
     hintFS:SetText("")
 
-    local c2 = CreateFrame("Frame", nil, row2Frame)
-    c2:SetSize(1, BTN_H2); c2:SetPoint("CENTER", row2Frame, "CENTER", 0, 0)
-    local r2 = {}
+    DockUI.historyContainer = CreateFrame("Frame", nil, hudFrame)
+    DockUI.historyContainer:SetSize(1, BTN_H2)
+    DockUI.row2 = {}
 
-    local historyCluster, historyItems = AddCluster(r2, c2, nil, BTN_H2 + 4, false)
-    undoBtn = AddRowButton(historyItems, historyCluster, "", 44, BTN_H2, "caption", function()
+    local historyItems
+    DockUI.historyCluster, historyItems = AddCluster(DockUI.row2, DockUI.historyContainer, nil, BTN_H2 + 4, false)
+    undoBtn = AddRowButton(historyItems, DockUI.historyCluster, "", 44, BTN_H2, "caption", function()
         if _G.MSUF_EM_UndoUndo then _G.MSUF_EM_UndoUndo() end
         HUD.RefreshControls()
     end, "Undo the last MSUF change from Edit Mode or the in-game menu.")
     ExportPublic("MSUF_EditModeUndoBtn", undoBtn)
     AttachHistoryIcon(undoBtn, MEDIA .. "msuf_history_undo_red.png")
 
-    redoBtn = AddRowButton(historyItems, historyCluster, "", 44, BTN_H2, "caption", function()
+    redoBtn = AddRowButton(historyItems, DockUI.historyCluster, "", 44, BTN_H2, "caption", function()
         if _G.MSUF_EM_UndoRedo then _G.MSUF_EM_UndoRedo() end
         HUD.RefreshControls()
     end, "Redo the last MSUF change from Edit Mode or the in-game menu.")
     ExportPublic("MSUF_EditModeRedoBtn", redoBtn)
     AttachHistoryIcon(redoBtn, MEDIA .. "msuf_history_redo_green.png")
-    FinishCluster(historyCluster, historyItems, BTN_H2 + 4, 0)
+    FinishCluster(DockUI.historyCluster, historyItems, BTN_H2 + 4, 0)
 
-    if advancedHUD then
-    local gridCluster, gridItems = AddCluster(r2, c2, nil, BTN_H2 + 4, false)
-    do
-        gridWidget, stepFS = AddAdjustWidget(gridItems, gridCluster, 80, BTN_H2, true, function(_, d)
-            if not EM2.Grid then return end
-            EM2.Grid.SetGridStep(max(4, min(80, EM2.Grid.GetGridStep() + d * 4)))
-            HUD.RefreshControls()
-        end, function(_, button)
-            if button ~= "LeftButton" or not EM2.Grid or not EM2.Grid.ToggleEnabled then return end
-            EM2.Grid.ToggleEnabled()
-            HUD.SetStatus(HelpText((not EM2.Grid.GetEnabled or EM2.Grid.GetEnabled()) and "EM_GRID_ON" or "EM_GRID_OFF"), "info")
-            HUD.RefreshControls()
-        end, "Left-click to toggle grid lines.\nScroll to adjust spacing.")
-    end
+    LayoutClusterRow(DockUI.historyContainer, DockUI.row2)
 
-    do
-        bgWidget, alphaFS = AddAdjustWidget(gridItems, gridCluster, 76, BTN_H2, false, function(_, d)
-            if not EM2.Grid then return end
-            EM2.Grid.SetBgAlpha(max(0, min(1, EM2.Grid.GetBgAlpha() + d * 0.05)))
-            HUD.RefreshControls()
-        end, nil, "Background overlay opacity.\nScroll to adjust.")
+    ApplyButtonRole(DockUI.positionBtn, "primary")
+    AttachDockHover(hudFrame); AttachDockHover(row2Frame); AttachDockHover(DockUI.grip)
+    AttachDockHover(DockUI.logo); AttachDockHover(DockUI.contextBtn); AttachDockHover(helpBtn)
+    AttachDockHover(exitBtn); AttachDockHover(cancelAllBtn); AttachDockHover(DockUI.positionBtn)
+    for _, cluster in ipairs(DockUI.row1) do
+        AttachDockHover(cluster)
+        for _, item in ipairs(cluster._dockItems or {}) do AttachDockHover(item) end
     end
-    FinishCluster(gridCluster, gridItems, BTN_H2 + 4, 0)
+    for _, cluster in ipairs(DockUI.row2) do
+        AttachDockHover(cluster)
+        for _, item in ipairs(cluster._dockItems or {}) do AttachDockHover(item) end
     end
+    DockUI.layoutEvents = CreateFrame("Frame", "MSUF_EM2_HUD_LayoutEvents")
+    DockUI.layoutEvents:SetScript("OnEvent", function()
+        if hudFrame and hudFrame:IsShown() and not (InCombatLockdown and InCombatLockdown()) then ApplyDockLayout() end
+    end)
+    return true
+end
 
-    LayoutCenter(c2, r2, CLUSTER_GAP, SEP_W)
+local function SetLayoutEventsEnabled(enabled)
+    local frame = DockUI.layoutEvents
+    if not frame or frame._msufEnabled == (enabled == true) then return end
+    frame._msufEnabled = enabled == true
+    if enabled then
+        frame:RegisterEvent("DISPLAY_SIZE_CHANGED")
+        frame:RegisterEvent("UI_SCALE_CHANGED")
+    else
+        frame:UnregisterEvent("DISPLAY_SIZE_CHANGED")
+        frame:UnregisterEvent("UI_SCALE_CHANGED")
+    end
 end
 
 function HUD.RefreshUnitSelector()
@@ -1008,14 +1666,14 @@ function HUD.RefreshUnitSelector()
 end
 
 function HUD.RefreshControls(force)
-    if not force and hudFrame and hudFrame.IsShown and not hudFrame:IsShown() then return end
-    if selectionFS then
-        local text = SelectionSummary()
-        if selectionLastText ~= text then
-            selectionFS:SetText(text)
-            selectionLastText = text
-        end
+    if not hudFrame or (not force and not hudFrame:IsShown()) then return end
+    local key, component, slot = CurrentFocusSelection()
+    local text = SelectionSummary(key, component, slot)
+    if selectionLastText ~= text then
+        selectionFS:SetText(text)
+        selectionLastText = text
     end
+    RefreshDockContext(key)
     if hintFS then
         local now = GetTime and GetTime() or 0
         if InCombatLockdown and InCombatLockdown() then
@@ -1030,44 +1688,37 @@ function HUD.RefreshControls(force)
             end
         else
             hudStatusText, hudStatusKind, hudStatusUntil = nil, nil, nil
-            SetHint(DefaultHintText(), TH.mutedR, TH.mutedG, TH.mutedB, 0.78)
+            SetHint(DefaultHintText(key ~= nil), TH.mutedR, TH.mutedG, TH.mutedB, 0.78)
         end
     end
-    if alphaFS and EM2.Grid then alphaFS:SetText(HelpText("BG") .. " " .. floor(EM2.Grid.GetBgAlpha() * 100 + 0.5) .. "%") end
+    if alphaFS and EM2.Grid then
+        local value = floor(EM2.Grid.GetBgAlpha() * 100 + 0.5)
+        if force or alphaFS._msufValue ~= value then
+            alphaFS._msufValue = value
+            alphaFS:SetText(HelpText("BG") .. " " .. value .. "%")
+        end
+    end
     if stepFS and EM2.Grid then
         local enabled = not EM2.Grid.GetEnabled or EM2.Grid.GetEnabled()
-        stepFS:SetText(HelpText("Grid") .. " " .. floor(EM2.Grid.GetGridStep()) .. "px")
-        if enabled then
-            stepFS:SetTextColor(TH.okR, TH.okG, TH.okB, 0.95)
-            if gridWidget and gridWidget._stateBg then gridWidget._stateBg:SetColorTexture(TH.okR, TH.okG, TH.okB, 0.18) end
-        else
-            stepFS:SetTextColor(TH.exitR, TH.exitG, TH.exitB, 0.95)
-            if gridWidget and gridWidget._stateBg then gridWidget._stateBg:SetColorTexture(TH.exitR, TH.exitG, TH.exitB, 0.20) end
+        local value = floor(EM2.Grid.GetGridStep())
+        if force or stepFS._msufValue ~= value then
+            stepFS._msufValue = value
+            stepFS:SetText(HelpText("Grid") .. " " .. value .. "px")
+        end
+        if gridWidget._msufEnabled ~= enabled then
+            gridWidget._msufEnabled = enabled
+            if enabled then
+                stepFS:SetTextColor(TH.okR, TH.okG, TH.okB, 0.95)
+                if gridWidget._stateBg then gridWidget._stateBg:SetColorTexture(TH.okR, TH.okG, TH.okB, 0.18) end
+            else
+                stepFS:SetTextColor(TH.exitR, TH.exitG, TH.exitB, 0.95)
+                if gridWidget._stateBg then gridWidget._stateBg:SetColorTexture(TH.exitR, TH.exitG, TH.exitB, 0.20) end
+            end
         end
     end
     if snapToggle and EM2.Snap then SetActive(snapToggle, EM2.Snap.IsEnabled()) end
-    if resetBtn and resetBtn._label then
-        local key = CurrentSelectionKey()
-        local canReset = key and ((UNIT_KEYS[key] == true) or (GROUP_KEY_TO_KIND[key] ~= nil)) or false
-        resetBtn:SetAlpha(canReset and 1 or 0.45)
-        resetBtn._label:SetTextColor(
-            canReset and TH.textR or TH.offR,
-            canReset and TH.textG or TH.offG,
-            canReset and TH.textB or TH.offB,
-            canReset and 0.92 or 0.55
-        )
-    end
-    if settingsBtn and settingsBtn._label then
-        local key = CurrentFocusSelection()
-        local canOpen = key ~= nil
-        settingsBtn:SetAlpha(canOpen and 1 or 0.45)
-        settingsBtn._label:SetTextColor(
-            canOpen and TH.textR or TH.offR,
-            canOpen and TH.textG or TH.offG,
-            canOpen and TH.textB or TH.offB,
-            canOpen and 0.92 or 0.55
-        )
-    end
+    SetControlEnabled(resetBtn, key and (UNIT_KEYS[key] == true or GROUP_KEY_TO_KIND[key] ~= nil))
+    SetControlEnabled(settingsBtn, key ~= nil)
     RegisterPreviewAnimationRefreshOwner()
     if previewBtn then SetActive(previewBtn, _G.MSUF_UnitPreviewActive and true or false) end
     if previewAnimBtn then
@@ -1080,30 +1731,41 @@ function HUD.RefreshControls(force)
     end
     if auraBtn then
         local db = _G.MSUF_DB; local a2 = db and db.auras3; local sh = a2 and a2.shared
-        SetActive(auraBtn, sh and sh.showInEditMode and true or false)
+        SetActive(auraBtn, sh and sh.showInEditMode and _G.MSUF_UnitPreviewActive == true)
     end
-    local canUndo = EM2.Undo and EM2.Undo.CanUndo() or false
-    local canRedo = EM2.Undo and EM2.Undo.CanRedo() or false
-    if undoBtn and undoBtn._historyIcon then
-        undoBtn._historyIcon:SetAlpha(canUndo and 1 or 0.35)
-    end
-    if redoBtn and redoBtn._historyIcon then
-        redoBtn._historyIcon:SetAlpha(canRedo and 1 or 0.35)
-    end
+    SetHistoryEnabled(undoBtn, EM2.Undo and EM2.Undo.CanUndo())
+    SetHistoryEnabled(redoBtn, EM2.Undo and EM2.Undo.CanRedo())
+    if DockUI.positionPopup and DockUI.positionPopup:IsShown() then RefreshPositionPopup() end
 end
 
 function HUD.Show()
-    EnsureHUD(); HUD.RefreshControls(true)
+    if InCombatLockdown and InCombatLockdown() then return false end
+    EnsureHUD(); ApplyDockLayout(); HUD.RefreshControls(true)
     hudFrame:Show(); if row2Frame then row2Frame:Show() end
+    SetLayoutEventsEnabled(true)
     if helpBtn and helpBtn._pulse then helpBtn._pulse:Play() end
+    SetDockExpanded(true)
+    if EnsureDockState().autoHide then ScheduleDockAutoHide() end
+    return true
+end
+
+function HUD.ShowPositionSettings(shown)
+    if InCombatLockdown and InCombatLockdown() then return false end
+    EnsureHUD()
+    ApplyDockLayout()
+    local popup = EnsurePositionPopup()
+    if shown == false then popup:Hide() else popup:Show() end
+    return popup:IsShown()
 end
 
 function HUD.Hide()
     HUD.StopTour()
-    if tutorialPanel then tutorialPanel:Hide() end
     local cf = _G["MSUF_EM2_CancelConfirm"]; if cf then cf:Hide() end
+    SetLayoutEventsEnabled(false)
     if helpBtn and helpBtn._pulse then helpBtn._pulse:Stop() end
     if row2Frame then row2Frame:Hide() end; if hudFrame then hudFrame:Hide() end
+    if DockUI.positionPopup then DockUI.positionPopup:Hide() end
+    autoHideGeneration = autoHideGeneration + 1
 end
 
 function HUD.IsShown() return hudFrame and hudFrame:IsShown() or false end

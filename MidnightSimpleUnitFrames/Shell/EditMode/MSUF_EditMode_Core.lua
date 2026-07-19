@@ -416,7 +416,7 @@ local ENTER_DEFER_DELAY = 0.03
 local active      = false
 local unitKey     = nil
 local combatFrame = nil
-local combatEventsRegistered = false
+local combatEventMode = nil
 local pendingCombatExitApply = false
 local enterGeneration = 0
 
@@ -927,17 +927,19 @@ function State.EnsureCombatListener()
 end
 
 function State.UpdateCombatListenerRegistration()
-    if active or pendingCombatExitApply then
-        State.EnsureCombatListener()
-        if combatFrame and not combatEventsRegistered then
-            combatEventsRegistered = true
-            combatFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
-            combatFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
-        end
-    elseif combatFrame and combatEventsRegistered then
-        combatEventsRegistered = false
+    local wantedMode = active and "active" or (pendingCombatExitApply and "regen" or nil)
+    if combatEventMode == wantedMode then return end
+    State.EnsureCombatListener()
+    if combatFrame and combatEventMode then
         combatFrame:UnregisterEvent("PLAYER_REGEN_DISABLED")
         combatFrame:UnregisterEvent("PLAYER_REGEN_ENABLED")
+    end
+    combatEventMode = wantedMode
+    if wantedMode == "active" then
+        combatFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
+        combatFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    elseif wantedMode == "regen" then
+        combatFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
     end
 end
 
