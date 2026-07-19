@@ -88,6 +88,72 @@ do
     Equal(createColorCalls, 3, "unchanged unavailable color was recreated")
 end
 
+-- Rebuilding a BackdropTemplate resets its border pieces to white. The castbar
+-- outline must therefore reapply its cached configured color when pixel scale
+-- changes the resolved edge size.
+do
+    local scale = 1
+    local host
+    _G.MSUF_DB = {
+        general = {
+            castbarOutlineThickness = 1,
+        },
+    }
+    _G.PixelUtil = {
+        GetNearestPixelSize = function(_, effectiveScale)
+            return 1 / effectiveScale
+        end,
+    }
+    _G.CreateFrame = function()
+        host = {
+            shown = false,
+            SetBackdrop = function(self)
+                self.borderR, self.borderG, self.borderB, self.borderA = 1, 1, 1, 1
+            end,
+            SetBackdropColor = function() end,
+            SetBackdropBorderColor = function(self, r, g, b, a)
+                self.borderR, self.borderG, self.borderB, self.borderA = r, g, b, a
+            end,
+            EnableMouse = function() end,
+            ClearAllPoints = function() end,
+            SetAllPoints = function() end,
+            Show = function(self) self.shown = true end,
+            Hide = function(self) self.shown = false end,
+        }
+        return host
+    end
+
+    local frame = {
+        GetEffectiveScale = function() return scale end,
+        GetFrameLevel = function() return 1 end,
+    }
+    local namespace = NewNamespace()
+    LoadAddonFile("Castbars/MSUF_CastbarStyle.lua", namespace)
+    namespace.MSUF_CastbarStyle:ApplyCastbarOutline(frame, false)
+    Equal(host.borderR, 0, "default castbar border red was not black")
+    Equal(host.borderG, 0, "default castbar border green was not black")
+    Equal(host.borderB, 0, "default castbar border blue was not black")
+    Equal(host.borderA, 1, "default castbar border alpha was not opaque")
+
+    local general = _G.MSUF_DB.general
+    general.castbarBorderR = 0.12
+    general.castbarBorderG = 0.34
+    general.castbarBorderB = 0.56
+    general.castbarBorderA = 0.78
+    namespace.MSUF_CastbarStyle:ApplyCastbarOutline(frame, false)
+    Equal(host.borderR, 0.12, "initial castbar border red was not applied")
+    Equal(host.borderG, 0.34, "initial castbar border green was not applied")
+    Equal(host.borderB, 0.56, "initial castbar border blue was not applied")
+    Equal(host.borderA, 0.78, "initial castbar border alpha was not applied")
+
+    scale = 2
+    namespace.MSUF_CastbarStyle:ApplyCastbarOutline(frame, false)
+    Equal(host.borderR, 0.12, "castbar border red reset after backdrop rebuild")
+    Equal(host.borderG, 0.34, "castbar border green reset after backdrop rebuild")
+    Equal(host.borderB, 0.56, "castbar border blue reset after backdrop rebuild")
+    Equal(host.borderA, 0.78, "castbar border alpha reset after backdrop rebuild")
+end
+
 -- Native duration-text cleanup is a transition: steady disabled calls do no C work,
 -- while a partially configured binding still receives a forced disable.
 do
@@ -499,4 +565,4 @@ Check(castbarPreviewSource:find('ReadCastbarNum(g, key, "IconBorderThickness", "
     and castbarPreviewSource:find("ApplyCastbarPreviewIconBorder(mock.cast.icon, iconBorderStyle, iconBorderThickness, g)", 1, true),
     "Castbar preview does not mirror scoped icon border thickness")
 
-print("PASS castbar hotpaths: shared ColorObjects, native-text transition cleanup, cooldown snapshot sharing, O(1) manager refresh, channel unit fastpath, scope-aware icon zoom and border thickness")
+print("PASS castbar hotpaths: shared ColorObjects, stable outline colors, native-text transition cleanup, cooldown snapshot sharing, O(1) manager refresh, channel unit fastpath, scope-aware icon zoom and border thickness")
