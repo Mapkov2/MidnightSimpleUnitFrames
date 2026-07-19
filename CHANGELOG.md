@@ -1,5 +1,22 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-Beta23 - 2026-07-19
+
+### Highlights
+
+- Updated Edit Mode with a compact dockable toolbar, responsive layouts, auto-hide, and zero idle polling.
+- Rebuilt the Color Picker with progressive controls, palettes, precise RGB/HEX input, and faster color pages.
+- Added configurable Castbar icon-border thickness and pixel-perfect outlines across live frames and previews.
+
+### Fixes
+
+- Reduced Unit Frame and Group Frame runtime work by reusing event-owned health, power, prediction, and threat state.
+- Moved Group Frame database repair out of combat and steady runtime paths.
+- Fixed Castbar auto-width, native duration handling, secret-safe target colors, and outline colors after border changes.
+- Fixed legacy `UI_Parent` anchors and prevented repeated retries for unavailable custom anchors.
+- Fixed first-open custom Menu fonts, direct menu navigation, and Aura workspace sizing.
+- Completed Edit Mode and Color Picker translations and expanded regression coverage.
+
 ## 6.0-Beta22 - 2026-07-19
 
 ### Highlights
