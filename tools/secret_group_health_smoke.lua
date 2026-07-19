@@ -39,8 +39,9 @@ assert(loadfile("MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Ele
 assert(Health, "health element was not registered")
 
 local function Bar()
-  local bar = {}
+  local bar = { minMaxCalls = 0 }
   function bar:SetMinMaxValues(minimum, maximum)
+    self.minMaxCalls = self.minMaxCalls + 1
     self.minimum, self.maximum = minimum, maximum
   end
   function bar:SetValue(value)
@@ -93,15 +94,21 @@ assert(aiBar.maximum == SECRET_MAX and aiBar.value == SECRET_HP,
   "secret authoritative AI health must still reach the StatusBar")
 assert(detailedCalls == 1, "AI health must retain the detailed calculator path")
 assert(aiBar._msufMinMax == nil and aiBar._msufHealthValue == nil
-    and aiBar._msufHealthMax == nil and aiBar._msufHealthMaxReady == nil,
-  "secret detailed health must never populate Lua comparison caches")
+    and aiBar._msufHealthMax == SECRET_MAX and aiBar._msufHealthMaxReady == true
+    and _G.issecretvalue(aiBar._msufHealthMax) == true,
+  "secret detailed max was not retained as an opaque event-owned payload")
 assert(aiStatusSeed == false and aiGoneSeed == nil,
   "secret detailed health must not reach status/dead comparisons")
+
+Health.Update(aiFrame, "UNIT_HEALTH", "party1")
+assert(detailedCalls == 2 and aiBar.minMaxCalls == 1,
+  "steady secret health repeated the unchanged native max setter")
 
 detailedHP, detailedMax = 617000, 775000
 Health.Update(aiFrame, "PARTY_MEMBER_ENABLE", "party1")
 assert(aiBar.value == 617000 and aiBar.maximum == 775000
-    and aiBar._msufHealthValue == 617000 and aiBar._msufHealthMax == 775000,
+    and aiBar._msufHealthValue == 617000 and aiBar._msufHealthMax == 775000
+    and aiBar.minMaxCalls == 2,
   "plain authoritative AI recovery must retain the detailed-health cache")
 
 print("secret group health smoke: ok")

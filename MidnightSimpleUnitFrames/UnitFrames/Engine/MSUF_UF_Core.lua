@@ -832,6 +832,7 @@ local SelectElementEventUpdate
 -- here after its frame is detached.
 local NIL_ROUTE_KEY = {}
 local staticElementFunctions = {}
+local noDispatchElementFunctions = {}
 local directHealthRouteCache = {}
 local directPowerRouteCache = {}
 local singleRouteCache = {}
@@ -849,6 +850,19 @@ local function IsRegisteredElementFunction(fn)
           return true
         end
       end
+    end
+  end
+  return false
+end
+
+local function IsNoDispatchElementFunction(fn)
+  if noDispatchElementFunctions[fn] == true then return true end
+  for i = 1, #UF.elementOrder do
+    local element = UF.elements[UF.elementOrder[i]]
+    local updates = type(element) == "table" and element.NoDispatchUpdates or nil
+    if type(updates) == "table" and updates[fn] == true then
+      noDispatchElementFunctions[fn] = true
+      return true
     end
   end
   return false
@@ -877,10 +891,10 @@ local function BuildHealthRoute(barFn, textFn, predictionFn, visualsFn, routeUni
   if target then
     return function(self, ev, _unit, ...)
       BeginFrameEvent(self, ev)
-      local hp, hpMax, percentReady
-      if barFn then hp, hpMax, percentReady = barFn(self, ev, target, ...) end
+      local hp, hpMax, percentReady, seedCalc
+      if barFn then hp, hpMax, percentReady, seedCalc = barFn(self, ev, target, ...) end
       if predictionFn then
-        if percentReady == true then predictionFn(self, ev, target, nil, nil, ...) else predictionFn(self, ev, target, hp, hpMax, ...) end
+        if percentReady == true then predictionFn(self, ev, target, nil, nil, nil, ...) else predictionFn(self, ev, target, hp, hpMax, seedCalc, ...) end
       end
       if textFn then
         if percentReady == true then textFn(self, ev, target, nil, nil, ...) else textFn(self, ev, target, hp, hpMax, ...) end
@@ -892,10 +906,10 @@ local function BuildHealthRoute(barFn, textFn, predictionFn, visualsFn, routeUni
   return function(self, ev, unit, ...)
     BeginFrameEvent(self, ev)
     local u = routeUnitless == true and self.MSUFUnitKey or (unit or self.MSUFUnitKey)
-    local hp, hpMax, percentReady
-    if barFn then hp, hpMax, percentReady = barFn(self, ev, u, ...) end
+    local hp, hpMax, percentReady, seedCalc
+    if barFn then hp, hpMax, percentReady, seedCalc = barFn(self, ev, u, ...) end
     if predictionFn then
-      if percentReady == true then predictionFn(self, ev, u, nil, nil, ...) else predictionFn(self, ev, u, hp, hpMax, ...) end
+      if percentReady == true then predictionFn(self, ev, u, nil, nil, nil, ...) else predictionFn(self, ev, u, hp, hpMax, seedCalc, ...) end
     end
     if textFn then
       if percentReady == true then textFn(self, ev, u, nil, nil, ...) else textFn(self, ev, u, hp, hpMax, ...) end
@@ -1002,17 +1016,33 @@ local function SharedDirectRoute(cache, builder, fn1, fn2, fn3, fn4, routeUnitle
 end
 
 local function BuildSingleRoute(update, unitless, target)
+  local noDispatch = IsNoDispatchElementFunction(update)
   if unitless == true then
+    if noDispatch then
+      return function(self, ev, _unit, ...)
+        update(self, ev, self.MSUFUnitKey, ...)
+      end
+    end
     return function(self, ev, _unit, ...)
       BeginFrameEvent(self, ev)
       update(self, ev, self.MSUFUnitKey, ...)
       EndFrameEvent(self)
     end
   elseif target then
+    if noDispatch then
+      return function(self, ev, _unit, ...)
+        update(self, ev, target, ...)
+      end
+    end
     return function(self, ev, _unit, ...)
       BeginFrameEvent(self, ev)
       update(self, ev, target, ...)
       EndFrameEvent(self)
+    end
+  end
+  if noDispatch then
+    return function(self, ev, unit, ...)
+      update(self, ev, unit or self.MSUFUnitKey, ...)
     end
   end
   return function(self, ev, unit, ...)
@@ -1391,16 +1421,16 @@ local function IdentityEventUpdate(frame, event)
   local unit = frame.MSUFUnitKey
   if not IdentityUnitExists(frame, unit) then return end
   local barPath = frame._msufIdentityBarPath
-  local hp, hpMax, healthPercentReady
+  local hp, hpMax, healthPercentReady, healthSeedCalc
   local power, powerMax, powerType, powerToken, powerMetaChanged
   if barPath then
-    hp, hpMax, healthPercentReady,
+    hp, hpMax, healthPercentReady, healthSeedCalc,
       power, powerMax, powerType, powerToken, powerMetaChanged = barPath(frame, event, unit)
   end
   local path = frame._msufIdentityPath
   if path then
     return path(frame, event, unit,
-      hp, hpMax, healthPercentReady,
+      hp, hpMax, healthPercentReady, healthSeedCalc,
       power, powerMax, powerType, powerToken, powerMetaChanged)
   end
 end
@@ -1507,6 +1537,7 @@ end
 local IDENTITY_STEP_NORMAL = 0
 local IDENTITY_STEP_HEALTH_TEXT = 1
 local IDENTITY_STEP_POWER_TEXT = 2
+local IDENTITY_STEP_PREDICTION = 3
 
 -- Identity bars run before the element sequence. Forward their ephemeral
 -- values to the matching text elements so restricted/secret payloads do not
@@ -1522,13 +1553,15 @@ local function CompileIdentityRuntimePath(list, labels, count)
       kinds[i] = IDENTITY_STEP_HEALTH_TEXT
     elseif label == "PowerText" then
       kinds[i] = IDENTITY_STEP_POWER_TEXT
+    elseif label == "Prediction" then
+      kinds[i] = IDENTITY_STEP_PREDICTION
     else
       kinds[i] = IDENTITY_STEP_NORMAL
     end
   end
 
   return function(frame, event, unit,
-      hp, hpMax, healthPercentReady,
+      hp, hpMax, healthPercentReady, healthSeedCalc,
       power, powerMax, powerType, powerToken, powerMetaChanged)
     for i = 1, count do
       local update = list[i]
@@ -1544,6 +1577,8 @@ local function CompileIdentityRuntimePath(list, labels, count)
       elseif kind == IDENTITY_STEP_POWER_TEXT then
         update(frame, event, unit,
           power, powerMax, powerType, powerToken, powerMetaChanged)
+      elseif kind == IDENTITY_STEP_PREDICTION then
+        update(frame, event, unit, hp, hpMax, healthSeedCalc)
       else
         update(frame, event, unit)
       end
@@ -1663,17 +1698,18 @@ local function CompileIdentityBarPath(frame)
 
   -- Always wrap, including health-only and power-only plans, so every
   -- archetype returns the same fixed tuple:
-  -- hp, hpMax, healthPercentReady, power, powerMax, type, token, metaChanged.
+  -- hp, hpMax, healthPercentReady, healthSeedCalc,
+  -- power, powerMax, type, token, metaChanged.
   local path = function(self, event, unit)
-    local hp, hpMax, healthPercentReady
+    local hp, hpMax, healthPercentReady, healthSeedCalc
     if health then
-      hp, hpMax, healthPercentReady = health(self, event, unit)
+      hp, hpMax, healthPercentReady, healthSeedCalc = health(self, event, unit)
     end
     local powerValue, powerMax, powerType, powerToken, powerMetaChanged
     if power then
       powerValue, powerMax, powerType, powerToken, powerMetaChanged = power(self, event, unit)
     end
-    return hp, hpMax, healthPercentReady,
+    return hp, hpMax, healthPercentReady, healthSeedCalc,
       powerValue, powerMax, powerType, powerToken, powerMetaChanged
   end
   if shared then byPower[key] = path end
@@ -1905,15 +1941,15 @@ function UF.RunLeanIdentity(frame, event)
   if not IdentityUnitExists(frame, unit) then return false end
   event = event or "MSUF_UNIT_IDENTITY"
   BeginFrameEvent(frame, event)
-  local hp, hpMax, healthPercentReady
+  local hp, hpMax, healthPercentReady, healthSeedCalc
   local power, powerMax, powerType, powerToken, powerMetaChanged
   if barPath then
-    hp, hpMax, healthPercentReady,
+    hp, hpMax, healthPercentReady, healthSeedCalc,
       power, powerMax, powerType, powerToken, powerMetaChanged = barPath(frame, event, unit)
   end
   if path then
     path(frame, event, unit,
-      hp, hpMax, healthPercentReady,
+      hp, hpMax, healthPercentReady, healthSeedCalc,
       power, powerMax, powerType, powerToken, powerMetaChanged)
   end
   EndFrameEvent(frame)

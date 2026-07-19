@@ -278,6 +278,10 @@ function GroupRangeFade.SelectEventUpdate(_frame, _spec, event)
   end
   return FilteredUnitEventUpdate
 end
+GroupRangeFade.NoDispatchUpdates = {
+  [FilteredRangeEventUpdate] = true,
+  [FilteredUnitEventUpdate] = true,
+}
 
 local ApplyAlpha
 local rangeSettleQueued

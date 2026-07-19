@@ -181,6 +181,12 @@ assert(reads.health == 1 and reads.healthMax == 1 and reads.healthPercent == 0,
   "absolute health path must read one coherent value pair without UnitHealthPercent")
 assert(health == 50 and healthMax == 100 and absolutePercentReady == false,
   "absolute health snapshot was not returned to route followers")
+absoluteHealthUpdate(absoluteHealthFrame, "UNIT_HEALTH", "party1")
+assert(reads.health == 2 and reads.healthMax == 1,
+  "steady absolute health reread an unchanged event-owned maximum")
+absoluteHealthUpdate(absoluteHealthFrame, "UNIT_MAXHEALTH", "party1")
+assert(reads.health == 3 and reads.healthMax == 2,
+  "UNIT_MAXHEALTH did not refresh the absolute health maximum")
 Health.SelectGroupHealthUpdater(absoluteHealthFrame)
 assert(absoluteHealthFrame._healthUpdate == absoluteHealthUpdate,
   "health hotpath reselection did not rebind the active update key")
@@ -246,6 +252,12 @@ assert(reads.power == 1 and reads.powerMax == 1 and reads.powerPercent == 0,
   "absolute power path must read one coherent value pair without UnitPowerPercent")
 assert(power == 40 and powerMax == 100,
   "absolute power snapshot was not returned to route followers")
+absolutePowerUpdate(absolutePowerFrame, "UNIT_POWER_UPDATE", "party1")
+assert(reads.power == 2 and reads.powerMax == 1,
+  "steady absolute power reread an unchanged event-owned maximum")
+absolutePowerUpdate(absolutePowerFrame, "UNIT_MAXPOWER", "party1")
+assert(reads.power == 3 and reads.powerMax == 2,
+  "UNIT_MAXPOWER did not refresh the absolute power maximum")
 Power.SelectGroupPowerUpdater(absolutePowerFrame)
 assert(absolutePowerFrame._powerUpdate == absolutePowerUpdate,
   "power hotpath reselection did not rebind the active update key")
@@ -291,6 +303,7 @@ end
 local textHealthReads, textHealthMaxReads = 0, 0
 local textPowerReads, textPowerMaxReads = 0, 0
 local textHealthPercentReads, textPowerPercentReads = 0, 0
+local textHealthMaxValue = 100
 local textPowerType, textPowerToken = 0, "MANA"
 local lastTextPowerMaxType
 local Text = {
@@ -308,7 +321,7 @@ local Text = {
   end,
   UnitHealthMax = function()
     textHealthMaxReads = textHealthMaxReads + 1
-    return 100
+    return textHealthMaxValue
   end,
   UnitPower = function()
     textPowerReads = textPowerReads + 1
@@ -511,6 +524,21 @@ maxPercentRuntime._dispatchHealthPercentReady = true
 TextUF.elements.HealthText.Update(maxPercentFrame, "UNIT_MAXHEALTH", "party1")
 assert(textHealthMaxReads == 2,
   "UNIT_MAXHEALTH must refresh the compiled health max cache")
+
+secretHealthMax = 101
+textHealthMaxValue = secretHealthMax
+textHealthMaxReads = 0
+maxPercentRuntime._dispatchHealthPercent, maxPercentRuntime._dispatchHealthPercentReady = 47, true
+TextUF.elements.HealthText.Update(maxPercentFrame, "UNIT_MAXHEALTH", "party1")
+for pct = 46, 45, -1 do
+  maxPercentRuntime._dispatchHealthPercent, maxPercentRuntime._dispatchHealthPercentReady = pct, true
+  TextUF.elements.HealthText.Update(maxPercentFrame, "UNIT_HEALTH", "party1")
+end
+assert(textHealthMaxReads == 1 and maxPercentFrame._msufTextHealthMaxReady == true
+    and _G.issecretvalue(maxPercentFrame._msufTextHealthMax) == true,
+  "steady secret health text reread an unchanged event-owned maximum")
+secretHealthMax = nil
+textHealthMaxValue = 100
 
 local shortFrame = {
   unit = "party1",

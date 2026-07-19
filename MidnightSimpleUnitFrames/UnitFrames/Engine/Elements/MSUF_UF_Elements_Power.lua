@@ -143,23 +143,6 @@ local function ReadPowerTypeCached(bar, unit, force)
   return powerType, token
 end
 
-local function BarShown(bar)
-  -- Power owns this bar's Show/Hide lifecycle and updates the cached flag in
-  -- SetShown. Parent visibility is gated by the Core, while IsShown() only
-  -- repeats this local state through a native call on every power event.
-  if not bar then return false end
-  if bar._msufShown ~= nil then return bar._msufShown == true end
-  -- Preserve the pre-Apply/legacy fallback for a bar with no owned state yet.
-  return not bar.IsShown or bar:IsShown()
-end
-
-local function PowerEventMatchesToken(bar, event, eventPowerToken)
-  if event ~= "UNIT_POWER_UPDATE" and event ~= "UNIT_POWER_FREQUENT" then return true end
-  if type(eventPowerToken) ~= "string" or eventPowerToken == "" then return true end
-  if bar._msufPowerTypeKnown ~= true or bar._msufPowerToken == nil then return true end
-  return bar._msufPowerToken == eventPowerToken
-end
-
 local function SetShown(frame, shown)
   local bar = frame and frame.targetPowerBar
   if not bar then return end
@@ -683,6 +666,7 @@ function Power.Apply(frame, spec)
   bar._msufPowerValueUnit = nil
   bar._msufPowerMaxUnit = nil
   bar._msufPowerMaxReady = nil
+  bar._msufPowerMaxType = nil
   bar._msufPowerPercentValue = nil
   bar._msufPowerType = nil
   bar._msufPowerToken = nil
@@ -704,7 +688,7 @@ local function UpdatePercent(frame, event, unit, animate)
   if not (UnitPowerPercent and UnitPowerType and SCALE_100) then return false end
   local bar = frame.targetPowerBar
   local forceType = false
-  if event ~= "UNIT_POWER_UPDATE" and event ~= "UNIT_POWER_FREQUENT" then
+  if animate ~= true then
     local power = SpecPower(frame)
     forceType = POWER_TYPE_INVALIDATION_EVENTS[event] == true or not power or power.mode ~= "power"
   end
@@ -741,19 +725,23 @@ local function UpdateAbsolute(frame, event, unit, animate)
   local powerType, token
   local bar = frame.targetPowerBar
   local forceType = false
-  if event ~= "UNIT_POWER_UPDATE" and event ~= "UNIT_POWER_FREQUENT" then
+  if animate ~= true then
     local power = SpecPower(frame)
     forceType = POWER_TYPE_INVALIDATION_EVENTS[event] == true or not power or power.mode ~= "power"
   end
   powerType, token = ReadPowerTypeCached(bar, unit, forceType)
   local value
   local maxValue
+  local refreshMax = animate ~= true
+    or bar._msufPowerMaxReady ~= true
+    or bar._msufPowerMaxUnit ~= unit
+    or bar._msufPowerMaxType ~= powerType
   if powerType ~= nil then
     value = UnitPower(unit, powerType)
-    maxValue = UnitPowerMax(unit, powerType)
+    if refreshMax then maxValue = UnitPowerMax(unit, powerType) else maxValue = bar._msufPowerMax end
   else
     value = UnitPower(unit)
-    maxValue = UnitPowerMax(unit)
+    if refreshMax then maxValue = UnitPowerMax(unit) else maxValue = bar._msufPowerMax end
   end
   local valueSecret = issecretvalue(value) == true
   local maxSecret = issecretvalue(maxValue) == true
@@ -766,11 +754,16 @@ local function UpdateAbsolute(frame, event, unit, animate)
     if not IsFiniteNumber(maxValue) or maxValue <= 0 then maxValue = 1 end
   end
   local cachedMinMax = bar._msufMinMax
-  if maxSecret or cachedMinMax ~= maxValue then
-    bar:SetMinMaxValues(0, maxValue)
-    if maxSecret then
+  local maxChanged = false
+  if maxSecret then
+    if refreshMax then
+      bar:SetMinMaxValues(0, maxValue)
       bar._msufMinMax = nil
-    else
+    end
+  else
+    maxChanged = cachedMinMax ~= maxValue
+    if maxChanged then
+      bar:SetMinMaxValues(0, maxValue)
       bar._msufMinMax = maxValue
     end
   end
@@ -785,14 +778,11 @@ local function UpdateAbsolute(frame, event, unit, animate)
     bar._msufPowerValue = value
     bar._msufPowerValueUnit = unit
   end
-  if maxSecret then
-    bar._msufPowerMax = nil
-    bar._msufPowerMaxUnit = nil
-    bar._msufPowerMaxReady = nil
-  else
+  if refreshMax or (not maxSecret and maxChanged) then
     bar._msufPowerMax = maxValue
     bar._msufPowerMaxUnit = unit
     bar._msufPowerMaxReady = true
+    bar._msufPowerMaxType = powerType
   end
   bar._msufPowerPercentValue = nil
   return value, maxValue, powerType, token
@@ -806,9 +796,13 @@ local function UpdatePercentPath(frame, event, unit, eventPowerToken)
     rt._dispatchPowerPercentReady = nil
   end
   local bar = frame and frame.targetPowerBar
-  if not (bar and unit and BarShown(bar)) then return end
-  if not PowerEventMatchesToken(bar, event, eventPowerToken) then return end
   local animate = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
+  if not (bar and unit) then return end
+  local shown = bar._msufShown
+  if shown ~= true and (shown == false or (bar.IsShown and not bar:IsShown())) then return end
+  if animate and type(eventPowerToken) == "string" and eventPowerToken ~= ""
+    and bar._msufPowerTypeKnown == true and bar._msufPowerToken ~= nil
+    and bar._msufPowerToken ~= eventPowerToken then return end
   if not animate then
     if SnapBarInterpolation then SnapBarInterpolation(bar) end
     SetColor(frame)
@@ -827,9 +821,13 @@ local function UpdateAbsolutePath(frame, event, unit, eventPowerToken)
     rt._dispatchPowerPercentReady = nil
   end
   local bar = frame and frame.targetPowerBar
-  if not (bar and unit and BarShown(bar)) then return end
-  if not PowerEventMatchesToken(bar, event, eventPowerToken) then return end
   local animate = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
+  if not (bar and unit) then return end
+  local shown = bar._msufShown
+  if shown ~= true and (shown == false or (bar.IsShown and not bar:IsShown())) then return end
+  if animate and type(eventPowerToken) == "string" and eventPowerToken ~= ""
+    and bar._msufPowerTypeKnown == true and bar._msufPowerToken ~= nil
+    and bar._msufPowerToken ~= eventPowerToken then return end
   if not animate then
     if SnapBarInterpolation then SnapBarInterpolation(bar) end
     SetColor(frame)
@@ -846,15 +844,22 @@ local function UpdateCurrentPath(frame, event, unit, eventPowerToken)
     rt._dispatchPowerPercentReady = nil
   end
   local bar = frame and frame.targetPowerBar
-  if not (bar and unit and BarShown(bar)) then return end
-  if not PowerEventMatchesToken(bar, event, eventPowerToken) then return end
   local animate = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
+  if not (bar and unit) then return end
+  local shown = bar._msufShown
+  if shown ~= true and (shown == false or (bar.IsShown and not bar:IsShown())) then return end
+  if animate and type(eventPowerToken) == "string" and eventPowerToken ~= ""
+    and bar._msufPowerTypeKnown == true and bar._msufPowerToken ~= nil
+    and bar._msufPowerToken ~= eventPowerToken then return end
   if not animate then
     if SnapBarInterpolation then SnapBarInterpolation(bar) end
     SetColor(frame)
   end
   local ok, _, powerType, token = UpdatePercent(frame, event, unit, animate)
-  if not ok then return UpdateAbsolutePath(frame, event, unit, eventPowerToken) end
+  if not ok then
+    local value, maxValue, absoluteType, absoluteToken = UpdateAbsolute(frame, event, unit, animate)
+    return value, maxValue, absoluteType, absoluteToken, event == "UNIT_DISPLAYPOWER"
+  end
   local value
   if powerType ~= nil then value = UnitPower(unit, powerType) else value = UnitPower(unit) end
   return value, nil, powerType, token, event == "UNIT_DISPLAYPOWER"

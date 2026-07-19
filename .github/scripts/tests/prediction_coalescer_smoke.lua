@@ -47,7 +47,10 @@ function Methods:UnregisterAllEvents()
     for event in pairs(self.registered) do self.registered[event] = nil end
 end
 function Methods:CreateTexture() return NewRegion("Texture", self) end
-function Methods:SetMinMaxValues(minimum, maximum) self.minimum, self.maximum = minimum, maximum end
+function Methods:SetMinMaxValues(minimum, maximum)
+    Bump(self, "SetMinMaxValues")
+    self.minimum, self.maximum = minimum, maximum
+end
 function Methods:SetValue(value) self.value = value end
 function Methods:SetStatusBarTexture(texture)
     self.statusTexture = self.statusTexture or NewRegion("Texture", self)
@@ -352,6 +355,18 @@ Equal(healthMaxReads, steadyMaxReads,
     "steady UNIT_HEALTH reread an unchanged prediction max")
 Check(healthAware.overAbsorbGlow == nil,
     "disabled over-absorb overlay created runtime texture work")
+
+local secretMax = { __secret = true }
+Prediction.Update(healthAware, "UNIT_MAXHEALTH", "party1", 60, secretMax)
+local incomingMaxWrites = OperationCount(healthAware.incomingHealBar, "SetMinMaxValues")
+local absorbMaxWrites = OperationCount(healthAware.absorbBar, "SetMinMaxValues")
+for _ = 1, 20 do
+    Prediction.UpdateHealthValue(healthAware, "UNIT_HEALTH", "party1", 60, secretMax)
+end
+Equal(OperationCount(healthAware.incomingHealBar, "SetMinMaxValues"), incomingMaxWrites,
+    "steady secret health repeated the incoming-heal max setter")
+Equal(OperationCount(healthAware.absorbBar, "SetMinMaxValues"), absorbMaxWrites,
+    "steady secret health repeated the absorb max setter")
 
 -- Enabled over-absorb still requires the numeric max and must preserve its
 -- visual threshold behavior.

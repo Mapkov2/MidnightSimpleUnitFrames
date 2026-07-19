@@ -712,19 +712,22 @@ local function CompileSecretWriter(slot)
   local pattern = slot.secretPattern
   local delimiter = slot.delimiter
 
-  return function(_, cur, maxValue, pct)
+  return function(_, cur, maxValue, pct, _, _, curSecret, maxSecret, pctSecret)
+    if needsCur and curSecret == nil then curSecret = issecretvalue(cur) == true end
+    if needsMax and maxSecret == nil then maxSecret = issecretvalue(maxValue) == true end
+    if needsPct and pctSecret == nil then pctSecret = issecretvalue(pct) == true end
     if fn then
       if needsCur then
-        cur = issecretvalue(cur) == true and fn(cur) or fn(FiniteNumberOr(cur, 0))
+        cur = curSecret == true and fn(cur) or fn(FiniteNumberOr(cur, 0))
       end
       if needsMax then
-        maxValue = issecretvalue(maxValue) == true and fn(maxValue) or fn(FiniteNumberOr(maxValue, 0))
+        maxValue = maxSecret == true and fn(maxValue) or fn(FiniteNumberOr(maxValue, 0))
       end
     else
-      if needsCur and issecretvalue(cur) ~= true then cur = FiniteNumberOr(cur, 0) end
-      if needsMax and issecretvalue(maxValue) ~= true then maxValue = FiniteNumberOr(maxValue, 0) end
+      if needsCur and curSecret ~= true then cur = FiniteNumberOr(cur, 0) end
+      if needsMax and maxSecret ~= true then maxValue = FiniteNumberOr(maxValue, 0) end
     end
-    if needsPct and issecretvalue(pct) ~= true then pct = FiniteNumberOr(pct, 0) end
+    if needsPct and pctSecret ~= true then pct = FiniteNumberOr(pct, 0) end
     fs._aText = nil
     fs._aTextPlain = nil
     -- The format mode is fixed when the slot is compiled. Dispatching the
@@ -1016,6 +1019,7 @@ local function CompileTextRuntime(frame, spec, text)
   rt._dispatchHealthMissingReady = nil
   frame._msufTextHealthMax = nil
   frame._msufTextHealthMaxUnit = nil
+  frame._msufTextHealthMaxReady = nil
 
   local showPower = spec and spec.showPowerText ~= false
   local powerUnused
@@ -1168,12 +1172,15 @@ UpdateTextSlotsSecret = function(slots, count, cur, max, unit, percentFn, needsP
       pct = percentFn(unit)
     end
   end
+  local curSecret = issecretvalue(cur) == true
+  local maxSecret = issecretvalue(max) == true
+  local pctSecret = needsPercent == true and issecretvalue(pct) == true or false
   for i = 1, count do
     local slot = slots[i]
     if slot then
       local writer = slot.secretWriter
       if writer then
-        writer(slot, cur, max, pct, true, rt)
+        writer(slot, cur, max, pct, true, rt, curSecret, maxSecret, pctSecret)
       else
         writer = slot.writer
         if writer then

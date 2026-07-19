@@ -149,12 +149,13 @@ local function WriteGFHotSlot(slot, cur, maxValue, pct, pctKnown, rt, missing)
   if missing ~= nil then
     rt.healthMissing = missing
   end
-  if nativeSecrets and (issecretvalue(cur) == true
-    or issecretvalue(maxValue) == true
-    or (pctKnown == true and issecretvalue(pct) == true)
-    or (missing ~= nil and issecretvalue(missing) == true)) then
+  local curSecret = nativeSecrets and issecretvalue(cur) == true
+  local maxSecret = nativeSecrets and issecretvalue(maxValue) == true
+  local pctSecret = nativeSecrets and pctKnown == true and issecretvalue(pct) == true
+  local missingSecret = nativeSecrets and missing ~= nil and issecretvalue(missing) == true
+  if nativeSecrets and (curSecret or maxSecret or pctSecret or missingSecret) then
     local writer = slot.secretWriter or slot.writer
-    if writer then writer(slot, cur, maxValue, pct, true, rt) end
+    if writer then writer(slot, cur, maxValue, pct, true, rt, curSecret, maxSecret, pctSecret) end
     return
   end
   local writer = slot.plainWriter or slot.writer
@@ -522,33 +523,31 @@ local function ReadHealthValuesCached(frame, unit)
   return hp, hpMax
 end
 
-local function SeedCachedHealthMax(frame, unit, hpMax)
+local function SeedCachedHealthMax(frame, unit, hpMax, event)
   if not frame then return false end
-  if issecretvalue(hpMax) == true then
-    frame._msufTextHealthMax = nil
-    frame._msufTextHealthMaxUnit = nil
-    return false
+  if event == "UNIT_HEALTH"
+    and frame._msufTextHealthMaxReady == true
+    and frame._msufTextHealthMaxUnit == unit then
+    return true
   end
-  if hpMax == nil then return false end
+  local secret = issecretvalue(hpMax) == true
+  if not secret and hpMax == nil then return false end
   frame._msufTextHealthMax = hpMax
   frame._msufTextHealthMaxUnit = unit
+  frame._msufTextHealthMaxReady = true
   return true
 end
 
 local function ReadHealthMaxCached(frame, unit, event)
-  local hpMax = frame and frame._msufTextHealthMax
-  if issecretvalue(hpMax) == true then
-    hpMax = nil
-    frame._msufTextHealthMax = nil
-    frame._msufTextHealthMaxUnit = nil
-  end
-
   local sameUnit = frame and unit ~= nil and frame._msufTextHealthMaxUnit == unit
-  if hpMax == nil or not sameUnit or event ~= "UNIT_HEALTH" then
-    hpMax = UnitHealthMax(unit)
+  if not frame or frame._msufTextHealthMaxReady ~= true or not sameUnit or event ~= "UNIT_HEALTH" then
+    local hpMax = UnitHealthMax(unit)
     SeedCachedHealthMax(frame, unit, hpMax)
+    return hpMax
   end
-  return hpMax
+  -- This may be a secret value. It is an opaque native payload owned by the
+  -- last UNIT_MAXHEALTH/identity refresh and must not be inspected here.
+  return frame._msufTextHealthMax
 end
 
 local function UpdateRuntimeHealthTextColor(frame, rt, unit, hp, hpMax, pct, pctReady)
@@ -784,7 +783,7 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
   if needsPercent or colorNeedsPercent then
     pctOverride, pctOverrideSet = ConsumeDispatchPercent(rt, "_dispatchHealthPercent", "_dispatchHealthPercentReady")
   end
-  SeedCachedHealthMax(frame, unit, hpMax)
+  SeedCachedHealthMax(frame, unit, hpMax, event)
 
   if rt.healthPlain == true then
     if (needHPValue and hp == nil) or (needMaxValue and hpMax == nil) then
@@ -1672,6 +1671,7 @@ end
 function InlineToT.Update(frame, event, unit)
   Text.UpdateInline(frame, event, unit)
 end
+InlineToT.NoDispatchUpdates = { [InlineToT.Update] = true }
 
 function InlineToT.Disable(frame)
   SetShownCached(frame and frame.totInlineSep, false)
