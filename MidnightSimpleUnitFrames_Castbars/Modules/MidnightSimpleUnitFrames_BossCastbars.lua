@@ -319,10 +319,10 @@ local function CreateBossCastbarFrame(unit)
     frame:SetFrameStrata("HIGH")
     frame:SetFrameLevel(50)
 
-    -- Background (solid black like MSUF)
+    -- The configurable Backdrop border owns the outer geometry.
     local background = frame:CreateTexture(nil, "BACKGROUND")
     background:SetAllPoints(frame)
-    background:SetColorTexture(0, 0, 0, 1)
+    background:SetColorTexture(0, 0, 0, 0)
     frame.background = background
 
     if _G.MSUF_ApplyCastbarOutline then _G.MSUF_ApplyCastbarOutline(frame, true) end
@@ -411,6 +411,13 @@ if h < 12 then h = 12 end
 -- Boss-specific castbar icon settings
 EnsureDBSafe()
 local g = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+local frameInset = 0
+if type(_G.MSUF_GetCastbarOutlineInset) == "function" then
+    local inset = _G.MSUF_GetCastbarOutlineInset(self, g)
+    frameInset = tonumber(inset) or 0
+elseif (tonumber(g.castbarOutlineThickness) or 1) > 0 then
+    frameInset = 1
+end
 local showIcon = (g.showBossCastIcon == nil) and (g.castbarShowIcon ~= false) or (g.showBossCastIcon ~= false)
 local iconOffsetX = tonumber(g.bossCastIconOffsetX)
 if iconOffsetX == nil then iconOffsetX = tonumber(g.castbarIconOffsetX) end
@@ -459,12 +466,11 @@ if self.statusBar then
     if showIcon and self.icon and not iconDetached then
         self.statusBar:SetPoint("LEFT", self, "LEFT", iconSize + 1, 0)
     else
-        self.statusBar:SetPoint("LEFT", self, "LEFT", 0, 0)
+        self.statusBar:SetPoint("LEFT", self, "LEFT", frameInset, 0)
     end
-    -- 1px top/bottom inset for the same border feel as MSUF
-    self.statusBar:SetPoint("TOP", self, "TOP", 0, -1)
-    self.statusBar:SetPoint("BOTTOM", self, "BOTTOM", 0, 1)
-    self.statusBar:SetPoint("RIGHT", self, "RIGHT", -1, 0)
+    self.statusBar:SetPoint("TOP", self, "TOP", 0, -frameInset)
+    self.statusBar:SetPoint("BOTTOM", self, "BOTTOM", 0, frameInset)
+    self.statusBar:SetPoint("RIGHT", self, "RIGHT", -frameInset, 0)
 end
 
 -- Boss cast text offsets (spell name inside the bar)
@@ -658,14 +664,14 @@ end
         local ox = math.floor((tonumber(g.bossCastbarOffsetX) or 0) + 0.5)
         local oy = math.floor((tonumber(g.bossCastbarOffsetY) or 0) + 0.5)
         local layoutDirty = false
-        local forcedW, forcedH
+        local forcedW, forcedH, preserveWidth
         if type(_G.MSUF_GetCastbarDesiredSize) == "function" then
-            forcedW, forcedH = _G.MSUF_GetCastbarDesiredSize(unit, g, self, 240, 12)
+            forcedW, forcedH, preserveWidth = _G.MSUF_GetCastbarDesiredSize(unit, g, self, 240, 12)
         else
             forcedW = tonumber(g.bossCastbarWidth)
             forcedH = tonumber(g.bossCastbarHeight)
         end
-        if forcedW then forcedW = math.floor(forcedW + 0.5) end
+        if forcedW and not preserveWidth then forcedW = math.floor(forcedW + 0.5) end
         if forcedH then forcedH = math.floor(forcedH + 0.5) end
 
         -- Height can always be overridden (even when width is auto-matched to the boss unitframe)
@@ -691,7 +697,11 @@ end
         else
             local uf = _G["MSUF_" .. unit] -- e.g. MSUF_boss1
             if uf and uf.GetWidth and uf.GetHeight then
-                layoutDirty = BossSetPointIfChanged(self, "BOTTOMLEFT", uf, "TOPLEFT", ox, 2 + oy) or layoutDirty
+                local autoX = 0
+                if type(_G.MSUF_GetCastbarAutoAnchorOffsetX) == "function" then
+                    autoX = _G.MSUF_GetCastbarAutoAnchorOffsetX(g, unit, self)
+                end
+                layoutDirty = BossSetPointIfChanged(self, "BOTTOMLEFT", uf, "TOPLEFT", ox + autoX, 2 + oy) or layoutDirty
 
                 if forcedW and forcedW > 10 then
                     layoutDirty = BossSetWidthIfChanged(self, forcedW) or layoutDirty

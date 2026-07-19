@@ -1166,6 +1166,17 @@ local function WidthSourceDBKey(u)
     if u == "focus" then return "castbarFocusMatchWidth" end
     if u == "boss" then return "bossCastbarMatchWidth" end
 end
+local function WidthAdjustmentDBKey(u)
+    local fn = _G.MSUF_GetCastbarWidthAdjustmentKey
+    if type(fn) == "function" then
+        local key = fn(u)
+        if key then return key end
+    end
+    if u == "player" then return "castbarPlayerWidthAdjustment" end
+    if u == "target" then return "castbarTargetWidthAdjustment" end
+    if u == "focus" then return "castbarFocusWidthAdjustment" end
+    if u == "boss" then return "bossCastbarWidthAdjustment" end
+end
 local function WidthSourceKey(g, u)
     local dbKey = WidthSourceDBKey(u)
     return NormalizeWidthSource(dbKey and g and g[dbKey]) or "manual"
@@ -1214,6 +1225,29 @@ local function GetEffectiveWidth(g, u)
     end
     return floor(ManualWidthValue(g, u) + 0.5)
 end
+local function StoreEditedWidth(g, u, widthSource, value)
+    value = tonumber(value)
+    if not value then return end
+    value = floor(max(50, min(600, value)) + 0.5)
+
+    if not widthSource then
+        if u == "boss" then
+            g.bossCastbarWidth = value
+        else
+            local pre = GP(u)
+            if pre then g[pre .. "BarWidth"] = value end
+        end
+        return
+    end
+
+    -- In Auto Width mode W edits the final displayed width. Store only the
+    -- delta so the bar continues following its source when that source resizes.
+    local adjustmentKey = WidthAdjustmentDBKey(u)
+    if not adjustmentKey then return end
+    local currentWidth = GetEffectiveWidth(g, u)
+    local currentAdjustment = tonumber(g[adjustmentKey]) or 0
+    g[adjustmentKey] = floor(max(-300, min(300, currentAdjustment + value - currentWidth)) + 0.5)
+end
 local function SetManualWidthControlsEnabled(enabled)
     if not pf then return end
     F.EnableStepper(pf.wBox, pf.wBoxMinus, pf.wBoxPlus, enabled)
@@ -1233,7 +1267,7 @@ local function RefreshWidthSourceControls(g, u, syncDropdown)
         pf.widthSourceDrop:SetValue(sourceKey)
     end
     local manual = (sourceKey == "manual")
-    SetManualWidthControlsEnabled(manual)
+    SetManualWidthControlsEnabled(true)
     if manual then
         SetBoxText(pf.wBox, floor(ManualWidthValue(g, u) + 0.5))
     else
@@ -1281,7 +1315,7 @@ local function Apply()
             g[widthSourceKey] = widthSource
         end
         g.bossCastbarOffsetX=San(pf.xBox and tonumber(pf.xBox:GetText()),0); g.bossCastbarOffsetY=San(pf.yBox and tonumber(pf.yBox:GetText()),0)
-        local w=pf.wBox and tonumber(pf.wBox:GetText()); if w and not widthSource then g.bossCastbarWidth=floor(max(50,min(600,w))+0.5) end
+        StoreEditedWidth(g, u, widthSource, pf.wBox and pf.wBox:GetText())
         local h=pf.hBox and tonumber(pf.hBox:GetText()); if h then g.bossCastbarHeight=floor(max(8,min(100,h))+0.5) end
         if pf.spellShowCB then g.showBossCastName=pf.spellShowCB:GetChecked() and true or false end
         if pf.iconShowCB then g.showBossCastIcon=pf.iconShowCB:GetChecked() and true or false end
@@ -1292,6 +1326,7 @@ local function Apply()
         if pf.iconSizeBox then local sz=tonumber(pf.iconSizeBox:GetText()); if sz then g.bossCastIconSize=floor(max(6,min(128,sz))+0.5) end end
         if pf.timeSizeBox then local sz=tonumber(pf.timeSizeBox:GetText()); if sz then g.bossCastTimeFontSize=floor(max(6,min(72,sz))+0.5) end end
         if type(_G.MSUF_UpdateCastbarWidthSourceSync) == "function" then _G.MSUF_UpdateCastbarWidthSourceSync(g, u) end
+        ReanchorCastbarUnit(u)
         if not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
             and type(_G.MSUF_UpdateBossCastbarPreview)=="function"
         then
@@ -1308,7 +1343,7 @@ local function Apply()
             g[widthSourceKey] = widthSource
         end
         g[pre.."OffsetX"]=San(pf.xBox and tonumber(pf.xBox:GetText()),dx); g[pre.."OffsetY"]=San(pf.yBox and tonumber(pf.yBox:GetText()),dy)
-        local w=pf.wBox and tonumber(pf.wBox:GetText()); if w and not widthSource then g[pre.."BarWidth"]=floor(max(50,min(600,w))+0.5) end
+        StoreEditedWidth(g, u, widthSource, pf.wBox and pf.wBox:GetText())
         local h=pf.hBox and tonumber(pf.hBox:GetText()); if h then g[pre.."BarHeight"]=floor(max(8,min(100,h))+0.5) end
         if pf.spellShowCB then g[pre.."ShowSpellName"]=pf.spellShowCB:GetChecked() and true or false end
         if pf.iconShowCB then g[pre.."ShowIcon"]=pf.iconShowCB:GetChecked() and true or false end
@@ -1329,6 +1364,7 @@ end
 
 local BOSS_KEYS = {
     "bossCastbarOffsetX","bossCastbarOffsetY","bossCastbarWidth","bossCastbarHeight",
+    "bossCastbarWidthAdjustment",
     "showBossCastName","showBossCastIcon","showBossCastTime","bossCastTimeFormat",
     "bossCastTextOffsetX","bossCastTextOffsetY",
     "bossCastSpellNameFontSize","bossCastIconSize","bossCastTimeFontSize",
@@ -1342,7 +1378,7 @@ local function SnapshotCast(u)
     else
         local pre=GP(u); if not pre then return nil end
         local stk=GST(u)
-        local suffixes={"OffsetX","OffsetY","BarWidth","BarHeight","ShowSpellName","ShowIcon",
+        local suffixes={"OffsetX","OffsetY","BarWidth","BarHeight","WidthAdjustment","ShowSpellName","ShowIcon",
             "TextOffsetX","TextOffsetY","SpellNameFontSize","IconSize","TimeFontSize","TimeFormat","Detached"}
         for _,s in ipairs(suffixes) do snap[pre..s]=g[pre..s] end
         if stk then snap[stk]=g[stk] end
@@ -1493,6 +1529,7 @@ local function Build()
         local r = {}
         if u == "boss" then
             r.w = g.bossCastbarWidth; r.h = g.bossCastbarHeight
+            r.widthAdjustment = g.bossCastbarWidthAdjustment
             local wk = WidthSourceDBKey(u); r.widthSource = wk and g[wk]
             r.showSpell = g.showBossCastName; r.showIcon = g.showBossCastIcon; r.showTime = g.showBossCastTime
             r.timeFormat = g.bossCastTimeFormat
@@ -1501,6 +1538,7 @@ local function Build()
         else
             local pre = GP(u); if not pre then return nil end
             r.w = g[pre.."BarWidth"]; r.h = g[pre.."BarHeight"]
+            r.widthAdjustment = g[pre.."WidthAdjustment"]
             local wk = WidthSourceDBKey(u); r.widthSource = wk and g[wk]
             r.showSpell = g[pre.."ShowSpellName"]; r.showIcon = g[pre.."ShowIcon"]
             local stk = GST(u); r.showTime = stk and g[stk]
@@ -1514,6 +1552,7 @@ local function Build()
         local g = EG(); if not g or not r then return end
         if u == "boss" then
             g.bossCastbarWidth = r.w; g.bossCastbarHeight = r.h
+            g.bossCastbarWidthAdjustment = tonumber(r.widthAdjustment) or 0
             local wk = WidthSourceDBKey(u); if wk then g[wk] = NormalizeWidthSource(r.widthSource) end
             g.showBossCastName = r.showSpell; g.showBossCastIcon = r.showIcon; g.showBossCastTime = r.showTime
             g.bossCastTimeFormat = NTF(r.timeFormat)
@@ -1522,6 +1561,7 @@ local function Build()
         else
             local pre = GP(u); if not pre then return end
             g[pre.."BarWidth"] = r.w; g[pre.."BarHeight"] = r.h
+            g[pre.."WidthAdjustment"] = tonumber(r.widthAdjustment) or 0
             local wk = WidthSourceDBKey(u); if wk then g[wk] = NormalizeWidthSource(r.widthSource) end
             g[pre.."ShowSpellName"] = r.showSpell; g[pre.."ShowIcon"] = r.showIcon
             local stk = GST(u); if stk then g[stk] = r.showTime end

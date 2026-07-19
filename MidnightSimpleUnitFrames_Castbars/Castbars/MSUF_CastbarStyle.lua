@@ -10,48 +10,222 @@ ns = ns or {}
 ns.MSUF_CastbarStyle = ns.MSUF_CastbarStyle or {}
 local S = ns.MSUF_CastbarStyle
 
+local math_floor, math_ceil = math.floor, math.ceil
+local WHITE8 = "Interface\\Buttons\\WHITE8X8"
+local OUTLINE_BACKDROPS = {}
+
+-- Pixel conversion is intentionally confined to visual apply/reanchor calls.
+-- No OnUpdate/event work is needed: the existing UI-scale refresh reapplies
+-- castbar visuals and the cached physical edge size invalidates the layout.
+local function CastbarEffectiveScale(region)
+    if region and region.GetEffectiveScale then
+        local scale = region:GetEffectiveScale()
+        if scale and scale > 0 then return scale end
+    end
+    local parent = _G.UIParent
+    if parent and parent.GetEffectiveScale then
+        local scale = parent:GetEffectiveScale()
+        if scale and scale > 0 then return scale end
+    end
+    return 1
+end
+
+local function CastbarPixelSize(region, value, minPixels)
+    value = tonumber(value) or 0
+    if value == 0 then return 0 end
+
+    local scale = CastbarEffectiveScale(region)
+    local pixelUtil = _G.PixelUtil
+    if pixelUtil and type(pixelUtil.GetNearestPixelSize) == "function" then
+        local size = pixelUtil.GetNearestPixelSize(value, scale, minPixels)
+        if size and size ~= 0 then return size end
+    end
+
+    local factor = 1
+    local getSize = _G.GetPhysicalScreenSize
+    if type(getSize) == "function" then
+        local _, physicalHeight = getSize()
+        physicalHeight = tonumber(physicalHeight) or 0
+        if physicalHeight > 0 then factor = 768 / physicalHeight end
+    end
+
+    local pixels = value * scale / factor
+    if pixels >= 0 then
+        pixels = math_floor(pixels + 0.5)
+    else
+        pixels = math_ceil(pixels - 0.5)
+    end
+
+    minPixels = tonumber(minPixels) or 0
+    if minPixels > 0 then
+        if pixels == 0 then
+            pixels = (value < 0) and -minPixels or minPixels
+        elseif pixels > 0 and pixels < minPixels then
+            pixels = minPixels
+        elseif pixels < 0 and pixels > -minPixels then
+            pixels = -minPixels
+        end
+    end
+
+    return pixels * factor / scale
+end
+
 -- -------------------------------------------------
 -- Castbar outline/border (color + thickness)
 -- Menu: "Castbar border color" + "Outline thickness"
 -- -------------------------------------------------
 
-local function EnsureOutline(frame)
-    if not frame or frame._msufOutline then return end
-
-    local function MakeEdge()
-        local t = frame:CreateTexture(nil, "OVERLAY")
-        -- IMPORTANT: Use a WHITE base texture so SetVertexColor can tint it.
-        -- If the base texture is black, vertex color multiplication keeps it black.
-        t:SetColorTexture(1, 1, 1, 1)
-        t:Hide()
-        return t
-    end
-
-    frame._msufOutline = {
-        top    = MakeEdge(),
-        bottom = MakeEdge(),
-        left   = MakeEdge(),
-        right  = MakeEdge(),
-    }
+local function NormalizeOutlineThickness(g, key, defaultValue)
+    local thickness = tonumber(g and g[key])
+    if thickness == nil then thickness = defaultValue or 0 end
+    thickness = math_floor(thickness + 0.5)
+    if thickness < 0 then thickness = 0 end
+    if thickness > 12 then thickness = 12 end
+    return thickness
 end
 
--- Internal implementation (mirrors the old MSUF_Castbars.lua logic 1:1)
+local function OutlineEdge(frame, g)
+    local thickness = NormalizeOutlineThickness(g, "castbarOutlineThickness", 1)
+    if thickness <= 0 then return 0, 0 end
+    local edge = CastbarPixelSize(frame, thickness, 1)
+    if edge <= 0 then edge = thickness end
+    return edge, thickness
+end
+
+function S:GetCastbarOutlineInset(frame, g)
+    if not g then
+        if type(EnsureDB) == "function" then EnsureDB() end
+        g = (MSUF_DB and MSUF_DB.general) or {}
+    end
+    local edge = OutlineEdge(frame, g)
+    return edge
+end
+
+function _G.MSUF_GetCastbarOutlineInset(frame, g)
+    return S:GetCastbarOutlineInset(frame, g)
+end
+
+local function BackdropForEdge(edge)
+    local key = tostring(edge)
+    local backdrop = OUTLINE_BACKDROPS[key]
+    if not backdrop then
+        backdrop = {
+            bgFile = WHITE8,
+            edgeFile = WHITE8,
+            edgeSize = edge,
+            insets = { left = 0, right = 0, top = 0, bottom = 0 },
+        }
+        OUTLINE_BACKDROPS[key] = backdrop
+    end
+    return backdrop
+end
+
+local function EnsureBackdropHost(frame, field, anchor)
+    if not (frame and anchor) then return nil end
+    local host = frame[field]
+    if host and not host.SetBackdrop then
+        host:Hide()
+        host = nil
+    end
+    if not host then
+        host = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+        host:EnableMouse(false)
+        frame[field] = host
+    end
+    host:ClearAllPoints()
+    host:SetAllPoints(anchor)
+
+    if host.SetFrameLevel then
+        local source = anchor == frame and (frame.statusBar or frame) or (anchor.GetParent and anchor:GetParent() or nil)
+        if not (source and source.GetFrameLevel) then source = frame.statusBar or frame end
+        local level = source and source.GetFrameLevel and (source:GetFrameLevel() or 0) or 0
+        host:SetFrameLevel(level + 20)
+    end
+    return host
+end
+
+local function HideBackdropHost(host)
+    if not host then return end
+    if host.SetBackdrop then host:SetBackdrop(nil) end
+    host:Hide()
+end
+
+local function FindCastbarIcon(frame)
+    if not frame then return nil end
+    return frame.icon or frame.Icon or (frame.IconFrame and frame.IconFrame.Icon)
+end
+
+local function HideIconOutline(frame)
+    if not frame then return end
+    HideBackdropHost(frame._msufIconOutlineHost)
+end
+
+-- Kept separate from the castbar outline so interrupt-ready border coloring can
+-- continue to affect only the bar. The icon outline always uses the configured
+-- castbar border color and is allocated lazily only when thickness is above 0.
+function S:ApplyCastbarIconOutline(frame, force)
+    if not frame then return end
+
+    if type(EnsureDB) == "function" then
+        EnsureDB()
+    end
+    local g = (MSUF_DB and MSUF_DB.general) or {}
+    local thickness = NormalizeOutlineThickness(g, "castbarIconOutlineThickness", 0)
+
+    local icon = FindCastbarIcon(frame)
+    if thickness <= 0 or not icon or (icon.IsShown and not icon:IsShown()) then
+        HideIconOutline(frame)
+        frame._msufIconOutlineT = 0
+        frame._msufIconOutlineR = nil
+        frame._msufIconOutlineG = nil
+        frame._msufIconOutlineB = nil
+        frame._msufIconOutlineA = nil
+        return
+    end
+
+    local host = EnsureBackdropHost(frame, "_msufIconOutlineHost", icon)
+    if not host then return end
+
+    local pixelRev = _G.MSUF_CastbarStyleRev or 0
+    local geometryChanged = force or frame._msufIconOutlineT ~= thickness or frame._msufIconOutlineAnchor ~= icon or frame._msufIconOutlinePixelRev ~= pixelRev
+    if geometryChanged then
+        local edge = CastbarPixelSize(icon, thickness, 1)
+        if edge <= 0 then edge = thickness end
+        host:SetBackdrop(BackdropForEdge(edge))
+        host:SetBackdropColor(0, 0, 0, 0)
+
+        frame._msufIconOutlineT = thickness
+        frame._msufIconOutlineEdge = edge
+        frame._msufIconOutlineAnchor = icon
+        frame._msufIconOutlinePixelRev = pixelRev
+    end
+
+    local r = tonumber(g.castbarBorderR); if r == nil then r = 0 end
+    local gg = tonumber(g.castbarBorderG); if gg == nil then gg = 0 end
+    local b = tonumber(g.castbarBorderB); if b == nil then b = 0 end
+    local a = tonumber(g.castbarBorderA); if a == nil then a = 1 end
+    -- BackdropTemplate paints a newly applied backdrop white, so a geometry
+    -- rebuild must restore the configured color even if RGBA did not change.
+    if geometryChanged or frame._msufIconOutlineR ~= r or frame._msufIconOutlineG ~= gg or frame._msufIconOutlineB ~= b or frame._msufIconOutlineA ~= a then
+        host:SetBackdropBorderColor(r, gg, b, a)
+        frame._msufIconOutlineR, frame._msufIconOutlineG, frame._msufIconOutlineB, frame._msufIconOutlineA = r, gg, b, a
+    end
+
+    frame._msufIconOutline = { _host = host }
+    host:Show()
+end
+
+-- UUF/oUF geometry: the frame is the fixed outer container and the Backdrop
+-- edge is rendered inside that geometry. Thickness never grows the castbar.
 function S:ApplyCastbarOutline(frame, force)
     if not frame then return end
-    EnsureOutline(frame)
-    local o = frame._msufOutline
-    if not o then return end
 
     if type(EnsureDB) == "function" then
         EnsureDB()
     end
     local g = (MSUF_DB and MSUF_DB.general) or {}
 
-    local thickness = tonumber(g.castbarOutlineThickness)
-    if thickness == nil then thickness = 1 end
-    thickness = math.floor(thickness + 0.5)
-    if thickness < 0 then thickness = 0 end
-    if thickness > 12 then thickness = 12 end
+    local edge, thickness = OutlineEdge(frame, g)
 
     local r = tonumber(g.castbarBorderR); if r == nil then r = 0 end
     local gg = tonumber(g.castbarBorderG); if gg == nil then gg = 0 end
@@ -59,47 +233,37 @@ function S:ApplyCastbarOutline(frame, force)
     local a = tonumber(g.castbarBorderA); if a == nil then a = 1 end
 
     if thickness <= 0 then
-        o.top:Hide(); o.bottom:Hide(); o.left:Hide(); o.right:Hide()
+        HideBackdropHost(frame._msufOutlineHost)
         frame._msufOutlineT = 0
+        frame._msufOutlineEdge = 0
+        frame._msufOutlineR = nil
+        frame._msufOutlineG = nil
+        frame._msufOutlineB = nil
+        frame._msufOutlineA = nil
         return
     end
 
-    if force or frame._msufOutlineT ~= thickness then
-        o.top:ClearAllPoints()
-        -- OUTSIDE outline: thickness grows outward (true "outline"), not inward over the bar.
-        -- Corner cleanup: top/bottom edges avoid overlapping left/right edges (no fat corners at thickness 5-6).
-        o.top:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, thickness)
-        o.top:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, thickness)
-        o.top:SetHeight(thickness)
-
-        o.bottom:ClearAllPoints()
-        o.bottom:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, -thickness)
-        o.bottom:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, -thickness)
-        o.bottom:SetHeight(thickness)
-
-        o.left:ClearAllPoints()
-        o.left:SetPoint("TOPLEFT", frame, "TOPLEFT", -thickness, thickness)
-        o.left:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", -thickness, -thickness)
-        o.left:SetWidth(thickness)
-
-        o.right:ClearAllPoints()
-        o.right:SetPoint("TOPRIGHT", frame, "TOPRIGHT", thickness, thickness)
-        o.right:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", thickness, -thickness)
-        o.right:SetWidth(thickness)
+    local host = EnsureBackdropHost(frame, "_msufOutlineHost", frame)
+    if not host then return end
+    local pixelRev = _G.MSUF_CastbarStyleRev or 0
+    local geometryChanged = force or frame._msufOutlineT ~= thickness or frame._msufOutlineEdge ~= edge or frame._msufOutlinePixelRev ~= pixelRev
+    if geometryChanged then
+        host:SetBackdrop(BackdropForEdge(edge))
+        host:SetBackdropColor(0, 0, 0, 0)
 
         frame._msufOutlineT = thickness
+        frame._msufOutlineEdge = edge
+        frame._msufOutlinePixelRev = pixelRev
     end
 
-    if force or frame._msufOutlineR ~= r or frame._msufOutlineG ~= gg or frame._msufOutlineB ~= b or frame._msufOutlineA ~= a then
-        o.top:SetVertexColor(r, gg, b, a)
-        o.bottom:SetVertexColor(r, gg, b, a)
-        o.left:SetVertexColor(r, gg, b, a)
-        o.right:SetVertexColor(r, gg, b, a)
+    if geometryChanged or frame._msufOutlineR ~= r or frame._msufOutlineG ~= gg or frame._msufOutlineB ~= b or frame._msufOutlineA ~= a then
+        host:SetBackdropBorderColor(r, gg, b, a)
 
         frame._msufOutlineR, frame._msufOutlineG, frame._msufOutlineB, frame._msufOutlineA = r, gg, b, a
     end
 
-    o.top:Show(); o.bottom:Show(); o.left:Show(); o.right:Show()
+    frame._msufOutline = { _host = host }
+    host:Show()
 end
 
 function S:ApplyCastbarOutlineToAll(force)
@@ -129,8 +293,10 @@ function S:ApplyCastbarOutlineToAll(force)
         local f = list[i]
         if f and f.IsShown and f:CanChangeAttribute() ~= false then
             S:ApplyCastbarOutline(f, force)
+            S:ApplyCastbarIconOutline(f, force)
         elseif f then
             S:ApplyCastbarOutline(f, force)
+            S:ApplyCastbarIconOutline(f, force)
         end
     end
 
@@ -140,6 +306,7 @@ function S:ApplyCastbarOutlineToAll(force)
             local f = boss[i]
             if f then
                 S:ApplyCastbarOutline(f, force)
+                S:ApplyCastbarIconOutline(f, force)
             end
         end
     end
@@ -150,7 +317,14 @@ end
 -- -------------------------------------------------
 if not _G.MSUF_ApplyCastbarOutline then
     function _G.MSUF_ApplyCastbarOutline(frame, force)
-        return S:ApplyCastbarOutline(frame, force)
+        S:ApplyCastbarOutline(frame, force)
+        return S:ApplyCastbarIconOutline(frame, force)
+    end
+end
+
+if not _G.MSUF_ApplyCastbarIconOutline then
+    function _G.MSUF_ApplyCastbarIconOutline(frame, force)
+        return S:ApplyCastbarIconOutline(frame, force)
     end
 end
 

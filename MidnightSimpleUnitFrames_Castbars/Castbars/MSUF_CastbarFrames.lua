@@ -24,11 +24,11 @@ function _G.MSUF_BuildCastbarFrameElements(self)
 
     local background = self:CreateTexture(nil, "BACKGROUND")
     background:SetAllPoints(self)
-    background:SetColorTexture(0, 0, 0, 1)
+    background:SetColorTexture(0, 0, 0, 0)
     self.background = background
 
     local statusBar = CreateFrame("StatusBar", nil, self)
-    statusBar:SetSize(self:GetWidth() - height - 1, self:GetHeight() - 2)
+    statusBar:SetSize(self:GetWidth() - height - 1, self:GetHeight())
     statusBar:SetPoint("LEFT", self, "LEFT", height + 1, 0)
 
     local texture = MSUF_GetCastbarTexture and MSUF_GetCastbarTexture() or "Interface\\TargetingFrame\\UI-StatusBar"
@@ -126,7 +126,7 @@ function _G.MSUF_CreateCastbarPreviewFrame(kind, frameName, opts)
     local parent = opts.parent or UIParent
     local w = tonumber(opts.width) or 250
     local h = tonumber(opts.height) or 18
-    local sbH = tonumber(opts.statusBarHeight) or math.max(4, h - 2)
+    local sbH = tonumber(opts.statusBarHeight) or h
 
     local f = CreateFrame("Frame", frameName, parent, opts.template or "BackdropTemplate")
     f.unit = kind
@@ -145,7 +145,7 @@ function _G.MSUF_CreateCastbarPreviewFrame(kind, frameName, opts)
     -- otherwise a parent texture can visually cover the fill animation.
     local frameBG = f:CreateTexture(nil, "BACKGROUND")
     frameBG:SetAllPoints(f)
-    frameBG:SetColorTexture(0, 0, 0, opts.bgAlpha or 0.8)
+    frameBG:SetColorTexture(0, 0, 0, 0)
     f._msufFrameBG = frameBG
 
     local statusBar = CreateFrame("StatusBar", nil, f)

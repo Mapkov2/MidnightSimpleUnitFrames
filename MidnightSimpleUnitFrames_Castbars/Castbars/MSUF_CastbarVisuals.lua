@@ -233,6 +233,13 @@ local function ApplyIconAndBarLayout(frame, unitKey, g)
     local height = (frame.GetHeight and frame:GetHeight()) or 0
     if width <= 0 then width = 250 end
     if height <= 0 then height = 18 end
+    local frameInset = 0
+    if type(_G.MSUF_GetCastbarOutlineInset) == "function" then
+        local inset = _G.MSUF_GetCastbarOutlineInset(frame, g)
+        frameInset = tonumber(inset) or 0
+    elseif (tonumber(g.castbarOutlineThickness) or 1) > 0 then
+        frameInset = 1
+    end
 
     local iconDetached = (iconOX ~= 0 or iconOY ~= 0)
     iconSize = tonumber(iconSize) or height
@@ -256,15 +263,17 @@ local function ApplyIconAndBarLayout(frame, unitKey, g)
         end
     end
 
-    statusBar:ClearAllPoints()
+    local leftInset = frameInset
     if showIcon and icon and not iconDetached then
-        statusBar:SetPoint("LEFT", frame, "LEFT", iconSize + 1, 0)
-        statusBar:SetWidth(width - (iconSize + 1))
-    else
-        statusBar:SetPoint("LEFT", frame, "LEFT", 0, 0)
-        statusBar:SetWidth(width)
+        leftInset = iconSize + 1
     end
-    statusBar:SetHeight(height - 2)
+    statusBar:ClearAllPoints()
+    statusBar:SetPoint("TOPLEFT", frame, "TOPLEFT", leftInset, -frameInset)
+    statusBar:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -frameInset, frameInset)
+    statusBar:SetSize(
+        math.max(1, width - leftInset - frameInset),
+        math.max(1, height - (frameInset * 2))
+    )
 
     if backgroundBar and statusBar then
         backgroundBar:ClearAllPoints()
