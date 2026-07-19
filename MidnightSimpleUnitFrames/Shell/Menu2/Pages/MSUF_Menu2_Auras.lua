@@ -3084,36 +3084,49 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
     local currentTool = CurrentUnitAuraTool(unit, currentTab)
     local outer = builder:CollapsibleSection("auras", "Auras", 120, false)
     local auraBuilder = CreateNestedAuraBuilder(ctx, builder, outer)
-    local top = auraBuilder:Section("", 104)
+    local sectionW = auraBuilder.width or 720
+    local tools = normalLane and UNIT_AURA_NORMAL_TOOLS or (currentTab == "custom4" and UNIT_AURA_TARGET_DOT_TOOLS or UNIT_AURA_CUSTOM_TOOLS)
+    local containerCenterY = -28
+    local containerMetrics = W.MeasureScopeOverrideBar and W.MeasureScopeOverrideBar(UNIT_AURA_WORKSPACE_TABS, {
+        width = sectionW,
+        labelWidth = 72,
+        centerY = containerCenterY,
+    })
+    local toolCenterY = min(-62, ((containerMetrics and containerMetrics.bottomY) or -40) - 22)
+    local toolMetrics = W.MeasureScopeOverrideBar and W.MeasureScopeOverrideBar(tools, {
+        width = sectionW,
+        labelWidth = 72,
+        centerY = toolCenterY,
+    })
+    local footerY = ((toolMetrics and toolMetrics.bottomY) or (toolCenterY - 12)) - 2
+    local top = auraBuilder:Section("", max(104, abs(footerY) + 28))
     if top.title then top.title:Hide() end
     if W.RegisterGuidedRegion then
         W.RegisterGuidedRegion(ctx, top, "Aura container and tools", "unit_aura_tools")
     end
-    local sectionW = top._msuf2Width or auraBuilder.width or 720
     local containerBar = RegisterAuraChoiceBar(ctx, W.ScopeOverrideBar(ctx, top, {
         values = UNIT_AURA_WORKSPACE_TABS,
         width = sectionW,
         label = "Container:",
         labelWidth = 72,
-        centerY = -28,
+        centerY = containerCenterY,
         getValue = CurrentTab,
         setValue = function(value)
             M.unitAuraTabSelection[unit] = value
             Rebuild(ctx)
         end,
     }), UNIT_AURA_WORKSPACE_TABS, "unit-workspace.container-selector")
-    local tools = normalLane and UNIT_AURA_NORMAL_TOOLS or (currentTab == "custom4" and UNIT_AURA_TARGET_DOT_TOOLS or UNIT_AURA_CUSTOM_TOOLS)
     local toolBar = RegisterAuraChoiceBar(ctx, W.ScopeOverrideBar(ctx, top, {
         values = tools,
         width = sectionW,
         label = "Edit:",
         labelWidth = 72,
-        centerY = -62,
+        centerY = toolCenterY,
         getValue = function() return CurrentUnitAuraTool(unit, currentTab) end,
         setValue = function(value) SetUnitAuraTool(unit, currentTab, value); Rebuild(ctx) end,
     }), tools, "unit-workspace.tool-selector")
     local openStyle = ActionButton(top, "More Aura Options", 150, "normal")
-    openStyle:SetPoint("TOPRIGHT", top, "TOPRIGHT", -16, -76)
+    openStyle:SetPoint("TOPRIGHT", top, "TOPRIGHT", -16, footerY)
     openStyle:SetScript("OnClick", function()
         SetCurrentScope(unit)
         M.SetMenuStateValue("auraStyleContainer", currentTab)
@@ -3123,7 +3136,7 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
     RegisterAuraControl(ctx, openStyle, "More Aura Options", "button", "unit-workspace.open-aura-style", "navigation", "auras3_styling")
     AddTooltip(openStyle, "More Aura Options",
         "Opens the complete Aura Style page for icon appearance, cooldown and stack text, duration bars, colors, and Full-Frame effects.")
-    local workspaceHint = W.Text(top, "All icon and full-frame styling: Appearance > Auras.", 16, -84, sectionW - 198, T.colors.muted)
+    local workspaceHint = W.Text(top, "All icon and full-frame styling: Appearance > Auras.", 16, footerY - 8, sectionW - 198, T.colors.muted)
     M.TrackRefresh(ctx, function()
         workspaceHint:SetText(normalLane and not AnyUnitFrameAuraEnabled()
             and UNIT_AURA_DISPEL_WARNING
