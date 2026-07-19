@@ -811,6 +811,21 @@ local function SetCastTargetText(frame, text)
     end
 end
 
+local function SetCastTargetTextPlainColorIfChanged(fs, red, green, blue)
+    if fs._msufCastTargetColorPlain == true
+        and fs._msufCastTargetColorR == red
+        and fs._msufCastTargetColorG == green
+        and fs._msufCastTargetColorB == blue
+    then
+        return
+    end
+    fs._msufCastTargetColorPlain = true
+    fs._msufCastTargetColorR = red
+    fs._msufCastTargetColorG = green
+    fs._msufCastTargetColorB = blue
+    fs:SetTextColor(red, green, blue)
+end
+
 local function ApplyCastTargetTextColor(frame, classFilename)
     local fs = frame and frame.castTargetText
     if not fs then return end
@@ -818,18 +833,25 @@ local function ApplyCastTargetTextColor(frame, classFilename)
     if type(getCustomColor) == "function" then
         local r, g, b, custom = getCustomColor()
         if custom == true then
-            fs:SetTextColor(r, g, b)
+            SetCastTargetTextPlainColorIfChanged(fs, r, g, b)
             return
         end
     end
     if classFilename and type(C_ClassColor_GetClassColor) == "function" then
+        -- UnitSpellTargetClass returns a secret value. Passing it directly to
+        -- C_ClassColor is allowed for tainted callers; indexing any Lua table
+        -- with it is not.
         local classColor = C_ClassColor_GetClassColor(classFilename)
         if classColor and type(classColor.GetRGB) == "function" then
+            -- GetRGB may return secret numbers. SetTextColor explicitly accepts
+            -- them, but Lua comparisons do not. Mark the plain cache invalid
+            -- and forward the tuple without retaining or inspecting it.
+            fs._msufCastTargetColorPlain = nil
             fs:SetTextColor(classColor:GetRGB())
             return
         end
     end
-    fs:SetTextColor(1, 1, 1)
+    SetCastTargetTextPlainColorIfChanged(fs, 1, 1, 1)
 end
 ExportPublic("MSUF_ApplyCastTargetTextColor", ApplyCastTargetTextColor)
 
