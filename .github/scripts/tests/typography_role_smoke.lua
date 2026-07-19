@@ -80,4 +80,74 @@ spec.font = custom
 SetUnitFont(customName, spec, 10, 'name')
 AssertEqual(customName.font, custom, 'custom unit font preservation')
 
+-- Menu2 must survive the real-client edge where the first custom semibold
+-- SetFont call returns without making that face renderable. The visible-page
+-- settle retries once; until then the inherited font must remain readable.
+local M = {}
+root.MSUF2 = M
+function M.Lines(text)
+    return tostring(text or ''):gmatch('[^\r\n]+')
+end
+function M.WordList(text)
+    local out = {}
+    for word in tostring(text or ''):gmatch('%S+') do out[word] = true end
+    return out
+end
+function M.AssignNamedValues(target, names, ...)
+    local values, index = { ... }, 0
+    for name in tostring(names or ''):gmatch('%S+') do
+        index = index + 1
+        target[name] = values[index]
+    end
+end
+assert(loadfile('MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Theme_Tokens.lua'))(
+    'MidnightSimpleUnitFrames', root)
+assert(loadfile('MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Theme.lua'))(
+    'MidnightSimpleUnitFrames', root)
+
+local inherited = 'Fonts\\FRIZQT__.TTF'
+_G.MSUF_DB.general.menuFontKey = regular
+local cold = FontString()
+cold.font, cold.size, cold.flags = inherited, 12, ''
+cold._msuf2FontOriginal = { font = inherited, size = 12, flags = '' }
+cold._msuf2FontRole = 'section'
+cold.text, cold.stringWidth, cold.semiboldAttempts = 'Frame Basics', 96, 0
+function cold:GetText() return self.text end
+function cold:GetStringWidth() return self.stringWidth end
+function cold:SetFont(font, size, flags)
+    if font == semibold then
+        self.semiboldAttempts = self.semiboldAttempts + 1
+        if self.semiboldAttempts == 1 then return true end -- accepted, but not actually applied
+    end
+    self.font, self.size, self.flags = font, size, flags
+    self.stringWidth = 96
+    return true
+end
+
+M.Theme.RefreshMenuFonts(cold, true)
+AssertEqual(cold.font, inherited, 'cold semibold fallback font')
+AssertEqual(cold.semiboldAttempts, 1, 'cold semibold first attempt')
+M.Theme.RefreshMenuFonts(cold, true)
+AssertEqual(cold.font, semibold, 'visible settle semibold retry')
+AssertEqual(cold.size, 15, 'visible settle section size')
+local attemptsAfterSuccess = cold.semiboldAttempts
+M.Theme.RefreshMenuFonts(cold)
+AssertEqual(cold.semiboldAttempts, attemptsAfterSuccess, 'cached font refresh')
+
+local blank = FontString()
+blank.font, blank.size, blank.flags = inherited, 12, ''
+blank._msuf2FontOriginal = { font = inherited, size = 12, flags = '' }
+blank._msuf2FontRole = 'section'
+blank.text, blank.stringWidth = 'Auras', 80
+function blank:GetText() return self.text end
+function blank:GetStringWidth() return self.stringWidth end
+function blank:SetFont(font, size, flags)
+    self.font, self.size, self.flags = font, size, flags
+    self.stringWidth = font == semibold and 0 or 80
+    return true
+end
+M.Theme.RefreshMenuFonts(blank, true)
+AssertEqual(blank.font, inherited, 'zero-width semibold fallback font')
+AssertEqual(blank.stringWidth, 80, 'zero-width semibold fallback metrics')
+
 print('typography_role_smoke: ok')

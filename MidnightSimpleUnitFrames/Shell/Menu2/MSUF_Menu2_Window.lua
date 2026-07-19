@@ -660,6 +660,15 @@ local function QueueVisiblePageLayoutSettle(key, entry)
         if not (M.frame and M.frame.IsShown and M.frame:IsShown()) then return end
         if not (entry.wrapper and entry.wrapper.IsShown and entry.wrapper:IsShown()) then return end
 
+        -- A fresh WoW client can accept the first custom semibold SetFont call
+        -- before its glyph metrics are renderable. Reapply this page's fonts
+        -- once after visibility and fall back immediately when the requested
+        -- face still cannot render text. Cached pages pay this cost only once.
+        if not entry._msuf2VisibleFontSettled and T and type(T.RefreshMenuFonts) == "function" then
+            entry._msuf2VisibleFontSettled = true
+            T.RefreshMenuFonts(entry.wrapper, true)
+        end
+
         -- A cached/new page can become visible in the same layout turn in
         -- which its accordion headers were created. If their anchored width
         -- resolved before OnSizeChanged was hooked, the first label layout can
