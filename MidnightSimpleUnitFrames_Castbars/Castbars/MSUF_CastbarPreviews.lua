@@ -904,15 +904,7 @@ if type(_G.MSUF_UpdateBossCastbarPreview) ~= "function" then
     })
     f:EnableMouse(false)
 
-    if f.SetBackdrop then
-        f:SetBackdrop({
-            bgFile   = "Interface\\Buttons\\WHITE8X8",
-            edgeFile = "Interface\\Buttons\\WHITE8X8",
-            edgeSize = 1,
-        })
-        f:SetBackdropColor(0, 0, 0, 0.55)
-        f:SetBackdropBorderColor(0, 0, 0, 1)
-    end
+    if f.SetBackdrop then f:SetBackdrop(nil) end
 
     f._msufIsPreview = true
     _G.MSUF_BossCastbarPreview = f
@@ -953,16 +945,23 @@ end
 
         if f.statusBar then
             f.statusBar:ClearAllPoints()
+            local frameInset = 0
+            if type(_G.MSUF_GetCastbarOutlineInset) == "function" then
+                local inset = _G.MSUF_GetCastbarOutlineInset(f, g)
+                frameInset = tonumber(inset) or 0
+            elseif (tonumber(g.castbarOutlineThickness) or 1) > 0 then
+                frameInset = 1
+            end
 
             if showIcon and f.icon and not iconDetached then
                 f.statusBar:SetPoint("LEFT", f, "LEFT", h + 1, 0)
             else
-                f.statusBar:SetPoint("LEFT", f, "LEFT", 1, 0)
+                f.statusBar:SetPoint("LEFT", f, "LEFT", frameInset, 0)
             end
 
-            f.statusBar:SetPoint("TOP", f, "TOP", 0, -1)
-            f.statusBar:SetPoint("BOTTOM", f, "BOTTOM", 0, 1)
-            f.statusBar:SetPoint("RIGHT", f, "RIGHT", -1, 0)
+            f.statusBar:SetPoint("TOP", f, "TOP", 0, -frameInset)
+            f.statusBar:SetPoint("BOTTOM", f, "BOTTOM", 0, frameInset)
+            f.statusBar:SetPoint("RIGHT", f, "RIGHT", -frameInset, 0)
 
             if type(MSUF_GetCastbarTexture) == "function" and f.statusBar.SetStatusBarTexture then
                 local ok, tex = MSUF_FastCall(MSUF_GetCastbarTexture)
@@ -1483,7 +1482,11 @@ function MSUF_PositionTargetCastbarPreview()
     if g.castbarTargetDetached then
         MSUF_TargetCastbarPreview:SetPoint("CENTER", anchorFrame, "CENTER", offsetX, offsetY)
     else
-        MSUF_TargetCastbarPreview:SetPoint("BOTTOMLEFT", anchorFrame, "TOPLEFT", offsetX, offsetY)
+        local autoX = 0
+        if type(_G.MSUF_GetCastbarAutoAnchorOffsetX) == "function" then
+            autoX = _G.MSUF_GetCastbarAutoAnchorOffsetX(g, "target", MSUF_TargetCastbarPreview)
+        end
+        MSUF_TargetCastbarPreview:SetPoint("BOTTOMLEFT", anchorFrame, "TOPLEFT", offsetX + autoX, offsetY)
     end
 end
 function MSUF_PositionFocusCastbarPreview()
@@ -1539,7 +1542,11 @@ function MSUF_PositionFocusCastbarPreview()
     if g.castbarFocusDetached then
         MSUF_FocusCastbarPreview:SetPoint("CENTER", anchorFrame, "CENTER", offsetX, offsetY)
     else
-        MSUF_FocusCastbarPreview:SetPoint("BOTTOMLEFT", anchorFrame, "TOPLEFT", offsetX, offsetY)
+        local autoX = 0
+        if type(_G.MSUF_GetCastbarAutoAnchorOffsetX) == "function" then
+            autoX = _G.MSUF_GetCastbarAutoAnchorOffsetX(g, "focus", MSUF_FocusCastbarPreview)
+        end
+        MSUF_FocusCastbarPreview:SetPoint("BOTTOMLEFT", anchorFrame, "TOPLEFT", offsetX + autoX, offsetY)
     end
 end
 
@@ -1588,8 +1595,8 @@ end
         MSUF_PositionPlayerCastbarPreview()
         playerPreview:Show()
         -- Keep player preview size synced to edit-mode size keys
-        local w, h = MSUF_GetPlayerCastbarDesiredSize(g, MSUF_PlayerCastbarPreview, 250, 18)
-        MSUF_ApplyPlayerCastbarSizeAndLayout(playerPreview, g, w, h)
+        local w, h, preserveWidth = MSUF_GetPlayerCastbarDesiredSize(g, MSUF_PlayerCastbarPreview, 250, 18)
+        MSUF_ApplyPlayerCastbarSizeAndLayout(playerPreview, g, w, h, preserveWidth)
 
     end
 
@@ -1627,8 +1634,8 @@ end
         local targetPreview = MSUF_TargetCastbarPreview or MSUF_CreateTargetCastbarPreview()
         if targetPreview and MSUF_PositionTargetCastbarPreview then
             if type(_G.MSUF_ApplyPlayerCastbarSizeAndLayout) == "function" then
-                local tw, th = GetCastbarDesiredPreviewSize("target", targetPreview, "castbarTargetBarWidth", "castbarTargetBarHeight", g.castbarTargetDetached, 250, 18)
-                _G.MSUF_ApplyPlayerCastbarSizeAndLayout(targetPreview, g, tw, th)
+                local tw, th, preserveWidth = GetCastbarDesiredPreviewSize("target", targetPreview, "castbarTargetBarWidth", "castbarTargetBarHeight", g.castbarTargetDetached, 250, 18)
+                _G.MSUF_ApplyPlayerCastbarSizeAndLayout(targetPreview, g, tw, th, preserveWidth)
             end
             MSUF_PositionTargetCastbarPreview()
             targetPreview:Show()
@@ -1641,12 +1648,12 @@ end
         local focusPreview = MSUF_FocusCastbarPreview or MSUF_CreateFocusCastbarPreview()
         if focusPreview and MSUF_PositionFocusCastbarPreview then
             if type(_G.MSUF_ApplyPlayerCastbarSizeAndLayout) == "function" then
-                local fw, fh = GetCastbarDesiredPreviewSize("focus", focusPreview, "castbarFocusBarWidth", "castbarFocusBarHeight", g.castbarFocusDetached, 250, 18)
+                local fw, fh, preserveWidth = GetCastbarDesiredPreviewSize("focus", focusPreview, "castbarFocusBarWidth", "castbarFocusBarHeight", g.castbarFocusDetached, 250, 18)
                 -- If focus is attached but has no unitframe yet, mirror target as a pragmatic fallback.
                 if (not fw or fw <= 0) and (UnitFrames and UnitFrames["target"] and UnitFrames["target"].GetWidth) then
                     fw = UnitFrames["target"]:GetWidth()
                 end
-                _G.MSUF_ApplyPlayerCastbarSizeAndLayout(focusPreview, g, fw, fh)
+                _G.MSUF_ApplyPlayerCastbarSizeAndLayout(focusPreview, g, fw, fh, preserveWidth)
             end
             MSUF_PositionFocusCastbarPreview()
             focusPreview:Show()

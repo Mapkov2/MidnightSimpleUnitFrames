@@ -1092,6 +1092,9 @@ end
     if g.castbarIconOffsetY == nil then
         g.castbarIconOffsetY = 0
     end
+    if g.castbarIconOutlineThickness == nil then
+        g.castbarIconOutlineThickness = 0
+    end
     if g.castbarTargetOffsetX == nil then
         g.castbarTargetOffsetX = 0
     end
@@ -1141,6 +1144,10 @@ end
     if g.castbarTargetBarHeight == nil then g.castbarTargetBarHeight = 18 end
     if g.castbarFocusBarWidth == nil then g.castbarFocusBarWidth = 175 end
     if g.castbarFocusBarHeight == nil then g.castbarFocusBarHeight = 18 end
+    if g.castbarPlayerWidthAdjustment == nil then g.castbarPlayerWidthAdjustment = 0 end
+    if g.castbarTargetWidthAdjustment == nil then g.castbarTargetWidthAdjustment = 0 end
+    if g.castbarFocusWidthAdjustment == nil then g.castbarFocusWidthAdjustment = 0 end
+    if g.bossCastbarWidthAdjustment == nil then g.bossCastbarWidthAdjustment = 0 end
     if g.castbarPlayerPreviewEnabled == nil then
         g.castbarPlayerPreviewEnabled = true
     end

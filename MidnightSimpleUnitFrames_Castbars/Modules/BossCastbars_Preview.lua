@@ -143,24 +143,12 @@ local function MSUF_CreateBossCastbarPreview(index)
     f._msufBossPreviewIndex = index
     f.unit = "boss"
 
-    -- simple border like the other preview bars
-    if f.SetBackdrop then
-        f:SetBackdrop({
-            bgFile   = "Interface\\Buttons\\WHITE8X8",
-            edgeFile = "Interface\\Buttons\\WHITE8X8",
-            edgeSize = 1,
-        })
-        f:SetBackdropColor(0, 0, 0, 0.55)
-        f:SetBackdropBorderColor(0, 0, 0, 1)
-    end
+    if f.SetBackdrop then f:SetBackdrop(nil) end
 
     local statusBar = CreateFrame("StatusBar", nil, f)
     statusBar:SetMinMaxValues(0, 1)
     statusBar:SetValue(0.6)
-    statusBar:SetPoint("TOP", f, "TOP", 0, -1)
-    statusBar:SetPoint("BOTTOM", f, "BOTTOM", 0, 1)
-    statusBar:SetPoint("RIGHT", f, "RIGHT", -1, 0)
-    statusBar:SetPoint("LEFT", f, "LEFT", 1, 0)
+    statusBar:SetAllPoints(f)
     f.statusBar = statusBar
 
 	-- Text overlay frame: FontStrings must be ABOVE the StatusBar fill.
@@ -296,16 +284,23 @@ local function MSUF_ApplyBossCastbarPreviewLayout(f, index)
 
     if f.statusBar then
         f.statusBar:ClearAllPoints()
+        local frameInset = 0
+        if type(_G.MSUF_GetCastbarOutlineInset) == "function" then
+            local inset = _G.MSUF_GetCastbarOutlineInset(f, g)
+            frameInset = tonumber(inset) or 0
+        elseif (tonumber(g.castbarOutlineThickness) or 1) > 0 then
+            frameInset = 1
+        end
 
         if showIcon and f.icon and not iconDetached then
             f.statusBar:SetPoint("LEFT", f, "LEFT", iconSize + 1, 0)
         else
-            f.statusBar:SetPoint("LEFT", f, "LEFT", 1, 0)
+            f.statusBar:SetPoint("LEFT", f, "LEFT", frameInset, 0)
         end
 
-        f.statusBar:SetPoint("TOP", f, "TOP", 0, -1)
-        f.statusBar:SetPoint("BOTTOM", f, "BOTTOM", 0, 1)
-        f.statusBar:SetPoint("RIGHT", f, "RIGHT", -1, 0)
+        f.statusBar:SetPoint("TOP", f, "TOP", 0, -frameInset)
+        f.statusBar:SetPoint("BOTTOM", f, "BOTTOM", 0, frameInset)
+        f.statusBar:SetPoint("RIGHT", f, "RIGHT", -frameInset, 0)
     end
 
     -- texture (if the helper exists)
