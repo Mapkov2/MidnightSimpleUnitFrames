@@ -1234,14 +1234,10 @@ function T.StyleScrollFrame(scroll, anchor)
     scroll._msuf2ScrollStyled = true
 
     local parent = anchor or (scroll.GetParent and scroll:GetParent()) or scroll
-    local bar = CreateFrame("Slider", nil, parent)
-    bar:SetOrientation("VERTICAL")
+    local bar = CreateFrame("Frame", nil, parent)
     bar:SetWidth(10)
     bar:SetPoint("TOPLEFT", scroll, "TOPRIGHT", 6, -8)
     bar:SetPoint("BOTTOMLEFT", scroll, "BOTTOMRIGHT", 6, 8)
-    bar:SetMinMaxValues(0, 1)
-    bar:SetValueStep(1)
-    if bar.SetObeyStepOnDrag then bar:SetObeyStepOnDrag(false) end
     if bar.EnableMouse then bar:EnableMouse(true) end
     if bar.SetFrameLevel and scroll.GetFrameLevel then bar:SetFrameLevel(scroll:GetFrameLevel() + 8) end
 
@@ -1265,7 +1261,6 @@ function T.StyleScrollFrame(scroll, anchor)
     local thumb = PixelBarTexture(bar:CreateTexture(nil, "OVERLAY"))
     thumb:SetSize(5, 42)
     thumb:SetColorTexture(thumbBase[1], thumbBase[2], thumbBase[3], 0.72)
-    bar:SetThumbTexture(thumb)
     bar._msuf2Thumb = thumb
 
     local function Paint(hover)
@@ -1280,6 +1275,19 @@ function T.StyleScrollFrame(scroll, anchor)
     end
 
     local rawSetVerticalScroll = scroll.SetVerticalScroll
+    local function UpdateThumbPosition(offset, maxScroll)
+        maxScroll = math.max(0, tonumber(maxScroll) or 0)
+        offset = ClampScrollValue(offset, maxScroll)
+        local barH = (bar.GetHeight and bar:GetHeight()) or 0
+        local thumbH = (thumb.GetHeight and thumb:GetHeight()) or 0
+        local travel = math.max(0, barH - thumbH)
+        local y = maxScroll > 0 and -(offset / maxScroll) * travel or 0
+        if thumb._msuf2LastY ~= y then
+            thumb._msuf2LastY = y
+            thumb:ClearAllPoints()
+            thumb:SetPoint("TOP", bar, "TOP", 0, y)
+        end
+    end
     local function CurrentMaxScroll()
         local maxScroll = scroll._msuf2MaxScroll
         if maxScroll == nil then
@@ -1295,11 +1303,9 @@ function T.StyleScrollFrame(scroll, anchor)
         offset = ClampScrollValue(offset, maxScroll)
         local current = (scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0
         if rawSetVerticalScroll and math.abs(offset - current) > 0.01 then rawSetVerticalScroll(scroll, offset) end
-        if bar and bar._msuf2LastScrollValue ~= offset then
+        if bar then
             bar._msuf2LastScrollValue = offset
-            bar._msuf2Refreshing = true
-            bar:SetValue(offset)
-            bar._msuf2Refreshing = nil
+            UpdateThumbPosition(offset, maxScroll)
         end
         return offset
     end
@@ -1367,38 +1373,29 @@ function T.StyleScrollFrame(scroll, anchor)
             if rawSetVerticalScroll and (scroll:GetVerticalScroll() or 0) ~= 0 then
                 rawSetVerticalScroll(scroll, 0)
             end
-            if bar._msuf2LastScrollValue ~= 0 then
-                bar._msuf2LastScrollValue = 0
-                bar._msuf2Refreshing = true
-                bar:SetValue(0)
-                bar._msuf2Refreshing = nil
-            end
+            bar._msuf2LastScrollValue = 0
+            UpdateThumbPosition(0, 0)
             if bar.Hide and bar:IsShown() then bar:Hide() end
             return
         end
 
         if bar.Show and not bar:IsShown() then bar:Show() end
-        if bar._msuf2LastMaxScroll ~= maxScroll then
-            bar._msuf2LastMaxScroll = maxScroll
-            bar:SetMinMaxValues(0, maxScroll)
-        end
+        bar._msuf2LastMaxScroll = maxScroll
         local visibleRatio = frameH / math.max(childH, 1)
-        local thumbH = math.floor(math.max(34, math.min(frameH, frameH * visibleRatio)) + 0.5)
+        local barH = (bar.GetHeight and bar:GetHeight()) or frameH
+        local thumbH = math.floor(math.max(34, math.min(barH, barH * visibleRatio)) + 0.5)
         if thumb and thumb.SetHeight and thumb._msuf2LastHeight ~= thumbH then
             thumb._msuf2LastHeight = thumbH
             thumb:SetHeight(thumbH)
+            thumb._msuf2LastY = nil
         end
 
         local offset = ClampScrollValue(scroll:GetVerticalScroll() or 0, maxScroll)
         if offset ~= (scroll:GetVerticalScroll() or 0) and rawSetVerticalScroll then
             rawSetVerticalScroll(scroll, offset)
         end
-        if bar._msuf2LastScrollValue ~= offset then
-            bar._msuf2LastScrollValue = offset
-            bar._msuf2Refreshing = true
-            bar:SetValue(offset)
-            bar._msuf2Refreshing = nil
-        end
+        bar._msuf2LastScrollValue = offset
+        UpdateThumbPosition(offset, maxScroll)
         Paint(bar._msuf2Hover)
     end
 
@@ -1432,6 +1429,40 @@ function T.StyleScrollFrame(scroll, anchor)
         end
     end
 
+    local function CursorYInBarSpace()
+        if type(GetCursorPosition) ~= "function" then return nil end
+        local _, y = GetCursorPosition()
+        local scale = (bar.GetEffectiveScale and bar:GetEffectiveScale()) or 1
+        scale = tonumber(scale) or 1
+        if scale <= 0 then scale = 1 end
+        return (tonumber(y) or 0) / scale
+    end
+
+    local function StopBarDrag()
+        bar._msuf2DragStartY = nil
+        bar._msuf2DragStartOffset = nil
+        bar:SetScript("OnUpdate", nil)
+    end
+
+    local function DragBar()
+        if type(IsMouseButtonDown) == "function" and not IsMouseButtonDown("LeftButton") then
+            StopBarDrag()
+            return
+        end
+        local startY = bar._msuf2DragStartY
+        local cursorY = CursorYInBarSpace()
+        if startY == nil or cursorY == nil then return end
+        local maxScroll = CurrentMaxScroll()
+        local barH = (bar.GetHeight and bar:GetHeight()) or 0
+        local thumbH = (thumb.GetHeight and thumb:GetHeight()) or 0
+        local travel = math.max(1, barH - thumbH)
+        local startOffset = ClampScrollValue(bar._msuf2DragStartOffset, maxScroll)
+        -- WoW cursor Y grows upward. Dragging down therefore produces a negative
+        -- delta and must increase the ScrollFrame offset.
+        local target = startOffset - (cursorY - startY) * (maxScroll / travel)
+        SetRawScroll(target)
+    end
+
     scroll:EnableMouseWheel(true)
     scroll:SetScript("OnMouseWheel", function(_, delta) ScrollBy(delta) end)
     local wheelChild = scroll.GetScrollChild and scroll:GetScrollChild()
@@ -1449,19 +1480,24 @@ function T.StyleScrollFrame(scroll, anchor)
         self._msuf2Hover = nil
         Paint(false)
     end)
-    bar:SetScript("OnValueChanged", function(self, value)
-        if self._msuf2Refreshing then return end
+    bar:SetScript("OnMouseDown", function(_, button)
+        if button and button ~= "LeftButton" then return end
         StopSmoothScroll()
-        local maxScroll = scroll._msuf2MaxScroll or 0
-        local clamped = ClampScrollValue(value, maxScroll)
-        local current = (scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0
-        if rawSetVerticalScroll and math.abs(clamped - current) > 0.01 then rawSetVerticalScroll(scroll, clamped) end
-        Refresh()
+        bar._msuf2DragStartY = CursorYInBarSpace()
+        bar._msuf2DragStartOffset = (scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0
+        if bar._msuf2DragStartY ~= nil then bar:SetScript("OnUpdate", DragBar) end
     end)
+    bar:SetScript("OnMouseUp", StopBarDrag)
     scroll:HookScript("OnScrollRangeChanged", Refresh)
     scroll:HookScript("OnSizeChanged", Refresh)
-    scroll:HookScript("OnHide", StopSmoothScroll)
-    if bar.HookScript then bar:HookScript("OnShow", function() Paint(bar._msuf2Hover) end) end
+    scroll:HookScript("OnHide", function()
+        StopSmoothScroll()
+        StopBarDrag()
+    end)
+    if bar.HookScript then
+        bar:HookScript("OnHide", StopBarDrag)
+        bar:HookScript("OnShow", function() Paint(bar._msuf2Hover) end)
+    end
 
     Refresh()
     scroll._msuf2ScrollBar = bar

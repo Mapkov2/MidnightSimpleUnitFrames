@@ -37,7 +37,7 @@ function MSUF_AddonCompartment_OnClick(_, btn)
     else
         -- Open MSUF menu
         if type(_G.MSUF_OpenStandaloneOptionsWindow) == "function" then
-            pcall(_G.MSUF_OpenStandaloneOptionsWindow, "home")
+            pcall(_G.MSUF_OpenStandaloneOptionsWindow)
         elseif type(_G.MSUF_OpenOptionsMenu) == "function" then
             pcall(_G.MSUF_OpenOptionsMenu)
         end
