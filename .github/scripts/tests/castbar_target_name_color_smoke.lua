@@ -53,8 +53,10 @@ assert(_G.MSUF_DB.general.castbarTargetNameR == 0.2
 assert(visualRefreshes == 1 and targetColorRefreshes == 1,
     "custom cast-target color did not refresh live castbars")
 
+local classColorCalls = 0
 _G.C_ClassColor = {
     GetClassColor = function(token)
+        classColorCalls = classColorCalls + 1
         assert(token == "MAGE")
         return { GetRGB = function() return 0.25, 0.5, 0.75 end }
     end,
@@ -66,9 +68,11 @@ _G.MSUF_RefreshAllCastTargetTextColors = function()
 end
 
 local applied
+local appliedCalls = 0
 local frame = {
     castTargetText = {
         SetTextColor = function(_, red, green, blue)
+            appliedCalls = appliedCalls + 1
             applied = { red, green, blue }
         end,
     },
@@ -84,8 +88,50 @@ assert(r == 1 and g == 1 and b == 1 and custom == false,
 applyCastTargetTextColor(frame, "MAGE")
 assert(applied[1] == 0.25 and applied[2] == 0.5 and applied[3] == 0.75,
     "legacy target class color was not restored after reset")
-assert(visualRefreshes == 2 and targetColorRefreshes == 2,
-    "reset cast-target color did not refresh live castbars")
+applyCastTargetTextColor(frame, "MAGE")
+assert(classColorCalls == 2,
+    "secret target class must be resolved directly by the safe C API on each refresh")
+assert(appliedCalls == 3,
+    "secret target class color was cached or compared in Lua")
+api.SetCastbarTargetNameColor(0.2, 0.4, 0.6)
+applyCastTargetTextColor(frame, "MAGE")
+assert(appliedCalls == 4 and applied[1] == 0.2 and applied[2] == 0.4 and applied[3] == 0.6,
+    "class-color forwarding left the plain custom-color cache stale")
+assert(visualRefreshes == 3 and targetColorRefreshes == 3,
+    "cast-target color changes did not refresh live castbars")
+
+api.ResetCastbarTargetNameColor()
+local secretComparisons = 0
+local secretComponentMT = {
+    __eq = function()
+        secretComparisons = secretComparisons + 1
+        error("secret RGB comparison")
+    end,
+}
+_G.C_ClassColor.GetClassColor = function()
+    return {
+        GetRGB = function()
+            return setmetatable({}, secretComponentMT),
+                setmetatable({}, secretComponentMT),
+                setmetatable({}, secretComponentMT)
+        end,
+    }
+end
+local secretApplyStart = appliedCalls
+applyCastTargetTextColor(frame, "MAGE")
+applyCastTargetTextColor(frame, "MAGE")
+assert(appliedCalls == secretApplyStart + 2 and secretComparisons == 0,
+    "secret class RGB values entered a Lua comparison cache")
+
+local castbarDriver = read(root .. "Castbars/MSUF_CastbarDriver.lua")
+assert(contains(castbarDriver, "C_ClassColor_GetClassColor(classFilename)"),
+    "cast-target class color no longer uses the secret-safe C API")
+assert(contains(castbarDriver, "fs:SetTextColor(classColor:GetRGB())")
+    and not contains(castbarDriver, "local red, green, blue = classColor:GetRGB()"),
+    "secret class RGB values are still retained before the native setter")
+assert(not contains(castbarDriver, "RAID_CLASS_COLORS[classFilename]")
+    and not contains(castbarDriver, "castTargetClassColors[classFilename]"),
+    "secret target class is still used as a Lua table key")
 
 local unitPreview = read(root .. "Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua")
 local castbarPage = read(root .. "Shell/Menu2/Pages/MSUF_Menu2_GlobalCastbars.lua")
