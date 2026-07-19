@@ -30,6 +30,9 @@ local EMPTY_EVENTS = V.EMPTY_EVENTS or {}
 local BORDER_THREAT_EVENTS = V.BORDER_THREAT_EVENTS or { "UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE" }
 local TARGET_CHANGE_EVENTS = { "PLAYER_TARGET_CHANGED" }
 local SetShown = V.SetShown
+local ReadGroupThreatStatus = V.ReadGroupThreatStatus
+local ReadGroupRole = V.ReadGroupRole
+local FreshUnitState = UF and UF.FreshUnitState
 
 local Borders = {}
 local IsAggroBorderUnit
@@ -341,6 +344,13 @@ local function BorderHighlightThickness(cfg)
   return thickness
 end
 
+local function NormalizeAggroMode(mode)
+  mode = tostring(mode or "ALL"):upper()
+  if mode == "TANK_ONLY" then return "TANK" end
+  if mode == "HEALER_ONLY" then return "HEALER" end
+  return mode
+end
+
 local function SetBorder(frame, show, r, g, b, a)
   if not frame.MSUFBorderEdges then
     return
@@ -392,21 +402,28 @@ local function ThreatState(frame)
   if frame._msufBorderRuntimeGroup == true
     or frame._msufIsGroupFrame == true
     or frame._msufCoreScope == "group" then
-    local exists = UnitExists and UnitExists(unit)
-    if not IsNil(exists) and NotSecretValue(exists) and exists == false then
-      return false
+    local state = FreshUnitState and FreshUnitState(frame, unit) or nil
+    if state and state.existsKnown == true then
+      if state.exists ~= true then return false end
+    else
+      local exists = UnitExists and UnitExists(unit)
+      if not IsNil(exists) and NotSecretValue(exists) and exists == false then
+        return false
+      end
     end
     local mode = frame._msufBorderRuntimeAggroMode
     if mode == nil then
       local spec = frame.MSUFSpec
       local cfg = spec and spec.border
-      mode = cfg and cfg.aggroMode
+      mode = NormalizeAggroMode(cfg and cfg.aggroMode)
     end
-    mode = tostring(mode or "ALL"):upper()
-    if mode == "TANK_ONLY" then mode = "TANK"
-    elseif mode == "HEALER_ONLY" then mode = "HEALER" end
     if mode == "TANK" or mode == "HEALER" or mode == "NON_TANK" then
-      local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit) or nil
+      local role
+      if ReadGroupRole then
+        role = ReadGroupRole(frame, unit)
+      elseif UnitGroupRolesAssigned then
+        role = UnitGroupRolesAssigned(unit)
+      end
       if IsNil(role) or not NotSecretValue(role) then
         return false
       end
@@ -418,7 +435,12 @@ local function ThreatState(frame)
         return false
       end
     end
-    local status = UnitThreatSituation(unit)
+    local status
+    if ReadGroupThreatStatus then
+      status = ReadGroupThreatStatus(frame, unit)
+    else
+      status = UnitThreatSituation(unit)
+    end
     if IsNil(status) or not NotSecretValue(status) then
       return false
     end
@@ -515,45 +537,89 @@ local function HighlightBorderLevel(cfg, key)
   return BORDER_LEVEL_OVER_NATIVE_DISPEL
 end
 
+local function RuntimeHighlightBorderLevel(frame, cfg, key)
+  if key == "dispel" then return frame._msufBorderRuntimeLevelDispel or BORDER_LEVEL_OVER_NATIVE_DISPEL end
+  if key == "aggro" then return frame._msufBorderRuntimeLevelAggro or HighlightBorderLevel(cfg, key) end
+  if key == "purge" then return frame._msufBorderRuntimeLevelPurge or HighlightBorderLevel(cfg, key) end
+  if key == "bossTarget" then return frame._msufBorderRuntimeLevelBossTarget or HighlightBorderLevel(cfg, key) end
+  return BORDER_LEVEL_OVER_NATIVE_DISPEL
+end
+
+local function ApplyResolvedBorder(frame, cfg, source, level, thickness, r, g, b, a)
+  r, g, b, a = r or 0, g or 0, b or 0, a or 1
+  thickness = thickness or 1
+  local layer = cfg and cfg.layer or 0
+  local offset = (level or BORDER_LEVEL_DEFAULT) + layer
+  local strata = cfg and cfg.strata or nil
+  local secret = IsSecretValue(r) or IsSecretValue(g) or IsSecretValue(b) or IsSecretValue(a)
+    or IsSecretValue(strata)
+  if not secret
+    and frame._msufBorderVisualCfg == cfg
+    and frame._msufBorderVisualSource == source
+    and frame._msufBorderVisualOffset == offset
+    and frame._msufBorderVisualStrata == strata
+    and frame._msufBorderVisualThickness == thickness
+    and frame._msufBorderVisualR == r
+    and frame._msufBorderVisualG == g
+    and frame._msufBorderVisualB == b
+    and frame._msufBorderVisualA == a
+  then
+    return true
+  end
+  frame._msufBorderVisualCfg = cfg
+  frame._msufBorderVisualSource = source
+  frame._msufBorderVisualOffset = offset
+  frame._msufBorderVisualStrata = secret and nil or strata
+  frame._msufBorderVisualThickness = thickness
+  if secret then
+    frame._msufBorderVisualR, frame._msufBorderVisualG = nil, nil
+    frame._msufBorderVisualB, frame._msufBorderVisualA = nil, nil
+  else
+    frame._msufBorderVisualR, frame._msufBorderVisualG = r, g
+    frame._msufBorderVisualB, frame._msufBorderVisualA = b, a
+  end
+  SetBorderOverlayLevel(frame, level, strata, layer)
+  LayoutBorder(frame, thickness)
+  SetBorder(frame, true, r, g, b, a)
+  return true
+end
+
+local function HideResolvedBorder(frame)
+  if frame._msufBorderVisualSource == "hidden" and frame._msufBorderShown == false then return end
+  frame._msufBorderVisualCfg = frame._msufBorderRuntimeCfg
+  frame._msufBorderVisualSource = "hidden"
+  SetBorder(frame, false)
+end
+
 local function ApplyHighlightBorder(frame, cfg, key, testActive)
   if key == "dispel" then
     if testActive and DispelTestApplies(frame) then
       local r, g, b, a = DispelTestColor(frame)
-      SetBorderOverlayLevel(frame, HighlightBorderLevel(cfg, key), cfg and cfg.strata, cfg and cfg.layer)
-      LayoutBorder(frame, BorderHighlightThickness(cfg))
-      SetBorder(frame, true, r, g, b, a)
-      return true
+      return ApplyResolvedBorder(frame, cfg, key, RuntimeHighlightBorderLevel(frame, cfg, key),
+        frame._msufBorderRuntimeHighlightThickness, r, g, b, a)
     end
     if cfg.dispel == true and frame._msufA3DispelActive == true then
-      SetBorderOverlayLevel(frame, HighlightBorderLevel(cfg, key), cfg and cfg.strata, cfg and cfg.layer)
-      LayoutBorder(frame, BorderHighlightThickness(cfg))
-      SetBorder(frame, true,
+      return ApplyResolvedBorder(frame, cfg, key, RuntimeHighlightBorderLevel(frame, cfg, key),
+        frame._msufBorderRuntimeHighlightThickness,
         frame._msufA3DispelR or 0.25,
         frame._msufA3DispelG or 0.75,
         frame._msufA3DispelB or 1,
         frame._msufA3DispelA or 1)
-      return true
     end
   elseif key == "aggro" then
     if (testActive and AggroTestApplies(frame)) or (cfg.aggro and IsAggroBorderUnit(frame) and ThreatState(frame)) then
-      SetBorderOverlayLevel(frame, HighlightBorderLevel(cfg, key), cfg and cfg.strata, cfg and cfg.layer)
-      LayoutBorder(frame, BorderHighlightThickness(cfg))
-      SetBorder(frame, true, AggroColor(cfg))
-      return true
+      return ApplyResolvedBorder(frame, cfg, key, RuntimeHighlightBorderLevel(frame, cfg, key),
+        frame._msufBorderRuntimeHighlightThickness, AggroColor(cfg))
     end
   elseif key == "purge" then
     if testActive and PurgeTestApplies(frame) then
-      SetBorderOverlayLevel(frame, HighlightBorderLevel(cfg, key), cfg and cfg.strata, cfg and cfg.layer)
-      LayoutBorder(frame, BorderHighlightThickness(cfg))
-      SetBorder(frame, true, PurgeColor(cfg))
-      return true
+      return ApplyResolvedBorder(frame, cfg, key, RuntimeHighlightBorderLevel(frame, cfg, key),
+        frame._msufBorderRuntimeHighlightThickness, PurgeColor(cfg))
     end
   elseif key == "bossTarget" then
     if (testActive and BossTargetTestApplies(frame)) or BossTargetState(frame, cfg) then
-      SetBorderOverlayLevel(frame, HighlightBorderLevel(cfg, key), cfg and cfg.strata, cfg and cfg.layer)
-      LayoutBorder(frame, BorderHighlightThickness(cfg))
-      SetBorder(frame, true, BossTargetColor(cfg))
-      return true
+      return ApplyResolvedBorder(frame, cfg, key, RuntimeHighlightBorderLevel(frame, cfg, key),
+        frame._msufBorderRuntimeHighlightThickness, BossTargetColor(cfg))
     end
   end
   return false
@@ -566,12 +632,21 @@ end
 function Borders.Apply(frame, spec)
   local cfg = spec and spec.border
   if frame then
+    local customPriority = cfg and cfg.prioEnabled == true and type(cfg.prioOrder) == "table"
     frame._msufBorderRuntimeCfg = cfg
     frame._msufBorderRuntimeGroup = spec and spec.scope == "group" or nil
-    frame._msufBorderRuntimeAggroMode = cfg and cfg.aggroMode or nil
+    frame._msufBorderRuntimeAggroMode = cfg and NormalizeAggroMode(cfg.aggroMode) or nil
     frame._msufBorderRuntimeHighlightThickness = tonumber(cfg and cfg.highlightThickness) or 3
+    frame._msufBorderRuntimeNormalThickness = BorderNormalThickness(cfg)
+    frame._msufBorderRuntimePriority = customPriority and cfg.prioOrder or nil
+    frame._msufBorderRuntimeCustomPriority = customPriority and true or nil
+    frame._msufBorderRuntimeLevelDispel = cfg and HighlightBorderLevel(cfg, "dispel") or nil
+    frame._msufBorderRuntimeLevelAggro = cfg and HighlightBorderLevel(cfg, "aggro") or nil
+    frame._msufBorderRuntimeLevelPurge = cfg and HighlightBorderLevel(cfg, "purge") or nil
+    frame._msufBorderRuntimeLevelBossTarget = cfg and HighlightBorderLevel(cfg, "bossTarget") or nil
     frame._msufBorderRuntimeNormal = BorderNormalEnabled(cfg) or nil
     frame._msufBorderRuntimeHighlight = BorderHighlightEnabled(frame, cfg) or nil
+    frame._msufBorderVisualCfg = nil
   end
   if not cfg or not (BorderNormalEnabled(cfg) or BorderHighlightEnabled(frame, cfg)) then
     LayoutBorder(frame, 1)
@@ -641,8 +716,17 @@ function Borders.Disable(frame)
     frame._msufBorderRuntimeGroup = nil
     frame._msufBorderRuntimeAggroMode = nil
     frame._msufBorderRuntimeHighlightThickness = nil
+    frame._msufBorderRuntimeNormalThickness = nil
+    frame._msufBorderRuntimePriority = nil
+    frame._msufBorderRuntimeCustomPriority = nil
+    frame._msufBorderRuntimeLevelDispel = nil
+    frame._msufBorderRuntimeLevelAggro = nil
+    frame._msufBorderRuntimeLevelPurge = nil
+    frame._msufBorderRuntimeLevelBossTarget = nil
     frame._msufBorderRuntimeNormal = nil
     frame._msufBorderRuntimeHighlight = nil
+    frame._msufBorderVisualCfg = nil
+    frame._msufBorderVisualSource = nil
   end
   SetBorder(frame, false)
 end
@@ -658,24 +742,33 @@ function Borders.Update(frame)
     highlightEnabled = BorderHighlightEnabled(frame, cfg)
   end
   if not cfg or not (normalEnabled or highlightEnabled) then
-    SetBorder(frame, false)
+    HideResolvedBorder(frame)
     return
   end
   local testActive = _G.MSUF_BorderTestModesActive == true
-  local priority = HighlightPriorityOrder(cfg)
-  for i = 1, #priority do
-    if ApplyHighlightBorder(frame, cfg, priority[i], testActive) then
-      return
+  if testActive or frame._msufBorderRuntimeCustomPriority == true then
+    local priority = frame._msufBorderRuntimePriority or HighlightPriorityOrder(cfg)
+    for i = 1, #priority do
+      if ApplyHighlightBorder(frame, cfg, priority[i], testActive) then
+        return
+      end
     end
+  else
+    -- The default order is fixed. Avoid the four-key generic loop and do not
+    -- call disabled highlight resolvers on every threat/dispel event.
+    if cfg.dispel == true and ApplyHighlightBorder(frame, cfg, "dispel", false) then return end
+    if cfg.aggro == true and ApplyHighlightBorder(frame, cfg, "aggro", false) then return end
+    if cfg.bossTarget == true and ApplyHighlightBorder(frame, cfg, "bossTarget", false) then return end
   end
   if not normalEnabled then
-    SetBorder(frame, false)
+    HideResolvedBorder(frame)
     return
   end
-  SetBorderOverlayLevel(frame, BORDER_LEVEL_NORMAL, cfg and cfg.strata, cfg and cfg.layer)
-  LayoutBorder(frame, BorderNormalThickness(cfg))
-  SetBorder(frame, true, NormalBorderColor(cfg))
+  ApplyResolvedBorder(frame, cfg, "normal", BORDER_LEVEL_NORMAL,
+    frame._msufBorderRuntimeNormalThickness, NormalBorderColor(cfg))
 end
+
+Borders.NoDispatchUpdates = { [Borders.Update] = true }
 
 UF.RegisterElement("Borders", Borders)
 
