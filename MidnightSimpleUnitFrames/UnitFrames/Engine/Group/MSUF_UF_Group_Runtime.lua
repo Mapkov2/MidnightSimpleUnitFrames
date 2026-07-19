@@ -461,9 +461,10 @@ function GF.UpdateGroupVisibility()
 end
 
 function GF.RefreshHeaderLayout(kind)
-  if GF.EnsureDB then GF.EnsureDB() end
+  local inCombat = InCombat()
+  if not inCombat and GF.EnsureDB then GF.EnsureDB() end
   local enabled = AnyGroupFrameEnabled()
-  if InCombat() then
+  if inCombat then
     local result = GF.DeferGroupRuntime("layout", kind)
     SetRuntimeEventsEnabled(enabled, not enabled)
     return result
