@@ -321,12 +321,13 @@ SlashCmdList["MSUF2OPTIONS"] = function(msg)
         return
     end
     local aliases = M.ALIASES or {}
-    M.Open(aliases[msg] or (msg ~= "" and msg or nil))
+    M.Open(msg ~= "" and (aliases[msg] or msg) or nil)
 end
 SLASH_MSUFOPTIONS1 = SLASH_MSUFOPTIONS1 or "/msufoptions"
 SlashCmdList["MSUFOPTIONS"] = SlashCmdList["MSUFOPTIONS"] or function(msg)
     local aliases = M.ALIASES or {}
-    local pageKey = aliases[tostring(msg or ""):lower()]
+    msg = tostring(msg or ""):lower()
+    local pageKey = msg ~= "" and (aliases[msg] or msg) or nil
     M.Open(pageKey)
 end
 
