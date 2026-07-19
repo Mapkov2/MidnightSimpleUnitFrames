@@ -473,6 +473,7 @@ function Runtime:PrepareWork(frame)
     local isChanneled = frame.MSUF_isChanneled == true
     local isEmpower = frame.isEmpower == true
     local timerDriven = frame.MSUF_timerDriven == true
+    local durationSnapshotUnsafe = frame._msufDurationSnapshotUnsafe == true
 
     if isChanneled then mask = MaskAdd(mask, WORK_CHANNEL) end
     if isEmpower then mask = MaskAdd(mask, WORK_EMPOWER) end
@@ -483,7 +484,6 @@ function Runtime:PrepareWork(frame)
         and not isEmpower
         and timerDriven
         and durationObj ~= nil
-        and frame._msufPlainEndTime ~= nil
 
     if frame.timeText and castTimeEnabled then
         if canUseNativeText
@@ -500,8 +500,24 @@ function Runtime:PrepareWork(frame)
         if frame.timeText and frame.timeText.SetText then frame.timeText:SetText("") end
     end
 
+    -- Secret durations can go directly to Blizzard's native statusbar and
+    -- DurationTextBinding APIs. With event-owned target/focus/boss lifecycle,
+    -- Lua polling cannot derive a completion or glow value from them. Keep the
+    -- proven fallback intact whenever native text setup fails.
+    local nativeSecretDurationOwned = durationSnapshotUnsafe
+        and not isChanneled
+        and not isEmpower
+        and timerDriven
+        and durationObj ~= nil
+        and frame._msufCastLifecycleOwned == true
+        and (not (frame.timeText and castTimeEnabled) or frame._msufNativeTimeBound == true)
+    if nativeSecretDurationOwned and MaskHas(mask, WORK_GLOW) then
+        mask = mask - WORK_GLOW
+    end
+
     local timerAPI = _G.C_Timer
-    if not isChanneled
+    if not nativeSecretDurationOwned
+        and not isChanneled
         and not isEmpower
         and timerDriven
         and (frame._msufPlainEndTime == nil

@@ -372,8 +372,12 @@ local function ResolveCastbarColors()
     end
     if not (castR and castG and castB) then
         local key = general.castbarInterruptibleColor or "teal"
-        local color = type(_G.MSUF_GetColorFromKey) == "function" and _G.MSUF_GetColorFromKey(key) or nil
-        if color and color.GetRGB then castR, castG, castB = color:GetRGB() end
+        local getRGB = _G.MSUF_GetColorRGBFromKey
+        if type(getRGB) == "function" then castR, castG, castB = getRGB(key) end
+        if not (castR and castG and castB) then
+            local color = type(_G.MSUF_GetColorFromKey) == "function" and _G.MSUF_GetColorFromKey(key) or nil
+            if color and color.GetRGB then castR, castG, castB = color:GetRGB() end
+        end
     end
     if not (castR and castG and castB) then castR, castG, castB = 0, 0.85, 0.85 end
 
@@ -383,8 +387,12 @@ local function ResolveCastbarColors()
     end
     if not (nonR and nonG and nonB) then
         local key = general.castbarNonInterruptibleColor or "red"
-        local color = type(_G.MSUF_GetColorFromKey) == "function" and _G.MSUF_GetColorFromKey(key) or nil
-        if color and color.GetRGB then nonR, nonG, nonB = color:GetRGB() end
+        local getRGB = _G.MSUF_GetColorRGBFromKey
+        if type(getRGB) == "function" then nonR, nonG, nonB = getRGB(key) end
+        if not (nonR and nonG and nonB) then
+            local color = type(_G.MSUF_GetColorFromKey) == "function" and _G.MSUF_GetColorFromKey(key) or nil
+            if color and color.GetRGB then nonR, nonG, nonB = color:GetRGB() end
+        end
     end
     if not (nonR and nonG and nonB) then nonR, nonG, nonB = 0.9, 0.1, 0.1 end
 

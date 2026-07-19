@@ -91,7 +91,11 @@ local function GeneralDB()
     return (_G.MSUF_DB and _G.MSUF_DB.general) or {}
 end
 
-local function CastbarFrameInset(g)
+local function CastbarFrameInset(frame, g)
+    if type(_G.MSUF_GetCastbarOutlineInset) == "function" then
+        local inset = _G.MSUF_GetCastbarOutlineInset(frame, g)
+        return tonumber(inset) or 0
+    end
     local thickness = tonumber(g and g.castbarOutlineThickness)
     if thickness == nil then thickness = 1 end
     return thickness > 0 and 1 or 0
@@ -207,7 +211,11 @@ local function ScaledWidth(sourceFrame, targetFrame)
     local targetScale = (targetFrame and targetFrame.GetEffectiveScale and targetFrame:GetEffectiveScale()) or 1
     if sourceScale <= 0 then sourceScale = 1 end
     if targetScale <= 0 then targetScale = 1 end
-    return Round(sourceScale == targetScale and w or w * sourceScale / targetScale)
+    -- Preserve the exact on-screen source width. The receiving castbar already
+    -- snaps once in its layout path; rounding here first can discard roughly
+    -- half a pixel at fractional effective scales and makes its right edge
+    -- consistently stop short. UUF likewise applies the container width once.
+    return w * sourceScale / targetScale
 end
 
 -- Cooldown Viewer container/viewer global names for a width-source kind.
@@ -710,7 +718,7 @@ function MSUF_ApplyPlayerCastbarIconLayout(bar, g, topInset, bottomInset)
     end
 
     -- StatusBar anchoring (only re-anchor when the layout state changes).
-    local frameInset = CastbarFrameInset(g)
+    local frameInset = CastbarFrameInset(bar, g)
     if frameInset <= 0 then
         topInset = 0
         bottomInset = 0

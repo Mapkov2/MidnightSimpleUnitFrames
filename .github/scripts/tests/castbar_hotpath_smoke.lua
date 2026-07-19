@@ -175,6 +175,56 @@ do
     Equal(retrySetEnabledCalls, 2, "SetEnabled cleanup was not retried")
     Equal(retryFrame._msufNativeTextCleanupPending, nil, "successful retry stayed pending")
     Equal(retryFrame._msufNativeTimeBound, nil, "successful retry stayed bound")
+
+    local secretDuration = { secret = true }
+    local nativeDuration
+    local secretBinding = {
+        SetFontString = function() end,
+        SetUpdateInterval = function() end,
+        SetTextFormat = function() end,
+        SetDuration = function(_, duration) nativeDuration = duration end,
+        SetEnabled = function() end,
+        UpdateFontString = function() end,
+    }
+    _G.C_DurationUtil.CreateDurationTextBinding = function() return secretBinding end
+    local secretFrame = {
+        unit = "target",
+        timeText = { SetText = function() end },
+        MSUF_durationObj = secretDuration,
+        MSUF_timerDriven = true,
+        MSUF_castActive = true,
+        _msufDurationSnapshotUnsafe = true,
+        _msufCastLifecycleOwned = true,
+    }
+    local secretMask = runtime:PrepareWork(secretFrame)
+    Equal(secretMask, runtime.WorkMask.UNIT_FAILSAFE,
+        "native secret duration retained Lua visual polling")
+    Check(secretFrame._msufNativeTimeBound == true, "secret duration did not bind native text")
+    Check(nativeDuration == secretDuration, "native binding did not receive secret duration object")
+    Check(secretFrame._msufCastbarGlowTick == nil, "unreadable secret duration retained glow polling")
+
+    _G.C_DurationUtil.CreateDurationTextBinding = function()
+        return {
+            SetFontString = function() end,
+            SetUpdateInterval = function() end,
+            SetTextFormat = function() end,
+            SetDuration = function() error("synthetic secret binding failure") end,
+            SetEnabled = function() end,
+        }
+    end
+    local fallbackFrame = {
+        unit = "target",
+        timeText = { SetText = function() end },
+        MSUF_durationObj = secretDuration,
+        MSUF_timerDriven = true,
+        MSUF_castActive = true,
+        _msufDurationSnapshotUnsafe = true,
+        _msufCastLifecycleOwned = true,
+    }
+    local fallbackMask = runtime:PrepareWork(fallbackFrame)
+    Equal(fallbackMask, runtime.WorkMask.TIME_TEXT + runtime.WorkMask.GLOW
+        + runtime.WorkMask.DURATION_FALLBACK + runtime.WorkMask.UNIT_FAILSAFE,
+        "failed native secret binding did not retain the proven Lua fallback")
 end
 
 -- GetSpellCooldownDuration returns a userdata object. Reuse it inside one frame,
@@ -417,6 +467,7 @@ end
 local defaultsSource = ReadSource("State/MSUF_Defaults.lua")
 local castbarMenuSource = ReadSource("Shell/Menu2/Pages/MSUF_Menu2_UnitFrameVisuals.lua")
 local castbarCopySource = ReadSource("Shell/Menu2/Pages/MSUF_Menu2_Unit.lua")
+local castbarResetSource = ReadSource("Shell/Menu2/MSUF_Menu2_Bindings.lua")
 local castbarVisualSource = ReadSource("Castbars/MSUF_CastbarVisuals.lua")
 local castbarAnchorSource = ReadSource("Castbars/MSUF_CastbarAnchors.lua")
 local castbarPreviewSource = ReadSource("Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua")
@@ -434,5 +485,18 @@ Check(castbarAnchorSource:find("g.castbarPlayerIconZoom", 1, true),
 Check(castbarPreviewSource:find('ReadCastbarNum(g, key, "IconZoom", "bossCastIconZoom", 100)', 1, true)
     and castbarPreviewSource:find("ApplyCastbarPreviewIconZoom(mock.cast.icon, iconZoom)", 1, true),
     "Castbar preview does not mirror scoped Icon Zoom")
+Check(defaultsSource:find('g[prefix .. "IconBorderThickness"]', 1, true),
+    "per-castbar icon border thickness defaults are missing")
+Check(castbarMenuSource:find('DetailKey("IconBorderThickness"), 0, "MSUF2_CASTBAR_ICON_BORDER_THICKNESS"', 1, true),
+    "scope-aware Castbar icon border thickness slider is missing")
+Check(castbarCopySource:find("IconSpacing IconBorderThickness IconBorderStyle", 1, true)
+    and castbarResetSource:find("IconSpacing IconBorderThickness IconBorderStyle", 1, true),
+    "Castbar scope copy/reset omits icon border thickness")
+Check(castbarVisualSource:find('DetailNum(g, prefix, "IconBorderThickness", nil, 0)', 1, true)
+    and castbarVisualSource:find("thickness <= 0", 1, true),
+    "live Castbar icon border does not resolve thickness or disable at zero")
+Check(castbarPreviewSource:find('ReadCastbarNum(g, key, "IconBorderThickness", "bossCastIconBorderThickness", 0)', 1, true)
+    and castbarPreviewSource:find("ApplyCastbarPreviewIconBorder(mock.cast.icon, iconBorderStyle, iconBorderThickness, g)", 1, true),
+    "Castbar preview does not mirror scoped icon border thickness")
 
-print("PASS castbar hotpaths: shared ColorObjects, native-text transition cleanup, cooldown snapshot sharing, O(1) manager refresh, channel unit fastpath, scope-aware icon zoom")
+print("PASS castbar hotpaths: shared ColorObjects, native-text transition cleanup, cooldown snapshot sharing, O(1) manager refresh, channel unit fastpath, scope-aware icon zoom and border thickness")

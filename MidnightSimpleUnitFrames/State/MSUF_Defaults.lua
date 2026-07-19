@@ -2306,7 +2306,22 @@ end
         if g[prefix .. "IconPosition"] == nil then g[prefix .. "IconPosition"] = "LEFT" end
         if g[prefix .. "IconZoom"] == nil then g[prefix .. "IconZoom"] = 100 end
         if g[prefix .. "IconSpacing"] == nil then g[prefix .. "IconSpacing"] = 1 end
-        if g[prefix .. "IconBorderStyle"] == nil then g[prefix .. "IconBorderStyle"] = "NONE" end
+        if g[prefix .. "IconBorderThickness"] == nil then
+            local style = tostring(g[prefix .. "IconBorderStyle"] or "NONE"):upper()
+            if style == "CASTBAR" then
+                local thickness = tonumber(g.castbarOutlineThickness) or 1
+                g[prefix .. "IconBorderThickness"] = math.max(0, math.min(8, thickness))
+            elseif style == "DARK" then
+                g[prefix .. "IconBorderThickness"] = 1
+            else
+                g[prefix .. "IconBorderThickness"] = 0
+            end
+            -- The thickness slider owns enable/disable from now on. Preserve
+            -- legacy NONE visually as thickness 0, then keep DARK ready so
+            -- increasing the slider immediately shows a border.
+            if style == "NONE" or style == "" then g[prefix .. "IconBorderStyle"] = "DARK" end
+        end
+        if g[prefix .. "IconBorderStyle"] == nil then g[prefix .. "IconBorderStyle"] = "DARK" end
         if g[prefix .. "SpellNamePosition"] == nil then g[prefix .. "SpellNamePosition"] = "LEFT" end
         if g[prefix .. "SpellNameFont"] == nil then g[prefix .. "SpellNameFont"] = "GLOBAL" end
         if g[prefix .. "SpellNameOutline"] == nil then g[prefix .. "SpellNameOutline"] = "GLOBAL" end

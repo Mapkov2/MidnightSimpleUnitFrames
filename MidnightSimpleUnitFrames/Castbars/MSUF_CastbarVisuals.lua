@@ -73,7 +73,11 @@ local function PrefixForUnit(unit)
     return nil
 end
 
-local function CastbarFrameInset(g)
+local function CastbarFrameInset(frame, g)
+    if type(_G.MSUF_GetCastbarOutlineInset) == "function" then
+        local inset = _G.MSUF_GetCastbarOutlineInset(frame, g)
+        return tonumber(inset) or 0
+    end
     local thickness = tonumber(g and g.castbarOutlineThickness)
     if thickness == nil then thickness = 1 end
     return thickness > 0 and 1 or 0
@@ -296,15 +300,51 @@ local function EnsureIconHost(frame)
     return host
 end
 
-local function EnsureIconBorder(frame)
-    if frame._msufDetailIconBorder then return frame._msufDetailIconBorder end
-    local border = {}
-    for _, key in ipairs({ "top", "bottom", "left", "right" }) do
-        border[key] = frame:CreateTexture(nil, "OVERLAY", nil, 7)
-        border[key]:SetColorTexture(0, 0, 0, 1)
-        border[key]:Hide()
+local ICON_BORDER_BACKDROPS = {}
+
+local function IconBorderEdge(host, thickness)
+    local scale = host and host.GetEffectiveScale and host:GetEffectiveScale() or 1
+    if scale <= 0 then scale = 1 end
+    if _G.PixelUtil and type(_G.PixelUtil.GetNearestPixelSize) == "function" then
+        local edge = _G.PixelUtil.GetNearestPixelSize(thickness, scale, 1)
+        if edge and edge > 0 then return edge end
     end
-    frame._msufDetailIconBorder = border
+    return thickness
+end
+
+local function IconBorderBackdrop(edge)
+    local key = tostring(edge)
+    local backdrop = ICON_BORDER_BACKDROPS[key]
+    if not backdrop then
+        backdrop = {
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = edge,
+            insets = { left = 0, right = 0, top = 0, bottom = 0 },
+        }
+        ICON_BORDER_BACKDROPS[key] = backdrop
+    end
+    return backdrop
+end
+
+local function EnsureIconBorder(frame, iconHost)
+    local border = frame._msufDetailIconBorder
+    if border and not border.SetBackdrop then
+        for _, key in ipairs({ "top", "bottom", "left", "right" }) do
+            if border[key] then border[key]:Hide() end
+        end
+        border = nil
+    end
+    if not border then
+        border = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+        border:EnableMouse(false)
+        frame._msufDetailIconBorder = border
+    end
+    border:ClearAllPoints()
+    border:SetAllPoints(iconHost)
+    if border.SetFrameLevel and iconHost.GetFrameLevel then
+        border:SetFrameLevel((iconHost:GetFrameLevel() or 0) + 2)
+    end
     return border
 end
 
@@ -312,26 +352,16 @@ local function HideIconBorder(frame)
     local border = frame and frame._msufDetailIconBorder
     if not border then return end
     frame._msufDetailIconBorderKey = nil
-    for _, key in ipairs({ "top", "bottom", "left", "right" }) do
-        if border[key] then border[key]:Hide() end
-    end
+    if border.SetBackdrop then border:SetBackdrop(nil) end
+    border:Hide()
 end
 
 local function ApplyIconBorder(frame, host, g, prefix)
     local style = DetailString(g, prefix, "IconBorderStyle", nil, "NONE"):upper()
-    if style == "NONE" or style == "" then
+    local thickness = Clamp(DetailNum(g, prefix, "IconBorderThickness", nil, 0), 0, 8)
+    if style == "NONE" or style == "" or thickness <= 0 then
         HideIconBorder(frame)
         return
-    end
-    local thickness = 1
-    if style == "CASTBAR" then
-        thickness = tonumber(g.castbarOutlineThickness)
-        if thickness == nil then thickness = 1 end
-        if thickness <= 0 then
-            HideIconBorder(frame)
-            return
-        end
-        thickness = Clamp(thickness, 1, 8)
     end
     local r, green, b, a = 0, 0, 0, 0.95
     if style == "CASTBAR" then
@@ -352,27 +382,12 @@ local function ApplyIconBorder(frame, host, g, prefix)
     if frame then
         frame._msufDetailIconBorderKey = key
     end
-    local border = EnsureIconBorder(frame)
-    border.top:ClearAllPoints()
-    border.top:SetPoint("TOPLEFT", host, "TOPLEFT", -thickness, thickness)
-    border.top:SetPoint("TOPRIGHT", host, "TOPRIGHT", thickness, thickness)
-    border.top:SetHeight(thickness)
-    border.bottom:ClearAllPoints()
-    border.bottom:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", -thickness, -thickness)
-    border.bottom:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", thickness, -thickness)
-    border.bottom:SetHeight(thickness)
-    border.left:ClearAllPoints()
-    border.left:SetPoint("TOPLEFT", host, "TOPLEFT", -thickness, thickness)
-    border.left:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", -thickness, -thickness)
-    border.left:SetWidth(thickness)
-    border.right:ClearAllPoints()
-    border.right:SetPoint("TOPRIGHT", host, "TOPRIGHT", thickness, thickness)
-    border.right:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", thickness, -thickness)
-    border.right:SetWidth(thickness)
-    for _, key in ipairs({ "top", "bottom", "left", "right" }) do
-        border[key]:SetVertexColor(r, green, b, a)
-        border[key]:Show()
-    end
+    local border = EnsureIconBorder(frame, host)
+    local edge = IconBorderEdge(host, thickness)
+    border:SetBackdrop(IconBorderBackdrop(edge))
+    border:SetBackdropColor(0, 0, 0, 0)
+    border:SetBackdropBorderColor(r, green, b, a)
+    border:Show()
 end
 
 --- Applies icon visibility and reserves statusbar space when the icon is outside
@@ -393,7 +408,7 @@ local function ApplyIconLayout(frame, g, unit, prefix)
     local x = DetailNum(g, prefix, "IconOffsetX", "castbarIconOffsetX", 0)
     local y = DetailNum(g, prefix, "IconOffsetY", "castbarIconOffsetY", 0)
     local position = NormalizeIconPosition(DetailString(g, prefix, "IconPosition", "castbarIconPosition", "LEFT"))
-    local frameInset = CastbarFrameInset(g)
+    local frameInset = CastbarFrameInset(frame, g)
     local layoutKey = KeyPart(unit) .. "|"
         .. BoolKey(icon ~= nil) .. "|"
         .. BoolKey(showIcon) .. "|"
@@ -407,7 +422,7 @@ local function ApplyIconLayout(frame, g, unit, prefix)
         .. position .. "|"
         .. KeyPart(frameInset) .. "|"
         .. KeyPart(DetailString(g, prefix, "IconBorderStyle", nil, "NONE")) .. "|"
-        .. KeyPart(g.castbarOutlineThickness) .. "|"
+        .. KeyPart(DetailNum(g, prefix, "IconBorderThickness", nil, 0)) .. "|"
         .. KeyPart(g.castbarBorderR) .. "|"
         .. KeyPart(g.castbarBorderG) .. "|"
         .. KeyPart(g.castbarBorderB) .. "|"

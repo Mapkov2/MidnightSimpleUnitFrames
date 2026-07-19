@@ -224,7 +224,7 @@ local function CreatePlayerCastbarFrame()
 
     local background = frame:CreateTexture(nil, "BACKGROUND")
     background:SetAllPoints(frame)
-    background:SetColorTexture(0, 0, 0, 1)
+    background:SetColorTexture(0, 0, 0, 0)
     frame.background = background
 
     local icon = frame:CreateTexture(nil, "OVERLAY", nil, 7)

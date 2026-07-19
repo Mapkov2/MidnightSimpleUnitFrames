@@ -732,6 +732,7 @@ local function ApplyCastbarFrameLayer(frame, general, forcedUnit)
     SetCastbarFrameLevel(frame.statusBar, statusLevel)
     SetCastbarFrameLevel(frame._msufPCIconHost, statusLevel + 3)
     SetCastbarFrameLevel(frame._msufDetailIconHost, statusLevel + 6)
+    SetCastbarFrameLevel(frame._msufDetailIconBorder, statusLevel + 8)
     SetCastbarFrameLevel(frame._msufTextOverlay, statusLevel + 10)
     SetCastbarFrameLevel(frame._msufOutlineHost, statusLevel + 20)
 end

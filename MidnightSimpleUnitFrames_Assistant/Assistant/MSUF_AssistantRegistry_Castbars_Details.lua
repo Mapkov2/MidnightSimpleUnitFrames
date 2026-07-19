@@ -90,6 +90,8 @@ function A.CastbarsRegistry.RegisterDetailSettings(ctx)
         RegisterGeneralNumber(spec.prefix .. "IconOffsetY", unit, "castbar", "iconOffsetY", "Castbar Icon Y Offset", 0, -300, 300, aliases)
         aliases = UnitCastbarAliases(unit, "castbar icon spacing", "castbar spell icon spacing")
         RegisterGeneralNumber(spec.prefix .. "IconSpacing", unit, "castbar", "iconSpacing", "Castbar Icon Spacing", 1, 0, 40, aliases)
+        aliases = UnitCastbarAliases(unit, "castbar icon border thickness", "castbar icon border size", "castbar spell icon border thickness")
+        RegisterGeneralNumber(spec.prefix .. "IconBorderThickness", unit, "castbar", "iconBorderThickness", "Castbar Icon Border Thickness", 0, 0, 8, aliases)
         aliases = UnitCastbarAliases(unit, "castbar icon border", "castbar icon border style")
         RegisterGeneralEnumSetting(spec.prefix .. "IconBorderStyle", unit, "castbar", "iconBorderStyle", "Castbar Icon Border Style", "NONE", CASTBAR_ICON_BORDER_VALUES, aliases, CASTBAR_ICON_BORDER_ALIASES)
 
