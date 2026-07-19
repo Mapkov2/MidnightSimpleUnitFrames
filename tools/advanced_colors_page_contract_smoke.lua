@@ -47,11 +47,15 @@ assert(loadfile(path))("MidnightSimpleUnitFrames", MSUF)
 assert(registeredPage and type(registeredPage.build) == "function", "colors page was not registered")
 assert(registeredPage.version == 18, "colors page version changed")
 
-local upvalues, index = 0, 1
-while debug.getupvalue(registeredPage.build, index) do
+local upvalues, buildColorGroup, index = 0, nil, 1
+while true do
+    local name, value = debug.getupvalue(registeredPage.build, index)
+    if not name then break end
+    if name == "BuildColorGroup" then buildColorGroup = value end
     upvalues, index = upvalues + 1, index + 1
 end
 assert(upvalues <= 40, "BuildColors exceeds the upvalue budget: " .. upvalues)
+assert(type(buildColorGroup) == "function", "BuildColors lost its color-group builder")
 
 local file = assert(io.open(path, "rb"))
 local source = file:read("*a")
@@ -74,6 +78,11 @@ for _, id in ipairs({ "colors_group_general", "colors_group_units", "colors_grou
     assert(buildSource:find('"' .. id .. '"', 1, true), "missing color group: " .. id)
 end
 assert(not source:find('stateKey = "colorsGroupFrameTab"', 1, true), "Group Frame colors should use accordions, not tabs")
+assert(source:find("local function ColorGroupHasPendingFocus", 1, true), "color groups lost search/deep-link aware lazy building")
+assert(source:find("if (ctx and ctx.hiddenBuild) or entry.open or ColorGroupHasPendingFocus", 1, true), "collapsed color groups are built eagerly")
+assert(source:find("entry._msuf2RefreshState = RefreshLazyGroup", 1, true), "collapsed color groups do not build on first open")
+assert(source:find("for i = count + 1, #slotControls do W.SetControlShown(slotControls[i], false) end", 1, true), "class-power slot visibility lost its initial delta path")
+assert(not source:find("M.TrackRefresh(ctx, RefreshSlotControls)\n    RefreshSlotControls()", 1, true), "class-power slot visibility refresh runs twice during page build")
 local widgetsFile = assert(io.open("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Widgets.lua", "rb"))
 local widgetsSource = widgetsFile:read("*a")
 widgetsFile:close()
@@ -131,5 +140,75 @@ end
 assert(source:find('ControlMeta("opt_colors", "advanced"', 1, true), "page ControlMeta scope changed")
 assert(source:find("RegisterControl(btn, Meta(semanticPath", 1, true), "button metadata registration was lost")
 assert(source:find("M.BindColor(ctx, color, getRGB, setRGB, metadata)", 1, true), "color metadata binding was lost")
+
+local function NewLazyHarness(opts)
+    opts = opts or {}
+    local entry = {}
+    entry.open = opts.open == true
+    entry.headerHeight = 36
+    entry.contentHeight = 96
+    entry.body = { SetHeight = function(_, height) entry.bodyHeight = height end }
+    entry.outer = { SetHeight = function(_, height) entry.outerHeight = height end }
+    local group = { _msuf2CollapsibleEntry = entry, _msuf2Width = 720 }
+    local root = {
+        CollapsibleSection = function() return group end,
+        RequestRelayoutCollapsibles = function(self) self._msuf2RelayoutPending = true end,
+    }
+    local ctx = {
+        key = "opt_colors",
+        hiddenBuild = opts.hiddenBuild == true,
+        entry = {},
+        refreshers = {},
+        width = 720,
+    }
+    local innerRelayouts = 0
+    M.Widgets.PageBuilder = function(_, builderOpts)
+        return {
+            RelayoutCollapsibles = function()
+                innerRelayouts = innerRelayouts + 1
+                builderOpts.onContentHeight(180)
+            end,
+        }
+    end
+    return ctx, root, entry, function() return innerRelayouts end
+end
+
+do
+    local ctx, root, entry, InnerRelayouts = NewLazyHarness()
+    local builds, refreshes = 0, 0
+    buildColorGroup(ctx, root, "colors_group_test", "Test", nil, false, { "colors_child" }, function()
+        builds = builds + 1
+        ctx.refreshers[#ctx.refreshers + 1] = function() refreshes = refreshes + 1 end
+    end)
+    assert(builds == 0 and type(entry._msuf2RefreshState) == "function", "closed color group was not left lazy")
+    entry.open = true
+    entry._msuf2RefreshState()
+    assert(builds == 1 and refreshes == 1, "first color-group open did not build and refresh exactly once")
+    assert(InnerRelayouts() == 1 and entry.bodyHeight == 180 and entry.outerHeight == 216, "lazy color-group height did not settle")
+    assert(root._msuf2RelayoutPending == nil, "lazy color-group left a redundant root relayout queued")
+    entry._msuf2RefreshState()
+    assert(builds == 1 and refreshes == 1, "lazy color group rebuilt during a later refresh")
+end
+
+do
+    local ctx, root = NewLazyHarness({ hiddenBuild = true })
+    local builds = 0
+    buildColorGroup(ctx, root, "colors_group_hidden", "Hidden", nil, false, { "colors_hidden_child" }, function()
+        builds = builds + 1
+    end)
+    assert(builds == 1, "hidden search build no longer registers nested color controls")
+end
+
+do
+    local previous = _G.MSUF_EM2_MenuFocusRequest
+    _G.MSUF_EM2_MenuFocusRequest = { explicit = true, pageKey = "opt_colors", sectionId = "colors_focus_child" }
+    local ctx, root = NewLazyHarness()
+    local builds = 0
+    buildColorGroup(ctx, root, "colors_group_focus", "Focus", nil, false, { "colors_focus_child" }, function()
+        builds = builds + 1
+    end)
+    _G.MSUF_EM2_MenuFocusRequest = previous
+    assert(builds == 1, "deep-linked color group remained unbuilt")
+end
 
 print("advanced colors page contract smoke: ok (BuildColors upvalues=" .. upvalues .. ")")

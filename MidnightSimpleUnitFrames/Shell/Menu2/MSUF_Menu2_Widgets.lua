@@ -1358,6 +1358,11 @@ function W.AttachBoundColorToCollapsible(ctx, colorControl)
         control = colorControl,
         label = colorControl._msuf2ColorLabel or "Color",
     }
+    local contextEntry = entry
+    while contextEntry.ancestorEntry do contextEntry = contextEntry.ancestorEntry end
+    contextEntry._msuf2ColorContextOwners = contextEntry._msuf2ColorContextOwners or {}
+    contextEntry._msuf2ColorContextOwners[#contextEntry._msuf2ColorContextOwners + 1] = colorControl
+    colorControl._msuf2ColorContextOwners = contextEntry._msuf2ColorContextOwners
     W.SetCollapsibleColorSwatches(ctx, section, entry._msuf2BoundHeaderColors)
     return true
 end
