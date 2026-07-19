@@ -64,7 +64,9 @@ local function ClampMaxFrames(value)
 end
 
 local function PriorityConf()
-  if GF.EnsureDB then GF.EnsureDB() end
+  -- The Group runtime repairs DB state at its OOC layout boundary and every
+  -- mutation refreshes these cached references. Priority event registration is
+  -- allowed in combat, so it must remain a direct cache read.
   return GF.GetPriorityConf and GF.GetPriorityConf() or nil
 end
 

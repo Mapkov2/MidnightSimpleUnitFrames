@@ -962,22 +962,23 @@ end
 ---
 --- Migration: GF-local highlight keys - unified hl* with hlOverride
 ---
+local HIGHLIGHT_MIGRATION_KEYS = {
+    aggroHighlightSize    = "hlAggroSize",
+    aggroHighlightOffset  = "hlAggroOffset",
+    aggroHighlightLayer   = "hlAggroLayer",
+    targetBorderSize      = "hlTargetSize",
+    targetHighlightOffset = "hlTargetOffset",
+    targetHighlightLayer  = "hlTargetLayer",
+    hoverHighlightSize    = "hlHoverSize",
+    hoverHighlightOffset  = "hlHoverOffset",
+}
+
 local function MigrateHighlightToUnified(conf)
     if not conf then return end
     if conf._hlMigrated then return end
     --- Migrate old GF-local geometry keys to hlOverride scope
     local hadCustom = false
-    local map = {
-        aggroHighlightSize    = "hlAggroSize",
-        aggroHighlightOffset  = "hlAggroOffset",
-        aggroHighlightLayer   = "hlAggroLayer",
-        targetBorderSize      = "hlTargetSize",
-        targetHighlightOffset = "hlTargetOffset",
-        targetHighlightLayer  = "hlTargetLayer",
-        hoverHighlightSize    = "hlHoverSize",
-        hoverHighlightOffset  = "hlHoverOffset",
-    }
-    for oldKey, newKey in pairs(map) do
+    for oldKey, newKey in pairs(HIGHLIGHT_MIGRATION_KEYS) do
         if conf[oldKey] ~= nil then
             conf[newKey] = conf[oldKey]
             hadCustom = true
@@ -993,6 +994,7 @@ end
 --- One-shot migration (idempotent via _ciMigratedV2 stamp).
 local CI_DROPPED_CATEGORIES = { boss = true, missing = true }
 local CI_CUSTOM_KEYS = { "ciCustomTL", "ciCustomTR", "ciCustomBL", "ciCustomBR", "ciCustomC" }
+local CI_SLOT_KEYS = { "ciSlotTL", "ciSlotTR", "ciSlotBL", "ciSlotBR", "ciSlotC" }
 
 --- Always-run defensive sweep: ensure ciCustom* slots are either a table or nil.
 --- A previous build may have stamped a non-table value (e.g. number, string)
@@ -1009,8 +1011,7 @@ end
 local function MigrateCornerIndicators(conf)
     if not conf then return end
     if conf._ciMigratedV2 then return end
-    local slotKeys = { "ciSlotTL", "ciSlotTR", "ciSlotBL", "ciSlotBR", "ciSlotC" }
-    for _, k in ipairs(slotKeys) do
+    for _, k in ipairs(CI_SLOT_KEYS) do
         if CI_DROPPED_CATEGORIES[conf[k]] then conf[k] = "none" end
     end
     --- Drop legacy boss color keys (replaced by aggro color in CI v2 schema)
@@ -1114,6 +1115,8 @@ local GF_BLIZZARD_AURA_TYPE_DEFAULTS = {
     dispels = true,
     externals = true,
 }
+local GF_AURA_GROUP_KEYS = { "buff", "debuff", "externals" }
+local RepairAuraFilters, RepairAuraV2
 
 local function NormalizeAuraRenderer(conf)
     if type(conf) ~= "table" or type(conf.auras) ~= "table" then return end
@@ -1139,24 +1142,25 @@ local function NormalizeAuraRenderer(conf)
     end
 end
 
---- PERF: rebuild/scan storms call EnsureDB dozens of times within one frame;
---- the migrate+defaults walk is idempotent, so repeats within the same frame
---- are skipped. The memo is defensive: it misses when the frame time changes,
---- when any gf_* table was replaced (profile switch/import changes identity),
---- or when a table was wiped in place (next() canary), so resets always rerun.
-local ensureDBStamp, ensureDBRoot, ensureDBParty, ensureDBRaid, ensureDBMythic, ensureDBPriority
+--- PERF: Group runtime has several defensive DB boundaries. A completed repair
+--- remains valid across frames until an actual DB mutation invalidates it; table
+--- identity checks still catch profile/root replacements without a scan.
+local ensureDBReady = false
+local ensureDBRoot, ensureDBParty, ensureDBRaid, ensureDBMythic, ensureDBPriority
 
 function GF.EnsureDB()
     local db = _G.MSUF_DB
     if not db then return end
-    local now = _G.GetTime and _G.GetTime() or nil
-    if now ~= nil and ensureDBStamp == now and ensureDBRoot == db
-        and ensureDBParty == db.gf_party and next(ensureDBParty) ~= nil
-        and ensureDBRaid == db.gf_raid and next(ensureDBRaid) ~= nil
-        and ensureDBMythic == db.gf_mythicraid and next(ensureDBMythic) ~= nil
-        and ensureDBPriority == db.gf_priority and next(ensureDBPriority) ~= nil
+    if ensureDBRoot == db
+        and ensureDBParty == db.gf_party
+        and ensureDBRaid == db.gf_raid
+        and ensureDBMythic == db.gf_mythicraid
+        and ensureDBPriority == db.gf_priority
     then
-        return
+        if ensureDBReady then return end
+        --- In-place menu/profile mutations are already visible through the
+        --- stable tables. Defer structural repair until the first OOC boundary.
+        if _G.InCombatLockdown and _G.InCombatLockdown() then return end
     end
     local _partyFresh = type(db.gf_party) ~= "table"
     local _raidFresh  = type(db.gf_raid)  ~= "table"
@@ -1211,8 +1215,8 @@ function GF.EnsureDB()
     NormalizeAuraRenderer(db.gf_party)
     NormalizeAuraRenderer(db.gf_raid)
     NormalizeAuraRenderer(db.gf_mythicraid)
-    --- Ensure spell filter fields exist on each aura sub-group
-    for _, conf in pairs({db.gf_party, db.gf_raid, db.gf_mythicraid}) do
+    --- Ensure spell filter fields exist on each aura sub-group.
+    RepairAuraFilters = RepairAuraFilters or function(conf)
         --- Migrate: remove legacy absorb/heal defaults that blocked global override
         if conf.absorbEnabled == true and not conf._absorbMigrated then
             conf.absorbEnabled = nil
@@ -1228,7 +1232,7 @@ function GF.EnsureDB()
             conf.enableAbsorbBar = nil
         end
         if type(conf.auras) == "table" then
-            for _, gk in pairs({"buff", "debuff", "externals"}) do
+            for _, gk in ipairs(GF_AURA_GROUP_KEYS) do
                 local g = conf.auras[gk]
                 if type(g) == "table" then
                     --- Migrate v3: old spellFilter/spellList - new filterToken/blacklistCats
@@ -1301,8 +1305,11 @@ function GF.EnsureDB()
             end
         end
     end
+    RepairAuraFilters(db.gf_party)
+    RepairAuraFilters(db.gf_raid)
+    RepairAuraFilters(db.gf_mythicraid)
     --- Migration v2: force-enable auras + defensives (showstopper fix)
-    for _, conf in pairs({db.gf_party, db.gf_raid, db.gf_mythicraid}) do
+    RepairAuraV2 = RepairAuraV2 or function(conf)
         if type(conf.auras) == "table" and not conf._auraMigV2 then
             conf._auraMigV2 = true
             if conf.auras.enabled == false or conf.auras.enabled == nil then
@@ -1314,8 +1321,11 @@ function GF.EnsureDB()
             end
         end
     end
+    RepairAuraV2(db.gf_party)
+    RepairAuraV2(db.gf_raid)
+    RepairAuraV2(db.gf_mythicraid)
     --- Update cached conf references
-    GF.InvalidateConfCache()
+    GF.InvalidateConfCache(true)
 
     --- Obsolete role-layout bootstrap flags from older builds.
     db._gfDefaultPresetApplied = nil
@@ -1325,9 +1335,9 @@ function GF.EnsureDB()
         GF.SeedCurrentSpecSpellIndicatorDefaults()
     end
 
-    ensureDBStamp = now
     ensureDBRoot = db
     ensureDBParty, ensureDBRaid, ensureDBMythic, ensureDBPriority = db.gf_party, db.gf_raid, db.gf_mythicraid, db.gf_priority
+    ensureDBReady = true
 end
 
 ---
@@ -1391,40 +1401,52 @@ local function LegacyAuraGrowth(conf, fallback)
     return x .. y
 end
 
+local LEGACY_BUFF_DEFAULTS = {
+    enabled = true, anchor = "BOTTOMRIGHT", growth = "LEFTUP",
+    x = 0, y = 0, size = 22, perRow = 4, max = 6, spacing = 1,
+    layer = 5, filterMode = "RAID_PLAYER",
+    showCooldownSwipe = true, showCooldown = true, cooldownAnchor = "CENTER",
+    cooldownOffsetX = 0, cooldownOffsetY = 0, cooldownSize = 8, cooldownOutline = "OUTLINE",
+    showStacks = true, stackAnchor = "BOTTOMRIGHT",
+    stackOffsetX = 2, stackOffsetY = -2, stackSize = 10, stackOutline = "OUTLINE",
+}
+
+local LEGACY_DEBUFF_DEFAULTS = {
+    enabled = true, anchor = "TOPLEFT", growth = "RIGHTDOWN",
+    x = 0, y = 0, size = 20, perRow = 3, max = 6, spacing = 1,
+    layer = 6, showDispelBorder = true,
+    showCooldownSwipe = true, showCooldown = true, cooldownAnchor = "CENTER",
+    cooldownOffsetX = 0, cooldownOffsetY = 0, cooldownSize = 8, cooldownOutline = "OUTLINE",
+    showStacks = true, stackAnchor = "BOTTOMRIGHT",
+    stackOffsetX = 2, stackOffsetY = -2, stackSize = 10, stackOutline = "OUTLINE",
+}
+
+local LEGACY_EXTERNAL_DEFAULTS = {
+    enabled = true, anchor = "CENTER", growth = "RIGHTDOWN",
+    x = 0, y = 0, size = 28, perRow = 3, max = 2, spacing = 1,
+    layer = 7,
+    showCooldownSwipe = true, showCooldown = true, cooldownAnchor = "CENTER",
+    cooldownOffsetX = 0, cooldownOffsetY = 0, cooldownSize = 10, cooldownOutline = "OUTLINE",
+    showStacks = false, stackAnchor = "BOTTOMRIGHT",
+    stackOffsetX = 2, stackOffsetY = -2, stackSize = 10, stackOutline = "OUTLINE",
+}
+
+local function CopyAuraDefaults(defaults)
+    local copy = {}
+    for key, value in pairs(defaults) do copy[key] = value end
+    return copy
+end
+
 local function LegacyBuffDefaults()
-    return {
-        enabled = true, anchor = "BOTTOMRIGHT", growth = "LEFTUP",
-        x = 0, y = 0, size = 22, perRow = 4, max = 6, spacing = 1,
-        layer = 5, filterMode = "RAID_PLAYER",
-        showCooldownSwipe = true, showCooldown = true, cooldownAnchor = "CENTER",
-        cooldownOffsetX = 0, cooldownOffsetY = 0, cooldownSize = 8, cooldownOutline = "OUTLINE",
-        showStacks = true, stackAnchor = "BOTTOMRIGHT",
-        stackOffsetX = 2, stackOffsetY = -2, stackSize = 10, stackOutline = "OUTLINE",
-    }
+    return CopyAuraDefaults(LEGACY_BUFF_DEFAULTS)
 end
 
 local function LegacyDebuffDefaults()
-    return {
-        enabled = true, anchor = "TOPLEFT", growth = "RIGHTDOWN",
-        x = 0, y = 0, size = 20, perRow = 3, max = 6, spacing = 1,
-        layer = 6, showDispelBorder = true,
-        showCooldownSwipe = true, showCooldown = true, cooldownAnchor = "CENTER",
-        cooldownOffsetX = 0, cooldownOffsetY = 0, cooldownSize = 8, cooldownOutline = "OUTLINE",
-        showStacks = true, stackAnchor = "BOTTOMRIGHT",
-        stackOffsetX = 2, stackOffsetY = -2, stackSize = 10, stackOutline = "OUTLINE",
-    }
+    return CopyAuraDefaults(LEGACY_DEBUFF_DEFAULTS)
 end
 
 local function LegacyExternalDefaults()
-    return {
-        enabled = true, anchor = "CENTER", growth = "RIGHTDOWN",
-        x = 0, y = 0, size = 28, perRow = 3, max = 2, spacing = 1,
-        layer = 7,
-        showCooldownSwipe = true, showCooldown = true, cooldownAnchor = "CENTER",
-        cooldownOffsetX = 0, cooldownOffsetY = 0, cooldownSize = 10, cooldownOutline = "OUTLINE",
-        showStacks = false, stackAnchor = "BOTTOMRIGHT",
-        stackOffsetX = 2, stackOffsetY = -2, stackSize = 10, stackOutline = "OUTLINE",
-    }
+    return CopyAuraDefaults(LEGACY_EXTERNAL_DEFAULTS)
 end
 
 local function LegacyPrivateAuraDefaults()
@@ -1516,9 +1538,9 @@ function GF.MigrateAuraConfig(conf, isRaid)
     if type(conf.auras.debuff) ~= "table" then conf.auras.debuff = LegacyDebuffDefaults(); changed = true end
     if type(conf.auras.externals) ~= "table" then conf.auras.externals = LegacyExternalDefaults(); changed = true end
     if conf.auras.iconZoom == nil then conf.auras.iconZoom = 100; changed = true end
-    FillMissingAuraFields(conf.auras.buff, LegacyBuffDefaults())
-    FillMissingAuraFields(conf.auras.debuff, LegacyDebuffDefaults())
-    FillMissingAuraFields(conf.auras.externals, LegacyExternalDefaults())
+    FillMissingAuraFields(conf.auras.buff, LEGACY_BUFF_DEFAULTS)
+    FillMissingAuraFields(conf.auras.debuff, LEGACY_DEBUFF_DEFAULTS)
+    FillMissingAuraFields(conf.auras.externals, LEGACY_EXTERNAL_DEFAULTS)
     if type(conf.spellIndicators) ~= "table" then
         conf.spellIndicators = { enabled = false, spec = "auto", specs = {}, layer = 9, iconZoom = 100 }
         changed = true
@@ -1531,8 +1553,12 @@ function GF.GetPriorityConf()
     return _confPriority or PRIORITY_DEFAULTS
 end
 
---- Call after any DB mutation (EnsureDB, profile swap, options apply)
-function GF.InvalidateConfCache()
+--- Call after any DB mutation (EnsureDB, profile swap, options apply). Internal
+--- cache refreshes may preserve the completed DB repair with keepDBReady=true.
+function GF.InvalidateConfCache(keepDBReady)
+    if keepDBReady ~= true then
+        ensureDBReady = false
+    end
     local db = _G.MSUF_DB
     if not db then
         _confParty, _confRaid, _confMythicRaid, _confPriority = nil, nil, nil, nil
@@ -1589,6 +1615,7 @@ function GF.ResetAllToDefaults()
     ResetConfToDefaults(db.gf_mythicraid, mythicRaidDefaults or MYTHIC_RAID_DEFAULTS)
     ResetConfToDefaults(db.gf_priority, PRIORITY_DEFAULTS)
 
+    GF.InvalidateConfCache()
     GF.EnsureDB()
 
     if GF.RefreshAll then GF.RefreshAll() end
