@@ -54,6 +54,7 @@ $tests = @(
     ".github/scripts/tests/aura_growth_anchor_smoke.lua",
     ".github/scripts/tests/beginner_workflow_smoke.lua",
     ".github/scripts/tests/boss_castbar_lifecycle_smoke.lua",
+    ".github/scripts/tests/castbar_auto_width_geometry_smoke.lua",
     ".github/scripts/tests/castbar_duration_identity_smoke.lua",
     ".github/scripts/tests/castbar_engine_identity_smoke.lua",
     ".github/scripts/tests/castbar_focus_subscription_smoke.lua",

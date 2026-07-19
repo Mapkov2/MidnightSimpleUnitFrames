@@ -62,13 +62,17 @@ local function BossCastbarsEnabled()
     return (not general) or general.enableBossCastbar ~= false
 end
 
-local function SetPointIfChanged(frame, point, relativeTo, relativePoint, offsetX, offsetY)
+local function SetPointIfChanged(frame, point, relativeTo, relativePoint, offsetX, offsetY, preserveOffsets)
     if not frame then
         return false
     end
 
-    offsetX = math.floor((tonumber(offsetX) or 0) + 0.5)
-    offsetY = math.floor((tonumber(offsetY) or 0) + 0.5)
+    offsetX = tonumber(offsetX) or 0
+    offsetY = tonumber(offsetY) or 0
+    if not preserveOffsets then
+        offsetX = math.floor(offsetX + 0.5)
+        offsetY = math.floor(offsetY + 0.5)
+    end
 
     local currentPoint, currentRelativeTo, currentRelativePoint, currentX, currentY = frame:GetPoint(1)
     if currentPoint == point
@@ -180,7 +184,12 @@ local function UpdateBossCastbarAnchorBase(frame)
     else
         local unitFrame = _G["MSUF_" .. unit]
         if unitFrame and unitFrame.GetWidth then
-            changed = SetPointIfChanged(frame, "BOTTOMLEFT", unitFrame, "TOPLEFT", offsetX, offsetY + 2) or changed
+            local autoX = 0
+            if type(_G.MSUF_GetCastbarAutoAnchorOffsetX) == "function" then
+                autoX = _G.MSUF_GetCastbarAutoAnchorOffsetX(general, unit, frame)
+            end
+            changed = SetPointIfChanged(frame, "BOTTOMLEFT", unitFrame, "TOPLEFT",
+                offsetX + autoX, offsetY + 2, true) or changed
             changed = SetWidthIfChanged(frame, desiredWidth or unitFrame:GetWidth() or 240) or changed
         else
             changed = SetPointIfChanged(
