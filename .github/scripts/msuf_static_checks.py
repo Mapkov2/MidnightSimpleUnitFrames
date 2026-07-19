@@ -616,7 +616,7 @@ def check_powerbar_contracts() -> None:
         "ApplyPowerBorder(bar, power)",
         "frame._msufPowerBarDetached = power.detached == true and true or nil",
         "return POWER_EVENTS_FAST",
-        "PowerEventMatchesToken(bar, event, eventPowerToken)",
+        "and bar._msufPowerToken ~= eventPowerToken then return end",
     ]:
         require(power, needle, "Powerbar native runtime contract")
     for reason in ["MSUF2_POWER_DETACHED_SHAPE", "MSUF2_POWER_DETACHED_ORB_SIZE"]:

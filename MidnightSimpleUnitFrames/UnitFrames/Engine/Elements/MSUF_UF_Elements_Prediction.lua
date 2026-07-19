@@ -179,6 +179,9 @@ local PREDICTION_DISABLE_FIELDS = {
   "_msufPredictionAbsorbEdgeGlow",
   "_msufPredictionOverAbsorbOverlay",
   "_msufPredictionFullHealthStripe",
+  "_msufPredictionFullHealthAlphaReady",
+  "_msufPredictionFullHealthAlphaDirty",
+  "_msufPredictionFullHealthAlphaUnit",
   "_msufPredictionClampHealToMissing",
   "_msufPredictionClampAbsorbToMissing",
   "_msufUpdatePredictionHealthValue",
@@ -324,7 +327,11 @@ local function ShowValue(bar, maxValue, value, forceMax)
   local needMax = forceMax == true or not maxReady
   local maxSecret = issecretvalue(maxValue) == true
   if maxSecret or maxValue ~= nil then -- not IsNil(maxValue)
-    if maxSecret or needMax or bar._msufMaxPlain ~= true or bar._msufMax ~= maxValue then
+    -- UNIT_MAXHEALTH and initial seeding own the native maximum. Secret max
+    -- values may be forwarded but never compared, so ordinary health ticks
+    -- retain the already-seeded StatusBar range without repeating the setter.
+    if (maxSecret and needMax)
+      or (not maxSecret and (needMax or bar._msufMaxPlain ~= true or bar._msufMax ~= maxValue)) then
       bar:SetMinMaxValues(0, maxValue)
       if maxSecret then
         bar._msufMax = nil
@@ -471,8 +478,10 @@ local function ReadDetailedHealth(frame, unit)
   end
   if not calc then return nil end
 
-  local current = calc.GetCurrentHealth and calc:GetCurrentHealth() or nil
-  local maximum = calc.GetMaximumHealth and calc:GetMaximumHealth() or nil
+  local getCurrent = calc.GetCurrentHealth
+  local getMaximum = calc.GetMaximumHealth
+  local current = getCurrent and getCurrent(calc) or nil
+  local maximum = getMaximum and getMaximum(calc) or nil
   return current, maximum, calc
 end
 
@@ -483,8 +492,9 @@ local function FallbackIncomingHeals(unit)
 end
 
 local function CalcIncomingHeals(calc, unit)
-  if calc and calc.GetIncomingHeals then
-    local _, healer = calc:GetIncomingHeals()
+  local getIncoming = calc and calc.GetIncomingHeals
+  if getIncoming then
+    local _, healer = getIncoming(calc)
     return healer
   end
   return FallbackIncomingHeals(unit)
@@ -492,12 +502,14 @@ end
 
 local function CalcDamageAbsorbs(calc, unit)
   if calc then
-    if calc.GetDamageAbsorbs then
-      local value = calc:GetDamageAbsorbs()
+    local getDamageAbsorbs = calc.GetDamageAbsorbs
+    if getDamageAbsorbs then
+      local value = getDamageAbsorbs(calc)
       if issecretvalue(value) == true or value ~= nil then return value end
     end
-    if calc.GetTotalDamageAbsorbs then
-      local value = calc:GetTotalDamageAbsorbs()
+    local getTotalDamageAbsorbs = calc.GetTotalDamageAbsorbs
+    if getTotalDamageAbsorbs then
+      local value = getTotalDamageAbsorbs(calc)
       if issecretvalue(value) == true or value ~= nil then return value end
     end
   end
@@ -506,12 +518,14 @@ end
 
 local function CalcHealAbsorbs(calc, unit)
   if calc then
-    if calc.GetHealAbsorbs then
-      local value = calc:GetHealAbsorbs()
+    local getHealAbsorbs = calc.GetHealAbsorbs
+    if getHealAbsorbs then
+      local value = getHealAbsorbs(calc)
       if issecretvalue(value) == true or value ~= nil then return value end
     end
-    if calc.GetTotalHealAbsorbs then
-      local value = calc:GetTotalHealAbsorbs()
+    local getTotalHealAbsorbs = calc.GetTotalHealAbsorbs
+    if getTotalHealAbsorbs then
+      local value = getTotalHealAbsorbs(calc)
       if issecretvalue(value) == true or value ~= nil then return value end
     end
   end
@@ -740,7 +754,10 @@ local function ResolveGlowAbsorb(frame, cfg, unit, hp, maxHP, absorb, hpSecret, 
   return absorb
 end
 
-local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb)
+local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refreshFullHealthAlpha)
+  if frame and refreshFullHealthAlpha == true then
+    frame._msufPredictionFullHealthAlphaDirty = true
+  end
   local overAbsorbEnabled = frame and frame._msufPredictionOverAbsorbOverlay == true
   local fullHealthStripeEnabled = frame and frame._msufPredictionFullHealthStripe == true
   if not (frame and (overAbsorbEnabled or fullHealthStripeEnabled)) then
@@ -773,14 +790,27 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb)
   -- resulting secret scalar. Rendering therefore performs the logical AND.
   if absorbSecret or hpSecret or maxSecret then
     if fullHealthStripeEnabled then
-      local alpha
-      if not hpSecret and not maxSecret and type(hp) == "number" and type(maxHP) == "number" and maxHP > 0 then
-        alpha = hp >= maxHP and 1 or 0
-      else
-        alpha = FullHealthAlpha(unit)
-      end
-      if issecretvalue(alpha) == true or alpha ~= nil then
+      local alphaReady = frame._msufPredictionFullHealthAlphaReady == true
+        and frame._msufPredictionFullHealthAlphaDirty ~= true
+        and issecretvalue(unit) ~= true
+        and frame._msufPredictionFullHealthAlphaUnit == unit
+      if not alphaReady then
+        local alpha
+        if not hpSecret and not maxSecret and type(hp) == "number" and type(maxHP) == "number" and maxHP > 0 then
+          alpha = hp >= maxHP and 1 or 0
+        else
+          alpha = FullHealthAlpha(unit)
+        end
+        if issecretvalue(alpha) ~= true and alpha == nil then
+          HideOverAbsorbGlow(frame)
+          return
+        end
         holder:SetAlpha(alpha)
+        frame._msufPredictionFullHealthAlphaReady = true
+        frame._msufPredictionFullHealthAlphaDirty = nil
+        frame._msufPredictionFullHealthAlphaUnit = issecretvalue(unit) ~= true and unit or nil
+      end
+      if frame._msufPredictionFullHealthAlphaReady == true then
         holder:SetValue(absorb)
         if holder._msufOverAbsorbShown ~= true then
           holder:SetShown(true)
@@ -1295,6 +1325,7 @@ local function CompilePredictionRuntime(frame, cfg, spec)
     and (cfg.overAbsorbOverlay == true or cfg.fullHealthAbsorbStripe == true)
   frame._msufPredictionOverAbsorbOverlay = cfg.absorb == true and cfg.overAbsorbOverlay == true
   frame._msufPredictionFullHealthStripe = cfg.absorb == true and cfg.fullHealthAbsorbStripe == true
+  frame._msufPredictionFullHealthAlphaDirty = true
   frame._msufPredictionClampHealToMissing = cfg.heal == true and healMode == 3
   frame._msufPredictionClampAbsorbToMissing = cfg.absorb == true and absorbMode == 3
   frame._msufPredictionEventPlans, frame._msufPredictionFullPlan = CompilePredictionPlans(cfg, healMode, absorbMode, followAbsorb)
@@ -1488,7 +1519,8 @@ local function UpdateAbsorbOnly(frame, event, unit, cfg, seedHP, seedMaxHP, abso
   end
   ShowValue(bar, maxHP, frame._msufPredictionAbsorb, forceMax)
   if frame._msufPredictionAbsorbEdgeGlow == true then
-    UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, frame._msufPredictionAbsorb)
+    UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, frame._msufPredictionAbsorb,
+      event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" or event == "UNIT_CONNECTION")
   end
 end
 
@@ -1540,7 +1572,7 @@ local function QueuePredictionDataEvent(frame, event)
   frame._msufPredictionQueued = nil
   mask = frame._msufPredictionDirtyMask
   frame._msufPredictionDirtyMask = nil
-  if mask then UpdateFull(frame, PREDICTION_DIRTY_PLAN_KEYS[mask], frame.MSUFUnitKey) end
+  if mask then UpdateFull(frame, PREDICTION_DIRTY_PLAN_KEYS[mask], frame.MSUFUnitKey, nil, nil, nil, true) end
 end
 
 FlushPredictionQueue = function()
@@ -1566,7 +1598,7 @@ FlushPredictionQueue = function()
         -- runtime plan after this event was registered. Let UpdateFull validate
         -- the current spec and rebuild that plan instead of stranding the bar
         -- until an unrelated health/lifecycle event happens.
-        UpdateFull(frame, PREDICTION_DIRTY_PLAN_KEYS[mask], frame.MSUFUnitKey)
+        UpdateFull(frame, PREDICTION_DIRTY_PLAN_KEYS[mask], frame.MSUFUnitKey, nil, nil, nil, true)
       end
     end
   end
@@ -1627,7 +1659,7 @@ function Prediction.UpdateHealthValue(frame, event, unit, seedHP, seedMaxHP)
     ShowValue(absorbBar, maxHP, frame._msufPredictionAbsorb)
   end
   if absorbEdgeGlow then
-    UpdateOverAbsorbGlow(frame, cfg, unit, seedHP, maxHP, frame._msufPredictionAbsorb)
+    UpdateOverAbsorbGlow(frame, cfg, unit, seedHP, maxHP, frame._msufPredictionAbsorb, true)
   end
 end
 
@@ -1706,8 +1738,10 @@ function Prediction.UpdateConnectionState(frame, event, unit, seedHP, seedMaxHP,
   return result
 end
 
-UpdateFull = function(frame, event, unit, seedHP, seedMaxHP, seedCalc)
-  if unit and issecretvalue(unit) == true then
+UpdateFull = function(frame, event, unit, seedHP, seedMaxHP, seedCalc, boundUnit)
+  if boundUnit == true then
+    unit = frame.MSUFUnitKey
+  elseif unit and issecretvalue(unit) == true then
     unit = frame and frame.MSUFUnitKey or nil
     seedHP, seedMaxHP, seedCalc = nil, nil, nil
   elseif unit and frame and unit ~= frame.MSUFUnitKey then
@@ -1716,7 +1750,7 @@ UpdateFull = function(frame, event, unit, seedHP, seedMaxHP, seedCalc)
   else
     unit = unit or frame.MSUFUnitKey
   end
-  local unitSecret = issecretvalue(unit) == true
+  local unitSecret = boundUnit ~= true and issecretvalue(unit) == true
   local cfg = frame._msufPredictionRuntimeCfg
   local spec
   if not cfg then
@@ -1778,7 +1812,7 @@ UpdateFull = function(frame, event, unit, seedHP, seedMaxHP, seedCalc)
           frame._msufPredictionAbsorbHeight, frame._msufPredictionAbsorbOffsetY)
       end
       ShowValue(frame.absorbBar, TEST_MAX, TEST_ABSORB)
-      UpdateOverAbsorbGlow(frame, cfg, unit, TEST_MAX, TEST_MAX, TEST_ABSORB)
+      UpdateOverAbsorbGlow(frame, cfg, unit, TEST_MAX, TEST_MAX, TEST_ABSORB, true)
     elseif frame.absorbBar then
       HideBar(frame.absorbBar)
       HideOverAbsorbGlow(frame)
@@ -1858,7 +1892,19 @@ UpdateFull = function(frame, event, unit, seedHP, seedMaxHP, seedCalc)
 
   local calc
   if refreshHeal or refreshAbsorb or refreshHealAbsorb then
-    calc = UpdateCalc(frame, unit, cfg)
+    -- Group AI health may already have filled this exact calculator earlier in
+    -- the same Core dispatch. Accept only that frame/unit/config/token snapshot;
+    -- all standalone or stale callers retain the authoritative refresh below.
+    if seedCalc
+      and seedCalc == frame._msufPredictionCalc
+      and seedCalc._msufPredictionCfg == cfg
+      and seedCalc._msufPredictionUpdateUnit == unit
+      and frame._msufDispatchActive == true
+      and seedCalc._msufPredictionUpdateDispatch == frame._msufDispatchToken then
+      calc = seedCalc
+    else
+      calc = UpdateCalc(frame, unit, cfg)
+    end
   end
   if refreshHeal then
     local incoming = ReadIncomingHeals(calc, unit, hp, maxHP, healMode)
@@ -1895,7 +1941,8 @@ UpdateFull = function(frame, event, unit, seedHP, seedMaxHP, seedCalc)
     end
     ShowValue(frame.absorbBar, maxHP, frame._msufPredictionAbsorb, forceMax)
     if frame._msufPredictionAbsorbEdgeGlow == true then
-      UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, frame._msufPredictionAbsorb)
+      UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, frame._msufPredictionAbsorb,
+        event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" or event == "UNIT_CONNECTION")
     end
   end
 
@@ -1930,6 +1977,7 @@ function Prediction.SelectEventUpdate(_frame, _spec, event)
   end
   return UpdateFull
 end
+Prediction.NoDispatchUpdates = { [QueuePredictionDataEvent] = true }
 
 --- Reseed live prediction values after Blizzard has finalized world/unit data.
 --- This is a cold lifecycle path: it touches only visible frames with an active

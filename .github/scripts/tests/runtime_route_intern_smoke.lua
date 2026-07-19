@@ -39,7 +39,11 @@ _G.UnitIsDead = function() return false end
 _G.UnitIsDeadOrGhost = function() return false end
 _G.issecretvalue = function() return false end
 
-local MSUF = { UF = { Metadata = { defaultApplyMask = { StatusTextIndicator = true } } } }
+local MSUF = { UF = { Metadata = { defaultApplyMask = {
+    StatusTextIndicator = true,
+    Prediction = true,
+    GroupVisuals = true,
+} } } }
 _G.MSUF_NS = MSUF
 
 local chunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Core.lua"))
@@ -56,20 +60,64 @@ local Health = {
 function Health.Update(frame, event, unit)
     calls[frame] = (calls[frame] or 0) + 1
     frame.lastEvent, frame.lastUnit = event, unit
-    return 80, 100, false
+    return 80, 100, false, frame.seedCalc
 end
 UF.RegisterElement("Health", Health)
+
+local Prediction = {
+    IsEnabled = function() return true end,
+    Create = function() end,
+    Apply = function() end,
+    GetEvents = function() return { "UNIT_MAXHEALTH" } end,
+}
+function Prediction.Update(frame, event, unit, hp, hpMax, seedCalc)
+    frame.predictionEvent = event
+    frame.predictionUnit = unit
+    frame.predictionHP = hp
+    frame.predictionMax = hpMax
+    frame.predictionCalc = seedCalc
+end
+UF.RegisterElement("Prediction", Prediction)
+
+local HealthText = {
+    IsEnabled = function() return true end,
+    Create = function() end,
+    Apply = function() end,
+    GetEvents = function() return { "UNIT_MAXHEALTH" } end,
+}
+function HealthText.Update(frame, event, unit, hp, hpMax)
+    frame.healthTextEvent = event
+    frame.healthTextUnit = unit
+    frame.healthTextHP = hp
+    frame.healthTextMax = hpMax
+end
+UF.RegisterElement("HealthText", HealthText)
+
+local GroupVisuals = {
+    IsEnabled = function() return true end,
+    Create = function() end,
+    Apply = function() end,
+    GetEvents = function() return { "UNIT_MAXHEALTH" } end,
+}
+function GroupVisuals.Update(frame, event, unit, hp, hpMax)
+    frame.visualsEvent = event
+    frame.visualsUnit = unit
+    frame.visualsHP = hp
+    frame.visualsMax = hpMax
+end
+UF.RegisterElement("GroupVisuals", GroupVisuals)
 
 local NameText = {
     IsEnabled = function() return true end,
     Create = function() end,
     Apply = function() end,
-    GetEvents = function() return {} end,
+    GetEvents = function() return { "UNIT_NAME_UPDATE" } end,
 }
 function NameText.Update(frame, event, unit)
     frame.nameCalls = (frame.nameCalls or 0) + 1
     frame.lastNameEvent, frame.lastNameUnit = event, unit
 end
+NameText.NoDispatchUpdates = { [NameText.Update] = true }
 UF.RegisterElement("NameText", NameText)
 
 local StatusTextIndicator = {
@@ -107,6 +155,31 @@ Check(first._msufIdentityFns == second._msufIdentityFns,
     "identity function sequences were retained per frame")
 Check(first._msufIdentityLabels == second._msufIdentityLabels,
     "identity labels were retained per frame")
+
+local seeded = NewFrame("party1")
+seeded.seedCalc = {}
+local seededSpec = { enabled = true, key = "party1", unit = "party1", scope = "group" }
+UF.AttachFrame(seeded, { scope = "group" })
+UF.ApplyElementToFrame(seeded, "Health", seededSpec)
+UF.ApplyElementToFrame(seeded, "Prediction", seededSpec)
+UF.ApplyElementToFrame(seeded, "HealthText", seededSpec)
+UF.ApplyElementToFrame(seeded, "GroupVisuals", seededSpec)
+seeded.UNIT_MAXHEALTH(seeded, "UNIT_MAXHEALTH", "party1")
+Check(seeded.predictionHP == 80 and seeded.predictionMax == 100,
+    ("direct health route did not forward seeded health values (hp=%s max=%s event=%s unit=%s)")
+        :format(tostring(seeded.predictionHP), tostring(seeded.predictionMax),
+            tostring(seeded.predictionEvent), tostring(seeded.predictionUnit)))
+Check(seeded.predictionCalc == seeded.seedCalc,
+    "direct health route dropped the dispatch-owned prediction calculator")
+Check(seeded.healthTextHP == 80 and seeded.healthTextMax == 100,
+    "direct health route did not forward values to health text")
+Check(seeded.visualsHP == 80 and seeded.visualsMax == 100,
+    "direct health route did not forward values to group visuals")
+seeded.predictionCalc = nil
+Check(UF.RunLeanIdentity(seeded, "MSUF_UNIT_IDENTITY") == true,
+    "seeded identity route did not run")
+Check(seeded.predictionCalc == seeded.seedCalc,
+    "identity route dropped the dispatch-owned prediction calculator")
 Check(first._msufIdentityPath == second._msufIdentityPath,
     "identity dispatch closures were retained per frame")
 Check(first._msufRuntimeAllFns == second._msufRuntimeAllFns,
@@ -122,6 +195,10 @@ first.UNIT_HEALTH(first, "UNIT_HEALTH", "player")
 second.UNIT_HEALTH(second, "UNIT_HEALTH", "player")
 Check(calls[first] == 1 and calls[second] == 1, "shared route did not preserve frame-local dispatch")
 Check(first.lastUnit == "player" and second.lastUnit == "player", "shared route changed unit binding")
+first._msufDispatchToken = 17
+first.UNIT_NAME_UPDATE(first, "UNIT_NAME_UPDATE", "player")
+Check(first.nameCalls == 1 and first._msufDispatchToken == 17 and first._msufDispatchActive == nil,
+    "state-free single route entered the shared unit-state dispatch")
 
 -- A hidden single frame can miss its target/focus identity event. OnShow must
 -- re-run the already compiled lean identity plan once, without a poll/driver.
