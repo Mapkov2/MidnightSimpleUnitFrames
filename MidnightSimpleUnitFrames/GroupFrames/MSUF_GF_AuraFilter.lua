@@ -245,6 +245,9 @@ local DECLASSIFIED_SPELLS = {
     },
     -- ── Skyriding ───────────────────────────────────────────────────
     SKYRIDING = {
+        [377234] = true,   -- Thrill of the Skies
+        [404464] = true,   -- Flight Style: Skyriding
+        [404468] = true,   -- Flight Style: Steady
         [427490] = true,   -- Ride Along Available
         [447959] = true,   -- Ride Along Active
         [447960] = true,   -- Ride Along Inactive
@@ -280,7 +283,7 @@ local DECLASSIFIED_META = {
     { key = "RESOURCE_AURAS",  label = "Resource Auras",
       tooltip = "Mage Icicles, Hunter Tip of the Spear." },
     { key = "SKYRIDING",       label = "Skyriding",
-      tooltip = "Ride Along Available / Active / Inactive." },
+      tooltip = "Flight Style, Thrill of the Skies, and Ride Along auras." },
     { key = "COOLDOWNS",       label = "Cooldowns",
       tooltip = "Hearthstone, Shaman Reincarnation." },
 }

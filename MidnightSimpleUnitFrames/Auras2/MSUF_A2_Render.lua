@@ -1427,7 +1427,7 @@ local function RenderUnit(entry)
                 cfg.bossHealHideOthers = (bha.hideOthers == true)
             end
         end
-        -- Global Ignore List (shared for boss frames, per-unit overridable elsewhere)
+        -- Global Ignore List (Shared baseline with optional per-unit override)
         local cats = shared.ignoreCats
         if pu and pu.overrideIgnore == true and type(pu.ignoreCats) == "table" then
             cats = pu.ignoreCats

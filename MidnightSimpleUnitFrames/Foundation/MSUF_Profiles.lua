@@ -1,5 +1,30 @@
 -- Extracted from MidnightSimpleUnitFrames.lua (profiles + active profile state)
 local addonName, ns = ...
+local MSUF_PROFILEIO_UNIT_ANCHOR_KEYS = {
+    "player", "target", "targettarget", "tot", "focus", "focustarget", "pet", "boss",
+    "boss1", "boss2", "boss3", "boss4", "boss5",
+}
+
+local function MSUF_ProfileIO_NormalizeAnchorAliases(profile)
+    if type(profile) ~= "table" then return false end
+    local changed = false
+    local general = profile.general
+    if type(general) == "table" and general.anchorName == "UI_Parent" then
+        general.anchorName = "UIParent"
+        changed = true
+    end
+    for i = 1, #MSUF_PROFILEIO_UNIT_ANCHOR_KEYS do
+        local conf = profile[MSUF_PROFILEIO_UNIT_ANCHOR_KEYS[i]]
+        if type(conf) == "table" and conf.anchorFrameName == "UI_Parent" then
+            conf.anchorFrameName = "UIParent"
+            changed = true
+        end
+    end
+    return changed
+end
+
+_G.MSUF_ProfileIO_NormalizeAnchorAliases = MSUF_ProfileIO_NormalizeAnchorAliases
+
 local function MSUF_ProfileIO_NormalizeLegacyTableChunk(str)
     if type(str) ~= "string" then
         return nil
@@ -39,6 +64,10 @@ local function MSUF_ProfileIO_LoadLegacyChunk(str)
     return func, err
 end
 local function MSUF_ProfileIO_RunEnsureDB()
+    -- This runs on login, profile switches, and after active-profile imports.
+    -- Repair the historical non-existent frame alias even when EnsureDB's
+    -- table-identity fast path can skip its heavier defaults pass.
+    MSUF_ProfileIO_NormalizeAnchorAliases(_G.MSUF_DB)
     local ensureDB = _G.MSUF_EnsureDB
     if type(ensureDB) == "function" then
         ensureDB()
@@ -1623,6 +1652,7 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable, refreshStat
     if type(newTable) ~= "table" then
          return false, "not a table"
     end
+    MSUF_ProfileIO_NormalizeAnchorAliases(newTable)
     if type(_G.MSUF_NormalizePortraitRenderDB) == "function" then
         pcall(_G.MSUF_NormalizePortraitRenderDB, newTable)
     end
