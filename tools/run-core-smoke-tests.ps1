@@ -95,6 +95,7 @@ $tests = @(
     ".github/scripts/tests/identity_payload_hotpath_smoke.lua",
     ".github/scripts/tests/layer_contract_smoke.lua",
     ".github/scripts/tests/layer_strata_runtime_smoke.lua",
+    ".github/scripts/tests/late_anchor_retry_smoke.lua",
     ".github/scripts/tests/legacy55_profile_migration_smoke.lua",
     ".github/scripts/tests/legacy573_group_name_and_classpower_quick_smoke.lua",
     ".github/scripts/tests/level_name_anchor_smoke.lua",

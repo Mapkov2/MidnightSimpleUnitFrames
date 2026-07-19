@@ -86,7 +86,13 @@ local function IsCooldownViewerAnchorUsable(name)
   return IsCooldownViewerAnchorFrameUsable(ResolveCooldownViewerAnchor(name))
 end
 
+local function CanonicalAnchorFrameName(name)
+  if name == "UI_Parent" then return "UIParent" end
+  return name
+end
+
 local function ResolveNamedAnchor(name)
+  name = CanonicalAnchorFrameName(name)
   if type(name) ~= "string" or name == "" then return nil, nil end
   if IsCooldownViewerAnchor(name) then
     local frame = ResolveCooldownViewerAnchor(name)
@@ -100,9 +106,9 @@ end
 
 local function ResolveAnchor(spec, frame)
   local anchor = UIParent
-  local name = spec and spec.anchorFrameName
+  local name = CanonicalAnchorFrameName(spec and spec.anchorFrameName)
   if type(name) ~= "string" or name == "" then
-    name = spec and spec.anchorToUnitframe
+    name = CanonicalAnchorFrameName(spec and spec.anchorToUnitframe)
     if name == "GLOBAL" or name == "global" or name == "FREE" then
       name = nil
     end
@@ -1019,7 +1025,7 @@ local function HasLateAnchorConfig()
   if general and general.anchorToCooldown == true then
     if IsCooldownViewerAnchorUsable("EssentialCooldownViewer") then return true end
   end
-  local globalAnchor = general and general.anchorName
+  local globalAnchor = CanonicalAnchorFrameName(general and general.anchorName)
   if IsCooldownViewerAnchor(globalAnchor) then
     if IsCooldownViewerAnchorUsable(globalAnchor) then return true end
   elseif type(globalAnchor) == "string"
@@ -1031,8 +1037,11 @@ local function HasLateAnchorConfig()
   for i = 1, #LATE_ANCHOR_KEYS do
     local conf = db[LATE_ANCHOR_KEYS[i]]
     if type(conf) == "table" then
-      local frameName = conf.anchorFrameName
-      if type(frameName) == "string" and frameName ~= "" then
+      local frameName = CanonicalAnchorFrameName(conf.anchorFrameName)
+      if type(frameName) == "string"
+        and frameName ~= ""
+        and frameName ~= "UIParent"
+        and frameName ~= "WorldFrame" then
         if IsCooldownViewerAnchor(frameName) then
           if IsCooldownViewerAnchorUsable(frameName) then return true end
         else
@@ -1075,6 +1084,20 @@ local function FlushLateAnchorReanchor(forcePosition)
   return true
 end
 
+local function FlushScheduledLateAnchorReanchor(state)
+  if not state.pending or state.flushing then return false end
+  local force = state.forcePosition == true
+  state.forcePosition = false
+  state.flushing = true
+  local flushed = FlushLateAnchorReanchor(force)
+  -- Keep pending=true for the entire flush. A missing custom anchor can call
+  -- the scheduler again from ApplyPosition; clearing it earlier creates an
+  -- unbounded next-frame Factory.Apply loop.
+  state.flushing = false
+  state.pending = false
+  return flushed
+end
+
 local function ScheduleLateAnchorReanchor(forcePosition)
   if InCombat() then
     if forcePosition then InvalidatePositionCache(nil) end
@@ -1083,25 +1106,23 @@ local function ScheduleLateAnchorReanchor(forcePosition)
   end
   local state = _G.MSUF_LateAnchorReanchorState
   if type(state) ~= "table" then
-    state = { pending = false, forcePosition = false }
+    state = { pending = false, forcePosition = false, flushing = false }
     ExportPublic("MSUF_LateAnchorReanchorState", state)
   end
+  if state.pending then
+    -- A force request may upgrade work that is queued but has not started.
+    -- Reentrant requests from the flush itself are deliberately ignored.
+    if forcePosition and not state.flushing then state.forcePosition = true end
+    return false
+  end
   if forcePosition then state.forcePosition = true end
-  if state.pending then return false end
   state.pending = true
   if _G.C_Timer and _G.C_Timer.After then
     _G.C_Timer.After(0, function()
-      if not state.pending then return end
-      state.pending = false
-      local force = state.forcePosition == true
-      state.forcePosition = false
-      FlushLateAnchorReanchor(force)
+      FlushScheduledLateAnchorReanchor(state)
     end)
   else
-    state.pending = false
-    local force = state.forcePosition == true
-    state.forcePosition = false
-    FlushLateAnchorReanchor(force)
+    FlushScheduledLateAnchorReanchor(state)
   end
   return true
 end

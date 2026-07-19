@@ -1288,6 +1288,7 @@ end
 
 local function ResolveAnchorSettings(conf, general)
   local anchorFrameName = conf and conf.anchorFrameName
+  if anchorFrameName == "UI_Parent" then anchorFrameName = "UIParent" end
   if type(anchorFrameName) == "string" and anchorFrameName ~= "" then
     return anchorFrameName, conf.anchorToUnitframe, IsCooldownViewerFrameName(anchorFrameName)
   end
@@ -1309,6 +1310,7 @@ local function ResolveAnchorSettings(conf, general)
   end
 
   local globalAnchor = general and general.anchorName
+  if globalAnchor == "UI_Parent" then globalAnchor = "UIParent" end
   if IsCooldownViewerFrameName(globalAnchor) then
     return globalAnchor, "GLOBAL", true
   end

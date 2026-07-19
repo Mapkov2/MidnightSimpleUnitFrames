@@ -428,7 +428,28 @@ local _, firstChanged = translate(malformedStored, {
 })
 assert(firstChanged == true, "unversioned current profile must be normalized once")
 assert(malformedStored.general.nameOffsetX == 500, "stored malformed numeric field was not clamped")
-assert(malformedStored._msufProfileNormalizationRevision == 10, "normalization revision was not persisted")
+assert(malformedStored._msufProfileNormalizationRevision == 11, "normalization revision was not persisted")
+
+-- A profile exported with the non-existent UI_Parent alias caused the unit
+-- factory to retry a full apply forever. Stored revision-10 profiles must be
+-- repaired in place as well as fresh external imports.
+local staleAnchorAlias = {
+    _msufProfileSchema = 600,
+    _msufProfileNormalizationRevision = 10,
+    general = { anchorName = "UI_Parent" },
+    pet = { anchorFrameName = "UI_Parent", anchorToUnitframe = "GLOBAL" },
+}
+local _, anchorAliasChanged = translate(staleAnchorAlias, {
+    source = "smoke_stored",
+    markProfile = true,
+    trustNormalizationMarker = true,
+})
+assert(anchorAliasChanged == true, "stale UI_Parent profile did not re-enter normalization")
+assert(staleAnchorAlias.general.anchorName == "UIParent"
+    and staleAnchorAlias.pet.anchorFrameName == "UIParent",
+    "UI_Parent anchor alias was not canonicalized")
+assert(staleAnchorAlias._msufProfileNormalizationRevision == 11,
+    "anchor alias repair did not persist the current normalization revision")
 
 -- The second trusted pass must return before walking the full profile tree.
 local nestedWalks = 0
@@ -440,7 +461,7 @@ local watchedGeneral = setmetatable({}, {
 })
 local alreadyCurrent = {
     _msufProfileSchema = 600,
-    _msufProfileNormalizationRevision = 10,
+    _msufProfileNormalizationRevision = 11,
     general = watchedGeneral,
 }
 local _, fastChanged = translate(alreadyCurrent, {
@@ -454,7 +475,7 @@ assert(nestedWalks == 0, "normalization fast path walked nested profile tables")
 -- External payloads never get to assert their own trust markers.
 local spoofedImport = {
     _msufProfileSchema = 600,
-    _msufProfileNormalizationRevision = 10,
+    _msufProfileNormalizationRevision = 11,
     _msufDefaultsRevision = 1,
     _msufDispelPriorityMigration = 3,
     general = { nameOffsetX = "900" },

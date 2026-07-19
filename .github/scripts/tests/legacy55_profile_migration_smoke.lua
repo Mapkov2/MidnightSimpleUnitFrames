@@ -401,7 +401,7 @@ local _, repaired = translate(storedV2, {
     markProfile = true,
     trustNormalizationMarker = true,
 })
-assert(repaired == true and storedV2._msufProfileNormalizationRevision == 10,
+assert(repaired == true and storedV2._msufProfileNormalizationRevision == 11,
     "stored v2 SavedVariables did not re-enter migration")
 assert(storedV2.auras3._msufAuras3LegacyGeometry_v3 == true
     and storedV2.auras3.perUnit.target.layout.buffAnchor == "TOPLEFT"
@@ -439,7 +439,7 @@ local _, repairedV3 = translate(storedV3, {
     markProfile = true,
     trustNormalizationMarker = true,
 })
-assert(repairedV3 == true and storedV3._msufProfileNormalizationRevision == 10
+assert(repairedV3 == true and storedV3._msufProfileNormalizationRevision == 11
     and storedV3.bars.barOutlineStrata == "BACKGROUND"
     and storedV3.target.barOutlineStrata == "BACKGROUND"
     and storedV3._msufLegacy55FrameOutlineBackground_v1 == true,
