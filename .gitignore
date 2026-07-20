@@ -1,2 +1,9 @@
 .idea/
 dist/
+
+# Developer-only validation assets stay local and out of production main.
+*_smoke.lua
+*_smoke.py
+.github/tests/
+MidnightSimpleUnitFrames/Tests/
+tools/tests/
