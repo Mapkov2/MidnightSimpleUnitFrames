@@ -22,6 +22,14 @@ local integrationSource = Read(integrationPath)
 
 assert(tocSource:find("Integrations\\MSUF_Integration_ThirdPartyAnchors.lua", 1, true),
     "third-party integration is not loaded by the TOC")
+local arcResolverOffset = assert(runtimeSource:find(
+    "local getArcUIAnchor = _G.MSUF_GetArcUICooldownAnchor", 1, true
+), "effective cooldown resolver does not consume the ArcUI integration getter")
+local skironResolverOffset = assert(runtimeSource:find(
+    "local getSkironProxy = _G.MSUF_GetSkironCooldownAnchorProxy", 1, true
+), "effective cooldown resolver does not consume the Skiron integration getter")
+assert(arcResolverOffset < skironResolverOffset,
+    "ArcUI does not take precedence when its public provider is active")
 assert(runtimeSource:find("local getCoolinatorAnchor = _G.MSUF_GetCoolinatorCooldownAnchor", 1, true),
     "effective cooldown resolver does not consume the integration getter")
 assert(mainSource:find('return "EssentialCooldownViewer", "GLOBAL", true', 1, true),
@@ -46,6 +54,16 @@ assert(not mainSource:find("SkironCooldownManager.AnchorProxy.SizeChanged", 1, t
     "Skiron integration still lives in the monolithic unitframe file")
 assert(integrationSource:find("CoolinatorPrimaryGroupAnchor", 1, true),
     "Coolinator primary group anchor is not owned by the integration module")
+assert(integrationSource:find('getGroupAnchor("Essential")', 1, true),
+    "ArcUI integration does not resolve the stable public Essential anchor")
+assert(integrationSource:find('ARCUI_ANCHOR_EVENT = "ArcUI.AnchorProxy.SizeChanged"', 1, true),
+    "ArcUI public size-change event is not consumed")
+assert(not integrationSource:find("ArcUI_CDMGroups_NS", 1, true)
+    and not integrationSource:find("ReapplyAll", 1, true),
+    "ArcUI integration still reaches into private layout internals")
+assert(not integrationSource:find("C_Timer.NewTicker", 1, true)
+    and not integrationSource:find(':SetScript("OnUpdate"', 1, true),
+    "third-party anchor integration added recurring idle work")
 assert(integrationSource:find("if proxyGroup ~= 1 then return end", 1, true),
     "Skiron callback is not restricted to the primary layout group")
 assert(not integrationSource:find('selectedAnchorRef == "ANCHOR:1"', 1, true),
@@ -115,6 +133,7 @@ local timers = {}
 local frames = {}
 local inCombat = false
 local coolinatorLoaded = false
+local arcUILoaded = false
 local eventCallbacks = {}
 
 local Frame = {}
@@ -181,7 +200,8 @@ _G.C_Timer = {
 }
 _G.C_AddOns = {
     IsAddOnLoaded = function(name)
-        return name == "Coolinator" and coolinatorLoaded
+        return (name == "Coolinator" and coolinatorLoaded)
+            or (name == "ArcUI" and arcUILoaded)
     end,
 }
 _G.EventRegistry = {
@@ -333,4 +353,89 @@ assert(_G.MSUF_GetCoolinatorCooldownAnchor() == nil,
 assert(rebinds == skironRebindBase + 4 and widthRefreshes == skironWidthBase + 5,
     "post-combat Coolinator reconciliation did not refresh consumers")
 
-print("coolinator anchor 5.72 smoke: OK")
+local arcRebindBase = rebinds
+local arcWidthBase = widthRefreshes
+local arcEventName = "ArcUI.AnchorProxy.SizeChanged"
+local arcSource = NewFrame("ArcUI_GroupAnchor_Essential", 238, 32)
+local currentArcSource = arcSource
+arcUILoaded = true
+_G.ArcUI_Public = {
+    ANCHOR_CHANGED_EVENT = arcEventName,
+    GetGroupAnchor = function(name)
+        assert(name == "Essential", "MSUF requested the wrong ArcUI group")
+        return currentArcSource
+    end,
+    GetPrimaryAnchor = function()
+        return _G.ArcUI_PrimaryGroupAnchor
+    end,
+}
+
+FireEvent("ADDON_LOADED", "ArcUI")
+assert(type(eventCallbacks[arcEventName]) == "function",
+    "ArcUI public anchor callback was not registered")
+assert(_G.MSUF_GetArcUICooldownAnchor() == nil,
+    "ArcUI resolver consumed acquisition before the scheduled lifecycle pass")
+FlushTimers()
+assert(_G.MSUF_GetArcUICooldownAnchor() == arcSource,
+    "ArcUI Essential anchor was not acquired")
+assert(_G.MSUF_IsThirdPartyCooldownAnchor(arcSource) == true,
+    "ArcUI public anchor is not classified as a native third-party anchor")
+assert(rebinds == arcRebindBase + 1 and widthRefreshes == arcWidthBase + 1,
+    "ArcUI acquisition did not refresh consumers exactly once")
+assert(arcSource.hooks.OnShow and arcSource.hooks.OnHide,
+    "ArcUI lifecycle hooks were not installed")
+
+local arcEvent = eventCallbacks[arcEventName]
+arcEvent(nil, "Utility", NewFrame("ArcUI_GroupAnchor_Utility", 180, 28))
+FlushTimers()
+assert(rebinds == arcRebindBase + 1 and widthRefreshes == arcWidthBase + 1,
+    "non-Essential ArcUI group event refreshed primary consumers")
+
+-- This models the druid form-switch rebuild: ArcUI repoints its private mirror
+-- while preserving the same public anchor identity exposed to MSUF.
+arcSource._arcMirror = NewFrame("ArcUI_InternalAnchorProxy_Rebuilt", 246, 32)
+arcEvent(nil, "Essential", arcSource)
+FlushTimers()
+assert(_G.MSUF_GetArcUICooldownAnchor() == arcSource,
+    "ArcUI form rebuild replaced the stable public source")
+assert(rebinds == arcRebindBase + 1,
+    "same-source ArcUI form rebuild unnecessarily rebound unitframes")
+assert(widthRefreshes == arcWidthBase + 2,
+    "same-source ArcUI form rebuild did not refresh width consumers")
+
+arcEvent(nil, "__primary__", NewFrame("ArcUI_PrimaryGroupAnchor", 246, 32))
+FlushTimers()
+assert(rebinds == arcRebindBase + 1 and widthRefreshes == arcWidthBase + 2,
+    "duplicate ArcUI primary event refreshed an existing Essential source")
+
+local replacement = NewFrame("ArcUI_GroupAnchor_Essential_Replacement", 250, 32)
+currentArcSource = replacement
+inCombat = true
+arcEvent(nil, "Essential", replacement)
+assert(_G.MSUF_GetArcUICooldownAnchor() == arcSource,
+    "combat-time ArcUI source switch discarded the stable pre-combat source")
+assert(rebinds == arcRebindBase + 1 and widthRefreshes == arcWidthBase + 2,
+    "combat-time ArcUI source switch mutated protected consumers")
+inCombat = false
+FireEvent("PLAYER_REGEN_ENABLED")
+FlushTimers()
+assert(_G.MSUF_GetArcUICooldownAnchor() == replacement,
+    "deferred ArcUI source switch was not reconciled after combat")
+assert(rebinds == arcRebindBase + 2 and widthRefreshes == arcWidthBase + 3,
+    "post-combat ArcUI reconciliation did not refresh consumers exactly once")
+
+replacement:Hide()
+FlushTimers()
+assert(_G.MSUF_GetArcUICooldownAnchor() == nil,
+    "hidden ArcUI source remained active")
+assert(rebinds == arcRebindBase + 3 and widthRefreshes == arcWidthBase + 4,
+    "ArcUI source loss did not refresh consumers exactly once")
+
+replacement:Show()
+FlushTimers()
+assert(_G.MSUF_GetArcUICooldownAnchor() == replacement,
+    "shown ArcUI source was not reacquired")
+assert(rebinds == arcRebindBase + 4 and widthRefreshes == arcWidthBase + 5,
+    "ArcUI source reacquisition did not refresh consumers exactly once")
+
+print("third-party anchor 5.74 smoke: OK")

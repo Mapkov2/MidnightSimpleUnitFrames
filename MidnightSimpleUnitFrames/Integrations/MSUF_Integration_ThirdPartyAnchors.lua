@@ -3,7 +3,7 @@ local _, ns = ...
 ns = ns or _G.MSUF_NS or {}
 _G.MSUF_NS = ns
 
--- Third-party cooldown-anchor integration for the 5.72 frame engine.
+-- Third-party cooldown-anchor integration for the 5.x frame engine.
 -- This mirrors the 6.0 ownership model: providers own their layout frames,
 -- while MSUF only observes provider lifecycle and binds consumers to a stable
 -- provider identity. No polling or recurring OnUpdate work is used.
@@ -16,13 +16,22 @@ local UIParent = UIParent
 local WorldFrame = WorldFrame
 local type = type
 
+local ARCUI_ANCHOR_EVENT = "ArcUI.AnchorProxy.SizeChanged"
 local SKIRON_ANCHOR_EVENT = "SkironCooldownManager.AnchorProxy.SizeChanged"
 local RETRY_DELAYS = { 0, 0.05, 0.20, 0.60, 1.20, 2.00 }
 
+local registeredArcUI
 local registeredSkiron
+local refreshArcUIAnchor
 local refreshSkironAnchorProxy
 local refreshCoolinatorAnchor
 local watcher
+
+local arcUISourceHookPending = false
+local arcUIRefreshAfterCombat = false
+local arcUIResolveGeneration = 0
+local arcUIActiveSource
+local observedArcUISources = setmetatable({}, { __mode = "k" })
 
 local skironSourceHookPending = false
 local skironProxyRefreshAfterCombat = false
@@ -67,6 +76,49 @@ end
 local function ResolveCoolinatorAnchorSource()
     local source = _G.CoolinatorPrimaryGroupAnchor
     if IsFrameUsable(source) then return source end
+end
+
+local function ResolveArcUIAnchorSource(preferredFrame)
+    if IsFrameUsable(preferredFrame) then return preferredFrame end
+
+    local api = _G.ArcUI_Public
+    if not api then return nil end
+
+    local source
+    local getGroupAnchor = api.GetGroupAnchor
+    if type(getGroupAnchor) == "function" then
+        source = getGroupAnchor("Essential")
+    end
+    if not source then
+        local getPrimaryAnchor = api.GetPrimaryAnchor
+        source = type(getPrimaryAnchor) == "function" and getPrimaryAnchor()
+            or _G.ArcUI_PrimaryGroupAnchor
+    end
+    if IsFrameUsable(source) then return source end
+end
+
+local function ObserveArcUISource(source)
+    if not (source and source.HookScript) then return false end
+    if source.IsForbidden and source:IsForbidden() then return false end
+    if observedArcUISources[source] then return true end
+    if InCombat() and source.IsProtected and source:IsProtected() then
+        arcUISourceHookPending = true
+        if watcher then watcher:RegisterEvent("PLAYER_REGEN_ENABLED") end
+        return false
+    end
+    observedArcUISources[source] = true
+    -- ArcUI's public EventRegistry callback owns normal size notifications.
+    -- This hook is only a compatibility fallback if EventRegistry is absent.
+    source:HookScript("OnSizeChanged", function()
+        if not registeredArcUI then refreshArcUIAnchor(true) end
+    end)
+    source:HookScript("OnShow", function()
+        refreshArcUIAnchor(true)
+    end)
+    source:HookScript("OnHide", function()
+        refreshArcUIAnchor(true)
+    end)
+    return true
 end
 
 local function ObserveSkironSource(source)
@@ -178,6 +230,26 @@ local function EnsureCoolinatorAnchorSource()
     return source, transition ~= nil, transition, false
 end
 
+local function EnsureArcUIAnchorSource(preferredFrame)
+    -- ArcUI 3.7.9+ owns a stable, UIParent-relative public anchor and only
+    -- repoints its private mirror when a form/spec rebuild replaces the group.
+    -- Keeping that native identity is what lets protected unitframes follow a
+    -- druid form change without any MSUF reanchor or combat-time mutation.
+    local source = ResolveArcUIAnchorSource(preferredFrame)
+    local previousSource = arcUIActiveSource
+    local transition = previousSource ~= source
+        and (not previousSource and "acquired" or not source and "lost" or "switched")
+        or nil
+    if transition and InCombat() then
+        arcUIRefreshAfterCombat = true
+        if watcher then watcher:RegisterEvent("PLAYER_REGEN_ENABLED") end
+        return previousSource, false, nil, true
+    end
+    arcUIActiveSource = source
+    if source then ObserveArcUISource(source) end
+    return source, transition ~= nil, transition, false
+end
+
 function ns.GetSkironCooldownAnchorProxy()
     local proxy = _G.MSUF_SkironCooldownAnchor
     if proxy and proxy.MSUFSkironSource ~= nil and (not proxy.IsShown or proxy:IsShown()) then
@@ -190,8 +262,14 @@ function ns.GetCoolinatorCooldownAnchor()
     if source and IsFrameUsable(source) then return source end
 end
 
+function ns.GetArcUICooldownAnchor()
+    local source = arcUIActiveSource
+    if source and IsFrameUsable(source) then return source end
+end
+
 function ns.IsThirdPartyCooldownAnchor(frame)
     if not frame then return false end
+    if frame == arcUIActiveSource and IsFrameUsable(frame) then return true end
     if frame == coolinatorActiveSource and IsFrameUsable(frame) then return true end
     local proxy = _G.MSUF_SkironCooldownAnchor
     return frame == proxy and proxy.MSUFSkironSource ~= nil
@@ -203,6 +281,10 @@ end
 
 _G.MSUF_GetCoolinatorCooldownAnchor = function()
     return ns.GetCoolinatorCooldownAnchor()
+end
+
+_G.MSUF_GetArcUICooldownAnchor = function()
+    return ns.GetArcUICooldownAnchor()
 end
 
 _G.MSUF_IsThirdPartyCooldownAnchor = function(frame)
@@ -249,6 +331,35 @@ refreshCoolinatorAnchor = function(sizeChanged)
     return source ~= nil
 end
 
+refreshArcUIAnchor = function(sizeChanged, preferredFrame)
+    local source, changed, _transition, deferred = EnsureArcUIAnchorSource(preferredFrame)
+    if deferred then return source ~= nil end
+    -- The public ArcUI object is stable across form switches. A same-source
+    -- event only affects width consumers; rebinding protected unitframes would
+    -- be redundant work and would reintroduce the original combat risk.
+    if changed then ScheduleEssentialCooldownAnchorConsumerRefresh() end
+    if changed or sizeChanged == true then ScheduleEssentialCooldownWidthRefresh() end
+    return source ~= nil
+end
+
+local function ScheduleArcUIAnchorResolve()
+    arcUIResolveGeneration = arcUIResolveGeneration + 1
+    local generation = arcUIResolveGeneration
+    local index = 1
+    local function run()
+        if generation ~= arcUIResolveGeneration then return end
+        if refreshArcUIAnchor() then return end
+        index = index + 1
+        local delay = RETRY_DELAYS[index]
+        if delay and C_Timer and C_Timer.After then C_Timer.After(delay, run) end
+    end
+    if not (C_Timer and C_Timer.After) then
+        run()
+        return
+    end
+    C_Timer.After(RETRY_DELAYS[index], run)
+end
+
 local function ScheduleSkironAnchorResolve()
     skironResolveGeneration = skironResolveGeneration + 1
     local generation = skironResolveGeneration
@@ -290,6 +401,32 @@ local function OnSkironAnchorProxySizeChanged(_, proxyGroup, proxy, _width, _hei
     refreshSkironAnchorProxy(proxy, isActiveProxy, true)
 end
 
+local function OnArcUIAnchorChanged(_, groupName, anchorFrame)
+    if groupName == "__primary__" then
+        local api = _G.ArcUI_Public
+        local getGroupAnchor = api and api.GetGroupAnchor
+        -- ArcUI fires for both the Essential group and its primary mirror.
+        -- Ignore the duplicate primary event while the explicit group exists.
+        if type(getGroupAnchor) == "function" and getGroupAnchor("Essential") then return end
+    elseif groupName ~= "Essential" then
+        return
+    end
+    refreshArcUIAnchor(true, anchorFrame)
+end
+
+local function RegisterArcUIAnchor()
+    local api = _G.ArcUI_Public
+    if not (api and type(api.GetGroupAnchor) == "function") then return false end
+    if not registeredArcUI and EventRegistry and type(EventRegistry.RegisterCallback) == "function" then
+        local eventName = api.ANCHOR_CHANGED_EVENT
+        if type(eventName) ~= "string" or eventName == "" then eventName = ARCUI_ANCHOR_EVENT end
+        EventRegistry:RegisterCallback(eventName, OnArcUIAnchorChanged, "MidnightSimpleUnitFrames")
+        registeredArcUI = true
+    end
+    ScheduleArcUIAnchorResolve()
+    return true
+end
+
 local function RegisterSkironAnchorProxy()
     if registeredSkiron then
         ScheduleSkironAnchorResolve()
@@ -312,9 +449,10 @@ local function RegisterCoolinatorAnchor()
 end
 
 local function RegisterThirdPartyAnchors()
+    local arcUI = RegisterArcUIAnchor()
     local skiron = RegisterSkironAnchorProxy()
     local coolinator = RegisterCoolinatorAnchor()
-    return skiron or coolinator
+    return arcUI or skiron or coolinator
 end
 
 ns.RegisterThirdPartyAnchors = RegisterThirdPartyAnchors
@@ -328,19 +466,25 @@ watcher:SetScript("OnEvent", function(self, event, addon)
     if event == "PLAYER_REGEN_ENABLED" then
         if InCombat() then return end
         self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+        local refreshArcUI = arcUISourceHookPending or arcUIRefreshAfterCombat
         local refreshSkiron = skironSourceHookPending or skironProxyRefreshAfterCombat
         local refreshCoolinator = coolinatorSourceHookPending or coolinatorRefreshAfterCombat
-        if not refreshSkiron and not refreshCoolinator then return end
+        if not refreshArcUI and not refreshSkiron and not refreshCoolinator then return end
+        arcUISourceHookPending = false
+        arcUIRefreshAfterCombat = false
         skironSourceHookPending = false
         skironProxyRefreshAfterCombat = false
         coolinatorSourceHookPending = false
         coolinatorRefreshAfterCombat = false
+        if refreshArcUI then refreshArcUIAnchor(true) end
         if refreshSkiron then refreshSkironAnchorProxy(nil, false, true) end
         if refreshCoolinator then refreshCoolinatorAnchor(true) end
         return
     end
     if event == "ADDON_LOADED" then
-        if addon == "SkironCooldownManager" then
+        if addon == "ArcUI" then
+            RegisterArcUIAnchor()
+        elseif addon == "SkironCooldownManager" then
             RegisterSkironAnchorProxy()
         elseif addon == "Coolinator" then
             RegisterCoolinatorAnchor()
