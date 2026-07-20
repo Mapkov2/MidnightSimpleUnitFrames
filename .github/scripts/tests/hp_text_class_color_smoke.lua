@@ -14,6 +14,10 @@ _G.UnitClass = function(unit)
     classReads = classReads + 1
     return "Warrior", "WARRIOR"
 end
+_G.UnitIsPlayer = function(unit)
+    assert(unit == "party1", "NPC name color resolved the wrong unit")
+    return false
+end
 _G.RAID_CLASS_COLORS = { WARRIOR = { r = 0.78, g = 0.61, b = 0.43 } }
 _G.MSUF_UFCore_GetClassBarColorFast = function(token)
     assert(token == "WARRIOR", "class-color HP text resolved the wrong class")
@@ -55,6 +59,17 @@ MSUF.UFText.UpdateHealthTextColor(frame, runtime, "party1")
 assert(hp.r == 0.17 and hp.g == 0.39 and hp.b == 0.83 and hp.a == 0.78,
     "runtime HP text did not use the configured class color and font opacity")
 assert(classReads == 1 and writes == 1, "runtime class color did not use the cached text-color setter")
+
+classReads = 0
+frame.MSUFSpec = {
+    text = { nameNpcClassColor = true },
+    textColor = { r = 1, g = 1, b = 1, a = 0.66 },
+}
+local nr, ng, nb, na = MSUF.UFText.NameTextColor(frame, "party1")
+assert(nr == 0.17 and ng == 0.39 and nb == 0.83 and na == 0.66,
+    "NPC name text did not resolve its class color: "
+      .. tostring(nr) .. "," .. tostring(ng) .. "," .. tostring(nb) .. "," .. tostring(na))
+assert(classReads == 1, "NPC name class color repeated UnitClass")
 
 local menu = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GlobalFonts.lua")
 assert(menu:find('{ value = "CLASS", text = "Class Color"', 1, true),

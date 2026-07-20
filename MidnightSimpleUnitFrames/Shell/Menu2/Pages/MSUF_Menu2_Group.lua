@@ -18,6 +18,7 @@ local max = math.max
 local min = math.min
 local Specs = M.GroupSpecs or {}
 local SCOPE_VALUES, GROWTH_VALUES, BLIZZARD_FALLBACK_VALUES, HEALTH_MODES, TEXT_MODES, DELIMITER_VALUES, ANCHORS, AURA_ANCHORS, SORT_MODES, GF_BAR_MODES, GF_ANCHOR_TO, GF_ANCHOR_POINTS, STATUS_ICON_ANCHORS, GF_STATUS_ICON_SPECS, GF_STATUS_ICON_VALUES, PLACED_INDICATOR_TYPES, FRAME_EFFECT_TYPES, FRAME_EFFECT_TIMINGS, ICON_EFFECT_TYPES, SPELL_GROWTH_VALUES, CI_SLOT_VALUES, CI_SLOT_DEFAULTS, DISPEL_OVERLAY_STYLES, DEBUFF_STRIPE_EDGES = M.PickDefaults(Specs, M.GROUP_SPEC_TABLE_KEYS)
+local HEALTH_TEXT_MODES = Specs.HEALTH_TEXT_MODES or TEXT_MODES
 local SIMPLE_TEXTURES = Specs.SimpleTextures or function() return {} end
 local pendingGF = {}
 local gfFlushQueued = false
@@ -505,7 +506,43 @@ local function ScopeSection(ctx, builder, opts)
     opts = opts or {}
     local priorityMode = opts.priorityMode == true
     local pageW = tonumber(builder.width) or 720
-    local h = priorityMode and 70 or 86
+    local pageValues = {}
+    for i = 1, #GROUP_PAGE_TABS do
+        local tab = GROUP_PAGE_TABS[i]
+        pageValues[i] = { value = tab.key, text = tab.label, width = tonumber(tab.width) or 72 }
+    end
+    local pageOpts = {
+        values = pageValues,
+        width = pageW,
+        maxRight = priorityMode and (pageW - 16) or (pageW - 112),
+        label = "Page:",
+        labelWidth = 64,
+        centerY = priorityMode and -24 or -28,
+    }
+    local pageMetrics = W.MeasureScopeOverrideBar and W.MeasureScopeOverrideBar(pageValues, pageOpts)
+    local pageBottomY = (pageMetrics and pageMetrics.bottomY) or -40
+    local scopeCenterY = min(-60, pageBottomY - 20)
+    local scopeValues = {}
+    if not priorityMode then
+        for i = 1, #SCOPE_VALUES do
+            local info = SCOPE_VALUES[i]
+            scopeValues[i] = {
+                value = info.value,
+                text = ScopeShortLabel(info.value),
+                width = (info.value == "mythicraid") and 86 or 64,
+            }
+        end
+    end
+    local scopeMetrics = not priorityMode and W.MeasureScopeOverrideBar and W.MeasureScopeOverrideBar(scopeValues, {
+        width = pageW,
+        label = "Editing:",
+        labelWidth = 64,
+        centerY = scopeCenterY,
+    })
+    local noteY = min(-50, pageBottomY - 10)
+    local h = priorityMode
+        and max(70, math.abs(noteY) + 20)
+        or max(86, math.abs((scopeMetrics and scopeMetrics.bottomY) or -72) + 14)
     local sec = T.Panel(builder.parent, nil, T.colors.glassStatus or T.colors.header, T.colors.borderSoft)
     T.ApplySurface(sec, "status")
     sec:SetPoint("TOPLEFT", builder.parent, "TOPLEFT", builder.x, builder.y)
@@ -534,27 +571,15 @@ local function ScopeSection(ctx, builder, opts)
     sec._msuf2GuidedSelectScope = SelectScope
 
     local command = sec
-    local pageValues = {}
-    for i = 1, #GROUP_PAGE_TABS do
-        local tab = GROUP_PAGE_TABS[i]
-        pageValues[i] = { value = tab.key, text = tab.label, width = tonumber(tab.width) or 72 }
-    end
-    local pageBar = W.ScopeOverrideBar(ctx, command, {
-        values = pageValues,
-        width = pageW,
-        maxRight = priorityMode and (pageW - 16) or (pageW - 112),
-        label = "Page:",
-        labelWidth = 64,
-        centerY = priorityMode and -24 or -28,
-        getValue = function() return ctx and ctx.key end,
-        setValue = function(pageKey) if pageKey and pageKey ~= ctx.key then M.SelectPage(pageKey) end end,
-    })
+    pageOpts.getValue = function() return ctx and ctx.key end
+    pageOpts.setValue = function(pageKey) if pageKey and pageKey ~= ctx.key then M.SelectPage(pageKey) end end
+    local pageBar = W.ScopeOverrideBar(ctx, command, pageOpts)
     RegisterGroupControl(pageBar, ctx, "navigation.section.selector", "Page", "segment", "ephemeral")
 
     if priorityMode then
         local note = W.Text(sec,
             "Profile-wide · follows the active Party, Raid, or Mythic Raid frame appearance",
-            16, -50, pageW - 32, T.colors.muted)
+            16, noteY, pageW - 32, T.colors.muted)
         if note and note.SetJustifyH then note:SetJustifyH("LEFT") end
         return sec
     end
@@ -562,21 +587,12 @@ local function ScopeSection(ctx, builder, opts)
     local copy = (W.RoleButton and W.RoleButton(sec, M.Tr("Copy To"), "normal", 86, 24)) or W.TopButton(sec, M.Tr("Copy To"), 86, 24, {})
     copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -16, -16)
     local scopeBtns = {}
-    local scopeValues = {}
-    for i = 1, #SCOPE_VALUES do
-        local info = SCOPE_VALUES[i]
-        scopeValues[i] = {
-            value = info.value,
-            text = ScopeShortLabel(info.value),
-            width = (info.value == "mythicraid") and 86 or 64,
-        }
-    end
     local scopeBar = W.ScopeOverrideBar(ctx, command, {
         values = scopeValues,
         width = pageW,
         label = "Editing:",
         labelWidth = 64,
-        centerY = -60,
+        centerY = scopeCenterY,
         getValue = CurrentScope,
         setValue = SelectScope,
     })
@@ -1386,6 +1402,7 @@ M.Assign(GroupPage, {
     BLIZZARD_FALLBACK_VALUES = BLIZZARD_FALLBACK_VALUES,
     HEALTH_MODES = HEALTH_MODES,
     TEXT_MODES = TEXT_MODES,
+    HEALTH_TEXT_MODES = HEALTH_TEXT_MODES,
     DELIMITER_VALUES = DELIMITER_VALUES,
     ANCHORS = ANCHORS,
     AURA_ANCHORS = AURA_ANCHORS,

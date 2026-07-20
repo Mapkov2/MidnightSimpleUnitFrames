@@ -1639,6 +1639,7 @@ function Render.Install(box, ctx, deps)
         end
         local fakeMax = 1000000
         local fakeHP = max(1, floor(fakeMax * hpPct + 0.5))
+        local fakeAbsorb = 125000
         local hpTextR, hpTextG, hpTextB = fr or 1, fg or 1, fb or 1
         local healthTextMode = (conf.fontOverride == true and conf.colorHealthTextByHealth ~= nil)
             and conf.colorHealthTextByHealth or (gen and gen.colorHealthTextByHealth)
@@ -1658,7 +1659,7 @@ function Render.Install(box, ctx, deps)
         end
         local hpDelimiter = runtimeText.healthDelimiter or conf.textDelimiter or " - "
         local function PreviewHealthText(mode, hidePercentSymbol)
-            if gf and gf.FormatHealthText then return gf.FormatHealthText(mode, fakeHP, fakeMax, hpDelimiter, false, nil, hidePercentSymbol, runtimeText.healthShortNumbers == true or (runtimeText.healthShortNumbers == nil and conf.hpFullValueShort ~= false)) end
+            if gf and gf.FormatHealthText then return gf.FormatHealthText(mode, fakeHP, fakeMax, hpDelimiter, false, nil, hidePercentSymbol, runtimeText.healthShortNumbers == true or (runtimeText.healthShortNumbers == nil and conf.hpFullValueShort ~= false), fakeAbsorb) end
             return mode == "PERCENT" and (hidePercentSymbol and "72" or "72%") or "720k"
         end
         PaintPreviewText(mock._hpLeftFS, hpSize, hpLeftMode, "LEFT", "LEFT",

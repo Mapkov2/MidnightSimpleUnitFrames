@@ -157,12 +157,13 @@ local function ClampPreviewOffsetOnScreen(point, relativePoint, relative, x, y, 
   return (x or 0) + dx, (y or 0) + dy
 end
 
-local function ResolveAnchorFrame(conf)
-  local name = conf and (conf.anchorToFrame or conf.anchorFrame or conf.relativeTo or conf.anchorTo)
-  if type(name) == "string" and name ~= "" and name ~= "FREE" and name ~= "UIParent" then
-    local UF = MSUF and MSUF.UF
-    if UF and UF.frames and UF.frames[name] then return UF.frames[name] end
-    if _G[name] then return _G[name] end
+local function ResolveAnchorFrame(conf, owner)
+  if type(GF.ResolveAnchorFrame) == "function" then
+    local frame, missing = GF.ResolveAnchorFrame(conf, owner)
+    if missing and type(_G.MSUF_ScheduleLateAnchorReanchor) == "function" then
+      _G.MSUF_ScheduleLateAnchorReanchor()
+    end
+    return frame
   end
   return UIParent
 end
@@ -277,7 +278,7 @@ local function PositionContainer(kind, count)
     if cx == nil or cy == nil then cx, cy = DefaultCenter(kind) end
     point = AnchorPoint(conf)
     relativePoint = RelativeAnchorPoint(conf, point)
-    relative, x, y = ResolveAnchorFrame(conf), floor(cx + 0.5), floor(cy + 0.5)
+    relative, x, y = ResolveAnchorFrame(conf, container), floor(cx + 0.5), floor(cy + 0.5)
     x, y = ClampPreviewOffsetOnScreen(point, relativePoint, relative, x, y, containerW, containerH)
   end
   local containerKey = tostring(point) .. "\030" .. tostring(relativePoint) .. "\030" .. tostring(relative) .. "\030" .. tostring(x) .. "\030" .. tostring(y)

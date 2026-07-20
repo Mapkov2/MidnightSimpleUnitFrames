@@ -26,6 +26,7 @@ local SCALE_100 = Text.SCALE_100
 local REVERSE_HEALTH_MODE = Text.REVERSE_HEALTH_MODE
 local nativeSecrets = _G.issecretvalue ~= nil
 local issecretvalue = _G.issecretvalue or function(_) return false end
+local TruncateWhenZero = _G.C_StringUtil and _G.C_StringUtil.TruncateWhenZero
 local ApplyText = Apply.Text or function(fs, text)
   if not fs then return end
   if issecretvalue(text) == true then
@@ -558,6 +559,29 @@ local function WriteDeficit(slot, cur, maxValue, pct, pctKnown, rt)
   SlotText(slot, "")
 end
 
+local function WriteAbsorb(slot, cur, maxValue, pct, pctKnown, rt)
+  local absorb = rt and rt.healthAbsorb
+  if absorb == nil then
+    SlotText(slot, "")
+    return
+  end
+  if issecretvalue(absorb) == true then
+    if TruncateWhenZero then
+      SlotText(slot, TruncateWhenZero(absorb))
+    else
+      local value, valueFormat = SlotFormattedValue(slot, absorb)
+      SlotFormatted(slot, valueFormat, value)
+    end
+    return
+  end
+  absorb = FiniteNumberOr(absorb, 0)
+  if absorb <= 0 then
+    SlotText(slot, "")
+    return
+  end
+  SlotText(slot, FormatValue(absorb, slot.short, slot.canSecret) or "")
+end
+
 local MODE_WRITERS = {
   CURRENT = WriteCurrent,
   FULLVALUE = WriteCurrent,
@@ -573,6 +597,7 @@ local MODE_WRITERS = {
   PERCENTMAX = WritePercentMax,
   PERCENTCURMAX = WritePercentCurMax,
   DEFICIT = WriteDeficit,
+  ABSORB = WriteAbsorb,
 }
 
 local function PlainWriteCurrent(slot, cur)
@@ -649,6 +674,11 @@ local function PlainWriteDeficit(slot, cur, maxValue, pct, pctKnown, rt)
   SlotTextPlain(slot, "")
 end
 
+local function PlainWriteAbsorb(slot, cur, maxValue, pct, pctKnown, rt)
+  local absorb = FiniteNumberOr(rt and rt.healthAbsorb, 0)
+  SlotTextPlain(slot, absorb > 0 and SlotValuePlain(slot, absorb) or "")
+end
+
 local MODE_PLAIN_WRITERS = {
   CURRENT = PlainWriteCurrent,
   FULLVALUE = PlainWriteCurrent,
@@ -664,6 +694,7 @@ local MODE_PLAIN_WRITERS = {
   PERCENTMAX = PlainWritePercentMax,
   PERCENTCURMAX = PlainWritePercentCurMax,
   DEFICIT = PlainWriteDeficit,
+  ABSORB = PlainWriteAbsorb,
 }
 
 local SECRET_MODE_CODES = {
@@ -846,7 +877,7 @@ end
 
 local function AddTextSlot(slots, index, fs, mode, delimiter, short, hidePercentSymbol, percentDecimals)
   if not (fs and mode and mode ~= "NONE") then
-    return index, false, false
+    return index, false, false, false, false, false
   end
   if not MODE_WRITERS[mode] then
     mode = "CURMAX"
@@ -886,7 +917,7 @@ local function AddTextSlot(slots, index, fs, mode, delimiter, short, hidePercent
   end
   slot.suffix = nil
   slot.canSecret = nil
-  return index + 1, needsPercent, mode == "DEFICIT", ModeNeedsCurrent(mode), ModeNeedsMax(mode)
+  return index + 1, needsPercent, mode == "DEFICIT", ModeNeedsCurrent(mode), ModeNeedsMax(mode), mode == "ABSORB"
 end
 
 local function TrimTextSlots(slots, firstDead)
@@ -918,6 +949,34 @@ local function CompileThreeTextSlots(slots, frame, show, fields, mode1, mode2, m
   end
   TrimTextSlots(slots, nextIndex)
   return nextIndex - 1, needsPercent, needsMissing, needsCurrent, needsMax
+end
+
+local function CompileHealthTextSlots(valueSlots, absorbSlots, frame, show, mode1, mode2, mode3, delimiter, short, hidePercentSymbol1, hidePercentSymbol2, hidePercentSymbol3, percentDecimals)
+  local valueIndex, absorbIndex = 1, 1
+  local needsPercent, needsMissing, needsCurrent, needsMax = false, false, false, false
+  if show then
+    for i = 1, #HEALTH_SLOT_FIELDS do
+      local fs = frame[HEALTH_SLOT_FIELDS[i]]
+      if fs and fs:IsShown() then
+        local mode = i == 1 and mode1 or (i == 2 and mode2 or mode3)
+        local hidePercentSymbol = i == 1 and hidePercentSymbol1 or (i == 2 and hidePercentSymbol2 or hidePercentSymbol3)
+        local slots = mode == "ABSORB" and absorbSlots or valueSlots
+        local index = mode == "ABSORB" and absorbIndex or valueIndex
+        local slotNeeds, slotMissing, slotCurrent, slotMax, slotAbsorb
+        index, slotNeeds, slotMissing, slotCurrent, slotMax, slotAbsorb = AddTextSlot(
+          slots, index, fs, mode, delimiter, short, hidePercentSymbol, percentDecimals)
+        if slotAbsorb then absorbIndex = index else valueIndex = index end
+        needsPercent = needsPercent or slotNeeds
+        needsMissing = needsMissing or slotMissing
+        needsCurrent = needsCurrent or slotCurrent
+        needsMax = needsMax or slotMax
+      end
+    end
+  end
+  TrimTextSlots(valueSlots, valueIndex)
+  TrimTextSlots(absorbSlots, absorbIndex)
+  local valueCount, absorbCount = valueIndex - 1, absorbIndex - 1
+  return valueCount + absorbCount, valueCount, absorbCount, needsPercent, needsMissing, needsCurrent, needsMax
 end
 
 local function CompileTextRuntime(frame, spec, text)
@@ -973,14 +1032,16 @@ local function CompileTextRuntime(frame, spec, text)
     rt.inlineToT = nil
   end
   rt.healthSlots = rt.healthSlots or {}
+  rt.healthAbsorbSlots = rt.healthAbsorbSlots or {}
   rt.powerSlots = rt.powerSlots or {}
   local showHealth = spec and spec.showHealthText ~= false
   local healthLeft, healthCenter, healthRight, healthHideLeft, healthHideCenter, healthHideRight = ResolveHealthTextModes(text)
   rt.healthPercentDecimals = NormalizePercentDecimals(text.healthPercentDecimals)
 
   local needsPercent, needsMissing, needsCurrent, needsMax
-  rt.healthSlotCount, needsPercent, needsMissing, needsCurrent, needsMax = CompileThreeTextSlots(
-    rt.healthSlots, frame, showHealth, HEALTH_SLOT_FIELDS,
+  rt.healthSlotCount, rt.healthValueSlotCount, rt.healthAbsorbSlotCount,
+    needsPercent, needsMissing, needsCurrent, needsMax = CompileHealthTextSlots(
+    rt.healthSlots, rt.healthAbsorbSlots, frame, showHealth,
     healthLeft, healthCenter, healthRight,
     text.healthDelimiter, text.healthShortNumbers,
     healthHideLeft, healthHideCenter, healthHideRight, rt.healthPercentDecimals)
@@ -1012,6 +1073,7 @@ local function CompileTextRuntime(frame, spec, text)
   rt._lastHealthTextHP = nil
   rt._lastHealthTextMax = nil
   rt._lastHealthTextMissing = nil
+  rt._lastAbsorbTextValue = nil
   rt._dispatchHealthTextHP = nil
   rt._dispatchHealthTextMax = nil
   rt._dispatchHealthTextMissing = nil
@@ -1071,7 +1133,7 @@ local function CompileTextRuntime(frame, spec, text)
   local hot = Text.RuntimeHotFunctions
   if hot then
     local groupScope = spec and spec.scope == "group"
-    if rt.healthSlotCount > 0 then
+    if rt.healthValueSlotCount > 0 then
       local fromValues
       if groupScope and (rt.healthNeedsCurrent == true
         or rt.healthNeedsMax == true

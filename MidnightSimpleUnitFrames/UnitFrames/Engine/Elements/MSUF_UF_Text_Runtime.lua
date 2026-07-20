@@ -11,6 +11,7 @@ if not (Text and UF) then return end
 
 local UnitHealth = Text.UnitHealth
 local UnitHealthMax = Text.UnitHealthMax
+local UnitGetTotalAbsorbs = Text.UnitGetTotalAbsorbs
 local UnitPower = Text.UnitPower
 local UnitPowerMax = Text.UnitPowerMax
 local UnitPowerType = Text.UnitPowerType
@@ -838,7 +839,7 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
       rt._dispatchHealthTextHP = nil
       rt._dispatchHealthTextMax = nil
       rt._dispatchHealthTextMissing = nil
-      UpdateTextSlotsSecret(rt.healthSlots, rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt, pctOverride, pctOverrideSet)
+      UpdateTextSlotsSecret(rt.healthSlots, rt.healthValueSlotCount or rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt, pctOverride, pctOverrideSet)
       return
     end
 
@@ -857,7 +858,7 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
       rt._dispatchHealthTextHP = nil
       rt._dispatchHealthTextMax = nil
       rt._dispatchHealthTextMissing = nil
-      UpdateTextSlotsSecret(rt.healthSlots, rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt, pctOverride, pctOverrideSet)
+      UpdateTextSlotsSecret(rt.healthSlots, rt.healthValueSlotCount or rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt, pctOverride, pctOverrideSet)
       return
     end
     local keyHP, keyMax = false, false
@@ -899,7 +900,7 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
       rt._lastHealthTextMissing = nil
     end
     UpdateRuntimeHealthTextColor(frame, rt, unit, hp, hpMax, pctOverride, pctOverrideSet)
-    UpdateTextSlotsPlain(rt.healthSlots, rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt, pctOverride, pctOverrideSet)
+    UpdateTextSlotsPlain(rt.healthSlots, rt.healthValueSlotCount or rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt, pctOverride, pctOverrideSet)
     return
   end
 
@@ -946,7 +947,26 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
     end
   end
   UpdateRuntimeHealthTextColor(frame, rt, unit, hp, hpMax, pctOverride, pctOverrideSet)
-  UpdateTextSlotsSecret(rt.healthSlots, rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt, pctOverride, pctOverrideSet)
+  UpdateTextSlotsSecret(rt.healthSlots, rt.healthValueSlotCount or rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt, pctOverride, pctOverrideSet)
+end
+
+local function UpdateAbsorbRuntime(frame, event, unit)
+  unit = unit or frame.MSUFUnitKey
+  local rt = frame._msufTextRuntime
+  local count = rt and rt.healthAbsorbSlotCount or 0
+  if count <= 0 then return end
+
+  local absorb = UnitGetTotalAbsorbs and UnitGetTotalAbsorbs(unit) or 0
+  local secret = nativeSecrets and issecretvalue(absorb) == true
+  if not secret and rt._lastAbsorbTextValue == absorb then return end
+  rt._lastAbsorbTextValue = secret and nil or absorb
+  rt.healthAbsorb = absorb
+  if secret then
+    UpdateTextSlotsSecret(rt.healthAbsorbSlots, count, nil, nil, unit, nil, false, rt)
+  else
+    UpdateTextSlotsPlain(rt.healthAbsorbSlots, count, nil, nil, unit, nil, false, rt)
+  end
+  rt.healthAbsorb = nil
 end
 
 local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
@@ -1161,10 +1181,12 @@ end
 
 Text.RuntimeHotFunctions = {
   healthHot = UpdateHealthRuntime,
+  absorbHot = UpdateAbsorbRuntime,
   powerHot = UpdatePowerRuntime,
 }
 
 Text.UpdateHealth = UpdateHealthRuntime
+Text.UpdateAbsorb = UpdateAbsorbRuntime
 Text.UpdatePower = UpdatePowerRuntime
 
 local NAME_EVENTS = { "UNIT_NAME_UPDATE" }
@@ -1181,6 +1203,18 @@ local HEALTH_TEXT_MAX_EVENTS = { "UNIT_MAXHEALTH" }
 local HEALTH_TEXT_CLASS_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_NAME_UPDATE" }
 local HEALTH_TEXT_CLASS_VALUE_EVENTS = { "UNIT_HEALTH", "UNIT_CONNECTION", "UNIT_NAME_UPDATE" }
 local HEALTH_TEXT_CLASS_MAX_EVENTS = { "UNIT_MAXHEALTH", "UNIT_NAME_UPDATE" }
+local ABSORB_TEXT_EVENTS = { "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_CONNECTION" }
+local ABSORB_TEXT_PLAYER_EVENTS = { "UNIT_ABSORB_AMOUNT_CHANGED" }
+local ABSORB_TEXT_CLASS_EVENTS = { "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_CONNECTION", "UNIT_NAME_UPDATE" }
+local HEALTH_TEXT_EVENTS_ABSORB = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_ABSORB_AMOUNT_CHANGED" }
+local HEALTH_TEXT_PLAYER_EVENTS_ABSORB = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_ABSORB_AMOUNT_CHANGED" }
+local HEALTH_TEXT_VALUE_EVENTS_ABSORB = { "UNIT_HEALTH", "UNIT_CONNECTION", "UNIT_ABSORB_AMOUNT_CHANGED" }
+local HEALTH_TEXT_VALUE_PLAYER_EVENTS_ABSORB = { "UNIT_HEALTH", "UNIT_ABSORB_AMOUNT_CHANGED" }
+local HEALTH_TEXT_MAX_EVENTS_ABSORB = { "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_ABSORB_AMOUNT_CHANGED" }
+local HEALTH_TEXT_MAX_PLAYER_EVENTS_ABSORB = { "UNIT_MAXHEALTH", "UNIT_ABSORB_AMOUNT_CHANGED" }
+local HEALTH_TEXT_CLASS_EVENTS_ABSORB = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_NAME_UPDATE", "UNIT_ABSORB_AMOUNT_CHANGED" }
+local HEALTH_TEXT_CLASS_VALUE_EVENTS_ABSORB = { "UNIT_HEALTH", "UNIT_CONNECTION", "UNIT_NAME_UPDATE", "UNIT_ABSORB_AMOUNT_CHANGED" }
+local HEALTH_TEXT_CLASS_MAX_EVENTS_ABSORB = { "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_NAME_UPDATE", "UNIT_ABSORB_AMOUNT_CHANGED" }
 local INLINE_TARGET_EVENTS = { "UNIT_TARGET" }
 local INLINE_NAME_UNITLESS_EVENTS = { "UNIT_NAME_UPDATE" }
 local INLINE_COLOR_UNITLESS_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_FACTION", "UNIT_FLAGS", "UNIT_CLASSIFICATION_CHANGED" }
@@ -1229,11 +1263,17 @@ local function HealthModeNeedsValueTicks(mode)
   if not ModeEnabled(mode) then
     return false
   end
-  return mode ~= "MAX"
+  return mode ~= "MAX" and mode ~= "ABSORB"
 end
 
 local function HealthModeNeedsMaxEvents(mode)
+  if mode == "ABSORB" then return false end
   return mode == "DEFICIT" or TEXT_MAX_EVENT_MODES[mode] == true
+end
+
+local function HealthTextNeedsAbsorbEvents(spec)
+  local left, center, right = ResolveHealthTextModes(spec and spec.text)
+  return left == "ABSORB" or center == "ABSORB" or right == "ABSORB"
 end
 
 local function HealthTextEnabled(spec)
@@ -1316,7 +1356,7 @@ end
 
 local function BuildGFHotHealthTextFromPercent(frame, rt)
   if not (rt
-    and rt.healthSlotCount == 1
+    and rt.healthValueSlotCount == 1
     and rt.healthColorByHealth ~= true
     and rt.healthDispatchKeyMode == 4
     and rt.healthNeedsCurrent ~= true
@@ -1339,7 +1379,7 @@ local function BuildGFHotHealthTextFromPercent(frame, rt)
 end
 
 local function BuildGFHotHealthText(frame, rt)
-  if not (rt and rt.healthSlotCount == 1 and rt.healthColorByHealth ~= true) then
+  if not (rt and rt.healthValueSlotCount == 1 and rt.healthColorByHealth ~= true) then
     return nil
   end
   local slot = rt.healthSlots and rt.healthSlots[1]
@@ -1537,18 +1577,35 @@ function HealthText.GetEvents(frame, spec)
     return EMPTY_EVENTS
   end
   local classColor = spec and spec.text and spec.text.healthColorByClass == true
-  if not HealthTextNeedsValueTicks(spec) then
+  local absorb = HealthTextNeedsAbsorbEvents(spec)
+  local needsValue = HealthTextNeedsValueTicks(spec)
+  local needsMax = HealthTextNeedsMaxEvents(spec)
+  local player = (frame and frame.MSUFUnitKey == "player") or (spec and spec.key == "player")
+  if not needsValue then
+    if not needsMax then
+      if not absorb then return EMPTY_EVENTS end
+      if player then return ABSORB_TEXT_PLAYER_EVENTS end
+      return classColor and ABSORB_TEXT_CLASS_EVENTS or ABSORB_TEXT_EVENTS
+    end
+    if absorb then
+      if player then return HEALTH_TEXT_MAX_PLAYER_EVENTS_ABSORB end
+      return classColor and HEALTH_TEXT_CLASS_MAX_EVENTS_ABSORB or HEALTH_TEXT_MAX_EVENTS_ABSORB
+    end
     return classColor and HEALTH_TEXT_CLASS_MAX_EVENTS or HEALTH_TEXT_MAX_EVENTS
   end
-  if (frame and frame.MSUFUnitKey == "player") or (spec and spec.key == "player") then
-    if not HealthTextNeedsMaxEvents(spec) then
-      return HEALTH_TEXT_VALUE_PLAYER_EVENTS
+  if player then
+    if not needsMax then
+      return absorb and HEALTH_TEXT_VALUE_PLAYER_EVENTS_ABSORB or HEALTH_TEXT_VALUE_PLAYER_EVENTS
     end
-    return HEALTH_TEXT_PLAYER_EVENTS
+    return absorb and HEALTH_TEXT_PLAYER_EVENTS_ABSORB or HEALTH_TEXT_PLAYER_EVENTS
   end
-  if not HealthTextNeedsMaxEvents(spec) then
+  if not needsMax then
+    if absorb then
+      return classColor and HEALTH_TEXT_CLASS_VALUE_EVENTS_ABSORB or HEALTH_TEXT_VALUE_EVENTS_ABSORB
+    end
     return classColor and HEALTH_TEXT_CLASS_VALUE_EVENTS or HEALTH_TEXT_VALUE_EVENTS
   end
+  if absorb then return classColor and HEALTH_TEXT_CLASS_EVENTS_ABSORB or HEALTH_TEXT_EVENTS_ABSORB end
   return classColor and HEALTH_TEXT_CLASS_EVENTS or HEALTH_TEXT_EVENTS
 end
 
@@ -1556,7 +1613,7 @@ function HealthText.GetUnitlessEvents(frame, spec)
   return HealthTextEnabled(spec) and spec and spec.scope == "group" and GROUP_LIFECYCLE_EVENTS or EMPTY_EVENTS
 end
 
-function HealthText.Update(frame, event, unit, hp, hpMax)
+local function UpdateHealthTextValues(frame, event, unit, hp, hpMax)
   local rt = frame and frame._msufTextRuntime
   if rt and rt.healthColorByClass == true and event ~= "UNIT_HEALTH" then
     UpdateHealthTextColor(frame, rt, unit or frame.MSUFUnitKey)
@@ -1582,6 +1639,29 @@ function HealthText.Update(frame, event, unit, hp, hpMax)
   end
   return Text.UpdateHealth(frame, event, unit or frame.MSUFUnitKey, hp, hpMax)
 end
+
+local function UpdateHealthTextAll(frame, event, unit, hp, hpMax)
+  UpdateHealthTextValues(frame, event, unit, hp, hpMax)
+  return UpdateAbsorbRuntime(frame, event, unit or frame.MSUFUnitKey)
+end
+
+function HealthText.SelectUpdate(frame)
+  local rt = frame and frame._msufTextRuntime
+  if rt and rt.healthAbsorbSlotCount and rt.healthAbsorbSlotCount > 0 then
+    return rt.healthValueSlotCount and rt.healthValueSlotCount > 0 and UpdateHealthTextAll or UpdateAbsorbRuntime
+  end
+  return UpdateHealthTextValues
+end
+
+function HealthText.SelectEventUpdate(frame, spec, event, update)
+  if event == "UNIT_ABSORB_AMOUNT_CHANGED" then return UpdateAbsorbRuntime end
+  if event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" or event == "UNIT_NAME_UPDATE" then
+    return UpdateHealthTextValues
+  end
+  return update
+end
+
+HealthText.Update = UpdateHealthTextAll
 
 function HealthText.Disable(frame)
   SetShownCached(frame and frame.hpTextLeft, false)

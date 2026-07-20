@@ -2035,15 +2035,15 @@ function Preview.Create(ctx, builder)
     if not (W and T and builder and builder.Section) then return nil end
     local section = builder:Section("Preview", 388)
     local width = section._msuf2Width or builder.width or ctx.width or 720
-    local innerW = max(470, width - 28)
-    local sideW = 104
+    local innerW = max(1, width - 28)
+    local sideW = min(104, max(72, innerW - 252))
     local box = T.Panel(section, nil, { 0.018, 0.022, 0.044, 0.88 }, T.colors.borderSoft)
     local chrome = Helpers.ApplyPreviewChrome and Helpers.ApplyPreviewChrome(box, "outer", T)
         or { title = T.colors.title or T.colors.text, canvasBorder = T.colors.borderSoft }
     box._catalogCtx = ctx
     box:SetPoint("TOPLEFT", section, "TOPLEFT", 14, -38)
     box:SetSize(innerW, 330)
-    box.canvasW, box.canvasH = max(320, innerW - sideW - 30), 288
+    box.canvasW, box.canvasH = max(1, innerW - sideW - 32), 288
     box.playerW, box.playerH = min(275, max(190, box.canvasW - 160)), 38
     box.handles = {}
     if box.EnableKeyboard then box:EnableKeyboard(true) end

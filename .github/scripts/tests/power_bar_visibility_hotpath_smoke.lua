@@ -9,6 +9,7 @@ _G.issecretvalue = function() return false end
 
 local elements = {}
 local percentReads = 0
+local powerTypeReads = 0
 local UF = {
     Elements = elements,
     RegisterElement = function(name, element) elements[name] = element end,
@@ -17,7 +18,10 @@ local common = {
     UF = UF,
     UnitPower = function() return 50 end,
     UnitPowerMax = function() return 100 end,
-    UnitPowerType = function() return 0, "MANA" end,
+    UnitPowerType = function()
+        powerTypeReads = powerTypeReads + 1
+        return 0, "MANA"
+    end,
     UnitPowerPercent = function()
         percentReads = percentReads + 1
         return 50
@@ -45,6 +49,7 @@ local bar = {
     end,
     SetMinMaxValues = function(self, _, maximum) self.maximum = maximum end,
     SetValue = function(self, value) self.value = value end,
+    SetStatusBarColor = function(self, r, g, b, a) self.color = { r, g, b, a } end,
 }
 local frame = {
     unit = "target",
@@ -66,6 +71,12 @@ bar._msufShown = nil
 update(frame, "UNIT_POWER_UPDATE", "target", "MANA")
 Check(percentReads == 2 and isShownCalls == 1,
     "uncached pre-Apply bar lost its native visibility fallback")
+
+bar._msufShown = true
+powerTypeReads = 0
+update(frame, "PLAYER_TARGET_CHANGED", "target")
+Check(powerTypeReads == 1,
+    "identity Power update repeated UnitPowerType for value and color")
 
 local healthBar = {
     points = {},

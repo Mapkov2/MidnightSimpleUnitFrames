@@ -483,6 +483,13 @@ local function BuildGFLayout(ctx)
         width = customAnchorW,
         getValue = CurrentCustomAnchor,
         setValue = SetCustomAnchor,
+        isCandidateAllowed = function(frame)
+            local gf = MSUF.GF
+            local owner = gf and gf.anchors and gf.anchors[CurrentScope()]
+            local factory = MSUF.UF and MSUF.UF.Factory
+            return not owner or not factory or type(factory.AnchorWouldCreateCycle) ~= "function"
+                or (frame ~= owner and not factory.AnchorWouldCreateCycle(owner, frame))
+        end,
         clearValue = function() SetCustomAnchor("") end,
         commitTitle = "Set Group Anchor",
         commitKey = function() return "group:anchorCustom:" .. tostring(CurrentScope()) end,

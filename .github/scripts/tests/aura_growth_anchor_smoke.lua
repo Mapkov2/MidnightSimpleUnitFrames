@@ -277,6 +277,13 @@ _G.issecretvalue = function() return false end
 _G.UnitExists = function() return true end
 _G.AuraContainerSortMethod = { Default = 0, Expiration = 1, Name = 2 }
 _G.AuraContainerSortDirection = { Normal = 0, Reverse = 1 }
+local durationFormatterCreateCalls = 0
+_G.C_StringUtil = {
+    CreateNumericRuleFormatter = function()
+        durationFormatterCreateCalls = durationFormatterCreateCalls + 1
+        return { AddBreakpoint = function() end }
+    end,
+}
 _G.MSUF_FRAME_STRATA_RANK = {
     BACKGROUND = 1, LOW = 2, MEDIUM = 3, HIGH = 4, DIALOG = 5,
     FULLSCREEN = 6, FULLSCREEN_DIALOG = 7, TOOLTIP = 8,
@@ -441,6 +448,21 @@ local function GeometryCalls(frames, field)
     return count
 end
 
+do
+    local lane = UnitLane("TOPLEFT", "RIGHTDOWN")
+    lane.showCooldownText = true
+    lane.showStacks = true
+    _G.MSUF_DB.general = {}
+    local container = ApplyLane(lane)
+    local frames = assert(container:GetAuraGroup(container._msufA3ManagedGroupKey)):GetFramesByIndex()
+    Equal(durationFormatterCreateCalls, 1, "duration formatter rebuilt for every AuraButton")
+    for i = 1, #frames do
+        local overlay = frames[i]._msufA3TextOverlay
+        Check(overlay ~= nil, "shared Aura text overlay missing")
+        Equal(overlay.clearAllPointsCalls, 1, "Aura text overlay laid out more than once during initialization")
+    end
+end
+
 local matrixCases = 0
 local horizontalChurnCovered = false
 for _, anchor in ipairs(ANCHORS) do
@@ -545,6 +567,18 @@ do
     Near(host.height, lane.height, "visible player world repair height")
     Equal(container._msufA3ForceManagedAuraGeometry, nil,
         "visible player world repair marker was not consumed")
+
+    host.point = { "CENTER", foreign, "CENTER", 55, -44 }
+    container._msufA3ForceManagedAuraGeometry = true
+    updates = container.updateAllAurasCalls or 0
+    Check(A3._DirectIdentityRefreshUnit("player") == true,
+        "normal direct refresh fast path did not run")
+    Equal(container.updateAllAurasCalls or 0, updates + 1,
+        "normal direct refresh fast path skipped native aura refresh")
+    AssertPoint(host, lane.anchor, parent, lane.anchor, lane.x, lane.y,
+        "normal direct refresh pending repair")
+    Equal(container._msufA3ForceManagedAuraGeometry, nil,
+        "normal direct refresh fast path dropped a pending geometry repair")
 
     -- Hidden containers skip the native aura refresh but still receive the
     -- one-shot geometry repair immediately, so a lane hidden during a loading
@@ -1208,6 +1242,17 @@ Check(Count(runtimeSource, "initialAnchor = ButtonAnchor(xSign, ySign)") >= 2,
     "unit/group compilers no longer share initial-anchor derivation")
 Check(runtimeSource:find("local NativeRuntime = (function()", 1, true),
     "native backend no longer has an isolated local-budget boundary")
+Check(Count(runtimeSource, "EnsureAuraTextOverlay(button) or button") == 1
+    and not runtimeSource:find("SyncButtonGeometry", 1, true)
+    and not runtimeSource:find("SyncCooldownTextLayering", 1, true),
+    "AuraButton initialization regained duplicate overlay or geometry work")
+Check(runtimeSource:find('lane._msufA3DurationFormatter', 1, true)
+    and runtimeSource:find('button:SetApplicationCount(count, _applicationCountOptions)', 1, true)
+    and runtimeSource:find('button:SetAuraSymbol(symbol, _auraSymbolOptions)', 1, true),
+    "AuraButton initialization no longer reuses formatter and option state")
+Check(runtimeSource:find('texture._msufA3IconZoomKey == zoom', 1, true)
+    and not runtimeSource:find('local key = tostring(zoom)', 1, true),
+    "Aura Icon Zoom regained its per-call string allocation")
 Check(not runtimeSource:find("ApplyVerticalAwareAuraLayout", 1, true)
     and not runtimeSource:find("InstallVerticalAuraLayoutFallback", 1, true),
     "PTR 5 runtime still overrides Blizzard's native ApplyLayout")
@@ -1234,6 +1279,8 @@ Check(not spellIndicatorSource:find("for button in pairs(buttons) do HideButton"
     "PTR 5 spell indicator teardown still calls APIs on initialized AuraButtons")
 
 local editModeSource = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_EditMode.lua")
+Check(editModeSource:find('group:SetFrameStrata("FULLSCREEN")', 1, true),
+    "Edit Mode Aura preview is no longer kept below the Menu2 edit-mode strata")
 Check(editModeSource:find('return IsEditModeActive() and rawget(_G, "MSUF_UnitPreviewActive") == true', 1, true),
     "Edit Mode Aura previews ignore the global Preview toggle")
 Check(editModeSource:find("if not UnitPreviewActive(unit) then", 1, true)

@@ -1858,11 +1858,11 @@ local function RegisterStatusIndicator(def)
 
   if updateWithEvent == true then
     function element.Update(frame, event, _unit, seedHP)
-      update(frame, frame._msufStatusIndicatorStatus or (frame.MSUFSpec and frame.MSUFSpec.status), event, seedHP)
+      update(frame, frame._msufStatusIndicatorStatus, event, seedHP)
     end
   else
     function element.Update(frame)
-      update(frame, frame._msufStatusIndicatorStatus or (frame.MSUFSpec and frame.MSUFSpec.status))
+      update(frame, frame._msufStatusIndicatorStatus)
     end
   end
 

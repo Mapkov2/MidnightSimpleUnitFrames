@@ -112,7 +112,9 @@ local function BuildCastbars(ctx)
             W.Text(section, "Castbar preview is built when this page is opened.", 14, -42, ctx.width - 28, T.colors.muted)
             return nil
         end
-        local section = b:Section("Preview", 148)
+        local availableW = b.width or ctx.width or 720
+        local compactControls = availableW < 694
+        local section = b:Section("Preview", compactControls and 178 or 148)
         local sectionW = section._msuf2Width or b.width or ctx.width or 720
         local innerW = max(360, sectionW - 28)
         local preview = {
@@ -204,8 +206,15 @@ local function BuildCastbars(ctx)
             { key = "focus", text = "Focus" },
             { key = "boss", text = "Boss" },
         }, 52, 4, M.SetCastbarPreviewUnit, "preview.unit")
-        local buttonW, buttonGap, interruptW = 82, 6, 90
-        local typeButtons = PreviewButtonGroup(section, "TOPRIGHT", "TOPRIGHT", -(14 + interruptW + 10), -12, {
+        local buttonGap, interruptW = 6, 90
+        local buttonW = compactControls
+            and max(68, min(82, floor((sectionW - 132 - (buttonGap * 2)) / 3)))
+            or 82
+        local typeButtons = PreviewButtonGroup(section,
+            compactControls and "TOPLEFT" or "TOPRIGHT",
+            compactControls and "TOPLEFT" or "TOPRIGHT",
+            compactControls and 8 or -(14 + interruptW + 10),
+            compactControls and -42 or -12, {
             { key = "normal", text = "Normal" },
             { key = "channel", text = "Channel" },
             { key = "empowered", text = "Empowered" },
@@ -213,13 +222,13 @@ local function BuildCastbars(ctx)
         local interrupt = T.CenterButtonLabel(T.SkinDangerButton(T.Button(section, "Interrupt", interruptW, 24)))
         interrupt._msuf2AllowCombatClick = true
         interrupt._msuf2SkipHistoryCheckpoint = true
-        interrupt:SetPoint("TOPRIGHT", section, "TOPRIGHT", -16, -16)
+        interrupt:SetPoint("TOPRIGHT", section, "TOPRIGHT", -16, compactControls and -46 or -16)
         interrupt:SetScript("OnClick", function()
             M.PlayCastbarPreviewInterrupt()
         end)
         RegisterControl(interrupt, Meta("preview.interrupt", "ephemeral"), "Interrupt", "button")
         local box = T.Panel(section, nil, { 0.018, 0.022, 0.044, 0.88 }, T.colors.borderSoft)
-        box:SetPoint("TOPLEFT", section, "TOPLEFT", 16, -52)
+        box:SetPoint("TOPLEFT", section, "TOPLEFT", 16, compactControls and -82 or -52)
         box:SetSize(innerW, 62)
         local portrait = T.Panel(box, nil, { 0.040, 0.060, 0.120, 0.96 }, { 0.16, 0.22, 0.42, 0.75 })
         portrait:SetSize(52, 52)

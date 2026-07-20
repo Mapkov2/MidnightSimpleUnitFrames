@@ -1124,13 +1124,14 @@ local function BuildDashboardUX(ctx)
     support:SetHeight(supportH)
     local iconDir = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\"
     local supportLinks = {
+        { key = "discord", texture = "Discord.png", title = "Discord", tooltip = "Copy Discord Link", url = "https://discord.gg/2Gf9b2Wprz" },
         { key = "patreon", texture = "Patreon.png", title = "Patreon", tooltip = "Click to copy the Patreon support link.", url = "https://www.patreon.com/cw/MidnightSimpleUnitframes" },
         { key = "paypal", texture = "PayPal.png", title = "PayPal", tooltip = "Click to copy the PayPal support link.", url = "https://www.paypal.com/ncp/payment/H3N2P87S53KBQ" },
         { key = "kofi", texture = "Ko-Fi.png", title = "Ko-fi", tooltip = "Click to copy the Ko-fi link.", url = "https://ko-fi.com/midnightsimpleunitframes#linkModal" },
         { key = "github", texture = "GitHub.png", title = "GitHub", tooltip = "Click to copy the GitHub repository link.", url = "https://github.com/Mapkov2/MidnightSimpleUnitFrames" },
     }
     local iconRow = CreateFrame("Frame", nil, support)
-    iconRow:SetSize(160, 24)
+    iconRow:SetSize(168, 24)
     if supportCompact then
         iconRow:SetPoint("BOTTOMLEFT", support, "BOTTOMLEFT", 16, 12)
     else

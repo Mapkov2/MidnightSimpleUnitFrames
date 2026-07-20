@@ -206,8 +206,10 @@ local function BuildText(ctx, builder, unit)
         if mode == "NONE" then return nil end
         local cur = isPower and "100" or (abbreviateFullValue and "630.0k" or "630,000")
         local maxText = isPower and "100" or (abbreviateFullValue and "1.0m" or "1,000,000")
+        local absorb = abbreviateFullValue and "125.0k" or "125,000"
         local pct = isPower and "100" or (decimalPercent and "63.4" or "63")
         if hidePercentSymbol ~= true then pct = pct .. "%" end
+        if mode == "ABSORB" then return absorb end
         if mode == "PERCENT" then return pct end
         if mode == "CURRENT" then return cur end
         if mode == "FULLVALUE" then return cur end

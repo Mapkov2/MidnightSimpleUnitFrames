@@ -24,6 +24,7 @@ local UnregisterUnitWatch = UnregisterUnitWatch
 local UnitWatchRegistered = UnitWatchRegistered
 local RegisterStateDriver = RegisterStateDriver
 local UIParent = UIParent
+local issecretvalue = _G.issecretvalue
 
 local COOLDOWN_ANCHORS = {
   EssentialCooldownViewer = true,
@@ -122,6 +123,9 @@ local function ResolveAnchor(spec, frame)
 end
 
 local MAX_ANCHOR_DEPTH = 16
+local function ReadAnchorMember(region, key)
+  return region[key]
+end
 
 local function AnchorDependsOn(region, target, seen, depth)
   if not (region and target) then return false end
@@ -131,18 +135,47 @@ local function AnchorDependsOn(region, target, seen, depth)
   seen = seen or {}
   if seen[region] then return false end
   seen[region] = true
-  if not (region.GetNumPoints and region.GetPoint) then return false end
-  for i = 1, region:GetNumPoints() or 0 do
-    local _, relativeTo = region:GetPoint(i)
-    if relativeTo == target or AnchorDependsOn(relativeTo, target, seen, depth) then
-      return true
+  local numOK, getNumPoints = pcall(ReadAnchorMember, region, "GetNumPoints")
+  local pointOK, getPoint = pcall(ReadAnchorMember, region, "GetPoint")
+  if numOK and pointOK and type(getNumPoints) == "function" and type(getPoint) == "function" then
+    local okCount, count = pcall(getNumPoints, region)
+    if okCount and type(count) == "number" and not (issecretvalue and issecretvalue(count)) then
+      for i = 1, count do
+        local okPoint, _, relativeTo = pcall(getPoint, region, i)
+        if okPoint and not (issecretvalue and issecretvalue(relativeTo))
+          and (relativeTo == target or AnchorDependsOn(relativeTo, target, seen, depth)) then
+          return true
+        end
+      end
     end
   end
+  local okParent, parent = false, nil
+  local parentReadOK, getParent = pcall(ReadAnchorMember, region, "GetParent")
+  if parentReadOK and type(getParent) == "function" then okParent, parent = pcall(getParent, region) end
+  if not okParent or (issecretvalue and issecretvalue(parent)) then parent = nil end
+  if parent == target or AnchorDependsOn(parent, target, seen, depth) then return true end
   return false
 end
 
 local function AnchorWouldCreateCycle(frame, anchor)
   return frame and anchor and anchor ~= UIParent and AnchorDependsOn(anchor, frame) == true
+end
+
+-- Shared by unit frames, group frames, Edit Mode, and the anchor picker. Keep
+-- named custom anchors direct; only reject targets that would make SetPoint
+-- recurse through the frame being positioned.
+Factory.ResolveNamedAnchor = ResolveNamedAnchor
+Factory.AnchorDependsOn = AnchorDependsOn
+Factory.AnchorWouldCreateCycle = AnchorWouldCreateCycle
+function Factory.IsAnchorCandidateAllowed(candidate, unitKey)
+  if not candidate then return false end
+  for key, frame in pairs(UF.frames or {}) do
+    local configKey = UF.ConfigKeyForUnit and UF.ConfigKeyForUnit(frame and frame.MSUFUnitKey)
+    if unitKey == nil or key == unitKey or configKey == unitKey then
+      if candidate == frame or AnchorWouldCreateCycle(frame, candidate) then return false end
+    end
+  end
+  return true
 end
 
 local function ScreenCacheKey(spec, frame)
@@ -657,6 +690,7 @@ function Factory.EnsureDeferredDriver()
 end
 
 local LATE_ANCHOR_KEYS = { "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }
+local LATE_GROUP_ANCHOR_KEYS = { "gf_party", "gf_raid", "gf_mythicraid", "gf_priority" }
 local COOLDOWN_WIDTH_MODES = {
   cooldown = "EssentialCooldownViewer",
   utility = "UtilityCooldownViewer",
@@ -1018,6 +1052,23 @@ ExportPublic("MSUF_RefreshExternalUnitFrameAnchor", function(frameName)
   return Factory.RefreshExternalAnchor(frameName)
 end)
 
+local function HasGroupLateAnchorConfig(db)
+  for i = 1, #LATE_GROUP_ANCHOR_KEYS do
+    local conf = db[LATE_GROUP_ANCHOR_KEYS[i]]
+    local name = type(conf) == "table" and CanonicalAnchorFrameName(
+      conf.anchorToFrame or conf.anchorFrame or conf.relativeTo or conf.anchorTo
+    ) or nil
+    if type(name) == "string"
+      and name ~= ""
+      and name ~= "FREE"
+      and name ~= "UIParent"
+      and name ~= "WorldFrame" then
+      return true
+    end
+  end
+  return false
+end
+
 local function HasLateAnchorConfig()
   local db = _G.MSUF_DB
   if type(db) ~= "table" then return false end
@@ -1062,13 +1113,18 @@ local function HasLateAnchorConfig()
       end
     end
   end
-  return false
+  return HasGroupLateAnchorConfig(db)
 end
 
 local function FlushLateAnchorReanchor(forcePosition)
   if InCombat() then
     if forcePosition then InvalidatePositionCache(nil) end
     if UF.RequestReanchorAfterCombat then UF.RequestReanchorAfterCombat() end
+    local GF = MSUF.GF
+    if type(_G.MSUF_DB) == "table" and HasGroupLateAnchorConfig(_G.MSUF_DB)
+      and GF and type(GF.DeferGroupRuntime) == "function" then
+      GF.DeferGroupRuntime("layout")
+    end
     return false
   end
   if forcePosition then
@@ -1081,20 +1137,47 @@ local function FlushLateAnchorReanchor(forcePosition)
   elseif type(_G.MSUF_ClassPower_Refresh) == "function" then
     _G.MSUF_ClassPower_Refresh()
   end
+  local db = _G.MSUF_DB
+  local GF = MSUF.GF
+  if type(db) == "table" and HasGroupLateAnchorConfig(db)
+    and GF and type(GF.RefreshHeaderLayout) == "function" then
+    GF.RefreshHeaderLayout()
+  end
   return true
 end
 
-local function FlushScheduledLateAnchorReanchor(state)
+local LATE_ANCHOR_RETRY_DELAYS = { 0, 0.05, 0.15, 0.35, 0.75, 1.5 }
+local FlushScheduledLateAnchorReanchor
+
+local function QueueLateAnchorReanchor(state, delay)
+  state.pending = true
+  if _G.C_Timer and type(_G.C_Timer.After) == "function" then
+    _G.C_Timer.After(delay or 0, function()
+      FlushScheduledLateAnchorReanchor(state)
+    end)
+    return true
+  end
+  if not delay or delay <= 0 then
+    FlushScheduledLateAnchorReanchor(state)
+    return true
+  end
+  state.pending = false
+  return false
+end
+
+FlushScheduledLateAnchorReanchor = function(state)
   if not state.pending or state.flushing then return false end
   local force = state.forcePosition == true
   state.forcePosition = false
+  state.pending = false
+  state.retryRequested = false
   state.flushing = true
   local flushed = FlushLateAnchorReanchor(force)
-  -- Keep pending=true for the entire flush. A missing custom anchor can call
-  -- the scheduler again from ApplyPosition; clearing it earlier creates an
-  -- unbounded next-frame Factory.Apply loop.
   state.flushing = false
-  state.pending = false
+  if state.retryRequested and (state.attempt or 1) < #LATE_ANCHOR_RETRY_DELAYS then
+    state.attempt = (state.attempt or 1) + 1
+    QueueLateAnchorReanchor(state, LATE_ANCHOR_RETRY_DELAYS[state.attempt])
+  end
   return flushed
 end
 
@@ -1102,29 +1185,35 @@ local function ScheduleLateAnchorReanchor(forcePosition)
   if InCombat() then
     if forcePosition then InvalidatePositionCache(nil) end
     if UF.RequestReanchorAfterCombat then UF.RequestReanchorAfterCombat() end
+    local GF = MSUF.GF
+    if type(_G.MSUF_DB) == "table" and HasGroupLateAnchorConfig(_G.MSUF_DB)
+      and GF and type(GF.DeferGroupRuntime) == "function" then
+      GF.DeferGroupRuntime("layout")
+    end
     return false
   end
   local state = _G.MSUF_LateAnchorReanchorState
   if type(state) ~= "table" then
-    state = { pending = false, forcePosition = false, flushing = false }
+    state = { pending = false, forcePosition = false, flushing = false, retryRequested = false, attempt = 0 }
     ExportPublic("MSUF_LateAnchorReanchorState", state)
+  end
+  if state.flushing then
+    -- A missing target found while applying requests the next bounded retry.
+    -- This replaces the former one-shot suppression without creating an
+    -- unbounded per-frame loop.
+    state.retryRequested = true
+    if forcePosition then state.forcePosition = true end
+    return false
   end
   if state.pending then
     -- A force request may upgrade work that is queued but has not started.
-    -- Reentrant requests from the flush itself are deliberately ignored.
-    if forcePosition and not state.flushing then state.forcePosition = true end
+    if forcePosition then state.forcePosition = true end
     return false
   end
   if forcePosition then state.forcePosition = true end
-  state.pending = true
-  if _G.C_Timer and _G.C_Timer.After then
-    _G.C_Timer.After(0, function()
-      FlushScheduledLateAnchorReanchor(state)
-    end)
-  else
-    FlushScheduledLateAnchorReanchor(state)
-  end
-  return true
+  state.attempt = 1
+  state.retryRequested = false
+  return QueueLateAnchorReanchor(state, LATE_ANCHOR_RETRY_DELAYS[1])
 end
 
 ExportPublic("MSUF_ScheduleLateAnchorReanchor", ScheduleLateAnchorReanchor)
@@ -1139,7 +1228,10 @@ do
   lateAnchorEvents:RegisterEvent("EDIT_MODE_LAYOUTS_UPDATED")
   lateAnchorEvents:RegisterEvent("ADDON_LOADED")
   lateAnchorEvents:SetScript("OnEvent", function(_, event, addon)
-    if event == "ADDON_LOADED" and addon ~= "Blizzard_EditMode" and addon ~= "Blizzard_CooldownViewer" then return end
+    if event == "ADDON_LOADED"
+      and addon ~= "Blizzard_EditMode"
+      and addon ~= "Blizzard_CooldownViewer"
+      and not HasLateAnchorConfig() then return end
     EnsureCooldownWidthObservers(true)
     if event == "EDIT_MODE_LAYOUTS_UPDATED" then ScheduleCooldownWidthRefresh() end
     if event == "PLAYER_ENTERING_WORLD" then

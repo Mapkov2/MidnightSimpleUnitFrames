@@ -296,7 +296,9 @@ local function BossTargetTestApplies(frame)
 end
 
 local function BossTargetState(frame, cfg)
-  if not (cfg and cfg.bossTarget == true and UnitIsUnit and frame and IsBossUnit(frame.MSUFUnitKey)) then
+  local bossUnit = frame and frame._msufBorderRuntimeBossUnit
+  if bossUnit == nil then bossUnit = IsBossUnit(frame and frame.MSUFUnitKey) end
+  if not (cfg and cfg.bossTarget == true and UnitIsUnit and frame and bossUnit) then
     return false
   end
   local isTarget = UnitIsUnit(frame.MSUFUnitKey, "target")
@@ -313,7 +315,9 @@ local function BorderHighlightEnabled(frame, cfg)
   if cfg and cfg.dispel == true then
     return true
   end
-  if cfg and cfg.bossTarget == true and IsBossUnit(frame and frame.MSUFUnitKey) then
+  local bossUnit = frame and frame._msufBorderRuntimeBossUnit
+  if bossUnit == nil then bossUnit = IsBossUnit(frame and frame.MSUFUnitKey) end
+  if cfg and cfg.bossTarget == true and bossUnit then
     return true
   end
   if _G.MSUF_BorderTestModesActive ~= true then
@@ -635,6 +639,7 @@ function Borders.Apply(frame, spec)
     local customPriority = cfg and cfg.prioEnabled == true and type(cfg.prioOrder) == "table"
     frame._msufBorderRuntimeCfg = cfg
     frame._msufBorderRuntimeGroup = spec and spec.scope == "group" or nil
+    frame._msufBorderRuntimeBossUnit = IsBossUnit(frame.MSUFUnitKey) == true
     frame._msufBorderRuntimeAggroMode = cfg and NormalizeAggroMode(cfg.aggroMode) or nil
     frame._msufBorderRuntimeHighlightThickness = tonumber(cfg and cfg.highlightThickness) or 3
     frame._msufBorderRuntimeNormalThickness = BorderNormalThickness(cfg)
@@ -651,7 +656,7 @@ function Borders.Apply(frame, spec)
   if not cfg or not (BorderNormalEnabled(cfg) or BorderHighlightEnabled(frame, cfg)) then
     LayoutBorder(frame, 1)
     SetBorder(frame, false)
-  elseif cfg.aggro == true or cfg.dispel == true or (cfg.bossTarget == true and IsBossUnit(frame and frame.MSUFUnitKey)) then
+  elseif cfg.aggro == true or cfg.dispel == true or (cfg.bossTarget == true and frame._msufBorderRuntimeBossUnit == true) then
     LayoutBorder(frame, BorderHighlightThickness(cfg))
     Borders.Update(frame, "MSUF_BORDER_APPLY", frame.MSUFUnitKey)
   else
@@ -714,6 +719,7 @@ function Borders.Disable(frame)
   if frame then
     frame._msufBorderRuntimeCfg = nil
     frame._msufBorderRuntimeGroup = nil
+    frame._msufBorderRuntimeBossUnit = nil
     frame._msufBorderRuntimeAggroMode = nil
     frame._msufBorderRuntimeHighlightThickness = nil
     frame._msufBorderRuntimeNormalThickness = nil

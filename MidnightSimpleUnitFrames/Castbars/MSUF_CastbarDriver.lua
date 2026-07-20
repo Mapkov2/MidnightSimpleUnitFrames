@@ -947,14 +947,17 @@ local function RefreshTargetFocusImmediate(frame)
         return true
     end
 
-    StoreActiveStateIdentity(frame, nil)
-    UpdateCastTargetText(frame, nil)
-
-    ClearFrameOnUpdate(frame)
+    -- ScheduleTargetFocusChanged already invalidated the active identity,
+    -- removed OnUpdate, and hard-stopped any visible previous cast. The
+    -- overwhelmingly common no-cast result therefore needs no second cleanup.
     if CastbarAlreadyIdle(frame) then
         return false
     end
 
+    StoreActiveStateIdentity(frame, nil)
+    UpdateCastTargetText(frame, nil)
+
+    ClearFrameOnUpdate(frame)
     StopDriverFrame(frame, "HARDHIDE", false)
     return false
 end

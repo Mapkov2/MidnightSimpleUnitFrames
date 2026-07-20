@@ -241,27 +241,7 @@ local function UnitIsEmpowering(unit)
     return type(stageCount) == "number" and stageCount > 0
 end
 
---- Main API: return a reusable state table for the unit. The same-frame cache
---- avoids repeated UnitCastingInfo/UnitChannelInfo reads when multiple castbar
---- helpers ask for state during one event burst.
-function Engine:BuildState(unit, previousState)
-    if not unit then
-        return INACTIVE_STATE
-    end
-
-    local now = GetTime()
-    if buildStateCacheTime[unit] == now and Engine._state[unit] then
-        return Engine._state[unit]
-    end
-
-    buildStateCacheTime[unit] = now
-
-    local state = Engine._state[unit]
-    if not state then
-        state = {}
-        Engine._state[unit] = state
-    end
-
+local function ResetState(state, unit)
     state.active = false
     state.unit = unit
     state.castType = "NONE"
@@ -287,9 +267,34 @@ function Engine:BuildState(unit, previousState)
     state.targetNameAllowed = nil
     state.targetName = nil
     state.targetClass = nil
+    state._msufInactiveNormalized = true
+end
+
+--- Main API: return a reusable state table for the unit. The same-frame cache
+--- avoids repeated UnitCastingInfo/UnitChannelInfo reads when multiple castbar
+--- helpers ask for state during one event burst.
+function Engine:BuildState(unit, previousState)
+    if not unit then
+        return INACTIVE_STATE
+    end
+
+    local now = GetTime()
+    if buildStateCacheTime[unit] == now and Engine._state[unit] then
+        return Engine._state[unit]
+    end
+
+    buildStateCacheTime[unit] = now
+
+    local state = Engine._state[unit]
+    if not state then
+        state = {}
+        Engine._state[unit] = state
+    end
 
     local name, text, icon, startTimeMS, endTimeMS, isTradeskill, castID, apiNotInterruptible, spellId, castBarID, delayTimeMS = UnitCastingInfo(unit)
     if name then
+        ResetState(state, unit)
+        state._msufInactiveNormalized = nil
         local isEmpower = UnitIsEmpowering(unit)
 
         state.castType = isEmpower and "EMPOWER" or "CAST"
@@ -320,6 +325,8 @@ function Engine:BuildState(unit, previousState)
 
     name, text, icon, startTimeMS, endTimeMS, isTradeskill, apiNotInterruptible, spellId, isEmpowered, numEmpowerStages, castBarID = UnitChannelInfo(unit)
     if name then
+        ResetState(state, unit)
+        state._msufInactiveNormalized = nil
         state.castType = "CHANNEL"
         state.apiNotInterruptible = apiNotInterruptible
         state.apiNotInterruptibleRaw = apiNotInterruptible
@@ -345,6 +352,12 @@ function Engine:BuildState(unit, previousState)
         return state
     end
 
+    -- A target/focus that remains idle is the dominant identity-switch case.
+    -- Its reusable state is already fully nil-normalized, so avoid rewriting
+    -- the same fields until an active cast has populated them again.
+    if state._msufInactiveNormalized ~= true then
+        ResetState(state, unit)
+    end
     ApplyIdentity(state)
     return state
 end

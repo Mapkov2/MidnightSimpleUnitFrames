@@ -835,6 +835,11 @@ local function BuildLayout(ctx, builder, unit)
         width = customAnchorW,
         getValue = function() return CustomAnchorName(GetConf(unit)) end,
         setValue = function(value) SetCustomAnchorValue(value) end,
+        isCandidateAllowed = function(frame)
+            local factory = MSUF.UF and MSUF.UF.Factory
+            return not factory or type(factory.IsAnchorCandidateAllowed) ~= "function"
+                or factory.IsAnchorCandidateAllowed(frame, unit)
+        end,
         clearValue = function()
             SetCustomAnchorValue("")
         end,

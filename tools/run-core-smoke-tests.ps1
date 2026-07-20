@@ -12,6 +12,7 @@ $lua = Get-Command $LuaCommand -ErrorAction Stop
 $tests = @(
     "tools/advanced_colors_page_contract_smoke.lua",
     ".github/scripts/tests/aggro_runtime_routing_smoke.lua",
+    ".github/scripts/tests/anchor_picker_forbidden_smoke.lua",
     "tools/apply_service_dedup_smoke.lua",
     "tools/castbar_native_manager_smoke.lua",
     "tools/castbar_refresh_ownership_smoke.lua",
@@ -91,6 +92,7 @@ $tests = @(
     ".github/scripts/tests/guided_tour_interaction_smoke.lua",
     ".github/scripts/tests/hp_text_class_color_smoke.lua",
     ".github/scripts/tests/hp_text_abbreviation_smoke.lua",
+    ".github/scripts/tests/health_absorb_text_smoke.lua",
     ".github/scripts/tests/health_ai_color_hotpath_smoke.lua",
     ".github/scripts/tests/identity_payload_hotpath_smoke.lua",
     ".github/scripts/tests/layer_contract_smoke.lua",
