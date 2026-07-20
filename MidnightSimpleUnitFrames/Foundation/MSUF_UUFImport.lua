@@ -1800,6 +1800,14 @@ local function ConvertCastbar(source, spec, dst, general, report, unitKey)
     defaults.Enabled = spec.cast == true
     defaults.ShowTarget = spec.castTarget == true
     local cast = Merge(source, defaults)
+    local nativeEnabled = cast.Enabled ~= false
+    if unitKey == "player" and not nativeEnabled then
+        -- UUF hands player-castbar ownership back to Blizzard when its custom
+        -- bar is disabled. MSUF intentionally suppresses Blizzard's player
+        -- castbar, so preserve the visible result with the native MSUF bar.
+        nativeEnabled = true
+        Mark(report, "approximated", "player: UUF Blizzard castbar fallback uses the native MSUF player castbar")
+    end
     local layout = Layout(cast.Layout, defaults.Layout)
     local width = SafeNumber(cast.Width, 244, 1, 1200)
     local height = SafeNumber(cast.Height, 24, 1, 600)
@@ -1808,7 +1816,7 @@ local function ConvertCastbar(source, spec, dst, general, report, unitKey)
     local relX, relY = Fraction(layout[2])
     local left = relX * dst.width + layout[3] - selfX * effectiveWidth - effectiveWidth * 0.5
     local bottom = relY * dst.height + layout[4] - selfY * height - height * 0.5
-    general[keys[1]], general[keys[2]], general[keys[3]] = cast.Enabled ~= false, width, height
+    general[keys[1]], general[keys[2]], general[keys[3]] = nativeEnabled, width, height
     general[keys[4]] = unitKey == "player" and left + effectiveWidth * 0.5 or left + dst.width * 0.5
     general[keys[5]] = bottom - dst.height * 0.5 - (unitKey == "boss" and 2 or 0)
     general[keys[6]] = cast.MatchParentWidth == true and "unitframe" or nil

@@ -30,8 +30,10 @@ local function _EnsureDB()
     end
 end
 
--- PERF: Cache general ref — invalidated only when MSUF_DB itself changes.
+-- PERF: Cache general ref — invalidated on DB-root changes and explicit cold-path settings applies.
 local _cachedGeneral, _cachedGeneralDB
+local _cbEnabledCache
+local _cbEnabledDBRef = nil
 local function _GetGeneral()
     local db = MSUF_DB
     if not db then _EnsureDB(); db = MSUF_DB end
@@ -258,10 +260,9 @@ end
 -- Keeping them here prevents nil-access during early load, and allows the stub
 -- to decide whether to load the LoD addon.
 if not _G.MSUF_IsCastbarEnabledForUnit then
-    -- PERF: Cache enabled state per unit — invalidated when MSUF_DB changes.
+    -- PERF: Cache enabled state per unit — invalidated on DB-root changes and explicit settings applies.
     -- Eliminates _GetGeneral + table lookup on every call (43/s per unit).
-    local _cbEnabledCache = {}
-    local _cbEnabledDBRef = nil
+    _cbEnabledCache = {}
     function _G.MSUF_IsCastbarEnabledForUnit(unit)
         if _cbEnabledDBRef ~= MSUF_DB then
             _cbEnabledDBRef = MSUF_DB
@@ -284,6 +285,21 @@ if not _G.MSUF_IsCastbarEnabledForUnit then
         return result
     end
 end
+
+-- Active profile imports and Player-castbar enable toggles preserve the
+-- MSUF_DB root table. Invalidate both cache layers explicitly on those exact
+-- cold paths so the event hotpath can keep its allocation-free cached lookup.
+local function _InvalidateCastbarSettingsCache()
+    _cachedGeneral = nil
+    _cachedGeneralDB = nil
+    if _cbEnabledCache then
+        for unit in pairs(_cbEnabledCache) do
+            _cbEnabledCache[unit] = nil
+        end
+    end
+    _cbEnabledDBRef = MSUF_DB
+end
+_G.MSUF_Castbars_InvalidateSettingsCache = _InvalidateCastbarSettingsCache
 
 if not _G.MSUF_IsCastTimeEnabled then
     function _G.MSUF_IsCastTimeEnabled(frame)

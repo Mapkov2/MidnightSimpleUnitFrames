@@ -469,12 +469,26 @@ local sparseDefaultBase = {
     gf_mythicraid = SeededGroupDefaults(),
 }
 
-local sparseDefaultOut = Import.Convert({General = {}, Units = {}}, DeepCopy(sparseDefaultBase))
-local explicitDefaultOut = Import.Convert(explicitDefaultProfile, DeepCopy(sparseDefaultBase))
+local sparseDefaultOut, sparseDefaultReport = Import.Convert({General = {}, Units = {}}, DeepCopy(sparseDefaultBase))
+local explicitDefaultOut, explicitDefaultReport = Import.Convert(explicitDefaultProfile, DeepCopy(sparseDefaultBase))
 Truthy(type(sparseDefaultOut) == "table", "sparse-default fixture converts")
 Truthy(type(explicitDefaultOut) == "table", "explicit-default fixture converts")
 
 if type(sparseDefaultOut) == "table" and type(explicitDefaultOut) == "table" then
+    EqualAt(sparseDefaultOut, "general.enablePlayerCastbar", true)
+    EqualAt(explicitDefaultOut, "general.enablePlayerCastbar", true)
+    ReportContains(
+        sparseDefaultReport,
+        "approximated",
+        "Blizzard castbar fallback",
+        "sparse UUF player fallback is replaced by the native MSUF player castbar"
+    )
+    ReportContains(
+        explicitDefaultReport,
+        "approximated",
+        "Blizzard castbar fallback",
+        "explicitly disabled UUF player castbar preserves its visible Blizzard fallback"
+    )
     ComparePaths(sparseDefaultOut, explicitDefaultOut, {
         "general.UIScale",
         "general.hpTextSeparator",
@@ -580,6 +594,42 @@ if type(sparseDefaultOut) == "table" and type(explicitDefaultOut) == "table" the
     EqualAt(sparseDefaultOut, "gf_raid.resurrectIconSize", 36)
     EqualAt(sparseDefaultOut, "gf_raid.privateAuras.enabled", true)
 end
+
+-- Player is the only castbar whose disabled UUF element hands ownership back
+-- to a Blizzard fallback that MSUF intentionally suppresses. Preserve that
+-- visible result without changing the enable semantics of other unit bars.
+local disabledCastbarProfile = {
+    General = {},
+    Units = {
+        player = {CastBar = UUFDefaultCastbar(false)},
+        target = {CastBar = UUFDefaultCastbar(false)},
+        focus = {CastBar = UUFDefaultCastbar(false)},
+        boss = {CastBar = UUFDefaultCastbar(false)},
+    },
+}
+disabledCastbarProfile.Units.player.CastBar.Width = 321
+disabledCastbarProfile.Units.player.CastBar.Height = 29
+local disabledCastbarOut = assert(Import.Convert(disabledCastbarProfile, {}))
+EqualAt(disabledCastbarOut, "general.enablePlayerCastbar", true)
+EqualAt(disabledCastbarOut, "general.castbarPlayerBarWidth", 321)
+EqualAt(disabledCastbarOut, "general.castbarPlayerBarHeight", 29)
+EqualAt(disabledCastbarOut, "general.enableTargetCastbar", false)
+EqualAt(disabledCastbarOut, "general.enableFocusCastbar", false)
+EqualAt(disabledCastbarOut, "general.enableBossCastbar", false)
+
+local disabledPlayerStyle = UUFDefaultCastbar(false)
+disabledPlayerStyle.Foreground = {1, 0, 0, 1}
+local enabledTargetStyle = UUFDefaultCastbar(true)
+enabledTargetStyle.Foreground = {0, 1, 0, 1}
+local castbarStyleSourceOut = assert(Import.Convert({
+    Units = {
+        player = {CastBar = disabledPlayerStyle},
+        target = {CastBar = enabledTargetStyle},
+    },
+}, {}))
+NearAt(castbarStyleSourceOut, "general.castbarInterruptibleR", 0)
+NearAt(castbarStyleSourceOut, "general.castbarInterruptibleG", 1)
+NearAt(castbarStyleSourceOut, "general.castbarInterruptibleB", 0)
 
 -- Profiles written by older UUF builds used ReadyCheck and Resurrection,
 -- while V12.1 uses ReadyCheckIndicator and ResurrectIndicator. Legacy values
@@ -1186,6 +1236,7 @@ EqualAt(output, "gf_party.privateAuras.size", 18)
 EqualAt(output, "gf_party.privateAuras.direction", "RIGHT")
 
 -- Existing Castbar, Portrait, and HealPrediction settings own these features.
+EqualAt(output, "general.enablePlayerCastbar", true)
 EqualAt(output, "general.enableTargetCastbar", true)
 EqualAt(output, "general.castbarTargetBarWidth", 244)
 EqualAt(output, "general.castbarTargetBarHeight", 20)

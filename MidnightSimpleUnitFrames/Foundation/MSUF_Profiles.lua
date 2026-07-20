@@ -1342,6 +1342,9 @@ local function MSUF_ApplySnapshotToActiveProfile(snapshot)
     MSUF_ProfileIO_RunEnsureDB()
     -- Always keep the profile-table reference stable (important!).
     MSUF_DB = MSUF_DB or {}
+    if kind == "castbar" or kind == "all" then
+        MSUF_ProfileIO_CallGlobal("MSUF_Castbars_InvalidateSettingsCache")
+    end
     if kind == "unitframe" then
         -- Wipe & replace the same general-key set that Unitframes export.
         MSUF_WipeGeneralSubset(MSUF_IsUnitframeGeneralKey)
@@ -1468,6 +1471,7 @@ local function MSUF_ApplyLegacyTableToActiveProfile(tbl, refreshStatus)
     MSUF_ProfileIO_RunEnsureDB()
     -- Keep profile table reference stable; wipe + copy.
     MSUF_DB = MSUF_DB or {}
+    MSUF_ProfileIO_CallGlobal("MSUF_Castbars_InvalidateSettingsCache")
     MSUF_WipeTable(MSUF_DB)
     for k, v in pairs(tbl) do
         MSUF_DB[k] = MSUF_DeepCopy(v)
@@ -1666,6 +1670,7 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable, refreshStat
     if isActive and type(MSUF_DB) == "table" then
         -- Prefer wiping the active table ref (MSUF_DB) to avoid cache/reference drift.
         local target = MSUF_DB
+        MSUF_ProfileIO_CallGlobal("MSUF_Castbars_InvalidateSettingsCache")
         MSUF_WipeTable(target)
         for k, v in pairs(newTable) do
             target[k] = MSUF_DeepCopy(v)
