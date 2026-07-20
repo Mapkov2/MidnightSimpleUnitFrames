@@ -844,6 +844,12 @@ local function MSUF_ApplyBarGradient(frameOrTex, isPower)
  end
 local function MSUF_ApplyHPGradient(frameOrTex)  return MSUF_ApplyBarGradient(frameOrTex, false) end
 local function MSUF_ApplyPowerGradient(frameOrTex)  return MSUF_ApplyBarGradient(frameOrTex, true) end
+local function MSUF_RefreshPowerBorderOnShow(bar)
+    local apply = _G.MSUF_ApplyPowerBarBorder
+    if type(apply) == "function" then
+        apply(bar)
+    end
+end
 function _G.MSUF_ApplyPowerBarBorder(bar)
     if not bar then  return end
     local bdb = (MSUF_DB and MSUF_DB.bars) or nil
@@ -882,6 +888,10 @@ function _G.MSUF_ApplyPowerBarBorder(bar)
         border = F.CreateFrame('Frame', nil, bar, template)
         border:EnableMouse(false)
         bar._msufPowerBorder = border
+    end
+    if bar.HookScript and not bar._msufPowerBorderOnShowHooked then
+        bar._msufPowerBorderOnShowHooked = true
+        bar:HookScript("OnShow", MSUF_RefreshPowerBorderOnShow)
     end
     local barShown = (not bar.IsShown) or bar:IsShown()
     local frameLevel = (bar.GetFrameLevel and bar:GetFrameLevel() or 0) + 2

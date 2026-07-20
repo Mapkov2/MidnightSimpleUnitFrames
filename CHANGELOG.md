@@ -1,5 +1,24 @@
 # Changelog
 
+## 5.76 - 2026-07-20
+
+### Highlights
+
+- Added independent X/Y positioning for Castbar icons and duration text in Edit Mode for Player, Target, Focus, and Boss frames.
+- Added spell-specific Player channel tick markers with talent- and duration-aware layouts, custom-position support, and a five-marker fallback for unsupported spells.
+- Added a 100-200% zoom control for 2D Unit Frame portraits with matching live and preview rendering.
+- Added 11 bundled bar textures: Arcane Pulse, Aurora Silk, Deep Current, Dragon Scale, Ember Weave, Forged Steel, Frosted Quartz, Lucent, Lunar Mist, Obsidian Glass, and Runic Circuit.
+- Added an adjustable 0-5 second interrupt display duration for Player, Target, Focus, and Boss Castbars.
+
+### Import & Stability
+
+- Improved UUF imports to preserve right-side Castbar icons, non-default spell and duration text positions, additional HP-percentage tags, and combined name-and-level labels.
+- Fixed power-bar separator borders that could remain hidden until Edit Mode was opened.
+- Preserved the Player Castbar across active profile and UUF imports, including profiles that previously relied on Blizzard's Player Castbar fallback.
+- Stabilized ArcUI Essential Cooldown anchors across form and specialization changes, delayed addon loading, and protected combat transitions.
+- Fixed overlapping controls in the Portrait Border and Raid Grid sections of the options menu.
+- Kept channel marker updates event-driven with no recurring background polling.
+
 ## 5.75 - 2026-07-20
 
 ### Highlights

@@ -1,7 +1,9 @@
--- Contract smoke for the native-only UnhaltedUnitFrames V12.1 -> MSUF 5.7
+-- Contract smoke for the native-only UnhaltedUnitFrames V12.x -> MSUF 5.7
 -- converter. This test intentionally inspects converted data, not production
 -- implementation strings or importer-only runtime hooks.
 --
+-- Focused reader/widget probes at the end cover runtime contracts which the
+-- converted profile alone cannot exercise.
 -- Run from the repository root with Lua 5.1:
 --   lua tools/uuf_native_converter_smoke.lua
 
@@ -32,6 +34,7 @@ local LibDeflate = assert(LibStub:GetLibrary("MSUF-LibDeflate-Bounded"))
 
 local checks = 0
 local failures = {}
+local coverageSummary
 
 local function Describe(value)
     if type(value) == "string" then return string.format("%q", value) end
@@ -153,7 +156,11 @@ local function Finish()
             #failures, checks, table.concat(failures, "\n- ")
         ), 0)
     end
-    print(string.format("uuf_native_converter_smoke: OK (%d checks)", checks))
+    local suffix = coverageSummary and ("; " .. coverageSummary) or ""
+    print(string.format(
+        "uuf_native_converter_smoke: OK (%d checks%s)",
+        checks, suffix
+    ))
 end
 
 local function EncodeSerialized(serialized)
@@ -1072,6 +1079,109 @@ EqualAt(coloredCompactOutput, "targettarget.showHPText", true)
 EqualAt(coloredCompactOutput, "targettarget.textRight", "CURRENT")
 EqualAt(coloredCompactOutput, "targettarget.hpFontSize", 10)
 
+-- UUF owns five independent FontStrings. Preserve multiple health tags that
+-- share the same horizontal anchor by folding the later tag into a free MSUF
+-- slot instead of silently replacing the first one.
+local multiHealthOutput, multiHealthReport = assert(Import.Convert({
+    Units = {
+        player = {
+            Enabled = true,
+            Frame = {Width = 244, Height = 42},
+            Tags = Tags(
+                Tag("[perhp]", "TOPRIGHT", "TOPRIGHT", -3, -2, 12),
+                Tag("[curhp:abbr]", "BOTTOMRIGHT", "BOTTOMRIGHT", -3, 2, 12)
+            ),
+        },
+    },
+}, {}))
+EqualAt(multiHealthOutput, "player.textRight", "PERCENT")
+EqualAt(multiHealthOutput, "player.textCenter", "CURRENT")
+EqualAt(multiHealthOutput, "player.showHP", true)
+ReportContains(
+    multiHealthReport,
+    "mapped",
+    "additional UUF health tag uses a free native slot",
+    "same-side UUF health tags are retained"
+)
+
+-- A common target label combines class-coloured name and level in one UUF
+-- tag (for example "Caith | 86"). Map both native fields instead of dropping
+-- the entire composite because MSUF renders level separately.
+local nameLevelOutput, nameLevelReport = assert(Import.Convert({
+    Units = {
+        target = {
+            Enabled = true,
+            Tags = Tags(
+                Tag("[raidcolor][name] | [level]", "BOTTOM", "BOTTOM", 0, 3, 13)
+            ),
+        },
+    },
+}, {}))
+EqualAt(nameLevelOutput, "target.showName", true)
+EqualAt(nameLevelOutput, "target.nameClassColor", true)
+EqualAt(nameLevelOutput, "target.showLevelIndicator", true)
+EqualAt(nameLevelOutput, "target.levelIndicatorAnchor", "NAMERIGHT")
+EqualAt(nameLevelOutput, "target.levelIndicatorSize", 13)
+ReportContains(
+    nameLevelReport,
+    "approximated",
+    "combined UUF name/level text uses native name and level fields",
+    "combined target name/level is explicitly represented"
+)
+
+-- Per-tag health separators must survive the unit-default assignment that
+-- follows tag conversion.
+local tagSeparatorOutput = assert(Import.Convert({
+    Units = {
+        target = {
+            Enabled = true,
+            Tags = Tags(Tag("[curhp] | [perhp]", "RIGHT", "RIGHT", -3, 0, 12)),
+        },
+    },
+}, {}))
+EqualAt(tagSeparatorOutput, "target.hpTextSeparator", " | ")
+
+-- Compact UUF power bars have no complete native MSUF runtime contract.
+-- Reject the bar explicitly while preserving the rest of the compact unit.
+local compactPowerOutput, compactPowerReport = assert(Import.Convert({
+    Units = {
+        targettarget = {
+            Enabled = true,
+            PowerBar = {Enabled = true, Height = 4, Position = "BOTTOM"},
+        },
+    },
+}, {targettarget={showPowerBar=true}}))
+EqualAt(compactPowerOutput, "targettarget.showPowerBar", false)
+EqualAt(compactPowerOutput, "targettarget.powerBarHeight", 4)
+ReportContains(
+    compactPowerReport, "skipped", "no native compact-unit equivalent",
+    "compact UUF power bar is explicitly reported as unsupported"
+)
+
+-- Fold non-default UUF cast-text anchors into MSUF's fixed native text slots.
+-- This preserves the source edge for RIGHT-anchored spell names and LEFT-
+-- anchored duration text without adding a runtime dispatcher.
+local castAnchorOutput = assert(Import.Convert({
+    Units = {
+        target = {
+            Enabled = true,
+            Frame = {Width = 244, Height = 42},
+            CastBar = {
+                Enabled = true, Width = 244, Height = 24, MatchParentWidth = false,
+                Icon = {Enabled = true, Position = "LEFT"},
+                Text = {
+                    SpellName = {Enabled = true, FontSize = 12, MaxChars = 15, Layout = {"RIGHT", "RIGHT", -3, 0}},
+                    Duration = {Enabled = true, FontSize = 12, Layout = {"LEFT", "LEFT", 3, 0}},
+                },
+            },
+        },
+    },
+}, {}))
+NearAt(castAnchorOutput, "general.castbarTargetTextOffsetX", 99)
+NearAt(castAnchorOutput, "general.castbarTargetTextOffsetY", 0)
+NearAt(castAnchorOutput, "general.castbarTargetTimeOffsetX", -182.2)
+NearAt(castAnchorOutput, "general.castbarTargetTimeOffsetY", 0)
+
 -- Native-only invariant: no converter-private UUF key survives at any depth.
 local forbidden = {}
 local seen = {}
@@ -1802,6 +1912,380 @@ do
     _G.MSUF_HideDefaultFrames()
     Equal(_G.PlayerFrame.unregisters, 0, "Blizzard player is independent from MSUF enabled")
     Equal(_G.PlayerFrame.hidden, false, "Blizzard-only player remains visible")
+end
+
+-- Compact-unit power bars remain unsupported even if a legacy/imported
+-- profile contains a latent showPowerBar=true field. The separator refresh
+-- remains a one-shot visibility hook for the supported native power bars.
+do
+    LoadAddonFile("Foundation/MSUF_Util.lua", "MidnightSimpleUnitFrames", {})
+    Equal(_G.MSUF_CanonPowerBarUnitKey("targettarget"), nil, "targettarget has no power-bar key")
+    Equal(_G.MSUF_CanonPowerBarUnitKey("tot"), nil, "tot alias has no power-bar key")
+    Equal(_G.MSUF_CanonPowerBarUnitKey("focustarget"), nil, "focustarget has no power-bar key")
+    Equal(_G.MSUF_CanonPowerBarUnitKey("pet"), nil, "pet has no power-bar key")
+
+    _G.MSUF_DB = {
+        targettarget={showPowerBar=true},
+        focustarget={showPowerBar=true},
+        pet={showPowerBar=true},
+    }
+    Equal(_G.MSUF_ReadUnitPowerBarEnabled("targettarget"), true, "unsupported ToT keeps neutral reader fallback")
+    Equal(_G.MSUF_ReadUnitPowerBarEnabled("focustarget"), true, "unsupported focus-target keeps neutral reader fallback")
+    Equal(_G.MSUF_ReadUnitPowerBarEnabled("pet"), true, "unsupported pet keeps neutral reader fallback")
+
+    local mainFile = assert(io.open(addonRoot .. "/MidnightSimpleUnitFrames.lua", "rb"))
+    local mainSource = mainFile:read("*a")
+    mainFile:close()
+    Truthy(
+        not mainSource:find("wantsCompactPower", 1, true),
+        "compact showPowerBar cannot allocate a runtime widget"
+    )
+    Truthy(
+        mainSource:find('if unit == "player" or unit == "focus" or unit == "target" or isBossUnit then', 1, true),
+        "power-bar allocation remains limited to supported units"
+    )
+
+    local border
+    local hookCount = 0
+    local function NewBorder()
+        local value = {shown=false, level=0}
+        function value:EnableMouse() end
+        function value:Hide() self.shown = false end
+        function value:Show() self.shown = true end
+        function value:IsShown() return self.shown end
+        function value:SetFrameLevel(level) self.level = level end
+        function value:GetFrameLevel() return self.level end
+        function value:SetBackdrop() end
+        function value:SetBackdropBorderColor() end
+        function value:ClearAllPoints() end
+        function value:SetPoint() end
+        border = value
+        return value
+    end
+
+    local runtimeNs = {
+        Cache={F={CreateFrame=NewBorder}},
+        Bars={
+            _ApplyAbsorbOverlayColor=function() end,
+            _ApplyHealAbsorbOverlayColor=function() end,
+            _ResetBarZero=function() end,
+        },
+    }
+    LoadAddonFile("Core/MSUF_Bars.lua", "MidnightSimpleUnitFrames", runtimeNs)
+
+    _G.MSUF_DB = {bars={}, target={powerBarBorderEnabled=true, powerBarBorderThickness=1}}
+    _G.MSUF_ReadUnitPowerBarBorderEnabled = function() return true end
+    _G.MSUF_ReadUnitPowerBarBorderThickness = function() return 1 end
+    _G.MSUF_Snap = function(_, size) return size end
+
+    local owner = {msufConfigKey="target"}
+    local bar = {shown=false, level=3}
+    function bar:GetParent() return owner end
+    function bar:IsShown() return self.shown end
+    function bar:GetFrameLevel() return self.level end
+    function bar:HookScript(kind, callback)
+        Equal(kind, "OnShow", "power border hook event")
+        hookCount = hookCount + 1
+        self.onShow = callback
+    end
+
+    _G.MSUF_ApplyPowerBarBorder(bar)
+    Equal(hookCount, 1, "one shared first-show hook")
+    Equal(border and border.shown, false, "hidden power bar keeps separator hidden")
+    bar.shown = true
+    bar.onShow(bar)
+    Equal(border.shown, true, "first bar show refreshes separator")
+    _G.MSUF_ApplyPowerBarBorder(bar)
+    Equal(hookCount, 1, "reapply does not duplicate OnShow hook")
+end
+
+-- Exhaustive regression matrix for every UUF 12.x input dimension which the
+-- native MSUF importer promises to support. Earlier sections validate rich
+-- real-profile fixtures and integration boundaries; this matrix makes the
+-- cartesian unit/tag/anchor contract explicit so adding or dropping a unit,
+-- tag form, icon side, or anchor cannot silently reduce coverage.
+do
+    local unitKeys = {"player", "targettarget", "target", "focus", "focustarget", "pet", "boss"}
+    local tagCases = {
+        {"name", "[name]", { ["target.showName"]=true, ["target.nameTextAnchor"]="RIGHT" }},
+        {"dynamic name", "[raidcolor][name]", {
+            ["target.showName"]=true, ["target.nameClassColor"]=true, ["target.npcNameRed"]=true,
+        }},
+        {"short name", "[name:short:9]", {
+            ["target.showName"]=true, ["target.nameShortenEnabled"]=true,
+            ["target.shortenNameMaxChars"]=9,
+        }},
+        {"level", "[level]", {
+            ["target.showLevelIndicator"]=true, ["target.levelIndicatorAnchor"]="RIGHT",
+        }},
+        {"status", "[status]", {
+            ["target.statusTextEnabled"]=true, ["target.statusTextAnchor"]="RIGHT",
+        }},
+        {"current health", "[curhp]", { ["target.textRight"]="CURRENT" }},
+        {"abbreviated current health", "[curhp:abbr]", { ["target.textRight"]="CURRENT" }},
+        {"maximum health", "[maxhp]", { ["target.textRight"]="MAX" }},
+        {"colored abbreviated maximum health", "[maxhp:abbr:colour]", { ["target.textRight"]="MAX" }},
+        {"missing health", "[missinghp]", { ["target.textRight"]="DEFICIT" }},
+        {"health percent", "[perhp]", { ["target.textRight"]="PERCENT" }},
+        {"signed health percent", "[perhp-with-sign]", { ["target.textRight"]="PERCENT" }},
+        {"precise health percent", "[perhp:3]", { ["target.textRight"]="PERCENT" }},
+        {"current and percent health", "[curhpperhp:abbr]", { ["target.textRight"]="CURPERCENT" }},
+        {"precise current and percent health", "[curhpperhp:2]", { ["target.textRight"]="CURPERCENT" }},
+        {"current power", "[curpp]", { ["target.powerTextRight"]="CURRENT" }},
+        {"colored abbreviated current power", "[powercolor][curpp:abbr]", {
+            ["target.powerTextRight"]="CURRENT", ["target.colorPowerTextByType"]=true,
+        }},
+        {"maximum power", "[maxpp]", { ["target.powerTextRight"]="MAX" }},
+        {"abbreviated maximum power", "[maxpp:abbr]", { ["target.powerTextRight"]="MAX" }},
+        {"power percent", "[perpp]", { ["target.powerTextRight"]="PERCENT" }},
+        {"precise power percent", "[perpp:3]", { ["target.powerTextRight"]="PERCENT" }},
+        {"conditional mana percent", "[curpp:manapercent:2]", { ["target.powerTextRight"]="PERCENT" }},
+        {"healer mana percent", "[curpp:manapercent:healer:2]", { ["target.powerTextRight"]="PERCENT" }},
+        {"health composite", "[curhp] | [perhp]", {
+            ["target.textRight"]="CURPERCENT", ["target.hpTextSeparator"]=" | ",
+        }},
+        {"name health composite", "[name] | [curhp]", {
+            ["target.showName"]=true, ["target.showHPText"]=true, ["target.textRight"]="CURRENT",
+        }},
+        {"health name composite", "[curhp] | [name]", {
+            ["target.showName"]=true, ["target.showHPText"]=true, ["target.textRight"]="CURRENT",
+        }},
+        {"name level composite", "[name:colour] | [level]", {
+            ["target.showName"]=true, ["target.nameClassColor"]=true,
+            ["target.showLevelIndicator"]=true, ["target.levelIndicatorAnchor"]="NAMERIGHT",
+        }},
+        {"level name composite", "[level] | [name]", {
+            ["target.showName"]=true, ["target.showLevelIndicator"]=true,
+            ["target.levelIndicatorAnchor"]="NAMELEFT",
+        }},
+        {"inline target name", "[name] [name:target:colour]", {
+            ["target.showName"]=true, ["targettarget.showToTInTargetName"]=true,
+            ["targettarget.totInlineColorMode"]="TOT_NAME",
+        }},
+        {"standalone target name", "[name:target:colour]", {
+            ["targettarget.showToTInTargetName"]=true,
+            ["targettarget.totInlineColorMode"]="TOT_NAME",
+        }},
+        {"missing power report", "[missingpp]", {}, "missing-power text has no native power-text mode"},
+        {"absorb text report", "[absorbs]", {}, "absorb amount text has no native unit text slot"},
+        {"unsupported composite report", "[name]-[status]", {}, "unsupported composite UUF tag"},
+    }
+
+    local unitCases = 0
+    for index = 1, #unitKeys do
+        local unitKey = unitKeys[index]
+        local width, height = 180 + index, 30 + index
+        local base = {[unitKey]={nativeSentinel={keep=unitKey}}}
+        local baseBefore = DeepCopy(base)
+        local converted, unitReport = assert(Import.Convert({
+            General={Range={Enabled=true, InRange=1, OutOfRange=0.5}},
+            Units={
+                [unitKey]={
+                    Enabled=true,
+                    Frame={Width=width, Height=height, Layout={"CENTER", "CENTER", index, -index}},
+                    HealthBar={
+                        Inverse=true, Smooth=true, ForegroundOpacity=0.8, BackgroundOpacity=0.3,
+                    },
+                    PowerBar={Enabled=true, Height=4 + index, Position="BOTTOM", Smooth=true},
+                    Tags=Tags(
+                        Tag("[raidcolor][name]", "LEFT", "LEFT", 3, 0, 11),
+                        Tag("[curhp:abbr]", "RIGHT", "RIGHT", -3, 0, 12),
+                        Tag("[perhp]", "RIGHT", "RIGHT", -3, 0, 13),
+                        Tag("[powercolor][curpp:abbr]", "LEFT", "BOTTOMLEFT", 2, 0, 10),
+                        Tag("[perpp]", "RIGHT", "BOTTOMRIGHT", -2, 0, 9)
+                    ),
+                },
+            },
+        }, base))
+        unitCases = unitCases + 1
+        Equal(converted[unitKey].enabled, true, unitKey .. " matrix enabled")
+        Equal(converted[unitKey].width, width, unitKey .. " matrix width")
+        Equal(converted[unitKey].height, height, unitKey .. " matrix height")
+        Equal(converted[unitKey].reverseFillBars, true, unitKey .. " matrix health reverse")
+        Equal(converted[unitKey].smoothFill, true, unitKey .. " matrix health smoothing")
+        local compactUnit = unitKey == "targettarget" or unitKey == "focustarget" or unitKey == "pet"
+        Equal(converted[unitKey].showPowerBar, not compactUnit, unitKey .. " matrix native power support")
+        Equal(converted[unitKey].powerBarHeight, 4 + index, unitKey .. " matrix power height")
+        Equal(converted[unitKey].powerSmoothFill, true, unitKey .. " matrix power smoothing")
+        Equal(converted[unitKey].showName, true, unitKey .. " matrix name")
+        Equal(converted[unitKey].nameClassColor, true, unitKey .. " matrix dynamic name color")
+        if compactUnit then
+            ReportContains(
+                unitReport, "skipped", "no native compact-unit equivalent",
+                unitKey .. " matrix reports unsupported power bar"
+            )
+        end
+        Equal(converted[unitKey].textRight, "CURRENT", unitKey .. " matrix primary HP tag")
+        Equal(converted[unitKey].textCenter, "PERCENT", unitKey .. " matrix same-side HP fallback")
+        Equal(converted[unitKey].powerTextLeft, "CURRENT", unitKey .. " matrix current power tag")
+        Equal(converted[unitKey].powerTextRight, "PERCENT", unitKey .. " matrix percent power tag")
+        Equal(At(converted, unitKey .. ".nativeSentinel.keep"), unitKey, unitKey .. " native sentinel survives")
+        Truthy(DeepEqual(base, baseBefore), unitKey .. " base remains immutable")
+    end
+    Equal(unitCases, #unitKeys, "100% individual-unit contract coverage")
+
+    for index = 1, #tagCases do
+        local case = tagCases[index]
+        local converted, report = assert(Import.Convert({
+            Units={target={
+                Frame={Width=244, Height=42},
+                PowerBar={Enabled=true, Height=3},
+                Tags=Tags(Tag(case[2], "RIGHT", "RIGHT", -3, 0, 13)),
+            }},
+        }, {}))
+        for path, expected in pairs(case[3]) do
+            Equal(At(converted, path), expected, "tag contract " .. case[1] .. ": " .. path)
+        end
+        if case[4] then
+            ReportContains(report, "skipped", case[4], "tag contract report " .. case[1])
+        else
+            Truthy(type(report) == "table", "tag contract report exists " .. case[1])
+        end
+    end
+
+    local groupSources = {
+        party={
+            Enabled=true,
+            Frame={Width=201, Height=51, Layout={"CENTER", "CENTER", -400, 20, 2}, GrowthDirection="RIGHT", ShowPlayer=true},
+            HealthBar={Inverse=true, Smooth=true, ForegroundOpacity=0.75, BackgroundOpacity=0.25},
+            PowerBar={Enabled=true, Height=5, OnlyShowHealers=false, Smooth=true},
+            Tags=Tags(
+                Tag("[name]", "LEFT", "LEFT", 3, 0, 11),
+                Tag("[curhp]", "RIGHT", "RIGHT", -3, 0, 12),
+                Tag("[perpp]", "CENTER", "CENTER", 0, 0, 10)
+            ),
+        },
+        raid={
+            Enabled=true,
+            Frame={
+                Width=91, Height=49, Layout={"LEFT", "LEFT", 11, 12, 3},
+                GrowthDirection="DOWN_RIGHT", Groups={true, true, true, true, false, false, false, false},
+            },
+            HealthBar={Inverse=true, Smooth=true, ForegroundOpacity=0.7, BackgroundOpacity=0.2},
+            PowerBar={Enabled=true, Height=4, OnlyShowHealers=false, Smooth=true},
+            Tags=Tags(
+                Tag("[name]", "LEFT", "LEFT", 3, 0, 11),
+                Tag("[curhp]", "RIGHT", "RIGHT", -3, 0, 12),
+                Tag("[perpp]", "CENTER", "CENTER", 0, 0, 10)
+            ),
+        },
+    }
+    local groupOutput = assert(Import.Convert({Units=groupSources}, {}))
+    local groupContracts = {
+        {"gf_party", 201, 51, 0.75, 0.25},
+        {"gf_raid", 91, 49, 0.7, 0.2},
+        {"gf_mythicraid", 91, 49, 0.7, 0.2},
+    }
+    for index = 1, #groupContracts do
+        local contract = groupContracts[index]
+        local key = contract[1]
+        EqualAt(groupOutput, key .. ".enabled", true)
+        EqualAt(groupOutput, key .. ".width", contract[2])
+        EqualAt(groupOutput, key .. ".height", contract[3])
+        EqualAt(groupOutput, key .. ".reverseFill", true)
+        EqualAt(groupOutput, key .. ".smoothFill", true)
+        NearAt(groupOutput, key .. ".hpBarAlpha", contract[4])
+        NearAt(groupOutput, key .. ".hpBgAlpha", contract[5])
+        EqualAt(groupOutput, key .. ".powerBarEnabled", true)
+        EqualAt(groupOutput, key .. ".powerSmoothFill", true)
+        EqualAt(groupOutput, key .. ".showName", true)
+        EqualAt(groupOutput, key .. ".textRight", "CURRENT")
+        EqualAt(groupOutput, key .. ".powerTextCenter", "PERCENT")
+    end
+
+    local fractions = {
+        TOPLEFT={-0.5, 0.5}, TOP={0, 0.5}, TOPRIGHT={0.5, 0.5},
+        LEFT={-0.5, 0}, CENTER={0, 0}, RIGHT={0.5, 0},
+        BOTTOMLEFT={-0.5, -0.5}, BOTTOM={0, -0.5}, BOTTOMRIGHT={0.5, -0.5},
+    }
+    local anchorPoints = {
+        "TOPLEFT", "TOP", "TOPRIGHT", "LEFT", "CENTER", "RIGHT",
+        "BOTTOMLEFT", "BOTTOM", "BOTTOMRIGHT",
+    }
+    local castUnits = {
+        player={"castbarPlayerTextOffsetX", "castbarPlayerTextOffsetY", "castbarPlayerTimeOffsetX", "castbarPlayerTimeOffsetY", "castbarPlayerIconOffsetX"},
+        target={"castbarTargetTextOffsetX", "castbarTargetTextOffsetY", "castbarTargetTimeOffsetX", "castbarTargetTimeOffsetY", "castbarTargetIconOffsetX"},
+        focus={"castbarFocusTextOffsetX", "castbarFocusTextOffsetY", "castbarFocusTimeOffsetX", "castbarFocusTimeOffsetY", "castbarFocusIconOffsetX"},
+        boss={"bossCastTextOffsetX", "bossCastTextOffsetY", "bossCastTimeOffsetX", "bossCastTimeOffsetY", "bossCastIconOffsetX"},
+    }
+    local castOrder = {"player", "target", "focus", "boss"}
+    local iconSides = {"LEFT", "RIGHT"}
+
+    local function ExpectedFold(layout, frameWidth, frameHeight, selfWidth, selfHeight,
+        nativeSelf, nativeRelative, nativeWidth, nativeHeight, padX, padY)
+        local sourceSelf = fractions[layout[1]]
+        local sourceRelative = fractions[layout[2]]
+        local nativeSelfFraction = fractions[nativeSelf]
+        local nativeRelativeFraction = fractions[nativeRelative]
+        local desiredX = sourceRelative[1] * frameWidth + layout[3] - sourceSelf[1] * selfWidth
+        local desiredY = sourceRelative[2] * frameHeight + layout[4] - sourceSelf[2] * selfHeight
+        local nativeX = nativeRelativeFraction[1] * nativeWidth - nativeSelfFraction[1] * selfWidth
+        local nativeY = nativeRelativeFraction[2] * nativeHeight - nativeSelfFraction[2] * selfHeight
+        return desiredX - nativeX - padX, desiredY - nativeY - padY
+    end
+
+    local castCases = 0
+    for unitIndex = 1, #castOrder do
+        local unitKey = castOrder[unitIndex]
+        local keys = castUnits[unitKey]
+        for sideIndex = 1, #iconSides do
+            local iconSide = iconSides[sideIndex]
+            for selfIndex = 1, #anchorPoints do
+                local selfPoint = anchorPoints[selfIndex]
+                for relativeIndex = 1, #anchorPoints do
+                    local relativePoint = anchorPoints[relativeIndex]
+                    local width, height, iconSize = 211, 23, 21
+                    local sourceStatusWidth = width - 2 - iconSize
+                    local nativeStatusWidth = width - 2 - (iconSide == "LEFT" and iconSize or 0)
+                    local statusHeight = height - 2
+                    local nameFontSize, timeFontSize = 13, 11
+                    local nameWidth = 17 * (nameFontSize * 0.60) + 6
+                    local timeWidth = 4 * (timeFontSize * 0.60) + 6
+                    local nameLayout = {selfPoint, relativePoint, 7, -5}
+                    local timeLayout = {selfPoint, relativePoint, -6, 4}
+                    local expectedNameX, expectedNameY = ExpectedFold(
+                        nameLayout, sourceStatusWidth, statusHeight, nameWidth, nameFontSize,
+                        "LEFT", "LEFT", nativeStatusWidth, statusHeight, unitKey == "boss" and 2 or 4, 0
+                    )
+                    local expectedTimeX, expectedTimeY = ExpectedFold(
+                        timeLayout, sourceStatusWidth, statusHeight, timeWidth, timeFontSize,
+                        "RIGHT", "RIGHT", nativeStatusWidth, statusHeight, 0, 0
+                    )
+                    local converted = assert(Import.Convert({Units={
+                        [unitKey]={
+                            Frame={Width=233, Height=47},
+                            CastBar={
+                                Enabled=true, Width=width, Height=height, MatchParentWidth=false,
+                                Icon={Enabled=true, Position=iconSide},
+                                Text={
+                                    SpellName={Enabled=true, FontSize=nameFontSize, MaxChars=17, Layout=nameLayout},
+                                    Duration={Enabled=true, FontSize=timeFontSize, Layout=timeLayout},
+                                },
+                            },
+                        },
+                    }}, {}))
+                    local general = converted.general
+                    local label = unitKey .. " " .. iconSide .. " " .. selfPoint .. "->" .. relativePoint
+                    Near(general[keys[1]], expectedNameX, "cast name X " .. label)
+                    Near(general[keys[2]], expectedNameY, "cast name Y " .. label)
+                    Near(general[keys[3]], expectedTimeX, "cast time X " .. label)
+                    Near(general[keys[4]], expectedTimeY, "cast time Y " .. label)
+                    Equal(general[keys[5]], iconSide == "RIGHT" and 189 or 0, "cast icon X " .. label)
+                    castCases = castCases + 1
+                end
+            end
+        end
+    end
+    local expectedCastCases = #castOrder * #iconSides * #anchorPoints * #anchorPoints
+    Equal(castCases, expectedCastCases, "100% castbar anchor/icon cartesian coverage")
+    Equal(#tagCases, 33, "supported tag contract manifest size")
+    Equal(#groupContracts, 3, "100% native group destination coverage")
+
+    coverageSummary = string.format(
+        "supported matrix 100%% (%d/%d units, %d/%d tag forms, %d/%d cast combinations, %d/%d group destinations)",
+        unitCases, #unitKeys, #tagCases, #tagCases,
+        castCases, expectedCastCases, #groupContracts, 3
+    )
 end
 
 Finish()
