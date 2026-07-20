@@ -19,6 +19,24 @@ local function NormalizePortraitRender(render)
     return "2D"
 end
 
+local function NormalizePortraitZoom(value)
+    value = tonumber(value) or 100
+    -- Accept the older 1.0-2.0 representation if imported from another addon.
+    if value > 1 and value <= 2 then value = value * 100 end
+    if value < 100 then return 100 end
+    if value > 200 then return 200 end
+    return value
+end
+
+local function Apply2DPortraitTexCoords(portrait, conf, baseInset)
+    if not (portrait and portrait.SetTexCoord) then return end
+    baseInset = tonumber(baseInset) or 0.1
+    local baseSpan = 1 - (baseInset * 2)
+    local span = baseSpan * (100 / NormalizePortraitZoom(conf and conf.portraitZoom))
+    local inset = (1 - span) * 0.5
+    portrait:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
+end
+
 local function IsPortraitModeActive(conf)
     if type(conf) ~= "table" then return false end
     local pm = conf.portraitMode
@@ -56,7 +74,7 @@ local function ApplyBossPreviewPortraitTexture(portrait, conf, render)
         end
     end
 
-    if portrait.SetTexCoord then portrait:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+    Apply2DPortraitTexCoords(portrait, conf, 0.08)
     if portrait.SetTexture then portrait:SetTexture("Interface\\ICONS\\Achievement_Boss_LichKing") end
 end
 
@@ -133,6 +151,7 @@ local function UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
 
     local mode = conf.portraitMode or "OFF"
     local render = NormalizePortraitRender(conf.portraitRender)
+    local zoom = NormalizePortraitZoom(conf.portraitZoom)
     local portrait = f.portrait
 
     local classStyle = conf.portraitClassStyle or "BLIZZARD"
@@ -147,6 +166,10 @@ local function UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
     if f._msufPortraitModeStamp ~= mode then
         f._msufPortraitModeStamp = mode
         if mode ~= "OFF" then f._msufPortraitDirty = true; f._msufPortraitNextAt = 0 end
+    end
+    if f._msufPortraitZoomStamp ~= zoom then
+        f._msufPortraitZoomStamp = zoom
+        if mode ~= "OFF" and render ~= "CLASS" then f._msufPortraitDirty = true; f._msufPortraitNextAt = 0 end
     end
 
     if mode == "OFF" then
@@ -189,7 +212,7 @@ local function UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
             elseif render == "CLASS" then
                 ApplyClassPortraitTexture(portrait, unit, conf, existsForPortrait)
             else
-                if portrait.SetTexCoord then portrait:SetTexCoord(0.1, 0.9, 0.1, 0.9) end
+                Apply2DPortraitTexCoords(portrait, conf, 0.1)
                 if existsForPortrait and SetPortraitTexture then
                     SetPortraitTexture(portrait, unit)
                 elseif portrait.SetTexture then

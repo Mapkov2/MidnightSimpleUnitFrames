@@ -179,6 +179,7 @@ local PORTRAIT_STYLE_DEFAULTS = {
     portraitSizeOverride = 0,
     portraitOffsetX = 0,
     portraitOffsetY = 0,
+    portraitZoom = 100,
     portraitBorderStyle = "NONE",
     portraitBorderThickness = 2,
     portraitBorderColorR = 1,
@@ -3224,7 +3225,12 @@ function Preview.Refresh(box, reason)
             mock.portrait.tex:SetTexture(UnitPreviewPortraitTexture(key, data))
             if mock.portrait.tex.SetVertexColor then mock.portrait.tex:SetVertexColor(1, 1, 1, 1) end
             if mock.portrait.tex.SetTexCoord then
-                mock.portrait.tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+                local zoom = tonumber(PortraitStyleGet(key, "portraitZoom", 100)) or 100
+                if zoom > 1 and zoom <= 2 then zoom = zoom * 100 end
+                if zoom < 100 then zoom = 100 elseif zoom > 200 then zoom = 200 end
+                local span = 0.84 * (100 / zoom)
+                local inset = (1 - span) * 0.5
+                mock.portrait.tex:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
             end
             mock.portrait.initial:Hide()
         end
