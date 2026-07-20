@@ -6,6 +6,20 @@
 
 local addonName, ns = ...
 
+-- Resolve the saved duration only when interrupt feedback starts. This keeps
+-- the normal cast update path free of additional work and makes live setting
+-- changes effective without reloading the Castbars addon.
+function _G.MSUF_GetInterruptFeedbackDuration()
+  local general = _G.MSUF_DB and _G.MSUF_DB.general
+  local duration = general and tonumber(general.castbarInterruptFeedbackDuration)
+  if type(duration) ~= "number" then
+    duration = tonumber(_G.MSUF_INTERRUPT_FEEDBACK_DURATION) or 0.5
+  end
+  if duration < 0 then return 0 end
+  if duration > 5 then return 5 end
+  return duration
+end
+
 -- =====================================================================
 -- 12.0 SetTimerDuration helper (NO global hook)
 --

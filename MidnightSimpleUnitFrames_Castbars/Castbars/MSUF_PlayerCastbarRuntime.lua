@@ -284,7 +284,6 @@ local function MSUF_GetInterruptFeedbackColor()
 
     return 0.8, 0.1, 0.1, 1
 end
-local MSUF_PLAYER_INTERRUPT_FEEDBACK_DURATION = (_G.MSUF_INTERRUPT_FEEDBACK_DURATION or 0.5)
 
 local function MSUF_PlayerCastbar_HideIfNoLongerCasting(timer)
     local self = timer and timer.msuCastbarFrame
@@ -365,7 +364,9 @@ local function MSUF_PlayerCastbar_ShowInterruptFeedback(self, label)
     self._msufActiveSpellID = nil
     self._msufActiveCastBarID = nil
     self._msufChanNilSince = nil
-    self.interruptFeedbackEndTime = GetTime() + MSUF_PLAYER_INTERRUPT_FEEDBACK_DURATION
+    local getFeedbackDuration = _G.MSUF_GetInterruptFeedbackDuration
+    local grace = type(getFeedbackDuration) == "function" and getFeedbackDuration() or 0.5
+    self.interruptFeedbackEndTime = GetTime() + grace
 
     -- Phase 2A: Use shared interrupt bar visuals (replaces ~25 lines of inline setup).
     local rf = _G.MSUF_GetReverseFillSafe and _G.MSUF_GetReverseFillSafe(self, false) or false
@@ -376,10 +377,6 @@ local function MSUF_PlayerCastbar_ShowInterruptFeedback(self, label)
         reverseFill = rf,
         label = label or INTERRUPTED,
     })
-
-    local grace = MSUF_PLAYER_INTERRUPT_FEEDBACK_DURATION
-    if type(grace) ~= 'number' then grace = 0.5 end
-    if grace < 0 then grace = 0 end
 
     self.hideTimer = C_Timer.NewTimer(grace, MSUF_PlayerCastbar_HideIfNoLongerCasting)
     self.hideTimer.msuCastbarFrame = self

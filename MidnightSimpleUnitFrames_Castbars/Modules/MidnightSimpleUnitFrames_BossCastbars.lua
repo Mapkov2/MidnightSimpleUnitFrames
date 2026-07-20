@@ -33,6 +33,11 @@ local Boss_UnregisterBestDriver
 local MSUF_BOSS_INTERRUPT_FEEDBACK_DURATION = 0.5
 
 local function MSUF_GetInterruptFeedbackGrace()
+    local resolve = _G.MSUF_GetInterruptFeedbackDuration
+    if type(resolve) == "function" then
+        return resolve()
+    end
+
     -- Preferred global: shared with the main castbar driver.
     local g = _G.MSUF_INTERRUPT_FEEDBACK_DURATION
     if type(g) == "number" and g > 0 then
