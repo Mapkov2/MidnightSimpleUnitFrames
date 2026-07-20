@@ -32,7 +32,7 @@ local function BuildText(ctx, builder, unit)
         return ReviewedMeta(ctx, path, "setting", "dynamic",
             "This control targets the HP or power text slot selected in the slot editor.")
     end
-    local sec = builder:CollapsibleSection("text", "Text", 820, false)
+    local sec = builder:CollapsibleSection("text", "Text", 620, false)
     sec._msuf2CollapsibleBadgesOnlyWhenOpen = true
     do
         -- Edit Mode can request that Menu2 opens directly on the text section/component the
@@ -411,6 +411,7 @@ local function BuildText(ctx, builder, unit)
             meta.step, meta.roundStep = 1, true
             return meta
         end)())
+    local SLOT_VALUES = VT("left", "Left slot", "center", "Center slot", "right", "Right slot")
     local ABSORB_STYLE_VALUES = VT("off", "Off", "value", "+ Value", "icon", "|TInterface\\Icons\\INV_Shield_06:14|t + Value")
     local HP_BASE_MODES = UnitSectionShared.HealthBaseModeValues(HP_MODES)
     local function BuildValueTextTab(kind, tab, cfg)
@@ -422,7 +423,7 @@ local function BuildText(ctx, builder, unit)
             return type(cfg.fullValueShortDefault) == "function" and cfg.fullValueShortDefault() == true or cfg.fullValueShortDefault == true
         end
         local hasAbsorb = cfg.absorbIconKey ~= nil
-        local contentHeight = hasAbsorb and 520 or 474
+        local contentHeight = hasAbsorb and 430 or 370
         local content = TextCard(tab, nil, nil, leftX, -4, cardW, contentHeight)
         local _, previewValue = PreviewText(content, cfg.preview, 16, -54, cardW - 32)
         controls.preview = previewValue
@@ -458,36 +459,18 @@ local function BuildText(ctx, builder, unit)
                 T.PlayNeonFlash(controls.fullValueShort, "info", { alpha = 0.26, duration = 0.85 })
             end
         end
-        local function SlotSummary(slot)
-            local spec = cfg.slots[slot]
-            local mode = ReadSlot(unit, spec.key, cfg.legacyKey, spec.default)
-            local baseMode = hasAbsorb and UnitSectionShared.HealthBaseMode(mode) or mode
-            local summary = OptionText(cfg.baseModes or cfg.modes, baseMode)
-            if hasAbsorb and UnitSectionShared.HealthModeHasAbsorb(mode) then
-                local icon = ReadText(unit, spec.absorbIconKey, ReadText(unit, cfg.absorbIconKey, false)) == true
-                summary = summary .. "  + " .. (icon and (absorbIconMarkup .. " ") or "") .. "Absorb"
-            end
-            return summary
-        end
-        local accordion = UnitSectionShared.TextSlotAccordion(content, {
-            selected = CurrentSlot(kind), x = 16, y = -92, width = cardW - 32,
-            bodyHeight = hasAbsorb and 154 or 108,
-            summary = SlotSummary,
-            onSelect = function(slot)
-                SetCurrentSlot(kind, slot)
-                FocusPreviewText(kind, slot, true)
+        controls.slot = W.Segment(content, "Text slots", SLOT_VALUES, cardW - 32)
+        W.MoveWidget(controls.slot, content, 16, -92, cardW - 32, "LEFT")
+        M.BindSegment(ctx, controls.slot,
+            function() return CurrentSlot(kind) end,
+            function(v)
+                SetCurrentSlot(kind, v)
+                FocusPreviewText(kind, v, true)
                 if M.RequestRefresh then M.RequestRefresh(ctx, "unit-text-slot") elseif M.Refresh then M.Refresh(ctx) end
             end,
-        })
-        controls.left, controls.center, controls.right = accordion.buttons.left, accordion.buttons.center, accordion.buttons.right
-        controls.RefreshAccordion = function() accordion:SetSelected(CurrentSlot(kind), true) end
-        for _, slot in ipairs({ "left", "center", "right" }) do
-            RegisterControl(accordion.buttons[slot], ctx, "text." .. kind .. ".slot_selector." .. slot,
-                (slot:sub(1, 1):upper() .. slot:sub(2)) .. " slot", "button", "ephemeral")
-        end
-        local editorY = accordion.editorY
+            ControlMeta(ctx, "text." .. kind .. ".slot_selector", "ephemeral"))
         controls.mode = W.Dropdown(content, cfg.valueLabel or "Value", cfg.baseModes or cfg.modes, 260)
-        PlaceDropdown(content, controls.mode, 32, editorY, cardW - 64)
+        PlaceDropdown(content, controls.mode, 16, -154, cardW - 32)
         M.BindDropdownWidget(ctx, controls.mode,
             function()
                 local mode = CurrentMode()
@@ -504,8 +487,8 @@ local function BuildText(ctx, builder, unit)
             end,
             SelectedSlotMeta("text." .. kind .. ".slot.mode"))
         if hasAbsorb then
-            controls.absorb = W.Segment(content, "Absorb", ABSORB_STYLE_VALUES, cardW - 64)
-            W.MoveWidget(controls.absorb, content, 32, editorY - 62, cardW - 64, "LEFT")
+            controls.absorb = W.Segment(content, "Absorb", ABSORB_STYLE_VALUES, cardW - 32)
+            W.MoveWidget(controls.absorb, content, 16, -216, cardW - 32, "LEFT")
             M.BindSegment(ctx, controls.absorb,
                 function()
                     if not UnitSectionShared.HealthModeHasAbsorb(CurrentMode()) then return "off" end
@@ -522,8 +505,8 @@ local function BuildText(ctx, builder, unit)
                 end,
                 SelectedSlotMeta("text." .. kind .. ".slot.absorb"))
         end
-        local hidePercentY = editorY - (hasAbsorb and 124 or 62)
-        controls.hidePercent = SwitchOrToggle(content, "Hide % sign", 32, hidePercentY, cardW - 64)
+        local hidePercentY = hasAbsorb and -278 or -216
+        controls.hidePercent = SwitchOrToggle(content, "Hide % sign", 16, hidePercentY, cardW - 32)
         M.BindBoolWidget(ctx, controls.hidePercent,
             function()
                 local spec = SelectedSlotSpec()
@@ -579,7 +562,7 @@ local function BuildText(ctx, builder, unit)
             end
             controls.preview:SetText(#parts > 0 and table.concat(parts, "  ") or "(none)")
         end
-        local formattingY = accordion.bottomY - 16
+        local formattingY = hasAbsorb and -310 or -248
         W.Text(content, "Formatting", 16, formattingY, cardW - 32, T.colors.text)
         controls.separator = W.Dropdown(content, "Delimiter", SEPARATORS, 160)
         PlaceDropdown(content, controls.separator, 16, formattingY - 28, halfDropdownW)
@@ -754,7 +737,7 @@ local function BuildText(ctx, builder, unit)
     })
     local powerManagedNotice, powerManagedNoticeButton
     if UnitSectionShared.CreateSectionNotice then
-        local notice, _, button = UnitSectionShared.CreateSectionNotice(powerTab, -690, "Class Resources", 126)
+        local notice, _, button = UnitSectionShared.CreateSectionNotice(powerTab, -470, "Class Resources", 126)
         powerManagedNotice, powerManagedNoticeButton = notice, button
     end
     if powerManagedNoticeButton then
@@ -800,8 +783,6 @@ local function BuildText(ctx, builder, unit)
         local powerOn = PowerTextShown()
         local powerManaged = IsPlayerPowerManagedByClassResources and IsPlayerPowerManagedByClassResources(unit)
         if namePreviewValue and namePreviewValue.SetText then namePreviewValue:SetText(NamePreviewText()) end
-        if hpControls.RefreshAccordion then hpControls.RefreshAccordion() end
-        if powerControls.RefreshAccordion then powerControls.RefreshAccordion() end
         if hpControls.RefreshPreview then hpControls.RefreshPreview() end
         if powerControls.RefreshPreview then powerControls.RefreshPreview() end
         UpdateTextHeaderBadges(tab, nameOn, hpOn, powerOn)
@@ -833,9 +814,9 @@ if type(UP.RegisterSection) == "function" then
     UP.RegisterSection({
         id = "text",
         title = "Text",
-        -- Tab content starts 64px below the body and reaches 688px down.
+        -- Tab content starts 64px below the body and reaches 518px down.
         -- Preserve a 36px bottom inset for the card surface/shadow.
-        height = 818,
+        height = 618,
         placement = "after_auras",
         order = 10,
         build = BuildText,

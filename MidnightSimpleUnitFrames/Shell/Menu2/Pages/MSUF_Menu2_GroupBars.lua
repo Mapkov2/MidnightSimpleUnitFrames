@@ -175,7 +175,7 @@ local function BuildGFResourceBarSection(ctx, b)
 end
 
 local function BuildGFTextSection(ctx, b)
-    local text = b:CollapsibleSection("text", "Text", 790, false)
+    local text = b:CollapsibleSection("text", "Text", 618, false)
     text._msuf2CollapsibleBadgesOnlyWhenOpen = true
     local textW = text._msuf2Width or b.width or 720
     local textLeftX = 24
@@ -453,12 +453,13 @@ local function BuildGFTextSection(ctx, b)
     local nameY = ScopeSlider(ctx, namePosition, "Y Offset", -100, 100, 1, textSliderW, "nameOffsetY", 0, "font", 16, -174, textCardW - 72)
     local nameAppearance = TextCard(nameTab, "Appearance", nil, textRightX, -4, textRightW, 150)
     local nameSize = ScopeSlider(ctx, nameAppearance, "Size", 6, 48, 1, hpSliderW, "nameFontSize", 12, "font", 16, -58, textRightW - 58)
+    local SLOT_VALUES = VT("left", "Left slot", "center", "Center slot", "right", "Right slot")
     local ABSORB_STYLE_VALUES = VT("off", "Off", "value", "+ Value", "icon", "|TInterface\\Icons\\INV_Shield_06:14|t + Value")
     local HP_BASE_MODES = M.UnitSectionsShared.HealthBaseModeValues(HEALTH_TEXT_MODES)
     local function BuildValueTextTab(kind, tab, cfg)
         local controls = {}
         local hasAbsorb = cfg.absorbIconKey ~= nil
-        local contentHeight = hasAbsorb and 520 or 474
+        local contentHeight = hasAbsorb and 430 or 370
         local content = TextCard(tab, nil, nil, textLeftX, -4, textCardW, contentHeight)
         controls.preview = PreviewText(content, "", 16, -54, textCardW - 32)
         if cfg.showGet then
@@ -487,34 +488,16 @@ local function BuildGFTextSection(ctx, b)
             end
             RequestGroupBarsRefresh(ctx, "gf-bars-text-mode")
         end
-        local function SlotSummary(slot)
-            local spec = cfg.slots[slot]
-            local mode = Val(CurrentScope(), spec.key, spec.default)
-            local baseMode = hasAbsorb and M.UnitSectionsShared.HealthBaseMode(mode) or mode
-            local summary = OptionText(cfg.baseModes or cfg.modes or TEXT_MODES, baseMode, tostring(baseMode))
-            if hasAbsorb and M.UnitSectionsShared.HealthModeHasAbsorb(mode) then
-                local icon = Bool(CurrentScope(), spec.absorbIconKey, Bool(CurrentScope(), cfg.absorbIconKey, false))
-                summary = summary .. "  + " .. (icon and (absorbIconMarkup .. " ") or "") .. "Absorb"
-            end
-            return summary
-        end
-        local accordion = M.UnitSectionsShared.TextSlotAccordion(content, {
-            selected = CurrentSlot(kind), x = 16, y = -92, width = textCardW - 32,
-            bodyHeight = hasAbsorb and 154 or 108,
-            summary = SlotSummary,
-            onSelect = function(slot)
-                SetCurrentSlot(kind, slot)
-                FocusGFPreviewText(kind, slot, true)
+        controls.slot = W.Segment(content, "Text slots", SLOT_VALUES, textCardW - 32)
+        W.MoveWidget(controls.slot, content, 16, -92, textCardW - 32, "LEFT")
+        M.BindSegment(ctx, controls.slot,
+            function() return CurrentSlot(kind) end,
+            function(v)
+                SetCurrentSlot(kind, v)
+                FocusGFPreviewText(kind, v, true)
                 RequestGroupBarsRefresh(ctx, "gf-bars-text-slot")
             end,
-        })
-        controls.left, controls.center, controls.right = accordion.buttons.left, accordion.buttons.center, accordion.buttons.right
-        controls.RefreshAccordion = function() accordion:SetSelected(CurrentSlot(kind), true) end
-        for _, slot in ipairs({ "left", "center", "right" }) do
-            RegisterControl(accordion.buttons[slot], ctx, "text." .. kind .. ".slot_selector." .. slot,
-                (slot:sub(1, 1):upper() .. slot:sub(2)) .. " slot", "button", "ephemeral")
-        end
-        local editorY = accordion.editorY
+            ControlMeta(ctx, "text." .. kind .. ".slot_selector", "ephemeral"))
         controls.mode = W.Dropdown(content, cfg.valueLabel or "Value", cfg.baseModes or cfg.modes or TEXT_MODES, textCardW - 32)
         M.BindDropdownWidget(ctx, controls.mode,
             function()
@@ -531,10 +514,10 @@ local function BuildGFTextSection(ctx, b)
                 AfterModeChanged(mode)
             end,
             ControlMeta(ctx, "text." .. kind .. ".slot.mode"))
-        W.MoveWidget(controls.mode, content, 32, editorY, textCardW - 64, "LEFT")
+        W.MoveWidget(controls.mode, content, 16, -154, textCardW - 32, "LEFT")
         if hasAbsorb then
-            controls.absorb = W.Segment(content, "Absorb", ABSORB_STYLE_VALUES, textCardW - 64)
-            W.MoveWidget(controls.absorb, content, 32, editorY - 62, textCardW - 64, "LEFT")
+            controls.absorb = W.Segment(content, "Absorb", ABSORB_STYLE_VALUES, textCardW - 32)
+            W.MoveWidget(controls.absorb, content, 16, -216, textCardW - 32, "LEFT")
             M.BindSegment(ctx, controls.absorb,
                 function()
                     if not M.UnitSectionsShared.HealthModeHasAbsorb(CurrentMode()) then return "off" end
@@ -550,8 +533,8 @@ local function BuildGFTextSection(ctx, b)
                 end,
                 ControlMeta(ctx, "text." .. kind .. ".slot.absorb"))
         end
-        local hidePercentY = editorY - (hasAbsorb and 124 or 62)
-        controls.hidePercent = W.ToggleAt(content, "Hide % sign", 32, hidePercentY, textCardW - 64)
+        local hidePercentY = hasAbsorb and -278 or -216
+        controls.hidePercent = W.ToggleAt(content, "Hide % sign", 16, hidePercentY, textCardW - 32)
         M.BindBoolWidget(ctx, controls.hidePercent,
             function()
                 local spec = SelectedSlotSpec()
@@ -572,7 +555,7 @@ local function BuildGFTextSection(ctx, b)
                 SetOptionEnabled(controls.absorb, enabled == true and M.UnitSectionsShared.HealthModeSupportsAbsorb(CurrentMode()))
             end
         end
-        local formattingY = accordion.bottomY - 16
+        local formattingY = hasAbsorb and -310 or -248
         W.Text(content, "Formatting", 16, formattingY, textCardW - 32, T.colors.text)
         controls.delimiter = ScopeDropdown(ctx, content, "Delimiter", DELIMITER_VALUES, textHalfDropW, cfg.delimiterKey, " / ", "visual", 16, formattingY - 28, textHalfDropW)
         if cfg.reverseKey then controls.reverse = BindScopeToggle(ctx, W.ToggleAt(content, "Reverse order", 28 + textHalfDropW, formattingY - 50, textHalfDropW), cfg.reverseKey, false, "visual") end
@@ -692,8 +675,6 @@ local function BuildGFTextSection(ctx, b)
         local hpOn = Bool(CurrentScope(), "showHPText", true)
         local powerOn = IsPowerTextEnabled()
         M.CallIf(RefreshTextTabs)
-        if hpControls.RefreshAccordion then hpControls.RefreshAccordion() end
-        if powerControls.RefreshAccordion then powerControls.RefreshAccordion() end
         SetOptionsEnabled(nameTextControls, nameOn)
         SetOptionsEnabled(hpTextControls, hpOn)
         if hpControls.RefreshPercentToggles then hpControls.RefreshPercentToggles(hpOn) end
