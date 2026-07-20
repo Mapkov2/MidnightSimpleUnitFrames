@@ -293,7 +293,7 @@ local function BuildStatus(ctx, builder, unit)
             if not spec then return end
             SetBool(unit, spec.show, value, "MSUF2_STATUS_ENABLED", { preview = true })
             RefreshStatusRuntime(unit, spec)
-            RefreshStatusMenu()
+            if RefreshStatusSectionState then RefreshStatusSectionState() end
         end)
     RegisterStatusSearch(enabled, "Status indicator enabled", {
         "enabled", "show selected indicator", "hide selected indicator", "show level", "hide level",
