@@ -612,6 +612,7 @@ _G.MSUF_ResolveStatusbarTextureKey = MSUF_ResolveStatusbarTextureKey
 _G.MSUF_BUILTIN_BAR_TEXTURES = _G.MSUF_BUILTIN_BAR_TEXTURES or {
     Blizzard   = "Interface\\TargetingFrame\\UI-StatusBar",
     Flat       = "Interface\\Buttons\\WHITE8x8",
+    ["MSUF Lucent"] = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Bars\\MSUF_Lucent_v2.tga",
     RaidHP     = "Interface\\RaidFrame\\Raid-Bar-Hp-Fill",
     RaidPower  = "Interface\\RaidFrame\\Raid-Bar-Resource-Fill",
     Skills     = "Interface\\PaperDollInfoFrame\\UI-Character-Skills-Bar",
