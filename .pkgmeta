@@ -12,6 +12,7 @@ ignore:
   - CHANGELOG.md
   - dist
   - tools
+  - "**/tools"
   - README.md
   - VERSION
 

@@ -112,6 +112,15 @@ Copy-Item -LiteralPath (Join-Path $RepoRoot "MidnightSimpleUnitFrames") -Destina
 Copy-Item -LiteralPath (Join-Path $RepoRoot "MidnightSimpleUnitFrames_Castbars") -Destination $stagePath -Recurse -Force
 Copy-Item -LiteralPath (Join-Path $RepoRoot "MidnightSimpleUnitFrames_UUFImporter") -Destination $stagePath -Recurse -Force
 
+$stagedToolsDirectories = @(
+    Get-ChildItem -LiteralPath $stagePath -Directory -Recurse -Force |
+        Where-Object { $_.Name -ieq "tools" } |
+        Sort-Object { $_.FullName.Length } -Descending
+)
+foreach ($toolsDirectory in $stagedToolsDirectories) {
+    Remove-Item -LiteralPath $toolsDirectory.FullName -Recurse -Force
+}
+
 $perfyHookPath = Join-Path $stagePath "MidnightSimpleUnitFrames/MSUF_PerfyHook.lua"
 if (Test-Path -LiteralPath $perfyHookPath) {
     Remove-Item -LiteralPath $perfyHookPath -Force
@@ -139,6 +148,20 @@ if (-not $packageItems) {
 }
 
 $packageItems | Compress-Archive -DestinationPath $zipPath -Force
+
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$archive = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
+try {
+    $forbiddenToolsEntries = @($archive.Entries | Where-Object {
+        $_.FullName -match '(?i)(^|[\\/])tools(?:[\\/]|$)'
+    })
+    if ($forbiddenToolsEntries.Count -gt 0) {
+        $sample = @($forbiddenToolsEntries | Select-Object -First 10 | ForEach-Object { $_.FullName }) -join ', '
+        throw "Release package contains forbidden tools content: $sample"
+    }
+} finally {
+    $archive.Dispose()
+}
 
 if (-not $KeepStaging) {
     Remove-Item -LiteralPath $stagePath -Recurse -Force
