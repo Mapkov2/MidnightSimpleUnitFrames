@@ -17,6 +17,8 @@ assert(source:find('T.ApplyButtonRole(control, enabled and "success" or "danger"
 assert(source:find("SetPreviewCurrentVisual(current, isEnabled)", 1, true)
     and source:find("SetPreviewCurrentVisual(advanced.current, isEnabled)", 1, true),
     "basic and advanced current-status preview buttons do not share the same state visual")
+assert(source:find('RefreshStatusRuntime(unit, spec)\n            if RefreshStatusSectionState then RefreshStatusSectionState() end', 1, true),
+    "status enable toggle still rebuilds the full page instead of refreshing in place")
 
 local layout = assert(source:match(
     "local function LayoutStatusControls%b()%s*(.-)%s*local function ShowControl"
