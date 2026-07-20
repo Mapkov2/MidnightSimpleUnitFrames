@@ -4140,6 +4140,12 @@ L["Yes. Priority Frames inherit the active Party, Raid, or Mythic Raid frame app
 L["Yes. Priority Frames work in parties, raids, and Mythic raids. In a party or dungeon they inherit Party Frames; in a raid they inherit the active Raid or Mythic Raid setup. They do not create a solo strip, and the matching base Party or Raid frames must be enabled."] = "是的。优先框架适用于聚会、突袭和神话突袭。在队伍或地下城中，他们继承队伍框架；在突袭中，他们继承活跃的突袭或神话突袭设置。它们不会创建单独的条带，并且必须启用匹配的基本派对或团队框架。"
 L["|cffffd200"] = "|cffffd200"
 L["|cffffffff"] = "|cffffffff"
+L["Absorb"] = "Absorb"
+L["Formatting"] = "Formatting"
+L["Hide % sign"] = "Hide % sign"
+L["Selected slot "] = "Selected slot "
+L["Short numbers"] = "Short numbers"
+L["Text slots"] = "Text slots"
 
 -- 编辑模式快捷弹窗。
 L["Aura layout"] = "光环布局"
