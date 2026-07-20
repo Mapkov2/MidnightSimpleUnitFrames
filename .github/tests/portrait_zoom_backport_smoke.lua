@@ -75,5 +75,10 @@ local menu = Read("MidnightSimpleUnitFrames/Menu2/Pages/MSUF_Menu2_UnitSections.
 assert(menu:find('W.Slider(geometryCard, "Portrait zoom", 100, 200, 1', 1, true)
     and menu:find('SetPortraitValue(unit, "portraitZoom"', 1, true),
     "Portrait zoom control is missing or not using the cold portrait sync path")
+assert(menu:find('CollapsibleSection("portrait", "Portrait", 612', 1, true)
+    and menu:find('W.ControlCard(sec, "Shape & Border", nil, leftX, -224, leftW, 312)', 1, true)
+    and menu:find('W.MoveWidget(borderSize, borderCard, 16, -170', 1, true)
+    and menu:find('W.ToggleAt(borderCard, "Fill border into frame gap", 16, -238', 1, true),
+    "Portrait border controls lost their non-overlapping vertical layout")
 
 print("portrait_zoom_backport_smoke: ok")
