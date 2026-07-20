@@ -4,10 +4,34 @@ local _, ns = ...
 ns = ns or {}
 
 local data = {
-    currentVersion = "5.74",
-    previousVersion = "5.73",
-    rangeLabel = "5.73 -> 5.74",
+    currentVersion = "5.75",
+    previousVersion = "5.74",
+    rangeLabel = "5.74 -> 5.75",
     entries = {
+        {
+            version = "5.75",
+            date = "2026-07-20",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Added spell-specific Player channel tick markers with talent- and duration-aware layouts, custom-position support, and a five-marker fallback for unsupported spells.",
+                        "Added a 100-200% zoom control for 2D Unit Frame portraits with matching live and preview rendering.",
+                        "Added 11 bundled bar textures: Arcane Pulse, Aurora Silk, Deep Current, Dragon Scale, Ember Weave, Forged Steel, Frosted Quartz, Lucent, Lunar Mist, Obsidian Glass, and Runic Circuit.",
+                        "Added an adjustable 0-5 second interrupt display duration for Player, Target, Focus, and Boss Castbars.",
+                    },
+                },
+                {
+                    title = "Fixes & Stability",
+                    bullets = {
+                        "Preserved the Player Castbar across active profile and UUF imports, including profiles that previously relied on Blizzard's Player Castbar fallback.",
+                        "Stabilized ArcUI Essential Cooldown anchors across form and specialization changes, delayed addon loading, and protected combat transitions.",
+                        "Fixed overlapping controls in the Portrait Border and Raid Grid sections of the options menu.",
+                        "Kept channel marker updates event-driven with no recurring background polling.",
+                    },
+                },
+            },
+        },
         {
             version = "5.74",
             date = "2026-07-19",
@@ -96,44 +120,6 @@ local data = {
                         "Fixed repeated ADDON_ACTION_FORBIDDEN errors on Warrior login caused by the Whirlwind tracker registering COMBAT_LOG_EVENT_UNFILTERED while Class Resource was disabled.",
                         "Restored the lightweight 5.6 spellcast-driven Whirlwind generator tracking and removed the global combat-log listener.",
                         "Bound Whirlwind tracker events only while the Warrior Class Resource is active and cleanly unbound them when the feature is disabled.",
-                    },
-                },
-            },
-        },
-        {
-            version = "5.70",
-            date = "2026-07-08",
-            sections = {
-                {
-                    title = "Patch Highlights",
-                    bullets = {
-                        "Moved the MSUF2 navigation rail into the 6.0-style layout while keeping the 5.x feature set intact.",
-                        "Added optional navigation rail icons for existing profiles, with icons disabled by default for fresh profiles.",
-                        "Added smooth menu scrolling with a Misc option to disable it.",
-                        "Added scope-aware Frame Outline strata and frame-level offset controls for unit frames and group frames.",
-                    },
-                },
-                {
-                    title = "Bug Fixes",
-                    bullets = {
-                        "Fixed Group Frame Outline geometry so secure-header refreshes cannot reset the outline to the inner bar bounds.",
-                        "Fixed Group Frame Outline live refresh so opening or using the options menu no longer requires a reload to apply the outline correctly.",
-                        "Fixed Group Frame mouseover, target, and focus highlight strata so selected or hover borders no longer draw over Blizzard panels while aggro and dispel highlights keep their priority.",
-                        "Fixed Unit Auras scope override clipping in compact layouts.",
-                        "Fixed Class Resource menu clipping issues in compact layouts.",
-                        "Fixed navigation rail icon positioning after closing and reopening the menu.",
-                        "Restored scope controls on Unit Frames and Group Frames pages after the nav rail layout update.",
-                        "Fixed Warrior Whirlwind cleave stacks so the bar only appears after a valid Improved Whirlwind target hit.",
-                        "Fixed the GCD castbar path for current WoW cooldown APIs.",
-                    },
-                },
-                {
-                    title = "General Changes",
-                    bullets = {
-                        "Replaced the menu logo with the current MSUF logo.",
-                        "Added a WoW 12.1 compatibility warning for MSUF 5.x stable builds that points users to the current CurseForge Beta.",
-                        "Kept the new outline strata, frame-level, smooth-scroll, icon, and layout apply work on cold menu paths.",
-                        "Kept combat and castbar fixes event-driven and cache-aware without adding constant polling.",
                     },
                 },
             },
