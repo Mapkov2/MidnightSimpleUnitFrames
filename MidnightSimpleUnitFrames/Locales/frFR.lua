@@ -2711,4 +2711,7 @@ L["Why are group names still shortened when name shortening is off?"] = "Pourquo
 L["Wrapping & Sorting"] = "Retour à la ligne et tri"
 L["X "] = "X "
 L["Yes, discard"] = "Oui, abandonner"
+L["Interrupt display duration (sec)"] = "Durée d'affichage de l'interruption (s)"
+L["Portrait zoom"] = "Zoom portrait"
+L["Spell-specific channel tick markers"] = "Marqueurs de graduation de canal spécifiques au sort"
 -- END MSUF runtime coverage

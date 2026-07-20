@@ -534,4 +534,7 @@ L["Useful for first-run orientation."] = "Useful for first-run orientation."
 L["Wago profile hub"] = "Wago profile hub"
 L["Wago profile imports"] = "Wago profile imports"
 L["Wago Profiles"] = "Wago Profiles"
+L["Interrupt display duration (sec)"] = "Interrupt display duration (seconds)"
+L["Portrait zoom"] = "Portrait zoom"
+L["Spell-specific channel tick markers"] = "Spell-specific channel tick markers"
 -- END MSUF runtime coverage
