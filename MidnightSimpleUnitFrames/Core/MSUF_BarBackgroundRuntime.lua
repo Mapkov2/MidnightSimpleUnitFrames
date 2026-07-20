@@ -157,6 +157,12 @@ _DPB.CDM = _DPB.CDM or {
 
 function _G.MSUF_GetEffectiveCooldownFrame(frameName)
     if frameName == "EssentialCooldownViewer" then
+        local getArcUIAnchor = _G.MSUF_GetArcUICooldownAnchor
+        local arcUIAnchor = type(getArcUIAnchor) == "function" and getArcUIAnchor() or nil
+        if arcUIAnchor then
+            return arcUIAnchor
+        end
+
         local getSkironProxy = _G.MSUF_GetSkironCooldownAnchorProxy
         local skironProxy = type(getSkironProxy) == "function" and getSkironProxy() or nil
         if skironProxy then
