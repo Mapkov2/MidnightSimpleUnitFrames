@@ -127,8 +127,26 @@ local _GF_UnitGroupRolesAssigned = _G.UnitGroupRolesAssigned
 local _GF_UnitHealthMissing = _G.UnitHealthMissing   --- secret-safe deficit
 local _GF_CSU_Round = _G.C_StringUtil and _G.C_StringUtil.RoundToNearestString
 local _GF_CSU_TruncateZero = _G.C_StringUtil and _G.C_StringUtil.TruncateWhenZero
+local _GF_CSU_WrapString = _G.C_StringUtil and _G.C_StringUtil.WrapString
 local _GF_ScaleTo100 = _G.CurveConstants and _G.CurveConstants.ScaleTo100
 local _GF_issecretvalue = _G.issecretvalue
+local _GF_ABSORB_ICON_MARKUP = "|TInterface\\Icons\\INV_Shield_06:0|t"
+local _GF_ABSORB_MODE_BASE = {
+    CURRENTABSORB = "CURRENT",
+    FULLVALUEABSORB = "FULLVALUE",
+    MAXABSORB = "MAX",
+    DEFICITABSORB = "DEFICIT",
+    CURMAXABSORB = "CURMAX",
+    PERCENTABSORB = "PERCENT",
+    CURPERCENTABSORB = "CURPERCENT",
+    CURMAXPERCENTABSORB = "CURMAXPERCENT",
+    MAXPERCENTABSORB = "MAXPERCENT",
+    PERCENTCURABSORB = "PERCENTCUR",
+    PERCENTMAXABSORB = "PERCENTMAX",
+    PERCENTCURMAXABSORB = "PERCENTCURMAX",
+    MAXCURABSORB = "MAXCUR",
+    PERCENTMAXCURABSORB = "PERCENTMAXCUR",
+}
 
 ---
 --- Health text modes (matches EQoL healthTextModeOptions)
@@ -136,6 +154,18 @@ local _GF_issecretvalue = _G.issecretvalue
 GF.HEALTH_TEXT_MODES = {
     { key = "NONE",           label = "None"                           },
     { key = "ABSORB",         label = "Absorb"                         },
+    { key = "CURRENTABSORB",  label = "Current + Absorb"               },
+    { key = "FULLVALUEABSORB", label = "Full Value + Absorb"           },
+    { key = "MAXABSORB",      label = "Max + Absorb"                   },
+    { key = "DEFICITABSORB",  label = "Deficit + Absorb"               },
+    { key = "CURMAXABSORB",   label = "Current / Max + Absorb"         },
+    { key = "PERCENTABSORB",  label = "Percent + Absorb"               },
+    { key = "CURPERCENTABSORB", label = "Current / Percent + Absorb"   },
+    { key = "CURMAXPERCENTABSORB", label = "Current / Max / Percent + Absorb" },
+    { key = "MAXPERCENTABSORB", label = "Max / Percent + Absorb"       },
+    { key = "PERCENTCURABSORB", label = "Percent / Current + Absorb"   },
+    { key = "PERCENTMAXABSORB", label = "Percent / Max + Absorb"       },
+    { key = "PERCENTCURMAXABSORB", label = "Percent / Current / Max + Absorb" },
     { key = "PERCENT",        label = "Percent"                        },
     { key = "CURRENT",        label = "Current"                        },
     { key = "FULLVALUE",      label = "Full Value"                     },
@@ -227,6 +257,7 @@ local PARTY_DEFAULTS = {
     textDelimiter     = " / ",
     healthTextDecimals = false,
     hpFullValueShort  = true,
+    hpAbsorbIcon      = false,
     --- Reverse order toggle (flips multi-part modes)
     hpTextReverse     = false,
     --- Name color
@@ -2086,7 +2117,7 @@ end
 --- concatenated with ".." and passed to FontString:SetText (C-side).
 --- Percent comes from UnitHealthPercent / UnitPowerPercent (non-secret).
 ---
---- Signature: FormatHealthText(mode, hp, hpMax, delimiter, reverse, unit, hidePercentSymbol, shortNumbers, totalAbsorb)
+--- Signature: FormatHealthText(mode, hp, hpMax, delimiter, reverse, unit, hidePercentSymbol, shortNumbers, totalAbsorb, absorbIcon)
 --- The optional "unit" parameter enables the secret-safe path.
 --- Preview mode (fake numeric values) omits unit - non-secret path runs.
 ---
@@ -2101,6 +2132,15 @@ local REVERSE_HP_MAP = {
     MAXPERCENT     = "PERCENTMAX",
     PERCENTMAX     = "MAXPERCENT",
     PERCENTCURMAX  = "CURMAXPERCENT",
+    CURPERCENTABSORB = "PERCENTCURABSORB",
+    PERCENTCURABSORB = "CURPERCENTABSORB",
+    CURMAXABSORB = "MAXCURABSORB",
+    MAXCURABSORB = "CURMAXABSORB",
+    CURMAXPERCENTABSORB = "PERCENTMAXCURABSORB",
+    PERCENTMAXCURABSORB = "CURMAXPERCENTABSORB",
+    MAXPERCENTABSORB = "PERCENTMAXABSORB",
+    PERCENTMAXABSORB = "MAXPERCENTABSORB",
+    PERCENTCURMAXABSORB = "CURMAXPERCENTABSORB",
 }
 
 function GF.ReverseHealthTextMode(mode)
@@ -2294,30 +2334,52 @@ local function _GF_FormatByMode(mode, sCur, sMax, delim, pctStr, missingVal, sho
 end
 
 ---
---- FormatHealthText(mode, hp, hpMax, delimiter, reverse [, unit [, hidePercentSymbol [, shortNumbers [, totalAbsorb]]]])
+local function _GF_FormatAbsorbText(value, shortNumbers, absorbIcon, combined)
+    local iss = _GF_issecretvalue
+    local secret = iss and iss(value)
+    if not secret and value == nil then return "" end
+    local prefix
+    if combined then
+        prefix = absorbIcon and (" + " .. _GF_ABSORB_ICON_MARKUP .. " ") or " + "
+    elseif absorbIcon then
+        prefix = _GF_ABSORB_ICON_MARKUP .. " "
+    end
+    if secret then
+        if _GF_CSU_TruncateZero then
+            local text = _GF_CSU_TruncateZero(value)
+            if prefix and _GF_CSU_WrapString then return _GF_CSU_WrapString(text, prefix, "") end
+            return text
+        end
+        return _GF_Abbrev(value, shortNumbers)
+    end
+    value = tonumber(value) or 0
+    if value <= 0 then return "" end
+    local text = _GF_Abbrev(value, shortNumbers)
+    return prefix and (prefix .. text) or text
+end
+
+--- FormatHealthText(mode, hp, hpMax, delimiter, reverse [, unit [, hidePercentSymbol [, shortNumbers [, totalAbsorb [, absorbIcon]]]]])
 --- mode : "PERCENT", "CURMAX", "DEFICIT", etc. or "NONE"
 --- hp, hpMax : raw UnitHealth / UnitHealthMax (possibly secret)
 --- delimiter : " / " etc.
 --- reverse : swap mode before formatting
 --- unit : unitId for secret-safe percent (optional, nil in preview)
 ---
-function GF.FormatHealthText(mode, hp, hpMax, delimiter, reverse, unit, hidePercentSymbol, shortNumbers, totalAbsorb)
+function GF.FormatHealthText(mode, hp, hpMax, delimiter, reverse, unit, hidePercentSymbol, shortNumbers, totalAbsorb, absorbIcon)
     if not mode or mode == "NONE" then return "" end
     if reverse then mode = REVERSE_HP_MAP[mode] or mode end
 
-    if mode == "ABSORB" then
+    local absorbBaseMode = _GF_ABSORB_MODE_BASE[mode]
+    local absorbText = ""
+    if mode == "ABSORB" or absorbBaseMode then
         local value = totalAbsorb
-        if value == nil and unit and _GF_UnitGetTotalAbsorbs then
+        local valueIsSecret = _GF_issecretvalue and _GF_issecretvalue(value)
+        if not valueIsSecret and value == nil and unit and _GF_UnitGetTotalAbsorbs then
             value = _GF_UnitGetTotalAbsorbs(unit)
         end
-        if value == nil then return "" end
-        local iss = _GF_issecretvalue
-        if iss and iss(value) then
-            if _GF_CSU_TruncateZero then return _GF_CSU_TruncateZero(value) end
-            return _GF_Abbrev(value, shortNumbers)
-        end
-        value = tonumber(value) or 0
-        return value > 0 and _GF_Abbrev(value, shortNumbers) or ""
+        absorbText = _GF_FormatAbsorbText(value, shortNumbers, absorbIcon == true, absorbBaseMode ~= nil)
+        if mode == "ABSORB" then return absorbText end
+        mode = absorbBaseMode
     end
 
     local delim = _GF_NormalizeTextDelimiter(delimiter, " / ")
@@ -2351,7 +2413,7 @@ function GF.FormatHealthText(mode, hp, hpMax, delimiter, reverse, unit, hidePerc
         end
     end
 
-    return _GF_FormatByMode(mode, sCur, sMax, delim, pctStr, missingVal, shortNumbers)
+    return _GF_FormatByMode(mode, sCur, sMax, delim, pctStr, missingVal, shortNumbers) .. absorbText
 end
 
 --- Truncate name string (UTF-8 aware when possible)

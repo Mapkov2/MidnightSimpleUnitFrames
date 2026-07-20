@@ -30,6 +30,7 @@ local MakeFS = PreviewModel.MakeFS
 local FontColor = PreviewModel.FontColor
 local Status = MSUF.UFPreviewStatus or {}
 MSUF.UFPreviewStatus = Status
+local IDENTITY_TEXT_IDS = { level = true, raceText = true, classText = true }
 local function AnchorLikeRuntime(region, anchor, x, y, frame, nameText)
     -- Runtime supports name-relative anchors; preview duplicates that math so the editor shows
     -- the same visual result without depending on a real unitframe.
@@ -115,7 +116,7 @@ local function ApplyStatusIconPackPreview(tex, spec, conf, g, runtimeCfg, iconTy
     if tex.SetTexCoord then tex:SetTexCoord(l or 0, r or 1, t or 0, b or 1) end
     return true
 end
-function Status.StatusTextPreviewText(source)
+function Status.StatusTextPreviewText(source, preferredText)
     local cfg
     if type(source) == "table" and (source.showDead ~= nil or source.showGhost ~= nil or source.showAFK ~= nil or source.showDND ~= nil) then
         cfg = source
@@ -126,11 +127,33 @@ function Status.StatusTextPreviewText(source)
     local showGhost = cfg == nil or cfg.showGhost ~= false
     local showAFK = cfg ~= nil and cfg.showAFK == true
     local showDND = cfg ~= nil and cfg.showDND == true
+    if type(preferredText) ~= "string" then preferredText = nil end
+    if preferredText == "OFFLINE" and showDead then return "OFFLINE" end
+    if preferredText == "DEAD" and showDead then return "DEAD" end
+    if preferredText == "GHOST" and showGhost then return "GHOST" end
+    if preferredText == "AFK" and showAFK then return "AFK" end
+    if preferredText == "DND" and showDND then return "DND" end
     if showDead then return "DEAD" end
     if showGhost then return "GHOST" end
     if showAFK then return "AFK" end
     if showDND then return "DND" end
     return nil
+end
+function Status.IsIdentityText(spec)
+    local id = type(spec) == "table" and spec.id or spec
+    return IDENTITY_TEXT_IDS[id] == true
+end
+function Status.IsTextIndicator(spec)
+    local id = type(spec) == "table" and spec.id or spec
+    return id == "statusText" or IDENTITY_TEXT_IDS[id] == true
+end
+function Status.IdentityPreviewText(spec, data)
+    local id = type(spec) == "table" and spec.id or spec
+    data = data or {}
+    if id == "level" then return tostring(data.level or "80") end
+    if id == "raceText" then return data.race or "Tauren" end
+    if id == "classText" then return data.className or data.class or "Warrior" end
+    return ""
 end
 function Status.CreateIcon(parent, color, text)
     local f = CreateFrame("Frame", nil, parent)
@@ -146,7 +169,7 @@ function Status.CreateIcon(parent, color, text)
     f.txt:SetTextColor(color[1], color[2], color[3], 1)
     return f
 end
-function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg)
+function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg, statusPreviewText)
     if not icon or not spec then return end
     local tex, txt = icon.tex, icon.txt
     if tex then
@@ -225,10 +248,11 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg)
             tex:SetTexture((key == "target" or key == "focus") and "Interface\\TargetingFrame\\UI-PVP-Horde" or "Interface\\TargetingFrame\\UI-PVP-Alliance")
             if tex.SetTexCoord then tex:SetTexCoord(0, 1, 0, 1) end
         end
-    elseif spec.id == "level" or spec.id == "statusText" then
+    elseif Status.IsTextIndicator(spec) then
         if tex then tex:Hide() end
         if txt then
-            txt:SetText(spec.id == "level" and (data.level or "80") or (Status.StatusTextPreviewText(runtimeCfg or g) or ""))
+            txt:SetText(Status.IsIdentityText(spec) and Status.IdentityPreviewText(spec, data)
+                or (statusPreviewText or Status.StatusTextPreviewText(runtimeCfg or g) or ""))
             txt:SetTextColor(FontColor())
             txt:Show()
         end

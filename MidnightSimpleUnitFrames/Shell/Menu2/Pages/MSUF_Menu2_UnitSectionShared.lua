@@ -368,6 +368,99 @@ function Shared.PlaceSlider(parent, control, x, y, width) W.MoveWidget(control, 
 function Shared.TextCard(parent, title, subtitle, x, y, width, height)
     return W.ControlCard(parent, title, subtitle, x, y, width, height)
 end
+local TEXT_SLOT_ORDER = { "left", "center", "right" }
+function Shared.TextSlotAccordion(parent, opts)
+    opts = opts or {}
+    local selected = opts.selected
+    if selected ~= "left" and selected ~= "center" and selected ~= "right" then selected = "right" end
+    local x, y, width = opts.x or 16, opts.y or -92, opts.width or 420
+    local headerH, bodyH, gap = opts.headerHeight or 38, opts.bodyHeight or 142, opts.gap or 6
+    local result = { buttons = {}, rows = {}, selected = selected }
+    W.Text(parent, opts.label or "Text slots", x, y, width, T.colors.text)
+    local rowTop = y - 26
+    result.editorY = rowTop - headerH - 10
+
+    for i = 1, #TEXT_SLOT_ORDER do
+        local slot = TEXT_SLOT_ORDER[i]
+        local row = T.Panel(parent, nil, T.colors.panel2, T.colors.borderSoft)
+        row._msuf2NoPanelNeon = true
+
+        local header = CreateFrame("Button", nil, row)
+        header:SetPoint("TOPLEFT", row, "TOPLEFT")
+        header:SetPoint("TOPRIGHT", row, "TOPRIGHT")
+        header:SetHeight(headerH)
+        local hover = header:CreateTexture(nil, "HIGHLIGHT")
+        hover:SetAllPoints()
+        hover:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.055)
+
+        local indicator = header:CreateTexture(nil, "ARTWORK")
+        indicator:SetPoint("LEFT", header, "LEFT", 10, 0)
+        indicator:SetSize(26, 26)
+
+        local title = T.Font(header, "GameFontNormal", M.Tr((slot:sub(1, 1):upper() .. slot:sub(2)) .. " slot"), T.colors.text, "section")
+        title:SetPoint("LEFT", indicator, "RIGHT", 9, 0)
+        title:SetJustifyH("LEFT")
+        header._msuf2Title = title
+
+        local summaryW = math.min(250, math.max(130, math.floor(width * 0.54)))
+        local summary = T.Panel(header, nil, T.colors.panel, T.colors.borderSoft)
+        summary._msuf2NoPanelNeon = true
+        summary:SetPoint("RIGHT", header, "RIGHT", -10, 0)
+        summary:SetSize(summaryW, 26)
+        local value = T.Font(summary, "GameFontHighlightSmall", "", T.colors.muted)
+        value:SetPoint("LEFT", summary, "LEFT", 10, 0)
+        value:SetPoint("RIGHT", summary, "RIGHT", -10, 0)
+        value:SetJustifyH("LEFT")
+        if value.SetWordWrap then value:SetWordWrap(false) end
+        result.rows[slot] = { frame = row, header = header, indicator = indicator, summaryFrame = summary, summary = value }
+        header:SetScript("OnClick", function()
+            result:SetSelected(slot)
+        end)
+        result.buttons[slot] = header
+    end
+
+    local function Layout()
+        local order = { result.selected }
+        for i = 1, #TEXT_SLOT_ORDER do
+            local slot = TEXT_SLOT_ORDER[i]
+            if slot ~= result.selected then order[#order + 1] = slot end
+        end
+        local top = rowTop
+        for i = 1, #order do
+            local slot = order[i]
+            local entry = result.rows[slot]
+            local open = slot == result.selected
+            local rowH = headerH + (open and bodyH or 0)
+            entry.frame:ClearAllPoints()
+            entry.frame:SetPoint("TOPLEFT", parent, "TOPLEFT", x, top)
+            entry.frame:SetSize(width, rowH)
+            local borderColor = open and T.colors.accent or (T.colors.cardBorder or T.colors.borderSoft)
+            T.ApplyBackdrop(entry.frame, T.colors.panel2,
+                { borderColor[1], borderColor[2], borderColor[3], open and 0.42 or 0.70 })
+            local ringColor = open and T.colors.accent or T.colors.muted
+            entry.indicator:SetAtlas(open and "campaign_headericon_open" or "campaign_headericon_closed", false)
+            entry.indicator:SetVertexColor(ringColor[1], ringColor[2], ringColor[3], open and 0.96 or 0.78)
+            entry.summary:SetText(opts.summary and opts.summary(slot) or "None")
+            entry.summaryFrame:SetShown(not open)
+            top = top - rowH - gap
+        end
+        result.bottomY = top + gap
+    end
+    function result:SetSelected(slot, silent)
+        if slot ~= "left" and slot ~= "center" and slot ~= "right" then return false end
+        if slot == self.selected then
+            Layout()
+            return false
+        end
+        self.selected = slot
+        Layout()
+        if not silent and opts.onSelect then opts.onSelect(slot) end
+        return true
+    end
+    result.Refresh = Layout
+    Layout()
+    return result
+end
 function Shared.PreviewText(parent, text, x, y, width, color)
     local label = W.Text(parent, "Preview", x, y, width, color or T.colors.dim)
     local value = T.Font(parent, "GameFontNormalSmall", text, T.colors.text)
@@ -383,6 +476,40 @@ function Shared.TextBadgeNumber(value)
     value = tonumber(value) or 0
     if value == math.floor(value) then return tostring(math.floor(value)) end
     return string.format("%.1f", value)
+end
+local HEALTH_ABSORB_BASE = {
+    CURRENTABSORB = "CURRENT", FULLVALUEABSORB = "FULLVALUE", MAXABSORB = "MAX", DEFICITABSORB = "DEFICIT",
+    CURMAXABSORB = "CURMAX", PERCENTABSORB = "PERCENT", CURPERCENTABSORB = "CURPERCENT",
+    CURMAXPERCENTABSORB = "CURMAXPERCENT", MAXPERCENTABSORB = "MAXPERCENT",
+    PERCENTCURABSORB = "PERCENTCUR", PERCENTMAXABSORB = "PERCENTMAX", PERCENTCURMAXABSORB = "PERCENTCURMAX",
+}
+local HEALTH_ABSORB_MODE = {}
+for mode, base in pairs(HEALTH_ABSORB_BASE) do HEALTH_ABSORB_MODE[base] = mode end
+function Shared.HealthBaseMode(mode)
+    if mode == "ABSORB" then return "NONE" end
+    return HEALTH_ABSORB_BASE[mode] or mode or "NONE"
+end
+function Shared.HealthModeHasAbsorb(mode)
+    return mode == "ABSORB" or HEALTH_ABSORB_BASE[mode] ~= nil
+end
+function Shared.HealthModeSupportsAbsorb(mode)
+    local base = Shared.HealthBaseMode(mode)
+    return base == "NONE" or HEALTH_ABSORB_MODE[base] ~= nil
+end
+function Shared.HealthModeWithAbsorb(mode, enabled)
+    local base = Shared.HealthBaseMode(mode)
+    if enabled ~= true then return base end
+    if base == "NONE" then return "ABSORB" end
+    return HEALTH_ABSORB_MODE[base] or base
+end
+function Shared.HealthBaseModeValues(values)
+    local filtered = {}
+    for i = 1, #(values or {}) do
+        local item = values[i]
+        local value = item and (item.value or item.key)
+        if value ~= "ABSORB" and HEALTH_ABSORB_BASE[value] == nil then filtered[#filtered + 1] = item end
+    end
+    return filtered
 end
 function Shared.MakeTextSlotState(owner, scopeKeyFn, slotTableName, moveTableName)
     -- Unit and group text pages both keep transient UI state for the selected text slot
@@ -441,6 +568,7 @@ function Shared.ValueTextControlSets(kind, controls, layer, hookControls, curren
     local hookSpecs = {
         { controls.show }, { controls.left, "left" }, { controls.center, "center" }, { controls.right, "right" },
         { controls.leftHidePercent, "left" }, { controls.centerHidePercent, "center" }, { controls.rightHidePercent, "right" },
+        { controls.mode, CurrentSlotFocus }, { controls.hidePercent, CurrentSlotFocus }, { controls.absorb, CurrentSlotFocus },
         { delimiter }, { controls.x }, { controls.y }, { controls.moveTogether },
         { controls.slot, CurrentSlotFocus }, { controls.slotX, CurrentSlotFocus }, { controls.slotY, CurrentSlotFocus },
         { controls.size }, { layer },
@@ -448,6 +576,7 @@ function Shared.ValueTextControlSets(kind, controls, layer, hookControls, curren
     local textControls = {
         controls.left, controls.center, controls.right,
         controls.leftHidePercent, controls.centerHidePercent, controls.rightHidePercent,
+        controls.mode, controls.hidePercent, controls.absorb, controls.slot,
         delimiter, controls.size, controls.x, controls.y, controls.moveTogether, layer,
     }
     if controls.reverse then
@@ -455,7 +584,7 @@ function Shared.ValueTextControlSets(kind, controls, layer, hookControls, curren
         textControls[#textControls + 1] = controls.reverse
     end
     if hookControls then hookControls(kind, hookSpecs) end
-    return textControls, { controls.slot, controls.slotX, controls.slotY }
+    return textControls, { controls.slotX, controls.slotY }
 end
 function Shared.CustomAnchorEditor(ctx, parent, opts)
     opts = opts or {}

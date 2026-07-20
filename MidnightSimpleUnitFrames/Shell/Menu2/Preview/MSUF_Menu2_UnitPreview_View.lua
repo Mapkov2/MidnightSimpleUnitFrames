@@ -312,8 +312,9 @@ local function CommitHandleMove(handle, reason)
     local box = handle._preview
     local fields = handle._fields or {}
     local _, _, key = UnitDB(box and box.key)
+    local moveReason = reason or "UNIT_PREVIEW_MOVE"
     if fields.text then
-        ForceTextUnit(key, reason or "UNIT_PREVIEW_MOVE")
+        ForceTextUnit(key, moveReason)
     elseif fields.portrait then
         ApplyPortrait(box and box._msufPanel, key, reason or "UNIT_PREVIEW_PORTRAIT_MOVE")
     elseif fields.detachedPower then
@@ -322,10 +323,10 @@ local function CommitHandleMove(handle, reason)
         ApplyCastbarRuntimeForKey(key)
     elseif fields.statusRefresh then
         local fn = _G[fields.statusRefresh]
-        if type(fn) == "function" then fn() end
+        if type(fn) == "function" then fn(key, moveReason) end
     end
-    ApplyPanelUnit(box and box._msufPanel, key, reason or "UNIT_PREVIEW_MOVE")
-    RequestPreviewLayoutRefresh(box, reason or "UNIT_PREVIEW_MOVE")
+    ApplyPanelUnit(box and box._msufPanel, key, moveReason)
+    RequestPreviewLayoutRefresh(box, moveReason)
     RefreshHandleSelectionVisuals(box)
 end
 local function EnsureBarsDB()

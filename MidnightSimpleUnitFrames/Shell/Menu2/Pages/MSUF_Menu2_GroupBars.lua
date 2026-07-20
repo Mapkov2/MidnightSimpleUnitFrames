@@ -175,7 +175,7 @@ local function BuildGFResourceBarSection(ctx, b)
 end
 
 local function BuildGFTextSection(ctx, b)
-    local text = b:CollapsibleSection("text", "Text", 618, false)
+    local text = b:CollapsibleSection("text", "Text", 790, false)
     text._msuf2CollapsibleBadgesOnlyWhenOpen = true
     local textW = text._msuf2Width or b.width or 720
     local textLeftX = 24
@@ -186,30 +186,42 @@ local function BuildGFTextSection(ctx, b)
     local hpSliderW = min(310, max(230, textRightW))
     local textDropW = min(310, max(220, textCardW))
     local textHalfDropW = floor((textCardW - 44) / 2)
-    local function TextModeExampleStr(mode, delim, isPower, decimalHP, hidePercentSymbol, shortNumbers)
+    local absorbModeBase = {
+        CURRENTABSORB = "CURRENT", FULLVALUEABSORB = "FULLVALUE", MAXABSORB = "MAX", DEFICITABSORB = "DEFICIT",
+        CURMAXABSORB = "CURMAX", PERCENTABSORB = "PERCENT", CURPERCENTABSORB = "CURPERCENT",
+        CURMAXPERCENTABSORB = "CURMAXPERCENT", MAXPERCENTABSORB = "MAXPERCENT",
+        PERCENTCURABSORB = "PERCENTCUR", PERCENTMAXABSORB = "PERCENTMAX",
+        PERCENTCURMAXABSORB = "PERCENTCURMAX", MAXCURABSORB = "MAXCUR",
+        PERCENTMAXCURABSORB = "PERCENTMAXCUR",
+    }
+    local absorbIconMarkup = "|TInterface\\Icons\\INV_Shield_06:0|t"
+    local function TextModeExampleStr(mode, delim, isPower, decimalHP, hidePercentSymbol, shortNumbers, absorbIcon)
+        local absorbBase = absorbModeBase[mode]
         local cur     = isPower and "100"  or (shortNumbers and "12.5k" or "12,450")
         local max_    = isPower and "100"  or (shortNumbers and "15.0k" or "15,000")
         local absorb  = shortNumbers and "3.8k" or "3,750"
+        local absorbText = (absorbIcon and (absorbIconMarkup .. " ") or "") .. absorb
         local pct     = isPower and "100" or (decimalHP and "83.0" or "83")
         if hidePercentSymbol ~= true then pct = pct .. "%" end
         local deficit = isPower and "0"    or (shortNumbers and "-2.6k" or "-2,550")
-        if mode == "ABSORB"         then return absorb
-        elseif mode == "PERCENT"        then return pct
-        elseif mode == "CURRENT"    then return cur
-        elseif mode == "FULLVALUE"  then return cur
-        elseif mode == "MAX"        then return max_
-        elseif mode == "DEFICIT"    then return deficit
-        elseif mode == "CURMAX"     then return cur  .. delim .. max_
-        elseif mode == "MAXCUR"     then return max_ .. delim .. cur
-        elseif mode == "CURPERCENT" then return cur  .. delim .. pct
-        elseif mode == "CURMAXPERCENT"  then return cur  .. delim .. max_ .. delim .. pct
-        elseif mode == "MAXPERCENT"     then return max_ .. delim .. pct
-        elseif mode == "PERCENTCUR"     then return pct  .. delim .. cur
-        elseif mode == "PERCENTMAX"     then return pct  .. delim .. max_
-        elseif mode == "PERCENTCURMAX"  then return pct  .. delim .. cur  .. delim .. max_
-        elseif mode == "PERCENTMAXCUR"  then return pct  .. delim .. max_ .. delim .. cur
-        end
-        return nil
+        if mode == "ABSORB" then return absorbText end
+        mode = absorbBase or mode
+        local value
+        if mode == "PERCENT" then value = pct
+        elseif mode == "CURRENT" or mode == "FULLVALUE" then value = cur
+        elseif mode == "MAX" then value = max_
+        elseif mode == "DEFICIT" then value = deficit
+        elseif mode == "CURMAX" then value = cur .. delim .. max_
+        elseif mode == "MAXCUR" then value = max_ .. delim .. cur
+        elseif mode == "CURPERCENT" then value = cur .. delim .. pct
+        elseif mode == "CURMAXPERCENT" then value = cur .. delim .. max_ .. delim .. pct
+        elseif mode == "MAXPERCENT" then value = max_ .. delim .. pct
+        elseif mode == "PERCENTCUR" then value = pct .. delim .. cur
+        elseif mode == "PERCENTMAX" then value = pct .. delim .. max_
+        elseif mode == "PERCENTCURMAX" then value = pct .. delim .. cur .. delim .. max_
+        elseif mode == "PERCENTMAXCUR" then value = pct .. delim .. max_ .. delim .. cur end
+        if not value then return nil end
+        return absorbBase and (value .. " + " .. absorbText) or value
     end
     local function TextModeHasPercent(mode)
         return tostring(mode or ""):find("PERCENT", 1, true) ~= nil
@@ -223,19 +235,26 @@ local function BuildGFTextSection(ctx, b)
             CURMAXPERCENT = "PERCENTMAXCUR", PERCENTMAXCUR = "CURMAXPERCENT",
             MAXPERCENT = "PERCENTMAX", PERCENTMAX = "MAXPERCENT",
             PERCENTCURMAX = "CURMAXPERCENT",
+            CURPERCENTABSORB = "PERCENTCURABSORB", PERCENTCURABSORB = "CURPERCENTABSORB",
+            CURMAXABSORB = "MAXCURABSORB", MAXCURABSORB = "CURMAXABSORB",
+            CURMAXPERCENTABSORB = "PERCENTMAXCURABSORB", PERCENTMAXCURABSORB = "CURMAXPERCENTABSORB",
+            MAXPERCENTABSORB = "PERCENTMAXABSORB", PERCENTMAXABSORB = "MAXPERCENTABSORB",
+            PERCENTCURMAXABSORB = "CURMAXPERCENTABSORB",
         }
         return rev[mode] or mode
     end
-    local function BuildTextPreviewStr(leftMode, centerMode, rightMode, delim, reverse, isPower, decimalHP, shortNumbers, hideLeft, hideCenter, hideRight)
+    local function BuildTextPreviewStr(leftMode, centerMode, rightMode, delim, reverse, isPower, decimalHP, shortNumbers, hideLeft, hideCenter, hideRight, absorbIconLeft, absorbIconCenter, absorbIconRight)
         if reverse and not isPower then
             leftMode, centerMode, rightMode = ReverseHpPreviewMode(rightMode), ReverseHpPreviewMode(centerMode), ReverseHpPreviewMode(leftMode)
             hideLeft, hideRight = hideRight, hideLeft
+            absorbIconLeft, absorbIconRight = absorbIconRight, absorbIconLeft
         end
         local slots = { leftMode, centerMode, rightMode }
         local hideSlots = { hideLeft, hideCenter, hideRight }
+        local iconSlots = { absorbIconLeft, absorbIconCenter, absorbIconRight }
         local parts = {}
         for i, mode in ipairs(slots) do
-            local ex = TextModeExampleStr(mode, delim, isPower, decimalHP, hideSlots[i], shortNumbers)
+            local ex = TextModeExampleStr(mode, delim, isPower, decimalHP, hideSlots[i], shortNumbers, iconSlots[i])
             if ex then parts[#parts + 1] = ex end
         end
         return #parts > 0 and table.concat(parts, "  ") or "(none)"
@@ -418,6 +437,12 @@ local function BuildGFTextSection(ctx, b)
         end
         return type(ReadTextTab) ~= "function" or ReadTextTab() == tab
     end
+    text._msuf2GuidedSelectSlot = function(kind, slot)
+        if (kind ~= "hp" and kind ~= "power") or (slot ~= "left" and slot ~= "center" and slot ~= "right") then return false end
+        SetCurrentSlot(kind, slot)
+        if refreshTextControls then refreshTextControls() end
+        return CurrentSlot(kind) == slot
+    end
     local nameContent = TextCard(nameTab, nil, nil, textLeftX, -4, textCardW, 158)
     PreviewText(nameContent, "Mapko", 16, -54, textCardW - 32)
     local showName = BindScopeToggle(ctx, W.SwitchAt(nameContent, "Show Name", 16, -24, 0, "HIDDEN"), "showName", true, "font")
@@ -428,10 +453,13 @@ local function BuildGFTextSection(ctx, b)
     local nameY = ScopeSlider(ctx, namePosition, "Y Offset", -100, 100, 1, textSliderW, "nameOffsetY", 0, "font", 16, -174, textCardW - 72)
     local nameAppearance = TextCard(nameTab, "Appearance", nil, textRightX, -4, textRightW, 150)
     local nameSize = ScopeSlider(ctx, nameAppearance, "Size", 6, 48, 1, hpSliderW, "nameFontSize", 12, "font", 16, -58, textRightW - 58)
-    local SLOT_VALUES = VT("left", "Left", "center", "Center", "right", "Right")
+    local ABSORB_STYLE_VALUES = VT("off", "Off", "value", "+ Value", "icon", "|TInterface\\Icons\\INV_Shield_06:14|t + Value")
+    local HP_BASE_MODES = M.UnitSectionsShared.HealthBaseModeValues(HEALTH_TEXT_MODES)
     local function BuildValueTextTab(kind, tab, cfg)
         local controls = {}
-        local content = TextCard(tab, nil, nil, textLeftX, -4, textCardW, 346)
+        local hasAbsorb = cfg.absorbIconKey ~= nil
+        local contentHeight = hasAbsorb and 520 or 474
+        local content = TextCard(tab, nil, nil, textLeftX, -4, textCardW, contentHeight)
         controls.preview = PreviewText(content, "", 16, -54, textCardW - 32)
         if cfg.showGet then
             controls.show = W.SwitchAt(content, cfg.showLabel, 16, -24, 0, "HIDDEN")
@@ -439,61 +467,118 @@ local function BuildGFTextSection(ctx, b)
         else
             controls.show = BindScopeToggle(ctx, W.SwitchAt(content, cfg.showLabel, 16, -24, 0, "HIDDEN"), cfg.showKey, cfg.showDefault, "font")
         end
-        local function SlotControl(slot, label, x, y, width)
-            local spec = cfg.slots[slot]
-            local control = W.Dropdown(content, label, cfg.modes or TEXT_MODES, width)
-            controls[slot] = control
-            M.BindDropdownWidget(ctx, control,
-                function() return Val(CurrentScope(), spec.key, spec.default) end,
-                function(value)
-                    Set(CurrentScope(), spec.key, value or spec.default, "visual")
-                    SetCurrentSlot(kind, slot)
-                    FocusGFPreviewText(kind, slot, true)
-                    local textEnabled = cfg.showGet and cfg.showGet() or Bool(CurrentScope(), cfg.showKey, cfg.showDefault)
-                    if controls.RefreshPercentToggles then controls.RefreshPercentToggles(textEnabled) end
-                    if controls.RefreshShortNumbersToggle then controls.RefreshShortNumbersToggle(textEnabled) end
-                    if value == "FULLVALUE" and controls.shortNumbers and T.PlayNeonFlash then
-                        T.PlayNeonFlash(controls.shortNumbers, "info", { alpha = 0.26, duration = 0.85 })
-                    end
-                    RequestGroupBarsRefresh(ctx, "gf-bars-text-mode")
-                end,
-                ControlMeta(ctx, "text." .. kind .. ".slot." .. slot .. ".mode"))
-            W.MoveWidget(control, content, x, y, width, "LEFT")
+        local function SelectedSlotSpec()
+            return cfg.slots[CurrentSlot(kind)] or cfg.slots.center
         end
-        SlotControl("right", "Right slot", 16, -96, textCardW - 32)
-        SlotControl("left", "Left slot", 16, -178, textHalfDropW)
-        SlotControl("center", "Center slot", 28 + textHalfDropW, -178, textHalfDropW)
-        local function SlotHidePercentControl(slot, label, x, y, width)
-            local spec = cfg.slots[slot]
-            if not (spec and spec.hidePercentKey) then return end
-            local control = W.ToggleAt(content, label, x, y, width)
-            controls[slot .. "HidePercent"] = control
-            M.BindBoolWidget(ctx, control,
-                function() return SlotHidePercentSymbol(CurrentScope(), spec.hidePercentKey) end,
-                function(value)
-                    Set(CurrentScope(), spec.hidePercentKey, value and true or false, "visual")
-                    SetCurrentSlot(kind, slot)
-                    FocusGFPreviewText(kind, slot, true)
-                    RequestGroupBarsRefresh(ctx, "gf-bars-text-hide-percent-symbol")
-                end,
-                ControlMeta(ctx, "text." .. kind .. ".slot." .. slot .. ".hide_percent"))
+        local function CurrentMode()
+            local spec = SelectedSlotSpec()
+            return Val(CurrentScope(), spec.key, spec.default)
         end
-        SlotHidePercentControl("right", "Hide right % sign", 16, -146, textCardW - 32)
-        SlotHidePercentControl("left", "Hide left % sign", 16, -230, textHalfDropW)
-        SlotHidePercentControl("center", "Hide center % sign", 28 + textHalfDropW, -230, textHalfDropW)
-        function controls.RefreshPercentToggles(enabled)
-            for slot, spec in pairs(cfg.slots or {}) do
-                local control = controls[slot .. "HidePercent"]
-                if control then
-                    SetOptionEnabled(control, enabled == true and TextModeHasPercent(Val(CurrentScope(), spec.key, spec.default)))
+        local function TextEnabled()
+            return cfg.showGet and cfg.showGet() or Bool(CurrentScope(), cfg.showKey, cfg.showDefault)
+        end
+        local function AfterModeChanged(mode)
+            FocusGFPreviewText(kind, CurrentSlot(kind), true)
+            if controls.RefreshPercentToggles then controls.RefreshPercentToggles(TextEnabled()) end
+            if controls.RefreshAbsorbControl then controls.RefreshAbsorbControl(TextEnabled()) end
+            if controls.RefreshShortNumbersToggle then controls.RefreshShortNumbersToggle(TextEnabled()) end
+            if mode == "FULLVALUE" and controls.shortNumbers and T.PlayNeonFlash then
+                T.PlayNeonFlash(controls.shortNumbers, "info", { alpha = 0.26, duration = 0.85 })
+            end
+            RequestGroupBarsRefresh(ctx, "gf-bars-text-mode")
+        end
+        local function SlotSummary(slot)
+            local spec = cfg.slots[slot]
+            local mode = Val(CurrentScope(), spec.key, spec.default)
+            local baseMode = hasAbsorb and M.UnitSectionsShared.HealthBaseMode(mode) or mode
+            local summary = OptionText(cfg.baseModes or cfg.modes or TEXT_MODES, baseMode, tostring(baseMode))
+            if hasAbsorb and M.UnitSectionsShared.HealthModeHasAbsorb(mode) then
+                local icon = Bool(CurrentScope(), spec.absorbIconKey, Bool(CurrentScope(), cfg.absorbIconKey, false))
+                summary = summary .. "  + " .. (icon and (absorbIconMarkup .. " ") or "") .. "Absorb"
+            end
+            return summary
+        end
+        local accordion = M.UnitSectionsShared.TextSlotAccordion(content, {
+            selected = CurrentSlot(kind), x = 16, y = -92, width = textCardW - 32,
+            bodyHeight = hasAbsorb and 154 or 108,
+            summary = SlotSummary,
+            onSelect = function(slot)
+                SetCurrentSlot(kind, slot)
+                FocusGFPreviewText(kind, slot, true)
+                RequestGroupBarsRefresh(ctx, "gf-bars-text-slot")
+            end,
+        })
+        controls.left, controls.center, controls.right = accordion.buttons.left, accordion.buttons.center, accordion.buttons.right
+        controls.RefreshAccordion = function() accordion:SetSelected(CurrentSlot(kind), true) end
+        for _, slot in ipairs({ "left", "center", "right" }) do
+            RegisterControl(accordion.buttons[slot], ctx, "text." .. kind .. ".slot_selector." .. slot,
+                (slot:sub(1, 1):upper() .. slot:sub(2)) .. " slot", "button", "ephemeral")
+        end
+        local editorY = accordion.editorY
+        controls.mode = W.Dropdown(content, cfg.valueLabel or "Value", cfg.baseModes or cfg.modes or TEXT_MODES, textCardW - 32)
+        M.BindDropdownWidget(ctx, controls.mode,
+            function()
+                local mode = CurrentMode()
+                return hasAbsorb and M.UnitSectionsShared.HealthBaseMode(mode) or mode
+            end,
+            function(value)
+                local spec, oldMode = SelectedSlotSpec(), CurrentMode()
+                local mode = value or spec.default
+                if hasAbsorb and M.UnitSectionsShared.HealthModeHasAbsorb(oldMode) and M.UnitSectionsShared.HealthModeSupportsAbsorb(mode) then
+                    mode = M.UnitSectionsShared.HealthModeWithAbsorb(mode, true)
                 end
+                Set(CurrentScope(), spec.key, mode, "visual")
+                AfterModeChanged(mode)
+            end,
+            ControlMeta(ctx, "text." .. kind .. ".slot.mode"))
+        W.MoveWidget(controls.mode, content, 32, editorY, textCardW - 64, "LEFT")
+        if hasAbsorb then
+            controls.absorb = W.Segment(content, "Absorb", ABSORB_STYLE_VALUES, textCardW - 64)
+            W.MoveWidget(controls.absorb, content, 32, editorY - 62, textCardW - 64, "LEFT")
+            M.BindSegment(ctx, controls.absorb,
+                function()
+                    if not M.UnitSectionsShared.HealthModeHasAbsorb(CurrentMode()) then return "off" end
+                    local spec = SelectedSlotSpec()
+                    return Bool(CurrentScope(), spec.absorbIconKey, Bool(CurrentScope(), cfg.absorbIconKey, false)) and "icon" or "value"
+                end,
+                function(value)
+                    local spec = SelectedSlotSpec()
+                    local mode = M.UnitSectionsShared.HealthModeWithAbsorb(CurrentMode(), value ~= "off")
+                    Set(CurrentScope(), spec.key, mode, "visual")
+                    if value ~= "off" then Set(CurrentScope(), spec.absorbIconKey, value == "icon", "font") end
+                    AfterModeChanged(mode)
+                end,
+                ControlMeta(ctx, "text." .. kind .. ".slot.absorb"))
+        end
+        local hidePercentY = editorY - (hasAbsorb and 124 or 62)
+        controls.hidePercent = W.ToggleAt(content, "Hide % sign", 32, hidePercentY, textCardW - 64)
+        M.BindBoolWidget(ctx, controls.hidePercent,
+            function()
+                local spec = SelectedSlotSpec()
+                return spec.hidePercentKey and SlotHidePercentSymbol(CurrentScope(), spec.hidePercentKey) or false
+            end,
+            function(value)
+                local spec = SelectedSlotSpec()
+                if spec.hidePercentKey then Set(CurrentScope(), spec.hidePercentKey, value and true or false, "visual") end
+                FocusGFPreviewText(kind, CurrentSlot(kind), true)
+                RequestGroupBarsRefresh(ctx, "gf-bars-text-hide-percent-symbol")
+            end,
+            ControlMeta(ctx, "text." .. kind .. ".slot.hide_percent"))
+        function controls.RefreshPercentToggles(enabled)
+            SetOptionEnabled(controls.hidePercent, enabled == true and TextModeHasPercent(CurrentMode()))
+        end
+        function controls.RefreshAbsorbControl(enabled)
+            if controls.absorb then
+                SetOptionEnabled(controls.absorb, enabled == true and M.UnitSectionsShared.HealthModeSupportsAbsorb(CurrentMode()))
             end
         end
-        controls.delimiter = ScopeDropdown(ctx, content, "Delimiter", DELIMITER_VALUES, textHalfDropW, cfg.delimiterKey, " / ", "visual", 16, -266, textHalfDropW)
-        if cfg.reverseKey then controls.reverse = BindScopeToggle(ctx, W.ToggleAt(content, "Reverse order", 28 + textHalfDropW, -288, textHalfDropW), cfg.reverseKey, false, "visual") end
-        if cfg.decimalsKey then controls.decimals = BindScopeToggle(ctx, W.ToggleAt(content, "Decimal percent", 28 + textHalfDropW, -316, textHalfDropW), cfg.decimalsKey, false, "visual") end
+        local formattingY = accordion.bottomY - 16
+        W.Text(content, "Formatting", 16, formattingY, textCardW - 32, T.colors.text)
+        controls.delimiter = ScopeDropdown(ctx, content, "Delimiter", DELIMITER_VALUES, textHalfDropW, cfg.delimiterKey, " / ", "visual", 16, formattingY - 28, textHalfDropW)
+        if cfg.reverseKey then controls.reverse = BindScopeToggle(ctx, W.ToggleAt(content, "Reverse order", 28 + textHalfDropW, formattingY - 50, textHalfDropW), cfg.reverseKey, false, "visual") end
+        if cfg.decimalsKey then controls.decimals = BindScopeToggle(ctx, W.ToggleAt(content, "Decimal percent", 28 + textHalfDropW, formattingY - 78, textHalfDropW), cfg.decimalsKey, false, "visual") end
         if cfg.shortNumbersKey then
-            controls.shortNumbers = BindScopeToggle(ctx, W.ToggleAt(content, "Abbreviate HP values (K/M)", 16, -316, textHalfDropW), cfg.shortNumbersKey, true, "font")
+            controls.shortNumbers = BindScopeToggle(ctx, W.ToggleAt(content, "Short numbers", 16, formattingY - 78, textHalfDropW), cfg.shortNumbersKey, true, "font")
             function controls.RefreshShortNumbersToggle(enabled)
                 local hasNumericValue = false
                 for _, spec in pairs(cfg.slots or {}) do
@@ -506,7 +591,7 @@ local function BuildGFTextSection(ctx, b)
                 SetOptionEnabled(controls.shortNumbers, enabled == true and hasNumericValue)
             end
         end
-        local position = TextCard(tab, "Position", cfg.positionSubtitle, textRightX, -4, textRightW, 410)
+        local position = TextCard(tab, "Position", cfg.positionSubtitle, textRightX, -4, textRightW, 350)
         controls.x = ScopeSlider(ctx, position, "X Offset", -100, 100, 1, hpSliderW, cfg.xKey, 0, "font", 16, -64, textRightW - 58)
         controls.y = ScopeSlider(ctx, position, "Y Offset", -100, 100, 1, hpSliderW, cfg.yKey, 0, "font", 16, -122, textRightW - 58)
         controls.moveTogether = W.ToggleAt(position, "Move text as one group", 16, -176, textRightW - 32)
@@ -519,20 +604,10 @@ local function BuildGFTextSection(ctx, b)
                 RequestGroupBarsRefresh(ctx, "gf-bars-text-move-together")
             end,
             ControlMeta(ctx, "text." .. kind .. ".move_together", "ephemeral"))
-        controls.slot = W.Segment(tab, "Slot", SLOT_VALUES, hpSliderW)
-        W.MoveWidget(controls.slot, position, 16, -220, textRightW - 32, "LEFT")
-        M.BindSegment(ctx, controls.slot,
-            function() return CurrentSlot(kind) end,
-            function(v)
-                SetCurrentSlot(kind, v)
-                FocusGFPreviewText(kind, v, true)
-                RequestGroupBarsRefresh(ctx, "gf-bars-text-slot")
-            end,
-            ControlMeta(ctx, "text." .. kind .. ".slot_selector", "ephemeral"))
         local function SlotAxis(axis)
-            local slider = W.Slider(position, "Slot " .. axis, -100, 100, 1, hpSliderW)
+            local slider = W.Slider(position, "Selected slot " .. axis, -100, 100, 1, hpSliderW)
             controls["slot" .. axis] = slider
-            PlaceSlider(position, slider, 16, axis == "X" and -284 or -342, textRightW - 58)
+            PlaceSlider(position, slider, 16, axis == "X" and -232 or -290, textRightW - 58)
             M.BindNumberWidget(ctx, slider,
                 function()
                     local xKey, yKey = SlotOffsetKeys(kind)
@@ -551,24 +626,27 @@ local function BuildGFTextSection(ctx, b)
         end
         SlotAxis("X")
         SlotAxis("Y")
-        local appearance = TextCard(tab, "Appearance", nil, textLeftX, -374, textCardW, 144)
+        local appearance = TextCard(tab, "Appearance", nil, textLeftX, -(contentHeight + 24), textCardW, 144)
         controls.size = ScopeSlider(ctx, appearance, "Size", 6, 48, 1, textSliderW, cfg.sizeKey, cfg.sizeDefault, "font", 16, -58, textCardW - 72)
         return controls
     end
     local hpControls = BuildValueTextTab("hp", hpTab, {
         modes = HEALTH_TEXT_MODES,
+        baseModes = HP_BASE_MODES,
+        valueLabel = "HP value",
         showLabel = "Show HP Text",
         showKey = "showHPText",
         showDefault = true,
         slots = {
-            left = { key = "textLeft", default = "NONE", hidePercentKey = "hpTextLeftHidePercentSymbol" },
-            center = { key = "textCenter", default = "PERCENT", hidePercentKey = "hpTextCenterHidePercentSymbol" },
-            right = { key = "textRight", default = "NONE", hidePercentKey = "hpTextRightHidePercentSymbol" },
+            left = { key = "textLeft", default = "NONE", hidePercentKey = "hpTextLeftHidePercentSymbol", absorbIconKey = "hpTextLeftAbsorbIcon" },
+            center = { key = "textCenter", default = "PERCENT", hidePercentKey = "hpTextCenterHidePercentSymbol", absorbIconKey = "hpTextCenterAbsorbIcon" },
+            right = { key = "textRight", default = "NONE", hidePercentKey = "hpTextRightHidePercentSymbol", absorbIconKey = "hpTextRightAbsorbIcon" },
         },
         delimiterKey = "textDelimiter",
         reverseKey = "hpTextReverse",
         decimalsKey = "healthTextDecimals",
         shortNumbersKey = "hpFullValueShort",
+        absorbIconKey = "hpAbsorbIcon",
         positionSubtitle = "Move all HP text together or adjust a selected slot.",
         xKey = "hpOffsetX",
         yKey = "hpOffsetY",
@@ -576,6 +654,7 @@ local function BuildGFTextSection(ctx, b)
         sizeDefault = 10,
     })
     local powerControls = BuildValueTextTab("power", powerTab, {
+        valueLabel = "Power value",
         showLabel = "Show Power Text",
         showGet = IsPowerTextEnabled,
         showSet = function(v)
@@ -613,9 +692,12 @@ local function BuildGFTextSection(ctx, b)
         local hpOn = Bool(CurrentScope(), "showHPText", true)
         local powerOn = IsPowerTextEnabled()
         M.CallIf(RefreshTextTabs)
+        if hpControls.RefreshAccordion then hpControls.RefreshAccordion() end
+        if powerControls.RefreshAccordion then powerControls.RefreshAccordion() end
         SetOptionsEnabled(nameTextControls, nameOn)
         SetOptionsEnabled(hpTextControls, hpOn)
         if hpControls.RefreshPercentToggles then hpControls.RefreshPercentToggles(hpOn) end
+        if hpControls.RefreshAbsorbControl then hpControls.RefreshAbsorbControl(hpOn) end
         if hpControls.RefreshShortNumbersToggle then hpControls.RefreshShortNumbersToggle(hpOn) end
         SetOptionsEnabled(hpSlotControls, hpOn and not MoveTogether("hp"))
         SetOptionsEnabled(powerTextControls, powerOn)
@@ -632,7 +714,10 @@ local function BuildGFTextSection(ctx, b)
                 delim, Bool(kind, "hpTextReverse", false), false, Bool(kind, "healthTextDecimals", false), Bool(kind, "hpFullValueShort", true),
                 SlotHidePercentSymbol(kind, "hpTextLeftHidePercentSymbol"),
                 SlotHidePercentSymbol(kind, "hpTextCenterHidePercentSymbol"),
-                SlotHidePercentSymbol(kind, "hpTextRightHidePercentSymbol")))
+                SlotHidePercentSymbol(kind, "hpTextRightHidePercentSymbol"),
+                Bool(kind, "hpTextLeftAbsorbIcon", Bool(kind, "hpAbsorbIcon", false)),
+                Bool(kind, "hpTextCenterAbsorbIcon", Bool(kind, "hpAbsorbIcon", false)),
+                Bool(kind, "hpTextRightAbsorbIcon", Bool(kind, "hpAbsorbIcon", false))))
         end
         if powerControls.preview then
             local delim = Val(kind, "powerTextDelimiter", " / ")

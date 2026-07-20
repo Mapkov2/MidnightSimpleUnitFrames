@@ -41,13 +41,13 @@ local UNIT_DATA = {
     -- Preview data is intentionally stylized and stable. Do not replace this with live Unit*
     -- API calls; preview should render identically while the player is offline, in combat, or
     -- inspecting another profile.
-    player = { name = "MIDNIGHT", class = "ROGUE", hp = 0.72, power = 0.52, powerToken = "ENERGY", level = "80", elite = false, isPlayer = true, portraitTexture = "Interface\\ICONS\\Ability_Stealth" },
-    target = { name = "Astral Warden", class = "MAGE", hp = 0.41, power = 0.68, powerToken = "MANA", level = "82", elite = true, reactionKind = "neutral", npcKind = "npcRegular", portraitTexture = "Interface\\ICONS\\Spell_Frost_FrostBolt02" },
-    targettarget = { name = "Moonlit Tank", class = "WARRIOR", hp = 0.88, power = 0.36, powerToken = "RAGE", level = "80", elite = false, isPlayer = true, portraitTexture = "Interface\\ICONS\\Ability_Warrior_DefensiveStance" },
-    focustarget = { name = "Marked Add", class = "WARRIOR", hp = 0.57, power = 0.24, powerToken = "RAGE", level = "81", elite = false, reactionKind = "enemy", npcKind = "npcMelee", portraitTexture = "Interface\\ICONS\\Ability_Warrior_Charge" },
-    focus = { name = "Voidcaller", class = "WARLOCK", hp = 0.63, power = 0.81, powerToken = "MANA", level = "81", elite = true, reactionKind = "enemy", npcKind = "npcCaster", portraitTexture = "Interface\\ICONS\\Spell_Shadow_Metamorphosis" },
-    boss = { name = "Boss Preview", class = "DEATHKNIGHT", hp = 0.55, power = 0.35, powerToken = "MANA", level = "??", elite = true, reactionKind = "enemy", npcKind = "npcBoss", portraitTexture = "Interface\\ICONS\\Achievement_Boss_LichKing" },
-    pet = { name = "Companion", class = "HUNTER", hp = 0.79, power = 0.44, powerToken = "FOCUS", level = "80", elite = false, isPet = true, reactionKind = "friendly", portraitTexture = "Interface\\ICONS\\Ability_Hunter_BeastCall" },
+    player = { name = "MIDNIGHT", class = "ROGUE", className = "Rogue", race = "Night Elf", hp = 0.72, power = 0.52, powerToken = "ENERGY", level = "80", elite = false, isPlayer = true, portraitTexture = "Interface\\ICONS\\Ability_Stealth" },
+    target = { name = "Astral Warden", class = "MAGE", className = "Mage", race = "Construct", hp = 0.41, power = 0.68, powerToken = "MANA", level = "82", elite = true, reactionKind = "neutral", npcKind = "npcRegular", portraitTexture = "Interface\\ICONS\\Spell_Frost_FrostBolt02" },
+    targettarget = { name = "Moonlit Tank", class = "WARRIOR", className = "Warrior", race = "Human", hp = 0.88, power = 0.36, powerToken = "RAGE", level = "80", elite = false, isPlayer = true, portraitTexture = "Interface\\ICONS\\Ability_Warrior_DefensiveStance" },
+    focustarget = { name = "Marked Add", class = "WARRIOR", className = "Warrior", race = "Orc", hp = 0.57, power = 0.24, powerToken = "RAGE", level = "81", elite = false, reactionKind = "enemy", npcKind = "npcMelee", portraitTexture = "Interface\\ICONS\\Ability_Warrior_Charge" },
+    focus = { name = "Voidcaller", class = "WARLOCK", className = "Warlock", race = "Orc", hp = 0.63, power = 0.81, powerToken = "MANA", level = "81", elite = true, reactionKind = "enemy", npcKind = "npcCaster", portraitTexture = "Interface\\ICONS\\Spell_Shadow_Metamorphosis" },
+    boss = { name = "Boss Preview", class = "DEATHKNIGHT", className = "Death Knight", race = "Undead", hp = 0.55, power = 0.35, powerToken = "MANA", level = "??", elite = true, reactionKind = "enemy", npcKind = "npcBoss", portraitTexture = "Interface\\ICONS\\Achievement_Boss_LichKing" },
+    pet = { name = "Companion", class = "HUNTER", className = "Hunter", race = "Beast", hp = 0.79, power = 0.44, powerToken = "FOCUS", level = "80", elite = false, isPet = true, reactionKind = "friendly", portraitTexture = "Interface\\ICONS\\Ability_Hunter_BeastCall" },
 }
 local function PreviewRaidGroupNameAllowed(key)
     return key == "player" or key == "target" or key == "targettarget" or key == "focustarget" or key == "focus"
@@ -819,31 +819,44 @@ local function JoinSep(sep)
     if sep == "" then return " " end
     return " " .. sep .. " "
 end
-local function FormatMode(mode, cur, maxVal, pct, sep, isPower, hidePercentSymbol, shortNumbers)
+local ABSORB_MODE_BASE = {
+    CURRENTABSORB = "CURRENT", FULLVALUEABSORB = "FULLVALUE", MAXABSORB = "MAX", DEFICITABSORB = "DEFICIT",
+    CURMAXABSORB = "CURMAX", PERCENTABSORB = "PERCENT", CURPERCENTABSORB = "CURPERCENT",
+    CURMAXPERCENTABSORB = "CURMAXPERCENT", MAXPERCENTABSORB = "MAXPERCENT",
+    PERCENTCURABSORB = "PERCENTCUR", PERCENTMAXABSORB = "PERCENTMAX",
+    PERCENTCURMAXABSORB = "PERCENTCURMAX", MAXCURABSORB = "MAXCUR",
+    PERCENTMAXCURABSORB = "PERCENTMAXCUR",
+}
+local ABSORB_ICON_MARKUP = "|TInterface\\Icons\\INV_Shield_06:0|t"
+local function FormatMode(mode, cur, maxVal, pct, sep, isPower, hidePercentSymbol, shortNumbers, absorbIcon)
     if isPower then mode = NormalizePowerMode(mode) else mode = NormalizeHpMode(mode) end
     if mode == "NONE" then return "" end
+    local absorbBase = ABSORB_MODE_BASE[mode]
     local c = NumText(cur, shortNumbers)
     local m = NumText(maxVal, shortNumbers)
     local a = NumText(125000, shortNumbers)
+    local absorbText = (absorbIcon and (ABSORB_ICON_MARKUP .. " ") or "") .. a
     local p = tostring(pct)
     if hidePercentSymbol ~= true then p = p .. "%" end
     local s = JoinSep(sep)
-    if mode == "ABSORB" then return a end
-    if mode == "PERCENT" then return p end
-    if mode == "CURRENT" then return c end
-    if mode == "FULLVALUE" then return c end
-    if mode == "MAX" then return m end
-    if mode == "DEFICIT" then return "-" .. NumText(maxVal - cur, shortNumbers) end
-    if mode == "CURMAX" then return c .. s .. m end
-    if mode == "MAXCUR" then return m .. s .. c end
-    if mode == "CURPERCENT" then return c .. s .. p end
-    if mode == "PERCENTCUR" then return p .. s .. c end
-    if mode == "CURMAXPERCENT" then return c .. s .. m .. s .. p end
-    if mode == "PERCENTMAXCUR" then return p .. s .. m .. s .. c end
-    if mode == "MAXPERCENT" then return m .. s .. p end
-    if mode == "PERCENTMAX" then return p .. s .. m end
-    if mode == "PERCENTCURMAX" then return p .. s .. c .. s .. m end
-    return c .. s .. p
+    if mode == "ABSORB" then return absorbText end
+    mode = absorbBase or mode
+    local value
+    if mode == "PERCENT" then value = p
+    elseif mode == "CURRENT" or mode == "FULLVALUE" then value = c
+    elseif mode == "MAX" then value = m
+    elseif mode == "DEFICIT" then value = "-" .. NumText(maxVal - cur, shortNumbers)
+    elseif mode == "CURMAX" then value = c .. s .. m
+    elseif mode == "MAXCUR" then value = m .. s .. c
+    elseif mode == "CURPERCENT" then value = c .. s .. p
+    elseif mode == "PERCENTCUR" then value = p .. s .. c
+    elseif mode == "CURMAXPERCENT" then value = c .. s .. m .. s .. p
+    elseif mode == "PERCENTMAXCUR" then value = p .. s .. m .. s .. c
+    elseif mode == "MAXPERCENT" then value = m .. s .. p
+    elseif mode == "PERCENTMAX" then value = p .. s .. m
+    elseif mode == "PERCENTCURMAX" then value = p .. s .. c .. s .. m
+    else value = c .. s .. p end
+    return absorbBase and (value .. " + " .. absorbText) or value
 end
 local UnitPreviewText = {}
 function UnitPreviewText.PlaceHandleAroundRegions(handle, parent, regions, pad)

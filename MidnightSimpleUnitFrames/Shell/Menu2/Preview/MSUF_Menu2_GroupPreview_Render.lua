@@ -1658,22 +1658,30 @@ function Render.Install(box, ctx, deps)
             end
         end
         local hpDelimiter = runtimeText.healthDelimiter or conf.textDelimiter or " - "
-        local function PreviewHealthText(mode, hidePercentSymbol)
-            if gf and gf.FormatHealthText then return gf.FormatHealthText(mode, fakeHP, fakeMax, hpDelimiter, false, nil, hidePercentSymbol, runtimeText.healthShortNumbers == true or (runtimeText.healthShortNumbers == nil and conf.hpFullValueShort ~= false), fakeAbsorb) end
+        local function PreviewHealthText(mode, hidePercentSymbol, runtimeIconKey, dbIconKey)
+            local absorbIcon = runtimeText[runtimeIconKey]
+            if absorbIcon == nil then absorbIcon = conf[dbIconKey] end
+            if absorbIcon == nil then absorbIcon = runtimeText.healthAbsorbIcon == true or conf.hpAbsorbIcon == true end
+            if gf and gf.FormatHealthText then return gf.FormatHealthText(mode, fakeHP, fakeMax, hpDelimiter, false, nil, hidePercentSymbol, runtimeText.healthShortNumbers == true or (runtimeText.healthShortNumbers == nil and conf.hpFullValueShort ~= false), fakeAbsorb, absorbIcon == true) end
             return mode == "PERCENT" and (hidePercentSymbol and "72" or "72%") or "720k"
         end
         PaintPreviewText(mock._hpLeftFS, hpSize, hpLeftMode, "LEFT", "LEFT",
             pad4 + ConfigToOffset(runtimeText.healthLeftX or ((conf.hpOffsetX or 0) + (conf.hpTextLeftOffsetX or 0)), previewScale),
             ConfigToOffset(runtimeText.healthLeftY or ((conf.hpOffsetY or 0) + (conf.hpTextLeftOffsetY or 0) + baselineOffset), previewScale),
-            "LEFT", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, PreviewHealthText(hpLeftMode, hpLeftHidePercent))
+            "LEFT", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, PreviewHealthText(hpLeftMode, hpLeftHidePercent,
+                runtimeText.healthReverse == true and "healthRightAbsorbIcon" or "healthLeftAbsorbIcon",
+                conf.hpTextReverse == true and "hpTextRightAbsorbIcon" or "hpTextLeftAbsorbIcon"))
         PaintPreviewText(mock._hpCenterFS, hpSize, hpCenterMode, "CENTER", "CENTER",
             ConfigToOffset(runtimeText.healthCenterX or ((conf.hpOffsetX or 0) + (conf.hpTextCenterOffsetX or 0)), previewScale),
             ConfigToOffset(runtimeText.healthCenterY or ((conf.hpOffsetY or 0) + (conf.hpTextCenterOffsetY or 0) + baselineOffset), previewScale),
-            "CENTER", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, PreviewHealthText(hpCenterMode, hpCenterHidePercent))
+            "CENTER", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, PreviewHealthText(hpCenterMode, hpCenterHidePercent,
+                "healthCenterAbsorbIcon", "hpTextCenterAbsorbIcon"))
         PaintPreviewText(mock._hpRightFS, hpSize, hpRightMode, "RIGHT", "RIGHT",
             -pad4 + ConfigToOffset(runtimeText.healthRightX or ((conf.hpOffsetX or 0) + (conf.hpTextRightOffsetX or 0)), previewScale),
             ConfigToOffset(runtimeText.healthRightY or ((conf.hpOffsetY or 0) + (conf.hpTextRightOffsetY or 0) + baselineOffset), previewScale),
-            "RIGHT", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, PreviewHealthText(hpRightMode, hpRightHidePercent))
+            "RIGHT", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, PreviewHealthText(hpRightMode, hpRightHidePercent,
+                runtimeText.healthReverse == true and "healthLeftAbsorbIcon" or "healthRightAbsorbIcon",
+                conf.hpTextReverse == true and "hpTextLeftAbsorbIcon" or "hpTextRightAbsorbIcon"))
         local pwrSize = max(6, ScaleValue((runtimeSpec and runtimeSpec.powerFontSize) or conf.powerFontSize or 9, previewScale, 6))
         local showPowerText = showText
         if runtimeSpec then

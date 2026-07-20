@@ -155,6 +155,14 @@ local function PreviewLiveFrame(key)
     if not frame then frame = uf and uf.frames and uf.frames[unit] or nil end
     return frame
 end
+local function PreviewLiveStatusText(key)
+    local frame = PreviewLiveFrame(key)
+    local value = frame and frame._msufStatusTextValue
+    if value == "DEAD" or value == "GHOST" or value == "OFFLINE" or value == "AFK" or value == "DND" then
+        return value
+    end
+    return nil
+end
 local function PreviewLivePowerBar(key)
     local frame = PreviewLiveFrame(key)
     return frame and (frame.targetPowerBar or frame.powerBar or frame.Power) or nil
@@ -485,7 +493,12 @@ function Render.Install(Preview, deps)
     renderState.UnitPreviewPortraitTexture = deps.UnitPreviewPortraitTexture
     renderState.ClassPortraitVisual = deps.ClassPortraitVisual
     renderState.PreviewStatus = MSUF.UFPreviewStatus or {}
-    renderState.STATUS_RUNTIME_KEYS = { raidmarker = "raidMarker", leader = "leader", assist = "assist", level = "level", elite = "elite", statusText = "statusText", statusCombat = "combat", statusResting = "resting", statusIncomingRes = "incomingRes", statusPvp = "pvp" }
+    renderState.STATUS_RUNTIME_KEYS = {
+        raidmarker = "raidMarker", leader = "leader", assist = "assist", level = "level",
+        raceText = "race", classText = "classText",
+        elite = "elite", statusText = "statusText", statusCombat = "combat", statusResting = "resting",
+        statusIncomingRes = "incomingRes", statusPvp = "pvp",
+    }
     renderState.ApplyPreviewTextFocus = deps.ApplyPreviewTextFocus or UNIT_RENDER_FALLBACKS.ApplyPreviewTextFocus
     local PowerColor = renderState.PowerColor
     local SharedCPPreview = MenuState.ClassPowerPreview or {}
@@ -621,6 +634,8 @@ function Preview.Refresh(box, reason)
     local runtimeSpec = R.RuntimeSpecForPreviewKey(key)
     local runtimePower = runtimeSpec and runtimeSpec.power
     local runtimeStatus = runtimeSpec and runtimeSpec.status
+    box._previewStatusText = R.PreviewStatus.StatusTextPreviewText
+        and R.PreviewStatus.StatusTextPreviewText((runtimeStatus and runtimeStatus.statusText) or g, PreviewLiveStatusText(key))
     local runtimeText = runtimeSpec and runtimeSpec.text
     local runtimeClassPower = runtimeSpec and runtimeSpec.classPower
     box.key = key
@@ -831,7 +846,7 @@ function Preview.Refresh(box, reason)
                 end
                 if spec.allowed and not spec.allowed(key) then show = false end
                 if spec.id == "elite" and not data.elite then show = false end
-                if spec.id == "statusText" and R.PreviewStatus.StatusTextPreviewText then show = show and R.PreviewStatus.StatusTextPreviewText(statusCfg or g) ~= nil end
+                if spec.id == "statusText" and R.PreviewStatus.StatusTextPreviewText then show = show and box._previewStatusText ~= nil end
                 if Preview.GetStatusPreviewMode() ~= "all" then
                     local selected = R.NormalizeStatusPreviewId(Preview.selectedStatusId)
                     if selected == "" then selected = "raidmarker" end
@@ -839,9 +854,10 @@ function Preview.Refresh(box, reason)
                 end
                 if show then
                     box._statusFootprintVisible = true
+                    local isIdentityText = R.PreviewStatus.IsIdentityText and R.PreviewStatus.IsIdentityText(spec)
                     local rawSize = tonumber(statusCfg and statusCfg.size) or tonumber(conf[spec.size]) or tonumber(g[spec.size])
                     if rawSize == nil then
-                        if spec.id == "level" then
+                        if isIdentityText then
                             rawSize = rawNameSize
                         elseif spec.id == "statusText" then
                             rawSize = rawNameSize + 2
@@ -850,14 +866,15 @@ function Preview.Refresh(box, reason)
                         end
                     end
                     local rw, rh = rawSize, rawSize
-                    if spec.id == "level" then
-                        rw, rh = ApproxTextWidth(tostring(data.level or "80"), rawSize, 2), rawSize + 4
+                    if isIdentityText then
+                        local previewText = R.PreviewStatus.IdentityPreviewText and R.PreviewStatus.IdentityPreviewText(spec, data) or spec.text
+                        rw, rh = ApproxTextWidth(previewText, rawSize, 2), rawSize + 4
                     elseif spec.id == "statusText" then
-                        rw, rh = ApproxTextWidth(R.PreviewStatus.StatusTextPreviewText(statusCfg or g) or "DEAD", rawSize, 4), rawSize + 4
+                        rw, rh = ApproxTextWidth(box._previewStatusText or "DEAD", rawSize, 4), rawSize + 4
                     end
-                    local anchor = (statusCfg and statusCfg.anchor) or R.ResolveStatusPreviewAnchor(spec, conf, g)
-                    local sx = tonumber(statusCfg and statusCfg.x) or tonumber(conf[spec.x]) or tonumber(g[spec.x]) or spec.defaultX or 0
-                    local sy = tonumber(statusCfg and statusCfg.y) or tonumber(conf[spec.y]) or tonumber(g[spec.y]) or spec.defaultY or 0
+                    local anchor = conf[spec.anchor] or (statusCfg and statusCfg.anchor) or R.ResolveStatusPreviewAnchor(spec, conf, g)
+                    local sx = tonumber(conf[spec.x]) or tonumber(statusCfg and statusCfg.x) or tonumber(g[spec.x]) or spec.defaultX or 0
+                    local sy = tonumber(conf[spec.y]) or tonumber(statusCfg and statusCfg.y) or tonumber(g[spec.y]) or spec.defaultY or 0
                     minX, maxX, minY, maxY = ExpandRuntimeAnchorRect(minX, maxX, minY, maxY, anchor, sx, sy, rw, rh, w, h)
                 end
             end
@@ -960,9 +977,9 @@ function Preview.Refresh(box, reason)
     R.UpdatePreviewZoomControls(box)
     local function S(v) return floor((tonumber(v) or 0) * scale + 0.5) end
     local function StatusAnchorOffsets(spec, statusCfg)
-        return (statusCfg and statusCfg.anchor) or R.ResolveStatusPreviewAnchor(spec, conf, g),
-            S(tonumber(statusCfg and statusCfg.x) or tonumber(conf[spec.x]) or tonumber(g[spec.x]) or spec.defaultX or 0),
-            S(tonumber(statusCfg and statusCfg.y) or tonumber(conf[spec.y]) or tonumber(g[spec.y]) or spec.defaultY or 0)
+        return conf[spec.anchor] or (statusCfg and statusCfg.anchor) or R.ResolveStatusPreviewAnchor(spec, conf, g),
+            S(tonumber(conf[spec.x]) or tonumber(statusCfg and statusCfg.x) or tonumber(g[spec.x]) or spec.defaultX or 0),
+            S(tonumber(conf[spec.y]) or tonumber(statusCfg and statusCfg.y) or tonumber(g[spec.y]) or spec.defaultY or 0)
     end
     local sw, sh, sp = S(w), S(h), S(pSize)
     local mockOffsetX, mockOffsetY = ResolvePreviewBodyOffsets(
@@ -1496,7 +1513,16 @@ function Preview.Refresh(box, reason)
     local hpCenterHidePercent = TextSlotHidePercentSymbol("hpTextCenterHidePercentSymbol")
     local hpRightHidePercent = TextSlotHidePercentSymbol("hpTextRightHidePercentSymbol")
     if R.TextScopeGet(key, "hpTextReverse", false) == true then
-        local rev = { CURPERCENT = "PERCENTCUR", PERCENTCUR = "CURPERCENT", CURMAX = "MAXCUR", MAXCUR = "CURMAX", CURMAXPERCENT = "PERCENTMAXCUR", PERCENTMAXCUR = "CURMAXPERCENT", MAXPERCENT = "PERCENTMAX", PERCENTMAX = "MAXPERCENT", PERCENTCURMAX = "CURMAXPERCENT" }
+        local rev = {
+            CURPERCENT = "PERCENTCUR", PERCENTCUR = "CURPERCENT", CURMAX = "MAXCUR", MAXCUR = "CURMAX",
+            CURMAXPERCENT = "PERCENTMAXCUR", PERCENTMAXCUR = "CURMAXPERCENT",
+            MAXPERCENT = "PERCENTMAX", PERCENTMAX = "MAXPERCENT", PERCENTCURMAX = "CURMAXPERCENT",
+            CURPERCENTABSORB = "PERCENTCURABSORB", PERCENTCURABSORB = "CURPERCENTABSORB",
+            CURMAXABSORB = "MAXCURABSORB", MAXCURABSORB = "CURMAXABSORB",
+            CURMAXPERCENTABSORB = "PERCENTMAXCURABSORB", PERCENTMAXCURABSORB = "CURMAXPERCENTABSORB",
+            MAXPERCENTABSORB = "PERCENTMAXABSORB", PERCENTMAXABSORB = "MAXPERCENTABSORB",
+            PERCENTCURMAXABSORB = "CURMAXPERCENTABSORB",
+        }
         hpLeftMode, hpRightMode = hpRightMode, hpLeftMode
         hpLeftMode = rev[hpLeftMode] or hpLeftMode
         hpCenterMode = rev[hpCenterMode] or hpCenterMode
@@ -1508,9 +1534,15 @@ function Preview.Refresh(box, reason)
     local hpPctValue = hpPercentDecimals and format("%.1f", floor(data.hp * 1000 + 0.5) / 10)
         or floor(data.hp * 100 + 0.5)
     local hpSepRaw = R.TextScopeGet(key, "hpTextSeparator", "")
-    mock.hpTextLeft:SetText(R.FormatMode(hpLeftMode, hpCur, hpMax, hpPctValue, hpSepRaw, false, hpLeftHidePercent, R.TextScopeGet(key, "hpFullValueShort", R.TextScopeGet(key, "useShortNumbers", true)) == true))
-    mock.hpTextCenter:SetText(R.FormatMode(hpCenterMode, hpCur, hpMax, hpPctValue, hpSepRaw, false, hpCenterHidePercent, R.TextScopeGet(key, "hpFullValueShort", R.TextScopeGet(key, "useShortNumbers", true)) == true))
-    mock.hpText:SetText(R.FormatMode(hpRightMode, hpCur, hpMax, hpPctValue, hpSepRaw, false, hpRightHidePercent, R.TextScopeGet(key, "hpFullValueShort", R.TextScopeGet(key, "useShortNumbers", true)) == true))
+    mock.hpTextLeft:SetText(R.FormatMode(hpLeftMode, hpCur, hpMax, hpPctValue, hpSepRaw, false, hpLeftHidePercent,
+        R.TextScopeGet(key, "hpFullValueShort", R.TextScopeGet(key, "useShortNumbers", true)) == true,
+        R.TextScopeGet(key, R.TextScopeGet(key, "hpTextReverse", false) == true and "hpTextRightAbsorbIcon" or "hpTextLeftAbsorbIcon", R.TextScopeGet(key, "hpAbsorbIcon", false)) == true))
+    mock.hpTextCenter:SetText(R.FormatMode(hpCenterMode, hpCur, hpMax, hpPctValue, hpSepRaw, false, hpCenterHidePercent,
+        R.TextScopeGet(key, "hpFullValueShort", R.TextScopeGet(key, "useShortNumbers", true)) == true,
+        R.TextScopeGet(key, "hpTextCenterAbsorbIcon", R.TextScopeGet(key, "hpAbsorbIcon", false)) == true))
+    mock.hpText:SetText(R.FormatMode(hpRightMode, hpCur, hpMax, hpPctValue, hpSepRaw, false, hpRightHidePercent,
+        R.TextScopeGet(key, "hpFullValueShort", R.TextScopeGet(key, "useShortNumbers", true)) == true,
+        R.TextScopeGet(key, R.TextScopeGet(key, "hpTextReverse", false) == true and "hpTextLeftAbsorbIcon" or "hpTextRightAbsorbIcon", R.TextScopeGet(key, "hpAbsorbIcon", false)) == true))
     mock.hpTextPct:SetText("")
     local powerSlots = R.TextScopeHasSlots(key, "powerTextLeft", "powerTextCenter", "powerTextRight")
     local powerLeftMode, powerCenterMode, powerRightMode
@@ -1794,7 +1826,7 @@ function Preview.Refresh(box, reason)
         end
         if spec.allowed and not spec.allowed(key) then show = false end
         if spec.id == "elite" and not data.elite then show = false end
-        if spec.id == "statusText" and R.PreviewStatus.StatusTextPreviewText then show = show and R.PreviewStatus.StatusTextPreviewText(statusCfg or g) ~= nil end
+        if spec.id == "statusText" and R.PreviewStatus.StatusTextPreviewText then show = show and box._previewStatusText ~= nil end
         if Preview.GetStatusPreviewMode() ~= "all" then
             local selected = R.NormalizeStatusPreviewId(Preview.selectedStatusId)
             if selected == "" then selected = "raidmarker" end
@@ -1803,9 +1835,10 @@ function Preview.Refresh(box, reason)
         icon:SetShown(show)
         if show then
             statusLayerAvailable = true
+            local isIdentityText = R.PreviewStatus.IsIdentityText and R.PreviewStatus.IsIdentityText(spec)
             local rawSize = tonumber(statusCfg and statusCfg.size) or tonumber(conf[spec.size]) or tonumber(g[spec.size])
             if rawSize == nil then
-                if spec.id == "level" then
+                if isIdentityText then
                     rawSize = nameRawSize
                 elseif spec.id == "statusText" then
                     rawSize = nameRawSize + 2
@@ -1814,7 +1847,7 @@ function Preview.Refresh(box, reason)
                 end
             end
             local sz = S(rawSize)
-            if spec.id == "level" then
+            if isIdentityText then
                 if sz < 7 then sz = 7 end
             elseif sz < 10 then
                 sz = 10
@@ -1823,13 +1856,13 @@ function Preview.Refresh(box, reason)
                 local rawLayer = tonumber(statusCfg and statusCfg.layer) or (spec.layer and (tonumber(conf[spec.layer]) or tonumber(g[spec.layer]))) or spec.defaultLayer
                 icon:SetFrameLevel(textBase + ClampPreviewLayer(rawLayer, spec.defaultLayer or 7))
             end
-            R.SetPreviewIconTexture(icon, spec, conf, g, key, data, statusCfg)
+            R.SetPreviewIconTexture(icon, spec, conf, g, key, data, statusCfg, box._previewStatusText)
             if spec.id == "statusCombat" and icon.SetAlpha then
                 icon:SetAlpha(animState and (0.55 + ((tonumber(animState.pulse) or 0) * 0.45)) or 1)
             elseif icon.SetAlpha then
                 icon:SetAlpha(1)
             end
-            if spec.id == "level" then
+            if isIdentityText then
                 local anchor, x, y = StatusAnchorOffsets(spec, statusCfg)
                 if icon.txt then
                     ApplyPreviewFont(icon.txt, max(7, sz))

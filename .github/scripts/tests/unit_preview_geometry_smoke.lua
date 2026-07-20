@@ -14,6 +14,7 @@ end
 local renderPath = addonRoot .. "/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua"
 local modelPath = addonRoot .. "/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Model.lua"
 local viewPath = addonRoot .. "/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_View.lua"
+local statusPath = addonRoot .. "/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Status.lua"
 
 local namespace = {}
 local chunk, err = loadfile(renderPath)
@@ -83,4 +84,27 @@ assert(source:find("dx, dy = StoredHandleDelta(h, dx, dy)", 1, true)
     and source:find("resolveOffsetDelta = NameHandleOffsetDelta", 1, true),
     "right-name delta resolver is not wired into direct manipulation")
 
-print("UNIT PREVIEW GEOMETRY SMOKE PASS - fit/manual/outlier/drag origin/right-name direction")
+local statusNamespace = {
+    UFPreview = { Model = { MakeFS = function() end, FontColor = function() return 1, 1, 1 end } },
+}
+local statusChunk, statusError = loadfile(statusPath)
+assert(statusChunk, statusError)
+statusChunk("MidnightSimpleUnitFrames", statusNamespace)
+local statusPreviewText = assert(statusNamespace.UFPreviewStatus
+    and statusNamespace.UFPreviewStatus.StatusTextPreviewText, "status preview text resolver missing")
+local enabledStates = { showDead = true, showGhost = true, showAFK = true, showDND = true }
+assert(statusPreviewText(enabledStates, "AFK") == "AFK",
+    "Unit Preview does not prefer the AFK state currently shown by runtime")
+assert(statusPreviewText(enabledStates, "DND") == "DND",
+    "Unit Preview does not prefer the DND state currently shown by runtime")
+assert(statusPreviewText({ showDead = true, showAFK = false }, "AFK") == "DEAD",
+    "Unit Preview showed a runtime AFK state disabled by preview configuration")
+
+local renderHandle = assert(io.open(renderPath, "r"))
+local renderSource = renderHandle:read("*a")
+renderHandle:close()
+assert(renderSource:find("frame._msufStatusTextValue", 1, true)
+    and renderSource:find("statusCfg, box._previewStatusText", 1, true),
+    "Unit Preview does not pass the current runtime status text into its renderer")
+
+print("UNIT PREVIEW GEOMETRY SMOKE PASS - fit/manual/outlier/drag origin/right-name direction/runtime status text")

@@ -62,14 +62,14 @@ local STAGES = {
     },
     {
         id = "uf_player_hp_text", pageKey = "uf_player", icon = "uf_player", area = "unitframes", title = "Set up Player health text",
-        includeSections = { text = true }, prepareSection = "text", prepareTab = "hp", prepareState = "unitTextTabSelection", controlLimit = 3,
-        controlPaths = { "unit/text/hp/show", "unit/text/hp/slot/right/mode", "unit/text/hp/size" },
+        includeSections = { text = true }, prepareSection = "text", prepareTab = "hp", prepareState = "unitTextTabSelection", prepareSlot = "right", prepareSlotState = "unitTextSlotSelection", controlLimit = 3,
+        controlPaths = { "unit/text/hp/show", "unit/text/hp/slot/mode", "unit/text/hp/size" },
         impact = "Skipping keeps the current Player health text.",
     },
     {
         id = "uf_player_power_text", pageKey = "uf_player", icon = "uf_player", area = "unitframes", title = "Set up Player power text",
-        includeSections = { text = true }, prepareSection = "text", prepareTab = "power", prepareState = "unitTextTabSelection", controlLimit = 3,
-        controlPaths = { "unit/text/power/show", "unit/text/power/slot/right/mode", "unit/text/power/size" },
+        includeSections = { text = true }, prepareSection = "text", prepareTab = "power", prepareState = "unitTextTabSelection", prepareSlot = "right", prepareSlotState = "unitTextSlotSelection", controlLimit = 3,
+        controlPaths = { "unit/text/power/show", "unit/text/power/slot/mode", "unit/text/power/size" },
         impact = "Skipping keeps the current Player power text.",
     },
     {
@@ -147,15 +147,15 @@ local STAGES = {
     {
         id = "gf_party_hp_text", pageKey = "gf_layout", icon = "gf_layout", area = "groupframes", title = "Set up Party health text",
         includeSections = { text = true }, includeLockedControls = true,
-        prepareSection = "text", prepareTab = "hp", prepareState = "gfTextTabSelection", prepareStateIndex = "party", controlLimit = 3,
-        controlPaths = { "group/layout/field/showhptext", "group/layout/text/hp/slot/center/mode", "group/layout/field/hpfontsize" },
+        prepareSection = "text", prepareTab = "hp", prepareState = "gfTextTabSelection", prepareStateIndex = "party", prepareSlot = "center", prepareSlotState = "gfTextSlotSelection", controlLimit = 3,
+        controlPaths = { "group/layout/field/showhptext", "group/layout/text/hp/slot/mode", "group/layout/field/hpfontsize" },
         impact = "Skipping keeps the current Party health text.",
     },
     {
         id = "gf_party_power_text", pageKey = "gf_layout", icon = "gf_layout", area = "groupframes", title = "Set up Party power text",
         includeSections = { text = true }, includeLockedControls = true,
-        prepareSection = "text", prepareTab = "power", prepareState = "gfTextTabSelection", prepareStateIndex = "party", controlLimit = 3,
-        controlPaths = { "group/layout/text/power/show", "group/layout/text/power/slot/center/mode", "group/layout/field/powerfontsize" },
+        prepareSection = "text", prepareTab = "power", prepareState = "gfTextTabSelection", prepareStateIndex = "party", prepareSlot = "center", prepareSlotState = "gfTextSlotSelection", controlLimit = 3,
+        controlPaths = { "group/layout/text/power/show", "group/layout/text/power/slot/mode", "group/layout/field/powerfontsize" },
         impact = "Skipping keeps the current Party power text.",
     },
     {
@@ -1044,6 +1044,23 @@ local function EnsureStageSurface(stage)
                 M[stage.prepareState] = state
             end
             state[stage.prepareStateIndex or "player"] = stage.prepareTab
+        end
+    end
+    if type(stage) == "table" and stage.prepareSection and stage.prepareTab and stage.prepareSlot and stage.prepareSlotState then
+        local pageEntry = M.cache and M.cache[stage.pageKey]
+        local section = pageEntry and pageEntry.sections and pageEntry.sections[stage.prepareSection]
+        local selectSlot = section and section._msuf2GuidedSelectSlot
+        local prepared
+        if type(selectSlot) == "function" then
+            local ok, value = pcall(selectSlot, stage.prepareTab, stage.prepareSlot)
+            prepared = ok and value ~= false
+        end
+        if not prepared then
+            local state = M[stage.prepareSlotState]
+            if type(state) ~= "table" then state = {}; M[stage.prepareSlotState] = state end
+            local index = stage.prepareStateIndex or "player"
+            if type(state[index]) ~= "table" then state[index] = {} end
+            state[index][stage.prepareTab] = stage.prepareSlot
         end
     end
     local kind = stage and stage.ensureCopyPopup
