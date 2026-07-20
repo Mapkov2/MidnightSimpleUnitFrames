@@ -108,26 +108,74 @@ local function _MSUF_GetFontPathSerial(path)
     return serial
 end
 
-local function _MSUF_FontApplied(fs, requestedPath)
-    if type(fs.GetFont) ~= "function" then return true end
-    local ok, actual = pcall(fs.GetFont, fs)
-    if not ok or not actual then return true end
+local function _MSUF_FontPathMatches(expected, actual)
     local matches = _G.MSUF_FontPathMatches or _G.MSUF_FontPathEquals
     if type(matches) == "function" then
-        return matches(requestedPath, actual) == true
+        return matches(expected, actual) == true
     end
-    return tostring(actual or ""):gsub("/", "\\"):lower() == tostring(requestedPath or ""):gsub("/", "\\"):lower()
+    return tostring(actual or ""):gsub("/", "\\"):lower() == tostring(expected or ""):gsub("/", "\\"):lower()
 end
 
+local function _MSUF_FontApplied(fs, expectedPath, expectedSize)
+    if type(fs.GetFont) ~= "function" then return true end
+    local ok, actualPath, actualSize = pcall(fs.GetFont, fs)
+    if not ok or not actualPath or not _MSUF_FontPathMatches(expectedPath, actualPath) then
+        return false
+    end
+    actualSize, expectedSize = tonumber(actualSize), tonumber(expectedSize)
+    return actualSize ~= nil and expectedSize ~= nil and math.abs(actualSize - expectedSize) <= 0.01
+end
+
+local function _MSUF_ClearFontApplyCaches(fs)
+    if not fs then return end
+    fs._msufFontRev = nil
+    fs._msufSafeFontPath = nil
+    fs._msufSafeFontSize = nil
+    fs._msufSafeFontFlags = nil
+    fs._msufSafeFontRequestPath = nil
+    fs._msufSafeFontRequestSize = nil
+    fs._msufSafeFontRequestFlags = nil
+    fs._msufSafeFontAppliedPath = nil
+    fs._msufSafeFontSource = nil
+end
+
+-- A cold client can accept SetFont before the live FontString publishes the
+-- requested path/metrics. Only verified path + size may earn _msufFontRev;
+-- otherwise clear both cache layers and let the bounded cold retry try again.
 local function _MSUF_SetFontChecked(fs, path, size, flags, fontKey)
+    local expectedSize = tonumber(size) or 12
+    if expectedSize <= 0 then expectedSize = 12 end
+
     local safeSet = _G.MSUF_SetFontSafe
     if type(safeSet) == "function" then
-        local ok = safeSet(fs, path, size, flags, fontKey)
-        return ok == true
+        local ok, appliedPath, source = safeSet(fs, path, size, flags, fontKey)
+        if ok ~= true then
+            _MSUF_ClearFontApplyCaches(fs)
+            return false, false
+        end
+        appliedPath = appliedPath or path
+        -- A helper-level fallback keeps text readable, but it must not settle
+        -- the configured-path revision or that font can never be retried.
+        if source ~= "fallback"
+            and _MSUF_FontPathMatches(path, appliedPath)
+            and _MSUF_FontApplied(fs, appliedPath, expectedSize)
+        then
+            return true, false
+        end
+        _MSUF_ClearFontApplyCaches(fs)
+        return false, true
     end
 
-    local ok, applied = pcall(fs.SetFont, fs, path, size, flags)
-    return ok and applied ~= false and _MSUF_FontApplied(fs, path)
+    local ok, applied = pcall(fs.SetFont, fs, path, expectedSize, flags)
+    if not ok or applied == false then
+        _MSUF_ClearFontApplyCaches(fs)
+        return false, false
+    end
+    if _MSUF_FontApplied(fs, path, expectedSize) then
+        return true, false
+    end
+    _MSUF_ClearFontApplyCaches(fs)
+    return false, true
 end
 
 local function _MSUF_ApplyFontCached(fs, size, setColor, cr, cg, cb)
@@ -137,10 +185,12 @@ local function _MSUF_ApplyFontCached(fs, size, setColor, cr, cg, cb)
 
     local rev = S.pathSerial * 10 + (_MSUF_FONT_FLAGS_CODE[S.flags] or 1) + size * 10000030
     if fs._msufFontRev ~= rev then
-        local ok = _MSUF_SetFontChecked(fs, S.path, size, S.flags, S.fontKey)
-        if not ok then
+        local ok, retryableMismatch = _MSUF_SetFontChecked(fs, S.path, size, S.flags, S.fontKey)
+        if not ok and not retryableMismatch then
             local fallback = _G.MSUF_ResolveFontPath and _G.MSUF_ResolveFontPath("Fonts\\FRIZQT__.TTF", size, S.flags) or "Fonts\\FRIZQT__.TTF"
-            ok = _MSUF_SetFontChecked(fs, fallback, size, S.flags, "FRIZQT")
+            -- Display-only fallback: never stamp the configured-path revision
+            -- for a different font or the configured font cannot recover.
+            _MSUF_SetFontChecked(fs, fallback, size, S.flags, "FRIZQT")
         end
         if ok then
             fs._msufFontRev = rev
