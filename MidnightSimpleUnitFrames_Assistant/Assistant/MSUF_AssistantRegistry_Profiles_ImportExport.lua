@@ -21,9 +21,8 @@ function A.ProfileRegistry.RegisterImportExportActions(ctx)
     local ActiveProfileName = ctx.ActiveProfileName
     local Assistant = ctx.Assistant or A
     local Menu = ctx.Menu or M
-    local RequireUUFBestEffortAccepted = ctx.RequireUUFBestEffortAccepted
     if not (Registry and type(Registry.RegisterAction) == "function") then return end
-    if type(Profile) ~= "table" or type(RequireUUFBestEffortAccepted) ~= "function" then return end
+    if type(Profile) ~= "table" then return end
     if type(ProfileExists) ~= "function" or type(ActiveProfileName) ~= "function" then return end
     local RegisterProfileImportActions = A.ProfileRegistry and A.ProfileRegistry.RegisterProfileImportActions
     if type(RegisterProfileImportActions) ~= "function" then return end

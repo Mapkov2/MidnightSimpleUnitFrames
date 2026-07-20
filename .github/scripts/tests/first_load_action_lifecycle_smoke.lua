@@ -654,7 +654,7 @@ do
 end
 
 -- The completion hook belongs to the shared data mutation boundaries, not a
--- single menu page, so compact, legacy/UUF, and external imports cannot bypass it.
+-- single menu page, so compact, legacy, and external imports cannot bypass it.
 do
     local profiles = Read("MidnightSimpleUnitFrames/State/MSUF_Profiles.lua")
     Check(Count(profiles, "MSUF.ProfileIOCompleteFirstLoadImport()") >= 6,

@@ -152,7 +152,6 @@ Profile.KindLabels
 Profile.List
 Profile.ProfileExists
 Profile.Refresh
-Profile.RequireUUFBestEffortAccepted
 Profile.ResolveProfileName
 Profile.ResolveSpecID
 Profile.SetSpecAutoSwitch

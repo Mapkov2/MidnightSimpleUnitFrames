@@ -275,8 +275,8 @@ Invalid("set_group_spell_indicator_aura", {
 Invalid("move_group_spell_indicator_order", { spec = "Holy Paladin", aura = "Beacon", position = 0 }, "at least")
 
 local importText = "  !MSUF_TEST_PAYLOAD  "
-Valid("import_profile_string", { value = importText, uufBestEffortAccepted = "yes" }, function(out)
-    assert(out.value == importText and out.uufBestEffortAccepted == true, "import text was not preserved exactly")
+Valid("import_profile_string", { value = importText }, function(out)
+    assert(out.value == importText, "import text was not preserved exactly")
 end)
 Invalid("import_profile_string", { value = "" }, "too short")
 Invalid("import_profile_string_new", { value = "!MSUF_TEST" }, "requires input field")

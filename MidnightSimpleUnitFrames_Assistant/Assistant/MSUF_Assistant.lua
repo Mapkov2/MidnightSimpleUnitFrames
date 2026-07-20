@@ -8105,26 +8105,21 @@ end
 AP.NORMAL_INPUT_MAX_CHARS = 20000
 
 function AP.ExtractProfileString(text)    text = tostring(text or "")
-    local compact = text:match("(MSUF%d+:%S+)")
-    if compact then return compact, false end
-    local uuf = text:match("(!UUF_%S+)")
-    if uuf then return uuf, true end
-    return nil, false
+    return text:match("(MSUF%d+:%S+)")
 end
 
 function AP.LongInputResult(text)    text = tostring(text or "")
     if #text <= AP.NORMAL_INPUT_MAX_CHARS then return nil end
-    local value, isUUF = AP.ExtractProfileString(text)
+    local value = AP.ExtractProfileString(text)
     if value and Registry and type(Registry.GetAction) == "function" then
         local action = Registry:GetAction("import_profile_string")
         if action then
             return A.ExecutePlan({
                 kind = "action",
                 action = action,
-                args = { value = value, uufBestEffortAccepted = isUUF == true },
+                args = { value = value },
                 confirmRequired = true,
-                confirmText = isUUF and A.UUFBestEffortConfirmText() or nil,
-                label = isUUF and "Import UnhaltedUnitFrames profile string" or "Import profile string",
+                label = "Import profile string",
                 summary = "Imports profile data into the active profile.",
             })
         end

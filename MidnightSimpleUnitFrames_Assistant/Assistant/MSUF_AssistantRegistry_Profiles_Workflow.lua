@@ -63,21 +63,6 @@ local function ActiveProfileName()
     return name
 end
 
-local function IsUUFImportString(value)
-    local fn = _G.MSUF_IsUUFImportString
-    if type(fn) == "function" then
-        return fn(value) == true
-    end
-    return type(value) == "string" and value:match("^%s*!UUF_") ~= nil
-end
-
-local function RequireUUFBestEffortAccepted(value, args)
-    if IsUUFImportString(value) and not (args and args.uufBestEffortAccepted == true) then
-        return false, "Confirm the best-effort UnhaltedUnitFrames import first."
-    end
-    return true
-end
-
 local Profile = {
     KindLabels = {
         all = "Full profile",
@@ -160,7 +145,6 @@ Profile.ProfileExists = ProfileExists
 Profile.ResolveProfileName = ResolveProfileName
 Profile.DisplayProfileName = DisplayProfileName
 Profile.ActiveProfileName = ActiveProfileName
-Profile.RequireUUFBestEffortAccepted = RequireUUFBestEffortAccepted
 
 A.ProfileWorkflow = Profile
 A.ResolveProfileName = ResolveProfileName

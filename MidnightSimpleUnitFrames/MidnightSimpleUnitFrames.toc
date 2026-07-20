@@ -27,8 +27,6 @@
 Libs\LibStub\LibStub.lua
 Libs\WagoAnalyticsShim\Shim.lua
 Libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
-Libs\AceSerializer-3.0\AceSerializer-3.0.lua
-Libs\LibDeflate\LibDeflate.lua
 Libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua
 Kernel\MSUF_Bootstrap.lua
 State\MSUF_FirstLoad.lua

@@ -19,14 +19,12 @@ local Profile = A.ProfileWorkflow
 local ResolveProfileName = A.ResolveProfileName
 local ProfileExists = A.ProfileExists
 local ActiveProfileName = A.ActiveProfileName
-local RequireUUFBestEffortAccepted = type(Profile) == "table" and Profile.RequireUUFBestEffortAccepted or nil
 local RegisterImportExportActions = A.ProfileRegistry and A.ProfileRegistry.RegisterImportExportActions
 local RegisterLifecycleActions = A.ProfileRegistry and A.ProfileRegistry.RegisterLifecycleActions
 if type(Profile) ~= "table"
     or type(ResolveProfileName) ~= "function"
     or type(ProfileExists) ~= "function"
     or type(ActiveProfileName) ~= "function"
-    or type(RequireUUFBestEffortAccepted) ~= "function"
 then
     return
 end
@@ -74,7 +72,6 @@ if type(RegisterImportExportActions) == "function" then
         Profile = Profile,
         ProfileExists = ProfileExists,
         ActiveProfileName = ActiveProfileName,
-        RequireUUFBestEffortAccepted = RequireUUFBestEffortAccepted,
         Assistant = A,
         Menu = M,
     })

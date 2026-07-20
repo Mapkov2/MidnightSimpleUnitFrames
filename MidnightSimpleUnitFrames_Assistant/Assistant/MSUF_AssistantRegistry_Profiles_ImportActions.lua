@@ -20,9 +20,8 @@ function A.ProfileRegistry.RegisterProfileImportActions(ctx)
     local ProfileExists = ctx.ProfileExists
     local ActiveProfileName = ctx.ActiveProfileName
     local Assistant = ctx.Assistant or A
-    local RequireUUFBestEffortAccepted = ctx.RequireUUFBestEffortAccepted
     if not (Registry and type(Registry.RegisterAction) == "function") then return end
-    if type(Profile) ~= "table" or type(RequireUUFBestEffortAccepted) ~= "function" then return end
+    if type(Profile) ~= "table" then return end
     if type(ProfileExists) ~= "function" or type(ActiveProfileName) ~= "function" then return end
 
     Registry:RegisterAction({
@@ -36,8 +35,6 @@ function A.ProfileRegistry.RegisterProfileImportActions(ctx)
         run = function(args)
             local value = args and args.value
             if type(value) ~= "string" or value == "" then return false, "Add the profile string you want to import." end
-            local allowed, why = RequireUUFBestEffortAccepted(value, args)
-            if not allowed then return false, why end
             local fn = _G.MSUF_ImportFromString
             if type(fn) ~= "function" then return false, "Open Profiles first, then send the profile import text." end
             if fn(value) == true then
@@ -64,8 +61,6 @@ function A.ProfileRegistry.RegisterProfileImportActions(ctx)
             local value = args and args.value
             local name = args and args.name
             if type(value) ~= "string" or value == "" then return false, "Add the profile string you want to import." end
-            local allowed, why = RequireUUFBestEffortAccepted(value, args)
-            if not allowed then return false, why end
             if type(name) ~= "string" or name == "" then return false, "What should the new profile be called for this import?" end
             if ProfileExists(name) then return false, "Profile " .. tostring(name) .. " already exists." end
             if type(_G.MSUF_CreateProfile) ~= "function"
@@ -111,8 +106,6 @@ function A.ProfileRegistry.RegisterProfileImportActions(ctx)
         run = function(args)
             local value = args and args.value
             if type(value) ~= "string" or value == "" then return false, "Add the legacy profile string you want to import." end
-            local allowed, why = RequireUUFBestEffortAccepted(value, args)
-            if not allowed then return false, why end
             local fn = _G.MSUF_ImportLegacyFromString
             if type(fn) ~= "function" then return false, "Open Profiles first, then send the legacy import text." end
             if fn(value) == false then return false, "I kept the profile as it was. Add the corrected legacy import text when ready." end
