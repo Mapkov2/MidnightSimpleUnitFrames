@@ -193,7 +193,6 @@ local MSUF_PlayerCastbar_UpdateLatencyZone       = _G.MSUF_PlayerCastbar_UpdateL
 local MSUF_LayoutEmpowerTicks                    = _G.MSUF_LayoutEmpowerTicks
 local MSUF_BlinkEmpowerTick                      = _G.MSUF_BlinkEmpowerTick
 local MSUF_IsEmpowerStageBlinkEnabled            = _G.MSUF_IsEmpowerStageBlinkEnabled
-local MSUF_PlayerChannelHasteMarkers_Update      = _G.MSUF_PlayerChannelHasteMarkers_Update
 local MSUF_ReanchorPlayerCastBar                 = _G.MSUF_ReanchorPlayerCastBar
 local MSUF_GetPlayerCastbarDesiredSize           = _G.MSUF_GetPlayerCastbarDesiredSize
 local MSUF_ApplyPlayerCastbarSizeAndLayout       = _G.MSUF_ApplyPlayerCastbarSizeAndLayout
@@ -1121,14 +1120,6 @@ do
         end
 
         -- Duration-object path (modern API): we only maintain time text + safety stop.
-
-        -- Player channel haste markers: low-cadence refresh (no per-frame OnUpdate).
-        if frame.unit == "player" and frame.MSUF_isChanneled and frame._msufPlayerChannelHasteMarkers then
-            if mc >= (frame._msufHasteMarkersNext or 0) then
-                frame._msufHasteMarkersNext = mc + 0.15
-                MSUF_PlayerChannelHasteMarkers_Update(frame, false)
-            end
-        end
 
         -- Lazy wall clock: only compute when the API/snapshot path actually needs it.
         if not now then now = (_Now or GetTimePreciseSec)() end
