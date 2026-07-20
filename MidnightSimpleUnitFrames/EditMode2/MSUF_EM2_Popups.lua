@@ -1322,6 +1322,8 @@ local function Apply()
         if pf.timeShowCB then g.showBossCastTime=pf.timeShowCB:GetChecked() and true or false end
         if pf.timeFormatDrop then g.bossCastTimeFormat=NTF(pf.timeFormatDrop:GetValue()) end
         g.bossCastTextOffsetX=San(pf.spellXBox and tonumber(pf.spellXBox:GetText()),0); g.bossCastTextOffsetY=San(pf.spellYBox and tonumber(pf.spellYBox:GetText()),0)
+        g.bossCastIconOffsetX=San(pf.iconXBox and tonumber(pf.iconXBox:GetText()),0); g.bossCastIconOffsetY=San(pf.iconYBox and tonumber(pf.iconYBox:GetText()),0)
+        g.bossCastTimeOffsetX=San(pf.timeXBox and tonumber(pf.timeXBox:GetText()),0); g.bossCastTimeOffsetY=San(pf.timeYBox and tonumber(pf.timeYBox:GetText()),0)
         if pf.spellSizeBox then local sz=tonumber(pf.spellSizeBox:GetText()); if sz then g.bossCastSpellNameFontSize=floor(max(6,min(72,sz))+0.5) end end
         if pf.iconSizeBox then local sz=tonumber(pf.iconSizeBox:GetText()); if sz then g.bossCastIconSize=floor(max(6,min(128,sz))+0.5) end end
         if pf.timeSizeBox then local sz=tonumber(pf.timeSizeBox:GetText()); if sz then g.bossCastTimeFontSize=floor(max(6,min(72,sz))+0.5) end end
@@ -1350,6 +1352,8 @@ local function Apply()
         local stk=GST(u); if stk and pf.timeShowCB then g[stk]=pf.timeShowCB:GetChecked() and true or false end
         local tfk=GTF(u); if tfk and pf.timeFormatDrop then g[tfk]=NTF(pf.timeFormatDrop:GetValue()) end
         g[pre.."TextOffsetX"]=San(pf.spellXBox and tonumber(pf.spellXBox:GetText()),0); g[pre.."TextOffsetY"]=San(pf.spellYBox and tonumber(pf.spellYBox:GetText()),0)
+        g[pre.."IconOffsetX"]=San(pf.iconXBox and tonumber(pf.iconXBox:GetText()),0); g[pre.."IconOffsetY"]=San(pf.iconYBox and tonumber(pf.iconYBox:GetText()),0)
+        g[pre.."TimeOffsetX"]=San(pf.timeXBox and tonumber(pf.timeXBox:GetText()),-2); g[pre.."TimeOffsetY"]=San(pf.timeYBox and tonumber(pf.timeYBox:GetText()),0)
         if pf.spellSizeBox then local sz=tonumber(pf.spellSizeBox:GetText()); if sz then g[pre.."SpellNameFontSize"]=floor(max(6,min(48,sz))+0.5) end end
         if pf.iconSizeBox then local sz=tonumber(pf.iconSizeBox:GetText()); if sz then g[pre.."IconSize"]=floor(max(6,min(128,sz))+0.5) end end
         if pf.timeSizeBox then local sz=tonumber(pf.timeSizeBox:GetText()); if sz then g[pre.."TimeFontSize"]=floor(max(6,min(48,sz))+0.5) end end
@@ -1367,6 +1371,7 @@ local BOSS_KEYS = {
     "bossCastbarWidthAdjustment",
     "showBossCastName","showBossCastIcon","showBossCastTime","bossCastTimeFormat",
     "bossCastTextOffsetX","bossCastTextOffsetY",
+    "bossCastIconOffsetX","bossCastIconOffsetY","bossCastTimeOffsetX","bossCastTimeOffsetY",
     "bossCastSpellNameFontSize","bossCastIconSize","bossCastTimeFontSize",
     "bossCastbarDetached",
 }
@@ -1379,7 +1384,8 @@ local function SnapshotCast(u)
         local pre=GP(u); if not pre then return nil end
         local stk=GST(u)
         local suffixes={"OffsetX","OffsetY","BarWidth","BarHeight","WidthAdjustment","ShowSpellName","ShowIcon",
-            "TextOffsetX","TextOffsetY","SpellNameFontSize","IconSize","TimeFontSize","TimeFormat","Detached"}
+            "TextOffsetX","TextOffsetY","IconOffsetX","IconOffsetY","TimeOffsetX","TimeOffsetY",
+            "SpellNameFontSize","IconSize","TimeFontSize","TimeFormat","Detached"}
         for _,s in ipairs(suffixes) do snap[pre..s]=g[pre..s] end
         if stk then snap[stk]=g[stk] end
         local wk = WidthSourceDBKey(u); if wk then snap[wk]=g[wk] end
@@ -1408,6 +1414,8 @@ local function Sync()
         SC(pf.spellShowCB,g.showBossCastName~=false); SC(pf.iconShowCB,g.showBossCastIcon~=false); SC(pf.timeShowCB,g.showBossCastTime~=false)
         if pf.timeFormatDrop then pf.timeFormatDrop:SetValue(NTF(g.bossCastTimeFormat)) end
         S(pf.spellXBox,g.bossCastTextOffsetX or 0); S(pf.spellYBox,g.bossCastTextOffsetY or 0)
+        S(pf.iconXBox,g.bossCastIconOffsetX or 0); S(pf.iconYBox,g.bossCastIconOffsetY or 0)
+        S(pf.timeXBox,g.bossCastTimeOffsetX or 0); S(pf.timeYBox,g.bossCastTimeOffsetY or 0)
         S(pf.spellSizeBox,g.bossCastSpellNameFontSize or g.fontSize or 14)
         S(pf.iconSizeBox,g.bossCastIconSize or g.bossCastbarHeight or 18)
         S(pf.timeSizeBox,g.bossCastTimeFontSize or g.fontSize or 14)
@@ -1423,6 +1431,8 @@ local function Sync()
         local stk=GST(u); SC(pf.timeShowCB,stk and g[stk]~=false)
         local tfk=GTF(u); if pf.timeFormatDrop then pf.timeFormatDrop:SetValue(NTF(tfk and g[tfk])) end
         S(pf.spellXBox,g[pre.."TextOffsetX"] or 0); S(pf.spellYBox,g[pre.."TextOffsetY"] or 0)
+        S(pf.iconXBox,g[pre.."IconOffsetX"] or 0); S(pf.iconYBox,g[pre.."IconOffsetY"] or 0)
+        S(pf.timeXBox,g[pre.."TimeOffsetX"] or -2); S(pf.timeYBox,g[pre.."TimeOffsetY"] or 0)
         S(pf.spellSizeBox,g[pre.."SpellNameFontSize"] or g.fontSize or 14)
         S(pf.iconSizeBox,g[pre.."IconSize"] or g[pre.."BarHeight"] or 18)
         S(pf.timeSizeBox,g[pre.."TimeFontSize"] or g.fontSize or 14)
@@ -1476,9 +1486,10 @@ local function Build()
 
     local iC,iB = F.Card(pf, sC, "Icon", -6, true)
     local iSh = F.CheckRow(pf, iB, iC, { label="Show", cbKey="iconShowCB", onChanged=function() Apply() end })
-    local iSz = F.SingleRow(pf, iB, iC, { label="Size:", boxKey="iconSizeBox", anchorTo=iSh, onChanged=Apply })
+    local iXY = F.PairRow(pf, iB, iC, { label1="X:", label2="Y:", key1="iconXBox", key2="iconYBox", anchorTo=iSh, onChanged=Apply })
+    local iSz = F.SingleRow(pf, iB, iC, { label="Size:", boxKey="iconSizeBox", anchorTo=iXY, onChanged=Apply })
     iC:RecalcHeight()
-    pf.iconShowCB:SetDependentRows(iSz)
+    pf.iconShowCB:SetDependentRows(iXY, iSz)
 
     local tC,tB = F.Card(pf, iC, "Duration", -6, true)
     local tSh = F.CheckRow(pf, tB, tC, { label="Show", cbKey="timeShowCB", onChanged=function() Apply() end })
@@ -1492,9 +1503,10 @@ local function Build()
         items = TIME_FORMAT_ITEMS,
         onChanged = Apply,
     })
-    local tSz = F.SingleRow(pf, tB, tC, { label="Size:", boxKey="timeSizeBox", anchorTo=tFmt, onChanged=Apply })
+    local tXY = F.PairRow(pf, tB, tC, { label1="X:", label2="Y:", key1="timeXBox", key2="timeYBox", anchorTo=tFmt, onChanged=Apply })
+    local tSz = F.SingleRow(pf, tB, tC, { label="Size:", boxKey="timeSizeBox", anchorTo=tXY, onChanged=Apply })
     tC:RecalcHeight()
-    pf.timeShowCB:SetDependentRows(tFmt, tSz)
+    pf.timeShowCB:SetDependentRows(tFmt, tXY, tSz)
 
     -- Castbar anchor toggle
     local aC,aB = F.Card(pf, tC, "Anchor", -6, true)
@@ -1534,6 +1546,8 @@ local function Build()
             r.showSpell = g.showBossCastName; r.showIcon = g.showBossCastIcon; r.showTime = g.showBossCastTime
             r.timeFormat = g.bossCastTimeFormat
             r.textX = g.bossCastTextOffsetX; r.textY = g.bossCastTextOffsetY
+            r.iconX = g.bossCastIconOffsetX; r.iconY = g.bossCastIconOffsetY
+            r.timeX = g.bossCastTimeOffsetX; r.timeY = g.bossCastTimeOffsetY
             r.spellSize = g.bossCastSpellNameFontSize; r.iconSize = g.bossCastIconSize; r.timeSize = g.bossCastTimeFontSize
         else
             local pre = GP(u); if not pre then return nil end
@@ -1544,6 +1558,8 @@ local function Build()
             local stk = GST(u); r.showTime = stk and g[stk]
             local tfk = GTF(u); r.timeFormat = tfk and g[tfk]
             r.textX = g[pre.."TextOffsetX"]; r.textY = g[pre.."TextOffsetY"]
+            r.iconX = g[pre.."IconOffsetX"]; r.iconY = g[pre.."IconOffsetY"]
+            r.timeX = g[pre.."TimeOffsetX"]; r.timeY = g[pre.."TimeOffsetY"]
             r.spellSize = g[pre.."SpellNameFontSize"]; r.iconSize = g[pre.."IconSize"]; r.timeSize = g[pre.."TimeFontSize"]
         end
         return r
@@ -1557,6 +1573,8 @@ local function Build()
             g.showBossCastName = r.showSpell; g.showBossCastIcon = r.showIcon; g.showBossCastTime = r.showTime
             g.bossCastTimeFormat = NTF(r.timeFormat)
             g.bossCastTextOffsetX = r.textX; g.bossCastTextOffsetY = r.textY
+            g.bossCastIconOffsetX = r.iconX; g.bossCastIconOffsetY = r.iconY
+            g.bossCastTimeOffsetX = r.timeX; g.bossCastTimeOffsetY = r.timeY
             g.bossCastSpellNameFontSize = r.spellSize; g.bossCastIconSize = r.iconSize; g.bossCastTimeFontSize = r.timeSize
         else
             local pre = GP(u); if not pre then return end
@@ -1567,6 +1585,8 @@ local function Build()
             local stk = GST(u); if stk then g[stk] = r.showTime end
             local tfk = GTF(u); if tfk then g[tfk] = NTF(r.timeFormat) end
             g[pre.."TextOffsetX"] = r.textX; g[pre.."TextOffsetY"] = r.textY
+            g[pre.."IconOffsetX"] = r.iconX; g[pre.."IconOffsetY"] = r.iconY
+            g[pre.."TimeOffsetX"] = r.timeX; g[pre.."TimeOffsetY"] = r.timeY
             g[pre.."SpellNameFontSize"] = r.spellSize; g[pre.."IconSize"] = r.iconSize; g[pre.."TimeFontSize"] = r.timeSize
         end
     end
@@ -1600,7 +1620,8 @@ local function Build()
     pf:EnableKeyboard(true)
     pf:SetScript("OnKeyDown", function(s,k) if k=="ESCAPE" then s:SetPropagateKeyboardInput(false); cancel:Click() else s:SetPropagateKeyboardInput(true) end end)
     pf:HookScript("OnHide", function(s) if s.SetPropagateKeyboardInput then s:SetPropagateKeyboardInput(true) end end)
-    pf:UpdateScrollHeight(500)
+    pf:UpdateScrollHeight(560)
+    if pf._recalcScroll then pf._recalcScroll() end
     return pf
 end
 

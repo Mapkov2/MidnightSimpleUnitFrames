@@ -1784,10 +1784,10 @@ local function ConvertPortrait(source, spec, dst, report, unitKey)
 end
 
 local CAST_KEYS = {
-    player={"enablePlayerCastbar","castbarPlayerBarWidth","castbarPlayerBarHeight","castbarPlayerOffsetX","castbarPlayerOffsetY","castbarPlayerMatchWidth","castbarPlayerShowIcon","castbarPlayerShowSpellName","showPlayerCastTime","castbarPlayerDetached","castbarPlayerIconSize","castbarPlayerTextOffsetX","castbarPlayerTextOffsetY","castbarPlayerTimeOffsetX","castbarPlayerTimeOffsetY","castbarPlayerSpellNameFontSize","castbarPlayerTimeFontSize"},
-    target={"enableTargetCastbar","castbarTargetBarWidth","castbarTargetBarHeight","castbarTargetOffsetX","castbarTargetOffsetY","castbarTargetMatchWidth","castbarTargetShowIcon","castbarTargetShowSpellName","showTargetCastTime","castbarTargetDetached","castbarTargetIconSize","castbarTargetTextOffsetX","castbarTargetTextOffsetY","castbarTargetTimeOffsetX","castbarTargetTimeOffsetY","castbarTargetSpellNameFontSize","castbarTargetTimeFontSize"},
-    focus={"enableFocusCastbar","castbarFocusBarWidth","castbarFocusBarHeight","castbarFocusOffsetX","castbarFocusOffsetY","castbarFocusMatchWidth","castbarFocusShowIcon","castbarFocusShowSpellName","showFocusCastTime","castbarFocusDetached","castbarFocusIconSize","castbarFocusTextOffsetX","castbarFocusTextOffsetY","castbarFocusTimeOffsetX","castbarFocusTimeOffsetY","castbarFocusSpellNameFontSize","castbarFocusTimeFontSize"},
-    boss={"enableBossCastbar","bossCastbarWidth","bossCastbarHeight","bossCastbarOffsetX","bossCastbarOffsetY","bossCastbarMatchWidth","showBossCastIcon","showBossCastName","showBossCastTime","bossCastbarDetached","bossCastIconSize","bossCastTextOffsetX","bossCastTextOffsetY","bossCastTimeOffsetX","bossCastTimeOffsetY","bossCastSpellNameFontSize","bossCastTimeFontSize"},
+    player={"enablePlayerCastbar","castbarPlayerBarWidth","castbarPlayerBarHeight","castbarPlayerOffsetX","castbarPlayerOffsetY","castbarPlayerMatchWidth","castbarPlayerShowIcon","castbarPlayerShowSpellName","showPlayerCastTime","castbarPlayerDetached","castbarPlayerIconSize","castbarPlayerTextOffsetX","castbarPlayerTextOffsetY","castbarPlayerTimeOffsetX","castbarPlayerTimeOffsetY","castbarPlayerSpellNameFontSize","castbarPlayerTimeFontSize","castbarPlayerIconOffsetX","castbarPlayerIconOffsetY"},
+    target={"enableTargetCastbar","castbarTargetBarWidth","castbarTargetBarHeight","castbarTargetOffsetX","castbarTargetOffsetY","castbarTargetMatchWidth","castbarTargetShowIcon","castbarTargetShowSpellName","showTargetCastTime","castbarTargetDetached","castbarTargetIconSize","castbarTargetTextOffsetX","castbarTargetTextOffsetY","castbarTargetTimeOffsetX","castbarTargetTimeOffsetY","castbarTargetSpellNameFontSize","castbarTargetTimeFontSize","castbarTargetIconOffsetX","castbarTargetIconOffsetY"},
+    focus={"enableFocusCastbar","castbarFocusBarWidth","castbarFocusBarHeight","castbarFocusOffsetX","castbarFocusOffsetY","castbarFocusMatchWidth","castbarFocusShowIcon","castbarFocusShowSpellName","showFocusCastTime","castbarFocusDetached","castbarFocusIconSize","castbarFocusTextOffsetX","castbarFocusTextOffsetY","castbarFocusTimeOffsetX","castbarFocusTimeOffsetY","castbarFocusSpellNameFontSize","castbarFocusTimeFontSize","castbarFocusIconOffsetX","castbarFocusIconOffsetY"},
+    boss={"enableBossCastbar","bossCastbarWidth","bossCastbarHeight","bossCastbarOffsetX","bossCastbarOffsetY","bossCastbarMatchWidth","showBossCastIcon","showBossCastName","showBossCastTime","bossCastbarDetached","bossCastIconSize","bossCastTextOffsetX","bossCastTextOffsetY","bossCastTimeOffsetX","bossCastTimeOffsetY","bossCastSpellNameFontSize","bossCastTimeFontSize","bossCastIconOffsetX","bossCastIconOffsetY"},
 }
 
 local function ConvertCastbar(source, spec, dst, general, report, unitKey)
@@ -1820,13 +1820,26 @@ local function ConvertCastbar(source, spec, dst, general, report, unitKey)
     general[keys[4]] = unitKey == "player" and left + effectiveWidth * 0.5 or left + dst.width * 0.5
     general[keys[5]] = bottom - dst.height * 0.5 - (unitKey == "boss" and 2 or 0)
     general[keys[6]] = cast.MatchParentWidth == true and "unitframe" or nil
-    general[keys[7]] = cast.Icon.Enabled ~= false
+    local iconEnabled = cast.Icon.Enabled ~= false
+    local iconPosition = tostring(cast.Icon.Position or "LEFT"):upper()
+    local iconSize = math.max(6, height - 2)
+    general[keys[7]] = iconEnabled
     general[keys[8]], general[keys[9]], general[keys[10]] = cast.Text.SpellName.Enabled ~= false, cast.Text.Duration.Enabled ~= false, false
-    general[keys[11]] = math.max(6, height - 2)
+    general[keys[11]] = iconSize
     local nameLayout = Layout(cast.Text.SpellName.Layout, defaults.Text.SpellName.Layout)
     local timeLayout = Layout(cast.Text.Duration.Layout, defaults.Text.Duration.Layout)
     general[keys[12]], general[keys[13]] = nameLayout[3] - (unitKey == "boss" and 2 or 4), nameLayout[4]
-    general[keys[14]], general[keys[15]] = timeLayout[3], timeLayout[4]
+    local timeOffsetX = timeLayout[3]
+    local iconOffsetX = 0
+    if iconEnabled and iconPosition == "RIGHT" then
+        -- UUF anchors the icon one pixel inside the right edge and shortens
+        -- the statusbar by the icon width. MSUF 5.75 exposes absolute icon
+        -- X/Y offsets, so translate both pieces once during import.
+        iconOffsetX = math.max(0, effectiveWidth - iconSize - 1)
+        timeOffsetX = timeOffsetX - iconSize
+    end
+    general[keys[14]], general[keys[15]] = timeOffsetX, timeLayout[4]
+    general[keys[18]], general[keys[19]] = iconOffsetX, 0
     general[keys[16]] = SafeNumber(cast.Text.SpellName.FontSize, 12, 6, 72)
     general[keys[17]] = SafeNumber(cast.Text.Duration.FontSize, 12, 6, 72)
     if not report._castbarSource and cast.Enabled ~= false then
@@ -1843,7 +1856,11 @@ local function ConvertCastbar(source, spec, dst, general, report, unitKey)
         Mark(report, "approximated", unitKey .. ": per-unit UUF castbar colors/direction use native shared castbar styling")
     end
     if cast.ShowTarget == true then Mark(report, "skipped", unitKey .. ": UUF cast-target text is unavailable natively") end
-    if tostring(cast.Icon.Position or "LEFT"):upper() ~= "LEFT" then Mark(report, "approximated", unitKey .. ": right cast icon uses native left icon") end
+    if iconPosition == "RIGHT" then
+        Mark(report, "approximated", unitKey .. ": right cast icon is translated to native X/Y offsets")
+    elseif iconPosition ~= "LEFT" then
+        Mark(report, "approximated", unitKey .. ": unknown UUF cast icon position uses native left icon")
+    end
     if FrameStrata(cast.FrameStrata, "MEDIUM") ~= "MEDIUM" then Mark(report, "skipped", unitKey .. ": castbar frame strata is fixed natively") end
     Mark(report, "mapped", unitKey .. ": castbar geometry and text")
 end
