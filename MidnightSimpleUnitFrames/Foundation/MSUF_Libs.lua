@@ -482,6 +482,7 @@ end
 local FALLBACK_STATUSBAR_TEXTURES = {
     { key = "Blizzard",      path = "Interface\\TargetingFrame\\UI-StatusBar" },
     { key = "Solid",         path = "Interface\\Buttons\\WHITE8X8" },
+    { key = "MSUF Lucent",   path = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Bars\\MSUF_Lucent_v2.tga" },
     { key = "Flat",          path = "Interface\\Buttons\\WHITE8x8" },
     { key = "RaidHP",        path = "Interface\\RaidFrame\\Raid-Bar-Hp-Fill" },
     { key = "RaidPower",     path = "Interface\\RaidFrame\\Raid-Bar-Resource-Fill" },
@@ -613,11 +614,22 @@ local function RegisterBundledFonts()
     end
 
     Reg("MSUF Charcoal",   "Charcoal.tga")
+    Reg("MSUF Lucent",     "MSUF_Lucent_v2.tga")
     Reg("MSUF Minimalist", "Minimalist.tga")
     Reg("MSUF Slickrock",  "Slickrock.tga")
     Reg("MSUF Smooth",     "MSUF_Smooth.tga")
     Reg("MSUF Smooth v2",  "Smoothv2.tga")
     Reg("MSUF Smoother",   "smoother.tga")
+    Reg("MSUF Arcane Pulse",   "MSUF_ArcanePulse.tga")
+    Reg("MSUF Aurora Silk",    "MSUF_AuroraSilk.tga")
+    Reg("MSUF Deep Current",   "MSUF_DeepCurrent.tga")
+    Reg("MSUF Dragon Scale",   "MSUF_DragonScale.tga")
+    Reg("MSUF Ember Weave",    "MSUF_EmberWeave.tga")
+    Reg("MSUF Forged Steel",   "MSUF_ForgedSteel.tga")
+    Reg("MSUF Frosted Quartz", "MSUF_FrostedQuartz.tga")
+    Reg("MSUF Lunar Mist",     "MSUF_LunarMist.tga")
+    Reg("MSUF Obsidian Glass", "MSUF_ObsidianGlass.tga")
+    Reg("MSUF Runic Circuit",  "MSUF_RunicCircuit.tga")
     Reg("Better Blizzard", "BetterBlizzard.blp")
 
     -- DB migration: eliminate broken legacy selections ("MSUF Flat"/"MSUF Smooth")
