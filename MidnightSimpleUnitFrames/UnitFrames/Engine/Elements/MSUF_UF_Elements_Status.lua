@@ -17,6 +17,8 @@ local UnitGroupRolesAssigned = UnitGroupRolesAssigned
 local UnitAffectingCombat = UnitAffectingCombat
 local UnitHasIncomingResurrection = UnitHasIncomingResurrection
 local UnitLevel = UnitLevel
+local UnitRace = UnitRace
+local UnitClass = UnitClass
 local UnitClassification = UnitClassification or GetUnitClassification
 local UnitIsPlayer = UnitIsPlayer
 local UnitIsPVP = UnitIsPVP
@@ -769,6 +771,8 @@ local CONFIGURED_REGION_DEFS = {
   { "leader", "LeaderIndicator", "leaderIcon", { "leaderIcon", "LeaderIndicator" }, { "LeaderIndicator", "leaderIcon" } },
   { "assist", "assistIcon" },
   { "level", "levelText", nil, nil, nil, nil, true },
+  { "race", "raceText", nil, nil, nil, nil, true },
+  { "classText", "classStatusText", nil, nil, nil, nil, true },
   { "raidGroup", "raidGroupNameText", nil, nil, nil, nil, true },
   { "elite", "eliteIcon" },
   { "statusText", "statusIndicatorText", nil, nil, nil, nil, true },
@@ -1240,27 +1244,69 @@ local function UpdatePhase(frame, status)
   end
 end
 
-local function UpdateLevel(frame, status)
-  local cfg = status and status.level
-  local fs = frame.levelText
-  local unit = frame.MSUFUnitKey
-  local unitState = FreshUnitState(frame, unit)
-  local exists = UnitExistsRuntime(unit, unitState)
-  if not (cfg and cfg.enabled and fs and UnitLevel and exists) then
-    SetShown(fs, false)
+local function IdentityString(value)
+  if issecretvalue(value) == true then
+    return value, true
+  end
+  if type(value) == "string" and value ~= "" then
+    return value, true
+  end
+  return "", false
+end
+
+local function ShowIdentityText(region, value, present)
+  if not region then return end
+  if present then
+    SetText(region, value)
+    SetShown(region, true)
+  else
+    SetShown(region, false)
+  end
+end
+
+local IDENTITY_TEXT_FIELDS = { "levelText", "raceText", "classStatusText" }
+
+local function UpdateIdentityTexts(frame, status)
+  local levelCfg = status and status.level
+  local raceCfg = status and status.race
+  local classCfg = status and status.classText
+  local showLevel = levelCfg and levelCfg.enabled == true and frame.levelText ~= nil
+  local showRace = raceCfg and raceCfg.enabled == true and frame.raceText ~= nil
+  local showClass = classCfg and classCfg.enabled == true and frame.classStatusText ~= nil
+
+  if not (showLevel or showRace or showClass) then
+    HideField(frame, IDENTITY_TEXT_FIELDS)
     return
   end
-  local level = UnitLevel(unit)
-  level = SafeNumber(level)
-  if not level then
-    SetShown(fs, false)
-  elseif level == -1 then
-    SetText(fs, "??")
-    SetShown(fs, true)
-  else
-    SetText(fs, tostring(level))
-    SetShown(fs, true)
+
+  local unit = frame.MSUFUnitKey
+  local unitState = FreshUnitState(frame, unit)
+  if not UnitExistsRuntime(unit, unitState) then
+    HideField(frame, IDENTITY_TEXT_FIELDS)
+    return
   end
+
+  local levelText, levelPresent = "", false
+  if showLevel and UnitLevel then
+    local level = SafeNumber(UnitLevel(unit))
+    if level then
+      levelText, levelPresent = level == -1 and "??" or tostring(level), true
+    end
+  end
+
+  local raceText, racePresent = "", false
+  if showRace and UnitRace then
+    raceText, racePresent = IdentityString(UnitRace(unit))
+  end
+
+  local classText, classPresent = "", false
+  if showClass and UnitClass then
+    classText, classPresent = IdentityString(UnitClass(unit))
+  end
+
+  if showLevel then ShowIdentityText(frame.levelText, levelText, levelPresent) else SetShown(frame.levelText, false) end
+  if showRace then ShowIdentityText(frame.raceText, raceText, racePresent) else SetShown(frame.raceText, false) end
+  if showClass then ShowIdentityText(frame.classStatusText, classText, classPresent) else SetShown(frame.classStatusText, false) end
 end
 
 local function RaidGroupText(style, subgroup)
@@ -1691,6 +1737,8 @@ local RAID_MARKER_EVENTS = { "RAID_TARGET_UPDATE" }
 local LEADER_EVENTS = { "GROUP_ROSTER_UPDATE", "PARTY_LEADER_CHANGED" }
 local LEVEL_EVENTS = { "UNIT_LEVEL" }
 local LEVEL_UNITLESS_EVENTS = { "PLAYER_LEVEL_UP", "PLAYER_LEVEL_CHANGED" }
+local IDENTITY_NAME_EVENTS = { "UNIT_NAME_UPDATE" }
+local IDENTITY_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_LEVEL" }
 local RAID_GROUP_EVENTS = { "GROUP_ROSTER_UPDATE" }
 local ELITE_EVENTS = { "UNIT_CLASSIFICATION_CHANGED", "UNIT_LEVEL" }
 local STATUS_TEXT_EVENTS = { "UNIT_CONNECTION", "UNIT_FLAGS" }
@@ -1707,12 +1755,37 @@ local PVP_EVENTS = { "UNIT_FACTION" }
 
 local function StatusEnabled(spec, key)
   local status = spec and spec.status
+  if key == "identityText" then
+    return status and status.enabled == true
+      and ((status.level and status.level.enabled == true)
+        or (status.race and status.race.enabled == true)
+        or (status.classText and status.classText.enabled == true))
+  end
   local cfg = status and status[key]
   if key == "leader" and not (cfg and cfg.enabled == true) then
     local assist = status and status.assist
     return status and status.enabled == true and assist and assist.enabled == true
   end
   return status and status.enabled == true and cfg and cfg.enabled == true
+end
+
+local function IdentityTextEvents(spec)
+  if not StatusEnabled(spec, "identityText") then return EMPTY_EVENTS end
+  local status = spec.status
+  local needsLevel = status.level and status.level.enabled == true
+  local needsName = (status.race and status.race.enabled == true)
+    or (status.classText and status.classText.enabled == true)
+  if needsLevel and needsName then return IDENTITY_EVENTS end
+  if needsName then return IDENTITY_NAME_EVENTS end
+  return needsLevel and LEVEL_EVENTS or EMPTY_EVENTS
+end
+
+local function IdentityTextUnitlessEvents(spec, frame)
+  if not (frame and frame.MSUFUnitKey == "player" and StatusEnabled(spec, "identityText")) then
+    return EMPTY_EVENTS
+  end
+  local status = spec.status
+  return (status.level and status.level.enabled == true) and LEVEL_UNITLESS_EVENTS or EMPTY_EVENTS
 end
 
 local function StatusTextEvents(spec, frame)
@@ -1766,6 +1839,10 @@ local Runtime = {
   LEADER_EVENTS = LEADER_EVENTS,
   LEVEL_EVENTS = LEVEL_EVENTS,
   LEVEL_UNITLESS_EVENTS = LEVEL_UNITLESS_EVENTS,
+  IDENTITY_NAME_EVENTS = IDENTITY_NAME_EVENTS,
+  IDENTITY_EVENTS = IDENTITY_EVENTS,
+  IdentityTextEvents = IdentityTextEvents,
+  IdentityTextUnitlessEvents = IdentityTextUnitlessEvents,
   RAID_GROUP_EVENTS = RAID_GROUP_EVENTS,
   ELITE_EVENTS = ELITE_EVENTS,
   STATUS_TEXT_EVENTS = STATUS_TEXT_EVENTS,
@@ -1791,7 +1868,8 @@ local Runtime = {
   UpdateReadyCheck = UpdateReadyCheck,
   UpdateSummon = UpdateSummon,
   UpdatePhase = UpdatePhase,
-  UpdateLevel = UpdateLevel,
+  UpdateLevel = UpdateIdentityTexts,
+  UpdateIdentityTexts = UpdateIdentityTexts,
   UpdateRaidGroup = UpdateRaidGroup,
   UpdateElite = UpdateElite,
   UpdateStatusText = UpdateStatusText,
@@ -1883,7 +1961,7 @@ end
 local STATUS_INDICATOR_DEFS = {
   { "RaidMarkerIndicator", "raidMarker", nil, RAID_MARKER_EVENTS, UpdateRaidMarker, "raidTargetIcon", true },
   { "LeaderIndicator", "leader", nil, LEADER_EVENTS, UpdateLeaderPair, { "LeaderIndicator", "leaderIcon", "assistIcon" }, true },
-  { "LevelIndicator", "level", LEVEL_EVENTS, LEVEL_UNITLESS_EVENTS, UpdateLevel, "levelText" },
+  { "LevelIndicator", "identityText", nil, nil, UpdateIdentityTexts, { "levelText", "raceText", "classStatusText" }, nil, nil, IdentityTextEvents, IdentityTextUnitlessEvents },
   { "RaidGroupIndicator", "raidGroup", nil, RAID_GROUP_EVENTS, UpdateRaidGroup, "raidGroupNameText", true },
   { "EliteIndicator", "elite", ELITE_EVENTS, nil, UpdateElite, "eliteIcon" },
   { "StatusTextIndicator", "statusText", nil, nil, UpdateStatusText, "statusIndicatorText", true, nil, StatusTextEvents, StatusTextUnitlessEvents, nil, true },
@@ -1916,6 +1994,7 @@ local STATUS_REFRESH_ALIASES = {
   "MSUF_RefreshLeaderIconFrames",
   "MSUF_RefreshRaidMarkerFrames",
   "MSUF_RefreshLevelIndicatorFrames",
+  "MSUF_RefreshIdentityTextFrames",
   "MSUF_RefreshRaidGroupNameFrames",
   "MSUF_RefreshEliteIconFrames",
 }

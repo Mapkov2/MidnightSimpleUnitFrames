@@ -30,9 +30,9 @@ local function BuildText(ctx, builder, unit)
     end
     local function SelectedSlotMeta(path)
         return ReviewedMeta(ctx, path, "setting", "dynamic",
-            "This position control targets the HP or power text slot selected beside it.")
+            "This control targets the HP or power text slot selected in the slot editor.")
     end
-    local sec = builder:CollapsibleSection("text", "Text", 620, false)
+    local sec = builder:CollapsibleSection("text", "Text", 820, false)
     sec._msuf2CollapsibleBadgesOnlyWhenOpen = true
     do
         -- Edit Mode can request that Menu2 opens directly on the text section/component the
@@ -59,7 +59,6 @@ local function BuildText(ctx, builder, unit)
     local cardW = math.min(520, math.max(360, sectionW - 48))
     local rightX = leftX + cardW + 28
     local rightW = math.min(360, math.max(260, sectionW - rightX - 28))
-    local rightSliderW = math.min(310, math.max(230, rightW))
     local halfDropdownW = floor((cardW - 44) / 2)
     local RefreshTextControlState = M.RefreshProxy()
     sec._msuf2CursorY = -12
@@ -201,30 +200,43 @@ local function BuildText(ctx, builder, unit)
     local function TextModeHasPercent(mode)
         return tostring(mode or ""):find("PERCENT", 1, true) ~= nil
     end
-    local function TextModeExample(mode, delimiter, isPower, decimalPercent, hidePercentSymbol, abbreviateFullValue)
+    local absorbModeBase = {
+        CURRENTABSORB = "CURRENT", FULLVALUEABSORB = "FULLVALUE", MAXABSORB = "MAX", DEFICITABSORB = "DEFICIT",
+        CURMAXABSORB = "CURMAX", PERCENTABSORB = "PERCENT", CURPERCENTABSORB = "CURPERCENT",
+        CURMAXPERCENTABSORB = "CURMAXPERCENT", MAXPERCENTABSORB = "MAXPERCENT",
+        PERCENTCURABSORB = "PERCENTCUR", PERCENTMAXABSORB = "PERCENTMAX",
+        PERCENTCURMAXABSORB = "PERCENTCURMAX", MAXCURABSORB = "MAXCUR",
+        PERCENTMAXCURABSORB = "PERCENTMAXCUR",
+    }
+    local absorbIconMarkup = "|TInterface\\Icons\\INV_Shield_06:0|t"
+    local function TextModeExample(mode, delimiter, isPower, decimalPercent, hidePercentSymbol, abbreviateFullValue, absorbIcon)
         mode = tostring(mode or "NONE"):upper()
         if mode == "NONE" then return nil end
+        local absorbBase = absorbModeBase[mode]
         local cur = isPower and "100" or (abbreviateFullValue and "630.0k" or "630,000")
         local maxText = isPower and "100" or (abbreviateFullValue and "1.0m" or "1,000,000")
         local absorb = abbreviateFullValue and "125.0k" or "125,000"
+        local absorbText = (absorbIcon and (absorbIconMarkup .. " ") or "") .. absorb
         local pct = isPower and "100" or (decimalPercent and "63.4" or "63")
         if hidePercentSymbol ~= true then pct = pct .. "%" end
-        if mode == "ABSORB" then return absorb end
-        if mode == "PERCENT" then return pct end
-        if mode == "CURRENT" then return cur end
-        if mode == "FULLVALUE" then return cur end
-        if mode == "MAX" then return maxText end
-        if mode == "DEFICIT" then return abbreviateFullValue and "-370.0k" or "-370,000" end
-        if mode == "CURMAX" then return cur .. delimiter .. maxText end
-        if mode == "MAXCUR" then return maxText .. delimiter .. cur end
-        if mode == "CURPERCENT" then return cur .. delimiter .. pct end
-        if mode == "PERCENTCUR" then return pct .. delimiter .. cur end
-        if mode == "CURMAXPERCENT" then return cur .. delimiter .. maxText .. delimiter .. pct end
-        if mode == "PERCENTMAXCUR" then return pct .. delimiter .. maxText .. delimiter .. cur end
-        if mode == "MAXPERCENT" then return maxText .. delimiter .. pct end
-        if mode == "PERCENTMAX" then return pct .. delimiter .. maxText end
-        if mode == "PERCENTCURMAX" then return pct .. delimiter .. cur .. delimiter .. maxText end
-        return cur
+        if mode == "ABSORB" then return absorbText end
+        mode = absorbBase or mode
+        local value
+        if mode == "PERCENT" then value = pct
+        elseif mode == "CURRENT" or mode == "FULLVALUE" then value = cur
+        elseif mode == "MAX" then value = maxText
+        elseif mode == "DEFICIT" then value = abbreviateFullValue and "-370.0k" or "-370,000"
+        elseif mode == "CURMAX" then value = cur .. delimiter .. maxText
+        elseif mode == "MAXCUR" then value = maxText .. delimiter .. cur
+        elseif mode == "CURPERCENT" then value = cur .. delimiter .. pct
+        elseif mode == "PERCENTCUR" then value = pct .. delimiter .. cur
+        elseif mode == "CURMAXPERCENT" then value = cur .. delimiter .. maxText .. delimiter .. pct
+        elseif mode == "PERCENTMAXCUR" then value = pct .. delimiter .. maxText .. delimiter .. cur
+        elseif mode == "MAXPERCENT" then value = maxText .. delimiter .. pct
+        elseif mode == "PERCENTMAX" then value = pct .. delimiter .. maxText
+        elseif mode == "PERCENTCURMAX" then value = pct .. delimiter .. cur .. delimiter .. maxText
+        else value = cur end
+        return absorbBase and (value .. " + " .. absorbText) or value
     end
     local function ReversePreviewHealthMode(mode)
         local rev = {
@@ -233,6 +245,11 @@ local function BuildText(ctx, builder, unit)
             CURMAXPERCENT = "PERCENTMAXCUR", PERCENTMAXCUR = "CURMAXPERCENT",
             MAXPERCENT = "PERCENTMAX", PERCENTMAX = "MAXPERCENT",
             PERCENTCURMAX = "CURMAXPERCENT",
+            CURPERCENTABSORB = "PERCENTCURABSORB", PERCENTCURABSORB = "CURPERCENTABSORB",
+            CURMAXABSORB = "MAXCURABSORB", MAXCURABSORB = "CURMAXABSORB",
+            CURMAXPERCENTABSORB = "PERCENTMAXCURABSORB", PERCENTMAXCURABSORB = "CURMAXPERCENTABSORB",
+            MAXPERCENTABSORB = "PERCENTMAXABSORB", PERCENTMAXABSORB = "MAXPERCENTABSORB",
+            PERCENTCURMAXABSORB = "CURMAXPERCENTABSORB",
         }
         return rev[mode] or mode
     end
@@ -337,6 +354,12 @@ local function BuildText(ctx, builder, unit)
         end
         return type(ReadTextTab) ~= "function" or ReadTextTab() == tab
     end
+    sec._msuf2GuidedSelectSlot = function(kind, slot)
+        if (kind ~= "hp" and kind ~= "power") or (slot ~= "left" and slot ~= "center" and slot ~= "right") then return false end
+        SetCurrentSlot(kind, slot)
+        if RefreshTextControlState then RefreshTextControlState() end
+        return CurrentSlot(kind) == slot
+    end
     local nameContent = TextCard(nameTab, nil, nil, leftX, -4, cardW, 116)
     local _, namePreviewValue = PreviewText(nameContent, NamePreviewText(), 16, -54, cardW - 32)
     local showNameText = W.SwitchAt(nameContent, "Show Name", 16, -24, 0, "HIDDEN")
@@ -388,7 +411,8 @@ local function BuildText(ctx, builder, unit)
             meta.step, meta.roundStep = 1, true
             return meta
         end)())
-    local SLOT_VALUES = VT("left", "Left", "center", "Center", "right", "Right")
+    local ABSORB_STYLE_VALUES = VT("off", "Off", "value", "+ Value", "icon", "|TInterface\\Icons\\INV_Shield_06:14|t + Value")
+    local HP_BASE_MODES = UnitSectionShared.HealthBaseModeValues(HP_MODES)
     local function BuildValueTextTab(kind, tab, cfg)
         local controls = {}
         local function FullValueShortEnabled()
@@ -397,7 +421,9 @@ local function BuildText(ctx, builder, unit)
             if value ~= nil then return value == true end
             return type(cfg.fullValueShortDefault) == "function" and cfg.fullValueShortDefault() == true or cfg.fullValueShortDefault == true
         end
-        local content = TextCard(tab, nil, nil, leftX, -4, cardW, 346)
+        local hasAbsorb = cfg.absorbIconKey ~= nil
+        local contentHeight = hasAbsorb and 520 or 474
+        local content = TextCard(tab, nil, nil, leftX, -4, cardW, contentHeight)
         local _, previewValue = PreviewText(content, cfg.preview, 16, -54, cardW - 32)
         controls.preview = previewValue
         controls.show = W.SwitchAt(content, cfg.showLabel, 16, -24, 0, "HIDDEN")
@@ -411,55 +437,111 @@ local function BuildText(ctx, builder, unit)
                 RefreshTextControlState()
             end,
             FixedSettingMeta("text." .. kind .. ".show", cfg.showKey))
-        local function SlotControl(slot, label, x, y, width)
-            local spec = cfg.slots[slot]
-            local control = W.Dropdown(content, label, cfg.modes, 260)
-            controls[slot] = control
-            PlaceDropdown(content, control, x, y, width)
-            M.BindDropdownWidget(ctx, control,
-                function() return ReadSlot(unit, spec.key, cfg.legacyKey, spec.default) end,
-                function(v)
-                    SetText(unit, spec.key, v or "NONE", spec.reason)
-                    SetCurrentSlot(kind, slot)
-                    FocusPreviewText(kind, slot, true)
-                    RefreshTextHeader()
-                    local default = type(cfg.showDefault) == "function" and cfg.showDefault() or cfg.showDefault
-                    local textEnabled = ReadBool(unit, cfg.showKey, default)
-                    if controls.RefreshPercentToggles then controls.RefreshPercentToggles(textEnabled) end
-                    if controls.RefreshFullValueToggle then controls.RefreshFullValueToggle(textEnabled) end
-                    if v == "FULLVALUE" and controls.fullValueShort and T.PlayNeonFlash then
-                        T.PlayNeonFlash(controls.fullValueShort, "info", { alpha = 0.26, duration = 0.85 })
-                    end
-                end,
-                FixedSettingMeta("text." .. kind .. ".slot." .. slot .. ".mode", spec.key))
+        local function SelectedSlotSpec()
+            return cfg.slots[CurrentSlot(kind)] or cfg.slots.center
         end
-        SlotControl("right", "Right slot", 16, -96, cardW - 32)
-        SlotControl("left", "Left slot", 16, -178, halfDropdownW)
-        SlotControl("center", "Center slot", 28 + halfDropdownW, -178, halfDropdownW)
-        local function SlotHidePercentControl(slot, label, x, y, width)
-            local spec = cfg.slots[slot]
-            if not (spec and spec.hidePercentKey) then return end
-            local control = SwitchOrToggle(content, label, x, y, width)
-            controls[slot .. "HidePercent"] = control
-            M.BindBoolWidget(ctx, control,
-                function() return ReadSlotHidePercentSymbol(spec.hidePercentKey) end,
-                function(v)
-                    SetText(unit, spec.hidePercentKey, v and true or false, spec.hidePercentReason)
-                    SetCurrentSlot(kind, slot)
-                    FocusPreviewText(kind, slot, true)
-                    RefreshTextHeader()
-                end,
-                FixedSettingMeta("text." .. kind .. ".slot." .. slot .. ".hide_percent", spec.hidePercentKey))
+        local function CurrentMode()
+            local spec = SelectedSlotSpec()
+            return ReadSlot(unit, spec.key, cfg.legacyKey, spec.default)
         end
-        SlotHidePercentControl("right", "Hide right % sign", 16, -146, cardW - 32)
-        SlotHidePercentControl("left", "Hide left % sign", 16, -230, halfDropdownW)
-        SlotHidePercentControl("center", "Hide center % sign", 28 + halfDropdownW, -230, halfDropdownW)
-        function controls.RefreshPercentToggles(enabled)
-            for slot, spec in pairs(cfg.slots or {}) do
-                local control = controls[slot .. "HidePercent"]
-                if control then
-                    SetControlEnabled(control, enabled == true and TextModeHasPercent(ReadSlot(unit, spec.key, cfg.legacyKey, spec.default)))
+        local function TextEnabled()
+            local default = type(cfg.showDefault) == "function" and cfg.showDefault() or cfg.showDefault
+            return ReadBool(unit, cfg.showKey, default)
+        end
+        local function AfterModeChanged(mode)
+            FocusPreviewText(kind, CurrentSlot(kind), true)
+            RefreshTextHeader()
+            if controls.RefreshPercentToggles then controls.RefreshPercentToggles(TextEnabled()) end
+            if controls.RefreshAbsorbControl then controls.RefreshAbsorbControl(TextEnabled()) end
+            if controls.RefreshFullValueToggle then controls.RefreshFullValueToggle(TextEnabled()) end
+            if mode == "FULLVALUE" and controls.fullValueShort and T.PlayNeonFlash then
+                T.PlayNeonFlash(controls.fullValueShort, "info", { alpha = 0.26, duration = 0.85 })
+            end
+        end
+        local function SlotSummary(slot)
+            local spec = cfg.slots[slot]
+            local mode = ReadSlot(unit, spec.key, cfg.legacyKey, spec.default)
+            local baseMode = hasAbsorb and UnitSectionShared.HealthBaseMode(mode) or mode
+            local summary = OptionText(cfg.baseModes or cfg.modes, baseMode)
+            if hasAbsorb and UnitSectionShared.HealthModeHasAbsorb(mode) then
+                local icon = ReadText(unit, spec.absorbIconKey, ReadText(unit, cfg.absorbIconKey, false)) == true
+                summary = summary .. "  + " .. (icon and (absorbIconMarkup .. " ") or "") .. "Absorb"
+            end
+            return summary
+        end
+        local accordion = UnitSectionShared.TextSlotAccordion(content, {
+            selected = CurrentSlot(kind), x = 16, y = -92, width = cardW - 32,
+            bodyHeight = hasAbsorb and 154 or 108,
+            summary = SlotSummary,
+            onSelect = function(slot)
+                SetCurrentSlot(kind, slot)
+                FocusPreviewText(kind, slot, true)
+                if M.RequestRefresh then M.RequestRefresh(ctx, "unit-text-slot") elseif M.Refresh then M.Refresh(ctx) end
+            end,
+        })
+        controls.left, controls.center, controls.right = accordion.buttons.left, accordion.buttons.center, accordion.buttons.right
+        controls.RefreshAccordion = function() accordion:SetSelected(CurrentSlot(kind), true) end
+        for _, slot in ipairs({ "left", "center", "right" }) do
+            RegisterControl(accordion.buttons[slot], ctx, "text." .. kind .. ".slot_selector." .. slot,
+                (slot:sub(1, 1):upper() .. slot:sub(2)) .. " slot", "button", "ephemeral")
+        end
+        local editorY = accordion.editorY
+        controls.mode = W.Dropdown(content, cfg.valueLabel or "Value", cfg.baseModes or cfg.modes, 260)
+        PlaceDropdown(content, controls.mode, 32, editorY, cardW - 64)
+        M.BindDropdownWidget(ctx, controls.mode,
+            function()
+                local mode = CurrentMode()
+                return hasAbsorb and UnitSectionShared.HealthBaseMode(mode) or mode
+            end,
+            function(v)
+                local spec, oldMode = SelectedSlotSpec(), CurrentMode()
+                local mode = v or "NONE"
+                if hasAbsorb and UnitSectionShared.HealthModeHasAbsorb(oldMode) and UnitSectionShared.HealthModeSupportsAbsorb(mode) then
+                    mode = UnitSectionShared.HealthModeWithAbsorb(mode, true)
                 end
+                SetText(unit, spec.key, mode, spec.reason)
+                AfterModeChanged(mode)
+            end,
+            SelectedSlotMeta("text." .. kind .. ".slot.mode"))
+        if hasAbsorb then
+            controls.absorb = W.Segment(content, "Absorb", ABSORB_STYLE_VALUES, cardW - 64)
+            W.MoveWidget(controls.absorb, content, 32, editorY - 62, cardW - 64, "LEFT")
+            M.BindSegment(ctx, controls.absorb,
+                function()
+                    if not UnitSectionShared.HealthModeHasAbsorb(CurrentMode()) then return "off" end
+                    local spec = SelectedSlotSpec()
+                    return ReadText(unit, spec.absorbIconKey, ReadText(unit, cfg.absorbIconKey, false)) == true and "icon" or "value"
+                end,
+                function(v)
+                    local spec = SelectedSlotSpec()
+                    local mode = UnitSectionShared.HealthModeWithAbsorb(CurrentMode(), v ~= "off")
+                    SetText(unit, spec.key, mode, spec.reason)
+                    if v ~= "off" then SetText(unit, spec.absorbIconKey, v == "icon", cfg.absorbIconReason) end
+                    AfterModeChanged(mode)
+                    if controls.RefreshPreview then controls.RefreshPreview() end
+                end,
+                SelectedSlotMeta("text." .. kind .. ".slot.absorb"))
+        end
+        local hidePercentY = editorY - (hasAbsorb and 124 or 62)
+        controls.hidePercent = SwitchOrToggle(content, "Hide % sign", 32, hidePercentY, cardW - 64)
+        M.BindBoolWidget(ctx, controls.hidePercent,
+            function()
+                local spec = SelectedSlotSpec()
+                return spec.hidePercentKey and ReadSlotHidePercentSymbol(spec.hidePercentKey) or false
+            end,
+            function(v)
+                local spec = SelectedSlotSpec()
+                if spec.hidePercentKey then SetText(unit, spec.hidePercentKey, v and true or false, spec.hidePercentReason) end
+                FocusPreviewText(kind, CurrentSlot(kind), true)
+                RefreshTextHeader()
+            end,
+            SelectedSlotMeta("text." .. kind .. ".slot.hide_percent"))
+        function controls.RefreshPercentToggles(enabled)
+            SetControlEnabled(controls.hidePercent, enabled == true and TextModeHasPercent(CurrentMode()))
+        end
+        function controls.RefreshAbsorbControl(enabled)
+            if controls.absorb then
+                SetControlEnabled(controls.absorb, enabled == true and UnitSectionShared.HealthModeSupportsAbsorb(CurrentMode()))
             end
         end
         function controls.RefreshPreview()
@@ -471,44 +553,54 @@ local function BuildText(ctx, builder, unit)
             local hideLeft = leftSpec.hidePercentKey and ReadSlotHidePercentSymbol(leftSpec.hidePercentKey)
             local hideCenter = centerSpec.hidePercentKey and ReadSlotHidePercentSymbol(centerSpec.hidePercentKey)
             local hideRight = rightSpec.hidePercentKey and ReadSlotHidePercentSymbol(rightSpec.hidePercentKey)
+            local fallbackIcon = cfg.absorbIconKey and ReadText(unit, cfg.absorbIconKey, false) == true
+            local iconLeft = leftSpec.absorbIconKey and ReadText(unit, leftSpec.absorbIconKey, fallbackIcon) == true
+            local iconCenter = centerSpec.absorbIconKey and ReadText(unit, centerSpec.absorbIconKey, fallbackIcon) == true
+            local iconRight = rightSpec.absorbIconKey and ReadText(unit, rightSpec.absorbIconKey, fallbackIcon) == true
             if cfg.reverseKey and ReadText(unit, cfg.reverseKey, false) == true then
                 leftMode, rightMode = ReversePreviewHealthMode(rightMode), ReversePreviewHealthMode(leftMode)
                 centerMode = ReversePreviewHealthMode(centerMode)
                 hideLeft, hideRight = hideRight, hideLeft
+                iconLeft, iconRight = iconRight, iconLeft
             end
             local delimiter = cfg.separatorGet and cfg.separatorGet() or ""
             local parts = {}
             local values = {
-                { leftMode, hideLeft },
-                { centerMode, hideCenter },
-                { rightMode, hideRight },
+                { leftMode, hideLeft, iconLeft },
+                { centerMode, hideCenter, iconCenter },
+                { rightMode, hideRight, iconRight },
             }
             for i = 1, #values do
-                local text = TextModeExample(values[i][1], delimiter, cfg.isPower == true, cfg.decimalsKey and ReadText(unit, cfg.decimalsKey, false) == true, values[i][2], FullValueShortEnabled())
+                local text = TextModeExample(values[i][1], delimiter, cfg.isPower == true,
+                    cfg.decimalsKey and ReadText(unit, cfg.decimalsKey, false) == true,
+                    values[i][2], FullValueShortEnabled(),
+                    values[i][3])
                 if text then parts[#parts + 1] = text end
             end
             controls.preview:SetText(#parts > 0 and table.concat(parts, "  ") or "(none)")
         end
+        local formattingY = accordion.bottomY - 16
+        W.Text(content, "Formatting", 16, formattingY, cardW - 32, T.colors.text)
         controls.separator = W.Dropdown(content, "Delimiter", SEPARATORS, 160)
-        PlaceDropdown(content, controls.separator, 16, -266, halfDropdownW)
+        PlaceDropdown(content, controls.separator, 16, formattingY - 28, halfDropdownW)
         M.BindDropdownWidget(ctx, controls.separator, cfg.separatorGet, function(v) SetText(unit, cfg.separatorKey, v or "", cfg.separatorReason) end,
             FixedSettingMeta("text." .. kind .. ".separator", cfg.separatorKey))
         if cfg.reverseKey then
-            controls.reverse = SwitchOrToggle(content, "Reverse order", 28 + halfDropdownW, -288, halfDropdownW)
+            controls.reverse = SwitchOrToggle(content, "Reverse order", 28 + halfDropdownW, formattingY - 50, halfDropdownW)
             M.BindBoolWidget(ctx, controls.reverse,
                 function() return ReadText(unit, cfg.reverseKey, false) == true end,
                 function(v) SetText(unit, cfg.reverseKey, v and true or false, cfg.reverseReason) end,
                 FixedSettingMeta("text." .. kind .. ".reverse", cfg.reverseKey))
         end
         if cfg.decimalsKey then
-            controls.decimals = SwitchOrToggle(content, "Decimal percent", 28 + halfDropdownW, -316, halfDropdownW)
+            controls.decimals = SwitchOrToggle(content, "Decimal percent", 28 + halfDropdownW, formattingY - 78, halfDropdownW)
             M.BindBoolWidget(ctx, controls.decimals,
                 function() return ReadText(unit, cfg.decimalsKey, false) == true end,
                 function(v) SetText(unit, cfg.decimalsKey, v and true or false, cfg.decimalsReason) end,
                 FixedSettingMeta("text." .. kind .. ".decimals", cfg.decimalsKey))
         end
         if cfg.fullValueShortKey then
-            controls.fullValueShort = SwitchOrToggle(content, "Abbreviate HP values (K/M)", 16, -316, halfDropdownW)
+            controls.fullValueShort = SwitchOrToggle(content, "Short numbers", 16, formattingY - 78, halfDropdownW)
             M.BindBoolWidget(ctx, controls.fullValueShort,
                 FullValueShortEnabled,
                 function(v)
@@ -528,7 +620,7 @@ local function BuildText(ctx, builder, unit)
                 SetControlEnabled(controls.fullValueShort, enabled == true and hasNumericValue)
             end
         end
-        local position = TextCard(tab, cfg.positionTitle, cfg.positionSubtitle, rightX, -4, rightW, 410)
+        local position = TextCard(tab, cfg.positionTitle, cfg.positionSubtitle, rightX, -4, rightW, 350)
         local function BindPositionSlider(name, label, y, key, defaultValue, reason, focusSlot, afterSet)
             local control = W.Slider(position, label, -300, 300, 1, 260)
             controls[name] = control
@@ -567,19 +659,9 @@ local function BuildText(ctx, builder, unit)
                 if M.RequestRefresh then M.RequestRefresh(ctx, "unit-text-move-together") elseif M.Refresh then M.Refresh(ctx) end
             end,
             ControlMeta(ctx, "text." .. kind .. ".move_together", "ephemeral"))
-        controls.slot = W.Segment(tab, "Slot", SLOT_VALUES, rightSliderW)
-        W.MoveWidget(controls.slot, position, 16, -220, rightW - 32, "LEFT")
-        M.BindSegment(ctx, controls.slot,
-            function() return CurrentSlot(kind) end,
-            function(v)
-                SetCurrentSlot(kind, v)
-                FocusPreviewText(kind, v, true)
-                if M.RequestRefresh then M.RequestRefresh(ctx, "unit-text-slot") elseif M.Refresh then M.Refresh(ctx) end
-            end,
-            ControlMeta(ctx, "text." .. kind .. ".slot_selector", "ephemeral"))
-        BindPositionSlider("slotX", "Slot X", -284, function() return SlotOffsetKeys(kind) end, 0, cfg.slotXReason, function() return CurrentSlot(kind) end)
-        BindPositionSlider("slotY", "Slot Y", -342, function() local _, yKey = SlotOffsetKeys(kind); return yKey end, 0, cfg.slotYReason, function() return CurrentSlot(kind) end)
-        local appearance = TextCard(tab, "Appearance", nil, leftX, -374, cardW, 144)
+        BindPositionSlider("slotX", "Selected slot X", -232, function() return SlotOffsetKeys(kind) end, 0, cfg.slotXReason, function() return CurrentSlot(kind) end)
+        BindPositionSlider("slotY", "Selected slot Y", -290, function() local _, yKey = SlotOffsetKeys(kind); return yKey end, 0, cfg.slotYReason, function() return CurrentSlot(kind) end)
+        local appearance = TextCard(tab, "Appearance", nil, leftX, -(contentHeight + 24), cardW, 144)
         controls.size = W.Slider(appearance, "Size", 6, 48, 1, 260)
         PlaceSlider(appearance, controls.size, 16, -58, cardW - 72)
         M.BindNumberWidget(ctx, controls.size,
@@ -599,11 +681,13 @@ local function BuildText(ctx, builder, unit)
         showDefault = true,
         showReason = "MSUF2_SHOW_HP_TEXT",
         modes = HP_MODES,
+        baseModes = HP_BASE_MODES,
+        valueLabel = "HP value",
         legacyKey = "hpTextMode",
         slots = {
-            left = { key = "textLeft", default = "NONE", reason = "MSUF2_HP_LEFT", hidePercentKey = "hpTextLeftHidePercentSymbol", hidePercentReason = "MSUF2_HP_LEFT_HIDE_PERCENT_SYMBOL" },
-            center = { key = "textCenter", default = "NONE", reason = "MSUF2_HP_CENTER", hidePercentKey = "hpTextCenterHidePercentSymbol", hidePercentReason = "MSUF2_HP_CENTER_HIDE_PERCENT_SYMBOL" },
-            right = { key = "textRight", default = "CURPERCENT", reason = "MSUF2_HP_RIGHT", hidePercentKey = "hpTextRightHidePercentSymbol", hidePercentReason = "MSUF2_HP_RIGHT_HIDE_PERCENT_SYMBOL" },
+            left = { key = "textLeft", default = "NONE", reason = "MSUF2_HP_LEFT", hidePercentKey = "hpTextLeftHidePercentSymbol", hidePercentReason = "MSUF2_HP_LEFT_HIDE_PERCENT_SYMBOL", absorbIconKey = "hpTextLeftAbsorbIcon" },
+            center = { key = "textCenter", default = "NONE", reason = "MSUF2_HP_CENTER", hidePercentKey = "hpTextCenterHidePercentSymbol", hidePercentReason = "MSUF2_HP_CENTER_HIDE_PERCENT_SYMBOL", absorbIconKey = "hpTextCenterAbsorbIcon" },
+            right = { key = "textRight", default = "CURPERCENT", reason = "MSUF2_HP_RIGHT", hidePercentKey = "hpTextRightHidePercentSymbol", hidePercentReason = "MSUF2_HP_RIGHT_HIDE_PERCENT_SYMBOL", absorbIconKey = "hpTextRightAbsorbIcon" },
         },
         separatorKey = "hpTextSeparator",
         separatorGet = function() return ReadText(unit, "hpTextSeparator", "") end,
@@ -611,6 +695,8 @@ local function BuildText(ctx, builder, unit)
         reverseKey = "hpTextReverse",
         reverseReason = "MSUF2_HP_REVERSE",
         decimalsKey = "healthTextDecimals",
+        absorbIconKey = "hpAbsorbIcon",
+        absorbIconReason = "MSUF2_HP_ABSORB_ICON",
         fullValueShortKey = "hpFullValueShort",
         fullValueShortDefault = function()
             local general = GetGeneral()
@@ -641,6 +727,7 @@ local function BuildText(ctx, builder, unit)
         showDefault = PowerTextDefault,
         showReason = "MSUF2_SHOW_POWER_TEXT",
         modes = POWER_MODES,
+        valueLabel = "Power value",
         legacyKey = "powerTextMode",
         slots = {
             left = { key = "powerTextLeft", default = "NONE", reason = "MSUF2_POWER_TEXT_LEFT", hidePercentKey = "powerTextLeftHidePercentSymbol", hidePercentReason = "MSUF2_POWER_TEXT_LEFT_HIDE_PERCENT_SYMBOL" },
@@ -667,7 +754,7 @@ local function BuildText(ctx, builder, unit)
     })
     local powerManagedNotice, powerManagedNoticeButton
     if UnitSectionShared.CreateSectionNotice then
-        local notice, _, button = UnitSectionShared.CreateSectionNotice(powerTab, -470, "Class Resources", 126)
+        local notice, _, button = UnitSectionShared.CreateSectionNotice(powerTab, -690, "Class Resources", 126)
         powerManagedNotice, powerManagedNoticeButton = notice, button
     end
     if powerManagedNoticeButton then
@@ -713,6 +800,8 @@ local function BuildText(ctx, builder, unit)
         local powerOn = PowerTextShown()
         local powerManaged = IsPlayerPowerManagedByClassResources and IsPlayerPowerManagedByClassResources(unit)
         if namePreviewValue and namePreviewValue.SetText then namePreviewValue:SetText(NamePreviewText()) end
+        if hpControls.RefreshAccordion then hpControls.RefreshAccordion() end
+        if powerControls.RefreshAccordion then powerControls.RefreshAccordion() end
         if hpControls.RefreshPreview then hpControls.RefreshPreview() end
         if powerControls.RefreshPreview then powerControls.RefreshPreview() end
         UpdateTextHeaderBadges(tab, nameOn, hpOn, powerOn)
@@ -721,6 +810,7 @@ local function BuildText(ctx, builder, unit)
         SetControlEnabled(hpControls.show, true)
         SetControlsEnabled(hpTextControls, hpOn)
         if hpControls.RefreshPercentToggles then hpControls.RefreshPercentToggles(hpOn) end
+        if hpControls.RefreshAbsorbControl then hpControls.RefreshAbsorbControl(hpOn) end
         if hpControls.RefreshFullValueToggle then hpControls.RefreshFullValueToggle(hpOn) end
         SetControlsEnabled(hpSlotControls, hpOn and not MoveTogether("hp"))
         SetControlEnabled(powerControls.show, true)
@@ -743,9 +833,9 @@ if type(UP.RegisterSection) == "function" then
     UP.RegisterSection({
         id = "text",
         title = "Text",
-        -- Tab content starts 64px below the body and reaches 518px down.
+        -- Tab content starts 64px below the body and reaches 688px down.
         -- Preserve a 36px bottom inset for the card surface/shadow.
-        height = 618,
+        height = 818,
         placement = "after_auras",
         order = 10,
         build = BuildText,

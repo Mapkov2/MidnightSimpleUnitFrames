@@ -23,10 +23,13 @@ local format = Text.format
 local floor = Text.floor
 local max = Text.max
 local SCALE_100 = Text.SCALE_100
+local ABSORB_HEALTH_MODE_BASE = Text.ABSORB_HEALTH_MODE_BASE or {}
 local REVERSE_HEALTH_MODE = Text.REVERSE_HEALTH_MODE
 local nativeSecrets = _G.issecretvalue ~= nil
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local TruncateWhenZero = _G.C_StringUtil and _G.C_StringUtil.TruncateWhenZero
+local WrapString = _G.C_StringUtil and _G.C_StringUtil.WrapString
+local ABSORB_ICON_MARKUP = "|TInterface\\Icons\\INV_Shield_06:0|t"
 local ApplyText = Apply.Text or function(fs, text)
   if not fs then return end
   if issecretvalue(text) == true then
@@ -294,11 +297,19 @@ local function AddSuffix(text, suffix)
 end
 
 local function SlotText(slot, text)
-  SetTextCached(slot.fs, AddSuffix(text, slot.suffix))
+  if slot.appendSuffix == true then
+    SetTextCached(slot.fs, text .. slot.suffix)
+  else
+    SetTextCached(slot.fs, text)
+  end
 end
 
 local function SlotTextPlain(slot, text)
-  SetTextPlainCached(slot.fs, AddSuffix(text, slot.suffix))
+  if slot.appendSuffix == true then
+    SetTextPlainCached(slot.fs, text .. slot.suffix)
+  else
+    SetTextPlainCached(slot.fs, text)
+  end
 end
 
 local function SlotFormatted(slot, pattern, ...)
@@ -308,6 +319,26 @@ local function SlotFormatted(slot, pattern, ...)
   end
   fs._aText = nil
   fs._aTextPlain = nil
+  if slot.appendSuffix == true then
+    local suffix = slot.suffix
+    local argc = select("#", ...)
+    local a, b, c, d, e = ...
+    pattern = pattern .. "%s"
+    if argc >= 5 then
+      fs:SetFormattedText(pattern, a, b, c, d, e, suffix)
+    elseif argc == 4 then
+      fs:SetFormattedText(pattern, a, b, c, d, suffix)
+    elseif argc == 3 then
+      fs:SetFormattedText(pattern, a, b, c, suffix)
+    elseif argc == 2 then
+      fs:SetFormattedText(pattern, a, b, suffix)
+    elseif argc == 1 then
+      fs:SetFormattedText(pattern, a, suffix)
+    else
+      fs:SetFormattedText(pattern, suffix)
+    end
+    return
+  end
   fs:SetFormattedText(pattern, ...)
 end
 
@@ -559,27 +590,39 @@ local function WriteDeficit(slot, cur, maxValue, pct, pctKnown, rt)
   SlotText(slot, "")
 end
 
-local function WriteAbsorb(slot, cur, maxValue, pct, pctKnown, rt)
-  local absorb = rt and rt.healthAbsorb
-  if absorb == nil then
-    SlotText(slot, "")
-    return
+local function AbsorbDisplayText(slot, absorb, combined, plain)
+  local secret = issecretvalue(absorb) == true
+  if not secret and absorb == nil then return "" end
+  local prefix
+  if combined then
+    prefix = slot.absorbIcon and (" + " .. ABSORB_ICON_MARKUP .. " ") or " + "
+  elseif slot.absorbIcon then
+    prefix = ABSORB_ICON_MARKUP .. " "
   end
-  if issecretvalue(absorb) == true then
+  if secret then
     if TruncateWhenZero then
-      SlotText(slot, TruncateWhenZero(absorb))
-    else
-      local value, valueFormat = SlotFormattedValue(slot, absorb)
-      SlotFormatted(slot, valueFormat, value)
+      local text = TruncateWhenZero(absorb)
+      if prefix and WrapString then return WrapString(text, prefix, "") end
+      return text
     end
-    return
+    return FormatValue(absorb, slot.short, slot.canSecret)
   end
   absorb = FiniteNumberOr(absorb, 0)
-  if absorb <= 0 then
-    SlotText(slot, "")
-    return
-  end
-  SlotText(slot, FormatValue(absorb, slot.short, slot.canSecret) or "")
+  if absorb <= 0 then return "" end
+  local text = plain and SlotValuePlain(slot, absorb) or (FormatValue(absorb, slot.short, slot.canSecret) or "")
+  return prefix and (prefix .. text) or text
+end
+
+local function WriteAbsorb(slot, cur, maxValue, pct, pctKnown, rt)
+  SlotText(slot, AbsorbDisplayText(slot, rt and rt.healthAbsorb, false, false))
+end
+
+local function WriteAbsorbCombined(slot, cur, maxValue, pct, pctKnown, rt)
+  slot.suffix = AbsorbDisplayText(slot, rt and rt.healthAbsorb, true, false)
+  slot.appendSuffix = true
+  slot.absorbBaseWriter(slot, cur, maxValue, pct, pctKnown, rt)
+  slot.appendSuffix = false
+  slot.suffix = nil
 end
 
 local MODE_WRITERS = {
@@ -675,8 +718,15 @@ local function PlainWriteDeficit(slot, cur, maxValue, pct, pctKnown, rt)
 end
 
 local function PlainWriteAbsorb(slot, cur, maxValue, pct, pctKnown, rt)
-  local absorb = FiniteNumberOr(rt and rt.healthAbsorb, 0)
-  SlotTextPlain(slot, absorb > 0 and SlotValuePlain(slot, absorb) or "")
+  SlotTextPlain(slot, AbsorbDisplayText(slot, rt and rt.healthAbsorb, false, true))
+end
+
+local function PlainWriteAbsorbCombined(slot, cur, maxValue, pct, pctKnown, rt)
+  slot.suffix = AbsorbDisplayText(slot, rt and rt.healthAbsorb, true, true)
+  slot.appendSuffix = true
+  slot.absorbBasePlainWriter(slot, cur, maxValue, pct, pctKnown, rt)
+  slot.appendSuffix = false
+  slot.suffix = nil
 end
 
 local MODE_PLAIN_WRITERS = {
@@ -824,6 +874,7 @@ local function SetModeText(fs, mode, cur, max, delimiter, unit, percentFn, short
   slot.hidePercentSymbol = hidePercentSymbol == true
   slot.percentDecimals = NormalizePercentDecimals(percentDecimals)
   slot.suffix = suffix
+  slot.appendSuffix = suffix ~= nil
   slot.canSecret = canSecret
   local writer = MODE_WRITERS[mode] or WriteCurMax
   writer(slot, cur, max, pct, pctKnown, nil)
@@ -839,14 +890,19 @@ local function ResolveHealthTextModes(text)
   local hideLeft = text.healthLeftHidePercentSymbol ~= nil and text.healthLeftHidePercentSymbol == true or fallbackHide
   local hideCenter = text.healthCenterHidePercentSymbol ~= nil and text.healthCenterHidePercentSymbol == true or fallbackHide
   local hideRight = text.healthRightHidePercentSymbol ~= nil and text.healthRightHidePercentSymbol == true or fallbackHide
+  local iconLeft, iconCenter, iconRight = text.healthLeftAbsorbIcon, text.healthCenterAbsorbIcon, text.healthRightAbsorbIcon
+  if iconLeft == nil then iconLeft = text.healthAbsorbIcon == true else iconLeft = iconLeft == true end
+  if iconCenter == nil then iconCenter = text.healthAbsorbIcon == true else iconCenter = iconCenter == true end
+  if iconRight == nil then iconRight = text.healthAbsorbIcon == true else iconRight = iconRight == true end
   if text.healthReverse == true then
     healthLeft, healthRight = healthRight, healthLeft
     hideLeft, hideRight = hideRight, hideLeft
+    iconLeft, iconRight = iconRight, iconLeft
     healthLeft = REVERSE_HEALTH_MODE[healthLeft] or healthLeft
     healthCenter = REVERSE_HEALTH_MODE[healthCenter] or healthCenter
     healthRight = REVERSE_HEALTH_MODE[healthRight] or healthRight
   end
-  return healthLeft, healthCenter, healthRight, hideLeft, hideCenter, hideRight
+  return healthLeft, healthCenter, healthRight, hideLeft, hideCenter, hideRight, iconLeft, iconCenter, iconRight
 end
 
 local function BuildSecretPattern(mode, vf, pf)
@@ -875,14 +931,18 @@ local function SecretPercentFormat(slot)
   return slot.hidePercentSymbol and "%d" or "%d%%"
 end
 
-local function AddTextSlot(slots, index, fs, mode, delimiter, short, hidePercentSymbol, percentDecimals)
+local function AddTextSlot(slots, index, fs, mode, delimiter, short, hidePercentSymbol, percentDecimals, absorbIcon)
   if not (fs and mode and mode ~= "NONE") then
-    return index, false, false, false, false, false
+    return index, false, false, false, false, false, false
   end
-  if not MODE_WRITERS[mode] then
+  local absorbBaseMode = ABSORB_HEALTH_MODE_BASE[mode]
+  local compiledMode = absorbBaseMode or mode
+  if not MODE_WRITERS[compiledMode] then
     mode = "CURMAX"
+    compiledMode = mode
+    absorbBaseMode = nil
   end
-  local needsPercent = ModeNeedsPercent(mode)
+  local needsPercent = ModeNeedsPercent(compiledMode)
   local slot = slots[index]
   if not slot then
     slot = {}
@@ -890,9 +950,13 @@ local function AddTextSlot(slots, index, fs, mode, delimiter, short, hidePercent
   end
   slot.fs = fs
   slot.mode = mode
-  slot.writer = MODE_WRITERS[mode] or WriteCurMax
-  slot.plainWriter = MODE_PLAIN_WRITERS[mode] or PlainWriteCurMax
-  local secretCode = SECRET_MODE_CODES[mode]
+  slot.absorbIcon = absorbIcon == true
+  slot.absorbBaseWriter = absorbBaseMode and MODE_WRITERS[compiledMode] or nil
+  slot.absorbBasePlainWriter = absorbBaseMode and MODE_PLAIN_WRITERS[compiledMode] or nil
+  slot.writer = absorbBaseMode and WriteAbsorbCombined or (MODE_WRITERS[compiledMode] or WriteCurMax)
+  slot.plainWriter = absorbBaseMode and PlainWriteAbsorbCombined or (MODE_PLAIN_WRITERS[compiledMode] or PlainWriteCurMax)
+  local secretCode
+  if not absorbBaseMode then secretCode = SECRET_MODE_CODES[compiledMode] end
   slot.secretWriter = nil
   slot.secretCode = secretCode
   slot.secretSetter = secretCode and SECRET_SETTERS[secretCode] or nil
@@ -916,8 +980,10 @@ local function AddTextSlot(slots, index, fs, mode, delimiter, short, hidePercent
     slot.secretPattern = nil
   end
   slot.suffix = nil
+  slot.appendSuffix = false
   slot.canSecret = nil
-  return index + 1, needsPercent, mode == "DEFICIT", ModeNeedsCurrent(mode), ModeNeedsMax(mode), mode == "ABSORB"
+  local usesAbsorb = mode == "ABSORB" or absorbBaseMode ~= nil
+  return index + 1, needsPercent, compiledMode == "DEFICIT", ModeNeedsCurrent(compiledMode), ModeNeedsMax(compiledMode), usesAbsorb, mode == "ABSORB"
 end
 
 local function TrimTextSlots(slots, firstDead)
@@ -951,8 +1017,9 @@ local function CompileThreeTextSlots(slots, frame, show, fields, mode1, mode2, m
   return nextIndex - 1, needsPercent, needsMissing, needsCurrent, needsMax
 end
 
-local function CompileHealthTextSlots(valueSlots, absorbSlots, frame, show, mode1, mode2, mode3, delimiter, short, hidePercentSymbol1, hidePercentSymbol2, hidePercentSymbol3, percentDecimals)
+local function CompileHealthTextSlots(valueSlots, absorbSlots, frame, show, mode1, mode2, mode3, delimiter, short, hidePercentSymbol1, hidePercentSymbol2, hidePercentSymbol3, percentDecimals, absorbIcon1, absorbIcon2, absorbIcon3)
   local valueIndex, absorbIndex = 1, 1
+  local combinedAbsorbCount = 0
   local needsPercent, needsMissing, needsCurrent, needsMax = false, false, false, false
   if show then
     for i = 1, #HEALTH_SLOT_FIELDS do
@@ -960,12 +1027,19 @@ local function CompileHealthTextSlots(valueSlots, absorbSlots, frame, show, mode
       if fs and fs:IsShown() then
         local mode = i == 1 and mode1 or (i == 2 and mode2 or mode3)
         local hidePercentSymbol = i == 1 and hidePercentSymbol1 or (i == 2 and hidePercentSymbol2 or hidePercentSymbol3)
-        local slots = mode == "ABSORB" and absorbSlots or valueSlots
-        local index = mode == "ABSORB" and absorbIndex or valueIndex
-        local slotNeeds, slotMissing, slotCurrent, slotMax, slotAbsorb
-        index, slotNeeds, slotMissing, slotCurrent, slotMax, slotAbsorb = AddTextSlot(
-          slots, index, fs, mode, delimiter, short, hidePercentSymbol, percentDecimals)
-        if slotAbsorb then absorbIndex = index else valueIndex = index end
+        local absorbIcon = i == 1 and absorbIcon1 or (i == 2 and absorbIcon2 or absorbIcon3)
+        local absorbOnly = mode == "ABSORB"
+        local slots = absorbOnly and absorbSlots or valueSlots
+        local index = absorbOnly and absorbIndex or valueIndex
+        local slotNeeds, slotMissing, slotCurrent, slotMax, slotAbsorb, slotAbsorbOnly
+        index, slotNeeds, slotMissing, slotCurrent, slotMax, slotAbsorb, slotAbsorbOnly = AddTextSlot(
+          slots, index, fs, mode, delimiter, short, hidePercentSymbol, percentDecimals, absorbIcon)
+        if slotAbsorbOnly then
+          absorbIndex = index
+        else
+          valueIndex = index
+          if slotAbsorb then combinedAbsorbCount = combinedAbsorbCount + 1 end
+        end
         needsPercent = needsPercent or slotNeeds
         needsMissing = needsMissing or slotMissing
         needsCurrent = needsCurrent or slotCurrent
@@ -976,7 +1050,7 @@ local function CompileHealthTextSlots(valueSlots, absorbSlots, frame, show, mode
   TrimTextSlots(valueSlots, valueIndex)
   TrimTextSlots(absorbSlots, absorbIndex)
   local valueCount, absorbCount = valueIndex - 1, absorbIndex - 1
-  return valueCount + absorbCount, valueCount, absorbCount, needsPercent, needsMissing, needsCurrent, needsMax
+  return valueCount + absorbCount, valueCount, absorbCount, combinedAbsorbCount, needsPercent, needsMissing, needsCurrent, needsMax
 end
 
 local function CompileTextRuntime(frame, spec, text)
@@ -1035,16 +1109,19 @@ local function CompileTextRuntime(frame, spec, text)
   rt.healthAbsorbSlots = rt.healthAbsorbSlots or {}
   rt.powerSlots = rt.powerSlots or {}
   local showHealth = spec and spec.showHealthText ~= false
-  local healthLeft, healthCenter, healthRight, healthHideLeft, healthHideCenter, healthHideRight = ResolveHealthTextModes(text)
+  local healthLeft, healthCenter, healthRight, healthHideLeft, healthHideCenter, healthHideRight,
+    healthIconLeft, healthIconCenter, healthIconRight = ResolveHealthTextModes(text)
   rt.healthPercentDecimals = NormalizePercentDecimals(text.healthPercentDecimals)
 
   local needsPercent, needsMissing, needsCurrent, needsMax
-  rt.healthSlotCount, rt.healthValueSlotCount, rt.healthAbsorbSlotCount,
+  rt.healthSlotCount, rt.healthValueSlotCount, rt.healthAbsorbSlotCount, rt.healthCombinedAbsorbSlotCount,
     needsPercent, needsMissing, needsCurrent, needsMax = CompileHealthTextSlots(
     rt.healthSlots, rt.healthAbsorbSlots, frame, showHealth,
     healthLeft, healthCenter, healthRight,
     text.healthDelimiter, text.healthShortNumbers,
-    healthHideLeft, healthHideCenter, healthHideRight, rt.healthPercentDecimals)
+    healthHideLeft, healthHideCenter, healthHideRight, rt.healthPercentDecimals,
+    healthIconLeft, healthIconCenter, healthIconRight)
+  rt.healthUsesAbsorb = (rt.healthAbsorbSlotCount or 0) + (rt.healthCombinedAbsorbSlotCount or 0) > 0
   rt.healthNeedsPercent = needsPercent
   rt.healthNeedsMissing = needsMissing
   rt.healthNeedsCurrent = needsCurrent
@@ -1074,6 +1151,7 @@ local function CompileTextRuntime(frame, spec, text)
   rt._lastHealthTextMax = nil
   rt._lastHealthTextMissing = nil
   rt._lastAbsorbTextValue = nil
+  rt.healthAbsorb = nil
   rt._dispatchHealthTextHP = nil
   rt._dispatchHealthTextMax = nil
   rt._dispatchHealthTextMissing = nil
@@ -1237,6 +1315,7 @@ UpdateTextSlotsSecret = function(slots, count, cur, max, unit, percentFn, needsP
   local curSecret = issecretvalue(cur) == true
   local maxSecret = issecretvalue(max) == true
   local pctSecret = needsPercent == true and issecretvalue(pct) == true or false
+  local pctKnown = needsPercent == true and (pctSecret or pct ~= nil)
   for i = 1, count do
     local slot = slots[i]
     if slot then
@@ -1246,7 +1325,7 @@ UpdateTextSlotsSecret = function(slots, count, cur, max, unit, percentFn, needsP
       else
         writer = slot.writer
         if writer then
-          writer(slot, cur, max, pct, false, rt)
+          writer(slot, cur, max, pct, pctKnown, rt)
         end
       end
     end

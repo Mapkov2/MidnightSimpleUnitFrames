@@ -33,7 +33,7 @@ local STATUS_TEXT_STATE_TOGGLES = {
 local DisabledNameAnchorValues = Shared.DisabledNameAnchorValues or function(values) return values or {} end
 local SetSectionHeaderStatus = Shared.SetSectionHeaderStatus or function() end
 local function BuildStatus(ctx, builder, unit)
-    local sec = builder:CollapsibleSection("status_icons", "Status icons", 684, false)
+    local sec = builder:CollapsibleSection("status_icons", "Status icons", 618, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local leftX = 14
     local topGap = 28
@@ -70,11 +70,13 @@ local function BuildStatus(ctx, builder, unit)
         end
         return type(ReadStatusTab) ~= "function" or ReadStatusTab() == tab
     end
-    local selectedCard = W.ControlCard(basicTab, "Selected Indicator", nil, leftX - 2, -38, leftW + 16, 268)
-    local previewCard = W.ControlCard(basicTab, "Status Preview", nil, rightX - 2, -38, rightW + 16, 214)
+    local topCardY, topCardH, cardRowGap = -38, 214, 12
+    local selectedCard = W.ControlCard(basicTab, "Selected Indicator", nil, leftX - 2, topCardY, leftW + 16, topCardH)
+    local previewCard = W.ControlCard(basicTab, "Status Preview", nil, rightX - 2, topCardY, rightW + 16, topCardH)
     local placementCardX = leftX - 2
     local placementCardW = max(320, sectionW - placementCardX - 28)
-    local placementCard = W.ControlCard(basicTab, "Placement", nil, placementCardX, -330, placementCardW, 262)
+    local placementCardY = topCardY - topCardH - cardRowGap
+    local placementCard = W.ControlCard(basicTab, "Placement", nil, placementCardX, placementCardY, placementCardW, 262)
     local placeLeftX = 16
     local placeGap = 24
     local placeAvailableW = max(280, placementCardW - 32)
@@ -217,6 +219,10 @@ local function BuildStatus(ctx, builder, unit)
         RegisterStatusSearch(control, searchLabel, keywords, nil, nil, semanticPath, "ephemeral")
         return control
     end
+    local function SetPreviewCurrentVisual(control, enabled)
+        if T.ApplyButtonRole then T.ApplyButtonRole(control, enabled and "success" or "danger") end
+        if control and control.SetActive then control:SetActive(false) end
+    end
     local function ResolveStatusDefault(defaultValue, spec)
         return type(defaultValue) == "function" and defaultValue(spec) or defaultValue
     end
@@ -261,8 +267,9 @@ local function BuildStatus(ctx, builder, unit)
         end)
     RegisterStatusSearch(selector, "Status indicator selector", {
         "indicator dropdown", "select level", "choose level", "status icon dropdown", "level dropdown",
-        "raid group", "raid group name", "group number", "subgroup",
-    }, function() return StatusValues(unit) end, "Choose Level or Raid Group here, then adjust the available controls for the selected indicator.", "status.selector", "ephemeral")
+        "raid group", "raid group name", "group number", "subgroup", "afk", "dnd", "ghost",
+        "select afk", "afk status", "status text", "race text", "class text", "unit info",
+    }, function() return StatusValues(unit) end, "Choose a status icon or an independent Level, Race, or Class text preview.", "status.selector", "ephemeral")
     local previewLabel = previewCard and previewCard.title
     local midnight = W.ToggleAt(previewCard, "Use Midnight Style", 16, -92, previewControlW)
     M.BindBoolWidget(ctx, midnight,
@@ -431,7 +438,7 @@ local function BuildStatus(ctx, builder, unit)
         M.BindBoolWidget(ctx, toggle,
             function() return ReadStatusTextState(info.key, info.default) end,
             function(value) SetStatusTextState(info.key, value) end)
-        RegisterStatusSearch(toggle, "Dead text state " .. tostring(info.text), {
+        RegisterStatusSearch(toggle, "Status text state " .. tostring(info.text), {
             "dead text", "status text", "afk", "dnd", "ghost", "dead", "offline text",
         }, nil, nil, "status.text_state." .. tostring(info.key), nil,
             { settingKey = "general.statusIndicators." .. tostring(info.key) })
@@ -457,7 +464,7 @@ local function BuildStatus(ctx, builder, unit)
             local spec = CurrentStatusSpec(unit)
             if not spec then return 14 end
             local fallback = spec.defaultSize
-            if spec.value == "level" then fallback = ReadStatusNumber(unit, "nameFontSize", fallback or 14) end
+            if spec.textIndicator then fallback = ReadStatusNumber(unit, "nameFontSize", fallback or 14) end
             return ReadStatusNumber(unit, spec.size, fallback)
         end,
         function(value)
@@ -637,7 +644,8 @@ local function BuildStatus(ctx, builder, unit)
         SetDropdownTitle(iconPack, StatusIconStyleLabel(spec))
         SetDropdownTitle(customIcon, SpecificIconLabel(spec))
         if iconPreviewLabel and iconPreviewLabel.SetText then
-            iconPreviewLabel:SetText(IsRoleStatusSpec(spec) and "Role icon preview" or "Icon preview")
+            iconPreviewLabel:SetText(spec and spec.textIndicator and "Text preview"
+                or (IsRoleStatusSpec(spec) and "Role icon preview" or "Icon preview"))
         end
         local hasSymbol = spec and spec.symbol
         local hasIconPack = false
@@ -659,6 +667,8 @@ local function BuildStatus(ctx, builder, unit)
         ShowControls(spec ~= nil, reset, advanced.reset)
         ShowControl(advanced.test, showTestMode and not inlineName)
         local isEnabled = spec and ReadStatusBool(unit, spec.show, spec.defaultShow)
+        SetPreviewCurrentVisual(current, isEnabled)
+        SetPreviewCurrentVisual(advanced.current, isEnabled)
         SetControlEnabled(symbol, hasSymbol and isEnabled)
         SetControlEnabled(iconPack, hasIconPack and isEnabled)
         SetControlEnabled(customIcon, hasCustomIcon and isEnabled)

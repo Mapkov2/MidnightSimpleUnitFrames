@@ -724,6 +724,8 @@ local function FlushDeferred()
   return GF.RefreshAll()
 end
 
+local startupVisualsPending = true
+
 local function RuntimeOnEvent(self, event, unit)
   -- SavedVariables/config caches are only reliable at the startup event
   -- boundary. Handle it before the disabled fast-exit so a cold cache cannot
@@ -732,6 +734,10 @@ local function RuntimeOnEvent(self, event, unit)
     SyncCombatState()
     GF.RefreshHeaderLayout(event)
     if event == "PLAYER_ENTERING_WORLD" then
+      if startupVisualsPending then
+        startupVisualsPending = false
+        GF.RefreshVisuals(nil, GF.DIRTY_VISUAL)
+      end
       RefreshVisiblePartyState(event)
       RefreshVisibleRoleState("PLAYER_ROLES_ASSIGNED")
       ScheduleHeaderLayoutSettle()

@@ -3381,6 +3381,7 @@ local function fill(key, defaults)
         textRight     = "CURPERCENT",
         hpTextMode    = "CURPERCENT",
         healthTextDecimals = false,
+        hpAbsorbIcon = false,
         hpTextLeftOffsetX = 0,
         hpTextLeftOffsetY = 0,
         hpTextCenterOffsetX = 0,

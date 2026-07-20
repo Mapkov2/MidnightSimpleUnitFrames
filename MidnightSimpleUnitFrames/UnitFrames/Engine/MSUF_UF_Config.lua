@@ -958,6 +958,8 @@ local UNIT_STATUS_ENTRY_DEFS = {
   PrefixedStatusDef("assist", "showLeaderIcon", true, "leaderIcon", 14, "TOPLEFT", 0, 3, 7, { "assistIconStyle", "BLIZZARD", "leaderIconStyle" }, nil, { "assistIconCustomIcon", "" }),
   PrefixedStatusDef("raidMarker", "showRaidMarker", true, "raidMarker", 18, "TOPLEFT", 16, 3, 7, nil, nil, { "raidMarkerCustomIcon", "" }),
   PrefixedStatusDef("level", "showLevelIndicator", true, "levelIndicator", 14, "NAMERIGHT", 0, 0, 7),
+  PrefixedStatusDef("race", "showRaceIndicator", false, "raceIndicator", 14, "NAMERIGHT", 0, 0, 7),
+  PrefixedStatusDef("classText", "showClassTextIndicator", false, "classTextIndicator", 14, "NAMERIGHT", 0, 0, 7),
   StatusEntryDef("raidGroup", "showRaidGroupInName", false, "nameFontSize", 12, "raidGroupNameAnchor", "NAMERIGHT", "raidGroupNameOffsetX", 3, "raidGroupNameOffsetY", 0, "raidGroupNameLayer", 5, { "raidGroupNameStyle", "PAREN" }, nil, nil, "nameTextLayer"),
   PrefixedStatusDef("elite", "showEliteIcon", true, "eliteIcon", 20, "TOPRIGHT", 2, 2, 7, nil, nil, { "eliteIconCustomIcon", "" }),
   PrefixedStatusDef("statusText", "statusTextEnabled", true, "statusText", 14, "CENTER", 0, 0, 7),
@@ -1375,7 +1377,7 @@ local function CompileUnitStatus(out, conf, general, key)
     local def = UNIT_STATUS_ENTRY_DEFS[i]
     local id = def[1]
     local fallbackSize = statusTextSize
-    if id == "level" then
+    if id == "level" or id == "race" or id == "classText" then
       fallbackSize = levelSize
     elseif id == "raidGroup" then
       fallbackSize = raidGroupSize
@@ -1496,6 +1498,10 @@ local function CompileUnitText(out, db, unit, key, conf, general, bars)
   end
   text.healthDelimiter = conf.hpTextSeparator or general.hpTextSeparator or " - "
   text.healthPercentDecimals = (conf.healthTextDecimals == true or conf.hpTextDecimals == true) and 1 or 0
+  text.healthAbsorbIcon = conf.hpAbsorbIcon == true
+  text.healthLeftAbsorbIcon = conf.hpTextLeftAbsorbIcon == nil and text.healthAbsorbIcon or conf.hpTextLeftAbsorbIcon == true
+  text.healthCenterAbsorbIcon = conf.hpTextCenterAbsorbIcon == nil and text.healthAbsorbIcon or conf.hpTextCenterAbsorbIcon == true
+  text.healthRightAbsorbIcon = conf.hpTextRightAbsorbIcon == nil and text.healthAbsorbIcon or conf.hpTextRightAbsorbIcon == true
   if conf.hpFullValueShort ~= nil then
     text.healthShortNumbers = conf.hpFullValueShort == true
   else

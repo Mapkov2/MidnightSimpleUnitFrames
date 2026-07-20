@@ -12,6 +12,7 @@ if not (Text and UF) then return end
 local UnitHealth = Text.UnitHealth
 local UnitHealthMax = Text.UnitHealthMax
 local UnitGetTotalAbsorbs = Text.UnitGetTotalAbsorbs
+local ABSORB_HEALTH_MODE_BASE = Text.ABSORB_HEALTH_MODE_BASE or {}
 local UnitPower = Text.UnitPower
 local UnitPowerMax = Text.UnitPowerMax
 local UnitPowerType = Text.UnitPowerType
@@ -950,23 +951,34 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
   UpdateTextSlotsSecret(rt.healthSlots, rt.healthValueSlotCount or rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt, pctOverride, pctOverrideSet)
 end
 
-local function UpdateAbsorbRuntime(frame, event, unit)
+local function UpdateAbsorbRuntime(frame, event, unit, skipCombinedRefresh)
   unit = unit or frame.MSUFUnitKey
   local rt = frame._msufTextRuntime
   local count = rt and rt.healthAbsorbSlotCount or 0
-  if count <= 0 then return end
+  local combinedCount = rt and rt.healthCombinedAbsorbSlotCount or 0
+  if count + combinedCount <= 0 then return end
 
-  local absorb = UnitGetTotalAbsorbs and UnitGetTotalAbsorbs(unit) or 0
+  local absorb = 0
+  if UnitGetTotalAbsorbs then absorb = UnitGetTotalAbsorbs(unit) end
   local secret = nativeSecrets and issecretvalue(absorb) == true
   if not secret and rt._lastAbsorbTextValue == absorb then return end
   rt._lastAbsorbTextValue = secret and nil or absorb
   rt.healthAbsorb = absorb
-  if secret then
-    UpdateTextSlotsSecret(rt.healthAbsorbSlots, count, nil, nil, unit, nil, false, rt)
-  else
-    UpdateTextSlotsPlain(rt.healthAbsorbSlots, count, nil, nil, unit, nil, false, rt)
+  if count > 0 then
+    if secret then
+      UpdateTextSlotsSecret(rt.healthAbsorbSlots, count, nil, nil, unit, nil, false, rt)
+    else
+      UpdateTextSlotsPlain(rt.healthAbsorbSlots, count, nil, nil, unit, nil, false, rt)
+    end
   end
-  rt.healthAbsorb = nil
+  if combinedCount > 0 and skipCombinedRefresh ~= true then
+    rt._lastHealthTextHP = nil
+    rt._lastHealthTextMax = nil
+    rt._lastHealthTextMissing = nil
+    UpdateHealthRuntime(frame, event, unit)
+  elseif combinedCount <= 0 then
+    rt.healthAbsorb = nil
+  end
 end
 
 local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
@@ -1263,10 +1275,12 @@ local function HealthModeNeedsValueTicks(mode)
   if not ModeEnabled(mode) then
     return false
   end
+  mode = ABSORB_HEALTH_MODE_BASE[mode] or mode
   return mode ~= "MAX" and mode ~= "ABSORB"
 end
 
 local function HealthModeNeedsMaxEvents(mode)
+  mode = ABSORB_HEALTH_MODE_BASE[mode] or mode
   if mode == "ABSORB" then return false end
   return mode == "DEFICIT" or TEXT_MAX_EVENT_MODES[mode] == true
 end
@@ -1274,6 +1288,9 @@ end
 local function HealthTextNeedsAbsorbEvents(spec)
   local left, center, right = ResolveHealthTextModes(spec and spec.text)
   return left == "ABSORB" or center == "ABSORB" or right == "ABSORB"
+    or ABSORB_HEALTH_MODE_BASE[left] ~= nil
+    or ABSORB_HEALTH_MODE_BASE[center] ~= nil
+    or ABSORB_HEALTH_MODE_BASE[right] ~= nil
 end
 
 local function HealthTextEnabled(spec)
@@ -1356,6 +1373,7 @@ end
 
 local function BuildGFHotHealthTextFromPercent(frame, rt)
   if not (rt
+    and (rt.healthCombinedAbsorbSlotCount or 0) == 0
     and rt.healthValueSlotCount == 1
     and rt.healthColorByHealth ~= true
     and rt.healthDispatchKeyMode == 4
@@ -1379,7 +1397,8 @@ local function BuildGFHotHealthTextFromPercent(frame, rt)
 end
 
 local function BuildGFHotHealthText(frame, rt)
-  if not (rt and rt.healthValueSlotCount == 1 and rt.healthColorByHealth ~= true) then
+  if not (rt and (rt.healthCombinedAbsorbSlotCount or 0) == 0
+    and rt.healthValueSlotCount == 1 and rt.healthColorByHealth ~= true) then
     return nil
   end
   local slot = rt.healthSlots and rt.healthSlots[1]
@@ -1641,13 +1660,13 @@ local function UpdateHealthTextValues(frame, event, unit, hp, hpMax)
 end
 
 local function UpdateHealthTextAll(frame, event, unit, hp, hpMax)
-  UpdateHealthTextValues(frame, event, unit, hp, hpMax)
-  return UpdateAbsorbRuntime(frame, event, unit or frame.MSUFUnitKey)
+  UpdateAbsorbRuntime(frame, event, unit or frame.MSUFUnitKey, true)
+  return UpdateHealthTextValues(frame, event, unit, hp, hpMax)
 end
 
 function HealthText.SelectUpdate(frame)
   local rt = frame and frame._msufTextRuntime
-  if rt and rt.healthAbsorbSlotCount and rt.healthAbsorbSlotCount > 0 then
+  if rt and rt.healthUsesAbsorb == true then
     return rt.healthValueSlotCount and rt.healthValueSlotCount > 0 and UpdateHealthTextAll or UpdateAbsorbRuntime
   end
   return UpdateHealthTextValues
