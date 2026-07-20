@@ -729,6 +729,30 @@ local function FoldAnchor(layout, frameWidth, frameHeight, fontSize, nativeSelf,
     return desiredX - nativeX - (padX or 0), desiredY - nativeY - (padY or 0)
 end
 
+-- Castbar text can use a different horizontal anchor in UUF than the fixed
+-- native MSUF slot. Keep width and height separate so RIGHT/CENTER anchors
+-- can be folded with the same secret-safe width estimate used by MSUF.
+local function FoldSizedAnchor(layout, frameWidth, frameHeight, selfWidth, selfHeight,
+    nativeSelf, nativeRelative, nativeWidth, nativeHeight, padX, padY)
+    layout = Layout(layout)
+    frameWidth = SafeNumber(frameWidth, 1, 1, 4096)
+    frameHeight = SafeNumber(frameHeight, 1, 1, 4096)
+    nativeWidth = SafeNumber(nativeWidth, frameWidth, 1, 4096)
+    nativeHeight = SafeNumber(nativeHeight, frameHeight, 1, 4096)
+    selfWidth = SafeNumber(selfWidth, 12, 1, 4096)
+    selfHeight = SafeNumber(selfHeight, 12, 1, 4096)
+
+    local sourceSelfX, sourceSelfY = Fraction(layout[1])
+    local sourceRelativeX, sourceRelativeY = Fraction(layout[2])
+    local nativeSelfX, nativeSelfY = Fraction(nativeSelf)
+    local nativeRelativeX, nativeRelativeY = Fraction(nativeRelative)
+    local desiredX = sourceRelativeX * frameWidth + layout[3] - sourceSelfX * selfWidth
+    local desiredY = sourceRelativeY * frameHeight + layout[4] - sourceSelfY * selfHeight
+    local nativeX = nativeRelativeX * nativeWidth - nativeSelfX * selfWidth
+    local nativeY = nativeRelativeY * nativeHeight - nativeSelfY * selfHeight
+    return desiredX - nativeX - (padX or 0), desiredY - nativeY - (padY or 0)
+end
+
 local function ParseTag(token)
     if type(token) ~= "string" or token == "" then return nil end
     local inner = token:match("^%[([^%[%]]+)%]%%?$")
@@ -736,6 +760,7 @@ local function ParseTag(token)
     inner = inner:lower()
 
     if inner == "status" then return "status" end
+    if inner == "level" then return "level" end
     if inner:match("^name:target") then
         return "targetname", nil, {
             dynamic=inner:find(":colour", 1, true) ~= nil,
@@ -821,6 +846,11 @@ local function ParseComposite(token)
                 meta.target = meta.target or {}
                 meta.name.dynamic = true
                 meta.target.dynamic = true
+            elseif kind == "name_level" then
+                meta.name = meta.name or {}
+                meta.level = meta.level or {}
+                meta.name.dynamic = true
+                meta.level.dynamic = true
             else
                 meta.dynamic = true
             end
@@ -859,6 +889,16 @@ local function ParseComposite(token)
             healthToken=first,
             separator=literal,
             nameFirst=false,
+        }
+    end
+    if firstKind == "name" and secondKind == "level" then
+        return "name_level", nil, {
+            name=firstMeta, level=secondMeta, separator=literal, nameFirst=true,
+        }
+    end
+    if firstKind == "level" and secondKind == "name" then
+        return "name_level", nil, {
+            name=secondMeta, level=firstMeta, separator=literal, nameFirst=false,
         }
     end
     if firstKind == "name" and secondKind == "targetname" and literal:match("^%s*$") then
@@ -1232,7 +1272,15 @@ local function ApplyHealthAndPower(unitKey, source, spec, dst, out, report)
         Mark(report, "skipped", unitKey .. ": per-frame UUF tapped/disconnected health coloring is unavailable natively")
     end
 
-    dst.showPowerBar = power.Enabled ~= false
+    local compactUnit = unitKey == "targettarget" or unitKey == "focustarget" or unitKey == "pet"
+    local powerEnabled = power.Enabled ~= false
+    dst.showPowerBar = powerEnabled and not compactUnit
+    if compactUnit and powerEnabled then
+        Mark(
+            report, "skipped",
+            unitKey .. ": UUF power bar has no native compact-unit equivalent"
+        )
+    end
     dst.powerBarHeight = SafeNumber(power.Height, powerDefaults.Height, 1, 100)
     dst.powerSmoothFill = power.Smooth == true
     dst.powerBarBorderEnabled = true
@@ -1322,6 +1370,30 @@ local UNIT_SLOT_PAD = {Left=4, Center=0, Right=-4}
 local UNIT_TOP_ANCHOR = {Left="TOPLEFT", Center="TOP", Right="TOPRIGHT"}
 local UNIT_BOTTOM_ANCHOR = {Left="BOTTOMLEFT", Center="BOTTOM", Right="BOTTOMRIGHT"}
 
+local UNIT_SLOT_FALLBACKS = {
+    Left={"Left", "Center", "Right"},
+    Center={"Center", "Left", "Right"},
+    Right={"Right", "Center", "Left"},
+}
+
+local function ClaimUnitTextSlot(state, kind, preferred)
+    if type(state) ~= "table" then return preferred, false end
+    local used = state[kind]
+    if type(used) ~= "table" then
+        used = {}
+        state[kind] = used
+    end
+    local candidates = UNIT_SLOT_FALLBACKS[preferred] or UNIT_SLOT_FALLBACKS.Center
+    for index = 1, #candidates do
+        local slot = candidates[index]
+        if not used[slot] then
+            used[slot] = true
+            return slot, slot ~= preferred
+        end
+    end
+    return preferred, false
+end
+
 local function ResetUnitText(dst)
     Assign(dst, {
         showName=false,
@@ -1373,7 +1445,7 @@ local function ApplyUnitStaticTagColor(tag, out, report, label)
     end
 end
 
-local function ApplyUnitTag(dst, tag, unitKey, out, report)
+local function ApplyUnitTag(dst, tag, unitKey, out, report, state)
     if type(tag) ~= "table" or type(tag.Tag) ~= "string" or tag.Tag == "" then return end
     local kind, mode, meta = ParseTag(tag.Tag)
     if kind == "composite" then kind, mode, meta = ParseComposite(tag.Tag) end
@@ -1416,17 +1488,46 @@ local function ApplyUnitTag(dst, tag, unitKey, out, report)
         }
 
         if meta.nameFirst == false then
-            ApplyUnitTag(dst, healthTag, unitKey, out, report)
-            ApplyUnitTag(dst, nameTag, unitKey, out, report)
+            ApplyUnitTag(dst, healthTag, unitKey, out, report, state)
+            ApplyUnitTag(dst, nameTag, unitKey, out, report, state)
         else
-            ApplyUnitTag(dst, nameTag, unitKey, out, report)
-            ApplyUnitTag(dst, healthTag, unitKey, out, report)
+            ApplyUnitTag(dst, nameTag, unitKey, out, report, state)
+            ApplyUnitTag(dst, healthTag, unitKey, out, report, state)
         end
         Mark(
             report,
             "approximated",
             unitKey .. ": combined UUF name/health text uses native left-name and right-HP slots"
         )
+        return
+    end
+
+    if kind == "name_level" then
+        local nameToken = meta and meta.name and meta.name.dynamic and "[name:colour]" or "[name]"
+        local nameTag = {
+            Tag=nameToken, FontSize=fontSize, Layout=layout, Colour=tag.Colour,
+        }
+        ApplyUnitTag(dst, nameTag, unitKey, out, report, state)
+        dst.showLevelIndicator = true
+        dst.levelIndicatorAnchor = meta and meta.nameFirst == false and "NAMELEFT" or "NAMERIGHT"
+        dst.levelIndicatorOffsetX = 0
+        dst.levelIndicatorOffsetY = 0
+        dst.levelIndicatorSize = fontSize
+        Mark(report, "approximated", unitKey .. ": combined UUF name/level text uses native name and level fields")
+        return
+    end
+
+    if kind == "level" then
+        local nativeAnchor = Anchor(layout[2], "CENTER")
+        local x, y = FoldAnchor(layout, width, height, fontSize, nativeAnchor, nativeAnchor,
+            width, height, 0, 0, 0, 0)
+        dst.showLevelIndicator = true
+        dst.levelIndicatorAnchor = nativeAnchor
+        dst.levelIndicatorOffsetX = x
+        dst.levelIndicatorOffsetY = y
+        dst.levelIndicatorSize = fontSize
+        ApplyUnitStaticTagColor(tag, out, report, unitKey .. " level")
+        Mark(report, "mapped", unitKey .. ": level tag and folded native position")
         return
     end
 
@@ -1501,6 +1602,12 @@ local function ApplyUnitTag(dst, tag, unitKey, out, report)
             return
         end
         local anchorMap = power and UNIT_BOTTOM_ANCHOR or UNIT_TOP_ANCHOR
+        local rerouted
+        local preferredSlot = slot
+        slot, rerouted = ClaimUnitTextSlot(state, kind, preferredSlot)
+        if rerouted then
+            Mark(report, "mapped", unitKey .. ": additional UUF " .. kind .. " tag uses a free native slot with folded position")
+        end
         local nativeAnchor = anchorMap[slot]
         local x, y = FoldAnchor(layout, width, height, fontSize, nativeAnchor, nativeAnchor,
             width, height, 0, 0, UNIT_SLOT_PAD[slot], 0)
@@ -1790,6 +1897,11 @@ local CAST_KEYS = {
     boss={"enableBossCastbar","bossCastbarWidth","bossCastbarHeight","bossCastbarOffsetX","bossCastbarOffsetY","bossCastbarMatchWidth","showBossCastIcon","showBossCastName","showBossCastTime","bossCastbarDetached","bossCastIconSize","bossCastTextOffsetX","bossCastTextOffsetY","bossCastTimeOffsetX","bossCastTimeOffsetY","bossCastSpellNameFontSize","bossCastTimeFontSize","bossCastIconOffsetX","bossCastIconOffsetY"},
 }
 
+local function CastTextWidth(text, fontSize, fallbackChars)
+    local maxChars = SafeNumber(text and text.MaxChars, fallbackChars, 1, 128)
+    return math.max(fontSize, maxChars * (fontSize * 0.60) + 6)
+end
+
 local function ConvertCastbar(source, spec, dst, general, report, unitKey)
     local keys = CAST_KEYS[unitKey]
     if not keys then
@@ -1828,20 +1940,32 @@ local function ConvertCastbar(source, spec, dst, general, report, unitKey)
     general[keys[11]] = iconSize
     local nameLayout = Layout(cast.Text.SpellName.Layout, defaults.Text.SpellName.Layout)
     local timeLayout = Layout(cast.Text.Duration.Layout, defaults.Text.Duration.Layout)
-    general[keys[12]], general[keys[13]] = nameLayout[3] - (unitKey == "boss" and 2 or 4), nameLayout[4]
-    local timeOffsetX = timeLayout[3]
     local iconOffsetX = 0
     if iconEnabled and iconPosition == "RIGHT" then
         -- UUF anchors the icon one pixel inside the right edge and shortens
         -- the statusbar by the icon width. MSUF 5.75 exposes absolute icon
-        -- X/Y offsets, so translate both pieces once during import.
+        -- X/Y offsets, so translate the icon once during import.
         iconOffsetX = math.max(0, effectiveWidth - iconSize - 1)
-        timeOffsetX = timeOffsetX - iconSize
     end
-    general[keys[14]], general[keys[15]] = timeOffsetX, timeLayout[4]
+    local sourceStatusWidth = math.max(1, effectiveWidth - 2 - (iconEnabled and iconSize or 0))
+    local nativeStatusWidth = math.max(1, effectiveWidth - 2)
+    if iconEnabled and iconPosition == "LEFT" then
+        nativeStatusWidth = math.max(1, nativeStatusWidth - iconSize)
+    end
+    local statusHeight = math.max(1, height - 2)
+    local nameFontSize = SafeNumber(cast.Text.SpellName.FontSize, 12, 6, 72)
+    local timeFontSize = SafeNumber(cast.Text.Duration.FontSize, 12, 6, 72)
+    local nameWidth = CastTextWidth(cast.Text.SpellName, nameFontSize, 15)
+    local timeWidth = CastTextWidth(cast.Text.Duration, timeFontSize, 4)
+    general[keys[12]], general[keys[13]] = FoldSizedAnchor(
+        nameLayout, sourceStatusWidth, statusHeight, nameWidth, nameFontSize,
+        "LEFT", "LEFT", nativeStatusWidth, statusHeight, unitKey == "boss" and 2 or 4, 0)
+    general[keys[14]], general[keys[15]] = FoldSizedAnchor(
+        timeLayout, sourceStatusWidth, statusHeight, timeWidth, timeFontSize,
+        "RIGHT", "RIGHT", nativeStatusWidth, statusHeight, 0, 0)
     general[keys[18]], general[keys[19]] = iconOffsetX, 0
-    general[keys[16]] = SafeNumber(cast.Text.SpellName.FontSize, 12, 6, 72)
-    general[keys[17]] = SafeNumber(cast.Text.Duration.FontSize, 12, 6, 72)
+    general[keys[16]] = nameFontSize
+    general[keys[17]] = timeFontSize
     if not report._castbarSource and cast.Enabled ~= false then
         report._castbarSource = unitKey
         SetRGB(general, "castbarInterruptible", cast.Foreground)
@@ -2535,14 +2659,15 @@ function Import.Convert(profile, baseProfile)
         ConvertPortrait(source.Portrait, spec, dst, report, key)
         ConvertCastbar(source.CastBar or source.Castbar, spec, dst, out.general, report, key)
         ResetUnitText(dst)
-
-        local tags = type(source.Tags) == "table" and source.Tags or {}
-        for tagIndex = 1, #TAG_KEYS do
-            ApplyUnitTag(dst, Merge(tags[TAG_KEYS[tagIndex]], spec.tags[tagIndex]), key, out, report)
-        end
-        ApplyUnitIndicators(dst, source.Indicators, key, out, report)
         dst.hpTextSeparator = out.general.hpTextSeparator
         dst.powerTextSeparator = out.general.powerTextSeparator
+
+        local tags = type(source.Tags) == "table" and source.Tags or {}
+        local tagState = {health={}, power={}}
+        for tagIndex = 1, #TAG_KEYS do
+            ApplyUnitTag(dst, Merge(tags[TAG_KEYS[tagIndex]], spec.tags[tagIndex]), key, out, report, tagState)
+        end
+        ApplyUnitIndicators(dst, source.Indicators, key, out, report)
         if key ~= "player" then
             dst.rangeFadeEnabled = out.general.rangeFadeEnabled
             dst.rangeFadeAlpha = out.general.rangeFadeAlpha

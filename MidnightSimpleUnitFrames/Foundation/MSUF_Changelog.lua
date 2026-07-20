@@ -4,10 +4,37 @@ local _, ns = ...
 ns = ns or {}
 
 local data = {
-    currentVersion = "5.75",
-    previousVersion = "5.74",
-    rangeLabel = "5.74 -> 5.75",
+    currentVersion = "5.76",
+    previousVersion = "5.75",
+    rangeLabel = "5.75 -> 5.76",
     entries = {
+        {
+            version = "5.76",
+            date = "2026-07-20",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Added independent X/Y positioning for Castbar icons and duration text in Edit Mode for Player, Target, Focus, and Boss frames.",
+                        "Added spell-specific Player channel tick markers with talent- and duration-aware layouts, custom-position support, and a five-marker fallback for unsupported spells.",
+                        "Added a 100-200% zoom control for 2D Unit Frame portraits with matching live and preview rendering.",
+                        "Added 11 bundled bar textures: Arcane Pulse, Aurora Silk, Deep Current, Dragon Scale, Ember Weave, Forged Steel, Frosted Quartz, Lucent, Lunar Mist, Obsidian Glass, and Runic Circuit.",
+                        "Added an adjustable 0-5 second interrupt display duration for Player, Target, Focus, and Boss Castbars.",
+                    },
+                },
+                {
+                    title = "Import & Stability",
+                    bullets = {
+                        "Improved UUF imports to preserve right-side Castbar icons, non-default spell and duration text positions, additional HP-percentage tags, and combined name-and-level labels.",
+                        "Fixed power-bar separator borders that could remain hidden until Edit Mode was opened.",
+                        "Preserved the Player Castbar across active profile and UUF imports, including profiles that previously relied on Blizzard's Player Castbar fallback.",
+                        "Stabilized ArcUI Essential Cooldown anchors across form and specialization changes, delayed addon loading, and protected combat transitions.",
+                        "Fixed overlapping controls in the Portrait Border and Raid Grid sections of the options menu.",
+                        "Kept channel marker updates event-driven with no recurring background polling.",
+                    },
+                },
+            },
+        },
         {
             version = "5.75",
             date = "2026-07-20",
@@ -106,20 +133,6 @@ local data = {
                         "Fixed range fading for complete Unit Frames.",
                         "Improved Group previews, aura controls, Edit Mode dragging, change history, font previews, menu scaling, and search.",
                         "Fixed overlapping Blizzard-frame notices in compact Unit Basics layouts.",
-                    },
-                },
-            },
-        },
-        {
-            version = "5.71",
-            date = "2026-07-11",
-            sections = {
-                {
-                    title = "Hotfix",
-                    bullets = {
-                        "Fixed repeated ADDON_ACTION_FORBIDDEN errors on Warrior login caused by the Whirlwind tracker registering COMBAT_LOG_EVENT_UNFILTERED while Class Resource was disabled.",
-                        "Restored the lightweight 5.6 spellcast-driven Whirlwind generator tracking and removed the global combat-log listener.",
-                        "Bound Whirlwind tracker events only while the Warrior Class Resource is active and cleanly unbound them when the feature is disabled.",
                     },
                 },
             },
