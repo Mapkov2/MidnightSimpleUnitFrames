@@ -289,22 +289,22 @@ local unitText = assert(io.open(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/P
 local unitShared = assert(io.open(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_UnitSectionShared.lua", "r")):read("*a")
 Check(unitPage:find("CURRENTABSORB=Current + Absorb", 1, true), "combined absorb modes missing from unit health modes")
 Check(unitText:find('absorbIconKey = "hpAbsorbIcon"', 1, true), "unit shield icon control missing")
-Check(unitText:find("TextSlotAccordion", 1, true) and unitText:find('"HP value"', 1, true),
-    "accordion HP slot editor missing")
-Check(unitShared:find('opts.label or "Text slots"', 1, true)
-        and unitShared:find("function result:SetSelected", 1, true)
-        and unitShared:find('"campaign_headericon_open"', 1, true)
-        and unitShared:find('"campaign_headericon_closed"', 1, true),
-    "shared text-slot accordion visuals or interaction missing")
+Check(unitText:find('W.Segment(content, "Text slots", SLOT_VALUES', 1, true)
+        and unitText:find('"HP value"', 1, true),
+    "segmented HP slot editor missing")
+Check(not unitText:find("TextSlotAccordion", 1, true)
+        and not unitShared:find("function Shared.TextSlotAccordion", 1, true),
+    "mockup accordion UX was not fully reverted")
 Check(unitText:find('"off", "Off", "value", "+ Value", "icon"', 1, true),
     "absorb style segment missing")
 Check(unitText:find('absorbIconKey = "hpTextLeftAbsorbIcon"', 1, true),
     "slot-aware unit shield style missing")
 
 local groupBars = assert(io.open(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupBars.lua", "r")):read("*a")
-Check(groupBars:find("TextSlotAccordion", 1, true) and groupBars:find('"Power value"', 1, true),
-    "accordion group slot editors missing")
+Check(groupBars:find('W.Segment(content, "Text slots", SLOT_VALUES', 1, true)
+        and groupBars:find('"Power value"', 1, true),
+    "segmented group slot editors missing")
 Check(groupBars:find('absorbIconKey = "hpTextRightAbsorbIcon"', 1, true),
     "slot-aware group shield style missing")
 
-print("Health absorb text smoke passed (combined modes, accordion slot UX, per-slot icon, routing, scope, zero-hide, PTR secret path)")
+print("Health absorb text smoke passed (combined modes, segmented slot UX, per-slot icon, routing, scope, zero-hide, PTR secret path)")
