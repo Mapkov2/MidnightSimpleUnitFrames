@@ -2076,7 +2076,7 @@ local function BuildAlpha(ctx, builder, unit)
 end
 
 local function BuildPortrait(ctx, builder, unit)
-    local sec = builder:CollapsibleSection("portrait", "Portrait", 558, false)
+    local sec = builder:CollapsibleSection("portrait", "Portrait", 612, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local leftX = 16
     local cardGap = 28
@@ -2096,7 +2096,7 @@ local function BuildPortrait(ctx, builder, unit)
     M._msuf2LastPortraitSide = M._msuf2LastPortraitSide or {}
     local mainCard = W.ControlCard(sec, "Portrait", "Main portrait visibility and render mode.", leftX, -38, leftW, 168)
     local geometryCard = W.ControlCard(sec, "Geometry", "Size, zoom, and local offset.", rightX, -38, rightW, 278)
-    local borderCard = W.ControlCard(sec, "Shape & Border", nil, leftX, -224, leftW, 258)
+    local borderCard = W.ControlCard(sec, "Shape & Border", nil, leftX, -224, leftW, 312)
     local styleCard = W.ControlCard(sec, "Class & Background", nil, rightX, -338, rightW, 166)
 
     local portraitEnable = W.SwitchAt(mainCard, "Portrait", leftW - 62, -24, 0, "HIDDEN")
@@ -2185,12 +2185,12 @@ local function BuildPortrait(ctx, builder, unit)
         end)
 
     local borderSize = W.Slider(borderCard, "Border thickness", 1, 12, 1, 280)
-    W.MoveWidget(borderSize, borderCard, 16, -166, leftW - 58, "CENTER")
+    W.MoveWidget(borderSize, borderCard, 16, -170, leftW - 58, "CENTER")
     M.BindSlider(ctx, borderSize,
         function() return ReadNumber(unit, "portraitBorderThickness", 2) end,
         function(v) SetNumber(unit, "portraitBorderThickness", v, "MSUF2_PORTRAIT_BORDER_SIZE", { preview = true }) end)
 
-    local fillBorder = W.ToggleAt(borderCard, "Fill border into frame gap", 16, -194, leftW - 32)
+    local fillBorder = W.ToggleAt(borderCard, "Fill border into frame gap", 16, -238, leftW - 32)
     M.BindToggle(ctx, fillBorder,
         function() return ReadBool(unit, "portraitFillBorder", false) end,
         function(v) SetPortraitValue(unit, "portraitFillBorder", v and true or false, "MSUF2_PORTRAIT_FILL_BORDER") end)
