@@ -3671,6 +3671,21 @@ L["Yes. Priority Frames work in parties, raids, and Mythic raids. In a party or 
 L["|cffffd200"] = "|cffffd200"
 L["|cffffffff"] = "|cffffffff"
 
+-- Ventanas rápidas del modo de edición.
+L["Aura layout"] = "Diseño de auras"
+L["Changes apply live"] = "Cambios en vivo"
+L["Copy to..."] = "Copiar a..."
+L["Detach castbar from unit frame"] = "Separar la barra de lanzamiento del marco de unidad"
+L["Detach power bar"] = "Separar la barra de recurso"
+L["Edit Boss 1-5 together"] = "Editar jefes 1-5 juntos"
+L["General aura settings"] = "Ajustes generales de auras"
+L["General castbar settings"] = "Ajustes generales de barras de lanzamiento"
+L["Lock ratio"] = "Proporción"
+L["Open detailed settings"] = "Abrir ajustes detallados"
+L["Spacing"] = "Espaciado"
+L["X"] = "X"
+L["Y"] = "Y"
+
 -- Barra compacta del modo de edición y acoplamiento tipo barra de tareas.
 L["?"] = "?"
 L["Edit Mode"] = "Modo de edición"

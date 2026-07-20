@@ -250,20 +250,24 @@ Check(layoutEvents and layoutEvents.events.DISPLAY_SIZE_CHANGED and layoutEvents
 
 if advanced then
     local primary = _G.MSUF_EM2_HUD_PreviewAddonSlot:GetParent():GetParent()
+    local redo = _G.MSUF_EditModeRedoBtn
     local discardLeft = toolbar:GetRight() - 192
+    Check(redo and primary:GetLeft() >= redo:GetRight() + 7.9, "Preview overlaps Redo at full width")
     Check(primary:GetRight() <= discardLeft - 7.9, "advanced controls overlap Discard at full width")
-    Equal(primary:GetScale(), 1, "advanced controls were unnecessarily scaled at full width")
+    local fullWidthScale = primary:GetScale()
+    Check(fullWidthScale > 0 and fullWidthScale <= 1, "invalid full-width advanced scale")
 
     _G.UIParent:SetWidth(1280)
     layoutEvents.scripts.OnEvent(layoutEvents, "DISPLAY_SIZE_CHANGED")
     Equal(toolbar:GetWidth(), 1248, "narrow toolbar did not fit the screen")
     discardLeft = toolbar:GetRight() - 192
     Check(primary:GetScale() < 1, "narrow advanced controls did not reflow")
+    Check(primary:GetLeft() >= redo:GetRight() + 7.9, "narrow Preview overlaps Redo")
     Check(primary:GetRight() <= discardLeft - 7.9, "narrow advanced controls overlap Discard")
 
     _G.UIParent:SetWidth(1920)
     layoutEvents.scripts.OnEvent(layoutEvents, "DISPLAY_SIZE_CHANGED")
-    Equal(primary:GetScale(), 1, "advanced controls did not restore full scale")
+    Equal(primary:GetScale(), fullWidthScale, "advanced controls did not restore their full-width scale")
 end
 
 local saved = _G.MSUF_GlobalDB.char["DockTester-TestRealm"].editModeHUDState

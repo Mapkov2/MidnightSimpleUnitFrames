@@ -3530,6 +3530,21 @@ L["Yes. Priority Frames work in parties, raids, and Mythic raids. In a party or 
 L["|cffffd200"] = "|cffffd200"
 L["|cffffffff"] = "|cffffffff"
 
+-- Быстрые окна режима редактирования.
+L["Aura layout"] = "Расположение аур"
+L["Changes apply live"] = "Изменения сразу"
+L["Copy to..."] = "Копировать в..."
+L["Detach castbar from unit frame"] = "Отсоединить полосу заклинаний от рамки бойца"
+L["Detach power bar"] = "Отсоединить полосу ресурса"
+L["Edit Boss 1-5 together"] = "Редактировать боссов 1-5 вместе"
+L["General aura settings"] = "Общие настройки аур"
+L["General castbar settings"] = "Общие настройки полосы заклинаний"
+L["Lock ratio"] = "Пропорции"
+L["Open detailed settings"] = "Открыть подробные настройки"
+L["Spacing"] = "Интервал"
+L["X"] = "X"
+L["Y"] = "Y"
+
 -- Компактная панель режима редактирования с закреплением как у панели задач.
 L["?"] = "?"
 L["Edit Mode"] = "Режим редактирования"

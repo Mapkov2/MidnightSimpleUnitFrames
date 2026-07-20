@@ -3491,6 +3491,21 @@ L["Yes. Priority Frames work in parties, raids, and Mythic raids. In a party or 
 L["|cffffd200"] = "|cffffd200"
 L["|cffffffff"] = "|cffffffff"
 
+-- 편집 모드 빠른 팝업.
+L["Aura layout"] = "오라 배치"
+L["Changes apply live"] = "변경 즉시 적용"
+L["Copy to..."] = "다음으로 복사..."
+L["Detach castbar from unit frame"] = "유닛 프레임에서 시전바 분리"
+L["Detach power bar"] = "자원 바 분리"
+L["Edit Boss 1-5 together"] = "우두머리 1-5 함께 편집"
+L["General aura settings"] = "일반 오라 설정"
+L["General castbar settings"] = "일반 시전바 설정"
+L["Lock ratio"] = "비율 고정"
+L["Open detailed settings"] = "세부 설정 열기"
+L["Spacing"] = "간격"
+L["X"] = "X"
+L["Y"] = "Y"
+
 -- 작업 표시줄 방식으로 고정할 수 있는 간결한 편집 모드 도구 모음.
 L["?"] = "?"
 L["Edit Mode"] = "편집 모드"

@@ -3535,6 +3535,21 @@ L["Yes. Priority Frames work in parties, raids, and Mythic raids. In a party or 
 L["|cffffd200"] = "|cffffd200"
 L["|cffffffff"] = "|cffffffff"
 
+-- 編輯模式快捷彈窗。
+L["Aura layout"] = "光環配置"
+L["Changes apply live"] = "變更會即時套用"
+L["Copy to..."] = "複製到..."
+L["Detach castbar from unit frame"] = "將施法條與單位框架分離"
+L["Detach power bar"] = "分離資源條"
+L["Edit Boss 1-5 together"] = "同時編輯首領 1-5"
+L["General aura settings"] = "一般光環設定"
+L["General castbar settings"] = "一般施法條設定"
+L["Lock ratio"] = "鎖定比例"
+L["Open detailed settings"] = "開啟詳細設定"
+L["Spacing"] = "間距"
+L["X"] = "X"
+L["Y"] = "Y"
+
 -- 可像工作列一樣停駐的精簡編輯模式工具列。
 L["?"] = "?"
 L["Edit Mode"] = "編輯模式"

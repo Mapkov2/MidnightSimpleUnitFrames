@@ -18,6 +18,7 @@ EM2.PopupFactory = Factory
 local floor = math.floor
 local W8 = "Interface/Buttons/WHITE8X8"
 local FONT = STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF"
+local MEDIA = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\"
 local U = EM2.Util or {}
 
 local C = {
@@ -73,6 +74,17 @@ local function FS(parent, role, color)
     return fs
 end
 
+local function SetReadableSize(fontObject, size)
+    if not (fontObject and fontObject.SetFont) then return fontObject end
+    local path, _, flags = fontObject.GetFont and fontObject:GetFont()
+    fontObject:SetFont(path or FONT, tonumber(size) or 13, flags or "")
+    return fontObject
+end
+
+local function SetButtonReadableSize(button, size)
+    return SetReadableSize(button and (button._msuf2Label or button._label), size)
+end
+
 local SharedUI = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
 local Menu2Style = _G.MSUF_EM2_Menu2Style
 if type(Menu2Style) ~= "table" or Menu2Style == SharedUI then Menu2Style = {} end
@@ -125,12 +137,15 @@ local function KeepMenu2Skin(widget)
     return widget
 end
 
-function Menu2Style.Button(parent, text, width, height, onClick)
+function Menu2Style.Button(parent, text, width, height, onClick, opts)
+    opts = opts or {}
     if SharedUI and SharedUI.Button then
         return KeepMenu2Skin(SharedUI.Button(parent, text, width or 66, height or 24, {
             onClick = onClick,
             align = "CENTER",
             skipHistory = true,
+            variant = opts.variant,
+            active = opts.active,
         }))
     end
     local b = CreateFrame("Button", nil, parent, "BackdropTemplate")
@@ -146,6 +161,10 @@ function Menu2Style.Button(parent, text, width, height, onClick)
     fs:SetText(Tr(text or ""))
     b._label = fs
     if onClick then b:SetScript("OnClick", onClick) end
+    if opts.variant == "primary" then
+        b:SetBackdropColor(0.16, 0.56, 0.72, 0.97)
+        b:SetBackdropBorderColor(C.title[1], C.title[2], C.title[3], 0.95)
+    end
     return KeepMenu2Skin(b)
 end
 
@@ -212,6 +231,8 @@ EM2.QuickPopup = Quick
 local QC = {
     panelBg = { 0.03, 0.05, 0.12, 0.95 },
     panelEdge = { 0.10, 0.20, 0.45, 0.90 },
+    cardBg = { 0.02, 0.03, 0.08, 0.64 },
+    cardEdge = { 0.10, 0.18, 0.38, 0.72 },
     title = { 0.60, 0.80, 1.00, 1.00 },
     white = { 0.86, 0.92, 1.00, 0.95 },
     muted = { 0.55, 0.62, 0.78, 0.70 },
@@ -225,6 +246,8 @@ local QC = {
 function Quick.RefreshPalette()
     QC.panelBg = Menu2Style.Color("popup", QC.panelBg)
     QC.panelEdge = Menu2Style.Color("borderSoft", QC.panelEdge)
+    QC.cardBg = Menu2Style.Color("card", QC.cardBg)
+    QC.cardEdge = Menu2Style.Color("borderSoft", QC.cardEdge)
     QC.title = Menu2Style.Color("accent", QC.title)
     QC.white = Menu2Style.Color("text", QC.white)
     QC.muted = Menu2Style.Color("muted", QC.muted)
@@ -319,7 +342,7 @@ function Quick.Button(parent, text, w, h, onClick, opts)
     local c = Quick.RefreshPalette()
     local b
     if Menu2Style.Button then
-        b = Menu2Style.Button(parent, Tr(text), w or 68, h or 32, onClick)
+        b = Menu2Style.Button(parent, Tr(text), w or 68, h or 32, onClick, opts)
         if Menu2Style.SetButtonText then Menu2Style.SetButtonText(b, text) end
     else
         b = CreateFrame("Button", nil, parent, "BackdropTemplate")
@@ -331,8 +354,22 @@ function Quick.Button(parent, text, w, h, onClick, opts)
         b._label:SetPoint("CENTER")
     end
     if not Menu2Style.SetButtonText and b._label then b._label:SetText(Tr(text)) end
+    SetButtonReadableSize(b, (opts and opts.fontSize) or ((text == "+" or text == "-") and 15 or 13))
     if onClick then b:SetScript("OnClick", onClick) end
+    if opts and opts.active ~= nil and b.SetActive then b:SetActive(opts.active) end
     return FinishQuickButton(b, opts)
+end
+
+function Quick.AttachIcon(btn, texturePath, size)
+    if not (btn and btn.CreateTexture and texturePath) then return nil end
+    local label = btn._msuf2Label or btn._label
+    if label and label.Hide then label:Hide() end
+    local icon = btn:CreateTexture(nil, "ARTWORK", nil, 5)
+    icon:SetTexture(texturePath)
+    icon:SetSize(size or 17, size or 17)
+    icon:SetPoint("CENTER", btn, "CENTER", 0, 0)
+    btn._quickIcon = icon
+    return icon
 end
 
 function Quick.ToggleButton(parent, text, w, h, onClick, opts)
@@ -376,7 +413,7 @@ end
 function Quick.Box(parent, width, opts)
     local c = Quick.RefreshPalette()
     local b = CreateFrame("EditBox", nil, parent, "BackdropTemplate")
-    b:SetSize(width or 52, 24)
+    b:SetSize(width or 52, (opts and opts.boxHeight) or 24)
     b:SetAutoFocus(false)
     b:SetNumeric(false)
     b:SetJustifyH("CENTER")
@@ -387,6 +424,7 @@ function Quick.Box(parent, width, opts)
     else
         b:SetFont(FONT, FontSize("body"), "")
     end
+    SetReadableSize(b, (opts and opts.valueFontSize) or 15)
     b:SetTextColor(c.white[1], c.white[2], c.white[3], c.white[4] or 1)
     if b.SetBackdrop then
         b:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1 })
@@ -414,26 +452,29 @@ end
 function Quick.ValuePair(owner, parent, y, label1, key1, cb1, label2, key2, cb2, opts)
     local c = Quick.RefreshPalette()
     local row = CreateFrame("Frame", nil, parent)
-    row:SetSize(400, 24)
+    row:SetSize((opts and opts.rowWidth) or 488, 32)
     row:SetPoint("TOPLEFT", parent, "TOPLEFT", (opts and opts.x) or 20, y)
 
-    local l1 = FS(row, "caption", c.white)
+    local l1 = SetReadableSize(FS(row, "caption", c.white), 13)
     l1:SetPoint("LEFT", row, "LEFT", 0, 0)
     l1:SetText(Tr(label1))
     if key1 then owner[key1 .. "Label"] = l1 end
-    local m1 = Quick.Step(row, "-", opts); m1:SetPoint("LEFT", l1, "RIGHT", Space("sm", 8), 0)
-    local b1 = Quick.Box(row, opts and opts.boxWidth or 52, opts); b1:SetPoint("LEFT", m1, "RIGHT", 1)
-    local p1 = Quick.Step(row, "+", opts); p1:SetPoint("LEFT", b1, "RIGHT", 1)
+    local m1 = Quick.Button(row, "-", 32, 32, nil, opts); m1:SetPoint("LEFT", l1, "RIGHT", Space("sm", 8), 0)
+    local boxOpts = {}
+    for key, value in pairs(opts or {}) do boxOpts[key] = value end
+    boxOpts.boxHeight = 32
+    local b1 = Quick.Box(row, opts and opts.boxWidth or 64, boxOpts); b1:SetPoint("LEFT", m1, "RIGHT", 4)
+    local p1 = Quick.Button(row, "+", 32, 32, nil, opts); p1:SetPoint("LEFT", b1, "RIGHT", 4)
     Quick.WireStepper(m1, b1, p1, cb1)
     owner[key1] = b1
 
-    local l2 = FS(row, "caption", c.white)
-    l2:SetPoint("LEFT", p1, "RIGHT", 16, 0)
+    local l2 = SetReadableSize(FS(row, "caption", c.white), 13)
+    l2:SetPoint("LEFT", p1, "RIGHT", 20, 0)
     l2:SetText(Tr(label2))
     if key2 then owner[key2 .. "Label"] = l2 end
-    local m2 = Quick.Step(row, "-", opts); m2:SetPoint("LEFT", l2, "RIGHT", Space("sm", 8), 0)
-    local b2 = Quick.Box(row, opts and opts.boxWidth or 52, opts); b2:SetPoint("LEFT", m2, "RIGHT", 1)
-    local p2 = Quick.Step(row, "+", opts); p2:SetPoint("LEFT", b2, "RIGHT", 1)
+    local m2 = Quick.Button(row, "-", 32, 32, nil, opts); m2:SetPoint("LEFT", l2, "RIGHT", Space("sm", 8), 0)
+    local b2 = Quick.Box(row, opts and opts.boxWidth or 64, boxOpts); b2:SetPoint("LEFT", m2, "RIGHT", 4)
+    local p2 = Quick.Button(row, "+", 32, 32, nil, opts); p2:SetPoint("LEFT", b2, "RIGHT", 4)
     Quick.WireStepper(m2, b2, p2, cb2)
     owner[key2] = b2
 
@@ -443,18 +484,89 @@ end
 function Quick.SingleValue(owner, parent, y, label, key, cb, opts)
     local c = Quick.RefreshPalette()
     local row = CreateFrame("Frame", nil, parent)
-    row:SetSize((opts and opts.rowWidth) or 360, 24)
+    row:SetSize((opts and opts.rowWidth) or 488, 32)
     row:SetPoint("TOPLEFT", parent, "TOPLEFT", (opts and opts.x) or 20, y)
 
-    local l = FS(row, "caption", c.white)
+    local l = SetReadableSize(FS(row, "caption", c.white), 13)
     l:SetPoint("LEFT", row, "LEFT", 0, 0)
     l:SetText(Tr(label))
-    local m = Quick.Step(row, "-", opts); m:SetPoint("LEFT", l, "RIGHT", Space("sm", 8), 0)
-    local b = Quick.Box(row, opts and opts.boxWidth or 52, opts); b:SetPoint("LEFT", m, "RIGHT", 1)
-    local p = Quick.Step(row, "+", opts); p:SetPoint("LEFT", b, "RIGHT", 1)
+    local m = Quick.Button(row, "-", 32, 32, nil, opts); m:SetPoint("LEFT", l, "RIGHT", Space("sm", 8), 0)
+    local boxOpts = {}
+    for option, value in pairs(opts or {}) do boxOpts[option] = value end
+    boxOpts.boxHeight = 32
+    local b = Quick.Box(row, opts and opts.boxWidth or 64, boxOpts); b:SetPoint("LEFT", m, "RIGHT", 4)
+    local p = Quick.Button(row, "+", 32, 32, nil, opts); p:SetPoint("LEFT", b, "RIGHT", 4)
     Quick.WireStepper(m, b, p, cb)
     owner[key] = b
     return row
+end
+
+--- Compact, self-contained geometry card used by the Edit Mode quick popups.
+--- Rows are declarative: { label = "X", key = "xBox", onChanged = Apply }.
+function Quick.ValueCard(owner, parent, x, y, width, title, rows, opts)
+    opts = opts or {}
+    local c = Quick.RefreshPalette()
+    local card = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    card:SetSize(width, opts.height or 132)
+    card:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    card:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
+    card:SetBackdropColor(c.cardBg[1], c.cardBg[2], c.cardBg[3], c.cardBg[4] or 0.64)
+    card:SetBackdropBorderColor(c.cardEdge[1], c.cardEdge[2], c.cardEdge[3], c.cardEdge[4] or 0.72)
+    if Menu2Style.Card then Menu2Style.Card(card) end
+
+    local heading = SetReadableSize(FS(card, "body", c.white), 15)
+    heading:SetPoint("TOPLEFT", card, "TOPLEFT", 12, -10)
+    heading:SetText(Tr(title or ""))
+    card._titleFS = heading
+
+    for i = 1, #(rows or {}) do
+        local spec = rows[i]
+        local row = CreateFrame("Frame", nil, card)
+        row:SetSize(width - 24, opts.controlHeight or 32)
+        row:SetPoint("TOPLEFT", card, "TOPLEFT", 12, -(38 + (i - 1) * 42))
+
+        local label = SetReadableSize(FS(row, "caption", c.white), 13)
+        label:SetPoint("LEFT", row, "LEFT", 0, 0)
+        label:SetText(Tr(spec.label or ""))
+        if spec.key then owner[spec.key .. "Label"] = label end
+
+        local plus = Quick.Button(row, "+", opts.stepWidth or 32, opts.controlHeight or 32, nil, opts)
+        plus:SetPoint("RIGHT", row, "RIGHT", -(spec.controlsRightInset or opts.controlsRightInset or 0), 0)
+        local boxOpts = {}
+        for key, value in pairs(opts) do boxOpts[key] = value end
+        boxOpts.boxHeight = opts.controlHeight or 32
+        local box = Quick.Box(row, spec.boxWidth or opts.boxWidth or 64, boxOpts)
+        box:SetPoint("RIGHT", plus, "LEFT", -(opts.controlGap or 4), 0)
+        local minus = Quick.Button(row, "-", opts.stepWidth or 32, opts.controlHeight or 32, nil, opts)
+        minus:SetPoint("RIGHT", box, "LEFT", -(opts.controlGap or 4), 0)
+        Quick.WireStepper(minus, box, plus, spec.onChanged)
+        owner[spec.key] = box
+    end
+
+    return card
+end
+
+function Quick.AddLiveStatus(pf, text)
+    if not (pf and pf._titleFS) then return nil end
+    local c = Quick.RefreshPalette()
+    local status = CreateFrame("Frame", nil, pf, "BackdropTemplate")
+    status:SetSize(150, 22)
+    status:SetPoint("LEFT", pf._titleFS, "RIGHT", 14, 0)
+    status:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
+    status:SetBackdropColor(c.cardBg[1], c.cardBg[2], c.cardBg[3], 0.72)
+    status:SetBackdropBorderColor(c.cardEdge[1], c.cardEdge[2], c.cardEdge[3], 0.58)
+    if Menu2Style.Card then Menu2Style.Card(status) end
+    local dot = status:CreateTexture(nil, "ARTWORK")
+    dot:SetTexture(MEDIA .. "msuf_switch_knob.tga")
+    dot:SetVertexColor(0.30, 1.00, 0.62, 1.00)
+    dot:SetSize(8, 8)
+    dot:SetPoint("LEFT", status, "LEFT", 9, 0)
+    local label = SetReadableSize(FS(status, "caption", { 0.72, 0.90, 0.82, 0.95 }), 13)
+    label:SetPoint("LEFT", dot, "RIGHT", 6, 0)
+    label:SetText(Tr(text or "Changes apply live"))
+    status._label, status._dot = label, dot
+    pf._liveStatus = status
+    return status
 end
 
 function Quick.ClearFocusedBoxes(...)
@@ -522,17 +634,25 @@ function Quick.CreateShell(name, opts)
     pf:SetScript("OnDragStart", function(s) if not blocker() then s:StartMoving() end end)
     pf:SetScript("OnDragStop", function(s) s:StopMovingOrSizing() end)
 
-    pf._titleFS = FS(pf, "section", c.white)
+    pf._titleFS = SetReadableSize(FS(pf, "section", c.white), 18)
     pf._titleFS:SetPoint("TOPLEFT", pf, "TOPLEFT", 20, -20)
     if opts.title then pf._titleFS:SetText(Tr(opts.title)) end
+    if opts.liveStatus then Quick.AddLiveStatus(pf, opts.liveStatus == true and "Changes apply live" or opts.liveStatus) end
 
-    local close = (Menu2Style.CloseButton and Menu2Style.CloseButton(pf, function() pf:Hide() end))
-        or Quick.Button(pf, "x", 24, 24, function() pf:Hide() end, opts)
+    local menu = _G.MSUF2 or (type(MSUF) == "table" and MSUF.MSUF2)
+    local close = menu and menu.CreateWindowControlButton and menu.CreateWindowControlButton(pf, "close")
+    if close then
+        close:SetScript("OnClick", function() pf:Hide() end)
+        KeepMenu2Skin(close)
+    else
+        close = (Menu2Style.CloseButton and Menu2Style.CloseButton(pf, function() pf:Hide() end))
+            or Quick.Button(pf, "x", 24, 24, function() pf:Hide() end, opts)
+    end
     FinishQuickButton(close, opts)
     close:SetPoint("TOPRIGHT", pf, "TOPRIGHT", -12, -12)
 
     if opts.subtitle then
-        pf._subtitleFS = FS(pf, "body", c.muted)
+        pf._subtitleFS = SetReadableSize(FS(pf, "body", c.muted), 13)
         pf._subtitleFS:SetPoint("TOPLEFT", pf._titleFS, "BOTTOMLEFT", 0, -8)
         pf._subtitleFS:SetText(Tr(opts.subtitle))
     end
@@ -660,42 +780,11 @@ function Quick.SingleValueAt(owner, parent, x, y, label, key, cb, opts)
     return Quick.SingleValue(owner, parent, y, label, key, cb, opts)
 end
 
-local function ResolveQuickSpecValue(value)
-    return type(value) == "function" and value() or value
-end
-
-function Quick.BuildBoundsPopup(name, shellOpts, spec)
-    -- Castbar and aura shortcut popups share one fixed bounds-editor layout. The caller
-    -- still owns DB writes, focus routing, and refresh callbacks; this helper only centralizes
-    -- the chrome so future popup additions do not copy/paste shell rows and footer wiring.
-    spec = spec or {}
-    local pf = Quick.CreateShell(name, shellOpts)
-    local defaultOpts = ResolveQuickSpecValue(spec.buttonOpts)
-    for i = 1, #(spec.rows or {}) do
-        local row = spec.rows[i]
-        local rowX = row.x
-        if rowX == nil then rowX = spec.rowX or 20 end
-        Quick.ValuePairAt(pf, pf, rowX, row.y, row.label1, row.key1, row.cb1, row.label2, row.key2, row.cb2, ResolveQuickSpecValue(row.opts) or defaultOpts)
-    end
-    local toggle = spec.toggle
-    if toggle then
-        pf[toggle.key] = Quick.ToggleAt(pf, toggle.text, toggle.x, toggle.y, toggle.w, toggle.h, toggle.onClick, ResolveQuickSpecValue(toggle.opts) or defaultOpts)
-    end
-    for i = 1, #(spec.buttons or {}) do
-        local button = spec.buttons[i]
-        local control = Quick.ButtonAt(pf, button.text, button.x, button.y, button.w, button.h, button.onClick, ResolveQuickSpecValue(button.opts) or defaultOpts)
-        if spec.wireButton then control = spec.wireButton(control, button, pf) or control end
-        if button.key then pf[button.key] = control end
-    end
-    if Quick.AddFooterControls and spec.footer then Quick.AddFooterControls(pf, spec.footer) end
-    if spec.scaleGrip ~= false and EM2.AttachPopupScaleGrip then EM2.AttachPopupScaleGrip(pf) end
-    return pf
-end
-
---- Shared bottom footer: Undo / Redo + Reset position. Keeps every quick popup
+--- Shared bottom footer: compact history, reset, and a clear Done action. Keeps every quick popup
 --- on the same Menu2 visual system and behavior. The host popup supplies:
 ---   opts.onResetPosition  -> called when "Reset position" is clicked
 ---   opts.resetLabel       -> button label (default "Reset position")
+---   opts.onDone           -> optional callback before the popup closes
 ---   opts.y                -> TOPLEFT y of the footer row (negative, from top)
 --- Exposes pf._refreshUndoRedo() to re-evaluate Undo/Redo enabled state, and
 --- calls it after the row is built and whenever the popup is shown.
@@ -705,13 +794,24 @@ function Quick.AddFooterControls(pf, opts)
     local btnOpts = opts.buttonOpts or { hoverWash = true, hoverKey = "_msufEM2FooterHoverWash" }
     local y = opts.y or -206
 
+    local divider = pf:CreateTexture(nil, "ARTWORK")
+    divider:SetColorTexture(0.18, 0.34, 0.56, 0.34)
+    divider:SetHeight(1)
+    divider:SetWidth(math.max(1, (pf:GetWidth() or 440) - 40))
+    if opts.anchor == "BOTTOM" then
+        divider:SetPoint("BOTTOM", pf, "BOTTOM", 0, (opts.bottomGap or 12) + 40)
+    else
+        divider:SetPoint("TOP", pf, "TOP", 0, y + 12)
+    end
+    pf._footerDivider = divider
+
     local function SetEnabled(btn, enabled)
         if not btn then return end
         btn:EnableMouse(enabled and true or false)
         btn:SetAlpha(enabled and 1 or 0.4)
     end
 
-    local undoBtn = Quick.Button(pf, "Undo", 90, 26, function()
+    local undoBtn = Quick.Button(pf, "", 38, 30, function()
         if EM2.Undo then EM2.Undo.DoUndo() end
         if pf._refreshUndoRedo then pf._refreshUndoRedo() end
     end, btnOpts)
@@ -723,22 +823,51 @@ function Quick.AddFooterControls(pf, opts)
         undoBtn:SetPoint("TOPLEFT", pf, "TOPLEFT", 20, y)
     end
 
-    local redoBtn = Quick.Button(pf, "Redo", 90, 26, function()
+    local redoBtn = Quick.Button(pf, "", 38, 30, function()
         if EM2.Undo then EM2.Undo.DoRedo() end
         if pf._refreshUndoRedo then pf._refreshUndoRedo() end
     end, btnOpts)
     redoBtn:SetPoint("TOPLEFT", undoBtn, "TOPRIGHT", 8, 0)
+    Quick.AttachIcon(undoBtn, MEDIA .. "msuf_history_undo_red.png", 17)
+    Quick.AttachIcon(redoBtn, MEDIA .. "msuf_history_redo_green.png", 17)
 
     if opts.onResetPosition then
-        local resetBtn = Quick.Button(pf, opts.resetLabel or "Reset position", 188, 26, function()
+        local resetBtn = Quick.Button(pf, opts.resetLabel or "Reset position", 142, 30, function()
             opts.onResetPosition(pf)
             if pf._refreshUndoRedo then pf._refreshUndoRedo() end
         end, btnOpts)
-        resetBtn:SetPoint("TOPLEFT", redoBtn, "TOPRIGHT", 8, 0)
+        resetBtn:SetPoint("BOTTOM", pf, "BOTTOM", 0, opts.bottomGap or 12)
+        if opts.anchor ~= "BOTTOM" then
+            resetBtn:ClearAllPoints()
+            resetBtn:SetPoint("TOP", pf, "TOP", 0, y)
+        end
         pf._resetPosBtn = resetBtn
     end
 
-    pf._undoBtn, pf._redoBtn = undoBtn, redoBtn
+    local doneBtn = Quick.Button(pf, opts.doneLabel or "Done", 118, 30, function()
+        if opts.onDone then opts.onDone(pf) end
+        if pf:IsShown() then pf:Hide() end
+    end, { variant = "primary", hoverWash = true, hoverKey = "_msufEM2DoneHoverWash" })
+    if opts.anchor == "BOTTOM" then
+        doneBtn:SetPoint("BOTTOMRIGHT", pf, "BOTTOMRIGHT", -20, opts.bottomGap or 12)
+    else
+        doneBtn:SetPoint("TOPRIGHT", pf, "TOPRIGHT", -20, y)
+    end
+
+    pf._undoBtn, pf._redoBtn, pf._doneBtn = undoBtn, redoBtn, doneBtn
+
+    local function AddTooltip(button, label)
+        if not (button and button.HookScript) then return end
+        button:HookScript("OnEnter", function(self)
+            if not _G.GameTooltip then return end
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:SetText(Tr(label), 0.86, 0.92, 1.00)
+            GameTooltip:Show()
+        end)
+        button:HookScript("OnLeave", function() if _G.GameTooltip then GameTooltip:Hide() end end)
+    end
+    AddTooltip(undoBtn, "Undo")
+    AddTooltip(redoBtn, "Redo")
     function pf._refreshUndoRedo()
         SetEnabled(undoBtn, EM2.Undo and EM2.Undo.CanUndo())
         SetEnabled(redoBtn, EM2.Undo and EM2.Undo.CanRedo())

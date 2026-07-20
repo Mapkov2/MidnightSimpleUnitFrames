@@ -3854,6 +3854,28 @@ L["Yes. Priority Frames work in parties, raids, and Mythic raids. In a party or 
 L["|cffffd200"] = "|cffffd200"
 L["|cffffffff"] = "|cffffffff"
 
+-- Edit-Mode-Schnellfenster.
+L["Changes apply live"] = "Änderungen live"
+L["Frame"] = "Fenster"
+L["Auras"] = "Auren"
+L["Size"] = "Größe"
+L["Lock ratio"] = "Proportionen"
+L["Bars"] = "Balken"
+L["Text"] = "Text"
+L["Status"] = "Status"
+L["Open detailed settings"] = "Detaileinstellungen öffnen"
+L["Copy to..."] = "Kopieren nach..."
+L["Detach power bar"] = "Ressourcenleiste lösen"
+L["Detach castbar from unit frame"] = "Zauberleiste lösen"
+L["General castbar settings"] = "Zauberleiste allgemein"
+L["Aura layout"] = "Aura-Layout"
+L["Spacing"] = "Abstand"
+L["Edit Boss 1-5 together"] = "Boss 1-5 gemeinsam bearbeiten"
+L["General aura settings"] = "Auren allgemein"
+L["Castbar"] = "Zauberleiste"
+L["X"] = "X"
+L["Y"] = "Y"
+
 -- Kompakte Bearbeitungsmodus-Leiste mit Taskleisten-Andockung.
 L["?"] = "?"
 L["Edit Mode"] = "Bearbeitungsmodus"
