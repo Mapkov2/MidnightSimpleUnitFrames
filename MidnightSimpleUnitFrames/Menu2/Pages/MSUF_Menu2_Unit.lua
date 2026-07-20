@@ -380,7 +380,7 @@ local COPY_POWER_BAR_FIELDS = {
 
 local COPY_PORTRAIT_FIELDS = {
     "portraitMode", "portraitRender", "portraitClassStyle", "portraitShape",
-    "portraitSizeOverride", "portraitOffsetX", "portraitOffsetY",
+    "portraitSizeOverride", "portraitOffsetX", "portraitOffsetY", "portraitZoom",
     "portraitBorderStyle", "portraitBorderThickness",
     "portraitBgEnabled", "portraitFillBorder",
 }

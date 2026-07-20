@@ -2076,7 +2076,7 @@ local function BuildAlpha(ctx, builder, unit)
 end
 
 local function BuildPortrait(ctx, builder, unit)
-    local sec = builder:CollapsibleSection("portrait", "Portrait", 504, false)
+    local sec = builder:CollapsibleSection("portrait", "Portrait", 558, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local leftX = 16
     local cardGap = 28
@@ -2095,9 +2095,9 @@ local function BuildPortrait(ctx, builder, unit)
 
     M._msuf2LastPortraitSide = M._msuf2LastPortraitSide or {}
     local mainCard = W.ControlCard(sec, "Portrait", "Main portrait visibility and render mode.", leftX, -38, leftW, 168)
-    local geometryCard = W.ControlCard(sec, "Geometry", "Size and local offset.", rightX, -38, rightW, 224)
+    local geometryCard = W.ControlCard(sec, "Geometry", "Size, zoom, and local offset.", rightX, -38, rightW, 278)
     local borderCard = W.ControlCard(sec, "Shape & Border", nil, leftX, -224, leftW, 258)
-    local styleCard = W.ControlCard(sec, "Class & Background", nil, rightX, -284, rightW, 166)
+    local styleCard = W.ControlCard(sec, "Class & Background", nil, rightX, -338, rightW, 166)
 
     local portraitEnable = W.SwitchAt(mainCard, "Portrait", leftW - 62, -24, 0, "HIDDEN")
     M.BindToggle(ctx, portraitEnable,
@@ -2162,6 +2162,12 @@ local function BuildPortrait(ctx, builder, unit)
         function() return ReadNumber(unit, "portraitOffsetY", 0) end,
         function(v) SetNumber(unit, "portraitOffsetY", v, "MSUF2_PORTRAIT_Y", { preview = true }) end)
 
+    local zoom = W.Slider(geometryCard, "Portrait zoom", 100, 200, 1, 280)
+    W.MoveWidget(zoom, geometryCard, 16, -224, rightW - 58, "CENTER")
+    M.BindSlider(ctx, zoom,
+        function() return ReadNumber(unit, "portraitZoom", 100) end,
+        function(v) SetPortraitValue(unit, "portraitZoom", floor((tonumber(v) or 100) + 0.5), "MSUF2_PORTRAIT_ZOOM") end)
+
     local classStyle = W.Dropdown(styleCard, "Class portrait style", PortraitClassStyleValues, 220)
     classStyle._msuf2SearchText = "Class portrait style Blizzard Rondo Colored Rondo WoW"
     W.MoveWidget(classStyle, styleCard, 16, -58, min(220, rightW - 32))
@@ -2207,6 +2213,7 @@ local function BuildPortrait(ctx, builder, unit)
         SetControlEnabled(size, active)
         SetControlEnabled(x, active)
         SetControlEnabled(y, active)
+        SetControlEnabled(zoom, active and not classRender)
         SetControlEnabled(border, active)
         SetControlEnabled(borderSize, hasBorder)
         SetControlEnabled(fillBorder, hasBorder)
