@@ -2383,4 +2383,7 @@ L["Why are group names still shortened when name shortening is off?"] = "Поч�
 L["Wrapping & Sorting"] = "Перенос и сортировка"
 L["X "] = "X "
 L["Yes, discard"] = "Да, сбросить"
+L["Interrupt display duration (sec)"] = "Время отображения прерывания (с)"
+L["Portrait zoom"] = "Портретный зум"
+L["Spell-specific channel tick markers"] = "Маркеры канала для конкретных заклинаний"
 -- END MSUF runtime coverage

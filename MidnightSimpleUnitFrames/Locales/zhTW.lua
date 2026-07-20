@@ -2401,4 +2401,7 @@ L["Why is my castbar not showing?"] = "為什麼我的施法條沒有顯示？"
 L["Wrapping & Sorting"] = "換行與排序"
 L["X "] = "X "
 L["Yes, discard"] = "是，放棄"
+L["Interrupt display duration (sec)"] = "中斷顯示時間（秒）"
+L["Portrait zoom"] = "人像變焦"
+L["Spell-specific channel tick markers"] = "特定於法術的通道刻度標記"
 -- END MSUF runtime coverage

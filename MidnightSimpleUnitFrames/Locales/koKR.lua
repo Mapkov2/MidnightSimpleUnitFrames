@@ -2346,4 +2346,7 @@ L["Why are group names still shortened when name shortening is off?"] = "이름 
 L["Wrapping & Sorting"] = "줄바꿈 및 정렬"
 L["X "] = "X "
 L["Yes, discard"] = "예, 버리기"
+L["Interrupt display duration (sec)"] = "차단 표시 시간(초)"
+L["Portrait zoom"] = "인물 줌"
+L["Spell-specific channel tick markers"] = "주문별 채널 틱 마커"
 -- END MSUF runtime coverage
