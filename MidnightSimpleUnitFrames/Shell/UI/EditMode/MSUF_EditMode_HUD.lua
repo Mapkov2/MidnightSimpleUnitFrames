@@ -782,6 +782,17 @@ local function DockMouseOver(frame)
 end
 
 local autoHideGeneration = 0
+function DockUI.ScheduleLayoutSettle()
+    DockUI.layoutGeneration = (DockUI.layoutGeneration or 0) + 1
+    local generation = DockUI.layoutGeneration
+    C_Timer.After(0, function()
+        if generation ~= DockUI.layoutGeneration then return end
+        if not (hudFrame and hudFrame:IsShown()) then return end
+        if InCombatLockdown and InCombatLockdown() then return end
+        ApplyDockLayout()
+    end)
+end
+
 SetDockExpanded = function(expanded)
     if not hudFrame then return end
     local state = EnsureDockState()
@@ -1025,7 +1036,7 @@ local function EnsurePositionPopup()
             local state = EnsureDockState()
             state.dock = dock
             state.snapToEdge = true
-            if ApplyDockLayout then ApplyDockLayout() end
+            if ApplyDockLayout then ApplyDockLayout(); DockUI.ScheduleLayoutSettle() end
             if RefreshPositionPopup then RefreshPositionPopup() end
         end)
         button:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -18, -43 - (i - 1) * 30)
@@ -1048,14 +1059,14 @@ local function EnsurePositionPopup()
     local minus = MakeBtn(popup, "-", 28, 24, "body", function()
         local state = EnsureDockState()
         state.edgeOffset = ClampDockNumber(state.edgeOffset - 2, 0, 64, DOCK_EDGE_DEFAULT)
-        if ApplyDockLayout then ApplyDockLayout() end
+        if ApplyDockLayout then ApplyDockLayout(); DockUI.ScheduleLayoutSettle() end
         RefreshPositionPopup()
     end)
     minus:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -102, -243)
     local plus = MakeBtn(popup, "+", 28, 24, "body", function()
         local state = EnsureDockState()
         state.edgeOffset = ClampDockNumber(state.edgeOffset + 2, 0, 64, DOCK_EDGE_DEFAULT)
-        if ApplyDockLayout then ApplyDockLayout() end
+        if ApplyDockLayout then ApplyDockLayout(); DockUI.ScheduleLayoutSettle() end
         RefreshPositionPopup()
     end)
     plus:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -18, -243)
@@ -1148,6 +1159,7 @@ local function StopDockDrag()
         state.dock = "FREE"
     end
     ApplyDockLayout()
+    DockUI.ScheduleLayoutSettle()
     RefreshPositionPopup()
 end
 
@@ -1200,11 +1212,15 @@ ApplyDockLayout = function()
         LayoutClusterRow(DockUI.historyContainer, DockUI.row2 or {})
         LayoutClusterRow(DockUI.primaryContainer, DockUI.row1 or {})
         local targetWidth = DockUI.horizontalWidth or DOCK_HORIZONTAL_W
-        local dockWidth = min(targetWidth, max(760, screenW - 32))
+        local dockWidth = min(targetWidth, max(320, screenW - 32))
         hudFrame:SetSize(dockWidth, DOCK_HORIZONTAL_H)
         if dock == "BOTTOM" then
             hudFrame:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, edge)
         elseif dock == "FREE" then
+            local maxFreeX = max(0, (screenW - dockWidth) * 0.5)
+            local maxFreeY = max(0, (screenH - DOCK_HORIZONTAL_H) * 0.5)
+            state.freeX = ClampDockNumber(state.freeX, -maxFreeX, maxFreeX, 0)
+            state.freeY = ClampDockNumber(state.freeY, -maxFreeY, maxFreeY, 0)
             hudFrame:SetPoint("CENTER", UIParent, "CENTER", state.freeX, state.freeY)
         else
             hudFrame:SetPoint("TOP", UIParent, "TOP", 0, -edge)
@@ -1222,24 +1238,36 @@ ApplyDockLayout = function()
         exitBtn:SetSize(80, BTN_H); exitBtn:SetPoint("RIGHT", hudFrame, "RIGHT", -16, -7)
         cancelAllBtn:SetSize(88, BTN_H); cancelAllBtn:SetPoint("RIGHT", exitBtn, "LEFT", -8, 0)
 
-        -- Keep the task groups centered in their actual free lane.  The old
-        -- screen-center anchor let wide Advanced controls run under Discard
-        -- after the dock was moved.  Narrow screens compress only this cold-
-        -- path container; no drag/idle OnUpdate work is introduced.
-        local laneLeft, laneRight = DockUI.historyContainer:GetRight(), cancelAllBtn:GetLeft()
-        local frameLeft = hudFrame:GetLeft()
-        if laneLeft and laneRight and frameLeft and laneRight > laneLeft then
-            local laneWidth = max(1, laneRight - laneLeft - 16)
-            local contentWidth = max(1, DockUI.primaryContainer:GetWidth())
-            if DockUI.primaryContainer.SetScale then
-                DockUI.primaryContainer:SetScale(min(1, laneWidth / contentWidth))
-            end
-            DockUI.primaryContainer:SetPoint("CENTER", hudFrame, "LEFT", (laneLeft + laneRight) * 0.5 - frameLeft, 0)
-        else
-            DockUI.primaryContainer:SetPoint("CENTER", hudFrame, "CENTER", compact and 35 or 70, 0)
+        -- Keep the task clusters physically anchored after History.  Merely
+        -- centering a scaled container inside an estimated lane allowed its
+        -- left edge to slide back over Redo even while the right edge passed
+        -- the clipping check.  The relative LEFT anchor makes that collision
+        -- impossible; the measured lane is used when WoW has resolved it and
+        -- the deterministic width remains the safe first-pass fallback.
+        local titleWidth = 0
+        if not compact then
+            titleWidth = DockUI.title.GetStringWidth and tonumber(DockUI.title:GetStringWidth()) or 72
+            titleWidth = min(160, max(56, titleWidth or 72))
         end
+        local contextWidth = compact and 80 or 96
+        local historyWidth = max(1, tonumber(DockUI.historyContainer:GetWidth()) or 1)
+        local laneLeft = 12 + 20 + 4 + 32
+            + (compact and 8 or (7 + titleWidth + 8))
+            + contextWidth + 8 + BTN_H + 8 + historyWidth
+        local laneRight = dockWidth - 16 - 80 - 8 - 88
+        local laneWidth = max(1, laneRight - laneLeft - 16)
+        local measuredLeft = DockUI.historyContainer:GetRight()
+        local measuredRight = cancelAllBtn:GetLeft()
+        if measuredLeft and measuredRight and measuredRight > measuredLeft + 16 then
+            laneWidth = measuredRight - measuredLeft - 16
+        end
+        local contentWidth = max(1, tonumber(DockUI.primaryContainer:GetWidth()) or 1)
+        if DockUI.primaryContainer.SetScale then
+            DockUI.primaryContainer:SetScale(min(1, laneWidth / contentWidth))
+        end
+        DockUI.primaryContainer:SetPoint("LEFT", DockUI.historyContainer, "RIGHT", 8, 0)
 
-        local inspectorWidth = min(800, dockWidth - 80)
+        local inspectorWidth = min(800, max(240, dockWidth - 80))
         row2Frame:SetSize(inspectorWidth, DockUI.inspectorH)
         if dock == "BOTTOM" then row2Frame:SetPoint("BOTTOM", hudFrame, "TOP", 0, 4)
         else row2Frame:SetPoint("TOP", hudFrame, "BOTTOM", 0, -4) end
@@ -1278,7 +1306,7 @@ function HUD.SetDockPosition(dock)
     local state = EnsureDockState()
     state.dock = dock
     state.snapToEdge = true
-    if hudFrame then ApplyDockLayout() end
+    if hudFrame then ApplyDockLayout(); DockUI.ScheduleLayoutSettle() end
     return true
 end
 
@@ -1299,7 +1327,7 @@ end
 function HUD.SetDockEdgeOffset(offset)
     local state = EnsureDockState()
     state.edgeOffset = ClampDockNumber(offset, 0, 64, DOCK_EDGE_DEFAULT)
-    if hudFrame then ApplyDockLayout() end
+    if hudFrame then ApplyDockLayout(); DockUI.ScheduleLayoutSettle() end
     if DockUI.positionPopup then RefreshPositionPopup() end
     return state.edgeOffset
 end
@@ -1716,7 +1744,10 @@ local function EnsureHUD()
     end
     DockUI.layoutEvents = CreateFrame("Frame", "MSUF_EM2_HUD_LayoutEvents")
     DockUI.layoutEvents:SetScript("OnEvent", function()
-        if hudFrame and hudFrame:IsShown() and not (InCombatLockdown and InCombatLockdown()) then ApplyDockLayout() end
+        if hudFrame and hudFrame:IsShown() and not (InCombatLockdown and InCombatLockdown()) then
+            ApplyDockLayout()
+            DockUI.ScheduleLayoutSettle()
+        end
     end)
     return true
 end
@@ -1822,8 +1853,11 @@ end
 
 function HUD.Show()
     if InCombatLockdown and InCombatLockdown() then return false end
-    EnsureHUD(); ApplyDockLayout(); HUD.RefreshControls(true)
+    EnsureHUD()
     hudFrame:Show(); if row2Frame then row2Frame:Show() end
+    ApplyDockLayout()
+    DockUI.ScheduleLayoutSettle()
+    HUD.RefreshControls(true)
     SetLayoutEventsEnabled(true)
     if helpBtn and helpBtn._pulse then helpBtn._pulse:Play() end
     SetDockExpanded(true)
@@ -1835,6 +1869,7 @@ function HUD.ShowPositionSettings(shown)
     if InCombatLockdown and InCombatLockdown() then return false end
     EnsureHUD()
     ApplyDockLayout()
+    DockUI.ScheduleLayoutSettle()
     local popup = EnsurePositionPopup()
     if shown == false then popup:Hide() else popup:Show() end
     return popup:IsShown()

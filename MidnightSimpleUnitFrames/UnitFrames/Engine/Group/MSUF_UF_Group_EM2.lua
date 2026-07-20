@@ -1375,7 +1375,6 @@ local function San(v, d)
   return floor(v + 0.5)
 end
 
-local W8 = "Interface/Buttons/WHITE8X8"
 local GROUP_COPY_TARGETS = {
   { "party", "Party" },
   { "raid", "Raid" },
@@ -1384,10 +1383,10 @@ local GROUP_COPY_TARGETS = {
 local GROUP_PAGE_COMPONENT = { gf_bars = "dispel", gf_auras = "auras", gf_indicators = "status" }
 local GROUP_PAGE_SECTION = { gf_auras = "buffs", gf_indicators = "sicons" }
 local GROUP_PAGE_BUTTONS = {
-  { "Layout", 20, 66, "gf_layout", "layout" },
-  { "Dispel Overlay", 96, 104, "gf_bars", "dispel" },
-  { "Auras", 210, 68, "gf_auras", "auras" },
-  { "Status & Indicators", 288, 126, "gf_indicators", "status" },
+  { "Layout", "gf_layout", "layout" },
+  { "Bars", "gf_bars", "dispel" },
+  { "Auras", "gf_auras", "auras" },
+  { "Status", "gf_indicators", "status" },
 }
 
 local function QuickPopup()
@@ -1397,84 +1396,6 @@ end
 local function Tr(text)
   local fn = QuickPopup().Tr
   return fn and fn(text) or text
-end
-
-local function PMakeTinyButton(popup, text, x, y, w, onClick)
-  local Q = QuickPopup()
-  local b = Q.Button(popup, text, w or 66, 30, onClick, { hoverWash = true })
-  b:SetPoint("TOPLEFT", popup, "TOPLEFT", x, y)
-  return b
-end
-
-local function PMakeValuePair(popup, y, label1, key1, label2, key2, onChanged)
-  return QuickPopup().ValuePair(popup, popup, y, label1, key1, onChanged, label2, key2, onChanged, { hoverWash = true })
-end
-
-local function PMakeCopyButton(popup, x, y, w, currentMode, onCopy)
-  local b = PMakeTinyButton(popup, "Copy to", x, y, w, nil)
-  local menu = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
-  local Q = QuickPopup()
-  local C = Q.RefreshPalette and Q.RefreshPalette() or {}
-  menu:SetFrameStrata("TOOLTIP")
-  menu:SetFrameLevel(960)
-  menu:SetClampedToScreen(true)
-  menu:EnableMouse(true)
-  menu:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1 })
-  local panelBg, panelEdge = C.panelBg or { 0.03, 0.05, 0.12 }, C.panelEdge or { 0.10, 0.20, 0.45 }
-  menu:SetBackdropColor(panelBg[1], panelBg[2], panelBg[3], 0.98)
-  menu:SetBackdropBorderColor(panelEdge[1], panelEdge[2], panelEdge[3], 0.95)
-  local S = _G.MSUF_EM2_Menu2Style
-  if S and S.Shell then S.Shell(menu) end
-  menu:Hide()
-
-  local itemH = 22
-  menu:SetSize(w, #GROUP_COPY_TARGETS * itemH + 6)
-  for i, src in ipairs(GROUP_COPY_TARGETS) do
-    local item = CreateFrame("Button", nil, menu)
-    item:SetSize(w - 4, itemH)
-    item:SetPoint("TOPLEFT", menu, "TOPLEFT", 2, -(3 + (i - 1) * itemH))
-    local bg = item:CreateTexture(nil, "BACKGROUND")
-    bg:SetAllPoints()
-    bg:SetColorTexture(0, 0, 0, 0)
-    local key, label = src[1], src[2]
-    local fs = Q.FS(item, "caption", (key == currentMode) and C.muted or C.white)
-    fs:SetPoint("LEFT", 8, 0)
-    fs:SetText(Tr(label))
-    item:SetScript("OnEnter", function()
-      local hover = C.btnHover or { 0.20, 0.40, 0.80 }
-      bg:SetColorTexture(hover[1], hover[2], hover[3], 0.22)
-    end)
-    item:SetScript("OnLeave", function() bg:SetColorTexture(0, 0, 0, 0) end)
-    item:SetScript("OnClick", function()
-      menu:Hide()
-      if key ~= currentMode and onCopy then onCopy(key) end
-      if b then
-        if S and S.SetButtonText then S.SetButtonText(b, label)
-        elseif b._label then b._label:SetText(Tr(label)) end
-        C_Timer.After(1.2, function()
-          if S and S.SetButtonText then S.SetButtonText(b, "Copy to")
-          elseif b._label then b._label:SetText(Tr("Copy to")) end
-        end)
-      end
-    end)
-  end
-  b:SetScript("OnClick", function()
-    if menu:IsShown() then menu:Hide(); return end
-    menu:ClearAllPoints()
-    menu:SetPoint("TOP", b, "BOTTOM", 0, -3)
-    menu:Show()
-  end)
-  menu:SetScript("OnUpdate", function(self)
-    if not self:IsShown() then return end
-    if b:IsMouseOver() or self:IsMouseOver() then
-      self._closeTimer = nil
-    else
-      if not self._closeTimer then self._closeTimer = GetTime() + 0.35
-      elseif GetTime() >= self._closeTimer then self:Hide() end
-    end
-  end)
-  popup:HookScript("OnHide", function() menu:Hide() end)
-  return b
 end
 
 local function RefreshAfterPopupApply(mode)
@@ -1577,12 +1498,12 @@ local function BuildGFPopup(mode)
   local isRaid = (mode == "raid" or mode == "mythicraid")
   local title = (mode == "mythicraid") and "Mythic Raid Frames" or (isRaid and "Raid Frames" or "Party Frames")
   local popup = QuickPopup().CreateShell("MSUF_EM2_GFPopup_" .. mode, {
-    width = 440,
-    height = 282,
+    width = 560,
+    height = 350,
     x = 250,
     y = 0,
     title = title,
-    subtitle = "Frame bounds",
+    liveStatus = true,
     blocker = BlockConfigLocked,
     hoverSource = "group-popup",
   })
@@ -1696,6 +1617,34 @@ local function BuildGFPopup(mode)
     if popup and popup:IsShown() then Sync() end
   end
 
+  local function CaptureSizeRatio()
+    local w = popup.wBox and tonumber(popup.wBox:GetText())
+    local h = popup.hBox and tonumber(popup.hBox:GetText())
+    if w and h and h > 0 then popup._sizeRatio = w / h end
+  end
+
+  local function ApplySize(changed)
+    if popup._lockRatio then
+      local ratio = tonumber(popup._sizeRatio)
+      local w = popup.wBox and tonumber(popup.wBox:GetText())
+      local h = popup.hBox and tonumber(popup.hBox:GetText())
+      local Q = QuickPopup()
+      if ratio and ratio > 0 then
+        if changed == "width" and w then
+          Q.SetBoxText(popup.hBox, floor(max(16, min(200, w / ratio)) + 0.5))
+        elseif changed == "height" and h then
+          Q.SetBoxText(popup.wBox, floor(max(40, min(400, h * ratio)) + 0.5))
+        end
+      end
+    end
+    Apply()
+  end
+
+  local function ToggleSizeRatio(checked)
+    popup._lockRatio = checked and true or false
+    if popup._lockRatio then CaptureSizeRatio() end
+  end
+
   local function WireGroupFocus(btn, component)
     if not (btn and btn.HookScript) then return btn end
     btn:HookScript("OnEnter", function()
@@ -1710,21 +1659,45 @@ local function BuildGFPopup(mode)
     return btn
   end
 
-  PMakeValuePair(popup, -72, "X", "xBox", "Y", "yBox", Apply)
-  PMakeValuePair(popup, -102, "Width", "wBox", "Height", "hBox", Apply)
+  local Q = QuickPopup()
+  Q.ValueCard(popup, popup, 20, -58, 208, "Position", {
+    { label = "X", key = "xBox", onChanged = Apply },
+    { label = "Y", key = "yBox", onChanged = Apply },
+  }, { height = 132, boxWidth = 64, hoverWash = true })
+  local sizeCard = Q.ValueCard(popup, popup, 240, -58, 300, "Size", {
+    { label = "Width", key = "wBox", onChanged = function() ApplySize("width") end },
+    { label = "Height", key = "hBox", onChanged = function() ApplySize("height") end },
+  }, { height = 132, boxWidth = 64, controlsRightInset = 88, hoverWash = true })
+  popup.ratioBtn = Q.ToggleAt(sizeCard, "Lock ratio", 208, -80, 80, 32, ToggleSizeRatio, { hoverWash = true })
 
   for i = 1, #GROUP_PAGE_BUTTONS do
     local def = GROUP_PAGE_BUTTONS[i]
-    local pageKey, component = def[4], def[5]
-    WireGroupFocus(PMakeTinyButton(popup, def[1], def[2], -140, def[3], function() OpenMenu2Page(pageKey) end), component)
+    local pageKey, component = def[2], def[3]
+    local x = 20 + (i - 1) * 130
+    local width = (i == #GROUP_PAGE_BUTTONS) and 130 or 122
+    WireGroupFocus(Q.ButtonAt(popup, def[1], x, -204, width, 34, function() OpenMenu2Page(pageKey) end, {
+      hoverWash = true,
+      active = i == 1,
+    }), component)
   end
 
-  PMakeTinyButton(popup, "Open settings", 20, -190, 190, function() OpenMenu2Page("gf_layout") end)
-  PMakeCopyButton(popup, 224, -190, 190, mode, CopyBoundsTo)
+  Q.ButtonAt(popup, "Open detailed settings", 20, -250, 334, 36, function() OpenMenu2Page("gf_layout") end, {
+    variant = "primary",
+    hoverWash = true,
+  })
+  Q.MenuButtonAt(popup, "Copy to...", 366, -250, 174, 36, function()
+    local entries = {}
+    for _, target in ipairs(GROUP_COPY_TARGETS) do
+      if target[1] ~= mode then entries[#entries + 1] = { key = target[1], label = target[2] } end
+    end
+    return entries
+  end, function(entry)
+    if entry.key ~= mode then CopyBoundsTo(entry.key) end
+  end, { palette = Q.RefreshPalette() })
 
   local Quick = EM2.QuickPopup or (_G.MSUF_EM2_Menu2Style and _G.MSUF_EM2_Menu2Style.QuickPopup)
   if Quick and Quick.AddFooterControls then
-    Quick.AddFooterControls(popup, { y = -230, onResetPosition = ResetPosition })
+    Quick.AddFooterControls(popup, { anchor = "BOTTOM", bottomGap = 12, onResetPosition = ResetPosition })
   end
 
   if EM2.AttachPopupScaleGrip then EM2.AttachPopupScaleGrip(popup) end

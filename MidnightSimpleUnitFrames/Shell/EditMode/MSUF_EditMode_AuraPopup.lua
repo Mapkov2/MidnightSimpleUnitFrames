@@ -11,15 +11,9 @@ local Style = _G.MSUF_EM2_Menu2Style or {}
 local Quick = EM2.QuickPopup or Style.QuickPopup
 if not Quick then return end
 
-local GROUP_LABELS = {
-    buff = "Buffs",
-    debuff = "Debuffs",
-}
-
 local GROUP_SPECS = {
     buff = {
         label = "Buffs",
-        singular = "Buff",
         xKey = "buffGroupOffsetX",
         yKey = "buffGroupOffsetY",
         sizeKey = "buffGroupIconSize",
@@ -29,7 +23,6 @@ local GROUP_SPECS = {
     },
     debuff = {
         label = "Debuffs",
-        singular = "Debuff",
         xKey = "debuffGroupOffsetX",
         yKey = "debuffGroupOffsetY",
         sizeKey = "debuffGroupIconSize",
@@ -278,16 +271,11 @@ function Sync()
     local sh = Shared(false) or {}
     local layout = UnitLayout(EffectiveUnit(pf.unit, sh), false) or {}
     local activeGroup, spec = ActiveGroup()
-    local laneLabel = spec.label or GROUP_LABELS[activeGroup] or "Buffs"
-    local singular = spec.singular or laneLabel
-    local suffix = " - " .. Quick.Tr(laneLabel) .. " " .. Quick.Tr("Position")
-
-    if pf._titleFS then pf._titleFS:SetText(Quick.Tr(UnitLabel(pf.unit) .. " - Auras")) end
-    if pf._subtitleFS then pf._subtitleFS:SetText(Quick.Tr("Aura bounds") .. suffix) end
-    SetLabel(pf.xBoxLabel, singular .. " X")
-    SetLabel(pf.yBoxLabel, singular .. " Y")
-    SetLabel(pf.sizeBoxLabel, singular .. " Size")
-    SetLabel(pf.spacingBoxLabel, "Shared Spacing")
+    if pf._titleFS then pf._titleFS:SetText(Quick.Tr(UnitLabel(pf.unit)) .. " " .. Quick.Tr("Auras")) end
+    SetLabel(pf.xBoxLabel, "X")
+    SetLabel(pf.yBoxLabel, "Y")
+    SetLabel(pf.sizeBoxLabel, "Size")
+    SetLabel(pf.spacingBoxLabel, "Spacing")
     if pf.buffLaneBtn and pf.buffLaneBtn.SetCheckedVisual then pf.buffLaneBtn:SetCheckedVisual(activeGroup == "buff") end
     if pf.debuffLaneBtn and pf.debuffLaneBtn.SetCheckedVisual then pf.debuffLaneBtn:SetCheckedVisual(activeGroup == "debuff") end
     Quick.SetBoxText(pf.spacingBox, ReadValue(layout, sh, "spacing", "spacing", 2))
@@ -299,40 +287,52 @@ function Sync()
         pf.bossTogetherBtn:SetShown(isBoss)
         if isBoss then
             pf.bossTogetherBtn:ClearAllPoints()
-            pf.bossTogetherBtn:SetPoint("TOPLEFT", pf, "TOPLEFT", 20, -172)
+            pf.bossTogetherBtn:SetPoint("TOPLEFT", pf, "TOPLEFT", 160, -242)
         end
         pf.bossTogetherBtn:SetCheckedVisual(sh.bossEditTogether ~= false)
+        pf:SetHeight(isBoss and 390 or 350)
+        local actionsY = isBoss and -282 or -244
+        if pf.unitAurasBtn then
+            pf.unitAurasBtn:ClearAllPoints()
+            pf.unitAurasBtn:SetPoint("TOPLEFT", pf, "TOPLEFT", 20, actionsY)
+        end
+        if pf.generalAurasBtn then
+            pf.generalAurasBtn:ClearAllPoints()
+            pf.generalAurasBtn:SetPoint("TOPLEFT", pf, "TOPLEFT", 366, actionsY)
+        end
     end
 end
 
 local function Build()
     if pf then return pf end
 
-    pf = Quick.BuildBoundsPopup("MSUF_EM2_AuraPopup", {
-        height = 306,
-        subtitle = "",
+    pf = Quick.CreateShell("MSUF_EM2_AuraPopup", {
+        width = 560,
+        height = 350,
+        title = "Auras",
+        liveStatus = true,
         hoverSource = "aura-popup",
-        peelSkin = true,
-    }, {
-        buttonOpts = ButtonOpts,
-        rows = {
-            { y = -108, label1 = "Buff X", key1 = "xBox", cb1 = Apply, label2 = "Buff Y", key2 = "yBox", cb2 = Apply },
-            { y = -138, label1 = "Buff Size", key1 = "sizeBox", cb1 = Apply, label2 = "Shared Spacing", key2 = "spacingBox", cb2 = Apply },
-        },
-        toggle = {
-            key = "bossTogetherBtn", text = "Boss 1-5 together", x = 20, y = -170, w = 394, h = 30,
-            onClick = Apply,
-            opts = function() return ButtonOpts(function() if pf and pf:IsShown() then Sync() end end) end,
-        },
-        buttons = {
-            { key = "unitAurasBtn", text = "Unitframe auras", x = 20, y = -210, w = 190, h = 30, onClick = OpenUnitAuras },
-            { key = "generalAurasBtn", text = "General auras", x = 224, y = -210, w = 190, h = 30, onClick = OpenGeneralAuras },
-        },
-        wireButton = function(btn) return WirePopupFocus(btn) end,
-        footer = { y = -250, resetLabel = "Reset lane position", onResetPosition = ResetPosition },
     })
-    pf.buffLaneBtn = WirePopupFocus(Quick.ToggleAt(pf, "Buffs", 20, -72, 190, 28, function() SetActiveGroup("buff") end, ButtonOpts(function() if pf and pf:IsShown() then Sync() end end)))
-    pf.debuffLaneBtn = WirePopupFocus(Quick.ToggleAt(pf, "Debuffs", 224, -72, 190, 28, function() SetActiveGroup("debuff") end, ButtonOpts(function() if pf and pf:IsShown() then Sync() end end)))
+    pf.buffLaneBtn = WirePopupFocus(Quick.ToggleAt(pf, "Buffs", 20, -58, 250, 32, function() SetActiveGroup("buff") end, ButtonOpts(function() if pf and pf:IsShown() then Sync() end end)))
+    pf.debuffLaneBtn = WirePopupFocus(Quick.ToggleAt(pf, "Debuffs", 290, -58, 250, 32, function() SetActiveGroup("debuff") end, ButtonOpts(function() if pf and pf:IsShown() then Sync() end end)))
+    Quick.ValueCard(pf, pf, 20, -102, 250, "Position", {
+        { label = "X", key = "xBox", onChanged = Apply },
+        { label = "Y", key = "yBox", onChanged = Apply },
+    }, { height = 132, boxWidth = 64, peelSkin = true })
+    Quick.ValueCard(pf, pf, 290, -102, 250, "Aura layout", {
+        { label = "Size", key = "sizeBox", onChanged = Apply },
+        { label = "Spacing", key = "spacingBox", onChanged = Apply },
+    }, { height = 132, boxWidth = 64, peelSkin = true })
+    pf.bossTogetherBtn = Quick.ToggleAt(pf, "Edit Boss 1-5 together", 160, -242, 240, 28, Apply,
+        ButtonOpts(function() if pf and pf:IsShown() then Sync() end end))
+    pf.unitAurasBtn = WirePopupFocus(Quick.ButtonAt(pf, "Open detailed settings", 20, -244, 334, 34, OpenUnitAuras, {
+        variant = "primary", hoverWash = true,
+    }))
+    pf.generalAurasBtn = WirePopupFocus(Quick.ButtonAt(pf, "General aura settings", 366, -244, 174, 34, OpenGeneralAuras, ButtonOpts()))
+    if Quick.AddFooterControls then
+        Quick.AddFooterControls(pf, { anchor = "BOTTOM", bottomGap = 12, resetLabel = "Reset lane position", onResetPosition = ResetPosition })
+    end
+    if EM2.AttachPopupScaleGrip then EM2.AttachPopupScaleGrip(pf) end
     return pf
 end
 

@@ -279,7 +279,7 @@ function Sync()
     local dx, dy = DefaultOffsets(unit)
     local w, h = EffectiveSize(g, unit)
 
-    if pf._titleFS then pf._titleFS:SetText(Quick.Tr(UnitLabel(unit) .. " - Castbar")) end
+    if pf._titleFS then pf._titleFS:SetText(Quick.Tr(UnitLabel(unit)) .. " " .. Quick.Tr("Castbar")) end
     Quick.SetBoxText(pf.xBox, Quick.San(xKey and g[xKey], dx))
     Quick.SetBoxText(pf.yBox, Quick.San(yKey and g[yKey], dy))
     Quick.SetBoxText(pf.wBox, w)
@@ -290,37 +290,68 @@ function Sync()
     end
 end
 
+local function CaptureSizeRatio()
+    local w = pf and pf.wBox and tonumber(pf.wBox:GetText())
+    local h = pf and pf.hBox and tonumber(pf.hBox:GetText())
+    if w and h and h > 0 then pf._sizeRatio = w / h end
+end
+
+local function ApplySize(changed)
+    if pf and pf._lockRatio then
+        local ratio = tonumber(pf._sizeRatio)
+        local w = pf.wBox and tonumber(pf.wBox:GetText())
+        local h = pf.hBox and tonumber(pf.hBox:GetText())
+        if ratio and ratio > 0 then
+            if changed == "width" and w then
+                Quick.SetBoxText(pf.hBox, floor(max(8, min(100, w / ratio)) + 0.5))
+            elseif changed == "height" and h then
+                Quick.SetBoxText(pf.wBox, floor(max(50, min(600, h * ratio)) + 0.5))
+            end
+        end
+    end
+    Apply("all")
+end
+
+local function ToggleSizeRatio(checked)
+    if not pf then return end
+    pf._lockRatio = checked and true or false
+    if pf._lockRatio then CaptureSizeRatio() end
+end
+
 local function Build()
     if pf then return pf end
 
-    pf = Quick.BuildBoundsPopup("MSUF_EM2_CastPopup", {
-        height = 282,
-        subtitle = "Castbar bounds",
+    pf = Quick.CreateShell("MSUF_EM2_CastPopup", {
+        width = 560,
+        height = 350,
+        title = "Castbar",
+        liveStatus = true,
         hoverSource = "cast-popup",
-        hoverWash = true,
-        hoverKey = "_msufEM2CastHoverWash",
         onHide = function(s)
             local self = pf or s
             if self and self.unit and not _G.MSUF_UnitPreviewActive then SetTest(self.unit, false) end
         end,
-    }, {
-        buttonOpts = ButtonOpts,
-        rows = {
-            { y = -72, label1 = "X", key1 = "xBox", cb1 = function() Apply("position") end, label2 = "Y", key2 = "yBox", cb2 = function() Apply("position") end },
-            { y = -102, label1 = "Width", key1 = "wBox", cb1 = function() Apply("width") end, label2 = "Height", key2 = "hBox", cb2 = function() Apply("height") end },
-        },
-        toggle = {
-            key = "detachBtn", text = "Detach castbar from unitframe", x = 20, y = -140, w = 394, h = 30,
-            onClick = ApplyDetach,
-            opts = function() return ButtonOpts(function() if pf and pf:IsShown() then Sync() end end) end,
-        },
-        buttons = {
-            { text = "Unitframe castbar", x = 20, y = -190, w = 190, h = 30, onClick = OpenUnitCastbar },
-            { text = "General castbar", x = 224, y = -190, w = 190, h = 30, onClick = OpenGeneralCastbars },
-        },
-        wireButton = function(btn) return WirePopupFocus(btn) end,
-        footer = { y = -230, onResetPosition = ResetPosition },
     })
+    local opts = ButtonOpts()
+    Quick.ValueCard(pf, pf, 20, -58, 208, "Position", {
+        { label = "X", key = "xBox", onChanged = function() Apply("position") end },
+        { label = "Y", key = "yBox", onChanged = function() Apply("position") end },
+    }, { height = 132, boxWidth = 64, hoverWash = true, hoverKey = opts.hoverKey })
+    local sizeCard = Quick.ValueCard(pf, pf, 240, -58, 300, "Size", {
+        { label = "Width", key = "wBox", onChanged = function() ApplySize("width") end },
+        { label = "Height", key = "hBox", onChanged = function() ApplySize("height") end },
+    }, { height = 132, boxWidth = 64, controlsRightInset = 88, hoverWash = true, hoverKey = opts.hoverKey })
+    pf.ratioBtn = Quick.ToggleAt(sizeCard, "Lock ratio", 208, -80, 80, 32, ToggleSizeRatio, ButtonOpts())
+    pf.detachBtn = Quick.ToggleAt(pf, "Detach castbar from unit frame", 160, -204, 240, 30, ApplyDetach,
+        ButtonOpts(function() if pf and pf:IsShown() then Sync() end end))
+    WirePopupFocus(Quick.ButtonAt(pf, "Open detailed settings", 20, -250, 334, 36, OpenUnitCastbar, {
+        variant = "primary", hoverWash = true, hoverKey = opts.hoverKey,
+    }))
+    WirePopupFocus(Quick.ButtonAt(pf, "General castbar settings", 366, -250, 174, 36, OpenGeneralCastbars, opts))
+    if Quick.AddFooterControls then
+        Quick.AddFooterControls(pf, { anchor = "BOTTOM", bottomGap = 12, onResetPosition = ResetPosition })
+    end
+    if EM2.AttachPopupScaleGrip then EM2.AttachPopupScaleGrip(pf) end
     return pf
 end
 
@@ -338,6 +369,7 @@ function CastPopup.Open(unit, parent)
     Build()
     pf.unit, pf.parent = unit, parent
     Sync()
+    if pf._lockRatio then CaptureSizeRatio() end
     pf:Show()
     SetTest(unit, true)
     if Style.FadeIn then Style.FadeIn(pf, 0.12, 0.86, 1) end

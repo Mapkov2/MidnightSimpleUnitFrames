@@ -236,7 +236,7 @@ end
 function Sync()
     if not pf or not pf.unit then return end
     local key=CK(pf.unit); local conf=key and Conf(key); if not conf then return end
-    if pf._titleFS then pf._titleFS:SetText(Tr(UnitLabel(key) .. " - Frame")) end
+    if pf._titleFS then pf._titleFS:SetText(Tr(UnitLabel(key)) .. " " .. Tr("Frame")) end
     Quick.SetBoxText(pf.xBox,San(conf.offsetX,0)); Quick.SetBoxText(pf.yBox,San(conf.offsetY,0))
     Quick.SetBoxText(pf.wBox,conf.width or (pf.parent and pf.parent:GetWidth()) or 250)
     Quick.SetBoxText(pf.hBox,conf.height or (pf.parent and pf.parent:GetHeight()) or 40)
@@ -247,8 +247,8 @@ function Sync()
         pf.detachBtn:SetCheckedVisual(detachedOn)
         if pf.dpbPanel then
             pf.dpbPanel:SetShown(detachedOn)
-            --- +44 reserved at the bottom for the Undo/Redo/Reset footer row.
-            pf:SetHeight(detachedOn and (key == "player" and 572 or 532) or (canDetach and 336 or 288))
+            --- Keep the detail panel between the quiet detach action and the pinned footer.
+            pf:SetHeight(detachedOn and (key == "player" and 620 or 584) or (canDetach and 410 or 370))
             if detachedOn then pf.dpbPanel:SetHeight(key == "player" and 220 or 184) end
         end
         if detachedOn then
@@ -269,7 +269,7 @@ function Sync()
                 pf.dpbAnchorBtn:SetShown(isPlayer)
                 if pf.dpbAnchorBtn.SetCheckedVisual then pf.dpbAnchorBtn:SetCheckedVisual(isPlayer and conf.detachedPowerBarAnchorToClassPower == true) end
             end
-            local firstY = isPlayer and -92 or -62
+            local firstY = isPlayer and -92 or -72
             if pf.dpbXYRow then
                 pf.dpbXYRow:ClearAllPoints()
                 pf.dpbXYRow:SetPoint("TOPLEFT", pf.dpbPanel, "TOPLEFT", 16, firstY)
@@ -408,6 +408,34 @@ local function CopyBoundsTo(targetKey)
     Sync()
 end
 
+local function CaptureSizeRatio()
+    local w = pf and pf.wBox and tonumber(pf.wBox:GetText())
+    local h = pf and pf.hBox and tonumber(pf.hBox:GetText())
+    if w and h and h > 0 then pf._sizeRatio = w / h end
+end
+
+local function ApplySize(changed)
+    if pf and pf._lockRatio then
+        local ratio = tonumber(pf._sizeRatio)
+        local w = pf.wBox and tonumber(pf.wBox:GetText())
+        local h = pf.hBox and tonumber(pf.hBox:GetText())
+        if ratio and ratio > 0 then
+            if changed == "width" and w then
+                Quick.SetBoxText(pf.hBox, floor(max(8, min(200, w / ratio)) + 0.5))
+            elseif changed == "height" and h then
+                Quick.SetBoxText(pf.wBox, floor(max(40, min(800, h * ratio)) + 0.5))
+            end
+        end
+    end
+    Apply()
+end
+
+local function ToggleSizeRatio(checked)
+    if not pf then return end
+    pf._lockRatio = checked and true or false
+    if pf._lockRatio then CaptureSizeRatio() end
+end
+
 local function Build()
     if pf then return pf end
     RefreshPalette()
@@ -417,9 +445,10 @@ local function Build()
     }
 
     pf = Quick.CreateShell("MSUF_EM2_UnitPopup", {
-        height = 336,
+        width = 560,
+        height = 410,
         title = "Frame",
-        subtitle = "Frame bounds",
+        liveStatus = true,
         hoverSource = "unit-popup",
         blocker = BlockConfigCombatLocked,
     })
@@ -430,7 +459,10 @@ local function Build()
 
     local function CopyMenuEntries()
         local entries = { { key = "__all__", label = "All units", highlight = true } }
-        for _, target in ipairs(UNIT_COPY_TARGETS) do entries[#entries + 1] = target end
+        local srcKey = pf and pf.unit and CK(pf.unit)
+        for _, target in ipairs(UNIT_COPY_TARGETS) do
+            if target.key ~= srcKey then entries[#entries + 1] = target end
+        end
         return entries
     end
 
@@ -445,22 +477,29 @@ local function Build()
         end
     end
 
-    Quick.ValuePairAt(pf, pf, 20, -72, "X", "xBox", Apply, "Y", "yBox", Apply)
-    Quick.ValuePairAt(pf, pf, 20, -102, "Width", "wBox", Apply, "Height", "hBox", Apply)
+    Quick.ValueCard(pf, pf, 20, -58, 208, "Position", {
+        { label = "X", key = "xBox", onChanged = Apply },
+        { label = "Y", key = "yBox", onChanged = Apply },
+    }, { height = 132, boxWidth = 64 })
+    local sizeCard = Quick.ValueCard(pf, pf, 240, -58, 300, "Size", {
+        { label = "Width", key = "wBox", onChanged = function() ApplySize("width") end },
+        { label = "Height", key = "hBox", onChanged = function() ApplySize("height") end },
+    }, { height = 132, boxWidth = 64, controlsRightInset = 88 })
+    pf.ratioBtn = Quick.ToggleAt(sizeCard, "Lock ratio", 208, -80, 80, 32, ToggleSizeRatio, toggleOpts)
 
-    WirePopupFocus(Quick.ButtonAt(pf, "Name", 20, -140, 58, 30, function() OpenMenu2Page(nil, "name") end), "name")
-    WirePopupFocus(Quick.ButtonAt(pf, "HP", 90, -140, 58, 30, function() OpenMenu2Page(nil, "hp") end), "hp")
-    WirePopupFocus(Quick.ButtonAt(pf, "Power", 160, -140, 72, 30, function() OpenMenu2Page(nil, "power") end), "power")
-    WirePopupFocus(Quick.ButtonAt(pf, "Auras", 244, -140, 68, 30, function() OpenMenu2Page(nil, "auras") end), "auras")
-    WirePopupFocus(Quick.ButtonAt(pf, "Cast", 324, -140, 58, 30, function() OpenMenu2Page(nil, "castbar") end), "castbar")
+    WirePopupFocus(Quick.ButtonAt(pf, "Frame", 20, -204, 96, 34, OpenMenu2Settings, { active = true }), "frame")
+    WirePopupFocus(Quick.ButtonAt(pf, "Bars", 124, -204, 96, 34, function() OpenMenu2Page(nil, "powerbar") end), "powerbar")
+    WirePopupFocus(Quick.ButtonAt(pf, "Text", 228, -204, 96, 34, function() OpenMenu2Page(nil, "name") end), "name")
+    WirePopupFocus(Quick.ButtonAt(pf, "Auras", 332, -204, 96, 34, function() OpenMenu2Page(nil, "auras") end), "auras")
+    WirePopupFocus(Quick.ButtonAt(pf, "Cast", 436, -204, 104, 34, function() OpenMenu2Page(nil, "castbar") end), "castbar")
 
-    Quick.ButtonAt(pf, "Open settings", 20, -190, 190, 30, OpenMenu2Settings)
-    Quick.MenuButtonAt(pf, "Copy to", 224, -190, 190, 30, CopyMenuEntries, CopyMenuSelect, { palette = C })
-    pf.detachBtn = Quick.ToggleAt(pf, "Detach powerbar", 20, -238, 394, 30, ApplyDetachPower, toggleOpts)
+    Quick.ButtonAt(pf, "Open detailed settings", 20, -250, 334, 36, OpenMenu2Settings, { variant = "primary" })
+    Quick.MenuButtonAt(pf, "Copy to...", 366, -250, 174, 36, CopyMenuEntries, CopyMenuSelect, { palette = C })
+    pf.detachBtn = Quick.ToggleAt(pf, "Detach power bar", 174, -300, 212, 30, ApplyDetachPower, toggleOpts)
 
     pf.dpbPanel = CreateFrame("Frame", nil, pf, "BackdropTemplate")
-    pf.dpbPanel:SetPoint("TOPLEFT", pf, "TOPLEFT", 20, -284)
-    pf.dpbPanel:SetSize(396, 220)
+    pf.dpbPanel:SetPoint("TOPLEFT", pf, "TOPLEFT", 20, -340)
+    pf.dpbPanel:SetSize(520, 220)
     pf.dpbPanel:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=1,right=1,top=1,bottom=1} })
     pf.dpbPanel:SetBackdropColor(C.cardBg[1], C.cardBg[2], C.cardBg[3], 0.58)
     pf.dpbPanel:SetBackdropBorderColor(C.cardEdge[1], C.cardEdge[2], C.cardEdge[3], 0.72)
@@ -528,7 +567,7 @@ local function Build()
 end
 
 local UnitPopup = {}; EM2.UnitPopup = UnitPopup
-function UnitPopup.Open(u, parent) if BlockConfigCombatLocked() then return false end; Build(); pf.unit=u; pf.parent=parent; Sync(); pf:Show(); if Menu2Style.FadeIn then Menu2Style.FadeIn(pf, 0.12, 0.86, 1) end; return true end
+function UnitPopup.Open(u, parent) if BlockConfigCombatLocked() then return false end; Build(); pf.unit=u; pf.parent=parent; Sync(); if pf._lockRatio then CaptureSizeRatio() end; pf:Show(); if Menu2Style.FadeIn then Menu2Style.FadeIn(pf, 0.12, 0.86, 1) end; return true end
 function UnitPopup.Close() if pf then pf:Hide() end end
 function UnitPopup.IsOpen() return pf and pf:IsShown() or false end
 function UnitPopup.Sync() if pf and pf:IsShown() then Sync() end end

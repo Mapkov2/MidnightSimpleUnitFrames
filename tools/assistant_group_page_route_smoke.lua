@@ -1,4 +1,4 @@
--- Runtime regression for the consolidated Group Layout and Dispel Overlay pages.
+-- Runtime regression for the consolidated Group Layout and Bars pages.
 _G = _G or _ENV
 
 local function Read(path)
@@ -64,8 +64,8 @@ end
 local popupSource = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_EM2.lua")
 assert(popupSource:find('gf_bars = "dispel"', 1, true),
     "Group quick popup does not classify Dispel Overlay explicitly")
-assert(popupSource:find('{ "Dispel Overlay", 96, 104, "gf_bars", "dispel" }', 1, true),
-    "Group quick popup has no Dispel Overlay destination")
+assert(popupSource:find('{ "Bars", "gf_bars", "dispel" }', 1, true),
+    "Group quick popup has no Bars destination")
 assert(not popupSource:find('{ "Health & Text", 96, 104, "gf_bars"', 1, true),
     "Group quick popup still routes Health & Text to Dispel Overlay")
 
