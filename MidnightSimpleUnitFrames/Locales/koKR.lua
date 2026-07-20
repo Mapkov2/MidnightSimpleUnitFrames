@@ -3490,6 +3490,12 @@ L["Yes. Priority Frames inherit the active Party, Raid, or Mythic Raid frame app
 L["Yes. Priority Frames work in parties, raids, and Mythic raids. In a party or dungeon they inherit Party Frames; in a raid they inherit the active Raid or Mythic Raid setup. They do not create a solo strip, and the matching base Party or Raid frames must be enabled."] = "그렇습니다. 우선 순위 프레임은 파티, 공격대, 신화 공격대에서 작동합니다. 파티나 던전에서는 파티 프레임을 상속받습니다. 공격대에서는 활성 공격대 또는 신화 공격대 설정을 상속합니다. 솔로 스트립을 생성하지 않으며 일치하는 기본 파티 또는 Raid 프레임을 활성화해야 합니다."
 L["|cffffd200"] = "|cffffd200"
 L["|cffffffff"] = "|cffffffff"
+L["Absorb"] = "Absorb"
+L["Formatting"] = "Formatting"
+L["Hide % sign"] = "Hide % sign"
+L["Selected slot "] = "Selected slot "
+L["Short numbers"] = "Short numbers"
+L["Text slots"] = "Text slots"
 
 -- 편집 모드 빠른 팝업.
 L["Aura layout"] = "오라 배치"

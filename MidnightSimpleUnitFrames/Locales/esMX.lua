@@ -3670,6 +3670,12 @@ L["Yes. Priority Frames inherit the active Party, Raid, or Mythic Raid frame app
 L["Yes. Priority Frames work in parties, raids, and Mythic raids. In a party or dungeon they inherit Party Frames; in a raid they inherit the active Raid or Mythic Raid setup. They do not create a solo strip, and the matching base Party or Raid frames must be enabled."] = "Sí. Los marcos de prioridad funcionan en grupos, incursiones y incursiones míticas. En un grupo o mazmorra heredan Party Frames; en una incursión heredan la configuración de Incursión activa o Incursión Mítica. No crean una franja en solitario y los marcos de grupo o incursión base correspondientes deben estar habilitados."
 L["|cffffd200"] = "|cffffd200"
 L["|cffffffff"] = "|cffffffff"
+L["Absorb"] = "Absorción"
+L["Formatting"] = "Formato"
+L["Hide % sign"] = "Ocultar signo %"
+L["Selected slot "] = "Posición seleccionada "
+L["Short numbers"] = "Números cortos"
+L["Text slots"] = "Posiciones de texto"
 
 -- Ventanas rápidas del modo de edición.
 L["Aura layout"] = "Diseño de auras"

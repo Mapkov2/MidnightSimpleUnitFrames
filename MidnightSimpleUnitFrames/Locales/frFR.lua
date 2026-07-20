@@ -3912,6 +3912,12 @@ L["Yes. Priority Frames inherit the active Party, Raid, or Mythic Raid frame app
 L["Yes. Priority Frames work in parties, raids, and Mythic raids. In a party or dungeon they inherit Party Frames; in a raid they inherit the active Raid or Mythic Raid setup. They do not create a solo strip, and the matching base Party or Raid frames must be enabled."] = "Oui. Les cadres prioritaires fonctionnent dans les groupes, les raids et les raids mythiques. Dans un groupe ou un donjon, ils héritent des cadres de groupe ; dans un raid, ils héritent de la configuration active Raid ou Mythic Raid. Ils ne créent pas de bande solo et les images de base Party ou Raid correspondantes doivent être activées."
 L["|cffffd200"] = "|cffffd200"
 L["|cffffffff"] = "|cffffffff"
+L["Absorb"] = "Absorption"
+L["Formatting"] = "Formatage"
+L["Hide % sign"] = "Masquer le signe %"
+L["Selected slot "] = "Emplacement sélectionné "
+L["Short numbers"] = "Nombres abrégés"
+L["Text slots"] = "Emplacements de texte"
 
 -- Fenêtres rapides du mode édition.
 L["Aura layout"] = "Disposition des auras"

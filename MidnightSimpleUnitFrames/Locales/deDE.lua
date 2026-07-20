@@ -3853,6 +3853,12 @@ L["Yes. Priority Frames inherit the active Party, Raid, or Mythic Raid frame app
 L["Yes. Priority Frames work in parties, raids, and Mythic raids. In a party or dungeon they inherit Party Frames; in a raid they inherit the active Raid or Mythic Raid setup. They do not create a solo strip, and the matching base Party or Raid frames must be enabled."] = "Ja. Prioritätsrahmen funktionieren in Gruppen, Raids und mythischen Raids. In einer Gruppe oder einem Dungeon erben sie Gruppenrahmen; In einem Raid erben sie das aktive Raid- oder Mythic Raid-Setup. Sie erstellen keinen Solo-Strip und die passenden Basis-Party- oder Raid-Frames müssen aktiviert sein."
 L["|cffffd200"] = "|cffffd200"
 L["|cffffffff"] = "|cffffffff"
+L["Absorb"] = "Absorbieren"
+L["Formatting"] = "Formatierung"
+L["Hide % sign"] = "%‑Zeichen ausblenden"
+L["Selected slot "] = "Ausgewählter Platz "
+L["Short numbers"] = "Kurze Zahlen"
+L["Text slots"] = "Textplätze"
 
 -- Edit-Mode-Schnellfenster.
 L["Changes apply live"] = "Änderungen live"
