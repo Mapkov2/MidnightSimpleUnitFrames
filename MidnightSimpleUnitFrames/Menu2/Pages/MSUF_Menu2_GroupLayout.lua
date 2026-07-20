@@ -188,7 +188,7 @@ local function BuildGFLayout(ctx)
         if entry then entry._msuf2RefreshState = RefreshHideOfflineState end
     end
 
-    local layout = b:CollapsibleSection("layout", "Layout", 430, false)
+    local layout = b:CollapsibleSection("layout", "Layout", 460, false)
     local layoutW = layout._msuf2Width or b.width or 720
     local layoutGap = 16
     local layoutLeftX = 20
@@ -199,7 +199,7 @@ local function BuildGFLayout(ctx)
     local layoutSliderW = max(180, min(360, layoutLeftW - 64))
 
     local sizeCard = W.ControlCard(layout, "Frame size", "Dimensions and spacing for each group member.", layoutLeftX, -38, layoutLeftW, 188)
-    local gridCard = W.ControlCard(layout, "Raid grid", "Column behavior for raid-like scopes.", layoutLeftX, -244, layoutLeftW, 158)
+    local gridCard = W.ControlCard(layout, "Raid grid", "Column behavior for raid-like scopes.", layoutLeftX, -244, layoutLeftW, 188)
     local growthCard = W.ControlCard(layout, "Growth Direction", "How new members fill the group frame.", layoutRightX, -38, layoutRightW, 188)
 
     local widthSlider = BindScopeSlider(ctx, W.Slider(sizeCard, "Width", 40, 300, 1, layoutSliderW), "width", 120, "rebuild")
@@ -213,7 +213,7 @@ local function BuildGFLayout(ctx)
 
     local unitsSlider = BindScopeSlider(ctx, W.Slider(gridCard, "Units per column", 1, 40, 1, layoutSliderW), "unitsPerColumn", 5, "rebuild")
     local maxColumnsSlider = BindScopeSlider(ctx, W.Slider(gridCard, "Max columns", 1, 8, 1, layoutSliderW), "maxColumns", 8, "rebuild")
-    local preserveRaidGroups = BindScopeToggle(ctx, W.ToggleAt(gridCard, "Preserve raid groups", 16, -138, layoutLeftW - 32), "preserveRaidGroups", false, "rebuild")
+    local preserveRaidGroups = BindScopeToggle(ctx, W.ToggleAt(gridCard, "Preserve raid groups", 16, -166, layoutLeftW - 32), "preserveRaidGroups", false, "rebuild")
     W.MoveWidget(unitsSlider, gridCard, 16, -62, layoutSliderW, "LEFT")
     W.MoveWidget(maxColumnsSlider, gridCard, 16, -108, layoutSliderW, "LEFT")
     local function RefreshRaidGroupLayoutState()
