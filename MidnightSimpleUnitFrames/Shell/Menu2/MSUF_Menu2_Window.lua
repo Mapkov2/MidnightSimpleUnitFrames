@@ -2063,6 +2063,7 @@ end
 
 local function BuildWindow()
     if M.frame then return M.frame end
+    M.CallIf(T.ApplyMenuAccent)
     local state = BuildWindowShell()
     InstallWindowInteractions(state)
     BuildWindowChrome(state)

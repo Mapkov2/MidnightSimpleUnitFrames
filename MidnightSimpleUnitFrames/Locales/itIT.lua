@@ -3613,3 +3613,20 @@ L["YOUR MOVE - Choose what you want to set up."] = "TOCCA A TE - Scegli cosa vuo
 -- Generated missing non-Assistant core keys for itIT.
 L["|cffffd200"] = "|cffffd200"
 L["|cffffffff"] = "|cffffffff"
+
+-- Colore d'accento del menu (Misc > Comportamento del menu).
+L["Menu accent color"] = "Colore d'accento del menu"
+L["Midnight (default)"] = "Midnight (predefinito)"
+L["Class color"] = "Colore della classe"
+L["Custom accent color"] = "Colore d'accento personalizzato"
+L["Ember"] = "Ember"
+L["Jade"] = "Jade"
+L["Violet"] = "Violet"
+L["Reload"] = "Ricarica"
+L["Midnight keeps the stock blue accent. Class color follows this character; the accent applies after a UI reload."] = "Midnight mantiene l'accento blu originale. Colore della classe segue questo personaggio; l'accento si applica dopo un ricaricamento dell'interfaccia."
+L["The menu accent color is baked in while the menu is built, so a UI reload is required to apply it.\n\nReload now?"] = "Il colore d'accento del menu viene integrato durante la costruzione del menu, quindi è necessario ricaricare l'interfaccia per applicarlo.\n\nRicaricare ora?"
+L["Menu accent colors"] = "Colori d'accento del menu"
+L["The MSUF menu can now follow your class color, a curated preset like Ember, Jade or Violet, or any custom color."] = "Il menu di MSUF può ora seguire il colore della tua classe, un preset curato come Ember, Jade o Violet, o qualsiasi colore personalizzato."
+L["The whole menu re-tints to your accent - surfaces, navigation and controls - applied after a UI reload."] = "L'intero menu si tinge del tuo accento - superfici, navigazione e controlli - applicato dopo un ricaricamento dell'interfaccia."
+L["class-color, preset and custom accent options for the MSUF menu"] = "opzioni di accento per colore di classe, preset e colore personalizzato per il menu di MSUF"
+L["Pick a menu accent"] = "Scegli un accento del menu"

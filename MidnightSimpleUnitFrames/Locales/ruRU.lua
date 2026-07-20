@@ -3630,3 +3630,20 @@ L["YOUR MOVE - Choose what you want to set up."] = "ВАШ ХОД - Выбери
 -- Generated missing non-Assistant core keys for ruRU.
 L["|cffffd200"] = "|cffffd200"
 L["|cffffffff"] = "|cffffffff"
+
+-- Акцентный цвет меню (Misc > Поведение меню).
+L["Menu accent color"] = "Акцентный цвет меню"
+L["Midnight (default)"] = "Midnight (по умолчанию)"
+L["Class color"] = "Цвет класса"
+L["Custom accent color"] = "Свой акцентный цвет"
+L["Ember"] = "Ember"
+L["Jade"] = "Jade"
+L["Violet"] = "Violet"
+L["Reload"] = "Перезагрузить"
+L["Midnight keeps the stock blue accent. Class color follows this character; the accent applies after a UI reload."] = "Midnight сохраняет стандартный синий акцент. Цвет класса следует этому персонажу; акцент применяется после перезагрузки интерфейса."
+L["The menu accent color is baked in while the menu is built, so a UI reload is required to apply it.\n\nReload now?"] = "Акцентный цвет меню встраивается при построении меню, поэтому для его применения требуется перезагрузка интерфейса.\n\nПерезагрузить сейчас?"
+L["Menu accent colors"] = "Акцентные цвета меню"
+L["The MSUF menu can now follow your class color, a curated preset like Ember, Jade or Violet, or any custom color."] = "Меню MSUF теперь может использовать цвет вашего класса, готовый пресет вроде Ember, Jade или Violet либо любой свой цвет."
+L["The whole menu re-tints to your accent - surfaces, navigation and controls - applied after a UI reload."] = "Всё меню окрашивается в ваш акцент - поверхности, навигация и элементы управления - после перезагрузки интерфейса."
+L["class-color, preset and custom accent options for the MSUF menu"] = "акцент по цвету класса, пресеты и свой акцентный цвет для меню MSUF"
+L["Pick a menu accent"] = "Выбрать акцент меню"

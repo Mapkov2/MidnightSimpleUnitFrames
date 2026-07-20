@@ -134,7 +134,7 @@ local function BuildMisc(ctx)
         "language.selection")
     local languageHelp = W.Text(language, "Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus.", 30, -96, languageW - 70, T.colors.muted)
     if languageHelp.SetWordWrap then languageHelp:SetWordWrap(true) end
-    local menuBehavior = b:CollapsibleSection("misc_menu_behavior", "Menu behavior", 340, true)
+    local menuBehavior = b:CollapsibleSection("misc_menu_behavior", "Menu behavior", 410, true)
     local menuBehaviorW = menuBehavior._msuf2Width or ctx.width or 720
     BindMiscToggle(menuBehavior, "Enable Windows-style edge snap for this menu", "slashMenuSnapEnabled", true, "MSUF2_MENU_SNAP", nil, nil, nil, MENU_WRITE_OPTS)
     local menuSnapHelp = W.Text(menuBehavior, "Drag the MSUF menu to a screen side for a half-screen layout, to a corner for a quarter layout, or to the top edge for a maximized layout.", 30, -72, menuBehaviorW - 70, T.colors.muted)
@@ -190,6 +190,84 @@ local function BuildMisc(ctx)
     W.MoveWidget(navHoverScale, menuBehavior, 14, -244, 300, "LEFT")
     local navHoverHelp = W.Text(menuBehavior, "100% keeps every navigation row the same size. Higher values magnify the row under the cursor.", 30, -292, menuBehaviorW - 70, T.colors.muted)
     if navHoverHelp.SetWordWrap then navHoverHelp:SetWordWrap(true) end
+    M.InstallStaticPopup("MSUF2_ACCENT_RELOAD_REQUIRED", {
+        text = M.Tr("The menu accent color is baked in while the menu is built, so a UI reload is required to apply it.\n\nReload now?"),
+        button1 = RELOADUI or M.Tr("Reload"),
+        button2 = CANCEL or M.Tr("Not now"),
+        OnAccept = function() M.CallIf(ReloadUI) end,
+    })
+    local accentSwatch
+    local function IsAccentMode(mode)
+        if mode == "class" or mode == "custom" then return true end
+        local presets = T.MENU_ACCENT_PRESETS
+        return type(presets) == "table" and presets[mode] ~= nil
+    end
+    local function ReadAccentMode()
+        local mode = ReadG("menuAccent", "midnight")
+        if IsAccentMode(mode) then return mode end
+        return "midnight"
+    end
+    local function AccentReloadCheck()
+        local applied = T._menuAccentApplied
+        local sig = type(T.MenuAccentSignature) == "function" and T.MenuAccentSignature(M.GetGeneralDB and M.GetGeneralDB()) or nil
+        if applied and sig and sig ~= applied then
+            -- Re-showing an already-visible popup replays its open sound; guard
+            -- so live color-picker painting cannot spam it.
+            if not (type(StaticPopup_Visible) == "function" and StaticPopup_Visible("MSUF2_ACCENT_RELOAD_REQUIRED")) then
+                StaticPopup_Show("MSUF2_ACCENT_RELOAD_REQUIRED")
+            end
+        elseif type(StaticPopup_Hide) == "function" then
+            StaticPopup_Hide("MSUF2_ACCENT_RELOAD_REQUIRED")
+        end
+    end
+    local accentCheckTimer
+    local function QueueAccentReloadCheck()
+        local timerApi = M.MenuTimer or _G.C_Timer
+        if accentCheckTimer and accentCheckTimer.Cancel then accentCheckTimer:Cancel() end
+        if not (timerApi and timerApi.NewTimer) then return AccentReloadCheck() end
+        accentCheckTimer = timerApi.NewTimer(0.45, function()
+            accentCheckTimer = nil
+            AccentReloadCheck()
+        end)
+    end
+    local function RefreshAccentSwatchEnabled()
+        if accentSwatch then W.SetControlEnabled(accentSwatch, ReadAccentMode() == "custom") end
+    end
+    BindMiscDropdown(menuBehavior, "Menu accent color",
+        VT("midnight", "Midnight (default)", "class", "Class color",
+            "ember", "Ember", "jade", "Jade", "violet", "Violet",
+            "custom", "Custom"),
+        250, 14, -304,
+        ReadAccentMode,
+        function(value)
+            if not IsAccentMode(value) then value = "midnight" end
+            SetG("menuAccent", value, "MSUF2_MENU_ACCENT", MENU_WRITE_OPTS)
+            RefreshAccentSwatchEnabled()
+            AccentReloadCheck()
+        end,
+        "setting.menuAccent")
+    accentSwatch = W.Color(menuBehavior, "Custom accent color")
+    M.BindColor(ctx, accentSwatch,
+        function()
+            local r, g2, b2 = T.MenuAccentHexToRGB(ReadG("menuAccentColor", "3b82f6"))
+            if not r then r, g2, b2 = 0.231, 0.510, 0.965 end
+            return r, g2, b2
+        end,
+        function(r, g2, b2)
+            SetG("menuAccentColor", T.MenuAccentRGBToHex(r, g2, b2), "MSUF2_MENU_ACCENT_COLOR", MENU_WRITE_OPTS)
+            QueueAccentReloadCheck()
+        end,
+        Meta("setting.menuAccentColor"))
+    if accentSwatch._msuf2Title then
+        accentSwatch._msuf2Title:ClearAllPoints()
+        accentSwatch._msuf2Title:SetPoint("TOPLEFT", menuBehavior, "TOPLEFT", menuFontRightX, -316)
+        accentSwatch._msuf2Title:SetWidth(170)
+    end
+    accentSwatch:ClearAllPoints()
+    accentSwatch:SetPoint("TOPLEFT", menuBehavior, "TOPLEFT", menuFontRightX + 182, -314)
+    RefreshAccentSwatchEnabled()
+    local accentHelp = W.Text(menuBehavior, "Midnight keeps the stock blue accent. Class color follows this character; the accent applies after a UI reload.", 30, -362, menuBehaviorW - 70, T.colors.muted)
+    if accentHelp.SetWordWrap then accentHelp:SetWordWrap(true) end
     local startup = b:CollapsibleSection("misc_startup", "Startup", 124, true)
     BindMiscToggle(startup, "Show welcome message", "showWelcomeMessage", true, "MSUF2_WELCOME", 14, -42, 320)
     BindMiscToggle(startup, "Enable version check (peer-to-peer)", "versionCheckEnabled", true, "MSUF2_VERSION_CHECK", 14, -76, 360, nil,

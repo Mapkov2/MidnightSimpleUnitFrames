@@ -3963,3 +3963,18 @@ L["AaBbCc 12345 - Midnight Simple Unit Frames"] = "AaBbCc 12345 – Midnight Sim
 L["Name "] = "Name"
 L["|cffffd200"] = "|cffffd200"
 L["|cffffffff"] = "|cffffffff"
+
+-- Menü-Akzentfarbe (Misc > Menüverhalten).
+L["Menu accent color"] = "Menü-Akzentfarbe"
+L["Midnight (default)"] = "Midnight (Standard)"
+L["Custom accent color"] = "Eigene Akzentfarbe"
+L["Ember"] = "Ember"
+L["Jade"] = "Jade"
+L["Violet"] = "Violet"
+L["Midnight keeps the stock blue accent. Class color follows this character; the accent applies after a UI reload."] = "Midnight behält den blauen Standard-Akzent. Klassenfarbe folgt diesem Charakter; der Akzent wird nach einem UI-Reload angewendet."
+L["The menu accent color is baked in while the menu is built, so a UI reload is required to apply it.\n\nReload now?"] = "Die Menü-Akzentfarbe wird beim Aufbau des Menüs eingebacken, daher ist ein UI-Reload erforderlich, um sie anzuwenden.\n\nJetzt neu laden?"
+L["Menu accent colors"] = "Menü-Akzentfarben"
+L["The MSUF menu can now follow your class color, a curated preset like Ember, Jade or Violet, or any custom color."] = "Das MSUF-Menü kann jetzt deiner Klassenfarbe, einem kuratierten Preset wie Ember, Jade oder Violet oder einer beliebigen eigenen Farbe folgen."
+L["The whole menu re-tints to your accent - surfaces, navigation and controls - applied after a UI reload."] = "Das gesamte Menü färbt sich in deinen Akzent - Flächen, Navigation und Controls - angewendet nach einem UI-Reload."
+L["class-color, preset and custom accent options for the MSUF menu"] = "Klassenfarben-, Preset- und eigene Akzent-Optionen für das MSUF-Menü"
+L["Pick a menu accent"] = "Wähle einen Menü-Akzent"
