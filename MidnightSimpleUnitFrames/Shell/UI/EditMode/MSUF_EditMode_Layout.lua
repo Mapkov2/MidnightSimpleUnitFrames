@@ -1387,12 +1387,10 @@ end
 
 local GROUP_VALID_POINTS = { CENTER = true, TOP = true, BOTTOM = true, LEFT = true, RIGHT = true, TOPLEFT = true, TOPRIGHT = true, BOTTOMLEFT = true, BOTTOMRIGHT = true }
 
-local function ResolveGroupAnchor(conf)
-    local name = conf and (conf.anchorToFrame or conf.anchorFrame or conf.relativeTo or conf.anchorTo)
-    if type(name) == "string" and name ~= "" and name ~= "FREE" and name ~= "UIParent" then
-        local UF = MSUF and MSUF.UF
-        if UF and UF.frames and UF.frames[name] then return UF.frames[name] end
-        if _G[name] then return _G[name] end
+local function ResolveGroupAnchor(conf, owner)
+    local gf = MSUF and MSUF.GF
+    if gf and type(gf.ResolveAnchorFrame) == "function" then
+        return gf.ResolveAnchorFrame(conf, owner)
     end
     return UIParent
 end
@@ -1403,10 +1401,18 @@ local function GroupAnchorPoint(conf)
     return point
 end
 
+local function GroupRelativeAnchorPoint(conf, fallback)
+    local point = conf and conf.relativePoint or fallback or "CENTER"
+    if not GROUP_VALID_POINTS[point] then point = fallback or "CENTER" end
+    return point
+end
+
 local function GroupOffsetFromCenter(bar, conf, centerX, centerY, gridDX, gridDY)
     local point = GroupAnchorPoint(conf)
-    local anchor = ResolveGroupAnchor(conf)
-    local ax, ay = PointXY(anchor, point)
+    local relativePoint = GroupRelativeAnchorPoint(conf, point)
+    local owner = bar and (bar._msufGFLiveAnchor or bar._msufGFLogicalAnchor or bar) or nil
+    local anchor = ResolveGroupAnchor(conf, owner)
+    local ax, ay = PointXY(anchor, relativePoint)
     if not (ax and ay) then
         ax = ((UIParent and UIParent.GetWidth and UIParent:GetWidth()) or 0) * 0.5
         ay = ((UIParent and UIParent.GetHeight and UIParent:GetHeight()) or 0) * 0.5
@@ -1787,7 +1793,8 @@ function Ticker.BeginDrag(mover, key, cfg)
         or (key == "gf_mythicraid" and "mythicraid")
         or (key == "gf_priority" and "priority")
         or (bar and bar._msufGFKind)
-    local anchor = isCastbar and UIParent or (isGroupFrame and ResolveGroupAnchor(conf)) or ResolveAnchor(key, conf)
+    local groupOwner = isGroupFrame and bar and (bar._msufGFLiveAnchor or bar._msufGFLogicalAnchor or bar) or nil
+    local anchor = isCastbar and UIParent or (isGroupFrame and ResolveGroupAnchor(conf, groupOwner)) or ResolveAnchor(key, conf)
 
     local bossAdjX, bossAdjY
     if bar and conf and key and key:sub(1,4) == "boss" and bar.unit then

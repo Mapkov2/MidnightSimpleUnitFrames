@@ -175,7 +175,10 @@ _G.GetRealmName = function() realmNameQueries = realmNameQueries + 1; return "Te
 _G.MSUF_GlobalDB = {}
 -- Grid/background are core Edit Mode controls and must remain available even
 -- when the addon's advanced menu controls are hidden.
-_G.MSUF_DB = { general = { hideAdvancedMenu = not advanced } }
+_G.MSUF_DB = {
+    general = { hideAdvancedMenu = not advanced },
+    gf_raid = { offsetX = 15, offsetY = 0, width = 220, height = 44 },
+}
 
 local MSUF = { LocaleRegistry = { enUS = {} } }
 function MSUF.ExportPublic(name, value)
@@ -237,8 +240,8 @@ Equal(undoQueries + redoQueries, 0, "closed HUD performed history work before fi
 EM2.HUD.Show()
 local toolbar = _G.MSUF_EM2_HUD
 Check(toolbar and toolbar:IsShown(), "compact toolbar was not created")
-Equal(toolbar:GetWidth(), advanced and 1480 or 1240, "top toolbar width")
-Equal(toolbar:GetHeight(), 58, "top toolbar height")
+Equal(toolbar:GetWidth(), advanced and 1480 or 1280, "top toolbar width")
+Equal(toolbar:GetHeight(), 68, "top toolbar height")
 Equal(toolbar:GetTop(), 1068, "top toolbar edge offset")
 Check(toolbar.scripts.OnUpdate == nil, "toolbar added an idle OnUpdate")
 local layoutEvents = _G.MSUF_EM2_HUD_LayoutEvents
@@ -247,14 +250,14 @@ Check(layoutEvents and layoutEvents.events.DISPLAY_SIZE_CHANGED and layoutEvents
 
 if advanced then
     local primary = _G.MSUF_EM2_HUD_PreviewAddonSlot:GetParent():GetParent()
-    local discardLeft = toolbar:GetRight() - 155
+    local discardLeft = toolbar:GetRight() - 192
     Check(primary:GetRight() <= discardLeft - 7.9, "advanced controls overlap Discard at full width")
     Equal(primary:GetScale(), 1, "advanced controls were unnecessarily scaled at full width")
 
     _G.UIParent:SetWidth(1280)
     layoutEvents.scripts.OnEvent(layoutEvents, "DISPLAY_SIZE_CHANGED")
     Equal(toolbar:GetWidth(), 1248, "narrow toolbar did not fit the screen")
-    discardLeft = toolbar:GetRight() - 155
+    discardLeft = toolbar:GetRight() - 192
     Check(primary:GetScale() < 1, "narrow advanced controls did not reflow")
     Check(primary:GetRight() <= discardLeft - 7.9, "narrow advanced controls overlap Discard")
 
@@ -271,7 +274,7 @@ Equal(freeX, 1040, "dragged toolbar horizontal position")
 Equal(freeY, 500, "dragged toolbar vertical position")
 if advanced then
     local primary = _G.MSUF_EM2_HUD_PreviewAddonSlot:GetParent():GetParent()
-    Check(primary:GetRight() <= toolbar:GetRight() - 162.9, "dragged advanced controls overlap Discard")
+    Check(primary:GetRight() <= toolbar:GetRight() - 199.9, "dragged advanced controls overlap Discard")
 end
 saved.dock = "TOP"
 layoutEvents.scripts.OnEvent(layoutEvents, "DISPLAY_SIZE_CHANGED")
@@ -286,7 +289,14 @@ Equal(gridTools._dockItems[3], gridTools._bgWidget, "BG is not between Grid and 
 Equal(gridTools._stepFS and gridTools._stepFS:GetText(), "Grid 32px", "grid spacing label")
 Equal(gridTools._alphaFS and gridTools._alphaFS:GetText(), "BG 75%", "background opacity label")
 Check(gridTools.scripts.OnUpdate == nil, "Grid/BG controls added an idle OnUpdate")
-Equal(_G.MSUF_EM2_HUD_Row2:GetHeight(), 32, "context status row height")
+Equal(_G.MSUF_EM2_HUD_Row2:GetHeight(), 40, "context status row height")
+local inspector = _G.MSUF_EM2_HUD_Row2
+Equal(inspector._inspectorSelection:GetWidth(), 176, "inspector selection width")
+Equal(inspector._inspectorSelection:GetHeight(), 36, "inspector selection height")
+Equal(inspector._inspectorSelectionFS:GetText(), "Raid Frames / Layout", "inspector selection label")
+for i, expected in ipairs({ "X 15", "Y 0", "W 220", "H 44" }) do
+    Equal(inspector._inspectorMetrics[i]._valueFS:GetText(), expected, "inspector metric " .. i)
+end
 local stepWrites, alphaWrites = gridTools._stepFS.textWrites, gridTools._alphaFS.textWrites
 EM2.HUD.RefreshControls()
 Equal(gridTools._stepFS.textWrites, stepWrites, "unchanged Grid value was rewritten")

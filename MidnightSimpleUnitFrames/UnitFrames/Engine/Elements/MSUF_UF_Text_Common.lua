@@ -15,6 +15,7 @@ local UnitClass = C.UnitClass
 local UnitExists = C.UnitExists
 local UnitHealth = C.UnitHealth
 local UnitHealthMax = C.UnitHealthMax
+local UnitGetTotalAbsorbs = C.UnitGetTotalAbsorbs
 local UnitPower = C.UnitPower
 local UnitPowerMax = C.UnitPowerMax
 local UnitPowerType = C.UnitPowerType
@@ -62,6 +63,7 @@ local ApplyTextureColor = C.ApplyTextureColor
 local SetShownCached = C.SetShownCached
 local SetFrameLevelCached = C.SetFrameLevelCached
 local ExternalFrameWidth = C.ExternalFrameWidth
+local ClassColorForToken = C.ClassColorForToken
 local ClassColor = C.ClassColor
 local UnitNPCKind = C.UnitNPCKind
 local NPCColor = C.NPCColor
@@ -401,7 +403,13 @@ local function NameTextColorFor(frame, unit, classNames, npcNames, keyOverride, 
     if npcClassNames then
       local _, class = UnitClass(unit)
       if issecretvalue(class) ~= true and class then
-        local r, g, b = ClassColor(unit)
+        local r, g, b
+        if ClassColorForToken then
+          r, g, b = ClassColorForToken(class)
+        end
+        if r == nil then
+          r, g, b = ClassColor(unit)
+        end
         return r, g, b, fa
       end
     end
@@ -499,6 +507,7 @@ Text.UnitClass = UnitClass
 Text.UnitExists = UnitExists
 Text.UnitHealth = UnitHealth
 Text.UnitHealthMax = UnitHealthMax
+Text.UnitGetTotalAbsorbs = UnitGetTotalAbsorbs
 Text.UnitPower = UnitPower
 Text.UnitPowerMax = UnitPowerMax
 Text.UnitPowerType = UnitPowerType

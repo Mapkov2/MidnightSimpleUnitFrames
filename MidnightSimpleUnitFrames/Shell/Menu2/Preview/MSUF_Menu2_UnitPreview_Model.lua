@@ -824,9 +824,11 @@ local function FormatMode(mode, cur, maxVal, pct, sep, isPower, hidePercentSymbo
     if mode == "NONE" then return "" end
     local c = NumText(cur, shortNumbers)
     local m = NumText(maxVal, shortNumbers)
+    local a = NumText(125000, shortNumbers)
     local p = tostring(pct)
     if hidePercentSymbol ~= true then p = p .. "%" end
     local s = JoinSep(sep)
+    if mode == "ABSORB" then return a end
     if mode == "PERCENT" then return p end
     if mode == "CURRENT" then return c end
     if mode == "FULLVALUE" then return c end

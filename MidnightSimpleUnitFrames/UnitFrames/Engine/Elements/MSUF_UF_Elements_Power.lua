@@ -37,21 +37,6 @@ local POWER_EVENTS = C and C.POWER_EVENTS
 local POWER_EVENTS_FAST = {
   "UNIT_POWER_FREQUENT", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE",
 }
-local POWER_TYPE_INVALIDATION_EVENTS = {
-  UNIT_DISPLAYPOWER = true,
-  UNIT_POWER_BAR_SHOW = true,
-  UNIT_POWER_BAR_HIDE = true,
-  PARTY_MEMBER_ENABLE = true,
-  PARTY_MEMBER_DISABLE = true,
-  MSUF_UNIT_IDENTITY = true,
-  MSUF_UNIT_IDENTITY_FAST = true,
-  MSUF_UNIT_IDENTITY_SOFT = true,
-  MSUF_UNIT_IDENTITY_SOFT_FAST = true,
-  MSUF_GF_UNIT_IDENTITY = true,
-  MSUF_GF_UNIT_STRUCTURE = true,
-  MSUF_APPLY = true,
-  MSUF_FORCE_UPDATE = true,
-}
 local POWER_SHAPE_MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\ClassPower\\"
 local DETACHED_SHAPE_TEXTURES = {
   ROUND = {
@@ -531,7 +516,7 @@ function Power.RefreshDetachedExternalWidth(frame, sourceName, power)
   return true
 end
 
-local function SetColor(frame, force)
+local function SetColor(frame, force, resolvedPowerType, resolvedToken, resolvedMetaReady)
   local bar = frame and frame.targetPowerBar
   if not bar then return end
   local power = SpecPower(frame) or {}
@@ -541,9 +526,9 @@ local function SetColor(frame, force)
     r, g, b = power.r, power.g, power.b
   end
   if not (IsFiniteNumber(r) and IsFiniteNumber(g) and IsFiniteNumber(b)) then
-    local powerType, token
-    local metaKnown = false
-    if mode ~= "class" and UnitPowerType then
+    local powerType, token = resolvedPowerType, resolvedToken
+    local metaKnown = resolvedMetaReady == true and (powerType ~= nil or token ~= nil) or false
+    if mode ~= "class" and resolvedMetaReady ~= true and UnitPowerType then
       powerType, token = ReadPowerTypeCached(bar, frame.MSUFUnitKey, true)
       metaKnown = powerType ~= nil or token ~= nil
     end
@@ -687,11 +672,10 @@ end
 local function UpdatePercent(frame, event, unit, animate)
   if not (UnitPowerPercent and UnitPowerType and SCALE_100) then return false end
   local bar = frame.targetPowerBar
-  local forceType = false
-  if animate ~= true then
-    local power = SpecPower(frame)
-    forceType = POWER_TYPE_INVALIDATION_EVENTS[event] == true or not power or power.mode ~= "power"
-  end
+  -- SetColor used to perform the authoritative non-tick type refresh before
+  -- this value read. Preserve that freshness here now that both consumers
+  -- share the same result instead of calling ReadPowerTypeCached twice.
+  local forceType = animate ~= true
   local powerType, token = ReadPowerTypeCached(bar, unit, forceType)
   local pct = UnitPowerPercent(unit, powerType or 0, true, SCALE_100)
   local secret = issecretvalue(pct) == true
@@ -724,11 +708,7 @@ end
 local function UpdateAbsolute(frame, event, unit, animate)
   local powerType, token
   local bar = frame.targetPowerBar
-  local forceType = false
-  if animate ~= true then
-    local power = SpecPower(frame)
-    forceType = POWER_TYPE_INVALIDATION_EVENTS[event] == true or not power or power.mode ~= "power"
-  end
+  local forceType = animate ~= true
   powerType, token = ReadPowerTypeCached(bar, unit, forceType)
   local value
   local maxValue
@@ -805,11 +785,14 @@ local function UpdatePercentPath(frame, event, unit, eventPowerToken)
     and bar._msufPowerToken ~= eventPowerToken then return end
   if not animate then
     if SnapBarInterpolation then SnapBarInterpolation(bar) end
-    SetColor(frame)
   end
   local ok, _, powerType, token = UpdatePercent(frame, event, unit, animate)
-  if ok then return nil, nil, powerType, token, event == "UNIT_DISPLAYPOWER" end
+  if ok then
+    if not animate then SetColor(frame, false, powerType, token, true) end
+    return nil, nil, powerType, token, event == "UNIT_DISPLAYPOWER"
+  end
   local value, maxValue, absoluteType, absoluteToken = UpdateAbsolute(frame, event, unit, animate)
+  if not animate then SetColor(frame, false, absoluteType, absoluteToken, true) end
   return value, maxValue, absoluteType, absoluteToken, event == "UNIT_DISPLAYPOWER"
 end
 
@@ -830,9 +813,9 @@ local function UpdateAbsolutePath(frame, event, unit, eventPowerToken)
     and bar._msufPowerToken ~= eventPowerToken then return end
   if not animate then
     if SnapBarInterpolation then SnapBarInterpolation(bar) end
-    SetColor(frame)
   end
   local value, maxValue, powerType, token = UpdateAbsolute(frame, event, unit, animate)
+  if not animate then SetColor(frame, false, powerType, token, true) end
   return value, maxValue, powerType, token, event == "UNIT_DISPLAYPOWER"
 end
 
@@ -853,15 +836,16 @@ local function UpdateCurrentPath(frame, event, unit, eventPowerToken)
     and bar._msufPowerToken ~= eventPowerToken then return end
   if not animate then
     if SnapBarInterpolation then SnapBarInterpolation(bar) end
-    SetColor(frame)
   end
   local ok, _, powerType, token = UpdatePercent(frame, event, unit, animate)
   if not ok then
     local value, maxValue, absoluteType, absoluteToken = UpdateAbsolute(frame, event, unit, animate)
+    if not animate then SetColor(frame, false, absoluteType, absoluteToken, true) end
     return value, maxValue, absoluteType, absoluteToken, event == "UNIT_DISPLAYPOWER"
   end
   local value
   if powerType ~= nil then value = UnitPower(unit, powerType) else value = UnitPower(unit) end
+  if not animate then SetColor(frame, false, powerType, token, true) end
   return value, nil, powerType, token, event == "UNIT_DISPLAYPOWER"
 end
 

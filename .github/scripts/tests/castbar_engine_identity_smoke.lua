@@ -22,6 +22,18 @@ local ns = {
 assert(loadfile("MidnightSimpleUnitFrames/Castbars/MSUF_CastbarEngine.lua"))("MSUF", ns)
 local engine = assert(_G.MSUF_GetCastbarEngine())
 
+cast.active = false
+local idle = engine:BuildState("focus")
+assert(idle.active == false and idle.castType == "NONE" and idle._msufInactiveNormalized == true,
+    "initial inactive state was not normalized")
+now = now + 0.01
+engine:Invalidate("focus")
+assert(engine:BuildState("focus") == idle and idle.spellName == nil and idle.castBarID == nil,
+    "steady inactive rebuild changed or dirtied the reusable state")
+cast.active = true
+now = now + 0.01
+engine:Invalidate("focus")
+
 local state = engine:BuildState("focus")
 assert(state.active and state.spellSequenceID == 44)
 assert(state.identity.castBarID == 44 and state.identity.sequenceID == 44)

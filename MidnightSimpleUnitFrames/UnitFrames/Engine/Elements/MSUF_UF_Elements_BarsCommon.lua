@@ -1235,6 +1235,7 @@ MSUF.UFBarTextCommon = {
   UpdateAllBarGradients = UpdateAllBarGradients,
   SetFrameLevelCached = SetFrameLevelCached,
   ExternalFrameWidth = ExternalFrameWidth,
+  ClassColorForToken = ClassColorForToken,
   ClassColor = ClassColor,
   UnitNPCKind = UnitNPCKind,
   NPCColor = NPCColor,

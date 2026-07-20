@@ -493,6 +493,7 @@ function Shared.CustomAnchorEditor(ctx, parent, opts)
     pick:SetScript("OnClick", function()
         local overlay = type(_G.MSUF_EnsureAnchorPicker) == "function" and _G.MSUF_EnsureAnchorPicker() or nil
         if not overlay then return end
+        overlay._isCandidateAllowed = opts.isCandidateAllowed
         overlay._onPick = function(frameName)
             WithHistory(opts.pickTitle or opts.commitTitle or "Pick Anchor", opts.pickKey or opts.commitKey, function() if opts.setValue then opts.setValue(frameName or "", "pick") end; box:SetText(frameName or "") end)
         end

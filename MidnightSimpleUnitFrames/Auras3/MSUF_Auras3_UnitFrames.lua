@@ -803,9 +803,8 @@ end
 local function ApplyAuraIconZoom(texture, lane)
     if not (texture and texture.SetTexCoord) then return end
     local zoom = ClampNumber(lane and lane.iconZoom, 100, 100, 200)
-    local key = tostring(zoom)
-    if texture._msufA3IconZoomKey == key then return end
-    texture._msufA3IconZoomKey = key
+    if texture._msufA3IconZoomKey == zoom then return end
+    texture._msufA3IconZoomKey = zoom
     local visible = 100 / zoom
     local inset = (1 - visible) * 0.5
     texture:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
@@ -1927,13 +1926,22 @@ local function LocalizedMinuteSuffix()
 end
 
 local function BuildAuraDurationFormatter(lane)
+    -- Compiled lanes are replaced on config/locale invalidation. Cache the
+    -- resolved native formatter there so pool growth does not rebuild its
+    -- signature for every newly initialized AuraButton.
+    local laneFormatter = type(lane) == "table" and lane._msufA3DurationFormatter
+    if laneFormatter ~= nil then return laneFormatter ~= false and laneFormatter or nil end
+
     local general = (_G.MSUF_DB and _G.MSUF_DB.general) or nil
     if not general then return nil end
     local buckets = general.aurasCooldownTextUseBuckets == true
     local decimalSec = ClampNumber(lane and lane.cooldownDecimalSeconds, DEFAULT_SHARED.cooldownDecimalSeconds, 0, 30)
 
     local C_StringUtil = _G.C_StringUtil
-    if not (C_StringUtil and type(C_StringUtil.CreateNumericRuleFormatter) == "function") then return nil end
+    if not (C_StringUtil and type(C_StringUtil.CreateNumericRuleFormatter) == "function") then
+        if type(lane) == "table" then lane._msufA3DurationFormatter = false end
+        return nil
+    end
 
     -- Safe color falls back to the configured global font color when the user has
     -- not picked one, matching the menu's Safe swatch behavior.
@@ -1969,7 +1977,11 @@ local function BuildAuraDurationFormatter(lane)
     local sig = table_concat({
         "minutes-suffix-color", buckets and 1 or 0, decimalSec, minuteSuffix, sr, sg, sb, wr, wg, wb, ur, ug, ub, urgentSec, warningSec, safeSec,
     }, "\030")
-    if _durationFormatterCache and _durationFormatterCache[sig] then return _durationFormatterCache[sig] end
+    if _durationFormatterCache and _durationFormatterCache[sig] then
+        local formatter = _durationFormatterCache[sig]
+        if type(lane) == "table" then lane._msufA3DurationFormatter = formatter end
+        return formatter
+    end
 
     local roundingDown = NumericRuleFormatRounding("Down", 2)
     local thresholds, seen = {}, {}
@@ -2030,6 +2042,7 @@ local function BuildAuraDurationFormatter(lane)
 
     _durationFormatterCache = _durationFormatterCache or {}
     _durationFormatterCache[sig] = formatter
+    if type(lane) == "table" then lane._msufA3DurationFormatter = formatter end
     return formatter
 end
 
@@ -2042,11 +2055,13 @@ local RefreshAppliedNativeRoot
 local EnsureNativeAuraRefreshDriver
 local ApplyLane
 
--- Reusable options table for SetDurationText. Blizzard securecopies options on
--- each call, so a single mutated table is safe across buttons and avoids per-button
--- garbage; we only ever set cold-path formatter references on it.
+-- Blizzard securecopies native AuraButton options on every setter call, so
+-- these cold-path tables are safe to reuse and avoid per-button Lua garbage.
+-- Only the duration-text table is temporarily mutated for its formatter.
 local _durationTextOptions = {}
 local _durationBarOptions = {}
+local _applicationCountOptions = {}
+local _auraSymbolOptions = { showWhenHarmful = true, showWhenHelpful = false }
 local RegisterNativeContainer
 local ConfigureContainer
 local SyncDispelSensorGeometry
@@ -2455,63 +2470,6 @@ local function EnsureAuraTextOverlay(button)
     return overlay
 end
 
-local function SyncCooldownTextLayering(button)
-    if not button then return end
-    local buttonLevel = button.GetFrameLevel and button:GetFrameLevel() or 0
-    local cooldown = button._msufA3Cooldown
-    if cooldown and cooldown.SetFrameLevel then
-        cooldown:SetFrameLevel(buttonLevel + 1)
-    end
-
-    local overlay = button._msufA3TextOverlay
-    if overlay then
-        overlay:ClearAllPoints()
-        overlay:SetAllPoints(button)
-        if overlay.SetFrameLevel then overlay:SetFrameLevel(buttonLevel + 4) end
-    end
-
-    local duration = button.Text or button.DurationText
-    if duration and duration.SetDrawLayer then
-        duration:SetDrawLayer("OVERLAY", 7)
-    end
-
-    local count = button._msufA3ApplicationCount or button.Count or button.ApplicationCount
-    if count and count.SetDrawLayer then
-        count:SetDrawLayer("OVERLAY", 6)
-    end
-end
-
-local function SyncButtonGeometry(button, lane, index)
-    if not (button and lane) then return false end
-    LayoutButton(button, lane, index)
-    local buttonParent = button:GetParent()
-    button:SetAlpha(buttonParent and buttonParent._msufA3SharedAuraGroups == true and (lane.alpha or 1) or 1)
-    local parentFrame = button._msufA3ParentFrame
-    if parentFrame then
-        SyncFrameStrata(button, ResolveFrameStrata(parentFrame, lane.strata))
-    end
-    if parentFrame and button.SetFrameLevel then
-        button:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + AuraIconBaseOffset(parentFrame) + (lane.layer or 1) + 1)
-    end
-    if button.Icon then
-        button.Icon:ClearAllPoints()
-        button.Icon:SetAllPoints(button)
-        ApplyAuraIconZoom(button.Icon, lane)
-    end
-    if button._msufA3Cooldown then
-        button._msufA3Cooldown:ClearAllPoints()
-        button._msufA3Cooldown:SetAllPoints(button)
-    end
-    SyncCooldownTextLayering(button)
-    if button._msufA3AuraBorder then
-        LayoutAuraBorder(button, button._msufA3AuraBorder, lane)
-    end
-    if button._msufA3DurationBar then
-        LayoutDurationBar(button, button._msufA3DurationBar, lane)
-    end
-    return true
-end
-
 local function SyncContainerGeometry(container, lane, parentFrame, forceGeometry)
     if not (container and lane) then return false end
     forceGeometry = forceGeometry == true or container._msufA3ForceManagedAuraGeometry == true
@@ -2577,11 +2535,12 @@ local function PrepareAuraButton(button, lane, index)
     ValidatePTR4AuraButtonContract(button)
     button._msufA3NativeButton = true
     button._msufA3LaneKind = lane.kind
-    button:SetSize(lane.size, lane.size)
+    LayoutButton(button, lane, index)
     local buttonParent = button:GetParent()
     button:SetAlpha(buttonParent and buttonParent._msufA3SharedAuraGroups == true and (lane.alpha or 1) or 1)
     local parentFrame = button._msufA3ParentFrame
     if parentFrame then
+        SyncFrameStrata(button, ResolveFrameStrata(parentFrame, lane.strata))
         button:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + AuraIconBaseOffset(parentFrame) + (lane.layer or 1) + 1)
     else
         button:SetFrameLevel((buttonParent:GetFrameLevel() or 0) + 1)
@@ -2662,8 +2621,12 @@ local function PrepareAuraButton(button, lane, index)
         if button._msufA3DurationBar then button._msufA3DurationBar:Hide() end
     end
 
+    local textOverlay
+    if lane.showCooldownText == true or lane.showStacks == true then
+        textOverlay = EnsureAuraTextOverlay(button) or button
+    end
+
     if lane.showCooldownText == true then
-        local textOverlay = EnsureAuraTextOverlay(button) or button
         local duration = button.Text or button.DurationText
         if not duration then
             duration = textOverlay:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -2696,7 +2659,6 @@ local function PrepareAuraButton(button, lane, index)
     end
 
     if lane.showStacks == true then
-        local textOverlay = EnsureAuraTextOverlay(button) or button
         local count = button._msufA3ApplicationCount or button.Count or button.ApplicationCount
         if not count then
             count = textOverlay:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -2710,7 +2672,7 @@ local function PrepareAuraButton(button, lane, index)
         if type(count.SetDrawLayer) == "function" then count:SetDrawLayer("OVERLAY", 6) end
         PlaceStackText(count, textOverlay, lane)
         count:Show()
-        button:SetApplicationCount(count, {})
+        button:SetApplicationCount(count, _applicationCountOptions)
     else
         button:ClearApplicationCount()
         local count = button._msufA3ApplicationCount or button.Count or button.ApplicationCount
@@ -2744,19 +2706,13 @@ local function PrepareAuraButton(button, lane, index)
         symbol:SetJustifyH("RIGHT")
         symbol:SetJustifyV("BOTTOM")
         ApplyFont(symbol, math_min(lane.stackSize or DEFAULT_SHARED.stackTextSize, 14))
-        button:SetAuraSymbol(symbol, { showWhenHarmful = true, showWhenHelpful = false })
+        button:SetAuraSymbol(symbol, _auraSymbolOptions)
     else
         button:ClearAuraSymbol()
         if button._msufA3AuraSymbol and button._msufA3AuraSymbol.Hide then button._msufA3AuraSymbol:Hide() end
     end
 
     button:SetMouseMotionEnabled(lane.showTooltip ~= false)
-
-    -- AuraContainer owns assignment, but MSUF owns the button dimensions and
-    -- grid. Keep managed buttons in sync as well: reusing a native container
-    -- must not leave already-assigned frames at the size from initialization.
-    SyncButtonGeometry(button, lane, index)
-    SyncCooldownTextLayering(button)
     button._msufA3LaneLayoutSignature = lane._msufA3LayoutSignature
 end
 
@@ -3246,8 +3202,15 @@ end
 
 A3._NativeContainerVisible = function(container)
     if not container then return false end
-    if type(container.IsVisible) == "function" and container:IsVisible() ~= true then return false end
-    if type(container.IsShown) == "function" and container:IsShown() ~= true then return false end
+    -- Native AuraContainers are Frames: IsVisible already includes both their
+    -- own shown state and inherited parent visibility. Fall back to IsShown
+    -- only for lightweight test/compatibility objects without IsVisible.
+    if type(container.IsVisible) == "function" then
+        return container:IsVisible() == true
+    end
+    if type(container.IsShown) == "function" then
+        return container:IsShown() == true
+    end
     return true
 end
 
@@ -3300,38 +3263,56 @@ A3._DirectIdentityRefreshUnit = function(unit, forceSpellIndicatorGeometry)
     local byUnit = A3._directIdentityAuraContainers
     local containers = byUnit and byUnit[unit]
     if not containers then return false end
+
+    if forceSpellIndicatorGeometry ~= true then
+        -- Target/focus swaps use this direct route. Keep the exceptional
+        -- world-transition recreation machinery out of the steady path while
+        -- still consuming any one-shot geometry marker left by a hidden frame.
+        local any = false
+        for container in pairs(containers) do
+            local update = container and container.UpdateAllAuras
+            if type(update) == "function" then
+                if A3._NativeContainerVisible(container) then update(container) end
+                if container._msufA3ForceManagedAuraGeometry == true
+                    or container._msufA3ForceSpellIndicatorGeometry == true then
+                    A3._SyncManagedAuraContainerGeometry(container, true)
+                end
+                any = true
+            end
+        end
+        return any
+    end
+
     local any, spellRecreates = false, nil
     for container in pairs(containers) do
-        local deferSpellRecreate = container and forceSpellIndicatorGeometry == true
-            and container._msufA3SpellIndicatorRoot == true
+        local deferSpellRecreate = container and container._msufA3SpellIndicatorRoot == true
         if deferSpellRecreate then
             spellRecreates = spellRecreates or {}
             spellRecreates[#spellRecreates + 1] = container
             any = true
         else
-        if container and forceSpellIndicatorGeometry == true
-            and A3._ManagedAuraContainerSupportsGeometryRepair(container) then
-            -- Hidden containers cannot be repaired in this pass. Keep the
-            -- request on the container so its next visible/config sync consumes
-            -- it instead of trusting stale desired-geometry metadata.
-            if container._msufA3SpellIndicatorRoot == true then
-                container._msufA3ForceSpellIndicatorGeometry = true
-            else
-                container._msufA3ForceManagedAuraGeometry = true
+            if container and A3._ManagedAuraContainerSupportsGeometryRepair(container) then
+                -- Hidden containers cannot be repaired in this pass. Keep the
+                -- request on the container so its next visible/config sync consumes
+                -- it instead of trusting stale desired-geometry metadata.
+                if container._msufA3SpellIndicatorRoot == true then
+                    container._msufA3ForceSpellIndicatorGeometry = true
+                else
+                    container._msufA3ForceManagedAuraGeometry = true
+                end
             end
-        end
-        if container and type(container.UpdateAllAuras) == "function" then
-            if A3._NativeContainerVisible(container) then
-                container:UpdateAllAuras()
+            if container and type(container.UpdateAllAuras) == "function" then
+                if A3._NativeContainerVisible(container) then
+                    container:UpdateAllAuras()
+                end
+                -- Zone/world transitions can desync a reused container while cache looks current.
+                -- Keep the normal cached fast path by applying geometry repair only once here.
+                if container._msufA3ForceManagedAuraGeometry == true
+                    or container._msufA3ForceSpellIndicatorGeometry == true then
+                    A3._SyncManagedAuraContainerGeometry(container, true)
+                end
+                any = true
             end
-            -- Zone/world transitions can desync a reused container while cache looks current.
-            -- Keep the normal cached fast path by applying geometry repair only once here.
-            if container._msufA3ForceManagedAuraGeometry == true
-                or container._msufA3ForceSpellIndicatorGeometry == true then
-                A3._SyncManagedAuraContainerGeometry(container, true)
-            end
-            any = true
-        end
         end
     end
     -- Recreating unregisters the old container and registers a replacement in

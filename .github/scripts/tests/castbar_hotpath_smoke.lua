@@ -536,7 +536,13 @@ local castbarCopySource = ReadSource("Shell/Menu2/Pages/MSUF_Menu2_Unit.lua")
 local castbarResetSource = ReadSource("Shell/Menu2/MSUF_Menu2_Bindings.lua")
 local castbarVisualSource = ReadSource("Castbars/MSUF_CastbarVisuals.lua")
 local castbarAnchorSource = ReadSource("Castbars/MSUF_CastbarAnchors.lua")
+local castbarDriverSource = ReadSource("Castbars/MSUF_CastbarDriver.lua")
 local castbarPreviewSource = ReadSource("Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua")
+local immediateRefresh = assert(castbarDriverSource:find("local function RefreshTargetFocusImmediate", 1, true))
+local idleFastPath = assert(castbarDriverSource:find("if CastbarAlreadyIdle(frame) then", immediateRefresh, true))
+local inactiveIdentityClear = assert(castbarDriverSource:find("StoreActiveStateIdentity(frame, nil)", immediateRefresh, true))
+Check(idleFastPath < inactiveIdentityClear,
+    "target/focus no-cast refresh repeats cleanup before its idle fast path")
 Check(defaultsSource:find('g[prefix .. "IconZoom"] = 100', 1, true),
     "per-castbar Icon Zoom defaults are missing")
 Check(castbarMenuSource:find('DetailKey("IconZoom"), 100, "MSUF2_CASTBAR_ICON_ZOOM"', 1, true),

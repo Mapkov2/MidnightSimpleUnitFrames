@@ -17,6 +17,7 @@ local VT = M.ValueTextList
 local DISPEL_OVERLAY_121_PTR_DISABLED = false
 local DISPEL_OVERLAY_121_PTR_MESSAGE = "Uses native 12.1 AuraContainer dispellable debuff detection."
 local SCOPE_VALUES, HEALTH_MODES, TEXT_MODES, DELIMITER_VALUES, ANCHORS, GF_BAR_MODES, SIMPLE_TEXTURES, DISPEL_OVERLAY_STYLES, DEBUFF_STRIPE_EDGES = M.PickDefaults(GP, [[SCOPE_VALUES HEALTH_MODES TEXT_MODES DELIMITER_VALUES ANCHORS GF_BAR_MODES SIMPLE_TEXTURES DISPEL_OVERLAY_STYLES DEBUFF_STRIPE_EDGES]])
+local HEALTH_TEXT_MODES = GP.HEALTH_TEXT_MODES or TEXT_MODES
 local GF, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, BindScopeDropdown, ScopeDropdown, ScopeSlider, ScopeColor, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, TrackSectionRefresh, OnOffBadge, BadgeNumber, OptionText, ControlMeta, RegisterControl = M.Pick(GP, [[GF Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle BindScopeDropdown ScopeDropdown ScopeSlider ScopeColor SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus TrackSectionRefresh OnOffBadge BadgeNumber OptionText ControlMeta RegisterControl]])
 OnOffBadge = OnOffBadge or M.OnOffBadge
 BadgeNumber = BadgeNumber or M.BadgeNumber
@@ -188,10 +189,12 @@ local function BuildGFTextSection(ctx, b)
     local function TextModeExampleStr(mode, delim, isPower, decimalHP, hidePercentSymbol, shortNumbers)
         local cur     = isPower and "100"  or (shortNumbers and "12.5k" or "12,450")
         local max_    = isPower and "100"  or (shortNumbers and "15.0k" or "15,000")
+        local absorb  = shortNumbers and "3.8k" or "3,750"
         local pct     = isPower and "100" or (decimalHP and "83.0" or "83")
         if hidePercentSymbol ~= true then pct = pct .. "%" end
         local deficit = isPower and "0"    or (shortNumbers and "-2.6k" or "-2,550")
-        if mode == "PERCENT"        then return pct
+        if mode == "ABSORB"         then return absorb
+        elseif mode == "PERCENT"        then return pct
         elseif mode == "CURRENT"    then return cur
         elseif mode == "FULLVALUE"  then return cur
         elseif mode == "MAX"        then return max_
@@ -333,7 +336,7 @@ local function BuildGFTextSection(ctx, b)
         local scope = CurrentScope()
         return UnitSectionShared.TextSlotSummary(kind, GF_TEXT_SUMMARY_SLOTS, function(slot)
             return Val(scope, slot[2], slot[3])
-        end, TEXT_MODES, OptionText)
+        end, kind == "hp" and HEALTH_TEXT_MODES or TEXT_MODES, OptionText)
     end
     local function UpdateTextHeaderBadges(tab, nameOn, hpOn, powerOn)
         local scope = CurrentScope()
@@ -438,7 +441,7 @@ local function BuildGFTextSection(ctx, b)
         end
         local function SlotControl(slot, label, x, y, width)
             local spec = cfg.slots[slot]
-            local control = W.Dropdown(content, label, TEXT_MODES, width)
+            local control = W.Dropdown(content, label, cfg.modes or TEXT_MODES, width)
             controls[slot] = control
             M.BindDropdownWidget(ctx, control,
                 function() return Val(CurrentScope(), spec.key, spec.default) end,
@@ -553,6 +556,7 @@ local function BuildGFTextSection(ctx, b)
         return controls
     end
     local hpControls = BuildValueTextTab("hp", hpTab, {
+        modes = HEALTH_TEXT_MODES,
         showLabel = "Show HP Text",
         showKey = "showHPText",
         showDefault = true,

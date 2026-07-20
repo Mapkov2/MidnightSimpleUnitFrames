@@ -323,12 +323,14 @@ local function HasNativePreviewAPI(gf)
     and type(gf.HidePreview) == "function"
 end
 
-local function ResolveAnchorFrame(conf)
-  local name = conf and (conf.anchorToFrame or conf.anchorFrame or conf.relativeTo or conf.anchorTo)
-  if type(name) == "string" and name ~= "" and name ~= "FREE" and name ~= "UIParent" then
-    local UF = MSUF and MSUF.UF
-    if UF and UF.frames and UF.frames[name] then return UF.frames[name] end
-    if _G[name] then return _G[name] end
+local function ResolveAnchorFrame(conf, owner)
+  local gf = GF()
+  if gf and type(gf.ResolveAnchorFrame) == "function" then
+    local frame, missing = gf.ResolveAnchorFrame(conf, owner)
+    if missing and type(_G.MSUF_ScheduleLateAnchorReanchor) == "function" then
+      _G.MSUF_ScheduleLateAnchorReanchor()
+    end
+    return frame
   end
   return UIParent
 end
@@ -645,7 +647,7 @@ local function PositionLogicalPreviewAnchor(kind, conf, totalW, totalH)
   if cy == nil then cy = defY end
   local point = AnchorPoint(conf)
   local relativePoint = RelativeAnchorPoint(conf, point)
-  local parent = ResolveAnchorFrame(conf)
+  local parent = ResolveAnchorFrame(conf, anchor)
   cx, cy = ClampAnchorOffsetOnScreen(point, relativePoint, parent, floor(cx + 0.5), floor(cy + 0.5), totalW, totalH)
   anchor:SetPoint(point, parent, relativePoint, floor(cx + 0.5), floor(cy + 0.5))
   anchor:Show()
@@ -719,7 +721,8 @@ local function SyncContainer(kind)
       if cx == nil then cx = defX end
       if cy == nil then cy = defY end
       local point = AnchorPoint(conf)
-      container:SetPoint(point, ResolveAnchorFrame(conf), point, floor(cx + 0.5), floor(cy + 0.5))
+      local relativePoint = RelativeAnchorPoint(conf, point)
+      container:SetPoint(point, ResolveAnchorFrame(conf, container), relativePoint, floor(cx + 0.5), floor(cy + 0.5))
     end
   end
   local nativeActive = kind ~= "priority" and HasNativePreviewAPI(gf)
@@ -1236,9 +1239,12 @@ end
 
 local function UpdateGFButton()
   if not _gfButton or not _gfButton._label then return end
+  if _gfButton.SetActive then _gfButton:SetActive(_previewShownByEM2) end
   if _previewShownByEM2 then
-    _gfButton._label:SetTextColor(0.38, 0.65, 1.00, 1)
-    if _gfButton._dot then _gfButton._dot:Show() end
+    _gfButton._label:SetTextColor(0.78, 0.82, 0.92, 1)
+    if _gfButton._dot then
+      if _gfButton.SetActive then _gfButton._dot:Hide() else _gfButton._dot:Show() end
+    end
   else
     _gfButton._label:SetTextColor(0.40, 0.42, 0.50, 0.85)
     if _gfButton._dot then _gfButton._dot:Hide() end
@@ -1256,27 +1262,40 @@ local function InstallHUDToggle()
       local hf = _G.MSUF_EM2_HUD
       if not hf then return end
       local slot = _G.MSUF_EM2_HUD_PreviewAddonSlot
-      _gfButton = CreateFrame("Button", nil, slot or hf)
-      _gfButton:SetSize(62, 27)
+      local parent = slot or hf
+      if SharedUI and type(SharedUI.Button) == "function" then
+        _gfButton = SharedUI.Button(parent, "Groups", 72, 36, {
+          align = "CENTER",
+          skipHistory = true,
+        })
+      else
+        _gfButton = CreateFrame("Button", nil, parent)
+        _gfButton:SetSize(72, 36)
+      end
       if slot then
         _gfButton:SetAllPoints(slot)
       else
         _gfButton:SetPoint("LEFT", hf, "CENTER", -198, 0)
       end
 
-      local hl = _gfButton:CreateTexture(nil, "HIGHLIGHT")
-      hl:SetAllPoints()
-      hl:SetColorTexture(1, 1, 1, 0.05)
+      if not _gfButton._msuf2Label and not _gfButton._label then
+        local hl = _gfButton:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints()
+        hl:SetColorTexture(1, 1, 1, 0.05)
+      end
 
-      local label = _gfButton:CreateFontString(nil, "OVERLAY")
-      label:SetFont(STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF", FontSize("body"), "")
-      label:SetShadowOffset(1, -1)
-      label:SetPoint("CENTER")
-      label:SetText("Groups")
+      local label = _gfButton._msuf2Label or _gfButton._label
+      if not label then
+        label = _gfButton:CreateFontString(nil, "OVERLAY")
+        label:SetFont(STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF", FontSize("body"), "")
+        label:SetShadowOffset(1, -1)
+        label:SetPoint("CENTER")
+        label:SetText("Groups")
+      end
       _gfButton._label = label
 
       local dot = _gfButton:CreateTexture(nil, "OVERLAY")
-      dot:SetSize(46, 2)
+      dot:SetSize(56, 2)
       dot:SetPoint("BOTTOM", _gfButton, "BOTTOM", 0, 2)
       dot:SetColorTexture(0.38, 0.65, 1.00, 0.90)
       _gfButton._dot = dot

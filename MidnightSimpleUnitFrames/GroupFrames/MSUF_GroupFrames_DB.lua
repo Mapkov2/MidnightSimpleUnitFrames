@@ -122,9 +122,11 @@ local _GF_AbbrFallback = _G.AbbreviateLargeNumbers or _G.ShortenNumber
 local _GF_UnitHealthPercent = _G.UnitHealthPercent   --- returns non-secret %
 local _GF_UnitPowerPercent  = _G.UnitPowerPercent    --- returns non-secret %
 local _GF_UnitPowerType     = _G.UnitPowerType
+local _GF_UnitGetTotalAbsorbs = _G.UnitGetTotalAbsorbs
 local _GF_UnitGroupRolesAssigned = _G.UnitGroupRolesAssigned
 local _GF_UnitHealthMissing = _G.UnitHealthMissing   --- secret-safe deficit
 local _GF_CSU_Round = _G.C_StringUtil and _G.C_StringUtil.RoundToNearestString
+local _GF_CSU_TruncateZero = _G.C_StringUtil and _G.C_StringUtil.TruncateWhenZero
 local _GF_ScaleTo100 = _G.CurveConstants and _G.CurveConstants.ScaleTo100
 local _GF_issecretvalue = _G.issecretvalue
 
@@ -133,6 +135,7 @@ local _GF_issecretvalue = _G.issecretvalue
 ---
 GF.HEALTH_TEXT_MODES = {
     { key = "NONE",           label = "None"                           },
+    { key = "ABSORB",         label = "Absorb"                         },
     { key = "PERCENT",        label = "Percent"                        },
     { key = "CURRENT",        label = "Current"                        },
     { key = "FULLVALUE",      label = "Full Value"                     },
@@ -2083,7 +2086,7 @@ end
 --- concatenated with ".." and passed to FontString:SetText (C-side).
 --- Percent comes from UnitHealthPercent / UnitPowerPercent (non-secret).
 ---
---- Signature: FormatHealthText(mode, hp, hpMax, delimiter, reverse, unit, hidePercentSymbol, shortNumbers)
+--- Signature: FormatHealthText(mode, hp, hpMax, delimiter, reverse, unit, hidePercentSymbol, shortNumbers, totalAbsorb)
 --- The optional "unit" parameter enables the secret-safe path.
 --- Preview mode (fake numeric values) omits unit - non-secret path runs.
 ---
@@ -2291,16 +2294,31 @@ local function _GF_FormatByMode(mode, sCur, sMax, delim, pctStr, missingVal, sho
 end
 
 ---
---- FormatHealthText(mode, hp, hpMax, delimiter, reverse [, unit [, hidePercentSymbol [, shortNumbers]]])
+--- FormatHealthText(mode, hp, hpMax, delimiter, reverse [, unit [, hidePercentSymbol [, shortNumbers [, totalAbsorb]]]])
 --- mode : "PERCENT", "CURMAX", "DEFICIT", etc. or "NONE"
 --- hp, hpMax : raw UnitHealth / UnitHealthMax (possibly secret)
 --- delimiter : " / " etc.
 --- reverse : swap mode before formatting
 --- unit : unitId for secret-safe percent (optional, nil in preview)
 ---
-function GF.FormatHealthText(mode, hp, hpMax, delimiter, reverse, unit, hidePercentSymbol, shortNumbers)
+function GF.FormatHealthText(mode, hp, hpMax, delimiter, reverse, unit, hidePercentSymbol, shortNumbers, totalAbsorb)
     if not mode or mode == "NONE" then return "" end
     if reverse then mode = REVERSE_HP_MAP[mode] or mode end
+
+    if mode == "ABSORB" then
+        local value = totalAbsorb
+        if value == nil and unit and _GF_UnitGetTotalAbsorbs then
+            value = _GF_UnitGetTotalAbsorbs(unit)
+        end
+        if value == nil then return "" end
+        local iss = _GF_issecretvalue
+        if iss and iss(value) then
+            if _GF_CSU_TruncateZero then return _GF_CSU_TruncateZero(value) end
+            return _GF_Abbrev(value, shortNumbers)
+        end
+        value = tonumber(value) or 0
+        return value > 0 and _GF_Abbrev(value, shortNumbers) or ""
+    end
 
     local delim = _GF_NormalizeTextDelimiter(delimiter, " / ")
     local hidePct = _GF_ResolveHidePct(hidePercentSymbol)

@@ -1489,7 +1489,7 @@ local function CreateGroup(unit, kind)
     local spec = GROUPS[kind]
     local snapName = "AuraPreview:" .. tostring(unit) .. ":" .. tostring(kind)
     local group = CreateFrame("Button", nil, UIParent, "BackdropTemplate")
-    group:SetFrameStrata("TOOLTIP")
+    group:SetFrameStrata("FULLSCREEN")
     group:SetFrameLevel(900)
     group:SetClampedToScreen(false)
     group:SetMovable(true)

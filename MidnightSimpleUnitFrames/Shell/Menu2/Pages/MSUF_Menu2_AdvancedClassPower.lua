@@ -793,7 +793,8 @@ function Page:BuildHeader()
     if W.RegisterGuidedRegion then W.RegisterGuidedRegion(ctx, head, "Class resource preview and quick setup") end
     head._msuf2Width, b.y = b.width, b.y - 62
     if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(b.y) + 28) end
-    local previewW = min(330, max(180, self.width - 438))
+    local desiredPreviewW = min(330, max(180, self.width - 438))
+    local previewW = min(desiredPreviewW, max(120, self.width - 316))
     local preview = W.Dropdown(head, "Preview resource", CLASS_POWER_PREVIEW_VALUES, previewW)
     RegisterControl(preview, Meta("preview.resource", "setting", {
         settingKey = "menu.classPowerPreviewResource",

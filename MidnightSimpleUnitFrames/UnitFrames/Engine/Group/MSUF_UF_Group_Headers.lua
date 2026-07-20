@@ -215,14 +215,27 @@ local function LayoutParts(kind, conf, configuredCount)
   return w, h, spacing, dx or 0, dy or 0, totalW or w, totalH or h, count
 end
 
-local function ResolveAnchorFrame(conf)
+function GF.ResolveAnchorFrame(conf, owner)
   local name = conf and (conf.anchorToFrame or conf.anchorFrame or conf.relativeTo or conf.anchorTo)
-  if type(name) == "string" and name ~= "" and name ~= "FREE" then
-    local UF = MSUF.UF
-    if UF and UF.frames and UF.frames[name] then return UF.frames[name] end
-    if _G[name] then return _G[name] end
+  if name == "UI_Parent" then name = "UIParent" end
+  if type(name) ~= "string" or name == "" or name == "FREE" or name == "UIParent" or name == "WorldFrame" then
+    return UIParent, nil, nil
   end
-  return UIParent
+  local factory = UF and UF.Factory
+  local resolved, missing
+  if factory and type(factory.ResolveNamedAnchor) == "function" then
+    resolved, missing = factory.ResolveNamedAnchor(name)
+  else
+    resolved = (UF and UF.frames and UF.frames[name]) or _G[name]
+    if not resolved then missing = name end
+  end
+  if not resolved then return UIParent, missing or name, nil end
+  if resolved == owner
+    or (factory and type(factory.AnchorWouldCreateCycle) == "function"
+      and factory.AnchorWouldCreateCycle(owner, resolved)) then
+    return UIParent, nil, name
+  end
+  return resolved, nil, nil
 end
 
 local function AnchorPoint(conf)
@@ -325,7 +338,12 @@ local function EnsureAnchor(key, conf, totalW, totalH)
   anchor:ClearAllPoints()
   local point = AnchorPoint(conf)
   local relativePoint = RelativeAnchorPoint(conf, point)
-  local parent = ResolveAnchorFrame(conf)
+  local parent, missingAnchorName, rejectedAnchorName = GF.ResolveAnchorFrame(conf, anchor)
+  anchor._msufMissingAnchorName = missingAnchorName
+  anchor._msufRejectedAnchorName = rejectedAnchorName
+  if missingAnchorName and type(_G.MSUF_ScheduleLateAnchorReanchor) == "function" then
+    _G.MSUF_ScheduleLateAnchorReanchor()
+  end
   anchor:SetPoint(point, parent, relativePoint, conf.offsetX or 0, conf.offsetY or 0)
   anchor:Show()
   ClampAnchorOnScreen(anchor, point, relativePoint, parent, conf.offsetX or 0, conf.offsetY or 0, totalW, totalH)

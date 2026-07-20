@@ -25,6 +25,7 @@ local Specs = {
     BLIZZARD_FALLBACK_VALUES = VTP "AUTO=Blizzard default|SHOW=Force Blizzard frames|NONE=Hide all frames",
     HEALTH_MODES = VTP "CLASS=Class|GRADIENT=Gradient|CUSTOM=Custom",
     TEXT_MODES = VTP "NONE=None|PERCENT=Percent|CURRENT=Current|FULLVALUE=Full Value|MAX=Max|DEFICIT=Deficit|CURMAX=Current / Max|CURPERCENT=Current / Percent|CURMAXPERCENT=Current / Max / Percent|MAXPERCENT=Max / Percent|PERCENTCUR=Percent / Current|PERCENTMAX=Percent / Max|PERCENTCURMAX=Percent / Current / Max",
+    HEALTH_TEXT_MODES = VTP "NONE=None|ABSORB=Absorb|PERCENT=Percent|CURRENT=Current|FULLVALUE=Full Value|MAX=Max|DEFICIT=Deficit|CURMAX=Current / Max|CURPERCENT=Current / Percent|CURMAXPERCENT=Current / Max / Percent|MAXPERCENT=Max / Percent|PERCENTCUR=Percent / Current|PERCENTMAX=Percent / Max|PERCENTCURMAX=Percent / Current / Max",
     DELIMITER_VALUES = VT(" ", "Space", "  ", "Double Space", " / ", "/", " - ", "-", " : ", ":", " | ", "|"),
     ANCHORS = VTP "LEFT=Left|CENTER=Center|RIGHT=Right",
     AURA_ANCHORS = VTP "TOPLEFT=Top Left|TOPRIGHT=Top Right|BOTTOMLEFT=Bottom Left|BOTTOMRIGHT=Bottom Right",

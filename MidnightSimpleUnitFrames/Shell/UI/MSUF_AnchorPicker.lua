@@ -42,14 +42,51 @@ local function ApplyFontRole(fs, role, fallback, flags)
     return fs
 end
 
-local function IsBlocked(frame)
+local isSecretValue = type(_G.issecretvalue) == "function" and _G.issecretvalue or nil
+local function PlainBool(v)
+    if isSecretValue and isSecretValue(v) then return nil end
+    if v == true or v == 1 then return true end
+    if v == false or v == 0 then return false end
+    return nil
+end
+
+local function ReadFrameMember(frame, key)
+    return frame[key]
+end
+
+-- Forbidden/tainted frames can throw even when IsForbidden() just returned
+-- false. Every method reached by the EnumerateFrames fallback therefore needs
+-- its own protected boundary.
+local function SafeFrameCall(frame, methodName, ...)
+    if not frame then return false, false end
+    local readOK, method = pcall(ReadFrameMember, frame, methodName)
+    if not readOK then return false, false end
+    if type(method) ~= "function" then return true, false end
+    local callOK, a, b, c, d = pcall(method, frame, ...)
+    return callOK, true, a, b, c, d
+end
+
+local function IsForbiddenFrame(frame)
+    if not frame then return true end
+    local ok, hasMethod, forbidden = SafeFrameCall(frame, "IsForbidden")
+    if not ok then return true end
+    if not hasMethod then return false end
+    return PlainBool(forbidden) ~= false
+end
+
+local function IsBlocked(frame, name)
     -- Never let the picker select root/protected/runtime-owned frames as anchors.
     if not frame then return true end
     if frame == UIParent or frame == WorldFrame then return true end
-    if frame.IsForbidden and frame:IsForbidden() then return true end
-    if frame.unitToken then return true end
+    if IsForbiddenFrame(frame) then return true end
+    local unitOK, unitToken = pcall(ReadFrameMember, frame, "unitToken")
+    if not unitOK or (isSecretValue and isSecretValue(unitToken)) or unitToken then return true end
     local ov = _G.MSUF_AnchorPicker
     if ov and (frame == ov or frame == ov._highlight) then return true end
+    if ov and type(ov._isCandidateAllowed) == "function" then
+        local ok, allowed = pcall(ov._isCandidateAllowed, frame, name)
+        if not ok or allowed ~= true then return true end
+    end
     return false
 end
 
@@ -61,9 +98,10 @@ local function IsBlockedName(name)
 end
 
 local function SafeGetRect(frame)
-    if not frame or not frame.GetRect then return nil end
-    if frame.IsForbidden and frame:IsForbidden() then return nil end
-    local l, b, w, h = frame:GetRect()
+    if IsForbiddenFrame(frame) then return nil end
+    local ok, hasMethod, l, b, w, h = SafeFrameCall(frame, "GetRect")
+    if not ok or not hasMethod then return nil end
+    if isSecretValue and (isSecretValue(l) or isSecretValue(b) or isSecretValue(w) or isSecretValue(h)) then return nil end
     l = tonumber(l); b = tonumber(b); w = tonumber(w); h = tonumber(h)
     if not (l and b and w and h) then return nil end
     if w <= 0 or h <= 0 then return nil end
@@ -74,58 +112,32 @@ local function NamedFromFocus(frame)
     -- Mouse focus often lands on anonymous child regions, so climb to a named parent.
     local seen = 0
     while frame and seen < 40 do
-        if not IsBlocked(frame) and frame.GetName then
-            local n = frame:GetName()
-            if not IsBlockedName(n) then return frame, n end
+        local nameOK, hasName, n = SafeFrameCall(frame, "GetName")
+        if nameOK and hasName and not (isSecretValue and isSecretValue(n)) then
+            if not IsBlocked(frame, n) then
+                if not IsBlockedName(n) then return frame, n end
+            end
         end
-        frame = frame.GetParent and frame:GetParent() or nil
+        local parentOK, hasParent, parent = SafeFrameCall(frame, "GetParent")
+        if not parentOK or not hasParent or (isSecretValue and isSecretValue(parent)) then break end
+        frame = parent
         seen = seen + 1
     end
     return nil, nil
 end
 
-local isSecretValue = type(_G.issecretvalue) == "function" and _G.issecretvalue or nil
-local function PlainBool(v)
-    if isSecretValue and isSecretValue(v) then return nil end
-    if v == true or v == 1 then return true end
-    if v == false or v == 0 then return false end
-    return nil
-end
-
 local function SafeVis(frame)
-    if not frame or not frame.IsVisible then return false end
-    return PlainBool(frame:IsVisible()) == true
+    if IsForbiddenFrame(frame) then return false end
+    local ok, hasMethod, visible = SafeFrameCall(frame, "IsVisible")
+    return ok and hasMethod and PlainBool(visible) == true
 end
 
-local lastFrame, lastName
 local function GetNamed()
-    -- Prefer the smallest named frame under the cursor; it is usually the intended anchor.
-    local cx, cy = GetCursorPosition()
-    local sc = UIParent:GetEffectiveScale() or 1
-    cx, cy = cx / sc, cy / sc
-
-    if EnumerateFrames then
-        local bestF, bestN, bestA = nil, nil, nil
-        local fr = EnumerateFrames()
-        while fr do
-            if not (fr.IsForbidden and fr:IsForbidden()) and SafeVis(fr) and not IsBlocked(fr) then
-                local name = fr.GetName and fr:GetName() or nil
-                if not IsBlockedName(name) then
-                    local l, b, w, h = SafeGetRect(fr)
-                    if l and cx >= l and cx <= (l + w) and cy >= b and cy <= (b + h) then
-                        local area = w * h
-                        if (not bestA) or area < bestA then bestF, bestN, bestA = fr, name, area end
-                    end
-                end
-            end
-            fr = EnumerateFrames(fr)
-        end
-        if bestN then lastFrame, lastName = bestF, bestN; return bestF, bestN end
-    end
-
+    -- WoW's focus stack is authoritative and avoids selecting a transient
+    -- decorative child merely because it has the smallest rectangle.
     if GetMouseFoci then
-        local foci = GetMouseFoci()
-        if type(foci) == "table" then
+        local ok, foci = pcall(GetMouseFoci)
+        if ok and type(foci) == "table" then
             for i = 1, #foci do
                 local f, n = NamedFromFocus(foci[i])
                 if n then return f, n end
@@ -133,10 +145,41 @@ local function GetNamed()
         end
     end
     if GetMouseFocus then
-        local f, n = NamedFromFocus(GetMouseFocus())
-        if n then return f, n end
+        local ok, focus = pcall(GetMouseFocus)
+        if ok then
+            local f, n = NamedFromFocus(focus)
+            if n then return f, n end
+        end
     end
-    return lastFrame, lastName
+
+    -- Older clients may not expose a useful focus stack. Fall back to the
+    -- smallest valid named frame currently under the cursor.
+    local cx, cy = GetCursorPosition()
+    local sc = UIParent:GetEffectiveScale() or 1
+    cx, cy = cx / sc, cy / sc
+
+    if EnumerateFrames then
+        local bestF, bestN, bestA = nil, nil, nil
+        local enumOK, fr = pcall(EnumerateFrames)
+        if not enumOK then fr = nil end
+        while fr do
+            if SafeVis(fr) then
+                local nameOK, hasName, name = SafeFrameCall(fr, "GetName")
+                if not nameOK or not hasName or (isSecretValue and isSecretValue(name)) then name = nil end
+                if not IsBlocked(fr, name) and not IsBlockedName(name) then
+                    local l, b, w, h = SafeGetRect(fr)
+                    if l and cx >= l and cx <= (l + w) and cy >= b and cy <= (b + h) then
+                        local area = w * h
+                        if (not bestA) or area < bestA then bestF, bestN, bestA = fr, name, area end
+                    end
+                end
+            end
+            enumOK, fr = pcall(EnumerateFrames, fr)
+            if not enumOK then fr = nil end
+        end
+        if bestN then return bestF, bestN end
+    end
+    return nil, nil
 end
 
 local function EnsureAnchorPicker()
@@ -238,6 +281,7 @@ local function EnsureAnchorPicker()
         if self.UnregisterEvent then self:UnregisterEvent("GLOBAL_MOUSE_DOWN") end
         if self.UnregisterEvent then self:UnregisterEvent("PLAYER_REGEN_DISABLED") end
         self._pickedFrame = nil; self._pickedName = nil; self._highlight:Hide()
+        self._onPick = nil; self._isCandidateAllowed = nil
         if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
     end)
 
