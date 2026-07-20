@@ -143,7 +143,6 @@ local factory = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Factory
 Omits(factory, "UF.ShouldUseMSUFUnitFrame", "factory has no Blizzard-ownership branch")
 
 local profiles = Read("MidnightSimpleUnitFrames/State/MSUF_Profiles.lua")
-Contains(profiles, "dst.useBlizzardFrame = dst.forceHideBlizzard == false", "UUF ForceHideBlizzard maps per unit")
 
 local menu = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua")
 Contains(menu, "Force Blizzard frame on", "Frame Basics exposes Blizzard ownership")

@@ -487,10 +487,10 @@ DefineObject("clear_spec_profile", { spec = SPEC_VALUE }, { required = { "spec" 
 DefineObject("set_spec_profile", { spec = SPEC_VALUE, name = NAME }, { required = { "spec", "name" } })
 DefineObject("export_profile", { kind = PROFILE_EXPORT_KIND })
 DefineObject("import_profile_string import_legacy_profile_string", {
-    value = IMPORT_TEXT, uufBestEffortAccepted = BOOL,
+    value = IMPORT_TEXT,
 }, { required = { "value" } })
 DefineObject("import_profile_string_new", {
-    value = IMPORT_TEXT, name = NAME, uufBestEffortAccepted = BOOL,
+    value = IMPORT_TEXT, name = NAME,
 }, { required = { "value", "name" } })
 
 DefineObject("copy_support_link", { link = SUPPORT_LINK }, { required = { "link" } })

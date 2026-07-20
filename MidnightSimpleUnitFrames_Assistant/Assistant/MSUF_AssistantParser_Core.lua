@@ -20,10 +20,6 @@ A.ParserData = Data
 local CoreData = Data.CORE_PARSER or {}
 local UnitTerms = CoreData.UNIT_TERMS or {}
 
-A.UUFBestEffortConfirmText = A.UUFBestEffortConfirmText or function()
-    return "This is an UnhaltedUnitFrames profile. MSUF can import it as closely as possible. Auras are not imported, and some UUF-only options may not have an MSUF equivalent. Answer with 'yes', 'do it', or 'apply' to import anyway, or 'cancel'."
-end
-
 local function Trim(text)
     text = tostring(text or "")
     return (text:gsub("^%s+", ""):gsub("%s+$", ""))

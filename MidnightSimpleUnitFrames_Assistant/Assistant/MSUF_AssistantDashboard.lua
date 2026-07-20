@@ -124,16 +124,6 @@ local function Trim(text)
     return (text:gsub("^%s+", ""):gsub("%s+$", ""))
 end
 
-local function IsUUFImportString(value)
-    -- UUF imports need an explicit confirmation path because conversion is best-effort and
-    -- cannot promise one-to-one aura or unsupported-setting mapping.
-    local fn = _G.MSUF_IsUUFImportString
-    if type(fn) == "function" then
-        return fn(value) == true
-    end
-    return type(value) == "string" and value:match("^%s*!UUF_") ~= nil
-end
-
 local function SetRegionShown(region, shown)
     if not region then return end
     shown = shown and true or false
@@ -727,14 +717,12 @@ local function RenderLargeTextPanel(ui)
                 return
             end
             A.AddHistory("user", "Profile import pasted from Assistant panel.", "submitted")
-            local isUUF = IsUUFImportString(value)
             local result = A.ExecutePlan({
                 kind = "action",
                 action = action,
-                args = { value = value, uufBestEffortAccepted = isUUF == true },
+                args = { value = value },
                 confirmRequired = true,
-                confirmText = isUUF and A.UUFBestEffortConfirmText() or nil,
-                label = isUUF and "Import UnhaltedUnitFrames profile string" or "Import profile string",
+                label = "Import profile string",
                 summary = "Imports profile data into the active profile.",
             })
             if result and result.text then A.AddHistory("assistant", result.text, result.status, result.summary) end

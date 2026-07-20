@@ -1087,7 +1087,6 @@ end
 local function ParseProfile(text, raw)
     local rawText = tostring(raw or "")
     local compactStart, endIndex, compact = rawText:find("(MSUF%d+:%S+)")
-    local uufStart, uufEndIndex, uufCompact = rawText:find("(!UUF_%S+)")
     local hasProfileWord = ContainsAny(text, ProfileData.PROFILE_WORD_TERMS)
     local hasExportIntent = HasProfileExportIntent(text)
     local safeImportIntent = IsSafeProfileImportIntent(text)
@@ -1124,25 +1123,6 @@ local function ParseProfile(text, raw)
             confirmRequired = true,
             label = legacy and "Import legacy profile string" or (newName and ("Import profile string as " .. tostring(newName)) or "Import profile string"),
             summary = newName and "Imports profile data into a new profile." or "Imports profile data into the active profile.",
-        } or nil
-    end
-    if uufCompact and (hasProfileWord or ContainsAny(text, ProfileData.PROFILE_IMPORT_ACTION_TERMS) or rawLower:find("^%s*!uuf_")) then
-        local newName = ImportNewProfileName(rawText, uufStart, uufEndIndex, text)
-        if not newName then
-            local missingName = BuildMissingImportNewProfileNameAnswer(text)
-            if missingName then return missingName end
-        end
-        local action = Registry and Registry:GetAction(newName and "import_profile_string_new" or "import_profile_string")
-        return action and {
-            kind = "action",
-            action = action,
-            args = newName
-                and { value = uufCompact, name = newName, uufBestEffortAccepted = true }
-                or { value = uufCompact, uufBestEffortAccepted = true },
-            confirmRequired = true,
-            confirmText = A.UUFBestEffortConfirmText(),
-            label = newName and ("Import UnhaltedUnitFrames profile string as " .. tostring(newName)) or "Import UnhaltedUnitFrames profile string",
-            summary = newName and "Imports the UnhaltedUnitFrames profile into a new MSUF profile." or "Imports the UnhaltedUnitFrames profile into the active MSUF profile.",
         } or nil
     end
     if not hasProfile then return nil end
