@@ -15,6 +15,8 @@ if repoRoot == "" then repoRoot = "." end
 local profileSource = repoRoot .. "/MidnightSimpleUnitFrames/Foundation/MSUF_Profiles.lua"
 local statusSource = repoRoot .. "/MidnightSimpleUnitFrames/Core/MSUF_StatusIndicators.lua"
 local previewSource = repoRoot .. "/MidnightSimpleUnitFrames/Menu2/Pages/MSUF_Menu2_UnitPreview.lua"
+local castbarStubSource = repoRoot .. "/MidnightSimpleUnitFrames/Core/MSUF_Castbars_LoDStub.lua"
+local menuBindingsSource = repoRoot .. "/MidnightSimpleUnitFrames/Menu2/MSUF_Menu2_Bindings.lua"
 
 local passed, failed = 0, 0
 local failures = {}
@@ -97,6 +99,7 @@ local mutationGlobals = {
     MSUF_MigrateDispelPriorityProfile = "migrate",
     MSUF_ApplyAllSettings = "applyAll",
     MSUF_ApplyAllSettings_Immediate = "applyImmediate",
+    MSUF_Castbars_InvalidateSettingsCache = "castbarCacheInvalidate",
     MSUF_UFCore_NotifyConfigChanged = "notify",
     MSUF_ApplyModules = "applyModules",
     MSUF_ClassPower_Refresh = "classPower",
@@ -342,6 +345,11 @@ for _, scenario in ipairs(activeSuccessEntrypoints) do
             and active.marker == nil
     )
     Check(scenario.name .. " refreshes status-icon runtime exactly once", (counts.statusRefresh or 0) == 1, counts.statusRefresh)
+    Check(
+        scenario.name .. " invalidates castbar settings cache before runtime apply",
+        (counts.castbarCacheInvalidate or 0) == 1,
+        counts.castbarCacheInvalidate
+    )
     Check(scenario.name .. " emits converter report exactly once", (counts.report or 0) == 1, counts.report)
     Check(
         scenario.name .. " refreshes status icons after core notify and before report",
@@ -371,6 +379,7 @@ do
     local deferFrame = _G.MSUF_ProfileIO_PostProfileDeferFrame
 
     Check("combat UUF import stores successful profile conversion", result == true)
+    Check("combat UUF import invalidates castbar cache before deferral", (counts.castbarCacheInvalidate or 0) == 1, counts.castbarCacheInvalidate)
     Check("combat UUF import does not refresh protected runtime immediately", (counts.statusRefresh or 0) == 0)
     Check("combat UUF import preserves pending status refresh", pending and pending.refreshStatus == true)
     Check("combat UUF import registers deferred runtime apply", deferFrame and deferFrame.registeredEvent == "PLAYER_REGEN_ENABLED")
@@ -378,12 +387,13 @@ do
     inCombat = false
     assert(deferFrame and type(deferFrame.OnEvent) == "function")
     deferFrame:OnEvent("PLAYER_REGEN_ENABLED")
+    Check("deferred UUF apply does not broaden cache invalidation", (counts.castbarCacheInvalidate or 0) == 1, counts.castbarCacheInvalidate)
     Check("deferred UUF apply refreshes status icons after combat", (counts.statusRefresh or 0) == 1, counts.statusRefresh)
     Check("deferred UUF apply consumes pending request", _G.MSUF_ProfileIO_PendingPostProfileRuntimeApply == nil)
 end
 
--- Native MSUF imports retain the established runtime path; the extra icon
--- refresh is requested only by the UUF converter routes above.
+-- Native MSUF full imports retain the established runtime path while dropping
+-- castbar caches once before their same-root replacement.
 do
     local active = FreshProfiles()
     ResetInstrumentation()
@@ -399,11 +409,98 @@ do
     _G.MSUF_TryDecodeCompactString = decodeCompact
 
     Check("native MSUF import still succeeds", result == true)
+    Check("native MSUF full import invalidates castbar cache once", (counts.castbarCacheInvalidate or 0) == 1, counts.castbarCacheInvalidate)
     Check("native MSUF import repairs the UI_Parent alias",
         active.general and active.general.anchorName == "UIParent"
             and active.pet and active.pet.anchorFrameName == "UIParent")
     Check("native MSUF import does not request UUF status refresh", (counts.statusRefresh or 0) == 0, counts.statusRefresh)
     Check("native MSUF import does not load UUF converter", (counts.loadAddon or 0) == 0, counts.loadAddon)
+end
+
+-- Partial snapshots invalidate only when they can change castbar enable data.
+for _, scenario in ipairs({
+    {
+        name = "native castbar snapshot",
+        kind = "castbar",
+        payload = { general = { enablePlayerCastbar = true } },
+        expectedInvalidations = 1,
+    },
+    {
+        name = "native colors snapshot",
+        kind = "colors",
+        payload = { general = { castbarInterruptibleR = 0.25 } },
+        expectedInvalidations = 0,
+    },
+}) do
+    FreshProfiles()
+    ResetInstrumentation()
+    local decodeCompact = _G.MSUF_TryDecodeCompactString
+    _G.MSUF_TryDecodeCompactString = function()
+        return { addon = "MSUF", fmt = 2, kind = scenario.kind, payload = scenario.payload }
+    end
+
+    local result = ImportActive("MSUF3:" .. scenario.name)
+    _G.MSUF_TryDecodeCompactString = decodeCompact
+
+    Check(scenario.name .. " still succeeds", result == true)
+    Check(
+        scenario.name .. " uses scoped castbar invalidation",
+        (counts.castbarCacheInvalidate or 0) == scenario.expectedInvalidations,
+        counts.castbarCacheInvalidate
+    )
+end
+
+-- External native MSUF imports invalidate only when they replace the active
+-- same-root profile; inactive destination profiles cannot affect runtime caches.
+do
+    local active = FreshProfiles()
+    ResetInstrumentation()
+    local decodeCompact = _G.MSUF_TryDecodeCompactString
+    local importedProfile = DeepCopy(convertedTemplate)
+    importedProfile.general = { font = "ExternalNativeFont" }
+    _G.MSUF_TryDecodeCompactString = function()
+        return { addon = "MSUF", fmt = 2, kind = "all", payload = importedProfile }
+    end
+
+    local result, why = ImportExternal("MSUF3:native_external_active_smoke", "Active")
+    _G.MSUF_TryDecodeCompactString = decodeCompact
+
+    Check("external native MSUF active import still succeeds", result == true, why)
+    Check("external native MSUF active import preserves profile root", _G.MSUF_DB == active)
+    Check(
+        "external native MSUF active import stores payload",
+        active.converterMarker == "native-uuf-converter"
+            and active.general and active.general.font == "ExternalNativeFont"
+    )
+    Check(
+        "external native MSUF active import invalidates castbar cache once",
+        (counts.castbarCacheInvalidate or 0) == 1,
+        counts.castbarCacheInvalidate
+    )
+    Check("external native MSUF active import bypasses UUF converter", (counts.convert or 0) == 0, counts.convert)
+end
+
+do
+    local active, other = FreshProfiles()
+    local activeSnapshot = DeepCopy(active)
+    ResetInstrumentation()
+    local decodeCompact = _G.MSUF_TryDecodeCompactString
+    _G.MSUF_TryDecodeCompactString = function()
+        return { addon = "MSUF", fmt = 2, kind = "all", payload = { general = { font = "InactiveNativeFont" } } }
+    end
+
+    local result, why = ImportExternal("MSUF3:native_external_inactive_smoke", "Other")
+    _G.MSUF_TryDecodeCompactString = decodeCompact
+
+    Check("external native MSUF inactive import still succeeds", result == true, why)
+    Check("external native MSUF inactive import preserves target root", _G.MSUF_GlobalDB.profiles.Other == other)
+    Check("external native MSUF inactive import stores payload", other.general and other.general.font == "InactiveNativeFont")
+    Check("external native MSUF inactive import leaves active profile untouched", DeepEqual(active, activeSnapshot))
+    Check(
+        "external native MSUF inactive import bypasses runtime cache invalidation",
+        (counts.castbarCacheInvalidate or 0) == 0,
+        counts.castbarCacheInvalidate
+    )
 end
 
 -- With UUF inactive, an external import must load the dedicated companion and
@@ -605,6 +702,139 @@ do
             placed and table.concat({ tostring(placed[1]), tostring(placed[3]), tostring(placed[4]), tostring(placed[5]) }, "/")
         )
     end
+end
+
+-- The castbar stub keeps two caches for its event hotpath. Exercise the real
+-- stub and the real Menu2 mutation path so same-root imports and leaf toggles
+-- cannot leave the runtime helper on an old enable value.
+do
+    local function General(playerEnabled)
+        return {
+            enablePlayerCastbar = playerEnabled and true or false,
+            enableTargetCastbar = false,
+            enableFocusCastbar = false,
+            enableBossCastbar = false,
+        }
+    end
+
+    local castbarsLoaded = false
+    local loadRequests = 0
+    _G.C_AddOns = {
+        IsAddOnLoaded = function(addon)
+            return addon == "MidnightSimpleUnitFrames_Castbars" and castbarsLoaded
+        end,
+        LoadAddOn = function(addon)
+            if addon == "MidnightSimpleUnitFrames_Castbars" then
+                loadRequests = loadRequests + 1
+                castbarsLoaded = true
+                return true
+            end
+            return false
+        end,
+    }
+    _G.C_Timer = { After = function(_, callback) callback() end }
+    _G.MSUF_ScheduleOnce = nil
+    _G.MSUF_RegisterModule = nil
+    _G.MSUF_IsCastbarEnabledForUnit = nil
+    _G.MSUF_AreAnyCastbarsEnabled = nil
+    _G.MSUF_Castbars_OnSettingsChanged = nil
+    _G.MSUF_Castbars_InvalidateSettingsCache = nil
+    _G.MSUF_EnsureCastbarsLoaded = nil
+    _G.MSUF_Castbars_ForceHideAll = nil
+    _G.MSUF_DB = {
+        general = General(false),
+        boss = { enabled = true },
+        focus = { enabled = true },
+    }
+    _G.MSUF_EnsureDB = function()
+        _G.MSUF_DB = _G.MSUF_DB or {}
+        _G.MSUF_DB.general = _G.MSUF_DB.general or General(false)
+    end
+
+    local stubChunk, stubError = loadfile(castbarStubSource)
+    assert(stubChunk, stubError)
+    stubChunk("MidnightSimpleUnitFrames", {})
+
+    local isEnabled = assert(_G.MSUF_IsCastbarEnabledForUnit)
+    local areAnyEnabled = assert(_G.MSUF_AreAnyCastbarsEnabled)
+    local invalidate = assert(_G.MSUF_Castbars_InvalidateSettingsCache)
+
+    Check("castbar cache fixture starts with player false", isEnabled("player") == false)
+    Check("castbar cache fixture starts with aggregate false", areAnyEnabled() == false)
+
+    local stableRoot = _G.MSUF_DB
+    _G.MSUF_DB.general = General(true)
+    invalidate()
+    Check("castbar cache invalidation preserves profile root", _G.MSUF_DB == stableRoot)
+    Check("castbar cache observes replaced general table", areAnyEnabled() == true)
+    Check("player enable cache observes replaced general table", isEnabled("player") == true)
+
+    _G.MSUF_DB.general.enablePlayerCastbar = false
+    invalidate()
+    Check("castbar cache observes same-table false mutation", areAnyEnabled() == false)
+    Check("player enable cache observes same-table false mutation", isEnabled("player") == false)
+
+    castbarsLoaded = false
+    loadRequests = 0
+    local visualRefreshes = 0
+    local invalidationCalls = 0
+    local settingsChangeCalls = 0
+    local realInvalidate = assert(_G.MSUF_Castbars_InvalidateSettingsCache)
+    local realOnSettingsChanged = assert(_G.MSUF_Castbars_OnSettingsChanged)
+    _G.MSUF_Castbars_InvalidateSettingsCache = function(...)
+        invalidationCalls = invalidationCalls + 1
+        return realInvalidate(...)
+    end
+    _G.MSUF_Castbars_OnSettingsChanged = function(...)
+        settingsChangeCalls = settingsChangeCalls + 1
+        return realOnSettingsChanged(...)
+    end
+    _G.MSUF_UpdateCastbarVisuals = function() visualRefreshes = visualRefreshes + 1 end
+    _G.MSUF2 = nil
+
+    local bindingsChunk, bindingsError = loadfile(menuBindingsSource)
+    assert(bindingsChunk, bindingsError)
+    local menuNS = {}
+    bindingsChunk("MidnightSimpleUnitFrames", menuNS)
+    local menu = assert(menuNS.MSUF2)
+
+    local changed = menu.SetGeneralValue(
+        "enablePlayerCastbar",
+        true,
+        "CASTBAR_CACHE_SMOKE",
+        { castbar = true, preview = false, applyAll = false, notify = false }
+    )
+    Check("Menu2 player castbar enable reports a change", changed == true)
+    Check("Menu2 player castbar enable stores true", _G.MSUF_DB.general.enablePlayerCastbar == true)
+    Check("Menu2 player castbar enable refreshes helper", isEnabled("player") == true)
+    Check("Menu2 player castbar enable refreshes aggregate", areAnyEnabled() == true)
+    Check("Menu2 player castbar enable requests LoD", loadRequests == 1, loadRequests)
+    Check("Menu2 player castbar enable refreshes visuals", visualRefreshes == 1, visualRefreshes)
+    Check("Menu2 player castbar enable invalidates exactly once", invalidationCalls == 1, invalidationCalls)
+    Check("Menu2 player castbar enable applies settings exactly once", settingsChangeCalls == 1, settingsChangeCalls)
+
+    menu.SetGeneralValue(
+        "enablePlayerCastbar",
+        false,
+        "CASTBAR_CACHE_SMOKE",
+        { castbar = true, preview = false, applyAll = false, notify = false }
+    )
+    Check("Menu2 player castbar disable stores false", _G.MSUF_DB.general.enablePlayerCastbar == false)
+    Check("Menu2 player castbar disable refreshes helper", isEnabled("player") == false)
+    Check("Menu2 player castbar disable refreshes aggregate", areAnyEnabled() == false)
+    Check("Menu2 player castbar disable refreshes visuals", visualRefreshes == 2, visualRefreshes)
+    Check("Menu2 player castbar disable invalidates exactly once", invalidationCalls == 2, invalidationCalls)
+    Check("Menu2 player castbar disable applies settings exactly once", settingsChangeCalls == 2, settingsChangeCalls)
+
+    menu.SetGeneralValue(
+        "showPlayerCastTime",
+        false,
+        "CASTBAR_STYLE_SCOPE_SMOKE",
+        { castbar = true, preview = false, applyAll = false, notify = false }
+    )
+    Check("Menu2 castbar style change retains visual refresh", visualRefreshes == 3, visualRefreshes)
+    Check("Menu2 castbar style change bypasses enable invalidation", invalidationCalls == 2, invalidationCalls)
+    Check("Menu2 castbar style change bypasses settings transition", settingsChangeCalls == 2, settingsChangeCalls)
 end
 
 io.write(string.format(

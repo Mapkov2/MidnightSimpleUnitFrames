@@ -627,6 +627,10 @@ function M.SetGeneralValue(key, value, reason, opts)
     if g[key] == value then return false end
     g[key] = value
     if key == "menuLocale" and M.ApplyLocaleSelection then M.ApplyLocaleSelection(value) end
+    if key == "enablePlayerCastbar" then
+        CallGlobal("MSUF_Castbars_InvalidateSettingsCache")
+        CallGlobal("MSUF_Castbars_OnSettingsChanged", reason or "MSUF2")
+    end
     M.RequestGeneralApply(reason or ("MSUF2_" .. tostring(key)), opts)
     return true
 end
