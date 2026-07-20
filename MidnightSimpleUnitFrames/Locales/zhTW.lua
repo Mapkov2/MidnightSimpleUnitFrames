@@ -3635,3 +3635,20 @@ L["YOUR MOVE - Choose what you want to set up."] = "輪到你了 - 選擇要設�
 -- Generated missing non-Assistant core keys for zhTW.
 L["|cffffd200"] = "|cffffd200"
 L["|cffffffff"] = "|cffffffff"
+
+-- 選單主題色（Misc > 選單行為）。
+L["Menu accent color"] = "選單主題色"
+L["Midnight (default)"] = "Midnight（預設）"
+L["Class color"] = "職業顏色"
+L["Custom accent color"] = "自訂主題色"
+L["Ember"] = "Ember"
+L["Jade"] = "Jade"
+L["Violet"] = "Violet"
+L["Reload"] = "重新載入"
+L["Midnight keeps the stock blue accent. Class color follows this character; the accent applies after a UI reload."] = "Midnight 保留預設的藍色主題色。職業顏色跟隨目前角色；主題色在重新載入介面後生效。"
+L["The menu accent color is baked in while the menu is built, so a UI reload is required to apply it.\n\nReload now?"] = "選單主題色在建立選單時寫入，因此需要重新載入介面才能生效。\n\n現在重新載入？"
+L["Menu accent colors"] = "選單主題色"
+L["The MSUF menu can now follow your class color, a curated preset like Ember, Jade or Violet, or any custom color."] = "MSUF 選單現在可以跟隨你的職業顏色、Ember/Jade/Violet 等預設，或任意自訂顏色。"
+L["The whole menu re-tints to your accent - surfaces, navigation and controls - applied after a UI reload."] = "整個選單（表面、導覽與控制項）都會染上你選擇的主題色，重新載入介面後生效。"
+L["class-color, preset and custom accent options for the MSUF menu"] = "MSUF 選單的職業顏色、預設與自訂主題色選項"
+L["Pick a menu accent"] = "選擇選單主題色"

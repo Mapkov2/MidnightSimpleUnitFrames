@@ -3591,3 +3591,20 @@ L["YOUR MOVE - Choose what you want to set up."] = "이제 선택하세요 - 설
 -- Generated missing non-Assistant core keys for koKR.
 L["|cffffd200"] = "|cffffd200"
 L["|cffffffff"] = "|cffffffff"
+
+-- 메뉴 강조 색상 (Misc > 메뉴 동작).
+L["Menu accent color"] = "메뉴 강조 색상"
+L["Midnight (default)"] = "Midnight (기본값)"
+L["Class color"] = "직업 색상"
+L["Custom accent color"] = "사용자 지정 강조 색상"
+L["Ember"] = "Ember"
+L["Jade"] = "Jade"
+L["Violet"] = "Violet"
+L["Reload"] = "다시 불러오기"
+L["Midnight keeps the stock blue accent. Class color follows this character; the accent applies after a UI reload."] = "Midnight는 기본 파란색 강조를 유지합니다. 직업 색상은 이 캐릭터를 따르며, 강조 색상은 UI를 다시 불러온 후 적용됩니다."
+L["The menu accent color is baked in while the menu is built, so a UI reload is required to apply it.\n\nReload now?"] = "메뉴 강조 색상은 메뉴 구성 시 적용되므로 UI를 다시 불러와야 반영됩니다.\n\n지금 다시 불러올까요?"
+L["Menu accent colors"] = "메뉴 강조 색상"
+L["The MSUF menu can now follow your class color, a curated preset like Ember, Jade or Violet, or any custom color."] = "이제 MSUF 메뉴가 직업 색상, Ember·Jade·Violet 같은 프리셋 또는 원하는 사용자 지정 색상을 따를 수 있습니다."
+L["The whole menu re-tints to your accent - surfaces, navigation and controls - applied after a UI reload."] = "메뉴 전체(표면, 탐색, 컨트롤)가 선택한 강조 색상으로 물들며, UI를 다시 불러온 후 적용됩니다."
+L["class-color, preset and custom accent options for the MSUF menu"] = "MSUF 메뉴의 직업 색상, 프리셋 및 사용자 지정 강조 옵션"
+L["Pick a menu accent"] = "메뉴 강조 색상 선택"

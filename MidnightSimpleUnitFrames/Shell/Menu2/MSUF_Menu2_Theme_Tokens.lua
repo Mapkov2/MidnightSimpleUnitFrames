@@ -298,3 +298,225 @@ T.focusVeils.edit = T.focusVeils.edit or {
     { key = "_msuf2FocusWash", layer = "BORDER", subLevel = 0, texture = "bgSmooth", color = { 0.018, 0.030, 0.060, 0.038 }, blend = "BLEND" },
     { key = "_msuf2FocusGrain", layer = "BORDER", subLevel = 1, texture = "bgCharcoal", color = { 0.030, 0.035, 0.060, 0.042 }, blend = "BLEND" },
 }
+
+-- Menu accent override (Misc > Menu behavior). The stock midnight accent family
+-- is rewritten IN PLACE (same tables, alphas preserved) so every consumer that
+-- bakes token colors at build time picks up the chosen accent transparently.
+-- Structural surfaces and the green/red/amber semantics stay untouched. This
+-- must run before the first themed frame is built; a mid-session change needs
+-- a UI reload, mirroring the locale contract.
+local ACCENT_SOURCE_TONES = {
+    { 0.141, 0.365, 0.741 }, -- deep (coreBlue family)
+    { 0.231, 0.510, 0.965 }, -- base (coreGlow family)
+    { 0.357, 0.608, 1.000 }, -- bright (coreHot family)
+}
+local function AccentToneIndex(color)
+    for i = 1, 3 do
+        local ref = ACCENT_SOURCE_TONES[i]
+        if math.abs(color[1] - ref[1]) < 0.006
+            and math.abs(color[2] - ref[2]) < 0.006
+            and math.abs(color[3] - ref[3]) < 0.006 then
+            return i
+        end
+    end
+    return nil
+end
+local function SwapAccentDeep(tbl, tones, depth)
+    for _, value in pairs(tbl) do
+        if type(value) == "table" then
+            if type(value[1]) == "number" and type(value[2]) == "number" and type(value[3]) == "number" then
+                local index = AccentToneIndex(value)
+                if index then
+                    local tone = tones[index]
+                    value[1], value[2], value[3] = tone[1], tone[2], tone[3]
+                    value._msuf2AccentTone = true
+                end
+            elseif depth < 3 then
+                SwapAccentDeep(value, tones, depth + 1)
+            end
+        end
+    end
+end
+local function RGBToHSV(r, g, b)
+    local maxc = math.max(r, g, b)
+    local minc = math.min(r, g, b)
+    local delta = maxc - minc
+    local h = 0
+    if delta > 0 then
+        if maxc == r then
+            h = ((g - b) / delta) % 6
+        elseif maxc == g then
+            h = (b - r) / delta + 2
+        else
+            h = (r - g) / delta + 4
+        end
+        h = h * 60
+    end
+    local s = maxc > 0 and delta / maxc or 0
+    return h, s, maxc
+end
+local function HSVToRGB(h, s, v)
+    local c = v * s
+    local hp = (h % 360) / 60
+    local x = c * (1 - math.abs(hp % 2 - 1))
+    local r, g, b
+    if hp < 1 then r, g, b = c, x, 0
+    elseif hp < 2 then r, g, b = x, c, 0
+    elseif hp < 3 then r, g, b = 0, c, x
+    elseif hp < 4 then r, g, b = 0, x, c
+    elseif hp < 5 then r, g, b = x, 0, c
+    else r, g, b = c, 0, x end
+    local m = v - c
+    return r + m, g + m, b + m
+end
+-- The structural midnight family is a blue-hue ramp; with a custom accent the
+-- whole menu body is rotated onto the accent hue (keeping each color's own
+-- lightness and relative saturation). Semantic colors (ok green, danger red,
+-- warning amber) sit outside the blue band and are skipped by construction.
+local REHUE_MIN_HUE, REHUE_MAX_HUE = 185, 262
+local function LooksLikeColor(t)
+    local n = #t
+    if n < 3 or n > 4 then return false end
+    for i = 1, n do
+        local v = t[i]
+        if type(v) ~= "number" or v < 0 or v > 1 then return false end
+    end
+    return true
+end
+local function RehueColor(c)
+    if c._msuf2AccentTone or c._msuf2Rehued then return end
+    local h, s, v = RGBToHSV(c[1], c[2], c[3])
+    if s <= 0.01 then return end
+    if h < REHUE_MIN_HUE or h > REHUE_MAX_HUE then return end
+    c._msuf2Rehued = true
+    local ns = s * (T._menuAccentSatScale or 1)
+    if ns > 1 then ns = 1 end
+    c[1], c[2], c[3] = HSVToRGB(T._menuAccentHue or 0, ns, v)
+end
+local function RehueDeep(tbl, depth)
+    for _, value in pairs(tbl) do
+        if type(value) == "table" then
+            if LooksLikeColor(value) then
+                RehueColor(value)
+            elseif depth < 4 then
+                RehueDeep(value, depth + 1)
+            end
+        end
+    end
+end
+--- Re-hues a hardcoded blue-family color literal in place (once) when a custom
+--- accent is active. For paint-path literals that live outside the token tables.
+function T.MenuAccentRehueLiteral(color)
+    if type(color) ~= "table" then return color end
+    if T._menuAccentApplied ~= nil and T._menuAccentApplied ~= "midnight"
+        and T._menuAccentHue ~= nil and LooksLikeColor(color) then
+        RehueColor(color)
+    end
+    return color
+end
+function T.MenuAccentHexToRGB(hex)
+    local r, g, b = tostring(hex or ""):match("^%s*#?(%x%x)(%x%x)(%x%x)%s*$")
+    if not r then return nil end
+    return tonumber(r, 16) / 255, tonumber(g, 16) / 255, tonumber(b, 16) / 255
+end
+local function AccentColorByte(value)
+    value = tonumber(value) or 0
+    if value < 0 then value = 0 elseif value > 1 then value = 1 end
+    return math.floor(value * 255 + 0.5)
+end
+function T.MenuAccentRGBToHex(r, g, b)
+    return string.format("%02x%02x%02x", AccentColorByte(r), AccentColorByte(g), AccentColorByte(b))
+end
+local function PlayerClassAccent()
+    local UnitClass = _G.UnitClass
+    local class = type(UnitClass) == "function" and select(2, UnitClass("player")) or nil
+    local colors = _G.CUSTOM_CLASS_COLORS or _G.RAID_CLASS_COLORS
+    local c = class and type(colors) == "table" and colors[class] or nil
+    if type(c) ~= "table" or type(c.r) ~= "number" then return nil end
+    return c.r, c.g, c.b, class
+end
+-- Curated accent presets selectable directly from the dropdown (no picker).
+T.MENU_ACCENT_PRESETS = T.MENU_ACCENT_PRESETS or {
+    ember = "e0603c",
+    jade = "2fbf8f",
+    violet = "8b5cf6",
+}
+--- Stable identity of the accent a given general DB describes. Compared against
+--- `T._menuAccentApplied` to decide whether a change needs a reload prompt.
+function T.MenuAccentSignature(g)
+    local mode = type(g) == "table" and g.menuAccent or nil
+    if mode == "class" then
+        local r, _, _, class = PlayerClassAccent()
+        if r then return "class:" .. tostring(class) end
+    elseif mode == "custom" then
+        local hex = type(g) == "table" and g.menuAccentColor or nil
+        if T.MenuAccentHexToRGB(hex) then return "custom:" .. tostring(hex):lower() end
+    elseif mode ~= nil and T.MENU_ACCENT_PRESETS[mode] then
+        return "preset:" .. tostring(mode)
+    end
+    return "midnight"
+end
+--- True when a non-midnight accent is active this session. Art-based chrome
+--- (panel/nav-pill PNGs with the midnight blue baked into the bitmap) checks
+--- this and falls back to the procedural token-driven rendering instead.
+function T.MenuAccentActive()
+    local applied = T._menuAccentApplied
+    return applied ~= nil and applied ~= "midnight"
+end
+--- Idempotent: applies the saved accent once per session and records what was
+--- applied. Returns nil (and retries on the next call) while the DB is not
+--- readable yet.
+function T.ApplyMenuAccent()
+    if T._menuAccentApplied then return T._menuAccentApplied end
+    local M2 = MSUF.MSUF2
+    local g = M2 and type(M2.GetGeneralDB) == "function" and M2.GetGeneralDB() or nil
+    if type(g) ~= "table" then return nil end
+    local sig = T.MenuAccentSignature(g)
+    T._menuAccentApplied = sig
+    if sig == "midnight" then return sig end
+    local r, gr, b
+    if g.menuAccent == "class" then
+        r, gr, b = PlayerClassAccent()
+    else
+        local presetHex = T.MENU_ACCENT_PRESETS[g.menuAccent]
+        r, gr, b = T.MenuAccentHexToRGB(presetHex or g.menuAccentColor)
+    end
+    if not r then return sig end
+    -- Hover/active states sit on very dark surfaces; lift murky picks so the
+    -- accent stays readable without touching already-bright class colors.
+    local maxComponent = math.max(r, gr, b)
+    if maxComponent <= 0.001 then
+        r, gr, b = 0.45, 0.45, 0.45
+    elseif maxComponent < 0.45 then
+        local lift = 0.45 / maxComponent
+        r, gr, b = r * lift, gr * lift, b * lift
+    end
+    local tones = {
+        { r * 0.72, gr * 0.72, b * 0.72 },
+        { r, gr, b },
+        {
+            math.min(1, r + (1 - r) * 0.30),
+            math.min(1, gr + (1 - gr) * 0.30),
+            math.min(1, b + (1 - b) * 0.30),
+        },
+    }
+    SwapAccentDeep(T.colors, tones, 1)
+    SwapAccentDeep(T.navIconColors, tones, 1)
+    SwapAccentDeep(T.glassVariants, tones, 1)
+    SwapAccentDeep(T.gradients, tones, 1)
+    -- Second pass: rotate the structural midnight body onto the accent hue so
+    -- the whole menu follows the accent, not just interactive highlights. The
+    -- saturation scale keeps a muted accent from over-tinting the surfaces
+    -- (0.761 is the stock coreGlow saturation the ramp was tuned against).
+    local hue, sat = RGBToHSV(r, gr, b)
+    T._menuAccentHue = hue
+    local satScale = sat / 0.761
+    if satScale > 1.05 then satScale = 1.05 end
+    T._menuAccentSatScale = satScale
+    RehueDeep(T.colors, 1)
+    RehueDeep(T.navIconColors, 1)
+    RehueDeep(T.glassVariants, 1)
+    RehueDeep(T.gradients, 1)
+    RehueDeep(T.focusVeils, 1)
+    return sig
+end

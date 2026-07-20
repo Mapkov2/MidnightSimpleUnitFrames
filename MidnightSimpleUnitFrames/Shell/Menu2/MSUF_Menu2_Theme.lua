@@ -1316,7 +1316,10 @@ function T.ApplyGlass(frame, variant)
     if not (frame and frame.CreateTexture) then return frame end
     if T.ApplyGradient and T.gradients and T.gradients[variant or "card"] then T.ApplyGradient(frame, variant or "card", { key = "_msuf2MaterialGradient" }) end
     local spec = GLASS_VARIANTS[variant or "card"] or GLASS_VARIANTS.card
-    local panelAssetApplied = ApplyPanelAsset(frame, variant or "card")
+    -- Panel PNGs carry the midnight blue in the bitmap; with a custom accent
+    -- the procedural glass path below renders from the swapped tokens instead.
+    local panelAssetApplied = not (T.MenuAccentActive and T.MenuAccentActive())
+        and ApplyPanelAsset(frame, variant or "card")
     if panelAssetApplied then
         frame._msuf2GlassVariant = variant
         frame._msuf2GlassApplied = true
@@ -2277,6 +2280,9 @@ local function PaintNavPillGlowArt(art, path, state)
     end
 end
 local function SetNavPillArt(btn, state, baseColor, topAmount, bottomAmount, alphaMul)
+    -- Pill PNGs are midnight-tinted art; with a custom accent the callers'
+    -- superellipse fallback paints from the swapped tokens instead.
+    if T.MenuAccentActive and T.MenuAccentActive() then return false end
     local media = T.media or {}
     local path = media[NAV_PILL_TEX[state or "idle"] or ""]
     if not path then return false end
@@ -2987,4 +2993,16 @@ end
 if MSUF and MSUF.UI and MSUF.UI.BindMenu2Theme then
     MSUF.UI.BindMenu2Theme(T)
     M.UI = MSUF.UI
+end
+
+-- Apply the saved menu accent as soon as SavedVariables are readable so every
+-- themed consumer (window shell, popups, edit-mode chrome) bakes the same
+-- accent family. BuildWindow keeps a guarded second call as a fallback.
+do
+    local accentInit = _G.CreateFrame("Frame")
+    accentInit:RegisterEvent("PLAYER_LOGIN")
+    accentInit:SetScript("OnEvent", function(self)
+        self:UnregisterAllEvents()
+        if type(T.ApplyMenuAccent) == "function" then T.ApplyMenuAccent() end
+    end)
 end

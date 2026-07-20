@@ -1153,7 +1153,27 @@ local function CollapsibleBadgeWidth(text)
     text = tostring(Tr(text or ""))
     return max(48, min(176, floor(22 + (#text * 6.2) + 0.5)))
 end
+-- The badge styles copy token colors at file load, before the menu accent
+-- override runs; re-sync the accent border from the live token and pull the
+-- remaining copies through the accent re-hue on first use.
+local badgeStylesRehued
+local function RefreshBadgeAccentBorder()
+    local live = ThemeColor("coreBlue", nil)
+    local accentBorder = COLLAPSIBLE_BADGE_STYLES.accent and COLLAPSIBLE_BADGE_STYLES.accent.border
+    if live and accentBorder then
+        accentBorder[1], accentBorder[2], accentBorder[3] = live[1], live[2], live[3]
+    end
+    if not badgeStylesRehued and T.MenuAccentRehueLiteral then
+        badgeStylesRehued = true
+        for _, style in pairs(COLLAPSIBLE_BADGE_STYLES) do
+            T.MenuAccentRehueLiteral(style.bg)
+            T.MenuAccentRehueLiteral(style.text)
+            if style.border ~= accentBorder then T.MenuAccentRehueLiteral(style.border) end
+        end
+    end
+end
 function W.SetCollapsibleBadges(section, specs)
+    RefreshBadgeAccentBorder()
     local entry = section and section._msuf2CollapsibleEntry
     local header = entry and entry.header
     if not header then return end
@@ -1558,6 +1578,25 @@ local SWITCH_EDGE_ON = { 0.160, 0.560, 0.760, 0.86 }
 local SWITCH_EDGE_OFF = { 0.095, 0.145, 0.255, 0.82 }
 local SWITCH_KNOB_ON = { 0.380, 0.760, 0.900, 1.00 }
 local SWITCH_KNOB_OFF = { 0.680, 0.760, 0.940, 1.00 }
+-- The literal ON family above is the tuned midnight-cyan look. With a custom
+-- menu accent active, derive the ON family from the (already swapped) accent
+-- token instead so switches follow the accent like every token-driven control.
+local SWITCH_ACCENT_BG_ON = { 0, 0, 0, 0.96 }
+local SWITCH_ACCENT_EDGE_ON = { 0, 0, 0, 0.86 }
+local SWITCH_ACCENT_KNOB_ON = { 0, 0, 0, 1.00 }
+local function SwitchOnColors()
+    if not (T.MenuAccentActive and T.MenuAccentActive()) then
+        return SWITCH_BG_ON, SWITCH_EDGE_ON, SWITCH_KNOB_ON
+    end
+    local a = T.colors.accent or SWITCH_EDGE_ON
+    SWITCH_ACCENT_BG_ON[1], SWITCH_ACCENT_BG_ON[2], SWITCH_ACCENT_BG_ON[3] =
+        a[1] * 0.16, a[2] * 0.16, a[3] * 0.16
+    SWITCH_ACCENT_EDGE_ON[1], SWITCH_ACCENT_EDGE_ON[2], SWITCH_ACCENT_EDGE_ON[3] =
+        a[1] * 0.78, a[2] * 0.78, a[3] * 0.78
+    SWITCH_ACCENT_KNOB_ON[1], SWITCH_ACCENT_KNOB_ON[2], SWITCH_ACCENT_KNOB_ON[3] =
+        min(a[1] + (1 - a[1]) * 0.35, 1), min(a[2] + (1 - a[2]) * 0.35, 1), min(a[3] + (1 - a[3]) * 0.35, 1)
+    return SWITCH_ACCENT_BG_ON, SWITCH_ACCENT_EDGE_ON, SWITCH_ACCENT_KNOB_ON
+end
 local function PlaySwitchFeedback(button)
     if not (button and button._msuf2SwitchFlash) then return end
     local checked = button.GetChecked and button:GetChecked()
@@ -1567,15 +1606,25 @@ local function PlaySwitchFeedback(button)
     button._msuf2SwitchFlash:SetAlpha(alpha)
     PlayWidgetMotion(button._msuf2SwitchFlash, "controlFeedback", { fromAlpha = alpha, toAlpha = 0 })
 end
+local switchOffRehueChecked
 local function RefreshSwitchVisual(button, hover)
     if not button then return end
+    if not switchOffRehueChecked then
+        switchOffRehueChecked = true
+        if T.MenuAccentRehueLiteral then
+            T.MenuAccentRehueLiteral(SWITCH_BG_OFF)
+            T.MenuAccentRehueLiteral(SWITCH_EDGE_OFF)
+            T.MenuAccentRehueLiteral(SWITCH_KNOB_OFF)
+        end
+    end
     hover = hover or button._msuf2SwitchHovered
     local pressed = button._msuf2SwitchPressed and true or false
     local checked = button.GetChecked and button:GetChecked()
     local enabled = not button.IsEnabled or button:IsEnabled()
-    local bg = checked and SWITCH_BG_ON or SWITCH_BG_OFF
-    local br = checked and SWITCH_EDGE_ON or SWITCH_EDGE_OFF
-    local kb = checked and SWITCH_KNOB_ON or SWITCH_KNOB_OFF
+    local onBg, onEdge, onKnob = SwitchOnColors()
+    local bg = checked and onBg or SWITCH_BG_OFF
+    local br = checked and onEdge or SWITCH_EDGE_OFF
+    local kb = checked and onKnob or SWITCH_KNOB_OFF
     local mul = enabled and (pressed and 1.10 or hover and 1.08 or 1) or 1
     local alpha = enabled and 1 or 0.58
     if button._msuf2SwitchFill then button._msuf2SwitchFill:SetVertexColor(min(bg[1] * mul, 1), min(bg[2] * mul, 1), min(bg[3] * mul, 1), bg[4] * alpha) end
