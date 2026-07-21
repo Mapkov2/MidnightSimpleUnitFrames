@@ -2025,16 +2025,12 @@ local function BuildColors(ctx)
 
     if not b._collapsibleStartY then b._collapsibleStartY = b.y end
     local host = CreateFrame("Frame", nil, b.parent)
-    host:SetSize(b.width, 60)
+    host:SetSize(b.width, 1)
     host:SetPoint("TOPLEFT", b.parent, "TOPLEFT", b.x, b.y)
-    local hostEntry = { kind = "section", frame = host, height = 60, gap = 12 }
+    local hostEntry = { kind = "section", frame = host, height = 1, gap = 12 }
     b.layoutEntries[#b.layoutEntries + 1] = hostEntry
-    b.y = b.y - 60 - 12
+    b.y = b.y - 1 - 12
 
-    local categorySpecs = {}
-    for i = 1, #COLOR_PAINTER_CATEGORIES do
-        categorySpecs[COLOR_PAINTER_CATEGORIES[i].key] = COLOR_PAINTER_CATEGORIES[i]
-    end
     local categories = {}
     for i = 1, #COLOR_CATEGORY_ORDER do
         local categoryKey = COLOR_CATEGORY_ORDER[i]
@@ -2043,24 +2039,13 @@ local function BuildColors(ctx)
         container:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
         container:SetHeight(1)
         container:Hide()
-        -- Headline that ties the filtered section list back to the painter tab
-        -- above, so the tab->list relationship stays visible while scrolling.
-        local spec = categorySpecs[categoryKey]
-        if spec then
-            local headline = T.Font(container, "GameFontNormal", TrText(spec.title or ""), T.colors.text, "section")
-            headline:SetPoint("TOPLEFT", container, "TOPLEFT", 2, -4)
-            if spec.subtitle and spec.subtitle ~= "" then
-                local sub = T.Font(container, "GameFontDisableSmall", TrText(spec.subtitle), T.colors.muted)
-                sub:SetPoint("TOPLEFT", container, "TOPLEFT", 2, -22)
-            end
-        end
-        categories[categoryKey] = { key = categoryKey, container = container, height = 60 }
+        categories[categoryKey] = { key = categoryKey, container = container, height = 1 }
     end
 
     local activeKey
     local function UpdateHostHeight()
         local active = categories[activeKey]
-        local height = max(60, tonumber(active and active.height) or 60)
+        local height = max(1, tonumber(active and active.height) or 1)
         hostEntry.height = height
         if host:GetHeight() ~= height then host:SetHeight(height) end
         b:RequestRelayoutCollapsibles()
@@ -2078,9 +2063,9 @@ local function BuildColors(ctx)
             parent = category.container,
             width = b.width,
             contentX = 0,
-            topInset = 34,
+            topInset = 0,
             onContentHeight = function(height)
-                height = max(60, tonumber(height) or 60)
+                height = max(1, tonumber(height) or 1)
                 if category.height == height then return end
                 category.height = height
                 if activeKey == categoryKey then UpdateHostHeight() end
@@ -2115,11 +2100,13 @@ local function BuildColors(ctx)
     ActivateCategory = function(categoryKey)
         if not categories[categoryKey] then categoryKey = COLOR_CATEGORY_ORDER[1] end
         EnsureCategoryBuilt(categoryKey)
-        if activeKey ~= categoryKey then
-            activeKey = categoryKey
-            for key, category in pairs(categories) do
-                category.container:SetShown(key == categoryKey)
-            end
+        activeKey = categoryKey
+        -- Cached page/search/pin lifecycles can leave a locally hidden active
+        -- container behind.  Reconcile every time, including same-category
+        -- activation, instead of relying on the key having changed.
+        if host.Show then host:Show() end
+        for key, category in pairs(categories) do
+            category.container:SetShown(key == categoryKey)
         end
         UpdateHostHeight()
     end

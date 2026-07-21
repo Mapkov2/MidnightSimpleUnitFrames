@@ -1001,17 +1001,7 @@ local function BuildPageEntry(key, hidden)
     local specVersion = spec and spec.version
     local layoutVersion = M._msuf2LayoutVersion or 0
     local cached = M.cache and M.cache[key]
-    if cached and cached.layoutVersion ~= layoutVersion then
-        if M.InvalidatePage then
-            M.InvalidatePage(key)
-        else
-            if cached.wrapper and cached.wrapper.Hide then cached.wrapper:Hide() end
-            if cached.wrapper and cached.wrapper.SetParent then cached.wrapper:SetParent(nil) end
-            M.cache[key] = nil
-        end
-        cached = nil
-    end
-    if cached and specVersion and cached.version ~= specVersion then
+    if cached and (cached.layoutVersion ~= layoutVersion or (specVersion and cached.version ~= specVersion)) then
         if M.InvalidatePage then
             M.InvalidatePage(key)
         else

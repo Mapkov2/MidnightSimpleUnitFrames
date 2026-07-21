@@ -2511,7 +2511,10 @@ end
 
 local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
     local title = kind == "debuff" and "Debuff Layout" or "Buff Layout"
-    local section = b:Section(title, 190)
+    -- Stufe-1 pilot: this section renders through the uniform W.SettingsRows
+    -- grid (fixed cell metrics, per-value reset) instead of hand-placed
+    -- offsets. Control identities, setters and apply reasons are unchanged.
+    local section = b:Section(title, 208)
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48
     local gap = 12
@@ -2522,43 +2525,102 @@ local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
         AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(kind) .. ".layout.visible", nil,
             "auras3." .. unit .. "." .. kind .. ".visible"))
     enable._msuf2GroupFrameGateAlwaysEnabled = true
-    local dropdownW = max(180, floor((inner - 126 - gap * 2) / 2))
-    local anchorX = 24 + 126 + gap
-    local growthX = anchorX + dropdownW + gap
-    controls[#controls + 1] = BindDropdown(ctx, section, "Anchor", anchorX, -34,
-        type(Model.AuraAnchorValues) == "function" and Model.AuraAnchorValues() or GFAnchorValues(), dropdownW,
-        function() return type(Model.ReadLaneAnchor) == "function" and Model.ReadLaneAnchor(unit, kind) or (kind == "buff" and "BOTTOMRIGHT" or "TOPLEFT") end,
-        function(v) if type(Model.WriteLaneAnchor) == "function" then Model.WriteLaneAnchor(unit, kind, v); ApplyUnit(ctx, unit, "AURAS3_UNIT_ANCHOR") end end,
-        AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(kind) .. ".layout.anchor"))
-    controls[#controls + 1] = BindDropdown(ctx, section, "Growth", growthX, -34,
-        type(Model.LaneGrowthValues) == "function" and Model.LaneGrowthValues() or Model.GrowthValues(), dropdownW,
-        function() return type(Model.ReadLaneGrowthPair) == "function" and Model.ReadLaneGrowthPair(unit, kind) or Model.ReadLaneGrowth(unit, kind) end,
-        function(v)
-            if type(Model.WriteLaneGrowthPair) == "function" then Model.WriteLaneGrowthPair(unit, kind, v) else Model.WriteLaneGrowth(unit, kind, v) end
-            ApplyUnit(ctx, unit, "AURAS3_UNIT_GROWTH")
-        end,
-        AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(kind) .. ".layout.growth"))
-    local col4 = floor((inner - gap * 3) / 4)
-    local function Number(label, col, y, minValue, maxValue, getValue, setValue, semanticKey)
-        local control = BindSlider(ctx, section, label, 24 + (col - 1) * (col4 + gap), y, minValue, maxValue, 1, col4, getValue, setValue,
-            AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(kind) .. ".layout." .. AuraCatalogToken(semanticKey)))
-        controls[#controls + 1] = control
-        return control
+    local function LaneMeta(row, pathSuffix)
+        local meta = AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(kind) .. ".layout." .. pathSuffix)
+        for key, value in pairs(meta) do
+            if row[key] == nil then row[key] = value end
+        end
+        return row
     end
-    Number("X", 1, -92, -300, 300, function() return Model.ReadNumber(unit, LaneXKey(kind), 0, -4096, 4096) end,
-        function(v) Model.WriteNumber(unit, LaneXKey(kind), v, -4096, 4096); ApplyUnit(ctx, unit, "AURAS3_UNIT_X") end, "offset-x")
-    Number("Y", 2, -92, -300, 300, function() return Model.ReadNumber(unit, LaneYKey(kind), LaneDefaultY(kind), -4096, 4096) end,
-        function(v) Model.WriteNumber(unit, LaneYKey(kind), v, -4096, 4096); ApplyUnit(ctx, unit, "AURAS3_UNIT_Y") end, "offset-y")
-    Number("Max", 3, -92, 0, 80, function() return Model.ReadNumber(unit, LaneMaxKey(kind), LaneDefaultMax(kind), 0, 80) end,
-        function(v) Model.WriteNumber(unit, LaneMaxKey(kind), v, 0, 80); ApplyUnit(ctx, unit, "AURAS3_UNIT_MAX") end, "max-icons")
-    Number("Size", 4, -92, 10, 80, function() return Model.ReadNumber(unit, LaneSizeKey(kind), 26, 1, 128) end,
-        function(v) Model.WriteNumber(unit, LaneSizeKey(kind), v, 1, 128); ApplyUnit(ctx, unit, "AURAS3_UNIT_SIZE") end, "icon-size")
-    local perRowControl = Number("Per row", 1, -146, 1, 40, function() return Model.ReadLanePerRow(unit, kind) end,
-        function(v) Model.WriteLanePerRow(unit, kind, v); ApplyUnit(ctx, unit, "AURAS3_UNIT_PER_ROW") end, "per-row")
-    Number("Gap", 2, -146, 0, 12, function() return Model.ReadNumber(unit, "spacing", 2, 0, 64) end,
-        function(v) Model.WriteNumber(unit, "spacing", v, 0, 64); ApplyUnit(ctx, unit, "AURAS3_UNIT_SPACING") end, "spacing")
-    Number("Layer (0-30)", 3, -146, 0, 30, function() return type(Model.ReadLaneLayer) == "function" and Model.ReadLaneLayer(unit, kind) or (kind == "buff" and 5 or 6) end,
-        function(v) if type(Model.WriteLaneLayer) == "function" then Model.WriteLaneLayer(unit, kind, v); ApplyUnit(ctx, unit, "AURAS3_UNIT_LAYER") end end, "layer")
+    local defaultAnchor = kind == "buff" and "BOTTOMRIGHT" or "TOPLEFT"
+    local anchorRows = W.SettingsRows(ctx, section, {
+        x = 24 + 126 + gap, y = -34, width = inner - 126 - gap, columns = 2, colGap = gap,
+        rows = {
+            LaneMeta({
+                kind = "dropdown", label = "Anchor", id = "anchor",
+                values = function()
+                    return type(Model.AuraAnchorValues) == "function" and Model.AuraAnchorValues() or GFAnchorValues()
+                end,
+                get = function()
+                    return type(Model.ReadLaneAnchor) == "function" and Model.ReadLaneAnchor(unit, kind) or defaultAnchor
+                end,
+                set = function(v)
+                    if type(Model.WriteLaneAnchor) == "function" then
+                        Model.WriteLaneAnchor(unit, kind, v)
+                        ApplyUnit(ctx, unit, "AURAS3_UNIT_ANCHOR")
+                    end
+                end,
+                reset = function()
+                    if type(Model.WriteLaneAnchor) == "function" then
+                        Model.WriteLaneAnchor(unit, kind, defaultAnchor)
+                        ApplyUnit(ctx, unit, "AURAS3_UNIT_ANCHOR")
+                    end
+                end,
+            }, "anchor"),
+            LaneMeta({
+                kind = "dropdown", label = "Growth", id = "growth",
+                values = function()
+                    return type(Model.LaneGrowthValues) == "function" and Model.LaneGrowthValues() or Model.GrowthValues()
+                end,
+                get = function()
+                    return type(Model.ReadLaneGrowthPair) == "function" and Model.ReadLaneGrowthPair(unit, kind) or Model.ReadLaneGrowth(unit, kind)
+                end,
+                set = function(v)
+                    if type(Model.WriteLaneGrowthPair) == "function" then Model.WriteLaneGrowthPair(unit, kind, v) else Model.WriteLaneGrowth(unit, kind, v) end
+                    ApplyUnit(ctx, unit, "AURAS3_UNIT_GROWTH")
+                end,
+            }, "growth"),
+        },
+    })
+    local function NumberRow(label, id, semanticKey, minValue, maxValue, defaultValue, getValue, setValue, resetValue)
+        return LaneMeta({
+            kind = "slider", label = label, id = id,
+            min = minValue, max = maxValue, step = 1, default = defaultValue,
+            get = getValue, set = setValue,
+            reset = resetValue and function() setValue(resetValue()) end or nil,
+        }, AuraCatalogToken(semanticKey))
+    end
+    local numberRows = W.SettingsRows(ctx, section, {
+        x = 24, y = -92, width = inner, columns = 4, colGap = gap,
+        rows = {
+            NumberRow("X", "x", "offset-x", -300, 300, 0,
+                function() return Model.ReadNumber(unit, LaneXKey(kind), 0, -4096, 4096) end,
+                function(v) Model.WriteNumber(unit, LaneXKey(kind), v, -4096, 4096); ApplyUnit(ctx, unit, "AURAS3_UNIT_X") end,
+                function() return 0 end),
+            NumberRow("Y", "y", "offset-y", -300, 300, LaneDefaultY(kind),
+                function() return Model.ReadNumber(unit, LaneYKey(kind), LaneDefaultY(kind), -4096, 4096) end,
+                function(v) Model.WriteNumber(unit, LaneYKey(kind), v, -4096, 4096); ApplyUnit(ctx, unit, "AURAS3_UNIT_Y") end,
+                function() return LaneDefaultY(kind) end),
+            NumberRow("Max", "max", "max-icons", 0, 80, LaneDefaultMax(kind),
+                function() return Model.ReadNumber(unit, LaneMaxKey(kind), LaneDefaultMax(kind), 0, 80) end,
+                function(v) Model.WriteNumber(unit, LaneMaxKey(kind), v, 0, 80); ApplyUnit(ctx, unit, "AURAS3_UNIT_MAX") end,
+                function() return LaneDefaultMax(kind) end),
+            NumberRow("Size", "size", "icon-size", 10, 80, 26,
+                function() return Model.ReadNumber(unit, LaneSizeKey(kind), 26, 1, 128) end,
+                function(v) Model.WriteNumber(unit, LaneSizeKey(kind), v, 1, 128); ApplyUnit(ctx, unit, "AURAS3_UNIT_SIZE") end,
+                function() return 26 end),
+            NumberRow("Per row", "perRow", "per-row", 1, 40, nil,
+                function() return Model.ReadLanePerRow(unit, kind) end,
+                function(v) Model.WriteLanePerRow(unit, kind, v); ApplyUnit(ctx, unit, "AURAS3_UNIT_PER_ROW") end,
+                nil),
+            NumberRow("Gap", "gap", "spacing", 0, 12, 2,
+                function() return Model.ReadNumber(unit, "spacing", 2, 0, 64) end,
+                function(v) Model.WriteNumber(unit, "spacing", v, 0, 64); ApplyUnit(ctx, unit, "AURAS3_UNIT_SPACING") end,
+                function() return 2 end),
+            NumberRow("Layer (0-30)", "layer", "layer", 0, 30, kind == "buff" and 5 or 6,
+                function() return type(Model.ReadLaneLayer) == "function" and Model.ReadLaneLayer(unit, kind) or (kind == "buff" and 5 or 6) end,
+                function(v) if type(Model.WriteLaneLayer) == "function" then Model.WriteLaneLayer(unit, kind, v); ApplyUnit(ctx, unit, "AURAS3_UNIT_LAYER") end end,
+                function() return kind == "buff" and 5 or 6 end),
+        },
+    })
+    local function CollectRows(result)
+        if not result then return end
+        for i = 1, #result.list do controls[#controls + 1] = result.list[i] end
+        for i = 1, #result.resets do controls[#controls + 1] = result.resets[i] end
+    end
+    CollectRows(anchorRows)
+    CollectRows(numberRows)
+    local perRowControl = numberRows and numberRows.controls and numberRows.controls.perRow
     M.TrackRefresh(ctx, function()
         local shown = UnitLaneShown(unit, kind)
         W.SetControlEnabled(enable, true)
@@ -2566,7 +2628,9 @@ local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
         local growth = type(Model.ReadLaneGrowthPair) == "function" and Model.ReadLaneGrowthPair(unit, kind)
             or Model.ReadLaneGrowth(unit, kind)
         growth = tostring(growth or ""):upper()
-        W.SetControlEnabled(perRowControl, shown and growth ~= "UP" and growth ~= "DOWN")
+        if perRowControl then
+            W.SetControlEnabled(perRowControl, shown and growth ~= "UP" and growth ~= "DOWN")
+        end
     end)
 end
 
