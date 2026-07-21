@@ -14,6 +14,7 @@ local MASK_PATH_1X = MASK_ROOT .. "rounded_bar_1x.tga"
 local EDGE_PATH_4X = MASK_ROOT .. "rounded_bar_edge_4x.tga"
 local WHITE8 = "Interface\\Buttons\\WHITE8x8"
 
+local CreateFrame = _G.CreateFrame
 local InCombatLockdown = _G.InCombatLockdown
 
 local BASE_BORDER_R, BASE_BORDER_G, BASE_BORDER_B, BASE_BORDER_A = 0, 0, 0, 1
@@ -122,24 +123,31 @@ local function RoundedMouseoverEnabled()
 end
 
 local _mouseoverR, _mouseoverG, _mouseoverB, _mouseoverA = 1, 1, 1, 0.78
+local _mouseoverStyle, _mouseoverSize = "GRADIENT", 6
 local function UpdateMouseoverEdgeColor()
   local gen = _G.MSUF_DB and _G.MSUF_DB.general
+  _mouseoverStyle = gen and tostring(gen.highlightStyle or "GRADIENT"):upper() or "GRADIENT"
+  if _mouseoverStyle ~= "BORDER" then _mouseoverStyle = "GRADIENT" end
+  _mouseoverSize = math.floor((tonumber(gen and gen.highlightThickness) or 6) + 0.5)
+  if _mouseoverSize < 1 then _mouseoverSize = 1 end
+  if _mouseoverSize > 16 then _mouseoverSize = 16 end
+  _mouseoverA = _mouseoverStyle == "BORDER" and 1 or 0.78
   if gen then
     local c = gen.highlightColor
     if type(c) == "table" and c[1] then
-      _mouseoverR, _mouseoverG, _mouseoverB, _mouseoverA = c[1], c[2] or 1, c[3] or 1, 0.78
+      _mouseoverR, _mouseoverG, _mouseoverB = c[1], c[2] or 1, c[3] or 1
       return
     end
     if type(c) == "string" then
       local colors = (MSUF and MSUF.MSUF_FONT_COLORS) or _G.MSUF_FONT_COLORS
       local cc = colors and colors[c]
       if cc then
-        _mouseoverR, _mouseoverG, _mouseoverB, _mouseoverA = cc[1], cc[2], cc[3], 0.78
+        _mouseoverR, _mouseoverG, _mouseoverB = cc[1], cc[2], cc[3]
         return
       end
     end
   end
-  _mouseoverR, _mouseoverG, _mouseoverB, _mouseoverA = 1, 1, 1, 0.72
+  _mouseoverR, _mouseoverG, _mouseoverB = 1, 1, 1
 end
 
 local function ResolveMouseoverEdgeColor()
@@ -418,7 +426,7 @@ local function ShowRoundedEdgeStack(owner, baseEdge, poolKey)
     if baseEdge then baseEdge:Show() end
     return
   end
-  local count = ClampEdgeSize(stack._msufCount, 1, 8)
+  local count = ClampEdgeSize(stack._msufCount, 1, 16)
   for i = 1, count do
     local edge = (i == 1) and baseEdge or stack[i]
     if edge and edge.Show then edge:Show() end
@@ -435,9 +443,36 @@ local function SetRoundedEdgeStackColor(owner, baseEdge, poolKey, r, g, b, a)
   end
 end
 
+local function SetRoundedMouseoverStackColor(owner, baseEdge, poolKey, r, g, b, a)
+  if _mouseoverStyle ~= "GRADIENT" then
+    return SetRoundedEdgeStackColor(owner, baseEdge, poolKey, r, g, b, a)
+  end
+  local stack = owner and owner[poolKey]
+  local count = ClampEdgeSize(stack and stack._msufCount, 1, 16)
+  for i = 1, count do
+    local edge = (i == 1) and baseEdge or stack and stack[i]
+    if edge and edge.SetVertexColor then
+      edge:SetVertexColor(r, g, b, a * ((count - i + 1) / count))
+    end
+  end
+end
+
+local function EnsureRoundedHoverContainer(owner, parent, key)
+  if not (owner and parent) then return nil end
+  local container = owner[key]
+  if container then return container end
+  if not (CreateFrame and CanCreateRoundedRegion(container)) then return nil end
+  container = CreateFrame("Frame", nil, parent)
+  container:SetAllPoints(parent)
+  if container.EnableMouse then container:EnableMouse(false) end
+  container:Hide()
+  owner[key] = container
+  return container
+end
+
 local function ApplyRoundedEdgeStack(owner, parent, baseEdge, anchor, thickness, poolKey, maskedKey, layer, subLevel)
   if not (owner and parent and baseEdge and anchor) then return false end
-  local count = ClampEdgeSize(thickness, 0, 8)
+  local count = ClampEdgeSize(thickness, 0, 16)
   if count <= 0 then
     HideRoundedEdgeStack(owner, baseEdge, poolKey)
     return false
@@ -560,47 +595,43 @@ end
 
 local function ApplyUnitRoundedHoverEdge(f, enabled)
   if not f then return nil end
+  local container = f._msufRUF_HoverContainer
   local edge = f._msufRUF_HoverEdge
   if not enabled then
-    if edge then edge:Hide() end
+    if container then container:Hide() elseif edge then edge:Hide() end
     return edge
   end
 
   local anchor = f.bg or f
+  if f.highlightBorder and f.highlightBorder.Hide then f.highlightBorder:Hide() end
+  container = container or EnsureRoundedHoverContainer(f, f, "_msufRUF_HoverContainer")
+  if not container then return nil end
   if not edge then
     if not CanCreateRoundedRegion(edge) then return nil end
-    edge = f:CreateTexture(nil, "OVERLAY", nil, 7)
+    edge = container:CreateTexture(nil, "OVERLAY", nil, 7)
     SE_SnapOff(edge)
     f._msufRUF_HoverEdge = edge
   end
 
   ClearMaskForTexture(f, "_msufRUF_MaskedTextures", edge)
   SetRoundedEdgeTexture(edge)
-  local thickness = ResolveUnitOutlineThickness(f)
-  if thickness < 1 then thickness = 1 end
-  ApplyRoundedEdgeStack(f, f, edge, anchor, thickness, "_msufRUF_HoverEdgeStack", "_msufRUF_MaskedTextures", "OVERLAY", 7)
+  local thickness = _mouseoverSize
+  ApplyRoundedEdgeStack(f, container, edge, anchor, thickness, "_msufRUF_HoverEdgeStack", "_msufRUF_MaskedTextures", "OVERLAY", 7)
   local r, g, b, a = ResolveMouseoverEdgeColor()
-  SetRoundedEdgeStackColor(f, edge, "_msufRUF_HoverEdgeStack", r, g, b, a)
-  HideRoundedEdgeStack(f, edge, "_msufRUF_HoverEdgeStack")
+  SetRoundedMouseoverStackColor(f, edge, "_msufRUF_HoverEdgeStack", r, g, b, a)
+  container:Hide()
   return edge
 end
 
 local function HandleUnitMouseover(f, active)
   if not (f and unitMouseoverHotEnabled) then return false end
-  if f.highlightBorder and f.highlightBorder.Hide then
-    f.highlightBorder:Hide()
+  local container = f._msufRUF_HoverContainer
+  if not container and not IsCombatLocked() then
+    ApplyUnitRoundedHoverEdge(f, true)
+    container = f._msufRUF_HoverContainer
   end
-
-  local edge = f._msufRUF_HoverEdge
-  if not edge and not IsCombatLocked() then
-    edge = ApplyUnitRoundedHoverEdge(f, true)
-  end
-  if edge then
-    if active then
-      ShowRoundedEdgeStack(f, edge, "_msufRUF_HoverEdgeStack")
-    else
-      HideRoundedEdgeStack(f, edge, "_msufRUF_HoverEdgeStack")
-    end
+  if container then
+    if active then container:Show() else container:Hide() end
   end
   return true
 end
@@ -645,9 +676,6 @@ local ResolveGroupOutlineThickness
 
 local function ResolveGroupEdgeColor(f)
   local r, g, b, a = ResolveBaseEdgeColor(f)
-  if RoundedMouseoverEnabled() and f and f._msufRUF_GroupMouseoverActive then
-    return ResolveMouseoverEdgeColor()
-  end
   local active = f and f._msufGFHighlightBorder or nil
   if active and active._msufHLActivePrio then
     r = active._msufHLR or r
@@ -663,11 +691,6 @@ local function ResolveGroupEdgeThickness(f)
   if active and active._msufHLActivePrio then
     return ClampEdgeSize(active._msufHLEdgeSz or active._msufHLOfs, 2, 30)
   end
-  if RoundedMouseoverEnabled() and f and f._msufRUF_GroupMouseoverActive then
-    local t = ResolveGroupOutlineThickness and ResolveGroupOutlineThickness(f) or 1
-    if t < 1 then t = 1 end
-    return t
-  end
   return ResolveGroupOutlineThickness and ResolveGroupOutlineThickness(f) or 1
 end
 
@@ -675,8 +698,7 @@ local function SetGroupRoundedEdgeColor(f)
   if not f then return false end
   local edge = f._msufRGF_Edge
   local thickness = ResolveGroupEdgeThickness(f)
-  local active = (RoundedMouseoverEnabled() and f._msufRUF_GroupMouseoverActive == true)
-    or (f._msufGFHighlightBorder and f._msufGFHighlightBorder._msufHLActivePrio)
+  local active = f._msufGFHighlightBorder and f._msufGFHighlightBorder._msufHLActivePrio
   if not edge and thickness <= 0 and not active then
     return true
   end
@@ -706,8 +728,7 @@ ApplyGroupRoundedEdge = function(f, enabled)
   local anchor = f.barGroup or f
   local parent = f.barGroup or f
   local thickness = ResolveGroupEdgeThickness(f)
-  local active = (RoundedMouseoverEnabled() and f._msufRUF_GroupMouseoverActive == true)
-    or (f._msufGFHighlightBorder and f._msufGFHighlightBorder._msufHLActivePrio)
+  local active = f._msufGFHighlightBorder and f._msufGFHighlightBorder._msufHLActivePrio
   if not edge then
     if not CanCreateRoundedRegion(edge) then return end
     edge = parent:CreateTexture(nil, "BACKGROUND", nil, -8)
@@ -721,6 +742,32 @@ ApplyGroupRoundedEdge = function(f, enabled)
   if not ApplyRoundedEdgeStack(f, parent, edge, anchor, thickness, "_msufRGF_EdgeStack", "_msufRGF_MaskedTextures", "BACKGROUND", -8) then return edge end
   local r, g, b, a = ResolveGroupEdgeColor(f)
   SetRoundedEdgeStackColor(f, edge, "_msufRGF_EdgeStack", r, g, b, a)
+  return edge
+end
+
+local function ApplyGroupRoundedHoverEdge(f, enabled)
+  if not f then return nil end
+  local container = f._msufRGF_HoverContainer
+  local edge = f._msufRGF_HoverEdge
+  if not enabled then
+    if container then container:Hide() else HideRoundedEdgeStack(f, edge, "_msufRGF_HoverEdgeStack") end
+    return edge
+  end
+  local parent = f.barGroup or f
+  if f.highlightBorder and f.highlightBorder.Hide then f.highlightBorder:Hide() end
+  container = container or EnsureRoundedHoverContainer(f, parent, "_msufRGF_HoverContainer")
+  if not container then return nil end
+  if not edge then
+    if not CanCreateRoundedRegion(edge) then return nil end
+    edge = container:CreateTexture(nil, "OVERLAY", nil, 7)
+    SE_SnapOff(edge)
+    f._msufRGF_HoverEdge = edge
+  end
+  if not ApplyRoundedEdgeStack(f, container, edge, parent, _mouseoverSize,
+      "_msufRGF_HoverEdgeStack", "_msufRGF_MaskedTextures", "OVERLAY", 7) then return edge end
+  local r, g, b, a = ResolveMouseoverEdgeColor()
+  SetRoundedMouseoverStackColor(f, edge, "_msufRGF_HoverEdgeStack", r, g, b, a)
+  container:Hide()
   return edge
 end
 
@@ -938,18 +985,14 @@ local function SuppressGroupSquareBorders(f)
 end
 
 local function HandleGroupMouseover(f, active)
-  if not f then return false end
-  if not groupMouseoverHotEnabled then
-    f._msufRUF_GroupMouseoverActive = nil
-    return false
+  if not (f and groupMouseoverHotEnabled) then return false end
+  local container = f._msufRGF_HoverContainer
+  if not container and not IsCombatLocked() then
+    ApplyGroupRoundedHoverEdge(f, true)
+    container = f._msufRGF_HoverContainer
   end
-  if not f._msufRGF_Edge and IsCombatLocked() then return false end
-  if f.highlightBorder and f.highlightBorder.Hide then
-    f.highlightBorder:Hide()
-  end
-  f._msufRUF_GroupMouseoverActive = active and true or nil
-  if not SetGroupRoundedEdgeColor(f) and not IsCombatLocked() then
-    ApplyGroupRoundedEdge(f, true)
+  if container then
+    if active then container:Show() else container:Hide() end
   end
   return true
 end
@@ -1056,11 +1099,11 @@ ApplyToGroupFrame = function(f, kind)
 
   if not enabled then
     f._msufRUF_SuppressGFHover = nil
-    f._msufRUF_GroupMouseoverActive = nil
     f._msufRGF_GlowAnchor = nil
     local hadRounded = f._msufRGF_Background or f._msufRGF_Edge or f._msufRoundedGFShell or f._msufRGF_MaskedTextures
     ClearGroupMasks(f)
     ApplyGroupRoundedEdge(f, false)
+    ApplyGroupRoundedHoverEdge(f, false)
     if f._msufRGF_Background then f._msufRGF_Background:Hide() end
     SE_ApplyGroupFrameShellVisuals(f, false)
     ApplyGroupBackdrop(f, kind, false)
@@ -1082,9 +1125,6 @@ ApplyToGroupFrame = function(f, kind)
 
   f._msufRGFDisableRestoreQueued = nil
   local mouseoverEnabled = RoundedMouseoverEnabled()
-  if not mouseoverEnabled then
-    f._msufRUF_GroupMouseoverActive = nil
-  end
   f._msufRUF_SuppressGFHover = mouseoverEnabled and true or nil
   local combatLocked = IsCombatLocked()
   if combatLocked and not f._msufRGF_MaskedTextures then
@@ -1103,6 +1143,7 @@ ApplyToGroupFrame = function(f, kind)
 
   BeginMaskRefresh(f, "_msufRGF_MaskedTextures")
   ApplyGroupRoundedEdge(f, true)
+  ApplyGroupRoundedHoverEdge(f, mouseoverEnabled)
   if f._msufRGF_Background then MaskGroupTexture(f, f._msufRGF_Background, f.barGroup) end
   if f.healthBg then MaskGroupTexture(f, f.healthBg, f.health or f.healthBg) end
   if roundPower and f.powerBg then MaskGroupTexture(f, f.powerBg, f.power or f.powerBg) end
