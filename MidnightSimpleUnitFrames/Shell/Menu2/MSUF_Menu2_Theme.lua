@@ -283,12 +283,6 @@ local function ApplyTextureGradient(tex, orientation, fromColor, toColor, preser
     end
     return false
 end
-local function ApplyGradientToParts(parts, orientation, fromColor, toColor)
-    if not parts then return end
-    for i = 1, #parts do
-        ApplyTextureGradient(parts[i], orientation, fromColor, toColor, true)
-    end
-end
 local function SetFillGradient(fill, baseColor, amountTop, amountBottom, alphaMul)
     if not fill then return end
     baseColor = baseColor or T.colors.pillBase or T.colors.panel2 or DEFAULT_PANEL_COLOR
@@ -329,7 +323,8 @@ local function SetFillGradient(fill, baseColor, amountTop, amountBottom, alphaMu
 end
 M.AssignNamedValues(T, "Tr Template SetColor ShadeColor ApplyTextureGradient SetFillGradient",
     M.Tr, Template, SetColor, ShadeColor, ApplyTextureGradient, SetFillGradient)
-local menuFontCacheKey, menuFontCachePath
+local NO_MENU_FONT = {}
+local menuFontCache = {}
 local function MenuGeneralDB()
     if type(M.GetGeneralDB) == "function" then return M.GetGeneralDB() end
     local ensureDB = _G.MSUF_EnsureDB
@@ -346,7 +341,8 @@ local function ResolveMenuFontPath(size, flags, role)
     size = tonumber(size) or 14
     flags = flags or ""
     local cacheKey = key .. "|" .. tostring(size) .. "|" .. tostring(flags) .. "|" .. tostring(role or "")
-    if cacheKey == menuFontCacheKey then return menuFontCachePath end
+    local cached = menuFontCache[cacheKey]
+    if cached ~= nil then return cached ~= NO_MENU_FONT and cached or nil end
     local path = key
     if not (path:find("\\", 1, true) or path:find("/", 1, true)) then
         local getPath = _G.MSUF_ResolveFontKeyPath or _G.MSUF_GetFontPathForKey or (MSUF and MSUF.MSUF_GetFontPathForKey)
@@ -358,11 +354,11 @@ local function ResolveMenuFontPath(size, flags, role)
         path = SharedUI.ResolveRoleFontPath(path, role)
     end
     if type(path) ~= "string" or path == "" then path = nil end
-    menuFontCacheKey, menuFontCachePath = cacheKey, path
+    menuFontCache[cacheKey] = path or NO_MENU_FONT
     return path
 end
 function T.ClearMenuFontCache()
-    menuFontCacheKey, menuFontCachePath = nil, nil
+    menuFontCache = {}
 end
 local function NormalizeAppliedFontPath(path)
     if type(path) ~= "string" then return nil end
@@ -472,8 +468,8 @@ local function RefreshMenuFonts(root, seen, force)
         for i = 1, #children do RefreshMenuFonts(children[i], seen, force) end
     end
 end
-function T.RefreshMenuFonts(root, force)
-    T.ClearMenuFontCache()
+function T.RefreshMenuFonts(root, force, preserveCache)
+    if preserveCache ~= true then T.ClearMenuFontCache() end
     local seen = {}
     if root then
         RefreshMenuFonts(root, seen, force == true)

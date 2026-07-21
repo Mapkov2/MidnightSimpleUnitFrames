@@ -107,10 +107,8 @@ end
 
 local function GlobalFontShadowMetrics()
     local g = _G.MSUF_DB and _G.MSUF_DB.general
-    local strength = tostring(g and g.fontShadowStrength or "NORMAL"):upper()
-    if strength == "SOFT" then return 0.55, 1, -1 end
-    if strength == "DEEP" then return 1, 2, -2 end
-    return 1, 1, -1
+    return _G.MSUF_ResolveFontShadowMetrics(g and g.fontShadowOpacity,
+        g and g.fontShadowDistance, g and g.fontShadowStrength)
 end
 
 local function SetTextShadow(fs, enabled)

@@ -254,7 +254,10 @@ local function ApplyFont(fontString, g, prefix, suffix, size, colorSuffix)
     size = Clamp(size, 6, 128)
     local r, green, b = CastbarTextColor(g, prefix, colorSuffix)
     local alpha = Clamp(g.fontTextAlpha or 1, 0.7, 1)
-    local shadow = tostring(g.textBackdrop ~= false and (g.fontShadowStrength or "NORMAL") or "NONE"):upper()
+    local shadowEnabled = g.textBackdrop ~= false
+    local shadowAlpha, shadowX, shadowY = _G.MSUF_ResolveFontShadowMetrics(
+        g.fontShadowOpacity, g.fontShadowDistance, g.fontShadowStrength)
+    local shadow = shadowEnabled and (KeyPart(shadowAlpha) .. ":" .. KeyPart(shadowX)) or "NONE"
     local fontCacheKey = fontPath .. "|"
         .. KeyPart(size) .. "|"
         .. KeyPart(flags) .. "|"
@@ -274,15 +277,9 @@ local function ApplyFont(fontString, g, prefix, suffix, size, colorSuffix)
 
     if fontString.SetTextColor then fontString:SetTextColor(r, green, b, alpha) end
 
-    if g.textBackdrop ~= false then
-        local sa, sx, sy = 1, 1, -1
-        if shadow == "SOFT" then
-            sa, sx, sy = 0.55, 1, -1
-        elseif shadow == "DEEP" then
-            sa, sx, sy = 1, 2, -2
-        end
-        if fontString.SetShadowColor then fontString:SetShadowColor(0, 0, 0, sa) end
-        if fontString.SetShadowOffset then fontString:SetShadowOffset(sx, sy) end
+    if shadowEnabled then
+        if fontString.SetShadowColor then fontString:SetShadowColor(0, 0, 0, shadowAlpha) end
+        if fontString.SetShadowOffset then fontString:SetShadowOffset(shadowX, shadowY) end
     elseif fontString.SetShadowOffset then
         fontString:SetShadowOffset(0, 0)
     end

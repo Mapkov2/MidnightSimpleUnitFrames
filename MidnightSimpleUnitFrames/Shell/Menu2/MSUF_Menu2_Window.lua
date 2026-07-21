@@ -666,7 +666,10 @@ local function QueueVisiblePageLayoutSettle(key, entry)
         -- face still cannot render text. Cached pages pay this cost only once.
         if not entry._msuf2VisibleFontSettled and T and type(T.RefreshMenuFonts) == "function" then
             entry._msuf2VisibleFontSettled = true
-            T.RefreshMenuFonts(entry.wrapper, true)
+            -- This is the one-shot visibility retry for freshly created font
+            -- strings, not a font-setting change. Preserve the resolved-path
+            -- cache populated while the page was built.
+            T.RefreshMenuFonts(entry.wrapper, true, true)
         end
 
         -- A cached/new page can become visible in the same layout turn in

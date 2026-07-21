@@ -2330,7 +2330,8 @@ local function MSUF_ProfileIO_HasScopedFontOverrideValue(scope)
     if type(scope) ~= "table" then return false end
     if scope.fontOutline ~= nil or scope.noOutline ~= nil or scope.boldText ~= nil then return true end
     if scope.fontMonochrome ~= nil or scope.fontTextAlpha ~= nil or scope.fontBaselineOffset ~= nil then return true end
-    if scope.textBackdrop ~= nil or scope.fontShadowStrength ~= nil or scope.colorPowerTextByHealth ~= nil then return true end
+    if scope.textBackdrop ~= nil or scope.fontShadowStrength ~= nil or scope.fontShadowOpacity ~= nil or scope.fontShadowDistance ~= nil then return true end
+    if scope.colorPowerTextByHealth ~= nil then return true end
     if scope.colorPowerTextByType ~= nil or scope.colorHealthTextByHealth ~= nil then return true end
     if scope.nameClassColor ~= nil or scope.npcNameRed ~= nil or scope.nameNpcClassColor ~= nil then return true end
     if scope.useGlobalFontColor == false then return true end

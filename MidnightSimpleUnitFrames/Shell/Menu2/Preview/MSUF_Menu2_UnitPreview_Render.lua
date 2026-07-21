@@ -566,10 +566,9 @@ function Render.Install(Preview, deps)
             if fs.SetShadowOffset then
                 if useShadow == nil then useShadow = not (general and general.textBackdrop == false) end
                 if useShadow then
-                    local strength = tostring(general and general.fontShadowStrength or "NORMAL"):upper()
-                    local shadowAlpha, shadowX, shadowY = 1, 1, -1
-                    if strength == "SOFT" then shadowAlpha, shadowX, shadowY = 0.55, 1, -1
-                    elseif strength == "DEEP" then shadowAlpha, shadowX, shadowY = 1, 2, -2 end
+                    local shadowAlpha, shadowX, shadowY = _G.MSUF_ResolveFontShadowMetrics(
+                        general and general.fontShadowOpacity, general and general.fontShadowDistance,
+                        general and general.fontShadowStrength)
                     if fs.SetShadowColor then fs:SetShadowColor(0, 0, 0, shadowAlpha) end
                     fs:SetShadowOffset(shadowX, shadowY)
                 else

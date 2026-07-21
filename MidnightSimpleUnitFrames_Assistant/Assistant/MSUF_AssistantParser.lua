@@ -5264,7 +5264,13 @@ local function ParseFontScopePriorityShortcut(normalized)
     elseif ContainsAny(normalized, P.RootPhrases[602]) then
         suffix = "textBackdrop"
     elseif ContainsAny(normalized, P.RootPhrases[603]) then
-        suffix = "fontShadowStrength"
+        value = FirstNumber(normalized)
+        if value ~= nil then
+            suffix = "fontShadowOpacity"
+            if value > 1 then value = value / 100 end
+        else
+            suffix = "fontShadowStrength"
+        end
     elseif ContainsAny(normalized, P.RootPhrases[604]) then
         suffix = "shortenNames"
     elseif ContainsAny(normalized, P.RootPhrases[605]) then

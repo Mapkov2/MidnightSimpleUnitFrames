@@ -277,6 +277,8 @@ general.enableHealPrediction
 general.enableHighlightOnHover
 general.fontBaselineOffset
 general.fontMonochrome
+general.fontShadowDistance
+general.fontShadowOpacity
 general.fontShadowStrength
 general.fontTextAlpha
 general.healAbsorbBarColorA
