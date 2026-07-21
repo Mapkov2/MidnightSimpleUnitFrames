@@ -28,7 +28,6 @@ local RegisterGroupBarAndPowerSettings = A.GroupFramesRegistry and A.GroupFrames
 local RegisterFramePowerToggleSettings = A.GroupFramesRegistry and A.GroupFramesRegistry.RegisterFramePowerToggleSettings
 local RegisterFrameOrderingSettings = A.GroupFramesRegistry and A.GroupFramesRegistry.RegisterFrameOrderingSettings
 local RegisterFrameAlphaAnchorSettings = A.GroupFramesRegistry and A.GroupFramesRegistry.RegisterFrameAlphaAnchorSettings
-local RegisterGroupTargetedSpellSettings = A.GroupFramesRegistry and A.GroupFramesRegistry.RegisterTargetedSpellSettings
 
 do
 for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
@@ -90,7 +89,6 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
     end
 
     if type(RegisterGroupStatusIconSettings) == "function" then RegisterGroupStatusIconSettings(ctx, scope) end
-    if type(RegisterGroupTargetedSpellSettings) == "function" then RegisterGroupTargetedSpellSettings(ctx, scope) end
 
 end
 end

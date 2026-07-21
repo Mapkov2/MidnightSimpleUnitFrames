@@ -139,7 +139,7 @@ Data.REGISTRY_PARSER = {
         "name font", "name text", "health font", "health text", "hp font", "hp text",
         "power font", "power text", "castbar", "cast bar", "spell name", "timer font", "time font",
         "aura", "auras", "buff", "buffs", "debuff", "debuffs", "cooldown", "stack",
-        "combat timer", "combat text", "targeted spell", "targeted spells", "anchor", "offset",
+        "combat timer", "combat text", "anchor", "offset",
         "x position", "y position", "line 1", "line 2", "slot 1", "slot 2", "override",
     },
         [56] = {

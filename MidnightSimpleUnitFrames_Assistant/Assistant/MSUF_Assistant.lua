@@ -2921,7 +2921,6 @@ local PENDING_GROUP_INDICATOR_KEY_PARTS = {
     "resurrecticon", "resurrectanchor", "resurrectx", "resurrecty", "resurrectlayer",
     "phaseicon", "pvpicon", "warmode", "threaticon", "aggroicon",
     "spellindicator", "spellindicators", "cornerindicator", "cornerindicators",
-    "targetedspell", "targetedspells",
 }
 
 local PENDING_GROUP_EFFECT_KEY_PARTS = {

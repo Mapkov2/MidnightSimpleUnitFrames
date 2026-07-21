@@ -715,11 +715,7 @@ local function QueueGroup(scope, mode, reason)
     end
     mode = tostring(mode or "visual")
     local gf = MSUF and MSUF.GF
-    if mode == "targetedSpells" then
-        -- DIRTY_VISUAL reaches TargetedSpells through GF's single runtime
-        -- observer after the frame mutation completes.
-        rec.dirtyMask = MergeGroupDirty(gf, rec.dirtyMask, gf and gf.DIRTY_VISUAL or true)
-    elseif mode == "reset" then
+    if mode == "reset" then
         rec.invalidateConfCache = true
         rec.requestAuraRefresh = true
         rec.rebuild = true

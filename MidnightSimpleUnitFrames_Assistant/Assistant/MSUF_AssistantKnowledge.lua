@@ -268,7 +268,6 @@ local GROUP_INDICATOR_KEY_PARTS = {
     "resurrecticon", "resurrectanchor", "resurrectx", "resurrecty", "resurrectlayer",
     "phaseicon", "pvpicon", "warmode", "threaticon", "aggroicon",
     "spellindicator", "spellindicators", "cornerindicator", "cornerindicators",
-    "targetedspell", "targetedspells",
 }
 
 local GROUP_EFFECT_KEY_PARTS = {
@@ -1157,8 +1156,8 @@ local PAGE_HELP = {
     gf_indicators = {
         title = "Group Status & Indicators help",
         lines = {
-            "You can change group status indicators, role/ready/summon icons, targeted spell indicators, corner indicators, and related editor choices available in MSUF.",
-            "Examples: show party targeted spell indicators; set targeted spell icon size to 28; show raid ready check icon; move raid phase icon right.",
+            "You can change group status indicators, role/ready/summon icons, corner indicators, and related editor choices available in MSUF.",
+            "Examples: show raid ready check icon; move raid phase icon right; configure party corner indicators.",
         },
         actions = { "Open Group Status & Indicators" },
     },
@@ -1196,7 +1195,7 @@ local SCOPED_HELP_ALIASES = {
     { terms = { "group text help", "group health help", "group health and text help", "help group text", "help group health", "help group health and text", "party text help", "raid text help", "party health help", "raid health help" }, page = "gf_layout" },
     { terms = { "group range help", "help group range" }, page = "gf_layout" },
     { terms = { "group effects help", "debuff stripe help", "help group effects", "group dispel help", "group dispel overlay help", "help group dispel", "help group dispel overlay" }, page = "gf_bars" },
-    { terms = { "indicator help", "help indicator", "group indicator help", "help group indicator", "corner indicator help", "help corner indicator", "targeted spell help", "targeted spells help", "targeted spell indicator help" }, page = "gf_indicators" },
+    { terms = { "indicator help", "help indicator", "group indicator help", "help group indicator", "corner indicator help", "help corner indicator" }, page = "gf_indicators" },
     { terms = { "group aura help", "group auras help", "help group aura", "help group auras", "party aura help", "raid aura help", "mythic raid aura help" }, page = "gf_auras" },
     { terms = { "priority frame help", "priority frames help", "help priority frames", "pinned frame help", "pinned frames help", "help pinned frames", "tank frames help", "prioritaetsframes hilfe", "hilfe prioritaetsframes" }, page = "gf_priority" },
     { terms = { "class resource help", "help class resource", "class power help", "help class power" }, page = "classpower" },
@@ -1352,7 +1351,7 @@ local WHAT_CAN_PAGE_HELP_TARGETS = {
     { page = "gf_layout", terms = { "group health and text", "group health", "group text", "group resource", "group power", "party health", "party text", "party power", "raid health", "raid text", "raid power", "mythic raid health", "mythic raid text" } },
     { page = "gf_layout", terms = { "group range", "range fade" } },
     { page = "gf_bars", terms = { "group effects", "debuff stripe", "group dispel", "group dispel overlay", "dispel overlay" } },
-    { page = "gf_indicators", terms = { "group status and indicators", "group indicators", "group indicator", "party indicator", "party indicators", "raid indicator", "raid indicators", "corner indicator", "corner indicators", "targeted spell", "targeted spells", "targeted spell indicator", "targeted spell indicators", "status icon", "status icons", "ready check", "raid marker", "role icon" } },
+    { page = "gf_indicators", terms = { "group status and indicators", "group indicators", "group indicator", "party indicator", "party indicators", "raid indicator", "raid indicators", "corner indicator", "corner indicators", "status icon", "status icons", "ready check", "raid marker", "role icon" } },
     { page = "gf_auras", terms = { "group aura", "group auras", "party aura", "party auras", "raid aura", "raid auras", "mythic raid aura", "mythic raid auras", "group buff", "group buffs", "group debuff", "group debuffs" } },
     { page = "gf_layout", terms = { "group layout", "group frame", "group frames", "party frame", "party frames", "raid frame", "raid frames", "mythic raid frame", "mythic raid frames", "party layout", "raid layout" } },
     { page = "auras3_filters", terms = { "aura filter", "aura filters", "hidden aura", "hidden auras", "blacklist", "whitelist", "ignore list" } },
@@ -1620,8 +1619,6 @@ local GROUP_INDICATOR_HELP_TERMS = {
     "leader", "assist", "raid marker", "target marker", "resurrection", "resurrection icon", "resurrect",
     "resurrect icon", "incoming res", "incoming resurrection", "rez icon", "summon", "summon icon",
     "phase icon", "phasing icon", "pvp icon", "pvp flag", "war mode", "threat", "aggro", "dispel",
-    "targeted spell", "targeted spells", "targeted spell indicator", "targeted spell indicators",
-    "enemy targeted spell", "enemy targeted spells", "nameplate cast tracker",
 }
 
 local UNIT_FRAME_SCOPE_TERMS = {
@@ -2583,15 +2580,6 @@ local function DirectHelpAnswer(query, opts)
             summary = "Assistant threat help",
         }
     end
-    if ContainsAny(norm, { "targeted spell", "targeted spells", "targeted spell indicator", "targeted spell indicators", "enemy targeted spell", "enemy targeted spells", "nameplate cast tracker" })
-        and ContainsAny(norm, { "help", "what", "what is", "what are", "what does", "how", "where", "explain", "mean", "change", "set", "show", "open" })
-    then
-        return {
-            text = "Targeted Spell Indicators help\nParty Targeted Spell Indicators show enemy nameplate casts that are targeting party members. They are party-only and live in Group Frames > Status & Indicators.\nExamples: show party targeted spell indicators; set targeted spell icon size to 28; set targeted spell mode to always; move targeted spells up 4.\nYou can ask: Open Group Status & Indicators",
-            status = "applied",
-            summary = "Assistant targeted spell indicator help",
-        }
-    end
     if ContainsAny(norm, { "combat lockdown", "lockdown", "in combat lockdown", "combat protected", "combat restriction", "protected action" })
         and ContainsAny(norm, { "help", "what", "what is", "what does", "how", "why", "explain" })
     then
@@ -2615,7 +2603,7 @@ local function DirectHelpAnswer(query, opts)
         and ContainsAny(norm, KNOWLEDGE_INTENT_TERMS)
     then
         return {
-            text = "Group Status & Indicators help\nIn Group Frames > Status & Indicators, I can help with ready-check, role, leader/assist, raid-marker, summon, resurrection, phase, PvP/War Mode, threat/aggro, dispel, targeted spell, and corner indicators. Spell Indicators are in Group Frames > Auras.\nExamples: show party targeted spell indicators; show raid ready check icon; hide raid summon icon; move raid phase icon right; set party ready check size to 18.\nYou can ask: Open Group Status & Indicators",
+            text = "Group Status & Indicators help\nIn Group Frames > Status & Indicators, I can help with ready-check, role, leader/assist, raid-marker, summon, resurrection, phase, PvP/War Mode, threat/aggro, dispel, and corner indicators. Spell Indicators are in Group Frames > Auras.\nExamples: show raid ready check icon; hide raid summon icon; move raid phase icon right; set party ready check size to 18.\nYou can ask: Open Group Status & Indicators",
             status = "applied",
             summary = "Assistant group status and indicators help",
         }

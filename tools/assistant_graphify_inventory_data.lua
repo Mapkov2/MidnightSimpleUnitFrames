@@ -1213,8 +1213,6 @@ return {
         { "gf_party.roleOrder", "core_reference_only", "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_Group.lua", "L1018" },
         { "gf_party.showSolo", "assistant_only", "MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantRegistry_Diagnostics_Frames.lua", "L141" },
         { "gf_party.spellIndicators.iconZoom", "core_reference_only", "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupIndicators.lua", "L67" },
-        { "gf_party.targetedSpellsEnabled", "assistant_only", "MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantSettingGraph.lua", "L549" },
-        { "gf_party.targetedSpellsLayer", "core_reference_only", "MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_LayerOverview.lua", "L613" },
         { "gf_party.textDelimiter", "assistant_only", "MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantRegistry_AutoCoverage.lua", "L134" },
         { "gf_raid.anchorPoint", "assistant_only", "MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantRegistry_AutoCoverage.lua", "L145" },
         { "gf_raid.barOutlineColorA", "assistant_only", "MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantRegistry_Core_Registry.lua", "L262" },

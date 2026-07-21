@@ -6711,12 +6711,6 @@ A.RouterIndicatorProblemTerms = A.RouterIndicatorProblemTerms or {
     },
 }
 
-A.RouterTargetedSpellIndicatorTerms = A.RouterTargetedSpellIndicatorTerms or {
-    "targeted spell", "targeted spells", "targeted spell indicator", "targeted spell indicators",
-    "targeted spell tracker", "targeted spells tracker", "enemy targeted spell", "enemy targeted spells",
-    "enemy nameplate cast tracker", "nameplate cast tracker",
-}
-
 A.RouterIndicatorProblemReply = function(title, body, examples, actions)
     return {
         text = tostring(title or "Indicator help") .. "\n" .. tostring(body or "") .. "\nExamples: " .. tostring(examples or "open group status and indicators; show raid marker on target.") .. "\nYou can ask: " .. tostring(actions or "Open Group Status & Indicators | Open Player | Open Target"),
@@ -6781,30 +6775,6 @@ A.RouterTryIndicatorProblemShortcut = function(text, coreHandler)
         or norm:match("^suche%s+") or norm:match("^finde%s+")
     then
         return nil
-    end
-
-    if R.ContainsAny(norm, A.RouterTargetedSpellIndicatorTerms) then
-        local groupScope, groupLabel = R.GroupScopeFromText(norm)
-        if groupScope and groupScope ~= "party" then
-            return A.RouterIndicatorProblemReply(
-                "Targeted Spell Indicators are Party-only",
-                "MSUF Targeted Spell Indicators track enemy nameplate casts that target party members. They do not have separate Raid or Mythic Raid settings, so I did not change " .. tostring(groupLabel or "that group scope") .. " frames.",
-                "open group status and indicators; show party targeted spell indicators; set party targeted spell icon size to 28.",
-                "Open Group Status & Indicators | show party targeted spell indicators"
-            )
-        end
-        local wantsInfo = R.AsksSettingLocation(norm)
-            or R.HasNaturalProblemTerm(norm)
-            or R.ContainsAny(norm, R.VISIBILITY_PROBLEM_TERMS)
-            or R.ContainsAny(norm, { "help", "explain", "what is", "what are", "how do", "how can" })
-        if wantsInfo then
-            return A.RouterIndicatorProblemReply(
-                "Targeted Spell Indicators help",
-                "Party Targeted Spell Indicators live in Group Status & Indicators. They are party-only and show enemy nameplate casts that target party members. Use exact party commands when you want a change.",
-                "show party targeted spell indicators; set party targeted spell icon size to 28; set targeted spell mode to always.",
-                "Open Group Status & Indicators | show party targeted spell indicators"
-            )
-        end
     end
 
     if R.AsksSettingLocation(norm)

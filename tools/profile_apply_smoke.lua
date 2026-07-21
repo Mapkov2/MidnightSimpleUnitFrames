@@ -230,7 +230,6 @@ local orderingFixture = {
         ciStrata = "LOW",
         dispelOverlayLayer = 6,
         dispelOverlayStrata = "MEDIUM",
-        targetedSpellsLayer = 7,
         auras = {
             buff = { layer = 8, strata = "HIGH" },
             debuff = { layer = 9, strata = "DIALOG" },

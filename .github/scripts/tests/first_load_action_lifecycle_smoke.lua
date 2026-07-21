@@ -212,9 +212,9 @@ do
 
     local cases = {
         { choice = "unitframes", first = "unit_intro", total = 19 },
-        { choice = "groupframes", first = "group_intro", total = 24 },
+        { choice = "groupframes", first = "group_intro", total = 23 },
         { choice = "classresources", first = "class_intro", total = 5 },
-        { choice = "all", first = "unit_intro", total = 40 },
+        { choice = "all", first = "unit_intro", total = 39 },
     }
     for i = 1, #cases do
         local case = cases[i]
@@ -261,7 +261,7 @@ end
 -- selector controls but excludes unrelated Aura workspaces.
 do
     local _, M = LoadFixture()
-    Equal(M.guidedTourStageCount, 40, "guided setup lost the forty-stage core workflow")
+    Equal(M.guidedTourStageCount, 39, "guided setup lost the thirty-nine-stage core workflow")
     Check(M.IsGuidedTourSectionIncluded("uf_player_auras", "auras") == true, "Player core flow lost Auras")
     Check(M.IsGuidedTourSectionIncluded("uf_player_name", "text") == true, "Player core flow lost Name text")
     Check(M.IsGuidedTourSectionIncluded("uf_player_hp_text", "text") == true, "Player core flow lost HP text")
@@ -279,7 +279,6 @@ do
     Check(M.IsGuidedTourSectionIncluded("gf_party_stripe", "dstripe") == true, "Party core flow lost Debuff Stripe")
     Check(M.IsGuidedTourSectionIncluded("gf_party_indicators", "indicators") == true, "Party core flow lost Frame Indicators")
     Check(M.IsGuidedTourSectionIncluded("gf_party_status", "sicons") == true, "Party core flow lost Status Icons")
-    Check(M.IsGuidedTourSectionIncluded("gf_party_targeted_spells", "targetedSpells") == true, "Party core flow lost Targeted Spells")
     Check(M.IsGuidedTourSectionIncluded("gf_party_corner_icons", "ci") == true, "Party core flow lost Corner Indicators")
     Check(M.IsGuidedTourSectionIncluded("gf_party_auras", "auras") == true, "Party core flow lost Auras")
     Check(M.IsGuidedTourSectionIncluded("gf_spell_icons", "si") == true, "Spell Icons stage lost the spell-indicator section")

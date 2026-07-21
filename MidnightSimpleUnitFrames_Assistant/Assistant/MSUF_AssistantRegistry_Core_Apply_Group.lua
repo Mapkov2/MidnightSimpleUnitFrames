@@ -94,16 +94,6 @@ function A.RegistryCoreBuilders.BuildGroupApplyHelper(ctx)
                 return ApplyService.RequestGroup(scope or "party", mode, reason)
             end
         end
-        if mode == "targetedSpells" then
-            local ts = gf and gf.TargetedSpells
-            if ts and type(ts.RequestApply) == "function" then
-                ts.RequestApply(false)
-            elseif ts and type(ts.RefreshConfig) == "function" then
-                ts.RefreshConfig(false)
-            end
-            if MRef and type(MRef.RefreshGFNativePreviews) == "function" then MRef.RefreshGFNativePreviews() end
-            return
-        end
         local GP = MRef and MRef.GroupPage
         if GP and type(GP.QueueGF) == "function" then
             GP.QueueGF(scope or "party", mode)

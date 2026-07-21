@@ -560,7 +560,6 @@ def check_kernel_castbar_contracts() -> None:
 def check_group_refresh_contracts() -> None:
     runtime = read(ADDON_ROOT / "UnitFrames" / "Engine" / "Group" / "MSUF_UF_Group_Runtime.lua")
     em2 = read(ADDON_ROOT / "UnitFrames" / "Engine" / "Group" / "MSUF_UF_Group_EM2.lua")
-    targeted = read(ADDON_ROOT / "UnitFrames" / "Engine" / "Group" / "MSUF_UF_Group_TargetedSpells.lua")
 
     require(runtime, "local function SyncCombatState", "group combat-state owner")
     require(
@@ -598,9 +597,8 @@ def check_group_refresh_contracts() -> None:
     require(runtime, "local function RefreshVisualsNow", "single internal group visual owner")
     require_count(runtime, "function GF.RefreshVisuals(", 1, "single public group visual owner")
     require_count(runtime, "function GF.RebuildAll(", 1, "single public group rebuild owner")
-    for source, label in [(em2, "group Edit Mode"), (targeted, "targeted spells")]:
-        if "GF.RefreshVisuals = function" in source or "GF.RebuildAll = function" in source:
-            raise CheckError(f"{label} must observe, not replace, group runtime functions")
+    if "GF.RefreshVisuals = function" in em2 or "GF.RebuildAll = function" in em2:
+        raise CheckError("group Edit Mode must observe, not replace, group runtime functions")
         require(source, "RegisterRuntimeObserver", f"{label} observer registration")
 
 

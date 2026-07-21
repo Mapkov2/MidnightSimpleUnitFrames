@@ -289,7 +289,7 @@ local groupNative = source["Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Native.l
 local groupHandlesSource = source["Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Handles.lua"]
 local groupSpecs = Read("Shell/Menu2/Pages/MSUF_Menu2_GroupSpecs.lua")
 local groupStatus = ExtractPipeKeys(groupSpecs, "GF_STATUS_ICON_SPECS = StatusIconSpecs [[")
-local groupLayers = { "guides", "bounds", "buff", "trackedBuff", "debuff", "status", "si", "targetedSpells", "auraText", "text" }
+local groupLayers = { "guides", "bounds", "buff", "trackedBuff", "debuff", "status", "si", "auraText", "text" }
 for i = 1, #groupLayers do Check(groupNative:find('"' .. groupLayers[i] .. '"', 1, true), "missing Group preview layer " .. groupLayers[i]) end
 local groupHandles, groupHandleSeen = {}, {}
 for key in groupHandlesSource:gmatch('CreatePreviewHandle%(%s*"([^"]+)"') do

@@ -1012,9 +1012,6 @@ local function HandleOffsets(handle)
     elseif handle._cfgSpell then
         local cfg = CurrentSpellPlaced(CurrentScope()) or {}
         return cfg.anchor, tonumber(cfg.x) or 0, tonumber(cfg.y) or 0
-    elseif handle._cfgTargetedSpells then
-        local cfg = Conf("party") or conf
-        return cfg.targetedSpellsAnchor or "CENTER", tonumber(cfg.targetedSpellsX) or 0, tonumber(cfg.targetedSpellsY) or 0
     elseif handle._cfgText then
         local kind = handle._cfgTextKind or CurrentTextKind()
         local slot = handle._cfgTextSlot
@@ -1323,7 +1320,6 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         external = true,
         status = true,
         si = true,
-        targetedSpells = true,
         auraText = true,
         text = true,
     }
@@ -1341,7 +1337,6 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         { "External", { 0.30, 0.72, 1.00 }, "externals", "external" },
         { "Status", { 0.95, 0.78, 0.22 }, "sicons", "status" },
         { "Spells", { 0.86, 0.50, 1.00 }, "si", "si" },
-        { "Target", { 1.00, 0.52, 0.18 }, "targetedSpells", "targetedSpells" },
         { "CD/Stack", { 1.00, 0.82, 0.28 }, "textcolor", "auraText" },
         { "Text", { 0.70, 0.90, 1.00 }, "text", "text" },
     }
@@ -1526,7 +1521,6 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     local externalHandle = handleBundle.externalHandle
     local statusHandles = handleBundle.statusHandles or {}
     local spellHandle = handleBundle.spellHandle
-    local targetedHandle = handleBundle.targetedHandle
     local SelectHandle = handleBundle.SelectHandle or function() end
     local NudgeHandlePosition = handleBundle.NudgeHandlePosition or function() end
     local AddIconPool = handleBundle.AddIconPool or function() end
@@ -1544,7 +1538,6 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         renderDeps.trackedBuffHandle = trackedBuffHandle
         renderDeps.externalHandle = externalHandle
         renderDeps.statusHandles, renderDeps.spellHandle = statusHandles, spellHandle
-        renderDeps.targetedHandle = targetedHandle
         renderDeps.statusSpecs = H.StatusSpecs and H.StatusSpecs()
         renderDeps.SelectHandle = SelectHandle
         renderDeps.NudgeHandlePosition = NudgeHandlePosition

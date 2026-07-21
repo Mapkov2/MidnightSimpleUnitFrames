@@ -101,15 +101,13 @@ end
 local AURA_DURATIONS = {
   buff = { 120, 76, 45, 28, 180, 14, 95, 36 },
   debuff = { 32, 18, 11, 7, 44, 24, 15, 9 },
-  targeted = { 2.8, 7, 13, 22, 35 },
 }
-local AURA_KIND_OFFSETS = { buff = 0.11, debuff = 0.37, targeted = 0.63 }
+local AURA_KIND_OFFSETS = { buff = 0.11, debuff = 0.37 }
 
 local function AuraKind(kind)
   kind = tostring(kind or ""):lower()
   if kind == "buffs" then return "buff" end
   if kind == "debuffs" then return "debuff" end
-  if kind == "targetedspells" or kind == "targeted_spells" or kind == "targeted" then return "targeted" end
   return AURA_DURATIONS[kind] and kind or "buff"
 end
 
