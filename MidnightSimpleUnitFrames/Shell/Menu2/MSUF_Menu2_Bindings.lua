@@ -666,10 +666,6 @@ end
 function M.CaptureHistory(label, source, fn)
     if type(fn) ~= "function" then return nil end
     if M.BlockCombatAction() then return false end
-    if historyTransaction and source and historyTransaction.source ~= source then
-        M.CommitHistoryTransaction()
-        return M.CaptureHistory(label, source, fn)
-    end
     if historyDepth > 0 or historyRestoring then
         local ok, result = SafeInvoke(fn)
         if not ok then return nil end
@@ -681,6 +677,10 @@ function M.CaptureHistory(label, source, fn)
             end
         end
         return result
+    end
+    if historyTransaction and source and historyTransaction.source ~= source then
+        M.CommitHistoryTransaction()
+        return M.CaptureHistory(label, source, fn)
     end
     local before = CurrentHistorySnapshot()
     historyDepth = historyDepth + 1
@@ -818,8 +818,12 @@ function M.IsHistorySurfaceActive(surface)
 end
 function M.CheckpointHistory(label, source)
     if M.BlockCombatAction() then return false end
+    -- Runtime apply helpers checkpoint under their own source while a bound
+    -- slider transaction is live. They are nested effects of the same user
+    -- gesture, not a new action, and must never close that transaction.
+    if historyDepth > 0 or historyRestoring then return false end
     if historyTransaction and source and historyTransaction.source ~= source then M.CommitHistoryTransaction() end
-    if historyDepth > 0 or historyRestoring or not historySessionActive or historyTransaction then return false end
+    if not historySessionActive or historyTransaction then return false end
     local before = CurrentHistorySnapshot()
     local after = SnapshotDB()
     local pushed = PushHistory(label or "MSUF2 change", source or "menu:checkpoint", before, after)
@@ -1827,6 +1831,13 @@ function M.BindToggle(ctx, widget, getValue, setValue, metadata)
     end)
     AddRefreshCall(ctx, SyncFromValue, widget)
 end
+local function SliderPointerDragActive(self)
+    if self._msuf2SliderActive == true then return true end
+    local isMouseButtonDown = _G.IsMouseButtonDown
+    return type(isMouseButtonDown) == "function"
+        and self.IsMouseOver and self:IsMouseOver()
+        and isMouseButtonDown("LeftButton") == true
+end
 function M.BindSlider(ctx, slider, getValue, setValue, metadata)
     if not slider then return end
     AttachCommandAction(ctx, slider, "slider", getValue, setValue, metadata)
@@ -1840,7 +1851,15 @@ function M.BindSlider(ctx, slider, getValue, setValue, metadata)
     local function CommitSliderHistory(self)
         if not self._msuf2HistoryTransaction then return end
         self._msuf2HistoryTransaction = nil
-        M.CallIf(M.CommitHistoryTransaction)
+        -- Keep the transaction open through the complete native MouseUp event.
+        -- Some Slider implementations deliver their final OnValueChanged after
+        -- OnMouseUp; committing on the next event tick folds that value into the
+        -- same single Undo/Redo step without any recurring timer or idle work.
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, function() M.CallIf(M.CommitHistoryTransaction) end)
+        else
+            M.CallIf(M.CommitHistoryTransaction)
+        end
     end
     slider._msuf2BeginSliderHistory = BeginSliderHistory
     slider._msuf2CommitSliderHistory = CommitSliderHistory
@@ -1853,6 +1872,12 @@ function M.BindSlider(ctx, slider, getValue, setValue, metadata)
         if self._msuf2Step and self._msuf2Step >= 1 then value = math.floor(value + 0.5) end
         local current = tonumber(getValue()) or 0
         if math.abs(current - value) < 0.0001 then return end
+        -- Blizzard may emit the first value tick before our OnMouseDown hook.
+        -- Begin lazily while the pointer is actively dragging this Slider so
+        -- even that first tick belongs to the release-time transaction.
+        if not self._msuf2HistoryTransaction and SliderPointerDragActive(self) then
+            BeginSliderHistory(self)
+        end
         CaptureWidgetChange(ctx, self, nil, function()
             setValue(value)
         end)
