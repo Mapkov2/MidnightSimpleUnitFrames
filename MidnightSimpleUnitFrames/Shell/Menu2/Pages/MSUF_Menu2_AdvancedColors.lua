@@ -63,7 +63,6 @@ local COLOR_SETTING_KEY_BY_PATH = {
     ["general.healthGradientMid"] = "general.healthGradientMid",
     ["general.unifiedBar"] = "general.unifiedBarColor",
     ["highlight.mouseover.color"] = "general.highlightColor",
-    ["highlight.mouseover.enabled"] = "general.highlightEnabled",
     ["npc.color.dead"] = "npcColors.dead",
     ["npc.color.enemy"] = "npcColors.enemy",
     ["npc.color.friendly"] = "npcColors.friendly",
@@ -401,9 +400,110 @@ local function SetHighlightRGB(r, g, b)
     G().highlightColor = { r, g, b }
     ApplyColors()
 end
-function ColorValueAt(ctx, section, label, x, y, getRGB, setRGB, labelWidthOverride, swatchWidth, metadata)
+local function TrText(text)
+    local translate = M.TranslateText or M.Tr
+    if type(translate) == "function" then return translate(text) end
+    return text
+end
+-- Default-aware color controls: an amber dot marks values that differ from the
+-- shipped default, right-click restores the default through the normal bound
+-- apply path, and section headers show a live "N modified" badge.
+local COLOR_DEFAULT_EPS = 0.003
+local function FindCollapsibleEntryFor(frame)
+    local parent = frame
+    for _ = 1, 12 do
+        if not parent then return nil end
+        local entry = parent._msuf2CollapsibleEntry
+        if entry then return entry end
+        parent = parent.GetParent and parent:GetParent()
+    end
+end
+local function ColorMatchesDefault(control)
+    local defaults = control and control._msuf2DefaultRGB
+    if not defaults or not control.GetRGB then return true end
+    local r, g, b = control:GetRGB()
+    return math.abs((tonumber(r) or 1) - defaults[1]) < COLOR_DEFAULT_EPS
+        and math.abs((tonumber(g) or 1) - defaults[2]) < COLOR_DEFAULT_EPS
+        and math.abs((tonumber(b) or 1) - defaults[3]) < COLOR_DEFAULT_EPS
+end
+local function RefreshSectionModifiedBadge(entry)
+    if not (entry and entry.body) or type(W.SetCollapsibleBadges) ~= "function" then return end
+    local list = entry._msuf2DefaultColorControls
+    if not list or #list == 0 then return end
+    local count = 0
+    for i = 1, #list do
+        if not ColorMatchesDefault(list[i]) then count = count + 1 end
+    end
+    if entry._msuf2ModifiedBadgeCount == count then return end
+    entry._msuf2ModifiedBadgeCount = count
+    if count > 0 then
+        W.SetCollapsibleBadges(entry.body, {{
+            text = tostring(count) .. " " .. TrText("modified"),
+            kind = "accent",
+            showWhenClosed = true,
+        }})
+    else
+        W.SetCollapsibleBadges(entry.body, {})
+    end
+end
+local function AttachDefaultColorBehavior(ctx, control, defaultRGB)
+    if not (control and control.GetRGB and control.SetRGB and type(defaultRGB) == "table") then return end
+    local dr = tonumber(defaultRGB[1])
+    local dg = tonumber(defaultRGB[2])
+    local db = tonumber(defaultRGB[3])
+    if not (dr and dg and db) then return end
+    control._msuf2DefaultRGB = { dr, dg, db }
+    local entry = FindCollapsibleEntryFor(control)
+    if entry then
+        entry._msuf2DefaultColorControls = entry._msuf2DefaultColorControls or {}
+        entry._msuf2DefaultColorControls[#entry._msuf2DefaultColorControls + 1] = control
+    end
+    -- Modified marker: tint the swatch's existing rounded edge amber instead
+    -- of drawing an extra corner marker. This reuses the exact pill texture
+    -- path every swatch already renders, so it cannot add stray artifacts.
+    local edge = control._msuf2Edge
+    local function RefreshDot()
+        local modified = not ColorMatchesDefault(control)
+        if edge and edge.SetVertexColor then
+            if modified then
+                edge:SetVertexColor(0.98, 0.74, 0.26, 1)
+            else
+                local base = (T.colors and T.colors.borderSoft) or { 0.30, 0.40, 0.50, 1 }
+                edge:SetVertexColor(base[1], base[2], base[3], 0.75)
+            end
+        end
+        if entry then RefreshSectionModifiedBadge(entry) end
+    end
+    control._msuf2RefreshDefaultDot = RefreshDot
+    local baseSetRGB = control.SetRGB
+    control.SetRGB = function(self, r, g, b)
+        baseSetRGB(self, r, g, b)
+        RefreshDot()
+    end
+    if control.RegisterForClicks then control:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
+    local baseClick = control.GetScript and control:GetScript("OnClick")
+    control:SetScript("OnClick", function(self, mouseButton, ...)
+        if mouseButton == "RightButton" then
+            if self.IsEnabled and not self:IsEnabled() then return end
+            local defaults = self._msuf2DefaultRGB
+            self:SetRGB(defaults[1], defaults[2], defaults[3])
+            if type(self._msuf2OnColorChanged) == "function" then
+                self._msuf2OnColorChanged(defaults[1], defaults[2], defaults[3])
+            end
+            return
+        end
+        if type(baseClick) == "function" then baseClick(self, mouseButton, ...) end
+    end)
+    if M.AddTooltip and control._msuf2ColorLabel then
+        M.AddTooltip(control, TrText(control._msuf2ColorLabel),
+            TrText("Right-click resets this color to its default."), { hook = true })
+    end
+    RefreshDot()
+end
+function ColorValueAt(ctx, section, label, x, y, getRGB, setRGB, labelWidthOverride, swatchWidth, metadata, defaultRGB)
     local color = W.Color(section, label)
     M.BindColor(ctx, color, getRGB, setRGB, metadata)
+    AttachDefaultColorBehavior(ctx, color, defaultRGB)
     if color._msuf2Title then
         local sx, sy = x or 0, y or 0
         local sectionW = section._msuf2Width or 720
@@ -427,7 +527,7 @@ local function ApiColorAt(ctx, section, label, x, y, getName, setName, dr, dg, d
                 if type(apply) == "function" then apply() else ApplyColors() end
             end
         end,
-        labelWidth, swatchWidth, metadata or Meta("api." .. tostring(setName or getName)))
+        labelWidth, swatchWidth, metadata or Meta("api." .. tostring(setName or getName)), { dr, dg, db })
 end
 local function GeneralColorAt(ctx, section, label, x, y, prefix, dr, dg, db, apply, labelWidth, swatchWidth, metadata)
     return ColorValueAt(ctx, section, label, x, y,
@@ -436,7 +536,7 @@ local function GeneralColorAt(ctx, section, label, x, y, prefix, dr, dg, db, app
             SetGeneralRGB(prefix, r, g, c)
             if type(apply) == "function" then apply() else ApplyColors() end
         end,
-        labelWidth, swatchWidth, metadata or Meta("general." .. tostring(prefix)))
+        labelWidth, swatchWidth, metadata or Meta("general." .. tostring(prefix)), { dr, dg, db })
 end
 local function ApiOrGeneralColorAt(ctx, section, label, x, y, getName, setName, prefix, dr, dg, db, apply, alpha, metadata)
     return ColorValueAt(ctx, section, label, x, y,
@@ -448,7 +548,7 @@ local function ApiOrGeneralColorAt(ctx, section, label, x, y, getName, setName, 
                 if type(apply) == "function" then apply() else ApplyColors() end
             end
         end,
-        nil, nil, metadata or Meta("general." .. tostring(prefix)))
+        nil, nil, metadata or Meta("general." .. tostring(prefix)), { dr, dg, db })
 end
 local function TableColorAt(ctx, section, label, x, y, getTable, key, dr, dg, db, apply, labelWidth, swatchWidth, metadata)
     return ColorValueAt(ctx, section, label, x, y,
@@ -457,7 +557,7 @@ local function TableColorAt(ctx, section, label, x, y, getTable, key, dr, dg, db
             SetTableRGB(getTable(), key, r, g, c)
             if type(apply) == "function" then apply() end
         end,
-        labelWidth, swatchWidth, metadata or Meta("table." .. tostring(key)))
+        labelWidth, swatchWidth, metadata or Meta("table." .. tostring(key)), { dr, dg, db })
 end
 local function BuildApiColorSpecs(ctx, section, specs, apply)
     return M.BuildControlSpecs(specs, {
@@ -559,7 +659,7 @@ local function GroupColorAt(ctx, section, label, x, y, prefix, dr, dg, db, label
     return ColorValueAt(ctx, section, label, x, y,
         function() return GroupRGB(prefix, dr, dg, db) end,
         function(r, g, b) SetGroupRGB(prefix, r, g, b, "MSUF2_GROUP_COLORS", "visual") end,
-        labelWidth, swatchWidth, Meta("group_frame.color." .. tostring(prefix)))
+        labelWidth, swatchWidth, Meta("group_frame.color." .. tostring(prefix)), { dr, dg, db })
 end
 local function Clamp01(value, fallback)
     value = tonumber(value)
@@ -682,7 +782,7 @@ local function NPCColorAt(ctx, section, row, x, y, apply)
                 if type(apply) == "function" then apply() else ApplyColors() end
             end
         end,
-        nil, nil, Meta("npc.color." .. tostring(row.key)))
+        nil, nil, Meta("npc.color." .. tostring(row.key)), { row.dr, row.dg, row.db })
 end
 local function ResetNPCColors(apiName)
     if ApiCall(apiName) then return end
@@ -917,6 +1017,8 @@ local function BuildPowerAndClassPowerColors(ctx, b, CH)
         function(v)
             M.SetMenuStateValue("colorsPowerToken", v or "MANA")
             if powerColor then powerColor:SetRGB(GetPowerOverrideRGB(M.colorsPowerToken)) end
+            -- The painter's resources preview strip mirrors this selection.
+            if M.RequestRefresh then M.RequestRefresh(ctx, "power-color-token") end
         end,
         Meta("power.editor.resource_selector", "ephemeral"))
     powerColor = ColorValueAt(ctx, power, "Color", 360, -10,
@@ -1040,7 +1142,8 @@ local function BuildPowerAndClassPowerColors(ctx, b, CH)
     end, "class_power.full_resource.reset")
     M.TrackRefresh(ctx, RefreshSlotControls)
 end
-local function BuildAuraAndPortraitColors(ctx, b, CH)
+local function BuildAuraAndPortraitColors(ctx, b, CH, part)
+    if part ~= "portrait" then
     local auras = b:CollapsibleSection("colors_auras", "Auras", 526, false)
     local w = auras._msuf2Width or b.width or 720
     local colW = max(310, floor((w - 58) / 2))
@@ -1099,7 +1202,7 @@ local function BuildAuraAndPortraitColors(ctx, b, CH)
     AuraColorAt(markers, "Own Buff", -102, "aurasOwnBuffHighlightColor", 1, 0.85, 0.20, ApplyAuraColors)
     AuraColorAt(markers, "Own Debuff", -142, "aurasOwnDebuffHighlightColor", 1, 0.30, 0.30, ApplyAuraColors)
     ColorValueAt(ctx, markers, "Pandemic window color", 16, -180, GetPandemicRGB, SetPandemicRGB,
-        nil, nil, Meta("auras.pandemic_window.color"))
+        nil, nil, Meta("auras.pandemic_window.color"), { 0, 0.4, 1 })
     ValueSliderAt(ctx, markers, "Safe seconds", 16, -232, 0, 600, 1, colW - 32,
         function() return ReadAuraNumber("aurasCooldownTextSafeSeconds", 60, 0, 600) end,
         function(v) WriteAuraNumber("aurasCooldownTextSafeSeconds", v, 0, 600) end,
@@ -1115,16 +1218,18 @@ local function BuildAuraAndPortraitColors(ctx, b, CH)
     W.Text(auras, "Timer and marker colors are shared by unit and group aura previews.", 24, -440, w - 48, T.colors.muted)
     CH.ButtonAt(auras, "Reset aura colors", 24, -476, 150, ResetAuraColorSettings, "auras.reset")
     M.TrackRefresh(ctx, RefreshColorSamples)
+    end
+    if part == "auras" then return end
 
     local portrait = b:CollapsibleSection("colors_portrait", "Portrait Colors", 180, false)
     ColorValueAt(ctx, portrait, "Border custom color", 12, -10,
         function() return GeneralRGB("portraitBorderColor", 1, 1, 1) end,
         function(r, g, c) SetAllPortraitRGB("portraitBorderColor", r, g, c) end,
-        nil, nil, Meta("portrait.border_color"))
+        nil, nil, Meta("portrait.border_color"), { 1, 1, 1 })
     ColorValueAt(ctx, portrait, "Background color", 12, -46,
         function() return GeneralRGB("portraitBgColor", 0.05, 0.05, 0.05) end,
         function(r, g, c) SetAllPortraitRGB("portraitBgColor", r, g, c) end,
-        nil, nil, Meta("portrait.background_color"))
+        nil, nil, Meta("portrait.background_color"), { 0.05, 0.05, 0.05 })
     CH.ButtonAt(portrait, "Reset portrait colors", 12, -118, 170, function()
         SetAllPortraitRGB("portraitBorderColor", 1, 1, 1)
         SetAllPortraitRGB("portraitBgColor", 0.05, 0.05, 0.05)
@@ -1150,19 +1255,134 @@ local function OpenFontsTextColors()
     end
     return true
 end
+-- Text-color MODES mirrored from Fonts > Text Colors, pinned to the SHARED
+-- font scope so edits here are deterministic no matter which scope the Fonts
+-- page currently targets. Same storage keys, same apply route - one source of
+-- truth; per-frame and group overrides stay on the Fonts page.
+local function FontColorSwatch()
+    local r, g, b = ApiRGB("GetGlobalFontColor", 1, 1, 1)
+    return { r, g, b }
+end
+local function PlayerClassSwatch()
+    local classToken
+    if type(_G.UnitClass) == "function" then
+        local _, token = _G.UnitClass("player")
+        classToken = token
+    end
+    local r, g, b = ClassColorRGB(classToken or "WARRIOR")
+    return { r, g, b }
+end
+local function NPCReactionSwatch()
+    local r, g, b = ApiRGB("GetNPCColor", 0.85, 0.10, 0.10, "enemy")
+    return { r, g, b }
+end
+local function HealthGradientSwatch()
+    return { 1, 0.7, 0 }
+end
+local function PowerTypeSwatch()
+    local token
+    if type(_G.UnitPowerType) == "function" then
+        local _, powerToken = _G.UnitPowerType("player")
+        token = powerToken
+    end
+    local r, g, b = GetPowerOverrideRGB(token and token ~= "" and token or "MANA")
+    return { r, g, b }
+end
+local FONT_TEXT_MODE_VALUES = {
+    name = {
+        { value = "DEFAULT", text = "Default (Font Color)", swatchColor = FontColorSwatch },
+        { value = "CLASS", text = "Class Color", swatchColor = PlayerClassSwatch },
+    },
+    npc = {
+        { value = "DEFAULT", text = "Default (Font Color)", swatchColor = FontColorSwatch },
+        { value = "NPC", text = "NPC / Reaction Color", swatchColor = NPCReactionSwatch },
+        { value = "CLASS", text = "Class Color (Reaction fallback)", swatchColor = PlayerClassSwatch },
+    },
+    health = {
+        { value = "DEFAULT", text = "Default (Font Color)", swatchColor = FontColorSwatch },
+        { value = "CLASS", text = "Class Color", swatchColor = PlayerClassSwatch },
+        { value = "HEALTH", text = "Health Gradient", swatchColor = HealthGradientSwatch },
+    },
+    power = {
+        { value = "DEFAULT", text = "Default (Font Color)", swatchColor = FontColorSwatch },
+        { value = "RESOURCE", text = "By Power Type", swatchColor = PowerTypeSwatch },
+    },
+}
+local function ApplySharedFontTextColors(reason)
+    local apply = CurrentApplyService()
+    if apply and type(apply.RequestFonts) == "function" then
+        return apply.RequestFonts(reason or "MSUF2_COLORS_TEXT_MODES", "shared")
+    end
+    return RequestGeneral(reason or "MSUF2_COLORS_TEXT_MODES", { preview = true, applyAll = true })
+end
 local function BuildFontAndClassColors(ctx, b, CH, part)
     if part ~= "classes" then
-    local font = b:CollapsibleSection("colors_font", "Global Font Color", 100, false)
+    local font = b:CollapsibleSection("colors_font", "Text Colors", 252, false)
+    local fontW = font._msuf2Width or ctx.width or 720
     CH.ApiColorAt(ctx, font, "Global font color", 12, -10, "GetGlobalFontColor", "SetGlobalFontColor", 1, 1, 1)
-    CH.ButtonAt(font, "Use font palette", 12, -50, 150, function()
+    CH.ButtonAt(font, "Use font palette", 360, -10, 170, function()
         if not ApiCall("ResetGlobalFontToPalette") then
             G().useCustomFontColor = false
             ClearRGB(G(), "fontColorCustom")
             ApplyColors()
         end
     end, "font.use_palette")
+    local nameModeDropdown = ValueDropdownAt(ctx, font, "Player Name Color", 12, -52, FONT_TEXT_MODE_VALUES.name, 300,
+        function() return G().nameClassColor and "CLASS" or "DEFAULT" end,
+        function(v)
+            G().nameClassColor = v == "CLASS"
+            ApplySharedFontTextColors("MSUF2_NAME_CLASS_COLOR")
+        end,
+        Meta("font.text_mode.player_name", "ephemeral"))
+    local npcModeDropdown = ValueDropdownAt(ctx, font, "NPC / Boss Name Color", 360, -52, FONT_TEXT_MODE_VALUES.npc, 300,
+        function()
+            local g = G()
+            if g.nameNpcClassColor then return "CLASS" end
+            return g.npcNameRed and "NPC" or "DEFAULT"
+        end,
+        function(v)
+            local g = G()
+            g.nameNpcClassColor = v == "CLASS"
+            g.npcNameRed = v == "NPC"
+            ApplySharedFontTextColors("MSUF2_NPC_NAME_COLOR")
+        end,
+        Meta("font.text_mode.npc_name", "ephemeral"))
+    local hpModeDropdown = ValueDropdownAt(ctx, font, "HP Text Color", 12, -112, FONT_TEXT_MODE_VALUES.health, 300,
+        function()
+            local value = G().colorHealthTextByHealth
+            if value == "CLASS" then return "CLASS" end
+            return (value == true or value == "HEALTH") and "HEALTH" or "DEFAULT"
+        end,
+        function(v)
+            G().colorHealthTextByHealth = (v == "CLASS") and "CLASS" or (v == "HEALTH")
+            ApplySharedFontTextColors("MSUF2_HP_TEXT_COLOR")
+        end,
+        Meta("font.text_mode.hp_text", "ephemeral"))
+    local powerModeDropdown = ValueDropdownAt(ctx, font, "Power Text Color", 360, -112, FONT_TEXT_MODE_VALUES.power, 300,
+        function() return G().colorPowerTextByType and "RESOURCE" or "DEFAULT" end,
+        function(v)
+            G().colorPowerTextByType = v == "RESOURCE"
+            ApplySharedFontTextColors("MSUF2_POWER_TEXT_COLOR")
+        end,
+        Meta("font.text_mode.power_text", "ephemeral"))
+    if M.AddTooltip then
+        -- "Player" means player CHARACTERS (the unit type), not the player
+        -- frame: class colors only exist for players, NPC names are governed
+        -- by the dropdown next to it. Spell that out.
+        M.AddTooltip(nameModeDropdown, TrText("Player Name Color"),
+            TrText("Name color for player characters on ALL frames - target, focus, party and raid included. NPC names use the setting next to this one."), { hook = true })
+        M.AddTooltip(npcModeDropdown, TrText("NPC / Boss Name Color"),
+            TrText("Name color for NPCs and bosses on all frames that follow the shared text settings."), { hook = true })
+        M.AddTooltip(hpModeDropdown, TrText("HP Text Color"),
+            TrText("HP text color mode for all frames that follow the shared text settings."), { hook = true })
+        M.AddTooltip(powerModeDropdown, TrText("Power Text Color"),
+            TrText("Power text color mode for all frames that follow the shared text settings."), { hook = true })
+    end
+    local sharedNote = W.Text(font, "Shared defaults for all frames. Per-frame and group overrides live in Fonts > Text Colors.",
+        12, -172, fontW - 28, T.colors.muted)
+    sharedNote:SetJustifyH("LEFT")
     local openFonts = T.Button(font, "Fonts > Text Colors", 190, 22)
-    openFonts:SetPoint("TOPRIGHT", font, "TOPRIGHT", -16, -50)
+    openFonts:SetPoint("TOPLEFT", font, "TOPLEFT", 12, -204)
     if T.CenterButtonLabel then T.CenterButtonLabel(openFonts) end
     if M.AddTooltip then
         M.AddTooltip(openFonts, "Fonts > Text Colors", "Open the Fonts page at its Text Colors section.", { hook = true })
@@ -1184,11 +1404,12 @@ local function BuildFontAndClassColors(ctx, b, CH, part)
         local token = tokens[i]
         local col = (i - 1) % 4
         local row = floor((i - 1) / 4)
+        local cdr, cdg, cdb = ClassDefaultRGB(token)
         ColorValueAt(ctx, classColors, COLOR_DATA.CLASS_LABELS[token] or token, 12 + col * classColW, -34 - row * 36,
             function() return ClassColorRGB(token) end,
             function(r, g, c)
                 if not ApiCall("SetClassColor", token, r, g, c) then ApplyUnitframeColorWithReload() end
-            end, classLabelW, 44, Meta("class_bar.token." .. tostring(token)))
+            end, classLabelW, 44, Meta("class_bar.token." .. tostring(token)), { cdr, cdg, cdb })
     end
     CH.ButtonAt(classColors, "Reset all class colors", 12, classResetY, 190, function()
         if not ApiCall("ResetAllClassColors") then
@@ -1255,11 +1476,11 @@ local function BuildBarGradientColors(ctx, b, CH)
     ColorValueAt(ctx, section, "Health gradient color", 14, colorY,
         function() return GradientRGB("healthBarGradientColor") end,
         function(r, g, bcol) SetGradientRGB("healthBarGradientColor", r, g, bcol, "MSUF2_HP_GRADIENT_COLOR") end,
-        compact and 180 or 190, 52, Meta("bar_gradient.health.color"))
+        compact and 180 or 190, 52, Meta("bar_gradient.health.color"), { 0, 0, 0 })
     ColorValueAt(ctx, section, "Power gradient color", powerX, powerY,
         function() return GradientRGB("powerBarGradientColor") end,
         function(r, g, bcol) SetGradientRGB("powerBarGradientColor", r, g, bcol, "MSUF2_POWER_GRADIENT_COLOR") end,
-        compact and 180 or 190, 52, Meta("bar_gradient.power.color"))
+        compact and 180 or 190, 52, Meta("bar_gradient.power.color"), { 0, 0, 0 })
     CH.ButtonAt(section, "Reset gradient colors", 14, resetY, 180, function()
         GradientScopeSet("healthBarGradientColorR", 0)
         GradientScopeSet("healthBarGradientColorG", 0)
@@ -1308,7 +1529,7 @@ local function BuildBackgroundAndAppearance(ctx, b, CH, part)
     end, "background.reset_to_black")
     end
     if part == "background" then return end
-    local appearance = b:CollapsibleSection("colors_appearance", "Unitframe Global Coloring", 350, true)
+    local appearance = b:CollapsibleSection("colors_appearance", "Unitframe Global Coloring", 330, true)
     local refreshBarModeControls
     local function CurrentBarMode()
         local g = G()
@@ -1316,21 +1537,48 @@ local function BuildBackgroundAndAppearance(ctx, b, CH, part)
         if mode ~= "dark" and mode ~= "class" and mode ~= "unified" and mode ~= "gradient" then mode = (g.useClassColors and "class") or "dark" end
         return mode
     end
-    ValueDropdownAt(ctx, appearance, "Bar mode", 12, -10, ValueTextPairs "dark=Dark Mode (dark black bars)|class=Class Color Mode (color HP bars)|unified=Unified Color Mode (one color for all frames)|gradient=Color Gradient", 320,
+    local function SetBarMode(mode)
+        local g = G()
+        g.barMode = mode
+        g.darkMode = (mode == "dark")
+        g.useClassColors = (mode == "class")
+        ApplyUnitframeColorWithReload()
+        if refreshBarModeControls then refreshBarModeControls() end
+        if M.RequestRefresh then M.RequestRefresh(ctx, "colors-bar-mode") end
+    end
+    -- Mode-first: the four coloring modes are the most consequential choice on
+    -- this page, so they lead the section as cards. The dropdown below stays
+    -- the canonical bound control for search and Assistant automation.
+    local BAR_MODE_CARDS = {
+        { mode = "dark", title = "Dark Mode", desc = "Dark, neutral bars for every frame." },
+        { mode = "class", title = "Class Colors", desc = "Health bars use Blizzard class colors." },
+        { mode = "unified", title = "Unified", desc = "One custom color for all health bars." },
+        { mode = "gradient", title = "Gradient", desc = "Bar color follows health percent (low / mid / high)." },
+    }
+    local appearanceW = appearance._msuf2Width or ctx.width or 720
+    local modeCardGap = 8
+    local modeCardW = min(172, max(120, floor((min(appearanceW, 740) - 24 - modeCardGap * 3) / 4)))
+    local modeCards = {}
+    for i = 1, #BAR_MODE_CARDS do
+        local cardSpec = BAR_MODE_CARDS[i]
+        local card = T.Button(appearance, cardSpec.title, modeCardW, 26)
+        card:SetPoint("TOPLEFT", appearance, "TOPLEFT", 12 + (i - 1) * (modeCardW + modeCardGap), -10)
+        if M.AddTooltip then M.AddTooltip(card, TrText(cardSpec.title), TrText(cardSpec.desc), { hook = true }) end
+        card:SetScript("OnClick", function() SetBarMode(cardSpec.mode) end)
+        RegisterControl(card, Meta("appearance.bar_mode_card." .. cardSpec.mode, "ephemeral"), cardSpec.title, "button")
+        modeCards[cardSpec.mode] = card
+    end
+    local modeDescLabel = LabelAt(appearance, "", 12, -44, appearanceW - 24, "GameFontHighlightSmall", T.colors.muted)
+    ValueDropdownAt(ctx, appearance, "Bar mode", 12, -70, ValueTextPairs "dark=Dark Mode (dark black bars)|class=Class Color Mode (color HP bars)|unified=Unified Color Mode (one color for all frames)|gradient=Color Gradient", 320,
         function()
             return CurrentBarMode()
         end,
         function(mode)
-            local g = G()
-            g.barMode = mode
-            g.darkMode = (mode == "dark")
-            g.useClassColors = (mode == "class")
-            ApplyUnitframeColorWithReload()
-            if refreshBarModeControls then refreshBarModeControls() end
+            SetBarMode(mode)
         end,
         Meta("appearance.bar_mode"))
-    local unifiedColor = CH.GeneralColorAt(ctx, appearance, "Unified bar color", 12, -70, "unifiedBar", 0.10, 0.60, 0.90, ApplyUnitframeColorWithReload)
-    local darkColor = ValueSliderAt(ctx, appearance, "Dark mode bar color", 12, -112, 0, 100, 1, 300,
+    local unifiedColor = CH.GeneralColorAt(ctx, appearance, "Unified bar color", 12, -134, "unifiedBar", 0.10, 0.60, 0.90, ApplyUnitframeColorWithReload)
+    local darkColor = ValueSliderAt(ctx, appearance, "Dark mode bar color", 12, -176, 0, 100, 1, 300,
         function()
             local v = tonumber(G().darkBarGray)
             if not v then return 7 end
@@ -1343,16 +1591,16 @@ local function BuildBackgroundAndAppearance(ctx, b, CH, part)
             ApplyUnitframeColorWithReload()
         end,
         Meta("appearance.dark_mode_tone"))
-    local gradientStrength = SliderAt(ctx, appearance, "Gradient strength", 360, -70, 0, 1, 0.05, 250, G, "gradientStrength", 0.45, ApplyUnitframeColorWithReload, Meta("appearance.gradient.strength"))
-    local healthGradient = SwitchAt(ctx, appearance, "Health Gradient", 360, -118, 230, G, "enableHealthGradient", true, function()
+    local gradientStrength = SliderAt(ctx, appearance, "Gradient strength", 360, -134, 0, 1, 0.05, 250, G, "gradientStrength", 0.45, ApplyUnitframeColorWithReload, Meta("appearance.gradient.strength"))
+    local healthGradient = SwitchAt(ctx, appearance, "Health Gradient", 360, -182, 230, G, "enableHealthGradient", true, function()
         ApplyUnitframeColorWithReload()
         if refreshBarModeControls then refreshBarModeControls() end
     end, Meta("appearance.gradient.enabled"))
-    local gradientStopsLabel = LabelAt(appearance, "Health gradient stops", 12, -166, 220, "GameFontNormalSmall", T.colors.muted)
-    local gradientLow = CH.GeneralColorAt(ctx, appearance, "Low", 12, -196, "healthGradientLow", 1, 0, 0, ApplyUnitframeColorWithReload, 58, 34)
-    local gradientMid = CH.GeneralColorAt(ctx, appearance, "Mid", 170, -196, "healthGradientMid", 1, 1, 0, ApplyUnitframeColorWithReload, 58, 34)
-    local gradientHigh = CH.GeneralColorAt(ctx, appearance, "High", 328, -196, "healthGradientHigh", 0, 1, 0, ApplyUnitframeColorWithReload, 58, 34)
-    local gradientReset = CH.ButtonAt(appearance, "Reset gradient", 486, -196, 150, function()
+    local gradientStopsLabel = LabelAt(appearance, "Health gradient stops", 12, -230, 220, "GameFontNormalSmall", T.colors.muted)
+    local gradientLow = CH.GeneralColorAt(ctx, appearance, "Low", 12, -260, "healthGradientLow", 1, 0, 0, ApplyUnitframeColorWithReload, 58, 34)
+    local gradientMid = CH.GeneralColorAt(ctx, appearance, "Mid", 170, -260, "healthGradientMid", 1, 1, 0, ApplyUnitframeColorWithReload, 58, 34)
+    local gradientHigh = CH.GeneralColorAt(ctx, appearance, "High", 328, -260, "healthGradientHigh", 0, 1, 0, ApplyUnitframeColorWithReload, 58, 34)
+    local gradientReset = CH.ButtonAt(appearance, "Reset gradient", 486, -260, 150, function()
         local g = G()
         g.healthGradientLowR, g.healthGradientLowG, g.healthGradientLowB = 1, 0, 0
         g.healthGradientMidR, g.healthGradientMidG, g.healthGradientMidB = 1, 1, 0
@@ -1368,6 +1616,14 @@ local function BuildBackgroundAndAppearance(ctx, b, CH, part)
         SetControlEnabled(darkColor, mode == "dark")
         SetControlEnabled(healthGradient, gradientMode)
         SetControlsEnabled(gradientEditControls, gradientEnabled)
+        for i = 1, #BAR_MODE_CARDS do
+            local cardSpec = BAR_MODE_CARDS[i]
+            local card = modeCards[cardSpec.mode]
+            if card and card.SetActive then card:SetActive(cardSpec.mode == mode) end
+            if cardSpec.mode == mode and modeDescLabel and modeDescLabel.SetText then
+                modeDescLabel:SetText(TrText(cardSpec.desc))
+            end
+        end
     end
     M.TrackRefresh(ctx, refreshBarModeControls)
     refreshBarModeControls()
@@ -1445,6 +1701,15 @@ local function BuildUnitAndNPCColors(ctx, b, CH)
     M.TrackRefresh(ctx, RefreshNPCTypeControls)
 end
 
+-- Colors that write one shared setting used by unit AND group frames get a
+-- small inline tag so the duplication reads as intentional, not as two
+-- separate settings.
+local function MarkSharedColor(control)
+    if not control then return end
+    local tag = T.Font(control, "GameFontDisableSmall", TrText("Shared with group frames"), T.colors.muted)
+    tag:SetPoint("LEFT", control, "RIGHT", 8, 0)
+    control._msuf2SharedColorTag = tag
+end
 local function BuildBarAndGroupColors(ctx, b, CH, includeGroup)
     local barColors = b:CollapsibleSection("colors_bar_colors", "Bar & Prediction Colors", 280, false)
     local barLeftX = 30
@@ -1458,18 +1723,21 @@ local function BuildBarAndGroupColors(ctx, b, CH, includeGroup)
         { "Aggro Border Color", barRightX, -38, "GetAggroBorderColor", "SetAggroBorderColor", 1, 0.5, 0 },
     })
     local powerBg = barColorControls.powerBg
-    ColorValueAt(ctx, barColors, "Positive Heal Prediction", barLeftX, -146,
+    MarkSharedColor(barColorControls.SetAbsorbOverlayColor)
+    MarkSharedColor(barColorControls.SetHealAbsorbOverlayColor)
+    local healPredictionColor = ColorValueAt(ctx, barColors, "Positive Heal Prediction", barLeftX, -146,
         function() return GeneralRGB("healPredictionColor", 0, 1, 0) end,
         function(r, g, c)
             local general = G()
             general.healPredictionColorR, general.healPredictionColorG, general.healPredictionColorB = r, g, c
             ApplyColors()
         end,
-        nil, nil, Meta("prediction.heal_color"))
+        nil, nil, Meta("prediction.heal_color"), { 0, 1, 0 })
+    MarkSharedColor(healPredictionColor)
     ColorValueAt(ctx, barColors, "Purge Border Color", barRightX, -74,
         function() return GeneralRGBAlias("hlPurgeColor", "purgeBorderColor", 1.00, 0.85, 0.00) end,
         function(r, g, c) SetGeneralRGBAlias("hlPurgeColor", "purgeBorderColor", r, g, c) end,
-        nil, nil, Meta("bar.purge_border_color"))
+        nil, nil, Meta("bar.purge_border_color"), { 1.00, 0.85, 0.00 })
     ColorValueAt(ctx, barColors, "Bar Outline Color", barRightX, -110,
         function() return GeneralRGB("barOutlineColor", 0, 0, 0) end,
         function(r, g, c)
@@ -1479,7 +1747,7 @@ local function BuildBarAndGroupColors(ctx, b, CH, includeGroup)
             general.barOutlineColorMode = nil
             ApplyGlobalOutlineColor()
         end,
-        nil, nil, Meta("bar.outline_color"))
+        nil, nil, Meta("bar.outline_color"), { 0, 0, 0 })
     local powerBgMatch = ValueToggleAt(ctx, barColors, "Power background matches HP", barRightX, -148,
         function() return ApiValue("GetPowerBarBackgroundMatchHP", function() return G().powerBarBgMatchBarColor == true end) end,
         function(v)
@@ -1534,7 +1802,7 @@ local function BuildCastbarColors(ctx, b, CH)
         function(r, g, c)
             if not ApiSetRGB("SetPlayerCastbarOverrideColor", r, g, c) then ApplyCastbarColors() end
         end,
-        overrideColorLabelW, nil, Meta("castbar.player_override.custom_color"))
+        overrideColorLabelW, nil, Meta("castbar.player_override.custom_color"), { 0, 0.6, 1 })
     local overrideEnable
     local overrideMode = ValueDropdownAt(ctx, castbar, "Mode", overrideModeX, -190, ValueTextPairs "CLASS=Class color|CUSTOM=Custom color", overrideModeW,
         function() return ApiValue("GetPlayerCastbarOverrideMode", function() return G().playerCastbarOverrideMode or "CLASS" end) end,
@@ -1587,17 +1855,10 @@ end
 
 local function BuildHighlightAndGameplayColors(ctx, b, CH, part)
     if part ~= "gameplay" then
-    local highlight = b:CollapsibleSection("colors_highlight", "Mouseover Highlight", 210, false)
-    local highlightColor = ColorValueAt(ctx, highlight, "Mouseover highlight color", 12, -48, HighlightRGB, SetHighlightRGB,
-        nil, nil, Meta("highlight.mouseover.color"))
-    SwitchAt(ctx, highlight, "Mouseover Highlight", 12, -10, 260, G, "highlightEnabled", true, function()
-        SetHighlightRGB(HighlightRGB())
-        SetControlEnabled(highlightColor, G().highlightEnabled ~= false)
-    end, Meta("highlight.mouseover.enabled"))
-    CH.TableColorAt(ctx, highlight, "Boss target highlight color", 12, -104, G, "bossTargetHighlightColor", 1, 0.82, 0, ApplyBossTargetHighlightColor)
-    M.BindGateGroup(ctx, nil, {
-        { controls = highlightColor, on = function() return G().highlightEnabled ~= false end },
-    })
+    local highlight = b:CollapsibleSection("colors_highlight", "Highlight Colors", 154, false)
+    ColorValueAt(ctx, highlight, "Mouseover highlight color", 12, -10, HighlightRGB, SetHighlightRGB,
+        nil, nil, Meta("highlight.mouseover.color"), { 1, 1, 1 })
+    CH.TableColorAt(ctx, highlight, "Boss target highlight color", 12, -66, G, "bossTargetHighlightColor", 1, 0.82, 0, ApplyBossTargetHighlightColor)
     end
     if part == "highlight" then return end
     local gameplay = b:CollapsibleSection("colors_gameplay", "Combat Feedback", 310, false)
@@ -1612,7 +1873,7 @@ local function BuildHighlightAndGameplayColors(ctx, b, CH, part)
             if gp.combatStateColorSync then SetTableRGB(gp, "combatStateLeaveColor", r, g, c) end
             ApplyGameplayColors()
         end,
-        nil, nil, Meta("gameplay.combat_enter_color"))
+        nil, nil, Meta("gameplay.combat_enter_color"), { 1, 1, 1 })
     local gameplayColors = CH.TableColorSpecs(ctx, gameplay, Gameplay, {
         { "Combat Leave text color", 12, -82, "combatStateLeaveColor", 0.7, 0.7, 0.7 },
         { "Crosshair in-range color", 12, -142, "crosshairInRangeColor", 0, 1, 0 },
@@ -1644,248 +1905,255 @@ local function BuildHighlightAndGameplayColors(ctx, b, CH, part)
     })
 end
 
+-- The painter paints through the real bound controls of the sections below
+-- (each section's color-context owner list), so every color has exactly one
+-- source of truth. This shared spec drives the painter tabs, the description
+-- line under them AND the headline above the filtered section list, so users
+-- see that one tab controls both.
+local COLOR_PAINTER_CATEGORIES = {
+    { key = "unit", title = "Player & Target Frames", shortTitle = "Player & Target",
+        subtitle = "Bars, text, portraits, NPC colors and combat feedback for unit frames.",
+        pickerNote = "HP, name and power text share Font Coloring and remain editable here." },
+    { key = "group", title = "Party & Raid Frames", shortTitle = "Party & Raid",
+        subtitle = "Shared by Party, Raid and Mythic Raid.",
+        pickerNote = "Shared by Party, Raid and Mythic Raid." },
+    { key = "cast", title = "Castbars", shortTitle = "Castbar",
+        subtitle = "Interrupt states, text, border and kick feedback.",
+        pickerNote = "Cast states, feedback, text, border and background." },
+    { key = "auras", title = "Auras & Icons", shortTitle = "Auras",
+        subtitle = "Timer urgency, ownership, stacks and pandemic state.",
+        pickerNote = "Timers, ownership, stacks, pandemic and purge." },
+    { key = "resources", title = "Power & Class Resources", shortTitle = "Resources",
+        subtitle = "Power bar colors and Class Resource colors (combo points, holy power, ...).",
+        pickerNote = "Power and Class Resource colors." },
+}
+local function TokenText(list, value)
+    for i = 1, #(list or {}) do
+        local item = list[i]
+        if item.value == value then return item.text or tostring(value) end
+    end
+    return tostring(value or "")
+end
+-- The Resources tab renders a menu-only preview strip instead of the live unit
+-- frames: it must follow the Power type / Resource type dropdown selection,
+-- which the player's real frames cannot show for foreign classes.
+local COLOR_RESOURCES_CATEGORY
+for i = 1, #COLOR_PAINTER_CATEGORIES do
+    if COLOR_PAINTER_CATEGORIES[i].key == "resources" then COLOR_RESOURCES_CATEGORY = COLOR_PAINTER_CATEGORIES[i] end
+end
+COLOR_RESOURCES_CATEGORY.preview = {
+    powerLabel = function() return TokenText(COLOR_POWER_TOKENS, M.colorsPowerToken or "MANA") end,
+    power = function() return GetPowerOverrideRGB(M.colorsPowerToken or "MANA") end,
+    powerBg = function() return ApiRGB("GetPowerBarBackgroundColor", 0, 0, 0) end,
+    resourceLabel = function() return TokenText(COLOR_CP_TOKENS, M.colorsCPToken or "COMBO_POINTS") end,
+    resource = function() return GetClassPowerRGB(M.colorsCPToken or "COMBO_POINTS") end,
+    resourceBg = function() return GetClassPowerBgRGB(M.colorsCPToken or "COMBO_POINTS") end,
+    slotCount = function() return ClassPowerSlotCount(M.colorsCPToken or "COMBO_POINTS") end,
+    slot = function(i) return GetClassPowerSlotRGB(M.colorsCPToken or "COMBO_POINTS", i) end,
+    fullEnabled = function() return ClassPowerFullColorEnabled(M.colorsCPToken or "COMBO_POINTS") end,
+    full = function() return GetClassPowerFullRGB(M.colorsCPToken or "COMBO_POINTS") end,
+}
 local function BuildColorPainter(ctx, b)
     local painter = M.ColorPainter
     if not (painter and type(painter.Build) == "function") then return end
     M.colorsPowerToken = M.colorsPowerToken or "MANA"
     M.colorsCPToken = M.colorsCPToken or "COMBO_POINTS"
-    local function ApiSpec(label, role, getName, setName, dr, dg, db, apply)
-        return {
-            label = label, role = role,
-            get = function() return ApiRGB(getName, dr, dg, db) end,
-            set = function(r, g, bcol)
-                if not ApiSetRGB(setName, r, g, bcol) then (apply or ApplyColors)() end
-            end,
-        }
-    end
-    local function GeneralSpec(label, role, prefix, dr, dg, db, apply)
-        return {
-            label = label, role = role,
-            get = function() return GeneralRGB(prefix, dr, dg, db) end,
-            set = function(r, g, bcol) SetGeneralRGB(prefix, r, g, bcol); (apply or ApplyColors)() end,
-        }
-    end
-    local function TableSpec(label, role, getTable, key, dr, dg, db, apply)
-        return {
-            label = label, role = role,
-            get = function() return TableRGB(getTable(), key, dr, dg, db) end,
-            set = function(r, g, bcol) SetTableRGB(getTable(), key, r, g, bcol); (apply or ApplyColors)() end,
-        }
-    end
-    local categories = {
-        {
-            key = "unit", title = "Unit Frames", shortTitle = "Bars & Text", subtitle = "Health, overlays, portrait and frame treatment.",
-            pickerNote = "HP, name and power text share Font Coloring and remain editable here.",
-            colors = {
-                GeneralSpec("Unified health", "health", "unifiedBar", 0.10, 0.60, 0.90, ApplyUnitframeColorWithReload),
-                GeneralSpec("Health gradient - low", "gradientLow", "healthGradientLow", 1, 0, 0, ApplyUnitframeColorWithReload),
-                GeneralSpec("Health gradient - mid", "gradientMid", "healthGradientMid", 1, 1, 0, ApplyUnitframeColorWithReload),
-                GeneralSpec("Health gradient - high", "gradientHigh", "healthGradientHigh", 0, 1, 0, ApplyUnitframeColorWithReload),
-                ApiSpec("Bar background", "background", "GetClassBarBgColor", "SetClassBarBgColor", 0, 0, 0, ApplyUnitframeColorWithReload),
-                ApiSpec("Power background", "powerBg", "GetPowerBarBackgroundColor", "SetPowerBarBackgroundColor", 0, 0, 0),
-                ApiSpec("Absorb overlay", "absorb", "GetAbsorbOverlayColor", "SetAbsorbOverlayColor", 1, 1, 1),
-                ApiSpec("Heal-absorb", "healAbsorb", "GetHealAbsorbOverlayColor", "SetHealAbsorbOverlayColor", 0.7, 0, 0),
-                GeneralSpec("Positive heal prediction", "healPrediction", "healPredictionColor", 0, 1, 0),
-                GeneralSpec("Frame outline", "outline", "barOutlineColor", 0, 0, 0, ApplyGlobalOutlineColor),
-                ApiSpec("HP / name / power text", "font", "GetGlobalFontColor", "SetGlobalFontColor", 1, 1, 1),
-                { label = "Portrait border", role = "portraitBorder", get = function() return GeneralRGB("portraitBorderColor", 1, 1, 1) end,
-                    set = function(r, g, bcol) SetAllPortraitRGB("portraitBorderColor", r, g, bcol) end },
-                { label = "Portrait background", role = "portraitBg", get = function() return GeneralRGB("portraitBgColor", 0.05, 0.05, 0.05) end,
-                    set = function(r, g, bcol) SetAllPortraitRGB("portraitBgColor", r, g, bcol) end },
-                { label = "Mouseover highlight", role = "mouseover", get = HighlightRGB, set = SetHighlightRGB },
-            },
-        },
-        {
-            key = "group", title = "Group Frames", shortTitle = "Group", subtitle = "Shared by Party, Raid and Mythic Raid.",
-            pickerNote = "Shared by Party, Raid and Mythic Raid.",
-            colors = {
-                { label = "Custom health", role = "health", get = function() return GroupRGB("healthCustom", 0.20, 0.80, 0.20) end,
-                    set = function(r, g, bcol) SetGroupRGB("healthCustom", r, g, bcol, "MSUF2_GROUP_PAINTER", "visual") end },
-                { label = "Background", role = "background", get = function() return GroupRGB("bg", 0.10, 0.10, 0.10) end,
-                    set = function(r, g, bcol) SetGroupRGB("bg", r, g, bcol, "MSUF2_GROUP_PAINTER", "visual") end },
-                { label = "Group border", role = "border", get = function() return GroupRGB("groupBorder", 0.38, 0.68, 1.00) end,
-                    set = function(r, g, bcol) SetGroupRGB("groupBorder", r, g, bcol, "MSUF2_GROUP_PAINTER", "visual") end },
-                { label = "Target highlight", role = "target", get = function() return GroupRGB("target", 1, 1, 1) end,
-                    set = function(r, g, bcol) SetGroupRGB("target", r, g, bcol, "MSUF2_GROUP_PAINTER", "visual") end },
-                { label = "Focus highlight", role = "focus", get = function() return GroupRGB("hlFocusColor", 0.50, 0.50, 1.00) end,
-                    set = function(r, g, bcol) SetGroupRGB("hlFocusColor", r, g, bcol, "MSUF2_GROUP_PAINTER", "visual") end },
-                { label = "Aggro corners", role = "aggro", get = function() return GroupRGB("ciAggroColor", 1, 0.55, 0) end,
-                    set = function(r, g, bcol) SetGroupRGB("ciAggroColor", r, g, bcol, "MSUF2_GROUP_PAINTER", "visual") end },
-                { label = "Dead / offline", role = "dead", get = function() return GroupRGB("deadBg", 0.60, 0.05, 0.05) end,
-                    set = function(r, g, bcol) SetGroupRGB("deadBg", r, g, bcol, "MSUF2_GROUP_PAINTER", "visual") end },
-                { label = "Debuff stripe", role = "debuff", get = function() return GroupRGB("debuffStripeColor", 0.80, 0.20, 0.20) end,
-                    set = function(r, g, bcol) SetGroupRGB("debuffStripeColor", r, g, bcol, "MSUF2_GROUP_PAINTER", "visual") end },
-                ApiSpec("Absorb overlay", "absorb", "GetAbsorbOverlayColor", "SetAbsorbOverlayColor", 1, 1, 1),
-                ApiSpec("Heal-absorb", "healAbsorb", "GetHealAbsorbOverlayColor", "SetHealAbsorbOverlayColor", 0.7, 0, 0),
-                GeneralSpec("Positive heal prediction", "healPrediction", "healPredictionColor", 0, 1, 0),
-            },
-        },
-        {
-            key = "cast", title = "Castbars", shortTitle = "Castbar", subtitle = "Interrupt states, text, border and kick feedback.",
-            pickerNote = "Cast states, feedback, text, border and background.",
-            colors = {
-                ApiSpec("Interruptible", "interruptible", "GetInterruptibleCastColor", "SetInterruptibleCastColor", 0, 0.9, 0.8, ApplyCastbarColors),
-                ApiSpec("Non-interruptible", "nonInterruptible", "GetNonInterruptibleCastColor", "SetNonInterruptibleCastColor", 0.4, 0.01, 0.01, ApplyCastbarColors),
-                ApiSpec("Interrupted", "interrupted", "GetInterruptFeedbackCastColor", "SetInterruptFeedbackCastColor", 1, 0.82, 0, ApplyCastbarColors),
-                ApiSpec("Kick unavailable", "unavailable", "GetInterruptUnavailableCastColor", "SetInterruptUnavailableCastColor", 1, 0.49, 0.14, ApplyCastbarColors),
-                ApiSpec("Cast text", "text", "GetCastbarTextColor", "SetCastbarTextColor", 1, 1, 1, ApplyCastbarColors),
-                ApiSpec("Cast Target Name", "targetName", "GetCastbarTargetNameColor", "SetCastbarTargetNameColor", 1, 1, 1, ApplyCastbarColors),
-                ApiSpec("Cast border", "border", "GetCastbarBorderColor", "SetCastbarBorderColor", 0, 0, 0, ApplyCastbarColors),
-                ApiSpec("Cast background", "background", "GetCastbarBackgroundColor", "SetCastbarBackgroundColor", 0.10, 0.10, 0.10, ApplyCastbarColors),
-                TableSpec("Kick ready", "kickReady", G, "kickReadyColor", 0, 1, 0, ApplyCastbarColors),
-                TableSpec("Kick not ready", "kickNotReady", G, "kickNotReadyColor", 1, 0, 0, ApplyCastbarColors),
-            },
-        },
-        {
-            key = "auras", title = "Auras & Icons", shortTitle = "Auras", subtitle = "Timer urgency, ownership, stacks and pandemic state.",
-            pickerNote = "Timers, ownership, stacks, pandemic and purge.",
-            colors = {
-                TableSpec("Safe timer", "safe", G, "aurasCooldownTextSafeColor", 1, 1, 1, ApplyAuraColors),
-                TableSpec("Warning timer", "warning", G, "aurasCooldownTextWarningColor", 1, 0.85, 0.20, ApplyAuraColors),
-                TableSpec("Urgent timer", "urgent", G, "aurasCooldownTextUrgentColor", 1, 0.55, 0.10, ApplyAuraColors),
-                TableSpec("Own buff", "ownBuff", G, "aurasOwnBuffHighlightColor", 1, 0.85, 0.20, ApplyAuraColors),
-                TableSpec("Own debuff", "ownDebuff", G, "aurasOwnDebuffHighlightColor", 1, 0.30, 0.30, ApplyAuraColors),
-                TableSpec("Stack count", "stack", G, "aurasStackCountColor", 1, 1, 1, ApplyAuraColors),
-                { label = "Pandemic window", role = "pandemic", get = GetPandemicRGB, set = SetPandemicRGB },
-                { label = "Purge border", role = "purge", get = function() return GeneralRGBAlias("hlPurgeColor", "purgeBorderColor", 1, 0.85, 0) end,
-                    set = function(r, g, bcol) SetGeneralRGBAlias("hlPurgeColor", "purgeBorderColor", r, g, bcol) end },
-            },
-        },
-        {
-            key = "resources", title = "Resources", shortTitle = "Resources", subtitle = "Current power and Class Resource selections.",
-            pickerNote = "Power and Class Resource colors.",
-            colors = {
-                { label = "Selected power", role = "power", get = function() return GetPowerOverrideRGB(M.colorsPowerToken or "MANA") end,
-                    set = function(r, g, bcol) SetPowerOverrideRGB(M.colorsPowerToken or "MANA", r, g, bcol) end },
-                ApiSpec("Power background", "powerBg", "GetPowerBarBackgroundColor", "SetPowerBarBackgroundColor", 0, 0, 0),
-                { label = "Class Resource", role = "class", get = function() return GetClassPowerRGB(M.colorsCPToken or "COMBO_POINTS") end,
-                    set = function(r, g, bcol) SetClassPowerRGB(M.colorsCPToken or "COMBO_POINTS", r, g, bcol) end },
-                { label = "Resource background", role = "classBg", get = function() return GetClassPowerBgRGB(M.colorsCPToken or "COMBO_POINTS") end,
-                    set = function(r, g, bcol) SetClassPowerBgRGB(M.colorsCPToken or "COMBO_POINTS", r, g, bcol) end },
-                { label = "First custom slot", role = "slot", get = function() return GetClassPowerSlotRGB(M.colorsCPToken or "COMBO_POINTS", 1) end,
-                    set = function(r, g, bcol)
-                        local token = M.colorsCPToken or "COMBO_POINTS"
-                        if GetClassPowerSlotMode(token) ~= "custom" then SetClassPowerSlotMode(token, "custom") end
-                        SetClassPowerRGB(ClassPowerSlotToken(token, 1), r, g, bcol)
-                    end },
-                { label = "Full resource", role = "full", get = function() return GetClassPowerFullRGB(M.colorsCPToken or "COMBO_POINTS") end,
-                    set = function(r, g, bcol)
-                        local token = M.colorsCPToken or "COMBO_POINTS"
-                        if not ClassPowerFullColorEnabled(token) then SetClassPowerFullColorEnabled(token, true) end
-                        SetClassPowerRGB(ClassPowerFullColorToken(token), r, g, bcol)
-                    end },
-            },
-        },
-    }
-    painter.Build(ctx, b, categories)
+    painter.Build(ctx, b, COLOR_PAINTER_CATEGORIES)
 end
 
-local function ColorGroupHasPendingFocus(ctx, sectionIds)
+-- One taxonomy: the painter tabs above decide which category of sections is
+-- visible below the preview. Every legacy section id survives unchanged inside
+-- its category, so search keywords, Assistant metadata and cross-page focus
+-- requests keep working. Categories build lazily on first activation; hidden
+-- (coverage/audit) builds materialize everything, matching the old groups.
+local COLOR_CATEGORY_ORDER = { "unit", "group", "cast", "auras", "resources" }
+local COLOR_CATEGORY_SECTIONS = {
+    unit = { "colors_appearance", "colors_bar_colors", "colors_bar_gradients", "colors_background",
+        "colors_font", "colors_classes", "colors_unit", "colors_npc_type", "colors_highlight",
+        "colors_gameplay", "colors_portrait" },
+    group = { "colors_group_frames", "colors_group_frames_background", "colors_group_frames_state", "colors_group_frames_highlights" },
+    cast = { "colors_castbar" },
+    auras = { "colors_auras" },
+    resources = { "colors_power", "colors_class_power" },
+}
+local COLOR_SECTION_CATEGORY = {}
+for categoryKey, sectionIds in pairs(COLOR_CATEGORY_SECTIONS) do
+    for i = 1, #sectionIds do COLOR_SECTION_CATEGORY[sectionIds[i]] = categoryKey end
+end
+
+local COLOR_CATEGORY_BUILDERS = {
+    unit = function(ctx, inner, CH)
+        BuildBackgroundAndAppearance(ctx, inner, CH, "appearance")
+        BuildBarAndGroupColors(ctx, inner, CH, false)
+        BuildBarGradientColors(ctx, inner, CH)
+        BuildBackgroundAndAppearance(ctx, inner, CH, "background")
+        BuildFontAndClassColors(ctx, inner, CH)
+        BuildUnitAndNPCColors(ctx, inner, CH)
+        BuildHighlightAndGameplayColors(ctx, inner, CH)
+        BuildAuraAndPortraitColors(ctx, inner, CH, "portrait")
+    end,
+    group = function(ctx, inner)
+        BuildGroupFrameColors(ctx, inner)
+    end,
+    cast = function(ctx, inner, CH)
+        BuildCastbarColors(ctx, inner, CH)
+    end,
+    auras = function(ctx, inner, CH)
+        BuildAuraAndPortraitColors(ctx, inner, CH, "auras")
+    end,
+    resources = function(ctx, inner, CH)
+        BuildPowerAndClassPowerColors(ctx, inner, CH)
+    end,
+}
+
+local function PendingColorFocusCategory(ctx)
     local request = _G.MSUF_EM2_MenuFocusRequest
-    if type(request) ~= "table" or request.explicit ~= true or request.consumed == true then return false end
-    if request.pageKey and tostring(request.pageKey) ~= tostring(ctx and ctx.key or "") then return false end
-    local wanted = tostring(request.sectionId or "")
-    for i = 1, #(sectionIds or {}) do
-        if wanted == sectionIds[i] then return true end
-    end
-    return false
+    if type(request) ~= "table" or request.explicit ~= true or request.consumed == true then return nil end
+    if request.pageKey and tostring(request.pageKey) ~= tostring(ctx and ctx.key or "") then return nil end
+    return COLOR_SECTION_CATEGORY[tostring(request.sectionId or "")]
 end
 
-local function BuildColorGroup(ctx, builder, id, title, subtitle, defaultOpen, sectionIds, build)
-    local group = builder:CollapsibleSection(id, title, 96, defaultOpen)
-    local entry = group._msuf2CollapsibleEntry
-    local groupW = group._msuf2Width or ctx.width or 720
-    local hasSubtitle = subtitle and subtitle ~= ""
-    if hasSubtitle then
-        LabelAt(group, subtitle, 16, -8, groupW - 32, "GameFontHighlightSmall", T.colors.muted)
+local function BuildColors(ctx)
+    local b, CH = W.PageBuilder(ctx), COLOR_HELPERS
+    -- Painter callbacks from a previous build of this page must never fire
+    -- into stale closures while this build is in progress.
+    M.ColorsOnPainterCategory = nil
+    M.ColorsSetPainterCategory = nil
+    M.ColorsEnsureCategoryBuilt = nil
+    b:GlobalStyleHeader("Colors", "Frame, group-frame, bar, aura, castbar and resource colors.", 72)
+    BuildColorPainter(ctx, b)
+
+    if not b._collapsibleStartY then b._collapsibleStartY = b.y end
+    local host = CreateFrame("Frame", nil, b.parent)
+    host:SetSize(b.width, 60)
+    host:SetPoint("TOPLEFT", b.parent, "TOPLEFT", b.x, b.y)
+    local hostEntry = { kind = "section", frame = host, height = 60, gap = 12 }
+    b.layoutEntries[#b.layoutEntries + 1] = hostEntry
+    b.y = b.y - 60 - 12
+
+    local categorySpecs = {}
+    for i = 1, #COLOR_PAINTER_CATEGORIES do
+        categorySpecs[COLOR_PAINTER_CATEGORIES[i].key] = COLOR_PAINTER_CATEGORIES[i]
+    end
+    local categories = {}
+    for i = 1, #COLOR_CATEGORY_ORDER do
+        local categoryKey = COLOR_CATEGORY_ORDER[i]
+        local container = CreateFrame("Frame", nil, host)
+        container:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
+        container:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
+        container:SetHeight(1)
+        container:Hide()
+        -- Headline that ties the filtered section list back to the painter tab
+        -- above, so the tab->list relationship stays visible while scrolling.
+        local spec = categorySpecs[categoryKey]
+        if spec then
+            local headline = T.Font(container, "GameFontNormal", TrText(spec.title or ""), T.colors.text, "section")
+            headline:SetPoint("TOPLEFT", container, "TOPLEFT", 2, -4)
+            if spec.subtitle and spec.subtitle ~= "" then
+                local sub = T.Font(container, "GameFontDisableSmall", TrText(spec.subtitle), T.colors.muted)
+                sub:SetPoint("TOPLEFT", container, "TOPLEFT", 2, -22)
+            end
+        end
+        categories[categoryKey] = { key = categoryKey, container = container, height = 60 }
     end
 
-    local inner, built, building
-    local function BuildContent()
-        if built or building or not entry then return false end
-        building = true
+    local activeKey
+    local function UpdateHostHeight()
+        local active = categories[activeKey]
+        local height = max(60, tonumber(active and active.height) or 60)
+        hostEntry.height = height
+        if host:GetHeight() ~= height then host:SetHeight(height) end
+        b:RequestRelayoutCollapsibles()
+    end
+    local ActivateCategory
+    local function EnsureCategoryBuilt(categoryKey)
+        local category = categories[categoryKey]
+        if not category or category.built or category.building then return category end
+        category.building = true
         local refreshers = ctx and ctx.refreshers
         local refreshStart = type(refreshers) == "table" and #refreshers or 0
         local wasBuilding = ctx and ctx._msuf2Building
         if ctx then ctx._msuf2Building = true end
-        inner = W.PageBuilder(ctx, {
-            parent = group,
-            width = groupW,
+        local inner = W.PageBuilder(ctx, {
+            parent = category.container,
+            width = b.width,
             contentX = 0,
-            topInset = hasSubtitle and 30 or 0,
-            ancestorEntry = entry,
+            topInset = 34,
             onContentHeight = function(height)
-                height = max(72, tonumber(height) or 72)
-                if entry.contentHeight == height then return end
-                entry.contentHeight = height
-                if entry.body and entry.body.SetHeight then entry.body:SetHeight(height) end
-                if entry.outer and entry.outer.SetHeight then
-                    entry.outer:SetHeight(entry.headerHeight + (entry.open and height or 0))
-                end
-                builder:RequestRelayoutCollapsibles()
+                height = max(60, tonumber(height) or 60)
+                if category.height == height then return end
+                category.height = height
+                if activeKey == categoryKey then UpdateHostHeight() end
             end,
         })
-        build(inner)
+        COLOR_CATEGORY_BUILDERS[categoryKey](ctx, inner, CH)
         inner:RelayoutCollapsibles()
-        built = true
-        building = nil
+        category.built = true
+        category.building = nil
         if ctx then ctx._msuf2Building = wasBuilding end
         if not wasBuilding and type(refreshers) == "table" then
             for i = refreshStart + 1, #refreshers do
                 local refresh = refreshers[i]
                 if type(refresh) == "function" then refresh() end
             end
-            -- The current outer relayout reads the updated body height after
+            -- The current outer relayout reads the updated host height after
             -- this callback, so its pending marker has already been satisfied.
-            builder._msuf2RelayoutPending = nil
+            b._msuf2RelayoutPending = nil
         end
-        return true
+        for i = 1, #inner.collapsibles do
+            local sectionEntry = inner.collapsibles[i]
+            sectionEntry._msuf2EnsureVisible = function()
+                if type(M.ColorsSetPainterCategory) == "function" then
+                    M.ColorsSetPainterCategory(categoryKey)
+                elseif ActivateCategory then
+                    ActivateCategory(categoryKey)
+                end
+            end
+        end
+        return category
     end
-    local function RefreshLazyGroup()
-        if entry.open and not built then return BuildContent() end
+    ActivateCategory = function(categoryKey)
+        if not categories[categoryKey] then categoryKey = COLOR_CATEGORY_ORDER[1] end
+        EnsureCategoryBuilt(categoryKey)
+        if activeKey ~= categoryKey then
+            activeKey = categoryKey
+            for key, category in pairs(categories) do
+                category.container:SetShown(key == categoryKey)
+            end
+        end
+        UpdateHostHeight()
     end
-    if (ctx and ctx.hiddenBuild) or entry.open or ColorGroupHasPendingFocus(ctx, sectionIds) then
-        BuildContent()
-    else
-        entry._msuf2RefreshState = RefreshLazyGroup
+    M.ColorsOnPainterCategory = ActivateCategory
+    M.ColorsEnsureCategoryBuilt = function(sectionId)
+        local categoryKey = COLOR_SECTION_CATEGORY[tostring(sectionId or "")]
+        if categoryKey then EnsureCategoryBuilt(categoryKey) end
     end
-    return group
-end
-
-local function BuildColors(ctx)
-    local b, CH = W.PageBuilder(ctx), COLOR_HELPERS
-    b:GlobalStyleHeader("Colors", "Frame, group-frame, bar, aura, castbar and resource colors.", 72)
-    BuildColorPainter(ctx, b)
-
-    BuildColorGroup(ctx, b, "colors_group_general", "General", "The shared color rules used across MSUF.", false,
-        { "colors_appearance", "colors_font" }, function(inner)
-        BuildBackgroundAndAppearance(ctx, inner, CH, "appearance")
-        BuildFontAndClassColors(ctx, inner, CH, "font")
-    end)
-    BuildColorGroup(ctx, b, "colors_group_units", "Unit Frames", "Reaction colors and feedback for individual units.", false,
-        { "colors_unit", "colors_npc_type", "colors_highlight" }, function(inner)
-        BuildUnitAndNPCColors(ctx, inner, CH)
-        BuildHighlightAndGameplayColors(ctx, inner, CH, "highlight")
-    end)
-    BuildColorGroup(ctx, b, "colors_group_groups", "Group Frames", nil, false,
-        { "colors_group_frames", "colors_group_frames_background", "colors_group_frames_state", "colors_group_frames_highlights" }, function(inner)
-        BuildGroupFrameColors(ctx, inner)
-    end)
-    BuildColorGroup(ctx, b, "colors_group_bars", "Bars", "Health, power, class resources, castbars and predictions.", false,
-        { "colors_classes", "colors_background", "colors_bar_colors", "colors_bar_gradients", "colors_castbar", "colors_power", "colors_class_power" }, function(inner)
-        BuildFontAndClassColors(ctx, inner, CH, "classes")
-        BuildBackgroundAndAppearance(ctx, inner, CH, "background")
-        BuildBarAndGroupColors(ctx, inner, CH, false)
-        BuildBarGradientColors(ctx, inner, CH)
-        BuildCastbarColors(ctx, inner, CH)
-        BuildPowerAndClassPowerColors(ctx, inner, CH)
-    end)
-    BuildColorGroup(ctx, b, "colors_group_additional", "Additional", "Combat feedback, aura timers and portraits.", false,
-        { "colors_gameplay", "colors_auras", "colors_portrait" }, function(inner)
-        BuildHighlightAndGameplayColors(ctx, inner, CH, "gameplay")
-        BuildAuraAndPortraitColors(ctx, inner, CH)
-    end)
+    if ctx.entry then
+        ctx.entry._msuf2ResolveMissingSection = function(sectionId)
+            local categoryKey = COLOR_SECTION_CATEGORY[tostring(sectionId or "")]
+            if not categoryKey then return nil end
+            if type(M.ColorsSetPainterCategory) == "function" then
+                M.ColorsSetPainterCategory(categoryKey)
+            else
+                ActivateCategory(categoryKey)
+            end
+            local sections = ctx.entry.sections
+            return sections and sections[tostring(sectionId)]
+        end
+    end
+    if ctx.hiddenBuild then
+        for i = 1, #COLOR_CATEGORY_ORDER do EnsureCategoryBuilt(COLOR_CATEGORY_ORDER[i]) end
+    end
+    local initialKey = PendingColorFocusCategory(ctx)
+    if not initialKey then
+        local persisted = M.colorsPainterCategory
+        initialKey = categories[persisted] and persisted or COLOR_CATEGORY_ORDER[1]
+    end
+    if type(M.ColorsSetPainterCategory) == "function" then
+        M.ColorsSetPainterCategory(initialKey)
+    end
+    ActivateCategory(initialKey)
     b:RelayoutCollapsibles()
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-M.RegisterPage("opt_colors", { title = "MSUF Colors", build = BuildColors, version = 18 })
+M.RegisterPage("opt_colors", { title = "MSUF Colors", build = BuildColors, version = 19 })

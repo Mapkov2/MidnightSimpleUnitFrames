@@ -1131,6 +1131,7 @@ local MISC_GENERAL_KEYS = KSW [[
     unitInfoTooltipStyle unitTooltipProvider unitTooltipAnchor unitTooltipMode unitTooltipModifier
     disableBlizzardUnitFrames hardKillBlizzardPlayerFrame
     showMinimapIcon showNavigationIcons playTargetSelectLostSounds
+    highlightEnabled highlightStyle highlightThickness
 ]]
 local MISC_UNIT_KEYS = {}
 local MISC_UNIT_RESET_KEYS = WL [[target focus boss]]
@@ -1140,7 +1141,7 @@ local CASTBAR_GENERAL_KEYS = KSW [[
     kickReadyStyle kickReadySize kickReadyAutoSize kickReadyAnchor kickReadyOffsetX kickReadyOffsetY
 ]]
 local MODULES_GENERAL_KEYS = KS("styleEnabled")
-local COLOR_GENERAL_KEYS = KSW "highlightEnabled playerCastbarOverrideEnabled playerCastbarOverrideMode npcClassColorBar npcTypeTarget npcTypeFocus npcTypeBoss npcTypeToT"
+local COLOR_GENERAL_KEYS = KSW "playerCastbarOverrideEnabled playerCastbarOverrideMode npcClassColorBar npcTypeTarget npcTypeFocus npcTypeBoss npcTypeToT"
 local COLOR_GAMEPLAY_KEYS = KS("combatStateColorSync")
 local COLOR_BARS_KEYS = KS("classPowerComboPointColorMode", "classPowerSlotColorModes", "classPowerFullColorEnabled")
 local GROUP_COLOR_KEYS = KSW [[

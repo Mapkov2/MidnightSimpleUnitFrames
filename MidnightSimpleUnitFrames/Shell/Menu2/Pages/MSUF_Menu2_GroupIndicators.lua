@@ -220,11 +220,6 @@ local function BuildIndicatorsSection(ctx, b)
     local leftW = floor((innerW - cardGap) * 0.48)
     local rightX = leftX + leftW + cardGap
     local rightW = innerW - leftW - cardGap
-    local function IsMouseoverHighlightEnabled()
-        local gen = _G.MSUF_DB and _G.MSUF_DB.general
-        if gen and gen.highlightEnabled == nil and gen.enableHighlightOnHover ~= nil then return gen.enableHighlightOnHover == true end
-        return not (gen and gen.highlightEnabled == false)
-    end
     local function AddScopeSlider(list, parent, label, minValue, maxValue, step, width, key, defaultValue, mode, y, moveWidth)
         local control = ScopeSlider(ctx, parent, label, minValue, maxValue, step, width, key, defaultValue, mode, 16, y, moveWidth or (width - 58))
         M.AppendValues(list, control); return control
@@ -266,25 +261,7 @@ local function BuildIndicatorsSection(ctx, b)
     AddScopeSlider(groupNumberControls, groupNumberCard, "X Offset", -100, 100, 1, leftW, "groupNumberX", -2, "geometry", -166)
     AddScopeSlider(groupNumberControls, groupNumberCard, "Y Offset", -100, 100, 1, leftW, "groupNumberY", 2, "geometry", -216)
     AddScopeSlider(groupNumberControls, groupNumberCard, "Layer", 0, 30, 1, leftW, "groupNumberLayer", 7, "visual", -266)
-    local hoverCard = W.ControlCard(indicators, "Hover Highlight", "Enable + color: |cff38c7f0Global Style > Colors|r > Mouseover Highlight", rightX, -148, rightW, 126)
-    local hoverHint = hoverCard and hoverCard.subtitle
-    local hoverSize = W.Slider(hoverCard, "Border Thickness", 1, 6, 1, rightW)
-    M.BindNumberWidget(ctx, hoverSize,
-        function()
-            local gf = GF and GF()
-            if gf and type(gf.GetHighlightVal) == "function" then return tonumber(gf.GetHighlightVal(CurrentScope(), "hlHoverSize")) or 1 end
-            return Num(CurrentScope(), "hlHoverSize", 1)
-        end,
-        function(value)
-            local kind = CurrentScope()
-            local conf = Conf(kind)
-            conf.hlHoverSize = floor((tonumber(value) or 1) + 0.5)
-            conf.hlOverride = true
-            QueueGF(kind, "visual")
-        end,
-        1, StepMeta(ctx, "field.hlHoverSize", 1))
-    W.MoveWidget(hoverSize, hoverCard, 16, -70, rightW - 58, "CENTER")
-    local focusCard = W.ControlCard(indicators, "Focus Highlight", "Shows a colored border around your Focus target. Priority: Dispel > Aggro > Target > Focus.", rightX, -294, rightW, 190)
+    local focusCard = W.ControlCard(indicators, "Focus Highlight", "Shows a colored border around your Focus target. Priority: Dispel > Aggro > Target > Focus.", rightX, -148, rightW, 190)
     local focusToggle = BindScopeToggle(ctx, W.SwitchAt(focusCard, "Focus Highlight", rightW - 62, -24, 0, "HIDDEN"), "hlFocusEnabled", true, "visual")
     focusToggle._msuf2GroupFrameGateAlwaysEnabled = true
     local focusHint = focusCard and focusCard.subtitle
@@ -307,10 +284,6 @@ local function BuildIndicatorsSection(ctx, b)
         SetOptionEnabled(groupNumberToggle, true)
         local targetEnabled = Bool(CurrentScope(), "targetIndicator", true)
         SetOptionEnabled(targetToggle, true)
-        local hoverEnabled = IsMouseoverHighlightEnabled()
-        SetOptionEnabled(hoverSize, hoverEnabled)
-        local hoverColor = hoverEnabled and T.colors.muted or T.colors.dim
-        hoverHint:SetTextColor(hoverColor[1], hoverColor[2], hoverColor[3], hoverEnabled and 1 or 0.70)
         local focusEnabled = Bool(CurrentScope(), "hlFocusEnabled", true)
         SetOptionsEnabled(focusControls, focusEnabled)
         SetOptionEnabled(focusToggle, true)
@@ -321,7 +294,6 @@ local function BuildIndicatorsSection(ctx, b)
         SetOptionEnabled(groupBorderToggle, true)
         SetSectionBadgesAndStatus(indicators, {
             OnOffBadge(targetEnabled, "Target on", "Target off"),
-            { text = hoverEnabled and "Hover on" or "Hover off", kind = hoverEnabled and "info" or "muted" },
             OnOffBadge(focusEnabled, "Focus on", "Focus off"),
             { text = groupNumberEnabled and "Group #" or (groupBorderEnabled and "Group border" or "Clean"), kind = (groupNumberEnabled or groupBorderEnabled) and "accent" or "muted" },
         })
