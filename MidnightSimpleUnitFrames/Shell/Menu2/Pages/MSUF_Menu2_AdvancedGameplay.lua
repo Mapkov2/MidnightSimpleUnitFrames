@@ -120,6 +120,22 @@ local function BuildGameplay(ctx)
     --- Old order: Combat Timer, Combat Enter/Leave, Class-specific toggles, Combat Crosshair.
     local compactTimer = GameplayStacked()
     local timer = b:CollapsibleSection("gameplay_timer", "Combat Timer", compactTimer and 570 or 430, true)
+    if W.AttachContextColorShortcut then
+        W.AttachContextColorShortcut(timer, {
+            title = "Combat Timer Text Settings",
+            historyLabel = "Combat timer color",
+            historySource = "menu:gameplay-timer-color",
+            offsetY = -8,
+            textSettings = {
+                scope = "shared",
+                kind = "gameplay_timer",
+                colorReferences = { "gameplay.timer" },
+                colorTitle = "Combat Timer Color",
+                subtitle = "Combat Timer text follows the shared Fonts settings.",
+                capabilities = { baseline = false },
+            },
+        })
+    end
     local timerW = timer._msuf2Width or ctx.width or 900
     local timerCardW = SectionCardWidth(timer, 680)
     local timerLeftX, timerRightX, timerColW = SectionColumns(timer, 300)
@@ -158,6 +174,22 @@ local function BuildGameplay(ctx)
     end
     local stateStacked = GameplayStacked()
     local state = b:CollapsibleSection("gameplay_state", "Combat Enter/Leave", stateStacked and 580 or 340, false)
+    if W.AttachContextColorShortcut then
+        W.AttachContextColorShortcut(state, {
+            title = "Combat State Text Settings",
+            historyLabel = "Combat state colors",
+            historySource = "menu:gameplay-state-colors",
+            offsetY = -8,
+            textSettings = {
+                scope = "shared",
+                kind = "gameplay_state",
+                colorReferences = { "gameplay.enter", "gameplay.leave" },
+                colorTitle = "Combat State Colors",
+                subtitle = "Combat Enter/Leave text follows the shared Fonts settings.",
+                capabilities = { baseline = false },
+            },
+        })
+    end
     local stateCardW = SectionCardWidth(state, 680)
     local stateControlW = SectionControlWidth(state, 260, 120)
     local stateLeftX, stateRightX, stateColW = SectionColumns(state, 260)
@@ -259,6 +291,14 @@ local function BuildGameplay(ctx)
     local totemActionControls = { previewBtn, resetTotemBtn }
     local crossStacked = GameplayStacked()
     local cross = b:CollapsibleSection("gameplay_crosshair", "Combat Crosshair", crossStacked and 800 or 588, false)
+    if W.AttachContextColorReferences then
+        W.AttachContextColorReferences(cross, { "gameplay.crosshair_in", "gameplay.crosshair_out" }, {
+            title = "Combat Crosshair Colors",
+            note = "Used when melee-range coloring is enabled.",
+            historySource = "menu:gameplay-crosshair-colors",
+            offsetY = -8,
+        })
+    end
     local crossW = cross._msuf2Width or ctx.width or 900
     local crossCardW = SectionCardWidth(cross, 700)
     local crossControlW = SectionControlWidth(cross, 300, 120)

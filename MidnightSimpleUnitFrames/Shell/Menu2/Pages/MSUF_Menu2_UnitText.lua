@@ -361,6 +361,15 @@ local function BuildText(ctx, builder, unit)
         return CurrentSlot(kind) == slot
     end
     local nameContent = TextCard(nameTab, nil, nil, leftX, -4, cardW, 116)
+    if W.AttachContextColorShortcut then
+        W.AttachContextColorShortcut(nameContent, {
+            title = "Name text settings",
+            historyLabel = "Name color",
+            historySource = "menu:unit-text-name-color",
+            offsetY = -24,
+            textSettings = { scope = unit, unit = unit, kind = "name" },
+        })
+    end
     local _, namePreviewValue = PreviewText(nameContent, NamePreviewText(), 16, -54, cardW - 32)
     local showNameText = W.SwitchAt(nameContent, "Show Name", 16, -24, 0, "HIDDEN")
     M.BindBoolWidget(ctx, showNameText,
@@ -425,6 +434,15 @@ local function BuildText(ctx, builder, unit)
         local hasAbsorb = cfg.absorbIconKey ~= nil
         local contentHeight = hasAbsorb and 430 or 370
         local content = TextCard(tab, nil, nil, leftX, -4, cardW, contentHeight)
+        if W.AttachContextColorShortcut then
+            W.AttachContextColorShortcut(content, {
+                title = kind == "hp" and "HP text settings" or "Power text settings",
+                historyLabel = kind == "hp" and "HP text color" or "Power text color",
+                historySource = "menu:unit-text-" .. tostring(kind) .. "-color",
+                offsetY = -24,
+                textSettings = { scope = unit, unit = unit, kind = kind },
+            })
+        end
         local _, previewValue = PreviewText(content, cfg.preview, 16, -54, cardW - 32)
         controls.preview = previewValue
         controls.show = W.SwitchAt(content, cfg.showLabel, 16, -24, 0, "HIDDEN")

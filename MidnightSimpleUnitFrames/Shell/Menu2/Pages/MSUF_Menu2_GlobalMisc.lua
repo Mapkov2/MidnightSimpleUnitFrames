@@ -269,7 +269,7 @@ local function BuildMisc(ctx)
     end
     accentSwatch:ClearAllPoints()
     accentSwatch:SetPoint("TOPLEFT", menuBehavior, "TOPLEFT", menuFontRightX + 182, -314)
-    RefreshAccentSwatchEnabled()
+    M.TrackRefresh(ctx, RefreshAccentSwatchEnabled)
     local accentHelp = W.Text(menuBehavior, "Midnight keeps the stock blue accent. Class color follows this character; the accent applies after a UI reload.", 30, -362, menuBehaviorW - 70, T.colors.muted)
     if accentHelp.SetWordWrap then accentHelp:SetWordWrap(true) end
     local startup = b:CollapsibleSection("misc_startup", "Startup", 124, true)
@@ -279,6 +279,13 @@ local function BuildMisc(ctx)
             Call("MSUF_ApplyModules")
         end)
     local mouseover = b:CollapsibleSection("misc_mouseover_highlight", "Mouseover Highlight", 218, true)
+    if W.AttachContextColorReferences then
+        W.AttachContextColorReferences(mouseover, { "highlight.mouseover" }, {
+            title = "Mouseover Highlight Color",
+            historySource = "menu:mouseover-highlight-color",
+            offsetY = -8,
+        })
+    end
     local mouseoverW = mouseover._msuf2Width or ctx.width or 720
     local mouseoverLeftX = 30
     local mouseoverRightX = max(mouseoverLeftX + 300, floor(mouseoverW * 0.52))

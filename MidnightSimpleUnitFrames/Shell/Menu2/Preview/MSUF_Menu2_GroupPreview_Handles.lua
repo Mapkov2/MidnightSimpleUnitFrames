@@ -33,6 +33,12 @@ function Handles.Install(box, deps)
     local H = deps.H or {}
     local M = deps.M or _G.MSUF2 or {}
     local MSUF = deps.MSUF or MSUF or {}
+    local function AuraDurationBarColor()
+        local auras3 = MSUF.MSUF_Auras3
+        local resolver = auras3 and auras3.GetDurationBarColor
+        if type(resolver) == "function" then return resolver() end
+        return 1, 1, 1
+    end
     local T = deps.T or M.Theme or {}
     local PreviewHelpers = M.PreviewHelpers or {}
     local RegisterPreviewControl = deps.RegisterPreviewControl or function(widget, semanticPath, label, kind, classification, extra)
@@ -842,7 +848,8 @@ function Handles.Install(box, deps)
             handle._iconTimers[i] = timer
             local durationBar = handle._iconDurationBars[i] or handle:CreateTexture(nil, "OVERLAY")
             durationBar:SetTexture(WHITE8X8)
-            durationBar:SetVertexColor(0.08, 0.78, 1.00, 0.92)
+            local durationR, durationG, durationB = AuraDurationBarColor()
+            durationBar:SetVertexColor(durationR, durationG, durationB, 0.92)
             durationBar:Hide()
             handle._iconDurationBars[i] = durationBar
         end

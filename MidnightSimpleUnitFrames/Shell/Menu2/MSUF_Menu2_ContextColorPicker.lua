@@ -354,6 +354,10 @@ local function OwnerOpacity(owner)
     if type(alpha) ~= "number" then return nil end
     return Clamp01(alpha)
 end
+local function OwnerState(owner)
+    if not (owner and type(owner._msuf2CaptureColorState) == "function") then return nil end
+    return owner:_msuf2CaptureColorState()
+end
 local function ApplyOwner(owner, r, g, b, alpha, preclamped)
     if not owner then return end
     if not preclamped then
@@ -912,8 +916,16 @@ local function EnsurePicker()
     function panel:Finish(cancelled)
         if self.finishing then return end
         self.finishing = true
+        local onFinish = self._msuf2OnFinish
+        self._msuf2OnFinish = nil
         if cancelled then
-            for owner in pairs(self.touched or {}) do local value = self.originals and self.originals[owner]; if value then ApplyOwner(owner, value[1], value[2], value[3], value[4]) end end
+            for owner in pairs(self.touched or {}) do
+                local value = self.originals and self.originals[owner]
+                if value then
+                    if value[5] ~= nil and type(owner._msuf2RestoreColorState) == "function" then owner:_msuf2RestoreColorState(value[5])
+                    else ApplyOwner(owner, value[1], value[2], value[3], value[4]) end
+                end
+            end
         else
             for owner in pairs(self.touched or {}) do local r, g, b = owner:GetRGB(); AddRecent(ToHex(r, g, b)) end
             self._palettesDirty = true
@@ -923,19 +935,24 @@ local function EnsurePicker()
         self._ownerDropdownValues = nil
         self.owner, self.owners, self.originals, self.touched, self.historyOwner = nil, nil, nil, nil, nil
         self:Hide(); self.finishing = nil
+        if type(onFinish) == "function" then pcall(onFinish, cancelled == true) end
     end
-    function panel:Open(contextTitle, owners, contextNote, initialOwner)
-        if self:IsShown() then self:Finish(false) end
+    function panel:Open(contextTitle, owners, contextNote, initialOwner, onFinish)
+        if self:IsShown() then
+            self._msuf2OnFinish = nil
+            self:Finish(false)
+        end
         self:SetScale(PickerMenuScale())
         self.owners, self.originals, self.touched = {}, {}, {}
         for i = 1, #(owners or {}) do
             local owner = owners[i]
             if owner and owner.GetRGB and owner.SetRGB then
                 self.owners[#self.owners + 1] = owner
-                local r, g, b = owner:GetRGB(); self.originals[owner] = { r, g, b, OwnerOpacity(owner) }
+                local r, g, b = owner:GetRGB(); self.originals[owner] = { r, g, b, OwnerOpacity(owner), OwnerState(owner) }
             end
         end
         if #self.owners == 0 then return end
+        self._msuf2OnFinish = type(onFinish) == "function" and onFinish or nil
         self.title:SetText(Tr("MSUF Color Picker"))
         local context = Tr(contextTitle or "Colors")
         local detail = Tr(contextNote or "Choose a target, then paint it.")
@@ -968,9 +985,9 @@ local function EnsurePicker()
     return panel
 end
 
-function W.OpenColorContextPicker(contextTitle, owners, contextNote, initialOwner)
+function W.OpenColorContextPicker(contextTitle, owners, contextNote, initialOwner, onFinish)
     local panel = EnsurePicker()
-    if panel then panel:Open(contextTitle, owners, contextNote, initialOwner) end
+    if panel then panel:Open(contextTitle, owners, contextNote, initialOwner, onFinish) end
     return panel
 end
 M.OpenColorContextPicker = W.OpenColorContextPicker

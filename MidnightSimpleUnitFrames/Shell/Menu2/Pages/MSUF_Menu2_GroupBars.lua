@@ -123,6 +123,21 @@ local function BuildGFResourceBarSection(ctx, b)
     end
     local powerMainCard = W.ControlCard(power, "Visibility & Size", nil, powerLeftX, -38, powerLeftW, 178)
     local powerRoleCard = W.ControlCard(power, "Roles", nil, powerRightX, -38, powerRightW, 178)
+    if W.AttachContextColorReferences then
+        W.AttachContextColorReferences(powerMainCard, { "power.current", "group.background" }, {
+            title = "Group Resource Bar Colors",
+            note = "Resource fill for this preview scope and the shared group-bar background.",
+            historySource = "menu:group-resource-bar-colors",
+            offsetX = -76,
+            context = function()
+                local scope = tostring(CurrentScope() or "party")
+                return {
+                    unit = "player",
+                    powerToken = (scope == "party" or scope == "gf_party") and "RUNIC_POWER" or "FOCUS",
+                }
+            end,
+        })
+    end
     local powerEnabled = W.SwitchAt(powerMainCard, "Show Power Bar", powerLeftW - 62, -24, 0, "HIDDEN")
     M.BindBoolWidget(ctx, powerEnabled,
         function() return IsPowerBarEnabled(CurrentScope()) end,
@@ -445,6 +460,19 @@ local function BuildGFTextSection(ctx, b)
         return CurrentSlot(kind) == slot
     end
     local nameContent = TextCard(nameTab, nil, nil, textLeftX, -4, textCardW, 158)
+    if W.AttachContextColorShortcut then
+        W.AttachContextColorShortcut(nameContent, {
+            title = "Name Text settings",
+            historyLabel = "Group name color",
+            historySource = "menu:group-text-name-color",
+            offsetY = -24,
+            textSettings = {
+                scope = function() return CurrentScope() end,
+                group = true,
+                kind = "name",
+            },
+        })
+    end
     PreviewText(nameContent, "Mapko", 16, -54, textCardW - 32)
     local showName = BindScopeToggle(ctx, W.SwitchAt(nameContent, "Show Name", 16, -24, 0, "HIDDEN"), "showName", true, "font")
     local hideNameOnStatus = BindScopeToggle(ctx, W.ToggleAt(nameContent, "Hide name on dead/offline", 16, -104, textCardW - 32), "hideNameOnDeadOffline", false, "visual")
@@ -462,6 +490,20 @@ local function BuildGFTextSection(ctx, b)
         local hasAbsorb = cfg.absorbIconKey ~= nil
         local contentHeight = hasAbsorb and 430 or 370
         local content = TextCard(tab, nil, nil, textLeftX, -4, textCardW, contentHeight)
+        if W.AttachContextColorShortcut then
+            local title = kind == "hp" and "HP Text settings" or "Power Text settings"
+            W.AttachContextColorShortcut(content, {
+                title = title,
+                historyLabel = kind == "hp" and "Group HP text color" or "Group power text color",
+                historySource = "menu:group-text-" .. tostring(kind) .. "-color",
+                offsetY = -24,
+                textSettings = {
+                    scope = function() return CurrentScope() end,
+                    group = true,
+                    kind = kind,
+                },
+            })
+        end
         controls.preview = PreviewText(content, "", 16, -54, textCardW - 32)
         if cfg.showGet then
             controls.show = W.SwitchAt(content, cfg.showLabel, 16, -24, 0, "HIDDEN")
@@ -737,6 +779,14 @@ local function BuildGFDebuffStripeSection(ctx, b)
     local stripeW = stripe._msuf2Width or b.width or 720
     local stripeCardW = min(560, stripeW - 40)
     local stripeCard = W.ControlCard(stripe, "Appearance & Placement", "Shows a thin colored stripe for debuffs matched by the debuff filter.", 20, -38, stripeCardW, 216)
+    if W.AttachContextColorReferences then
+        W.AttachContextColorReferences(stripeCard, { "group.debuff_stripe" }, {
+            title = "Debuff Stripe Color",
+            note = "Shared by Party, Raid and Mythic Raid.",
+            historySource = "menu:group-debuff-stripe-color",
+            offsetX = -76,
+        })
+    end
     local stripeToggle = BindScopeToggle(ctx, W.SwitchAt(stripeCard, "Debuff Stripe", stripeCardW - 62, -24, 0, "HIDDEN"), "debuffStripeEnabled", false, "visual")
     local stripeEdge = ScopeDropdown(ctx, stripeCard, "Stripe edge", DEBUFF_STRIPE_EDGES, 260, "debuffStripeEdge", "BOTTOM", "visual", 16, -74, min(260, stripeCardW - 32))
     local stripeHeight = ScopeSlider(ctx, stripeCard, "Stripe height", 1, 8, 1, 300, "debuffStripeHeight", 3, "visual", 16, -126, min(360, stripeCardW - 72))

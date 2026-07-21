@@ -22,6 +22,12 @@ end
 local function NumberOrOne(value) return tonumber(value) or 1 end
 local function DefaultAuraGrowth() return { px = 1, py = 0, sx = 0, sy = -1 } end
 local function DefaultClampLayer(value, fallback) return tonumber(value) or fallback or 0 end
+local function AuraDurationBarColor()
+    local auras3 = MSUF.MSUF_Auras3
+    local resolver = auras3 and auras3.GetDurationBarColor
+    if type(resolver) == "function" then return resolver() end
+    return 1, 1, 1
+end
 local function NormalizeFrameStrata(value, fallback)
     local normalize = _G.MSUF_NormalizeFrameStrata
     if type(normalize) == "function" then return normalize(value, fallback or "AUTO") end
@@ -680,11 +686,11 @@ local function RenderAuras(scene)
         local frac
         if cfg.durationBarDirection == "ELAPSED" then
             frac = auraState and auraState.elapsedFrac or 0.38
-            bar:SetVertexColor(0.22, 0.88, 0.50, 0.92)
         else
             frac = auraState and auraState.remainingFrac or 0.62
-            bar:SetVertexColor(0.08, 0.78, 1.00, 0.92)
         end
+        local r, g, b = AuraDurationBarColor()
+        bar:SetVertexColor(r, g, b, 0.92)
         frac = max(0.02, min(1, tonumber(frac) or 0.62))
         bar:ClearAllPoints()
         bar:SetHeight(height)

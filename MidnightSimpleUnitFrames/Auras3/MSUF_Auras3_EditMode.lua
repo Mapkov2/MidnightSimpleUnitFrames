@@ -31,6 +31,12 @@ if type(A3) ~= "table" then
 end
 ExportPublic("MSUF_Auras3", A3)
 
+local function AuraDurationBarColor()
+    local resolver = A3.GetDurationBarColor
+    if type(resolver) == "function" then return resolver() end
+    return 1, 1, 1
+end
+
 if A3.__editModeLoaded then return end
 A3.__editModeLoaded = true
 
@@ -1353,7 +1359,8 @@ local function EnsureIcon(group, index)
 
     local durationBar = icon:CreateTexture(nil, "OVERLAY")
     durationBar:SetTexture(W8)
-    durationBar:SetVertexColor(0.08, 0.78, 1, 0.92)
+    local durationR, durationG, durationB = AuraDurationBarColor()
+    durationBar:SetVertexColor(durationR, durationG, durationB, 0.92)
     durationBar:Hide()
     icon.DurationBar = durationBar
 
@@ -1406,11 +1413,8 @@ local function ApplyPreviewIconText(icon, unit, cfg)
                 icon.DurationBar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
                 icon.DurationBar:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -inset, inset)
             end
-            if cfg.durationBarDirection == "ELAPSED" then
-                icon.DurationBar:SetVertexColor(0.22, 0.88, 0.50, 0.92)
-            else
-                icon.DurationBar:SetVertexColor(0.08, 0.78, 1, 0.92)
-            end
+            local r, g, b = AuraDurationBarColor()
+            icon.DurationBar:SetVertexColor(r, g, b, 0.92)
             icon.DurationBar:Show()
         else
             icon.DurationBar:Hide()
@@ -1437,11 +1441,11 @@ local function ApplyPreviewDurationBarProgress(icon, cfg, auraState)
     local frac
     if cfg.durationBarDirection == "ELAPSED" then
         frac = auraState and auraState.elapsedFrac or 1
-        bar:SetVertexColor(0.22, 0.88, 0.50, 0.92)
     else
         frac = auraState and auraState.remainingFrac or 1
-        bar:SetVertexColor(0.08, 0.78, 1, 0.92)
     end
+    local r, g, b = AuraDurationBarColor()
+    bar:SetVertexColor(r, g, b, 0.92)
     frac = math_max(0.02, math_min(1, tonumber(frac) or 1))
     bar:ClearAllPoints()
     bar:SetHeight(height)

@@ -257,15 +257,177 @@ local function BarsFlagForKey(scope, key)
     if IsTextScopeKey(key) and not IsGFScope(scope) then return "hpPowerTextOverride" end
     return "hlOverride"
 end
-local function FontScopeGet(key, default, rootKey)
+local function ApplyFontsFor(scope, reason)
+    scope = NormalizeScopeKey(scope)
+    M.RequestGeneralApply(reason or "MSUF2_FONTS", {
+        preview = true,
+        applyAll = false,
+        fonts = true,
+        fontScope = scope,
+    })
+end
+local function FontScopeGetFor(scope, key, default, rootKey)
     local shared = rootKey and DB() or G()
-    return ScopeRead(CurrentFontScope(), "fontOverride", shared, rootKey or key, default)
+    return ScopeRead(NormalizeScopeKey(scope), "fontOverride", shared, rootKey or key, default)
+end
+local function FontScopeSetFor(scope, key, value, reason, rootKey, suppressApply)
+    scope = NormalizeScopeKey(scope)
+    local shared = rootKey and DB() or G()
+    ScopeWrite(scope, "fontOverride", shared, rootKey or key, value)
+    if suppressApply ~= true then ApplyFontsFor(scope, reason or "MSUF2_FONTS_SCOPE") end
+end
+local function FontOverrideGetFor(scope)
+    scope = NormalizeScopeKey(scope)
+    return scope ~= "shared" and ScopeHasOverride(scope, "fontOverride")
+end
+local function SeedGFFontOverride(scope)
+    if not IsGFScope(scope) then return end
+    local db, general = DB(), G()
+    local enabled = db.shortenNames == true
+    local side = general.shortenNameClipSide or "LEFT"
+    local maxChars = tonumber(general.shortenNameMaxChars) or 6
+    local noEllipsis = general.shortenNameShowDots == false
+    local keys = ScopeDBKeys(scope)
+    for i = 1, #(keys or {}) do
+        local scopeKey = keys[i]
+        db[scopeKey] = db[scopeKey] or {}
+        local entry = db[scopeKey]
+        if entry.nameShortenEnabled == nil then entry.nameShortenEnabled = enabled end
+        if entry.nameClipSide == nil then entry.nameClipSide = side end
+        if entry.nameNoEllipsis == nil then entry.nameNoEllipsis = noEllipsis end
+        if (tonumber(entry.nameMaxChars) or 0) <= 0 then entry.nameMaxChars = maxChars end
+        entry.nameShortenOverride = nil
+        entry._msufGFNameTruncationOverride = nil
+    end
+end
+local function FontOverrideSetFor(scope, enabled, reason)
+    scope = NormalizeScopeKey(scope)
+    if scope == "shared" then return false end
+    enabled = enabled and true or false
+    ScopeSetOverride(scope, "fontOverride", enabled)
+    if enabled then SeedGFFontOverride(scope) end
+    ApplyFontsFor(scope, reason or "MSUF2_FONT_OVERRIDE")
+    return enabled
+end
+local function FontOutlineGetFor(scope)
+    scope = NormalizeScopeKey(scope)
+    if IsGFScope(scope) then
+        if ScopeHasOverride(scope, "fontOverride") then
+            local db, keys = DB(), ScopeDBKeys(scope)
+            for i = 1, #(keys or {}) do
+                local entry = db[keys[i]]
+                local value = entry and entry.fontOutline
+                if value ~= nil then
+                    if value == "" then return "NONE" end
+                    if value == "NONE" or value == "THICKOUTLINE" then return value end
+                    return "OUTLINE"
+                end
+            end
+        end
+        if G().noOutline == true then return "NONE" end
+        if G().boldText == true then return "THICKOUTLINE" end
+        return "OUTLINE"
+    end
+    if FontScopeGetFor(scope, "noOutline", false) then return "NONE" end
+    if FontScopeGetFor(scope, "boldText", false) then return "THICKOUTLINE" end
+    return "OUTLINE"
+end
+local function FontOutlineSetFor(scope, value, reason)
+    scope = NormalizeScopeKey(scope)
+    value = tostring(value or "OUTLINE"):upper()
+    if value ~= "NONE" and value ~= "THICKOUTLINE" then value = "OUTLINE" end
+    if IsGFScope(scope) then
+        ScopeWrite(scope, "fontOverride", G(), "fontOutline", value)
+        ApplyFontsFor(scope, reason or "MSUF2_GF_FONT_OUTLINE")
+        return value
+    end
+    ScopeWrite(scope, "fontOverride", G(), "boldText", value == "THICKOUTLINE")
+    ScopeWrite(scope, "fontOverride", G(), "noOutline", value == "NONE")
+    ApplyFontsFor(scope, reason or "MSUF2_FONT_OUTLINE")
+    return value
+end
+local function FontShadowMetricsFor(scope)
+    scope = NormalizeScopeKey(scope)
+    local opacity = FontScopeGetFor(scope, "fontShadowOpacity", nil)
+    local distance = FontScopeGetFor(scope, "fontShadowDistance", nil)
+    local strength = FontScopeGetFor(scope, "fontShadowStrength", nil)
+    local resolve = _G.MSUF_ResolveFontShadowMetrics
+    if type(resolve) == "function" then return resolve(opacity, distance, strength) end
+    local alpha = tonumber(opacity) or 1
+    local pixels = tonumber(distance) or 1
+    return alpha, pixels, -pixels
+end
+local function NormalizeFontTextColorKind(scope, kind)
+    kind = tostring(kind or "name"):lower():gsub("[%s%-]+", "_")
+    if kind == "group" or kind == "group_name" then return "group" end
+    if kind == "name" or kind == "player" or kind == "player_name" then
+        return IsGFScope(scope) and "group" or "player"
+    end
+    if kind == "npc" or kind == "npc_name" or kind == "boss" or kind == "boss_name" then return "npc" end
+    if kind == "hp" or kind == "health" or kind == "health_text" then return "hp" end
+    if kind == "power" or kind == "resource" or kind == "power_text" then return "power" end
+    return nil
+end
+local function FontTextColorModeGetFor(scope, kind)
+    scope = NormalizeScopeKey(scope)
+    kind = NormalizeFontTextColorKind(scope, kind)
+    if kind == "group" then
+        if not ScopeHasOverride(scope, "fontOverride") then
+            return G().nameClassColor == true and "CLASS" or "DEFAULT"
+        end
+        local value = tostring(FontScopeGetFor(scope, "nameColorMode", "DEFAULT") or "DEFAULT"):upper()
+        if value == "CLASS" or value == "CUSTOM" then return value end
+        return "DEFAULT"
+    elseif kind == "player" then
+        return FontScopeGetFor(scope, "nameClassColor", false) and "CLASS" or "DEFAULT"
+    elseif kind == "npc" then
+        if FontScopeGetFor(scope, "nameNpcClassColor", false) then return "CLASS" end
+        return FontScopeGetFor(scope, "npcNameRed", false) and "NPC" or "DEFAULT"
+    elseif kind == "hp" then
+        local value = FontScopeGetFor(scope, "colorHealthTextByHealth", false)
+        if value == "CLASS" then return "CLASS" end
+        return (value == true or value == "HEALTH") and "HEALTH" or "DEFAULT"
+    elseif kind == "power" then
+        return FontScopeGetFor(scope, "colorPowerTextByType", false) and "RESOURCE" or "DEFAULT"
+    end
+    return "DEFAULT"
+end
+local function FontTextColorModeSetFor(scope, kind, value, reason)
+    scope = NormalizeScopeKey(scope)
+    kind = NormalizeFontTextColorKind(scope, kind)
+    value = tostring(value or "DEFAULT"):upper()
+    if kind == "group" then
+        if value ~= "CLASS" and value ~= "CUSTOM" then value = "DEFAULT" end
+        ScopeWrite(scope, "fontOverride", G(), "nameColorMode", value)
+        ApplyFontsFor(scope, reason or "MSUF2_GF_NAME_COLOR")
+    elseif kind == "player" then
+        value = value == "CLASS" and "CLASS" or "DEFAULT"
+        ScopeWrite(scope, "fontOverride", G(), "nameClassColor", value == "CLASS")
+        ApplyFontsFor(scope, reason or "MSUF2_NAME_CLASS_COLOR")
+    elseif kind == "npc" then
+        if value ~= "CLASS" and value ~= "NPC" then value = "DEFAULT" end
+        ScopeWrite(scope, "fontOverride", G(), "nameNpcClassColor", value == "CLASS")
+        ScopeWrite(scope, "fontOverride", G(), "npcNameRed", value == "NPC")
+        ApplyFontsFor(scope, reason or "MSUF2_NPC_NAME_COLOR")
+    elseif kind == "hp" then
+        if value ~= "CLASS" and value ~= "HEALTH" then value = "DEFAULT" end
+        ScopeWrite(scope, "fontOverride", G(), "colorHealthTextByHealth",
+            value == "CLASS" and "CLASS" or (value == "HEALTH"))
+        ApplyFontsFor(scope, reason or "MSUF2_HP_TEXT_COLOR")
+    elseif kind == "power" then
+        value = value == "RESOURCE" and "RESOURCE" or "DEFAULT"
+        ScopeWrite(scope, "fontOverride", G(), "colorPowerTextByType", value == "RESOURCE")
+        ApplyFontsFor(scope, reason or "MSUF2_POWER_TEXT_COLOR")
+    else
+        return nil
+    end
+    return value
+end
+local function FontScopeGet(key, default, rootKey)
+    return FontScopeGetFor(CurrentFontScope(), key, default, rootKey)
 end
 local function FontScopeSet(key, value, reason, rootKey)
-    local shared = rootKey and DB() or G()
-    local scope = CurrentFontScope()
-    ScopeWrite(scope, "fontOverride", shared, rootKey or key, value)
-    M.RequestGeneralApply(reason or "MSUF2_FONTS_SCOPE", { preview = true, applyAll = false, fonts = true, fontScope = scope })
+    FontScopeSetFor(CurrentFontScope(), key, value, reason, rootKey)
 end
 local function BarScopeGet(key, default)
     local scope = CurrentBarsScope()
@@ -686,7 +848,7 @@ end
 local SetControlEnabled = W.SetControlEnabled
 local SetControlsEnabled = W.SetControlsEnabled
 local function ApplyFonts(reason)
-    M.RequestGeneralApply(reason or "MSUF2_FONTS", { preview = true, applyAll = false, fonts = true, fontScope = CurrentFontScope() })
+    ApplyFontsFor(CurrentFontScope(), reason)
 end
 function ApplyBars(reason)
     M.RequestGeneralApply(reason or "MSUF2_BARS", { preview = true, applyAll = false, bars = true, barsScope = CurrentBarsScope() })
@@ -705,6 +867,11 @@ M.Assign(GlobalPage, {
     GradientKeyActive = GradientKeyActive, MarkGradientKey = MarkGradientKey,
     GradientScopeGet = GradientScopeGet, GradientScopeSet = GradientScopeSet, GradientScopeHasExplicit = GradientScopeHasExplicit,
     CurrentFontScope = CurrentFontScope, CurrentBarsScope = CurrentBarsScope, IsGFScope = IsGFScope, BarsFlagForKey = BarsFlagForKey,
+    ApplyFontsFor = ApplyFontsFor, FontScopeGetFor = FontScopeGetFor, FontScopeSetFor = FontScopeSetFor,
+    FontOverrideGetFor = FontOverrideGetFor, FontOverrideSetFor = FontOverrideSetFor,
+    FontOutlineGetFor = FontOutlineGetFor, FontOutlineSetFor = FontOutlineSetFor,
+    FontShadowMetricsFor = FontShadowMetricsFor,
+    FontTextColorModeGetFor = FontTextColorModeGetFor, FontTextColorModeSetFor = FontTextColorModeSetFor,
     FontScopeGet = FontScopeGet, FontScopeSet = FontScopeSet, BarScopeGet = BarScopeGet, BarScopeSet = BarScopeSet,
     BarScopeGetBars = BarScopeGetBars, BarScopeSetBars = BarScopeSetBars, NormalizeFontKey = NormalizeFontKey,
     FontValues = FontValues, FontKeyGet = FontKeyGet, FontKeySet = FontKeySet,

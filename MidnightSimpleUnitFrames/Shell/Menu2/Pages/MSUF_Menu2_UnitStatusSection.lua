@@ -424,6 +424,26 @@ local function BuildStatus(ctx, builder, unit)
         "customIcon", "", "MSUF2_STATUS_CUSTOM_ICON", "Specific icon override", {
         "specific icon", "custom icon", "single icon", "icon asset", "sharedmedia icon", "override icon",
     }, IconAssetValuesForCurrentStatus, function() if RefreshStatusSectionState then RefreshStatusSectionState() end end)
+    local selectedTextShortcut
+    if W.AttachContextColorShortcut then
+        selectedTextShortcut = W.AttachContextColorShortcut(selectedCard, {
+            title = "Selected Status Text Settings",
+            historyLabel = "Status text color",
+            historySource = "menu:unit-status-text-color",
+            offsetX = -76,
+            textSettings = {
+                scope = unit,
+                unit = unit,
+                kind = "status",
+                subtitle = "Font style and color are synchronized with the Fonts menu for this frame.",
+                colorTitle = "Status text color",
+                capabilities = { baseline = false },
+            },
+        })
+        local current = CurrentStatusSpec(unit)
+        selectedTextShortcut:SetShown(current and (current.textIndicator == true
+            or current.inlineName == true or current.value == "statusText"))
+    end
     local statusTextStates = CreateFrame("Frame", nil, placementCard)
     statusTextStates:SetPoint("TOPLEFT", placementCard, "TOPLEFT", placeRightX, -48)
     statusTextStates:SetSize(placeRightW, 72)
@@ -651,6 +671,7 @@ local function BuildStatus(ctx, builder, unit)
         local hasIconPack = false
         local hasCustomIcon = spec and spec.customIcon
         local isStatusText = spec and spec.value == "statusText"
+        local isTextIndicator = spec and (spec.textIndicator == true or spec.inlineName == true or isStatusText)
         local showStateStyle = (hasSymbol or hasIconPack) and true or false
         local showTestMode = spec and spec.statusRuntime and true or false
         LayoutSelectedControls(hasSymbol, hasIconPack, hasCustomIcon)
@@ -659,6 +680,7 @@ local function BuildStatus(ctx, builder, unit)
         ShowControl(symbol, hasSymbol)
         ShowControl(iconPack, hasIconPack)
         ShowControl(customIcon, hasCustomIcon)
+        ShowControl(selectedTextShortcut, isTextIndicator)
         ShowControl(statusTextStates, isStatusText)
         ShowControl(raidGroupStyle, inlineName)
         ShowControl(test, showTestMode)

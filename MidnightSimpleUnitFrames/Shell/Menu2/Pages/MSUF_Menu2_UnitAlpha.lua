@@ -15,6 +15,9 @@ local function BuildAlpha(ctx, builder, unit)
     local SetBool = UP.SetBool
     local ReadNumber = UP.ReadNumber
     local SetNumber = UP.SetNumber
+    local GetConf = UP.GetConf
+    local GetGeneral = UP.GetGeneral
+    local GetBars = UP.GetBars
     if not (ReadBool and SetBool and ReadNumber and SetNumber) then return end
     local sec = builder:CollapsibleSection("transparency", "Transparency", nil, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
@@ -31,6 +34,56 @@ local function BuildAlpha(ctx, builder, unit)
     local healthCard = W.ControlCard(sec, "Health Bar", nil, healthX, cardY, cardW, cardH)
     local resourceCard = W.ControlCard(sec, "Resource Bar", nil, resourceX, cardY, cardW, cardH)
     local optionsCard = W.ControlCard(sec, "Options", nil, optionsX, cardY, optionsW, cardH)
+    if W.AttachContextColorReferences and GetGeneral then
+        local function EffectiveHealthMode()
+            local conf = GetConf and GetConf(unit) or {}
+            local mode = type(conf.healthColorMode) == "string" and conf.healthColorMode:lower() or nil
+            if mode == "global" or (mode ~= "class" and mode ~= "gradient" and mode ~= "unified" and mode ~= "dark") then
+                local general = GetGeneral()
+                mode = type(general.barMode) == "string" and general.barMode:lower() or nil
+                if mode ~= "class" and mode ~= "gradient" and mode ~= "unified" and mode ~= "dark" then
+                    mode = general.useClassColors == true and "class" or "dark"
+                end
+                if mode == "gradient" and general.enableHealthGradient == false then mode = "class" end
+            end
+            return mode
+        end
+        W.AttachContextColorReferences(healthCard, function()
+            local mode = EffectiveHealthMode()
+            local refs = {}
+            if mode == "gradient" then
+                refs = { "health.gradient.low", "health.gradient.mid", "health.gradient.high" }
+            elseif mode == "unified" then
+                refs = { "health.unified" }
+            elseif mode == "class" then
+                refs = { unit == "pet" and "unit.pet" or "health.current" }
+            end
+            local general = GetGeneral()
+            if general.barBgMatchHPColor ~= true and general.barBgClassColor ~= true then
+                refs[#refs + 1] = "bar.background_tint"
+            end
+            return refs
+        end, {
+            title = "Health Bar Colors",
+            note = "Colors follow this frame's effective Health Color Scheme.",
+            historySource = "menu:unit-alpha-health-colors",
+            context = function() return { unit = unit, healthMode = EffectiveHealthMode() } end,
+        })
+        W.AttachContextColorReferences(resourceCard, function()
+            local refs = { "power.current" }
+            local general = GetGeneral()
+            local bars = GetBars and GetBars() or {}
+            if not (general.powerBarBgMatchBarColor == true or bars.powerBarBgMatchBarColor == true) then
+                refs[#refs + 1] = "bar.power_background"
+            end
+            return refs
+        end, {
+            title = "Resource Bar Colors",
+            note = "A matched resource background is derived from Health instead.",
+            historySource = "menu:unit-alpha-resource-colors",
+            context = function() return { unit = unit } end,
+        })
+    end
     local function AddAlphaSlider(parent, width, spec)
         local slider = W.Slider(parent, spec.label, 0, 1, 0.05, width)
         M.UsePercentInput(slider)

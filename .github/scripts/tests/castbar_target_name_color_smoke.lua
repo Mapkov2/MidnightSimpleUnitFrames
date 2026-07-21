@@ -124,6 +124,7 @@ assert(appliedCalls == secretApplyStart + 2 and secretComparisons == 0,
     "secret class RGB values entered a Lua comparison cache")
 
 local castbarDriver = read(root .. "Castbars/MSUF_CastbarDriver.lua")
+local castbarVisuals = read(root .. "Castbars/MSUF_CastbarVisuals.lua")
 assert(contains(castbarDriver, "C_ClassColor_GetClassColor(classFilename)"),
     "cast-target class color no longer uses the secret-safe C API")
 assert(contains(castbarDriver, "fs:SetTextColor(classColor:GetRGB())")
@@ -132,6 +133,9 @@ assert(contains(castbarDriver, "fs:SetTextColor(classColor:GetRGB())")
 assert(not contains(castbarDriver, "RAID_CLASS_COLORS[classFilename]")
     and not contains(castbarDriver, "castTargetClassColors[classFilename]"),
     "secret target class is still used as a Lua table key")
+assert(contains(castbarVisuals, 'local targetTextAlpha = colorSuffix == "TargetName"')
+    and contains(castbarVisuals, "fontString:SetAlpha(alpha)"),
+    "cast-target recoloring can reset the shared Fonts text opacity")
 
 local unitPreview = read(root .. "Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua")
 local castbarPage = read(root .. "Shell/Menu2/Pages/MSUF_Menu2_GlobalCastbars.lua")

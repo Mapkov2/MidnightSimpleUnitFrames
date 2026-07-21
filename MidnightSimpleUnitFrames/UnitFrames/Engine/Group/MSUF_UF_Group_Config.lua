@@ -180,7 +180,7 @@ local function FallbackFillPredictionColors(dst, general, conf, scopedValue, num
   dst.healR = numberFn(general and general.healPredictionColorR, 0)
   dst.healG = numberFn(general and general.healPredictionColorG, 1)
   dst.healB = numberFn(general and general.healPredictionColorB, 0)
-  dst.healA = Clamp01(general and general.healPredictionColorA, 0.45)
+  dst.healA = Clamp01(scopedValue(conf, general, "healPredictionBarOpacity", general and general.healPredictionColorA), 0.45)
   dst.absorbR = numberFn(general and general.absorbBarColorR, 1)
   dst.absorbG = numberFn(general and general.absorbBarColorG, 1)
   dst.absorbB = numberFn(general and general.absorbBarColorB, 1)

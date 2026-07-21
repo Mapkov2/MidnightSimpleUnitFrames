@@ -33,18 +33,43 @@ local function AttachGroupFocus(widget, component)
     W.AttachGroupEditFocus(widget, CurrentEditFocusKey, component or "layout")
     return widget
 end
-local function OpenGroupFrameColors()
-    _G.MSUF_EM2_MenuFocusRequest = {
-        pageKey = "opt_colors",
-        sectionId = "colors_group_frames",
-        explicit = true,
-        consumed = false,
-        source = "group-frame-basics",
-        changedAt = GetTime and GetTime() or 0,
-    }
-    if M.SelectPage and M.SelectPage("opt_colors") == false then
-        _G.MSUF_EM2_MenuFocusRequest = nil
+local GROUP_HEALTH_PREVIEW_CLASS = { party = "HUNTER", raid = "PRIEST", mythicraid = "PALADIN" }
+local function CurrentGroupHealthMode()
+    return tostring(Val(CurrentScope(), "gfBarMode", "GLOBAL") or "GLOBAL"):upper()
+end
+local function CurrentGroupEffectiveHealthMode()
+    local mode = CurrentGroupHealthMode()
+    if mode ~= "GLOBAL" then return mode end
+    local general = type(M.GetGeneralDB) == "function" and M.GetGeneralDB() or {}
+    mode = tostring(general.barMode or (general.useClassColors == true and "CLASS" or "DARK")):upper()
+    if mode == "GRADIENT" and general.enableHealthGradient == false then return "CLASS" end
+    return mode
+end
+local function GroupBackgroundUsesDerivedColor()
+    local general = type(M.GetGeneralDB) == "function" and M.GetGeneralDB() or {}
+    return general.barBgMatchHPColor == true or general.barBgClassColor == true
+end
+local function CurrentGroupHealthColorRefs()
+    local mode = CurrentGroupHealthMode()
+    local references
+    if mode == "GLOBAL" or mode == "CLASS" or mode == "GRADIENT" then
+        references = { "health.current" }
+    else
+        references = { "group.health" }
     end
+    if not GroupBackgroundUsesDerivedColor() then
+        references[#references + 1] = "group.background"
+    end
+    return references
+end
+local function CurrentGroupHealthColorContext()
+    local scope = tostring(CurrentScope() or "party"):lower():gsub("^gf_", "")
+    return {
+        unit = "player",
+        unitKey = "player",
+        classToken = GROUP_HEALTH_PREVIEW_CLASS[scope] or "HUNTER",
+        healthMode = CurrentGroupHealthMode(),
+    }
 end
 local function BuildGFGeneralSection(ctx, b)
     local general = b:CollapsibleSection("general", "Frame Basics", 430, false)
@@ -56,14 +81,21 @@ local function BuildGFGeneralSection(ctx, b)
     local generalLeftToggleW = max(80, generalLeftW - 34)
     local generalRightToggleW = max(80, generalRightW - 34)
     local offlineSliderW = max(320, min(520, generalW - generalLeftX - 170))
-    local openColors = T.Button(general, "Colors", 112, 22)
-    openColors:SetPoint("TOPRIGHT", general, "TOPRIGHT", -20, -8)
-    if T.CenterButtonLabel then T.CenterButtonLabel(openColors) end
-    if M.AddTooltip then
-        M.AddTooltip(openColors, "Group Frame Colors", "Open Colors > Group Frame Colors for shared Party, Raid and Mythic Raid colors.", { hook = true })
+    if W.AttachContextColorReferences then
+        W.AttachContextColorReferences(general, function()
+            local references = CurrentGroupHealthColorRefs()
+            if Bool(CurrentScope(), "deadBgEnabled", false) and CurrentGroupEffectiveHealthMode() ~= "GRADIENT" then
+                references[#references + 1] = "group.dead"
+            end
+            return references
+        end, {
+            title = "Group Frame Colors",
+            note = "Shared by Party, Raid and Mythic Raid.",
+            historySource = "menu:group-frame-basics-colors",
+            offsetY = -10,
+            context = CurrentGroupHealthColorContext,
+        })
     end
-    openColors:SetScript("OnClick", OpenGroupFrameColors)
-    RegisterControl(openColors, ctx, "navigation.group_colors", "Group Frame Colors", "button", "navigation", { navigationKey = "opt_colors" })
     W.LabelAt(general, "Frame", generalLeftX, -38, generalLeftW, "GameFontNormalSmall", T.colors.accent)
     W.LabelAt(general, "Behavior", generalRightX, -38, generalRightW, "GameFontNormalSmall", T.colors.accent)
     local enableGroup = BindScopeToggle(ctx, AttachGroupFocus(W.SwitchAt(general, "Use MSUF group frames", generalLeftX, -64, generalLeftW), "layout"), "enabled", false, "rebuild")
@@ -176,6 +208,14 @@ local function BuildGFTransparencySection(ctx, b)
     local _, transparencyCardY = W.NextRow(transparency, transparencyCardH)
     local healthOpacityCard = W.ControlCard(transparency, "Health Bar", nil, transparencyLeftX, transparencyCardY, transparencyCardW, transparencyCardH)
     local opacityOptionsCard = W.ControlCard(transparency, "Options", nil, transparencyRightX, transparencyCardY, transparencyRightW, transparencyCardH)
+    if W.AttachContextColorReferences then
+        W.AttachContextColorReferences(healthOpacityCard, CurrentGroupHealthColorRefs, {
+            title = "Group Health Bar Colors",
+            note = "Foreground follows the selected group color mode; editable group colors are shared by Party, Raid and Mythic Raid.",
+            historySource = "menu:group-transparency-colors",
+            context = CurrentGroupHealthColorContext,
+        })
+    end
     local function AddAlphaSlider(parent, width, spec)
         local slider = W.Slider(parent, spec.label, 0, 1, 0.05, width)
         M.UsePercentInput(slider)
