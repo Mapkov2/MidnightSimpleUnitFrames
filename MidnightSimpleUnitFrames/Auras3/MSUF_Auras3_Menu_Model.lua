@@ -733,6 +733,43 @@ local function DefaultsInto(tbl, defaults)
     end
 end
 
+-- Menu reads can call EnsureDB hundreds of times while constructing one page.
+-- Seed each concrete profile table once, then invalidate at the next apply
+-- boundary. Replaced profile/subtables naturally miss this weak-key cache.
+local defaultsSeedCache = setmetatable({}, { __mode = "k" })
+local function MarkDefaultsSeeded(tbl, defaults)
+    if type(tbl) ~= "table" or type(defaults) ~= "table" then return end
+    local seeded = { defaults = defaults, childKeys = {}, childTables = {} }
+    defaultsSeedCache[tbl] = seeded
+    for key, value in pairs(defaults) do
+        if type(value) == "table" and type(tbl[key]) == "table" then
+            local childIndex = #seeded.childKeys + 1
+            seeded.childKeys[childIndex] = key
+            seeded.childTables[childIndex] = tbl[key]
+            MarkDefaultsSeeded(tbl[key], value)
+        end
+    end
+end
+local function DefaultsIntoOnce(tbl, defaults)
+    if type(tbl) ~= "table" or type(defaults) ~= "table" then return end
+    local seeded = defaultsSeedCache[tbl]
+    if seeded and seeded.defaults == defaults then
+        local childrenMatch = true
+        for i = 1, #seeded.childKeys do
+            if tbl[seeded.childKeys[i]] ~= seeded.childTables[i] then
+                childrenMatch = false
+                break
+            end
+        end
+        if childrenMatch then return end
+    end
+    DefaultsInto(tbl, defaults)
+    MarkDefaultsSeeded(tbl, defaults)
+end
+function Model.InvalidateDefaultSeedCache()
+    defaultsSeedCache = setmetatable({}, { __mode = "k" })
+end
+
 local function ClampNumber(value, defaultValue, minValue, maxValue)
     value = tonumber(value)
     if value == nil then value = defaultValue end
@@ -1170,7 +1207,7 @@ function Model.EnsureDB()
     if type(auras.customDisplays.serial) ~= "number" then auras.customDisplays.serial = 0 end
     if type(auras.customContainers) ~= "table" then auras.customContainers = {} end
     if type(auras.customContainers.perUnit) ~= "table" then auras.customContainers.perUnit = {} end
-    DefaultsInto(shared, DEFAULT_SHARED)
+    DefaultsIntoOnce(shared, DEFAULT_SHARED)
     if shared._msufA3_debuffTypeBorderModeMigrated_v1 ~= true then
         shared.debuffTypeBorderMode = shared.useDebuffTypeBorders == true and "SYMBOL" or NormalizeDebuffTypeBorderMode(shared.debuffTypeBorderMode, "OFF")
         shared._msufA3_debuffTypeBorderModeMigrated_v1 = true
@@ -1183,7 +1220,7 @@ local function EnsureGeneralDB()
     local db = _G.MSUF_DB
     if type(db) ~= "table" then db = {}; ExportPublic("MSUF_DB", db) end
     if type(db.general) ~= "table" then db.general = {} end
-    DefaultsInto(db.general, DEFAULT_GENERAL)
+    DefaultsIntoOnce(db.general, DEFAULT_GENERAL)
     return db.general
 end
 
@@ -2196,7 +2233,7 @@ local function EnsureScopeFilters(scope, create)
     local auras, shared = Model.EnsureDB()
     scope = NormalizeScope(scope)
     if scope == "shared" then
-        DefaultsInto(shared.filters, DEFAULT_SHARED.filters)
+        DefaultsIntoOnce(shared.filters, DEFAULT_SHARED.filters)
         return shared.filters
     end
 
@@ -2206,11 +2243,11 @@ local function EnsureScopeFilters(scope, create)
     if create then
         pu.overrideFilters = true
         if type(pu.filters) ~= "table" then pu.filters = DeepCopy(shared.filters or DEFAULT_SHARED.filters) end
-        DefaultsInto(pu.filters, DEFAULT_SHARED.filters)
+        DefaultsIntoOnce(pu.filters, DEFAULT_SHARED.filters)
         return pu.filters
     end
     if pu.overrideFilters == true and type(pu.filters) == "table" then
-        DefaultsInto(pu.filters, DEFAULT_SHARED.filters)
+        DefaultsIntoOnce(pu.filters, DEFAULT_SHARED.filters)
         return pu.filters
     end
     return shared.filters
@@ -3059,6 +3096,7 @@ function Model.ReadPreviewConfig(unit)
 end
 
 function Model.Apply(unit, reason)
+    Model.InvalidateDefaultSeedCache()
     reason = reason or "AURAS3_MENU"
     local function IsGroupApplyScope(scope)
         scope = tostring(scope or ""):lower()
