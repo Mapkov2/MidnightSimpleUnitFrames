@@ -3668,6 +3668,18 @@ local function ParseGroupHighlightFastShortcut(normalized)
         return nil
     end
 
+    if ContainsAny(normalized, P.RootPhrases[479]) then
+        local value = FirstNumber(normalized)
+        local setting = A.Registry and A.Registry:GetSetting("general.highlightThickness")
+        if not (setting and value) then return nil end
+        return {
+            kind = "changes",
+            changes = { { setting = setting, value = value } },
+            label = setting.label or "Mouseover Highlight Size",
+            summary = "Changes the global mouseover highlight size for unit and group frames.",
+        }
+    end
+
     local groups = DetectGroups(normalized)
     if #groups == 0 and ContainsAny(normalized, P.RootPhrases[478]) then
         groups = { "party", "raid", "mythicraid" }
@@ -3677,11 +3689,7 @@ local function ParseGroupHighlightFastShortcut(normalized)
     local attr
     local label
     local value
-    if ContainsAny(normalized, P.RootPhrases[479]) then
-        attr = "hlHoverSize"
-        label = "Hover Highlight Thickness"
-        value = FirstNumber(normalized)
-    elseif ContainsAny(normalized, P.RootPhrases[480]) then
+    if ContainsAny(normalized, P.RootPhrases[480]) then
         attr = "aggroMode"
         label = "Aggro Shows For"
         value = GroupAggroModeValue(normalized)

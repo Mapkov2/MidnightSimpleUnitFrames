@@ -17,6 +17,8 @@ function A.GlobalRegistry.RegisterHighlightColorSettings(ctx)
 
     local ColorSetting = ctx.ColorSetting
     local RegisterGeneralBoolean = ctx.RegisterGeneralBoolean
+    local RegisterGeneralNumberSetting = ctx.RegisterGeneralNumberSetting
+    local RegisterGeneralEnum = ctx.RegisterGeneralEnum
     local GeneralDB = ctx.GeneralDB
     local TableRGB = ctx.TableRGB
     local SetTableRGB = ctx.SetTableRGB
@@ -50,7 +52,24 @@ function A.GlobalRegistry.RegisterHighlightColorSettings(ctx)
 
     RegisterGeneralBoolean("highlightEnabled", "mouseoverHighlight", "Mouseover Highlight", true, {
         "mouseover highlight", "hover highlight", "unitframe mouseover highlight",
-    }, { category = "Colors / Mouseover Highlight", frameType = "colors", apply = ApplyColors, reason = "MSUF_ASSISTANT_MOUSEOVER_HIGHLIGHT" })
+    }, { category = "Miscellaneous / Mouseover Highlight", frameType = "misc", page = "opt_misc", apply = ApplyColors, reason = "MSUF_ASSISTANT_MOUSEOVER_HIGHLIGHT" })
+    if type(RegisterGeneralEnum) == "function" then
+        RegisterGeneralEnum("highlightStyle", "mouseoverHighlightStyle", "Mouseover Highlight Style", "GRADIENT",
+            { "GRADIENT", "BORDER" }, {
+                "mouseover highlight style", "hover highlight style", "hover gradient", "hover border style",
+            }, {
+                category = "Miscellaneous / Mouseover Highlight", frameType = "misc", page = "opt_misc", apply = ApplyColors,
+                valueAliases = { gradient = "GRADIENT", soft = "GRADIENT", border = "BORDER", solid = "BORDER" },
+            })
+    end
+    if type(RegisterGeneralNumberSetting) == "function" then
+        RegisterGeneralNumberSetting("highlightThickness", "mouseoverHighlightSize", "Mouseover Highlight Size", 6, 1, 16, {
+            "mouseover highlight size", "hover highlight size", "mouseover highlight thickness", "hover border thickness",
+        }, {
+            category = "Miscellaneous / Mouseover Highlight", frameType = "misc", page = "opt_misc", apply = ApplyColors,
+            description = "Controls the width of the soft gradient or solid mouseover border.",
+        })
+    end
     ColorSetting("general.highlightColor", "Mouseover Highlight Color", {
         "mouseover highlight color", "hover highlight color", "unitframe highlight color",
     }, function()

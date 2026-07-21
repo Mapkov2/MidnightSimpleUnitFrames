@@ -1498,7 +1498,7 @@ local seedCases = {
     {
         id = "party-hover-highlight-thickness",
         prompt = "set party hover highlight thickness to 4",
-        expect = { kind = "changes", key = "gf_party.hlHoverSize", value = 4 },
+        expect = { kind = "changes", key = "general.highlightThickness", value = 4 },
         category = "group-highlight",
     },
     {

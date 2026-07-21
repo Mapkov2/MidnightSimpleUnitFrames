@@ -287,7 +287,6 @@ general.healPredictionColorA
 general.healPredictionColorB
 general.healPredictionColorG
 general.healPredictionColorR
-general.highlightThickness
 general.hlDispelBorderEnabled
 general.hlPurgeBorderEnabled
 general.hlPurgeColorB
