@@ -574,39 +574,63 @@ local function MSUF_PositionPlayerInfoFrame(frame)
     end
  end
 --- Tooltip helpers (unified; keeps behavior, reduces copy/paste)
+local MSUF_IsSecretValueAPI = _G.issecretvalue
+local function MSUF_UnitInfo_IsSecret(value)
+    return MSUF_IsSecretValueAPI and MSUF_IsSecretValueAPI(value) == true
+end
+
+local function MSUF_UnitInfo_PlainString(value)
+    if MSUF_UnitInfo_IsSecret(value) then return nil end
+    if type(value) == "string" and value ~= "" then return value end
+    return nil
+end
+
+local function MSUF_UnitInfo_PlainNumber(value)
+    if MSUF_UnitInfo_IsSecret(value) then return nil end
+    return tonumber(value)
+end
+
+local function MSUF_UnitInfo_PlainBoolean(value)
+    if MSUF_UnitInfo_IsSecret(value) then return nil end
+    return value == true or value == 1
+end
+
+local function MSUF_UnitInfo_DisplayName(unit, fallbackName)
+    local name = UnitName(unit)
+    if MSUF_UnitInfo_IsSecret(name) then return name end
+    return MSUF_UnitInfo_PlainString(name) or MSUF_UnitInfo_PlainString(fallbackName) or ""
+end
+
 local function MSUF_UnitInfo_GetLocationText()
-    local zone = GetZoneText and GetZoneText() or nil
-    local subzone = GetSubZoneText and GetSubZoneText() or nil
-    if subzone and subzone ~= "" and zone and zone ~= "" then
-        --- Only compare strings if they're safe; otherwise just prefer subzone when present.
-        if (not NotSecretValue) or (NotSecretValue(subzone) and NotSecretValue(zone)) then
-            if subzone ~= zone then
-                 return subzone
-            end
-        end
-    end
-    return (subzone and subzone ~= "") and subzone or zone
+    local zoneValue, subzoneValue
+    if GetZoneText then zoneValue = GetZoneText() end
+    if GetSubZoneText then subzoneValue = GetSubZoneText() end
+    local zone = MSUF_UnitInfo_PlainString(zoneValue)
+    local subzone = MSUF_UnitInfo_PlainString(subzoneValue)
+    if subzone and zone and subzone ~= zone then return subzone end
+    return subzone or zone or ""
 end
 local function MSUF_UnitInfo_BuildNameLine(unit, fallbackName, isPlayer)
-    local nameLine = UnitName(unit) or fallbackName
+    local nameLine = MSUF_UnitInfo_DisplayName(unit, fallbackName)
+    if MSUF_UnitInfo_IsSecret(nameLine) then return nameLine end
     if isPlayer then
         --- Secret-safe (12.0): UnitIsAFK/UnitIsDND may return secret booleans;
         --- direct boolean test in `if` would hard-error. Guard via issecretvalue.
         local getAway = _G.MSUF_GetCachedAwayStatus
         if getAway then
             local away = getAway(unit, true, true, false)
-            if away == 1 or away == 3 then
+            if not MSUF_UnitInfo_IsSecret(away) and (away == 1 or away == 3) then
                 nameLine = nameLine .. " <AFK>"
-            elseif away == 2 then
+            elseif not MSUF_UnitInfo_IsSecret(away) and away == 2 then
                 nameLine = nameLine .. " <DND>"
             end
         elseif UnitIsAFK then
             local afk = UnitIsAFK(unit)
-            if not (issecretvalue and issecretvalue(afk)) and afk then
+            if MSUF_UnitInfo_PlainBoolean(afk) == true then
                 nameLine = nameLine .. " <AFK>"
             elseif UnitIsDND then
                 local dnd = UnitIsDND(unit)
-                if not (issecretvalue and issecretvalue(dnd)) and dnd then
+                if MSUF_UnitInfo_PlainBoolean(dnd) == true then
                     nameLine = nameLine .. " <DND>"
                 end
             end
@@ -629,7 +653,7 @@ local function MSUF_UnitInfo_BuildLine4(faction, isPVP)
      return text
 end
 local function MSUF_UnitInfo_BuildLine2_Player(level, race, classLoc)
-    local n = tonumber(level)
+    local n = MSUF_UnitInfo_PlainNumber(level)
     if n and n > 0 then
         if race and classLoc then
             return string.format("Level %d %s %s", n, race, classLoc)
@@ -642,6 +666,7 @@ local function MSUF_UnitInfo_BuildLine2_Player(level, race, classLoc)
     return classLoc or ""
 end
 local function MSUF_UnitInfo_ClassificationText(classification)
+    classification = MSUF_UnitInfo_PlainString(classification)
     if classification == "elite" then
          return "Elite"
     elseif classification == "rare" then
@@ -654,7 +679,7 @@ local function MSUF_UnitInfo_ClassificationText(classification)
      return nil
 end
 local function MSUF_UnitInfo_BuildLine2_NPC(level, classification)
-    local n = tonumber(level)
+    local n = MSUF_UnitInfo_PlainNumber(level)
     if not (n and n > 0) then
          return ""
     end
@@ -665,58 +690,66 @@ local function MSUF_UnitInfo_BuildLine2_NPC(level, classification)
     end
      return line2
 end
+local function MSUF_UnitInfo_SetText(fontString, value)
+    if MSUF_UnitInfo_IsSecret(value) then
+        fontString:SetText(value)
+    else
+        fontString:SetText(value or "")
+    end
+end
 local function MSUF_UnitInfo_ShowFrame(f, nameLine, line2, line3, line4, loc)
-    f.name:SetText(nameLine or "")
-    f.line2:SetText(line2 or "")
-    f.line3:SetText(line3 or "")
-    f.line4:SetText(line4 or "")
-    f.line5:SetText(loc or "")
+    MSUF_UnitInfo_SetText(f.name, nameLine)
+    MSUF_UnitInfo_SetText(f.line2, line2)
+    MSUF_UnitInfo_SetText(f.line3, line3)
+    MSUF_UnitInfo_SetText(f.line4, line4)
+    MSUF_UnitInfo_SetText(f.line5, loc)
     MSUF_PositionPlayerInfoFrame(f)
     f:Show()
  end
 local function ShowUnitInfoTooltip(unit, fallbackName)
     local f = MSUF_GetPlayerInfoFrame()
-    if not UnitExists(unit) then
+    local exists = UnitExists(unit)
+    if not MSUF_UnitInfo_IsSecret(exists) and not exists then
         f:Hide()
          return
     end
 
     if unit == "pet" then
-        local name = UnitName(unit) or fallbackName or "Pet"
-        local level = UnitLevel(unit)
-        local creatureType = UnitCreatureType(unit)
+        local name = MSUF_UnitInfo_DisplayName(unit, fallbackName or "Pet")
+        local level = MSUF_UnitInfo_PlainNumber(UnitLevel(unit))
+        local creatureType = MSUF_UnitInfo_PlainString(UnitCreatureType(unit))
         local line2 = ""
-        local n = tonumber(level)
-        if n and n > 0 then
-            line2 = string.format("Level %d", n)
+        if level and level > 0 then
+            line2 = string.format("Level %d", level)
         end
         MSUF_UnitInfo_ShowFrame(f, name, line2, creatureType or "", "", MSUF_UnitInfo_GetLocationText())
         return
     end
 
-    local level = UnitLevel(unit)
-    local isPlayer = UnitIsPlayer(unit)
+    local level = MSUF_UnitInfo_PlainNumber(UnitLevel(unit))
+    local isPlayer = MSUF_UnitInfo_PlainBoolean(UnitIsPlayer(unit)) == true
     local race, classLoc, faction, isPVP
     if isPlayer then
-        race = UnitRace(unit)
-        classLoc = select(1, UnitClass(unit))
-        faction = UnitFactionGroup(unit)
-        isPVP = UnitIsPVP(unit)
+        race = MSUF_UnitInfo_PlainString(UnitRace(unit))
+        classLoc = MSUF_UnitInfo_PlainString(UnitClass(unit))
+        faction = MSUF_UnitInfo_PlainString(UnitFactionGroup(unit))
+        isPVP = MSUF_UnitInfo_PlainBoolean(UnitIsPVP(unit)) == true
     end
 
     local nameLine = MSUF_UnitInfo_BuildNameLine(unit, fallbackName, isPlayer)
     local line2 = isPlayer and MSUF_UnitInfo_BuildLine2_Player(level, race, classLoc)
         or MSUF_UnitInfo_BuildLine2_NPC(level, UnitClassification(unit))
-    local line3 = isPlayer and (classLoc or "") or (UnitCreatureType(unit) or "")
+    local line3 = isPlayer and (classLoc or "") or (MSUF_UnitInfo_PlainString(UnitCreatureType(unit)) or "")
     local line4 = isPlayer and MSUF_UnitInfo_BuildLine4(faction, isPVP) or ""
 
     if unit == "player" then
         local specName
         if GetSpecialization and GetSpecializationInfo then
-            local specIndex = GetSpecialization()
+            local specIndex = MSUF_UnitInfo_PlainNumber(GetSpecialization())
             if specIndex then
-                local _, sName = GetSpecializationInfo(specIndex, nil, nil, nil, UnitSex("player"))
-                specName = sName
+                local sex = MSUF_UnitInfo_PlainNumber(UnitSex("player"))
+                local _, sName = GetSpecializationInfo(specIndex, nil, nil, nil, sex)
+                specName = MSUF_UnitInfo_PlainString(sName)
             end
         end
         if specName and classLoc then
@@ -779,7 +812,9 @@ Tooltips.Allowed = Tooltips.Allowed or function()
     return MSUF_TooltipModeAllowed(cache.mode, cache.modifier)
 end
 Tooltips.ShowUnit = Tooltips.ShowUnit or function(owner, unit, opts)
-    if not unit or not UnitExists(unit) then return false end
+    if not unit then return false end
+    local exists = UnitExists(unit)
+    if not MSUF_UnitInfo_IsSecret(exists) and not exists then return false end
     local cache = MSUF_GetTooltipCache()
     local g = cache.general
     local provider, anchor = cache.provider, cache.anchor
