@@ -244,8 +244,9 @@ for _, list in ipairs({ unitFiles, groupFiles, auraFiles, previewFiles }) do
 end
 -- Current inventory includes the explicitly cataloged Group Indicator tile,
 -- Group Preview button, Group Layout transparency/bar controls,
--- spell-indicator style controls, and the remaining in-scope product factories.
-Check(factorySites == 199, string.format("interactive factory inventory drifted: expected 199, got %d", factorySites))
+-- spell-indicator style controls, and the four explicit compact-preview
+-- controls added across Unit, Group, and Class Resources.
+Check(factorySites == 204, string.format("interactive factory inventory drifted: expected 204, got %d", factorySites))
 
 local function AddUnique(list, seen, value)
     value = tostring(value or "")
