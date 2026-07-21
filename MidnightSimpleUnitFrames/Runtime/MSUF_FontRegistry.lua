@@ -112,22 +112,40 @@ G.MSUF_FONT_LIST = G.MSUF_FONT_LIST or FONT_LIST
 
 local MSUF_FontPathProbe
 local MSUF_FontPathLoadableCache = {}
+-- Preview refreshes probe the same font paths thousands of times per menu
+-- session. The nested raw-path cache answers repeat probes without the
+-- gsub/lower/concat allocations of the normalized cache key; loadability of a
+-- path never changes within a session, so neither cache needs invalidation.
+local MSUF_FontPathLoadableFast = {}
 
 local function MSUF_NormalizeFontPathForProbe(path)
     if type(path) ~= "string" or path == "" then return nil end
     return path:gsub("/", "\\")
 end
 
-local function MSUF_FontPathIsLoadable(path, size, flags)
-    path = MSUF_NormalizeFontPathForProbe(path)
-    if not path then return false end
+local function MSUF_FontPathIsLoadable(rawPath, size, flags)
     size = tonumber(size) or 14
     if size <= 0 then size = 14 end
     flags = flags or ""
+    if type(rawPath) == "string" and rawPath ~= "" then
+        local byPath = MSUF_FontPathLoadableFast[rawPath]
+        local bySize = byPath and byPath[size]
+        local fast = bySize and bySize[flags]
+        if fast ~= nil then return fast end
+    end
+    local path = MSUF_NormalizeFontPathForProbe(rawPath)
+    if not path then return false end
 
     local cacheKey = path:lower() .. "|" .. tostring(size) .. "|" .. tostring(flags)
     local cached = MSUF_FontPathLoadableCache[cacheKey]
-    if cached ~= nil then return cached end
+    if cached ~= nil then
+        local byPath = MSUF_FontPathLoadableFast[rawPath]
+        if not byPath then byPath = {}; MSUF_FontPathLoadableFast[rawPath] = byPath end
+        local bySize = byPath[size]
+        if not bySize then bySize = {}; byPath[size] = bySize end
+        bySize[flags] = cached
+        return cached
+    end
 
     if type(G.CreateFont) ~= "function" then
         return true
@@ -145,6 +163,13 @@ local function MSUF_FontPathIsLoadable(path, size, flags)
     local ok, applied = pcall(MSUF_FontPathProbe.SetFont, MSUF_FontPathProbe, path, size, flags)
     local loadable = ok and applied ~= false
     MSUF_FontPathLoadableCache[cacheKey] = loadable
+    if type(rawPath) == "string" and rawPath ~= "" then
+        local byPath = MSUF_FontPathLoadableFast[rawPath]
+        if not byPath then byPath = {}; MSUF_FontPathLoadableFast[rawPath] = byPath end
+        local bySize = byPath[size]
+        if not bySize then bySize = {}; byPath[size] = bySize end
+        bySize[flags] = loadable
+    end
     return loadable
 end
 
@@ -414,28 +439,30 @@ local function MSUF_FetchFontPathFromLSM(key)
     return nil
 end
 
+-- Plain function instead of a per-call closure: this resolver runs for every
+-- text element of every preview refresh.
+local function MSUF_TrySafeFontPath(resolve, candidate, candidateKey, size, flags)
+    if type(candidate) ~= "string" or candidate == "" then return nil end
+    local resolved = type(resolve) == "function" and resolve(candidate, size, flags, candidateKey) or candidate
+    if type(resolved) == "string" and resolved ~= "" then
+        if MSUF_FontPathIsLoadable(resolved, size, flags) or (flags ~= "" and MSUF_FontPathIsLoadable(resolved, size, "")) then
+            return resolved
+        end
+    end
+    return nil
+end
+
 local function MSUF_ResolveSafeFontPath(path, size, flags, fontKey)
     size = tonumber(size) or 14
     if size <= 0 then size = 14 end
     flags = flags or ""
 
     local resolve = G.MSUF_ResolveFontPath
-    local function TryPath(candidate, candidateKey)
-        if type(candidate) ~= "string" or candidate == "" then return nil end
-        local resolved = type(resolve) == "function" and resolve(candidate, size, flags, candidateKey or fontKey) or candidate
-        if type(resolved) == "string" and resolved ~= "" then
-            if MSUF_FontPathIsLoadable(resolved, size, flags) or (flags ~= "" and MSUF_FontPathIsLoadable(resolved, size, "")) then
-                return resolved
-            end
-        end
-        return nil
-    end
-
     local internal = type(G.MSUF_GetInternalFontPathByKey) == "function" and G.MSUF_GetInternalFontPathByKey(fontKey) or nil
-    return TryPath(path, fontKey)
-        or TryPath(internal, fontKey)
-        or TryPath(FONT_LIST[1] and FONT_LIST[1].path, "FRIZQT")
-        or TryPath("Fonts\\FRIZQT__.TTF", "FRIZQT")
+    return MSUF_TrySafeFontPath(resolve, path, fontKey, size, flags)
+        or MSUF_TrySafeFontPath(resolve, internal, fontKey, size, flags)
+        or MSUF_TrySafeFontPath(resolve, FONT_LIST[1] and FONT_LIST[1].path, "FRIZQT", size, flags)
+        or MSUF_TrySafeFontPath(resolve, "Fonts\\FRIZQT__.TTF", "FRIZQT", size, flags)
         or "Fonts\\FRIZQT__.TTF"
 end
 

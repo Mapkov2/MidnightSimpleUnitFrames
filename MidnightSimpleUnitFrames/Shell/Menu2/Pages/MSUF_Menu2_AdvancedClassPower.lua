@@ -1154,14 +1154,21 @@ function Page:RefreshControlState()
     local playerDetached = db.player and db.player.powerBarDetached == true
     SetControlsEnabled(self.groups.detached, anyDetached); SetControlsEnabled(self.groups.detachedPlayer, playerDetached)
     SetControlEnabled(self.dpbUse, true)
+    -- Lazy sections leave their control tables nil until first expand.
     local playerShape = NormalizeDetachedPowerShape(db.player and db.player.detachedPowerBarShape)
-    SetControlEnabled(self.dpb.orbSize, playerDetached and playerShape == "ORB")
-    SetControlEnabled(self.dpb.height, playerDetached and playerShape ~= "ORB")
+    if self.dpb then
+        SetControlEnabled(self.dpb.orbSize, playerDetached and playerShape == "ORB")
+        SetControlEnabled(self.dpb.height, playerDetached and playerShape ~= "ORB")
+    end
     local playerTextOn = db.player and PlayerPowerTextShown(db.player)
-    SetControlEnabled(self.dpbText.onBar, playerDetached); SetControlEnabled(self.dpbText.size, playerDetached and playerTextOn)
+    if self.dpbText then
+        SetControlEnabled(self.dpbText.onBar, playerDetached); SetControlEnabled(self.dpbText.size, playerDetached and playerTextOn)
+    end
     SetControlsEnabled(self.groups.detachedText, playerDetached and playerTextOn)
-    for i, mode in ipairs({ (db.player and (db.player.powerTextRight or db.player.powerTextMode)) or "CURPERCENT", db.player and db.player.powerTextLeft or "NONE", db.player and db.player.powerTextCenter or "NONE" }) do
-        SetControlEnabled(self.dpbHide[i], playerDetached and playerTextOn and HasPercent(mode))
+    if self.dpbHide then
+        for i, mode in ipairs({ (db.player and (db.player.powerTextRight or db.player.powerTextMode)) or "CURPERCENT", db.player and db.player.powerTextLeft or "NONE", db.player and db.player.powerTextCenter or "NONE" }) do
+            SetControlEnabled(self.dpbHide[i], playerDetached and playerTextOn and HasPercent(mode))
+        end
     end
     SetControlsEnabled(self.groups.detachedSlot, playerDetached and playerTextOn)
     local hpOn, hpShape = BoolValue(bars, "playerHPBarEnabled", false), ResolvePlayerHPShape(bars, db)
@@ -1170,12 +1177,14 @@ function Page:RefreshControlState()
     SetControlsEnabled(self.groups.hpManual, hpOn and not hpOrb and (bars.playerHPBarWidthMode or "class") == "custom")
     SetControlsEnabled(self.groups.hpOrb, hpOn and NormalizePlayerHPShape(bars.playerHPBarShape) == "ORB")
     SetControlsEnabled(self.groups.hpTexture, hpOn and hpShape == "BAR")
-    SetControlEnabled(self.hp.height, hpOn and not hpOrb)
+    if self.hp then SetControlEnabled(self.hp.height, hpOn and not hpOrb) end
     local hpTextOn = hpOn and BoolValue(bars, "playerHPBarTextEnabled", true)
     local hpCustom = hpTextOn and not BoolValue(bars, "playerHPBarUsePlayerText", true)
     SetControlsEnabled(self.groups.hpText, hpTextOn); SetControlsEnabled(self.groups.hpCustomText, hpCustom)
-    for i, mode in ipairs({ bars.playerHPBarTextRight or "CURPERCENT", bars.playerHPBarTextLeft or "NONE", bars.playerHPBarTextCenter or "NONE" }) do
-        SetControlEnabled(self.hpHide[i], hpCustom and HasPercent(mode))
+    if self.hpHide then
+        for i, mode in ipairs({ bars.playerHPBarTextRight or "CURPERCENT", bars.playerHPBarTextLeft or "NONE", bars.playerHPBarTextCenter or "NONE" }) do
+            SetControlEnabled(self.hpHide[i], hpCustom and HasPercent(mode))
+        end
     end
     SetControlsEnabled(self.groups.hpTextPosition, hpTextOn)
     SetControlEnabled(self.hpUse, true)
@@ -1183,16 +1192,46 @@ function Page:RefreshControlState()
     SetControlEnabled(self.altToggle, true); SetControlEnabled(self.cpEnable, true)
 end
 
+-- Collapsed sections build only their shell on the visible cold path; content
+-- builds on first expand through the shared lazy-section registry. Hidden
+-- search-index builds and persisted-open sections still build synchronously
+-- inside BuildSectionLazy, so search, Assistant coverage, and reopened
+-- sections keep seeing the full page.
+function Page:LazySection(id, title, height, method)
+    local UnitPage = M.UnitPage
+    if UnitPage and type(UnitPage.BuildSectionLazy) == "function" then
+        local page = self
+        UnitPage.BuildSectionLazy(self.ctx, self.b, "player", {
+            id = id,
+            title = title,
+            height = height,
+            defaultOpen = false,
+            build = function(_, proxyBuilder)
+                local outerBuilder = page.b
+                page.b = proxyBuilder
+                local invoked, err = pcall(method, page)
+                page.b = outerBuilder
+                if not invoked then error(err, 0) end
+                -- Newly built controls need their enabled/disabled state; the
+                -- proxy is a safe no-op while the page itself is still building.
+                page.refresh()
+            end,
+        })
+        return
+    end
+    method(self)
+end
+
 function Page:Build()
     self:BuildHeader()
     BuildInlineClassPowerPreview(self.ctx, self.b)
     self:BuildClassLayout()
-    self:BuildClassBehavior()
-    self:BuildClassStyle()
-    self:BuildClassVisibility()
-    self:BuildDetachedPower()
-    self:BuildPlayerHP()
-    self:BuildAlternativeMana()
+    self:LazySection("classpower_behavior", "Behavior", 206, Page.BuildClassBehavior)
+    self:LazySection("classpower_visuals", "Appearance", 430, Page.BuildClassStyle)
+    self:LazySection("classpower_visibility", "Auto-Hide", 216, Page.BuildClassVisibility)
+    self:LazySection("classpower_detached_power", "Player Power", function() return self.width < 680 and 920 or 640 end, Page.BuildDetachedPower)
+    self:LazySection("classpower_player_hp", "Extra Health Bar", function() return self.width < 680 and 980 or 700 end, Page.BuildPlayerHP)
+    self:LazySection("classpower_alt_mana", "Alternative Mana", 306, Page.BuildAlternativeMana)
     -- All callbacks share one late-bound state refresh instead of capturing every control.
     self.refresh = self.refresh(function() self:RefreshControlState() end)
     M.RefreshClassPowerDetachedState = self.refresh

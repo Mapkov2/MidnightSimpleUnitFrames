@@ -1812,18 +1812,55 @@ local function BuildPowerSection(ctx, b)
     })
 end
 
+-- Every collapsible on this page goes through the shared lazy-section
+-- registry in page order. Open sections get their shell (declared height)
+-- in the click frame and their content one deferred refresh later; closed
+-- sections build on first expand; hidden search-index builds stay synchronous
+-- inside BuildSectionLazy. Heights of open sections must mirror the compact
+-- thresholds their builders use internally.
+local GLOBAL_BARS_LAZY_SECTION_SPECS = {
+    {
+        sectionId = "bars_textures",
+        title = "Textures & Gradient",
+        defaultOpen = true,
+        height = function(lazyCtx) return (((lazyCtx and lazyCtx.width) or 720) < 560) and 458 or 330 end,
+        build = BuildTextureSection,
+    },
+    {
+        sectionId = "bars_temp_max_health",
+        title = "Maximum Health Loss",
+        defaultOpen = true,
+        height = function(lazyCtx) return (((lazyCtx and lazyCtx.width) or 720) < 700) and 482 or 294 end,
+        build = BuildTempMaxHealthSection,
+    },
+    { sectionId = "bars_absorb", title = "Absorb Display", height = 414, defaultOpen = true, build = BuildAbsorbSection },
+    { sectionId = "bars_outline", title = "Frame Outline", height = 220, build = BuildOutlineSection },
+    { sectionId = "bars_rounded", title = "Rounded Texture", height = 246, defaultOpen = true, build = BuildRoundedSection },
+    { sectionId = "bars_highlight", title = "Highlight Borders", height = 710, defaultOpen = true, build = BuildHighlightSection },
+    {
+        sectionId = "bars_unit_dispel_overlay",
+        title = "UnitFrame Dispel Overlay",
+        height = function(lazyCtx)
+            local width = min(900, max(320, ((lazyCtx and lazyCtx.width) or 720) - 40))
+            return width >= 760 and 358 or 468
+        end,
+        build = BuildUnitDispelOverlaySection,
+    },
+    { sectionId = "bars_power", title = "Bar Animation + Text Accuracy", height = 152, build = BuildPowerSection },
+}
+local function BuildGlobalBarsSectionLazy(ctx, b, spec)
+    local buildLazy = M.UnitPage and M.UnitPage.BuildSectionLazy
+    if type(buildLazy) == "function" then return buildLazy(ctx, b, nil, spec) end
+    return spec.build(ctx, b)
+end
+
 local function BuildBars(ctx)
     local b = W.PageBuilder(ctx)
     b:GlobalStyleHeader("Bars", "Textures, gradients, outlines and highlight borders.", 72)
     BuildScopeSection(ctx, b)
-    BuildTextureSection(ctx, b)
-    BuildTempMaxHealthSection(ctx, b)
-    BuildAbsorbSection(ctx, b)
-    BuildOutlineSection(ctx, b)
-    BuildRoundedSection(ctx, b)
-    BuildHighlightSection(ctx, b)
-    BuildUnitDispelOverlaySection(ctx, b)
-    BuildPowerSection(ctx, b)
+    for i = 1, #GLOBAL_BARS_LAZY_SECTION_SPECS do
+        BuildGlobalBarsSectionLazy(ctx, b, GLOBAL_BARS_LAZY_SECTION_SPECS[i])
+    end
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-M.RegisterPage("opt_bars", { title = "MSUF Bars", build = BuildBars, version = 16 })
+M.RegisterPage("opt_bars", { title = "MSUF Bars", build = BuildBars, version = 17 })

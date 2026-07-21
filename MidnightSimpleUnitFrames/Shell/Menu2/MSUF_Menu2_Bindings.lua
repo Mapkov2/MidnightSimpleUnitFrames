@@ -61,7 +61,15 @@ local function ProfileSystemNeedsInit()
         or type(activeTable) ~= "table"
         or _G.MSUF_DB ~= activeTable
 end
+local lastEnsuredDB
 function M.EnsureDB()
+    -- Fast path: the exact table we last ensured and exported is still the
+    -- active DB. A profile switch or import replaces _G.MSUF_DB, which breaks
+    -- the identity check and re-runs the full ensure/export sequence below.
+    local db = _G.MSUF_DB
+    if db ~= nil and db == lastEnsuredDB and type(db.general) == "table" and not ProfileSystemNeedsInit() then
+        return db
+    end
     if ProfileSystemNeedsInit() and type(_G.MSUF_InitProfiles) == "function" then
         SafeInvoke(_G.MSUF_InitProfiles)
     end
@@ -69,6 +77,7 @@ function M.EnsureDB()
     if type(ensure) == "function" then SafeInvoke(ensure) end
     ExportPublic("MSUF_DB", _G.MSUF_DB or {})
     _G.MSUF_DB.general = _G.MSUF_DB.general or {}
+    lastEnsuredDB = _G.MSUF_DB
     return _G.MSUF_DB
 end
 function M.GetUnitDB(unit)

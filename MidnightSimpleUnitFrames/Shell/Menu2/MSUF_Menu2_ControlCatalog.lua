@@ -404,10 +404,6 @@ local function SemanticIdentity(meta, command, widget, label)
     meta = type(meta) == "table" and meta or {}
     command = type(command) == "table" and command or {}
 
-    -- CommandSource was evaluated eagerly by the former candidate-table
-    -- construction.  Keep that exact behavior while avoiding ten temporary
-    -- tables for every registered control.
-    local commandSource = CommandSource(command, label)
     local value = CleanText(meta.identityKey)
     if value ~= "" then return value, "identity_key" end
     value = CleanText(meta.controlPath)
@@ -422,7 +418,11 @@ local function SemanticIdentity(meta, command, widget, label)
     if value ~= "" then return value, "source_label" end
     value = CleanText(widget and widget._msuf2SearchText)
     if value ~= "" then return value, "source_label" end
-    value = CleanText(commandSource)
+    -- CommandSource may pcall a page-provided sourceFn; it only runs for
+    -- controls that lack every stronger identity key above, which keeps the
+    -- identity result identical while sparing its CleanText fan-out on the
+    -- overwhelmingly common keyed paths.
+    value = CleanText(CommandSource(command, label))
     if value ~= "" then return value, "command_source" end
     value = CleanText(label)
     if value ~= "" then return value, "display_label" end
@@ -488,13 +488,27 @@ local function CommandMetadata(command, label)
     return metadata
 end
 
+-- Command metadata is consumed only by cold read paths (capability checks,
+-- audit reports, Assistant descriptors). Building the ~30-field table with its
+-- CleanText fan-out during Catalog.Register made every page build pay for it
+-- per control, so registration only marks it dirty and readers materialize it
+-- here on first access.
+local function EnsureCommandMeta(record)
+    if type(record) ~= "table" then return nil end
+    if record._commandMetaDirty then
+        record._commandMetaDirty = nil
+        record.commandMeta = CommandMetadata(record.command, record.label)
+    end
+    return record.commandMeta
+end
+
 local SETTING_COMMAND_KINDS = {
     toggle = true, slider = true, dropdown = true, segment = true,
     textinput = true, color = true, dragrow = true,
 }
 local function CapabilityIssue(record)
     if type(record) ~= "table" then return nil end
-    local meta = record.commandMeta
+    local meta = EnsureCommandMeta(record)
     local transient = record.classification == "ephemeral" and type(meta) == "table" and meta.hasSet == true
     if record.classification ~= "setting" and record.classification ~= "action" and not transient then return nil end
     if type(meta) ~= "table" or meta.hasSet ~= true then return "missing executable write command" end
@@ -524,7 +538,7 @@ end
 local function RuntimeCapabilityIssue(record)
     local issue = CapabilityIssue(record)
     if issue then return issue end
-    local command, meta = record and record.command, record and record.commandMeta
+    local command, meta = record and record.command, EnsureCommandMeta(record)
     if type(command) ~= "table" or type(meta) ~= "table" then return nil end
     if meta.hasGet then
         local ok = pcall(command.get)
@@ -808,7 +822,11 @@ function Catalog.Register(widget, meta, registrationSource)
     local revisionBefore = record and (record._revisionKey or RevisionKey(record)) or nil
 
     if not record then
-        local fallbackId, seed = FallbackId(pageKey, kind, identity, command)
+        -- Valid explicit IDs never use the fallback ID, so skip its three Slug
+        -- passes and the StableHash for the common declared-controlId case.
+        -- AllocateCollisionId falls back to baseId when seed is nil.
+        local fallbackId, seed
+        if not explicitId then fallbackId, seed = FallbackId(pageKey, kind, identity, command) end
         local requestedId = explicitId or fallbackId
         local idSource = explicitId and "explicit" or (invalidExplicitId and "fallback_invalid_explicit" or "fallback")
         local occupied = STATE.byId[requestedId]
@@ -883,12 +901,20 @@ function Catalog.Register(widget, meta, registrationSource)
         record.identityBasis = identityBasis
     end
     if command then record.command = command end
-    record.commandMeta = CommandMetadata(record.command, record.label)
-    record.identityKey = CleanText(meta.identityKey or record.identityKey)
-    record.controlPath = CleanText(meta.controlPath or record.controlPath)
-    record.settingKey = CleanText(meta.settingKey or (record.command and record.command.settingKey) or record.settingKey)
-    record.actionKey = CleanText(meta.actionKey or (record.command and record.command.actionKey) or record.actionKey)
-    record.navigationKey = CleanText(meta.navigationKey or (record.command and record.command.navigationKey) or record.navigationKey)
+    record.commandMeta = nil
+    record._commandMetaDirty = true
+    -- Record fields always hold CleanText output from an earlier pass, so an
+    -- unchanged field skips the re-clean; only newly declared sources pay it.
+    local declaredValue = meta.identityKey
+    record.identityKey = declaredValue and CleanText(declaredValue) or record.identityKey or ""
+    declaredValue = meta.controlPath
+    record.controlPath = declaredValue and CleanText(declaredValue) or record.controlPath or ""
+    declaredValue = meta.settingKey or (record.command and record.command.settingKey)
+    record.settingKey = declaredValue and CleanText(declaredValue) or record.settingKey or ""
+    declaredValue = meta.actionKey or (record.command and record.command.actionKey)
+    record.actionKey = declaredValue and CleanText(declaredValue) or record.actionKey or ""
+    declaredValue = meta.navigationKey or (record.command and record.command.navigationKey)
+    record.navigationKey = declaredValue and CleanText(declaredValue) or record.navigationKey or ""
     local declaredActionFixedArgs = meta.actionFixedArgs
     if declaredActionFixedArgs == nil and command then declaredActionFixedArgs = command.actionFixedArgs end
     if declaredActionFixedArgs ~= nil then
@@ -906,7 +932,7 @@ function Catalog.Register(widget, meta, registrationSource)
     elseif meta.actionKey ~= nil or command and command.actionKey ~= nil then
         record.actionInputArg = ""
     else
-        record.actionInputArg = CleanText(record.actionInputArg)
+        record.actionInputArg = record.actionInputArg or ""
     end
     local declaredDisposition = meta.assistantDisposition
     if declaredDisposition == nil and command then declaredDisposition = command.assistantDisposition end
@@ -932,8 +958,8 @@ function Catalog.Register(widget, meta, registrationSource)
         record.assistantDisposition = ""
         record.assistantDispositionReason = ""
     else
-        record.assistantDisposition = CleanText(record.assistantDisposition):lower()
-        record.assistantDispositionReason = CleanText(record.assistantDispositionReason)
+        record.assistantDisposition = record.assistantDisposition or ""
+        record.assistantDispositionReason = record.assistantDispositionReason or ""
     end
     if declaredAssistantRoutes then
         local keys, keyErrors = NormalizeAssistantRouteList(
@@ -956,7 +982,8 @@ function Catalog.Register(widget, meta, registrationSource)
         record.assistantSettingRouteErrors = type(record.assistantSettingRouteErrors) == "table"
             and record.assistantSettingRouteErrors or {}
     end
-    record.help = CleanText(meta.help or meta.description or record.help)
+    declaredValue = meta.help or meta.description
+    record.help = declaredValue and CleanText(declaredValue) or record.help or ""
     record.virtual = meta.virtual == true
     record.confirmRequired = meta.confirmRequired == true or (record.command and record.command.confirmRequired == true) or record.confirmRequired == true
     record.registrationCount = (tonumber(record.registrationCount) or 0) + 1
@@ -1254,9 +1281,10 @@ local function PublicRecord(record)
     for source in pairs(record.sources or {}) do sources[#sources + 1] = source end
     table.sort(sources)
     local command
-    if type(record.commandMeta) == "table" then
+    local commandMeta = EnsureCommandMeta(record)
+    if type(commandMeta) == "table" then
         command = {}
-        for key, value in pairs(record.commandMeta) do command[key] = value end
+        for key, value in pairs(commandMeta) do command[key] = value end
     end
     local linkDisposition, linkReason, linkEligible, contractAccounted, suggestedDisposition, suggestionReason = AssistantLinkDisposition(record)
     return {
@@ -1401,7 +1429,7 @@ end
 
 local function AssistantDescriptor(record)
     local semanticId, familyId, memberKey = AssistantSemanticId(record)
-    local command = record.commandMeta or {}
+    local command = EnsureCommandMeta(record) or {}
     return {
         schemaVersion = Catalog.SCHEMA_VERSION,
         semanticId = semanticId,
@@ -1819,9 +1847,10 @@ local function ResolveSettingDescriptorRecord(settingKey, pageKey, descriptor)
     local expectedKinds = EXPECTED_SETTING_KINDS[CleanText(descriptor and descriptor.type):lower()]
     local best, bestScore, bestSource, tied
     local function ConsiderRecord(record)
+        local considerMeta = EnsureCommandMeta(record)
         if record and record.classification == "setting"
             and (not expectedKinds or expectedKinds[record.kind])
-            and record.commandMeta and record.commandMeta.hasGet and record.commandMeta.hasSet
+            and considerMeta and considerMeta.hasGet and considerMeta.hasSet
         then
             local recordTokens, recordSet, rawPath = RecordSettingTokens(record)
             local reviewedAliasSource = DescriptorReviewedAliasSource(compacts, rawPath)
@@ -2088,8 +2117,9 @@ function Catalog.ValidateRecord(record)
     if declaredDisposition and record.classification ~= "setting" and record.classification ~= "action" then
         errors[#errors + 1] = "assistantDisposition is only valid for persisted setting/action controls"
     end
+    local validateMeta = EnsureCommandMeta(record)
     if record.classification == "setting" then
-        if not (record.commandMeta and record.commandMeta.hasGet and record.commandMeta.hasSet) and record.settingKey == "" then
+        if not (validateMeta and validateMeta.hasGet and validateMeta.hasSet) and record.settingKey == "" then
             warnings[#warnings + 1] = "setting has no complete read/write command metadata"
         end
         if record.settingKey ~= "" and reviewedDisposition then
@@ -2098,7 +2128,7 @@ function Catalog.ValidateRecord(record)
             warnings[#warnings + 1] = "persisted setting lacks an explicit Assistant target or reviewed disposition"
         end
     elseif record.classification == "action" then
-        if not (record.commandMeta and record.commandMeta.hasSet) and record.actionKey == "" then
+        if not (validateMeta and validateMeta.hasSet) and record.actionKey == "" then
             warnings[#warnings + 1] = "action has no write command metadata"
         end
         if record.actionKey ~= "" and reviewedDisposition then
@@ -2246,8 +2276,9 @@ function Catalog.GetCoverageReport()
             report.interactive = report.interactive + 1
             if classification ~= "unknown" then report.knownInteractive = report.knownInteractive + 1 end
         end
+        local reportMeta = EnsureCommandMeta(record)
         if classification == "ephemeral" then
-            if record.commandMeta and record.commandMeta.hasSet then report.interactiveEphemeral = report.interactiveEphemeral + 1
+            if reportMeta and reportMeta.hasSet then report.interactiveEphemeral = report.interactiveEphemeral + 1
             else report.passiveEphemeral = report.passiveEphemeral + 1 end
         end
         if classification == "unknown" then
@@ -2256,13 +2287,13 @@ function Catalog.GetCoverageReport()
             report.unknown[#report.unknown + 1] = item
         end
         if classification == "setting" or classification == "action"
-            or classification == "ephemeral" and record.commandMeta and record.commandMeta.hasSet then
+            or classification == "ephemeral" and reportMeta and reportMeta.hasSet then
             local capabilityIssue = RuntimeCapabilityIssue(record)
             if capabilityIssue then
                 report.invalidCapabilityCount = report.invalidCapabilityCount + 1
                 report.invalidCapabilities[#report.invalidCapabilities + 1] = {
                     controlId = record.controlId, pageKey = record.pageKey,
-                    classification = classification, kind = record.commandMeta and record.commandMeta.kind or record.kind,
+                    classification = classification, kind = reportMeta and reportMeta.kind or record.kind,
                     reason = capabilityIssue,
                 }
             end
@@ -2390,9 +2421,9 @@ function Catalog.GetCoverageReport()
 end
 
 -- Menu2-level API: callers do not need to know the catalog object name.
-function M.RegisterRuntimeControl(widget, meta, registrationSource)
-    return Catalog.Register(widget, meta, registrationSource)
-end
+-- Direct alias instead of a wrapper: this sits on the per-control
+-- registration path of every page build.
+M.RegisterRuntimeControl = Catalog.Register
 
 -- Composite widgets (segments, scope selectors, slider +/- buttons) expose one
 -- logical command on the parent. Their child buttons remain visible UI parts,

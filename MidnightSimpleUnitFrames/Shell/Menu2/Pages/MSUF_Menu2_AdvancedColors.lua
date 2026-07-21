@@ -10,6 +10,7 @@ local W = M.Widgets
 local T = M.Theme
 local AP = M.AdvancedPage or {}
 local GP = M.GlobalPage or {}
+local C_Timer = M.MenuTimer or _G.C_Timer
 local floor = math.floor
 local max = math.max
 local min = math.min
@@ -1984,16 +1985,26 @@ for categoryKey, sectionIds in pairs(COLOR_CATEGORY_SECTIONS) do
     for i = 1, #sectionIds do COLOR_SECTION_CATEGORY[sectionIds[i]] = categoryKey end
 end
 
+-- A category builder may return a continuation function (which may return
+-- another one): EnsureCategoryBuilt runs the first slice synchronously and the
+-- continuations on following short ticks. The unit category is the default
+-- Colors entry view and was the single largest chunk of the entry frame; its
+-- later stages hold only default-collapsed sections, so they can fill in
+-- below the visible content without moving anything the user already sees.
 local COLOR_CATEGORY_BUILDERS = {
     unit = function(ctx, inner, CH)
         BuildBackgroundAndAppearance(ctx, inner, CH, "appearance")
         BuildBarAndGroupColors(ctx, inner, CH, false)
         BuildBarGradientColors(ctx, inner, CH)
-        BuildBackgroundAndAppearance(ctx, inner, CH, "background")
-        BuildFontAndClassColors(ctx, inner, CH)
-        BuildUnitAndNPCColors(ctx, inner, CH)
-        BuildHighlightAndGameplayColors(ctx, inner, CH)
-        BuildAuraAndPortraitColors(ctx, inner, CH, "portrait")
+        return function()
+            BuildBackgroundAndAppearance(ctx, inner, CH, "background")
+            BuildFontAndClassColors(ctx, inner, CH)
+            return function()
+                BuildUnitAndNPCColors(ctx, inner, CH)
+                BuildHighlightAndGameplayColors(ctx, inner, CH)
+                BuildAuraAndPortraitColors(ctx, inner, CH, "portrait")
+            end
+        end
     end,
     group = function(ctx, inner)
         BuildGroupFrameColors(ctx, inner)
@@ -2056,12 +2067,17 @@ local function BuildColors(ctx)
     local ActivateCategory
     local function EnsureCategoryBuilt(categoryKey)
         local category = categories[categoryKey]
-        if not category or category.built or category.building then return category end
+        if not category or category.built then return category end
+        if category.building then
+            local resume = category.resumeStage
+            if resume then
+                category.resumeStage = nil
+                resume()
+            end
+            return category
+        end
         category.building = true
         local refreshers = ctx and ctx.refreshers
-        local refreshStart = type(refreshers) == "table" and #refreshers or 0
-        local wasBuilding = ctx and ctx._msuf2Building
-        if ctx then ctx._msuf2Building = true end
         local inner = W.PageBuilder(ctx, {
             parent = category.container,
             width = b.width,
@@ -2074,30 +2090,65 @@ local function BuildColors(ctx)
                 if activeKey == categoryKey then UpdateHostHeight() end
             end,
         })
-        COLOR_CATEGORY_BUILDERS[categoryKey](ctx, inner, CH)
-        inner:RelayoutCollapsibles()
-        category.built = true
-        category.building = nil
-        if ctx then ctx._msuf2Building = wasBuilding end
-        if not wasBuilding and type(refreshers) == "table" then
-            for i = refreshStart + 1, #refreshers do
-                local refresh = refreshers[i]
-                if type(refresh) == "function" then refresh() end
-            end
-            -- The current outer relayout reads the updated host height after
-            -- this callback, so its pending marker has already been satisfied.
-            b._msuf2RelayoutPending = nil
-        end
-        for i = 1, #inner.collapsibles do
-            local sectionEntry = inner.collapsibles[i]
-            sectionEntry._msuf2EnsureVisible = function()
-                if type(M.ColorsSetPainterCategory) == "function" then
-                    M.ColorsSetPainterCategory(categoryKey)
-                elseif ActivateCategory then
-                    ActivateCategory(categoryKey)
+        local function FinishCategoryBuild()
+            category.built = true
+            category.building = nil
+            for i = 1, #inner.collapsibles do
+                local sectionEntry = inner.collapsibles[i]
+                sectionEntry._msuf2EnsureVisible = function()
+                    if type(M.ColorsSetPainterCategory) == "function" then
+                        M.ColorsSetPainterCategory(categoryKey)
+                    elseif ActivateCategory then
+                        ActivateCategory(categoryKey)
+                    end
                 end
             end
         end
+        -- A builder may return a continuation (which may return another one):
+        -- later stages run on short ticks so the entry frame only pays for the
+        -- first slice. Without a timer every stage runs inline, so tests and
+        -- degraded clients keep the old fully synchronous behavior.
+        local function RunCategoryStage(stage)
+            local refreshStart = type(refreshers) == "table" and #refreshers or 0
+            local wasBuilding = ctx and ctx._msuf2Building
+            if ctx then ctx._msuf2Building = true end
+            local previousBuildKey = M._msuf2SearchBuildKey
+            if ctx and ctx.key then M._msuf2SearchBuildKey = ctx.key end
+            local ok, nextStage = pcall(stage, ctx, inner, CH)
+            M._msuf2SearchBuildKey = previousBuildKey
+            if ctx then ctx._msuf2Building = wasBuilding end
+            if not ok then
+                category.building = nil
+                error(nextStage, 0)
+            end
+            inner:RelayoutCollapsibles()
+            if not wasBuilding and type(refreshers) == "table" then
+                for i = refreshStart + 1, #refreshers do
+                    local refresh = refreshers[i]
+                    if type(refresh) == "function" then refresh() end
+                end
+                -- The current outer relayout reads the updated host height after
+                -- this callback, so its pending marker has already been satisfied.
+                b._msuf2RelayoutPending = nil
+            end
+            if type(nextStage) == "function" then
+                if C_Timer and type(C_Timer.After) == "function" then
+                    -- Combat quiescence may cancel the tracked timer; the
+                    -- resume hook lets the next EnsureCategoryBuilt call pick
+                    -- the build back up instead of leaving it half-finished.
+                    category.resumeStage = function() RunCategoryStage(nextStage) end
+                    C_Timer.After(0.02, function()
+                        if categories[categoryKey] ~= category or category.resumeStage == nil then return end
+                        category.resumeStage = nil
+                        RunCategoryStage(nextStage)
+                    end)
+                    return
+                end
+                return RunCategoryStage(nextStage)
+            end
+            FinishCategoryBuild()
+        end
+        RunCategoryStage(COLOR_CATEGORY_BUILDERS[categoryKey])
         return category
     end
     ActivateCategory = function(categoryKey)

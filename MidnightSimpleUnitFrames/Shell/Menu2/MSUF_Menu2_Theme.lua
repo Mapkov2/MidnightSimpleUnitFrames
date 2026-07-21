@@ -50,12 +50,18 @@ local function ActiveLocale()
     if type(MSUF.GetEffectiveLocale) == "function" then return MSUF.GetEffectiveLocale() end
     return MSUF.LOCALE or ((type(GetLocale) == "function" and GetLocale()) or "enUS")
 end
+-- The effective locale is immutable for the session (MSUF.SetLocale requires a
+-- reload), so the English check is resolved once instead of per tracked key.
+local activeLocaleIsEnglish
 local function TrackLocaleKey(key, translated)
     -- Locale coverage is collected while UI text is resolved. This gives diagnostics a cheap
     -- way to list missing translations without a separate scan of every page file.
     M.localeKeys = M.localeKeys or {}
     M.localeKeys[key] = true
-    if ENGLISH_LOCALES[ActiveLocale()] or translated then return end
+    if activeLocaleIsEnglish == nil then
+        activeLocaleIsEnglish = ENGLISH_LOCALES[ActiveLocale()] == true
+    end
+    if activeLocaleIsEnglish or translated then return end
     M.missingLocaleKeys = M.missingLocaleKeys or {}
     M.missingLocaleKeys[key] = true
 end
@@ -174,7 +180,6 @@ local function SmoothTexture(tex)
     if tex.SetSnapToPixelGrid then tex:SetSnapToPixelGrid(false) end
     if tex.SetTexelSnappingBias then tex:SetTexelSnappingBias(0) end
 end
-local Clamp01 = M.Clamp01
 local DEFAULT_PANEL_COLOR = { 0.04, 0.05, 0.08, 1 }
 local gradientColorCache = {}
 local function GradientColor(r, g, b, a)
@@ -224,7 +229,12 @@ local function ShadeColorComponents(c, amount, alphaMul)
         local f = 1 + amount
         r, g, b = r * f, g * f, b * f
     end
-    return Clamp01(r), Clamp01(g), Clamp01(b), Clamp01((c[4] or 1) * (alphaMul or 1))
+    local a = (c[4] or 1) * (alphaMul or 1)
+    if r < 0 then r = 0 elseif r > 1 then r = 1 end
+    if g < 0 then g = 0 elseif g > 1 then g = 1 end
+    if b < 0 then b = 0 elseif b > 1 then b = 1 end
+    if a < 0 then a = 0 elseif a > 1 then a = 1 end
+    return r, g, b, a
 end
 local function ShadeColorInto(out, c, amount, alphaMul)
     out = out or {}
@@ -424,8 +434,20 @@ local function ApplyStyledFont(fs, force)
     fs._msuf2AppliedFontKey = applied and fontKey or nil
     return applied
 end
+local function RegisterPageFontString(fs)
+    local entry = M._msuf2FontCollectionEntry
+    if type(entry) ~= "table" or fs._msuf2FontCollectionEntry == entry then return end
+    local fontStrings = entry.fontStrings
+    if type(fontStrings) ~= "table" then
+        fontStrings = {}
+        entry.fontStrings = fontStrings
+    end
+    fontStrings[#fontStrings + 1] = fs
+    fs._msuf2FontCollectionEntry = entry
+end
 function T.StyleFontString(fs, color, bump, role)
     if not fs then return fs end
+    RegisterPageFontString(fs)
     if role ~= nil then fs._msuf2FontRole = role end
     local c = color or T.colors.text
     local cr, cg, cb, ca = c[1], c[2], c[3], c[4] or 1
@@ -477,6 +499,15 @@ function T.RefreshMenuFonts(root, force, preserveCache)
     end
     RefreshMenuFonts(M.frame, seen, force == true)
     RefreshMenuFonts(M.minimizedBar, seen, force == true)
+end
+function T.RefreshMenuFontStrings(fontStrings, force, preserveCache)
+    if preserveCache ~= true then T.ClearMenuFontCache() end
+    if type(fontStrings) ~= "table" then return false end
+    for i = 1, #fontStrings do
+        local fs = fontStrings[i]
+        if fs and fs._msuf2FontOriginal then ApplyStyledFont(fs, force == true) end
+    end
+    return true
 end
 local function SetSuperellipseVertexColor(self, r, g, b, a)
     a = a or 1
@@ -2077,43 +2108,6 @@ local function PaintButtonParts(fill, edge, label, bg, br, tx, top, bottom, text
     edge:SetVertexColor(br[1], br[2], br[3], br[4] or 1)
     SetLabelColor(label, tx, textAlpha)
 end
-local function EnsureButtonDepthArt(btn)
-    if not (btn and btn.CreateTexture) then return nil end
-    if btn._msuf2ButtonDepthArt then return btn._msuf2ButtonDepthArt end
-    local top = btn:CreateTexture(nil, "ARTWORK", nil, 2)
-    top:SetPoint("TOPLEFT", btn, "TOPLEFT", 6, -2)
-    top:SetPoint("TOPRIGHT", btn, "TOPRIGHT", -6, -2)
-    top:SetHeight(5)
-    top:SetTexture(WHITE8)
-    if top.SetBlendMode then top:SetBlendMode("ADD") end
-    local bottom = btn:CreateTexture(nil, "BORDER", nil, 7)
-    bottom:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", 5, 2)
-    bottom:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -5, 2)
-    bottom:SetHeight(6)
-    bottom:SetTexture(WHITE8)
-    local lip = btn:CreateTexture(nil, "ARTWORK", nil, 3)
-    lip:SetPoint("TOPLEFT", btn, "TOPLEFT", 8, -3)
-    lip:SetPoint("TOPRIGHT", btn, "TOPRIGHT", -8, -3)
-    lip:SetHeight(1)
-    lip:SetTexture(WHITE8)
-    if lip.SetBlendMode then lip:SetBlendMode("ADD") end
-    btn._msuf2ButtonDepthArt = { top = top, bottom = bottom, lip = lip }
-    return btn._msuf2ButtonDepthArt
-end
-local function SetButtonDepthArt(btn, base, edgeColor, active, hover)
-    local art = EnsureButtonDepthArt(btn)
-    if not art then return end
-    if art.top and art.top.Hide then art.top:Hide() end
-    if art.bottom and art.bottom.Hide then art.bottom:Hide() end
-    if art.lip and art.lip.Hide then art.lip:Hide() end
-end
-local function HideButtonDepthArt(btn)
-    local art = btn and btn._msuf2ButtonDepthArt
-    if not art then return end
-    if art.top and art.top.Hide then art.top:Hide() end
-    if art.bottom and art.bottom.Hide then art.bottom:Hide() end
-    if art.lip and art.lip.Hide then art.lip:Hide() end
-end
 local function PaintStoredNavIcon(btn, alpha)
     if btn._msuf2NavIcon and btn._msuf2NavIconColor then
         local ic = btn._msuf2NavIconColor
@@ -2380,14 +2374,12 @@ local function ButtonVisual(btn, active, hover)
         SetNavActiveFX(btn, false)
         SetFillGradient(fill, { c.coreShadow[1], c.coreShadow[2], c.coreShadow[3], 0.55 }, 0.08, -0.14)
         edge:SetVertexColor(c.coreRim[1], c.coreRim[2], c.coreRim[3], 0.45)
-        SetButtonDepthArt(btn, nil, { c.coreRim[1], c.coreRim[2], c.coreRim[3], 0.45 }, false, false)
         btn._msuf2Label:SetTextColor(0.50, 0.52, 0.58, 0.95)
         return
     end
     if btn._msuf2NavHeader then
         HideNavPillArt(btn)
         SetNavActiveFX(btn, false)
-        HideButtonDepthArt(btn)
         SetSuperellipsePartsShown(fill, false)
         SetSuperellipsePartsShown(edge, false)
         local tx = hover and (c.navHeaderHover or c.navHeaderText) or c.navHeaderText
@@ -2400,11 +2392,9 @@ local function ButtonVisual(btn, active, hover)
         if active or hover then
             SetFillGradient(fill, { 0.180, 0.040, 0.065, 0.97 }, 0.18, -0.18)
             edge:SetVertexColor(c.danger[1], c.danger[2], c.danger[3], 0.95)
-            SetButtonDepthArt(btn, nil, c.danger, active, hover)
         else
             SetFillGradient(fill, { 0.140, 0.030, 0.050, 0.94 }, 0.14, -0.20)
             edge:SetVertexColor(c.danger[1], c.danger[2], c.danger[3], 0.82)
-            SetButtonDepthArt(btn, nil, c.danger, false, false)
         end
         btn._msuf2Label:SetTextColor(c.text[1], c.text[2], c.text[3], 1)
         return
@@ -2415,11 +2405,9 @@ local function ButtonVisual(btn, active, hover)
         if active or hover then
             SetFillGradient(fill, { c.coreBlue[1], c.coreBlue[2], c.coreBlue[3], 0.64 }, 0.08, -0.28)
             edge:SetVertexColor(c.coreGlow[1], c.coreGlow[2], c.coreGlow[3], 0.46)
-            SetButtonDepthArt(btn, nil, { c.coreGlow[1], c.coreGlow[2], c.coreGlow[3], 0.46 }, active, hover)
         else
             SetFillGradient(fill, { c.coreBlue[1], c.coreBlue[2], c.coreBlue[3], 0.56 }, 0.07, -0.30)
             edge:SetVertexColor(c.coreGlow[1], c.coreGlow[2], c.coreGlow[3], 0.38)
-            SetButtonDepthArt(btn, nil, { c.coreGlow[1], c.coreGlow[2], c.coreGlow[3], 0.38 }, false, false)
         end
         btn._msuf2Label:SetTextColor(1, 1, 1, 1)
         return
@@ -2430,17 +2418,14 @@ local function ButtonVisual(btn, active, hover)
         if active or hover then
             SetFillGradient(fill, { 0.060, 0.380, 0.180, 0.98 }, 0.18, -0.18)
             edge:SetVertexColor(0.220, 0.860, 0.420, 0.90)
-            SetButtonDepthArt(btn, nil, { 0.220, 0.860, 0.420, 0.90 }, active, hover)
         else
             SetFillGradient(fill, { 0.040, 0.280, 0.130, 0.95 }, 0.14, -0.20)
             edge:SetVertexColor(0.140, 0.660, 0.310, 0.82)
-            SetButtonDepthArt(btn, nil, { 0.140, 0.660, 0.310, 0.82 }, false, false)
         end
         btn._msuf2Label:SetTextColor(0.92, 1.00, 0.94, 1)
         return
     end
     if btn._msuf2NavItem then
-        HideButtonDepthArt(btn)
         SetSuperellipsePartsShown(fill, false)
         SetSuperellipsePartsShown(edge, false)
         if active then
@@ -2485,20 +2470,17 @@ local function ButtonVisual(btn, active, hover)
         if btn._msuf2NavStripe then btn._msuf2NavStripe:Show() end
         local bg, br, tx = c.pillActive, c.pillEdgeActive, c.pillTextActive
         PaintButtonParts(fill, edge, btn._msuf2Label, bg, br, tx, 0.16, -0.15)
-        SetButtonDepthArt(btn, bg, br, true, hover)
         PaintStoredNavIcon(btn, 1.00)
     elseif hover then
         if btn._msuf2NavStripe then btn._msuf2NavStripe:Hide() end
         local bg, br = c.pillHover, c.pillEdgeHover
         PaintButtonParts(fill, edge, btn._msuf2Label, bg, br, c.text, 0.14, -0.18, 1)
-        SetButtonDepthArt(btn, bg, br, false, true)
         PaintStoredNavIcon(btn, 0.85)
     else
         if btn._msuf2NavStripe then btn._msuf2NavStripe:Hide() end
         local bg, br, tx = c.pillBase, c.pillEdge, c.pillText
         if btn._msuf2SolidPill then bg = c.pillBaseSolid end
         PaintButtonParts(fill, edge, btn._msuf2Label, bg, br, tx, 0.12, -0.20, 0.95)
-        SetButtonDepthArt(btn, bg, br, false, false)
         PaintStoredNavIcon(btn, 0.50)
     end
     if (not active) and btn._msuf2Override and edge then
@@ -2589,7 +2571,7 @@ local function ButtonHistoryCheckpoint(self)
     if label == "" then label = "MSUF2 button" end
     checkpoint(label, self._msuf2HistorySource or ("button:" .. tostring(self)))
 end
-function T.Button(parent, text, width, height)
+function T.Button(parent, text, width, height, opts)
     local btn = CreateFrame("Button", nil, parent)
     btn:SetSize(width or 120, height or 24)
     if btn.SetHitRectInsets then btn:SetHitRectInsets(-2, -2, -2, -2) end
@@ -2603,7 +2585,13 @@ function T.Button(parent, text, width, height)
     btn._msuf2Label = label
     btn._msuf2SearchText = text or ""
     label._msuf2SearchText = text or ""
-    if M and type(M.RegisterSearchWidget) == "function" and text and text ~= "" then M.RegisterSearchWidget(btn, { label = text, kind = "button", anchor = label }) end
+    -- noSearch is for component buttons (slider +/- steppers) that would be
+    -- registered here only to be unregistered by MarkRuntimeControlComponent
+    -- moments later.
+    if M and type(M.RegisterSearchWidget) == "function" and text and text ~= ""
+        and not (opts and opts.noSearch) then
+        M.RegisterSearchWidget(btn, { label = text, kind = "button", anchor = label })
+    end
     btn._msuf2RawSetScript = btn.SetScript
     btn.SetScript = ButtonSetScript
     btn.SetText, btn.GetText = ButtonSetText, ButtonGetText

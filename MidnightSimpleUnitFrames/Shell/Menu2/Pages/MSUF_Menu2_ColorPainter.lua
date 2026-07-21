@@ -303,11 +303,30 @@ local function ResolveCategoryAnchors(unitBoxes, groupBox, categoryKey)
     return result
 end
 
+-- Click targets are rebuilt on every category show and WoW can never destroy
+-- frames, so released targets cycle through this pool instead of leaking a
+-- fresh Button plus highlight texture per rebuild.
+local clickTargetPool = {}
+local function ReleaseClickTargets(targets)
+    for i = 1, #targets do
+        local target = targets[i]
+        target:Hide()
+        clickTargetPool[#clickTargetPool + 1] = target
+    end
+end
 local function AddClickTarget(host, anchor, onClick, onRightClick, label, priority, panDelegate, tooltipText, levelAnchor)
     if not (host and anchor and type(onClick) == "function") then return nil end
-    local button = CreateFrame("Button", nil, host)
-    button:SetAllPoints(anchor)
-    button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    local button = table.remove(clickTargetPool)
+    if button then
+        button:SetParent(host)
+        button:ClearAllPoints()
+        button:SetAllPoints(anchor)
+        button:Show()
+    else
+        button = CreateFrame("Button", nil, host)
+        button:SetAllPoints(anchor)
+        button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    end
     if button.SetFrameLevel and host.GetFrameLevel then
         local localPriority = floor((tonumber(priority) or 0) / 10)
         local targetBase
@@ -322,15 +341,18 @@ local function AddClickTarget(host, anchor, onClick, onRightClick, label, priori
         end
         button:SetFrameLevel(targetBase + localPriority)
     end
-    local hover = button:CreateTexture(nil, "HIGHLIGHT")
-    hover:SetAllPoints()
-    hover:SetColorTexture(0.18, 0.66, 1, 0.18)
+    if not button._msuf2ClickTargetWired then
+        button._msuf2ClickTargetWired = true
+        local hover = button:CreateTexture(nil, "HIGHLIGHT")
+        hover:SetAllPoints()
+        hover:SetColorTexture(0.18, 0.66, 1, 0.18)
+        ForwardMenuScrollWheel(button)
+    end
     if M.AddTooltip then
         M.AddTooltip(button, label,
             tooltipText or Tr("Click to edit these colors. Right-click opens the matching section below."),
             { owner = "ANCHOR_CURSOR" })
     end
-    ForwardMenuScrollWheel(button)
     -- Ctrl+drag (and middle-drag) over a click target must pan the preview
     -- canvas underneath instead of opening the paint picker.
     if type(panDelegate) == "function" then
@@ -458,24 +480,20 @@ function P.Build(ctx, builder, categories)
 
     local unitGap = 8
     local unitPreviewW = max(1, floor((previewW - unitGap) * 0.5))
-    local playerBox = MakeUnitPreview(host, ctx, unitPreviewW, "player", "Player")
-    local targetBox = MakeUnitPreview(host, ctx, unitPreviewW, "target", "Target")
+    -- The Player/Target boxes are the default tab's content, but their host is
+    -- a fixed 350px frame, so creating them one deferred refresh later (see
+    -- EnsureUnitBoxes below) never moves layout. Only when no deferred refresh
+    -- can follow do they build synchronously.
     local unitBoxes = {}
-    if playerBox then
-        playerBox:ClearAllPoints()
-        playerBox:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
-        unitBoxes[#unitBoxes + 1] = playerBox
-    end
-    if targetBox then
-        targetBox:ClearAllPoints()
-        targetBox:SetPoint("TOPLEFT", host, "TOPLEFT", unitPreviewW + unitGap, 0)
-        unitBoxes[#unitBoxes + 1] = targetBox
-    end
-    local groupBox = MakeGroupPreview(host, ctx, previewW)
-    if groupBox then groupBox:Hide() end
-    if #unitBoxes == 0 and not groupBox then Label(host, "Preview renderer is unavailable.", 12, -12, previewW - 24, T.colors.muted) end
-    for i = 1, #unitBoxes do CollectZoomBar(unitBoxes[i].zoomBar) end
-    CollectZoomBar(groupBox and groupBox._zoomBar)
+    local unitBoxesBuilt = false
+    local EnsureUnitBoxes
+    -- The group tab shows one full-width native preview. Like the castbar
+    -- panel it is built lazily on first activation of its tab; the default
+    -- unit tab must not pay for the native group frame preview.
+    local groupBox
+    local groupPreviewAvailable = type((M.GroupPreview or {}).CreateNative) == "function"
+    local unitPreviewAvailable = type(MSUF.MSUF_Menu2_CreateUnitPreviewBox or _G.MSUF_Menu2_CreateUnitPreviewBox) == "function"
+    if not unitPreviewAvailable and not groupPreviewAvailable then Label(host, "Preview renderer is unavailable.", 12, -12, previewW - 24, T.colors.muted) end
     SetZoomChromeShown(false)
 
     -- The color preview keeps zoom/pan but intentionally no layout editing,
@@ -496,9 +514,6 @@ function P.Build(ctx, builder, categories)
             helpers.ShowPreviewControlsHelp(self, { M = M, T = T, W = W, Tr = Tr, lines = lines })
         end)
     end
-    for i = 1, #unitBoxes do RewirePreviewHelp(unitBoxes[i].zoomHelpButton) end
-    RewirePreviewHelp(groupBox and groupBox._zoomHelpButton)
-
     -- The castbar tab shows one full-width panel instead of two half panels;
     -- built lazily on first activation of the tab.
     local castBox
@@ -515,6 +530,74 @@ function P.Build(ctx, builder, categories)
             end
         end
         return castBox or nil
+    end
+
+    local function EnsureGroupBox()
+        if groupBox == nil then
+            groupBox = MakeGroupPreview(host, ctx, previewW) or false
+            if groupBox then
+                CollectZoomBar(groupBox._zoomBar)
+                if groupBox._zoomBar and groupBox._zoomBar.SetAlpha then groupBox._zoomBar:SetAlpha(0) end
+                RewirePreviewHelp(groupBox._zoomHelpButton)
+                groupBox:Hide()
+            end
+        end
+        return groupBox or nil
+    end
+
+    local function WireUnitBox(box)
+        CollectZoomBar(box.zoomBar)
+        if box.zoomBar and box.zoomBar.SetAlpha then box.zoomBar:SetAlpha(0) end
+        RewirePreviewHelp(box.zoomHelpButton)
+    end
+    -- Each preview box costs a comparable slice of the entry frame, so the
+    -- Target box builds one short tick after Player instead of in the same
+    -- frame. The late box re-runs the category pass to pick up its
+    -- shown-state, click targets, and first render; a hidden page skips that
+    -- sync and the next visible refresh covers it. targetBoxPending stays the
+    -- resume marker: if combat quiescence cancels the tracked timer, the next
+    -- EnsureUnitBoxes call finishes the pair synchronously.
+    local targetBoxPending = false
+    local function AddTargetBox()
+        targetBoxPending = false
+        local targetBox = MakeUnitPreview(host, ctx, unitPreviewW, "target", "Target")
+        if not targetBox then return end
+        targetBox:ClearAllPoints()
+        targetBox:SetPoint("TOPLEFT", host, "TOPLEFT", unitPreviewW + unitGap, 0)
+        unitBoxes[#unitBoxes + 1] = targetBox
+        WireUnitBox(targetBox)
+        if not (ctx and ctx.wrapper and ctx.wrapper.IsShown and not ctx.wrapper:IsShown()) then
+            ShowCategory(Current())
+            RequestPreview(targetBox, "MSUF2_COLOR_PAINTER_TARGET_BOX")
+        end
+    end
+    EnsureUnitBoxes = function()
+        if unitBoxesBuilt then
+            if targetBoxPending then AddTargetBox() end
+            return
+        end
+        -- During the synchronous page-build frame a deferred visible refresh is
+        -- already queued, so creation moves to that later frame. Hidden search
+        -- index builds never pass the visible-refresh guards and skip the
+        -- Player/Target boxes entirely. Without a timer (test harnesses,
+        -- degraded clients) creation stays synchronous.
+        if ctx and ctx._msuf2Building and C_Timer and C_Timer.After then return end
+        unitBoxesBuilt = true
+        local playerBox = MakeUnitPreview(host, ctx, unitPreviewW, "player", "Player")
+        if playerBox then
+            playerBox:ClearAllPoints()
+            playerBox:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
+            unitBoxes[#unitBoxes + 1] = playerBox
+            WireUnitBox(playerBox)
+        end
+        if C_Timer and C_Timer.After then
+            targetBoxPending = true
+            C_Timer.After(0.02, function()
+                if targetBoxPending then AddTargetBox() end
+            end)
+        else
+            AddTargetBox()
+        end
     end
 
     -- Zoom and pan gestures pass through the shield to the hovered preview's
@@ -564,7 +647,7 @@ function P.Build(ctx, builder, categories)
 
     local function RefreshPreviews(reason)
         for i = 1, #unitBoxes do RequestPreview(unitBoxes[i], reason) end
-        RequestPreview(groupBox, reason)
+        if groupBox then RequestPreview(groupBox, reason) end
         if castBox then RequestPreview(castBox, reason) end
     end
 
@@ -753,7 +836,7 @@ function P.Build(ctx, builder, categories)
         return false
     end
     local function RebuildClickTargets(category, castPanel)
-        for i = 1, #clickTargets do clickTargets[i]:Hide() end
+        ReleaseClickTargets(clickTargets)
         clickTargets = {}
         local anchors = ResolveCategoryAnchors(castPanel and { castPanel } or unitBoxes, groupBox, category.key)
         for i = 1, #anchors do
@@ -906,8 +989,10 @@ function P.Build(ctx, builder, categories)
                 break
             end
         end
+        EnsureUnitBoxes()
         local castPanel = key == "cast" and EnsureCastBox() or nil
         local strip = key == "resources" and EnsureResourcesStrip(category) or nil
+        if key == "group" then EnsureGroupBox() end
         for i = 1, #unitBoxes do unitBoxes[i]:SetShown(key ~= "group" and not castPanel and not strip) end
         if castBox then castBox:SetShown(castPanel and true or false) end
         if resourcesStrip and resourcesStrip ~= false then resourcesStrip:SetShown(strip and true or false) end
@@ -930,7 +1015,7 @@ function P.Build(ctx, builder, categories)
         if category then
             tabDescription:SetText(Tr(category.subtitle or ""))
             if strip then
-                for i = 1, #clickTargets do clickTargets[i]:Hide() end
+                ReleaseClickTargets(clickTargets)
                 clickTargets = {}
                 strip.Update()
             else
@@ -982,7 +1067,7 @@ function P.Build(ctx, builder, categories)
         end
     end
     local initialRefreshSerial = 0
-    local function RefreshVisiblePreview(reason)
+    local function RefreshVisiblePreview(reason, skipRender)
         if ctx and ctx.key and M.activeKey and M.activeKey ~= ctx.key then return end
         if ctx and ctx.wrapper and ctx.wrapper.IsShown and not ctx.wrapper:IsShown() then return end
         if section.IsShown and not section:IsShown() then return end
@@ -992,18 +1077,25 @@ function P.Build(ctx, builder, categories)
         -- Showing only Player/Target here cannot make them visible below a
         -- released (hidden) host.
         if host.Show then host:Show() end
+        EnsureUnitBoxes()
         EnsurePreviewAttachment()
         ShowCategory(Current())
-        RefreshPreviews(reason or "MSUF2_COLOR_PAINTER_VISIBLE")
+        if not skipRender then RefreshPreviews(reason or "MSUF2_COLOR_PAINTER_VISIBLE") end
+        return true
     end
     local function QueueVisiblePreviewRefresh(reason)
         initialRefreshSerial = initialRefreshSerial + 1
         local serial = initialRefreshSerial
-        RefreshVisiblePreview(reason)
+        local rendered = RefreshVisiblePreview(reason) == true
         local timer = C_Timer
         if timer and timer.After then
             timer.After(0, function()
-                if serial == initialRefreshSerial then RefreshVisiblePreview(reason) end
+                if serial ~= initialRefreshSerial then return end
+                -- The next-frame pass reasserts host/attachment/category state;
+                -- the expensive preview render repeats here only when the
+                -- immediate pass was blocked by the visibility guards. The
+                -- 0.05s settle pass below stays a full render.
+                if RefreshVisiblePreview(reason, rendered) == true then rendered = true end
             end)
             timer.After(0.05, function()
                 if serial == initialRefreshSerial then RefreshVisiblePreview(reason) end

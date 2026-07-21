@@ -50,6 +50,7 @@ local W = M.Widgets
 M.pages = M.pages or {}
 M.pageOrder = M.pageOrder or {}
 M.cache = M.cache or {}
+M._msuf2PageLayoutVariants = M._msuf2PageLayoutVariants or {}
 -- Deliberately transient: reloads and new logins start from the Dashboard.
 M.sessionLastPage = nil
 M._msuf2LayoutVersion = M._msuf2LayoutVersion or 0
@@ -651,6 +652,7 @@ local function ApplyScrollMetrics()
     if entry and entry.wrapper then entry.wrapper:SetSize(CONTENT_W - 12, height) end
     if M.scrollFrame and M.scrollFrame._msuf2RefreshScrollBar then M.scrollFrame:_msuf2RefreshScrollBar() end
 end
+local VISIBLE_SETTLE_RELAYOUT = { refreshUntrackedState = true }
 local function QueueVisiblePageLayoutSettle(key, entry)
     if type(entry) ~= "table" or entry._msuf2VisibleLayoutSettleQueued then return end
     entry._msuf2VisibleLayoutSettleQueued = true
@@ -669,7 +671,11 @@ local function QueueVisiblePageLayoutSettle(key, entry)
             -- This is the one-shot visibility retry for freshly created font
             -- strings, not a font-setting change. Preserve the resolved-path
             -- cache populated while the page was built.
-            T.RefreshMenuFonts(entry.wrapper, true, true)
+            if type(T.RefreshMenuFontStrings) == "function" and type(entry.fontStrings) == "table" then
+                T.RefreshMenuFontStrings(entry.fontStrings, true, true)
+            else
+                T.RefreshMenuFonts(entry.wrapper, true, true)
+            end
         end
 
         -- A cached/new page can become visible in the same layout turn in
@@ -696,7 +702,7 @@ local function QueueVisiblePageLayoutSettle(key, entry)
         for i = 1, #builders do
             local builder = builders[i]
             if type(builder.RelayoutCollapsibles) == "function" then
-                builder:RelayoutCollapsibles()
+                builder:RelayoutCollapsibles(VISIBLE_SETTLE_RELAYOUT)
             end
         end
         ApplyScrollMetrics()
@@ -710,11 +716,10 @@ end
 function RebuildActivePageForResize(frame)
     local key = M.activeKey or "home"
     SaveWindowSize(frame)
-    ApplyScrollMetrics()
     M._msuf2LayoutVersion = (M._msuf2LayoutVersion or 0) + 1
-    if M.InvalidatePage then M.InvalidatePage(key) end
     M.activeKey = nil
     if M.SelectPage and frame and frame:IsShown() then M.SelectPage(key) end
+    ApplyScrollMetrics()
     M.CallIf(M.RefreshGuidedTourChrome, "WINDOW_RESIZE")
 end
 function M.RegisterPage(key, spec)
@@ -994,14 +999,55 @@ local function BuildPlaceholderPage(ctx, requestedKey)
     W.Text(sec, M.Format("Requested page: %s", tostring(requestedKey or "unknown")), 16, -68, ctx.width - 32, T.colors.dim)
     ctx:SetContentHeight(210)
 end
+local BUILD_LAYOUT_ONLY_RELAYOUT = { skipStateRefresh = true }
+local function CurrentPageLayoutSlot()
+    return M.frame and M.frame._msuf2WindowState == "maximized" and "maximized" or "normal"
+end
+local function PageEntryMatchesLayout(entry, slot)
+    return type(entry) == "table"
+        and entry.layoutSlot == slot
+        and entry.layoutWidth == CONTENT_W
+        and entry.layoutHeight == CONTENT_H
+end
+local function RestorePageEntryRegistrations(entry)
+    if type(entry) ~= "table" or type(entry.searchWidgets) ~= "table"
+        or type(M.RegisterSearchWidget) ~= "function"
+    then
+        return
+    end
+    local previousBuildKey = M._msuf2SearchBuildKey
+    M._msuf2SearchBuildKey = entry.key
+    for i = 1, #entry.searchWidgets do
+        local widget = entry.searchWidgets[i]
+        local meta = widget and widget._msuf2SearchMeta
+        if widget and type(meta) == "table" then M.RegisterSearchWidget(widget, meta) end
+    end
+    M._msuf2SearchBuildKey = previousBuildKey
+end
+local function RememberPageLayoutVariant(key, entry)
+    if type(entry) ~= "table" then return end
+    local variants = M._msuf2PageLayoutVariants[key]
+    if type(variants) ~= "table" then
+        variants = {}
+        M._msuf2PageLayoutVariants[key] = variants
+    end
+    local previous = variants[entry.layoutSlot]
+    if previous and previous ~= entry and previous.wrapper then
+        previous._msuf2Invalidated = true
+        previous.wrapper:Hide()
+        previous.wrapper:SetParent(nil)
+    end
+    variants[entry.layoutSlot] = entry
+end
 local function BuildPageEntry(key, hidden)
     if not M.scrollChild then return nil end
     key = ALIASES[key or ""] or key or "home"
     local spec = M.pages[key]
     local specVersion = spec and spec.version
     local layoutVersion = M._msuf2LayoutVersion or 0
+    local layoutSlot = CurrentPageLayoutSlot()
     local cached = M.cache and M.cache[key]
-    if cached and (cached.layoutVersion ~= layoutVersion or (specVersion and cached.version ~= specVersion)) then
+    if cached and specVersion and cached.version ~= specVersion then
         if M.InvalidatePage then
             M.InvalidatePage(key)
         else
@@ -1011,21 +1057,61 @@ local function BuildPageEntry(key, hidden)
         end
         cached = nil
     end
+    local registryCleared = false
+    if cached and not PageEntryMatchesLayout(cached, layoutSlot) then
+        if cached.wrapper and cached.wrapper.Hide then cached.wrapper:Hide() end
+        ClearSearchRegistryPage(key)
+        registryCleared = true
+        M.cache[key] = nil
+        local variants = M._msuf2PageLayoutVariants[key]
+        local variant = type(variants) == "table" and variants[layoutSlot] or nil
+        if PageEntryMatchesLayout(variant, layoutSlot)
+            and (not specVersion or variant.version == specVersion)
+            and variant._msuf2Invalidated ~= true
+        then
+            cached = variant
+            cached.layoutVersion = layoutVersion
+            M.cache[key] = cached
+            RestorePageEntryRegistrations(cached)
+        else
+            cached = nil
+        end
+    end
     if cached and cached.hiddenBuild == true and not hidden then
         if cached.wrapper and cached.wrapper.Hide then cached.wrapper:Hide() end
         if cached.wrapper and cached.wrapper.SetParent then cached.wrapper:SetParent(nil) end
+        local variants = M._msuf2PageLayoutVariants[key]
+        if type(variants) == "table" and variants[cached.layoutSlot] == cached then
+            variants[cached.layoutSlot] = nil
+        end
         M.cache[key] = nil
         cached = nil
     end
     if cached then return cached end
-    ClearSearchRegistryPage(key)
+    if not registryCleared then ClearSearchRegistryPage(key) end
     local wrapper = CreateFrame("Frame", nil, M.scrollChild)
     wrapper:SetPoint("TOPLEFT", M.scrollChild, "TOPLEFT", 0, 0)
     wrapper:SetSize(CONTENT_W - 12, CONTENT_H)
     if hidden and wrapper.Hide then wrapper:Hide() end
-    local entry = { key = key, wrapper = wrapper, refreshers = {}, height = CONTENT_H, version = specVersion, layoutVersion = layoutVersion, hiddenBuild = hidden and true or false }
+    local entry = {
+        key = key,
+        wrapper = wrapper,
+        refreshers = {},
+        fontStrings = {},
+        searchWidgets = {},
+        height = CONTENT_H,
+        version = specVersion,
+        layoutVersion = layoutVersion,
+        layoutSlot = layoutSlot,
+        layoutWidth = CONTENT_W,
+        layoutHeight = CONTENT_H,
+        hiddenBuild = hidden and true or false,
+    }
     M.cache[key] = entry
+    RememberPageLayoutVariant(key, entry)
     local ctx = CreateContext(key, wrapper, entry)
+    local previousFontCollectionEntry = M._msuf2FontCollectionEntry
+    M._msuf2FontCollectionEntry = entry
     BuildSecondaryPageNav(ctx, key)
     local prevBuildKey = M._msuf2SearchBuildKey
     M._msuf2SearchBuildKey = key
@@ -1039,20 +1125,24 @@ local function BuildPageEntry(key, hidden)
         entry._msuf2Building = nil
         local builders = ctx._msuf2PageBuilders
         if type(builders) == "table" then
+            local nestedLayoutChanged = false
             for i = 1, #builders do
                 local builder = builders[i]
                 if builder and builder._msuf2RelayoutPending and builder.RelayoutCollapsibles then
                     builder._msuf2RelayoutPending = nil
-                    builder:RelayoutCollapsibles()
+                    local changed = builder:RelayoutCollapsibles(BUILD_LAYOUT_ONLY_RELAYOUT)
+                    if changed and builder.parent ~= ctx.wrapper then nestedLayoutChanged = true end
                 end
             end
             -- Nested builders can resize their owning collapsible while they
             -- relayout. Reflow the page-level builder once more afterwards so
             -- its final cursor, not an earlier nested height, owns the page.
-            for i = 1, #builders do
-                local builder = builders[i]
-                if builder and builder.ctx == ctx and builder.RelayoutCollapsibles then
-                    builder:RelayoutCollapsibles()
+            if nestedLayoutChanged then
+                for i = 1, #builders do
+                    local builder = builders[i]
+                    if builder and builder.parent == ctx.wrapper and builder.RelayoutCollapsibles then
+                        builder:RelayoutCollapsibles(BUILD_LAYOUT_ONLY_RELAYOUT)
+                    end
                 end
             end
         end
@@ -1070,6 +1160,7 @@ local function BuildPageEntry(key, hidden)
         ctx:SetContentHeight(finalHeight)
     end
     M._msuf2SearchBuildKey = prevBuildKey
+    M._msuf2FontCollectionEntry = previousFontCollectionEntry
     if hidden and wrapper.Hide then wrapper:Hide() end
     return entry
 end
@@ -2144,15 +2235,33 @@ function M.InvalidatePage(key)
         M.CallIf(M.ReleaseGFNativePreviews, "INVALIDATE_PAGE", nil)
         ClearSearchRegistryPage(key)
         if key == "home" then M.dashboardEditModeButton = nil end
+        local entries, seen = {}, {}
         local entry = M.cache[key]
-        if entry and entry.wrapper then
-            entry._msuf2Invalidated = true
-            entry.wrapper:Hide()
-            entry.wrapper:SetParent(nil)
+        if entry then entries[#entries + 1] = entry; seen[entry] = true end
+        local variants = M._msuf2PageLayoutVariants[key]
+        if type(variants) == "table" then
+            for _, variant in pairs(variants) do
+                if variant and not seen[variant] then
+                    entries[#entries + 1] = variant
+                    seen[variant] = true
+                end
+            end
+        end
+        for i = 1, #entries do
+            local invalidated = entries[i]
+            invalidated._msuf2Invalidated = true
+            if invalidated.wrapper then
+                invalidated.wrapper:Hide()
+                invalidated.wrapper:SetParent(nil)
+            end
         end
         M.cache[key] = nil
+        M._msuf2PageLayoutVariants[key] = nil
     else
         MarkSearchIndexDirty()
-        for k in pairs(M.cache) do M.InvalidatePage(k) end
+        local keys = {}
+        for k in pairs(M.cache) do keys[k] = true end
+        for k in pairs(M._msuf2PageLayoutVariants) do keys[k] = true end
+        for k in pairs(keys) do M.InvalidatePage(k) end
     end
 end
