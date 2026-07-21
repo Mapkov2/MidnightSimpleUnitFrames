@@ -698,9 +698,9 @@ builders.PRESENTATION = function(E)
 
     local function ClassPowerFontApplied(region, fontPath, size, fontFlags)
         if type(region.GetFont) ~= "function" then return true end
-        local actual, actualSize, actualFlags = region:GetFont()
-        if not actual then return true end
-        if actualSize and actualSize ~= size then return false end
+        local ok, actual, actualSize, actualFlags = pcall(region.GetFont, region)
+        if not ok or not actual then return false end
+        if actualSize and math.abs((tonumber(actualSize) or 0) - size) > 0.01 then return false end
         if (actualFlags or "") ~= (fontFlags or "") then return false end
         if actual == fontPath then return true end
         if type(_G.MSUF_FontPathMatches) == "function" and _G.MSUF_FontPathMatches(fontPath, actual) == true then return true end
@@ -710,11 +710,17 @@ builders.PRESENTATION = function(E)
 
     local function ApplyClassPowerFont(region, fontPath, size, fontFlags)
         if not (region and region.SetFont) then return false end
-        local ok = pcall(region.SetFont, region, fontPath, size, fontFlags)
-        if ok and ClassPowerFontApplied(region, fontPath, size, fontFlags) then return true end
+        local applyResolved = _G.MSUF_ApplyResolvedFont
+        if type(applyResolved) == "function" then
+            local ok, _, source = applyResolved(region, fontPath, size, fontFlags)
+            return ok == true and source ~= "fallback"
+        end
+        local ok, applied = pcall(region.SetFont, region, fontPath, size, fontFlags)
+        if ok and applied ~= false and ClassPowerFontApplied(region, fontPath, size, fontFlags) then return true end
         local fallback = _G.MSUF_ResolveSafeFontPath and _G.MSUF_ResolveSafeFontPath("Fonts\\FRIZQT__.TTF", size, fontFlags, "FRIZQT") or "Fonts\\FRIZQT__.TTF"
-        ok = pcall(region.SetFont, region, fallback, size, fontFlags)
-        return ok and ClassPowerFontApplied(region, fallback, size, fontFlags)
+        pcall(region.SetFont, region, fallback, size, fontFlags)
+        if type(_G.MSUF_MarkFontApplyFailed) == "function" then _G.MSUF_MarkFontApplyFailed() end
+        return false
     end
 
     --- Font refresh is driven by global font serials and ClassPower options.
@@ -750,10 +756,13 @@ builders.PRESENTATION = function(E)
         if fontSize < 6 then fontSize = 6 end
 
         local rev = (_G.MSUF_FontPathSerial or 0) + fontSize * 1000003
-        if fs and _cpFontRev ~= rev then
-            if ApplyClassPowerFont(fs, path, fontSize, flags) then
-                _cpFontRev = rev
-            end
+        local fontEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
+        if fs and (_cpFontRev ~= rev or fs._msufCPFontEpoch ~= fontEpoch) then
+            ApplyClassPowerFont(fs, path, fontSize, flags)
+            -- Stamp the bounded attempt, including fallback. Epoch transition
+            -- owns the next retry and prevents class-resource hotpath retries.
+            _cpFontRev = rev
+            fs._msufCPFontEpoch = fontEpoch
         end
 
         local runeSize = fontSize - 2
@@ -761,10 +770,10 @@ builders.PRESENTATION = function(E)
         for i = 1, (CP.maxBars or 0) do
             local bar = CP.bars[i]
             local rfs = bar and bar._runeText
-            if rfs and rfs._msufCPFontRev ~= rev then
-                if ApplyClassPowerFont(rfs, path, runeSize, flags) then
-                    rfs._msufCPFontRev = rev
-                end
+            if rfs and (rfs._msufCPFontRev ~= rev or rfs._msufCPFontEpoch ~= fontEpoch) then
+                ApplyClassPowerFont(rfs, path, runeSize, flags)
+                rfs._msufCPFontRev = rev
+                rfs._msufCPFontEpoch = fontEpoch
             end
         end
 

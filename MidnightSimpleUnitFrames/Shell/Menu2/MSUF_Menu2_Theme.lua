@@ -9,7 +9,7 @@ local SharedUI = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
 
 T.fontSizes = (SharedUI and SharedUI.fontSizes) or T.fontSizes or {
     micro = 9, caption = 11, supporting = 11, body = 13, control = 13,
-    card = 13, section = 15, heading = 17, hero = 21,
+    card = 13, accordion = 15, section = 15, heading = 17, hero = 21,
 }
 function T.FontSize(role, fallback)
     if SharedUI and type(SharedUI.FontSize) == "function" then return SharedUI.FontSize(role, fallback) end

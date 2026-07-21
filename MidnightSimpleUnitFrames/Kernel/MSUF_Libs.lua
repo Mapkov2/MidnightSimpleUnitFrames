@@ -9,10 +9,115 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
 end
 
 local _MSUF_KnownFileAssetCache = {}
+local _MSUF_LSMFontAssetPaths = {}
+local _MSUF_FontApplyFailureSerial = tonumber(_G.MSUF_FontApplyFailureSerial) or 0
+_G.MSUF_FontApplyEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
 
 local function MSUF_NormalizeFileAssetPath(asset)
     if type(asset) ~= "string" or asset == "" then return nil end
     return asset:gsub("/", "\\")
+end
+
+local function MSUF_FileAssetPathKey(asset)
+    local normalized = MSUF_NormalizeFileAssetPath(asset)
+    if not normalized then return nil end
+    return normalized:lower(), normalized
+end
+
+local function MSUF_RememberLSMFontAsset(asset)
+    local key, normalized = MSUF_FileAssetPathKey(asset)
+    if key then
+        -- The exact normalized entry is the allocation-free common lookup.
+        -- The folded alias handles old/imported profiles with different case.
+        _MSUF_LSMFontAssetPaths[normalized] = normalized
+        _MSUF_LSMFontAssetPaths[key] = normalized
+    end
+    return normalized
+end
+
+local function MSUF_GetRegisteredLSMFontPath(asset)
+    if type(asset) ~= "string" or asset == "" then return nil end
+    local registered = _MSUF_LSMFontAssetPaths[asset]
+    if registered then return registered end
+    local key, normalized = MSUF_FileAssetPathKey(asset)
+    if not key then return nil end
+    return _MSUF_LSMFontAssetPaths[normalized] or _MSUF_LSMFontAssetPaths[key]
+end
+
+local function MSUF_IsRegisteredLSMFontPath(asset)
+    return MSUF_GetRegisteredLSMFontPath(asset) ~= nil
+end
+
+local function MSUF_FileAssetPathsEqual(a, b)
+    local aKey = MSUF_FileAssetPathKey(a)
+    local bKey = MSUF_FileAssetPathKey(b)
+    return aKey ~= nil and bKey ~= nil and aKey == bKey
+end
+
+local function MSUF_SeedLSMFontAssets(lsm)
+    if not (lsm and type(lsm.HashTable) == "function") then return end
+    local ok, fonts = pcall(lsm.HashTable, lsm, "font")
+    if not ok or type(fonts) ~= "table" then return end
+    for _, path in pairs(fonts) do
+        MSUF_RememberLSMFontAsset(path)
+    end
+end
+
+local function MSUF_GetLSMFontAsset(lsm, key)
+    if not lsm or type(key) ~= "string" or key == "" then return nil end
+    local path
+    if type(lsm.HashTable) == "function" then
+        local ok, fonts = pcall(lsm.HashTable, lsm, "font")
+        if ok and type(fonts) == "table" then path = fonts[key] end
+    end
+    if not path and type(lsm.Fetch) == "function" then
+        local ok, fetched = pcall(lsm.Fetch, lsm, "font", key, true)
+        if ok then path = fetched end
+    end
+    return MSUF_RememberLSMFontAsset(path)
+end
+
+local function MSUF_FontApplicationMatches(fs, expectedPath, expectedSize)
+    if not fs or type(fs.GetFont) ~= "function" then return true end
+    local ok, actualPath, actualSize = pcall(fs.GetFont, fs)
+    if not ok or not MSUF_FileAssetPathsEqual(expectedPath, actualPath) then return false end
+    actualSize, expectedSize = tonumber(actualSize), tonumber(expectedSize)
+    return actualSize ~= nil and expectedSize ~= nil and math.abs(actualSize - expectedSize) <= 0.01
+end
+
+local function MSUF_ClearFontStringApplyCaches(fs)
+    if not fs then return end
+    fs._msufFontAppliedPath = nil
+    fs._msufFontAppliedSize = nil
+    fs._msufFontAppliedFlags = nil
+    fs._msufFontAppliedEpoch = nil
+    fs._msufFontRequestPath = nil
+    fs._msufFontRequestSize = nil
+    fs._msufFontRequestFlags = nil
+    fs._msufFontRequestAppliedPath = nil
+    fs._msufFontRequestEpoch = nil
+    fs._msufFontSource = nil
+    fs._msufFontRev = nil
+    fs._msufFontEpoch = nil
+    fs._msufFont = nil
+    fs._msufFontSize = nil
+    fs._msufFontFlags = nil
+    fs._msufFontAttemptEpoch = nil
+    fs._msufTextFontEpoch = nil
+    fs._msufStatusFont = nil
+    fs._msufStatusFontSize = nil
+    fs._msufStatusFontFlags = nil
+    fs._msufStatusFontEpoch = nil
+    fs._msufStatusFontAttemptEpoch = nil
+    fs._msufCastbarFontEpoch = nil
+end
+
+local function MSUF_MarkFontApplyFailed()
+    _MSUF_FontApplyFailureSerial = _MSUF_FontApplyFailureSerial + 1
+    _G.MSUF_FontApplyFailureSerial = _MSUF_FontApplyFailureSerial
+    local notify = _G.MSUF_OnFontApplyFailed
+    if type(notify) == "function" then pcall(notify, _MSUF_FontApplyFailureSerial) end
+    return _MSUF_FontApplyFailureSerial
 end
 
 local function MSUF_IsKnownFileAsset(asset)
@@ -54,6 +159,11 @@ local function MSUF_IsKnownFileAsset(asset)
 end
 
 ExportPublic("MSUF_IsKnownFileAsset", _G.MSUF_IsKnownFileAsset or MSUF_IsKnownFileAsset)
+ExportPublic("MSUF_GetRegisteredLSMFontPath", MSUF_GetRegisteredLSMFontPath)
+ExportPublic("MSUF_IsRegisteredLSMFontPath", MSUF_IsRegisteredLSMFontPath)
+ExportPublic("MSUF_FontApplicationMatches", MSUF_FontApplicationMatches)
+ExportPublic("MSUF_ClearFontStringApplyCaches", MSUF_ClearFontStringApplyCaches)
+ExportPublic("MSUF_MarkFontApplyFailed", MSUF_MarkFontApplyFailed)
 MSUF.Util = MSUF.Util or {}
 MSUF.Util.IsKnownFileAsset = MSUF.Util.IsKnownFileAsset or MSUF_IsKnownFileAsset
 
@@ -111,6 +221,11 @@ do
     local function FontAssetAllowed(path)
         path = NormalizeFontPath(path)
         if type(path) ~= "string" or path == "" then return nil end
+        -- An exact LibSharedMedia registration is authoritative metadata for
+        -- this session. Skip transient manifest/probe negatives and let the
+        -- verified SetFont call remain the final openability check.
+        local registered = MSUF_GetRegisteredLSMFontPath(path)
+        if registered then return registered end
         local isKnown = _G.MSUF_IsKnownFileAsset or MSUF_IsKnownFileAsset
         if type(isKnown) == "function" and isKnown(path) == false then return nil end
         local isLoadable = _G.MSUF_FontPathIsLoadable
@@ -183,23 +298,27 @@ do
     end
 
     local function ApplyOne(fs, path, size, flags)
-        if not (fs and type(fs.SetFont) == "function" and type(path) == "string" and path ~= "") then return false end
-        local isKnown = _G.MSUF_IsKnownFileAsset or MSUF_IsKnownFileAsset
-        if type(isKnown) == "function" and isKnown(path) == false then return false end
+        if not (fs and type(fs.SetFont) == "function") then return false end
+        path = FontAssetAllowed(path)
+        if not path then return false end
+        local epoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
         if fs._msufFontAppliedPath == path
             and fs._msufFontAppliedSize == size
             and fs._msufFontAppliedFlags == flags
+            and fs._msufFontAppliedEpoch == epoch
         then
             return true
         end
         local ok, applied = pcall(fs.SetFont, fs, path, size, flags)
-        if not ok then return false end
-        if applied ~= false then
+        if ok and applied ~= false and MSUF_FontApplicationMatches(fs, path, size) then
             fs._msufFontAppliedPath = path
             fs._msufFontAppliedSize = size
             fs._msufFontAppliedFlags = flags
+            fs._msufFontAppliedEpoch = epoch
+            return true
         end
-        return applied ~= false
+        MSUF_ClearFontStringApplyCaches(fs)
+        return false
     end
 
     local function ApplyResolvedFont(fs, path, size, flags, fontKey)
@@ -207,9 +326,11 @@ do
         if size <= 0 then size = 12 end
         flags = NormalizeFlags(flags)
         local requested = ResolveFontPath(path, size, flags, fontKey)
+        local epoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
         if fs and fs._msufFontRequestPath == requested
             and fs._msufFontRequestSize == size
             and fs._msufFontRequestFlags == flags
+            and fs._msufFontRequestEpoch == epoch
         then
             return true, fs._msufFontRequestAppliedPath or requested, fs._msufFontSource or "cached"
         end
@@ -221,18 +342,24 @@ do
                 fs._msufFontRequestFlags = flags
                 fs._msufFontRequestAppliedPath = requested
                 fs._msufFontSource = "requested"
+                fs._msufFontRequestEpoch = epoch
             end
             return true, requested, "requested"
         end
         local fallback = ResolveFallbackFontPath()
         if fallback ~= requested and (ApplyOne(fs, fallback, size, flags) or (flags ~= "" and ApplyOne(fs, fallback, size, ""))) then
+            -- Cache a readable fallback only for this epoch. The failure
+            -- serial keeps the generation unresolved; the next epoch retries
+            -- the requested path without imposing repeated hotpath SetFont.
             if fs then
                 fs._msufFontRequestPath = requested
                 fs._msufFontRequestSize = size
                 fs._msufFontRequestFlags = flags
                 fs._msufFontRequestAppliedPath = fallback
+                fs._msufFontRequestEpoch = epoch
                 fs._msufFontSource = "fallback"
             end
+            MSUF_MarkFontApplyFailed()
             return true, fallback, "fallback"
         end
         if fs then
@@ -242,6 +369,7 @@ do
             fs._msufFontRequestAppliedPath = nil
             fs._msufFontSource = nil
         end
+        MSUF_MarkFontApplyFailed()
         return false, requested, "failed"
     end
 
@@ -372,6 +500,7 @@ local _MSUF_StatusIconMediaRefreshPending = false
 local _MSUF_StatusIconMediaRefreshFrame
 local _MSUF_FontMediaRefreshPending = false
 local _MSUF_FontMediaRefreshFrame
+local _MSUF_LSMFontMediaChangedInCombat = false
 local _MSUF_LSMCombatFrame
 local _MSUF_LSMCallbackActive = false
 local _MSUF_LSMMediaCounts = { font = 0, statusbar = 0, background = 0, msuf_statusicon = 0 }
@@ -486,7 +615,11 @@ end
 
 local function RunFontMediaRefresh()
     _MSUF_FontMediaRefreshPending = false
-    if type(_G.MSUF_UpdateAllFonts) == "function" then
+    if type(_G.MSUF_RequestFontRecovery) == "function" then
+        _G.MSUF_RequestFontRecovery("LSM_FONT_REGISTERED")
+    elseif type(_G.MSUF_UpdateAllFonts_Immediate) == "function" then
+        _G.MSUF_UpdateAllFonts_Immediate()
+    elseif type(_G.MSUF_UpdateAllFonts) == "function" then
         _G.MSUF_UpdateAllFonts()
     end
 end
@@ -614,7 +747,7 @@ local function SnapshotLSMMediaCounts(LSM)
     _MSUF_LSMMediaCounts.msuf_statusicon = CountLSMMediaType(LSM, "msuf_statusicon")
 end
 
-local function RefreshFontMedia(key, forceApply)
+local function RefreshFontMedia(key, forceApply, registeredPath)
     if type(_G.MSUF_ClearResolvedFontPathCache) == "function" then
         _G.MSUF_ClearResolvedFontPathCache()
     end
@@ -626,7 +759,10 @@ local function RefreshFontMedia(key, forceApply)
     if not needsFontRefresh and key ~= nil then
         local normalizeFontKey = _G.MSUF_NormalizeFontKey or function(k) return k end
         local general = _G.MSUF_DB and _G.MSUF_DB.general
-        needsFontRefresh = general and normalizeFontKey(general.fontKey) == normalizeFontKey(key)
+        local configured = general and general.fontKey
+        needsFontRefresh = configured ~= nil
+            and (normalizeFontKey(configured) == normalizeFontKey(key)
+                or MSUF_FileAssetPathsEqual(configured, registeredPath))
     end
     if needsFontRefresh then
         ScheduleFontMediaRefresh()
@@ -661,7 +797,9 @@ local function RefreshChangedMediaAfterCombat()
     _MSUF_LSMMediaCounts.background = backgroundCount
     _MSUF_LSMMediaCounts.msuf_statusicon = statusIconCount
 
-    if fontChanged then
+    if fontChanged or _MSUF_LSMFontMediaChangedInCombat then
+        _MSUF_LSMFontMediaChangedInCombat = false
+        MSUF_SeedLSMFontAssets(LSM)
         RefreshFontMedia(nil, true)
     end
     if statusbarChanged then
@@ -673,7 +811,15 @@ local function RefreshChangedMediaAfterCombat()
 end
 
 local function OnLSMRegistered(_, mediatype, key)
+    local registeredFontPath
+    if mediatype == "font" then
+        -- Record the path before the combat early-return. Registered media is
+        -- cold-path metadata and lets the post-combat refresh bypass a stale
+        -- negative file probe without doing any combat hotpath work.
+        registeredFontPath = MSUF_GetLSMFontAsset(MSUF.LSM, key)
+    end
     if IsCombatLocked() then
+        if mediatype == "font" then _MSUF_LSMFontMediaChangedInCombat = true end
         ExportPublic("MSUF_LSM_CombatRefreshPending", true)
         if UnregisterLSMCallback then
             UnregisterLSMCallback()
@@ -686,7 +832,7 @@ local function OnLSMRegistered(_, mediatype, key)
     end
 
     if mediatype == "font" then
-        RefreshFontMedia(key, false)
+        RefreshFontMedia(key, false, registeredFontPath)
     elseif mediatype == "statusbar" then
         RefreshStatusbarMedia()
         RefreshStatusIconMedia()
@@ -713,7 +859,8 @@ RegisterLSMCallback = function()
     if IsCombatLocked() then return false end
     if _MSUF_LSMCallbackActive then return true end
 
-    LSM.RegisterCallback(LSM_CALLBACK_OWNER, LSM_REGISTERED_EVENT, OnLSMRegistered)
+    local ok = pcall(LSM.RegisterCallback, LSM_CALLBACK_OWNER, LSM_REGISTERED_EVENT, OnLSMRegistered)
+    if not ok then return false end
     _MSUF_LSMCallbackActive = true
     ExportPublic("MSUF_LSM_CallbackActive", true)
     return true
@@ -747,6 +894,7 @@ end
 local function EnsureLSMCallbacks()
     local LSM = MSUF.LSM
     if not LSM then return end
+    MSUF_SeedLSMFontAssets(LSM)
     ExportPublic("MSUF_LSM_CallbacksRegistered", true)
     EnsureLSMCombatFrame()
     SnapshotLSMMediaCounts(LSM)

@@ -254,6 +254,10 @@ local function ApplyFont(fontString, g, prefix, suffix, size, colorSuffix)
     size = Clamp(size, 6, 128)
     local r, green, b = CastbarTextColor(g, prefix, colorSuffix)
     local alpha = Clamp(g.fontTextAlpha or 1, 0.7, 1)
+    -- The target-class writer later forwards secret RGB values directly with
+    -- the native three-argument SetTextColor path. Keep opacity on the region
+    -- for this one FontString so those safe recolors cannot reset it to 100%.
+    local targetTextAlpha = colorSuffix == "TargetName"
     local shadowEnabled = g.textBackdrop ~= false
     local shadowAlpha, shadowX, shadowY = _G.MSUF_ResolveFontShadowMetrics(
         g.fontShadowOpacity, g.fontShadowDistance, g.fontShadowStrength)
@@ -266,16 +270,38 @@ local function ApplyFont(fontString, g, prefix, suffix, size, colorSuffix)
         .. KeyPart(b) .. "|"
         .. KeyPart(alpha) .. "|"
         .. shadow
-    if fontString._msufCastbarFontKey == fontCacheKey then
+    local fontEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
+    if fontString._msufCastbarFontKey == fontCacheKey
+        and fontString._msufCastbarFontEpoch == fontEpoch
+    then
         return
     end
-    fontString._msufCastbarFontKey = fontCacheKey
 
+    local requestedReady = false
     if fontString.SetFont then
-        fontString:SetFont(fontPath, size, flags)
+        local applyResolved = _G.MSUF_ApplyResolvedFont
+        if type(applyResolved) == "function" then
+            local ok, _, source = applyResolved(fontString, fontPath, size, flags, fontKey)
+            requestedReady = ok == true and source ~= "fallback"
+        else
+            local ok, applied = pcall(fontString.SetFont, fontString, fontPath, size, flags)
+            requestedReady = ok and applied ~= false
+            local matches = _G.MSUF_FontApplicationMatches
+            if requestedReady and type(matches) == "function" then
+                requestedReady = matches(fontString, fontPath, size) == true
+            end
+            if not requestedReady and type(_G.MSUF_MarkFontApplyFailed) == "function" then
+                _G.MSUF_MarkFontApplyFailed()
+            end
+        end
     end
+    -- Cache the bounded attempt, including readable fallback, for this epoch.
+    -- The coordinator owns retries by advancing the epoch.
+    fontString._msufCastbarFontKey = fontCacheKey
+    fontString._msufCastbarFontEpoch = fontEpoch
 
-    if fontString.SetTextColor then fontString:SetTextColor(r, green, b, alpha) end
+    if fontString.SetTextColor then fontString:SetTextColor(r, green, b, targetTextAlpha and 1 or alpha) end
+    if targetTextAlpha and fontString.SetAlpha then fontString:SetAlpha(alpha) end
 
     if shadowEnabled then
         if fontString.SetShadowColor then fontString:SetShadowColor(0, 0, 0, shadowAlpha) end

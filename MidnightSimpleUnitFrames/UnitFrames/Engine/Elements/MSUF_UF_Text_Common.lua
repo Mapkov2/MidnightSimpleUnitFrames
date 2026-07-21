@@ -96,11 +96,17 @@ local function ResolveRoleFont(font, role, size)
   return font
 end
 
-local function FontApplied(fs, requested)
+local function FontApplied(fs, requested, requestedSize)
+  local matches = _G.MSUF_FontApplicationMatches
+  if type(matches) == "function" then
+    return matches(fs, requested, requestedSize) == true
+  end
   if type(fs.GetFont) ~= "function" then return true end
-  local actual = fs:GetFont()
-  if not actual then return false end
-  return tostring(actual):gsub("/", "\\"):lower() == tostring(requested or ""):gsub("/", "\\"):lower()
+  local ok, actual, actualSize = pcall(fs.GetFont, fs)
+  if not ok or not actual then return false end
+  local pathMatches = tostring(actual):gsub("/", "\\"):lower() == tostring(requested or ""):gsub("/", "\\"):lower()
+  actualSize, requestedSize = tonumber(actualSize), tonumber(requestedSize)
+  return pathMatches and actualSize ~= nil and requestedSize ~= nil and math.abs(actualSize - requestedSize) <= 0.01
 end
 
 local function ApplyFontChecked(fs, requested, size, flags)
@@ -108,29 +114,47 @@ local function ApplyFontChecked(fs, requested, size, flags)
   size = tonumber(size) or 12
   if size <= 0 then size = 12 end
   if size < 6 then size = 6 elseif size > 128 then size = 128 end
-  local applied = fs:SetFont(requested, size, flags)
-  return applied ~= false and FontApplied(fs, requested)
+  local ok, applied = pcall(fs.SetFont, fs, requested, size, flags)
+  return ok and applied ~= false and FontApplied(fs, requested, size)
 end
 
 local function SetFont(fs, spec, size, role)
   if not fs then
-    return
+    return true
   end
   local fontSize = tonumber(size) or 12
   if fontSize <= 0 then fontSize = 12 end
   if fontSize < 6 then fontSize = 6 elseif fontSize > 128 then fontSize = 128 end
   local font = ResolveRoleFont((spec and spec.font) or STANDARD_FONT, role, fontSize)
   local flags = spec and spec.fontFlags or "OUTLINE"
-  if fs._msufFont ~= font or fs._msufFontSize ~= fontSize or fs._msufFontFlags ~= flags then
+  local fontEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
+  local fontReady = fs._msufFontPending ~= true
+  if fs._msufFontAttemptEpoch ~= fontEpoch
+    or fs._msufFont ~= font
+    or fs._msufFontSize ~= fontSize
+    or fs._msufFontFlags ~= flags
+  then
     if ApplyFontChecked(fs, font, fontSize, flags) then
       fs._msufFont = font
       fs._msufFontSize = fontSize
       fs._msufFontFlags = flags
+      fs._msufFontEpoch = fontEpoch
+      fs._msufFontAttemptEpoch = fontEpoch
+      fs._msufFontPending = nil
+      fontReady = true
     else
-      ApplyFontChecked(fs, STANDARD_FONT, fontSize, flags)
-      fs._msufFont = nil
-      fs._msufFontSize = nil
-      fs._msufFontFlags = nil
+      if font ~= STANDARD_FONT then ApplyFontChecked(fs, STANDARD_FONT, fontSize, flags) end
+      local clear = _G.MSUF_ClearFontStringApplyCaches
+      if type(clear) == "function" then clear(fs) end
+      -- Remember this epoch's bounded fallback attempt so ordinary unit events
+      -- do not retry SetFont. The coordinator's next epoch is the retry owner.
+      fs._msufFont, fs._msufFontSize, fs._msufFontFlags = font, fontSize, flags
+      fs._msufFontEpoch = nil
+      fs._msufFontAttemptEpoch = fontEpoch
+      fs._msufFontPending = true
+      local markFailed = _G.MSUF_MarkFontApplyFailed
+      if type(markFailed) == "function" then markFailed() end
+      fontReady = false
     end
   end
   local color = spec and spec.textColor
@@ -150,6 +174,7 @@ local function SetFont(fs, spec, size, role)
       fs._msufShadowX, fs._msufShadowY, fs._msufShadowA = sx, sy, sa
     end
   end
+  return fontReady
 end
 
 local function SetPowerTextColor(frame, r, g, b, a)

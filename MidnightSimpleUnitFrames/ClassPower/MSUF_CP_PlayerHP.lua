@@ -484,25 +484,33 @@ builders.PLAYER_HP = function(E)
             local g = _G.MSUF_DB and _G.MSUF_DB.general
             fontPath = resolveSafe(fontPath, size, fontFlags, g and g.fontKey)
         end
+        local fontEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
         local stamp = tostring(fontPath) .. ":" .. tostring(size) .. ":" .. tostring(fontFlags)
+            .. ":" .. tostring(fontEpoch)
         if PHP._fontStamp == stamp then return end
-        PHP._fontStamp = stamp
         local function FontApplied(fs, path, px, fontFlags)
             if type(fs.GetFont) ~= "function" then return true end
-            local actual, actualSize, actualFlags = fs:GetFont()
-            if not actual then return true end
-            if actualSize and actualSize ~= px then return false end
+            local ok, actual, actualSize, actualFlags = pcall(fs.GetFont, fs)
+            if not ok or not actual then return false end
+            if actualSize and math.abs((tonumber(actualSize) or 0) - px) > 0.01 then return false end
             if (actualFlags or "") ~= (fontFlags or "") then return false end
             if actual == path then return true end
             local matches = _G.MSUF_FontPathMatches or _G.MSUF_FontPathEquals
             if type(matches) == "function" then return matches(path, actual) == true end
             return tostring(actual or ""):gsub("/", "\\"):lower() == tostring(path or ""):gsub("/", "\\"):lower()
         end
+        local general = _G.MSUF_DB and _G.MSUF_DB.general
         for _, fs in pairs({ PHP.left, PHP.center, PHP.right }) do
             if fs.SetFont then
-                local ok = pcall(fs.SetFont, fs, fontPath, size, fontFlags)
-                if not ok or not FontApplied(fs, fontPath, size, fontFlags) then
-                    pcall(fs.SetFont, fs, "Fonts\\FRIZQT__.TTF", size, fontFlags)
+                local applyResolved = _G.MSUF_ApplyResolvedFont
+                if type(applyResolved) == "function" then
+                    applyResolved(fs, fontPath, size, fontFlags, general and general.fontKey)
+                else
+                    local ok, applied = pcall(fs.SetFont, fs, fontPath, size, fontFlags)
+                    if not ok or applied == false or not FontApplied(fs, fontPath, size, fontFlags) then
+                        pcall(fs.SetFont, fs, "Fonts\\FRIZQT__.TTF", size, fontFlags)
+                        if type(_G.MSUF_MarkFontApplyFailed) == "function" then _G.MSUF_MarkFontApplyFailed() end
+                    end
                 end
             end
             fs._phpTextR, fs._phpTextG, fs._phpTextB, fs._phpTextA = nil, nil, nil, nil
@@ -510,6 +518,9 @@ builders.PLAYER_HP = function(E)
             if fs.SetShadowColor then fs:SetShadowColor(0, 0, 0, 1) end
             if fs.SetShadowOffset then fs:SetShadowOffset(1, -1) end
         end
+        -- Cache the attempt after all three strings have been processed. A
+        -- failed requested font remains readable and retries on the next epoch.
+        PHP._fontStamp = stamp
     end
 
     --- Cold creation path. The bar is parented to the player frame so frame
