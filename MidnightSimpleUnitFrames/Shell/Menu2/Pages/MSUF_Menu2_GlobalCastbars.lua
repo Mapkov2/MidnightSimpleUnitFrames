@@ -1068,6 +1068,12 @@ local function BuildCastbars(ctx)
     end
     local function BuildBehaviorSection(_, secBuilder)
     local behavior = secBuilder:CollapsibleSection("castbar_behavior", "Shake & Fill Direction", 196, true)
+    if W.AttachContextColorReferences then
+        W.AttachContextColorReferences(behavior, { "cast.interrupt_feedback" }, {
+            title = "Interrupt Feedback Color",
+            historySource = "menu:castbars-interrupt-feedback-color",
+        })
+    end
     local leftX, rightX = 14, 392
     local behaviorControls = BuildCastControlSpecs(behavior, {
         { "toggle", "Shake on interrupt", leftX, -42, 260, "castbarInterruptShake", false, "MSUF2_CASTBAR_SHAKE", ApplyAndRefresh },
@@ -1095,6 +1101,14 @@ local function BuildCastbars(ctx)
     LazyCastbarSection({ sectionId = "castbar_behavior", title = "Shake & Fill Direction", height = 196, defaultOpen = true, build = BuildBehaviorSection })
     local function BuildTexturesSection(_, secBuilder)
     local textures = secBuilder:CollapsibleSection("castbar_textures", "Textures & Outline", 220, false)
+    if W.AttachContextColorReferences then
+        W.AttachContextColorReferences(textures, {
+            "cast.interruptible", "cast.non_interruptible", "cast.background", "cast.border",
+        }, {
+            title = "Castbar Colors",
+            historySource = "menu:castbars-texture-colors",
+        })
+    end
     local texLeftX, texRightX = 14, 392
     local function ApplyTexturesAndPreview(reason, _, applyQueued)
         if applyQueued ~= true then ApplyCastbarTextures(reason) end
@@ -1135,6 +1149,21 @@ local function BuildCastbars(ctx)
     LazyCastbarSection({ sectionId = "castbar_empowered", title = "Empowered Casts", height = 130, build = BuildEmpoweredSection })
     local function BuildNameShorteningSection(_, secBuilder)
     local text = secBuilder:CollapsibleSection("castbar_name_shortening", "Name Shortening", 154, false)
+    if W.AttachContextColorShortcut then
+        W.AttachContextColorShortcut(text, {
+            title = "Cast Text Settings",
+            historyLabel = "Cast text color",
+            historySource = "menu:castbars-name-text-color",
+            textSettings = {
+                scope = "shared",
+                kind = "cast",
+                colorReferences = { "cast.text" },
+                colorTitle = "Cast Text Color",
+                subtitle = "Castbar font style follows the shared Fonts settings.",
+                capabilities = { baseline = false },
+            },
+        })
+    end
     local textLeftX, textRightX = 14, 392
     local syncNameShortening
     local function NameShorteningEnabled() return (tonumber(ReadG("castbarSpellNameShortening", 0)) or 0) == 1 end
@@ -1156,6 +1185,21 @@ local function BuildCastbars(ctx)
     LazyCastbarSection({ sectionId = "castbar_name_shortening", title = "Name Shortening", height = 154, build = BuildNameShorteningSection })
     local function BuildFocusKickSection(_, secBuilder)
     local focusKick = secBuilder:CollapsibleSection("castbar_focus_kick", "Focus Kick", 326, false)
+    if W.AttachContextColorShortcut then
+        W.AttachContextColorShortcut(focusKick, {
+            title = "Focus Kick Text & Colors",
+            historyLabel = "Focus Kick color",
+            historySource = "menu:castbars-focus-kick-colors",
+            textSettings = {
+                scope = "shared",
+                kind = "cast",
+                colorReferences = { "font.global", "cast.kick_ready", "cast.kick_not_ready" },
+                colorTitle = "Focus Kick Colors",
+                subtitle = "Focus Kick text follows the shared Fonts settings.",
+                capabilities = { shadow = false, opacity = false, baseline = false },
+            },
+        })
+    end
     local focusHint = W.Text(focusKick, "Track interrupts on your focus without showing the focus castbar.", 14, -38, (focusKick._msuf2Width or ctx.width or 720) - 28, T.colors.muted)
     if focusHint and focusHint.SetWordWrap then focusHint:SetWordWrap(true) end
     focusKick._msuf2CursorY = -68
@@ -1227,6 +1271,18 @@ local function BuildCastbars(ctx)
     LazyCastbarSection({ sectionId = "castbar_focus_kick", title = "Focus Kick", height = 326, build = BuildFocusKickSection })
     local function BuildInterruptReadySection(_, secBuilder)
     local kick = secBuilder:CollapsibleSection("castbar_interrupt_ready", "Interrupt Ready Indicator", 328, false)
+    if W.AttachContextColorReferences then
+        W.AttachContextColorReferences(kick, function()
+            if tostring(ReadG("kickReadyStyle", "border") or "border"):lower() == "fill" then
+                return { "cast.interruptible", "cast.interrupt_unavailable" }
+            end
+            return { "cast.kick_ready", "cast.kick_not_ready" }
+        end, {
+            title = "Interrupt Ready Colors",
+            note = "The shown colors follow the selected indicator style.",
+            historySource = "menu:castbars-interrupt-ready-colors",
+        })
+    end
     local kickLeftX, kickRightX = 14, 392
     W.LabelAt(kick, "Castbars", kickLeftX, -38, 160, "GameFontNormalSmall", T.colors.accent)
     W.LabelAt(kick, "Appearance", kickRightX, -38, 160, "GameFontNormalSmall", T.colors.accent)

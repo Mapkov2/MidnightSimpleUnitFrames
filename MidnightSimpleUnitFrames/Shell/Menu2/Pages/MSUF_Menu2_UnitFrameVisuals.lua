@@ -170,6 +170,18 @@ local function BuildPortrait(ctx, builder, unit)
     local geometryCard = W.ControlCard(sec, "Geometry", nil, rightX, layout.geometryY, rightW, 278)
     local borderCard = W.ControlCard(sec, "Shape & Border", nil, leftX, layout.borderY, leftW, 312)
     local styleCard = W.ControlCard(sec, "Class & Background", nil, rightX, layout.styleY, rightW, 166)
+    if W.AttachContextColorReferences then
+        W.AttachContextColorReferences(borderCard, { "portrait.border" }, {
+            title = "Portrait Border Color",
+            note = "Configure the color used by the Solid and Custom portrait border styles.",
+            historySource = "menu:unit-portrait-border-color",
+        })
+        W.AttachContextColorReferences(styleCard, { "portrait.background" }, {
+            title = "Portrait Background Color",
+            note = "Configure the optional portrait background color.",
+            historySource = "menu:unit-portrait-background-color",
+        })
+    end
     local portraitEnable = W.SwitchAt(mainCard, "Portrait", leftW - 62, -24, 0, "HIDDEN")
     M.BindBoolWidget(ctx, portraitEnable,
         function() return NormalizePortrait(unit) ~= "OFF" end,
@@ -330,6 +342,21 @@ local function BuildPower(ctx, builder, unit)
     local mainCard = PowerCard("Visibility & Size", nil, leftX, -38, cardW, 220)
     local borderCard = PowerCard("Border & fill", "Outline and fill behavior.", rightX, -38, rightW, 220)
     local detachedCard = PowerCard("Detached placement", "Used only when the power bar is detached from the unit frame.", leftX, detachedCardY, fullW, detachedCardHeight)
+    if W.AttachContextColorReferences then
+        W.AttachContextColorReferences(borderCard, function()
+            local refs = { "power.current" }
+            local general, bars = GetGeneral(), GetBars()
+            if not (general.powerBarBgMatchBarColor == true or bars.powerBarBgMatchBarColor == true) then
+                refs[#refs + 1] = "bar.power_background"
+            end
+            return refs
+        end, {
+            title = "Power Bar Colors",
+            note = "The resource color follows the current unit. A matched background is derived from Health instead.",
+            historySource = "menu:unit-power-colors",
+            context = function() return { unit = unit } end,
+        })
+    end
     local show = W.SwitchAt(mainCard, "Show power bar", cardW - 62, -24, 0, "HIDDEN")
     W.AttachUnitEditFocus(show, unit, "powerbar")
     M.BindBoolWidget(ctx, show,
@@ -563,14 +590,17 @@ local function BuildCastbar(ctx, builder, unit)
         if math.abs(value - floor(value + 0.5)) < 0.001 then value = floor(value + 0.5) end
         SetGeneralValue(key, value, reason)
     end
-    local function BindDetailDropdown(parent, list, label, x, y, width, values, key, defaultValue, reason)
+    local function BindDetailDropdown(parent, list, label, x, y, width, values, key, defaultValue, reason, afterSet)
         local control = W.Dropdown(parent, label, values, width)
         W.MoveWidget(control, parent, x, y, width)
         AddControl(list, control)
         W.AttachUnitEditFocus(control, unit, "castbar")
         M.BindDropdownWidget(ctx, control,
             function() return ReadGeneralValue(key, defaultValue) end,
-            function(v) SetGeneralValue(key, v or defaultValue, reason) end,
+            function(v)
+                SetGeneralValue(key, v or defaultValue, reason)
+                if afterSet then afterSet(v) end
+            end,
             SettingMeta(ctx, "castbar.detail." .. tostring(reason), "general", key))
         return control
     end
@@ -685,7 +715,7 @@ local function BuildCastbar(ctx, builder, unit)
     local generalTab, iconTab, spellTab, timeTab, advancedTab =
         UnitSectionShared.MakeTabFrames(sec, -64, sectionW, tabFrames, "general", "icon", "spell", "time", "advanced")
     local generalCard = W.ControlCard(generalTab, nil, nil, leftX, -4, leftW, 132)
-    local providerCard = W.ControlCard(generalTab, "Provider", nil, rightX, -4, rightW, 132)
+    local providerCard = W.ControlCard(generalTab, "Provider & Surface", nil, rightX, -4, rightW, 132)
     local sizeCard = W.ControlCard(generalTab, "Size", "Width can use manual bounds or follow another frame.", leftX, -154, sectionW - 32, 166)
     local iconCard = W.ControlCard(iconTab, nil, nil, leftX, -4, leftW, 478)
     local spellCard = W.ControlCard(spellTab, nil, nil, leftX, -4, leftW, 370)
@@ -694,6 +724,69 @@ local function BuildCastbar(ctx, builder, unit)
     local textAdvancedCard = W.ControlCard(advancedTab, "Spell Text Behavior", nil, leftX, -4, leftW, 190)
     local iconAdvancedCard = W.ControlCard(advancedTab, "Icon Style", nil, rightX, -4, rightW, 118)
     local layerAdvancedCard = W.ControlCard(advancedTab, "Whole Castbar Layer", nil, rightX, -140, rightW, 164)
+    if W.AttachContextColorReferences then
+        local function GeneralCastbarColorRefs()
+            local refs = {}
+            local general = GetGeneral()
+            if unit == "player" and general.playerCastbarOverrideEnabled == true then
+                local mode = tostring(general.playerCastbarOverrideMode or "CLASS"):upper()
+                refs[1] = mode == "CUSTOM" and "cast.player_override" or "unit.class.current"
+            else
+                refs[1], refs[2] = "cast.interruptible", "cast.non_interruptible"
+            end
+            refs[#refs + 1] = "cast.interrupt_feedback"
+            return refs
+        end
+        local function IconBorderColorRefs()
+            local style = tostring(ReadGeneralValue(DetailKey("IconBorderStyle"), "DARK")):upper()
+            return style == "CASTBAR" and { "cast.border" } or {}
+        end
+        local castContext = function() return { unit = unit } end
+        W.AttachContextColorReferences(generalCard, GeneralCastbarColorRefs, {
+            title = UnitTopLabel(unit) .. " Castbar Colors",
+            note = "Player colors follow the active override mode.",
+            historySource = "menu:unit-castbar-general-colors",
+            context = castContext,
+        })
+        W.AttachContextColorReferences(providerCard, { "cast.background", "cast.border" }, {
+            title = "Castbar Surface Colors",
+            note = "Shared castbar background and outline colors.",
+            historySource = "menu:unit-castbar-surface-colors",
+        })
+        W.AttachContextColorReferences(iconCard, IconBorderColorRefs, {
+            title = "Castbar Icon Border Color",
+            note = "Used by the Castbar icon-border style.",
+            historySource = "menu:unit-castbar-icon-border-color",
+        })
+        local function AttachCastTextSettings(card, colorId, title, source)
+            if not (card and W.AttachContextColorShortcut) then return end
+            W.AttachContextColorShortcut(card, {
+                title = title,
+                historyLabel = title,
+                historySource = source,
+                textSettings = {
+                    scope = "shared",
+                    unit = unit,
+                    kind = colorId == "cast.target_text" and "cast_target" or "cast",
+                    colorReferences = { colorId },
+                    colorTitle = title,
+                    subtitle = "Castbar text follows the shared Fonts settings.",
+                    capabilities = { baseline = false },
+                },
+            })
+        end
+        AttachCastTextSettings(spellCard, "cast.text", "Cast Spell Text Color", "menu:unit-castbar-spell-text-color")
+        if targetNameCard then
+            AttachCastTextSettings(targetNameCard, "cast.target_text", "Cast Target Text Color", "menu:unit-castbar-target-text-color")
+        end
+        AttachCastTextSettings(timeCard, "cast.text", "Cast Time Text Color", "menu:unit-castbar-time-text-color")
+        AttachCastTextSettings(textAdvancedCard, "cast.text", "Cast Spell Text Color", "menu:unit-castbar-advanced-text-color")
+        W.AttachContextColorReferences(iconAdvancedCard, IconBorderColorRefs, {
+            title = "Castbar Icon Border Color",
+            note = "Used by the Castbar icon-border style.",
+            historySource = "menu:unit-castbar-advanced-icon-border-color",
+        })
+    end
     local castbarTabs, RefreshCastbarTabs, ReadCastbarTab, SetGuidedCastbarTab = W.SegmentTabs(ctx, sec, {
         label = "", values = CASTBAR_TAB_VALUES, width = min(620, sectionW - 48),
         frames = tabFrames, defaultTab = "general",
@@ -905,7 +998,9 @@ local function BuildCastbar(ctx, builder, unit)
             return meta
         end)())
     BuildDetailControls(iconAdvancedCard, iconControls, {
-        { "dropdown", "Border style", 16, -52, min(260, controlWRight), CASTBAR_ICON_BORDER_VALUES, DetailKey("IconBorderStyle"), "DARK", "MSUF2_CASTBAR_ICON_BORDER" },
+        { "dropdown", "Border style", 16, -52, min(260, controlWRight), CASTBAR_ICON_BORDER_VALUES, DetailKey("IconBorderStyle"), "DARK", "MSUF2_CASTBAR_ICON_BORDER", function()
+            if M.Refresh then M.Refresh(ctx) end
+        end },
     })
     local castbarLayer = W.Slider(layerAdvancedCard, "Layer (0-30)", 0, 30, 1, controlWRight)
     W.MoveWidget(castbarLayer, layerAdvancedCard, 16, -52, controlWRight)

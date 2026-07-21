@@ -804,14 +804,9 @@ function Page:BuildHeader()
     preview:SetValue(M.GetClassPowerPreviewSpecKey())
     AddTooltip(preview, "Class Resource Preview", "Shows the selected class/spec resource below without changing your character, spec or saved settings.")
     M.TrackRefresh(ctx, function() preview:SetValue(M.GetClassPowerPreviewSpecKey()) end)
-    local colors = T.Button(head, "Class Color", 112, 24)
-    if W.StyleTopActionButton then W.StyleTopActionButton(colors) end
-    colors:SetPoint("TOPRIGHT", head, "TOPRIGHT", -16, -16)
-    colors:SetScript("OnClick", function() M.SelectPage("opt_colors") end)
-    RegisterControl(colors, Meta("navigation.class_colors", "navigation", { navigationKey = "opt_colors" }), "Class Color", "button")
     local quick = T.Button(head, "Quick Setup: Class Bar", 158, 24)
     if W.StyleTopSuccessButton then W.StyleTopSuccessButton(quick) elseif W.StyleTopActionButton then W.StyleTopActionButton(quick) end
-    quick:SetPoint("RIGHT", colors, "LEFT", -8, 0)
+    quick:SetPoint("TOPRIGHT", head, "TOPRIGHT", -16, -16)
     quick:SetScript("OnClick", ExecuteQuickSetup)
     quick:SetScript("OnEnter", ShowQuickSetupTooltip)
     quick:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
@@ -914,8 +909,53 @@ function Page:BuildClassStyle()
         { "outline", "slider", "Outline", 0, 4, 1, 300, "classPowerOutline", 1, group = "cp" },
         { "gap", "slider", "Pip gap", 0, 8, 1, 300, "classPowerGap", 0, group = "cp" },
     }))
+    local resourcesCard, textCard, pipsCard
     for _, card in ipairs({ { resources, "Resource & Textures", 248 }, { text, "Text", 210 }, { opacity, "Opacity", 204 }, { pips, "Pips & Border", 230 } }) do
-        W.ControlCard(card[1], card[2], nil, 18, -38, cardW + 28, card[3])
+        local controlCard = W.ControlCard(card[1], card[2], nil, 18, -38, cardW + 28, card[3])
+        if card[1] == resources then resourcesCard = controlCard end
+        if card[1] == text then textCard = controlCard end
+        if card[1] == pips then pipsCard = controlCard end
+    end
+    if W.AttachContextColorReferences then
+        local function CurrentClassPowerRefs()
+            return { "class_power.current" }
+        end
+        local function CurrentClassPowerContext(includeSlots)
+            local spec = type(M.GetClassPowerPreviewSpec) == "function" and M.GetClassPowerPreviewSpec() or nil
+            return {
+                resourceToken = type(spec) == "table" and spec.token or nil,
+                slot = type(spec) == "table" and spec.value or nil,
+                includeSlots = includeSlots,
+            }
+        end
+        local colorOptions = {
+            title = "Class Resource Colors",
+            note = "Colors follow the currently selected preview resource.",
+            historySource = "menu:class-power-resource-colors",
+            context = function() return CurrentClassPowerContext(false) end,
+        }
+        W.AttachContextColorReferences(resourcesCard, CurrentClassPowerRefs, colorOptions)
+        W.AttachContextColorReferences(pipsCard, CurrentClassPowerRefs, {
+            title = colorOptions.title,
+            note = colorOptions.note,
+            historySource = "menu:class-power-pip-colors",
+            context = function() return CurrentClassPowerContext(true) end,
+        })
+    end
+    if W.AttachContextColorShortcut then
+        W.AttachContextColorShortcut(textCard, {
+            title = "Class Resource Text Settings",
+            historyLabel = "Class resource text color",
+            historySource = "menu:class-power-text-color",
+            textSettings = {
+                scope = "shared",
+                kind = "class_power",
+                colorReferences = { "class_power.text" },
+                colorTitle = "Class Resource Text Color",
+                subtitle = "Class Resource text follows the shared Fonts settings.",
+                capabilities = { baseline = false },
+            },
+        })
     end
     MoveWidget(self.cp.color, resources, 32, -72)
     MoveWidget(self.cp.comboColor, resources, 32, -104, controlW)
@@ -983,7 +1023,19 @@ function Page:BuildDetachedPower()
     AddTooltip(self.dpbUse, "Detached Player Power", "Moves the Player power bar out of the unit frame. Anchor connects it to the Class Resources stack; Sync only follows the stack width.")
     AddTooltip(self.dpb.anchor, "Anchor To Class Resource", "Keeps detached Player power attached to the Class Resource bar. Player power controls are disabled while this connection is active.")
     AddTooltip(self.dpb.sync, "Sync Width", "Uses the Class Resource width for detached Player power without making Class Resources own the Player power controls.")
-    W.ControlCard(text, "Power Text", nil, 14, -38, cardW, twoColumns and 560 or 790)
+    local powerTextCard = W.ControlCard(text, "Power Text", nil, 14, -38, cardW, twoColumns and 560 or 790)
+    if W.AttachContextColorShortcut then
+        W.AttachContextColorShortcut(powerTextCard, {
+            title = "Player Power Text Settings",
+            historyLabel = "Player power text color",
+            historySource = "menu:class-power-player-power-text-color",
+            textSettings = {
+                scope = "player",
+                unit = "player",
+                kind = "power",
+            },
+        })
+    end
     self.dpbText = self:Controls(text, Player, ApplyDetachedPowerText, "detached_power.text", {
         { "onBar", "detachedTextOnBar", "Power text on bar", "detachedPowerBarTextOnBar", false, group = "detachedPlayer" },
         { "preset", "detachedTextPreset", "Power text", DETACHED_POWER_TEXT_PRESET_VALUES, 300, group = "detachedPlayer" },
@@ -1023,7 +1075,24 @@ function Page:BuildDetachedPower()
     AddTooltip(self.dpbText.preset, "Power Text", "Simple presets for Player power text while detached power is managed by Class Resources. Custom Slots means the existing slot layout is kept until you choose a preset.")
     AddTooltip(self.dpbText.onBar, "Power Text On Bar", "Places Player power text on the detached power bar. When off, the same Player power text remains positioned by the normal text layout.")
     AddTooltip(self.dpbText.x, "Text X", "Moves all detached Player power text slots together. Slot X/Y controls below add per-slot offsets.")
-    W.ControlCard(textures, "Power Textures", nil, 14, -38, cardW, 260)
+    local powerTexturesCard = W.ControlCard(textures, "Power Textures", nil, 14, -38, cardW, 260)
+    if W.AttachContextColorReferences then
+        W.AttachContextColorReferences(powerTexturesCard, function()
+            local refs = { "power.current" }
+            local db = M.EnsureDB()
+            local general = db and db.general or {}
+            local bars = Bars()
+            if not (general.powerBarBgMatchBarColor == true or bars.powerBarBgMatchBarColor == true) then
+                refs[#refs + 1] = "bar.power_background"
+            end
+            return refs
+        end, {
+            title = "Detached Player Power Colors",
+            note = "The resource color follows Player power. A matched background is derived from Health instead.",
+            historySource = "menu:class-power-detached-power-colors",
+            context = function() return { unit = "player" } end,
+        })
+    end
     local texture = self:Controls(textures, Bars, ApplyDetachedPowerBar, "detached_power.textures", {
         { "fg", "dropdown", "Foreground texture", function() return TextureValues("Use global bar texture") end, 300, "detachedPowerBarTexture", "", group = "detached" },
         { "bg", "dropdown", "Background texture", function() return TextureValues("Use foreground texture") end, 300, "detachedPowerBarBgTexture", "", group = "detached" },
@@ -1079,9 +1148,30 @@ function Page:BuildPlayerHP()
     AddTooltip(self.hp.shape, "HP Shape", "Bar keeps the normal statusbar. Follow Player Power mirrors the independent detached Player power shape. Orb uses a single vertical fill.")
     AddTooltip(self.hp.orbSize, "Orb Size", "Used only when this HP bar is explicitly set to Orb. Follow Player Power inherits the Player power orb size instead.")
     AddTooltip(self.hp.smooth, "Smooth Fill", "Optional interpolation for this second HP bar. Off keeps direct native SetValue updates.")
-    W.ControlCard(textures, "HP Textures", nil, 14, -38, cardW, 346)
+    local hpTexturesCard = W.ControlCard(textures, "HP Textures", nil, 14, -38, cardW, 346)
+    if W.AttachContextColorReferences then
+        local function PlayerHPColorMode()
+            local mode = tostring(Bars().playerHPBarColorMode or "GLOBAL"):upper()
+            if mode == "CLASS" or mode == "DARK" or mode == "GRADIENT" then return mode end
+            return "GLOBAL"
+        end
+        W.AttachContextColorReferences(hpTexturesCard, function()
+            return PlayerHPColorMode() == "DARK" and {} or { "health.current" }
+        end, {
+            title = "Extra Health Bar Colors",
+            note = "The foreground follows the selected HP color mode. Dark Mode uses the shared dark-tone control.",
+            historySource = "menu:class-power-player-hp-colors",
+            context = function()
+                return { unit = "player", unitKey = "player", healthMode = PlayerHPColorMode() }
+            end,
+        })
+    end
+    local function ApplyPlayerHPColorMode()
+        ApplyPlayerHPBar()
+        if M.Refresh then M.Refresh(self.ctx) end
+    end
     local texture = self:Controls(textures, Bars, ApplyPlayerHPBar, "player_hp.textures", {
-        { "color", "dropdown", "HP color", PLAYER_HP_COLOR_VALUES, 300, "playerHPBarColorMode", "GLOBAL" },
+        { "color", "dropdown", "HP color", PLAYER_HP_COLOR_VALUES, 300, "playerHPBarColorMode", "GLOBAL", ApplyPlayerHPColorMode },
         { "fg", "dropdown", "Foreground texture", function() return TextureValues("Use global bar texture") end, 300, "playerHPBarTexture", "", ApplyPlayerHPTextures },
         { "bg", "dropdown", "Background texture", function() return TextureValues("Use foreground texture") end, 300, "playerHPBarBgTexture", "", ApplyPlayerHPTextures },
         { "bgAlpha", "alpha", "BG opacity", "playerHPBarBgAlpha", .35, ApplyPlayerHPBar, 1 },
@@ -1092,7 +1182,42 @@ function Page:BuildPlayerHP()
     AddTooltip(texture.color, "HP Color", "Global follows the normal MSUF health color mode. Class Color forces your class color. Dark Mode forces the configured dark bar color. HP Gradient colors only this second HP bar by current health.")
     AddTooltip(texture.bg, "Background Texture", "Visible behind the filled HP amount. At 100% HP the fill covers the background; Outline 0 does not disable this texture.")
     AddTooltip(texture.outline, "HP Outline", "Controls only the second HP bar outline. Bar uses four outside border edges; shapes use their fixed edge texture. 0 disables only the outline.")
-    W.ControlCard(text, "HP Text", nil, 14, -38, cardW, twoColumns and 520 or 690)
+    local hpTextCard = W.ControlCard(text, "HP Text", nil, 14, -38, cardW, twoColumns and 520 or 690)
+    if W.AttachContextColorShortcut then
+        W.AttachContextColorShortcut(hpTextCard, {
+            title = "Extra Health Text Settings",
+            historyLabel = "Extra health text color",
+            historySource = "menu:class-power-player-hp-text-color",
+            textSettings = {
+                scope = "shared",
+                modeScope = "player",
+                unit = "player",
+                kind = "hp",
+                colorReferences = function()
+                    if Bars().playerHPBarUsePlayerText == true then return nil end
+                    return {}
+                end,
+                capabilities = function()
+                    local mirror = Bars().playerHPBarUsePlayerText == true
+                    return {
+                        shadow = false,
+                        opacity = false,
+                        baseline = false,
+                        shadowAlpha = false,
+                        shadowDistance = false,
+                        colorMode = mirror,
+                        colors = mirror,
+                    }
+                end,
+                subtitle = function()
+                    if Bars().playerHPBarUsePlayerText == true then
+                        return "Font face follows Shared; text and color mode mirror Player HP."
+                    end
+                    return "Local HP text uses shared face settings and a fixed white color."
+                end,
+            },
+        })
+    end
     local textRefresh = self:WithRefresh(ApplyPlayerHPText)
     self.hpTextEnable = SwitchAt(self.ctx, text, "Show HP text", 32, -104, controlW, Bars, "playerHPBarTextEnabled", true, textRefresh, Meta("player_hp.text.enabled"))
     local shared = SwitchAt(self.ctx, text, "Use Player HP text", 32, -136, controlW, Bars, "playerHPBarUsePlayerText", true, textRefresh, Meta("player_hp.text.use_player_text"))
@@ -1126,7 +1251,13 @@ function Page:BuildAlternativeMana()
     local section = self.b:CollapsibleSection("classpower_alt_mana", "Alternative Mana", 306, false)
     local cardW = min(620, (section._msuf2Width or self.width) - 28)
     local controlW = min(360, cardW - 64)
-    W.ControlCard(section, "Visibility & Size", "For specializations that use mana alongside another resource.", 14, -38, cardW, 234)
+    local manaCard = W.ControlCard(section, "Visibility & Size", "For specializations that use mana alongside another resource.", 14, -38, cardW, 234)
+    if W.AttachContextColorReferences then
+        W.AttachContextColorReferences(manaCard, { "class_power.alt_mana" }, {
+            title = "Alternative Mana Color",
+            historySource = "menu:class-power-alternative-mana-color",
+        })
+    end
     self.altToggle = SwitchAt(self.ctx, section, "Show mana bar (dual resource)", 32, -98, controlW, Bars, "showAltMana", false, ApplyClassPower, Meta("alternative_mana.enabled"))
     local smooth = SwitchAt(self.ctx, section, "Smooth fill", 32, -132, controlW, Bars, "altManaSmoothFill", true, ApplyClassPowerSmoothing, Meta("alternative_mana.smooth_fill"))
     local fields = self:Controls(section, Bars, ApplyClassPower, "alternative_mana.layout", {

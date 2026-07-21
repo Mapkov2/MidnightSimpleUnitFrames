@@ -10,6 +10,7 @@
     <Script file="Pages\MSUF_Menu2_GroupPriority.lua"/>
     <Script file="Pages\MSUF_Menu2_Advanced.lua"/>
     <Script file="MSUF_Menu2_ContextColorPicker.lua"/>
+    <Script file="MSUF_Menu2_TextQuickSettings.lua"/>
     <Script file="Pages\MSUF_Menu2_ColorPainter.lua"/>
     <Script file="Pages\MSUF_Menu2_AdvancedColors.lua"/>
     <Script file="Pages\MSUF_Menu2_AdvancedGameplay.lua"/>

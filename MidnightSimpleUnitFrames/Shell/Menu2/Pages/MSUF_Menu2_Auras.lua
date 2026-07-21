@@ -23,6 +23,11 @@ local AURA_PREVIEW_EDGE_OPTS = { linesKey = "edge", maxEdgeSize = 1, texture = T
 local floor, ceil, max, min, abs = math.floor, math.ceil, math.max, math.min, math.abs
 local tonumber, tostring, type, ipairs, pairs = tonumber, tostring, type, ipairs, pairs
 local table_concat = table.concat
+local function AuraDurationBarColor()
+    local resolver = A3 and A3.GetDurationBarColor
+    if type(resolver) == "function" then return resolver() end
+    return 1, 1, 1
+end
 local AccessibleNumber = M.AccessibleNumber or function(value, fallback)
     fallback = tonumber(fallback) or 0
     local canaccessvalue = _G.canaccessvalue
@@ -48,6 +53,43 @@ local DEBUFF_AURA_SORT_METHOD_VALUES = VTP "DEFAULT=Player & Priority First|UNIT
 local DURATION_BAR_DISPLAY_VALUES = VTP "BAR_ONLY=Bar Only|OVERLAY=Icon + Bar"
 local DURATION_BAR_POSITION_VALUES = VTP "BOTTOM=Bottom|TOP=Top"
 local DURATION_BAR_DIRECTION_VALUES = VTP "REMAINING=Remaining|ELAPSED=Elapsed"
+local function AURA_COOLDOWN_COLOR_REFERENCES()
+    local general = _G.MSUF_DB and _G.MSUF_DB.general or nil
+    if general and general.aurasCooldownTextUseBuckets == true then
+        return {
+            "font.global",
+            "aura.cooldown.safe",
+            "aura.cooldown.warning",
+            "aura.cooldown.urgent",
+        }
+    end
+    return { "font.global" }
+end
+local AURA_DURATION_BAR_COLOR_REFERENCES = { "aura.cooldown.safe" }
+function M.AttachAuraFontsAndColors(section, title, unit)
+    if not (section and W.AttachContextColorReferences) then return end
+    local references = AURA_COOLDOWN_COLOR_REFERENCES()
+    if #references == 1 then references[2] = AURA_DURATION_BAR_COLOR_REFERENCES[1] end
+    W.AttachContextColorReferences(section, references, {
+        title = title .. " Fonts & Colors",
+        historyLabel = title .. " color",
+        historySource = "menu:auras-fonts-colors",
+        tooltipTitle = "Aura fonts & colors",
+        tooltipText = "Open the shared font settings and the colors used by this Aura area.",
+        textSettings = {
+            scope = "shared",
+            unit = unit,
+            kind = "aura",
+            colorReferences = references,
+            colorTitle = title .. " Colors",
+            subtitle = "Aura text follows the shared Fonts settings; duration colors stay synchronized with Aura Colors.",
+            capabilities = {
+                opacity = false, baseline = false,
+                shadowAlpha = false, shadowDistance = false,
+            },
+        },
+    })
+end
 local BUFF_AURA_SORT_METHOD_OK = { DEFAULT=true, BIG_DEFENSIVE=true, IMPORTANT_FIRST=true, EXPIRATION=true, EXPIRATION_ONLY=true, NAME=true, NAME_ONLY=true }
 local DEBUFF_AURA_SORT_METHOD_OK = { DEFAULT=true, UNIT_FRAME_DEBUFF=true, IMPORTANT_FIRST=true, EXPIRATION=true, EXPIRATION_ONLY=true, NAME=true, NAME_ONLY=true }
 local function AuraSortMethodValues(lane)
@@ -306,17 +348,6 @@ local function SelectPage(pageKey, scope)
         if scope == "party" or scope == "raid" then M.SetMenuStateValue("auraStyleGFScope", scope) end
     end
     if M.SelectPage then M.SelectPage(pageKey or "auras3") end
-end
-local function OpenAuraColors()
-    _G.MSUF_EM2_MenuFocusRequest = {
-        pageKey = "opt_colors",
-        sectionId = "colors_auras",
-        explicit = true,
-        consumed = false,
-    }
-    if M.SelectPage and M.SelectPage("opt_colors") == false then
-        _G.MSUF_EM2_MenuFocusRequest = nil
-    end
 end
 local function RequestAuraRuntime(scope, reason)
     local apply = M.ApplyService or _G.MSUF_Menu2_ApplyService
@@ -649,7 +680,12 @@ local function BuildAuraStyleNav(ctx, b, scope)
             end
         end,
     }), values, "style.container.selector")
-    return CurrentAuraStyleContainer(scope)
+    local current = CurrentAuraStyleContainer(scope)
+    local title = current == "custom4" and "Dots on target Aura Style"
+        or (tostring(current):match("^custom[123]$") and ("Custom " .. tostring(current):match("(%d)$") .. " Aura Style"))
+        or (LaneTitle(current) .. " Aura Style")
+    M.AttachAuraFontsAndColors(section, title, scope)
+    return current
 end
 local function OtherLane(kind)
     return kind == "buff" and "debuff" or "buff"
@@ -959,7 +995,8 @@ local function CreateAuraPreviewIcon(parent)
     f.swipe:Hide()
     f.durationBar = f:CreateTexture(nil, "OVERLAY")
     f.durationBar:SetTexture(TEX_W8)
-    f.durationBar:SetVertexColor(0.08, 0.78, 1.00, 0.92)
+    local durationR, durationG, durationB = AuraDurationBarColor()
+    f.durationBar:SetVertexColor(durationR, durationG, durationB, 0.92)
     f.durationBar:Hide()
     f.dispelBorder = f:CreateTexture(nil, "OVERLAY")
     f.dispelBorder:Hide()
@@ -1328,11 +1365,8 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
                 icon.durationBar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
                 icon.durationBar:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -inset, inset)
             end
-            if cfg.durationBarDirection == "ELAPSED" then
-                icon.durationBar:SetVertexColor(0.22, 0.88, 0.50, 0.92)
-            else
-                icon.durationBar:SetVertexColor(0.08, 0.78, 1.00, 0.92)
-            end
+            local r, g, b = AuraDurationBarColor()
+            icon.durationBar:SetVertexColor(r, g, b, 0.92)
             icon.durationBar:Show()
         else
             icon.durationBar:Hide()
@@ -1779,22 +1813,36 @@ local function BuildUnitStyle(ctx, b, scope)
     local features = b:CollapsibleSection(baseId .. "_features", LaneTitle(lane) .. " Basics", featuresH, true)
     local fw = BodyWidth(features)
     local featuresY = -44
-    local colorsButton = ActionButton(features, "Open Aura Colors", 150, "normal")
-    colorsButton:SetPoint("TOPLEFT", features, "TOPLEFT", 24, featuresY)
-    colorsButton:SetScript("OnClick", OpenAuraColors)
-    RegisterAuraControl(ctx, colorsButton, "Open Aura Colors", "button", "style.lane.colors", "navigation", "opt_colors")
-    AddTooltip(colorsButton, "Aura colors", "Opens Colors > Auras for timer, stack, highlight, and pandemic colors.")
-    BindStyleSlider(features, "Icon Zoom (%)", 24, featuresY - 44, 100, 200, 1, fw - 48, "iconZoom", 100, 100, 200, 100, 200, "AURAS3_ICON_ZOOM")
-    BindStyleSwitch(features, "Show Cooldown Text", 24, featuresY - 100, fw - 48, "showCooldownText", true, "AURAS3_SHOW_COOLDOWN_TEXT")
-    BindStyleSwitch(features, "Show Cooldown Swipe", 24, featuresY - 132, fw - 48, "showCooldownSwipe", true, "AURAS3_SHOW_COOLDOWN_SWIPE")
-    BindStyleSwitch(features, "Show Tooltip", 24, featuresY - 164, fw - 48, "showTooltip", true, "AURAS3_TOOLTIP")
+    BindStyleSlider(features, "Icon Zoom (%)", 24, featuresY, 100, 200, 1, fw - 48, "iconZoom", 100, 100, 200, 100, 200, "AURAS3_ICON_ZOOM")
+    BindStyleSwitch(features, "Show Cooldown Text", 24, featuresY - 56, fw - 48, "showCooldownText", true, "AURAS3_SHOW_COOLDOWN_TEXT")
+    BindStyleSwitch(features, "Show Cooldown Swipe", 24, featuresY - 88, fw - 48, "showCooldownSwipe", true, "AURAS3_SHOW_COOLDOWN_SWIPE")
+    BindStyleSwitch(features, "Show Tooltip", 24, featuresY - 120, fw - 48, "showTooltip", true, "AURAS3_TOOLTIP")
     if lane == "debuff" then
-        BindStyleDropdown(features, "Dispel-type Border", 24, featuresY - 214,
+        BindStyleDropdown(features, "Dispel-type Border", 24, featuresY - 170,
             type(Model.DebuffTypeBorderModeValues) == "function" and Model.DebuffTypeBorderModeValues() or DEBUFF_TYPE_BORDER_MODE_VALUES,
             fw - 48, ReadScopeDebuffBorderMode, WriteScopeDebuffBorderMode, "AURAS3_DEBUFF_TYPE_BORDER_MODE")
     end
 
     local stack = b:CollapsibleSection(baseId .. "_stack", LaneTitle(lane) .. " Stack Count", 296, false)
+    if W.AttachContextColorShortcut then
+        W.AttachContextColorShortcut(stack, {
+            title = LaneTitle(lane) .. " Stack Text Settings",
+            historyLabel = "Aura stack text color",
+            historySource = "menu:auras-stack-text-color",
+            textSettings = {
+                scope = "shared",
+                unit = unit,
+                kind = "aura",
+                colorReferences = { "font.global" },
+                colorTitle = "Aura Stack Text Color",
+                subtitle = "Aura stack text follows the shared Fonts settings.",
+                capabilities = {
+                    opacity = false, baseline = false,
+                    shadowAlpha = false, shadowDistance = false,
+                },
+            },
+        })
+    end
     local sw = BodyWidth(stack)
     BindStyleSwitch(stack, "Show Stack Count", 24, -56, sw - 48, "showStackCount", true, "AURAS3_SHOW_STACKS")
     AddStyleControl(BindDropdown(ctx, stack, "Anchor", 24, -94, Model.StackAnchorValues(), sw - 48,
@@ -1818,6 +1866,25 @@ local function BuildUnitStyle(ctx, b, scope)
     BindStyleSlider(stack, "Y", 32 + stackSmallW, -212, -40, 40, 1, stackSmallW, "stackTextOffsetY", 1, -2000, 2000, nil, nil, "AURAS3_STACK_Y")
 
     local cooldown = b:CollapsibleSection(baseId .. "_cooldown", LaneTitle(lane) .. " Cooldown Text", 374, true)
+    if W.AttachContextColorShortcut then
+        W.AttachContextColorShortcut(cooldown, {
+            title = LaneTitle(lane) .. " Cooldown Text Settings",
+            historyLabel = "Aura cooldown text color",
+            historySource = "menu:auras-cooldown-text-color",
+            textSettings = {
+                scope = "shared",
+                unit = unit,
+                kind = "aura",
+                colorReferences = AURA_COOLDOWN_COLOR_REFERENCES,
+                colorTitle = LaneTitle(lane) .. " Cooldown Colors",
+                subtitle = "Aura cooldown text follows the shared Fonts settings.",
+                capabilities = {
+                    opacity = false, baseline = false,
+                    shadowAlpha = false, shadowDistance = false,
+                },
+            },
+        })
+    end
     local cw = BodyWidth(cooldown)
     BindStyleSlider(cooldown, "Text Size", 24, -48, 6, 40, 1, cw - 48, "cooldownTextSize", 14, 6, 40, nil, nil, "AURAS3_COOLDOWN_SIZE")
     BindStyleDropdown(cooldown, "Anchor", 24, -104, type(Model.AuraAnchorValues) == "function" and Model.AuraAnchorValues() or GFAnchorValues(), cw - 48, ReadScopeCooldownAnchor, WriteScopeCooldownAnchor, "AURAS3_COOLDOWN_ANCHOR")
@@ -1829,6 +1896,9 @@ local function BuildUnitStyle(ctx, b, scope)
     AddTooltip(decimal, "Cooldown text format", "Remaining time below this value uses one decimal place. Timers show unitless seconds below 1 minute and localized minutes above it. Set 0 for whole seconds only.")
 
     local durationBar = b:CollapsibleSection(baseId .. "_duration_bar", LaneTitle(lane) .. " Duration Bar", 322, false)
+    W.AttachContextColorReferences(durationBar, AURA_DURATION_BAR_COLOR_REFERENCES, {
+        title = LaneTitle(lane) .. " Duration Bar Color",
+    })
     local dbw = BodyWidth(durationBar)
     BindStyleSwitch(durationBar, "Show Duration Bar", 24, -48, dbw - 48, "showDurationBar", false, "AURAS3_DURATION_BAR")
     BindStyleSlider(durationBar, "Height", 24, -104, 1, 16, 1, dbw - 48, "durationBarHeight", 2, 1, 16, nil, nil, "AURAS3_DURATION_BAR_HEIGHT")
@@ -1982,16 +2052,11 @@ local function BuildGroupStyle(ctx, b, scope)
 
     local features = b:CollapsibleSection(baseId .. "_features", LaneTitle(lane) .. " Basics", 186 + extraDebuffControls, true)
     local fw = BodyWidth(features)
-    local colorsButton = ActionButton(features, "Open Aura Colors", 150, "normal")
-    colorsButton:SetPoint("TOPLEFT", features, "TOPLEFT", 24, -44)
-    colorsButton:SetScript("OnClick", OpenAuraColors)
-    RegisterAuraControl(ctx, colorsButton, "Open Aura Colors", "button", "group-style.lane.colors", "navigation", "opt_colors")
-    AddTooltip(colorsButton, "Aura colors", "Opens Colors > Auras for timer, stack, highlight, and pandemic colors.")
-    BindGroupSwitch(ctx, features, "Show Cooldown Text", 24, -84, fw - 48, scope, lane, "showCooldown", true, "visual", RefreshStylePreview)
-    BindGroupSwitch(ctx, features, "Show Cooldown Swipe", 24, -114, fw - 48, scope, lane, "showCooldownSwipe", true, "visual", RefreshStylePreview)
-    BindGroupSwitch(ctx, features, "Show Tooltip", 24, -146, fw - 48, scope, lane, "showTooltip", true, "visual", RefreshStylePreview)
+    BindGroupSwitch(ctx, features, "Show Cooldown Text", 24, -44, fw - 48, scope, lane, "showCooldown", true, "visual", RefreshStylePreview)
+    BindGroupSwitch(ctx, features, "Show Cooldown Swipe", 24, -74, fw - 48, scope, lane, "showCooldownSwipe", true, "visual", RefreshStylePreview)
+    BindGroupSwitch(ctx, features, "Show Tooltip", 24, -106, fw - 48, scope, lane, "showTooltip", true, "visual", RefreshStylePreview)
     if lane == "debuff" then
-        BindDropdown(ctx, features, "Dispel-type Border", 24, -198,
+        BindDropdown(ctx, features, "Dispel-type Border", 24, -158,
             type(Model.DebuffTypeBorderModeValues) == "function" and Model.DebuffTypeBorderModeValues() or DEBUFF_TYPE_BORDER_MODE_VALUES,
             fw - 48,
             function() return ReadGroupDebuffTypeBorderMode(scope, lane) end,
@@ -2003,6 +2068,24 @@ local function BuildGroupStyle(ctx, b, scope)
     end
 
     local cooldown = b:CollapsibleSection(baseId .. "_cooldown", LaneTitle(lane) .. " Cooldown Text", 336, true)
+    if W.AttachContextColorShortcut then
+        W.AttachContextColorShortcut(cooldown, {
+            title = LaneTitle(lane) .. " Cooldown Text Settings",
+            historyLabel = "Group aura cooldown text color",
+            historySource = "menu:group-auras-cooldown-text-color",
+            textSettings = {
+                scope = "shared",
+                kind = "aura",
+                colorReferences = AURA_COOLDOWN_COLOR_REFERENCES,
+                colorTitle = LaneTitle(lane) .. " Cooldown Colors",
+                subtitle = "Group aura cooldown text follows the shared Fonts settings.",
+                capabilities = {
+                    opacity = false, baseline = false,
+                    shadowAlpha = false, shadowDistance = false,
+                },
+            },
+        })
+    end
     local cw = BodyWidth(cooldown)
     BindGroupSlider(ctx, cooldown, "Cooldown Font", 24, -56, 6, 24, 1, cw - 48, scope, lane, "cooldownSize", 8, "font", RefreshStylePreview)
     BindGroupDropdown(ctx, cooldown, "Cooldown Anchor", 24, -112, GFAnchorValues(), cw - 48, scope, lane, "cooldownAnchor", "CENTER", "geometry", RefreshStylePreview)
@@ -2024,6 +2107,9 @@ local function BuildGroupStyle(ctx, b, scope)
     AddTooltip(groupDecimal, "Cooldown text format", "Remaining time below this value uses one decimal place. Timers show unitless seconds below 1 minute and localized minutes above it. Set 0 for whole seconds only.")
 
     local durationBar = b:CollapsibleSection(baseId .. "_duration_bar", LaneTitle(lane) .. " Duration Bar", 322, false)
+    W.AttachContextColorReferences(durationBar, AURA_DURATION_BAR_COLOR_REFERENCES, {
+        title = LaneTitle(lane) .. " Duration Bar Color",
+    })
     local dbw = BodyWidth(durationBar)
     BindGroupSwitch(ctx, durationBar, "Show Duration Bar", 24, -48, dbw - 48, scope, lane, "showDurationBar", false, "visual", RefreshStylePreview)
     BindGroupSlider(ctx, durationBar, "Height", 24, -104, 1, 16, 1, dbw - 48, scope, lane, "durationBarHeight", 2, "visual", RefreshStylePreview)
@@ -2032,6 +2118,24 @@ local function BuildGroupStyle(ctx, b, scope)
     BindGroupDropdown(ctx, durationBar, "Fill Mode", 24, -278, DURATION_BAR_DIRECTION_VALUES, dbw - 48, scope, lane, "durationBarDirection", "REMAINING", "visual", RefreshStylePreview)
 
     local stack = b:CollapsibleSection(baseId .. "_stack", LaneTitle(lane) .. " Stack Count", 270, false)
+    if W.AttachContextColorShortcut then
+        W.AttachContextColorShortcut(stack, {
+            title = LaneTitle(lane) .. " Stack Text Settings",
+            historyLabel = "Group aura stack text color",
+            historySource = "menu:group-auras-stack-text-color",
+            textSettings = {
+                scope = "shared",
+                kind = "aura",
+                colorReferences = { "font.global" },
+                colorTitle = "Aura Stack Text Color",
+                subtitle = "Group aura stack text follows the shared Fonts settings.",
+                capabilities = {
+                    opacity = false, baseline = false,
+                    shadowAlpha = false, shadowDistance = false,
+                },
+            },
+        })
+    end
     local sw = BodyWidth(stack)
     BindGroupSwitch(ctx, stack, "Show Stack Count", 24, -56, sw - 48, scope, lane, "showStacks", true, "visual", RefreshStylePreview)
     BindGroupSlider(ctx, stack, "Stack Font", 24, -94, 6, 24, 1, sw - 48, scope, lane, "stackSize", 10, "font", RefreshStylePreview)
@@ -2525,6 +2629,7 @@ local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
     -- grid (fixed cell metrics, per-value reset) instead of hand-placed
     -- offsets. Control identities, setters and apply reasons are unchanged.
     local section = b:Section(title, 208)
+    M.AttachAuraFontsAndColors(section, title, unit)
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48
     local gap = 12
@@ -3515,6 +3620,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
 
     if tool == "layout" then
         local section = b:Section(containerLabel .. " Layout", 190)
+        M.AttachAuraFontsAndColors(section, containerLabel .. " Layout", unit)
         local w = section._msuf2Width or b.width or 720
         local col3, gap3 = Grid(w, 3)
         BindDropdown(ctx, section, "Anchor", 24, -34, Model.AuraAnchorValues(), col3,
@@ -3567,6 +3673,25 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
 
     if tool == "appearance" then
         local section = b:Section(containerLabel .. " Icon Style", 292)
+        if W.AttachContextColorShortcut then
+            W.AttachContextColorShortcut(section, {
+                title = containerLabel .. " Text Settings",
+                historyLabel = "Custom aura cooldown text color",
+                historySource = "menu:custom-auras-cooldown-text-color",
+                textSettings = {
+                    scope = "shared",
+                    unit = unit,
+                    kind = "aura",
+                    colorReferences = AURA_COOLDOWN_COLOR_REFERENCES,
+                    colorTitle = containerLabel .. " Cooldown Colors",
+                    subtitle = "Custom aura text follows the shared Fonts settings.",
+                    capabilities = {
+                        opacity = false, baseline = false,
+                        shadowAlpha = false, shadowDistance = false,
+                    },
+                },
+            })
+        end
         local w = section._msuf2Width or b.width or 720
         local col4, gap = Grid(w, 4)
         local function X(col) return 24 + (col - 1) * (col4 + gap) end

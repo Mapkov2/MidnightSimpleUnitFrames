@@ -737,6 +737,32 @@ local function BuildBasics(ctx, builder, unit, label)
     -- Default-open so the page greets users with real settings instead of a
     -- stack of closed headers; saved accordion state still wins afterwards.
     local sec = builder:CollapsibleSection("frame_basics", "Frame Basics", 202, true)
+    if W.AttachContextColorReferences then
+        local function EffectiveHealthMode()
+            return NormalizeHealthColorMode(GetConf(unit).healthColorMode) or GlobalHealthColorMode()
+        end
+        W.AttachContextColorReferences(sec, function()
+            local mode = EffectiveHealthMode()
+            local refs = {}
+            if mode == "gradient" then
+                refs = { "health.gradient.low", "health.gradient.mid", "health.gradient.high" }
+            elseif mode == "unified" then
+                refs = { "health.unified" }
+            elseif mode == "class" then
+                refs = { unit == "pet" and "unit.pet" or "health.current" }
+            end
+            local general = GetGeneral()
+            if general.barBgMatchHPColor ~= true and general.barBgClassColor ~= true then
+                refs[#refs + 1] = "bar.background_tint"
+            end
+            return refs
+        end, {
+            title = UnitTopLabel(unit) .. " Health Colors",
+            note = "Colors follow this frame's effective Health Color Scheme.",
+            historySource = "menu:unit-frame-basics-health-colors",
+            context = function() return { unit = unit, healthMode = EffectiveHealthMode() } end,
+        })
+    end
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local gap = 24
     local colW = math.floor((sectionW - 28 - (gap * 2)) / 3)
@@ -806,6 +832,7 @@ local function BuildBasics(ctx, builder, unit, label)
             local conf = GetConf(unit)
             conf.healthColorMode = NormalizeHealthColorMode(v)
             M.RequestUnitApply(unit, "MSUF2_HEALTH_COLOR_MODE", { preview = true, colors = true })
+            if M.Refresh then M.Refresh(ctx) end
         end,
         SettingMeta(ctx, "basics.health_color_mode", unit, "healthColorMode"))
     if M.AddTooltip then
@@ -1011,6 +1038,29 @@ local function BuildInlineText(ctx, builder, unit)
         RequestUnitRuntimeApply("targettarget", reason, inlineApplyFlags, forceToT == true)
         Call("MSUF_UpdateTargetToTInlineNow")
         if not skipRefresh and RefreshInlineControlState then RefreshInlineControlState() end
+    end
+    if W.AttachContextColorShortcut then
+        W.AttachContextColorShortcut(sec, {
+            title = "Inline Text Settings",
+            historyLabel = "Inline text color",
+            historySource = "menu:target-inline-text-color",
+            textSettings = {
+                scope = "target",
+                unit = "target",
+                kind = "inline",
+                colorReferences = { "text.inline_tot.current" },
+                colorTitle = "Inline Text Color",
+                colorModeValues = ToTInlineColorOptions,
+                getColorMode = function()
+                    return ToTInlineColorDropdownValue(GetConf("targettarget"))
+                end,
+                setColorMode = function(value)
+                    GetConf("targettarget").totInlineColorMode = NormalizeToTInlineColorMode(value)
+                    ApplyToTInline("MSUF2_TOT_INLINE_COLOR", true)
+                end,
+                subtitle = "Font style follows Target Fonts; color mode follows Inline color.",
+            },
+        })
     end
     local show = W.Toggle(sec, "Show Target of Target text inline")
     M.BindBoolWidget(ctx, show,
@@ -1293,6 +1343,12 @@ end
 local function BuildBossLayout(ctx, builder, unit)
     if unit ~= "boss" then return end
     local sec = builder:CollapsibleSection("boss_layout", "Boss Layout", 204, false)
+    if W.AttachContextColorReferences then
+        W.AttachContextColorReferences(sec, { "highlight.boss_target" }, {
+            title = "Boss Target Highlight Color",
+            historySource = "menu:unit-boss-target-highlight-color",
+        })
+    end
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local leftX = 14
     local rightX = math.max(350, floor(sectionW * 0.50) + 8)

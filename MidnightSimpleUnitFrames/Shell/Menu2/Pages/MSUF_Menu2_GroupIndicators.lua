@@ -253,6 +253,22 @@ local function BuildIndicatorsSection(ctx, b)
     local hlHint = W.Text(highlightCard, "Shows a border around the current target in group frames. Aggro and dispel borders are controlled in Bars.", 16, -42, innerW - 164, T.colors.muted)
     if hlHint.SetWordWrap then hlHint:SetWordWrap(true) end
     local groupNumberCard = W.ControlCard(indicators, "Group Number", nil, leftX, -148, leftW, 296)
+    if W.AttachContextColorShortcut then
+        W.AttachContextColorShortcut(groupNumberCard, {
+            title = "Group Number Text Settings",
+            historyLabel = "Group number text color",
+            historySource = "menu:group-number-text-color",
+            offsetX = -76,
+            textSettings = {
+                scope = function() return CurrentScope() end,
+                group = true,
+                kind = "status",
+                subtitle = "Font style and color are synchronized with the Fonts menu for this group scope.",
+                colorTitle = "Group number text color",
+                capabilities = { baseline = false },
+            },
+        })
+    end
     local groupNumberToggle = BindScopeToggle(ctx, W.SwitchAt(groupNumberCard, "Group Number", leftW - 62, -24, 0, "HIDDEN"), "showGroupNumber", false, "visual")
     groupNumberToggle._msuf2GroupFrameGateAlwaysEnabled = true
     local groupNumberControls = {}
@@ -262,6 +278,14 @@ local function BuildIndicatorsSection(ctx, b)
     AddScopeSlider(groupNumberControls, groupNumberCard, "Y Offset", -100, 100, 1, leftW, "groupNumberY", 2, "geometry", -216)
     AddScopeSlider(groupNumberControls, groupNumberCard, "Layer", 0, 30, 1, leftW, "groupNumberLayer", 7, "visual", -266)
     local focusCard = W.ControlCard(indicators, "Focus Highlight", "Shows a colored border around your Focus target. Priority: Dispel > Aggro > Target > Focus.", rightX, -148, rightW, 190)
+    if W.AttachContextColorReferences then
+        W.AttachContextColorReferences(focusCard, { "group.focus" }, {
+            title = "Focus Highlight Color",
+            note = "Shared by Party, Raid and Mythic Raid.",
+            historySource = "menu:group-focus-highlight-color",
+            offsetX = -76,
+        })
+    end
     local focusToggle = BindScopeToggle(ctx, W.SwitchAt(focusCard, "Focus Highlight", rightW - 62, -24, 0, "HIDDEN"), "hlFocusEnabled", true, "visual")
     focusToggle._msuf2GroupFrameGateAlwaysEnabled = true
     local focusHint = focusCard and focusCard.subtitle
@@ -271,6 +295,14 @@ local function BuildIndicatorsSection(ctx, b)
     local focusColorHint = W.Text(focusCard, "Focus color is in Global Style > Colors > Group Frame Colors.", 16, -142, rightW - 32, T.colors.muted)
     if focusColorHint.SetWordWrap then focusColorHint:SetWordWrap(true) end
     local groupBorderCard = W.ControlCard(indicators, "Group Border", nil, leftX, -462, leftW, 202)
+    if W.AttachContextColorReferences then
+        W.AttachContextColorReferences(groupBorderCard, { "group.border" }, {
+            title = "Group Border Color",
+            note = "Shared by Party, Raid and Mythic Raid.",
+            historySource = "menu:group-border-color",
+            offsetX = -76,
+        })
+    end
     local groupBorderToggle = BindScopeToggle(ctx, W.SwitchAt(groupBorderCard, "Group Border", leftW - 62, -24, 0, "HIDDEN"), "groupBorderEnabled", false, "visual")
     groupBorderToggle._msuf2GroupFrameGateAlwaysEnabled = true
     local groupBorderControls = {}
@@ -338,8 +370,30 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         end
         return type(ReadStatusTab) ~= "function" or ReadStatusTab() == tab
     end
+    local function IsTextStatusIconSpec(spec)
+        local value = spec and spec.value
+        return value == "statusText" or value == "statusGhostText" or value == "statusAFKText"
+    end
     local styleCard = W.ControlCard(siconBasicTab, "Style", nil, siconLeftX, -38, siconLeftW, 132)
     local selectedCard = W.ControlCard(siconBasicTab, "Selected Indicator", nil, siconLeftX, -188, siconLeftW, 316)
+    local selectedTextShortcut
+    if W.AttachContextColorShortcut then
+        selectedTextShortcut = W.AttachContextColorShortcut(selectedCard, {
+            title = "Selected Status Text Settings",
+            historyLabel = "Group status text color",
+            historySource = "menu:group-status-text-color",
+            offsetX = -76,
+            textSettings = {
+                scope = function() return CurrentScope() end,
+                group = true,
+                kind = "status",
+                subtitle = "Font style and color are synchronized with the Fonts menu for this group scope.",
+                colorTitle = "Group status text color",
+                capabilities = { baseline = false },
+            },
+        })
+        selectedTextShortcut:SetShown(IsTextStatusIconSpec(CurrentGFStatusSpec()))
+    end
     local previewCard = W.ControlCard(siconBasicTab, "Status Preview", nil, siconRightX, -38, siconRightW, 164)
     local placementCard = W.ControlCard(siconBasicTab, "Placement", nil, siconRightX, -220, siconRightW, 322)
     local function RefreshStatusIconMenu()
@@ -690,6 +744,7 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         SetManyEnabled(true, advanced.previewAll, previewAll, midnightStyle, statusEnabled)
         local hasIconPack = false
         local hasCustomIcon = spec and spec.customIcon
+        if selectedTextShortcut then selectedTextShortcut:SetShown(IsTextStatusIconSpec(spec)) end
         if W.SetControlShown then
             W.SetControlShown(iconPack, hasIconPack and true or false)
             W.SetControlShown(customIcon, hasCustomIcon and true or false)
@@ -1375,12 +1430,12 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
     local siLeftW = max(240, min(370, floor((siInnerW - siGap) * 0.46)))
     local siRightX = siLeftX + siLeftW + siGap
     local siRightW = max(240, min(390, siInnerW - siLeftW - siGap))
-    local spellSetCard, placedIndicatorCard
+    local spellSetCard, placedIndicatorCard, frameHighlightCard
     do
         spellSetCard = W.ControlCard(spells, Tr("Choose Spells"), nil, siLeftX - 14, -38, siLeftW + 28, 404)
         W.ControlCard(spells, Tr("Edit Spell"), nil, siRightX - 14, -38, siRightW + 28, 404)
         placedIndicatorCard = W.ControlCard(spells, Tr("Show on Frame"), nil, siLeftX - 14, -456, siLeftW + 28, 570)
-        W.ControlCard(spells, Tr("Highlight Health Bar"), nil, siRightX - 14, -456, siRightW + 28, 468)
+        frameHighlightCard = W.ControlCard(spells, Tr("Highlight Health Bar"), nil, siRightX - 14, -456, siRightW + 28, 468)
         W.ControlCard(spells, Tr("Icon Details"), nil, siRightX - 14, -936, siRightW + 28, 248)
     end
     local RefreshSpellIndicatorState = M.RefreshProxy()
@@ -1718,6 +1773,8 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
             { hook = true, titleAsLine = true })
     end
     local frameColor = W.Color(spells, Tr("Color"))
+    frameColor._msuf2ColorLabel = Tr("Health bar highlight")
+    frameColor._msuf2ContextColorCardOverride = frameHighlightCard
     M.BindColor(ctx, frameColor,
         function()
             local frame = FrameEffectConfig(CurrentScope(), false)
@@ -1877,10 +1934,12 @@ local function BuildCornerIndicatorsSection(ctx, b, RefreshPage)
     local leftW = max(240, min(360, floor((cornerInnerW - cornerGap) * 0.46)))
     local rightX = leftX + leftW + cornerGap
     local rightW = max(260, min(440, cornerInnerW - leftW - cornerGap))
+    local cornerEditorCard
     do
         W.ControlCardBackdrop(corners, leftX - 14, -38, leftW + 28, 224)
         W.ControlCardBackdrop(corners, leftX - 14, -272, leftW + 28, 334)
-        W.ControlCardBackdrop(corners, rightX - 14, -38, rightW + 28, 526)
+        cornerEditorCard = W.ControlCardBackdrop(corners, rightX - 14, -38, rightW + 28, 526)
+        cornerEditorCard._msuf2ControlCardTitle = "Custom Spell Editor"
     end
     W.LabelAt(corners, "Global", leftX, -42, leftW, "GameFontNormalSmall", T.colors.accent)
     local ciEnable = BindScopeToggle(ctx, W.SwitchAt(corners, "Corner Indicators", leftX, -72, leftW), "ciEnabled", false, "visual")
@@ -1982,6 +2041,8 @@ local function BuildCornerIndicatorsSection(ctx, b, RefreshPage)
     local customMode = BindCICustomDropdown("When", CIModeValues, "mode", "present", -350)
     local customFilter = BindCICustomDropdown("Filter", CIFilterValues, "filter", "HELPFUL|PLAYER", -404)
     local customColor = W.Color(corners, "Custom Color")
+    customColor._msuf2ColorLabel = "Custom spell color"
+    customColor._msuf2ContextColorCardOverride = cornerEditorCard
     M.BindColor(ctx, customColor,
         function()
             local cfg = CICustomConfig(CurrentScope(), CurrentCISlot(), false)
@@ -1994,6 +2055,23 @@ local function BuildCornerIndicatorsSection(ctx, b, RefreshPage)
         end,
         ControlMeta(ctx, "corner.editor.color"))
     W.MoveWidget(customColor, corners, rightX, -458, rightW)
+    local cornerColorShortcut
+    if W.AttachContextColorShortcut then
+        cornerColorShortcut = W.AttachContextColorShortcut(cornerEditorCard, {
+            title = "Corner Indicator Color",
+            getTargets = function()
+                local slot = CurrentCISlot()
+                local category = Val(CurrentScope(), "ciSlot" .. slot, CI_SLOT_DEFAULTS[slot] or "none")
+                if category == "custom" then return { customColor } end
+                if category == "aggro" and type(M.ResolveContextColorReferences) == "function" then
+                    return M.ResolveContextColorReferences({ "group.aggro" }, {})
+                end
+                return {}
+            end,
+            note = "Uses the selected slot's Custom Spell color or the shared Corner Aggro color.",
+            historySource = "menu:group-corner-indicator-color",
+        })
+    end
     local customHelp = W.Text(corners, "Tip: HELPFUL|PLAYER and HARMFUL|PLAYER are the safest filters because WoW exposes your own spell IDs reliably.", rightX, -506, rightW, T.colors.dim)
     if customHelp.SetWordWrap then customHelp:SetWordWrap(true) end
     local ciGlobalControls, ciEditorControls, ciCustomControls = { ciSize, ciAlpha, ciLayer }, { slotDrop, categoryDrop }, { customSpells, customMode, customFilter, customColor }
@@ -2007,6 +2085,7 @@ local function BuildCornerIndicatorsSection(ctx, b, RefreshPage)
         SetOptionsEnabled(slotControls, enabled)
         SetOptionsEnabled(ciEditorControls, enabled)
         SetOptionsEnabled(ciCustomControls, enabled and showCustom)
+        if cornerColorShortcut then cornerColorShortcut:SetShown(enabled and (showCustom or category == "aggro")) end
         local slotLabel = slot
         for i = 1, #CI_SLOT_VALUES do
             if CI_SLOT_VALUES[i].value == slot then

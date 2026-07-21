@@ -306,13 +306,12 @@ for _, key in ipairs({ "bars_textures", "bars_absorb", "bars_outline", "bars_rou
 end
 assert(ctx.contentHeight and ctx.contentHeight > 0, "content height was not finalized")
 assert(#bindings >= 25, "unexpected binding count: " .. #bindings)
-assert(#controls == 15, "control metadata registration changed: " .. #controls)
+assert(#controls == 14, "control metadata registration changed: " .. #controls)
 local expectedControlPaths = {
     ["gradient.health.direction.UP"] = true,
     ["gradient.health.direction.DOWN"] = true,
     ["gradient.power.direction.UP"] = true,
     ["gradient.power.direction.DOWN"] = true,
-    ["gradient.colors"] = true,
     ["absorb.workspace_tab"] = true,
     ["highlight.workspace_tab"] = true,
     ["highlight.priority.order.order"] = true,

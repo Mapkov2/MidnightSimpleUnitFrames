@@ -728,30 +728,20 @@ local function BuildTextureSection(ctx, b)
             Meta("gradient." .. key))
         return control
     end
-    local colors = T.Button(textures, "Gradient colors", 142, 22)
-    colors:SetPoint("TOPLEFT", textures, "TOPLEFT", rightX + 88, gradientY + 8)
-    T.CenterButtonLabel(colors)
-    if M.AddTooltip then
-        M.AddTooltip(colors, "Gradient colors", "Open Colors > Bar Gradient Colors for separate Health and Power gradient colors in the selected Bars scope.", { hook = true })
-    end
-    colors:SetScript("OnClick", function()
-        _G.MSUF_EM2_MenuFocusRequest = {
-            pageKey = "opt_colors",
-            sectionId = "colors_bar_gradients",
-            explicit = true,
-            consumed = false,
-            source = "bars-gradient-colors",
-            changedAt = GetTime and GetTime() or 0,
-        }
-        if M.SelectPage and M.SelectPage("opt_colors") == false then _G.MSUF_EM2_MenuFocusRequest = nil end
-    end)
-    RegisterControl(colors, Meta("gradient.colors", "navigation", { navigationKey = "opt_colors" }), "Gradient colors", "button")
     local hpY = gradientY - 28
     local powerY = gradientY - 138
     local padX = compactTextures and math.min(rightX + 210, (ctx.width or 720) - 104) or math.min(rightX + 238, (ctx.width or 720) - 104)
     local compactStrengthW = math.max(150, padX - rightX - 14)
     local hpGradient = BindGradientToggle("Health gradient", hpY, compactTextures and 150 or 180, "enableGradient", "MSUF2_HP_GRADIENT", "health")
     local powerGradient = BindGradientToggle("Power gradient", powerY, compactTextures and 170 or 190, "enablePowerGradient", "MSUF2_POWER_GRADIENT", "power")
+    if W.AttachContextColorReferences then
+        W.AttachContextColorReferences(textures, { "gradient.health", "gradient.power" }, {
+            title = "Bar Gradient Colors",
+            note = "Health and Power gradient colors for the selected Bars scope.",
+            historySource = "menu:bars-gradient-colors",
+            offsetY = -8,
+        })
+    end
     local function BindGradientStrength(kind, y, key, legacyKey, path, reason)
         local label = kind == "power" and "Power strength" or "Health strength"
         local control = W.Slider(textures, label, 0, 1, 0.05, 220)
@@ -1072,6 +1062,7 @@ local function BuildTempMaxHealthSection(ctx, b)
 
     local colorY = compact and -204 or -204
     local color = W.Color(section, "Loss color")
+    color._msuf2ContextColorAllowDisabled = true
     W.MoveWidget(color, section, leftX, colorY)
     M.BindColor(ctx, color,
         function()
@@ -1150,6 +1141,20 @@ local function BuildAbsorbSection(ctx, b)
     end
     local positive, negative, heal = M.UnitSectionsShared.MakeTabFrames(
         section, -64, sectionW, tabFrames, "positive", "negative", "heal")
+    if W.AttachContextColorReferences then
+        W.AttachContextColorReferences(positive, { "bar.absorb" }, {
+            title = "Absorb Color",
+            historySource = "menu:bars-absorb-color",
+        })
+        W.AttachContextColorReferences(negative, { "bar.heal_absorb" }, {
+            title = "Heal Absorb Color",
+            historySource = "menu:bars-heal-absorb-color",
+        })
+        W.AttachContextColorReferences(heal, { "bar.heal_prediction" }, {
+            title = "Heal Prediction Color",
+            historySource = "menu:bars-heal-prediction-color",
+        })
+    end
     local tabs = W.SegmentTabs(ctx, section, {
         label = "", values = tabValues, width = min(660, sectionW - 48),
         frames = tabFrames, defaultTab = "positive", get = CurrentTab,
@@ -1480,7 +1485,7 @@ local function BuildHighlightSection(ctx, b)
         width = min(520, hlInnerW), frames = highlightTabFrames, defaultTab = "modes",
         x = hlLeftX, y = -44,
     }), "highlight.workspace_tab", VT("modes", "Modes", "preview", "Preview", "priority", "Priority"))
-    W.ControlCard(modesFrame, "Border Modes", nil, hlLeftX - 14, -38, hlLeftW + 28, 542)
+    local modesCard = W.ControlCard(modesFrame, "Border Modes", nil, hlLeftX - 14, -38, hlLeftW + 28, 542)
     local priorityCardW = min(360, max(260, hlLeftW + 28))
     local priorityCard = W.ControlCard(priorityFrame, "Priority Order", nil, hlLeftX - 14, -38, priorityCardW, 296)
     W.ControlCard(previewFrame, "Preview", nil, hlPreviewX - 14, -38, hlPreviewW + 28, 248)
@@ -1568,6 +1573,18 @@ local function BuildHighlightSection(ctx, b)
     local function BossTargetBorderOn()
         local fallback = ReadGBool("bossTargetHighlightEnabled", true) and 1 or 0
         return (tonumber(ReadG("bossTargetOutlineMode", fallback)) or fallback) == 1
+    end
+    if W.AttachContextColorReferences then
+        W.AttachContextColorReferences(modesCard, function()
+            local references = { "bar.aggro_border" }
+            if not PURGE_BORDER_121_PTR_DISABLED then references[#references + 1] = "bar.purge_border" end
+            if SharedScope() then references[#references + 1] = "highlight.boss_target" end
+            return references
+        end, {
+            title = "Highlight Border Colors",
+            note = "Colors available to the border modes in this card.",
+            historySource = "menu:bars-highlight-colors",
+        })
     end
     local function BindBorderTestToggle(label, y, flagName, setterName, enabledFn, noScope, path)
         local control = W.ToggleAt(previewFrame, label, hlPreviewX, y, hlPreviewW)

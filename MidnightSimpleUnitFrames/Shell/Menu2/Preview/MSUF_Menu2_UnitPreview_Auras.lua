@@ -26,6 +26,12 @@ local function ClampNumber(value, defaultValue, minValue, maxValue)
     if maxValue ~= nil and value > maxValue then value = maxValue end
     return value
 end
+local function AuraDurationBarColor()
+    local auras3 = MSUF.MSUF_Auras3
+    local resolver = auras3 and auras3.GetDurationBarColor
+    if type(resolver) == "function" then return resolver() end
+    return 1, 1, 1
+end
 local function RuntimeRound(value)
     return floor((tonumber(value) or 0) + 0.5)
 end
@@ -656,7 +662,8 @@ local function CreateIcon(parent)
     f.swipe:Hide()
     f.durationBar = f:CreateTexture(nil, "OVERLAY")
     f.durationBar:SetTexture(TEX_W8)
-    f.durationBar:SetVertexColor(0.08, 0.78, 1.00, 0.92)
+    local durationR, durationG, durationB = AuraDurationBarColor()
+    f.durationBar:SetVertexColor(durationR, durationG, durationB, 0.92)
     f.durationBar:Hide()
     f.edge = f:CreateTexture(nil, "BORDER")
     f.edge:SetAllPoints(f)
@@ -835,11 +842,11 @@ local function LayoutPreviewDurationBar(bar, icon, cfg, size, auraState)
     local frac
     if cfg.durationBarDirection == "ELAPSED" then
         frac = auraState and auraState.elapsedFrac or 0.38
-        bar:SetVertexColor(0.22, 0.88, 0.50, 0.92)
     else
         frac = auraState and auraState.remainingFrac or 0.62
-        bar:SetVertexColor(0.08, 0.78, 1.00, 0.92)
     end
+    local r, g, b = AuraDurationBarColor()
+    bar:SetVertexColor(r, g, b, 0.92)
     frac = max(0.02, min(1, tonumber(frac) or 0.62))
     bar:ClearAllPoints()
     bar:SetHeight(height)

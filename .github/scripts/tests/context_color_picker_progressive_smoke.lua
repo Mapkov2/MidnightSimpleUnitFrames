@@ -33,8 +33,10 @@ Has('local frame = CreateFrame("Slider", nil, parent)', "opacity control is not 
 Has("frame:SetMinMaxValues(0, 1)", "opacity slider range is not normalized")
 Has('opacity:SetScript("OnValueChanged"', "opacity slider is not wired to live changes")
 Has("function panel:ApplyOpacity(alpha)", "picker has no alpha-channel apply path")
-Has("self.originals[owner] = { r, g, b, OwnerOpacity(owner) }",
-    "cancel state does not retain the original alpha channel")
+Has("self.originals[owner] = { r, g, b, OwnerOpacity(owner), OwnerState(owner) }",
+    "cancel state does not retain alpha and structural override state")
+Has('value[5] ~= nil and type(owner._msuf2RestoreColorState) == "function"',
+    "cancel does not restore structural color override state")
 assert(not source:find("MSUF color settings are fully opaque RGB colors.", 1, true),
     "picker still describes its opacity control as a non-functional RGB display")
 Has('Input(advancedCard, 40, true)', "RGB precision fields must live in Advanced")

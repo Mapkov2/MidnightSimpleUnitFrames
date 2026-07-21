@@ -16,7 +16,7 @@ local max = math.max
 local min = math.min
 local SHADOW_OPACITY_APPLY_DELAY = 0.18
 local UNIT_SCOPE_KEYS = GP.UNIT_SCOPE_KEYS or {}
-local DB, G, Unit, NormalizeScopeKey, ScopeDBKeys, ScopeHasOverride, ScopeSetOverride, ScopeWrite, CurrentFontScope, IsGFScope, FontScopeGet, FontScopeSet, NormalizeFontKey, FontValues, FontKeyGet, FontKeySet, SetControlEnabled, SetControlsEnabled, ApplyFonts, ControlMeta, RegisterControl = M.Pick(GP, [[DB G Unit NormalizeScopeKey ScopeDBKeys ScopeHasOverride ScopeSetOverride ScopeWrite CurrentFontScope IsGFScope FontScopeGet FontScopeSet NormalizeFontKey FontValues FontKeyGet FontKeySet SetControlEnabled SetControlsEnabled ApplyFonts ControlMeta RegisterControl]])
+local DB, G, Unit, NormalizeScopeKey, ScopeDBKeys, ScopeHasOverride, ScopeSetOverride, ScopeWrite, CurrentFontScope, IsGFScope, FontScopeGet, FontScopeSet, FontOutlineGetFor, FontOutlineSetFor, FontShadowMetricsFor, FontTextColorModeGetFor, FontTextColorModeSetFor, NormalizeFontKey, FontValues, FontKeyGet, FontKeySet, SetControlEnabled, SetControlsEnabled, ApplyFonts, ControlMeta, RegisterControl = M.Pick(GP, [[DB G Unit NormalizeScopeKey ScopeDBKeys ScopeHasOverride ScopeSetOverride ScopeWrite CurrentFontScope IsGFScope FontScopeGet FontScopeSet FontOutlineGetFor FontOutlineSetFor FontShadowMetricsFor FontTextColorModeGetFor FontTextColorModeSetFor NormalizeFontKey FontValues FontKeyGet FontKeySet SetControlEnabled SetControlsEnabled ApplyFonts ControlMeta RegisterControl]])
 local FONT_DYNAMIC_SETTING_KEYS_BY_PATH = {
     ["name_shortening.enabled"] = { "gf_party.nameShortenEnabled", "gf_raid.nameShortenEnabled" },
     ["name_shortening.style"] = { "gf_party.nameClipSide", "gf_raid.nameClipSide" },
@@ -69,8 +69,7 @@ local function RGB(r, g, b, a)
     return { r or 1, g or 1, b or 1, a or 1 }
 end
 local function ShadowMetrics()
-    return _G.MSUF_ResolveFontShadowMetrics(FontScopeGet("fontShadowOpacity", nil),
-        FontScopeGet("fontShadowDistance", nil), FontScopeGet("fontShadowStrength", nil))
+    return FontShadowMetricsFor(CurrentFontScope())
 end
 local function NormalizeShadowOpacity(value)
     local alpha = _G.MSUF_ResolveFontShadowMetrics(value, 1)
@@ -124,7 +123,14 @@ local function ComposeFontFlags(outline, monochrome)
     if monochrome == true then flags = flags ~= "" and (flags .. ",MONOCHROME") or "MONOCHROME" end
     return flags
 end
-local function ConfiguredFontColorPreview()
+local function ConfiguredFontColorPreview(scope)
+    scope = NormalizeScopeKey(scope or CurrentFontScope())
+    local getFor = GP.FontScopeGetFor
+    if IsGFScope(scope) and FontOverrideGetFor(scope)
+        and type(getFor) == "function" and getFor(scope, "useGlobalFontColor", true) == false
+    then
+        return RGB(getFor(scope, "fontR", 1), getFor(scope, "fontG", 1), getFor(scope, "fontB", 1))
+    end
     local fn = _G.MSUF_GetConfiguredFontColor or (MSUF and MSUF.MSUF_GetConfiguredFontColor)
     if type(fn) == "function" then
         local r, g, b = fn()
@@ -197,32 +203,67 @@ end
 local function CurrentHealthGradientPreview()
     return RGB(1, 0.7, 0)
 end
-local function NameColorValues()
-    return {
-        { value = "DEFAULT", text = "Default (Font Color)", swatchColor = ConfiguredFontColorPreview },
+local function GroupCustomNameColorPreview(scope)
+    scope = NormalizeScopeKey(scope or CurrentFontScope())
+    local getFor = GP.FontScopeGetFor
+    if type(getFor) == "function" then
+        return RGB(getFor(scope, "nameColorR", 1), getFor(scope, "nameColorG", 1), getFor(scope, "nameColorB", 1))
+    end
+    return RGB(FontScopeGet("nameColorR", 1), FontScopeGet("nameColorG", 1), FontScopeGet("nameColorB", 1))
+end
+local function NameColorValues(scope)
+    scope = NormalizeScopeKey(scope or CurrentFontScope())
+    local values = {
+        { value = "DEFAULT", text = "Default (Font Color)", swatchColor = function() return ConfiguredFontColorPreview(scope) end },
         { value = "CLASS", text = "Class Color", swatchColor = PlayerClassColorPreview },
     }
+    if IsGFScope(scope) then
+        values[#values + 1] = {
+            value = "CUSTOM",
+            text = "Custom Color",
+            swatchColor = function() return GroupCustomNameColorPreview(scope) end,
+        }
+    end
+    return values
 end
-local function NPCColorValues()
+local function NPCColorValues(scope)
+    scope = NormalizeScopeKey(scope or CurrentFontScope())
     return {
-        { value = "DEFAULT", text = "Default (Font Color)", swatchColor = ConfiguredFontColorPreview },
+        { value = "DEFAULT", text = "Default (Font Color)", swatchColor = function() return ConfiguredFontColorPreview(scope) end },
         { value = "NPC", text = "NPC / Reaction Color", swatchColor = NPCReactionColorPreview },
         { value = "CLASS", text = "Class Color (Reaction fallback)", swatchColor = PlayerClassColorPreview },
     }
 end
-local function HealthColorValues()
+local function HealthColorValues(scope)
+    scope = NormalizeScopeKey(scope or CurrentFontScope())
     return {
-        { value = "DEFAULT", text = "Default (Font Color)", swatchColor = ConfiguredFontColorPreview },
+        { value = "DEFAULT", text = "Default (Font Color)", swatchColor = function() return ConfiguredFontColorPreview(scope) end },
         { value = "CLASS", text = "Class Color", swatchColor = PlayerClassColorPreview },
         { value = "HEALTH", text = "Health Gradient", swatchColor = CurrentHealthGradientPreview },
     }
 end
-local function PowerColorValues()
+local function PowerColorValues(scope)
+    scope = NormalizeScopeKey(scope or CurrentFontScope())
     return {
-        { value = "DEFAULT", text = "Default (Font Color)", swatchColor = ConfiguredFontColorPreview },
+        { value = "DEFAULT", text = "Default (Font Color)", swatchColor = function() return ConfiguredFontColorPreview(scope) end },
         { value = "RESOURCE", text = "By Power Type", swatchColor = CurrentPowerColorPreview },
     }
 end
+local function FontTextColorValuesFor(scope, kind)
+    scope = NormalizeScopeKey(scope or CurrentFontScope())
+    kind = tostring(kind or "name"):lower():gsub("[%s%-]+", "_")
+    if kind == "npc" or kind == "npc_name" or kind == "boss" or kind == "boss_name" then
+        return NPCColorValues(scope)
+    elseif kind == "hp" or kind == "health" or kind == "health_text" then
+        return HealthColorValues(scope)
+    elseif kind == "power" or kind == "resource" or kind == "power_text" then
+        return PowerColorValues(scope)
+    end
+    return NameColorValues(scope)
+end
+-- Shared UI source for the Fonts page and the contextual Text popup. Keeping
+-- the value factories here also keeps their live swatch previews identical.
+GP.FontTextColorValuesFor = FontTextColorValuesFor
 local function PreviewFontKey()
     local key = FontKeyGet()
     if key == nil or key == "" then key = NormalizeFontKey(G().fontKey or "FRIZQT") end
@@ -230,15 +271,7 @@ local function PreviewFontKey()
 end
 local function PreviewFontFlags()
     local monochrome = FontScopeGet("fontMonochrome", false) == true
-    if IsGFScope(CurrentFontScope()) then
-        local v = FontScopeGet("fontOutline", "OUTLINE")
-        if v == "" then v = "NONE" end
-        return ComposeFontFlags(v, monochrome)
-    end
-    local outline = "OUTLINE"
-    if FontScopeGet("noOutline", false) then outline = "NONE"
-    elseif FontScopeGet("boldText", false) then outline = "THICKOUTLINE" end
-    return ComposeFontFlags(outline, monochrome)
+    return ComposeFontFlags(FontOutlineGetFor(CurrentFontScope()), monochrome)
 end
 local function ApplyPreviewFont(fs)
     if not (fs and fs.SetFont) then return end
@@ -340,31 +373,6 @@ end
 local function SetFontAndApply(key, value, reason, sourceKey)
     FontScopeSet(key, value, reason, sourceKey)
     ApplyFonts(reason)
-end
-local function OpenGlobalFontColor()
-    if W.CloseDropdown then W.CloseDropdown() end
-    local request = {
-        pageKey = "opt_colors",
-        sectionId = "colors_font",
-        explicit = true,
-        consumed = false,
-        source = "fonts-global-font-color",
-        changedAt = GetTime and GetTime() or 0,
-    }
-    _G.MSUF_EM2_MenuFocusRequest = request
-    if type(M.SelectPage) ~= "function" or M.SelectPage("opt_colors") == false then
-        if _G.MSUF_EM2_MenuFocusRequest == request then _G.MSUF_EM2_MenuFocusRequest = nil end
-        return false
-    end
-    local function FinishFocus()
-        if M.activeKey ~= "opt_colors" then return end
-        if request.consumed ~= true and type(M.FocusRequestedSection) == "function" then
-            M.FocusRequestedSection("opt_colors", { flash = true })
-        end
-    end
-    FinishFocus()
-    if C_Timer and C_Timer.After then C_Timer.After(0, FinishFocus) end
-    return true
 end
 local function BuildFonts(ctx)
     local b = W.PageBuilder(ctx)
@@ -494,24 +502,9 @@ local function BuildFonts(ctx)
     end
     local outline = W.Segment(text, "Outline", VT("OUTLINE", "Outline", "THICKOUTLINE", "Thick Outline", "NONE", "None"), 420)
     M.BindSegment(ctx, outline,
-        function()
-            if IsGFScope(CurrentFontScope()) then
-                local v = FontScopeGet("fontOutline", "OUTLINE")
-                if v == "" then return "OUTLINE" end
-                return v or "OUTLINE"
-            end
-            if FontScopeGet("noOutline", false) then return "NONE" end
-            if FontScopeGet("boldText", false) then return "THICKOUTLINE" end
-            return "OUTLINE"
-        end,
+        function() return FontOutlineGetFor(CurrentFontScope()) end,
         function(v)
-            if IsGFScope(CurrentFontScope()) then
-                SetFontAndApply("fontOutline", v or "OUTLINE", "MSUF2_GF_FONT_OUTLINE")
-                RefreshFontPreview()
-                return
-            end
-            FontScopeSet("boldText", v == "THICKOUTLINE", "MSUF2_FONT_OUTLINE")
-            SetFontAndApply("noOutline", v == "NONE", "MSUF2_FONT_OUTLINE")
+            FontOutlineSetFor(CurrentFontScope(), v)
             RefreshFontPreview()
         end,
         Meta("text_style.outline"))
@@ -601,12 +594,12 @@ local function BuildFonts(ctx)
         M.BindDropdownWidget(ctx, control, getValue, setValue, Meta(path))
         return control
     end
-    local function BindFontModeDropdown(parent, label, values, key, activeValue, reason)
+    local function BindFontColorModeDropdown(parent, label, values, kind, path)
         return BindFontDropdown(parent, label, values,
-            function() return FontScopeGet(key, false) and activeValue or "DEFAULT" end,
-            function(v) SetFontAndApply(key, v == activeValue, reason) end,
+            function() return FontTextColorModeGetFor(CurrentFontScope(), kind) end,
+            function(v) FontTextColorModeSetFor(CurrentFontScope(), kind, v) end,
             nil,
-            "colors." .. key)
+            path)
     end
     local function BuildNameShorteningControls(parent, label, minChars, noticeFallbackY, getEnabled, setEnabled, getSide, setSide, getChars, setChars, getNoEllipsis, setNoEllipsis, formatChars)
         local controls = {}
@@ -627,52 +620,18 @@ local function BuildFonts(ctx)
         return controls
     end
     local colors = b:CollapsibleSection("fonts_name_power_colors", "Text Colors", 280, true)
-    local nameColor = BindFontDropdown(colors, "Player Name Color", NameColorValues,
-        function()
-            if IsGFScope(CurrentFontScope()) then return FontScopeGet("nameColorMode", "DEFAULT") == "CLASS" and "CLASS" or "DEFAULT" end
-            return FontScopeGet("nameClassColor", false) and "CLASS" or "DEFAULT"
-        end,
-        function(v)
-            if IsGFScope(CurrentFontScope()) then
-                SetFontAndApply("nameColorMode", v == "CLASS" and "CLASS" or "DEFAULT", "MSUF2_GF_NAME_COLOR")
-                return
-            end
-            SetFontAndApply("nameClassColor", v == "CLASS", "MSUF2_NAME_CLASS_COLOR")
-        end,
-        nil,
-        "colors.player_name")
-    local npcColor = BindFontDropdown(colors, "NPC / Boss Name Color", NPCColorValues,
-        function()
-            if FontScopeGet("nameNpcClassColor", false) then return "CLASS" end
-            return FontScopeGet("npcNameRed", false) and "NPC" or "DEFAULT"
-        end,
-        function(v)
-            SetFontAndApply("nameNpcClassColor", v == "CLASS", "MSUF2_NPC_CLASS_COLOR")
-            SetFontAndApply("npcNameRed", v == "NPC", "MSUF2_NPC_RED")
-        end,
-        nil,
-        "colors.npc_name")
-    local healthColor = BindFontDropdown(colors, "HP Text Color", HealthColorValues,
-        function()
-            local value = FontScopeGet("colorHealthTextByHealth", false)
-            if value == "CLASS" then return "CLASS" end
-            return (value == true or value == "HEALTH") and "HEALTH" or "DEFAULT"
-        end,
-        function(v)
-            local value = v == "CLASS" and "CLASS" or (v == "HEALTH")
-            SetFontAndApply("colorHealthTextByHealth", value, "MSUF2_HP_TEXT_COLOR")
-        end,
-        nil,
-        "colors.colorHealthTextByHealth")
-    local powerColor = BindFontModeDropdown(colors, "Power Text Color", PowerColorValues, "colorPowerTextByType", "RESOURCE", "MSUF2_POWER_TEXT_COLOR")
-    local globalFontColor = T.Button(colors, "Global font color", 170, 22)
-    globalFontColor:SetPoint("TOPRIGHT", colors, "TOPRIGHT", -16, -16)
-    if T.CenterButtonLabel then T.CenterButtonLabel(globalFontColor) end
-    if M.AddTooltip then
-        M.AddTooltip(globalFontColor, "Global font color", "Open Colors > Global Font Color to choose the default color used by font settings.", { hook = true })
+    local nameColor = BindFontColorModeDropdown(colors, "Player Name Color", NameColorValues, "name", "colors.player_name")
+    local npcColor = BindFontColorModeDropdown(colors, "NPC / Boss Name Color", NPCColorValues, "npc", "colors.npc_name")
+    local healthColor = BindFontColorModeDropdown(colors, "HP Text Color", HealthColorValues, "hp", "colors.colorHealthTextByHealth")
+    local powerColor = BindFontColorModeDropdown(colors, "Power Text Color", PowerColorValues, "power", "colors.colorPowerTextByType")
+    if W.AttachContextColorReferences then
+        W.AttachContextColorReferences(colors, { "font.default.current" }, {
+            title = "Default Font Color",
+            note = "Uses this Fonts scope's effective Default font color.",
+            historySource = "menu:fonts-global-font-color",
+            context = function() return { scope = CurrentFontScope() } end,
+        })
     end
-    globalFontColor:SetScript("OnClick", OpenGlobalFontColor)
-    RegisterControl(globalFontColor, Meta("colors.global_font", "navigation", { navigationKey = "opt_colors" }), "Global font color", "button")
     local scopedFontControls = { outline, sharp, shadow, shadowOpacity, shadowDistance, opacity, baseline, nameColor, healthColor }
     RefreshScopedFontControls = RefreshScopedFontControls(function()
         local scopeKey = CurrentFontScope()

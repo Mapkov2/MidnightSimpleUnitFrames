@@ -557,6 +557,7 @@ local function ScopeSection(ctx, builder, opts)
     local function SelectScope(kind)
         local previousScope = M.gfScope
         M.SetMenuStateValue("gfScope", kind or "party")
+        if previousScope ~= M.gfScope and W.CloseTextQuickSettings then W.CloseTextQuickSettings() end
         if previousScope ~= M.gfScope and M.ShowStatusFeedback then M.ShowStatusFeedback(ScopeShortLabel(M.gfScope) .. " scope", "info", 1.1) end
         local gf = GF()
         if type(_G.MSUF_GF_EM2_SetActivePreviewKind) == "function" then _G.MSUF_GF_EM2_SetActivePreviewKind(M.gfScope) end
