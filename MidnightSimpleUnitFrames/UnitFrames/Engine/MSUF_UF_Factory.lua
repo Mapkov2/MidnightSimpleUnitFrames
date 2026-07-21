@@ -612,6 +612,13 @@ function Factory.SpawnAll(applyMask)
   if InCombat() then return DeferApply(nil) end
   local config = ResolveConfig(true)
   if not config then return false end
+  -- Config.Refresh() above resolves the active profile. Highlight.lua loads
+  -- earlier and may still hold the pre-profile SavedVariables snapshot after
+  -- /reload, so seed its cold cache from the now-authoritative DB before any
+  -- frame can receive mouseover hooks.
+  if Highlight and type(Highlight.Refresh) == "function" then
+    Highlight.Refresh()
+  end
   if UF.DisableBlizzardFrames then UF.DisableBlizzardFrames() end
   for i = 1, #UF.unitOrder do
     ApplyOne(UF.unitOrder[i], config, applyMask)
