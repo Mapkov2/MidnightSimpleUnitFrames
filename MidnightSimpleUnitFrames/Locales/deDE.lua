@@ -3978,3 +3978,73 @@ L["The MSUF menu can now follow your class color, a curated preset like Ember, J
 L["The whole menu re-tints to your accent - surfaces, navigation and controls - applied after a UI reload."] = "Das gesamte Menü färbt sich in deinen Akzent - Flächen, Navigation und Controls - angewendet nach einem UI-Reload."
 L["class-color, preset and custom accent options for the MSUF menu"] = "Klassenfarben-, Preset- und eigene Akzent-Optionen für das MSUF-Menü"
 L["Pick a menu accent"] = "Wähle einen Menü-Akzent"
+
+-- Colors page redesign: mode cards, modified badges, click-to-paint preview.
+L["Class Colors"] = "Klassenfarben"
+L["Unified"] = "Einheitlich"
+L["Gradient"] = "Verlauf"
+L["Dark, neutral bars for every frame."] = "Dunkle, neutrale Balken für alle Frames."
+L["Health bars use Blizzard class colors."] = "Lebensbalken nutzen Blizzards Klassenfarben."
+L["One custom color for all health bars."] = "Eine eigene Farbe für alle Lebensbalken."
+L["Bar color follows health percent (low / mid / high)."] = "Balkenfarbe folgt dem Lebens-Prozentwert (Niedrig / Mittel / Hoch)."
+L["modified"] = "geändert"
+L["Right-click resets this color to its default."] = "Rechtsklick setzt diese Farbe auf den Standard zurück."
+L["Shared with group frames"] = "Gilt auch für Gruppenframes"
+L["Click to edit these colors. Right-click opens the matching section below."] = "Klicken, um diese Farben zu bearbeiten. Rechtsklick öffnet unten die passende Sektion."
+L["Click an element in the preview to edit its colors. Right-click a color swatch to reset it to default."] = "Klicke ein Element in der Vorschau an, um seine Farben zu bearbeiten. Rechtsklick auf ein Farbfeld setzt es auf den Standard zurück."
+L["Brush armed: click a preview element to paint it. Right-click the swatch to disarm."] = "Pinsel aktiv: Klicke ein Vorschau-Element an, um es einzufärben. Rechtsklick auf das Farbfeld deaktiviert den Pinsel."
+L["My colors"] = "Meine Farben"
+L["Palette color"] = "Palettenfarbe"
+L["Click to arm this color as a brush, then click a preview element to paint it."] = "Klicken, um diese Farbe als Pinsel zu aktivieren, dann ein Vorschau-Element anklicken, um es einzufärben."
+L["Save or pick colors in the color picker to reuse them here."] = "Speichere oder wähle Farben im Farbwähler, um sie hier wiederzuverwenden."
+L["Painted:"] = "Eingefärbt:"
+
+-- Mouseover-Highlight-Einstellungen.
+L["Soft gradient"] = "Weicher Verlauf"
+L["Solid border"] = "Fester Rahmen"
+L["Effect size"] = "Effektgröße"
+L["Soft gradient gives the whole frame a clear, portrait-safe hover cue. Solid border keeps a crisp edge. Choose its color in Global Style > Colors > Unit Frames."] = "Der weiche Verlauf hebt den ganzen Frame klar und portraitsicher hervor. Der feste Rahmen zeigt eine scharfe Kante. Die Farbe findest du unter Globaler Stil > Farben > Unitframes."
+L["Highlight Colors"] = "Highlight-Farben"
+L["Mouseover highlight color"] = "Mouseover-Highlight-Farbe"
+L["Boss target highlight color"] = "Bossziel-Highlight-Farbe"
+L["%d px"] = "%d px"
+L["Language, menu behavior, mouseover highlights, tooltips and Blizzard frames."] = "Sprache, Menüverhalten, Mouseover-Highlights, Tooltips und Blizzard-Frames."
+
+-- Colors page: painter tab labels and category descriptions.
+L["Player & Target"] = "Spieler & Ziel"
+L["Player & Target Frames"] = "Spieler- & Ziel-Frames"
+L["Party & Raid"] = "Gruppe & Schlachtzug"
+L["Party & Raid Frames"] = "Gruppen- & Schlachtzugs-Frames"
+L["Power & Class Resources"] = "Ressourcen & Klassenressourcen"
+L["Bars, text, portraits, NPC colors and combat feedback for unit frames."] = "Balken, Texte, Porträts, NPC-Farben und Kampf-Feedback der Einheitenfenster."
+L["Power bar colors and Class Resource colors (combo points, holy power, ...)."] = "Ressourcenbalken-Farben und Klassenressourcen-Farben (Combopunkte, Heilige Kraft, ...)."
+
+L["The preview follows the Power type and Resource type selection below."] = "Die Vorschau folgt der Auswahl von Ressourcentyp und Klassenressource unten."
+
+-- Color painter: surface-specific preview controls help.
+L["Click a colored element to edit exactly its colors."] = "Klicke ein farbiges Element an, um genau seine Farben zu bearbeiten."
+L["Right-click an element to open its section below."] = "Rechtsklick auf ein Element öffnet unten seine Sektion."
+L["Ctrl + mouse wheel zooms. Ctrl + drag pans. Fit recenters."] = "Strg + Mausrad zoomt. Strg + Ziehen verschiebt. Fit zentriert neu."
+L["Right-click any color swatch below to reset it to default."] = "Rechtsklick auf ein Farbfeld unten setzt es auf den Standard zurück."
+L["Layout editing lives on the Player/Target and Party/Raid pages."] = "Layout-Bearbeitung findet auf den Spieler/Ziel- und Gruppen/Schlachtzug-Seiten statt."
+
+-- Colors page: shared text-color mode dropdowns (mirrored from Fonts > Text Colors).
+L["Player Name Color"] = "Namensfarbe - Spielercharaktere"
+L["NPC / Boss Name Color"] = "Namensfarbe - NPCs & Bosse"
+L["HP Text Color"] = "HP-Text-Farbe"
+L["Power Text Color"] = "Ressourcentext-Farbe"
+L["NPC / Reaction Color"] = "NPC-/Reaktionsfarbe"
+L["By Power Type"] = "Nach Ressourcentyp"
+L["Use font palette"] = "Schriftpalette verwenden"
+L["Shared defaults for all frames. Per-frame and group overrides live in Fonts > Text Colors."] = "Geteilte Standards für alle Frames. Overrides pro Frame und für Gruppen liegen in Fonts > Text Colors."
+
+-- Colors page: text-mode dropdown tooltips and preview text-target hint.
+L["Name color for player characters on ALL frames - target, focus, party and raid included. NPC names use the setting next to this one."] = "Namensfarbe für Spielercharaktere auf ALLEN Frames - inklusive Ziel, Fokus, Gruppe und Schlachtzug. NPC-Namen nutzen die Einstellung daneben."
+L["Name color for NPCs and bosses on all frames that follow the shared text settings."] = "Namensfarbe für NPCs und Bosse auf allen Frames, die den geteilten Text-Einstellungen folgen."
+L["HP text color mode for all frames that follow the shared text settings."] = "HP-Text-Farbmodus für alle Frames, die den geteilten Text-Einstellungen folgen."
+L["Power text color mode for all frames that follow the shared text settings."] = "Ressourcentext-Farbmodus für alle Frames, die den geteilten Text-Einstellungen folgen."
+L["Opens the shared Text Colors settings below - color modes for name, HP and power text."] = "Öffnet unten die geteilten Text Colors-Einstellungen - Farbmodi für Namens-, HP- und Ressourcentext."
+
+-- Color painter: selector-dependent preview targets navigate to their section.
+L["Opens the Resources colors below - pick the power type there, then set its color."] = "Öffnet unten die Ressourcen-Farben - dort den Ressourcentyp wählen und seine Farbe festlegen."
+L["Opens the Resources colors below - pick the Class Resource there, then set its colors."] = "Öffnet unten die Ressourcen-Farben - dort die Klassenressource wählen und ihre Farben festlegen."

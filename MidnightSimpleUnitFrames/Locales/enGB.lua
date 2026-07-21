@@ -8,6 +8,17 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF or MSUF.LOCALE ~= "enGB" then return end
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("enGB")) or (MSUF.L or {})
 
+-- Mouseover highlight controls.
+L["Soft gradient"] = "Soft gradient"
+L["Solid border"] = "Solid border"
+L["Effect size"] = "Effect size"
+L["Soft gradient gives the whole frame a clear, portrait-safe hover cue. Solid border keeps a crisp edge. Choose its color in Global Style > Colors > Unit Frames."] = "Soft gradient gives the whole frame a clear, portrait-safe hover cue. Solid border keeps a crisp edge. Choose its colour in Global Style > Colours > Unit Frames."
+L["Highlight Colors"] = "Highlight Colours"
+L["Mouseover highlight color"] = "Mouseover highlight colour"
+L["Boss target highlight color"] = "Boss target highlight colour"
+L["%d px"] = "%d px"
+L["Language, menu behavior, mouseover highlights, tooltips and Blizzard frames."] = "Language, menu behaviour, mouseover highlights, tooltips and Blizzard frames."
+
 L["Force Blizzard frame on"] = "Force Blizzard frame on"
 L["Keeps Blizzard's native frame active independently of the MSUF frame. Leave MSUF Enable on to show both, or turn MSUF Enable off to use only Blizzard. A UI reload is required."] = "Keeps Blizzard's native frame active independently of the MSUF frame. Leave MSUF Enable on to show both, or turn MSUF Enable off to use only Blizzard. A UI reload is required."
 L["Shared name shortening affects all unit names and group frames unless a scope has custom font settings."] = "Shared name shortening affects all unit names and group frames unless a scope has custom font settings."

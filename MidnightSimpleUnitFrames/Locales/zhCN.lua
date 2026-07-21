@@ -14,6 +14,17 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF or MSUF.LOCALE ~= "zhCN" then return end
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("zhCN")) or (MSUF.L or {})
 
+-- 鼠标悬停高亮设置。
+L["Soft gradient"] = "柔和渐变"
+L["Solid border"] = "实线边框"
+L["Effect size"] = "效果大小"
+L["Soft gradient gives the whole frame a clear, portrait-safe hover cue. Solid border keeps a crisp edge. Choose its color in Global Style > Colors > Unit Frames."] = "柔和渐变会清晰高亮整个框体，并兼容头像；实线边框则保留清晰轮廓。可在全局样式 > 颜色 > 单位框体中选择颜色。"
+L["Highlight Colors"] = "高亮颜色"
+L["Mouseover highlight color"] = "鼠标悬停高亮颜色"
+L["Boss target highlight color"] = "首领目标高亮颜色"
+L["%d px"] = "%d 像素"
+L["Language, menu behavior, mouseover highlights, tooltips and Blizzard frames."] = "语言、菜单行为、鼠标悬停高亮、鼠标提示和暴雪框体。"
+
 L["Force Blizzard frame on"] = "强制启用暴雪框体"
 L["Keeps Blizzard's native frame active independently of the MSUF frame. Leave MSUF Enable on to show both, or turn MSUF Enable off to use only Blizzard. A UI reload is required."] = "使暴雪原生框体独立于 MSUF 框体保持启用。保持启用 MSUF 可同时显示两者，关闭启用 MSUF 则仅使用暴雪框体。需要重载界面。"
 L["Shared name shortening affects all unit names and group frames unless a scope has custom font settings."] = "共享名称缩短会影响所有单位名称和团队框体，除非某个范围使用自定义字体设置。"
