@@ -1061,7 +1061,10 @@ local function ApplyToUnitFrame(f)
 
   MaskGradientTable(f, f.hpGradients, f.hpBar)
 
-  MaskStatusBars(f, false, f.absorbBar, f.healAbsorbBar)
+  if f.tempMaxHealthBackground then
+    MaskTexture(f, f.tempMaxHealthBackground, f.tempMaxHealthBar or f.hpBar)
+  end
+  MaskStatusBars(f, false, f.tempMaxHealthBar, f.absorbBar, f.healAbsorbBar)
   MaskOverlayList(f, f._msufUFDispelOverlays or f._msufUFDispelOverlay)
   MaskStatusBarFill(f, f.incomingHealBar or f.selfHealPredBar)
   if f.selfHealPredBar ~= f.incomingHealBar then
@@ -1151,7 +1154,10 @@ ApplyToGroupFrame = function(f, kind)
 
   MaskStatusBarFill(f, f.health, true)
   if roundPower then MaskStatusBarFill(f, f.power, true) end
-  MaskStatusBars(f, true, f.incomingHealBar, f.absorbBar, f.healAbsorbBar)
+  if f.tempMaxHealthBackground then
+    MaskGroupTexture(f, f.tempMaxHealthBackground, f.tempMaxHealthBar or f.health)
+  end
+  MaskStatusBars(f, true, f.tempMaxHealthBar, f.incomingHealBar, f.absorbBar, f.healAbsorbBar)
   MaskOverlayList(f, f._msufGFDispelOverlays or f._msufGFDispelOverlay, true)
   MaskStatusBarFill(f, f._msufGFDebuffStripe, true)
 

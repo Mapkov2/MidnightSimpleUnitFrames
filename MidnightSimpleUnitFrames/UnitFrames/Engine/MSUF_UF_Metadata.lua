@@ -114,7 +114,7 @@ Metadata.runtimeUpdateOwners = BuildNameSet(
   "Health Power Text NameText HealthText PowerText InlineToT Portrait Alpha " ..
   "StatusIndicators RaidMarkerIndicator LeaderIndicator LevelIndicator " ..
   "RaidGroupIndicator EliteIndicator StatusTextIndicator CombatIndicator " ..
-  "RestingIndicator IncomingResIndicator PVPIndicator Prediction Borders " ..
+  "RestingIndicator IncomingResIndicator PVPIndicator TempMaxHealth Prediction Borders " ..
   "LoadConditions GroupStatusRuntime RangeFade GroupRangeFade GroupVisuals " ..
   "GroupCornerIndicators")
 
@@ -125,22 +125,23 @@ local MASK_BORDERS = { borders = true }
 local MASK_BAR_OUTLINE = { power = true, borders = true }
 local MASK_DISPEL_VISUAL = { borders = true, auras = true }
 local MASK_PREDICTION = { prediction = true }
+local MASK_TEMP_MAX_HEALTH = { tempMaxHealth = true }
 local MASK_FONT_RUNTIME = BuildNameSet("health power name")
 local MASK_TEXT_STATUS_RUNTIME = BuildNameSet("health power name status")
 local MASK_DISABLED = {}
 local MASK_CASTBAR_SYNC = BuildNameSet("health power name portrait status borders")
 local MASK_BARS_BORDERS = BuildNameSet("health power borders")
-local MASK_COLOR_CHANGE = BuildNameSet("health power name inline portrait status prediction borders")
-local MASK_UNIT_IDENTITY = BuildNameSet("load health power name inline portrait status prediction alpha borders")
+local MASK_COLOR_CHANGE = BuildNameSet("health power name inline portrait status tempMaxHealth prediction borders")
+local MASK_UNIT_IDENTITY = BuildNameSet("load health power name inline portrait status tempMaxHealth prediction alpha borders")
 local MASK_UNIT_IDENTITY_FAST = BuildNameSet("load health power name")
-local MASK_UNIT_IDENTITY_VISUAL = BuildNameSet("inline portrait status prediction alpha borders")
+local MASK_UNIT_IDENTITY_VISUAL = BuildNameSet("inline portrait status tempMaxHealth prediction alpha borders")
 local MASK_UNIT_IDENTITY_AURAS = { auras = true }
-local MASK_UNIT_IDENTITY_SOFT = BuildNameSet("load health power name inline portrait status prediction")
+local MASK_UNIT_IDENTITY_SOFT = BuildNameSet("load health power name inline portrait status tempMaxHealth prediction")
 local MASK_UNIT_IDENTITY_SOFT_FAST = MASK_UNIT_IDENTITY_FAST
-local MASK_UNIT_IDENTITY_SOFT_VISUAL = BuildNameSet("inline portrait status prediction")
+local MASK_UNIT_IDENTITY_SOFT_VISUAL = BuildNameSet("inline portrait status tempMaxHealth prediction")
 local MASK_UNIT_IDENTITY_SOFT_AURAS = { auras = true }
-local MASK_GROUP_UNIT_IDENTITY = BuildNameSet("load health power name groupStatus prediction groupVisuals groupRange borders")
-local MASK_GROUP_UNIT_STRUCTURE = BuildNameSet("load health power name groupStatus prediction groupVisuals groupRange borders auras")
+local MASK_GROUP_UNIT_IDENTITY = BuildNameSet("load health power name groupStatus tempMaxHealth prediction groupVisuals groupRange borders")
+local MASK_GROUP_UNIT_STRUCTURE = BuildNameSet("load health power name groupStatus tempMaxHealth prediction groupVisuals groupRange borders auras")
 
 -- StatusIndicators owns region creation/layout, while the per-indicator elements
 -- own initial state, event routing, and their cached status spec.  They therefore
@@ -178,6 +179,10 @@ AddRuntimeReasonMasks(runtimeReasonMasks, MASK_BARS_BORDERS,
   "MSUF2_GRADIENT MSUF2_HP_GRADIENT MSUF2_POWER_GRADIENT " ..
   "MSUF2_GRADIENT_STRENGTH MSUF2_GRADIENT_DIRECTION")
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_COLOR_CHANGE, "MSUF_COLOR_CHANGE")
+AddRuntimeReasonMasks(runtimeReasonMasks, MASK_TEMP_MAX_HEALTH,
+  "MSUF2_TEMP_MAX_HEALTH MSUF2_TEMP_MAX_HEALTH_ENABLED MSUF2_TEMP_MAX_HEALTH_TEXTURE " ..
+  "MSUF2_TEMP_MAX_HEALTH_COLOR MSUF2_TEMP_MAX_HEALTH_OPACITY " ..
+  "MSUF2_TEMP_MAX_HEALTH_BACKGROUND MSUF2_TEMP_MAX_HEALTH_TEST")
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_PREDICTION,
   "MSUF2_ABSORB_MODE MSUF2_ABSORB MSUF2_ABSORB_ANCHOR MSUF2_ABSORB_OPACITY " ..
   "MSUF2_ABSORB_TEXTURE MSUF2_ABSORB_TEST MSUF2_ABSORB_TEST_CLEAR " ..
@@ -196,30 +201,30 @@ AddRuntimeReasonMasks(runtimeReasonMasks, MASK_HEALTH, "MSUF_REVERSE_FILL")
 Metadata.runtimeReasonMasks = runtimeReasonMasks
 
 Metadata.defaultApplyMask = BuildNameSet(
-  "Health Power Text NameText HealthText PowerText Portrait " .. STATUS_APPLY_ELEMENTS .. " Prediction " ..
+  "Health Power Text NameText HealthText PowerText Portrait " .. STATUS_APPLY_ELEMENTS .. " TempMaxHealth Prediction " ..
   "Borders LoadConditions Alpha RangeFade Auras Castbars ClassPower")
 
 -- ApplyService owns cross-module followers explicitly. Its frame apply uses this
 -- mask so Auras/Castbars/ClassPower are not queued a second time by bridge
 -- elements. Direct Factory/Profile applies keep defaultApplyMask above.
 Metadata.coordinatedApplyMask = BuildNameSet(
-  "Health Power Text NameText HealthText PowerText Portrait " .. STATUS_APPLY_ELEMENTS .. " Prediction " ..
+  "Health Power Text NameText HealthText PowerText Portrait " .. STATUS_APPLY_ELEMENTS .. " TempMaxHealth Prediction " ..
   "Borders LoadConditions Alpha RangeFade")
 
 Metadata.refreshElementGroups = {
   healthTextBorder = BuildNameList("Health Text NameText HealthText InlineToT Borders"),
   visuals = BuildNameList(
     "Health Power Text NameText HealthText PowerText InlineToT Portrait " ..
-    "StatusIndicators RaidMarkerIndicator LeaderIndicator Prediction LevelIndicator " ..
+    "StatusIndicators RaidMarkerIndicator LeaderIndicator TempMaxHealth Prediction LevelIndicator " ..
     "RaidGroupIndicator EliteIndicator StatusTextIndicator CombatIndicator RestingIndicator " ..
     "IncomingResIndicator PVPIndicator Alpha Borders RangeFade Auras"),
   powerText = BuildNameList("Power Text PowerText"),
   colors = BuildNameList(
     "Health Power Text NameText HealthText PowerText InlineToT Portrait " ..
     "StatusIndicators LevelIndicator EliteIndicator StatusTextIndicator CombatIndicator " ..
-    "RestingIndicator IncomingResIndicator PVPIndicator Prediction Borders"),
+    "RestingIndicator IncomingResIndicator PVPIndicator TempMaxHealth Prediction Borders"),
   text = BuildNameList("Text NameText HealthText PowerText InlineToT"),
   borders = BuildNameList("Borders Power"),
-  reverseFill = BuildNameList("Health Power Prediction"),
+  reverseFill = BuildNameList("Health Power TempMaxHealth Prediction"),
   alpha = BuildNameList("Alpha RangeFade"),
 }

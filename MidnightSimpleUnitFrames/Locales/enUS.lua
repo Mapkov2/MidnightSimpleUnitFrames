@@ -2435,3 +2435,10 @@ L["colors_appearance"] = "colors_appearance"
 L["colors_bar_colors"] = "colors_bar_colors"
 L["group"] = "group"
 L["unit"] = "unit"
+
+-- Bars: temporary maximum-health reduction overlay.
+L["Maximum Health Loss"] = "Maximum Health Loss"
+L["Shows the part of maximum health that is temporarily unavailable."] = "Shows the part of maximum health that is temporarily unavailable."
+L["Show maximum-health loss"] = "Show maximum-health loss"
+L["Loss color"] = "Loss color"
+L["Preview effect"] = "Preview effect"

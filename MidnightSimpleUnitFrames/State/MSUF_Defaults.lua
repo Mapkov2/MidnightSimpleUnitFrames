@@ -753,6 +753,13 @@ local function MSUF_Defaults_GetMenuFontDefault()
 end
 
 local MSUF_DEFAULT_PREDICTION_BAR_VALUES = {
+    tempMaxHealthEnabled = false,
+    tempMaxHealthTexture = "Solid",
+    tempMaxHealthColorR = 0.70,
+    tempMaxHealthColorG = 0.10,
+    tempMaxHealthColorB = 0.10,
+    tempMaxHealthOpacity = 1,
+    tempMaxHealthBackgroundOpacity = 0.65,
     healPredEnabled = true,
     healPredictionBarHeight = 0,
     healPredictionBarOffsetY = 0,
@@ -2419,6 +2426,13 @@ end
     --- request to follow the foreground texture outside the factory profile.
     if g.absorbBarOpacity == nil then g.absorbBarOpacity = 1 end
     if g.healAbsorbBarOpacity == nil then g.healAbsorbBarOpacity = 1 end
+    if g.tempMaxHealthEnabled == nil then g.tempMaxHealthEnabled = false end
+    if type(g.tempMaxHealthTexture) ~= "string" then g.tempMaxHealthTexture = "Solid" end
+    if g.tempMaxHealthColorR == nil then g.tempMaxHealthColorR = 0.70 end
+    if g.tempMaxHealthColorG == nil then g.tempMaxHealthColorG = 0.10 end
+    if g.tempMaxHealthColorB == nil then g.tempMaxHealthColorB = 0.10 end
+    if g.tempMaxHealthOpacity == nil then g.tempMaxHealthOpacity = 1 end
+    if g.tempMaxHealthBackgroundOpacity == nil then g.tempMaxHealthBackgroundOpacity = 0.65 end
     if g.absorbBarTexture ~= nil and type(g.absorbBarTexture) ~= "string" then
         g.absorbBarTexture = nil
     end
@@ -2458,6 +2472,9 @@ end
     end
     if g.healAbsorbBarTexture ~= nil and not _MSUF_IsValidStatusbarKey(g.healAbsorbBarTexture) then
         g.healAbsorbBarTexture = nil
+    end
+    if g.tempMaxHealthTexture ~= nil and not _MSUF_IsValidStatusbarKey(g.tempMaxHealthTexture) then
+        g.tempMaxHealthTexture = "Solid"
     end
     if g.hpTextMode == nil then
         g.hpTextMode = "FULL_PLUS_PERCENT"

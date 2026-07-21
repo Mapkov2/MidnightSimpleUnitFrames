@@ -76,6 +76,7 @@ local EVENT_ELEMENTS = {
   -- Auras declares only those rare, unit-filtered recovery events.
   Auras = true,
   Portrait = true,
+  TempMaxHealth = true,
   Prediction = true,
   -- These elements own live state that is not covered by the basic bar/text
   -- routes or by a separate shared driver. Keep them frame-routed so their
@@ -112,6 +113,7 @@ local IDENTITY_ELEMENTS = {
   PowerText = true,
   InlineToT = true,
   Portrait = true,
+  TempMaxHealth = true,
   Prediction = true,
   Borders = true,
   -- These values belong to the bound unit and must be reseeded when target,
@@ -305,12 +307,14 @@ local PREDICTION_TEST_CATEGORIES = {
   heal = true,
   absorb = true,
   healAbsorb = true,
+  tempMaxHealth = true,
 }
 
 local function NormalizePredictionTestCategory(category)
   if category == "heal" or category == "prediction" or category == "healPrediction" then return "heal" end
   if category == "healAbsorb" or category == "negative" or category == "negativeAbsorb" then return "healAbsorb" end
   if category == "absorb" or category == "positive" or category == "positiveAbsorb" then return "absorb" end
+  if category == "tempMaxHealth" or category == "maxHealthLoss" or category == "reducedMaxHealth" then return "tempMaxHealth" end
   return nil
 end
 UF.NormalizePredictionTestCategory = NormalizePredictionTestCategory

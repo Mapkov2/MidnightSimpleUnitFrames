@@ -4054,3 +4054,10 @@ L["colors_appearance"] = "colors_appearance"
 L["colors_bar_colors"] = "colors_bar_colors"
 L["group"] = "group"
 L["unit"] = "unit"
+
+-- Balken: vorübergehend reduzierte maximale Gesundheit.
+L["Maximum Health Loss"] = "Verlust maximaler Gesundheit"
+L["Shows the part of maximum health that is temporarily unavailable."] = "Zeigt den Anteil der maximalen Gesundheit, der vorübergehend nicht verfügbar ist."
+L["Show maximum-health loss"] = "Verlust maximaler Gesundheit anzeigen"
+L["Loss color"] = "Verlustfarbe"
+L["Preview effect"] = "Effektvorschau"

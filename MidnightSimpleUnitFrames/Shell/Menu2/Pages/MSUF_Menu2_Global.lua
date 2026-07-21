@@ -633,7 +633,16 @@ local function SetAbsorbTextureTest(enabled, category)
         ExportPublic("MSUF_AbsorbTextureTestMode", enabled and true or false)
         ExportPublic("MSUF_AbsorbTextureTestScope", enabled and scope or nil)
     end
-    if type(_G.MSUF_RefreshPredictionBars) == "function" then
+    if category == "tempMaxHealth" and type(_G.MSUF_RefreshTempMaxHealth) == "function" then
+        _G.MSUF_RefreshTempMaxHealth(scope, "MSUF2_TEMP_MAX_HEALTH_TEST")
+        if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
+            _G.MSUF_UFPreview_RequestRefresh("MSUF2_TEMP_MAX_HEALTH_TEST")
+        end
+        if type(M.RefreshGFNativePreviews) == "function" then
+            M.RefreshGFNativePreviews("MSUF2_TEMP_MAX_HEALTH_TEST")
+        end
+        return
+    elseif type(_G.MSUF_RefreshPredictionBars) == "function" then
         _G.MSUF_RefreshPredictionBars(scope, "MSUF2_PREDICTION_TEST")
     end
     if type(_G.MSUF_Bars_RefreshAbsorbTextureTestPreview) == "function" then
@@ -653,6 +662,9 @@ local function ClearAbsorbTextureTest()
     if wasEnabled then
         if type(_G.MSUF_RefreshPredictionBars) == "function" then
             _G.MSUF_RefreshPredictionBars(nil, "MSUF2_ABSORB_TEST_CLEAR")
+        end
+        if type(_G.MSUF_RefreshTempMaxHealth) == "function" then
+            _G.MSUF_RefreshTempMaxHealth(nil, "MSUF2_TEMP_MAX_HEALTH_TEST")
         end
         if type(_G.MSUF_Bars_RefreshAbsorbTextureTestPreview) == "function" then
             _G.MSUF_Bars_RefreshAbsorbTextureTestPreview()

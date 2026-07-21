@@ -1440,6 +1440,8 @@ local function BuildPreview(parent, panel, width, height)
     if T and T.StyleFontString then T.StyleFontString(mock.sizeTag, { 1, 0.35, 0.25, 0.95 }, 0) end
     MockTexture("hpBG", "BACKGROUND", TEX_W8, { 0, 0, 0, 0.82 }, "color")
     MockTexture("hp", "ARTWORK", type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture() or TEX_W8, nil, "settex")
+    MockTexture("tempMaxHealthBg", "ARTWORK", TEX_W8, { 0, 0, 0, 0.65 }, "color")
+    MockTexture("tempMaxHealth", "ARTWORK", TEX_W8, { 0.70, 0.10, 0.10, 1 })
     MockTexture("healPred", "ARTWORK", TEX_W8, { 0, 1, 0.4, 0.55 })
     MockTexture("absorb", "ARTWORK", TEX_W8, { 0.55, 0.70, 1, 0.58 })
     MockTexture("healAbsorb", "ARTWORK", TEX_W8, { 0.70, 0, 0, 1 })

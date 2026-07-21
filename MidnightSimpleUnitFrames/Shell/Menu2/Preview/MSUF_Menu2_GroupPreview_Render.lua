@@ -174,6 +174,7 @@ local function BuildScene(box, reason)
         runtimePower = runtimeSpec and runtimeSpec.power or {},
         runtimeHealth = runtimeSpec and runtimeSpec.health or {},
         runtimeBorder = runtimeSpec and runtimeSpec.border or {},
+        runtimeTempMaxHealth = runtimeSpec and runtimeSpec.tempMaxHealth or {},
         runtimePrediction = runtimeSpec and runtimeSpec.prediction or {},
         runtimeStatus = runtimeSpec and runtimeSpec.status or {},
         focus = H.PreviewFocusForPage(S.ctx.key),
@@ -1075,7 +1076,8 @@ function Render.Install(box, ctx, deps)
             scene.hpPct, scene.powerPct, scene.healPct, scene.absorbPct
         local runtimeSpec, runtimeAuras = scene.runtimeSpec, scene.runtimeAuras
         local runtimeText, runtimePower, runtimeHealth = scene.runtimeText, scene.runtimePower, scene.runtimeHealth
-        local runtimeBorder, runtimePrediction, runtimeStatus = scene.runtimeBorder, scene.runtimePrediction, scene.runtimeStatus
+        local runtimeBorder, runtimeTempMaxHealth, runtimePrediction, runtimeStatus = scene.runtimeBorder,
+            scene.runtimeTempMaxHealth, scene.runtimePrediction, scene.runtimeStatus
         local focus, layerVisible, soloLayer, layerAvailable = scene.focus, scene.layerVisible, scene.soloLayer, scene.layerAvailable
         local buffCfg, trackedBuffCfg, debuffCfg, externalCfg = scene.buffCfg, scene.trackedBuffCfg, scene.debuffCfg, scene.externalCfg
         local statusSpec, selectedSpellCfg, selectedPlaced = scene.statusSpec, scene.selectedSpellCfg, scene.selectedPlaced
@@ -1369,6 +1371,35 @@ function Render.Install(box, ctx, deps)
         if runtimeHealth.backgroundMatchHealth == true then hbr, hbg, hbb = hr or hbr, hg or hbg, hb or hbb end
         if not runtimeSpec and gen and gen.barBgClassColor then hbr, hbg, hbb = ClassColor(cls, hbr, hbg, hbb) end
         mock._healthBg:SetVertexColor(hbr, hbg, hbb, hbCfg.a or groupVisual.hpBgAlpha or conf.hpBgAlpha or 0.85)
+        local tempMaxShown
+        if runtimeSpec then
+            tempMaxShown = runtimeTempMaxHealth.enabled == true
+        else
+            local enabled = gen and gen.tempMaxHealthEnabled
+            if conf.hlOverride == true and conf.tempMaxHealthEnabled ~= nil then enabled = conf.tempMaxHealthEnabled end
+            tempMaxShown = enabled == true
+            if _G.MSUF_ShouldShowAbsorbTextureTest
+                and _G.MSUF_ShouldShowAbsorbTextureTest(nil, kind, "tempMaxHealth") then
+                tempMaxShown = true
+            end
+        end
+        mock._tempMaxHealth:ClearAllPoints()
+        mock._tempMaxHealth:SetAllPoints(mock._health)
+        mock._tempMaxHealth:SetStatusBarTexture(runtimeTempMaxHealth.texture or barTex)
+        mock._tempMaxHealth:SetStatusBarColor(
+            runtimeTempMaxHealth.r or (gen and gen.tempMaxHealthColorR) or 0.70,
+            runtimeTempMaxHealth.g or (gen and gen.tempMaxHealthColorG) or 0.10,
+            runtimeTempMaxHealth.b or (gen and gen.tempMaxHealthColorB) or 0.10,
+            runtimeTempMaxHealth.a or (gen and gen.tempMaxHealthOpacity) or 1)
+        if mock._tempMaxHealth.SetReverseFill then mock._tempMaxHealth:SetReverseFill(not hpReverse) end
+        mock._tempMaxHealth:SetValue(0.20)
+        mock._tempMaxHealthBg:ClearAllPoints()
+        local tempMaxFill = mock._tempMaxHealth.GetStatusBarTexture
+            and mock._tempMaxHealth:GetStatusBarTexture()
+        mock._tempMaxHealthBg:SetAllPoints(tempMaxFill or mock._tempMaxHealth)
+        mock._tempMaxHealthBg:SetColorTexture(0, 0, 0,
+            runtimeTempMaxHealth.backgroundAlpha or (gen and gen.tempMaxHealthBackgroundOpacity) or 0.65)
+        mock._tempMaxHealth:SetShown(tempMaxShown)
         local hpTex = mock._health.GetStatusBarTexture and mock._health:GetStatusBarTexture()
         local healPredMode = tonumber(runtimePrediction.healAnchorMode) or H.HealPredAnchorMode(conf)
         local healPredShown
