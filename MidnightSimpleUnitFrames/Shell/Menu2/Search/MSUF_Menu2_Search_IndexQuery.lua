@@ -19,6 +19,7 @@ local SearchData = M.SearchData or {}
 local NAV_ITEMS = M.navItems or {}
 
 local max = math.max
+local byte = string.byte
 
 local SearchText = Search.Text or {}
 local ContentWidth, ContentHeight, TrimText, ShortLabel, SearchPlaceholderText, SearchBoxHasText, RefreshSearchPlaceholder, UpdateSearchPlaceholder, NormalizeSearchText, DisplaySearchText, SearchEffectiveLocale, SearchDisplayText, AddSearchText, AddRawSearchText, AddToggleQuestionSearchText, AddControlQuestionSearchText = M.Pick(SearchText, [[ContentWidth ContentHeight TrimText ShortLabel SearchPlaceholderText SearchBoxHasText RefreshSearchPlaceholder UpdateSearchPlaceholder NormalizeSearchText DisplaySearchText SearchEffectiveLocale SearchDisplayText AddSearchText AddRawSearchText AddToggleQuestionSearchText AddControlQuestionSearchText]])
@@ -304,9 +305,14 @@ local function BuildSearchQueryClauses(query)
     return normalized, clauses
 end
 
+local searchTokenSeenScratch = {}
+local searchTokenSeenScratchBusy = false
 local function BuildSearchTokenList(normalized, limit)
     limit = tonumber(limit) or SEARCH_MAX_RECORD_TOKENS
-    local tokens, seen = {}, {}
+    local tokens = {}
+    local wasBusy = searchTokenSeenScratchBusy
+    local seen = wasBusy and {} or searchTokenSeenScratch
+    searchTokenSeenScratchBusy = true
     for token in tostring(normalized or ""):gmatch("%S+") do
         if #token >= 2 and not SEARCH_STOP_WORDS[token] and not seen[token] then
             seen[token] = true
@@ -314,6 +320,8 @@ local function BuildSearchTokenList(normalized, limit)
             if #tokens >= limit then break end
         end
     end
+    for i = 1, #tokens do seen[tokens[i]] = nil end
+    searchTokenSeenScratchBusy = wasBusy
     return tokens
 end
 
@@ -327,7 +335,7 @@ SearchEditDistanceWithin = function(a, b, maxDistance)
         if la == lb then
             local firstMismatch, mismatches = nil, 0
             for i = 1, la do
-                if a:sub(i, i) ~= b:sub(i, i) then
+                if byte(a, i) ~= byte(b, i) then
                     mismatches = mismatches + 1
                     firstMismatch = firstMismatch or i
                     if mismatches > 2 then return false end
@@ -336,15 +344,15 @@ SearchEditDistanceWithin = function(a, b, maxDistance)
             if mismatches <= 1 then return true end
             return mismatches == 2
                 and firstMismatch < la
-                and a:sub(firstMismatch, firstMismatch) == b:sub(firstMismatch + 1, firstMismatch + 1)
-                and a:sub(firstMismatch + 1, firstMismatch + 1) == b:sub(firstMismatch, firstMismatch)
+                and byte(a, firstMismatch) == byte(b, firstMismatch + 1)
+                and byte(a, firstMismatch + 1) == byte(b, firstMismatch)
         end
 
         local short, long = a, b
         if la > lb then short, long = b, a end
         local i, j, edits = 1, 1, 0
         while i <= #short and j <= #long do
-            if short:sub(i, i) == long:sub(j, j) then
+            if byte(short, i) == byte(long, j) then
                 i = i + 1
                 j = j + 1
             else
@@ -361,9 +369,9 @@ SearchEditDistanceWithin = function(a, b, maxDistance)
     for i = 1, la do
         curr[0] = i
         local rowMin = curr[0]
-        local ca = a:sub(i, i)
+        local ca = byte(a, i)
         for j = 1, lb do
-            local cost = (ca == b:sub(j, j)) and 0 or 1
+            local cost = (ca == byte(b, j)) and 0 or 1
             local value = math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost)
             curr[j] = value
             if value < rowMin then rowMin = value end
@@ -374,52 +382,56 @@ SearchEditDistanceWithin = function(a, b, maxDistance)
     return prev[lb] <= maxDistance
 end
 
-local function SearchFuzzyTokenMatch(rec, term)
+local function SearchFuzzyTokenMatch(rec, term, distanceCache)
     if not rec or #term < 5 or term:find(" ", 1, true) then return false end
     if not rec.tokens then
         rec.tokens = BuildSearchTokenList(rec.haystack or "", rec.tokenLimit)
     end
-    if not rec.tokens then return false end
     local maxDistance = (#term >= 8) and 2 or 1
+    local termCache = distanceCache[term]
+    if not termCache then
+        termCache = {}
+        distanceCache[term] = termCache
+    end
     for i = 1, #rec.tokens do
         local token = rec.tokens[i]
-        if math.abs(#token - #term) <= maxDistance and SearchEditDistanceWithin(token, term, maxDistance) then
-            return true
+        if math.abs(#token - #term) <= maxDistance then
+            local matched = termCache[token]
+            if matched == nil then
+                matched = SearchEditDistanceWithin(token, term, maxDistance)
+                termCache[token] = matched
+            end
+            if matched then return true end
         end
     end
     return false
 end
 
-local function SearchTermScore(rec, term, queryWord)
+local function SearchClauseScore(rec, clause, fuzzyDistanceCache)
     local haystack = rec.haystack or ""
-    local score = 0
-    if haystack:find(term, 1, true) then
-        if rec.labelNorm == term or rec.titleNorm == term then score = score + 180 end
-        if rec.labelNorm:sub(1, #term) == term or rec.titleNorm:sub(1, #term) == term then score = score + 90 end
-        if rec.labelNorm:find(term, 1, true) then score = score + 70 end
-        if rec.titleNorm:find(term, 1, true) then score = score + 55 end
-        if rec.hintNorm and rec.hintNorm:find(term, 1, true) then score = score + 45 end
-        if rec.groupNorm:find(term, 1, true) then score = score + 35 end
-        if term ~= queryWord then score = score + 35 end
-        return true, score + 10
-    end
-    if term == queryWord and SearchFuzzyTokenMatch(rec, term) then
-        return true, (term == queryWord) and 28 or 20
-    end
-    return false, 0
-end
-
-local function SearchClauseScore(rec, clause)
     local best = 0
     for i = 1, #clause.terms do
-        local matched, score = SearchTermScore(rec, clause.terms[i], clause.word)
-        if matched and score > best then best = score end
+        local term = clause.terms[i]
+        local score = 0
+        if haystack:find(term, 1, true) then
+            if rec.labelNorm == term or rec.titleNorm == term then score = score + 180 end
+            if rec.labelNorm:find(term, 1, true) == 1 or rec.titleNorm:find(term, 1, true) == 1 then score = score + 90 end
+            if rec.labelNorm:find(term, 1, true) then score = score + 70 end
+            if rec.titleNorm:find(term, 1, true) then score = score + 55 end
+            if rec.hintNorm and rec.hintNorm:find(term, 1, true) then score = score + 45 end
+            if rec.groupNorm:find(term, 1, true) then score = score + 35 end
+            if term ~= clause.word then score = score + 35 end
+            score = score + 10
+        elseif term == clause.word and SearchFuzzyTokenMatch(rec, term, fuzzyDistanceCache) then
+            score = 28
+        end
+        if score > best then best = score end
     end
     return best > 0, best
 end
 
-local function SearchLooksLikeSupportQuestion(query)
-    local normalized = NormalizeSearchText(query)
+local function SearchLooksLikeSupportQuestion(query, normalized)
+    normalized = normalized or NormalizeSearchText(query)
     if normalized == "" then return false end
     if tostring(query or ""):find("?", 1, true) then return true end
     if normalized:find("how ", 1, true) or normalized:find("where ", 1, true) or normalized:find("why ", 1, true) then return true end
@@ -453,13 +465,12 @@ end
 
 local SEARCH_CONTROL_QUERY_TERMS = "toggle checkbox switch enable disable enabled disabled show hide dropdown select choose slider adjust increase decrease color colour swatch input field textfield editbox aktivier deaktivier einschalt ausschalt anzeigen ausblenden auswahl auswaehlen dropdown regler schieberegler aument reducir ajustar seleccionar choisir activer desactiver selezionare attivare disattivare ativar desativar выбрать включить отключить 설정 선택 사용 비활성 활성 下拉 选择 启用 停用 選擇 啟用 停用"
 
-local function SearchLooksLikeControlQuestion(query)
-    local normalized = NormalizeSearchText(query)
+local function SearchLooksLikeControlQuestion(query, normalized)
+    normalized = normalized or NormalizeSearchText(query)
     if normalized == "" then return false end
     if normalized:find("turn on", 1, true) or normalized:find("turn off", 1, true) then return true end
     for term in SEARCH_CONTROL_QUERY_TERMS:gmatch("%S+") do
-        term = NormalizeSearchText(term)
-        if term ~= "" and normalized:find(term, 1, true) then return true end
+        if normalized:find(term, 1, true) then return true end
     end
     return false
 end
@@ -472,28 +483,20 @@ local SEARCH_CONTROL_KINDS = M.KeySetFromWords "toggle dropdown segment slider c
 
 local function SearchContainsTerm(normalized, term)
     normalized = tostring(normalized or "")
-    term = NormalizeSearchText(term)
     if normalized == "" or term == "" then return false end
     if term:find(" ", 1, true) then return normalized:find(term, 1, true) ~= nil end
     return (" " .. normalized .. " "):find(" " .. term .. " ", 1, true) ~= nil
 end
 
 local function SearchContainsAnyTerm(normalized, terms)
-    if type(terms) == "string" then
-        for term in terms:gmatch("[^|]+") do
-            if SearchContainsTerm(normalized, term) then return true end
-        end
-        return false
-    end
-    if type(terms) ~= "table" then return false end
-    for i = 1, #terms do
-        if SearchContainsTerm(normalized, terms[i]) then return true end
+    for term in terms:gmatch("[^|]+") do
+        if SearchContainsTerm(normalized, term) then return true end
     end
     return false
 end
 
-local function SearchLooksLikeGenericLocationQuestion(query)
-    local normalized = NormalizeSearchText(query)
+local function SearchLooksLikeGenericLocationQuestion(query, normalized)
+    normalized = normalized or NormalizeSearchText(query)
     if normalized == "" then return false end
     local hasQuestion = SearchContainsAnyTerm(normalized, SEARCH_GENERIC_LOCATION_QUESTION_TERMS)
     if not hasQuestion then return false end
@@ -502,9 +505,10 @@ local function SearchLooksLikeGenericLocationQuestion(query)
     return SearchContainsAnyTerm(normalized, SEARCH_GENERIC_LOCATION_ACTION_TERMS)
 end
 
-local function SearchGenericLocationSubjectClauses(query)
-    if not SearchLooksLikeGenericLocationQuestion(query) then return nil, nil end
-    local raw = SearchRawWords(NormalizeSearchText(query))
+local function SearchGenericLocationSubjectClauses(query, normalized)
+    normalized = normalized or NormalizeSearchText(query)
+    if not SearchLooksLikeGenericLocationQuestion(query, normalized) then return nil, nil end
+    local raw = SearchRawWords(normalized)
     if #raw == 0 then return nil, nil end
     local words = SearchCanonicalWords(raw)
     local subject = table.concat(words, " ")
@@ -687,37 +691,6 @@ local function AddValuesSearchText(parts, values)
     end
 end
 
-local function SearchSectionTitle(frame)
-    if not frame then return nil end
-    local entry = frame._msuf2CollapsibleEntry
-    if entry and entry.label then
-        local text = FontStringText(entry.label)
-        if IsSearchableDisplayText(text) then return text end
-    end
-    if frame.title then
-        local text = FontStringText(frame.title)
-        if IsSearchableDisplayText(text) then return text end
-    end
-    if IsSearchableDisplayText(frame._msuf2SearchTitle) then return DisplaySearchText(frame._msuf2SearchTitle) end
-    return nil
-end
-
-local function SectionPathForAnchor(anchor, pageTitle)
-    local path, seen = {}, {}
-    local parent = anchor and anchor.GetParent and anchor:GetParent()
-    local pageNorm = NormalizeSearchText(pageTitle or "")
-    while parent do
-        local title = SearchSectionTitle(parent)
-        local norm = NormalizeSearchText(title or "")
-        if norm ~= "" and norm ~= pageNorm and not seen[norm] then
-            seen[norm] = true
-            table.insert(path, 1, title)
-        end
-        parent = parent.GetParent and parent:GetParent() or nil
-    end
-    return path
-end
-
 local function SearchHint(pageInfo, anchor)
     local parts, seen = {}, {}
     local function Add(text)
@@ -730,7 +703,30 @@ local function SearchHint(pageInfo, anchor)
     end
     Add(pageInfo.group)
     Add(pageInfo.label or pageInfo.title)
-    local sections = SectionPathForAnchor(anchor, pageInfo.title or pageInfo.label)
+    local sections, sectionSeen = {}, {}
+    local parent = anchor and anchor.GetParent and anchor:GetParent()
+    local pageNorm = NormalizeSearchText(pageInfo.title or pageInfo.label or "")
+    while parent do
+        local title
+        local entry = parent._msuf2CollapsibleEntry
+        if entry and entry.label then
+            local text = FontStringText(entry.label)
+            if IsSearchableDisplayText(text) then title = text end
+        end
+        if not title and parent.title then
+            local text = FontStringText(parent.title)
+            if IsSearchableDisplayText(text) then title = text end
+        end
+        if not title and IsSearchableDisplayText(parent._msuf2SearchTitle) then
+            title = DisplaySearchText(parent._msuf2SearchTitle)
+        end
+        local norm = NormalizeSearchText(title or "")
+        if norm ~= "" and norm ~= pageNorm and not sectionSeen[norm] then
+            sectionSeen[norm] = true
+            table.insert(sections, 1, title)
+        end
+        parent = parent.GetParent and parent:GetParent() or nil
+    end
     for i = 1, #sections do Add(sections[i]) end
     return table.concat(parts, " > ")
 end
@@ -832,6 +828,40 @@ local function CopyStaticSearchValues(values)
 end
 
 local BuildRegistrySearchRecord
+local runtimeControlMetaScratch = {}
+local runtimeControlMetaScratchBusy = false
+
+local function RegisterSearchRuntimeControl(widget, meta, pageKey, kind, label, rawLabel, help, command)
+    if type(M.RegisterRuntimeControl) ~= "function" then return nil end
+    local payload = runtimeControlMetaScratchBusy and {} or runtimeControlMetaScratch
+    payload.controlId = meta.controlId
+    payload.identityKey = meta.identityKey
+    payload.controlPath = meta.controlPath
+    payload.pageKey = pageKey
+    payload.kind = kind
+    payload.label = label
+    payload.identityLabel = meta.identityLabel or widget._msuf2SearchText or rawLabel
+    payload.settingKey = meta.settingKey
+    payload.actionKey = meta.actionKey
+    payload.actionFixedArgs = meta.actionFixedArgs
+    payload.actionInputArg = meta.actionInputArg
+    payload.navigationKey = meta.navigationKey
+    payload.assistantDisposition = meta.assistantDisposition
+    payload.assistantDispositionReason = meta.assistantDispositionReason
+    payload.assistantSettingKeys = meta.assistantSettingKeys
+    payload.assistantSettingKeyPatterns = meta.assistantSettingKeyPatterns
+    payload.classification = meta.classification or meta.controlType
+    payload.ephemeral = meta.ephemeral
+    payload.help = help
+    payload.confirmRequired = meta.confirmRequired
+    payload.command = command
+    local wasBusy = runtimeControlMetaScratchBusy
+    runtimeControlMetaScratchBusy = true
+    local ok, result = pcall(M.RegisterRuntimeControl, widget, payload, "search")
+    runtimeControlMetaScratchBusy = wasBusy
+    if ok then return result end
+    return nil
+end
 
 function M.UnregisterSearchWidget(widget)
     if not widget then return false end
@@ -883,31 +913,8 @@ function M.RegisterSearchWidget(widget, meta)
     -- Search also indexes headings/descriptions, but those are not Assistant
     -- controls. Sending static prose into RuntimeControlCatalog created
     -- unstable fallback IDs and made option coverage depend on copy text.
-    if catalogInteractive and type(M.RegisterRuntimeControl) == "function" then
-        local ok, result = pcall(M.RegisterRuntimeControl, widget, {
-            controlId = meta.controlId,
-            identityKey = meta.identityKey,
-            controlPath = meta.controlPath,
-            pageKey = pageKey,
-            kind = kind,
-            label = label,
-            identityLabel = meta.identityLabel or widget._msuf2SearchText or rawLabel,
-            settingKey = meta.settingKey,
-            actionKey = meta.actionKey,
-            actionFixedArgs = meta.actionFixedArgs,
-            actionInputArg = meta.actionInputArg,
-            navigationKey = meta.navigationKey,
-            assistantDisposition = meta.assistantDisposition,
-            assistantDispositionReason = meta.assistantDispositionReason,
-            assistantSettingKeys = meta.assistantSettingKeys,
-            assistantSettingKeyPatterns = meta.assistantSettingKeyPatterns,
-            classification = meta.classification or meta.controlType,
-            ephemeral = meta.ephemeral,
-            help = help,
-            confirmRequired = meta.confirmRequired,
-            command = command,
-        }, "search")
-        if ok then catalogId = result end
+    if catalogInteractive then
+        catalogId = RegisterSearchRuntimeControl(widget, meta, pageKey, kind, label, rawLabel, help, command)
     end
 
     local id = widget._msuf2SearchRegistryId
@@ -1031,15 +1038,12 @@ local function AddSearchRecord(records, seenRecords, pageInfo, label, anchor, ki
 
     local idLabelNorm = NormalizeSearchText(label)
     local idHintNorm = NormalizeSearchText(hint)
-    local recordId = table.concat({
-        tostring(pageInfo.key or ""),
-        tostring(kind or ""),
-        tostring(anchor or ""),
-        idLabelNorm,
-        idHintNorm,
-    }, "\031")
-    if seenRecords[recordId] then return end
-    seenRecords[recordId] = true
+    local recordId = tostring(pageInfo.key or "") .. "\031"
+        .. tostring(kind or "") .. "\031"
+        .. tostring(anchor or "") .. "\031"
+        .. idLabelNorm .. "\031" .. idHintNorm
+    if seenRecords and seenRecords[recordId] then return end
+    if seenRecords then seenRecords[recordId] = true end
 
     displayHint = DisplaySearchText(displayHint)
     local displayGroup, displayTitle, titleNorm, groupNorm = "", "", "", ""
@@ -1093,9 +1097,9 @@ local function AddSearchRecord(records, seenRecords, pageInfo, label, anchor, ki
         tokenLimit = (kind ~= "faq" and kind ~= "page")
             and SEARCH_CONTROL_MAX_TOKENS
             or SEARCH_MAX_RECORD_TOKENS,
-        order = #records + 1,
+        order = records and #records + 1 or 1,
     }
-    records[#records + 1] = record
+    if records then records[#records + 1] = record end
     return record
 end
 
@@ -1150,8 +1154,7 @@ BuildRegistrySearchRecord = function(entry)
     end
     AddControlQuestionSearchText(extra, entry.label, entry.kind, entry.values)
     AddSearchText(extra, entry.help)
-    local tempRecords, seenRecords = {}, {}
-    local rec = AddSearchRecord(tempRecords, seenRecords, info, entry.label, entry.anchor, entry.kind or "control", extra)
+    local rec = AddSearchRecord(nil, nil, info, entry.label, entry.anchor, entry.kind or "control", extra)
     if rec then
         rec.answer = entry.help
         if type(entry.settingKey) == "string" and entry.settingKey ~= "" then
@@ -1621,10 +1624,10 @@ function SearchPages(query)
     if #clauses == 0 then return {} end
     if #normalized < MIN_SEARCH_QUERY_LEN then return {} end
 
-    local supportQuestion = SearchLooksLikeSupportQuestion(query)
-    local genericLocationSubject, genericLocationClauses = SearchGenericLocationSubjectClauses(query)
+    local supportQuestion = SearchLooksLikeSupportQuestion(query, normalized)
+    local genericLocationSubject, genericLocationClauses = SearchGenericLocationSubjectClauses(query, normalized)
     local genericLocationQuestion = genericLocationSubject ~= nil and genericLocationClauses ~= nil
-    local controlQuestion = SearchLooksLikeControlQuestion(query) or genericLocationQuestion
+    local controlQuestion = SearchLooksLikeControlQuestion(query, normalized) or genericLocationQuestion
     local profileTransferQuestion = normalized:find("import", 1, true)
         or normalized:find("export", 1, true)
         or normalized:find("profile string", 1, true)
@@ -1639,6 +1642,7 @@ function SearchPages(query)
     end
     local results = {}
     local records = GetSearchRecords()
+    local fuzzyDistanceCache = {}
     for i = 1, #records do
         local rec = records[i]
         local score = 0
@@ -1646,7 +1650,7 @@ function SearchPages(query)
         local matchedClauses = 0
         local missedClauses = 0
         for c = 1, #clauses do
-            local ok, clauseScore = SearchClauseScore(rec, clauses[c])
+            local ok, clauseScore = SearchClauseScore(rec, clauses[c], fuzzyDistanceCache)
             if not ok then
                 missedClauses = missedClauses + 1
                 if requiredMatches == #clauses or (#clauses - missedClauses) < requiredMatches then
@@ -1660,7 +1664,7 @@ function SearchPages(query)
         end
         if matched and matchedClauses >= requiredMatches then
             if rec.labelNorm == normalized or rec.titleNorm == normalized then score = score + 260 end
-            if rec.labelNorm:sub(1, #normalized) == normalized then score = score + 130 end
+            if rec.labelNorm:find(normalized, 1, true) == 1 then score = score + 130 end
             if rec.haystack and rec.haystack:find(normalized, 1, true) then score = score + 80 end
             if rec.kind == "section" then score = score + 70 end
             if rec.kind == "faq" then score = score + 55 end
@@ -1704,30 +1708,26 @@ function SearchPages(query)
     return CurateSearchResults(results, supportQuestion and not genericLocationQuestion)
 end
 
-local function SearchQueryReady(query)
-    return #NormalizeSearchText(query or "") >= MIN_SEARCH_QUERY_LEN
-end
-
 local function ShouldUseAssistantForQuery(query, results)
     query = TrimText(query)
-    if not SearchQueryReady(query) or SearchCombatLocked() then return false end
+    local normalized = NormalizeSearchText(query)
+    if #normalized < MIN_SEARCH_QUERY_LEN or SearchCombatLocked() then return false end
     results = type(results) == "table" and results or {}
     if #results == 0 then return true end
 
-    local normalized = NormalizeSearchText(query)
     if query:find("?", 1, true)
         or normalized:find("can you", 1, true) or normalized:find("could you", 1, true)
         or normalized:find("would you", 1, true) or normalized:find("please ", 1, true)
         or normalized:find("kannst du", 1, true) or normalized:find("konntest du", 1, true)
         or normalized:find("kannst ", 1, true) or normalized:find("bitte ", 1, true)
-        or SearchLooksLikeGenericLocationQuestion(query) then
+        or SearchLooksLikeGenericLocationQuestion(query, normalized) then
         return true
     end
 
     local _, clauses = BuildSearchQueryClauses(query)
     if #clauses < 3 then return false end
-    return SearchLooksLikeSupportQuestion(query)
-        or (#clauses >= 5 and SearchLooksLikeControlQuestion(query))
+    return SearchLooksLikeSupportQuestion(query, normalized)
+        or (#clauses >= 5 and SearchLooksLikeControlQuestion(query, normalized))
 end
 
 SetSearchResults = function(results, query) M.searchResults = results or {}; M.searchResultsQuery = query or "" end
@@ -1791,7 +1791,7 @@ local function RunSearchInputQuery(query, openPage)
         return
     end
 
-    if not SearchQueryReady(query) then
+    if #NormalizeSearchText(query) < MIN_SEARCH_QUERY_LEN then
         SetSearchResults(nil, query)
         if openPage then ShowSearchPageForQuery(query) end
         return
@@ -1809,7 +1809,7 @@ local function ScheduleSearchInputQuery(searchBox, query, openPage, onComplete)
 
     M.searchQuery = query
 
-    if query == "" or SearchCombatLocked() or not SearchQueryReady(query) then
+    if query == "" or SearchCombatLocked() or #NormalizeSearchText(query) < MIN_SEARCH_QUERY_LEN then
         RunSearchInputQuery(query, openPage)
         if type(onComplete) == "function" then onComplete(query) end
         return

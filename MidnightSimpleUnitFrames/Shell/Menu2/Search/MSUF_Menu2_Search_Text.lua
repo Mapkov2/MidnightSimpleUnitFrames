@@ -41,6 +41,7 @@ local SEARCH_KEYWORDS, SEARCH_TEXT_FOLDS, SEARCH_UTF_PUNCTUATION = M.PickDefault
 
 local function TrimText(text)
     text = tostring(text or "")
+    if not text:find("^%s") and not text:find("%s$") then return text end
     return (text:gsub("^%s+", ""):gsub("%s+$", ""))
 end
 
@@ -88,30 +89,70 @@ local function UpdateSearchPlaceholder(searchBox)
     end
 end
 
+local NORMALIZED_TEXT_CACHE_LIMIT = 4096
+local NORMALIZED_TEXT_CACHE_MAX_SOURCE_LEN = 256
+local normalizedTextCache, normalizedTextCacheCount = {}, 0
 local function NormalizeSearchText(text)
     text = tostring(text or "")
-    text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
-    text = text:gsub("\195\132", "ae"):gsub("\195\164", "ae")
-    text = text:gsub("\195\150", "oe"):gsub("\195\182", "oe")
-    text = text:gsub("\195\156", "ue"):gsub("\195\188", "ue")
-    text = text:gsub("\195\159", "ss")
-    for from, to in pairs(SEARCH_TEXT_FOLDS) do text = text:gsub(from, to) end
-    for i = 1, #SEARCH_UTF_PUNCTUATION do text = text:gsub(SEARCH_UTF_PUNCTUATION[i], " ") end
-    text = text:gsub("[\240-\244][\128-\191][\128-\191][\128-\191]", " ")
+    local source = text
+    local cacheable = #source <= NORMALIZED_TEXT_CACHE_MAX_SOURCE_LEN
+    if cacheable then
+        local cached = normalizedTextCache[source]
+        if cached ~= nil then return cached end
+    end
+    if text:find("|", 1, true) then
+        text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    end
+    if text:find("[\128-\255]") then
+        text = text:gsub("\195\132", "ae"):gsub("\195\164", "ae")
+        text = text:gsub("\195\150", "oe"):gsub("\195\182", "oe")
+        text = text:gsub("\195\156", "ue"):gsub("\195\188", "ue")
+        text = text:gsub("\195\159", "ss")
+        for from, to in pairs(SEARCH_TEXT_FOLDS) do text = text:gsub(from, to) end
+        for i = 1, #SEARCH_UTF_PUNCTUATION do text = text:gsub(SEARCH_UTF_PUNCTUATION[i], " ") end
+        text = text:gsub("[\240-\244][\128-\191][\128-\191][\128-\191]", " ")
+    end
     text = text:gsub("[/\\_%-%.:;,%(%)]", " ")
     text = string.lower(text)
     text = text:gsub("[\001-\031\127]", " ")
     --- Preserve non-ASCII letters so native localized FAQ keywords can match.
     text = text:gsub("[!\"#$%%&'%*%+<=>%?%@%[%]%^`{|}~]+", " ")
     text = text:gsub("%s+", " ")
-    return TrimText(text)
+    text = TrimText(text)
+    if cacheable then
+        if normalizedTextCacheCount >= NORMALIZED_TEXT_CACHE_LIMIT then
+            normalizedTextCache, normalizedTextCacheCount = {}, 0
+        end
+        normalizedTextCache[source] = text
+        normalizedTextCacheCount = normalizedTextCacheCount + 1
+    end
+    return text
 end
 
+local DISPLAY_TEXT_CACHE_LIMIT = 4096
+local DISPLAY_TEXT_CACHE_MAX_SOURCE_LEN = 256
+local displayTextCache, displayTextCacheCount = {}, 0
 local function DisplaySearchText(text)
     text = tostring(text or "")
-    text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    local source = text
+    local cacheable = #source <= DISPLAY_TEXT_CACHE_MAX_SOURCE_LEN
+    if cacheable then
+        local cached = displayTextCache[source]
+        if cached ~= nil then return cached end
+    end
+    if text:find("|", 1, true) then
+        text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    end
     text = text:gsub("%s+", " ")
-    return TrimText(text)
+    text = TrimText(text)
+    if cacheable then
+        if displayTextCacheCount >= DISPLAY_TEXT_CACHE_LIMIT then
+            displayTextCache, displayTextCacheCount = {}, 0
+        end
+        displayTextCache[source] = text
+        displayTextCacheCount = displayTextCacheCount + 1
+    end
+    return text
 end
 
 local SEARCH_LOCALE_KEY_PREFIX = "MSUF2_SEARCH_"
@@ -119,15 +160,18 @@ local SEARCH_DEFAULT_LOCALE = "enUS"
 local SEARCH_LOCALE_TEXT_CACHE = {}
 
 local function IsSearchLocaleKey(text)
-    return type(text) == "string" and text:sub(1, #SEARCH_LOCALE_KEY_PREFIX) == SEARCH_LOCALE_KEY_PREFIX
+    return type(text) == "string" and text:find(SEARCH_LOCALE_KEY_PREFIX, 1, true) == 1
 end
 
 local function SearchEffectiveLocale()
+    -- The first-party resolver returns this exact value. Prefer the direct
+    -- field on the high-volume search-index path while retaining fallbacks
+    -- for isolated load/test environments.
+    if type(MSUF.LOCALE) == "string" and MSUF.LOCALE ~= "" then return MSUF.LOCALE end
     if type(MSUF.GetEffectiveLocale) == "function" then
         local ok, locale = pcall(MSUF.GetEffectiveLocale)
         if ok and type(locale) == "string" and locale ~= "" then return locale end
     end
-    if type(MSUF.LOCALE) == "string" and MSUF.LOCALE ~= "" then return MSUF.LOCALE end
     if type(_G.GetLocale) == "function" then
         local ok, locale = pcall(_G.GetLocale)
         if ok and type(locale) == "string" and locale ~= "" then return locale end
@@ -135,23 +179,29 @@ local function SearchEffectiveLocale()
     return SEARCH_DEFAULT_LOCALE
 end
 
-local function SearchLocaleCacheKey(text)
-    return SearchEffectiveLocale() .. "\031" .. tostring(text or "")
-end
-
 local function AddUniqueSearchPart(parts, seen, text)
-    text = DisplaySearchText(text)
     if text == "" or seen[text] then return end
     seen[text] = true
     parts[#parts + 1] = text
 end
 
+local searchLocaleSeenScratch = {}
+local searchLocaleSeenScratchBusy = false
 local function SearchLocaleTranslations(text)
-    local cacheKey = SearchLocaleCacheKey(text)
-    local cached = SEARCH_LOCALE_TEXT_CACHE[cacheKey]
+    text = tostring(text or "")
+    local locale = SearchEffectiveLocale()
+    local localeCache = SEARCH_LOCALE_TEXT_CACHE[locale]
+    if not localeCache then
+        localeCache = {}
+        SEARCH_LOCALE_TEXT_CACHE[locale] = localeCache
+    end
+    local cached = localeCache[text]
     if cached then return cached end
 
-    local out, seen = {}, {}
+    local out = {}
+    local wasBusy = searchLocaleSeenScratchBusy
+    local seen = wasBusy and {} or searchLocaleSeenScratch
+    searchLocaleSeenScratchBusy = true
     local function add(value)
         value = DisplaySearchText(value)
         if value == "" or seen[value] then return end
@@ -165,12 +215,14 @@ local function SearchLocaleTranslations(text)
     end
 
     if type(MSUF.RegisterLocale) == "function" then
-        local L = MSUF.RegisterLocale(SearchEffectiveLocale())
+        local L = MSUF.RegisterLocale(locale)
         local translated = L and L[text]
         if translated and translated ~= text then add(translated) end
     end
 
-    SEARCH_LOCALE_TEXT_CACHE[cacheKey] = out
+    for i = 1, #out do seen[out[i]] = nil end
+    searchLocaleSeenScratchBusy = wasBusy
+    localeCache[text] = out
     return out
 end
 
@@ -183,11 +235,16 @@ local function SearchDisplayText(text)
     return text
 end
 
+local addSearchTextSeenScratch = {}
+local addSearchTextSeenScratchBusy = false
 local function AddSearchText(parts, text)
     if text == nil then return end
     text = DisplaySearchText(text)
     if text == "" then return end
-    local seen = {}
+    local wasBusy = addSearchTextSeenScratchBusy
+    local seen = wasBusy and {} or addSearchTextSeenScratch
+    addSearchTextSeenScratchBusy = true
+    local firstAdded = #parts + 1
     local translations = SearchLocaleTranslations(text)
     if #translations > 0 then
         for i = 1, #translations do
@@ -199,6 +256,8 @@ local function AddSearchText(parts, text)
     elseif not IsSearchLocaleKey(text) then
         AddUniqueSearchPart(parts, seen, text)
     end
+    for i = firstAdded, #parts do seen[parts[i]] = nil end
+    addSearchTextSeenScratchBusy = wasBusy
 end
 
 local function AddSearchTextVariants(out, seen, text)
@@ -208,10 +267,10 @@ local function AddSearchTextVariants(out, seen, text)
             AddUniqueSearchPart(out, seen, translations[i])
         end
         if not IsSearchLocaleKey(text) then
-            AddUniqueSearchPart(out, seen, text)
+            AddUniqueSearchPart(out, seen, DisplaySearchText(text))
         end
     elseif not IsSearchLocaleKey(text) then
-        AddUniqueSearchPart(out, seen, text)
+        AddUniqueSearchPart(out, seen, DisplaySearchText(text))
     end
 end
 

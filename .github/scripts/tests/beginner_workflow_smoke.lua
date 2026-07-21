@@ -127,7 +127,59 @@ local searchNamespace = {
 _G.C_Timer = _G.C_Timer or { After = function(_, callback) callback() end }
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/Search/MSUF_Menu2_Search_IndexQuery.lua"))(
     "MidnightSimpleUnitFrames", searchNamespace)
-local preferAssistant = assert(searchM.Search._CoreAPI.ShouldUseAssistantForQuery)
+local editDistance = assert(searchM.Search._RoutingContext.SearchEditDistanceWithin)
+assert(editDistance("player", "player", 1), "fuzzy identity match changed")
+assert(editDistance("player", "plauer", 1), "fuzzy transposition match changed")
+assert(editDistance("player", "plaer", 1), "fuzzy deletion match changed")
+assert(not editDistance("player", "power", 1), "fuzzy distance-one rejection changed")
+assert(editDistance("priority", "priortiy", 2), "fuzzy distance-two match changed")
+
+local function Upvalue(fn, wanted)
+    for i = 1, 80 do
+        local name, value = debug.getupvalue(fn, i)
+        if not name then break end
+        if name == wanted then return value, i end
+    end
+end
+local searchPages = assert(searchM.Search._CoreAPI.SearchPages)
+local getSearchRecords = assert(Upvalue(searchPages, "GetSearchRecords"))
+local searchState = assert(Upvalue(getSearchRecords, "SEARCH_STATE"))
+local controlQuestion = assert(Upvalue(searchPages, "SearchLooksLikeControlQuestion"))
+assert(controlQuestion("select frame") and controlQuestion("schieberegler einstellen"),
+    "pre-normalized control-query terms changed matching")
+local clauseScore = assert(Upvalue(searchPages, "SearchClauseScore"))
+local fuzzyMatch = assert(Upvalue(clauseScore, "SearchFuzzyTokenMatch"))
+local originalDistance, distanceIndex = Upvalue(fuzzyMatch, "SearchEditDistanceWithin")
+assert(originalDistance and distanceIndex, "fuzzy distance worker missing")
+local originalRecords, originalDirty, originalLocale = searchState.records, searchState.recordsDirty, searchState.localeKey
+searchState.records, searchState.recordsDirty, searchState.localeKey = {}, false, "enUS"
+for i = 1, 12 do
+    searchState.records[i] = {
+        key = "home", kind = "toggle", label = "Player " .. i, hint = "", order = i, priority = 1000,
+        haystack = "unrelated", labelNorm = "", titleNorm = "", groupNorm = "", hintNorm = "",
+        tokens = { "player" },
+    }
+end
+local distanceCalls = 0
+debug.setupvalue(fuzzyMatch, distanceIndex, function(...)
+    distanceCalls = distanceCalls + 1
+    return originalDistance(...)
+end)
+local fuzzyResults = searchPages("plauer")
+debug.setupvalue(fuzzyMatch, distanceIndex, originalDistance)
+searchState.records, searchState.recordsDirty, searchState.localeKey = originalRecords, originalDirty, originalLocale
+assert(#fuzzyResults == 12, "fuzzy cache changed search result coverage: " .. tostring(#fuzzyResults))
+assert(distanceCalls == 1, "identical fuzzy token distances were recomputed")
+
+local coreAPI = assert(searchM.Search._CoreAPI)
+coreAPI.RunSearchInputQuery("p", false)
+assert(searchM.searchResultsQuery == "p" and #(searchM.searchResults or {}) == 0,
+    "short direct search no longer exits without querying")
+local scheduledQuery
+coreAPI.ScheduleSearchInputQuery(nil, "p", false, function(query) scheduledQuery = query end)
+assert(scheduledQuery == "p", "short scheduled search no longer completes synchronously")
+
+local preferAssistant = assert(coreAPI.ShouldUseAssistantForQuery)
 assert(preferAssistant("raid auras", { {} }) == false, "short setting keywords no longer stay direct")
 assert(preferAssistant("can you change my player width", { {} }) == true,
     "English change request did not promote to Assistant")

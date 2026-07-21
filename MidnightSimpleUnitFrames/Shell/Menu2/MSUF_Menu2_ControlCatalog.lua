@@ -138,16 +138,32 @@ else
     STATE.revision = tonumber(STATE.revision) or 0
 end
 
+local CLEAN_TEXT_CACHE_LIMIT = 4096
+local CLEAN_TEXT_CACHE_MAX_SOURCE_LEN = 256
+local cleanTextCache, cleanTextCacheCount = {}, 0
 local function CleanText(value)
     if value == nil then return "" end
     local kind = type(value)
     if kind ~= "string" and kind ~= "number" then return "" end
     local text = kind == "string" and value or tostring(value)
+    local source = text
+    local cacheable = #source <= CLEAN_TEXT_CACHE_MAX_SOURCE_LEN
+    if cacheable then
+        local cached = cleanTextCache[source]
+        if cached ~= nil then return cached end
+    end
     if text:find("|", 1, true) then
         text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
     end
     if text:find("^%s") then text = text:gsub("^%s+", "") end
     if text:find("%s$") then text = text:gsub("%s+$", "") end
+    if cacheable then
+        if cleanTextCacheCount >= CLEAN_TEXT_CACHE_LIMIT then
+            cleanTextCache, cleanTextCacheCount = {}, 0
+        end
+        cleanTextCache[source] = text
+        cleanTextCacheCount = cleanTextCacheCount + 1
+    end
     return text
 end
 
@@ -257,10 +273,26 @@ local function AssistantRouteFingerprint(record)
         .. "\029" .. table.concat(record and record.assistantSettingRouteErrors or {}, "\030")
 end
 
+local NORMALIZED_TOKEN_CACHE_LIMIT = 4096
+local NORMALIZED_TOKEN_CACHE_MAX_SOURCE_LEN = 256
+local normalizedTokenCache, normalizedTokenCacheCount = {}, 0
 local function NormalizeToken(value)
-    local text = CleanText(value):lower()
+    local source = CleanText(value)
+    local cacheable = #source <= NORMALIZED_TOKEN_CACHE_MAX_SOURCE_LEN
+    if cacheable then
+        local cached = normalizedTokenCache[source]
+        if cached ~= nil then return cached end
+    end
+    local text = source:lower()
     text = text:gsub("[^%w]+", " ")
     text = text:gsub("^%s+", ""):gsub("%s+$", ""):gsub("%s+", " ")
+    if cacheable then
+        if normalizedTokenCacheCount >= NORMALIZED_TOKEN_CACHE_LIMIT then
+            normalizedTokenCache, normalizedTokenCacheCount = {}, 0
+        end
+        normalizedTokenCache[source] = text
+        normalizedTokenCacheCount = normalizedTokenCacheCount + 1
+    end
     return text
 end
 
@@ -399,14 +431,11 @@ end
 
 local function FallbackId(pageKey, kind, identity, command)
     local commandKind = type(command) == "table" and CleanText(command.kind) or ""
-    local seed = table.concat({ pageKey, kind, identity, commandKind }, "\031")
-    return table.concat({
-        "menu2",
-        Slug(pageKey, "unknown", 36),
-        Slug(kind, "control", 24),
-        Slug(identity, "unidentified", 42),
-        StableHash(seed),
-    }, "."), seed
+    local seed = pageKey .. "\031" .. kind .. "\031" .. identity .. "\031" .. commandKind
+    return "menu2." .. Slug(pageKey, "unknown", 36)
+        .. "." .. Slug(kind, "control", 24)
+        .. "." .. Slug(identity, "unidentified", 42)
+        .. "." .. StableHash(seed), seed
 end
 
 local function CommandMetadata(command, label)
