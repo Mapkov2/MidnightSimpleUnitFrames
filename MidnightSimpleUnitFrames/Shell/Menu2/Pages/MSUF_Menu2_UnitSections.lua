@@ -248,7 +248,6 @@ local function BuildPreview(ctx, builder, unit)
     local sectionEntry = sec and sec._msuf2CollapsibleEntry
     local previewHeader = sectionEntry and sectionEntry.header
     local previewHeaderTitle = "Preview - " .. UnitTopLabel(unit)
-    local liveBadge
     if sectionEntry then
         -- The compact card uses the accordion header as its toolbar. Keep the
         -- underlying section/search identity intact while presenting the unit
@@ -260,15 +259,6 @@ local function BuildPreview(ctx, builder, unit)
             sectionEntry.label:ClearAllPoints()
             sectionEntry.label:SetPoint("LEFT", sectionEntry.arrow, "RIGHT", 8, 0)
             sectionEntry.label:SetJustifyH("LEFT")
-        end
-        sec._msuf2CollapsibleBadgesShowWhenClosed = true
-        if W.SetCollapsibleBadges then
-            W.SetCollapsibleBadges(sec, { { text = "Live", kind = "ok", width = 46, alwaysShow = true } })
-            liveBadge = sectionEntry._msuf2Badges and sectionEntry._msuf2Badges[1]
-            if liveBadge and sectionEntry.label then
-                liveBadge:ClearAllPoints()
-                liveBadge:SetPoint("LEFT", sectionEntry.label, "RIGHT", 10, 0)
-            end
         end
     end
     local previewNote = "Live preview. Select a handle, then use its gear to open the exact settings. Hovering menu controls highlights the related frame element. Use MSUF Edit Mode to place frames on screen."
@@ -311,7 +301,6 @@ local function BuildPreview(ctx, builder, unit)
         box._msuf2PreferredRestoreHeight = UnitPreviewBoxHeight()
         box._msuf2PreferredRestoreYOffset = UnitPreviewTopOffset()
         box._msuf2CompactHeader = previewHeader
-        box._msuf2CompactLiveBadge = liveBadge
     end
     -- Single enforcement path for preview mode/height: assigned below, called
     -- from every box acquisition and from the page refresh cycle.
@@ -458,7 +447,6 @@ local function BuildPreview(ctx, builder, unit)
             expandBtn:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -14, -8)
         end
         if expandBtn.SetText then expandBtn:SetText(expanded and "Compact Preview" or "Expand") end
-        if liveBadge then liveBadge:SetShown(not expanded) end
     end
     ApplyPreviewHeightMode = function()
         local boxH = UnitPreviewBoxHeight()
