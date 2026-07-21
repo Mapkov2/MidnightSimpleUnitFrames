@@ -100,10 +100,19 @@ function M.AssignNamedValues(target, names, ...)
         target[name] = values[index]
     end
 end
+local previousCreateFrame = _G.CreateFrame
+_G.CreateFrame = function()
+    local frame = {}
+    function frame:RegisterEvent() end
+    function frame:SetScript() end
+    function frame:UnregisterAllEvents() end
+    return frame
+end
 assert(loadfile('MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Theme_Tokens.lua'))(
     'MidnightSimpleUnitFrames', root)
 assert(loadfile('MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Theme.lua'))(
     'MidnightSimpleUnitFrames', root)
+_G.CreateFrame = previousCreateFrame
 
 local inherited = 'Fonts\\FRIZQT__.TTF'
 _G.MSUF_DB.general.menuFontKey = regular
