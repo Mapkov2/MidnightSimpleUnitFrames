@@ -521,6 +521,15 @@ function M.TextSlotOffsetKeys(kind, slot)
     if not prefix then return "nameOffsetX", "nameOffsetY" end
     return prefix .. "OffsetX", prefix .. "OffsetY"
 end
+function M.TextSlotFontSizeKey(kind, slot)
+    local prefix
+    if kind == "hp" then
+        prefix = (slot == "left" and "hpTextLeft") or (slot == "right" and "hpTextRight") or "hpTextCenter"
+    elseif kind == "power" then
+        prefix = (slot == "left" and "powerTextLeft") or (slot == "right" and "powerTextRight") or "powerTextCenter"
+    end
+    return prefix and (prefix .. "FontSize") or nil
+end
 local function DeepCopyValue(value, seen)
     if type(value) ~= "table" then return value end
     seen = seen or {}

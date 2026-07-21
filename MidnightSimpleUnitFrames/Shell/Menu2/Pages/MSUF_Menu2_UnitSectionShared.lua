@@ -443,6 +443,9 @@ function Shared.MakeTextSlotState(owner, scopeKeyFn, slotTableName, moveTableNam
     function state.SlotOffsetKeys(kind)
         return M.TextSlotOffsetKeys(kind, state.CurrentSlot(kind))
     end
+    function state.SlotFontSizeKey(kind)
+        return M.TextSlotFontSizeKey(kind, state.CurrentSlot(kind))
+    end
     function state.MoveTogether(kind)
         local byScope = owner[moveTableName][ScopeKey()]
         local value = byScope and byScope[kind]
@@ -477,14 +480,14 @@ function Shared.ValueTextControlSets(kind, controls, layer, hookControls, curren
         { controls.leftHidePercent, "left" }, { controls.centerHidePercent, "center" }, { controls.rightHidePercent, "right" },
         { controls.mode, CurrentSlotFocus }, { controls.hidePercent, CurrentSlotFocus }, { controls.absorb, CurrentSlotFocus },
         { delimiter }, { controls.x }, { controls.y }, { controls.moveTogether },
-        { controls.slot, CurrentSlotFocus }, { controls.slotX, CurrentSlotFocus }, { controls.slotY, CurrentSlotFocus },
+        { controls.slot, CurrentSlotFocus }, { controls.slotX, CurrentSlotFocus }, { controls.slotY, CurrentSlotFocus }, { controls.slotSize, CurrentSlotFocus },
         { controls.size }, { layer },
     }
     local textControls = {
         controls.left, controls.center, controls.right,
         controls.leftHidePercent, controls.centerHidePercent, controls.rightHidePercent,
         controls.mode, controls.hidePercent, controls.absorb, controls.slot,
-        delimiter, controls.size, controls.x, controls.y, controls.moveTogether, layer,
+        delimiter, controls.size, controls.slotSize, controls.x, controls.y, controls.moveTogether, layer,
     }
     if controls.reverse then
         hookSpecs[#hookSpecs + 1] = { controls.reverse }

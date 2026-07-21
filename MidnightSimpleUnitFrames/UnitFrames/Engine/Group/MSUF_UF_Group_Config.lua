@@ -693,6 +693,11 @@ local function CompilePrediction(kind, conf, texture)
   return out
 end
 
+local function ResolveTextSlotFontSize(conf, key, fallback)
+  local value = Num(conf and conf[key], fallback)
+  return value > 0 and value or fallback
+end
+
 local function CompileTempMaxHealth(kind, conf, texture)
   local general = _G.MSUF_DB and _G.MSUF_DB.general or {}
   local textureKey = ScopedValue(conf, general, "tempMaxHealthTexture", "")
@@ -1266,6 +1271,8 @@ local function CompileTextSpec(kind, conf, general, baselineOffset, nameTextOpti
   local hpY = Num(conf.hpOffsetY, 0) + baselineOffset
   local powerX = Num(conf.powerOffsetX, 0)
   local powerY = Num(conf.powerOffsetY, 0) + baselineOffset
+  local hpFontSize = Num(conf.hpFontSize, 10)
+  local powerFontSize = Num(conf.powerFontSize, 9)
   return {
     anchorToBars = true,
     nameAnchorToFrame = conf._msufLegacyNameAnchorToFrame == true,
@@ -1288,6 +1295,9 @@ local function CompileTextSpec(kind, conf, general, baselineOffset, nameTextOpti
     healthLeft = healthLeft,
     healthCenter = healthCenter,
     healthRight = healthRight,
+    healthLeftFontSize = ResolveTextSlotFontSize(conf, "hpTextLeftFontSize", hpFontSize),
+    healthCenterFontSize = ResolveTextSlotFontSize(conf, "hpTextCenterFontSize", hpFontSize),
+    healthRightFontSize = ResolveTextSlotFontSize(conf, "hpTextRightFontSize", hpFontSize),
     healthLeftHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "hpTextLeftHidePercentSymbol"),
     healthCenterHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "hpTextCenterHidePercentSymbol"),
     healthRightHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "hpTextRightHidePercentSymbol"),
@@ -1311,6 +1321,9 @@ local function CompileTextSpec(kind, conf, general, baselineOffset, nameTextOpti
     powerLeft = conf.powerTextLeft or "NONE",
     powerCenter = conf.powerTextCenter or "NONE",
     powerRight = conf.powerTextRight or "NONE",
+    powerLeftFontSize = ResolveTextSlotFontSize(conf, "powerTextLeftFontSize", powerFontSize),
+    powerCenterFontSize = ResolveTextSlotFontSize(conf, "powerTextCenterFontSize", powerFontSize),
+    powerRightFontSize = ResolveTextSlotFontSize(conf, "powerTextRightFontSize", powerFontSize),
     powerLeftHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextLeftHidePercentSymbol"),
     powerCenterHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextCenterHidePercentSymbol"),
     powerRightHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextRightHidePercentSymbol"),

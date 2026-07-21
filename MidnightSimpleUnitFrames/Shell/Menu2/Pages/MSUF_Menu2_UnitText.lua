@@ -108,7 +108,7 @@ local function BuildText(ctx, builder, unit)
         end
     end
     local textSlotState = UnitSectionShared.MakeTextSlotState(M, function() return unit end, "unitTextSlotSelection", "unitTextMoveTogether")
-    local CurrentSlot, SetCurrentSlot, SlotOffsetKeys = textSlotState.CurrentSlot, textSlotState.SetCurrentSlot, textSlotState.SlotOffsetKeys
+    local CurrentSlot, SetCurrentSlot, SlotOffsetKeys, SlotFontSizeKey = textSlotState.CurrentSlot, textSlotState.SetCurrentSlot, textSlotState.SlotOffsetKeys, textSlotState.SlotFontSizeKey
     local MoveTogether, SetMoveTogether = textSlotState.MoveTogether, textSlotState.SetMoveTogether
     local function FocusPreviewText(kind, slot, active)
         local fn = _G.MSUF_UFPreview_FocusTextSlot
@@ -603,7 +603,7 @@ local function BuildText(ctx, builder, unit)
                 SetControlEnabled(controls.fullValueShort, enabled == true and hasNumericValue)
             end
         end
-        local position = TextCard(tab, cfg.positionTitle, cfg.positionSubtitle, rightX, -4, rightW, 350)
+        local position = TextCard(tab, cfg.positionTitle, cfg.positionSubtitle, rightX, -4, rightW, 408)
         local function BindPositionSlider(name, label, y, key, defaultValue, reason, focusSlot, afterSet)
             local control = W.Slider(position, label, -300, 300, 1, 260)
             controls[name] = control
@@ -644,8 +644,25 @@ local function BuildText(ctx, builder, unit)
             ControlMeta(ctx, "text." .. kind .. ".move_together", "ephemeral"))
         BindPositionSlider("slotX", "Selected slot X", -232, function() return SlotOffsetKeys(kind) end, 0, cfg.slotXReason, function() return CurrentSlot(kind) end)
         BindPositionSlider("slotY", "Selected slot Y", -290, function() local _, yKey = SlotOffsetKeys(kind); return yKey end, 0, cfg.slotYReason, function() return CurrentSlot(kind) end)
+        controls.slotSize = W.Slider(position, "Selected slot size", 6, 48, 1, 260)
+        PlaceSlider(position, controls.slotSize, 16, -348, rightW - 58)
+        M.BindNumberWidget(ctx, controls.slotSize,
+            function()
+                local conf = GetConf(unit)
+                local value = tonumber(conf and conf[SlotFontSizeKey(kind)])
+                return value and value > 0 and value or EffectiveTextSize(cfg.sizeKey, cfg.generalSizeKey)
+            end,
+            function(v)
+                SetNumber(unit, SlotFontSizeKey(kind), v, cfg.slotSizeReason, { text = true, fonts = true, preview = true })
+                FocusPreviewText(kind, CurrentSlot(kind), true)
+            end,
+            10, (function()
+                local meta = SelectedSlotMeta("text." .. kind .. ".slot.size")
+                meta.step, meta.roundStep = 1, true
+                return meta
+            end)())
         local appearance = TextCard(tab, "Appearance", nil, leftX, -(contentHeight + 24), cardW, 144)
-        controls.size = W.Slider(appearance, "Size", 6, 48, 1, 260)
+        controls.size = W.Slider(appearance, "Default size", 6, 48, 1, 260)
         PlaceSlider(appearance, controls.size, 16, -58, cardW - 72)
         M.BindNumberWidget(ctx, controls.size,
             function() return EffectiveTextSize(cfg.sizeKey, cfg.generalSizeKey) end,
@@ -698,6 +715,7 @@ local function BuildText(ctx, builder, unit)
         moveReason = "MSUF2_HP_TEXT_MOVE_MODE",
         slotXReason = "MSUF2_HP_SLOT_X",
         slotYReason = "MSUF2_HP_SLOT_Y",
+        slotSizeReason = "MSUF2_HP_SLOT_SIZE",
         sizeKey = "hpFontSize",
         generalSizeKey = "hpFontSize",
         sizeReason = "MSUF2_HP_SIZE",
@@ -731,6 +749,7 @@ local function BuildText(ctx, builder, unit)
         moveReason = "MSUF2_POWER_TEXT_MOVE_MODE",
         slotXReason = "MSUF2_POWER_SLOT_X",
         slotYReason = "MSUF2_POWER_SLOT_Y",
+        slotSizeReason = "MSUF2_POWER_SLOT_SIZE",
         sizeKey = "powerFontSize",
         generalSizeKey = "powerFontSize",
         sizeReason = "MSUF2_POWER_TEXT_SIZE",

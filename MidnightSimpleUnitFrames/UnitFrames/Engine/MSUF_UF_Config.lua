@@ -261,6 +261,12 @@ local function ApplySideTextOffsets(text, outPrefix, confPrefix, legacyPrefix, b
   end
 end
 
+local function ResolveTextSlotFontSize(conf, general, key, fallback)
+  local value = Number((conf and conf[key]) or (general and general[key]), fallback)
+  if value <= 0 then return fallback end
+  return value
+end
+
 local function ResolveBarMode(general)
   local mode = general and general.barMode
   if type(mode) == "string" then
@@ -1511,6 +1517,9 @@ local function CompileUnitText(out, db, unit, key, conf, general, bars)
   text.healthLeftHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "hpTextLeftHidePercentSymbol")
   text.healthCenterHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "hpTextCenterHidePercentSymbol")
   text.healthRightHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "hpTextRightHidePercentSymbol")
+  text.healthLeftFontSize = ResolveTextSlotFontSize(conf, general, "hpTextLeftFontSize", out.healthFontSize)
+  text.healthCenterFontSize = ResolveTextSlotFontSize(conf, general, "hpTextCenterFontSize", out.healthFontSize)
+  text.healthRightFontSize = ResolveTextSlotFontSize(conf, general, "hpTextRightFontSize", out.healthFontSize)
   if conf.hpTextReverse ~= nil then
     text.healthReverse = conf.hpTextReverse == true
   else
@@ -1540,6 +1549,9 @@ local function CompileUnitText(out, db, unit, key, conf, general, bars)
   text.powerLeftHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextLeftHidePercentSymbol")
   text.powerCenterHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextCenterHidePercentSymbol")
   text.powerRightHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextRightHidePercentSymbol")
+  text.powerLeftFontSize = ResolveTextSlotFontSize(conf, general, "powerTextLeftFontSize", out.powerFontSize)
+  text.powerCenterFontSize = ResolveTextSlotFontSize(conf, general, "powerTextCenterFontSize", out.powerFontSize)
+  text.powerRightFontSize = ResolveTextSlotFontSize(conf, general, "powerTextRightFontSize", out.powerFontSize)
   text.powerDelimiter = conf.powerTextSeparator or general.powerTextSeparator or text.healthDelimiter
   text.powerX = Number(conf.powerOffsetX or conf.powerTextOffsetX or general.powerOffsetX or general.powerTextOffsetX, -4)
   text.powerY = Number(conf.powerOffsetY or conf.powerTextOffsetY or general.powerOffsetY or general.powerTextOffsetY, 4) + fontBaselineOffset

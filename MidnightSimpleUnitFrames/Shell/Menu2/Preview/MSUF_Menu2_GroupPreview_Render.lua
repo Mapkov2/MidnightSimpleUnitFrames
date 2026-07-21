@@ -1635,7 +1635,10 @@ function Render.Install(box, ctx, deps)
         if mock._nameFS.SetWordWrap then mock._nameFS:SetWordWrap(false) end
         if mock._nameFS.SetNonSpaceWrap then mock._nameFS:SetNonSpaceWrap(false) end
         mock._nameFS:SetShown(showText and ((runtimeSpec and runtimeSpec.showName == true) or (not runtimeSpec and conf.showName ~= false)))
-        local hpSize = max(7, ScaleValue((runtimeSpec and runtimeSpec.healthFontSize) or conf.hpFontSize or 10, previewScale, 6))
+        local hpSize = (runtimeSpec and runtimeSpec.healthFontSize) or conf.hpFontSize or 10
+        local hpLeftSize = max(7, ScaleValue(runtimeText.healthLeftFontSize or conf.hpTextLeftFontSize or hpSize, previewScale, 6))
+        local hpCenterSize = max(7, ScaleValue(runtimeText.healthCenterFontSize or conf.hpTextCenterFontSize or hpSize, previewScale, 6))
+        local hpRightSize = max(7, ScaleValue(runtimeText.healthRightFontSize or conf.hpTextRightFontSize or hpSize, previewScale, 6))
         local hpTextOn = showText and ((runtimeSpec and runtimeSpec.showHealthText == true) or (not runtimeSpec and conf.showHPText ~= false))
         local hpLeftMode, hpCenterMode, hpRightMode
         if runtimeSpec then
@@ -1698,24 +1701,27 @@ function Render.Install(box, ctx, deps)
             if gf and gf.FormatHealthText then return gf.FormatHealthText(mode, fakeHP, fakeMax, hpDelimiter, false, nil, hidePercentSymbol, runtimeText.healthShortNumbers == true or (runtimeText.healthShortNumbers == nil and conf.hpFullValueShort ~= false), fakeAbsorb, absorbIcon == true) end
             return mode == "PERCENT" and (hidePercentSymbol and "72" or "72%") or "720k"
         end
-        PaintPreviewText(mock._hpLeftFS, hpSize, hpLeftMode, "LEFT", "LEFT",
+        PaintPreviewText(mock._hpLeftFS, hpLeftSize, hpLeftMode, "LEFT", "LEFT",
             pad4 + ConfigToOffset(runtimeText.healthLeftX or ((conf.hpOffsetX or 0) + (conf.hpTextLeftOffsetX or 0)), previewScale),
             ConfigToOffset(runtimeText.healthLeftY or ((conf.hpOffsetY or 0) + (conf.hpTextLeftOffsetY or 0) + baselineOffset), previewScale),
             "LEFT", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, PreviewHealthText(hpLeftMode, hpLeftHidePercent,
                 runtimeText.healthReverse == true and "healthRightAbsorbIcon" or "healthLeftAbsorbIcon",
                 conf.hpTextReverse == true and "hpTextRightAbsorbIcon" or "hpTextLeftAbsorbIcon"))
-        PaintPreviewText(mock._hpCenterFS, hpSize, hpCenterMode, "CENTER", "CENTER",
+        PaintPreviewText(mock._hpCenterFS, hpCenterSize, hpCenterMode, "CENTER", "CENTER",
             ConfigToOffset(runtimeText.healthCenterX or ((conf.hpOffsetX or 0) + (conf.hpTextCenterOffsetX or 0)), previewScale),
             ConfigToOffset(runtimeText.healthCenterY or ((conf.hpOffsetY or 0) + (conf.hpTextCenterOffsetY or 0) + baselineOffset), previewScale),
             "CENTER", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, PreviewHealthText(hpCenterMode, hpCenterHidePercent,
                 "healthCenterAbsorbIcon", "hpTextCenterAbsorbIcon"))
-        PaintPreviewText(mock._hpRightFS, hpSize, hpRightMode, "RIGHT", "RIGHT",
+        PaintPreviewText(mock._hpRightFS, hpRightSize, hpRightMode, "RIGHT", "RIGHT",
             -pad4 + ConfigToOffset(runtimeText.healthRightX or ((conf.hpOffsetX or 0) + (conf.hpTextRightOffsetX or 0)), previewScale),
             ConfigToOffset(runtimeText.healthRightY or ((conf.hpOffsetY or 0) + (conf.hpTextRightOffsetY or 0) + baselineOffset), previewScale),
             "RIGHT", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, PreviewHealthText(hpRightMode, hpRightHidePercent,
                 runtimeText.healthReverse == true and "healthLeftAbsorbIcon" or "healthRightAbsorbIcon",
                 conf.hpTextReverse == true and "hpTextLeftAbsorbIcon" or "hpTextRightAbsorbIcon"))
-        local pwrSize = max(6, ScaleValue((runtimeSpec and runtimeSpec.powerFontSize) or conf.powerFontSize or 9, previewScale, 6))
+        local pwrSize = (runtimeSpec and runtimeSpec.powerFontSize) or conf.powerFontSize or 9
+        local pwrLeftSize = max(6, ScaleValue(runtimeText.powerLeftFontSize or conf.powerTextLeftFontSize or pwrSize, previewScale, 6))
+        local pwrCenterSize = max(6, ScaleValue(runtimeText.powerCenterFontSize or conf.powerTextCenterFontSize or pwrSize, previewScale, 6))
+        local pwrRightSize = max(6, ScaleValue(runtimeText.powerRightFontSize or conf.powerTextRightFontSize or pwrSize, previewScale, 6))
         local showPowerText = showText
         if runtimeSpec then
             showPowerText = showText and runtimeSpec.showPowerText == true
@@ -1735,15 +1741,15 @@ function Render.Install(box, ctx, deps)
         local powerLeftHidePercent = SlotHidePercentSymbol("powerLeftHidePercentSymbol", "powerTextLeftHidePercentSymbol")
         local powerCenterHidePercent = SlotHidePercentSymbol("powerCenterHidePercentSymbol", "powerTextCenterHidePercentSymbol")
         local powerRightHidePercent = SlotHidePercentSymbol("powerRightHidePercentSymbol", "powerTextRightHidePercentSymbol")
-        PaintPreviewText(mock._powerLeftFS, pwrSize, powerLeftMode, "BOTTOMLEFT", "BOTTOMLEFT",
+        PaintPreviewText(mock._powerLeftFS, pwrLeftSize, powerLeftMode, "BOTTOMLEFT", "BOTTOMLEFT",
             pad4 + ConfigToOffset(runtimeText.powerLeftX or ((conf.powerOffsetX or 0) + (conf.powerTextLeftOffsetX or 0)), previewScale),
             ConfigToOffset(1 + (runtimeText.powerLeftY or ((conf.powerOffsetY or 0) + (conf.powerTextLeftOffsetY or 0) + baselineOffset)), previewScale),
             "LEFT", fr or 1, fg or 1, fb or 1, textAlpha, showPowerText, PreviewPowerText(powerLeftMode, powerLeftHidePercent))
-        PaintPreviewText(mock._powerCenterFS, pwrSize, powerCenterMode, "BOTTOM", "BOTTOM",
+        PaintPreviewText(mock._powerCenterFS, pwrCenterSize, powerCenterMode, "BOTTOM", "BOTTOM",
             ConfigToOffset(runtimeText.powerCenterX or ((conf.powerOffsetX or 0) + (conf.powerTextCenterOffsetX or 0)), previewScale),
             ConfigToOffset(1 + (runtimeText.powerCenterY or ((conf.powerOffsetY or 0) + (conf.powerTextCenterOffsetY or 0) + baselineOffset)), previewScale),
             "CENTER", fr or 1, fg or 1, fb or 1, textAlpha, showPowerText, PreviewPowerText(powerCenterMode, powerCenterHidePercent))
-        PaintPreviewText(mock._powerRightFS, pwrSize, powerRightMode, "BOTTOMRIGHT", "BOTTOMRIGHT",
+        PaintPreviewText(mock._powerRightFS, pwrRightSize, powerRightMode, "BOTTOMRIGHT", "BOTTOMRIGHT",
             -pad4 + ConfigToOffset(runtimeText.powerRightX or ((conf.powerOffsetX or 0) + (conf.powerTextRightOffsetX or 0)), previewScale),
             ConfigToOffset(1 + (runtimeText.powerRightY or ((conf.powerOffsetY or 0) + (conf.powerTextRightOffsetY or 0) + baselineOffset)), previewScale),
             "RIGHT", fr or 1, fg or 1, fb or 1, textAlpha, showPowerText, PreviewPowerText(powerRightMode, powerRightHidePercent))

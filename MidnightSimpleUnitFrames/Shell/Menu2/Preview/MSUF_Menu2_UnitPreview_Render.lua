@@ -268,6 +268,10 @@ end
 local function ApplyPreviewFontSet(apply, size, ...)
     for i = 1, select("#", ...) do apply(select(i, ...), size) end
 end
+local function ResolvePreviewTextSlotSize(runtimeText, conf, runtimeKey, dbKey, fallback)
+    local value = tonumber(runtimeText and runtimeText[runtimeKey]) or tonumber(conf and conf[dbKey])
+    return value and value > 0 and value or fallback
+end
 local function SetTextColorSet(r, g, b, a, ...)
     for i = 1, select("#", ...) do select(i, ...):SetTextColor(r, g, b, a) end
 end
@@ -868,18 +872,16 @@ function Preview.Refresh(box, reason)
         local hpTextVisible = PreviewLayerWanted(box, "hpText") and conf.showHP ~= false and (not runtimeSpec or runtimeSpec.showHealthText ~= false)
         if hpTextVisible then
             local o = TextOffsets("hp", -4)
-            local th, tw = rawHPSize + 6, ApproxTextWidth("410K - 41%", rawHPSize, 10)
-            minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "LEFT", "LEFT", 4 + o.leftX, o.leftY, tw, th, w, h)
-            minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "CENTER", "CENTER", o.centerX, o.centerY, tw, th, w, h)
-            minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "RIGHT", "RIGHT", -4 + o.rightX, o.rightY, tw, th, w, h)
+            minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "LEFT", "LEFT", 4 + o.leftX, o.leftY, ApproxTextWidth("410K - 41%", ResolvePreviewTextSlotSize(runtimeText, conf, "healthLeftFontSize", "hpTextLeftFontSize", rawHPSize), 10), ResolvePreviewTextSlotSize(runtimeText, conf, "healthLeftFontSize", "hpTextLeftFontSize", rawHPSize) + 6, w, h)
+            minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "CENTER", "CENTER", o.centerX, o.centerY, ApproxTextWidth("410K - 41%", ResolvePreviewTextSlotSize(runtimeText, conf, "healthCenterFontSize", "hpTextCenterFontSize", rawHPSize), 10), ResolvePreviewTextSlotSize(runtimeText, conf, "healthCenterFontSize", "hpTextCenterFontSize", rawHPSize) + 6, w, h)
+            minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "RIGHT", "RIGHT", -4 + o.rightX, o.rightY, ApproxTextWidth("410K - 41%", ResolvePreviewTextSlotSize(runtimeText, conf, "healthRightFontSize", "hpTextRightFontSize", rawHPSize), 10), ResolvePreviewTextSlotSize(runtimeText, conf, "healthRightFontSize", "hpTextRightFontSize", rawHPSize) + 6, w, h)
         end
         local powerTextVisible = PreviewLayerWanted(box, "powerText") and ((key ~= "focustarget" and conf.showPower ~= false) or conf.showPower == true) and (not runtimeSpec or runtimeSpec.showPowerText ~= false)
         if powerTextVisible then
             local o = TextOffsets("power", 4)
-            local th, tw = rawPowerSize + 6, ApproxTextWidth("240K", rawPowerSize, 6)
-            minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "BOTTOMLEFT", "BOTTOMLEFT", 4 + o.leftX, 1 + o.leftY, tw, th, w, h)
-            minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "BOTTOM", "BOTTOM", o.centerX, 1 + o.centerY, tw, th, w, h)
-            minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "BOTTOMRIGHT", "BOTTOMRIGHT", -4 + o.rightX, 1 + o.rightY, tw, th, w, h)
+            minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "BOTTOMLEFT", "BOTTOMLEFT", 4 + o.leftX, 1 + o.leftY, ApproxTextWidth("240K", ResolvePreviewTextSlotSize(runtimeText, conf, "powerLeftFontSize", "powerTextLeftFontSize", rawPowerSize), 6), ResolvePreviewTextSlotSize(runtimeText, conf, "powerLeftFontSize", "powerTextLeftFontSize", rawPowerSize) + 6, w, h)
+            minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "BOTTOM", "BOTTOM", o.centerX, 1 + o.centerY, ApproxTextWidth("240K", ResolvePreviewTextSlotSize(runtimeText, conf, "powerCenterFontSize", "powerTextCenterFontSize", rawPowerSize), 6), ResolvePreviewTextSlotSize(runtimeText, conf, "powerCenterFontSize", "powerTextCenterFontSize", rawPowerSize) + 6, w, h)
+            minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "BOTTOMRIGHT", "BOTTOMRIGHT", -4 + o.rightX, 1 + o.rightY, ApproxTextWidth("240K", ResolvePreviewTextSlotSize(runtimeText, conf, "powerRightFontSize", "powerTextRightFontSize", rawPowerSize), 6), ResolvePreviewTextSlotSize(runtimeText, conf, "powerRightFontSize", "powerTextRightFontSize", rawPowerSize) + 6, w, h)
         end
         if PreviewLayerWanted(box, "status") then
             for i = 1, #(D.STATUS_PREVIEW or {}) do
@@ -1519,8 +1521,8 @@ function Preview.Refresh(box, reason)
     local baseTextSize = tonumber(g.fontSize) or 14
     local nameRawSize = tonumber(conf.nameFontSize) or tonumber(g.nameFontSize) or baseTextSize
     local nameSize = S(nameRawSize); if nameSize < 7 then nameSize = 7 end
-    local hpSize = S(tonumber(conf.hpFontSize) or tonumber(g.hpFontSize) or baseTextSize); if hpSize < 7 then hpSize = 7 end
-    local pwrSize = S(tonumber(conf.powerFontSize) or tonumber(g.powerFontSize) or baseTextSize); if pwrSize < 7 then pwrSize = 7 end
+    local hpSize = tonumber(conf.hpFontSize) or tonumber(g.hpFontSize) or baseTextSize
+    local pwrSize = tonumber(conf.powerFontSize) or tonumber(g.powerFontSize) or baseTextSize
     box._fontPreviewTextAlpha = tonumber(runtimeSpec and runtimeSpec.textColor and runtimeSpec.textColor.a)
         or tonumber(conf.fontOverride == true and conf.fontTextAlpha)
         or tonumber(g.fontTextAlpha)
@@ -1529,8 +1531,12 @@ function Preview.Refresh(box, reason)
     box._fontPreviewBaselineOffset = tonumber(conf.fontOverride == true and conf.fontBaselineOffset) or tonumber(g.fontBaselineOffset) or 0
     if box._fontPreviewBaselineOffset < -4 then box._fontPreviewBaselineOffset = -4 elseif box._fontPreviewBaselineOffset > 4 then box._fontPreviewBaselineOffset = 4 end
     ApplyPreviewFontSet(ApplyPreviewFont, nameSize, mock.nameText, mock.raidGroupNameText, mock.totInlineSep, mock.totInlineText)
-    ApplyPreviewFontSet(ApplyPreviewFont, hpSize, mock.hpTextLeft, mock.hpTextCenter, mock.hpText, mock.hpTextPct)
-    ApplyPreviewFontSet(ApplyPreviewFont, pwrSize, mock.powerTextLeft, mock.powerTextCenter, mock.powerText, mock.powerTextPct)
+    ApplyPreviewFont(mock.hpTextLeft, max(7, S(ResolvePreviewTextSlotSize(runtimeText, conf, "healthLeftFontSize", "hpTextLeftFontSize", hpSize))))
+    ApplyPreviewFont(mock.hpTextCenter, max(7, S(ResolvePreviewTextSlotSize(runtimeText, conf, "healthCenterFontSize", "hpTextCenterFontSize", hpSize))))
+    ApplyPreviewFontSet(ApplyPreviewFont, max(7, S(ResolvePreviewTextSlotSize(runtimeText, conf, "healthRightFontSize", "hpTextRightFontSize", hpSize))), mock.hpText, mock.hpTextPct)
+    ApplyPreviewFont(mock.powerTextLeft, max(7, S(ResolvePreviewTextSlotSize(runtimeText, conf, "powerLeftFontSize", "powerTextLeftFontSize", pwrSize))))
+    ApplyPreviewFont(mock.powerTextCenter, max(7, S(ResolvePreviewTextSlotSize(runtimeText, conf, "powerCenterFontSize", "powerTextCenterFontSize", pwrSize))))
+    ApplyPreviewFontSet(ApplyPreviewFont, max(7, S(ResolvePreviewTextSlotSize(runtimeText, conf, "powerRightFontSize", "powerTextRightFontSize", pwrSize))), mock.powerText, mock.powerTextPct)
     SetTextColorSet(fr, fg, fb, box._fontPreviewTextAlpha, mock.nameText, mock.raidGroupNameText)
     mock.totInlineSep:SetTextColor(0.72, 0.76, 0.84, box._fontPreviewTextAlpha)
     mock.totInlineText:SetTextColor(fr, fg, fb, box._fontPreviewTextAlpha)
