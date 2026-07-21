@@ -183,8 +183,24 @@ local function ApplyTimeTextFont()
         fontPath = resolveSafe(fontPath, fontSize, fontFlags, g and g.fontKey)
     end
 
-    if iconFrame and iconFrame.timeText then iconFrame.timeText:SetFont(fontPath, fontSize, fontFlags) end
-    if previewFrame and previewFrame.timeText then previewFrame.timeText:SetFont(fontPath, fontSize, fontFlags) end
+    local g = _G.MSUF_DB and _G.MSUF_DB.general
+    local applyResolved = _G.MSUF_ApplyResolvedFont
+    local function ApplyOne(fs)
+        if not fs then return end
+        if type(applyResolved) == "function" then
+            applyResolved(fs, fontPath, fontSize, fontFlags, g and g.fontKey)
+            return
+        end
+        local ok, applied = pcall(fs.SetFont, fs, fontPath, fontSize, fontFlags)
+        local ready = ok and applied ~= false
+        local matches = _G.MSUF_FontApplicationMatches
+        if ready and type(matches) == "function" then ready = matches(fs, fontPath, fontSize) == true end
+        if not ready and type(_G.MSUF_MarkFontApplyFailed) == "function" then
+            _G.MSUF_MarkFontApplyFailed()
+        end
+    end
+    ApplyOne(iconFrame and iconFrame.timeText)
+    ApplyOne(previewFrame and previewFrame.timeText)
 
     if type(_G.MSUF_GetConfiguredFontColor) == "function" then
         local red, green, blue = _G.MSUF_GetConfiguredFontColor()

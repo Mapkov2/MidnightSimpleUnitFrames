@@ -661,7 +661,18 @@ end
 local function SyncNameOverlayFont(overlay, source)
     if not (overlay and source) then return end
     local path, size, flags = source:GetFont()
-    if path and size then overlay:SetFont(path, size, flags) end
+    if path and size then
+        local general = _G.MSUF_DB and _G.MSUF_DB.general
+        local applyResolved = _G.MSUF_ApplyResolvedFont
+        if type(applyResolved) == "function" then
+            applyResolved(overlay, path, size, flags, general and general.fontKey)
+        else
+            local ok, applied = pcall(overlay.SetFont, overlay, path, size, flags)
+            if (not ok or applied == false) and type(_G.MSUF_MarkFontApplyFailed) == "function" then
+                _G.MSUF_MarkFontApplyFailed()
+            end
+        end
+    end
     if source.GetJustifyH then overlay:SetJustifyH(source:GetJustifyH()) end
     if source.GetJustifyV then overlay:SetJustifyV(source:GetJustifyV()) end
     if source.GetShadowColor then overlay:SetShadowColor(source:GetShadowColor()) end

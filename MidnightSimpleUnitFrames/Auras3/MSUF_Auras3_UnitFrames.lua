@@ -1886,7 +1886,25 @@ local function ApplyFont(fs, size)
     end
     local fontPath, fontFlags = A3._auraFontPath, A3._auraFontFlags
     local r, g, b, useShadow = A3._auraFontR, A3._auraFontG, A3._auraFontB, A3._auraFontShadow
-    fs:SetFont(fontPath or STANDARD_TEXT_FONT, ClampNumber(size, 12, 6, 40), fontFlags or "OUTLINE")
+    fontPath = fontPath or STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+    fontFlags = fontFlags or "OUTLINE"
+    size = ClampNumber(size, 12, 6, 40)
+    local general = _G.MSUF_DB and _G.MSUF_DB.general
+    local applyResolved = _G.MSUF_ApplyResolvedFont
+    if type(applyResolved) == "function" then
+        applyResolved(fs, fontPath, size, fontFlags, general and general.fontKey)
+    else
+        local ok, applied = pcall(fs.SetFont, fs, fontPath, size, fontFlags)
+        local ready = ok and applied ~= false
+        local matches = _G.MSUF_FontApplicationMatches
+        if ready and type(matches) == "function" then ready = matches(fs, fontPath, size) == true end
+        if not ready then
+            if fontPath ~= STANDARD_TEXT_FONT and STANDARD_TEXT_FONT then
+                pcall(fs.SetFont, fs, STANDARD_TEXT_FONT, size, fontFlags)
+            end
+            if type(_G.MSUF_MarkFontApplyFailed) == "function" then _G.MSUF_MarkFontApplyFailed() end
+        end
+    end
     fs:SetTextColor(r or 1, g or 1, b or 1, 1)
     if useShadow then fs:SetShadowOffset(1, -1) else fs:SetShadowOffset(0, 0) end
 end
@@ -2445,11 +2463,17 @@ end
 
 local function ApplyDurationBarColor(bar)
     if not bar then return end
-    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or nil
-    local color = general and general.aurasCooldownTextSafeColor
-    local r, g, b = 0.08, 0.78, 1.00
-    if type(color) == "table" then
-        r, g, b = color[1] or color.r or r, color[2] or color.g or g, color[3] or color.b or b
+    local r, g, b
+    if type(A3.GetDurationBarColor) == "function" then
+        r, g, b = A3.GetDurationBarColor()
+    else
+        local general = (_G.MSUF_DB and _G.MSUF_DB.general) or nil
+        local color = general and general.aurasCooldownTextSafeColor
+        if type(color) == "table" then
+            r, g, b = color[1] or color.r, color[2] or color.g, color[3] or color.b
+        elseif type(_G.MSUF_GetConfiguredFontColor) == "function" then
+            r, g, b = _G.MSUF_GetConfiguredFontColor()
+        end
     end
     if bar.SetStatusBarColor then bar:SetStatusBarColor(Clamp01(r, 1), Clamp01(g, 1), Clamp01(b, 1), 0.95) end
 end

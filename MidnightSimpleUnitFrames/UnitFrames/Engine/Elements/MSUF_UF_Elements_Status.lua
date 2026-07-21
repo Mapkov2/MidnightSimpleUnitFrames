@@ -321,21 +321,52 @@ local function ApplyStatusFont(region, font, size, flags)
   size = tonumber(size) or 14
   if size <= 0 then size = 14 end
   if size < 6 then size = 6 elseif size > 128 then size = 128 end
-  return region:SetFont(font, size, flags) ~= false
+  local ok, applied = pcall(region.SetFont, region, font, size, flags)
+  if not ok or applied == false then return false end
+  local matches = _G.MSUF_FontApplicationMatches
+  if type(matches) == "function" then
+    return matches(region, font, size) == true
+  end
+  if type(region.GetFont) ~= "function" then return true end
+  local readOK, actualFont, actualSize = pcall(region.GetFont, region)
+  if not readOK or not actualFont then return false end
+  local pathMatches = tostring(actualFont):gsub("/", "\\"):lower() == tostring(font):gsub("/", "\\"):lower()
+  actualSize = tonumber(actualSize)
+  return pathMatches and actualSize ~= nil and math.abs(actualSize - size) <= 0.01
 end
 
 local function SetFont(region, spec, size)
   if not region or not region.SetFont then
-    return
+    return true
   end
   local font = spec and spec.font
   local flags = spec and spec.fontFlags or "OUTLINE"
   size = tonumber(size) or 14
   if size <= 0 then size = 14 end
   if size < 6 then size = 6 elseif size > 128 then size = 128 end
-  if font and (region._msufStatusFont ~= font or region._msufStatusFontSize ~= size or region._msufStatusFontFlags ~= flags) then
+  local fontEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
+  local fontReady = region._msufStatusFontPending ~= true
+  if font and (region._msufStatusFontAttemptEpoch ~= fontEpoch
+      or region._msufStatusFont ~= font
+      or region._msufStatusFontSize ~= size
+      or region._msufStatusFontFlags ~= flags)
+  then
     if ApplyStatusFont(region, font, size, flags) then
       region._msufStatusFont, region._msufStatusFontSize, region._msufStatusFontFlags = font, size, flags
+      region._msufStatusFontEpoch = fontEpoch
+      region._msufStatusFontAttemptEpoch = fontEpoch
+      region._msufStatusFontPending = nil
+      fontReady = true
+    else
+      local clear = _G.MSUF_ClearFontStringApplyCaches
+      if type(clear) == "function" then clear(region) end
+      region._msufStatusFont, region._msufStatusFontSize, region._msufStatusFontFlags = font, size, flags
+      region._msufStatusFontEpoch = nil
+      region._msufStatusFontAttemptEpoch = fontEpoch
+      region._msufStatusFontPending = true
+      local markFailed = _G.MSUF_MarkFontApplyFailed
+      if type(markFailed) == "function" then markFailed() end
+      fontReady = false
     end
   end
   if region.SetShadowOffset then
@@ -349,6 +380,7 @@ local function SetFont(region, spec, size)
       region._msufStatusShadowX, region._msufStatusShadowY, region._msufStatusShadowA = sx, sy, sa
     end
   end
+  return fontReady
 end
 
 local function ApplyTextColor(region, spec)

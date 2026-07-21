@@ -28,6 +28,7 @@ local SetNameTextColor = Text.SetNameTextColor
 local NameTextColor = Text.NameTextColor
 local ResolveHealthTextModes = Text.ResolveHealthTextModes
 local CompileTextRuntime = Text.CompileTextRuntime
+local SetHealthTextColor = Text.SetHealthTextColor
 local UpdateHealthTextColor = Text.UpdateHealthTextColor
 local RefreshNameRelativeStatusAnchors = MSUF.UFStatusRuntime and MSUF.UFStatusRuntime.RefreshNameRelativeAnchors
 local function LayoutText(fs, point, relPoint, x, y, justify, relativeTo)
@@ -818,7 +819,13 @@ local function RefreshAppliedTextColors(frame, spec, text)
     end
   end
   frame._msufPowerTextColorInitialized = nil
-  if UpdateHealthTextColor then
+  if text and text.healthColorByHealth ~= true and text.healthColorByClass ~= true
+    and text.directLayout ~= true and rt then
+    -- The health-color updater is intentionally a no-op in the default color
+    -- mode. Refresh that cold path here so font opacity changes cannot leave HP
+    -- text on its previous alpha while name/power text already use the new one.
+    SetHealthTextColor(frame, rt, rt.textColorR, rt.textColorG, rt.textColorB, rt.textColorA)
+  elseif UpdateHealthTextColor then
     UpdateHealthTextColor(frame, rt, frame.MSUFUnitKey)
   end
   if frame.nameText then
@@ -827,13 +834,41 @@ local function RefreshAppliedTextColors(frame, spec, text)
   frame._msufTextColorRevision = spec and spec._msufTextColorRevision
 end
 
+local FONT_EPOCH_TEXT_FIELDS = {
+  "nameText", "raidGroupNameText", "totInlineSep", "totInlineText",
+  "hpTextLeft", "hpTextCenter", "hpTextRight",
+  "powerTextLeft", "powerTextCenter", "powerTextRight",
+  "levelText", "classificationIndicatorText", "statusIndicatorText", "statusIndicatorOverlayText",
+  "_msufInlineDotsFS",
+}
+
+local function InvalidateTextForFontEpoch(frame)
+  for i = 1, #FONT_EPOCH_TEXT_FIELDS do
+    local region = frame[FONT_EPOCH_TEXT_FIELDS[i]]
+    if region then
+      region._aText = nil
+      region._aTextPlain = nil
+      region._msufLastSetT = nil
+    end
+  end
+  frame._msufTextApplySignature = nil
+  frame._msufTextLayoutRevision = nil
+  frame._msufLastNameRaw, frame._msufLastNameText, frame._msufLastNameShortenStamp = nil, nil, nil
+  frame._msufInlineRaw, frame._msufInlineText, frame._msufInlineStamp = nil, nil, nil
+end
+
 function Text.Apply(frame, spec)
   local text = spec and spec.text or {}
+  local fontEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
+  if frame._msufTextFontAttemptEpoch ~= fontEpoch then
+    InvalidateTextForFontEpoch(frame)
+  end
   local sinksChanged, sinksReady = EnsureConfiguredTextSinks(frame, spec)
   local layoutRevision = spec and spec._msufTextLayoutRevision
   if frame._msufGFPreviewDetached ~= true
     and not sinksChanged
     and sinksReady
+    and frame._msufTextFontAttemptEpoch == fontEpoch
     and layoutRevision ~= nil
     and frame._msufTextLayoutRevision == layoutRevision
   then
@@ -844,6 +879,7 @@ function Text.Apply(frame, spec)
   if frame._msufGFPreviewDetached ~= true
     and not sinksChanged
     and sinksReady
+    and frame._msufTextFontAttemptEpoch == fontEpoch
     and frame._msufTextApplySignature == signature
   then
     RefreshAppliedTextColors(frame, spec, text)
@@ -860,17 +896,18 @@ function Text.Apply(frame, spec)
     HideDots(frame._msufInlineDotsFS)
     frame._msufInlineRaw, frame._msufInlineText, frame._msufInlineStamp = nil, nil, nil
   end
-  SetFont(frame.nameText, spec, spec and spec.nameFontSize, "name")
+  local fontsReady = SetFont(frame.nameText, spec, spec and spec.nameFontSize, "name") ~= false
   if inlineEnabled then
-    SetFont(frame.totInlineSep, spec, spec and spec.nameFontSize, "name")
-    SetFont(frame.totInlineText, spec, spec and spec.nameFontSize, "name")
+    if SetFont(frame.totInlineSep, spec, spec and spec.nameFontSize, "name") == false then fontsReady = false end
+    if SetFont(frame.totInlineText, spec, spec and spec.nameFontSize, "name") == false then fontsReady = false end
   end
-  SetFont(frame.hpTextLeft, spec, text.healthLeftFontSize or (spec and spec.healthFontSize), "health")
-  SetFont(frame.hpTextCenter, spec, text.healthCenterFontSize or (spec and spec.healthFontSize), "health")
-  SetFont(frame.hpTextRight, spec, text.healthRightFontSize or (spec and spec.healthFontSize), "health")
-  SetFont(frame.powerTextLeft, spec, text.powerLeftFontSize or (spec and spec.powerFontSize), "power")
-  SetFont(frame.powerTextCenter, spec, text.powerCenterFontSize or (spec and spec.powerFontSize), "power")
-  SetFont(frame.powerTextRight, spec, text.powerRightFontSize or (spec and spec.powerFontSize), "power")
+  if SetFont(frame.hpTextLeft, spec, text.healthLeftFontSize or (spec and spec.healthFontSize), "health") == false then fontsReady = false end
+  if SetFont(frame.hpTextCenter, spec, text.healthCenterFontSize or (spec and spec.healthFontSize), "health") == false then fontsReady = false end
+  if SetFont(frame.hpTextRight, spec, text.healthRightFontSize or (spec and spec.healthFontSize), "health") == false then fontsReady = false end
+  if SetFont(frame.powerTextLeft, spec, text.powerLeftFontSize or (spec and spec.powerFontSize), "power") == false then fontsReady = false end
+  if SetFont(frame.powerTextCenter, spec, text.powerCenterFontSize or (spec and spec.powerFontSize), "power") == false then fontsReady = false end
+  if SetFont(frame.powerTextRight, spec, text.powerRightFontSize or (spec and spec.powerFontSize), "power") == false then fontsReady = false end
+  frame._msufTextFontPending = fontsReady and nil or true
   frame._msufNameTextR, frame._msufNameTextG, frame._msufNameTextB, frame._msufNameTextA = nil, nil, nil, nil
   frame._msufLastNameRaw, frame._msufLastNameText, frame._msufLastNameShortenStamp = nil, nil, nil
   frame._msufPowerTextColorInitialized = nil
@@ -1026,4 +1063,6 @@ function Text.Apply(frame, spec)
   frame._msufTextApplySignature = signature
   frame._msufTextLayoutRevision = layoutRevision
   frame._msufTextColorRevision = spec and spec._msufTextColorRevision
+  frame._msufTextFontAttemptEpoch = fontEpoch
+  frame._msufTextFontEpoch = fontsReady and fontEpoch or nil
 end

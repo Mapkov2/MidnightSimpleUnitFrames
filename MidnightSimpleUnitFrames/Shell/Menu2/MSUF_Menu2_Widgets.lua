@@ -679,7 +679,9 @@ function W.PageBuilder(ctx, opts)
         arrow:SetSize(10, 10)
         arrow:SetPoint("LEFT", header, "LEFT", 12, 0)
         arrow:SetTexture(T.media.collapseArrow)
-        local label = T.Font(header, "GameFontNormal", Tr(title or ""), T.colors.text, "section")
+        -- Keep the selected face for accordion titles. Expressway's automatic
+        -- Regular -> SemiBold face switch can cold-start blank until a relayout.
+        local label = T.Font(header, "GameFontNormal", Tr(title or ""), T.colors.text, "accordion")
         SetSearchText(label, title)
         label:SetJustifyH("LEFT")
         local hint = T.Font(header, "GameFontDisableSmall", "", T.colors.dim)

@@ -10,11 +10,15 @@ local UI = assert(root.UI, 'shared UI missing')
 
 local regular = 'Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Fonts\\Expressway Regular.ttf'
 local semibold = 'Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Fonts\\Expressway SemiBold.ttf'
+local standard = 'Fonts\\FRIZQT__.TTF'
 local custom = 'Interface\\AddOns\\SharedMedia_Custom\\My Font.ttf'
 
 AssertEqual(UI.FontSize('supporting'), 11, 'supporting size')
 AssertEqual(UI.FontSize('control'), 13, 'control size')
+AssertEqual(UI.FontSize('accordion'), 15, 'accordion size')
 AssertEqual(UI.FontSize('section'), 15, 'section size')
+AssertEqual(UI.ResolveRoleFontPath(regular, 'accordion'), regular, 'accordion regular weight')
+AssertEqual(UI.ResolveRoleFontPath(standard, 'accordion'), standard, 'accordion standard font preservation')
 AssertEqual(UI.ResolveRoleFontPath(regular, 'section'), semibold, 'section weight')
 AssertEqual(UI.ResolveRoleFontPath(regular, 'control'), regular, 'control weight')
 AssertEqual(UI.ResolveRoleFontPath(custom, 'section'), custom, 'custom font preservation')
@@ -80,6 +84,62 @@ spec.font = custom
 SetUnitFont(customName, spec, 10, 'name')
 AssertEqual(customName.font, custom, 'custom unit font preservation')
 
+-- A SetFont success with provisional live metrics must stay pending without
+-- retrying from ordinary unit events. The coordinator's next epoch owns the
+-- second real SetFont; once settled, the tuple cache returns to zero work.
+local previousMarkFontFailed = _G.MSUF_MarkFontApplyFailed
+local previousFontEpoch = _G.MSUF_FontApplyEpoch
+_G.MSUF_FontApplyEpoch = 100
+local markedFontFailures = 0
+_G.MSUF_MarkFontApplyFailed = function()
+    markedFontFailures = markedFontFailures + 1
+end
+spec.font = regular
+local coldUnit = FontString()
+coldUnit.setCalls, coldUnit.getCalls = 0, 0
+function coldUnit:GetFont()
+    self.getCalls = self.getCalls + 1
+    return self.font, self.size, self.flags
+end
+function coldUnit:SetFont(font, size, flags)
+    self.setCalls = self.setCalls + 1
+    self.font, self.flags = font, flags
+    self.size = self.setCalls == 1 and (size + 1) or size
+    return true
+end
+AssertEqual(SetUnitFont(coldUnit, spec, 14, 'name'), false, 'cold unit provisional metrics')
+AssertEqual(coldUnit._msufFontPending, true, 'cold unit pending marker')
+AssertEqual(coldUnit._msufFont, semibold, 'cold unit bounded-attempt tuple cache')
+AssertEqual(coldUnit._msufFontAttemptEpoch, 100, 'cold unit attempt epoch')
+AssertEqual(coldUnit._msufFontEpoch, nil, 'cold unit success epoch')
+AssertEqual(markedFontFailures, 1, 'cold unit failure signal')
+local pendingSetCalls, pendingGetCalls = coldUnit.setCalls, coldUnit.getCalls
+AssertEqual(SetUnitFont(coldUnit, spec, 14, 'name'), false, 'cold unit same-epoch pending result')
+AssertEqual(coldUnit.setCalls, pendingSetCalls, 'cold unit same-epoch SetFont calls')
+AssertEqual(coldUnit.getCalls, pendingGetCalls, 'cold unit same-epoch GetFont calls')
+_G.MSUF_FontApplyEpoch = 101
+AssertEqual(SetUnitFont(coldUnit, spec, 14, 'name'), true, 'cold unit retry')
+AssertEqual(coldUnit.font, semibold, 'cold unit retry path')
+AssertEqual(coldUnit.size, 14, 'cold unit retry size')
+AssertEqual(coldUnit._msufFontPending, nil, 'cold unit pending cleared')
+AssertEqual(coldUnit._msufFontEpoch, 101, 'cold unit settled epoch')
+local settledUnitSetCalls, settledUnitGetCalls = coldUnit.setCalls, coldUnit.getCalls
+AssertEqual(SetUnitFont(coldUnit, spec, 14, 'name'), true, 'cold unit settled fast path')
+AssertEqual(coldUnit.setCalls, settledUnitSetCalls, 'cold unit settled SetFont calls')
+AssertEqual(coldUnit.getCalls, settledUnitGetCalls, 'cold unit settled GetFont calls')
+_G.MSUF_MarkFontApplyFailed = previousMarkFontFailed
+_G.MSUF_FontApplyEpoch = previousFontEpoch
+
+local layoutFile = assert(io.open('MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Text_Layout.lua', 'rb'))
+local layoutSource = layoutFile:read('*a')
+layoutFile:close()
+local _, epochGuardCount = layoutSource:gsub('and frame%._msufTextFontAttemptEpoch == fontEpoch', '')
+AssertEqual(epochGuardCount, 2, 'text layout epoch fast-path guards')
+assert(layoutSource:find('if frame._msufTextFontAttemptEpoch ~= fontEpoch then', 1, true),
+    'text layout epoch invalidation missing')
+assert(layoutSource:find('frame._msufTextFontPending = fontsReady and nil or true', 1, true),
+    'text layout pending result assignment missing')
+
 -- Menu2 must survive the real-client edge where the first custom semibold
 -- SetFont call returns without making that face renderable. The visible-page
 -- settle retries once; until then the inherited font must remain readable.
@@ -132,6 +192,16 @@ AssertEqual(safeFontResolveCalls - resolveStart, 1, 'visible font settle preserv
 M.Theme.ClearMenuFontCache()
 M.Theme.StyleFontString(FontString(), nil, 0, 'body')
 AssertEqual(safeFontResolveCalls - resolveStart, 2, 'explicit font cache clear re-resolves')
+
+local accordionTitle = FontString()
+M.Theme.StyleFontString(accordionTitle, nil, 0, 'accordion')
+AssertEqual(accordionTitle.font, regular, 'configured accordion font face')
+AssertEqual(accordionTitle.size, 15, 'configured accordion font size')
+local widgetsFile = assert(io.open('MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Widgets.lua', 'rb'))
+local widgetsSource = widgetsFile:read('*a')
+widgetsFile:close()
+assert(widgetsSource:find('T.Font(header, "GameFontNormal", Tr(title or ""), T.colors.text, "accordion")', 1, true),
+    'collapsible title must use the cold-start-safe accordion role')
 
 local inherited = 'Fonts\\FRIZQT__.TTF'
 _G.MSUF_DB.general.menuFontKey = regular
