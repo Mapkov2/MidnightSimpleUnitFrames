@@ -717,6 +717,7 @@ function RebuildActivePageForResize(frame)
     local key = M.activeKey or "home"
     SaveWindowSize(frame)
     M._msuf2LayoutVersion = (M._msuf2LayoutVersion or 0) + 1
+    M.CallIf(M.SetActivePageHeader, nil)
     M.activeKey = nil
     if M.SelectPage and frame and frame:IsShown() then M.SelectPage(key) end
     ApplyScrollMetrics()
@@ -730,6 +731,7 @@ end
 local function HideAllCachedPages()
     M.CallIf(M.ReleasePinnedPreviews, "HIDE_ALL_PAGES", nil)
     M.CallIf(M.ReleaseGFNativePreviews, "HIDE_ALL_PAGES", nil)
+    M.CallIf(M.SetActivePageHeader, nil)
     for _, entry in pairs(M.cache) do
         if entry.wrapper and entry.wrapper.Hide then entry.wrapper:Hide() end
     end
@@ -1034,6 +1036,7 @@ local function RememberPageLayoutVariant(key, entry)
     local previous = variants[entry.layoutSlot]
     if previous and previous ~= entry and previous.wrapper then
         previous._msuf2Invalidated = true
+        M.CallIf(M.DisposePageHeader, previous)
         previous.wrapper:Hide()
         previous.wrapper:SetParent(nil)
     end
@@ -1047,11 +1050,12 @@ local function BuildPageEntry(key, hidden)
     local layoutVersion = M._msuf2LayoutVersion or 0
     local layoutSlot = CurrentPageLayoutSlot()
     local cached = M.cache and M.cache[key]
-    if cached and specVersion and cached.version ~= specVersion then
-        if M.InvalidatePage then
-            M.InvalidatePage(key)
-        else
-            if cached.wrapper and cached.wrapper.Hide then cached.wrapper:Hide() end
+        if cached and specVersion and cached.version ~= specVersion then
+            if M.InvalidatePage then
+                M.InvalidatePage(key)
+            else
+                M.CallIf(M.DisposePageHeader, cached)
+                if cached.wrapper and cached.wrapper.Hide then cached.wrapper:Hide() end
             if cached.wrapper and cached.wrapper.SetParent then cached.wrapper:SetParent(nil) end
             M.cache[key] = nil
         end
@@ -1078,6 +1082,7 @@ local function BuildPageEntry(key, hidden)
         end
     end
     if cached and cached.hiddenBuild == true and not hidden then
+        M.CallIf(M.DisposePageHeader, cached)
         if cached.wrapper and cached.wrapper.Hide then cached.wrapper:Hide() end
         if cached.wrapper and cached.wrapper.SetParent then cached.wrapper:SetParent(nil) end
         local variants = M._msuf2PageLayoutVariants[key]
@@ -1092,7 +1097,9 @@ local function BuildPageEntry(key, hidden)
     local wrapper = CreateFrame("Frame", nil, M.scrollChild)
     wrapper:SetPoint("TOPLEFT", M.scrollChild, "TOPLEFT", 0, 0)
     wrapper:SetSize(CONTENT_W - 12, CONTENT_H)
-    if hidden and wrapper.Hide then wrapper:Hide() end
+    -- Building is always passive. SelectPage commits the entry, activates its
+    -- optional fixed header, and only then reveals the completed wrapper.
+    if wrapper.Hide then wrapper:Hide() end
     local entry = {
         key = key,
         wrapper = wrapper,
@@ -1277,6 +1284,7 @@ function M.SelectPage(key)
     if key == M.activeKey and cached then
         M.sessionLastPage = key
         RememberPrimaryNavPage(key)
+        M.CallIf(M.SetActivePageHeader, cached)
         M.CallIf(M.ReleasePinnedPreviews, "SELECT_CACHED", key)
         M.CallIf(M.ReleaseGFNativePreviews, "SELECT_CACHED", key)
         RunRefreshers(cached)
@@ -1295,6 +1303,10 @@ function M.SelectPage(key)
     local previous = previousKey and M.cache and M.cache[previousKey]
     M.CallIf(M.ReleasePinnedPreviews, "SELECT_PAGE", key)
     M.CallIf(M.ReleaseGFNativePreviews, "SELECT_PAGE", key)
+    -- Clear the shared slot before touching either wrapper. Pages without an
+    -- Editing/Page header therefore return to the original direct scroll
+    -- anchor synchronously instead of inheriting stale chrome.
+    M.CallIf(M.SetActivePageHeader, nil)
     if previous and previous.wrapper and previous.wrapper.Hide then
         previous.wrapper:Hide()
     else
@@ -1304,6 +1316,7 @@ function M.SelectPage(key)
     if not entry then return false end
     entry.hiddenBuild = false
     M.activeKey = key
+    M.CallIf(M.SetActivePageHeader, entry)
     M.CallIf(M.RefreshLayerOverviewContext)
     if not suppressPageHistory then RecordPageNavigation(previousKey, key) end
     M.sessionLastPage = key
@@ -2080,6 +2093,7 @@ local function InstallWindowLifecycle(state)
         if self.RefreshStatus then self:RefreshStatus() end
         if M.scrollFrame and M.scrollFrame._msuf2RefreshScrollBar then M.scrollFrame:_msuf2RefreshScrollBar() end
         local activeEntry = M.activeKey and M.cache and M.cache[M.activeKey]
+        M.CallIf(M.SetActivePageHeader, activeEntry)
         if activeEntry then QueueVisiblePageLayoutSettle(M.activeKey, activeEntry) end
         M.CallIf(M.RefreshGuidedTourChrome, "WINDOW_SHOW")
         M.CallIf(M.ResumePinnedPreviews, "WINDOW_SHOW")
@@ -2090,6 +2104,7 @@ local function InstallWindowLifecycle(state)
         M.CallIf(M.UpdateMenuCombatListener)
     end)
     f:SetScript("OnHide", function()
+        M.CallIf(M.SetActivePageHeader, nil)
         M.CallIf(M.HideLayerOverview)
         if M.StopWindowLayoutAnimation then M.StopWindowLayoutAnimation(f) end
         if f._msuf2CancelWindowInteractions then
@@ -2132,11 +2147,85 @@ end
 local function BuildWindowScrollHost(state)
     local f = state.frame
     local host, status = f.host, f.status
+    local pageHeaderHost = CreateFrame("Frame", nil, host)
+    pageHeaderHost:SetHeight(0)
+    pageHeaderHost:Hide()
+    -- Structural only: the page panel already owns its rounded glass surface.
+    -- A second opaque rectangle and ClipsChildren cut through the panel's
+    -- overscanned nine-slice corners and caused the asymmetric dark edge.
+    f.pageHeaderHost = pageHeaderHost
+    M.pageHeaderHost = pageHeaderHost
     local scroll = CreateFrame("ScrollFrame", nil, host)
-    scroll:SetPoint("TOPLEFT", status, "BOTTOMLEFT", 0, 0)
-    scroll:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", -24, 0)
     f.scrollFrame = scroll
     M.scrollFrame = scroll
+    local activeTopOwner, activeLayoutHost = status, host
+    local function RefreshPinnedHeaderGeometry()
+        scroll._msuf2PinnedPreviewLastOffset = nil
+        scroll._msuf2PinnedPreviewLastHeight = nil
+        scroll._msuf2PinnedPreviewLastChildHeight = nil
+        if scroll._msuf2RefreshScrollBar then scroll:_msuf2RefreshScrollBar() end
+        M.CallIf(M.RefreshPinnedPreviews, scroll)
+    end
+    local function LayoutPageHeaderHost(topOwner, layoutHost)
+        if topOwner then activeTopOwner = topOwner end
+        if layoutHost then activeLayoutHost = layoutHost end
+        topOwner = activeTopOwner or status
+        layoutHost = activeLayoutHost or host
+        pageHeaderHost:ClearAllPoints()
+        pageHeaderHost:SetPoint("TOPLEFT", topOwner, "BOTTOMLEFT", 0, 0)
+        -- The fixed panel keeps the PageBuilder width (content - 32) with
+        -- equal 12 px side insets.  The ScrollFrame remains 16 px narrower
+        -- on the right to reserve its scrollbar gutter.
+        pageHeaderHost:SetPoint("TOPRIGHT", topOwner, "BOTTOMRIGHT", -8, 0)
+        scroll:ClearAllPoints()
+        local activeHeader = scroll._msuf2StickyPageHeader
+        if activeHeader and activeHeader.active and (tonumber(activeHeader.hostHeight) or 0) > 0 then
+            pageHeaderHost:SetHeight(activeHeader.hostHeight)
+            pageHeaderHost:Show()
+            scroll:SetPoint("TOPLEFT", pageHeaderHost, "BOTTOMLEFT", 0, 0)
+        else
+            pageHeaderHost:SetHeight(0)
+            pageHeaderHost:Hide()
+            -- Plain pages bypass the optional slot completely. A hidden
+            -- zero-height intermediary previously left several menus blank
+            -- until a later layout pass repaired their mixed anchors.
+            scroll:SetPoint("TOPLEFT", topOwner, "BOTTOMLEFT", 0, 0)
+        end
+        scroll:SetPoint("BOTTOMRIGHT", layoutHost, "BOTTOMRIGHT", -24, 0)
+        scroll._msuf2TourAnchorOwner = topOwner
+        scroll._msuf2TourAnchorHost = layoutHost
+        scroll._msuf2MaxScroll = nil
+        scroll._msuf2SmoothScrollTarget = nil
+    end
+    M.LayoutPageHeaderHost = LayoutPageHeaderHost
+    function M.SetActivePageHeader(entry)
+        local nextHeader = type(entry) == "table" and entry.pageHeader or nil
+        if nextHeader and (nextHeader.disposed or nextHeader.entry ~= entry) then nextHeader = nil end
+        local previous = scroll._msuf2StickyPageHeader
+        if previous ~= nextHeader then
+            if previous and previous.Deactivate then previous:Deactivate() end
+            scroll._msuf2StickyPageHeader = nil
+            if nextHeader and nextHeader.Activate and nextHeader:Activate(pageHeaderHost) then
+                scroll._msuf2StickyPageHeader = nextHeader
+            end
+        elseif nextHeader and nextHeader.Activate
+            and (not nextHeader.active
+                or (nextHeader.section and nextHeader.section.GetParent
+                    and nextHeader.section:GetParent() ~= pageHeaderHost))
+        then
+            nextHeader:Activate(pageHeaderHost)
+        end
+        LayoutPageHeaderHost()
+        RefreshPinnedHeaderGeometry()
+        return scroll._msuf2StickyPageHeader ~= nil
+    end
+    function M.DisposePageHeader(entry)
+        local record = type(entry) == "table" and entry.pageHeader or nil
+        if not record then return end
+        if scroll._msuf2StickyPageHeader == record then M.SetActivePageHeader(nil) end
+        if record.Dispose then record:Dispose() end
+    end
+    LayoutPageHeaderHost(status, host)
     local child = CreateFrame("Frame", nil, scroll)
     child:SetSize(CONTENT_W - 12, CONTENT_H)
     scroll:SetScrollChild(child)
@@ -2250,6 +2339,7 @@ function M.InvalidatePage(key)
         for i = 1, #entries do
             local invalidated = entries[i]
             invalidated._msuf2Invalidated = true
+            M.CallIf(M.DisposePageHeader, invalidated)
             if invalidated.wrapper then
                 invalidated.wrapper:Hide()
                 invalidated.wrapper:SetParent(nil)

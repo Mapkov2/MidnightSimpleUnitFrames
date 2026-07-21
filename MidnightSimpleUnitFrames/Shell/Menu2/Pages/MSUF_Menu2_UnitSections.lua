@@ -648,6 +648,16 @@ local function BuildTopActions(ctx, builder, unit, label)
     sec:SetScript("OnHide", function()
         if copyPopup then copyPopup.Hide() end
     end)
+    if W.AttachStickyPageHeader then
+        W.AttachStickyPageHeader(sec, {
+            pageKey = ctx and ctx.key,
+            wrapper = ctx and ctx.wrapper,
+            gap = 4,
+            builder = builder,
+            ctx = ctx,
+            flowGap = 8,
+        })
+    end
 end
 local function AttachBasicsHeaderStatus(sec, unit)
     local sectionEntry = sec and sec._msuf2CollapsibleEntry

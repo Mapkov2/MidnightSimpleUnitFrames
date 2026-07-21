@@ -447,6 +447,16 @@ local function BuildScopeOverrideSection(ctx, builder, opts)
         if segment and segment.Refresh then segment:Refresh() end
         hint:SetWidth(ctx.width - 28)
     end)
+    if W.AttachStickyPageHeader then
+        W.AttachStickyPageHeader(scope, {
+            pageKey = ctx and ctx.key,
+            wrapper = ctx and ctx.wrapper,
+            gap = 4,
+            builder = builder,
+            ctx = ctx,
+            flowGap = 12,
+        })
+    end
     return {
         section = scope,
         segment = segment,
