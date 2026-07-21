@@ -760,9 +760,9 @@ local SIG_TEXT_KEYS = {
   "nameShortenMaskPx",
   "directLayout", "directNamePoint", "directNameRelativePoint", "directNameX", "directNameY",
   "nameClassColor", "nameNpcColor", "nameNpcClassColor", "npcColorMode", "npcTypeColorText", "npcTypeTarget", "npcTypeFocus", "npcTypeBoss", "npcTypeToT",
-  "healthLayer", "healthLeft", "healthCenter", "healthRight", "healthLeftHidePercentSymbol", "healthCenterHidePercentSymbol", "healthRightHidePercentSymbol", "healthReverse", "healthDelimiter", "healthPercentDecimals", "healthShortNumbers", "healthAbsorbIcon", "healthLeftAbsorbIcon", "healthCenterAbsorbIcon", "healthRightAbsorbIcon", "healthColorByHealth", "healthColorByClass", "healthLeftX", "healthLeftY", "healthCenterX", "healthCenterY", "healthRightX", "healthRightY",
+  "healthLayer", "healthLeft", "healthCenter", "healthRight", "healthLeftFontSize", "healthCenterFontSize", "healthRightFontSize", "healthLeftHidePercentSymbol", "healthCenterHidePercentSymbol", "healthRightHidePercentSymbol", "healthReverse", "healthDelimiter", "healthPercentDecimals", "healthShortNumbers", "healthAbsorbIcon", "healthLeftAbsorbIcon", "healthCenterAbsorbIcon", "healthRightAbsorbIcon", "healthColorByHealth", "healthColorByClass", "healthLeftX", "healthLeftY", "healthCenterX", "healthCenterY", "healthRightX", "healthRightY",
   "directHealthLeftPoint", "directHealthLeftRelativePoint", "directHealthLeftX", "directHealthLeftY", "directHealthCenterPoint", "directHealthCenterRelativePoint", "directHealthCenterX", "directHealthCenterY", "directHealthRightPoint", "directHealthRightRelativePoint", "directHealthRightX", "directHealthRightY",
-  "powerLayer", "powerLeft", "powerCenter", "powerRight", "powerLeftHidePercentSymbol", "powerCenterHidePercentSymbol", "powerRightHidePercentSymbol", "powerDelimiter", "powerColorByType", "powerLeftX", "powerLeftY", "powerCenterX", "powerCenterY", "powerRightX", "powerRightY",
+  "powerLayer", "powerLeft", "powerCenter", "powerRight", "powerLeftFontSize", "powerCenterFontSize", "powerRightFontSize", "powerLeftHidePercentSymbol", "powerCenterHidePercentSymbol", "powerRightHidePercentSymbol", "powerDelimiter", "powerColorByType", "powerLeftX", "powerLeftY", "powerCenterX", "powerCenterY", "powerRightX", "powerRightY",
   "directPowerLeftPoint", "directPowerLeftRelativePoint", "directPowerLeftX", "directPowerLeftY", "directPowerCenterPoint", "directPowerCenterRelativePoint", "directPowerCenterX", "directPowerCenterY", "directPowerRightPoint", "directPowerRightRelativePoint", "directPowerRightX", "directPowerRightY",
   "shortNumbers", "hidePercentSymbol", "hideNameOnDeadOffline",
 }
@@ -865,12 +865,12 @@ function Text.Apply(frame, spec)
     SetFont(frame.totInlineSep, spec, spec and spec.nameFontSize, "name")
     SetFont(frame.totInlineText, spec, spec and spec.nameFontSize, "name")
   end
-  SetFont(frame.hpTextLeft, spec, spec and spec.healthFontSize, "health")
-  SetFont(frame.hpTextCenter, spec, spec and spec.healthFontSize, "health")
-  SetFont(frame.hpTextRight, spec, spec and spec.healthFontSize, "health")
-  SetFont(frame.powerTextLeft, spec, spec and spec.powerFontSize, "power")
-  SetFont(frame.powerTextCenter, spec, spec and spec.powerFontSize, "power")
-  SetFont(frame.powerTextRight, spec, spec and spec.powerFontSize, "power")
+  SetFont(frame.hpTextLeft, spec, text.healthLeftFontSize or (spec and spec.healthFontSize), "health")
+  SetFont(frame.hpTextCenter, spec, text.healthCenterFontSize or (spec and spec.healthFontSize), "health")
+  SetFont(frame.hpTextRight, spec, text.healthRightFontSize or (spec and spec.healthFontSize), "health")
+  SetFont(frame.powerTextLeft, spec, text.powerLeftFontSize or (spec and spec.powerFontSize), "power")
+  SetFont(frame.powerTextCenter, spec, text.powerCenterFontSize or (spec and spec.powerFontSize), "power")
+  SetFont(frame.powerTextRight, spec, text.powerRightFontSize or (spec and spec.powerFontSize), "power")
   frame._msufNameTextR, frame._msufNameTextG, frame._msufNameTextB, frame._msufNameTextA = nil, nil, nil, nil
   frame._msufLastNameRaw, frame._msufLastNameText, frame._msufLastNameShortenStamp = nil, nil, nil
   frame._msufPowerTextColorInitialized = nil

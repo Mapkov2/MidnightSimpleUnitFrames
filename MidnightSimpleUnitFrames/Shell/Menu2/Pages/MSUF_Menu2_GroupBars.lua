@@ -276,7 +276,7 @@ local function BuildGFTextSection(ctx, b)
         return key
     end
     local textSlotState = UnitSectionShared.MakeTextSlotState(M, CurrentScope, "gfTextSlotSelection", "gfTextMoveTogether")
-    local CurrentSlot, SetCurrentSlot, SlotOffsetKeys = textSlotState.CurrentSlot, textSlotState.SetCurrentSlot, textSlotState.SlotOffsetKeys
+    local CurrentSlot, SetCurrentSlot, SlotOffsetKeys, SlotFontSizeKey = textSlotState.CurrentSlot, textSlotState.SetCurrentSlot, textSlotState.SlotOffsetKeys, textSlotState.SlotFontSizeKey
     local MoveTogether, SetMoveTogether = textSlotState.MoveTogether, textSlotState.SetMoveTogether
     local refreshTextControls
     local function CurrentScopeKey()
@@ -574,7 +574,7 @@ local function BuildGFTextSection(ctx, b)
                 SetOptionEnabled(controls.shortNumbers, enabled == true and hasNumericValue)
             end
         end
-        local position = TextCard(tab, "Position", cfg.positionSubtitle, textRightX, -4, textRightW, 350)
+        local position = TextCard(tab, "Position", cfg.positionSubtitle, textRightX, -4, textRightW, 408)
         controls.x = ScopeSlider(ctx, position, "X Offset", -100, 100, 1, hpSliderW, cfg.xKey, 0, "font", 16, -64, textRightW - 58)
         controls.y = ScopeSlider(ctx, position, "Y Offset", -100, 100, 1, hpSliderW, cfg.yKey, 0, "font", 16, -122, textRightW - 58)
         controls.moveTogether = W.ToggleAt(position, "Move text as one group", 16, -176, textRightW - 32)
@@ -609,8 +609,24 @@ local function BuildGFTextSection(ctx, b)
         end
         SlotAxis("X")
         SlotAxis("Y")
+        controls.slotSize = W.Slider(position, "Selected slot size", 6, 48, 1, hpSliderW)
+        PlaceSlider(position, controls.slotSize, 16, -348, textRightW - 58)
+        M.BindNumberWidget(ctx, controls.slotSize,
+            function()
+                local value = tonumber(Val(CurrentScope(), SlotFontSizeKey(kind), nil))
+                return value and value > 0 and value or tonumber(Val(CurrentScope(), cfg.sizeKey, cfg.sizeDefault)) or cfg.sizeDefault
+            end,
+            function(v)
+                Set(CurrentScope(), SlotFontSizeKey(kind), v, "font")
+                FocusGFPreviewText(kind, CurrentSlot(kind), true)
+            end,
+            cfg.sizeDefault, (function()
+                local meta = ControlMeta(ctx, "text." .. kind .. ".slot.size")
+                meta.step, meta.roundStep = 1, true
+                return meta
+            end)())
         local appearance = TextCard(tab, "Appearance", nil, textLeftX, -(contentHeight + 24), textCardW, 144)
-        controls.size = ScopeSlider(ctx, appearance, "Size", 6, 48, 1, textSliderW, cfg.sizeKey, cfg.sizeDefault, "font", 16, -58, textCardW - 72)
+        controls.size = ScopeSlider(ctx, appearance, "Default size", 6, 48, 1, textSliderW, cfg.sizeKey, cfg.sizeDefault, "font", 16, -58, textCardW - 72)
         return controls
     end
     local hpControls = BuildValueTextTab("hp", hpTab, {
