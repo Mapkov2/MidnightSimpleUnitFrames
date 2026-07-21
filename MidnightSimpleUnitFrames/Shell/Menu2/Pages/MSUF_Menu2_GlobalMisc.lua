@@ -11,6 +11,7 @@ local T = M.Theme
 local GP = M.GlobalPage or {}
 local max = math.max
 local min = math.min
+local C_Timer = M.MenuTimer or _G.C_Timer
 local Call, G, ReadG, SetG, ReadGBool, SetGBool, MenuFontValues, MenuFontKeyGet, MenuFontKeySet, ControlMeta = M.Pick(GP, [[Call G ReadG SetG ReadGBool SetGBool MenuFontValues MenuFontKeyGet MenuFontKeySet ControlMeta]])
 local SETTING_KEY_BY_PATH = {
     ["language.selection"] = "general.menuLocale",
@@ -226,10 +227,9 @@ local function BuildMisc(ctx)
     end
     local accentCheckTimer
     local function QueueAccentReloadCheck()
-        local timerApi = M.MenuTimer or _G.C_Timer
         if accentCheckTimer and accentCheckTimer.Cancel then accentCheckTimer:Cancel() end
-        if not (timerApi and timerApi.NewTimer) then return AccentReloadCheck() end
-        accentCheckTimer = timerApi.NewTimer(0.45, function()
+        if not (C_Timer and C_Timer.NewTimer) then return AccentReloadCheck() end
+        accentCheckTimer = C_Timer.NewTimer(0.45, function()
             accentCheckTimer = nil
             AccentReloadCheck()
         end)
