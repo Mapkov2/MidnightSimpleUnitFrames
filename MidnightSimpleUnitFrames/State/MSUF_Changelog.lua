@@ -19,8 +19,9 @@ local data = {
                 {
                     title = "Highlights",
                     bullets = {
-                        "Added a Maximum Health Loss overlay that shows temporarily unavailable health directly on Unit Frames and Group Frames.",
-                        "Expanded text styling with scoped shadow controls and independent font sizes for each left, center, and right Health/Power text slot.",
+                        "Added a customizable Maximum Health Loss overlay for Unit Frames and Group Frames, with texture, loss color, overlay opacity, background opacity, and a live effect preview.",
+                        "Replaced the old shadow-strength presets with a scoped Shadow Opacity slider and 1 px / 2 px Shadow Distance controls; existing profile values migrate automatically.",
+                        "Added independent Font Size controls for each selected left, center, and right Health/Power text slot, with matching live previews.",
                         "Added real opacity controls for Health and Power backgrounds, including exact live-preview parity and consistent class-colored backgrounds.",
                         "Refined Menu2 with compact reference previews, clearer shared settings layouts, and highlighted open accordion sections.",
                     },
