@@ -1,5 +1,30 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-Beta25 - 2026-07-21
+
+### Highlights
+
+- Added a Maximum Health Loss overlay that shows temporarily unavailable health directly on Unit Frames and Group Frames.
+- Expanded text styling with scoped shadow controls and independent font sizes for each left, center, and right Health/Power text slot.
+- Added real opacity controls for Health and Power backgrounds, including exact live-preview parity and consistent class-colored backgrounds.
+- Refined Menu2 with compact reference previews, clearer shared settings layouts, and highlighted open accordion sections.
+
+### Changes
+
+- Added compact and expanded preview modes across Unit Frame, Group Frame, Class Resource, and Color Painter workflows.
+- Unified repeated settings and color-card layouts for clearer navigation and more consistent controls.
+- Improved Group Preview ownership so heavy native previews can be reused safely between Group Frame pages.
+- Updated all supported locales for the new font, background, preview, and maximum-health-loss controls.
+
+### Fixes & Performance
+
+- Reduced Menu2 opening, resizing, search, font-refresh, Color Painter, and preview work through lazy section builds, reusable layouts, cached control metadata, and pooled preview targets.
+- Cached normalized search queries, font probes, profile reads, and Aura default seeding without adding idle or combat polling.
+- Fixed slider drags so the complete gesture, including the final released value, creates exactly one Undo/Redo step.
+- Fixed rounded frame masks on login and kept class-colored backgrounds correct for players, NPCs, pets, bosses, and temporarily missing units.
+- Prevented background opacity from being multiplied twice and kept color changes attached to the active imported profile.
+- Expanded Lua 5.1 regression coverage for Menu2 cold paths, preview lifecycles, text-slot sizing, opacity, history, Auras, and rounded-frame startup.
+
 ## 6.0-Beta24 - 2026-07-21
 
 ### Highlights
