@@ -52,7 +52,7 @@ $tests = @(
     "tools/range_visibility_smoke.lua",
     "tools/ready_check_targeting_smoke.lua",
     "tools/secret_group_health_smoke.lua",
-    "tools/targeted_spells_smoke.lua",
+    ".github/scripts/tests/unit_info_tooltip_secret_smoke.lua",
     "tools/text_lazy_sinks_smoke.lua",
     "tools/uf_notify_config_refresh_smoke.lua",
     "tools/unit_event_routing_smoke.lua",

@@ -546,16 +546,6 @@ local PARTY_DEFAULTS = {
     ciCustomBL        = nil,
     ciCustomBR        = nil,
     ciCustomC         = nil,
-    --- Party targeted spell indicators
-    targetedSpellsEnabled  = false,
-    targetedSpellsMode     = "whenHealing",
-    targetedSpellsIconSize = 24,
-    targetedSpellsMaxIcons = 3,
-    targetedSpellsAnchor   = "CENTER",
-    targetedSpellsGrow     = "CENTER",
-    targetedSpellsX        = 0,
-    targetedSpellsY        = 0,
-    targetedSpellsLayer    = 10,
     --- Grid layout
     unitsPerColumn    = 5,
     maxColumns        = 1,

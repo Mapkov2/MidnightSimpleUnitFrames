@@ -604,15 +604,6 @@ Overview.RegisterProvider("group-frames", function(sink)
         end
     end
 
-    local party = type(db.gf_party) == "table" and db.gf_party or {}
-    sink:Layer({
-        id = "group.party.targetedSpellsLayer",
-        area = "Group Status", scope = "Party", label = "Targeted Spells",
-        value = party.targetedSpellsLayer, default = 10,
-        enabled = party.enabled == true and party.targetedSpellsEnabled == true,
-        settingKey = "gf_party.targetedSpellsLayer",
-        edit = { kind = "group", scope = "party", dbKey = "gf_party", path = { "targetedSpellsLayer" } },
-    })
 end)
 
 Overview.RegisterProvider("class-resources", function(sink)

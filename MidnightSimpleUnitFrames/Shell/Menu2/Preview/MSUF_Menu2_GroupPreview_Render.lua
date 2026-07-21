@@ -302,7 +302,6 @@ local function BuildScene(box, reason)
         si = scene.runtimeSpellIndicators and scene.runtimeSpellIndicators.enabled == true
             and (scene.runtimeSpellPlacedAvailable or scene.runtimeSpellEffectAvailable)
             or selectedSpellAvailable or false,
-        targetedSpells = kind == "party" and conf.targetedSpellsEnabled == true,
         auraText = aurasEnabled and customAuraText,
         text = textAvailable,
     }
@@ -498,10 +497,6 @@ local function FinalizeScene(scene)
             SetPreviewFrameLevel(iconEffectRoot, handle:GetFrameLevel() + 4)
         end
     end
-    if S.targetedHandle then
-        SetPreviewFrameLevel(S.targetedHandle, healthBaseLevel + (S.Layers.TARGETED_SPELLS_BASE_OFFSET or 40)
-            + S.ClampLayer(conf.targetedSpellsLayer, 10))
-    end
     for i = 1, #TEXT_LEVEL_SPECS do
         local item = TEXT_LEVEL_SPECS[i]
         SetPreviewFrameLevel(scene.textHandles[item[1]], scene.textBaseLevel
@@ -534,10 +529,6 @@ local function FinalizeScene(scene)
     for _, handle in pairs(scene.dynamicSpellHandlesActive or {}) do
         handle:SetShown(spellVisible)
         handle:SetAlpha(SceneLayerAlpha(scene, "si"))
-    end
-    if S.targetedHandle then
-        S.targetedHandle:SetShown(scene.layerAvailable.targetedSpells and SceneLayerOn(scene, "targetedSpells"))
-        S.targetedHandle:SetAlpha(SceneLayerAlpha(scene, "targetedSpells"))
     end
     for i = 1, #TEXT_HANDLE_KEYS do scene.textHandles[TEXT_HANDLE_KEYS[i]]:SetAlpha(SceneLayerAlpha(scene, "text")) end
     for i = 1, #box._layerButtons do
@@ -939,7 +930,6 @@ function Render.Install(box, ctx, deps)
     local externalHandle = deps.externalHandle
     local statusHandles = deps.statusHandles or {}
     local spellHandle = deps.spellHandle
-    local targetedHandle = deps.targetedHandle
     local selectedSpellEffectOwner = box._msufGFSelectedSpellEffectOwner
     if not selectedSpellEffectOwner then
         selectedSpellEffectOwner = CreateFrame("Frame", nil, mock)
@@ -989,7 +979,6 @@ function Render.Install(box, ctx, deps)
         externalHandle = externalHandle,
         statusHandles = statusHandles,
         spellHandle = spellHandle,
-        targetedHandle = targetedHandle,
         statusSpecs = statusSpecs,
         CompiledSpec = CompiledSpec,
         CompiledAuraLane = CompiledAuraLane,
@@ -1771,109 +1760,6 @@ function Render.Install(box, ctx, deps)
         local RuntimeAuraTextAnchor = scene.RuntimeAuraTextAnchor
         local LayoutAuraPreviewSwipe = scene.LayoutAuraPreviewSwipe
         local LayoutAuraDurationBar = scene.LayoutAuraDurationBar
-        local function TargetedAnchor(anchor)
-            if anchor == "TOPLEFT" or anchor == "TOP" or anchor == "TOPRIGHT"
-                or anchor == "LEFT" or anchor == "CENTER" or anchor == "RIGHT"
-                or anchor == "BOTTOMLEFT" or anchor == "BOTTOM" or anchor == "BOTTOMRIGHT" then
-                return anchor
-            end
-            return "CENTER"
-        end
-        local function TargetedGrow(grow)
-            if grow == "LEFT" or grow == "UP" or grow == "DOWN" or grow == "CENTER" then return grow end
-            return "RIGHT"
-        end
-        local function LayoutTargetedSpells()
-            if not targetedHandle then return end
-            local maxIcons = Int(conf.targetedSpellsMaxIcons, 3, 1, 5)
-            local size = max(8, ScaleValue(conf.targetedSpellsIconSize or 24, previewScale, 8))
-            local gap = max(1, ScaleValue(2, previewScale, 1))
-            local step = size + gap
-            local anchor = TargetedAnchor(conf.targetedSpellsAnchor)
-            local grow = TargetedGrow(conf.targetedSpellsGrow)
-            local frac = GF_PREVIEW_ANCHOR_FRAC[anchor] or GF_PREVIEW_ANCHOR_FRAC.CENTER
-            local ids = (GF_AURA_MOCK_ICON_IDS and GF_AURA_MOCK_ICON_IDS.targeted) or { 116, 133, 51505, 20484, 257044 }
-            if #ids == 0 then ids = { 116, 133, 51505, 20484, 257044 } end
-            AddIconPool(targetedHandle, maxIcons)
-            targetedHandle._previewRects = targetedHandle._previewRects or {}
-            local minL, minB, maxR, maxT
-            local centeredOffset = grow == "CENTER" and -((maxIcons - 1) * step * 0.5) or 0
-            for i = 1, maxIcons do
-                local offset = (i - 1) * step
-                local ax, ay = offset, 0
-                if grow == "CENTER" then
-                    ax = centeredOffset + offset
-                elseif grow == "LEFT" then
-                    ax = -offset
-                elseif grow == "UP" then
-                    ax, ay = 0, offset
-                elseif grow == "DOWN" then
-                    ax, ay = 0, -offset
-                end
-                local left = ax - ((frac and frac[1]) or 0.5) * size
-                local bottom = ay - ((frac and frac[2]) or 0.5) * size
-                local right, top = left + size, bottom + size
-                local rect = targetedHandle._previewRects[i] or {}
-                rect[1], rect[2] = left, bottom
-                targetedHandle._previewRects[i] = rect
-                minL = minL and min(minL, left) or left
-                minB = minB and min(minB, bottom) or bottom
-                maxR = maxR and max(maxR, right) or right
-                maxT = maxT and max(maxT, top) or top
-            end
-            if not minL then minL, minB, maxR, maxT = -size * 0.5, -size * 0.5, size * 0.5, size * 0.5 end
-            local handleW = max(1, Round(maxR - minL))
-            local handleH = max(1, Round(maxT - minB))
-            local originX, originY = -minL, -minB
-            targetedHandle:SetSize(handleW, handleH)
-            targetedHandle._previewOriginX = originX
-            targetedHandle._previewOriginY = originY
-            targetedHandle._previewAnchorFrame = mock
-            targetedHandle._previewScale = previewScale
-            targetedHandle._previewWriteScale = previewScale
-            targetedHandle._previewText = "Targeted Spells"
-            targetedHandle:ClearAllPoints()
-            targetedHandle:SetPoint("BOTTOMLEFT", mock, anchor,
-                ConfigToOffset(conf.targetedSpellsX or 0, previewScale) - originX,
-                ConfigToOffset(conf.targetedSpellsY or 0, previewScale) - originY)
-            for i = 1, maxIcons do
-                local tex = targetedHandle._icons and targetedHandle._icons[i]
-                local swipe = targetedHandle._iconSwipes and targetedHandle._iconSwipes[i]
-                local timer = targetedHandle._iconTimers and targetedHandle._iconTimers[i]
-                local border = targetedHandle._iconBorders and targetedHandle._iconBorders[i]
-                local stack = targetedHandle._iconStacks and targetedHandle._iconStacks[i]
-                local rect = targetedHandle._previewRects[i]
-                if tex and rect then
-                    tex:SetTexture(MockSpellTexture(ids[((i - 1) % #ids) + 1]))
-                    tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-                    tex:SetVertexColor(1, 1, 1, 1)
-                    tex:SetSize(size, size)
-                    tex:ClearAllPoints()
-                    tex:SetPoint("BOTTOMLEFT", targetedHandle, "BOTTOMLEFT", rect[1] + originX, rect[2] + originY)
-                    tex:Show()
-                    if swipe then
-                        swipe:ClearAllPoints()
-                        swipe:SetPoint("TOPLEFT", tex, "TOP", 0, 0)
-                        swipe:SetPoint("BOTTOMRIGHT", tex, "BOTTOMRIGHT", 0, 0)
-                        swipe:SetShown(true)
-                    end
-                    if timer then
-                        timer:SetText("")
-                        timer:Hide()
-                    end
-                    if border then border:Hide() end
-                    if stack then stack:Hide() end
-                end
-            end
-            for i = maxIcons + 1, #(targetedHandle._icons or {}) do
-                if targetedHandle._icons[i] then targetedHandle._icons[i]:Hide() end
-                if targetedHandle._iconSwipes and targetedHandle._iconSwipes[i] then targetedHandle._iconSwipes[i]:Hide() end
-                if targetedHandle._iconBorders and targetedHandle._iconBorders[i] then targetedHandle._iconBorders[i]:Hide() end
-                if targetedHandle._iconStacks and targetedHandle._iconStacks[i] then targetedHandle._iconStacks[i]:Hide() end
-                if targetedHandle._iconTimers and targetedHandle._iconTimers[i] then targetedHandle._iconTimers[i]:Hide() end
-            end
-        end
-        LayoutTargetedSpells()
         local function ConfigureStatusHandle(statusHandle)
             local spec = statusHandle and statusHandle._statusSpec
             if not (statusHandle and spec) then return end

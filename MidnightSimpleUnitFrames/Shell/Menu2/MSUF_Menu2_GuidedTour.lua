@@ -196,12 +196,6 @@ local STAGES = {
         impact = "Skipping keeps the current Party status icons.",
     },
     {
-        id = "gf_party_targeted_spells", pageKey = "gf_indicators", icon = "gf_indicators", area = "groupframes", title = "Build Party targeted spells",
-        includeSections = { targetedSpells = true }, includeLockedControls = true, controlLimit = 5,
-        controlPaths = { "group/indicators/targeted_spells/targetedspellsenabled", "group/indicators/targeted_spells/targetedspellsmode", "group/indicators/targeted_spells/targetedspellsiconsize", "group/indicators/targeted_spells/targetedspellsmaxicons", "group/indicators/targeted_spells/targetedspellsanchor" },
-        impact = "Skipping leaves the Party-only targeted-spell tracker unchanged.",
-    },
-    {
         id = "gf_party_corner_icons", pageKey = "gf_indicators", icon = "gf_indicators", area = "groupframes", title = "Build Party corner indicators",
         includeSections = { ci = true }, includeEphemeralControls = true, includeLockedControls = true, controlLimit = 5,
         controlPaths = { "group/indicators/field/cienabled", "group/indicators/field/cisize", "group/indicators/corner/editor/slot", "group/indicators/corner/editor/category", "group/indicators/corner/editor/spell_ids" },
@@ -576,9 +570,6 @@ end
 
 local function LockedControlCue(control)
     local id = tostring(control and control.id or ""):lower()
-    if id:find("targeted_spells", 1, true) then
-        return Tr("UNLOCK, THEN CHANGE IT - Enable Targeted Spell Indicators first.")
-    end
     if id:find("corner", 1, true) then
         return Tr("UNLOCK, THEN CHANGE IT - Enable Corner Indicators, choose a slot, then select Custom Spell when requested.")
     end
@@ -691,7 +682,6 @@ local function StageCue(stage, position, touched)
     end
     if stage.id == "gf_layout" then return Tr("PARTY IS THE MASTER - Adjust its frame basics, then copy the finished result to Raid or Mythic Raid.") end
     if stage.id == "gf_party_auras" then return Tr("AURA WORKSPACE - Choose Buffs, Debuffs, or External Defensives, then choose the editing tool.") end
-    if stage.id == "gf_party_targeted_spells" then return Tr("MSUF POWER MOVE - Show incoming enemy casts directly on the Party member they target.") end
     if stage.id == "gf_party_corner_icons" then return Tr("MSUF POWER MOVE - Assign each corner or bind a custom spell to the selected slot.") end
     if stage.id:match("^gf_party_") then return Tr("PARTY CORE - Change the new green setting and watch the Party Preview update.") end
     if stage.id:match("^group_copy_") then return Tr("COPY FLOW - Open Copy To, select All categories, then press a destination to copy Party instantly.") end
@@ -3276,7 +3266,7 @@ local function BuildPowerMovesPage(ctx, T, W)
     Header(b, "MSUF power moves", "A focused frame workflow with direct control over the details that matter in combat.")
     InfoCard(b, T, "Touch the preview", "Drag its handles. Double-click a handle or use its gear to open the exact setting; right-click exposes related actions.", "uf_player", 86)
     InfoCard(b, T, "Spell Icons by spec", "Track presets or custom Spell IDs per spec, then choose icon or bar placement, cooldown behavior, and full-frame effects.", "gf_auras", 92)
-    InfoCard(b, T, "Party combat intelligence", "Targeted Spells show incoming enemy casts on their target; Corner Indicators and External Defensives keep critical group information compact.", "gf_indicators", 92)
+    InfoCard(b, T, "Party combat intelligence", "Corner Indicators and External Defensives keep critical group information compact.", "gf_indicators", 92)
     InfoCard(b, T, "Cooldown-aware layouts", "Anchor Unitframes and Class Resources to Essential Cooldowns, or keep every frame independently placed.", "classpower", 86)
     InfoCard(b, T, "Ask instead of hunting", "Describe the result you want. The Assistant finds the exact control, keeps safeguards in place, and leaves Undo available.", "home", 86)
     return math.abs(b.y) + 34

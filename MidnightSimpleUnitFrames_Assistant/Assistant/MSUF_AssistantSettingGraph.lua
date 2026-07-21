@@ -545,19 +545,6 @@ local function ApplyCastbarComponentGates(state, settings)
     end
 end
 
-local function ApplyTargetedSpellGates(state)
-    local parent = "gf_party.targetedSpellsEnabled"
-    local seen = {}
-    for _, field in ipairs({
-        "targetedSpellsMode", "targetedSpellsIconSize", "targetedSpellsMaxIcons", "targetedSpellsLayer",
-        "targetedSpellsAnchor", "targetedSpellsGrow", "targetedSpellsX", "targetedSpellsY",
-    }) do
-        AddComponentGate(state, seen, "gf_party." .. field, parent,
-            "party-targeted-spells", "This targeted-spell detail is visible only while Party Targeted Spell Indicators are enabled.",
-            "MSUF_AssistantRegistry_GroupFramesStatus.lua:RegisterTargetedSpellSettings")
-    end
-end
-
 local function ApplyGroupIndicatorGates(state)
     local families = {
         {
@@ -1076,7 +1063,6 @@ local function Build(includeGroupRoots, requestedKey)
         ApplyGroupStatusComponentGates(state)
         ApplyCastbarComponentGates(state, settings)
         ApplyUnitVisualConditionalGates(state, scanIndex)
-        ApplyTargetedSpellGates(state)
         ApplyGroupIndicatorGates(state)
         ApplyRequires(state)
         ApplyScopedAssociations(state)

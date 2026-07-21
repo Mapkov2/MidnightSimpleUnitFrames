@@ -22,7 +22,6 @@ local conf = {
         debuff = { enabled = true, max = 4 },
     },
     spellIndicators = { enabled = true },
-    targetedSpellsEnabled = true,
     showName = true,
     showHPText = true,
 }
@@ -66,7 +65,6 @@ local scene = Render.Components.Plan(box, "CONTRACT")
 assert(scene.kind == "party" and scene.label == "Party", "scope plan mismatch")
 assert(scene.layerAvailable.buff and scene.layerAvailable.debuff, "aura lanes disappeared")
 assert(scene.layerAvailable.si, "spell indicators disappeared")
-assert(scene.layerAvailable.targetedSpells, "targeted-spell layer disappeared")
 assert(scene.selectedSpellEffect and scene.selectedSpellEffect.type == "glow", "selected spell effect plan mismatch")
 
 M.gfPreviewLayerVisible = { buff = false }
@@ -82,7 +80,7 @@ local source = file:read("*a")
 file:close()
 local contracts = {
     "showCooldownSwipe", "cooldownSwipeReverse", "showDurationBar", "durationBarDirection",
-    "dispelBorderMode", "targetedSpellsEnabled", "readyCheckIcon", "resurrectIcon",
+    "dispelBorderMode", "readyCheckIcon", "resurrectIcon",
     "healthtint", "namecolor", "ApplyRounded", "FrameStrata", "healthLeftHidePercentSymbol",
     "powerRightHidePercentSymbol", "HideUnusedSpellIndicatorHandles", "ApplyTextFocus", "ResolveNameColor",
 }

@@ -158,7 +158,7 @@ function Handles.Install(box, deps)
     end
     local function RefreshGroupPreviewAfterMove(handle, skipPreviewRefresh)
         local gf = MSUF and MSUF.GF
-        local refreshKind = (handle and handle._cfgTargetedSpells) and "party" or H.CurrentScope()
+        local refreshKind = H.CurrentScope()
         local auraGroupMove = handle and handle._cfgGroup
         local a3 = MSUF and MSUF.MSUF_Auras3
         local apply = (M and M.ApplyService) or _G.MSUF_Menu2_ApplyService
@@ -177,9 +177,6 @@ function Handles.Install(box, deps)
             local dirty = gf.DIRTY_VISUAL or 0x02
             if handle and (handle._cfgGroup or handle._cfgSpell) then dirty = gf.DIRTY_AURAS or dirty end
             gf.RefreshVisuals(refreshKind, dirty)
-            if handle and handle._cfgTargetedSpells and gf.TargetedSpells and type(gf.TargetedSpells.RefreshConfig) == "function" then
-                gf.TargetedSpells.RefreshConfig(false)
-            end
         elseif gf and gf.MarkAllDirty then
             gf.MarkAllDirty(gf.DIRTY_VISUAL or 0x02)
         end
@@ -311,7 +308,7 @@ function Handles.Install(box, deps)
         if not (handle and box._mock) or handle._locked then return end
         if handle._cfgText then return end
         local m = box._mock
-        local anchorFrame = ((handle._cfgGroup or handle._cfgTargetedSpells) and handle._previewAnchorFrame) or m
+        local anchorFrame = (handle._cfgGroup and handle._previewAnchorFrame) or m
         local mL, mT = anchorFrame:GetLeft() or 0, anchorFrame:GetTop() or 0
         local mW, mH = max(1, anchorFrame:GetWidth() or 1), max(1, anchorFrame:GetHeight() or 1)
         local hL, hT = handle:GetLeft() or 0, handle:GetTop() or 0
@@ -322,11 +319,6 @@ function Handles.Install(box, deps)
             local px = hL + handle._previewOriginX
             local py = hB + handle._previewOriginY
             anchor = ResolveGroupAuraAnchor((px - mL) / mW, (mT - py) / mH)
-            offX, offY = PointOffset(px, py, anchorFrame, anchor)
-        elseif handle._cfgTargetedSpells and handle._previewOriginX and handle._previewOriginY then
-            local px = hL + handle._previewOriginX
-            local py = hB + handle._previewOriginY
-            anchor = ResolveAnchor((px - mL) / mW, (mT - py) / mH)
             offX, offY = PointOffset(px, py, anchorFrame, anchor)
         else
             local cx, cy = hL + hW * 0.5, hT - hH * 0.5
@@ -364,11 +356,6 @@ function Handles.Install(box, deps)
                 placed.x = cfgX
                 placed.y = cfgY
             end
-        elseif handle._cfgTargetedSpells then
-            local partyConf = H.Conf("party") or conf
-            partyConf.targetedSpellsAnchor = anchor
-            partyConf.targetedSpellsX = cfgX
-            partyConf.targetedSpellsY = cfgY
         end
         RefreshGroupPreviewAfterMove(handle)
         CheckpointHandleHistory(handle, action)
@@ -405,10 +392,6 @@ function Handles.Install(box, deps)
             if not placed then return false end
             placed.x = cfgX
             placed.y = cfgY
-        elseif handle._cfgTargetedSpells then
-            local partyConf = H.Conf("party") or conf
-            partyConf.targetedSpellsX = cfgX
-            partyConf.targetedSpellsY = cfgY
         else
             return false
         end
@@ -441,9 +424,6 @@ function Handles.Install(box, deps)
         elseif handle._cfgSpell then
             local placed = SpellPlacedForHandle(handle, false)
             return tonumber(placed and placed.x) or 0, tonumber(placed and placed.y) or 0
-        elseif handle._cfgTargetedSpells then
-            local partyConf = H.Conf("party") or conf
-            return tonumber(partyConf.targetedSpellsX) or 0, tonumber(partyConf.targetedSpellsY) or 0
         end
         return nil
     end
@@ -468,9 +448,6 @@ function Handles.Install(box, deps)
             local placed = SpellPlacedForHandle(handle, true)
             if not placed then return false end
             placed.x, placed.y = x, y
-        elseif handle._cfgTargetedSpells then
-            local partyConf = H.Conf("party") or conf
-            partyConf.targetedSpellsX, partyConf.targetedSpellsY = x, y
         else
             return false
         end
@@ -1055,10 +1032,6 @@ function Handles.Install(box, deps)
         return true, anchor, nextX, nextY
     end
     box._spellIndicatorHandles = spellIndicatorHandles
-    local targetedHandle = CreatePreviewHandle("targetedSpells", "targetedSpells", { 1.00, 0.52, 0.18 }, "TARGET", 72, 32, false)
-    targetedHandle._cfgTargetedSpells = true
-    targetedHandle._previewText = "Targeted Spells"
-    AddIconPool(targetedHandle, 5)
     local function ConfigureTextHandle(handle, kind, slot)
         if not handle then return end
         handle._cfgText = true
@@ -1127,7 +1100,6 @@ function Handles.Install(box, deps)
         externalHandle = externalHandle,
         statusHandles = statusHandles,
         spellHandle = spellHandle,
-        targetedHandle = targetedHandle,
         SelectHandle = SelectHandle,
         NudgeHandlePosition = NudgeHandlePosition,
         AddIconPool = AddIconPool,

@@ -53,7 +53,6 @@ Contains(guided, 'id = "gf_party_dispel"', "Party workflow omits Dispel Overlay"
 Contains(guided, 'id = "gf_party_stripe"', "Party workflow omits Debuff Stripe")
 Contains(guided, 'id = "gf_party_indicators"', "Party workflow omits Frame Indicators")
 Contains(guided, 'id = "gf_party_status"', "Party workflow omits Status Icons")
-Contains(guided, 'id = "gf_party_targeted_spells"', "Party workflow omits Targeted Spells")
 Contains(guided, 'id = "gf_party_corner_icons"', "Party workflow omits Corner Indicators")
 Contains(guided, 'id = "gf_party_auras"', "Party workflow omits Aura lanes")
 Contains(guided, 'id = "unit_intro"', "complete setup is not split into a Unitframe chapter")
@@ -115,7 +114,6 @@ Contains(groupBars, '"text." .. kind .. ".slot.mode"', "Party HP/Power slot edit
 Contains(groupBars, "text._msuf2GuidedSelectSlot", "Party text missions cannot select the slot edited by the shared control")
 Contains(unitText, "sec._msuf2GuidedSelectSlot", "Player text missions cannot select the slot edited by the shared control")
 Contains(groupIndicators, "sicons._msuf2GuidedSelectTab", "Party Status mission cannot open the Basic tab")
-Contains(groupIndicators, '"targeted_spells." .. tostring(key)', "Targeted Spells controls have no stable guided identity")
 Contains(groupIndicators, '"corner.editor.spell_ids"', "Corner custom spell input has no stable guided identity")
 Contains(groupAuras, '"group_aura_tools"', "Party Aura selectors do not have a stable guided region")
 Contains(groupAuras, '"group-workspace.container-selector"', "Party Aura container selector has no stable guided identity")
@@ -195,7 +193,7 @@ local M = {
 local MSUF = { MSUF2 = M, GuidedTour6 = tour }
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_GuidedTour.lua"))(
     "MidnightSimpleUnitFrames", MSUF)
-assert(M.guidedTourStageCount == 40, "guided setup lost the forty-stage core workflow")
+assert(M.guidedTourStageCount == 39, "guided setup lost the thirty-nine-stage core workflow")
 assert(M.GuidedTourOwnsPreviewLayout() == true, "active guided tour did not suppress floating preview pins")
 state.status = "paused"
 assert(M.GuidedTourOwnsPreviewLayout() == false, "inactive guided tour still owned preview layout")

@@ -40,7 +40,7 @@ assert(Layers.StatusLevel(unit, 0, 0) == 20 + Layers.STATUS_BASE_OFFSET,
 
 for _, key in ipairs({
     "AURA_ICON_BASE_OFFSET", "SPELL_ICON_BASE_OFFSET",
-    "CORNER_ICON_BASE_OFFSET", "TARGETED_SPELLS_BASE_OFFSET",
+    "CORNER_ICON_BASE_OFFSET",
 }) do
     assert(Layers[key] == foreground, key .. " escaped the Group foreground band")
 end
@@ -48,7 +48,6 @@ end
 local auraRuntime = Read(Join("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua"))
 local spellRuntime = Read(Join("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_SpellIndicators.lua"))
 local cornerRuntime = Read(Join("MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Indicators.lua"))
-local targetedRuntime = Read(Join("MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_TargetedSpells.lua"))
 local previewRuntime = Read(Join("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Render.lua"))
 
 assert(auraRuntime:find("AuraIconBaseOffset(parentFrame)", 1, true)
@@ -58,8 +57,6 @@ assert(spellRuntime:find("SpellIconBaseOffset(parentFrame)", 1, true),
     "Group Spell Indicator icons are not protected foreground surfaces")
 assert(cornerRuntime:find("Layers.CORNER_ICON_BASE_OFFSET", 1, true),
     "Group corner indicators are not protected foreground surfaces")
-assert(targetedRuntime:find("Layers.TARGETED_SPELLS_BASE_OFFSET", 1, true),
-    "Group targeted-spell icons are not protected foreground surfaces")
 assert(auraRuntime:find('parentFrame.MSUFSpec.scope == "group"', 1, true)
         and spellRuntime:find('parentFrame.MSUFSpec.scope == "group"', 1, true),
     "legacy Group FrameStrata can still bypass deterministic foreground ordering")

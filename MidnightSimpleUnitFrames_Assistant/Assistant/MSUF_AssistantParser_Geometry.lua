@@ -1788,7 +1788,7 @@ P.GROUP_ROOT_FRAME_DETAIL_TERMS = {
     "name", "name text", "hp", "health", "hp text", "health text", "power", "mana", "power text", "mana text", "text slot",
     "status", "status text", "status icon", "indicator", "icon", "ready check", "raid marker",
     "summon", "resurrect", "resurrection", "ghost", "dead", "afk", "dnd", "group number",
-    "pvp", "pvp flag", "targeted spell", "targeted spells", "targeted",
+    "pvp", "pvp flag",
     "aura", "auras", "buff", "buffs", "debuff", "debuffs", "castbar", "cast bar", "portrait",
     "bar", "health bar", "power bar", "mana bar", "border", "outline",
 }
