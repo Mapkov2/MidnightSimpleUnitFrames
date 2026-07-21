@@ -75,6 +75,7 @@ local _MSUF_FontPathSerialNext = 0
 -- existing scheduler until then.
 local _fontApplyFailed = false
 local _fontRelayoutRetries = 0
+local _fontRelayoutRetryPending = false
 local MSUF_FONT_RELAYOUT_MAX_RETRIES = 200
 local _measureFS
 
@@ -354,18 +355,31 @@ local function UpdateAllFonts(onlyKey)
     local ready = (not _fontApplyFailed) and _ConfiguredFontReady()
     if ready then
         _fontRelayoutRetries = 0
+        -- A queued timer cannot be cancelled portably; make its callback a
+        -- no-op when another cold-path refresh already reached readiness.
+        _fontRelayoutRetryPending = false
         local force = _G.MSUF_ForceTextLayoutForUnitKey
         if type(force) == "function" then
             ForEachUnitFrame(function(f)
                 if f then force(f.unit or f.msufConfigKey) end
             end)
         end
-    elseif _fontRelayoutRetries < MSUF_FONT_RELAYOUT_MAX_RETRIES then
+    elseif not _fontRelayoutRetryPending and _fontRelayoutRetries < MSUF_FONT_RELAYOUT_MAX_RETRIES then
         _fontRelayoutRetries = _fontRelayoutRetries + 1
-        if _G.C_Timer and _G.C_Timer.After then
-            _G.C_Timer.After(0.1, function() UpdateAllFonts() end)
+        _fontRelayoutRetryPending = true
+        local function RetryColdFontApply()
+            if not _fontRelayoutRetryPending then return end
+            _fontRelayoutRetryPending = false
+            UpdateAllFonts()
+        end
+        if _G.MSUF_ScheduleDelayOnce then
+            _G.MSUF_ScheduleDelayOnce("UF_FONT_COLD_RELAYOUT", 0.1, RetryColdFontApply)
+        elseif _G.C_Timer and _G.C_Timer.After then
+            _G.C_Timer.After(0.1, RetryColdFontApply)
         elseif _G.MSUF_ScheduleOnce then
-            _G.MSUF_ScheduleOnce("UF_FONT_COLD_RELAYOUT", function() UpdateAllFonts() end)
+            _G.MSUF_ScheduleOnce("UF_FONT_COLD_RELAYOUT", RetryColdFontApply)
+        else
+            _fontRelayoutRetryPending = false
         end
     end
 
