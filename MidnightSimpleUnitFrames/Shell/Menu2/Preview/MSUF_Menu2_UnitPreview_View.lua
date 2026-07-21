@@ -1243,6 +1243,154 @@ local function ApplyUnitPinnedPresentation(box, pinned, opts, sideW)
         UpdateHandleHint(box, box._selectedHandle)
     end
 end
+--- Compact inline presentation: the preview shrinks to a reference strip, the
+--- canvas takes the full box width, and the docked layer sidebar becomes a
+--- popover behind a "Layers" button. The docked sidebar has a fixed content
+--- height, so simply shrinking the box would spill its rows past the section.
+local function EnsureUnitLayersButton(box)
+    if box._msuf2LayersButton then return box._msuf2LayersButton end
+    local T = MenuTheme()
+    local btn
+    if T and T.Button then
+        btn = T.Button(box, TR("Layers"), 76, 20)
+    else
+        btn = CreateFrame("Button", nil, box, "BackdropTemplate")
+        btn:SetSize(76, 20)
+    end
+    btn:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -5)
+    btn:SetScript("OnClick", function()
+        local sidebar = box.sidebar
+        if sidebar then sidebar:SetShown(not sidebar:IsShown()) end
+    end)
+    if M2 and M2.AddTooltip then
+        M2.AddTooltip(btn, "Layers", "Toggle the preview layer list.", { hook = true })
+    end
+    box._msuf2LayersButton = btn
+    return btn
+end
+local function SetUnitCanvasToolsShown(box, shown)
+    if not box then return end
+    local controlsHint = box._msuf2PreviewControlsHint
+    if not shown then
+        if box._msuf2CompactToolsHidden ~= true then
+            box._msuf2CompactControlsHintWasShown = controlsHint and controlsHint.IsShown and controlsHint:IsShown() or false
+        end
+        box._msuf2CompactToolsHidden = true
+        if box.zoomBar then box.zoomBar:Hide() end
+        if box.animateCombatButton then box.animateCombatButton:Hide() end
+        if controlsHint then controlsHint:Hide() end
+        return
+    end
+    box._msuf2CompactToolsHidden = nil
+    if box.zoomBar then box.zoomBar:Show() end
+    if box.animateCombatButton then box.animateCombatButton:Show() end
+    if controlsHint and box._msuf2CompactControlsHintWasShown then controlsHint:Show() end
+end
+local function LayoutUnitHeaderControls(box, compact)
+    if not box then return end
+    local header = box._msuf2CompactHeader
+    local expandBtn = box._msuf2CompactExpandButton
+    local layersBtn = box._msuf2LayersButton
+    local pinBtn = box._msuf2PinButton
+    if compact and header then
+        if layersBtn then
+            if layersBtn.SetText then layersBtn:SetText(TR("Layers") .. " v") end
+            layersBtn:SetParent(header)
+            layersBtn:ClearAllPoints()
+            if expandBtn then layersBtn:SetPoint("RIGHT", expandBtn, "LEFT", -8, 0)
+            else layersBtn:SetPoint("RIGHT", header, "RIGHT", -108, 0) end
+            if layersBtn.SetFrameLevel and header.GetFrameLevel then
+                layersBtn:SetFrameLevel((header:GetFrameLevel() or 1) + 3)
+            end
+        end
+        if pinBtn then
+            pinBtn:SetParent(header)
+            pinBtn:ClearAllPoints()
+            local liveBadge = box._msuf2CompactLiveBadge
+            if liveBadge then pinBtn:SetPoint("LEFT", liveBadge, "RIGHT", 8, 0)
+            else pinBtn:SetPoint("LEFT", header, "LEFT", 176, 0) end
+            if pinBtn.SetFrameLevel and header.GetFrameLevel then
+                pinBtn:SetFrameLevel((header:GetFrameLevel() or 1) + 3)
+            end
+        end
+        return
+    end
+    if layersBtn then
+        if layersBtn.SetText then layersBtn:SetText(TR("Layers")) end
+        layersBtn:SetParent(box)
+        layersBtn:ClearAllPoints()
+        layersBtn:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -5)
+    end
+    if pinBtn then
+        pinBtn:SetParent(box)
+        pinBtn:ClearAllPoints()
+        pinBtn:SetPoint("TOPRIGHT", box, "TOPRIGHT", -12, -8)
+    end
+end
+local function ApplyUnitCompactPresentation(box, compact, sideW)
+    if not box then return end
+    compact = compact and true or false
+    box._msuf2CompactPreview = compact
+    if box._msuf2PinnedFloating == true then compact = false end
+    if PreviewHelpers.SwitchCompactZoomMode then PreviewHelpers.SwitchCompactZoomMode(box, compact, 1.50) end
+    local canvas, sidebar = box.canvas, box.sidebar
+    local T = MenuTheme()
+    if compact then
+        if box.title then box.title:Hide() end
+        if box.hint then box.hint:Hide() end
+        SetUnitCanvasToolsShown(box, false)
+        if canvas then
+            canvas:ClearAllPoints()
+            canvas:SetPoint("TOPLEFT", box, "TOPLEFT", 8, -8)
+            canvas:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -8, 8)
+        end
+        if sidebar and canvas then
+            local rows = #(box.layerButtons or {})
+            sidebar:ClearAllPoints()
+            local layersBtn = EnsureUnitLayersButton(box)
+            if layersBtn and box._msuf2CompactHeader then
+                sidebar:SetPoint("TOPRIGHT", layersBtn, "BOTTOMRIGHT", 0, -6)
+            else
+                sidebar:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -28)
+            end
+            sidebar:SetSize((sideW or 104) + 8, 32 + rows * 18 + 10)
+            if sidebar.SetFrameLevel and canvas.GetFrameLevel then
+                sidebar:SetFrameLevel((canvas:GetFrameLevel() or 1) + 90)
+            end
+            if sidebar.SetBackdropColor then sidebar:SetBackdropColor(0.012, 0.026, 0.050, 0.98) end
+            if sidebar.SetBackdropBorderColor then
+                local border = (T and T.colors and T.colors.borderSoft) or { 0.086, 0.149, 0.227, 1 }
+                sidebar:SetBackdropBorderColor(border[1], border[2], border[3], 0.9)
+            end
+            sidebar:Hide()
+        end
+        EnsureUnitLayersButton(box):Show()
+        LayoutUnitHeaderControls(box, true)
+    else
+        if box.title then box.title:Show() end
+        if box.hint then box.hint:Show() end
+        SetUnitCanvasToolsShown(box, true)
+        LayoutUnitHeaderControls(box, false)
+        if canvas then
+            canvas:ClearAllPoints()
+            canvas:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -30)
+            canvas:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -((sideW or 104) + 18), 12)
+        end
+        if sidebar and canvas then
+            sidebar:ClearAllPoints()
+            sidebar:SetPoint("TOPLEFT", canvas, "TOPRIGHT", 8, 0)
+            sidebar:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 12)
+            if sidebar.SetFrameLevel and canvas.GetFrameLevel then
+                sidebar:SetFrameLevel((canvas:GetFrameLevel() or 1) + 1)
+            end
+            if PreviewHelpers.ApplyPreviewChrome then
+                PreviewHelpers.ApplyPreviewChrome(sidebar, "sidebar", T, ApplyPreviewBackdrop)
+            end
+            sidebar:Show()
+        end
+        if box._msuf2LayersButton then box._msuf2LayersButton:Hide() end
+    end
+end
 local function BuildPreview(parent, panel, width, height)
     local sideW = 104
     local T = MenuTheme()
@@ -1257,7 +1405,23 @@ local function BuildPreview(parent, panel, width, height)
     box._msufStaticH = height or 228
     box._msufPanel = panel
     box.ApplyPinnedPreviewPresentation = function(self, pinned, opts)
+        if pinned then
+            if PreviewHelpers.SwitchCompactZoomMode then PreviewHelpers.SwitchCompactZoomMode(self, false, 1.50) end
+            -- The pinned header reuses title/hint; compact mode may have
+            -- hidden them and must never leave the floating header empty.
+            if self.title then self.title:Show() end
+            if self.hint then self.hint:Show() end
+            SetUnitCanvasToolsShown(self, true)
+            LayoutUnitHeaderControls(self, false)
+            if self._msuf2LayersButton then self._msuf2LayersButton:Hide() end
+        end
         ApplyUnitPinnedPresentation(self, pinned, opts, sideW)
+        if not pinned and self._msuf2CompactPreview then
+            ApplyUnitCompactPresentation(self, true, sideW)
+        end
+    end
+    box.ApplyCompactPreviewPresentation = function(self, compact)
+        ApplyUnitCompactPresentation(self, compact, sideW)
     end
     function box:RequestRefresh(reason)
         local preview = MSUF.UFPreview or Preview
@@ -1315,6 +1479,9 @@ local function BuildPreview(parent, panel, width, height)
     local sidebar = CreateFrame("Frame", nil, box, "BackdropTemplate")
     sidebar:SetPoint("TOPLEFT", canvas, "TOPRIGHT", 8, 0)
     sidebar:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 12)
+    -- The layer rows are fixed-offset children; without clipping they spill
+    -- past the sidebar whenever the box is shorter than the row stack.
+    if sidebar.SetClipsChildren then sidebar:SetClipsChildren(true) end
     if PreviewHelpers.ApplyPreviewChrome then
         PreviewHelpers.ApplyPreviewChrome(sidebar, "sidebar", T, ApplyPreviewBackdrop)
     else

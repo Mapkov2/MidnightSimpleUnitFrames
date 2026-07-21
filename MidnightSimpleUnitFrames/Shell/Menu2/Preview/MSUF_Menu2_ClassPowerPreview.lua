@@ -1869,6 +1869,7 @@ local function CreateLayerSidebar(box, sideW)
     if Helpers.ApplyPreviewChrome then Helpers.ApplyPreviewChrome(sidebar, "sidebar", T) end
     sidebar:SetPoint("TOPLEFT", box.canvas, "TOPRIGHT", 8, 0)
     sidebar:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 12)
+    if sidebar.SetClipsChildren then sidebar:SetClipsChildren(true) end
     box.sidebar = sidebar
     local chrome = Helpers.PreviewChromePalette and Helpers.PreviewChromePalette(T) or {}
     local hdr = T.Font(sidebar, "GameFontDisableSmall", TR("LAYERS"), chrome.layerHeader or T.colors.muted)
@@ -2029,21 +2030,174 @@ local function DragUpdate(frame)
     WriteHandle(handle, nextX, nextY, true)
 end
 
+local function EnsureClassPowerLayersButton(box)
+    if box._msuf2LayersButton then return box._msuf2LayersButton end
+    local btn = T.Button(box, TR("Layers") .. " v", 76, 20)
+    if T.CenterButtonLabel then T.CenterButtonLabel(btn) end
+    btn:SetScript("OnClick", function()
+        if box.sidebar then box.sidebar:SetShown(not box.sidebar:IsShown()) end
+    end)
+    M.AddTooltip(btn, "Layers", "Toggle the preview layer list.", { hook = true })
+    RegisterPreviewControl(box._catalogCtx, btn, "layer.popover", "Class Resources Preview Layers", "button", "ephemeral")
+    box._msuf2LayersButton = btn
+    return btn
+end
+local function SetClassPowerPreviewToolsShown(box, shown)
+    if not box then return end
+    local controlsHint = box._msuf2PreviewControlsHint
+    if not shown then
+        if box._msuf2CompactToolsHidden ~= true then
+            box._msuf2CompactControlsHintWasShown = controlsHint and controlsHint.IsShown and controlsHint:IsShown() or false
+        end
+        box._msuf2CompactToolsHidden = true
+        if box.zoomBar then box.zoomBar:Hide() end
+        if box.animateButton then box.animateButton:Hide() end
+        if controlsHint then controlsHint:Hide() end
+        return
+    end
+    box._msuf2CompactToolsHidden = nil
+    if box.zoomBar then box.zoomBar:Show() end
+    if box.animateButton then box.animateButton:Show() end
+    if controlsHint and box._msuf2CompactControlsHintWasShown then controlsHint:Show() end
+end
+local function LayoutClassPowerHeaderControls(box, compact)
+    if not box then return end
+    local header = box._msuf2CompactHeader
+    local expandBtn = box._msuf2CompactExpandButton
+    local layersBtn = box._msuf2LayersButton
+    local pinBtn = box._msuf2PinButton
+    if compact and header then
+        if layersBtn then
+            layersBtn:SetText(TR("Layers") .. " v")
+            layersBtn:SetParent(header)
+            layersBtn:ClearAllPoints()
+            if expandBtn then layersBtn:SetPoint("RIGHT", expandBtn, "LEFT", -8, 0)
+            else layersBtn:SetPoint("RIGHT", header, "RIGHT", -108, 0) end
+            if layersBtn.SetFrameLevel and header.GetFrameLevel then layersBtn:SetFrameLevel((header:GetFrameLevel() or 1) + 3) end
+        end
+        if pinBtn then
+            pinBtn:SetParent(header)
+            pinBtn:ClearAllPoints()
+            local liveBadge = box._msuf2CompactLiveBadge
+            if liveBadge then pinBtn:SetPoint("LEFT", liveBadge, "RIGHT", 8, 0)
+            else pinBtn:SetPoint("LEFT", header, "LEFT", 214, 0) end
+            if pinBtn.SetFrameLevel and header.GetFrameLevel then pinBtn:SetFrameLevel((header:GetFrameLevel() or 1) + 3) end
+        end
+        return
+    end
+    if layersBtn then
+        layersBtn:SetText(TR("Layers"))
+        layersBtn:SetParent(box)
+        layersBtn:ClearAllPoints()
+        layersBtn:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -5)
+    end
+    if pinBtn then
+        pinBtn:SetParent(box)
+        pinBtn:ClearAllPoints()
+        pinBtn:SetPoint("TOPRIGHT", box, "TOPRIGHT", -12, -8)
+    end
+end
+local function ApplyClassPowerCompactPresentation(box, compact, sideW)
+    if not box then return end
+    compact = compact == true
+    box._msuf2CompactPreview = compact
+    if box._msuf2PinnedFloating == true then compact = false end
+    if Helpers.SwitchCompactZoomMode then Helpers.SwitchCompactZoomMode(box, compact, 1.50) end
+    local canvas, sidebar = box.canvas, box.sidebar
+    if compact then
+        if box.title then box.title:Hide() end
+        if box.hint then box.hint:Hide() end
+        SetClassPowerPreviewToolsShown(box, false)
+        if canvas then
+            box.canvasW = max(1, (box.GetWidth and box:GetWidth() or 1) - 16)
+            box.canvasH = max(1, (box.GetHeight and box:GetHeight() or 1) - 16)
+            canvas:ClearAllPoints()
+            canvas:SetPoint("TOPLEFT", box, "TOPLEFT", 8, -8)
+            canvas:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -8, 8)
+            if box.stage then box.stage:SetSize(box.canvasW, box.canvasH) end
+        end
+        local layersBtn = EnsureClassPowerLayersButton(box)
+        if sidebar and canvas then
+            local rows = #(box.layerButtons or {})
+            sidebar:ClearAllPoints()
+            if box._msuf2CompactHeader then sidebar:SetPoint("TOPRIGHT", layersBtn, "BOTTOMRIGHT", 0, -6)
+            else sidebar:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -28) end
+            sidebar:SetSize((sideW or 104) + 8, 32 + rows * 18 + 10)
+            if sidebar.SetFrameLevel and canvas.GetFrameLevel then sidebar:SetFrameLevel((canvas:GetFrameLevel() or 1) + 90) end
+            sidebar:Hide()
+        end
+        layersBtn:Show()
+        LayoutClassPowerHeaderControls(box, true)
+        return
+    end
+    if box.title then box.title:Show() end
+    if box.hint then box.hint:Show() end
+    SetClassPowerPreviewToolsShown(box, true)
+    LayoutClassPowerHeaderControls(box, false)
+    if canvas then
+        box.canvasW = box._msuf2ExpandedCanvasW or box.canvasW
+        box.canvasH = box._msuf2ExpandedCanvasH or box.canvasH
+        canvas:ClearAllPoints()
+        canvas:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -30)
+        canvas:SetSize(box.canvasW, box.canvasH)
+        if box.stage then box.stage:SetSize(box.canvasW, box.canvasH) end
+    end
+    if sidebar and canvas then
+        sidebar:ClearAllPoints()
+        sidebar:SetPoint("TOPLEFT", canvas, "TOPRIGHT", 8, 0)
+        sidebar:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 12)
+        if sidebar.SetFrameLevel and canvas.GetFrameLevel then sidebar:SetFrameLevel((canvas:GetFrameLevel() or 1) + 1) end
+        sidebar:Show()
+    end
+    if box._msuf2LayersButton then box._msuf2LayersButton:Hide() end
+end
+
 --- Build the inline/pinnable ClassPower preview section and install its refresh
 --- function. All live apply calls are opt-in through handle actions.
+local CP_PREVIEW_EXPANDED_BOX_HEIGHT = 330
+local CP_PREVIEW_COMPACT_BOX_HEIGHT = 132
 function Preview.Create(ctx, builder)
-    if not (W and T and builder and builder.Section) then return nil end
-    local section = builder:Section("Preview", 388)
-    local width = section._msuf2Width or builder.width or ctx.width or 720
-    local innerW = max(1, width - 28)
+    if not (W and T and builder and builder.CollapsibleSection) then return nil end
+    local expanded = M.classPowerPreviewExpanded == true
+    local section = builder:CollapsibleSection("classpower_preview", "Preview", (expanded and CP_PREVIEW_EXPANDED_BOX_HEIGHT or CP_PREVIEW_COMPACT_BOX_HEIGHT) + 16, true)
+    local sectionEntry = section and section._msuf2CollapsibleEntry
+    local previewHeader = sectionEntry and sectionEntry.header
+    local liveBadge
+    if sectionEntry then
+        sectionEntry._msuf2ManualHintLayout = true
+        if sectionEntry.hint then sectionEntry.hint:Hide() end
+        if sectionEntry.label then
+            sectionEntry.label:SetText(TR("Preview") .. " - " .. TR("Class Resources"))
+            sectionEntry.label:ClearAllPoints()
+            sectionEntry.label:SetPoint("LEFT", sectionEntry.arrow, "RIGHT", 8, 0)
+            sectionEntry.label:SetJustifyH("LEFT")
+        end
+        section._msuf2CollapsibleBadgesShowWhenClosed = true
+        if W.SetCollapsibleBadges then
+            W.SetCollapsibleBadges(section, { { text = "Live", kind = "ok", width = 46, alwaysShow = true } })
+            liveBadge = sectionEntry._msuf2Badges and sectionEntry._msuf2Badges[1]
+            if liveBadge and sectionEntry.label then
+                liveBadge:ClearAllPoints()
+                liveBadge:SetPoint("LEFT", sectionEntry.label, "RIGHT", 10, 0)
+            end
+        end
+    end
+    -- Collapsible bodies may be capped to the normal form-content width.  The
+    -- preview canvas is page chrome, like Unit and Group previews, and should
+    -- use the full page width instead of leaving an empty column on the right.
+    local pageW = ctx.width or builder.width or section._msuf2Width or 720
+    local innerW = max(1, pageW - 28)
     local sideW = min(104, max(72, innerW - 252))
+    local expandBtn = T.Button(previewHeader or section, "Expand", 88, 20)
+    if T.CenterButtonLabel then T.CenterButtonLabel(expandBtn) end
     local box = T.Panel(section, nil, { 0.018, 0.022, 0.044, 0.88 }, T.colors.borderSoft)
     local chrome = Helpers.ApplyPreviewChrome and Helpers.ApplyPreviewChrome(box, "outer", T)
         or { title = T.colors.title or T.colors.text, canvasBorder = T.colors.borderSoft }
     box._catalogCtx = ctx
-    box:SetPoint("TOPLEFT", section, "TOPLEFT", 14, -38)
-    box:SetSize(innerW, 330)
+    box:SetPoint("TOPLEFT", section, "TOPLEFT", 14, -8)
+    box:SetSize(innerW, expanded and CP_PREVIEW_EXPANDED_BOX_HEIGHT or CP_PREVIEW_COMPACT_BOX_HEIGHT)
     box.canvasW, box.canvasH = max(1, innerW - sideW - 32), 288
+    box._msuf2ExpandedCanvasW, box._msuf2ExpandedCanvasH = box.canvasW, box.canvasH
     box.playerW, box.playerH = min(275, max(190, box.canvasW - 160)), 38
     box.handles = {}
     if box.EnableKeyboard then box:EnableKeyboard(true) end
@@ -2054,6 +2208,7 @@ function Preview.Create(ctx, builder)
     })
     local title = T.Font(box, "GameFontNormal", TR("Class Resources Preview"), chrome.title or T.colors.accent)
     title:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -8)
+    box.title = title
     local hint = T.Font(box, "GameFontDisableSmall", TR("drag handles - double-click/settings opens options - right-click actions - Ctrl+wheel zoom"), T.colors.muted)
     hint:SetPoint("LEFT", title, "RIGHT", 12, 0)
     hint:SetPoint("RIGHT", box, "RIGHT", -12, 0)
@@ -2245,6 +2400,63 @@ function Preview.Create(ctx, builder)
         Preview.active = box
         RequestClassPowerPreviewRefresh(box, reason or "CLASSPOWER_PREVIEW_RESUME")
     end
+    box._msuf2PreferredRestoreHeight = expanded and CP_PREVIEW_EXPANDED_BOX_HEIGHT or CP_PREVIEW_COMPACT_BOX_HEIGHT
+    box._msuf2PreferredRestoreYOffset = -8
+    box._msuf2CompactHeader = previewHeader
+    box._msuf2CompactLiveBadge = liveBadge
+    box._msuf2CompactExpandButton = expandBtn
+    box.ApplyPinnedPreviewPresentation = function(self)
+        ApplyClassPowerCompactPresentation(self, self._msuf2CompactPreview == true, sideW)
+    end
+    box.ApplyCompactPreviewPresentation = function(self, compact)
+        ApplyClassPowerCompactPresentation(self, compact, sideW)
+    end
+    local function RefreshExpandButton()
+        local isExpanded = M.classPowerPreviewExpanded == true
+        expandBtn:SetParent(previewHeader or section)
+        expandBtn:ClearAllPoints()
+        expandBtn:SetSize(isExpanded and 130 or 88, 20)
+        if previewHeader then
+            expandBtn:SetPoint("RIGHT", previewHeader, "RIGHT", -12, 0)
+            if expandBtn.SetFrameLevel and previewHeader.GetFrameLevel then expandBtn:SetFrameLevel((previewHeader:GetFrameLevel() or 1) + 3) end
+        else
+            expandBtn:SetPoint("TOPRIGHT", section, "TOPRIGHT", -14, -8)
+        end
+        expandBtn:SetText(isExpanded and "Compact Preview" or "Expand")
+        if liveBadge then liveBadge:SetShown(not isExpanded) end
+    end
+    local function ApplyPreviewMode()
+        local isExpanded = M.classPowerPreviewExpanded == true
+        local boxH = isExpanded and CP_PREVIEW_EXPANDED_BOX_HEIGHT or CP_PREVIEW_COMPACT_BOX_HEIGHT
+        local contentH = boxH + 16
+        RefreshExpandButton()
+        if box._msuf2PinnedFloating ~= true then
+            local previousH = box.GetHeight and box:GetHeight() or 0
+            box._msuf2PreferredRestoreHeight = boxH
+            box._msuf2PreferredRestoreYOffset = -8
+            box:ClearAllPoints()
+            box:SetPoint("TOPLEFT", section, "TOPLEFT", 14, -8)
+            box:SetHeight(boxH)
+            box:ApplyCompactPreviewPresentation(not isExpanded)
+            if math.abs(previousH - boxH) > 0.5 then RequestClassPowerPreviewRefresh(box, "CLASSPOWER_PREVIEW_HEIGHT") end
+        end
+        if sectionEntry and sectionEntry.contentHeight ~= contentH then
+            sectionEntry.contentHeight = contentH
+            if sectionEntry.body and sectionEntry.body.SetHeight then sectionEntry.body:SetHeight(contentH) end
+            if sectionEntry.outer and sectionEntry.outer.SetHeight then
+                sectionEntry.outer:SetHeight(sectionEntry.headerHeight + (sectionEntry.open and contentH or 0))
+            end
+            if sectionEntry.builder and sectionEntry.builder.RequestRelayoutCollapsibles then sectionEntry.builder:RequestRelayoutCollapsibles() end
+        end
+    end
+    expandBtn:SetScript("OnClick", function()
+        local isExpanded = not (M.classPowerPreviewExpanded == true)
+        if M.SetMenuStateValue then M.SetMenuStateValue("classPowerPreviewExpanded", isExpanded)
+        else M.classPowerPreviewExpanded = isExpanded end
+        ApplyPreviewMode()
+    end)
+    M.AddTooltip(expandBtn, "Preview size", "Toggle between the compact reference preview and the full-height canvas.", { hook = true })
+    RegisterPreviewControl(ctx, expandBtn, "height.toggle", "Expand Class Resources Preview", "button", "ephemeral")
     M._msuf2ClassPowerInlinePreview = section
     if W.AttachPinnedPreview then
         W.AttachPinnedPreview(section, box, {
@@ -2256,11 +2468,16 @@ function Preview.Create(ctx, builder)
             top = -8,
             pageKey = ctx and ctx.key,
             wrapper = ctx and ctx.wrapper,
+            restoreParent = section,
+            restorePoint = { "TOPLEFT", section, "TOPLEFT", 14, -8 },
+            restoreWidth = innerW,
+            restoreHeight = box._msuf2PreferredRestoreHeight,
         })
         RegisterPreviewControl(ctx, box._msuf2PinButton, "pin.toggle", "Pin Class Resources Preview", "toggle", "ephemeral", {
             help = "Keeps this preview visible while editing lower Class Resources options.",
         })
     end
+    ApplyPreviewMode()
     ActivateVisiblePreview()
     M.TrackMethodRefresh(ctx, section, "Refresh")
     return section

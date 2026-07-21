@@ -229,9 +229,48 @@ local function ApplyUnitFrameEnabledGate(ctx, unit)
 end
 local UnitSectionShared = M.UnitSectionsShared or {}
 local SetSectionHeaderStatus = UnitSectionShared.SetSectionHeaderStatus or function() end
+-- Compact-by-default preview: the frame stays visible as a live reference
+-- while the settings keep the viewport; "Expand Preview" restores the full
+-- canvas. The mode is one shared, persisted state across all unit pages.
+local UNIT_PREVIEW_EXPANDED_BOX_HEIGHT = 292
+local UNIT_PREVIEW_COMPACT_BOX_HEIGHT = 132
+local function UnitPreviewBoxHeight()
+    return M.unitPreviewExpanded == true and UNIT_PREVIEW_EXPANDED_BOX_HEIGHT or UNIT_PREVIEW_COMPACT_BOX_HEIGHT
+end
+local function UnitPreviewSectionHeight()
+    return UnitPreviewBoxHeight() + (M.unitPreviewExpanded == true and 86 or 16)
+end
+local function UnitPreviewTopOffset()
+    return M.unitPreviewExpanded == true and -70 or -8
+end
 local function BuildPreview(ctx, builder, unit)
-    local sec = builder:CollapsibleSection("preview", "Hide Preview", 378, true)
-    if W.SetCollapsibleToggleText then W.SetCollapsibleToggleText(sec, "Hide Preview", "Show Preview") end
+    local sec = builder:CollapsibleSection("preview", "Hide Preview", UnitPreviewSectionHeight(), true)
+    local sectionEntry = sec and sec._msuf2CollapsibleEntry
+    local previewHeader = sectionEntry and sectionEntry.header
+    local previewHeaderTitle = "Preview - " .. UnitTopLabel(unit)
+    local liveBadge
+    if sectionEntry then
+        -- The compact card uses the accordion header as its toolbar. Keep the
+        -- underlying section/search identity intact while presenting the unit
+        -- name and live state like the compact mock-up.
+        sectionEntry._msuf2ManualHintLayout = true
+        if sectionEntry.hint then sectionEntry.hint:Hide() end
+        if sectionEntry.label then
+            sectionEntry.label:SetText(previewHeaderTitle)
+            sectionEntry.label:ClearAllPoints()
+            sectionEntry.label:SetPoint("LEFT", sectionEntry.arrow, "RIGHT", 8, 0)
+            sectionEntry.label:SetJustifyH("LEFT")
+        end
+        sec._msuf2CollapsibleBadgesShowWhenClosed = true
+        if W.SetCollapsibleBadges then
+            W.SetCollapsibleBadges(sec, { { text = "Live", kind = "ok", width = 46, alwaysShow = true } })
+            liveBadge = sectionEntry._msuf2Badges and sectionEntry._msuf2Badges[1]
+            if liveBadge and sectionEntry.label then
+                liveBadge:ClearAllPoints()
+                liveBadge:SetPoint("LEFT", sectionEntry.label, "RIGHT", 10, 0)
+            end
+        end
+    end
     local previewNote = "Live preview. Select a handle, then use its gear to open the exact settings. Hovering menu controls highlights the related frame element. Use MSUF Edit Mode to place frames on screen."
     if unit == "pet" then
         previewNote = previewNote .. " Pet frames only appear in game while you have an active pet."
@@ -244,7 +283,10 @@ local function BuildPreview(ctx, builder, unit)
     elseif unit == "boss" then
         previewNote = previewNote .. " Boss Frames can be previewed here and in MSUF Edit Mode outside encounters."
     end
-    W.Text(sec, previewNote, 14, -38, ctx.width - 28, T.colors.muted)
+    -- The handle how-to is only relevant while actually working with the full
+    -- canvas; the compact reference strip stays free of it.
+    local noteText = W.Text(sec, previewNote, 14, -38, ctx.width - 28, T.colors.muted)
+    noteText:SetShown(M.unitPreviewExpanded == true)
     local createPreview = MSUF.MSUF_Menu2_CreateUnitPreviewBox or _G.MSUF_Menu2_CreateUnitPreviewBox
     if not createPreview then
         W.Text(sec, "The shared unit preview module is not loaded.", 14, -70, ctx.width - 28, T.colors.muted)
@@ -266,7 +308,14 @@ local function BuildPreview(ctx, builder, unit)
         box._msuf2PinnedPreviewPageKey = ctx and ctx.key
         box._msuf2PinnedPreviewWrapper = ctx and ctx.wrapper
         box._msuf2PinnedFloating = nil
+        box._msuf2PreferredRestoreHeight = UnitPreviewBoxHeight()
+        box._msuf2PreferredRestoreYOffset = UnitPreviewTopOffset()
+        box._msuf2CompactHeader = previewHeader
+        box._msuf2CompactLiveBadge = liveBadge
     end
+    -- Single enforcement path for preview mode/height: assigned below, called
+    -- from every box acquisition and from the page refresh cycle.
+    local ApplyPreviewHeightMode
     local function EnsurePreviewAttachment()
         if not box then return end
         local record = box._msuf2PinnedPreviewRecord
@@ -288,9 +337,9 @@ local function BuildPreview(ctx, builder, unit)
                 centerButton = true,
                 quietButton = true,
                 restoreParent = sec,
-                restorePoint = { "TOPLEFT", sec, "TOPLEFT", 14, -70 },
+                restorePoint = { "TOPLEFT", sec, "TOPLEFT", 14, UnitPreviewTopOffset() },
                 restoreWidth = ctx.width - 28,
-                restoreHeight = 292,
+                restoreHeight = UnitPreviewBoxHeight(),
                 pageKey = pageKey,
                 wrapper = wrapper,
             })
@@ -331,13 +380,13 @@ local function BuildPreview(ctx, builder, unit)
         box = UP._sharedUnitPreviewBox
         if box and box.Hide then box:Hide() end
         if not box then
-            box = createPreview(sec, panel, ctx.width - 28, 292)
+            box = createPreview(sec, panel, ctx.width - 28, UnitPreviewBoxHeight())
             if not box then return nil end
             UP._sharedUnitPreviewBox = box
         else
             box:SetParent(sec)
             box:ClearAllPoints()
-            box:SetSize(ctx.width - 28, 292)
+            box:SetSize(ctx.width - 28, UnitPreviewBoxHeight())
             box._msufPanel = panel
             local preview = MSUF.UFPreview
             if preview and type(preview.RegisterRuntimeControlsForPage) == "function" then
@@ -346,7 +395,7 @@ local function BuildPreview(ctx, builder, unit)
         end
         box._msufPanel = panel
         SetPreviewOwner()
-        box:SetPoint("TOPLEFT", sec, "TOPLEFT", 16, -72)
+        box:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, UnitPreviewTopOffset())
         box:Show()
         if box.title and box.title.SetTextColor then
             local c = T.colors.accent
@@ -367,6 +416,7 @@ local function BuildPreview(ctx, builder, unit)
             end)
         end
         EnsurePreviewAttachment()
+        if ApplyPreviewHeightMode then ApplyPreviewHeightMode() end
         return box
     end
     local function RefreshThisPreview(reason)
@@ -392,6 +442,77 @@ local function BuildPreview(ctx, builder, unit)
         end
         Call("MSUF_UFPreview_RequestRefresh", reason or "MSUF2_UNIT_PAGE")
     end
+    local expandBtn = T.Button(previewHeader or sec, "Expand", 88, 20)
+    if T.CenterButtonLabel then T.CenterButtonLabel(expandBtn) end
+    local function RefreshExpandButton()
+        local expanded = M.unitPreviewExpanded == true
+        expandBtn:SetParent(previewHeader or sec)
+        expandBtn:ClearAllPoints()
+        expandBtn:SetSize(expanded and 130 or 88, 20)
+        if previewHeader then
+            expandBtn:SetPoint("RIGHT", previewHeader, "RIGHT", -12, 0)
+            if expandBtn.SetFrameLevel and previewHeader.GetFrameLevel then
+                expandBtn:SetFrameLevel((previewHeader:GetFrameLevel() or 1) + 3)
+            end
+        else
+            expandBtn:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -14, -8)
+        end
+        if expandBtn.SetText then expandBtn:SetText(expanded and "Compact Preview" or "Expand") end
+        if liveBadge then liveBadge:SetShown(not expanded) end
+    end
+    ApplyPreviewHeightMode = function()
+        local boxH = UnitPreviewBoxHeight()
+        local secH = UnitPreviewSectionHeight()
+        local topOffset = UnitPreviewTopOffset()
+        local expanded = M.unitPreviewExpanded == true
+        if noteText then noteText:SetShown(expanded) end
+        RefreshExpandButton()
+        if box and box._msuf2PinnedFloating ~= true then
+            box._msuf2PreferredRestoreHeight = boxH
+            box._msuf2PreferredRestoreYOffset = topOffset
+            box._msuf2CompactExpandButton = expandBtn
+            -- Enforce mode and height unconditionally: diff-based skipping is
+            -- exactly where presentation/height desyncs hid (shared box, cached
+            -- pages, pin restores). Only the render refresh stays change-gated.
+            local previousH = (box.GetHeight and box:GetHeight()) or 0
+            box:ClearAllPoints()
+            box:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, topOffset)
+            if box.ApplyCompactPreviewPresentation then
+                box:ApplyCompactPreviewPresentation(not expanded)
+            end
+            if box.SetHeight then box:SetHeight(boxH) end
+            if math.abs(previousH - boxH) > 0.5 and box.RequestRefresh then
+                box:RequestRefresh("MSUF2_UNIT_PREVIEW_HEIGHT")
+            end
+        end
+        local entry = sec._msuf2CollapsibleEntry
+        if entry and entry.contentHeight ~= secH then
+            entry.contentHeight = secH
+            if entry.body and entry.body.SetHeight then entry.body:SetHeight(secH) end
+            if entry.outer and entry.outer.SetHeight then
+                entry.outer:SetHeight(entry.headerHeight + (entry.open and secH or 0))
+            end
+            if entry.builder and entry.builder.RequestRelayoutCollapsibles then
+                entry.builder:RequestRelayoutCollapsibles()
+            end
+        end
+    end
+    expandBtn:SetScript("OnClick", function()
+        local expanded = not (M.unitPreviewExpanded == true)
+        if M.SetMenuStateValue then M.SetMenuStateValue("unitPreviewExpanded", expanded)
+        else M.unitPreviewExpanded = expanded end
+        ApplyPreviewHeightMode()
+    end)
+    if M.AddTooltip then
+        M.AddTooltip(expandBtn, "Preview size",
+            "Toggle between the compact reference preview and the full-height canvas.", { hook = true })
+    end
+    RegisterControl(expandBtn, ctx, "preview.height.toggle", "Expand Preview", "button", "ephemeral")
+    -- Pages share one preview box and cache their section heights; reassert the
+    -- current mode whenever this page refreshes so a toggle made on another
+    -- unit page cannot leave this section with a stale height.
+    M.TrackRefresh(ctx, ApplyPreviewHeightMode)
+    RefreshExpandButton()
     local function RefreshPreviewState()
         SetSectionHeaderStatus(sec, nil)
         if not PreviewHostShown() then
@@ -615,7 +736,9 @@ local function AttachBasicsHeaderStatus(sec, unit)
     return RefreshBasicsState
 end
 local function BuildBasics(ctx, builder, unit, label)
-    local sec = builder:CollapsibleSection("frame_basics", "Frame Basics", 202, false)
+    -- Default-open so the page greets users with real settings instead of a
+    -- stack of closed headers; saved accordion state still wins afterwards.
+    local sec = builder:CollapsibleSection("frame_basics", "Frame Basics", 202, true)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local gap = 24
     local colW = math.floor((sectionW - 28 - (gap * 2)) / 3)

@@ -759,6 +759,44 @@ function H.EnsurePreviewControlsHint(box, anchor, opts)
     hint:Show()
     return hint
 end
+function H.SwitchCompactZoomMode(box, compact, defaultCompactZoom)
+    if not box then return false end
+    compact = compact == true
+    local active = box._msuf2CompactZoomMode
+    if active == compact then return false end
+
+    local function Store(prefix)
+        box[prefix .. "ManualZoom"] = tonumber(box._manualZoom)
+        box[prefix .. "PanX"] = tonumber(box._zoomPanX) or 0
+        box[prefix .. "PanY"] = tonumber(box._zoomPanY) or 0
+        box[prefix .. "Initialized"] = true
+    end
+    local function Restore(prefix, fallbackZoom)
+        if box[prefix .. "Initialized"] then
+            box._manualZoom = box[prefix .. "ManualZoom"]
+            box._zoomPanX = tonumber(box[prefix .. "PanX"]) or 0
+            box._zoomPanY = tonumber(box[prefix .. "PanY"]) or 0
+            return
+        end
+        box._manualZoom = tonumber(fallbackZoom)
+        box._zoomPanX, box._zoomPanY = 0, 0
+        box[prefix .. "Initialized"] = true
+        box[prefix .. "ManualZoom"] = box._manualZoom
+        box[prefix .. "PanX"], box[prefix .. "PanY"] = 0, 0
+    end
+
+    if active == nil then
+        -- Before the first compact transition, the preview owns its normal
+        -- expanded zoom state.  Preserve that Fit/manual choice verbatim.
+        Store("_msuf2ExpandedZoom")
+    else
+        Store(active and "_msuf2CompactZoom" or "_msuf2ExpandedZoom")
+    end
+    Restore(compact and "_msuf2CompactZoom" or "_msuf2ExpandedZoom", compact and defaultCompactZoom or nil)
+    box._msuf2CompactZoomMode = compact
+    return true
+end
+
 function H.InstallZoomPan(ZoomPan, opts)
     if type(ZoomPan) ~= "table" then return end
     opts = opts or {}

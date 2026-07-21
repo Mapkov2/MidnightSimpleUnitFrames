@@ -2602,6 +2602,17 @@ function W.AttachPinnedPreview(body, box, opts)
     local originalFrameLevel = (box.GetFrameLevel and box:GetFrameLevel()) or 1
     local originalWidth = tonumber(opts.restoreWidth) or (box.GetWidth and box:GetWidth())
     local originalHeight = tonumber(opts.restoreHeight) or (box.GetHeight and box:GetHeight())
+    -- Pages may change the preview's inline height after attach (compact vs
+    -- expanded preview); the box-level preference wins over the attach-time
+    -- restore height so unpinning restores the CURRENT mode, not a stale one.
+    local function EffectiveRestoreHeight()
+        return tonumber(box._msuf2PreferredRestoreHeight) or originalHeight
+    end
+    local function EffectiveRestoreYOffset()
+        local preferred = tonumber(box._msuf2PreferredRestoreYOffset)
+        if preferred ~= nil then return preferred end
+        return yOfs
+    end
     local pinnedHeight = tonumber(opts.pinnedHeight)
     local pinned = false
     local restoring = false
@@ -2636,8 +2647,8 @@ function W.AttachPinnedPreview(body, box, opts)
         end
         if slot.SetFrameLevel then slot:SetFrameLevel(max(0, originalFrameLevel - 1)) end
         slot:ClearAllPoints()
-        slot:SetPoint(point or "TOPLEFT", relTo or originalParent, relPoint or "TOPLEFT", xOfs or 0, yOfs or 0)
-        slot:SetSize(max(1, originalWidth or (box.GetWidth and box:GetWidth()) or 1), max(1, originalHeight or (box.GetHeight and box:GetHeight()) or 1))
+        slot:SetPoint(point or "TOPLEFT", relTo or originalParent, relPoint or "TOPLEFT", xOfs or 0, EffectiveRestoreYOffset() or 0)
+        slot:SetSize(max(1, originalWidth or (box.GetWidth and box:GetWidth()) or 1), max(1, EffectiveRestoreHeight() or (box.GetHeight and box:GetHeight()) or 1))
         if slot.SetAlpha then slot:SetAlpha(0) end
         slot:Show()
         return slot
@@ -2743,7 +2754,7 @@ function W.AttachPinnedPreview(body, box, opts)
             LayoutPinnedScrim(level)
         else
             if record and record.scrim then record.scrim:Hide() end
-            if originalWidth and originalHeight and box.SetSize then box:SetSize(originalWidth, originalHeight) end
+            if originalWidth and EffectiveRestoreHeight() and box.SetSize then box:SetSize(originalWidth, EffectiveRestoreHeight()) end
             if type(box.ApplyPinnedPreviewPresentation) == "function" then box:ApplyPinnedPreviewPresentation(false, opts) end
         end
     end
@@ -2778,7 +2789,7 @@ function W.AttachPinnedPreview(body, box, opts)
         if not AnchorBoxToRestoreSlot() then
             box:SetParent(originalParent)
             box:ClearAllPoints()
-            box:SetPoint(point or "TOPLEFT", relTo or body, relPoint or "TOPLEFT", xOfs or 0, yOfs or 0)
+            box:SetPoint(point or "TOPLEFT", relTo or body, relPoint or "TOPLEFT", xOfs or 0, EffectiveRestoreYOffset() or 0)
             if box.SetFrameLevel then box:SetFrameLevel(originalFrameLevel) end
         end
         if box.RequestRefresh then box:RequestRefresh("PINNED_PREVIEW_RESTORE") end
@@ -2804,7 +2815,7 @@ function W.AttachPinnedPreview(body, box, opts)
         local anchor = originalAnchor or body
         local anchorTop = anchor and anchor.GetTop and anchor:GetTop()
         if not anchorTop then return nil end
-        return anchorTop + (tonumber(yOfs) or 0)
+        return anchorTop + (tonumber(EffectiveRestoreYOffset()) or 0)
     end
     local function ShouldPin()
         local guidedLayout = type(M.GuidedTourOwnsPreviewLayout) == "function"

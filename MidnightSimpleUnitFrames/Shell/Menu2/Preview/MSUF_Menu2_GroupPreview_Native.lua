@@ -373,6 +373,121 @@ local function ApplyGroupPinnedPresentation(box, pinned, opts, sideW)
         UpdateHint(box, box._selectedHandle)
     end
 end
+local function EnsureGroupLayersButton(box)
+    if box._msuf2LayersButton then return box._msuf2LayersButton end
+    local btn = T.Button(box, ((M.Tr and M.Tr("Layers")) or "Layers") .. " v", 76, 20)
+    if T.CenterButtonLabel then T.CenterButtonLabel(btn) end
+    btn:SetScript("OnClick", function()
+        if box._layers then box._layers:SetShown(not box._layers:IsShown()) end
+    end)
+    if M.AddTooltip then M.AddTooltip(btn, "Layers", "Toggle the preview layer list.", { hook = true }) end
+    RegisterGroupPreviewControl(btn, "layers.popover", "Group Preview Layers", "button", "ephemeral")
+    box._msuf2LayersButton = btn
+    return btn
+end
+local function SetGroupPreviewToolsShown(box, shown)
+    local controlsHint = box and box._msuf2PreviewControlsHint
+    if not box then return end
+    if not shown then
+        if box._msuf2CompactToolsHidden ~= true then
+            box._msuf2CompactControlsHintWasShown = controlsHint and controlsHint.IsShown and controlsHint:IsShown() or false
+        end
+        box._msuf2CompactToolsHidden = true
+        if box._zoomBar then box._zoomBar:Hide() end
+        if box._previewAnimationButton then box._previewAnimationButton:Hide() end
+        if controlsHint then controlsHint:Hide() end
+        return
+    end
+    box._msuf2CompactToolsHidden = nil
+    if box._zoomBar then box._zoomBar:Show() end
+    if box._previewAnimationButton then box._previewAnimationButton:Show() end
+    if controlsHint and box._msuf2CompactControlsHintWasShown then controlsHint:Show() end
+end
+local function LayoutGroupPreviewHeaderControls(box, compact)
+    if not box then return end
+    local header = box._msuf2CompactHeader
+    local expandBtn = box._msuf2CompactExpandButton
+    local layersBtn = box._msuf2LayersButton
+    local pinBtn = box._msuf2PinButton
+    if compact and header then
+        if layersBtn then
+            layersBtn:SetText(((M.Tr and M.Tr("Layers")) or "Layers") .. " v")
+            layersBtn:SetParent(header)
+            layersBtn:ClearAllPoints()
+            if expandBtn then layersBtn:SetPoint("RIGHT", expandBtn, "LEFT", -8, 0)
+            else layersBtn:SetPoint("RIGHT", header, "RIGHT", -108, 0) end
+            if layersBtn.SetFrameLevel and header.GetFrameLevel then layersBtn:SetFrameLevel((header:GetFrameLevel() or 1) + 3) end
+        end
+        if pinBtn then
+            pinBtn:SetParent(header)
+            pinBtn:ClearAllPoints()
+            local liveBadge = box._msuf2CompactLiveBadge
+            if liveBadge then pinBtn:SetPoint("LEFT", liveBadge, "RIGHT", 8, 0)
+            else pinBtn:SetPoint("LEFT", header, "LEFT", 176, 0) end
+            if pinBtn.SetFrameLevel and header.GetFrameLevel then pinBtn:SetFrameLevel((header:GetFrameLevel() or 1) + 3) end
+        end
+        return
+    end
+    if layersBtn then
+        layersBtn:SetText((M.Tr and M.Tr("Layers")) or "Layers")
+        layersBtn:SetParent(box)
+        layersBtn:ClearAllPoints()
+        layersBtn:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -5)
+    end
+    if pinBtn then
+        pinBtn:SetParent(box)
+        pinBtn:ClearAllPoints()
+        pinBtn:SetPoint("TOPRIGHT", box, "TOPRIGHT", -12, -8)
+    end
+end
+local function ApplyGroupCompactPresentation(box, compact, sideW)
+    if not box then return end
+    compact = compact == true
+    box._msuf2CompactPreview = compact
+    if box._msuf2PinnedFloating == true then compact = false end
+    if PreviewHelpers.SwitchCompactZoomMode then PreviewHelpers.SwitchCompactZoomMode(box, compact, 1.50) end
+    local stage, layers = box._stage, box._layers
+    if compact then
+        if box._title then box._title:Hide() end
+        if box._hint then box._hint:Hide() end
+        SetGroupPreviewToolsShown(box, false)
+        if stage then
+            stage:ClearAllPoints()
+            stage:SetPoint("TOPLEFT", box, "TOPLEFT", 8, -8)
+            stage:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -8, 8)
+        end
+        local layersBtn = EnsureGroupLayersButton(box)
+        if layers and stage then
+            local rows = #(box._layerButtons or {})
+            layers:ClearAllPoints()
+            if box._msuf2CompactHeader then layers:SetPoint("TOPRIGHT", layersBtn, "BOTTOMRIGHT", 0, -6)
+            else layers:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -28) end
+            layers:SetSize((sideW or 104) + 8, 32 + rows * 18 + 10)
+            if layers.SetFrameLevel and stage.GetFrameLevel then layers:SetFrameLevel((stage:GetFrameLevel() or 1) + 90) end
+            layers:Hide()
+        end
+        layersBtn:Show()
+        LayoutGroupPreviewHeaderControls(box, true)
+        return
+    end
+    if box._title then box._title:Show() end
+    if box._hint then box._hint:Show() end
+    SetGroupPreviewToolsShown(box, true)
+    LayoutGroupPreviewHeaderControls(box, false)
+    if stage then
+        stage:ClearAllPoints()
+        stage:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -30)
+        stage:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -((sideW or 104) + 18), 12)
+    end
+    if layers and stage then
+        layers:ClearAllPoints()
+        layers:SetPoint("TOPLEFT", stage, "TOPRIGHT", 8, 0)
+        layers:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 12)
+        if layers.SetFrameLevel and stage.GetFrameLevel then layers:SetFrameLevel((stage:GetFrameLevel() or 1) + 1) end
+        layers:Show()
+    end
+    if box._msuf2LayersButton then box._msuf2LayersButton:Hide() end
+end
 local function PreviewScopeLabel(kind)
     if kind == "raid" then return "Raid" end
     if kind == "mythicraid" then return "Mythic Raid" end
@@ -1071,7 +1186,19 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     box:SetSize(width, 292)
     box._msufStaticH = 292
     box.ApplyPinnedPreviewPresentation = function(self, pinned, opts)
+        if pinned then
+            if PreviewHelpers.SwitchCompactZoomMode then PreviewHelpers.SwitchCompactZoomMode(self, false, 1.50) end
+            SetGroupPreviewToolsShown(self, true)
+            LayoutGroupPreviewHeaderControls(self, false)
+            if self._title then self._title:Show() end
+            if self._hint then self._hint:Show() end
+            if self._msuf2LayersButton then self._msuf2LayersButton:Hide() end
+        end
         ApplyGroupPinnedPresentation(self, pinned, opts, layerW)
+        if not pinned and self._msuf2CompactPreview then ApplyGroupCompactPresentation(self, true, layerW) end
+    end
+    box.ApplyCompactPreviewPresentation = function(self, compact)
+        ApplyGroupCompactPresentation(self, compact, layerW)
     end
     if parent and parent.GetFrameLevel and box.SetFrameLevel then box:SetFrameLevel((parent:GetFrameLevel() or 0) + 2) end
     local title = T.Font(box, "GameFontNormal", "", chrome.title or T.colors.title or T.colors.text)
@@ -1151,6 +1278,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     end
     layers:SetPoint("TOPLEFT", stage, "TOPRIGHT", 8, 0)
     layers:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 12)
+    if layers.SetClipsChildren then layers:SetClipsChildren(true) end
     box._layers = layers
     local layersTitle = R.LayerFont(layers, "LAYERS", chrome.layerHeader or (T.colors and T.colors.muted) or R.LayerHeaderColor)
     layersTitle:SetPoint("TOP", layers, "TOP", 0, -5)
