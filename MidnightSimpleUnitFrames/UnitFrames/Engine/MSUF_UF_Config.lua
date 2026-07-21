@@ -375,35 +375,38 @@ end
 
 local function ResolveHealthBackground(general, bars, health, dst, conf)
   dst = dst or {}
-  local r, g, b, a
+  local r, g, b, tintAlpha
   local getBg = _G.MSUF_GetBarBackgroundTintRGBA
   if type(getBg) == "function" then
-    r, g, b, a = getBg()
+    r, g, b, tintAlpha = getBg()
   else
     r, g, b = DarkTint(general, Number(general and general.classBarBgR, 0), Number(general and general.classBarBgG, 0), Number(general and general.classBarBgB, 0))
-    a = 0.9
+    tintAlpha = Number(general and general.classBarBgA, 1)
   end
   if general and general.barBgMatchHPColor == true and health then
     r, g, b = DarkTint(general, health.r, health.g, health.b)
   end
-  CopyColor(dst, r, g, b, (Number(a, 0.9)) * ResolveBgAlpha(general, bars, conf))
+  -- Color opacity is an explicit user-controlled multiplier whose neutral
+  -- default is 1.0. This replaces the old hidden 0.9 tint alpha, so setting
+  -- both the tint and per-unit Background controls to 100% is truly opaque.
+  CopyColor(dst, r, g, b, ResolveBgAlpha(general, bars, conf) * Clamp01(tintAlpha, 1))
   return dst
 end
 
 local function ResolvePowerBackground(general, bars, health, dst, conf)
   dst = dst or {}
-  local r, g, b, a
+  local r, g, b, tintAlpha
   local getBg = _G.MSUF_GetPowerBarBackgroundTintRGBA
   if type(getBg) == "function" then
-    r, g, b, a = getBg()
+    r, g, b, tintAlpha = getBg()
   else
     r, g, b = DarkTint(general, Number(general and general.powerBarBgColorR, Number(general and general.classBarBgR, 0)), Number(general and general.powerBarBgColorG, Number(general and general.classBarBgG, 0)), Number(general and general.powerBarBgColorB, Number(general and general.classBarBgB, 0)))
-    a = 0.9
+    tintAlpha = Number(general and general.powerBarBgColorA, Number(general and general.classBarBgA, 1))
   end
   if (general and general.powerBarBgMatchBarColor == true) or (bars and bars.powerBarBgMatchBarColor == true) then
     r, g, b = DarkTint(general, health and health.r or r, health and health.g or g, health and health.b or b)
   end
-  CopyColor(dst, r, g, b, (Number(a, 0.9)) * ResolvePowerBgAlpha(general, bars, conf))
+  CopyColor(dst, r, g, b, ResolvePowerBgAlpha(general, bars, conf) * Clamp01(tintAlpha, 1))
   return dst
 end
 
@@ -1613,6 +1616,7 @@ local function CompileUnitHealth(out, conf, general, bars)
   end
   health.background = ResolveHealthBackground(general, bars, health, health.background or {}, conf)
   health.backgroundMatchHealth = general.barBgMatchHPColor == true
+  health.backgroundClassColor = general.barBgClassColor == true
   return health
 end
 

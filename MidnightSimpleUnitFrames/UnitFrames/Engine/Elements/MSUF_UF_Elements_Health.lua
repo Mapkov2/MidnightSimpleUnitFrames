@@ -659,6 +659,13 @@ local function UpdateColorOnly(frame, event, unit)
   end
 end
 
+local function UpdateIdentityBackground(frame)
+  local health = frame and frame.MSUFSpec and frame.MSUFSpec.health
+  if not (health and health.backgroundClassColor == true and ApplyBackgrounds) then return false end
+  ApplyBackgrounds(frame, true, false)
+  return true
+end
+
 function Health.Update(frame, event, unit)
   -- Core installs UpdateGroup/UpdateSingle directly through SelectUpdate, so
   -- event hot paths stay branch-free. Preserve the public update contract for
@@ -717,6 +724,7 @@ Health.UpdateMaxValueStatic = Health.Update
 Health.UpdateMaxValueStaticPlain = Health.Update
 Health.UpdateConnectionState = Health.Update
 Health.UpdateIdentityColor = Health.Update
+Health.UpdateIdentityBackground = UpdateIdentityBackground
 function Health.UpdateGroupLifecycleMetadata(frame, _event, unit)
   local isAI, changed = RefreshGroupAIHealthMode(frame, unit or (frame and frame.MSUFUnitKey))
   -- Detailed AI health/prediction availability is committed by these lifecycle

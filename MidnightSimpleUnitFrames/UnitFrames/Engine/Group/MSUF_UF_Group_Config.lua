@@ -336,6 +336,7 @@ local function ResolveHealthVisual(conf)
     g = Num(conf.healthCustomG, 0.8),
     b = Num(conf.healthCustomB, 0.2),
     backgroundMatchHealth = (cache and cache.barBgMatchHPColor == true) or (general and general.barBgMatchHPColor == true) or false,
+    backgroundClassColor = (cache and cache.barBgClassColor == true) or (general and general.barBgClassColor == true) or false,
     npcClassColorBar = (cache and cache.npcClassColorBar == true) or (general and general.npcClassColorBar == true) or false,
     gradientLowR = Num(cache and cache.healthGradientLowR or general and general.healthGradientLowR, 1),
     gradientLowG = Num(cache and cache.healthGradientLowG or general and general.healthGradientLowG, 0),
@@ -1506,6 +1507,7 @@ local function CompileSpecUncached(kind, frame, unit, conf)
       backgroundTexture = bgTexture,
       background = CompileBarBackground(conf),
       backgroundMatchHealth = healthVisual.backgroundMatchHealth == true,
+      backgroundClassColor = healthVisual.backgroundClassColor == true,
       npcClassColorBar = healthVisual.npcClassColorBar == true,
       barGradient = ResolveBarGradient(conf, general, "enableGradient"),
       reverse = conf.reverseFill == true,
@@ -1614,6 +1616,7 @@ local function RefreshColorDomain(kind, base, conf)
   health.gradientHighR, health.gradientHighG, health.gradientHighB = healthVisual.gradientHighR, healthVisual.gradientHighG, healthVisual.gradientHighB
   health.background = CompileBarBackground(conf)
   health.backgroundMatchHealth = healthVisual.backgroundMatchHealth == true
+  health.backgroundClassColor = healthVisual.backgroundClassColor == true
   health.npcClassColorBar = healthVisual.npcClassColorBar == true
   health.barGradient = ResolveBarGradient(conf, general, "enableGradient")
 

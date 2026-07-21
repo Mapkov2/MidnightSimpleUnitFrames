@@ -1939,28 +1939,41 @@ function M.BindColor(ctx, colorButton, getRGB, setRGB, metadata)
     end
     colorButton._msuf2BeginColorInteraction = BeginColorHistory
     colorButton._msuf2CommitColorInteraction = CommitColorHistory
+    colorButton._msuf2GetColorOpacity = function()
+        if type(getRGB) ~= "function" then return nil end
+        local _, _, _, alpha = getRGB()
+        return type(alpha) == "number" and alpha or nil
+    end
     local function RefreshColor()
         if type(getRGB) ~= "function" then return end
-        local r, g, b = getRGB()
+        local r, g, b, alpha = getRGB()
+        colorButton._msuf2ColorHasOpacity = type(alpha) == "number"
         colorButton:SetRGB(r or 1, g or 1, b or 1)
     end
-    colorButton:SetOnColorChanged(function(r, g, b)
+    colorButton:SetOnColorChanged(function(r, g, b, alpha)
         if BlockCombatAndRefresh(ctx) then
             RefreshColor()
             return
         end
+        local currentAlpha
         if type(getRGB) == "function" then
-            local cr, cg, cb = getRGB()
+            local cr, cg, cb, ca = getRGB()
+            currentAlpha = ca
+            local alphaUnchanged = alpha == nil
+                or (type(ca) == "number" and math.abs(ca - alpha) < 0.0001)
             if math.abs((cr or 1) - (r or 1)) < 0.0001
                 and math.abs((cg or 1) - (g or 1)) < 0.0001
                 and math.abs((cb or 1) - (b or 1)) < 0.0001
+                and alphaUnchanged
             then
                 RefreshColor()
                 return
             end
         end
+        local nextAlpha = alpha
+        if nextAlpha == nil and type(currentAlpha) == "number" then nextAlpha = currentAlpha end
         CaptureWidgetChange(ctx, colorButton, nil, function()
-            if type(setRGB) == "function" then setRGB(r, g, b) end
+            if type(setRGB) == "function" then setRGB(r, g, b, nextAlpha) end
         end)
         RefreshColor()
         NotifyGuidedControlInteraction(colorButton)

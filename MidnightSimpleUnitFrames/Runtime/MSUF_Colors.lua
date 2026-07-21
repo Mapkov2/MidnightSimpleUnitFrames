@@ -46,7 +46,10 @@ local _cachedDB, _cachedGen
 
 local function _general()
     local db = MSUF_DB
-    if db and _cachedDB == db then
+    --- Full-profile imports deliberately keep the MSUF_DB root stable while
+    --- replacing its `general` child. Validate both identities so getters and
+    --- setters never keep operating on the detached pre-import table.
+    if db and _cachedDB == db and _cachedGen == db.general then
         return _cachedGen
     end
     --- First call or profile switch: resolve fresh.
@@ -439,11 +442,11 @@ local function ResetAllClassColors()
 end
 
 --- - Class Bar Background Color -
-local function GetClassBarBgColor() return _getRGB("classBarBgR", "classBarBgG", "classBarBgB", 0, 0, 0) end
-local function SetClassBarBgColor(r, g, b) _setRGB("classBarBgR", "classBarBgG", "classBarBgB", r, g, b, 0, 0, 0) end
+local function GetClassBarBgColor() return _getRGBA("classBarBgR", "classBarBgG", "classBarBgB", "classBarBgA", 0, 0, 0, 1) end
+local function SetClassBarBgColor(r, g, b, a) _setRGBA("classBarBgR", "classBarBgG", "classBarBgB", "classBarBgA", r, g, b, a, 0, 0, 0, 1) end
 local function ResetClassBarBgColor()
     local g = _general(); if not g then return end
-    g.classBarBgR, g.classBarBgG, g.classBarBgB = nil, nil, nil; PushVisualUpdates()
+    g.classBarBgR, g.classBarBgG, g.classBarBgB, g.classBarBgA = nil, nil, nil, nil; PushVisualUpdates()
 end
 
 --- - Bar BG Match HP -
@@ -515,11 +518,9 @@ local function SetHealAbsorbOverlayColor(r, g, b, a)  _setRGBA("healAbsorbBarCol
 
 --- - Power Bar Background -
 local function GetPowerBarBackgroundColor()
-    local g = _general()
-    if not g then return 0, 0, 0 end
-    return tonumber(g.powerBarBgColorR) or 0, tonumber(g.powerBarBgColorG) or 0, tonumber(g.powerBarBgColorB) or 0
+    return _getRGBA("powerBarBgColorR", "powerBarBgColorG", "powerBarBgColorB", "powerBarBgColorA", 0, 0, 0, 1)
 end
-local function SetPowerBarBackgroundColor(r, g, b) _setRGB("powerBarBgColorR", "powerBarBgColorG", "powerBarBgColorB", r, g, b, 0, 0, 0) end
+local function SetPowerBarBackgroundColor(r, g, b, a) _setRGBA("powerBarBgColorR", "powerBarBgColorG", "powerBarBgColorB", "powerBarBgColorA", r, g, b, a, 0, 0, 0, 1) end
 local function GetPowerBarBackgroundMatchHP() return (_general() or {}).powerBarBgMatchBarColor and true or false end
 local function SetPowerBarBackgroundMatchHP(v) local g = _general(); if g then g.powerBarBgMatchBarColor = v and true or false; PushVisualUpdates() end end
 

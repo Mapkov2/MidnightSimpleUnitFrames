@@ -307,9 +307,12 @@ local function Swatch(parent, size, onClick)
 end
 
 local function OpacityDisplay(parent, width)
-    local frame = CreateFrame("Frame", nil, parent)
+    local frame = CreateFrame("Slider", nil, parent)
     frame:SetSize(width, 20)
-    frame:EnableMouse(true)
+    frame:SetOrientation("HORIZONTAL")
+    frame:SetMinMaxValues(0, 1)
+    frame:SetValueStep(0.01)
+    if frame.SetObeyStepOnDrag then frame:SetObeyStepOnDrag(true) end
     if T.ApplyBackdrop then T.ApplyBackdrop(frame, T.colors.coreShadow, T.colors.borderSoft) end
     local innerWidth, innerHeight = width - 2, 18
     local atlasInfo = _G.C_Texture and _G.C_Texture.GetAtlasInfo
@@ -336,17 +339,29 @@ local function OpacityDisplay(parent, width)
     else
         shade:SetColorTexture(0.02, 0.04, 0.07, 0.56)
     end
-    local thumb = CreateFrame("Frame", nil, frame)
-    thumb:SetSize(6, 24); thumb:SetPoint("RIGHT", frame, "RIGHT", 2, 0)
-    if T.ApplyBackdrop then T.ApplyBackdrop(thumb, T.colors.text, T.colors.coreHot or T.colors.accent) end
+    local thumb = frame:CreateTexture(nil, "OVERLAY")
+    thumb:SetSize(6, 24)
+    thumb:SetColorTexture(T.colors.text[1], T.colors.text[2], T.colors.text[3], 1)
+    frame:SetThumbTexture(thumb)
+    frame:SetValue(1)
     frame.checkerHost, frame.shade, frame.thumb = checkerHost, shade, thumb
     return frame
 end
-local function ApplyOwner(owner, r, g, b, preclamped)
+local function OwnerOpacity(owner)
+    if not (owner and owner._msuf2ColorHasOpacity == true
+        and type(owner._msuf2GetColorOpacity) == "function") then return nil end
+    local alpha = owner:_msuf2GetColorOpacity()
+    if type(alpha) ~= "number" then return nil end
+    return Clamp01(alpha)
+end
+local function ApplyOwner(owner, r, g, b, alpha, preclamped)
     if not owner then return end
-    if not preclamped then r, g, b = Clamp01(r), Clamp01(g), Clamp01(b) end
+    if not preclamped then
+        r, g, b = Clamp01(r), Clamp01(g), Clamp01(b)
+        if alpha ~= nil then alpha = Clamp01(alpha) end
+    end
     owner:SetRGB(r, g, b)
-    if type(owner._msuf2OnColorChanged) == "function" then owner._msuf2OnColorChanged(r, g, b) end
+    if type(owner._msuf2OnColorChanged) == "function" then owner._msuf2OnColorChanged(r, g, b, alpha) end
 end
 
 local function PickerMenuScale()
@@ -494,7 +509,10 @@ local function EnsurePicker()
     local opacityValue = Font(wheelCard, "GameFontHighlightSmall", "100%", T.colors.text)
     opacityLabel:Hide(); opacity:Hide(); opacityValue:Hide()
     panel.opacityLabel, panel.opacity, panel.opacityValue = opacityLabel, opacity, opacityValue
-    if M.AddTooltip then M.AddTooltip(opacity, "Opacity: 100%", "MSUF color settings are fully opaque RGB colors.") end
+    opacity:SetScript("OnValueChanged", function(_, value)
+        if not panel._syncingOpacity then panel:ApplyOpacity(value) end
+    end)
+    if M.AddTooltip then M.AddTooltip(opacity, "Opacity", "Adjusts the alpha channel of this color.") end
 
     local advancedCard = T.Panel(panel, nil, T.colors.coreSurface, T.colors.cardBorder or T.colors.borderSoft)
     advancedCard:SetPoint("TOPLEFT", PICKER_PAD + LEFT_CARD_WIDTH + PICKER_GAP, -133)
@@ -743,7 +761,8 @@ local function EnsurePicker()
             self.copy:SetPoint("LEFT", self.hex, "RIGHT", 6, 0)
             self.save:SetPoint("LEFT", self.copy, "RIGHT", 6, 0)
         end
-        self.opacityLabel:SetShown(advanced); self.opacity:SetShown(advanced); self.opacityValue:SetShown(advanced)
+        local showOpacity = advanced and self.owner and self.owner._msuf2ColorHasOpacity == true
+        self.opacityLabel:SetShown(showOpacity); self.opacity:SetShown(showOpacity); self.opacityValue:SetShown(showOpacity)
         for i = 1, 3 do self.rgb[i]:SetShown(advanced); self.rgbLabels[i]:SetShown(advanced) end
         self.hexTitle:SetShown(advanced); self.hex:SetShown(advanced); self.copy:SetShown(advanced); self.save:SetShown(advanced)
         self.more:SetSize(advanced and ADVANCED_MORE_WIDTH or SIMPLE_MORE_WIDTH, 26)
@@ -835,6 +854,20 @@ local function EnsurePicker()
             self._syncingColorSelect = nil
         end
     end
+    function panel:RefreshOpacity(alpha)
+        alpha = alpha == nil and OwnerOpacity(self.owner) or Clamp01(alpha)
+        local hasOpacity = type(alpha) == "number"
+        if hasOpacity then
+            self._syncingOpacity = true
+            self.opacity:SetValue(alpha)
+            self._syncingOpacity = nil
+            self.opacityValue:SetText(string.format("%d%%", floor(alpha * 100 + 0.5)))
+        end
+        local showOpacity = self.advanced and hasOpacity
+        self.opacityLabel:SetShown(showOpacity)
+        self.opacity:SetShown(showOpacity)
+        self.opacityValue:SetShown(showOpacity)
+    end
     function panel:Refresh()
         if not self.owner then return end
         local r, g, b = self.owner:GetRGB(); local originalValue = self.originals and self.originals[self.owner]
@@ -842,6 +875,7 @@ local function EnsurePicker()
         self.selector.label:SetText(Tr(self.owner._msuf2ColorLabel or self.owner._msuf2SearchText or "Color"))
         self._readoutHex, self._readoutR, self._readoutG, self._readoutB = nil, nil, nil, nil
         self:RefreshColorReadout(true)
+        self:RefreshOpacity()
         if self.advanced then self:RefreshPalettes() else self:RefreshSelectedSwatch(r, g, b, self._readoutHex) end
     end
     function panel:SetOwner(owner) if owner then self.owner = owner; self:Refresh() end end
@@ -855,14 +889,31 @@ local function EnsurePicker()
             if type(self.owner._msuf2BeginColorInteraction) == "function" then self.owner:_msuf2BeginColorInteraction() end
         end
         self.touched[self.owner] = true
-        ApplyOwner(self.owner, r, g, b, true)
+        ApplyOwner(self.owner, r, g, b, nil, true)
         self:RefreshColorReadout(fromColorSelect ~= true, r, g, b)
+    end
+    function panel:ApplyOpacity(alpha)
+        if not self.owner or self.owner._msuf2ColorHasOpacity ~= true then return end
+        alpha = Clamp01(alpha)
+        local current = OwnerOpacity(self.owner)
+        if current == nil or abs(alpha - current) < 0.000001 then
+            self:RefreshOpacity(current)
+            return
+        end
+        if not self.historyOwner then
+            self.historyOwner = self.owner
+            if type(self.owner._msuf2BeginColorInteraction) == "function" then self.owner:_msuf2BeginColorInteraction() end
+        end
+        self.touched[self.owner] = true
+        local r, g, b = self.owner:GetRGB()
+        ApplyOwner(self.owner, r, g, b, alpha, true)
+        self:RefreshOpacity(alpha)
     end
     function panel:Finish(cancelled)
         if self.finishing then return end
         self.finishing = true
         if cancelled then
-            for owner in pairs(self.touched or {}) do local value = self.originals and self.originals[owner]; if value then ApplyOwner(owner, value[1], value[2], value[3]) end end
+            for owner in pairs(self.touched or {}) do local value = self.originals and self.originals[owner]; if value then ApplyOwner(owner, value[1], value[2], value[3], value[4]) end end
         else
             for owner in pairs(self.touched or {}) do local r, g, b = owner:GetRGB(); AddRecent(ToHex(r, g, b)) end
             self._palettesDirty = true
@@ -881,7 +932,7 @@ local function EnsurePicker()
             local owner = owners[i]
             if owner and owner.GetRGB and owner.SetRGB then
                 self.owners[#self.owners + 1] = owner
-                local r, g, b = owner:GetRGB(); self.originals[owner] = { r, g, b }
+                local r, g, b = owner:GetRGB(); self.originals[owner] = { r, g, b, OwnerOpacity(owner) }
             end
         end
         if #self.owners == 0 then return end
