@@ -133,6 +133,17 @@ local function Defer(reason)
   end
 end
 
+local function BeginHeaderLayoutRebind(header)
+  local begin = GF.BeginHeaderLayoutRebind
+  return type(begin) == "function" and begin(header) == true
+end
+
+local function EndHeaderLayoutRebind(header, active)
+  if active ~= true then return end
+  local finish = GF.EndHeaderLayoutRebind
+  if type(finish) == "function" then finish(header) end
+end
+
 local function HeaderName(key)
   if key == "party" then
     GF._partyHeaderSerial = (GF._partyHeaderSerial or 0) + 1
@@ -1129,18 +1140,20 @@ function GF.SetupPriorityHeader(kind, nameList, count)
   end
 
   local changed, wasHidden = ConfigurePriorityHeader(header, kind, conf, nameList, w, h, spacing)
+  local needsScan = changed or newHeader or reused or wasHidden or GF._forceScanHeaders == true
   if header:GetParent() ~= anchor then header:SetParent(anchor) end
   header:ClearAllPoints()
   local origin = conf.growth == "UP" and "BOTTOMLEFT"
     or conf.growth == "LEFT" and "TOPRIGHT"
     or "TOPLEFT"
   header:SetPoint(origin, anchor, origin, 0, 0)
+  local coalescedShow = needsScan and BeginHeaderLayoutRebind(header)
   header:Show()
   if (changed or newHeader or reused or wasHidden) and header.SetAttribute then
     header:SetAttribute("_msufLayoutNonce", (header:GetAttribute("_msufLayoutNonce") or 0) + 1)
   end
+  EndHeaderLayoutRebind(header, coalescedShow)
 
-  local needsScan = changed or newHeader or reused or wasHidden or GF._forceScanHeaders == true
   if needsScan and header.GetChildren then
     for i = 1, select("#", header:GetChildren()) do
       local child = select(i, header:GetChildren())
@@ -1215,7 +1228,9 @@ function GF.SetupHeader(key, kind)
   --- anchor; applying the origin-to-center delta here a second time makes the
   --- visible block drift whenever the roster count changes.
   header:SetPoint(point, anchor, point, 0, 0)
+  local coalescedShow
   if wasHiddenForLayout then
+    coalescedShow = GF.ScheduleScan and BeginHeaderLayoutRebind(header)
     header:Show()
   end
   --- Filtering and preserved-group layouts can make Blizzard's real secure
@@ -1233,6 +1248,7 @@ function GF.SetupHeader(key, kind)
   if (attrChanged or countChanged) and header.SetAttribute and not InCombat() then
     header:SetAttribute("_msufLayoutNonce", (header:GetAttribute("_msufLayoutNonce") or 0) + 1)
   end
+  EndHeaderLayoutRebind(header, coalescedShow)
   -- Attribute writes on a hidden header only update the secure layout recipe.
   -- Scanning children is needed for new/reused headers, explicit roster forces,
   -- or when a visible header was hide/show cycled and may have retargeted children.

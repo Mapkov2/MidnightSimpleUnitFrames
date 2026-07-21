@@ -677,6 +677,12 @@ end
 local RegisterFrameEvent
 local RefreshHealthLifecycleSinkRoutes
 
+local function HeaderLayoutRebindActive(frame)
+  local GF = MSUF and MSUF.GF
+  local isActive = GF and GF.IsHeaderLayoutRebindActive
+  return type(isActive) == "function" and isActive(frame) == true
+end
+
 local function FrameOnShow(frame)
   frame._msufCoreVisible = true
   if frame._msufCoreRangeEventConfigured == true
@@ -686,7 +692,12 @@ local function FrameOnShow(frame)
     frame._msufCoreRangeEventSuspended = nil
   end
   if frame._msufCoreScope == "group" then
-    RefreshGroupFrameState(frame, "MSUF_GF_ONSHOW")
+    if HeaderLayoutRebindActive(frame) then
+      frame._msufGFHeaderOnShowDeferred = true
+    else
+      frame._msufGFHeaderOnShowDeferred = nil
+      RefreshGroupFrameState(frame, "MSUF_GF_ONSHOW")
+    end
   elseif UF.RunLeanIdentity then
     -- Identity events can arrive while target/focus/dependent frames are
     -- hidden. Re-seed the existing lean plan once when the frame becomes

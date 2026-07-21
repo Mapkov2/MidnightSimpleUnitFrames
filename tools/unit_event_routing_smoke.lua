@@ -332,4 +332,22 @@ assert(healthUpdateCalls == healthBefore + 1 and powerUpdateCalls == powerBefore
     and statusUpdateCalls == statusBefore + 1 and visualUpdateCalls == visualBefore + 1,
     "OnShow must refresh exactly the newly visible group child")
 
+local headerRebindActive = true
+MSUF.GF.IsHeaderLayoutRebindActive = function(candidate)
+    return headerRebindActive and candidate == groupFrame
+end
+healthBefore, powerBefore = healthUpdateCalls, powerUpdateCalls
+statusBefore, visualBefore = statusUpdateCalls, visualUpdateCalls
+groupFrame.hooks.OnShow(groupFrame)
+assert(healthUpdateCalls == healthBefore and powerUpdateCalls == powerBefore
+    and statusUpdateCalls == statusBefore and visualUpdateCalls == visualBefore
+    and groupFrame._msufGFHeaderOnShowDeferred == true,
+    "MSUF-owned header relayout must defer the expensive child lifecycle to its scan")
+headerRebindActive = false
+groupFrame.hooks.OnShow(groupFrame)
+assert(healthUpdateCalls == healthBefore + 1 and powerUpdateCalls == powerBefore + 1
+    and statusUpdateCalls == statusBefore + 1 and visualUpdateCalls == visualBefore + 1
+    and groupFrame._msufGFHeaderOnShowDeferred == nil,
+    "ordinary OnShow must clear a stale deferred marker and retain full catch-up behavior")
+
 io.write("unit_event_routing_smoke: ok\n")
