@@ -23,12 +23,89 @@ W.Space = T and T.Space or W.Space
 local floor = math.floor
 local max = math.max
 local min = math.min
+local WHITE8 = "Interface\\Buttons\\WHITE8x8"
+local ACCORDION_OPEN_CORNER = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\rounded_mask.tga"
+local ACCORDION_OPEN_CORNER_SIZE = 4
+local ACCORDION_OPEN_CORNER_UV = 17 / 128
+-- PageBuilder accordions extend eight units past the ScrollFrame viewport:
+-- builder x=12 + ctx width=(CONTENT_W-32), viewport right=(CONTENT_W-28).
+-- Keep only the header cap inside the viewport; body layout remains unchanged.
+local ACCORDION_HEADER_RIGHT_INSET = 8
 local sliderSerial = 0
 local Tr = M.TranslateText or function(text) return text end
 local EM2Util = (_G.MSUF_EM2 and _G.MSUF_EM2.Util) or {}
 local function ThemeColor(name, fallback)
     local c = T and T.colors and T.colors[name]
     return c or fallback
+end
+local function AccordionRegionsSetShown(self, shown)
+    for i = 1, #self do self[i]:SetShown(shown) end
+end
+local function AccordionRegionsSetAlpha(self, alpha)
+    for i = 1, #self do self[i]:SetAlpha(alpha) end
+end
+local function AccordionRegionsSetColorTexture(self, r, g, b, a)
+    for i = 1, #self do self[i]:SetVertexColor(r, g, b, a or 1) end
+end
+local function CreateAccordionRoundedRegions(header, layer, subLevel)
+    local radius = ACCORDION_OPEN_CORNER_SIZE
+    local uv = ACCORDION_OPEN_CORNER_UV
+    local regions = {
+        SetShown = AccordionRegionsSetShown,
+        SetAlpha = AccordionRegionsSetAlpha,
+        SetColorTexture = AccordionRegionsSetColorTexture,
+    }
+    local middle = header:CreateTexture(nil, layer, nil, subLevel)
+    middle:SetTexture(WHITE8)
+    middle:SetPoint("TOPLEFT", header, "TOPLEFT", radius, 0)
+    middle:SetPoint("BOTTOMRIGHT", header, "BOTTOMRIGHT", -radius, 0)
+    regions.middle = middle
+    regions[#regions + 1] = middle
+    local function Side(pointA, pointB, sideKey)
+        local tex = header:CreateTexture(nil, layer, nil, subLevel)
+        tex:SetTexture(WHITE8)
+        tex:SetPoint(pointA, header, pointA, 0, pointA:find("^TOP") and -radius or radius)
+        tex:SetPoint(pointB, header, pointB, 0, pointB:find("^TOP") and -radius or radius)
+        tex:SetWidth(radius)
+        regions[sideKey] = tex
+        regions[#regions + 1] = tex
+    end
+    Side("TOPLEFT", "BOTTOMLEFT", "left")
+    Side("TOPRIGHT", "BOTTOMRIGHT", "right")
+    local function Corner(point, u1, u2, v1, v2, sideKey)
+        local tex = header:CreateTexture(nil, layer, nil, subLevel)
+        tex:SetTexture(ACCORDION_OPEN_CORNER, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+        tex:SetTexCoord(u1, u2, v1, v2)
+        tex:SetSize(radius, radius)
+        tex:SetPoint(point, header, point, 0, 0)
+        local bucket = regions[sideKey .. "Corners"]
+        if not bucket then bucket = {}; regions[sideKey .. "Corners"] = bucket end
+        bucket[#bucket + 1] = tex
+        regions[#regions + 1] = tex
+    end
+    -- Preserve the original left cap exactly. The asset's native right crop is
+    -- its byte-identical horizontal mirror and avoids transformed UV sampling.
+    Corner("TOPLEFT", 0, uv, 0, uv, "left")
+    Corner("TOPRIGHT", 1 - uv, 1, 0, uv, "right")
+    Corner("BOTTOMLEFT", 0, uv, 1 - uv, 1, "left")
+    Corner("BOTTOMRIGHT", 1 - uv, 1, 1 - uv, 1, "right")
+    return regions
+end
+local function SetAccordionHighlightSide(regions, side, color)
+    side:SetVertexColor(color[1], color[2], color[3], color[4] or 1)
+    for i = 1, #regions do regions[i]:SetVertexColor(color[1], color[2], color[3], color[4] or 1) end
+end
+local function CreateAccordionOpenHighlight(header, fromColor, toColor)
+    local regions = CreateAccordionRoundedRegions(header, "BACKGROUND", 1)
+    if T.ApplyTextureGradient then
+        T.ApplyTextureGradient(regions.middle, "HORIZONTAL", fromColor, toColor, false)
+    else
+        regions.middle:SetColorTexture(toColor[1], toColor[2], toColor[3], toColor[4] or 1)
+    end
+    SetAccordionHighlightSide(regions.leftCorners, regions.left, fromColor)
+    SetAccordionHighlightSide(regions.rightCorners, regions.right, toColor)
+    regions:SetShown(false)
+    return regions
 end
 local function WithAlpha(color, alpha)
     return { color[1], color[2], color[3], alpha }
@@ -217,10 +294,13 @@ local function FlashCollapsibleHeader(entry)
     local header = entry and entry.header
     if not header then return end
     if not entry._msuf2FocusFlash then
-        local flash = header:CreateTexture(nil, "OVERLAY")
-        flash:SetAllPoints()
+        local flash = CreateFrame("Frame", nil, header)
+        flash:SetAllPoints(header)
+        flash:EnableMouse(false)
         local c = T.colors.accent or ThemeColor("coreBlue", { 0.060, 0.250, 0.390, 1.00 })
-        flash:SetColorTexture(c[1], c[2], c[3], 0.18)
+        local flashFill = CreateAccordionRoundedRegions(flash, "ARTWORK", 0)
+        flashFill:SetColorTexture(c[1], c[2], c[3], 0.18)
+        flash._msuf2RoundedFill = flashFill
         flash:SetAlpha(0)
         flash:Hide()
         entry._msuf2FocusFlash = flash
@@ -451,10 +531,12 @@ function W.PageBuilder(ctx, opts)
         end
         return self:RelayoutCollapsibles()
     end
-    function b:RelayoutCollapsibles()
+    function b:RelayoutCollapsibles(opts)
+        opts = type(opts) == "table" and opts or nil
         self._msuf2RelayoutPending = nil
-        if not self._collapsibleStartY then return end
+        if not self._collapsibleStartY then return false end
         local y = self._collapsibleStartY
+        local layoutChanged = false
         local entries = (#self.layoutEntries > 0) and self.layoutEntries or self.collapsibles
         for i = 1, #entries do
             local entry = entries[i]
@@ -467,6 +549,7 @@ function W.PageBuilder(ctx, opts)
                         section._msuf2RelayoutKey = key
                         section:ClearAllPoints()
                         section:SetPoint("TOPLEFT", self.parent, "TOPLEFT", self.x, y)
+                        layoutChanged = true
                     end
                     y = y - h - (entry.gap or 12)
                 end
@@ -474,6 +557,8 @@ function W.PageBuilder(ctx, opts)
                 y = y - (entry.height or 10)
             else
                 local open = entry.open and true or false
+                local openChanged = entry._msuf2RelayoutOpen ~= open
+                entry._msuf2RelayoutOpen = open
                 local outerH = entry.headerHeight + (open and entry.contentHeight or 0)
                 local key = tostring(self.parent) .. "\030" .. tostring(self.x) .. "\030" .. tostring(y)
                     .. "\030" .. tostring(outerH) .. "\030" .. tostring(open)
@@ -482,23 +567,45 @@ function W.PageBuilder(ctx, opts)
                     entry.outer:ClearAllPoints()
                     entry.outer:SetPoint("TOPLEFT", self.parent, "TOPLEFT", self.x, y)
                     entry.outer:SetHeight(outerH)
+                    layoutChanged = true
                 end
                 if entry.body._msuf2ShownState ~= open then
                     entry.body._msuf2ShownState = open
                     entry.body:SetShown(open)
+                    if entry.bodySurface then entry.bodySurface:SetShown(open) end
+                    layoutChanged = true
                 end
-                if entry.body.SetAlpha and not entry._msuf2MotionActive then entry.body:SetAlpha(1) end
-                T.ApplyCollapseVisual(entry.arrow, entry.hint, open)
-                if entry._msuf2RefreshHeaderTone then entry._msuf2RefreshHeaderTone(false) end
-                if entry._msuf2RefreshState then entry._msuf2RefreshState(entry) end
-                if entry._msuf2RefreshColorSwatchVisibility then entry._msuf2RefreshColorSwatchVisibility() end
-                NotifyCollapsibleSectionState(entry, open)
+                if openChanged or (opts and opts.refreshVisuals) then
+                    if entry.body.SetAlpha and not entry._msuf2MotionActive then entry.body:SetAlpha(1) end
+                    T.ApplyCollapseVisual(entry.arrow, entry.hint, open)
+                    if entry._msuf2RefreshHeaderTone then entry._msuf2RefreshHeaderTone(false) end
+                    if entry._msuf2RefreshColorSwatchVisibility then entry._msuf2RefreshColorSwatchVisibility() end
+                    NotifyCollapsibleSectionState(entry, open)
+                end
+                local refreshState = entry._msuf2RefreshState
+                local refreshUntracked = opts and opts.refreshUntrackedState
+                local trackedState = refreshState and entry._msuf2TrackedRefreshState == refreshState
+                if refreshState
+                    and not (opts and opts.skipStateRefresh)
+                    and (openChanged or (refreshUntracked and not trackedState) or (opts and opts.forceStateRefresh))
+                then
+                    refreshState(entry)
+                end
                 y = y - entry.outer:GetHeight() - 8
             end
         end
-        self.y = y
-        UpdateContentHeight(math.abs(y) + 42)
-        QueuePinnedPreviewGeometryRefresh(M.scrollFrame)
+        if self.y ~= y then
+            self.y = y
+            layoutChanged = true
+        end
+        local contentHeight = math.abs(y) + 42
+        if self._msuf2LastContentHeight ~= contentHeight then
+            self._msuf2LastContentHeight = contentHeight
+            UpdateContentHeight(contentHeight)
+            layoutChanged = true
+        end
+        if layoutChanged then QueuePinnedPreviewGeometryRefresh(M.scrollFrame) end
+        return layoutChanged
     end
     function b:Section(title, height)
         local section = T.Panel(self.parent, nil, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft)
@@ -531,31 +638,43 @@ function W.PageBuilder(ctx, opts)
         M.accordionState = MenuStateTable("accordionState")
         local collapseHintClickState = GetCollapseHintClickState()
         local sectionId = tostring(id or title or "section")
+        local openHighlightEnabled = sectionId:lower():find("preview", 1, true) == nil
         local stateKey = tostring(ctx.key or "page") .. ":" .. sectionId
         local saved = M.accordionState[stateKey]
         local open = (saved == nil) and (defaultOpen and true or false) or (saved and true or false)
         local headerH = 28
         if not self._collapsibleStartY then self._collapsibleStartY = self.y end
-        local outer = T.Panel(self.parent, nil, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft)
+        -- The wrapper must stay visually empty. A full card surface here sits
+        -- underneath the header and fills its transparent rounded corners.
+        local outer = CreateFrame("Frame", nil, self.parent)
         outer._msuf2NoPanelNeon = true
-        T.ApplySurface(outer, "card")
         SetSearchTitle(outer, title)
         RegisterSearchObject(outer, title, "section")
         outer:SetPoint("TOPLEFT", self.parent, "TOPLEFT", self.x, self.y)
         outer:SetSize(self.width, headerH + (open and (height or 120) or 0))
+        local bodySurface = T.Panel(outer, nil, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft)
+        T.ApplySurface(bodySurface, "card")
+        bodySurface:SetPoint("TOPLEFT", outer, "TOPLEFT", 0, -(headerH + ACCORDION_OPEN_CORNER_SIZE))
+        bodySurface:SetPoint("BOTTOMRIGHT", outer, "BOTTOMRIGHT", 0, 0)
+        bodySurface:SetShown(open)
+        PlaceBackdropFrameBehindControls(bodySurface, outer)
         local header = CreateFrame("Button", nil, outer)
         SetSearchTitle(header, title)
         header:SetPoint("TOPLEFT", outer, "TOPLEFT", 0, 0)
-        header:SetPoint("TOPRIGHT", outer, "TOPRIGHT", 0, 0)
+        header:SetPoint("TOPRIGHT", outer, "TOPRIGHT", -ACCORDION_HEADER_RIGHT_INSET, 0)
         header:SetHeight(headerH)
-        local headerBg = header:CreateTexture(nil, "BACKGROUND")
-        headerBg:SetAllPoints()
+        local headerBg = CreateAccordionRoundedRegions(header, "BACKGROUND", 0)
         local headerSurface = ThemeColor("coreSurface", { 0.014, 0.038, 0.072, 1.00 })
         local headerRaised = ThemeColor("coreRaised", { 0.026, 0.070, 0.110, 1.00 })
         headerBg:SetColorTexture(headerSurface[1], headerSurface[2], headerSurface[3], 0.34)
-        local headerHover = header:CreateTexture(nil, "HIGHLIGHT")
-        headerHover:SetAllPoints()
-        headerHover:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.045)
+        local headerOpenHighlight
+        if openHighlightEnabled then
+            local headerActiveBlue = ThemeColor("coreGlow", { 0.231, 0.510, 0.965, 1.00 })
+            local headerActiveDeep = ThemeColor("coreBlue", { 0.141, 0.365, 0.741, 1.00 })
+            local headerActiveFrom = { headerActiveBlue[1], headerActiveBlue[2], headerActiveBlue[3], 0.62 }
+            local headerActiveTo = { headerActiveDeep[1], headerActiveDeep[2], headerActiveDeep[3], 0.56 }
+            headerOpenHighlight = CreateAccordionOpenHighlight(header, headerActiveFrom, headerActiveTo)
+        end
         local arrow = header:CreateTexture(nil, "OVERLAY")
         arrow:SetSize(10, 10)
         arrow:SetPoint("LEFT", header, "LEFT", 12, 0)
@@ -577,8 +696,9 @@ function W.PageBuilder(ctx, opts)
             outer = outer,
             header = header,
             headerBg = headerBg,
-            headerHover = headerHover,
+            headerOpenHighlight = headerOpenHighlight,
             body = body,
+            bodySurface = bodySurface,
             arrow = arrow,
             label = label,
             hint = hint,
@@ -589,6 +709,7 @@ function W.PageBuilder(ctx, opts)
             headerHeight = headerH,
             contentHeight = height or 120,
             stateKey = stateKey,
+            openHighlightEnabled = openHighlightEnabled,
             guidedOrder = NextGuidedTourOrder(ctx),
             ancestorEntry = self.ancestorEntry,
         }
@@ -665,14 +786,28 @@ function W.PageBuilder(ctx, opts)
             ctx.entry._msuf2GuidedSortedSections = nil
         end
         self.collapsibles[#self.collapsibles + 1] = entry
+        local function SetHeaderSolid(color, alpha)
+            headerBg._msuf2TextureMode = "solid"
+            headerBg:SetColorTexture(color[1], color[2], color[3], alpha)
+        end
         local function RefreshHeaderTone(hover)
-            if not headerBg.SetColorTexture then return end
+            local active = entry.open == true and entry.openHighlightEnabled == true
+            if entry._msuf2OpenHighlightShown ~= active then
+                entry._msuf2OpenHighlightShown = active
+                if headerOpenHighlight then headerOpenHighlight:SetShown(active) end
+                headerBg:SetAlpha(active and 0 or 1)
+            end
+            if active then
+                arrow:SetVertexColor(1, 1, 1, 0.98)
+            elseif T.ApplyCollapseVisual then
+                T.ApplyCollapseVisual(arrow, nil, entry.open)
+            end
             if entry.open then
-                headerBg:SetColorTexture(headerSurface[1], headerSurface[2], headerSurface[3], hover and 0.48 or 0.40)
+                SetHeaderSolid(headerSurface, hover and 0.48 or 0.40)
             elseif hover then
-                headerBg:SetColorTexture(headerRaised[1], headerRaised[2], headerRaised[3], 0.42)
+                SetHeaderSolid(headerRaised, 0.42)
             else
-                headerBg:SetColorTexture(headerSurface[1], headerSurface[2], headerSurface[3], 0.34)
+                SetHeaderSolid(headerSurface, 0.34)
             end
         end
         entry._msuf2RefreshHeaderTone = RefreshHeaderTone
@@ -699,6 +834,7 @@ function W.PageBuilder(ctx, opts)
                     self:RelayoutCollapsibles()
                 end
                 entry.open = true
+                RefreshHeaderTone(false)
                 entry._msuf2MotionActive = true
                 if body.SetAlpha then body:SetAlpha(0) end
                 self:RelayoutCollapsibles()
@@ -756,6 +892,7 @@ function W.PageBuilder(ctx, opts)
                 entry._msuf2MotionActive = nil
                 entry._msuf2Closing = nil
                 entry.open = wanted
+                RefreshHeaderTone(false)
                 M.accordionState[stateKey] = wanted
                 if body.SetAlpha then body:SetAlpha(1) end
                 self:RelayoutCollapsibles()
@@ -3027,7 +3164,7 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     HideSliderTemplateParts(slider)
     if T.StyleSlider then T.StyleSlider(slider) end
     local function StepButton(text)
-        local btn = T.Button(section, text, 20, 24)
+        local btn = T.Button(section, text, 20, 24, { noSearch = true })
         SetSearchText(btn, text)
         if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(btn, slider)
         else btn._msuf2ControlPartOf = slider end

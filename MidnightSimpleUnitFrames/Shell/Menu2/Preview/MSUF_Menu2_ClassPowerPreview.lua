@@ -2162,7 +2162,6 @@ function Preview.Create(ctx, builder)
     local section = builder:CollapsibleSection("classpower_preview", "Preview", (expanded and CP_PREVIEW_EXPANDED_BOX_HEIGHT or CP_PREVIEW_COMPACT_BOX_HEIGHT) + 16, true)
     local sectionEntry = section and section._msuf2CollapsibleEntry
     local previewHeader = sectionEntry and sectionEntry.header
-    local liveBadge
     if sectionEntry then
         sectionEntry._msuf2ManualHintLayout = true
         if sectionEntry.hint then sectionEntry.hint:Hide() end
@@ -2171,15 +2170,6 @@ function Preview.Create(ctx, builder)
             sectionEntry.label:ClearAllPoints()
             sectionEntry.label:SetPoint("LEFT", sectionEntry.arrow, "RIGHT", 8, 0)
             sectionEntry.label:SetJustifyH("LEFT")
-        end
-        section._msuf2CollapsibleBadgesShowWhenClosed = true
-        if W.SetCollapsibleBadges then
-            W.SetCollapsibleBadges(section, { { text = "Live", kind = "ok", width = 46, alwaysShow = true } })
-            liveBadge = sectionEntry._msuf2Badges and sectionEntry._msuf2Badges[1]
-            if liveBadge and sectionEntry.label then
-                liveBadge:ClearAllPoints()
-                liveBadge:SetPoint("LEFT", sectionEntry.label, "RIGHT", 10, 0)
-            end
         end
     end
     -- Collapsible bodies may be capped to the normal form-content width.  The
@@ -2403,7 +2393,6 @@ function Preview.Create(ctx, builder)
     box._msuf2PreferredRestoreHeight = expanded and CP_PREVIEW_EXPANDED_BOX_HEIGHT or CP_PREVIEW_COMPACT_BOX_HEIGHT
     box._msuf2PreferredRestoreYOffset = -8
     box._msuf2CompactHeader = previewHeader
-    box._msuf2CompactLiveBadge = liveBadge
     box._msuf2CompactExpandButton = expandBtn
     box.ApplyPinnedPreviewPresentation = function(self)
         ApplyClassPowerCompactPresentation(self, self._msuf2CompactPreview == true, sideW)
@@ -2423,7 +2412,6 @@ function Preview.Create(ctx, builder)
             expandBtn:SetPoint("TOPRIGHT", section, "TOPRIGHT", -14, -8)
         end
         expandBtn:SetText(isExpanded and "Compact Preview" or "Expand")
-        if liveBadge then liveBadge:SetShown(not isExpanded) end
     end
     local function ApplyPreviewMode()
         local isExpanded = M.classPowerPreviewExpanded == true
