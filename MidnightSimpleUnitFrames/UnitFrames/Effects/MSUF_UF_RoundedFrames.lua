@@ -1426,6 +1426,11 @@ local Module = {
 do
     local f = CreateFrame("Frame")
     MSUF.__msufRoundedEventFrame = f
+    -- The module loads before PLAYER_LOGIN, while the live UF/GF frames are
+    -- finalized during that login pass. Keep one cold startup route so an
+    -- already-enabled profile receives its masks after those frames exist.
+    -- Disabled profiles detach again at ADDON_LOADED and retain no idle event.
+    f:RegisterEvent("ADDON_LOADED")
     f:SetScript("OnEvent", function(_, event, arg1)
       if event == "ADDON_LOADED" then
         if arg1 == addonName or arg1 == "MidnightSimpleUnitFrames" then
@@ -1436,7 +1441,10 @@ do
               MSUF.__msufRoundedUF_Registered = true
             end
           end
-          if IsEnabled() then HookOnce() end
+          if IsEnabled() then
+            HookOnce()
+            f:RegisterEvent("PLAYER_LOGIN")
+          end
           if f.UnregisterEvent then f:UnregisterEvent("ADDON_LOADED") end
         end
       elseif event == "PLAYER_LOGIN" then
