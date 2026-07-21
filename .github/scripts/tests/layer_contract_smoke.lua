@@ -305,7 +305,7 @@ assert(aurasModel:find("function Model.ReadLaneStrata(unit, kind)", 1, true)
 
 -- Unified UX contract: each ordering surface exposes one numeric Layer 0..30
 -- control. Blizzard FrameStrata stays an internal legacy compatibility field.
-assert(aurasMenu:find('Number("Layer (0-30)", 3, -146, 0, 30', 1, true),
+assert(aurasMenu:find('NumberRow("Layer (0-30)", "layer", "layer", 0, 30', 1, true),
     "regular Unit Aura lane lost its Layer 0..30 control")
 assert(aurasMenu:find('"Layer (0-30)", "layer", 0, 30, 9', 1, true),
     "Custom Aura container lost its Layer 0..30 control")

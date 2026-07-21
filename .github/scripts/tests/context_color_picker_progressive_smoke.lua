@@ -28,7 +28,15 @@ assert(not source:find("M.CreateWindowControlGroup(panel", 1, true),
 Has('Font(advancedCard, "GameFontNormalSmall", "Palette"', "palette title must live in Advanced")
 Has('{ "quick", "Quick" }, { "class", "Class" }, { "recent", "Recent" }, { "saved", "Saved" }',
     "palette tabs are incomplete")
-Has('local opacity = OpacityDisplay(wheelCard, 160)', "opaque RGB contract is not represented in the redesigned picker")
+Has('local opacity = OpacityDisplay(wheelCard, 160)', "opacity control is missing from the redesigned picker")
+Has('local frame = CreateFrame("Slider", nil, parent)', "opacity control is not a native draggable slider")
+Has("frame:SetMinMaxValues(0, 1)", "opacity slider range is not normalized")
+Has('opacity:SetScript("OnValueChanged"', "opacity slider is not wired to live changes")
+Has("function panel:ApplyOpacity(alpha)", "picker has no alpha-channel apply path")
+Has("self.originals[owner] = { r, g, b, OwnerOpacity(owner) }",
+    "cancel state does not retain the original alpha channel")
+assert(not source:find("MSUF color settings are fully opaque RGB colors.", 1, true),
+    "picker still describes its opacity control as a non-functional RGB display")
 Has('Input(advancedCard, 40, true)', "RGB precision fields must live in Advanced")
 Has('Input(advancedCard, 64, false)', "HEX precision field must live in Advanced")
 Has('Swatch(advancedCard, 24', "palette swatches must use the compact mock-up grid")
@@ -130,6 +138,24 @@ assert(widgetsSource:find("while contextEntry.ancestorEntry do contextEntry = co
     "color controls do not resolve their shared contextual owner group")
 assert(widgetsSource:find("colorControl._msuf2ColorContextOwners = contextEntry._msuf2ColorContextOwners", 1, true),
     "color controls do not expose their functional target list")
+
+local bindingsPath = "MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Bindings.lua"
+local bindingsHandle = assert(io.open(bindingsPath, "rb"))
+local bindingsSource = bindingsHandle:read("*a")
+bindingsHandle:close()
+assert(bindingsSource:find("colorButton._msuf2GetColorOpacity = function()", 1, true),
+    "bound RGBA colors do not expose their alpha channel to the picker")
+assert(bindingsSource:find("setRGB(r, g, b, nextAlpha)", 1, true),
+    "bound color changes do not preserve or write alpha")
+
+local colorsPath = "MidnightSimpleUnitFrames/Runtime/MSUF_Colors.lua"
+local colorsHandle = assert(io.open(colorsPath, "rb"))
+local colorsSource = colorsHandle:read("*a")
+colorsHandle:close()
+assert(colorsSource:find('GetClassBarBgColor() return _getRGBA("classBarBgR", "classBarBgG", "classBarBgB", "classBarBgA"', 1, true),
+    "bar background tint API is still RGB-only")
+assert(colorsSource:find('_getRGBA("powerBarBgColorR", "powerBarBgColorG", "powerBarBgColorB", "powerBarBgColorA"', 1, true),
+    "power background color API is still RGB-only")
 
 local openStart = assert(source:find("function panel:Open", 1, true))
 local openEnd = assert(source:find("panel:SetScript(\"OnKeyDown\"", openStart, true))

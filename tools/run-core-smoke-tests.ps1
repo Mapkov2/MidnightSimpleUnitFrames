@@ -139,7 +139,14 @@ $tests = @(
     ".github/scripts/tests/temp_max_health_smoke.lua",
     ".github/scripts/tests/typography_role_smoke.lua",
     ".github/scripts/tests/unit_status_indicator_layout_smoke.lua",
-    ".github/scripts/tests/version_check_prerelease_smoke.lua"
+    ".github/scripts/tests/version_check_prerelease_smoke.lua",
+    ".github/scripts/tests/aura_menu_default_seed_cache_smoke.lua",
+    ".github/scripts/tests/group_layout_cold_path_smoke.lua",
+    ".github/scripts/tests/menu2_perfy_hotpath_contract_smoke.lua",
+    ".github/scripts/tests/slider_history_release_smoke.lua",
+    ".github/scripts/tests/text_slot_font_size_smoke.lua",
+    ".github/scripts/tests/menu2_accordion_open_highlight_smoke.lua",
+    ".github/scripts/tests/unit_background_alpha_smoke.lua"
 )
 
 function Convert-ToRelativePath([string]$path) {
