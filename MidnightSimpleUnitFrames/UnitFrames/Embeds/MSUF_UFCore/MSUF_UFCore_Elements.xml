@@ -2,6 +2,7 @@
   <Script file="..\..\Engine\Elements\MSUF_UF_Visuals_Common.lua"/>
   <Script file="..\..\Engine\Elements\MSUF_UF_Elements_BarsCommon.lua"/>
   <Script file="..\..\Engine\Elements\MSUF_UF_Elements_Health.lua"/>
+  <Script file="..\..\Engine\Elements\MSUF_UF_Elements_TempMaxHealth.lua"/>
   <Script file="..\..\Engine\Elements\MSUF_UF_Elements_Power.lua"/>
   <Script file="..\..\Engine\Elements\MSUF_UF_Elements_Portrait.lua"/>
   <Script file="..\..\Engine\Elements\MSUF_UF_Elements_Prediction.lua"/>

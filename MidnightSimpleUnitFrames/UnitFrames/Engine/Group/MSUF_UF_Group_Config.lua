@@ -75,7 +75,8 @@ local AbsorbTextureTestEnabledForScope = UF.AbsorbTextureTestEnabledForScope or 
     local normalized = NormalizeAbsorbTestScope(scope)
     local function Enabled(bucket)
       if type(bucket) ~= "table" then return false end
-      if category == "heal" or category == "absorb" or category == "healAbsorb" then return bucket[category] == true end
+      if category == "heal" or category == "absorb" or category == "healAbsorb"
+        or category == "tempMaxHealth" then return bucket[category] == true end
       return bucket.heal == true or bucket.absorb == true or bucket.healAbsorb == true
     end
     return Enabled(modes.shared) or (normalized ~= "shared" and Enabled(modes[normalized]))
@@ -689,6 +690,28 @@ local function CompilePrediction(kind, conf, texture)
   }
   FillPredictionColors(out, general, conf, ScopedValue, Num)
   return out
+end
+
+local function CompileTempMaxHealth(kind, conf, texture)
+  local general = _G.MSUF_DB and _G.MSUF_DB.general or {}
+  local textureKey = ScopedValue(conf, general, "tempMaxHealthTexture", "")
+  local resolvedTexture = texture
+  if type(textureKey) == "string" and textureKey ~= "" then
+    local resolve = _G.MSUF_ResolveStatusbarTextureKey
+    local candidate = type(resolve) == "function" and resolve(textureKey) or textureKey
+    if type(candidate) == "string" and candidate ~= "" then resolvedTexture = candidate end
+  end
+  local test = AbsorbTextureTestEnabledForScope(kind, "tempMaxHealth")
+  return {
+    enabled = ScopedValue(conf, general, "tempMaxHealthEnabled", false) == true or test == true,
+    test = test == true,
+    texture = resolvedTexture,
+    r = Clamp01(ScopedValue(conf, general, "tempMaxHealthColorR", 0.70), 0.70),
+    g = Clamp01(ScopedValue(conf, general, "tempMaxHealthColorG", 0.10), 0.10),
+    b = Clamp01(ScopedValue(conf, general, "tempMaxHealthColorB", 0.10), 0.10),
+    a = Clamp01(ScopedValue(conf, general, "tempMaxHealthOpacity", 1), 1),
+    backgroundAlpha = Clamp01(ScopedValue(conf, general, "tempMaxHealthBackgroundOpacity", 0.65), 0.65),
+  }
 end
 
 local function CompileDispelVisual(kind, conf)
@@ -1502,6 +1525,7 @@ local function CompileSpecUncached(kind, frame, unit, conf)
       smooth = conf.powerSmoothFill == true,
     },
     text = textSpec,
+    tempMaxHealth = CompileTempMaxHealth(kind, conf, texture),
     prediction = CompilePrediction(kind, conf, texture),
     dispel = CompileDispelVisual(kind, conf),
     status = status,
@@ -1629,6 +1653,7 @@ local function RefreshColorDomain(kind, base, conf)
     BumpSpecDomain(base, "_msufTextLayoutRevision")
   end
 
+  base.tempMaxHealth = ReplaceTableContents(base.tempMaxHealth, CompileTempMaxHealth(kind, conf, texture))
   base.prediction = ReplaceTableContents(base.prediction, CompilePrediction(kind, conf, texture))
   base.dispel = ReplaceTableContents(base.dispel, CompileDispelVisual(kind, conf))
   base.border = ReplaceTableContents(base.border, CompileBorderSpec(kind, conf, general))

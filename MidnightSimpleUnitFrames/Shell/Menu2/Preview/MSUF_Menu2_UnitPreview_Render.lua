@@ -614,6 +614,57 @@ function Render.Install(Preview, deps)
     renderState.LayoutPreviewPortraitBorder = LayoutPreviewPortraitBorder
     deps._RenderState = renderState
 
+local function RenderTempMaxHealth(mock, runtimeSpec, conf, general, key, hpReverse, hpAreaW, setTexture)
+    local cfg = runtimeSpec and runtimeSpec.tempMaxHealth
+    local shown = cfg and cfg.enabled == true
+    if not cfg then
+        local enabled = general and general.tempMaxHealthEnabled
+        if conf and conf.hlOverride == true and conf.tempMaxHealthEnabled ~= nil then enabled = conf.tempMaxHealthEnabled end
+        shown = enabled == true
+        if _G.MSUF_ShouldShowAbsorbTextureTest
+            and _G.MSUF_ShouldShowAbsorbTextureTest(nil, key, "tempMaxHealth") then
+            shown = true
+        end
+    end
+    if not shown then
+        mock.tempMaxHealthBg:Hide()
+        mock.tempMaxHealth:Hide()
+        return
+    end
+
+    local texture = cfg and cfg.texture
+        or (type(_G.MSUF_ResolveStatusbarTextureKey) == "function"
+            and _G.MSUF_ResolveStatusbarTextureKey((conf and conf.tempMaxHealthTexture)
+                or (general and general.tempMaxHealthTexture) or "Solid"))
+        or "Interface\\Buttons\\WHITE8X8"
+    setTexture(mock.tempMaxHealth, texture)
+    mock.tempMaxHealth:SetVertexColor(
+        tonumber(cfg and cfg.r) or tonumber(general and general.tempMaxHealthColorR) or 0.70,
+        tonumber(cfg and cfg.g) or tonumber(general and general.tempMaxHealthColorG) or 0.10,
+        tonumber(cfg and cfg.b) or tonumber(general and general.tempMaxHealthColorB) or 0.10,
+        tonumber(cfg and cfg.a) or tonumber(general and general.tempMaxHealthOpacity) or 1)
+    mock.tempMaxHealthBg:SetColorTexture(0, 0, 0,
+        tonumber(cfg and cfg.backgroundAlpha) or tonumber(general and general.tempMaxHealthBackgroundOpacity) or 0.65)
+    mock.tempMaxHealth:ClearAllPoints()
+    mock.tempMaxHealthBg:ClearAllPoints()
+    if hpReverse then
+        mock.tempMaxHealth:SetPoint("TOPLEFT", mock.hpBG, "TOPLEFT", 0, 0)
+        mock.tempMaxHealth:SetPoint("BOTTOMLEFT", mock.hpBG, "BOTTOMLEFT", 0, 0)
+        mock.tempMaxHealthBg:SetPoint("TOPLEFT", mock.hpBG, "TOPLEFT", 0, 0)
+        mock.tempMaxHealthBg:SetPoint("BOTTOMLEFT", mock.hpBG, "BOTTOMLEFT", 0, 0)
+    else
+        mock.tempMaxHealth:SetPoint("TOPRIGHT", mock.hpBG, "TOPRIGHT", 0, 0)
+        mock.tempMaxHealth:SetPoint("BOTTOMRIGHT", mock.hpBG, "BOTTOMRIGHT", 0, 0)
+        mock.tempMaxHealthBg:SetPoint("TOPRIGHT", mock.hpBG, "TOPRIGHT", 0, 0)
+        mock.tempMaxHealthBg:SetPoint("BOTTOMRIGHT", mock.hpBG, "BOTTOMRIGHT", 0, 0)
+    end
+    local lossWidth = math.max(1, hpAreaW * 0.20)
+    mock.tempMaxHealth:SetWidth(lossWidth)
+    mock.tempMaxHealthBg:SetWidth(lossWidth)
+    mock.tempMaxHealthBg:Show()
+    mock.tempMaxHealth:Show()
+end
+
 --- Hot refresh for the unit preview. It composes current DB/model values into
 --- mock regions and handle positions, but never mutates live unit frames.
 function Preview.Refresh(box, reason)
@@ -1046,6 +1097,7 @@ function Preview.Refresh(box, reason)
     local hpAreaW = max(1, sw)
     local hpFrac = max(0, min(1, tonumber(data.hp) or 0.6))
     mock.hp:SetWidth(max(1, hpAreaW * hpFrac))
+    RenderTempMaxHealth(mock, runtimeSpec, conf, g, key, hpReverse, hpAreaW, SetTex)
     local healPredMode = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.healAnchorMode) or R.PreviewResolveHealPredAnchorMode(conf, g)
     local absorbMode = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.absorbAnchorMode) or R.PreviewResolveAbsorbAnchorMode(conf, g)
     local healPredShown = runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.heal == true

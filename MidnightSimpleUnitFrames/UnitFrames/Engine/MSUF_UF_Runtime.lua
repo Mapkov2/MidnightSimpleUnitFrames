@@ -412,6 +412,7 @@ function UF.RefreshHealthLayout()
 end
 
 local PREDICTION_ELEMENTS = { "Prediction" }
+local TEMP_MAX_HEALTH_ELEMENTS = { "TempMaxHealth" }
 
 local function GroupPredictionScopeMatches(kind, scope)
   if scope == nil or scope == "*" or scope == "shared" then return true end
@@ -455,6 +456,27 @@ function UF.RefreshPredictionBars(scope, reason)
   return did
 end
 
+function UF.RefreshTempMaxHealth(scope, reason)
+  reason = reason or "MSUF2_TEMP_MAX_HEALTH"
+  local did = UF.RefreshElements(scope == "shared" and nil or scope, TEMP_MAX_HEALTH_ELEMENTS, reason) or false
+  local GF = MSUF and MSUF.GF
+  if GF and type(GF.ForEachFrame) == "function" and type(GF.CompileSpec) == "function"
+    and type(UF.ApplyElementToFrame) == "function" then
+    InvalidateGroupPredictionSpecs(GF, scope)
+    GF.ForEachFrame(function(frame, unit, kind)
+      if GroupPredictionScopeMatches(kind, scope) ~= true then return end
+      if issecretvalue(unit) == true or type(unit) ~= "string" or unit == "" then return end
+      local spec = GF.CompileSpec(kind, frame, unit)
+      if spec then
+        UF.SetFrameSpec(frame, spec, unit)
+        UF.ApplyElementToFrame(frame, "TempMaxHealth", spec, reason)
+        did = true
+      end
+    end, true)
+  end
+  return did
+end
+
 function UF.RefreshPowerLayout(unit)
   return UF.RefreshElements(unit, POWER_TEXT_ELEMENTS, "MSUF_POWER_LAYOUT")
 end
@@ -489,6 +511,7 @@ ExportPublic("MSUF_ApplyBarOutlineThickness_All", UF.RefreshBorders)
 ExportPublic("MSUF_ApplyPowerBarBorder_All", UF.RefreshBorders)
 ExportPublic("MSUF_ApplyReverseFillBars", UF.RefreshHealthLayout)
 ExportPublic("MSUF_RefreshPredictionBars", UF.RefreshPredictionBars)
+ExportPublic("MSUF_RefreshTempMaxHealth", UF.RefreshTempMaxHealth)
 ExportPublic("MSUF_ApplyAllAlpha", UF.RefreshAlphas)
 ExportPublic("MSUF_ApplyPowerBarEmbedLayout_All", UF.RefreshPowerLayout)
 ExportPublic("MSUF_ApplyPowerBarEmbedLayout", UF.RefreshPowerLayoutForFrame)

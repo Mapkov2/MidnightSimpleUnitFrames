@@ -52,6 +52,13 @@ local BAR_DYNAMIC_SETTING_KEYS_BY_PATH = {
     ["gradient.enablePowerGradient"] = { "general.enablePowerGradient" },
     ["gradient.health.strength"] = { "general.gradientStrength" },
     ["gradient.power.strength"] = { "general.powerGradientStrength" },
+    ["temp_max_health.enabled"] = { "general.tempMaxHealthEnabled" },
+    ["temp_max_health.texture"] = { "general.tempMaxHealthTexture" },
+    ["temp_max_health.color"] = {
+        "general.tempMaxHealthColorR", "general.tempMaxHealthColorG", "general.tempMaxHealthColorB",
+    },
+    ["temp_max_health.opacity"] = { "general.tempMaxHealthOpacity" },
+    ["temp_max_health.background_opacity"] = { "general.tempMaxHealthBackgroundOpacity" },
     ["absorb.display_mode"] = { "general.absorbTextMode" },
     ["absorb.absorbAnchorMode"] = { "general.absorbAnchorMode" },
     ["absorb.absorbBarOpacity"] = { "general.absorbBarOpacity" },
@@ -107,6 +114,11 @@ local BAR_DYNAMIC_SETTING_SUFFIX_BY_PATH = {
     ["gradient.enablePowerGradient"] = "enablePowerGradient",
     ["gradient.health.strength"] = "gradientStrength",
     ["gradient.power.strength"] = "powerGradientStrength",
+    ["temp_max_health.enabled"] = "tempMaxHealthEnabled",
+    ["temp_max_health.texture"] = "tempMaxHealthTexture",
+    ["temp_max_health.color"] = "tempMaxHealthColorR",
+    ["temp_max_health.opacity"] = "tempMaxHealthOpacity",
+    ["temp_max_health.background_opacity"] = "tempMaxHealthBackgroundOpacity",
     ["absorb.display_mode"] = "absorbTextMode",
     ["absorb.absorbAnchorMode"] = "absorbAnchorMode",
     ["absorb.absorbBarOpacity"] = "absorbBarOpacity",
@@ -165,6 +177,7 @@ local function IsDynamicBarPath(path)
         or path == "power.smooth_fill"
         or path:find("^textures%.") ~= nil
         or path:find("^gradient%.") ~= nil
+        or path:find("^temp_max_health%.") ~= nil
         or path:find("^absorb%.") ~= nil
         or path:find("^outline%.") ~= nil
         or (path:find("^highlight%.") ~= nil and path ~= "highlight.boss_target.mode")
@@ -1007,6 +1020,116 @@ local function BuildAbsorbSectionLegacy(ctx, b)
     end))
 end
 
+local function BuildTempMaxHealthSection(ctx, b)
+    local sectionW = ctx.width or 720
+    local compact = sectionW < 700
+    local section = b:CollapsibleSection("bars_temp_max_health", "Maximum Health Loss", compact and 482 or 294, true)
+    sectionW = section._msuf2Width or sectionW
+    local leftX = compact and 20 or 30
+    local rightX = compact and 20 or max(390, min(540, floor(sectionW * 0.52)))
+    local leftW = compact and max(240, sectionW - 40) or max(280, rightX - leftX - 54)
+    local rightW = compact and leftW or max(280, sectionW - rightX - 32)
+    local SyncControls = M.RefreshProxy()
+
+    W.Text(section, "Shows the part of maximum health that is temporarily unavailable.",
+        20, -36, sectionW - 40, T.colors.muted)
+
+    local function Refresh(reason)
+        local scope = CurrentBarsScope()
+        if type(_G.MSUF_RefreshTempMaxHealth) == "function" then
+            _G.MSUF_RefreshTempMaxHealth(scope, reason or "MSUF2_TEMP_MAX_HEALTH")
+        else
+            ApplyBars(reason or "MSUF2_TEMP_MAX_HEALTH")
+        end
+        if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
+            _G.MSUF_UFPreview_RequestRefresh(reason or "MSUF2_TEMP_MAX_HEALTH")
+        end
+        if type(M.RefreshGFNativePreviews) == "function" then
+            M.RefreshGFNativePreviews(reason or "MSUF2_TEMP_MAX_HEALTH")
+        end
+        SyncControls()
+    end
+
+    local enabled = W.ToggleAt(section, "Show maximum-health loss", leftX, -78, leftW)
+    M.BindBoolWidget(ctx, enabled,
+        function() return BarScopeGet("tempMaxHealthEnabled", ReadGBool("tempMaxHealthEnabled", false)) == true end,
+        function(value)
+            BarScopeSet("tempMaxHealthEnabled", value and true or false, "MSUF2_TEMP_MAX_HEALTH_ENABLED", true)
+            Refresh("MSUF2_TEMP_MAX_HEALTH_ENABLED")
+        end,
+        Meta("temp_max_health.enabled"))
+
+    local textureY = compact and -132 or -132
+    local texture = W.Dropdown(section, "Texture", function() return TextureValues("Use foreground texture") end, leftW)
+    M.BindDropdownWidget(ctx, texture,
+        function() return BarScopeGet("tempMaxHealthTexture", ReadG("tempMaxHealthTexture", "Solid")) end,
+        function(value)
+            BarScopeSet("tempMaxHealthTexture", value or "", "MSUF2_TEMP_MAX_HEALTH_TEXTURE", true)
+            Refresh("MSUF2_TEMP_MAX_HEALTH_TEXTURE")
+        end,
+        Meta("temp_max_health.texture"))
+    W.MoveWidget(texture, section, leftX, textureY, leftW, "LEFT")
+
+    local colorY = compact and -204 or -204
+    local color = W.Color(section, "Loss color")
+    W.MoveWidget(color, section, leftX, colorY)
+    M.BindColor(ctx, color,
+        function()
+            return tonumber(BarScopeGet("tempMaxHealthColorR", ReadG("tempMaxHealthColorR", 0.70))) or 0.70,
+                tonumber(BarScopeGet("tempMaxHealthColorG", ReadG("tempMaxHealthColorG", 0.10))) or 0.10,
+                tonumber(BarScopeGet("tempMaxHealthColorB", ReadG("tempMaxHealthColorB", 0.10))) or 0.10
+        end,
+        function(r, g, b)
+            BarScopeSet("tempMaxHealthColorR", tonumber(r) or 0.70, "MSUF2_TEMP_MAX_HEALTH_COLOR", true)
+            BarScopeSet("tempMaxHealthColorG", tonumber(g) or 0.10, "MSUF2_TEMP_MAX_HEALTH_COLOR", true)
+            BarScopeSet("tempMaxHealthColorB", tonumber(b) or 0.10, "MSUF2_TEMP_MAX_HEALTH_COLOR", true)
+            Refresh("MSUF2_TEMP_MAX_HEALTH_COLOR")
+        end,
+        Meta("temp_max_health.color"))
+
+    local opacityY = compact and -266 or -78
+    local opacity = W.Slider(section, "Overlay opacity", 0.05, 1, 0.05, rightW)
+    M.BindNumberWidget(ctx, opacity,
+        function() return tonumber(BarScopeGet("tempMaxHealthOpacity", ReadG("tempMaxHealthOpacity", 1))) or 1 end,
+        function(value)
+            BarScopeSet("tempMaxHealthOpacity", tonumber(value) or 1, "MSUF2_TEMP_MAX_HEALTH_OPACITY", true)
+            Refresh("MSUF2_TEMP_MAX_HEALTH_OPACITY")
+        end,
+        1, Meta("temp_max_health.opacity"))
+    W.MoveWidget(opacity, section, rightX, opacityY, rightW, "LEFT")
+
+    local backgroundY = compact and -330 or -142
+    local background = W.Slider(section, "Background opacity", 0, 1, 0.05, rightW)
+    M.BindNumberWidget(ctx, background,
+        function()
+            return tonumber(BarScopeGet("tempMaxHealthBackgroundOpacity",
+                ReadG("tempMaxHealthBackgroundOpacity", 0.65))) or 0.65
+        end,
+        function(value)
+            BarScopeSet("tempMaxHealthBackgroundOpacity", tonumber(value) or 0.65,
+                "MSUF2_TEMP_MAX_HEALTH_BACKGROUND", true)
+            Refresh("MSUF2_TEMP_MAX_HEALTH_BACKGROUND")
+        end,
+        0.65, Meta("temp_max_health.background_opacity"))
+    W.MoveWidget(background, section, rightX, backgroundY, rightW, "LEFT")
+
+    local previewY = compact and -402 or -214
+    local preview = W.ToggleAt(section, "Preview effect", rightX, previewY, rightW)
+    M.BindBoolWidget(ctx, preview,
+        function() return IsAbsorbTextureTestEnabled("tempMaxHealth") == true end,
+        function(value) SetAbsorbTextureTest(value and true or false, "tempMaxHealth") end,
+        Meta("temp_max_health.preview", "ephemeral"))
+
+    local options = { texture, color, opacity, background }
+    M.TrackRefresh(ctx, SyncControls(function()
+        local scopedActive = ScopedControls()
+        local on = BarScopeGet("tempMaxHealthEnabled", ReadGBool("tempMaxHealthEnabled", false)) == true
+        SetControlEnabled(enabled, scopedActive)
+        SetControlsEnabled(options, scopedActive and on)
+        SetControlEnabled(preview, true)
+    end))
+end
+
 local function BuildAbsorbSection(ctx, b)
     local section = b:CollapsibleSection("bars_absorb", "Absorb Display", 414, true)
     local sectionW = section._msuf2Width or ctx.width or 720
@@ -1694,6 +1817,7 @@ local function BuildBars(ctx)
     b:GlobalStyleHeader("Bars", "Textures, gradients, outlines and highlight borders.", 72)
     BuildScopeSection(ctx, b)
     BuildTextureSection(ctx, b)
+    BuildTempMaxHealthSection(ctx, b)
     BuildAbsorbSection(ctx, b)
     BuildOutlineSection(ctx, b)
     BuildRoundedSection(ctx, b)

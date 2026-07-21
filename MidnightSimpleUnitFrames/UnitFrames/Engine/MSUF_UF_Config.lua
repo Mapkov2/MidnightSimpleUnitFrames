@@ -411,7 +411,8 @@ local NormalizePredictionTestCategory = UF.NormalizePredictionTestCategory or fu
 local function PredictionTestModesAny(modes)
   if type(modes) ~= "table" then return false end
   for _, bucket in pairs(modes) do
-    if type(bucket) == "table" and (bucket.heal == true or bucket.absorb == true or bucket.healAbsorb == true) then
+    if type(bucket) == "table" and (bucket.heal == true or bucket.absorb == true
+      or bucket.healAbsorb == true or bucket.tempMaxHealth == true) then
       return true
     end
   end
@@ -432,7 +433,7 @@ local SetAbsorbTextureTestMode = _G.MSUF_SetAbsorbTextureTestMode or function(en
     bucket.absorb = enabled == true or nil
     bucket.healAbsorb = enabled == true or nil
   end
-  if not (bucket.heal or bucket.absorb or bucket.healAbsorb) then modes[normalizedScope] = nil end
+  if not (bucket.heal or bucket.absorb or bucket.healAbsorb or bucket.tempMaxHealth) then modes[normalizedScope] = nil end
   local anyEnabled = PredictionTestModesAny(modes)
   ExportPublic("MSUF_PredictionTestModes", anyEnabled and modes or nil)
   ExportPublic("MSUF_AbsorbTextureTestMode", anyEnabled)
@@ -1615,6 +1616,21 @@ local function CompileUnitHealth(out, conf, general, bars)
   return health
 end
 
+local function CompileUnitTempMaxHealth(out, conf, general, key)
+  local cfg = out.tempMaxHealth or {}
+  out.tempMaxHealth = cfg
+  local test = AbsorbTextureTestEnabledForScope(key, "tempMaxHealth")
+  cfg.test = test == true
+  cfg.enabled = ScopedValue(conf, general, "tempMaxHealthEnabled", false) == true or cfg.test
+  cfg.texture = ResolveStatusbarTextureKey(
+    ScopedValue(conf, general, "tempMaxHealthTexture", ""), out.texture)
+  cfg.r = Clamp01(ScopedValue(conf, general, "tempMaxHealthColorR", 0.70), 0.70)
+  cfg.g = Clamp01(ScopedValue(conf, general, "tempMaxHealthColorG", 0.10), 0.10)
+  cfg.b = Clamp01(ScopedValue(conf, general, "tempMaxHealthColorB", 0.10), 0.10)
+  cfg.a = Clamp01(ScopedValue(conf, general, "tempMaxHealthOpacity", 1), 1)
+  cfg.backgroundAlpha = Clamp01(ScopedValue(conf, general, "tempMaxHealthBackgroundOpacity", 0.65), 0.65)
+end
+
 local function CompileUnitPower(out, unit, key, conf, general, bars, health)
   local power = out.power or {}
   out.power = power
@@ -1823,6 +1839,7 @@ local function ResolveUnit(db, unit, out)
   CompileUnitBase(out, unit, key, def, conf, general, bars, bossIndex)
   CompileUnitText(out, db, unit, key, conf, general, bars)
   local health = CompileUnitHealth(out, conf, general, bars)
+  CompileUnitTempMaxHealth(out, conf, general, key)
   CompileUnitPower(out, unit, key, conf, general, bars, health)
   CompileUnitPrediction(out, conf, general, key)
 
