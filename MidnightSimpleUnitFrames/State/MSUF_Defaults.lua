@@ -1875,8 +1875,28 @@ end
     if g.highlightEnabled == nil then
         g.highlightEnabled = true
     end
+    local highlightStyle = type(g.highlightStyle) == "string" and string.upper(g.highlightStyle) or "GRADIENT"
+    g.highlightStyle = highlightStyle == "BORDER" and "BORDER" or "GRADIENT"
+    local highlightThickness = math.floor((tonumber(g.highlightThickness) or 6) + 0.5)
+    if highlightThickness < 1 then highlightThickness = 1 end
+    if highlightThickness > 16 then highlightThickness = 16 end
+    g.highlightThickness = highlightThickness
     local fontColors = (MSUF and MSUF.MSUF_FONT_COLORS) or _G.MSUF_FONT_COLORS
-    if type(g.highlightColor) ~= "string" then
+    if type(g.highlightColor) == "table" then
+        local color = g.highlightColor
+        local r = tonumber(color[1] or color.r or color["1"])
+        local green = tonumber(color[2] or color.g or color["2"])
+        local b = tonumber(color[3] or color.b or color["3"])
+        if r and green and b then
+            g.highlightColor = {
+                math.max(0, math.min(1, r)),
+                math.max(0, math.min(1, green)),
+                math.max(0, math.min(1, b)),
+            }
+        else
+            g.highlightColor = "white"
+        end
+    elseif type(g.highlightColor) ~= "string" then
         g.highlightColor = "white"
     else
         g.highlightColor = string.lower(g.highlightColor)

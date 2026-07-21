@@ -11,6 +11,8 @@ end
 -- Owns the optional mouseover/target-style highlight frame layered above unitframes. Global
 -- DB changes update cached config, while per-frame calls only show/hide/recolor the overlay.
 local CreateFrame = CreateFrame
+local CreateColor = _G.CreateColor
+local floor = math.floor
 local tonumber = tonumber
 local type = type
 local issecretvalue = _G.issecretvalue or function(_) return false end
@@ -23,7 +25,8 @@ local BACKDROP_TEMPLATE = (BackdropTemplateMixin and "BackdropTemplate") or nil
 
 local cfgEnabled = true
 local cfgR, cfgG, cfgB = 1, 1, 1
-local cfgSize = 1
+local cfgStyle = "GRADIENT"
+local cfgSize = 6
 local cfgGen = 0
 local sawDB = false
 
@@ -34,15 +37,15 @@ local function HideFrameHighlight(frame)
   end
 end
 
-local function HideExistingHighlights()
+local function ForEachHighlightFrame(fn)
   local uf = MSUF and MSUF.UF
   if uf and type(uf.ForEachFrame) == "function" then
-    uf.ForEachFrame(HideFrameHighlight)
+    uf.ForEachFrame(fn)
   else
     local frames = uf and uf.frames
     if type(frames) == "table" then
       for _, frame in pairs(frames) do
-        HideFrameHighlight(frame)
+        fn(frame)
       end
     end
   end
@@ -50,19 +53,23 @@ local function HideExistingHighlights()
   local list = uf and uf.frameList
   if type(list) == "table" then
     for i = 1, #list do
-      HideFrameHighlight(list[i])
+      fn(list[i])
     end
   end
 
   local ns = _G.MSUF_NS or _G.MSUF or MSUF
   local gf = ns and ns.GF
   if gf and type(gf.ForEachFrame) == "function" then
-    gf.ForEachFrame(HideFrameHighlight, true)
+    gf.ForEachFrame(fn, true)
   elseif gf and type(gf.frameList) == "table" then
     for i = 1, #gf.frameList do
-      HideFrameHighlight(gf.frameList[i])
+      fn(gf.frameList[i])
     end
   end
+end
+
+local function HideExistingHighlights()
+  ForEachHighlightFrame(HideFrameHighlight)
 end
 
 local function ResolveHighlightRGB(general)
@@ -80,6 +87,7 @@ local function ResolveHighlightRGB(general)
 end
 
 local ShowImpl, HideImpl
+local RefreshExistingHighlights
 local roundedUnitMouseover
 local roundedGroupMouseover
 
@@ -97,19 +105,87 @@ function Highlight.Refresh()
   cfgR, cfgG, cfgB = ResolveHighlightRGB(general)
 
   local size = general and tonumber(general.highlightThickness)
-  if not size or size < 1 then size = 1 end
-  if size > 8 then size = 8 end
-  cfgSize = size
+  if not size then size = 6 end
+  cfgSize = floor(size + 0.5)
+  if cfgSize < 1 then cfgSize = 1 end
+  if cfgSize > 16 then cfgSize = 16 end
+
+  cfgStyle = general and tostring(general.highlightStyle or "GRADIENT"):upper() or "GRADIENT"
+  if cfgStyle ~= "BORDER" then cfgStyle = "GRADIENT" end
 
   cfgGen = cfgGen + 1
 
   if not enabled then
     HideExistingHighlights()
+  elseif RefreshExistingHighlights then
+    RefreshExistingHighlights()
   end
   return true
 end
 
-local function EnsureBorder(frame)
+local function ConfigureGradientTexture(tex, direction)
+  if not tex then return end
+  local orientation = (direction == "up" or direction == "down") and "VERTICAL" or "HORIZONTAL"
+  local minA, maxA = 0, 0.78
+  if direction == "left" or direction == "down" then minA, maxA = maxA, minA end
+  tex:SetTexture(WHITE8)
+  if tex.SetBlendMode then tex:SetBlendMode("BLEND") end
+  if tex.SetGradient and CreateColor then
+    tex:SetGradient(orientation, CreateColor(cfgR, cfgG, cfgB, minA), CreateColor(cfgR, cfgG, cfgB, maxA))
+  elseif tex.SetGradientAlpha then
+    tex:SetGradientAlpha(orientation, cfgR, cfgG, cfgB, minA, cfgR, cfgG, cfgB, maxA)
+  elseif tex.SetColorTexture then
+    tex:SetColorTexture(cfgR, cfgG, cfgB, 0.62)
+  end
+end
+
+local function EnsureGradient(hb)
+  local gradient = hb._msufGradient
+  if not gradient then
+    gradient = {}
+    for _, direction in ipairs({ "left", "right", "up", "down" }) do
+      gradient[direction] = hb:CreateTexture(nil, "OVERLAY")
+    end
+    gradient.left:SetPoint("TOPLEFT", hb, "TOPLEFT", 0, 0)
+    gradient.left:SetPoint("BOTTOMLEFT", hb, "BOTTOMLEFT", 0, 0)
+    gradient.right:SetPoint("TOPRIGHT", hb, "TOPRIGHT", 0, 0)
+    gradient.right:SetPoint("BOTTOMRIGHT", hb, "BOTTOMRIGHT", 0, 0)
+    gradient.up:SetPoint("TOPLEFT", hb, "TOPLEFT", 0, 0)
+    gradient.up:SetPoint("TOPRIGHT", hb, "TOPRIGHT", 0, 0)
+    gradient.down:SetPoint("BOTTOMLEFT", hb, "BOTTOMLEFT", 0, 0)
+    gradient.down:SetPoint("BOTTOMRIGHT", hb, "BOTTOMRIGHT", 0, 0)
+    hb._msufGradient = gradient
+  end
+  gradient.left:SetWidth(cfgSize)
+  gradient.right:SetWidth(cfgSize)
+  gradient.up:SetHeight(cfgSize)
+  gradient.down:SetHeight(cfgSize)
+  for direction, tex in pairs(gradient) do
+    ConfigureGradientTexture(tex, direction)
+    tex:Show()
+  end
+end
+
+local function HideGradient(hb)
+  local gradient = hb and hb._msufGradient
+  if type(gradient) ~= "table" then return end
+  for _, tex in pairs(gradient) do
+    if tex and tex.Hide then tex:Hide() end
+  end
+end
+
+local function ApplyHighlightVisual(hb)
+  if cfgStyle == "GRADIENT" and hb.CreateTexture then
+    if hb.SetBackdrop then hb:SetBackdrop(nil) end
+    EnsureGradient(hb)
+  else
+    HideGradient(hb)
+    if hb.SetBackdrop then hb:SetBackdrop({ edgeFile = WHITE8, edgeSize = cfgSize }) end
+    if hb.SetBackdropBorderColor then hb:SetBackdropBorderColor(cfgR, cfgG, cfgB, 1) end
+  end
+end
+
+local function EnsureHighlight(frame)
   local hb = frame._msufHL
   if not hb then
     hb = CreateFrame("Frame", nil, frame, BACKDROP_TEMPLATE)
@@ -149,19 +225,23 @@ local function EnsureBorder(frame)
       hb._appliedGen = nil
     end
     if hb.Hide then hb:Hide() end
-    return hb
+    return nil
   end
 
   if hb._appliedGen ~= cfgGen then
     hb._appliedGen = cfgGen
-    if hb.SetBackdrop then
-      hb:SetBackdrop({ edgeFile = WHITE8, edgeSize = cfgSize })
-    end
-    if hb.SetBackdropBorderColor then
-      hb:SetBackdropBorderColor(cfgR, cfgG, cfgB, 1)
-    end
+    ApplyHighlightVisual(hb)
   end
   return hb
+end
+
+RefreshExistingHighlights = function(frame)
+  local function RefreshFrame(current)
+    local hb = current and current._msufHL
+    if hb and hb.IsShown and hb:IsShown() then EnsureHighlight(current) end
+  end
+  if frame then return RefreshFrame(frame) end
+  ForEachHighlightFrame(RefreshFrame)
 end
 
 ShowImpl = function(frame)
@@ -171,7 +251,10 @@ ShowImpl = function(frame)
     Highlight.Refresh()
     if not cfgEnabled then return end
   end
-  local hb = EnsureBorder(frame)
+  local hb = frame._msufHL
+  if not hb or hb._appliedGen ~= cfgGen then
+    hb = EnsureHighlight(frame)
+  end
   if hb then hb:Show() end
 end
 
@@ -236,6 +319,7 @@ local function HighlightDebug()
   local p = print
   p("MSUF Highlight: loaded=YES enabled=" .. tostring(cfgEnabled)
     .. " color=" .. string.format("%.2f,%.2f,%.2f", cfgR, cfgG, cfgB)
+    .. " style=" .. tostring(cfgStyle)
     .. " size=" .. tostring(cfgSize)
     .. " roundedOwns=" .. tostring(roundedUnitMouseover ~= nil))
   local f = _G.MSUF_target

@@ -704,7 +704,10 @@ end
 local function CompileGroupVisuals(kind, conf)
   local general = _G.MSUF_DB and _G.MSUF_DB.general
   local hoverR, hoverG, hoverB = ResolveHighlightRGB()
-  local hoverSize = GF.GetHighlightVal and GF.GetHighlightVal(kind, "hlHoverSize") or conf.hlHoverSize
+  local hoverSize = general and general.highlightThickness
+  if hoverSize == nil then
+    hoverSize = GF.GetHighlightVal and GF.GetHighlightVal(kind, "hlHoverSize") or conf.hlHoverSize
+  end
   local frameHighlightEnabled = not (general and general.highlightEnabled == false)
   if general and general.highlightEnabled == nil and general.enableHighlightOnHover ~= nil then
     frameHighlightEnabled = general.enableHighlightOnHover == true
