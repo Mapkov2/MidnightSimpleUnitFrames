@@ -2436,6 +2436,23 @@ L["colors_bar_colors"] = "colors_bar_colors"
 L["group"] = "group"
 L["unit"] = "unit"
 
+-- Beta 25 Menu2 controls and preview chrome.
+L["Adjusts the alpha channel of this color."] = "Adjusts the alpha channel of this color."
+L["Background opacity"] = "Background opacity"
+L["Default size"] = "Default size"
+L["Expand"] = "Expand"
+L["Layers"] = "Layers"
+L["Opacity"] = "Opacity"
+L["Overlay opacity"] = "Overlay opacity"
+L["Preview - "] = "Preview - "
+L["Preview size"] = "Preview size"
+L["Reset this value to its default."] = "Reset this value to its default."
+L["Selected slot size"] = "Selected slot size"
+L["Shadow opacity"] = "Shadow opacity"
+L["Texture"] = "Texture"
+L["Toggle between the compact reference preview and the full-height canvas."] = "Toggle between the compact reference preview and the full-height canvas."
+L["Toggle the preview layer list."] = "Toggle the preview layer list."
+
 -- Bars: temporary maximum-health reduction overlay.
 L["Maximum Health Loss"] = "Maximum Health Loss"
 L["Shows the part of maximum health that is temporarily unavailable."] = "Shows the part of maximum health that is temporarily unavailable."
