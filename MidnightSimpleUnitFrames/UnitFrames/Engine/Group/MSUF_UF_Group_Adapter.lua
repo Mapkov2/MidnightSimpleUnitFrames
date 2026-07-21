@@ -36,6 +36,8 @@ local appliedWidth = setmetatable({}, { __mode = "k" })
 local appliedHeight = setmetatable({}, { __mode = "k" })
 local secureClicksConfigured = setmetatable({}, { __mode = "k" })
 local unitIndexRebindDepth = 0
+local headerLayoutRebindHeader
+local headerLayoutRebindDepth = 0
 
 local UNIT_ATTR = "unit"
 local NO_UNIT = false
@@ -77,6 +79,34 @@ end
 
 local function VisualFrame(frame)
   return frame and (frame._msufVisualFrame or frame) or frame
+end
+
+--- Mark the one secure header whose synchronous Show will be followed by an
+--- MSUF child scan. Visibility hooks may keep their cheap bookkeeping, while
+--- the scan becomes the single authoritative state/apply barrier.
+function GF.BeginHeaderLayoutRebind(header)
+  if not header then return false end
+  if headerLayoutRebindHeader and headerLayoutRebindHeader ~= header then return false end
+  headerLayoutRebindHeader = header
+  headerLayoutRebindDepth = headerLayoutRebindDepth + 1
+  return true
+end
+
+function GF.EndHeaderLayoutRebind(header)
+  if not header or headerLayoutRebindHeader ~= header then return false end
+  headerLayoutRebindDepth = headerLayoutRebindDepth - 1
+  if headerLayoutRebindDepth <= 0 then
+    headerLayoutRebindHeader = nil
+    headerLayoutRebindDepth = 0
+  end
+  return true
+end
+
+function GF.IsHeaderLayoutRebindActive(frame)
+  local header = headerLayoutRebindHeader
+  if not (header and frame) then return false end
+  local shell = ShellFrame(frame)
+  return shell and shell.GetParent and shell:GetParent() == header or false
 end
 
 local function IsPreviewFrame(shell, visual)
@@ -379,6 +409,25 @@ local function RefreshGroupUnitState(frame, reason)
   return false
 end
 
+local function FlushDeferredHeaderOnShow(frame, structureApplied)
+  if not frame then return false end
+  local deferred = frame._msufGFHeaderOnShowDeferred == true
+  frame._msufGFHeaderOnShowDeferred = nil
+  if deferred and structureApplied ~= true then
+    RefreshGroupUnitState(frame, "MSUF_GF_ONSHOW")
+  end
+  local flushRange = UF and UF.FlushDeferredGroupRangeSettle
+  if type(flushRange) == "function" then flushRange(frame) end
+  return deferred
+end
+
+local function DiscardDeferredHeaderOnShow(frame)
+  if not frame then return end
+  frame._msufGFHeaderOnShowDeferred = nil
+  local discardRange = UF and UF.DiscardDeferredGroupRangeSettle
+  if type(discardRange) == "function" then discardRange(frame) end
+end
+
 function GF.RebindGroupHotRuntime(frame)
   if UF and UF.OptimizeFrameHotpaths then UF.OptimizeFrameHotpaths(frame) end
   return nil
@@ -472,6 +521,7 @@ local function SuspendUnitBinding(frame)
   if visual then
     visual.MSUFUnitKey = nil
     visual.unitKey = nil
+    DiscardDeferredHeaderOnShow(visual)
     NotifyGroupRangeUnitIdentity(visual)
   end
 end
@@ -488,14 +538,18 @@ local function ApplyUnitFrame(frame, kind, unit, reason, applyMask, forceApply)
   visual.configKey = "gf_" .. kind
 
   local spec = GF.CompileSpec(kind, visual, unit)
-  if not spec then return false end
+  if not spec then
+    FlushDeferredHeaderOnShow(visual, false)
+    return false
+  end
   UF.SetFrameSpec(visual, spec, unit)
   SetButtonBasics(shell, visual, unit, spec)
 
   if forceApply ~= true and SameApplied(visual, kind, unit, spec) then
     attrUnit[shell] = unit
     TrackFrame(visual, unit)
-    if reason == "UNIT_CHANGED" or reason == UNIT_CHANGED_REASON then
+    if not FlushDeferredHeaderOnShow(visual, false)
+      and (reason == "UNIT_CHANGED" or reason == UNIT_CHANGED_REASON) then
       RefreshGroupUnitState(visual, UNIT_CHANGED_REASON)
     end
     return true
@@ -506,6 +560,7 @@ local function ApplyUnitFrame(frame, kind, unit, reason, applyMask, forceApply)
   MarkApplied(visual, kind, unit, spec)
   attrUnit[shell] = unit
   TrackFrame(visual, unit)
+  FlushDeferredHeaderOnShow(visual, true)
   return true
 end
 

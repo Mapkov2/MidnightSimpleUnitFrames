@@ -26,7 +26,11 @@ _G.MSUF = MSUF
 _G.InCombatLockdown = function() return false end
 _G.UnitExists = function() return true end
 _G.UnitGUID = function(unit) return unit end
-_G.UnitInRange = function() return true, true end
+local rangePolls = 0
+_G.UnitInRange = function()
+    rangePolls = rangePolls + 1
+    return true, true
+end
 _G.GetTime = function() return 1 end
 _G.issecretvalue = function(value)
     return value == SECRET_UNIT or value == SECRET_RANGE
@@ -159,5 +163,28 @@ assert(restrictedFrame.alpha == 1,
 
 assert(settleDriver and settleDriver.events.PLAYER_ENTERING_WORLD,
     "range settle driver must remain available for initial/world-state catch-up")
+
+local coalescedFrame = partyFrames[1]
+local headerRebindActive = true
+MSUF.GF.IsHeaderLayoutRebindActive = function(candidate)
+    return headerRebindActive and candidate == coalescedFrame
+end
+local pollsBefore = rangePolls
+for i = 1, #coalescedFrame.hooks.OnShow do
+    coalescedFrame.hooks.OnShow[i](coalescedFrame)
+end
+assert(rangePolls == pollsBefore and coalescedFrame._msufGFRangeSettleDeferred == true,
+    "header relayout must defer the range settle instead of polling before the scan")
+assert(UF.FlushDeferredGroupRangeSettle(coalescedFrame) == true
+    and rangePolls == pollsBefore + 1
+    and coalescedFrame._msufGFRangeSettleDeferred == nil,
+    "post-scan range settle must run exactly once")
+headerRebindActive = false
+pollsBefore = rangePolls
+for i = 1, #coalescedFrame.hooks.OnShow do
+    coalescedFrame.hooks.OnShow[i](coalescedFrame)
+end
+assert(rangePolls == pollsBefore + 1,
+    "ordinary range OnShow must retain its immediate settled-state refresh")
 
 print("group_range_coalesce_smoke: ok")

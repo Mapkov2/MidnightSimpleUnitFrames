@@ -534,8 +534,17 @@ local function smokeGroupHeaderLayoutCountFallback()
         return 0, 0, count, count
     end
     local scanCalls = {}
+    local rebindBegins, rebindEnds = 0, 0
     MSUF.GF.ScheduleScan = function(key, kind)
         scanCalls[#scanCalls + 1] = { key = key, kind = kind }
+    end
+    MSUF.GF.BeginHeaderLayoutRebind = function()
+        rebindBegins = rebindBegins + 1
+        return true
+    end
+    MSUF.GF.EndHeaderLayoutRebind = function()
+        rebindEnds = rebindEnds + 1
+        return true
     end
 
     loadAddon("UnitFrames/Engine/Group/MSUF_UF_Group_Headers.lua", MSUF)
@@ -544,11 +553,14 @@ local function smokeGroupHeaderLayoutCountFallback()
     MSUF.GF.SetupHeader("raid", "raid")
     assert(seenCounts[#seenCounts] == 10, "unknown raid count should use bounded fallback")
     assert(#scanCalls == 1, "new raid header should scan once")
+    MSUF.GF.headers.raid:Show()
 
     groupCount = 4
     MSUF.GF.SetupHeader("raid", "raid")
     assert(seenCounts[#seenCounts] == 4, "positive raid count should pass through")
-    assert(#scanCalls == 1, "unchanged raid header should not scan without roster force")
+    assert(#scanCalls == 2, "visible raid topology change should rescan once")
+    assert(rebindBegins == 1 and rebindEnds == 1,
+        "visible header hide/show did not bracket its synchronous rescan")
 
     groupCount = 0
     MSUF.GF.SetupHeader("raid", "raid")

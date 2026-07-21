@@ -344,6 +344,20 @@ local function RefreshSettledRange(frame)
   end
 end
 
+function UF.FlushDeferredGroupRangeSettle(frame)
+  if not (frame and frame._msufGFRangeSettleDeferred == true) then return false end
+  frame._msufGFRangeSettleDeferred = nil
+  RefreshSettledRange(frame)
+  return true
+end
+
+function UF.DiscardDeferredGroupRangeSettle(frame)
+  if not frame then return false end
+  local deferred = frame._msufGFRangeSettleDeferred == true
+  frame._msufGFRangeSettleDeferred = nil
+  return deferred
+end
+
 FlushRangeSettle = function()
   if InCombatLockdown and InCombatLockdown() then
     rangeSettleQueued = nil
@@ -494,6 +508,12 @@ end
 
 local function RangeSettleOnShow(self)
   SetSettleRegistration(self, self and self._msufGFRangeRuntimeEnabled == true)
+  local isRebinding = GF and GF.IsHeaderLayoutRebindActive
+  if type(isRebinding) == "function" and isRebinding(self) == true then
+    self._msufGFRangeSettleDeferred = true
+    return
+  end
+  self._msufGFRangeSettleDeferred = nil
   RefreshSettledRange(self)
 end
 
@@ -958,6 +978,7 @@ function ApplyAlpha(frame, event, rangeValue, rangeSecret)
 end
 
 function GroupRangeFade.Apply(frame)
+  if frame then frame._msufGFRangeSettleDeferred = nil end
   ClearAlphaCaches(frame)
   CompileRangeRuntime(frame, frame and frame.MSUFSpec)
   HookRangeSettleVisibility(frame)
@@ -1024,6 +1045,7 @@ function GroupRangeFade.Update(frame, event, unit, inRange)
 end
 
 function GroupRangeFade.Disable(frame)
+  if frame then frame._msufGFRangeSettleDeferred = nil end
   ClearRange(frame)
   ClearOfflineDelay(frame)
   ClearAlphaCaches(frame)
