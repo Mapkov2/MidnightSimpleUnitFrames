@@ -2,10 +2,69 @@ local addonName, ns = ...
 ns = ns or {}
 
 local _MSUF_KnownFileAssetCache = {}
+local _MSUF_LSMFontAssetPaths = {}
 
 local function MSUF_NormalizeFileAssetPath(asset)
     if type(asset) ~= "string" or asset == "" then return nil end
     return asset:gsub("/", "\\")
+end
+
+local function MSUF_FileAssetPathKey(asset)
+    local normalized = MSUF_NormalizeFileAssetPath(asset)
+    if not normalized then return nil end
+    return normalized:lower(), normalized
+end
+
+local function MSUF_RememberLSMFontAsset(asset)
+    local key, normalized = MSUF_FileAssetPathKey(asset)
+    if key then
+        -- Preserve LSM's canonical spelling for SetFont. The exact normalized
+        -- lookup is allocation-free on the normal path; the folded alias only
+        -- handles case differences from older/imported profiles.
+        _MSUF_LSMFontAssetPaths[normalized] = normalized
+        _MSUF_LSMFontAssetPaths[key] = normalized
+    end
+    return normalized
+end
+
+local function MSUF_GetRegisteredLSMFontAsset(asset)
+    if type(asset) ~= "string" or asset == "" then return nil end
+    local registered = _MSUF_LSMFontAssetPaths[asset]
+    if registered then return registered end
+    local key, normalized = MSUF_FileAssetPathKey(asset)
+    if not key then return nil end
+    return _MSUF_LSMFontAssetPaths[normalized] or _MSUF_LSMFontAssetPaths[key]
+end
+
+local function MSUF_FileAssetPathsEqual(a, b)
+    local aKey = MSUF_FileAssetPathKey(a)
+    local bKey = MSUF_FileAssetPathKey(b)
+    return aKey ~= nil and bKey ~= nil and aKey == bKey
+end
+
+local function MSUF_SeedLSMFontAssets(lsm)
+    if not (lsm and type(lsm.HashTable) == "function") then return end
+    local ok, fonts = pcall(lsm.HashTable, lsm, "font")
+    if not ok or type(fonts) ~= "table" then return end
+    for _, path in pairs(fonts) do
+        MSUF_RememberLSMFontAsset(path)
+    end
+end
+
+local function MSUF_GetLSMFontAsset(lsm, key)
+    if not lsm or type(key) ~= "string" or key == "" then return nil end
+    local path
+    if type(lsm.HashTable) == "function" then
+        local ok, fonts = pcall(lsm.HashTable, lsm, "font")
+        if ok and type(fonts) == "table" then
+            path = fonts[key]
+        end
+    end
+    if not path and type(lsm.Fetch) == "function" then
+        local ok, fetched = pcall(lsm.Fetch, lsm, "font", key, true)
+        if ok then path = fetched end
+    end
+    return MSUF_RememberLSMFontAsset(path)
 end
 
 local function MSUF_IsKnownFileAsset(asset)
@@ -108,6 +167,12 @@ do
     local function FontAssetAllowed(path)
         path = NormalizeFontPath(path)
         if type(path) ~= "string" or path == "" then return nil end
+        -- SharedMedia registrations are authoritative for their exact path.
+        -- C_UIFileAsset can transiently report a loose cross-addon file as
+        -- unknown while addons are still loading; SetFont remains the final
+        -- openability check below.
+        local registered = MSUF_GetRegisteredLSMFontAsset(path)
+        if registered then return registered end
         local isKnown = _G.MSUF_IsKnownFileAsset or MSUF_IsKnownFileAsset
         if type(isKnown) == "function" and isKnown(path) == false then return nil end
         return path
@@ -180,9 +245,9 @@ do
     end
 
     local function ApplyOne(fs, path, size, flags)
-        if not (fs and type(fs.SetFont) == "function" and type(path) == "string" and path ~= "") then return false end
-        local isKnown = _G.MSUF_IsKnownFileAsset or MSUF_IsKnownFileAsset
-        if type(isKnown) == "function" and isKnown(path) == false then return false end
+        if not (fs and type(fs.SetFont) == "function") then return false end
+        path = FontAssetAllowed(path)
+        if not path then return false end
         if fs._msufSafeFontPath == path
             and fs._msufSafeFontSize == size
             and fs._msufSafeFontFlags == flags
@@ -348,6 +413,27 @@ local function TryInitLSM()
     return false
 end
 
+local _MSUF_FontMediaRefreshPending = false
+local function RunFontMediaRefresh()
+    _MSUF_FontMediaRefreshPending = false
+    local updateFonts = _G.MSUF_UpdateAllFonts
+    if type(updateFonts) == "function" then
+        pcall(updateFonts)
+    end
+end
+
+local function ScheduleFontMediaRefresh()
+    if _MSUF_FontMediaRefreshPending then return end
+    _MSUF_FontMediaRefreshPending = true
+    if _G.MSUF_ScheduleOnce then
+        _G.MSUF_ScheduleOnce("LSM_FONT_MEDIA_REFRESH", RunFontMediaRefresh)
+    elseif _G.C_Timer and type(_G.C_Timer.After) == "function" then
+        _G.C_Timer.After(0, RunFontMediaRefresh)
+    else
+        RunFontMediaRefresh()
+    end
+end
+
 local _MSUF_StatusbarMediaRefreshPending = false
 local _MSUF_StatusbarMediaRefreshFrame
 
@@ -442,11 +528,15 @@ end
 local function EnsureLSMCallbacks()
     local LSM = ns.LSM
     if not LSM then return end
+    -- Seed before the ownership guard so registrations that predate MSUF are
+    -- trusted even when another MSUF module already installed the callbacks.
+    MSUF_SeedLSMFontAssets(LSM)
     if _G.MSUF_LSM_CallbacksRegistered then return end
     _G.MSUF_LSM_CallbacksRegistered = true
 
     LSM:RegisterCallback("LibSharedMedia_Registered", function(_, mediatype, key)
         if mediatype == "font" then
+            local registeredPath = MSUF_GetLSMFontAsset(LSM, key)
             if type(_G.MSUF_ClearResolvedFontPathCache) == "function" then
                 _G.MSUF_ClearResolvedFontPathCache()
             end
@@ -455,16 +545,11 @@ local function EnsureLSMCallbacks()
             end
 
             local normalizeFontKey = _G.MSUF_NormalizeFontKey or function(k) return k end
-            if _G.MSUF_DB and _G.MSUF_DB.general and normalizeFontKey(_G.MSUF_DB.general.fontKey) == normalizeFontKey(key) then
-                if _G.C_Timer and _G.C_Timer.After then
-                    _G.C_Timer.After(0, function()
-                        if _G.MSUF_UpdateAllFonts then
-                            _G.MSUF_UpdateAllFonts()
-                        end
-                    end)
-                elseif _G.MSUF_UpdateAllFonts then
-                    _G.MSUF_UpdateAllFonts()
-                end
+            local configured = _G.MSUF_DB and _G.MSUF_DB.general and _G.MSUF_DB.general.fontKey
+            local keyMatches = configured ~= nil and normalizeFontKey(configured) == normalizeFontKey(key)
+            local pathMatches = MSUF_FileAssetPathsEqual(configured, registeredPath)
+            if keyMatches or pathMatches then
+                ScheduleFontMediaRefresh()
             end
 
         elseif mediatype == "statusbar" then
