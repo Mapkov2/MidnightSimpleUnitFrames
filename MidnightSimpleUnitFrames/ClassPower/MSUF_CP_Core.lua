@@ -739,9 +739,8 @@ builders.PRESENTATION = function(E)
         if type(general) == "table" then
             textAlpha = tonumber(general.fontTextAlpha) or 1
             if textAlpha < 0.7 then textAlpha = 0.7 elseif textAlpha > 1 then textAlpha = 1 end
-            local strength = tostring(general.fontShadowStrength or "NORMAL"):upper()
-            if strength == "SOFT" then shadowAlpha, shadowX, shadowY = 0.55, 1, -1
-            elseif strength == "DEEP" then shadowAlpha, shadowX, shadowY = 1, 2, -2 end
+            shadowAlpha, shadowX, shadowY = _G.MSUF_ResolveFontShadowMetrics(
+                general.fontShadowOpacity, general.fontShadowDistance, general.fontShadowStrength)
         end
 
         local fontSize = baseSize

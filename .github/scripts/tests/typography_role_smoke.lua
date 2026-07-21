@@ -101,6 +101,12 @@ function M.AssignNamedValues(target, names, ...)
     end
 end
 local previousCreateFrame = _G.CreateFrame
+local previousResolveSafeFontPath = _G.MSUF_ResolveSafeFontPath
+local safeFontResolveCalls = 0
+_G.MSUF_ResolveSafeFontPath = function(path)
+    safeFontResolveCalls = safeFontResolveCalls + 1
+    return path
+end
 _G.CreateFrame = function()
     local frame = {}
     function frame:RegisterEvent() end
@@ -113,6 +119,19 @@ assert(loadfile('MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Theme_Tokens.lu
 assert(loadfile('MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Theme.lua'))(
     'MidnightSimpleUnitFrames', root)
 _G.CreateFrame = previousCreateFrame
+
+_G.MSUF_DB.general.menuFontKey = regular
+M.Theme.ClearMenuFontCache()
+local cacheA, cacheB = FontString(), FontString()
+local resolveStart = safeFontResolveCalls
+M.Theme.StyleFontString(cacheA, nil, 0, 'body')
+M.Theme.StyleFontString(cacheB, nil, 0, 'body')
+AssertEqual(safeFontResolveCalls - resolveStart, 1, 'same menu font tuple resolves once')
+M.Theme.RefreshMenuFonts(cacheB, true, true)
+AssertEqual(safeFontResolveCalls - resolveStart, 1, 'visible font settle preserves resolved path cache')
+M.Theme.ClearMenuFontCache()
+M.Theme.StyleFontString(FontString(), nil, 0, 'body')
+AssertEqual(safeFontResolveCalls - resolveStart, 2, 'explicit font cache clear re-resolves')
 
 local inherited = 'Fonts\\FRIZQT__.TTF'
 _G.MSUF_DB.general.menuFontKey = regular
@@ -158,5 +177,7 @@ end
 M.Theme.RefreshMenuFonts(blank, true)
 AssertEqual(blank.font, inherited, 'zero-width semibold fallback font')
 AssertEqual(blank.stringWidth, 80, 'zero-width semibold fallback metrics')
+
+_G.MSUF_ResolveSafeFontPath = previousResolveSafeFontPath
 
 print('typography_role_smoke: ok')

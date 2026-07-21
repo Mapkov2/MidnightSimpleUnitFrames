@@ -1213,17 +1213,33 @@ local function ResolveFontBaselineOffset(general, conf)
   return value
 end
 
+local ResolveFontShadowMetrics = _G.MSUF_ResolveFontShadowMetrics or function(opacity, distance, legacyStrength, fallbackOpacity, fallbackDistance)
+  if legacyStrength ~= nil then
+    legacyStrength = tostring(legacyStrength):upper()
+    opacity = legacyStrength == "SOFT" and 0.55 or 1
+    distance = legacyStrength == "DEEP" and 2 or 1
+  else
+    opacity = tonumber(opacity) or tonumber(fallbackOpacity) or 1
+    distance = tonumber(distance) or tonumber(fallbackDistance) or 1
+  end
+  if opacity < 0.20 then opacity = 0.20 elseif opacity > 1 then opacity = 1 end
+  distance = math.floor(distance + 0.5)
+  distance = distance <= 1 and 1 or 2
+  return opacity, distance, -distance
+end
+
 local function ResolveFontShadow(general, conf)
   local enabled = not (general and general.textBackdrop == false)
-  local strength = general and general.fontShadowStrength or "NORMAL"
+  local alpha, x, y = ResolveFontShadowMetrics(general and general.fontShadowOpacity,
+    general and general.fontShadowDistance, general and general.fontShadowStrength)
   if conf and conf.fontOverride == true then
     if conf.textBackdrop ~= nil then enabled = conf.textBackdrop == true end
-    if conf.fontShadowStrength ~= nil then strength = conf.fontShadowStrength end
+    if conf.fontShadowOpacity ~= nil or conf.fontShadowDistance ~= nil or conf.fontShadowStrength ~= nil then
+      alpha, x, y = ResolveFontShadowMetrics(conf.fontShadowOpacity, conf.fontShadowDistance,
+        conf.fontShadowStrength, alpha, x)
+    end
   end
-  strength = tostring(strength or "NORMAL"):upper()
-  if strength == "SOFT" then return enabled, 0.55, 1, -1 end
-  if strength == "DEEP" then return enabled, 1, 2, -2 end
-  return enabled, 1, 1, -1
+  return enabled, alpha, x, y
 end
 
 local function BossLayoutDelta(conf, index, def)

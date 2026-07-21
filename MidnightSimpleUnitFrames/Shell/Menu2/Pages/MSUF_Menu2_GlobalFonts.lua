@@ -14,8 +14,9 @@ local VT = M.ValueTextList
 local floor = math.floor
 local max = math.max
 local min = math.min
+local SHADOW_OPACITY_APPLY_DELAY = 0.18
 local UNIT_SCOPE_KEYS = GP.UNIT_SCOPE_KEYS or {}
-local DB, G, Unit, NormalizeScopeKey, ScopeDBKeys, ScopeHasOverride, ScopeSetOverride, CurrentFontScope, IsGFScope, FontScopeGet, FontScopeSet, NormalizeFontKey, FontValues, FontKeyGet, FontKeySet, SetControlEnabled, SetControlsEnabled, ApplyFonts, ControlMeta, RegisterControl = M.Pick(GP, [[DB G Unit NormalizeScopeKey ScopeDBKeys ScopeHasOverride ScopeSetOverride CurrentFontScope IsGFScope FontScopeGet FontScopeSet NormalizeFontKey FontValues FontKeyGet FontKeySet SetControlEnabled SetControlsEnabled ApplyFonts ControlMeta RegisterControl]])
+local DB, G, Unit, NormalizeScopeKey, ScopeDBKeys, ScopeHasOverride, ScopeSetOverride, ScopeWrite, CurrentFontScope, IsGFScope, FontScopeGet, FontScopeSet, NormalizeFontKey, FontValues, FontKeyGet, FontKeySet, SetControlEnabled, SetControlsEnabled, ApplyFonts, ControlMeta, RegisterControl = M.Pick(GP, [[DB G Unit NormalizeScopeKey ScopeDBKeys ScopeHasOverride ScopeSetOverride ScopeWrite CurrentFontScope IsGFScope FontScopeGet FontScopeSet NormalizeFontKey FontValues FontKeyGet FontKeySet SetControlEnabled SetControlsEnabled ApplyFonts ControlMeta RegisterControl]])
 local FONT_DYNAMIC_SETTING_KEYS_BY_PATH = {
     ["name_shortening.enabled"] = { "gf_party.nameShortenEnabled", "gf_raid.nameShortenEnabled" },
     ["name_shortening.style"] = { "gf_party.nameClipSide", "gf_raid.nameClipSide" },
@@ -27,7 +28,8 @@ local FONT_DYNAMIC_SETTING_SUFFIXES_BY_PATH = {
     ["text_style.outline"] = { "outline" },
     ["text_style.rendering"] = { "fontMonochrome" },
     ["text_style.shadow.enabled"] = { "textBackdrop" },
-    ["text_style.shadow.strength"] = { "fontShadowStrength" },
+    ["text_style.shadow.opacity"] = { "fontShadowOpacity" },
+    ["text_style.shadow.distance"] = { "fontShadowDistance" },
     ["text_style.opacity"] = { "fontTextAlpha" },
     ["text_style.baseline"] = { "fontBaselineOffset" },
     ["colors.player_name"] = { "nameColorMode" },
@@ -66,16 +68,38 @@ end
 local function RGB(r, g, b, a)
     return { r or 1, g or 1, b or 1, a or 1 }
 end
-local function NormalizeShadowStrength(value)
-    value = tostring(value or "NORMAL"):upper()
-    if value == "SOFT" or value == "DEEP" then return value end
-    return "NORMAL"
+local function ShadowMetrics()
+    return _G.MSUF_ResolveFontShadowMetrics(FontScopeGet("fontShadowOpacity", nil),
+        FontScopeGet("fontShadowDistance", nil), FontScopeGet("fontShadowStrength", nil))
 end
-local function ShadowMetrics(value)
-    value = NormalizeShadowStrength(value)
-    if value == "SOFT" then return 0.55, 1, -1 end
-    if value == "DEEP" then return 1, 2, -2 end
-    return 1, 1, -1
+local function NormalizeShadowOpacity(value)
+    local alpha = _G.MSUF_ResolveFontShadowMetrics(value, 1)
+    return floor(alpha * 20 + 0.5) / 20
+end
+local function NormalizeShadowDistance(value)
+    local _, distance = _G.MSUF_ResolveFontShadowMetrics(1, value)
+    return distance
+end
+local function ClearLegacyShadowStrength()
+    local scope = CurrentFontScope()
+    if scope == "shared" then
+        G().fontShadowStrength = nil
+        return
+    end
+    local db, keys = DB(), ScopeDBKeys(scope)
+    for i = 1, #(keys or {}) do
+        local entry = db[keys[i]]
+        if entry then entry.fontShadowStrength = nil end
+    end
+end
+local function SetShadowAndApply(key, value, reason)
+    ClearLegacyShadowStrength()
+    FontScopeSet(key, value, reason)
+    ApplyFonts(reason)
+end
+local function SetShadowValueWithoutApply(key, value)
+    ClearLegacyShadowStrength()
+    ScopeWrite(CurrentFontScope(), "fontOverride", G(), key, value)
 end
 local function NormalizeTextAlpha(value)
     value = tonumber(value) or 1
@@ -243,7 +267,7 @@ local function ApplyPreviewFont(fs)
     if fs.SetShadowOffset then
         local shadowOn = FontScopeGet("textBackdrop", true) == true
         if shadowOn then
-            local a, x, y = ShadowMetrics(FontScopeGet("fontShadowStrength", "NORMAL"))
+            local a, x, y = ShadowMetrics()
             if fs.SetShadowColor then fs:SetShadowColor(0, 0, 0, a) end
             fs:SetShadowOffset(x, y)
         else
@@ -437,6 +461,16 @@ local function BuildFonts(ctx)
         if fontScopeInfo and fontScopeInfo.SetWidth then fontScopeInfo:SetWidth(ctx.width - 402) end
         ApplyPreviewFont(preview)
     end
+    local function RefreshShadowPreview()
+        if not (preview and preview.SetShadowOffset) then return end
+        if FontScopeGet("textBackdrop", true) == true then
+            local alpha, x, y = ShadowMetrics()
+            if preview.SetShadowColor then preview:SetShadowColor(0, 0, 0, alpha) end
+            preview:SetShadowOffset(x, y)
+        else
+            preview:SetShadowOffset(0, 0)
+        end
+    end
     M.BindDropdownWidget(ctx, fontDrop,
         function() return FontKeyGet() end,
         function(v)
@@ -448,7 +482,7 @@ local function BuildFonts(ctx)
         Meta("font.family"))
     M.TrackRefresh(ctx, RefreshFontPreview)
     local RefreshScopedFontControls = M.RefreshProxy()
-    local text = b:CollapsibleSection("fonts_text_style", "Text Style", 370, true)
+    local text = b:CollapsibleSection("fonts_text_style", "Text Style", 430, true)
     local function BindTextSegment(label, values, width, getValue, setValue, path, afterSet)
         local control = W.Segment(text, label, values, width)
         M.BindSegment(ctx, control, getValue, function(v)
@@ -490,10 +524,63 @@ local function BuildFonts(ctx)
         function(v) SetFontAndApply("textBackdrop", v == "ON", "MSUF2_FONT_SHADOW") end,
         "text_style.shadow.enabled",
         function() RefreshScopedFontControls() end)
-    local shadowStrength = BindTextSegment("Shadow strength", VT("SOFT", "Soft", "NORMAL", "Normal", "DEEP", "Deep"), 360,
-        function() return NormalizeShadowStrength(FontScopeGet("fontShadowStrength", "NORMAL")) end,
-        function(v) SetFontAndApply("fontShadowStrength", NormalizeShadowStrength(v), "MSUF2_FONT_SHADOW_STRENGTH") end,
-        "text_style.shadow.strength")
+    local shadowOpacity = W.Slider(text, "Shadow opacity", 0.20, 1, 0.05, 300)
+    local shadowOpacityApplyTimer
+    local shadowOpacityApplyPending
+    local shadowOpacityApplyScope
+    local function CancelShadowOpacityApplyTimer()
+        if shadowOpacityApplyTimer and shadowOpacityApplyTimer.Cancel then
+            shadowOpacityApplyTimer:Cancel()
+        end
+        shadowOpacityApplyTimer = nil
+    end
+    local function FlushShadowOpacityApply()
+        if not shadowOpacityApplyPending then return end
+        shadowOpacityApplyPending = nil
+        CancelShadowOpacityApplyTimer()
+        M.RequestGeneralApply("MSUF2_FONT_SHADOW_OPACITY", {
+            history = false,
+            preview = true,
+            applyAll = false,
+            fonts = true,
+            fontScope = shadowOpacityApplyScope or CurrentFontScope(),
+        })
+        shadowOpacityApplyScope = nil
+    end
+    local function QueueShadowOpacityApply()
+        shadowOpacityApplyPending = true
+        shadowOpacityApplyScope = CurrentFontScope()
+        CancelShadowOpacityApplyTimer()
+        -- A drag updates only the single sample FontString. The runtime refresh
+        -- is committed once by OnMouseUp, never once per OnValueChanged tick.
+        if shadowOpacity._msuf2SliderActive then return end
+        if C_Timer and C_Timer.NewTimer then
+            shadowOpacityApplyTimer = C_Timer.NewTimer(SHADOW_OPACITY_APPLY_DELAY, FlushShadowOpacityApply)
+        else
+            FlushShadowOpacityApply()
+        end
+    end
+    if M.UsePercentInput then M.UsePercentInput(shadowOpacity) end
+    M.BindNumberWidget(ctx, shadowOpacity,
+        function()
+            local alpha = ShadowMetrics()
+            return alpha
+        end,
+        function(v)
+            SetShadowValueWithoutApply("fontShadowOpacity", NormalizeShadowOpacity(v))
+            RefreshShadowPreview()
+            QueueShadowOpacityApply()
+        end,
+        1, Meta("text_style.shadow.opacity", "setting", { step = 0.05 }))
+    shadowOpacity:HookScript("OnMouseUp", FlushShadowOpacityApply)
+    shadowOpacity:HookScript("OnHide", FlushShadowOpacityApply)
+    local shadowDistance = BindTextSegment("Shadow distance", VT(1, "1 px", 2, "2 px"), 260,
+        function()
+            local _, distance = ShadowMetrics()
+            return distance
+        end,
+        function(v) SetShadowAndApply("fontShadowDistance", NormalizeShadowDistance(v), "MSUF2_FONT_SHADOW_DISTANCE") end,
+        "text_style.shadow.distance")
     local opacity = BindTextSegment("Text opacity", VT(1, "100%", 0.85, "85%", 0.70, "70%"), 320,
         function() return NormalizeTextAlpha(FontScopeGet("fontTextAlpha", 1)) end,
         function(v) SetFontAndApply("fontTextAlpha", NormalizeTextAlpha(v), "MSUF2_FONT_TEXT_ALPHA") end,
@@ -586,13 +673,15 @@ local function BuildFonts(ctx)
     end
     globalFontColor:SetScript("OnClick", OpenGlobalFontColor)
     RegisterControl(globalFontColor, Meta("colors.global_font", "navigation", { navigationKey = "opt_colors" }), "Global font color", "button")
-    local scopedFontControls = { outline, sharp, shadow, opacity, baseline, nameColor, healthColor }
+    local scopedFontControls = { outline, sharp, shadow, shadowOpacity, shadowDistance, opacity, baseline, nameColor, healthColor }
     RefreshScopedFontControls = RefreshScopedFontControls(function()
         local scopeKey = CurrentFontScope()
         local canEdit = CurrentFontScopeCanEdit()
         local gfScope = IsGFScope(scopeKey)
         SetControlsEnabled(scopedFontControls, canEdit)
-        SetControlEnabled(shadowStrength, canEdit and FontScopeGet("textBackdrop", true) == true)
+        local shadowEnabled = canEdit and FontScopeGet("textBackdrop", true) == true
+        SetControlEnabled(shadowOpacity, shadowEnabled)
+        SetControlEnabled(shadowDistance, shadowEnabled)
         SetControlEnabled(npcColor, canEdit and not gfScope)
         SetControlEnabled(powerColor, canEdit and not gfScope)
     end)

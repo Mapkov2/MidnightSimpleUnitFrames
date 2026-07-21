@@ -200,8 +200,73 @@ function A.GlobalRegistry.RegisterScopedFontDetailSettings(ctx)
             apply = ApplyFonts,
             reason = "MSUF_ASSISTANT_FONT_SHADOW",
         })
+        local shadowOpacityAliases = {
+            "shadow opacity", "text shadow opacity", "font shadow opacity",
+        }
+        if isShared then
+            shadowOpacityAliases[#shadowOpacityAliases + 1] = "global shadow opacity"
+            shadowOpacityAliases[#shadowOpacityAliases + 1] = "global text shadow opacity"
+            shadowOpacityAliases[#shadowOpacityAliases + 1] = "shared shadow opacity"
+            shadowOpacityAliases[#shadowOpacityAliases + 1] = "shared text shadow opacity"
+        end
+        RegisterScopedSetting("fontScope", scope, "fontShadowOpacity", "shadowOpacity", "Shadow Opacity", "number", 1, SharedOrScopedAliases(scope, {
+            Unpack(shadowOpacityAliases),
+        }), {
+            flag = "fontOverride",
+            min = 0.20,
+            max = 1,
+            step = 0.05,
+            percent = true,
+            get = function(scopeKey)
+                local alpha = _G.MSUF_ResolveFontShadowMetrics(
+                    GlobalScopeRead(scopeKey, "fontOverride", GeneralDB(), "fontShadowOpacity", nil),
+                    GlobalScopeRead(scopeKey, "fontOverride", GeneralDB(), "fontShadowDistance", nil),
+                    GlobalScopeRead(scopeKey, "fontOverride", GeneralDB(), "fontShadowStrength", nil))
+                return alpha
+            end,
+            set = function(scopeKey, value)
+                local alpha = _G.MSUF_ResolveFontShadowMetrics(value, 1)
+                alpha = math.floor(alpha * 20 + 0.5) / 20
+                GlobalScopeWrite(scopeKey, "fontOverride", GeneralDB(), "fontShadowStrength", nil)
+                GlobalScopeWrite(scopeKey, "fontOverride", GeneralDB(), "fontShadowOpacity", alpha)
+            end,
+            apply = ApplyFonts,
+            reason = "MSUF_ASSISTANT_FONT_SHADOW_OPACITY",
+        })
+        local shadowDistanceAliases = {
+            "shadow distance", "text shadow distance", "font shadow distance", "shadow depth", "shadow offset",
+        }
+        if isShared then
+            shadowDistanceAliases[#shadowDistanceAliases + 1] = "global shadow distance"
+            shadowDistanceAliases[#shadowDistanceAliases + 1] = "global shadow depth"
+            shadowDistanceAliases[#shadowDistanceAliases + 1] = "shared shadow distance"
+            shadowDistanceAliases[#shadowDistanceAliases + 1] = "shared shadow depth"
+        end
+        RegisterScopedSetting("fontScope", scope, "fontShadowDistance", "shadowDistance", "Shadow Distance", "number", 1, SharedOrScopedAliases(scope, {
+            Unpack(shadowDistanceAliases),
+        }), {
+            flag = "fontOverride",
+            min = 1,
+            max = 2,
+            step = 1,
+            get = function(scopeKey)
+                local _, distance = _G.MSUF_ResolveFontShadowMetrics(
+                    GlobalScopeRead(scopeKey, "fontOverride", GeneralDB(), "fontShadowOpacity", nil),
+                    GlobalScopeRead(scopeKey, "fontOverride", GeneralDB(), "fontShadowDistance", nil),
+                    GlobalScopeRead(scopeKey, "fontOverride", GeneralDB(), "fontShadowStrength", nil))
+                return distance
+            end,
+            set = function(scopeKey, value)
+                local _, distance = _G.MSUF_ResolveFontShadowMetrics(1, value)
+                GlobalScopeWrite(scopeKey, "fontOverride", GeneralDB(), "fontShadowStrength", nil)
+                GlobalScopeWrite(scopeKey, "fontOverride", GeneralDB(), "fontShadowDistance", distance)
+            end,
+            apply = ApplyFonts,
+            reason = "MSUF_ASSISTANT_FONT_SHADOW_DISTANCE",
+        })
         local shadowStrengthAliases = {
             "shadow strength", "text shadow strength", "font shadow strength", "shadow intensity",
+            "soft shadow preset", "normal shadow preset", "deep shadow preset",
         }
         if isShared then
             shadowStrengthAliases[#shadowStrengthAliases + 1] = "global shadow strength"
@@ -210,8 +275,10 @@ function A.GlobalRegistry.RegisterScopedFontDetailSettings(ctx)
             shadowStrengthAliases[#shadowStrengthAliases + 1] = "shared shadow strength"
             shadowStrengthAliases[#shadowStrengthAliases + 1] = "shared text shadow strength"
             shadowStrengthAliases[#shadowStrengthAliases + 1] = "shared font shadow strength"
+            shadowStrengthAliases[#shadowStrengthAliases + 1] = "global shadow preset"
+            shadowStrengthAliases[#shadowStrengthAliases + 1] = "shared shadow preset"
         end
-        RegisterScopedSetting("fontScope", scope, "fontShadowStrength", "shadowStrength", "Shadow Strength", "enum", "NORMAL", SharedOrScopedAliases(scope, {
+        RegisterScopedSetting("fontScope", scope, "fontShadowStrength", "shadowStrength", "Legacy Shadow Preset", "enum", "NORMAL", SharedOrScopedAliases(scope, {
             Unpack(shadowStrengthAliases),
         }), {
             flag = "fontOverride",

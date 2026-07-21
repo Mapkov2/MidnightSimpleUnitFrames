@@ -163,12 +163,7 @@ local function _MSUF_ClampTextAlpha(value)
     return value
 end
 
-local function _MSUF_ShadowMetrics(strength)
-    strength = tostring(strength or "NORMAL"):upper()
-    if strength == "SOFT" then return 0.55, 1, -1 end
-    if strength == "DEEP" then return 1, 2, -2 end
-    return 1, 1, -1
-end
+local _MSUF_ShadowMetrics = _G.MSUF_ResolveFontShadowMetrics
 
 local function _MSUF_OutlineFromFlags(flags)
     flags = tostring(flags or ""):upper()
@@ -359,9 +354,10 @@ local function _MSUF_ApplyFontsToFrame(f)
             _origShadow = S.useShadow
             S.useShadow = conf.textBackdrop and true or false
         end
-        if conf.fontShadowStrength ~= nil then
+        if conf.fontShadowOpacity ~= nil or conf.fontShadowDistance ~= nil or conf.fontShadowStrength ~= nil then
             _origShadowAlpha, _origShadowX, _origShadowY = S.shadowAlpha, S.shadowX, S.shadowY
-            S.shadowAlpha, S.shadowX, S.shadowY = _MSUF_ShadowMetrics(conf.fontShadowStrength)
+            S.shadowAlpha, S.shadowX, S.shadowY = _MSUF_ShadowMetrics(conf.fontShadowOpacity,
+                conf.fontShadowDistance, conf.fontShadowStrength, S.shadowAlpha, S.shadowX)
         end
         if conf.fontTextAlpha ~= nil then
             _origTextAlpha = S.textAlpha
@@ -430,7 +426,8 @@ local function UpdateAllFonts(onlyKey, skipUnitFrames, skipCastbars, skipClassPo
     local globalHPSize   = _MSUF_NormalizeFontSize(g.hpFontSize, baseSize)
     local globalPowSize  = _MSUF_NormalizeFontSize(g.powerFontSize, baseSize)
     local useShadow      = not (g and g.textBackdrop == false)
-    local shadowAlpha, shadowX, shadowY = _MSUF_ShadowMetrics(g.fontShadowStrength)
+    local shadowAlpha, shadowX, shadowY = _MSUF_ShadowMetrics(g.fontShadowOpacity,
+        g.fontShadowDistance, g.fontShadowStrength)
     local textAlpha = _MSUF_ClampTextAlpha(g.fontTextAlpha)
     local colorPowerByType = (g.colorPowerTextByType == true)
 

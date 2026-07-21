@@ -1349,11 +1349,44 @@ local function MSUF_Defaults_MigrateGroupTooltipProfiles()
     return changed
 end
 
+local function MSUF_ResolveFontShadowMetrics(opacity, distance, legacyStrength, fallbackOpacity, fallbackDistance)
+    if legacyStrength ~= nil then
+        legacyStrength = tostring(legacyStrength):upper()
+        opacity = legacyStrength == "SOFT" and 0.55 or 1
+        distance = legacyStrength == "DEEP" and 2 or 1
+    else
+        opacity = tonumber(opacity)
+        if opacity == nil then opacity = tonumber(fallbackOpacity) or 1 end
+        distance = tonumber(distance)
+        if distance == nil then distance = tonumber(fallbackDistance) or 1 end
+    end
+    if opacity < 0.20 then opacity = 0.20 elseif opacity > 1 then opacity = 1 end
+    distance = math.floor(distance + 0.5)
+    if distance <= 1 then distance = 1 else distance = 2 end
+    return opacity, distance, -distance
+end
+ExportPublic("MSUF_ResolveFontShadowMetrics", MSUF_ResolveFontShadowMetrics)
+
+local function MSUF_Defaults_NormalizeFontShadowScope(scope, populateDefaults)
+    if type(scope) ~= "table" then return end
+    if scope.fontShadowStrength ~= nil then
+        scope.fontShadowOpacity, scope.fontShadowDistance =
+            MSUF_ResolveFontShadowMetrics(nil, nil, scope.fontShadowStrength)
+        scope.fontShadowStrength = nil
+        return
+    end
+    if populateDefaults or scope.fontShadowOpacity ~= nil or scope.fontShadowDistance ~= nil then
+        scope.fontShadowOpacity, scope.fontShadowDistance = MSUF_ResolveFontShadowMetrics(
+            scope.fontShadowOpacity, scope.fontShadowDistance)
+    end
+end
+
 local function MSUF_Defaults_HasScopedFontOverrideValue(scope)
     if type(scope) ~= "table" then return false end
     if scope.fontOutline ~= nil or scope.noOutline ~= nil or scope.boldText ~= nil then return true end
     if scope.fontMonochrome ~= nil or scope.fontTextAlpha ~= nil or scope.fontBaselineOffset ~= nil then return true end
-    if scope.textBackdrop ~= nil or scope.fontShadowStrength ~= nil or scope.colorPowerTextByType ~= nil or scope.colorHealthTextByHealth ~= nil then return true end
+    if scope.textBackdrop ~= nil or scope.fontShadowStrength ~= nil or scope.fontShadowOpacity ~= nil or scope.fontShadowDistance ~= nil then return true end
+    if scope.colorPowerTextByType ~= nil or scope.colorHealthTextByHealth ~= nil then return true end
     if scope.nameClassColor ~= nil or scope.npcNameRed ~= nil or scope.nameNpcClassColor ~= nil then return true end
     if scope.useGlobalFontColor == false then return true end
     if scope.fontR ~= nil or scope.fontG ~= nil or scope.fontB ~= nil then return true end
@@ -1855,8 +1888,12 @@ end
     if g.fontMonochrome == nil then
         g.fontMonochrome = false
     end
-    if g.fontShadowStrength ~= "SOFT" and g.fontShadowStrength ~= "DEEP" then
-        g.fontShadowStrength = "NORMAL"
+    MSUF_Defaults_NormalizeFontShadowScope(g, true)
+    for _, key in ipairs({
+        "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss",
+        "gf_party", "gf_raid", "gf_mythicraid",
+    }) do
+        MSUF_Defaults_NormalizeFontShadowScope(MSUF_DB[key], false)
     end
     if type(g.fontTextAlpha) ~= "number" then
         g.fontTextAlpha = 1

@@ -98,17 +98,19 @@ local function ClampBaselineOffset(value)
     return value
 end
 
-local function NormalizeShadowStrength(value)
-    value = tostring(value or "NORMAL"):upper()
-    if value == "SOFT" or value == "DEEP" then return value end
-    return "NORMAL"
-end
-
-local function ShadowMetrics(value)
-    value = NormalizeShadowStrength(value)
-    if value == "SOFT" then return 0.55, 1, -1 end
-    if value == "DEEP" then return 1, 2, -2 end
-    return 1, 1, -1
+local ShadowMetrics = _G.MSUF_ResolveFontShadowMetrics or function(opacity, distance, legacyStrength, fallbackOpacity, fallbackDistance)
+    if legacyStrength ~= nil then
+        legacyStrength = tostring(legacyStrength):upper()
+        opacity = legacyStrength == "SOFT" and 0.55 or 1
+        distance = legacyStrength == "DEEP" and 2 or 1
+    else
+        opacity = tonumber(opacity) or tonumber(fallbackOpacity) or 1
+        distance = tonumber(distance) or tonumber(fallbackDistance) or 1
+    end
+    if opacity < 0.20 then opacity = 0.20 elseif opacity > 1 then opacity = 1 end
+    distance = math.floor(distance + 0.5)
+    distance = distance <= 1 and 1 or 2
+    return opacity, distance, -distance
 end
 
 ---
@@ -274,6 +276,8 @@ local PARTY_DEFAULTS = {
     fontMonochrome    = nil,
     textBackdrop      = nil,
     fontShadowStrength = nil,
+    fontShadowOpacity = nil,
+    fontShadowDistance = nil,
     fontTextAlpha     = nil,
     fontBaselineOffset = nil,
     useGlobalFontColor = true,
@@ -2015,12 +2019,15 @@ function GF.ResolveFontShadow(kind)
     local db = _G.MSUF_DB
     local gen = db and db.general
     local enabled = not (gen and gen.textBackdrop == false)
-    local strength = gen and gen.fontShadowStrength or "NORMAL"
+    local alpha, x, y = ShadowMetrics(gen and gen.fontShadowOpacity, gen and gen.fontShadowDistance,
+        gen and gen.fontShadowStrength)
     if conf.fontOverride then
         if conf.textBackdrop ~= nil then enabled = conf.textBackdrop == true end
-        if conf.fontShadowStrength ~= nil then strength = conf.fontShadowStrength end
+        if conf.fontShadowOpacity ~= nil or conf.fontShadowDistance ~= nil or conf.fontShadowStrength ~= nil then
+            alpha, x, y = ShadowMetrics(conf.fontShadowOpacity, conf.fontShadowDistance,
+                conf.fontShadowStrength, alpha, x)
+        end
     end
-    local alpha, x, y = ShadowMetrics(strength)
     return enabled, alpha, x, y
 end
 

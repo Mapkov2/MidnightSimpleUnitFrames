@@ -2237,6 +2237,8 @@ expectSetting("disable font shadows", "fontScope.shared.textBackdrop", false, "t
 expectSetting("turn off shadows", "fontScope.shared.textBackdrop", false, "textShadow")
 expectSetting("turn off player text shadows", "fontScope.player.textBackdrop", false, "textShadow")
 expectSetting("set shadow strengths to soft", "fontScope.shared.fontShadowStrength", "SOFT", "shadowStrength")
+expectSetting("set shadow strength to 55", "fontScope.shared.fontShadowOpacity", 0.55, "shadowOpacity")
+expectSetting("set shadow distance to 2", "fontScope.shared.fontShadowDistance", 2, "shadowDistance")
 expectSetting("turn off player names", "player.showName", false, "name")
 expectSetting("set font sizes to 16", "general.fontSize", 16, "fontSize")
 expectSetting("set bar outline thicknesses to 2", "bars.barOutlineThickness", 2, "outline")
