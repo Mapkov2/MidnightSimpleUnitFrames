@@ -11,6 +11,17 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF or MSUF.LOCALE ~= "frFR" then return end
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("frFR")) or (MSUF.L or {})
 
+-- Commandes de surbrillance au survol.
+L["Soft gradient"] = "Dégradé doux"
+L["Solid border"] = "Bordure pleine"
+L["Effect size"] = "Taille de l’effet"
+L["Soft gradient gives the whole frame a clear, portrait-safe hover cue. Solid border keeps a crisp edge. Choose its color in Global Style > Colors > Unit Frames."] = "Le dégradé doux met clairement en évidence tout le cadre, portrait compris. La bordure pleine conserve un contour net. Choisissez sa couleur dans Style global > Couleurs > Cadres d’unité."
+L["Highlight Colors"] = "Couleurs de surbrillance"
+L["Mouseover highlight color"] = "Couleur de surbrillance au survol"
+L["Boss target highlight color"] = "Couleur de surbrillance de la cible de boss"
+L["%d px"] = "%d px"
+L["Language, menu behavior, mouseover highlights, tooltips and Blizzard frames."] = "Langue, comportement du menu, surbrillances au survol, infobulles et cadres Blizzard."
+
 L["Force Blizzard frame on"] = "Forcer l'activation du cadre Blizzard"
 L["Keeps Blizzard's native frame active independently of the MSUF frame. Leave MSUF Enable on to show both, or turn MSUF Enable off to use only Blizzard. A UI reload is required."] = "Maintient le cadre natif de Blizzard actif indépendamment du cadre MSUF. Laissez Activer MSUF activé pour afficher les deux, ou désactivez-le pour utiliser uniquement Blizzard. Un rechargement de l'interface est requis."
 L["Shared name shortening affects all unit names and group frames unless a scope has custom font settings."] = "Le raccourcissement partagé des noms affecte tous les noms d'unités et cadres de groupe, sauf si une portée utilise des réglages de police personnalisés."

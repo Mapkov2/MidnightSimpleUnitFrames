@@ -11,6 +11,17 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF or MSUF.LOCALE ~= "zhTW" then return end
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("zhTW")) or (MSUF.L or {})
 
+-- 滑鼠游標高亮設定。
+L["Soft gradient"] = "柔和漸層"
+L["Solid border"] = "實線邊框"
+L["Effect size"] = "效果大小"
+L["Soft gradient gives the whole frame a clear, portrait-safe hover cue. Solid border keeps a crisp edge. Choose its color in Global Style > Colors > Unit Frames."] = "柔和漸層會清楚高亮整個框架，並相容於頭像；實線邊框則保留清晰輪廓。可在全域樣式 > 顏色 > 單位框架中選擇顏色。"
+L["Highlight Colors"] = "高亮顏色"
+L["Mouseover highlight color"] = "滑鼠游標高亮顏色"
+L["Boss target highlight color"] = "首領目標高亮顏色"
+L["%d px"] = "%d 像素"
+L["Language, menu behavior, mouseover highlights, tooltips and Blizzard frames."] = "語言、選單行為、滑鼠游標高亮、工具提示和暴雪框架。"
+
 L["Force Blizzard frame on"] = "強制啟用暴雪框架"
 L["Keeps Blizzard's native frame active independently of the MSUF frame. Leave MSUF Enable on to show both, or turn MSUF Enable off to use only Blizzard. A UI reload is required."] = "讓暴雪原生框架獨立於 MSUF 框架保持啟用。保持啟用 MSUF 可同時顯示兩者，關閉啟用 MSUF 則只使用暴雪框架。需要重新載入介面。"
 L["Shared name shortening affects all unit names and group frames unless a scope has custom font settings."] = "共享名稱縮短會影響所有單位名稱與隊伍框架，除非某個範圍使用自訂字型設定。"

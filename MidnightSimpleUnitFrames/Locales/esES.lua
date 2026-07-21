@@ -7,6 +7,17 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF or MSUF.LOCALE ~= "esES" then return end
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("esES")) or (MSUF.L or {})
 
+-- Controles de resaltado al pasar el cursor.
+L["Soft gradient"] = "Degradado suave"
+L["Solid border"] = "Borde sólido"
+L["Effect size"] = "Tamaño del efecto"
+L["Soft gradient gives the whole frame a clear, portrait-safe hover cue. Solid border keeps a crisp edge. Choose its color in Global Style > Colors > Unit Frames."] = "El degradado suave resalta todo el marco de forma clara y compatible con retratos. El borde sólido mantiene un contorno nítido. Elige el color en Estilo global > Colores > Marcos de unidad."
+L["Highlight Colors"] = "Colores de resaltado"
+L["Mouseover highlight color"] = "Color de resaltado al pasar el cursor"
+L["Boss target highlight color"] = "Color de resaltado del objetivo de jefe"
+L["%d px"] = "%d px"
+L["Language, menu behavior, mouseover highlights, tooltips and Blizzard frames."] = "Idioma, comportamiento del menú, resaltados al pasar el cursor, tooltips y marcos de Blizzard."
+
 L["Force Blizzard frame on"] = "Activar marco de Blizzard"
 L["Keeps Blizzard's native frame active independently of the MSUF frame. Leave MSUF Enable on to show both, or turn MSUF Enable off to use only Blizzard. A UI reload is required."] = "Mantiene activo el marco nativo de Blizzard independientemente del marco de MSUF. Deja activado Habilitar MSUF para mostrar ambos o desactívalo para usar solo Blizzard. Es necesario recargar la interfaz."
 L["Shared name shortening affects all unit names and group frames unless a scope has custom font settings."] = "El acortamiento de nombres compartido afecta a todos los nombres de unidades y marcos de grupo, salvo que un ámbito tenga ajustes de fuente personalizados."

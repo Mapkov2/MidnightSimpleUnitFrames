@@ -11,6 +11,17 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF or MSUF.LOCALE ~= "ruRU" then return end
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("ruRU")) or (MSUF.L or {})
 
+-- Настройки подсветки при наведении.
+L["Soft gradient"] = "Мягкий градиент"
+L["Solid border"] = "Сплошная рамка"
+L["Effect size"] = "Размер эффекта"
+L["Soft gradient gives the whole frame a clear, portrait-safe hover cue. Solid border keeps a crisp edge. Choose its color in Global Style > Colors > Unit Frames."] = "Мягкий градиент четко выделяет всю рамку, включая портрет. Сплошная рамка сохраняет четкий контур. Выберите цвет в разделе Глобальный стиль > Цвета > Рамки юнитов."
+L["Highlight Colors"] = "Цвета подсветки"
+L["Mouseover highlight color"] = "Цвет подсветки при наведении"
+L["Boss target highlight color"] = "Цвет подсветки цели босса"
+L["%d px"] = "%d пикс."
+L["Language, menu behavior, mouseover highlights, tooltips and Blizzard frames."] = "Язык, поведение меню, подсветка при наведении, подсказки и рамки Blizzard."
+
 L["Force Blizzard frame on"] = "Принудительно включить фрейм Blizzard"
 L["Keeps Blizzard's native frame active independently of the MSUF frame. Leave MSUF Enable on to show both, or turn MSUF Enable off to use only Blizzard. A UI reload is required."] = "Оставляет стандартный фрейм Blizzard активным независимо от фрейма MSUF. Оставьте MSUF включенным, чтобы показывать оба, или отключите MSUF, чтобы использовать только Blizzard. Требуется перезагрузка интерфейса."
 L["Shared name shortening affects all unit names and group frames unless a scope has custom font settings."] = "Общее сокращение имен влияет на все имена юнитов и групповые фреймы, если область не использует собственные настройки шрифта."

@@ -11,6 +11,17 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF or MSUF.LOCALE ~= "ptBR" then return end
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("ptBR")) or (MSUF.L or {})
 
+-- Controles de realce ao passar o mouse.
+L["Soft gradient"] = "Gradiente suave"
+L["Solid border"] = "Borda sólida"
+L["Effect size"] = "Tamanho do efeito"
+L["Soft gradient gives the whole frame a clear, portrait-safe hover cue. Solid border keeps a crisp edge. Choose its color in Global Style > Colors > Unit Frames."] = "O gradiente suave realça todo o quadro com clareza e funciona com retratos. A borda sólida mantém um contorno nítido. Escolha a cor em Estilo global > Cores > Quadros de unidade."
+L["Highlight Colors"] = "Cores de realce"
+L["Mouseover highlight color"] = "Cor do realce ao passar o mouse"
+L["Boss target highlight color"] = "Cor do realce do alvo de chefe"
+L["%d px"] = "%d px"
+L["Language, menu behavior, mouseover highlights, tooltips and Blizzard frames."] = "Idioma, comportamento do menu, realces ao passar o mouse, dicas de interface e quadros da Blizzard."
+
 L["Force Blizzard frame on"] = "Forçar quadro da Blizzard ativo"
 L["Keeps Blizzard's native frame active independently of the MSUF frame. Leave MSUF Enable on to show both, or turn MSUF Enable off to use only Blizzard. A UI reload is required."] = "Mantém o quadro nativo da Blizzard ativo independentemente do quadro do MSUF. Deixe Ativar MSUF ligado para mostrar ambos ou desligue-o para usar somente o da Blizzard. É necessário recarregar a interface."
 L["Shared name shortening affects all unit names and group frames unless a scope has custom font settings."] = "O encurtamento de nomes compartilhado afeta todos os nomes de unidades e quadros de grupo, a menos que um escopo use configurações de fonte personalizadas."

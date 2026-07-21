@@ -2362,3 +2362,70 @@ L["The MSUF menu can now follow your class color, a curated preset like Ember, J
 L["The whole menu re-tints to your accent - surfaces, navigation and controls - applied after a UI reload."] = "The whole menu re-tints to your accent - surfaces, navigation and controls - applied after a UI reload."
 L["class-color, preset and custom accent options for the MSUF menu"] = "class-color, preset and custom accent options for the MSUF menu"
 L["Pick a menu accent"] = "Pick a menu accent"
+
+-- Colors page redesign: mode cards, modified badges, click-to-paint preview.
+L["Class Colors"] = "Class Colors"
+L["Unified"] = "Unified"
+L["Dark, neutral bars for every frame."] = "Dark, neutral bars for every frame."
+L["Health bars use Blizzard class colors."] = "Health bars use Blizzard class colors."
+L["One custom color for all health bars."] = "One custom color for all health bars."
+L["Bar color follows health percent (low / mid / high)."] = "Bar color follows health percent (low / mid / high)."
+L["modified"] = "modified"
+L["Right-click resets this color to its default."] = "Right-click resets this color to its default."
+L["Shared with group frames"] = "Shared with group frames"
+L["Click to edit these colors. Right-click opens the matching section below."] = "Click to edit these colors. Right-click opens the matching section below."
+L["Click an element in the preview to edit its colors. Right-click a color swatch to reset it to default."] = "Click an element in the preview to edit its colors. Right-click a color swatch to reset it to default."
+L["Brush armed: click a preview element to paint it. Right-click the swatch to disarm."] = "Brush armed: click a preview element to paint it. Right-click the swatch to disarm."
+L["My colors"] = "My colors"
+L["Palette color"] = "Palette color"
+L["Click to arm this color as a brush, then click a preview element to paint it."] = "Click to arm this color as a brush, then click a preview element to paint it."
+L["Save or pick colors in the color picker to reuse them here."] = "Save or pick colors in the color picker to reuse them here."
+L["Painted:"] = "Painted:"
+
+-- Mouseover highlight controls.
+L["Soft gradient"] = "Soft gradient"
+L["Solid border"] = "Solid border"
+L["Effect size"] = "Effect size"
+L["Soft gradient gives the whole frame a clear, portrait-safe hover cue. Solid border keeps a crisp edge. Choose its color in Global Style > Colors > Unit Frames."] = "Soft gradient gives the whole frame a clear, portrait-safe hover cue. Solid border keeps a crisp edge. Choose its color in Global Style > Colors > Unit Frames."
+L["Highlight Colors"] = "Highlight Colors"
+L["Mouseover highlight color"] = "Mouseover highlight color"
+L["Boss target highlight color"] = "Boss target highlight color"
+L["%d px"] = "%d px"
+L["Language, menu behavior, mouseover highlights, tooltips and Blizzard frames."] = "Language, menu behavior, mouseover highlights, tooltips and Blizzard frames."
+
+-- Colors page: painter tab labels and category descriptions.
+L["Player & Target"] = "Player & Target"
+L["Player & Target Frames"] = "Player & Target Frames"
+L["Party & Raid"] = "Party & Raid"
+L["Party & Raid Frames"] = "Party & Raid Frames"
+L["Power & Class Resources"] = "Power & Class Resources"
+L["Bars, text, portraits, NPC colors and combat feedback for unit frames."] = "Bars, text, portraits, NPC colors and combat feedback for unit frames."
+L["Power bar colors and Class Resource colors (combo points, holy power, ...)."] = "Power bar colors and Class Resource colors (combo points, holy power, ...)."
+
+L["The preview follows the Power type and Resource type selection below."] = "The preview follows the Power type and Resource type selection below."
+
+-- Color painter: surface-specific preview controls help.
+L["Click a colored element to edit exactly its colors."] = "Click a colored element to edit exactly its colors."
+L["Right-click an element to open its section below."] = "Right-click an element to open its section below."
+L["Ctrl + mouse wheel zooms. Ctrl + drag pans. Fit recenters."] = "Ctrl + mouse wheel zooms. Ctrl + drag pans. Fit recenters."
+L["Right-click any color swatch below to reset it to default."] = "Right-click any color swatch below to reset it to default."
+L["Layout editing lives on the Player/Target and Party/Raid pages."] = "Layout editing lives on the Player/Target and Party/Raid pages."
+
+-- Colors page: shared text-color mode dropdowns (mirrored from Fonts > Text Colors).
+L["Player Name Color"] = "Player Name Color"
+L["NPC / Boss Name Color"] = "NPC / Boss Name Color"
+L["HP Text Color"] = "HP Text Color"
+L["Power Text Color"] = "Power Text Color"
+L["Use font palette"] = "Use font palette"
+L["Shared defaults for all frames. Per-frame and group overrides live in Fonts > Text Colors."] = "Shared defaults for all frames. Per-frame and group overrides live in Fonts > Text Colors."
+
+-- Colors page: text-mode dropdown tooltips and preview text-target hint.
+L["Name color for player characters on ALL frames - target, focus, party and raid included. NPC names use the setting next to this one."] = "Name color for player characters on ALL frames - target, focus, party and raid included. NPC names use the setting next to this one."
+L["Name color for NPCs and bosses on all frames that follow the shared text settings."] = "Name color for NPCs and bosses on all frames that follow the shared text settings."
+L["HP text color mode for all frames that follow the shared text settings."] = "HP text color mode for all frames that follow the shared text settings."
+L["Power text color mode for all frames that follow the shared text settings."] = "Power text color mode for all frames that follow the shared text settings."
+L["Opens the shared Text Colors settings below - color modes for name, HP and power text."] = "Opens the shared Text Colors settings below - color modes for name, HP and power text."
+
+-- Color painter: selector-dependent preview targets navigate to their section.
+L["Opens the Resources colors below - pick the power type there, then set its color."] = "Opens the Resources colors below - pick the power type there, then set its color."
+L["Opens the Resources colors below - pick the Class Resource there, then set its colors."] = "Opens the Resources colors below - pick the Class Resource there, then set its colors."
