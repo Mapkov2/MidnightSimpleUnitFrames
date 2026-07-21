@@ -1644,21 +1644,30 @@ local function ApplyCooldownFont(ic, gcfg, gFont, wantFlags, baseR, baseG, baseB
     if fsChanged then cd._msufGFCdStyledFS = fs end
 
     local size = ScaleFrameValue((gcfg and gcfg.cooldownSize) or 8, frameScale or 1, 6)
+    local fontEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
 
     -- Diff-gate: skip redundant SetFont (same pattern as A2_Icons line 938)
     if fsChanged or cd._msufGFCdTextSize ~= size or cd._msufGFCdFontPath ~= gFont
-       or cd._msufGFCdFontFlags ~= wantFlags then
+       or cd._msufGFCdFontFlags ~= wantFlags or cd._msufGFCdFontEpoch ~= fontEpoch then
+        local applied = false
         if gFont and fs.SetFont then
             local g = _G.MSUF_DB and _G.MSUF_DB.general
             if type(_G.MSUF_SetFontSafe) == "function" then
-                _G.MSUF_SetFontSafe(fs, gFont, size, wantFlags, (g and g.fontKey) or "FRIZQT")
+                applied = _G.MSUF_SetFontSafe(fs, gFont, size, wantFlags, (g and g.fontKey) or "FRIZQT") == true
             else
-                fs:SetFont(gFont, size, wantFlags)
+                local ok, result = pcall(fs.SetFont, fs, gFont, size, wantFlags)
+                applied = ok and result ~= false
             end
         end
-        cd._msufGFCdTextSize = size
-        cd._msufGFCdFontPath = gFont
-        cd._msufGFCdFontFlags = wantFlags
+        if applied then
+            cd._msufGFCdTextSize = size
+            cd._msufGFCdFontPath = gFont
+            cd._msufGFCdFontFlags = wantFlags
+            cd._msufGFCdFontEpoch = fontEpoch
+        else
+            cd._msufGFCdFontEpoch = nil
+            if type(_G.MSUF_MarkFontApplyFailed) == "function" then _G.MSUF_MarkFontApplyFailed() end
+        end
     end
 
     -- Anchor + offset (live-apply via diff-gate on anchor+x+y)
@@ -1703,18 +1712,30 @@ local function ApplyStackLayout(ic, gcfg, gFont, wantFlags, frameScale)
     local anchor = gcfg.stackAnchor or "BOTTOMRIGHT"
     local ox = ScaleFrameValue(gcfg.stackOffsetX or -1, frameScale or 1)
     local oy = ScaleFrameValue(gcfg.stackOffsetY or 1, frameScale or 1)
+    local fontEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
 
-    if ic._msufGFStkSize ~= size or ic._msufGFStkFont ~= gFont then
+    if ic._msufGFStkSize ~= size or ic._msufGFStkFont ~= gFont
+        or ic._msufGFStkFontFlags ~= wantFlags or ic._msufGFStkFontEpoch ~= fontEpoch
+    then
+        local applied = false
         if gFont and fs.SetFont then
             local g = _G.MSUF_DB and _G.MSUF_DB.general
             if type(_G.MSUF_SetFontSafe) == "function" then
-                _G.MSUF_SetFontSafe(fs, gFont, size, wantFlags, (g and g.fontKey) or "FRIZQT")
+                applied = _G.MSUF_SetFontSafe(fs, gFont, size, wantFlags, (g and g.fontKey) or "FRIZQT") == true
             else
-                fs:SetFont(gFont, size, wantFlags)
+                local ok, result = pcall(fs.SetFont, fs, gFont, size, wantFlags)
+                applied = ok and result ~= false
             end
         end
-        ic._msufGFStkSize = size
-        ic._msufGFStkFont = gFont
+        if applied then
+            ic._msufGFStkSize = size
+            ic._msufGFStkFont = gFont
+            ic._msufGFStkFontFlags = wantFlags
+            ic._msufGFStkFontEpoch = fontEpoch
+        else
+            ic._msufGFStkFontEpoch = nil
+            if type(_G.MSUF_MarkFontApplyFailed) == "function" then _G.MSUF_MarkFontApplyFailed() end
+        end
     end
 
     if ic._msufGFStkAnchor ~= anchor or ic._msufGFStkOX ~= ox or ic._msufGFStkOY ~= oy then

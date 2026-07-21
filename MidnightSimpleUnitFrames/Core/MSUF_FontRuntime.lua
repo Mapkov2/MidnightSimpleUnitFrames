@@ -67,30 +67,152 @@ local _fontState = {}
 local _MSUF_FontPathSerialByKey = {}
 local _MSUF_FontPathSerialNext = 0
 
--- Cold-start text fix, folded into the font subsystem (no standalone file).
--- See the 6.0 MSUF_FontRuntime for the full rationale: the configured font may
--- not be loadable when the per-frame init layout runs, so width-dependent text
--- anchors get committed against wrong metrics. UpdateAllFonts re-runs the text
--- layout once the configured font is applied + measurable, retrying via the
--- existing scheduler until then.
+-- Cold-start font coordinator. WoW can publish the requested path/size before
+-- the selected face's glyph metrics are actually active. The first fanout is
+-- therefore provisional; a delayed probe advances the epoch and performs one
+-- forced settle fanout. Unready retries touch only the hidden probe FontString.
 local _fontApplyFailed = false
-local _fontRelayoutRetries = 0
-local _fontRelayoutRetryPending = false
-local MSUF_FONT_RELAYOUT_MAX_RETRIES = 200
+local _fontApplyFailureSerial = tonumber(_G.MSUF_FontApplyFailureSerial) or 0
+local _fontSettle = {
+    tuple = nil,
+    path = nil,
+    generation = 0,
+    attempt = 0,
+    pending = false,
+    active = false,
+    forceNext = false,
+    committing = false,
+}
+-- The mandatory first settle intentionally waits one second. Path/size
+-- readback can be false-ready for several frames on a real cold client; other
+-- production addons use the same one-second post-login font settle window.
+local MSUF_FONT_SETTLE_DELAYS = { 1.0, 0.5, 1.0, 2.0, 4.0, 8.0 }
 local _measureFS
+local UpdateAllFonts
+local _MSUF_ScheduleFontProbe
+local _MSUF_RunFontProbe
+local _fontRecoveryCombatFrame
+local _fontUpdateDepth = 0
+local _fontFailureRecoveryPending = false
 
-local function _ConfiguredFontReady()
-    local getPath = _G.MSUF_GetFontPath
-    local path = (type(getPath) == "function" and getPath()) or _fontState.path or "Fonts\\FRIZQT__.TTF"
+local function _MSUF_ScheduleLateFontRecovery()
+    if _fontSettle.active
+        or _fontSettle.timedOutTuple == _fontSettle.tuple
+        or _fontFailureRecoveryPending
+    then
+        return
+    end
+    _fontFailureRecoveryPending = true
+    local function RecoverLateFontString()
+        _fontFailureRecoveryPending = false
+        if _fontUpdateDepth == 0
+            and not _fontSettle.active
+            and _fontSettle.timedOutTuple ~= _fontSettle.tuple
+            and type(_G.MSUF_RequestFontRecovery) == "function"
+        then
+            _G.MSUF_RequestFontRecovery("LATE_FONTSTRING_FAILURE")
+        end
+    end
+    if _G.MSUF_ScheduleOnce then
+        _G.MSUF_ScheduleOnce("FONT_APPLY_FAILURE_RECOVERY", RecoverLateFontString)
+    elseif _G.C_Timer and _G.C_Timer.After then
+        _G.C_Timer.After(0, RecoverLateFontString)
+    else
+        _fontFailureRecoveryPending = false
+    end
+end
+
+local function _MSUF_FontCombatLocked()
+    return type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() == true
+end
+
+local function _MSUF_DeferFontRecoveryAfterCombat(requested)
+    if requested then
+        _fontSettle.deferredRequest = true
+        _fontSettle.deferredProbe = nil
+    elseif not _fontSettle.deferredRequest then
+        _fontSettle.deferredProbe = true
+    end
+    if not _fontRecoveryCombatFrame and type(_G.CreateFrame) == "function" then
+        local frame = _G.CreateFrame("Frame")
+        frame:SetScript("OnEvent", function(self, event)
+            if event ~= "PLAYER_REGEN_ENABLED" then return end
+            self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+            local runRequest = _fontSettle.deferredRequest
+            local runProbe = _fontSettle.deferredProbe
+            _fontSettle.deferredRequest = nil
+            _fontSettle.deferredProbe = nil
+            if runRequest and type(_G.MSUF_RequestFontRecovery) == "function" then
+                _G.MSUF_RequestFontRecovery("PLAYER_REGEN_ENABLED")
+            elseif runProbe and type(_MSUF_RunFontProbe) == "function" then
+                _MSUF_RunFontProbe()
+            end
+        end)
+        _fontRecoveryCombatFrame = frame
+    end
+    if _fontRecoveryCombatFrame then
+        _fontRecoveryCombatFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    end
+end
+
+_G.MSUF_FontApplyFailureSerial = _fontApplyFailureSerial
+_G.MSUF_FontApplyEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
+
+function _G.MSUF_MarkFontApplyFailed()
+    _fontApplyFailureSerial = _fontApplyFailureSerial + 1
+    _G.MSUF_FontApplyFailureSerial = _fontApplyFailureSerial
+    if not _fontSettle.active and _fontSettle.timedOutTuple ~= _fontSettle.tuple then
+        if _fontUpdateDepth == 0 then
+            _MSUF_ScheduleLateFontRecovery()
+        else
+            _fontSettle.lateFailureDuringFanout = true
+        end
+    end
+    return _fontApplyFailureSerial
+end
+
+local function _MSUF_BumpFontApplyEpoch()
+    local epoch = (tonumber(_G.MSUF_FontApplyEpoch) or 0) + 1
+    _G.MSUF_FontApplyEpoch = epoch
+    return epoch
+end
+
+local function _MSUF_FontTuple(path, flags, fontKey)
+    return tostring(path or ""):gsub("/", "\\"):lower()
+        .. "\001" .. tostring(flags or "")
+        .. "\001" .. tostring(fontKey or "")
+end
+
+local function _MSUF_BeginFontGeneration(path, flags, fontKey, force)
+    local tuple = _MSUF_FontTuple(path, flags, fontKey)
+    if not force and _fontSettle.tuple == tuple then return false end
+    _fontSettle.tuple = tuple
+    _fontSettle.path = path
+    _fontSettle.generation = _fontSettle.generation + 1
+    _fontSettle.attempt = 0
+    _fontSettle.pending = false
+    _fontSettle.pendingGeneration = nil
+    _fontSettle.active = true
+    _fontSettle.timedOutTuple = nil
+    _MSUF_BumpFontApplyEpoch()
+    return true
+end
+
+local function _ConfiguredFontReady(path)
+    path = path or _fontSettle.path or _fontState.path or "Fonts\\FRIZQT__.TTF"
     if type(path) ~= "string" or path == "" then return false end
     if not _measureFS then
         if not _G.UIParent then return true end
         _measureFS = _G.UIParent:CreateFontString(nil, "BACKGROUND")
         _measureFS:Hide()
     end
-    if not pcall(_measureFS.SetFont, _measureFS, path, 14, "") then return false end
-    local applied = _measureFS:GetFont()
-    if not applied or tostring(applied):gsub("/", "\\"):lower() ~= tostring(path):gsub("/", "\\"):lower() then
+    local ok, accepted = pcall(_measureFS.SetFont, _measureFS, path, 14, "")
+    if not ok or accepted == false then return false end
+    local readOK, applied, appliedSize = pcall(_measureFS.GetFont, _measureFS)
+    if not readOK or not applied
+        or tostring(applied):gsub("/", "\\"):lower() ~= tostring(path):gsub("/", "\\"):lower()
+        or math.abs((tonumber(appliedSize) or 0) - 14) > 0.01
+    then
         return false
     end
     _measureFS:SetText("ABCabcgjpqy0123")
@@ -130,12 +252,15 @@ end
 local function _MSUF_ClearFontApplyCaches(fs)
     if not fs then return end
     fs._msufFontRev = nil
+    fs._msufFontEpoch = nil
     fs._msufSafeFontPath = nil
     fs._msufSafeFontSize = nil
     fs._msufSafeFontFlags = nil
+    fs._msufSafeFontEpoch = nil
     fs._msufSafeFontRequestPath = nil
     fs._msufSafeFontRequestSize = nil
     fs._msufSafeFontRequestFlags = nil
+    fs._msufSafeFontRequestEpoch = nil
     fs._msufSafeFontAppliedPath = nil
     fs._msufSafeFontSource = nil
 end
@@ -185,7 +310,13 @@ local function _MSUF_ApplyFontCached(fs, size, setColor, cr, cg, cb)
     size = tonumber(size) or 14
 
     local rev = S.pathSerial * 10 + (_MSUF_FONT_FLAGS_CODE[S.flags] or 1) + size * 10000030
-    if fs._msufFontRev ~= rev then
+    local epoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
+    if fs._msufFontRev ~= rev or fs._msufFontEpoch ~= epoch then
+        if fs._msufFontEpoch ~= epoch then
+            -- Also defeats older/external SafeSet implementations whose tuple
+            -- cache predates MSUF's epoch contract.
+            _MSUF_ClearFontApplyCaches(fs)
+        end
         local ok, retryableMismatch = _MSUF_SetFontChecked(fs, S.path, size, S.flags, S.fontKey)
         if not ok and not retryableMismatch then
             local fallback = _G.MSUF_ResolveFontPath and _G.MSUF_ResolveFontPath("Fonts\\FRIZQT__.TTF", size, S.flags) or "Fonts\\FRIZQT__.TTF"
@@ -195,9 +326,11 @@ local function _MSUF_ApplyFontCached(fs, size, setColor, cr, cg, cb)
         end
         if ok then
             fs._msufFontRev = rev
+            fs._msufFontEpoch = epoch
             fs._msufShadowOn = nil
         else
             fs._msufFontRev = nil
+            fs._msufFontEpoch = nil
             _fontApplyFailed = true
         end
     end
@@ -287,7 +420,8 @@ local function _MSUF_ApplyFontsToFrame(f)
     if _origCPT ~= nil then S.colorPowerByType = _origCPT end
 end
 
-local function UpdateAllFonts(onlyKey)
+UpdateAllFonts = function(onlyKey)
+    _fontUpdateDepth = _fontUpdateDepth + 1
     local castbars = ns and ns.Castbars
     local getFontPath = castbars and castbars._GetFontPath or _G.MSUF_GetFontPath
     local getFontFlags = castbars and castbars._GetFontFlags or _G.MSUF_GetFontFlags
@@ -297,6 +431,13 @@ local function UpdateAllFonts(onlyKey)
     EnsureDBSafe()
     local db = _G.MSUF_DB
     local g = (db and db.general) or {}
+    local forceGeneration = _fontSettle.forceNext == true
+    _fontSettle.forceNext = false
+    local newFontGeneration = _MSUF_BeginFontGeneration(path, flags, g.fontKey, forceGeneration)
+    if newFontGeneration then
+        -- Prewarm only; never accept this first sample as final readiness.
+        _ConfiguredFontReady(path)
+    end
     local getColor = (ns and ns.MSUF_GetConfiguredFontColor) or _G.MSUF_GetConfiguredFontColor
     local fr, fg, fb = 1, 1, 1
     if type(getColor) == "function" then
@@ -337,6 +478,7 @@ local function UpdateAllFonts(onlyKey)
     _fontState.UpdateNameColor = _G.MSUF_UpdateNameColor
 
     _fontApplyFailed = false
+    local failureSerialBefore = _fontApplyFailureSerial
     ForEachUnitFrame(_MSUF_ApplyFontsToFrame)
 
     if _G.MSUF_UpdateCastbarVisuals_Immediate then
@@ -349,38 +491,25 @@ local function UpdateAllFonts(onlyKey)
     if _G.MSUF_Auras2_ApplyFontsFromGlobal then _G.MSUF_Auras2_ApplyFontsFromGlobal() end
     if _G.MSUF_ClassPower_ApplyFonts then _G.MSUF_ClassPower_ApplyFonts() end
     if ns and ns.MSUF_ToTInline_RequestRefresh then ns.MSUF_ToTInline_RequestRefresh("FONTS") end
+    if type(_G.MSUF_FocusKick_ApplyTimeTextFont) == "function" then
+        _G.MSUF_FocusKick_ApplyTimeTextFont()
+    end
+    local gf = (ns and ns.GF) or (_G.MSUF_NS and _G.MSUF_NS.GF)
+    if _fontSettle.committing and gf and type(gf.RefreshVisuals) == "function" then
+        if type(gf.InvalidateCdFont) == "function" then gf.InvalidateCdFont() end
+        gf.RefreshVisuals()
+    elseif gf and type(gf.RefreshFonts) == "function" then
+        -- Initial/menu pass: base text only. The single settle commit uses the
+        -- full path once so existing GF aura/spell FontStrings also re-enter
+        -- their epoch gates without doubling the expensive full refresh.
+        gf.RefreshFonts()
+    end
 
-    -- Re-run the text layout once the configured font is loaded + measurable so
-    -- width-dependent anchors recompute; retry via the scheduler on a cold start.
-    local ready = (not _fontApplyFailed) and _ConfiguredFontReady()
-    if ready then
-        _fontRelayoutRetries = 0
-        -- A queued timer cannot be cancelled portably; make its callback a
-        -- no-op when another cold-path refresh already reached readiness.
-        _fontRelayoutRetryPending = false
-        local force = _G.MSUF_ForceTextLayoutForUnitKey
-        if type(force) == "function" then
-            ForEachUnitFrame(function(f)
-                if f then force(f.unit or f.msufConfigKey) end
-            end)
-        end
-    elseif not _fontRelayoutRetryPending and _fontRelayoutRetries < MSUF_FONT_RELAYOUT_MAX_RETRIES then
-        _fontRelayoutRetries = _fontRelayoutRetries + 1
-        _fontRelayoutRetryPending = true
-        local function RetryColdFontApply()
-            if not _fontRelayoutRetryPending then return end
-            _fontRelayoutRetryPending = false
-            UpdateAllFonts()
-        end
-        if _G.MSUF_ScheduleDelayOnce then
-            _G.MSUF_ScheduleDelayOnce("UF_FONT_COLD_RELAYOUT", 0.1, RetryColdFontApply)
-        elseif _G.C_Timer and _G.C_Timer.After then
-            _G.C_Timer.After(0.1, RetryColdFontApply)
-        elseif _G.MSUF_ScheduleOnce then
-            _G.MSUF_ScheduleOnce("UF_FONT_COLD_RELAYOUT", RetryColdFontApply)
-        else
-            _fontRelayoutRetryPending = false
-        end
+    if _fontApplyFailureSerial ~= failureSerialBefore then
+        _fontApplyFailed = true
+    end
+    if _fontSettle.active and not _fontSettle.committing then
+        _MSUF_ScheduleFontProbe()
     end
 
     if _G.MSUF_BossTestMode and _G.MSUF_UnitEditModeActive and not _G.MSUF_InCombat then
@@ -393,6 +522,124 @@ local function UpdateAllFonts(onlyKey)
             end
         end
     end
+    _fontUpdateDepth = _fontUpdateDepth - 1
+    if _fontUpdateDepth == 0 and _fontSettle.lateFailureDuringFanout then
+        _fontSettle.lateFailureDuringFanout = nil
+        _MSUF_ScheduleLateFontRecovery()
+    end
+end
+
+local function _MSUF_ForceSettledTextLayout()
+    local forceFrame = _G.MSUF_ForceTextLayoutForFrame
+    local forceKey = _G.MSUF_ForceTextLayoutForUnitKey
+    if type(forceFrame) ~= "function" and type(forceKey) ~= "function" then return end
+    local seenKeys = type(forceFrame) ~= "function" and {} or nil
+    ForEachUnitFrame(function(f)
+        if not f then return end
+        if type(forceFrame) == "function" then
+            forceFrame(f)
+        else
+            local key = f.msufConfigKey or f.unit
+            local normalize = _G.MSUF_NormalizeTextLayoutUnitKey
+            if type(normalize) == "function" then key = normalize(key) end
+            key = key or "player"
+            if not seenKeys[key] then
+                seenKeys[key] = true
+                forceKey(key)
+            end
+        end
+    end)
+end
+
+_MSUF_RunFontProbe = function(expectedGeneration)
+    if expectedGeneration and expectedGeneration ~= _fontSettle.generation then return end
+    _fontSettle.pending = false
+    _fontSettle.pendingGeneration = nil
+    if not _fontSettle.active then return end
+    if _MSUF_FontCombatLocked() then
+        _MSUF_DeferFontRecoveryAfterCombat(false)
+        return
+    end
+
+    local generation = _fontSettle.generation
+    _fontSettle.attempt = _fontSettle.attempt + 1
+    local ready = _ConfiguredFontReady(_fontSettle.path)
+    if ready then
+        -- The first accepted tuple was provisional. Advancing the epoch makes
+        -- every participating cache issue one real SetFont on this settle pass.
+        _MSUF_BumpFontApplyEpoch()
+        local invalidate = _G.MSUF_InvalidateFontMetricCaches
+        if type(invalidate) == "function" then
+            invalidate()
+        else
+            _G.MSUF_NameWidthAvgCache = nil
+        end
+
+        _fontSettle.committing = true
+        UpdateAllFonts()
+        _fontSettle.committing = false
+
+        if generation ~= _fontSettle.generation then
+            _MSUF_ScheduleFontProbe()
+            return
+        end
+        if not _fontApplyFailed then
+            _fontSettle.active = false
+            _fontSettle.attempt = 0
+            _MSUF_ForceSettledTextLayout()
+            return
+        end
+    end
+
+    if generation == _fontSettle.generation
+        and _fontSettle.active
+        and _fontSettle.attempt < #MSUF_FONT_SETTLE_DELAYS
+    then
+        _MSUF_ScheduleFontProbe()
+    else
+        -- The readable fallback from the initial fanout remains in place.
+        -- A later profile/path change or matching LSM registration starts a
+        -- fresh generation with a fresh retry budget.
+        _fontSettle.active = false
+        _fontSettle.timedOutTuple = _fontSettle.tuple
+    end
+end
+
+_MSUF_ScheduleFontProbe = function()
+    if _fontSettle.pending or not _fontSettle.active then return end
+    local delay = MSUF_FONT_SETTLE_DELAYS[_fontSettle.attempt + 1]
+    if not delay then
+        _fontSettle.active = false
+        _fontSettle.timedOutTuple = _fontSettle.tuple
+        return
+    end
+    local generation = _fontSettle.generation
+    local function RunCapturedFontProbe()
+        if generation ~= _fontSettle.generation then return end
+        _MSUF_RunFontProbe(generation)
+    end
+    _fontSettle.pending = true
+    _fontSettle.pendingGeneration = generation
+    local key = "UF_FONT_COLD_RELAYOUT_" .. tostring(generation)
+    if _G.MSUF_ScheduleDelayOnce then
+        _G.MSUF_ScheduleDelayOnce(key, delay, RunCapturedFontProbe)
+    elseif _G.C_Timer and _G.C_Timer.After then
+        _G.C_Timer.After(delay, RunCapturedFontProbe)
+    elseif _G.MSUF_ScheduleOnce then
+        _G.MSUF_ScheduleOnce(key, RunCapturedFontProbe)
+    else
+        _fontSettle.pending = false
+        _fontSettle.active = false
+    end
+end
+
+function _G.MSUF_RequestFontRecovery()
+    _fontSettle.forceNext = true
+    if _MSUF_FontCombatLocked() then
+        _MSUF_DeferFontRecoveryAfterCombat(true)
+        return false
+    end
+    return UpdateAllFonts()
 end
 
 Export("MSUF_UpdateAllFonts", UpdateAllFonts, "UpdateAllFonts")
@@ -445,6 +692,6 @@ do
     kick:RegisterEvent("PLAYER_ENTERING_WORLD")
     kick:SetScript("OnEvent", function(self)
         self:UnregisterEvent("PLAYER_ENTERING_WORLD")
-        UpdateAllFonts()
+        _G.MSUF_RequestFontRecovery("PLAYER_ENTERING_WORLD")
     end)
 end

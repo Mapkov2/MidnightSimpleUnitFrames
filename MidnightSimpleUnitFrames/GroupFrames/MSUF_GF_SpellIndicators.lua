@@ -1,4 +1,4 @@
-﻿-- MSUF_GF_SpellIndicators.lua - Group Frames: Per-Spell Indicator Engine
+-- MSUF_GF_SpellIndicators.lua — Group Frames: Per-Spell Indicator Engine
 -- Tracks player-cast healer HoTs on party/raid members.
 -- 2-tier: placed indicators (icon/square/bar/number) + frame effects (healthtint/border/glow/pulse/namecolor/framealpha).
 -- Uses proven HealerBuffs scan pattern (HELPFUL filter, spellId lookup).
@@ -1154,13 +1154,27 @@ local function ApplyPlacedCooldownFont(ind, cfg, fontSizeOverride)
         ff = GF and GF.ResolveFontFlags and GF.ResolveFontFlags() or "OUTLINE"
     end
     local wantFlags = cfg.cooldownOutline or ff or "OUTLINE"
+    local fontEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
     if cd._msufGFCdTextSize ~= cdSize or cd._msufGFCdFontPath ~= fp
-        or cd._msufGFCdFontFlags ~= wantFlags
+        or cd._msufGFCdFontFlags ~= wantFlags or cd._msufGFCdFontEpoch ~= fontEpoch
     then
-        fs:SetFont(fp, cdSize, wantFlags)
-        cd._msufGFCdTextSize = cdSize
-        cd._msufGFCdFontPath = fp
-        cd._msufGFCdFontFlags = wantFlags
+        local applied = false
+        local general = _G.MSUF_DB and _G.MSUF_DB.general
+        if type(_G.MSUF_SetFontSafe) == "function" then
+            applied = _G.MSUF_SetFontSafe(fs, fp, cdSize, wantFlags, general and general.fontKey) == true
+        else
+            local ok, result = pcall(fs.SetFont, fs, fp, cdSize, wantFlags)
+            applied = ok and result ~= false
+        end
+        if applied then
+            cd._msufGFCdTextSize = cdSize
+            cd._msufGFCdFontPath = fp
+            cd._msufGFCdFontFlags = wantFlags
+            cd._msufGFCdFontEpoch = fontEpoch
+        else
+            cd._msufGFCdFontEpoch = nil
+            if type(_G.MSUF_MarkFontApplyFailed) == "function" then _G.MSUF_MarkFontApplyFailed() end
+        end
     end
     if cd._msufGFCdAnchor ~= "CENTER" or cd._msufGFCdOX ~= 0 or cd._msufGFCdOY ~= 0 then
         cd._msufGFCdAnchor = "CENTER"
