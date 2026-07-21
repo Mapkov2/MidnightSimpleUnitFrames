@@ -8,10 +8,45 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-Beta24",
-    previousVersion = "6.0-Beta23",
-    rangeLabel = "6.0-Beta23 -> 6.0-Beta24",
+    currentVersion = "6.0-Beta25",
+    previousVersion = "6.0-Beta24",
+    rangeLabel = "6.0-Beta24 -> 6.0-Beta25",
     entries = {
+        {
+            version = "6.0-Beta25",
+            date = "2026-07-21",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Added a Maximum Health Loss overlay that shows temporarily unavailable health directly on Unit Frames and Group Frames.",
+                        "Expanded text styling with scoped shadow controls and independent font sizes for each left, center, and right Health/Power text slot.",
+                        "Added real opacity controls for Health and Power backgrounds, including exact live-preview parity and consistent class-colored backgrounds.",
+                        "Refined Menu2 with compact reference previews, clearer shared settings layouts, and highlighted open accordion sections.",
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Added compact and expanded preview modes across Unit Frame, Group Frame, Class Resource, and Color Painter workflows.",
+                        "Unified repeated settings and color-card layouts for clearer navigation and more consistent controls.",
+                        "Improved Group Preview ownership so heavy native previews can be reused safely between Group Frame pages.",
+                        "Updated all supported locales for the new font, background, preview, and maximum-health-loss controls.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Reduced Menu2 opening, resizing, search, font-refresh, Color Painter, and preview work through lazy section builds, reusable layouts, cached control metadata, and pooled preview targets.",
+                        "Cached normalized search queries, font probes, profile reads, and Aura default seeding without adding idle or combat polling.",
+                        "Fixed slider drags so the complete gesture, including the final released value, creates exactly one Undo/Redo step.",
+                        "Fixed rounded frame masks on login and kept class-colored backgrounds correct for players, NPCs, pets, bosses, and temporarily missing units.",
+                        "Prevented background opacity from being multiplied twice and kept color changes attached to the active imported profile.",
+                        "Expanded Lua 5.1 regression coverage for Menu2 cold paths, preview lifecycles, text-slot sizing, opacity, history, Auras, and rounded-frame startup.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-Beta24",
             date = "2026-07-21",
@@ -99,35 +134,6 @@ local data = {
                         "Reduced Unit Frame and Menu runtime work, especially during combat.",
                         "Preserved legacy group text geometry, class-resource stacks, and character keybindings.",
                         "Completed Beta 22 Menu translations and regression coverage.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-Beta21",
-            date = "2026-07-18",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Added separate Blizzard-frame controls for each unit.",
-                        "Completed all Menu2 and Priority Frames translations.",
-                        "Added ten new bar textures.",
-                        "Expanded text, absorb, and prediction settings.",
-                        "Improved cooldown-frame width syncing.",
-                        "Reduced Menu and Guided Tour workload.",
-                    },
-                },
-                {
-                    title = "Fixes",
-                    bullets = {
-                        "Frames and previews now stay on screen.",
-                        "Fixed incorrect pet-frame colors.",
-                        "Fixed Color Painter previews.",
-                        "Preview zoom is now preserved.",
-                        "Improved old profile migration.",
-                        "Improved Assistant controls and recovery.",
-                        "Added more regression tests.",
                     },
                 },
             },
