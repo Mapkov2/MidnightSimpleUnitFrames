@@ -648,7 +648,15 @@ local function BuildCastbar(ctx, builder, unit)
         if not canUseBlizzardProvider then return end
         local backend = NormalizeBackend(value)
         if backend == "HIDE" then backend = "MSUF" end
+        local previousBackend = ReadCastbarBackend()
         SetCastbarBackend(backend)
+        if backend == "BLIZZARD" and previousBackend ~= "BLIZZARD" then
+            if type(_G.MSUF_ShowReloadRecommendedPopup) == "function" then
+                _G.MSUF_ShowReloadRecommendedPopup("Player Blizzard castbar")
+            elseif _G.print then
+                _G.print("|cffffd700MSUF:|r Switching to the Blizzard player castbar requires a /reload.")
+            end
+        end
     end
     local function SetCastbarEnabled(enabled)
         if enabled then
