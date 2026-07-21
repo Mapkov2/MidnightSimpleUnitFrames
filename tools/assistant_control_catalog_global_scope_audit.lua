@@ -115,13 +115,14 @@ AuditNamedCalls("Shell/Menu2/Preview/MSUF_Menu2_ClassPowerPreview.lua", { "Regis
     previewRegistrationCalls = previewRegistrationCalls + 1
     local hasSemanticPath = call:find('"handle%.') or call:find('"layer%.') or call:find('"animation%.') or call:find('"keyboard%.')
         or call:find('"zoom%.') or call:find('"hint%.') or call:find('"canvas"') or call:find('"pin%.')
+        or call:find('"height%.')
         or call:find("info[2]", 1, true)
     return hasSemanticPath ~= nil, "has no stable Class Resources preview semantic path"
 end)
 
 local previewSemanticPaths = {
     "canvas", "keyboard.nudge_surface", "zoom.surface", "zoom.out", "zoom.fit", "zoom.one_to_one", "zoom.in", "zoom.help",
-    "hint.dismiss", "animation.toggle", "pin.toggle",
+    "hint.dismiss", "animation.toggle", "pin.toggle", "height.toggle", "layer.popover",
 }
 for _, key in ipairs({ "guides", "border", "reference", "class", "classText", "power", "powerText", "hp", "hpText", "bounds" }) do
     previewSemanticPaths[#previewSemanticPaths + 1] = "layer." .. key

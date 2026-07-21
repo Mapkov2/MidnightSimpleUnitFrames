@@ -45,7 +45,11 @@ Require(support:find("function M.BindBoolWidget(ctx, widget, getValue, setValue,
 Require(support:find("function M.BindToggleAt(ctx, parent, label, x, y, width, getValue, setValue, metadata)", 1, true), "BindToggleAt has no metadata migration path")
 Require(support:find("function M.BindDropdownAt(ctx, parent, label, x, y, values, width, getValue, setValue, metadata)", 1, true), "BindDropdownAt has no metadata migration path")
 Require(widgets:find("M.BindBoolWidget(ctx, widget, row.get, row.set, row)", 1, true), "declarative card rows do not pass control metadata")
-Require(search:find('}, "search")', 1, true), "RegisterSearchWidget does not feed the catalog")
+local searchFeedsCatalogDirectly = search:find('}, "search")', 1, true)
+local searchFeedsCatalogViaScratch = search:find("local function RegisterSearchRuntimeControl", 1, true)
+    and search:find('M.RegisterRuntimeControl, widget, payload, "search"', 1, true)
+    and search:find("catalogId = RegisterSearchRuntimeControl(", 1, true)
+Require(searchFeedsCatalogDirectly or searchFeedsCatalogViaScratch, "RegisterSearchWidget does not feed the catalog")
 Require(search:find('}, "search-command")', 1, true), "resolved button commands do not feed the catalog")
 Require(search:find("M.ClearRuntimeControlsForPage", 1, true), "page invalidation does not clear catalog records")
 
