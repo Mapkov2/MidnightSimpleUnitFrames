@@ -1026,6 +1026,73 @@ function W.BuildCard(ctx, parent, spec)
     end
     return { card = card, controls = controls, gate = gate }
 end
+
+--- Uniform multi-column settings rows inside an EXISTING section or card (the
+--- "Zeilen-Grid" building block): fixed cell metrics, cells flow left-to-right
+--- then top-to-bottom, optional per-row reset-to-default action. Uses the same
+--- row specs, constructors and binders as W.BuildCard, so converted sections
+--- keep their control behavior and Assistant metadata unchanged.
+---
+--- spec = {
+---   x?, y?, width?, columns? (default 2), colGap?, rowGap?,
+---   rows = { { <BuildCardControl row fields> , reset? = function } , ... },
+--- }
+--- A row's `reset` writes its default through the row's own apply path; the
+--- glyph next to the control stays dim until hovered.
+--- Returns { controls = <id -> widget>, list = { widgets... },
+---           resets = { buttons... }, bottomY = <next free y> }.
+function W.SettingsRows(ctx, parent, spec)
+    if not (parent and type(spec) == "table") then return nil end
+    local rows = spec.rows or {}
+    local width = spec.width or ((parent._msuf2Width or 400) - 32)
+    local columns = max(1, spec.columns or 2)
+    local colGap = spec.colGap or 18
+    local rowGap = spec.rowGap or 6
+    local x0 = spec.x or 16
+    local colW = floor((width - colGap * (columns - 1)) / columns)
+    local y = spec.y or -34
+    local controls, list, resets = {}, {}, {}
+    local col, rowH = 0, 0
+    for i = 1, #rows do
+        local row = rows[i]
+        local kind = row.kind or row.type
+        local cellH = row.height or CARD_ROW_HEIGHT[kind] or 30
+        local x = x0 + col * (colW + colGap)
+        local hasReset = type(row.reset) == "function"
+        local widget = BuildCardControl(ctx, parent, row, x, y, colW - (hasReset and 22 or 0))
+        if widget then
+            if row.id then controls[row.id] = widget end
+            list[#list + 1] = widget
+            if hasReset then
+                local resetBtn = CreateFrame("Button", nil, parent)
+                resetBtn:SetSize(18, 18)
+                resetBtn:SetPoint("TOPLEFT", parent, "TOPLEFT", x + colW - 17, y - (kind == "slider" and 20 or 4))
+                local glyph = T.Font(resetBtn, "GameFontDisableSmall", "\226\134\186", T.colors.muted)
+                glyph:SetPoint("CENTER", resetBtn, "CENTER", 0, 0)
+                resetBtn:SetAlpha(0.35)
+                resetBtn:SetScript("OnEnter", function(self) self:SetAlpha(1) end)
+                resetBtn:SetScript("OnLeave", function(self) self:SetAlpha(0.35) end)
+                resetBtn:SetScript("OnClick", function()
+                    row.reset()
+                    if M.RequestRefresh then M.RequestRefresh(ctx, "settings-row-reset") end
+                end)
+                if M.AddTooltip then
+                    M.AddTooltip(resetBtn, Tr(CardResolve(row.label) or "Setting"), Tr("Reset this value to its default."), { hook = true })
+                end
+                resets[#resets + 1] = resetBtn
+            end
+        end
+        rowH = max(rowH, cellH)
+        col = col + 1
+        if col >= columns then
+            col = 0
+            y = y - rowH - rowGap
+            rowH = 0
+        end
+    end
+    if col > 0 then y = y - rowH - rowGap end
+    return { controls = controls, list = list, resets = resets, bottomY = y }
+end
 local function TopButtonStyle(bg, border, textColor, hoverBg, hoverBorder)
     return {
         bg = bg, border = border, textColor = textColor,

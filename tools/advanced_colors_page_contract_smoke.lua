@@ -87,6 +87,11 @@ assert(source:find("local function PendingColorFocusCategory", 1, true), "catego
 assert(source:find("if ctx.hiddenBuild then", 1, true), "hidden (coverage) builds no longer materialize every category")
 assert(source:find("_msuf2ResolveMissingSection", 1, true), "cross-page focus requests can no longer materialize lazy categories")
 assert(source:find("_msuf2EnsureVisible", 1, true), "focused sections can no longer reveal their category")
+assert(not source:find("if activeKey ~= categoryKey then", 1, true),
+    "same-category activation can leave the active color settings container hidden")
+assert(not source:find("local categorySpecs = {}", 1, true)
+    and source:find("topInset = 0", 1, true),
+    "Color settings still insert a redundant category headline between navigation and controls")
 assert(source:find("for i = count + 1, #slotControls do W.SetControlShown(slotControls[i], false) end", 1, true), "class-power slot visibility lost its initial delta path")
 assert(not source:find("M.TrackRefresh(ctx, RefreshSlotControls)\n    RefreshSlotControls()", 1, true), "class-power slot visibility refresh runs twice during page build")
 local widgetsFile = assert(io.open("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Widgets.lua", "rb"))

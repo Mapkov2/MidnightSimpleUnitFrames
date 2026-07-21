@@ -357,7 +357,55 @@ end
 
 function P.Build(ctx, builder, categories)
     if not (ctx and builder and type(categories) == "table" and #categories > 0) then return nil end
-    local section = builder:CollapsibleSection("colors_preview", "Color Preview", 478, true)
+    local valid = {}
+    local selectorValues = {}
+    for i = 1, #categories do
+        local category = categories[i]
+        valid[category.key] = true
+        selectorValues[i] = { value = category.key, text = category.shortTitle or category.title }
+    end
+    local function Current() return valid[M.colorsPainterCategory] and M.colorsPainterCategory or categories[1].key end
+    local ShowCategory
+
+    -- Category choice is page navigation, not preview chrome.  Keep it outside
+    -- the collapsible preview so the active settings remain reachable even
+    -- when the preview is closed or temporarily pinned.
+    local pageW = tonumber(builder.width) or tonumber(ctx.width) or 720
+    local selectorOpts = {
+        values = selectorValues,
+        width = pageW,
+        label = "Editing:",
+        labelWidth = 64,
+        centerY = -27,
+        getValue = Current,
+        setValue = function(value)
+            if ShowCategory then ShowCategory(value) end
+        end,
+    }
+    local selectorMetrics = W.MeasureScopeOverrideBar and W.MeasureScopeOverrideBar(selectorValues, selectorOpts)
+    local selectorH = max(54, math.abs((selectorMetrics and selectorMetrics.bottomY) or -39) + 14)
+    local selector = (T.Panel and T.Panel(builder.parent, nil, T.colors.glassStatus or T.colors.header, T.colors.borderSoft))
+        or CreateFrame("Frame", nil, builder.parent)
+    if T.ApplySurface then T.ApplySurface(selector, "status") end
+    selector:SetPoint("TOPLEFT", builder.parent, "TOPLEFT", builder.x, builder.y)
+    selector:SetSize(pageW, selectorH)
+    selector._msuf2Width = pageW
+    builder.y = builder.y - selectorH - 8
+    if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(builder.y) + 28) end
+    if W.RegisterGuidedRegion then W.RegisterGuidedRegion(ctx, selector, "Color editing category", "colors_scope") end
+    local categoryBar = W.ScopeOverrideBar and W.ScopeOverrideBar(ctx, selector, selectorOpts)
+    RegisterControl(categoryBar,
+        ControlMeta("opt_colors", "advanced", "preview.scope.selector", "ephemeral"),
+        "Editing", "segment", selectorValues)
+    if categoryBar and categoryBar.buttons and M.AddTooltip then
+        for i = 1, #categories do
+            local category = categories[i]
+            M.AddTooltip(categoryBar.buttons[i], Tr(category.title or category.shortTitle or ""),
+                Tr(category.subtitle or ""), { hook = true })
+        end
+    end
+
+    local section = builder:CollapsibleSection("colors_preview", "Color Preview", 452, true)
     section._msuf2CollapsibleBadgesShowWhenClosed = true
     if W.SetCollapsibleBadges then
         W.SetCollapsibleBadges(section, {{ text = "Live", kind = "accent", showWhenClosed = true }})
@@ -365,12 +413,9 @@ function P.Build(ctx, builder, categories)
     local width = section._msuf2Width or ctx.width or 720
     local innerW = width - 32
 
-    local tabsY, gap = -10, 6
-    local tabW = floor((innerW - gap * (#categories - 1)) / #categories)
-    local tabButtons = {}
     local previewW = innerW
     local host = CreateFrame("Frame", nil, section)
-    host:SetPoint("TOPLEFT", section, "TOPLEFT", 16, -62)
+    host:SetPoint("TOPLEFT", section, "TOPLEFT", 16, -36)
     host:SetSize(previewW, 350)
     local shield = InstallColorOnlyShield(host)
 
@@ -526,7 +571,7 @@ function P.Build(ctx, builder, categories)
     -- Hint line: makes the clickable preview discoverable and doubles as the
     -- status line for the palette brush.
     local HINT_BASE = "Click an element in the preview to edit its colors. Right-click a color swatch to reset it to default."
-    local hintLine = Label(section, HINT_BASE, 16, -418, innerW, T.colors.muted)
+    local hintLine = Label(section, HINT_BASE, 16, -392, innerW, T.colors.muted)
     local hintResetSerial = 0
     local function SetHintStatus(text, holdSeconds)
         hintResetSerial = hintResetSerial + 1
@@ -575,13 +620,13 @@ function P.Build(ctx, builder, categories)
             SetHintStatus(nil)
         end
     end
-    local paletteLabel = Label(section, "My colors", 16, -442, 96, T.colors.dim, "GameFontNormalSmall")
+    local paletteLabel = Label(section, "My colors", 16, -416, 96, T.colors.dim, "GameFontNormalSmall")
     paletteLabel:SetJustifyH("LEFT")
     local paletteX = 96
     for i = 1, PALETTE_SLOTS do
         local slot = CreateFrame("Button", nil, section)
         slot:SetSize(26, 16)
-        slot:SetPoint("TOPLEFT", section, "TOPLEFT", paletteX + 16 + (i - 1) * 32, -440)
+        slot:SetPoint("TOPLEFT", section, "TOPLEFT", paletteX + 16 + (i - 1) * 32, -414)
         slot:RegisterForClicks("LeftButtonUp", "RightButtonUp")
         slot._msuf2Fill, slot._msuf2Edge = T.CreateSuperellipseLayers(slot, "_msuf2PaletteSwatch", 1, "ARTWORK", "OVERLAY")
         local hover = slot:CreateTexture(nil, "HIGHLIGHT")
@@ -633,7 +678,7 @@ function P.Build(ctx, builder, categories)
         if M.colorsBrushHex and not seen[M.colorsBrushHex] then M.colorsBrushHex = nil end
         if not paletteEmptyHint then
             paletteEmptyHint = Label(section, "Save or pick colors in the color picker to reuse them here.",
-                paletteX + 16, -442, innerW - paletteX - 16, T.colors.dim, "GameFontNormalSmall")
+                paletteX + 16, -416, innerW - paletteX - 16, T.colors.dim, "GameFontNormalSmall")
         end
         paletteEmptyHint:SetShown(shown == 0)
         RefreshPaletteBrushVisuals()
@@ -693,27 +738,12 @@ function P.Build(ctx, builder, categories)
         W.OpenColorContextPicker(spec.label or category.title, owners, category.pickerNote, initialOwner)
         return true
     end
-    for i = 1, #categories do
-        local category = categories[i]
-        local tab = T.Button(section, category.shortTitle or category.title, tabW, 26)
-        tab:SetPoint("TOPLEFT", section, "TOPLEFT", 16 + (i - 1) * (tabW + gap), tabsY)
-        if M.AddTooltip then
-            M.AddTooltip(tab, Tr(category.title or category.shortTitle or ""),
-                Tr(category.subtitle or ""), { hook = true })
-        end
-        RegisterControl(tab,
-            ControlMeta("opt_colors", "advanced", "preview.scope.option." .. tostring(category.key), "ephemeral"),
-            category.shortTitle or category.title, "button")
-        tabButtons[category.key] = tab
-    end
-    -- The active tab filters preview AND section list; this line says what the
-    -- tab covers so the labels do not have to carry it alone.
-    local tabDescription = Label(section, "", 16, -40, innerW, T.colors.muted)
+    -- The external Editing navigator filters preview AND section list.  Keep a
+    -- concise description in the preview card so its current content remains
+    -- clear without duplicating the selector.
+    local tabDescription = Label(section, "", 16, -14, innerW, T.colors.muted)
 
     local clickTargets = {}
-    local valid = {}
-    for i = 1, #categories do valid[categories[i].key] = true end
-    local function Current() return valid[M.colorsPainterCategory] and M.colorsPainterCategory or categories[1].key end
     local function FocusColorSection(sectionId)
         sectionId = sectionId or CATEGORY_SECTION[Current()]
         local target = EnsureSectionForPaint(sectionId)
@@ -866,7 +896,7 @@ function P.Build(ctx, builder, categories)
             resourcesStrip.Update()
         end
     end)
-    local function ShowCategory(key)
+    ShowCategory = function(key)
         if not valid[key] then key = categories[1].key end
         if M.SetMenuStateValue then M.SetMenuStateValue("colorsPainterCategory", key) else M.colorsPainterCategory = key end
         local category
@@ -896,7 +926,7 @@ function P.Build(ctx, builder, categories)
             RequestPreview(groupBox, "MSUF2_COLOR_PAINTER_GROUP")
             HideGroupPreviewIcons(groupBox)
         end
-        for id, button in pairs(tabButtons) do if button.SetActive then button:SetActive(id == key) end end
+        if categoryBar and categoryBar.Refresh then categoryBar:Refresh() end
         if category then
             tabDescription:SetText(Tr(category.subtitle or ""))
             if strip then
@@ -913,11 +943,6 @@ function P.Build(ctx, builder, categories)
         if type(M.ColorsOnPainterCategory) == "function" then M.ColorsOnPainterCategory(key) end
     end
     M.ColorsSetPainterCategory = ShowCategory
-    for key, button in pairs(tabButtons) do
-        button:SetScript("OnClick", function()
-            ShowCategory(key)
-        end)
-    end
     local function EnsurePreviewAttachment()
         if not W.AttachPinnedPreview then return end
         local pageKey = ctx and ctx.key
@@ -937,7 +962,7 @@ function P.Build(ctx, builder, categories)
                 pageKey = pageKey,
                 wrapper = wrapper,
                 restoreParent = section,
-                restorePoint = { "TOPLEFT", section, "TOPLEFT", 16, -62 },
+                restorePoint = { "TOPLEFT", section, "TOPLEFT", 16, -36 },
                 restoreWidth = previewW,
                 restoreHeight = 350,
             })

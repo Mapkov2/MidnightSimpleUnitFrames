@@ -116,6 +116,8 @@ function T.Button(parent, text, width, height)
     button:SetSize(width, height)
     return button
 end
+function T.Panel(parent) return NewFrame(parent) end
+function T.ApplySurface() end
 function T.CreateSuperellipseLayers(parent)
     local fill, edge = parent:CreateTexture(), parent:CreateTexture()
     function edge:SetVertexColor(...) self.vertexColor = { ... } end
@@ -128,6 +130,14 @@ function W.AttachPinnedPreview(body, box, opts)
     attachCalls[#attachCalls + 1] = record
     return record
 end
+function W.MeasureScopeOverrideBar() return { bottomY = -39 } end
+local selectorParent
+function W.ScopeOverrideBar(_, parent, opts)
+    selectorParent = parent
+    local bar = NewFrame(parent)
+    function bar:Refresh() self.value = opts.getValue() end
+    return bar
+end
 function M.TrackRefresh(_, callback) refreshers[#refreshers + 1] = callback end
 function M.SetMenuStateValue(key, value) M[key] = value end
 function M.AddTooltip() end
@@ -135,7 +145,7 @@ function M.AddTooltip() end
 local wrapper = NewFrame()
 local section = NewFrame(wrapper)
 section._msuf2Width = 900
-local builder = {}
+local builder = { parent = wrapper, x = 12, y = -12, width = 900 }
 function builder:CollapsibleSection(id)
     assert(id == "colors_preview", "unexpected Color Painter section")
     return section
@@ -161,6 +171,8 @@ local painter = assert(M.ColorPainter and M.ColorPainter.Build, "Color Painter b
 local ctx = { key = "opt_colors", width = 900, wrapper = wrapper }
 painter(ctx, builder, { { key = "unit", title = "Bars & Text" } })
 
+assert(selectorParent and selectorParent:GetParent() == wrapper,
+    "Color category selector is still coupled to the preview section")
 assert(#attachCalls == 1, "initial Color Painter pin attachment was not unique")
 assert(#previewBoxes == 2, "Color Painter did not create Player and Target previews")
 local host = assert(attachCalls[1].box, "Color Painter preview host missing")
