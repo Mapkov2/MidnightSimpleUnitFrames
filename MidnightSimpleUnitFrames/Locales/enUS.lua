@@ -2429,3 +2429,9 @@ L["Opens the shared Text Colors settings below - color modes for name, HP and po
 -- Color painter: selector-dependent preview targets navigate to their section.
 L["Opens the Resources colors below - pick the power type there, then set its color."] = "Opens the Resources colors below - pick the power type there, then set its color."
 L["Opens the Resources colors below - pick the Class Resource there, then set its colors."] = "Opens the Resources colors below - pick the Class Resource there, then set its colors."
+
+-- Colors workspace technical category labels.
+L["colors_appearance"] = "colors_appearance"
+L["colors_bar_colors"] = "colors_bar_colors"
+L["group"] = "group"
+L["unit"] = "unit"
