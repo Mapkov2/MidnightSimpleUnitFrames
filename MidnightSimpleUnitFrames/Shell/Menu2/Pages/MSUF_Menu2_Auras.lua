@@ -572,6 +572,16 @@ local function BuildAuraStyleScopeOverrideSection(ctx, b)
         if segment and segment.Refresh then segment:Refresh() end
         hint:SetWidth(ctx.width - 28)
     end)
+    if W.AttachStickyPageHeader then
+        W.AttachStickyPageHeader(section, {
+            pageKey = ctx and ctx.key,
+            wrapper = ctx and ctx.wrapper,
+            gap = 4,
+            builder = b,
+            ctx = ctx,
+            flowGap = 12,
+        })
+    end
     return CurrentScope()
 end
 local function FinishPage(ctx, b)

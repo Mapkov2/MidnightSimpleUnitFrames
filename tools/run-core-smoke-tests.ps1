@@ -104,6 +104,7 @@ $tests = @(
     ".github/scripts/tests/legacy573_group_name_and_classpower_quick_smoke.lua",
     ".github/scripts/tests/level_name_anchor_smoke.lua",
     ".github/scripts/tests/menu2_compact_preview_family_smoke.lua",
+    ".github/scripts/tests/menu2_sticky_page_header_lifecycle_smoke.lua",
     ".github/scripts/tests/menu2_visible_page_layout_settle_smoke.lua",
     ".github/scripts/tests/menu2_search_normalization_cache_smoke.lua",
     ".github/scripts/tests/menu_refresh_proxy_smoke.lua",

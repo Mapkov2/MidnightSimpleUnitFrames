@@ -581,6 +581,16 @@ local function ScopeSection(ctx, builder, opts)
             "Profile-wide · follows the active Party, Raid, or Mythic Raid frame appearance",
             16, noteY, pageW - 32, T.colors.muted)
         if note and note.SetJustifyH then note:SetJustifyH("LEFT") end
+        if W.AttachStickyPageHeader then
+            W.AttachStickyPageHeader(sec, {
+                pageKey = ctx and ctx.key,
+                wrapper = ctx and ctx.wrapper,
+                gap = 4,
+                builder = builder,
+                ctx = ctx,
+                flowGap = 8,
+            })
+        end
         return sec
     end
 
@@ -645,6 +655,16 @@ local function ScopeSection(ctx, builder, opts)
         end)
     end
     sec:SetScript("OnHide", function() if copyPopup then copyPopup.Hide() end end)
+    if W.AttachStickyPageHeader then
+        W.AttachStickyPageHeader(sec, {
+            pageKey = ctx and ctx.key,
+            wrapper = ctx and ctx.wrapper,
+            gap = 4,
+            builder = builder,
+            ctx = ctx,
+            flowGap = 8,
+        })
+    end
     local function RefreshTop()
         local current = CurrentScope()
         for i = 1, #SCOPE_VALUES do

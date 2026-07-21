@@ -2161,7 +2161,9 @@ local function AnchorTourScroll(chrome, active)
     local scroll = chrome.scroll
     local topOwner = chrome.status
     if active then topOwner = chrome end
-    if scroll._msuf2TourAnchorOwner ~= topOwner or scroll._msuf2TourAnchorHost ~= chrome.host then
+    if type(M.LayoutPageHeaderHost) == "function" then
+        M.LayoutPageHeaderHost(topOwner, chrome.host)
+    elseif scroll._msuf2TourAnchorOwner ~= topOwner or scroll._msuf2TourAnchorHost ~= chrome.host then
         scroll:ClearAllPoints()
         scroll:SetPoint("TOPLEFT", topOwner, "BOTTOMLEFT", 0, 0)
         scroll:SetPoint("BOTTOMRIGHT", chrome.host, "BOTTOMRIGHT", -24, 0)

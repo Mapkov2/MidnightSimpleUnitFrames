@@ -426,6 +426,16 @@ function P.Build(ctx, builder, categories)
                 Tr(category.subtitle or ""), { hook = true })
         end
     end
+    if W.AttachStickyPageHeader then
+        W.AttachStickyPageHeader(selector, {
+            pageKey = ctx and ctx.key,
+            wrapper = ctx and ctx.wrapper,
+            gap = 4,
+            builder = builder,
+            ctx = ctx,
+            flowGap = 8,
+        })
+    end
 
     local section = builder:CollapsibleSection("colors_preview", "Color Preview", 452, true)
     section._msuf2CollapsibleBadgesShowWhenClosed = true

@@ -2567,6 +2567,128 @@ function W.Button(section, label, width)
     btn:SetPoint("TOPLEFT", x, y)
     return btn
 end
+
+--- Register a page-owned editing/navigation panel for the fixed header slot.
+---
+--- Registration is intentionally passive: page selection in Window.lua owns
+--- activation synchronously.  Inactive panels stay with their page wrapper,
+--- so cache invalidation cannot strand the panel (and its surface textures)
+--- under the shared window header host.
+function W.AttachStickyPageHeader(section, opts)
+    if not section then return nil end
+    opts = opts or {}
+    local ctx = opts.ctx
+    local entry = ctx and ctx.entry
+    if type(entry) ~= "table" then return nil end
+    if entry.pageHeader then return entry.pageHeader end
+
+    local originalParent = (section.GetParent and section:GetParent()) or opts.wrapper
+    local point, relativeTo, relativePoint, originalX, originalY
+    if section.GetPoint then
+        point, relativeTo, relativePoint, originalX, originalY = section:GetPoint(1)
+    end
+    point = point or "TOPLEFT"
+    relativeTo = relativeTo or originalParent
+    relativePoint = relativePoint or point
+    originalX, originalY = tonumber(originalX) or 0, tonumber(originalY) or 0
+    local originalWidth = tonumber(section.GetWidth and section:GetWidth()) or 0
+    local originalHeight = tonumber(section.GetHeight and section:GetHeight()) or 0
+    local originalFrameLevel = (section.GetFrameLevel and section:GetFrameLevel()) or 1
+    local headerX = tonumber(opts.left) or originalX
+    local headerY = tonumber(opts.top)
+    if headerY == nil then headerY = originalY end
+    local headerTopInset = max(0, -headerY)
+    local stickyGap = max(0, tonumber(opts.gap) or 0)
+
+    if section.EnableMouse then section:EnableMouse(true) end
+    local builder = opts.builder
+    if builder and not section._msuf2PageHeaderFlowReleased then
+        local flowGap = max(0, tonumber(opts.flowGap) or 12)
+        local sectionHeight = originalHeight
+        -- The original first panel starts at PageBuilder's -12 inset.  That
+        -- inset now belongs to the fixed header, so release it from the new
+        -- ScrollFrame flow as well; otherwise top padding is counted twice.
+        builder.y = (tonumber(builder.y) or 0) + sectionHeight + flowGap + headerTopInset
+        section._msuf2PageHeaderFlowReleased = true
+        if ctx and ctx.SetContentHeight then
+            ctx:SetContentHeight(math.abs(builder.y) + 28)
+        end
+    end
+
+    local record = {
+        entry = entry,
+        section = section,
+        pageKey = opts.pageKey or entry.key,
+        originalParent = originalParent,
+        originalPoint = point,
+        originalRelativeTo = relativeTo,
+        originalRelativePoint = relativePoint,
+        originalX = originalX,
+        originalY = originalY,
+        originalWidth = originalWidth,
+        originalHeight = originalHeight,
+        originalFrameLevel = originalFrameLevel,
+        headerX = headerX,
+        headerY = headerY,
+        hostHeight = max(0, headerTopInset + originalHeight + stickyGap),
+    }
+
+    function record:Activate(headerHost)
+        if self.disposed or not headerHost or self.entry.pageHeader ~= self then return false end
+        local activeHeight = tonumber(section.GetHeight and section:GetHeight()) or self.originalHeight
+        if activeHeight <= 0 then activeHeight = self.originalHeight end
+        self.hostHeight = max(0, headerTopInset + activeHeight + stickyGap)
+        if section.Hide then section:Hide() end
+        section:SetParent(headerHost)
+        section:ClearAllPoints()
+        -- Preserve the PageBuilder geometry exactly.  Deriving a new width
+        -- from the host's right edge made the right margin differ from the
+        -- original page and let child rows protrude past rounded corners.
+        section:SetPoint(point, headerHost, relativePoint, headerX, headerY)
+        if section.SetSize and self.originalWidth > 0 and activeHeight > 0 then
+            section:SetSize(self.originalWidth, activeHeight)
+        end
+        if section.SetFrameLevel then
+            local baseLevel = (headerHost.GetFrameLevel and headerHost:GetFrameLevel()) or originalFrameLevel
+            section:SetFrameLevel(baseLevel + (opts.frameLevelOffset or 2))
+        end
+        if section.Show then section:Show() end
+        self.active = true
+        return true
+    end
+
+    function record:Deactivate()
+        if self.disposed then return end
+        if section.Hide then section:Hide() end
+        if originalParent and section.SetParent then section:SetParent(originalParent) end
+        section:ClearAllPoints()
+        section:SetPoint(point, relativeTo, relativePoint, originalX, originalY)
+        if section.SetSize and originalWidth > 0 and originalHeight > 0 then
+            section:SetSize(originalWidth, originalHeight)
+        end
+        if section.SetFrameLevel then section:SetFrameLevel(originalFrameLevel) end
+        self.active = nil
+    end
+
+    function record:Dispose()
+        if self.disposed then return end
+        self:Deactivate()
+        self.disposed = true
+        if section._msuf2StickyPageHeaderRecord == self then
+            section._msuf2StickyPageHeaderRecord = nil
+        end
+        if entry.pageHeader == self then entry.pageHeader = nil end
+    end
+
+    entry.pageHeader = record
+    section._msuf2StickyPageHeaderRecord = record
+    -- A freshly built page wrapper is hidden until SelectPage commits it.
+    -- Keep the registered panel hidden as well; the central activation path
+    -- shows it only after the page becomes active.
+    if section.Hide then section:Hide() end
+    return record
+end
+
 local function InstallPinnedPreviewUpdater(scroll)
     if not scroll or scroll._msuf2PinnedPreviewUpdater then return end
     scroll._msuf2PinnedPreviewUpdater = true
