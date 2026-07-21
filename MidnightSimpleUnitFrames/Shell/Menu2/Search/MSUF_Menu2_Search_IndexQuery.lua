@@ -892,6 +892,13 @@ function M.RegisterSearchWidget(widget, meta)
     local pageKey = meta.pageKey or M._msuf2SearchBuildKey or M.activeKey
     if type(pageKey) ~= "string" or pageKey == "" or pageKey == "search" then return end
 
+    local pageEntry = M.cache and M.cache[pageKey]
+    if pageEntry and widget._msuf2SearchOwnerEntry ~= pageEntry then
+        pageEntry.searchWidgets = pageEntry.searchWidgets or {}
+        pageEntry.searchWidgets[#pageEntry.searchWidgets + 1] = widget
+        widget._msuf2SearchOwnerEntry = pageEntry
+    end
+
     local rawLabel = meta.label or meta.title or meta.text or widget._msuf2SearchText or widget._msuf2SearchTitle
     local label = DisplaySearchText(rawLabel)
     if not IsSearchableDisplayText(label) then return end
@@ -905,14 +912,14 @@ function M.RegisterSearchWidget(widget, meta)
     local keywords = meta.keywords
     local help = meta.help or meta.description
     local catalogId
-    local catalogKind = tostring(kind or ""):lower()
     local catalogClass = meta.classification or meta.controlType
-    local catalogInteractive = meta.catalog ~= false and (catalogClass == "setting" or catalogClass == "action" or catalogClass == "navigation"
-        or catalogKind == "button" or catalogKind == "toggle" or catalogKind == "slider"
-        or catalogKind == "dropdown" or catalogKind == "segment" or catalogKind == "textinput" or catalogKind == "color")
+    local catalogInteractive = meta.catalog ~= false and (type(command) == "table"
+        or catalogClass == "setting" or catalogClass == "action"
+        or catalogClass == "navigation" or catalogClass == "ephemeral")
     -- Search also indexes headings/descriptions, but those are not Assistant
-    -- controls. Sending static prose into RuntimeControlCatalog created
-    -- unstable fallback IDs and made option coverage depend on copy text.
+    -- controls. Construction-time buttons/sliders are search-only until their
+    -- explicit page binding supplies a command or reviewed classification.
+    -- Sending them early created fallback IDs that were promoted moments later.
     if catalogInteractive then
         catalogId = RegisterSearchRuntimeControl(widget, meta, pageKey, kind, label, rawLabel, help, command)
     end
@@ -1576,6 +1583,11 @@ end
 
 local function GetSearchRecords()
     EnsureSearchLocaleFresh()
+    -- Search usage is what starts draining deferred section content (closed
+    -- sections of visited pages). Until then those jobs stay parked so cold
+    -- page builds remain shell-only.
+    local pumpSections = M.UnitPage and M.UnitPage.PumpBackgroundSections
+    if type(pumpSections) == "function" then pumpSections() end
     if SEARCH_STATE.indexing and SEARCH_STATE.records then
         return SEARCH_STATE.records
     end

@@ -1122,7 +1122,10 @@ end
 function M.TrackCollapsibleRefresh(ctx, section, refresh)
     refresh = M.TrackRefresh(ctx, refresh)
     local entry = section and section._msuf2CollapsibleEntry
-    if entry then entry._msuf2RefreshState = refresh end
+    if entry then
+        entry._msuf2RefreshState = refresh
+        entry._msuf2TrackedRefreshState = refresh
+    end
     return refresh
 end
 function M.TrackMethodRefresh(ctx, object, method)

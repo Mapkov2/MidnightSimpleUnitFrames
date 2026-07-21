@@ -35,7 +35,7 @@ function Handles.Install(box, deps)
     local MSUF = deps.MSUF or MSUF or {}
     local T = deps.T or M.Theme or {}
     local PreviewHelpers = M.PreviewHelpers or {}
-    local function RegisterPreviewControl(widget, semanticPath, label, kind, classification, extra)
+    local RegisterPreviewControl = deps.RegisterPreviewControl or function(widget, semanticPath, label, kind, classification, extra)
         local page = M.GroupPage
         if page and type(page.RegisterControl) == "function" then
             page.RegisterControl(widget, { key = M.activeKey }, "preview." .. tostring(semanticPath), label, kind, classification, extra)

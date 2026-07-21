@@ -270,7 +270,7 @@ local function PreviewAllSpecSpellIcons(kind)
     local state = M.gfPreviewAllSpecSpellIcons
     return type(state) == "table" and state[kind or CurrentScope()] == true
 end
-local function CreatePreviewAnimationButton(box)
+local function CreatePreviewAnimationButton(box, registerControl)
     if not box or box._previewAnimationButton then return end
     local parent = box._stage or box
     local template = (T and T.Template and T.Template()) or "BackdropTemplate"
@@ -304,7 +304,7 @@ local function CreatePreviewAnimationButton(box)
             return PreviewAnimationActive(box) == (enabled == true)
         end,
     }
-    RegisterGroupPreviewControl(btn, "combat_animation", "Group Preview Combat Animation", "button", "ephemeral")
+    (registerControl or RegisterGroupPreviewControl)(btn, "combat_animation", "Group Preview Combat Animation", "button", "ephemeral")
     if M.AddTooltip then
         M.AddTooltip(btn, "Combat Preview", "Animates health, power, prediction bars, text values, aura timers, and combat-state indicators in this preview only. Pauses during combat.", { hook = true })
     end
@@ -381,7 +381,8 @@ local function EnsureGroupLayersButton(box)
         if box._layers then box._layers:SetShown(not box._layers:IsShown()) end
     end)
     if M.AddTooltip then M.AddTooltip(btn, "Layers", "Toggle the preview layer list.", { hook = true }) end
-    RegisterGroupPreviewControl(btn, "layers.popover", "Group Preview Layers", "button", "ephemeral")
+    local registerControl = box._msuf2RegisterGroupPreviewControl or RegisterGroupPreviewControl
+    registerControl(btn, "layers.popover", "Group Preview Layers", "button", "ephemeral")
     box._msuf2LayersButton = btn
     return btn
 end
@@ -1174,6 +1175,37 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     local width = (ctx.width or 720) - 28
     local layerW = 104
     local box = CreateFrame("Frame", nil, parent, T.Template())
+    local previewControls = {}
+    local runtimePageContext = { key = ctx and ctx.key }
+    local function RegisterPreviewControl(widget, semanticPath, label, kind, classification, extra)
+        if not widget then return widget end
+        if widget._msuf2GroupPreviewControlOwner ~= box then
+            widget._msuf2GroupPreviewControlOwner = box
+            previewControls[#previewControls + 1] = widget
+        end
+        widget._msuf2GroupPreviewSemanticPath = semanticPath
+        widget._msuf2GroupPreviewLabel = label
+        widget._msuf2GroupPreviewKind = kind
+        widget._msuf2GroupPreviewClassification = classification
+        widget._msuf2GroupPreviewExtra = extra
+        return RegisterGroupPreviewControl(widget, semanticPath, label, kind, classification, extra)
+    end
+    box._msuf2RegisterGroupPreviewControl = RegisterPreviewControl
+    function box:RegisterRuntimeControlsForPage(pageKey)
+        local page = M.GroupPage
+        if not (page and type(page.RegisterControl) == "function") then return false end
+        runtimePageContext.key = pageKey
+        for i = 1, #previewControls do
+            local widget = previewControls[i]
+            page.RegisterControl(widget, runtimePageContext,
+                "preview." .. tostring(widget._msuf2GroupPreviewSemanticPath),
+                widget._msuf2GroupPreviewLabel,
+                widget._msuf2GroupPreviewKind,
+                widget._msuf2GroupPreviewClassification,
+                widget._msuf2GroupPreviewExtra)
+        end
+        return true
+    end
     local chrome
     if PreviewHelpers.ApplyPreviewChrome then
         chrome = PreviewHelpers.ApplyPreviewChrome(box, "outer", T, function(frame, bg, border)
@@ -1241,7 +1273,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     })
     box._msuf2ZoomCommand = box._msuf2ZoomCommand
         or (PreviewHelpers.BuildZoomCommand and PreviewHelpers.BuildZoomCommand(box, GFZoomPan, "GROUP_PREVIEW_ASSISTANT_ZOOM"))
-    RegisterGroupPreviewControl(box._zoomBar, "zoom.surface", "Group Preview Zoom", "slider", "ephemeral", {
+    RegisterPreviewControl(box._zoomBar, "zoom.surface", "Group Preview Zoom", "slider", "ephemeral", {
         help = "Sets the Group preview zoom percentage; Fit and 1:1 remain available as exact actions.",
         command = box._msuf2ZoomCommand,
     })
@@ -1254,14 +1286,14 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     }
     for i = 1, #zoomControls do
         local info = zoomControls[i]
-        RegisterGroupPreviewControl(box[info[1]], info[2], info[3], "button", "ephemeral")
+        RegisterPreviewControl(box[info[1]], info[2], info[3], "button", "ephemeral")
     end
     if PreviewHelpers.EnsurePreviewControlsHint then
         local controlsHint = PreviewHelpers.EnsurePreviewControlsHint(box, stage, { M = M, T = T, Tr = R.Tr })
-        RegisterGroupPreviewControl(controlsHint and controlsHint._close, "hint.dismiss", "Dismiss preview tip", "button", "ephemeral")
+        RegisterPreviewControl(controlsHint and controlsHint._close, "hint.dismiss", "Dismiss preview tip", "button", "ephemeral")
     end
     R.ZoomWheel = box._zoomWheel or R.ZoomWheel
-    CreatePreviewAnimationButton(box)
+    CreatePreviewAnimationButton(box, RegisterPreviewControl)
     local bounds = CreateFrame("Frame", nil, stage, T.Template())
     bounds:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
     bounds:SetBackdropColor(0, 0, 0, 0)
@@ -1395,7 +1427,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
                 return (layerVisibility[btn._layerKey] ~= false) == enabled
             end,
         }
-        RegisterGroupPreviewControl(btn, "layer." .. tostring(def[4]), def[1] .. " preview layer", "button", "ephemeral")
+        RegisterPreviewControl(btn, "layer." .. tostring(def[4]), def[1] .. " preview layer", "button", "ephemeral")
         box._layerButtons[#box._layerButtons + 1] = btn
     end
     local mock = CreateFrame("Frame", nil, stage, T.Template())
@@ -1428,7 +1460,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         end,
         { previewSurface = "group" }
     ))
-    RegisterGroupPreviewControl(mock, "canvas", "Group preview canvas", "canvas", "ephemeral", {
+    RegisterPreviewControl(mock, "canvas", "Group preview canvas", "canvas", "ephemeral", {
         help = "Pans this exact Group preview canvas by an explicit X/Y delta.",
         command = box._msuf2PanCommand,
     })
@@ -1486,6 +1518,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     mock._powerCenterFS = mock._powerFS
     mock._powerRightFS = T.Font(mock._powerTextLayer, "GameFontHighlightSmall", "", T.colors.text)
     box._selectedHandle = nil
+    R.RegisterPreviewControl = RegisterPreviewControl
     local handleBundle = (M.GroupPreviewHandles and M.GroupPreviewHandles.Install and M.GroupPreviewHandles.Install(box, R)) or {}
     local buffHandle = handleBundle.buffHandle
     local trackedBuffHandle = handleBundle.trackedBuffHandle

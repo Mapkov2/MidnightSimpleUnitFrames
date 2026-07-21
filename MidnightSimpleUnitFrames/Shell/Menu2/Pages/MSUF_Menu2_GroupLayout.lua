@@ -46,10 +46,7 @@ local function OpenGroupFrameColors()
         _G.MSUF_EM2_MenuFocusRequest = nil
     end
 end
-local function BuildGFLayout(ctx)
-    local b = W.PageBuilder(ctx)
-    ScopeSection(ctx, b)
-    M.GroupPreview.Add(ctx, b)
+local function BuildGFGeneralSection(ctx, b)
     local general = b:CollapsibleSection("general", "Frame Basics", 430, false)
     local generalW = general._msuf2Width or b.width or 720
     local generalLeftX = 32
@@ -147,14 +144,24 @@ local function BuildGFLayout(ctx)
         end
     end
     TrackSectionRefresh(ctx, general, RefreshHideOfflineState)
+end
 
+local function BuildGFTextSection(ctx, b)
     local layoutSections = M.GroupFrameLayoutSections
-    if layoutSections then
-        if layoutSections.BuildText then layoutSections.BuildText(ctx, b) end
-        if layoutSections.BuildResourceBar then layoutSections.BuildResourceBar(ctx, b) end
-        if layoutSections.BuildRangeFade then layoutSections.BuildRangeFade(ctx, b) end
-    end
+    if layoutSections and layoutSections.BuildText then return layoutSections.BuildText(ctx, b) end
+end
 
+local function BuildGFResourceBarSection(ctx, b)
+    local layoutSections = M.GroupFrameLayoutSections
+    if layoutSections and layoutSections.BuildResourceBar then return layoutSections.BuildResourceBar(ctx, b) end
+end
+
+local function BuildGFRangeFadeSection(ctx, b)
+    local layoutSections = M.GroupFrameLayoutSections
+    if layoutSections and layoutSections.BuildRangeFade then return layoutSections.BuildRangeFade(ctx, b) end
+end
+
+local function BuildGFTransparencySection(ctx, b)
     -- Keep Group Frame opacity controls visually aligned with the Unitframe
     -- Transparency section while binding them to the currently selected scope.
     local transparency = b:CollapsibleSection("transparency", "Transparency", nil, false)
@@ -186,7 +193,9 @@ local function BuildGFLayout(ctx)
         AttachGroupFocus(W.ToggleAt(opacityOptionsCard, "Keep text + portrait visible", 16, -62, transparencyRightW - 32), "bars"),
         "alphaExcludeTextPortrait", false, "visual", "field.alphaExcludeTextPortrait")
     if b.FinishSection then b:FinishSection(transparency, 48) end
+end
 
+local function BuildGFGeometrySection(ctx, b)
     local advancedLayout = b:CollapsibleSection("layout_advanced", "Geometry", 448, false)
     local advancedLayoutW = advancedLayout._msuf2Width or b.width or 720
     local layoutGap = 16
@@ -218,6 +227,9 @@ local function BuildGFLayout(ctx)
         })
     end
     TrackSectionRefresh(ctx, advancedLayout, RefreshRaidGroupLayoutState)
+end
+
+local function BuildGFSortingSection(ctx, b)
     local sorting = b:CollapsibleSection("sorting", "Sorting", 236, false)
     local sortingW = sorting._msuf2Width or b.width or 720
     local sortingGap = 16
@@ -290,6 +302,9 @@ local function BuildGFLayout(ctx)
         })
     end
     TrackSectionRefresh(ctx, sorting, refreshSortingControls)
+end
+
+local function BuildGFScalingSection(ctx, b)
     local scale = b:CollapsibleSection("scaling", "Frame Scaling", 380, false)
     local scaleW = scale._msuf2Width or b.width or 720
     local scaleGap = 16
@@ -442,7 +457,9 @@ local function BuildGFLayout(ctx)
         })
     end)
     TrackSectionRefresh(ctx, scale, RefreshScalingState)
+end
 
+local function BuildGFAnchorSection(ctx, b)
     local anchor = b:CollapsibleSection("anchor", "Anchoring", 220, false)
     local anchorW = anchor._msuf2Width or b.width or 720
     local anchorLeftX = 20
@@ -515,6 +532,30 @@ local function BuildGFLayout(ctx)
         })
     end
     TrackSectionRefresh(ctx, anchor, RefreshAnchorHeader)
+end
+
+local GROUP_LAYOUT_SECTION_SPECS = {
+    { sectionId = "general", title = "Frame Basics", height = 430, build = BuildGFGeneralSection },
+    { sectionId = "text", title = "Text", height = 618, build = BuildGFTextSection },
+    { sectionId = "power", title = "Resource Bar", height = 240, build = BuildGFResourceBarSection },
+    { sectionId = "range", title = "Range Fade", height = 220, build = BuildGFRangeFadeSection },
+    { sectionId = "transparency", title = "Transparency", autoHeight = true, build = BuildGFTransparencySection },
+    { sectionId = "layout_advanced", title = "Geometry", height = 448, build = BuildGFGeometrySection },
+    { sectionId = "sorting", title = "Sorting", height = 236, build = BuildGFSortingSection },
+    { sectionId = "scaling", title = "Frame Scaling", height = 380, build = BuildGFScalingSection },
+    { sectionId = "anchor", title = "Anchoring", height = 220, build = BuildGFAnchorSection },
+}
+
+local function BuildGFLayout(ctx)
+    local b = W.PageBuilder(ctx)
+    ScopeSection(ctx, b)
+    M.GroupPreview.Add(ctx, b)
+    local buildLazy = M.UnitPage and M.UnitPage.BuildSectionLazy
+    for i = 1, #GROUP_LAYOUT_SECTION_SPECS do
+        local spec = GROUP_LAYOUT_SECTION_SPECS[i]
+        if type(buildLazy) == "function" then buildLazy(ctx, b, nil, spec)
+        else spec.build(ctx, b) end
+    end
     FinalizeScopePage(ctx, b)
 end
-M.RegisterPage("gf_layout", { title = "MSUF Group Layout", build = BuildGFLayout, version = 22 })
+M.RegisterPage("gf_layout", { title = "MSUF Group Layout", build = BuildGFLayout, version = 23 })

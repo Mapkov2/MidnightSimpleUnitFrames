@@ -1057,7 +1057,17 @@ local function BuildCastbars(ctx)
         ApplyCastbarsIfNeeded(reason, nil, applyQueued)
         RequestCastPreviewRefresh()
     end
-    local behavior = b:CollapsibleSection("castbar_behavior", "Shake & Fill Direction", 196, true)
+    -- Sections route through the shared lazy-section registry: the open
+    -- Behavior section defers its content one frame behind its shell, closed
+    -- sections build on their first expand, and hidden search-index builds
+    -- stay synchronous inside BuildSectionLazy.
+    local function LazyCastbarSection(spec)
+        local buildLazy = M.UnitPage and M.UnitPage.BuildSectionLazy
+        if type(buildLazy) == "function" then return buildLazy(ctx, b, nil, spec) end
+        return spec.build(ctx, b)
+    end
+    local function BuildBehaviorSection(_, secBuilder)
+    local behavior = secBuilder:CollapsibleSection("castbar_behavior", "Shake & Fill Direction", 196, true)
     local leftX, rightX = 14, 392
     local behaviorControls = BuildCastControlSpecs(behavior, {
         { "toggle", "Shake on interrupt", leftX, -42, 260, "castbarInterruptShake", false, "MSUF2_CASTBAR_SHAKE", ApplyAndRefresh },
@@ -1081,7 +1091,10 @@ local function BuildCastbars(ctx)
             "Shows tick separators on the Player castbar while channeling.\n\nSupported spells use their actual tick count, including supported talent and channel-duration changes. Unsupported channels keep five evenly spaced fallback lines. Custom channel tick settings override the automatic layout.\n\nThe markers are event-driven and add no recurring channel polling.",
             { hook = true, titleAsLine = true, labelHit = true, owner = "ANCHOR_RIGHT" })
     end
-    local textures = b:CollapsibleSection("castbar_textures", "Textures & Outline", 220, false)
+    end
+    LazyCastbarSection({ sectionId = "castbar_behavior", title = "Shake & Fill Direction", height = 196, defaultOpen = true, build = BuildBehaviorSection })
+    local function BuildTexturesSection(_, secBuilder)
+    local textures = secBuilder:CollapsibleSection("castbar_textures", "Textures & Outline", 220, false)
     local texLeftX, texRightX = 14, 392
     local function ApplyTexturesAndPreview(reason, _, applyQueued)
         if applyQueued ~= true then ApplyCastbarTextures(reason) end
@@ -1100,7 +1113,10 @@ local function BuildCastbars(ctx)
         { "toggle", "Show spark (leading edge highlight)", texRightX, -144, 360, "castbarShowSpark", false, "MSUF2_CASTBAR_SPARK", ApplyTexturesAndPreview },
         { "toggle", "Spark extends beyond bar", texRightX, -168, 360, "castbarSparkOverflow", true, "MSUF2_CASTBAR_SPARK_OVERFLOW", ApplyTexturesAndPreview },
     }, "textures")
-    local empowered = b:CollapsibleSection("castbar_empowered", "Empowered Casts", 130, false)
+    end
+    LazyCastbarSection({ sectionId = "castbar_textures", title = "Textures & Outline", height = 220, build = BuildTexturesSection })
+    local function BuildEmpoweredSection(_, secBuilder)
+    local empowered = secBuilder:CollapsibleSection("castbar_empowered", "Empowered Casts", 130, false)
     local empoweredLeftX, empoweredRightX = 14, 392
     local syncEmpowered
     local function ApplyEmpoweredPreview(reason, _, applyQueued)
@@ -1115,7 +1131,10 @@ local function BuildCastbars(ctx)
     local blinkControls = { empoweredControls.empowerStageBlinkTime }
     syncEmpowered = function() SetControlsEnabled(blinkControls, ReadGBool("empowerStageBlink", true)) end
     M.TrackRefresh(ctx, syncEmpowered)
-    local text = b:CollapsibleSection("castbar_name_shortening", "Name Shortening", 154, false)
+    end
+    LazyCastbarSection({ sectionId = "castbar_empowered", title = "Empowered Casts", height = 130, build = BuildEmpoweredSection })
+    local function BuildNameShorteningSection(_, secBuilder)
+    local text = secBuilder:CollapsibleSection("castbar_name_shortening", "Name Shortening", 154, false)
     local textLeftX, textRightX = 14, 392
     local syncNameShortening
     local function NameShorteningEnabled() return (tonumber(ReadG("castbarSpellNameShortening", 0)) or 0) == 1 end
@@ -1133,7 +1152,10 @@ local function BuildCastbars(ctx)
     local nameShorteningControls = { textControls.castbarSpellNameMaxLen, textControls.castbarSpellNameReservedSpace }
     syncNameShortening = function() SetControlsEnabled(nameShorteningControls, NameShorteningEnabled()) end
     M.TrackRefresh(ctx, syncNameShortening)
-    local focusKick = b:CollapsibleSection("castbar_focus_kick", "Focus Kick", 326, false)
+    end
+    LazyCastbarSection({ sectionId = "castbar_name_shortening", title = "Name Shortening", height = 154, build = BuildNameShorteningSection })
+    local function BuildFocusKickSection(_, secBuilder)
+    local focusKick = secBuilder:CollapsibleSection("castbar_focus_kick", "Focus Kick", 326, false)
     local focusHint = W.Text(focusKick, "Track interrupts on your focus without showing the focus castbar.", 14, -38, (focusKick._msuf2Width or ctx.width or 720) - 28, T.colors.muted)
     if focusHint and focusHint.SetWordWrap then focusHint:SetWordWrap(true) end
     focusKick._msuf2CursorY = -68
@@ -1201,7 +1223,10 @@ local function BuildCastbars(ctx)
     local focusKickControls = { focusControls.preview, focusControls.width, focusControls.height, focusControls.text, focusControls.x, focusControls.y, resetFocus }
     syncFocusKick = function() SetControlsEnabled(focusKickControls, ReadGBool("enableFocusKickIcon", false)) end
     M.TrackRefresh(ctx, syncFocusKick)
-    local kick = b:CollapsibleSection("castbar_interrupt_ready", "Interrupt Ready Indicator", 328, false)
+    end
+    LazyCastbarSection({ sectionId = "castbar_focus_kick", title = "Focus Kick", height = 326, build = BuildFocusKickSection })
+    local function BuildInterruptReadySection(_, secBuilder)
+    local kick = secBuilder:CollapsibleSection("castbar_interrupt_ready", "Interrupt Ready Indicator", 328, false)
     local kickLeftX, kickRightX = 14, 392
     W.LabelAt(kick, "Castbars", kickLeftX, -38, 160, "GameFontNormalSmall", T.colors.accent)
     W.LabelAt(kick, "Appearance", kickRightX, -38, 160, "GameFontNormalSmall", T.colors.accent)
@@ -1240,6 +1265,8 @@ local function BuildCastbars(ctx)
         SetControlEnabled(colorHint, enabled)
     end
     M.TrackRefresh(ctx, syncKickReady)
+    end
+    LazyCastbarSection({ sectionId = "castbar_interrupt_ready", title = "Interrupt Ready Indicator", height = 328, build = BuildInterruptReadySection })
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 M.RegisterPage("opt_castbar", { title = "MSUF Castbar", build = BuildCastbars, version = 5 })

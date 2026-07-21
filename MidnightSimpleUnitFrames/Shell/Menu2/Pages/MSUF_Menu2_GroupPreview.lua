@@ -70,6 +70,9 @@ local function RegisterNativePreview(box, ctx)
     M._gfNativePreviews = M._gfNativePreviews or {}
     box._msufGFNativePreviewPageKey = ctx and ctx.key
     box._msufGFNativePreviewWrapper = ctx and ctx.wrapper
+    for i = 1, #M._gfNativePreviews do
+        if M._gfNativePreviews[i] == box then return end
+    end
     M._gfNativePreviews[#M._gfNativePreviews + 1] = box
 end
 M._gfNativePreviews = M._gfNativePreviews or {}
@@ -130,13 +133,28 @@ local function CreateNativeGFPreview(parent, ctx)
     if type(create) == "function" then return create(parent, ctx, GroupPreview.OpenSection) end
     return nil
 end
+local function RebindNativeGFPreview(box, parent, ctx)
+    if not (box and parent) then return nil end
+    if box.Hide then box:Hide() end
+    if box.SetParent then box:SetParent(parent) end
+    if box.ClearAllPoints then box:ClearAllPoints() end
+    local width = ((ctx and ctx.width) or 720) - 28
+    if box.SetWidth then box:SetWidth(width) end
+    if box.SetFrameLevel and parent.GetFrameLevel then box:SetFrameLevel((parent:GetFrameLevel() or 0) + 2) end
+    local renderState = box._msufGFRenderState
+    if renderState then
+        renderState.ctx = ctx
+        renderState.width = width
+    end
+    if box.RegisterRuntimeControlsForPage then box:RegisterRuntimeControlsForPage(ctx and ctx.key) end
+    return box
+end
 local function AddGFPreview(ctx, builder)
     if not (builder and builder.CollapsibleSection and W and T) then return end
     local sectionH, boxY = GFPreviewIntroMetrics(builder and builder.width or ctx and ctx.width)
     local body = builder:CollapsibleSection("gf_preview_native", "Hide Preview", sectionH, true)
     local sectionEntry = body and body._msuf2CollapsibleEntry
     local previewHeader = sectionEntry and sectionEntry.header
-    local liveBadge
     if sectionEntry then
         sectionEntry._msuf2ManualHintLayout = true
         if sectionEntry.hint then sectionEntry.hint:Hide() end
@@ -145,15 +163,6 @@ local function AddGFPreview(ctx, builder)
             sectionEntry.label:ClearAllPoints()
             sectionEntry.label:SetPoint("LEFT", sectionEntry.arrow, "RIGHT", 8, 0)
             sectionEntry.label:SetJustifyH("LEFT")
-        end
-        body._msuf2CollapsibleBadgesShowWhenClosed = true
-        if W.SetCollapsibleBadges then
-            W.SetCollapsibleBadges(body, { { text = "Live", kind = "ok", width = 46, alwaysShow = true } })
-            liveBadge = sectionEntry._msuf2Badges and sectionEntry._msuf2Badges[1]
-            if liveBadge and sectionEntry.label then
-                liveBadge:ClearAllPoints()
-                liveBadge:SetPoint("LEFT", sectionEntry.label, "RIGHT", 10, 0)
-            end
         end
     end
     local noteText = W.Text(body, GF_PREVIEW_NOTE, 14, -38, (body._msuf2Width or 720) - 28, T.colors.muted)
@@ -164,6 +173,44 @@ local function AddGFPreview(ctx, builder)
     local expandBtn = T.Button(previewHeader or body, "Expand", 88, 20)
     if T.CenterButtonLabel then T.CenterButtonLabel(expandBtn) end
     local ApplyPreviewMode
+    local function OwnsPreview()
+        if not box then return false end
+        local pageKey = ctx and ctx.key
+        local wrapper = ctx and ctx.wrapper
+        if box._msufGFNativePreviewPageKey ~= pageKey or box._msufGFNativePreviewWrapper ~= wrapper then return false end
+        return box._msuf2PinnedFloating == true or (box.GetParent and box:GetParent() == body)
+    end
+    local function EnsurePreviewAttachment()
+        if not (box and W.AttachPinnedPreview) then return end
+        local record = box._msuf2PinnedPreviewRecord
+        local pageKey = ctx and ctx.key
+        local wrapper = ctx and ctx.wrapper
+        if record and record.pageKey == pageKey and record.pageWrapper == wrapper then return end
+        W.AttachPinnedPreview(body, box, {
+            stateKey = "groupFramePreview",
+            title = box._title,
+            hint = box._hint,
+            left = 14,
+            right = 14,
+            top = -8,
+            pinnedHeight = 232,
+            buttonWidth = 78,
+            buttonHeight = 20,
+            centerButton = true,
+            quietButton = true,
+            pageKey = pageKey,
+            wrapper = wrapper,
+            restoreParent = body,
+            restorePoint = { "TOPLEFT", body, "TOPLEFT", 14, boxY },
+            restoreWidth = box.GetWidth and box:GetWidth(),
+            restoreHeight = box.GetHeight and box:GetHeight(),
+        })
+        local page = M.GroupPage
+        if page and type(page.RegisterControl) == "function" then
+            page.RegisterControl(box._msuf2PinButton, { key = pageKey }, "preview.pin.toggle",
+                "Pin Group Preview", "toggle", "ephemeral")
+        end
+    end
     local function PreviewHostShown()
         if ctx and ctx.key and M.activeKey and M.activeKey ~= ctx.key then return false end
         if M.frame and M.frame.IsShown and not M.frame:IsShown() then return false end
@@ -172,15 +219,23 @@ local function AddGFPreview(ctx, builder)
         return true
     end
     local function EnsurePreview()
+        if box and not OwnsPreview() then box = nil end
         if box then
             box._msufGFPreviewHostShown = PreviewHostShown
             if not PreviewHostShown() then return nil end
             if box.Show then box:Show() end
+            EnsurePreviewAttachment()
             if ApplyPreviewMode then ApplyPreviewMode() end
             return box
         end
         if not PreviewHostShown() then return nil end
-        box = CreateNativeGFPreview(body, ctx)
+        local shared = GroupPreview._sharedNativeBox
+        if shared and not shared._msufGFNativePreviewDisposed then
+            box = RebindNativeGFPreview(shared, body, ctx)
+        else
+            box = CreateNativeGFPreview(body, ctx)
+            GroupPreview._sharedNativeBox = box
+        end
         if not box then
             if not rendererMissing then
                 missingText = W.Text(body, "Group preview renderer is unavailable.", 14, boxY, (body._msuf2Width or 720) - 28, T.colors.muted)
@@ -193,37 +248,11 @@ local function AddGFPreview(ctx, builder)
         box._msuf2PreferredRestoreHeight = M.groupPreviewExpanded == true and GF_PREVIEW_EXPANDED_BOX_HEIGHT or GF_PREVIEW_COMPACT_BOX_HEIGHT
         box._msuf2PreferredRestoreYOffset = boxY
         box._msuf2CompactHeader = previewHeader
-        box._msuf2CompactLiveBadge = liveBadge
         box._msuf2CompactExpandButton = expandBtn
         box:SetPoint("TOPLEFT", body, "TOPLEFT", 16, boxY)
         RegisterNativePreview(box, ctx)
         box:Show()
-        if W.AttachPinnedPreview then
-            W.AttachPinnedPreview(body, box, {
-                stateKey = "groupFramePreview",
-                title = box._title,
-                hint = box._hint,
-                left = 14,
-                right = 14,
-                top = -8,
-                pinnedHeight = 232,
-                buttonWidth = 78,
-                buttonHeight = 20,
-                centerButton = true,
-                quietButton = true,
-                pageKey = ctx and ctx.key,
-                wrapper = ctx and ctx.wrapper,
-                restoreParent = body,
-                restorePoint = { "TOPLEFT", body, "TOPLEFT", 14, boxY },
-                restoreWidth = box.GetWidth and box:GetWidth(),
-                restoreHeight = box.GetHeight and box:GetHeight(),
-            })
-            local page = M.GroupPage
-            if page and type(page.RegisterControl) == "function" then
-                page.RegisterControl(box._msuf2PinButton, { key = ctx and ctx.key }, "preview.pin.toggle",
-                    "Pin Group Preview", "toggle", "ephemeral")
-            end
-        end
+        EnsurePreviewAttachment()
         if ApplyPreviewMode then ApplyPreviewMode() end
         return box
     end
@@ -239,7 +268,6 @@ local function AddGFPreview(ctx, builder)
             expandBtn:SetPoint("TOPRIGHT", body, "TOPRIGHT", -14, -8)
         end
         expandBtn:SetText(expanded and "Compact Preview" or "Expand")
-        if liveBadge then liveBadge:SetShown(not expanded) end
     end
     ApplyPreviewMode = function()
         local expanded = M.groupPreviewExpanded == true
@@ -248,12 +276,11 @@ local function AddGFPreview(ctx, builder)
         if sectionEntry and sectionEntry.label then sectionEntry.label:SetText("Preview - " .. GroupPreviewScopeLabel()) end
         if noteText then noteText:SetShown(expanded) end
         RefreshExpandButton()
-        if box and box._msuf2PinnedFloating ~= true then
+        if OwnsPreview() and box._msuf2PinnedFloating ~= true then
             local previousH = box.GetHeight and box:GetHeight() or 0
             box._msuf2PreferredRestoreHeight = boxH
             box._msuf2PreferredRestoreYOffset = currentBoxY
             box._msuf2CompactHeader = previewHeader
-            box._msuf2CompactLiveBadge = liveBadge
             box._msuf2CompactExpandButton = expandBtn
             box:ClearAllPoints()
             box:SetPoint("TOPLEFT", body, "TOPLEFT", 14, currentBoxY)
@@ -302,8 +329,8 @@ local function AddGFPreview(ctx, builder)
     if body.HookScript then body:HookScript("OnShow", RefreshThisPreview) end
     if body.HookScript then
         body:HookScript("OnHide", function()
-            if box and box.ReleaseRuntimePreview then box:ReleaseRuntimePreview() end
-            if box and box.Hide then box:Hide() end
+            if OwnsPreview() and box.ReleaseRuntimePreview then box:ReleaseRuntimePreview() end
+            if OwnsPreview() and box.Hide then box:Hide() end
         end)
     end
     M.TrackCollapsibleRefresh(ctx, body, RefreshThisPreview)
