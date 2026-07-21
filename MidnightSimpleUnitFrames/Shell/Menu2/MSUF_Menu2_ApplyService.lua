@@ -426,6 +426,7 @@ local function RefreshTargetedGeneral(reason, opt, alphaDeferred)
         or opt.barOutline == true or opt.roundedBars == true
         or opt.aggroBorder == true or opt.dispelPurgeBorder == true
         or opt.bossTargetBorder == true or opt.highlightPriority == true or opt.colors == true
+        or opt.mouseoverHighlight == true
         or opt.castbar == true or opt.castbarTextures == true
         or opt.detachedPowerBar == true or WantsClassPower(opt)
         or opt.visual ~= nil or opt.frames == true)
@@ -1011,6 +1012,15 @@ local function ApplyColorRuntime(opt, unitFramesApplied)
     return true
 end
 
+local function ApplyMouseoverHighlightRuntime()
+    -- Cold path only: menu changes are coalesced before this runs. Rounded
+    -- frames rebuild their cached edge stack first; the standalone renderer
+    -- then refreshes its cached style/size/color generation.
+    Apply.CallGlobal("MSUF_ApplyRoundedUnitframes")
+    Apply.CallGlobal("MSUF_RefreshMouseoverHighlight")
+    return true
+end
+
 FlushApply = function()
     if flushTimer and type(flushTimer.Cancel) == "function" then pcall(flushTimer.Cancel, flushTimer) end
     flushTimer = nil
@@ -1103,6 +1113,7 @@ FlushApply = function()
             ApplyCastbarRuntime(opt)
         end
         if opt.colors then ApplyColorRuntime(opt, fullUnitFramesApplied) end
+        if opt.mouseoverHighlight then ApplyMouseoverHighlightRuntime() end
         if applyAll and WantsClassPower(opt) and not ClassPowerAlreadyApplied(opt) then
             Apply.CallGlobal("MSUF_ClassPower_Apply", ClassPowerRuntimeOptions(opt))
         end
@@ -1274,6 +1285,7 @@ function Apply.RequestGeneral(reason, opts)
             pendingGeneral.colors = true
             MergeScopeField(pendingGeneral, "colorScope", opts.colorScope)
         end
+        if opts.mouseoverHighlight then pendingGeneral.mouseoverHighlight = true end
         if WantsClassPower(opts) then
             pendingGeneral.classpower = true
             if WantsFullClassPower(opts) then pendingGeneral.classPowerFull = true end

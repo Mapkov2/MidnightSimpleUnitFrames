@@ -684,8 +684,10 @@ function H.ShowPreviewControlsHelp(anchor, opts)
         popup._close = close
         H._previewControlsHelpPopup = popup
     end
-    popup._title:SetText(tr("Preview Controls"))
-    local lines = PreviewControlsLines(tr)
+    popup._title:SetText(tr(opts.title or "Preview Controls"))
+    -- Callers with a reduced interaction model (e.g. the color-only preview)
+    -- can supply their own lines instead of the full editing help.
+    local lines = opts.lines or PreviewControlsLines(tr)
     for i = 1, #(popup._lines or {}) do
         local fs = popup._lines[i]
         if fs then fs:SetText(lines[i] and ("- " .. lines[i]) or "") end

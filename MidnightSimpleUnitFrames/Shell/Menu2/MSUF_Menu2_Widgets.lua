@@ -258,6 +258,9 @@ function W.FocusCollapsibleSection(section, opts)
     local entry = section and section._msuf2CollapsibleEntry
     if not entry then return false end
     opts = opts or {}
+    -- Pages that show only one section group at a time (e.g. the Colors
+    -- categories) install this to reveal the group the target lives in.
+    if type(entry._msuf2EnsureVisible) == "function" then entry._msuf2EnsureVisible(entry) end
     local chain, cursor = {}, entry
     while cursor do
         table.insert(chain, 1, cursor)
@@ -308,6 +311,11 @@ function M.FocusRequestedSection(pageKey, opts)
     local entry = M.cache and M.cache[pageKey]
     local sections = entry and entry.sections
     local section = sections and sections[tostring(req.sectionId)]
+    if not section and entry and type(entry._msuf2ResolveMissingSection) == "function" then
+        -- Lazily built section groups (Colors categories) can materialize the
+        -- requested section on demand before the focus attempt gives up.
+        section = entry._msuf2ResolveMissingSection(tostring(req.sectionId))
+    end
     if not section then
         CloseAutoFocusedSections(pageKey)
         return false

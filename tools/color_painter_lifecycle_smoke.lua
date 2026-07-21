@@ -83,7 +83,10 @@ local previewBoxes = {}
 local M = {
     activeKey = "opt_colors",
     MENU_POPUP_FRAME_LEVEL = 120,
-    Theme = { colors = { text = { 1, 1, 1, 1 }, title = { 1, 1, 1, 1 }, muted = { 0.5, 0.5, 0.5, 1 } } },
+    Theme = { colors = {
+        text = { 1, 1, 1, 1 }, title = { 1, 1, 1, 1 }, muted = { 0.5, 0.5, 0.5, 1 },
+        dim = { 0.4, 0.45, 0.55, 1 }, borderSoft = { 0.3, 0.4, 0.5, 1 },
+    } },
     Widgets = {},
     AdvancedPage = {},
 }
@@ -112,6 +115,11 @@ function T.Button(parent, text, width, height)
     button:SetText(text)
     button:SetSize(width, height)
     return button
+end
+function T.CreateSuperellipseLayers(parent)
+    local fill, edge = parent:CreateTexture(), parent:CreateTexture()
+    function edge:SetVertexColor(...) self.vertexColor = { ... } end
+    return fill, edge
 end
 function W.AttachPinnedPreview(body, box, opts)
     local record = { body = body, box = box, pageKey = opts.pageKey, pageWrapper = opts.wrapper }
@@ -164,8 +172,8 @@ host._msuf2PinnedPreviewRecord = nil
 host:Hide()
 assert(not host:IsShown(), "release simulation did not hide the preview host")
 
-assert(type(refreshers[1]) == "function", "Color Painter page refresher missing")
-refreshers[1]()
+assert(#refreshers > 0, "Color Painter page refresher missing")
+for i = 1, #refreshers do refreshers[i]() end
 
 assert(host:IsShown(), "cached Colors page did not restore its released preview host")
 assert(#attachCalls == 2, "cached Colors page did not reattach pin ownership")

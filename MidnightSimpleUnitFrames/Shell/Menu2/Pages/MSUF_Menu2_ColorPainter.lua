@@ -64,7 +64,11 @@ end
 
 local function InstallColorOnlyShield(parent)
     local shield = CreateFrame("Button", nil, parent)
-    shield:SetAllPoints(parent)
+    -- Leave the top strip of every preview panel uncovered: that is where the
+    -- zoom clusters live, and the shield must never eat their clicks. All
+    -- other interactive preview surfaces up there are explicitly disabled.
+    shield:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -64)
+    shield:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", 0, 0)
     shield:EnableMouse(true)
     shield:RegisterForClicks("LeftButtonDown", "LeftButtonUp", "RightButtonDown", "RightButtonUp")
     local popupLevel = tonumber(M.MENU_POPUP_FRAME_LEVEL) or 120
@@ -201,6 +205,16 @@ local CATEGORY_SECTION = {
     auras = "colors_auras",
     resources = "colors_power",
 }
+-- Sections whose colors depend on a selector (text-color modes, Power type,
+-- Class Resource type): preview clicks NAVIGATE to the section instead of
+-- opening the paint picker, because the picker cannot show which token or
+-- mode the painted color would actually edit. An armed palette brush still
+-- paints the section's primary color directly.
+local NAVIGATE_ONLY_SECTIONS = {
+    colors_font = "Opens the shared Text Colors settings below - color modes for name, HP and power text.",
+    colors_power = "Opens the Resources colors below - pick the power type there, then set its color.",
+    colors_class_power = "Opens the Resources colors below - pick the Class Resource there, then set its colors.",
+}
 
 local function FocusUnitPreview(box, category)
     if not (box and type(box.layerVisibility) == "table") then return end
@@ -218,33 +232,33 @@ local function FocusUnitPreview(box, category)
 end
 
 local function ResolveCategoryAnchors(unitBoxes, groupBox, categoryKey)
-    local function Target(anchor, sectionId, label, priority)
+    local function Target(anchor, sectionId, label, priority, ownerLabel)
         if not anchor then return nil end
-        return { anchor = anchor, sectionId = sectionId, label = label, priority = priority or 0 }
+        return { anchor = anchor, sectionId = sectionId, label = label, priority = priority or 0, ownerLabel = ownerLabel }
     end
     local function FillAnchor(bar)
         if bar and bar.GetStatusBarTexture then return bar:GetStatusBarTexture() or bar end
         return bar
     end
     local result = {}
-    local function Add(anchor, sectionId, label, priority)
-        local value = Target(anchor, sectionId, label, priority)
+    local function Add(anchor, sectionId, label, priority, ownerLabel)
+        local value = Target(anchor, sectionId, label, priority, ownerLabel)
         if value then result[#result + 1] = value end
     end
     if categoryKey == "group" then
         local groupMock = groupBox and (groupBox._mock or groupBox.mock)
-        Add(groupMock, "colors_group_frames", "Group Frame Colors", 0)
-        Add(groupMock and groupMock._power, "colors_power", "Power Bar Colors", 20)
-        Add(groupMock and FillAnchor(groupMock._healPred), "colors_bar_colors", "Positive Heal Prediction", 40)
-        Add(groupMock and FillAnchor(groupMock._absorb), "colors_bar_colors", "Absorb Overlay", 50)
-        Add(groupMock and FillAnchor(groupMock._healAbsorb), "colors_bar_colors", "Heal-Absorb (Negative)", 60)
-        Add(groupMock and groupMock._nameFS, "colors_font", "Name Text Color", 80)
-        Add(groupMock and groupMock._hpLeftFS, "colors_font", "Health Text Color", 90)
-        Add(groupMock and groupMock._hpCenterFS, "colors_font", "Health Text Color", 90)
-        Add(groupMock and groupMock._hpRightFS, "colors_font", "Health Text Color", 90)
-        Add(groupMock and groupMock._powerLeftFS, "colors_font", "Power Text Color", 90)
-        Add(groupMock and groupMock._powerCenterFS, "colors_font", "Power Text Color", 90)
-        Add(groupMock and groupMock._powerRightFS, "colors_font", "Power Text Color", 90)
+        Add(groupMock, "colors_group_frames", "Group Frame Colors", 0, "Health bar color")
+        Add(groupMock and groupMock._power, "colors_power", "Power Bar Colors", 20, "Color")
+        Add(groupMock and FillAnchor(groupMock._healPred), "colors_bar_colors", "Positive Heal Prediction", 40, "Positive Heal Prediction")
+        Add(groupMock and FillAnchor(groupMock._absorb), "colors_bar_colors", "Absorb Overlay", 50, "Absorb Bar Color")
+        Add(groupMock and FillAnchor(groupMock._healAbsorb), "colors_bar_colors", "Heal-Absorb (Negative)", 60, "Heal-Absorb / Negative Heal")
+        Add(groupMock and groupMock._nameFS, "colors_font", "Name Text Color", 80, "Global font color")
+        Add(groupMock and groupMock._hpLeftFS, "colors_font", "Health Text Color", 90, "Global font color")
+        Add(groupMock and groupMock._hpCenterFS, "colors_font", "Health Text Color", 90, "Global font color")
+        Add(groupMock and groupMock._hpRightFS, "colors_font", "Health Text Color", 90, "Global font color")
+        Add(groupMock and groupMock._powerLeftFS, "colors_font", "Power Text Color", 90, "Global font color")
+        Add(groupMock and groupMock._powerCenterFS, "colors_font", "Power Text Color", 90, "Global font color")
+        Add(groupMock and groupMock._powerRightFS, "colors_font", "Power Text Color", 90, "Global font color")
         return result
     end
     for i = 1, #(unitBoxes or {}) do
@@ -256,62 +270,94 @@ local function ResolveCategoryAnchors(unitBoxes, groupBox, categoryKey)
                 return unitLabel and (unitLabel .. ": " .. label) or label
             end
             if categoryKey == "unit" then
-                Add(mock.hpBG or mock, "colors_appearance", LabelFor("Unitframe Global Coloring"), 0)
-                Add(mock.powerBG or mock.power, "colors_power", LabelFor("Power Bar Colors"), 20)
-                Add(mock.detachedPower, "colors_power", LabelFor("Detached Power Bar Colors"), 25)
-                Add(mock.portrait, "colors_portrait", LabelFor("Portrait Colors"), 30)
-                Add(mock.healPred, "colors_bar_colors", LabelFor("Positive Heal Prediction"), 40)
-                Add(mock.absorb, "colors_bar_colors", LabelFor("Absorb Overlay"), 50)
-                Add(mock.healAbsorb, "colors_bar_colors", LabelFor("Heal-Absorb (Negative)"), 60)
-                Add(mock.nameText, "colors_font", LabelFor("Name Text Color"), 80)
-                Add(mock.raidGroupNameText, "colors_font", LabelFor("Name Text Color"), 80)
-                Add(mock.totInlineText, "colors_font", LabelFor("Name Text Color"), 80)
-                Add(mock.hpTextLeft, "colors_font", LabelFor("Health Text Color"), 90)
-                Add(mock.hpTextCenter, "colors_font", LabelFor("Health Text Color"), 90)
-                Add(mock.hpText, "colors_font", LabelFor("Health Text Color"), 90)
-                Add(mock.hpTextPct, "colors_font", LabelFor("Health Text Color"), 90)
-                Add(mock.powerTextLeft, "colors_font", LabelFor("Power Text Color"), 90)
-                Add(mock.powerTextCenter, "colors_font", LabelFor("Power Text Color"), 90)
-                Add(mock.powerText, "colors_font", LabelFor("Power Text Color"), 90)
-                Add(mock.powerTextPct, "colors_font", LabelFor("Power Text Color"), 90)
+                Add(mock.hpBG or mock, "colors_appearance", LabelFor("Unitframe Global Coloring"), 0, "Unified bar color")
+                Add(mock.powerBG or mock.power, "colors_power", LabelFor("Power Bar Colors"), 20, "Color")
+                Add(mock.detachedPower, "colors_power", LabelFor("Detached Power Bar Colors"), 25, "Color")
+                Add(mock.portrait, "colors_portrait", LabelFor("Portrait Colors"), 30, "Border custom color")
+                Add(mock.healPred, "colors_bar_colors", LabelFor("Positive Heal Prediction"), 40, "Positive Heal Prediction")
+                Add(mock.absorb, "colors_bar_colors", LabelFor("Absorb Overlay"), 50, "Absorb Bar Color")
+                Add(mock.healAbsorb, "colors_bar_colors", LabelFor("Heal-Absorb (Negative)"), 60, "Heal-Absorb / Negative Heal")
+                Add(mock.nameText, "colors_font", LabelFor("Name Text Color"), 80, "Global font color")
+                Add(mock.raidGroupNameText, "colors_font", LabelFor("Name Text Color"), 80, "Global font color")
+                Add(mock.totInlineText, "colors_font", LabelFor("Name Text Color"), 80, "Global font color")
+                Add(mock.hpTextLeft, "colors_font", LabelFor("Health Text Color"), 90, "Global font color")
+                Add(mock.hpTextCenter, "colors_font", LabelFor("Health Text Color"), 90, "Global font color")
+                Add(mock.hpText, "colors_font", LabelFor("Health Text Color"), 90, "Global font color")
+                Add(mock.hpTextPct, "colors_font", LabelFor("Health Text Color"), 90, "Global font color")
+                Add(mock.powerTextLeft, "colors_font", LabelFor("Power Text Color"), 90, "Global font color")
+                Add(mock.powerTextCenter, "colors_font", LabelFor("Power Text Color"), 90, "Global font color")
+                Add(mock.powerText, "colors_font", LabelFor("Power Text Color"), 90, "Global font color")
+                Add(mock.powerTextPct, "colors_font", LabelFor("Power Text Color"), 90, "Global font color")
             elseif categoryKey == "cast" then
-                Add(mock.cast, "colors_castbar", LabelFor("Castbar Colors"), 30)
+                Add(mock.cast, "colors_castbar", LabelFor("Castbar Colors"), 30, "Interruptible cast color")
             elseif categoryKey == "auras" then
-                Add(unitBox.handleAuraBuffs, "colors_auras", LabelFor("Aura Colors"), 30)
-                Add(unitBox.handleAuraDebuffs, "colors_auras", LabelFor("Aura Colors"), 30)
+                Add(unitBox.handleAuraBuffs, "colors_auras", LabelFor("Aura Colors"), 30, "Own Buff")
+                Add(unitBox.handleAuraDebuffs, "colors_auras", LabelFor("Aura Colors"), 30, "Own Debuff")
             elseif categoryKey == "resources" then
-                Add(mock.powerBG or mock.power, "colors_power", LabelFor("Power Bar Colors"), 20)
-                Add(mock.detachedPower, "colors_power", LabelFor("Detached Power Bar Colors"), 25)
-                Add(mock.classPower, "colors_class_power", LabelFor("Class Power Colors"), 30)
+                Add(mock.powerBG or mock.power, "colors_power", LabelFor("Power Bar Colors"), 20, "Color")
+                Add(mock.detachedPower, "colors_power", LabelFor("Detached Power Bar Colors"), 25, "Color")
+                Add(mock.classPower, "colors_class_power", LabelFor("Class Power Colors"), 30, "Color")
             end
         end
     end
     return result
 end
 
-local function AddClickTarget(host, anchor, onClick, label, priority)
+local function AddClickTarget(host, anchor, onClick, onRightClick, label, priority, panDelegate, tooltipText, levelAnchor)
     if not (host and anchor and type(onClick) == "function") then return nil end
     local button = CreateFrame("Button", nil, host)
     button:SetAllPoints(anchor)
-    button:RegisterForClicks("LeftButtonUp")
+    button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     if button.SetFrameLevel and host.GetFrameLevel then
         local localPriority = floor((tonumber(priority) or 0) / 10)
-        local popupLevel = tonumber(M.MENU_POPUP_FRAME_LEVEL) or 120
-        local targetBase = min((host:GetFrameLevel() or 0) + COLOR_TARGET_LEVEL, popupLevel - 19)
+        local targetBase
+        if levelAnchor and levelAnchor.GetFrameLevel then
+            -- Anchor to the shield: pinning reparents the host and lifts the
+            -- whole subtree, so absolute caps would strand rebuilt targets
+            -- BELOW the shield (first click works, every later one is eaten).
+            targetBase = (levelAnchor:GetFrameLevel() or 0) + 11
+        else
+            local popupLevel = tonumber(M.MENU_POPUP_FRAME_LEVEL) or 120
+            targetBase = min((host:GetFrameLevel() or 0) + COLOR_TARGET_LEVEL, popupLevel - 19)
+        end
         button:SetFrameLevel(targetBase + localPriority)
     end
     local hover = button:CreateTexture(nil, "HIGHLIGHT")
     hover:SetAllPoints()
     hover:SetColorTexture(0.18, 0.66, 1, 0.18)
-    if M.AddTooltip then M.AddTooltip(button, label, Tr("Open the matching color section below."), { owner = "ANCHOR_CURSOR" }) end
+    if M.AddTooltip then
+        M.AddTooltip(button, label,
+            tooltipText or Tr("Click to edit these colors. Right-click opens the matching section below."),
+            { owner = "ANCHOR_CURSOR" })
+    end
     ForwardMenuScrollWheel(button)
-    button:SetScript("OnClick", onClick)
+    -- Ctrl+drag (and middle-drag) over a click target must pan the preview
+    -- canvas underneath instead of opening the paint picker.
+    if type(panDelegate) == "function" then
+        button:SetScript("OnMouseDown", function(_, mouseButton)
+            if (mouseButton == "LeftButton" and IsControlKeyDown and IsControlKeyDown())
+                or mouseButton == "MiddleButton" then
+                panDelegate("OnMouseDown", mouseButton)
+            end
+        end)
+        button:SetScript("OnMouseUp", function(_, mouseButton)
+            panDelegate("OnMouseUp", mouseButton)
+        end)
+    end
+    button:SetScript("OnClick", function(self, mouseButton)
+        if mouseButton == "LeftButton" and IsControlKeyDown and IsControlKeyDown() then return end
+        if mouseButton == "RightButton" and type(onRightClick) == "function" then
+            onRightClick(self)
+            return
+        end
+        onClick(self)
+    end)
     return button
 end
 
 function P.Build(ctx, builder, categories)
     if not (ctx and builder and type(categories) == "table" and #categories > 0) then return nil end
-    local section = builder:CollapsibleSection("colors_preview", "Color Preview", 410, true)
+    local section = builder:CollapsibleSection("colors_preview", "Color Preview", 478, true)
     section._msuf2CollapsibleBadgesShowWhenClosed = true
     if W.SetCollapsibleBadges then
         W.SetCollapsibleBadges(section, {{ text = "Live", kind = "accent", showWhenClosed = true }})
@@ -324,9 +370,46 @@ function P.Build(ctx, builder, categories)
     local tabButtons = {}
     local previewW = innerW
     local host = CreateFrame("Frame", nil, section)
-    host:SetPoint("TOPLEFT", section, "TOPLEFT", 16, -46)
+    host:SetPoint("TOPLEFT", section, "TOPLEFT", 16, -62)
     host:SetSize(previewW, 350)
-    InstallColorOnlyShield(host)
+    local shield = InstallColorOnlyShield(host)
+
+    -- Zoom chrome is noise for a color task: keep the controls functional but
+    -- fade them in only while the pointer is over the preview.
+    local zoomBars = {}
+    -- Keep the zoom clusters strictly above the shield and the paint click
+    -- targets. Levels are taken relative to the shield itself (no host math,
+    -- no popup caps) and re-asserted on every tab switch, because preview
+    -- internals may re-level their chrome during refreshes.
+    local function RaiseZoomBar(bar)
+        if bar and bar.SetFrameLevel and shield and shield.GetFrameLevel then
+            bar:SetFrameLevel((shield:GetFrameLevel() or 0) + 30)
+        end
+    end
+    local function RaiseZoomBars()
+        for i = 1, #zoomBars do RaiseZoomBar(zoomBars[i]) end
+    end
+    local function CollectZoomBar(bar)
+        if not bar then return end
+        zoomBars[#zoomBars + 1] = bar
+        RaiseZoomBar(bar)
+    end
+    local function SetZoomChromeShown(shown)
+        for i = 1, #zoomBars do
+            local bar = zoomBars[i]
+            if bar.SetAlpha then bar:SetAlpha(shown and 1 or 0) end
+        end
+    end
+    if shield and shield.HookScript then
+        shield:HookScript("OnEnter", function() SetZoomChromeShown(true) end)
+        shield:HookScript("OnLeave", function()
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0.30, function()
+                    if not (host.IsMouseOver and host:IsMouseOver()) then SetZoomChromeShown(false) end
+                end)
+            end
+        end)
+    end
 
     local unitGap = 8
     local unitPreviewW = max(1, floor((previewW - unitGap) * 0.5))
@@ -346,20 +429,286 @@ function P.Build(ctx, builder, categories)
     local groupBox = MakeGroupPreview(host, ctx, previewW)
     if groupBox then groupBox:Hide() end
     if #unitBoxes == 0 and not groupBox then Label(host, "Preview renderer is unavailable.", 12, -12, previewW - 24, T.colors.muted) end
+    for i = 1, #unitBoxes do CollectZoomBar(unitBoxes[i].zoomBar) end
+    CollectZoomBar(groupBox and groupBox._zoomBar)
+    SetZoomChromeShown(false)
+
+    -- The color preview keeps zoom/pan but intentionally no layout editing,
+    -- so the "?" help must describe this surface instead of the full editor.
+    local PAINTER_HELP_LINES = {
+        "Click a colored element to edit exactly its colors.",
+        "Right-click an element to open its section below.",
+        "Ctrl + mouse wheel zooms. Ctrl + drag pans. Fit recenters.",
+        "Right-click any color swatch below to reset it to default.",
+        "Layout editing lives on the Player/Target and Party/Raid pages.",
+    }
+    local function RewirePreviewHelp(helpButton)
+        local helpers = M.PreviewHelpers
+        if not (helpButton and helpers and type(helpers.ShowPreviewControlsHelp) == "function") then return end
+        helpButton:SetScript("OnClick", function(self)
+            local lines = {}
+            for i = 1, #PAINTER_HELP_LINES do lines[i] = Tr(PAINTER_HELP_LINES[i]) end
+            helpers.ShowPreviewControlsHelp(self, { M = M, T = T, W = W, Tr = Tr, lines = lines })
+        end)
+    end
+    for i = 1, #unitBoxes do RewirePreviewHelp(unitBoxes[i].zoomHelpButton) end
+    RewirePreviewHelp(groupBox and groupBox._zoomHelpButton)
+
+    -- The castbar tab shows one full-width panel instead of two half panels;
+    -- built lazily on first activation of the tab.
+    local castBox
+    local function EnsureCastBox()
+        if castBox == nil then
+            castBox = MakeUnitPreview(host, ctx, previewW, "target", "Target") or false
+            if castBox then
+                castBox:ClearAllPoints()
+                castBox:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
+                CollectZoomBar(castBox.zoomBar)
+                if castBox.zoomBar and castBox.zoomBar.SetAlpha then castBox.zoomBar:SetAlpha(0) end
+                RewirePreviewHelp(castBox.zoomHelpButton)
+                castBox:Hide()
+            end
+        end
+        return castBox or nil
+    end
+
+    -- Zoom and pan gestures pass through the shield to the hovered preview's
+    -- own canvas handlers. Direct canvas mouse input stays disabled on this
+    -- color-only surface, but the canvas scripts remain installed and expect
+    -- (surface, ...) arguments, so delegation is safe.
+    local function HoveredPreviewSurface()
+        local function SurfaceOf(box)
+            if box and box.IsShown and box:IsShown() and box.IsMouseOver and box:IsMouseOver() then
+                return box.canvas or box._stage
+            end
+        end
+        for i = 1, #unitBoxes do
+            local surface = SurfaceOf(unitBoxes[i])
+            if surface then return surface end
+        end
+        return SurfaceOf(castBox or nil) or SurfaceOf(groupBox)
+    end
+    local function DelegateSurfaceScript(scriptName, ...)
+        local surface = HoveredPreviewSurface()
+        local handler = surface and surface.GetScript and surface:GetScript(scriptName)
+        if type(handler) == "function" then
+            handler(surface, ...)
+            return true
+        end
+        return false
+    end
+    if shield then
+        shield:SetScript("OnMouseWheel", function(_, delta)
+            -- The canvas wheel handler zooms on Ctrl and forwards plain wheel
+            -- input to the menu scroll on its own.
+            if DelegateSurfaceScript("OnMouseWheel", delta) then return end
+            local scroll = M.scrollFrame
+            local handler = scroll and scroll.GetScript and scroll:GetScript("OnMouseWheel")
+            if type(handler) == "function" then handler(scroll, delta) end
+        end)
+        shield:SetScript("OnMouseDown", function(_, mouseButton)
+            if (mouseButton == "LeftButton" and IsControlKeyDown and IsControlKeyDown())
+                or mouseButton == "MiddleButton" then
+                DelegateSurfaceScript("OnMouseDown", mouseButton)
+            end
+        end)
+        shield:SetScript("OnMouseUp", function(_, mouseButton)
+            DelegateSurfaceScript("OnMouseUp", mouseButton)
+        end)
+    end
 
     local function RefreshPreviews(reason)
         for i = 1, #unitBoxes do RequestPreview(unitBoxes[i], reason) end
         RequestPreview(groupBox, reason)
+        if castBox then RequestPreview(castBox, reason) end
+    end
+
+    -- Hint line: makes the clickable preview discoverable and doubles as the
+    -- status line for the palette brush.
+    local HINT_BASE = "Click an element in the preview to edit its colors. Right-click a color swatch to reset it to default."
+    local hintLine = Label(section, HINT_BASE, 16, -418, innerW, T.colors.muted)
+    local hintResetSerial = 0
+    local function SetHintStatus(text, holdSeconds)
+        hintResetSerial = hintResetSerial + 1
+        local serial = hintResetSerial
+        hintLine:SetText(text and Tr(text) or Tr(HINT_BASE))
+        if text and holdSeconds and C_Timer and C_Timer.After then
+            C_Timer.After(holdSeconds, function()
+                if serial == hintResetSerial then hintLine:SetText(Tr(HINT_BASE)) end
+            end)
+        end
+    end
+
+    -- Palette row: saved + recent colors from the shared picker store. A click
+    -- arms the swatch as a brush; the next preview click paints with it.
+    local function PaletteStore()
+        local db = type(M.EnsureDB) == "function" and M.EnsureDB() or _G.MSUF_DB
+        local store = type(db) == "table" and db.menu2ColorPicker or nil
+        return type(store) == "table" and store or nil
+    end
+    local function PaletteHexToRGB(value)
+        local hex = tostring(value or ""):match("^%s*#?(%x%x%x%x%x%x)%s*$")
+        if not hex then return nil end
+        return tonumber(hex:sub(1, 2), 16) / 255, tonumber(hex:sub(3, 4), 16) / 255, tonumber(hex:sub(5, 6), 16) / 255
+    end
+    local PALETTE_SLOTS = 14
+    local paletteSlots = {}
+    local paletteEmptyHint
+    local function RefreshPaletteBrushVisuals()
+        for i = 1, #paletteSlots do
+            local slot = paletteSlots[i]
+            if slot._msuf2Edge then
+                if slot._msuf2Hex and slot._msuf2Hex == M.colorsBrushHex then
+                    slot._msuf2Edge:SetVertexColor(1.00, 0.82, 0.20, 1)
+                else
+                    slot._msuf2Edge:SetVertexColor(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], 0.9)
+                end
+            end
+        end
+    end
+    local function SetBrush(hex)
+        M.colorsBrushHex = hex
+        RefreshPaletteBrushVisuals()
+        if hex then
+            SetHintStatus("Brush armed: click a preview element to paint it. Right-click the swatch to disarm.")
+        else
+            SetHintStatus(nil)
+        end
+    end
+    local paletteLabel = Label(section, "My colors", 16, -442, 96, T.colors.dim, "GameFontNormalSmall")
+    paletteLabel:SetJustifyH("LEFT")
+    local paletteX = 96
+    for i = 1, PALETTE_SLOTS do
+        local slot = CreateFrame("Button", nil, section)
+        slot:SetSize(26, 16)
+        slot:SetPoint("TOPLEFT", section, "TOPLEFT", paletteX + 16 + (i - 1) * 32, -440)
+        slot:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+        slot._msuf2Fill, slot._msuf2Edge = T.CreateSuperellipseLayers(slot, "_msuf2PaletteSwatch", 1, "ARTWORK", "OVERLAY")
+        local hover = slot:CreateTexture(nil, "HIGHLIGHT")
+        hover:SetAllPoints()
+        hover:SetColorTexture(1, 1, 1, 0.10)
+        slot:SetScript("OnClick", function(self, mouseButton)
+            if not self._msuf2Hex then return end
+            if mouseButton == "RightButton" or M.colorsBrushHex == self._msuf2Hex then
+                SetBrush(nil)
+            else
+                SetBrush(self._msuf2Hex)
+            end
+        end)
+        if M.AddTooltip then
+            M.AddTooltip(slot, "Palette color", Tr("Click to arm this color as a brush, then click a preview element to paint it."), { hook = true })
+        end
+        RegisterControl(slot,
+            ControlMeta("opt_colors", "advanced", "preview.palette.slot." .. tostring(i), "ephemeral"),
+            "Palette color", "button")
+        slot:Hide()
+        paletteSlots[i] = slot
+    end
+    local function RefreshPaletteSlots()
+        local store = PaletteStore()
+        local shown, seen = 0, {}
+        local function AddSwatches(list)
+            if type(list) ~= "table" then return end
+            for i = 1, #list do
+                if shown >= PALETTE_SLOTS then return end
+                local hex = list[i]
+                local r, g, b = PaletteHexToRGB(hex)
+                if r and not seen[hex] then
+                    seen[hex] = true
+                    shown = shown + 1
+                    local slot = paletteSlots[shown]
+                    slot._msuf2Hex = hex
+                    if slot._msuf2Fill.SetColorTexture then slot._msuf2Fill:SetColorTexture(r, g, b, 1)
+                    else slot._msuf2Fill:SetVertexColor(r, g, b, 1) end
+                    slot:Show()
+                end
+            end
+        end
+        AddSwatches(store and store.saved)
+        AddSwatches(store and store.recent)
+        for i = shown + 1, PALETTE_SLOTS do
+            paletteSlots[i]._msuf2Hex = nil
+            paletteSlots[i]:Hide()
+        end
+        if M.colorsBrushHex and not seen[M.colorsBrushHex] then M.colorsBrushHex = nil end
+        if not paletteEmptyHint then
+            paletteEmptyHint = Label(section, "Save or pick colors in the color picker to reuse them here.",
+                paletteX + 16, -442, innerW - paletteX - 16, T.colors.dim, "GameFontNormalSmall")
+        end
+        paletteEmptyHint:SetShown(shown == 0)
+        RefreshPaletteBrushVisuals()
+    end
+    RefreshPaletteSlots()
+    M.TrackRefresh(ctx, RefreshPaletteSlots)
+
+    -- Click-to-paint: resolve the section that owns the clicked element and
+    -- open the shared context picker on its real bound color controls.
+    local function EnsureSectionForPaint(sectionId)
+        if not sectionId then return nil end
+        local pageKey = (ctx and ctx.key) or M.activeKey or "opt_colors"
+        local cache = M.cache and M.cache[pageKey]
+        if not cache then return nil end
+        local sections = cache.sections
+        local target = sections and sections[sectionId]
+        if not target and type(M.ColorsEnsureCategoryBuilt) == "function" then
+            M.ColorsEnsureCategoryBuilt(sectionId)
+            sections = cache.sections
+            target = sections and sections[sectionId]
+        end
+        return target
+    end
+    local function SectionPaintOwners(sectionId)
+        local target = EnsureSectionForPaint(sectionId)
+        local entry = target and target._msuf2CollapsibleEntry
+        if not entry then return nil end
+        local root = entry
+        while root.ancestorEntry do root = root.ancestorEntry end
+        local owners = root._msuf2ColorContextOwners
+        if type(owners) == "table" and #owners > 0 then return owners end
+        return nil
+    end
+    local function FindOwnerByLabel(owners, label)
+        if not (owners and label) then return nil end
+        for i = 1, #owners do
+            if owners[i]._msuf2ColorLabel == label then return owners[i] end
+        end
+    end
+    local function ApplyBrushToOwner(owner, ownerLabel)
+        local r, g, b = PaletteHexToRGB(M.colorsBrushHex)
+        if not (r and owner) then return false end
+        if owner.SetRGB then owner:SetRGB(r, g, b) end
+        if type(owner._msuf2OnColorChanged) == "function" then owner._msuf2OnColorChanged(r, g, b) end
+        SetHintStatus(Tr("Painted:") .. " " .. Tr(tostring(ownerLabel or owner._msuf2ColorLabel or "color")), 2.5)
+        return true
+    end
+    local function OpenPaintTarget(spec, category)
+        local sectionId = spec.sectionId or CATEGORY_SECTION[category.key]
+        local owners = SectionPaintOwners(sectionId)
+        if not owners then return false end
+        local initialOwner = FindOwnerByLabel(owners, spec.ownerLabel) or owners[1]
+        if M.colorsBrushHex then
+            if ApplyBrushToOwner(initialOwner, spec.label) then return true end
+        end
+        if type(W.OpenColorContextPicker) ~= "function" then return false end
+        W.OpenColorContextPicker(spec.label or category.title, owners, category.pickerNote, initialOwner)
+        return true
     end
     for i = 1, #categories do
         local category = categories[i]
         local tab = T.Button(section, category.shortTitle or category.title, tabW, 26)
         tab:SetPoint("TOPLEFT", section, "TOPLEFT", 16 + (i - 1) * (tabW + gap), tabsY)
+        if M.AddTooltip then
+            M.AddTooltip(tab, Tr(category.title or category.shortTitle or ""),
+                Tr(category.subtitle or ""), { hook = true })
+        end
         RegisterControl(tab,
             ControlMeta("opt_colors", "advanced", "preview.scope.option." .. tostring(category.key), "ephemeral"),
             category.shortTitle or category.title, "button")
         tabButtons[category.key] = tab
     end
+    -- The active tab filters preview AND section list; this line says what the
+    -- tab covers so the labels do not have to carry it alone.
+    local tabDescription = Label(section, "", 16, -40, innerW, T.colors.muted)
 
     local clickTargets = {}
     local valid = {}
@@ -367,34 +716,176 @@ function P.Build(ctx, builder, categories)
     local function Current() return valid[M.colorsPainterCategory] and M.colorsPainterCategory or categories[1].key end
     local function FocusColorSection(sectionId)
         sectionId = sectionId or CATEGORY_SECTION[Current()]
-        local pageKey = (ctx and ctx.key) or M.activeKey or "opt_colors"
-        local cache = M.cache and M.cache[pageKey]
-        local section = cache and cache.sections and cache.sections[sectionId]
-        if section and type(W.FocusCollapsibleSection) == "function" then
-            return W.FocusCollapsibleSection(section, { persist = true, flash = true })
+        local target = EnsureSectionForPaint(sectionId)
+        if target and type(W.FocusCollapsibleSection) == "function" then
+            return W.FocusCollapsibleSection(target, { persist = true, flash = true })
         end
         return false
     end
-    local function RebuildClickTargets(category)
+    local function RebuildClickTargets(category, castPanel)
         for i = 1, #clickTargets do clickTargets[i]:Hide() end
         clickTargets = {}
-        local anchors = ResolveCategoryAnchors(unitBoxes, groupBox, category.key)
+        local anchors = ResolveCategoryAnchors(castPanel and { castPanel } or unitBoxes, groupBox, category.key)
         for i = 1, #anchors do
             local spec = anchors[i]
+            local navigateTooltip = NAVIGATE_ONLY_SECTIONS[spec.sectionId or ""]
             local target = AddClickTarget(host, spec.anchor, function()
+                if navigateTooltip and not M.colorsBrushHex then
+                    FocusColorSection(spec.sectionId)
+                    return
+                end
+                if not OpenPaintTarget(spec, category) then
+                    FocusColorSection(spec.sectionId or CATEGORY_SECTION[category.key])
+                end
+            end, function()
                 FocusColorSection(spec.sectionId or CATEGORY_SECTION[category.key])
-            end, spec.label or category.title, spec.priority)
+            end, spec.label or category.title, spec.priority, DelegateSurfaceScript,
+            navigateTooltip and Tr(navigateTooltip) or nil,
+            shield)
             if target then clickTargets[#clickTargets + 1] = target end
         end
     end
+    -- Resources tab: menu-only preview strip that follows the Power type /
+    -- Resource type dropdowns. The live unit frames can only render the
+    -- player's own class resources, so they cannot preview foreign selections.
+    local resourcesStrip
+    local function EnsureResourcesStrip(category)
+        if resourcesStrip ~= nil then return resourcesStrip or nil end
+        local preview = category and category.preview
+        if type(preview) ~= "table" then
+            resourcesStrip = false
+            return nil
+        end
+        local strip = CreateFrame("Frame", nil, host)
+        strip:SetPoint("TOPLEFT", host, "TOPLEFT", 24, -52)
+        strip:SetPoint("TOPRIGHT", host, "TOPRIGHT", -24, -52)
+        strip:SetHeight(210)
+        if strip.SetFrameLevel and host.GetFrameLevel then
+            local base = (shield and shield.GetFrameLevel and shield:GetFrameLevel())
+                or ((host:GetFrameLevel() or 0) + COLOR_SHIELD_LEVEL)
+            strip:SetFrameLevel(base + 11)
+        end
+        local barW = 340
+        local function StripButton(y, height, label, sectionId, ownerLabel)
+            local button = CreateFrame("Button", nil, strip)
+            button:SetPoint("TOPLEFT", strip, "TOPLEFT", 0, y)
+            button:SetSize(barW + 24, height)
+            button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+            local hover = button:CreateTexture(nil, "HIGHLIGHT")
+            hover:SetAllPoints()
+            hover:SetColorTexture(0.18, 0.66, 1, 0.12)
+            if M.AddTooltip then
+                M.AddTooltip(button, label,
+                    Tr("Click to edit these colors. Right-click opens the matching section below."),
+                    { owner = "ANCHOR_CURSOR" })
+            end
+            ForwardMenuScrollWheel(button)
+            button:SetScript("OnClick", function(_, mouseButton)
+                if mouseButton == "RightButton" then
+                    FocusColorSection(sectionId)
+                    return
+                end
+                if not OpenPaintTarget({ sectionId = sectionId, label = label, ownerLabel = ownerLabel }, category) then
+                    FocusColorSection(sectionId)
+                end
+            end)
+            return button
+        end
+
+        local powerRow = StripButton(-6, 50, "Power Bar Colors", "colors_power", "Color")
+        local powerLabel = Label(powerRow, "", 12, -4, barW, T.colors.text)
+        local powerBg = powerRow:CreateTexture(nil, "BORDER")
+        powerBg:SetPoint("TOPLEFT", powerRow, "TOPLEFT", 12, -24)
+        powerBg:SetSize(barW, 18)
+        local powerFill = powerRow:CreateTexture(nil, "ARTWORK")
+        powerFill:SetPoint("TOPLEFT", powerBg, "TOPLEFT", 1, -1)
+        powerFill:SetSize(floor(barW * 0.62), 16)
+
+        local resourceRow = StripButton(-72, 56, "Class Power Colors", "colors_class_power", "Color")
+        local resourceLabel = Label(resourceRow, "", 12, -4, barW, T.colors.text)
+        local slots = {}
+        for i = 1, 11 do
+            local pill = resourceRow:CreateTexture(nil, "ARTWORK")
+            pill:SetSize(26, 13)
+            pill:SetPoint("TOPLEFT", resourceRow, "TOPLEFT", 12 + (i - 1) * 31, -28)
+            pill:Hide()
+            slots[i] = pill
+        end
+        local resourceBarBg = resourceRow:CreateTexture(nil, "BORDER")
+        resourceBarBg:SetPoint("TOPLEFT", resourceRow, "TOPLEFT", 12, -26)
+        resourceBarBg:SetSize(barW, 18)
+        local resourceBarFill = resourceRow:CreateTexture(nil, "ARTWORK")
+        resourceBarFill:SetPoint("TOPLEFT", resourceBarBg, "TOPLEFT", 1, -1)
+        resourceBarFill:SetSize(floor(barW * 0.62), 16)
+
+        Label(strip, "The preview follows the Power type and Resource type selection below.",
+            12, -146, previewW - 96, T.colors.dim, "GameFontNormalSmall")
+
+        function strip.Update()
+            local pr, pg, pb = preview.power()
+            local br, bgc, bb = preview.powerBg()
+            powerFill:SetColorTexture(pr, pg, pb, 1)
+            powerBg:SetColorTexture(br, bgc, bb, 0.9)
+            powerLabel:SetText(Tr("Power") .. " - " .. Tr(preview.powerLabel() or ""))
+            resourceLabel:SetText(Tr("Class Resource") .. " - " .. Tr(preview.resourceLabel() or ""))
+            local count = tonumber(preview.slotCount()) or 0
+            local slotsShown = count > 0
+            if slotsShown then
+                local shown = min(count, 10)
+                for i = 1, shown do
+                    local sr, sg, sb = preview.slot(i)
+                    slots[i]:SetColorTexture(sr, sg, sb, 1)
+                    slots[i]:Show()
+                end
+                local nextIndex = shown + 1
+                if preview.fullEnabled() and nextIndex <= 11 then
+                    local fr, fg, fb = preview.full()
+                    slots[nextIndex]:SetColorTexture(fr, fg, fb, 1)
+                    slots[nextIndex]:Show()
+                    nextIndex = nextIndex + 1
+                end
+                for i = nextIndex, 11 do slots[i]:Hide() end
+            else
+                for i = 1, 11 do slots[i]:Hide() end
+            end
+            resourceBarBg:SetShown(not slotsShown)
+            resourceBarFill:SetShown(not slotsShown)
+            if not slotsShown then
+                local rr, rg, rb = preview.resource()
+                local rbr, rbg, rbb = preview.resourceBg()
+                resourceBarFill:SetColorTexture(rr, rg, rb, 1)
+                resourceBarBg:SetColorTexture(rbr, rbg, rbb, 0.9)
+            end
+        end
+        strip:Hide()
+        resourcesStrip = strip
+        return strip
+    end
+    M.TrackRefresh(ctx, function()
+        if resourcesStrip and resourcesStrip ~= false and resourcesStrip:IsShown() and resourcesStrip.Update then
+            resourcesStrip.Update()
+        end
+    end)
     local function ShowCategory(key)
         if not valid[key] then key = categories[1].key end
         if M.SetMenuStateValue then M.SetMenuStateValue("colorsPainterCategory", key) else M.colorsPainterCategory = key end
-        for i = 1, #unitBoxes do unitBoxes[i]:SetShown(key ~= "group") end
+        local category
+        for i = 1, #categories do
+            if categories[i].key == key then
+                category = categories[i]
+                break
+            end
+        end
+        local castPanel = key == "cast" and EnsureCastBox() or nil
+        local strip = key == "resources" and EnsureResourcesStrip(category) or nil
+        for i = 1, #unitBoxes do unitBoxes[i]:SetShown(key ~= "group" and not castPanel and not strip) end
+        if castBox then castBox:SetShown(castPanel and true or false) end
+        if resourcesStrip and resourcesStrip ~= false then resourcesStrip:SetShown(strip and true or false) end
         if groupBox then groupBox:SetShown(key == "group") end
-        if key ~= "group" then
-            for i = 1, #unitBoxes do
-                local unitBox = unitBoxes[i]
+        if key ~= "group" and not strip then
+            local boxes = castPanel and { castPanel } or unitBoxes
+            for i = 1, #boxes do
+                local unitBox = boxes[i]
                 HidePreviewEditorChrome(unitBox, unitBox.canvas, unitBox.sidebar, unitBox.zoomBar, unitBox.animateCombatButton)
                 DisableUnitPreviewEditing(unitBox)
                 FocusUnitPreview(unitBox, key)
@@ -406,8 +897,22 @@ function P.Build(ctx, builder, categories)
             HideGroupPreviewIcons(groupBox)
         end
         for id, button in pairs(tabButtons) do if button.SetActive then button:SetActive(id == key) end end
-        for i = 1, #categories do if categories[i].key == key then RebuildClickTargets(categories[i]); break end end
+        if category then
+            tabDescription:SetText(Tr(category.subtitle or ""))
+            if strip then
+                for i = 1, #clickTargets do clickTargets[i]:Hide() end
+                clickTargets = {}
+                strip.Update()
+            else
+                RebuildClickTargets(category, castPanel)
+            end
+        end
+        RaiseZoomBars()
+        -- One taxonomy: the same tab drives which section category the page
+        -- shows below the preview.
+        if type(M.ColorsOnPainterCategory) == "function" then M.ColorsOnPainterCategory(key) end
     end
+    M.ColorsSetPainterCategory = ShowCategory
     for key, button in pairs(tabButtons) do
         button:SetScript("OnClick", function()
             ShowCategory(key)
@@ -432,14 +937,17 @@ function P.Build(ctx, builder, categories)
                 pageKey = pageKey,
                 wrapper = wrapper,
                 restoreParent = section,
-                restorePoint = { "TOPLEFT", section, "TOPLEFT", 16, -46 },
+                restorePoint = { "TOPLEFT", section, "TOPLEFT", 16, -62 },
                 restoreWidth = previewW,
                 restoreHeight = 350,
             })
         end
         if host._msuf2PinButton and host._msuf2PinButton.SetFrameLevel then
-            local popupLevel = tonumber(M.MENU_POPUP_FRAME_LEVEL) or 120
-            host._msuf2PinButton:SetFrameLevel(min((host:GetFrameLevel() or 1) + COLOR_TARGET_LEVEL + 12, popupLevel - 5))
+            -- Shield-relative like the click targets and zoom bars, so the
+            -- pin toggle stays clickable after pin-mode reparenting.
+            local base = (shield and shield.GetFrameLevel and shield:GetFrameLevel())
+                or ((host:GetFrameLevel() or 1) + COLOR_SHIELD_LEVEL)
+            host._msuf2PinButton:SetFrameLevel(base + 22)
         end
         if host._msuf2PinButton and not host._msuf2ColorPainterPinRegistered then
             host._msuf2ColorPainterPinRegistered = true
@@ -483,6 +991,7 @@ function P.Build(ctx, builder, categories)
             initialRefreshSerial = initialRefreshSerial + 1
             for i = 1, #unitBoxes do unitBoxes[i]:Hide() end
             if groupBox then groupBox:Hide() end
+            if castBox then castBox:Hide() end
         end)
     end
     if ctx and ctx.wrapper and ctx.wrapper.HookScript then
@@ -494,6 +1003,7 @@ function P.Build(ctx, builder, categories)
     if not section:IsShown() then
         for i = 1, #unitBoxes do unitBoxes[i]:Hide() end
         if groupBox then groupBox:Hide() end
+        if castBox then castBox:Hide() end
     end
     M.TrackRefresh(ctx, function()
         if not section:IsShown() then return end

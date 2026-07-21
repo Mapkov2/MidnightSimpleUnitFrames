@@ -20,6 +20,8 @@ local SETTING_KEY_BY_PATH = {
     ["tooltips.anchor"] = "general.unitTooltipAnchor",
     ["tooltips.visibility_mode"] = "general.unitTooltipMode",
     ["tooltips.modifier"] = "general.unitTooltipModifier",
+    ["mouseover.style"] = "general.highlightStyle",
+    ["mouseover.size"] = "general.highlightThickness",
 }
 local function Meta(path, classification, exact)
     exact = type(exact) == "table" and exact or {}
@@ -35,7 +37,9 @@ end
 local VT = M.ValueTextList
 local TOOLTIP_MODES = VT("ALWAYS", "Always", "OOC", "Out of Combat", "MODIFIER", "Modifier Key", "NEVER", "Never")
 local TOOLTIP_MODIFIERS = VT("ALT", "Alt", "CTRL", "Ctrl", "SHIFT", "Shift")
+local MOUSEOVER_STYLES = VT("GRADIENT", "Soft gradient", "BORDER", "Solid border")
 local MENU_WRITE_OPTS = { preview = false, applyAll = false, notify = false }
+local MOUSEOVER_WRITE_OPTS = { preview = false, applyAll = false, mouseoverHighlight = true }
 local PREVIEW_FALSE = { preview = false }
 local function NormalizeTooltipMode(mode)
     if mode == "OOC" or mode == "MODIFIER" or mode == "NEVER" then return mode end
@@ -92,7 +96,7 @@ local function WriteTooltipBehavior(mode, modifier)
 end
 local function BuildMisc(ctx)
     local b = W.PageBuilder(ctx)
-    b:GlobalStyleHeader("Miscellaneous", "Language, menu behavior, tooltips and Blizzard frames.", 72)
+    b:GlobalStyleHeader("Miscellaneous", "Language, menu behavior, mouseover highlights, tooltips and Blizzard frames.", 72)
     M.InstallStaticPopup("MSUF_RELOAD_PLAYERFRAME_HIDE_MODE", {
         text = M.Tr("This changes how MSUF hides the Blizzard PlayerFrame.\n\nA UI reload is required."),
         button1 = RELOADUI or M.Tr("Reload"),
@@ -274,6 +278,49 @@ local function BuildMisc(ctx)
         function()
             Call("MSUF_ApplyModules")
         end)
+    local mouseover = b:CollapsibleSection("misc_mouseover_highlight", "Mouseover Highlight", 218, true)
+    local mouseoverW = mouseover._msuf2Width or ctx.width or 720
+    local mouseoverLeftX = 30
+    local mouseoverRightX = max(mouseoverLeftX + 300, floor(mouseoverW * 0.52))
+    local mouseoverLeftW = max(240, min(280, mouseoverRightX - mouseoverLeftX - 40))
+    local mouseoverRightW = max(220, min(300, mouseoverW - mouseoverRightX - 36))
+    local enabled = BindMiscToggle(mouseover, "Enable mouseover highlight", "highlightEnabled", true,
+        "MSUF2_MOUSEOVER_HIGHLIGHT", 14, -10, 320, MOUSEOVER_WRITE_OPTS)
+    local style = BindMiscDropdown(mouseover, "Style", MOUSEOVER_STYLES, mouseoverLeftW,
+        mouseoverLeftX, -64,
+        function()
+            local value = tostring(ReadG("highlightStyle", "GRADIENT")):upper()
+            return value == "BORDER" and "BORDER" or "GRADIENT"
+        end,
+        function(value)
+            SetG("highlightStyle", value == "BORDER" and "BORDER" or "GRADIENT",
+                "MSUF2_MOUSEOVER_STYLE", MOUSEOVER_WRITE_OPTS)
+        end,
+        "mouseover.style")
+    local size = W.Slider(mouseover, "Effect size", 1, 16, 1, mouseoverRightW)
+    if size.SetValueFormatter then
+        size:SetValueFormatter(function(value) return M.Format("%d px", floor((tonumber(value) or 6) + 0.5)) end)
+    end
+    M.BindNumberWidget(ctx, size,
+        function() return floor((tonumber(ReadG("highlightThickness", 6)) or 6) + 0.5) end,
+        function(value)
+            SetG("highlightThickness", floor((tonumber(value) or 6) + 0.5),
+                "MSUF2_MOUSEOVER_SIZE", MOUSEOVER_WRITE_OPTS)
+        end,
+        6,
+        Meta("mouseover.size", "setting", { min = 1, max = 16, step = 1, format = "%d px" }))
+    W.MoveWidget(size, mouseover, mouseoverRightX, -58, mouseoverRightW, "CENTER")
+    local mouseoverHelp = W.Text(mouseover,
+        "Soft gradient gives the whole frame a clear, portrait-safe hover cue. Solid border keeps a crisp edge. Choose its color in Global Style > Colors > Unit Frames.",
+        mouseoverLeftX, -142, mouseoverW - 68, T.colors.muted)
+    if mouseoverHelp.SetWordWrap then mouseoverHelp:SetWordWrap(true) end
+    local function RefreshMouseoverControls()
+        local on = ReadGBool("highlightEnabled", true)
+        M.CallIf(W.SetControlEnabled, style, on)
+        M.CallIf(W.SetControlEnabled, size, on)
+    end
+    if enabled and enabled.HookScript then enabled:HookScript("OnClick", RefreshMouseoverControls) end
+    M.TrackRefresh(ctx, RefreshMouseoverControls)
     local tooltips = b:CollapsibleSection("misc_tooltips", "Unitframe tooltips", 236, false)
     local tooltipW = tooltips._msuf2Width or ctx.width or 720
     local tooltipLeftX = 30
@@ -331,4 +378,4 @@ local function BuildMisc(ctx)
         end)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-M.RegisterPage("opt_misc", { title = "MSUF Miscellaneous", build = BuildMisc, version = 11 })
+M.RegisterPage("opt_misc", { title = "MSUF Miscellaneous", build = BuildMisc, version = 12 })

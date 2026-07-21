@@ -21,7 +21,12 @@ end
 
 local registeredPage
 local M = {
-    AdvancedPage = {}, Theme = {}, Widgets = { SetControlsEnabled = function() end },
+    AdvancedPage = {},
+    Theme = {
+        colors = { text = { 1, 1, 1, 1 }, muted = { 0.5, 0.5, 0.5, 1 } },
+        Font = function() return { SetPoint = function() end, SetText = function() end } end,
+    },
+    Widgets = { SetControlsEnabled = function() end },
     KeyLabelRows = function() return {} end,
     WordList = Words,
     ColorRows = ColorRows,
@@ -45,17 +50,20 @@ local MSUF = { MSUF2 = M }
 local path = "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors.lua"
 assert(loadfile(path))("MidnightSimpleUnitFrames", MSUF)
 assert(registeredPage and type(registeredPage.build) == "function", "colors page was not registered")
-assert(registeredPage.version == 18, "colors page version changed")
+assert(registeredPage.version == 19, "colors page version changed")
 
-local upvalues, buildColorGroup, index = 0, nil, 1
+local upvalues, categoryBuilders, index = 0, nil, 1
 while true do
     local name, value = debug.getupvalue(registeredPage.build, index)
     if not name then break end
-    if name == "BuildColorGroup" then buildColorGroup = value end
+    if name == "COLOR_CATEGORY_BUILDERS" then categoryBuilders = value end
     upvalues, index = upvalues + 1, index + 1
 end
 assert(upvalues <= 40, "BuildColors exceeds the upvalue budget: " .. upvalues)
-assert(type(buildColorGroup) == "function", "BuildColors lost its color-group builder")
+assert(type(categoryBuilders) == "table", "BuildColors lost its category builders")
+for _, categoryKey in ipairs({ "unit", "group", "cast", "auras", "resources" }) do
+    assert(type(categoryBuilders[categoryKey]) == "function", "missing category builder: " .. categoryKey)
+end
 
 local file = assert(io.open(path, "rb"))
 local source = file:read("*a")
@@ -69,18 +77,16 @@ local components = {
 for _, name in ipairs(components) do
     assert(source:find("local function " .. name, 1, true), "missing color-domain builder: " .. name)
 end
-local buildCursor = assert(source:find("local function BuildColors(ctx)", 1, true))
-local buildSource = source:sub(buildCursor)
+local buildersCursor = assert(source:find("local COLOR_CATEGORY_BUILDERS", 1, true))
+local buildersSource = source:sub(buildersCursor)
 for _, name in ipairs(components) do
-    assert(buildSource:find(name .. "(ctx, ", 1, true), "missing color-domain build call: " .. name)
-end
-for _, id in ipairs({ "colors_group_general", "colors_group_units", "colors_group_groups", "colors_group_bars", "colors_group_additional" }) do
-    assert(buildSource:find('"' .. id .. '"', 1, true), "missing color group: " .. id)
+    assert(buildersSource:find(name .. "(ctx, inner", 1, true), "missing color-domain build call: " .. name)
 end
 assert(not source:find('stateKey = "colorsGroupFrameTab"', 1, true), "Group Frame colors should use accordions, not tabs")
-assert(source:find("local function ColorGroupHasPendingFocus", 1, true), "color groups lost search/deep-link aware lazy building")
-assert(source:find("if (ctx and ctx.hiddenBuild) or entry.open or ColorGroupHasPendingFocus", 1, true), "collapsed color groups are built eagerly")
-assert(source:find("entry._msuf2RefreshState = RefreshLazyGroup", 1, true), "collapsed color groups do not build on first open")
+assert(source:find("local function PendingColorFocusCategory", 1, true), "categories lost search/deep-link aware lazy building")
+assert(source:find("if ctx.hiddenBuild then", 1, true), "hidden (coverage) builds no longer materialize every category")
+assert(source:find("_msuf2ResolveMissingSection", 1, true), "cross-page focus requests can no longer materialize lazy categories")
+assert(source:find("_msuf2EnsureVisible", 1, true), "focused sections can no longer reveal their category")
 assert(source:find("for i = count + 1, #slotControls do W.SetControlShown(slotControls[i], false) end", 1, true), "class-power slot visibility lost its initial delta path")
 assert(not source:find("M.TrackRefresh(ctx, RefreshSlotControls)\n    RefreshSlotControls()", 1, true), "class-power slot visibility refresh runs twice during page build")
 local widgetsFile = assert(io.open("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Widgets.lua", "rb"))
@@ -94,13 +100,15 @@ assert(bindingsSource:find("widgets.AttachBoundColorToCollapsible", 1, true), "c
 
 local sections = {
     "colors_font", "colors_classes", "colors_background", "colors_appearance", "colors_unit",
-    "colors_npc_type", "colors_bar_colors", "colors_group_frames", "colors_group_frames_background",
-    "colors_group_frames_state", "colors_group_frames_highlights", "colors_castbar",
-    "colors_highlight", "colors_gameplay", "colors_power", "colors_class_power",
+    "colors_npc_type", "colors_bar_colors", "colors_bar_gradients", "colors_group_frames",
+    "colors_group_frames_background", "colors_group_frames_state", "colors_group_frames_highlights",
+    "colors_castbar", "colors_highlight", "colors_gameplay", "colors_power", "colors_class_power",
     "colors_auras", "colors_portrait",
 }
 for _, key in ipairs(sections) do
     assert(source:find('CollapsibleSection("' .. key .. '"', 1, true), "missing section: " .. key)
+    assert(source:find('"' .. key .. '"', source:find("local COLOR_CATEGORY_SECTIONS", 1, true), true),
+        "section is not mapped to a painter category: " .. key)
 end
 
 local settingContracts = {
@@ -111,7 +119,7 @@ local settingContracts = {
     "aurasCooldownTextSafeColor", "aurasCooldownTextWarningColor", "aurasCooldownTextUrgentColor",
     "aurasStackCountColor", "aurasOwnBuffHighlightColor", "aurasOwnDebuffHighlightColor",
     "portraitBorderColor", "portraitBgColor", "gfBarMode",
-    "playerCastbarOverride", "kickReadyColor", "kickNotReadyColor", "highlightEnabled",
+    "playerCastbarOverride", "kickReadyColor", "kickNotReadyColor", "highlightColor",
     "bossTargetHighlightColor", "combatTimerColor", "combatStateEnterColor", "combatStateLeaveColor",
     "crosshairInRangeColor", "crosshairOutRangeColor",
 }
@@ -141,74 +149,124 @@ assert(source:find('ControlMeta("opt_colors", "advanced"', 1, true), "page Contr
 assert(source:find("RegisterControl(btn, Meta(semanticPath", 1, true), "button metadata registration was lost")
 assert(source:find("M.BindColor(ctx, color, getRGB, setRGB, metadata)", 1, true), "color metadata binding was lost")
 
-local function NewLazyHarness(opts)
+-- Behavior harness: run the real BuildColors with the category builders
+-- swapped for counting stubs, so category laziness, hidden (coverage) builds
+-- and deep-link materialization stay pinned without the widget stack.
+local CATEGORY_TEST_SECTIONS = {
+    unit = { "colors_appearance" },
+    group = { "colors_group_frames" },
+    cast = { "colors_castbar" },
+    auras = { "colors_auras" },
+    resources = { "colors_power" },
+}
+
+local function NewMockFrame()
+    local frame = { shown = true, height = 60 }
+    function frame:SetSize(_, height) self.height = height end
+    function frame:SetHeight(height) self.height = height end
+    function frame:GetHeight() return self.height end
+    function frame:SetPoint() end
+    function frame:SetShown(shown) self.shown = shown and true or false end
+    function frame:Show() self.shown = true end
+    function frame:Hide() self.shown = false end
+    return frame
+end
+
+local function RunBuildColorsHarness(opts)
     opts = opts or {}
-    local entry = {}
-    entry.open = opts.open == true
-    entry.headerHeight = 36
-    entry.contentHeight = 96
-    entry.body = { SetHeight = function(_, height) entry.bodyHeight = height end }
-    entry.outer = { SetHeight = function(_, height) entry.outerHeight = height end }
-    local group = { _msuf2CollapsibleEntry = entry, _msuf2Width = 720 }
-    local root = {
-        CollapsibleSection = function() return group end,
-        RequestRelayoutCollapsibles = function(self) self._msuf2RelayoutPending = true end,
-    }
+    local previousCreateFrame = _G.CreateFrame
+    _G.CreateFrame = NewMockFrame
+    local buildCounts = {}
+    local testBuilders = {}
+    for categoryKey in pairs(categoryBuilders) do
+        testBuilders[categoryKey] = function(builderCtx, inner)
+            buildCounts[categoryKey] = (buildCounts[categoryKey] or 0) + 1
+            for _, sectionId in ipairs(CATEGORY_TEST_SECTIONS[categoryKey] or {}) do
+                builderCtx.entry.sections[sectionId] = { _msuf2SectionId = sectionId }
+                inner.collapsibles[#inner.collapsibles + 1] = { sectionId = sectionId }
+            end
+        end
+    end
+    local builderUpvalue
+    for i = 1, upvalues do
+        local name = debug.getupvalue(registeredPage.build, i)
+        if name == "COLOR_CATEGORY_BUILDERS" then builderUpvalue = i break end
+    end
+    assert(builderUpvalue, "COLOR_CATEGORY_BUILDERS upvalue not found")
+    debug.setupvalue(registeredPage.build, builderUpvalue, testBuilders)
+    M.Widgets.PageBuilder = function(_, builderOpts)
+        if not builderOpts then
+            local b = {
+                x = 12, y = -12, width = 720, parent = "root",
+                layoutEntries = {}, collapsibles = {},
+            }
+            function b:GlobalStyleHeader() self.y = self.y - 84 end
+            function b:RequestRelayoutCollapsibles() self._msuf2RelayoutPending = true end
+            function b:RelayoutCollapsibles() self._msuf2RelayoutPending = nil end
+            return b
+        end
+        local inner = { collapsibles = {} }
+        function inner:RelayoutCollapsibles() builderOpts.onContentHeight(240) end
+        return inner
+    end
     local ctx = {
         key = "opt_colors",
         hiddenBuild = opts.hiddenBuild == true,
-        entry = {},
+        entry = { sections = {} },
         refreshers = {},
         width = 720,
     }
-    local innerRelayouts = 0
-    M.Widgets.PageBuilder = function(_, builderOpts)
-        return {
-            RelayoutCollapsibles = function()
-                innerRelayouts = innerRelayouts + 1
-                builderOpts.onContentHeight(180)
-            end,
-        }
+    function ctx:SetContentHeight() end
+    M.colorsPainterCategory = opts.painterCategory
+    local ok, err = pcall(registeredPage.build, ctx)
+    -- Keep the stub builders installed: the installed callbacks
+    -- (M.ColorsEnsureCategoryBuilt, resolver) share the upvalue cell and are
+    -- exercised after the build returns. Restored once at the end of the file.
+    _G.CreateFrame = previousCreateFrame
+    assert(ok, "BuildColors harness failed: " .. tostring(err))
+    return ctx, buildCounts, builderUpvalue
+end
+
+do
+    local ctx, buildCounts = RunBuildColorsHarness({ painterCategory = "unit" })
+    assert(buildCounts.unit == 1, "active category was not built exactly once")
+    assert(not buildCounts.cast and not buildCounts.auras and not buildCounts.resources and not buildCounts.group,
+        "inactive categories were built eagerly")
+    assert(type(M.ColorsOnPainterCategory) == "function", "painter tab callback was not installed")
+    assert(type(M.ColorsEnsureCategoryBuilt) == "function", "paint popover cannot materialize categories")
+    M.ColorsEnsureCategoryBuilt("colors_castbar")
+    assert(buildCounts.cast == 1, "M.ColorsEnsureCategoryBuilt did not build the owning category")
+    assert(type(ctx.entry._msuf2ResolveMissingSection) == "function", "missing-section resolver was not installed")
+    local resolved = ctx.entry._msuf2ResolveMissingSection("colors_auras")
+    assert(buildCounts.auras == 1 and resolved and resolved._msuf2SectionId == "colors_auras",
+        "deep-linked section did not materialize its category")
+    M.ColorsOnPainterCategory("group")
+    assert(buildCounts.group == 1, "tab switch did not build its category")
+end
+
+do
+    local _, buildCounts = RunBuildColorsHarness({ hiddenBuild = true })
+    for _, categoryKey in ipairs({ "unit", "group", "cast", "auras", "resources" }) do
+        assert(buildCounts[categoryKey] == 1, "hidden (coverage) build skipped category: " .. categoryKey)
     end
-    return ctx, root, entry, function() return innerRelayouts end
-end
-
-do
-    local ctx, root, entry, InnerRelayouts = NewLazyHarness()
-    local builds, refreshes = 0, 0
-    buildColorGroup(ctx, root, "colors_group_test", "Test", nil, false, { "colors_child" }, function()
-        builds = builds + 1
-        ctx.refreshers[#ctx.refreshers + 1] = function() refreshes = refreshes + 1 end
-    end)
-    assert(builds == 0 and type(entry._msuf2RefreshState) == "function", "closed color group was not left lazy")
-    entry.open = true
-    entry._msuf2RefreshState()
-    assert(builds == 1 and refreshes == 1, "first color-group open did not build and refresh exactly once")
-    assert(InnerRelayouts() == 1 and entry.bodyHeight == 180 and entry.outerHeight == 216, "lazy color-group height did not settle")
-    assert(root._msuf2RelayoutPending == nil, "lazy color-group left a redundant root relayout queued")
-    entry._msuf2RefreshState()
-    assert(builds == 1 and refreshes == 1, "lazy color group rebuilt during a later refresh")
-end
-
-do
-    local ctx, root = NewLazyHarness({ hiddenBuild = true })
-    local builds = 0
-    buildColorGroup(ctx, root, "colors_group_hidden", "Hidden", nil, false, { "colors_hidden_child" }, function()
-        builds = builds + 1
-    end)
-    assert(builds == 1, "hidden search build no longer registers nested color controls")
 end
 
 do
     local previous = _G.MSUF_EM2_MenuFocusRequest
-    _G.MSUF_EM2_MenuFocusRequest = { explicit = true, pageKey = "opt_colors", sectionId = "colors_focus_child" }
-    local ctx, root = NewLazyHarness()
-    local builds = 0
-    buildColorGroup(ctx, root, "colors_group_focus", "Focus", nil, false, { "colors_focus_child" }, function()
-        builds = builds + 1
-    end)
+    _G.MSUF_EM2_MenuFocusRequest = { explicit = true, pageKey = "opt_colors", sectionId = "colors_castbar" }
+    local _, buildCounts = RunBuildColorsHarness()
     _G.MSUF_EM2_MenuFocusRequest = previous
-    assert(builds == 1, "deep-linked color group remained unbuilt")
+    assert(buildCounts.cast == 1, "deep-linked category remained unbuilt")
+end
+
+M.ColorsOnPainterCategory = nil
+M.ColorsEnsureCategoryBuilt = nil
+for i = 1, upvalues do
+    local name = debug.getupvalue(registeredPage.build, i)
+    if name == "COLOR_CATEGORY_BUILDERS" then
+        debug.setupvalue(registeredPage.build, i, categoryBuilders)
+        break
+    end
 end
 
 print("advanced colors page contract smoke: ok (BuildColors upvalues=" .. upvalues .. ")")
