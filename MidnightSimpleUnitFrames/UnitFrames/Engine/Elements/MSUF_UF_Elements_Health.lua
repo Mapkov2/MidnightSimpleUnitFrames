@@ -15,6 +15,7 @@ local WHITE = C and C.WHITE or "Interface\\Buttons\\WHITE8X8"
 local SCALE_100 = C and C.SCALE_100
 local SetBarSmoothing = C and C.SetBarSmoothing
 local ApplyHealthStatusColor = C and C.ApplyHealthStatusColor
+local ApplyBackgrounds = C and C.ApplyBackgrounds
 local ApplyBarGradient = C and C.ApplyBarGradient
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local ExportPublic = MSUF.ExportPublic or function(name, value)
@@ -84,14 +85,6 @@ local function SetColor(frame, force)
     bar._msufStatusR, bar._msufStatusG, bar._msufStatusB, bar._msufStatusA = nil, nil, nil, nil
   end
   frame._msufHealthStatusGone = nil
-  local bg = frame.hpBarBG or frame.bg
-  if bg then
-    local ba = frame.MSUFSpec and frame.MSUFSpec.backgroundAlpha or 0.72
-    if bg._msufA ~= ba then
-      bg:SetColorTexture(0.02, 0.02, 0.025, ba)
-      bg._msufA = ba
-    end
-  end
 end
 
 local function RuntimeColorEnabled(frame)
@@ -217,6 +210,7 @@ function Health.Apply(frame, spec)
   if SetBarSmoothing then SetBarSmoothing(frame.hpBar, h and h.smooth == true) end
   if ApplyBarGradient then ApplyBarGradient(frame, frame.hpBar, h and h.barGradient, "hpGradients") end
   SetColor(frame, true)
+  if ApplyBackgrounds then ApplyBackgrounds(frame, true, false) end
   ApplyRuntimeColor(frame, "MSUF_COLOR_CHANGE", frame.MSUFUnitKey)
 end
 
