@@ -12,14 +12,15 @@ assert(settle:find("entry._msuf2VisibleLayoutSettleQueued", 1, true),
 assert(settle:find("for _, body in pairs(entry.sections or {}) do", 1, true)
     and settle:find("section._msuf2RefreshLayout()", 1, true),
     "visible-page layout settle does not refresh accordion header geometry")
-assert(settle:find("builder:RelayoutCollapsibles()", 1, true)
+assert(settle:find("builder:RelayoutCollapsibles(VISIBLE_SETTLE_RELAYOUT)", 1, true)
     and settle:find("ApplyScrollMetrics()", 1, true),
     "visible-page layout settle does not finish page/scroll geometry")
 assert(settle:find("C_Timer.After(0, Settle)", 1, true),
     "visible-page layout settle is not deferred until anchored widths resolve")
 assert(settle:find("entry._msuf2VisibleFontSettled", 1, true)
+    and settle:find("T.RefreshMenuFontStrings(entry.fontStrings, true, true)", 1, true)
     and settle:find("T.RefreshMenuFonts(entry.wrapper, true, true)", 1, true),
-    "visible-page layout settle does not retry cold custom-font application once with the build cache preserved")
+    "visible-page layout settle does not retry registered fonts with a recursive compatibility fallback")
 assert(not settle:find("OnUpdate", 1, true),
     "visible-page layout settle added recurring runtime work")
 
