@@ -991,12 +991,16 @@ local function ApplyFonts(f, kind)
         local curP, curS, curF = fs:GetFont()
         curF = curF or ""
         local wantF = fontFlags or ""
-        if curP ~= fontPath or curS ~= size or curF ~= wantF then
+        local epoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
+        if curP ~= fontPath or curS ~= size or curF ~= wantF or fs._msufGFFontEpoch ~= epoch then
+            local applied = false
             if type(safeSetFont) == "function" then
-                safeSetFont(fs, fontPath, size, wantF, fontKey)
+                applied = safeSetFont(fs, fontPath, size, wantF, fontKey) == true
             else
-                fs:SetFont(fontPath, size, wantF)
+                local ok, result = pcall(fs.SetFont, fs, fontPath, size, wantF)
+                applied = ok and result ~= false
             end
+            fs._msufGFFontEpoch = applied and epoch or nil
         end
         if r and colorChanged then fs:SetTextColor(r, g, b, a or 1) end
         fs:SetShadowOffset(0, 0)

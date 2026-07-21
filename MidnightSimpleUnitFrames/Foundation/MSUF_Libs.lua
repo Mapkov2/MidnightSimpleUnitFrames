@@ -122,6 +122,15 @@ ns.Util.IsKnownFileAsset = ns.Util.IsKnownFileAsset or MSUF_IsKnownFileAsset
 -- A selected SharedMedia font is stored/resolved as the exact file path and is
 -- applied directly. Fallback is only used after SetFont itself rejects the path.
 do
+    -- Every cold-font settle advances this epoch. FontString tuple caches are
+    -- only valid inside one epoch so a delayed settle always reaches SetFont
+    -- again, even when GetFont already published the requested tuple early.
+    _G.MSUF_FontApplyEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
+
+    local function FontApplyEpoch()
+        return tonumber(_G.MSUF_FontApplyEpoch) or 0
+    end
+
     local ADDON_FONT_BASE = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Fonts\\"
     local FALLBACK_FONT = "Fonts\\FRIZQT___CYR.TTF"
     local FALLBACK_FONT_ALTERNATES = {
@@ -250,9 +259,11 @@ do
         if not (fs and type(fs.SetFont) == "function") then return false end
         path = FontAssetAllowed(path)
         if not path then return false end
+        local epoch = FontApplyEpoch()
         if fs._msufSafeFontPath == path
             and fs._msufSafeFontSize == size
             and fs._msufSafeFontFlags == flags
+            and fs._msufSafeFontEpoch == epoch
         then
             return true
         end
@@ -261,6 +272,7 @@ do
             fs._msufSafeFontPath = path
             fs._msufSafeFontSize = size
             fs._msufSafeFontFlags = flags
+            fs._msufSafeFontEpoch = epoch
         end
         return ok and applied ~= false
     end
@@ -270,9 +282,11 @@ do
         if size <= 0 then size = 12 end
         flags = NormalizeFlags(flags)
         local requested = ResolveFontPath(path, size, flags, fontKey)
+        local epoch = FontApplyEpoch()
         if fs and fs._msufSafeFontRequestPath == requested
             and fs._msufSafeFontRequestSize == size
             and fs._msufSafeFontRequestFlags == flags
+            and fs._msufSafeFontRequestEpoch == epoch
         then
             return true, fs._msufSafeFontAppliedPath or requested, fs._msufSafeFontSource or "cached"
         end
@@ -284,6 +298,7 @@ do
                 fs._msufSafeFontRequestFlags = flags
                 fs._msufSafeFontAppliedPath = requested
                 fs._msufSafeFontSource = "requested"
+                fs._msufSafeFontRequestEpoch = epoch
             end
             return true, requested, "requested"
         end
@@ -295,6 +310,10 @@ do
                 fs._msufSafeFontRequestFlags = flags
                 fs._msufSafeFontAppliedPath = fallback
                 fs._msufSafeFontSource = "fallback"
+                fs._msufSafeFontRequestEpoch = epoch
+            end
+            if type(_G.MSUF_MarkFontApplyFailed) == "function" then
+                _G.MSUF_MarkFontApplyFailed()
             end
             return true, fallback, "fallback"
         end
@@ -304,6 +323,10 @@ do
             fs._msufSafeFontRequestFlags = nil
             fs._msufSafeFontAppliedPath = nil
             fs._msufSafeFontSource = nil
+            fs._msufSafeFontRequestEpoch = nil
+        end
+        if type(_G.MSUF_MarkFontApplyFailed) == "function" then
+            _G.MSUF_MarkFontApplyFailed()
         end
         return false, requested, "failed"
     end
@@ -418,7 +441,12 @@ end
 local _MSUF_FontMediaRefreshPending = false
 local function RunFontMediaRefresh()
     _MSUF_FontMediaRefreshPending = false
-    local updateFonts = _G.MSUF_UpdateAllFonts
+    local recoverFonts = _G.MSUF_RequestFontRecovery
+    if type(recoverFonts) == "function" then
+        pcall(recoverFonts, "LSM_FONT_REGISTERED")
+        return
+    end
+    local updateFonts = _G.MSUF_UpdateAllFonts_Immediate or _G.MSUF_UpdateAllFonts
     if type(updateFonts) == "function" then
         pcall(updateFonts)
     end
@@ -539,7 +567,7 @@ local function EnsureLSMCallbacks()
     -- CallbackHandler stores one handler per event + owner. Registering with
     -- LSM itself as the owner lets another addon's colon-form registration
     -- silently replace this callback before its media is registered.
-    LSM.RegisterCallback(_MSUF_LSMCallbackOwner, "LibSharedMedia_Registered", function(_, mediatype, key)
+    local function OnMediaRegistered(_, mediatype, key)
         if mediatype == "font" then
             local registeredPath = MSUF_GetLSMFontAsset(LSM, key)
             if type(_G.MSUF_ClearResolvedFontPathCache) == "function" then
@@ -563,8 +591,11 @@ local function EnsureLSMCallbacks()
             end
             ScheduleStatusbarMediaRefresh()
         end
-    end)
-    _G.MSUF_LSM_CallbacksRegistered = true
+    end
+    local ok = pcall(LSM.RegisterCallback, _MSUF_LSMCallbackOwner, "LibSharedMedia_Registered", OnMediaRegistered)
+    if ok then
+        _G.MSUF_LSM_CallbacksRegistered = true
+    end
 end
 
 -- Shared statusbar texture choices for Menu2 dropdowns.

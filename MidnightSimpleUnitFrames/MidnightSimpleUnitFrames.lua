@@ -3341,6 +3341,19 @@ end
 
 local _MSUF_MeasureCache = {}
 local _MSUF_MeasureFS
+function _G.MSUF_InvalidateFontMetricCaches()
+    for key in pairs(_MSUF_MeasureCache) do
+        _MSUF_MeasureCache[key] = nil
+    end
+    local nameCache = _G.MSUF_NameWidthAvgCache
+    if type(nameCache) == "table" then
+        for key in pairs(nameCache) do
+            nameCache[key] = nil
+        end
+    else
+        _G.MSUF_NameWidthAvgCache = nil
+    end
+end
 
 local function MSUF_MeasureTextWidth(templateFS, sampleText)
     if not templateFS or not templateFS.GetFont then return 0 end
@@ -3653,11 +3666,26 @@ local function ApplyTextLayout(f, conf)
         MSUF_TextLayout_Place(f.powerTextPct, tf, "BOTTOMRIGHT", "BOTTOMRIGHT", -4 + pX + pRightX, pY + pRightY, "RIGHT")
     end
  end
+local _MSUF_FONT_REFLOW_FIELDS = {
+    "nameText", "raidGroupNameText", "totInlineSep", "totInlineText",
+    "_msufToTInlineSep", "_msufToTInlineText",
+    "levelText", "classificationText", "classificationIndicatorText",
+    "statusIndicatorText", "statusIndicatorOverlayText",
+    "hpTextLeft", "hpTextCenter", "hpText", "hpTextRight", "hpTextPct",
+    "powerTextLeft", "powerTextCenter", "powerText", "powerTextRight", "powerTextPct",
+}
 function _G.MSUF_ForceTextLayoutForUnitKey(unitKey)
     if not MSUF_DB then MSUF_EnsureDB() end
     local k = _G.MSUF_NormalizeTextLayoutUnitKey(unitKey)
     local function ApplyForFrame(f)
         if not f then return end
+        for i = 1, #_MSUF_FONT_REFLOW_FIELDS do
+            local fs = f[_MSUF_FONT_REFLOW_FIELDS[i]]
+            if fs then
+                fs._msufLastSetT = nil
+                fs._msufTextHiddenEmpty = nil
+            end
+        end
         f._msufTextLayoutStamp = nil
         f._msufTextSpec = nil
         f._msufLastH = nil
@@ -3699,6 +3727,12 @@ function _G.MSUF_ForceTextLayoutForUnitKey(unitKey)
             hasUnit = F.UnitExists(unit) and true or false
     end
         if hasUnit and F.UnitHealth then
+            if ns.Text and type(ns.Text.ApplyName) == "function" then
+                ns.Text.ApplyName(f, unit)
+            end
+            if ns.Text and type(ns.Text.ApplyLevel) == "function" then
+                ns.Text.ApplyLevel(f, unit, conf)
+            end
             local hp = F.UnitHealth(unit)
             if hp ~= nil then
                 f._msufLastHpValue = nil
