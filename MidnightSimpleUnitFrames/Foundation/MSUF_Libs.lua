@@ -3,6 +3,7 @@ ns = ns or {}
 
 local _MSUF_KnownFileAssetCache = {}
 local _MSUF_LSMFontAssetPaths = {}
+local _MSUF_LSMCallbackOwner = {}
 
 local function MSUF_NormalizeFileAssetPath(asset)
     if type(asset) ~= "string" or asset == "" then return nil end
@@ -21,10 +22,11 @@ local function MSUF_RememberLSMFontAsset(asset)
         -- Preserve LSM's canonical spelling for SetFont. The exact normalized
         -- lookup is allocation-free on the normal path; the folded alias only
         -- handles case differences from older/imported profiles.
-        _MSUF_LSMFontAssetPaths[normalized] = normalized
-        _MSUF_LSMFontAssetPaths[key] = normalized
+        _MSUF_LSMFontAssetPaths[asset] = asset
+        _MSUF_LSMFontAssetPaths[normalized] = asset
+        _MSUF_LSMFontAssetPaths[key] = asset
     end
-    return normalized
+    return key and asset or nil
 end
 
 local function MSUF_GetRegisteredLSMFontAsset(asset)
@@ -532,9 +534,12 @@ local function EnsureLSMCallbacks()
     -- trusted even when another MSUF module already installed the callbacks.
     MSUF_SeedLSMFontAssets(LSM)
     if _G.MSUF_LSM_CallbacksRegistered then return end
-    _G.MSUF_LSM_CallbacksRegistered = true
+    if type(LSM.RegisterCallback) ~= "function" then return end
 
-    LSM:RegisterCallback("LibSharedMedia_Registered", function(_, mediatype, key)
+    -- CallbackHandler stores one handler per event + owner. Registering with
+    -- LSM itself as the owner lets another addon's colon-form registration
+    -- silently replace this callback before its media is registered.
+    LSM.RegisterCallback(_MSUF_LSMCallbackOwner, "LibSharedMedia_Registered", function(_, mediatype, key)
         if mediatype == "font" then
             local registeredPath = MSUF_GetLSMFontAsset(LSM, key)
             if type(_G.MSUF_ClearResolvedFontPathCache) == "function" then
@@ -559,6 +564,7 @@ local function EnsureLSMCallbacks()
             ScheduleStatusbarMediaRefresh()
         end
     end)
+    _G.MSUF_LSM_CallbacksRegistered = true
 end
 
 -- Shared statusbar texture choices for Menu2 dropdowns.
