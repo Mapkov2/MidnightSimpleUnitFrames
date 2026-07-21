@@ -8,10 +8,51 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-Beta23",
-    previousVersion = "6.0-Beta22",
-    rangeLabel = "6.0-Beta22 -> 6.0-Beta23",
+    currentVersion = "6.0-Beta24",
+    previousVersion = "6.0-Beta23",
+    rangeLabel = "6.0-Beta23 -> 6.0-Beta24",
     entries = {
+        {
+            version = "6.0-Beta24",
+            date = "2026-07-21",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Rebuilt Colors and Color Painter with focused categories, clickable live previews, reusable brush colors, quick reset actions, and lazy loading for faster navigation.",
+                        "Added global mouseover highlight styles: a portrait-safe soft gradient or solid border with configurable color and size across Unit Frames and Group Frames.",
+                        "Expanded Unit Frame and Group Frame text controls with clearer slot editing, combined HP + Absorb formats, per-slot shield icons, color modes, placement, and layers.",
+                        "Redesigned the Edit Mode quick popups and added customizable menu accent themes.",
+                        "Added ArcUI cooldown anchors for supported third-party cooldown layouts.",
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Added Player & Target, Party & Raid, Castbar, Aura, Power, and Class Resource color workspaces with matching preview targets and deep-link navigation.",
+                        "Added Dark, Class Color, Unified, and Gradient health-color modes plus shared text-color controls inside the Colors workflow.",
+                        "Moved mouseover highlight behavior to Miscellaneous while keeping its colors in Colors, and updated Menu search and Assistant routing accordingly.",
+                        "Improved Edit Mode popup layouts, responsive controls, and direct access to the relevant Unit Frame, Group Frame, Aura, and Castbar settings.",
+                        "Added menu accent presets, class-color accents, and custom accent colors.",
+                        "Added a reload recommendation when switching the Player Castbar back to Blizzard's provider.",
+                        "Removed the obsolete UUF profile importer and its no-longer-needed compression libraries.",
+                        "Updated all supported locales for the new text, Colors, Color Painter, Edit Mode, and highlight controls.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Coalesced Group Frame header rebind, OnShow, and range-settle work so roster layout changes refresh once without adding polling or combat hot-path work.",
+                        "Preserved configured health-bar backgrounds when health colors refresh.",
+                        "Kept rounded and square mouseover highlights on cached, direct hover paths and live-applied style changes without a full color refresh.",
+                        "Reused event-owned Unit Frame health, power, prediction, identity, and status state to avoid duplicate reads and unnecessary event routes.",
+                        "Restored compact text-slot controls and changed status toggles to refresh in place.",
+                        "Improved combined absorb text, class-colored HP text, Aura growth anchors, Castbar provider handling, Power visibility, screen clamping, and late-anchor retry behavior.",
+                        "Expanded Lua 5.1 regression coverage for text, status, Edit Mode, ArcUI anchors, colors, highlights, Group Frame coalescing, and runtime routing.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-Beta23",
             date = "2026-07-19",
@@ -87,41 +128,6 @@ local data = {
                         "Improved old profile migration.",
                         "Improved Assistant controls and recovery.",
                         "Added more regression tests.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-Beta20",
-            date = "2026-07-16",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Added Pinned Frames (Priority Frames): keep up to five manually pinned group members or automatic tanks in a stable extra strip with hover-hotkey pinning, inherited Party/Raid visuals and click-casting, plus attached or free Edit Mode placement.",
-                        "Kept Auras, status indicators, targeted spells, identity updates, and group lifecycles synchronized across normal and duplicated Priority Frames.",
-                        "Improved Range Fade for PTR-restricted unit payloads and movement-driven target/focus fallbacks without restoring continuous polling.",
-                        "Fixed resurrection status recovery, removed duplicate dependent-unit prediction reads, and tightened mouseover-highlight hot paths.",
-                        "Expanded profile compatibility, Priority Frames import/export, Menu and Edit Mode integration, Assistant guidance, and regression coverage.",
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Added character-specific manual pins, automatic tank selection, one-to-five visible slots, stable ordering, and duplicate prevention for Priority Frames.",
-                        "Added a managed hover hotkey with conflict handling, manual pin controls, attached placement, configurable growth and spacing, and a dedicated free-position mover.",
-                        "Inherited the active Party, Raid, or Mythic Raid appearance and click-cast behavior while keeping Priority layout settings profile-wide.",
-                        "Deferred secure Priority roster and layout changes safely during combat and kept selection event-driven with no ticker or OnUpdate loop.",
-                        "Updated Auras, ready checks, targeted-spell icons, names, group status, lifecycle fanout, and visual refreshes for every exact frame copy of a unit.",
-                        "Hardened Range Fade for secret UNIT_IN_RANGE_UPDATE payloads, split filtered unit registrations safely, and limited fallback checks to movement while needed.",
-                        "Rechecked dead, ghost, and offline labels after resurrection even when PTR group health values remain protected.",
-                        "Coalesced dependent-unit prediction with the authoritative identity refresh to avoid duplicate calculator reads.",
-                        "Corrected legacy Aura2 offsets, legacy range-fade portrait migration, partial 5.57 snapshot detection, and Priority Frames profile payload handling.",
-                        "Removed per-hover DB/global reads from rounded and standard mouseover highlights and kept disabled paths lean.",
-                        "Improved power-color preview parity, binding and specialization status refreshes, Priority Edit Mode cancel/reset behavior, and Menu search routing.",
-                        "Added Assistant navigation, safe setting control, pinning guidance, troubleshooting, and performance help for Priority Frames.",
-                        "Expanded Lua 5.1 runtime, secure-header, lifecycle, migration, binding, Menu, Assistant, Range Fade, prediction, and duplicate-frame regression coverage.",
-                        "Removed obsolete development mockups and audit artifacts from the addon source tree.",
                     },
                 },
             },

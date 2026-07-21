@@ -1,5 +1,36 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-Beta24 - 2026-07-21
+
+### Highlights
+
+- Rebuilt Colors and Color Painter with focused categories, clickable live previews, reusable brush colors, quick reset actions, and lazy loading for faster navigation.
+- Added global mouseover highlight styles: a portrait-safe soft gradient or solid border with configurable color and size across Unit Frames and Group Frames.
+- Expanded Unit Frame and Group Frame text controls with clearer slot editing, combined HP + Absorb formats, per-slot shield icons, color modes, placement, and layers.
+- Redesigned the Edit Mode quick popups and added customizable menu accent themes.
+- Added ArcUI cooldown anchors for supported third-party cooldown layouts.
+
+### Changes
+
+- Added Player & Target, Party & Raid, Castbar, Aura, Power, and Class Resource color workspaces with matching preview targets and deep-link navigation.
+- Added Dark, Class Color, Unified, and Gradient health-color modes plus shared text-color controls inside the Colors workflow.
+- Moved mouseover highlight behavior to Miscellaneous while keeping its colors in Colors, and updated Menu search and Assistant routing accordingly.
+- Improved Edit Mode popup layouts, responsive controls, and direct access to the relevant Unit Frame, Group Frame, Aura, and Castbar settings.
+- Added menu accent presets, class-color accents, and custom accent colors.
+- Added a reload recommendation when switching the Player Castbar back to Blizzard's provider.
+- Removed the obsolete UUF profile importer and its no-longer-needed compression libraries.
+- Updated all supported locales for the new text, Colors, Color Painter, Edit Mode, and highlight controls.
+
+### Fixes & Performance
+
+- Coalesced Group Frame header rebind, OnShow, and range-settle work so roster layout changes refresh once without adding polling or combat hot-path work.
+- Preserved configured health-bar backgrounds when health colors refresh.
+- Kept rounded and square mouseover highlights on cached, direct hover paths and live-applied style changes without a full color refresh.
+- Reused event-owned Unit Frame health, power, prediction, identity, and status state to avoid duplicate reads and unnecessary event routes.
+- Restored compact text-slot controls and changed status toggles to refresh in place.
+- Improved combined absorb text, class-colored HP text, Aura growth anchors, Castbar provider handling, Power visibility, screen clamping, and late-anchor retry behavior.
+- Expanded Lua 5.1 regression coverage for text, status, Edit Mode, ArcUI anchors, colors, highlights, Group Frame coalescing, and runtime routing.
+
 ## 6.0-Beta23 - 2026-07-19
 
 ### Highlights
