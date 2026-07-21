@@ -333,21 +333,23 @@ end
 local function ApiRGB(name, dr, dg, db, ...)
     local fn = ColorAPI()[name]
     if type(fn) == "function" then
-        local r, g, b = fn(...)
-        if type(r) == "number" and type(g) == "number" and type(b) == "number" then return r, g, b end
+        local r, g, b, a = fn(...)
+        if type(r) == "number" and type(g) == "number" and type(b) == "number" then return r, g, b, a end
     end
     return dr, dg, db
 end
-local function ApiSetRGB(name, r, g, b)
-    return ApiCall(name, r, g, b)
+local function ApiSetRGB(name, r, g, b, a)
+    return ApiCall(name, r, g, b, a)
 end
 local function GeneralRGB(prefix, dr, dg, db)
     local g = G()
-    return tonumber(g[prefix .. "R"]) or dr, tonumber(g[prefix .. "G"]) or dg, tonumber(g[prefix .. "B"]) or db
+    return tonumber(g[prefix .. "R"]) or dr, tonumber(g[prefix .. "G"]) or dg,
+        tonumber(g[prefix .. "B"]) or db, tonumber(g[prefix .. "A"])
 end
-local function SetGeneralRGB(prefix, r, gCol, b)
+local function SetGeneralRGB(prefix, r, gCol, b, a)
     local g = G()
     g[prefix .. "R"], g[prefix .. "G"], g[prefix .. "B"] = r, gCol, b
+    if type(a) == "number" then g[prefix .. "A"] = a end
 end
 local function GeneralRGBAlias(primaryPrefix, legacyPrefix, dr, dg, db)
     local g = G()
@@ -522,8 +524,8 @@ end
 local function ApiColorAt(ctx, section, label, x, y, getName, setName, dr, dg, db, apply, labelWidth, swatchWidth, metadata)
     return ColorValueAt(ctx, section, label, x, y,
         function() return ApiRGB(getName, dr, dg, db) end,
-        function(r, g, c)
-            if not ApiSetRGB(setName, r, g, c) then
+        function(r, g, c, a)
+            if not ApiSetRGB(setName, r, g, c, a) then
                 if type(apply) == "function" then apply() else ApplyColors() end
             end
         end,
@@ -532,8 +534,8 @@ end
 local function GeneralColorAt(ctx, section, label, x, y, prefix, dr, dg, db, apply, labelWidth, swatchWidth, metadata)
     return ColorValueAt(ctx, section, label, x, y,
         function() return GeneralRGB(prefix, dr, dg, db) end,
-        function(r, g, c)
-            SetGeneralRGB(prefix, r, g, c)
+        function(r, g, c, a)
+            SetGeneralRGB(prefix, r, g, c, a)
             if type(apply) == "function" then apply() else ApplyColors() end
         end,
         labelWidth, swatchWidth, metadata or Meta("general." .. tostring(prefix)), { dr, dg, db })
@@ -541,10 +543,11 @@ end
 local function ApiOrGeneralColorAt(ctx, section, label, x, y, getName, setName, prefix, dr, dg, db, apply, alpha, metadata)
     return ColorValueAt(ctx, section, label, x, y,
         function() return ApiRGB(getName, dr, dg, db) end,
-        function(r, g, c)
-            local ok = alpha ~= nil and ApiCall(setName, r, g, c, alpha) or ApiCall(setName, r, g, c)
+        function(r, g, c, a)
+            local nextAlpha = type(a) == "number" and a or alpha
+            local ok = nextAlpha ~= nil and ApiCall(setName, r, g, c, nextAlpha) or ApiCall(setName, r, g, c)
             if not ok then
-                SetGeneralRGB(prefix, r, g, c)
+                SetGeneralRGB(prefix, r, g, c, nextAlpha)
                 if type(apply) == "function" then apply() else ApplyColors() end
             end
         end,

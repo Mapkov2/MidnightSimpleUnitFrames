@@ -471,12 +471,14 @@ function Core.ApplyPreviewTransparency(box, conf)
         Core.SetRegionAlpha(mock.roundedBg, 0)
         PreviewSetRoundedEdgeStackAlpha(mock, 0)
     end
-    Core.SetRegionAlpha(mock.hpBG, alpha.flat and alpha.frame or alpha.bg)
+    -- Background opacity is already baked into the compiled tint. Keep the
+    -- region itself opaque so the preview does not square the slider value.
+    Core.SetRegionAlpha(mock.hpBG, alpha.flat and alpha.frame or 1)
     Core.SetRegionAlpha(mock.hp, alpha.flat and alpha.frame or alpha.hp)
     Core.SetRegionAlpha(mock.healPred, alpha.flat and alpha.frame or alpha.hp)
     Core.SetRegionAlpha(mock.absorb, alpha.flat and alpha.frame or alpha.hp)
     Core.SetRegionAlpha(mock.healAbsorb, alpha.flat and alpha.frame or alpha.hp)
-    Core.SetRegionAlpha(mock.powerBG, alpha.flat and alpha.frame or alpha.powerBg)
+    Core.SetRegionAlpha(mock.powerBG, alpha.flat and alpha.frame or 1)
     Core.SetRegionAlpha(mock.power, alpha.flat and alpha.frame or alpha.power)
     Core.SetRegionAlpha(mock.classPower, alpha.flat and alpha.frame or alpha.power)
     Core.SetRegionAlpha(mock.detachedPower, alpha.flat and alpha.frame or alpha.power)

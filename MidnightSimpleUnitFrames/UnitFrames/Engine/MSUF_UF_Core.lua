@@ -1422,6 +1422,15 @@ local function SelectElementUpdate(element, frame)
   return update
 end
 
+local function RefreshIdentityHealthBackground(frame)
+  local active = frame and frame._msufActiveElements
+  if not (active and active.Health == true) then return false end
+  local health = UF.elements and UF.elements.Health
+  local refresh = health and health.UpdateIdentityBackground
+  if type(refresh) ~= "function" then return false end
+  return refresh(frame) == true
+end
+
 SelectElementEventUpdate = function(element, frame, event, update)
   local selector = element and element.SelectEventUpdate
   if type(selector) == "function" then
@@ -1434,7 +1443,10 @@ local function IdentityEventUpdate(frame, event)
   if not frame then return end
   event = event or "MSUF_UNIT_IDENTITY"
   local unit = frame.MSUFUnitKey
-  if not IdentityUnitExists(frame, unit) then return end
+  if not IdentityUnitExists(frame, unit) then
+    RefreshIdentityHealthBackground(frame)
+    return
+  end
   local barPath = frame._msufIdentityBarPath
   local hp, hpMax, healthPercentReady, healthSeedCalc
   local power, powerMax, powerType, powerToken, powerMetaChanged
@@ -1442,6 +1454,7 @@ local function IdentityEventUpdate(frame, event)
     hp, hpMax, healthPercentReady, healthSeedCalc,
       power, powerMax, powerType, powerToken, powerMetaChanged = barPath(frame, event, unit)
   end
+  RefreshIdentityHealthBackground(frame)
   local path = frame._msufIdentityPath
   if path then
     return path(frame, event, unit,
@@ -2126,6 +2139,7 @@ function UF.OnUnitChanged(frame, oldUnit, newUnit)
   RebuildFrameEvents(frame)
   if frame._msufCoreScope == "group" then
     RefreshGroupFrameState(frame, "MSUF_GF_UNIT_IDENTITY")
+    RefreshIdentityHealthBackground(frame)
   else
     UF.RunLeanIdentity(frame, "MSUF_UNIT_IDENTITY")
   end

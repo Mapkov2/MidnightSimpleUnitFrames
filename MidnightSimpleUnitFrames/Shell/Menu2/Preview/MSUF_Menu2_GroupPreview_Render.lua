@@ -1369,7 +1369,9 @@ function Render.Install(box, ctx, deps)
         local hbr, hbg, hbb = hbCfg.r or conf.bgR or 0.06, hbCfg.g or conf.bgG or 0.06, hbCfg.b or conf.bgB or 0.07
         local gen = _G.MSUF_DB and _G.MSUF_DB.general
         if runtimeHealth.backgroundMatchHealth == true then hbr, hbg, hbb = hr or hbr, hg or hbg, hb or hbb end
-        if not runtimeSpec and gen and gen.barBgClassColor then hbr, hbg, hbb = ClassColor(cls, hbr, hbg, hbb) end
+        if runtimeHealth.backgroundClassColor == true or (not runtimeSpec and gen and gen.barBgClassColor) then
+            hbr, hbg, hbb = ClassColor(cls, hbr, hbg, hbb)
+        end
         mock._healthBg:SetVertexColor(hbr, hbg, hbb, hbCfg.a or groupVisual.hpBgAlpha or conf.hpBgAlpha or 0.85)
         local tempMaxShown
         if runtimeSpec then

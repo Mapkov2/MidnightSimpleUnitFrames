@@ -1130,7 +1130,13 @@ local function ApplyBackgrounds(frame, health, power)
   local hb = spec.health and spec.health.background
   if health and frame.bg and hb then
     local r, g, b = hb.r, hb.g, hb.b
-    if frame._msufHealthBgDynamic == true and frame.hpBar and frame.hpBar.GetStatusBarColor then
+    if spec.health.backgroundClassColor == true then
+      local bars = MSUF.Bars
+      local resolveClass = bars and bars._ClassBackgroundColor
+      if type(resolveClass) == "function" then
+        r, g, b = resolveClass(frame, r, g, b)
+      end
+    elseif frame._msufHealthBgDynamic == true and frame.hpBar and frame.hpBar.GetStatusBarColor then
       local cr, cg, cb = frame.hpBar:GetStatusBarColor()
       if type(cr) == "number" and type(cg) == "number" and type(cb) == "number" then
         r, g, b = cr, cg, cb

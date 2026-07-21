@@ -140,7 +140,7 @@ local function MSUF_GetBarBackgroundTintRGBA()
     EnsureDBSafe()
     local g = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
     local r, gg, b = MSUF.Bars._DarkTint(g, MSUF_Clamp01(g.classBarBgR), MSUF_Clamp01(g.classBarBgG), MSUF_Clamp01(g.classBarBgB))
-    return r, gg, b, 0.9
+    return r, gg, b, MSUF_Clamp01(type(g.classBarBgA) == "number" and g.classBarBgA or 1)
 end
 ExportPublic("MSUF_GetBarBackgroundTintRGBA", MSUF_GetBarBackgroundTintRGBA)
 
@@ -152,7 +152,7 @@ local function MSUF_GetPowerBarBackgroundTintRGBA()
         return MSUF_GetBarBackgroundTintRGBA()
     end
     local r, gg, b = MSUF.Bars._DarkTint(g, MSUF_Clamp01(ar), MSUF_Clamp01(ag), MSUF_Clamp01(ab))
-    return r, gg, b, 0.9
+    return r, gg, b, MSUF_Clamp01(type(g.powerBarBgColorA) == "number" and g.powerBarBgColorA or 1)
 end
 ExportPublic("MSUF_GetPowerBarBackgroundTintRGBA", MSUF_GetPowerBarBackgroundTintRGBA)
 
@@ -278,30 +278,33 @@ end
 MSUF.Bars._ClassBackgroundColor = function(frame, defR, defG, defB)
     if not frame then return defR, defG, defB end
     local unit = frame.MSUFUnitKey or frame.unit
-    if not unit or (UnitExists and not UnitExists(unit)) then
-        frame._msufBarBgClassGuid = nil
-        frame._msufBarBgClassToken = nil
-        return defR, defG, defB
-    end
-
     local classToken
 
     --- Midnight/Beta: UnitGUID can be a secret string. Do not cache or compare it
     --- in Lua; resolve the class directly instead.
     frame._msufBarBgClassGuid = nil
-    if UnitIsPlayer then
+
+    -- A player unit owns a meaningful class color. NPC, pet, boss, missing, and
+    -- secret units deliberately fall back to the local player's class so the
+    -- option remains visibly useful for every unit-frame type.
+    local boundUnitUsable = unit ~= nil
+    if boundUnitUsable and UnitExists then
+        local exists = UnitExists(unit)
+        boundUnitUsable = not MSUF_IsSecretValue(exists) and exists == true
+    end
+    if boundUnitUsable and UnitIsPlayer then
         local isPlayer = UnitIsPlayer(unit)
-        if MSUF_IsSecretValue(isPlayer) or not isPlayer then
-            frame._msufBarBgClassToken = nil
-            return defR, defG, defB
+        if not MSUF_IsSecretValue(isPlayer) and isPlayer == true and UnitClass then
+            local _
+            _, classToken = UnitClass(unit)
         end
     end
-    if UnitClass then
+
+    if MSUF_IsSecretValue(classToken) then classToken = nil end
+    if not classToken and UnitClass then
         local _
-        _, classToken = UnitClass(unit)
-    end
-    if MSUF_IsSecretValue(classToken) then
-        classToken = nil
+        _, classToken = UnitClass("player")
+        if MSUF_IsSecretValue(classToken) then classToken = nil end
     end
     frame._msufBarBgClassToken = classToken
     if not classToken then return defR, defG, defB end
@@ -332,17 +335,12 @@ local function _MSUF_ResolveGetCache()
     return nil
 end
 
-local function _MSUF_BarBackgroundAlphaMul(cache, bars)
-    local alphaMul = cache and cache.barBackgroundAlpha
-    if type(alphaMul) ~= "number" then
-        local alphaPct = 90
-        if bars and type(bars.barBackgroundAlpha) == "number" then
-            alphaPct = bars.barBackgroundAlpha
-        end
-        if alphaPct < 0 then alphaPct = 0 elseif alphaPct > 100 then alphaPct = 100 end
-        alphaMul = alphaPct / 100
-    end
-    return alphaMul
+local function _MSUF_ResolveGlobalBackgroundAlpha(cache, bars)
+    local alpha = cache and cache.barBackgroundAlpha
+    if type(alpha) == "number" then return MSUF_Clamp01(alpha) end
+    local percent = bars and bars.barBackgroundAlpha
+    if type(percent) == "number" then return MSUF_Clamp01(percent / 100) end
+    return 0.9
 end
 
 local function _MSUF_ResolveHealthBackgroundRGBA(frame, cache, gen, bars)
@@ -359,8 +357,14 @@ local function _MSUF_ResolveHealthBackgroundRGBA(frame, cache, gen, bars)
         r, gg, b = MSUF.Bars._MatchHPColor(frame, gen, cache, r, gg, b)
     end
 
-    if type(a) == "number" then
-        a = a * _MSUF_BarBackgroundAlphaMul(cache, bars)
+    -- Compiled specs own the final per-unit opacity. The cache alpha is already
+    -- resolved too, so neither value may be multiplied again during a repaint.
+    local healthBg = frame and frame.MSUFSpec and frame.MSUFSpec.health
+        and frame.MSUFSpec.health.background
+    if healthBg and type(healthBg.a) == "number" then
+        a = healthBg.a
+    elseif not cache then
+        a = MSUF_Clamp01(type(a) == "number" and a or 1) * _MSUF_ResolveGlobalBackgroundAlpha(nil, bars)
     end
     return r, gg, b, a
 end
@@ -396,7 +400,6 @@ local function MSUF_ApplyBarBackgroundVisual(frame)
     local bars = (cache and cache.barsRef) or (_G.MSUF_DB and _G.MSUF_DB.bars)
 
     local r, gg, b, a = _MSUF_ResolveHealthBackgroundRGBA(frame, cache, gen, bars)
-    local alphaMul = _MSUF_BarBackgroundAlphaMul(cache, bars)
 
     _MSUF_ApplyBgToTexture(frame, hpTex, frame.hpBarBG, "HP", r, gg, b, a)
 
@@ -406,7 +409,12 @@ local function MSUF_ApplyBarBackgroundVisual(frame)
     else
         pr, pg, pb, pa = MSUF_GetPowerBarBackgroundTintRGBA()
     end
-    if type(pa) == "number" then pa = pa * alphaMul end
+    local powerBg = spec and spec.power and spec.power.background
+    if powerBg and type(powerBg.a) == "number" then
+        pa = powerBg.a
+    elseif not cache then
+        pa = MSUF_Clamp01(type(pa) == "number" and pa or 1) * _MSUF_ResolveGlobalBackgroundAlpha(nil, bars)
+    end
 
     if (cache and cache.powerBarBgMatchHPColor or ((gen and gen.powerBarBgMatchHPColor) or (bars and bars.powerBarBgMatchBarColor))) and frame.hpBar and frame.hpBar.GetStatusBarColor then
         pr, pg, pb = MSUF.Bars._MatchHPColor(frame, gen, cache, pr, pg, pb)

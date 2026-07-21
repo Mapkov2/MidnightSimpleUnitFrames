@@ -591,12 +591,12 @@ local function HealthBackgroundColor(hr, hg, hb, data)
         r, g, b, a = _G.MSUF_GetBarBackgroundTintRGBA()
     end
     r, g, b, a = Clamp01(r, 0), Clamp01(g, 0), Clamp01(b, 0), Clamp01(a, 0.9)
-    if ((cache and cache.barBgClassColor) or ((not cache) and gen and gen.barBgClassColor)) and data and data.isPlayer then
-        r, g, b = ClassColor(data.class)
+    if (cache and cache.barBgClassColor) or ((not cache) and gen and gen.barBgClassColor) then
+        local classToken = data and data.isPlayer and data.class or UNIT_DATA.player.class
+        r, g, b = ClassColor(classToken)
     elseif (cache and cache.barBgMatchHPColor) or ((not cache) and gen and gen.barBgMatchHPColor) then
         r, g, b = DarkMatchHPColor(hr, hg, hb, cache)
     end
-    a = a * Clamp01(cache and cache.barBackgroundAlpha, 0.9)
     return r, g, b, a
 end
 local function PowerBackgroundColor(pr, pg, pb, hr, hg, hb)
@@ -609,7 +609,6 @@ local function PowerBackgroundColor(pr, pg, pb, hr, hg, hb)
     end
     r, g, b, a = Clamp01(r, pr * 0.16), Clamp01(g, pg * 0.16), Clamp01(b, pb * 0.16), Clamp01(a, 0.9)
     if cache and cache.powerBarBgMatchHPColor then r, g, b = DarkMatchHPColor(hr, hg, hb, cache) end
-    a = a * Clamp01(cache and cache.barBackgroundAlpha, 0.9)
     return r, g, b, a
 end
 local function PowerColor(token)
