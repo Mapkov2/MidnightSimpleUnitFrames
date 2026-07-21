@@ -536,7 +536,7 @@ end
 
 local GROUP_LAYOUT_SECTION_SPECS = {
     { sectionId = "general", title = "Frame Basics", height = 430, build = BuildGFGeneralSection },
-    { sectionId = "text", title = "Text", height = 618, build = BuildGFTextSection },
+    { sectionId = "text", title = "Text", height = 690, build = BuildGFTextSection },
     { sectionId = "power", title = "Resource Bar", height = 240, build = BuildGFResourceBarSection },
     { sectionId = "range", title = "Range Fade", height = 220, build = BuildGFRangeFadeSection },
     { sectionId = "transparency", title = "Transparency", autoHeight = true, build = BuildGFTransparencySection },
@@ -558,4 +558,4 @@ local function BuildGFLayout(ctx)
     end
     FinalizeScopePage(ctx, b)
 end
-M.RegisterPage("gf_layout", { title = "MSUF Group Layout", build = BuildGFLayout, version = 23 })
+M.RegisterPage("gf_layout", { title = "MSUF Group Layout", build = BuildGFLayout, version = 24 })

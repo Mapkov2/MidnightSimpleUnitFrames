@@ -175,7 +175,8 @@ local function BuildGFResourceBarSection(ctx, b)
 end
 
 local function BuildGFTextSection(ctx, b)
-    local text = b:CollapsibleSection("text", "Text", 618, false)
+    -- HP tab: 64px tab inset + 598px of cards + bottom breathing room.
+    local text = b:CollapsibleSection("text", "Text", 690, false)
     text._msuf2CollapsibleBadgesOnlyWhenOpen = true
     local textW = text._msuf2Width or b.width or 720
     local textLeftX = 24

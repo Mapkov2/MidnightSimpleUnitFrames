@@ -78,7 +78,9 @@ assert(layout:find("M.UnitPage and M.UnitPage.BuildSectionLazy", 1, true),
     "Group Layout no longer uses the established lazy-section lifecycle")
 assert(layout:find("M.GroupPreview.Add(ctx, b)", 1, true),
     "visible Group Preview was removed from the page cold path")
-assert(layout:find('version = 23', 1, true), "Group Layout cache version was not bumped")
+assert(layout:find('{ sectionId = "text", title = "Text", height = 690', 1, true),
+    "Group Layout Text section no longer reserves enough height for the HP Appearance card")
+assert(layout:find('version = 24', 1, true), "Group Layout cache version was not bumped")
 
 local globalBars = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GlobalBars.lua")
 for _, sectionId in ipairs({ "bars_outline", "bars_unit_dispel_overlay", "bars_power" }) do
