@@ -3695,6 +3695,27 @@ L["modified"] = "已修改"
 L["the local Assistant for exact settings, explanations and reversible changes"] = "用於精確設定、說明與可復原變更的本機助理"
 L["unit"] = "unit"
 
+-- Beta 25 Menu2 控制項與預覽介面。
+L["Adjusts the alpha channel of this color."] = "調整此顏色的 Alpha 色版。"
+L["Background opacity"] = "背景不透明度"
+L["Default size"] = "預設大小"
+L["Expand"] = "展開"
+L["Layers"] = "圖層"
+L["Loss color"] = "損失顏色"
+L["Maximum Health Loss"] = "最大生命力損失"
+L["Opacity"] = "不透明度"
+L["Preview - "] = "預覽 - "
+L["Preview effect"] = "預覽效果"
+L["Preview size"] = "預覽大小"
+L["Reset this value to its default."] = "將此數值重設為預設值。"
+L["Selected slot size"] = "已選欄位大小"
+L["Shadow opacity"] = "陰影不透明度"
+L["Show maximum-health loss"] = "顯示最大生命力損失"
+L["Shows the part of maximum health that is temporarily unavailable."] = "顯示暫時無法使用的最大生命力部分。"
+L["Texture"] = "材質"
+L["Toggle between the compact reference preview and the full-height canvas."] = "在精簡參考預覽與全高畫布之間切換。"
+L["Toggle the preview layer list."] = "切換預覽圖層清單。"
+
 -- MSUF FULL CORE MENU ENGLISH RETRY 2
 -- Generated missing non-Assistant core keys for zhTW.
 L["|cffffd200"] = "|cffffd200"

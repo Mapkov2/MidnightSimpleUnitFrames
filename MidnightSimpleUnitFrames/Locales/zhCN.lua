@@ -4300,6 +4300,26 @@ L["modified"] = "已修改"
 L["the local Assistant for exact settings, explanations and reversible changes"] = "用于精确设置、说明和可撤销更改的本地助手"
 L["unit"] = "unit"
 
+-- Beta 25 Menu2 控件和预览界面。
+L["Adjusts the alpha channel of this color."] = "调整此颜色的 Alpha 通道。"
+L["Background opacity"] = "背景不透明度"
+L["Default size"] = "默认大小"
+L["Expand"] = "展开"
+L["Layers"] = "图层"
+L["Loss color"] = "损失颜色"
+L["Maximum Health Loss"] = "最大生命值损失"
+L["Preview - "] = "预览 - "
+L["Preview effect"] = "预览效果"
+L["Preview size"] = "预览大小"
+L["Reset this value to its default."] = "将此值重置为默认值。"
+L["Selected slot size"] = "所选槽位大小"
+L["Shadow opacity"] = "阴影不透明度"
+L["Show maximum-health loss"] = "显示最大生命值损失"
+L["Shows the part of maximum health that is temporarily unavailable."] = "显示暂时无法使用的最大生命值部分。"
+L["Texture"] = "材质"
+L["Toggle between the compact reference preview and the full-height canvas."] = "在紧凑参考预览和全高画布之间切换。"
+L["Toggle the preview layer list."] = "切换预览图层列表。"
+
 -- MSUF FULL CORE MENU ENGLISH RETRY 2
 -- Generated missing non-Assistant core keys for zhCN.
 L["|cffffd200"] = "|cffffd200"

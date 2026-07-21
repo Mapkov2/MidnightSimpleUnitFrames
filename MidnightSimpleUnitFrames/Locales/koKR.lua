@@ -3651,6 +3651,27 @@ L["modified"] = "수정됨"
 L["the local Assistant for exact settings, explanations and reversible changes"] = "정확한 설정, 설명, 되돌릴 수 있는 변경을 위한 로컬 도우미"
 L["unit"] = "unit"
 
+-- 베타 25 Menu2 조작 및 미리보기.
+L["Adjusts the alpha channel of this color."] = "이 색상의 알파 채널을 조절합니다."
+L["Background opacity"] = "배경 불투명도"
+L["Default size"] = "기본 크기"
+L["Expand"] = "확장"
+L["Layers"] = "레이어"
+L["Loss color"] = "손실 색상"
+L["Maximum Health Loss"] = "최대 생명력 손실"
+L["Opacity"] = "불투명도"
+L["Preview - "] = "미리보기 - "
+L["Preview effect"] = "효과 미리보기"
+L["Preview size"] = "미리보기 크기"
+L["Reset this value to its default."] = "이 값을 기본값으로 재설정합니다."
+L["Selected slot size"] = "선택한 슬롯 크기"
+L["Shadow opacity"] = "그림자 불투명도"
+L["Show maximum-health loss"] = "최대 생명력 손실 표시"
+L["Shows the part of maximum health that is temporarily unavailable."] = "일시적으로 사용할 수 없는 최대 생명력 부분을 표시합니다."
+L["Texture"] = "텍스처"
+L["Toggle between the compact reference preview and the full-height canvas."] = "간결한 참조 미리보기와 전체 높이 영역 사이를 전환합니다."
+L["Toggle the preview layer list."] = "미리보기 레이어 목록을 전환합니다."
+
 -- MSUF FULL CORE MENU ENGLISH RETRY 2
 -- Generated missing non-Assistant core keys for koKR.
 L["|cffffd200"] = "|cffffd200"

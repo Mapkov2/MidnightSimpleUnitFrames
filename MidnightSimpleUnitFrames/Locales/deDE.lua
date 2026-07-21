@@ -4055,6 +4055,22 @@ L["colors_bar_colors"] = "colors_bar_colors"
 L["group"] = "group"
 L["unit"] = "unit"
 
+-- Beta 25 Menu2-Steuerelemente und Vorschau-Chrome.
+L["Adjusts the alpha channel of this color."] = "Passt den Alphakanal dieser Farbe an."
+L["Background opacity"] = "Hintergrunddeckkraft"
+L["Default size"] = "Standardgröße"
+L["Expand"] = "Erweitern"
+L["Layers"] = "Ebenen"
+L["Opacity"] = "Deckkraft"
+L["Preview - "] = "Vorschau - "
+L["Preview size"] = "Vorschaugröße"
+L["Reset this value to its default."] = "Setzt diesen Wert auf den Standard zurück."
+L["Selected slot size"] = "Größe des gewählten Slots"
+L["Shadow opacity"] = "Schattendeckkraft"
+L["Texture"] = "Textur"
+L["Toggle between the compact reference preview and the full-height canvas."] = "Wechselt zwischen der kompakten Referenzvorschau und der Vorschaufläche in voller Höhe."
+L["Toggle the preview layer list."] = "Schaltet die Liste der Vorschau-Ebenen um."
+
 -- Balken: vorübergehend reduzierte maximale Gesundheit.
 L["Maximum Health Loss"] = "Verlust maximaler Gesundheit"
 L["Shows the part of maximum health that is temporarily unavailable."] = "Zeigt den Anteil der maximalen Gesundheit, der vorübergehend nicht verfügbar ist."
