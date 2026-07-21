@@ -18,14 +18,12 @@ function A.GroupFramesRegistry.RegisterVisualHighlightSettings(ctx, scope)
     if scope == "" then return end
 
     local AddAliasesForUnit = ctx.AddAliasesForUnit
-    local GroupDB = ctx.GroupDB
-    local ClampNumber = ctx.ClampNumber
     local RegisterGroupBoolean = ctx.RegisterGroupBoolean
     local RegisterGroupNumber = ctx.RegisterGroupNumber
     local RegisterGroupEnum = ctx.RegisterGroupEnum
     local RegisterGroupColor = ctx.RegisterGroupColor
 
-    if type(AddAliasesForUnit) ~= "function" or type(GroupDB) ~= "function" or type(ClampNumber) ~= "function" then return end
+    if type(AddAliasesForUnit) ~= "function" then return end
     if type(RegisterGroupBoolean) ~= "function" or type(RegisterGroupNumber) ~= "function" then return end
     if type(RegisterGroupEnum) ~= "function" or type(RegisterGroupColor) ~= "function" then return end
 
@@ -96,18 +94,6 @@ function A.GroupFramesRegistry.RegisterVisualHighlightSettings(ctx, scope)
     AddAliasesForUnit(aliases, scope, "group number frame strata")
     AddAliasesForUnit(aliases, scope, "group index layer")
     RegisterGroupNumber(scope, "groupNumberLayer", "groupNumberLayer", "Group Number Layer", 7, 0, 30, 1, "visual", aliases)
-
-    aliases = {}
-    AddAliasesForUnit(aliases, scope, "hover highlight thickness")
-    AddAliasesForUnit(aliases, scope, "mouseover highlight thickness")
-    AddAliasesForUnit(aliases, scope, "hover border thickness")
-    RegisterGroupNumber(scope, "hoverHighlightSize", "hlHoverSize", "Hover Highlight Thickness", 1, 1, 6, 1, "visual", aliases, {
-        set = function(scopeKey, value)
-            local conf = GroupDB(scopeKey)
-            conf.hlHoverSize = ClampNumber(value, 1, 6, 1)
-            conf.hlOverride = true
-        end,
-    })
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "fallback aggro border")

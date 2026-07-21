@@ -143,6 +143,8 @@ function A.GlobalRegistry.RegisterAssistantColorSettings(ctx)
         RegisterHighlightColorSettings({
             ColorSetting = ColorSetting,
             RegisterGeneralBoolean = RegisterGeneralBoolean,
+            RegisterGeneralNumberSetting = RegisterGeneralNumberSetting,
+            RegisterGeneralEnum = RegisterGeneralEnum,
             GeneralDB = GeneralDB,
             TableRGB = TableRGB,
             SetTableRGB = SetTableRGB,
