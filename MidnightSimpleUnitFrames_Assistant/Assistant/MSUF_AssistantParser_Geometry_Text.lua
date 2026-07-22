@@ -553,6 +553,19 @@ function A._ParseNameTextAnchorShortcut(text)
 
     local changes = {}
     local function AddTarget(settingKey, showKey)
+        -- The anchor change is the request; enabling Show Name is only a
+        -- companion so the newly anchored name is visible.  Resolve the anchor
+        -- first and, when it is valid, add the anchor change BEFORE the Show
+        -- Name toggle so the anchor is the primary/reported change.  If the
+        -- anchor is not valid, do not add a bare Show Name toggle (that would
+        -- turn "anchor name left" into "show name").
+        local setting = Registry and Registry:GetSetting(settingKey)
+        if not (setting and A._EnumAllowsValue(setting, value)) then return end
+        changes[#changes + 1] = {
+            setting = setting,
+            value = value,
+            valueLabel = DisplayValue(setting, value),
+        }
         local showSetting = Registry and Registry:GetSetting(showKey)
         if showSetting and ReadSettingValue(showSetting) == false then
             changes[#changes + 1] = {
@@ -560,14 +573,6 @@ function A._ParseNameTextAnchorShortcut(text)
                 value = true,
                 valueLabel = "enabled",
                 label = type(A.DisplaySettingValueLabel) == "function" and A.DisplaySettingValueLabel(showSetting, "enabled", "Name") or (tostring(showSetting.label or "Name") .. ": enabled"),
-            }
-        end
-        local setting = Registry and Registry:GetSetting(settingKey)
-        if setting and A._EnumAllowsValue(setting, value) then
-            changes[#changes + 1] = {
-                setting = setting,
-                value = value,
-                valueLabel = DisplayValue(setting, value),
             }
         end
     end
