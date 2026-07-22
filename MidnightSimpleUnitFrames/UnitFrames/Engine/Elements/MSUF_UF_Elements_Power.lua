@@ -60,11 +60,11 @@ local function IsFiniteNumber(value)
   return type(value) == "number" and value == value and (value - value) == 0
 end
 
-local function SetPowerBarValue(bar, value, animate)
-  -- 12.x StatusBar:SetValue accepts restricted/secret values together with a
-  -- NeverSecret interpolation enum. Keep the payload entirely C-side so smooth
-  -- fill works in combat without inspecting or copying the protected number.
-  local interp = animate == true and bar._msufSmoothInterp or nil
+local function SetPowerBarValue(bar, value, animate, valueSecret)
+  -- Opaque combat values cannot be deduplicated, so interpolating each event
+  -- would create a second native workload on top of the required SetValue.
+  -- Keep configured smoothing for ordinary values only.
+  local interp = animate == true and valueSecret ~= true and bar._msufSmoothInterp or nil
   if interp then
     bar:SetValue(value, interp)
     bar._msufInterpolating = true
@@ -548,9 +548,10 @@ end
 
 function Power.GetEvents(frame, spec)
   local power = spec and spec.power
-  -- Player power is driven by Blizzard's high-frequency event instead of also
-  -- subscribing the bar to UNIT_POWER_UPDATE and doing duplicate value work.
-  if (frame and frame.MSUFUnitKey == "player") or (power and power.frequent == true) then
+  -- Realtime player text is the only unit-frame feature that needs Blizzard's
+  -- high-frequency stream.  The compiler publishes that decision on the
+  -- power spec so ordinary player bars stay on UNIT_POWER_UPDATE.
+  if power and power.frequent == true then
     return POWER_EVENTS_FAST
   end
   return POWER_EVENTS
@@ -687,7 +688,7 @@ local function UpdatePercent(frame, event, unit, animate)
   end
   local cachedPct = bar._msufPowerPercentValue
   if secret or cachedPct ~= pct then
-    SetPowerBarValue(bar, pct, animate)
+    SetPowerBarValue(bar, pct, animate, secret)
     if secret then
       bar._msufPowerPercentValue = nil
     else
@@ -749,7 +750,7 @@ local function UpdateAbsolute(frame, event, unit, animate)
   end
   local cachedValue = bar._msufPowerValue
   if valueSecret or cachedValue ~= value or bar._msufPowerValueUnit ~= unit then
-    SetPowerBarValue(bar, value, animate)
+    SetPowerBarValue(bar, value, animate, valueSecret)
   end
   if valueSecret then
     bar._msufPowerValue = nil
@@ -837,6 +838,35 @@ local function UpdateCurrentPath(frame, event, unit, eventPowerToken)
   if not animate then
     if SnapBarInterpolation then SnapBarInterpolation(bar) end
   end
+  -- CURRENT-only text does not need a percent sample. Drive both the bar and
+  -- text from one UnitPower read, with UnitPowerMax cached between its owned
+  -- invalidation events.
+  local value, _, powerType, token = UpdateAbsolute(frame, event, unit, animate)
+  if not animate then SetColor(frame, false, powerType, token, true) end
+  return value, nil, powerType, token, event == "UNIT_DISPLAYPOWER"
+end
+
+-- Mixed CURRENT+PERCENT formats retain UnitPowerPercent because protected
+-- values cannot be divided in Lua. Keeping this as its own compiled route also
+-- leaves the overwhelmingly common CURRENT-only path free of format branches.
+local function UpdateCurrentPercentPath(frame, event, unit, eventPowerToken)
+  unit = unit or (frame and frame.MSUFUnitKey)
+  local rt = frame and frame._msufTextRuntime
+  if rt and rt._dispatchPowerPercentReady == true then
+    rt._dispatchPowerPercent = nil
+    rt._dispatchPowerPercentReady = nil
+  end
+  local bar = frame and frame.targetPowerBar
+  local animate = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
+  if not (bar and unit) then return end
+  local shown = bar._msufShown
+  if shown ~= true and (shown == false or (bar.IsShown and not bar:IsShown())) then return end
+  if animate and type(eventPowerToken) == "string" and eventPowerToken ~= ""
+    and bar._msufPowerTypeKnown == true and bar._msufPowerToken ~= nil
+    and bar._msufPowerToken ~= eventPowerToken then return end
+  if not animate then
+    if SnapBarInterpolation then SnapBarInterpolation(bar) end
+  end
   local ok, _, powerType, token = UpdatePercent(frame, event, unit, animate)
   if not ok then
     local value, maxValue, absoluteType, absoluteToken = UpdateAbsolute(frame, event, unit, animate)
@@ -852,18 +882,22 @@ end
 local POWER_PLAN_PERCENT = 1
 local POWER_PLAN_CURRENT = 2
 local POWER_PLAN_ABSOLUTE = 3
+local POWER_PLAN_CURRENT_PERCENT = 4
 
 local function PowerValuePlan(frame)
   local rt = frame and frame._msufTextRuntime
   if not (rt and (rt.powerSlotCount or 0) > 0) then return POWER_PLAN_PERCENT end
   if rt.powerNeedsCurrent == true and rt.powerNeedsMax == true then return POWER_PLAN_ABSOLUTE end
-  if rt.powerNeedsCurrent == true then return POWER_PLAN_CURRENT end
+  if rt.powerNeedsCurrent == true then
+    return rt.powerNeedsPercent == true and POWER_PLAN_CURRENT_PERCENT or POWER_PLAN_CURRENT
+  end
   return POWER_PLAN_PERCENT
 end
 
 function Power.Update(frame, event, unit, eventPowerToken)
   local plan = PowerValuePlan(frame)
   if plan == POWER_PLAN_ABSOLUTE then return UpdateAbsolutePath(frame, event, unit, eventPowerToken) end
+  if plan == POWER_PLAN_CURRENT_PERCENT then return UpdateCurrentPercentPath(frame, event, unit, eventPowerToken) end
   if plan == POWER_PLAN_CURRENT then return UpdateCurrentPath(frame, event, unit, eventPowerToken) end
   return UpdatePercentPath(frame, event, unit, eventPowerToken)
 end
@@ -871,6 +905,7 @@ end
 function Power.SelectUpdate(frame)
   local plan = PowerValuePlan(frame)
   if plan == POWER_PLAN_ABSOLUTE then return UpdateAbsolutePath end
+  if plan == POWER_PLAN_CURRENT_PERCENT then return UpdateCurrentPercentPath end
   if plan == POWER_PLAN_CURRENT then return UpdateCurrentPath end
   return UpdatePercentPath
 end
@@ -884,6 +919,7 @@ Power.UpdateValueGroupPercent = Power.Update
 -- element functions for shared Core route prototypes.
 Power.UpdateValuePercentPath = UpdatePercentPath
 Power.UpdateValueCurrentPath = UpdateCurrentPath
+Power.UpdateValueCurrentPercentPath = UpdateCurrentPercentPath
 Power.UpdateValueAbsolutePath = UpdateAbsolutePath
 function Power.SelectGroupPowerUpdater(frame)
   if not frame then return nil end

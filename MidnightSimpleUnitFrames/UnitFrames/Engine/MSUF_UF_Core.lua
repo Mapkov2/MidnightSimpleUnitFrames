@@ -18,6 +18,8 @@ local table_concat = table.concat
 local CreateFrame = CreateFrame
 local InCombatLockdown = InCombatLockdown
 local UnitExists = UnitExists
+local UnitIsPlayer = UnitIsPlayer
+local UnitClass = UnitClass
 local UnitIsConnected = UnitIsConnected
 local UnitIsDead = UnitIsDead
 local UnitIsDeadOrGhost = UnitIsDeadOrGhost
@@ -212,15 +214,146 @@ local function FreshUnitState(frame, unit)
 end
 UF.FreshUnitState = FreshUnitState
 
+-- Identity consumers run back-to-back inside the same frame dispatch. Keep a
+-- tiny dispatch-local read-through cache for the frame's bound unit so Core,
+-- bars, backgrounds, status indicators, and text do not repeat protected unit
+-- API calls. The dispatch token makes the cache impossible to survive an event
+-- boundary; dependent/inline units deliberately bypass it.
+local function IdentityDispatchState(frame, unit)
+  if not (frame and frame._msufDispatchActive == true and IsUnitToken(unit)) then
+    return nil
+  end
+  local boundUnit = frame.MSUFUnitKey or frame.unit
+  if unit ~= boundUnit then return nil end
+
+  local state = frame._msufUnitState
+  if not state then
+    state = {}
+    frame._msufUnitState = state
+  end
+  local token = frame._msufDispatchToken
+  if state.identityDispatchToken ~= token or state.identityUnit ~= unit then
+    state.identityDispatchToken = token
+    state.identityUnit = unit
+    state.identityExistsRead = nil
+    state.identityIsPlayerRead = nil
+    state.identityClassRead = nil
+    state.identityConnectedRead = nil
+    state.identityDeadRead = nil
+  end
+  return state
+end
+
+local function ReadUnitExistsCached(frame, unit)
+  local unitState = FreshUnitState(frame, unit)
+  if unitState and unitState.existsKnown ~= nil then
+    return unitState.exists == true, unitState.existsKnown == true
+  end
+
+  local state = IdentityDispatchState(frame, unit)
+  if state and state.identityExistsRead == true then
+    return state.exists == true, state.existsKnown == true
+  end
+
+  local exists, known
+  if not UnitExists then
+    exists, known = true, true
+  else
+    local raw = UnitExists(unit)
+    if issecretvalue(raw) == true then
+      exists, known = true, false
+    else
+      exists, known = raw == true or raw == 1, true
+    end
+  end
+  if state then
+    state.identityExistsRead = true
+    state.exists = exists
+    state.existsKnown = known
+  end
+  return exists, known
+end
+UF.ReadUnitExistsCached = ReadUnitExistsCached
+
+local function ReadUnitIsPlayerCached(frame, unit)
+  local unitState = FreshUnitState(frame, unit)
+  if unitState then
+    if unitState.isPlayerKnown == true then
+      return unitState.isPlayer == true, true
+    end
+    if unitState.identityReady == true then
+      return nil, false
+    end
+  end
+
+  local state = IdentityDispatchState(frame, unit)
+  if state and state.identityIsPlayerRead == true then
+    return state.isPlayer, state.isPlayerKnown == true
+  end
+
+  local isPlayer, known
+  if UnitIsPlayer then
+    local raw = UnitIsPlayer(unit)
+    if issecretvalue(raw) ~= true then
+      isPlayer, known = raw == true or raw == 1, true
+    end
+  end
+  if state then
+    state.identityIsPlayerRead = true
+    state.isPlayer = isPlayer
+    state.isPlayerKnown = known == true
+  end
+  return isPlayer, known == true
+end
+UF.ReadUnitIsPlayerCached = ReadUnitIsPlayerCached
+
+local function ReadUnitClassCached(frame, unit)
+  local state = IdentityDispatchState(frame, unit)
+  if state and state.identityClassRead == true then
+    return state.className, state.classToken
+  end
+
+  local className, classToken
+  if UnitClass then
+    className, classToken = UnitClass(unit)
+  end
+  if state then
+    state.identityClassRead = true
+    state.className = className
+    state.classToken = classToken
+  end
+  return className, classToken
+end
+UF.ReadUnitClassCached = ReadUnitClassCached
+
 local function ReadConnectedCached(frame, unit, state)
   state = state or FreshUnitState(frame, unit)
   if state and state.connectedKnown == true then
     return state.connected == true, true
   end
-  if not UnitIsConnected then return true, true end
-  local connected = UnitIsConnected(unit)
-  if issecretvalue(connected) == true or connected == nil then return true, false end
-  return connected == true or connected == 1, true
+
+  local dispatchState = IdentityDispatchState(frame, unit)
+  if dispatchState and dispatchState.identityConnectedRead == true then
+    return dispatchState.connected == true, dispatchState.connectedKnown == true
+  end
+
+  local connected, known
+  if not UnitIsConnected then
+    connected, known = true, true
+  else
+    local raw = UnitIsConnected(unit)
+    if issecretvalue(raw) == true or raw == nil then
+      connected, known = true, false
+    else
+      connected, known = raw == true or raw == 1, true
+    end
+  end
+  if dispatchState then
+    dispatchState.identityConnectedRead = true
+    dispatchState.connected = connected
+    dispatchState.connectedKnown = known
+  end
+  return connected, known
 end
 UF.ReadConnectedCached = ReadConnectedCached
 
@@ -229,13 +362,32 @@ local function ReadDeadCached(frame, unit, state)
   if state and state.deadKnown == true then
     return state.dead == true, true
   end
-  if not (UnitIsDeadOrGhost or UnitIsDead) then return false, true end
-  local dead = UnitIsDeadOrGhost and UnitIsDeadOrGhost(unit) or nil
-  if (issecretvalue(dead) == true or dead == nil) and UnitIsDead then
-    dead = UnitIsDead(unit)
+
+  local dispatchState = IdentityDispatchState(frame, unit)
+  if dispatchState and dispatchState.identityDeadRead == true then
+    return dispatchState.dead == true, dispatchState.deadKnown == true
   end
-  if issecretvalue(dead) == true or dead == nil then return false, false end
-  return dead == true or dead == 1, true
+
+  local dead, known
+  if not (UnitIsDeadOrGhost or UnitIsDead) then
+    dead, known = false, true
+  else
+    local raw = UnitIsDeadOrGhost and UnitIsDeadOrGhost(unit) or nil
+    if (issecretvalue(raw) == true or raw == nil) and UnitIsDead then
+      raw = UnitIsDead(unit)
+    end
+    if issecretvalue(raw) == true or raw == nil then
+      dead, known = false, false
+    else
+      dead, known = raw == true or raw == 1, true
+    end
+  end
+  if dispatchState then
+    dispatchState.identityDeadRead = true
+    dispatchState.dead = dead
+    dispatchState.deadKnown = known
+  end
+  return dead, known
 end
 UF.ReadDeadCached = ReadDeadCached
 
@@ -561,6 +713,7 @@ local function FrameVisibleForEvent(frame)
   frame._msufCoreVisible = visible and true or false
   return visible
 end
+UF.FrameVisibleForEvent = FrameVisibleForEvent
 
 local function IdentityUnitExists(frame, unit)
   if not IsUnitToken(unit) then return false end
@@ -570,7 +723,8 @@ local function IdentityUnitExists(frame, unit)
     or _G.MSUF_UnitEditModeActive == true then
     return true
   end
-  return UnitExistsSafe(unit)
+  local exists = ReadUnitExistsCached(frame, unit)
+  return exists == true
 end
 
 -- Only data-only events may carry stable identity across dispatches. Status
@@ -904,32 +1058,53 @@ end
 
 local function BuildHealthRoute(barFn, textFn, predictionFn, visualsFn, routeUnitless, target)
   if target then
-    return function(self, ev, _unit, ...)
+    if not predictionFn then
+      return function(self, ev, _unit)
+        BeginFrameEvent(self, ev)
+        local hp, hpMax, percentReady
+        if barFn then hp, hpMax, percentReady = barFn(self, ev, target) end
+        if textFn then
+          if percentReady == true then textFn(self, ev, target) else textFn(self, ev, target, hp, hpMax) end
+        end
+        if visualsFn then visualsFn(self, ev, target, hp, hpMax) end
+        EndFrameEvent(self)
+      end
+    end
+    return function(self, ev, _unit)
       BeginFrameEvent(self, ev)
       local hp, hpMax, percentReady, seedCalc
-      if barFn then hp, hpMax, percentReady, seedCalc = barFn(self, ev, target, ...) end
-      if predictionFn then
-        if percentReady == true then predictionFn(self, ev, target, nil, nil, nil, ...) else predictionFn(self, ev, target, hp, hpMax, seedCalc, ...) end
-      end
+      if barFn then hp, hpMax, percentReady, seedCalc = barFn(self, ev, target) end
+      if percentReady == true then predictionFn(self, ev, target) else predictionFn(self, ev, target, hp, hpMax, seedCalc) end
       if textFn then
-        if percentReady == true then textFn(self, ev, target, nil, nil, ...) else textFn(self, ev, target, hp, hpMax, ...) end
+        if percentReady == true then textFn(self, ev, target) else textFn(self, ev, target, hp, hpMax) end
       end
-      if visualsFn then visualsFn(self, ev, target, hp, hpMax, ...) end
+      if visualsFn then visualsFn(self, ev, target, hp, hpMax) end
       EndFrameEvent(self)
     end
   end
-  return function(self, ev, unit, ...)
+  if not predictionFn then
+    return function(self, ev, unit)
+      BeginFrameEvent(self, ev)
+      local u = routeUnitless == true and self.MSUFUnitKey or (unit or self.MSUFUnitKey)
+      local hp, hpMax, percentReady
+      if barFn then hp, hpMax, percentReady = barFn(self, ev, u) end
+      if textFn then
+        if percentReady == true then textFn(self, ev, u) else textFn(self, ev, u, hp, hpMax) end
+      end
+      if visualsFn then visualsFn(self, ev, u, hp, hpMax) end
+      EndFrameEvent(self)
+    end
+  end
+  return function(self, ev, unit)
     BeginFrameEvent(self, ev)
     local u = routeUnitless == true and self.MSUFUnitKey or (unit or self.MSUFUnitKey)
     local hp, hpMax, percentReady, seedCalc
-    if barFn then hp, hpMax, percentReady, seedCalc = barFn(self, ev, u, ...) end
-    if predictionFn then
-      if percentReady == true then predictionFn(self, ev, u, nil, nil, nil, ...) else predictionFn(self, ev, u, hp, hpMax, seedCalc, ...) end
-    end
+    if barFn then hp, hpMax, percentReady, seedCalc = barFn(self, ev, u) end
+    if percentReady == true then predictionFn(self, ev, u) else predictionFn(self, ev, u, hp, hpMax, seedCalc) end
     if textFn then
-      if percentReady == true then textFn(self, ev, u, nil, nil, ...) else textFn(self, ev, u, hp, hpMax, ...) end
+      if percentReady == true then textFn(self, ev, u) else textFn(self, ev, u, hp, hpMax) end
     end
-    if visualsFn then visualsFn(self, ev, u, hp, hpMax, ...) end
+    if visualsFn then visualsFn(self, ev, u, hp, hpMax) end
     EndFrameEvent(self)
   end
 end
@@ -998,17 +1173,17 @@ end
 
 local function BuildPowerRoute(barFn, textFn, _unused, _unusedFollower, routeUnitless, target)
   if target then
-    return function(self, ev, _unit, ...)
+    return function(self, ev, _unit, eventPowerToken)
       local power, powerMax, powerType, powerToken, metaChanged
-      if barFn then power, powerMax, powerType, powerToken, metaChanged = barFn(self, ev, target, ...) end
-      if textFn then textFn(self, ev, target, power, powerMax, powerType, powerToken, metaChanged, ...) end
+      if barFn then power, powerMax, powerType, powerToken, metaChanged = barFn(self, ev, target, eventPowerToken) end
+      if textFn then textFn(self, ev, target, power, powerMax, powerType, powerToken, metaChanged) end
     end
   end
-  return function(self, ev, unit, ...)
+  return function(self, ev, unit, eventPowerToken)
     local u = routeUnitless == true and self.MSUFUnitKey or (unit or self.MSUFUnitKey)
     local power, powerMax, powerType, powerToken, metaChanged
-    if barFn then power, powerMax, powerType, powerToken, metaChanged = barFn(self, ev, u, ...) end
-    if textFn then textFn(self, ev, u, power, powerMax, powerType, powerToken, metaChanged, ...) end
+    if barFn then power, powerMax, powerType, powerToken, metaChanged = barFn(self, ev, u, eventPowerToken) end
+    if textFn then textFn(self, ev, u, power, powerMax, powerType, powerToken, metaChanged) end
   end
 end
 
@@ -1093,7 +1268,9 @@ local function CompileFrameEventPath(frame, event, list)
   local powerEvent = POWER_EVENTS[event] == true
   if healthEvent or powerEvent then
     local barUpdate = healthEvent and frame[GetUpdateKey("Health")] or frame[GetUpdateKey("Power")]
-    local textUpdate = healthEvent and frame[GetUpdateKey("HealthText")] or frame[GetUpdateKey("PowerText")]
+    local textElement = healthEvent and UF.elements.HealthText or UF.elements.PowerText
+    local textBase = healthEvent and frame[GetUpdateKey("HealthText")] or frame[GetUpdateKey("PowerText")]
+    local textUpdate = textBase and SelectElementEventUpdate(textElement, frame, event, textBase) or nil
     local predictionUpdate
     local visualsUpdate
     if healthEvent then
@@ -1515,9 +1692,8 @@ local function FrameNeedsIdentityLifecycle(frame)
 end
 
 local function IsBossUnit(unit)
-  if type(unit) ~= "string" or unit:sub(1, 4) ~= "boss" then return false end
-  local index = tonumber(unit:sub(5))
-  return index and index >= 1 and index <= 5
+  return unit == "boss1" or unit == "boss2" or unit == "boss3"
+    or unit == "boss4" or unit == "boss5"
 end
 
 local function AddIdentityLifecycleHandlers(frame)
@@ -1757,6 +1933,12 @@ function UF.RebuildRuntimeStatusState(frame)
   frame._msufGroupIdentityLabels = frame._msufIdentityLabels
   frame._msufGroupIdentityPath = frame._msufIdentityPath
   frame._msufIdentityBarPath = CompileIdentityBarPath(frame)
+  -- Prewarm the shared unit/read-through state while routes are compiled,
+  -- never on the first target/combat event that consumes those routes.
+  if (frame._msufIdentityPath or frame._msufIdentityBarPath)
+    and not frame._msufUnitState then
+    frame._msufUnitState = {}
+  end
   if CompileGroupLifecyclePlan then CompileGroupLifecyclePlan(frame) end
   return true
 end
@@ -1966,9 +2148,12 @@ function UF.RunLeanIdentity(frame, event)
   local barPath = frame._msufIdentityBarPath
   if not (path or barPath) then return false end
   local unit = frame.MSUFUnitKey
-  if not IdentityUnitExists(frame, unit) then return false end
   event = event or "MSUF_UNIT_IDENTITY"
   BeginFrameEvent(frame, event)
+  if not IdentityUnitExists(frame, unit) then
+    EndFrameEvent(frame)
+    return false
+  end
   local hp, hpMax, healthPercentReady, healthSeedCalc
   local power, powerMax, powerType, powerToken, powerMetaChanged
   if barPath then
@@ -2144,7 +2329,8 @@ function UF.OnUnitChanged(frame, oldUnit, newUnit)
     UF.RunLeanIdentity(frame, "MSUF_UNIT_IDENTITY")
   end
   local A3 = MSUF and MSUF.MSUF_Auras3
-  if A3 and type(A3.OnFrameUnitChanged) == "function" then
+  local active = frame._msufActiveElements
+  if active and active.Auras == true and A3 and type(A3.OnFrameUnitChanged) == "function" then
     A3.OnFrameUnitChanged(frame, oldUnit, newUnit)
   end
   return true

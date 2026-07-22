@@ -107,25 +107,6 @@ local function SetAlphaCached(obj, alpha, field, force)
   end
 end
 
--- Borders and group corner indicators are dispatched back-to-back for the
--- same threat event. Share the raw C-side snapshots inside that one Core
--- dispatch without retaining them across events.
-local function ReadGroupThreatStatus(frame, unit)
-  local token = frame and frame._msufDispatchActive == true and frame._msufDispatchToken or nil
-  if token
-    and frame._msufGroupThreatDispatchToken == token
-    and frame._msufGroupThreatDispatchUnit == unit then
-    return frame._msufGroupThreatDispatchValue
-  end
-  local status = UnitThreatSituation and UnitThreatSituation(unit) or nil
-  if token then
-    frame._msufGroupThreatDispatchToken = token
-    frame._msufGroupThreatDispatchUnit = unit
-    frame._msufGroupThreatDispatchValue = status
-  end
-  return status
-end
-
 local function ReadGroupRole(frame, unit)
   local token = frame and frame._msufDispatchActive == true and frame._msufDispatchToken or nil
   if token
@@ -140,6 +121,52 @@ local function ReadGroupRole(frame, unit)
     frame._msufGroupRoleDispatchValue = role
   end
   return role
+end
+
+-- Borders run before corner indicators in the compiled event path. Resolve
+-- their common group-aggro predicate once per dispatch; corners retain their
+-- stricter combat gate and reuse this result when both visuals are enabled.
+local function ResolveGroupAggroThreat(frame, unit, mode)
+  if not (frame and unit and UnitThreatSituation) then return false end
+  local token = frame._msufDispatchActive == true and frame._msufDispatchToken or nil
+  if token
+    and frame._msufGroupAggroDispatchToken == token
+    and frame._msufGroupAggroDispatchUnit == unit
+    and frame._msufGroupAggroDispatchMode == mode then
+    return frame._msufGroupAggroDispatchValue == true
+  end
+
+  local active = true
+  local exists = UnitExists and UnitExists(unit)
+  if not IsNil(exists) and NotSecretValue(exists)
+    and (exists == false or exists == 0) then
+    active = false
+  end
+  if active and (mode == "TANK" or mode == "HEALER" or mode == "NON_TANK") then
+    local role = ReadGroupRole(frame, unit)
+    if IsNil(role) or not NotSecretValue(role)
+      or (mode == "NON_TANK" and role == "TANK")
+      or (mode ~= "NON_TANK" and role ~= mode) then
+      active = false
+    end
+  end
+  if active then
+    local status = UnitThreatSituation(unit)
+    if IsNil(status) or not NotSecretValue(status) then
+      active = false
+    else
+      status = tonumber(status)
+      active = status ~= nil and status >= 1
+    end
+  end
+
+  if token then
+    frame._msufGroupAggroDispatchToken = token
+    frame._msufGroupAggroDispatchUnit = unit
+    frame._msufGroupAggroDispatchMode = mode
+    frame._msufGroupAggroDispatchValue = active
+  end
+  return active
 end
 
 MSUF.UFVisuals = {
@@ -173,6 +200,5 @@ MSUF.UFVisuals = {
   Clamp01 = Clamp01,
   SetFrameAlpha = SetFrameAlpha,
   SetAlphaCached = SetAlphaCached,
-  ReadGroupThreatStatus = ReadGroupThreatStatus,
-  ReadGroupRole = ReadGroupRole,
+  ResolveGroupAggroThreat = ResolveGroupAggroThreat,
 }

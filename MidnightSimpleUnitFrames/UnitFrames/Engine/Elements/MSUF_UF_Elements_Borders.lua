@@ -16,10 +16,8 @@ local Layers = UF and UF.Layers or {}
 -- Owns highlight, aggro, purge/dispel, and boss-target border layers for unitframes. Runtime
 -- updates are event-driven and secret-safe; page code only changes DB/style inputs.
 local CreateFrame = V.CreateFrame or CreateFrame
-local UnitExists = V.UnitExists or UnitExists
 local UnitIsUnit = V.UnitIsUnit or UnitIsUnit
 local UnitThreatSituation = V.UnitThreatSituation or UnitThreatSituation
-local UnitGroupRolesAssigned = V.UnitGroupRolesAssigned or UnitGroupRolesAssigned
 local tonumber = V.tonumber or tonumber
 local tostring = V.tostring or tostring
 local type = V.type or type
@@ -30,9 +28,7 @@ local EMPTY_EVENTS = V.EMPTY_EVENTS or {}
 local BORDER_THREAT_EVENTS = V.BORDER_THREAT_EVENTS or { "UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE" }
 local TARGET_CHANGE_EVENTS = { "PLAYER_TARGET_CHANGED" }
 local SetShown = V.SetShown
-local ReadGroupThreatStatus = V.ReadGroupThreatStatus
-local ReadGroupRole = V.ReadGroupRole
-local FreshUnitState = UF and UF.FreshUnitState
+local ResolveGroupAggroThreat = V.ResolveGroupAggroThreat
 
 local Borders = {}
 local IsAggroBorderUnit
@@ -179,9 +175,8 @@ local function BorderNormalEnabled(cfg)
 end
 
 function IsBossUnit(unit)
-  if type(unit) ~= "string" or unit:sub(1, 4) ~= "boss" then return false end
-  local index = tonumber(unit:sub(5))
-  return index ~= nil and index >= 1 and index <= 5
+  return unit == "boss1" or unit == "boss2" or unit == "boss3"
+    or unit == "boss4" or unit == "boss5"
 end
 
 function IsAggroBorderUnit(frame)
@@ -406,50 +401,13 @@ local function ThreatState(frame)
   if frame._msufBorderRuntimeGroup == true
     or frame._msufIsGroupFrame == true
     or frame._msufCoreScope == "group" then
-    local state = FreshUnitState and FreshUnitState(frame, unit) or nil
-    if state and state.existsKnown == true then
-      if state.exists ~= true then return false end
-    else
-      local exists = UnitExists and UnitExists(unit)
-      if not IsNil(exists) and NotSecretValue(exists) and exists == false then
-        return false
-      end
-    end
     local mode = frame._msufBorderRuntimeAggroMode
     if mode == nil then
       local spec = frame.MSUFSpec
       local cfg = spec and spec.border
       mode = NormalizeAggroMode(cfg and cfg.aggroMode)
     end
-    if mode == "TANK" or mode == "HEALER" or mode == "NON_TANK" then
-      local role
-      if ReadGroupRole then
-        role = ReadGroupRole(frame, unit)
-      elseif UnitGroupRolesAssigned then
-        role = UnitGroupRolesAssigned(unit)
-      end
-      if IsNil(role) or not NotSecretValue(role) then
-        return false
-      end
-      if mode == "NON_TANK" then
-        if role == "TANK" then
-          return false
-        end
-      elseif role ~= mode then
-        return false
-      end
-    end
-    local status
-    if ReadGroupThreatStatus then
-      status = ReadGroupThreatStatus(frame, unit)
-    else
-      status = UnitThreatSituation(unit)
-    end
-    if IsNil(status) or not NotSecretValue(status) then
-      return false
-    end
-    status = tonumber(status)
-    return status ~= nil and status >= 1
+    return ResolveGroupAggroThreat and ResolveGroupAggroThreat(frame, unit, mode) or false
   end
 
   local status

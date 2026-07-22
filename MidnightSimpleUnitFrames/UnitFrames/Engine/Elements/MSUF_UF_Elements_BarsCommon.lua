@@ -49,6 +49,11 @@ local byte, sub = string.byte, string.sub
 local abs, floor, max = math.abs, math.floor, math.max
 local Clamp01 = UF.Clamp01
 local FreshUnitState = UF.FreshUnitState
+local ReadUnitExistsCached = UF.ReadUnitExistsCached
+local ReadUnitIsPlayerCached = UF.ReadUnitIsPlayerCached
+local ReadUnitClassCached = UF.ReadUnitClassCached
+local ReadConnectedCached = UF.ReadConnectedCached
+local ReadDeadCached = UF.ReadDeadCached
 local GetTime = _G.GetTime
 local C_Timer = _G.C_Timer
 local Enum = _G.Enum
@@ -114,7 +119,7 @@ local REVERSE_HEALTH_MODE = {
 }
 local EMPTY_EVENTS = {}
 local POWER_EVENTS = { "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" }
-local POWER_EVENTS_FREQUENT = { "UNIT_POWER_UPDATE", "UNIT_POWER_FREQUENT", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" }
+local POWER_EVENTS_FREQUENT = { "UNIT_POWER_FREQUENT", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" }
 local TEXT_EVENT_SETS = {
   -- Event sets are deliberately prebuilt tables. The dispatcher stores references to these
   -- tables and should not allocate new event arrays every time a text mode changes.
@@ -226,9 +231,9 @@ end
 local SetBarMinMaxPlain = SetBarMinMaxKnown
 
 local function SetBarValue(bar, value, directValue, animate)
-  local interp = animate and bar._msufSmoothInterp or nil
   if directValue then
     local valueSecret = issecretvalue(value) == true
+    local interp = animate and not valueSecret and bar._msufSmoothInterp or nil
     if not valueSecret and bar._msufDirectValuePlain == true and bar._msufDirectValue == value then
       return false
     end
@@ -237,6 +242,7 @@ local function SetBarValue(bar, value, directValue, animate)
       bar._msufInterpolating = true
     else
       bar:SetValue(value)
+      bar._msufInterpolating = nil
     end
     if valueSecret then
       bar._msufDirectValue = nil
@@ -253,11 +259,13 @@ local function SetBarValue(bar, value, directValue, animate)
   bar._msufDirectValuePlain = nil
   value = SafeNumber(value) or 0
   if bar._msufValuePlain ~= true or bar._msufValue ~= value then
+    local interp = animate and bar._msufSmoothInterp or nil
     if interp then
       bar:SetValue(value, interp)
       bar._msufInterpolating = true
     else
       bar:SetValue(value)
+      bar._msufInterpolating = nil
     end
     bar._msufValue = value
     bar._msufValuePlain = true
@@ -270,7 +278,7 @@ local function SetBarValueKnown(bar, value, valueSecret, animate)
   if valueSecret == nil then
     valueSecret = issecretvalue(value) == true
   end
-  local interp = animate and bar._msufSmoothInterp or nil
+  local interp = animate and not valueSecret and bar._msufSmoothInterp or nil
   if not valueSecret and bar._msufDirectValuePlain == true and bar._msufDirectValue == value then
     return false
   end
@@ -279,6 +287,7 @@ local function SetBarValueKnown(bar, value, valueSecret, animate)
     bar._msufInterpolating = true
   else
     bar:SetValue(value)
+    bar._msufInterpolating = nil
   end
   if valueSecret then
     bar._msufDirectValue = nil
@@ -297,12 +306,13 @@ local function SetBarValuePlain(bar, value, animate)
   if not valueSecret and bar._msufDirectValuePlain == true and bar._msufDirectValue == value then
     return false
   end
-  local interp = animate and bar._msufSmoothInterp or nil
+  local interp = animate and not valueSecret and bar._msufSmoothInterp or nil
   if interp then
     bar:SetValue(value, interp)
     bar._msufInterpolating = true
   else
     bar:SetValue(value)
+    bar._msufInterpolating = nil
   end
   if valueSecret then
     bar._msufDirectValue = nil
@@ -604,7 +614,14 @@ local function ClassColor(unit)
   return 0.12, 0.62, 0.95
 end
 
-local function FriendlyNPCClassToken(state, unit)
+local function DispatchClassColor(frame, unit)
+  local _, class = ReadUnitClassCached(frame, unit)
+  local r, g, b = ClassColorForToken(class)
+  if r ~= nil then return r, g, b end
+  return 0.12, 0.62, 0.95
+end
+
+local function FriendlyNPCClassToken(state, frame, unit)
   if not state then
     return nil
   end
@@ -613,7 +630,7 @@ local function FriendlyNPCClassToken(state, unit)
     local reaction = IsUnitToken(unit) and UnitReaction and SafeNumber(UnitReaction(unit, "player")) or nil
     if reaction and reaction >= 5 then
       state.npcClassEligible = true
-      local _, class = UnitClass(unit)
+      local _, class = ReadUnitClassCached(frame, unit)
       if issecretvalue(class) ~= true then
         state.npcClass = class
       end
@@ -808,6 +825,16 @@ local function ReadUnitBool(api, unit, defaultValue)
   return ReadKnownUnitBool(api, unit, defaultValue)
 end
 
+-- Core normally supplies both dispatch-cache readers. Standalone consumers
+-- that intentionally load this shared primitive without Core still retain the
+-- same secret-safe result contract instead of calling a nil optional helper.
+ReadConnectedCached = ReadConnectedCached or function(_, unit)
+  return ReadUnitBool(UnitIsConnected, unit, true)
+end
+ReadDeadCached = ReadDeadCached or function(_, unit)
+  return ReadUnitBool(UnitIsDeadOrGhost, unit, false)
+end
+
 local function HealthModeNeedsIdentity(spec)
   local health = spec and spec.health
   local mode = health and health.mode
@@ -870,17 +897,21 @@ local function RefreshUnitState(frame, unit, spec, event)
   local dispatchToken = frame._msufDispatchActive == true and frame._msufDispatchToken or nil
   state.unit = unit
   state.dispatchToken = dispatchToken
-  state.ready = true
+  -- Publish the state only after the volatile tuple has been refreshed. This
+  -- prevents the dispatch cache from mistaking the prior event's values for a
+  -- fresh state while RefreshUnitState itself is rebuilding the table.
+  state.ready = false
   local validUnit = IsUnitToken(unit)
   if validUnit then
-    state.exists, state.existsKnown = ReadKnownUnitBool(UnitExists, unit, true)
-    state.dead, state.deadKnown = ReadKnownUnitBool(UnitIsDeadOrGhost, unit, false)
-    state.connected, state.connectedKnown = ReadKnownUnitBool(UnitIsConnected, unit, true)
+    state.exists, state.existsKnown = ReadUnitExistsCached(frame, unit)
+    state.dead, state.deadKnown = ReadDeadCached(frame, unit)
+    state.connected, state.connectedKnown = ReadConnectedCached(frame, unit)
   else
     state.exists, state.existsKnown = true, false
     state.dead, state.deadKnown = false, false
     state.connected, state.connectedKnown = true, false
   end
+  state.ready = true
 
   if preserveIdentity and (
       oldExistsKnown ~= state.existsKnown
@@ -908,14 +939,16 @@ local function RefreshUnitState(frame, unit, spec, event)
   end
   if needsIdentity and not preserveIdentity then
     if validUnit then
-      state.isPlayer, state.isPlayerKnown = ReadKnownUnitBool(UnitIsPlayer, unit, false)
+      local isPlayer
+      isPlayer, state.isPlayerKnown = ReadUnitIsPlayerCached(frame, unit)
+      state.isPlayer = isPlayer == true
     end
     if state.isPlayerKnown and not state.isPlayer then
       state.npcKind = UnitNPCKind(frame, unit, spec)
       state.npcKindKnown = state.npcKind ~= nil
       local health = spec and spec.health
       if health and health.npcClassColorBar == true and spec.key ~= "pet" and spec.key ~= "boss" then
-        FriendlyNPCClassToken(state, unit)
+        FriendlyNPCClassToken(state, frame, unit)
       end
     end
     state.identityReady = true
@@ -1077,17 +1110,21 @@ local function HealthColor(frame, unit, hp, maxHP, calc, event)
     return GradientColor(unit, calc, frame, hp, maxHP)
   end
 
-  if spec and spec.key == "pet" and health.petColorEnabled == true then
-    return health.petR or 0, health.petG or 0.8, health.petB or 0
+  if spec and spec.key == "pet" then
+    if health.petUsePlayerClassColor == true then
+      return health.petPlayerClassR or 0.12, health.petPlayerClassG or 0.62, health.petPlayerClassB or 0.95
+    elseif health.petColorEnabled == true then
+      return health.petR or 0, health.petG or 0.8, health.petB or 0
+    end
   end
 
   if state and state.isPlayerKnown and state.isPlayer then
-    return ClassColor(unit)
+    return DispatchClassColor(frame, unit)
   end
 
   if health.npcClassColorBar == true and spec and spec.key ~= "pet" and spec.key ~= "boss"
       and state and state.isPlayerKnown and not state.isPlayer then
-    local r, g, b = ClassColorForToken(FriendlyNPCClassToken(state, unit))
+    local r, g, b = ClassColorForToken(FriendlyNPCClassToken(state, frame, unit))
     if r ~= nil then
       return r, g, b
     end
@@ -1110,8 +1147,16 @@ local function ApplyHealthStatusColor(bar, frame, unit, hp, maxHP, calc, event)
   local health = spec and spec.health or {}
   local r, g, b, raw = HealthColor(frame, unit, hp, maxHP, calc, event)
   if health.mode == "gradient" and raw == true then
-    bar:SetStatusBarColor(r, g, b, 1)
-    bar._msufStatusR, bar._msufStatusG, bar._msufStatusB, bar._msufStatusA = nil, nil, nil, nil
+    if issecretvalue(r) == true or issecretvalue(g) == true or issecretvalue(b) == true then
+      -- Restricted curve results cannot participate in Lua comparisons. Pass
+      -- them straight through and invalidate the plain-value cache.
+      bar:SetStatusBarColor(r, g, b, 1)
+      bar._msufStatusR, bar._msufStatusG, bar._msufStatusB, bar._msufStatusA = nil, nil, nil, nil
+    else
+      -- Native curve APIs also return ordinary RGB outside restricted combat.
+      -- Those values are safe to dedupe just like every other status color.
+      ApplyStatusColor(bar, r, g, b)
+    end
     frame._msufGradStashR, frame._msufGradStashG, frame._msufGradStashB = r, g, b
     frame._msufGradStashAt = GetTime and GetTime() or 0
     return true
@@ -1165,7 +1210,7 @@ local function PowerColor(frame, unit, powerType, token, metaKnown)
   if powerSpec.mode == "dark" or powerSpec.mode == "unified" or powerSpec.mode == "static" then
     return powerSpec.r or 0.1, powerSpec.g or 0.35, powerSpec.b or 0.95
   elseif powerSpec.mode == "class" then
-    return ClassColor(unit)
+    return DispatchClassColor(frame, unit)
   end
 
   local tokenKey, powerTypeKey

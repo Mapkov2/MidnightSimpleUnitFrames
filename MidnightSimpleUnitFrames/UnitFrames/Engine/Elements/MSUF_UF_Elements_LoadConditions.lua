@@ -195,6 +195,14 @@ local function VisibilityNeedsDriver(spec)
   return false
 end
 
+-- Existence-only visibility is structural frame ownership, not an active
+-- LoadConditions feature. Factory/SecureGroupHeader keep the native unit watch
+-- alive, while this element enters Core routing only for real conditional
+-- visibility or a forced unit-frame preview.
+function LoadConditions.IsEnabled(frame, spec)
+  return VisibilityNeedsDriver(spec) or ShouldForcePreview(frame)
+end
+
 local function VisibilityFrame(frame)
   return frame
 end
@@ -322,6 +330,17 @@ function LoadConditions.Disable(frame)
   frame._msufVisibilityExpr = nil
   if UnregisterStateDriver then
     UnregisterStateDriver(frame, "visibility")
+  end
+  -- A conditional driver replaces RegisterUnitWatch while active. Restore the
+  -- native existence owner immediately when the last condition is removed;
+  -- targeted RefreshElements calls do not pass through Factory's post-apply
+  -- fallback that normally performs this hand-off for fresh single frames.
+  if RegisterUnitWatch and not (frame.MSUFSpec and frame.MSUFSpec.enabled == false) then
+    local watched = UnitWatchRegistered and UnitWatchRegistered(frame) == true
+    if not watched then
+      RegisterUnitWatch(frame)
+    end
+    frame._msufUnitWatched = true
   end
   return true
 end

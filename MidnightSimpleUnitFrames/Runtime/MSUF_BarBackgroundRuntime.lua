@@ -16,8 +16,12 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
 end
 
 local type, tonumber = type, tonumber
-local UnitClass, UnitExists, UnitIsPlayer = _G.UnitClass, _G.UnitExists, _G.UnitIsPlayer
+local UnitClass = _G.UnitClass
 local issecretvalue = _G.issecretvalue
+local UF = MSUF.UF or {}
+local ReadUnitExistsCached = UF.ReadUnitExistsCached
+local ReadUnitIsPlayerCached = UF.ReadUnitIsPlayerCached
+local ReadUnitClassCached = UF.ReadUnitClassCached
 
 do
     --- Legacy compatibility anchor for profiles that referenced an older
@@ -275,6 +279,18 @@ MSUF.Bars._MatchHPColor = function(frame, gen, cache, defR, defG, defB)
     return MSUF_Clamp01(fr), MSUF_Clamp01(fg), MSUF_Clamp01(fb)
 end
 
+local _MSUF_PlayerClassToken
+local function _MSUF_GetPlayerClassToken()
+    if _MSUF_PlayerClassToken then return _MSUF_PlayerClassToken end
+    if not UnitClass then return nil end
+    local _, classToken = UnitClass("player")
+    if MSUF_IsSecretValue(classToken) or type(classToken) ~= "string" or classToken == "" then
+        return nil
+    end
+    _MSUF_PlayerClassToken = classToken
+    return classToken
+end
+
 MSUF.Bars._ClassBackgroundColor = function(frame, defR, defG, defB)
     if not frame then return defR, defG, defB end
     local unit = frame.MSUFUnitKey or frame.unit
@@ -288,24 +304,20 @@ MSUF.Bars._ClassBackgroundColor = function(frame, defR, defG, defB)
     -- secret units deliberately fall back to the local player's class so the
     -- option remains visibly useful for every unit-frame type.
     local boundUnitUsable = unit ~= nil
-    if boundUnitUsable and UnitExists then
-        local exists = UnitExists(unit)
-        boundUnitUsable = not MSUF_IsSecretValue(exists) and exists == true
+    if boundUnitUsable then
+        local exists, known = ReadUnitExistsCached(frame, unit)
+        boundUnitUsable = known == true and exists == true
     end
-    if boundUnitUsable and UnitIsPlayer then
-        local isPlayer = UnitIsPlayer(unit)
-        if not MSUF_IsSecretValue(isPlayer) and isPlayer == true and UnitClass then
+    if boundUnitUsable then
+        local isPlayer, known = ReadUnitIsPlayerCached(frame, unit)
+        if known == true and isPlayer == true then
             local _
-            _, classToken = UnitClass(unit)
+            _, classToken = ReadUnitClassCached(frame, unit)
         end
     end
 
     if MSUF_IsSecretValue(classToken) then classToken = nil end
-    if not classToken and UnitClass then
-        local _
-        _, classToken = UnitClass("player")
-        if MSUF_IsSecretValue(classToken) then classToken = nil end
-    end
+    if not classToken then classToken = _MSUF_GetPlayerClassToken() end
     frame._msufBarBgClassToken = classToken
     if not classToken then return defR, defG, defB end
 
