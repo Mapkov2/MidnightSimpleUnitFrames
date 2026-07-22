@@ -149,7 +149,7 @@ function A.GroupFramesRegistry.RegisterBasicSettings(ctx, scope)
     aliases = {}
     AddAliasesForUnit(aliases, scope, "smooth fill", "weiche fuellung")
     AddAliasesForUnit(aliases, scope, "smooth health", "weiche leben")
-    RegisterGroupBoolean(scope, "smoothFill", "smoothFill", "Smooth Health Fill", true, "visual", aliases)
+    RegisterGroupBoolean(scope, "smoothFill", "smoothFill", "Smooth Health Fill", false, "visual", aliases)
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "reverse fill", "fuellung umkehren")

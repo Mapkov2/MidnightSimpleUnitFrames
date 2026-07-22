@@ -636,10 +636,10 @@ local function SmoothPowerGet()
     if key then
         local u = Unit(key)
         if u.powerSmoothFill ~= nil then return u.powerSmoothFill == true end
-        if key == "player" then return ReadB("smoothPowerBar", true) ~= false end
+        if key == "player" then return ReadB("smoothPowerBar", false) == true end
         return false
     end
-    return ReadB("smoothPowerBar", true) ~= false
+    return ReadB("smoothPowerBar", false) == true
 end
 local function SmoothPowerSet(enabled, reason)
     enabled = enabled and true or false

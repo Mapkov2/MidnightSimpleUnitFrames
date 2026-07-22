@@ -134,7 +134,7 @@ function A.ClassPowerRegistry.RegisterDisplaySettings(ctx)
             "disable class resources prediction",
         },
     })
-    RegisterBarsBoolean("classPowerSmoothFill", "smoothFill", "Class Resource Smooth Fill", true, ClassPowerAliases(
+    RegisterBarsBoolean("classPowerSmoothFill", "smoothFill", "Class Resource Smooth Fill", false, ClassPowerAliases(
         "smooth fill", "smooth resource fill", "smooth class resource", "smooth class power"
     ), {
         reason = "MSUF_ASSISTANT_CLASSPOWER_SMOOTH_FILL",

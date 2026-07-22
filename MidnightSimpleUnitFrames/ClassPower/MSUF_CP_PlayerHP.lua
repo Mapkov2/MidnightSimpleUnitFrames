@@ -1025,26 +1025,27 @@ builders.PLAYER_HP = function(E)
             else
                 PHP.bar:SetMinMaxValues(0, maxHP)
             end
-            PHP._maxHP = maxSecret and nil or maxHP
+            if maxSecret then PHP._maxHP = nil else PHP._maxHP = maxHP end
         end
         if hpChanged then
             if common and type(common.SetBarValueKnown) == "function" then
                 common.SetBarValueKnown(PHP.bar, hp, hpSecret, true)
             else
-                local interp = PHP.bar._msufSmoothInterp
+                local interp = not hpSecret and PHP.bar._msufSmoothInterp or nil
                 if interp then
                     PHP.bar:SetValue(hp, interp)
                     PHP.bar._msufInterpolating = true
                 else
                     PHP.bar:SetValue(hp)
+                    PHP.bar._msufInterpolating = nil
                 end
             end
-            PHP._hp = hpSecret and nil or hp
+            if hpSecret then PHP._hp = nil else PHP._hp = hp end
             UpdateText(hp, maxHP)
         elseif maxSecret or PHP._textMaxHP ~= maxHP then
             UpdateText(hp, maxHP)
         end
-        PHP._textMaxHP = maxSecret and nil or maxHP
+        if maxSecret then PHP._textMaxHP = nil else PHP._textMaxHP = maxHP end
         ApplyColor(hp, maxHP, event)
     end
 

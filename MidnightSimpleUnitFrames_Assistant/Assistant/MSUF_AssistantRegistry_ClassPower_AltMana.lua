@@ -27,7 +27,7 @@ function A.ClassPowerRegistry.RegisterAltManaSettings(ctx)
         frameType = "altMana",
         reason = "MSUF_ASSISTANT_ALT_MANA",
     })
-    RegisterBarsBoolean("altManaSmoothFill", "smoothFill", "Alternative Mana Smooth Fill", true, {
+    RegisterBarsBoolean("altManaSmoothFill", "smoothFill", "Alternative Mana Smooth Fill", false, {
         "alternative mana smooth fill", "alt mana smooth fill", "smooth alternative mana", "smooth alt mana",
     }, {
         category = "Global / Class Resources / Alternative Mana",

@@ -157,7 +157,7 @@ function A.GlobalBarRegistry.RegisterBaseBarSettings(ctx)
         "dispel overlay opacity", "unitframe dispel overlay opacity", "dispel overlay alpha",
     }, { category = "Global / Bars / UnitFrame Dispel Overlay", frameType = "globalBars", apply = ApplyDispelPurgeBorder, reason = "MSUF_ASSISTANT_UNIT_DISPEL_OVERLAY_ALPHA", step = 0.05, percent = true })
 
-    RegisterBarsBoolean("smoothPowerBar", "smoothPower", "Smooth Power Bar", true, {
+    RegisterBarsBoolean("smoothPowerBar", "smoothPower", "Smooth Power Bar", false, {
         "smooth power bar", "smooth power", "smooth mana bar", "power bar smoothing",
     }, { category = "Global / Bars / Power", frameType = "globalBars", apply = ApplyBars, reason = "MSUF_ASSISTANT_SMOOTH_POWER" })
     RegisterBarsBoolean("realtimePowerText", "realtimePowerText", "Realtime Power Text", true, {

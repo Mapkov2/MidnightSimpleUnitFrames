@@ -117,8 +117,8 @@ local function _CP_RefreshConfig()
     _cpDB.showPrediction    = (b.classPowerShowPrediction ~= false)
     _cpDB.showText          = (b.classPowerShowText ~= false)
     _cpDB.fontSize          = tonumber(b.classPowerFontSize) or 14
-    _cpDB.classSmooth       = (b.classPowerSmoothFill ~= false)
-    _cpDB.altManaSmooth     = (b.altManaSmoothFill ~= false)
+    _cpDB.classSmooth       = (b.classPowerSmoothFill == true)
+    _cpDB.altManaSmooth     = (b.altManaSmoothFill == true)
     _cpDB.colorOverrides    = (type(g.classPowerColorOverrides) == "table") and g.classPowerColorOverrides or nil
     _cpDB.bgColorOverrides  = (type(g.classPowerBgColorOverrides) == "table") and g.classPowerBgColorOverrides or nil
     _cpDB.comboPointColorMode = cpMode
@@ -393,7 +393,7 @@ local function EnsureDefaults()
     if b.classPowerOffsetY    == nil then b.classPowerOffsetY    = 0     end
     if b.classPowerFrameLevelOffset == nil then b.classPowerFrameLevelOffset = 5 end
     if b.smoothPowerBar       == nil then b.smoothPowerBar       = false end
-    if b.classPowerSmoothFill == nil then b.classPowerSmoothFill = (b.smoothPowerBar ~= false) end
+    if b.classPowerSmoothFill == nil then b.classPowerSmoothFill = (b.smoothPowerBar == true) end
     if b.showChargedComboPoints == nil then b.showChargedComboPoints = true end
     if b.classPowerComboPointColorMode == nil then b.classPowerComboPointColorMode = "default" end
     if b.classPowerShowText    == nil then b.classPowerShowText    = false end
@@ -412,7 +412,7 @@ local function EnsureDefaults()
     if b.altManaColorR        == nil then b.altManaColorR        = 0.0   end
     if b.altManaColorG        == nil then b.altManaColorG        = 0.0   end
     if b.altManaColorB        == nil then b.altManaColorB        = 0.8   end
-    if b.altManaSmoothFill    == nil then b.altManaSmoothFill    = (b.smoothPowerBar ~= false) end
+    if b.altManaSmoothFill    == nil then b.altManaSmoothFill    = (b.smoothPowerBar == true) end
 
     --- Class Resources-owned second Player HP bar (off by default)
     if b.playerHPBarEnabled     == nil then b.playerHPBarEnabled     = false end
