@@ -8,10 +8,45 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-Beta25",
-    previousVersion = "6.0-Beta24",
-    rangeLabel = "6.0-Beta24 -> 6.0-Beta25",
+    currentVersion = "6.0-Beta26",
+    previousVersion = "6.0-Beta25",
+    rangeLabel = "6.0-Beta25 -> 6.0-Beta26",
     entries = {
+        {
+            version = "6.0-Beta26",
+            date = "2026-07-23",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Expanded the Assistant with more natural explanations, follow-up context, safer scope selection, and stronger move, anchor, color, number, enum, and boolean request handling.",
+                        "Reworked Unit Frame and Group Frame runtime paths to share event-owned identity and value state, coalesce text and prediction refreshes, and remove unnecessary idle, range, threat, and lifecycle work.",
+                        "Unified 12.1 Group Aura slot ownership for Spell Indicators, dispel visuals, and fixed external icons, including secret-safe party range gating and safer native container reuse.",
+                        "Added clearer Group Frame provider controls for MSUF, normal Blizzard ownership, forced Blizzard frames, and fully disabled frames.",
+                        "Improved Aura styling workflows and live previews across Menu2, Edit Mode, Unit Frames, Group Frames, and custom Aura containers.",
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Added cast and channel spell icons to portraits while keeping the feature event-driven and inactive when unused.",
+                        "Split status text presentation from status icons and migrated existing Unit Frame and Group Frame profile values automatically.",
+                        "Made Health, Power, Class Resource, and Alternative Mana smoothing explicit opt-in settings while preserving Quick Setup as an intentional smoothing preset.",
+                        "Simplified contextual text and color editing, refined accordion and dashboard visuals, and completed Menu2/Edit Mode source coverage for all shipped locales.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Reduced Castbar first-cast work, duplicate native cleanup, and Auto Width fan-out with per-source dirty routing and reusable geometry state.",
+                        "Reduced duplicate health, power, class-color, NPC-kind, status, prediction, and text reads across hot event paths.",
+                        "Coalesced text and prediction rendering, narrowed Group Frame event routing, retired stale unit subscriptions, and cancelled inactive range timers immediately.",
+                        "Improved offline Group Frame visibility, status targeting, level/name anchoring, secret-safe absorb handling, and profile migration behavior.",
+                        "Expanded the Core Lua 5.1 suite to 152 passing runtime, Menu2, Assistant, Aura, Castbar, Group Frame, smoothing, status, and hotpath regression tests.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-Beta25",
             date = "2026-07-21",
@@ -110,31 +145,6 @@ local data = {
                         "Fixed legacy UI_Parent anchors and prevented repeated retries for unavailable custom anchors.",
                         "Fixed first-open custom Menu fonts, direct menu navigation, and Aura workspace sizing.",
                         "Completed Edit Mode and Color Picker translations and expanded regression coverage.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-Beta22",
-            date = "2026-07-19",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Added target DoT lanes with curated class spells and full-frame effects.",
-                        "Unified Undo and Redo across Menu2 and Edit Mode.",
-                        "Added beginner Quick Setup, Coolinator anchors, and scoped icon zoom.",
-                        "Refined color tools, Menu search, and window controls.",
-                    },
-                },
-                {
-                    title = "Fixes",
-                    bullets = {
-                        "Fixed clipped Level and status-indicator controls.",
-                        "Improved castbar interrupt feedback and inactive resync handling.",
-                        "Reduced Unit Frame and Menu runtime work, especially during combat.",
-                        "Preserved legacy group text geometry, class-resource stacks, and character keybindings.",
-                        "Completed Beta 22 Menu translations and regression coverage.",
                     },
                 },
             },
