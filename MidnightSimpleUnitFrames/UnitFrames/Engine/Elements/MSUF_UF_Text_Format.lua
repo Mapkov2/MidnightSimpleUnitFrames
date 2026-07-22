@@ -1220,9 +1220,11 @@ local function CompileTextRuntime(frame, spec, text)
       end
       rt.healthHot = fromValues or hot.healthHot
       rt.healthHotFromPercent = hot.healthFromPercent and hot.healthFromPercent(frame, rt) or nil
+      rt.healthDirty = hot.healthDirty
     else
       rt.healthHot = nil
       rt.healthHotFromPercent = nil
+      rt.healthDirty = nil
     end
     if rt.powerSlotCount > 0 then
       local fromValues
@@ -1231,15 +1233,19 @@ local function CompileTextRuntime(frame, spec, text)
       end
       rt.powerHot = fromValues or hot.powerHot
       rt.powerHotFromPercent = hot.powerFromPercent and hot.powerFromPercent(frame, rt) or nil
+      rt.powerDirty = hot.powerDirty
     else
       rt.powerHot = nil
       rt.powerHotFromPercent = nil
+      rt.powerDirty = nil
     end
   else
     rt.healthHot = nil
     rt.healthHotFromPercent = nil
+    rt.healthDirty = nil
     rt.powerHot = nil
     rt.powerHotFromPercent = nil
+    rt.powerDirty = nil
   end
   return rt
 end
