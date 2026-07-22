@@ -56,9 +56,38 @@ Deterministic path chosen; English output first (DE output deferred by decision)
 | Scope priority — named frame beats generated global fallback (registry-wide, 148 combos) | done |
 | Move-vs-anchor — "move name to the left/right/up/down" now offsets; "to middle" still anchors | done |
 | Anchor-vs-position choice on genuine ambiguity (bare "name to the left" asks instead of guessing) | done |
+| Move-vs-anchor full-trace — centralized movement verbs; 252 phrasings, 0 anchor bugs | done |
+| Color-request full-trace — 262 color settings, 0 land on a channel | done |
+| Numeric full-trace — 1474 settings, 0 wrong-target mutations | done |
 
 Every change so far preserves 0.0 combat overhead (static metadata / menu-only
 answer paths; no new events or tickers).
+
+## Proven vs. open (measured, not claimed)
+
+**Safety — broadly proven.** Full end-to-end traces through the real A.Submit
+pipeline show **0 wrong-target mutations** across ~3977 settings (number 1474,
+color 262, boolean 1443, enum 798) and 0 color values landing on a channel.
+Every non-applied case fails closed or asks. Three permanent full-trace gate
+tests lock this in; a fixed error class cannot silently return.
+
+**Correctness of two long-red "P0 safety" audits** — they were **stale tests**,
+not product bugs (the HP text-color enum gained a CLASS mode; fixtures assumed
+two). The Assistant was correct all along.
+
+**Open toward "human-like every option":**
+- Natural coverage of enum/boolean settings is not yet trace-proven: raw-value
+  prompts under-apply (a test artifact); a valueLabel-based natural-language
+  trace is the honest next measurement.
+- ~230 read-only color channels are AutoCoverage decomposition artifacts, now
+  suppressed from search; the real color settings (262) are all writable.
+- Scope-local alias -> global color-setting routing ("boss portrait background
+  color") is a wording follow-up; the color setting itself is reachable.
+- In-game acceptance (/msufcoverage, combat, reload, profile switch, perf SLOs)
+  is not done — all evidence so far is desktop Lua, not the real client.
+- The release gate cannot run here: tools/ is gitignored (dev-local) and the
+  gate consumes it via worktree snapshots; a green end-to-end run needs the
+  owner's snapshot flow.
 
 ## Non-goals
 - No real LLM or external inference in the client.
