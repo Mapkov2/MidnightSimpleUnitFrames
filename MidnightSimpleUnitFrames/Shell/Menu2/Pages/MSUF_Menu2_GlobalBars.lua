@@ -559,7 +559,7 @@ end
 -- Bars keeps its normal accordion controls focused on geometry and behavior.
 -- Color targets are built only when the quiet three-dot shortcut is clicked,
 -- so no hidden swatch widgets or gameplay/runtime hooks are needed.
-local function AttachBarsColorShortcut(section, title, note, label, getRGB, setRGB, historySource, captureState, restoreState)
+local function AttachBarsColorShortcut(section, title, note, label, getRGB, setRGB, historySource, captureState, restoreState, catalogMeta)
     if not (section and W.AttachContextColorShortcut) then return nil end
     local targets = {
         {
@@ -571,13 +571,32 @@ local function AttachBarsColorShortcut(section, title, note, label, getRGB, setR
             historyLabel = tostring(label or "Bar") .. " color",
         },
     }
-    return W.AttachContextColorShortcut(section, {
+    local shortcut = W.AttachContextColorShortcut(section, {
         title = title,
         note = note,
         getTargets = function() return targets end,
         historySource = historySource or "menu:bars-colors",
         maxTargets = 1,
     })
+    if shortcut and catalogMeta then
+        local registeredMeta = {}
+        for key, value in pairs(catalogMeta) do registeredMeta[key] = value end
+        registeredMeta.command = {
+            kind = "color",
+            source = registeredMeta.controlPath or registeredMeta.identityKey,
+            get = getRGB,
+            set = setRGB,
+            assistantDisposition = registeredMeta.assistantDisposition,
+            assistantDispositionReason = registeredMeta.assistantDispositionReason,
+            assistantSettingKeys = registeredMeta.assistantSettingKeys,
+            assistantSettingKeyPatterns = registeredMeta.assistantSettingKeyPatterns,
+            blockCombat = function()
+                return type(M.BlockCombatAction) == "function" and M.BlockCombatAction() or false
+            end,
+        }
+        RegisterControl(shortcut, registeredMeta, title or label or "Bar color", "color")
+    end
+    return shortcut
 end
 
 local function CaptureBarsScopeFields(fields)
@@ -1170,7 +1189,8 @@ local function BuildTempMaxHealthSection(ctx, b)
         function(state)
             RestoreBarsScopeFields(state)
             Refresh("MSUF2_TEMP_MAX_HEALTH_COLOR_CANCEL")
-        end)
+        end,
+        Meta("temp_max_health.color"))
 
     local opacityY = compact and -204 or -78
     local opacity = W.Slider(section, "Overlay opacity", 0.05, 1, 0.05, rightW)
@@ -1518,7 +1538,8 @@ local function BuildOutlineSection(ctx, b)
         function(state)
             RestoreBarsScopeFields(state)
             RequestOutlineRuntime()
-        end)
+        end,
+        Meta("outline.color"))
     M.BindGateGroup(ctx, nil, {
         { controls = { outlineSlider, outlineLayer }, on = ScopedControls },
     })
