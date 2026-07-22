@@ -10,6 +10,8 @@ if not C then return end
 -- behavioral changes in MSUF_UF_Elements_BarsCommon.lua so the text runtime stays consistent.
 local UF = C.UF
 local FreshUnitState = UF.FreshUnitState
+local ReadUnitIsPlayerCached = UF.ReadUnitIsPlayerCached
+local ReadUnitClassCached = UF.ReadUnitClassCached
 local CreateFrame = C.CreateFrame
 local UnitClass = C.UnitClass
 local UnitExists = C.UnitExists
@@ -397,12 +399,21 @@ local function PlainUnitIsPlayer(frame, unit)
   if unitState and unitState.isPlayerKnown == true then
     return unitState.isPlayer == true
   end
-  if not UnitIsPlayer then return nil end
-  local isPlayer = UnitIsPlayer(unit)
-  if issecretvalue(isPlayer) == true then
-    return nil
-  end
-  return isPlayer == true or isPlayer == 1
+  local isPlayer, known = ReadUnitIsPlayerCached(frame, unit)
+  if known == true then return isPlayer == true end
+  return nil
+end
+
+local function DispatchClassColor(frame, unit)
+  local _, class = ReadUnitClassCached(frame, unit)
+  local r, g, b = ClassColorForToken(class)
+  if r ~= nil then return r, g, b end
+  return 0.12, 0.62, 0.95
+end
+
+local function DispatchClassToken(frame, unit)
+  local _, class = ReadUnitClassCached(frame, unit)
+  return class
 end
 
 local function TextWantsNPCTypeColor(text)
@@ -422,19 +433,19 @@ local function NameTextColorFor(frame, unit, classNames, npcNames, keyOverride, 
   end
   if isPlayer then
     if classNames then
-      local r, g, b = ClassColor(unit)
+      local r, g, b = DispatchClassColor(frame, unit)
       return r, g, b, fa
     end
   else
     if npcClassNames then
-      local _, class = UnitClass(unit)
+      local class = DispatchClassToken(frame, unit)
       if issecretvalue(class) ~= true and class then
         local r, g, b
         if ClassColorForToken then
           r, g, b = ClassColorForToken(class)
         end
         if r == nil then
-          r, g, b = ClassColor(unit)
+          r, g, b = DispatchClassColor(frame, unit)
         end
         return r, g, b, fa
       end
@@ -501,14 +512,14 @@ local function InlineTextColor(frame, unit, inline)
   end
   if isPlayer then
     if inline and inline.targetNameClassColor == true then
-      local r, g, b = ClassColor(unit)
+      local r, g, b = DispatchClassColor(frame, unit)
       return r, g, b, fa
     end
   else
     if inline and inline.targetNameNpcClassColor == true then
-      local _, class = UnitClass(unit)
+      local class = DispatchClassToken(frame, unit)
       if issecretvalue(class) ~= true and class then
-        local r, g, b = ClassColor(unit)
+        local r, g, b = DispatchClassColor(frame, unit)
         return r, g, b, fa
       end
     end
