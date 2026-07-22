@@ -5,7 +5,7 @@ return {
         schemaVersion = 1,
         manifestFormat = "msuf-addon-source-sha256-v1",
         algorithm = "SHA256",
-        manifestSha256 = "88697DA71F86DFE99AC59591881495BA797459C2CFD15DACD091C54AD5DD366F",
+        manifestSha256 = "F4871B8D5D8FB925D6CBFFCF25C0137C1EF23866EE24204E235C21ADD86091C9",
         fileCount = 597,
     },
     recordCount = 1747,
