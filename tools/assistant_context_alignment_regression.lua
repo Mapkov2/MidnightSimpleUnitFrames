@@ -373,9 +373,12 @@ permanentSetting.get, permanentSetting.set, permanentSetting.apply = permanentOr
 
 clearContext()
 local hpModeChoice = assert(A.Parse("Set HP color text"), "Missing HP text color-mode choice")
-assert(hpModeChoice.kind == "ambiguous" and #hpModeChoice.choices == 2, "Bare HP text color command did not offer both modes")
-assert(hpModeChoice.choices[1].value == "DEFAULT" and hpModeChoice.choices[2].value == "HEALTH",
-    "HP text color-mode choices are not Single Color then Health Gradient")
+-- The mode enum is DEFAULT, CLASS, HEALTH (Class colouring was added after the
+-- original two-mode fixture), so a bare command offers all three modes.
+assert(hpModeChoice.kind == "ambiguous" and #hpModeChoice.choices == 3, "Bare HP text color command did not offer every mode")
+assert(hpModeChoice.choices[1].value == "DEFAULT" and hpModeChoice.choices[2].value == "CLASS"
+    and hpModeChoice.choices[3].value == "HEALTH",
+    "HP text color-mode choices are not Single Color, Class, then Health Gradient")
 local hpSingle = assert(A.Parse("change HP text from gradiant to single color"), "Missing single-color HP text plan")
 assert(hpSingle.kind == "changes", tostring(hpSingle.text))
 assert(hpSingle.changes[#hpSingle.changes].setting.key == "fontScope.shared.colorHealthTextByHealth",
