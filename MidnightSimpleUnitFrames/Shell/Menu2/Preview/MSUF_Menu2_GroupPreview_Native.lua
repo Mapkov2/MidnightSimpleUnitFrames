@@ -101,6 +101,7 @@ local function CompiledSpec(kind)
             power.enabled = powerHeight > 0
             power.height = powerHeight
             spec.power = power
+            spec.showPowerText = powerHeight > 0 and base.showPowerText == true
         end
         if type(base.status) == "table" then
             local status = ShallowCopy(base.status) or {}
@@ -698,6 +699,8 @@ local function RuntimeStatusConfig(status, spec)
         return status.statusText and status.statusText.ghost or nil
     elseif value == "statusAFKText" then
         return status.statusText and status.statusText.afk or nil
+    elseif value == "statusDNDText" then
+        return status.statusText and status.statusText.dnd or nil
     end
     local key = GF_STATUS_RUNTIME_KEYS[value]
     return key and status[key] or nil
@@ -939,12 +942,14 @@ local function CurrentStatusSpec()
 end
 local function StatusSpecIsText(spec)
     local value = spec and spec.value
-    return value == "statusText" or value == "statusGhostText" or value == "statusAFKText"
+    return value == "statusText" or value == "statusGhostText"
+        or value == "statusAFKText" or value == "statusDNDText"
 end
 local function StatusText(spec)
     local value = spec and spec.value
     if value == "statusGhostText" then return "GHOST" end
     if value == "statusAFKText" then return "AFK" end
+    if value == "statusDNDText" then return "DND" end
     return "DEAD"
 end
 local function StatusLabel(spec)
@@ -960,7 +965,8 @@ local function StatusLabel(spec)
     if value == "phaseIcon" then return "Phase" end
     if value == "statusText" then return "Dead Text" end
     if value == "statusGhostText" then return "Ghost Text" end
-    if value == "statusAFKText" then return "AFK/DND" end
+    if value == "statusAFKText" then return "AFK Text" end
+    if value == "statusDNDText" then return "DND Text" end
     return (spec and spec.text) or "Status"
 end
 local function StatusPreviewMode()

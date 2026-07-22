@@ -111,6 +111,31 @@ local CLASS_TOKENS = {
   "MAGE", "WARLOCK", "MONK", "DRUID", "DEMONHUNTER", "EVOKER",
 }
 
+local playerClassToken
+local function PlayerClassToken()
+  if playerClassToken == nil and type(_G.UnitClass) == "function" then
+    local _, token = _G.UnitClass("player")
+    if type(token) == "string" and token ~= "" then playerClassToken = token end
+  end
+  return playerClassToken
+end
+
+local function ResolveClassColor(db, token)
+  local classColors = type(db.classColors) == "table" and db.classColors or nil
+  local src = classColors and token and classColors[token]
+  if type(src) == "table" and tonumber(src.r or src[1]) and tonumber(src.g or src[2]) and tonumber(src.b or src[3]) then
+    return Number(src.r or src[1], 1), Number(src.g or src[2], 1), Number(src.b or src[3], 1)
+  end
+  local palette = MSUF.MSUF_FONT_COLORS or _G.MSUF_FONT_COLORS
+  if type(src) == "string" and palette and palette[src] then
+    local color = palette[src]
+    return Number(color.r or color[1], 1), Number(color.g or color[2], 1), Number(color.b or color[3], 1)
+  end
+  local color = token and _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[token]
+  if color then return color.r or 0.12, color.g or 0.62, color.b or 0.95 end
+  return 0.12, 0.62, 0.95
+end
+
 local NPC_COLOR_DEFAULTS = {
   friendly = { 0, 1, 0 },
   neutral = { 1, 1, 0 },
@@ -486,6 +511,10 @@ end
 
 local function NormalizePowerTextMode(mode, fallback)
   return mode == nil and fallback or POWER_TEXT_MODE_ALIASES[mode] or mode
+end
+
+local function PowerTextModeNeedsValueTicks(mode)
+  return mode ~= nil and mode ~= "NONE" and mode ~= "MAX"
 end
 
 local function ResolveTextSlotHidePercentSymbol(conf, general, key)
@@ -972,12 +1001,41 @@ local UNIT_STATUS_ENTRY_DEFS = {
   PrefixedStatusDef("classText", "showClassTextIndicator", false, "classTextIndicator", 14, "NAMERIGHT", 0, 0, 7),
   StatusEntryDef("raidGroup", "showRaidGroupInName", false, "nameFontSize", 12, "raidGroupNameAnchor", "NAMERIGHT", "raidGroupNameOffsetX", 3, "raidGroupNameOffsetY", 0, "raidGroupNameLayer", 5, { "raidGroupNameStyle", "PAREN" }, nil, nil, "nameTextLayer"),
   PrefixedStatusDef("elite", "showEliteIcon", true, "eliteIcon", 20, "TOPRIGHT", 2, 2, 7, nil, nil, { "eliteIconCustomIcon", "" }),
-  PrefixedStatusDef("statusText", "statusTextEnabled", true, "statusText", 14, "CENTER", 0, 0, 7),
   PrefixedStatusDef("combat", "showCombatStateIndicator", true, "combatStateIndicator", 18, "TOPLEFT", 0, 0, 7, nil, { "combatStateIndicatorSymbol", "DEFAULT" }, { "combatStateIndicatorCustomIcon", "" }),
   PrefixedStatusDef("resting", "showRestingIndicator", false, "restedStateIndicator", 18, "TOPLEFT", 0, 0, 7, nil, { "restedStateIndicatorSymbol", "DEFAULT", "restingStateIndicatorSymbol" }, { "restedStateIndicatorCustomIcon", "" }),
   PrefixedStatusDef("incomingRes", "showIncomingResIndicator", true, "incomingResIndicator", 18, "TOPRIGHT", 0, 0, 7, nil, { "incomingResIndicatorSymbol", "DEFAULT" }, { "incomingResIndicatorCustomIcon", "" }),
   PrefixedStatusDef("pvp", "showPvpIndicator", true, "pvpIndicator", 18, "TOPRIGHT", 0, 0, 7, nil, nil, { "pvpIndicatorCustomIcon", "" }),
 }
+
+local UNIT_STATUS_TEXT_STATE_DEFS = {
+  { "statusDeadText", "statusDeadTextEnabled", "showDead", true, "statusText" },
+  { "statusGhostText", "statusGhostTextEnabled", "showGhost", true, "statusGhostText" },
+  { "statusAFKText", "statusAFKTextEnabled", "showAFK", false, "statusAFKText" },
+  { "statusDNDText", "statusDNDTextEnabled", "showDND", false, "statusDNDText" },
+}
+
+local function CompileUnitStatusTextState(status, conf, general, def, fallbackSize)
+  local id, showKey, legacyStateKey, defaultShow, prefix = def[1], def[2], def[3], def[4], def[5]
+  local entry = status[id] or {}
+  status[id] = entry
+  local explicit = conf and conf[showKey]
+  if explicit == nil then explicit = general and general[showKey] end
+  if explicit == nil then
+    local states = general and type(general.statusIndicators) == "table" and general.statusIndicators or nil
+    local legacyState = states and states[legacyStateKey]
+    if legacyState == nil then legacyState = defaultShow end
+    entry.enabled = StatusBool(conf, general, "statusTextEnabled", true) and legacyState == true
+  else
+    entry.enabled = Bool(explicit, defaultShow)
+  end
+  local legacyPrefix = prefix ~= "statusText" and "statusText" or nil
+  entry.size = StatusNumber(conf, general, prefix .. "Size", fallbackSize, legacyPrefix and (legacyPrefix .. "Size"))
+  entry.anchor = StatusString(conf, general, prefix .. "Anchor", "CENTER", legacyPrefix and (legacyPrefix .. "Anchor"))
+  entry.x = StatusNumber(conf, general, prefix .. "OffsetX", 0, legacyPrefix and (legacyPrefix .. "OffsetX"))
+  entry.y = StatusNumber(conf, general, prefix .. "OffsetY", 0, legacyPrefix and (legacyPrefix .. "OffsetY"))
+  entry.layer = ClampStatusLayer(StatusNumber(conf, general, prefix .. "Layer", 7, legacyPrefix and (legacyPrefix .. "Layer")), 7)
+  return entry
+end
 
 local function CompileStatusEntryDef(status, conf, general, key, def, fallbackSize)
   local entry = CompileStatusEntry(status, def[1], conf, general, key,
@@ -1363,6 +1421,7 @@ local function CompileUnitPortrait(out, conf, general)
   out.portrait.side = portraitMode == "RIGHT" and "RIGHT" or "LEFT"
   out.portrait.render = NormalizePortraitRender(conf.portraitRender)
   out.portrait.classStyle = NormalizePortraitClassStyle(conf.portraitClassStyle)
+  out.portrait.castSpellIcon = conf.portraitCastSpellIcon == true
   out.portrait.shape = NormalizePortraitShape(conf.portraitShape)
   out.portrait.size = portraitSize
   out.portrait.x = Number(conf.portraitOffsetX, 0)
@@ -1411,12 +1470,21 @@ local function CompileUnitStatus(out, conf, general, key)
     CompileStatusEntryDef(status, conf, general, key, def, fallbackSize)
   end
 
-  local statusText = status.statusText
-  local statusIndicators = type(general.statusIndicators) == "table" and general.statusIndicators or nil
-  statusText.showAFK = statusIndicators ~= nil and statusIndicators.showAFK == true
-  statusText.showDND = statusIndicators ~= nil and statusIndicators.showDND == true
-  statusText.showDead = statusIndicators == nil or statusIndicators.showDead ~= false
-  statusText.showGhost = statusIndicators == nil or statusIndicators.showGhost ~= false
+  local statusTextStates = {}
+  for i = 1, #UNIT_STATUS_TEXT_STATE_DEFS do
+    statusTextStates[i] = CompileUnitStatusTextState(status, conf, general, UNIT_STATUS_TEXT_STATE_DEFS[i], statusTextSize)
+  end
+  local deadText, ghostText, afkText, dndText = statusTextStates[1], statusTextStates[2], statusTextStates[3], statusTextStates[4]
+  local baseText = deadText.enabled and deadText or ghostText.enabled and ghostText
+    or afkText.enabled and afkText or dndText.enabled and dndText or deadText
+  local statusText = status.statusText or {}
+  status.statusText = statusText
+  statusText.enabled = deadText.enabled or ghostText.enabled or afkText.enabled or dndText.enabled
+  statusText.size, statusText.anchor = baseText.size, baseText.anchor
+  statusText.x, statusText.y, statusText.layer = baseText.x, baseText.y, baseText.layer
+  statusText.showDead, statusText.showGhost = deadText.enabled, ghostText.enabled
+  statusText.showAFK, statusText.showDND = afkText.enabled, dndText.enabled
+  statusText.dead, statusText.ghost, statusText.afk, statusText.dnd = deadText, ghostText, afkText, dndText
 
   local pvp = status.pvp
   if pvp.enabled and UF.PVPIndicatorContextActive and not UF.PVPIndicatorContextActive() then
@@ -1429,6 +1497,7 @@ local function CompileUnitStatus(out, conf, general, key)
     local entry = status[UNIT_STATUS_ENTRY_DEFS[i][1]]
     statusEnabled = statusEnabled or (entry and entry.enabled == true)
   end
+  statusEnabled = statusEnabled or statusText.enabled
   status.enabled = statusEnabled
 end
 
@@ -1592,13 +1661,13 @@ local function PetFrameColorEnabled(general)
     and type(general.petFrameColorB) == "number"
 end
 
-local function CompileUnitHealth(out, conf, general, bars)
+local function CompileUnitHealth(out, db, conf, general, bars)
   local health = out.health or {}
   out.health = health
   health.texture = out.texture
   health.backgroundTexture = out.backgroundTexture
   health.reverse = conf.reverseFillBars == true
-  health.smooth = conf.smoothFill ~= false
+  health.smooth = conf.smoothFill == true
   health.mode = ResolveUnitBarMode(conf, general)
   health.gradient = general.enableHealthGradient ~= false
   health.gradientLowR = Number(general.healthGradientLowR, 1)
@@ -1619,6 +1688,12 @@ local function CompileUnitHealth(out, conf, general, bars)
   health.petR = Number(general.petFrameColorR, 0)
   health.petG = Number(general.petFrameColorG, 0.8)
   health.petB = Number(general.petFrameColorB, 0)
+  health.petUsePlayerClassColor = out.key == "pet" and general.petFrameUsePlayerClassColor == true or false
+  if health.petUsePlayerClassColor then
+    health.petPlayerClassR, health.petPlayerClassG, health.petPlayerClassB = ResolveClassColor(db, PlayerClassToken())
+  else
+    health.petPlayerClassR, health.petPlayerClassG, health.petPlayerClassB = nil, nil, nil
+  end
   if health.mode == "unified" then
     CopyColor(health, general.unifiedBarR or 0.1, general.unifiedBarG or 0.6, general.unifiedBarB or 0.9, 1)
   elseif health.mode == "dark" then
@@ -1654,7 +1729,16 @@ local function CompileUnitPower(out, unit, key, conf, general, bars, health)
   power.height = Number(conf.powerBarHeight or bars.powerBarHeight, 3)
   power.texture = out.texture
   power.backgroundTexture = out.backgroundTexture
-  power.frequent = unit == "player" and bars.realtimePowerText == true
+  local text = out.text
+  power.frequent = unit == "player"
+    and out.enabled ~= false
+    and out.showPowerText == true
+    and bars.realtimePowerText == true
+    and text ~= nil
+    and (PowerTextModeNeedsValueTicks(text.powerLeft)
+      or PowerTextModeNeedsValueTicks(text.powerCenter)
+      or PowerTextModeNeedsValueTicks(text.powerRight))
+    or false
   power.alpha = Clamp01(conf.powerBarAlpha, 1)
   power.mode = ResolvePowerMode(general)
   power.colors = power.colors or {}
@@ -1725,7 +1809,7 @@ local function CompileUnitPower(out, unit, key, conf, general, bars, health)
   if conf.powerSmoothFill ~= nil then
     power.smooth = conf.powerSmoothFill == true
   else
-    power.smooth = unit == "player" and bars.smoothPowerBar ~= false or false
+    power.smooth = unit == "player" and bars.smoothPowerBar == true or false
   end
 end
 
@@ -1854,7 +1938,7 @@ local function ResolveUnit(db, unit, out)
   local key, def, conf, general, bars, bossIndex = ResolveUnitContext(db, unit)
   CompileUnitBase(out, unit, key, def, conf, general, bars, bossIndex)
   CompileUnitText(out, db, unit, key, conf, general, bars)
-  local health = CompileUnitHealth(out, conf, general, bars)
+  local health = CompileUnitHealth(out, db, conf, general, bars)
   CompileUnitTempMaxHealth(out, conf, general, key)
   CompileUnitPower(out, unit, key, conf, general, bars, health)
   CompileUnitPrediction(out, conf, general, key)
@@ -1990,6 +2074,7 @@ local function BuildSettingsCache(db)
   cache.petFrameColorR = Number(general.petFrameColorR, 0)
   cache.petFrameColorG = Number(general.petFrameColorG, 0.8)
   cache.petFrameColorB = Number(general.petFrameColorB, 0)
+  cache.petFrameUsePlayerClassColor = general.petFrameUsePlayerClassColor == true
   ApplyNpcTypeFlags(cache, general, "npcTypeColorBar")
   ApplyNpcTypeFlags(cache, general, "npcTypeColorText")
   cache.npcClassColorBar = general.npcClassColorBar == true
@@ -2010,6 +2095,16 @@ local function BuildSettingsCache(db)
       local c = _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[token]
       dst.r, dst.g, dst.b = c and c.r or 0.12, c and c.g or 0.62, c and c.b or 0.95
     end
+  end
+  if cache.petFrameUsePlayerClassColor then
+    cache.playerClassToken = PlayerClassToken()
+    local color = cache.playerClassToken and cache.classColors[cache.playerClassToken]
+    cache.petPlayerClassR = color and color.r or 0.12
+    cache.petPlayerClassG = color and color.g or 0.62
+    cache.petPlayerClassB = color and color.b or 0.95
+  else
+    cache.playerClassToken = nil
+    cache.petPlayerClassR, cache.petPlayerClassG, cache.petPlayerClassB = nil, nil, nil
   end
   cache.npcColors = cache.npcColors or {}
   local npcColors = type(db.npcColors) == "table" and db.npcColors or nil

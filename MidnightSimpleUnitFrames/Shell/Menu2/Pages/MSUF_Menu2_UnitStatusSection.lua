@@ -24,12 +24,6 @@ StatusIconPackValues = StatusIconPackValues or function() return {} end
 local SYMBOL_MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Symbols\\"
 local RAID_GROUP_NAME_STYLES = VT("PAREN", "(2)", "BRACKET", "[2]", "NONE", "2")
 local STATUS_ICON_TAB_VALUES = VT("basic", "Basic", "advanced", "Advanced")
-local STATUS_TEXT_STATE_TOGGLES = {
-    { key = "showDead", text = "Dead", default = true },
-    { key = "showGhost", text = "Ghost", default = true },
-    { key = "showAFK", text = "AFK", default = false },
-    { key = "showDND", text = "DND", default = false },
-}
 local DisabledNameAnchorValues = Shared.DisabledNameAnchorValues or function(values) return values or {} end
 local SetSectionHeaderStatus = Shared.SetSectionHeaderStatus or function() end
 local function BuildStatus(ctx, builder, unit)
@@ -102,27 +96,21 @@ local function BuildStatus(ctx, builder, unit)
             M.SelectPage(ctx.key)
         end
     end
-    local function StatusTextStateTable()
-        local g = GetGeneral and GetGeneral() or nil
-        if type(g) ~= "table" then return nil end
-        if type(g.statusIndicators) ~= "table" then g.statusIndicators = {} end
-        return g.statusIndicators
-    end
-    local function ReadStatusTextState(key, default)
-        local state = StatusTextStateTable()
-        local value = state and state[key]
-        if value == nil then return default and true or false end
-        return value and true or false
-    end
-    local function SetStatusTextState(key, value)
-        local state = StatusTextStateTable()
-        if not state then return end
-        value = value and true or false
-        if state[key] == value then return end
-        state[key] = value
-        if M.RequestGeneralApply then M.RequestGeneralApply("MSUF2_STATUS_TEXT_STATE", { preview = true, applyAll = false, notify = false }) end
-        Call("MSUF_RequestStatusTextRefresh")
-        RefreshStatusMenu()
+    local function ReadStatusEnabled(spec)
+        if not spec then return false end
+        local conf = GetConf(unit)
+        local g = GetGeneral()
+        local value = conf and conf[spec.show]
+        if value == nil then value = g and g[spec.show] end
+        if value ~= nil then return value and true or false end
+        if spec.legacyShow and spec.legacyState then
+            local master = ReadStatusBool(unit, spec.legacyShow, true)
+            local states = g and type(g.statusIndicators) == "table" and g.statusIndicators or nil
+            local state = states and states[spec.legacyState]
+            if state == nil then state = spec.defaultShow end
+            return master and state and true or false
+        end
+        return spec.defaultShow and true or false
     end
     local unitLabel = UnitTopLabel(unit)
     local unitLabelLower = string.lower(unitLabel or tostring(unit or "unit"))
@@ -177,7 +165,9 @@ local function BuildStatus(ctx, builder, unit)
             function()
                 local spec = CurrentStatusSpec(unit)
                 if not spec then return fallback end
-                local legacyKey = specKey == "layer" and spec.legacyLayer or nil
+                local legacyKey = specKey == "x" and spec.legacyX
+                    or specKey == "y" and spec.legacyY
+                    or specKey == "layer" and spec.legacyLayer or nil
                 local value = ReadStatusNumber(unit, spec[specKey], spec[defaultKey], legacyKey)
                 return normalize and normalize(value, spec) or value
             end,
@@ -234,7 +224,8 @@ local function BuildStatus(ctx, builder, unit)
             function()
                 local spec = CurrentStatusSpec(unit)
                 local key = spec and spec[specField]
-                return key and ReadStatusString(unit, key, ResolveStatusDefault(defaultValue, spec)) or ResolveStatusDefault(defaultValue, spec)
+                local legacyKey = specField == "anchor" and spec and spec.legacyAnchor or nil
+                return key and ReadStatusString(unit, key, ResolveStatusDefault(defaultValue, spec), legacyKey) or ResolveStatusDefault(defaultValue, spec)
             end,
             function(value)
                 local spec = CurrentStatusSpec(unit)
@@ -286,7 +277,7 @@ local function BuildStatus(ctx, builder, unit)
     M.BindBoolWidget(ctx, enabled,
         function()
             local spec = CurrentStatusSpec(unit)
-            return spec and ReadStatusBool(unit, spec.show, spec.defaultShow) or false
+            return ReadStatusEnabled(spec)
         end,
         function(value)
             local spec = CurrentStatusSpec(unit)
@@ -442,28 +433,8 @@ local function BuildStatus(ctx, builder, unit)
         })
         local current = CurrentStatusSpec(unit)
         selectedTextShortcut:SetShown(current and (current.textIndicator == true
-            or current.inlineName == true or current.value == "statusText"))
+            or current.inlineName == true or current.statusTextState ~= nil))
     end
-    local statusTextStates = CreateFrame("Frame", nil, placementCard)
-    statusTextStates:SetPoint("TOPLEFT", placementCard, "TOPLEFT", placeRightX, -48)
-    statusTextStates:SetSize(placeRightW, 72)
-    W.LabelAt(statusTextStates, "Show text for", 0, -2, placeRightW, "GameFontHighlightSmall", T.colors.text)
-    local statusTextStateControls = {}
-    for i = 1, #STATUS_TEXT_STATE_TOGGLES do
-        local info = STATUS_TEXT_STATE_TOGGLES[i]
-        local col = (i - 1) % 2
-        local row = floor((i - 1) / 2)
-        local toggle = W.ToggleAt(statusTextStates, info.text, col * max(84, floor(placeRightW * 0.44)), -24 - row * 28, 72)
-        statusTextStateControls[#statusTextStateControls + 1] = toggle
-        M.BindBoolWidget(ctx, toggle,
-            function() return ReadStatusTextState(info.key, info.default) end,
-            function(value) SetStatusTextState(info.key, value) end)
-        RegisterStatusSearch(toggle, "Status text state " .. tostring(info.text), {
-            "dead text", "status text", "afk", "dnd", "ghost", "dead", "offline text",
-        }, nil, nil, "status.text_state." .. tostring(info.key), nil,
-            { settingKey = "general.statusIndicators." .. tostring(info.key) })
-    end
-    statusTextStates:Hide()
     local raidGroupStyle = W.Dropdown(placementCard, "Style", RAID_GROUP_NAME_STYLES, 180)
     Shared.PlaceDropdown(placementCard, raidGroupStyle, placeRightX, -54, min(180, placeRightW))
     M.BindDropdownWidget(ctx, raidGroupStyle,
@@ -485,7 +456,7 @@ local function BuildStatus(ctx, builder, unit)
             if not spec then return 14 end
             local fallback = spec.defaultSize
             if spec.textIndicator then fallback = ReadStatusNumber(unit, "nameFontSize", fallback or 14) end
-            return ReadStatusNumber(unit, spec.size, fallback)
+            return ReadStatusNumber(unit, spec.size, fallback, spec.legacySize)
         end,
         function(value)
             local spec = CurrentStatusSpec(unit)
@@ -506,7 +477,9 @@ local function BuildStatus(ctx, builder, unit)
     local anchor = BindStatusSpecDropdown(placementCard, "Anchor", CurrentStatusAnchorValues, 220, placeLeftX, -116, placeLeftW,
         "anchor", function(spec) return (spec and spec.defaultAnchor) or "TOPLEFT" end, "MSUF2_STATUS_ANCHOR", "Status indicator anchor", {
         "level anchor", "level anchoring", "level text anchor", "level text anchoring",
-        "right to player name", "left to player name", "top left", "top right", "bottom left", "bottom right",
+        "right to name", "left to name", "right to player name", "left to player name",
+        "right to target name", "left to target name", "right to boss name", "left to boss name",
+        "top left", "top right", "bottom left", "bottom right",
     }, CurrentStatusAnchorValues)
     local x = BindStatusPlacementSlider(placementCard, "X Offset", -500, 500, placeRightX, -54, placeRightW, "x", "defaultX", 0, "MSUF2_STATUS_X", "Status indicator X offset", {
         "x", "x offset", "horizontal offset", "level x", "level x offset", "move level left", "move level right",
@@ -664,13 +637,13 @@ local function BuildStatus(ctx, builder, unit)
         SetDropdownTitle(iconPack, StatusIconStyleLabel(spec))
         SetDropdownTitle(customIcon, SpecificIconLabel(spec))
         if iconPreviewLabel and iconPreviewLabel.SetText then
-            iconPreviewLabel:SetText(spec and spec.textIndicator and "Text preview"
-                or (IsRoleStatusSpec(spec) and "Role icon preview" or "Icon preview"))
+            iconPreviewLabel:SetText(M.Tr(spec and spec.textIndicator and "Text preview"
+                or (IsRoleStatusSpec(spec) and "Role icon preview" or "Icon preview")))
         end
         local hasSymbol = spec and spec.symbol
         local hasIconPack = false
         local hasCustomIcon = spec and spec.customIcon
-        local isStatusText = spec and spec.value == "statusText"
+        local isStatusText = spec and spec.statusTextState ~= nil
         local isTextIndicator = spec and (spec.textIndicator == true or spec.inlineName == true or isStatusText)
         local showStateStyle = (hasSymbol or hasIconPack) and true or false
         local showTestMode = spec and spec.statusRuntime and true or false
@@ -681,20 +654,18 @@ local function BuildStatus(ctx, builder, unit)
         ShowControl(iconPack, hasIconPack)
         ShowControl(customIcon, hasCustomIcon)
         ShowControl(selectedTextShortcut, isTextIndicator)
-        ShowControl(statusTextStates, isStatusText)
         ShowControl(raidGroupStyle, inlineName)
         ShowControl(test, showTestMode)
         ShowControls(true, anchor, x, y, layer, advanced.x, advanced.y, advanced.layer)
         ShowControls(not inlineName, size, previewLabel, current, all, previewCard, advanced.current, advanced.all)
         ShowControls(spec ~= nil, reset, advanced.reset)
         ShowControl(advanced.test, showTestMode and not inlineName)
-        local isEnabled = spec and ReadStatusBool(unit, spec.show, spec.defaultShow)
+        local isEnabled = ReadStatusEnabled(spec)
         SetPreviewCurrentVisual(current, isEnabled)
         SetPreviewCurrentVisual(advanced.current, isEnabled)
         SetControlEnabled(symbol, hasSymbol and isEnabled)
         SetControlEnabled(iconPack, hasIconPack and isEnabled)
         SetControlEnabled(customIcon, hasCustomIcon and isEnabled)
-        SetControlsEnabled(statusTextStateControls, isStatusText and isEnabled)
         SetControlEnabled(raidGroupStyle, inlineName and isEnabled)
         SetControlsEnabled(statusEnabledControls, isEnabled)
         SetControlsEnabled(statusDetachedControls, (not inlineName) and isEnabled)

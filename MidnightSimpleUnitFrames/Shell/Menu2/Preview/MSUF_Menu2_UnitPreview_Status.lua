@@ -31,6 +31,12 @@ local FontColor = PreviewModel.FontColor
 local Status = MSUF.UFPreviewStatus or {}
 MSUF.UFPreviewStatus = Status
 local IDENTITY_TEXT_IDS = { level = true, raceText = true, classText = true }
+local STATUS_TEXT_STATE_IDS = {
+    statusText = "DEAD",
+    statusGhostText = "GHOST",
+    statusAFKText = "AFK",
+    statusDNDText = "DND",
+}
 local function AnchorLikeRuntime(region, anchor, x, y, frame, nameText)
     -- Runtime supports name-relative anchors; preview duplicates that math so the editor shows
     -- the same visual result without depending on a real unitframe.
@@ -145,7 +151,11 @@ function Status.IsIdentityText(spec)
 end
 function Status.IsTextIndicator(spec)
     local id = type(spec) == "table" and spec.id or spec
-    return id == "statusText" or IDENTITY_TEXT_IDS[id] == true
+    return STATUS_TEXT_STATE_IDS[id] ~= nil or IDENTITY_TEXT_IDS[id] == true
+end
+function Status.IsStatusTextState(spec)
+    local id = type(spec) == "table" and spec.id or spec
+    return STATUS_TEXT_STATE_IDS[id] ~= nil
 end
 function Status.IdentityPreviewText(spec, data)
     local id = type(spec) == "table" and spec.id or spec
@@ -252,7 +262,8 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg, statu
         if tex then tex:Hide() end
         if txt then
             txt:SetText(Status.IsIdentityText(spec) and Status.IdentityPreviewText(spec, data)
-                or (statusPreviewText or Status.StatusTextPreviewText(runtimeCfg or g) or ""))
+                or STATUS_TEXT_STATE_IDS[spec.id]
+                or statusPreviewText or Status.StatusTextPreviewText(runtimeCfg or g) or "")
             txt:SetTextColor(FontColor())
             txt:Show()
         end

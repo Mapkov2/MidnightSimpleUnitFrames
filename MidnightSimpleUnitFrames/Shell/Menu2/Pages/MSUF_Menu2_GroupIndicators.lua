@@ -226,7 +226,9 @@ local function BuildIndicatorsSection(ctx, b)
         local control = ScopeDropdown(ctx, parent, label, values, width, key, defaultValue, mode, 16, y, width - 32)
         M.AppendValues(list, control); return control
     end
-    local highlightCard = W.ControlCard(indicators, "Target Highlight", nil, leftX, -38, innerW, 92)
+    local highlightCard = W.ControlCard(indicators, "Target Highlight",
+        "Configure target highlighting in Appearance > Miscellaneous > Frame Highlights.",
+        leftX, -38, innerW, 92)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(highlightCard, { "group.target" }, {
             title = "Target Highlight Color",
@@ -235,29 +237,25 @@ local function BuildIndicatorsSection(ctx, b)
             offsetX = -76,
         })
     end
-    local targetToggle = BindScopeToggle(ctx, W.SwitchAt(highlightCard, "Target Highlight", innerW - 62, -24, 0, "HIDDEN"), "targetIndicator", true, "visual")
-    targetToggle._msuf2GroupFrameGateAlwaysEnabled = true
-    local function OpenBarsHighlight()
+    local function OpenFrameHighlights()
         _G.MSUF_EM2_MenuFocusRequest = {
-            pageKey = "opt_bars",
-            sectionId = "bars_highlight",
+            pageKey = "opt_misc",
+            sectionId = "misc_mouseover_highlight",
             explicit = true,
             consumed = false,
         }
-        if M.SelectPage and M.SelectPage("opt_bars") == false then
+        if M.SelectPage and M.SelectPage("opt_misc") == false then
             _G.MSUF_EM2_MenuFocusRequest = nil
         end
     end
-    local openBars = T.Button(highlightCard, "Open Bars", 112, 22)
-    openBars:SetPoint("TOPRIGHT", highlightCard, "TOPRIGHT", -16, -56)
-    T.CenterButtonLabel(openBars)
+    local openHighlights = T.Button(highlightCard, "Open Highlights", 132, 22)
+    openHighlights:SetPoint("TOPRIGHT", highlightCard, "TOPRIGHT", -16, -56)
+    T.CenterButtonLabel(openHighlights)
     if M.AddTooltip then
-        M.AddTooltip(openBars, "Open Bars", "Global Style > Bars > Highlight Borders", { hook = true })
+        M.AddTooltip(openHighlights, "Open Highlights", "Appearance > Miscellaneous > Frame Highlights", { hook = true })
     end
-    openBars:SetScript("OnClick", OpenBarsHighlight)
-    RegisterControl(openBars, ctx, "navigation.global_bars_highlight", "Open Bars", "button", "navigation", { navigationKey = "opt_bars" })
-    local hlHint = W.Text(highlightCard, "Shows a border around the current target in group frames. Aggro and dispel borders are controlled in Bars.", 16, -42, innerW - 164, T.colors.muted)
-    if hlHint.SetWordWrap then hlHint:SetWordWrap(true) end
+    openHighlights:SetScript("OnClick", OpenFrameHighlights)
+    RegisterControl(openHighlights, ctx, "navigation.frame_highlights", "Open Highlights", "button", "navigation", { navigationKey = "opt_misc" })
     local groupNumberCard = W.ControlCard(indicators, "Group Number", nil, leftX, -148, leftW, 296)
     if W.AttachContextColorShortcut then
         W.AttachContextColorShortcut(groupNumberCard, {
@@ -321,7 +319,6 @@ local function BuildIndicatorsSection(ctx, b)
         SetOptionsEnabled(groupNumberControls, groupNumberEnabled)
         SetOptionEnabled(groupNumberToggle, true)
         local targetEnabled = Bool(CurrentScope(), "targetIndicator", true)
-        SetOptionEnabled(targetToggle, true)
         local focusEnabled = Bool(CurrentScope(), "hlFocusEnabled", true)
         SetOptionsEnabled(focusControls, focusEnabled)
         SetOptionEnabled(focusToggle, true)
@@ -378,7 +375,8 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
     end
     local function IsTextStatusIconSpec(spec)
         local value = spec and spec.value
-        return value == "statusText" or value == "statusGhostText" or value == "statusAFKText"
+        return value == "statusText" or value == "statusGhostText"
+            or value == "statusAFKText" or value == "statusDNDText"
     end
     local styleCard = W.ControlCard(siconBasicTab, "Style", nil, siconLeftX, -38, siconLeftW, 132)
     local selectedCard = W.ControlCard(siconBasicTab, "Selected Indicator", nil, siconLeftX, -188, siconLeftW, 316)
@@ -2030,4 +2028,4 @@ local function BuildGFIndicators(ctx)
     BuildCornerIndicatorsSection(ctx, b, RefreshPage)
     FinalizeScopePage(ctx, b)
 end
-M.RegisterPage("gf_indicators", { title = "MSUF Group Status & Indicators", build = BuildGFIndicators, version = 17 })
+M.RegisterPage("gf_indicators", { title = "MSUF Group Status & Indicators", build = BuildGFIndicators, version = 18 })

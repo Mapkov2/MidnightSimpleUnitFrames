@@ -383,6 +383,9 @@ local PARTY_DEFAULTS = {
     statusAFKText          = true,
     statusAFKTextSize      = 14,
     statusAFKTextAnchor    = "CENTER",
+    statusDNDText          = true,
+    statusDNDTextSize      = 14,
+    statusDNDTextAnchor    = "CENTER",
     --- Status icon/text layers (frame level order: higher = on top)
     roleIconLayer     = 1,
     leaderIconLayer   = 2,
@@ -396,6 +399,7 @@ local PARTY_DEFAULTS = {
     statusTextLayer   = 7,
     statusGhostTextLayer = 7,
     statusAFKTextLayer   = 7,
+    statusDNDTextLayer   = 7,
     --- Text offsets
     nameOffsetX       = 28, -- clears the complete left status-icon lane
     nameOffsetY       = 0,
@@ -421,6 +425,8 @@ local PARTY_DEFAULTS = {
     statusGhostOffsetY = 0,
     statusAFKOffsetX   = 0,
     statusAFKOffsetY   = 0,
+    statusDNDOffsetX   = 0,
+    statusDNDOffsetY   = 0,
     --- Text layer (frame level relative to bar)
     nameTextLayer     = 5,
     textLayer         = 5,
@@ -468,7 +474,7 @@ local PARTY_DEFAULTS = {
     --- Reverse fill
     reverseFill           = false,
     --- Smooth fill
-    smoothFill            = true,
+    smoothFill            = false,
     --- Dispel overlay (color wash on health bar when dispellable debuff active)
     dispelOverlayEnabled  = false,
     dispelOverlayStyle    = "FULL",   --- FULL / BOTTOM / TOP / LEFT / RIGHT
@@ -1183,6 +1189,16 @@ end
 local ensureDBReady = false
 local ensureDBRoot, ensureDBParty, ensureDBRaid, ensureDBMythic, ensureDBPriority
 
+local function MigrateSplitDNDStatusText(conf)
+    if type(conf) ~= "table" or conf.statusDNDText ~= nil or conf.statusAFKText == nil then return end
+    conf.statusDNDText = conf.statusAFKText
+    conf.statusDNDTextSize = conf.statusAFKTextSize
+    conf.statusDNDTextAnchor = conf.statusAFKTextAnchor
+    conf.statusDNDTextLayer = conf.statusAFKTextLayer
+    conf.statusDNDOffsetX = conf.statusAFKOffsetX
+    conf.statusDNDOffsetY = conf.statusAFKOffsetY
+end
+
 function GF.EnsureDB()
     local db = _G.MSUF_DB
     if not db then return end
@@ -1234,6 +1250,9 @@ function GF.EnsureDB()
     MigrateTextureOverrideOwnership(db.gf_party)
     MigrateTextureOverrideOwnership(db.gf_raid)
     MigrateTextureOverrideOwnership(db.gf_mythicraid)
+    MigrateSplitDNDStatusText(db.gf_party)
+    MigrateSplitDNDStatusText(db.gf_raid)
+    MigrateSplitDNDStatusText(db.gf_mythicraid)
     applyDefaults(db.gf_party, PARTY_DEFAULTS)
     applyDefaults(db.gf_raid,  RAID_DEFAULTS)
     applyDefaults(db.gf_mythicraid, MYTHIC_RAID_DEFAULTS)
