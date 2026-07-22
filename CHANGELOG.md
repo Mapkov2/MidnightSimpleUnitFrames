@@ -1,5 +1,30 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-Beta26 - 2026-07-23
+
+### Highlights
+
+- Expanded the Assistant with more natural explanations, follow-up context, safer scope selection, and stronger move, anchor, color, number, enum, and boolean request handling.
+- Reworked Unit Frame and Group Frame runtime paths to share event-owned identity and value state, coalesce text and prediction refreshes, and remove unnecessary idle, range, threat, and lifecycle work.
+- Unified 12.1 Group Aura slot ownership for Spell Indicators, dispel visuals, and fixed external icons, including secret-safe party range gating and safer native container reuse.
+- Added clearer Group Frame provider controls for MSUF, normal Blizzard ownership, forced Blizzard frames, and fully disabled frames.
+- Improved Aura styling workflows and live previews across Menu2, Edit Mode, Unit Frames, Group Frames, and custom Aura containers.
+
+### Changes
+
+- Added cast and channel spell icons to portraits while keeping the feature event-driven and inactive when unused.
+- Split status text presentation from status icons and migrated existing Unit Frame and Group Frame profile values automatically.
+- Made Health, Power, Class Resource, and Alternative Mana smoothing explicit opt-in settings while preserving Quick Setup as an intentional smoothing preset.
+- Simplified contextual text and color editing, refined accordion and dashboard visuals, and completed Menu2/Edit Mode source coverage for all shipped locales.
+
+### Fixes & Performance
+
+- Reduced Castbar first-cast work, duplicate native cleanup, and Auto Width fan-out with per-source dirty routing and reusable geometry state.
+- Reduced duplicate health, power, class-color, NPC-kind, status, prediction, and text reads across hot event paths.
+- Coalesced text and prediction rendering, narrowed Group Frame event routing, retired stale unit subscriptions, and cancelled inactive range timers immediately.
+- Improved offline Group Frame visibility, status targeting, level/name anchoring, secret-safe absorb handling, and profile migration behavior.
+- Expanded the Core Lua 5.1 suite to 152 passing runtime, Menu2, Assistant, Aura, Castbar, Group Frame, smoothing, status, and hotpath regression tests.
+
 ## 6.0-Beta25 - 2026-07-21
 
 ### Highlights
