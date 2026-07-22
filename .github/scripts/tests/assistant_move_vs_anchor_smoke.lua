@@ -84,4 +84,31 @@ Check(parsed("align player name left").kind ~= "ambiguous", "'align ... left' is
 -- A movement request must NOT trigger the ambiguity choice.
 Check(parsed("move player name to the left").kind ~= "ambiguous", "'move ... to the left' is not ambiguous")
 
+-- Router path: "move ... to the left" must resolve to an X offset even through
+-- the full Submit path with prior name-anchor context (the screenshot case).
+-- The router's fixed-anchor detection must exclude movement verbs, not only
+-- nudge/shift, or "move name to the left" silently sets the anchor.
+if type(A.Submit) == "function" then
+    local function submitKey(prompt)
+        if A.GetContext then local c = A.GetContext() for k in pairs(c) do c[k] = nil end end
+        -- Prime prior context: a name anchor was just discussed.
+        local ctx = A.GetContext and A.GetContext()
+        if ctx then
+            ctx.lastSetting = "player.nameTextAnchor"
+            ctx.lastUnit, ctx.lastFrameType = "player", "unitframe"
+            ctx.lastCategory = "Player / Text"
+            ctx.turnSerial, ctx.lastSubjectTurn = 5, 5
+            ctx.lastChangeBundle = { { key = "player.nameTextAnchor", attribute = "nameTextAnchor",
+                unit = "player", frameType = "unitframe", value = "LEFT", oldValue = "CENTER" } }
+        end
+        local ok, res = pcall(A.Submit, prompt)
+        return ok and type(res) == "table" and tostring(res.text or "") or ""
+    end
+    local text = submitKey("move PLAYER text name to the left")
+    Check(text:find("X Offset", 1, true) ~= nil,
+        "screenshot case: 'move PLAYER text name to the left' with prior context must move (X Offset), got: " .. text:sub(1, 80))
+    Check(text:find("Anchor is already", 1, true) == nil,
+        "screenshot case must not silently report the anchor as already set")
+end
+
 print("assistant_move_vs_anchor_smoke: PASS")

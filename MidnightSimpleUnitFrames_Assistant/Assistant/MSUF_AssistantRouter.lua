@@ -5448,9 +5448,14 @@ function R.TextMovementIntent(text)
     -- Fixed anchor values belong to an Anchor enum, not to relative X/Y
     -- offsets. In particular, "position ... top left" must never become a
     -- silent ten-pixel left nudge.
+    -- A movement verb ("move/shift/nudge/push the name to the left") is a
+    -- relative offset, not a fixed anchor.  Only "position ... to the left" or a
+    -- bare "name to the left" is a cardinal anchor; without excluding "move"
+    -- here, "move name to the left" silently set the Name Text Anchor instead of
+    -- moving the name.
     local plainCardinalAnchor = R.TextMovementNumberCount(text) == 0
         and R.ContainsAny(actionable, { "to the left", "to the right" })
-        and not R.ContainsAny(actionable, { "more to", "further", "nudge", "shift", " by " })
+        and not R.ContainsAny(actionable, { "more to", "further", "nudge", "shift", "push", "move", " by " })
     local fixedAnchorRequested = firstWord == "position" or plainCardinalAnchor
         or R.ContainsAny(actionable, { " anchor", "center", "centre", "middle", "to top", "to bottom" })
     local fixedAnchorValue
@@ -11080,11 +11085,22 @@ function R.RegistrySettingSearchEntries(text, norm, limit)
     if results == nil then return nil, true end
     if #results == 0 then return nil end
 
+    -- A single color channel (generated R/G/B/A component) is never the answer
+    -- to a fuzzy setting search: MSUF colors are set through a color picker, so
+    -- "player portrait background color" must reach the color setting, not its
+    -- red channel.  Channels stay reachable by their exact name through the
+    -- exact-alias path; they are only dropped from fuzzy candidate ranking.
+    local requestsChannel = R.ContainsAny(norm, {
+        "red channel", "green channel", "blue channel", "alpha channel",
+        "color channel", "colour channel", "channel value",
+    })
     local scopeKind, scope, scopeLabel = R.RegistryRequestedScope(norm)
     local entries = {}
     for i = 1, #results do
         local item = results[i] and results[i].item
-        if item and item.kind == "setting" then
+        if item and item.kind == "setting"
+            and not (not requestsChannel and item.setting and item.setting.assistantColorChannel == true)
+        then
             local setting = item.setting or {}
             local score = (tonumber(results[i].score) or 0) + R.RegistryItemScopeScore(item, scopeKind, scope, scopeLabel)
             if tostring(setting.key or item.key or "") == "targettarget.showToTInTargetName"
