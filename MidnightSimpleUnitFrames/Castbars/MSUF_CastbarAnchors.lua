@@ -57,8 +57,15 @@ local WIDTH_SOURCE_RETRY_DELAYS = { 0.05, 0.15, 0.35, 0.75, 1.5, 3.0, 5.0, 7.0 }
 -- Frames already hooked for width-source change notifications (weak keys).
 local hookedWidthSourceFrames = setmetatable({}, { __mode = "k" })
 
--- Per-unit signature of the current width source, used to skip redundant work.
+-- Current frame -> castbar-unit ownership. A per-unit generation invalidates
+-- retired dependencies without walking frames whose WoW hooks cannot be removed.
+local widthSourceFrameDependents = setmetatable({}, { __mode = "k" })
+local widthSourceDependencyGeneration = { player = 0, target = 0, focus = 0, boss = 0 }
+
+-- Per-unit reusable numeric source snapshots. Avoid building transient strings
+-- on every source Show/Hide/Size event.
 local widthSourceSignatures = {}
+local dirtyWidthSourceUnits = {}
 
 -- Sync state machine flags.
 local widthSourceQueued = false             -- a next-frame flush is queued
@@ -192,8 +199,7 @@ end
 -- The visible health geometry of a unitframe. Legacy rectangular frames may
 -- expose a dedicated outline host; current 6.0 frames expose their normal
 -- outside border separately and account for it below.
-local function GetUnitframeWidthSource(unit)
-    local frame = GetUnitframe(unit)
+local function GetUnitframeWidthSourceFromFrame(frame)
     if not frame then return nil end
     local outline = frame._msufBarOutline
     local outlineFrame = outline and outline.frame
@@ -207,6 +213,10 @@ local function GetUnitframeWidthSource(unit)
         return hp
     end
     return frame
+end
+
+local function GetUnitframeWidthSource(unit)
+    return GetUnitframeWidthSourceFromFrame(GetUnitframe(unit))
 end
 
 -- Width of sourceFrame expressed in targetFrame's scale.
@@ -429,60 +439,89 @@ local function InvalidateWidthSourceSignature(unit)
     end
 end
 
--- A compact, comparable signature of a frame's geometry/visibility.
-local function FrameSignature(frame)
-    if not frame then return "nil" end
-    local w = (frame.GetWidth and frame:GetWidth()) or 0
-    local h = (frame.GetHeight and frame:GetHeight()) or 0
-    local scale = (frame.GetEffectiveScale and frame:GetEffectiveScale()) or 1
-    local shown = (frame.IsShown and frame:IsShown()) and 1 or 0
-    return tostring(Round(w * 100)) .. ":"
-        .. tostring(Round(h * 100)) .. ":"
-        .. tostring(Round(scale * 1000)) .. ":"
-        .. tostring(shown)
-end
-
--- Build the width-source signature for a unit (nil if no active source).
-local function WidthSourceSignature(g, unit)
-    unit = NormalizeUnit(unit)
-    if not ShouldUseMSUFCastbar(unit, g) then return nil end
-
-    local matchSrc = ConfiguredWidthSource(g, unit)
-    if not matchSrc then return nil end
-    if IsCooldownWidthSourceKind(matchSrc) and not CooldownWidthSourceUsable(matchSrc) then return nil end
-
-    if matchSrc == "unitframe" then
-        local count = unit == "boss" and 5 or 1
-        local sig = matchSrc
-        for i = 1, count do
-            local sourceUnit = unit == "boss" and ("boss" .. i) or unit
-            sig = sig
-                .. "|" .. sourceUnit
-                .. "=" .. FrameSignature(GetUnitframe(sourceUnit))
-                .. "/" .. FrameSignature(GetUnitframeWidthSource(sourceUnit))
-                .. "/i=" .. tostring(Round(UnitframeNormalBorderInset(
-                    GetUnitframe(sourceUnit), GetUnitframeWidthSource(sourceUnit)
-                ) * 100))
-        end
-        return sig
+-- Store one frame's compact geometry in a reused numeric array. Returns the
+-- next free index and whether this slice changed.
+local function StoreFrameSignature(state, offset, frame)
+    local w, h, scale, shown = 0, 0, 1, 0
+    if frame then
+        w = (frame.GetWidth and frame:GetWidth()) or 0
+        h = (frame.GetHeight and frame:GetHeight()) or 0
+        scale = (frame.GetEffectiveScale and frame:GetEffectiveScale()) or 1
+        shown = (frame.IsShown and frame:IsShown()) and 1 or 0
     end
+    w = Round(w * 100)
+    h = Round(h * 100)
+    scale = Round(scale * 1000)
 
-    return matchSrc .. "|cdm=" .. FrameSignature(CooldownWidthSourceFrame(matchSrc))
+    local changed = state[offset] ~= frame
+        or state[offset + 1] ~= w
+        or state[offset + 2] ~= h
+        or state[offset + 3] ~= scale
+        or state[offset + 4] ~= shown
+    state[offset] = frame
+    state[offset + 1] = w
+    state[offset + 2] = h
+    state[offset + 3] = scale
+    state[offset + 4] = shown
+    return offset + 5, changed
 end
 
--- True (and stores the new signature) when the width source changed since last.
+-- Compare and update a unit's numeric width-source snapshot.
 local function WidthSourceNeedsReanchor(g, unit)
     unit = NormalizeUnit(unit)
-    local sig = WidthSourceSignature(g, unit)
-    if not sig then
+    if not ShouldUseMSUFCastbar(unit, g) then
         widthSourceSignatures[unit] = nil
         return false
     end
-    if widthSourceSignatures[unit] == sig then
+
+    local matchSrc = ConfiguredWidthSource(g, unit)
+    if not matchSrc
+        or (IsCooldownWidthSourceKind(matchSrc) and not CooldownWidthSourceUsable(matchSrc)) then
+        widthSourceSignatures[unit] = nil
         return false
     end
-    widthSourceSignatures[unit] = sig
-    return true
+
+    local state = widthSourceSignatures[unit]
+    if not state then
+        state = {}
+        widthSourceSignatures[unit] = state
+    end
+    local changed = state.kind ~= matchSrc
+    state.kind = matchSrc
+    local offset = 1
+
+    if matchSrc == "unitframe" then
+        local count = unit == "boss" and 5 or 1
+        if state.count ~= count then changed = true end
+        state.count = count
+        for i = 1, count do
+            local sourceUnit = unit == "boss" and ("boss" .. i) or unit
+            local frame = GetUnitframe(sourceUnit)
+            local source = GetUnitframeWidthSourceFromFrame(frame)
+            local sliceChanged
+            offset, sliceChanged = StoreFrameSignature(state, offset, frame)
+            changed = sliceChanged or changed
+            offset, sliceChanged = StoreFrameSignature(state, offset, source)
+            changed = sliceChanged or changed
+            local inset = Round(UnitframeNormalBorderInset(frame, source) * 100)
+            if state[offset] ~= inset then changed = true end
+            state[offset] = inset
+            offset = offset + 1
+        end
+    else
+        if state.count ~= 1 then changed = true end
+        state.count = 1
+        local sliceChanged
+        offset, sliceChanged = StoreFrameSignature(state, offset, CooldownWidthSourceFrame(matchSrc))
+        changed = sliceChanged or changed
+    end
+
+    local oldValueCount = state.valueCount or 0
+    for i = offset, oldValueCount do
+        state[i] = nil
+    end
+    state.valueCount = offset - 1
+    return changed
 end
 
 ------------------------------------------------------------------------
@@ -498,9 +537,34 @@ local function FlushWidthSourceSync()
     end
     local g = GeneralDB()
     for _, unit in ipairs(CASTBAR_UNITS) do
-        if WidthSourceNeedsReanchor(g, unit) then
-            ApplyCastbarEffectiveSizeUnit(unit, g)
+        if dirtyWidthSourceUnits[unit] then
+            dirtyWidthSourceUnits[unit] = nil
+            if WidthSourceNeedsReanchor(g, unit) then
+                ApplyCastbarEffectiveSizeUnit(unit, g)
+            end
         end
+    end
+end
+
+local function MarkAllWidthSourceUnitsDirty(g)
+    for _, unit in ipairs(CASTBAR_UNITS) do
+        dirtyWidthSourceUnits[unit] = ConfiguredWidthSource(g, unit) and true or nil
+    end
+end
+
+local function ResetWidthSourceDependencies(unit)
+    unit = NormalizeUnit(unit)
+    local generation = widthSourceDependencyGeneration[unit]
+    if generation == nil then return nil end
+    generation = generation + 1
+    widthSourceDependencyGeneration[unit] = generation
+    return generation
+end
+
+local function ClearWidthSourceRuntimeState()
+    for _, unit in ipairs(CASTBAR_UNITS) do
+        dirtyWidthSourceUnits[unit] = nil
+        ResetWidthSourceDependencies(unit)
     end
 end
 
@@ -526,16 +590,37 @@ end
 
 -- Hook a source frame so size/show/hide changes re-queue a sync. Returns true
 -- if the frame was newly hooked (or already valid).
-local function HookWidthSourceFrame(frame)
-    if not (frame and frame.HookScript) or hookedWidthSourceFrames[frame] then
+local function HookWidthSourceFrame(frame, unit, generation)
+    if not (frame and frame.HookScript) then
         return false
     end
+    unit = NormalizeUnit(unit)
+    generation = generation or widthSourceDependencyGeneration[unit]
+    if generation == nil then return false end
+    local dependents = widthSourceFrameDependents[frame]
+    if not dependents then
+        dependents = {}
+        widthSourceFrameDependents[frame] = dependents
+    end
+    dependents[unit] = generation
+    if hookedWidthSourceFrames[frame] then return true end
     if InCombat() and frame.IsProtected and frame:IsProtected() then
         return false
     end
     hookedWidthSourceFrames[frame] = true
     local function QueueIfActive()
-        if widthSourceLifecycleActive then QueueWidthSourceSync() end
+        if not widthSourceLifecycleActive then return end
+        local current = widthSourceFrameDependents[frame]
+        local anyDirty = false
+        if current then
+            for dependentUnit, dependencyGeneration in pairs(current) do
+                if widthSourceDependencyGeneration[dependentUnit] == dependencyGeneration then
+                    dirtyWidthSourceUnits[dependentUnit] = true
+                    anyDirty = true
+                end
+            end
+        end
+        if anyDirty then QueueWidthSourceSync() end
     end
     frame:HookScript("OnSizeChanged", QueueIfActive)
     frame:HookScript("OnShow", QueueIfActive)
@@ -546,16 +631,20 @@ end
 -- Ensure all source frames for a unit's configured width source are hooked.
 -- Returns true if at least one source frame currently exists.
 local function EnsureWidthSourceHooks(g, unit)
+    unit = NormalizeUnit(unit)
+    local generation = ResetWidthSourceDependencies(unit)
+    if not generation then return false end
     local matchSrc = ConfiguredWidthSource(g, unit)
     if not matchSrc then return false end
 
     if matchSrc == "unitframe" then
         local found = false
-        local count = NormalizeUnit(unit) == "boss" and 5 or 1
+        local count = unit == "boss" and 5 or 1
         for i = 1, count do
-            local sourceUnit = NormalizeUnit(unit) == "boss" and ("boss" .. i) or unit
-            found = HookWidthSourceFrame(GetUnitframe(sourceUnit)) or found
-            found = HookWidthSourceFrame(GetUnitframeWidthSource(sourceUnit)) or found
+            local sourceUnit = unit == "boss" and ("boss" .. i) or unit
+            local frame = GetUnitframe(sourceUnit)
+            found = HookWidthSourceFrame(frame, unit, generation) or found
+            found = HookWidthSourceFrame(GetUnitframeWidthSourceFromFrame(frame), unit, generation) or found
         end
         return found
     end
@@ -565,11 +654,11 @@ local function EnsureWidthSourceHooks(g, unit)
     end
 
     local containerKey, viewerKey = WidthSourceNames(matchSrc)
-    local found = HookWidthSourceFrame(_G[containerKey])
+    local found = HookWidthSourceFrame(_G[containerKey], unit, generation)
     local viewer = EffectiveCooldownViewer(viewerKey)
-    found = HookWidthSourceFrame(viewer) or found
+    found = HookWidthSourceFrame(viewer, unit, generation) or found
     if viewerKey and _G[viewerKey] ~= viewer then
-        found = HookWidthSourceFrame(_G[viewerKey]) or found
+        found = HookWidthSourceFrame(_G[viewerKey], unit, generation) or found
     end
     return found
 end
@@ -608,6 +697,7 @@ local function WidthSourceRetryStep()
     end
     if not anyMissing then
         widthSourceRetryActive = false
+        MarkAllWidthSourceUnitsDirty(g)
         QueueWidthSourceSync()
         return
     end
@@ -662,7 +752,10 @@ function MSUF_UpdateCastbarWidthSourceSync(g, unit, keepSignature)
 
     if unit then
         local source = ConfiguredWidthSource(g, unit)
-        if not source then return end
+        if not source then
+            ResetWidthSourceDependencies(unit)
+            return
+        end
         if not EnsureWidthSourceHooks(g, unit) and not IsCooldownWidthSourceKind(source) then
             StartWidthSourceRetry()
         end
@@ -680,9 +773,12 @@ function MSUF_UpdateCastbarWidthSourceSync(g, unit, keepSignature)
             if not EnsureWidthSourceHooks(g, unitKey) and not IsCooldownWidthSourceKind(source) then
                 StartWidthSourceRetry()
             end
+        else
+            ResetWidthSourceDependencies(unitKey)
         end
     end
     if anyActive then
+        MarkAllWidthSourceUnitsDirty(g)
         QueueWidthSourceSync()
     end
 end
@@ -723,6 +819,7 @@ do
         widthSourceRetryActive = false
         widthSourceQueued = false
         widthSourcePendingAfterCombat = false
+        if not wanted then ClearWidthSourceRuntimeState() end
         widthSourceBoot:UnregisterAllEvents()
         if wanted then
             widthSourceBoot:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -987,7 +1084,7 @@ local function RefreshCastbarCooldownWidthSource(sourceName)
         local unit = CASTBAR_UNITS[i]
         if ConfiguredWidthSource(g, unit) == kind then
             applied = ApplyCastbarEffectiveSizeUnit(unit, g) or applied
-            widthSourceSignatures[unit] = WidthSourceSignature(g, unit)
+            WidthSourceNeedsReanchor(g, unit)
         end
     end
     return applied
