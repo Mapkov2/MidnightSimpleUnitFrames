@@ -23,7 +23,7 @@ local type = type
 local UnitGUID = UnitGUID
 local UnitInRange = UnitInRange
 local InCombatLockdown = InCombatLockdown
-local C_Timer = C_Timer
+local NewTimer = C_Timer.NewTimer
 local GetTime = GetTime
 
 local Secrets = MSUF.Secrets or {}
@@ -31,7 +31,7 @@ local issecretvalue = _G.issecretvalue or function(_) return false end
 local IsUnitToken = UF.IsUnitToken
 local FreshUnitState = UF.FreshUnitState
 local ReadConnectedCached = UF.ReadConnectedCached
-local UnitExistsSafe = UF.UnitExistsSafe
+local ReadUnitExistsCached = UF.ReadUnitExistsCached
 
 local RANGE_EVENTS = {
   "UNIT_IN_RANGE_UPDATE", "UNIT_PHASE",
@@ -265,7 +265,10 @@ end
 -- secret unit payload in restricted content, while its inRange payload is safe
 -- to forward into the secret-aware alpha path.
 local function FilteredRangeEventUpdate(frame, event, _unit, inRange)
-  return GroupRangeFade.Update(frame, event, nil, inRange)
+  local changed = GroupRangeFade.Update(frame, event, nil, inRange)
+  local applyAuraGate = frame and frame._msufApplyPartyAuraRangeGate
+  if applyAuraGate then applyAuraGate(frame, inRange) end
+  return changed
 end
 
 local function FilteredUnitEventUpdate(frame, event)
@@ -287,6 +290,9 @@ local ApplyAlpha
 local rangeSettleQueued
 local rangeSettleCursor
 local rangeSettleAfterCombat
+local rangeSettleTimer
+local offlineCombatRegistrationCount = 0
+local offlineCombatDriverRegistered
 local rangeSettleFrames = {}
 local rangeSettleIndex = {}
 local settleDriver
@@ -359,6 +365,7 @@ function UF.DiscardDeferredGroupRangeSettle(frame)
 end
 
 FlushRangeSettle = function()
+  rangeSettleTimer = nil
   if InCombatLockdown and InCombatLockdown() then
     rangeSettleQueued = nil
     rangeSettleCursor = nil
@@ -397,6 +404,19 @@ FlushRangeSettle = function()
   rangeSettleCursor = nil
 end
 
+local function CancelRangeSettle()
+  if rangeSettleTimer then
+    rangeSettleTimer:Cancel()
+  end
+  rangeSettleTimer = nil
+  rangeSettleQueued = nil
+  rangeSettleCursor = nil
+  rangeSettleAfterCombat = nil
+  if settleDriver and settleDriver.SetScript then
+    settleDriver:SetScript("OnUpdate", nil)
+  end
+end
+
 local function QueueRangeSettle(delay)
   if InCombatLockdown and InCombatLockdown() then
     rangeSettleAfterCombat = true
@@ -415,13 +435,35 @@ local function QueueRangeSettle(delay)
     FlushRangeSettle()
     return
   end
-  C_Timer.After(delay, FlushRangeSettle)
+  rangeSettleTimer = NewTimer(delay, FlushRangeSettle)
 end
 
 local settleDriverRegistered
 local settleRegistrationCount = 0
 
+local function RefreshOfflineCombatVisibility(event)
+  if offlineCombatRegistrationCount <= 0 then
+    return
+  end
+  local live = GF and GF.frames
+  for i = 1, #rangeSettleFrames do
+    local frame = rangeSettleFrames[i]
+    if frame
+      and frame._msufGFOfflineCombatRegistered == true
+      and (not live or live[frame] == true) then
+      ApplyAlpha(frame, event)
+    end
+  end
+end
+
 local function SettleDriverOnEvent(_, event)
+  if event == "PLAYER_REGEN_DISABLED" then
+    RefreshOfflineCombatVisibility(event)
+    return
+  end
+  if event == "PLAYER_REGEN_ENABLED" then
+    RefreshOfflineCombatVisibility(event)
+  end
   if event ~= "PLAYER_REGEN_ENABLED" or rangeSettleAfterCombat == true then
     QueueRangeSettle(event == "PLAYER_ENTERING_WORLD" and 0.2 or 0)
   end
@@ -445,19 +487,27 @@ local function RefreshSettleDriver()
     return
   end
   local want = settleRegistrationCount > 0
-  if want == settleDriverRegistered then
-    return
-  end
-  if want then
-    for i = 1, #RANGE_SETTLE_EVENTS do
-      driver:RegisterEvent(RANGE_SETTLE_EVENTS[i])
+  if want ~= settleDriverRegistered then
+    if want then
+      for i = 1, #RANGE_SETTLE_EVENTS do
+        driver:RegisterEvent(RANGE_SETTLE_EVENTS[i])
+      end
+    else
+      for i = 1, #RANGE_SETTLE_EVENTS do
+        driver:UnregisterEvent(RANGE_SETTLE_EVENTS[i])
+      end
     end
-  else
-    for i = 1, #RANGE_SETTLE_EVENTS do
-      driver:UnregisterEvent(RANGE_SETTLE_EVENTS[i])
-    end
+    settleDriverRegistered = want
   end
-  settleDriverRegistered = want
+  local wantCombat = offlineCombatRegistrationCount > 0
+  if wantCombat ~= offlineCombatDriverRegistered then
+    if wantCombat then
+      driver:RegisterEvent("PLAYER_REGEN_DISABLED")
+    else
+      driver:UnregisterEvent("PLAYER_REGEN_DISABLED")
+    end
+    offlineCombatDriverRegistered = wantCombat
+  end
 end
 
 local function AddSettleFrame(frame)
@@ -489,8 +539,22 @@ local function SetSettleRegistration(frame, active)
     return
   end
   active = active == true
+  local combatActive = active
+    and frame._msufGFHideOfflineEnabled == true
+    and frame._msufGFHideOfflineInCombat ~= true
+  local wasCombatActive = frame._msufGFOfflineCombatRegistered == true
+  if wasCombatActive ~= combatActive then
+    offlineCombatRegistrationCount = offlineCombatRegistrationCount + (combatActive and 1 or -1)
+    if offlineCombatRegistrationCount < 0 then
+      offlineCombatRegistrationCount = 0
+    end
+    frame._msufGFOfflineCombatRegistered = combatActive or nil
+  end
   local wasActive = frame._msufGFRangeSettleRegistered == true
   if wasActive == active then
+    if wasCombatActive ~= combatActive then
+      RefreshSettleDriver()
+    end
     return
   end
   settleRegistrationCount = settleRegistrationCount + (active and 1 or -1)
@@ -503,10 +567,17 @@ local function SetSettleRegistration(frame, active)
   else
     RemoveSettleFrame(frame)
   end
+  if settleRegistrationCount <= 0 then
+    CancelRangeSettle()
+  end
   RefreshSettleDriver()
 end
 
 local function RangeSettleOnShow(self)
+  -- HookScript persists for the frame lifetime. Once both range fade and
+  -- offline handling are disabled, leave this hook as a single guard instead
+  -- of entering header-rebind detection and settled-range evaluation.
+  if not self or self._msufGFRangeRuntimeEnabled ~= true then return end
   SetSettleRegistration(self, self and self._msufGFRangeRuntimeEnabled == true)
   local isRebinding = GF and GF.IsHeaderLayoutRebindActive
   if type(isRebinding) == "function" and isRebinding(self) == true then
@@ -759,6 +830,14 @@ RemoveOfflineDelayFrame = function(frame)
     offlineDelayIndex[tail] = i
   end
   frame._msufGFOfflineDelayReadyAt = nil
+  if #offlineDelayFrames == 0 and offlineDelayTimerActive == true then
+    if offlineDelayTimer then
+      offlineDelayTimer:Cancel()
+    end
+    offlineDelayTimer = nil
+    offlineDelayTimerActive = nil
+    offlineDelayTimerAt = nil
+  end
 end
 
 local function QueueOfflineDelayFrame(frame, delay)
@@ -827,17 +906,13 @@ ScheduleOfflineDelayTimer = function(when)
   if delay < 0 then
     delay = 0
   end
-  if offlineDelayTimer and type(offlineDelayTimer.Cancel) == "function" then
+  if offlineDelayTimer then
     offlineDelayTimer:Cancel()
     offlineDelayTimer = nil
   end
   offlineDelayTimerActive = true
   offlineDelayTimerAt = when
-  if C_Timer and type(C_Timer.NewTimer) == "function" then
-    offlineDelayTimer = C_Timer.NewTimer(delay, OfflineDelayTimerCallback)
-  else
-    C_Timer.After(delay, OfflineDelayTimerCallback)
-  end
+  offlineDelayTimer = NewTimer(delay, OfflineDelayTimerCallback)
 end
 
 local function OfflineHideReady(frame)
@@ -887,7 +962,7 @@ local function OfflineGone(frame, unit, force)
     if state and state.existsKnown == true then
       exists = state.exists == true
     else
-      exists = UnitExistsSafe(unit)
+      exists = ReadUnitExistsCached(frame, unit)
     end
     offline = exists ~= true
   end
@@ -913,8 +988,9 @@ local function BaseAlpha(frame, event)
     return base, false
   end
   if OfflineGone(frame, unit, event == "UNIT_CONNECTION" or event == "MSUF_APPLY") then
+    local hideReady = OfflineHideReady(frame)
     if not (InCombatLockdown and InCombatLockdown()) or frame._msufGFHideOfflineInCombat == true then
-      if OfflineHideReady(frame) then
+      if hideReady then
         return 0, true
       end
     end

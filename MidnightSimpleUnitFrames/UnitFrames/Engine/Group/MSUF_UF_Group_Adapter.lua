@@ -34,6 +34,7 @@ local appliedUnit = setmetatable({}, { __mode = "k" })
 local appliedKind = setmetatable({}, { __mode = "k" })
 local appliedWidth = setmetatable({}, { __mode = "k" })
 local appliedHeight = setmetatable({}, { __mode = "k" })
+local appliedPowerEnabled = setmetatable({}, { __mode = "k" })
 local secureClicksConfigured = setmetatable({}, { __mode = "k" })
 local unitIndexRebindDepth = 0
 local headerLayoutRebindHeader
@@ -375,14 +376,17 @@ function GF.ValidateUnitFrameMap(frame, unit)
 end
 
 local function MarkApplied(frame, kind, unit, spec)
+  local power = spec and spec.power
   appliedSerial[frame] = spec and spec._msufGFCompileSerial or 0
   appliedUnit[frame] = unit
   appliedKind[frame] = kind
   appliedWidth[frame] = spec and spec.width or 0
   appliedHeight[frame] = spec and spec.height or 0
+  appliedPowerEnabled[frame] = power and power.enabled == true
 end
 
 local function SameApplied(frame, kind, unit, spec)
+  local power = spec and spec.power
   return frame
     and frame.MSUFSpec
     and appliedSerial[frame] == (spec and spec._msufGFCompileSerial or 0)
@@ -390,6 +394,9 @@ local function SameApplied(frame, kind, unit, spec)
     and appliedKind[frame] == kind
     and appliedWidth[frame] == (spec and spec.width or 0)
     and appliedHeight[frame] == (spec and spec.height or 0)
+    -- Per-role enablement is frame-owned and mutates without bumping the
+    -- shared kind serial. Height itself is config-owned by that serial.
+    and appliedPowerEnabled[frame] == (power and power.enabled == true)
 end
 
 local function NotifyGroupRangeUnitIdentity(frame)
@@ -516,7 +523,13 @@ local function SuspendUnitBinding(frame)
   if not frame then return end
   local shell = ShellFrame(frame)
   local visual = VisualFrame(shell)
+  -- Secure headers recycle children. Once a child has no unit, its old
+  -- RegisterUnitEvent subscriptions must not keep crossing into Lua for the
+  -- previous party/raid token; the normal rebind path rebuilds them exactly.
+  if visual and visual.UnregisterAllEvents then visual:UnregisterAllEvents() end
   UnindexFrameUnit(visual)
+  appliedUnit[visual] = nil
+  visual._msufEventRouteUnit = nil
   attrUnit[shell] = NO_UNIT
   if visual then
     visual.MSUFUnitKey = nil

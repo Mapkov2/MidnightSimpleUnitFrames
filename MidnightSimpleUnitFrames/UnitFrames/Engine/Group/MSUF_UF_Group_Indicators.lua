@@ -22,9 +22,7 @@ local function SetShown(region, show)
   region:SetShown(show)
   region._msufGFShown = show
 end
-local UnitThreatSituation = UnitThreatSituation
 local UnitAffectingCombat = UnitAffectingCombat
-local UnitGroupRolesAssigned = UnitGroupRolesAssigned
 local CreateFrame = CreateFrame
 local tonumber = tonumber
 local tostring = tostring
@@ -32,12 +30,9 @@ local type = type
 local pairs = pairs
 local floor = math.floor
 local max = math.max
-local Secrets = MSUF.Secrets or {}
-local UnitMissing = Secrets.UnitMissing or function(_) return false end
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local Visuals = MSUF.UFVisuals or {}
-local ReadGroupThreatStatus = Visuals.ReadGroupThreatStatus
-local ReadGroupRole = Visuals.ReadGroupRole
+local ResolveGroupAggroThreat = Visuals.ResolveGroupAggroThreat
 local Apply = MSUF.Apply or {}
 local ApplyColorTexture = Apply.ColorTexture or function(tex, r, g, b, a)
   if not tex then return end
@@ -56,7 +51,6 @@ end
 
 local EMPTY = {}
 local CORNER_THREAT_EVENTS = { "UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE", "UNIT_FLAGS" }
-local CORNER_THREAT_UNITLESS_EVENTS = { "PLAYER_REGEN_ENABLED" }
 
 local function ClampLayer(layer, fallback)
   layer = floor((tonumber(layer) or fallback or 7) + 0.5)
@@ -127,37 +121,17 @@ local function NormalizeAggroMode(mode)
   return mode
 end
 
-local function AggroModeAllows(frame, unit, mode)
-  if mode == "ALL" or mode == "" then return true end
-  if not UnitGroupRolesAssigned then return false end
-  local role
-  if ReadGroupRole then
-    role = ReadGroupRole(frame, unit)
-  else
-    role = UnitGroupRolesAssigned(unit)
-  end
-  if issecretvalue(role) == true or role == nil then return false end
-  if mode == "NON_TANK" then return role ~= "TANK" end
-  if mode == "TANK" or mode == "HEALER" then return role == mode end
-  return true
-end
-
-local function HasThreat(frame, unit, cfg)
-  if not UnitThreatSituation or not unit then return false end
-  if not AggroModeAllows(frame, unit, cfg and cfg.runtimeAggroMode or "ALL") then return false end
-  if UnitAffectingCombat then
+local function HasThreat(frame, unit, cfg, event)
+  if not (ResolveGroupAggroThreat and frame and unit) then return false end
+  -- Threat events already carry the authoritative transition and the shared
+  -- resolver reads UnitThreatSituation. Keep the combat-state query only for
+  -- synthetic/flag refreshes that exist to clear stale indicators.
+  if event ~= "UNIT_THREAT_SITUATION_UPDATE" and event ~= "UNIT_THREAT_LIST_UPDATE"
+    and UnitAffectingCombat then
     local active = UnitAffectingCombat(unit)
     if issecretvalue(active) == true or (active ~= true and active ~= 1) then return false end
   end
-  local status
-  if ReadGroupThreatStatus then
-    status = ReadGroupThreatStatus(frame, unit)
-  else
-    status = UnitThreatSituation(unit)
-  end
-  if issecretvalue(status) == true or status == nil then return false end
-  status = tonumber(status)
-  return status ~= nil and status >= 1
+  return ResolveGroupAggroThreat(frame, unit, cfg and cfg.runtimeAggroMode or "ALL")
 end
 
 local GroupCornerIndicators = {}
@@ -175,8 +149,7 @@ function GroupCornerIndicators.GetEvents(frame, spec)
 end
 
 function GroupCornerIndicators.GetUnitlessEvents(frame, spec)
-  local cfg = spec and spec.cornerIndicators
-  return cfg and cfg.needsThreat == true and CORNER_THREAT_UNITLESS_EVENTS or EMPTY
+  return EMPTY
 end
 
 local function EnsureCorner(frame, key, layer)
@@ -245,14 +218,8 @@ end
 local function RuntimeThreat(frame, cfg, event)
   if not (frame and cfg and cfg.enabled == true and cfg.needsThreat == true) then return end
   local unit = frame.MSUFUnitKey
-  if unit and UnitMissing(unit) then
-    frame._msufGFCornerThreatCfg = cfg
-    frame._msufGFCornerThreatState = false
-    SetThreatSlotsShown(frame, cfg, false)
-    return
-  end
   if frame._msufGFCornerPreparedCfg ~= cfg then return end
-  local threat = HasThreat(frame, unit, cfg)
+  local threat = HasThreat(frame, unit, cfg, event)
   if (event == "UNIT_THREAT_SITUATION_UPDATE" or event == "UNIT_THREAT_LIST_UPDATE")
     and frame._msufGFCornerThreatCfg == cfg
     and frame._msufGFCornerThreatState == threat then
@@ -285,6 +252,25 @@ end
 function GroupCornerIndicators.Update(frame, event) UpdateCornerIndicators(frame, event) end
 function GroupCornerIndicators.Disable(frame) HideCorners(frame) end
 GroupCornerIndicators.NoDispatchUpdates = { [GroupCornerIndicators.Update] = true }
+
+-- Group_Runtime already owns PLAYER_REGEN_ENABLED once for the whole group
+-- system. Reuse its visible-frame walk for the uncommon stale-threat catch-up
+-- instead of registering the same unitless event on every secure child.
+local function RefreshCornerThreatFrame(frame, _, _, event)
+  local active = frame and frame._msufActiveElements
+  if not (active and active.GroupCornerIndicators == true) then return false end
+  local cfg = frame._msufGFCornerPreparedCfg
+  local update = cfg and cfg.runtimeThreat
+  if not (cfg and cfg.needsThreat == true and update) then return false end
+  update(frame, cfg, event or "PLAYER_REGEN_ENABLED")
+  return true
+end
+
+function GF.RefreshCornerThreatState(reason)
+  local forEach = GF.ForEachFrame
+  if type(forEach) ~= "function" then return false end
+  return forEach(RefreshCornerThreatFrame, false, reason or "PLAYER_REGEN_ENABLED")
+end
 
 UF.RegisterElement("GroupCornerIndicators", GroupCornerIndicators)
 
