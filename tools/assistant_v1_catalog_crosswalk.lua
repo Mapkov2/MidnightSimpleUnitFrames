@@ -253,10 +253,37 @@ for key, spec in pairs(M.pages or {}) do
     end
 end
 table.sort(pageKeys)
+-- The product deliberately slices hidden lazy-section builds through timers.
+-- This desktop audit needs the completed catalog before it can crosswalk any
+-- setting, so run only its construction timers synchronously and restore the
+-- shared stub immediately afterwards.
+local originalTimerAfter = _G.C_Timer and _G.C_Timer.After
+local menuTimer = M.MenuTimer
+local originalMenuTimerAfter = menuTimer and menuTimer.After
+local originalMenuTimerNewTimer = menuTimer and menuTimer.NewTimer
+if _G.C_Timer then
+    _G.C_Timer.After = function(_, callback)
+        if type(callback) == "function" then callback() end
+    end
+end
+if menuTimer then
+    menuTimer.After = function(_, callback)
+        if type(callback) == "function" then callback() end
+    end
+    menuTimer.NewTimer = function(_, callback)
+        if type(callback) == "function" then callback() end
+        return { Cancel = function() end }
+    end
+end
 for i = 1, #pageKeys do
     local key = pageKeys[i]
     local ok, err = pcall(M.BuildPageEntry, key, true)
     if not ok then pageBuildFailures[#pageBuildFailures + 1] = { key = key, error = tostring(err) } end
+end
+if _G.C_Timer then _G.C_Timer.After = originalTimerAfter end
+if menuTimer then
+    menuTimer.After = originalMenuTimerAfter
+    menuTimer.NewTimer = originalMenuTimerNewTimer
 end
 
 -- Build the real menu shell too. Page builders alone cannot instantiate the
@@ -1019,6 +1046,19 @@ if verbose then
                 tostring(row.controlPath or ""), tostring(row.label or "")))
         end
     end
+    for i = 1, #(catalogCoverage.invalidCapabilities or {}) do
+        local row = catalogCoverage.invalidCapabilities[i]
+        print(string.format("CATALOG_INVALID_CAPABILITY\t%s\t%s\t%s\t%s\t%s",
+            tostring(row.controlId or ""), tostring(row.pageKey or ""),
+            tostring(row.classification or ""), tostring(row.kind or ""),
+            tostring(row.reason or "")))
+    end
+    for i = 1, #(catalogCoverage.registryMissingTargets or {}) do
+        local row = catalogCoverage.registryMissingTargets[i]
+        print(string.format("CATALOG_REGISTRY_MISSING\t%s\t%s\t%s\t%s",
+            tostring(row.controlId or ""), tostring(row.pageKey or ""),
+            tostring(row.classification or ""), tostring(row.targetKey or "")))
+    end
     for i = 1, #unitGroupReverse.failures do
         local row = unitGroupReverse.failures[i]
         local descriptor = row.setting or {}
@@ -1130,11 +1170,12 @@ if not unitGroupOnly then
     assert(globalReverse.invalidStandalone == 0,
         "Global Registry setting has an invalid standalone menu-control contract")
     -- The explicit standalone inventory includes the three channel-tick
-    -- controllers and minimap position; these are intentionally controller-
-    -- owned settings without a scalar Menu2 widget (23 historical + 4).
+    -- controllers, minimap position, three compatibility-only legacy shadow
+    -- presets, and four contextual-only aura colors; these are intentionally
+    -- controller-owned settings without a scalar Menu2 widget (23 + 11).
     -- The three raw Bar Outline RGB channels are now claimed by the canonical
     -- composite color controller instead of counted as generated standalones.
-    assert(globalReverse.standaloneGenerated == 148 and globalReverse.standaloneExplicit == 27,
+    assert(globalReverse.standaloneGenerated == 148 and globalReverse.standaloneExplicit == 34,
         "reviewed Global standalone split changed; classify new generated or explicit no-widget settings")
     assert(globalReverse.generatedTotal
             == globalReverse.standaloneGenerated + globalReverse.generatedRouted,
