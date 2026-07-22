@@ -657,6 +657,26 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refresh
       HideOverAbsorbGlow(frame)
       return
     end
+
+    -- A protected absorb cannot participate in the optional partial-health
+    -- threshold. Its only renderable result is the native full-health stripe:
+    -- the holder value gates absorb presence and its cached alpha gates health.
+    -- Once both gates are warm, an absorb-data event needs no UnitHealth/
+    -- UnitHealthMax recovery at all.
+    if writeAbsorbValue == true
+      and issecretvalue(absorb) == true
+      and holder and hpBar
+      and holder._msufOverAbsorbReverse == reverse
+      and holder._msufOverAbsorbAnchor == hpBar
+      and frame._msufPredictionFullHealthAlphaReady == true
+      and frame._msufPredictionFullHealthAlphaDirty ~= true
+      and frame._msufPredictionFullHealthAlphaUnit == unit then
+      if holder._msufOverAbsorbShown ~= true then
+        holder:SetShown(true)
+        holder._msufOverAbsorbShown = true
+      end
+      return
+    end
   end
 
   -- Protected health reduces to two native payloads: a step-curve alpha and
