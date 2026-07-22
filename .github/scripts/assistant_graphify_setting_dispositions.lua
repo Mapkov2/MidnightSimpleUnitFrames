@@ -228,8 +228,6 @@ general._fontScopeKey
 general._msufUFTextPerUnitMigrated_v4325
 general._msuf2Width
 general._msufFactoryProfileApplied
-general.absorbBarHeight
-general.absorbBarOffsetY
 general.aggroBorderB
 general.aggroBorderG
 general.aggroBorderR
@@ -284,9 +282,6 @@ general.fontShadowDistance
 general.fontShadowOpacity
 general.fontShadowStrength
 general.fontTextAlpha
-general.healAbsorbAnchorMode
-general.healAbsorbBarHeight
-general.healAbsorbBarOffsetY
 general.healAbsorbBarColorA
 general.healAbsorbBarColorB
 general.healAbsorbBarColorG
@@ -295,11 +290,6 @@ general.healPredictionColorA
 general.healPredictionColorB
 general.healPredictionColorG
 general.healPredictionColorR
-general.healPredEnabled
-general.healPredictionBarHeight
-general.healPredictionBarOffsetY
-general.healPredictionBarOpacity
-general.healPredictionBarTexture
 general.hlDispelBorderEnabled
 general.hlPurgeBorderEnabled
 general.hlPurgeColorB
@@ -354,13 +344,6 @@ general.shortenNameShowDots
 general.shortenNames
 general.statusIndicators
 general.statusTextEnabled
-general.tempMaxHealthBackgroundOpacity
-general.tempMaxHealthColorB
-general.tempMaxHealthColorG
-general.tempMaxHealthColorR
-general.tempMaxHealthEnabled
-general.tempMaxHealthOpacity
-general.tempMaxHealthTexture
 general.textBackdrop
 general.textLayer
 general.unifiedBar
