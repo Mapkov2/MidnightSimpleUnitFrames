@@ -5448,14 +5448,17 @@ function R.TextMovementIntent(text)
     -- Fixed anchor values belong to an Anchor enum, not to relative X/Y
     -- offsets. In particular, "position ... top left" must never become a
     -- silent ten-pixel left nudge.
-    -- A movement verb ("move/shift/nudge/push the name to the left") is a
-    -- relative offset, not a fixed anchor.  Only "position ... to the left" or a
-    -- bare "name to the left" is a cardinal anchor; without excluding "move"
-    -- here, "move name to the left" silently set the Name Text Anchor instead of
-    -- moving the name.
+    -- A movement verb ("move/drag/nudge the name to the left") is a relative
+    -- offset, not a fixed anchor.  Only "position ... to the left" or a bare
+    -- "name to the left" is a cardinal anchor.  The movement-verb set lives in
+    -- one place (A.HasNudgeMovementVerb) so the parser and this router path can
+    -- never drift apart -- that drift is exactly what let "move name to the
+    -- left" silently set the Name Text Anchor.
+    local hasMovementVerb = type(A.HasNudgeMovementVerb) == "function" and A.HasNudgeMovementVerb(text)
     local plainCardinalAnchor = R.TextMovementNumberCount(text) == 0
         and R.ContainsAny(actionable, { "to the left", "to the right" })
-        and not R.ContainsAny(actionable, { "more to", "further", "nudge", "shift", "push", "move", " by " })
+        and not hasMovementVerb
+        and not R.ContainsAny(actionable, { "more to", "further", " by " })
     local fixedAnchorRequested = firstWord == "position" or plainCardinalAnchor
         or R.ContainsAny(actionable, { " anchor", "center", "centre", "middle", "to top", "to bottom" })
     local fixedAnchorValue

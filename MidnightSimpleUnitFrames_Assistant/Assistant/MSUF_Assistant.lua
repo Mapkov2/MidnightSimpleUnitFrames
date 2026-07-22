@@ -2293,14 +2293,20 @@ function A.HasSmallNudgeIntent(text)
         or AP.ContextNormalizedHasPhrase(normalized, "tiny")
 end
 
+-- Every verb that means "relatively reposition this element" (an X/Y offset),
+-- as opposed to a fixed anchor.  Kept in one place because both the parser and
+-- the router gate their move-vs-anchor decision on it; a verb missing here let
+-- "drag/scoot/slide name to the left" silently set the Name Text Anchor.
+A.NUDGE_MOVEMENT_VERBS = A.NUDGE_MOVEMENT_VERBS or {
+    "move", "nudge", "shift", "push", "raise", "lower",
+    "drag", "scoot", "slide", "bump", "pull", "reposition", "budge", "shove",
+}
 function A.HasNudgeMovementVerb(text)
     local normalized = NormalizeReply(text)
-    return AP.ContextNormalizedHasPhrase(normalized, "move")
-        or AP.ContextNormalizedHasPhrase(normalized, "nudge")
-        or AP.ContextNormalizedHasPhrase(normalized, "shift")
-        or AP.ContextNormalizedHasPhrase(normalized, "push")
-        or AP.ContextNormalizedHasPhrase(normalized, "raise")
-        or AP.ContextNormalizedHasPhrase(normalized, "lower")
+    for i = 1, #A.NUDGE_MOVEMENT_VERBS do
+        if AP.ContextNormalizedHasPhrase(normalized, A.NUDGE_MOVEMENT_VERBS[i]) then return true end
+    end
+    return false
 end
 
 function AP.IsSpatialRelationshipIntent(text)

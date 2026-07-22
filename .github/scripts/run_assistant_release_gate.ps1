@@ -324,6 +324,7 @@ $luaGates = @(
     [pscustomobject]@{ Category = "controller"; Path = "tools/assistant_parser_smoke.lua"; Args = @() },
     [pscustomobject]@{ Category = "controller"; Path = ".github/scripts/tests/assistant_scope_priority_smoke.lua"; Args = @() },
     [pscustomobject]@{ Category = "controller"; Path = ".github/scripts/tests/assistant_move_vs_anchor_smoke.lua"; Args = @() },
+    [pscustomobject]@{ Category = "controller"; Path = ".github/scripts/tests/assistant_move_anchor_fulltrace.lua"; Args = @() },
     [pscustomobject]@{ Category = "controller/color"; Path = ".github/scripts/tests/assistant_color_picker_bridge_smoke.lua"; Args = @() },
     [pscustomobject]@{ Category = "controller/color"; Path = ".github/scripts/tests/assistant_bar_gradient_reset_smoke.lua"; Args = @() },
     [pscustomobject]@{ Category = "controller/layer"; Path = ".github/scripts/tests/layer_contract_smoke.lua"; Args = @() },
