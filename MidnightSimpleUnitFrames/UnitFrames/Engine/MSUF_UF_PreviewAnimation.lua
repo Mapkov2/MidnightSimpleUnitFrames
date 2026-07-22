@@ -111,15 +111,22 @@ local function AuraKind(kind)
   return AURA_DURATIONS[kind] and kind or "buff"
 end
 
-local function FormatAuraTime(remaining, duration, decimalSeconds)
+local function FormatAuraTime(remaining, duration, decimalThreshold)
   remaining = tonumber(remaining) or 0
   duration = tonumber(duration) or 0
+  if decimalThreshold == true then
+    decimalThreshold = 60
+  elseif decimalThreshold == false or decimalThreshold == nil then
+    decimalThreshold = 3
+  else
+    decimalThreshold = max(0, tonumber(decimalThreshold) or 3)
+  end
   if duration <= 0 then return "" end
   if remaining >= 3600 then
     return tostring(max(1, floor((remaining + 1800) / 3600))) .. "h"
   elseif remaining >= 60 then
     return tostring(max(1, floor((remaining + 30) / 60))) .. "m"
-  elseif remaining < 3 or decimalSeconds == true then
+  elseif decimalThreshold > 0 and remaining < decimalThreshold then
     return format("%.1f", max(0.1, remaining))
   end
   return tostring(max(1, floor(remaining + 0.5)))
@@ -191,7 +198,8 @@ function PA.BuildAuraState(kind, index, scratch, options, elapsed)
   scratch.elapsedFrac = elapsedFrac
   scratch.progress = elapsedFrac
   scratch.swipeFrac = remainingFrac
-  scratch.text = FormatAuraTime(remaining, duration, options.decimalSeconds == true)
+  scratch.text = FormatAuraTime(remaining, duration,
+    options.decimalThreshold ~= nil and options.decimalThreshold or options.decimalSeconds)
   scratch.stacks = stacks
   return scratch
 end

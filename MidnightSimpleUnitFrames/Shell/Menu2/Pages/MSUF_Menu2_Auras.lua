@@ -66,6 +66,7 @@ local function AURA_COOLDOWN_COLOR_REFERENCES()
     return { "font.global" }
 end
 local AURA_DURATION_BAR_COLOR_REFERENCES = { "aura.cooldown.safe" }
+local AURA_SHARED_COLOR_NOTE = "Shared by all Aura scopes."
 function M.AttachAuraFontsAndColors(section, title, unit)
     if not (section and W.AttachContextColorReferences) then return end
     local references = AURA_COOLDOWN_COLOR_REFERENCES()
@@ -74,14 +75,18 @@ function M.AttachAuraFontsAndColors(section, title, unit)
         title = title .. " Fonts & Colors",
         historyLabel = title .. " color",
         historySource = "menu:auras-fonts-colors",
+        scopeTag = "Shared",
+        note = AURA_SHARED_COLOR_NOTE,
         tooltipTitle = "Aura fonts & colors",
-        tooltipText = "Open the shared font settings and the colors used by this Aura area.",
+        tooltipText = "Open the shared font and colors used by every Aura scope.",
         textSettings = {
             scope = "shared",
             unit = unit,
             kind = "aura",
             colorReferences = references,
             colorTitle = title .. " Colors",
+            colorScopeTag = "Shared",
+            colorNote = AURA_SHARED_COLOR_NOTE,
             subtitle = "Aura text follows the shared Fonts settings; duration colors stay synchronized with Aura Colors.",
             capabilities = {
                 opacity = false, baseline = false,
@@ -588,17 +593,17 @@ local function BuildAuraStyleScopeOverrideSection(ctx, b)
         reset:SetShown(shared and #active > 0)
         if shared then
             overrideInfo:SetText("|cffffffff" .. Tr("Overrides:") .. "|r " .. (#visibleActive > 0 and table_concat(visibleActive, ", ") or Tr("None")))
-            hint:SetText("Shared aura style is the baseline for unit-frame aura text, swipe, border, and timer settings. Party and Raid are group-frame style scopes with their own settings.")
+            hint:SetText(Tr("Shared aura style is the baseline for unit-frame aura text, swipe, border, and timer settings. Party and Raid are group-frame style scopes with their own settings."))
         elseif group then
             overrideInfo:SetText("")
             hint:SetText("")
         elseif custom then
-            overrideInfo:SetText("|cffffffff" .. ScopeLabel(current) .. " Custom style|r")
-            hint:SetText("Custom 1-3 and Dots on target are stored per frame. Icon styling and Full-Frame effects here only change " .. ScopeLabel(current) .. ".")
+            overrideInfo:SetText("|cffffffff" .. M.Format("%s Custom style", ScopeLabel(current)) .. "|r")
+            hint:SetText(M.Format("Custom 1-3 and Dots on target are stored per frame. Icon styling and Full-Frame effects here only change %s.", ScopeLabel(current)))
         elseif not Model.UseSharedVisuals(current) then
-            hint:SetText("Override active: this scope keeps its own aura style. Shared style changes will not replace it until the override is reset.")
+            hint:SetText(Tr("Override active: this scope keeps its own aura style. Shared style changes will not replace it until the override is reset."))
         else
-            hint:SetText("Inherited: this scope follows Shared aura style. Enable custom aura style only when this scope needs different text, swipe, border, or timer settings.")
+            hint:SetText(Tr("Inherited: this scope follows Shared aura style. Enable custom aura style only when this scope needs different text, swipe, border, or timer settings."))
         end
         if segment and segment.Refresh then segment:Refresh() end
         hint:SetWidth(ctx.width - 28)
@@ -771,15 +776,13 @@ local function GroupConf(kind)
 end
 local function QueueGroupScope(scope, mode)
     local a, b = GroupScopeKinds(scope)
-    local queued = false
     if type(GP.QueueGF) == "function" then
         GP.QueueGF(a, mode or "visual")
         if b then GP.QueueGF(b, mode or "visual") end
-        queued = true
     end
-    if not queued then
-        RefreshGFPreview()
-    end
+    -- Paint the menu preview from the just-written raw Aura style immediately.
+    -- The coalesced group apply below still owns runtime recompilation.
+    RefreshGFPreview()
 end
 local function GFAurasRoot(kind)
     local conf = GroupConf(kind)
@@ -1401,15 +1404,15 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
             local ok, reason = type(A3.UpdateMenuAuraPreview) == "function"
                 and A3.UpdateMenuAuraPreview(box, previewScope, lane, width, liveHeight)
             local label = ScopeLabel(previewScope)
-            titleLabel:SetText(label .. " Live Preview")
+            titleLabel:SetText(M.Format("%s Live Preview", label))
             if ok then
-                meta:SetText("Live " .. label .. " auras. An empty canvas means no matching aura is active.")
+                meta:SetText(M.Format("Live %s auras. An empty canvas means no matching aura is active.", label))
             elseif reason == "combat" then
-                meta:SetText("Live preview updates after combat. Sample mode remains available.")
+                meta:SetText(Tr("Live preview updates after combat. Sample mode remains available."))
             elseif reason == "no-group-frame" then
-                meta:SetText("No live " .. label .. " member is currently available.")
+                meta:SetText(M.Format("No live %s member is currently available.", label))
             else
-                meta:SetText("Live preview is unavailable for this container. Sample mode remains available.")
+                meta:SetText(Tr("Live preview is unavailable for this container. Sample mode remains available."))
             end
             return
         end
@@ -1523,15 +1526,15 @@ local function BuildLiveAuraPreview(ctx, parent, scope, laneKind, x, y, width, h
         local ok, reason = type(A3.UpdateMenuAuraPreview) == "function"
             and A3.UpdateMenuAuraPreview(box, scope, laneKind, width, height)
         if ok then
-            status:SetText("Native · " .. ScopeLabel(scope))
+            status:SetText(Tr("Native · ") .. ScopeLabel(scope))
         elseif reason == "combat" then
-            status:SetText("Updates after combat")
+            status:SetText(Tr("Updates after combat"))
         elseif reason == "no-group-frame" then
-            status:SetText("No live member")
+            status:SetText(Tr("No live member"))
         elseif tostring(laneKind):match("^custom[1234]$") then
-            status:SetText("Disabled or whitelist empty")
+            status:SetText(Tr("Disabled or whitelist empty"))
         else
-            status:SetText("No matching aura active")
+            status:SetText(Tr("No matching aura active"))
         end
     end
     M.TrackRefresh(ctx, RefreshLive)
@@ -1544,7 +1547,7 @@ local function BuildAuraStylePreviewWorkbench(ctx, b, scope, lane)
     local panelH = T.Space("xxl", 32) * 4 + T.Space("lg", 16) + T.Space("xs", 4)
     local sectionH = abs(panelY) + panelH + T.Space("lg", 16)
     local sectionId = "aura_style_" .. tostring(lane or "auras") .. "_preview"
-    local section = b:CollapsibleSection(sectionId, LaneTitle(lane) .. " Preview", sectionH, true)
+    local section = b:CollapsibleSection(sectionId, "Preview", sectionH, true)
     local width = section._msuf2Width or b.width or 720
     local pad = T.Space("xl", 24)
     local labelW = T.Space("xl", 24) * 3 + T.Space("md", 12)
@@ -1810,7 +1813,7 @@ local function BuildUnitStyle(ctx, b, scope)
     refreshMiniPreview = BuildAuraStylePreviewWorkbench(ctx, b, unit, lane)
 
     local featuresH = 244 + extraDebuffControls
-    local features = b:CollapsibleSection(baseId .. "_features", LaneTitle(lane) .. " Basics", featuresH, true)
+    local features = b:CollapsibleSection(baseId .. "_features", "Basics", featuresH, true)
     local fw = BodyWidth(features)
     local featuresY = -44
     BindStyleSlider(features, "Icon Zoom (%)", 24, featuresY, 100, 200, 1, fw - 48, "iconZoom", 100, 100, 200, 100, 200, "AURAS3_ICON_ZOOM")
@@ -1823,12 +1826,14 @@ local function BuildUnitStyle(ctx, b, scope)
             fw - 48, ReadScopeDebuffBorderMode, WriteScopeDebuffBorderMode, "AURAS3_DEBUFF_TYPE_BORDER_MODE")
     end
 
-    local stack = b:CollapsibleSection(baseId .. "_stack", LaneTitle(lane) .. " Stack Count", 296, false)
+    local stack = b:CollapsibleSection(baseId .. "_stack", "Stack Count", 296, false)
     if W.AttachContextColorShortcut then
         W.AttachContextColorShortcut(stack, {
             title = LaneTitle(lane) .. " Stack Text Settings",
             historyLabel = "Aura stack text color",
             historySource = "menu:auras-stack-text-color",
+            scopeTag = "Shared",
+            note = AURA_SHARED_COLOR_NOTE,
             textSettings = {
                 scope = "shared",
                 unit = unit,
@@ -1865,12 +1870,14 @@ local function BuildUnitStyle(ctx, b, scope)
     BindStyleSlider(stack, "X", 24, -212, -40, 40, 1, stackSmallW, "stackTextOffsetX", -1, -2000, 2000, nil, nil, "AURAS3_STACK_X")
     BindStyleSlider(stack, "Y", 32 + stackSmallW, -212, -40, 40, 1, stackSmallW, "stackTextOffsetY", 1, -2000, 2000, nil, nil, "AURAS3_STACK_Y")
 
-    local cooldown = b:CollapsibleSection(baseId .. "_cooldown", LaneTitle(lane) .. " Cooldown Text", 374, true)
+    local cooldown = b:CollapsibleSection(baseId .. "_cooldown", "Cooldown Text", 374, true)
     if W.AttachContextColorShortcut then
         W.AttachContextColorShortcut(cooldown, {
             title = LaneTitle(lane) .. " Cooldown Text Settings",
             historyLabel = "Aura cooldown text color",
             historySource = "menu:auras-cooldown-text-color",
+            scopeTag = "Shared",
+            note = AURA_SHARED_COLOR_NOTE,
             textSettings = {
                 scope = "shared",
                 unit = unit,
@@ -1895,9 +1902,11 @@ local function BuildUnitStyle(ctx, b, scope)
     local decimal = BindStyleSlider(cooldown, "Decimals below sec", 24, -328, 0, 30, 1, cw - 48, "cooldownDecimalSeconds", 3, 0, 30, nil, nil, "AURAS3_COOLDOWN_FORMAT")
     AddTooltip(decimal, "Cooldown text format", "Remaining time below this value uses one decimal place. Timers show unitless seconds below 1 minute and localized minutes above it. Set 0 for whole seconds only.")
 
-    local durationBar = b:CollapsibleSection(baseId .. "_duration_bar", LaneTitle(lane) .. " Duration Bar", 322, false)
+    local durationBar = b:CollapsibleSection(baseId .. "_duration_bar", "Duration Bar", 322, false)
     W.AttachContextColorReferences(durationBar, AURA_DURATION_BAR_COLOR_REFERENCES, {
         title = LaneTitle(lane) .. " Duration Bar Color",
+        scopeTag = "Shared",
+        note = AURA_SHARED_COLOR_NOTE,
     })
     local dbw = BodyWidth(durationBar)
     BindStyleSwitch(durationBar, "Show Duration Bar", 24, -48, dbw - 48, "showDurationBar", false, "AURAS3_DURATION_BAR")
@@ -1921,7 +1930,7 @@ local function BuildUnitStyle(ctx, b, scope)
         Model.WriteValue(unit, EffectKey(suffix), value)
         ApplyUnit(ctx, unit, reason)
     end
-    local frameEffect = b:CollapsibleSection(baseId .. "_full_frame", LaneTitle(lane) .. " Full-Frame Effect", 210, false)
+    local frameEffect = b:CollapsibleSection(baseId .. "_full_frame", "Full-Frame Effect", 210, false)
     local few = BodyWidth(frameEffect)
     local effectCol = max(140, floor((few - 68) / 3))
     local effectGap = 10
@@ -1971,7 +1980,7 @@ local function BuildUnitStyle(ctx, b, scope)
     EffectSlider("Thickness", 2, -96, 1, 16, 1, "Thickness", 2, "AURAS3_LANE_FRAME_EFFECT_THICKNESS")
     EffectSlider("Priority", 0, -150, 1, 10, 1, "Priority", 5, "AURAS3_LANE_FRAME_EFFECT_PRIORITY")
 
-    local behavior = b:CollapsibleSection(baseId .. "_behavior", LaneTitle(lane) .. " Ordering", 156, false)
+    local behavior = b:CollapsibleSection(baseId .. "_behavior", "Ordering", 156, false)
     local bw = BodyWidth(behavior)
     local sortMethod = BindStyleDropdown(behavior, "Sort By", 24, -48, AuraSortMethodValues(lane), bw - 48,
         ReadScopeSortMethod, WriteScopeSortMethod, "AURAS3_SORT_METHOD")
@@ -2050,7 +2059,7 @@ local function BuildGroupStyle(ctx, b, scope)
 
     refreshMiniPreview = BuildAuraStylePreviewWorkbench(ctx, b, scope, lane)
 
-    local features = b:CollapsibleSection(baseId .. "_features", LaneTitle(lane) .. " Basics", 186 + extraDebuffControls, true)
+    local features = b:CollapsibleSection(baseId .. "_features", "Basics", 186 + extraDebuffControls, true)
     local fw = BodyWidth(features)
     BindGroupSwitch(ctx, features, "Show Cooldown Text", 24, -44, fw - 48, scope, lane, "showCooldown", true, "visual", RefreshStylePreview)
     BindGroupSwitch(ctx, features, "Show Cooldown Swipe", 24, -74, fw - 48, scope, lane, "showCooldownSwipe", true, "visual", RefreshStylePreview)
@@ -2067,12 +2076,14 @@ local function BuildGroupStyle(ctx, b, scope)
             AuraControlMeta(ctx, "group-style.lane." .. AuraCatalogToken(lane) .. ".dispel-border-mode"))
     end
 
-    local cooldown = b:CollapsibleSection(baseId .. "_cooldown", LaneTitle(lane) .. " Cooldown Text", 336, true)
+    local cooldown = b:CollapsibleSection(baseId .. "_cooldown", "Cooldown Text", 336, true)
     if W.AttachContextColorShortcut then
         W.AttachContextColorShortcut(cooldown, {
             title = LaneTitle(lane) .. " Cooldown Text Settings",
             historyLabel = "Group aura cooldown text color",
             historySource = "menu:group-auras-cooldown-text-color",
+            scopeTag = "Shared",
+            note = AURA_SHARED_COLOR_NOTE,
             textSettings = {
                 scope = "shared",
                 kind = "aura",
@@ -2106,9 +2117,11 @@ local function BuildGroupStyle(ctx, b, scope)
     local groupDecimal = BindGroupSlider(ctx, cooldown, "Decimals below sec", 24, -288, 0, 30, 1, cw - 48, scope, lane, "cooldownDecimalSeconds", 3, "visual", RefreshStylePreview)
     AddTooltip(groupDecimal, "Cooldown text format", "Remaining time below this value uses one decimal place. Timers show unitless seconds below 1 minute and localized minutes above it. Set 0 for whole seconds only.")
 
-    local durationBar = b:CollapsibleSection(baseId .. "_duration_bar", LaneTitle(lane) .. " Duration Bar", 322, false)
+    local durationBar = b:CollapsibleSection(baseId .. "_duration_bar", "Duration Bar", 322, false)
     W.AttachContextColorReferences(durationBar, AURA_DURATION_BAR_COLOR_REFERENCES, {
         title = LaneTitle(lane) .. " Duration Bar Color",
+        scopeTag = "Shared",
+        note = AURA_SHARED_COLOR_NOTE,
     })
     local dbw = BodyWidth(durationBar)
     BindGroupSwitch(ctx, durationBar, "Show Duration Bar", 24, -48, dbw - 48, scope, lane, "showDurationBar", false, "visual", RefreshStylePreview)
@@ -2117,12 +2130,14 @@ local function BuildGroupStyle(ctx, b, scope)
     BindGroupDropdown(ctx, durationBar, "Position", 24, -220, DURATION_BAR_POSITION_VALUES, dbw - 48, scope, lane, "durationBarPosition", "BOTTOM", "visual", RefreshStylePreview)
     BindGroupDropdown(ctx, durationBar, "Fill Mode", 24, -278, DURATION_BAR_DIRECTION_VALUES, dbw - 48, scope, lane, "durationBarDirection", "REMAINING", "visual", RefreshStylePreview)
 
-    local stack = b:CollapsibleSection(baseId .. "_stack", LaneTitle(lane) .. " Stack Count", 270, false)
+    local stack = b:CollapsibleSection(baseId .. "_stack", "Stack Count", 270, false)
     if W.AttachContextColorShortcut then
         W.AttachContextColorShortcut(stack, {
             title = LaneTitle(lane) .. " Stack Text Settings",
             historyLabel = "Group aura stack text color",
             historySource = "menu:group-auras-stack-text-color",
+            scopeTag = "Shared",
+            note = AURA_SHARED_COLOR_NOTE,
             textSettings = {
                 scope = "shared",
                 kind = "aura",
@@ -2144,7 +2159,7 @@ local function BuildGroupStyle(ctx, b, scope)
     BindGroupSlider(ctx, stack, "Stack X", 24, -210, -40, 40, 1, stackSmallW, scope, lane, "stackX", 0, "geometry", RefreshStylePreview)
     BindGroupSlider(ctx, stack, "Stack Y", 32 + stackSmallW, -210, -40, 40, 1, stackSmallW, scope, lane, "stackY", 0, "geometry", RefreshStylePreview)
 
-    local behavior = b:CollapsibleSection(baseId .. "_behavior", LaneTitle(lane) .. " Ordering", 216, false)
+    local behavior = b:CollapsibleSection(baseId .. "_behavior", "Ordering", 216, false)
     local bw = BodyWidth(behavior)
     local groupSortMethod = BindGroupDropdown(ctx, behavior, "Sort By", 24, -48, AuraSortMethodValues(lane), bw - 48,
         scope, lane, "sortMethod", "DEFAULT", "visual")
@@ -2258,9 +2273,11 @@ local function RefreshCustomPreviewEffect(box, item)
     edges[3]:SetPoint("TOPLEFT", box, "TOPLEFT", 1, -1); edges[3]:SetPoint("BOTTOMLEFT", box, "BOTTOMLEFT", 1, 1); edges[3]:SetWidth(thickness)
     edges[4]:SetPoint("TOPRIGHT", box, "TOPRIGHT", -1, -1); edges[4]:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -1, 1); edges[4]:SetWidth(thickness)
 end
+local function CustomStyleSectionId(index, suffix)
+    return "aura_style_custom_" .. tostring(index or 1) .. "_" .. tostring(suffix or "section")
+end
 local function BuildCustomAuraStylePreview(ctx, b, scope, index)
-    local label = index == 4 and "Dots on target" or ("Custom " .. tostring(index))
-    local section = b:Section(label .. " Preview", 452)
+    local section = b:CollapsibleSection(CustomStyleSectionId(index, "preview"), "Preview", 452, true)
     local w = section._msuf2Width or b.width or 720
     local liveRefresh = select(2, BuildLiveAuraPreview(ctx, section, scope, "custom" .. tostring(index), 24, -34, w - 48, 176))
     local dummyBox, dummyRefresh = BuildMiniAuraPreview(ctx, section, scope, 24, -220, w - 48, 176, nil, {
@@ -2662,12 +2679,6 @@ local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
                 set = function(v)
                     if type(Model.WriteLaneAnchor) == "function" then
                         Model.WriteLaneAnchor(unit, kind, v)
-                        ApplyUnit(ctx, unit, "AURAS3_UNIT_ANCHOR")
-                    end
-                end,
-                reset = function()
-                    if type(Model.WriteLaneAnchor) == "function" then
-                        Model.WriteLaneAnchor(unit, kind, defaultAnchor)
                         ApplyUnit(ctx, unit, "AURAS3_UNIT_ANCHOR")
                     end
                 end,
@@ -3079,7 +3090,7 @@ end
 
 local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
     local laneTitle = lane == "debuff" and "Debuff" or "Buff"
-    local section = b:Section(laneTitle .. " Blacklist", 250)
+    local section = b:Section(laneTitle .. " Blacklist", lane == "debuff" and 292 or 250)
     local groupActionPath = "group-workspace.scope." .. AuraCatalogToken(scope)
         .. ".lane." .. AuraCatalogToken(lane) .. ".blacklist"
     local w = section._msuf2Width or b.width or 720
@@ -3108,10 +3119,11 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
     local presetW = max(152, floor(inner * 0.22))
     local spellW = max(210, floor(inner * 0.30))
     local function CurrentPreset()
-        local key = M.auraBlacklistPreset or "RAID_BUFFS"
+        local defaultKey = lane == "debuff" and "SATED" or "RAID_BUFFS"
+        local key = M.auraBlacklistPreset or defaultKey
         local values = Model.BlacklistPresetValues()
         for i = 1, #values do if values[i].value == key then return key end end
-        return values[1] and values[1].value or "RAID_BUFFS"
+        return values[1] and values[1].value or defaultKey
     end
     local preset = W.Dropdown(section, "Preset", function() return Model.BlacklistPresetValues() end, presetW)
     W.MoveWidget(preset, section, 24, -92, presetW)
@@ -3206,6 +3218,11 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
             elseif row then row._spellID = nil; row:Hide() end
         end
     end)
+    if lane == "debuff" then
+        W.Text(section,
+            "Friendly debuffs: exact blocking is limited to Blizzard NeverSecret auras such as Sated/Exhaustion.",
+            24, -246, inner, T.colors.muted)
+    end
 end
 
 function M.BuildAuras3GroupLaneWorkspace(ctx, b, scope, lane, opts)
@@ -3672,12 +3689,14 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
     end
 
     if tool == "appearance" then
-        local section = b:Section(containerLabel .. " Icon Style", 292)
+        local section = b:CollapsibleSection(CustomStyleSectionId(index, "appearance"), "Icon Style", 292, true)
         if W.AttachContextColorShortcut then
             W.AttachContextColorShortcut(section, {
                 title = containerLabel .. " Text Settings",
                 historyLabel = "Custom aura cooldown text color",
                 historySource = "menu:custom-auras-cooldown-text-color",
+                scopeTag = "Shared",
+                note = AURA_SHARED_COLOR_NOTE,
                 textSettings = {
                     scope = "shared",
                     unit = unit,
@@ -3752,7 +3771,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
     end
 
     if tool == "effect" then
-        local section = b:Section(containerLabel .. " Full-Frame", 210)
+        local section = b:CollapsibleSection(CustomStyleSectionId(index, "full_frame"), "Full-Frame Effect", 210, false)
         local w = section._msuf2Width or b.width or 720
         local col3, gap = Grid(w, 3)
         BindDropdown(ctx, section, "Effect", 24, -34, CUSTOM_FRAME_EFFECTS, col3,
@@ -3859,5 +3878,5 @@ end
 M.RegisterPage("auras3_buffs", { title = "Aura Style: Buffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "buff") end, version = 23 })
 M.RegisterPage("auras3_debuffs", { title = "Aura Style: Debuffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "debuff") end, version = 23 })
 M.RegisterPage("auras3_custom", { title = "MSUF Auras", build = BuildMovedAuraPage, version = 2 })
-M.RegisterPage("auras3_styling", { title = "Aura Style", build = BuildAuraStylePage, version = 46 })
+M.RegisterPage("auras3_styling", { title = "Aura Style", build = BuildAuraStylePage, version = 47 })
 M.RegisterPage("auras3_filters", { title = "MSUF Auras", build = BuildMovedAuraPage, version = 31 })
