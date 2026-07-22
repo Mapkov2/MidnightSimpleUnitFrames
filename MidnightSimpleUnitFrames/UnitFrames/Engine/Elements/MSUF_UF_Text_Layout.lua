@@ -23,6 +23,7 @@ local GetLayerBaseLevel = Text.GetLayerBaseLevel
 local Layers = UF and UF.Layers or {}
 local SetFrameLevelCached = Text.SetFrameLevelCached
 local SetShownCached = Text.SetShownCached
+local SetTextCached = Text.SetTextCached
 local SetFont = Text.SetFont
 local SetNameTextColor = Text.SetNameTextColor
 local NameTextColor = Text.NameTextColor
@@ -679,6 +680,72 @@ local function EnsureFontString(frame, key, template, layer, fallback, layerFiel
   return fs, changed
 end
 
+local function EnsureNameAnchorProxy(frame, spec)
+  if not frame then return false end
+  local text = spec and spec.text or {}
+  local shortenMax = text.nameShorten == true and tonumber(text.nameShortenMax) or 0
+  local clipped = text.nameLegacyTruncation ~= true and shortenMax and shortenMax > 0
+  local active = frame._msufNameRelativeStatus == true
+    and spec and spec.showName ~= false
+    and text.anchorToBars == true
+    and text.directLayout ~= true
+    and not clipped
+  local proxy = frame._msufNameAnchorText
+
+  if not active then
+    local changed = frame._msufNameAnchorTextActive == true
+    frame._msufNameAnchorTextActive = nil
+    if proxy then
+      if changed and SetTextCached then SetTextCached(proxy, "") end
+      SetShownCached(proxy, false)
+    end
+    return changed
+  end
+
+  local created
+  proxy, created = EnsureFontString(frame, "_msufNameAnchorText", "GameFontNormal", text.nameLayer, 5, "MSUFNameTextLayer")
+  if not proxy then return false end
+  local wasActive = frame._msufNameAnchorTextActive == true
+  frame._msufNameAnchorTextActive = true
+
+  SetFont(proxy, spec, spec and spec.nameFontSize, "name")
+  if proxy._msufNameAnchorNoWrap ~= true then
+    if proxy.SetWordWrap then proxy:SetWordWrap(false) end
+    if proxy.SetNonSpaceWrap then proxy:SetNonSpaceWrap(false) end
+    proxy._msufNameAnchorNoWrap = true
+  end
+  if proxy._msufNameAnchorWidth ~= 0 then
+    proxy:SetWidth(0)
+    proxy._msufNameAnchorWidth = 0
+  end
+  if proxy.SetAlpha and proxy._msufNameAnchorAlpha ~= 0 then
+    proxy:SetAlpha(0)
+    proxy._msufNameAnchorAlpha = 0
+  end
+
+  local health = text.nameAnchorToFrame == true and frame or BarTextHealthAnchor(frame)
+  local anchor = text.nameAnchor or "LEFT"
+  local x = tonumber(text.nameX) or 0
+  local y = tonumber(text.nameY) or 0
+  if anchor == "CENTER" then
+    LayoutText(proxy, "CENTER", "CENTER", x, y, "CENTER", health)
+  elseif anchor == "RIGHT" then
+    LayoutText(proxy, "RIGHT", "RIGHT", -3 + x, y, "RIGHT", health)
+  else
+    LayoutText(proxy, "LEFT", "LEFT", 3 + x, y, "LEFT", health)
+  end
+  SetShownCached(proxy, true)
+
+  -- This is a secret-safe pass-through: no comparison, measurement, or Lua
+  -- arithmetic is performed on the unit name.
+  if not wasActive and frame.nameText and frame.nameText.GetText and SetTextCached then
+    SetTextCached(proxy, frame.nameText:GetText())
+  end
+  return created or not wasActive
+end
+
+Text.EnsureNameAnchorProxy = EnsureNameAnchorProxy
+
 function Text.GetEvents()
   return EMPTY_EVENTS
 end
@@ -835,7 +902,7 @@ local function RefreshAppliedTextColors(frame, spec, text)
 end
 
 local FONT_EPOCH_TEXT_FIELDS = {
-  "nameText", "raidGroupNameText", "totInlineSep", "totInlineText",
+  "nameText", "_msufNameAnchorText", "raidGroupNameText", "totInlineSep", "totInlineText",
   "hpTextLeft", "hpTextCenter", "hpTextRight",
   "powerTextLeft", "powerTextCenter", "powerTextRight",
   "levelText", "classificationIndicatorText", "statusIndicatorText", "statusIndicatorOverlayText",
@@ -864,6 +931,7 @@ function Text.Apply(frame, spec)
     InvalidateTextForFontEpoch(frame)
   end
   local sinksChanged, sinksReady = EnsureConfiguredTextSinks(frame, spec)
+  sinksChanged = EnsureNameAnchorProxy(frame, spec) or sinksChanged
   local layoutRevision = spec and spec._msufTextLayoutRevision
   if frame._msufGFPreviewDetached ~= true
     and not sinksChanged

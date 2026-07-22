@@ -20,6 +20,7 @@ local InCombatLockdown = Text.InCombatLockdown
 local UnitName = Text.UnitName
 local ReadDisplayName = UnitName
 local GetTime = Text.GetTime
+local C_Timer = _G.C_Timer
 local PowerColor = Text.PowerColor
 local SetShownCached = Text.SetShownCached
 local SetTextCached = Text.SetTextCached
@@ -47,13 +48,12 @@ local UpdateTextSlotsPlain = Text.UpdateTextSlotsPlain or UpdateTextSlots
 local UpdateTextSlotsSecret = Text.UpdateTextSlotsSecret or UpdateTextSlots
 local ResolveHealthTextModes = Text.ResolveHealthTextModes
 local AnchorInlineToName = Text.AnchorInlineToName
-local RefreshNameRelativeStatusAnchors = MSUF.UFStatusRuntime and MSUF.UFStatusRuntime.RefreshNameRelativeAnchors
 local EMPTY_EVENTS = Text.EMPTY_EVENTS
 local POWER_EVENTS = Text.POWER_EVENTS
 local POWER_EVENTS_FREQUENT = Text.POWER_EVENTS_FREQUENT
 local POWER_TEXT_MAX_EVENTS = { "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" }
 local POWER_TEXT_VALUE_META_EVENTS = { "UNIT_POWER_UPDATE", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" }
-local POWER_TEXT_VALUE_META_EVENTS_FREQUENT = { "UNIT_POWER_UPDATE", "UNIT_POWER_FREQUENT", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" }
+local POWER_TEXT_VALUE_META_EVENTS_FREQUENT = { "UNIT_POWER_FREQUENT", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" }
 local GROUP_LIFECYCLE_EVENTS = { "PARTY_MEMBER_ENABLE", "PARTY_MEMBER_DISABLE" }
 local POWER_IDENTITY_EVENTS = {
   PARTY_MEMBER_ENABLE = true,
@@ -65,6 +65,110 @@ local POWER_IDENTITY_EVENTS = {
   MSUF_GF_UNIT_IDENTITY = true,
   MSUF_GF_UNIT_STRUCTURE = true,
 }
+
+-- Match oUF's 250 ms text cadence with one shared, combat-window ticker. The
+-- queue retains frames only; restricted event payloads are always reread when
+-- the batch drains, while latest plain values already owned by a bar may be
+-- reused.
+local TEXT_DIRTY_HEALTH = 1
+local TEXT_DIRTY_POWER = 2
+local TEXT_DIRTY_BOTH = 3
+local TEXT_DIRTY_DELAY = 0.25
+local dirtyTextQueueA, dirtyTextQueueB = {}, {}
+local dirtyTextWriteQueue = dirtyTextQueueA
+local dirtyTextWriteCount = 0
+local dirtyTextTicker
+local FlushDirtyText
+local UpdateHealthTextValues
+local UpdatePowerTextValues
+
+local function ClearDirtyTextBit(frame, bit)
+  if not frame then return end
+  local mask = frame._msufTextDirtyMask
+  if mask == TEXT_DIRTY_BOTH then
+    frame._msufTextDirtyMask = bit == TEXT_DIRTY_HEALTH and TEXT_DIRTY_POWER or TEXT_DIRTY_HEALTH
+  elseif mask == bit then
+    frame._msufTextDirtyMask = nil
+  end
+end
+
+local function ClearDirtyTextDispatch(frame, mask)
+  local rt = frame and frame._msufTextRuntime
+  if not rt then return end
+  if mask == TEXT_DIRTY_HEALTH or mask == TEXT_DIRTY_BOTH then
+    rt._dispatchHealthPercent = nil
+    rt._dispatchHealthPercentReady = nil
+    rt._dispatchHealthMissing = nil
+    rt._dispatchHealthMissingReady = nil
+  end
+  if mask == TEXT_DIRTY_POWER or mask == TEXT_DIRTY_BOTH then
+    rt._dispatchPowerPercent = nil
+    rt._dispatchPowerPercentReady = nil
+  end
+end
+
+local function CancelDirtyTextFrame(frame, mask, preserveDispatch)
+  if not frame then return end
+  if mask == TEXT_DIRTY_HEALTH or mask == TEXT_DIRTY_POWER then
+    ClearDirtyTextBit(frame, mask)
+    if preserveDispatch ~= true then ClearDirtyTextDispatch(frame, mask) end
+  else
+    frame._msufTextDirtyMask = nil
+    if preserveDispatch ~= true then ClearDirtyTextDispatch(frame, TEXT_DIRTY_BOTH) end
+  end
+end
+
+local function ArmDirtyTextTimer()
+  if not dirtyTextTicker then
+    dirtyTextTicker = C_Timer.NewTicker(TEXT_DIRTY_DELAY, FlushDirtyText)
+  end
+end
+
+local function MarkDirtyText(frame, bit)
+  if not frame then return end
+  local mask = frame._msufTextDirtyMask
+  if mask == nil then
+    frame._msufTextDirtyMask = bit
+  elseif mask ~= bit then
+    frame._msufTextDirtyMask = TEXT_DIRTY_BOTH
+  end
+  if frame._msufTextDirtyQueued == true then return end
+  frame._msufTextDirtyQueued = true
+  dirtyTextWriteCount = dirtyTextWriteCount + 1
+  dirtyTextWriteQueue[dirtyTextWriteCount] = frame
+  ArmDirtyTextTimer()
+end
+
+local function MarkHealthTextDirty(frame)
+  MarkDirtyText(frame, TEXT_DIRTY_HEALTH)
+  -- The bar route may have published a restricted percent for a synchronous
+  -- text writer. A deferred marker must never retain that event payload.
+  ClearDirtyTextDispatch(frame, TEXT_DIRTY_HEALTH)
+end
+
+local function MarkPowerTextDirty(frame)
+  MarkDirtyText(frame, TEXT_DIRTY_POWER)
+  ClearDirtyTextDispatch(frame, TEXT_DIRTY_POWER)
+end
+
+local function DirtyTextFrameVisible(frame)
+  local visible = UF.FrameVisibleForEvent
+  if type(visible) == "function" then return visible(frame) end
+  if frame._msufCoreSpecEnabled == false or frame._msufCoreVisible == false then return false end
+  return true
+end
+
+local function DirtyTextFrameState(frame)
+  if not frame or not DirtyTextFrameVisible(frame) then return false end
+  local attached = UF.attachedFrames
+  if type(attached) == "table" and attached[frame] ~= true then return false end
+  local active = frame._msufActiveElements
+  local rt = frame._msufTextRuntime
+  if not (rt and type(active) == "table") then return false end
+  local unit = frame.MSUFUnitKey or frame.unit
+  if unit == nil then return false end
+  return rt, unit, active
+end
 
 local function IsFiniteNumber(value)
   return type(value) == "number" and value == value and (value - value) == 0
@@ -615,10 +719,10 @@ function Text.UpdateInline(frame, event, unit)
   SetInlineTextColor(frame, InlineTextColor(frame, inlineUnit, inline))
 end
 
-local function RefreshNameRelativeStatus(frame)
-  if frame and frame._msufNameRelativeStatus == true and RefreshNameRelativeStatusAnchors then
-    RefreshNameRelativeStatusAnchors(frame)
-  end
+local function SetNameTextCached(frame, value)
+  SetTextCached(frame.nameText, value)
+  local proxy = frame._msufNameAnchorTextActive == true and frame._msufNameAnchorText
+  if proxy then SetTextCached(proxy, value) end
 end
 
 -- Native 5.73 Group Frames shortened the actual UTF-8 name and only added
@@ -676,8 +780,7 @@ function Text.UpdateName(frame, event, unit)
     frame._msufNameStatusUnit = nil
     frame._msufNameStatusHidden = nil
     frame._msufNameTextUnit = nil
-    SetTextCached(frame.nameText, "")
-    RefreshNameRelativeStatus(frame)
+    SetNameTextCached(frame, "")
     frame.nameText._msufShown = nil
     SetShownCached(frame.nameText, false)
     return
@@ -689,8 +792,7 @@ function Text.UpdateName(frame, event, unit)
     frame._msufNameStatusHidden = nil
     frame.nameText._msufShown = nil
     SetShownCached(frame.nameText, true)
-    SetTextCached(frame.nameText, TruncateLegacyGroupName(previewName, rt))
-    RefreshNameRelativeStatus(frame)
+    SetNameTextCached(frame, TruncateLegacyGroupName(previewName, rt))
     frame._msufNameTextUnit = unit
     Text.UpdateNameColor(frame, event, unit)
     return
@@ -699,8 +801,7 @@ function Text.UpdateName(frame, event, unit)
     frame._msufNameStatusUnit = nil
     frame._msufNameStatusHidden = nil
     frame._msufNameTextUnit = nil
-    SetTextCached(frame.nameText, "")
-    RefreshNameRelativeStatus(frame)
+    SetNameTextCached(frame, "")
     frame.nameText._msufShown = nil
     SetShownCached(frame.nameText, false)
     return
@@ -735,8 +836,7 @@ function Text.UpdateName(frame, event, unit)
     frame._msufNameStatusHidden = hidden
     if hidden then
       frame._msufNameTextUnit = nil
-      SetTextCached(frame.nameText, "")
-      RefreshNameRelativeStatus(frame)
+      SetNameTextCached(frame, "")
       frame.nameText._msufShown = nil
       SetShownCached(frame.nameText, false)
       return
@@ -756,8 +856,7 @@ function Text.UpdateName(frame, event, unit)
     Text.UpdateNameColor(frame, event, unit)
     return
   end
-  SetTextCached(frame.nameText, TruncateLegacyGroupName(ReadDisplayName(unit), rt))
-  RefreshNameRelativeStatus(frame)
+  SetNameTextCached(frame, TruncateLegacyGroupName(ReadDisplayName(unit), rt))
   frame._msufNameTextUnit = unit
   Text.UpdateNameColor(frame, event, unit)
 end
@@ -1193,8 +1292,10 @@ end
 
 Text.RuntimeHotFunctions = {
   healthHot = UpdateHealthRuntime,
+  healthDirty = MarkHealthTextDirty,
   absorbHot = UpdateAbsorbRuntime,
   powerHot = UpdatePowerRuntime,
+  powerDirty = MarkPowerTextDirty,
 }
 
 Text.UpdateHealth = UpdateHealthRuntime
@@ -1632,7 +1733,8 @@ function HealthText.GetUnitlessEvents(frame, spec)
   return HealthTextEnabled(spec) and spec and spec.scope == "group" and GROUP_LIFECYCLE_EVENTS or EMPTY_EVENTS
 end
 
-local function UpdateHealthTextValues(frame, event, unit, hp, hpMax)
+UpdateHealthTextValues = function(frame, event, unit, hp, hpMax)
+  CancelDirtyTextFrame(frame, TEXT_DIRTY_HEALTH, true)
   local rt = frame and frame._msufTextRuntime
   if rt and rt.healthColorByClass == true and event ~= "UNIT_HEALTH" then
     UpdateHealthTextColor(frame, rt, unit or frame.MSUFUnitKey)
@@ -1674,7 +1776,11 @@ end
 
 function HealthText.SelectEventUpdate(frame, spec, event, update)
   if event == "UNIT_ABSORB_AMOUNT_CHANGED" then return UpdateAbsorbRuntime end
-  if event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" or event == "UNIT_NAME_UPDATE" then
+  if event == "UNIT_HEALTH" then
+    local rt = frame and frame._msufTextRuntime
+    return rt and rt.healthDirty or MarkHealthTextDirty
+  end
+  if event == "UNIT_MAXHEALTH" or event == "UNIT_NAME_UPDATE" then
     return UpdateHealthTextValues
   end
   return update
@@ -1683,6 +1789,7 @@ end
 HealthText.Update = UpdateHealthTextAll
 
 function HealthText.Disable(frame)
+  CancelDirtyTextFrame(frame, TEXT_DIRTY_HEALTH)
   SetShownCached(frame and frame.hpTextLeft, false)
   SetShownCached(frame and frame.hpTextCenter, false)
   SetShownCached(frame and frame.hpTextRight, false)
@@ -1709,7 +1816,8 @@ function PowerText.GetEvents(frame, spec)
   return spec and spec.power and spec.power.frequent == true and POWER_EVENTS_FREQUENT or POWER_EVENTS
 end
 
-function PowerText.Update(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
+UpdatePowerTextValues = function(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
+  CancelDirtyTextFrame(frame, TEXT_DIRTY_POWER, true)
   local rt = frame and frame._msufTextRuntime
   local percentFn = rt and rt.powerHotFromPercent
   if percentFn then
@@ -1731,12 +1839,105 @@ function PowerText.Update(frame, event, unit, power, powerMax, powerType, powerT
   end
   return Text.UpdatePower(frame, event, unit or frame.MSUFUnitKey, power, powerMax, powerType, powerToken, powerMetaChanged)
 end
+PowerText.Update = UpdatePowerTextValues
+
+function PowerText.SelectEventUpdate(frame, spec, event, update)
+  if event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT" then
+    local rt = frame and frame._msufTextRuntime
+    return rt and rt.powerDirty or MarkPowerTextDirty
+  end
+  return update
+end
 
 function PowerText.Disable(frame)
+  CancelDirtyTextFrame(frame, TEXT_DIRTY_POWER)
   SetShownCached(frame and frame.powerTextLeft, false)
   SetShownCached(frame and frame.powerTextCenter, false)
   SetShownCached(frame and frame.powerTextRight, false)
 end
+
+FlushDirtyText = function()
+  if dirtyTextWriteCount == 0 then
+    local ticker = dirtyTextTicker
+    dirtyTextTicker = nil
+    if ticker then ticker:Cancel() end
+    return
+  end
+  local batch = dirtyTextWriteQueue
+  local count = dirtyTextWriteCount
+  dirtyTextWriteQueue = batch == dirtyTextQueueA and dirtyTextQueueB or dirtyTextQueueA
+  dirtyTextWriteCount = 0
+
+  for i = 1, count do
+    local frame = batch[i]
+    batch[i] = nil
+    if frame and frame._msufTextDirtyQueued == true then
+      frame._msufTextDirtyQueued = nil
+      local mask = frame._msufTextDirtyMask
+      frame._msufTextDirtyMask = nil
+      local rt, unit, active = DirtyTextFrameState(frame)
+      if rt then
+        if (mask == TEXT_DIRTY_HEALTH or mask == TEXT_DIRTY_BOTH)
+          and active.HealthText == true and (rt.healthSlotCount or 0) > 0 then
+          -- No event payload is retained. Force max-dependent modes to resolve
+          -- the authoritative value at drain time rather than reusing a cache
+          -- that may predate the dirty window.
+          frame._msufTextHealthMaxReady = nil
+          local bar = frame.hpBar or frame.Health
+          local pct = bar and bar._msufHealthPercentValue
+          if (rt.healthNeedsPercent == true or rt.healthColorByHealth == true)
+            and bar
+            and bar._msufHealthPercentUnit == unit
+            and pct ~= nil
+            and issecretvalue(pct) ~= true then
+            -- The Health element already read this latest plain percentage for
+            -- the same unit. Share it with the deferred writer just as the
+            -- synchronous route does; opaque values never enter this cache.
+            rt._dispatchHealthPercent = pct
+            rt._dispatchHealthPercentReady = true
+          end
+          UpdateHealthTextValues(frame, "UNIT_HEALTH", unit, nil, nil)
+        elseif mask == TEXT_DIRTY_HEALTH or mask == TEXT_DIRTY_BOTH then
+          ClearDirtyTextDispatch(frame, TEXT_DIRTY_HEALTH)
+        end
+        if (mask == TEXT_DIRTY_POWER or mask == TEXT_DIRTY_BOTH)
+          and active.PowerText == true and (rt.powerSlotCount or 0) > 0 then
+          local bar = frame.targetPowerBar
+          local power, powerMax
+          if bar and bar._msufShown == true then
+            local cachedPower = bar._msufPowerValue
+            if rt.powerNeedsCurrent == true
+              and bar._msufPowerValueUnit == unit
+              and cachedPower ~= nil
+              and issecretvalue(cachedPower) ~= true then
+              power = cachedPower
+            end
+            local cachedMax = bar._msufPowerMax
+            if rt.powerNeedsMax == true
+              and bar._msufPowerMaxReady == true
+              and bar._msufPowerMaxUnit == unit
+              and cachedMax ~= nil
+              and issecretvalue(cachedMax) ~= true then
+              powerMax = cachedMax
+            end
+          end
+          UpdatePowerTextValues(frame, "UNIT_POWER_UPDATE", unit, power, powerMax, nil, nil, false)
+        elseif mask == TEXT_DIRTY_POWER or mask == TEXT_DIRTY_BOTH then
+          ClearDirtyTextDispatch(frame, TEXT_DIRTY_POWER)
+        end
+      else
+        ClearDirtyTextDispatch(frame, mask)
+      end
+    end
+  end
+
+  -- New work queued during the drain already shares the active ticker.
+end
+
+HealthText.MarkValueDirty = MarkHealthTextDirty
+PowerText.MarkValueDirty = MarkPowerTextDirty
+HealthText.NoDispatchUpdates = { [MarkHealthTextDirty] = true }
+PowerText.NoDispatchUpdates = { [MarkPowerTextDirty] = true }
 
 UF.RegisterElement("PowerText", PowerText)
 
