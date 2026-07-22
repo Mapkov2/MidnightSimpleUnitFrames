@@ -258,7 +258,7 @@ local unitlessIndexByEvent = {}
 local unitlessCountByEvent = {}
 local unitlessRegistered = {}
 
-local function RunTargetedReadyCheckConfirm(frame, unit, event, registered, live)
+local function RunTargetedUnitlessStatus(frame, unit, event, registered, live)
   if frame and (not live or live[frame] == true) then
     local active = frame._msufActiveElements
     if active and active.GroupStatusRuntime == true and registered and registered[frame] then
@@ -281,15 +281,17 @@ local function EnsureUnitlessDriver()
     end
     local live = GF and GF.frames
 
-    -- READY_CHECK_CONFIRM carries the affected unit token. Updating only that
-    -- frame avoids broadcasting every confirmation across the entire raid.
-    -- READY_CHECK and READY_CHECK_FINISHED remain intentional broadcasts.
-    if event == "READY_CHECK_CONFIRM" and type(unitTarget) == "string" then
+    -- These unitless registrations still carry the affected unit token. Route
+    -- them through the group index instead of broadcasting AFK/DND or ready
+    -- state changes across every raid frame. Their start/finished counterparts
+    -- remain intentional broadcasts.
+    if (event == "READY_CHECK_CONFIRM" or event == "PLAYER_FLAGS_CHANGED")
+      and type(unitTarget) == "string" then
       local registered = unitlessIndexByEvent[event]
       local duplicateBucket = GF and GF.priorityUnitFrames and GF.priorityUnitFrames[unitTarget]
       local forEach = GF and GF.ForEachFrameForUnit
       if duplicateBucket and type(forEach) == "function" then
-        if forEach(unitTarget, RunTargetedReadyCheckConfirm, event, registered, live) == true then
+        if forEach(unitTarget, RunTargetedUnitlessStatus, event, registered, live) == true then
           return
         end
         -- A stale duplicate index falls through to the correctness broadcast.

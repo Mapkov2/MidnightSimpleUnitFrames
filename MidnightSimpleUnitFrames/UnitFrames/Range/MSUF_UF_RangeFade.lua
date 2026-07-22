@@ -21,7 +21,7 @@ local Range = UF.Range or {}
 UF.Range = Range
 
 local CreateFrame = _G.CreateFrame
-local C_Timer = _G.C_Timer
+local NewTimer = _G.C_Timer.NewTimer
 local UnitCanAssist = _G.UnitCanAssist
 local UnitCanAttack = _G.UnitCanAttack
 local UnitIsDeadOrGhost = _G.UnitIsDeadOrGhost
@@ -159,6 +159,7 @@ local activeCount = 0
 local pollCount = 0
 local pollQueued = false
 local pollNextAt
+local pollTimer
 local pollSetDirty = true
 local targetChecked = 0
 local targetInRange = 0
@@ -682,17 +683,26 @@ local function PollInterval()
   return 2.00
 end
 
+local function CancelPollTimer()
+  if pollTimer then
+    pollTimer:Cancel()
+  end
+  pollTimer = nil
+  pollQueued = false
+  pollNextAt = nil
+end
+
 local function PollTimerCallback()
+  pollTimer = nil
   if not pollQueued then return end
   if RangePollCombatBlocked() then
-    pollQueued = false
-    pollNextAt = nil
+    CancelPollTimer()
     pollSettlePending = false
     return
   end
   local now = GetTime and GetTime() or 0
   if pollNextAt and now < pollNextAt then
-    C_Timer.After(pollNextAt - now, PollTimerCallback)
+    pollTimer = NewTimer(pollNextAt - now, PollTimerCallback)
     return
   end
   pollQueued = false
@@ -706,7 +716,7 @@ local function SchedulePoll(delay)
   pollQueued = true
   delay = delay or PollInterval()
   pollNextAt = (GetTime and GetTime() or 0) + delay
-  C_Timer.After(delay, PollTimerCallback)
+  pollTimer = NewTimer(delay, PollTimerCallback)
 end
 
 local function RebuildPollSet()
@@ -716,8 +726,7 @@ local function RebuildPollSet()
     for i = 1, #pollUnits do
       pollUnits[i] = nil
     end
-    pollQueued = false
-    pollNextAt = nil
+    CancelPollTimer()
     pollSettlePending = false
     return
   end
@@ -731,8 +740,7 @@ local function RebuildPollSet()
     pollUnits[i] = nil
   end
   if pollCount <= 0 then
-    pollQueued = false
-    pollNextAt = nil
+    CancelPollTimer()
     return
   end
   SchedulePoll()
@@ -802,6 +810,11 @@ local function ScheduleFocusTargetRange()
 end
 
 local function RangeFrameOnShow(self)
+  -- HookScript cannot be removed after a frame has used RangeFade. Keep the
+  -- permanent hook inert once the element is disabled; otherwise every later
+  -- parent visibility transition rebuilds the player's spell cache and wakes
+  -- the shared runtime despite having no active range consumer.
+  if not FrameRangeActive(self) then return end
   SetFrameDriverActive(self, true)
   if not spellsBuilt then
     RebuildSpells()
@@ -938,9 +951,10 @@ local function DriverOnEvent(source, event, unit, a, b, c)
       SchedulePoll()
     else
       pollSettlePending = false
-      -- Do not logically cancel an already queued C_Timer.After callback.
-      -- Reusing it if movement restarts avoids overlapping timer generations;
-      -- if the player stays still, that one callback retires itself.
+      -- The edge evaluation above is the final settled value. Native
+      -- NewTimer handles let the sparse movement poll disappear immediately
+      -- instead of waking once more after movement has stopped.
+      if pollTimer then CancelPollTimer() end
     end
     return
   end
@@ -978,7 +992,7 @@ local function DriverOnEvent(source, event, unit, a, b, c)
   elseif unit and activeUnits[unit] then
     if unit == "target" then
       TargetRefresh(true)
-    elseif event == "UNIT_IN_RANGE_UPDATE" and ApplyUnitInRangeEvent(unit, a, true) then
+    elseif event == "UNIT_IN_RANGE_UPDATE" and ApplyUnitInRangeEvent(unit, a) then
       return
     else
       EvaluateUnit(unit, true)
@@ -1191,8 +1205,8 @@ SyncRuntime = function()
   spellsBuilt = false
   MarkTargetSpellSyncDirty()
   pollCount = 0
-  pollQueued = false
-  pollNextAt = nil
+  CancelPollTimer()
+  pollSettlePending = false
   UnregisterDriver()
 end
 

@@ -286,15 +286,6 @@ local function UpdateFocus(frame, cfg, showOverride)
     "focus", "MSUFGFFocusEdges", "_msufGFFocusVisualShown", showOverride)
 end
 
-local function AuraVisualTarget(frame, onHealth)
-  local health = frame and (frame.hpBar or frame.Health or frame.health)
-  if not health then return nil end
-  if onHealth ~= false then
-    return health.GetStatusBarTexture and health:GetStatusBarTexture() or nil
-  end
-  return health
-end
-
 local function LayoutAuraVisual(tex, target, edge, size)
   if not (tex and target) then return end
   edge = edge or "FULL"
@@ -343,24 +334,6 @@ local function EnsureAuraTexture(frame, key)
   return tex
 end
 
-local function UpdateDispelOverlay(frame, cfg)
-  local tex = frame and frame.MSUFGFDispelOverlay
-  if not (cfg and cfg.dispelOverlayEnabled == true and frame and frame._msufA3DispelOverlayActive == true) then
-    SetShown(tex, false)
-    return
-  end
-  tex = tex or EnsureAuraTexture(frame, "MSUFGFDispelOverlay")
-  if not tex then return end
-  local target = AuraVisualTarget(frame, cfg.dispelOverlayOnHealth)
-  LayoutAuraVisual(tex, target, cfg.dispelOverlayStyle or "FULL", cfg.highlightThickness or 3)
-  SetColorTextureCached(tex,
-    frame._msufA3DispelOverlayR or frame._msufA3DispelR or 0.25,
-    frame._msufA3DispelOverlayG or frame._msufA3DispelG or 0.75,
-    frame._msufA3DispelOverlayB or frame._msufA3DispelB or 1,
-    cfg.dispelOverlayAlpha or 0.35)
-  SetShown(tex, true)
-end
-
 local function UpdateDebuffStripe(frame, cfg)
   local tex = frame and frame.MSUFGFDebuffStripe
   if not (cfg and cfg.debuffStripeEnabled == true and frame and frame._msufA3DebuffStripeActive == true) then
@@ -378,15 +351,6 @@ local function UpdateDebuffStripe(frame, cfg)
     frame._msufA3DebuffStripeB or cfg.debuffStripeColorB or 0.2,
     frame._msufA3DebuffStripeA or cfg.debuffStripeAlpha or 0.6)
   SetShown(tex, true)
-end
-
-local function UpdateAuraVisuals(frame, cfg)
-  UpdateDispelOverlay(frame, cfg)
-  UpdateDebuffStripe(frame, cfg)
-end
-
-local function UpdateAuraDispelOverlayOnly(frame, cfg)
-  UpdateDispelOverlay(frame, cfg)
 end
 
 local function UpdateAuraDebuffStripeOnly(frame, cfg)
@@ -929,7 +893,6 @@ local function SpecNeedsGroupVisuals(spec)
     or cfg.targetIndicator == true
     or cfg.focusIndicator == true
     or cfg.deadBgEnabled == true
-    or cfg.dispelOverlayEnabled == true
     or cfg.debuffStripeEnabled == true
 end
 
@@ -972,13 +935,12 @@ local function CompileVisualRuntime(spec)
     cfg.runtimeOnFocus = cfg.focusIndicator == true and UpdateFocus or nil
     cfg.runtimeOnDeadBg = cfg.deadBgEnabled == true and UpdateDeadBg or nil
     cfg.runtimeOnRangeAlpha = (healthActive == true or (cfg.rangeFadeEnabled == true and cfg.rangeFadeLayerMode == "health")) and RuntimeOnRangeAlpha or nil
-    if cfg.dispelOverlayEnabled == true then
-      cfg.runtimeOnAuraVisuals = cfg.debuffStripeEnabled == true and UpdateAuraVisuals or UpdateAuraDispelOverlayOnly
-    elseif cfg.debuffStripeEnabled == true then
-      cfg.runtimeOnAuraVisuals = UpdateAuraDebuffStripeOnly
-    else
-      cfg.runtimeOnAuraVisuals = nil
-    end
+    -- Dispel overlays are native AuraButton regions owned by Auras3 GroupSlots.
+    -- Keeping the retired texture follower here made an overlay-only profile
+    -- retain GroupVisuals in every group-frame lifecycle plan despite having no
+    -- event or state producer. The legacy stripe remains here until it has the
+    -- same native owner.
+    cfg.runtimeOnAuraVisuals = cfg.debuffStripeEnabled == true and UpdateAuraDebuffStripeOnly or nil
   end
 end
 

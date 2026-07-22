@@ -754,6 +754,9 @@ local function RuntimeOnEvent(self, event, unit)
     -- Priority selection is orthogonal to the broader pending reason. Catch up
     -- once unless the broad flush already rebuilt the active Priority header.
     if GF._pendingPriorityRefresh then GF.RefreshPriorityFrames("deferred-priority") end
+    if type(GF.RefreshCornerThreatState) == "function" then
+      GF.RefreshCornerThreatState(event)
+    end
     SetRuntimeEventsEnabled(AnyGroupFrameEnabled())
     return
   elseif event == "PLAYER_REGEN_DISABLED" then

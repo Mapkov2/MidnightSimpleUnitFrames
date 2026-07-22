@@ -40,6 +40,7 @@ GF._previewFrameSerial = tonumber(GF._previewFrameSerial) or 0
 
 local PREVIEW_BUILD_SLICE_COUNT = 2
 local PREVIEW_BUILD_SLICE_THRESHOLD = 8
+local PREVIEW_KINDS = { "party", "raid", "mythicraid" }
 
 local function BumpPreviewBuildSerial(kind)
   kind = NormalizeKind(kind) or kind
@@ -925,7 +926,8 @@ end
 --- orphan detection alone is insufficient: detach every preview immediately.
 function GF.HidePreviewsForCombat()
   local hidden = false
-  for _, kind in ipairs({ "party", "raid", "mythicraid" }) do
+  for i = 1, #PREVIEW_KINDS do
+    local kind = PREVIEW_KINDS[i]
     local frames = GF._previewFrames[kind]
     if GF._previewActive[kind] == true or (frames and #frames > 0) then
       hidden = GF.HidePreview(kind) or hidden
@@ -938,7 +940,8 @@ function GF.RefreshPreviewLayout(kind, opts)
   if InCombat() then return false end
   if kind == nil then
     local any = false
-    for _, activeKind in ipairs({ "party", "raid", "mythicraid" }) do
+    for i = 1, #PREVIEW_KINDS do
+      local activeKind = PREVIEW_KINDS[i]
       if GF._previewActive and GF._previewActive[activeKind] then
         any = GF.RefreshPreviewLayout(activeKind, opts) or any
       end
@@ -960,7 +963,8 @@ GF.RefreshPreviewBox = GF.RefreshPreviewLayout
 function GF.RefreshPreviewAnimation()
   if InCombat() then return false end
   local any = false
-  for _, kind in ipairs({ "party", "raid", "mythicraid" }) do
+  for i = 1, #PREVIEW_KINDS do
+    local kind = PREVIEW_KINDS[i]
     if GF._previewActive and GF._previewActive[kind] then
       local count = GF._previewShownCounts[kind] or DefaultPreviewCount(kind)
       local visibleCount = VisiblePreviewCount(kind, count)
@@ -989,7 +993,8 @@ end
 function GF.HideOrphanedPreviews()
   if PreviewsAllowed() then return false end
   local hidden = false
-  for _, kind in ipairs({ "party", "raid", "mythicraid" }) do
+  for i = 1, #PREVIEW_KINDS do
+    local kind = PREVIEW_KINDS[i]
     if GF._previewActive[kind] then
       GF.HidePreview(kind)
       hidden = true
