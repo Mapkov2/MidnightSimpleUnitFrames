@@ -985,6 +985,13 @@ function K.Search(query, limit, opts)
     if type(K.searchCache) == "table" and K.searchCache[cacheKey] then
         return CopySearchResults(K.searchCache[cacheKey])
     end
+    -- A single color channel (generated R/G/B/A component) is never the target
+    -- of a normal color request: MSUF sets colors through a color picker, so a
+    -- search for "portrait background color" must reach the color setting, not
+    -- its red channel.  Suppress channel components unless the query explicitly
+    -- names a channel, so the channels stay findable when the user truly asks
+    -- for one but never shadow the real color control.
+    local allowColorChannels = norm:find("channel", 1, true) ~= nil
     local results = {}
     for i = 1, #(index.items or {}) do
         if i % 32 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
@@ -992,6 +999,11 @@ function K.Search(query, limit, opts)
         local score = TokenScore(item, queryTokens, norm, intent, pageKey, exactNorm,
             actionQueryHint, requestedSearchUnit, applyPageBoost)
         if opts.kind and item.kind ~= opts.kind then score = 0 end
+        if not allowColorChannels and item.kind == "setting" and item.setting
+            and item.setting.assistantColorChannel == true
+        then
+            score = 0
+        end
         if score > 0 then
             InsertTopResult(results, { item = item, score = score }, limit)
         end

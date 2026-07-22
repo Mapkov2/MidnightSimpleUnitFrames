@@ -295,6 +295,32 @@ end
 -- that the color parser owns.
 local CHANNEL_WORDS = { R = "Red Channel", G = "Green Channel", B = "Blue Channel", A = "Alpha Channel" }
 
+-- Detect a generated number that is one channel of a composite color (a DB key
+-- ending in R/G/B/A whose stem is a color concept).  MSUF exposes colors through
+-- color pickers, never per-channel sliders, so a user who says "set X color to
+-- black" means the whole color.  These channel scalars are kept in the registry
+-- for DB coverage but are marked so the Assistant never treats a single channel
+-- as a mutation target for a color value.
+local COLOR_CHANNEL_STEM_WORDS = {
+    "color", "colour", "background", "border", "bg", "gradient", "aggro",
+    "namecolor", "glow", "tick", "altmana", "absorb", "highlight", "hl",
+}
+local function IsColorChannelKey(key)
+    key = tostring(key or "")
+    local channel = key:match("([RGBA])$")
+    if not channel then return nil end
+    -- The character before the channel letter must be a lowercase letter or a
+    -- digit, so real words ending in an uppercase R/G/B/A are not misread.
+    local prev = key:sub(-2, -2)
+    if not prev:match("[%l%d]") then return nil end
+    local stem = key:sub(1, #key - 1):lower()
+    for i = 1, #COLOR_CHANNEL_STEM_WORDS do
+        if stem:find(COLOR_CHANNEL_STEM_WORDS[i], 1, true) then return channel end
+    end
+    return nil
+end
+Auto.IsColorChannelKey = IsColorChannelKey
+
 local function LabelFromKey(key)
     local label = key:gsub("(%l)(%u)", "%1 %2")
         -- Acronym boundary: "alphaBGOutOfCombat" -> "alpha BG Out Of Combat",
@@ -879,6 +905,14 @@ local function BuildSpec(scope, key, value, fromManifest)
         spec.generatedMutationSafety = "unreviewed-number-domain"
         spec.assistantMutationSafe = false
         spec.unsafeMutationReason = "This generated numeric setting has no reviewed minimum, maximum, or step."
+        -- One channel of a composite color.  Flag it so a color-value request
+        -- never resolves to a single channel; MSUF colors are set through a
+        -- color picker, so this points the user there instead.
+        if IsColorChannelKey(key) then
+            spec.assistantColorChannel = true
+            spec.generatedMutationSafety = "color-channel-component"
+            spec.unsafeMutationReason = "This is one channel of a composite color. Set the whole color instead, for example 'set " .. tostring(scope) .. " color to red'."
+        end
         spec.get = function()
             local tbl = ScopeTable(scope)
             local raw = PathValue(tbl, key)
