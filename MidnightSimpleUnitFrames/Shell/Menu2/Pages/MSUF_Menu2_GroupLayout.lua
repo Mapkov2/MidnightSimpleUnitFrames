@@ -11,8 +11,9 @@ local floor = math.floor
 local max = math.max
 local min = math.min
 local VT = M.ValueTextList
-local SCOPE_VALUES, GROWTH_VALUES, BLIZZARD_FALLBACK_VALUES, SORT_MODES, GF_ANCHOR_TO, GF_ANCHOR_POINTS = M.PickDefaults(GP, [[SCOPE_VALUES GROWTH_VALUES BLIZZARD_FALLBACK_VALUES SORT_MODES GF_ANCHOR_TO GF_ANCHOR_POINTS]])
-local GF, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, ScopeDropdown, ScopeSlider, BuildGrowthDirectionTiles, BuildRoleOrderRows, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, TrackSectionRefresh, OnOffBadge, BadgeNumber, OptionText, CreateSectionNotice, ControlMeta, RegisterControl = M.Pick(GP, [[GF Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle ScopeDropdown ScopeSlider BuildGrowthDirectionTiles BuildRoleOrderRows SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus TrackSectionRefresh OnOffBadge BadgeNumber OptionText CreateSectionNotice ControlMeta RegisterControl]])
+local SCOPE_VALUES, GROWTH_VALUES, SORT_MODES, GF_ANCHOR_TO, GF_ANCHOR_POINTS = M.PickDefaults(GP, [[SCOPE_VALUES GROWTH_VALUES SORT_MODES GF_ANCHOR_TO GF_ANCHOR_POINTS]])
+local GROUP_FRAME_PROVIDER_VALUES = GP.GROUP_FRAME_PROVIDER_VALUES or {}
+local GF, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, ScopeDropdown, ScopeSlider, BuildGrowthDirectionTiles, BuildRoleOrderRows, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, TrackSectionRefresh, OnOffBadge, BadgeNumber, OptionText, CreateSectionNotice, ControlMeta, RegisterControl, RefreshContext, FrameProvider, FrameProviderLabel, FrameProviderTooltip, SetFrameProvider = M.Pick(GP, [[GF Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle ScopeDropdown ScopeSlider BuildGrowthDirectionTiles BuildRoleOrderRows SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus TrackSectionRefresh OnOffBadge BadgeNumber OptionText CreateSectionNotice ControlMeta RegisterControl RefreshContext FrameProvider FrameProviderLabel FrameProviderTooltip SetFrameProvider]])
 SetSectionBadgesAndStatus = SetSectionBadgesAndStatus or M.Noop
 OnOffBadge = OnOffBadge or M.OnOffBadge
 BadgeNumber = BadgeNumber or M.BadgeNumber
@@ -71,6 +72,33 @@ local function CurrentGroupHealthColorContext()
         healthMode = CurrentGroupHealthMode(),
     }
 end
+local function RefreshFrameBasicsProviderHeader(section)
+    local provider = FrameProvider(CurrentScope())
+    local usesMSUF = provider == "MSUF"
+    local offlineHidden = usesMSUF and Bool(CurrentScope(), "hideOfflineEnabled", false)
+    local badges = {
+        { text = FrameProviderLabel(CurrentScope()), kind = usesMSUF and "accent" or (provider == "NONE" and "muted" or "info") },
+    }
+    if usesMSUF then
+        badges[#badges + 1] = { text = Bool(CurrentScope(), "showPlayer", true) and "Player shown" or "Player hidden", kind = Bool(CurrentScope(), "showPlayer", true) and "info" or "muted" }
+        badges[#badges + 1] = { text = offlineHidden and ("Offline " .. BadgeNumber(Num(CurrentScope(), "hideOfflineDelay", 0)) .. "s") or "Offline visible", kind = offlineHidden and "accent" or "muted" }
+    end
+    local status
+    if usesMSUF then
+        status = {
+            hint = "MSUF provider",
+            hintColor = { 0.66, 0.84, 1.00, 1 },
+        }
+    else
+        status = {
+            hint = provider == "NONE" and "all frames hidden" or "Blizzard provider",
+            hintColor = { 0.90, 0.84, 0.76, 1 },
+            bg = { 0.105, 0.082, 0.052, 0.44 },
+        }
+    end
+    SetSectionBadgesAndStatus(section, badges, status)
+    return provider, usesMSUF, offlineHidden
+end
 local function BuildGFGeneralSection(ctx, b)
     local general = b:CollapsibleSection("general", "Frame Basics", 430, false)
     local generalW = general._msuf2Width or b.width or 720
@@ -98,23 +126,36 @@ local function BuildGFGeneralSection(ctx, b)
     end
     W.LabelAt(general, "Frame", generalLeftX, -38, generalLeftW, "GameFontNormalSmall", T.colors.accent)
     W.LabelAt(general, "Behavior", generalRightX, -38, generalRightW, "GameFontNormalSmall", T.colors.accent)
-    local enableGroup = BindScopeToggle(ctx, AttachGroupFocus(W.SwitchAt(general, "Use MSUF group frames", generalLeftX, -64, generalLeftW), "layout"), "enabled", false, "rebuild")
-    enableGroup._msuf2GroupFrameGateAlwaysEnabled = true
+    local frameProvider = AttachGroupFocus(W.Dropdown(general, "Frames used in this scope", GROUP_FRAME_PROVIDER_VALUES, min(300, generalLeftW)), "layout")
+    W.MoveWidget(frameProvider, general, generalLeftX, -64, min(300, generalLeftW), "LEFT")
+    frameProvider._msuf2GroupFrameGateAlwaysEnabled = true
+    M.BindDropdownWidget(ctx, frameProvider,
+        function() return FrameProvider(CurrentScope()) end,
+        function(value)
+            SetFrameProvider(CurrentScope(), value)
+            RefreshContext(ctx)
+        end,
+        ControlMeta(ctx, "basics.frame_provider"))
+    if M.AddTooltip then
+        M.AddTooltip(frameProvider,
+            function() return ScopeLabel() .. " frame provider" end,
+            function() return FrameProviderTooltip(CurrentScope()) end,
+            { hook = true, owner = "ANCHOR_RIGHT" })
+    end
+    local providerHelp = W.Text(general,
+        "Choose MSUF, follow WoW's own Blizzard frame settings, force Blizzard frames, or hide both. Party, Raid, and Mythic Raid are independent.",
+        generalRightX, -58, generalRightW, T.colors.muted)
+    if providerHelp and providerHelp.SetWordWrap then providerHelp:SetWordWrap(true) end
+    local msufControls = {}
     M.BuildControlSpecs({
-        { "Show player", generalLeftX, -94, generalLeftToggleW, "layout", "showPlayer", true, "rebuild" },
-        { "Show while solo", generalLeftX, -124, generalLeftToggleW, "layout", "showSolo", false, "rebuild" },
-        { "Hide in Housing", generalLeftX, -154, generalLeftToggleW, "layout", "hideInHousing", false, "visual" },
-        { "Smooth health fill", generalRightX, -64, generalRightToggleW, "bars", "smoothFill", true, "visual" },
-        { "Reverse fill direction", generalRightX, -94, generalRightToggleW, "bars", "reverseFill", false, "visual" },
-        { "Hide during client scene", generalRightX, -124, generalRightToggleW, "layout", "hideInClientScene", true, "visual" },
-        { "Click casting / Clique", generalRightX, -154, generalRightToggleW, "layout", "clickCastEnabled", true, "rebuild" },
-    }, { ["*"] = function(s) return BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(general, s[1], s[2], s[3], s[4]), s[5]), s[6], s[7], s[8]) end })
-    local fallbackModeW = min(260, generalLeftW)
-    local fallbackMode = ScopeDropdown(ctx, general, "If this switch is off", BLIZZARD_FALLBACK_VALUES, fallbackModeW, "blizzardFallbackMode", "AUTO", "rebuild", generalLeftX, -196, fallbackModeW)
-    fallbackMode._msuf2GroupFrameGateAlwaysEnabled = true
-    AttachGroupFocus(fallbackMode, "layout")
-    local fallbackHelp = W.Text(general, "Blizzard default is the simple off-state when no MSUF group-frame scope is active. If any MSUF group frames are on, Auto keeps Blizzard group frames hidden to avoid duplicates.", generalRightX, -184, generalRightW, T.colors.muted)
-    if fallbackHelp and fallbackHelp.SetWordWrap then fallbackHelp:SetWordWrap(true) end
+        { "Show player", generalLeftX, -124, generalLeftToggleW, "layout", "showPlayer", true, "rebuild" },
+        { "Show while solo", generalLeftX, -154, generalLeftToggleW, "layout", "showSolo", false, "rebuild" },
+        { "Hide in Housing", generalLeftX, -184, generalLeftToggleW, "layout", "hideInHousing", false, "visual" },
+        { "Smooth health fill", generalRightX, -124, generalRightToggleW, "bars", "smoothFill", false, "visual" },
+        { "Reverse fill direction", generalRightX, -154, generalRightToggleW, "bars", "reverseFill", false, "visual" },
+        { "Hide during client scene", generalRightX, -184, generalRightToggleW, "layout", "hideInClientScene", true, "visual" },
+        { "Click casting / Clique", generalRightX, -214, generalRightToggleW, "layout", "clickCastEnabled", true, "rebuild" },
+    }, { ["*"] = function(s) return BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(general, s[1], s[2], s[3], s[4]), s[5]), s[6], s[7], s[8]) end }, nil, msufControls)
     W.DividerAt(general, -256, generalLeftX, 32)
     W.LabelAt(general, "Offline Members", generalLeftX, -274, generalLeftW, "GameFontNormalSmall", T.colors.accent)
     local hideOfflineEnabled = BindScopeToggle(ctx, AttachGroupFocus(W.SwitchAt(general, "Offline Members", generalLeftX, -300, generalLeftW), "layout"), "hideOfflineEnabled", false, "visual")
@@ -124,54 +165,41 @@ local function BuildGFGeneralSection(ctx, b)
     local generalNotice, generalNoticeButton
     if type(CreateSectionNotice) == "function" then
         local _
-        generalNotice, _, generalNoticeButton = CreateSectionNotice(general, -374, "Enable Scope", 104)
+        generalNotice, _, generalNoticeButton = CreateSectionNotice(general, -374, "Use MSUF", 104)
     end
     if generalNoticeButton then
-        RegisterControl(generalNoticeButton, ctx, "scope.enable_now", "Enable Scope", "button", "setting", {
+        RegisterControl(generalNoticeButton, ctx, "scope.use_msuf_now", "Use MSUF", "button", "setting", {
             assistantDisposition = "dynamic",
-            assistantDispositionReason = "This shortcut edits the enabled setting for the currently selected Group scope.",
-            assistantSettingKeys = { "gf_party.enabled", "gf_raid.enabled", "gf_mythicraid.enabled" },
+            assistantDispositionReason = "This shortcut selects MSUF as the frame provider for the currently selected Group scope.",
+            assistantSettingKeys = {
+                "gf_party.enabled", "gf_party.blizzardFallbackMode",
+                "gf_raid.enabled", "gf_raid.blizzardFallbackMode",
+                "gf_mythicraid.enabled", "gf_mythicraid.blizzardFallbackMode",
+            },
             command = {
                 kind = "toggle", valueKind = "boolean",
-                get = function() return Bool(CurrentScope(), "enabled", false) end,
-                set = function(value) Set(CurrentScope(), "enabled", value == true, "rebuild") end,
+                get = function() return FrameProvider(CurrentScope()) == "MSUF" end,
+                set = function(value) SetFrameProvider(CurrentScope(), value == true and "MSUF" or "AUTO") end,
             },
         })
         generalNoticeButton:SetScript("OnClick", function()
-            Set(CurrentScope(), "enabled", true, "rebuild")
+            SetFrameProvider(CurrentScope(), "MSUF")
+            RefreshContext(ctx)
         end)
     end
     local function RefreshHideOfflineState()
-        local enabled = Bool(CurrentScope(), "hideOfflineEnabled", false)
-        local scopeEnabled = Bool(CurrentScope(), "enabled", false)
-        SetOptionsEnabled(hideOfflineControls, enabled)
-        local status
-        if not scopeEnabled then
-            status = {
-                hint = "scope disabled",
-                hintColor = { 0.90, 0.84, 0.76, 1 },
-                bg = { 0.105, 0.082, 0.052, 0.44 },
-                arrowColor = { 0.88, 0.62, 0.22, 1 },
-            }
-        end
-        SetSectionBadgesAndStatus(general, {
-            OnOffBadge(scopeEnabled, "Enabled", "Disabled"),
-            { text = Bool(CurrentScope(), "showPlayer", true) and "Player shown" or "Player hidden", kind = Bool(CurrentScope(), "showPlayer", true) and "info" or "muted" },
-            { text = enabled and ("Offline " .. BadgeNumber(Num(CurrentScope(), "hideOfflineDelay", 0)) .. "s") or "Offline visible", kind = enabled and "accent" or "muted" },
-        }, status)
+        local provider, usesMSUF, enabled = RefreshFrameBasicsProviderHeader(general)
+        SetOptionsEnabled(msufControls, usesMSUF)
+        SetOptionEnabled(hideOfflineEnabled, usesMSUF)
+        SetOptionsEnabled(hideOfflineControls, usesMSUF and enabled)
         if generalNotice then
-            local scopeEnabled = Bool(CurrentScope(), "enabled", false)
-            generalNotice:SetShown(not scopeEnabled)
-            if not scopeEnabled then
-                local mode = Val(CurrentScope(), "blizzardFallbackMode", "AUTO")
-                local anyMSUF = Bool("party", "enabled", false) or Bool("raid", "enabled", false) or Bool("mythicraid", "enabled", false)
-                local behavior = anyMSUF and "Blizzard frames stay hidden because another MSUF group scope is on." or "Blizzard decides normally."
-                if mode == "SHOW" then
-                    behavior = "Blizzard frames are forced visible."
-                elseif mode == "NONE" then
-                    behavior = "MSUF and Blizzard frames stay hidden."
-                end
-                generalNotice:SetMessage(ScopeLabel() .. " group frames are disabled. " .. behavior, "warning")
+            generalNotice:SetShown(not usesMSUF)
+            if provider == "AUTO" then
+                generalNotice:SetMessage(M.Format("%s uses Blizzard frames. WoW's own settings decide when they appear.", ScopeLabel()), "info")
+            elseif provider == "SHOW" then
+                generalNotice:SetMessage(M.Format("%s forces Blizzard frames visible. Use this only when the normal WoW settings option does not show them.", ScopeLabel()), "warning")
+            elseif provider == "NONE" then
+                generalNotice:SetMessage(M.Format("%s hides both MSUF and Blizzard group frames.", ScopeLabel()), "warning")
             end
         end
     end
@@ -575,7 +603,19 @@ local function BuildGFAnchorSection(ctx, b)
 end
 
 local GROUP_LAYOUT_SECTION_SPECS = {
-    { sectionId = "general", title = "Frame Basics", height = 430, build = BuildGFGeneralSection },
+    {
+        sectionId = "general", title = "Frame Basics", height = 430, build = BuildGFGeneralSection,
+        prepareShell = function(ctx, section)
+            local function RefreshProviderHeader() RefreshFrameBasicsProviderHeader(section) end
+            if M.AddRefresherOnce then
+                M.AddRefresherOnce(ctx, "group-frame-basics-provider-header", RefreshProviderHeader)
+            elseif M.AddRefresher then
+                M.AddRefresher(ctx, RefreshProviderHeader)
+            end
+            RefreshProviderHeader()
+            return RefreshProviderHeader
+        end,
+    },
     { sectionId = "text", title = "Text", height = 690, build = BuildGFTextSection },
     { sectionId = "power", title = "Resource Bar", height = 240, build = BuildGFResourceBarSection },
     { sectionId = "range", title = "Range Fade", height = 220, build = BuildGFRangeFadeSection },

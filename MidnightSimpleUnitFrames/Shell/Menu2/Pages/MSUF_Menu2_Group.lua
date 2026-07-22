@@ -18,6 +18,12 @@ local max = math.max
 local min = math.min
 local Specs = M.GroupSpecs or {}
 local SCOPE_VALUES, GROWTH_VALUES, BLIZZARD_FALLBACK_VALUES, HEALTH_MODES, TEXT_MODES, DELIMITER_VALUES, ANCHORS, AURA_ANCHORS, SORT_MODES, GF_BAR_MODES, GF_ANCHOR_TO, GF_ANCHOR_POINTS, STATUS_ICON_ANCHORS, GF_STATUS_ICON_SPECS, GF_STATUS_ICON_VALUES, PLACED_INDICATOR_TYPES, FRAME_EFFECT_TYPES, FRAME_EFFECT_TIMINGS, ICON_EFFECT_TYPES, SPELL_GROWTH_VALUES, CI_SLOT_VALUES, CI_SLOT_DEFAULTS, DISPEL_OVERLAY_STYLES, DEBUFF_STRIPE_EDGES = M.PickDefaults(Specs, M.GROUP_SPEC_TABLE_KEYS)
+local GROUP_FRAME_PROVIDER_VALUES = Specs.GROUP_FRAME_PROVIDER_VALUES or {
+    { value = "MSUF", text = "MSUF frames" },
+    { value = "AUTO", text = "Blizzard frames (WoW settings)" },
+    { value = "SHOW", text = "Force Blizzard frames" },
+    { value = "NONE", text = "Hide all group frames" },
+}
 local HEALTH_TEXT_MODES = Specs.HEALTH_TEXT_MODES or TEXT_MODES
 local SIMPLE_TEXTURES = Specs.SimpleTextures or function() return {} end
 local pendingGF = {}
@@ -80,7 +86,7 @@ local function ResolveGroupControlMeta(ctx, semanticPath, fallbackPath)
     if type(semanticPath) == "table" then return semanticPath end
     return GroupControlMeta(ctx, semanticPath or fallbackPath)
 end
-local GF_INDICATOR_COPY_FIELDS = M.CopyFieldsFromSpecs(GF_STATUS_ICON_SPECS, "pvpIcon statusText statusGhostText statusAFKText",
+local GF_INDICATOR_COPY_FIELDS = M.CopyFieldsFromSpecs(GF_STATUS_ICON_SPECS, "pvpIcon statusText statusGhostText statusAFKText statusDNDText",
     [[showGroupNumber groupNumberSize groupNumberAnchor groupNumberX groupNumberY groupNumberLayer groupBorderEnabled groupBorderSize groupBorderPadding groupBorderR groupBorderG groupBorderB groupBorderA iconStyle useMidnightIcons roleIconStyle leaderIconStyle assistIconStyle raidMarkerStyle readyCheckIconStyle summonIconStyle resurrectIconStyle pvpIconStyle phaseIconStyle roleIconCustomIcon leaderIconCustomIcon assistIconCustomIcon raidMarkerCustomIcon readyCheckIconCustomIcon summonIconCustomIcon resurrectIconCustomIcon pvpIconCustomIcon phaseIconCustomIcon]], "enabled iconStyle customIcon size anchor x y layer")
 local function NormalizeFrameStrata(value, fallback)
     local normalize = _G.MSUF_NormalizeFrameStrata
@@ -352,6 +358,57 @@ end
 local function ScopeShortLabel(kind)
     return M.Tr(SCOPE_SHORT_LABELS[kind] or SCOPE_LABELS[kind] or "Party")
 end
+local function NormalizeFrameProvider(value)
+    if value == "MSUF" then return "MSUF" end
+    if value == true or value == "SHOW" or value == "BLIZZARD" then return "SHOW" end
+    if value == false or value == "NONE" or value == "HIDE" then return "NONE" end
+    return "AUTO"
+end
+local function FrameProvider(kind)
+    if Bool(kind, "enabled", false) then return "MSUF" end
+    return NormalizeFrameProvider(Val(kind, "blizzardFallbackMode", "AUTO"))
+end
+local function FrameProviderInfo(value)
+    value = NormalizeFrameProvider(value)
+    for i = 1, #GROUP_FRAME_PROVIDER_VALUES do
+        local info = GROUP_FRAME_PROVIDER_VALUES[i]
+        if info and info.value == value then return info end
+    end
+end
+local function FrameProviderLabel(kind)
+    local info = FrameProviderInfo(FrameProvider(kind))
+    return M.Tr((info and info.text) or "Blizzard frames (WoW settings)")
+end
+local function FrameProviderShortLabel(kind)
+    local provider = FrameProvider(kind)
+    if provider == "MSUF" then return "MSUF" end
+    if provider == "SHOW" then return M.Tr("Blizzard forced") end
+    if provider == "NONE" then return M.Tr("Hidden") end
+    return M.Tr("Blizzard")
+end
+local function FrameProviderTooltip(kind)
+    local info = FrameProviderInfo(FrameProvider(kind))
+    return info and (info.tooltip or info.description) or ""
+end
+local function SetFrameProvider(kind, provider)
+    kind = kind or CurrentScope()
+    provider = NormalizeFrameProvider(provider)
+    local function Write()
+        local conf = Conf(kind)
+        local nextEnabled = provider == "MSUF"
+        local enabledChanged = conf.enabled ~= nextEnabled
+        local fallbackChanged = not nextEnabled and NormalizeFrameProvider(conf.blizzardFallbackMode) ~= provider
+        if not enabledChanged and not fallbackChanged then return false end
+        conf.enabled = nextEnabled
+        if not nextEnabled then conf.blizzardFallbackMode = provider end
+        QueueGF(kind, "rebuild")
+        if enabledChanged and type(_G.MSUF_ShowGroupFrameReloadRequiredPopup) == "function" then
+            _G.MSUF_ShowGroupFrameReloadRequiredPopup()
+        end
+        return true
+    end
+    return M.RunWithHistory("Group frame provider", "group:" .. tostring(kind) .. ":frameProvider", Write)
+end
 local GF_COPY_EXCLUDE = M.KeySetFromWords "offsetX offsetY point positionMode _hlMigrated"
 local GF_SHARED_COLOR_KEYS = M.KeySetFromWords [[
     gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB
@@ -540,9 +597,11 @@ local function ScopeSection(ctx, builder, opts)
         centerY = scopeCenterY,
     })
     local noteY = min(-50, pageBottomY - 10)
+    local scopeBottomY = (scopeMetrics and scopeMetrics.bottomY) or -72
+    local providerSummaryY = scopeBottomY - 8
     local h = priorityMode
         and max(70, math.abs(noteY) + 20)
-        or max(86, math.abs((scopeMetrics and scopeMetrics.bottomY) or -72) + 14)
+        or max(108, math.abs(providerSummaryY) + 24)
     local sec = T.Panel(builder.parent, nil, T.colors.glassStatus or T.colors.header, T.colors.borderSoft)
     T.ApplySurface(sec, "status")
     sec:SetPoint("TOPLEFT", builder.parent, "TOPLEFT", builder.x, builder.y)
@@ -558,7 +617,7 @@ local function ScopeSection(ctx, builder, opts)
         local previousScope = M.gfScope
         M.SetMenuStateValue("gfScope", kind or "party")
         if previousScope ~= M.gfScope and W.CloseTextQuickSettings then W.CloseTextQuickSettings() end
-        if previousScope ~= M.gfScope and M.ShowStatusFeedback then M.ShowStatusFeedback(ScopeShortLabel(M.gfScope) .. " scope", "info", 1.1) end
+        if previousScope ~= M.gfScope and M.ShowStatusFeedback then M.ShowStatusFeedback(M.Format("%s scope", ScopeShortLabel(M.gfScope)), "info", 1.1) end
         local gf = GF()
         if type(_G.MSUF_GF_EM2_SetActivePreviewKind) == "function" then _G.MSUF_GF_EM2_SetActivePreviewKind(M.gfScope) end
         RequestGFPagePreview()
@@ -609,6 +668,8 @@ local function ScopeSection(ctx, builder, opts)
     })
     RegisterGroupControl(scopeBar, ctx, "scope.selector", "Editing", "segment", "ephemeral")
     for i = 1, #SCOPE_VALUES do scopeBtns[SCOPE_VALUES[i].value] = scopeBar and scopeBar.buttons and scopeBar.buttons[i] end
+    local providerSummary = W.Text(sec, "", 16, providerSummaryY, pageW - 32, T.colors.muted)
+    if providerSummary and providerSummary.SetJustifyH then providerSummary:SetJustifyH("LEFT") end
     M.gfCopyScopes = (type(M.gfCopyScopes) == "table") and M.gfCopyScopes or NewGFCopyScopes()
     local copyPopup = Shared.MakeScopeCopyPopup and Shared.MakeScopeCopyPopup(copy, {
         controlDomain = "group",
@@ -637,7 +698,7 @@ local function ScopeSection(ctx, builder, opts)
             local function RunCopy()
                 if CopyGroupSettings(CurrentScope(), kind, M.gfCopyScopes) then
                     RefreshContext(ctx)
-                    if M.ShowStatusFeedback then M.ShowStatusFeedback("Copied to " .. ScopeShortLabel(kind), "ok", 1.3) end
+                    if M.ShowStatusFeedback then M.ShowStatusFeedback(M.Format("Copied to %s", ScopeShortLabel(kind)), "ok", 1.3) end
                 end
             end
             M.RunWithHistory("Copy Group Settings", "group:copy:" .. tostring(CurrentScope()) .. ":" .. tostring(kind), RunCopy)
@@ -672,6 +733,10 @@ local function ScopeSection(ctx, builder, opts)
             local info = SCOPE_VALUES[i]
             if scopeBtns[info.value] and scopeBtns[info.value].SetActive then scopeBtns[info.value]:SetActive(current == info.value) end
         end
+        if providerSummary then
+            providerSummary:SetText(M.Format("Frame providers | Party: %s | Raid: %s | Mythic Raid: %s",
+                FrameProviderShortLabel("party"), FrameProviderShortLabel("raid"), FrameProviderShortLabel("mythicraid")))
+        end
     end
     M.TrackRefresh(ctx, RefreshTop)
 end
@@ -679,6 +744,9 @@ local GroupPage = M.GroupPage or {}
 M.GroupPage = GroupPage
 M.Assign(GroupPage, {
     Conf = Conf, Val = Val, Set = Set, Bool = Bool, Num = Num, CurrentScope = CurrentScope,
+    GROUP_FRAME_PROVIDER_VALUES = GROUP_FRAME_PROVIDER_VALUES,
+    FrameProvider = FrameProvider, FrameProviderLabel = FrameProviderLabel, FrameProviderShortLabel = FrameProviderShortLabel,
+    FrameProviderTooltip = FrameProviderTooltip, SetFrameProvider = SetFrameProvider,
     GF_COPY_CATEGORIES = GF_COPY_CATEGORIES, NewGFCopyScopes = NewGFCopyScopes, CopyGroupSettings = CopyGroupSettings,
 })
 local function BindScopeToggle(ctx, widget, key, default, mode, semanticPath)
@@ -1421,6 +1489,7 @@ M.Assign(GroupPage, {
     SCOPE_VALUES = SCOPE_VALUES,
     GROWTH_VALUES = GROWTH_VALUES,
     BLIZZARD_FALLBACK_VALUES = BLIZZARD_FALLBACK_VALUES,
+    GROUP_FRAME_PROVIDER_VALUES = GROUP_FRAME_PROVIDER_VALUES,
     HEALTH_MODES = HEALTH_MODES,
     TEXT_MODES = TEXT_MODES,
     HEALTH_TEXT_MODES = HEALTH_TEXT_MODES,

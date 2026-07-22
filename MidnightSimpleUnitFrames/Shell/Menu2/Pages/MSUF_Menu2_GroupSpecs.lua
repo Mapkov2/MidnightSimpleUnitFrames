@@ -23,6 +23,32 @@ local Specs = {
     SCOPE_VALUES = VTP "party=Party|raid=Raid|mythicraid=Mythic Raid",
     GROWTH_VALUES = VTP "DOWN=Down|UP=Up|RIGHT=Right|LEFT=Left",
     BLIZZARD_FALLBACK_VALUES = VTP "AUTO=Blizzard default|SHOW=Force Blizzard frames|NONE=Hide all frames",
+    GROUP_FRAME_PROVIDER_VALUES = {
+        {
+            value = "MSUF",
+            text = "MSUF frames",
+            tooltipTitle = "MSUF frames",
+            tooltip = "Uses MSUF's custom group frames for the selected Party, Raid, or Mythic Raid scope. The other scopes remain independent.",
+        },
+        {
+            value = "AUTO",
+            text = "Blizzard frames (WoW settings)",
+            tooltipTitle = "Blizzard frames (WoW settings)",
+            tooltip = "Turns off MSUF frames for this scope and returns control to WoW. Blizzard's own Party or Raid Frame settings decide when its frames appear.",
+        },
+        {
+            value = "SHOW",
+            text = "Force Blizzard frames",
+            tooltipTitle = "Force Blizzard frames",
+            tooltip = "Turns off MSUF frames for this scope and forces Blizzard group frames visible. Use this only when Blizzard's frames do not appear with the normal WoW settings option.",
+        },
+        {
+            value = "NONE",
+            text = "Hide all group frames",
+            tooltipTitle = "Hide all group frames",
+            tooltip = "Hides both MSUF and Blizzard group frames for this scope. Your saved MSUF layout remains unchanged.",
+        },
+    },
     HEALTH_MODES = VTP "CLASS=Class|GRADIENT=Gradient|CUSTOM=Custom",
     TEXT_MODES = VTP "NONE=None|PERCENT=Percent|CURRENT=Current|FULLVALUE=Full Value|MAX=Max|DEFICIT=Deficit|CURMAX=Current / Max|CURPERCENT=Current / Percent|CURMAXPERCENT=Current / Max / Percent|MAXPERCENT=Max / Percent|PERCENTCUR=Percent / Current|PERCENTMAX=Percent / Max|PERCENTCURMAX=Percent / Current / Max",
     HEALTH_TEXT_MODES = VTP "NONE=None|ABSORB=Absorb|CURRENTABSORB=Current + Absorb|FULLVALUEABSORB=Full Value + Absorb|MAXABSORB=Max + Absorb|DEFICITABSORB=Deficit + Absorb|CURMAXABSORB=Current / Max + Absorb|PERCENTABSORB=Percent + Absorb|CURPERCENTABSORB=Current / Percent + Absorb|CURMAXPERCENTABSORB=Current / Max / Percent + Absorb|MAXPERCENTABSORB=Max / Percent + Absorb|PERCENTCURABSORB=Percent / Current + Absorb|PERCENTMAXABSORB=Percent / Max + Absorb|PERCENTCURMAXABSORB=Percent / Current / Max + Absorb|PERCENT=Percent|CURRENT=Current|FULLVALUE=Full Value|MAX=Max|DEFICIT=Deficit|CURMAX=Current / Max|CURPERCENT=Current / Percent|CURMAXPERCENT=Current / Max / Percent|MAXPERCENT=Max / Percent|PERCENTCUR=Percent / Current|PERCENTMAX=Percent / Max|PERCENTCURMAX=Percent / Current / Max",
@@ -46,7 +72,8 @@ pvpIcon|PvP Flag (War Mode/PvP)|pvpIcon|pvpIconStyle|pvpIconSize|pvpIconAnchor|p
 phaseIcon|Phase|phaseIcon|phaseIconStyle|phaseIconSize|phaseAnchor|phaseX|phaseY|phaseLayer|14|TOPLEFT|3|phaseIconCustomIcon
 statusText|Dead Text|statusText|0|statusTextSize|statusTextAnchor|statusOffsetX|statusOffsetY|statusTextLayer|14|CENTER|7|0
 statusGhostText|Ghost Text|statusGhostText|0|statusGhostTextSize|statusGhostTextAnchor|statusGhostOffsetX|statusGhostOffsetY|statusGhostTextLayer|14|CENTER|7|0
-statusAFKText|AFK / DND Text|statusAFKText|0|statusAFKTextSize|statusAFKTextAnchor|statusAFKOffsetX|statusAFKOffsetY|statusAFKTextLayer|14|CENTER|7|0
+statusAFKText|AFK Text|statusAFKText|0|statusAFKTextSize|statusAFKTextAnchor|statusAFKOffsetX|statusAFKOffsetY|statusAFKTextLayer|14|CENTER|7|0
+statusDNDText|DND Text|statusDNDText|0|statusDNDTextSize|statusDNDTextAnchor|statusDNDOffsetX|statusDNDOffsetY|statusDNDTextLayer|14|CENTER|7|0
 ]],
     PLACED_INDICATOR_TYPES = VTP "none=None|icon=Icon|square=Square|bar=Bar|number=Number",
     FRAME_EFFECT_TYPES = VTP "none=None|healthtint=Health Tint|border=Border|glow=Glow|pulse=Pulse|namecolor=Name Color",
