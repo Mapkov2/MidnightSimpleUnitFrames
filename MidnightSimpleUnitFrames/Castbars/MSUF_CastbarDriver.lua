@@ -604,10 +604,9 @@ local function ClearStartRetry(frame)
     frame._msufStartRetryPending = nil
 end
 
-local function StopDriverFrame(frame, reason, unregisterCastbar)
+local function StopDriverFrame(frame, reason)
     if not frame then return end
 
-    ClearFrameOnUpdate(frame)
     ClearStopExpectation(frame)
     ClearStartRetry(frame)
     HideChannelHasteMarkers(frame)
@@ -621,9 +620,6 @@ local function StopDriverFrame(frame, reason, unregisterCastbar)
     end
     _G.MSUF_CB_ResetStateOnStop(frame, reason)
     PublishState(frame, nil, reason)
-    if unregisterCastbar and _G.MSUF_UnregisterCastbar then
-        _G.MSUF_UnregisterCastbar(frame)
-    end
 end
 
 local function EnsureDriverCallbacks(frame)
@@ -957,8 +953,7 @@ local function RefreshTargetFocusImmediate(frame)
     StoreActiveStateIdentity(frame, nil)
     UpdateCastTargetText(frame, nil)
 
-    ClearFrameOnUpdate(frame)
-    StopDriverFrame(frame, "HARDHIDE", false)
+    StopDriverFrame(frame, "HARDHIDE")
     return false
 end
 
@@ -988,9 +983,14 @@ local function ScheduleTargetFocusChanged(frame)
 
     -- Never leave the previous unit's cast visible while the new target/focus
     -- is resolved on the next frame.
-    ClearFrameOnUpdate(frame)
     if not CastbarAlreadyIdle(frame) then
-        StopDriverFrame(frame, "UNIT_CHANGED", false)
+        -- Hard-hide the previous unit once. Runtime owns OnUpdate/native/manager
+        -- cleanup, and the queued refresh can now take its idle fast path when
+        -- the replacement unit has no cast instead of stopping a second time.
+        StopDriverFrame(frame, "HARDHIDE")
+    else
+        -- Retain the stale-script safety net for an already hidden idle frame.
+        ClearFrameOnUpdate(frame)
     end
 
     if frame._msufTargetFocusRefreshQueued == true then return end
@@ -1078,7 +1078,7 @@ HandleUnitDeathEvent = function(frame, event)
         dead = ToKnownPlainBool(UnitIsDeadOrGhost(unit))
     end
     if exists == false or dead == true or connected == false then
-        StopDriverFrame(frame, "STOPPED", false)
+        StopDriverFrame(frame, "STOPPED")
     end
 end
 
@@ -1111,7 +1111,7 @@ local function HandleDriverEvent(frame, event, eventUnit)
         if frame.unit == "target" or frame.unit == "focus" then
             SetDriverEventsRegistered(frame, frame.unit, false)
         end
-        StopDriverFrame(frame, "HARDHIDE", true)
+        StopDriverFrame(frame, "HARDHIDE")
         return
     end
 
@@ -1208,7 +1208,6 @@ local function HandleDriverEvent(frame, event, eventUnit)
         frame.MSUF_kickInterruptibleConfirmed = true
         frame._msufApiNotInterruptibleRaw = false
         if frame.UpdateColorForInterruptible then _G.MSUF_CB_ApplyColor(frame) end
-        if _G.MSUF_KickReady_RefreshFrame then _G.MSUF_KickReady_RefreshFrame(frame, nil) end
         local state = frame._msufCastState
         if state then
             state.isNotInterruptible = false
@@ -1224,7 +1223,6 @@ local function HandleDriverEvent(frame, event, eventUnit)
         frame.MSUF_kickInterruptibleConfirmed = false
         frame._msufApiNotInterruptibleRaw = true
         if frame.UpdateColorForInterruptible then _G.MSUF_CB_ApplyColor(frame) end
-        if _G.MSUF_KickReady_RefreshFrame then _G.MSUF_KickReady_RefreshFrame(frame, nil) end
         local state = frame._msufCastState
         if state then
             state.isNotInterruptible = true
@@ -1382,26 +1380,35 @@ local function CreateCastBar(frameName, unit)
                 _G.MSUF_Castbar_ApplyActiveDuration(self, state, ACTIVE_DURATION_OPTIONS)
             end
 
-            local reverseFill = _G.MSUF_GetReverseFillSafe(self, isChannel)
+            -- ApplyActive already resolved and installed reverse fill for the
+            -- native-duration path. Only the legacy fallback still needs the
+            -- global resolver.
+            local reverseFill
+            if durationObj then reverseFill = self._msufStripeReverseFill end
+            if reverseFill == nil then
+                reverseFill = _G.MSUF_GetReverseFillSafe(self, isChannel)
+            end
+            reverseFill = reverseFill == true
             self._msufStripeReverseFill = reverseFill
             UpdateChannelHasteMarkers(self, true)
 
             if self.UpdateColorForInterruptible then
-                _G.MSUF_CB_ApplyColor(self)
+                -- ApplyColor owns the single KickReady refresh; pass the state
+                -- through so the decorator does not have to infer it again.
+                _G.MSUF_CB_ApplyColor(self, state)
             end
             self:Show()
             self.MSUF_castActive = true
             if _G.MSUF_RegisterCastbar then
                 _G.MSUF_RegisterCastbar(self)
             end
-            if self.timeText then
+            if self.timeText
+                and self._msufNativeTimeBound ~= true
+                and self._msufCastTimeEnabled ~= false
+            then
                 _G.MSUF_UpdateCastTimeText_FromStatusBar(self)
             end
             UpdateCastTargetText(self, state)
-
-            if _G.MSUF_KickReady_RefreshFrame then
-                _G.MSUF_KickReady_RefreshFrame(self, state)
-            end
 
             if self.unit ~= "player" then
                 self._msufZeroCount = nil
@@ -1507,6 +1514,15 @@ local function CreateCastBar(frameName, unit)
     SetDriverEventsRegistered(frame, unit, true)
     AnchorDriverFrameToUnitFrame(frame, unit)
     BuildCastbarFrameElements(frame)
+    -- Resolve the shared ColorObjects while this hidden frame is constructed;
+    -- otherwise their first CreateColor calls land in the first active cast.
+    if frame.UpdateColorForInterruptible then
+        frame:UpdateColorForInterruptible()
+    end
+    local runtime = MSUF.MSUF_CastbarRuntime or _G.MSUF_CastbarRuntime
+    if runtime and runtime.PrewarmNativeTimeText then
+        runtime:PrewarmNativeTimeText(frame)
+    end
     frame:Hide()
 
     if unit == "target" then

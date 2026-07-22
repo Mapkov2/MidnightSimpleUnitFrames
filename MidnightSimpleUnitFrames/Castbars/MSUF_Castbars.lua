@@ -321,6 +321,10 @@ local function CreatePlayerCastbarFrame()
     end
 
     SetPlayerCastbarEventsRegistered(frame, true)
+    local runtime = _G.MSUF_CastbarRuntime
+    if runtime and runtime.PrewarmNativeTimeText then
+        runtime:PrewarmNativeTimeText(frame)
+    end
     frame:Hide()
     return frame
 end

@@ -102,6 +102,22 @@ local function DisableFrameOnUpdate(frame)
     frame:SetScript("OnUpdate", nil)
 end
 
+local function HideAfterManagerUnregister(frame, managerUnregistered)
+    if not (frame and frame.Hide) then return end
+    if managerUnregistered ~= true then
+        frame:Hide()
+        return
+    end
+
+    -- CastbarManager's OnHide hook normally unregisters the frame. Stop has
+    -- already done that synchronously, so guard only this Hide notification and
+    -- restore any outer re-entrancy state immediately afterwards.
+    local unregisterGuard = frame._msufInUnregister
+    frame._msufInUnregister = true
+    frame:Hide()
+    frame._msufInUnregister = unregisterGuard
+end
+
 local function CancelTimerHandle(timer)
     local timerType = type(timer)
     if timerType ~= "table" and timerType ~= "userdata" then
@@ -120,6 +136,16 @@ end
 
 local plainIsSecret = _G.issecretvalue or function(_) return false end
 local plainHuge = math.huge
+
+local function DurationHasSecretValues(durationObj)
+    local hasSecretValues = durationObj and durationObj.HasSecretValues
+    if type(hasSecretValues) ~= "function" then
+        return false
+    end
+
+    local ok, result = pcall(hasSecretValues, durationObj)
+    return ok == true and result == true
+end
 
 --- Dragonflight+ APIs may return value wrappers. Convert only to plain scalars
 --- here so the rest of Runtime can compare and cache safely.
@@ -171,7 +197,7 @@ end
 local nativeTextFormats
 local nativeTextFormatsUnavailable
 
-local function BuildNativeTextFormats()
+local function BuildNativeTextFormats(allowRetry)
     if nativeTextFormats then return nativeTextFormats end
     if nativeTextFormatsUnavailable then return nil end
 
@@ -186,13 +212,13 @@ local function BuildNativeTextFormats()
         or type(durationProperties) ~= "table"
         or type(rounding) ~= "table"
     then
-        nativeTextFormatsUnavailable = true
+        if allowRetry ~= true then nativeTextFormatsUnavailable = true end
         return nil
     end
 
     local ok, formatter = pcall(createFormatter)
     if not ok or not formatter or type(formatter.SetBreakpoints) ~= "function" then
-        nativeTextFormatsUnavailable = true
+        if allowRetry ~= true then nativeTextFormatsUnavailable = true end
         return nil
     end
 
@@ -205,7 +231,7 @@ local function BuildNativeTextFormats()
         },
     })
     if not ok then
-        nativeTextFormatsUnavailable = true
+        if allowRetry ~= true then nativeTextFormatsUnavailable = true end
         return nil
     end
 
@@ -263,9 +289,93 @@ local function DisableNativeTimeText(frame)
     end
 end
 
+-- Build the immutable formatter graph and the frame-local binding while the
+-- castbar itself is being prepared. A duration is deliberately not attached
+-- here: Blizzard configures DurationTextBinding objects before the live aura
+-- duration as well, and the binding remains idle until ApplyNativeTimeText
+-- supplies a duration and enables it. This keeps formatter/binding creation
+-- out of the first active target-cast event without adding idle updates.
+local function PrepareNativeTimeText(frame, format, allowRetry)
+    if not (frame and frame.timeText) then return false end
+
+    local formats = BuildNativeTextFormats(allowRetry)
+    local formatSpec = formats and formats[format]
+    if not formatSpec then
+        frame._msufNativeTextUnsafe = true
+        return false
+    end
+
+    local binding = frame._msufDurationTextBinding
+    if not binding then
+        local createBinding = _G.C_DurationUtil and _G.C_DurationUtil.CreateDurationTextBinding
+        if type(createBinding) ~= "function" then return false end
+
+        local ok
+        ok, binding = pcall(createBinding)
+        if not ok or not binding then
+            frame._msufNativeTextUnsafe = true
+            return false
+        end
+        frame._msufDurationTextBinding = binding
+    end
+
+    -- Any failed native method may leave a partially configured object. Give
+    -- the existing cleanup helper ownership until this preparation succeeds.
+    frame._msufNativeTextCleanupPending = true
+
+    if frame._msufDurationTextConfigured ~= true then
+        local ok = type(binding.SetFontString) == "function"
+            and pcall(binding.SetFontString, binding, frame.timeText)
+        if not ok then
+            frame._msufNativeTextUnsafe = true
+            DisableNativeTimeText(frame)
+            return false
+        end
+
+        ok = type(binding.SetUpdateInterval) == "function"
+            and pcall(binding.SetUpdateInterval, binding, 0.10)
+        if not ok then
+            frame._msufNativeTextUnsafe = true
+            DisableNativeTimeText(frame)
+            return false
+        end
+        frame._msufDurationTextConfigured = true
+    end
+
+    if frame._msufDurationTextFormat ~= format then
+        local ok = type(binding.SetTextFormat) == "function"
+            and pcall(binding.SetTextFormat, binding, formatSpec[1], formatSpec[2])
+        if not ok then
+            frame._msufNativeTextUnsafe = true
+            DisableNativeTimeText(frame)
+            return false
+        end
+        frame._msufDurationTextFormat = format
+    end
+
+    frame._msufNativeTextCleanupPending = nil
+    frame._msufNativeTextUnsafe = nil
+    return true, binding
+end
+
+local function PrepareStableDuration(frame)
+    if not frame or frame._msufStableDurationObj then return true end
+
+    local createDuration = _G.C_DurationUtil and _G.C_DurationUtil.CreateDuration
+    if type(createDuration) ~= "function" then return false end
+
+    local ok, durationObj = pcall(createDuration)
+    if not ok or not durationObj or type(durationObj.Assign) ~= "function" then
+        return false
+    end
+
+    frame._msufStableDurationObj = durationObj
+    return true
+end
+
 --- Keep one duration container per frame. Blizzard's native statusbar and text
 --- binding remain attached to that object while Assign updates its contents.
---- Clients without Copy/Assign retain the existing direct-object fallback.
+--- Clients without CreateDuration/Copy/Assign retain the direct-object fallback.
 local function StableDuration(frame, incoming)
     if not (frame and incoming) then return incoming end
 
@@ -304,63 +414,14 @@ end
 local function ApplyNativeTimeText(frame, durationObj, format)
     if not (frame and frame.timeText and durationObj) then return false end
 
-    local formats = BuildNativeTextFormats()
-    local formatSpec = formats and formats[format]
-    if not formatSpec then
-        frame._msufNativeTextUnsafe = true
-        return false
-    end
+    local previousFormat = frame._msufDurationTextFormat
+    local prepared, binding = PrepareNativeTimeText(frame, format)
+    if not prepared then return false end
+    local formatChanged = previousFormat ~= format
 
-    local binding = frame._msufDurationTextBinding
-    if not binding then
-        local createBinding = _G.C_DurationUtil and _G.C_DurationUtil.CreateDurationTextBinding
-        if type(createBinding) ~= "function" then return false end
-
-        local ok
-        ok, binding = pcall(createBinding)
-        if not ok or not binding then
-            frame._msufNativeTextUnsafe = true
-            return false
-        end
-        frame._msufDurationTextBinding = binding
-    end
-
-    -- From this point onward every binding method can leave native state
-    -- partially configured. DisableNativeTimeText must therefore run even when
-    -- the final `_msufNativeTimeBound` success flag was never reached.
+    -- From this point onward duration/enabled methods can leave live native
+    -- state behind, so failed calls must use the normal cleanup path.
     frame._msufNativeTextCleanupPending = true
-
-    local configured = frame._msufDurationTextConfigured == true
-    if not configured then
-        local ok = type(binding.SetFontString) == "function"
-            and pcall(binding.SetFontString, binding, frame.timeText)
-        if not ok then
-            frame._msufNativeTextUnsafe = true
-            DisableNativeTimeText(frame)
-            return false
-        end
-
-        ok = type(binding.SetUpdateInterval) == "function"
-            and pcall(binding.SetUpdateInterval, binding, 0.10)
-        if not ok then
-            frame._msufNativeTextUnsafe = true
-            DisableNativeTimeText(frame)
-            return false
-        end
-        frame._msufDurationTextConfigured = true
-    end
-
-    local formatChanged = frame._msufDurationTextFormat ~= format
-    if formatChanged then
-        local ok = type(binding.SetTextFormat) == "function"
-            and pcall(binding.SetTextFormat, binding, formatSpec[1], formatSpec[2])
-        if not ok then
-            frame._msufNativeTextUnsafe = true
-            DisableNativeTimeText(frame)
-            return false
-        end
-        frame._msufDurationTextFormat = format
-    end
 
     local durationChanged = frame._msufDurationTextDuration ~= durationObj
     if durationChanged then
@@ -401,6 +462,17 @@ end
 -- native implementation and one failure policy.
 function Runtime:BindNativeTimeText(frame, durationObj, format)
     return ApplyNativeTimeText(frame, durationObj, format or "CURRENT")
+end
+
+function Runtime:PrewarmNativeTimeText(frame, format)
+    if not frame then return false end
+    -- Frame construction is outside the first-cast event. Prepare the mutable
+    -- duration container here so the hot path can Assign instead of Copy.
+    PrepareStableDuration(frame)
+    if not frame.timeText then return false end
+    local enabled, configuredFormat = self:RefreshWorkConfig(frame, false)
+    if enabled == false then return false end
+    return PrepareNativeTimeText(frame, format or configuredFormat or "CURRENT", true)
 end
 
 function Runtime:DisableNativeTimeText(frame)
@@ -791,8 +863,26 @@ end
 --- Snapshot duration into plain numbers for fallback text updates and manager
 --- buckets. The duration object remains authoritative when the client supports
 --- timer-driven StatusBars.
-function Runtime:SnapshotDuration(frame, durationObj)
+function Runtime:SnapshotDuration(frame, durationObj, nativeTimerOwned)
     if not (frame and durationObj) then
+        return nil, nil
+    end
+
+    -- LuaDurationObject:HasSecretValues() is explicitly ReturnsNeverSecret in
+    -- Blizzard's API contract. Once the client has accepted this object for the
+    -- native statusbar, probing its protected numeric getters cannot produce a
+    -- usable Lua completion snapshot. Keep the existing getter path as the full
+    -- fallback for readable durations, missing APIs, and native timer failures.
+    if nativeTimerOwned == true
+        and frame.unit ~= "player"
+        and frame.MSUF_isChanneled ~= true
+        and frame.isEmpower ~= true
+        and DurationHasSecretValues(durationObj)
+    then
+        frame._msufPlainEndTime = nil
+        frame._msufRemaining = nil
+        frame._msufPlainTotal = nil
+        frame._msufDurationSnapshotUnsafe = true
         return nil, nil
     end
 
@@ -890,10 +980,6 @@ function Runtime:ApplyActive(frame, state, options)
 
     SetText(frame, "castText", state.text or spellName or "")
 
-    if options.skipSnapshot ~= true then
-        self:SnapshotDuration(frame, durationObj)
-    end
-
     local reverseFill = ResolveReverseFill(frame, state, isChanneled)
     frame._msufStripeReverseFill = reverseFill and true or false
     local timerDriven = self:ApplyTimer(frame.statusBar, durationObj, reverseFill, isChanneled) and true or false
@@ -904,6 +990,10 @@ function Runtime:ApplyActive(frame, state, options)
         frame._msufNativeTimerUnsafe = true
     end
     frame._msufTimerAssumeCountdown = timerDriven and (isChanneled == true) or nil
+
+    if options.skipSnapshot ~= true then
+        self:SnapshotDuration(frame, durationObj, timerDriven)
+    end
 
     local castState = frame._msufCastState or state
     if options.skipCastState ~= true then
@@ -1032,10 +1122,25 @@ function Runtime:Stop(frame, reasonOrOptions)
     activeDurationFrames[frame] = nil
     local setLifecycleActive = _G.MSUF_Castbar_SetLifecycleActive
     if type(setLifecycleActive) == "function" then setLifecycleActive(frame, false) end
-    self:DeactivateNative(frame)
-
-    if type(_G.MSUF_UnregisterCastbar) == "function" then
-        _G.MSUF_UnregisterCastbar(frame)
+    local unregisterCastbar = _G.MSUF_UnregisterCastbar
+    local unregistered = type(unregisterCastbar) == "function"
+    if unregistered then
+        -- The manager owns native deactivation during unregister. Calling it
+        -- here as well repeated CancelNativeCompletion/DisableNativeTimeText on
+        -- every stop.
+        unregisterCastbar(frame)
+        -- Preserve standalone/partial-manager safety: if an alternate or early
+        -- unregister implementation did not release native ownership, finish
+        -- the cleanup here. The normal manager path clears these flags first.
+        if frame._msufNativeTimeBound == true
+            or frame._msufNativeTextCleanupPending == true
+            or frame._msufNativeCompletionTimer ~= nil
+            or frame._msufNativeCompletionDeadline ~= nil
+        then
+            self:DeactivateNative(frame)
+        end
+    else
+        self:DeactivateNative(frame)
     end
 
     frame.MSUF_durationObj = nil
@@ -1080,9 +1185,7 @@ function Runtime:Stop(frame, reasonOrOptions)
             frame.latencyBar:Hide()
         end
 
-        if frame.Hide then
-            frame:Hide()
-        end
+        HideAfterManagerUnregister(frame, unregistered)
 
         return
     end
@@ -1096,8 +1199,8 @@ function Runtime:Stop(frame, reasonOrOptions)
             frame.latencyBar:Hide()
         end
 
-        if not frame.interrupted and frame.Hide then
-            frame:Hide()
+        if not frame.interrupted then
+            HideAfterManagerUnregister(frame, unregistered)
         end
 
         return
@@ -1111,9 +1214,7 @@ function Runtime:Stop(frame, reasonOrOptions)
         SetText(frame, "castText", "")
         SetText(frame, "timeText", "")
 
-        if frame.Hide then
-            frame:Hide()
-        end
+        HideAfterManagerUnregister(frame, unregistered)
     end
 end
 
