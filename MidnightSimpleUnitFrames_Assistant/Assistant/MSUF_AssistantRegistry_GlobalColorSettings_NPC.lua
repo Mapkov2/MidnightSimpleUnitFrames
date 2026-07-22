@@ -62,6 +62,13 @@ function A.GlobalRegistry.RegisterNPCColorSettings(ctx)
     end, function(r, g, b)
         if not ApiSetRGB("SetPetFrameColor", r, g, b) then SetGeneralRGB("petFrameColor", r, g, b) end
     end, { category = "Colors / Unit Frame Colors", attribute = "petColor", defaultR = 0, defaultG = 0.8, defaultB = 0, apply = ApplyColors })
+    RegisterGeneralBoolean("petFrameUsePlayerClassColor", "petUsePlayerClassColor",
+        "Use Player Class Color For Pet Frame", false, {
+            "pet player class color", "pet frame player class color", "use player class color for pet",
+        }, {
+            category = "Colors / Unit Frame Colors", frameType = "colors",
+            apply = ApplyColors, reason = "MSUF_ASSISTANT_PET_PLAYER_CLASS_COLOR",
+        })
 
     Registry:RegisterSetting({
         key = "general.npcColorMode",

@@ -29,6 +29,59 @@ function A.GlobalRegistry.RegisterBaseSettings(ctx)
 
     RegisterBaseAppearanceSettings(ctx)
 
+    Registry:RegisterSetting({
+        key = "general.menuAccent",
+        label = "Menu Accent Color",
+        category = "Global / Misc",
+        unit = "global",
+        frameType = "misc",
+        attribute = "menuAccent",
+        type = "enum",
+        values = { "midnight", "class", "ember", "jade", "violet", "custom" },
+        valueAliases = {
+            default = "midnight", blue = "midnight", classcolor = "class",
+            orange = "ember", green = "jade", purple = "violet",
+        },
+        aliases = { "menu accent", "menu accent color", "options accent", "menu theme color" },
+        get = function()
+            local value = tostring(GeneralDB().menuAccent or "midnight")
+            local allowed = { midnight = true, class = true, ember = true, jade = true, violet = true, custom = true }
+            return allowed[value] and value or "midnight"
+        end,
+        set = function(value) GeneralDB().menuAccent = tostring(value or "midnight") end,
+        apply = function() return true end,
+        combatSafe = true,
+        requiresReload = true,
+    })
+    Registry:RegisterSetting({
+        key = "general.menuAccentColor",
+        label = "Custom Menu Accent Color",
+        category = "Global / Misc",
+        unit = "global",
+        frameType = "misc",
+        attribute = "menuAccentColor",
+        type = "color",
+        aliases = { "custom menu accent color", "menu custom color", "options accent color" },
+        defaultR = 0.231, defaultG = 0.510, defaultB = 0.965,
+        get = function()
+            local hex = tostring(GeneralDB().menuAccentColor or "3b82f6"):gsub("#", "")
+            if not hex:match("^[%da-fA-F][%da-fA-F][%da-fA-F][%da-fA-F][%da-fA-F][%da-fA-F]$") then hex = "3b82f6" end
+            return tonumber(hex:sub(1, 2), 16) / 255,
+                tonumber(hex:sub(3, 4), 16) / 255,
+                tonumber(hex:sub(5, 6), 16) / 255
+        end,
+        set = function(r, g, b)
+            local function Byte(value)
+                value = math.max(0, math.min(1, tonumber(value) or 0))
+                return math.floor(value * 255 + 0.5)
+            end
+            GeneralDB().menuAccentColor = string.format("%02x%02x%02x", Byte(r), Byte(g), Byte(b))
+        end,
+        apply = function() return true end,
+        combatSafe = true,
+        requiresReload = true,
+    })
+
     RegisterGeneralString("menuFontKey", "menuFont", "MSUF Menu Font", "", {
         "msuf menu font", "menu font", "options menu font", "options font", "dashboard menu font",
         "font of the msuf menu", "font for the msuf menu", "msuf menu typeface", "menu typeface",

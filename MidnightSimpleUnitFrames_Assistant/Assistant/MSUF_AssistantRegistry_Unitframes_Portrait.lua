@@ -83,6 +83,10 @@ function A.UnitframesRegistry.RegisterPortraitSettings(ctx, unit)
             ["class portrait"] = "CLASS",
         },
     })
+    RegisterUnitBooleanSetting(unit, "portraitCastSpellIcon", "portraitCastSpellIcon",
+        "Show Cast Spell Icon In Portrait", false,
+        MakeAliases(unit, "cast spell icon in portrait", "portrait cast icon", "portrait spell icon"),
+        { category = "Portrait" })
     RegisterUnitEnum(unit, "portraitShape", "portraitShape", "Portrait Shape", "SQUARE", PORTRAIT_SHAPE_VALUES, MakeAliases(unit, "portrait shape"), {
         category = "Portrait",
         valueAliases = {
