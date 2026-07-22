@@ -18,7 +18,6 @@ local UnitAffectingCombat = UnitAffectingCombat
 local UnitHasIncomingResurrection = UnitHasIncomingResurrection
 local UnitLevel = UnitLevel
 local UnitRace = UnitRace
-local UnitClass = UnitClass
 local UnitClassification = UnitClassification or GetUnitClassification
 local UnitIsPlayer = UnitIsPlayer
 local UnitIsPVP = UnitIsPVP
@@ -62,24 +61,26 @@ local function SafeNumber(value)
   end
   return tonumber(value)
 end
-local UnitExistsSafe = UF.UnitExistsSafe
 local FreshUnitState = UF.FreshUnitState
 local ReadConnectedCached = UF.ReadConnectedCached
 local ReadDeadCached = UF.ReadDeadCached
-local function UnitExistsRuntime(unit, state)
+local ReadUnitExistsCached = UF.ReadUnitExistsCached
+local ReadUnitIsPlayerCached = UF.ReadUnitIsPlayerCached
+local ReadUnitClassCached = UF.ReadUnitClassCached
+local function UnitExistsRuntime(unit, state, frame)
   if state and state.existsKnown == true then
     return state.exists == true
   end
-  return UnitExistsSafe(unit)
+  local exists = ReadUnitExistsCached(frame, unit)
+  return exists == true
 end
-local function UnitIsPlayerRuntime(unit, state)
+local function UnitIsPlayerRuntime(unit, state, frame)
   if state and state.isPlayerKnown == true then
     return state.isPlayer == true
   end
-  if not UnitIsPlayer then
-    return nil
-  end
-  return BoolTrue(UnitIsPlayer(unit))
+  local isPlayer, known = ReadUnitIsPlayerCached(frame, unit)
+  if known == true then return isPlayer == true end
+  return UnitIsPlayer and false or nil
 end
 local Apply = MSUF.Apply or {}
 local ApplyShown = Apply.Shown or function(region, show)
@@ -429,26 +430,16 @@ local function NameRelativeAnchor(frame, anchor)
     return clip, "RIGHT", "LEFT", 0
   end
 
-  local width = name.GetStringWidth and SafeNumber(name:GetStringWidth()) or 0
-  width = width or 0
-  local justify = name._msufJustifyH
-  if not justify and name.GetJustifyH then
-    justify = name:GetJustifyH()
-  end
+  -- Bar-anchored name FontStrings span the full health bar, so their region
+  -- edge is not the rendered glyph edge. Text layout supplies an invisible,
+  -- auto-sized twin for that case. Anchoring directly to its edge lets the UI
+  -- engine propagate restricted name geometry without exposing a secret
+  -- GetStringWidth() result to Lua.
+  local target = frame._msufNameAnchorTextActive == true and frame._msufNameAnchorText or name
   if anchor == "NAMERIGHT" then
-    if justify == "RIGHT" then
-      return name, "LEFT", "RIGHT", 0
-    elseif justify == "CENTER" then
-      return name, "LEFT", "CENTER", width * 0.5
-    end
-    return name, "LEFT", "LEFT", width
+    return target, "LEFT", "RIGHT", 0
   end
-  if justify == "RIGHT" then
-    return name, "RIGHT", "RIGHT", -width
-  elseif justify == "CENTER" then
-    return name, "RIGHT", "CENTER", width * -0.5
-  end
-  return name, "RIGHT", "LEFT", 0
+  return target, "RIGHT", "LEFT", 0
 end
 
 local function AnchorRegion(region, frame, cfg)
@@ -623,8 +614,8 @@ local function PVPFallbackTextureForAtlas(atlas)
   return PVP_TEXTURE_BY_ATLAS[atlas]
 end
 
-local function ResolvePVPAtlas(unit, unitState)
-  if not (unit and UnitExistsRuntime(unit, unitState)) then
+local function ResolvePVPAtlas(frame, unit, unitState)
+  if not (unit and UnitExistsRuntime(unit, unitState, frame)) then
     return nil
   end
   if UnitFramePVPContextualDisabled() then
@@ -861,19 +852,33 @@ end
 local function ApplyConfiguredRegions(frame, spec)
   local status = spec and spec.status
   if not status then
-    if frame then frame._msufNameRelativeStatus = nil end
+    if frame then
+      frame._msufNameRelativeStatus = nil
+      local textRuntime = MSUF.UFText
+      if textRuntime and textRuntime.EnsureNameAnchorProxy then
+        textRuntime.EnsureNameAnchorProxy(frame, spec)
+      end
+    end
     return
   end
   local nameRelative
   for i = 1, #CONFIGURED_REGION_DEFS do
     local def = CONFIGURED_REGION_DEFS[i]
-    ApplyConfiguredRegion(frame, spec, status, def)
     local cfg = status[def[1]]
     if cfg and cfg.enabled == true and (cfg.anchor == "NAMERIGHT" or cfg.anchor == "NAMELEFT") then
       nameRelative = true
     end
   end
-  if frame then frame._msufNameRelativeStatus = nameRelative end
+  if frame then
+    frame._msufNameRelativeStatus = nameRelative
+    local textRuntime = MSUF.UFText
+    if textRuntime and textRuntime.EnsureNameAnchorProxy then
+      textRuntime.EnsureNameAnchorProxy(frame, spec)
+    end
+  end
+  for i = 1, #CONFIGURED_REGION_DEFS do
+    ApplyConfiguredRegion(frame, spec, status, CONFIGURED_REGION_DEFS[i])
+  end
 end
 
 local function RefreshNameRelativeAnchors(frame)
@@ -905,7 +910,7 @@ local function UpdateRaidMarker(frame, status)
   local tex = frame.raidTargetIcon
   local unit = frame.MSUFUnitKey
   local unitState = FreshUnitState(frame, unit)
-  local exists = UnitExistsRuntime(unit, unitState)
+  local exists = UnitExistsRuntime(unit, unitState, frame)
   if not (cfg and cfg.enabled and tex and GetRaidTargetIndex and SetRaidTargetIconTexture and exists) then
     if tex then
       tex._msufRaidMarkerIndex = nil
@@ -945,7 +950,7 @@ local function UpdateLeader(frame, status)
   local tex = frame.LeaderIndicator
   local unit = frame.MSUFUnitKey
   local unitState = FreshUnitState(frame, unit)
-  local exists = UnitExistsRuntime(unit, unitState)
+  local exists = UnitExistsRuntime(unit, unitState, frame)
   if not (cfg and cfg.enabled and tex and exists) then
     SetShown(tex, false)
     return
@@ -969,12 +974,12 @@ local function UpdateLeaderPair(frame, status)
   local leaderTex = frame and (frame.leaderIcon or frame.LeaderIndicator)
   local assistTex = frame and frame.assistIcon
   local unitState = FreshUnitState(frame, unit)
-  local exists = UnitExistsRuntime(unit, unitState)
+  local exists = UnitExistsRuntime(unit, unitState, frame)
   -- Unit-type early-out: only a PLAYER can be group leader/assistant, so a
   -- non-player target (any mob) can never show these. Skip the two group-query
   -- API calls entirely and just ensure the icons are hidden. This guard makes
   -- rapid target-swaps over mobs cheap.
-  if exists and UnitIsPlayerRuntime(unit, unitState) == false then
+  if exists and UnitIsPlayerRuntime(unit, unitState, frame) == false then
     if leaderTex and leaderTex._msufStatusShown ~= false then SetShown(leaderTex, false); leaderTex._msufStatusShown = false end
     if assistTex and assistTex._msufStatusShown ~= false then SetShown(assistTex, false); assistTex._msufStatusShown = false end
     frame._msufLeaderPairState = 0
@@ -1149,14 +1154,15 @@ local function UpdatePowerRoleVisibility(frame, status)
   end
 
   local prev = frame._msufGFPowRoleHidden
-  frame._msufGFPowRoleHidden = hidden or nil
+  -- Preserve both sides of the role gate. Using nil for the visible state made
+  -- the first visible -> hidden transition look like initialization, so a
+  -- reused healer/tank frame could keep its old Power event ownership as DPS.
+  frame._msufGFPowRoleHidden = hidden
   if prev ~= nil and prev ~= hidden then
-    -- Role-driven power visibility changes alter event ownership and layout. Secure header
-    -- changes are avoided in combat; the dirty mark is replayed by group runtime later.
-    if frame._msufGFRegEv and gf and type(gf.RegisterUnitEvents) == "function" and unit then
-      gf.RegisterUnitEvents(frame, unit)
-    end
-    if not (InCombatLockdown and InCombatLockdown()) and gf and type(gf.MarkDirty) == "function" then
+    -- Role-driven power visibility changes alter event ownership and layout.
+    -- MarkDirty owns the combat deferral; outside combat it reapplies the exact
+    -- frame immediately, while the group runtime coalesces protected changes.
+    if gf and type(gf.MarkDirty) == "function" then
       gf.MarkDirty(frame, (gf.DIRTY_GEOMETRY or 0x01) + (gf.DIRTY_LAYOUT or 0x20))
     end
   end
@@ -1168,7 +1174,7 @@ local function UpdateRole(frame, status)
   local tex = frame and frame.roleIcon
   local unit = frame and frame.MSUFUnitKey
   local unitState = FreshUnitState(frame, unit)
-  local exists = UnitExistsRuntime(unit, unitState)
+  local exists = UnitExistsRuntime(unit, unitState, frame)
   local role = UnitGroupRolesAssigned and unit and UnitGroupRolesAssigned(unit) or nil
   if issecretvalue(role) == true then role = nil end
   if role == "NONE" then role = nil end
@@ -1261,7 +1267,7 @@ local function UpdatePhase(frame, status)
   end
   local reason
   local unitState = FreshUnitState(frame, unit)
-  local isPlayer = UnitIsPlayerRuntime(unit, unitState)
+  local isPlayer = UnitIsPlayerRuntime(unit, unitState, frame)
   if isPlayer == true and UnitPhaseReason then
     reason = UnitPhaseReason(unit)
   end
@@ -1313,7 +1319,7 @@ local function UpdateIdentityTexts(frame, status)
 
   local unit = frame.MSUFUnitKey
   local unitState = FreshUnitState(frame, unit)
-  if not UnitExistsRuntime(unit, unitState) then
+  if not UnitExistsRuntime(unit, unitState, frame) then
     HideField(frame, IDENTITY_TEXT_FIELDS)
     return
   end
@@ -1332,8 +1338,9 @@ local function UpdateIdentityTexts(frame, status)
   end
 
   local classText, classPresent = "", false
-  if showClass and UnitClass then
-    classText, classPresent = IdentityString(UnitClass(unit))
+  if showClass then
+    local className = ReadUnitClassCached(frame, unit)
+    classText, classPresent = IdentityString(className)
   end
 
   if showLevel then ShowIdentityText(frame.levelText, levelText, levelPresent) else SetShown(frame.levelText, false) end
@@ -1355,14 +1362,14 @@ local function UpdateRaidGroup(frame, status)
   local fs = frame.raidGroupNameText
   local unit = frame.MSUFUnitKey
   local unitState = FreshUnitState(frame, unit)
-  local exists = UnitExistsRuntime(unit, unitState)
+  local exists = UnitExistsRuntime(unit, unitState, frame)
   if not (cfg and cfg.enabled and fs and UnitInRaid and GetRaidRosterInfo and exists) then
     SetShown(fs, false)
     return
   end
   -- Only a PLAYER can be in the raid roster; a mob target never shows a raid
   -- group number. Skip UnitInRaid/GetRaidRosterInfo for non-players.
-  if UnitIsPlayerRuntime(unit, unitState) == false then
+  if UnitIsPlayerRuntime(unit, unitState, frame) == false then
     SetShown(fs, false)
     return
   end
@@ -1400,8 +1407,8 @@ local function EliteAtlas(state)
   return "nameplates-icon-elite-silver"
 end
 
-local function EliteState(unit, unitState)
-  local exists = UnitExistsRuntime(unit, unitState)
+local function EliteState(frame, unit, unitState)
+  local exists = UnitExistsRuntime(unit, unitState, frame)
   if not (UnitClassification and exists) then
     return nil
   end
@@ -1438,11 +1445,11 @@ local function UpdateElite(frame, status)
   -- target can never show this. Skip the classification query for players.
   local unit = frame.MSUFUnitKey
   local unitState = FreshUnitState(frame, unit)
-  if status.testMode ~= true and UnitIsPlayerRuntime(unit, unitState) == true then
+  if status.testMode ~= true and UnitIsPlayerRuntime(unit, unitState, frame) == true then
     SetShown(tex, false)
     return
   end
-  local state = status.testMode and "BOSS" or EliteState(unit, unitState)
+  local state = status.testMode and "BOSS" or EliteState(frame, unit, unitState)
   if state then
     if ApplyStatusIconPackTexture(tex, cfg, status, "elite", state) then
       SetShown(tex, true)
@@ -1501,7 +1508,7 @@ local function StatusText(frame, cfg, unitState, seedHP)
   if cfg and cfg.showDND and UnitIsDND then
     local dnd = UnitIsDND(unit)
     if BoolTrue(dnd) then
-      return "DND", "afk"
+      return "DND", "dnd"
     end
   end
   return nil
@@ -1591,11 +1598,22 @@ local function UpdateStatusText(frame, status, event, seedHP)
     and cfg.showGhost ~= true then
     return
   end
-  if not UnitExistsRuntime(unit, unitState) then
+  if not UnitExistsRuntime(unit, unitState, frame) then
     ClearStatusText(frame, fs)
     return
   end
-  local text, state = status.testMode and "DEAD" or nil, status.testMode and "dead" or nil
+  local text, state
+  if status.testMode then
+    if cfg.showDead then
+      text, state = "DEAD", "dead"
+    elseif cfg.showGhost then
+      text, state = "GHOST", "ghost"
+    elseif cfg.showAFK then
+      text, state = "AFK", "afk"
+    elseif cfg.showDND then
+      text, state = "DND", "dnd"
+    end
+  end
   if not text then
     text, state = StatusText(frame, cfg, unitState, seedHP)
   end
@@ -1605,6 +1623,8 @@ local function UpdateStatusText(frame, status, event, seedHP)
       layout = cfg.ghost
     elseif state == "afk" and cfg.afk then
       layout = cfg.afk
+    elseif state == "dnd" and cfg.dnd then
+      layout = cfg.dnd
     elseif cfg.dead then
       layout = cfg.dead
     end
@@ -1639,7 +1659,7 @@ local function UpdateCombat(frame, status)
   local tex = frame.combatStateIndicatorIcon
   local unit = frame.MSUFUnitKey
   local unitState = FreshUnitState(frame, unit)
-  local exists = UnitExistsRuntime(unit, unitState)
+  local exists = UnitExistsRuntime(unit, unitState, frame)
   if not (cfg and cfg.enabled and tex and exists) then
     SetShown(tex, false)
     return
@@ -1682,7 +1702,7 @@ local function UpdateIncomingRes(frame, status)
   local tex = frame.incomingResIndicatorIcon
   local unit = frame.MSUFUnitKey
   local unitState = FreshUnitState(frame, unit)
-  local exists = UnitExistsRuntime(unit, unitState)
+  local exists = UnitExistsRuntime(unit, unitState, frame)
   if not (cfg and cfg.enabled and tex and exists) then
     SetShown(tex, false)
     return
@@ -1693,7 +1713,7 @@ local function UpdateIncomingRes(frame, status)
   end
   -- Only players get resurrected; a mob target never has incoming res. Skip the
   -- API query for non-players.
-  if status.testMode ~= true and UnitIsPlayerRuntime(unit, unitState) == false then
+  if status.testMode ~= true and UnitIsPlayerRuntime(unit, unitState, frame) == false then
     SetShown(tex, false)
     return
   end
@@ -1725,7 +1745,7 @@ local function UpdatePVP(frame, status)
     return
   end
   local unitState = FreshUnitState(frame, unit)
-  local atlas = status.testMode and ResolvePVPTestAtlas(unit) or ResolvePVPAtlas(unit, unitState)
+  local atlas = status.testMode and ResolvePVPTestAtlas(unit) or ResolvePVPAtlas(frame, unit, unitState)
   if atlas and ApplyStatusIconPackTexture(tex, cfg, status, "pvp", PVPVariantForAtlas(atlas)) then
     SetShown(tex, true)
   elseif ApplyPVPTexture(tex, atlas) then

@@ -1626,6 +1626,7 @@ local MSUF_PROFILEIO_POSITIVE_FONT_SIZE_KEYS = {
     statusTextSize = 14,
     statusGhostTextSize = 14,
     statusAFKTextSize = 14,
+    statusDNDTextSize = 14,
     playerHPBarTextSize = 14,
     combatFontSize = 24,
     combatStateFontSize = 24,
@@ -1809,7 +1810,7 @@ local MSUF_PROFILEIO_LEGACY_PROFILE_SCHEMA_56 = 560
 --- MSUF_ProfileIO_TranslateProfileToCurrent, independently from the broad
 --- default-fill revision owned by MSUF_Defaults.lua. Bump it whenever that
 --- translation pipeline gains a new mandatory repair.
-local MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = 11
+local MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = 12
 local MSUF_PROFILEIO_TEXT_SCOPE_KEYS = {
     "general",
     "player", "target", "targettarget", "tot", "targetoftarget",
@@ -1866,6 +1867,9 @@ local MSUF_PROFILEIO_STATUS_PREFIXES = {
     "levelIndicator",
     "eliteIcon",
     "statusText",
+    "statusGhostText",
+    "statusAFKText",
+    "statusDNDText",
     "combatStateIndicator",
     "restedStateIndicator",
     "restingStateIndicator",
@@ -1902,6 +1906,10 @@ local MSUF_PROFILEIO_GROUP_STATUS_NUMERIC_KEYS = {
     statusAFKOffsetX = { -500, 500 },
     statusAFKOffsetY = { -500, 500 },
     statusAFKTextLayer = { 0, 30 },
+    statusDNDTextSize = { 1, 256 },
+    statusDNDOffsetX = { -500, 500 },
+    statusDNDOffsetY = { -500, 500 },
+    statusDNDTextLayer = { 0, 30 },
     groupNumberSize = { 1, 256 },
     groupNumberX = { -500, 500 },
     groupNumberY = { -500, 500 },
@@ -1915,6 +1923,7 @@ local MSUF_PROFILEIO_GROUP_STATUS_ANCHOR_KEYS = {
     "statusTextAnchor",
     "statusGhostTextAnchor",
     "statusAFKTextAnchor",
+    "statusDNDTextAnchor",
     "groupNumberAnchor",
 }
 local MSUF_PROFILEIO_UNIT_STATUS_BOOL_ALIASES = {
@@ -1949,6 +1958,7 @@ local MSUF_PROFILEIO_GROUP_STATUS_BOOL_ALIASES = {
     { "statusText", "statusTextEnabled" },
     { "statusGhostText", "statusGhostTextEnabled" },
     { "statusAFKText", "statusAFKTextEnabled" },
+    { "statusDNDText", "statusDNDTextEnabled" },
     { "showGroupNumber", "showRaidGroupInName" },
 }
 local MSUF_PROFILEIO_GROUP_STATUS_OFFSET_ALIASES = {
@@ -1966,6 +1976,8 @@ local MSUF_PROFILEIO_GROUP_STATUS_OFFSET_ALIASES = {
     { "statusGhostOffsetY", "statusGhostTextOffsetY" },
     { "statusAFKOffsetX", "statusAFKTextOffsetX" },
     { "statusAFKOffsetY", "statusAFKTextOffsetY" },
+    { "statusDNDOffsetX", "statusDNDTextOffsetX" },
+    { "statusDNDOffsetY", "statusDNDTextOffsetY" },
     { "groupNumberX", "raidGroupNameOffsetX" },
     { "groupNumberY", "raidGroupNameOffsetY" },
     { "groupNumberLayer", "raidGroupNameLayer" },
@@ -2447,6 +2459,62 @@ local function MSUF_ProfileIO_NormalizeStatusScope(scope, isGroupScope)
         end
         for i = 1, #MSUF_PROFILEIO_GROUP_STATUS_ANCHOR_KEYS do
             changed = MSUF_ProfileIO_UpperStringField(scope, MSUF_PROFILEIO_GROUP_STATUS_ANCHOR_KEYS[i]) or changed
+        end
+    end
+    return changed
+end
+
+local MSUF_PROFILEIO_GROUP_STATUS_SCOPES = { gf_party = true, gf_raid = true, gf_mythicraid = true }
+local MSUF_PROFILEIO_UNIT_STATUS_SPLIT = {
+    { "statusDeadTextEnabled", "showDead", true, nil },
+    { "statusGhostTextEnabled", "showGhost", true, "statusGhostText" },
+    { "statusAFKTextEnabled", "showAFK", false, "statusAFKText" },
+    { "statusDNDTextEnabled", "showDND", false, "statusDNDText" },
+}
+local MSUF_PROFILEIO_STATUS_LAYOUT_SUFFIXES = { "Size", "Anchor", "OffsetX", "OffsetY", "Layer" }
+local function MSUF_ProfileIO_MigrateSplitStatusText(profile)
+    if type(profile) ~= "table" then return false end
+    local changed = false
+    local general = type(profile.general) == "table" and profile.general or {}
+    local states = type(general.statusIndicators) == "table" and general.statusIndicators or {}
+    for i = 1, #MSUF_PROFILEIO_TEXT_SCOPE_KEYS do
+        local scopeKey = MSUF_PROFILEIO_TEXT_SCOPE_KEYS[i]
+        local scope = profile[scopeKey]
+        if type(scope) == "table" and MSUF_PROFILEIO_GROUP_STATUS_SCOPES[scopeKey] then
+            if scope.statusDNDText == nil and scope.statusAFKText ~= nil then
+                scope.statusDNDText = scope.statusAFKText
+                scope.statusDNDTextSize = scope.statusAFKTextSize
+                scope.statusDNDTextAnchor = scope.statusAFKTextAnchor
+                scope.statusDNDTextLayer = scope.statusAFKTextLayer
+                scope.statusDNDOffsetX = scope.statusAFKOffsetX
+                scope.statusDNDOffsetY = scope.statusAFKOffsetY
+                changed = true
+            end
+        elseif type(scope) == "table" and scopeKey ~= "general" then
+            local master = scope.statusTextEnabled
+            if master == nil then master = general.statusTextEnabled end
+            if master == nil then master = true end
+            for j = 1, #MSUF_PROFILEIO_UNIT_STATUS_SPLIT do
+                local def = MSUF_PROFILEIO_UNIT_STATUS_SPLIT[j]
+                if scope[def[1]] == nil then
+                    local state = states[def[2]]
+                    if state == nil then state = def[3] end
+                    scope[def[1]] = master == true and state == true
+                    changed = true
+                end
+                local prefix = def[4]
+                if prefix then
+                    for k = 1, #MSUF_PROFILEIO_STATUS_LAYOUT_SUFFIXES do
+                        local suffix = MSUF_PROFILEIO_STATUS_LAYOUT_SUFFIXES[k]
+                        local key, legacyKey = prefix .. suffix, "statusText" .. suffix
+                        if scope[key] == nil then
+                            local value = scope[legacyKey]
+                            if value == nil then value = general[legacyKey] end
+                            if value ~= nil then scope[key], changed = value, true end
+                        end
+                    end
+                end
+            end
         end
     end
     return changed
@@ -2996,6 +3064,7 @@ MSUF_ProfileIO_TranslateProfileToCurrent = function(profile, context)
             changed = MSUF_ProfileIO_NormalizeStatusScope(scope, isGroupScope) or changed
         end
     end
+    changed = MSUF_ProfileIO_MigrateSplitStatusText(profile) or changed
     changed = MSUF.ProfileIONormalizeLegacy55VisualCompatibility(profile, legacyProfile, context) or changed
     changed = MSUF_ProfileIO_NormalizeLegacyAuras(profile, legacyProfile) or changed
     local normalizeLayers = _G.MSUF_NormalizeNumericLayers

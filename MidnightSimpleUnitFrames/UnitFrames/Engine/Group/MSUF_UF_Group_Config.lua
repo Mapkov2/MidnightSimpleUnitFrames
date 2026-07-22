@@ -537,6 +537,7 @@ local GROUP_STATUS_REGIONS = {
   statusText = { "statusTextSize", 14, "statusTextAnchor", "CENTER", "statusOffsetX", 0, "statusOffsetY", 0, "statusTextLayer", 7 },
   statusGhost = { "statusGhostTextSize", 14, "statusGhostTextAnchor", "CENTER", "statusGhostOffsetX", 0, "statusGhostOffsetY", 0, "statusGhostTextLayer", 7 },
   statusAFK = { "statusAFKTextSize", 14, "statusAFKTextAnchor", "CENTER", "statusAFKOffsetX", 0, "statusAFKOffsetY", 0, "statusAFKTextLayer", 7 },
+  statusDND = { "statusDNDTextSize", 14, "statusDNDTextAnchor", "CENTER", "statusDNDOffsetX", 0, "statusDNDOffsetY", 0, "statusDNDTextLayer", 7 },
   raidGroup = { "groupNumberSize", 10, "groupNumberAnchor", "BOTTOMRIGHT", "groupNumberX", -2, "groupNumberY", 2, "groupNumberLayer", 7 },
 }
 
@@ -557,7 +558,7 @@ local function CompileStatus(kind, conf)
   local phaseEnabled = conf.phaseIcon == true
   local statusDeadGhostTextEnabled = conf.statusText == true or conf.statusGhostText == true
   local statusConnectionTextEnabled = conf.statusText == true
-  local statusPlayerFlagTextEnabled = conf.statusAFKText == true
+  local statusPlayerFlagTextEnabled = conf.statusAFKText == true or conf.statusDNDText == true
   local statusFlagTextEnabled = statusDeadGhostTextEnabled or statusPlayerFlagTextEnabled
   local statusTextEnabled = statusConnectionTextEnabled or statusFlagTextEnabled
   local raidGroupEnabled = conf.showGroupNumber == true
@@ -585,10 +586,11 @@ local function CompileStatus(kind, conf)
   statusText.showDead = conf.statusText == true
   statusText.showGhost = conf.statusGhostText == true
   statusText.showAFK = conf.statusAFKText == true
-  statusText.showDND = conf.statusAFKText == true
+  statusText.showDND = conf.statusDNDText == true
   statusText.dead = StatusRegionDef(conf, conf.statusText == true, "statusText")
   statusText.ghost = StatusRegionDef(conf, conf.statusGhostText == true, "statusGhost")
   statusText.afk = StatusRegionDef(conf, conf.statusAFKText == true, "statusAFK")
+  statusText.dnd = StatusRegionDef(conf, conf.statusDNDText == true, "statusDND")
   local raidGroup = StatusRegionDef(conf, raidGroupEnabled, "raidGroup")
   raidGroup.style = conf.groupNumberStyle or "PAREN"
   local raidMarker = StatusRegionDef(conf, raidMarkerEnabled, "raidMarker")
@@ -1524,7 +1526,7 @@ local function CompileSpecUncached(kind, frame, unit, conf)
       npcClassColorBar = healthVisual.npcClassColorBar == true,
       barGradient = ResolveBarGradient(conf, general, "enableGradient"),
       reverse = conf.reverseFill == true,
-      smooth = conf.smoothFill ~= false,
+      smooth = conf.smoothFill == true,
     },
     power = {
       enabled = powerHeight > 0,
@@ -1876,6 +1878,9 @@ local function PatchFrameSpec(base, kind, frame, unit, conf)
   power.enabled = powerHeight > 0
   power.height = powerHeight
   spec.power = power
+  -- Power text is part of the same role-gated runtime ownership as the bar.
+  -- A DPS frame with its power bar disabled must not retain PowerText events.
+  spec.showPowerText = powerHeight > 0 and base.showPowerText == true
 
   local status = frame._msufGFStatusSpec
   if not status then

@@ -469,6 +469,9 @@ statusPvp=pvp|pvp flag|pvp icon|pvp indicator|pvp status|war mode|flagged
 statusResting=rested|resting|rest icon
 statusCombat=combat icon|combat state|in combat icon
 statusText=dead text|dead status|offline text|status text
+statusGhostText=ghost|ghost text
+statusAFKText=afk|afk text
+statusDNDText=dnd|dnd text|do not disturb
 eliteicon=elite|rare|elite icon|rare icon
 raidgroupname=raid group|group number|subgroup
 level=level|level text|level indicator
@@ -487,7 +490,8 @@ leaderIcon=leader
 assistIcon=assist
 raidMarker=raid marker|marker
 statusText=dead|offline
-statusAFKText=afk|dnd
+statusAFKText=afk
+statusDNDText=dnd|do not disturb
 roleIcon=role icon|tank|healer|dps
 ]]
 

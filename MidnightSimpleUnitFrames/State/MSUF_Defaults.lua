@@ -174,6 +174,7 @@ local MSUF_DEFAULTS_TEXT_SCOPE_KEYS = { "player", "target", "targettarget", "tot
 local MSUF_DEFAULTS_GROUP_SCOPE_KEYS = { "gf_party", "gf_raid", "gf_mythicraid" }
 local MSUF_DEFAULTS_STATUS_PREFIXES = {
     "leaderIcon", "raidMarker", "levelIndicator", "eliteIcon", "statusText",
+    "statusGhostText", "statusAFKText", "statusDNDText",
     "combatStateIndicator", "restedStateIndicator", "restingStateIndicator",
     "incomingResIndicator", "pvpIndicator", "raidGroupName",
 }
@@ -445,7 +446,8 @@ local function MSUF_Defaults_NormalizeStatusScope(scope, groupScope)
         { "roleIcon", "showRoleIcon" }, { "leaderIcon", "showLeaderIcon" },
         { "assistIcon", "showAssistIcon" }, { "raidMarker", "showRaidMarker" },
         { "statusText", "statusTextEnabled" }, { "statusGhostText", "statusGhostTextEnabled" },
-        { "statusAFKText", "statusAFKTextEnabled" }, { "showGroupNumber", "showRaidGroupInName" },
+        { "statusAFKText", "statusAFKTextEnabled" }, { "statusDNDText", "statusDNDTextEnabled" },
+        { "showGroupNumber", "showRaidGroupInName" },
     } or {
         { "showLeaderIcon", "leaderIcon" }, { "showRaidMarker", "raidMarker" },
         { "showLevelIndicator", "levelIndicator" }, { "showEliteIcon", "eliteIcon" },
@@ -465,6 +467,7 @@ local function MSUF_Defaults_NormalizeStatusScope(scope, groupScope)
         { "statusOffsetX", "statusTextOffsetX" }, { "statusOffsetY", "statusTextOffsetY" },
         { "statusGhostOffsetX", "statusGhostTextOffsetX" }, { "statusGhostOffsetY", "statusGhostTextOffsetY" },
         { "statusAFKOffsetX", "statusAFKTextOffsetX" }, { "statusAFKOffsetY", "statusAFKTextOffsetY" },
+        { "statusDNDOffsetX", "statusDNDTextOffsetX" }, { "statusDNDOffsetY", "statusDNDTextOffsetY" },
         { "groupNumberX", "raidGroupNameOffsetX" }, { "groupNumberY", "raidGroupNameOffsetY" },
         { "groupNumberLayer", "raidGroupNameLayer" },
     } or {
@@ -490,12 +493,12 @@ local function MSUF_Defaults_NormalizeStatusScope(scope, groupScope)
             "roleIconX", "roleIconY", "raidMarkerX", "raidMarkerY",
             "leaderIconX", "leaderIconY", "assistIconX", "assistIconY",
             "statusOffsetX", "statusOffsetY", "statusGhostOffsetX", "statusGhostOffsetY",
-            "statusAFKOffsetX", "statusAFKOffsetY", "groupNumberX", "groupNumberY",
+            "statusAFKOffsetX", "statusAFKOffsetY", "statusDNDOffsetX", "statusDNDOffsetY", "groupNumberX", "groupNumberY",
         }) do
             changed = MSUF_Defaults_NormalizeNumberField(scope, key, -500, 500) or changed
         end
         changed = MSUF_Defaults_NormalizeNumberField(scope, "groupNumberLayer", 0, 30) or changed
-        for _, key in ipairs({ "roleIconAnchor", "raidMarkerAnchor", "leaderIconAnchor", "assistIconAnchor", "statusTextAnchor", "statusGhostTextAnchor", "statusAFKTextAnchor", "groupNumberAnchor" }) do
+        for _, key in ipairs({ "roleIconAnchor", "raidMarkerAnchor", "leaderIconAnchor", "assistIconAnchor", "statusTextAnchor", "statusGhostTextAnchor", "statusAFKTextAnchor", "statusDNDTextAnchor", "groupNumberAnchor" }) do
             changed = MSUF_Defaults_UpperStringField(scope, key) or changed
         end
     end
@@ -637,14 +640,60 @@ local function MSUF_Defaults_NormalizeNumericLayers(root)
 end
 ExportPublic("MSUF_NormalizeNumericLayers", MSUF_Defaults_NormalizeNumericLayers)
 
+local UNIT_STATUS_TEXT_SPLIT = {
+    { "statusDeadTextEnabled", "showDead", true, nil },
+    { "statusGhostTextEnabled", "showGhost", true, "statusGhostText" },
+    { "statusAFKTextEnabled", "showAFK", false, "statusAFKText" },
+    { "statusDNDTextEnabled", "showDND", false, "statusDNDText" },
+}
+local UNIT_STATUS_TEXT_LAYOUT_SUFFIXES = { "Size", "Anchor", "OffsetX", "OffsetY", "Layer" }
+local function MSUF_Defaults_MigrateSplitUnitStatusText(db)
+    if type(db) ~= "table" then return false end
+    local changed = false
+    local general = type(db.general) == "table" and db.general or {}
+    local states = type(general.statusIndicators) == "table" and general.statusIndicators or {}
+    for _, unitKey in ipairs(MSUF_DEFAULTS_TEXT_SCOPE_KEYS) do
+        local scope = db[unitKey]
+        if type(scope) == "table" then
+            local master = scope.statusTextEnabled
+            if master == nil then master = general.statusTextEnabled end
+            if master == nil then master = true end
+            for i = 1, #UNIT_STATUS_TEXT_SPLIT do
+                local def = UNIT_STATUS_TEXT_SPLIT[i]
+                if scope[def[1]] == nil then
+                    local state = states[def[2]]
+                    if state == nil then state = def[3] end
+                    scope[def[1]] = master == true and state == true
+                    changed = true
+                end
+                local prefix = def[4]
+                if prefix then
+                    for j = 1, #UNIT_STATUS_TEXT_LAYOUT_SUFFIXES do
+                        local suffix = UNIT_STATUS_TEXT_LAYOUT_SUFFIXES[j]
+                        local key, legacyKey = prefix .. suffix, "statusText" .. suffix
+                        if scope[key] == nil then
+                            local value = scope[legacyKey]
+                            if value == nil then value = general[legacyKey] end
+                            if value ~= nil then scope[key], changed = value, true end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return changed
+end
+
 local function MSUF_Defaults_NormalizeProfileTo60Defaults(db)
     if type(db) ~= "table" then return false end
+    local changed = MSUF_Defaults_MigrateSplitUnitStatusText(db)
     local sharedTranslator = _G.MSUF_ProfileIO_TranslateProfileToCurrent
     if type(sharedTranslator) ~= "function" and type(MSUF) == "table" then
         sharedTranslator = MSUF.MSUF_ProfileIO_TranslateProfileToCurrent
     end
     if type(sharedTranslator) == "function" then
-        local _, changed = sharedTranslator(db, { source = "defaults", markProfile = true })
+        local _, translated = sharedTranslator(db, { source = "defaults", markProfile = true })
+        changed = translated == true or changed
         if db.auras ~= nil then
             db.auras = nil
             changed = true
@@ -656,7 +705,6 @@ local function MSUF_Defaults_NormalizeProfileTo60Defaults(db)
         changed = MSUF_Defaults_NormalizeNumericLayers(db) or changed
         return changed == true
     end
-    local changed = false
     changed = MSUF_Defaults_NormalizeUnitPositionAliases(db) or changed
     changed = MSUF_Defaults_NormalizeAuras3Profile(db) or changed
     for _, key in ipairs(MSUF_DEFAULTS_TEXT_SCOPE_KEYS) do
@@ -903,6 +951,23 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     EnsureFreshGroupAuraNativeRenderer(db.gf_mythicraid)
     db.bars = db.bars or {}
     SetDefault(db.bars, "showAltMana", false)
+    -- Match the performance baseline used by EUI: native interpolation is an
+    -- explicit visual option, never an implicit cost on a fresh profile.
+    db.bars.smoothPowerBar = false
+    db.bars.classPowerSmoothFill = false
+    db.bars.altManaSmoothFill = false
+    for _, key in ipairs({ "player", "target", "targettarget", "focustarget", "focus", "pet", "boss" }) do
+        if type(db[key]) == "table" then
+            db[key].smoothFill = false
+            db[key].powerSmoothFill = false
+        end
+    end
+    for _, key in ipairs({ "gf_party", "gf_raid", "gf_mythicraid" }) do
+        if type(db[key]) == "table" then
+            db[key].smoothFill = false
+            db[key].powerSmoothFill = false
+        end
+    end
     SetDefault(db.bars, "roundedFramesEnabled", false)
     SetDefault(db.bars, "roundedUnitFrames", true)
     SetDefault(db.bars, "roundedGroupFrames", true)
@@ -1114,7 +1179,7 @@ local MSUF_DEFAULTS_CURRENT_PROFILE_SCHEMA = 600
 --- Persisted completion marker for the broad default-fill/repair pass below.
 --- Bump this whenever MSUF_EnsureDB_Heavy gains a new mandatory default or
 --- one-shot repair; current profiles can then be repaired exactly once again.
-local MSUF_DEFAULTS_CURRENT_REVISION = 5
+local MSUF_DEFAULTS_CURRENT_REVISION = 6
 
 --- Root tables are the contract every other module assumes after EnsureDB.
 --- Add new top-level SavedVariables buckets here before modules start reading
@@ -2905,13 +2970,13 @@ if MSUF_DB.bars == nil then
         MSUF_DB.bars.powerBarHeight = 3
     end
     if MSUF_DB.bars.smoothPowerBar == nil then
-        MSUF_DB.bars.smoothPowerBar = true
+        MSUF_DB.bars.smoothPowerBar = false
     end
     if MSUF_DB.bars.classPowerSmoothFill == nil then
-        MSUF_DB.bars.classPowerSmoothFill = MSUF_DB.bars.smoothPowerBar ~= false
+        MSUF_DB.bars.classPowerSmoothFill = MSUF_DB.bars.smoothPowerBar == true
     end
     if MSUF_DB.bars.altManaSmoothFill == nil then
-        MSUF_DB.bars.altManaSmoothFill = MSUF_DB.bars.smoothPowerBar ~= false
+        MSUF_DB.bars.altManaSmoothFill = MSUF_DB.bars.smoothPowerBar == true
     end
     if MSUF_DB.bars.classPowerComboPointColorMode == nil then
         MSUF_DB.bars.classPowerComboPointColorMode = "default"
@@ -3689,7 +3754,7 @@ local function fill(key, defaults)
                 u.powerBarBorderThickness = tonumber(bars.powerBarBorderThickness or bars.powerBarBorderSize) or 1
             end
             if u.powerSmoothFill == nil then
-                u.powerSmoothFill = (unitKey == "player") and (bars.smoothPowerBar ~= false) or false
+                u.powerSmoothFill = (unitKey == "player") and (bars.smoothPowerBar == true) or false
             end
             if unitKey == "player" then
                 local legacyShape = tostring(u.detachedPowerBarShape or "FOLLOW_CLASS"):upper()
@@ -3741,7 +3806,7 @@ local function fill(key, defaults)
         end
         --- Per-unitframe: smooth health fill animation (matches Group Frames default).
         if u.smoothFill == nil then
-            u.smoothFill = true
+            u.smoothFill = false
         end
         --- Unified alpha: HP fill opacity + power fill opacity + background texture
         --- opacity + a toggle to keep text/portrait opaque. Legacy combat/layered keys
