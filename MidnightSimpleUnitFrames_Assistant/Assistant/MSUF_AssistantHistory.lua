@@ -179,12 +179,62 @@ function A.SetContextValue(key, value)
     return value
 end
 
+-- Bounded ring of recently discussed distinct subjects.  The follow-up engine
+-- resolves "make it bigger / also for target" against a single last subject;
+-- this ring lets a later turn reach back to an earlier one ("the other frame",
+-- "back to the player one").  It is deliberately small and dedup-by-key so it
+-- can never grow SavedVariables or drift into stale-context guessing: the
+-- consumer still checks each entry's turn age before trusting it.
+local RECENT_SUBJECTS_LIMIT = 5
+
+local function PushRecentSubject(ctx, bundle)
+    local key = bundle and bundle.lastSetting
+    if type(key) ~= "string" or key == "" then return end
+    local ring = type(ctx.recentSubjects) == "table" and ctx.recentSubjects or {}
+    ctx.recentSubjects = ring
+    -- Drop any earlier mention of the same subject so re-touching it moves the
+    -- entry to the front instead of duplicating it.
+    for i = #ring, 1, -1 do
+        local entry = ring[i]
+        if type(entry) ~= "table" or entry.settingKey == key then
+            table.remove(ring, i)
+        end
+    end
+    table.insert(ring, 1, {
+        settingKey = key,
+        unit = bundle.lastUnit,
+        frameType = bundle.lastFrameType,
+        category = bundle.lastCategory,
+        label = bundle.actionLabel or bundle.label,
+        turn = tonumber(ctx.turnSerial or ctx.lastTurnSerial) or 0,
+    })
+    while #ring > RECENT_SUBJECTS_LIMIT do
+        table.remove(ring)
+    end
+end
+
 function A.ConversationContext()
     local ctx = A.GetContext()
     local turnSerial = tonumber(ctx.turnSerial or ctx.lastTurnSerial) or 0
     local subjectTurn = tonumber(ctx.lastSubjectTurn)
     local ageTurns
     if subjectTurn then ageTurns = turnSerial - subjectTurn end
+    local recentSubjects = {}
+    for i = 1, #(type(ctx.recentSubjects) == "table" and ctx.recentSubjects or {}) do
+        local entry = ctx.recentSubjects[i]
+        if type(entry) == "table" then
+            local entryTurn = tonumber(entry.turn) or 0
+            recentSubjects[#recentSubjects + 1] = {
+                settingKey = entry.settingKey,
+                unit = entry.unit,
+                frameType = entry.frameType,
+                category = entry.category,
+                label = entry.label,
+                turn = entryTurn,
+                ageTurns = turnSerial - entryTurn,
+            }
+        end
+    end
     return {
         subject = {
             settingKey = ctx.lastSetting,
@@ -194,6 +244,7 @@ function A.ConversationContext()
             textArea = ctx.lastTextArea,
             textSlot = ctx.lastTextSlot,
         },
+        recentSubjects = recentSubjects,
         lastValue = ctx.lastValue,
         lastDirection = ctx.lastDirection,
         turnSerial = turnSerial,
@@ -216,5 +267,6 @@ function A.RememberAppliedBundle(bundle)
     ctx.lastChangeBundle = bundle and bundle.serializable or nil
     if bundle and bundle.lastSetting ~= nil then
         ctx.lastSubjectTurn = tonumber(ctx.turnSerial or ctx.lastTurnSerial) or ctx.lastSubjectTurn
+        PushRecentSubject(ctx, bundle)
     end
 end

@@ -7493,6 +7493,166 @@ function R.TryUncertainContextChoices(text)
     }
 end
 
+-- Read-only reach-back to an earlier conversation subject.
+--
+-- The follow-up engine resolves "make it bigger / also for target" against the
+-- single most recent change.  A reference that reaches further back -- "the
+-- other frame", "the first one", "go back to the player one" -- has nothing to
+-- resolve against there, so without this it would fall through to a generic
+-- no-match.  This reads the bounded recent-subjects ring and, when a
+-- back-reference names exactly one still-recent earlier subject, restates it
+-- and offers it as a selectable read-only follow-up.
+--
+-- It never mutates.  A back-reference is inherently ambiguous, so the safe
+-- outcome is to confirm which subject the user means and let them state the
+-- change explicitly; the status is "info"/"ambiguous", never "applied".  When
+-- the ring is empty, the reference is ambiguous across several subjects, or the
+-- only candidate has aged out, this returns nil.
+local REACH_BACK_MAX_AGE_TURNS = 8
+
+local function ReachBackOrdinalIndex(norm)
+    if R.ContainsAny(norm, { "the other", "other one", "other frame", "das andere", "der andere", "die andere" }) then
+        return "other"
+    end
+    for word, index in pairs({ first = 1, second = 2, third = 3, fourth = 4, fifth = 5,
+        erste = 1, zweite = 2, dritte = 3, vierte = 4, fuenfte = 5 })
+    do
+        if norm:find("%f[%a]" .. word .. "%f[%A]") then return index end
+    end
+    return nil
+end
+
+function R.RouterReachBackSubjectChoice(text)
+    if type(A.ConversationContext) ~= "function"
+        or type(R.RegistrySettingItemForKey) ~= "function"
+        or type(R.RegistryLocationResultFollowups) ~= "function"
+    then
+        return nil
+    end
+    local norm = R.Normalize(text)
+    if norm == "" then return nil end
+
+    -- Only engage on an explicit reach-back reference.  A back-reference is a
+    -- noun phrase pointing at an earlier subject, not a fresh command; if the
+    -- text names a concrete setting the normal parsers own it.
+    local isBackReference = R.ContainsAny(norm, {
+        "the other", "other one", "other frame", "other setting",
+        "go back to", "back to the", "the previous one", "the earlier one",
+        "das andere", "der andere", "die andere", "zurueck zu", "das vorherige",
+    })
+    local ordinal = ReachBackOrdinalIndex(norm)
+    local ordinalReference = type(ordinal) == "number"
+        and R.ContainsAny(norm, { "one", "frame", "option", "setting", "eine", "frame", "option", "einstellung" })
+    if not isBackReference and not ordinalReference then return nil end
+
+    local ctx = A.ConversationContext()
+    local ring = type(ctx) == "table" and ctx.recentSubjects or {}
+    if #ring == 0 then return nil end
+
+    -- Candidates are still-recent subjects other than the current one.
+    local currentKey = ctx.subject and ctx.subject.settingKey
+    local candidates = {}
+    for i = 1, #ring do
+        local entry = ring[i]
+        if type(entry) == "table" and type(entry.settingKey) == "string"
+            and (tonumber(entry.ageTurns) or 0) <= REACH_BACK_MAX_AGE_TURNS
+        then
+            candidates[#candidates + 1] = entry
+        end
+    end
+    if #candidates == 0 then return nil end
+
+    local chosen
+    if type(ordinal) == "number" then
+        chosen = candidates[ordinal]
+    elseif ordinal == "other" then
+        -- "the other one" only resolves cleanly with exactly one alternative to
+        -- the current subject; more than one is genuinely ambiguous.
+        local alternatives = {}
+        for i = 1, #candidates do
+            if candidates[i].settingKey ~= currentKey then alternatives[#alternatives + 1] = candidates[i] end
+        end
+        if #alternatives == 1 then chosen = alternatives[1] end
+    else
+        -- "go back to the <name> one": match a ring entry by label/unit token.
+        for i = 1, #candidates do
+            local entry = candidates[i]
+            local hay = R.Normalize(tostring(entry.label or "") .. " " .. tostring(entry.unit or ""))
+            for wordToken in norm:gmatch("%a%a%a+") do
+                if wordToken ~= "the" and wordToken ~= "one" and wordToken ~= "back"
+                    and wordToken ~= "frame" and hay:find(wordToken, 1, true)
+                then
+                    chosen = chosen or entry
+                end
+            end
+        end
+    end
+    if type(chosen) ~= "table" or type(chosen.settingKey) ~= "string" then return nil end
+
+    local item = R.RegistrySettingItemForKey(chosen.settingKey)
+    if not item then return nil end
+    local label = tostring(item.label or chosen.label or chosen.settingKey)
+    return {
+        text = "You mean the earlier topic: " .. label .. "?\n"
+            .. "Tell me what to change about it, or reply to open or explain it. I did not change anything.",
+        status = "ambiguous",
+        result = "ambiguous",
+        summary = "Assistant reach-back to an earlier conversation subject",
+        searchResults = R.RegistryLocationResultFollowups({ { item = item } }, 1),
+    }
+end
+
+-- Last-chance, read-only "did you mean" fallback before the Discord dead-end.
+--
+-- When no parser, shortcut, or context choice could claim the input, an LLM
+-- would still reason from what it knows rather than give up.  This does the
+-- deterministic equivalent: it searches the control catalog for the nearest
+-- registered settings and, only when the top hit clears the same confidence
+-- floor the explain/decision shortcuts use to name a setting (score >= 340,
+-- rawScore >= 260), offers the closest options as selectable suggestions.
+--
+-- It never mutates.  The suggestions are read-only follow-ups the user opens
+-- or explains by number, and the status is "ambiguous", never "applied".
+-- Below the floor the input is genuine noise, so this returns nil and the
+-- caller falls through to the honest "I could not match that" reply.
+function R.RouterCatalogSuggestionNoMatch(text)
+    if type(R.RegistrySettingSearchEntries) ~= "function"
+        or type(R.RegistryLocationResultFollowups) ~= "function"
+    then
+        return nil
+    end
+    local norm = R.Normalize(text)
+    if norm == "" then return nil end
+
+    local entries = R.RegistrySettingSearchEntries(text, norm, 8)
+    if type(entries) ~= "table" or #entries == 0 then return nil end
+
+    local top = entries[1]
+    local topScore = tonumber(top and top.score) or 0
+    local topRaw = tonumber(top and top.rawScore) or 0
+    -- Mirror the explain/decision shortcut floor so a suggestion is only made
+    -- when a specialist would also have been willing to name this setting.
+    if topScore < 340 or topRaw < 260 then return nil end
+
+    local visible = math.min(3, #entries)
+    local lines = {
+        "I could not match that to an exact MSUF command, but these registered options look closest:",
+    }
+    for i = 1, visible do
+        local item = entries[i] and entries[i].item
+        lines[#lines + 1] = tostring(i) .. ". " .. tostring(item and item.label or "MSUF setting")
+    end
+    lines[#lines + 1] = "Reply with a number to open or explain that option. I did not change anything."
+
+    return {
+        text = table.concat(lines, "\n"),
+        status = "ambiguous",
+        result = "ambiguous",
+        summary = "Assistant nearest-catalog suggestions for an unmatched request",
+        searchResults = R.RegistryLocationResultFollowups(entries, visible),
+    }
+end
+
 function A.RouterFriendlyNoMatch(text)
     local contextualChoice = R.TryUncertainContextChoices and R.TryUncertainContextChoices(text)
     if contextualChoice then
@@ -7501,6 +7661,16 @@ function A.RouterFriendlyNoMatch(text)
     end
     local noMatch = R.KnowledgeNoMatch(text)
     if noMatch then return noMatch end
+    local reachBack = R.RouterReachBackSubjectChoice and R.RouterReachBackSubjectChoice(text)
+    if reachBack then
+        if A.RecordNoMatch then A.RecordNoMatch(text, reachBack, "router-reach-back") end
+        return reachBack
+    end
+    local suggestion = R.RouterCatalogSuggestionNoMatch(text)
+    if suggestion then
+        if A.RecordNoMatch then A.RecordNoMatch(text, suggestion, "router-catalog-suggestion") end
+        return suggestion
+    end
     local result = {
         text = "I'm not sure which MSUF request you mean yet. I can help once I can match the request to an MSUF menu option. Include the frame or page plus the option, for example 'set player width to 300', 'turn off raid range fade', or 'set target buff icon size to 30'. If that wording should work, send the full text in Discord: " .. R.DISCORD_INVITE,
         status = "info",
@@ -10967,6 +11137,81 @@ function R.RegistryCurrentValueLine(item)
     return "Current value: " .. tostring(label) .. "."
 end
 
+-- Human-readable label for a related setting key, used when reporting a
+-- graph verdict.  Falls back to the raw key so a missing registry label can
+-- never blank out the sentence.
+local function GraphVerdictSettingLabel(key)
+    key = tostring(key or "")
+    if key == "" then return key end
+    local related = A.Registry and type(A.Registry.GetSetting) == "function"
+        and A.Registry:GetSetting(key) or nil
+    local label = related and related.label
+    return (type(label) == "string" and label ~= "") and label or key
+end
+
+local function GraphVerdictJoinLabels(edges, keyField, limit)
+    local labels, seen = {}, {}
+    for i = 1, #(edges or {}) do
+        local key = tostring(edges[i] and edges[i][keyField] or "")
+        if key ~= "" and not seen[key] then
+            seen[key] = true
+            labels[#labels + 1] = GraphVerdictSettingLabel(key)
+            if #labels >= (limit or 3) then break end
+        end
+    end
+    if #labels == 0 then return nil end
+    return table.concat(labels, ", ")
+end
+
+-- Enrich a plain "explain this setting" answer with the live dependency-graph
+-- verdict.  The graph already knows why a control is currently ineffective,
+-- where its value is inherited from, and what it conflicts with; the static
+-- purpose/type/value lines cannot express that.  Returns a single sentence
+-- only when the verdict is non-trivial (blocked, inheriting, or conflicting);
+-- an effective, independent setting stays silent so the common answer keeps
+-- its length.  The evaluator fails closed with (nil, error) during combat,
+-- while the menu is closed, or for an unknown key, so this degrades to
+-- today's answer without a guard of its own.
+--
+-- This enrichment never forces a graph build.  It reads only the guard-free
+-- EvaluateSettingDependenciesIfBuilt, which returns nil unless the dependency
+-- graph is already built for the requested scope; the regular evaluator would
+-- otherwise re-scan the whole registry twice and run AutoCoverage, making a
+-- cold explain answer pay tens of milliseconds for one extra sentence.  When
+-- the graph is not built yet the line is simply omitted; a later
+-- relationship/why question builds it once and subsequent explain answers pick
+-- the verdict up for free.
+function R.RegistrySettingGraphVerdictLine(item)
+    if type(A.EvaluateSettingDependenciesIfBuilt) ~= "function" then return nil end
+    local key = tostring((item and (item.settingKey or item.key))
+        or (item and item.setting and item.setting.key) or "")
+    if key == "" then return nil end
+    local ok, evaluation = pcall(A.EvaluateSettingDependenciesIfBuilt, key)
+    if not ok or type(evaluation) ~= "table" then return nil end
+
+    if type(evaluation.blockers) == "table" and #evaluation.blockers > 0 then
+        local labels = GraphVerdictJoinLabels(evaluation.blockers, "to", 3)
+        if labels then
+            return "Right now it is not fully effective because " .. labels
+                .. " is not in the required state."
+        end
+    end
+    if type(evaluation.activeConflicts) == "table" and #evaluation.activeConflicts > 0 then
+        local labels = GraphVerdictJoinLabels(evaluation.activeConflicts, "to", 3)
+        if labels then
+            return "It currently conflicts with " .. labels .. "."
+        end
+    end
+    if type(evaluation.inheritedFrom) == "table" and #evaluation.inheritedFrom > 0 then
+        local labels = GraphVerdictJoinLabels(evaluation.inheritedFrom, "to", 3)
+        if labels then
+            return "Its effective value is currently inherited from " .. labels
+                .. "; turn on the scope override to make it independent."
+        end
+    end
+    return nil
+end
+
 function R.RegistrySettingPurpose(item)
     item = item or {}
     local setting = item.setting or {}
@@ -13175,6 +13420,8 @@ function A.RouterTryRegistrySettingExplainShortcut(text, coreHandler, precompute
     }
     local valueLine = R.RegistryCurrentValueLine(item)
     if valueLine then lines[#lines + 1] = valueLine end
+    local verdictLine = R.RegistrySettingGraphVerdictLine(item)
+    if verdictLine then lines[#lines + 1] = verdictLine end
     local choicesLine = R.RegistryEnumChoicesLine(item)
     if choicesLine then lines[#lines + 1] = choicesLine end
     local relatedLine = R.RegistryRelatedLine(close)

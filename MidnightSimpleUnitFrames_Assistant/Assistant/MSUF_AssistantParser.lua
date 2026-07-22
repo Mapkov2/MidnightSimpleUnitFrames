@@ -4663,6 +4663,12 @@ function A._ParsePipelineGeometry(normalized, raw)
     result = ParseCastbarTextMoveShortcut(normalized); if result then return result end
     result = A._ParseGroupRangeFadeShortcut(normalized); if result then return result end
     result = A._ParseGroupOpacityShortcut(normalized); if result then return result end
+    -- Last geometry attempt: a bare "name to the left/right" (no move verb, no
+    -- anchor/align word) is genuinely ambiguous between anchor and offset, so
+    -- ask instead of letting it fall through to a generic no-match.
+    if A._ParseNameDirectionAmbiguityShortcut then
+        result = A._ParseNameDirectionAmbiguityShortcut(normalized); if result then return result end
+    end
     return ParseUnitOpacityShortcut(normalized)
 end
 

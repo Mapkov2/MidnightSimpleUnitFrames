@@ -449,6 +449,22 @@ function A._ParseNameTextAnchorShortcut(text)
         return nil
     end
 
+    -- "Move/shift/nudge the name to the left" is a position (X/Y offset) request,
+    -- not a text anchor.  Without this, the movement verb plus a directional
+    -- phrase like "to the left" would silently set the Name Text Anchor to LEFT
+    -- instead of moving the name.  Two intents stay on the anchor path:
+    --   * an explicit anchor/align word ("align left", "anchor left"), and
+    --   * centering ("move name to middle/center"), which has no offset axis and
+    --     is the reviewed meaning of the Name Text Anchor CENTER value.
+    -- So only a movement verb aimed at a left/right/up/down direction hands the
+    -- request to the offset path.
+    if type(A.HasNudgeMovementVerb) == "function" and A.HasNudgeMovementVerb(text)
+        and not ContainsAny(text, GeometryTextPhrases[49])
+        and not ContainsAny(text, GeometryTextPhrases[47])
+    then
+        return nil
+    end
+
     local value
     if ContainsAny(text, GeometryTextPhrases[47]) then
         value = "CENTER"
@@ -579,6 +595,72 @@ function A._ParseNameTextAnchorShortcut(text)
         changes = changes,
         label = "Set name text anchor",
         summary = "Changes the Name anchor for the selected unit or group.",
+    }
+end
+
+-- Genuine anchor-vs-position ambiguity.  "Player name to the left" — a name plus
+-- a left/right direction, with no movement verb ("move/shift") and no explicit
+-- anchor/align word — could mean either "left-align the name" (Name Text Anchor)
+-- or "move the name left" (Name X Offset).  Neither the anchor nor the offset
+-- shortcut claims it (both require a verb), so today it falls through to a
+-- generic no-match.  Instead of silently guessing, offer both and let the user
+-- pick.  Read-only until the user chooses; the status is "ambiguous".
+function A._ParseNameDirectionAmbiguityShortcut(text)
+    if type(A.HasNudgeMovementVerb) == "function" and A.HasNudgeMovementVerb(text) then return nil end
+    if ContainsAny(text, GeometryTextPhrases[49]) then return nil end -- explicit anchor/align -> anchor path owns it
+    if not ContainsAny(text, GeometryTextPhrases[59]) then return nil end -- must mention a name
+
+    local value
+    if ContainsAny(text, GeometryTextPhrases[48]) or HasPhrase(text, "left") then
+        value = "LEFT"
+    elseif ContainsAny(text, GeometryTextPhrases[50]) or HasPhrase(text, "right") then
+        value = "RIGHT"
+    end
+    if not value then return nil end
+
+    local groups = DetectGroups(text)
+    local units = {}
+    if #groups == 0 then units = DetectUnits(text) end
+    if #groups == 0 and #units == 0 then
+        local pageUnit = CurrentPageUnit and CurrentPageUnit()
+        if pageUnit then units = { pageUnit } end
+    end
+    if (#groups + #units) ~= 1 then return nil end
+
+    local scope, anchorKey, offsetKey
+    if #units == 1 then
+        scope = tostring(units[1])
+        anchorKey, offsetKey = scope .. ".nameTextAnchor", scope .. ".nameOffsetX"
+    else
+        scope = "gf_" .. tostring(A._TextGroupScopeName(groups[1]))
+        anchorKey, offsetKey = scope .. ".nameAnchor", scope .. ".nameOffsetX"
+    end
+    local anchorSetting = Registry and Registry:GetSetting(anchorKey)
+    local offsetSetting = Registry and Registry:GetSetting(offsetKey)
+    if not (anchorSetting and offsetSetting) then return nil end
+    if not A._EnumAllowsValue(anchorSetting, value) then return nil end
+
+    local moveStep = tonumber(offsetSetting.moveStep or offsetSetting.step) or 10
+    local delta = value == "LEFT" and -math.abs(moveStep) or math.abs(moveStep)
+    local lower = tostring(value):lower()
+    return {
+        kind = "ambiguous",
+        choices = {
+            {
+                setting = anchorSetting,
+                value = value,
+                valueLabel = DisplayValue(anchorSetting, value),
+                label = "Align the name " .. lower .. " (" .. tostring(anchorSetting.label or "Name Text Anchor") .. ")",
+            },
+            {
+                setting = offsetSetting,
+                relativeDelta = delta,
+                direction = value == "LEFT" and "left" or "right",
+                label = "Move the name " .. lower .. " (" .. tostring(offsetSetting.label or "Name X Offset") .. ")",
+            },
+        },
+        label = "Do you want to align the name or move it " .. lower .. "?",
+        summary = "Name direction request is ambiguous between anchor and position; asking which the user means.",
     }
 end
 

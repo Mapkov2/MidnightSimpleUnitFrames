@@ -300,6 +300,7 @@ $luaGates = @(
     [pscustomobject]@{ Category = "graph"; Path = "tools/assistant_v1_catalog_crosswalk.lua"; Args = @("--graphify-inventory") },
     [pscustomobject]@{ Category = "graph"; Path = "tools/assistant_setting_graph_smoke.lua"; Args = @() },
     [pscustomobject]@{ Category = "graph"; Path = "tools/assistant_setting_graph_audit.lua"; Args = @() },
+    [pscustomobject]@{ Category = "graph"; Path = ".github/scripts/tests/assistant_setting_explain_graph_verdict_smoke.lua"; Args = @() },
 
     [pscustomobject]@{ Category = "no-menu"; Path = "tools/assistant_v1_lod_schema_smoke.lua"; Args = @() },
     [pscustomobject]@{ Category = "no-menu"; Path = "tools/assistant_lod_zero_idle_smoke.lua"; Args = @() },
@@ -321,6 +322,8 @@ $luaGates = @(
 
     [pscustomobject]@{ Category = "controller"; Path = "tools/assistant_exact_setting_control_contract.lua"; Args = @() },
     [pscustomobject]@{ Category = "controller"; Path = "tools/assistant_parser_smoke.lua"; Args = @() },
+    [pscustomobject]@{ Category = "controller"; Path = ".github/scripts/tests/assistant_scope_priority_smoke.lua"; Args = @() },
+    [pscustomobject]@{ Category = "controller"; Path = ".github/scripts/tests/assistant_move_vs_anchor_smoke.lua"; Args = @() },
     [pscustomobject]@{ Category = "controller/color"; Path = ".github/scripts/tests/assistant_color_picker_bridge_smoke.lua"; Args = @() },
     [pscustomobject]@{ Category = "controller/color"; Path = ".github/scripts/tests/assistant_bar_gradient_reset_smoke.lua"; Args = @() },
     [pscustomobject]@{ Category = "controller/layer"; Path = ".github/scripts/tests/layer_contract_smoke.lua"; Args = @() },
@@ -328,6 +331,7 @@ $luaGates = @(
     [pscustomobject]@{ Category = "controller"; Path = ".github/scripts/tests/assistant_three_controller_gaps_smoke.lua"; Args = @() },
     [pscustomobject]@{ Category = "controller"; Path = "tools/assistant_autocoverage_identity_regression.lua"; Args = @() },
     [pscustomobject]@{ Category = "controller/safety"; Path = "tools/assistant_autocoverage_safety_regression.lua"; Args = @() },
+    [pscustomobject]@{ Category = "controller/safety"; Path = ".github/scripts/tests/assistant_domain_promotion_smoke.lua"; Args = @() },
     [pscustomobject]@{ Category = "controller/safety"; Path = "tools/assistant_readonly_submit_e2e.lua"; Args = @() },
     [pscustomobject]@{ Category = "controller/safety"; Path = "tools/assistant_profile_copy_readonly_audit.lua"; Args = @() },
     [pscustomobject]@{ Category = "controller"; Path = "tools/assistant_channel_tick_controller_smoke.lua"; Args = @() },
@@ -352,6 +356,7 @@ $luaGates = @(
 
     [pscustomobject]@{ Category = "conversation"; Path = "tools/assistant_context_alignment_regression.lua"; Args = @() },
     [pscustomobject]@{ Category = "conversation"; Path = ".github/scripts/tests/assistant_context_object_followup_regression.lua"; Args = @() },
+    [pscustomobject]@{ Category = "conversation"; Path = ".github/scripts/tests/assistant_reach_back_subject_smoke.lua"; Args = @() },
     [pscustomobject]@{ Category = "conversation"; Path = "tools/assistant_natural_setting_conversation_audit.lua"; Args = @() },
     [pscustomobject]@{ Category = "conversation"; Path = "tools/assistant_planning_followup_regression.lua"; Args = @() },
     [pscustomobject]@{ Category = "conversation"; Path = "tools/assistant_real_prompt_output_audit.lua"; Args = @("--quiet") },
@@ -361,6 +366,7 @@ $luaGates = @(
     [pscustomobject]@{ Category = "conversation"; Path = "tools/assistant_open_ended_aura_growth_regression.lua"; Args = @() },
     [pscustomobject]@{ Category = "conversation"; Path = "tools/assistant_status_semantics_audit.lua"; Args = @() },
     [pscustomobject]@{ Category = "conversation"; Path = "tools/assistant_nomatch_learning_audit.lua"; Args = @() },
+    [pscustomobject]@{ Category = "conversation"; Path = ".github/scripts/tests/assistant_catalog_suggestion_nomatch_smoke.lua"; Args = @() },
 
     [pscustomobject]@{ Category = "locale"; Path = "tools/assistant_dialog_locale_audit.lua"; Args = @() },
     [pscustomobject]@{ Category = "conversation/locale"; Path = "tools/assistant_english_output_suite.lua"; Args = @() },
