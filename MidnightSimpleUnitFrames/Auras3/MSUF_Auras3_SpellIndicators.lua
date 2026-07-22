@@ -33,6 +33,7 @@ local expiringEffectCurves = {}
 local activeExpiringEffectGates = {}
 local expiringEffectDriver
 local expiringEffectElapsed = 0
+local SetRangeAlpha
 local EXPIRING_DURATION_BAR_OPTIONS = {
     interpolation = StatusBarInterpolation and StatusBarInterpolation.Immediate,
     direction = StatusBarTimerDirection and StatusBarTimerDirection.RemainingTime,
@@ -235,16 +236,13 @@ local function SpellIndicatorSlotKey(item, index)
     return "msuf_si_" .. key
 end
 
-local function SlotTrackingSignature(slot)
-    return tostring(slot.unit) .. "\030" .. tostring(slot.slotKey) .. "\030" .. tostring(slot.nativeFilter)
-        .. "\030" .. tostring(slot.candidateFilterSignature)
-end
-
 local SlotLayoutSignature
 
 local function SlotStructuralSignature(slot)
-    return tostring(slot.slotKey) .. "\030" .. tostring(slot.nativeFilter)
-        .. "\030" .. tostring(SlotLayoutSignature(slot))
+    -- The public 12.1 AuraSlot filter setter reparses assignments without
+    -- recreating the access-restricted AuraButton. Only slot topology and
+    -- initializeFrame-owned visuals remain structural.
+    return tostring(slot.slotKey) .. "\030" .. tostring(SlotLayoutSignature(slot))
 end
 
 local function SpellIconBaseOffset(parentFrame)
@@ -283,7 +281,6 @@ end
 
 local function FinalizeSlot(slot)
     if slot then
-        slot._msufA3TrackingSignature = SlotTrackingSignature(slot)
         slot._msufA3StructuralSignature = SlotStructuralSignature(slot)
         slot._msufA3LayoutSignature = SlotLayoutSignature(slot)
     end
@@ -407,11 +404,10 @@ function Runtime.CompileSlots(unit, spellIndicators, sharedBuffStyle)
     if not (type(spellIndicators) == "table" and spellIndicators.enabled == true and type(spellIndicators.items) == "table") then
         return nil
     end
-    local slots, trackingParts, structuralParts, layoutParts = {}, {}, {}, {}
+    local slots, structuralParts, layoutParts = {}, {}, {}
     local function AddSlot(slot)
         if not slot then return end
         slots[#slots + 1] = slot
-        trackingParts[#trackingParts + 1] = slot._msufA3TrackingSignature
         structuralParts[#structuralParts + 1] = slot._msufA3StructuralSignature
         layoutParts[#layoutParts + 1] = slot._msufA3LayoutSignature
     end
@@ -468,7 +464,6 @@ function Runtime.CompileSlots(unit, spellIndicators, sharedBuffStyle)
         layer = spellIndicators.layer or 9,
         iconZoom = ClampNumber(spellIndicators.iconZoom, 100, 100, 200),
         strata = NormalizeFrameStrata(spellIndicators.strata, "AUTO"),
-        _msufA3TrackingSignature = table_concat(trackingParts, "\029"),
         _msufA3StructuralSignature = table_concat(structuralParts, "\029"),
         _msufA3LayoutSignature = table_concat(layoutParts, "\029"),
     }
@@ -504,11 +499,12 @@ function Runtime.RootConfig(cfg)
 end
 
 function Runtime.Install(deps)
-    Runtime._deps = deps or {}
+    Runtime._deps = deps
+    SetRangeAlpha = deps.SetRangeAlpha
 end
 
 local function D()
-    return Runtime._deps or {}
+    return Runtime._deps
 end
 
 local function SpellIndicatorHealthBar(parentFrame)
@@ -786,6 +782,21 @@ function Runtime.HideAll(parentFrame)
     Runtime.HideMissing(parentFrame)
 end
 
+function Runtime.HideRootMissing(parentFrame, slotRoot)
+    local missing = parentFrame and parentFrame._msufA3SpellIndicatorMissingFrames
+    local slots = slotRoot and slotRoot.slots
+    if not (missing and type(slots) == "table") then return false end
+    local any = false
+    for i = 1, #slots do
+        local frame = missing[slots[i] and slots[i].slotKey]
+        if frame then
+            frame:Hide()
+            any = true
+        end
+    end
+    return any
+end
+
 local function LayoutEdges(button, parentFrame, target, effect)
     local edges = EnsureEdges(button, parentFrame)
     if not edges then return end
@@ -1051,15 +1062,29 @@ local function ApplyExpiringButtonFrameEffect(button, slot, parentFrame)
     gate:ClearAllPoints()
     gate:SetAllPoints(healthBar)
     gate:SetAlpha(0)
+    -- Duration and range are independent secret-backed gates. Keep them on
+    -- separate ancestors so multiplying the range alpha never overwrites the
+    -- duration curve or a Pulse animation running on the effect root.
+    local rangeGate = gate._msufA3PartyRangeGate
+    if not rangeGate then
+        rangeGate = CreateFrame("Frame", nil, gate)
+        rangeGate:EnableMouse(false)
+        gate._msufA3PartyRangeGate = rangeGate
+    end
+    rangeGate:ClearAllPoints()
+    rangeGate:SetAllPoints(gate)
+    rangeGate:Show()
     local effectRoot = gate._msufA3ExpiringEffectRoot
     if not effectRoot then
-        effectRoot = CreateFrame("Frame", nil, gate)
+        effectRoot = CreateFrame("Frame", nil, rangeGate)
         effectRoot:EnableMouse(false)
         effectRoot._msufA3SpellIndicatorEffectRoot = effectRoot
         gate._msufA3ExpiringEffectRoot = effectRoot
+    elseif effectRoot.GetParent and effectRoot:GetParent() ~= rangeGate and effectRoot.SetParent then
+        effectRoot:SetParent(rangeGate)
     end
     effectRoot:ClearAllPoints()
-    effectRoot:SetAllPoints(gate)
+    effectRoot:SetAllPoints(rangeGate)
     if not ApplyButtonFrameEffect(effectRoot, slot, parentFrame) then
         gate:Hide()
         return false
@@ -1131,6 +1156,28 @@ local function ApplyButtonIconEffect(button, slot, parentFrame)
     root:Show()
     root:SetAlpha(1)
     return true
+end
+
+-- Fixed-slot buttons inherit the owning AuraContainer's range alpha. These
+-- addon-owned siblings sit outside the restricted AuraButton tree, so forward
+-- the same opaque range boolean to their own native sinks without inspecting
+-- it in Lua.
+function Runtime.ApplyPartyRangeGate(parentFrame, inRange)
+    if not parentFrame then return false end
+    local any = false
+    local gates = parentFrame._msufA3SpellIndicatorExpiringEffectGates
+    if gates then
+        for gate in pairs(gates) do
+            any = SetRangeAlpha(gate._msufA3PartyRangeGate, inRange, 1) or any
+        end
+    end
+    local missing = parentFrame._msufA3SpellIndicatorMissingFrames
+    if missing then
+        for _, frame in pairs(missing) do
+            any = SetRangeAlpha(frame, inRange, 1) or any
+        end
+    end
+    return any
 end
 
 function Runtime.RefreshFrameEffects(parentFrame)
@@ -1377,9 +1424,31 @@ function Runtime.SyncGeometry(container, slotRoot, parentFrame, forceGeometry)
     return true
 end
 
+-- Slot-family bridge for the group-frame runtime. Spell Indicators and the
+-- dispel sensors are both fixed-position AddAuraSlot consumers, so they can
+-- share one native AuraContainer without changing either initializer. Keep
+-- Spell Indicator slots first: their logical slot index then remains identical
+-- to the native button index used by SyncGeometry and the forbidden-button
+-- recreation path.
+function Runtime.AttachSlots(container, slotRoot)
+    if not (container and Runtime.IsRoot(slotRoot)) then return nil end
+    container._msufA3ManagedAuraSlots = true
+    container._msufA3SpellIndicatorRoot = true
+    container._msufA3SpellIndicatorButtonSlots = {}
+    container._msufA3SpellIndicatorSlotFilterStrings = {}
+    container._msufA3SpellIndicatorSlotCandidateFilterSignatures = {}
+    for i = 1, #slotRoot.slots do
+        local slot = slotRoot.slots[i]
+        container._msufA3SpellIndicatorButtonSlots[i] = slot
+        container:AddAuraSlot(slot.slotKey, slot.nativeFilter, SlotOptions(container, slot, i))
+        container._msufA3SpellIndicatorSlotFilterStrings[slot.slotKey] = slot.nativeFilter
+        container._msufA3SpellIndicatorSlotCandidateFilterSignatures[slot.slotKey] = slot.candidateFilterSignature
+    end
+    return #slotRoot.slots
+end
+
 local function CreateSlots(root, slotRoot, parentFrame)
     local deps = D()
-    if not (deps.EnsureLoaded and deps.CreateContainer and deps.ConfigureContainer and deps.RegisterContainer) then return nil end
     if not deps.EnsureLoaded() then
         A3.nativeAuraRuntimeAvailable = false
         A3.nativeAuraRuntimeError = (deps.addonName or "Blizzard_AuraContainer") .. " is not loaded: " .. tostring(A3.nativeAuraRuntimeLoadError or "unknown")
@@ -1388,22 +1457,14 @@ local function CreateSlots(root, slotRoot, parentFrame)
     local container = deps.CreateContainer(root)
     if not container then return nil end
     A3.nativeAuraRuntimeAvailable = true
-    container._msufA3ManagedAuraSlots = true
-    container._msufA3SpellIndicatorRoot = true
     container._msufA3NativeLane = slotRoot.kind
     container._msufA3NativeRegistered = nil
     container._msufA3NativeRegistrationPending = nil
-    container._msufA3SpellIndicatorButtonSlots = {}
-    container._msufA3SpellIndicatorSlotCandidateFilterSignatures = {}
     container.unit = slotRoot.unit
     container.createdButtons = slotRoot.max or 0
     deps.ConfigureContainer(container, slotRoot.unit)
     Runtime.SyncGeometry(container, slotRoot, parentFrame)
-    for i = 1, #slotRoot.slots do
-        local slot = slotRoot.slots[i]
-        container:AddAuraSlot(slot.slotKey, slot.nativeFilter, SlotOptions(container, slot, i))
-        container._msufA3SpellIndicatorSlotCandidateFilterSignatures[slot.slotKey] = slot.candidateFilterSignature
-    end
+    Runtime.AttachSlots(container, slotRoot)
     if not deps.RegisterContainer(container) then
         if container.Hide then container:Hide() end
         return nil
@@ -1414,12 +1475,17 @@ local function CreateSlots(root, slotRoot, parentFrame)
 end
 
 local function UpdateSlots(container, slotRoot)
-    if not (container and Runtime.IsRoot(slotRoot) and type(slotRoot.slots) == "table") then return false end
+    if not (container and Runtime.IsRoot(slotRoot)) then return false end
     container._msufA3SpellIndicatorButtonSlots = container._msufA3SpellIndicatorButtonSlots or {}
+    container._msufA3SpellIndicatorSlotFilterStrings = container._msufA3SpellIndicatorSlotFilterStrings or {}
     container._msufA3SpellIndicatorSlotCandidateFilterSignatures = container._msufA3SpellIndicatorSlotCandidateFilterSignatures or {}
     for i = 1, #slotRoot.slots do
         local slot = slotRoot.slots[i]
         container._msufA3SpellIndicatorButtonSlots[i] = slot
+        if container._msufA3SpellIndicatorSlotFilterStrings[slot.slotKey] ~= slot.nativeFilter then
+            container:SetAuraSlotFilterString(slot.slotKey, slot.nativeFilter)
+            container._msufA3SpellIndicatorSlotFilterStrings[slot.slotKey] = slot.nativeFilter
+        end
         if container._msufA3SpellIndicatorSlotCandidateFilterSignatures[slot.slotKey] ~= slot.candidateFilterSignature then
             container:SetAuraSlotCandidateFilters(slot.slotKey, slot.candidateFilters)
             container._msufA3SpellIndicatorSlotCandidateFilterSignatures[slot.slotKey] = slot.candidateFilterSignature
@@ -1434,23 +1500,17 @@ end
 function Runtime.Apply(root, slotRoot, parentFrame, forceRecreate)
     if not (root and Runtime.IsRoot(slotRoot)) then return nil end
     local deps = D()
-    if not deps.HideContainer then return nil end
     local key = slotRoot.rootKey or "SpellIndicators"
-    local trackingSignature = slotRoot._msufA3TrackingSignature
     local structuralSignature = slotRoot._msufA3StructuralSignature
     local layoutSignature = slotRoot._msufA3LayoutSignature
     local current = root[key]
     if forceRecreate ~= true and current and current._msufA3StructuralSignature == structuralSignature then
-        if deps.RebindUnit then deps.RebindUnit(current, slotRoot.unit) end
+        deps.RebindUnit(current, slotRoot.unit)
         current._msufA3NativeLaneConfig = slotRoot
         UpdateSlots(current, slotRoot)
         Runtime.SyncGeometry(current, slotRoot, parentFrame)
         current:Show()
-        if deps.RegisterContainer and not deps.RegisterContainer(current) then return nil end
-        if current._msufA3TrackingSignature ~= trackingSignature and type(current.UpdateAllAuras) == "function" then
-            current:UpdateAllAuras()
-        end
-        current._msufA3TrackingSignature = trackingSignature
+        if not deps.RegisterContainer(current) then return nil end
         current._msufA3StructuralSignature = structuralSignature
         current._msufA3LayoutSignature = layoutSignature
         return current
@@ -1460,7 +1520,6 @@ function Runtime.Apply(root, slotRoot, parentFrame, forceRecreate)
     root[key] = nil
     current = CreateSlots(root, slotRoot, parentFrame)
     if current then
-        current._msufA3TrackingSignature = trackingSignature
         current._msufA3StructuralSignature = structuralSignature
         current._msufA3LayoutSignature = layoutSignature
         root[key] = current
@@ -1468,8 +1527,13 @@ function Runtime.Apply(root, slotRoot, parentFrame, forceRecreate)
     return current
 end
 
+Runtime.UpdateSlots = UpdateSlots
+
 function Runtime.Recreate(container)
     if not (container and container._msufA3SpellIndicatorRoot == true) then return nil end
+    if container._msufA3GroupSlotsRoot == true then
+        return D().RecreateGroupSlots(container)
+    end
     local slotRoot = container._msufA3NativeLaneConfig
     local parentFrame = container._msufA3ParentFrame
     local root = container.GetParent and container:GetParent() or nil
