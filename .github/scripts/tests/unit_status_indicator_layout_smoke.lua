@@ -2,6 +2,7 @@ local path = "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_UnitStatusSe
 local file = assert(io.open(path, "rb"))
 local source = file:read("*a")
 file:close()
+source = source:gsub("\r\n", "\n")
 
 assert(source:find('CollapsibleSection("status_icons", "Status icons", 618, false)', 1, true),
     "status section height does not match the compact basic-tab layout")

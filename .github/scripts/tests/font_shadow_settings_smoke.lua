@@ -5,7 +5,7 @@ local function Read(relative)
     local file = assert(io.open(path, "rb"), "cannot open " .. path)
     local text = file:read("*a")
     file:close()
-    return text
+    return (text:gsub("\r\n", "\n"))
 end
 
 local function Equal(actual, expected, label)
