@@ -57,7 +57,6 @@ local HEALTH_COLOR_OPTIONS = {
     { value = "dark", text = HEALTH_COLOR_LABELS.dark },
 }
 local WARNING_HINT = { 0.90, 0.84, 0.76, 1 }
-local WARNING_ARROW = { 0.88, 0.62, 0.22, 1 }
 local WARNING_BADGE_FILL = { 0.205, 0.148, 0.080, 0.96 }
 local WARNING_BADGE_EDGE = { 0.52, 0.39, 0.18, 0.78 }
 local WARNING_HEADER_BG = { 0.096, 0.078, 0.050, 0.56 }
@@ -247,7 +246,7 @@ local function BuildPreview(ctx, builder, unit)
     local sec = builder:CollapsibleSection("preview", "Hide Preview", UnitPreviewSectionHeight(), true)
     local sectionEntry = sec and sec._msuf2CollapsibleEntry
     local previewHeader = sectionEntry and sectionEntry.header
-    local previewHeaderTitle = "Preview - " .. UnitTopLabel(unit)
+    local previewHeaderTitle = M.Tr("Preview - ") .. UnitTopLabel(unit)
     if sectionEntry then
         -- The compact card uses the accordion header as its toolbar. Keep the
         -- underlying section/search identity intact while presenting the unit
@@ -446,7 +445,7 @@ local function BuildPreview(ctx, builder, unit)
         else
             expandBtn:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -14, -8)
         end
-        if expandBtn.SetText then expandBtn:SetText(expanded and "Compact Preview" or "Expand") end
+        if expandBtn.SetText then expandBtn:SetText(M.Tr(expanded and "Compact Preview" or "Expand")) end
     end
     ApplyPreviewHeightMode = function()
         local boxH = UnitPreviewBoxHeight()
@@ -727,7 +726,6 @@ local function AttachBasicsHeaderStatus(sec, unit)
                 sectionEntry.hint:SetTextColor(WARNING_HINT[1], WARNING_HINT[2], WARNING_HINT[3], WARNING_HINT[4])
             end
         end
-        if sectionEntry.arrow and sectionEntry.arrow.SetVertexColor and not on then sectionEntry.arrow:SetVertexColor(WARNING_ARROW[1], WARNING_ARROW[2], WARNING_ARROW[3], WARNING_ARROW[4]) end
     end
     sectionEntry._msuf2BasicsHeaderRefresh = RefreshBasicsState
     RefreshBasicsState()
@@ -744,14 +742,18 @@ local function BuildBasics(ctx, builder, unit, label)
         W.AttachContextColorReferences(sec, function()
             local mode = EffectiveHealthMode()
             local refs = {}
+            local general = GetGeneral()
             if mode == "gradient" then
                 refs = { "health.gradient.low", "health.gradient.mid", "health.gradient.high" }
             elseif mode == "unified" then
                 refs = { "health.unified" }
             elseif mode == "class" then
-                refs = { unit == "pet" and "unit.pet" or "health.current" }
+                if unit == "pet" and general.petFrameUsePlayerClassColor == true then
+                    refs = { "unit.class.current" }
+                else
+                    refs = { unit == "pet" and "unit.pet" or "health.current" }
+                end
             end
-            local general = GetGeneral()
             if general.barBgMatchHPColor ~= true and general.barBgClassColor ~= true then
                 refs[#refs + 1] = "bar.background_tint"
             end
@@ -760,7 +762,14 @@ local function BuildBasics(ctx, builder, unit, label)
             title = UnitTopLabel(unit) .. " Health Colors",
             note = "Colors follow this frame's effective Health Color Scheme.",
             historySource = "menu:unit-frame-basics-health-colors",
-            context = function() return { unit = unit, healthMode = EffectiveHealthMode() } end,
+            context = function()
+                local context = { unit = unit, healthMode = EffectiveHealthMode() }
+                if unit == "pet" and GetGeneral().petFrameUsePlayerClassColor == true and type(_G.UnitClass) == "function" then
+                    local _, token = _G.UnitClass("player")
+                    context.classToken = token
+                end
+                return context
+            end,
         })
     end
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
@@ -788,7 +797,7 @@ local function BuildBasics(ctx, builder, unit, label)
         SettingMeta(ctx, "basics.reverse_fill", unit, "reverseFillBars"))
     local smooth = W.ToggleAt(sec, "Smooth fill", x3, row1, labelW)
     M.BindBoolWidget(ctx, smooth,
-        function() return ReadBool(unit, "smoothFill", true) end,
+        function() return ReadBool(unit, "smoothFill", false) end,
         function(v) SetBool(unit, "smoothFill", v, "MSUF2_SMOOTH_FILL", { preview = true }) end,
         SettingMeta(ctx, "basics.smooth_fill", unit, "smoothFill"))
     local blizzard = W.SwitchAt(sec, "Force Blizzard frame on", x1, -76, math.max(196, colW + 24))
@@ -838,8 +847,24 @@ local function BuildBasics(ctx, builder, unit, label)
     if M.AddTooltip then
         M.AddTooltip(colorMode, "Health Color Scheme", "Use Global follows the Unitframe Global Coloring mode from Colors. Other choices override only this frame.", { hook = true, owner = "ANCHOR_RIGHT" })
     end
+    local petPlayerClassColor
+    if unit == "pet" then
+        petPlayerClassColor = W.ToggleAt(sec, "Player Class Color", x3, -116, labelW)
+        M.BindBoolWidget(ctx, petPlayerClassColor,
+            function() return GetGeneral().petFrameUsePlayerClassColor == true end,
+            function(v)
+                GetGeneral().petFrameUsePlayerClassColor = v and true or false
+                M.RequestUnitApply("pet", "MSUF2_PET_PLAYER_CLASS_COLOR", { preview = true })
+                if M.Refresh then M.Refresh(ctx) end
+            end,
+            SettingMeta(ctx, "basics.use_player_class_color", "general", "petFrameUsePlayerClassColor"))
+        if M.AddTooltip then
+            M.AddTooltip(petPlayerClassColor, "Use player's class color for Pet Frame",
+                "Colors the Pet health bar with your class color while its Health Color Scheme is Class / Reaction.", { hook = true, owner = "ANCHOR_RIGHT" })
+        end
+    end
     if W.AttachUnitEditFocus then
-        for _, control in ipairs({ enable, reverse, smooth, blizzard, colorMode }) do W.AttachUnitEditFocus(control, unit, "frame") end
+        for _, control in ipairs({ enable, reverse, smooth, blizzard, colorMode, petPlayerClassColor }) do W.AttachUnitEditFocus(control, unit, "frame") end
     end
     local sectionEntry = sec and sec._msuf2CollapsibleEntry
     local RefreshBasicsState = AttachBasicsHeaderStatus(sec, unit) or function() end
@@ -863,7 +888,7 @@ local function BuildBasics(ctx, builder, unit, label)
     end
     RegisterControl(enableNow, ctx, "basics.enable_now", "Enable", "button",
         unit ~= "focustarget" and "setting" or "action", enableShortcutMeta)
-    notice:SetMessage(unitLabel .. " frame is disabled and will not appear.", "warning")
+    notice:SetMessage(M.Format("%s frame is disabled and will not appear.", unitLabel), "warning")
     enableNow:SetScript("OnClick", function()
         if unit == "focustarget" and not ReadBool("focus", "enabled", true) then SetBool("focus", "enabled", true, "MSUF2_FOCUSTARGET_PARENT_ENABLED", { preview = true }) end
         SetBool(unit, "enabled", true, "MSUF2_FRAME_ENABLED", { preview = true })
@@ -878,11 +903,11 @@ local function BuildBasics(ctx, builder, unit, label)
         SetControlEnabled(blizzard, true)
         SetControlsEnabled(basicsDependentControls, ownOn)
         if parentOff then
-            notice:SetMessage("Focus Target follows the Focus frame. Enable Focus to show it.", "warning")
-            if enableNow.SetText then enableNow:SetText("Enable Focus") end
+            notice:SetMessage(M.Tr("Focus Target follows the Focus frame. Enable Focus to show it."), "warning")
+            if enableNow.SetText then enableNow:SetText(M.Tr("Enable Focus")) end
         else
-            notice:SetMessage(unitLabel .. " frame is disabled and will not appear.", "warning")
-            if enableNow.SetText then enableNow:SetText("Enable") end
+            notice:SetMessage(M.Format("%s frame is disabled and will not appear.", unitLabel), "warning")
+            if enableNow.SetText then enableNow:SetText(M.Tr("Enable")) end
         end
         notice:SetShown(not ownOn or parentOff)
         RefreshBasicsState()

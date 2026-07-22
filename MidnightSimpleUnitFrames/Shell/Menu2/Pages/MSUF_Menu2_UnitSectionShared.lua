@@ -109,10 +109,6 @@ function Shared.SetSectionHeaderStatus(sec, opts)
         local c = opts.labelColor
         entry.label:SetTextColor(c[1] or 1, c[2] or 1, c[3] or 1, c[4] or 1)
     end
-    if opts.arrowColor and entry.arrow and entry.arrow.SetVertexColor then
-        local c = opts.arrowColor
-        entry.arrow:SetVertexColor(c[1] or 1, c[2] or 1, c[3] or 1, c[4] or 1)
-    end
     if entry.hint and entry.hint.SetText then
         if opts.hint ~= nil then
             entry.hint:SetText(opts.hint)

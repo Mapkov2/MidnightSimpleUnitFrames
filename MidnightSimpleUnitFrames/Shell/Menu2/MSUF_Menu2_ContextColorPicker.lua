@@ -87,6 +87,46 @@ end
 local function Font(parent, template, text, color)
     return T.Font(parent, template, Tr(text or ""), color or T.colors.text)
 end
+local function MenuFontStamp()
+    local db = _G.MSUF_DB
+    local general = type(db) == "table" and db.general or nil
+    return tostring(type(general) == "table" and general.menuFontKey or "")
+        .. "\030" .. tostring(tonumber(_G.MSUF_FontApplyEpoch) or 0)
+end
+local function RefreshPickerFonts(panel)
+    if not (panel and type(T.RefreshMenuFonts) == "function") then return end
+    local stamp = MenuFontStamp()
+    if panel._msuf2MenuFontStamp == stamp then return end
+    T.RefreshMenuFonts(panel, true)
+    panel._msuf2MenuFontStamp = stamp
+end
+local function PickerInfoOwnsTooltip(button)
+    local tooltip = _G.GameTooltip
+    if not tooltip then return false end
+    return not tooltip.GetOwner or tooltip:GetOwner() == button
+end
+local function ShowPickerInfo(button)
+    local tooltip = _G.GameTooltip
+    if not (button and tooltip) then return end
+    local title = button._msuf2PickerInfoTitle or Tr("Color context")
+    local text = button._msuf2PickerInfoText or ""
+    tooltip:SetOwner(button, "ANCHOR_RIGHT")
+    tooltip:SetText(title, 1, 1, 1)
+    if text ~= "" then tooltip:AddLine(text, 0.80, 0.86, 1.00, true) end
+    tooltip:Show()
+end
+local function HidePickerInfo(button)
+    if button then button._msuf2PickerInfoPinned = nil end
+    if PickerInfoOwnsTooltip(button) then _G.GameTooltip:Hide() end
+end
+local function RaisePickerInfo(panel)
+    local button = panel and panel.infoButton
+    if not (button and button.SetFrameLevel) then return end
+    local close = panel.closeButton or panel.close
+    local level = close and close.GetFrameLevel and close:GetFrameLevel()
+        or ((panel.GetFrameLevel and panel:GetFrameLevel() or 0) + 16)
+    button:SetFrameLevel(level + 1)
+end
 local function AddFlatButtonIcon(button, kind)
     local icon = CreateFrame("Frame", nil, button)
     icon:SetSize(12, 12); icon:SetPoint("LEFT", 5, 0)
@@ -389,7 +429,6 @@ local function EnsurePicker()
 
     local blocker = CreateFrame("Button", nil, parent)
     blocker:SetAllPoints(parent); blocker:EnableMouse(true)
-    local dim = blocker:CreateTexture(nil, "BACKGROUND"); dim:SetAllPoints(); dim:SetColorTexture(0, 0, 0, 0.36)
     blocker:SetScript("OnClick", function() if picker then picker:Finish(true) end end); blocker:Hide()
 
     local panel = T.Panel(parent, nil, T.colors.glassShell or T.colors.bg, T.colors.cardBorder or T.colors.borderSoft)
@@ -431,10 +470,33 @@ local function EnsurePicker()
     drag:SetScript("OnDoubleClick", function() panel:ResetPosition() end)
     if M.AddTooltip then M.AddTooltip(drag, "Move color picker", "Drag to move. Double-click to center it again.") end
 
+    local info = T.Button(panel, "i", 18, 18, { noSearch = true })
+    info._msuf2SkipHistoryCheckpoint = true
+    if T.CenterButtonLabel then T.CenterButtonLabel(info) end
+    if close then
+        info:SetPoint("RIGHT", close, "LEFT", -6, 0)
+    else
+        info:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -38, -11)
+    end
+    info:RegisterForClicks("LeftButtonUp")
+    info:SetScript("OnClick", function(self)
+        self._msuf2PickerInfoPinned = not self._msuf2PickerInfoPinned
+        if self._msuf2PickerInfoPinned then ShowPickerInfo(self) else HidePickerInfo(self) end
+    end)
+    info:HookScript("OnEnter", function(self) ShowPickerInfo(self) end)
+    info:HookScript("OnLeave", function(self)
+        if not self._msuf2PickerInfoPinned and PickerInfoOwnsTooltip(self) then _G.GameTooltip:Hide() end
+    end)
+    panel.infoButton = info
+    RaisePickerInfo(panel)
+
     local title = Font(panel, "GameFontNormalLarge", "MSUF Color Picker", T.colors.title or T.colors.text)
-    title:SetPoint("TOPLEFT", PICKER_PAD, -10); panel.title = title
-    local note = Font(panel, "GameFontDisableSmall", "", T.colors.muted)
-    note:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -1); note:SetWidth(SIMPLE_WIDTH - PICKER_PAD * 2); note:SetJustifyH("LEFT"); panel.note = note
+    title:SetPoint("TOPLEFT", PICKER_PAD, -10)
+    title:SetPoint("RIGHT", info, "LEFT", -8, 0)
+    title:SetJustifyH("LEFT")
+    if title.SetWordWrap then title:SetWordWrap(false) end
+    if title.SetNonSpaceWrap then title:SetNonSpaceWrap(false) end
+    panel.title = title
     local moveHint = Font(panel, "GameFontDisableSmall", "drag to move", T.colors.dim)
     moveHint:SetPoint("TOPRIGHT", close or panel,
         close and "TOPLEFT" or "TOPRIGHT", close and -10 or -16, close and -1 or -16)
@@ -715,7 +777,6 @@ local function EnsurePicker()
         local previewWidth = (width - PICKER_PAD * 2 - PICKER_GAP) * 0.5
         local selectorWidth = width - PICKER_PAD * 2
         self:SetSize(width, height)
-        self.note:SetWidth(width - PICKER_PAD * 2)
         self.selector:SetWidth(selectorWidth)
         self.original:SetWidth(previewWidth); self.current:SetWidth(previewWidth)
 
@@ -932,12 +993,13 @@ local function EnsurePicker()
         end
         if self.historyOwner and type(self.historyOwner._msuf2CommitColorInteraction) == "function" then self.historyOwner:_msuf2CommitColorInteraction() end
         self:SetContextListShown(false)
+        HidePickerInfo(self.infoButton)
         self._ownerDropdownValues = nil
         self.owner, self.owners, self.originals, self.touched, self.historyOwner = nil, nil, nil, nil, nil
         self:Hide(); self.finishing = nil
         if type(onFinish) == "function" then pcall(onFinish, cancelled == true) end
     end
-    function panel:Open(contextTitle, owners, contextNote, initialOwner, onFinish)
+    function panel:Open(contextTitle, owners, contextNote, initialOwner, onFinish, scopeTag)
         if self:IsShown() then
             self._msuf2OnFinish = nil
             self:Finish(false)
@@ -953,10 +1015,15 @@ local function EnsurePicker()
         end
         if #self.owners == 0 then return end
         self._msuf2OnFinish = type(onFinish) == "function" and onFinish or nil
-        self.title:SetText(Tr("MSUF Color Picker"))
+        local visibleScope = Tr(scopeTag or "")
+        self.title:SetText(Tr("MSUF Color Picker") .. (visibleScope ~= "" and (" · " .. visibleScope) or ""))
         local context = Tr(contextTitle or "Colors")
         local detail = Tr(contextNote or "Choose a target, then paint it.")
-        self.note:SetText(context .. "  -  " .. detail)
+        self.infoButton._msuf2PickerInfoTitle = context
+        self.infoButton._msuf2PickerInfoText = detail
+        self.infoButton:SetShown(context ~= "" or detail ~= "")
+        HidePickerInfo(self.infoButton)
+        RefreshPickerFonts(self)
         local selected = self.owners[1]
         for i = 1, #self.owners do if self.owners[i] == initialOwner then selected = initialOwner; break end end
         self.owner = selected
@@ -967,6 +1034,7 @@ local function EnsurePicker()
         self:RestorePosition(); self:SetContextListShown(false); self:Layout(); self:Refresh()
         ApplyPickerPriority(self, self.blocker)
         if M.RefreshWindowControls then M.RefreshWindowControls(self) end
+        RaisePickerInfo(self)
         self.blocker:Show(); self:Show(); self:ClampPosition()
     end
 
@@ -976,7 +1044,10 @@ local function EnsurePicker()
             if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(false) end
         elseif self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
     end)
-    panel:HookScript("OnHide", function(self) if self.blocker then self.blocker:Hide() end end)
+    panel:HookScript("OnHide", function(self)
+        HidePickerInfo(self.infoButton)
+        if self.blocker then self.blocker:Hide() end
+    end)
     if M.frame and M.frame.HookScript and not M.frame._msuf2ContextColorPickerHideHooked then
         M.frame._msuf2ContextColorPickerHideHooked = true
         M.frame:HookScript("OnHide", function() if picker and picker:IsShown() then picker:Finish(false) end end)
@@ -985,9 +1056,9 @@ local function EnsurePicker()
     return panel
 end
 
-function W.OpenColorContextPicker(contextTitle, owners, contextNote, initialOwner, onFinish)
+function W.OpenColorContextPicker(contextTitle, owners, contextNote, initialOwner, onFinish, scopeTag)
     local panel = EnsurePicker()
-    if panel then panel:Open(contextTitle, owners, contextNote, initialOwner, onFinish) end
+    if panel then panel:Open(contextTitle, owners, contextNote, initialOwner, onFinish, scopeTag) end
     return panel
 end
 M.OpenColorContextPicker = W.OpenColorContextPicker

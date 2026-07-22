@@ -556,6 +556,9 @@ local function HealthColor(key, data)
     local mode = PreviewHealthMode(key, g, cache)
     data = data or UNIT_DATA.player
     if mode == "class" then
+        if data.isPet and cache and cache.petFrameUsePlayerClassColor then
+            return cache.petPlayerClassR or 0.12, cache.petPlayerClassG or 0.62, cache.petPlayerClassB or 0.95
+        end
         if data.isPet and cache and cache.petFrameColorEnabled then return cache.petFrameColorR or 0, cache.petFrameColorG or 0.8, cache.petFrameColorB or 0 end
         if data.isPlayer then return ClassColor(data.class) end
         local npcClassColor = cache and cache.npcClassColorBar

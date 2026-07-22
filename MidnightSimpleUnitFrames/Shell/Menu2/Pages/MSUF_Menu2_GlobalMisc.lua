@@ -97,7 +97,7 @@ local function WriteTooltipBehavior(mode, modifier)
 end
 local function BuildMisc(ctx)
     local b = W.PageBuilder(ctx)
-    b:GlobalStyleHeader("Miscellaneous", "Language, menu behavior, mouseover highlights, tooltips and Blizzard frames.", 72)
+    b:GlobalStyleHeader("Miscellaneous", "Language, menu behavior, frame highlights, tooltips and Blizzard frames.", 72)
     M.InstallStaticPopup("MSUF_RELOAD_PLAYERFRAME_HIDE_MODE", {
         text = M.Tr("This changes how MSUF hides the Blizzard PlayerFrame.\n\nA UI reload is required."),
         button1 = RELOADUI or M.Tr("Reload"),
@@ -119,6 +119,27 @@ local function BuildMisc(ctx)
     local function BindMiscDropdown(parent, label, values, width, x, y, getValue, setValue, path)
         local control = M.BindDropdownWidget(ctx, W.Dropdown(parent, label, values, width), getValue, setValue, Meta(path))
         W.MoveWidget(control, parent, x, y, width, "LEFT")
+        return control
+    end
+    local function BindGroupTargetSwitch(parent, label, kind, x, y, width)
+        local control = W.SwitchAt(parent, label, x, y, width)
+        M.BindBoolWidget(ctx, control,
+            function()
+                local groupPage = M.GroupPage
+                if groupPage and type(groupPage.Bool) == "function" then
+                    return groupPage.Bool(kind, "targetIndicator", true)
+                end
+                return true
+            end,
+            function(value)
+                local groupPage = M.GroupPage
+                if groupPage and type(groupPage.Set) == "function" then
+                    groupPage.Set(kind, "targetIndicator", value and true or false, "visual")
+                end
+            end,
+            Meta("group_target." .. kind, "setting", {
+                settingKey = "gf_" .. kind .. ".targetIndicator",
+            }))
         return control
     end
     local language = b:CollapsibleSection("misc_language", "Language", 146, true)
@@ -175,7 +196,7 @@ local function BuildMisc(ctx)
             M.CallIf(T.ClearMenuFontCache)
             M.CallIf(T.RefreshMenuFonts)
             if menuFontPreview and menuFontPreview.SetText then
-                menuFontPreview:SetText("AaBbCc 12345 - MSUF Menu")
+                menuFontPreview:SetText(M.Tr("AaBbCc 12345 - MSUF Menu"))
             end
         end,
         "menu.font")
@@ -278,7 +299,7 @@ local function BuildMisc(ctx)
         function()
             Call("MSUF_ApplyModules")
         end)
-    local mouseover = b:CollapsibleSection("misc_mouseover_highlight", "Mouseover Highlight", 218, true)
+    local mouseover = b:CollapsibleSection("misc_mouseover_highlight", "Frame Highlights", 340, true)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(mouseover, { "highlight.mouseover" }, {
             title = "Mouseover Highlight Color",
@@ -328,6 +349,22 @@ local function BuildMisc(ctx)
     end
     if enabled and enabled.HookScript then enabled:HookScript("OnClick", RefreshMouseoverControls) end
     M.TrackRefresh(ctx, RefreshMouseoverControls)
+    local targetCardW = max(320, mouseoverW - 28)
+    local targetCard = W.ControlCard(mouseover, "Group Target Highlight",
+        "Independent of mouseover. Marks your current target in the selected group-frame types.",
+        14, -198, targetCardW, 116)
+    if W.AttachContextColorReferences then
+        W.AttachContextColorReferences(targetCard, { "group.target" }, {
+            title = "Target Highlight Color",
+            note = "Shared by Party, Raid and Mythic Raid.",
+            historySource = "menu:group-target-highlight-color",
+            offsetX = -76,
+        })
+    end
+    local targetColumnW = math.floor((targetCardW - 36) / 3)
+    BindGroupTargetSwitch(targetCard, "Party frames", "party", 18, -78, targetColumnW - 42)
+    BindGroupTargetSwitch(targetCard, "Raid frames", "raid", 18 + targetColumnW, -78, targetColumnW - 42)
+    BindGroupTargetSwitch(targetCard, "Mythic Raid frames", "mythicraid", 18 + (targetColumnW * 2), -78, targetColumnW - 42)
     local tooltips = b:CollapsibleSection("misc_tooltips", "Unitframe tooltips", 236, false)
     local tooltipW = tooltips._msuf2Width or ctx.width or 720
     local tooltipLeftX = 30
@@ -385,4 +422,4 @@ local function BuildMisc(ctx)
         end)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-M.RegisterPage("opt_misc", { title = "MSUF Miscellaneous", build = BuildMisc, version = 12 })
+M.RegisterPage("opt_misc", { title = "MSUF Miscellaneous", build = BuildMisc, version = 13 })

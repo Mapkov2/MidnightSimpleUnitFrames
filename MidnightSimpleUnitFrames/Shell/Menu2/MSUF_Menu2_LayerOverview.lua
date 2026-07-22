@@ -85,7 +85,10 @@ local FALLBACK_UNIT_STATUS_SPECS = {
     { text = "Level", show = "showLevelIndicator", defaultShow = true, layer = "levelIndicatorLayer", defaultLayer = 7 },
     { text = "Raid Group", show = "showRaidGroupInName", defaultShow = false, layer = "raidGroupNameLayer", legacyLayer = "nameTextLayer", defaultLayer = 5, units = "player target targettarget focustarget focus" },
     { text = "Elite / Rare", show = "showEliteIcon", defaultShow = true, layer = "eliteIconLayer", defaultLayer = 7, units = "target focus targettarget focustarget boss" },
-    { text = "Dead Text", show = "statusTextEnabled", defaultShow = true, layer = "statusTextLayer", defaultLayer = 7 },
+    { text = "Dead / Offline Text", show = "statusDeadTextEnabled", defaultShow = true, layer = "statusTextLayer", defaultLayer = 7 },
+    { text = "Ghost Text", show = "statusGhostTextEnabled", defaultShow = true, layer = "statusGhostTextLayer", defaultLayer = 7 },
+    { text = "AFK Text", show = "statusAFKTextEnabled", defaultShow = false, layer = "statusAFKTextLayer", defaultLayer = 7 },
+    { text = "DND Text", show = "statusDNDTextEnabled", defaultShow = false, layer = "statusDNDTextLayer", defaultLayer = 7 },
     { text = "Combat", show = "showCombatStateIndicator", defaultShow = true, layer = "combatStateIndicatorLayer", defaultLayer = 7, units = "player target" },
     { text = "Rested", show = "showRestingIndicator", defaultShow = false, layer = "restedStateIndicatorLayer", defaultLayer = 7, units = "player" },
     { text = "Incoming Rez", show = "showIncomingResIndicator", defaultShow = true, layer = "incomingResIndicatorLayer", defaultLayer = 7, units = "player target" },
@@ -103,7 +106,8 @@ local FALLBACK_GROUP_STATUS_SPECS = {
     { text = "Phase", enabled = "phaseIcon", layer = "phaseLayer", defaultLayer = 3 },
     { text = "Dead Text", enabled = "statusText", layer = "statusTextLayer", defaultLayer = 7 },
     { text = "Ghost Text", enabled = "statusGhostText", layer = "statusGhostTextLayer", defaultLayer = 7 },
-    { text = "AFK / DND Text", enabled = "statusAFKText", layer = "statusAFKTextLayer", defaultLayer = 7 },
+    { text = "AFK Text", enabled = "statusAFKText", layer = "statusAFKTextLayer", defaultLayer = 7 },
+    { text = "DND Text", enabled = "statusDNDText", layer = "statusDNDTextLayer", defaultLayer = 7 },
 }
 
 local function DB()

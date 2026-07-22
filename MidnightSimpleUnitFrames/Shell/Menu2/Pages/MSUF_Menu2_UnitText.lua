@@ -837,7 +837,7 @@ local function BuildText(ctx, builder, unit)
         SetControlsEnabled(powerSlotControls, powerOn and not MoveTogether("power"))
         if powerManaged then
             if powerManagedNotice then
-                powerManagedNotice:SetMessage("Player power bar is connected to Class Resources. These Power Text settings still edit the active Player power text.", "warning")
+                powerManagedNotice:SetMessage(M.Tr("Player power bar is connected to Class Resources. These Power Text settings still edit the active Player power text."), "warning")
                 powerManagedNotice:Show()
             end
         elseif powerManagedNotice then

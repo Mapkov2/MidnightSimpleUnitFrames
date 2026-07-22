@@ -556,6 +556,96 @@ local function ApplyGradientRuntime(reason, kind)
     return RequestApply("RequestBarGradients", reason or "MSUF2_GRADIENT", CurrentBarsScope())
 end
 
+-- Bars keeps its normal accordion controls focused on geometry and behavior.
+-- Color targets are built only when the quiet three-dot shortcut is clicked,
+-- so no hidden swatch widgets or gameplay/runtime hooks are needed.
+local function AttachBarsColorShortcut(section, title, note, label, getRGB, setRGB, historySource, captureState, restoreState)
+    if not (section and W.AttachContextColorShortcut) then return nil end
+    local targets = {
+        {
+            label = label,
+            getRGB = getRGB,
+            setRGB = setRGB,
+            captureState = captureState,
+            restoreState = restoreState,
+            historyLabel = tostring(label or "Bar") .. " color",
+        },
+    }
+    return W.AttachContextColorShortcut(section, {
+        title = title,
+        note = note,
+        getTargets = function() return targets end,
+        historySource = historySource or "menu:bars-colors",
+        maxTargets = 1,
+    })
+end
+
+local function CaptureBarsScopeFields(fields)
+    local scope = CurrentBarsScope()
+    local keys = scope ~= "shared" and ScopeDBKeys(scope) or nil
+    local state = { scope = scope, fields = fields }
+    if not keys then
+        state.shared = {}
+        local general = G()
+        for i = 1, #fields do
+            local field = fields[i]
+            state.shared[field] = general[field]
+        end
+        return state
+    end
+
+    state.entries = {}
+    local db = DB()
+    for i = 1, #keys do
+        local key, entry = keys[i], db[keys[i]]
+        local saved = { key = key, existed = type(entry) == "table", values = {} }
+        for j = 1, #fields do
+            local field = fields[j]
+            if saved.existed then saved.values[field] = entry[field] end
+        end
+        state.entries[i] = saved
+    end
+    return state
+end
+
+local function RestoreBarsScopeFields(state)
+    if type(state) ~= "table" or type(state.fields) ~= "table" then return end
+    if state.shared then
+        local general = G()
+        for i = 1, #state.fields do
+            local field = state.fields[i]
+            general[field] = state.shared[field]
+        end
+        return
+    end
+
+    local db = DB()
+    for i = 1, #(state.entries or {}) do
+        local saved = state.entries[i]
+        local entry = db[saved.key]
+        if saved.existed then
+            if type(entry) ~= "table" then
+                entry = {}
+                db[saved.key] = entry
+            end
+            for j = 1, #state.fields do
+                local field = state.fields[j]
+                entry[field] = saved.values[field]
+            end
+        elseif type(entry) == "table" then
+            for j = 1, #state.fields do entry[state.fields[j]] = nil end
+            if next(entry) == nil then db[saved.key] = nil end
+        end
+    end
+end
+
+local TEMP_MAX_HEALTH_COLOR_STATE_FIELDS = {
+    "hlOverride", "tempMaxHealthColorR", "tempMaxHealthColorG", "tempMaxHealthColorB",
+}
+local OUTLINE_COLOR_STATE_FIELDS = {
+    "hlOverride", "barOutlineColorMode", "barOutlineColorR", "barOutlineColorG", "barOutlineColorB", "barOutlineColorA",
+}
+
 local function SetOutlineRGB(entry, r, g, b)
     if entry.barOutlineColorR == r and entry.barOutlineColorG == g and entry.barOutlineColorB == b
         and entry.barOutlineColorA == 1 and entry.barOutlineColorMode == nil then return false end
@@ -676,13 +766,13 @@ local function BuildScopeSection(ctx, b)
         hint = "Textures are shared except Party/Raid group-frame overrides. Gradients can be customized per unit or group scope.",
         updateHint = function(hint, current, active, shared)
             if shared then
-                hint:SetText("Textures are shared except Party/Raid group-frame overrides. Gradients can be customized per unit or group scope.")
+                hint:SetText(M.Tr("Textures are shared except Party/Raid group-frame overrides. Gradients can be customized per unit or group scope."))
             elseif IsGFScope(current) and ScopeHasOverride(current, "hlOverride") then
-                hint:SetText("This group scope can use custom textures and gradients. Raid also applies to Mythic Raid.")
+                hint:SetText(M.Tr("This group scope can use custom textures and gradients. Raid also applies to Mythic Raid."))
             elseif ScopeHasOverride(current, "hlOverride") then
-                hint:SetText("This scope can use custom gradients and bar settings. Textures still follow Shared.")
+                hint:SetText(M.Tr("This scope can use custom gradients and bar settings. Textures still follow Shared."))
             else
-                hint:SetText("This scope follows Shared bar settings. Turn on custom settings here when this scope needs different gradients or bar settings.")
+                hint:SetText(M.Tr("This scope follows Shared bar settings. Turn on custom settings here when this scope needs different gradients or bar settings."))
             end
         end,
     })
@@ -1013,7 +1103,7 @@ end
 local function BuildTempMaxHealthSection(ctx, b)
     local sectionW = ctx.width or 720
     local compact = sectionW < 700
-    local section = b:CollapsibleSection("bars_temp_max_health", "Maximum Health Loss", compact and 482 or 294, true)
+    local section = b:CollapsibleSection("bars_temp_max_health", "Maximum Health Loss", compact and 414 or 274, true)
     sectionW = section._msuf2Width or sectionW
     local leftX = compact and 20 or 30
     local rightX = compact and 20 or max(390, min(540, floor(sectionW * 0.52)))
@@ -1060,11 +1150,10 @@ local function BuildTempMaxHealthSection(ctx, b)
         Meta("temp_max_health.texture"))
     W.MoveWidget(texture, section, leftX, textureY, leftW, "LEFT")
 
-    local colorY = compact and -204 or -204
-    local color = W.Color(section, "Loss color")
-    color._msuf2ContextColorAllowDisabled = true
-    W.MoveWidget(color, section, leftX, colorY)
-    M.BindColor(ctx, color,
+    AttachBarsColorShortcut(section,
+        "Maximum Health Loss Color",
+        "Loss color for the selected Bars scope.",
+        "Loss color",
         function()
             return tonumber(BarScopeGet("tempMaxHealthColorR", ReadG("tempMaxHealthColorR", 0.70))) or 0.70,
                 tonumber(BarScopeGet("tempMaxHealthColorG", ReadG("tempMaxHealthColorG", 0.10))) or 0.10,
@@ -1076,9 +1165,14 @@ local function BuildTempMaxHealthSection(ctx, b)
             BarScopeSet("tempMaxHealthColorB", tonumber(b) or 0.10, "MSUF2_TEMP_MAX_HEALTH_COLOR", true)
             Refresh("MSUF2_TEMP_MAX_HEALTH_COLOR")
         end,
-        Meta("temp_max_health.color"))
+        "menu:bars-temp-max-health-color",
+        function() return CaptureBarsScopeFields(TEMP_MAX_HEALTH_COLOR_STATE_FIELDS) end,
+        function(state)
+            RestoreBarsScopeFields(state)
+            Refresh("MSUF2_TEMP_MAX_HEALTH_COLOR_CANCEL")
+        end)
 
-    local opacityY = compact and -266 or -78
+    local opacityY = compact and -204 or -78
     local opacity = W.Slider(section, "Overlay opacity", 0.05, 1, 0.05, rightW)
     M.BindNumberWidget(ctx, opacity,
         function() return tonumber(BarScopeGet("tempMaxHealthOpacity", ReadG("tempMaxHealthOpacity", 1))) or 1 end,
@@ -1089,7 +1183,7 @@ local function BuildTempMaxHealthSection(ctx, b)
         1, Meta("temp_max_health.opacity"))
     W.MoveWidget(opacity, section, rightX, opacityY, rightW, "LEFT")
 
-    local backgroundY = compact and -330 or -142
+    local backgroundY = compact and -268 or -142
     local background = W.Slider(section, "Background opacity", 0, 1, 0.05, rightW)
     M.BindNumberWidget(ctx, background,
         function()
@@ -1104,14 +1198,14 @@ local function BuildTempMaxHealthSection(ctx, b)
         0.65, Meta("temp_max_health.background_opacity"))
     W.MoveWidget(background, section, rightX, backgroundY, rightW, "LEFT")
 
-    local previewY = compact and -402 or -214
+    local previewY = compact and -340 or -214
     local preview = W.ToggleAt(section, "Preview effect", rightX, previewY, rightW)
     M.BindBoolWidget(ctx, preview,
         function() return IsAbsorbTextureTestEnabled("tempMaxHealth") == true end,
         function(value) SetAbsorbTextureTest(value and true or false, "tempMaxHealth") end,
         Meta("temp_max_health.preview", "ephemeral"))
 
-    local options = { texture, color, opacity, background }
+    local options = { texture, opacity, background }
     M.TrackRefresh(ctx, SyncControls(function()
         local scopedActive = ScopedControls()
         local on = BarScopeGet("tempMaxHealthEnabled", ReadGBool("tempMaxHealthEnabled", false)) == true
@@ -1388,7 +1482,7 @@ local function BuildAbsorbSection(ctx, b)
 end
 
 local function BuildOutlineSection(ctx, b)
-    local outline = b:CollapsibleSection("bars_outline", "Frame Outline", 220, false)
+    local outline = b:CollapsibleSection("bars_outline", "Frame Outline", 178, false)
     local outlineSlider = W.Slider(outline, "Bar outline thickness", 0, 8, 1, 300)
     M.BindNumberWidget(ctx, outlineSlider,
         function() return tonumber(BarScopeGetBars("barOutlineThickness", 1)) or 1 end,
@@ -1405,9 +1499,10 @@ local function BuildOutlineSection(ctx, b)
             RequestOutlineRuntime()
         end,
         0, Meta("outline.layer", "setting", { step = 1, roundStep = true }))
-    local outlineColor = W.Color(outline, "Outline color")
-    W.MoveWidget(outlineColor, outline, 30, -150)
-    M.BindColor(ctx, outlineColor,
+    AttachBarsColorShortcut(outline,
+        "Frame Outline Color",
+        "Outline color for the selected Bars scope.",
+        "Outline color",
         function()
             return tonumber(BarScopeGet("barOutlineColorR", ReadG("barOutlineColorR", 0))) or 0,
                 tonumber(BarScopeGet("barOutlineColorG", ReadG("barOutlineColorG", 0))) or 0,
@@ -1418,9 +1513,14 @@ local function BuildOutlineSection(ctx, b)
                 RequestOutlineRuntime()
             end
         end,
-        Meta("outline.color"))
+        "menu:bars-outline-color",
+        function() return CaptureBarsScopeFields(OUTLINE_COLOR_STATE_FIELDS) end,
+        function(state)
+            RestoreBarsScopeFields(state)
+            RequestOutlineRuntime()
+        end)
     M.BindGateGroup(ctx, nil, {
-        { controls = { outlineSlider, outlineLayer, outlineColor }, on = ScopedControls },
+        { controls = { outlineSlider, outlineLayer }, on = ScopedControls },
     })
 end
 
@@ -1847,11 +1947,11 @@ local GLOBAL_BARS_LAZY_SECTION_SPECS = {
         sectionId = "bars_temp_max_health",
         title = "Maximum Health Loss",
         defaultOpen = true,
-        height = function(lazyCtx) return (((lazyCtx and lazyCtx.width) or 720) < 700) and 482 or 294 end,
+        height = function(lazyCtx) return (((lazyCtx and lazyCtx.width) or 720) < 700) and 414 or 274 end,
         build = BuildTempMaxHealthSection,
     },
     { sectionId = "bars_absorb", title = "Absorb Display", height = 414, defaultOpen = true, build = BuildAbsorbSection },
-    { sectionId = "bars_outline", title = "Frame Outline", height = 220, build = BuildOutlineSection },
+    { sectionId = "bars_outline", title = "Frame Outline", height = 178, build = BuildOutlineSection },
     { sectionId = "bars_rounded", title = "Rounded Texture", height = 246, defaultOpen = true, build = BuildRoundedSection },
     { sectionId = "bars_highlight", title = "Highlight Borders", height = 710, defaultOpen = true, build = BuildHighlightSection },
     {

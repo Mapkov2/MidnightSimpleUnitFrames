@@ -91,11 +91,12 @@ local function CallMSUF(name, ...)
 end
 local function ClearProfileHistory() if M.ClearHistory then M.ClearHistory() end end
 local function PrintProfileMessage(color, message)
+    message = M.Tr(tostring(message or ""))
     if M.ShowStatusFeedback then
         local kind = tostring(color or ""):find("ff0000", 1, true) and "danger" or "info"
-        M.ShowStatusFeedback(tostring(message or ""), kind, kind == "danger" and 2.0 or 1.7)
+        M.ShowStatusFeedback(message, kind, kind == "danger" and 2.0 or 1.7)
     end
-    print((color or "|cffffd700") .. "MSUF:|r " .. tostring(message or ""))
+    print((color or "|cffffd700") .. "MSUF:|r " .. message)
 end
 local function BlockCombatAction()
     if M.BlockCombatAction then return M.BlockCombatAction() and true or false end
@@ -192,13 +193,13 @@ local function ShowImportReloadPrompt()
 end
 local function ReloadAfterNewProfileImport(profileName)
     if _G.InCombatLockdown and _G.InCombatLockdown() then
-        PrintProfileMessage("|cffffd700", "Imported profile '" .. tostring(profileName) .. "'. Reload after combat with /reload.")
+        PrintProfileMessage("|cffffd700", M.Format("Imported profile '%s'. Reload after combat with /reload.", tostring(profileName)))
         return
     end
     if type(_G.ReloadUI) == "function" then
         _G.ReloadUI()
     else
-        PrintProfileMessage("|cffffd700", "Imported profile '" .. tostring(profileName) .. "'. Reload the UI with /reload.")
+        PrintProfileMessage("|cffffd700", M.Format("Imported profile '%s'. Reload the UI with /reload.", tostring(profileName)))
     end
 end
 local function ProfileExists(name)
@@ -453,12 +454,12 @@ local function BuildProfiles(ctx)
                 M.profileImportString = value
                 blob:SetText(value)
                 blob:HighlightText()
-                if M.ShowStatusFeedback then M.ShowStatusFeedback("Profile string exported", "ok", 1.5) end
+                if M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr("Profile string exported"), "ok", 1.5) end
             elseif M.ShowStatusFeedback then
-                M.ShowStatusFeedback("Export failed", "danger", 1.8)
+                M.ShowStatusFeedback(M.Tr("Export failed"), "danger", 1.8)
             end
         elseif M.ShowStatusFeedback then
-            M.ShowStatusFeedback("Export unavailable", "danger", 1.8)
+            M.ShowStatusFeedback(M.Tr("Export unavailable"), "danger", 1.8)
         end
     end, nil, "export.generate")
     local importCreateNew, importProfileName
@@ -516,7 +517,7 @@ local function BuildProfiles(ctx)
         end
         local ok, imported = pcall(_G.MSUF_ImportFromString, text)
         if not ok then
-            PrintProfileMessage("|cffff0000", "Import failed: " .. tostring(imported))
+            PrintProfileMessage("|cffff0000", M.Format("Import failed: %s", tostring(imported)))
             return false
         end
         if imported ~= true then return false end
@@ -535,7 +536,7 @@ local function BuildProfiles(ctx)
             return false
         end
         if ProfileExists(name) then
-            PrintProfileMessage("|cffff0000", "Profile '" .. name .. "' already exists.")
+            PrintProfileMessage("|cffff0000", M.Format("Profile '%s' already exists.", name))
             return false
         end
         if type(_G.MSUF_CreateProfile) ~= "function"
@@ -551,7 +552,7 @@ local function BuildProfiles(ctx)
         local previous = ActiveProfileName()
         CallMSUF("MSUF_CreateProfile", name)
         if not ProfileExists(name) then
-            PrintProfileMessage("|cffff0000", "Import failed: could not create profile '" .. name .. "'.")
+            PrintProfileMessage("|cffff0000", M.Format("Import failed: could not create profile '%s'.", name))
             return false
         end
         local previousExists = ProfileExists(previous)
@@ -559,14 +560,14 @@ local function BuildProfiles(ctx)
         if _G.MSUF_ActiveProfile ~= name then
             if previousExists then CallMSUF("MSUF_SwitchProfile", previous) end
             DeleteCreatedProfile(name)
-            PrintProfileMessage("|cffff0000", "Import failed: could not switch to profile '" .. name .. "'.")
+            PrintProfileMessage("|cffff0000", M.Format("Import failed: could not switch to profile '%s'.", name))
             return false
         end
         local ok, imported = pcall(_G.MSUF_ImportFromString, text)
         if not ok or imported ~= true then
             if previousExists then CallMSUF("MSUF_SwitchProfile", previous) end
             DeleteCreatedProfile(name)
-            PrintProfileMessage("|cffff0000", ok and "Import failed." or ("Import failed: " .. tostring(imported)))
+            PrintProfileMessage("|cffff0000", ok and M.Tr("Import failed.") or M.Format("Import failed: %s", tostring(imported)))
             RefreshAfterProfileChange(ctx)
             return false
         end
@@ -596,7 +597,7 @@ local function BuildProfiles(ctx)
         end
         M.SetMenuStateValue("profileImportCreateNew", not (M.profileImportCreateNew == true))
         self:SetChecked(M.profileImportCreateNew == true)
-        if M.ShowStatusFeedback then M.ShowStatusFeedback(M.profileImportCreateNew == true and "New-profile import on" or "New-profile import off", "info", 1.2) end
+        if M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr(M.profileImportCreateNew == true and "New-profile import on" or "New-profile import off"), "info", 1.2) end
         if M.RequestRefresh then M.RequestRefresh(ctx, "profiles-import-mode") elseif M.Refresh then M.Refresh(ctx) end
     end)
     local legacy = ProfileButton(io, "Import Legacy", function()
@@ -607,9 +608,9 @@ local function BuildProfiles(ctx)
             ClearProfileHistory()
             M.RequestGeneralApply("MSUF2_PROFILE_LEGACY_IMPORT", { preview = true, applyAll = false, notify = false })
             RefreshAfterProfileChange(ctx)
-            if M.ShowStatusFeedback then M.ShowStatusFeedback("Legacy profile imported", "ok", 1.7) end
+            if M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr("Legacy profile imported"), "ok", 1.7) end
         elseif M.ShowStatusFeedback then
-            M.ShowStatusFeedback("Legacy import unavailable", "danger", 1.8)
+            M.ShowStatusFeedback(M.Tr("Legacy import unavailable"), "danger", 1.8)
         end
     end, nil, "import.legacy", true)
     local wago = ProfileButton(io, "Browse Wago Profiles", function()

@@ -4,58 +4,17 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 
 -- TEXT_QUICK_SETTINGS
--- One cold, reusable popup for the RGB dots inside Text cards. Everything is
--- resolved when the user opens it; there is no event, ticker, or gameplay path.
+-- One cold, reusable Text Colors popup for RGB dots inside Text cards. It only
+-- contains a scope-aware color-mode dropdown. Text without a real color mode
+-- opens the existing color picker directly; no typography control belongs here.
 local W = M.Widgets
 local T = M.Theme
 local Tr = M.Tr or function(value) return value end
-local floor = math.floor
-local max = math.max
-local min = math.min
 
 local textQuickPopup
 local activeAnchor
 local activeOptions
 local activeSettings
-local cachedFontValues
-
-local OUTLINE_VALUES = {
-    { value = "OUTLINE", text = "Outline" },
-    { value = "THICKOUTLINE", text = "Thick" },
-    { value = "NONE", text = "None" },
-}
-local RENDER_VALUES = {
-    { value = "SMOOTH", text = "Smooth" },
-    { value = "SHARP", text = "Sharp" },
-}
-local SHADOW_VALUES = {
-    { value = "ON", text = "On" },
-    { value = "OFF", text = "Off" },
-}
-local TEXT_ALPHA_VALUES = {
-    { value = 1, text = "100%" },
-    { value = 0.85, text = "85%" },
-    { value = 0.70, text = "70%" },
-}
-local SHADOW_DISTANCE_VALUES = {
-    { value = 1, text = "1 px" },
-    { value = 2, text = "2 px" },
-}
-local BASELINE_VALUES = {}
-for value = -4, 4 do
-    BASELINE_VALUES[#BASELINE_VALUES + 1] = {
-        value = value,
-        text = value > 0 and ("+" .. tostring(value) .. " px") or (tostring(value) .. " px"),
-    }
-end
-local SHADOW_ALPHA_VALUES = {}
-for step = 4, 20 do
-    local value = step / 20
-    SHADOW_ALPHA_VALUES[#SHADOW_ALPHA_VALUES + 1] = {
-        value = value,
-        text = tostring(floor(value * 100 + 0.5)) .. "%",
-    }
-end
 local GROUP_PREVIEW_CLASS = { gf_party = "DEATHKNIGHT", gf_raid = "HUNTER" }
 local GROUP_PREVIEW_POWER = { gf_party = "RUNIC_POWER", gf_raid = "FOCUS" }
 local SCOPE_LABELS = {
@@ -148,6 +107,21 @@ local function CurrentModeKind()
     if IsGroupSettings(settings, scope) then return "group_name" end
     local _, data = PreviewUnitData(settings)
     return data.isPlayer and "player_name" or "npc_name"
+end
+
+local function CurrentColorModeLabel()
+    local configured = Resolve(activeSettings and activeSettings.colorModeLabel, nil)
+    if not configured and HasCustomColorMode() then
+        configured = Resolve(activeSettings and activeSettings.colorTitle, nil)
+    end
+    if configured then return configured end
+    local modeKind = CurrentModeKind()
+    if modeKind == "group_name" then return "Group Name Color" end
+    if modeKind == "player_name" then return "Player Name Color" end
+    if modeKind == "npc_name" then return "NPC / Boss Name Color" end
+    if modeKind == "hp" then return "HP Text Color" end
+    if modeKind == "power" then return "Power Text Color" end
+    return "Color mode"
 end
 
 local function CurrentColorMode()
@@ -505,6 +479,11 @@ local function GroupPowerTargets()
     return { PowerColorTarget(token) }
 end
 
+local function AppendTargets(targets, additions)
+    for i = 1, #(additions or {}) do targets[#targets + 1] = additions[i] end
+    return targets
+end
+
 local function ResolveTextColorTargets()
     if not HasCapability("colors", true) then return {} end
     local settings, scope, kind = activeSettings or {}, CurrentModeScope(), CurrentKind()
@@ -518,40 +497,42 @@ local function ResolveTextColorTargets()
     local group = IsGroupSettings(settings, scope)
     local mode = CurrentColorMode()
     if kind == "name" then
+        local targets = { DefaultFontTarget(scope, group) }
         if group then
-            if mode == "CUSTOM" then
-                return { ScopedRGBTarget(scope, "Custom group name", "nameColorR", "nameColorG", "nameColorB", {
-                    modeKey = "nameColorMode", modeValue = "CUSTOM",
-                }) }
-            end
-            if mode == "CLASS" then return GroupClassTargets() end
-            return { DefaultFontTarget(scope, true) }
+            AppendTargets(targets, GroupClassTargets())
+            targets[#targets + 1] = ScopedRGBTarget(scope, "Custom group name", "nameColorR", "nameColorG", "nameColorB")
+            return targets
         end
         local unit, data = PreviewUnitData(settings)
-        if mode == "CLASS" then
-            return { ClassColorTarget(data.class, (data.className or data.class or "Unit") .. " class color") }
-        elseif mode == "NPC" then
-            return { NPCColorTarget(ResolveNPCPreviewKind(unit, data)) }
+        if CurrentModeKind() == "npc_name" then
+            targets[#targets + 1] = NPCColorTarget(ResolveNPCPreviewKind(unit, data))
         end
-        return { GlobalFontTarget() }
+        targets[#targets + 1] = ClassColorTarget(data.class, (data.className or data.class or "Unit") .. " class color")
+        return targets
     elseif kind == "hp" then
         if mode == "HEALTH" then
-            return {
+            local targets = {
                 GeneralRGBTarget("Low health", "healthGradientLow", 1, 0, 0),
                 GeneralRGBTarget("Mid health", "healthGradientMid", 1, 1, 0),
                 GeneralRGBTarget("High health", "healthGradientHigh", 0, 1, 0),
             }
-        elseif mode == "CLASS" then
-            if group then return GroupClassTargets() end
+            if group then return AppendTargets(targets, GroupClassTargets()) end
             local _, data = PreviewUnitData(settings)
-            return { ClassColorTarget(data.class, (data.className or data.class or "Unit") .. " class color") }
+            targets[#targets + 1] = ClassColorTarget(data.class, (data.className or data.class or "Unit") .. " class color")
+            return targets
         end
-        return { DefaultFontTarget(scope, group) }
-    end
-    if mode == "RESOURCE" then
-        if group then return GroupPowerTargets() end
+        local targets = { DefaultFontTarget(scope, group) }
+        if group then return AppendTargets(targets, GroupClassTargets()) end
         local _, data = PreviewUnitData(settings)
-        return { PowerColorTarget(data.powerToken or "MANA") }
+        targets[#targets + 1] = ClassColorTarget(data.class, (data.className or data.class or "Unit") .. " class color")
+        return targets
+    end
+    if kind == "power" then
+        local targets = { DefaultFontTarget(scope, group) }
+        if group then return AppendTargets(targets, GroupPowerTargets()) end
+        local _, data = PreviewUnitData(settings)
+        targets[#targets + 1] = PowerColorTarget(data.powerToken or "MANA")
+        return targets
     end
     return { DefaultFontTarget(scope, group) }
 end
@@ -576,63 +557,34 @@ local function BindDropdown(control, label, source, getter, setter)
     end)
 end
 
-local function BindSegment(control, label, source, getter, setter)
-    control._msuf2SkipHistoryCheckpoint = true
-    for i = 1, #(control.buttons or {}) do
-        local button = control.buttons[i]
-        button._msuf2SkipHistoryCheckpoint = true
-        button:SetScript("OnClick", function()
-            local value = button._msuf2Value
-            if getter() == value then return end
-            if RunChange(label, source, function() setter(value) end) and textQuickPopup and textQuickPopup.Refresh then textQuickPopup:Refresh() end
-        end)
-    end
-end
-
-local function NormalizeTextAlpha(value)
-    value = tonumber(value) or 1
-    if value <= 0.75 then return 0.70 end
-    if value <= 0.925 then return 0.85 end
-    return 1
-end
-
-local function NormalizeBaseline(value)
-    return max(-4, min(4, floor((tonumber(value) or 0) + 0.5)))
-end
-
-local function ClearLegacyShadowStrength(scope)
-    local GP = GlobalPage()
-    if scope == "shared" then
-        local general = GP.G and GP.G()
-        if general then general.fontShadowStrength = nil end
-        return
-    end
-    local db = GP.DB and GP.DB()
-    local keys = type(GP.ScopeDBKeys) == "function" and GP.ScopeDBKeys(scope) or nil
-    for i = 1, #(keys or {}) do
-        local entry = db and db[keys[i]]
-        if entry then entry.fontShadowStrength = nil end
-    end
-end
-
-local function ScopeStyleGet(key, default)
-    local GP = GlobalPage()
-    return GP.FontScopeGetFor(CurrentScope(), key, default)
-end
-
-local function ScopeStyleSet(key, value, reason)
-    local GP, scope = GlobalPage(), CurrentScope()
-    GP.FontScopeSetFor(scope, key, value, reason)
-end
-
 local function ColorModeVisible()
     return HasCapability("colorMode", true)
         and (HasCustomColorMode() or HasNativeColorMode())
         and not (IsGroupSettings(activeSettings, CurrentModeScope()) and CurrentKind() == "power")
 end
 
-local function RefreshPopup()
-    if textQuickPopup and textQuickPopup.Refresh then textQuickPopup:Refresh() end
+local function TextColorPickerOptions(options, targets)
+    local kind = CurrentKind()
+    local note = Resolve(activeSettings and activeSettings.colorNote,
+        Resolve(options and options.note,
+            #targets > 1 and "Choose a color relevant to this text." or "Edit the color used by this text."))
+    return {
+        title = Resolve(activeSettings and activeSettings.colorTitle,
+            kind == "name" and "Name colors"
+            or (kind == "hp" and "HP text colors"
+            or (kind == "power" and "Power text colors" or "Text colors"))),
+        note = note,
+        historyLabel = options and options.historyLabel or "Text color",
+        historySource = options and options.historySource or "menu:text-quick:color",
+        scopeTag = Resolve(activeSettings and activeSettings.colorScopeTag,
+            Resolve(options and options.scopeTag, nil)),
+        maxTargets = 4,
+    }
+end
+
+local function OpenResolvedTextColors(anchor, options, targets, onClosed)
+    if not (anchor and type(W.OpenContextColors) == "function" and type(targets) == "table" and #targets > 0) then return false end
+    return W.OpenContextColors(anchor:GetParent(), TextColorPickerOptions(options, targets), targets, onClosed)
 end
 
 local function EnsurePopup()
@@ -643,7 +595,7 @@ local function EnsurePopup()
 
     local popup = M.CreateMenuPopupPanel(parent)
     textQuickPopup = popup
-    popup:SetSize(430, 466)
+    popup:SetSize(430, 196)
     popup:SetClampedToScreen(true)
     popup:EnableKeyboard(true)
     if popup.SetPropagateKeyboardInput then popup:SetPropagateKeyboardInput(true) end
@@ -673,87 +625,8 @@ local function EnsurePopup()
         popup:Refresh()
     end)
 
-    popup.family = W.Dropdown(popup, "Font family (all frames)", function()
-        if not cachedFontValues then
-            local GP = GlobalPage()
-            cachedFontValues = type(GP.FontValues) == "function" and GP.FontValues(false) or {}
-        end
-        return cachedFontValues
-    end, 398)
-    W.MoveWidget(popup.family, popup, 16, -102, 398, "LEFT")
-    BindDropdown(popup.family, "Font family", "menu:text-quick:font-family",
-        function()
-            local GP = GlobalPage()
-            return type(GP.FontKeyGet) == "function" and GP.FontKeyGet() or nil
-        end,
-        function(value)
-            local GP = GlobalPage()
-            if type(GP.FontKeySet) == "function" then GP.FontKeySet(value) end
-            if type(_G.MSUF_NormalizeStoredFontKeys) == "function" then _G.MSUF_NormalizeStoredFontKeys() end
-            if type(GP.ApplyFontsFor) == "function" then GP.ApplyFontsFor("shared", "MSUF2_TEXT_QUICK_FONT_KEY") end
-        end)
-
-    popup.outline = W.Segment(popup, "Outline", OUTLINE_VALUES, 398)
-    W.MoveWidget(popup.outline, popup, 16, -156, 398, "LEFT")
-    BindSegment(popup.outline, "Font outline", "menu:text-quick:outline",
-        function() return GlobalPage().FontOutlineGetFor(CurrentScope()) end,
-        function(value) GlobalPage().FontOutlineSetFor(CurrentScope(), value, "MSUF2_TEXT_QUICK_OUTLINE") end)
-
-    popup.rendering = W.Segment(popup, "Rendering", RENDER_VALUES, 190)
-    W.MoveWidget(popup.rendering, popup, 16, -210, 190, "LEFT")
-    BindSegment(popup.rendering, "Font rendering", "menu:text-quick:rendering",
-        function() return ScopeStyleGet("fontMonochrome", false) and "SHARP" or "SMOOTH" end,
-        function(value) ScopeStyleSet("fontMonochrome", value == "SHARP", "MSUF2_TEXT_QUICK_RENDERING") end)
-
-    popup.shadow = W.Segment(popup, "Text shadow", SHADOW_VALUES, 190)
-    W.MoveWidget(popup.shadow, popup, 224, -210, 190, "LEFT")
-    BindSegment(popup.shadow, "Text shadow", "menu:text-quick:shadow",
-        function() return ScopeStyleGet("textBackdrop", true) and "ON" or "OFF" end,
-        function(value) ScopeStyleSet("textBackdrop", value == "ON", "MSUF2_TEXT_QUICK_SHADOW") end)
-
-    popup.opacity = W.Segment(popup, "Text opacity", TEXT_ALPHA_VALUES, 190)
-    W.MoveWidget(popup.opacity, popup, 16, -264, 190, "LEFT")
-    BindSegment(popup.opacity, "Text opacity", "menu:text-quick:opacity",
-        function() return NormalizeTextAlpha(ScopeStyleGet("fontTextAlpha", 1)) end,
-        function(value) ScopeStyleSet("fontTextAlpha", NormalizeTextAlpha(value), "MSUF2_TEXT_QUICK_ALPHA") end)
-
-    popup.baseline = W.Dropdown(popup, "Baseline", BASELINE_VALUES, 190)
-    W.MoveWidget(popup.baseline, popup, 224, -264, 190, "LEFT")
-    BindDropdown(popup.baseline, "Font baseline", "menu:text-quick:baseline",
-        function() return NormalizeBaseline(ScopeStyleGet("fontBaselineOffset", 0)) end,
-        function(value) ScopeStyleSet("fontBaselineOffset", NormalizeBaseline(value), "MSUF2_TEXT_QUICK_BASELINE") end)
-
-    popup.shadowAlpha = W.Dropdown(popup, "Shadow opacity", SHADOW_ALPHA_VALUES, 190)
-    W.MoveWidget(popup.shadowAlpha, popup, 16, -318, 190, "LEFT")
-    BindDropdown(popup.shadowAlpha, "Shadow opacity", "menu:text-quick:shadow-opacity",
-        function()
-            local GP = GlobalPage()
-            local value = type(GP.FontShadowMetricsFor) == "function" and GP.FontShadowMetricsFor(CurrentScope()) or 1
-            return max(0.20, min(1, floor(value * 20 + 0.5) / 20))
-        end,
-        function(value)
-            local scope = CurrentScope()
-            ClearLegacyShadowStrength(scope)
-            ScopeStyleSet("fontShadowOpacity", max(0.20, min(1, tonumber(value) or 1)), "MSUF2_TEXT_QUICK_SHADOW_ALPHA")
-        end)
-
-    popup.shadowDistance = W.Segment(popup, "Shadow distance", SHADOW_DISTANCE_VALUES, 190)
-    W.MoveWidget(popup.shadowDistance, popup, 224, -318, 190, "LEFT")
-    BindSegment(popup.shadowDistance, "Shadow distance", "menu:text-quick:shadow-distance",
-        function()
-            local GP = GlobalPage()
-            local _, distance
-            if type(GP.FontShadowMetricsFor) == "function" then _, distance = GP.FontShadowMetricsFor(CurrentScope()) end
-            return tonumber(distance) == 2 and 2 or 1
-        end,
-        function(value)
-            local scope = CurrentScope()
-            ClearLegacyShadowStrength(scope)
-            ScopeStyleSet("fontShadowDistance", tonumber(value) == 2 and 2 or 1, "MSUF2_TEXT_QUICK_SHADOW_DISTANCE")
-        end)
-
-    popup.colorMode = W.Dropdown(popup, "Color mode", ColorModeValues, 296)
-    W.MoveWidget(popup.colorMode, popup, 16, -372, 296, "LEFT")
+    popup.colorMode = W.Dropdown(popup, "Color mode", ColorModeValues, 398)
+    W.MoveWidget(popup.colorMode, popup, 16, -102, 398, "LEFT")
     BindDropdown(popup.colorMode, "Text color mode", "menu:text-quick:color-mode",
         CurrentColorMode,
         function(value)
@@ -778,19 +651,8 @@ local function EnsurePopup()
         local anchor, options = activeAnchor, activeOptions
         local targets = ResolveTextColorTargets()
         if #targets == 0 then return end
-        local kind = CurrentKind()
-        local colorOptions = {
-            title = Resolve(activeSettings and activeSettings.colorTitle,
-                kind == "name" and "Name colors"
-                or (kind == "hp" and "HP text colors"
-                or (kind == "power" and "Power text colors" or "Text colors"))),
-            note = #targets > 1 and "Choose one of the colors used by this text mode." or "Edit the color used by this text mode.",
-            historyLabel = options and options.historyLabel or "Text color",
-            historySource = options and options.historySource or "menu:text-quick:color",
-            maxTargets = 4,
-        }
         popup:Hide()
-        local opened = W.OpenContextColors(anchor and anchor:GetParent(), colorOptions, targets, function()
+        local opened = OpenResolvedTextColors(anchor, options, targets, function()
             if anchor and anchor.IsVisible and anchor:IsVisible() and M.frame and M.frame.IsShown and M.frame:IsShown() then
                 W.OpenTextQuickSettings(anchor, options)
             end
@@ -799,114 +661,52 @@ local function EnsurePopup()
     end)
 
     function popup:Refresh()
-        local GP, scope, kind = GlobalPage(), CurrentScope(), CurrentKind()
-        local group = IsGroupSettings(activeSettings, scope)
+        local GP, scope = GlobalPage(), CurrentScope()
         local label = SCOPE_LABELS[scope] or tostring(scope)
-        self.title:SetText(Tr("Fonts & Colors") .. " · " .. Tr(label))
-        self.subtitle:SetText(Tr(Resolve(activeSettings and activeSettings.subtitle,
-            "Font style is synchronized with the Fonts menu for this frame.")))
+        self.title:SetText(Tr("Text Colors") .. " · " .. Tr(label))
+        self.subtitle:SetText(Tr(Resolve(activeSettings and activeSettings.colorSubtitle,
+            "Synchronized with Text Colors in the Fonts menu for this scope.")))
 
         local shared = scope == "shared"
-        local override = shared or (type(GP.FontOverrideGetFor) == "function" and GP.FontOverrideGetFor(scope))
-        local showOverride = not shared and HasCapability("override", true)
+        local override = shared or (type(GP.FontOverrideGetFor) == "function" and GP.FontOverrideGetFor(scope) == true)
+        local showOverride = not shared and HasNativeColorMode() and HasCapability("override", true)
         SetShown(self.override, showOverride)
         self.override:SetChecked(override and true or false)
 
-        self.family:SetValue(type(GP.FontKeyGet) == "function" and GP.FontKeyGet() or nil)
-        self.outline:SetValue(type(GP.FontOutlineGetFor) == "function" and GP.FontOutlineGetFor(scope) or "OUTLINE")
-        self.rendering:SetValue(ScopeStyleGet("fontMonochrome", false) and "SHARP" or "SMOOTH")
-        local shadowOn = ScopeStyleGet("textBackdrop", true) == true
-        self.shadow:SetValue(shadowOn and "ON" or "OFF")
-        self.opacity:SetValue(NormalizeTextAlpha(ScopeStyleGet("fontTextAlpha", 1)))
-        self.baseline:SetValue(NormalizeBaseline(ScopeStyleGet("fontBaselineOffset", 0)))
-        local shadowAlpha, shadowDistance = 1, 1
-        if type(GP.FontShadowMetricsFor) == "function" then
-            shadowAlpha, shadowDistance = GP.FontShadowMetricsFor(scope)
-        end
-        self.shadowAlpha:SetValue(max(0.20, min(1, floor((tonumber(shadowAlpha) or 1) * 20 + 0.5) / 20)))
-        self.shadowDistance:SetValue(tonumber(shadowDistance) == 2 and 2 or 1)
-
-        local familyVisible = HasCapability("family", true)
-        local outlineVisible = HasCapability("outline", true)
-        local renderingVisible = HasCapability("rendering", true)
-        local shadowVisible = HasCapability("shadow", true)
-        local opacityVisible = HasCapability("opacity", true)
-        local baselineVisible = HasCapability("baseline", true)
-        local shadowAlphaVisible = shadowVisible and HasCapability("shadowAlpha", true)
-        local shadowDistanceVisible = shadowVisible and HasCapability("shadowDistance", true)
         local colorsAllowed = HasCapability("colors", true)
         local targetCount = colorsAllowed and #ResolveTextColorTargets() or 0
         local colorsVisible = colorsAllowed and targetCount > 0
         local modeVisible = ColorModeVisible()
-        SetShown(self.family, familyVisible)
-        SetShown(self.outline, outlineVisible)
-        SetShown(self.rendering, renderingVisible)
-        SetShown(self.shadow, shadowVisible)
-        SetShown(self.opacity, opacityVisible)
-        SetShown(self.baseline, baselineVisible)
-        SetShown(self.shadowAlpha, shadowAlphaVisible)
-        SetShown(self.shadowDistance, shadowDistanceVisible)
         SetShown(self.colorMode, modeVisible)
         SetShown(self.colors, colorsVisible)
         SetShown(self.colorNote, colorsVisible)
         if modeVisible then
             self.colorMode:SetValues(ColorModeValues())
             self.colorMode:SetValue(CurrentColorMode())
-        end
-
-        -- Reflow only while this cold popup is open. Component-specific
-        -- capability masks therefore do not leave dead rows or make the
-        -- unobtrusive shortcut open an unnecessarily tall panel.
-        local y = showOverride and -102 or -76
-        local function Full(control, visible)
-            if not visible then return end
-            W.MoveWidget(control, self, 16, y, 398, "LEFT")
-            y = y - 54
-        end
-        local function Pair(left, leftVisible, right, rightVisible)
-            if not leftVisible and not rightVisible then return end
-            if leftVisible and rightVisible then
-                W.MoveWidget(left, self, 16, y, 190, "LEFT")
-                W.MoveWidget(right, self, 224, y, 190, "LEFT")
-            elseif leftVisible then
-                W.MoveWidget(left, self, 16, y, 398, "LEFT")
-            else
-                W.MoveWidget(right, self, 16, y, 398, "LEFT")
+            if self.colorMode._msuf2Title and self.colorMode._msuf2Title.SetText then
+                self.colorMode._msuf2Title:SetText(Tr(CurrentColorModeLabel()))
             end
+        end
+
+        local y = showOverride and -102 or -76
+        if modeVisible then
+            W.MoveWidget(self.colorMode, self, 16, y, 398, "LEFT")
             y = y - 54
         end
-        Full(self.family, familyVisible)
-        Full(self.outline, outlineVisible)
-        Pair(self.rendering, renderingVisible, self.shadow, shadowVisible)
-        Pair(self.opacity, opacityVisible, self.baseline, baselineVisible)
-        Pair(self.shadowAlpha, shadowAlphaVisible, self.shadowDistance, shadowDistanceVisible)
-        Full(self.colorMode, modeVisible)
-        self:SetHeight(max(214, -y + (colorsVisible and 40 or 16)))
+        self:SetHeight(-y + (colorsVisible and 40 or 16))
 
-        local scopedControls = {
-            self.outline, self.rendering, self.shadow, self.opacity, self.baseline,
-            self.shadowAlpha, self.shadowDistance,
-        }
-        for i = 1, #scopedControls do SetEnabled(scopedControls[i], override) end
-        SetEnabled(self.shadowAlpha, override and shadowOn and shadowAlphaVisible)
-        SetEnabled(self.shadowDistance, override and shadowOn and shadowDistanceVisible)
         local modeScope = CurrentModeScope()
         local modeOverride = modeScope == "shared"
             or (type(GP.FontOverrideGetFor) == "function" and GP.FontOverrideGetFor(modeScope) == true)
         local colorModeEnabled = modeVisible and (HasCustomColorMode() or modeOverride)
         SetEnabled(self.colorMode, colorModeEnabled)
-        if colorModeEnabled and self.colorMode._msuf2Title and self.colorMode._msuf2Title.SetTextColor then
+        if modeVisible and self.colorMode._msuf2Title and self.colorMode._msuf2Title.SetTextColor then
             self.colorMode._msuf2Title:SetTextColor(
                 T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], T.colors.accent[4] or 1)
         end
 
         SetEnabled(self.colors, targetCount > 0)
-        if group and kind == "power" then
-            self.colorNote:SetText(CurrentColorMode() == "RESOURCE"
-                and Tr("Group preview resource color") or Tr("Default group font color"))
-        else
-            self.colorNote:SetText(tostring(targetCount) .. (targetCount == 1 and Tr(" matching color") or Tr(" matching colors")))
-        end
+        self.colorNote:SetText(tostring(targetCount) .. (targetCount == 1 and Tr(" relevant color") or Tr(" relevant colors")))
     end
 
     popup:SetScript("OnKeyDown", function(self, key)
@@ -930,11 +730,8 @@ end
 
 function W.OpenTextQuickSettings(anchor, options)
     if not anchor or Blocked() then return false end
-    local popup = EnsurePopup()
-    if not popup then return false end
     if W.CloseDropdown then W.CloseDropdown({ immediate = true }) end
-    if popup.SetPropagateKeyboardInput then popup:SetPropagateKeyboardInput(true) end
-    if popup:IsShown() and activeAnchor == anchor then popup:Hide(); return true end
+    if textQuickPopup and textQuickPopup:IsShown() and activeAnchor == anchor then textQuickPopup:Hide(); return true end
 
     activeAnchor = anchor
     activeOptions = options or {}
@@ -946,6 +743,18 @@ function W.OpenTextQuickSettings(anchor, options)
         general._fontScopeKey = scope
         if type(M.InvalidatePage) == "function" then M.InvalidatePage("opt_fonts") end
     end
+
+    -- Spell text, Aura text, status text, and every other text without a real
+    -- color-mode enum need no intermediate menu. Open only their exact color
+    -- target(s) in the established MSUF color picker.
+    if not ColorModeVisible() then
+        if textQuickPopup and textQuickPopup:IsShown() then textQuickPopup:Hide() end
+        return OpenResolvedTextColors(anchor, activeOptions, ResolveTextColorTargets())
+    end
+
+    local popup = EnsurePopup()
+    if not popup then return false end
+    if popup.SetPropagateKeyboardInput then popup:SetPropagateKeyboardInput(true) end
     popup:Refresh()
     if M.ApplyPopupFramePriority then M.ApplyPopupFramePriority(popup) end
     popup:ClearAllPoints()

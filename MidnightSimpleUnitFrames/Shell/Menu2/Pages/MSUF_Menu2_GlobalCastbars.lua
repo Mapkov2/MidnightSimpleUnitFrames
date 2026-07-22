@@ -680,7 +680,7 @@ local function BuildCastbars(ctx)
                     if custom == true then targetR, targetG, targetB = r, gColor, b end
                 end
                 self.castTargetText:SetTextColor(targetR, targetG, targetB, 1)
-                self.castTargetText:SetText("Cleave Training Dummy")
+                self.castTargetText:SetText(M.Tr("Cleave Training Dummy"))
                 self.castTargetText:SetWidth(max(20, scw - S(4)))
                 self.castTargetText:ClearAllPoints()
                 local targetX = ReadCastbarNum(g, unit, "TargetNameOffsetX", "bossCastTargetNameOffsetX", 0)
