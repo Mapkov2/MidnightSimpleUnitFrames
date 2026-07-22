@@ -1281,6 +1281,27 @@ function G.Evaluate(key, context)
     return EvaluateInternal(state, key, context)
 end
 
+-- Guard-free companion to G.Evaluate for latency-sensitive read paths.
+--
+-- G.Evaluate routes through EnsureBuilt, which re-scans the full registry
+-- twice and runs AutoCoverage on every call so a first request can build the
+-- graph.  That guard costs tens of milliseconds even when the graph is already
+-- warm, which is too much to pay inside a hot answer path merely to add one
+-- enrichment sentence.  This variant never builds and never re-scans: it reads
+-- the already-materialized state directly and returns nil when the graph is
+-- not built yet, when the requested scope has not been expanded, or for an
+-- unknown key.  Callers must treat a nil result as "no enrichment available"
+-- and must not use it to prove a setting has no dependencies.
+function G.EvaluateIfBuilt(key, context)
+    if G._built ~= true then return nil end
+    local state = G._state
+    if type(state) ~= "table" or type(state.settingsByKey) ~= "table" then return nil end
+    key = type(key) == "table" and key.key or key
+    key = tostring(key or "")
+    if key == "" or not state.settingsByKey[key] then return nil end
+    return EvaluateInternal(state, key, context)
+end
+
 local function DisplayValue(value, known)
     if not known then return "unknown" end
     if value == true then return "on" end
@@ -1536,6 +1557,8 @@ function G.GetCoverageReport()
 end
 
 -- Stable Assistant-facing aliases for future Router/Knowledge integration.
+A.IsSettingDependencyGraphBuilt = G.IsBuilt
+A.EvaluateSettingDependenciesIfBuilt = G.EvaluateIfBuilt
 A.GetSettingDependencyNode = G.GetNode
 A.GetSettingDependencies = G.GetDependencies
 A.GetSettingDependents = G.GetDependents

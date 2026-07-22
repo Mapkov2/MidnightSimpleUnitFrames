@@ -354,6 +354,35 @@ P.AreBulkSafeAuraSettingChanges = P.AreBulkSafeAuraSettingChanges or function(ch
     return true
 end
 
+-- A generated frameType="general" fallback carries no unit, so the explicit
+-- unit/group filter below never excludes it.  When the user names a frame
+-- ("player frame") and a reviewed curated setting owns the same attribute for
+-- that frame, the generic fallback must lose: otherwise a request for a real
+-- per-frame control (for example the Player HP Text Delimiter enum) resolves to
+-- the unconstrained generated general string and gets refused.  Only generated
+-- generals are affected, so every genuinely global feature stays matchable.
+function P.GeneratedGeneralShadowedByScopedSetting(setting, units, groups)
+    if setting.generated ~= true or tostring(setting.frameType or "") ~= "general" then return false end
+    if not (Registry and type(Registry.FindSettings) == "function") then return false end
+    local attribute = tostring(setting.attribute or "")
+    if attribute == "" then return false end
+    local scopes = {}
+    for i = 1, #(units or {}) do scopes[#scopes + 1] = units[i] end
+    for i = 1, #(groups or {}) do scopes[#scopes + 1] = groups[i] end
+    for i = 1, #scopes do
+        local scoped = Registry:FindSettings({ unit = scopes[i], attribute = attribute })
+        for j = 1, #(scoped or {}) do
+            local candidate = scoped[j]
+            if type(candidate) == "table" and candidate.generated ~= true
+                and tostring(candidate.key or "") ~= tostring(setting.key or "")
+            then
+                return true
+            end
+        end
+    end
+    return false
+end
+
 local function SettingAllowedByExplicitScopes(setting, text)
     if type(setting) ~= "table" then return false end
     if ClassPowerBlockedByExplicitUnitPowerIntent(setting, text) then return false end
@@ -409,6 +438,11 @@ local function SettingAllowedByExplicitScopes(setting, text)
     end
     local settingKey = tostring(setting.key or ""):lower()
     if settingKey:find("bosstarget", 1, true) and ContainsAny(text, RegistryPhrases[15]) then return true end
+    if (#units > 0 or #groups > 0)
+        and P.GeneratedGeneralShadowedByScopedSetting(setting, units, groups)
+    then
+        return false
+    end
     if #units > 0 and unit ~= "" and unit ~= "global"
         and not ListContains(units, unit) and not ListContains(units, keyScope)
         and not SettingAllowsAnyIntentScope(setting, units)

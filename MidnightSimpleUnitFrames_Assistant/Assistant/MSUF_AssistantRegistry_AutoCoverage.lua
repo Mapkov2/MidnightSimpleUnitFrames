@@ -1073,8 +1073,92 @@ function Auto.Fill()
     for scope in pairs(FLAT_SCOPES) do FillManifestScope(scope) end
     Auto.lastFillCount = added
     Auto.lastNestedFillCount = 0
+    -- Promote generated numbers to a safe write domain wherever a reviewed
+    -- curated sibling supplies one.  Runs after every generated spec is
+    -- registered so the curated/generated split is fully visible.
+    Auto.PromoteInheritedNumberDomains()
     Auto._fillComplete = true
     return added
+end
+
+-- Generic leaf names that describe a property of many unrelated controls
+-- (a portrait "size" is not a font "size").  Even when every curated setting
+-- that happens to share such a leaf agrees on a domain today, that agreement
+-- is coincidental, so a generic leaf is never a safe promotion source.
+local UNSAFE_PROMOTION_LEAVES = {
+    size = true, width = true, height = true, x = true, y = true,
+    offsetX = true, offsetY = true, offsetx = true, offsety = true,
+    alpha = true, scale = true, layer = true, thickness = true,
+    spacing = true, padding = true, length = true, opacity = true,
+    r = true, g = true, b = true, a = true,
+}
+
+local function PromotionLeaf(key)
+    return tostring(key or ""):match("([^.]+)$") or ""
+end
+
+-- Curation pass: give a generated read-only number a safe write domain when a
+-- reviewed, curated (non-generated) sibling with the SAME leaf key exists and
+-- every such sibling AGREES on min, max, and percent.  Same leaf across frames
+-- means the same attribute (boss.combatStateIndicatorSize inherits the
+-- reviewed [8..64] of player.combatStateIndicatorSize), so the domain transfers
+-- without any guessing.  Generic leaves and any leaf whose curated siblings
+-- disagree are left read-only.  This only copies static metadata onto an
+-- already-registered spec, so it adds no runtime events and zero combat cost.
+function Auto.PromoteInheritedNumberDomains()
+    local Registry = A.Registry
+    if not (Registry and type(Registry.AllSettings) == "function") then return 0 end
+    local settings = Registry:AllSettings()
+
+    -- Build per-leaf curated domains and detect disagreement.
+    local domainByLeaf = {}
+    for i = 1, #settings do
+        local s = settings[i]
+        if type(s) == "table" and s.generated ~= true and s.type == "number"
+            and (s.min ~= nil or s.max ~= nil)
+        then
+            local leaf = PromotionLeaf(s.key)
+            if not UNSAFE_PROMOTION_LEAVES[leaf] then
+                local entry = domainByLeaf[leaf]
+                local percent = s.percent == true
+                if entry == nil then
+                    domainByLeaf[leaf] = {
+                        min = s.min, max = s.max, step = s.step, percent = percent,
+                        source = s.key, conflict = false,
+                    }
+                elseif not entry.conflict then
+                    if entry.min ~= s.min or entry.max ~= s.max or entry.percent ~= percent then
+                        entry.conflict = true
+                    end
+                end
+            end
+        end
+    end
+
+    local promoted = 0
+    for i = 1, #settings do
+        local s = settings[i]
+        if type(s) == "table" and s.generated == true and s.type == "number"
+            and s.assistantMutationSafe == false and s.min == nil and s.max == nil
+        then
+            local domain = domainByLeaf[PromotionLeaf(s.key)]
+            if domain and not domain.conflict and domain.min ~= nil and domain.max ~= nil
+                and domain.min < domain.max
+            then
+                s.min = domain.min
+                s.max = domain.max
+                if domain.step ~= nil then s.step = domain.step end
+                s.percent = domain.percent
+                s.assistantMutationSafe = true
+                s.generatedMutationSafety = "inherited-curated-domain"
+                s.mutationDomainSource = domain.source
+                s.unsafeMutationReason = nil
+                promoted = promoted + 1
+            end
+        end
+    end
+    Auto.lastDomainPromotionCount = promoted
+    return promoted
 end
 
 --- Avoid building generated aliases for players who never use the assistant.
