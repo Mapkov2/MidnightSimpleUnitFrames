@@ -23,6 +23,7 @@ local IsMouseButtonDown = _G.IsMouseButtonDown
 local InCombatLockdown = _G.InCombatLockdown
 local C_Timer = _G.C_Timer
 local issecretvalue = _G.issecretvalue
+local TextureKitConstants = _G.TextureKitConstants
 
 local A3 = MSUF.MSUF_Auras3
 if type(A3) ~= "table" then
@@ -103,6 +104,10 @@ local GROUPS = {
 
 local LANE_STYLE_KEYS = {
     buff = {
+        showStackCount = "buffShowStackCount",
+        showCooldownText = "buffShowCooldownText",
+        showCooldownSwipe = "buffShowCooldownSwipe",
+        cooldownSwipeReverse = "buffCooldownSwipeReverse",
         stackCountAnchor = "buffStackCountAnchor",
         cooldownTextAnchor = "buffCooldownTextAnchor",
         stackTextSize = "buffStackTextSize",
@@ -111,6 +116,7 @@ local LANE_STYLE_KEYS = {
         cooldownTextSize = "buffCooldownTextSize",
         cooldownTextOffsetX = "buffCooldownTextOffsetX",
         cooldownTextOffsetY = "buffCooldownTextOffsetY",
+        cooldownDecimalSeconds = "buffCooldownDecimalSeconds",
         showDurationBar = "buffShowDurationBar",
         durationBarHeight = "buffDurationBarHeight",
         durationBarDisplay = "buffDurationBarDisplay",
@@ -118,6 +124,12 @@ local LANE_STYLE_KEYS = {
         durationBarDirection = "buffDurationBarDirection",
     },
     debuff = {
+        showStackCount = "debuffShowStackCount",
+        showCooldownText = "debuffShowCooldownText",
+        showCooldownSwipe = "debuffShowCooldownSwipe",
+        cooldownSwipeReverse = "debuffCooldownSwipeReverse",
+        debuffTypeBorderMode = "debuffTypeBorderMode",
+        useDebuffTypeBorders = "useDebuffTypeBorders",
         stackCountAnchor = "debuffStackCountAnchor",
         cooldownTextAnchor = "debuffCooldownTextAnchor",
         stackTextSize = "debuffStackTextSize",
@@ -126,6 +138,7 @@ local LANE_STYLE_KEYS = {
         cooldownTextSize = "debuffCooldownTextSize",
         cooldownTextOffsetX = "debuffCooldownTextOffsetX",
         cooldownTextOffsetY = "debuffCooldownTextOffsetY",
+        cooldownDecimalSeconds = "debuffCooldownDecimalSeconds",
         showDurationBar = "debuffShowDurationBar",
         durationBarHeight = "debuffDurationBarHeight",
         durationBarDisplay = "debuffDurationBarDisplay",
@@ -135,6 +148,10 @@ local LANE_STYLE_KEYS = {
 }
 
 local W8 = "Interface\\Buttons\\WHITE8X8"
+local DEBUFF_TYPE_BORDER_PREVIEW_ATLAS = {
+    BORDER = "ui-debuff-border-magic-noicon",
+    SYMBOL = "ui-debuff-border-magic-icon",
+}
 local HEADER_H = 18
 local PREVIEW_ICONS = 4
 local TEXT_STYLE_LAYOUT_KEYS = {
@@ -144,6 +161,7 @@ local TEXT_STYLE_LAYOUT_KEYS = {
     cooldownTextSize = true,
     cooldownTextOffsetX = true,
     cooldownTextOffsetY = true,
+    cooldownDecimalSeconds = true,
     durationBarHeight = true,
     buffStackTextSize = true,
     buffStackTextOffsetX = true,
@@ -151,6 +169,7 @@ local TEXT_STYLE_LAYOUT_KEYS = {
     buffCooldownTextSize = true,
     buffCooldownTextOffsetX = true,
     buffCooldownTextOffsetY = true,
+    buffCooldownDecimalSeconds = true,
     buffDurationBarHeight = true,
     debuffStackTextSize = true,
     debuffStackTextOffsetX = true,
@@ -158,23 +177,38 @@ local TEXT_STYLE_LAYOUT_KEYS = {
     debuffCooldownTextSize = true,
     debuffCooldownTextOffsetX = true,
     debuffCooldownTextOffsetY = true,
+    debuffCooldownDecimalSeconds = true,
     debuffDurationBarHeight = true,
 }
 local TEXT_STYLE_SHARED_KEYS = {
     stackCountAnchor = true,
     cooldownTextAnchor = true,
+    showStackCount = true,
+    showCooldownText = true,
+    showCooldownSwipe = true,
+    cooldownSwipeReverse = true,
     showDurationBar = true,
     durationBarDisplay = true,
     durationBarPosition = true,
     durationBarDirection = true,
     buffStackCountAnchor = true,
     buffCooldownTextAnchor = true,
+    buffShowStackCount = true,
+    buffShowCooldownText = true,
+    buffShowCooldownSwipe = true,
+    buffCooldownSwipeReverse = true,
     buffShowDurationBar = true,
     buffDurationBarDisplay = true,
     buffDurationBarPosition = true,
     buffDurationBarDirection = true,
     debuffStackCountAnchor = true,
     debuffCooldownTextAnchor = true,
+    debuffShowStackCount = true,
+    debuffShowCooldownText = true,
+    debuffShowCooldownSwipe = true,
+    debuffCooldownSwipeReverse = true,
+    debuffTypeBorderMode = true,
+    useDebuffTypeBorders = true,
     debuffShowDurationBar = true,
     debuffDurationBarDisplay = true,
     debuffDurationBarPosition = true,
@@ -414,19 +448,36 @@ local function ReadLaneCooldownTextAnchor(shared, layoutShared, kind)
     return AURA_TEXT_ANCHOR_OK[anchor] and anchor or "CENTER"
 end
 
+local function NormalizeDebuffBorderMode(value, useLegacy)
+    if value == true then return "SYMBOL" end
+    value = tostring(value or ""):upper()
+    if value == "BORDER" or value == "COLOR" or value == "ON" then return "BORDER" end
+    if value == "SYMBOL" or value == "BORDER_SYMBOL" or value == "BORDER_SYMBOLS"
+        or value == "BORDER+SYMBOL" or value == "ICON" or value == "WITH_SYMBOL" then
+        return "SYMBOL"
+    end
+    return useLegacy == true and "SYMBOL" or "OFF"
+end
+
 local function ReadTextConfig(unit, kind)
     kind = NormalizeKind(kind)
     local customSpec = GROUPS[kind]
     if customSpec and customSpec.customIndex then
         local item = CustomItem(unit, customSpec.customIndex, false)
         local placed = item and item.placed or {}
+        local isDebuff = item and item.auraType == "DEBUFF"
         return {
+            showStackCount = placed.showStacks ~= false,
+            showCooldownText = placed.showCooldown ~= false,
+            showCooldownSwipe = placed.showCooldownSwipe ~= false,
+            cooldownSwipeReverse = placed.cooldownSwipeReverse == true,
             stackSize = Clamp(placed.stackSize, 14, 6, 40),
             stackX = Clamp(placed.stackX, 0, -2000, 2000),
             stackY = Clamp(placed.stackY, 0, -2000, 2000),
             cooldownSize = Clamp(placed.cooldownSize, 14, 6, 40),
             cooldownX = Clamp(placed.cooldownX, 0, -2000, 2000),
             cooldownY = Clamp(placed.cooldownY, 0, -2000, 2000),
+            cooldownDecimalSeconds = Clamp(placed.cooldownDecimalSeconds, 3, 0, 30),
             showDurationBar = placed.showDurationBar == true,
             durationBarHeight = Clamp(placed.durationBarHeight, 2, 1, 16),
             durationBarDisplay = placed.durationBarDisplay == "OVERLAY" and "OVERLAY" or "BAR_ONLY",
@@ -434,6 +485,7 @@ local function ReadTextConfig(unit, kind)
             durationBarDirection = placed.durationBarDirection == "ELAPSED" and "ELAPSED" or "REMAINING",
             stackAnchor = placed.stackAnchor or "BOTTOMRIGHT",
             cooldownAnchor = placed.cooldownAnchor or "CENTER",
+            debuffBorderMode = isDebuff and NormalizeDebuffBorderMode(placed.debuffTypeBorderMode, placed.useDebuffTypeBorders) or "OFF",
         }
     end
     local auras, shared = EnsureDB()
@@ -444,12 +496,17 @@ local function ReadTextConfig(unit, kind)
         ls = nil
     end
     return {
+        showStackCount = ReadLaneTextBool(shared, ls, kind, "showStackCount", true),
+        showCooldownText = ReadLaneTextBool(shared, ls, kind, "showCooldownText", true),
+        showCooldownSwipe = ReadLaneTextBool(shared, ls, kind, "showCooldownSwipe", true),
+        cooldownSwipeReverse = ReadLaneTextBool(shared, ls, kind, "cooldownSwipeReverse", false),
         stackSize = ReadLaneTextNumber(shared, layout, kind, "stackTextSize", 14, 6, 40),
         stackX = ReadLaneTextNumber(shared, layout, kind, "stackTextOffsetX", -1, -2000, 2000),
         stackY = ReadLaneTextNumber(shared, layout, kind, "stackTextOffsetY", 1, -2000, 2000),
         cooldownSize = ReadLaneTextNumber(shared, layout, kind, "cooldownTextSize", 14, 6, 40),
         cooldownX = ReadLaneTextNumber(shared, layout, kind, "cooldownTextOffsetX", 0, -2000, 2000),
         cooldownY = ReadLaneTextNumber(shared, layout, kind, "cooldownTextOffsetY", 0, -2000, 2000),
+        cooldownDecimalSeconds = ReadLaneTextNumber(shared, layout, kind, "cooldownDecimalSeconds", 3, 0, 30),
         showDurationBar = ReadLaneTextBool(shared, ls, kind, "showDurationBar", false),
         durationBarHeight = ReadLaneTextNumber(shared, layout, kind, "durationBarHeight", 2, 1, 16),
         durationBarDisplay = ReadLaneTextString(shared, ls, kind, "durationBarDisplay", "BAR_ONLY") == "OVERLAY" and "OVERLAY" or "BAR_ONLY",
@@ -457,6 +514,9 @@ local function ReadTextConfig(unit, kind)
         durationBarDirection = ReadLaneTextString(shared, ls, kind, "durationBarDirection", "REMAINING") == "ELAPSED" and "ELAPSED" or "REMAINING",
         stackAnchor = ReadLaneTextAnchor(shared, ls, kind),
         cooldownAnchor = ReadLaneCooldownTextAnchor(shared, ls, kind),
+        debuffBorderMode = kind == "debuff" and NormalizeDebuffBorderMode(
+            ReadLaneTextString(shared, ls, kind, "debuffTypeBorderMode", "OFF"),
+            ReadLaneTextBool(shared, ls, kind, "useDebuffTypeBorders", false)) or "OFF",
     }
 end
 
@@ -1357,12 +1417,22 @@ local function EnsureIcon(group, index)
     shade:SetColorTexture(0, 0, 0, 0)
     icon.Shade = shade
 
+    local swipe = icon:CreateTexture(nil, "ARTWORK", nil, 1)
+    swipe:SetTexture(W8)
+    swipe:SetVertexColor(0, 0, 0, 0.32)
+    swipe:Hide()
+    icon.Swipe = swipe
+
     local durationBar = icon:CreateTexture(nil, "OVERLAY")
     durationBar:SetTexture(W8)
     local durationR, durationG, durationB = AuraDurationBarColor()
     durationBar:SetVertexColor(durationR, durationG, durationB, 0.92)
     durationBar:Hide()
     icon.DurationBar = durationBar
+
+    local dispelBorder = icon:CreateTexture(nil, "OVERLAY", nil, 2)
+    dispelBorder:Hide()
+    icon.DispelBorder = dispelBorder
 
     local cd = icon:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     cd:SetPoint("CENTER", icon, "CENTER", 0, 0)
@@ -1377,6 +1447,45 @@ local function EnsureIcon(group, index)
 
     icons[index] = icon
     return icon
+end
+
+local function LayoutPreviewSwipe(icon, cfg, remainingFrac)
+    local swipe = icon and icon.Swipe
+    local barOnly = cfg and cfg.showDurationBar == true and cfg.durationBarDisplay == "BAR_ONLY"
+    if not (swipe and cfg and cfg.showCooldownSwipe ~= false and not barOnly) then
+        if swipe then swipe:Hide() end
+        return
+    end
+    local size = math_max(1, (icon.GetWidth and icon:GetWidth()) or 1)
+    local frac = math_max(0.02, math_min(1, tonumber(remainingFrac) or 0.48))
+    swipe:ClearAllPoints()
+    swipe:SetWidth(math_max(1, math_floor(size * frac + 0.5)))
+    swipe:SetHeight(size)
+    if cfg.cooldownSwipeReverse == true then
+        swipe:SetPoint("TOPLEFT", icon, "TOPLEFT")
+        swipe:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT")
+    else
+        swipe:SetPoint("TOPRIGHT", icon, "TOPRIGHT")
+        swipe:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT")
+    end
+    swipe:Show()
+end
+
+local function LayoutPreviewDispelBorder(icon, cfg)
+    local border = icon and icon.DispelBorder
+    local atlas = cfg and DEBUFF_TYPE_BORDER_PREVIEW_ATLAS[cfg.debuffBorderMode]
+    local barOnly = cfg and cfg.showDurationBar == true and cfg.durationBarDisplay == "BAR_ONLY"
+    if not (border and atlas and border.SetAtlas and not barOnly) then
+        if border then border:Hide() end
+        return
+    end
+    local size = math_max(1, (icon.GetWidth and icon:GetWidth()) or 24)
+    local pad = math_max(1, math_floor(size / 24 + 0.5))
+    border:ClearAllPoints()
+    border:SetPoint("TOPLEFT", icon, "TOPLEFT", -pad, pad)
+    border:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", pad, -pad)
+    border:SetAtlas(atlas, TextureKitConstants and TextureKitConstants.IgnoreAtlasSize)
+    border:Show()
 end
 
 local function ApplyIconZoom(texture, zoom)
@@ -1395,11 +1504,15 @@ local function ApplyPreviewIconText(icon, unit, cfg)
     if icon.Count then
         ApplyGlobalFont(icon.Count, cfg.stackSize)
         PlaceStackText(icon.Count, icon, cfg)
+        icon.Count:SetShown(cfg.showStackCount ~= false)
     end
     if icon.CooldownText then
         ApplyGlobalFont(icon.CooldownText, cfg.cooldownSize)
         PlaceCooldownText(icon.CooldownText, icon, cfg)
+        icon.CooldownText:SetShown(cfg.showCooldownText ~= false)
     end
+    LayoutPreviewSwipe(icon, cfg)
+    LayoutPreviewDispelBorder(icon, cfg)
     if icon.DurationBar then
         if cfg.showDurationBar == true then
             local height = Clamp(cfg.durationBarHeight, 2, 1, 16)
@@ -1422,11 +1535,13 @@ local function ApplyPreviewIconText(icon, unit, cfg)
     end
 end
 
-local function PreviewAuraState(kind, index, icon)
+local function PreviewAuraState(kind, index, icon, cfg)
     local fn = _G.MSUF_GetPreviewAnimationAuraState
     if type(fn) ~= "function" then return nil end
     icon._msufA3PreviewAuraScratch = icon._msufA3PreviewAuraScratch or {}
-    return fn(kind, index, icon._msufA3PreviewAuraScratch)
+    return fn(kind, index, icon._msufA3PreviewAuraScratch, {
+        decimalThreshold = tonumber(cfg and cfg.cooldownDecimalSeconds) or 3,
+    })
 end
 
 local function ApplyPreviewDurationBarProgress(icon, cfg, auraState)
@@ -1472,9 +1587,10 @@ local function ApplyPreviewAuraAnimation(group, kind, shownIcons, textCfg)
     for i = 1, shownIcons do
         local icon = icons[i]
         if icon then
-            local auraState = PreviewAuraState(kind, i, icon)
-            if icon.Count then icon.Count:SetText(auraState and auraState.stacks or (i == 1 and "3" or "")) end
-            if icon.CooldownText then icon.CooldownText:SetText(auraState and auraState.text or (i == 1 and "1m" or "32")) end
+            local auraState = PreviewAuraState(kind, i, icon, textCfg)
+            if icon.Count then icon.Count:SetText(textCfg.showStackCount ~= false and (auraState and auraState.stacks or (i == 1 and "3" or "")) or "") end
+            if icon.CooldownText then icon.CooldownText:SetText(textCfg.showCooldownText ~= false and (auraState and auraState.text or (i == 1 and "1m" or "32")) or "") end
+            LayoutPreviewSwipe(icon, textCfg, auraState and auraState.remainingFrac)
             ApplyPreviewDurationBarProgress(icon, textCfg, auraState)
         end
     end
@@ -1674,10 +1790,14 @@ local function RefreshSignature(unit, kind, cfg, metrics, textCfg, shownIcons, s
         .. "\030" .. tostring(textCfg and textCfg.stackSize) .. "\030" .. tostring(textCfg and textCfg.stackX)
         .. "\030" .. tostring(textCfg and textCfg.stackY) .. "\030" .. tostring(textCfg and textCfg.cooldownSize)
         .. "\030" .. tostring(textCfg and textCfg.cooldownX) .. "\030" .. tostring(textCfg and textCfg.cooldownY)
+        .. "\030" .. tostring(textCfg and textCfg.cooldownDecimalSeconds)
         .. "\030" .. tostring(textCfg and textCfg.stackAnchor) .. "\030" .. tostring(textCfg and textCfg.cooldownAnchor)
         .. "\030" .. tostring(textCfg and textCfg.showDurationBar) .. "\030" .. tostring(textCfg and textCfg.durationBarHeight)
         .. "\030" .. tostring(textCfg and textCfg.durationBarDisplay) .. "\030" .. tostring(textCfg and textCfg.durationBarPosition)
         .. "\030" .. tostring(textCfg and textCfg.durationBarDirection)
+        .. "\030" .. tostring(textCfg and textCfg.showStackCount) .. "\030" .. tostring(textCfg and textCfg.showCooldownText)
+        .. "\030" .. tostring(textCfg and textCfg.showCooldownSwipe) .. "\030" .. tostring(textCfg and textCfg.cooldownSwipeReverse)
+        .. "\030" .. tostring(textCfg and textCfg.debuffBorderMode)
 end
 
 function EM.HideUnit(unit)

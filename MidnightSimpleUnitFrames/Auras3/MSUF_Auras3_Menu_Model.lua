@@ -582,32 +582,41 @@ local DEFAULT_GENERAL = {
     aurasCooldownTextUrgentSeconds = 5,
 }
 
+-- Blizzard PTR 6 build 68824 Aura Classifications. These healer/support auras
+-- were removed from NeverSecret, but remain eligible for exact SpellID filters
+-- as helpful auras on assistable units. SATED below is the explicitly documented
+-- NeverSecret harmful-aura family unlocked for friendly-unit filtering in PTR 6.
 local FALLBACK_PUBLIC_AURA_SPELLS = {
     PRESERVATION_EVOKER = {
         [355941] = true, [363502] = true, [364343] = true, [366155] = true,
-        [367364] = true, [373267] = true, [376788] = true,
+        [367364] = true, [373267] = true, [376788] = true, [409895] = true,
     },
     AUGMENTATION_EVOKER = {
-        [360827] = true, [395152] = true, [410089] = true, [410263] = true,
+        [360827] = true, [395152] = true, [395296] = true, [410089] = true, [410263] = true,
         [410686] = true, [413984] = true,
     },
     RESTO_DRUID = {
         [774] = true, [8936] = true, [33763] = true, [48438] = true, [155777] = true,
+        [439530] = true,
     },
     DISC_PRIEST = {
         [17] = true, [194384] = true, [1253593] = true,
+        [1300008] = true, [1300009] = true,
     },
     HOLY_PRIEST = {
         [139] = true, [41635] = true, [77489] = true,
     },
     MISTWEAVER_MONK = {
         [115175] = true, [119611] = true, [124682] = true, [450769] = true,
+        [1292922] = true,
     },
     RESTO_SHAMAN = {
-        [974] = true, [383648] = true, [61295] = true,
+        [974] = true, [383648] = true, [61295] = true, [382024] = true,
+        [207400] = true, [444490] = true,
     },
     HOLY_PALADIN = {
         [53563] = true, [156322] = true, [156910] = true, [1244893] = true,
+        [200025] = true, [431381] = true,
     },
     RAID_BUFFS = {
         [1459]   = true,   --- Arcane Intellect
@@ -651,14 +660,14 @@ local FALLBACK_PUBLIC_AURA_SPELLS = {
 
 local FALLBACK_PUBLIC_AURA_META = {
     { key = "RAID_BUFFS", label = "Long-term Raid Buffs", category = "Raid", tooltip = "Long duration raid buffs Blizzard exposes as non-secret." },
-    { key = "PRESERVATION_EVOKER", label = "Preservation Evoker", category = "Healer", tooltip = "Dream Breath, Echo, Reversion, Lifebind." },
-    { key = "AUGMENTATION_EVOKER", label = "Augmentation Evoker", category = "Support", tooltip = "Blistering Scales, Ebon Might, Prescience, Shifting Sands." },
-    { key = "RESTO_DRUID", label = "Restoration Druid", category = "Healer", tooltip = "Rejuvenation, Regrowth, Lifebloom, Wild Growth, Germination." },
-    { key = "DISC_PRIEST", label = "Discipline Priest", category = "Healer", tooltip = "Power Word: Shield, Atonement, Void Shield." },
+    { key = "PRESERVATION_EVOKER", label = "Preservation Evoker", category = "Healer", tooltip = "Dream Breath, Dream Flight, Echo, Reversion, Lifebind, Verdant Embrace." },
+    { key = "AUGMENTATION_EVOKER", label = "Augmentation Evoker", category = "Support", tooltip = "Blistering Scales, Ebon Might, Prescience, Inferno's Blessing, Symbiotic Bloom, Shifting Sands." },
+    { key = "RESTO_DRUID", label = "Restoration Druid", category = "Healer", tooltip = "Rejuvenation, Regrowth, Lifebloom, Wild Growth, Germination, Symbiotic Blooms." },
+    { key = "DISC_PRIEST", label = "Discipline Priest", category = "Healer", tooltip = "Power Word: Shield, Atonement, Void Shield, and Unfolding Vision variants." },
     { key = "HOLY_PRIEST", label = "Holy Priest", category = "Healer", tooltip = "Renew, Prayer of Mending, Echo of Light." },
-    { key = "MISTWEAVER_MONK", label = "Mistweaver Monk", category = "Healer", tooltip = "Soothing Mist, Renewing Mist, Enveloping Mist, Aspect of Harmony." },
-    { key = "RESTO_SHAMAN", label = "Restoration Shaman", category = "Healer", tooltip = "Earth Shield and Riptide." },
-    { key = "HOLY_PALADIN", label = "Holy Paladin", category = "Healer", tooltip = "Beacon and Eternal Flame variants." },
+    { key = "MISTWEAVER_MONK", label = "Mistweaver Monk", category = "Healer", tooltip = "Soothing Mist, Renewing Mist, Enveloping Mist, Aspect of Harmony, Coalescence." },
+    { key = "RESTO_SHAMAN", label = "Restoration Shaman", category = "Healer", tooltip = "Earth Shield, Riptide, Earthliving Weapon, Ancestral Vigor, Hydrobubble." },
+    { key = "HOLY_PALADIN", label = "Holy Paladin", category = "Healer", tooltip = "Beacon variants, Eternal Flame, and Dawnlight." },
     { key = "BLESSING_BRONZE", label = "Blessing of the Bronze", category = "Raid", tooltip = "All class-specific Blessing of the Bronze variants." },
     { key = "SELF_BUFFS", label = "Long-term Self Buffs", category = "Class", tooltip = "Rite of Sanctification and Rite of Adjuration." },
     { key = "ROGUE_POISONS", label = "Rogue Poisons", category = "Class", tooltip = "Deadly, Wound, Crippling, Numbing, Instant, Atrophic, Amplifying." },
@@ -3102,6 +3111,11 @@ function Model.ReadPreviewConfig(unit)
         buffCooldownX = Model.ReadLaneStyleNumber(unit, "buff", "cooldownTextOffsetX", 0, -2000, 2000),
         buffCooldownY = Model.ReadLaneStyleNumber(unit, "buff", "cooldownTextOffsetY", 0, -2000, 2000),
         buffCooldownDecimalSeconds = Model.ReadLaneStyleNumber(unit, "buff", "cooldownDecimalSeconds", 3, 0, 30),
+        buffShowDurationBar = Model.ReadLaneStyleBool(unit, "buff", "showDurationBar", false),
+        buffDurationBarHeight = Model.ReadLaneStyleNumber(unit, "buff", "durationBarHeight", 2, 1, 16),
+        buffDurationBarDisplay = Model.ReadLaneDurationBarDisplay(unit, "buff"),
+        buffDurationBarPosition = Model.ReadLaneDurationBarPosition(unit, "buff"),
+        buffDurationBarDirection = Model.ReadLaneDurationBarDirection(unit, "buff"),
         debuffStackSize = Model.ReadLaneStyleNumber(unit, "debuff", "stackTextSize", 14, 6, 40),
         debuffStackX = Model.ReadLaneStyleNumber(unit, "debuff", "stackTextOffsetX", -1, -2000, 2000),
         debuffStackY = Model.ReadLaneStyleNumber(unit, "debuff", "stackTextOffsetY", 1, -2000, 2000),
@@ -3110,6 +3124,11 @@ function Model.ReadPreviewConfig(unit)
         debuffCooldownX = Model.ReadLaneStyleNumber(unit, "debuff", "cooldownTextOffsetX", 0, -2000, 2000),
         debuffCooldownY = Model.ReadLaneStyleNumber(unit, "debuff", "cooldownTextOffsetY", 0, -2000, 2000),
         debuffCooldownDecimalSeconds = Model.ReadLaneStyleNumber(unit, "debuff", "cooldownDecimalSeconds", 3, 0, 30),
+        debuffShowDurationBar = Model.ReadLaneStyleBool(unit, "debuff", "showDurationBar", false),
+        debuffDurationBarHeight = Model.ReadLaneStyleNumber(unit, "debuff", "durationBarHeight", 2, 1, 16),
+        debuffDurationBarDisplay = Model.ReadLaneDurationBarDisplay(unit, "debuff"),
+        debuffDurationBarPosition = Model.ReadLaneDurationBarPosition(unit, "debuff"),
+        debuffDurationBarDirection = Model.ReadLaneDurationBarDirection(unit, "debuff"),
     }
 end
 

@@ -794,6 +794,7 @@ local function CustomTextConfig(bounds)
         stackX = tonumber(placed.stackX) or 0,
         stackY = tonumber(placed.stackY) or 0,
         cooldownSize = tonumber(placed.cooldownSize) or 14,
+        cooldownAnchor = placed.cooldownAnchor or "CENTER",
         cooldownX = tonumber(placed.cooldownX) or 0,
         cooldownY = tonumber(placed.cooldownY) or 0,
         showDurationBar = placed.showDurationBar == true,
@@ -810,7 +811,7 @@ local function PreviewAuraState(kind, index, icon, cfg)
     if type(fn) ~= "function" then return nil end
     icon._msufPreviewAuraScratch = icon._msufPreviewAuraScratch or {}
     return fn(kind, index, icon._msufPreviewAuraScratch, {
-        decimalSeconds = cfg and cfg.cooldownDecimalSeconds == true,
+        decimalThreshold = tonumber(cfg and cfg.cooldownDecimalSeconds) or 3,
     })
 end
 
@@ -891,6 +892,30 @@ local function PlaceStack(fs, icon, cfg, S)
         if fs.SetJustifyV then fs:SetJustifyV("TOP") end
     end
 end
+local function PlaceCooldown(fs, icon, cfg, S)
+    if not fs then return end
+    local anchor = tostring(cfg.cooldownAnchor or "CENTER"):upper()
+    local x = S(cfg.cooldownX or 0)
+    local y = S(cfg.cooldownY or 0)
+    fs:ClearAllPoints()
+    fs:SetPoint(anchor, icon, anchor, x, y)
+    if anchor == "TOPLEFT" or anchor == "LEFT" or anchor == "BOTTOMLEFT" then
+        fs:SetJustifyH("LEFT")
+    elseif anchor == "TOPRIGHT" or anchor == "RIGHT" or anchor == "BOTTOMRIGHT" then
+        fs:SetJustifyH("RIGHT")
+    else
+        fs:SetJustifyH("CENTER")
+    end
+    if fs.SetJustifyV then
+        if anchor == "TOPLEFT" or anchor == "TOP" or anchor == "TOPRIGHT" then
+            fs:SetJustifyV("TOP")
+        elseif anchor == "BOTTOMLEFT" or anchor == "BOTTOM" or anchor == "BOTTOMRIGHT" then
+            fs:SetJustifyV("BOTTOM")
+        else
+            fs:SetJustifyV("MIDDLE")
+        end
+    end
+end
 local function PreviewDebuffBorderMode(cfg)
     local mode = cfg and cfg.debuffTypeBorderMode
     if mode == true then return "SYMBOL" end
@@ -939,8 +964,6 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
     local step = S((bounds.size or 0) + (bounds.spacing or 0))
     local stackSize = max(7, S(textCfg.stackSize or 14))
     local cooldownSize = max(7, S(textCfg.cooldownSize or 14))
-    local cooldownX = S(textCfg.cooldownX or 0)
-    local cooldownY = S(textCfg.cooldownY or 0)
     local layer = tonumber(bounds.layer) or (kind == "buff" and 5 or 6)
     local debuffBorderMode = textureKind == "debuff" and (bounds.custom and PreviewDebuffBorderMode(bounds.item and bounds.item.placed) or PreviewDebuffBorderMode(cfg)) or "OFF"
     local laneX = S(bounds.laneLeft or ((bounds.baseX or 0) + (bounds.x or 0)))
@@ -991,9 +1014,7 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
         PlaceStack(icon.stack, icon, textCfg, S)
         icon.stack:SetText(textCfg.showStackCount ~= false and (auraState and auraState.stacks or (i % 3 == 1 and "2" or "")) or "")
         ApplyAuraFont(icon.timer, cooldownSize)
-        icon.timer:ClearAllPoints()
-        icon.timer:SetPoint("CENTER", icon, "CENTER", cooldownX, cooldownY)
-        icon.timer:SetJustifyH("CENTER")
+        PlaceCooldown(icon.timer, icon, textCfg, S)
         icon.timer:SetText(textCfg.showCooldownText ~= false and (auraState and auraState.text or (i % 2 == 0 and "18" or "")) or "")
         icon:Show()
     end

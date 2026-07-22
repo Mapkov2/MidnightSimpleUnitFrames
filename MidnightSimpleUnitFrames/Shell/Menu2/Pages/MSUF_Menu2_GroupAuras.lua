@@ -100,10 +100,10 @@ local GF_AURA_WORKSPACE_LANES = {
     { value = "debuff", text = "Debuffs" },
     { value = "externals", text = "External Defensives" },
 }
--- Native 12.1 AuraContainers do not currently expose a working SpellID blacklist
--- path. Keep the workspace visible so the missing feature is explicit, but do not
--- let stale menu state or a click open controls that cannot affect live auras.
-local GF_AURA_BLACKLIST_AVAILABLE = false
+-- PTR 6 permits exact SpellID candidate filters for every non-secret aura.
+-- Helpful auras on friendly group units were already eligible; NeverSecret
+-- harmful auras such as Sated/Exhaustion are now eligible there as well.
+local GF_AURA_BLACKLIST_AVAILABLE = true
 local GF_AURA_WORKSPACE_TOOL_OK = { layout = true, filters = true, blacklist = GF_AURA_BLACKLIST_AVAILABLE }
 local function CurrentAuraWorkspaceTool(scope, lane)
     M.gfAuraToolSelection = M.gfAuraToolSelection or {}
@@ -216,10 +216,7 @@ local function BuildAuraWorkspaceTabs(ctx, section, scope, lane, width)
                 "Opens the complete Aura Style page for icon appearance, cooldown and stack text, duration bars, and colors.",
                 { hook = true, titleAsLine = true })
         end
-        local hint = GF_AURA_BLACKLIST_AVAILABLE
-            and "All icon styling: Appearance > Auras."
-            or "Blacklist is unavailable in WoW 12.1. All icon styling: Appearance > Auras."
-        W.Text(section, hint, 16, -84, sectionW - 198, MUTED)
+        W.Text(section, "All icon styling: Appearance > Auras.", 16, -84, sectionW - 198, MUTED)
     else
         W.Text(section, "External defensives use their dedicated layout below.", 16, -84, sectionW - 32, MUTED)
     end
@@ -343,6 +340,9 @@ local function BuildGFAuras(ctx)
         W.RegisterGuidedRegion(ctx, top, "Aura lane and tools", "group_aura_tools")
     end
     BuildAuraWorkspaceTabs(ctx, top, scope, lane, top._msuf2Width or auraBuilder.width or 720)
+    if type(M.AttachAuraFontsAndColors) == "function" then
+        M.AttachAuraFontsAndColors(top, "Auras", scope)
+    end
 
     local rootSection = auraBuilder:Section("Group Aura Visibility", 132)
     local rootWidth = rootSection._msuf2Width or auraBuilder.width or 720

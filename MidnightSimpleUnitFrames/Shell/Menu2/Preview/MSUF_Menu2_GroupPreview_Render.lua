@@ -99,11 +99,19 @@ local function RawTrackedBuffLane(scene, rawBuff)
         showCooldownSwipe = rawBuff.trackedShowCooldownSwipe,
         cooldownSwipeReverse = rawBuff.trackedCooldownSwipeReverse,
         showCooldown = rawBuff.trackedShowCooldown,
+        showCooldownText = rawBuff.trackedShowCooldown,
         showStacks = rawBuff.trackedShowStacks,
+        showTooltip = rawBuff.trackedShowTooltip,
+        showDurationBar = rawBuff.trackedShowDurationBar,
+        durationBarHeight = rawBuff.trackedDurationBarHeight,
+        durationBarDisplay = rawBuff.trackedDurationBarDisplay,
+        durationBarPosition = rawBuff.trackedDurationBarPosition,
+        durationBarDirection = rawBuff.trackedDurationBarDirection,
         cooldownSize = rawBuff.trackedCooldownSize,
         cooldownAnchor = rawBuff.trackedCooldownAnchor,
         cooldownX = rawBuff.trackedCooldownX,
         cooldownY = rawBuff.trackedCooldownY,
+        cooldownDecimalSeconds = rawBuff.trackedCooldownDecimalSeconds,
         stackSize = rawBuff.trackedStackSize,
         stackAnchor = rawBuff.trackedStackAnchor,
         stackX = rawBuff.trackedStackX,
@@ -153,6 +161,22 @@ local function ApplyPreviewIconZoom(texture, zoom, baseInset)
     texture:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
 end
 
+local AURA_PREVIEW_RAW_FIELDS = {
+    "showCooldownSwipe", "cooldownSwipeReverse", "showCooldown", "showCooldownText", "showStacks", "showTooltip",
+    "showDurationBar", "durationBarHeight", "durationBarDisplay", "durationBarPosition", "durationBarDirection",
+    "cooldownSize", "cooldownAnchor", "cooldownX", "cooldownY", "cooldownDecimalSeconds",
+    "stackSize", "stackAnchor", "stackX", "stackY", "dispelBorderMode", "showDispelBorder", "showDispelSymbol",
+}
+
+local function OverlayRawAuraPreviewStyle(compiled, raw)
+    if type(compiled) ~= "table" or type(raw) ~= "table" then return compiled end
+    for i = 1, #AURA_PREVIEW_RAW_FIELDS do
+        local key = AURA_PREVIEW_RAW_FIELDS[i]
+        if raw[key] ~= nil then compiled[key] = raw[key] end
+    end
+    return compiled
+end
+
 local function BuildScene(box, reason)
     local S = box._msufGFRenderState
     local H, M, MSUF = S.H, S.M, S.MSUF
@@ -191,7 +215,7 @@ local function BuildScene(box, reason)
     local rawAuras = conf.auras or {}
     local trackedRaw = RawTrackedBuffLane(scene, rawAuras.buff)
     scene.rawAuras = rawAuras
-    scene.auraIconZoom = tonumber(scene.runtimeAuras and scene.runtimeAuras.iconZoom) or tonumber(rawAuras.iconZoom) or 100
+    scene.auraIconZoom = tonumber(rawAuras.iconZoom) or tonumber(scene.runtimeAuras and scene.runtimeAuras.iconZoom) or 100
     scene.buffCfg = scene.runtimeAuras
         and S.CompiledAuraLane(scene.runtimeAuras, "buff", rawAuras.buff or {}) or rawAuras.buff or {}
     scene.trackedBuffCfg = scene.runtimeAuras
@@ -200,6 +224,10 @@ local function BuildScene(box, reason)
         and S.CompiledAuraLane(scene.runtimeAuras, "debuff", rawAuras.debuff or {}) or rawAuras.debuff or {}
     scene.externalCfg = scene.runtimeAuras
         and S.CompiledAuraLane(scene.runtimeAuras, "external", rawAuras.externals or {}) or rawAuras.externals or {}
+    OverlayRawAuraPreviewStyle(scene.buffCfg, rawAuras.buff)
+    OverlayRawAuraPreviewStyle(scene.trackedBuffCfg, trackedRaw)
+    OverlayRawAuraPreviewStyle(scene.debuffCfg, rawAuras.debuff)
+    OverlayRawAuraPreviewStyle(scene.externalCfg, rawAuras.externals)
     scene.statusSpec = S.CurrentStatusSpec()
     scene.selectedSpellCfg = S.CurrentSpellConfig(kind)
     -- The selected frame effect belongs to the selected spell, not to whichever
@@ -648,7 +676,7 @@ local function RenderAuras(scene)
         local scratch = handle._previewAuraStates[index] or {}
         handle._previewAuraStates[index] = scratch
         return buildAuraState(groupKey, index, scratch, {
-            decimalSeconds = cfg and cfg.cooldownDecimalSeconds == true,
+            decimalThreshold = tonumber(cfg and cfg.cooldownDecimalSeconds) or 3,
         }, self._animationElapsed)
     end
     local function LayoutAuraPreviewSwipe(swipe, icon, size, remainingFrac, reverse)
