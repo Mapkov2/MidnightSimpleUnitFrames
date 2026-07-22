@@ -797,6 +797,34 @@ P._ExactEnumValueForText = P._ExactEnumValueForText or function(setting, text)
     return nil
 end
 
+-- Resolve a symbol-valued enum (text separator/delimiter) from the RAW text.
+-- The user may type the literal symbol ("... to :"), which normalization would
+-- strip.  We only accept values that are pure punctuation symbols so this can
+-- never shadow a word-valued enum, and we require the symbol to appear after
+-- the value connector so a colon elsewhere in the sentence is ignored.
+P.SymbolEnumValueForRaw = P.SymbolEnumValueForRaw or function(setting, raw)
+    local values = setting and setting.values
+    if type(values) ~= "table" or type(raw) ~= "string" or raw == "" then return nil end
+    -- Take the value part after the last "to"/"="/"as" connector, else the whole
+    -- text, and trim surrounding whitespace.
+    local tail = raw:match("[Tt][Oo]%s+(.-)%s*$")
+        or raw:match("=%s*(.-)%s*$")
+        or raw:match("[Aa][Ss]%s+(.-)%s*$")
+        or raw:gsub("^%s+", ""):gsub("%s+$", "")
+    tail = tostring(tail or "")
+    -- The value part must be EXACTLY a symbol enum value.  Requiring an exact
+    -- match (not a suffix) prevents "->" from matching a ">" or "-" value; a
+    -- multi-character custom symbol like "->" is not an enum value and must fall
+    -- through to the custom string field.
+    for i = 1, #values do
+        local value = tostring(values[i] or "")
+        if value ~= "" and value:match("^[%p]+$") and #value <= 3 and tail == value then
+            return values[i]
+        end
+    end
+    return nil
+end
+
 P._StripExactValueConnector = P._StripExactValueConnector or function(text)
     text = Trim(text)
     text = text:gsub("^=%s*", "")
@@ -2090,7 +2118,15 @@ ValueForRegistrySetting = function(setting, text, raw)
         if value and setting.percent == true and value > 1 then value = value / 100 end
         return value
     end
-    if setting.type == "enum" then return EnumValueForText(setting, text) end
+    if setting.type == "enum" then
+        -- Symbol-valued enums (text separators/delimiters: ':', '-', '/', '|',
+        -- '<', '>', '~', '\\') lose their value to normalization, which strips
+        -- punctuation like the colon.  Look for the exact symbol in the raw text
+        -- first so "set hp text separator to :" resolves the colon value.
+        local symbolValue = P.SymbolEnumValueForRaw and P.SymbolEnumValueForRaw(setting, raw)
+        if symbolValue ~= nil then return symbolValue end
+        return EnumValueForText(setting, text)
+    end
     if setting.type == "string" then
         -- Some native controls store their fixed choices as strings because
         -- their keys can be extended by MSUF at runtime (status icon packs are
