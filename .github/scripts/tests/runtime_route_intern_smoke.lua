@@ -83,7 +83,7 @@ local HealthText = {
     IsEnabled = function() return true end,
     Create = function() end,
     Apply = function() end,
-    GetEvents = function() return { "UNIT_MAXHEALTH" } end,
+    GetEvents = function() return { "UNIT_HEALTH", "UNIT_MAXHEALTH" } end,
 }
 function HealthText.Update(frame, event, unit, hp, hpMax)
     frame.healthTextEvent = event
@@ -91,6 +91,15 @@ function HealthText.Update(frame, event, unit, hp, hpMax)
     frame.healthTextHP = hp
     frame.healthTextMax = hpMax
 end
+function HealthText.MarkValueDirty(frame, event, unit, hp, hpMax)
+    frame.healthDirtyCalls = (frame.healthDirtyCalls or 0) + 1
+    frame.healthDirtyEvent, frame.healthDirtyUnit = event, unit
+    frame.healthDirtyHP, frame.healthDirtyMax = hp, hpMax
+end
+function HealthText.SelectEventUpdate(frame, spec, event, update)
+    return event == "UNIT_HEALTH" and HealthText.MarkValueDirty or update
+end
+HealthText.NoDispatchUpdates = { [HealthText.MarkValueDirty] = true }
 UF.RegisterElement("HealthText", HealthText)
 
 local GroupVisuals = {
@@ -155,6 +164,25 @@ Check(first._msufIdentityFns == second._msufIdentityFns,
     "identity function sequences were retained per frame")
 Check(first._msufIdentityLabels == second._msufIdentityLabels,
     "identity labels were retained per frame")
+
+-- Event-specific static text markers must remain inside the interned direct
+-- Health route. Falling back to the generic per-frame list would erase the
+-- batching win and retain one closure per raid child.
+local dirtyFirst, dirtySecond = NewFrame("party2"), NewFrame("party2")
+local dirtySpec = { enabled = true, key = "party2", unit = "party2", scope = "group" }
+UF.AttachFrame(dirtyFirst, { scope = "group" })
+UF.AttachFrame(dirtySecond, { scope = "group" })
+UF.ApplyElementToFrame(dirtyFirst, "Health", dirtySpec)
+UF.ApplyElementToFrame(dirtySecond, "Health", dirtySpec)
+UF.ApplyElementToFrame(dirtyFirst, "HealthText", dirtySpec)
+UF.ApplyElementToFrame(dirtySecond, "HealthText", dirtySpec)
+Check(dirtyFirst.UNIT_HEALTH == dirtySecond.UNIT_HEALTH,
+    "event-specific HealthText dirty marker escaped shared direct-route interning")
+dirtyFirst.UNIT_HEALTH(dirtyFirst, "UNIT_HEALTH", "party2")
+Check(calls[dirtyFirst] == 1 and dirtyFirst.healthDirtyCalls == 1,
+    "direct Health route did not run the bar and dirty marker exactly once")
+Check(dirtyFirst.healthDirtyHP == 80 and dirtyFirst.healthDirtyMax == 100,
+    "direct Health route dropped the bar payload before the static dirty marker")
 
 local seeded = NewFrame("party1")
 seeded.seedCalc = {}
@@ -270,6 +298,24 @@ Check(first.lastPowerPayload[3] == 35 and first.lastPowerPayload[4] == 100
 Check(first._msufDispatchToken == 41 and second._msufDispatchToken == 73
     and first._msufDispatchActive == nil and second._msufDispatchActive == nil,
     "state-free power routes mutated the shared unit-state dispatch")
+
+-- Core unit rebinding must not enter Auras3 at all when its element is off.
+-- The permanent integration callback is a cold-path owner, not permission to
+-- resolve disabled aura config on every target/header identity change.
+local auraUnitChangeCalls = 0
+MSUF.MSUF_Auras3 = {
+    OnFrameUnitChanged = function()
+        auraUnitChangeCalls = auraUnitChangeCalls + 1
+    end,
+}
+UF.OnUnitChanged(second, "player", "target")
+Check(auraUnitChangeCalls == 0,
+    "disabled Auras3 received Core OnUnitChanged work")
+second._msufActiveElements.Auras = true
+UF.OnUnitChanged(second, "target", "focus")
+Check(auraUnitChangeCalls == 1,
+    "active Auras3 did not receive Core OnUnitChanged")
+second._msufActiveElements.Auras = nil
 
 -- A castbar may temporarily borrow this frame's existing health lifecycle
 -- route. Detach must notify it before deleting the compiled route so the owner

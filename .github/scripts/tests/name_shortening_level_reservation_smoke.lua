@@ -21,6 +21,8 @@ local function FontString(parent)
     function fs:SetNonSpaceWrap(value) self.nonSpaceWrap = value end
     function fs:SetWidth(value) self.width = value end
     function fs:SetText(value) self.text = value or "" end
+    function fs:GetText() return self.text end
+    function fs:SetAlpha(value) self.alpha = value end
     function fs:GetStringWidth() return #self.text * 7 end
     function fs:GetFont() return "Fonts\\FRIZQT__.TTF", 14, "OUTLINE" end
     function fs:SetFont() end
@@ -35,11 +37,13 @@ local function ClipFrame(parent)
     function clip:EnableMouse() end
     function clip:SetClipsChildren(value) self.clipsChildren = value == true end
     function clip:SetFrameLevel(value) self.frameLevel = value end
+    function clip:SetAllPoints(value) self.allPoints = value end
     function clip:SetSize(width, height) self.width, self.height = width, height end
     function clip:ClearAllPoints() self.points = nil end
     function clip:SetPoint(...) self.points = { ... } end
     function clip:Show() self.shown = true end
     function clip:Hide() self.shown = false end
+    function clip:CreateFontString() return FontString(self) end
     return clip
 end
 
@@ -60,6 +64,12 @@ local Text = {
     ClampFrameLayer = function(layer, fallback) return tonumber(layer) or fallback end,
     GetLayerBaseLevel = function() return 0 end,
     SetFrameLevelCached = function(frame, level) frame:SetFrameLevel(level) end,
+    SetShownCached = function(region, shown)
+        if shown then region:Show() else region:Hide() end
+        region._msufShown = shown == true
+    end,
+    SetTextCached = function(region, value) region:SetText(value) end,
+    SetFont = function() return true end,
 }
 local MSUF = { UF = Text.UF, UFText = Text }
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Text_Layout.lua"))(
@@ -75,6 +85,42 @@ for index = 1, 100 do
     end
 end
 Check(type(applyNameClip) == "function", "ApplyNameClip cold-path upvalue missing")
+
+local proxyFrame = {
+    hpBar = {},
+    _msufNameRelativeStatus = true,
+}
+proxyFrame.nameText = FontString(proxyFrame)
+proxyFrame.nameText:SetText("Astral Warden")
+local proxySpec = {
+    showName = true,
+    nameFontSize = 14,
+    text = {
+        anchorToBars = true,
+        nameAnchor = "LEFT",
+        nameX = 4,
+        nameY = 1,
+        nameLayer = 5,
+    },
+}
+Check(Text.EnsureNameAnchorProxy(proxyFrame, proxySpec) == true,
+    "bar-anchored name proxy was not created")
+local proxy = proxyFrame._msufNameAnchorText
+Check(proxyFrame._msufNameAnchorTextActive == true and proxy and proxy.shown,
+    "bar-anchored name proxy was not activated")
+Check(proxy.text == "Astral Warden" and proxy.width == 0 and proxy.alpha == 0,
+    "bar-anchored name proxy did not mirror an invisible auto-sized name")
+Check(proxy.points and proxy.points[1] == "LEFT" and proxy.points[2] == proxyFrame.hpBar
+    and proxy.points[3] == "LEFT" and proxy.points[4] == 7 and proxy.points[5] == 1,
+    "bar-anchored name proxy did not mirror the visible name origin")
+Check(Text.EnsureNameAnchorProxy(proxyFrame, proxySpec) == false,
+    "unchanged bar-name proxy repeated lifecycle work")
+proxySpec.text.nameShorten = true
+proxySpec.text.nameShortenMax = 10
+Check(Text.EnsureNameAnchorProxy(proxyFrame, proxySpec) == true,
+    "shortened name did not deactivate the full-name proxy")
+Check(proxyFrame._msufNameAnchorTextActive == nil and proxy.shown == false and proxy.text == "",
+    "inactive full-name proxy retained visible or stale state")
 
 local function ClipWidth(withLevel)
     local frame = { unit = "target" }

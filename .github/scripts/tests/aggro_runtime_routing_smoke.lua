@@ -97,18 +97,29 @@ end
 local threatByUnit = {}
 local combatByUnit = {}
 local threatQueries = {}
+local existsQueries = {}
+local roleQueries = {}
 local inInstance = false
 local stateDriverCalls = {}
+local stateDriverUnregisterCalls = 0
+local unitWatchRegisterCalls = 0
+local unitWatchUnregisterCalls = 0
 
 _G.CreateFrame = function(_, _, parent) return NewObject(parent) end
 _G.InCombatLockdown = function() return false end
-_G.UnitExists = function() return true end
+_G.UnitExists = function(unit)
+  existsQueries[unit] = (existsQueries[unit] or 0) + 1
+  return true
+end
 _G.UnitIsConnected = function() return true end
 _G.UnitIsDead = function() return false end
 _G.UnitIsDeadOrGhost = function() return false end
 _G.UnitIsUnit = function(a, b) return a == b end
 _G.UnitAffectingCombat = function(unit) return combatByUnit[unit] == true end
-_G.UnitGroupRolesAssigned = function() return "DAMAGER" end
+_G.UnitGroupRolesAssigned = function(unit)
+  roleQueries[unit] = (roleQueries[unit] or 0) + 1
+  return "DAMAGER"
+end
 _G.UnitClass = function() return "Warrior", "WARRIOR" end
 _G.UnitReaction = function() return 5 end
 _G.SetPortraitTexture = function() end
@@ -121,9 +132,17 @@ _G.RegisterStateDriver = function(frame, state, expression)
     expression = expression,
   }
 end
-_G.UnregisterStateDriver = function() end
-_G.RegisterUnitWatch = function(frame) frame.unitWatchRegistered = true end
-_G.UnregisterUnitWatch = function(frame) frame.unitWatchRegistered = nil end
+_G.UnregisterStateDriver = function()
+  stateDriverUnregisterCalls = stateDriverUnregisterCalls + 1
+end
+_G.RegisterUnitWatch = function(frame)
+  unitWatchRegisterCalls = unitWatchRegisterCalls + 1
+  frame.unitWatchRegistered = true
+end
+_G.UnregisterUnitWatch = function(frame)
+  unitWatchUnregisterCalls = unitWatchUnregisterCalls + 1
+  frame.unitWatchRegistered = nil
+end
 _G.UnitWatchRegistered = function(frame) return frame.unitWatchRegistered == true end
 _G.UnitThreatSituation = function(unit, mobUnit)
   local key
@@ -188,6 +207,14 @@ end
 local function UnitRoute(frame, event)
   local units = frame.unitEvents[event]
   return units and units[1] or nil
+end
+
+local function RuntimeHasLabel(frame, wanted)
+  local labels = frame and frame._msufRuntimeAllLabels
+  for i = 1, labels and #labels or 0 do
+    if labels[i] == wanted then return true end
+  end
+  return false
 end
 
 local function AggroBorderConfig()
@@ -270,7 +297,7 @@ local partySpec = {
     hasWork = true,
     needsThreat = true,
     needsAura = false,
-    aggroMode = "ALL",
+    aggroMode = "NON_TANK",
     aggroR = 1,
     aggroG = 0.55,
     aggroB = 0,
@@ -281,25 +308,31 @@ local partySpec = {
     slotMap = { TR = cornerSlot },
   },
 }
+partySpec.border.aggroMode = "NON_TANK"
 UF.ApplySpec(party, partySpec, nil, { Borders = true, GroupCornerIndicators = true })
 
 local corner = assert(party.MSUFGFCornerIndicators and party.MSUFGFCornerIndicators.TR)
 for _, event in ipairs({ "UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE", "UNIT_FLAGS" }) do
   Check(UnitRoute(party, event) == "party1", event .. " was not routed to party1")
 end
-Check(party.genericEvents.PLAYER_REGEN_ENABLED == true,
-  "group aggro combat-exit catch-up was not registered")
+Check(party.genericEvents.PLAYER_REGEN_ENABLED ~= true,
+  "group aggro combat-exit catch-up must not register on every frame")
 Check(party._msufBorderShown == false and corner.shown == false,
   "party aggro visuals must start hidden")
 
 combatByUnit.party1 = true
 threatByUnit.party1 = 1
 local partyThreatQueriesBefore = threatQueries.party1 or 0
+local partyExistsQueriesBefore = existsQueries.party1 or 0
+local partyRoleQueriesBefore = roleQueries.party1 or 0
 party:Fire("UNIT_THREAT_LIST_UPDATE", "party1")
 Check(party._msufBorderShown == true and corner.shown == true,
   "party aggro visuals did not react to threat-list gain")
 Check((threatQueries.party1 or 0) - partyThreatQueriesBefore == 1,
-  "border and corner indicator did not share one dispatch-local threat snapshot")
+  "border and corner indicator did not share one dispatch-local aggro result")
+Check((existsQueries.party1 or 0) - partyExistsQueriesBefore == 1
+    and (roleQueries.party1 or 0) - partyRoleQueriesBefore == 1,
+  "border and corner indicator repeated group aggro eligibility reads")
 threatByUnit.party1 = 0
 party:Fire("UNIT_THREAT_SITUATION_UPDATE", "party1")
 Check(party._msufBorderShown == false and corner.shown == false,
@@ -351,9 +384,58 @@ party:Fire("UNIT_THREAT_LIST_UPDATE", "party2")
 Check(party._msufBorderShown == true and corner.shown == true,
   "rebound party aggro visuals did not update")
 combatByUnit.party2 = false
-party:Fire("PLAYER_REGEN_ENABLED")
+MSUF.GF.ForEachFrame = function(fn, includeHidden, ...)
+  Check(includeHidden == false, "shared corner catch-up must stay visibility-gated")
+  return fn(party, party.MSUFUnitKey, "party", ...)
+end
+Check(MSUF.GF.RefreshCornerThreatState("PLAYER_REGEN_ENABLED") == true,
+  "shared group runtime did not visit the active corner threat owner")
 Check(corner.shown == false,
   "combat exit did not clear a stale group corner aggro indicator")
+
+-- Default visibility belongs to Blizzard's native UnitWatch, not an active
+-- Core element. Single frames arrive here after Factory has registered the
+-- watch; secure group children arrive with the header-owned watch already set.
+local defaultStateDriverCount = #stateDriverCalls
+local defaultUnitWatchRegisterCount = unitWatchRegisterCalls
+local defaultUnitWatchUnregisterCount = unitWatchUnregisterCalls
+local defaultSingle = NewUnitFrame("target")
+_G.RegisterUnitWatch(defaultSingle)
+UF.ApplySpec(defaultSingle, {
+  enabled = true,
+  unit = "target",
+  key = "target",
+  scope = "single",
+  load = { active = false },
+}, nil, { LoadConditions = true })
+Check(not (defaultSingle._msufActiveElements and defaultSingle._msufActiveElements.LoadConditions),
+  "default single frame retained active LoadConditions ownership")
+Check(not RuntimeHasLabel(defaultSingle, "LoadConditions"),
+  "default single frame retained LoadConditions in its runtime sequence")
+Check(defaultSingle.unitWatchRegistered == true,
+  "default single frame lost its native UnitWatch")
+
+local defaultGroup = NewUnitFrame("party1")
+_G.RegisterUnitWatch(defaultGroup)
+UF.ApplySpec(defaultGroup, {
+  enabled = true,
+  unit = "party1",
+  key = "party",
+  scope = "group",
+  load = { active = false },
+}, nil, { LoadConditions = true })
+Check(not (defaultGroup._msufActiveElements and defaultGroup._msufActiveElements.LoadConditions),
+  "default group frame retained active LoadConditions ownership")
+Check(not RuntimeHasLabel(defaultGroup, "LoadConditions"),
+  "default group frame retained LoadConditions in its runtime sequence")
+Check(defaultGroup.unitWatchRegistered == true,
+  "default group frame lost its native UnitWatch")
+Check(#stateDriverCalls == defaultStateDriverCount,
+  "default visibility registered a secure state driver")
+Check(unitWatchRegisterCalls == defaultUnitWatchRegisterCount + 2,
+  "default visibility mutated native UnitWatch during Core apply")
+Check(unitWatchUnregisterCalls == defaultUnitWatchUnregisterCount,
+  "default visibility unregistered native UnitWatch during Core apply")
 
 -- Instance/housing load conditions resolve cold environment state into the
 -- secure visibility expression. Zone-boundary events must rebuild that exact
@@ -390,6 +472,60 @@ loadFrame:Fire("ZONE_CHANGED_NEW_AREA")
 Check(#stateDriverCalls == 3
     and stateDriverCalls[3].expression:find("[@focus,exists] show", 1, true),
   "ZONE_CHANGED_NEW_AREA did not rebuild the out-of-instance visibility expression")
+
+-- Removing the final real condition must leave no Core route and hand
+-- existence visibility back to UnitWatch even through targeted element apply.
+local stateDriverUnregisterBefore = stateDriverUnregisterCalls
+local unitWatchRegisterBefore = unitWatchRegisterCalls
+UF.ApplySpec(loadFrame, {
+  enabled = true,
+  unit = "focus",
+  key = "focus",
+  scope = "single",
+  load = { active = false },
+}, nil, { LoadConditions = true })
+Check(not (loadFrame._msufActiveElements and loadFrame._msufActiveElements.LoadConditions),
+  "condition teardown retained active LoadConditions ownership")
+Check(not RuntimeHasLabel(loadFrame, "LoadConditions"),
+  "condition teardown retained LoadConditions in its runtime sequence")
+Check(loadFrame.genericEvents.PLAYER_ENTERING_WORLD == nil
+    and loadFrame.genericEvents.ZONE_CHANGED_NEW_AREA == nil,
+  "condition teardown retained zone-boundary routes")
+Check(stateDriverUnregisterCalls == stateDriverUnregisterBefore + 1,
+  "condition teardown did not unregister its secure state driver")
+Check(unitWatchRegisterCalls == unitWatchRegisterBefore + 1
+    and loadFrame.unitWatchRegistered == true,
+  "condition teardown did not restore native UnitWatch")
+
+-- Forced preview is still a real visibility owner even with no profile
+-- conditions, and disabling preview returns to the same native default.
+local previewFrame = NewUnitFrame("target")
+_G.RegisterUnitWatch(previewFrame)
+local previewSpec = {
+  enabled = true,
+  unit = "target",
+  key = "target",
+  scope = "single",
+  load = { active = false },
+}
+_G.MSUF_PreviewTestMode = true
+local previewDriverBefore = #stateDriverCalls
+local previewUnitWatchUnregisterBefore = unitWatchUnregisterCalls
+UF.ApplySpec(previewFrame, previewSpec, nil, { LoadConditions = true })
+Check(previewFrame._msufActiveElements.LoadConditions == true,
+  "forced preview did not activate LoadConditions")
+Check(RuntimeHasLabel(previewFrame, "LoadConditions"),
+  "forced preview missed LoadConditions runtime ownership")
+Check(#stateDriverCalls == previewDriverBefore + 1
+    and stateDriverCalls[#stateDriverCalls].expression:find("[nocombat] show", 1, true),
+  "forced preview did not install its secure visibility expression")
+Check(unitWatchUnregisterCalls == previewUnitWatchUnregisterBefore + 1,
+  "forced preview did not replace native UnitWatch with its secure driver")
+_G.MSUF_PreviewTestMode = nil
+UF.ApplySpec(previewFrame, previewSpec, nil, { LoadConditions = true })
+Check(not (previewFrame._msufActiveElements and previewFrame._msufActiveElements.LoadConditions)
+    and previewFrame.unitWatchRegistered == true,
+  "preview teardown did not return to inactive UnitWatch ownership")
 
 -- Compact probes guard the other non-basic runtime owners that were skipped by
 -- the same event-owner gate. Their rendering is tested elsewhere; this verifies

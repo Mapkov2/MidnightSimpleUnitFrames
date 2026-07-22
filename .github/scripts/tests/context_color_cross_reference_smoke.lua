@@ -64,6 +64,10 @@ local shortcutHelper = Slice(widgets,
     "function W.AttachContextColorShortcut",
     "function W.AttachContextColorReferences",
     "context-color shortcut")
+Has(widgets, "local function ContextColorShortcutsSuppressed(card)",
+    "context-color shortcuts have no page-scoped suppression helper")
+Has(shortcutHelper, "if ContextColorShortcutsSuppressed(card) then return nil end",
+    "context-color shortcuts ignore page-scoped suppression")
 Has(shortcutHelper, 'shortcut:SetScript("OnClick", function(self)', "RGB shortcut has no click handler")
 Has(shortcutHelper, "W.OpenContextColors(card, options)", "RGB shortcut click does not open the deferred color context")
 for _, forbidden in ipairs({ 'SetScript("OnUpdate"', "RegisterEvent", "RegisterUnitEvent", "C_Timer" }) do
@@ -76,6 +80,13 @@ local boundColorHelper = Slice(widgets,
     "bound context-color helper")
 Has(boundColorHelper, "owner._msuf2ContextColorAllowDisabled == true",
     "bound RGB shortcuts ignore the opt-in for disabled-state preconfiguration")
+
+local colorsBuild = Slice(colors,
+    "local function BuildColors(ctx)",
+    'M.RegisterPage("opt_colors"',
+    "native colors page")
+Has(colorsBuild, "ctx.wrapper._msuf2SuppressContextColorShortcuts = true",
+    "the native Colors page does not suppress redundant RGB shortcuts")
 
 local registry = Slice(colors,
     "-- Feature pages reference these semantic ids",
@@ -376,6 +387,22 @@ Has(auraSource, "M.AttachAuraFontsAndColors(section, title, scope)",
     "Aura Style container selector has no direct Fonts & Colors entry")
 assert(Count(auraSource, "AttachAuraFontsAndColors(") == 4,
     "Aura Fonts & Colors shortcuts no longer cover exactly the Style selector and two layout-card paths")
+Has(auraLayoutContext, "AURA_SHARED_COLOR_NOTE",
+    "Aura Fonts & Colors popup does not disclose its shared color scope")
+Has(auraLayoutContext, "colorNote = AURA_SHARED_COLOR_NOTE",
+    "Aura shared-scope disclosure is not forwarded to the color picker info button")
+Has(auraLayoutContext, 'scopeTag = "Shared"',
+    "Aura color picker does not expose its shared scope in the visible picker title")
+Has(auraLayoutContext, 'colorScopeTag = "Shared"',
+    "Aura text color picker does not retain the visible shared-scope tag")
+assert(Count(auraSource, "note = AURA_SHARED_COLOR_NOTE") == 8,
+    "not every Aura color shortcut carries the concise shared-scope explanation")
+assert(Count(auraSource, 'scopeTag = "Shared"') == 8,
+    "not every Aura color shortcut carries the visible Shared tag")
+
+local groupAuraSource = Read(pagesRoot .. "MSUF_Menu2_GroupAuras.lua")
+Has(groupAuraSource, 'M.AttachAuraFontsAndColors(top, "Auras", scope)',
+    "compact Group Auras workspace has no direct Fonts & Colors entry")
 
 -- Every semantic id used by a feature page must resolve through the canonical
 -- registry. Native Dispel colors deliberately have no synthetic picker target.
@@ -441,8 +468,26 @@ Has(globalCastbars, "capabilities = { shadow = false, opacity = false, baseline 
     "Focus Kick popup exposes font controls its runtime does not consume")
 
 local globalBars = Read(pagesRoot .. "MSUF_Menu2_GlobalBars.lua")
-Has(globalBars, "color._msuf2ContextColorAllowDisabled = true",
-    "Maximum Health Loss hides its RGB shortcut while the effect is disabled")
+Has(globalBars, "local function AttachBarsColorShortcut",
+    "Bars has no color-popup-only target helper")
+Has(globalBars, "local function CaptureBarsScopeFields",
+    "Bars color popups do not capture their scoped structural DB state")
+Has(globalBars, "local function RestoreBarsScopeFields",
+    "Bars color popups cannot restore scoped structural DB state on cancel")
+Has(globalBars, "TEMP_MAX_HEALTH_COLOR_STATE_FIELDS",
+    "Maximum Health Loss color popup does not preserve override and field presence")
+Has(globalBars, "OUTLINE_COLOR_STATE_FIELDS",
+    "Frame Outline color popup does not preserve mode, override, and field presence")
+Has(globalBars, '"Maximum Health Loss Color"',
+    "Maximum Health Loss no longer exposes its color through the popup")
+Has(globalBars, '"Frame Outline Color"',
+    "Frame Outline no longer exposes its color through the popup")
+assert(not globalBars:find('W.Color(section, "Loss color")', 1, true),
+    "Maximum Health Loss still duplicates its color inside the normal Bars controls")
+assert(not globalBars:find('W.Color(outline, "Outline color")', 1, true),
+    "Frame Outline still duplicates its color inside the normal Bars controls")
+Has(globalBars, 'local opacityY = compact and -204 or -78',
+    "compact Maximum Health Loss layout still reserves the removed color row")
 
 local classPower = Slice(registry,
     'ContextFactory("class_power.current"',

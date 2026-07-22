@@ -40,7 +40,7 @@ local UF = {
     elements = elements,
     Layers = {},
     RegisterElement = function(name, element) elements[name] = element end,
-    UnitExistsSafe = function() return true end,
+    ReadUnitExistsCached = function() return true, true end,
     FreshUnitState = function() return nil end,
     ReadConnectedCached = function()
         if connected == SECRET then return true, false end
@@ -126,6 +126,7 @@ groupStatusText.showDND = true
 groupStatusText.dead = GroupStatusLayout(3)
 groupStatusText.ghost = GroupStatusLayout(21)
 groupStatusText.afk = GroupStatusLayout(27)
+groupStatusText.dnd = GroupStatusLayout(29)
 local groupStatus = { enabled = true, group = true, alpha = 1, statusText = groupStatusText }
 local groupSpec = { enabled = true, scope = "group", health = { mode = "dark" }, status = groupStatus }
 
@@ -262,6 +263,14 @@ Check(group._msufStatusTextValue == "AFK"
     and group.MSUFStatusLayers[27].frameLevel == 77,
     "group AFK text did not adopt its independent layer holder")
 afk = false
+group._msufUpdateGroupStatusState(group, "UNIT_FLAGS", "party1")
+dnd = true
+group._msufUpdateGroupStatusState(group, "UNIT_FLAGS", "party1")
+Check(group._msufStatusTextValue == "DND"
+    and group.statusIndicatorText:GetParent() == group.MSUFStatusLayers[29]
+    and group.MSUFStatusLayers[29].frameLevel == 79,
+    "group DND text did not adopt its independent layer holder")
+dnd = false
 group._msufUpdateGroupStatusState(group, "UNIT_FLAGS", "party1")
 
 connected = false

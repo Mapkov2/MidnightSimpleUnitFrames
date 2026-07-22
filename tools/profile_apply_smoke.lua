@@ -427,7 +427,54 @@ local _, firstChanged = translate(malformedStored, {
 })
 assert(firstChanged == true, "unversioned current profile must be normalized once")
 assert(malformedStored.general.nameOffsetX == 500, "stored malformed numeric field was not clamped")
-assert(malformedStored._msufProfileNormalizationRevision == 11, "normalization revision was not persisted")
+assert(malformedStored._msufProfileNormalizationRevision == 12, "normalization revision was not persisted")
+
+-- Revision 12 splits the former combined UF state text and the GF AFK/DND
+-- entry without changing the effective visibility or inherited placement.
+local combinedStatusProfile = {
+    _msufProfileSchema = 600,
+    _msufProfileNormalizationRevision = 11,
+    general = { statusIndicators = { showDead = false, showGhost = true, showAFK = true, showDND = false } },
+    player = {
+        statusTextEnabled = true,
+        statusTextSize = 19,
+        statusTextAnchor = "TOP",
+        statusTextOffsetX = 4,
+        statusTextOffsetY = -7,
+        statusTextLayer = 13,
+    },
+    gf_party = {
+        statusAFKText = false,
+        statusAFKTextSize = 18,
+        statusAFKTextAnchor = "BOTTOM",
+        statusAFKOffsetX = 9,
+        statusAFKOffsetY = -3,
+        statusAFKTextLayer = 12,
+    },
+}
+translate(combinedStatusProfile, {
+    source = "smoke_stored",
+    markProfile = true,
+    trustNormalizationMarker = true,
+})
+assert(combinedStatusProfile.player.statusDeadTextEnabled == false
+    and combinedStatusProfile.player.statusGhostTextEnabled == true
+    and combinedStatusProfile.player.statusAFKTextEnabled == true
+    and combinedStatusProfile.player.statusDNDTextEnabled == false,
+    "combined UF status visibility was not split without behavior drift")
+assert(combinedStatusProfile.player.statusGhostTextSize == 19
+    and combinedStatusProfile.player.statusAFKTextAnchor == "TOP"
+    and combinedStatusProfile.player.statusDNDTextOffsetX == 4
+    and combinedStatusProfile.player.statusDNDTextOffsetY == -7
+    and combinedStatusProfile.player.statusDNDTextLayer == 13,
+    "combined UF status placement was not inherited by every split state")
+assert(combinedStatusProfile.gf_party.statusDNDText == false
+    and combinedStatusProfile.gf_party.statusDNDTextSize == 18
+    and combinedStatusProfile.gf_party.statusDNDTextAnchor == "BOTTOM"
+    and combinedStatusProfile.gf_party.statusDNDOffsetX == 9
+    and combinedStatusProfile.gf_party.statusDNDOffsetY == -3
+    and combinedStatusProfile.gf_party.statusDNDTextLayer == 12,
+    "combined GF AFK/DND settings were not preserved for the new DND entry")
 
 -- A profile exported with the non-existent UI_Parent alias caused the unit
 -- factory to retry a full apply forever. Stored revision-10 profiles must be
@@ -447,7 +494,7 @@ assert(anchorAliasChanged == true, "stale UI_Parent profile did not re-enter nor
 assert(staleAnchorAlias.general.anchorName == "UIParent"
     and staleAnchorAlias.pet.anchorFrameName == "UIParent",
     "UI_Parent anchor alias was not canonicalized")
-assert(staleAnchorAlias._msufProfileNormalizationRevision == 11,
+assert(staleAnchorAlias._msufProfileNormalizationRevision == 12,
     "anchor alias repair did not persist the current normalization revision")
 
 -- The second trusted pass must return before walking the full profile tree.
@@ -460,7 +507,7 @@ local watchedGeneral = setmetatable({}, {
 })
 local alreadyCurrent = {
     _msufProfileSchema = 600,
-    _msufProfileNormalizationRevision = 11,
+    _msufProfileNormalizationRevision = 12,
     general = watchedGeneral,
 }
 local _, fastChanged = translate(alreadyCurrent, {
@@ -474,7 +521,7 @@ assert(nestedWalks == 0, "normalization fast path walked nested profile tables")
 -- External payloads never get to assert their own trust markers.
 local spoofedImport = {
     _msufProfileSchema = 600,
-    _msufProfileNormalizationRevision = 11,
+    _msufProfileNormalizationRevision = 12,
     _msufDefaultsRevision = 1,
     _msufDispelPriorityMigration = 3,
     general = { nameOffsetX = "900" },
@@ -547,7 +594,7 @@ assert(normalizeLayers(layerFixture) == false, "layer normalization is not idemp
 local function currentDefaultsProfile()
     local profile = {
         _msufProfileSchema = 600,
-        _msufDefaultsRevision = 5,
+        _msufDefaultsRevision = 6,
         shortenNames = false,
     }
     for _, key in ipairs({
@@ -581,6 +628,12 @@ staleDefaults._msufDefaultsRevision = 0
 _G.MSUF_DB = staleDefaults
 _G.MSUF_EnsureDB(false, true)
 assert(staleDefaults.general.anchorName == "UIParent", "stale switched profile bypassed the Defaults repair")
+assert(staleDefaults.bars.smoothPowerBar == false
+    and staleDefaults.bars.classPowerSmoothFill == false
+    and staleDefaults.bars.altManaSmoothFill == false
+    and staleDefaults.player.smoothFill == false
+    and staleDefaults.player.powerSmoothFill == false,
+    "fresh unit/class-resource smoothing defaults are not opt-in")
 
 -- Ensuring an export copy must not evict the live profile from the local cache.
 staleDefaults.general.anchorName = nil

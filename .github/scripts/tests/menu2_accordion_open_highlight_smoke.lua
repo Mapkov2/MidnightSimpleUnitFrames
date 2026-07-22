@@ -38,9 +38,14 @@ assert(widgets:find('sectionId:lower():find("preview", 1, true) == nil', 1, true
     and refreshTone:find("entry.openHighlightEnabled == true", 1, true),
     "preview accordions are not excluded from open highlighting")
 assert(refreshTone:find("arrow:SetVertexColor(1, 1, 1, 0.98)", 1, true)
+    and not refreshTone:find("SetRotation", 1, true)
     and not collapsible:find("local openArrow", 1, true)
     and not collapsible:find("openArrow = openArrow", 1, true),
-    "active accordion still overlays a second arrow instead of recoloring the original")
+    "open accordion arrow is not contrast-safe or still owns rotation")
+assert(widgets:find("T.ApplyCollapseVisual(entry.arrow, entry.hint, open)", 1, true)
+    and collapsible:find("T.ApplyCollapseVisual(entry.arrow, entry.hint, false)", 1, true),
+    "accordion arrow state is no longer owned by the proven relayout and close paths")
+
 assert(refreshTone:find("headerBg:SetAlpha(active and 0 or 1)", 1, true),
     "square status background can still bleed through rounded open corners")
 assert(widgets:find('CreateAccordionRoundedRegions(header, "BACKGROUND", 0)', 1, true)
@@ -65,6 +70,22 @@ assert(not widgets:find("ActiveCollapsible", 1, true)
     and not widgets:find("ActiveAccordion", 1, true),
     "obsolete selected-accordion state is still present")
 
+local dashboardPath = "MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Dashboard.lua"
+local dashboardFile = assert(io.open(dashboardPath, "rb"))
+local dashboard = dashboardFile:read("*a")
+dashboardFile:close()
+assert(widgets:find("W.CreateAccordionRoundedRegions = CreateAccordionRoundedRegions", 1, true)
+    and widgets:find("W.CreateAccordionOpenHighlight = CreateAccordionOpenHighlight", 1, true),
+    "shared accordion tone regions are not available to the dashboard")
+assert(dashboard:find("local function CreateDashboardAccordionTone", 1, true)
+    and dashboard:find('W.CreateAccordionOpenHighlight(header,', 1, true)
+    and dashboard:find("M.CallIf(T.ApplyCollapseVisual, arrow, nil, open)", 1, true)
+    and dashboard:find("if open then arrow:SetVertexColor(1, 1, 1, 0.98) end", 1, true)
+    and dashboard:find("PaintHeaderTone(open, false)", 1, true),
+    "dashboard disclosures do not synchronize the shared highlight and arrow state")
+assert(not dashboard:find('hover:SetColorTexture(1, 1, 1, 0.025)', 1, true),
+    "dashboard disclosures still paint a square hover layer over rounded headers")
+
 local statusPath = "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_UnitSectionShared.lua"
 local statusFile = assert(io.open(statusPath, "rb"))
 local status = statusFile:read("*a")
@@ -72,6 +93,23 @@ statusFile:close()
 assert(status:find("entry.headerBg:SetColorTexture", 1, true)
     and not status:find("headerOpenHighlight", 1, true),
     "section status refresh is no longer isolated to the base background")
+assert(not status:find("opts.arrowColor", 1, true)
+    and not status:find("entry.arrow:SetVertexColor", 1, true),
+    "section status can still override the accordion state arrow")
+
+local unitSectionsPath = "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua"
+local unitSectionsFile = assert(io.open(unitSectionsPath, "rb"))
+local unitSections = unitSectionsFile:read("*a")
+unitSectionsFile:close()
+assert(not unitSections:find("sectionEntry.arrow:SetVertexColor", 1, true),
+    "unit enabled state can still override the accordion state arrow")
+
+local groupLayoutPath = "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupLayout.lua"
+local groupLayoutFile = assert(io.open(groupLayoutPath, "rb"))
+local groupLayout = groupLayoutFile:read("*a")
+groupLayoutFile:close()
+assert(not groupLayout:find("arrowColor", 1, true),
+    "group provider status can still override the accordion state arrow")
 
 for _, path in ipairs({
     "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua",

@@ -34,6 +34,11 @@ local db = _G.MSUF_DB
 Check(type(db.gf_party) == "table" and type(db.gf_raid) == "table"
     and type(db.gf_mythicraid) == "table" and type(db.gf_priority) == "table",
     "initial Group DB repair did not materialize all scopes")
+Check(db.gf_party.smoothFill == false and db.gf_raid.smoothFill == false
+    and db.gf_mythicraid.smoothFill == false
+    and db.gf_party.powerSmoothFill == false and db.gf_raid.powerSmoothFill == false
+    and db.gf_mythicraid.powerSmoothFill == false,
+    "fresh Group Health/Power smoothing defaults are not opt-in")
 
 pairScans = 0
 for _ = 1, 100 do GF.EnsureDB() end

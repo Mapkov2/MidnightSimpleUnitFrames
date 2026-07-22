@@ -17,6 +17,18 @@ local portraitPath = ResolvePath(
     "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Portrait.lua",
     "UnitFrames/Engine/Elements/MSUF_UF_Elements_Portrait.lua"
 )
+local configPath = ResolvePath(
+    "MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Config.lua",
+    "UnitFrames/Engine/MSUF_UF_Config.lua"
+)
+local unitMenuPath = ResolvePath(
+    "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_Unit.lua",
+    "Shell/Menu2/Pages/MSUF_Menu2_Unit.lua"
+)
+local unitVisualsMenuPath = ResolvePath(
+    "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_UnitFrameVisuals.lua",
+    "Shell/Menu2/Pages/MSUF_Menu2_UnitFrameVisuals.lua"
+)
 
 local function NewRegion(parent)
     local region = { parent = parent, shown = true, frameLevel = 1 }
@@ -80,6 +92,8 @@ local portraitCalls = 0
 local portraitRevision = 1
 local now = 1
 local guids = { player = "Player-1", target = "Creature-1" }
+local activeCastIcon, activeChannelIcon
+local castInfoReads, channelInfoReads = 0, 0
 
 _G.CreateFrame = CreateFrame
 _G.UnitExists = function(unit) return guids[unit] ~= nil end
@@ -87,6 +101,14 @@ _G.UnitIsConnected = function() return true end
 _G.UnitIsVisible = function() return true end
 _G.UnitGUID = function(unit) return guids[unit] end
 _G.UnitClass = function() return "Mage", "MAGE" end
+_G.UnitCastingInfo = function()
+    castInfoReads = castInfoReads + 1
+    if activeCastIcon then return "Cast", "Cast", activeCastIcon end
+end
+_G.UnitChannelInfo = function()
+    channelInfoReads = channelInfoReads + 1
+    if activeChannelIcon then return "Channel", "Channel", activeChannelIcon end
+end
 _G.UnitReaction = function() return 5 end
 _G.UnitThreatSituation = function() return 0 end
 _G.UnitGroupRolesAssigned = function() return "NONE" end
@@ -151,6 +173,8 @@ assert(HasEvent(playerEvents, "UNIT_ENTERED_VEHICLE"), "player enter-vehicle eve
 assert(HasEvent(playerEvents, "UNIT_EXITED_VEHICLE"), "player exit-vehicle event not registered")
 assert(not HasEvent(playerEvents, "UNIT_HEALTH"), "portrait must not subscribe to health hot events")
 assert(not HasEvent(playerEvents, "UNIT_POWER_FREQUENT"), "portrait must not subscribe to power hot events")
+assert(not HasEvent(playerEvents, "UNIT_SPELLCAST_START"), "disabled cast portrait registered spellcast events")
+assert(castInfoReads == 0 and channelInfoReads == 0, "disabled cast portrait queried cast APIs")
 
 for _ = 1, 1000 do
     Portrait.Update(player, "MSUF_UNIT_IDENTITY_VISUAL", "player")
@@ -184,4 +208,53 @@ now = now + 1
 Portrait.Update(target, "PLAYER_TARGET_CHANGED", "target")
 assert(portraitCalls == 7, "target identity change did not refresh portrait")
 
-print("portrait refresh smoke: ok (cache, native event, vehicle enter/exit, GUID and target changes)")
+player.MSUFSpec.portrait.castSpellIcon = true
+Portrait.Apply(player, player.MSUFSpec)
+local castEvents = Portrait.GetEvents(player, player.MSUFSpec)
+assert(HasEvent(castEvents, "UNIT_SPELLCAST_START"), "enabled cast portrait did not register cast start")
+assert(HasEvent(castEvents, "UNIT_SPELLCAST_CHANNEL_STOP"), "enabled cast portrait did not register channel stop")
+assert(HasEvent(castEvents, "UNIT_SPELLCAST_EMPOWER_START"), "enabled cast portrait did not register empower start")
+assert(not HasEvent(castEvents, "UNIT_SPELLCAST_DELAYED"), "cast portrait registered a timing-only event")
+
+activeCastIcon = 136243
+local channelReadsBeforeCastStart = channelInfoReads
+Portrait.Update(player, "UNIT_SPELLCAST_START", "player")
+assert(player.portrait.texture == activeCastIcon, "cast start did not replace the portrait with the spell icon")
+assert(player._msufPortraitCastIconActive == true, "cast portrait active state missing")
+assert(channelInfoReads == channelReadsBeforeCastStart, "cast start queried the channel API")
+
+activeCastIcon = nil
+Portrait.Update(player, "UNIT_SPELLCAST_STOP", "player")
+assert(player.portrait.texture == "portrait:player:4", "cast stop did not restore the unit portrait")
+assert(player._msufPortraitCastIconActive == nil, "cast portrait active state survived cast stop")
+
+activeChannelIcon = 136235
+local castReadsBeforeChannelStart = castInfoReads
+Portrait.Update(player, "UNIT_SPELLCAST_CHANNEL_START", "player")
+assert(player.portrait.texture == activeChannelIcon, "channel start did not replace the portrait with the spell icon")
+assert(castInfoReads == castReadsBeforeChannelStart, "channel start queried the casting API")
+activeChannelIcon = nil
+Portrait.Update(player, "UNIT_SPELLCAST_CHANNEL_STOP", "player")
+assert(player.portrait.texture == "portrait:player:4", "channel stop did not restore the unit portrait")
+
+player.MSUFSpec.portrait.castSpellIcon = false
+Portrait.Apply(player, player.MSUFSpec)
+local readsBeforeDisabledUpdate = castInfoReads + channelInfoReads
+Portrait.Update(player, "UNIT_PORTRAIT_UPDATE", "player")
+assert(castInfoReads + channelInfoReads == readsBeforeDisabledUpdate, "disabled cast portrait retained API overhead")
+assert(not HasEvent(Portrait.GetEvents(player, player.MSUFSpec), "UNIT_SPELLCAST_START"), "disabled cast portrait retained spellcast events")
+
+local function ReadFile(path)
+    local handle = assert(io.open(path, "r"))
+    local text = handle:read("*a")
+    handle:close()
+    return text
+end
+local configSource = ReadFile(configPath)
+local unitMenuSource = ReadFile(unitMenuPath)
+local unitVisualsMenuSource = ReadFile(unitVisualsMenuPath)
+assert(configSource:find("out.portrait.castSpellIcon = conf.portraitCastSpellIcon == true", 1, true), "portrait cast option is not compiled")
+assert(unitMenuSource:find("portraitCastSpellIcon", 1, true), "portrait copy scope lost the cast icon option")
+assert(unitVisualsMenuSource:find("Show cast spell icon in portrait", 1, true), "portrait menu toggle missing")
+
+print("portrait refresh smoke: ok (cache, lifecycle, optional event routing, cast/channel icon swap, zero disabled API reads)")

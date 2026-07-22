@@ -29,10 +29,15 @@ local elements = {}
 local UF = {
     Layers = {},
     RegisterElement = function(name, element) elements[name] = element end,
-    UnitExistsSafe = function()
+    ReadUnitExistsCached = function()
         existsReads = existsReads + 1
-        return true
+        return true, true
     end,
+    ReadUnitIsPlayerCached = function()
+        playerReads = playerReads + 1
+        return false, true
+    end,
+    ReadUnitClassCached = function() return _G.UnitClass() end,
     FreshUnitState = function() return freshState end,
     ReadConnectedCached = function() return true, true end,
     ReadDeadCached = function() return false, true end,

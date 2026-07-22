@@ -41,6 +41,8 @@ function MSUF.UF.FlushDeferredGroupRangeSettle(frame)
 end
 
 local serial = 1
+local powerEnabled = false
+local powerHeight = 0
 function MSUF.GF.CompileSpec(kind, _, unit)
   return {
     scope = "group",
@@ -48,6 +50,7 @@ function MSUF.GF.CompileSpec(kind, _, unit)
     unit = unit,
     width = 120,
     height = 36,
+    power = { enabled = powerEnabled, height = powerHeight },
     _msufGFCompileSerial = serial,
   }
 end
@@ -57,6 +60,9 @@ local function Child(unit)
   function frame:GetAttribute(name) return self.attributes[name] end
   function frame:SetAttribute(name, value) self.attributes[name] = value end
   function frame:HookScript(name, fn) self.hooks[name] = fn end
+  function frame:UnregisterAllEvents()
+    self.unregisterAllEventsCalls = (self.unregisterAllEventsCalls or 0) + 1
+  end
   function frame:RegisterForClicks() end
   function frame:SetSize() end
   function frame:GetParent() return self.parent end
@@ -98,6 +104,22 @@ assert(refreshes[#refreshes].exact == false,
 local resolvedParty, exactParty = MSUF.GF.ResolveLifecycleFrame("party1")
 assert(resolvedParty == party and exactParty == true,
   "stable secure child/index agreement must resolve the exact lifecycle target")
+
+local orphan = Child("party5")
+MSUF.GF.headers.orphan = Header(orphan)
+assert(MSUF.GF.ScanHeader("orphan", "party") == true, "orphan child did not bind")
+orphan.unregisterAllEventsCalls = 0
+orphan._msufEventRouteUnit = "party5"
+orphan.attributes.unit = nil
+orphan.hooks.OnAttributeChanged(orphan, "unit", nil)
+assert(orphan.unregisterAllEventsCalls == 1 and orphan.MSUFUnitKey == nil
+    and orphan._msufEventRouteUnit == nil,
+  "unitless secure child retained its old native unit-event subscriptions")
+local orphanApplyBefore = applyCalls
+orphan.attributes.unit = "party5"
+assert(MSUF.GF.ScanHeader("orphan", "party") == true and applyCalls == orphanApplyBefore + 1,
+  "scan fallback reused a suspended child without rebuilding its event routing")
+
 party.attributes.unit = "party2"
 assert(select(2, MSUF.GF.ResolveLifecycleFrame("party1")) == false,
   "secure attribute/index disagreement must force the full fallback")
@@ -130,6 +152,27 @@ assert(applyCalls == applyBefore + 1 and #refreshes == refreshBefore
     and rangeFlushes == 2 and coalesced._msufGFRangeSettleDeferred == nil,
   "structural apply did not replace rather than duplicate the deferred OnShow lifecycle")
 
+-- Per-role power visibility changes do not bump the shared kind serial. The
+-- adapter must still reapply the child so DPS-off removes Power's unit event
+-- route instead of inheriting a healer/tank route from the same unit token.
+applyBefore = applyCalls
+powerEnabled, powerHeight = true, 6
+assert(MSUF.GF.ScanHeader("coalesced", "party") == true,
+  "role-enabled power child did not rescan")
+assert(applyCalls == applyBefore + 1,
+  "role-enabled power state was hidden by the same-serial fast path")
+applyBefore = applyCalls
+powerEnabled, powerHeight = false, 0
+assert(MSUF.GF.ScanHeader("coalesced", "party") == true,
+  "DPS power-disabled child did not rescan")
+assert(applyCalls == applyBefore + 1,
+  "DPS power-off retained the previous Power event ownership")
+applyBefore = applyCalls
+assert(MSUF.GF.ScanHeader("coalesced", "party") == true,
+  "unchanged DPS power-disabled child did not rescan")
+assert(applyCalls == applyBefore,
+  "unchanged DPS power-off state bypassed the same-serial fast path")
+
 local raid = Child("raid1")
 MSUF.GF.headers.raid = Header(raid)
 assert(MSUF.GF.ScanHeader("raid", "raid") == true, "raid child did not bind")
@@ -137,5 +180,42 @@ before = #refreshes
 raid.hooks.OnAttributeChanged(raid, "unit", "raid1")
 assert(#refreshes == before,
   "same-token raid rebind must not broadcast expensive state snapshots")
+
+-- The status cold path must remember visible as an explicit false state. That
+-- makes the first healer/tank -> DPS transition dirty the exact child instead
+-- of treating it as initialization and leaving Power's old route registered.
+local registeredElements = {}
+function MSUF.UF.RegisterElement(name, element) registeredElements[name] = element end
+local roleDirtyCalls = 0
+MSUF.GF.GetEffectivePowerHeight = function(_, _, role)
+  return role == "DAMAGER" and 0 or 6
+end
+MSUF.GF.MarkDirty = function(frame, mask)
+  roleDirtyCalls = roleDirtyCalls + 1
+  frame._roleDirtyMask = mask
+  return true
+end
+assert(loadfile("MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Status.lua"))(
+  "MidnightSimpleUnitFrames",
+  MSUF
+)
+local updatePowerRole = assert(MSUF.UFStatusRuntime and MSUF.UFStatusRuntime.UpdatePowerRoleVisibility,
+  "power role visibility runtime missing")
+local roleFrame = {
+  MSUFUnitKey = "party1",
+  _msufGFKind = "party",
+  targetPowerBar = {},
+  MSUFSpec = { scope = "group" },
+}
+assert(updatePowerRole(roleFrame, { roleValue = "HEALER" }) == false
+    and roleFrame._msufGFPowRoleHidden == false and roleDirtyCalls == 0,
+  "visible group Power did not retain a known role state")
+assert(updatePowerRole(roleFrame, { roleValue = "DAMAGER" }) == true
+    and roleFrame._msufGFPowRoleHidden == true and roleDirtyCalls == 1,
+  "DPS power-off did not dirty stale Power event ownership")
+updatePowerRole(roleFrame, { roleValue = "DAMAGER" })
+assert(roleDirtyCalls == 1, "unchanged DPS power-off repeated a dirty apply")
+assert(updatePowerRole(roleFrame, { roleValue = "HEALER" }) == false and roleDirtyCalls == 2,
+  "DPS -> healer Power transition did not restore event ownership")
 
 print("group adapter state smoke: ok")

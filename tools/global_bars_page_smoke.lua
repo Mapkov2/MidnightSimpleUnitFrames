@@ -41,7 +41,7 @@ local db = {
     },
     bars = { roundedUnitFrames = true, roundedGroupFrames = true, roundedPowerBars = true, roundedMouseover = true },
 }
-local registeredPage, sections, bindings, controls = nil, {}, {}, {}
+local registeredPage, sections, bindings, controls, colorShortcuts = nil, {}, {}, {}, {}
 local applyCalls = {}
 local predictionTests = {}
 local M = {}
@@ -170,6 +170,10 @@ M.Widgets = {
     ToggleAt = function(_, label) return Widget("toggle:" .. tostring(label)) end,
     SwitchAt = function(_, label) return Widget("toggle:" .. tostring(label)) end,
     Color = function(_, label) return Widget("color:" .. tostring(label)) end,
+    AttachContextColorShortcut = function(section, opts)
+        colorShortcuts[#colorShortcuts + 1] = { section = section, opts = opts }
+        return Widget("color-shortcut")
+    end,
     Text = function() return Widget("text") end,
     LabelAt = function() return Widget("label") end,
     ControlCard = function() return Widget("card") end,
@@ -252,6 +256,52 @@ assert(loadfile("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GlobalBar
 assert(registeredPage and type(registeredPage.build) == "function", "Bars page was not registered")
 local ctx = { width = 900, key = "opt_bars", SetContentHeight = function(self, value) self.contentHeight = value end }
 registeredPage.build(ctx)
+
+assert(#colorShortcuts == 2, "Bars must expose exactly the two removed inline colors through shortcuts")
+local shortcutsByTitle = {}
+for _, shortcut in ipairs(colorShortcuts) do shortcutsByTitle[shortcut.opts.title] = shortcut.opts end
+local lossShortcut = assert(shortcutsByTitle["Maximum Health Loss Color"], "maximum-health loss color shortcut missing")
+local outlineShortcut = assert(shortcutsByTitle["Frame Outline Color"], "frame outline color shortcut missing")
+db.general.hpPowerTextSelectedKey = "player"
+local lossTarget = assert(lossShortcut.getTargets()[1], "maximum-health loss popup target missing")
+assert(type(lossTarget.captureState) == "function" and type(lossTarget.restoreState) == "function",
+    "maximum-health loss popup has no structural cancel contract")
+db.player = nil
+local lossState = lossTarget.captureState()
+lossTarget.setRGB(0.21, 0.32, 0.43)
+assert(db.player and db.player.tempMaxHealthColorR == 0.21
+        and db.player.tempMaxHealthColorG == 0.32 and db.player.tempMaxHealthColorB == 0.43,
+    "maximum-health loss popup color did not stay in the selected Bars scope")
+lossTarget.restoreState(lossState)
+assert(db.player == nil, "maximum-health loss cancel left a materialized scope override")
+local outlineTarget = assert(outlineShortcut.getTargets()[1], "frame outline popup target missing")
+assert(type(outlineTarget.captureState) == "function" and type(outlineTarget.restoreState) == "function",
+    "frame outline popup has no structural cancel contract")
+db.player = { hlOverride = false, unrelated = 42, barOutlineColorMode = "CLASS" }
+local outlineState = outlineTarget.captureState()
+outlineTarget.setRGB(0.54, 0.65, 0.76)
+assert(db.player.barOutlineColorR == 0.54 and db.player.barOutlineColorG == 0.65
+        and db.player.barOutlineColorB == 0.76 and db.player.barOutlineColorA == 1,
+    "frame outline popup color did not stay in the selected Bars scope")
+outlineTarget.restoreState(outlineState)
+assert(db.player.hlOverride == false and db.player.unrelated == 42 and db.player.barOutlineColorMode == "CLASS"
+        and db.player.barOutlineColorR == nil and db.player.barOutlineColorG == nil
+        and db.player.barOutlineColorB == nil and db.player.barOutlineColorA == nil,
+    "frame outline cancel did not restore mode, override, and field presence exactly")
+db.general.hpPowerTextSelectedKey = "shared"
+db.general.barOutlineColorMode = "CLASS"
+db.general.barOutlineColorR, db.general.barOutlineColorG = nil, nil
+db.general.barOutlineColorB, db.general.barOutlineColorA = nil, nil
+local sharedOutlineState = outlineTarget.captureState()
+outlineTarget.setRGB(0.12, 0.23, 0.34)
+outlineTarget.restoreState(sharedOutlineState)
+assert(db.general.barOutlineColorMode == "CLASS" and db.general.barOutlineColorR == nil
+        and db.general.barOutlineColorG == nil and db.general.barOutlineColorB == nil
+        and db.general.barOutlineColorA == nil,
+    "shared frame outline cancel did not restore the inherited structural state")
+for _, binding in ipairs(bindings) do
+    assert(binding.kind ~= "color", "Bars still builds an inline color binding: " .. tostring(binding.control.name))
+end
 
 local anchorCount, testCount = 0, 0
 local anchorPreviewCategories = {}

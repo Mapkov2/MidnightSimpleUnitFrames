@@ -11,10 +11,28 @@ _G.issecretvalue = function(value)
 end
 _G.CreateFrame = function() return nil end
 _G.InCombatLockdown = function() return false end
-_G.UnitExists = function() return true end
-_G.UnitIsConnected = function() return true end
+local existsReads, playerReads, classReads, connectedReads, deadReads = 0, 0, 0, 0, 0
+_G.UnitExists = function()
+    existsReads = existsReads + 1
+    return true
+end
+_G.UnitIsPlayer = function()
+    playerReads = playerReads + 1
+    return true
+end
+_G.UnitClass = function()
+    classReads = classReads + 1
+    return "Mage", "MAGE"
+end
+_G.UnitIsConnected = function()
+    connectedReads = connectedReads + 1
+    return true
+end
 _G.UnitIsDead = function() return false end
-_G.UnitIsDeadOrGhost = function() return false end
+_G.UnitIsDeadOrGhost = function()
+    deadReads = deadReads + 1
+    return false
+end
 
 local scheduled = {}
 _G.MSUF_ScheduleOnce = function(key, callback)
@@ -88,6 +106,27 @@ UF.RegisterElement("Power", Power)
 local NameText = { IsEnabled = function() return true end, GetEvents = function() return {} end }
 function NameText.Update(frame)
     Record(frame, "NameText")
+    local exists, existsKnown = UF.ReadUnitExistsCached(frame, frame.MSUFUnitKey)
+    local existsAgain, existsKnownAgain = UF.ReadUnitExistsCached(frame, frame.MSUFUnitKey)
+    local isPlayer, playerKnown = UF.ReadUnitIsPlayerCached(frame, frame.MSUFUnitKey)
+    local isPlayerAgain, playerKnownAgain = UF.ReadUnitIsPlayerCached(frame, frame.MSUFUnitKey)
+    local className, classToken = UF.ReadUnitClassCached(frame, frame.MSUFUnitKey)
+    local classNameAgain, classTokenAgain = UF.ReadUnitClassCached(frame, frame.MSUFUnitKey)
+    local connected, connectedKnown = UF.ReadConnectedCached(frame, frame.MSUFUnitKey)
+    local connectedAgain, connectedKnownAgain = UF.ReadConnectedCached(frame, frame.MSUFUnitKey)
+    local dead, deadKnown = UF.ReadDeadCached(frame, frame.MSUFUnitKey)
+    local deadAgain, deadKnownAgain = UF.ReadDeadCached(frame, frame.MSUFUnitKey)
+    Check(exists and existsKnown and existsAgain and existsKnownAgain,
+        "dispatch existence cache changed the known result")
+    Check(isPlayer and playerKnown and isPlayerAgain and playerKnownAgain,
+        "dispatch player cache changed the known result")
+    Check(className == "Mage" and classToken == "MAGE"
+        and classNameAgain == className and classTokenAgain == classToken,
+        "dispatch class cache changed the class tuple")
+    Check(connected and connectedKnown and connectedAgain and connectedKnownAgain,
+        "dispatch connection cache changed the known result")
+    Check(not dead and deadKnown and not deadAgain and deadKnownAgain,
+        "dispatch dead cache changed the known result")
 end
 UF.RegisterElement("NameText", NameText)
 
@@ -160,6 +199,8 @@ Check(full._msufIdentityPath == fullTwin._msufIdentityPath,
     "identical typed identity plans were not interned")
 Check(full._msufIdentityBarPath == fullTwin._msufIdentityBarPath,
     "identical identity bar payload plans were not interned")
+Check(type(full._msufUnitState) == "table" and full._msufIdentityDispatchState == nil,
+    "identity read-through state was not prewarmed in the shared unit cache")
 
 healthCalls, powerCalls = 0, 0
 local token = full._msufDispatchToken or 0
@@ -174,6 +215,9 @@ Check(full.lastPowerPayload.power == 35 and full.lastPowerPayload.powerMax == 10
     "power payload was shifted or lost before PowerText")
 Check(full._msufDispatchToken == token + 1 and full._msufDispatchActive == nil,
     "event identity did not retain exactly one dispatch boundary")
+Check(existsReads == 1 and playerReads == 1 and classReads == 1
+    and connectedReads == 1 and deadReads == 1,
+    "one identity dispatch repeated a bound-unit API read")
 
 -- Native percent plans seed a dispatch slot in Health. Match the normal
 -- direct Health route and pass nil values so HealthText consumes that slot.
@@ -182,6 +226,9 @@ Reset(full)
 full.PLAYER_TARGET_CHANGED(full, "PLAYER_TARGET_CHANGED")
 Check(full.lastHealthPayload.hp == nil and full.lastHealthPayload.hpMax == nil,
     "percent-ready identity bypassed the dispatch-percent handoff")
+Check(existsReads == 2 and playerReads == 2 and classReads == 2
+    and connectedReads == 2 and deadReads == 2,
+    "identity API cache survived into the next event")
 healthPercentReady = false
 
 -- RunLeanIdentity owns its own single dispatch and uses the same local payload

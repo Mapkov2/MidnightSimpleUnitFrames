@@ -34,6 +34,7 @@ local unitSections = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2
 local groupText = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupBars.lua")
 local groupPage = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_Group.lua")
 local classPower = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_AdvancedClassPower.lua")
+local castbars = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GlobalCastbars.lua")
 local menuXML = Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2.xml")
     .. Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_AfterUnitPreview.xml")
     .. Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_AfterGroupPreview.xml")
@@ -64,13 +65,9 @@ for _, forbidden in ipairs({
     assert(not Has(popup, forbidden), "quick settings add recurring menu work: " .. forbidden)
 end
 
--- These explicit-scope adapters are the shared source of truth for the Fonts
--- page and the contextual popup. Their exact UI composition can change while
--- bidirectional synchronization remains contractual.
+-- Only the Text Colors model is shared with the Fonts page. Typography belongs
+-- exclusively to the Fonts page and must never leak into an RGB popup.
 local adapters = {
-    "FontScopeGetFor", "FontScopeSetFor",
-    "FontOutlineGetFor", "FontOutlineSetFor",
-    "FontShadowMetricsFor",
     "FontTextColorModeGetFor", "FontTextColorModeSetFor",
 }
 for _, name in ipairs(adapters) do
@@ -78,20 +75,18 @@ for _, name in ipairs(adapters) do
     Require(popup, name, "quick settings bypass the explicit-scope Fonts model")
 end
 
--- Relevant controls mirrored from Fonts. Prefer stable DB/model identifiers
--- over translated labels so localization changes do not weaken this contract.
-local fontContracts = {
-    { "FontValues", "font family" },
-    { "FontOutlineGetFor", "outline" },
-    { "fontMonochrome", "rendering" },
-    { "textBackdrop", "shadow" },
-    { "fontTextAlpha", "text opacity" },
-    { "fontBaselineOffset", "baseline" },
-}
-for _, contract in ipairs(fontContracts) do
-    Require(popup, contract[1], "quick settings omit Fonts option " .. contract[2])
+for _, forbidden in ipairs({
+    "FontValues", "FontOutlineGetFor", "FontOutlineSetFor", "FontShadowMetricsFor",
+    "fontMonochrome", "textBackdrop", "fontTextAlpha", "fontBaselineOffset",
+    'W.Segment(popup, "Outline"', 'W.Segment(popup, "Rendering"',
+    'W.Segment(popup, "Text shadow"', 'W.Segment(popup, "Text opacity"',
+    'W.Dropdown(popup, "Font family', 'W.Dropdown(popup, "Baseline"',
+    'W.Dropdown(popup, "Shadow opacity"', 'W.Segment(popup, "Shadow distance"',
+}) do
+    assert(not Has(popup, forbidden), "Text Colors popup exposes forbidden typography: " .. forbidden)
 end
 
+Require(popup, 'Tr("Text Colors")', "contextual popup is not identified as Text Colors only")
 Require(popup, "FontTextColorModeGetFor", "contextual text color mode getter is missing")
 Require(popup, "FontTextColorModeSetFor", "contextual text color mode setter is missing")
 Require(globalFonts, "GP.FontTextColorValuesFor = FontTextColorValuesFor",
@@ -104,29 +99,61 @@ Require(globalFonts, "swatchColor = CurrentHealthGradientPreview",
     "Fonts color-mode values lost their health preview")
 Require(popup, "GP.FontTextColorValuesFor(CurrentModeScope(), modeKind)",
     "quick settings do not reuse the Fonts menu color previews")
+for _, label in ipairs({
+    "Player Name Color", "NPC / Boss Name Color", "Group Name Color",
+    "HP Text Color", "Power Text Color",
+}) do
+    Require(popup, label, "quick settings omit the scope-aware Fonts color label")
+end
+Require(popup, "CurrentColorModeLabel()",
+    "quick settings do not apply the context-specific Fonts color label")
 Require(popup, "settings.modeScope or settings.colorScope",
     "quick settings cannot separate the shared font scope from a frame-owned color mode")
 Require(popup, "settings.colorModeValues", "quick settings omit custom color-mode preview values")
 Require(popup, "settings.getColorMode", "quick settings omit custom color-mode synchronization getter")
 Require(popup, "settings.setColorMode", "quick settings omit custom color-mode synchronization setter")
 Require(popup, "CurrentCapabilities", "quick settings omit runtime capability filtering")
-Require(popup, 'HasCapability("baseline", true)',
-    "quick settings cannot hide unsupported baseline controls")
+Require(popup, "activeSettings and activeSettings.colorNote",
+    "direct text color pickers cannot disclose a shared or global color scope")
+Require(popup, "activeSettings and activeSettings.colorScopeTag",
+    "direct text color pickers cannot forward a compact visible scope tag")
 Require(popup, "local colorsVisible = colorsAllowed and targetCount > 0",
     "quick settings leave an irrelevant zero-color action visible")
-Require(popup, "self:SetHeight(max(214, -y + (colorsVisible and 40 or 16)))",
-    "quick settings do not shrink around their relevant controls")
+Require(popup, "self:SetHeight(-y + (colorsVisible and 40 or 16))",
+    "Text Colors popup does not shrink around its color-only controls")
 Require(popup, "local modeScope = CurrentModeScope()",
     "quick settings do not derive color-mode enablement from its owning scope")
 Require(popup, "HasCustomColorMode() or modeOverride",
     "independent custom color modes are incorrectly gated by a font override")
-local enablePass = assert(popup:find("for i = 1, #scopedControls do SetEnabled", 1, true),
-    "quick-settings scoped enable pass is missing")
+local enablePass = assert(popup:find("SetEnabled(self.colorMode", 1, true),
+    "scope-aware color-mode enable pass is missing")
 local accentPass = assert(popup:find("self.colorMode._msuf2Title:SetTextColor", enablePass, true),
     "Color mode is not highlighted after enabled-state styling")
 assert(accentPass > enablePass, "Color mode highlight is overwritten by enabled-state styling")
+Require(popup, "if modeVisible and self.colorMode._msuf2Title",
+    "an inherited but visible color mode loses its requested highlight")
 assert(Has(popup, "OpenContextColors") or Has(popup, "OpenColorContextPicker"),
     "quick settings do not hand the Colors action to the existing color picker")
+local directAt = assert(popup:find("if not ColorModeVisible() then", 1, true),
+    "text without a meaningful mode does not bypass the intermediate popup")
+local directPickerAt = assert(popup:find("OpenResolvedTextColors(anchor, activeOptions, ResolveTextColorTargets())", directAt, true),
+    "single-purpose text does not open its exact color picker directly")
+local popupFactoryAt = assert(popup:find("local popup = EnsurePopup()", directPickerAt, true),
+    "color-mode popup is not lazy behind the direct-picker branch")
+assert(directPickerAt < popupFactoryAt,
+    "spell/aura/status colors construct the intermediate color-mode popup")
+Require(castbars, 'colorReferences = { "cast.text" }',
+    "Cast Spell Text does not retain its one exact direct-picker target")
+Require(popup, "local targets = { DefaultFontTarget(scope, group) }",
+    "native text palettes omit their relevant default font color")
+Require(popup, "targets[#targets + 1] = NPCColorTarget",
+    "NPC name palettes omit their relevant reaction color")
+Require(popup, "targets[#targets + 1] = ClassColorTarget",
+    "native name/HP palettes omit their relevant class color")
+Require(popup, "targets[#targets + 1] = PowerColorTarget",
+    "power palettes omit their relevant resource color")
+Require(popup, 'Tr(" relevant colors")',
+    "quick settings still describe a relevant palette as only the active color")
 Require(popup, "textSettings", "quick settings do not consume the contextual descriptor")
 Require(popup, 'M.InvalidatePage("opt_fonts")', "quick settings do not invalidate Fonts after synchronizing its scope")
 

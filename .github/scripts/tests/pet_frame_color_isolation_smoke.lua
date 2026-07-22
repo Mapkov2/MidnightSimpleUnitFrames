@@ -25,6 +25,13 @@ _G.IsInInstance = function() return false, "none" end
 _G.UnitIsPVP = function() return false end
 _G.UnitIsPVPFreeForAll = function() return false end
 _G.issecretvalue = function() return false end
+local unitClassCalls = 0
+_G.UnitClass = function(unit)
+    unitClassCalls = unitClassCalls + 1
+    if unit == "player" then return "Rogue", "ROGUE" end
+    return nil, nil
+end
+_G.RAID_CLASS_COLORS = { ROGUE = { r = 1, g = 0.96, b = 0.41 } }
 
 local UF = {
     Clamp01 = Clamp01,
@@ -69,12 +76,18 @@ local function Load(relativePath)
     return assert(loadfile(path))("MidnightSimpleUnitFrames", MSUF)
 end
 
-_G.MSUF_DB = { general = {}, bars = {} }
+_G.MSUF_DB = {
+    general = {},
+    bars = {},
+    classColors = { ROGUE = { r = 0.67, g = 0.23, b = 0.84 } },
+}
 Load("MSUF_UF_Config.lua")
 
 local cache = UF.Config.RefreshSettingsCache()
 Check(cache.petFrameColorEnabled == false,
     "an unset pet color unexpectedly enabled the custom override")
+Check(cache.petFrameUsePlayerClassColor == false,
+    "the player class-color override unexpectedly defaulted on")
 
 _G.MSUF_DB.general.petFrameColorR = 0.91
 _G.MSUF_DB.general.petFrameColorG = 0.72
@@ -107,6 +120,9 @@ function UF.FreshUnitState(frame, unit)
     end
     return nil
 end
+function UF.ReadUnitExistsCached(_, unit) return _G.UnitExists(unit), true end
+function UF.ReadUnitIsPlayerCached(_, unit) return _G.UnitIsPlayer(unit), true end
+function UF.ReadUnitClassCached(_, unit) return _G.UnitClass(unit) end
 
 Load("Elements/MSUF_UF_Elements_BarsCommon.lua")
 local Common = assert(MSUF.UFBarTextCommon, "bar common missing")
@@ -138,4 +154,36 @@ r, g, b = Common.HealthColor(petFrame, "pet", 100, 100, false, "MSUF_UNIT_IDENTI
 Check(r == 0.91 and g == 0.72 and b == 0.19,
     "changing an NPC color bled into the custom pet color")
 
-print("PASS pet frame color: saved RGB enables an NPC-isolated HP override")
+_G.MSUF_DB.general.petFrameUsePlayerClassColor = true
+cache = UF.Config.RefreshSettingsCache()
+Check(cache.petFrameUsePlayerClassColor == true and cache.playerClassToken == "ROGUE",
+    "the player class-color override was not compiled")
+Check(cache.petPlayerClassR == 0.67 and cache.petPlayerClassG == 0.23 and cache.petPlayerClassB == 0.84,
+    "the player class-color override ignored MSUF's configured class color")
+petSpec.health.petUsePlayerClassColor = cache.petFrameUsePlayerClassColor
+petSpec.health.petPlayerClassR = cache.petPlayerClassR
+petSpec.health.petPlayerClassG = cache.petPlayerClassG
+petSpec.health.petPlayerClassB = cache.petPlayerClassB
+petFrame._msufDispatchToken = 3
+unitClassCalls = 0
+r, g, b = Common.HealthColor(petFrame, "pet", 100, 100, false, "MSUF_UNIT_IDENTITY")
+Check(r == 0.67 and g == 0.23 and b == 0.84,
+    "the player class color did not take priority over the fixed pet color")
+Check(unitClassCalls == 0,
+    "the pet health-color hotpath called UnitClass instead of using compiled RGB")
+
+local function ReadSource(relativePath)
+    local file = assert(io.open(root .. "/" .. relativePath, "rb"))
+    local source = file:read("*a")
+    file:close()
+    return source
+end
+
+local unitMenu = ReadSource("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua")
+local colorMenu = ReadSource("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors.lua")
+Check(unitMenu:find("basics.use_player_class_color", 1, true),
+    "the player class-color toggle is missing from Pet Frame Basics")
+Check(colorMenu:find("unit.pet.use_player_class_color", 1, true),
+    "the player class-color toggle is missing from Unitframe Colors")
+
+print("PASS pet frame color: fixed and player-class RGB paths stay compiled and NPC-isolated")

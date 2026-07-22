@@ -11,15 +11,35 @@ _G.issecretvalue = function() return false end
 _G.UnitInPartyIsAI = function(unit) return unit == "party1" end
 
 local Health
+local Prediction
 local detailedCalls, colorCalls = 0, 0
+local calculatorCreates, predictionEventRegistrations = 0, 0
+local sharedHealthCalculator
+
+_G.CreateUnitHealPredictionCalculator = function()
+  calculatorCreates = calculatorCreates + 1
+  local calc = {
+    GetCurrentHealth = function() return 80 end,
+    GetMaximumHealth = function() return 100 end,
+  }
+  sharedHealthCalculator = sharedHealthCalculator or calc
+  return calc
+end
+_G.UnitGetDetailedHealPrediction = function(unit, healer)
+  Check(unit == "party1" and healer == "player",
+    "detailed health used the wrong unit/healer contract")
+  detailedCalls = detailedCalls + 1
+end
+_G.MSUF_EventBus_Register = function()
+  predictionEventRegistrations = predictionEventRegistrations + 1
+  return true
+end
+
 local MSUF = {
   UF = {
     RegisterElement = function(name, element)
       if name == "Health" then Health = element end
-    end,
-    ReadDetailedHealth = function()
-      detailedCalls = detailedCalls + 1
-      return 80, 100
+      if name == "Prediction" then Prediction = element end
     end,
   },
   UFBarTextCommon = {
@@ -39,6 +59,18 @@ MSUF.UFBarTextCommon.UF = MSUF.UF
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Health.lua"))(
   "MidnightSimpleUnitFrames", MSUF)
 Check(Health ~= nil, "health element was not registered")
+local healthOwnedReader = MSUF.UF.ReadDetailedHealth
+Check(type(healthOwnedReader) == "function", "Health did not publish its detailed-health source")
+
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Prediction.lua"))(
+  "MidnightSimpleUnitFrames", MSUF)
+Check(Prediction ~= nil, "prediction element was not registered")
+Check(MSUF.UF.ReadDetailedHealth == healthOwnedReader,
+  "Prediction replaced the Health-owned detailed-health source")
+Check(MSUF.UF.ReadPredictionDetailedHealth == nil and Prediction.ReadDetailedHealth == nil,
+  "Prediction retained a detailed-health compatibility provider")
+Check(predictionEventRegistrations == 0,
+  "disabled Prediction registered a lifecycle event at module load")
 
 local bar = {}
 function bar:SetMinMaxValues(minimum, maximum)
@@ -66,6 +98,10 @@ local update = Health.SelectUpdate(frame, frame.MSUFSpec)
 update(frame, "UNIT_HEALTH", "party1")
 Check(detailedCalls == 1 and bar.value == 80 and bar.maximum == 100,
   "AI health lost its authoritative detailed-health update")
+Check(calculatorCreates == 1 and frame._msufPredictionCalc == nil,
+  "prediction-disabled AI health created frame-owned Prediction state")
+Check((Prediction._msufActiveLifecycleCount or 0) == 0,
+  "prediction-disabled AI health activated the Prediction lifecycle")
 Check(colorCalls == 0,
   "steady positive AI UNIT_HEALTH repeated the full runtime color path")
 
@@ -73,11 +109,46 @@ frame._msufHealthStatusGone = true
 update(frame, "UNIT_HEALTH", "party1")
 Check(detailedCalls == 2 and colorCalls == 1,
   "gone-state UNIT_HEALTH lost its revive/status recolor")
+Check(calculatorCreates == 1,
+  "prediction-disabled AI health stopped reusing the shared Health calculator")
+frame._msufHealthStatusGone = nil
+
+-- A calculator left on the frame by a formerly enabled overlay must not pull
+-- disabled Prediction back into AI health. Only an active runtime config can
+-- select the Prediction provider.
+local stalePredictionCalc = {}
+frame._msufPredictionCalc = stalePredictionCalc
+update(frame, "UNIT_HEALTH", "party1")
+Check(detailedCalls == 3 and calculatorCreates == 1,
+  "stale Prediction state bypassed the Health-owned calculator")
+Check(stalePredictionCalc._msufPredictionUpdateUnit == nil,
+  "stale Prediction calculator was refreshed while Prediction was disabled")
+
+-- Even an active-looking Prediction state cannot select a frame calculator.
+-- Detailed health remains the independent shared AI-only source.
+local activePredictionCalc = {}
+frame._msufPredictionCalc = activePredictionCalc
+frame._msufPredictionRuntimeCfg = { enabled = true }
+local activeHP, activeMax, activeCalc = MSUF.UF.ReadDetailedHealth(frame, "party1")
+Check(activeHP == 80 and activeMax == 100 and activeCalc == sharedHealthCalculator,
+  "active Prediction state replaced the independent AI-health calculator")
+Check(activeCalc ~= activePredictionCalc,
+  "AI health reused a frame-owned Prediction calculator")
+frame._msufPredictionRuntimeCfg = nil
+
+local detailedBeforeNonAI = detailedCalls
+frame._msufHealthAI = false
+Check(MSUF.UF.ReadDetailedHealth(frame, "party1") == nil,
+  "ordinary group member entered the AI detailed-health source")
+Check(detailedCalls == detailedBeforeNonAI,
+  "ordinary group member performed a detailed-health API read")
+frame._msufHealthAI = true
 
 local identityUpdate = Health.SelectEventUpdate(frame, frame.MSUFSpec, "UNIT_FACTION")
 identityUpdate(frame, "UNIT_FACTION", "party1")
-Check(colorCalls == 2 and detailedCalls == 2,
-  "identity-only color event performed health work or skipped recolor")
+Check(colorCalls == 2 and detailedCalls == 4,
+  "identity-only color event performed health work or skipped recolor: colors="
+    .. tostring(colorCalls) .. " detailed=" .. tostring(detailedCalls))
 
 local function HasEvent(events, wanted)
   for i = 1, #events do

@@ -164,8 +164,20 @@ assert(not groupRoundedHover:find("ShowRoundedEdgeStack", 1, true)
 
 local misc = Read(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GlobalMisc.lua")
 Has(misc, 'CollapsibleSection("misc_mouseover_highlight"', "mouseover controls were not moved to Miscellaneous")
+Has(misc, '"Frame Highlights"', "mouseover and group-target controls are not grouped under Frame Highlights")
 Has(misc, '"highlightStyle"', "Miscellaneous is missing the mouseover style control")
 Has(misc, '"highlightThickness"', "Miscellaneous is missing the mouseover size control")
+Has(misc, '"Group Target Highlight"', "Miscellaneous is missing the independent group-target control")
+Has(misc, '"gf_" .. kind .. ".targetIndicator"', "group-target switches do not expose their scoped setting keys")
+Has(misc, 'groupPage.Set(kind, "targetIndicator", value and true or false, "visual")',
+  "group-target switches do not use the existing scoped live-apply path")
+
+local groupIndicators = Read(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupIndicators.lua")
+assert(not groupIndicators:find('BindScopeToggle(ctx, W.SwitchAt(highlightCard', 1, true),
+  "Group Status still owns the hard-to-discover target-highlight toggle")
+Has(groupIndicators, 'pageKey = "opt_misc"', "old target-highlight location does not link to Frame Highlights")
+Has(groupIndicators, 'sectionId = "misc_mouseover_highlight"',
+  "old target-highlight location does not focus the Frame Highlights section")
 
 local colors = Read(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors.lua")
 assert(not colors:find('Meta("highlight.mouseover.enabled")', 1, true),

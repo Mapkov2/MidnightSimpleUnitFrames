@@ -25,9 +25,9 @@ assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MS
     "MidnightSimpleUnitFrames", MSUF)
 local StatusRuntime = assert(MSUF.UFStatusRuntime, "status runtime missing")
 
-local nameWidth = 87
 local name = { _msufJustifyH = "LEFT", text = "Astral Warden" }
-function name:GetStringWidth() return nameWidth end
+function name:GetStringWidth() error("name-relative anchor must not read restricted geometry") end
+local nameAnchor = { text = "Astral Warden" }
 
 local level = { setPointCalls = 0 }
 function level:ClearAllPoints() end
@@ -41,42 +41,29 @@ local frame = {
     unit = "target",
     MSUFUnitKey = "target",
     nameText = name,
+    _msufNameAnchorText = nameAnchor,
+    _msufNameAnchorTextActive = true,
     levelText = level,
     _msufNameRelativeStatus = true,
     MSUFSpec = { text = {}, status = { enabled = true, level = levelCfg } },
 }
 
 Check(StatusRuntime.RefreshNameRelativeAnchors(frame) == true, "name-relative level refresh did not run")
-Check(level.point == "LEFT" and level.target == name and level.relPoint == "LEFT",
-    "left-justified name did not use its rendered left edge")
-Check(level.x == 97 and level.y == 2, "level did not anchor after rendered name width plus offset")
+Check(level.point == "LEFT" and level.target == nameAnchor and level.relPoint == "RIGHT",
+    "name-relative level did not use the secret-safe glyph-edge proxy")
+Check(level.x == 10 and level.y == 2, "name-relative level offset changed")
 
 StatusRuntime.RefreshNameRelativeAnchors(frame)
 Check(level.setPointCalls == 1, "unchanged name-relative anchor repeated SetPoint")
-nameWidth = 120
+levelCfg.anchor = "NAMELEFT"
 StatusRuntime.RefreshNameRelativeAnchors(frame)
-Check(level.x == 130 and level.setPointCalls == 2, "changed name width did not reanchor level text")
-
-name._msufJustifyH = "CENTER"
-StatusRuntime.RefreshNameRelativeAnchors(frame)
-Check(level.relPoint == "CENTER" and level.x == 70, "centered name right edge was calculated incorrectly")
-name._msufJustifyH = "RIGHT"
-StatusRuntime.RefreshNameRelativeAnchors(frame)
-Check(level.relPoint == "RIGHT" and level.x == 10, "right-justified name right edge was calculated incorrectly")
-
-name._msufJustifyH = "LEFT"
-nameWidth = secretWidth
-StatusRuntime.RefreshNameRelativeAnchors(frame)
-Check(level.relPoint == "LEFT" and level.x == 10,
-    "secret name width reached anchor arithmetic instead of using the safe zero-width fallback")
-nameWidth = 87
+Check(level.point == "RIGHT" and level.target == nameAnchor and level.relPoint == "LEFT",
+    "NAMELEFT did not use the secret-safe glyph-edge proxy")
+levelCfg.anchor = "NAMERIGHT"
 
 local refreshCalls = 0
-local originalRefresh = StatusRuntime.RefreshNameRelativeAnchors
 StatusRuntime.RefreshNameRelativeAnchors = function(liveFrame)
     refreshCalls = refreshCalls + 1
-    Check(liveFrame.nameText.text == "Captain Garrick", "level refresh ran before the live name changed")
-    return originalRefresh(liveFrame)
 end
 
 MSUF.UFText = {
@@ -108,6 +95,20 @@ assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MS
 name._msufJustifyH = "LEFT"
 name.text = "Astral Warden"
 MSUF.UFText.UpdateName(frame, "UNIT_NAME_UPDATE", "target")
-Check(refreshCalls == 1, "live name update did not refresh the name-relative level anchor")
+Check(name.text == "Captain Garrick", "live name text was not updated")
+Check(nameAnchor.text == "Captain Garrick", "secret-safe glyph-edge proxy did not follow the live name")
+Check(refreshCalls == 0, "live name update repeated cold SetPoint work")
 
-print("PASS level name anchor: live glyph edge tracks layout and name changes without redundant SetPoint")
+local statusSource = assert(io.open(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Status.lua", "rb")):read("*a")
+Check(statusSource:find("name:GetStringWidth()", 1, true) == nil,
+    "name-relative status anchoring regressed to restricted width arithmetic")
+local layoutSource = assert(io.open(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Text_Layout.lua", "rb")):read("*a")
+Check(layoutSource:find("Text.EnsureNameAnchorProxy = EnsureNameAnchorProxy", 1, true) ~= nil,
+    "secret-safe bar-name anchor proxy is not exported")
+Check(layoutSource:find("proxy:SetAlpha(0)", 1, true) ~= nil,
+    "bar-name anchor proxy is not visually inert")
+local menuSource = assert(io.open(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_Unit.lua", "rb")):read("*a")
+Check(menuSource:find('local STATUS_LEVEL_ANCHORS = WithNameAnchors("Right to name", "Left to name")', 1, true) ~= nil,
+    "unit status menu still labels name-relative anchors as player-only")
+
+print("PASS level name anchor: secret-safe glyph edge tracks live names without hotpath SetPoint")

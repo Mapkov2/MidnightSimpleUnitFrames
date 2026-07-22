@@ -29,6 +29,13 @@ local function Secret(text, zero)
 end
 
 _G.issecretvalue = function(value) return type(value) == "table" and value.secret == true end
+local textDrain
+_G.C_Timer = {
+    NewTicker = function(_, callback)
+        textDrain = callback
+        return { Cancel = function() end }
+    end,
+}
 _G.C_StringUtil = {
     TruncateWhenZero = function(value)
         if _G.issecretvalue(value) then return value.zero and "" or value.text end
@@ -101,6 +108,7 @@ local currentFS, absorbFS = NewFontString(), NewFontString()
 local frame = {
     unit = "player",
     MSUFUnitKey = "player",
+    _msufActiveElements = { HealthText = true },
     hpTextLeft = currentFS,
     hpTextRight = absorbFS,
 }
@@ -138,6 +146,7 @@ Check(absorbFS.text == "SHORT:250", "absorb text mismatch: " .. tostring(absorbF
 healthValue = 500
 local healthRoute = HealthText.SelectEventUpdate(frame, spec, "UNIT_HEALTH", update)
 healthRoute(frame, "UNIT_HEALTH", "player")
+textDrain()
 Check(absorbReads == 1, "UNIT_HEALTH must not read absorbs")
 Check(currentFS.text == "SHORT:500", "UNIT_HEALTH did not update the normal slot")
 Check(absorbFS.text == "SHORT:250", "UNIT_HEALTH touched the absorb slot")
@@ -173,7 +182,10 @@ Check(not HasEvent(events, "UNIT_MAXHEALTH"), "absorb-only text must not registe
 
 healthValue, healthMaxValue, absorbValue = 600, 1000, 250
 local comboFS = NewFontString()
-local comboFrame = { unit = "party1", MSUFUnitKey = "party1", hpTextCenter = comboFS }
+local comboFrame = {
+    unit = "party1", MSUFUnitKey = "party1", hpTextCenter = comboFS,
+    _msufActiveElements = { HealthText = true },
+}
 local comboSpec = {
     key = "party1",
     scope = "group",
@@ -212,6 +224,7 @@ Check(comboFS.text == "SHORT:600 / SHORT:1000 + " .. shield .. " SECRET:375",
 healthValue, healthMaxValue = Secret("SECRET_HP", false), Secret("SECRET_MAX", false)
 HealthText.SelectEventUpdate(comboFrame, comboSpec, "UNIT_HEALTH", comboUpdate)(
     comboFrame, "UNIT_HEALTH", "party1", healthValue, healthMaxValue)
+textDrain()
 Check(comboFS.text == "SHORT:SECRET_HP / SHORT:SECRET_MAX + " .. shield .. " SECRET:375",
     "combined fully secret formatted path mismatch: " .. tostring(comboFS.text))
 healthValue, healthMaxValue = 600, 1000

@@ -38,6 +38,7 @@ local reads = {
 }
 local commonPowerType, commonPowerToken = 0, "MANA"
 local lastPowerReadType
+local powerReadValue, powerReadMaximum = 40, 100
 
 local function ResetReads()
   for key in pairs(reads) do reads[key] = 0 end
@@ -68,11 +69,11 @@ local Common = {
   UF = UF,
   UnitHealth = function()
     reads.health = reads.health + 1
-    return 50
+    return secretHealth or 50
   end,
   UnitHealthMax = function()
     reads.healthMax = reads.healthMax + 1
-    return 100
+    return secretHealthMax or 100
   end,
   UnitHealthPercent = function()
     reads.healthPercent = reads.healthPercent + 1
@@ -81,11 +82,11 @@ local Common = {
   UnitPower = function(_, powerType)
     reads.power = reads.power + 1
     lastPowerReadType = powerType
-    return 40
+    return powerReadValue
   end,
   UnitPowerMax = function()
     reads.powerMax = reads.powerMax + 1
-    return 100
+    return powerReadMaximum
   end,
   UnitPowerType = function()
     reads.powerType = reads.powerType + 1
@@ -122,6 +123,11 @@ local percentHealthFrame = NewHealthFrame({
   healthNeedsPercent = true,
 })
 local percentHealthUpdate = Health.SelectUpdate(percentHealthFrame, percentHealthFrame.MSUFSpec)
+percentHealthFrame.hpBar._msufHealthValue = 45
+percentHealthFrame.hpBar._msufHealthValueUnit = "party1"
+percentHealthFrame.hpBar._msufHealthMax = 100
+percentHealthFrame.hpBar._msufHealthMaxUnit = "party1"
+percentHealthFrame.hpBar._msufHealthMaxReady = true
 ResetReads()
 local healthPercent, healthPercentMax, percentReady = percentHealthUpdate(
   percentHealthFrame, "UNIT_HEALTH", "party1")
@@ -129,6 +135,19 @@ assert(reads.healthPercent == 1 and reads.health == 0 and reads.healthMax == 0,
   "percent-only health must use exactly UnitHealthPercent")
 assert(healthPercent == 50 and healthPercentMax == nil and percentReady == true,
   "percent-only health return contract changed")
+assert(percentHealthFrame.hpBar._msufHealthValue == 45
+    and percentHealthFrame.hpBar._msufHealthValueUnit == "party1"
+    and percentHealthFrame.hpBar._msufHealthMax == 100
+    and percentHealthFrame.hpBar._msufHealthMaxUnit == "party1"
+    and percentHealthFrame.hpBar._msufHealthMaxReady == true,
+  "compiled percent health tick churned inactive absolute-route caches")
+Health.SelectGroupHealthUpdater(percentHealthFrame)
+assert(percentHealthFrame.hpBar._msufHealthValue == nil
+    and percentHealthFrame.hpBar._msufHealthValueUnit == nil
+    and percentHealthFrame.hpBar._msufHealthMax == nil
+    and percentHealthFrame.hpBar._msufHealthMaxUnit == nil
+    and percentHealthFrame.hpBar._msufHealthMaxReady == nil,
+  "health route transition retained stale value-source caches")
 
 local maxOnlyHealthFrame = NewHealthFrame({
   healthSlotCount = 1,
@@ -157,14 +176,38 @@ local currentHealthFrame = NewHealthFrame({
 })
 local currentHealthUpdate = Health.SelectUpdate(currentHealthFrame, currentHealthFrame.MSUFSpec)
 assert(currentHealthUpdate ~= percentHealthUpdate,
-  "CURRENT health did not compile its percent+current plan")
+  "CURRENT health did not compile its shared absolute-bar plan")
 ResetReads()
 local currentHealth, currentHealthMax, currentPercentReady = currentHealthUpdate(
   currentHealthFrame, "UNIT_HEALTH", "party1")
-assert(reads.healthPercent == 1 and reads.health == 1 and reads.healthMax == 0,
-  "CURRENT health must read percent+current without UnitHealthMax")
+assert(reads.healthPercent == 0 and reads.health == 1 and reads.healthMax == 1,
+  "CURRENT-only health did not share one absolute value with the bar")
 assert(currentHealth == 50 and currentHealthMax == nil and currentPercentReady == false,
   "CURRENT health partial snapshot contract changed")
+currentHealthUpdate(currentHealthFrame, "UNIT_HEALTH", "party1")
+assert(reads.health == 2 and reads.healthMax == 1 and reads.healthPercent == 0,
+  "steady CURRENT-only health reread its event-owned maximum")
+currentHealthUpdate(currentHealthFrame, "UNIT_MAXHEALTH", "party1")
+assert(reads.health == 3 and reads.healthMax == 2 and reads.healthPercent == 0,
+  "CURRENT-only UNIT_MAXHEALTH did not refresh the bar maximum")
+
+secretHealth, secretHealthMax = {}, {}
+local secretCurrentHealthFrame = NewHealthFrame({
+  healthSlotCount = 1,
+  healthNeedsCurrent = true,
+})
+local secretCurrentHealthUpdate = Health.SelectUpdate(secretCurrentHealthFrame, secretCurrentHealthFrame.MSUFSpec)
+ResetReads()
+local protectedHealth, protectedHealthMaximum = secretCurrentHealthUpdate(
+  secretCurrentHealthFrame, "UNIT_HEALTH", "party1")
+assert(protectedHealth == secretHealth and protectedHealthMaximum == nil
+    and secretCurrentHealthFrame.hpBar.value == secretHealth
+    and secretCurrentHealthFrame.hpBar.maximum == secretHealthMax,
+  "CURRENT-only health did not forward protected value/max through native setters")
+secretCurrentHealthUpdate(secretCurrentHealthFrame, "UNIT_HEALTH", "party1")
+assert(reads.health == 2 and reads.healthMax == 1 and reads.healthPercent == 0,
+  "steady protected CURRENT-only health reread its owned maximum")
+secretHealth, secretHealthMax = nil, nil
 
 local absoluteHealthFrame = NewHealthFrame({
   healthSlotCount = 1,
@@ -196,8 +239,10 @@ local predictionHealthFrame = NewHealthFrame({
   healthNeedsPercent = true,
 })
 predictionHealthFrame._msufPredictionNeedsHealth = true
-assert(Health.SelectUpdate(predictionHealthFrame, predictionHealthFrame.MSUFSpec) == absoluteHealthUpdate,
-  "prediction health/max seeding was omitted from the compiled health value plan")
+assert(Health.SelectUpdate(predictionHealthFrame, predictionHealthFrame.MSUFSpec) == percentHealthUpdate,
+  "Prediction state leaked back into the compiled Health value-source plan")
+assert(UF.ReadPredictionDetailedHealth == nil,
+  "removed Prediction detailed-health compatibility provider was restored")
 
 local function NewPowerFrame(runtime)
   return {
@@ -228,14 +273,58 @@ local currentPowerFrame = NewPowerFrame({
 })
 local currentPowerUpdate = Power.SelectUpdate(currentPowerFrame)
 assert(currentPowerUpdate ~= percentPowerUpdate,
-  "CURRENT power did not compile its percent+current plan")
+  "CURRENT power did not compile its shared absolute-bar plan")
 ResetReads()
 local currentPower, currentPowerMax = currentPowerUpdate(
   currentPowerFrame, "UNIT_POWER_UPDATE", "party1")
-assert(reads.powerPercent == 1 and reads.power == 1 and reads.powerMax == 0,
-  "CURRENT power must read percent+current without UnitPowerMax")
+assert(reads.powerPercent == 0 and reads.power == 1 and reads.powerMax == 1,
+  "CURRENT-only power did not share one absolute value with the bar")
 assert(currentPower == 40 and currentPowerMax == nil,
   "CURRENT power partial snapshot contract changed")
+currentPowerUpdate(currentPowerFrame, "UNIT_POWER_UPDATE", "party1")
+assert(reads.power == 2 and reads.powerMax == 1 and reads.powerPercent == 0,
+  "steady CURRENT-only power reread its event-owned maximum")
+currentPowerUpdate(currentPowerFrame, "UNIT_MAXPOWER", "party1")
+assert(reads.power == 3 and reads.powerMax == 2 and reads.powerPercent == 0,
+  "CURRENT-only UNIT_MAXPOWER did not refresh the bar maximum")
+
+secretPower, secretPowerMax = {}, {}
+powerReadValue, powerReadMaximum = secretPower, secretPowerMax
+local secretCurrentPowerFrame = NewPowerFrame({
+  powerSlotCount = 1,
+  powerNeedsCurrent = true,
+})
+local secretCurrentPowerUpdate = Power.SelectUpdate(secretCurrentPowerFrame)
+ResetReads()
+local protectedCurrent, protectedMaximum = secretCurrentPowerUpdate(
+  secretCurrentPowerFrame, "UNIT_POWER_UPDATE", "party1")
+assert(protectedCurrent == secretPower and protectedMaximum == nil
+    and secretCurrentPowerFrame.targetPowerBar.value == secretPower
+    and secretCurrentPowerFrame.targetPowerBar.maximum == secretPowerMax,
+  "CURRENT-only power did not forward protected value/max through native setters")
+secretCurrentPowerUpdate(secretCurrentPowerFrame, "UNIT_POWER_UPDATE", "party1")
+assert(reads.power == 2 and reads.powerMax == 1 and reads.powerPercent == 0,
+  "steady protected CURRENT-only power reread its owned maximum")
+secretPower, secretPowerMax = nil, nil
+powerReadValue, powerReadMaximum = 40, 100
+
+local mixedCurrentPercentFrame = NewPowerFrame({
+  powerSlotCount = 1,
+  powerNeedsCurrent = true,
+  powerNeedsPercent = true,
+})
+local mixedCurrentPercentUpdate = Power.SelectUpdate(mixedCurrentPercentFrame)
+assert(mixedCurrentPercentUpdate ~= currentPowerUpdate
+    and mixedCurrentPercentUpdate ~= percentPowerUpdate,
+  "CURRENT+PERCENT power did not compile its dedicated secret-safe path")
+ResetReads()
+local mixedCurrent, mixedMaximum = mixedCurrentPercentUpdate(
+  mixedCurrentPercentFrame, "UNIT_POWER_UPDATE", "party1")
+assert(reads.powerPercent == 1 and reads.power == 1 and reads.powerMax == 0,
+  "CURRENT+PERCENT power lost its secret-safe native percent sample")
+assert(mixedCurrent == 40 and mixedMaximum == nil
+    and mixedCurrentPercentFrame._msufTextRuntime._dispatchPowerPercentReady == true,
+  "CURRENT+PERCENT partial snapshot contract changed")
 
 local absolutePowerFrame = NewPowerFrame({
   powerSlotCount = 1,
