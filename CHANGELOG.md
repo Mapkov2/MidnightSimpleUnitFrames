@@ -8,14 +8,16 @@
 - Reworked Unit Frame and Group Frame runtime paths to share event-owned identity and value state, coalesce text and prediction refreshes, and remove unnecessary idle, range, threat, and lifecycle work.
 - Unified 12.1 Group Aura slot ownership for Spell Indicators, dispel visuals, and fixed external icons, including secret-safe party range gating and safer native container reuse.
 - Added clearer Group Frame provider controls for MSUF, normal Blizzard ownership, forced Blizzard frames, and fully disabled frames.
+- Added an optional "Show cast spell icon in portrait" mode that temporarily replaces 2D or class portraits during casts, channels, and empowered spells.
+- Added compact top-right three-dot color shortcuts across supported Menu2 cards so their exact scoped colors open directly in the shared color picker.
 - Improved Aura styling workflows and live previews across Menu2, Edit Mode, Unit Frames, Group Frames, and custom Aura containers.
 
 ### Changes
 
-- Added cast and channel spell icons to portraits while keeping the feature event-driven and inactive when unused.
 - Split status text presentation from status icons and migrated existing Unit Frame and Group Frame profile values automatically.
 - Made Health, Power, Class Resource, and Alternative Mana smoothing explicit opt-in settings while preserving Quick Setup as an intentional smoothing preset.
-- Simplified contextual text and color editing, refined accordion and dashboard visuals, and completed Menu2/Edit Mode source coverage for all shipped locales.
+- Simplified contextual text editing, added direct Bars/Aura/Text color targets, refined accordion and dashboard visuals, and suppressed redundant shortcuts on the dedicated Colors page.
+- Completed Menu2/Edit Mode source coverage for all shipped locales, including the new portrait, provider, status, Aura, and color-picker controls.
 
 ### Fixes & Performance
 
