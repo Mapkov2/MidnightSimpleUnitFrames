@@ -76,9 +76,17 @@ not product bugs (the HP text-color enum gained a CLASS mode; fixtures assumed
 two). The Assistant was correct all along.
 
 **Open toward "human-like every option":**
-- Natural coverage of enum/boolean settings is not yet trace-proven: raw-value
-  prompts under-apply (a test artifact); a valueLabel-based natural-language
-  trace is the honest next measurement.
+- Natural coverage is now trace-proven with value labels: number 97.9%, boolean
+  98.8%, color 99.2%, enum 91.6% applied end-to-end (enum 95.6% at parse level;
+  the gap between parse and apply is desktop runtime-apply artifacts, not the
+  Assistant). The literal ':' separator value was the one systematic enum bug
+  and is fixed. The ~35 remaining enum parse edge cases are label collisions
+  that resolve to a *related* real setting (e.g. "npc name -> class" between the
+  two NPC-name-colour controls), never a wrong value -- diminishing returns per
+  case, no systematic gap.
+- Known separate bug (not enum coverage): "align/anchor name left" and a bare
+  name+direction resolve to showName instead of the Name Text Anchor in some
+  phrasings; the move-vs-anchor class is otherwise fully traced.
 - ~230 read-only color channels are AutoCoverage decomposition artifacts, now
   suppressed from search; the real color settings (262) are all writable.
 - Scope-local alias -> global color-setting routing ("boss portrait background
