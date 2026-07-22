@@ -140,7 +140,11 @@ _G.UnitHealthPercent = function()
     return healthPercentAlpha
 end
 local unitExists = true
-_G.UnitExists = function() return unitExists end
+local unitExistsReads = 0
+_G.UnitExists = function()
+    unitExistsReads = unitExistsReads + 1
+    return unitExists
+end
 local unitConnected = true
 _G.UnitIsConnected = function() return unitConnected end
 local healthReads = 0
@@ -277,11 +281,14 @@ local persistentDriver = drivers[#drivers]
 Check(persistentDriver and persistentDriver.shown == true,
     "queued prediction work did not wake its persistent driver")
 local persistentCallback = persistentDriver.scripts.OnUpdate
+local unitExistsReadsBeforeFlush = unitExistsReads
 FlushDriver()
 Equal(calls.detailed, 0, "common follow geometry created a detailed calculator read")
 Equal(calls.directIncoming, 1, "heal event was not coalesced to one direct read")
 Equal(calls.directAbsorb, 0, "heal-only event refreshed absorbs")
 Equal(calls.directHealAbsorb, 0, "heal-only event refreshed heal absorbs")
+Equal(unitExistsReads, unitExistsReadsBeforeFlush,
+    "warm prediction drain re-entered cold unit-existence validation")
 Equal(calls.lastUnit, "player", "secret event payload escaped into the queued API read")
 Check(persistentDriver.shown == false
     and persistentDriver.scripts.OnUpdate == persistentCallback,
@@ -792,6 +799,16 @@ Equal(OperationCount(fullHealthStripe.overAbsorbGlowBar, "SetValue"), protectedV
     "protected full-health event rewrote the holder payload")
 Check(fullHealthStripe.overAbsorbGlowBar.shown == true,
     "protected absorb value was rejected by the live full-health stripe")
+local queuedStripeAbsorb = Prediction.SelectEventUpdate(
+    fullHealthStripe, fullHealthStripeSpec, "UNIT_ABSORB_AMOUNT_CHANGED")
+local protectedDataHealthReads = healthReads
+local protectedDataMaxReads = healthMaxReads
+queuedStripeAbsorb(fullHealthStripe, "UNIT_ABSORB_AMOUNT_CHANGED", "party3")
+FlushDriver()
+Equal(healthReads, protectedDataHealthReads,
+    "warm protected absorb drain reread UnitHealth")
+Equal(healthMaxReads, protectedDataMaxReads,
+    "warm protected absorb drain reread UnitHealthMax")
 local protectedHealth = { __secret = true }
 local protectedFullAlpha = { __secret = true }
 healthPercentAlpha = protectedFullAlpha
