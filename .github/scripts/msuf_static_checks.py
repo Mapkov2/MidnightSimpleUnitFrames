@@ -640,7 +640,7 @@ def check_classpower_smoothing_contracts() -> None:
     ]:
         require(controller, needle, "ClassPower native smoothing/event contract")
     require(modes, "bar:SetValue(value, smoothInterp)", "ClassPower C-side interpolation")
-    require(modes, "CP_SetPowerValue(bar, rawCur, smoothInterp)", "ClassPower secret-value C-side path")
+    require(modes, "CP_SetPowerValue(bar, rawCur, smoothInterp, true)", "ClassPower secret-value C-side path")
     require(alt_mana, "local SMOOTH_INTERP =", "Alternative Mana cached interpolation enum")
     require(alt_mana, "if maxSecret then AM._maxValue = nil", "Alternative Mana secret max cache guard")
     require(alt_mana, "if curSecret then AM._currentValue = nil", "Alternative Mana secret value cache guard")
@@ -655,7 +655,7 @@ def check_classpower_smoothing_contracts() -> None:
     )
     require(
         page,
-        'Player, "powerSmoothFill", true, ApplyDetachedPlayerPowerSmoothing, '
+        'Player, "powerSmoothFill", false, ApplyDetachedPlayerPowerSmoothing, '
         'Meta("detached_power.layout.smooth_fill")',
         "Managed Player power smoothing binding and catalog identity",
     )
@@ -688,7 +688,7 @@ def check_portrait_refresh_contracts() -> None:
     )
     require(
         portrait,
-        "ApplyUnitPortrait(texture, frame.MSUFUnitKey, frame, p, force)",
+        "ApplyUnitPortrait(texture, frame.MSUFUnitKey, frame, p, force or restorePortrait)",
         "Portrait force must reach the queued update path",
     )
     require(
