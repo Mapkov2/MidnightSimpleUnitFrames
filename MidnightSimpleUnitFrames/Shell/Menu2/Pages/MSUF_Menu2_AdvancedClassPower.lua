@@ -870,7 +870,7 @@ function Page:BuildClassBehavior()
         { "ebon", "toggle", "Show Ebon Might timer (Aug)", "showEbonMight", true, group = "cp" },
         { "shadow", "toggle", "Show Insanity bar (Shadow)", "showShadowMana", false, group = "cp" },
         { "prediction", "toggle", "Show resource prediction", "classPowerShowPrediction", true, group = "cp" },
-        { "smooth", "toggle", "Smooth fill", "classPowerSmoothFill", true, ApplyClassPowerSmoothing, group = "cp",
+        { "smooth", "toggle", "Smooth fill", "classPowerSmoothFill", false, ApplyClassPowerSmoothing, group = "cp",
             helpTitle = "Class Resource Smooth Fill", help = "Smooths resource changes. Runes, Essence recharge, and timers keep their own animation." },
     })
     local rightX = min(max(380, floor(self.width * .45)), max(320, self.width - 420))
@@ -1007,7 +1007,7 @@ function Page:BuildDetachedPower()
             ApplyDetachedPowerSource(); self.refresh()
         end, Meta("detached_power.enabled"))
     local smooth = SwitchAt(self.ctx, layout, "Smooth fill", twoColumns and rightX or 32, twoColumns and -104 or -138, controlW,
-        Player, "powerSmoothFill", true, ApplyDetachedPlayerPowerSmoothing, Meta("detached_power.layout.smooth_fill"))
+        Player, "powerSmoothFill", false, ApplyDetachedPlayerPowerSmoothing, Meta("detached_power.layout.smooth_fill"))
     local mode = self:Controls(layout, Bars, ApplyDetachedPowerWidthMode, "detached_power.layout", {
         { "mode", "nilDefaultDropdown", "Width mode", VT("manual", "Manual", "cooldown", "Essential Cooldowns", "utility", "Utility Cooldowns", "tracked_buffs", "Tracked Buffs"), 260, "detachedPowerBarWidthMode", "manual", group = "detached" },
     })
@@ -1259,7 +1259,7 @@ function Page:BuildAlternativeMana()
         })
     end
     self.altToggle = SwitchAt(self.ctx, section, "Show mana bar (dual resource)", 32, -98, controlW, Bars, "showAltMana", false, ApplyClassPower, Meta("alternative_mana.enabled"))
-    local smooth = SwitchAt(self.ctx, section, "Smooth fill", 32, -132, controlW, Bars, "altManaSmoothFill", true, ApplyClassPowerSmoothing, Meta("alternative_mana.smooth_fill"))
+    local smooth = SwitchAt(self.ctx, section, "Smooth fill", 32, -132, controlW, Bars, "altManaSmoothFill", false, ApplyClassPowerSmoothing, Meta("alternative_mana.smooth_fill"))
     local fields = self:Controls(section, Bars, ApplyClassPower, "alternative_mana.layout", {
         { "height", "slider", "Height", 2, 30, 1, 300, "altManaHeight", 4 },
         { "y", "slider", "Y offset", -50, 50, 1, 300, "altManaOffsetY", -2 },

@@ -44,10 +44,11 @@ local function CP_StampStatusBarColor(bar, r, g, b, a)
     end
 end
 
---- Native StatusBar interpolation keeps secret power values inside Blizzard's
---- C implementation and avoids Lua-side animation state or OnUpdate work.
-local function CP_SetPowerValue(bar, value, smoothInterp)
-    if smoothInterp then
+--- StatusBar accepts secret power values directly, but opaque event payloads
+--- cannot be deduplicated. Keep those writes immediate while preserving native
+--- interpolation for ordinary values.
+local function CP_SetPowerValue(bar, value, smoothInterp, valueSecret)
+    if smoothInterp and valueSecret ~= true then
         bar:SetValue(value, smoothInterp)
     else
         bar:SetValue(value)
@@ -493,7 +494,7 @@ modeBuilders.SEGMENTED = function(E)
                 local bar = CP.bars[i]
                 if bar then
                     CP_StampMinMax(bar, i - 1, i)
-                    CP_SetPowerValue(bar, cur, smoothInterp)
+                    CP_SetPowerValue(bar, cur, smoothInterp, true)
                     CP_StampAlpha(bar, filledAlpha)
                 end
             end
@@ -599,7 +600,7 @@ modeBuilders.FRACTIONAL = function(E)
                 if bar then
                     if modSafe then
                         CP_StampMinMax(bar, (i - 1) * mod, i * mod)
-                        CP_SetPowerValue(bar, rawCur, smoothInterp)
+                        CP_SetPowerValue(bar, rawCur, smoothInterp, true)
                     else
                         CP_StampMinMax(bar, 0, 1)
                         CP_SetPowerValue(bar, 1, smoothInterp)
@@ -1032,7 +1033,7 @@ modeBuilders.AURA = function(E)
                 local bar = CP.bars[i]
                 if bar then
                     CP_StampMinMax(bar, i - 1, i)
-                    CP_SetPowerValue(bar, rawCur, smoothInterp)
+                    CP_SetPowerValue(bar, rawCur, smoothInterp, not curSafe)
                     CP_StampAlpha(bar, filledAlpha)
                     local slotR = useSlotColors and visual.slotR and visual.slotR[i]
                     CP_StampStatusBarColor(bar, isFull and visual.fullR or (slotR or baseR),
@@ -1458,7 +1459,7 @@ modeBuilders.CONTINUOUS = function(E)
             cur = tonumber(rawCur) or 0
             CP_SetPowerValue(bar, cur, smoothInterp)
         else
-            CP_SetPowerValue(bar, rawCur, smoothInterp)
+            CP_SetPowerValue(bar, rawCur, smoothInterp, true)
             cur = nil
         end
 

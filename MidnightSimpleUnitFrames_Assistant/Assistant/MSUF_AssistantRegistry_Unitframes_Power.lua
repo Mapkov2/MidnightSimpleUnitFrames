@@ -88,7 +88,7 @@ function A.UnitframesRegistry.RegisterPowerSettings(ctx, unit)
         end,
     })
     RegisterUnitBooleanSetting(unit, "powerSmoothFill", "powerSmoothFill", "Power Bar Smooth Fill",
-        unit == "player",
+        false,
         MakeAliases(unit, "power smooth fill", "smooth power bar"), { category = "Power Bar", power = true })
 
     local detachedPowerAliases = MakeAliases(unit, "detached power bar", "detach power bar", "power bar detached")

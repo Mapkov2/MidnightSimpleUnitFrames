@@ -46,7 +46,7 @@ function A.UnitframesRegistry.RegisterCoreLoopSettings(ctx)
             category = "Frame",
             reason = "MSUF_ASSISTANT_REVERSE_FILL",
         })
-        RegisterUnitBooleanSetting(unit, "smoothFill", "smoothFill", "Smooth Health Fill", true, MakeAliases(unit, "smooth fill", "smooth health fill", "smooth frame fill"), {
+        RegisterUnitBooleanSetting(unit, "smoothFill", "smoothFill", "Smooth Health Fill", false, MakeAliases(unit, "smooth fill", "smooth health fill", "smooth frame fill"), {
             category = "Frame",
             reason = "MSUF_ASSISTANT_SMOOTH_FILL",
         })
