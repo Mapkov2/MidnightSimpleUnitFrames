@@ -169,7 +169,7 @@ local function BuildPortrait(ctx, builder, unit)
     local mainCard = W.ControlCard(sec, "Visibility & Mode", nil, leftX, layout.mainY, leftW, 168)
     local geometryCard = W.ControlCard(sec, "Geometry", nil, rightX, layout.geometryY, rightW, 278)
     local borderCard = W.ControlCard(sec, "Shape & Border", nil, leftX, layout.borderY, leftW, 312)
-    local styleCard = W.ControlCard(sec, "Class & Background", nil, rightX, layout.styleY, rightW, 166)
+    local styleCard = W.ControlCard(sec, "Class & Background", nil, rightX, layout.styleY, rightW, 220)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(borderCard, { "portrait.border" }, {
             title = "Portrait Border Color",
@@ -222,7 +222,9 @@ local function BuildPortrait(ctx, builder, unit)
     local borderSize = BindPortraitSlider(borderCard, "Border thickness", 16, -170, leftW - 58, 1, 12, 1, "portraitBorderThickness", 2, "MSUF2_PORTRAIT_BORDER_SIZE")
     local fillBorder = BindPortraitToggle(borderCard, "Fill border into frame gap", 16, -238, leftW - 32, "portraitFillBorder", false, "MSUF2_PORTRAIT_FILL_BORDER")
     local portraitBg = BindPortraitToggle(styleCard, "Portrait background", 16, -112, rightW - 32, "portraitBgEnabled", false, "MSUF2_PORTRAIT_BG")
-    local portraitActiveControls = { portrait, render, shape, size, x, y, border, portraitBg }
+    local castSpellIcon = BindPortraitToggle(styleCard, "Show cast spell icon in portrait", 16, -166, rightW - 32, "portraitCastSpellIcon", false, "MSUF2_PORTRAIT_CAST_ICON")
+    castSpellIcon._msuf2SearchText = "Portrait cast spell icon casting channel empower"
+    local portraitActiveControls = { portrait, render, shape, size, x, y, border, portraitBg, castSpellIcon }
     local function PortraitActive() return NormalizePortrait(unit) ~= "OFF" end
     RefreshPortraitControls = RefreshPortraitControls(M.BindGateGroup(ctx, function() return GetConf(unit) end, {
         { enable = portraitEnable },
@@ -374,7 +376,7 @@ local function BuildPower(ctx, builder, unit)
             if conf.powerBarBorderEnabled ~= nil then return conf.powerBarBorderEnabled == true end
             return GetBars().powerBarBorderEnabled == true
         end, RefreshPowerEnabled },
-        { "toggle", "Smooth fill", 16, -158, rightW - 32, "powerSmoothFill", unit == "player", "MSUF2_POWER_SMOOTH" },
+        { "toggle", "Smooth fill", 16, -158, rightW - 32, "powerSmoothFill", false, "MSUF2_POWER_SMOOTH" },
     })
     BuildPowerControls(mainCard, AddPowerControl, {
         { "slider", "Power bar height", 16, -76, cardW - 72, 1, 20, 1, "powerBarHeight", 3, "MSUF2_POWER_HEIGHT",
@@ -500,11 +502,11 @@ local function BuildPower(ctx, builder, unit)
         also = function()
             if ClassManaged() then
                 if powerNoticeButton and powerNoticeButton.SetText then powerNoticeButton:SetText(M.Tr and M.Tr("Class Resources") or "Class Resources") end
-                powerNotice:SetMessage("Player power bar is connected to Class Resources. Manage detached power and power text in Class Resources > Detached Power Bar.", "warning")
+                powerNotice:SetMessage(M.Tr("Player power bar is connected to Class Resources. Manage detached power and power text in Class Resources > Detached Power Bar."), "warning")
                 powerNotice:Show()
             elseif not PowerOn() then
                 if powerNoticeButton and powerNoticeButton.SetText then powerNoticeButton:SetText(M.Tr and M.Tr("Show Power") or "Show Power") end
-                powerNotice:SetMessage(UnitTopLabel(unit) .. " power bar is hidden. Turn it on to configure size, embed, or detached settings.", "warning")
+                powerNotice:SetMessage(M.Format("%s power bar is hidden. Turn it on to configure size, embed, or detached settings.", UnitTopLabel(unit)), "warning")
                 powerNotice:Show()
             else
                 if powerNoticeButton and powerNoticeButton.SetText then powerNoticeButton:SetText(M.Tr and M.Tr("Show Power") or "Show Power") end
@@ -1043,9 +1045,9 @@ local function BuildCastbar(ctx, builder, unit)
             local backend = ReadCastbarBackend()
             if backend ~= "MSUF" then
                 if backend == "HIDE" then
-                    castbarNotice:SetMessage(UnitTopLabel(unit) .. " castbar is off. Turn it on to use the MSUF castbar.", "warning")
+                    castbarNotice:SetMessage(M.Format("%s castbar is off. Turn it on to use the MSUF castbar.", UnitTopLabel(unit)), "warning")
                 else
-                    castbarNotice:SetMessage(UnitTopLabel(unit) .. " castbar uses Blizzard. Select MSUF to adjust castbar layout and text behavior.", "warning")
+                    castbarNotice:SetMessage(M.Format("%s castbar uses Blizzard. Select MSUF to adjust castbar layout and text behavior.", UnitTopLabel(unit)), "warning")
                 end
                 castbarNotice:Show()
             else
