@@ -19,19 +19,27 @@ function Frame:UnregisterEvent(event) self.registered[event] = nil end
 function Frame:UnregisterAllEvents()
     for event in pairs(self.registered) do self.registered[event] = nil end
 end
+function Frame:Show() self.shown = true end
+function Frame:Hide() self.shown = false end
 
 local function NewFrame(unit)
     return setmetatable({
         unit = unit,
         unitKey = unit,
         visible = true,
+        shown = true,
         scripts = {},
         hooks = {},
         registered = {},
     }, Frame)
 end
 
-_G.CreateFrame = function() return NewFrame(nil) end
+local createdFrames = {}
+_G.CreateFrame = function()
+    local frame = NewFrame(nil)
+    createdFrames[#createdFrames + 1] = frame
+    return frame
+end
 _G.InCombatLockdown = function() return false end
 _G.UnitExists = function() return true end
 _G.UnitIsConnected = function() return true end
@@ -49,6 +57,18 @@ _G.MSUF_NS = MSUF
 local chunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Core.lua"))
 chunk("MidnightSimpleUnitFrames", MSUF)
 local UF = assert(MSUF.UF)
+
+local function FlushDeferredHealth()
+    for i = #createdFrames, 1, -1 do
+        local frame = createdFrames[i]
+        local update = frame.scripts and frame.scripts.OnUpdate
+        if frame.shown == true and type(update) == "function" then
+            update(frame, 0)
+            return
+        end
+    end
+    error("group health driver was not armed", 2)
+end
 
 local calls = setmetatable({}, { __mode = "k" })
 local Health = {
@@ -152,6 +172,8 @@ UF.ApplyElementToFrame(second, "NameText", spec)
 
 Check(type(first.UNIT_HEALTH) == "function", "first route missing")
 Check(first.UNIT_HEALTH == second.UNIT_HEALTH, "identical direct routes were not interned")
+Check(first._msufGroupHealthRoute == second._msufGroupHealthRoute,
+    "identical deferred group-health routes were not interned")
 Check(first._msufEventNames == second._msufEventNames, "event-name plans were not interned")
 Check(first._msufElementEventRoutes.Health.events == second._msufElementEventRoutes.Health.events,
     "element event lists were not interned")
@@ -179,8 +201,12 @@ UF.ApplyElementToFrame(dirtySecond, "HealthText", dirtySpec)
 Check(dirtyFirst.UNIT_HEALTH == dirtySecond.UNIT_HEALTH,
     "event-specific HealthText dirty marker escaped shared direct-route interning")
 dirtyFirst.UNIT_HEALTH(dirtyFirst, "UNIT_HEALTH", "party2")
+for _ = 1, 9 do dirtyFirst.UNIT_HEALTH(dirtyFirst, "UNIT_HEALTH", "party2") end
+Check(calls[dirtyFirst] == nil and dirtyFirst.healthDirtyCalls == nil,
+    "group health work ran before the render-frame drain")
+FlushDeferredHealth()
 Check(calls[dirtyFirst] == 1 and dirtyFirst.healthDirtyCalls == 1,
-    "direct Health route did not run the bar and dirty marker exactly once")
+    "deferred Health route did not coalesce the bar and dirty marker exactly once")
 Check(dirtyFirst.healthDirtyHP == 80 and dirtyFirst.healthDirtyMax == 100,
     "direct Health route dropped the bar payload before the static dirty marker")
 
@@ -221,6 +247,7 @@ Check(first._msufIdentityBarPath == second._msufIdentityBarPath,
 
 first.UNIT_HEALTH(first, "UNIT_HEALTH", "player")
 second.UNIT_HEALTH(second, "UNIT_HEALTH", "player")
+FlushDeferredHealth()
 Check(calls[first] == 1 and calls[second] == 1, "shared route did not preserve frame-local dispatch")
 Check(first.lastUnit == "player" and second.lastUnit == "player", "shared route changed unit binding")
 first._msufDispatchToken = 17

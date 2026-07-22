@@ -766,6 +766,99 @@ local function EndFrameEvent(frame)
   frame._msufDispatchActive = nil
 end
 
+-- Group health can fire several times before the next render. Blizzard's
+-- CompactUnitFrame defers this same expensive path and drains it once per
+-- frame; keep MSUF's already-compiled Health/Text/Prediction/Visuals route
+-- intact, but enter it at most once for each visible secure child. Two reused
+-- queues preserve re-entrant events for the following frame without runtime
+-- allocations.
+local groupHealthQueueA, groupHealthQueueB = {}, {}
+local groupHealthWriteQueue = groupHealthQueueA
+local groupHealthWriteCount = 0
+local groupHealthDriver
+local groupHealthDriverArmed
+local FlushGroupHealthQueue
+
+local function StopGroupHealthDriver()
+  if groupHealthDriver and groupHealthDriver.Hide then groupHealthDriver:Hide() end
+  groupHealthDriverArmed = nil
+end
+
+local function CancelQueuedGroupHealth(frame)
+  if not (frame and frame._msufGroupHealthQueued == true) then return false end
+  for i = 1, groupHealthWriteCount do
+    if groupHealthWriteQueue[i] == frame then
+      groupHealthWriteQueue[i] = groupHealthWriteQueue[groupHealthWriteCount]
+      groupHealthWriteQueue[groupHealthWriteCount] = nil
+      groupHealthWriteCount = groupHealthWriteCount - 1
+      break
+    end
+  end
+  frame._msufGroupHealthQueued = nil
+  if groupHealthWriteCount == 0 and groupHealthDriverArmed == true then
+    StopGroupHealthDriver()
+  end
+  return true
+end
+
+local function ArmGroupHealthDriver()
+  if groupHealthDriverArmed == true then return true end
+  if not groupHealthDriver and CreateFrame then
+    groupHealthDriver = CreateFrame("Frame")
+    if groupHealthDriver and groupHealthDriver.SetScript
+      and groupHealthDriver.Hide and groupHealthDriver.Show then
+      groupHealthDriver:SetScript("OnUpdate", FlushGroupHealthQueue)
+      groupHealthDriver:Hide()
+    end
+  end
+  if not (groupHealthDriver and groupHealthDriver.Show) then return false end
+  groupHealthDriverArmed = true
+  groupHealthDriver:Show()
+  return true
+end
+
+local function QueueGroupHealth(frame)
+  if not frame or frame._msufGroupHealthQueued == true then return end
+  frame._msufGroupHealthQueued = true
+  groupHealthWriteCount = groupHealthWriteCount + 1
+  groupHealthWriteQueue[groupHealthWriteCount] = frame
+  if ArmGroupHealthDriver() then return end
+
+  -- CreateFrame is absent only in restricted test/compatibility hosts.
+  groupHealthWriteQueue[groupHealthWriteCount] = nil
+  groupHealthWriteCount = groupHealthWriteCount - 1
+  frame._msufGroupHealthQueued = nil
+  local route = frame._msufGroupHealthRoute
+  if route then route(frame, "UNIT_HEALTH", frame.MSUFUnitKey) end
+end
+
+FlushGroupHealthQueue = function()
+  StopGroupHealthDriver()
+  local batch = groupHealthWriteQueue
+  local count = groupHealthWriteCount
+  groupHealthWriteQueue = batch == groupHealthQueueA and groupHealthQueueB or groupHealthQueueA
+  groupHealthWriteCount = 0
+
+  for i = 1, count do
+    local frame = batch[i]
+    batch[i] = nil
+    if frame then
+      frame._msufGroupHealthQueued = nil
+      local unit = frame.MSUFUnitKey
+      local route = frame._msufGroupHealthRoute
+      if route
+        and frame._msufCoreScope == "group"
+        and frame._msufCoreSpecEnabled == true
+        and frame._msufCoreVisible == true
+        and frame._msufEventRouteUnit == unit then
+        route(frame, "UNIT_HEALTH", unit)
+      end
+    end
+  end
+
+  if groupHealthWriteCount > 0 then ArmGroupHealthDriver() end
+end
+
 local function FrameOnEvent(frame, event, unit, ...)
   -- SetFrameSpec plus the visibility hooks keep both flags hot and exact for
   -- normal attached frames. Only fall back to the full preview-aware resolver
@@ -1564,6 +1657,7 @@ RegisterFrameEvent = function(frame, event, unitless)
 end
 
 local function ClearFrameEvents(frame)
+  CancelQueuedGroupHealth(frame)
   if frame and frame.UnregisterAllEvents then frame:UnregisterAllEvents() end
   if frame then
     local names = frame._msufEventNames
@@ -1582,6 +1676,7 @@ local function ClearFrameEvents(frame)
     frame._msufCoreRangeEventConfigured = nil
     frame._msufCoreRangeEventUnitless = nil
     frame._msufCoreRangeEventSuspended = nil
+    frame._msufGroupHealthRoute = nil
   end
 end
 
@@ -2071,7 +2166,13 @@ local function RebuildFrameEvents(frame)
       else
         RegisterFrameEvent(frame, event, unitless)
       end
-      frame[event] = CompileFrameEventPath(frame, event, list)
+      local path = CompileFrameEventPath(frame, event, list)
+      if event == "UNIT_HEALTH" and frame._msufCoreScope == "group" then
+        frame._msufGroupHealthRoute = path
+        frame[event] = QueueGroupHealth
+      else
+        frame[event] = path
+      end
     end
   end
   if RefreshHealthLifecycleSinkRoutes then RefreshHealthLifecycleSinkRoutes(frame) end
