@@ -1,4 +1,4 @@
-# GOAL: MSUF In-Game LLM
+# Assistant Goal: MSUF In-Game LLM
 
 **The MSUF Assistant becomes an in-game "LLM for MSUF" — offline, natural-language,
 with maximum performance and 0.0 combat overhead.**
