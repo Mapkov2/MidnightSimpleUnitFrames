@@ -8,8 +8,9 @@ end
 local classification, classToken, reaction = "normal", "WARRIOR", 3
 local dead = false
 local classificationReads, playerReads, classReads, reactionReads = 0, 0, 0, 0
+local secretValue
 
-_G.issecretvalue = function() return false end
+_G.issecretvalue = function(value) return secretValue ~= nil and value == secretValue end
 _G.UnitExists = function() return true end
 _G.UnitIsDeadOrGhost = function() return dead end
 _G.UnitIsConnected = function() return true end
@@ -35,9 +36,18 @@ _G.MSUF_UFCore_GetClassBarColorFast = function(token)
     if token == "WARRIOR" then return 0.8, 0.6, 0.4 end
     return 0.12, 0.62, 0.95
 end
+_G.CreateColor = function(r, g, b, a) return { r = r, g = g, b = b, a = a } end
+_G.C_CurveUtil = {
+    CreateColorCurve = function()
+        return { AddPoint = function() end }
+    end,
+}
 
 local UF = {
     Clamp01 = function(value) return value end,
+    ReadUnitExistsCached = function(_, unit) return _G.UnitExists(unit), true end,
+    ReadUnitIsPlayerCached = function(_, unit) return _G.UnitIsPlayer(unit), true end,
+    ReadUnitClassCached = function(_, unit) return _G.UnitClass(unit) end,
 }
 function UF.FreshUnitState(frame, unit)
     local state = frame and frame._msufUnitState
@@ -214,5 +224,33 @@ state = Common.RefreshUnitState(frame, "target", spec, "UNIT_HEALTH")
 Check(state.dead == false and classificationReads == stableDeadClassification + 1
     and playerReads == stableDeadPlayer + 1,
     "revive transition reused dead identity")
+
+-- Native curve RGB is ordinary data outside restricted combat and must use
+-- the existing status-color cache. Restricted components still bypass every
+-- Lua comparison and are forwarded on each update.
+local gradientFrame = {
+    unit = "target",
+    MSUFSpec = { key = "target", health = { mode = "gradient" } },
+    _msufDispatchActive = true,
+    _msufDispatchToken = 1,
+}
+local gradientBar = { writes = 0 }
+function gradientBar:SetStatusBarColor(r, g, b, a)
+    self.writes = self.writes + 1
+    self.r, self.g, self.b, self.a = r, g, b, a
+end
+local plainColor = { GetRGB = function() return 0.25, 0.5, 0.75 end }
+local calc = { EvaluateCurrentHealthPercent = function() return plainColor end }
+Common.ApplyHealthStatusColor(gradientBar, gradientFrame, "target", 50, 100, calc, "UNIT_HEALTH")
+Common.ApplyHealthStatusColor(gradientBar, gradientFrame, "target", 50, 100, calc, "UNIT_HEALTH")
+Check(gradientBar.writes == 1, "plain native gradient RGB repeated SetStatusBarColor")
+
+secretValue = {}
+local secretColor = { GetRGB = function() return secretValue, 0.5, 0.75 end }
+calc.EvaluateCurrentHealthPercent = function() return secretColor end
+Common.ApplyHealthStatusColor(gradientBar, gradientFrame, "target", 50, 100, calc, "UNIT_HEALTH")
+Common.ApplyHealthStatusColor(gradientBar, gradientFrame, "target", 50, 100, calc, "UNIT_HEALTH")
+Check(gradientBar.writes == 3 and gradientBar._msufStatusR == nil,
+    "restricted native gradient RGB entered the Lua color cache")
 
 print("PASS NPC dispatch cache: health/name colors share type and player identity reads")

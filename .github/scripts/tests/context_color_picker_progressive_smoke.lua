@@ -19,6 +19,10 @@ Has("self.advancedCard:SetShown(advanced)", "advanced tools are not gated as one
 Has('self.more:SetText(Tr(advanced and "Back to controls" or "More Options"))',
     "advanced disclosure button does not communicate both states")
 Has("self.advanced = false", "picker must always open in the simple state")
+Has('self.title:SetText(Tr("MSUF Color Picker") .. (visibleScope ~= "" and (" · " .. visibleScope) or ""))',
+    "picker cannot show a compact visible scope tag")
+Has("function W.OpenColorContextPicker(contextTitle, owners, contextNote, initialOwner, onFinish, scopeTag)",
+    "public color-picker bridge does not carry the visible scope tag")
 
 Has('M.CreateWindowControlButton(panel, "close")', "picker close control does not use the MSUF window style")
 assert(not source:find('"maximize"', 1, true), "picker must not expose a maximize title control")
@@ -57,6 +61,26 @@ Has('local editingLabel = Font(selector, "GameFontHighlightSmall", "Editing"',
     "target selector must keep Editing separate from the target label")
 Has('local selectorColor = ColorChip(selector, 14, 14)',
     "target selector must place the color after its separator")
+Has('local info = T.Button(panel, "i", 18, 18, { noSearch = true })',
+    "context help must live behind the compact MSUF info control")
+Has('self.infoButton._msuf2PickerInfoText = detail',
+    "picker context help is not routed to the info tooltip")
+Has('info:RegisterForClicks("LeftButtonUp")',
+    "picker info control does not explicitly accept clicks")
+Has('info:SetScript("OnClick", function(self)',
+    "picker info control has no click-toggle behavior")
+Has('self._msuf2PickerInfoPinned = not self._msuf2PickerInfoPinned',
+    "picker info tooltip cannot be pinned and closed by click")
+Has("button:SetFrameLevel(level + 1)",
+    "picker info control is still below the draggable title overlay")
+Has("RaisePickerInfo(self)",
+    "picker info mouse priority is not restored after popup priority changes")
+assert(not source:find('self.note:SetText(context .. "  -  " .. detail)', 1, true),
+    "picker still renders the long context note inline where it can overlap the selector")
+Has("RefreshPickerFonts(self)",
+    "cached picker does not refresh Expressway/custom menu fonts when it opens")
+Has('type(T.RefreshMenuFonts) == "function"',
+    "picker font refresh does not use the shared safe MSUF typography path")
 Has("self:SetScale(PickerMenuScale())", "picker must follow the effective MSUF menu scale")
 Has('local original = ColorField(panel, 144, 22)', "Original preview must use the flat mock-up field")
 Has('local current = ColorField(panel, 144, 22)', "Current preview must use the flat mock-up field")
@@ -140,6 +164,20 @@ assert(widgetsSource:find("while contextEntry.ancestorEntry do contextEntry = co
     "color controls do not resolve their shared contextual owner group")
 assert(widgetsSource:find("colorControl._msuf2ColorContextOwners = contextEntry._msuf2ColorContextOwners", 1, true),
     "color controls do not expose their functional target list")
+
+local dropdownsPath = "MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Dropdowns.lua"
+local dropdownsHandle = assert(io.open(dropdownsPath, "rb"))
+local dropdownsSource = dropdownsHandle:read("*a")
+dropdownsHandle:close()
+assert(dropdownsSource:find("local function RefreshDropdownMenuFonts()", 1, true),
+    "cached picker dropdown cannot refresh Expressway/custom menu fonts")
+assert(dropdownsSource:find("RefreshDropdownMenuFonts()", dropdownsSource:find("local function OpenDropdown", 1, true), true),
+    "shared picker dropdown does not refresh its current MSUF menu font when opened")
+local dropdownFontStart = assert(dropdownsSource:find("local function RefreshDropdownMenuFonts", 1, true))
+local dropdownFontEnd = assert(dropdownsSource:find("local function DropdownItemValue", dropdownFontStart, true))
+local dropdownFontSource = dropdownsSource:sub(dropdownFontStart, dropdownFontEnd - 1)
+assert(not dropdownFontSource:find('SetScript("OnUpdate"', 1, true),
+    "dropdown font synchronization added recurring menu work")
 
 local bindingsPath = "MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Bindings.lua"
 local bindingsHandle = assert(io.open(bindingsPath, "rb"))

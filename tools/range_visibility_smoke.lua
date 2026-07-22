@@ -10,6 +10,7 @@ end
 
 local knownSpell = 2139
 local spellChecks = {}
+local knownSpellChecks = 0
 local driver
 local visible = false
 
@@ -23,7 +24,11 @@ local MSUF = {
 }
 
 _G.MSUF_NS = MSUF
-_G.C_Timer = { After = function() end }
+_G.C_Timer = {
+  NewTimer = function()
+    return { Cancel = function() end }
+  end,
+}
 _G.GetTime = function() return 1 end
 _G.GetUnitSpeed = function() return 0 end
 _G.InCombatLockdown = function() return false end
@@ -33,7 +38,10 @@ _G.UnitCanAttack = function() return true end
 _G.UnitClass = function() return "Mage", "MAGE" end
 _G.UnitExists = function() return true end
 _G.UnitIsDeadOrGhost = function() return false end
-_G.IsPlayerSpell = function(spellID) return spellID == knownSpell end
+_G.IsPlayerSpell = function(spellID)
+  knownSpellChecks = knownSpellChecks + 1
+  return spellID == knownSpell
+end
 _G.C_Spell = {
   EnableSpellRangeCheck = function() end,
   GetOverrideSpell = function(spellID) return spellID end,
@@ -103,5 +111,18 @@ visible = true
 RunVisibilityHook("OnShow")
 assert(spellChecks[1] == 2139,
   "showing after an inactive talent window did not rebuild the spell cache")
+
+-- Visibility hooks are permanent, but a disabled RangeFade element must leave
+-- them as true zero-overhead guards: no spellbook scan, evaluation, or driver.
+Range.UnregisterFrame(frame)
+knownSpellChecks = 0
+spellChecks = {}
+RunVisibilityHook("OnShow")
+assert(knownSpellChecks == 0,
+  "disabled RangeFade rebuilt the player spell cache from its permanent OnShow hook")
+assert(#spellChecks == 0,
+  "disabled RangeFade evaluated spell range from its permanent OnShow hook")
+assert(next(driver.events) == nil,
+  "disabled RangeFade woke the shared driver from its permanent OnShow hook")
 
 print("range visibility smoke: ok")

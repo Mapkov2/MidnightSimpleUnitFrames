@@ -34,6 +34,7 @@ local secretValue
 local spellRangeByUnit = {}
 local unitRangeByUnit = {}
 local movingUnits = {}
+local timerCancels = 0
 
 local function Record(operation, event, units)
     operations[#operations + 1] = {
@@ -112,7 +113,19 @@ _G.CreateFrame = function()
     return created
 end
 
-_G.C_Timer = { After = function() end }
+_G.C_Timer = {
+    After = function() end,
+    NewTimer = function(delay, callback)
+        local timer = { delay = delay, callback = callback }
+        function timer:Cancel()
+            if self.cancelled ~= true then
+                self.cancelled = true
+                timerCancels = timerCancels + 1
+            end
+        end
+        return timer
+    end,
+}
 _G.UnitCanAssist = function(_, unit) return not tostring(unit):match("^boss%d+$") end
 _G.UnitCanAttack = function(_, unit) return tostring(unit):match("^boss%d+$") ~= nil end
 _G.UnitIsDeadOrGhost = function() return false end
@@ -221,6 +234,8 @@ movingUnits.player = nil
 driver.scripts.OnEvent(driver, "PLAYER_STOPPED_MOVING")
 Equal(target.appliedRangeMultiplier, 1,
     "movement stop did not settle friendly target range")
+Equal(timerCancels, 1,
+    "movement stop retained the already-settled sparse range timer")
 
 -- Hiding target changes its unit filter and target-specific plain events only.
 ResetOperations()

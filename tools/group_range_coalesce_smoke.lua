@@ -35,7 +35,16 @@ _G.GetTime = function() return 1 end
 _G.issecretvalue = function(value)
     return value == SECRET_UNIT or value == SECRET_RANGE
 end
-_G.C_Timer = { After = function(_, callback) callback() end }
+local settleTimers = {}
+_G.C_Timer = {
+    After = function(_, callback) callback() end,
+    NewTimer = function(delay, callback)
+        local timer = { delay = delay, callback = callback }
+        function timer:Cancel() self.cancelled = true end
+        settleTimers[#settleTimers + 1] = timer
+        return timer
+    end,
+}
 
 local settleDriver
 _G.CreateFrame = function()
@@ -139,11 +148,18 @@ end
 
 local restrictedFrame = raidFrames[20]
 restrictedFrame.booleanValue = nil
+local auraRangeCalls = 0
+restrictedFrame._msufApplyPartyAuraRangeGate = function(frame, inRange)
+    auraRangeCalls = auraRangeCalls + 1
+    frame.auraRangeValue = inRange
+end
 restrictedFrame.OnEvent(restrictedFrame, "UNIT_IN_RANGE_UPDATE", SECRET_UNIT, SECRET_RANGE)
 assert(restrictedFrame.booleanValue == SECRET_RANGE,
     "secret event unit must be ignored while secret inRange reaches SetAlphaFromBoolean")
 assert(restrictedFrame.booleanInAlpha == 1 and restrictedFrame.booleanOutAlpha == 0.4,
     "secret range update must retain the configured in/out alpha mapping")
+assert(auraRangeCalls == 1 and restrictedFrame.auraRangeValue == SECRET_RANGE,
+    "group range route did not forward the opaque payload to its compiled aura follower")
 
 UF.OnUnitChanged(restrictedFrame, "raid20", "raid41")
 assert(restrictedFrame.unitEvents.UNIT_IN_RANGE_UPDATE == "raid41",
@@ -163,6 +179,16 @@ assert(restrictedFrame.alpha == 1,
 
 assert(settleDriver and settleDriver.events.PLAYER_ENTERING_WORLD,
     "range settle driver must remain available for initial/world-state catch-up")
+
+local disabledRebindChecks = 0
+MSUF.GF.IsHeaderLayoutRebindActive = function()
+    disabledRebindChecks = disabledRebindChecks + 1
+    return false
+end
+local disabledPollsBefore = rangePolls
+restrictedFrame.hooks.OnShow[#restrictedFrame.hooks.OnShow](restrictedFrame)
+assert(disabledRebindChecks == 0 and rangePolls == disabledPollsBefore,
+    "disabled group range performed work from its permanent OnShow hook")
 
 local coalescedFrame = partyFrames[1]
 local headerRebindActive = true
@@ -186,5 +212,24 @@ for i = 1, #coalescedFrame.hooks.OnShow do
 end
 assert(rangePolls == pollsBefore + 1,
     "ordinary range OnShow must retain its immediate settled-state refresh")
+
+-- A delayed world-settle belongs only to the currently visible consumers.
+-- Hiding the final consumer must cancel the native timer instead of retaining
+-- all group-frame references until it wakes.
+settleDriver.scripts.OnEvent(settleDriver, "PLAYER_ENTERING_WORLD")
+local delayedSettle = settleTimers[#settleTimers]
+assert(delayedSettle and delayedSettle.delay == 0.2,
+    "world transition did not arm the cancellable delayed settle")
+for _, collection in ipairs({ partyFrames, raidFrames }) do
+    for i = 1, #collection do
+        local candidate = collection[i]
+        local hooks = candidate.hooks.OnHide or {}
+        for j = 1, #hooks do hooks[j](candidate) end
+    end
+end
+assert(delayedSettle.cancelled == true,
+    "last hidden group range consumer retained its delayed settle timer")
+assert(settleDriver.events.PLAYER_ENTERING_WORLD == nil,
+    "last hidden group range consumer retained the shared settle events")
 
 print("group_range_coalesce_smoke: ok")

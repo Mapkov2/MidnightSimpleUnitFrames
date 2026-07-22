@@ -3,9 +3,27 @@ _G = _G or _ENV
 local elements = {}
 local aiChecks = 0
 _G.issecretvalue = function() return false end
+_G.C_Timer = {
+  NewTimer = function()
+    return { Cancel = function() end }
+  end,
+}
 _G.UnitInPartyIsAI = function(unit)
   aiChecks = aiChecks + 1
   return unit == "party1"
+end
+local detailedCalls = 0
+local detailedCurrent = 775000
+_G.GetTime = function() return 10 end
+_G.CreateUnitHealPredictionCalculator = function()
+  return {
+    GetCurrentHealth = function() return detailedCurrent end,
+    GetMaximumHealth = function() return 775000 end,
+  }
+end
+_G.UnitGetDetailedHealPrediction = function(unit, healer, calc)
+  assert(unit == "party1" and healer == "player" and calc)
+  detailedCalls = detailedCalls + 1
 end
 
 local MSUF = {
@@ -73,19 +91,6 @@ local powerEvents = EventSet(Power.GetEvents({ unit = "party1" }, {
 assert(not powerEvents.PARTY_MEMBER_ENABLE and not powerEvents.PARTY_MEMBER_DISABLE,
   "group power must be refreshed by the shared lifecycle driver, not register the events itself")
 
-local detailedCalls = 0
-local detailedCurrent = 775000
-_G.GetTime = function() return 10 end
-_G.CreateUnitHealPredictionCalculator = function()
-  return {
-    GetCurrentHealth = function() return detailedCurrent end,
-    GetMaximumHealth = function() return 775000 end,
-  }
-end
-_G.UnitGetDetailedHealPrediction = function(unit, healer, calc)
-  assert(unit == "party1" and healer == "player" and calc)
-  detailedCalls = detailedCalls + 1
-end
 assert(loadfile("MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Prediction.lua"))(
   "MidnightSimpleUnitFrames",
   MSUF
@@ -123,9 +128,8 @@ assert(bar.value == 775000 and bar.maximum == 775000,
   "party enable must use committed detailed health instead of stale direct health")
 assert(bar._msufHealthValue == 775000 and bar._msufHealthMax == 775000,
   "detailed lifecycle health must seed the shared bar/text cache")
-Prediction.ReadDetailedHealth(lifecycleFrame, "party1")
-assert(detailedCalls == 1,
-  "health and prediction must reuse one dispatch's detailed calculator fill")
+assert(Prediction.ReadDetailedHealth == nil and detailedCalls == 1,
+  "Prediction restored the removed detailed-health compatibility provider")
 lifecycleFrame._msufDispatchToken = 2
 Health.Update(lifecycleFrame, "PARTY_MEMBER_ENABLE", "party1")
 assert(detailedCalls == 2,

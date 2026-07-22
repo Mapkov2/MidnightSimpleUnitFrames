@@ -25,6 +25,7 @@ local Frame = {}
 Frame.__index = Frame
 
 function Frame:GetParent() return self.parent end
+function Frame:SetParent(parent) self.parent = parent end
 function Frame:ClearAllPoints()
   self.clearPointCalls = (self.clearPointCalls or 0) + 1
   self.point = nil
@@ -43,6 +44,11 @@ function Frame:SetFrameLevel(level) self.frameLevel = level end
 function Frame:GetFrameStrata() return self.frameStrata or "MEDIUM" end
 function Frame:SetFrameStrata(strata) self.frameStrata = strata end
 function Frame:SetAlpha(alpha) self.alpha = alpha end
+function Frame:SetAlphaFromBoolean(value, trueAlpha, falseAlpha)
+  self.alphaFromBooleanCalls = (self.alphaFromBooleanCalls or 0) + 1
+  self.alphaFromBooleanValue = value
+  if type(value) == "boolean" then self.alpha = value and trueAlpha or falseAlpha end
+end
 function Frame:SetVertexColor() end
 function Frame:SetTextColor(r, g, b, a) self.textColor = { r, g, b, a } end
 function Frame:GetTextColor()
@@ -235,7 +241,13 @@ do
     end,
     ConfigureContainer = function() end,
     RegisterContainer = function() return true end,
+    RebindUnit = function() end,
     HideContainer = function() end,
+    SetRangeAlpha = function(region, value, trueAlpha)
+      if not region then return false end
+      region:SetAlphaFromBoolean(value, trueAlpha, 0)
+      return true
+    end,
   })
 
   local function LiveSlot(x)
@@ -416,8 +428,14 @@ do
   Equal(gate.alpha, 1, "frame effect did not activate below its expiration threshold")
   local effectRoot = assert(gate._msufA3ExpiringEffectRoot,
     "expiring effect root was not created")
+  local rangeGate = assert(gate._msufA3PartyRangeGate,
+    "expiring effect did not receive an independent range gate")
   Equal(gate.allPoints, timedParent.hpBar,
     "expiring effect gate is not attached to the health bar")
+  Equal(rangeGate.allPoints, gate,
+    "expiring range gate is not attached to the duration gate")
+  Equal(effectRoot:GetParent(), rangeGate,
+    "expiring frame-effect owner bypassed the range gate")
   Equal(effectRoot.allPoints, timedParent.hpBar,
     "expiring frame-effect owner is not attached to the health bar")
   Equal(effectRoot.frameLevel,
@@ -429,6 +447,14 @@ do
     "expiring Name Color overlay was not created")
   Equal(nameOverlay.text, "Updated Name",
     "expiring Name Color overlay did not follow the current unit name")
+  local durationAlpha = gate.alpha
+  local secretRange = {}
+  Check(Runtime.ApplyPartyRangeGate(timedParent, secretRange) == true,
+    "expiring range gate did not accept the secret-safe route")
+  Equal(rangeGate.alphaFromBooleanValue, secretRange,
+    "expiring range gate did not preserve the opaque range value")
+  Equal(gate.alpha, durationAlpha,
+    "range gating overwrote the independent duration curve")
   mockRemaining = 0
   driver:GetScript("OnUpdate")(driver, 0.2)
   Equal(gate.alpha, 0, "missing or permanent aura left the expiration effect active")

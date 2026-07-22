@@ -56,8 +56,8 @@ local secretBars = {}
 for i = 1, 2 do
     secretBars[i] = {
         SetValue = function(_, v, interp)
-            assert(v == secretPower and interp == smoothToken,
-                "secret segmented power must stay in the native StatusBar path")
+            assert(v == secretPower and interp == nil,
+                "secret segmented power must use immediate native StatusBar writes")
         end,
         SetMinMaxValues = function(_, lo, hi)
             secretRanges[i] = { lo, hi }
@@ -81,8 +81,8 @@ assert(secretRanges[1][1] == 0 and secretRanges[1][2] == 1
 local fractionalRange
 local fractionalBar = {
     SetValue = function(_, v, interp)
-        assert(v == secretPower and interp == smoothToken,
-            "secret fractional power must stay in the native StatusBar path")
+        assert(v == secretPower and interp == nil,
+            "secret fractional power must use immediate native StatusBar writes")
     end,
     SetMinMaxValues = function(_, lo, hi) fractionalRange = { lo, hi } end,
     SetAlpha = function() end,
@@ -326,10 +326,69 @@ local oldValueCalls, oldRangeCalls = altCalls.value, altCalls.range
 alt.AM_UpdateValue()
 assert(altCalls.value == oldValueCalls and altCalls.range == oldRangeCalls,
     "Alternative Mana must suppress duplicate non-secret StatusBar writes")
+
+local secretAltCurrent, secretAltMax = {}, {}
+altCurrent, altMax = secretAltCurrent, secretAltMax
+alt.AM_UpdateValue()
+assert(altCalls.lastValue == secretAltCurrent and altCalls.hi == secretAltMax,
+    "secret Alternative Mana values must still reach the native StatusBar")
+assert(altCalls.valueInterp == nil and altCalls.rangeInterp == nil,
+    "secret Alternative Mana value/range writes must be immediate")
+assert(am._currentValue == nil and am._maxValue == nil,
+    "secret Alternative Mana values must not enter comparison caches")
+
 cpDB.altManaSmooth = false
-altCurrent = 61
+altCurrent, altMax = 61, 120
 alt.AM_UpdateValue()
 assert(altCalls.lastValue == 61 and altCalls.valueInterp == nil,
     "Alternative Mana must support immediate fill")
+
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/ClassPower/MSUF_CP_PlayerHP.lua"))()
+local secretHP, secretMaxHP = {}, {}
+local playerHPValue, playerHPMax = secretHP, secretMaxHP
+local playerHPCalls = {}
+local playerHPBar = {
+    _msufSmoothInterp = smoothToken,
+    _msufInterpolating = true,
+    SetMinMaxValues = function(_, lo, hi)
+        playerHPCalls.lo, playerHPCalls.hi = lo, hi
+    end,
+    SetValue = function(_, value, interp)
+        playerHPCalls.value, playerHPCalls.interp = value, interp
+    end,
+    SetStatusBarColor = function() end,
+}
+local playerHPState = {
+    visible = true,
+    bar = playerHPBar,
+    _colorMode = "DARK",
+}
+_G.issecretvalue = function(value)
+    return value == secretHP or value == secretMaxHP
+end
+local playerHP = assert(_G.MSUF_CP_CORE_BUILDERS.PLAYER_HP)({
+    PHP = playerHPState,
+    CP = {},
+    _cpDB = { bars = {} },
+    UnitHealth = function() return playerHPValue end,
+    UnitHealthMax = function() return playerHPMax end,
+    UnitClass = function() return nil, nil end,
+    RAID_CLASS_COLORS = {},
+    GetPlayerFrame = function() return nil end,
+})
+
+playerHP.Update("UNIT_HEALTH")
+assert(playerHPCalls.value == secretHP and playerHPCalls.hi == secretMaxHP,
+    "secret Player HP values must still reach the native StatusBar fallback")
+assert(playerHPCalls.interp == nil and playerHPBar._msufInterpolating == nil,
+    "secret Player HP fallback must cancel interpolation and write immediately")
+assert(playerHPState._hp == nil and playerHPState._maxHP == nil,
+    "secret Player HP values must not enter comparison caches")
+
+playerHPValue, playerHPMax = 62, 100
+playerHP.Update("UNIT_HEALTH")
+assert(playerHPCalls.value == 62 and playerHPCalls.interp == smoothToken
+    and playerHPBar._msufInterpolating == true,
+    "ordinary Player HP fallback lost configured smooth interpolation")
 
 print("classpower smooth runtime smoke: ok")

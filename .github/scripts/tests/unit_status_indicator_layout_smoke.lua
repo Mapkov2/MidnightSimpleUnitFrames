@@ -41,8 +41,15 @@ local unitPath = "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_Unit.lua
 local unitFile = assert(io.open(unitPath, "rb"))
 local unitSource = unitFile:read("*a")
 unitFile:close()
-assert(unitSource:find('StatusControl("statusText", "Dead / Ghost / AFK / DND"', 1, true),
-    "shared runtime status text is not discoverable as AFK/DND in the indicator selector")
+for _, statusRow in ipairs({
+    'StatusControl("statusText", "Dead / Offline Text"',
+    'StatusControl("statusGhostText", "Ghost Text"',
+    'StatusControl("statusAFKText", "AFK Text"',
+    'StatusControl("statusDNDText", "DND Text"',
+}) do
+    assert(unitSource:find(statusRow, 1, true),
+        "split unit status text is missing from the indicator selector: " .. statusRow)
+end
 assert(unitSource:find('StatusControl("level", "Level Text"', 1, true),
     "level text is not exposed in Status Icons")
 assert(unitSource:find('StatusControl("raceText", "Race Text"', 1, true),
@@ -56,7 +63,7 @@ local previewPath = "MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_Uni
 local previewFile = assert(io.open(previewPath, "rb"))
 local previewSource = previewFile:read("*a")
 previewFile:close()
-for _, previewId in ipairs({ "level", "raceText", "classText" }) do
+for _, previewId in ipairs({ "level", "raceText", "classText", "statusText", "statusGhostText", "statusAFKText", "statusDNDText" }) do
     assert(previewSource:find("\n" .. previewId .. "|", 1, true),
         previewId .. " does not have an independent status preview spec")
 end

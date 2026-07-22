@@ -70,6 +70,13 @@ function Frame:GetWidth() return self.width or 0 end
 function Frame:GetHeight() return self.height or 0 end
 function Frame:SetAlpha(alpha) self.alpha = alpha end
 function Frame:GetAlpha() return self.alpha or 1 end
+function Frame:SetAlphaFromBoolean(value, trueAlpha, falseAlpha)
+    self.alphaFromBooleanCalls = (self.alphaFromBooleanCalls or 0) + 1
+    self.alphaFromBooleanValue = value
+    self.alphaFromBooleanTrue = trueAlpha
+    self.alphaFromBooleanFalse = falseAlpha
+    if type(value) == "boolean" then self.alpha = value and trueAlpha or falseAlpha end
+end
 function Frame:SetFrameLevel(level) CheckButtonAccess(self); self.frameLevel = level end
 function Frame:GetFrameLevel() return self.frameLevel or 0 end
 function Frame:SetFrameStrata(strata) CheckButtonAccess(self); self.frameStrata = strata end
@@ -87,6 +94,7 @@ function Frame:HookScript(name, callback)
     self.hooks[name] = callback
 end
 function Frame:RegisterEvent(event)
+    self.registerEventCalls = (self.registerEventCalls or 0) + 1
     self.events = self.events or {}
     self.events[event] = true
 end
@@ -97,7 +105,10 @@ end
 function Frame:UnregisterEvent(event)
     if self.events then self.events[event] = nil end
 end
-function Frame:UnregisterAllEvents() self.events = {} end
+function Frame:UnregisterAllEvents()
+    self.unregisterAllEventsCalls = (self.unregisterAllEventsCalls or 0) + 1
+    self.events = {}
+end
 function Frame:CreateTexture()
     return setmetatable({ parent = self, shown = true }, Frame)
 end
@@ -218,6 +229,9 @@ function Frame:AddAuraGroup(groupKey, filter, options)
     local group = { frames = {} }
     function group:GetFramesByIndex() return self.frames end
     self.groups[groupKey] = group
+    self.groupFilters = self.groupFilters or {}
+    self.groupFilters[groupKey] = filter
+    self.addAuraGroupCalls = (self.addAuraGroupCalls or 0) + 1
     self.groupOptions = self.groupOptions or {}
     self.groupOptions[groupKey] = options
     for index = 1, (options.maxFrameCount or 0) do
@@ -232,6 +246,13 @@ function Frame:GetAuraGroup(groupKey)
     return self.groups and self.groups[groupKey]
 end
 function Frame:SetAuraGroupLayout(groupKey, options) self.groupLayouts[groupKey] = options end
+function Frame:SetAuraGroupFilterString(groupKey, filter)
+    self.groupFilterStrings = self.groupFilterStrings or {}
+    self.groupFilterStrings[groupKey] = filter
+    self.groupFilterSetterCalls = (self.groupFilterSetterCalls or 0) + 1
+    self.groupFilters[groupKey] = filter
+    self:UpdateAllAuras()
+end
 function Frame:SetAuraGroupMaxFrameCount() end
 function Frame:SetAuraGroupCandidateFilters() end
 function Frame:SetAuraGroupSortMethod() end
@@ -244,7 +265,23 @@ function Frame:AddAuraSlot(slotKey, filter, options)
         button._ptr5Forbidden = true
     end
 end
-function Frame:SetAuraSlotCandidateFilters() end
+function Frame:SetAuraSlotCandidateFilters(slotKey, candidateFilters)
+    self.slotCandidateFilters = self.slotCandidateFilters or {}
+    self.slotCandidateFilters[slotKey] = candidateFilters
+    self.slotCandidateSetterCalls = (self.slotCandidateSetterCalls or 0) + 1
+end
+function Frame:SetAuraSlotSortMethod(slotKey, sortMethod, sortDirection)
+    self.slotSortMethods = self.slotSortMethods or {}
+    self.slotSortMethods[slotKey] = { sortMethod, sortDirection }
+    self.slotSortSetterCalls = (self.slotSortSetterCalls or 0) + 1
+end
+function Frame:SetAuraSlotFilterString(slotKey, filter)
+    self.slotFilterStrings = self.slotFilterStrings or {}
+    self.slotFilterStrings[slotKey] = filter
+    self.slotFilterSetterCalls = (self.slotFilterSetterCalls or 0) + 1
+    self.auraSlotOptions[slotKey].filter = filter
+    self:UpdateAllAuras()
+end
 function Frame:AddItemEnchantment() end
 function Frame:UpdateAllAuras() self.updateAllAurasCalls = (self.updateAllAurasCalls or 0) + 1 end
 function Frame:SetAuraLayoutAnchorPoint(anchor)
@@ -275,6 +312,14 @@ _G.C_Timer = {
 _G.InCombatLockdown = function() return false end
 _G.issecretvalue = function() return false end
 _G.UnitExists = function() return true end
+local unitInRangeCalls = 0
+local unitInRangeLastUnit
+_G.UnitInRange = function(unit)
+    assert(type(unit) == "string" and unit ~= "", "UnitInRange requires a bound unit token")
+    unitInRangeCalls = unitInRangeCalls + 1
+    unitInRangeLastUnit = unit
+    return true, true
+end
 _G.AuraContainerSortMethod = { Default = 0, Expiration = 1, Name = 2 }
 _G.AuraContainerSortDirection = { Normal = 0, Reverse = 1 }
 local durationFormatterCreateCalls = 0
@@ -304,11 +349,14 @@ _G.MSUF_NS = MSUF
 
 local layersChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Layers.lua"))
 layersChunk("MidnightSimpleUnitFrames", MSUF)
+local spellIndicatorChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_SpellIndicators.lua"))
+spellIndicatorChunk("MidnightSimpleUnitFrames", MSUF)
 local backendChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua"))
 backendChunk("MidnightSimpleUnitFrames", MSUF)
 
 local A3 = assert(MSUF.MSUF_Auras3)
 local AurasElement = assert(registeredElements.Auras)
+local SpellIndicators = assert(A3.SpellIndicators)
 Check(type(A3.ResolveUnitFrameConfig) == "function", "unit aura compiler missing")
 Check(type(A3._ApplyNormalLaneContainers) == "function", "normal lane integration surface missing")
 local Layers = assert(MSUF.UF.Layers)
@@ -316,6 +364,357 @@ Check(Layers.SPELL_FRAME_EFFECT_BASE_OFFSET + 10 < Layers.DISPEL_OVERLAY_EFFECT_
     "Dispel overlay AUTO level is not above the strongest Spell frame effect")
 Check(Layers.DISPEL_OVERLAY_EFFECT_OFFSET < Layers.TEXT_BASE_OFFSET + 5,
     "health effects escaped above the default text layer")
+
+-- Fixed-position group slots share exactly one native owner. Spell Indicator
+-- slots stay first (their runtime index contract), Dispel follows, and a single
+-- External appends one absolute slot. Multi-icon Externals retain AuraGroup.
+do
+    local SpellRuntime = assert(A3.SpellIndicators)
+    local spellRoot = assert(SpellRuntime.CompileSlots("party1", {
+        enabled = true,
+        layer = 9,
+        strata = "AUTO",
+        items = {
+            {
+                enabled = true,
+                key = "group-slot-owner",
+                includeSpellIDs = { [12345] = true },
+                placed = {
+                    type = "icon",
+                    anchor = "TOPLEFT",
+                    x = 4,
+                    y = -3,
+                    size = 12,
+                    showCooldown = false,
+                    showCooldownSwipe = false,
+                    showStacks = false,
+                },
+            },
+        },
+    }))
+    local spellSlot = assert(spellRoot.slots[1])
+
+    local function SensorRoot(nativeFilter, trackingSignature)
+        local sensor = {
+            sensor = true,
+            enabled = true,
+            kind = "dispelOverlay",
+            unit = "party1",
+            nativeFilter = nativeFilter,
+            max = 1,
+            visual = "overlay",
+            target = "healthFill",
+            style = "FULL",
+            alpha = 0.35,
+            thickness = 3,
+            layer = 0,
+            strata = "AUTO",
+            _msufA3TrackingSignature = trackingSignature,
+            _msufA3StructuralSignature = "sensor-struct",
+            _msufA3LayoutSignature = "sensor-layout",
+        }
+        return {
+            sensor = true,
+            sensorRoot = true,
+            kind = "dispelSensors",
+            rootKey = "DispelSensor",
+            unit = "party1",
+            enabled = true,
+            sensors = { sensor },
+            max = 1,
+            layer = 0,
+            _msufA3TrackingSignature = trackingSignature,
+            _msufA3StructuralSignature = "sensor-root-struct",
+            _msufA3LayoutSignature = "sensor-root-layout",
+        }
+    end
+
+    local function ExternalLane(maxCount, structuralSignature, nativeFilter, candidateSignature, sortMethod)
+        maxCount = maxCount or 1
+        return {
+            kind = "external",
+            rootKey = "Externals",
+            unit = "party1",
+            enabled = true,
+            nativeFilter = nativeFilter or "HELPFUL|RAID",
+            candidateFilters = candidateSignature and { includeSpellIDs = { [6940] = true } } or nil,
+            candidateFilterSignature = candidateSignature,
+            max = maxCount,
+            size = 15,
+            iconZoom = 110,
+            spacing = 1,
+            step = 16,
+            perRow = maxCount,
+            cols = maxCount,
+            rows = 1,
+            width = maxCount * 15 + math.max(0, maxCount - 1),
+            height = 15,
+            anchor = "BOTTOMRIGHT",
+            x = 7,
+            y = -8,
+            layer = 7,
+            strata = "AUTO",
+            alpha = 0.65,
+            xSign = 1,
+            ySign = -1,
+            verticalGrowth = false,
+            initialAnchor = "TOPLEFT",
+            showCooldownText = false,
+            showCooldownSwipe = false,
+            showDurationBar = false,
+            showStacks = false,
+            showTooltip = true,
+            showAuraBorder = false,
+            showAuraSymbol = false,
+            sortMethod = sortMethod or "DEFAULT",
+            sortReverse = false,
+            _msufA3StructuralSignature = structuralSignature or "external-struct",
+            _msufA3LayoutSignature = structuralSignature or "external-layout",
+        }
+    end
+
+    local function GroupSlots(sensorRoot, activeSpellRoot, externalLane)
+        return assert(A3._GetGroupSlotsRootConfig({
+            group = true,
+            lanes = { external = externalLane },
+            sensorRoot = sensorRoot or false,
+            spellIndicators = activeSpellRoot,
+        }))
+    end
+
+    local function SetCount(set)
+        local count = 0
+        for _ in pairs(set or {}) do count = count + 1 end
+        return count
+    end
+
+    local parent = NewFrame(nil)
+    parent.MSUFUnitKey = "party1"
+    parent.unit = "party1"
+    parent.hpBar = NewHealthBar(parent)
+    local auraRoot = NewFrame(parent)
+    local sensorA = SensorRoot("HARMFUL|DISPELLABLE", "sensor-track-a")
+    local externalA = ExternalLane(1, "external-struct-a")
+    local both = GroupSlots(sensorA, spellRoot, externalA)
+    local normalOk, normalAny = A3._ApplyNormalLaneContainers(
+        auraRoot, { external = externalA }, parent, false, both)
+    Check(normalOk == true and normalAny == false,
+        "single External was still applied as a standalone AuraGroup")
+    Equal(auraRoot.Externals, nil, "single External retained a standalone native owner")
+    local combined = assert(A3._ApplyGroupSlots(auraRoot, both, parent, false),
+        "combined GroupSlots owner did not apply")
+    Equal(auraRoot.GroupSlots, combined, "combined owner did not use canonical GroupSlots key")
+    Equal(auraRoot.DispelSensor, nil, "combined owner allocated legacy DispelSensor root")
+    Equal(auraRoot.SpellIndicators, nil, "combined owner allocated legacy SpellIndicators root")
+    Equal(SetCount(A3._directIdentityAuraContainers and A3._directIdentityAuraContainers.party1), 1,
+        "combined fixed slots registered more than one native owner")
+    Equal(SetCount(combined.auraSlotOptions), 3, "combined owner did not contain all three slot families")
+    Equal(combined.auraSlotOptions[spellSlot.slotKey].filter, spellSlot.nativeFilter,
+        "Spell Indicator native filter changed inside GroupSlots")
+    Equal(combined.auraSlotOptions.msuf_dispelOverlay_1.filter, sensorA.sensors[1].nativeFilter,
+        "Dispel native filter changed inside GroupSlots")
+    Check(combined[1] and combined[1]._msufA3SpellIndicatorSlot ~= nil,
+        "Spell Indicator initializer lost the first native slot")
+    Equal(combined[1].point and combined[1].point[4], 4,
+        "Spell Indicator geometry changed inside GroupSlots")
+    Equal(combined[2] and combined[2]._msufA3DispelSensor, "overlay",
+        "Dispel initializer lost its offset native slot")
+    Equal(combined[2].allPoints, parent.hpBar,
+        "Dispel geometry changed inside GroupSlots")
+    Equal(combined[2]._msufA3DispelSensorRegion.allPoints, parent.hpBar:GetStatusBarTexture(),
+        "Dispel fill-layer geometry changed inside GroupSlots")
+    Equal(combined.auraSlotOptions.msuf_external.filter, externalA.nativeFilter,
+        "External native filter changed inside GroupSlots")
+    Equal(combined[3] and combined[3]._msufA3LaneKind, "external",
+        "External initializer lost its appended native slot")
+    Equal(combined[3].point and combined[3].point[1], externalA.anchor,
+        "External outer anchor changed inside GroupSlots")
+    Equal(combined[3].point and combined[3].point[2], parent,
+        "External slot was not anchored directly to the unit frame")
+    Equal(combined[3].point and combined[3].point[4], externalA.x,
+        "External horizontal offset changed inside GroupSlots")
+    Equal(combined[3].point and combined[3].point[5], externalA.y,
+        "External vertical offset changed inside GroupSlots")
+    Equal(combined[3].alpha, externalA.alpha,
+        "External in-range alpha changed inside GroupSlots")
+
+    local sensorOnly = assert(A3._ApplyGroupSlots(auraRoot, GroupSlots(sensorA, nil), parent, false),
+        "sensor-only GroupSlots transition failed")
+    Check(sensorOnly ~= combined, "removing Spell Indicators did not structurally replace GroupSlots")
+    Equal(SetCount(sensorOnly.auraSlotOptions), 1, "sensor-only GroupSlots retained Spell Indicator slots")
+    Equal(sensorOnly[1] and sensorOnly[1]._msufA3DispelSensor, "overlay",
+        "sensor-only GroupSlots did not reset the Dispel native index")
+    Equal(SetCount(A3._directIdentityAuraContainers and A3._directIdentityAuraContainers.party1), 1,
+        "sensor-only transition retained a stale native owner")
+
+    local spellOnly = assert(A3._ApplyGroupSlots(auraRoot, GroupSlots(nil, spellRoot), parent, false),
+        "spell-only GroupSlots transition failed")
+    Check(spellOnly ~= sensorOnly, "removing Dispel did not structurally replace GroupSlots")
+    Equal(SetCount(spellOnly.auraSlotOptions), 1, "spell-only GroupSlots retained Dispel slots")
+    Check(spellOnly[1] and spellOnly[1]._msufA3SpellIndicatorSlot ~= nil,
+        "spell-only GroupSlots lost its initializer")
+    Equal(SetCount(A3._directIdentityAuraContainers and A3._directIdentityAuraContainers.party1), 1,
+        "spell-only transition retained a stale native owner")
+
+    local combinedAgain = assert(A3._ApplyGroupSlots(auraRoot, both, parent, false),
+        "combined GroupSlots re-enable failed")
+    local sensorB = SensorRoot("HARMFUL|RAID_PLAYER_DISPELLABLE", "sensor-track-b")
+    local updated = assert(A3._ApplyGroupSlots(auraRoot, GroupSlots(sensorB, spellRoot, externalA), parent, false),
+        "GroupSlots filter-only update failed")
+    Equal(updated, combinedAgain, "filter-only update unnecessarily recreated GroupSlots")
+    Equal(updated.slotFilterStrings.msuf_dispelOverlay_1, "HARMFUL|RAID_PLAYER_DISPELLABLE",
+        "filter-only update did not reach the native Dispel slot")
+
+    local externalB = ExternalLane(1, "external-struct-a", "HELPFUL|EXTERNAL_DEFENSIVE", "external-candidates", "NAME")
+    local externalUpdated = assert(A3._ApplyGroupSlots(
+        auraRoot, GroupSlots(sensorB, spellRoot, externalB), parent, false),
+        "External filter-only GroupSlots update failed")
+    Equal(externalUpdated, updated, "External filter/candidate/sort update recreated GroupSlots")
+    Equal(externalUpdated.slotFilterStrings.msuf_external, externalB.nativeFilter,
+        "External filter update did not reach its AuraSlot")
+    Equal(externalUpdated.slotCandidateFilters.msuf_external, externalB.candidateFilters,
+        "External candidate update did not reach its AuraSlot")
+    Equal(externalUpdated.slotSortMethods.msuf_external[1], _G.AuraContainerSortMethod.Name,
+        "External sort update did not reach its AuraSlot")
+
+    local externalMoved = ExternalLane(1, "external-struct-b", externalB.nativeFilter, "external-candidates", "NAME")
+    externalMoved.anchor = "TOPRIGHT"
+    externalMoved.x = -9
+    local moved = assert(A3._ApplyGroupSlots(
+        auraRoot, GroupSlots(sensorB, spellRoot, externalMoved), parent, false),
+        "External structural GroupSlots update failed")
+    Check(moved ~= externalUpdated, "External anchor/style change reused forbidden native buttons")
+    Equal(moved[3].point[1], "TOPRIGHT", "External structural rebuild lost its new anchor")
+    Equal(moved[3].point[4], -9, "External structural rebuild lost its new offset")
+
+    local recreated = assert(SpellRuntime.Recreate(moved), "GroupSlots world recreation failed")
+    Check(recreated ~= moved, "GroupSlots world recreation reused forbidden native buttons")
+    Equal(SetCount(recreated.auraSlotOptions), 3, "GroupSlots recreation lost a slot family")
+    Equal(SetCount(A3._directIdentityAuraContainers and A3._directIdentityAuraContainers.party1), 1,
+        "GroupSlots recreation retained a stale native owner")
+
+    A3._HideLane(recreated)
+    auraRoot.GroupSlots = nil
+    Equal(SetCount(A3._directIdentityAuraContainers and A3._directIdentityAuraContainers.party1), 0,
+        "disabled GroupSlots retained native UNIT_AURA ownership")
+
+    local externalMany = ExternalLane(2, "external-many")
+    local maxTwoConfig = {
+        group = true,
+        lanes = { external = externalMany },
+        sensorRoot = false,
+    }
+    Equal(A3._GetGroupSlotsRootConfig(maxTwoConfig), nil,
+        "multi-icon External was incorrectly compiled into GroupSlots")
+    normalOk, normalAny = A3._ApplyNormalLaneContainers(
+        auraRoot, maxTwoConfig.lanes, parent, false, nil)
+    Check(normalOk == true and normalAny == true,
+        "multi-icon External did not retain its AuraGroup fallback")
+    Check(auraRoot.Externals ~= nil, "multi-icon External created no standalone owner")
+    Equal(auraRoot.Externals.createdButtons, 2,
+        "multi-icon External fallback changed its native capacity")
+    A3._HideLane(auraRoot.Externals)
+    auraRoot.Externals = nil
+end
+
+-- Identical group-border AuraSlots all select the same top candidate. Compile
+-- one border slot while leaving other visual families at their existing count.
+do
+    local function CompileBorder(trigger, overlayEnabled)
+        local frame = NewFrame(nil)
+        frame._msufIsGroupFrame = true
+        frame._msufGFKind = "party"
+        frame.MSUFUnitKey = "party1"
+        frame.MSUFSpec = {
+            auras = { enabled = true },
+            border = { dispel = true, dispelTrigger = trigger },
+            group = {
+                dispelOverlayEnabled = overlayEnabled == true,
+                dispelOverlayTrigger = "BORDER",
+            },
+        }
+        Check(AurasElement.IsEnabled(frame) == true, "group Dispel border did not compile")
+        return assert(frame._msufA3NativeGroupConfig)
+    end
+
+    local dispelType = CompileBorder("DISPEL_TYPE", true)
+    Equal(dispelType.sensors.dispelBorder.max, 1,
+        "group Dispel-type border retained duplicate AuraSlots")
+    Equal(dispelType.sensors.dispelBorder.filterMax, 1,
+        "group Dispel-type border retained duplicate filter capacity")
+    Equal(dispelType.sensors.dispelOverlay.max, 3,
+        "border-only slot collapse leaked into the overlay family")
+
+    local playerCast = CompileBorder("PLAYER_CAST", false)
+    Equal(playerCast.sensors.dispelBorder.max, 1,
+        "group player-cast border retained duplicate AuraSlots")
+end
+
+-- The direct identity driver is shared by all eligible native containers.
+-- Register its fixed event set only on the first container, keep it active
+-- while any container remains, and restore it once after a full teardown.
+do
+    local function IdentityContainer(unit)
+        local container = NewFrame(nil)
+        container.unit = unit
+        function container:UpdateAllAuras()
+            self.updateAllAurasCalls = (self.updateAllAurasCalls or 0) + 1
+        end
+        return container
+    end
+
+    A3._directIdentityAuraContainers = nil
+    A3._directIdentityAuraFrame = nil
+    local target = IdentityContainer("target")
+    local focus = IdentityContainer("focus")
+    local boss = IdentityContainer("boss1")
+
+    Check(A3._RegisterDirectIdentityRefreshContainer(target) == true,
+        "first direct identity container did not register")
+    local driver = assert(A3._directIdentityAuraFrame,
+        "first direct identity container created no event driver")
+    Equal(driver.registerEventCalls or 0, 6,
+        "first direct identity container did not register the fixed event set once")
+    Equal(driver.unregisterAllEventsCalls or 0, 0,
+        "first direct identity container redundantly cleared a new event driver")
+
+    Check(A3._RegisterDirectIdentityRefreshContainer(focus) == true
+        and A3._RegisterDirectIdentityRefreshContainer(boss) == true,
+        "additional direct identity containers did not register")
+    Equal(driver.registerEventCalls or 0, 6,
+        "additional direct identity containers re-registered shared events")
+    Equal(driver.unregisterAllEventsCalls or 0, 0,
+        "additional direct identity containers reset the shared event driver")
+
+    driver.scripts.OnEvent(driver, "PLAYER_TARGET_CHANGED")
+    Equal(target.updateAllAurasCalls or 0, 1,
+        "shared direct identity driver did not refresh target")
+    Equal(focus.updateAllAurasCalls or 0, 0,
+        "target event refreshed focus container")
+    Equal(boss.updateAllAurasCalls or 0, 0,
+        "target event refreshed boss container")
+
+    A3._UnregisterDirectIdentityRefreshContainer(target)
+    A3._UnregisterDirectIdentityRefreshContainer(focus)
+    Equal(driver.unregisterAllEventsCalls or 0, 0,
+        "shared direct identity driver stopped before the last container")
+    A3._UnregisterDirectIdentityRefreshContainer(boss)
+    Equal(driver.unregisterAllEventsCalls or 0, 1,
+        "last direct identity container did not stop the shared driver once")
+    Check(next(driver.events) == nil,
+        "direct identity driver retained events after full teardown")
+
+    local replacement = IdentityContainer("target")
+    Check(A3._RegisterDirectIdentityRefreshContainer(replacement) == true,
+        "direct identity driver did not restart after full teardown")
+    Check(A3._directIdentityAuraFrame == driver,
+        "direct identity driver recreated its frame after teardown")
+    Equal(driver.registerEventCalls or 0, 12,
+        "direct identity driver did not register exactly once on restart")
+    A3._UnregisterDirectIdentityRefreshContainer(replacement)
+    Equal(driver.unregisterAllEventsCalls or 0, 2,
+        "restarted direct identity driver did not stop exactly once")
+end
 
 local ANCHORS = {
     "TOPLEFT", "TOP", "TOPRIGHT",
@@ -397,7 +796,7 @@ local function ApplyLane(lane)
     local lanes = {}
     lanes[lane.kind] = lane
     local ok, any = A3._ApplyNormalLaneContainers(auraRoot, lanes, parent, false)
-    Check(ok == true and any == true, "normal aura lane integration failed")
+    Check(ok == true and any == true, "normal aura lane integration failed: ok=" .. tostring(ok) .. " any=" .. tostring(any) .. " error=" .. tostring(A3.nativeAuraRuntimeError))
     return assert(auraRoot[lane.rootKey]), auraRoot, parent
 end
 
@@ -446,6 +845,59 @@ local function GeometryCalls(frames, field)
     local count = 0
     for i = 1, #frames do count = count + (frames[i][field] or 0) end
     return count
+end
+
+-- Filter-only edits belong to Blizzard's public 12.1 setter path. They must
+-- retain both the container and its access-restricted buttons, while an
+-- initializeFrame-owned visual edit remains structural.
+do
+    local lane = UnitLane("TOPLEFT", "RIGHTDOWN")
+    local container, auraRoot, parent = ApplyLane(lane)
+    local groupKey = container._msufA3ManagedGroupKey
+    local button = container:GetAuraGroup(groupKey):GetFramesByIndex()[1]
+    local updatesBefore = container.updateAllAurasCalls or 0
+
+    lane.nativeFilter = "HELPFUL|PLAYER"
+    lane._msufA3TrackingSignature = nil
+    lane._msufA3StructuralSignature = nil
+    lane._msufA3LayoutSignature = nil
+    local ok, any = A3._ApplyNormalLaneContainers(auraRoot, { buff = lane }, parent, false)
+    local reused = assert(auraRoot.Buffs)
+    Check(ok == true and any == true and reused == container,
+        "filter-only lane edit recreated its native container")
+    Equal(reused:GetAuraGroup(groupKey):GetFramesByIndex()[1], button,
+        "filter-only lane edit recreated its forbidden AuraButton")
+    Equal(reused.groupFilterSetterCalls or 0, 1,
+        "filter-only lane edit did not use exactly one native group setter")
+    Equal(reused.updateAllAurasCalls or 0, updatesBefore + 1,
+        "filter-only lane edit requested more than one native full parse")
+end
+
+do
+    local function Indicator(nativeFilter, frameType)
+        return assert(SpellIndicators.CompileSlots("player", {
+            enabled = true,
+            items = {
+                {
+                    enabled = true,
+                    key = "hybrid_delta",
+                    allowAnyAura = true,
+                    nativeFilter = nativeFilter,
+                    placed = { type = "icon", size = 16 },
+                    frame = { type = frameType, color = { 1, 0, 0, 1 } },
+                },
+            },
+        }))
+    end
+    local helpfulBorder = Indicator("HELPFUL", "border")
+    local playerBorder = Indicator("HELPFUL|PLAYER", "border")
+    local helpfulTint = Indicator("HELPFUL", "tint")
+    Equal(helpfulBorder._msufA3StructuralSignature, playerBorder._msufA3StructuralSignature,
+        "Spell Indicator native filter is still structural")
+    Check(helpfulBorder.slots[1].nativeFilter ~= playerBorder.slots[1].nativeFilter,
+        "Spell Indicator native filter escaped the public setter config")
+    Check(helpfulBorder._msufA3StructuralSignature ~= helpfulTint._msufA3StructuralSignature,
+        "init-only frame effect stopped forcing the smallest container rebuild")
 end
 
 do
@@ -638,7 +1090,7 @@ do
         }
         Check(AurasElement.IsEnabled(parent) == true, "Dispel-only group aura config did not enable")
         Check(AurasElement.Enable(parent) == true, "native Dispel overlay did not apply")
-        local container = assert(parent.Auras and parent.Auras.DispelSensor,
+        local container = assert(parent.Auras and parent.Auras.GroupSlots,
             "combined Dispel sensor container missing")
         local button = assert(container[1], "native Dispel overlay AuraButton missing")
         return parent, button, healthFill, container
@@ -875,10 +1327,10 @@ for _, laneSpec in ipairs(GROUP_LANES) do
 end
 Equal(groupCases, 216, "group lane/anchor/growth coverage")
 
--- Party aura access can change without UNIT_AURA. The element must request the
--- two rare per-unit recovery events and invalidate only the already-registered
--- native containers for that party member. Raid and preview frames deliberately
--- stay off this path so the fix cannot add a 40-frame range subscription.
+-- Party aura access can change without UNIT_AURA. Connection remains a rare
+-- full recovery edge, but chatty range transitions must only forward their
+-- possibly-secret boolean into native alpha gates. Raid and preview frames
+-- deliberately stay off this path so the fix cannot add a 40-frame route.
 do
     local frame = NewFrame(nil)
     frame.unit = "party1"
@@ -898,13 +1350,24 @@ do
             debuffIconSize = 12,
             debuffSpacing = 2,
             debuffPerRow = 2,
+            showTrackedBuffs = true,
+            maxTrackedBuffs = 1,
+            trackedBuffIncludeHash = { [12345] = true },
+        },
+        spellIndicators = {
+            enabled = true,
+            items = {{
+                enabled = true,
+                key = "party-range-gate",
+                includeSpellIDs = { [12345] = true },
+                placed = { type = "icon", anchor = "TOPLEFT", x = 1, y = -1, size = 10 },
+            }},
         },
     }
 
     local events = AurasElement.GetEvents(frame)
-    Equal(#events, 2, "party aura access event count")
-    Equal(events[1], "UNIT_CONNECTION", "party aura connection event")
-    Equal(events[2], "UNIT_IN_RANGE_UPDATE", "party aura range event")
+    Equal(#events, 1, "party aura access event count")
+    Equal(events[1], "UNIT_IN_RANGE_UPDATE", "party aura range event")
 
     A3._directIdentityAuraContainers = nil
     Check(AurasElement.IsEnabled(frame) == true, "party aura access config did not enable")
@@ -928,24 +1391,48 @@ do
         }
     end
     Check(containerCount > 0, "party aura access runtime created no native containers")
+    local groupSlots = assert(frame.Auras.GroupSlots, "party range gate has no fixed-slot owner")
+    local trackedBuffs = assert(frame.Auras.TrackedBuffs, "party range gate has no tracked-buff owner")
+    local normalBuffs = assert(frame.Auras.Buffs, "party range smoke has no ordinary Buff owner")
+    local normalDebuffs = assert(frame.Auras.Debuffs, "party range smoke has no ordinary Debuff owner")
 
     local rangeUpdate = AurasElement.SelectEventUpdate(frame, frame.MSUFSpec,
         "UNIT_IN_RANGE_UPDATE", AurasElement.Update)
-    Equal(rangeUpdate, AurasElement.UpdatePartyAuraAccess,
-        "party range event did not select its secret-safe refresh route")
+    Equal(rangeUpdate, AurasElement.UpdatePartyAuraRange,
+        "party range event did not select its secret-safe alpha route")
     local updates = TotalUpdates()
-    rangeUpdate(frame, "UNIT_IN_RANGE_UPDATE", {}, {})
-    Equal(TotalUpdates(), updates + containerCount,
-        "party range transition did not refresh every native container exactly once")
+    local secretRange = {}
+    local slotAlphaCalls = groupSlots.alphaFromBooleanCalls or 0
+    local trackedAlphaCalls = trackedBuffs.alphaFromBooleanCalls or 0
+    local buffAlphaCalls = normalBuffs.alphaFromBooleanCalls or 0
+    local debuffAlphaCalls = normalDebuffs.alphaFromBooleanCalls or 0
+    rangeUpdate(frame, "UNIT_IN_RANGE_UPDATE", "party1", secretRange, true)
+    Equal(TotalUpdates(), updates,
+        "party range transition triggered a native FullAuraRebuild")
+    Equal(groupSlots.alphaFromBooleanCalls or 0, slotAlphaCalls + 1,
+        "party range transition missed the fixed-slot alpha gate")
+    Equal(groupSlots.alphaFromBooleanValue, secretRange,
+        "fixed-slot alpha gate did not preserve the opaque range value")
+    Equal(trackedBuffs.alphaFromBooleanCalls or 0, trackedAlphaCalls + 1,
+        "party range transition missed the identity-filtered lane gate")
+    Equal(trackedBuffs.alphaFromBooleanValue, secretRange,
+        "tracked-buff alpha gate did not preserve the opaque range value")
+    Equal(normalBuffs.alphaFromBooleanCalls or 0, buffAlphaCalls,
+        "ordinary token-filtered Buffs were unnecessarily range-gated")
+    Equal(normalDebuffs.alphaFromBooleanCalls or 0, debuffAlphaCalls,
+        "ordinary token-filtered Debuffs were unnecessarily range-gated")
 
-    local connectionUpdate = AurasElement.SelectEventUpdate(frame, frame.MSUFSpec,
-        "UNIT_CONNECTION", AurasElement.Update)
-    Equal(connectionUpdate, AurasElement.UpdatePartyAuraAccess,
-        "party connection event did not select its refresh route")
-    updates = TotalUpdates()
-    connectionUpdate(frame, "UNIT_CONNECTION", {}, false)
-    Equal(TotalUpdates(), updates + containerCount,
-        "party connection transition did not refresh every native container exactly once")
+    frame.MSUFSpec.group = { rangeFadeEnabled = true }
+    frame._msufActiveElements = { GroupRangeFade = true }
+    AurasElement.Apply(frame)
+    Equal(#AurasElement.GetEvents(frame), 0,
+        "party aura gate duplicated GroupRangeFade's UNIT_IN_RANGE_UPDATE route")
+    Check(type(frame._msufApplyPartyAuraRangeGate) == "function",
+        "shared party range route did not compile its direct aura follower")
+
+    Equal(AurasElement.SelectEventUpdate(frame, frame.MSUFSpec,
+        "UNIT_CONNECTION", AurasElement.Update), nil,
+        "party connection event regained a native full-refresh route")
 
     local current = assert(A3._directIdentityAuraContainers.party1)
     local currentCount = 0
@@ -958,6 +1445,47 @@ do
             "party access refresh repeated container point geometry")
     end
     Equal(currentCount, containerCount, "party access refresh changed native container count")
+
+    -- A secure child can temporarily lose MSUFUnitKey during a world/roster
+    -- identity sweep while its native containers are still indexed by the old
+    -- unit. The registry unit must seed the range gate without calling
+    -- UnitInRange(nil), which is a hard client error rather than a nil result.
+    local boundUnit = frame.MSUFUnitKey
+    frame.MSUFUnitKey = nil
+    local rangeCallsBeforeFallback = unitInRangeCalls
+    local refreshOK, refreshErr = pcall(A3._DirectIdentityRefreshUnit, "party1")
+    Check(refreshOK, "party identity refresh passed an unbound token to UnitInRange: " .. tostring(refreshErr))
+    Equal(unitInRangeCalls, rangeCallsBeforeFallback + 1,
+        "party identity refresh did not seed range from its registry unit")
+    Equal(unitInRangeLastUnit, "party1",
+        "party identity refresh used the wrong fallback range unit")
+    frame.MSUFUnitKey = boundUnit
+
+    -- `player` is shared by the normal Player UF and the Party self child.
+    -- Direct identity refresh must ignore the normal parent and still seed the
+    -- actual Party parent regardless of pairs() order.
+    local normalPlayerFrame = NewFrame(nil)
+    normalPlayerFrame.MSUFUnitKey = "player"
+    local normalPlayerContainer = NewAuraContainer(normalPlayerFrame)
+    normalPlayerContainer._msufA3ParentFrame = normalPlayerFrame
+    local partyPlayerContainer = groupSlots
+    local oldPartyPlayerUnit = frame.MSUFUnitKey
+    local oldPlayerContainers = A3._directIdentityAuraContainers.player
+    frame.MSUFUnitKey = "player"
+    A3._directIdentityAuraContainers.player = {
+        [normalPlayerContainer] = true,
+        [partyPlayerContainer] = true,
+    }
+    local playerAlphaCalls = groupSlots.alphaFromBooleanCalls or 0
+    local playerRefreshOK, playerRefreshErr = pcall(A3._DirectIdentityRefreshUnit, "player")
+    Check(playerRefreshOK,
+        "shared player identity refresh failed to seed its Party parent: " .. tostring(playerRefreshErr))
+    Equal(groupSlots.alphaFromBooleanCalls or 0, playerAlphaCalls + 1,
+        "normal Player UF parent displaced the Party self range seed")
+    Equal(unitInRangeLastUnit, "player",
+        "Party self range seed did not use the shared player registry unit")
+    A3._directIdentityAuraContainers.player = oldPlayerContainers
+    frame.MSUFUnitKey = oldPartyPlayerUnit
 
     local preview = NewFrame(nil)
     preview.unit = "party1"
@@ -976,6 +1504,42 @@ do
     target.unit = "target"
     target.MSUFUnitKey = "target"
     Equal(#AurasElement.GetEvents(target), 0, "single unit registered party aura access events")
+
+    local ordinaryDebuffs = NewFrame(nil)
+    ordinaryDebuffs.unit = "party2"
+    ordinaryDebuffs.MSUFUnitKey = "party2"
+    ordinaryDebuffs._msufIsGroupFrame = true
+    ordinaryDebuffs._msufGFKind = "party"
+    ordinaryDebuffs.MSUFSpec = {
+        auras = {
+            enabled = true,
+            showBuffs = false,
+            maxBuffs = 0,
+            showTrackedBuffs = false,
+            maxTrackedBuffs = 0,
+            showDebuffs = true,
+            maxDebuffs = 2,
+            showExternals = false,
+            maxExternals = 0,
+        },
+    }
+    Check(AurasElement.IsEnabled(ordinaryDebuffs) == true,
+        "ordinary party Debuffs did not keep the native aura element enabled")
+    Equal(#AurasElement.GetEvents(ordinaryDebuffs), 0,
+        "disabled identity-dependent party aura features retained UNIT_IN_RANGE_UPDATE")
+    local rangeCalls = unitInRangeCalls
+    Check(AurasElement.Enable(ordinaryDebuffs) == true,
+        "ordinary party Debuffs did not apply their native container")
+    Equal(unitInRangeCalls, rangeCalls,
+        "disabled identity-dependent party aura features retained a range seed")
+    Equal(ordinaryDebuffs.Auras.Buffs, nil,
+        "disabled party Buffs retained a native UNIT_AURA owner")
+    local ordinaryOwners = 0
+    for _ in pairs(A3._directIdentityAuraContainers.party2 or {}) do
+        ordinaryOwners = ordinaryOwners + 1
+    end
+    Equal(ordinaryOwners, 1,
+        "ordinary party Debuffs did not compile to exactly one native UNIT_AURA owner")
 end
 
 -- Native maximum-duration filtering is compiled once into every Debuff
@@ -1271,8 +1835,31 @@ Check(runtimeSource:find("player = true", 1, true),
     "player aura containers are no longer eligible for world repair")
 Check(runtimeSource:find("A3._SyncManagedAuraContainerGeometry", 1, true),
     "generic managed-aura world repair dispatcher missing")
+Check(runtimeSource:find("root.GroupSlots = current", 1, true)
+    and runtimeSource:find("ApplyGroupSlots(root, groupSlots, frame, forceRecreate)", 1, true)
+    and runtimeSource:find("local firstEffectRoot = group and 2 or 1", 1, true),
+    "group fixed-slot families no longer route through one canonical native owner")
+Check(not runtimeSource:find("_ApplySharedAuraContainer", 1, true)
+    and not runtimeSource:find("_msufA3SharedAuraGroups", 1, true)
+    and not runtimeSource:find("_sharedAuraRootKey", 1, true),
+    "dead pre-PTR5 shared normal-lane runtime returned")
+Check(not runtimeSource:find('"UNIT_CONNECTION"', 1, true),
+    "party UNIT_CONNECTION regained an AuraContainer full-refresh route")
+local rangeFastPathStart = assert(runtimeSource:find("function AurasElement.UpdatePartyAuraRange", 1, true))
+local rangeFastPathStop = assert(runtimeSource:find("function AurasElement.SelectEventUpdate", rangeFastPathStart, true))
+local rangeFastPath = runtimeSource:sub(rangeFastPathStart, rangeFastPathStop)
+Check(rangeFastPath:find("ApplyPartyAuraRangeGate", 1, true)
+    and not rangeFastPath:find("_DirectIdentityRefreshUnit", 1, true)
+    and not rangeFastPath:find("UpdateAllAuras", 1, true),
+    "UNIT_IN_RANGE_UPDATE regained a native aura rebuild")
 
 local spellIndicatorSource = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_SpellIndicators.lua")
+Check(spellIndicatorSource:find("function Runtime.AttachSlots(container, slotRoot)", 1, true)
+    and spellIndicatorSource:find("D().RecreateGroupSlots", 1, true),
+    "Spell Indicator slot/recreation bridge for GroupSlots is missing")
+Check(spellIndicatorSource:find("function Runtime.ApplyPartyRangeGate(parentFrame, inRange)", 1, true)
+    and spellIndicatorSource:find("gate._msufA3PartyRangeGate", 1, true),
+    "external Spell Indicator effects are not range-gated")
 Check(not spellIndicatorSource:find("hooksecurefunc(source", 1, true),
     "PTR 5 spell indicators retain a post-initializer write hook into forbidden AuraButton descendants")
 Check(not spellIndicatorSource:find("for button in pairs(buttons) do HideButton", 1, true),
@@ -1386,4 +1973,4 @@ Check(groupHandlesSource:find("return ResolveAnchor(rx, ry)", 1, true),
 Check(groupHandlesSource:find('externalHandle._cfgGroup = "externals"', 1, true),
     "group External aura handle no longer writes its persisted lane")
 
-print("PASS aura position parity: 54 unit + 216 group live layouts, 54 unit preview lanes, scope-aware icon zoom, vertical fallback, PTR5 forbidden-button guard, fixed host capacity, player/dispel zone repair, 1000x native churn")
+print("PASS aura position parity: 54 unit + 216 group live layouts, one GroupSlots owner with transitions/recreate, 54 unit preview lanes, scope-aware icon zoom, vertical fallback, PTR5 forbidden-button guard, fixed host capacity, player/dispel zone repair, 1000x native churn")

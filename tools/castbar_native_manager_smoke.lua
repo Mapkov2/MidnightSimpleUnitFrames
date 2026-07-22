@@ -210,6 +210,39 @@ local function StartCast(unit, castType, configure)
     return frame, duration
 end
 
+-- Immutable formatter construction and frame-local binding setup belong to
+-- cold frame preparation, not the first active cast. The live duration must
+-- reuse that binding and is still the operation that enables it.
+local createFormatter = _G.C_StringUtil.CreateNumericRuleFormatter
+_G.C_StringUtil.CreateNumericRuleFormatter = nil
+local retryFrame = NewCastFrame("target")
+assert(not runtime:PrewarmNativeTimeText(retryFrame),
+    "prewarm unexpectedly succeeded without the formatter API")
+_G.C_StringUtil.CreateNumericRuleFormatter = createFormatter
+assert(runtime:PrewarmNativeTimeText(retryFrame),
+    "failed prewarm permanently poisoned the later native retry")
+runtime:DisableNativeTimeText(retryFrame)
+
+local prewarmFrame = NewCastFrame("target")
+local bindingsBeforePrewarm = #bindings
+assert(runtime:PrewarmNativeTimeText(prewarmFrame))
+assert(#bindings == bindingsBeforePrewarm + 1, "native cast-time binding was not prewarmed")
+local prewarmedBinding = prewarmFrame._msufDurationTextBinding
+assert(prewarmedBinding and prewarmedBinding.fontString == prewarmFrame.timeText,
+    "prewarmed binding did not own the cast-time FontString")
+assert(prewarmedBinding.interval == 0.10 and prewarmedBinding.format == "{} / {}",
+    "prewarmed binding lost its configured interval/format")
+assert(prewarmedBinding.duration == nil and prewarmedBinding.enabled ~= true,
+    "prewarmed binding became active without a duration")
+local prewarmDuration = NewDuration(2, 2)
+assert(runtime:BindNativeTimeText(prewarmFrame, prewarmDuration, "CURRENT_MAX"))
+assert(prewarmFrame._msufDurationTextBinding == prewarmedBinding
+    and #bindings == bindingsBeforePrewarm + 1,
+    "first active cast replaced its prewarmed native binding")
+assert(prewarmedBinding.duration == prewarmDuration and prewarmedBinding.enabled == true,
+    "live cast did not activate the prewarmed binding")
+runtime:DisableNativeTimeText(prewarmFrame)
+
 -- DurationTextBinding writes behind the Lua text cache. Both activation and
 -- deactivation must invalidate it, including SetEnabled(false) fallback.
 bindingWithoutDisable = true

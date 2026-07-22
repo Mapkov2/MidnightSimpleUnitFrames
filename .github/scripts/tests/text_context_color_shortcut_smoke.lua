@@ -19,6 +19,12 @@ local helper = widgets:sub(helperStart, helperEnd - 1)
 
 assert(helper:find('shortcut:SetPoint("TOPRIGHT", card, "TOPRIGHT", tonumber(opts.offsetX) or -12, tonumber(opts.offsetY) or -10)', 1, true),
     "RGB shortcut does not expose an exact top-right card anchor")
+assert(helper:find('T.Button(card, CONTEXT_COLOR_SHORTCUT_TEXT, 34, 20, { noSearch = true })', 1, true)
+        and helper:find("AddThreeDotShortcutTextures(shortcut, COLOR_SHORTCUT_DOTS)", 1, true),
+    "RGB shortcut does not use the larger shared textured three-dot treatment")
+assert(helper:find('dot:SetTexture(THREE_DOT_SHORTCUT_TEXTURE)', 1, true)
+        and helper:find('dot:SetSize(5, 5)', 1, true),
+    "three-dot shortcuts still rely on a scaled font glyph instead of crisp native textures")
 assert(helper:find("math.min(4, tonumber(opts.maxTargets) or 4)", 1, true),
     "RGB shortcut does not enforce the compact four-target limit")
 assert(helper:find("if #targets > maxTargets then return false end", 1, true),
@@ -48,8 +54,12 @@ assert(unitText:find("textSettings = { scope = unit, unit = unit, kind = kind }"
     "HP/Power submenu does not pass its mode-local descriptor")
 assert(quickSettings:find('if mode == "HEALTH" then', 1, true),
     "HP health mode does not expose its three gradient stops")
-assert(quickSettings:find('return { PowerColorTarget(data.powerToken or "MANA") }', 1, true),
-    "Power type mode does not resolve the deterministic preview power color")
+assert(quickSettings:find('local targets = { DefaultFontTarget(scope, group) }', 1, true),
+    "native text palettes do not include their effective default font color")
+assert(quickSettings:find('targets[#targets + 1] = ClassColorTarget', 1, true),
+    "name/HP palettes do not include the relevant deterministic class color")
+assert(quickSettings:find('targets[#targets + 1] = PowerColorTarget(data.powerToken or "MANA")', 1, true),
+    "Power palette does not include the deterministic preview power color")
 assert(not unitText:find("W.AttachContextColorShortcut(advancedLayers", 1, true),
     "More Options incorrectly exposes a color shortcut without a color target")
 
@@ -68,6 +78,14 @@ do
         function frame:Hide() self.shown = false end
         function frame:HookScript(script, callback) self.hooks[script] = callback end
         function frame:SetScript(script, callback) self.scripts[script] = callback end
+        function frame:CreateTexture()
+            local texture = {}
+            function texture:SetTexture(value) self.texture = value end
+            function texture:SetSize(width, height) self.width, self.height = width, height end
+            function texture:SetPoint(...) self.point = { ... } end
+            function texture:SetVertexColor(...) self.color = { ... } end
+            return texture
+        end
         return frame
     end
 
@@ -86,7 +104,7 @@ do
             local button = Frame(parent)
             button.text, button.width, button.height = text, width, height
             button._msuf2Label = {
-                ClearAllPoints = Noop, SetAllPoints = Noop, SetJustifyH = Noop,
+                ClearAllPoints = Noop, SetAllPoints = Noop, SetJustifyH = Noop, Hide = Noop,
             }
             return button
         end,
@@ -97,9 +115,9 @@ do
 
     local opened, openCount
     openCount = 0
-    W.OpenColorContextPicker = function(title, owners, note, initial)
+    W.OpenColorContextPicker = function(title, owners, note, initial, _, scopeTag)
         openCount = openCount + 1
-        opened = { title = title, owners = owners, note = note, initial = initial }
+        opened = { title = title, owners = owners, note = note, initial = initial, scopeTag = scopeTag }
     end
 
     local values = {}
@@ -122,9 +140,18 @@ do
     card._msuf2Width = 420
     card._msuf2ControlCardTitle = "HP Text colors"
     card.title = { SetWidth = function(_, width) card.titleWidth = width end }
-    local shortcut = assert(W.AttachContextColorShortcut(card, { getTargets = Targets, offsetY = -24 }))
+    local shortcut = assert(W.AttachContextColorShortcut(card, { getTargets = Targets, offsetY = -24, scopeTag = "Shared" }))
+    assert(shortcut.width == 34 and shortcut.height == 20,
+        "RGB shortcut did not retain the larger 34x20 click target")
+    assert(shortcut._msuf2ThreeDotTextures and #shortcut._msuf2ThreeDotTextures == 3,
+        "RGB shortcut did not create exactly three native texture dots")
+    for i = 1, 3 do
+        local dot = shortcut._msuf2ThreeDotTextures[i]
+        assert(dot.width == 5 and dot.height == 5,
+            "RGB shortcut texture dot is not rendered at the crisp 5x5 size")
+    end
     assert(providerCalls == 0, "target provider ran during card construction")
-    assert(W.AttachContextColorShortcut(card, { getTargets = Targets }) == shortcut,
+    assert(W.AttachContextColorShortcut(card, { getTargets = Targets, scopeTag = "Shared" }) == shortcut,
         "duplicate attachment created a second shortcut")
     assert(shortcut.point and shortcut.point[1] == "TOPRIGHT" and shortcut.point[2] == card
         and shortcut.point[3] == "TOPRIGHT" and shortcut.point[4] == -12 and shortcut.point[5] == -24,
@@ -153,6 +180,7 @@ do
     shortcut.scripts.OnClick(shortcut)
     assert(providerCalls == 1, "target provider did not run exactly once on click")
     assert(opened and opened.title == "HP Text colors", "card context title was not preserved")
+    assert(opened.scopeTag == "Shared", "visible context scope tag was not forwarded to the picker")
     assert(#opened.owners == 4, "shortcut did not pass exactly the compact four-target maximum")
     assert(opened.initial == opened.owners[1], "first relevant target is not selected initially")
     opened.owners[1]:_msuf2BeginColorInteraction()

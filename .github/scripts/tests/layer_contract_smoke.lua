@@ -242,7 +242,7 @@ assert(controlSchema:find("/custom-container/effect/layer", 1, true)
         and controlSchema:find("/outline/layer", 1, true),
     "generated Assistant schema omitted a unified Layer 0..30 control")
 
--- The green I button is a shared hook, while the popup always reads the same
+-- The quiet white three-dot button is a shared hook, while the popup always reads the same
 -- addon-wide cold collector. Keep this as a source contract instead of a full
 -- Menu2/WoW widget mock.
 local menuRoot = Join(ROOT, "MidnightSimpleUnitFrames/Shell/Menu2")
@@ -269,17 +269,21 @@ local borderRuntime = Read(Join(ROOT, "MidnightSimpleUnitFrames/UnitFrames/Engin
 assert(menuXML:find('<Script file="MSUF_Menu2_LayerOverview.lua"/>', 1, true),
     "Menu2 XML does not load the global LayerOverview module")
 assert(widgets:find("local function AttachLayerOverviewButton", 1, true)
-        and widgets:find('W.RoleButton(section, "I", "success"', 1, true),
-    "numeric layer sliders do not receive the shared green I button")
-assert(widgets:find("slider._msuf2LayerInfoButton = info", 1, true),
-    "layer slider does not retain its single info-button hook")
+        and widgets:find('local LAYER_OVERVIEW_SHORTCUT_TEXT = "|cffffffff', 1, true)
+        and widgets:find('T.Button(section, LAYER_OVERVIEW_SHORTCUT_TEXT, 34, 20, { noSearch = true })', 1, true)
+        and widgets:find("AddThreeDotShortcutTextures(shortcut, LAYER_SHORTCUT_DOTS)", 1, true),
+    "numeric layer sliders do not receive the shared white textured three-dot button")
+assert(not widgets:find('W.RoleButton(section, "I", "success"', 1, true),
+    "numeric layer sliders still use the old green I button")
+assert(widgets:find("slider._msuf2LayerShortcutButton = shortcut", 1, true),
+    "layer slider does not retain its single three-dot shortcut hook")
 assert(widgets:find("local show = M.ShowLayerOverview or _G.MSUF_ShowLayerOverview", 1, true)
         and widgets:find("AttachLayerOverviewButton(section, slider, title, label, minVal, maxVal)", 1, true),
     "layer info buttons do not call the shared global overview")
 assert(widgets:find("tonumber(minValue) ~= 0 or tonumber(maxValue) ~= 30", 1, true),
-    "the shared I hook is not restricted to numeric MSUF Layer 0..30 controls")
-assert(widgets:find("control._msuf2LayerInfoButton:SetShown(shown)", 1, true),
-    "a conditionally hidden Layer control can leave its I button behind")
+    "the shared three-dot hook is not restricted to numeric MSUF Layer 0..30 controls")
+assert(widgets:find("control._msuf2LayerShortcutButton:SetShown(shown)", 1, true),
+    "a conditionally hidden Layer control can leave its three-dot button behind")
 
 assert(overview:find("function Overview.CollectLayerOverviewRows()", 1, true)
         and overview:find('ExportPublic("MSUF_CollectLayerOverviewRows"', 1, true),

@@ -286,6 +286,7 @@ local function smokeGroupRuntime()
     end
     MSUF.UFStatusRuntime.UpdateStatusText = function(frame)
         statusTextUpdates = statusTextUpdates + 1
+        frame._statusTextUpdates = (frame._statusTextUpdates or 0) + 1
         frame._msufStatusTextValue = statusDead and "DEAD" or nil
     end
 
@@ -318,9 +319,11 @@ local function smokeGroupRuntime()
             statusTickerCreates = statusTickerCreates + 1
         end,
     }
+    local createdFrames = {}
     _G.CreateFrame = function(_, _, parent)
         local holder = frame()
         holder.parent = parent
+        createdFrames[#createdFrames + 1] = holder
         return holder
     end
 
@@ -343,6 +346,7 @@ local function smokeGroupRuntime()
         absorbBarOffsetY = -2,
         healAbsorbBarHeight = 5,
         healAbsorbBarOffsetY = 3,
+        showPowerText = true,
     }
     _G.MSUF_PredictionTestModes = { party = { absorb = true } }
     MSUF.GF.GetConf = function() return conf end
@@ -354,6 +358,13 @@ local function smokeGroupRuntime()
     loadAddon("UnitFrames/Engine/Group/MSUF_UF_Group_Status.lua", MSUF)
     loadAddon("UnitFrames/Engine/Group/MSUF_UF_Group_Visuals.lua", MSUF)
     loadAddon("UnitFrames/Engine/Group/MSUF_UF_Group_Indicators.lua", MSUF)
+
+    local nativeOverlayOnly = { scope = "group", group = { dispelOverlayEnabled = true } }
+    assert(MSUF.UF.elements.GroupVisuals.IsEnabled(nil, nativeOverlayOnly) == false,
+        "native GroupSlots dispel overlay retained the retired GroupVisuals owner")
+    local legacyStripeOnly = { scope = "group", group = { debuffStripeEnabled = true } }
+    assert(MSUF.UF.elements.GroupVisuals.IsEnabled(nil, legacyStripeOnly) == true,
+        "legacy debuff stripe lost its GroupVisuals owner")
 
     local f = frame()
     f.unit = "party1"
@@ -380,6 +391,21 @@ local function smokeGroupRuntime()
         "scope-aware prediction geometry was not cold-compiled")
     _G.MSUF_PredictionTestModes = nil
 
+    local groupRole = "DAMAGER"
+    MSUF.GF.GetUnitGroupRole = function() return groupRole end
+    MSUF.GF.GetEffectivePowerHeight = function(_, _, role)
+        return role == "DAMAGER" and 0 or 6
+    end
+    local roleFrame = frame()
+    roleFrame.MSUFUnitKey = "party2"
+    local roleSpec = MSUF.GF.CompileSpec("party", roleFrame, "party2")
+    assert(roleSpec.power.enabled == false and roleSpec.showPowerText == false,
+        "DPS power-off retained PowerText runtime ownership")
+    groupRole = "HEALER"
+    roleSpec = MSUF.GF.CompileSpec("party", roleFrame, "party2")
+    assert(roleSpec.power.enabled == true and roleSpec.showPowerText == true,
+        "healer power-on did not restore PowerText runtime ownership")
+
     local hasStatusHealthEvent, hasPartyEnable, hasPartyDisable = false, false, false
     for _, event in ipairs(f.MSUFSpec.status.groupRuntimeEvents or {}) do
         if event == "UNIT_HEALTH" then hasStatusHealthEvent = true end
@@ -393,6 +419,35 @@ local function smokeGroupRuntime()
     MSUF.UF.elements.GroupStatusRuntime.Apply(f)
     assert(type(f.MSUFSpec.status.runtimeDispatch) == "table", "status runtimeDispatch missing")
     assert(statusTickerCreates == 0, "group status must not create a polling ticker")
+
+    local flagsPeer = frame()
+    flagsPeer.MSUFUnitKey = "party2"
+    flagsPeer.MSUFSpec = MSUF.GF.CompileSpec("party", flagsPeer, "party2")
+    f._msufActiveElements = { GroupStatusRuntime = true }
+    flagsPeer._msufActiveElements = { GroupStatusRuntime = true }
+    MSUF.GF.frames = { [f] = true, [flagsPeer] = true }
+    MSUF.GF.FrameForUnit = function(unit)
+        if unit == "party1" then return f end
+        if unit == "party2" then return flagsPeer end
+    end
+    MSUF.UF.elements.GroupStatusRuntime.Apply(flagsPeer)
+    local statusDriver
+    for i = 1, #createdFrames do
+        local candidate = createdFrames[i]
+        if candidate.events and candidate.events.PLAYER_FLAGS_CHANGED then
+            statusDriver = candidate
+            break
+        end
+    end
+    assert(statusDriver and type(statusDriver.script) == "function",
+        "shared group status driver missing")
+    local targetFlagsBefore = f._statusTextUpdates or 0
+    local peerFlagsBefore = flagsPeer._statusTextUpdates or 0
+    statusDriver.script(statusDriver, "PLAYER_FLAGS_CHANGED", "party1")
+    assert((f._statusTextUpdates or 0) == targetFlagsBefore + 1
+        and (flagsPeer._statusTextUpdates or 0) == peerFlagsBefore,
+        "PLAYER_FLAGS_CHANGED broadcast beyond its indexed group unit")
+
     local statusUpdatesBeforeHealth = statusTextUpdates
     MSUF.UF.elements.Health.Update(f, "UNIT_HEALTH", "party1")
     assert(statusTextUpdates == statusUpdatesBeforeHealth,
@@ -605,6 +660,7 @@ local function smokeGroupRuntimeRosterModes()
     local eventFrame
     local combat = false
     local stateRefreshes = {}
+    local cornerRefreshes = {}
     local groupFrames = {
         { unit = "party1", MSUFUnitKey = "party1", kind = "party", shown = true },
         { unit = "party2", MSUFUnitKey = "party2", kind = "party", shown = false },
@@ -624,6 +680,10 @@ local function smokeGroupRuntimeRosterModes()
             end
         end
         return any
+    end
+    MSUF.GF.RefreshCornerThreatState = function(reason)
+        cornerRefreshes[#cornerRefreshes + 1] = reason
+        return true
     end
 
     local function eventHost()
@@ -725,6 +785,8 @@ local function smokeGroupRuntimeRosterModes()
     assert(#setupCalls > setupBeforeCombatRoster, "deferred combat roster should rebuild after combat")
     assert(#stateRefreshes == refreshBeforeCombatRoster + 1,
         "deferred roster must catch up visible party state exactly once after combat")
+    assert(#cornerRefreshes == 1 and cornerRefreshes[1] == "PLAYER_REGEN_ENABLED",
+        "group runtime must route combat-exit corner cleanup through its shared regen owner")
 end
 
 local function smokeGroupRuntimeRefreshOwnership()

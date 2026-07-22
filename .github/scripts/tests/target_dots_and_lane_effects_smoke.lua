@@ -75,7 +75,8 @@ assert(menu:find("Model.AddCustomContainerSpell(unit, index, value, true)", 1, t
     "custom target DoT IDs are not explicitly approved")
 assert(menu:find('title = index == 4 and "Tracked DoT Style Preview"', 1, true),
     "target DoT style preview is not labeled as tracked content")
-assert(menu:find('LaneTitle(lane) .. " Full-Frame Effect"', 1, true), "Buff/Debuff Full-Frame menu is missing")
+assert(menu:find('b:CollapsibleSection(baseId .. "_full_frame", "Full-Frame Effect"', 1, true),
+    "Buff/Debuff Full-Frame accordion is missing")
 
 local preview = Read("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Auras.lua")
 assert(preview:find("tonumber(customIndex) <= 4", 1, true), "custom4 preview kind is rejected")

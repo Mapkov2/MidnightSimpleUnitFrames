@@ -17,7 +17,7 @@ local elements = {}
 local UF = {
     Layers = {},
     RegisterElement = function(name, element) elements[name] = element end,
-    UnitExistsSafe = function() return true end,
+    ReadUnitExistsCached = function() return true, true end,
     FreshUnitState = function() return nil end,
     ReadConnectedCached = function() return true, true end,
     ReadDeadCached = function() return false, true end,

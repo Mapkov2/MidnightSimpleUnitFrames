@@ -63,9 +63,11 @@ _G.UnitIsPVPFreeForAll = function() return false end
 _G.issecretvalue = function() return false end
 
 local mockUnit = { exists = true, isPlayer = true, classToken = "MAGE", playerClassToken = "ROGUE" }
+local playerClassReads = 0
 _G.UnitExists = function(unit) return unit == "player" or mockUnit.exists end
 _G.UnitIsPlayer = function(unit) return unit == "player" or mockUnit.isPlayer end
 _G.UnitClass = function(unit)
+    if unit == "player" then playerClassReads = playerClassReads + 1 end
     local token = unit == "player" and mockUnit.playerClassToken or mockUnit.classToken
     return token and token:sub(1, 1) .. token:sub(2):lower() or nil, token
 end
@@ -98,6 +100,16 @@ local UF = {
     ResolveBarGradient = function() return nil end,
     FillPredictionColors = function() end,
 }
+function UF.ReadUnitExistsCached(_, unit)
+    return unit == "player" or mockUnit.exists, true
+end
+function UF.ReadUnitIsPlayerCached(_, unit)
+    return unit == "player" or mockUnit.isPlayer, true
+end
+function UF.ReadUnitClassCached(_, unit)
+    local token = unit == "player" and mockUnit.playerClassToken or mockUnit.classToken
+    return token and token:sub(1, 1) .. token:sub(2):lower() or nil, token
+end
 UF.elements = {}
 function UF.RegisterElement(name, element)
     UF.elements[name] = element
@@ -271,12 +283,14 @@ Near(classFrame.bg.r, 0.80, "NPC falls back to local player class red")
 Near(classFrame.bg.g, 0.70, "NPC falls back to local player class green")
 Near(classFrame.bg.b, 0.10, "NPC falls back to local player class blue")
 Near(classFrame.bg.a, 0.73, "NPC class fallback preserves compiled opacity")
+Check(playerClassReads == 1, "local player fallback class was not read exactly once")
 
 mockUnit.exists = false
 UF.elements.Health.UpdateIdentityBackground(classFrame)
 Near(classFrame.bg.r, 0.80, "missing unit falls back to local player class red")
 Near(classFrame.bg.g, 0.70, "missing unit falls back to local player class green")
 Near(classFrame.bg.b, 0.10, "missing unit falls back to local player class blue")
+Check(playerClassReads == 1, "stable local player class was reread for a missing unit")
 mockUnit.exists = true
 
 classFrame.MSUFSpec.health.backgroundClassColor = false

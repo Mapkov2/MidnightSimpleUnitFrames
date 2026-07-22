@@ -24,7 +24,11 @@ _G.MSUF_UFCore_GetClassBarColorFast = function(token)
     return 0.17, 0.39, 0.83
 end
 
-local UF = { Clamp01 = function(value) return value end }
+local UF = {
+    Clamp01 = function(value) return value end,
+    ReadUnitIsPlayerCached = function(_, unit) return _G.UnitIsPlayer(unit), true end,
+    ReadUnitClassCached = function(_, unit) return _G.UnitClass(unit) end,
+}
 local MSUF = {
     UF = UF,
     UFText = {},

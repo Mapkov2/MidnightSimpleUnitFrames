@@ -1112,7 +1112,7 @@ for i = 1, #layerContract.infoHookMismatches do
     layerInfoHookMismatchIds[i] = tostring(layerContract.infoHookMismatches[i].controlId or "unknown")
 end
 assert(#layerContract.infoHookMismatches == 0,
-    "numeric MSUF Layer controls and shared green I hooks diverged: " .. table.concat(layerInfoHookMismatchIds, ", "))
+    "numeric MSUF Layer controls and shared three-dot shortcuts diverged: " .. table.concat(layerInfoHookMismatchIds, ", "))
 assert(tonumber(catalogCoverage.invalidCapabilityCount) == 0,
     "RuntimeControlCatalog contains a setting/action with an invalid executable capability")
 assert(catalogCoverage.catalogComplete == true,

@@ -82,7 +82,7 @@ local Common = {
     WHITE = "white",
     SCALE_100 = {},
     POWER_EVENTS = { "UNIT_POWER_UPDATE", "UNIT_MAXPOWER" },
-    POWER_EVENTS_FREQUENT = { "UNIT_POWER_UPDATE", "UNIT_POWER_FREQUENT", "UNIT_MAXPOWER" },
+    POWER_EVENTS_FREQUENT = { "UNIT_POWER_FREQUENT", "UNIT_MAXPOWER" },
     SetBarSmoothing = function(bar, enabled)
         bar._msufSmoothInterp = enabled and INTERP or nil
     end,
@@ -168,18 +168,32 @@ assert(bar.MSUFPowerBorderEdges[1].colorTexture[1] == 0.2, "power border color w
 assert(backgroundApplies == 1, "compiled power background was not applied")
 assert(gradientApplies == 1, "compiled power gradient was not applied")
 local playerEvents = Power.GetEvents(frame, spec)
-assert(HasEvent(playerEvents, "UNIT_POWER_FREQUENT"), "player power must use UNIT_POWER_FREQUENT")
-assert(not HasEvent(playerEvents, "UNIT_POWER_UPDATE"), "player fast path must not duplicate UNIT_POWER_UPDATE")
+assert(HasEvent(playerEvents, "UNIT_POWER_UPDATE"), "ordinary player power must use UNIT_POWER_UPDATE")
+assert(not HasEvent(playerEvents, "UNIT_POWER_FREQUENT"), "ordinary player power must not subscribe to UNIT_POWER_FREQUENT")
+power.frequent = true
+playerEvents = Power.GetEvents(frame, spec)
+assert(HasEvent(playerEvents, "UNIT_POWER_FREQUENT"), "realtime player power must use UNIT_POWER_FREQUENT")
+assert(not HasEvent(playerEvents, "UNIT_POWER_UPDATE"), "realtime player fast path must not duplicate UNIT_POWER_UPDATE")
+power.frequent = false
+playerEvents = Power.GetEvents(frame, spec)
+assert(HasEvent(playerEvents, "UNIT_POWER_UPDATE") and not HasEvent(playerEvents, "UNIT_POWER_FREQUENT"),
+    "disabling realtime power did not restore the exclusive UNIT_POWER_UPDATE route")
+power.frequent = true
 
 currentPercent = SECRET
 Power.Update(frame, "UNIT_POWER_FREQUENT", "player")
 assert(bar.value == SECRET, "secret power value did not reach the StatusBar")
-assert(bar.interpolation == INTERP, "secret power did not use native C-side interpolation")
+assert(bar.interpolation == nil and bar._msufInterpolating == nil,
+    "secret power created a native interpolation job")
 assert(bar._msufPowerPercentValue == nil, "secret power leaked into a Lua comparison cache")
 local valueCalls = bar.valueCalls
 Power.Update(frame, "UNIT_POWER_FREQUENT", "player", "RAGE")
 assert(bar.valueCalls == valueCalls, "unrelated power token reached the player bar hot path")
 
+currentPercent = 65
+Power.Update(frame, "UNIT_POWER_FREQUENT", "player")
+assert(bar.interpolation == INTERP and bar._msufInterpolating == true,
+    "plain power lost configured smooth fill")
 currentPercent = 64
 Power.Update(frame, "UNIT_DISPLAYPOWER", "player")
 assert(bar.value == 64 and bar.interpolation == nil, "identity/meta refresh must snap instead of animate")
