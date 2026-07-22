@@ -289,7 +289,9 @@ end
 resetTask()
 sharedHealthTextBox.value = "DEFAULT"
 assert(status(assert(A.Submit("change global hp text color"))) == "ambiguous")
-local selectedHealthText = assert(A.Submit("2"), "global HP text color follow-up missing result")
+-- Options are 1: default, 2: class, 3: health. Select 3 to reach HEALTH; the
+-- earlier fixture assumed a two-option list without the DEFAULT entry.
+local selectedHealthText = assert(A.Submit("3"), "global HP text color follow-up missing result")
 assert(status(selectedHealthText) == "applied" or status(selectedHealthText) == "unchanged",
     "global HP text color follow-up did not apply the retained setting")
 assert(sharedHealthTextBox.value == "HEALTH", "global HP text color follow-up changed the wrong value")
