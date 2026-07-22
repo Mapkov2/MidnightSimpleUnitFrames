@@ -356,7 +356,7 @@ for _, key in ipairs({ "bars_textures", "bars_absorb", "bars_outline", "bars_rou
 end
 assert(ctx.contentHeight and ctx.contentHeight > 0, "content height was not finalized")
 assert(#bindings >= 25, "unexpected binding count: " .. #bindings)
-assert(#controls == 14, "control metadata registration changed: " .. #controls)
+assert(#controls == 16, "control metadata registration changed: " .. #controls)
 local expectedControlPaths = {
     ["gradient.health.direction.UP"] = true,
     ["gradient.health.direction.DOWN"] = true,
@@ -365,6 +365,8 @@ local expectedControlPaths = {
     ["absorb.workspace_tab"] = true,
     ["highlight.workspace_tab"] = true,
     ["highlight.priority.order.order"] = true,
+    ["temp_max_health.color"] = true,
+    ["outline.color"] = true,
 }
 for _, item in ipairs(controls) do
     if item.meta then expectedControlPaths[item.meta.path] = nil end
