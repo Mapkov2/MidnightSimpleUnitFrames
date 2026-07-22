@@ -58,7 +58,7 @@ local DROPDOWN_SMOOTH_SCROLL_SPEED = 14
 local DROPDOWN_SMOOTH_SCROLL_MAX_ELAPSED = 0.050
 local DROPDOWN_SMOOTH_SCROLL_EPSILON = 0.45
 local dropdownActiveRowHeight = DROPDOWN_ROW_H
-local CloseDropdown
+local CloseDropdown, HideDropdownItemTooltip
 local IsDescendantOf
 local function PixelBarTexture(texture)
     if not texture then return texture end
@@ -315,6 +315,7 @@ end
 function CloseDropdown(opts)
     local immediate = opts == true or (type(opts) == "table" and opts.immediate == true)
     if dropdownClosing and not dropdownOwner and not immediate then return end
+    if HideDropdownItemTooltip then HideDropdownItemTooltip() end
     local owner = dropdownOwner or dropdownClosingOwner
     dropdownClosing = true
     dropdownClosingOwner = owner
@@ -449,6 +450,16 @@ local function EnsureDropdownFrame()
     end)
     return dropdownFrame
 end
+local function RefreshDropdownMenuFonts()
+    if not (dropdownFrame and type(T.RefreshMenuFonts) == "function") then return end
+    local db = _G.MSUF_DB
+    local general = type(db) == "table" and db.general or nil
+    local stamp = tostring(type(general) == "table" and general.menuFontKey or "")
+        .. "\030" .. tostring(tonumber(_G.MSUF_FontApplyEpoch) or 0)
+    if dropdownFrame._msuf2MenuFontStamp == stamp then return end
+    T.RefreshMenuFonts(dropdownFrame, true)
+    dropdownFrame._msuf2MenuFontStamp = stamp
+end
 local function DropdownItemValue(item)
     if type(item) ~= "table" then return item end
     if item.value ~= nil then return item.value end
@@ -463,6 +474,32 @@ local function DropdownItemText(item)
     if item.label ~= nil then return Tr(item.label) end
     if item[1] ~= nil and item[2] ~= nil then return Tr(tostring(item[1])) end
     return Tr(tostring(DropdownItemValue(item) or ""))
+end
+local function DropdownItemTooltipField(item, key, fallbackKey)
+    if type(item) ~= "table" then return nil end
+    local value = item[key]
+    if value == nil and fallbackKey then value = item[fallbackKey] end
+    if type(value) == "function" then
+        local ok, resolved = pcall(value, item)
+        value = ok and resolved or nil
+    end
+    if value == nil or value == "" then return nil end
+    return Tr(tostring(value))
+end
+HideDropdownItemTooltip = function(owner)
+    local tooltip = _G.GameTooltip
+    if not tooltip then return end
+    if not owner or not tooltip.IsOwned or tooltip:IsOwned(owner) then tooltip:Hide() end
+end
+local function ShowDropdownItemTooltip(owner)
+    local item = owner and owner._msuf2Item
+    local body = DropdownItemTooltipField(item, "tooltip", "description")
+    if not body or not _G.GameTooltip then return end
+    local title = DropdownItemTooltipField(item, "tooltipTitle") or DropdownItemText(item)
+    _G.GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+    _G.GameTooltip:SetText(title, 1, 1, 1)
+    _G.GameTooltip:AddLine(body, 0.80, 0.86, 1.00, true)
+    _G.GameTooltip:Show()
 end
 local function DropdownItemIcon(item)
     if type(item) ~= "table" then return nil end
@@ -850,6 +887,8 @@ local function DropdownRow(index)
     if text.SetNonSpaceWrap then text:SetNonSpaceWrap(false) end
     StoreDropdownDefaultFont(text)
     row._msuf2Text = text
+    row:SetScript("OnEnter", ShowDropdownItemTooltip)
+    row:SetScript("OnLeave", function(self) HideDropdownItemTooltip(self) end)
     row:SetScript("OnClick", function(self)
         if self._msuf2DropdownDisabled then return end
         if M.BlockCombatAction and M.BlockCombatAction() then
@@ -866,6 +905,7 @@ local function DropdownRow(index)
                 if owner._msuf2OnValueChanged then owner._msuf2OnValueChanged(value) end
             end
         end
+        HideDropdownItemTooltip(self)
         CloseDropdown()
     end)
     row:EnableMouseWheel(true)
@@ -880,6 +920,7 @@ local function DropdownRow(index)
 end
 local function OpenDropdown(owner, valuesTable)
     EnsureDropdownFrame()
+    RefreshDropdownMenuFonts()
     valuesTable = (type(valuesTable) == "table") and valuesTable or {}
     if #valuesTable == 0 then return end
     dropdownClosing = nil

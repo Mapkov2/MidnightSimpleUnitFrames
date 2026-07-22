@@ -74,6 +74,7 @@ local COLOR_SETTING_KEY_BY_PATH = {
     ["npc.color.npcMiniboss"] = "npcColors.npcMiniboss",
     ["npc.color.npcRegular"] = "npcColors.npcRegular",
     ["npc.class_color_bar"] = "general.npcClassColorBar",
+    ["unit.pet.use_player_class_color"] = "general.petFrameUsePlayerClassColor",
     ["npc_type.enabled"] = "general.npcColorMode",
     ["npc_type.option.npcTypeBoss"] = "general.npcTypeBoss",
     ["npc_type.option.npcTypeColorBar"] = "general.npcTypeColorBar",
@@ -2549,8 +2550,26 @@ local function BuildUnitAndNPCColors(ctx, b, CH)
         local row = COLOR_DATA.NPC_ROWS[i]
         NPCColorAt(ctx, unit, row, 12, -10 - (i - 1) * 36, ApplyUnitframeColorWithReload)
     end
-    CH.ApiColorAt(ctx, unit, "Pet Frame Color", 360, -10, "GetPetFrameColor", "SetPetFrameColor", 0, 0.8, 0, ApplyUnitframeColorWithReload)
-    ValueToggleAt(ctx, unit, "Friendly NPC class colors on HP bars (Class Color mode only)", 360, -54,
+    local petColor = CH.ApiColorAt(ctx, unit, "Pet Frame Color", 360, -10, "GetPetFrameColor", "SetPetFrameColor", 0, 0.8, 0, ApplyUnitframeColorWithReload)
+    local refreshPetColorControl
+    local petPlayerClassColor = ValueToggleAt(ctx, unit, "Use player's class color for Pet Frame", 360, -54,
+        function() return G().petFrameUsePlayerClassColor == true end,
+        function(v)
+            G().petFrameUsePlayerClassColor = v and true or false
+            M.RequestUnitApply("pet", "MSUF2_PET_PLAYER_CLASS_COLOR", { preview = true })
+            if refreshPetColorControl then refreshPetColorControl() end
+        end,
+        Meta("unit.pet.use_player_class_color"))
+    refreshPetColorControl = function()
+        SetControlEnabled(petColor, G().petFrameUsePlayerClassColor ~= true)
+    end
+    M.TrackRefresh(ctx, refreshPetColorControl)
+    refreshPetColorControl()
+    if M.AddTooltip then
+        M.AddTooltip(petPlayerClassColor, "Use player's class color for Pet Frame",
+            "Colors the Pet health bar with your class color while its Health Color Scheme is Class / Reaction.", { hook = true })
+    end
+    ValueToggleAt(ctx, unit, "Friendly NPC class colors on HP bars (Class Color mode only)", 360, -82,
         function() return ApiValue("GetNPCClassColorBar", function() return G().npcClassColorBar == true end) end,
         function(v)
             if not ApiCall("SetNPCClassColorBar", v) then
@@ -2938,6 +2957,7 @@ local function PendingColorFocusCategory(ctx)
 end
 
 local function BuildColors(ctx)
+    if ctx and ctx.wrapper then ctx.wrapper._msuf2SuppressContextColorShortcuts = true end
     local b, CH = W.PageBuilder(ctx), COLOR_HELPERS
     -- Painter callbacks from a previous build of this page must never fire
     -- into stale closures while this build is in progress.

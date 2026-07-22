@@ -442,14 +442,14 @@ local function BuildFonts(ctx)
         updateHint = function(hint, current, active, shared)
             if shared then
                 if #active > 0 then
-                    hint:SetText("Shared font settings are the baseline. Active overrides keep their own font and name-shortening settings.")
+                    hint:SetText(M.Tr("Shared font settings are the baseline. Active overrides keep their own font and name-shortening settings."))
                 else
-                    hint:SetText("Shared font settings are the baseline for units and group frames.")
+                    hint:SetText(M.Tr("Shared font settings are the baseline for units and group frames."))
                 end
             elseif ScopeHasOverride(current, "fontOverride") then
-                hint:SetText("This scope is using custom font settings. Shared changes will not affect it until the override is reset.")
+                hint:SetText(M.Tr("This scope is using custom font settings. Shared changes will not affect it until the override is reset."))
             else
-                hint:SetText("This scope follows Shared font settings. Turn on custom settings here only when this scope needs different fonts.")
+                hint:SetText(M.Tr("This scope follows Shared font settings. Turn on custom settings here only when this scope needs different fonts."))
             end
         end,
     })
@@ -710,9 +710,9 @@ local function BuildFonts(ctx)
             SetControlEnabled(shorten, canEdit)
             SetControlsEnabled(gfNameShorteningControls, canEdit and enabled)
             if GFNameUsesLocalScope() then
-                scopeNotice:SetText("This group scope uses custom font settings. Shared name-shortening changes will not affect it until the override is reset.")
+                scopeNotice:SetText(M.Tr("This group scope uses custom font settings. Shared name-shortening changes will not affect it until the override is reset."))
             else
-                scopeNotice:SetText("This group scope follows Shared name shortening. Turn on custom settings above only when group names need different truncation.")
+                scopeNotice:SetText(M.Tr("This group scope follows Shared name shortening. Turn on custom settings above only when group names need different truncation."))
             end
         end
         M.TrackRefresh(ctx, RefreshGFNameShorteningControls)
@@ -738,14 +738,14 @@ local function BuildFonts(ctx)
                     if #active > 0 then
                         scopeNotice:SetText("|cffffd200" .. M.Tr("Font overrides active:") .. "|r "
                             .. table.concat(active, ", ")
-                            .. ". Shared name-shortening changes do not affect those scopes.")
+                            .. M.Tr(". Shared name-shortening changes do not affect those scopes."))
                     else
-                        scopeNotice:SetText("Shared name shortening affects all unit names and group frames unless a scope has custom font settings.")
+                        scopeNotice:SetText(M.Tr("Shared name shortening affects all unit names and group frames unless a scope has custom font settings."))
                     end
                 elseif ScopeHasOverride(current, "fontOverride") then
-                    scopeNotice:SetText("This scope uses custom font settings. Shared name-shortening changes will not affect it until the override is reset.")
+                    scopeNotice:SetText(M.Tr("This scope uses custom font settings. Shared name-shortening changes will not affect it until the override is reset."))
                 else
-                    scopeNotice:SetText("This scope follows Shared name shortening. Turn on custom settings above only when this scope needs different names.")
+                    scopeNotice:SetText(M.Tr("This scope follows Shared name shortening. Turn on custom settings above only when this scope needs different names."))
                 end
             end
         end

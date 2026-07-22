@@ -312,6 +312,29 @@ local function GetBundledChangelog()
     if type(data) ~= "table" or type(data.entries) ~= "table" or type(data.entries[1]) ~= "table" then return nil end
     return data
 end
+local function ThemeColor(name, fallback)
+    local color = T and T.colors and T.colors[name]
+    return color or fallback
+end
+local function CreateDashboardAccordionTone(header, arrow)
+    local headerSurface = ThemeColor("coreSurface", { 0.014, 0.038, 0.072, 1.00 })
+    local headerRaised = ThemeColor("coreRaised", { 0.026, 0.070, 0.110, 1.00 })
+    local headerActiveBlue = ThemeColor("coreGlow", { 0.231, 0.510, 0.965, 1.00 })
+    local headerActiveDeep = ThemeColor("coreBlue", { 0.141, 0.365, 0.741, 1.00 })
+    local headerBg = W.CreateAccordionRoundedRegions(header, "BACKGROUND", 0)
+    local headerOpenHighlight = W.CreateAccordionOpenHighlight(header,
+        { headerActiveBlue[1], headerActiveBlue[2], headerActiveBlue[3], 0.62 },
+        { headerActiveDeep[1], headerActiveDeep[2], headerActiveDeep[3], 0.56 })
+    local function Refresh(open, hover)
+        headerOpenHighlight:SetShown(open)
+        headerBg:SetAlpha(open and 0 or 1)
+        M.CallIf(T.ApplyCollapseVisual, arrow, nil, open)
+        if open then arrow:SetVertexColor(1, 1, 1, 0.98) end
+        local color = hover and headerRaised or headerSurface
+        headerBg:SetColorTexture(color[1], color[2], color[3], hover and 0.42 or 0.34)
+    end
+    return Refresh
+end
 local function BuildDashboardChangelog(parent, cardWidth, opts)
     opts = opts or {}
     local data = GetBundledChangelog()
@@ -333,21 +356,17 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
     header:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, top)
     header:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, top)
     header:SetHeight(headerH)
-    local headerBg = header:CreateTexture(nil, "BACKGROUND")
-    headerBg:SetAllPoints()
-    headerBg:SetColorTexture(0, 0, 0, 0)
     local headerEdge = header:CreateTexture(nil, "BORDER")
     headerEdge:SetPoint("BOTTOMLEFT", header, "BOTTOMLEFT", 0, 0)
     headerEdge:SetPoint("BOTTOMRIGHT", header, "BOTTOMRIGHT", 0, 0)
     headerEdge:SetHeight(1)
     headerEdge:SetColorTexture(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], 0.44)
-    local hover = header:CreateTexture(nil, "HIGHLIGHT")
-    hover:SetAllPoints()
-    hover:SetColorTexture(1, 1, 1, 0.025)
     local arrow = header:CreateTexture(nil, "OVERLAY")
     arrow:SetSize(10, 10)
     arrow:SetPoint("LEFT", header, "LEFT", 16, 0)
     arrow:SetTexture(T.media.collapseArrow)
+    local PaintHeaderTone = CreateDashboardAccordionTone(header, arrow)
+    PaintHeaderTone(false, false)
     local title = T.Font(header, "GameFontNormal", M.Tr(opts.title or "Changelog"), T.colors.text)
     title:SetPoint("LEFT", arrow, "RIGHT", 8, 0)
     title:SetPoint("RIGHT", header, "RIGHT", -94, 0)
@@ -432,8 +451,7 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
         help = "Shows or hides the bundled MSUF release notes.",
     }), opts.title or "Changelog", "button")
     local function PaintHeader(isOpen)
-        M.CallIf(T.ApplyCollapseVisual, arrow, nil, isOpen)
-        if headerBg.SetColorTexture then headerBg:SetColorTexture(0, 0, 0, 0) end
+        PaintHeaderTone(isOpen, false)
         if headerEdge.SetColorTexture then headerEdge:SetColorTexture(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], isOpen and 0.58 or 0.34) end
         hint:SetText(isOpen and M.Tr("Hide") or M.Tr("View"))
     end
@@ -453,7 +471,7 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
         if type(opts.onToggle) == "function" then opts.onToggle(open) end
     end)
     header:SetScript("OnEnter", function()
-        if headerBg.SetColorTexture then headerBg:SetColorTexture(1, 1, 1, 0.025) end
+        PaintHeaderTone(open, true)
     end)
     header:SetScript("OnLeave", function()
         PaintHeader(open)
@@ -778,14 +796,12 @@ local function BuildDashboardUX(ctx)
         head:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
         head:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, 0)
         head:SetHeight(44)
-        local hover = head:CreateTexture(nil, "BACKGROUND")
-        hover:SetAllPoints()
-        hover:SetColorTexture(0, 0, 0, 0)
         local arrow = head:CreateTexture(nil, "OVERLAY")
         arrow:SetTexture(T.media.collapseArrow)
         arrow:SetSize(10, 10)
         arrow:SetPoint("LEFT", head, "LEFT", 16, 0)
-        M.CallIf(T.ApplyCollapseVisual, arrow, nil, open)
+        local PaintHeaderTone = CreateDashboardAccordionTone(head, arrow)
+        PaintHeaderTone(open, false)
         local label = T.Font(head, "GameFontNormal", M.Tr(title), T.colors.text)
         label:SetPoint("LEFT", arrow, "RIGHT", 8, 0)
         if type(fillPills) == "function" then fillPills(head, width) end
@@ -795,10 +811,10 @@ local function BuildDashboardUX(ctx)
             M.SelectPage("home")
         end)
         head:SetScript("OnEnter", function()
-            if hover.SetColorTexture then hover:SetColorTexture(1, 1, 1, 0.025) end
+            PaintHeaderTone(open, true)
         end)
         head:SetScript("OnLeave", function()
-            if hover.SetColorTexture then hover:SetColorTexture(0, 0, 0, 0) end
+            PaintHeaderTone(open, false)
         end)
         RegisterDashboardControl(head, DashboardMeta(semanticPath, "ephemeral", {
             help = "Shows or hides the " .. tostring(title) .. " dashboard section.",
@@ -819,7 +835,7 @@ local function BuildDashboardUX(ctx)
     if recoveryOpen then
         W.Text(recovery, "Reset tools, Wago access, and recovery shortcuts live here.", 16, -60, recoveryW - 32, T.colors.muted)
         local resetPositions = Button(recovery, "Reset Positions", 16, -94, 118, 22, function()
-            if not RunMSUFSlashCommand("reset") and M.ShowStatusFeedback then M.ShowStatusFeedback("Reset unavailable", "danger", 1.4) end
+            if not RunMSUFSlashCommand("reset") and M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr("Reset unavailable"), "danger", 1.4) end
         end, "primary", "display_recovery.reset_positions")
         AddTooltip(resetPositions, "Reset Positions", "Runs /msuf reset for frame positions and visibility.")
         local wagoX, helpX, discordX = 146, 270, 368

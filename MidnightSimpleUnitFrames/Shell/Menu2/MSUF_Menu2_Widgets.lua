@@ -107,6 +107,8 @@ local function CreateAccordionOpenHighlight(header, fromColor, toColor)
     regions:SetShown(false)
     return regions
 end
+W.CreateAccordionRoundedRegions = CreateAccordionRoundedRegions
+W.CreateAccordionOpenHighlight = CreateAccordionOpenHighlight
 local function WithAlpha(color, alpha)
     return { color[1], color[2], color[3], alpha }
 end
@@ -657,7 +659,10 @@ function W.PageBuilder(ctx, opts)
         local bodySurface = T.Panel(outer, nil, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft)
         T.ApplySurface(bodySurface, "card")
         bodySurface:SetPoint("TOPLEFT", outer, "TOPLEFT", 0, -(headerH + ACCORDION_OPEN_CORNER_SIZE))
-        bodySurface:SetPoint("BOTTOMRIGHT", outer, "BOTTOMRIGHT", 0, 0)
+        -- Match the header's scrollbar clearance. Extending the open surface to
+        -- the full wrapper width puts its right border underneath the viewport
+        -- edge, where it is visibly clipped while scrolling.
+        bodySurface:SetPoint("BOTTOMRIGHT", outer, "BOTTOMRIGHT", -ACCORDION_HEADER_RIGHT_INSET, 0)
         bodySurface:SetShown(open)
         PlaceBackdropFrameBehindControls(bodySurface, outer)
         local header = CreateFrame("Button", nil, outer)
@@ -1467,6 +1472,34 @@ end
 -- resolution and virtual picker owners are both click-only: constructing or
 -- idling Menu2 adds no refresh loop, event, timer, or gameplay work.
 local CONTEXT_COLOR_SHORTCUT_TEXT = "|cffff625f•|r|cff61d683•|r|cff5aa7ff•|r"
+local THREE_DOT_SHORTCUT_TEXTURE = (T.media and T.media.switchKnob)
+    or ("Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\msuf_switch_knob.tga")
+local COLOR_SHORTCUT_DOTS = {
+    { 1.000, 0.384, 0.373 },
+    { 0.380, 0.839, 0.514 },
+    { 0.353, 0.655, 1.000 },
+}
+local LAYER_SHORTCUT_DOTS = {
+    { 1, 1, 1 },
+    { 1, 1, 1 },
+    { 1, 1, 1 },
+}
+
+local function AddThreeDotShortcutTextures(shortcut, colors)
+    if not (shortcut and shortcut.CreateTexture and type(colors) == "table") then return end
+    if shortcut._msuf2Label and shortcut._msuf2Label.Hide then shortcut._msuf2Label:Hide() end
+    local dots = {}
+    for i = 1, 3 do
+        local color = colors[i] or LAYER_SHORTCUT_DOTS[i]
+        local dot = shortcut:CreateTexture(nil, "ARTWORK", nil, 4)
+        dot:SetTexture(THREE_DOT_SHORTCUT_TEXTURE)
+        dot:SetSize(5, 5)
+        dot:SetPoint("CENTER", shortcut, "CENTER", (i - 2) * 7, 0)
+        dot:SetVertexColor(color[1], color[2], color[3], 1)
+        dots[i] = dot
+    end
+    shortcut._msuf2ThreeDotTextures = dots
+end
 
 local function ResolveContextColorOption(value, fallback)
     if type(value) == "function" then value = value() end
@@ -1573,12 +1606,26 @@ function W.OpenContextColors(card, opts, resolvedTargets, onFinish)
     local fallbackTitle = card and card._msuf2ControlCardTitle or "Colors"
     local title = ResolveContextColorOption(opts.title, fallbackTitle)
     local note = ResolveContextColorOption(opts.note, nil)
-    W.OpenColorContextPicker(title, owners, note, owners[1], onFinish)
+    local scopeTag = ResolveContextColorOption(opts.scopeTag, nil)
+    W.OpenColorContextPicker(title, owners, note, owners[1], onFinish, scopeTag)
     return true
+end
+
+local function ContextColorShortcutsSuppressed(card)
+    local frame = card
+    for _ = 1, 16 do
+        if not frame then break end
+        if frame._msuf2SuppressContextColorShortcuts == true then return true end
+        frame = frame.GetParent and frame:GetParent()
+    end
+    return false
 end
 
 function W.AttachContextColorShortcut(card, opts)
     if not card then return nil end
+    -- The canonical Colors page already exposes the color controls directly.
+    -- Its contextual shortcut would only reopen the same picker and add noise.
+    if ContextColorShortcutsSuppressed(card) then return nil end
     opts = opts or {}
     if card._msuf2ContextColorShortcut then
         local existing = card._msuf2ContextColorShortcut
@@ -1588,18 +1635,14 @@ function W.AttachContextColorShortcut(card, opts)
         return existing
     end
 
-    local shortcut = T.Button(card, CONTEXT_COLOR_SHORTCUT_TEXT, 30, 18, { noSearch = true })
+    local shortcut = T.Button(card, CONTEXT_COLOR_SHORTCUT_TEXT, 34, 20, { noSearch = true })
     shortcut._msuf2SkipHistoryCheckpoint = true
     shortcut._msuf2ContextColorOptions = opts
     shortcut:ClearAllPoints()
     shortcut:SetPoint("TOPRIGHT", card, "TOPRIGHT", tonumber(opts.offsetX) or -12, tonumber(opts.offsetY) or -10)
     shortcut:SetFrameLevel((card.GetFrameLevel and card:GetFrameLevel() or 1) + 3)
     shortcut:SetAlpha(0.58)
-    if shortcut._msuf2Label then
-        shortcut._msuf2Label:ClearAllPoints()
-        shortcut._msuf2Label:SetAllPoints(shortcut)
-        shortcut._msuf2Label:SetJustifyH("CENTER")
-    end
+    AddThreeDotShortcutTextures(shortcut, COLOR_SHORTCUT_DOTS)
     shortcut:HookScript("OnEnter", function(self) self:SetAlpha(0.96) end)
     shortcut:HookScript("OnLeave", function(self) self:SetAlpha(0.58) end)
     function shortcut:_msuf2RefreshContextColorVisibility()
@@ -2657,8 +2700,8 @@ function W.SetControlShown(control, shown)
             control._msuf2StepButtons[i]:SetShown(shown)
         end
     end
-    if control._msuf2LayerInfoButton then
-        control._msuf2LayerInfoButton:SetShown(shown)
+    if control._msuf2LayerShortcutButton then
+        control._msuf2LayerShortcutButton:SetShown(shown)
     end
     if shown and control._msuf2SetLayoutWidth then control:_msuf2SetLayoutWidth(control._msuf2RowWidth or control._msuf2RequestedWidth) end
 end
@@ -3543,30 +3586,37 @@ local function IsNumericLayerControl(label, minValue, maxValue)
         or (frameLayer ~= "" and text == frameLayer)
 end
 
+local LAYER_OVERVIEW_SHORTCUT_TEXT = "|cffffffff•|r|cffffffff•|r|cffffffff•|r"
 local function AttachLayerOverviewButton(section, slider, title, label, minValue, maxValue)
     if not (section and slider and title and IsNumericLayerControl(label, minValue, maxValue)) then return nil end
-    local info = W.RoleButton(section, "I", "success", 18, 18)
-    info:SetPoint("TOPRIGHT", title, "TOPRIGHT", 0, 2)
-    info._msuf2SkipHistoryCheckpoint = true
-    info._msuf2LayerOverviewButton = true
-    if info.SetFrameLevel and slider.GetFrameLevel then info:SetFrameLevel(slider:GetFrameLevel() + 4) end
-    if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(info, slider)
-    else info._msuf2ControlPartOf = slider end
-    info:SetScript("OnClick", function(self)
+    local shortcut = T.Button(section, LAYER_OVERVIEW_SHORTCUT_TEXT, 34, 20, { noSearch = true })
+    shortcut:SetPoint("TOPRIGHT", title, "TOPRIGHT", 0, 2)
+    shortcut:SetAlpha(0.58)
+    shortcut._msuf2SkipHistoryCheckpoint = true
+    shortcut._msuf2LayerOverviewButton = true
+    AddThreeDotShortcutTextures(shortcut, LAYER_SHORTCUT_DOTS)
+    if shortcut.SetFrameLevel and slider.GetFrameLevel then shortcut:SetFrameLevel(slider:GetFrameLevel() + 4) end
+    if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(shortcut, slider)
+    else shortcut._msuf2ControlPartOf = slider end
+    if shortcut.HookScript then
+        shortcut:HookScript("OnEnter", function(self) self:SetAlpha(0.96) end)
+        shortcut:HookScript("OnLeave", function(self) self:SetAlpha(0.58) end)
+    end
+    shortcut:SetScript("OnClick", function(self)
         local show = M.ShowLayerOverview or _G.MSUF_ShowLayerOverview
         if type(show) == "function" then show(self) end
     end)
-    if info.HookScript then
-        info:HookScript("OnHide", function(self)
+    if shortcut.HookScript then
+        shortcut:HookScript("OnHide", function(self)
             local hide = M.HideLayerOverviewForAnchor or _G.MSUF_HideLayerOverviewForAnchor
             if type(hide) == "function" then hide(self) end
         end)
     end
     if type(M.AddTooltip) == "function" then
-        M.AddTooltip(info, "Layer overview", "Shows every configurable MSUF layer on the unified 0-30 scale.", { hook = true, owner = "ANCHOR_RIGHT" })
+        M.AddTooltip(shortcut, "Layer overview", "Shows every configurable MSUF layer on the unified 0-30 scale.", { hook = true, owner = "ANCHOR_RIGHT" })
     end
-    slider._msuf2LayerInfoButton = info
-    return info
+    slider._msuf2LayerShortcutButton = shortcut
+    return shortcut
 end
 
 --- Slider wraps Blizzard's slider template but hides native art and stamps

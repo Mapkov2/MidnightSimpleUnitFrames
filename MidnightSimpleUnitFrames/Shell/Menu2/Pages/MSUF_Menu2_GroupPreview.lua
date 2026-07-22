@@ -159,7 +159,7 @@ local function AddGFPreview(ctx, builder)
         sectionEntry._msuf2ManualHintLayout = true
         if sectionEntry.hint then sectionEntry.hint:Hide() end
         if sectionEntry.label then
-            sectionEntry.label:SetText("Preview - " .. GroupPreviewScopeLabel())
+            sectionEntry.label:SetText(Tr("Preview - ") .. GroupPreviewScopeLabel())
             sectionEntry.label:ClearAllPoints()
             sectionEntry.label:SetPoint("LEFT", sectionEntry.arrow, "RIGHT", 8, 0)
             sectionEntry.label:SetJustifyH("LEFT")
@@ -267,13 +267,13 @@ local function AddGFPreview(ctx, builder)
         else
             expandBtn:SetPoint("TOPRIGHT", body, "TOPRIGHT", -14, -8)
         end
-        expandBtn:SetText(expanded and "Compact Preview" or "Expand")
+        expandBtn:SetText(Tr(expanded and "Compact Preview" or "Expand"))
     end
     ApplyPreviewMode = function()
         local expanded = M.groupPreviewExpanded == true
         local contentH, currentBoxY = GFPreviewIntroMetrics(builder and builder.width or ctx and ctx.width)
         local boxH = expanded and GF_PREVIEW_EXPANDED_BOX_HEIGHT or GF_PREVIEW_COMPACT_BOX_HEIGHT
-        if sectionEntry and sectionEntry.label then sectionEntry.label:SetText("Preview - " .. GroupPreviewScopeLabel()) end
+        if sectionEntry and sectionEntry.label then sectionEntry.label:SetText(Tr("Preview - ") .. GroupPreviewScopeLabel()) end
         if noteText then noteText:SetShown(expanded) end
         RefreshExpandButton()
         if OwnsPreview() and box._msuf2PinnedFloating ~= true then

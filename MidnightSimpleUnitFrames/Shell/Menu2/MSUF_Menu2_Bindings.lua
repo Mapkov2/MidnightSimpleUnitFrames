@@ -1546,7 +1546,7 @@ local function ResetPageImpl(pageKey)
     local defaults = FactoryDefaults()
     if type(defaults) ~= "table" then
         if M.ShowStatusFeedback then
-            M.ShowStatusFeedback("Reset failed: defaults unavailable", "danger", 1.8)
+            M.ShowStatusFeedback(M.Tr("Reset failed: defaults unavailable"), "danger", 1.8)
         elseif print then
             print("|cffff0000MSUF:|r Reset failed: factory defaults are not available yet.")
         end
@@ -1559,7 +1559,7 @@ local function ResetPageImpl(pageKey)
     EnsureTargetTargetAlias(db)
     ApplyAfterPageReset(pageKey, info)
     if M.ShowStatusFeedback then
-        M.ShowStatusFeedback(tostring(info.label or pageKey) .. " reset", "ok", 1.4)
+        M.ShowStatusFeedback(M.Format("%s reset", tostring(info.label or pageKey)), "ok", 1.4)
     elseif print then
         print("|cffffd700MSUF:|r " .. tostring(info.label or pageKey) .. " reset to defaults.")
     end

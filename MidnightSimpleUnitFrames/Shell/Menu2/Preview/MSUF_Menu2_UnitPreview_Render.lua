@@ -500,7 +500,9 @@ function Render.Install(Preview, deps)
     renderState.STATUS_RUNTIME_KEYS = {
         raidmarker = "raidMarker", leader = "leader", assist = "assist", level = "level",
         raceText = "race", classText = "classText",
-        elite = "elite", statusText = "statusText", statusCombat = "combat", statusResting = "resting",
+        elite = "elite", statusText = "statusDeadText", statusGhostText = "statusGhostText",
+        statusAFKText = "statusAFKText", statusDNDText = "statusDNDText",
+        statusCombat = "combat", statusResting = "resting",
         statusIncomingRes = "incomingRes", statusPvp = "pvp",
     }
     renderState.ApplyPreviewTextFocus = deps.ApplyPreviewTextFocus or UNIT_RENDER_FALLBACKS.ApplyPreviewTextFocus
@@ -898,7 +900,6 @@ function Preview.Refresh(box, reason)
                 end
                 if spec.allowed and not spec.allowed(key) then show = false end
                 if spec.id == "elite" and not data.elite then show = false end
-                if spec.id == "statusText" and R.PreviewStatus.StatusTextPreviewText then show = show and box._previewStatusText ~= nil end
                 if Preview.GetStatusPreviewMode() ~= "all" then
                     local selected = R.NormalizeStatusPreviewId(Preview.selectedStatusId)
                     if selected == "" then selected = "raidmarker" end
@@ -911,7 +912,7 @@ function Preview.Refresh(box, reason)
                     if rawSize == nil then
                         if isIdentityText then
                             rawSize = rawNameSize
-                        elseif spec.id == "statusText" then
+                        elseif R.PreviewStatus.IsStatusTextState and R.PreviewStatus.IsStatusTextState(spec) then
                             rawSize = rawNameSize + 2
                         else
                             rawSize = spec.defaultSize
@@ -921,7 +922,7 @@ function Preview.Refresh(box, reason)
                     if isIdentityText then
                         local previewText = R.PreviewStatus.IdentityPreviewText and R.PreviewStatus.IdentityPreviewText(spec, data) or spec.text
                         rw, rh = ApproxTextWidth(previewText, rawSize, 2), rawSize + 4
-                    elseif spec.id == "statusText" then
+                    elseif R.PreviewStatus.IsStatusTextState and R.PreviewStatus.IsStatusTextState(spec) then
                         rw, rh = ApproxTextWidth(box._previewStatusText or "DEAD", rawSize, 4), rawSize + 4
                     end
                     local anchor = conf[spec.anchor] or (statusCfg and statusCfg.anchor) or R.ResolveStatusPreviewAnchor(spec, conf, g)
@@ -1883,7 +1884,6 @@ function Preview.Refresh(box, reason)
         end
         if spec.allowed and not spec.allowed(key) then show = false end
         if spec.id == "elite" and not data.elite then show = false end
-        if spec.id == "statusText" and R.PreviewStatus.StatusTextPreviewText then show = show and box._previewStatusText ~= nil end
         if Preview.GetStatusPreviewMode() ~= "all" then
             local selected = R.NormalizeStatusPreviewId(Preview.selectedStatusId)
             if selected == "" then selected = "raidmarker" end
@@ -1897,7 +1897,7 @@ function Preview.Refresh(box, reason)
             if rawSize == nil then
                 if isIdentityText then
                     rawSize = nameRawSize
-                elseif spec.id == "statusText" then
+                elseif R.PreviewStatus.IsStatusTextState and R.PreviewStatus.IsStatusTextState(spec) then
                     rawSize = nameRawSize + 2
                 else
                     rawSize = spec.defaultSize
@@ -1931,7 +1931,7 @@ function Preview.Refresh(box, reason)
                 local textH = icon.txt and icon.txt.GetStringHeight and icon.txt:GetStringHeight() or sz
                 icon:SetSize(max(1, floor((tonumber(textW) or sz) + 0.5)), max(1, floor((tonumber(textH) or sz) + 0.5)))
                 R.PositionLevelPreview(icon, anchor, x, y, mock, S(6))
-            elseif spec.id == "statusText" then
+            elseif R.PreviewStatus.IsStatusTextState and R.PreviewStatus.IsStatusTextState(spec) then
                 local anchor, x, y = StatusAnchorOffsets(spec, statusCfg)
                 if icon.txt then
                     ApplyPreviewFont(icon.txt, max(7, sz))
