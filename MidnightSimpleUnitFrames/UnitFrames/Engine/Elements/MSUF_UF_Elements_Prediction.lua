@@ -1520,7 +1520,7 @@ local function QueuePredictionDataEvent(frame, event)
   if mask then
     local flush = frame._msufPredictionFlushData
     if flush then
-      flush(frame, PREDICTION_DIRTY_PLAN_KEYS[mask])
+      flush(frame, mask)
     else
       UpdateFull(frame, PREDICTION_DIRTY_PLAN_KEYS[mask], frame.MSUFUnitKey, nil, nil, true)
     end
@@ -1554,7 +1554,7 @@ FlushPredictionQueue = function()
         -- until an unrelated health/lifecycle event happens.
         local flush = frame._msufPredictionFlushData
         if flush then
-          flush(frame, PREDICTION_DIRTY_PLAN_KEYS[mask])
+          flush(frame, mask)
         else
           UpdateFull(frame, PREDICTION_DIRTY_PLAN_KEYS[mask], frame.MSUFUnitKey, nil, nil, true)
         end
@@ -1795,6 +1795,85 @@ function Prediction.UpdateConnectionState(frame, event, unit, seedHP, seedMaxHP)
   return result
 end
 
+local function ApplyPredictionValues(frame, cfg, unit, cacheUnit, event, hp, maxHP,
+    refreshHeal, refreshAbsorb, refreshHealAbsorb,
+    showHeal, showAbsorb, showHealAbsorb, forceMax)
+  if refreshHeal then
+    frame._msufPredictionIncoming = ReadIncomingHeals(unit)
+  end
+  if refreshAbsorb then
+    local readAbsorb = frame._msufPredictionReadAbsorb or ReadDamageAbsorbs
+    local absorb = readAbsorb(frame, unit)
+    frame._msufPredictionAbsorb = absorb
+    if frame._msufPredictionFullHealthStripe ~= true
+      and issecretvalue(absorb) ~= true
+      and type(absorb) == "number"
+      and absorb > 0 then
+      frame._msufPredictionPartialGlowHealthActive = true
+    else
+      frame._msufPredictionPartialGlowHealthActive = nil
+    end
+  end
+  if refreshHealAbsorb then
+    frame._msufPredictionHealAbsorb = ReadHealAbsorbs(unit)
+  end
+  if refreshHeal or refreshAbsorb or refreshHealAbsorb then
+    frame._msufPredictionCacheReady = true
+    frame._msufPredictionCacheUnit = cacheUnit
+    frame._msufPredictionCacheCfg = cfg
+  end
+
+  if showHeal and frame.incomingHealBar then
+    local incoming = frame._msufPredictionIncoming
+    if (forceMax == true or frame.incomingHealBar._msufMaxReady ~= true)
+      and issecretvalue(maxHP) ~= true and maxHP == nil then
+      maxHP = ReadHealthMax(frame, unit, forceMax)
+    end
+    ShowValue(frame.incomingHealBar, maxHP, incoming, forceMax)
+  end
+
+  if showAbsorb and frame.absorbBar then
+    local absorbMode = frame._msufPredictionAbsorbMode
+    if absorbMode == 3 or absorbMode == 4 then
+      local follow = frame._msufPredictionHealActive == true
+        and frame.incomingHealBar and frame.incomingHealBar._msufShown == true
+        and frame.incomingHealBar or nil
+      LayoutBarIfNeeded(frame, frame.absorbBar, 2, absorbMode,
+        frame._msufPredictionAbsorbReverse, follow,
+        frame._msufPredictionAbsorbHeight, frame._msufPredictionAbsorbOffsetY)
+    end
+    if (forceMax == true or frame.absorbBar._msufMaxReady ~= true)
+      and issecretvalue(maxHP) ~= true and maxHP == nil then
+      maxHP = ReadHealthMax(frame, unit, forceMax)
+    end
+    ShowValue(frame.absorbBar, maxHP, frame._msufPredictionAbsorb, forceMax)
+    if frame._msufPredictionOverAbsorbOverlay == true
+      or frame._msufPredictionFullHealthStripe == true then
+      local glowAbsorb = frame._msufPredictionAbsorb
+      if refreshAbsorb == true and frame._msufPredictionMixedFollowClamp == true then
+        glowAbsorb = ReadDamageAbsorbs(frame, unit)
+      end
+      UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, glowAbsorb,
+        event == "UNIT_MAXHEALTH" or event == "UNIT_CONNECTION", refreshAbsorb == true)
+    end
+  end
+
+  if showHealAbsorb and frame.healAbsorbBar then
+    -- Prediction data changes only the bar value. Static geometry is owned by
+    -- Apply; authoritative full/max refreshes retain the defensive repair.
+    if forceMax == true then
+      LayoutHealAbsorbBar(frame, frame.healAbsorbBar, 3, frame._msufPredictionHpReverse == true,
+        frame._msufPredictionHealAbsorbMode,
+        frame._msufPredictionHealAbsorbHeight, frame._msufPredictionHealAbsorbOffsetY)
+    end
+    if (forceMax == true or frame.healAbsorbBar._msufMaxReady ~= true)
+      and issecretvalue(maxHP) ~= true and maxHP == nil then
+      maxHP = ReadHealthMax(frame, unit, forceMax)
+    end
+    ShowValue(frame.healAbsorbBar, maxHP, frame._msufPredictionHealAbsorb, forceMax)
+  end
+end
+
 UpdateFull = function(frame, event, unit, seedHP, seedMaxHP, boundUnit, trustedActive)
   if boundUnit == true then
     unit = frame.MSUFUnitKey
@@ -1930,80 +2009,39 @@ UpdateFull = function(frame, event, unit, seedHP, seedMaxHP, boundUnit, trustedA
   local hp, maxHP
   if issecretvalue(seedHP) == true or seedHP ~= nil then hp = seedHP end
   if issecretvalue(seedMaxHP) == true or seedMaxHP ~= nil then maxHP = seedMaxHP end
-  if refreshHeal then
-    frame._msufPredictionIncoming = ReadIncomingHeals(unit)
-  end
-  if refreshAbsorb then
-    local readAbsorb = frame._msufPredictionReadAbsorb or ReadDamageAbsorbs
-    local absorb = readAbsorb(frame, unit)
-    frame._msufPredictionAbsorb = absorb
-    if frame._msufPredictionFullHealthStripe ~= true
-      and issecretvalue(absorb) ~= true
-      and type(absorb) == "number"
-      and absorb > 0 then
-      frame._msufPredictionPartialGlowHealthActive = true
-    else
-      frame._msufPredictionPartialGlowHealthActive = nil
-    end
-  end
-  if refreshHealAbsorb then
-    frame._msufPredictionHealAbsorb = ReadHealAbsorbs(unit)
-  end
-  if refreshHeal or refreshAbsorb or refreshHealAbsorb then
-    frame._msufPredictionCacheReady = true
-    frame._msufPredictionCacheUnit = unitSecret ~= true and unit or nil
-    frame._msufPredictionCacheCfg = cfg
-  end
-
-  if showHeal and frame.incomingHealBar then
-    local incoming = frame._msufPredictionIncoming
-    if (forceMax == true or frame.incomingHealBar._msufMaxReady ~= true) and issecretvalue(maxHP) ~= true and maxHP == nil then
-      maxHP = ReadHealthMax(frame, unit, forceMax)
-    end
-    ShowValue(frame.incomingHealBar, maxHP, incoming, forceMax)
-  end
-
-  if showAbsorb and frame.absorbBar then
-    if absorbMode == 3 or absorbMode == 4 then
-      local follow = cfg.heal == true and frame.incomingHealBar and frame.incomingHealBar._msufShown == true and frame.incomingHealBar or nil
-      LayoutBarIfNeeded(frame, frame.absorbBar, 2, absorbMode, frame._msufPredictionAbsorbReverse, follow,
-        frame._msufPredictionAbsorbHeight, frame._msufPredictionAbsorbOffsetY)
-    end
-    if (forceMax == true or frame.absorbBar._msufMaxReady ~= true) and issecretvalue(maxHP) ~= true and maxHP == nil then
-      maxHP = ReadHealthMax(frame, unit, forceMax)
-    end
-    ShowValue(frame.absorbBar, maxHP, frame._msufPredictionAbsorb, forceMax)
-    if frame._msufPredictionOverAbsorbOverlay == true
-      or frame._msufPredictionFullHealthStripe == true then
-      local glowAbsorb = frame._msufPredictionAbsorb
-      if refreshAbsorb == true and frame._msufPredictionMixedFollowClamp == true then
-        glowAbsorb = ReadDamageAbsorbs(frame, unit)
-      end
-      UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, glowAbsorb,
-        event == "UNIT_MAXHEALTH" or event == "UNIT_CONNECTION", refreshAbsorb == true)
-    end
-  end
-
-  if showHealAbsorb and frame.healAbsorbBar then
-    -- Prediction data changes only the bar value. Static geometry is owned by
-    -- Apply; authoritative full/max refreshes retain the defensive repair.
-    if forceMax == true then
-      LayoutHealAbsorbBar(frame, frame.healAbsorbBar, 3, frame._msufPredictionHpReverse == true,
-        frame._msufPredictionHealAbsorbMode,
-        frame._msufPredictionHealAbsorbHeight, frame._msufPredictionHealAbsorbOffsetY)
-    end
-    if (forceMax == true or frame.healAbsorbBar._msufMaxReady ~= true) and issecretvalue(maxHP) ~= true and maxHP == nil then
-      maxHP = ReadHealthMax(frame, unit, forceMax)
-    end
-    ShowValue(frame.healAbsorbBar, maxHP, frame._msufPredictionHealAbsorb, forceMax)
-  end
+  return ApplyPredictionValues(frame, cfg, unit, unitSecret ~= true and unit or nil,
+    event, hp, maxHP, refreshHeal, refreshAbsorb, refreshHealAbsorb,
+    showHeal, showAbsorb, showHealAbsorb, forceMax)
 end
 
 -- Data events enter only through the compiled queue. Apply installs this
--- pointer for a live non-test plan, while Disable/Suspend clears it; therefore
--- the normal render-frame drain needs no repeated feature or UnitExists gate.
-UpdateBoundPredictionData = function(frame, event)
-  return UpdateFull(frame, event, frame.MSUFUnitKey, nil, nil, true, true)
+-- pointer for a live non-test plan, while Disable/Suspend clears it. Consume
+-- the numeric dirty mask directly instead of re-entering UpdateFull's cold
+-- unit/config/test/event-plan state machine on every rendered-frame drain.
+-- Recovery alone falls back to UpdateFull so a stale/missing cache can rebuild
+-- the authoritative runtime before the next hot drain.
+UpdateBoundPredictionData = function(frame, mask)
+  local unit = frame.MSUFUnitKey
+  local cfg = frame._msufPredictionRuntimeCfg
+  if type(mask) ~= "number"
+    or not cfg
+    or frame._msufPredictionDisabled == true
+    or frame._msufPredictionCacheReady ~= true
+    or frame._msufPredictionCacheUnit ~= unit
+    or frame._msufPredictionCacheCfg ~= cfg then
+    local event = type(mask) == "number" and PREDICTION_DIRTY_PLAN_KEYS[mask] or mask
+    return UpdateFull(frame, event, unit, nil, nil, true)
+  end
+
+  local refreshHeal = (mask % 2) >= 1 and frame._msufPredictionHealActive == true
+  local refreshAbsorb = (mask % 4) >= 2 and frame._msufPredictionAbsorbActive == true
+  local refreshHealAbsorb = mask >= 4 and frame._msufPredictionHealAbsorbActive == true
+  local showAbsorb = refreshAbsorb
+    or (refreshHeal and frame._msufPredictionFollowAbsorb == true
+      and frame._msufPredictionAbsorbActive == true)
+  return ApplyPredictionValues(frame, cfg, unit, unit, nil, nil, nil,
+    refreshHeal, refreshAbsorb, refreshHealAbsorb,
+    refreshHeal, showAbsorb, refreshHealAbsorb, false)
 end
 
 function Prediction.Update(frame, event, unit, seedHP, seedMaxHP)
