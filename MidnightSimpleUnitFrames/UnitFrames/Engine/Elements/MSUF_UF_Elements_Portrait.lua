@@ -16,6 +16,8 @@ local UnitGUID = V.UnitGUID or UnitGUID
 local UnitExists = V.UnitExists or UnitExists
 local UnitIsConnected = V.UnitIsConnected or UnitIsConnected
 local UnitIsVisible = V.UnitIsVisible or UnitIsVisible
+local UnitCastingInfo = V.UnitCastingInfo or UnitCastingInfo
+local UnitChannelInfo = V.UnitChannelInfo or UnitChannelInfo
 local SetPortraitTexture = V.SetPortraitTexture or SetPortraitTexture
 local tonumber = V.tonumber or tonumber
 local type = V.type or type
@@ -30,6 +32,22 @@ local GROUP_PORTRAIT_2D_EVENTS = {
 }
 local PORTRAIT_2D_PLAYER_EVENTS = V.PORTRAIT_2D_PLAYER_EVENTS or { "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED", "UNIT_ENTERED_VEHICLE", "UNIT_EXITED_VEHICLE" }
 local PORTRAIT_2D_DEPENDENT_EVENTS = V.PORTRAIT_2D_DEPENDENT_EVENTS or { "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED", "UNIT_CONNECTION" }
+local PORTRAIT_CAST_EVENTS = {
+  "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_FAILED", "UNIT_SPELLCAST_INTERRUPTED",
+  "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP",
+  "UNIT_SPELLCAST_EMPOWER_START", "UNIT_SPELLCAST_EMPOWER_STOP",
+}
+local function WithPortraitCastEvents(events)
+  local combined = {}
+  for i = 1, #events do combined[#combined + 1] = events[i] end
+  for i = 1, #PORTRAIT_CAST_EVENTS do combined[#combined + 1] = PORTRAIT_CAST_EVENTS[i] end
+  return combined
+end
+local PORTRAIT_CLASS_CAST_EVENTS = WithPortraitCastEvents(PORTRAIT_CLASS_EVENTS)
+local PORTRAIT_2D_CAST_EVENTS = WithPortraitCastEvents(PORTRAIT_2D_EVENTS)
+local GROUP_PORTRAIT_2D_CAST_EVENTS = WithPortraitCastEvents(GROUP_PORTRAIT_2D_EVENTS)
+local PORTRAIT_2D_PLAYER_CAST_EVENTS = WithPortraitCastEvents(PORTRAIT_2D_PLAYER_EVENTS)
+local PORTRAIT_2D_DEPENDENT_CAST_EVENTS = WithPortraitCastEvents(PORTRAIT_2D_DEPENDENT_EVENTS)
 local WHITE = V.WHITE or "Interface\\Buttons\\WHITE8x8"
 local BOSS_PREVIEW_PORTRAIT = V.BOSS_PREVIEW_PORTRAIT or "Interface\\ICONS\\Achievement_Boss_LichKing"
 local BOSS_PREVIEW_CLASS = V.BOSS_PREVIEW_CLASS or "DEATHKNIGHT"
@@ -81,6 +99,8 @@ local issecretvalue = _G.issecretvalue or function(_) return false end
 
 local Portrait = {}
 local ApplyUnitPortrait
+local ApplyClassPortrait
+local UpdateCastPortrait
 local ResolvePortraitBorderColor
 local PortraitBorderNeedsUpdate
 local LayoutPortraitBorder
@@ -202,17 +222,27 @@ local function PortraitFrameVisible(frame)
   return holder ~= nil
 end
 
-local function ApplyPortraitUpdate(frame)
+local function ApplyPortraitUpdate(frame, castAlreadyChecked)
   if not frame then
     return
   end
   local p = frame._msufPortraitRuntimeCfg or (frame.MSUFSpec and frame.MSUFSpec.portrait)
   local texture = frame.portrait
-  if p and p.enabled == true and p.render ~= "CLASS" and texture and PortraitFrameVisible(frame) then
+  if p and p.enabled == true and texture and PortraitFrameVisible(frame) then
     local force = frame._msufPortraitForceRefresh == true
     frame._msufPortraitNeedsVisibleRefresh = nil
     frame._msufPortraitForceRefresh = nil
-    ApplyUnitPortrait(texture, frame.MSUFUnitKey, frame, p, force)
+    local showingCast, restorePortrait = false, false
+    if castAlreadyChecked ~= true then
+      showingCast, restorePortrait = UpdateCastPortrait(frame, p)
+    end
+    if not showingCast then
+      if p.render == "CLASS" then
+        ApplyClassPortrait(texture, frame.MSUFUnitKey, p, nil, frame, force or restorePortrait)
+      else
+        ApplyUnitPortrait(texture, frame.MSUFUnitKey, frame, p, force or restorePortrait)
+      end
+    end
   elseif p and p.enabled == true and texture and not PortraitFrameVisible(frame) then
     frame._msufPortraitNeedsVisibleRefresh = true
   end
@@ -472,7 +502,7 @@ local function BossPreviewClassToken(unit, frame)
   return nil
 end
 
-local function ApplyClassPortrait(texture, unit, p, class, frame, force)
+ApplyClassPortrait = function(texture, unit, p, class, frame, force)
   class = class or BossPreviewClassToken(unit, frame) or UnitClassToken(unit)
   local frameUnit = frame and frame.MSUFUnitKey
   local classStyle = p and p.classStyle or "BLIZZARD"
@@ -547,6 +577,65 @@ ApplyUnitPortrait = function(texture, unit, frame, p, force)
   SetPortraitTexture(texture, unit)
   texture._msufPortraitGUID = guid or (exists and nil or false)
   texture._msufPortraitKey = key
+end
+
+local function CastingIcon(unit)
+  if UnitCastingInfo then
+    local name, _, icon = UnitCastingInfo(unit)
+    if name ~= nil then return icon end
+  end
+  return nil
+end
+
+local function ChannelIcon(unit)
+  if UnitChannelInfo then
+    local name, _, icon = UnitChannelInfo(unit)
+    if name ~= nil then return icon end
+  end
+  return nil
+end
+
+local function ActiveCastIcon(unit, event)
+  if not unit then return nil end
+  if event == "UNIT_SPELLCAST_START" then
+    return CastingIcon(unit)
+  end
+  if event == "UNIT_SPELLCAST_CHANNEL_START" or event == "UNIT_SPELLCAST_EMPOWER_START" then
+    return ChannelIcon(unit)
+  end
+  return CastingIcon(unit) or ChannelIcon(unit)
+end
+
+local function ApplyCastPortraitIcon(frame, texture, icon)
+  if issecretvalue(icon) == true then
+    texture:SetTexture(icon)
+    texture._msufTexture = nil
+    texture._msufAtlas = nil
+    texture._msufPortraitGUID = nil
+    texture._msufPortraitKey = nil
+    ClearClassPortraitCache(texture)
+  else
+    SetTextureCached(texture, icon)
+  end
+  SetTexCoordCached(texture, 0.08, 0.92, 0.08, 0.92)
+  SetVertexColorCached(texture, 1, 1, 1, 1)
+  frame._msufPortraitCastIconActive = true
+end
+
+UpdateCastPortrait = function(frame, p, event)
+  if not (frame and p and p.castSpellIcon == true) then
+    local restorePortrait = frame and frame._msufPortraitCastIconActive == true
+    if frame then frame._msufPortraitCastIconActive = nil end
+    return false, restorePortrait
+  end
+  local icon = ActiveCastIcon(frame.MSUFUnitKey, event)
+  if icon ~= nil then
+    ApplyCastPortraitIcon(frame, frame.portrait, icon)
+    return true, false
+  end
+  local restorePortrait = frame._msufPortraitCastIconActive == true
+  frame._msufPortraitCastIconActive = nil
+  return false, restorePortrait
 end
 
 ResolvePortraitBorderColor = function(frame, p, class)
@@ -657,19 +746,20 @@ function Portrait.GetEvents(frame, spec)
   local p = spec and spec.portrait
   if p and p.enabled == true then
     local unit = frame and frame.MSUFUnitKey or spec and spec.unit
+    local castSpellIcon = p.castSpellIcon == true
     if p.render == "CLASS" then
-      return PORTRAIT_CLASS_EVENTS
+      return castSpellIcon and PORTRAIT_CLASS_CAST_EVENTS or PORTRAIT_CLASS_EVENTS
     end
     if unit == "player" or (spec and spec.key == "player") then
-      return PORTRAIT_2D_PLAYER_EVENTS
+      return castSpellIcon and PORTRAIT_2D_PLAYER_CAST_EVENTS or PORTRAIT_2D_PLAYER_EVENTS
     end
     if unit == "targettarget" or unit == "focustarget" then
-      return PORTRAIT_2D_DEPENDENT_EVENTS
+      return castSpellIcon and PORTRAIT_2D_DEPENDENT_CAST_EVENTS or PORTRAIT_2D_DEPENDENT_EVENTS
     end
     if spec and spec.scope == "group" then
-      return GROUP_PORTRAIT_2D_EVENTS
+      return castSpellIcon and GROUP_PORTRAIT_2D_CAST_EVENTS or GROUP_PORTRAIT_2D_EVENTS
     end
-    return PORTRAIT_2D_EVENTS
+    return castSpellIcon and PORTRAIT_2D_CAST_EVENTS or PORTRAIT_2D_EVENTS
   end
   return EMPTY_EVENTS
 end
@@ -724,10 +814,13 @@ function Portrait.Apply(frame, spec)
     if PortraitFrameVisible(frame) then
       frame._msufPortraitNeedsVisibleRefresh = nil
       frame._msufPortraitForceRefresh = nil
-      if p.render == "CLASS" then
-        ApplyClassPortrait(frame.portrait, frame.MSUFUnitKey, p, nil, frame)
-      else
-        ApplyUnitPortrait(frame.portrait, frame.MSUFUnitKey, frame, p)
+      local showingCast, restorePortrait = UpdateCastPortrait(frame, p)
+      if not showingCast then
+        if p.render == "CLASS" then
+          ApplyClassPortrait(frame.portrait, frame.MSUFUnitKey, p, nil, frame, restorePortrait)
+        else
+          ApplyUnitPortrait(frame.portrait, frame.MSUFUnitKey, frame, p, restorePortrait)
+        end
       end
     else
       frame._msufPortraitNeedsVisibleRefresh = true
@@ -745,6 +838,7 @@ function Portrait.Disable(frame)
   frame._msufUpdatePortraitConnection = nil
   frame._msufPortraitRuntimeCfg = nil
   frame._msufPortraitFrameHeight = nil
+  frame._msufPortraitCastIconActive = nil
   if frame.portrait then
     ClearPortraitGUID(frame.portrait)
   end
@@ -806,17 +900,29 @@ function Portrait.Update(frame, event, unit)
     return
   end
 
+  local showingCast, restorePortrait = UpdateCastPortrait(frame, p, event)
+  if showingCast then
+    if PortraitBorderNeedsUpdate(event, p) then
+      LayoutPortraitBorder(frame.MSUFPortraitHolder, p, ResolvePortraitBorderColor(frame, p))
+    end
+    return
+  end
+
   local class
   if p.render == "CLASS" then
-    local force = forceRefresh == true or frame._msufPortraitForceRefresh == true
+    local force = forceRefresh == true or frame._msufPortraitForceRefresh == true or restorePortrait == true
     frame._msufPortraitNeedsVisibleRefresh = nil
     frame._msufPortraitForceRefresh = nil
     class = UnitClassToken(unit)
     ApplyClassPortrait(texture, unit, p, class, frame, force)
   else
-    if ShouldRefresh2DPortraitForEvent(event, identityVisual) then
+    if restorePortrait == true then
+      frame._msufPortraitNeedsVisibleRefresh = nil
+      frame._msufPortraitForceRefresh = nil
+      ApplyUnitPortrait(texture, unit, frame, p, true)
+    elseif ShouldRefresh2DPortraitForEvent(event, identityVisual) then
       if forceRefresh == true or UnitPortraitKeyChanged(texture, unit, frame, p) then
-        ApplyPortraitUpdate(frame)
+        ApplyPortraitUpdate(frame, true)
       else
         frame._msufPortraitNeedsVisibleRefresh = nil
         frame._msufPortraitForceRefresh = nil
