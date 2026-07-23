@@ -4468,3 +4468,16 @@ L["Group Target Highlight"] = "小队目标高亮"
 L["Language, menu behavior, frame highlights, tooltips and Blizzard frames."] = "语言、菜单行为、框体高亮、鼠标提示和暴雪框体。"
 L["Open Highlights"] = "打开高亮设置"
 L["|cffff625f•|r|cff61d683•|r|cff5aa7ff•|r  Colors..."] = "|cffff625f•|r|cff61d683•|r|cff5aa7ff•|r  颜色..."
+
+
+--- Fill Direction and Power bar textures (6.0 Beta 26)
+L["Power Bar Texture"] = "能量条材质"
+L["Power Background Texture"] = "能量背景材质"
+L["Power Texture"] = "能量材质"
+L["Power Background"] = "能量背景"
+L["Fill Direction"] = "填充方向"
+L["Art for every unit's power bar. Leave on Use bar texture to keep the shared bar art. Each unit page can override this, and the Class Resources detached power texture still wins for a detached Player bar."] = "每个单位能量条的外观。保持“使用条材质”即可沿用共享的条外观。每个单位页面都可覆盖此项，而对于分离的玩家能量条，职业资源的分离能量材质仍然优先。"
+L["Art for this frame's power bar, detached or not. Leave on the global option to follow the shared Bars power texture."] = "此框体能量条的外观，无论是否分离。保持全局选项即可沿用条设置中的共享能量材质。"
+L["Axis and direction the Health and Power bars fill. Vertical options fill bottom-to-top or top-to-bottom; combines with Smooth fill."] = "生命值与能量条的填充轴向和方向。垂直选项从下往上或从上往下填充，可与平滑填充组合使用。"
+L["Background art behind every unit's power bar. Overridable per unit on the unit page."] = "每个单位能量条后方的背景外观。可在各单位页面单独覆盖。"
+L["Background art behind this frame's power bar."] = "此框体能量条后方的背景外观。"
