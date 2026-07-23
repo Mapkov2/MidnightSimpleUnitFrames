@@ -326,7 +326,7 @@ for _, suffix in ipairs({ "personalize", "import_profile", "use_defaults", "what
     local record = Catalog.Get(id)
     Check(record and record.virtual == true and record.classification == "action"
         and record.actionKey == "first_load." .. suffix
-        and record.commandMeta and record.commandMeta.hasSet == true,
+        and record.command and type(record.command.set) == "function",
         "FirstLoad conditional action is absent from the closed-scene catalog: " .. suffix)
 end
 
