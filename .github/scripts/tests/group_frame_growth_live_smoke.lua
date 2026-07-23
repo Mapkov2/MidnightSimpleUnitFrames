@@ -375,6 +375,8 @@ Check(runtimeFrame.events.GROUP_ROSTER_UPDATE and runtimeFrame.events.PLAYER_REG
   "enabled group runtime did not install its steady event set after startup")
 local partyHeader = GF.headers.party
 Check(partyHeader ~= nil, "PLAYER_LOGIN did not create the enabled party header")
+Equal(partyHeader:GetAttribute("auraContainerTemplate"), "CustomAuraContainerTemplate",
+  "party header did not request secure-side native AuraContainer birth")
 Check(UIParent:IsShown(), "ordinary CreateFrame mock did not start shown like a WoW frame")
 Check(partyHeader._createdShown == false,
   "SecureGroupHeaderTemplate mock ignored Blizzard's hidden=true template")
@@ -403,6 +405,8 @@ end
 -- Raid exercises the complete primary direction matrix on the same children.
 inRaid = true
 local raidHeader = SetupAndShow("raid", "raid")
+Equal(raidHeader:GetAttribute("auraContainerTemplate"), "CustomAuraContainerTemplate",
+  "raid header did not request secure-side native AuraContainer birth")
 AssertLayout(raidHeader, "raid", "raid initial DOWN")
 for _, growth in ipairs({ "UP", "RIGHT", "LEFT", "DOWN" }) do
   confs.raid.growth = growth

@@ -267,7 +267,7 @@ end
 local function FilteredRangeEventUpdate(frame, event, _unit, inRange)
   local changed = GroupRangeFade.Update(frame, event, nil, inRange)
   local applyAuraGate = frame and frame._msufApplyPartyAuraRangeGate
-  if applyAuraGate then applyAuraGate(frame, inRange) end
+  if changed and applyAuraGate then applyAuraGate(frame, inRange) end
   return changed
 end
 
@@ -1118,6 +1118,7 @@ function GroupRangeFade.Update(frame, event, unit, inRange)
   if changed then
     ApplyAlpha(frame, event, rangeValue, rangeSecret)
   end
+  return changed
 end
 
 function GroupRangeFade.Disable(frame)
