@@ -1089,6 +1089,7 @@ local function CompleteGroupRoots(state, settings)
     ApplyScopeRoots(state, settings, BuildScanIndex(settings), "group")
     -- A navigation association may coexist with a newly completed group-root
     -- prerequisite; its kind keeps the two meanings distinct to callers.
+    ApplyRegistryAssociations(state, settings, true, "all")
     Finalize(state, settings)
     state.groupRootsBuilt = true
     state.edgeIdentity = nil
