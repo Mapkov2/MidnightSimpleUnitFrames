@@ -103,6 +103,7 @@ Features\Gameplay\MSUF_Feature_GameplayRuntime.lua
 Features\Gameplay\MSUF_Feature_TargetSound.lua
 Features\Gameplay\MSUF_Feature_TotemPreview.lua
 Features\Telemetry\MSUF_Analytics.lua
+Features\Diagnostics\MSUF_Feature_GroupPulse.lua
 Features\Versioning\MSUF_VersionCheck.lua
 Features\Versioning\MSUF_ChangelogPopup.lua
 
