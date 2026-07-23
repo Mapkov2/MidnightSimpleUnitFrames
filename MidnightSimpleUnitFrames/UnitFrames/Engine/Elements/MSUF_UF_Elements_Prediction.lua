@@ -1226,6 +1226,7 @@ local function ClearPredictionCache(frame)
   frame._msufPredictionIncoming = nil
   frame._msufPredictionAbsorb = nil
   frame._msufPredictionHealAbsorb = nil
+  frame._msufPredictionHealthVisualActive = nil
   frame._msufPredictionPartialGlowHealthActive = nil
   frame._msufPredictionHealthMax = nil
   frame._msufPredictionHealthMaxUnit = nil
@@ -1679,15 +1680,9 @@ end
 
 UpdateGlowHealthFast = function(frame, event, unit, seedHP, seedMaxHP)
   if not frame then return end
-  -- A partial edge has no work while the last absorb event reported zero or a
-  -- protected payload. This is the normal combat state for every group member,
-  -- so reject it before unit/config/cache validation. The full-health stripe
-  -- deliberately remains health-driven because its native alpha gate can
-  -- consume protected values.
-  if frame._msufPredictionFullHealthStripe ~= true
-    and frame._msufPredictionPartialGlowHealthActive ~= true then
-    return
-  end
+  -- The absorb-data event owns this gate. Most group members have no absorb,
+  -- so reject their health ticks before unit/config/cache/secret inspection.
+  if frame._msufPredictionHealthVisualActive ~= true then return end
   unit = unit or frame.MSUFUnitKey
   local cfg = frame._msufPredictionRuntimeCfg
   if issecretvalue(unit) == true
@@ -1825,10 +1820,11 @@ local function ApplyPredictionValues(frame, cfg, unit, cacheUnit, event, hp, max
     local readAbsorb = frame._msufPredictionReadAbsorb or ReadDamageAbsorbs
     local absorb = readAbsorb(frame, unit)
     frame._msufPredictionAbsorb = absorb
-    if frame._msufPredictionFullHealthStripe ~= true
-      and issecretvalue(absorb) ~= true
-      and type(absorb) == "number"
-      and absorb > 0 then
+    local absorbSecret = issecretvalue(absorb) == true
+    local absorbPositive = not absorbSecret and type(absorb) == "number" and absorb > 0
+    frame._msufPredictionHealthVisualActive = (absorbPositive
+      or (absorbSecret and frame._msufPredictionFullHealthStripe == true)) and true or nil
+    if frame._msufPredictionFullHealthStripe ~= true and absorbPositive then
       frame._msufPredictionPartialGlowHealthActive = true
     else
       frame._msufPredictionPartialGlowHealthActive = nil

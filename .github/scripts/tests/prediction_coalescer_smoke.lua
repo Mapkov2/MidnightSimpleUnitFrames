@@ -712,8 +712,7 @@ local protectedOverlayFast = Prediction.SelectEventUpdate(overAbsorb, overAbsorb
 Equal(protectedOverlayFast, Prediction.UpdateGlowHealthFast,
     "partial over-absorb did not compile its direct health selector")
 local inactiveFastFrame = setmetatable({
-    _msufPredictionFullHealthStripe = false,
-    _msufPredictionPartialGlowHealthActive = false,
+    _msufPredictionHealthVisualActive = false,
 }, {
     __index = function(_, key)
         error("inactive partial-glow health path touched " .. tostring(key))
@@ -793,6 +792,8 @@ Equal(OperationCount(fullHealthStripe.overAbsorbGlowBar, "SetValue"), steadyGlow
     "absorb event did not write its protected holder payload exactly once")
 Equal(fullHealthStripe.overAbsorbGlowBar.value, protectedAbsorb,
     "protected absorb event did not feed the native status gate")
+Check(fullHealthStripe._msufPredictionHealthVisualActive == true,
+    "protected full-health absorb did not arm its native health gate")
 local protectedValueWrites = OperationCount(fullHealthStripe.overAbsorbGlowBar, "SetValue")
 Prediction.UpdateHealthValue(fullHealthStripe, "UNIT_HEALTH", "party3", 100, 100)
 Equal(OperationCount(fullHealthStripe.overAbsorbGlowBar, "SetValue"), protectedValueWrites,
@@ -879,6 +880,28 @@ healthPercentAlpha = 1
 Prediction.UpdateHealthValue(fullHealthStripe, "UNIT_HEALTH", "party3", 99, 100)
 Check(fullHealthStripe.overAbsorbGlowBar.shown == false,
     "full-health absorb stripe leaked into partial health")
+
+-- A plain zero absorb disarms the health follower even while the full-health
+-- stripe feature remains enabled. Repeated health events must stop at the one
+-- compiled gate without touching frame state or the native health curve.
+totalAbsorbValue = 0
+Prediction.Update(fullHealthStripe, "UNIT_ABSORB_AMOUNT_CHANGED", "party3")
+Check(fullHealthStripe._msufPredictionHealthVisualActive == nil,
+    "zero absorb retained the full-health stripe follower")
+local zeroStripePercentReads = healthPercentReads
+for _ = 1, 20 do
+    fullHealthStripeFast(fullHealthStripe, "UNIT_HEALTH", "party3")
+end
+Equal(healthPercentReads, zeroStripePercentReads,
+    "zero-absorb full-health stripe repeated native curve reads")
+local zeroStripeFastFrame = setmetatable({
+    _msufPredictionHealthVisualActive = false,
+}, {
+    __index = function(_, key)
+        error("zero-absorb stripe fast path touched " .. tostring(key))
+    end,
+})
+fullHealthStripeFast(zeroStripeFastFrame, "UNIT_HEALTH", "party3")
 
 -- Follow-HP clips its raw display amount through geometry. The stripe reuses
 -- the same event-backed (potentially protected) payload without a health read.
