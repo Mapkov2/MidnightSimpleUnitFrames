@@ -56,13 +56,19 @@ _G.wipe = function(tbl)
 end
 
 local healthValue, healthMaxValue, absorbValue = 600, 1000, 250
-local healthReads, absorbReads = 0, 0
+local healthReads, maxHealthReads, missingHealthReads, absorbReads = 0, 0, 0, 0
+_G.UnitHealthMissing = function(unit, usePredicted)
+    Check(unit == "party1" and usePredicted == true,
+        "missing health did not use the native predicted-health contract")
+    missingHealthReads = missingHealthReads + 1
+    return 400
+end
 local UF = { elements = {} }
 function UF.RegisterElement(name, element) UF.elements[name] = element end
 
 local Text = {
     UnitHealth = function() healthReads = healthReads + 1; return healthValue end,
-    UnitHealthMax = function() return healthMaxValue end,
+    UnitHealthMax = function() maxHealthReads = maxHealthReads + 1; return healthMaxValue end,
     UnitGetTotalAbsorbs = function() absorbReads = absorbReads + 1; return absorbValue end,
     UnitPower = function() return 0 end,
     UnitPowerMax = function() return 1 end,
@@ -150,6 +156,40 @@ textDrain()
 Check(absorbReads == 1, "UNIT_HEALTH must not read absorbs")
 Check(currentFS.text == "SHORT:500", "UNIT_HEALTH did not update the normal slot")
 Check(absorbFS.text == "SHORT:250", "UNIT_HEALTH touched the absorb slot")
+
+local deficitFS = NewFontString()
+local deficitFrame = {
+    unit = "party1",
+    MSUFUnitKey = "party1",
+    hpTextCenter = deficitFS,
+    _msufActiveElements = { HealthText = true },
+}
+local deficitSpec = {
+    key = "party1",
+    scope = "group",
+    showHealthText = true,
+    text = {
+        healthLeft = "NONE",
+        healthCenter = "DEFICIT",
+        healthRight = "NONE",
+        healthShortNumbers = true,
+    },
+}
+local deficitRuntime = Text.CompileTextRuntime(deficitFrame, deficitSpec, deficitSpec.text)
+Check(deficitRuntime.healthNeedsMissing == true
+        and deficitRuntime.healthNeedsCurrent ~= true
+        and deficitRuntime.healthNeedsMax ~= true,
+    "deficit-only text compiled unrelated health requirements")
+local readsBeforeDeficit, maxReadsBeforeDeficit = healthReads, maxHealthReads
+local deficitRoute = HealthText.SelectEventUpdate(
+    deficitFrame, deficitSpec, "UNIT_HEALTH", HealthText.SelectUpdate(deficitFrame, deficitSpec))
+deficitRoute(deficitFrame, "UNIT_HEALTH", "party1")
+textDrain()
+Check(missingHealthReads == 1 and healthReads == readsBeforeDeficit
+        and maxHealthReads == maxReadsBeforeDeficit,
+    "deficit-only drain did not use one native UnitHealthMissing read")
+Check(deficitFS.text == "-SHORT:400",
+    "native missing-health text mismatch: " .. tostring(deficitFS.text))
 
 absorbValue = 0
 local absorbRoute = HealthText.SelectEventUpdate(frame, spec, "UNIT_ABSORB_AMOUNT_CHANGED", update)

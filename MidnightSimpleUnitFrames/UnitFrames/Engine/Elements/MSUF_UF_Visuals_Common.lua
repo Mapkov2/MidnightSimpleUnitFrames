@@ -123,6 +123,48 @@ local function ReadGroupRole(frame, unit)
   return role
 end
 
+local function GroupAggroModeNeedsRole(mode)
+  return mode == "TANK" or mode == "HEALER" or mode == "NON_TANK"
+end
+
+local function GroupAggroModeAllowsRole(mode, role)
+  if not GroupAggroModeNeedsRole(mode) then return true end
+  if IsNil(role) or not NotSecretValue(role) then return false end
+  if mode == "NON_TANK" then return role ~= "TANK" end
+  return role == mode
+end
+
+local function GroupAggroModeAllows(frame, unit, mode)
+  return GroupAggroModeAllowsRole(mode,
+    GroupAggroModeNeedsRole(mode) and ReadGroupRole(frame, unit) or nil)
+end
+
+-- Visible secure group children already own an exact RegisterUnitEvent token.
+-- UnitThreatSituation returning nil is therefore also the cheapest missing-unit
+-- gate; a separate UnitExists call only duplicated work on every threat event.
+local function ReadGroupAggroThreat(unit)
+  if not (unit and UnitThreatSituation) then return false end
+  local status = UnitThreatSituation(unit)
+  if IsNil(status) or not NotSecretValue(status) then return false end
+  status = tonumber(status)
+  return status ~= nil and status >= 1
+end
+
+-- EUI-style group hotpath: read threat once, read role at most once, and derive
+-- both enabled visual consumers from those two values. Border and corner modes
+-- may differ, so returning a pair preserves their independent configuration
+-- without re-entering UnitThreatSituation.
+local function ResolveGroupAggroPair(frame, unit, borderMode, cornerMode)
+  if not ReadGroupAggroThreat(unit) then return false, false end
+  local role
+  if GroupAggroModeNeedsRole(borderMode) or GroupAggroModeNeedsRole(cornerMode) then
+    role = ReadGroupRole(frame, unit)
+  end
+  local border = borderMode ~= nil and GroupAggroModeAllowsRole(borderMode, role) or false
+  local corner = cornerMode ~= nil and GroupAggroModeAllowsRole(cornerMode, role) or false
+  return border, corner
+end
+
 -- Borders run before corner indicators in the compiled event path. Resolve
 -- their common group-aggro predicate once per dispatch; corners retain their
 -- stricter combat gate and reuse this result when both visuals are enabled.
@@ -136,28 +178,19 @@ local function ResolveGroupAggroThreat(frame, unit, mode)
     return frame._msufGroupAggroDispatchValue == true
   end
 
+  -- This resolver is also used by cold/apply and UNIT_FLAGS fallback paths,
+  -- where no exact RegisterUnitEvent delivery proves that the token exists.
+  -- Keep their explicit existence guard; only ResolveGroupAggroPair is the
+  -- exact group-threat hotpath and can safely omit the duplicate native read.
   local active = true
   local exists = UnitExists and UnitExists(unit)
   if not IsNil(exists) and NotSecretValue(exists)
     and (exists == false or exists == 0) then
     active = false
   end
-  if active and (mode == "TANK" or mode == "HEALER" or mode == "NON_TANK") then
-    local role = ReadGroupRole(frame, unit)
-    if IsNil(role) or not NotSecretValue(role)
-      or (mode == "NON_TANK" and role == "TANK")
-      or (mode ~= "NON_TANK" and role ~= mode) then
-      active = false
-    end
-  end
   if active then
-    local status = UnitThreatSituation(unit)
-    if IsNil(status) or not NotSecretValue(status) then
-      active = false
-    else
-      status = tonumber(status)
-      active = status ~= nil and status >= 1
-    end
+    active = ReadGroupAggroThreat(unit)
+      and GroupAggroModeAllows(frame, unit, mode)
   end
 
   if token then
@@ -200,5 +233,8 @@ MSUF.UFVisuals = {
   Clamp01 = Clamp01,
   SetFrameAlpha = SetFrameAlpha,
   SetAlphaCached = SetAlphaCached,
+  ReadGroupAggroThreat = ReadGroupAggroThreat,
+  GroupAggroModeAllows = GroupAggroModeAllows,
+  ResolveGroupAggroPair = ResolveGroupAggroPair,
   ResolveGroupAggroThreat = ResolveGroupAggroThreat,
 }

@@ -99,6 +99,7 @@ local combatByUnit = {}
 local threatQueries = {}
 local existsQueries = {}
 local roleQueries = {}
+local roleByUnit = {}
 local inInstance = false
 local stateDriverCalls = {}
 local stateDriverUnregisterCalls = 0
@@ -123,7 +124,7 @@ _G.UnitIsUnit = function(a, b) return a == b end
 _G.UnitAffectingCombat = function(unit) return combatByUnit[unit] == true end
 _G.UnitGroupRolesAssigned = function(unit)
   roleQueries[unit] = (roleQueries[unit] or 0) + 1
-  return "DAMAGER"
+  return roleByUnit[unit] or "DAMAGER"
 end
 _G.UnitClass = function() return "Warrior", "WARRIOR" end
 _G.UnitReaction = function() return 5 end
@@ -330,14 +331,18 @@ threatByUnit.party1 = 1
 local partyThreatQueriesBefore = threatQueries.party1 or 0
 local partyExistsQueriesBefore = existsQueries.party1 or 0
 local partyRoleQueriesBefore = roleQueries.party1 or 0
+local partyDispatchTokenBefore = party._msufDispatchToken
 party:Fire("UNIT_THREAT_LIST_UPDATE", "party1")
 Check(party._msufBorderShown == true and corner.shown == true,
   "party aggro visuals did not react to threat-list gain")
 Check((threatQueries.party1 or 0) - partyThreatQueriesBefore == 1,
-  "border and corner indicator did not share one dispatch-local aggro result")
-Check((existsQueries.party1 or 0) - partyExistsQueriesBefore == 1
+  "border and corner indicator did not share one direct aggro read")
+Check((existsQueries.party1 or 0) - partyExistsQueriesBefore == 0
     and (roleQueries.party1 or 0) - partyRoleQueriesBefore == 1,
-  "border and corner indicator repeated group aggro eligibility reads")
+  "direct group aggro route repeated or retained redundant eligibility reads")
+Check(party._msufDispatchToken == partyDispatchTokenBefore
+    and party._msufDispatchActive == nil,
+  "direct group aggro route entered the generic frame dispatcher")
 threatByUnit.party1 = 0
 party:Fire("UNIT_THREAT_SITUATION_UPDATE", "party1")
 Check(party._msufBorderShown == false and corner.shown == false,
@@ -352,6 +357,71 @@ Check(party._msufBorderShown == false and corner.shown == false,
   "party aggro visuals did not clear nil threat")
 Check((threatQueries.party1 or 0) >= 4,
   "party aggro visuals did not use one-argument UnitThreatSituation(party1)")
+
+-- Independently configured consumers still share the same role read.
+party._msufBorderRuntimeAggroMode = "TANK"
+party._msufGFCornerPreparedCfg.runtimeAggroMode = "HEALER"
+roleByUnit.party1 = "HEALER"
+combatByUnit.party1 = true
+threatByUnit.party1 = 3
+partyThreatQueriesBefore = threatQueries.party1 or 0
+partyRoleQueriesBefore = roleQueries.party1 or 0
+party:Fire("UNIT_THREAT_LIST_UPDATE", "party1")
+Check(party._msufBorderShown == false and corner.shown == true,
+  "different border/corner role modes were not resolved independently")
+Check((threatQueries.party1 or 0) - partyThreatQueriesBefore == 1
+    and (roleQueries.party1 or 0) - partyRoleQueriesBefore == 1,
+  "different border/corner role modes repeated native reads")
+party._msufBorderRuntimeAggroMode = "NON_TANK"
+party._msufGFCornerPreparedCfg.runtimeAggroMode = "NON_TANK"
+roleByUnit.party1 = nil
+
+-- UNIT_FLAGS remains a corner-only member-combat clear while the player can
+-- still be in combat; the next authoritative threat event clears the border.
+party:Fire("UNIT_THREAT_LIST_UPDATE", "party1")
+Check(party._msufBorderShown == true and corner.shown == true,
+  "party aggro setup for UNIT_FLAGS clear failed")
+combatByUnit.party1 = false
+party:Fire("UNIT_FLAGS", "party1")
+Check(party._msufBorderShown == true and corner.shown == false,
+  "UNIT_FLAGS did not clear a member that left combat")
+threatByUnit.party1 = 0
+party:Fire("UNIT_THREAT_LIST_UPDATE", "party1")
+Check(party._msufBorderShown == false,
+  "authoritative threat clear did not remove the remaining border")
+
+-- The EUI-style fast path must preserve the existing shared-border priority
+-- contract when a dispel or test visual is active.
+combatByUnit.party1 = true
+threatByUnit.party1 = 3
+party._msufBorderRuntimeCfg.dispel = true
+party._msufA3DispelActive = true
+party._msufA3DispelR, party._msufA3DispelG, party._msufA3DispelB = 0.2, 0.7, 1
+party:Fire("UNIT_THREAT_SITUATION_UPDATE", "party1")
+Check(party._msufBorderVisualSource == "dispel" and corner.shown == true,
+  "default dispel-before-aggro priority regressed on the direct route")
+party._msufBorderRuntimeCustomPriority = true
+party._msufBorderRuntimePriority = { "aggro", "dispel" }
+party:Fire("UNIT_THREAT_SITUATION_UPDATE", "party1")
+Check(party._msufBorderVisualSource == "aggro",
+  "custom aggro-before-dispel priority regressed on the direct route")
+party._msufBorderRuntimeCustomPriority = nil
+party._msufBorderRuntimePriority = nil
+party._msufA3DispelActive = nil
+
+threatByUnit.party1 = 0
+_G.MSUF_BorderTestModesActive = true
+_G.MSUF_AggroBorderTestMode = true
+_G.MSUF_AggroBorderTestScope = "shared"
+party:Fire("UNIT_THREAT_LIST_UPDATE", "party1")
+Check(party._msufBorderVisualSource == "aggro" and corner.shown == false,
+  "aggro border test mode was lost when real threat was false")
+_G.MSUF_BorderTestModesActive = nil
+_G.MSUF_AggroBorderTestMode = nil
+_G.MSUF_AggroBorderTestScope = nil
+party:Fire("UNIT_THREAT_LIST_UPDATE", "party1")
+Check(party._msufBorderShown == false,
+  "party border stayed in test mode after the test gate cleared")
 
 -- Hidden frames suppress runtime events. OnShow must reseed threat-driven state.
 threatByUnit.party1 = 3
@@ -578,16 +648,6 @@ probe:Fire("UNIT_PHASE", "party3")
 probe:Fire("UNIT_FLAGS", "party3")
 probe:Fire("INCOMING_RESURRECT_CHANGED", "party3")
 probe:Fire("UNIT_FACTION", "party3")
-local groupDataDriver
-for i = #createdFrames, 1, -1 do
-  local candidate = createdFrames[i]
-  if candidate.visible == true and candidate:GetScript("OnUpdate") then
-    groupDataDriver = candidate
-    break
-  end
-end
-Check(groupDataDriver ~= nil, "deferred group health driver was not armed")
-groupDataDriver:RunScript("OnUpdate")
 Check(visualCalls.UNIT_HEALTH == 1 and visualCalls.UNIT_FLAGS == 1,
   "GroupVisuals probe was not dispatched exactly once per owned event")
 Check(statusCalls.UNIT_PHASE == 1 and statusCalls.UNIT_FLAGS == 1

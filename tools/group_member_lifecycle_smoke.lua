@@ -2,6 +2,8 @@ _G = _G or _ENV
 
 local elements = {}
 local aiChecks = 0
+local percentCalls = 0
+local healthPercent = 100
 _G.issecretvalue = function() return false end
 _G.C_Timer = {
   NewTimer = function()
@@ -13,11 +15,10 @@ _G.UnitInPartyIsAI = function(unit)
   return unit == "party1"
 end
 local detailedCalls = 0
-local detailedCurrent = 775000
 _G.GetTime = function() return 10 end
 _G.CreateUnitHealPredictionCalculator = function()
   return {
-    GetCurrentHealth = function() return detailedCurrent end,
+    GetCurrentHealth = function() return 775000 end,
     GetMaximumHealth = function() return 775000 end,
   }
 end
@@ -33,7 +34,12 @@ local MSUF = {
   },
   UFBarTextCommon = {
     UF = nil,
-    UnitHealthPercent = function() return 100 end,
+    UnitHealthPercent = function(unit, usePredicted, curve)
+      assert((unit == "party1" or unit == "party2") and usePredicted == true and curve == 100,
+        "group health used the wrong native predicted-percent contract")
+      percentCalls = percentCalls + 1
+      return healthPercent
+    end,
     SCALE_100 = 100,
     WHITE = "white",
     POWER_EVENTS = { "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" },
@@ -124,28 +130,14 @@ local lifecycleFrame = {
   _msufDispatchToken = 1,
 }
 Health.Update(lifecycleFrame, "PARTY_MEMBER_ENABLE", "party1")
-assert(bar.value == 775000 and bar.maximum == 775000,
-  "party enable must use committed detailed health instead of stale direct health")
-assert(bar._msufHealthValue == 775000 and bar._msufHealthMax == 775000,
-  "detailed lifecycle health must seed the shared bar/text cache")
-assert(Prediction.ReadDetailedHealth == nil and detailedCalls == 1,
-  "Prediction restored the removed detailed-health compatibility provider")
-lifecycleFrame._msufDispatchToken = 2
-Health.Update(lifecycleFrame, "PARTY_MEMBER_ENABLE", "party1")
-assert(detailedCalls == 2,
-  "a second state dispatch at the same GetTime must not reuse a stale calculator fill")
-local metadataChecks = aiChecks
-assert(Health.UpdateGroupLifecycleMetadata(lifecycleFrame, "PARTY_MEMBER_ENABLE", "party1") == true
-    and aiChecks == metadataChecks + 1,
-  "active AI followers must retain the authoritative detailed lifecycle snapshot")
-lifecycleFrame._msufGroupLifecycleAIMetadataReady = true
-lifecycleFrame._msufDispatchToken = 3
-metadataChecks = aiChecks
-Health.Update(lifecycleFrame, "PARTY_MEMBER_ENABLE", "party1")
-assert(aiChecks == metadataChecks,
-  "compiled lifecycle metadata dependency must prevent a duplicate AI classification read")
-lifecycleFrame._msufGroupLifecycleAIMetadataReady = nil
-lifecycleFrame._msufDispatchActive = nil
+assert(bar.value == 100 and bar.maximum == 100,
+  "party enable must use the native predicted-percent group path")
+assert(bar._msufHealthPercentValue == 100 and bar._msufHealthPercentUnit == "party1"
+    and bar._msufHealthValue == nil and bar._msufHealthMax == nil,
+  "group lifecycle health must seed only the percent cache")
+assert(Prediction.ReadDetailedHealth == nil and Health.UpdateGroupLifecycleMetadata == nil
+    and detailedCalls == 0 and aiChecks == 0 and percentCalls == 1,
+  "group lifecycle health restored the removed AI/detailed-health path")
 
 local statusSeed, goneSeed
 lifecycleFrame._msufUpdateGroupStatusState = function(_, event, unit, hp)
@@ -160,25 +152,17 @@ lifecycleFrame._msufUpdateGroupVisualsGoneState = function(_, event, unit, hp)
   goneSeed = hp
 end
 lifecycleFrame._msufDispatchActive = true
-lifecycleFrame._msufDispatchToken = 4
-detailedCurrent = 617000
+healthPercent = 61
 Health.Update(lifecycleFrame, "UNIT_HEALTH", "party1")
-assert(detailedCalls == 4 and bar.value == 617000,
-  "AI UNIT_HEALTH must read the authoritative detailed pool")
-assert(statusSeed == nil and goneSeed == 617000,
-  "living AI health must skip status while still seeding dead-background recovery")
+assert(detailedCalls == 0 and aiChecks == 0 and percentCalls == 2 and bar.value == 61,
+  "group UNIT_HEALTH must stay on one native predicted-percent read")
+assert(statusSeed == nil and goneSeed == 61,
+  "living group health must skip status while still seeding dead-background recovery")
 lifecycleFrame._msufStatusTextValue = "DEAD"
-lifecycleFrame._msufDispatchToken = 5
-detailedCurrent = 700000
+healthPercent = 70
 Health.Update(lifecycleFrame, "UNIT_HEALTH", "party1")
-assert(statusSeed == 700000 and goneSeed == 700000,
-  "positive AI health must clear a stale gone status in the same dispatch")
-local checksAfterFirstHealth = aiChecks
-lifecycleFrame._msufDispatchToken = 6
-detailedCurrent = 710000
-Health.Update(lifecycleFrame, "UNIT_HEALTH", "party1")
-assert(detailedCalls == 6 and aiChecks == checksAfterFirstHealth,
-  "AI classification must be cached while each health dispatch remains authoritative")
+assert(statusSeed == 70 and goneSeed == 70,
+  "positive group health must clear a stale gone status in the same dispatch")
 
 local normalBar = {}
 function normalBar:SetMinMaxValues(minimum, maximum) self.minimum, self.maximum = minimum, maximum end
@@ -192,34 +176,10 @@ local normalFrame = {
   _msufDispatchActive = true,
   _msufDispatchToken = 1,
 }
+healthPercent = 80
 Health.Update(normalFrame, "UNIT_HEALTH", "party2")
-assert(normalBar.value == 100 and detailedCalls == 6,
-  "non-AI group health must retain the percent fastpath")
-local changedFrame = {
-  unit = "party2",
-  _msufIsGroupFrame = true,
-  _msufHealthAIUnit = "party1",
-  _msufHealthAI = true,
-}
-assert(Health.UpdateGroupLifecycleMetadata(changedFrame, "PARTY_MEMBER_DISABLE", "party2") == true
-    and changedFrame._msufHealthAI == false,
-  "AI mode transition must promote the non-target frame to a full health snapshot")
-local stableAIState = {
-  _msufIsGroupFrame = true,
-  _msufHealthAIUnit = "party2",
-  _msufHealthAI = false,
-}
-local stableAIWrites = 0
-local stableFrame = setmetatable({}, {
-  __index = stableAIState,
-  __newindex = function(_, key, value)
-    stableAIWrites = stableAIWrites + 1
-    stableAIState[key] = value
-  end,
-})
-assert(Health.UpdateGroupLifecycleMetadata(stableFrame, "PARTY_MEMBER_ENABLE", "party2") == false
-    and stableAIWrites == 0,
-  "unchanged lifecycle AI metadata must not rewrite frame state")
+assert(normalBar.value == 80 and detailedCalls == 0 and aiChecks == 0 and percentCalls == 4,
+  "all group members must share the predicted-percent fastpath")
 
 MSUF.UFVisuals = { UF = MSUF.UF }
 assert(loadfile("MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Portrait.lua"))(

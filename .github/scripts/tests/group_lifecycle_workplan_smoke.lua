@@ -83,11 +83,6 @@ function Health.Update(frame, _, unit)
   Count(frame, "health")
   return 80, 100, false
 end
-function Health.UpdateGroupLifecycleMetadata(frame, _, unit)
-  Check(frame.unit == unit, "metadata received another frame's unit")
-  Count(frame, "metadata")
-  return false
-end
 UF.RegisterElement("Health", Health)
 
 local Power = {
@@ -164,8 +159,6 @@ end
 lifecycleDriver.scripts.OnEvent(lifecycleDriver, "PARTY_MEMBER_ENABLE", "party1")
 Check(Calls(first, "health") == 1 and Calls(second, "health") == 0,
   "target-full/global-minimal health routing is not O(1)")
-Check(Calls(first, "metadata") == 0 and Calls(second, "metadata") == 1,
-  "non-target AI metadata gate did not run exactly once")
 Check(Calls(first, "power") == 1 and Calls(second, "power") == 1,
   "global alternate-power invalidation regressed")
 Check(Calls(first, "status") == 1 and Calls(second, "status") == 1
@@ -183,8 +176,6 @@ Check(Calls(first, "health") == 2 and Calls(second, "health") == 1
   "index/rebind/alias miss lost the full broadcast fallback")
 Check(first.statusHadHealthSnapshot == true and second.statusHadHealthSnapshot == true,
   "full fallback did not preserve the coherent health/status barrier")
-Check(Calls(second, "metadata") == 1,
-  "full fallback incorrectly executed the minimal metadata path")
 
 lifecycleDriver.scripts.OnEvent(lifecycleDriver, "PARTY_MEMBER_ENABLE", secretToken)
 Check(Calls(first, "health") == 3 and Calls(second, "health") == 2,

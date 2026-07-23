@@ -1525,7 +1525,6 @@ local function QueuePredictionDataEvent(frame, event)
     frame._msufPredictionDirtyMask = mask + bit
   end
   if frame._msufPredictionQueued == true then return end
-
   frame._msufPredictionQueued = true
   predictionWriteCount = predictionWriteCount + 1
   predictionWriteQueue[predictionWriteCount] = frame
@@ -1652,9 +1651,10 @@ local function UpdateWarmFullHealthStripe(frame, unit)
     end
     SetOverAbsorbAlpha(holder, 1)
   else
-    -- Health deliberately does not retain protected percentage payloads. Ask
-    -- the native curve for the one secret-safe full-health alpha we actually
-    -- need; do not recover UnitHealth/UnitHealthMax first.
+    -- A protected percentage cannot be passed into LuaCurve:Evaluate from
+    -- addon code: that call is tainted even though the value itself came from
+    -- UnitHealthPercent. Re-enter the native API with the curve so Blizzard
+    -- performs the secret evaluation in untainted execution.
     local alpha = FullHealthAlpha(unit)
     local alphaSecret = issecretvalue(alpha) == true
     if not alphaSecret then
@@ -2083,6 +2083,9 @@ end
 Prediction.NoDispatchUpdates = { [QueuePredictionDataEvent] = true }
 Prediction.UpdateGlowHealthFast = UpdateGlowHealthFast
 Prediction.UpdateMixedFollowHealthFast = UpdateMixedFollowHealthFast
+-- Core may omit this follower entirely while the absorb-data owner says there
+-- is no health-dependent glow/stripe to render.
+Prediction.HealthVisualGateUpdates = { [UpdateGlowHealthFast] = true }
 
 --- Reseed live prediction values after Blizzard has finalized world/unit data.
 --- This is a cold lifecycle path: it touches only visible frames with an active

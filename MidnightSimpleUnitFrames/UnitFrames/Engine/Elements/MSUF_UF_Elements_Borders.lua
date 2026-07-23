@@ -26,6 +26,10 @@ local NotSecretValue = V.NotSecretValue or function(_) return true end
 local IsSecretValue = _G.issecretvalue or function(_) return false end
 local EMPTY_EVENTS = V.EMPTY_EVENTS or {}
 local BORDER_THREAT_EVENTS = V.BORDER_THREAT_EVENTS or { "UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE" }
+local GROUP_THREAT_EVENT = {
+  UNIT_THREAT_SITUATION_UPDATE = true,
+  UNIT_THREAT_LIST_UPDATE = true,
+}
 local TARGET_CHANGE_EVENTS = { "PLAYER_TARGET_CHANGED" }
 local SetShown = V.SetShown
 local ResolveGroupAggroThreat = V.ResolveGroupAggroThreat
@@ -553,7 +557,15 @@ local function HideResolvedBorder(frame)
   SetBorder(frame, false)
 end
 
-local function ApplyHighlightBorder(frame, cfg, key, testActive)
+local function ApplyNormalBorder(frame, cfg)
+  if frame and frame._msufBorderRuntimeNormal == true then
+    return ApplyResolvedBorder(frame, cfg, "normal", BORDER_LEVEL_NORMAL,
+      frame._msufBorderRuntimeNormalThickness, NormalBorderColor(cfg))
+  end
+  HideResolvedBorder(frame)
+end
+
+local function ApplyHighlightBorder(frame, cfg, key, testActive, threatKnown, threat)
   if key == "dispel" then
     if testActive and DispelTestApplies(frame) then
       local r, g, b, a = DispelTestColor(frame)
@@ -569,7 +581,17 @@ local function ApplyHighlightBorder(frame, cfg, key, testActive)
         frame._msufA3DispelA or 1)
     end
   elseif key == "aggro" then
-    if (testActive and AggroTestApplies(frame)) or (cfg.aggro and IsAggroBorderUnit(frame) and ThreatState(frame)) then
+    local active = testActive and AggroTestApplies(frame)
+    if not active and cfg.aggro then
+      if threatKnown == true then
+        -- The compiled group-threat route has already proved scope/event
+        -- ownership and resolved the configured role filter.
+        active = threat == true
+      elseif IsAggroBorderUnit(frame) then
+        active = ThreatState(frame)
+      end
+    end
+    if active then
       return ApplyResolvedBorder(frame, cfg, key, RuntimeHighlightBorderLevel(frame, cfg, key),
         frame._msufBorderRuntimeHighlightThickness, AggroColor(cfg))
     end
@@ -695,7 +717,7 @@ function Borders.Disable(frame)
   SetBorder(frame, false)
 end
 
-function Borders.Update(frame)
+local function UpdateResolved(frame, threatKnown, threat)
   local cfg = frame and frame._msufBorderRuntimeCfg
   if cfg == nil and frame and frame.MSUFSpec then
     cfg = frame.MSUFSpec.border
@@ -713,26 +735,66 @@ function Borders.Update(frame)
   if testActive or frame._msufBorderRuntimeCustomPriority == true then
     local priority = frame._msufBorderRuntimePriority or HighlightPriorityOrder(cfg)
     for i = 1, #priority do
-      if ApplyHighlightBorder(frame, cfg, priority[i], testActive) then
+      if ApplyHighlightBorder(frame, cfg, priority[i], testActive, threatKnown, threat) then
         return
       end
     end
   else
     -- The default order is fixed. Avoid the four-key generic loop and do not
     -- call disabled highlight resolvers on every threat/dispel event.
-    if cfg.dispel == true and ApplyHighlightBorder(frame, cfg, "dispel", false) then return end
-    if cfg.aggro == true and ApplyHighlightBorder(frame, cfg, "aggro", false) then return end
-    if cfg.bossTarget == true and ApplyHighlightBorder(frame, cfg, "bossTarget", false) then return end
+    if cfg.dispel == true and ApplyHighlightBorder(frame, cfg, "dispel", false, threatKnown, threat) then return end
+    if cfg.aggro == true and ApplyHighlightBorder(frame, cfg, "aggro", false, threatKnown, threat) then return end
+    if cfg.bossTarget == true and ApplyHighlightBorder(frame, cfg, "bossTarget", false, threatKnown, threat) then return end
   end
   if not normalEnabled then
     HideResolvedBorder(frame)
     return
   end
-  ApplyResolvedBorder(frame, cfg, "normal", BORDER_LEVEL_NORMAL,
-    frame._msufBorderRuntimeNormalThickness, NormalBorderColor(cfg))
+  ApplyNormalBorder(frame, cfg)
 end
 
-Borders.NoDispatchUpdates = { [Borders.Update] = true }
+function Borders.Update(frame)
+  return UpdateResolved(frame, false, false)
+end
+
+-- Selected only for group threat events. Core supplies the already-resolved
+-- border predicate from its one-read pair route; the nil fallback keeps this
+-- function correct for private/custom route compilers.
+function Borders.UpdateGroupThreat(frame, event, unit, threat)
+  if threat == nil then
+    threat = ResolveGroupAggroThreat
+      and ResolveGroupAggroThreat(frame, unit or (frame and frame.MSUFUnitKey),
+        frame and frame._msufBorderRuntimeAggroMode)
+      or false
+    return UpdateResolved(frame, true, threat == true)
+  end
+  local cfg = frame and frame._msufBorderRuntimeCfg
+  if not cfg
+    or _G.MSUF_BorderTestModesActive == true
+    or frame._msufBorderRuntimeCustomPriority == true
+    or frame._msufA3DispelActive == true
+    or cfg.bossTarget == true then
+    return UpdateResolved(frame, true, threat == true)
+  end
+  if threat == true and frame._msufBorderRuntimeHighlight == true then
+    return ApplyResolvedBorder(frame, cfg, "aggro",
+      frame._msufBorderRuntimeLevelAggro or BORDER_LEVEL_DEFAULT,
+      frame._msufBorderRuntimeHighlightThickness, AggroColor(cfg))
+  end
+  return ApplyNormalBorder(frame, cfg)
+end
+
+function Borders.SelectEventUpdate(frame, spec, event, update)
+  if spec and spec.scope == "group" and GROUP_THREAT_EVENT[event] == true then
+    return Borders.UpdateGroupThreat
+  end
+  return update
+end
+
+Borders.NoDispatchUpdates = {
+  [Borders.Update] = true,
+  [Borders.UpdateGroupThreat] = true,
+}
 
 UF.RegisterElement("Borders", Borders)
 

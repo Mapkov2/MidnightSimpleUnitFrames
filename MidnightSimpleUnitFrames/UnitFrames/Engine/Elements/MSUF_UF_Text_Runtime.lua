@@ -11,6 +11,7 @@ if not (Text and UF) then return end
 
 local UnitHealth = Text.UnitHealth
 local UnitHealthMax = Text.UnitHealthMax
+local UnitHealthMissing = _G.UnitHealthMissing
 local UnitGetTotalAbsorbs = Text.UnitGetTotalAbsorbs
 local ABSORB_HEALTH_MODE_BASE = Text.ABSORB_HEALTH_MODE_BASE or {}
 local UnitPower = Text.UnitPower
@@ -196,6 +197,13 @@ local function MissingHealthFromValues(hp, hpMax)
   return missing > 0 and missing or 0
 end
 
+local function ReadMissingHealth(unit, hp, hpMax)
+  local missing = MissingHealthFromValues(hp, hpMax)
+  if missing ~= nil then return missing end
+  if UnitHealthMissing then return UnitHealthMissing(unit, true) end
+  return nil
+end
+
 local function NormalizePercentDecimals(decimals)
   decimals = tonumber(decimals) or 0
   return decimals >= 1 and 1 or 0
@@ -290,11 +298,7 @@ local function GFHotHealthNeedsUpdate(frame, rt, unit, hp, hpMax)
   local keyMissing = false
   local missing
   if rt.healthNeedsMissing == true then
-    missing = MissingHealthFromValues(hp, hpMax)
-    if missing == nil then
-      local calc = frame and frame._msufHealthCalc
-      missing = calc and calc.GetMissingHealth and calc:GetMissingHealth() or nil
-    end
+    missing = ReadMissingHealth(unit, hp, hpMax)
     if issecretvalue(missing) == true then
       ClearGFHotHealthKeys(rt)
       return true, nil, false, missing
@@ -873,10 +877,8 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
   local needsCurrent = rt.healthNeedsCurrent == true
   local needsMax = rt.healthNeedsMax == true
   local colorByHealth = rt.healthColorByHealth == true
-  local percentNeedsValues = false
-  local missingNeedsValues = rt.healthNeedsMissing == true
-  local needHPValue = needsCurrent or percentNeedsValues or missingNeedsValues
-  local needMaxValue = needsMax or percentNeedsValues or missingNeedsValues
+  local needHPValue = needsCurrent
+  local needMaxValue = needsMax
   local hpMissing = issecretvalue(hp) ~= true and hp == nil
   local maxMissing = issecretvalue(hpMax) ~= true and hpMax == nil
   local colorNeedsPercent = colorByHealth and (hpMissing or maxMissing)
@@ -911,11 +913,7 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
       else
         rt._dispatchHealthMissingReady = nil
         rt._dispatchHealthMissing = nil
-        rt.healthMissing = MissingHealthFromValues(hp, hpMax)
-        if rt.healthMissing == nil then
-          local calc = frame and frame._msufHealthCalc
-          rt.healthMissing = calc and calc.GetMissingHealth and calc:GetMissingHealth() or nil
-        end
+        rt.healthMissing = ReadMissingHealth(unit, hp, hpMax)
       end
     else
       rt._dispatchHealthMissingReady = nil
@@ -1029,11 +1027,7 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
   rt._lastHpRaw, rt._lastHpMaxRaw = hp, hpMax
 
   if rt.healthNeedsMissing == true then
-    rt.healthMissing = MissingHealthFromValues(hp, hpMax)
-    if rt.healthMissing == nil then
-      local calc = frame and frame._msufHealthCalc
-      rt.healthMissing = calc and calc.GetMissingHealth and calc:GetMissingHealth() or nil
-    end
+    rt.healthMissing = ReadMissingHealth(unit, hp, hpMax)
   else
     rt.healthMissing = nil
   end

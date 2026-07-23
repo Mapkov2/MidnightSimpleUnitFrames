@@ -299,7 +299,6 @@ local function HealthGradientFromValues(frame, hp, hpMax)
 end
 
 local function HealthTextColor(frame, unit, hp, hpMax, rt)
-  local calc = frame and frame._msufHealthCalc
   local a = rt and rt.healthTextAlpha
   if frame and frame._msufHealthColorByHealth == true then
     local at = frame._msufGradStashAt
@@ -311,7 +310,7 @@ local function HealthTextColor(frame, unit, hp, hpMax, rt)
       return frame._msufGradStashR, frame._msufGradStashG, frame._msufGradStashB, a
     end
   end
-  local r, g, b, raw = GradientColor(unit, calc, frame, hp, hpMax)
+  local r, g, b, raw = GradientColor(unit, nil, frame)
   if raw == true then
     if a == nil then
       local _

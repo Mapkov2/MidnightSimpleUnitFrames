@@ -118,6 +118,16 @@ local function NewHealthFrame(runtime)
   }
 end
 
+local function NewSingleHealthFrame(runtime)
+  return {
+    unit = "target",
+    hpBar = NewBar(),
+    MSUFSpec = { scope = "single", health = { mode = "dark" } },
+    _msufTextRuntime = runtime,
+    _msufActiveElements = { Health = true },
+  }
+end
+
 local percentHealthFrame = NewHealthFrame({
   healthSlotCount = 1,
   healthNeedsPercent = true,
@@ -170,13 +180,30 @@ assert(reads.healthPercent == 1 and reads.health == 0 and reads.healthMax == 0,
 assert(colorOnlyHealthFrame._msufTextRuntime._dispatchHealthPercentReady == true,
   "health text gradient did not receive the shared native percent sample")
 
-local currentHealthFrame = NewHealthFrame({
+local currentGroupHealthFrame = NewHealthFrame({
+  healthSlotCount = 1,
+  healthNeedsCurrent = true,
+})
+local currentGroupHealthUpdate = Health.SelectUpdate(
+  currentGroupHealthFrame, currentGroupHealthFrame.MSUFSpec)
+assert(currentGroupHealthUpdate == percentHealthUpdate,
+  "group CURRENT health must leave absolute text reads to the shared dirty drain")
+ResetReads()
+local groupCurrentHealth, groupCurrentHealthMax, groupCurrentPercentReady = currentGroupHealthUpdate(
+  currentGroupHealthFrame, "UNIT_HEALTH", "party1")
+assert(reads.healthPercent == 1 and reads.health == 0 and reads.healthMax == 0,
+  "group CURRENT health must keep the bar on one native percent read")
+assert(groupCurrentHealth == 50 and groupCurrentHealthMax == nil and groupCurrentPercentReady == true,
+  "group CURRENT health percent contract changed")
+
+local currentHealthFrame = NewSingleHealthFrame({
   healthSlotCount = 1,
   healthNeedsCurrent = true,
 })
 local currentHealthUpdate = Health.SelectUpdate(currentHealthFrame, currentHealthFrame.MSUFSpec)
-assert(currentHealthUpdate ~= percentHealthUpdate,
-  "CURRENT health did not compile its shared absolute-bar plan")
+assert(currentHealthUpdate == Health.UpdateValueSingleCurrent
+    and currentHealthUpdate ~= percentHealthUpdate,
+  "single CURRENT health did not compile its shared absolute-bar plan")
 ResetReads()
 local currentHealth, currentHealthMax, currentPercentReady = currentHealthUpdate(
   currentHealthFrame, "UNIT_HEALTH", "party1")
@@ -192,7 +219,7 @@ assert(reads.health == 3 and reads.healthMax == 2 and reads.healthPercent == 0,
   "CURRENT-only UNIT_MAXHEALTH did not refresh the bar maximum")
 
 secretHealth, secretHealthMax = {}, {}
-local secretCurrentHealthFrame = NewHealthFrame({
+local secretCurrentHealthFrame = NewSingleHealthFrame({
   healthSlotCount = 1,
   healthNeedsCurrent = true,
 })
@@ -209,13 +236,30 @@ assert(reads.health == 2 and reads.healthMax == 1 and reads.healthPercent == 0,
   "steady protected CURRENT-only health reread its owned maximum")
 secretHealth, secretHealthMax = nil, nil
 
-local absoluteHealthFrame = NewHealthFrame({
+local absoluteGroupHealthFrame = NewHealthFrame({
+  healthSlotCount = 1,
+  healthNeedsCurrent = true,
+  healthNeedsMax = true,
+})
+local absoluteGroupHealthUpdate = Health.SelectUpdate(
+  absoluteGroupHealthFrame, absoluteGroupHealthFrame.MSUFSpec)
+assert(absoluteGroupHealthUpdate == percentHealthUpdate,
+  "group current+max health must leave absolute text reads to the shared dirty drain")
+ResetReads()
+local groupHealth, groupHealthMax, groupAbsolutePercentReady = absoluteGroupHealthUpdate(
+  absoluteGroupHealthFrame, "UNIT_HEALTH", "party1")
+assert(reads.healthPercent == 1 and reads.health == 0 and reads.healthMax == 0
+    and groupHealth == 50 and groupHealthMax == nil and groupAbsolutePercentReady == true,
+  "group current+max health left the native percent hotpath")
+
+local absoluteHealthFrame = NewSingleHealthFrame({
   healthSlotCount = 1,
   healthNeedsCurrent = true,
   healthNeedsMax = true,
 })
 local absoluteHealthUpdate = Health.SelectUpdate(absoluteHealthFrame, absoluteHealthFrame.MSUFSpec)
-assert(absoluteHealthUpdate ~= percentHealthUpdate and absoluteHealthUpdate ~= currentHealthUpdate,
+assert(absoluteHealthUpdate == Health.UpdateValueSingleAbsolute
+    and absoluteHealthUpdate ~= percentHealthUpdate and absoluteHealthUpdate ~= currentHealthUpdate,
   "current+max health did not compile a separate absolute update path")
 ResetReads()
 local health, healthMax, absolutePercentReady = absoluteHealthUpdate(
@@ -254,11 +298,21 @@ local function NewPowerFrame(runtime)
   }
 end
 
+local function NewSinglePowerFrame(runtime)
+  return {
+    unit = "target",
+    targetPowerBar = NewBar(),
+    MSUFSpec = { scope = "single", power = { mode = "power" } },
+    _msufTextRuntime = runtime,
+    _msufActiveElements = { Power = true },
+  }
+end
+
 local percentPowerFrame = NewPowerFrame({
   powerSlotCount = 1,
   powerNeedsPercent = true,
 })
-local percentPowerUpdate = Power.SelectUpdate(percentPowerFrame)
+local percentPowerUpdate = Power.SelectUpdate(percentPowerFrame, percentPowerFrame.MSUFSpec)
 ResetReads()
 local powerValue, powerMaximum = percentPowerUpdate(
   percentPowerFrame, "UNIT_POWER_UPDATE", "party1")
@@ -267,13 +321,29 @@ assert(reads.powerPercent == 1 and reads.power == 0 and reads.powerMax == 0,
 assert(powerValue == nil and powerMaximum == nil,
   "percent-only power must keep absolute route payloads empty")
 
-local currentPowerFrame = NewPowerFrame({
+local currentGroupPowerFrame = NewPowerFrame({
   powerSlotCount = 1,
   powerNeedsCurrent = true,
 })
-local currentPowerUpdate = Power.SelectUpdate(currentPowerFrame)
-assert(currentPowerUpdate ~= percentPowerUpdate,
-  "CURRENT power did not compile its shared absolute-bar plan")
+local currentGroupPowerUpdate = Power.SelectUpdate(
+  currentGroupPowerFrame, currentGroupPowerFrame.MSUFSpec)
+assert(currentGroupPowerUpdate == percentPowerUpdate,
+  "group CURRENT power must leave absolute text reads to the shared dirty drain")
+ResetReads()
+local groupCurrentPower, groupCurrentPowerMax = currentGroupPowerUpdate(
+  currentGroupPowerFrame, "UNIT_POWER_UPDATE", "party1")
+assert(reads.powerPercent == 1 and reads.power == 0 and reads.powerMax == 0
+    and groupCurrentPower == nil and groupCurrentPowerMax == nil,
+  "group CURRENT power left the native percent hotpath")
+
+local currentPowerFrame = NewSinglePowerFrame({
+  powerSlotCount = 1,
+  powerNeedsCurrent = true,
+})
+local currentPowerUpdate = Power.SelectUpdate(currentPowerFrame, currentPowerFrame.MSUFSpec)
+assert(currentPowerUpdate == Power.UpdateValueCurrentPath
+    and currentPowerUpdate ~= percentPowerUpdate,
+  "single CURRENT power did not compile its shared absolute-bar plan")
 ResetReads()
 local currentPower, currentPowerMax = currentPowerUpdate(
   currentPowerFrame, "UNIT_POWER_UPDATE", "party1")
@@ -290,11 +360,12 @@ assert(reads.power == 3 and reads.powerMax == 2 and reads.powerPercent == 0,
 
 secretPower, secretPowerMax = {}, {}
 powerReadValue, powerReadMaximum = secretPower, secretPowerMax
-local secretCurrentPowerFrame = NewPowerFrame({
+local secretCurrentPowerFrame = NewSinglePowerFrame({
   powerSlotCount = 1,
   powerNeedsCurrent = true,
 })
-local secretCurrentPowerUpdate = Power.SelectUpdate(secretCurrentPowerFrame)
+local secretCurrentPowerUpdate = Power.SelectUpdate(
+  secretCurrentPowerFrame, secretCurrentPowerFrame.MSUFSpec)
 ResetReads()
 local protectedCurrent, protectedMaximum = secretCurrentPowerUpdate(
   secretCurrentPowerFrame, "UNIT_POWER_UPDATE", "party1")
@@ -308,12 +379,13 @@ assert(reads.power == 2 and reads.powerMax == 1 and reads.powerPercent == 0,
 secretPower, secretPowerMax = nil, nil
 powerReadValue, powerReadMaximum = 40, 100
 
-local mixedCurrentPercentFrame = NewPowerFrame({
+local mixedCurrentPercentFrame = NewSinglePowerFrame({
   powerSlotCount = 1,
   powerNeedsCurrent = true,
   powerNeedsPercent = true,
 })
-local mixedCurrentPercentUpdate = Power.SelectUpdate(mixedCurrentPercentFrame)
+local mixedCurrentPercentUpdate = Power.SelectUpdate(
+  mixedCurrentPercentFrame, mixedCurrentPercentFrame.MSUFSpec)
 assert(mixedCurrentPercentUpdate ~= currentPowerUpdate
     and mixedCurrentPercentUpdate ~= percentPowerUpdate,
   "CURRENT+PERCENT power did not compile its dedicated secret-safe path")
@@ -326,13 +398,30 @@ assert(mixedCurrent == 40 and mixedMaximum == nil
     and mixedCurrentPercentFrame._msufTextRuntime._dispatchPowerPercentReady == true,
   "CURRENT+PERCENT partial snapshot contract changed")
 
-local absolutePowerFrame = NewPowerFrame({
+local absoluteGroupPowerFrame = NewPowerFrame({
   powerSlotCount = 1,
   powerNeedsCurrent = true,
   powerNeedsMax = true,
 })
-local absolutePowerUpdate = Power.SelectUpdate(absolutePowerFrame)
-assert(absolutePowerUpdate ~= percentPowerUpdate and absolutePowerUpdate ~= currentPowerUpdate,
+local absoluteGroupPowerUpdate = Power.SelectUpdate(
+  absoluteGroupPowerFrame, absoluteGroupPowerFrame.MSUFSpec)
+assert(absoluteGroupPowerUpdate == percentPowerUpdate,
+  "group current+max power must leave absolute text reads to the shared dirty drain")
+ResetReads()
+local groupPower, groupPowerMax = absoluteGroupPowerUpdate(
+  absoluteGroupPowerFrame, "UNIT_POWER_UPDATE", "party1")
+assert(reads.powerPercent == 1 and reads.power == 0 and reads.powerMax == 0
+    and groupPower == nil and groupPowerMax == nil,
+  "group current+max power left the native percent hotpath")
+
+local absolutePowerFrame = NewSinglePowerFrame({
+  powerSlotCount = 1,
+  powerNeedsCurrent = true,
+  powerNeedsMax = true,
+})
+local absolutePowerUpdate = Power.SelectUpdate(absolutePowerFrame, absolutePowerFrame.MSUFSpec)
+assert(absolutePowerUpdate == Power.UpdateValueAbsolutePath
+    and absolutePowerUpdate ~= percentPowerUpdate and absolutePowerUpdate ~= currentPowerUpdate,
   "current+max power did not compile a separate absolute update path")
 ResetReads()
 local power, powerMax = absolutePowerUpdate(
@@ -355,7 +444,7 @@ local maxOnlyPowerFrame = NewPowerFrame({
   powerSlotCount = 1,
   powerNeedsMax = true,
 })
-assert(Power.SelectUpdate(maxOnlyPowerFrame) == percentPowerUpdate,
+assert(Power.SelectUpdate(maxOnlyPowerFrame, maxOnlyPowerFrame.MSUFSpec) == percentPowerUpdate,
   "MAX-only power must not promote every UNIT_POWER tick to absolute reads")
 
 local lifecyclePowerFrame = NewPowerFrame({
@@ -369,8 +458,10 @@ lifecyclePowerFrame.targetPowerBar._msufPowerType = 0
 lifecyclePowerFrame.targetPowerBar._msufPowerToken = "MANA"
 commonPowerType, commonPowerToken = 1, "RAGE"
 ResetReads()
-Power.SelectUpdate(lifecyclePowerFrame)(lifecyclePowerFrame, "PARTY_MEMBER_ENABLE", "party1")
-assert(reads.powerType == 1 and lastPowerReadType == 1,
+Power.SelectUpdate(lifecyclePowerFrame, lifecyclePowerFrame.MSUFSpec)(
+  lifecyclePowerFrame, "PARTY_MEMBER_ENABLE", "party1")
+assert(reads.powerType == 1 and reads.powerPercent == 1
+    and reads.power == 0 and reads.powerMax == 0,
   "group lifecycle did not invalidate a same-token power-type cache")
 commonPowerType, commonPowerToken = 0, "MANA"
 

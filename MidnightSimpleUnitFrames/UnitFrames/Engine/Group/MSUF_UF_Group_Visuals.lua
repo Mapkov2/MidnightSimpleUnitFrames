@@ -651,8 +651,9 @@ end
 
 --- Health fade is a hotpath visual. Use seeded dispatch values when available
 --- and throttle secret-value fallbacks to avoid expensive repeated reads.
-local function UpdateHealthFade(frame, cfg, seedHP, seedMaxHP, event)
+local function UpdateHealthFade(frame, cfg, seedHP, seedMaxHP, event, percentReady)
   if not frame.hpBar then return end
+  if percentReady == true then seedMaxHP = 100 end
   local rangeAlpha = frame._msufGFRangeHealthAlpha or 1
   local rangeBool = frame._msufGFRangeHealthBool
   local rangeBoolSecret = frame._msufGFRangeHealthBoolSecret == true or issecretvalue(rangeBool) == true
@@ -711,13 +712,14 @@ local function UpdateHealthFade(frame, cfg, seedHP, seedMaxHP, event)
   local unit = frame.MSUFUnitKey
   if cfg.healthFadeEnabled == true and IsUnitToken(unit) then
     local pct = keyCacheable and PercentFromPlainValues(keyHP, keyMax) or PercentFromValues(keyHP, keyMax)
-    if pct == nil and UnitHealthPercent then
+    if pct == nil and percentReady ~= true and UnitHealthPercent then
       local raw = UnitHealthPercent(unit)
       if issecretvalue(raw) ~= true then
         pct = tonumber(raw)
       end
     end
     if pct == nil
+      and percentReady ~= true
       and not seedHPSecret and seedHP == nil
       and not seedMaxSecret and seedMaxHP == nil
       and UnitHealth and UnitHealthMax then
@@ -976,7 +978,7 @@ UpdateBordersFromVisualState = function(frame)
   end
 end
 
-local function UpdateVisuals(frame, event, updateInfo, seedMaxHP)
+local function UpdateVisuals(frame, event, updateInfo, seedMaxHP, percentReady)
   local cfg = frame._msufGFVisualRuntimeGroup
   if not cfg then
     local spec = frame.MSUFSpec
@@ -990,7 +992,7 @@ local function UpdateVisuals(frame, event, updateInfo, seedMaxHP)
     fn = cfg.runtimeOnFocus
     if fn then fn(frame, cfg, guid ~= nil and guid == focusIndicatorCurrentGUID) end
     fn = cfg.runtimeOnHealth
-    if fn then fn(frame, cfg, updateInfo, seedMaxHP, event) end
+    if fn then fn(frame, cfg, updateInfo, seedMaxHP, event, percentReady) end
     fn = cfg.runtimeOnDeadBg
     if fn then fn(frame, cfg, nil, event) end
     fn = cfg.runtimeOnAuraVisuals
@@ -1015,13 +1017,13 @@ local function UpdateVisuals(frame, event, updateInfo, seedMaxHP)
   elseif event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" then
     local fn = cfg.runtimeOnHealth
     if fn then
-      fn(frame, cfg, updateInfo, seedMaxHP, event)
+      fn(frame, cfg, updateInfo, seedMaxHP, event, percentReady)
     end
     return
   elseif event == "PARTY_MEMBER_ENABLE" or event == "PARTY_MEMBER_DISABLE" then
     local fn = cfg.runtimeOnHealth
     if fn then
-      fn(frame, cfg, updateInfo, seedMaxHP, event)
+      fn(frame, cfg, updateInfo, seedMaxHP, event, percentReady)
     end
     fn = cfg.runtimeOnDeadBg
     if fn then
@@ -1053,7 +1055,7 @@ local function UpdateVisuals(frame, event, updateInfo, seedMaxHP)
   fn = cfg.runtimeOnFocus
   if fn then fn(frame, cfg, event) end
   fn = cfg.runtimeOnHealth
-  if fn then fn(frame, cfg, updateInfo, seedMaxHP, event) end
+  if fn then fn(frame, cfg, updateInfo, seedMaxHP, event, percentReady) end
   fn = cfg.runtimeOnDeadBg
   if fn then fn(frame, cfg, nil, event) end
   fn = cfg.runtimeOnAuraVisuals
@@ -1099,7 +1101,9 @@ function GroupVisuals.Apply(frame)
   PrepareVisuals(frame, cfg)
   UpdateVisuals(frame, "MSUF_GF_VISUALS_APPLY")
 end
-function GroupVisuals.Update(frame, event, unit, updateInfo, seedMaxHP) UpdateVisuals(frame, event, updateInfo, seedMaxHP) end
+function GroupVisuals.Update(frame, event, unit, updateInfo, seedMaxHP, percentReady)
+  UpdateVisuals(frame, event, updateInfo, seedMaxHP, percentReady)
+end
 
 function GroupVisuals.Disable(frame)
   if not frame then return end
