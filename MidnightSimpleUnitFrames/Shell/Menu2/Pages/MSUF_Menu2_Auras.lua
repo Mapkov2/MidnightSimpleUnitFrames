@@ -3401,9 +3401,12 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             if changed then Apply("AURAS3_TARGET_DOT_ADD", true); Rebuild(ctx) end
             return changed and true or false
         end)
-        RegisterAuraControl(ctx, add, "Track DoT", "button", customActionPath .. ".dots.add", "action", {
-            assistantDisposition = "compound",
-            assistantDispositionReason = "The selected DoT dropdown value and add button form one compound list mutation without an Assistant action contract.",
+        RegisterAuraTextAction(ctx, add, {
+            SetText = function(_, value) selected = value end,
+        }, "Track DoT", customActionPath .. ".dots.add", {
+            actionKey = "aura_custom_whitelist_add_spell",
+            actionFixedArgs = { scope = unit, index = index },
+            actionInputArg = "value",
         })
         AddTooltip(dropdown, "Target DoT", "Curated Retail 12.0+ and 12.1 DoT auras. Tracking is always restricted to your current target and your own aura source.")
         local customInputValue = ""
@@ -3425,8 +3428,9 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             return changed and true or false
         end)
         RegisterAuraTextAction(ctx, addCustom, customInput, "Add Custom ID", customActionPath .. ".dots.custom-id.add", {
-            assistantDisposition = "compound",
-            assistantDispositionReason = "This explicit custom DoT ID is stored as a manually approved target-aura candidate without an Assistant action contract.",
+            actionKey = "aura_custom_whitelist_add_spell",
+            actionFixedArgs = { scope = unit, index = index },
+            actionInputArg = "value",
         })
         AddTooltip(customInput, "Custom Spell ID",
             "Adds an exact harmful aura ID that is missing from the curated list. The aura is still restricted to your current target and your own aura source.")

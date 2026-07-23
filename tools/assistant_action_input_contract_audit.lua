@@ -284,7 +284,8 @@ Invalid("import_profile_string_new", { value = "!MSUF_TEST" }, "requires input f
 Valid("aura_custom_whitelist_add_spell", { scope = "target", index = "3", value = 12345 }, function(out)
     assert(out.index == 3 and out.value == 12345)
 end)
-Invalid("aura_custom_whitelist_add_spell", { scope = "target", index = 4, value = 12345 }, "at most")
+Valid("aura_custom_whitelist_add_spell", { scope = "target", index = 4, value = 12345 })
+Invalid("aura_custom_whitelist_add_spell", { scope = "target", index = 5, value = 12345 }, "at most")
 Valid("aura_group_category_blacklist_set", {
     scope = "mythic raid", lane = "debuffs", category = "exhaustion", value = "on",
 }, function(out)
