@@ -58,7 +58,7 @@ local chunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engi
 chunk("MidnightSimpleUnitFrames", MSUF)
 local UF = assert(MSUF.UF)
 
-local function FlushDeferredHealth()
+local function FlushDeferredGroupData()
     for i = #createdFrames, 1, -1 do
         local frame = createdFrames[i]
         local update = frame.scripts and frame.scripts.OnUpdate
@@ -67,7 +67,7 @@ local function FlushDeferredHealth()
             return
         end
     end
-    error("group health driver was not armed", 2)
+    error("group data driver was not armed", 2)
 end
 
 local calls = setmetatable({}, { __mode = "k" })
@@ -204,7 +204,7 @@ dirtyFirst.UNIT_HEALTH(dirtyFirst, "UNIT_HEALTH", "party2")
 for _ = 1, 9 do dirtyFirst.UNIT_HEALTH(dirtyFirst, "UNIT_HEALTH", "party2") end
 Check(calls[dirtyFirst] == nil and dirtyFirst.healthDirtyCalls == nil,
     "group health work ran before the render-frame drain")
-FlushDeferredHealth()
+FlushDeferredGroupData()
 Check(calls[dirtyFirst] == 1 and dirtyFirst.healthDirtyCalls == 1,
     "deferred Health route did not coalesce the bar and dirty marker exactly once")
 Check(dirtyFirst.healthDirtyHP == 80 and dirtyFirst.healthDirtyMax == 100,
@@ -247,7 +247,7 @@ Check(first._msufIdentityBarPath == second._msufIdentityBarPath,
 
 first.UNIT_HEALTH(first, "UNIT_HEALTH", "player")
 second.UNIT_HEALTH(second, "UNIT_HEALTH", "player")
-FlushDeferredHealth()
+FlushDeferredGroupData()
 Check(calls[first] == 1 and calls[second] == 1, "shared route did not preserve frame-local dispatch")
 Check(first.lastUnit == "player" and second.lastUnit == "player", "shared route changed unit binding")
 first._msufDispatchToken = 17
@@ -309,12 +309,18 @@ UF.ApplyElementToFrame(first, "Power", spec)
 UF.ApplyElementToFrame(second, "Power", spec)
 UF.ApplyElementToFrame(first, "PowerText", spec)
 UF.ApplyElementToFrame(second, "PowerText", spec)
-Check(first.UNIT_POWER_UPDATE ~= second.UNIT_POWER_UPDATE,
-    "frame-owned update closures were incorrectly interned")
+Check(first.UNIT_POWER_UPDATE == second.UNIT_POWER_UPDATE,
+    "group power updates did not share the common deferred entry point")
+Check(first._msufGroupPowerUpdateRoute ~= second._msufGroupPowerUpdateRoute,
+    "frame-owned power update closures were incorrectly interned")
 first._msufDispatchToken = 41
 second._msufDispatchToken = 73
 first.UNIT_POWER_UPDATE(first, "UNIT_POWER_UPDATE", "player")
 second.UNIT_POWER_UPDATE(second, "UNIT_POWER_UPDATE", "player")
+for _ = 1, 9 do first.UNIT_POWER_UPDATE(first, "UNIT_POWER_UPDATE", "player") end
+Check(first.powerCalls == nil and second.powerCalls == nil,
+    "group power work ran before the render-frame drain")
+FlushDeferredGroupData()
 Check(first.powerCalls == 1 and second.powerCalls == 1, "private routes lost frame-local update state")
 Check(first.powerTextCalls == 1 and second.powerTextCalls == 1,
     "direct power routes did not update bar and text exactly once")
