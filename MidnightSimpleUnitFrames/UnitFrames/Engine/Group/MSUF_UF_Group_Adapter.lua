@@ -253,10 +253,11 @@ end
 
 local function TrackFrame(frame, unit)
   if not frame then return end
-  if GF.frames[frame] ~= true then
-    GF.frames[frame] = true
+  if frame._msufGFInFrameList ~= true then
+    frame._msufGFInFrameList = true
     GF.frameList[#GF.frameList + 1] = frame
   end
+  GF.frames[frame] = true
   IndexFrameUnit(frame, unit or frame.MSUFUnitKey)
 end
 GF.TrackFrame = TrackFrame
@@ -514,6 +515,7 @@ function GF.UntrackFrame(frame)
   appliedWidth[visual] = nil
   appliedHeight[visual] = nil
   secureClicksConfigured[shell] = nil
+  visual._msufGFInFrameList = nil
   for i = #GF.frameList, 1, -1 do
     if GF.frameList[i] == visual then table_remove(GF.frameList, i) end
   end
@@ -527,6 +529,7 @@ local function SuspendUnitBinding(frame)
   -- RegisterUnitEvent subscriptions must not keep crossing into Lua for the
   -- previous party/raid token; the normal rebind path rebuilds them exactly.
   if visual and visual.UnregisterAllEvents then visual:UnregisterAllEvents() end
+  GF.frames[visual] = nil
   UnindexFrameUnit(visual)
   appliedUnit[visual] = nil
   visual._msufEventRouteUnit = nil

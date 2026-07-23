@@ -108,6 +108,9 @@ assert(resolvedParty == party and exactParty == true,
 local orphan = Child("party5")
 MSUF.GF.headers.orphan = Header(orphan)
 assert(MSUF.GF.ScanHeader("orphan", "party") == true, "orphan child did not bind")
+local orphanInventorySize = #MSUF.GF.frameList
+assert(MSUF.GF.frames[orphan] == true and orphan._msufGFInFrameList == true,
+  "bound secure child did not enter the active set and inventory")
 orphan.unregisterAllEventsCalls = 0
 orphan._msufEventRouteUnit = "party5"
 orphan.attributes.unit = nil
@@ -115,10 +118,45 @@ orphan.hooks.OnAttributeChanged(orphan, "unit", nil)
 assert(orphan.unregisterAllEventsCalls == 1 and orphan.MSUFUnitKey == nil
     and orphan._msufEventRouteUnit == nil,
   "unitless secure child retained its old native unit-event subscriptions")
+assert(MSUF.GF.frames[orphan] == nil and orphan._msufGFInFrameList == true
+    and #MSUF.GF.frameList == orphanInventorySize,
+  "suspended secure child remained active or left its stable inventory slot")
+local sawSuspended = false
+MSUF.GF.ForEachFrame(function(frame)
+  if frame == orphan then sawSuspended = true end
+end, true)
+assert(sawSuspended == false and MSUF.GF.FrameForUnit("party5") == nil
+    and select(2, MSUF.GF.ResolveLifecycleFrame("party5")) == false,
+  "central group iteration or unit lookup crossed the suspended-frame gate")
+for _ = 1, 3 do
+  orphan.hooks.OnAttributeChanged(orphan, "unit", nil)
+end
+assert(MSUF.GF.frames[orphan] == nil and #MSUF.GF.frameList == orphanInventorySize,
+  "repeated suspension changed active membership or duplicated inventory")
 local orphanApplyBefore = applyCalls
 orphan.attributes.unit = "party5"
 assert(MSUF.GF.ScanHeader("orphan", "party") == true and applyCalls == orphanApplyBefore + 1,
   "scan fallback reused a suspended child without rebuilding its event routing")
+assert(MSUF.GF.frames[orphan] == true and orphan._msufGFInFrameList == true
+    and #MSUF.GF.frameList == orphanInventorySize
+    and MSUF.GF.FrameForUnit("party5") == orphan,
+  "normal rebind did not reactivate the secure child in its existing inventory slot")
+for _ = 1, 3 do
+  orphan.attributes.unit = nil
+  orphan.hooks.OnAttributeChanged(orphan, "unit", nil)
+  assert(MSUF.GF.frames[orphan] == nil and #MSUF.GF.frameList == orphanInventorySize,
+    "suspend/rebind cycle retained active membership or changed inventory length")
+  orphan.attributes.unit = "party5"
+  assert(MSUF.GF.ScanHeader("orphan", "party") == true
+      and MSUF.GF.frames[orphan] == true
+      and #MSUF.GF.frameList == orphanInventorySize,
+    "suspend/rebind cycle failed to reactivate without duplicating inventory")
+end
+MSUF.GF.UntrackFrame(orphan)
+assert(MSUF.GF.frames[orphan] == nil and orphan._msufGFInFrameList == nil
+    and #MSUF.GF.frameList == orphanInventorySize - 1
+    and MSUF.GF.FrameForUnit("party5") == nil,
+  "untrack retained active membership, inventory marker, or unit index")
 
 party.attributes.unit = "party2"
 assert(select(2, MSUF.GF.ResolveLifecycleFrame("party1")) == false,
@@ -180,6 +218,20 @@ before = #refreshes
 raid.hooks.OnAttributeChanged(raid, "unit", "raid1")
 assert(#refreshes == before,
   "same-token raid rebind must not broadcast expensive state snapshots")
+local raidInventorySize = #MSUF.GF.frameList
+for _ = 1, 2 do
+  raid.attributes.unit = nil
+  raid.hooks.OnAttributeChanged(raid, "unit", nil)
+  assert(MSUF.GF.frames[raid] == nil and raid._msufGFInFrameList == true
+      and #MSUF.GF.frameList == raidInventorySize,
+    "suspended raid child remained active or changed stable inventory")
+  raid.attributes.unit = "raid1"
+  assert(MSUF.GF.ScanHeader("raid", "raid") == true
+      and MSUF.GF.frames[raid] == true
+      and #MSUF.GF.frameList == raidInventorySize
+      and MSUF.GF.FrameForUnit("raid1") == raid,
+    "raid child did not reactivate in its existing inventory slot")
+end
 
 -- The status cold path must remember visible as an explicit false state. That
 -- makes the first healer/tank -> DPS transition dirty the exact child instead
