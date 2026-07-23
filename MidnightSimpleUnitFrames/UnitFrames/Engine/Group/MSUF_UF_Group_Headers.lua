@@ -821,6 +821,7 @@ local function ApplySortAttributes(header, state)
 end
 
 local SECURE_UNIT_BUTTON_TEMPLATE = "SecureUnitButtonTemplate, PingableUnitFrameTemplate"
+local SECURE_AURA_CONTAINER_TEMPLATE = "CustomAuraContainerTemplate"
 local SECURE_INIT_VERSION = 7
 
 local function ButtonTemplate()
@@ -927,7 +928,8 @@ local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCou
     or AttrChanged(header, "unitsPerColumn", upc)
     or AttrChanged(header, "maxColumns", columns)
   local shouldHide = header.IsShown and header:IsShown()
-    and (AttrChanged(header, "template", buttonTemplate)
+    and (AttrChanged(header, "auraContainerTemplate", SECURE_AURA_CONTAINER_TEMPLATE)
+      or AttrChanged(header, "template", buttonTemplate)
       or sizeChanged
       or AttrChanged(header, "xOffset", xOffset)
       or AttrChanged(header, "yOffset", yOffset)
@@ -945,6 +947,11 @@ local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCou
   end
 
   local changed = false
+  -- 12.1 can create AuraContainers for SecureGroupHeader children inside the
+  -- restricted header environment. Birth one inert native owner for every
+  -- party/raid child so Auras3 can adopt it without a Lua-side frame birth,
+  -- including children added while combat lockdown is active.
+  changed = SetAttrIfChanged(header, "auraContainerTemplate", SECURE_AURA_CONTAINER_TEMPLATE) or changed
   changed = SetAttrIfChanged(header, "template", buttonTemplate) or changed
   changed = SetAttrIfChanged(header, "templateType", "Button") or changed
   changed = SetAttrIfChanged(header, "initial-width", initialWidth) or changed
@@ -1045,6 +1052,7 @@ local function ConfigurePriorityHeader(header, kind, conf, nameList, w, h, spaci
     or AttrChanged(header, "unitsPerColumn", 5)
   local shouldHide = header.IsShown and header:IsShown()
     and (kindChanged or sizeChanged or secureInitChanged or topologyChanged
+      or AttrChanged(header, "auraContainerTemplate", SECURE_AURA_CONTAINER_TEMPLATE)
       or AttrChanged(header, "template", ButtonTemplate())
       or AttrChanged(header, "nameList", nameList))
 
@@ -1052,6 +1060,7 @@ local function ConfigurePriorityHeader(header, kind, conf, nameList, w, h, spaci
   if topologyChanged then ResetManagedChildAnchors(header) end
 
   local changed = kindChanged
+  changed = SetAttrIfChanged(header, "auraContainerTemplate", SECURE_AURA_CONTAINER_TEMPLATE) or changed
   changed = SetAttrIfChanged(header, "template", ButtonTemplate()) or changed
   changed = SetAttrIfChanged(header, "templateType", "Button") or changed
   changed = SetAttrIfChanged(header, "initial-width", initialWidth) or changed

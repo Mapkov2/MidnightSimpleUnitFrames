@@ -365,9 +365,9 @@ Check(Layers.SPELL_FRAME_EFFECT_BASE_OFFSET + 10 < Layers.DISPEL_OVERLAY_EFFECT_
 Check(Layers.DISPEL_OVERLAY_EFFECT_OFFSET < Layers.TEXT_BASE_OFFSET + 5,
     "health effects escaped above the default text layer")
 
--- Fixed-position group slots share exactly one native owner. Spell Indicator
--- slots stay first (their runtime index contract), Dispel follows, and a single
--- External appends one absolute slot. Multi-icon Externals retain AuraGroup.
+-- Compatible group displays share one native owner. Spell Indicator slots stay
+-- first (their runtime index contract), Dispel follows, every one-icon lane is
+-- an AuraSlot, and at most one multi-icon lane uses the owner's AuraGroup.
 do
     local SpellRuntime = assert(A3.SpellIndicators)
     local spellRoot = assert(SpellRuntime.CompileSlots("party1", {
@@ -492,6 +492,7 @@ do
     parent.MSUFUnitKey = "party1"
     parent.unit = "party1"
     parent.hpBar = NewHealthBar(parent)
+    parent.AuraContainer = NewAuraContainer(parent)
     local auraRoot = NewFrame(parent)
     local sensorA = SensorRoot("HARMFUL|DISPELLABLE", "sensor-track-a")
     local externalA = ExternalLane(1, "external-struct-a")
@@ -503,6 +504,8 @@ do
     Equal(auraRoot.Externals, nil, "single External retained a standalone native owner")
     local combined = assert(A3._ApplyGroupSlots(auraRoot, both, parent, false),
         "combined GroupSlots owner did not apply")
+    Equal(combined, parent.AuraContainer,
+        "GroupSlots did not adopt the SecureGroupHeader-born AuraContainer")
     Equal(auraRoot.GroupSlots, combined, "combined owner did not use canonical GroupSlots key")
     Equal(auraRoot.DispelSensor, nil, "combined owner allocated legacy DispelSensor root")
     Equal(auraRoot.SpellIndicators, nil, "combined owner allocated legacy SpellIndicators root")
@@ -541,6 +544,8 @@ do
     local sensorOnly = assert(A3._ApplyGroupSlots(auraRoot, GroupSlots(sensorA, nil), parent, false),
         "sensor-only GroupSlots transition failed")
     Check(sensorOnly ~= combined, "removing Spell Indicators did not structurally replace GroupSlots")
+    Check(sensorOnly ~= parent.AuraContainer,
+        "immutable header-born AuraSlots were reused for a structural replacement")
     Equal(SetCount(sensorOnly.auraSlotOptions), 1, "sensor-only GroupSlots retained Spell Indicator slots")
     Equal(sensorOnly[1] and sensorOnly[1]._msufA3DispelSensor, "overlay",
         "sensor-only GroupSlots did not reset the Dispel native index")
@@ -580,8 +585,9 @@ do
     local externalMoved = ExternalLane(1, "external-struct-b", externalB.nativeFilter, "external-candidates", "NAME")
     externalMoved.anchor = "TOPRIGHT"
     externalMoved.x = -9
+    local movedConfig = GroupSlots(sensorB, spellRoot, externalMoved)
     local moved = assert(A3._ApplyGroupSlots(
-        auraRoot, GroupSlots(sensorB, spellRoot, externalMoved), parent, false),
+        auraRoot, movedConfig, parent, false),
         "External structural GroupSlots update failed")
     Check(moved ~= externalUpdated, "External anchor/style change reused forbidden native buttons")
     Equal(moved[3].point[1], "TOPRIGHT", "External structural rebuild lost its new anchor")
@@ -595,6 +601,14 @@ do
 
     A3._HideLane(recreated)
     auraRoot.GroupSlots = nil
+    local resumed = assert(A3._ApplyGroupSlots(auraRoot, movedConfig, parent, false),
+        "parked GroupSlots owner did not resume after frame retirement")
+    Equal(resumed, recreated,
+        "frame retirement leaked its recreated GroupSlots owner")
+    Check(resumed._msufA3LayoutHost == nil or resumed._msufA3LayoutHost:IsShown(),
+        "resumed GroupSlots owner left its fixed layout host hidden")
+    A3._HideLane(resumed)
+    auraRoot.GroupSlots = nil
     Equal(SetCount(A3._directIdentityAuraContainers and A3._directIdentityAuraContainers.party1), 0,
         "disabled GroupSlots retained native UNIT_AURA ownership")
 
@@ -604,21 +618,106 @@ do
         lanes = { external = externalMany },
         sensorRoot = false,
     }
-    Equal(A3._GetGroupSlotsRootConfig(maxTwoConfig), nil,
-        "multi-icon External was incorrectly compiled into GroupSlots")
+    local maxTwoOwner = assert(A3._GetGroupSlotsRootConfig(maxTwoConfig),
+        "single multi-icon External created no shared owner")
     normalOk, normalAny = A3._ApplyNormalLaneContainers(
-        auraRoot, maxTwoConfig.lanes, parent, false, nil)
-    Check(normalOk == true and normalAny == true,
-        "multi-icon External did not retain its AuraGroup fallback")
-    Check(auraRoot.Externals ~= nil, "multi-icon External created no standalone owner")
-    Equal(auraRoot.Externals.createdButtons, 2,
-        "multi-icon External fallback changed its native capacity")
-    A3._HideLane(auraRoot.Externals)
-    auraRoot.Externals = nil
+        auraRoot, maxTwoConfig.lanes, parent, false, maxTwoOwner)
+    Check(normalOk == true and normalAny == false,
+        "single multi-icon External retained a standalone AuraGroup")
+    local maxTwo = assert(A3._ApplyGroupSlots(auraRoot, maxTwoOwner, parent, false),
+        "multi-icon External shared owner did not apply")
+    Equal(maxTwo._msufA3ManagedGroupKey, "msuf_external",
+        "multi-icon External changed its native AuraGroup key")
+    Equal(maxTwo.createdButtons, 2,
+        "multi-icon External shared owner changed its native capacity")
+    Equal(SetCount(A3._directIdentityAuraContainers and A3._directIdentityAuraContainers.party1), 1,
+        "single multi-icon External registered more than one native owner")
+    A3._HideLane(maxTwo)
+    auraRoot.GroupSlots = nil
+
+    local function ShapeLane(kind, rootKey, maxCount, gate)
+        local lane = ExternalLane(maxCount, kind .. "-shape-" .. tostring(maxCount))
+        lane.kind = kind
+        lane.rootKey = rootKey
+        lane.partyAccessGate = gate == true
+        return lane
+    end
+
+    local raidLanes = {
+        buff = ShapeLane("buff", "Buffs", 1, false),
+        debuff = ShapeLane("debuff", "Debuffs", 1, false),
+        external = ShapeLane("external", "Externals", 1, true),
+    }
+    local raidOwner = assert(A3._GetGroupSlotsRootConfig({
+        group = true,
+        partyRangeGate = false,
+        lanes = raidLanes,
+        sensorRoot = false,
+    }), "Raid single-icon lanes created no shared owner")
+    normalOk, normalAny = A3._ApplyNormalLaneContainers(
+        auraRoot, raidLanes, parent, false, raidOwner)
+    Check(normalOk == true and normalAny == false,
+        "Raid single-icon lanes retained standalone owners")
+    local raidContainer = assert(A3._ApplyGroupSlots(auraRoot, raidOwner, parent, false),
+        "Raid shared owner did not apply")
+    Equal(SetCount(raidContainer.auraSlotOptions), 3,
+        "Raid shared owner did not contain Buff/Debuff/External slots")
+    Equal(SetCount(A3._directIdentityAuraContainers and A3._directIdentityAuraContainers.party1), 1,
+        "Raid-shaped single-icon lanes registered more than one native owner")
+    A3._HideLane(raidContainer)
+    auraRoot.GroupSlots = nil
+
+    local mythicLanes = {
+        debuff = ShapeLane("debuff", "Debuffs", 1, false),
+        external = ShapeLane("external", "Externals", 1, true),
+    }
+    local mythicOwner = assert(A3._GetGroupSlotsRootConfig({
+        group = true,
+        partyRangeGate = false,
+        lanes = mythicLanes,
+        sensorRoot = false,
+    }), "Mythic single-icon lanes created no shared owner")
+    local mythicContainer = assert(A3._ApplyGroupSlots(auraRoot, mythicOwner, parent, false),
+        "Mythic shared owner did not apply")
+    Equal(SetCount(mythicContainer.auraSlotOptions), 2,
+        "Mythic shared owner did not contain Debuff/External slots")
+    Equal(SetCount(A3._directIdentityAuraContainers and A3._directIdentityAuraContainers.party1), 1,
+        "Mythic-shaped single-icon lanes registered more than one native owner")
+    A3._HideLane(mythicContainer)
+    auraRoot.GroupSlots = nil
+
+    local partyLanes = {
+        debuff = ShapeLane("debuff", "Debuffs", 2, false),
+        external = ShapeLane("external", "Externals", 1, true),
+    }
+    local partyOwner = assert(A3._GetGroupSlotsRootConfig({
+        group = true,
+        partyRangeGate = true,
+        lanes = partyLanes,
+        sensorRoot = false,
+    }), "Party gate partition created no primary owner")
+    local partyFlow = assert(partyOwner.secondaryRoot,
+        "Party gate partition did not separate token-only Debuffs")
+    normalOk, normalAny = A3._ApplyNormalLaneContainers(
+        auraRoot, partyLanes, parent, false, partyOwner)
+    Check(normalOk == true and normalAny == false,
+        "Party gate partition retained standalone lane owners")
+    local partyGated = assert(A3._ApplyGroupSlots(auraRoot, partyOwner, parent, false),
+        "Party gated owner did not apply")
+    local partyUngated = assert(A3._ApplyGroupSlots(auraRoot, partyFlow, parent, false),
+        "Party token-only owner did not apply")
+    Check(partyOwner.rangeGated == true and partyFlow.rangeGated == false,
+        "Party native owners lost their distinct range contracts")
+    Equal(SetCount(A3._directIdentityAuraContainers and A3._directIdentityAuraContainers.party1), 2,
+        "Party Debuff/External profile did not compile to exactly two native owners")
+    A3._HideLane(partyGated)
+    A3._HideLane(partyUngated)
+    auraRoot.GroupSlots = nil
+    auraRoot.GroupAuraFlow = nil
 end
 
--- Identical group-border AuraSlots all select the same top candidate. Compile
--- one border slot while leaving other visual families at their existing count.
+-- Identical fixed border/overlay AuraSlots all select the same top candidate.
+-- Compile one slot per visual; Corner slots retain their distinct positions.
 do
     local function CompileBorder(trigger, overlayEnabled)
         local frame = NewFrame(nil)
@@ -642,8 +741,8 @@ do
         "group Dispel-type border retained duplicate AuraSlots")
     Equal(dispelType.sensors.dispelBorder.filterMax, 1,
         "group Dispel-type border retained duplicate filter capacity")
-    Equal(dispelType.sensors.dispelOverlay.max, 3,
-        "border-only slot collapse leaked into the overlay family")
+    Equal(dispelType.sensors.dispelOverlay.max, 1,
+        "group Dispel overlay retained duplicate AuraSlots")
 
     local playerCast = CompileBorder("PLAYER_CAST", false)
     Equal(playerCast.sensors.dispelBorder.max, 1,
@@ -1390,10 +1489,16 @@ do
             points = container.setPointCalls or 0,
         }
     end
-    Check(containerCount > 0, "party aura access runtime created no native containers")
+    Equal(containerCount, 3,
+        "Party gate partition did not create one gated owner plus two independent token-only flows")
     local groupSlots = assert(frame.Auras.GroupSlots, "party range gate has no fixed-slot owner")
-    local trackedBuffs = assert(frame.Auras.TrackedBuffs, "party range gate has no tracked-buff owner")
-    local normalBuffs = assert(frame.Auras.Buffs, "party range smoke has no ordinary Buff owner")
+    Check(groupSlots.auraSlotOptions.msuf_trackedBuff ~= nil,
+        "identity-filtered tracked Buff did not join the gated owner")
+    Equal(frame.Auras.TrackedBuffs, nil,
+        "identity-filtered tracked Buff retained a standalone owner")
+    local normalBuffs = assert(frame.Auras.GroupAuraFlow,
+        "party range smoke has no consolidated ordinary Buff owner")
+    Equal(frame.Auras.Buffs, nil, "ordinary Buff retained a standalone owner")
     local normalDebuffs = assert(frame.Auras.Debuffs, "party range smoke has no ordinary Debuff owner")
 
     local rangeUpdate = AurasElement.SelectEventUpdate(frame, frame.MSUFSpec,
@@ -1403,7 +1508,6 @@ do
     local updates = TotalUpdates()
     local secretRange = {}
     local slotAlphaCalls = groupSlots.alphaFromBooleanCalls or 0
-    local trackedAlphaCalls = trackedBuffs.alphaFromBooleanCalls or 0
     local buffAlphaCalls = normalBuffs.alphaFromBooleanCalls or 0
     local debuffAlphaCalls = normalDebuffs.alphaFromBooleanCalls or 0
     rangeUpdate(frame, "UNIT_IN_RANGE_UPDATE", "party1", secretRange, true)
@@ -1413,10 +1517,6 @@ do
         "party range transition missed the fixed-slot alpha gate")
     Equal(groupSlots.alphaFromBooleanValue, secretRange,
         "fixed-slot alpha gate did not preserve the opaque range value")
-    Equal(trackedBuffs.alphaFromBooleanCalls or 0, trackedAlphaCalls + 1,
-        "party range transition missed the identity-filtered lane gate")
-    Equal(trackedBuffs.alphaFromBooleanValue, secretRange,
-        "tracked-buff alpha gate did not preserve the opaque range value")
     Equal(normalBuffs.alphaFromBooleanCalls or 0, buffAlphaCalls,
         "ordinary token-filtered Buffs were unnecessarily range-gated")
     Equal(normalDebuffs.alphaFromBooleanCalls or 0, debuffAlphaCalls,
@@ -1835,10 +1935,11 @@ Check(runtimeSource:find("player = true", 1, true),
     "player aura containers are no longer eligible for world repair")
 Check(runtimeSource:find("A3._SyncManagedAuraContainerGeometry", 1, true),
     "generic managed-aura world repair dispatcher missing")
-Check(runtimeSource:find("root.GroupSlots = current", 1, true)
+Check(runtimeSource:find("BuildGroupAuraOwner", 1, true)
+    and runtimeSource:find("root[rootKey] = current", 1, true)
     and runtimeSource:find("ApplyGroupSlots(root, groupSlots, frame, forceRecreate)", 1, true)
     and runtimeSource:find("local firstEffectRoot = group and 2 or 1", 1, true),
-    "group fixed-slot families no longer route through one canonical native owner")
+    "compatible group aura families no longer route through canonical native owners")
 Check(not runtimeSource:find("_ApplySharedAuraContainer", 1, true)
     and not runtimeSource:find("_msufA3SharedAuraGroups", 1, true)
     and not runtimeSource:find("_sharedAuraRootKey", 1, true),
@@ -1973,4 +2074,4 @@ Check(groupHandlesSource:find("return ResolveAnchor(rx, ry)", 1, true),
 Check(groupHandlesSource:find('externalHandle._cfgGroup = "externals"', 1, true),
     "group External aura handle no longer writes its persisted lane")
 
-print("PASS aura position parity: 54 unit + 216 group live layouts, one GroupSlots owner with transitions/recreate, 54 unit preview lanes, scope-aware icon zoom, vertical fallback, PTR5 forbidden-button guard, fixed host capacity, player/dispel zone repair, 1000x native churn")
+print("PASS aura position parity: 54 unit + 216 group live layouts, consolidated group owners with Party gate partition/recreate, 54 unit preview lanes, scope-aware icon zoom, vertical fallback, PTR5 forbidden-button guard, fixed host capacity, player/dispel zone repair, 1000x native churn")
