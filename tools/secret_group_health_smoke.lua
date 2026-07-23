@@ -4,19 +4,25 @@ local SECRET_HP = 617001
 local SECRET_MAX = 775001
 local SECRET_PCT = 73001
 local INTERP = {}
-local detailedHP, detailedMax = SECRET_HP, SECRET_MAX
 local plainPercent = 100
+local groupPercent = SECRET_PCT
+local aiChecks = 0
+local calculatorCalls = 0
 local detailedCalls = 0
 local Health
 
 _G.issecretvalue = function(value)
   return value == SECRET_HP or value == SECRET_MAX or value == SECRET_PCT
 end
-_G.UnitInPartyIsAI = function(unit) return unit == "party1" end
+_G.UnitInPartyIsAI = function(unit)
+  aiChecks = aiChecks + 1
+  return unit == "party1"
+end
 _G.CreateUnitHealPredictionCalculator = function()
+  calculatorCalls = calculatorCalls + 1
   return {
-    GetCurrentHealth = function() return detailedHP end,
-    GetMaximumHealth = function() return detailedMax end,
+    GetCurrentHealth = function() return SECRET_HP end,
+    GetMaximumHealth = function() return SECRET_MAX end,
   }
 end
 _G.UnitGetDetailedHealPrediction = function(unit, healer)
@@ -33,7 +39,9 @@ local MSUF = {
   },
   UFBarTextCommon = {
     UnitHealthPercent = function(unit)
-      return unit == "player" and SECRET_PCT or plainPercent
+      if unit == "player" then return SECRET_PCT end
+      if unit == "party1" then return groupPercent end
+      return plainPercent
     end,
     SCALE_100 = 100,
     WHITE = "white",
@@ -92,45 +100,49 @@ Health.Update(playerFrame, "PARTY_MEMBER_ENABLE", "player")
 assert(playerBar.maximum == 100 and playerBar.value == SECRET_PCT and detailedCalls == 0,
   "player lifecycle refresh must remain on the percent path")
 
-local aiStatusSeed, aiGoneSeed = false, false
-local aiBar = Bar()
-aiBar._msufSmoothInterp = INTERP
-local aiFrame = {
+local groupStatusSeed, groupGoneSeed = false, false
+local groupBar = Bar()
+groupBar._msufSmoothInterp = INTERP
+local groupFrame = {
   unit = "party1",
-  hpBar = aiBar,
+  hpBar = groupBar,
   MSUFSpec = { scope = "group", health = { mode = "dark" } },
   _msufIsGroupFrame = true,
-  _msufUpdateGroupStatusState = function(_, _, _, seed) aiStatusSeed = seed end,
-  _msufUpdateGroupVisualsGoneState = function(_, _, _, seed) aiGoneSeed = seed end,
+  _msufUpdateGroupStatusState = function(_, _, _, seed) groupStatusSeed = seed end,
+  _msufUpdateGroupVisualsGoneState = function(_, _, _, seed) groupGoneSeed = seed end,
 }
 
-Health.Update(aiFrame, "UNIT_HEALTH", "party1")
-assert(aiBar.maximum == SECRET_MAX and aiBar.value == SECRET_HP,
-  "secret authoritative AI health must still reach the StatusBar")
-assert(detailedCalls == 1, "AI health must retain the detailed calculator path")
-assert(aiBar._msufMinMax == nil and aiBar._msufHealthValue == nil
-    and aiBar._msufHealthMax == SECRET_MAX and aiBar._msufHealthMaxReady == true
-    and _G.issecretvalue(aiBar._msufHealthMax) == true,
-  "secret detailed max was not retained as an opaque event-owned payload")
-assert(aiStatusSeed == false and aiGoneSeed == nil,
-  "secret detailed health must not reach status/dead comparisons")
+Health.Update(groupFrame, "UNIT_HEALTH", "party1")
+assert(groupBar.maximum == 100 and groupBar.value == SECRET_PCT,
+  "secret group percent must still reach the StatusBar")
+assert(aiChecks == 0 and calculatorCalls == 0 and detailedCalls == 0,
+  "group health restored the removed AI/detailed calculator path")
+assert(groupBar._msufMinMax == 100 and groupBar._msufHealthPercentValue == nil
+    and groupBar._msufHealthPercentUnit == nil
+    and groupBar._msufHealthValue == nil and groupBar._msufHealthMax == nil,
+  "secret group percent leaked into Lua comparison caches")
+assert(groupStatusSeed == false and groupGoneSeed == nil,
+  "secret group percent must not reach status/dead comparisons")
 
-Health.Update(aiFrame, "UNIT_HEALTH", "party1")
-assert(detailedCalls == 2 and aiBar.minMaxCalls == 1,
-  "steady secret health repeated the unchanged native max setter")
+Health.Update(groupFrame, "UNIT_HEALTH", "party1")
+assert(aiChecks == 0 and calculatorCalls == 0 and detailedCalls == 0
+    and groupBar.minMaxCalls == 1,
+  "steady secret group health repeated the unchanged native max setter")
 
-detailedHP, detailedMax = 617000, 775000
-Health.Update(aiFrame, "PARTY_MEMBER_ENABLE", "party1")
-assert(aiBar.value == 617000 and aiBar.maximum == 775000
-    and aiBar._msufHealthValue == 617000 and aiBar._msufHealthMax == 775000
-    and aiBar.minMaxCalls == 2 and aiBar.interpolation == nil
-    and aiBar._msufInterpolating == nil,
-  "plain authoritative AI recovery must retain the detailed-health cache")
+groupPercent = 80
+Health.Update(groupFrame, "PARTY_MEMBER_ENABLE", "party1")
+assert(groupBar.value == 80 and groupBar.maximum == 100
+    and groupBar._msufHealthPercentValue == 80
+    and groupBar._msufHealthPercentUnit == "party1"
+    and groupBar.minMaxCalls == 1 and groupBar.interpolation == nil
+    and groupBar._msufInterpolating == nil,
+  "plain group recovery must populate the percent cache without interpolation")
 
-detailedHP = 616999
-Health.Update(aiFrame, "UNIT_HEALTH", "party1")
-assert(aiBar.value == 616999 and aiBar.interpolation == INTERP
-    and aiBar._msufInterpolating == true,
+groupPercent = 79
+Health.Update(groupFrame, "UNIT_HEALTH", "party1")
+assert(groupBar.value == 79 and groupBar.interpolation == INTERP
+    and groupBar._msufInterpolating == true
+    and groupBar._msufHealthPercentValue == 79,
   "plain UNIT_HEALTH lost explicitly enabled smoothing")
 
 local plainBar = Bar()

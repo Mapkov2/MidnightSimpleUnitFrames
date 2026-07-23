@@ -10,9 +10,6 @@ local CreateFrame = C and C.CreateFrame or CreateFrame
 local UnitHealth = C and C.UnitHealth or UnitHealth
 local UnitHealthMax = C and C.UnitHealthMax or UnitHealthMax
 local UnitHealthPercent = C and C.UnitHealthPercent or UnitHealthPercent
-local UnitInPartyIsAI = _G.UnitInPartyIsAI
-local CreateUnitHealPredictionCalculator = _G.CreateUnitHealPredictionCalculator
-local UnitGetDetailedHealPrediction = _G.UnitGetDetailedHealPrediction
 local WHITE = C and C.WHITE or "Interface\\Buttons\\WHITE8X8"
 local SCALE_100 = C and C.SCALE_100
 local SetBarSmoothing = C and C.SetBarSmoothing
@@ -26,9 +23,6 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
 end
 
 local Health = {}
-local PREDICTION_HEALER_UNIT = "player"
-local sharedDetailedHealthCalc
-local detailedHealthUnsupported
 local EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION" }
 local STATUS_COLOR_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_FLAGS" }
 local IDENTITY_STATUS_COLOR_EVENTS = {
@@ -50,10 +44,6 @@ local COLOR_ONLY_EVENTS = {
 }
 local PLAYER_STATUS_COLOR_EVENTS = { "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST" }
 local GROUP_LIFECYCLE_EVENTS = { "PARTY_MEMBER_ENABLE", "PARTY_MEMBER_DISABLE" }
-local GROUP_LIFECYCLE_EVENT = {
-  PARTY_MEMBER_ENABLE = true,
-  PARTY_MEMBER_DISABLE = true,
-}
 local IDENTITY_EVENTS = {
   MSUF_UNIT_IDENTITY = true,
   MSUF_UNIT_IDENTITY_FAST = true,
@@ -364,22 +354,6 @@ local function UpdateAbsolute(frame, event, unit)
   return UpdateAbsoluteValues(frame, unit, hp, maxHP, refreshMax, event == "UNIT_HEALTH")
 end
 
-local function RefreshGroupAIHealthMode(frame, unit)
-  if not (frame and frame._msufIsGroupFrame == true) then
-    return false, false
-  end
-  if not UnitInPartyIsAI then return false, true end
-  local oldUnit = frame._msufHealthAIUnit
-  local oldAI = frame._msufHealthAI
-  local isAI = UnitInPartyIsAI(unit) == true
-  local changed = oldUnit ~= unit or oldAI ~= isAI
-  if changed then
-    frame._msufHealthAIUnit = unit
-    frame._msufHealthAI = isAI
-  end
-  return isAI, changed
-end
-
 local function NotifyHealthState(frame, event, unit, hp, hpSecret)
   local group = frame._msufIsGroupFrame == true
   if group ~= true then
@@ -422,8 +396,6 @@ local function NotifyHealthState(frame, event, unit, hp, hpSecret)
     updateGoneState(frame, event, unit, seedHP)
   end
 end
-
-local ReadDetailedHealth
 
 local function UpdateSingle(frame, event, unit)
   unit = unit or frame.MSUFUnitKey
@@ -501,19 +473,6 @@ local function UpdateGroup(frame, event, unit)
   end
   if not (frame and frame.hpBar and unit) then return end
 
-  if frame._msufHealthAIUnit ~= unit
-    or (event ~= "UNIT_HEALTH" and (IDENTITY_EVENTS[event] == true
-      or (GROUP_LIFECYCLE_EVENT[event] == true and frame._msufGroupLifecycleAIMetadataReady ~= true))) then
-    RefreshGroupAIHealthMode(frame, unit)
-  end
-
-  if frame._msufHealthAI == true then
-    local hp, maxHP, percentReady, seedCalc, applied = ReadDetailedHealth(frame, unit, event, true)
-    if applied == true then
-      return hp, maxHP, percentReady, seedCalc
-    end
-  end
-
   local ok, pct, maxValue, percentReady, pctSecret = UpdatePercent(frame, unit, event == "UNIT_HEALTH")
   if ok then
     if frame._msufHealthRuntimeColorEnabled ~= false
@@ -533,66 +492,65 @@ local function UpdateGroup(frame, event, unit)
   return hp, maxHP, absolutePercentReady
 end
 
-local function UpdateGroupAbsolute(frame, event, unit)
+-- Group percent bar with zero health-text consumers: the single-pass lane.
+-- UpdatePercent, the runtime-color gate, and the steady-state half of
+-- NotifyHealthState are folded into one function so a group UNIT_HEALTH tick
+-- runs without text-runtime handshakes or helper-call boundaries. Behaviour is
+-- identical to UpdateGroup for a frame whose text runtime has no health slots;
+-- SelectGroupHealthUpdater swaps back to UpdateGroup the moment slots appear.
+local function UpdateGroupPercentLean(frame, event, unit)
   unit = unit or frame.MSUFUnitKey
-  local rt = frame and frame._msufTextRuntime
-  if rt and rt._dispatchHealthPercentReady == true then
-    rt._dispatchHealthPercent = nil
-    rt._dispatchHealthPercentReady = nil
-  end
-  if not (frame and frame.hpBar and unit) then return end
-
-  if frame._msufHealthAIUnit ~= unit
-    or (event ~= "UNIT_HEALTH" and (IDENTITY_EVENTS[event] == true
-      or (GROUP_LIFECYCLE_EVENT[event] == true and frame._msufGroupLifecycleAIMetadataReady ~= true))) then
-    RefreshGroupAIHealthMode(frame, unit)
+  local bar = frame and frame.hpBar
+  if not (bar and unit) then return end
+  if not (UnitHealthPercent and SCALE_100) then
+    return UpdateGroup(frame, event, unit)
   end
 
-  if frame._msufHealthAI == true then
-    local hp, maxHP, percentReady, seedCalc, applied = ReadDetailedHealth(frame, unit, event, true)
-    if applied == true then
-      return hp, maxHP, percentReady, seedCalc
+  local pct = UnitHealthPercent(unit, true, SCALE_100)
+  local secret = issecretvalue(pct) == true
+  if not secret and (type(pct) ~= "number" or pct ~= pct or (pct - pct) ~= 0) then pct = 0 end
+  if bar._msufMinMax ~= 100 then
+    bar:SetMinMaxValues(0, 100)
+    bar._msufMinMax = 100
+  end
+  if secret
+    or bar._msufHealthPercentValue ~= pct
+    or bar._msufHealthPercentUnit ~= unit then
+    local interp = event == "UNIT_HEALTH" and not secret and bar._msufSmoothInterp or nil
+    if interp then
+      bar:SetValue(pct, interp)
+      bar._msufInterpolating = true
+    else
+      bar:SetValue(pct)
+      bar._msufInterpolating = nil
+    end
+    if secret then
+      bar._msufHealthPercentValue = nil
+      bar._msufHealthPercentUnit = nil
+    else
+      bar._msufHealthPercentValue = pct
+      bar._msufHealthPercentUnit = unit
     end
   end
 
-  local hp, maxHP, percentReady, hpSecret = UpdateAbsolute(frame, event, unit)
   if frame._msufHealthRuntimeColorEnabled ~= false
-    and (event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, hp, hpSecret)) then
-    if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
-  end
-  NotifyHealthState(frame, event, unit, hp, hpSecret)
-  return hp, maxHP, percentReady
-end
-
-local function UpdateGroupCurrent(frame, event, unit)
-  unit = unit or frame.MSUFUnitKey
-  local rt = frame and frame._msufTextRuntime
-  if rt and rt._dispatchHealthPercentReady == true then
-    rt._dispatchHealthPercent = nil
-    rt._dispatchHealthPercentReady = nil
-  end
-  if not (frame and frame.hpBar and unit) then return end
-
-  if frame._msufHealthAIUnit ~= unit
-    or (event ~= "UNIT_HEALTH" and (IDENTITY_EVENTS[event] == true
-      or (GROUP_LIFECYCLE_EVENT[event] == true and frame._msufGroupLifecycleAIMetadataReady ~= true))) then
-    RefreshGroupAIHealthMode(frame, unit)
+    and (event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, pct, secret)) then
+    if not ApplyRuntimeColor(frame, event, unit, pct, 100) then SetColor(frame) end
   end
 
-  if frame._msufHealthAI == true then
-    local hp, maxHP, percentReady, seedCalc, applied = ReadDetailedHealth(frame, unit, event, true)
-    if applied == true then
-      return hp, maxHP, percentReady, seedCalc
-    end
+  -- Steady alive tick with a plain percent and no visible gone label feeds the
+  -- gone-state sink directly; every other case keeps the full notify contract.
+  if event == "UNIT_HEALTH"
+    and not secret
+    and pct > 0
+    and frame._msufStatusTextValue == nil
+    and frame._msufStatusTextHealthRefresh ~= true then
+    local goneState = frame._msufUpdateGroupVisualsGoneState
+    if goneState then goneState(frame, event, unit, pct) end
+  else
+    NotifyHealthState(frame, event, unit, pct, secret)
   end
-
-  local hp, maxHP, _, hpSecret = UpdateAbsolute(frame, event, unit)
-  if frame._msufHealthRuntimeColorEnabled ~= false
-    and (event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, hp, hpSecret)) then
-    if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
-  end
-  NotifyHealthState(frame, event, unit, hp, hpSecret)
-  return hp, nil, false
+  return pct, nil, true
 end
 
 local HEALTH_PLAN_PERCENT = 1
@@ -602,8 +560,7 @@ local HEALTH_PLAN_ABSOLUTE = 3
 local function HealthValuePlan(frame)
   local rt = frame and frame._msufTextRuntime
   if not (rt and (rt.healthSlotCount or 0) > 0) then return HEALTH_PLAN_PERCENT end
-  if rt.healthNeedsMissing == true
-    or (rt.healthNeedsCurrent == true and rt.healthNeedsMax == true) then
+  if rt.healthNeedsCurrent == true and rt.healthNeedsMax == true then
     return HEALTH_PLAN_ABSOLUTE
   end
   -- CURRENT can share the bar's UnitHealth read only when no active text
@@ -625,57 +582,6 @@ local function UpdateColorOnly(frame, event, unit)
   end
 end
 
---- Detailed current/max health belongs exclusively to group AI/follower
---- health. Prediction uses direct event payload APIs and must never select or
---- share this calculator, so ordinary frames cannot enter the detailed path.
-ReadDetailedHealth = function(frame, unit, event, apply)
-  if not (frame and frame._msufHealthAI == true and unit) then return nil end
-
-  local current, maximum, calc
-  if detailedHealthUnsupported == true
-    or not (CreateUnitHealPredictionCalculator and UnitGetDetailedHealPrediction) then
-    detailedHealthUnsupported = true
-    return nil
-  end
-
-  calc = sharedDetailedHealthCalc
-  if not calc then
-    calc = CreateUnitHealPredictionCalculator()
-    if not calc then
-      detailedHealthUnsupported = true
-      return nil
-    end
-    sharedDetailedHealthCalc = calc
-  end
-
-  UnitGetDetailedHealPrediction(unit, PREDICTION_HEALER_UNIT, calc)
-  local getCurrent = calc.GetCurrentHealth
-  local getMaximum = calc.GetMaximumHealth
-  if getCurrent then current = getCurrent(calc) end
-  if getMaximum then maximum = getMaximum(calc) end
-
-  if apply ~= true then return current, maximum, calc end
-  local currentAvailable = issecretvalue(current) == true or current ~= nil
-  local maximumAvailable = issecretvalue(maximum) == true or maximum ~= nil
-  if not (currentAvailable and maximumAvailable) then return nil end
-
-  local bar = frame.hpBar
-  local refreshMax = event ~= "UNIT_HEALTH"
-    or bar._msufHealthMaxReady ~= true
-    or bar._msufHealthMaxUnit ~= unit
-  local hp, maxHP, percentReady, hpSecret = UpdateAbsoluteValues(
-    frame, unit, current, maximum, refreshMax, event == "UNIT_HEALTH")
-  if frame._msufHealthRuntimeColorEnabled ~= false
-    and (event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, hp, hpSecret)) then
-    if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
-  end
-  NotifyHealthState(frame, event, unit, hp, hpSecret)
-  return hp, maxHP, percentReady, calc, true
-end
-
-Health.ReadDetailedHealth = ReadDetailedHealth
-UF.ReadDetailedHealth = ReadDetailedHealth
-
 local function UpdateIdentityBackground(frame)
   local health = frame and frame.MSUFSpec and frame.MSUFSpec.health
   if not (health and health.backgroundClassColor == true and ApplyBackgrounds) then return false end
@@ -687,24 +593,30 @@ function Health.Update(frame, event, unit)
   -- Core installs UpdateGroup/UpdateSingle directly through SelectUpdate, so
   -- event hot paths stay branch-free. Preserve the public update contract for
   -- direct callers and compatibility paths that have a group frame.
-  local plan = HealthValuePlan(frame)
   if frame and frame._msufIsGroupFrame == true then
-    if plan == HEALTH_PLAN_ABSOLUTE then return UpdateGroupAbsolute(frame, event, unit) end
-    if plan == HEALTH_PLAN_CURRENT then return UpdateGroupCurrent(frame, event, unit) end
     return UpdateGroup(frame, event, unit)
   end
+  local plan = HealthValuePlan(frame)
   if plan == HEALTH_PLAN_ABSOLUTE then return UpdateSingleAbsolute(frame, event, unit) end
   if plan == HEALTH_PLAN_CURRENT then return UpdateSingleCurrent(frame, event, unit) end
   return UpdateSingle(frame, event, unit)
 end
 
 function Health.SelectUpdate(frame, spec)
-  local plan = HealthValuePlan(frame)
   if (spec and spec.scope == "group") or (frame and frame._msufIsGroupFrame == true) then
-    if plan == HEALTH_PLAN_ABSOLUTE then return UpdateGroupAbsolute end
-    if plan == HEALTH_PLAN_CURRENT then return UpdateGroupCurrent end
+    -- No health-text consumers -> the folded single-pass lane. Any text slot,
+    -- percent need, or health-driven text color keeps the generic group path
+    -- that owns the text-runtime percent handshake.
+    local rt = frame and frame._msufTextRuntime
+    if rt == nil
+      or ((rt.healthSlotCount or 0) == 0
+        and rt.healthColorByHealth ~= true
+        and rt.healthNeedsPercent ~= true) then
+      return UpdateGroupPercentLean
+    end
     return UpdateGroup
   end
+  local plan = HealthValuePlan(frame)
   if plan == HEALTH_PLAN_ABSOLUTE then return UpdateSingleAbsolute end
   if plan == HEALTH_PLAN_CURRENT then return UpdateSingleCurrent end
   return UpdateSingle
@@ -727,13 +639,12 @@ Health.UpdateValueStatic = Health.Update
 Health.UpdateValueStaticPlain = Health.Update
 Health.UpdateValueGroupStatic = UpdateGroup
 Health.UpdateValueGroupPercent = UpdateGroup
+Health.UpdateValueGroupPercentLean = UpdateGroupPercentLean
 -- Static implementations are exposed on the element descriptor so Core can
 -- safely intern direct route prototypes without retaining frame-owned closures.
 Health.UpdateValueSinglePercent = UpdateSingle
 Health.UpdateValueSingleCurrent = UpdateSingleCurrent
 Health.UpdateValueSingleAbsolute = UpdateSingleAbsolute
-Health.UpdateValueGroupCurrent = UpdateGroupCurrent
-Health.UpdateValueGroupAbsolute = UpdateGroupAbsolute
 Health.UpdateValuePercent = Health.Update
 Health.UpdateMaxValue = Health.Update
 Health.UpdateMaxValuePlain = Health.Update
@@ -742,13 +653,6 @@ Health.UpdateMaxValueStaticPlain = Health.Update
 Health.UpdateConnectionState = Health.Update
 Health.UpdateIdentityColor = Health.Update
 Health.UpdateIdentityBackground = UpdateIdentityBackground
-function Health.UpdateGroupLifecycleMetadata(frame, _event, unit)
-  local isAI, changed = RefreshGroupAIHealthMode(frame, unit or (frame and frame.MSUFUnitKey))
-  -- Detailed AI health/prediction availability is committed by these lifecycle
-  -- events. Refresh every active follower, but keep ordinary raid members on
-  -- the metadata-only path unless their classification actually changed.
-  return isAI == true or changed == true
-end
 function Health.SelectGroupHealthUpdater(frame)
   if not frame then return nil end
   local update = Health.SelectUpdate(frame, frame.MSUFSpec)

@@ -85,7 +85,13 @@ assert(indicator.shown == false, "combat exit must clear the threat indicator")
 
 local events = table.concat(element.GetEvents(frame, frame.MSUFSpec), "|")
 local unitless = table.concat(element.GetUnitlessEvents(frame, frame.MSUFSpec), "|")
-assert(events:find("UNIT_FLAGS", 1, true))
+assert(not events:find("UNIT_FLAGS", 1, true),
+  "ALL-mode threat must stay on authoritative threat events")
+frame.MSUFSpec.cornerIndicators.aggroMode = "TANK"
+local roleEvents = table.concat(element.GetEvents(frame, frame.MSUFSpec), "|")
+assert(roleEvents:find("UNIT_FLAGS", 1, true),
+  "role-filtered threat must retain UNIT_FLAGS for role transitions")
+frame.MSUFSpec.cornerIndicators.aggroMode = "ALL"
 assert(not unitless:find("PLAYER_REGEN_ENABLED", 1, true),
   "corner indicators must reuse the shared group regen owner")
 

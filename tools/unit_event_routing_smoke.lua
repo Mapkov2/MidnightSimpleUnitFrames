@@ -35,7 +35,6 @@ local healthUpdateCalls = 0
 local powerUpdateCalls = 0
 local statusUpdateCalls = 0
 local visualUpdateCalls = 0
-local healthMetadataCalls = 0
 local healthUnits = {}
 local powerUnits = {}
 local statusUnits = {}
@@ -60,11 +59,6 @@ UF.RegisterElement("Health", {
             expectedUnitState.ready = true
             expectedUnitState.dispatchToken = runtimeFrame._msufDispatchToken
         end
-    end,
-    UpdateGroupLifecycleMetadata = function(runtimeFrame, _, unit)
-        healthMetadataCalls = healthMetadataCalls + 1
-        assert(runtimeFrame.MSUFUnitKey == unit, "AI metadata gate received the wrong bound unit")
-        return false
     end,
 })
 UF.RegisterElement("Power", {
@@ -278,7 +272,6 @@ UF.ApplySpec(healthOnlyFrame, {
 
 local healthBefore, powerBefore = healthUpdateCalls, powerUpdateCalls
 local statusBefore, visualBefore = statusUpdateCalls, visualUpdateCalls
-local metadataBefore = healthMetadataCalls
 MSUF.GF = {
     ResolveLifecycleFrame = function(unit)
         if unit == "party1" then return groupFrame, true end
@@ -288,8 +281,6 @@ MSUF.GF = {
 lifecycleDriver.OnEvent(lifecycleDriver, "PARTY_MEMBER_ENABLE", "party1")
 assert(healthUpdateCalls == healthBefore + 1 and powerUpdateCalls == powerBefore + 2,
     "validated lifecycle target must keep heavy health work O(1) while power stays global")
-assert(healthMetadataCalls == metadataBefore + 2,
-    "non-target frames must use the cheap compiled AI metadata gate")
 assert(statusUpdateCalls == statusBefore + 3,
     "presence status must retain Blizzard's group-global lifecycle semantics")
 assert(visualUpdateCalls == visualBefore + 3,
@@ -311,14 +302,11 @@ assert(groupFrame._msufGroupLifecyclePlan ~= healthOnlyFrame._msufGroupLifecycle
 
 healthBefore, powerBefore = healthUpdateCalls, powerUpdateCalls
 statusBefore, visualBefore = statusUpdateCalls, visualUpdateCalls
-metadataBefore = healthMetadataCalls
 MSUF.GF.ResolveLifecycleFrame = function() return nil, false end
 lifecycleDriver.OnEvent(lifecycleDriver, "PARTY_MEMBER_DISABLE", "party1")
 assert(healthUpdateCalls == healthBefore + 3 and powerUpdateCalls == powerBefore + 2
     and statusUpdateCalls == statusBefore + 3 and visualUpdateCalls == visualBefore + 3,
     "index/rebind/alias miss must preserve the authoritative full broadcast fallback")
-assert(healthMetadataCalls == metadataBefore,
-    "full fallback must not run the global-minimal metadata path")
 
 healthBefore = healthUpdateCalls
 lifecycleDriver.OnEvent(lifecycleDriver, "PARTY_MEMBER_ENABLE", secretValue)

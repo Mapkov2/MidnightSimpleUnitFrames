@@ -58,18 +58,6 @@ local chunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engi
 chunk("MidnightSimpleUnitFrames", MSUF)
 local UF = assert(MSUF.UF)
 
-local function FlushDeferredGroupData()
-    for i = #createdFrames, 1, -1 do
-        local frame = createdFrames[i]
-        local update = frame.scripts and frame.scripts.OnUpdate
-        if frame.shown == true and type(update) == "function" then
-            update(frame, 0)
-            return
-        end
-    end
-    error("group data driver was not armed", 2)
-end
-
 local calls = setmetatable({}, { __mode = "k" })
 local Health = {
     IsEnabled = function() return true end,
@@ -80,22 +68,40 @@ local Health = {
 function Health.Update(frame, event, unit)
     calls[frame] = (calls[frame] or 0) + 1
     frame.lastEvent, frame.lastUnit = event, unit
-    return 80, 100, false, frame.seedCalc
+    if frame.drainOrder then frame.drainOrder[#frame.drainOrder + 1] = "health" end
+    if frame.healthPayload ~= nil then
+        return frame.healthPayload, nil, true
+    end
+    return 80, 100, false
 end
 UF.RegisterElement("Health", Health)
+
+local function QueuePredictionData(frame)
+    frame._msufPredictionDirtyMask = 1
+    frame.predictionFlushCalls = (frame.predictionFlushCalls or 0) + 1
+end
 
 local Prediction = {
     IsEnabled = function() return true end,
     Create = function() end,
-    Apply = function() end,
-    GetEvents = function() return { "UNIT_MAXHEALTH" } end,
+    Apply = function(frame)
+        frame._msufPredictionFlushData = function(owner, mask)
+            owner.predictionFlushCalls = (owner.predictionFlushCalls or 0) + 1
+            owner.predictionFlushMask = mask
+            if owner.drainOrder then owner.drainOrder[#owner.drainOrder + 1] = "prediction" end
+        end
+    end,
+    GetEvents = function() return { "UNIT_MAXHEALTH", "UNIT_HEAL_PREDICTION" } end,
+    SelectEventUpdate = function(_, _, event, update)
+        return event == "UNIT_HEAL_PREDICTION" and QueuePredictionData or update
+    end,
+    NoDispatchUpdates = { [QueuePredictionData] = true },
 }
-function Prediction.Update(frame, event, unit, hp, hpMax, seedCalc)
+function Prediction.Update(frame, event, unit, hp, hpMax)
     frame.predictionEvent = event
     frame.predictionUnit = unit
     frame.predictionHP = hp
     frame.predictionMax = hpMax
-    frame.predictionCalc = seedCalc
 end
 UF.RegisterElement("Prediction", Prediction)
 
@@ -128,11 +134,12 @@ local GroupVisuals = {
     Apply = function() end,
     GetEvents = function() return { "UNIT_MAXHEALTH" } end,
 }
-function GroupVisuals.Update(frame, event, unit, hp, hpMax)
+function GroupVisuals.Update(frame, event, unit, hp, hpMax, percentReady)
     frame.visualsEvent = event
     frame.visualsUnit = unit
     frame.visualsHP = hp
     frame.visualsMax = hpMax
+    frame.visualsPercentReady = percentReady
 end
 UF.RegisterElement("GroupVisuals", GroupVisuals)
 
@@ -172,8 +179,6 @@ UF.ApplyElementToFrame(second, "NameText", spec)
 
 Check(type(first.UNIT_HEALTH) == "function", "first route missing")
 Check(first.UNIT_HEALTH == second.UNIT_HEALTH, "identical direct routes were not interned")
-Check(first._msufGroupHealthRoute == second._msufGroupHealthRoute,
-    "identical deferred group-health routes were not interned")
 Check(first._msufEventNames == second._msufEventNames, "event-name plans were not interned")
 Check(first._msufElementEventRoutes.Health.events == second._msufElementEventRoutes.Health.events,
     "element event lists were not interned")
@@ -201,17 +206,50 @@ UF.ApplyElementToFrame(dirtySecond, "HealthText", dirtySpec)
 Check(dirtyFirst.UNIT_HEALTH == dirtySecond.UNIT_HEALTH,
     "event-specific HealthText dirty marker escaped shared direct-route interning")
 dirtyFirst.UNIT_HEALTH(dirtyFirst, "UNIT_HEALTH", "party2")
-for _ = 1, 9 do dirtyFirst.UNIT_HEALTH(dirtyFirst, "UNIT_HEALTH", "party2") end
-Check(calls[dirtyFirst] == nil and dirtyFirst.healthDirtyCalls == nil,
-    "group health work ran before the render-frame drain")
-FlushDeferredGroupData()
 Check(calls[dirtyFirst] == 1 and dirtyFirst.healthDirtyCalls == 1,
-    "deferred Health route did not coalesce the bar and dirty marker exactly once")
+    "direct group Health route did not update the bar and dirty marker exactly once")
 Check(dirtyFirst.healthDirtyHP == 80 and dirtyFirst.healthDirtyMax == 100,
     "direct Health route dropped the bar payload before the static dirty marker")
 
+-- Party, raid, and mythic raid all use the same direct group hotpath. Keep the
+-- three real group kinds in this test so a future raid-only queue or driver
+-- cannot silently reappear behind the shared scope.
+local groupRouteFrames = {}
+local groupKinds = {
+    { kind = "party", unit = "party1" },
+    { kind = "raid", unit = "raid1" },
+    { kind = "mythicraid", unit = "raid2" },
+}
+local createdBeforeGroupHealth = #createdFrames
+for i = 1, #groupKinds do
+    local entry = groupKinds[i]
+    local frame = NewFrame(entry.unit)
+    frame._msufGFKind = entry.kind
+    local groupSpec = {
+        enabled = true,
+        key = entry.unit,
+        unit = entry.unit,
+        scope = "group",
+        groupKind = entry.kind,
+    }
+    UF.AttachFrame(frame, { scope = "group" })
+    UF.ApplyElementToFrame(frame, "Health", groupSpec)
+    UF.ApplyElementToFrame(frame, "HealthText", groupSpec)
+    frame._msufDispatchToken = 100 + i
+    frame.UNIT_HEALTH(frame, "UNIT_HEALTH", entry.unit)
+    Check(calls[frame] == 1 and frame.healthDirtyCalls == 1,
+        entry.kind .. " health did not stay on the direct shared group route")
+    Check(frame._msufDispatchToken == 100 + i and frame._msufDispatchActive == nil,
+        entry.kind .. " UNIT_HEALTH re-entered the generic dispatch protocol")
+    groupRouteFrames[i] = frame
+end
+Check(groupRouteFrames[1].UNIT_HEALTH == groupRouteFrames[2].UNIT_HEALTH
+    and groupRouteFrames[2].UNIT_HEALTH == groupRouteFrames[3].UNIT_HEALTH,
+    "party, raid, and mythic raid no longer share the same direct health route")
+Check(#createdFrames == createdBeforeGroupHealth,
+    "group health recreated an OnUpdate driver for party or raid frames")
+
 local seeded = NewFrame("party1")
-seeded.seedCalc = {}
 local seededSpec = { enabled = true, key = "party1", unit = "party1", scope = "group" }
 UF.AttachFrame(seeded, { scope = "group" })
 UF.ApplyElementToFrame(seeded, "Health", seededSpec)
@@ -223,17 +261,29 @@ Check(seeded.predictionHP == 80 and seeded.predictionMax == 100,
     ("direct health route did not forward seeded health values (hp=%s max=%s event=%s unit=%s)")
         :format(tostring(seeded.predictionHP), tostring(seeded.predictionMax),
             tostring(seeded.predictionEvent), tostring(seeded.predictionUnit)))
-Check(seeded.predictionCalc == seeded.seedCalc,
-    "direct health route dropped the dispatch-owned prediction calculator")
 Check(seeded.healthTextHP == 80 and seeded.healthTextMax == 100,
     "direct health route did not forward values to health text")
 Check(seeded.visualsHP == 80 and seeded.visualsMax == 100,
     "direct health route did not forward values to group visuals")
-seeded.predictionCalc = nil
+local protectedPercent = {}
+seeded.healthPayload = protectedPercent
+seeded.UNIT_MAXHEALTH(seeded, "UNIT_MAXHEALTH", "party1")
+Check(seeded.predictionHP == nil and seeded.predictionMax == nil,
+    ("direct health route leaked non-absolute percentage values into Prediction (hp=%s max=%s)")
+        :format(tostring(seeded.predictionHP), tostring(seeded.predictionMax)))
+Check(seeded.visualsHP == protectedPercent and seeded.visualsMax == nil
+    and seeded.visualsPercentReady == true,
+    "direct health route did not identify the seeded percentage for group visuals")
+seeded.healthPayload = nil
+calls[seeded] = nil
+seeded.UNIT_HEALTH(seeded, "UNIT_HEALTH", "party1")
+Check(calls[seeded] == 1,
+    "group health did not remain on the direct event path")
+seeded.predictionHP, seeded.predictionMax = false, false
 Check(UF.RunLeanIdentity(seeded, "MSUF_UNIT_IDENTITY") == true,
     "seeded identity route did not run")
-Check(seeded.predictionCalc == seeded.seedCalc,
-    "identity route dropped the dispatch-owned prediction calculator")
+Check(seeded.predictionHP == 80 and seeded.predictionMax == 100,
+    "identity route did not forward absolute health values to prediction")
 Check(first._msufIdentityPath == second._msufIdentityPath,
     "identity dispatch closures were retained per frame")
 Check(first._msufRuntimeAllFns == second._msufRuntimeAllFns,
@@ -247,7 +297,6 @@ Check(first._msufIdentityBarPath == second._msufIdentityBarPath,
 
 first.UNIT_HEALTH(first, "UNIT_HEALTH", "player")
 second.UNIT_HEALTH(second, "UNIT_HEALTH", "player")
-FlushDeferredGroupData()
 Check(calls[first] == 1 and calls[second] == 1, "shared route did not preserve frame-local dispatch")
 Check(first.lastUnit == "player" and second.lastUnit == "player", "shared route changed unit binding")
 first._msufDispatchToken = 17
@@ -309,19 +358,14 @@ UF.ApplyElementToFrame(first, "Power", spec)
 UF.ApplyElementToFrame(second, "Power", spec)
 UF.ApplyElementToFrame(first, "PowerText", spec)
 UF.ApplyElementToFrame(second, "PowerText", spec)
-Check(first.UNIT_POWER_UPDATE == second.UNIT_POWER_UPDATE,
-    "group power updates did not share the common deferred entry point")
-Check(first._msufGroupPowerUpdateRoute ~= second._msufGroupPowerUpdateRoute,
-    "frame-owned power update closures were incorrectly interned")
+Check(first.UNIT_POWER_UPDATE ~= second.UNIT_POWER_UPDATE,
+    "frame-owned direct power routes were incorrectly interned")
 first._msufDispatchToken = 41
 second._msufDispatchToken = 73
 first.UNIT_POWER_UPDATE(first, "UNIT_POWER_UPDATE", "player")
 second.UNIT_POWER_UPDATE(second, "UNIT_POWER_UPDATE", "player")
-for _ = 1, 9 do first.UNIT_POWER_UPDATE(first, "UNIT_POWER_UPDATE", "player") end
-Check(first.powerCalls == nil and second.powerCalls == nil,
-    "group power work ran before the render-frame drain")
-FlushDeferredGroupData()
-Check(first.powerCalls == 1 and second.powerCalls == 1, "private routes lost frame-local update state")
+Check(first.powerCalls == 1 and second.powerCalls == 1,
+    "direct group power routes lost frame-local update state")
 Check(first.powerTextCalls == 1 and second.powerTextCalls == 1,
     "direct power routes did not update bar and text exactly once")
 Check(first.lastPowerPayload[3] == 35 and first.lastPowerPayload[4] == 100

@@ -879,6 +879,47 @@ local function UpdateCurrentPercentPath(frame, event, unit, eventPowerToken)
   return value, nil, powerType, token, event == "UNIT_DISPLAYPOWER"
 end
 
+-- Group percent bar with zero power-text consumers: single-pass lane folding
+-- UpdatePercentPath + UpdatePercent without the text-runtime handshakes.
+-- Behaviour is identical for a frame whose text runtime has no power slots;
+-- SelectGroupPowerUpdater swaps back to UpdatePercentPath when slots appear.
+local function UpdateGroupPercentPathLean(frame, event, unit, eventPowerToken)
+  unit = unit or (frame and frame.MSUFUnitKey)
+  local bar = frame and frame.targetPowerBar
+  if not (bar and unit) then return end
+  local shown = bar._msufShown
+  if shown ~= true and (shown == false or (bar.IsShown and not bar:IsShown())) then return end
+  local animate = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
+  if animate and type(eventPowerToken) == "string" and eventPowerToken ~= ""
+    and bar._msufPowerTypeKnown == true and bar._msufPowerToken ~= nil
+    and bar._msufPowerToken ~= eventPowerToken then return end
+  if not (UnitPowerPercent and UnitPowerType and SCALE_100) then
+    return UpdatePercentPath(frame, event, unit, eventPowerToken)
+  end
+  if not animate then
+    if SnapBarInterpolation then SnapBarInterpolation(bar) end
+  end
+
+  local powerType, token = ReadPowerTypeCached(bar, unit, animate ~= true)
+  local pct = UnitPowerPercent(unit, powerType or 0, true, SCALE_100)
+  local secret = issecretvalue(pct) == true
+  if not secret and (type(pct) ~= "number" or pct ~= pct or (pct - pct) ~= 0) then pct = 0 end
+  if bar._msufMinMax ~= 100 then
+    bar:SetMinMaxValues(0, 100)
+    bar._msufMinMax = 100
+  end
+  if secret or bar._msufPowerPercentValue ~= pct then
+    SetPowerBarValue(bar, pct, animate, secret)
+    if secret then
+      bar._msufPowerPercentValue = nil
+    else
+      bar._msufPowerPercentValue = pct
+    end
+  end
+  if not animate then SetColor(frame, false, powerType, token, true) end
+  return nil, nil, powerType, token, event == "UNIT_DISPLAYPOWER"
+end
+
 local POWER_PLAN_PERCENT = 1
 local POWER_PLAN_CURRENT = 2
 local POWER_PLAN_ABSOLUTE = 3
@@ -895,6 +936,10 @@ local function PowerValuePlan(frame)
 end
 
 function Power.Update(frame, event, unit, eventPowerToken)
+  local spec = frame and frame.MSUFSpec
+  if frame and (frame._msufIsGroupFrame == true or (spec and spec.scope == "group")) then
+    return UpdatePercentPath(frame, event, unit, eventPowerToken)
+  end
   local plan = PowerValuePlan(frame)
   if plan == POWER_PLAN_ABSOLUTE then return UpdateAbsolutePath(frame, event, unit, eventPowerToken) end
   if plan == POWER_PLAN_CURRENT_PERCENT then return UpdateCurrentPercentPath(frame, event, unit, eventPowerToken) end
@@ -902,7 +947,16 @@ function Power.Update(frame, event, unit, eventPowerToken)
   return UpdatePercentPath(frame, event, unit, eventPowerToken)
 end
 
-function Power.SelectUpdate(frame)
+function Power.SelectUpdate(frame, spec)
+  if (spec and spec.scope == "group") or (frame and frame._msufIsGroupFrame == true) then
+    -- No power-text consumers -> the folded single-pass lane; any power slot
+    -- keeps the generic path that owns the text-runtime percent handshake.
+    local rt = frame and frame._msufTextRuntime
+    if rt == nil or (rt.powerSlotCount or 0) == 0 then
+      return UpdateGroupPercentPathLean
+    end
+    return UpdatePercentPath
+  end
   local plan = PowerValuePlan(frame)
   if plan == POWER_PLAN_ABSOLUTE then return UpdateAbsolutePath end
   if plan == POWER_PLAN_CURRENT_PERCENT then return UpdateCurrentPercentPath end
@@ -914,7 +968,8 @@ Power.UpdateValue = Power.Update
 Power.UpdateValuePlain = Power.Update
 Power.UpdateValueStatic = Power.Update
 Power.UpdateValueStaticPlain = Power.Update
-Power.UpdateValueGroupPercent = Power.Update
+Power.UpdateValueGroupPercent = UpdatePercentPath
+Power.UpdateValueGroupPercentLean = UpdateGroupPercentPathLean
 -- Keep both compiled value-source implementations discoverable as immutable
 -- element functions for shared Core route prototypes.
 Power.UpdateValuePercentPath = UpdatePercentPath
@@ -923,7 +978,7 @@ Power.UpdateValueCurrentPercentPath = UpdateCurrentPercentPath
 Power.UpdateValueAbsolutePath = UpdateAbsolutePath
 function Power.SelectGroupPowerUpdater(frame)
   if not frame then return nil end
-  local update = Power.SelectUpdate(frame)
+  local update = Power.SelectUpdate(frame, frame.MSUFSpec)
   local updateKey = UF._updateKeys and UF._updateKeys.Power
   if updateKey and frame._msufActiveElements and frame._msufActiveElements.Power == true then
     frame[updateKey] = update

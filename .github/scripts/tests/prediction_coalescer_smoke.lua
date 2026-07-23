@@ -824,13 +824,14 @@ fullHealthStripe.hpBar._msufHealthPercentUnit = nil
 local protectedFastHealthReads = healthReads
 local protectedFastMaxReads = healthMaxReads
 local protectedFastPercentReads = healthPercentReads
-fullHealthStripeFast(fullHealthStripe, "UNIT_HEALTH", "party3")
+fullHealthStripeFast(fullHealthStripe, "UNIT_HEALTH", "party3",
+    protectedHealth, nil, nil, true)
 Equal(healthReads, protectedFastHealthReads,
     "protected warm full-health stripe reread UnitHealth")
 Equal(healthMaxReads, protectedFastMaxReads,
     "protected warm full-health stripe reread UnitHealthMax")
 Equal(healthPercentReads, protectedFastPercentReads + 1,
-    "protected warm full-health stripe did not use exactly one native curve read")
+    "protected warm full-health stripe did not use the native secret-safe curve path")
 Equal(fullHealthStripe.overAbsorbGlowBar.alpha, protectedFullAlpha,
     "protected warm full-health stripe lost its native alpha payload")
 fullHealthStripe._msufPredictionOverAbsorbOverlay = false

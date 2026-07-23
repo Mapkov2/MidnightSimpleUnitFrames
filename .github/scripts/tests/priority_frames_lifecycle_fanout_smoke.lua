@@ -2,7 +2,7 @@
 -- while unrelated frames keep only the lean group-global path.
 local root = arg and arg[1] or "."
 local lifecycleDriver
-local MSUF = { UF = { Metadata = { runtimeUpdateOwners = {} } }, GF = {} }
+local MSUF = { UF = { Metadata = { runtimeUpdateOwners = { GroupStatusRuntime = true } } }, GF = {} }
 _G.MSUF_NS, _G.MSUF = MSUF, MSUF
 _G.UnitExists = function() return true end
 _G.issecretvalue = function() return false end
@@ -29,9 +29,15 @@ UF.RegisterElement("Health", {
       fullUpdates[frame] = (fullUpdates[frame] or 0) + 1
     end
   end,
-  UpdateGroupLifecycleMetadata = function(frame)
-    globalUpdates[frame] = (globalUpdates[frame] or 0) + 1
-    return false
+})
+UF.RegisterElement("GroupStatusRuntime", {
+  IsEnabled = function() return true end,
+  GetEvents = function() return {} end,
+  Update = function(frame, event)
+    if (event == "PARTY_MEMBER_ENABLE" or event == "PARTY_MEMBER_DISABLE")
+      and frame._msufGroupStateRefresh ~= true then
+      globalUpdates[frame] = (globalUpdates[frame] or 0) + 1
+    end
   end,
 })
 

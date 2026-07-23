@@ -16,6 +16,10 @@ local percentMode = false
 local order = {}
 local predictionHP, predictionMax, textHP, textMax
 local events = { "UNIT_HEALTH" }
+local function UpdatePrediction(_, _, _, hp, maxHP)
+  order[#order + 1] = "prediction"
+  predictionHP, predictionMax = hp, maxHP
+end
 
 UF.RegisterElement("Health", {
   GetEvents = function() return events end,
@@ -27,10 +31,8 @@ UF.RegisterElement("Health", {
 })
 UF.RegisterElement("Prediction", {
   GetEvents = function() return events end,
-  Update = function(_, _, _, hp, maxHP)
-    order[#order + 1] = "prediction"
-    predictionHP, predictionMax = hp, maxHP
-  end,
+  Update = UpdatePrediction,
+  HealthVisualGateUpdates = { [UpdatePrediction] = true },
 })
 UF.RegisterElement("HealthText", {
   GetEvents = function() return events end,
@@ -48,6 +50,7 @@ function frame:RegisterUnitEvent(event, unit) self.unitEvents[event] = unit end
 function frame:RegisterEvent(event) self.genericEvents[event] = true end
 
 UF.ApplySpec(frame, { unit = "party1", key = "party1", scope = "group", enabled = true })
+frame._msufPredictionHealthVisualActive = true
 frame.OnEvent(frame, "UNIT_HEALTH", "party1")
 assert(table.concat(order, "|") == "health|prediction|text", "unexpected dispatch order: " .. table.concat(order, "|"))
 assert(predictionHP == 80 and predictionMax == 100)
@@ -61,5 +64,14 @@ assert(predictionHP == nil and predictionMax == nil,
   "percent health must not seed prediction with non-absolute values")
 assert(textHP == nil and textMax == nil,
   "percent health must retain the secret text fastpath")
+
+frame._msufPredictionHealthVisualActive = nil
+order = {}
+predictionHP, predictionMax = false, false
+frame.OnEvent(frame, "UNIT_HEALTH", "party1")
+assert(table.concat(order, "|") == "health|text",
+  "inactive health visual still called Prediction: " .. table.concat(order, "|"))
+assert(predictionHP == false and predictionMax == false,
+  "inactive health visual mutated Prediction payload")
 
 print("health prediction dispatch smoke: ok")

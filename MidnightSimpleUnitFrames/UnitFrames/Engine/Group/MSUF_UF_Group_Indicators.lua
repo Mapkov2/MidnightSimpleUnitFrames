@@ -50,7 +50,14 @@ local ApplyColorTexture = Apply.ColorTexture or function(tex, r, g, b, a)
 end
 
 local EMPTY = {}
-local CORNER_THREAT_EVENTS = { "UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE", "UNIT_FLAGS" }
+local CORNER_THREAT_EVENTS = { "UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE" }
+local CORNER_ROLE_THREAT_EVENTS = {
+  "UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE", "UNIT_FLAGS",
+}
+local GROUP_THREAT_EVENT = {
+  UNIT_THREAT_SITUATION_UPDATE = true,
+  UNIT_THREAT_LIST_UPDATE = true,
+}
 
 local function ClampLayer(layer, fallback)
   layer = floor((tonumber(layer) or fallback or 7) + 0.5)
@@ -143,8 +150,13 @@ end
 
 function GroupCornerIndicators.GetEvents(frame, spec)
   local cfg = spec and spec.cornerIndicators
-  if cfg and cfg.needsThreat == true and cfg.needsAura ~= true then return CORNER_THREAT_EVENTS end
-  if cfg and cfg.needsThreat == true then return CORNER_THREAT_EVENTS end
+  if cfg and cfg.needsThreat == true then
+    local mode = NormalizeAggroMode(cfg.aggroMode)
+    if mode == "TANK" or mode == "HEALER" or mode == "NON_TANK" then
+      return CORNER_ROLE_THREAT_EVENTS
+    end
+    return CORNER_THREAT_EVENTS
+  end
   return EMPTY
 end
 
@@ -215,11 +227,9 @@ end
 
 --- Threat updates are event-deduped per frame/config so repeated threat events
 --- do not repaint unchanged slots.
-local function RuntimeThreat(frame, cfg, event)
+local function ApplyThreatState(frame, cfg, event, threat)
   if not (frame and cfg and cfg.enabled == true and cfg.needsThreat == true) then return end
-  local unit = frame.MSUFUnitKey
   if frame._msufGFCornerPreparedCfg ~= cfg then return end
-  local threat = HasThreat(frame, unit, cfg, event)
   if (event == "UNIT_THREAT_SITUATION_UPDATE" or event == "UNIT_THREAT_LIST_UPDATE")
     and frame._msufGFCornerThreatCfg == cfg
     and frame._msufGFCornerThreatState == threat then
@@ -228,6 +238,11 @@ local function RuntimeThreat(frame, cfg, event)
   frame._msufGFCornerThreatCfg = cfg
   frame._msufGFCornerThreatState = threat
   SetThreatSlotsShown(frame, cfg, threat)
+end
+
+local function RuntimeThreat(frame, cfg, event)
+  local unit = frame and frame.MSUFUnitKey
+  return ApplyThreatState(frame, cfg, event, HasThreat(frame, unit, cfg, event))
 end
 
 local function UpdateCornerIndicators(frame, event)
@@ -250,8 +265,22 @@ function GroupCornerIndicators.Apply(frame)
   end
 end
 function GroupCornerIndicators.Update(frame, event) UpdateCornerIndicators(frame, event) end
+function GroupCornerIndicators.UpdateGroupThreat(frame, event, unit, threat)
+  local cfg = frame and frame._msufGFCornerPreparedCfg
+  if threat == nil then threat = HasThreat(frame, unit or (frame and frame.MSUFUnitKey), cfg, event) end
+  return ApplyThreatState(frame, cfg, event, threat == true)
+end
+function GroupCornerIndicators.SelectEventUpdate(frame, spec, event, update)
+  if spec and spec.scope == "group" and GROUP_THREAT_EVENT[event] == true then
+    return GroupCornerIndicators.UpdateGroupThreat
+  end
+  return update
+end
 function GroupCornerIndicators.Disable(frame) HideCorners(frame) end
-GroupCornerIndicators.NoDispatchUpdates = { [GroupCornerIndicators.Update] = true }
+GroupCornerIndicators.NoDispatchUpdates = {
+  [GroupCornerIndicators.Update] = true,
+  [GroupCornerIndicators.UpdateGroupThreat] = true,
+}
 
 -- Group_Runtime already owns PLAYER_REGEN_ENABLED once for the whole group
 -- system. Reuse its visible-frame walk for the uncommon stale-threat catch-up

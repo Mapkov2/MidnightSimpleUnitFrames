@@ -275,4 +275,22 @@ AssertTopology(frequentSpec, true, true, false, "realtime Power-only route")
 AssertTopology(frequentCurrentSpec, true, false, true, "realtime current-only PowerText route")
 AssertTopology(frequentSpec, true, true, true, "realtime Power+PowerText union")
 
+for _, kind in ipairs({ "party", "raid", "mythicraid" }) do
+  local groupPowerFrame = {
+    _msufIsGroupFrame = true,
+    _msufGFKind = kind,
+    MSUFSpec = { scope = "group", groupKind = kind },
+    _msufTextRuntime = {
+      powerSlotCount = 1,
+      powerNeedsCurrent = true,
+      powerNeedsMax = true,
+    },
+  }
+  Check(Power.SelectUpdate(groupPowerFrame, groupPowerFrame.MSUFSpec)
+      == Power.UpdateValuePercentPath,
+    kind .. " power bar still changes value source for current/max text")
+end
+Check(Power.UpdateValueGroupPercent == Power.UpdateValuePercentPath,
+  "group power descriptor does not expose the native percent route")
+
 print("power event topology smoke: ok")

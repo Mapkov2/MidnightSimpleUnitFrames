@@ -157,6 +157,11 @@ local GROUP_LIFECYCLE_EVENTS = {
   PARTY_MEMBER_DISABLE = true,
 }
 
+local GROUP_THREAT_EVENTS = {
+  UNIT_THREAT_SITUATION_UPDATE = true,
+  UNIT_THREAT_LIST_UPDATE = true,
+}
+
 local NONPREFIX_UNIT_EVENTS = {
   INCOMING_RESURRECT_CHANGED = true,
 }
@@ -766,138 +771,25 @@ local function EndFrameEvent(frame)
   frame._msufDispatchActive = nil
 end
 
--- Group health/power can fire several times before the next render. Drain the
--- already-compiled hot routes once per visible secure child and rendered frame.
--- Two reused queues preserve re-entrant events without runtime allocations.
-local groupDataQueueA, groupDataQueueB = {}, {}
-local groupDataWriteQueue = groupDataQueueA
-local groupDataWriteCount = 0
-local groupDataDriver, groupDataDriverArmed
-local FlushGroupDataQueue
-
-local function StopGroupDataDriver()
-  if groupDataDriver and groupDataDriver.Hide then groupDataDriver:Hide() end
-  groupDataDriverArmed = nil
-end
-
-local function CancelQueuedGroupData(frame)
-  if not frame then return false end
-  if frame._msufGroupDataQueued == true then
-    for i = 1, groupDataWriteCount do
-      if groupDataWriteQueue[i] == frame then
-        groupDataWriteQueue[i] = groupDataWriteQueue[groupDataWriteCount]
-        groupDataWriteQueue[groupDataWriteCount] = nil
-        groupDataWriteCount = groupDataWriteCount - 1
-        break
-      end
-    end
-  end
-  local queued = frame._msufGroupDataQueued == true
-  frame._msufGroupDataQueued = nil
-  frame._msufGroupHealthDirty = nil
-  frame._msufGroupPowerUpdateDirty = nil
-  frame._msufGroupPowerFrequentDirty = nil
-  if groupDataWriteCount == 0 and groupDataDriverArmed == true then StopGroupDataDriver() end
-  return queued
-end
-
-local function ArmGroupDataDriver()
-  if groupDataDriverArmed == true then return true end
-  if not groupDataDriver and CreateFrame then
-    groupDataDriver = CreateFrame("Frame")
-    if groupDataDriver and groupDataDriver.SetScript and groupDataDriver.Hide and groupDataDriver.Show then
-      groupDataDriver:SetScript("OnUpdate", FlushGroupDataQueue)
-      groupDataDriver:Hide()
-    end
-  end
-  if not (groupDataDriver and groupDataDriver.Show) then return false end
-  groupDataDriverArmed = true
-  groupDataDriver:Show()
-  return true
-end
-
-local function QueueGroupDataFrame(frame)
-  if frame._msufGroupDataQueued == true then return true end
-  frame._msufGroupDataQueued = true
-  groupDataWriteCount = groupDataWriteCount + 1
-  groupDataWriteQueue[groupDataWriteCount] = frame
-  if ArmGroupDataDriver() then return true end
-  groupDataWriteQueue[groupDataWriteCount] = nil
-  groupDataWriteCount = groupDataWriteCount - 1
-  frame._msufGroupDataQueued = nil
-  return false
-end
-
-local function QueueGroupHealth(frame)
-  if not frame then return end
-  frame._msufGroupHealthDirty = true
-  if QueueGroupDataFrame(frame) then return end
-  frame._msufGroupHealthDirty = nil
-  local route = frame._msufGroupHealthRoute
-  if route then route(frame, "UNIT_HEALTH", frame.MSUFUnitKey) end
-end
-
-local function QueueGroupPowerUpdate(frame)
-  if not frame then return end
-  frame._msufGroupPowerUpdateDirty = true
-  if QueueGroupDataFrame(frame) then return end
-  frame._msufGroupPowerUpdateDirty = nil
-  local route = frame._msufGroupPowerUpdateRoute
-  if route then route(frame, "UNIT_POWER_UPDATE", frame.MSUFUnitKey) end
-end
-
-local function QueueGroupPowerFrequent(frame)
-  if not frame then return end
-  frame._msufGroupPowerFrequentDirty = true
-  if QueueGroupDataFrame(frame) then return end
-  frame._msufGroupPowerFrequentDirty = nil
-  local route = frame._msufGroupPowerFrequentRoute
-  if route then route(frame, "UNIT_POWER_FREQUENT", frame.MSUFUnitKey) end
-end
-
-FlushGroupDataQueue = function()
-  StopGroupDataDriver()
-  local batch = groupDataWriteQueue
-  local count = groupDataWriteCount
-  groupDataWriteQueue = batch == groupDataQueueA and groupDataQueueB or groupDataQueueA
-  groupDataWriteCount = 0
-
-  for i = 1, count do
-    local frame = batch[i]
-    batch[i] = nil
-    if frame then
-      frame._msufGroupDataQueued = nil
-      local unit = frame.MSUFUnitKey
-      local valid = frame._msufCoreScope == "group"
-        and frame._msufCoreSpecEnabled == true
-        and frame._msufCoreVisible == true
-        and frame._msufEventRouteUnit == unit
-      local healthDirty = frame._msufGroupHealthDirty
-      local powerUpdateDirty = frame._msufGroupPowerUpdateDirty
-      local powerFrequentDirty = frame._msufGroupPowerFrequentDirty
-      frame._msufGroupHealthDirty = nil
-      frame._msufGroupPowerUpdateDirty = nil
-      frame._msufGroupPowerFrequentDirty = nil
-      if valid then
-        local route = healthDirty and frame._msufGroupHealthRoute
-        if route then route(frame, "UNIT_HEALTH", unit) end
-        route = powerUpdateDirty and frame._msufGroupPowerUpdateRoute
-        if route then route(frame, "UNIT_POWER_UPDATE", unit) end
-        route = powerFrequentDirty and frame._msufGroupPowerFrequentRoute
-        if route then route(frame, "UNIT_POWER_FREQUENT", unit) end
-      end
-    end
-  end
-
-  if groupDataWriteCount > 0 then ArmGroupDataDriver() end
-end
-
 local function FrameOnEvent(frame, event, unit, ...)
   -- SetFrameSpec plus the visibility hooks keep both flags hot and exact for
   -- normal attached frames. Only fall back to the full preview-aware resolver
   -- for cold initialization, hidden frames, and disabled specs.
   if not (frame._msufCoreSpecEnabled == true and frame._msufCoreVisible == true)
     and not FrameVisibleForEvent(frame) then
+    return
+  end
+  local path = frame[event]
+  if path then return path(frame, event, unit, ...) end
+end
+
+-- Secure group children keep their visibility/spec state exact through the
+-- adapter and the OnShow/OnHide hooks below. Their combat events therefore do
+-- not need the generic preview-aware visibility resolver on every dispatch.
+-- Retired/unbound children unregister all events; this one cheap guard only
+-- covers the short hidden-header transition window.
+local function GroupFrameOnEvent(frame, event, unit, ...)
+  if frame._msufCoreSpecEnabled ~= true or frame._msufCoreVisible ~= true then
     return
   end
   local path = frame[event]
@@ -1129,7 +1021,9 @@ local NIL_ROUTE_KEY = {}
 local staticElementFunctions = {}
 local noDispatchElementFunctions = {}
 local directHealthRouteCache = {}
+local directGroupHealthRouteCache = {}
 local directPowerRouteCache = {}
+local directGroupThreatRouteCache = {}
 local singleRouteCache = {}
 local sharedFrameEventRoutes = {}
 
@@ -1192,19 +1086,23 @@ local function BuildHealthRoute(barFn, textFn, predictionFn, visualsFn, routeUni
         if textFn then
           if percentReady == true then textFn(self, ev, target) else textFn(self, ev, target, hp, hpMax) end
         end
-        if visualsFn then visualsFn(self, ev, target, hp, hpMax) end
+        if visualsFn then visualsFn(self, ev, target, hp, hpMax, percentReady) end
         EndFrameEvent(self)
       end
     end
     return function(self, ev, _unit)
       BeginFrameEvent(self, ev)
-      local hp, hpMax, percentReady, seedCalc
-      if barFn then hp, hpMax, percentReady, seedCalc = barFn(self, ev, target) end
-      if percentReady == true then predictionFn(self, ev, target) else predictionFn(self, ev, target, hp, hpMax, seedCalc) end
+      local hp, hpMax, percentReady
+      if barFn then hp, hpMax, percentReady = barFn(self, ev, target) end
+      if percentReady == true then
+        predictionFn(self, ev, target)
+      else
+        predictionFn(self, ev, target, hp, hpMax)
+      end
       if textFn then
         if percentReady == true then textFn(self, ev, target) else textFn(self, ev, target, hp, hpMax) end
       end
-      if visualsFn then visualsFn(self, ev, target, hp, hpMax) end
+      if visualsFn then visualsFn(self, ev, target, hp, hpMax, percentReady) end
       EndFrameEvent(self)
     end
   end
@@ -1217,20 +1115,24 @@ local function BuildHealthRoute(barFn, textFn, predictionFn, visualsFn, routeUni
       if textFn then
         if percentReady == true then textFn(self, ev, u) else textFn(self, ev, u, hp, hpMax) end
       end
-      if visualsFn then visualsFn(self, ev, u, hp, hpMax) end
+      if visualsFn then visualsFn(self, ev, u, hp, hpMax, percentReady) end
       EndFrameEvent(self)
     end
   end
   return function(self, ev, unit)
     BeginFrameEvent(self, ev)
     local u = routeUnitless == true and self.MSUFUnitKey or (unit or self.MSUFUnitKey)
-    local hp, hpMax, percentReady, seedCalc
-    if barFn then hp, hpMax, percentReady, seedCalc = barFn(self, ev, u) end
-    if percentReady == true then predictionFn(self, ev, u) else predictionFn(self, ev, u, hp, hpMax, seedCalc) end
+    local hp, hpMax, percentReady
+    if barFn then hp, hpMax, percentReady = barFn(self, ev, u) end
+    if percentReady == true then
+      predictionFn(self, ev, u)
+    else
+      predictionFn(self, ev, u, hp, hpMax)
+    end
     if textFn then
       if percentReady == true then textFn(self, ev, u) else textFn(self, ev, u, hp, hpMax) end
     end
-    if visualsFn then visualsFn(self, ev, u, hp, hpMax) end
+    if visualsFn then visualsFn(self, ev, u, hp, hpMax, percentReady) end
     EndFrameEvent(self)
   end
 end
@@ -1331,6 +1233,106 @@ local function SharedDirectRoute(cache, builder, fn1, fn2, fn3, fn4, routeUnitle
   return route
 end
 
+-- UNIT_HEALTH is the dominant group-frame event. Health passes every value
+-- needed by its text/prediction/visual followers, so the steady route has no
+-- shared unit-state consumer and must not enter the generic dispatch protocol.
+-- Rare connection/max-health/lifecycle paths retain BuildHealthRoute and its
+-- coherent state snapshot.
+local function BuildGroupHealthRoute(barFn, textFn, predictionFn, visualsFn, predictionGated)
+  if not predictionFn then
+    return function(self, ev, unit)
+      local u = unit or self.MSUFUnitKey
+      local hp, hpMax, percentReady
+      if barFn then hp, hpMax, percentReady = barFn(self, ev, u) end
+      if textFn then
+        if percentReady == true then textFn(self, ev, u) else textFn(self, ev, u, hp, hpMax) end
+      end
+      if visualsFn then visualsFn(self, ev, u, hp, hpMax, percentReady) end
+    end
+  end
+
+  if predictionGated == true then
+    return function(self, ev, unit)
+      local u = unit or self.MSUFUnitKey
+      local hp, hpMax, percentReady
+      if barFn then hp, hpMax, percentReady = barFn(self, ev, u) end
+      -- Absorb-data events own this plain gate. The common no-absorb member
+      -- therefore pays no Prediction call at all on UNIT_HEALTH.
+      if self._msufPredictionHealthVisualActive == true then
+        if percentReady == true then
+          predictionFn(self, ev, u)
+        else
+          predictionFn(self, ev, u, hp, hpMax)
+        end
+      end
+      if textFn then
+        if percentReady == true then textFn(self, ev, u) else textFn(self, ev, u, hp, hpMax) end
+      end
+      if visualsFn then visualsFn(self, ev, u, hp, hpMax, percentReady) end
+    end
+  end
+
+  return function(self, ev, unit)
+    local u = unit or self.MSUFUnitKey
+    local hp, hpMax, percentReady
+    if barFn then hp, hpMax, percentReady = barFn(self, ev, u) end
+    if percentReady == true then
+      predictionFn(self, ev, u)
+    else
+      predictionFn(self, ev, u, hp, hpMax)
+    end
+    if textFn then
+      if percentReady == true then textFn(self, ev, u) else textFn(self, ev, u, hp, hpMax) end
+    end
+    if visualsFn then visualsFn(self, ev, u, hp, hpMax, percentReady) end
+  end
+end
+
+local function SharedGroupHealthRoute(barFn, textFn, predictionFn, visualsFn, predictionGated)
+  if (barFn and not IsRegisteredElementFunction(barFn))
+    or (textFn and not IsRegisteredElementFunction(textFn))
+    or (predictionFn and not IsRegisteredElementFunction(predictionFn))
+    or (visualsFn and not IsRegisteredElementFunction(visualsFn)) then
+    return BuildGroupHealthRoute(barFn, textFn, predictionFn, visualsFn, predictionGated)
+  end
+  local mode = predictionGated == true and "prediction-gated" or "direct"
+  local leaf, key = RouteCacheLeaf(directGroupHealthRouteCache,
+    barFn, textFn, predictionFn, visualsFn, mode, nil)
+  local route = leaf[key]
+  if not route then
+    route = BuildGroupHealthRoute(barFn, textFn, predictionFn, visualsFn, predictionGated)
+    leaf[key] = route
+  end
+  sharedFrameEventRoutes[route] = true
+  return route
+end
+
+local function BuildGroupThreatRoute(borderFn, cornerFn, resolvePair)
+  return function(self, ev, unit)
+    local u = unit or self.MSUFUnitKey
+    local borderThreat, cornerThreat = resolvePair(
+      self,
+      u,
+      borderFn and self._msufBorderRuntimeAggroMode or nil,
+      cornerFn and self._msufGFCornerPreparedCfg
+        and self._msufGFCornerPreparedCfg.runtimeAggroMode or nil)
+    if borderFn then borderFn(self, ev, u, borderThreat) end
+    if cornerFn then cornerFn(self, ev, u, cornerThreat) end
+  end
+end
+
+local function SharedGroupThreatRoute(borderFn, cornerFn, resolvePair)
+  local leaf, key = RouteCacheLeaf(directGroupThreatRouteCache,
+    borderFn, cornerFn, resolvePair, nil, "unit", nil)
+  local route = leaf[key]
+  if not route then
+    route = BuildGroupThreatRoute(borderFn, cornerFn, resolvePair)
+    leaf[key] = route
+  end
+  sharedFrameEventRoutes[route] = true
+  return route
+end
+
 local function BuildSingleRoute(update, unitless, target)
   local noDispatch = IsNoDispatchElementFunction(update)
   if unitless == true then
@@ -1390,6 +1392,34 @@ end
 local function CompileFrameEventPath(frame, event, list)
   local target = frame._msufFrameUnitEventTargets and frame._msufFrameUnitEventTargets[event]
   local count = #list
+  if frame._msufCoreScope == "group" and GROUP_THREAT_EVENTS[event] == true then
+    local borders = UF.elements.Borders
+    local corners = UF.elements.GroupCornerIndicators
+    local borderUpdate = borders and borders.UpdateGroupThreat
+    local cornerUpdate = corners and corners.UpdateGroupThreat
+    local visuals = MSUF.UFVisuals
+    local resolvePair = visuals and visuals.ResolveGroupAggroPair
+    local borderFn, cornerFn
+    local direct = target == nil and type(resolvePair) == "function"
+    for i = 1, count, 2 do
+      local update = list[i]
+      if list[i + 1] == true then
+        direct = false
+        break
+      end
+      if update == borderUpdate then
+        borderFn = update
+      elseif update == cornerUpdate then
+        cornerFn = update
+      else
+        direct = false
+        break
+      end
+    end
+    if direct == true and (borderFn or cornerFn) then
+      return SharedGroupThreatRoute(borderFn, cornerFn, resolvePair)
+    end
+  end
   local healthEvent = HEALTH_EVENTS[event] == true
   local powerEvent = POWER_EVENTS[event] == true
   if healthEvent or powerEvent then
@@ -1436,6 +1466,15 @@ local function CompileFrameEventPath(frame, event, list)
     end
     if direct == true and (barFn or textFn or predictionFn or visualsFn) then
       if healthEvent then
+        if frame._msufCoreScope == "group" and event == "UNIT_HEALTH"
+          and target == nil and routeUnitless ~= true then
+          local prediction = UF.elements.Prediction
+          local gated = predictionFn and prediction
+            and prediction.HealthVisualGateUpdates
+            and prediction.HealthVisualGateUpdates[predictionFn] == true
+          return SharedGroupHealthRoute(
+            barFn, textFn, predictionFn, visualsFn, gated == true)
+        end
         return SharedDirectRoute(directHealthRouteCache, BuildHealthRoute,
           barFn, textFn, predictionFn, visualsFn, routeUnitless, target)
       end
@@ -1512,36 +1551,17 @@ local function BuildLifecycleFullPath(healthPath, powerUpdate, powerTextUpdate,
   end
 end
 
-local function BuildLifecycleGlobalPath(healthPath, healthMetadata, powerUpdate,
-    powerTextUpdate, namePresenceUpdate, statusUpdate, rangeUpdate, visualsUpdate)
+local function BuildLifecycleGlobalPath(powerUpdate, powerTextUpdate,
+    namePresenceUpdate, statusUpdate, rangeUpdate, visualsUpdate)
   return function(frame, event)
     local unit = frame.MSUFUnitKey
-
-    local refreshHealth
-    if healthMetadata then
-      refreshHealth = healthMetadata(frame, event, unit) == true
-    else
-      -- Unknown/custom health owners do not expose the cheap AI metadata gate.
-      -- Retain the authoritative full health snapshot for those private plans.
-      refreshHealth = healthPath ~= nil
-    end
-    local healthRefreshed = refreshHealth and healthPath ~= nil
-    if healthRefreshed then
-      -- Only the uncommon AI/classification-change branch enters Health again.
-      -- Mark that branch after the metadata decision so ordinary group members
-      -- avoid lifecycle marker writes on every global invalidation.
-      frame._msufGroupLifecycleAIMetadataReady = true
-      frame._msufGroupStateRefresh = true
-      frame._msufDeferDispatchEnd = true
-      healthPath(frame, event, nil)
-      frame._msufGroupLifecycleAIMetadataReady = nil
-    else
-      BeginFrameEvent(frame, event)
-    end
+    BeginFrameEvent(frame, event)
 
     -- Blizzard treats PARTY_MEMBER_ENABLE/DISABLE as a group-wide alternate
     -- power and presence invalidation. These are the intentionally global
-    -- followers; name/portrait and ordinary health stay target-only.
+    -- followers; name/portrait and health stay target-only. If the lifecycle
+    -- unit cannot be resolved safely, the driver selects fullPath for every
+    -- frame instead of entering this minimal path.
     local power, powerMax, powerType, powerToken, powerMetaChanged
     if powerUpdate then
       power, powerMax, powerType, powerToken, powerMetaChanged = powerUpdate(frame, event, unit)
@@ -1556,24 +1576,18 @@ local function BuildLifecycleGlobalPath(healthPath, healthMetadata, powerUpdate,
     if rangeUpdate then rangeUpdate(frame, event, unit) end
     if visualsUpdate then visualsUpdate(frame, event, unit, hp, hpMax) end
 
-    if healthRefreshed then
-      frame._msufDeferDispatchEnd = nil
-      EndFrameEvent(frame)
-      frame._msufGroupStateRefresh = nil
-    else
-      EndFrameEvent(frame)
-    end
+    EndFrameEvent(frame)
   end
 end
 
-local function NewGroupLifecyclePlan(healthPath, healthMetadata, powerUpdate,
+local function NewGroupLifecyclePlan(healthPath, powerUpdate,
     powerTextUpdate, nameUpdate, namePresenceUpdate, portraitUpdate, statusUpdate,
     rangeUpdate, visualsUpdate, bordersUpdate, cornerUpdate)
   return {
     fullPath = BuildLifecycleFullPath(healthPath, powerUpdate, powerTextUpdate,
       nameUpdate, portraitUpdate, statusUpdate, rangeUpdate, visualsUpdate,
       bordersUpdate, cornerUpdate),
-    globalPath = BuildLifecycleGlobalPath(healthPath, healthMetadata, powerUpdate,
+    globalPath = BuildLifecycleGlobalPath(powerUpdate,
       powerTextUpdate, namePresenceUpdate, statusUpdate, rangeUpdate, visualsUpdate),
   }
 end
@@ -1585,12 +1599,11 @@ local function InternLifecycleNode(node, value)
   return nextNode
 end
 
-local function InternGroupLifecyclePlan(healthPath, healthMetadata, powerUpdate,
+local function InternGroupLifecyclePlan(healthPath, powerUpdate,
     powerTextUpdate, nameUpdate, namePresenceUpdate, portraitUpdate, statusUpdate,
     rangeUpdate, visualsUpdate, bordersUpdate, cornerUpdate)
   local shared = (not healthPath or sharedFrameEventRoutes[healthPath] == true)
   shared = shared
-    and (not healthMetadata or IsRegisteredElementFunction(healthMetadata))
     and (not powerUpdate or IsRegisteredElementFunction(powerUpdate))
     and (not powerTextUpdate or IsRegisteredElementFunction(powerTextUpdate))
     and (not nameUpdate or IsRegisteredElementFunction(nameUpdate))
@@ -1602,13 +1615,12 @@ local function InternGroupLifecyclePlan(healthPath, healthMetadata, powerUpdate,
     and (not bordersUpdate or IsRegisteredElementFunction(bordersUpdate))
     and (not cornerUpdate or IsRegisteredElementFunction(cornerUpdate))
   if not shared then
-    return NewGroupLifecyclePlan(healthPath, healthMetadata, powerUpdate,
+    return NewGroupLifecyclePlan(healthPath, powerUpdate,
       powerTextUpdate, nameUpdate, namePresenceUpdate, portraitUpdate, statusUpdate,
       rangeUpdate, visualsUpdate, bordersUpdate, cornerUpdate)
   end
 
   local node = InternLifecycleNode(groupLifecyclePlanIntern, healthPath)
-  node = InternLifecycleNode(node, healthMetadata)
   node = InternLifecycleNode(node, powerUpdate)
   node = InternLifecycleNode(node, powerTextUpdate)
   node = InternLifecycleNode(node, nameUpdate)
@@ -1620,7 +1632,7 @@ local function InternGroupLifecyclePlan(healthPath, healthMetadata, powerUpdate,
   node = InternLifecycleNode(node, bordersUpdate)
   node = InternLifecycleNode(node, cornerUpdate)
   if not node.plan then
-    node.plan = NewGroupLifecyclePlan(healthPath, healthMetadata, powerUpdate,
+    node.plan = NewGroupLifecyclePlan(healthPath, powerUpdate,
       powerTextUpdate, nameUpdate, namePresenceUpdate, portraitUpdate, statusUpdate,
       rangeUpdate, visualsUpdate, bordersUpdate, cornerUpdate)
   end
@@ -1640,15 +1652,11 @@ CompileGroupLifecyclePlan = function(frame)
     return nil
   end
   local healthPath = frame.PARTY_MEMBER_ENABLE
-  local healthElement = UF.elements and UF.elements.Health
-  local healthMetadata = ActiveLifecycleUpdate(frame, "Health")
-    and healthElement and healthElement.UpdateGroupLifecycleMetadata or nil
   local nameUpdate = ActiveLifecycleUpdate(frame, "NameText")
   local text = frame.MSUFSpec and frame.MSUFSpec.text
   local namePresenceUpdate = text and text.hideNameOnDeadOffline == true and nameUpdate or nil
   local plan = InternGroupLifecyclePlan(
     healthPath,
-    healthMetadata,
     ActiveLifecycleUpdate(frame, "Power"),
     ActiveLifecycleUpdate(frame, "PowerText"),
     nameUpdate,
@@ -1690,7 +1698,6 @@ RegisterFrameEvent = function(frame, event, unitless)
 end
 
 local function ClearFrameEvents(frame)
-  CancelQueuedGroupData(frame)
   if frame and frame.UnregisterAllEvents then frame:UnregisterAllEvents() end
   if frame then
     local names = frame._msufEventNames
@@ -1709,9 +1716,6 @@ local function ClearFrameEvents(frame)
     frame._msufCoreRangeEventConfigured = nil
     frame._msufCoreRangeEventUnitless = nil
     frame._msufCoreRangeEventSuspended = nil
-    frame._msufGroupHealthRoute = nil
-    frame._msufGroupPowerUpdateRoute = nil
-    frame._msufGroupPowerFrequentRoute = nil
   end
 end
 
@@ -1755,17 +1759,17 @@ local function IdentityEventUpdate(frame, event)
     return
   end
   local barPath = frame._msufIdentityBarPath
-  local hp, hpMax, healthPercentReady, healthSeedCalc
+  local hp, hpMax, healthPercentReady
   local power, powerMax, powerType, powerToken, powerMetaChanged
   if barPath then
-    hp, hpMax, healthPercentReady, healthSeedCalc,
+    hp, hpMax, healthPercentReady,
       power, powerMax, powerType, powerToken, powerMetaChanged = barPath(frame, event, unit)
   end
   RefreshIdentityHealthBackground(frame)
   local path = frame._msufIdentityPath
   if path then
     return path(frame, event, unit,
-      hp, hpMax, healthPercentReady, healthSeedCalc,
+      hp, hpMax, healthPercentReady,
       power, powerMax, powerType, powerToken, powerMetaChanged)
   end
 end
@@ -1895,7 +1899,7 @@ local function CompileIdentityRuntimePath(list, labels, count)
   end
 
   return function(frame, event, unit,
-      hp, hpMax, healthPercentReady, healthSeedCalc,
+      hp, hpMax, healthPercentReady,
       power, powerMax, powerType, powerToken, powerMetaChanged)
     for i = 1, count do
       local update = list[i]
@@ -1912,7 +1916,11 @@ local function CompileIdentityRuntimePath(list, labels, count)
         update(frame, event, unit,
           power, powerMax, powerType, powerToken, powerMetaChanged)
       elseif kind == IDENTITY_STEP_PREDICTION then
-        update(frame, event, unit, hp, hpMax, healthSeedCalc)
+        if healthPercentReady == true then
+          update(frame, event, unit)
+        else
+          update(frame, event, unit, hp, hpMax)
+        end
       else
         update(frame, event, unit)
       end
@@ -2032,18 +2040,17 @@ local function CompileIdentityBarPath(frame)
 
   -- Always wrap, including health-only and power-only plans, so every
   -- archetype returns the same fixed tuple:
-  -- hp, hpMax, healthPercentReady, healthSeedCalc,
-  -- power, powerMax, type, token, metaChanged.
+  -- hp, hpMax, healthPercentReady, power, powerMax, type, token, metaChanged.
   local path = function(self, event, unit)
-    local hp, hpMax, healthPercentReady, healthSeedCalc
+    local hp, hpMax, healthPercentReady
     if health then
-      hp, hpMax, healthPercentReady, healthSeedCalc = health(self, event, unit)
+      hp, hpMax, healthPercentReady = health(self, event, unit)
     end
     local powerValue, powerMax, powerType, powerToken, powerMetaChanged
     if power then
       powerValue, powerMax, powerType, powerToken, powerMetaChanged = power(self, event, unit)
     end
-    return hp, hpMax, healthPercentReady, healthSeedCalc,
+    return hp, hpMax, healthPercentReady,
       powerValue, powerMax, powerType, powerToken, powerMetaChanged
   end
   if shared then byPower[key] = path end
@@ -2202,18 +2209,7 @@ local function RebuildFrameEvents(frame)
         RegisterFrameEvent(frame, event, unitless)
       end
       local path = CompileFrameEventPath(frame, event, list)
-      if event == "UNIT_HEALTH" and frame._msufCoreScope == "group" then
-        frame._msufGroupHealthRoute = path
-        frame[event] = QueueGroupHealth
-      elseif event == "UNIT_POWER_UPDATE" and frame._msufCoreScope == "group" then
-        frame._msufGroupPowerUpdateRoute = path
-        frame[event] = QueueGroupPowerUpdate
-      elseif event == "UNIT_POWER_FREQUENT" and frame._msufCoreScope == "group" then
-        frame._msufGroupPowerFrequentRoute = path
-        frame[event] = QueueGroupPowerFrequent
-      else
-        frame[event] = path
-      end
+      frame[event] = path
     end
   end
   if RefreshHealthLifecycleSinkRoutes then RefreshHealthLifecycleSinkRoutes(frame) end
@@ -2296,15 +2292,15 @@ function UF.RunLeanIdentity(frame, event)
     EndFrameEvent(frame)
     return false
   end
-  local hp, hpMax, healthPercentReady, healthSeedCalc
+  local hp, hpMax, healthPercentReady
   local power, powerMax, powerType, powerToken, powerMetaChanged
   if barPath then
-    hp, hpMax, healthPercentReady, healthSeedCalc,
+    hp, hpMax, healthPercentReady,
       power, powerMax, powerType, powerToken, powerMetaChanged = barPath(frame, event, unit)
   end
   if path then
     path(frame, event, unit,
-      hp, hpMax, healthPercentReady, healthSeedCalc,
+      hp, hpMax, healthPercentReady,
       power, powerMax, powerType, powerToken, powerMetaChanged)
   end
   EndFrameEvent(frame)
@@ -2395,7 +2391,14 @@ end
 
 function UF.AttachFrameMethods(frame)
   if not frame then return frame end
-  if frame._msufOufCoreMethods == true then return frame end
+  if frame._msufOufCoreMethods == true then
+    local eventScript = frame._msufCoreScope == "group" and GroupFrameOnEvent or FrameOnEvent
+    if frame.SetScript and frame._msufCoreEventScript ~= eventScript then
+      frame:SetScript("OnEvent", eventScript)
+      frame._msufCoreEventScript = eventScript
+    end
+    return frame
+  end
   frame._msufOufCoreMethods = true
   frame._msufDispatchToken = frame._msufDispatchToken or 0
   frame._msufCreatedElements = frame._msufCreatedElements or {}
@@ -2405,20 +2408,27 @@ function UF.AttachFrameMethods(frame)
   frame.IsElementEnabled = FrameIsElementEnabled
   frame.ForceUpdate = function(self, reason) return UF.FrameForceUpdate(self, reason) end
   frame.UpdateAllElements = function(self, event) return UF.FrameRuntimeUpdate(self, event or "MSUF_FORCE_UPDATE") end
-  if frame.SetScript then frame:SetScript("OnEvent", FrameOnEvent) end
+  local eventScript = frame._msufCoreScope == "group" and GroupFrameOnEvent or FrameOnEvent
+  if frame.SetScript then
+    frame:SetScript("OnEvent", eventScript)
+    frame._msufCoreEventScript = eventScript
+  end
   return frame
 end
 
 function UF.AttachFrame(frame, opts)
   if not frame then return nil end
   opts = type(opts) == "table" and opts or nil
-  UF.AttachFrameMethods(frame)
   frame._msufCoreScope = opts and opts.scope or frame._msufCoreScope or "single"
+  UF.AttachFrameMethods(frame)
   frame._msufVisualRoot = opts and opts.visualRoot or frame._msufVisualRoot or frame
   if frame.HookScript and frame._msufCoreVisibilityHooked ~= true then
     frame._msufCoreVisibilityHooked = true
     frame:HookScript("OnShow", FrameOnShow)
     frame:HookScript("OnHide", FrameOnHide)
+    frame._msufCoreVisible = not frame.IsVisible or frame:IsVisible()
+  end
+  if frame._msufCoreVisible == nil then
     frame._msufCoreVisible = not frame.IsVisible or frame:IsVisible()
   end
   if UF.attachedFrames[frame] ~= true then
