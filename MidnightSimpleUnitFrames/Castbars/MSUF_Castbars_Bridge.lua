@@ -269,9 +269,9 @@ if type(CastbarsForceHideAll) ~= "function" then
         Hide(_G.MSUF_PlayerCastBar)
         Hide(_G.MSUF_PlayerCastbar)
         Hide(_G.MSUF_TargetCastbar)
-        Hide(_G.TargetCastBar)
+        Hide((_G.TargetCastBar and _G.TargetCastBar._msufCastbarDriver == true) and _G.TargetCastBar)
         Hide(_G.MSUF_FocusCastbar)
-        Hide(_G.FocusCastBar)
+        Hide((_G.FocusCastBar and _G.FocusCastBar._msufCastbarDriver == true) and _G.FocusCastBar)
 
         local bossCastbars = _G.MSUF_BossCastbars
         if type(bossCastbars) == "table" then
