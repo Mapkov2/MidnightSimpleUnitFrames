@@ -3841,9 +3841,54 @@ A3._ScheduleDirectIdentityRefreshAll = function(groupOnly, forceSpellIndicatorGe
 end
 
 -- The shared driver is active exactly while at least one eligible native
--- container exists. Keep the active frame locally so registering additional
--- target/focus/boss/group containers is a zero-mutation fast path.
+-- container exists. Its event set follows the active unit families so a
+-- group-only runtime never receives target/focus/boss identity callbacks.
 local directIdentityRefreshEventFrame
+local directIdentityRefreshRegisteredEvents = {}
+
+local function SetDirectIdentityRefreshEvent(frame, event, enabled)
+    if enabled == true then
+        if directIdentityRefreshRegisteredEvents[event] ~= true then
+            frame:RegisterEvent(event)
+            directIdentityRefreshRegisteredEvents[event] = true
+        end
+    elseif directIdentityRefreshRegisteredEvents[event] == true then
+        frame:UnregisterEvent(event)
+        directIdentityRefreshRegisteredEvents[event] = nil
+    end
+end
+
+local function SyncDirectIdentityRefreshEvents(frame)
+    local byUnit = A3._directIdentityAuraContainers
+    local hasAny, hasGroup, hasTarget, hasFocus, hasBoss = false, false, false, false, false
+    if byUnit then
+        for unit, containers in pairs(byUnit) do
+            if containers and next(containers) then
+                hasAny = true
+                if A3._IsGroupUnitToken(unit) then
+                    hasGroup = true
+                elseif unit == "target" then
+                    hasTarget = true
+                elseif unit == "focus" then
+                    hasFocus = true
+                elseif type(unit) == "string" and unit:match("^boss%d+$") then
+                    hasBoss = true
+                end
+            else
+                byUnit[unit] = nil
+            end
+        end
+    end
+    if not hasAny then return false end
+
+    SetDirectIdentityRefreshEvent(frame, "PLAYER_ENTERING_WORLD", true)
+    SetDirectIdentityRefreshEvent(frame, "ZONE_CHANGED_NEW_AREA", true)
+    SetDirectIdentityRefreshEvent(frame, "GROUP_ROSTER_UPDATE", hasGroup)
+    SetDirectIdentityRefreshEvent(frame, "PLAYER_TARGET_CHANGED", hasTarget)
+    SetDirectIdentityRefreshEvent(frame, "PLAYER_FOCUS_CHANGED", hasFocus)
+    SetDirectIdentityRefreshEvent(frame, "INSTANCE_ENCOUNTER_ENGAGE_UNIT", hasBoss)
+    return true
+end
 
 A3._EnsureDirectIdentityRefreshFrame = function()
     if directIdentityRefreshEventFrame then return directIdentityRefreshEventFrame end
@@ -3867,12 +3912,6 @@ A3._EnsureDirectIdentityRefreshFrame = function()
         end)
         A3._directIdentityAuraFrame = frame
     end
-    frame:RegisterEvent("PLAYER_TARGET_CHANGED")
-    frame:RegisterEvent("PLAYER_FOCUS_CHANGED")
-    frame:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
-    frame:RegisterEvent("GROUP_ROSTER_UPDATE")
-    frame:RegisterEvent("PLAYER_ENTERING_WORLD")
-    frame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     directIdentityRefreshEventFrame = frame
     return frame
 end
@@ -3896,9 +3935,8 @@ A3._RegisterDirectIdentityRefreshContainer = function(container)
     end
     set[container] = true
     container._msufA3DirectIdentityUnit = unit
-    if not directIdentityRefreshEventFrame then
-        A3._EnsureDirectIdentityRefreshFrame()
-    end
+    local frame = A3._EnsureDirectIdentityRefreshFrame()
+    SyncDirectIdentityRefreshEvents(frame)
     return true
 end
 
@@ -3918,7 +3956,10 @@ A3._UnregisterDirectIdentityRefreshContainer = function(container)
         A3._directIdentityRefreshForceSpellIndicatorGeometry = nil
         local frame = A3._directIdentityAuraFrame
         if frame then frame:UnregisterAllEvents() end
+        directIdentityRefreshRegisteredEvents = {}
         directIdentityRefreshEventFrame = nil
+    else
+        SyncDirectIdentityRefreshEvents(directIdentityRefreshEventFrame)
     end
 end
 

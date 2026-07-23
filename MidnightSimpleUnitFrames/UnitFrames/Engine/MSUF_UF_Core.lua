@@ -1239,6 +1239,21 @@ end
 -- Rare connection/max-health/lifecycle paths retain BuildHealthRoute and its
 -- coherent state snapshot.
 local function BuildGroupHealthRoute(barFn, textFn, predictionFn, visualsFn, predictionGated)
+  -- Bar-only gated archetype (group percent bar, no text, no extra visuals):
+  -- the steady no-absorb UNIT_HEALTH tick is exactly one updater call.
+  if predictionGated == true and barFn and not textFn and not visualsFn then
+    return function(self, ev, unit)
+      local u = unit or self.MSUFUnitKey
+      local hp, hpMax, percentReady = barFn(self, ev, u)
+      if self._msufPredictionHealthVisualActive == true then
+        if percentReady == true then
+          predictionFn(self, ev, u)
+        else
+          predictionFn(self, ev, u, hp, hpMax)
+        end
+      end
+    end
+  end
   if not predictionFn then
     return function(self, ev, unit)
       local u = unit or self.MSUFUnitKey

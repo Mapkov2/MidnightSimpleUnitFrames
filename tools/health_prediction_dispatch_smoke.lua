@@ -35,6 +35,7 @@ UF.RegisterElement("Prediction", {
   HealthVisualGateUpdates = { [UpdatePrediction] = true },
 })
 UF.RegisterElement("HealthText", {
+  IsEnabled = function(_, spec) return not spec or spec.showHealthText ~= false end,
   GetEvents = function() return events end,
   Update = function(_, _, _, hp, maxHP)
     order[#order + 1] = "text"
@@ -73,5 +74,44 @@ assert(table.concat(order, "|") == "health|text",
   "inactive health visual still called Prediction: " .. table.concat(order, "|"))
 assert(predictionHP == false and predictionMax == false,
   "inactive health visual mutated Prediction payload")
+
+local frameMethods = frame
+local function NewGroupFrame()
+  return setmetatable({ unitEvents = {}, genericEvents = {} }, { __index = frameMethods })
+end
+
+-- Party, Raid, and Mythic Raid must all compile the bar-only no-absorb
+-- archetype: one Health updater call, no generic dispatch and no Prediction
+-- follower until absorb data explicitly opens the gate.
+local groupKinds = {
+  { kind = "party", unit = "party1" },
+  { kind = "raid", unit = "raid1" },
+  { kind = "mythicraid", unit = "raid2" },
+}
+for i = 1, #groupKinds do
+  local entry = groupKinds[i]
+  local lean = NewGroupFrame()
+  UF.ApplySpec(lean, {
+    unit = entry.unit,
+    key = entry.unit,
+    scope = "group",
+    groupKind = entry.kind,
+    enabled = true,
+    showHealthText = false,
+  })
+  lean._msufDispatchToken = 200 + i
+  order = {}
+  lean.OnEvent(lean, "UNIT_HEALTH", entry.unit)
+  assert(table.concat(order, "|") == "health",
+    entry.kind .. " no-absorb route retained a follower: " .. table.concat(order, "|"))
+  assert(lean._msufDispatchToken == 200 + i and lean._msufDispatchActive == nil,
+    entry.kind .. " bar-only health re-entered generic dispatch")
+
+  lean._msufPredictionHealthVisualActive = true
+  order = {}
+  lean.OnEvent(lean, "UNIT_HEALTH", entry.unit)
+  assert(table.concat(order, "|") == "health|prediction",
+    entry.kind .. " active absorb route lost Prediction: " .. table.concat(order, "|"))
+end
 
 print("health prediction dispatch smoke: ok")

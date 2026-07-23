@@ -621,7 +621,7 @@ Check(unitFramesSource:find("A3._ScheduleDirectIdentityRefreshAll(false, true)",
   "PLAYER_ENTERING_WORLD direct refresh does not request forced geometry")
 Check(unitFramesSource:find("ZONE_CHANGED_NEW_AREA = true", 1, true),
   "zone-change direct refresh does not request the world-entry repair path")
-Check(unitFramesSource:find('frame:RegisterEvent("ZONE_CHANGED_NEW_AREA")', 1, true),
+Check(unitFramesSource:find('SetDirectIdentityRefreshEvent(frame, "ZONE_CHANGED_NEW_AREA", true)', 1, true),
   "zone-change lifecycle event is not registered")
 local unitStart = assert(unitFramesSource:find("A3._DirectIdentityRefreshUnit = function", 1, true))
 local unitStop = assert(unitFramesSource:find("A3._DirectIdentityRefreshAll = function", unitStart, true))
