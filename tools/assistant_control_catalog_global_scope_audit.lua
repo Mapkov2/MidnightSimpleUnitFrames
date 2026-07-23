@@ -45,16 +45,20 @@ for _, relative in ipairs(files) do
     for _ in content:gmatch("T%.Button%s*%(") do factorySites = factorySites + 1 end
     for _ in content:gmatch("CreateFrame%s*%(%s*['\"]Button['\"]") do factorySites = factorySites + 1 end
 end
-if factorySites ~= 97 then Fail(string.format("global/advanced interactive factory inventory drifted: expected 97, got %d", factorySites)) end
+if factorySites ~= 112 then Fail(string.format("global/advanced interactive factory inventory drifted: expected 112, got %d", factorySites)) end
 
 local function BalancedCall(content, openAt)
-    local depth, quote, escaped = 0, nil, false
+    local depth, quote, escaped, lineComment = 0, nil, false, false
     for i = openAt, #content do
         local ch = content:sub(i, i)
-        if quote then
+        if lineComment then
+            if ch == "\n" then lineComment = false end
+        elseif quote then
             if escaped then escaped = false
             elseif ch == "\\" then escaped = true
             elseif ch == quote then quote = nil end
+        elseif ch == "-" and content:sub(i + 1, i + 1) == "-" then
+            lineComment = true
         elseif ch == '"' or ch == "'" then
             quote = ch
         elseif ch == "(" then
@@ -79,7 +83,8 @@ local function AuditNamedCalls(relative, helperNames, validate)
             if content:sub(startAt - 1, startAt - 1) ~= "." and not before:match("function%s+$") then
                 local call = BalancedCall(content, endAt)
                 if not call then
-                    Fail(relative .. ": unterminated " .. helperName .. " call")
+                    local line = 1 + select(2, content:sub(1, startAt):gsub("\n", ""))
+                    Fail(string.format("%s:%d unterminated %s call", relative, line, helperName))
                 else
                     local ok, reason = validate(helperName, call)
                     if not ok then
@@ -192,7 +197,7 @@ local requiredRawCoverage = {
     ["Shell/Menu2/Pages/MSUF_Menu2_GlobalCastbars.lua"] = { "RegisterControl(btn, Meta(semanticPath", "RegisterControl(interrupt", "RegisterControl(resetFocus" },
     ["Shell/Menu2/Pages/MSUF_Menu2_AdvancedGameplay.lua"] = { "RegisterControl(previewBtn", "RegisterControl(resetTotemBtn" },
     ["Shell/Menu2/Pages/MSUF_Menu2_AdvancedProfiles.lua"] = { "RegisterControl(profileDrop", "RegisterControl(import,", "RegisterControl(importCreateNew", "RegisterControl(importProfileName" },
-    ["Shell/Menu2/Pages/MSUF_Menu2_AdvancedClassPower.lua"] = { "RegisterControl(preview,", "RegisterControl(colors", "RegisterControl(quick,", "RegisterSegment(W.SegmentTabs" },
+    ["Shell/Menu2/Pages/MSUF_Menu2_AdvancedClassPower.lua"] = { "RegisterControl(preview,", "W.AttachContextColorReferences(resourcesCard", "RegisterControl(quick,", "RegisterSegment(W.SegmentTabs" },
     ["Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors.lua"] = { "M.BindColor(ctx, color, getRGB, setRGB, metadata)", "RegisterControl(btn, Meta(semanticPath", "Meta(\"appearance.bar_mode\"", "Meta(\"gameplay.combat_state_color_sync\"" },
     ["Shell/Menu2/MSUF_Menu2_Dashboard.lua"] = { "RegisterDashboardControl(header", "RegisterDashboardControl(btn", "RegisterDashboardControl(head", "RegisterDashboardControl(slider", "DashboardMeta(\"support.link." },
     ["Shell/Menu2/Preview/MSUF_Menu2_ClassPowerPreview.lua"] = { "identity = pageKey .. \".class-power-preview.\"", "RegisterPreviewControl(preview._catalogCtx, h, \"handle.\"", "RegisterPreviewControl(preview._catalogCtx, gear", "RegisterPreviewControl(box._catalogCtx, btn, \"layer.\"", "RegisterPreviewControl(preview._catalogCtx, btn, \"animation.toggle\"", "RegisterPreviewControl(ctx, box, \"keyboard.nudge_surface\"", "RegisterPreviewControl(ctx, box.zoomBar, \"zoom.surface\"", "RegisterPreviewControl(ctx, box.canvas, \"canvas\"", "RegisterPreviewControl(ctx, box._msuf2PinButton, \"pin.toggle\"" },
@@ -235,7 +240,7 @@ end
 print("GLOBAL/ADVANCED CONTROL CATALOG STATIC AUDIT PASS")
 print(string.format("Files: %d; annotated Bind call sites: %d/%d; direct semantic declarations: %d",
     #files, annotatedBinds, bindCalls, declarations))
-print(string.format("Interactive factory drift sentinel: %d/%d", factorySites, 97))
+print(string.format("Interactive factory drift sentinel: %d/%d", factorySites, 112))
 print("Normalized semantic-path collisions: 0; required raw-button/selector coverage markers: present")
 print(string.format("Class Resources preview: %d registration call sites; %d generated canonical controls; collisions: 0",
     previewRegistrationCalls, #previewSemanticPaths))
