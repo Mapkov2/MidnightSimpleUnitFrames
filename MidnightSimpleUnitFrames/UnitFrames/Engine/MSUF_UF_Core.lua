@@ -766,97 +766,130 @@ local function EndFrameEvent(frame)
   frame._msufDispatchActive = nil
 end
 
--- Group health can fire several times before the next render. Blizzard's
--- CompactUnitFrame defers this same expensive path and drains it once per
--- frame; keep MSUF's already-compiled Health/Text/Prediction/Visuals route
--- intact, but enter it at most once for each visible secure child. Two reused
--- queues preserve re-entrant events for the following frame without runtime
--- allocations.
-local groupHealthQueueA, groupHealthQueueB = {}, {}
-local groupHealthWriteQueue = groupHealthQueueA
-local groupHealthWriteCount = 0
-local groupHealthDriver
-local groupHealthDriverArmed
-local FlushGroupHealthQueue
+-- Group health/power can fire several times before the next render. Drain the
+-- already-compiled hot routes once per visible secure child and rendered frame.
+-- Two reused queues preserve re-entrant events without runtime allocations.
+local groupDataQueueA, groupDataQueueB = {}, {}
+local groupDataWriteQueue = groupDataQueueA
+local groupDataWriteCount = 0
+local groupDataDriver, groupDataDriverArmed
+local FlushGroupDataQueue
 
-local function StopGroupHealthDriver()
-  if groupHealthDriver and groupHealthDriver.Hide then groupHealthDriver:Hide() end
-  groupHealthDriverArmed = nil
+local function StopGroupDataDriver()
+  if groupDataDriver and groupDataDriver.Hide then groupDataDriver:Hide() end
+  groupDataDriverArmed = nil
 end
 
-local function CancelQueuedGroupHealth(frame)
-  if not (frame and frame._msufGroupHealthQueued == true) then return false end
-  for i = 1, groupHealthWriteCount do
-    if groupHealthWriteQueue[i] == frame then
-      groupHealthWriteQueue[i] = groupHealthWriteQueue[groupHealthWriteCount]
-      groupHealthWriteQueue[groupHealthWriteCount] = nil
-      groupHealthWriteCount = groupHealthWriteCount - 1
-      break
+local function CancelQueuedGroupData(frame)
+  if not frame then return false end
+  if frame._msufGroupDataQueued == true then
+    for i = 1, groupDataWriteCount do
+      if groupDataWriteQueue[i] == frame then
+        groupDataWriteQueue[i] = groupDataWriteQueue[groupDataWriteCount]
+        groupDataWriteQueue[groupDataWriteCount] = nil
+        groupDataWriteCount = groupDataWriteCount - 1
+        break
+      end
     end
   end
-  frame._msufGroupHealthQueued = nil
-  if groupHealthWriteCount == 0 and groupHealthDriverArmed == true then
-    StopGroupHealthDriver()
+  local queued = frame._msufGroupDataQueued == true
+  frame._msufGroupDataQueued = nil
+  frame._msufGroupHealthDirty = nil
+  frame._msufGroupPowerUpdateDirty = nil
+  frame._msufGroupPowerFrequentDirty = nil
+  if groupDataWriteCount == 0 and groupDataDriverArmed == true then StopGroupDataDriver() end
+  return queued
+end
+
+local function ArmGroupDataDriver()
+  if groupDataDriverArmed == true then return true end
+  if not groupDataDriver and CreateFrame then
+    groupDataDriver = CreateFrame("Frame")
+    if groupDataDriver and groupDataDriver.SetScript and groupDataDriver.Hide and groupDataDriver.Show then
+      groupDataDriver:SetScript("OnUpdate", FlushGroupDataQueue)
+      groupDataDriver:Hide()
+    end
   end
+  if not (groupDataDriver and groupDataDriver.Show) then return false end
+  groupDataDriverArmed = true
+  groupDataDriver:Show()
   return true
 end
 
-local function ArmGroupHealthDriver()
-  if groupHealthDriverArmed == true then return true end
-  if not groupHealthDriver and CreateFrame then
-    groupHealthDriver = CreateFrame("Frame")
-    if groupHealthDriver and groupHealthDriver.SetScript
-      and groupHealthDriver.Hide and groupHealthDriver.Show then
-      groupHealthDriver:SetScript("OnUpdate", FlushGroupHealthQueue)
-      groupHealthDriver:Hide()
-    end
-  end
-  if not (groupHealthDriver and groupHealthDriver.Show) then return false end
-  groupHealthDriverArmed = true
-  groupHealthDriver:Show()
-  return true
+local function QueueGroupDataFrame(frame)
+  if frame._msufGroupDataQueued == true then return true end
+  frame._msufGroupDataQueued = true
+  groupDataWriteCount = groupDataWriteCount + 1
+  groupDataWriteQueue[groupDataWriteCount] = frame
+  if ArmGroupDataDriver() then return true end
+  groupDataWriteQueue[groupDataWriteCount] = nil
+  groupDataWriteCount = groupDataWriteCount - 1
+  frame._msufGroupDataQueued = nil
+  return false
 end
 
 local function QueueGroupHealth(frame)
-  if not frame or frame._msufGroupHealthQueued == true then return end
-  frame._msufGroupHealthQueued = true
-  groupHealthWriteCount = groupHealthWriteCount + 1
-  groupHealthWriteQueue[groupHealthWriteCount] = frame
-  if ArmGroupHealthDriver() then return end
-
-  -- CreateFrame is absent only in restricted test/compatibility hosts.
-  groupHealthWriteQueue[groupHealthWriteCount] = nil
-  groupHealthWriteCount = groupHealthWriteCount - 1
-  frame._msufGroupHealthQueued = nil
+  if not frame then return end
+  frame._msufGroupHealthDirty = true
+  if QueueGroupDataFrame(frame) then return end
+  frame._msufGroupHealthDirty = nil
   local route = frame._msufGroupHealthRoute
   if route then route(frame, "UNIT_HEALTH", frame.MSUFUnitKey) end
 end
 
-FlushGroupHealthQueue = function()
-  StopGroupHealthDriver()
-  local batch = groupHealthWriteQueue
-  local count = groupHealthWriteCount
-  groupHealthWriteQueue = batch == groupHealthQueueA and groupHealthQueueB or groupHealthQueueA
-  groupHealthWriteCount = 0
+local function QueueGroupPowerUpdate(frame)
+  if not frame then return end
+  frame._msufGroupPowerUpdateDirty = true
+  if QueueGroupDataFrame(frame) then return end
+  frame._msufGroupPowerUpdateDirty = nil
+  local route = frame._msufGroupPowerUpdateRoute
+  if route then route(frame, "UNIT_POWER_UPDATE", frame.MSUFUnitKey) end
+end
+
+local function QueueGroupPowerFrequent(frame)
+  if not frame then return end
+  frame._msufGroupPowerFrequentDirty = true
+  if QueueGroupDataFrame(frame) then return end
+  frame._msufGroupPowerFrequentDirty = nil
+  local route = frame._msufGroupPowerFrequentRoute
+  if route then route(frame, "UNIT_POWER_FREQUENT", frame.MSUFUnitKey) end
+end
+
+FlushGroupDataQueue = function()
+  StopGroupDataDriver()
+  local batch = groupDataWriteQueue
+  local count = groupDataWriteCount
+  groupDataWriteQueue = batch == groupDataQueueA and groupDataQueueB or groupDataQueueA
+  groupDataWriteCount = 0
 
   for i = 1, count do
     local frame = batch[i]
     batch[i] = nil
     if frame then
-      frame._msufGroupHealthQueued = nil
+      frame._msufGroupDataQueued = nil
       local unit = frame.MSUFUnitKey
-      local route = frame._msufGroupHealthRoute
-      if route
-        and frame._msufCoreScope == "group"
+      local valid = frame._msufCoreScope == "group"
         and frame._msufCoreSpecEnabled == true
         and frame._msufCoreVisible == true
-        and frame._msufEventRouteUnit == unit then
-        route(frame, "UNIT_HEALTH", unit)
+        and frame._msufEventRouteUnit == unit
+      local healthDirty = frame._msufGroupHealthDirty
+      local powerUpdateDirty = frame._msufGroupPowerUpdateDirty
+      local powerFrequentDirty = frame._msufGroupPowerFrequentDirty
+      frame._msufGroupHealthDirty = nil
+      frame._msufGroupPowerUpdateDirty = nil
+      frame._msufGroupPowerFrequentDirty = nil
+      if valid then
+        local route = healthDirty and frame._msufGroupHealthRoute
+        if route then route(frame, "UNIT_HEALTH", unit) end
+        route = powerUpdateDirty and frame._msufGroupPowerUpdateRoute
+        if route then route(frame, "UNIT_POWER_UPDATE", unit) end
+        route = powerFrequentDirty and frame._msufGroupPowerFrequentRoute
+        if route then route(frame, "UNIT_POWER_FREQUENT", unit) end
       end
     end
   end
 
-  if groupHealthWriteCount > 0 then ArmGroupHealthDriver() end
+  if groupDataWriteCount > 0 then ArmGroupDataDriver() end
 end
 
 local function FrameOnEvent(frame, event, unit, ...)
@@ -1657,7 +1690,7 @@ RegisterFrameEvent = function(frame, event, unitless)
 end
 
 local function ClearFrameEvents(frame)
-  CancelQueuedGroupHealth(frame)
+  CancelQueuedGroupData(frame)
   if frame and frame.UnregisterAllEvents then frame:UnregisterAllEvents() end
   if frame then
     local names = frame._msufEventNames
@@ -1677,6 +1710,8 @@ local function ClearFrameEvents(frame)
     frame._msufCoreRangeEventUnitless = nil
     frame._msufCoreRangeEventSuspended = nil
     frame._msufGroupHealthRoute = nil
+    frame._msufGroupPowerUpdateRoute = nil
+    frame._msufGroupPowerFrequentRoute = nil
   end
 end
 
@@ -2170,6 +2205,12 @@ local function RebuildFrameEvents(frame)
       if event == "UNIT_HEALTH" and frame._msufCoreScope == "group" then
         frame._msufGroupHealthRoute = path
         frame[event] = QueueGroupHealth
+      elseif event == "UNIT_POWER_UPDATE" and frame._msufCoreScope == "group" then
+        frame._msufGroupPowerUpdateRoute = path
+        frame[event] = QueueGroupPowerUpdate
+      elseif event == "UNIT_POWER_FREQUENT" and frame._msufCoreScope == "group" then
+        frame._msufGroupPowerFrequentRoute = path
+        frame[event] = QueueGroupPowerFrequent
       else
         frame[event] = path
       end
