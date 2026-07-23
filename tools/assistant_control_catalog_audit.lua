@@ -58,12 +58,14 @@ for _, api in ipairs({
     "function Catalog.ValidateRecord",
     "function Catalog.ValidateAll",
     "function Catalog.GetCoverageReport",
-    "function M.RegisterRuntimeControl",
     "function M.ClearRuntimeControlsForPage",
     "function M.GetRuntimeControlCoverageReport",
 }) do
     Require(catalog:find(api, 1, true), "missing catalog API: " .. api)
 end
+Require(catalog:find("M.RegisterRuntimeControl = Catalog.Register", 1, true)
+    or catalog:find("function M.RegisterRuntimeControl", 1, true),
+    "missing catalog API: M.RegisterRuntimeControl")
 
 Require(catalog:find("fallback_id_collision", 1, true), "fallback collision reporting is missing")
 Require(catalog:find("invalid_explicit_id", 1, true), "invalid explicit ID reporting is missing")
