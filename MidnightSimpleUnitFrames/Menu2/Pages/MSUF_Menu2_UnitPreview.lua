@@ -3289,8 +3289,14 @@ function Preview.Refresh(box, reason)
             mock.cast:SetPoint("CENTER", canvas, "CENTER", S(castOffsetX) + panX, S(castOffsetY) + panY)
         elseif key == "player" then
             mock.cast:SetPoint("BOTTOM", mock, "TOP", S(castOffsetX), S(castOffsetY))
+        elseif key == "boss" then
+            -- Runtime boss castbars use TOP-to-visible-outline-BOTTOM with a
+            -- three-pixel gap.  The mock's one-pixel outline sits one pixel
+            -- inside its container, hence +1 X and -2 Y from mock BOTTOMLEFT.
+            mock.cast:SetPoint("TOPLEFT", mock, "BOTTOMLEFT",
+                S(castOffsetX + 1), S(castOffsetY - 2))
         else
-            mock.cast:SetPoint("BOTTOMLEFT", mock, "TOPLEFT", S(castOffsetX), S(castOffsetY + ((key == "boss") and 2 or 0)))
+            mock.cast:SetPoint("BOTTOMLEFT", mock, "TOPLEFT", S(castOffsetX), S(castOffsetY))
         end
         local cr, cg, cb = 0.0, 0.9, 0.8
         if type(_G.MSUF_GetInterruptibleCastColor) == "function" then

@@ -85,8 +85,16 @@ end
 
 local function BossSetPointIfChanged(frame, point, relativeTo, relativePoint, xOfs, yOfs)
     if not (frame and frame.SetPoint) then return false end
-    xOfs = math.floor((tonumber(xOfs) or 0) + 0.5)
-    yOfs = math.floor((tonumber(yOfs) or 0) + 0.5)
+    xOfs = tonumber(xOfs) or 0
+    yOfs = tonumber(yOfs) or 0
+    local snap = _G.MSUF_Snap
+    if type(snap) == "function" then
+        xOfs = snap(frame, xOfs)
+        yOfs = snap(frame, yOfs)
+    else
+        xOfs = math.floor(xOfs + 0.5)
+        yOfs = math.floor(yOfs + 0.5)
+    end
 
     local currentPoint, currentRelativeTo, currentRelativePoint, currentX, currentY
     if frame.GetPoint then
@@ -666,8 +674,8 @@ end
     function frame:UpdateAnchor(forceLayout)
         EnsureDBSafe()
         local g = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
-        local ox = math.floor((tonumber(g.bossCastbarOffsetX) or 0) + 0.5)
-        local oy = math.floor((tonumber(g.bossCastbarOffsetY) or 0) + 0.5)
+        local ox = tonumber(g.bossCastbarOffsetX) or 0
+        local oy = tonumber(g.bossCastbarOffsetY) or 0
         local layoutDirty = false
         local forcedW, forcedH, preserveWidth
         if type(_G.MSUF_GetCastbarDesiredSize) == "function" then
@@ -676,8 +684,15 @@ end
             forcedW = tonumber(g.bossCastbarWidth)
             forcedH = tonumber(g.bossCastbarHeight)
         end
-        if forcedW and not preserveWidth then forcedW = math.floor(forcedW + 0.5) end
-        if forcedH then forcedH = math.floor(forcedH + 0.5) end
+        local snap = _G.MSUF_Snap
+        if forcedW and not preserveWidth then
+            forcedW = (type(snap) == "function") and snap(self, forcedW)
+                or math.floor(forcedW + 0.5)
+        end
+        if forcedH then
+            forcedH = (type(snap) == "function") and snap(self, forcedH)
+                or math.floor(forcedH + 0.5)
+        end
 
         -- Height can always be overridden (even when width is auto-matched to the boss unitframe)
         if forcedH and forcedH > 4 then
@@ -702,16 +717,33 @@ end
         else
             local uf = _G["MSUF_" .. unit] -- e.g. MSUF_boss1
             if uf and uf.GetWidth and uf.GetHeight then
-                local autoX = 0
-                if type(_G.MSUF_GetCastbarAutoAnchorOffsetX) == "function" then
-                    autoX = _G.MSUF_GetCastbarAutoAnchorOffsetX(g, unit, self)
+                -- Anchor the castbar's TOP edge to the BOTTOM edge of the
+                -- visible boss outline (or HP bar when outlines are disabled).
+                -- Both source edges are already physical-pixel snapped.  A
+                -- three-physical-pixel gap is therefore invariant across every
+                -- odd/even boss height and fractional UI scale.
+                local source = (type(_G.MSUF_GetCastbarUnitframeWidthSource) == "function"
+                    and _G.MSUF_GetCastbarUnitframeWidthSource(unit)) or uf
+                local gap = 3
+                if type(_G.MSUF_GetPhysicalPixelSize) == "function" then
+                    gap = _G.MSUF_GetPhysicalPixelSize(self, 3)
+                elseif type(snap) == "function" then
+                    gap = snap(self, 3)
                 end
-                layoutDirty = BossSetPointIfChanged(self, "BOTTOMLEFT", uf, "TOPLEFT", ox + autoX, 2 + oy) or layoutDirty
+                layoutDirty = BossSetPointIfChanged(
+                    self, "TOPLEFT", source, "BOTTOMLEFT", ox, oy - gap
+                ) or layoutDirty
 
                 if forcedW and forcedW > 10 then
                     layoutDirty = BossSetWidthIfChanged(self, forcedW) or layoutDirty
                 else
-                    local w = uf:GetWidth()
+                    local w = source and source.GetWidth and source:GetWidth()
+                    if w and w > 0 and source ~= self then
+                        local sourceScale = (source.GetEffectiveScale and source:GetEffectiveScale()) or 1
+                        local selfScale = (self.GetEffectiveScale and self:GetEffectiveScale()) or 1
+                        if selfScale == 0 then selfScale = 1 end
+                        w = w * sourceScale / selfScale
+                    end
                     if w and w > 10 then
                         layoutDirty = BossSetWidthIfChanged(self, w) or layoutDirty
                     end

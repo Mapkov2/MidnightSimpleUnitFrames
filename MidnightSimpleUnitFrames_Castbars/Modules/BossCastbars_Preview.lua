@@ -221,15 +221,20 @@ local function MSUF_ApplyBossCastbarPreviewLayout(f, index)
     local g = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
 
     local uf = _G["MSUF_boss" .. index] or _G["MSUF_boss1"]
-    local forcedW, forcedH
+    local forcedW, forcedH, preserveWidth
     if type(_G.MSUF_GetCastbarDesiredSize) == "function" then
-        forcedW, forcedH = _G.MSUF_GetCastbarDesiredSize("boss" .. index, g, f, 240, 12)
+        forcedW, forcedH, preserveWidth = _G.MSUF_GetCastbarDesiredSize("boss" .. index, g, f, 240, 12)
     else
         forcedW = tonumber(g.bossCastbarWidth)
         forcedH = tonumber(g.bossCastbarHeight)
     end
     local w = (forcedW and forcedW > 10) and forcedW or (uf and uf.GetWidth and uf:GetWidth()) or 240
     local h = (forcedH and forcedH > 4) and forcedH or 12
+    local snap = _G.MSUF_Snap
+    if type(snap) == "function" then
+        if not preserveWidth then w = snap(f, w) end
+        h = snap(f, h)
+    end
 
     -- Icon size: when bossCastIconSize is set, it overrides the default (bar height).
     local iconSize = h
@@ -407,8 +412,15 @@ local function MSUF_PositionBossCastbarPreview(f, index)
 
     EnsureDBSafe()
     local g = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
-    local ox = math.floor((tonumber(g.bossCastbarOffsetX) or 0) + 0.5)
-    local oy = math.floor((tonumber(g.bossCastbarOffsetY) or 0) + 0.5)
+    local ox = tonumber(g.bossCastbarOffsetX) or 0
+    local oy = tonumber(g.bossCastbarOffsetY) or 0
+    local snap = _G.MSUF_Snap
+    if type(snap) == "function" then
+        ox, oy = snap(f, ox), snap(f, oy)
+    else
+        ox = math.floor(ox + 0.5)
+        oy = math.floor(oy + 0.5)
+    end
 
     if g.bossCastbarDetached == true then
         -- Detached: anchor to UIParent CENTER, keep per-boss vertical stacking.
@@ -420,8 +432,17 @@ local function MSUF_PositionBossCastbarPreview(f, index)
     local uf = _G["MSUF_boss" .. index]
     if uf and uf.IsShown and uf:IsShown() then
         f:ClearAllPoints()
-        -- Keep legacy relative placement, but previews themselves stay parented to UIParent.
-        f:SetPoint("BOTTOMLEFT", uf, "TOPLEFT", 0 + ox, 2 + oy)
+        local source = (type(_G.MSUF_GetCastbarUnitframeWidthSource) == "function"
+            and _G.MSUF_GetCastbarUnitframeWidthSource("boss" .. index)) or uf
+        local gap = 3
+        if type(_G.MSUF_GetPhysicalPixelSize) == "function" then
+            gap = _G.MSUF_GetPhysicalPixelSize(f, 3)
+        elseif type(snap) == "function" then
+            gap = snap(f, 3)
+        end
+        -- Match runtime: TOP edge below the visible boss outline by exactly
+        -- three physical pixels.
+        f:SetPoint("TOPLEFT", source, "BOTTOMLEFT", ox, oy - gap)
     else
         -- fallback if boss frames aren't visible (still useful for slider tweaking)
         f:ClearAllPoints()

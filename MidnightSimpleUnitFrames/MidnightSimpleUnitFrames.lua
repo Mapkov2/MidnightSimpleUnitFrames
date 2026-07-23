@@ -2939,6 +2939,13 @@ local function PositionUnitFrame(f, unit, refreshConfig)
         then
             _G.MSUF_CacheUnitFrameScreenPosition(f, key, unit)
         end
+        -- Boss health/power surfaces use absolute physical-pixel edges.  The
+        -- secure container intentionally remains on its configured CENTER
+        -- anchor; only the visible bar geometry is phase-corrected.
+        local applyBossPhysicalGeometry = _G.MSUF_ApplyBossPhysicalBarGeometry
+        if type(applyBossPhysicalGeometry) == "function" then
+            applyBossPhysicalGeometry(f)
+        end
     else
         if wantsCooldownAnchor and isCooldownAnchor and inLockdown then
             if _G.MSUF_RequestUnitFrameReanchorAfterCombat then
@@ -5046,6 +5053,118 @@ local function _MSUF_PreviewUnitFrame(unit, conf)
     ns.UF.RequestUpdate(f, true, false, "ApplyUnitKey:DisabledEditPreview")
 end
 
+-- Boss frames are CENTER-anchored secure buttons.  At fractional UI scales an
+-- odd logical height puts that center on the opposite half-pixel phase from an
+-- even height.  Anchoring the HP fill and its outline independently to the
+-- secure button then lets each region round a different edge, producing either
+-- a transparent row or a 1.5-pixel border.
+--
+-- Resolve the secure frame once in absolute screen space, snap that rectangle
+-- to physical pixels, and derive every visible HP/power edge from it.  The
+-- secure button itself is not moved, so click targeting and configured anchors
+-- keep their original behavior.
+local function MSUF_ApplyBossPhysicalBarGeometry(f)
+    if not (f and f.hpBar) then return false end
+    local unit = f.unit
+    if not (f.isBoss or f._msufBossIndex ~= nil
+        or (type(unit) == "string" and unit:match("^boss%d+$")))
+    then
+        return false
+    end
+    if (InCombatLockdown and InCombatLockdown()) or _G.MSUF_InCombat == true then
+        return false
+    end
+
+    local getRect = _G.MSUF_GetPhysicalScreenRect
+    local setRect = _G.MSUF_SetRegionPhysicalScreenRect
+    if type(getRect) ~= "function" or type(setRect) ~= "function" then
+        return false
+    end
+
+    local left, bottom, right, top, pixel = getRect(f)
+    if not (left and bottom and right and top and pixel and pixel > 0) then
+        return false
+    end
+
+    -- The historical two-unit inset is intentionally resolved as two physical
+    -- pixels.  That leaves the one-pixel outline one physical pixel inside the
+    -- secure frame on every UI scale.
+    local inset = pixel * 2
+    local contentLeft, contentRight = left + inset, right - inset
+    local contentBottom, contentTop = bottom + inset, top - inset
+    if contentRight <= contentLeft or contentTop <= contentBottom then
+        return false
+    end
+
+    local hp = f.hpBar
+    local power = f.targetPowerBar
+    local powerDetached = f._msufPowerBarDetached == true
+    local powerEnabled = f._msufPowerBarEnabled == true
+        or f._msufPowerBarReserved == true
+        or (power and power.IsShown and power:IsShown())
+    local reservePower = powerEnabled and not powerDetached
+        and f._msufPowerBarReserved == true
+
+    local powerScreenHeight = 0
+    if power and powerEnabled and not powerDetached then
+        local configuredHeight = tonumber(f._msufPowerBarHeight)
+            or (power.GetHeight and power:GetHeight()) or 0
+        local snap = _G.MSUF_Snap
+        if type(snap) == "function" then
+            configuredHeight = snap(power, configuredHeight)
+        end
+        local powerScale = (power.GetEffectiveScale and power:GetEffectiveScale()) or 1
+        if powerScale == 0 then powerScale = 1 end
+        powerScreenHeight = configuredHeight * powerScale
+        if powerScreenHeight < pixel then powerScreenHeight = pixel end
+    end
+
+    local hpBottom = contentBottom
+    if reservePower then
+        hpBottom = contentBottom + powerScreenHeight
+        if hpBottom >= contentTop then
+            hpBottom = contentTop - pixel
+            powerScreenHeight = math.max(pixel, hpBottom - contentBottom)
+        end
+    end
+
+    local ok = setRect(hp, contentLeft, hpBottom, contentRight, contentTop)
+    if not ok then return false end
+    if f.bg then
+        setRect(f.bg, contentLeft, hpBottom, contentRight, contentTop)
+    end
+
+    if power and powerEnabled and not powerDetached then
+        if reservePower then
+            setRect(power, contentLeft, contentBottom, contentRight, hpBottom)
+        else
+            -- Non-embedded power bars sit immediately below HP.  Their bottom
+            -- is still an integer physical edge, so an outline spanning both
+            -- bars remains one pixel thick.
+            setRect(power, contentLeft, contentBottom - powerScreenHeight,
+                contentRight, contentBottom)
+        end
+    end
+
+    f._msufBossPhysicalGeometryApplied = true
+    f._msufBarOutlineEdgeSize = -1
+    f._msufHighlightEdgeSize = -1
+    return true
+end
+_G.MSUF_ApplyBossPhysicalBarGeometry = MSUF_ApplyBossPhysicalBarGeometry
+
+function _G.MSUF_RefreshBossPhysicalGeometry()
+    if not UnitFrames then return false end
+    local changed = false
+    for i = 1, (MSUF_MAX_BOSS_FRAMES or 5) do
+        local frame = UnitFrames["boss" .. i] or _G["MSUF_boss" .. i]
+        if frame and MSUF_ApplyBossPhysicalBarGeometry(frame) then
+            changed = true
+        end
+    end
+    return changed
+end
+
 local function _MSUF_ApplyToUnitFrame(unit, conf)
     local f = UnitFrames[unit]
     if not f then return end
@@ -5076,12 +5195,6 @@ local function _MSUF_ApplyToUnitFrame(unit, conf)
     if f.targetPowerBar then
         MSUF_ApplyPowerBarEmbedLayout(f)
     end
-    do
-        local fnStaticOutlines = _G.MSUF_RefreshStaticUnitFrameOutlines
-        if type(fnStaticOutlines) == "function" then
-            fnStaticOutlines(f)
-        end
-    end
     ns.Bars._ApplyReverseFillBars(f, conf)
     local showName  = (conf.showName  ~= false)
     local showHP    = (conf.showHP    ~= false)
@@ -5101,6 +5214,15 @@ local function _MSUF_ApplyToUnitFrame(unit, conf)
         end
     end
     PositionUnitFrame(f, unit)
+    if f.isBoss then
+        MSUF_ApplyBossPhysicalBarGeometry(f)
+    end
+    do
+        local fnStaticOutlines = _G.MSUF_RefreshStaticUnitFrameOutlines
+        if type(fnStaticOutlines) == "function" then
+            fnStaticOutlines(f)
+        end
+    end
     if key ~= "boss" then _G.MSUF_ClampUnitFramesToScreen(key) end
     if f.portrait then
         MSUF_UpdateBossPortraitLayout(f, conf)
@@ -5746,8 +5868,29 @@ local function MSUF_EnableUnitFrameDrag(f, unit)
         self:StartMoving()
 
         if nativeThirdPartyDrag then
-            self._msufDragAccum = nil
-            self:SetScript("OnUpdate", nil)
+            -- Boss bar surfaces are anchored to absolute physical pixels, so
+            -- they must be refreshed while their secure container is moving.
+            -- Keep the third-party DB/cache work disabled; only follow the
+            -- container's current screen rectangle.
+            if key == "boss" then
+                self._msufDragAccum = 0
+                self:SetScript("OnUpdate", function(s, elapsed)
+                    if not s._msufDragActive then
+                        s:SetScript("OnUpdate", nil)
+                        return
+                    end
+                    s._msufDragAccum = (s._msufDragAccum or 0) + (elapsed or 0)
+                    if s._msufDragAccum < 0.02 then return end
+                    s._msufDragAccum = 0
+                    local applyBossPhysicalGeometry = _G.MSUF_ApplyBossPhysicalBarGeometry
+                    if type(applyBossPhysicalGeometry) == "function" then
+                        applyBossPhysicalGeometry(s)
+                    end
+                end)
+            else
+                self._msufDragAccum = nil
+                self:SetScript("OnUpdate", nil)
+            end
             return
         end
 
@@ -5761,6 +5904,12 @@ local function MSUF_EnableUnitFrameDrag(f, unit)
                 if s._msufDragAccum < 0.02 then  return end
                 s._msufDragAccum = 0
                 _UpdateDBFromFrame(s, s._msufDragKey, s._msufDragConf)
+                if s._msufDragKey == "boss" then
+                    local applyBossPhysicalGeometry = _G.MSUF_ApplyBossPhysicalBarGeometry
+                    if type(applyBossPhysicalGeometry) == "function" then
+                        applyBossPhysicalGeometry(s)
+                    end
+                end
              end)
      end)
     f:SetScript("OnDragStop", function(self, button)
@@ -5786,6 +5935,10 @@ local function MSUF_EnableUnitFrameDrag(f, unit)
                     local frame = UnitFrames and UnitFrames[bossUnit] or _G["MSUF_" .. bossUnit]
                     if frame then
                         PositionUnitFrame(frame, bossUnit)
+                        local applyBossPhysicalGeometry = _G.MSUF_ApplyBossPhysicalBarGeometry
+                        if type(applyBossPhysicalGeometry) == "function" then
+                            applyBossPhysicalGeometry(frame)
+                        end
                     end
                 end
             else
@@ -5847,6 +6000,8 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
     local pb = f.targetPowerBar
     if not pb then
         f._msufPowerBarReserved = nil
+        f._msufPowerBarEnabled = nil
+        f._msufPowerBarHeight = nil
         ns.Cache.ClearStamp(f, "PBEmbedLayout")
          return
     end
@@ -5892,6 +6047,8 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
     elseif type(unit) == 'string' and string.sub(unit, 1, 4) == 'boss' then
         enabled = (b.showBossPowerBar ~= false)
     end
+    f._msufPowerBarEnabled = enabled and true or nil
+    f._msufPowerBarHeight = h
 
     -- Detach: per-unit config for player/target/focus (detach overrides embed)
     local detached = false
@@ -5957,6 +6114,9 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
     local cpAnchorUsable = anchorToCP and MSUF_IsClassPowerAnchorUsable(cpContainer) or false
     if not ns.Cache.StampChanged(f, "PBEmbedLayout", (enabled and 1 or 0), (embed and 1 or 0), (reserve and 1 or 0), h, (activeDetached and 1 or 0), dW, dH, dX, dY, dLevel, (anchorToCP and 1 or 0), (cpAnchorUsable and 1 or 0), dpbWMode) then
         if not enabled then _MSUF_Bars_HidePower(pb, true) end
+        if f.isBoss and type(_G.MSUF_ApplyBossPhysicalBarGeometry) == "function" then
+            _G.MSUF_ApplyBossPhysicalBarGeometry(f)
+        end
         if _G.MSUF_ApplyPowerBarBorder then
             _G.MSUF_ApplyPowerBarBorder(pb)
         end
@@ -6022,6 +6182,9 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
         pb:SetHeight(h)
         pb:SetPoint('TOPLEFT', hb, 'BOTTOMLEFT', 0, 0)
         pb:SetPoint('TOPRIGHT', hb, 'BOTTOMRIGHT', 0, 0)
+    end
+    if f.isBoss and type(_G.MSUF_ApplyBossPhysicalBarGeometry) == "function" then
+        _G.MSUF_ApplyBossPhysicalBarGeometry(f)
     end
     if not enabled then
         _MSUF_Bars_HidePower(pb, true)

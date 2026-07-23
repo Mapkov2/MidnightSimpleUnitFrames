@@ -727,6 +727,84 @@ do
         return RoundToGrid(v, step)
     end
 
+    function _G.MSUF_GetPhysicalPixelSize(frame, pixels)
+        pixels = tonumber(pixels)
+        if pixels == nil then pixels = 1 end
+        return GetStepFor(frame) * pixels
+    end
+
+    -- Returns an absolute screen rectangle whose origin and dimensions are all
+    -- integer physical pixels.  GetScaledRect is already in the common
+    -- screen-scale coordinate space, so the 768/physicalHeight factor is the
+    -- size of one physical pixel in that space.
+    function _G.MSUF_GetPhysicalScreenRect(frame)
+        if not frame then return nil end
+        EnsureBase()
+
+        local left, bottom, width, height
+        if frame.GetScaledRect then
+            left, bottom, width, height = frame:GetScaledRect()
+        end
+        if type(left) ~= "number" or type(bottom) ~= "number"
+            or type(width) ~= "number" or type(height) ~= "number"
+        then
+            if not (frame.GetLeft and frame.GetBottom and frame.GetWidth and frame.GetHeight) then
+                return nil
+            end
+            local eff = (frame.GetEffectiveScale and frame:GetEffectiveScale()) or 1
+            if eff == 0 then eff = 1 end
+            left, bottom = frame:GetLeft(), frame:GetBottom()
+            width, height = frame:GetWidth(), frame:GetHeight()
+            if type(left) ~= "number" or type(bottom) ~= "number"
+                or type(width) ~= "number" or type(height) ~= "number"
+            then
+                return nil
+            end
+            left, bottom = left * eff, bottom * eff
+            width, height = width * eff, height * eff
+        end
+
+        local pixel = _cachedBase768 or 1
+        local snappedLeft = RoundToGrid(left, pixel)
+        local snappedBottom = RoundToGrid(bottom, pixel)
+        local snappedWidth = math.max(pixel, RoundToGrid(width, pixel))
+        local snappedHeight = math.max(pixel, RoundToGrid(height, pixel))
+        return snappedLeft, snappedBottom,
+               snappedLeft + snappedWidth, snappedBottom + snappedHeight,
+               pixel
+    end
+
+    -- Places a region on an already-resolved absolute physical rectangle.
+    -- Two absolute edge anchors are used intentionally: children no longer
+    -- inherit the odd/even half-pixel phase of a CENTER-anchored container.
+    function _G.MSUF_SetRegionPhysicalScreenRect(region, left, bottom, right, top)
+        if not (region and region.SetPoint and UIParent) then return false end
+        if type(left) ~= "number" or type(bottom) ~= "number"
+            or type(right) ~= "number" or type(top) ~= "number"
+        then
+            return false
+        end
+        if InCombatLockdown and InCombatLockdown() then
+            return false
+        end
+
+        -- SetPoint offsets are expressed in the coordinate space of the region
+        -- being positioned.  Divide absolute screen coordinates by that
+        -- region's effective scale (not UIParent's), otherwise a non-1 MSUF
+        -- frame scale would move and resize the bars incorrectly.
+        local regionScale = (region.GetEffectiveScale and region:GetEffectiveScale())
+            or (UIParent.GetEffectiveScale and UIParent:GetEffectiveScale())
+            or (UIParent.GetScale and UIParent:GetScale()) or 1
+        if regionScale == 0 then regionScale = 1 end
+
+        region:ClearAllPoints()
+        region:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT",
+            left / regionScale, bottom / regionScale)
+        region:SetPoint("TOPRIGHT", UIParent, "BOTTOMLEFT",
+            right / regionScale, top / regionScale)
+        return true
+    end
+
     function _G.MSUF_Scale(v)
         return _G.MSUF_Snap(UIParent, v)
     end

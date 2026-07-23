@@ -1944,13 +1944,27 @@ local function MSUF_ApplyBarOutline(self, thickness, o)
         self._msufBarOutlineEdgeSize = -1
     end
 
-    if (self._msufBarOutlineThickness ~= thickness) or (self._msufBarOutlineEdgeSize ~= edge) or (self._msufBarOutlineBottomIsPower ~= (bottomIsPower and true or false)) then
+    -- The absolute physical boss bar rectangle already resolves its lower
+    -- texture edge.  Expanding the outline frame another pixel below that edge
+    -- makes WoW rasterize one transparent row between the fill and bottom
+    -- line.  Keep the bottom line on the resolved edge for these frames only;
+    -- all legacy/non-boss outline geometry remains unchanged.
+    local bossPhysicalBottom = self._msufBossPhysicalGeometryApplied == true
+    if (self._msufBarOutlineThickness ~= thickness)
+        or (self._msufBarOutlineEdgeSize ~= edge)
+        or (self._msufBarOutlineBottomIsPower ~= (bottomIsPower and true or false))
+        or (self._msufBarOutlineBossPhysicalBottom ~= bossPhysicalBottom)
+    then
         f:ClearAllPoints()
         _MSUF_BorderSetPoint(f, "TOPLEFT", hb, "TOPLEFT", -edge, edge)
-        _MSUF_BorderSetPoint(f, "BOTTOMRIGHT", bottomBar, "BOTTOMRIGHT", edge, -edge)
+        _MSUF_BorderSetPoint(
+            f, "BOTTOMRIGHT", bottomBar, "BOTTOMRIGHT",
+            edge, bossPhysicalBottom and 0 or -edge
+        )
         self._msufBarOutlineThickness = thickness
         self._msufBarOutlineEdgeSize = edge
         self._msufBarOutlineBottomIsPower = bottomIsPower and true or false
+        self._msufBarOutlineBossPhysicalBottom = bossPhysicalBottom
     end
     _LayoutBarOutlineLines(o, f, edge)
     f:Show()
@@ -3657,11 +3671,19 @@ do
     f:SetScript("OnEvent", function()
         if _G.MSUF_UpdatePixelPerfect then
             _G.MSUF_UpdatePixelPerfect()
-    end
+        end
+        -- Re-resolve absolute boss bar edges before rebuilding their outlines.
+        -- UI scale and display-size changes alter the physical-pixel factor.
+        if type(_G.MSUF_RefreshBossPhysicalGeometry) == "function" then
+            _G.MSUF_RefreshBossPhysicalGeometry()
+        end
         if MSUF_BarBorderCache then
             MSUF_BarBorderCache.stamp = nil
-    end
+        end
         MSUF_ForEachUnitFrame(_Iter_ResetBorderOnScale)
-_G.MSUF_UpdateCastbarVisuals()
+        if type(_G.MSUF_ApplyBossCastbarPositionSetting) == "function" then
+            _G.MSUF_ApplyBossCastbarPositionSetting(false)
+        end
+        _G.MSUF_UpdateCastbarVisuals()
      end)
 end
