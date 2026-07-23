@@ -438,10 +438,10 @@ DefineObject("aura_blacklist_add_preset", {
     scope = AURA_UNIT_INPUT_SCOPE, lane = AURA_LANE, preset = BLACKLIST_PRESET,
 }, { required = { "scope", "preset" } })
 DefineObject("aura_custom_whitelist_add_spell aura_custom_whitelist_remove_spell", {
-    scope = AURA_UNIT_INPUT_SCOPE, index = Integer(1, 3), value = SPELL_VALUE,
+    scope = AURA_UNIT_INPUT_SCOPE, index = Integer(1, 4), value = SPELL_VALUE,
 }, { required = { "scope", "index", "value" } })
 DefineObject("aura_custom_whitelist_clear_spells aura_custom_whitelist_summary", {
-    scope = AURA_UNIT_INPUT_SCOPE, index = Integer(1, 3),
+    scope = AURA_UNIT_INPUT_SCOPE, index = Integer(1, 4),
 }, { required = { "scope", "index" } })
 DefineObject("reset_aura_custom_container", {
     scope = AURA_CUSTOM_CONTAINER_SCOPE, index = Integer(1, 3),
