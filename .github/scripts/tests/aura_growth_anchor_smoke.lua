@@ -749,9 +749,9 @@ do
         "group player-cast border retained duplicate AuraSlots")
 end
 
--- The direct identity driver is shared by all eligible native containers.
--- Register its fixed event set only on the first container, keep it active
--- while any container remains, and restore it once after a full teardown.
+-- The direct identity driver is shared by all eligible native containers, but
+-- only subscribes to the active unit families. Group-only Party/Raid runtimes
+-- must never receive target/focus/boss identity callbacks.
 do
     local function IdentityContainer(unit)
         local container = NewFrame(nil)
@@ -764,24 +764,40 @@ do
 
     A3._directIdentityAuraContainers = nil
     A3._directIdentityAuraFrame = nil
+    local party = IdentityContainer("party1")
+    local raid = IdentityContainer("raid1")
     local target = IdentityContainer("target")
     local focus = IdentityContainer("focus")
     local boss = IdentityContainer("boss1")
 
-    Check(A3._RegisterDirectIdentityRefreshContainer(target) == true,
-        "first direct identity container did not register")
+    Check(A3._RegisterDirectIdentityRefreshContainer(party) == true,
+        "first group identity container did not register")
     local driver = assert(A3._directIdentityAuraFrame,
         "first direct identity container created no event driver")
-    Equal(driver.registerEventCalls or 0, 6,
-        "first direct identity container did not register the fixed event set once")
+    Equal(driver.registerEventCalls or 0, 3,
+        "group-only driver did not register world/zone/roster exactly once")
+    Check(driver.events.GROUP_ROSTER_UPDATE == true
+        and driver.events.PLAYER_ENTERING_WORLD == true
+        and driver.events.ZONE_CHANGED_NEW_AREA == true,
+        "group-only driver missed a required identity event")
+    Check(driver.events.PLAYER_TARGET_CHANGED == nil
+        and driver.events.PLAYER_FOCUS_CHANGED == nil
+        and driver.events.INSTANCE_ENCOUNTER_ENGAGE_UNIT == nil,
+        "group-only driver retained target/focus/boss callbacks")
     Equal(driver.unregisterAllEventsCalls or 0, 0,
         "first direct identity container redundantly cleared a new event driver")
 
-    Check(A3._RegisterDirectIdentityRefreshContainer(focus) == true
+    Check(A3._RegisterDirectIdentityRefreshContainer(raid) == true,
+        "additional raid identity container did not register")
+    Equal(driver.registerEventCalls or 0, 3,
+        "raid container re-registered the shared group event family")
+
+    Check(A3._RegisterDirectIdentityRefreshContainer(target) == true
+        and A3._RegisterDirectIdentityRefreshContainer(focus) == true
         and A3._RegisterDirectIdentityRefreshContainer(boss) == true,
         "additional direct identity containers did not register")
     Equal(driver.registerEventCalls or 0, 6,
-        "additional direct identity containers re-registered shared events")
+        "unit-family events were not added exactly once")
     Equal(driver.unregisterAllEventsCalls or 0, 0,
         "additional direct identity containers reset the shared event driver")
 
@@ -795,9 +811,16 @@ do
 
     A3._UnregisterDirectIdentityRefreshContainer(target)
     A3._UnregisterDirectIdentityRefreshContainer(focus)
+    Check(driver.events.PLAYER_TARGET_CHANGED == nil
+        and driver.events.PLAYER_FOCUS_CHANGED == nil,
+        "removed target/focus owners retained identity events")
     Equal(driver.unregisterAllEventsCalls or 0, 0,
         "shared direct identity driver stopped before the last container")
     A3._UnregisterDirectIdentityRefreshContainer(boss)
+    A3._UnregisterDirectIdentityRefreshContainer(party)
+    Check(driver.events.GROUP_ROSTER_UPDATE == true,
+        "party removal dropped the group event while raid remained")
+    A3._UnregisterDirectIdentityRefreshContainer(raid)
     Equal(driver.unregisterAllEventsCalls or 0, 1,
         "last direct identity container did not stop the shared driver once")
     Check(next(driver.events) == nil,
@@ -808,8 +831,13 @@ do
         "direct identity driver did not restart after full teardown")
     Check(A3._directIdentityAuraFrame == driver,
         "direct identity driver recreated its frame after teardown")
-    Equal(driver.registerEventCalls or 0, 12,
-        "direct identity driver did not register exactly once on restart")
+    Equal(driver.registerEventCalls or 0, 9,
+        "target-only restart registered unrelated unit-family events")
+    Check(driver.events.PLAYER_TARGET_CHANGED == true
+        and driver.events.GROUP_ROSTER_UPDATE == nil
+        and driver.events.PLAYER_FOCUS_CHANGED == nil
+        and driver.events.INSTANCE_ENCOUNTER_ENGAGE_UNIT == nil,
+        "target-only restart retained unrelated identity events")
     A3._UnregisterDirectIdentityRefreshContainer(replacement)
     Equal(driver.unregisterAllEventsCalls or 0, 2,
         "restarted direct identity driver did not stop exactly once")
