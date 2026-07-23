@@ -1200,6 +1200,10 @@ local function CompileTextRuntime(frame, spec, text)
   rt.plainTextTrusted = nativeSecrets ~= true and frame.MSUFUnitKey == "player"
   rt._lastPowerTextPower = nil
   rt._lastPowerTextMax = nil
+  rt._dispatchHealthPercent = nil
+  rt._dispatchHealthPercentReady = nil
+  rt._dispatchHealthMissing = nil
+  rt._dispatchHealthMissingReady = nil
   rt._dispatchPowerTextPower = nil
   rt._dispatchPowerTextMax = nil
   frame._msufTextPowerType = nil
@@ -1220,7 +1224,7 @@ local function CompileTextRuntime(frame, spec, text)
       end
       rt.healthHot = fromValues or hot.healthHot
       rt.healthHotFromPercent = hot.healthFromPercent and hot.healthFromPercent(frame, rt) or nil
-      rt.healthDirty = hot.healthDirty
+      rt.healthDirty = groupScope and hot.groupHealthDirty or hot.healthDirty
     else
       rt.healthHot = nil
       rt.healthHotFromPercent = nil

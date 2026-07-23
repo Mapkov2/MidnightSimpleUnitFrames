@@ -33,7 +33,7 @@ local InlineTextColor = Text.InlineTextColor
 local SetPowerTextColor = Text.SetPowerTextColor
 local UpdateHealthTextColor = Text.UpdateHealthTextColor
 local HealthPercent = Text.HealthPercent
-local HealthPercentAvailable = Text.UnitHealthPercent ~= nil
+local HealthPercentAvailable = Text.UnitHealthPercent ~= nil and Text.SCALE_100 ~= nil
 local PowerPercent = Text.PowerPercent
 local PowerPercentAvailable = Text.UnitPowerPercent ~= nil
 local floor = Text.floor or math.floor
@@ -145,6 +145,20 @@ local function MarkHealthTextDirty(frame)
   -- The bar route may have published a restricted percent for a synchronous
   -- text writer. A deferred marker must never retain that event payload.
   ClearDirtyTextDispatch(frame, TEXT_DIRTY_HEALTH)
+end
+
+local function MarkGroupHealthTextDirty(frame)
+  -- Group UNIT_HEALTH is compiled with Health's percent-only updater. That
+  -- route never publishes a dispatch payload, so the generic four-field clear
+  -- is dead work on every member tick.
+  MarkDirtyText(frame, TEXT_DIRTY_HEALTH)
+  local rt = frame and frame._msufTextRuntime
+  if rt and (rt._dispatchHealthPercentReady == true
+    or rt._dispatchHealthMissingReady == true) then
+    -- Defensive recovery for a stale payload left by an interrupted cold-path
+    -- recompile; the steady compiled Group route never enters this branch.
+    ClearDirtyTextDispatch(frame, TEXT_DIRTY_HEALTH)
+  end
 end
 
 local function MarkPowerTextDirty(frame)
@@ -1287,6 +1301,7 @@ end
 Text.RuntimeHotFunctions = {
   healthHot = UpdateHealthRuntime,
   healthDirty = MarkHealthTextDirty,
+  groupHealthDirty = MarkGroupHealthTextDirty,
   absorbHot = UpdateAbsorbRuntime,
   powerHot = UpdatePowerRuntime,
   powerDirty = MarkPowerTextDirty,
@@ -1772,6 +1787,14 @@ function HealthText.SelectEventUpdate(frame, spec, event, update)
   if event == "UNIT_ABSORB_AMOUNT_CHANGED" then return UpdateAbsorbRuntime end
   if event == "UNIT_HEALTH" then
     local rt = frame and frame._msufTextRuntime
+    -- EUI-style inline write for a group frame with a single percent-only health
+    -- slot: write in the same route pass as the bar (which published the plain
+    -- percent), skipping the deferred dirty-text queue/ticker/drain. Any other
+    -- text shape (absorb-combined, value/missing modes) keeps the coalescer.
+    if spec and spec.scope == "group" and rt and rt.healthHotFromPercent
+      and rt.healthUsesAbsorb ~= true then
+      return UpdateHealthTextValues
+    end
     return rt and rt.healthDirty or MarkHealthTextDirty
   end
   if event == "UNIT_MAXHEALTH" or event == "UNIT_NAME_UPDATE" then
@@ -1838,6 +1861,16 @@ PowerText.Update = UpdatePowerTextValues
 function PowerText.SelectEventUpdate(frame, spec, event, update)
   if event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT" then
     local rt = frame and frame._msufTextRuntime
+    -- EUI-style inline write: a group frame with a single percent-only power
+    -- slot writes its text synchronously in the same compiled route pass as the
+    -- bar (which just published the plain percent to rt._dispatchPowerPercent),
+    -- consuming that value with the existing bucket dedup. This drops the
+    -- deferred dirty-text machinery (MarkDirty -> C_Timer ticker -> FlushDirtyText
+    -- -> per-frame state re-fetch) that EllesmereUI's inline SetFormattedText
+    -- never pays. Any other text shape keeps the deferred coalescer.
+    if spec and spec.scope == "group" and rt and rt.powerHotFromPercent then
+      return UpdatePowerTextValues
+    end
     return rt and rt.powerDirty or MarkPowerTextDirty
   end
   return update
@@ -1879,18 +1912,28 @@ FlushDirtyText = function()
           frame._msufTextHealthMaxReady = nil
           local bar = frame.hpBar or frame.Health
           local pct = bar and bar._msufHealthPercentValue
-          if (rt.healthNeedsPercent == true or rt.healthColorByHealth == true)
+          local percentFn = rt.healthHotFromPercent
+          local percentReady = (rt.healthNeedsPercent == true or rt.healthColorByHealth == true)
             and bar
             and bar._msufHealthPercentUnit == unit
             and pct ~= nil
-            and issecretvalue(pct) ~= true then
-            -- The Health element already read this latest plain percentage for
-            -- the same unit. Share it with the deferred writer just as the
-            -- synchronous route does; opaque values never enter this cache.
-            rt._dispatchHealthPercent = pct
-            rt._dispatchHealthPercentReady = true
+            and issecretvalue(pct) ~= true
+          if percentFn and HealthPercentAvailable then
+            -- Percent-only Group text can bypass the generic value resolver.
+            -- Reuse Health's plain cache; protected values are reread once at
+            -- drain time and passed directly to the precompiled writer.
+            if percentReady ~= true then pct = HealthPercent(unit) end
+            percentFn(frame, "UNIT_HEALTH", unit, pct)
+          else
+            if percentReady == true then
+              -- The Health element already read this latest plain percentage
+              -- for the same unit. Share it with the generic deferred writer;
+              -- opaque values never enter this cache.
+              rt._dispatchHealthPercent = pct
+              rt._dispatchHealthPercentReady = true
+            end
+            UpdateHealthTextValues(frame, "UNIT_HEALTH", unit, nil, nil)
           end
-          UpdateHealthTextValues(frame, "UNIT_HEALTH", unit, nil, nil)
         elseif mask == TEXT_DIRTY_HEALTH or mask == TEXT_DIRTY_BOTH then
           ClearDirtyTextDispatch(frame, TEXT_DIRTY_HEALTH)
         end
@@ -1929,8 +1972,12 @@ FlushDirtyText = function()
 end
 
 HealthText.MarkValueDirty = MarkHealthTextDirty
+HealthText.MarkGroupValueDirty = MarkGroupHealthTextDirty
 PowerText.MarkValueDirty = MarkPowerTextDirty
-HealthText.NoDispatchUpdates = { [MarkHealthTextDirty] = true }
+HealthText.NoDispatchUpdates = {
+  [MarkHealthTextDirty] = true,
+  [MarkGroupHealthTextDirty] = true,
+}
 PowerText.NoDispatchUpdates = { [MarkPowerTextDirty] = true }
 
 UF.RegisterElement("PowerText", PowerText)

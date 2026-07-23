@@ -624,8 +624,16 @@ local function OnChildAttributeChanged(self, name, value)
     -- SecureGroupHeader rewrites unchanged partyN attributes on roster updates.
     -- Treat that write as the event-driven catch-up barrier instead of dropping
     -- it; raid headers stay on their normal per-unit paths to avoid 40 refreshes.
+    -- Headers rewrite attributes in per-frame sweeps (several writes per child
+    -- per roster/scenario tick), and each catch-up is a FULL compiled lifecycle
+    -- pass. One catch-up per rendered frame per visual keeps the barrier
+    -- semantics at a fraction of the cost; GetTime is frame-constant.
     if (kind or visual._msufGFKind) == "party" or IsPriorityFrame(visual) then
-      RefreshGroupUnitState(visual, UNIT_CHANGED_REASON)
+      local now = _G.GetTime and _G.GetTime()
+      if now == nil or visual._msufGFCatchupFrameStamp ~= now then
+        visual._msufGFCatchupFrameStamp = now
+        RefreshGroupUnitState(visual, UNIT_CHANGED_REASON)
+      end
     end
     EndUnitIndexRebind()
     return

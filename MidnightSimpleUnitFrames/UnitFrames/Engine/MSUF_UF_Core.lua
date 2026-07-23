@@ -861,7 +861,23 @@ end
 
 local function FrameOnShow(frame)
   frame._msufCoreVisible = true
-  if frame._msufCoreRangeEventConfigured == true
+  -- Restore the full event set suspended by the aggressive hidden-frame path.
+  -- Re-registering from the recorded recipe reactivates every unit event; the
+  -- identity/lifecycle refresh below then catches up on any state the frame
+  -- missed while inert. Range is restored here too, so its dedicated branch is
+  -- skipped when a full suspend was active.
+  if frame._msufCoreEventsSuspended == true then
+    frame._msufCoreEventsSuspended = nil
+    local names = frame._msufEventNames
+    local reg = frame._msufEventReg
+    if names and reg and RegisterFrameEvent then
+      for i = 1, #names do
+        local e = names[i]
+        RegisterFrameEvent(frame, e, reg[e] == true)
+      end
+    end
+    frame._msufCoreRangeEventSuspended = nil
+  elseif frame._msufCoreRangeEventConfigured == true
     and frame._msufCoreRangeEventSuspended == true
     and RegisterFrameEvent then
     RegisterFrameEvent(frame, "UNIT_IN_RANGE_UPDATE", frame._msufCoreRangeEventUnitless == true)
@@ -886,6 +902,25 @@ local function FrameOnHide(frame)
   frame._msufCoreVisible = false
   if RefreshHealthLifecycleSinkRoutes and frame._msufHealthLifecycleSink then
     RefreshHealthLifecycleSinkRoutes(frame)
+  end
+  -- Aggressive parity mode (opt-in): a hidden frame whose unit still exists
+  -- keeps receiving every registered UNIT_* event and burns FrameOnEvent's
+  -- early-return per event. Unregister them all while hidden so the frame is
+  -- truly inert (FrameOnShow restores from the recorded recipe). This is the
+  -- "zero overhead when off" guarantee; the compiled routes stay on the frame.
+  if _G.MSUF_GF_SuspendHidden == true
+    and frame._msufCoreEventsSuspended ~= true
+    and frame._msufEventNames
+    and frame.UnregisterEvent then
+    local names = frame._msufEventNames
+    for i = 1, #names do
+      frame:UnregisterEvent(names[i])
+    end
+    frame._msufCoreEventsSuspended = true
+    if frame._msufCoreRangeEventConfigured == true then
+      frame._msufCoreRangeEventSuspended = true
+    end
+    return
   end
   -- Blizzard's CompactUnitFrame explicitly unregisters this event while
   -- hidden because every registered unit makes the client perform additional
@@ -1438,7 +1473,10 @@ local function CompileFrameEventPath(frame, event, list)
   local healthEvent = HEALTH_EVENTS[event] == true
   local powerEvent = POWER_EVENTS[event] == true
   if healthEvent or powerEvent then
-    local barUpdate = healthEvent and frame[GetUpdateKey("Health")] or frame[GetUpdateKey("Power")]
+    local barElement = healthEvent and UF.elements.Health or UF.elements.Power
+    local barBase = healthEvent and frame[GetUpdateKey("Health")] or frame[GetUpdateKey("Power")]
+    local barUpdate = healthEvent and barBase
+      and SelectElementEventUpdate(barElement, frame, event, barBase) or barBase
     local textElement = healthEvent and UF.elements.HealthText or UF.elements.PowerText
     local textBase = healthEvent and frame[GetUpdateKey("HealthText")] or frame[GetUpdateKey("PowerText")]
     local textUpdate = textBase and SelectElementEventUpdate(textElement, frame, event, textBase) or nil
@@ -1694,6 +1732,14 @@ RegisterFrameEvent = function(frame, event, unitless)
     and EnsureGroupLifecycleDriver() then
     return
   end
+  -- Record the registration recipe so FrameOnHide can fully suspend a hidden
+  -- frame's unit events and FrameOnShow can restore them (opt-in via
+  -- _G.MSUF_GF_SuspendHidden). A hidden frame whose unit still exists otherwise
+  -- keeps receiving every UNIT_* event and pays FrameOnEvent's early-return per
+  -- event; suspending makes it truly inert, guaranteeing zero overhead while off.
+  local reg = frame._msufEventReg
+  if not reg then reg = {}; frame._msufEventReg = reg end
+  reg[event] = unitless == true
   if unitless == true or not IsUnitEvent(event) or not frame.RegisterUnitEvent then
     frame:RegisterEvent(event)
     return
@@ -1723,6 +1769,8 @@ local function ClearFrameEvents(frame)
     end
     frame._msufEvents = nil
     frame._msufEventNames = nil
+    frame._msufEventReg = nil
+    frame._msufCoreEventsSuspended = nil
     frame._msufFrameUnitEvents = nil
     frame._msufFrameUnitEventTargets = nil
     frame._msufElementEventRoutes = nil

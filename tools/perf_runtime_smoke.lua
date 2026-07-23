@@ -174,6 +174,23 @@ local function smokeTextRuntime()
     assert(rt.powerHot == rtFns.powerHot, "power hot function was not compiled")
     assert(rt.powerDirty == rtFns.powerDirty, "power dirty function was not compiled")
 
+    local gf = {
+        unit = "party1",
+        MSUFUnitKey = "party1",
+        hpTextCenter = fontString(true),
+    }
+    local gfSpec = {
+        scope = "group",
+        showHealthText = true,
+        showPowerText = false,
+        text = { healthCenter = "PERCENT", powerLeft = "NONE" },
+    }
+    local gfRuntime = Text.CompileTextRuntime(gf, gfSpec, gfSpec.text)
+    assert(gfRuntime.healthDirty == rtFns.groupHealthDirty,
+        "Group health text did not compile the no-dispatch dirty marker")
+    assert(type(gfRuntime.healthHotFromPercent) == "function",
+        "Group percent text did not compile its direct percent writer")
+
     local expectedSecretNeeds = {
         CURRENT = { true, false, false },
         MAX = { false, true, false },

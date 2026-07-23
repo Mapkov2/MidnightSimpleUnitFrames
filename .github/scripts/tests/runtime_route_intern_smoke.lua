@@ -74,6 +74,16 @@ function Health.Update(frame, event, unit)
     end
     return 80, 100, false
 end
+function Health.UpdateGroupHealthEvent(frame, event, unit)
+    frame.groupHealthEventCalls = (frame.groupHealthEventCalls or 0) + 1
+    return Health.Update(frame, event, unit)
+end
+function Health.SelectEventUpdate(_, spec, event, update)
+    if spec and spec.scope == "group" and event == "UNIT_HEALTH" then
+        return Health.UpdateGroupHealthEvent
+    end
+    return update
+end
 UF.RegisterElement("Health", Health)
 
 local function QueuePredictionData(frame)
@@ -208,6 +218,8 @@ Check(dirtyFirst.UNIT_HEALTH == dirtySecond.UNIT_HEALTH,
 dirtyFirst.UNIT_HEALTH(dirtyFirst, "UNIT_HEALTH", "party2")
 Check(calls[dirtyFirst] == 1 and dirtyFirst.healthDirtyCalls == 1,
     "direct group Health route did not update the bar and dirty marker exactly once")
+Check(dirtyFirst.groupHealthEventCalls == 1,
+    "direct group Health route ignored the event-specialized bar updater")
 Check(dirtyFirst.healthDirtyHP == 80 and dirtyFirst.healthDirtyMax == 100,
     "direct Health route dropped the bar payload before the static dirty marker")
 
