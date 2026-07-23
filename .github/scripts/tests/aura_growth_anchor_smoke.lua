@@ -774,12 +774,12 @@ do
         "first group identity container did not register")
     local driver = assert(A3._directIdentityAuraFrame,
         "first direct identity container created no event driver")
-    Equal(driver.registerEventCalls or 0, 3,
-        "group-only driver did not register world/zone/roster exactly once")
-    Check(driver.events.GROUP_ROSTER_UPDATE == true
+    Equal(driver.registerEventCalls or 0, 2,
+        "group-only driver did not register world/zone exactly once")
+    Check(driver.events.GROUP_ROSTER_UPDATE == nil
         and driver.events.PLAYER_ENTERING_WORLD == true
         and driver.events.ZONE_CHANGED_NEW_AREA == true,
-        "group-only driver missed a required identity event")
+        "group-only driver retained a redundant roster refresh")
     Check(driver.events.PLAYER_TARGET_CHANGED == nil
         and driver.events.PLAYER_FOCUS_CHANGED == nil
         and driver.events.INSTANCE_ENCOUNTER_ENGAGE_UNIT == nil,
@@ -789,14 +789,14 @@ do
 
     Check(A3._RegisterDirectIdentityRefreshContainer(raid) == true,
         "additional raid identity container did not register")
-    Equal(driver.registerEventCalls or 0, 3,
+    Equal(driver.registerEventCalls or 0, 2,
         "raid container re-registered the shared group event family")
 
     Check(A3._RegisterDirectIdentityRefreshContainer(target) == true
         and A3._RegisterDirectIdentityRefreshContainer(focus) == true
         and A3._RegisterDirectIdentityRefreshContainer(boss) == true,
         "additional direct identity containers did not register")
-    Equal(driver.registerEventCalls or 0, 6,
+    Equal(driver.registerEventCalls or 0, 5,
         "unit-family events were not added exactly once")
     Equal(driver.unregisterAllEventsCalls or 0, 0,
         "additional direct identity containers reset the shared event driver")
@@ -818,8 +818,10 @@ do
         "shared direct identity driver stopped before the last container")
     A3._UnregisterDirectIdentityRefreshContainer(boss)
     A3._UnregisterDirectIdentityRefreshContainer(party)
-    Check(driver.events.GROUP_ROSTER_UPDATE == true,
-        "party removal dropped the group event while raid remained")
+    Check(driver.events.PLAYER_ENTERING_WORLD == true
+        and driver.events.ZONE_CHANGED_NEW_AREA == true
+        and driver.events.GROUP_ROSTER_UPDATE == nil,
+        "raid-only identity owner retained a roster-wide aura refresh")
     A3._UnregisterDirectIdentityRefreshContainer(raid)
     Equal(driver.unregisterAllEventsCalls or 0, 1,
         "last direct identity container did not stop the shared driver once")
@@ -831,7 +833,7 @@ do
         "direct identity driver did not restart after full teardown")
     Check(A3._directIdentityAuraFrame == driver,
         "direct identity driver recreated its frame after teardown")
-    Equal(driver.registerEventCalls or 0, 9,
+    Equal(driver.registerEventCalls or 0, 8,
         "target-only restart registered unrelated unit-family events")
     Check(driver.events.PLAYER_TARGET_CHANGED == true
         and driver.events.GROUP_ROSTER_UPDATE == nil

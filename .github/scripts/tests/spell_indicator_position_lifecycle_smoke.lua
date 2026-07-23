@@ -76,6 +76,17 @@ function Frame:SetHeight(height) self.height = height end
 function Frame:SetWidth(width) self.width = width end
 function Frame:SetScript(script, handler) self.scripts = self.scripts or {}; self.scripts[script] = handler end
 function Frame:GetScript(script) return self.scripts and self.scripts[script] or nil end
+function Frame:HookScript(script, handler)
+  local previous = self:GetScript(script)
+  if previous then
+    self:SetScript(script, function(...)
+      previous(...)
+      handler(...)
+    end)
+  else
+    self:SetScript(script, handler)
+  end
+end
 function Frame:Show()
   local changed = self.shown ~= true
   self.shown = true
@@ -382,6 +393,7 @@ do
   Equal(timedParent._msufA3SpellIndicatorExpiringEffectGates, nil,
     "visible icon incorrectly created the expiration gate")
   local sensorButton = NewFrame(timedContainer)
+  sensorButton:Hide()
   sensorButton.Icon = NewFrame(sensorButton)
   mockRemaining = 4
   sensorOptions.initializeFrame(sensorButton)
@@ -409,12 +421,18 @@ do
   local gates = assert(timedParent._msufA3SpellIndicatorExpiringEffectGates,
     "expiring frame-effect gate was not created")
   local gate = next(gates)
-  Check(gate ~= nil, "expiring frame-effect gate was not registered")
+  Check(gate ~= nil, "expiring frame-effect gate was not retained")
   Equal(sensorButton._msufA3SpellIndicatorIconEffectRoot, nil,
     "hidden frame-effect sensor created an icon glow")
-  Equal(gate.alpha, 1,
-    "expiring frame effect was not evaluated immediately during registration")
   local driver
+  for i = 1, #createdFrames do
+    if createdFrames[i]:GetScript("OnUpdate") then driver = createdFrames[i] end
+  end
+  Equal(driver, nil, "inactive expiration sensor started the shared driver")
+  timedParent:Show()
+  sensorButton:Show()
+  Equal(gate.alpha, 1,
+    "assigned expiring frame effect was not evaluated during activation")
   for i = 1, #createdFrames do
     if createdFrames[i]:GetScript("OnUpdate") then driver = createdFrames[i] end
   end
@@ -458,6 +476,9 @@ do
   mockRemaining = 0
   driver:GetScript("OnUpdate")(driver, 0.2)
   Equal(gate.alpha, 0, "missing or permanent aura left the expiration effect active")
+  sensorButton:Hide()
+  Equal(driver:GetScript("OnUpdate"), nil,
+    "expiration driver kept running after the native sensor button hid")
   Runtime.HideFrameEffects(timedParent)
   Equal(driver:GetScript("OnUpdate"), nil, "expiration driver kept running without active gates")
 

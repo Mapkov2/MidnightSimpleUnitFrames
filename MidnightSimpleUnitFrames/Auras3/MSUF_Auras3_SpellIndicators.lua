@@ -980,6 +980,8 @@ local function StartExpiringEffectDriver()
     if not expiringEffectDriver then
         expiringEffectDriver = CreateFrame("Frame")
         expiringEffectDriver:Hide()
+        -- Diagnostics handle only (/msufgp): never written back through this path.
+        MSUF._msufA3ExpiringEffectDriver = expiringEffectDriver
     end
     if not expiringEffectDriver:GetScript("OnUpdate") then
         expiringEffectElapsed = 0
@@ -1000,6 +1002,16 @@ end
 UnregisterExpiringEffectGate = function(gate)
     if gate then activeExpiringEffectGates[gate] = nil end
     StopExpiringEffectDriverIfIdle()
+end
+
+local function ExpiringSensorButtonOnShow(button)
+    local gate = button and button._msufA3ExpiringEffectGate
+    if gate then gate:Show() end
+end
+
+local function ExpiringSensorButtonOnHide(button)
+    local gate = button and button._msufA3ExpiringEffectGate
+    if gate then gate:Hide() end
 end
 
 local function EnsureExpiringDurationBridge(button)
@@ -1099,14 +1111,19 @@ local function ApplyExpiringButtonFrameEffect(button, slot, parentFrame)
     }
     gate:SetScript("OnShow", RegisterExpiringEffectGate)
     gate:SetScript("OnHide", UnregisterExpiringEffectGate)
+    gate._msufA3ExpiringEffectButton = button
+    button._msufA3ExpiringEffectGate = gate
+    if button._msufA3ExpiringEffectLifecycleHooked ~= true and button.HookScript then
+        button._msufA3ExpiringEffectLifecycleHooked = true
+        button:HookScript("OnShow", ExpiringSensorButtonOnShow)
+        button:HookScript("OnHide", ExpiringSensorButtonOnHide)
+    end
     parentFrame._msufA3SpellIndicatorExpiringEffectGates = parentFrame._msufA3SpellIndicatorExpiringEffectGates or {}
     parentFrame._msufA3SpellIndicatorExpiringEffectGates[gate] = true
-    gate:Show()
-    -- A group frame can be effectively hidden while its AuraSlots initialize,
-    -- in which case no OnShow transition is delivered here. Registration is
-    -- idempotent and keeps the threshold evaluation independent of secret aura
-    -- visibility; Lua only forwards the secret curve result to SetAlpha.
-    RegisterExpiringEffectGate(gate)
+    -- AuraSlot frames are allocated hidden. Let the native assignment lifecycle
+    -- start this gate only while the sensor button actually owns an aura; an
+    -- absent timed aura therefore adds no shared OnUpdate work.
+    gate:Hide()
     return true
 end
 
@@ -1123,6 +1140,9 @@ ClearExpiringFrameEffects = function(parentFrame)
             gate._msufA3ExpiringEffectState = nil
             gate:Hide()
         end
+        local button = gate and gate._msufA3ExpiringEffectButton
+        if button then button._msufA3ExpiringEffectGate = nil end
+        if gate then gate._msufA3ExpiringEffectButton = nil end
     end
     parentFrame._msufA3SpellIndicatorExpiringEffectGates = nil
 end

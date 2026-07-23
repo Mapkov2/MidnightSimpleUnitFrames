@@ -3698,10 +3698,6 @@ A3._directIdentityRefreshAllEvents = A3._directIdentityRefreshAllEvents or {
     ZONE_CHANGED_NEW_AREA = true,
 }
 
-A3._directIdentityRefreshGroupEvents = A3._directIdentityRefreshGroupEvents or {
-    GROUP_ROSTER_UPDATE = true,
-}
-
 A3._directIdentityEventUnits = A3._directIdentityEventUnits or {
     PLAYER_TARGET_CHANGED = { "target" },
     PLAYER_FOCUS_CHANGED = { "focus" },
@@ -3860,19 +3856,19 @@ end
 
 local function SyncDirectIdentityRefreshEvents(frame)
     local byUnit = A3._directIdentityAuraContainers
-    local hasAny, hasGroup, hasTarget, hasFocus, hasBoss = false, false, false, false, false
+    local hasAny, hasTarget, hasFocus, hasBoss = false, false, false, false
     if byUnit then
         for unit, containers in pairs(byUnit) do
             if containers and next(containers) then
                 hasAny = true
-                if A3._IsGroupUnitToken(unit) then
-                    hasGroup = true
-                elseif unit == "target" then
-                    hasTarget = true
-                elseif unit == "focus" then
-                    hasFocus = true
-                elseif type(unit) == "string" and unit:match("^boss%d+$") then
-                    hasBoss = true
+                if not A3._IsGroupUnitToken(unit) then
+                    if unit == "target" then
+                        hasTarget = true
+                    elseif unit == "focus" then
+                        hasFocus = true
+                    elseif type(unit) == "string" and unit:match("^boss%d+$") then
+                        hasBoss = true
+                    end
                 end
             else
                 byUnit[unit] = nil
@@ -3883,7 +3879,6 @@ local function SyncDirectIdentityRefreshEvents(frame)
 
     SetDirectIdentityRefreshEvent(frame, "PLAYER_ENTERING_WORLD", true)
     SetDirectIdentityRefreshEvent(frame, "ZONE_CHANGED_NEW_AREA", true)
-    SetDirectIdentityRefreshEvent(frame, "GROUP_ROSTER_UPDATE", hasGroup)
     SetDirectIdentityRefreshEvent(frame, "PLAYER_TARGET_CHANGED", hasTarget)
     SetDirectIdentityRefreshEvent(frame, "PLAYER_FOCUS_CHANGED", hasFocus)
     SetDirectIdentityRefreshEvent(frame, "INSTANCE_ENCOUNTER_ENGAGE_UNIT", hasBoss)
@@ -3898,10 +3893,6 @@ A3._EnsureDirectIdentityRefreshFrame = function()
         frame:SetScript("OnEvent", function(_, event)
         if A3._directIdentityRefreshAllEvents[event] == true then
             A3._ScheduleDirectIdentityRefreshAll(false, true)
-            return
-        end
-        if A3._directIdentityRefreshGroupEvents[event] == true then
-            A3._ScheduleDirectIdentityRefreshAll(true)
             return
         end
         local units = A3._directIdentityEventUnits[event]
