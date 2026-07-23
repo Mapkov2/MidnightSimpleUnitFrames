@@ -80,6 +80,7 @@ $tests = @(
     ".github/scripts/tests/castbar_target_name_color_smoke.lua",
     ".github/scripts/tests/combat_crosshair_zoom_contract_smoke.lua",
     ".github/scripts/tests/disabled_feature_lifecycle_smoke.lua",
+    ".github/scripts/tests/detached_power_border_texture_smoke.lua",
     ".github/scripts/tests/detached_power_preview_width_smoke.lua",
     ".github/scripts/tests/editmode_castbar_nudge_smoke.lua",
     ".github/scripts/tests/editmode_idle_lifecycle_smoke.lua",

@@ -56,6 +56,26 @@ local HEALTH_COLOR_OPTIONS = {
     { value = "unified", text = HEALTH_COLOR_LABELS.unified },
     { value = "dark", text = HEALTH_COLOR_LABELS.dark },
 }
+-- Fill Direction merges the fill axis (verticalFillBars) with the in-axis
+-- direction (reverseFillBars) into one control. Compiled by CompileUnitHealth/
+-- CompileUnitPower (MSUF_UF_Config.lua) and applied via the SetOrientation +
+-- SetReverseFill blocks in the Health/Power elements.
+local FILL_DIRECTION_OPTIONS = {
+    { value = "lr", text = "Left to Right" },
+    { value = "rl", text = "Right to Left" },
+    { value = "bt", text = "Bottom to Top" },
+    { value = "tb", text = "Top to Bottom" },
+}
+local FILL_DIRECTION_STATE = {
+    lr = { reverse = false, vertical = false },
+    rl = { reverse = true,  vertical = false },
+    bt = { reverse = false, vertical = true  },
+    tb = { reverse = true,  vertical = true  },
+}
+local function FillDirectionValue(reverse, vertical)
+    if vertical then return reverse and "tb" or "bt" end
+    return reverse and "rl" or "lr"
+end
 local WARNING_HINT = { 0.90, 0.84, 0.76, 1 }
 local WARNING_BADGE_FILL = { 0.205, 0.148, 0.080, 0.96 }
 local WARNING_BADGE_EDGE = { 0.52, 0.39, 0.18, 0.78 }
@@ -790,12 +810,9 @@ local function BuildBasics(ctx, builder, unit, label)
             M.RequestOrRefresh(ctx, "frame-basics-enabled")
         end,
         SettingMeta(ctx, "basics.enabled", unit, "enabled"))
-    local reverse = W.ToggleAt(sec, "Reverse fill direction", x2, row1, labelW)
-    M.BindBoolWidget(ctx, reverse,
-        function() return ReadBool(unit, "reverseFillBars", false) end,
-        function(v) SetBool(unit, "reverseFillBars", v, "MSUF2_REVERSE_FILL", { preview = true }) end,
-        SettingMeta(ctx, "basics.reverse_fill", unit, "reverseFillBars"))
-    local smooth = W.ToggleAt(sec, "Smooth fill", x3, row1, labelW)
+    -- Fill Direction (axis + in-axis direction) is a 4-way dropdown placed on
+    -- its own row below Health Color Scheme; Smooth takes the freed x2 slot.
+    local smooth = W.ToggleAt(sec, "Smooth fill", x2, row1, labelW)
     M.BindBoolWidget(ctx, smooth,
         function() return ReadBool(unit, "smoothFill", false) end,
         function(v) SetBool(unit, "smoothFill", v, "MSUF2_SMOOTH_FILL", { preview = true }) end,
@@ -846,6 +863,35 @@ local function BuildBasics(ctx, builder, unit, label)
         SettingMeta(ctx, "basics.health_color_mode", unit, "healthColorMode"))
     if M.AddTooltip then
         M.AddTooltip(colorMode, "Health Color Scheme", "Use Global follows the Unitframe Global Coloring mode from Colors. Other choices override only this frame.", { hook = true, owner = "ANCHOR_RIGHT" })
+    end
+    -- Shares the Health Color Scheme row so the section stays within its
+    -- declared height instead of overlapping the next accordion header. Snap to
+    -- the column grid when there is room, otherwise sit just right of the
+    -- width-capped Health Color Scheme dropdown; clamp the width so it never
+    -- runs into the third column (Pet keeps its class-color toggle there).
+    local fillDirW = math.min(270, math.max(220, colW * 2))
+    local fillDirX = math.max(x2, x1 + fillDirW + gap)
+    local fillDirFit = (x3 - gap) - fillDirX
+    if fillDirFit > 0 and fillDirW > fillDirFit then fillDirW = fillDirFit end
+    local fillDir = W.Dropdown(sec, "Fill Direction", FILL_DIRECTION_OPTIONS, fillDirW)
+    UnitSectionShared.PlaceDropdown(sec, fillDir, fillDirX, -116, fillDirW)
+    M.BindDropdownWidget(ctx, fillDir,
+        function()
+            return FillDirectionValue(ReadBool(unit, "reverseFillBars", false), ReadBool(unit, "verticalFillBars", false))
+        end,
+        function(v)
+            local state = FILL_DIRECTION_STATE[v] or FILL_DIRECTION_STATE.lr
+            -- Write both booleans, then a single apply/preview (mirrors the
+            -- Health Color Scheme setter) so a 4-way change never double-applies.
+            local conf = GetConf(unit)
+            conf.reverseFillBars = state.reverse
+            conf.verticalFillBars = state.vertical
+            M.RequestUnitApply(unit, "MSUF2_FILL_DIRECTION", { preview = true })
+            if M.Refresh then M.Refresh(ctx) end
+        end,
+        SettingMeta(ctx, "basics.fill_direction", unit, "verticalFillBars"))
+    if M.AddTooltip then
+        M.AddTooltip(fillDir, "Fill Direction", "Axis and direction the Health and Power bars fill. Vertical options fill bottom-to-top or top-to-bottom; combines with Smooth fill.", { hook = true, owner = "ANCHOR_RIGHT" })
     end
     local petPlayerClassColor
     if unit == "pet" then

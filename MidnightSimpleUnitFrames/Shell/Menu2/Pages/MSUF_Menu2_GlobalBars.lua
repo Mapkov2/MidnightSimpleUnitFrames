@@ -41,6 +41,8 @@ local BAR_SETTING_BY_PATH = {
     ["rounded.roundedPowerBars"] = "bars.roundedPowerBars",
     ["rounded.roundedMouseover"] = "bars.roundedMouseover",
     ["power.realtime_text"] = "bars.realtimePowerText",
+    ["textures.power_foreground"] = "bars.powerBarTexture",
+    ["textures.power_background"] = "bars.powerBarBgTexture",
 }
 local BAR_ACTION_BY_PATH = {
     ["scope.overrides.reset"] = "reset_all_scoped_global_bars_overrides",
@@ -799,11 +801,13 @@ end
 
 local function BuildTextureSection(ctx, b)
     local compactTextures = (ctx.width or 720) < 560
-    local textures = b:CollapsibleSection("bars_textures", "Textures & Gradient", compactTextures and 458 or 330, true)
+    local textures = b:CollapsibleSection("bars_textures", "Textures & Gradient", compactTextures and 566 or 330, true)
     local leftX, topY = 14, -42
     local rightX = compactTextures and leftX or math.max(340, math.floor((ctx.width or 720) * 0.50))
     local leftW = compactTextures and math.max(220, (ctx.width or 720) - 42) or math.min(300, math.max(220, rightX - 48))
-    local gradientY = compactTextures and (topY - 126) or topY
+    -- Compact stacks the gradient block under the texture column, which now
+    -- carries two extra power dropdowns.
+    local gradientY = compactTextures and (topY - 234) or topY
     local function BindTextureDropdown(label, values, getValue, setValue, y, path)
         local control = W.Dropdown(textures, label, values, leftW)
         M.BindDropdownWidget(ctx, control, getValue, setValue, Meta(path))
@@ -822,6 +826,31 @@ local function BuildTextureSection(ctx, b)
                 ApplyBars("MSUF2_BAR_BG_TEXTURE")
             end
         end, topY - 54, "textures.background")
+    -- Shared power-bar art for every unit power bar (detached or not). Stored in
+    -- the shared bars table like powerBarHeight, and resolved in the UF compiler
+    -- as: this value -> per-unit powerBarTexture -> Class Resources detached art.
+    local powerTexture = BindTextureDropdown("Power bar texture", function() return TextureValues("Use bar texture") end,
+        function() return Bars().powerBarTexture or "" end,
+        function(v)
+            local bars = Bars()
+            v = v or ""
+            if bars.powerBarTexture == v then return end
+            bars.powerBarTexture = v
+            ApplyBars("MSUF2_POWER_BAR_TEXTURE")
+        end, topY - 108, "textures.power_foreground")
+    local powerBgTexture = BindTextureDropdown("Power background texture", function() return TextureValues("Use bar background texture") end,
+        function() return Bars().powerBarBgTexture or "" end,
+        function(v)
+            local bars = Bars()
+            v = v or ""
+            if bars.powerBarBgTexture == v then return end
+            bars.powerBarBgTexture = v
+            ApplyBars("MSUF2_POWER_BAR_BG_TEXTURE")
+        end, topY - 162, "textures.power_background")
+    if M.AddTooltip then
+        M.AddTooltip(powerTexture, "Power Bar Texture", "Art for every unit's power bar. Leave on Use bar texture to keep the shared bar art. Each unit page can override this, and the Class Resources detached power texture still wins for a detached Player bar.", { hook = true, owner = "ANCHOR_RIGHT" })
+        M.AddTooltip(powerBgTexture, "Power Background Texture", "Background art behind every unit's power bar. Overridable per unit on the unit page.", { hook = true, owner = "ANCHOR_RIGHT" })
+    end
     local gradLabel = T.Font(textures, "GameFontHighlightSmall", M.Tr("Gradient"), T.colors.muted)
     gradLabel:SetPoint("TOPLEFT", textures, "TOPLEFT", rightX, gradientY)
     local SyncGradientControls = M.RefreshProxy()
@@ -1961,7 +1990,7 @@ local GLOBAL_BARS_LAZY_SECTION_SPECS = {
         sectionId = "bars_textures",
         title = "Textures & Gradient",
         defaultOpen = true,
-        height = function(lazyCtx) return (((lazyCtx and lazyCtx.width) or 720) < 560) and 458 or 330 end,
+        height = function(lazyCtx) return (((lazyCtx and lazyCtx.width) or 720) < 560) and 566 or 330 end,
         build = BuildTextureSection,
     },
     {

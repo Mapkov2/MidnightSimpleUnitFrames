@@ -188,6 +188,17 @@ function Health.Apply(frame, spec)
   frame._msufHealthRuntimeColorEnabled = mode ~= "dark" and mode ~= "unified"
   frame._msufHealthRuntimeGradient = mode == "gradient"
   SetTexture(frame.hpBar, h and h.texture or spec and spec.texture or WHITE)
+  if frame.hpBar.SetOrientation then
+    -- Native fill axis; set-once per Apply, no hot-path cost. VERTICAL combines
+    -- with SetReverseFill below (reverse flips the direction within the axis).
+    local orientation = (h and h.vertical == true) and "VERTICAL" or "HORIZONTAL"
+    if frame.hpBar._msufOrientation ~= orientation then
+      frame.hpBar:SetOrientation(orientation)
+      frame.hpBar._msufOrientation = orientation
+      -- Force the reverse-fill block below to re-apply after an axis flip.
+      frame.hpBar._msufReverseFill = nil
+    end
+  end
   if frame.hpBar.SetReverseFill then
     local reverse = h and h.reverse == true
     if frame.hpBar._msufReverseFill ~= reverse then
@@ -533,6 +544,22 @@ local function UpdateGroupPercentLean(frame, event, unit)
     end
   end
 
+  -- UNIT_HEALTH text writers are deferred dirty markers and immediately
+  -- discard dispatch payloads. For the common alive/static-color member there
+  -- is likewise no status or dead-background consumer, so finish at the bar
+  -- write instead of entering the generic color/status handoff. Identity,
+  -- connection, gradient, gone-state, and smoothing semantics above remain
+  -- unchanged.
+  if event == "UNIT_HEALTH"
+    and frame._msufHealthRuntimeGradient ~= true
+    and frame._msufHealthStatusGone ~= true
+    and frame._msufStatusTextValue == nil
+    and frame._msufStatusTextHealthRefresh ~= true
+    and frame._msufUpdateGroupVisualsGoneState == nil
+    and (secret or pct > 0) then
+    return pct, nil, true
+  end
+
   if frame._msufHealthRuntimeColorEnabled ~= false
     and (event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, pct, secret)) then
     if not ApplyRuntimeColor(frame, event, unit, pct, 100) then SetColor(frame) end
@@ -622,7 +649,14 @@ function Health.SelectUpdate(frame, spec)
   return UpdateSingle
 end
 
-function Health.SelectEventUpdate(_frame, _spec, event)
+function Health.SelectEventUpdate(_frame, spec, event)
+  -- Group health text uses a shared deferred drain on UNIT_HEALTH, so the
+  -- generic UpdateGroup dispatch-percent handshake is dead work on that event.
+  -- Reuse the same folded bar path already used by text-free Raid/Mythic
+  -- frames; cold max/connection/identity events retain the full updater.
+  if event == "UNIT_HEALTH" and spec and spec.scope == "group" then
+    return UpdateGroupPercentLean
+  end
   -- UNIT_FLAGS changes dead/ghost/AFK/DND status, not the health value. The
   -- color resolver performs the exact status and (for gradient mode) native
   -- curve reads it needs, so a second UnitHealthPercent + StatusBar write is

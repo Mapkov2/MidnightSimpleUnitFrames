@@ -1390,8 +1390,23 @@ local function RenderDetachedPower(preview, bars, player, classFrame)
     local x, y = tonumber(player.detachedPowerBarOffsetX) or 0, tonumber(player.detachedPowerBarOffsetY) or -4
     local pr, pg, pb = PowerColor()
     local fgTex = ResolveTexture(bars.detachedPowerBarTexture)
-    local bgTex = ResolveTexture(bars.detachedPowerBarBgTexture, fgTex)
-    local outline = PreviewOutline(preview, bars.detachedPowerBarOutline, 1)
+    -- An unset detached background follows the global bar background, not the
+    -- foreground, so detaching alone never repaints the bar (see UF config).
+    local bgTex = ResolveTexture(bars.detachedPowerBarBgTexture,
+        type(_G.MSUF_GetBarBackgroundTexture) == "function" and _G.MSUF_GetBarBackgroundTexture() or fgTex)
+    -- Shapes keep the Class-Resources edge; the rectangular bar follows the
+    -- Player unit page's own power border toggle/thickness.
+    local outline
+    if shapeInfo then
+        outline = PreviewOutline(preview, bars.detachedPowerBarOutline, 1)
+    else
+        local borderOn = player.powerBarBorderEnabled
+        if borderOn == nil then borderOn = bars.powerBarBorderEnabled end
+        outline = borderOn == true
+            and PreviewOutline(preview, player.powerBarBorderThickness
+                or bars.powerBarBorderThickness or bars.powerBarBorderSize, 1)
+            or 0
+    end
     local fraction = AnimatedMeterFraction(preview, 0.72, 0.46, 0.08, 0.96)
     frame:ClearAllPoints()
     if classFrame and classFrame.IsShown and classFrame:IsShown() then

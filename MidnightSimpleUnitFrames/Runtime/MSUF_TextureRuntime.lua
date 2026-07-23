@@ -139,10 +139,11 @@ local function _Iter_ApplyAllBarTex(f)
     _ApplyTexCached(f.hpBar, hpTex)
     if S.applyBg then S.applyBg(f) end
 
+    -- The compiler owns the full power-texture precedence (global bars value ->
+    -- per-unit override -> Class Resources detached art), so the finished spec
+    -- value is authoritative for every unit. This pass therefore needs no
+    -- detached/Player special case and no second texture-key resolve.
     local pbTex = (spec and spec.power and spec.power.texture) or (spec and spec.texture) or hpTex
-    if f._msufPowerBarDetached and S.texDPB then
-        pbTex = S.texDPB
-    end
     -- ROUND/CRYSTAL/ORB use fixed fill art owned by the Power element. A global
     -- statusbar refresh must not replace that art with the rectangular bar media.
     if not (f.targetPowerBar and f.targetPowerBar._msufPowerShapeActive == true) then
@@ -170,10 +171,7 @@ local function UpdateAllBarTextures(scope, skipUnitFrames, skipCastbars)
         local texHP = getBarTexture()
         if not texHP then return end
 
-        local dpb = MSUF.Bars and MSUF.Bars._DetachedPowerBarTextures
-
         _iterState.texHP = texHP
-        _iterState.texDPB = (dpb and dpb.ResolveFg and dpb.ResolveFg()) or texHP
         _iterState.applyBg = _G.MSUF_ApplyBarBackgroundVisual
 
         ForEachUnitFrame(_Iter_ApplyAllBarTex, scope)

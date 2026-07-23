@@ -636,13 +636,17 @@ local function HandleUnitMouseover(f, active)
   return true
 end
 
+-- Mirror the flat power border contract: the detached rectangular bar follows the
+-- unit's own power border toggle/thickness, not the Class-Resources shape outline.
 local function ResolveDetachedPowerEdgeThickness(f)
   if not (f and f._msufPowerBarDetached and f.targetPowerBar) then return 0 end
   if f.targetPowerBar._msufPowerShapeActive == true then return 0 end
-  local bars = BarsDB()
-  local raw = bars and bars.detachedPowerBarOutline
-  if raw == nil then raw = ResolveUnitOutlineThickness(f) end
-  return ClampEdgeSize(raw, 0, 8)
+  local power = f.MSUFSpec and f.MSUFSpec.power
+  if power then
+    if power.borderEnabled ~= true then return 0 end
+    return ClampEdgeSize(power.borderThickness, 0, 8)
+  end
+  return ResolveUnitOutlineThickness(f)
 end
 
 local function ApplyDetachedPowerRoundedEdge(f, enabled)

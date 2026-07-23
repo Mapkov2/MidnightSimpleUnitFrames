@@ -156,6 +156,7 @@ local PREDICTION_DISABLE_FIELDS = {
   "_msufPredictionRuntimeCfg",
   "_msufPredictionFrameWidth",
   "_msufPredictionHpReverse",
+  "_msufPredictionVertical",
   "_msufPredictionHealMode",
   "_msufPredictionAbsorbMode",
   "_msufPredictionHealAbsorbMode",
@@ -535,6 +536,7 @@ local function PositionOverAbsorbGlow(frame, reverse)
   local holder = EnsureOverAbsorbGlow(frame)
   local hpBar = frame and (frame.hpBar or frame.Health)
   if not (holder and hpBar) then return nil end
+  local vertical = frame._msufPredictionVertical == true
   if holder.SetFrameLevel and hpBar.GetFrameLevel then
     local baseLevel = hpBar:GetFrameLevel()
     if issecretvalue(baseLevel) ~= true then
@@ -545,20 +547,38 @@ local function PositionOverAbsorbGlow(frame, reverse)
       end
     end
   end
-  if holder._msufOverAbsorbReverse == reverse and holder._msufOverAbsorbAnchor == hpBar then
+  if holder._msufOverAbsorbReverse == reverse
+    and holder._msufOverAbsorbAnchor == hpBar
+    and holder._msufOverAbsorbVertical == vertical then
     return holder
   end
   holder:ClearAllPoints()
-  if reverse then
-    holder:SetPoint("TOPRIGHT", hpBar, "TOPLEFT", OVER_ABSORB_GLOW_OFFSET, 0)
-    holder:SetPoint("BOTTOMRIGHT", hpBar, "BOTTOMLEFT", OVER_ABSORB_GLOW_OFFSET, 0)
+  if vertical then
+    -- Vertical fill: the over-absorb edge sits at the fill-end (top for
+    -- bottom->top HP, bottom for top->bottom HP) as a horizontal strip. The
+    -- Shield-Overshield art is drawn for a side edge; a rotated stripe is an
+    -- accepted cosmetic trade-off (the presence gate still renders correctly).
+    if reverse then
+      holder:SetPoint("TOPLEFT", hpBar, "BOTTOMLEFT", 0, OVER_ABSORB_GLOW_OFFSET)
+      holder:SetPoint("TOPRIGHT", hpBar, "BOTTOMRIGHT", 0, OVER_ABSORB_GLOW_OFFSET)
+    else
+      holder:SetPoint("BOTTOMLEFT", hpBar, "TOPLEFT", 0, -OVER_ABSORB_GLOW_OFFSET)
+      holder:SetPoint("BOTTOMRIGHT", hpBar, "TOPRIGHT", 0, -OVER_ABSORB_GLOW_OFFSET)
+    end
+    holder:SetHeight(OVER_ABSORB_GLOW_W)
   else
-    holder:SetPoint("TOPLEFT", hpBar, "TOPRIGHT", -OVER_ABSORB_GLOW_OFFSET, 0)
-    holder:SetPoint("BOTTOMLEFT", hpBar, "BOTTOMRIGHT", -OVER_ABSORB_GLOW_OFFSET, 0)
+    if reverse then
+      holder:SetPoint("TOPRIGHT", hpBar, "TOPLEFT", OVER_ABSORB_GLOW_OFFSET, 0)
+      holder:SetPoint("BOTTOMRIGHT", hpBar, "BOTTOMLEFT", OVER_ABSORB_GLOW_OFFSET, 0)
+    else
+      holder:SetPoint("TOPLEFT", hpBar, "TOPRIGHT", -OVER_ABSORB_GLOW_OFFSET, 0)
+      holder:SetPoint("BOTTOMLEFT", hpBar, "BOTTOMRIGHT", -OVER_ABSORB_GLOW_OFFSET, 0)
+    end
+    holder:SetWidth(OVER_ABSORB_GLOW_W)
   end
-  holder:SetWidth(OVER_ABSORB_GLOW_W)
   holder._msufOverAbsorbReverse = reverse
   holder._msufOverAbsorbAnchor = hpBar
+  holder._msufOverAbsorbVertical = vertical
   return holder
 end
 
@@ -868,6 +888,58 @@ local function SetParentCached(bar, parent)
   return true
 end
 
+-- The HP bar's own size changes only on layout/apply -- never on a combat
+-- event -- so measuring it inside the per-event layout guard is pure overhead.
+-- Measure once and let the widget invalidate the cache itself. Two independent
+-- invalidation sources keep this exact: the bar's own OnSizeChanged (covers any
+-- resize, including live Edit Mode drags) and Prediction.Apply (deterministic
+-- for every config/layout apply, and the path that installs the hook).
+local function InvalidateHpGeometry(hpBar)
+  if hpBar then hpBar._msufPredGeomReady = nil end
+end
+
+local function OnHpGeometryChanged(hpBar)
+  hpBar._msufPredGeomReady = nil
+end
+
+local function EnsureHpGeometryHook(hpBar)
+  if not hpBar or hpBar._msufPredGeomHooked == true or not hpBar.HookScript then return end
+  hpBar._msufPredGeomHooked = true
+  hpBar:HookScript("OnSizeChanged", OnHpGeometryChanged)
+end
+
+-- Extent of the HP bar along the fill axis. Non-positive measurements are
+-- cached as nil so the caller's configured fallback still applies, exactly as
+-- the previous inline measure did; a later resize re-arms the cache.
+local function HpAlongSize(hpBar, vertical, runtimeWidth)
+  if hpBar._msufPredGeomReady ~= true then
+    local w = hpBar.GetWidth and hpBar:GetWidth() or nil
+    local h = hpBar.GetHeight and hpBar:GetHeight() or nil
+    if not w or w <= 0 then w = nil end
+    if not h or h <= 0 then h = nil end
+    hpBar._msufPredGeomW = w
+    hpBar._msufPredGeomH = h
+    hpBar._msufPredGeomReady = true
+  end
+  if vertical then
+    return hpBar._msufPredGeomH or 1
+  end
+  return hpBar._msufPredGeomW or runtimeWidth or 1
+end
+
+-- Overlay StatusBars fill along the same axis as the HP bar. Orientation is a
+-- set-once native flag; the swipe below re-applies reverse fill after any axis
+-- flip because SetOrientation can reset it on some clients.
+local function ApplyOverlayOrientation(bar, vertical)
+  if not bar.SetOrientation then return end
+  local orientation = vertical and "VERTICAL" or "HORIZONTAL"
+  if bar._msufPredictionBarOrientation ~= orientation then
+    bar:SetOrientation(orientation)
+    bar._msufPredictionBarOrientation = orientation
+    bar._msufReverseFill = nil
+  end
+end
+
 local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar, height, offsetY)
   local hpBar = frame.hpBar or frame.Health
   if not (bar and hpBar) then
@@ -875,11 +947,11 @@ local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar, heig
   end
   local followSource = (mode == 3 or mode == 4) and followBar or nil
   local follow = (mode == 3 or mode == 4) and (followSource and StatusTexture(followSource) or StatusTexture(hpBar)) or nil
-  local runtimeWidth = tonumber(frame._msufPredictionFrameWidth)
-  local width = (hpBar.GetWidth and hpBar:GetWidth()) or runtimeWidth or 1
-  if not width or width <= 0 then
-    width = runtimeWidth or 1
-  end
+  local vertical = frame._msufPredictionVertical == true
+  -- Extent along the fill axis only: width horizontally, height vertically. The
+  -- cross axis is pinned by the corner anchors, so it is never measured. Served
+  -- from the size-change-invalidated cache -- no native measure per event.
+  local width = HpAlongSize(hpBar, vertical, tonumber(frame._msufPredictionFrameWidth))
   local anchorTarget = follow or hpBar
   local parent = (mode == 4) and frame or hpBar
   local parentCurrent = not bar.GetParent or bar:GetParent() == parent
@@ -895,6 +967,7 @@ local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar, heig
     and bar._msufPredictionLevelOffset == levelOffset
     and bar._msufPredictionHeight == height
     and bar._msufPredictionOffsetY == offsetY
+    and bar._msufPredictionVertical == vertical
     and bar._msufReverseFill == reverse
     and parentCurrent
   if layoutCurrent and PredictionLayerCurrent(frame, hpBar, bar, levelOffset) then
@@ -916,9 +989,41 @@ local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar, heig
     or bar._msufPredictionLevelOffset ~= levelOffset
     or bar._msufPredictionHeight ~= height
     or bar._msufPredictionOffsetY ~= offsetY
+    or bar._msufPredictionVertical ~= vertical
     or parentChanged then
     bar:ClearAllPoints()
-    if follow then
+    if vertical then
+      -- Vertical fill rotates the horizontal layout 90 degrees. Along-axis is
+      -- height (fills bottom->top, or top->bottom when reverse); cross-axis is
+      -- width. The `height` param (stripe thickness) maps to width and `offsetY`
+      -- becomes a horizontal (cross-axis) nudge.
+      if follow then
+        bar:SetHeight(width)
+        if height > 0 then
+          bar:SetWidth(height)
+          if reverse then
+            bar:SetPoint("TOP", follow, "BOTTOM", offsetY, 0)
+          else
+            bar:SetPoint("BOTTOM", follow, "TOP", offsetY, 0)
+          end
+        elseif reverse then
+          bar:SetPoint("TOPLEFT", follow, "BOTTOMLEFT", offsetY, 0)
+          bar:SetPoint("TOPRIGHT", follow, "BOTTOMRIGHT", offsetY, 0)
+        else
+          bar:SetPoint("BOTTOMLEFT", follow, "TOPLEFT", offsetY, 0)
+          bar:SetPoint("BOTTOMRIGHT", follow, "TOPRIGHT", offsetY, 0)
+        end
+      elseif height > 0 then
+        bar:SetWidth(height)
+        bar:SetPoint("BOTTOM", hpBar, "BOTTOM", offsetY, 0)
+        bar:SetPoint("TOP", hpBar, "TOP", offsetY, 0)
+      elseif offsetY ~= 0 then
+        bar:SetPoint("TOPLEFT", hpBar, "TOPLEFT", offsetY, 0)
+        bar:SetPoint("BOTTOMRIGHT", hpBar, "BOTTOMRIGHT", offsetY, 0)
+      else
+        bar:SetAllPoints(hpBar)
+      end
+    elseif follow then
       bar:SetWidth(width)
       if height > 0 then
         bar:SetHeight(height)
@@ -953,7 +1058,9 @@ local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar, heig
     bar._msufPredictionLevelOffset = levelOffset
     bar._msufPredictionHeight = height
     bar._msufPredictionOffsetY = offsetY
+    bar._msufPredictionVertical = vertical
   end
+  ApplyOverlayOrientation(bar, vertical)
   if bar.SetReverseFill and bar._msufReverseFill ~= reverse then
     bar:SetReverseFill(reverse)
     bar._msufReverseFill = reverse
@@ -967,11 +1074,10 @@ local function PredictionLayoutCurrent(frame, bar, levelOffset, mode, reverse, f
   end
   local followSource = (mode == 3 or mode == 4) and followBar or nil
   local follow = (mode == 3 or mode == 4) and (followSource and StatusTexture(followSource) or StatusTexture(hpBar)) or nil
-  local runtimeWidth = tonumber(frame._msufPredictionFrameWidth)
-  local width = (hpBar.GetWidth and hpBar:GetWidth()) or runtimeWidth or 1
-  if not width or width <= 0 then
-    width = runtimeWidth or 1
-  end
+  local vertical = frame._msufPredictionVertical == true
+  -- Cached along-axis extent (see LayoutBar): this guard is the per-event hot
+  -- path, so it must not measure the bar natively.
+  local width = HpAlongSize(hpBar, vertical, tonumber(frame._msufPredictionFrameWidth))
   local anchorTarget = follow or hpBar
   local parent = (mode == 4) and frame or hpBar
   height = height or 0
@@ -985,6 +1091,7 @@ local function PredictionLayoutCurrent(frame, bar, levelOffset, mode, reverse, f
     and bar._msufPredictionLevelOffset == levelOffset
     and bar._msufPredictionHeight == height
     and bar._msufPredictionOffsetY == offsetY
+    and bar._msufPredictionVertical == vertical
     and bar._msufReverseFill == reverse
     and (not bar.GetParent or bar:GetParent() == parent)
     and PredictionLayerCurrent(frame, hpBar, bar, levelOffset)
@@ -1010,11 +1117,9 @@ local function LayoutHealAbsorbBar(frame, bar, levelOffset, hpReverse, mode, hei
     return LayoutBar(frame, bar, levelOffset, mode, ReverseForMode(mode, hpReverse), nil, height, offsetY)
   end
   local hpTexture = StatusTexture(hpBar) or hpBar
-  local runtimeWidth = tonumber(frame._msufPredictionFrameWidth)
-  local width = (hpBar.GetWidth and hpBar:GetWidth()) or runtimeWidth or 1
-  if not width or width <= 0 then
-    width = runtimeWidth or 1
-  end
+  local vertical = frame._msufPredictionVertical == true
+  -- Cached along-axis extent, as in LayoutBar.
+  local width = HpAlongSize(hpBar, vertical, tonumber(frame._msufPredictionFrameWidth))
   local reverse = hpReverse ~= true
 
   local layoutCurrent = bar._msufHealAbsorbAnchorTarget == hpTexture
@@ -1025,6 +1130,7 @@ local function LayoutHealAbsorbBar(frame, bar, levelOffset, hpReverse, mode, hei
     and bar._msufHealAbsorbLevelOffset == levelOffset
     and bar._msufHealAbsorbHeight == height
     and bar._msufHealAbsorbOffsetY == offsetY
+    and bar._msufHealAbsorbVertical == vertical
     and bar._msufReverseFill == reverse
   if layoutCurrent and bar.GetParent and bar:GetParent() ~= hpBar then
     layoutCurrent = false
@@ -1050,22 +1156,44 @@ local function LayoutHealAbsorbBar(frame, bar, levelOffset, hpReverse, mode, hei
     or bar._msufHealAbsorbParent ~= hpBar
     or bar._msufHealAbsorbHeight ~= height
     or bar._msufHealAbsorbOffsetY ~= offsetY
+    or bar._msufHealAbsorbVertical ~= vertical
     or parentChanged then
     bar:ClearAllPoints()
-    bar:SetWidth(width)
-    if height > 0 then
-      bar:SetHeight(height)
-      if hpReverse == true then
-        bar:SetPoint("LEFT", hpTexture, "LEFT", 0, offsetY)
+    if vertical then
+      -- Vertical mirror: the heal-absorb overlay tracks the HP fill edge on the
+      -- fill axis (bottom for bottom->top HP, top for top->bottom HP). `height`
+      -- (thickness) becomes width and `offsetY` a horizontal nudge.
+      bar:SetHeight(width)
+      if height > 0 then
+        bar:SetWidth(height)
+        if hpReverse == true then
+          bar:SetPoint("BOTTOM", hpTexture, "BOTTOM", offsetY, 0)
+        else
+          bar:SetPoint("TOP", hpTexture, "TOP", offsetY, 0)
+        end
+      elseif hpReverse == true then
+        bar:SetPoint("BOTTOMLEFT", hpTexture, "BOTTOMLEFT", offsetY, 0)
+        bar:SetPoint("BOTTOMRIGHT", hpTexture, "BOTTOMRIGHT", offsetY, 0)
       else
-        bar:SetPoint("RIGHT", hpTexture, "RIGHT", 0, offsetY)
+        bar:SetPoint("TOPLEFT", hpTexture, "TOPLEFT", offsetY, 0)
+        bar:SetPoint("TOPRIGHT", hpTexture, "TOPRIGHT", offsetY, 0)
       end
-    elseif hpReverse == true then
-      bar:SetPoint("TOPLEFT", hpTexture, "TOPLEFT", 0, offsetY)
-      bar:SetPoint("BOTTOMLEFT", hpTexture, "BOTTOMLEFT", 0, offsetY)
     else
-      bar:SetPoint("TOPRIGHT", hpTexture, "TOPRIGHT", 0, offsetY)
-      bar:SetPoint("BOTTOMRIGHT", hpTexture, "BOTTOMRIGHT", 0, offsetY)
+      bar:SetWidth(width)
+      if height > 0 then
+        bar:SetHeight(height)
+        if hpReverse == true then
+          bar:SetPoint("LEFT", hpTexture, "LEFT", 0, offsetY)
+        else
+          bar:SetPoint("RIGHT", hpTexture, "RIGHT", 0, offsetY)
+        end
+      elseif hpReverse == true then
+        bar:SetPoint("TOPLEFT", hpTexture, "TOPLEFT", 0, offsetY)
+        bar:SetPoint("BOTTOMLEFT", hpTexture, "BOTTOMLEFT", 0, offsetY)
+      else
+        bar:SetPoint("TOPRIGHT", hpTexture, "TOPRIGHT", 0, offsetY)
+        bar:SetPoint("BOTTOMRIGHT", hpTexture, "BOTTOMRIGHT", 0, offsetY)
+      end
     end
     bar._msufPredictionMode = nil
     bar._msufHealAbsorbAnchorTarget = hpTexture
@@ -1075,9 +1203,11 @@ local function LayoutHealAbsorbBar(frame, bar, levelOffset, hpReverse, mode, hei
     bar._msufHealAbsorbParent = hpBar
     bar._msufHealAbsorbHeight = height
     bar._msufHealAbsorbOffsetY = offsetY
+    bar._msufHealAbsorbVertical = vertical
   end
   bar._msufHealAbsorbLevelOffset = levelOffset
 
+  ApplyOverlayOrientation(bar, vertical)
   if bar.SetReverseFill and bar._msufReverseFill ~= reverse then
     bar:SetReverseFill(reverse)
     bar._msufReverseFill = reverse
@@ -1235,6 +1365,72 @@ local function ClearPredictionCache(frame)
   ClearBarValueCache(frame.healAbsorbBar)
 end
 
+-- FLAT prediction writer for the plain-bar archetype: any combination of an
+-- incoming-heal bar, an absorb bar, and a heal-absorb bar with STATIC anchors
+-- and NO over-absorb overlay/stripe and NO mixed follow-clamp. This is exactly
+-- EllesmereUI's absorb+heal-prediction shape. It skips the general
+-- ApplyPredictionValues state machine (per-lane show/refresh branch pairs,
+-- follow-layout checks, over-absorb glow) and does the one thing a data event
+-- changes: read the dirty lane(s) from the mask and write the bar(s) with
+-- ShowValue's own dedup. Only the lanes flagged in the mask are read, matching
+-- the general path's refresh gating so a heal event never reads the absorb API
+-- and vice versa. Compiled onto the frame only when the archetype matches.
+local function FlushFlatPrediction(frame, mask)
+  if type(mask) ~= "number" then mask = 7 end
+  local unit = frame.MSUFUnitKey
+  -- Resolve which lanes this event touches before doing any work: the mask
+  -- selects heal(1)/absorb(2)/heal-absorb(4), gated on the lane being active
+  -- and its bar existing. Reading the plain HP max is deferred until we know at
+  -- least one lane will render -- and read at most once, with no per-call
+  -- closure (this is a per-member, per-event hot path; a boxed upvalue frame
+  -- here is pure GC churn EUI never pays on its flat writer).
+  local doHeal = (mask % 2) >= 1 and frame._msufPredictionHealActive == true and frame.incomingHealBar
+  local doAbsorb = (mask % 4) >= 2 and frame._msufPredictionAbsorbActive == true and frame.absorbBar
+  local doHealAbsorb = mask >= 4 and frame._msufPredictionHealAbsorbActive == true and frame.healAbsorbBar
+  if doHeal or doAbsorb or doHealAbsorb then
+    local maxHP
+    local hpBar = frame.hpBar
+    if hpBar and hpBar._msufHealthMaxReady == true and hpBar._msufHealthMaxUnit == unit then
+      maxHP = hpBar._msufHealthMax
+    end
+    if issecretvalue(maxHP) ~= true and maxHP == nil then
+      maxHP = ReadHealthMax(frame, unit)
+    end
+    if doHeal then
+      local incoming = ReadIncomingHeals(unit)
+      frame._msufPredictionIncoming = incoming
+      ShowValue(frame.incomingHealBar, maxHP, incoming, false)
+    end
+    if doAbsorb then
+      local readAbsorb = frame._msufPredictionReadAbsorb or ReadDamageAbsorbs
+      local absorb = readAbsorb(frame, unit)
+      frame._msufPredictionAbsorb = absorb
+      ShowValue(frame.absorbBar, maxHP, absorb, false)
+    end
+    if doHealAbsorb then
+      local healAbsorb = ReadHealAbsorbs(unit)
+      frame._msufPredictionHealAbsorb = healAbsorb
+      ShowValue(frame.healAbsorbBar, maxHP, healAbsorb, false)
+    end
+  end
+  -- No reseed-cache bookkeeping here: the cache fields are read only by the
+  -- health-gated glow/stripe and general reseed paths, none of which run for a
+  -- flat frame (no health-dependent visual). A cold general refresh finding the
+  -- cache unset simply reseeds fully -- the safe direction -- so keeping it
+  -- unset costs nothing and saves three field writes + an issecretvalue on
+  -- every per-event flush, which is the whole point of this archetype.
+end
+
+-- Plain-bar archetype: static anchors (no absorb follow), no over-absorb
+-- overlay/stripe, no mixed follow-clamp. Heal / absorb / heal-absorb bars in
+-- any combination are fine -- none of them layout on a data event.
+local function IsFlatPredictionArchetype(cfg, followAbsorb, mixedFollowClamp)
+  return cfg.overAbsorbOverlay ~= true
+    and cfg.fullHealthAbsorbStripe ~= true
+    and followAbsorb ~= true
+    and mixedFollowClamp ~= true
+end
+
 local function CompilePredictionRuntime(frame, cfg, spec)
   if not frame then
     return
@@ -1249,6 +1445,10 @@ local function CompilePredictionRuntime(frame, cfg, spec)
   frame._msufPredictionRuntimeCfg = cfg
   frame._msufPredictionFrameWidth = tonumber(spec and spec.width) or nil
   frame._msufPredictionHpReverse = hpReverse
+  -- Fill axis for HP: overlays anchor along the same axis (see LayoutBar /
+  -- LayoutHealAbsorbBar / PositionOverAbsorbGlow). reverse still flips direction
+  -- within the axis; vertical only swaps which axis is the fill axis.
+  frame._msufPredictionVertical = spec and spec.health and spec.health.vertical == true
   frame._msufPredictionHealMode = healMode
   frame._msufPredictionAbsorbMode = absorbMode
   frame._msufPredictionHealAbsorbMode = healAbsorbMode
@@ -1282,10 +1482,18 @@ local function CompilePredictionRuntime(frame, cfg, spec)
     frame._msufUpdatePredictionHealthValue = Prediction.UpdateHealthValue
   end
   frame._msufUpdatePredictionConnectionState = Prediction.UpdateConnectionState
-  frame._msufPredictionFlushData = frame._msufPredictionMask ~= 0
-    and cfg.test ~= true
-    and UpdateBoundPredictionData
-    or nil
+  if frame._msufPredictionMask ~= 0 and cfg.test ~= true then
+    if IsFlatPredictionArchetype(cfg, followAbsorb, mixedFollowClamp) then
+      frame._msufPredictionFlushData = FlushFlatPrediction
+      frame._msufPredictionSimpleAbsorb = true
+    else
+      frame._msufPredictionFlushData = UpdateBoundPredictionData
+      frame._msufPredictionSimpleAbsorb = nil
+    end
+  else
+    frame._msufPredictionFlushData = nil
+    frame._msufPredictionSimpleAbsorb = nil
+  end
 end
 
 function Prediction.IsEnabled(frame, spec)
@@ -1378,6 +1586,14 @@ function Prediction.Apply(frame, spec)
   ClearPredictionCache(frame)
   frame._msufPredictionConnectionUnit = nil
   frame._msufPredictionConnectionOnline = nil
+  -- Apply is the authoritative geometry boundary: drop the cached HP-bar
+  -- measurement and make sure the bar reports later resizes itself, so the
+  -- per-event layout guard never has to measure.
+  do
+    local hpBar = frame.hpBar or frame.Health
+    InvalidateHpGeometry(hpBar)
+    EnsureHpGeometryHook(hpBar)
+  end
   CompilePredictionRuntime(frame, cfg, spec)
   if frame._msufPredictionFullHealthStripe == true then
     -- Curve construction is immutable feature setup. Do it with Apply/layout
@@ -1520,9 +1736,45 @@ local function QueuePredictionDataEvent(frame, event)
   local bit = PREDICTION_DATA_EVENT_BITS[event]
   if not bit then return end
 
+  -- Flat archetype (plain heal/absorb bars, no health-gated glow/stripe): the
+  -- writer is cheaper than the coalescer's own queue bookkeeping + OnUpdate
+  -- driver arm/disarm, so a same-frame burst that "collapses" to one flush
+  -- still costs more queued than just flushing each lane on the spot. Measured
+  -- net-negative for this archetype -- so render this lane synchronously, which
+  -- is exactly EllesmereUI's per-event model. Every bar write is value-deduped
+  -- downstream, and the flush touches only StatusBar values (combat-safe).
+  if frame._msufPredictionSimpleAbsorb == true then
+    local flush = frame._msufPredictionFlushData
+    if flush then
+      flush(frame, bit)
+      return
+    end
+  end
+
   local mask = frame._msufPredictionDirtyMask or 0
   if (mask % (bit * 2)) < bit then
     frame._msufPredictionDirtyMask = mask + bit
+  end
+  -- EllesmereUI renders absorb synchronously on the event (one UpdateAbsorb
+  -- call, no render-frame driver). Opt-in parity: flush the accumulated mask
+  -- immediately instead of queuing onto the OnUpdate coalescer. Every bar write
+  -- downstream is value-deduped, so a same-frame burst still collapses to the
+  -- writes that actually changed -- it just drops the per-frame driver arm +
+  -- queue bookkeeping. Default keeps the coalescer (off unless the test toggle
+  -- sets _G.MSUF_GF_PredictionSync).
+  if _G.MSUF_GF_PredictionSync == true then
+    frame._msufPredictionQueued = nil
+    local syncMask = frame._msufPredictionDirtyMask
+    frame._msufPredictionDirtyMask = nil
+    if syncMask then
+      local flush = frame._msufPredictionFlushData
+      if flush then
+        flush(frame, syncMask)
+      else
+        UpdateFull(frame, PREDICTION_DIRTY_PLAN_KEYS[syncMask], frame.MSUFUnitKey, nil, nil, true)
+      end
+    end
+    return
   end
   if frame._msufPredictionQueued == true then return end
   frame._msufPredictionQueued = true
@@ -1705,6 +1957,33 @@ UpdateGlowHealthFast = function(frame, event, unit, seedHP, seedMaxHP)
   if not absorbSecret and (type(absorb) ~= "number" or absorb <= 0) then
     return
   end
+  -- Steady-tick dedupe (pure overlay, plain absorb). The overshield verdict is
+  -- a function of the integer health-percent bucket and the absorb amount; it
+  -- cannot change while both are unchanged. Skip the redundant render on
+  -- health ticks that stay inside one display bucket -- the common case for a
+  -- shielded member whose health jitters -- WITHOUT reimplementing the show
+  -- test: a cache miss falls through to the authoritative UpdateOverAbsorbGlow,
+  -- which owns the full-health / partial-spill decision. Every prediction data
+  -- event clears this key (ApplyPredictionValues) so the next tick re-syncs.
+  if frame._msufPredictionFullHealthStripe ~= true and not absorbSecret then
+    local bar = frame.hpBar
+    local pct = bar and bar._msufHealthPercentValue
+    if pct ~= nil and issecretvalue(pct) ~= true and type(pct) == "number"
+      and bar._msufHealthPercentUnit == unit then
+      local bucket = pct - (pct % 1)
+      if frame._msufGlowTickBucket == bucket
+        and frame._msufGlowTickAbsorb == absorb
+        and frame._msufGlowTickUnit == unit then
+        return
+      end
+      frame._msufGlowTickBucket = bucket
+      frame._msufGlowTickAbsorb = absorb
+      frame._msufGlowTickUnit = unit
+    else
+      frame._msufGlowTickBucket = nil
+      frame._msufGlowTickUnit = nil
+    end
+  end
   if frame._msufPredictionFullHealthStripe == true
     and UpdateWarmFullHealthStripe(frame, unit) then
     return
@@ -1813,6 +2092,15 @@ end
 local function ApplyPredictionValues(frame, cfg, unit, cacheUnit, event, hp, maxHP,
     refreshHeal, refreshAbsorb, refreshHealAbsorb,
     showHeal, showAbsorb, showHealAbsorb, forceMax)
+  -- The live health-bar size -- never a stale spec width -- owns prediction
+  -- geometry. Authoritative refreshes (UNIT_MAXHEALTH / UNIT_CONNECTION / full
+  -- plan) therefore drop the cached measurement so both overlay types repair
+  -- themselves here, exactly as they did when every event measured natively.
+  -- High-frequency absorb/heal data events keep serving from the cache, which
+  -- the bar's own OnSizeChanged invalidates the moment it actually resizes.
+  if forceMax == true then
+    InvalidateHpGeometry(frame.hpBar or frame.Health)
+  end
   if refreshHeal then
     frame._msufPredictionIncoming = ReadIncomingHeals(unit)
   end
@@ -1837,6 +2125,11 @@ local function ApplyPredictionValues(frame, cfg, unit, cacheUnit, event, hp, max
     frame._msufPredictionCacheReady = true
     frame._msufPredictionCacheUnit = cacheUnit
     frame._msufPredictionCacheCfg = cfg
+    -- A prediction data event (absorb/heal/max) can change the overshield
+    -- verdict at an unchanged health-percent bucket. Clear the steady-tick
+    -- glow key so the next UNIT_HEALTH re-syncs through UpdateOverAbsorbGlow.
+    frame._msufGlowTickBucket = nil
+    frame._msufGlowTickUnit = nil
   end
 
   if showHeal and frame.incomingHealBar then
@@ -2039,8 +2332,12 @@ end
 UpdateBoundPredictionData = function(frame, mask)
   local unit = frame.MSUFUnitKey
   local cfg = frame._msufPredictionRuntimeCfg
+  local plans = frame._msufPredictionEventPlans
+  local plan = type(mask) == "number"
+    and plans and plans[PREDICTION_DIRTY_PLAN_KEYS[mask]] or nil
   if type(mask) ~= "number"
     or not cfg
+    or not plan
     or frame._msufPredictionDisabled == true
     or frame._msufPredictionCacheReady ~= true
     or frame._msufPredictionCacheUnit ~= unit
@@ -2049,15 +2346,9 @@ UpdateBoundPredictionData = function(frame, mask)
     return UpdateFull(frame, event, unit, nil, nil, true)
   end
 
-  local refreshHeal = (mask % 2) >= 1 and frame._msufPredictionHealActive == true
-  local refreshAbsorb = (mask % 4) >= 2 and frame._msufPredictionAbsorbActive == true
-  local refreshHealAbsorb = mask >= 4 and frame._msufPredictionHealAbsorbActive == true
-  local showAbsorb = refreshAbsorb
-    or (refreshHeal and frame._msufPredictionFollowAbsorb == true
-      and frame._msufPredictionAbsorbActive == true)
   return ApplyPredictionValues(frame, cfg, unit, unit, nil, nil, nil,
-    refreshHeal, refreshAbsorb, refreshHealAbsorb,
-    refreshHeal, showAbsorb, refreshHealAbsorb, false)
+    plan[PLAN_REFRESH_HEAL], plan[PLAN_REFRESH_ABSORB], plan[PLAN_REFRESH_HEAL_ABSORB],
+    plan[PLAN_SHOW_HEAL], plan[PLAN_SHOW_ABSORB], plan[PLAN_SHOW_HEAL_ABSORB], false)
 end
 
 function Prediction.Update(frame, event, unit, seedHP, seedMaxHP)

@@ -37,6 +37,9 @@ local POWER_EVENTS = C and C.POWER_EVENTS
 local POWER_EVENTS_FAST = {
   "UNIT_POWER_FREQUENT", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE",
 }
+-- Group power bars never show alternate power, so they skip the BAR_SHOW/HIDE
+-- registrations (matches EllesmereUI's lean per-unit tracker).
+local POWER_EVENTS_GROUP = { "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER" }
 local POWER_SHAPE_MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\ClassPower\\"
 local DETACHED_SHAPE_TEXTURES = {
   ROUND = {
@@ -196,10 +199,12 @@ local function ApplyPowerBorder(bar, power)
     return
   end
   if bar._msufDetachedShapeEdge then SetRegionShown(bar._msufDetachedShapeEdge, false) end
-  local detached = power and power.detached == true
-  local rawThickness = detached and power.detachedOutline or power and power.borderThickness
-  local thickness = math_floor((tonumber(rawThickness) or 0) + 0.5)
-  if thickness <= 0 or (not detached and not (power and power.borderEnabled == true)) then
+  -- The rectangular border is owned by the per-unit toggle/thickness whether the
+  -- bar is inline or detached. `detachedOutline` only feeds the Player shape edge
+  -- in ApplyShapeMedia; reading it here made the unit-page border controls inert
+  -- as soon as the power bar was detached.
+  local thickness = math_floor((tonumber(power and power.borderThickness) or 0) + 0.5)
+  if thickness <= 0 or not (power and power.borderEnabled == true) then
     HidePowerBorderEdges(bar)
     return
   end
@@ -554,6 +559,13 @@ function Power.GetEvents(frame, spec)
   if power and power.frequent == true then
     return POWER_EVENTS_FAST
   end
+  -- Group members render a normal (mana/rage/energy) power bar; the
+  -- alternate-power show/hide stream is a single-frame/boss concern. Dropping
+  -- those two registrations per raid member trims the per-frame event set
+  -- toward EllesmereUI's lean tracker without changing any displayed value.
+  if spec and spec.scope == "group" then
+    return POWER_EVENTS_GROUP
+  end
   return POWER_EVENTS
 end
 
@@ -638,6 +650,18 @@ function Power.Apply(frame, spec)
       ApplyBackgroundMedia(frame, power)
     end
     if ApplyBarGradient then ApplyBarGradient(frame, bar, power.barGradient, "powerGradients") end
+  end
+  -- Native fill axis for the inline/embedded bar. ApplyShapeMedia owns
+  -- _msufPowerOrientation for detached shapes (ORB forces VERTICAL, others
+  -- HORIZONTAL); only override the non-shape bar so shapes keep their axis.
+  if bar.SetOrientation and bar._msufPowerShapeActive ~= true then
+    local orientation = power.vertical == true and "VERTICAL" or "HORIZONTAL"
+    if bar._msufPowerOrientation ~= orientation then
+      bar:SetOrientation(orientation)
+      bar._msufPowerOrientation = orientation
+      -- Force the reverse-fill block below to re-apply after an axis flip.
+      bar._msufReverseFill = nil
+    end
   end
   if bar.SetReverseFill then
     local reverse = power.reverse == true

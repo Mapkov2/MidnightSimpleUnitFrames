@@ -1095,10 +1095,11 @@ function Page:BuildDetachedPower()
     end
     local texture = self:Controls(textures, Bars, ApplyDetachedPowerBar, "detached_power.textures", {
         { "fg", "dropdown", "Foreground texture", function() return TextureValues("Use global bar texture") end, 300, "detachedPowerBarTexture", "", group = "detached" },
-        { "bg", "dropdown", "Background texture", function() return TextureValues("Use foreground texture") end, 300, "detachedPowerBarBgTexture", "", group = "detached" },
+        { "bg", "dropdown", "Background texture", function() return TextureValues("Use global background texture") end, 300, "detachedPowerBarBgTexture", "", group = "detached" },
         { "outline", "slider", "Power bar outline", 0, 8, 1, 300, "detachedPowerBarOutline", 1, ApplyDetachedPowerBarOutline, group = "detached" },
     })
-    AddTooltip(texture.outline, "Power Bar Outline", "Controls only the detached Player power outline managed here. Bar uses an outside border; shapes use their fixed edge texture. 0 disables only the outline.")
+    self.dpbTextures = texture
+    AddTooltip(texture.outline, "Power Bar Outline", "Edge strength of the Round, Crystal and Orb detached Player power shapes. 0 disables only that edge. A detached Bar keeps the power border from its own unit frame page.")
     PlaceColumn(layout, 32, twoColumns and -154 or -188, 54, controlW, "LEFT", self.dpb.anchor, self.dpb.sync, mode.mode, self.dpb.orbSize, self.dpb.height)
     PlaceColumn(layout, rightX, twoColumns and -154 or -520, 54, controlW, "LEFT", self.dpb.x, self.dpb.y, self.dpb.layer)
     PlaceColumn(textures, 32, -104, 54, controlW, "LEFT", texture.fg, texture.bg, texture.outline)
@@ -1290,6 +1291,10 @@ function Page:RefreshControlState()
     if self.dpb then
         SetControlEnabled(self.dpb.orbSize, playerDetached and playerShape == "ORB")
         SetControlEnabled(self.dpb.height, playerDetached and playerShape ~= "ORB")
+    end
+    if self.dpbTextures then
+        -- A detached Bar draws the power border owned by its unit frame page.
+        SetControlEnabled(self.dpbTextures.outline, playerDetached and playerShape ~= "BAR")
     end
     local playerTextOn = db.player and PlayerPowerTextShown(db.player)
     if self.dpbText then

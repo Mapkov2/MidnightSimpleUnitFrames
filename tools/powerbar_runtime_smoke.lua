@@ -230,7 +230,13 @@ Power.Apply(frame, spec)
 assert(bar.frameLevel == 10, "detached power layer was not clamped at 0")
 power.detachedLevel = 6
 Power.Apply(frame, spec)
-assert(border.shown == true and bar._msufPowerBorderThickness == 3, "detached outline was not restored")
+-- Detaching does not hand the border over to `detachedOutline`: the per-unit
+-- toggle stays off here, so the rectangular border must stay hidden.
+assert(border.shown == false, "detached power border ignored the disabled unit border toggle")
+power.borderEnabled = true
+Power.Apply(frame, spec)
+assert(border.shown == true and bar._msufPowerBorderThickness == 2,
+    "detached power border did not follow the per-unit border thickness")
 local centeredPoint = bar.points[1]
 assert(centeredPoint and centeredPoint[1] == "TOP" and centeredPoint[2] == frame
     and centeredPoint[3] == "BOTTOM" and centeredPoint[4] == 4 and centeredPoint[5] == -7,

@@ -439,7 +439,7 @@ local T = {
     ["Tip: Hold SHIFT (5) / CTRL (10) / ALT (grid step) for bigger steps."] = "SHIFT (5) / CTRL (10) / ALT (cuadrícula) = pasos mayores.",
     ["Unsorted (default)"] = "Sin ordenar",
     ["Update text every event (higher CPU, pixel-accurate)"] = "Actualizar cada evento (más CPU)",
-    ["Use foreground texture"] = "Usar textura principal",
+    ["Use global background texture"] = "Usar textura de fondo global",
     ["Use global bar texture"] = "Usar textura de barra global",
     ["What to export?"] = "¿Qué exportar?",
 

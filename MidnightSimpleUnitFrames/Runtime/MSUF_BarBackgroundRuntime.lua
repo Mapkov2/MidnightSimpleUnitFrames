@@ -443,11 +443,11 @@ local function MSUF_ApplyBarBackgroundVisual(frame)
 
     if shapedPower then
         frame._msufDPBBgTexOverride = nil
-    elseif frame._msufPowerBarDetached and frame.powerBarBG then
+    elseif frame._msufPowerBarDetached and frame.powerBarBG and frame.MSUFUnitKey == "player" then
+        -- Player-only, matching the compiler: the Class Resources page owns these
+        -- two keys. An unset background must keep the unit's normal background
+        -- art, so there is deliberately no foreground fallback here.
         local dpbBgTex = _DPB.ResolveBg()
-        if not dpbBgTex then
-            dpbBgTex = _DPB.ResolveFg()
-        end
         if dpbBgTex then
             if frame._msufDPBBgTexOverride ~= dpbBgTex then
                 frame.powerBarBG:SetTexture(dpbBgTex)

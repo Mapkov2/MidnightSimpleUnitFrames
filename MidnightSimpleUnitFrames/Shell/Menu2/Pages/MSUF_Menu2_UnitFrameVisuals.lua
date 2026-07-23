@@ -30,9 +30,14 @@ local DETACHED_POWER_SHAPE_VALUES = VT("BAR", "Bar", "ROUND", "Round", "CRYSTAL"
 local UnitSectionShared = M.UnitSectionsShared or {}
 local SetSectionHeaderStatus = UnitSectionShared.SetSectionHeaderStatus or function() end
 local CreateSectionNotice = UnitSectionShared.CreateSectionNotice or function() end
+-- Power Bar section card geometry. BuildPower and PowerSectionHeight must stay
+-- in sync, so both read these instead of repeating the offsets.
+local POWER_TEXTURE_CARD_TOP = -284
+local POWER_TEXTURE_CARD_H = 110
+local POWER_DETACHED_CARD_TOP = POWER_TEXTURE_CARD_TOP - POWER_TEXTURE_CARD_H - 26
 local function PowerSectionHeight(unit)
     local isPlayer = unit == "player"
-    return math.abs(-284) + (isPlayer and 406 or 304) + 52
+    return math.abs(POWER_DETACHED_CARD_TOP) + (isPlayer and 406 or 304) + 52
 end
 local function NormalizeCastbarTabKey(key)
     if key ~= "general" and key ~= "icon" and key ~= "spell" and key ~= "time" and key ~= "advanced" then key = "general" end
@@ -240,7 +245,7 @@ end
 local function BuildPower(ctx, builder, unit)
     if not POWER_UNITS[unit] then return end
     local isPlayer = unit == "player"
-    local detachedCardY = -284
+    local detachedCardY = POWER_DETACHED_CARD_TOP
     local detachedCardHeight = isPlayer and 406 or 304
     local powerSectionHeight = PowerSectionHeight(unit)
     local powerNoticeY = detachedCardY - detachedCardHeight - 12
@@ -343,7 +348,36 @@ local function BuildPower(ctx, builder, unit)
     end
     local mainCard = PowerCard("Visibility & Size", nil, leftX, -38, cardW, 220)
     local borderCard = PowerCard("Border & fill", "Outline and fill behavior.", rightX, -38, rightW, 220)
+    local textureCard = PowerCard("Power textures", "Overrides the shared power bar art for this frame.", leftX, POWER_TEXTURE_CARD_TOP, fullW, POWER_TEXTURE_CARD_H)
     local detachedCard = PowerCard("Detached placement", "Used only when the power bar is detached from the unit frame.", leftX, detachedCardY, fullW, detachedCardHeight)
+    -- Per-unit power art. Empty follows bars.powerBarTexture, which itself falls
+    -- back to this frame's bar texture; resolution happens in the UF compiler.
+    local function SetPowerTextureKey(key, value, reason)
+        local conf = GetConf(unit)
+        value = value or ""
+        if conf[key] == value then return end
+        conf[key] = value
+        M.RequestUnitApply(unit, reason, POWER_OPTS)
+    end
+    local function BindPowerTexture(label, emptyLabel, key, x, reason, path)
+        local width = max(200, min(320, floor((fullW - 32 - 28) * 0.5)))
+        local control = AddPowerControl(W.Dropdown(textureCard, label,
+            function() return M.StatusBarTextureItems(emptyLabel) end, width))
+        W.MoveWidget(control, textureCard, x, -40, width, "LEFT")
+        M.BindDropdownWidget(ctx, control,
+            function() return GetConf(unit)[key] or "" end,
+            function(v) SetPowerTextureKey(key, v, reason) end,
+            SettingMeta(ctx, path, unit, key))
+        return control, width
+    end
+    local powerFgTexture, powerTextureW = BindPowerTexture("Power texture", "Use global power texture",
+        "powerBarTexture", 16, "MSUF2_POWER_TEXTURE", "power.texture")
+    local powerBgTexture = BindPowerTexture("Power background", "Use global power background",
+        "powerBarBgTexture", 16 + powerTextureW + 28, "MSUF2_POWER_BG_TEXTURE", "power.background_texture")
+    if M.AddTooltip then
+        M.AddTooltip(powerFgTexture, "Power Texture", "Art for this frame's power bar, detached or not. Leave on the global option to follow the shared Bars power texture.", { hook = true, owner = "ANCHOR_RIGHT" })
+        M.AddTooltip(powerBgTexture, "Power Background", "Background art behind this frame's power bar.", { hook = true, owner = "ANCHOR_RIGHT" })
+    end
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(borderCard, function()
             local refs = { "power.current" }

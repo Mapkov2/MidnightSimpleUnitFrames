@@ -1092,15 +1092,32 @@ function Preview.Refresh(box, reason)
     mock.hpBG:SetAllPoints(mock)
     mock.hp:ClearAllPoints()
     local hpReverse = (runtimeSpec and runtimeSpec.health and runtimeSpec.health.reverse == true) or (not (runtimeSpec and runtimeSpec.health) and conf.reverseFillBars == true)
-    if hpReverse then
-        SetRightSpan(mock.hp, mock.hpBG)
-    else
-        SetLeftSpan(mock.hp, mock.hpBG)
-    end
     local hpAreaW = max(1, sw)
     local hpFrac = max(0, min(1, tonumber(data.hp) or 0.6))
-    mock.hp:SetWidth(max(1, hpAreaW * hpFrac))
-    RenderTempMaxHealth(mock, runtimeSpec, conf, g, key, hpReverse, hpAreaW, SetTex)
+    -- Vertical fill (health.vertical / conf.verticalFillBars) grows the health
+    -- texture along the frame height. Prediction and temp-max overlays are
+    -- horizontal-only in this thumbnail, so they are hidden when vertical rather
+    -- than mixing fill axes. The axis test is inlined (no new locals) because
+    -- this Refresh function sits at Lua's 200 active-local limit.
+    if (runtimeSpec and runtimeSpec.health and runtimeSpec.health.vertical == true) or (not (runtimeSpec and runtimeSpec.health) and conf.verticalFillBars == true) then
+        if hpReverse then
+            mock.hp:SetPoint("TOPLEFT", mock.hpBG, "TOPLEFT", 0, 0)
+            mock.hp:SetPoint("TOPRIGHT", mock.hpBG, "TOPRIGHT", 0, 0)
+        else
+            SetBottomSpan(mock.hp, mock.hpBG)
+        end
+        mock.hp:SetHeight(max(1, max(1, sh) * hpFrac))
+        mock.tempMaxHealthBg:Hide()
+        mock.tempMaxHealth:Hide()
+    else
+        if hpReverse then
+            SetRightSpan(mock.hp, mock.hpBG)
+        else
+            SetLeftSpan(mock.hp, mock.hpBG)
+        end
+        mock.hp:SetWidth(max(1, hpAreaW * hpFrac))
+        RenderTempMaxHealth(mock, runtimeSpec, conf, g, key, hpReverse, hpAreaW, SetTex)
+    end
     local healPredMode = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.healAnchorMode) or R.PreviewResolveHealPredAnchorMode(conf, g)
     local absorbMode = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.absorbAnchorMode) or R.PreviewResolveAbsorbAnchorMode(conf, g)
     local healPredShown = runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.heal == true
@@ -1115,6 +1132,14 @@ function Preview.Refresh(box, reason)
         if _G.MSUF_ShouldShowAbsorbTextureTest and _G.MSUF_ShouldShowAbsorbTextureTest(nil, key, "healAbsorb") then
             healAbsorbShown = true
         end
+    end
+    -- Overlays are horizontal-only in this thumbnail; omit them on a vertical
+    -- health bar so the preview never shows mismatched fill axes. Inline the
+    -- axis test to avoid a new local (Refresh is at the 200 active-local limit).
+    if (runtimeSpec and runtimeSpec.health and runtimeSpec.health.vertical == true) or (not (runtimeSpec and runtimeSpec.health) and conf.verticalFillBars == true) then
+        healPredShown = false
+        absorbShown = false
+        healAbsorbShown = false
     end
     local healPredFrac = ((healPredMode == 3) and min(0.14, max(0.02, 1 - hpFrac))) or 0.14
     if healPredShown then
@@ -1428,7 +1453,16 @@ function Preview.Refresh(box, reason)
             mock.detachedPower:SetPoint("TOP", mock, "BOTTOM", dx, dy)
         end
         local powerShapeInfo = PREVIEW_POWER_SHAPES[box._runtimeDetachedPowerShape or "BAR"]
-        local powerOutline = floor((tonumber(bars.detachedPowerBarOutline) or 1) + 0.5)
+        -- Detached bars use the unit's own power border, same as the live frame.
+        local powerOutline = 0
+        if runtimePower ~= nil then
+            if runtimePower.borderEnabled == true then powerOutline = tonumber(runtimePower.borderThickness) or 1 end
+        elseif conf.powerBarBorderEnabled ~= nil then
+            if conf.powerBarBorderEnabled == true then powerOutline = tonumber(conf.powerBarBorderThickness) or 1 end
+        elseif bars.powerBarBorderEnabled == true then
+            powerOutline = tonumber(bars.powerBarBorderThickness or bars.powerBarBorderSize) or 1
+        end
+        powerOutline = floor(powerOutline + 0.5)
         if powerOutline < 0 then powerOutline = 0 elseif powerOutline > 8 then powerOutline = 8 end
         if mock.detachedPower.SetBackdropColor then
             if mock.detachedPower.SetBackdrop then mock.detachedPower:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = max(1, powerOutline) }) end

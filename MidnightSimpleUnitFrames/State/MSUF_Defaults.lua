@@ -2987,6 +2987,16 @@ if MSUF_DB.bars == nil then
     if MSUF_DB.bars.classPowerShapeAlign == nil then
         MSUF_DB.bars.classPowerShapeAlign = "CENTER"
     end
+    --- Shared power-bar art for every unit's power bar (detached or not).
+    --- Empty = follow the unit's bar texture, which is the historical behavior.
+    --- A per-unit powerBarTexture overrides this; the Class Resources
+    --- detachedPowerBarTexture below stays the most specific layer.
+    if MSUF_DB.bars.powerBarTexture == nil then
+        MSUF_DB.bars.powerBarTexture = ""
+    end
+    if MSUF_DB.bars.powerBarBgTexture == nil then
+        MSUF_DB.bars.powerBarBgTexture = ""
+    end
     if MSUF_DB.bars.detachedPowerBarTexture == nil then
         MSUF_DB.bars.detachedPowerBarTexture = ""
     end
@@ -3562,6 +3572,13 @@ local function fill(key, defaults)
         --- Per-unitframe: reverse fill direction for HP + Power bars.
         --- (false = normal left->right fill)
         reverseFillBars = false,
+        --- Per-unitframe: vertical fill axis for HP + Power bars.
+        --- (false = horizontal fill; true = vertical, combines with reverseFillBars)
+        verticalFillBars = false,
+        --- Per-unitframe power bar art. Empty = follow bars.powerBarTexture,
+        --- which itself falls back to this frame's bar texture.
+        powerBarTexture = "",
+        powerBarBgTexture = "",
     })
     for k, v in pairs(textDefaults) do
         if MSUF_DB.player[k] == nil then MSUF_DB.player[k] = v end
@@ -3594,6 +3611,13 @@ local function fill(key, defaults)
         showInterrupt = true,
         --- Per-unitframe: reverse fill direction for HP + Power bars.
         reverseFillBars = false,
+        --- Per-unitframe: vertical fill axis for HP + Power bars.
+        --- (false = horizontal fill; true = vertical, combines with reverseFillBars)
+        verticalFillBars = false,
+        --- Per-unitframe power bar art. Empty = follow bars.powerBarTexture,
+        --- which itself falls back to this frame's bar texture.
+        powerBarTexture = "",
+        powerBarBgTexture = "",
     })
     for k, v in pairs(textDefaults) do
         if MSUF_DB.target[k] == nil then MSUF_DB.target[k] = v end
@@ -3613,6 +3637,13 @@ local function fill(key, defaults)
         showInterrupt = true,
         --- Per-unitframe: reverse fill direction for HP + Power bars.
         reverseFillBars = false,
+        --- Per-unitframe: vertical fill axis for HP + Power bars.
+        --- (false = horizontal fill; true = vertical, combines with reverseFillBars)
+        verticalFillBars = false,
+        --- Per-unitframe power bar art. Empty = follow bars.powerBarTexture,
+        --- which itself falls back to this frame's bar texture.
+        powerBarTexture = "",
+        powerBarBgTexture = "",
         --- Focus-only: optional relative anchor for positioning.
         --- "GLOBAL" keeps the classic behavior (anchored to the MSUF global anchor).
         --- Other supported values: "player", "target".
@@ -3633,6 +3664,13 @@ local function fill(key, defaults)
         showPowerText = false,
         --- Per-unitframe: reverse fill direction for HP + Power bars.
         reverseFillBars = false,
+        --- Per-unitframe: vertical fill axis for HP + Power bars.
+        --- (false = horizontal fill; true = vertical, combines with reverseFillBars)
+        verticalFillBars = false,
+        --- Per-unitframe power bar art. Empty = follow bars.powerBarTexture,
+        --- which itself falls back to this frame's bar texture.
+        powerBarTexture = "",
+        powerBarBgTexture = "",
     })
     if MSUF_DB.targettarget.showToTInTargetName == nil then MSUF_DB.targettarget.showToTInTargetName = false end
     --- Target-of-Target inline-in-Target separator token (rendered with spaces around it).
@@ -3656,6 +3694,13 @@ local function fill(key, defaults)
         showPowerText = false,
         --- Focus Target is a lightweight child-style frame: no castbar or auras.
         reverseFillBars = false,
+        --- Per-unitframe: vertical fill axis for HP + Power bars.
+        --- (false = horizontal fill; true = vertical, combines with reverseFillBars)
+        verticalFillBars = false,
+        --- Per-unitframe power bar art. Empty = follow bars.powerBarTexture,
+        --- which itself falls back to this frame's bar texture.
+        powerBarTexture = "",
+        powerBarBgTexture = "",
     })
     for k, v in pairs(textDefaults) do
         if MSUF_DB.focustarget[k] == nil then MSUF_DB.focustarget[k] = v end
@@ -3676,6 +3721,13 @@ local function fill(key, defaults)
         showPowerText = true,
         --- Per-unitframe: reverse fill direction for HP + Power bars.
         reverseFillBars = false,
+        --- Per-unitframe: vertical fill axis for HP + Power bars.
+        --- (false = horizontal fill; true = vertical, combines with reverseFillBars)
+        verticalFillBars = false,
+        --- Per-unitframe power bar art. Empty = follow bars.powerBarTexture,
+        --- which itself falls back to this frame's bar texture.
+        powerBarTexture = "",
+        powerBarBgTexture = "",
     })
     for k, v in pairs(textDefaults) do
         if MSUF_DB.pet[k] == nil then MSUF_DB.pet[k] = v end
@@ -3699,6 +3751,13 @@ local function fill(key, defaults)
         portraitMode = "OFF",
         --- Per-unitframe: reverse fill direction for HP + Power bars.
         reverseFillBars = false,
+        --- Per-unitframe: vertical fill axis for HP + Power bars.
+        --- (false = horizontal fill; true = vertical, combines with reverseFillBars)
+        verticalFillBars = false,
+        --- Per-unitframe power bar art. Empty = follow bars.powerBarTexture,
+        --- which itself falls back to this frame's bar texture.
+        powerBarTexture = "",
+        powerBarBgTexture = "",
     })
     for k, v in pairs(textDefaults) do
         if MSUF_DB.boss[k] == nil then MSUF_DB.boss[k] = v end
@@ -3791,6 +3850,26 @@ local function fill(key, defaults)
                 end
                 u.detachedPowerBarWidth = detachedWidth
             end
+        end
+        --- A detached rectangular bar used to draw `bars.detachedPowerBarOutline`
+        --- instead of its own power border, which left the unit page's border
+        --- toggle and thickness inert. That global now only feeds the Player
+        --- Round/Crystal/Orb edge, so carry a customized value over once to keep
+        --- existing detached bars looking the same.
+        if bars._msufDetachedPowerBorderMigrated_v1 ~= true then
+            local legacyOutline = tonumber(bars.detachedPowerBarOutline)
+            if legacyOutline and legacyOutline > 0 and legacyOutline ~= 1 then
+                for _, unitKey in ipairs({"player", "target", "focus", "targettarget", "focustarget", "pet", "boss"}) do
+                    local u = MSUF_DB[unitKey]
+                    local shape = tostring(u.detachedPowerBarShape or "BAR"):upper()
+                    if u.powerBarDetached == true and u.powerBarBorderEnabled ~= true
+                        and (unitKey ~= "player" or shape == "BAR") then
+                        u.powerBarBorderEnabled = true
+                        u.powerBarBorderThickness = legacyOutline > 10 and 10 or legacyOutline
+                    end
+                end
+            end
+            bars._msufDetachedPowerBorderMigrated_v1 = true
         end
     end
     for _, unitKey in ipairs({"player", "target", "targettarget", "focustarget", "focus", "pet", "boss"}) do

@@ -1558,6 +1558,8 @@ local MSUF_PROFILEIO_GENERAL_TEXTURE_WARNING_KEYS = {
 local MSUF_PROFILEIO_BARS_TEXTURE_WARNING_KEYS = {
     "classPowerTexture",
     "classPowerBgTexture",
+    "powerBarTexture",
+    "powerBarBgTexture",
     "detachedPowerBarTexture",
     "detachedPowerBarBgTexture",
     "playerHPBarTexture",
@@ -1567,6 +1569,8 @@ local MSUF_PROFILEIO_BARS_TEXTURE_WARNING_KEYS = {
 local MSUF_PROFILEIO_UNIT_TEXTURE_WARNING_KEYS = {
     "barTexture",
     "barBackgroundTexture",
+    "powerBarTexture",
+    "powerBarBgTexture",
     "absorbBarTexture",
     "healAbsorbBarTexture",
 }

@@ -312,7 +312,7 @@ L["Manual"] = "Manuell"
 
 --- Texture dropdown follow-text
 L["Use global bar texture"] = "Globale Balkentextur nutzen"
-L["Use foreground texture"] = "Vordergrundtextur nutzen"
+L["Use global background texture"] = "Globale Hintergrundtextur nutzen"
 L["Foreground texture"] = "Vordergrundtextur"
 L["Background texture"] = "Hintergrundtextur"
 

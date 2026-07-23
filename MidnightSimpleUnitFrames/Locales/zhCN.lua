@@ -423,7 +423,7 @@ local T = {
     ["Hide when empty"]  = "空时隐藏",
 
     ["Use global bar texture"]  = "使用全局计量条纹理",
-    ["Use foreground texture"]  = "使用前景纹理",
+    ["Use global background texture"]  = "使用全局背景纹理",
     ["Alternative Mana Bar"]  = "替代法力条",
     ["Shadow, Ret, Ele, Enh, Balance, Feral, WW"]  = "暗影, 恢复, 元素, 增强, 平衡, 野性, 双武器",
     ["Show mana bar (dual resource)"]  = "显示法力条 (双资源)",
