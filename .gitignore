@@ -23,3 +23,7 @@ MidnightSimpleUnitFrames/**/.codex-remote-attachments/
 
 # Local standalone addon worktree; not part of the MSUF repo.
 /MidnightSimpleAuras/
+
+# Python bytecode cache from the Lua test harness tooling.
+__pycache__/
+*.pyc
