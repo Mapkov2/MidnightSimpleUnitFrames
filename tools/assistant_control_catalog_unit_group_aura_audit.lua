@@ -187,7 +187,7 @@ local requiredMarkers = {
         "RegisterGroupControl(copy, ctx, \"copy.open\"", "RegisterGroupControl(btn, ctx, \"field.growth.option.",
     },
     ["Shell/Menu2/Pages/MSUF_Menu2_GroupLayout.lua"] = {
-        "RegisterControl(openColors", "RegisterControl(generalNoticeButton",
+        "W.AttachContextColorReferences(healthOpacityCard", "RegisterControl(generalNoticeButton",
     },
     ["Shell/Menu2/Pages/MSUF_Menu2_GroupBars.lua"] = { "RegisterControl(textTabs" },
     ["Shell/Menu2/Pages/MSUF_Menu2_GroupAuras.lua"] = {
@@ -195,11 +195,11 @@ local requiredMarkers = {
         "RegisterAuraControl(ctx, toolBar, \"Edit\", \"segment\"",
     },
     ["Shell/Menu2/Pages/MSUF_Menu2_GroupIndicators.lua"] = {
-        "RegisterControl(openBars", "RegisterControl(statusTabs", "RegisterControl(statusReset",
+        "W.AttachContextColorReferences(highlightCard", "RegisterControl(statusTabs", "RegisterControl(statusReset",
         "RegisterControl(advanced.reset", "RegisterControl(tile, self.ctx",
     },
     ["Shell/Menu2/Pages/MSUF_Menu2_Auras.lua"] = {
-        "RegisterAuraChoiceBar(ctx", "RegisterAuraControl(ctx, reset", "RegisterAuraControl(ctx, colorsButton",
+        "RegisterAuraChoiceBar(ctx", "RegisterAuraControl(ctx, reset", "W.AttachContextColorReferences(section, references",
         "RegisterAuraTextAction(ctx, directAdd", "RegisterAuraTextAction(ctx, directRemove",
         "RegisterAuraControl(ctx, addSpell", "RegisterAuraControl(ctx, addSet", "RegisterAuraControl(ctx, row",
         "RegisterAuraControl(ctx, button, page[1]",
@@ -209,8 +209,8 @@ local requiredMarkers = {
         "#(box.layerButtons or {})", "#(box.handles or {})", "handle._msuf2SettingsGear", "Register(box._msuf2PinButton",
     },
     ["Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Native.lua"] = {
-        "RegisterGroupPreviewControl(box._zoomBar", "RegisterGroupPreviewControl(btn, \"combat_animation\"",
-        "RegisterGroupPreviewControl(btn, \"layer.\"", "RegisterGroupPreviewControl(mock, \"canvas\"",
+        "RegisterPreviewControl(box._zoomBar", "(registerControl or RegisterGroupPreviewControl)(btn, \"combat_animation\"",
+        "RegisterPreviewControl(btn, \"layer.\"", "RegisterPreviewControl(mock, \"canvas\"",
     },
     ["Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Handles.lua"] = { "RegisterPreviewControl(handle, \"handle.\"" },
     ["Shell/Menu2/Pages/MSUF_Menu2_GroupPreview.lua"] = { "page.RegisterControl(box._msuf2PinButton" },
@@ -246,7 +246,7 @@ end
 -- Group Preview button, Group Layout transparency/bar controls,
 -- spell-indicator style controls, and the four explicit compact-preview
 -- controls added across Unit, Group, and Class Resources.
-Check(factorySites == 204, string.format("interactive factory inventory drifted: expected 204, got %d", factorySites))
+Check(factorySites == 201, string.format("interactive factory inventory drifted: expected 201, got %d", factorySites))
 
 local function AddUnique(list, seen, value)
     value = tostring(value or "")
@@ -283,7 +283,7 @@ end
 for i = 1, 3 do AddUnique(unitHandles, unitHandleSeen, "auraCustom" .. tostring(i)) end
 for i = 1, #unitStatus do AddUnique(unitHandles, unitHandleSeen, unitStatus[i]) end
 Check(#unitLayers == 12, string.format("Unit preview layer inventory drifted: expected 12, got %d", #unitLayers))
-Check(#unitHandles == 34, string.format("Unit preview handle inventory drifted: expected 34, got %d", #unitHandles))
+Check(#unitHandles == 39, string.format("Unit preview handle inventory drifted: expected 39, got %d", #unitHandles))
 
 local groupNative = source["Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Native.lua"]
 local groupHandlesSource = source["Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Handles.lua"]
