@@ -105,7 +105,12 @@ local stateDriverUnregisterCalls = 0
 local unitWatchRegisterCalls = 0
 local unitWatchUnregisterCalls = 0
 
-_G.CreateFrame = function(_, _, parent) return NewObject(parent) end
+local createdFrames = {}
+_G.CreateFrame = function(_, _, parent)
+  local frame = NewObject(parent)
+  createdFrames[#createdFrames + 1] = frame
+  return frame
+end
 _G.InCombatLockdown = function() return false end
 _G.UnitExists = function(unit)
   existsQueries[unit] = (existsQueries[unit] or 0) + 1
@@ -573,6 +578,16 @@ probe:Fire("UNIT_PHASE", "party3")
 probe:Fire("UNIT_FLAGS", "party3")
 probe:Fire("INCOMING_RESURRECT_CHANGED", "party3")
 probe:Fire("UNIT_FACTION", "party3")
+local groupDataDriver
+for i = #createdFrames, 1, -1 do
+  local candidate = createdFrames[i]
+  if candidate.visible == true and candidate:GetScript("OnUpdate") then
+    groupDataDriver = candidate
+    break
+  end
+end
+Check(groupDataDriver ~= nil, "deferred group health driver was not armed")
+groupDataDriver:RunScript("OnUpdate")
 Check(visualCalls.UNIT_HEALTH == 1 and visualCalls.UNIT_FLAGS == 1,
   "GroupVisuals probe was not dispatched exactly once per owned event")
 Check(statusCalls.UNIT_PHASE == 1 and statusCalls.UNIT_FLAGS == 1
