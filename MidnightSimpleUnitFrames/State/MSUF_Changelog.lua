@@ -41,8 +41,12 @@ local data = {
                     title = "Fixes & Performance",
                     bullets = {
                         "Reduced Castbar first-cast work, duplicate native cleanup, and Auto Width fan-out with per-source dirty routing and reusable geometry state.",
+                        "Kept Blizzard's native Target and Focus Castbars untouched unless the frame is explicitly owned by MSUF.",
                         "Reduced duplicate health, power, class-color, NPC-kind, status, prediction, and text reads across hot event paths.",
                         "Coalesced text and prediction rendering, narrowed Group Frame event routing, retired stale unit subscriptions, and cancelled inactive range timers immediately.",
+                        "Consolidated compatible Group Aura slots and flowing icons into shared native owners, including secure-header container birth and separate secret-safe Party range gating.",
+                        "Compiled lean Health, Power, Prediction, and Threat routes for Group Frames, reusing resolved values directly and skipping consumers that have no visible work.",
+                        "Kept suspended secure Group Frame children in a stable inventory so roster rebinds reactivate them without duplicate entries or stale active routing.",
                         "Improved offline Group Frame visibility, status targeting, level/name anchoring, secret-safe absorb handling, and profile migration behavior.",
                         "Expanded the Core Lua 5.1 suite to 152 passing runtime, Menu2, Assistant, Aura, Castbar, Group Frame, smoothing, status, and hotpath regression tests.",
                     },
