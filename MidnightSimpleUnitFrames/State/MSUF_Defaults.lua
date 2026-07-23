@@ -2236,6 +2236,20 @@ end
 if g.bossCastbarHeight == nil then
     g.bossCastbarHeight = 12
 end
+-- Attached boss castbars now use a stable edge-to-edge anchor: castbar TOP to
+-- the visible boss outline BOTTOM. Convert the legacy TOP-of-container /
+-- BOTTOM-of-castbar offset once, preserving the current on-screen position at
+-- the profile's present boss/castbar heights. Subsequent odd/even boss height
+-- changes then keep a constant physical gap instead of changing pixel phase.
+if g._msufBossCastbarPhysicalEdgeAnchor_v1 ~= true
+    and g.bossCastbarDetached ~= true
+then
+    local bossHeight = tonumber(MSUF_DB and MSUF_DB.boss and MSUF_DB.boss.height) or 30
+    local castbarHeight = tonumber(g.bossCastbarHeight) or 12
+    local legacyOffsetY = tonumber(g.bossCastbarOffsetY) or -46
+    g.bossCastbarOffsetY = legacyOffsetY + bossHeight + castbarHeight + 4
+    g._msufBossCastbarPhysicalEdgeAnchor_v1 = true
+end
     if g.castbarShowIcon == nil then
         g.castbarShowIcon = true
     end

@@ -89,6 +89,14 @@ local function BossUnitFrame(index)
     return CoreFrame(unit) or _G["MSUF_" .. unit]
 end
 
+local function Snap(frame, value)
+    value = tonumber(value) or 0
+    if type(_G.MSUF_Snap) == "function" then
+        return _G.MSUF_Snap(frame, value)
+    end
+    return math.floor(value + 0.5)
+end
+
 local function HideAllBossCastbarPreviews()
     if _G.MSUF_BossCastbarPreview then
         _G.MSUF_BossCastbarPreview:Hide()
@@ -183,6 +191,13 @@ local function ApplyBossCastbarPreviewLayout(preview, index)
         height = tonumber(general.bossCastbarHeight) or 18
     end
 
+    if width and not preserveWidth then
+        width = Snap(preview, width)
+    end
+    if height then
+        height = Snap(preview, height)
+    end
+
     if type(_G.MSUF_ApplyPlayerCastbarSizeAndLayout) == "function" then
         _G.MSUF_ApplyPlayerCastbarSizeAndLayout(preview, general, width, height, preserveWidth)
     else
@@ -236,8 +251,8 @@ local function PositionBossCastbarPreview(preview, index)
     end
 
     local general = GeneralDB()
-    local offsetX = tonumber(general.bossCastbarOffsetX) or 0
-    local offsetY = tonumber(general.bossCastbarOffsetY) or 0
+    local offsetX = Snap(preview, tonumber(general.bossCastbarOffsetX) or 0)
+    local offsetY = Snap(preview, tonumber(general.bossCastbarOffsetY) or 0)
 
     preview:ClearAllPoints()
 
@@ -257,11 +272,25 @@ local function PositionBossCastbarPreview(preview, index)
 
     local unitFrame = BossUnitFrame(index)
     if unitFrame then
+        local unit = "boss" .. index
+        local source = (type(_G.MSUF_GetCastbarUnitframeWidthSource) == "function"
+            and _G.MSUF_GetCastbarUnitframeWidthSource(unit)) or unitFrame
         local autoX = 0
         if type(_G.MSUF_GetCastbarAutoAnchorOffsetX) == "function" then
-            autoX = _G.MSUF_GetCastbarAutoAnchorOffsetX(general, "boss" .. index, preview)
+            autoX = _G.MSUF_GetCastbarAutoAnchorOffsetX(general, unit, preview)
         end
-        preview:SetPoint("BOTTOMLEFT", unitFrame, "TOPLEFT", offsetX + autoX, offsetY + 2)
+        local bottomInset = 0
+        if type(_G.MSUF_GetCastbarUnitframeBottomInset) == "function" then
+            bottomInset = _G.MSUF_GetCastbarUnitframeBottomInset(unit, preview)
+        end
+        local gap = 3
+        if type(_G.MSUF_GetPhysicalPixelSize) == "function" then
+            gap = _G.MSUF_GetPhysicalPixelSize(preview, 3)
+        else
+            gap = Snap(preview, gap)
+        end
+        preview:SetPoint("TOPLEFT", source, "BOTTOMLEFT",
+            offsetX + autoX, offsetY - bottomInset - gap)
     else
         preview:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -420 + offsetX, (-220 + offsetY) - ((index - 1) * 34))
     end

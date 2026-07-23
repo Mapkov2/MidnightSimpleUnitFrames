@@ -219,6 +219,9 @@ function Health.Apply(frame, spec)
   SetColor(frame, true)
   if ApplyBackgrounds then ApplyBackgrounds(frame, true, false) end
   ApplyRuntimeColor(frame, "MSUF_COLOR_CHANGE", frame.MSUFUnitKey)
+  if type(_G.MSUF_ApplyBossPhysicalBarGeometry) == "function" then
+    _G.MSUF_ApplyBossPhysicalBarGeometry(frame)
+  end
 end
 
 function Health.GetEvents(frame, spec)

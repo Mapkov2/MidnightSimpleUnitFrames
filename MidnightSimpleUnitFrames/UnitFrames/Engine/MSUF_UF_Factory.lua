@@ -14,6 +14,7 @@ UF.Factory = UF.Factory or {}
 local Factory = UF.Factory
 local EnsureCooldownWidthObservers
 local ScheduleCooldownWidthRefresh
+local ApplyBossPhysicalBarGeometry
 
 local type = type
 local tonumber = tonumber
@@ -318,6 +319,9 @@ local function ApplyPosition(frame, spec)
     frame._msufHardLockPoint = nil
     frame._msufLoadedFromScreenCache = nil
   end
+  if type(ApplyBossPhysicalBarGeometry) == "function" then
+    ApplyBossPhysicalBarGeometry(frame)
+  end
   return true
 end
 
@@ -336,6 +340,115 @@ local function ApplySize(frame, spec)
   frame._msufHeight = height
   return true
 end
+
+local function IsBossFrame(frame)
+  local unit = frame and frame.MSUFUnitKey
+  return type(unit) == "string" and unit:match("^boss%d+$") ~= nil
+end
+
+-- Boss unitframes are CENTER anchored. At fractional UI scales, odd and even
+-- heights put that center on opposite half-pixel phases. Resolve the visible
+-- HP/power rectangle once in absolute screen space so every surface shares the
+-- same physical edges without moving the secure click container itself.
+ApplyBossPhysicalBarGeometry = function(frame)
+  if not (frame and frame.hpBar and IsBossFrame(frame)) or InCombat() then
+    return false
+  end
+
+  local getRect = _G.MSUF_GetPhysicalScreenRect
+  local setRect = _G.MSUF_SetRegionPhysicalScreenRect
+  if type(getRect) ~= "function" or type(setRect) ~= "function" then
+    return false
+  end
+
+  local left, bottom, right, top, pixel = getRect(frame)
+  if not (left and bottom and right and top and pixel and pixel > 0)
+    or right <= left or top <= bottom
+  then
+    return false
+  end
+
+  local spec = frame.MSUFSpec or {}
+  local powerSpec = spec.power or {}
+  local power = frame.targetPowerBar
+  local powerEnabled = power and powerSpec.enabled == true
+  local powerDetached = powerEnabled and powerSpec.detached == true
+  local powerEmbedded = powerEnabled and not powerDetached and powerSpec.embed ~= false
+
+  local powerScreenHeight = 0
+  if powerEnabled and not powerDetached then
+    local configuredHeight = tonumber(powerSpec.height)
+      or (power.GetHeight and power:GetHeight()) or 0
+    local snap = _G.MSUF_Snap
+    if type(snap) == "function" then
+      configuredHeight = snap(power, configuredHeight)
+    end
+    local powerScale = (power.GetEffectiveScale and power:GetEffectiveScale()) or 1
+    if powerScale == 0 then powerScale = 1 end
+    powerScreenHeight = math.max(pixel, configuredHeight * powerScale)
+  end
+
+  local hpBottom = bottom
+  if powerEmbedded then
+    hpBottom = bottom + powerScreenHeight
+    if hpBottom >= top then
+      hpBottom = top - pixel
+      powerScreenHeight = math.max(pixel, hpBottom - bottom)
+    end
+  end
+
+  if not setRect(frame.hpBar, left, hpBottom, right, top) then
+    return false
+  end
+  if frame.bg then
+    setRect(frame.bg, left, hpBottom, right, top)
+  end
+
+  if powerEnabled and not powerDetached then
+    if powerEmbedded then
+      setRect(power, left, bottom, right, hpBottom)
+    else
+      -- Preserve the detached-inline layout's visual gap, but make that gap
+      -- exactly one physical pixel instead of one scale-dependent UI unit.
+      local powerTop = bottom - pixel
+      setRect(power, left, powerTop - powerScreenHeight, right, powerTop)
+    end
+  end
+
+  local geometryChanged = frame._msufBossPhysicalLeft ~= left
+    or frame._msufBossPhysicalBottom ~= bottom
+    or frame._msufBossPhysicalRight ~= right
+    or frame._msufBossPhysicalTop ~= top
+    or frame._msufBossPhysicalPixel ~= pixel
+  frame._msufBossPhysicalLeft = left
+  frame._msufBossPhysicalBottom = bottom
+  frame._msufBossPhysicalRight = right
+  frame._msufBossPhysicalTop = top
+  frame._msufBossPhysicalPixel = pixel
+  frame._msufBossPhysicalGeometryApplied = true
+  if geometryChanged then
+    frame._msufBorderLayoutReady = nil
+  end
+  return true
+end
+
+local function RefreshBossPhysicalGeometry()
+  local changed = false
+  local count = tonumber(_G.MSUF_MAX_BOSS_FRAMES or _G.MAX_BOSS_FRAMES) or 5
+  for index = 1, count do
+    local unit = "boss" .. index
+    local frame = (UF.frames and UF.frames[unit]) or _G["MSUF_" .. unit]
+    if frame and ApplyBossPhysicalBarGeometry(frame) then
+      changed = true
+    end
+  end
+  return changed
+end
+
+Factory.ApplyBossPhysicalBarGeometry = ApplyBossPhysicalBarGeometry
+Factory.RefreshBossPhysicalGeometry = RefreshBossPhysicalGeometry
+ExportPublic("MSUF_ApplyBossPhysicalBarGeometry", ApplyBossPhysicalBarGeometry)
+ExportPublic("MSUF_RefreshBossPhysicalGeometry", RefreshBossPhysicalGeometry)
 
 local function DisableFrame(frame)
   if not frame then return end
@@ -1281,6 +1394,24 @@ do
     end
   end)
   EnsureCooldownWidthObservers()
+end
+
+do
+  local bossPixelEvents = CreateFrame("Frame")
+  bossPixelEvents:RegisterEvent("DISPLAY_SIZE_CHANGED")
+  bossPixelEvents:RegisterEvent("UI_SCALE_CHANGED")
+  bossPixelEvents:SetScript("OnEvent", function()
+    if type(_G.MSUF_UpdatePixelPerfect) == "function" then
+      _G.MSUF_UpdatePixelPerfect()
+    end
+    RefreshBossPhysicalGeometry()
+    if type(UF.RefreshBorders) == "function" then
+      UF.RefreshBorders("boss")
+    end
+    if type(_G.MSUF_ApplyBossCastbarPositionSetting) == "function" then
+      _G.MSUF_ApplyBossCastbarPositionSetting(false)
+    end
+  end)
 end
 
 function UF.Initialize()

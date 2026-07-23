@@ -1379,6 +1379,9 @@ local function SetBossPreviewPosition(point, anchor, relativePoint, x, y, conf)
             frame._msufDragActive = true
             frame:ClearAllPoints()
             frame:SetPoint(point, anchor, relativePoint, x + (dx or 0), y + (dy or 0))
+            if type(_G.MSUF_ApplyBossPhysicalBarGeometry) == "function" then
+                _G.MSUF_ApplyBossPhysicalBarGeometry(frame)
+            end
             moved = true
         end
     end

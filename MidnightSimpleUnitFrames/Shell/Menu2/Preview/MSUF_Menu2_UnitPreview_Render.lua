@@ -758,6 +758,14 @@ function Preview.Refresh(box, reason)
     if castOffsetY == nil then castOffsetY = tonumber(castDefY) or 0 end
     local castDetached = castEnabled and CastbarDetached(key, g)
     local castPreviewVisible = castEnabled and PreviewLayerWanted(box, "castbar")
+    local bossBorderInset = 0
+    if key == "boss"
+        and runtimeSpec and runtimeSpec.border
+        and runtimeSpec.border.enabled == true
+    then
+        bossBorderInset = max(1, floor((tonumber(runtimeSpec.border.thickness) or 1) + 0.5))
+    end
+    local bossCastbarGap = 3
     local bars = _G.MSUF_DB and _G.MSUF_DB.bars or {}
     local classPowerPreviewSpec
     if key == "player" then
@@ -985,9 +993,12 @@ function Preview.Refresh(box, reason)
         elseif key == "player" then
             cLeft = (w - castW) * 0.5 + castOffsetX
             cBottom = h + castOffsetY
+        elseif key == "boss" then
+            cLeft = castOffsetX - bossBorderInset
+            cBottom = castOffsetY - bossBorderInset - bossCastbarGap - castBarH
         else
             cLeft = castOffsetX
-            cBottom = h + castOffsetY + ((key == "boss") and 2 or 0)
+            cBottom = h + castOffsetY
         end
         if castPreviewVisible then
             wideW = max(wideW, castW)
@@ -1900,8 +1911,12 @@ function Preview.Refresh(box, reason)
             mock.cast:SetPoint("CENTER", canvas, "CENTER", box._detachedCastBaseOffsetX + panX, box._detachedCastBaseOffsetY + panY)
         elseif key == "player" then
             mock.cast:SetPoint("BOTTOM", mock, "TOP", S(castOffsetX), S(castOffsetY))
+        elseif key == "boss" then
+            mock.cast:SetPoint("TOPLEFT", mock, "BOTTOMLEFT",
+                S(castOffsetX - bossBorderInset),
+                S(castOffsetY - bossBorderInset - bossCastbarGap))
         else
-            mock.cast:SetPoint("BOTTOMLEFT", mock, "TOPLEFT", S(castOffsetX), S(castOffsetY + ((key == "boss") and 2 or 0)))
+            mock.cast:SetPoint("BOTTOMLEFT", mock, "TOPLEFT", S(castOffsetX), S(castOffsetY))
         end
         local cr, cg, cb = 0.0, 0.9, 0.8
         if type(_G.MSUF_GetInterruptibleCastColor) == "function" then cr, cg, cb = _G.MSUF_GetInterruptibleCastColor() end

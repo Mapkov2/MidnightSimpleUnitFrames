@@ -117,6 +117,14 @@ local function SetHeightIfChanged(frame, height)
     return true
 end
 
+local function Snap(frame, value)
+    value = tonumber(value) or 0
+    if type(_G.MSUF_Snap) == "function" then
+        return _G.MSUF_Snap(frame, value)
+    end
+    return math.floor(value + 0.5)
+end
+
 --- Applies only internal boss castbar region layout. Positioning relative to
 --- boss unit frames or UIParent is handled by UpdateBossCastbarAnchor.
 local function ApplyBossCastbarLayout(frame)
@@ -154,18 +162,26 @@ local function UpdateBossCastbarAnchorBase(frame)
 
     local desiredWidth
     local desiredHeight
+    local preserveWidth
     if type(_G.MSUF_GetCastbarDesiredSize) == "function" then
-        desiredWidth, desiredHeight = _G.MSUF_GetCastbarDesiredSize(unit, general, frame, 240, 12)
+        desiredWidth, desiredHeight, preserveWidth = _G.MSUF_GetCastbarDesiredSize(unit, general, frame, 240, 12)
     else
         desiredWidth = tonumber(general.bossCastbarWidth)
         desiredHeight = tonumber(general.bossCastbarHeight)
     end
 
+    if desiredWidth and not preserveWidth then
+        desiredWidth = Snap(frame, desiredWidth)
+    end
+    if desiredHeight then
+        desiredHeight = Snap(frame, desiredHeight)
+    end
+
     local changed = false
     changed = SetHeightIfChanged(frame, desiredHeight or frame:GetHeight() or 18) or changed
 
-    local offsetX = tonumber(general.bossCastbarOffsetX) or 0
-    local offsetY = tonumber(general.bossCastbarOffsetY) or 0
+    local offsetX = Snap(frame, tonumber(general.bossCastbarOffsetX) or 0)
+    local offsetY = Snap(frame, tonumber(general.bossCastbarOffsetY) or 0)
 
     if general.bossCastbarDetached == true then
         local layoutX = 0
@@ -184,13 +200,36 @@ local function UpdateBossCastbarAnchorBase(frame)
     else
         local unitFrame = _G["MSUF_" .. unit]
         if unitFrame and unitFrame.GetWidth then
+            local source = (type(_G.MSUF_GetCastbarUnitframeWidthSource) == "function"
+                and _G.MSUF_GetCastbarUnitframeWidthSource(unit)) or unitFrame
             local autoX = 0
             if type(_G.MSUF_GetCastbarAutoAnchorOffsetX) == "function" then
                 autoX = _G.MSUF_GetCastbarAutoAnchorOffsetX(general, unit, frame)
             end
-            changed = SetPointIfChanged(frame, "BOTTOMLEFT", unitFrame, "TOPLEFT",
-                offsetX + autoX, offsetY + 2, true) or changed
-            changed = SetWidthIfChanged(frame, desiredWidth or unitFrame:GetWidth() or 240) or changed
+            local bottomInset = 0
+            if type(_G.MSUF_GetCastbarUnitframeBottomInset) == "function" then
+                bottomInset = _G.MSUF_GetCastbarUnitframeBottomInset(unit, frame)
+            end
+            local gap = 3
+            if type(_G.MSUF_GetPhysicalPixelSize) == "function" then
+                gap = _G.MSUF_GetPhysicalPixelSize(frame, 3)
+            else
+                gap = Snap(frame, gap)
+            end
+            changed = SetPointIfChanged(frame, "TOPLEFT", source, "BOTTOMLEFT",
+                offsetX + autoX, offsetY - bottomInset - gap, true) or changed
+
+            local width = desiredWidth
+            if not width and source and source.GetWidth then
+                width = source:GetWidth()
+                if width and width > 0 and source ~= frame then
+                    local sourceScale = (source.GetEffectiveScale and source:GetEffectiveScale()) or 1
+                    local frameScale = (frame.GetEffectiveScale and frame:GetEffectiveScale()) or 1
+                    if frameScale <= 0 then frameScale = 1 end
+                    width = width * sourceScale / frameScale
+                end
+            end
+            changed = SetWidthIfChanged(frame, width or unitFrame:GetWidth() or 240) or changed
         else
             changed = SetPointIfChanged(
                 frame,
