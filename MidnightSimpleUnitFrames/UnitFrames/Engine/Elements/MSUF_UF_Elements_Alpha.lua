@@ -28,9 +28,11 @@ local function CastbarForUnit(unit)
     return nil
   end
   if unit == "target" then
-    return _G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar or _G.TargetCastBar
+    return _G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar
+      or ((_G.TargetCastBar and _G.TargetCastBar._msufCastbarDriver == true) and _G.TargetCastBar)
   elseif unit == "focus" then
-    return _G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar or _G.FocusCastBar
+    return _G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar
+      or ((_G.FocusCastBar and _G.FocusCastBar._msufCastbarDriver == true) and _G.FocusCastBar)
   end
 
   local bossIndex = tostring(unit):match("^boss(%d+)$")

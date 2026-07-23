@@ -81,11 +81,11 @@ local function HideMSUFCastbar(unit)
   elseif unit == "target" then
     HideFrame(_G.MSUF_TargetCastbar)
     HideFrame(_G.MSUF_TargetCastBar)
-    HideFrame(_G.TargetCastBar)
+    HideFrame((_G.TargetCastBar and _G.TargetCastBar._msufCastbarDriver == true) and _G.TargetCastBar)
   elseif unit == "focus" then
     HideFrame(_G.MSUF_FocusCastbar)
     HideFrame(_G.MSUF_FocusCastBar)
-    HideFrame(_G.FocusCastBar)
+    HideFrame((_G.FocusCastBar and _G.FocusCastBar._msufCastbarDriver == true) and _G.FocusCastBar)
   elseif unit == "boss" then
     for i = 1, 10 do
       HideFrame(_G["MSUF_boss" .. i .. "CastBar"])
