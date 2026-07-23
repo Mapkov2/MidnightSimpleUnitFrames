@@ -138,15 +138,80 @@ local function EnsureEdge(parent, key)
   return edge
 end
 
+local function SetPhysicalEdgeRect(region, left, bottom, right, top)
+  if not (region and region.SetPoint and UIParent) then return false end
+  local scale = (region.GetEffectiveScale and region:GetEffectiveScale())
+    or (UIParent.GetEffectiveScale and UIParent:GetEffectiveScale())
+    or (UIParent.GetScale and UIParent:GetScale()) or 1
+  if scale == 0 then scale = 1 end
+  region:ClearAllPoints()
+  region:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", left / scale, bottom / scale)
+  region:SetPoint("TOPRIGHT", UIParent, "BOTTOMLEFT", right / scale, top / scale)
+  return true
+end
+
+local function LayoutPhysicalBossBorder(frame, thickness)
+  if not (frame and frame._msufBossPhysicalGeometryApplied == true) then return false end
+  local left = frame._msufBossPhysicalLeft
+  local bottom = frame._msufBossPhysicalBottom
+  local right = frame._msufBossPhysicalRight
+  local top = frame._msufBossPhysicalTop
+  local pixel = frame._msufBossPhysicalPixel
+  if type(left) ~= "number" or type(bottom) ~= "number"
+    or type(right) ~= "number" or type(top) ~= "number"
+    or type(pixel) ~= "number" or pixel <= 0
+  then
+    return false
+  end
+
+  local pixelCount = math.floor((tonumber(thickness) or 1) + 0.5)
+  if pixelCount < 1 then pixelCount = 1 end
+  local edgeSize = pixel * pixelCount
+  local edges = frame.MSUFBorderEdges
+  if frame._msufBorderPhysicalLayout == true
+    and frame._msufBorderPhysicalLeft == left
+    and frame._msufBorderPhysicalBottom == bottom
+    and frame._msufBorderPhysicalRight == right
+    and frame._msufBorderPhysicalTop == top
+    and frame._msufBorderPhysicalEdgeSize == edgeSize
+    and edges and edges.top and edges.bottom and edges.left and edges.right
+  then
+    return true
+  end
+
+  local topEdge = EnsureEdge(frame, "top")
+  local bottomEdge = EnsureEdge(frame, "bottom")
+  local leftEdge = EnsureEdge(frame, "left")
+  local rightEdge = EnsureEdge(frame, "right")
+  SetPhysicalEdgeRect(topEdge, left - edgeSize, top, right + edgeSize, top + edgeSize)
+  SetPhysicalEdgeRect(bottomEdge, left - edgeSize, bottom - edgeSize, right + edgeSize, bottom)
+  SetPhysicalEdgeRect(leftEdge, left - edgeSize, bottom, left, top)
+  SetPhysicalEdgeRect(rightEdge, right, bottom, right + edgeSize, top)
+
+  frame._msufBorderThickness = thickness
+  frame._msufBorderLayoutReady = true
+  frame._msufBorderPhysicalLayout = true
+  frame._msufBorderPhysicalLeft = left
+  frame._msufBorderPhysicalBottom = bottom
+  frame._msufBorderPhysicalRight = right
+  frame._msufBorderPhysicalTop = top
+  frame._msufBorderPhysicalEdgeSize = edgeSize
+  return true
+end
+
 local function LayoutBorder(frame, thickness)
   EnsureBorderOverlay(frame)
   thickness = tonumber(thickness) or 1
   if thickness < 1 then
     thickness = 1
   end
+  if LayoutPhysicalBossBorder(frame, thickness) then
+    return
+  end
   local edges = frame.MSUFBorderEdges
   if frame._msufBorderThickness == thickness
     and frame._msufBorderLayoutReady == true
+    and frame._msufBorderPhysicalLayout ~= true
     and edges and edges.top and edges.bottom and edges.left and edges.right then
     return
   end
@@ -172,6 +237,7 @@ local function LayoutBorder(frame, thickness)
   right:SetWidth(thickness)
   frame._msufBorderThickness = thickness
   frame._msufBorderLayoutReady = true
+  frame._msufBorderPhysicalLayout = nil
 end
 
 local function BorderNormalEnabled(cfg)
@@ -614,6 +680,9 @@ function Borders.Create(frame)
 end
 
 function Borders.Apply(frame, spec)
+  if type(_G.MSUF_ApplyBossPhysicalBarGeometry) == "function" then
+    _G.MSUF_ApplyBossPhysicalBarGeometry(frame)
+  end
   local cfg = spec and spec.border
   if frame then
     local customPriority = cfg and cfg.prioEnabled == true and type(cfg.prioOrder) == "table"

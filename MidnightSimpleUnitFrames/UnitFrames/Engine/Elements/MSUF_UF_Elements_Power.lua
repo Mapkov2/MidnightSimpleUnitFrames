@@ -668,6 +668,9 @@ function Power.Apply(frame, spec)
     HidePowerBorder(bar)
     if HideBarGradient then HideBarGradient(frame.powerGradients) end
   end
+  if type(_G.MSUF_ApplyBossPhysicalBarGeometry) == "function" then
+    _G.MSUF_ApplyBossPhysicalBarGeometry(frame)
+  end
 end
 
 local function UpdatePercent(frame, event, unit, animate)

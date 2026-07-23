@@ -263,13 +263,31 @@ local function UnitframeNormalBorderInset(frame, sourceFrame)
     return thickness
 end
 
+-- Normal borders are configured in unitframe units, except for boss frames
+-- whose corrected geometry rounds the setting to an exact physical-pixel
+-- count. Express that visible inset in the receiving castbar's units.
+local function UnitframeNormalBorderInsetForTarget(frame, sourceFrame, targetFrame)
+    local inset = UnitframeNormalBorderInset(frame, sourceFrame)
+    if inset <= 0 then return 0 end
+
+    if frame and frame._msufBossPhysicalGeometryApplied == true
+        and type(_G.MSUF_GetPhysicalPixelSize) == "function"
+    then
+        local pixels = math.floor(inset + 0.5)
+        if pixels < 1 then pixels = 1 end
+        return _G.MSUF_GetPhysicalPixelSize(targetFrame, pixels)
+    end
+
+    return ScaledValue(sourceFrame or frame, targetFrame, inset)
+end
+
 local function UnitframeVisibleWidth(unit, targetFrame)
     local frame = GetUnitframe(unit)
     local source = GetUnitframeWidthSource(unit)
     local width = ScaledWidth(source, targetFrame)
     if not width then return nil end
-    local inset = UnitframeNormalBorderInset(frame, source)
-    return width + (ScaledValue(source or frame, targetFrame, inset) * 2)
+    local inset = UnitframeNormalBorderInsetForTarget(frame, source, targetFrame)
+    return width + (inset * 2)
 end
 
 -- Cooldown Viewer container/viewer global names for a width-source kind.
@@ -378,10 +396,14 @@ local function GetCastbarAutoAnchorOffsetX(g, unit, targetFrame)
 
     local targetScale = (targetFrame and targetFrame.GetEffectiveScale and targetFrame:GetEffectiveScale()) or 1
     if targetScale <= 0 then targetScale = 1 end
-    local inset = UnitframeNormalBorderInset(frame, source)
-    local sourceScale = (source.GetEffectiveScale and source:GetEffectiveScale()) or 1
-    if sourceScale <= 0 then sourceScale = 1 end
-    return (sourceLeft - frameLeft - (inset * sourceScale)) / targetScale
+    local inset = UnitframeNormalBorderInsetForTarget(frame, source, targetFrame)
+    return ((sourceLeft - frameLeft) / targetScale) - inset
+end
+
+local function GetCastbarUnitframeBottomInset(unit, targetFrame)
+    local frame = GetUnitframe(unit)
+    local source = GetUnitframeWidthSource(unit)
+    return UnitframeNormalBorderInsetForTarget(frame, source, targetFrame)
 end
 
 ------------------------------------------------------------------------
@@ -1273,6 +1295,7 @@ ExportPublic("MSUF_GetCastbarWidthSourceKey", function(unit)
 end)
 ExportPublic("MSUF_GetCastbarUnitframeWidthSource", GetUnitframeWidthSource)
 ExportPublic("MSUF_GetCastbarAutoAnchorOffsetX", GetCastbarAutoAnchorOffsetX)
+ExportPublic("MSUF_GetCastbarUnitframeBottomInset", GetCastbarUnitframeBottomInset)
 ExportPublic("MSUF_GetCastbarDesiredSize", MSUF_GetCastbarDesiredSize)
 ExportPublic("MSUF_UpdateCastbarWidthSourceSync", MSUF_UpdateCastbarWidthSourceSync)
 ExportPublic("MSUF_ApplyCastbarEffectiveSizeUnit", ApplyCastbarEffectiveSizeUnit)

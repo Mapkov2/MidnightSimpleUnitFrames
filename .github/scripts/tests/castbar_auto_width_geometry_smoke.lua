@@ -16,6 +16,9 @@ _G.MSUF_DB = {
     general = {
         castbarTargetMatchWidth = "unitframe",
         castbarTargetBarHeight = 18,
+        bossCastbarMatchWidth = "unitframe",
+        bossCastbarHeight = 12,
+        enableBossCastbar = true,
     },
 }
 _G.EnsureDB = function() end
@@ -50,10 +53,33 @@ local unitframe = {
     GetScaledRect = function() return 100, 0, 210, 27 end,
     HookScript = function() end,
 }
+local bossHealth = {
+    GetWidth = function() return 240 end,
+    GetEffectiveScale = function() return 0.75 end,
+    GetScaledRect = function() return 401, 0, 180, 33.75 end,
+    HookScript = function() end,
+}
+local bossFrame = {
+    unit = "boss1",
+    MSUFUnitKey = "boss1",
+    hpBar = bossHealth,
+    _msufBossPhysicalGeometryApplied = true,
+    _msufBorderRuntimeNormal = true,
+    _msufBorderRuntimeNormalThickness = 1,
+    GetWidth = function() return 240 end,
+    GetHeight = function() return 45 end,
+    GetEffectiveScale = function() return 0.75 end,
+    GetScaledRect = function() return 400, 0, 180, 33.75 end,
+    HookScript = function() end,
+}
 local namespace = {
     UF = {
-        frames = { target = unitframe },
-        GetFrame = function(unit) return unit == "target" and unitframe or nil end,
+        frames = { target = unitframe, boss1 = bossFrame },
+        GetFrame = function(unit)
+            if unit == "target" then return unitframe end
+            if unit == "boss1" then return bossFrame end
+            return nil
+        end,
     },
     ExportPublic = function(name, value)
         _G[name] = value
@@ -87,6 +113,19 @@ Near(100 + offsetX + width, 310.75, "Auto Width right edge does not match the un
 _G.MSUF_Snap = function(_, value) return math.floor(value) end
 _G.MSUF_ApplyPlayerCastbarSizeAndLayout(castbar, general, width, height, preserveWidth)
 Near(castbar.width, 211.5, "Auto Width was rounded a second time")
+
+_G.MSUF_GetPhysicalPixelSize = function(_, pixels) return (pixels or 1) * 0.5 end
+local bossOffsetX = _G.MSUF_GetCastbarAutoAnchorOffsetX(general, "boss1", castbar)
+local bossWidth, bossHeight, bossPreserve = _G.MSUF_GetCastbarDesiredSize(
+    "boss1", general, castbar, 240, 12)
+Near(bossOffsetX, 0.5, "physical boss border did not align the left visible edge")
+Near(bossWidth, 181, "physical boss border was not included in Auto Width")
+Near(_G.MSUF_GetCastbarUnitframeBottomInset("boss1", castbar), 0.5,
+    "physical boss bottom-border inset was not converted to castbar units")
+Check(bossHeight == 12 and bossPreserve == true,
+    "boss Auto Width lost its configured height or exact-width marker")
+Near(400 + bossOffsetX + bossWidth, 581.5,
+    "physical boss Auto Width right edge does not match the visible border")
 
 unitframe._msufBorderRuntimeNormal = nil
 unitframe._msufBorderRuntimeNormalThickness = nil
