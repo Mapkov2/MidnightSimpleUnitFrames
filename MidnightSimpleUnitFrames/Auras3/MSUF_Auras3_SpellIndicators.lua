@@ -1314,8 +1314,8 @@ local function ApplyVisual(button, slot)
         button:ClearDurationCooldown()
         button:ClearDurationText()
         if button._msufA3ExpiringEffectDurationBound ~= true then button:ClearDurationBar() end
-        button:ClearAuraBorder()
-        button:ClearAuraSymbol()
+        button:ClearDispelTypeTextures()
+        button:ClearDispelTypeText()
         icon:Hide()
         if button._msufA3SpellIndicatorSwatch then button._msufA3SpellIndicatorSwatch:Hide() end
         return

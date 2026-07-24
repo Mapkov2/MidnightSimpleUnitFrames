@@ -150,7 +150,7 @@ local function ReadGroupAggroThreat(unit)
   return status ~= nil and status >= 1
 end
 
--- EUI-style group hotpath: read threat once, read role at most once, and derive
+-- Flat group hotpath: read threat once, read role at most once, and derive
 -- both enabled visual consumers from those two values. Border and corner modes
 -- may differ, so returning a pair preserves their independent configuration
 -- without re-entering UnitThreatSituation.

@@ -48,19 +48,21 @@ local MAX_CONFIGURABLE_DEBUFF_DURATION = 180
 local MAX_FINITE_AURA_DURATION = 2147483647
 local MSUF_AURA_SENSOR_EDGE_TEXTURE = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\msuf_frame_edge_thin_256x64.tga"
 local AURA_BORDER_OPTIONS = {
-    showIcon = false,
     showWhenHarmful = true,
     showWhenHelpful = false,
 }
+-- Sensors highlight slot presence, so they must also fire for debuffs without
+-- a dispel type (e.g. PLAYER_CAST trigger). PTR 7's option processor hides
+-- untyped auras unless showWithoutDispelType is set; older clients ignore it.
 local AURA_SENSOR_BORDER_OPTIONS = {
-    showIcon = false,
     showWhenHarmful = true,
     showWhenHelpful = false,
+    showWithoutDispelType = true,
 }
 local AURA_SENSOR_OVERLAY_OPTIONS = {
-    showIcon = false,
     showWhenHarmful = true,
     showWhenHelpful = false,
+    showWithoutDispelType = true,
 }
 local IDENTITY_AURA_REFRESH_REASONS = {
     MSUF_UNIT_IDENTITY_AURAS = true,
@@ -135,6 +137,12 @@ local DEFAULT_SHARED = {
     cooldownTextOffsetX = 0,
     cooldownTextOffsetY = 0,
     cooldownDecimalSeconds = 3,
+    styleBorderEnabled = false,
+    styleBorderThickness = 1,
+    styleBorderColor = { 0, 0, 0, 1 },
+    styleShadowEnabled = false,
+    styleShadowSize = 4,
+    styleShadowColor = { 0, 0, 0, 0.8 },
     buffFrameEffectType = "none",
     buffFrameEffectColor = { 0.69, 0.50, 0.88, 0.80 },
     buffFrameEffectPriority = 5,
@@ -316,6 +324,12 @@ local STYLE_SHARED_LAYOUT_KEYS = {
     cooldownDecimalSeconds = true,
     buffCooldownDecimalSeconds = true,
     debuffCooldownDecimalSeconds = true,
+    styleBorderEnabled = true,
+    styleBorderThickness = true,
+    styleBorderColor = true,
+    styleShadowEnabled = true,
+    styleShadowSize = true,
+    styleShadowColor = true,
     buffFrameEffectType = true,
     buffFrameEffectColor = true,
     buffFrameEffectPriority = true,
@@ -471,6 +485,43 @@ local function EnsureBlizzardAuraContainerLoaded()
     return false
 end
 
+-- PTR 7 allows creating aura containers (and their batched AuraButtons)
+-- during combat, so aura cold paths no longer wait for PLAYER_REGEN. The one
+-- remaining hard blocker is demand-loading Blizzard_AuraContainer itself:
+-- LoadAddOn is refused in combat. After its first load this never defers.
+local function AuraRuntimeCombatBlocked()
+    return InCombat() and not IsAddOnLoaded(AURA_CONTAINER_ADDON)
+end
+
+-- PTR 7 global aura tooltip skinning: when the user runs MSUF's own unit-info
+-- tooltips, restyle the shared AuraButtonTooltip to the same dark look so
+-- aura hovers match; GAME-provider users keep Blizzard's default style.
+-- SetTooltipBackdrop/ResetTooltipStyle are secure delegates: call directly.
+local function ApplyAuraTooltipStyle()
+    local inbound = _G.AuraContainerInbound
+    if not (inbound and type(inbound.SetTooltipBackdrop) == "function") then return end
+    local general = _G.MSUF_DB and _G.MSUF_DB.general
+    local wantMSUF = (general and general.unitTooltipProvider) == "MSUF"
+    local applied = A3._auraTooltipStyleApplied
+    if wantMSUF then
+        if applied == "MSUF" then return end
+        local createColor = _G.CreateColor
+        inbound.SetTooltipBackdrop({
+            backdropInfo = {
+                bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+                edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+                tile = true, tileSize = 16, edgeSize = 16,
+                insets = { left = 4, right = 4, top = 4, bottom = 4 },
+            },
+            centerColor = createColor and createColor(0, 0, 0, 0.9) or nil,
+        })
+        A3._auraTooltipStyleApplied = "MSUF"
+    elseif applied == "MSUF" and type(inbound.ResetTooltipStyle) == "function" then
+        inbound.ResetTooltipStyle()
+        A3._auraTooltipStyleApplied = "DEFAULT"
+    end
+end
+
 local function Round(value)
     value = tonumber(value) or 0
     return math_floor(value + 0.5)
@@ -603,8 +654,10 @@ local function ReadGroupDebuffTypeBorderMode(source)
 end
 
 local function GetAuraBorderOptions(showIcon)
-    AURA_BORDER_OPTIONS.style = nil
-    AURA_BORDER_OPTIONS.showIcon = showIcon == true
+    -- Border/BorderWithIcon let Blizzard supply its dispel border atlas, which
+    -- is the intended art for the lane debuff-type border feature.
+    local styles = _G.Enum and _G.Enum.CustomAuraButtonDispelTypeTextureStyle
+    AURA_BORDER_OPTIONS.style = styles and (showIcon == true and styles.BorderWithIcon or styles.Border) or nil
     return AURA_BORDER_OPTIONS
 end
 
@@ -936,8 +989,47 @@ end
 local LaneTrackingSignature, LaneStructuralSignature, LaneLayoutSignature
 local SensorTrackingSignature, SensorStructuralSignature, SensorLayoutSignature
 
+-- Shared icon style (static border + soft shadow) is one global
+-- block applied to every lane kind: buffs, debuffs, group lanes, and all
+-- custom containers including the target-dot tracker. Compiled once per
+-- runtime-config generation and stamped by reference onto each finalized
+-- lane, so per-lane compile cost is a single table read. Buttons render it
+-- inside initializeFrame only; the style signature joins the lane layout
+-- signature so any change recreates containers (never touches live buttons).
+local _iconStyleCompiled, _iconStyleCompiledGen
+local function SharedIconStyle()
+    local gen = A3._runtimeConfigGen or 1
+    if _iconStyleCompiled and _iconStyleCompiledGen == gen then return _iconStyleCompiled end
+    local _, shared = EnsureDB()
+    local bc = type(shared.styleBorderColor) == "table" and shared.styleBorderColor or DEFAULT_SHARED.styleBorderColor
+    local sc = type(shared.styleShadowColor) == "table" and shared.styleShadowColor or DEFAULT_SHARED.styleShadowColor
+    local style = {
+        borderEnabled = shared.styleBorderEnabled == true,
+        borderThickness = Round(ClampNumber(shared.styleBorderThickness, DEFAULT_SHARED.styleBorderThickness, 1, 8)),
+        borderR = Clamp01(bc[1] or bc.r, 0),
+        borderG = Clamp01(bc[2] or bc.g, 0),
+        borderB = Clamp01(bc[3] or bc.b, 0),
+        borderA = Clamp01(bc[4] or bc.a, 1),
+        shadowEnabled = shared.styleShadowEnabled == true,
+        shadowSize = Round(ClampNumber(shared.styleShadowSize, DEFAULT_SHARED.styleShadowSize, 1, 16)),
+        shadowR = Clamp01(sc[1] or sc.r, 0),
+        shadowG = Clamp01(sc[2] or sc.g, 0),
+        shadowB = Clamp01(sc[3] or sc.b, 0),
+        shadowA = Clamp01(sc[4] or sc.a, 0.8),
+    }
+    style.signature = table_concat({
+        style.borderEnabled and "B" or "b", style.borderThickness,
+        style.borderR, style.borderG, style.borderB, style.borderA,
+        style.shadowEnabled and "S" or "s", style.shadowSize,
+        style.shadowR, style.shadowG, style.shadowB, style.shadowA,
+    }, ":")
+    _iconStyleCompiled, _iconStyleCompiledGen = style, gen
+    return style
+end
+
 local function FinalizeLane(lane)
     if lane then
+        lane.iconStyle = SharedIconStyle()
         lane._msufA3TrackingSignature = LaneTrackingSignature(lane)
         lane._msufA3StructuralSignature = LaneStructuralSignature(lane)
         lane._msufA3LayoutSignature = LaneLayoutSignature(lane)
@@ -1082,7 +1174,12 @@ local function CompileDispelSensor(unit, frameSpec, groupMode, visual)
         unit = unit,
         enabled = true,
         nativeFilter = nativeFilter,
-        max = cornerCount or maxCount,
+        -- Corner sensors consolidate onto ONE AuraSlot whose button carries a
+        -- texture per corner (PTR 7 multiple dispel textures). Identical
+        -- filters always select the same top aura, so N corner slots were N
+        -- copies of the same native slot manager doing identical work.
+        -- filterCount still records the region count for signatures.
+        max = cornerSlots and 1 or maxCount,
         filterCount = cornerCount,
         filterMax = cornerCount and 1 or maxCount,
         visual = visual,
@@ -1808,6 +1905,7 @@ local AURA_SORT_METHOD_FIELDS = {
     EXPIRATION_ONLY = "ExpirationOnly",
     NAME = "Name",
     NAME_ONLY = "NameOnly",
+    INSTANCE_ID = "AuraInstanceIDOnly",
 }
 
 local AURA_SORT_METHOD_FALLBACKS = {
@@ -1819,6 +1917,7 @@ local AURA_SORT_METHOD_FALLBACKS = {
     EXPIRATION_ONLY = 5,
     NAME = 6,
     NAME_ONLY = 7,
+    INSTANCE_ID = 8,
 }
 
 NormalizeAuraSortMethod = function(value)
@@ -1828,6 +1927,11 @@ NormalizeAuraSortMethod = function(value)
     if value == "IMPORTANTONLY" or value == "IMPORTANT" then value = "IMPORTANT_FIRST" end
     if value == "EXPIRATIONONLY" then value = "EXPIRATION_ONLY" end
     if value == "NAMEONLY" then value = "NAME_ONLY" end
+    -- PTR 7: aura-instance-ID-only sort (stable arrival order, no payload reads).
+    if value == "INSTANCEID" or value == "AURA_INSTANCE_ID" or value == "AURAINSTANCEID"
+        or value == "INSTANCE_ID_ONLY" or value == "ARRIVAL" then
+        value = "INSTANCE_ID"
+    end
     return AURA_SORT_METHOD_FIELDS[value] and value or DEFAULT_SHARED.sortMethod
 end
 
@@ -2174,6 +2278,10 @@ local PTR4_AURA_CONTAINER_METHODS = {
     "SetAuraSlotCandidateFilters",
     "SetAuraSlotSortMethod",
     "AddItemEnchantment",
+    -- PTR 7 flow layout API (replaced SetAuraLayout{AnchorPoint,GrowthDirection,RowWidth}).
+    "SetFlowLayoutAnchorPoint",
+    "SetFlowLayoutGrowthDirection",
+    "SetFlowLayoutMaximumLineSize",
 }
 
 local PTR4_AURA_BUTTON_METHODS = {
@@ -2187,10 +2295,12 @@ local PTR4_AURA_BUTTON_METHODS = {
     "ClearDurationText",
     "SetApplicationCount",
     "ClearApplicationCount",
-    "SetAuraBorder",
-    "ClearAuraBorder",
-    "SetAuraSymbol",
-    "ClearAuraSymbol",
+    -- PTR 7 names; the SetAuraBorder/SetAuraSymbol aliases are deprecated and
+    -- flagged for removal after 12.1.
+    "AddDispelTypeTexture",
+    "ClearDispelTypeTextures",
+    "SetDispelTypeText",
+    "ClearDispelTypeText",
     "SetMouseMotionEnabled",
     "SetCancelAuraButtons",
 }
@@ -2204,17 +2314,6 @@ local function ValidatePTR4AuraContainerContract(container)
             A3.nativeAuraRuntimeError = "PTR4 AuraContainer missing " .. methodName
             return false
         end
-    end
-    -- 12.1 PTR 7 renamed the container-level layout setters from
-    -- SetAuraLayout{AnchorPoint,GrowthDirection,RowWidth} to the shared flow
-    -- layout API SetFlowLayout{AnchorPoint,GrowthDirection,MaximumLineSize}.
-    -- Require either variant so the contract passes on both patched and
-    -- not-yet-patched clients; ApplyContainerFlowLayout picks the live one.
-    if type(container.SetFlowLayoutGrowthDirection) ~= "function"
-        and type(container.SetAuraLayoutGrowthDirection) ~= "function" then
-        A3.nativeAuraRuntimeAvailable = false
-        A3.nativeAuraRuntimeError = "PTR4 AuraContainer missing layout API (SetFlowLayoutGrowthDirection)"
-        return false
     end
     return true
 end
@@ -2295,8 +2394,13 @@ local function FrameAppliedConfigIsCurrent(frame, reason, cfg)
 end
 
 LaneTrackingSignature = function(lane)
+    -- initialAnchor is tracking-level on purpose: the container is anchored to
+    -- its layout host exactly once (it is sealed after AddAuraGroup), so a
+    -- growth-direction change must recreate the container rather than
+    -- re-anchor a live one.
     return tostring(lane.unit) .. "\030" .. tostring(lane.kind) .. "\030" .. tostring(lane.nativeFilter)
         .. "\030" .. tostring(lane.max) .. "\030" .. tostring(lane.candidateFilterSignature)
+        .. "\030" .. tostring(lane.initialAnchor)
 end
 
 LaneStructuralSignature = function(lane)
@@ -2329,22 +2433,9 @@ LaneLayoutSignature = function(lane)
         .. "\030" .. tostring(lane.stackSize) .. "\030" .. tostring(lane.stackX)
         .. "\030" .. tostring(lane.stackY) .. "\030" .. tostring(lane.showTooltip)
         .. "\030" .. tostring(lane.showAuraBorder) .. "\030" .. tostring(lane.showAuraSymbol)
-        .. "\030" .. tostring(lane.alpha) .. "\030" .. tostring(A3._nativeVisualGen or 0)
-end
-
-local function LaneButtonConfigSignature(lane)
-    return tostring(lane.unit) .. "\030" .. tostring(lane.kind)
-        .. "\030" .. tostring(lane.iconZoom)
-        .. "\030" .. tostring(lane.showCooldownText) .. "\030" .. tostring(lane.showCooldownSwipe)
-        .. "\030" .. tostring(lane.cooldownSwipeReverse) .. "\030" .. tostring(lane.showDurationBar)
-        .. "\030" .. tostring(lane.durationBarDisplay) .. "\030" .. tostring(lane.durationBarDirection)
-        .. "\030" .. tostring(lane.showStacks) .. "\030" .. tostring(lane.showTooltip)
-        .. "\030" .. tostring(lane.showAuraBorder) .. "\030" .. tostring(lane.showAuraSymbol)
-        .. "\030" .. tostring(lane.cooldownSize) .. "\030" .. tostring(lane.cooldownAnchor)
-        .. "\030" .. tostring(lane.cooldownX) .. "\030" .. tostring(lane.cooldownY)
-        .. "\030" .. tostring(lane.cooldownDecimalSeconds) .. "\030" .. tostring(lane.stackAnchor)
-        .. "\030" .. tostring(lane.stackSize) .. "\030" .. tostring(lane.stackX)
-        .. "\030" .. tostring(lane.stackY) .. "\030" .. tostring(A3._nativeVisualGen or 0)
+        .. "\030" .. tostring(lane.alpha)
+        .. "\030" .. tostring(lane.iconStyle and lane.iconStyle.signature)
+        .. "\030" .. tostring(A3._nativeVisualGen or 0)
 end
 
 SensorTrackingSignature = function(sensor)
@@ -2598,26 +2689,21 @@ local function EnsureAuraTextOverlay(button)
     return overlay
 end
 
--- Container-level layout application, feature-detecting the API the running
--- client exposes. PTR 7 (12.1) replaced SetAuraLayout{AnchorPoint,
--- GrowthDirection,RowWidth} with the shared SetFlowLayout{AnchorPoint,
--- GrowthDirection,MaximumLineSize}. AnchorUtil.FlowDirection values are the
--- same +/-1 signs MSUF already computes (Right/Up = 1, Left/Down = -1), so the
--- growth direction maps 1:1. Only ever called from the signature-guarded
--- geometry cold path, so the branch/global lookup cost is irrelevant.
+-- Container-level layout application on the PTR 7 (12.1) flow layout API
+-- (SetFlowLayout{AnchorPoint,GrowthDirection,MaximumLineSize}; the pre-PTR7
+-- SetAuraLayout* setters no longer exist and their fallback has been removed).
+-- AnchorUtil.FlowDirection values are the same +/-1 signs MSUF already
+-- computes (Right/Up = 1, Left/Down = -1), so growth maps 1:1. Vertical lanes
+-- pass a one-icon maximumLineSize, which is the native way to force a column:
+-- every icon wraps to a new line and lines stack along the vertical growth
+-- direction. Only ever called from the signature-guarded geometry cold path.
 local function ApplyContainerFlowLayout(container, anchorPoint, xSign, ySign, lineSize)
-    if type(container.SetFlowLayoutGrowthDirection) == "function" then
-        local flowDir = _G.AnchorUtil and _G.AnchorUtil.FlowDirection
-        local hDir = flowDir and (xSign >= 0 and flowDir.Right or flowDir.Left) or xSign
-        local vDir = flowDir and (ySign >= 0 and flowDir.Up or flowDir.Down) or ySign
-        container:SetFlowLayoutAnchorPoint(anchorPoint)
-        container:SetFlowLayoutGrowthDirection(hDir, vDir)
-        container:SetFlowLayoutMaximumLineSize(lineSize)
-    elseif type(container.SetAuraLayoutGrowthDirection) == "function" then
-        container:SetAuraLayoutAnchorPoint(anchorPoint)
-        container:SetAuraLayoutGrowthDirection(xSign, ySign)
-        container:SetAuraLayoutRowWidth(lineSize)
-    end
+    local flowDir = _G.AnchorUtil and _G.AnchorUtil.FlowDirection
+    container:SetFlowLayoutAnchorPoint(anchorPoint)
+    container:SetFlowLayoutGrowthDirection(
+        flowDir and (xSign >= 0 and flowDir.Right or flowDir.Left) or xSign,
+        flowDir and (ySign >= 0 and flowDir.Up or flowDir.Down) or ySign)
+    container:SetFlowLayoutMaximumLineSize(lineSize)
 end
 
 local function SyncContainerGeometry(container, lane, parentFrame, forceGeometry, preserveAlpha)
@@ -2630,8 +2716,16 @@ local function SyncContainerGeometry(container, lane, parentFrame, forceGeometry
     local resolvedStrata
     if parentFrame then
         resolvedStrata = ResolveFrameStrata(parentFrame, lane.strata)
-        if layoutHost then SyncFrameStrata(layoutHost, resolvedStrata) end
-        SyncFrameStrata(container, resolvedStrata)
+        -- Strata/level authority lives on the MSUF-owned layout host only:
+        -- AddAuraGroup seals the container with UntrustedLayoutScriptExecution
+        -- on PTR 7, so direct SetFrameStrata/SetFrameLevel calls on a live
+        -- container are unreliable. The container is created as a child of the
+        -- host and inherits both through the parent chain.
+        if layoutHost then
+            SyncFrameStrata(layoutHost, resolvedStrata)
+        else
+            SyncFrameStrata(container, resolvedStrata)
+        end
     end
     -- Geometry depends only on the lane's layout signature (size/spacing/anchor/
     -- offsets/level/growth/visual gen) and the parent frame. Content-only
@@ -2663,18 +2757,29 @@ local function SyncContainerGeometry(container, lane, parentFrame, forceGeometry
         layoutHost:ClearAllPoints()
         layoutHost:SetPoint(lane.anchor, parentFrame, lane.anchor, lane.x, lane.y)
         layoutHost:SetSize(lane.width, lane.height)
-        container:ClearAllPoints()
-        container:SetPoint(initialAnchor, layoutHost, initialAnchor, 0, 0)
+        -- Anchor the sealed container to its host once; growth-direction
+        -- changes alter the tracking signature and recreate the container, so
+        -- this never needs to re-anchor a live (sealed) container.
+        if container._msufA3HostAnchor ~= initialAnchor then
+            container:ClearAllPoints()
+            container:SetPoint(initialAnchor, layoutHost, initialAnchor, 0, 0)
+            container._msufA3HostAnchor = initialAnchor
+        end
     elseif parentFrame then
         container:ClearAllPoints()
         container:SetPoint(lane.anchor, parentFrame, lane.anchor, lane.x, lane.y)
     end
     if preserveAlpha ~= true then container:SetAlpha(lane.alpha or 1) end
     if parentFrame then
+        local level = (parentFrame:GetFrameLevel() or 0) + AuraIconBaseOffset(parentFrame) + (lane.layer or 1)
         if layoutHost and layoutHost.SetFrameLevel then
-            layoutHost:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + AuraIconBaseOffset(parentFrame) + (lane.layer or 1))
+            -- Host-only level writes: the container (a child of the host)
+            -- and its AuraButtons follow through C-side parent delta
+            -- propagation, which no PTR 7 seal can block.
+            layoutHost:SetFrameLevel(level)
+        elseif container.SetFrameLevel then
+            container:SetFrameLevel(level)
         end
-        container:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + AuraIconBaseOffset(parentFrame) + (lane.layer or 1))
     end
     container._msufA3ButtonFrameStrata = resolvedStrata
     if forceGeometry == true then container._msufA3ForceManagedAuraGeometry = nil end
@@ -2781,8 +2886,14 @@ local function PrepareAuraButton(button, lane, index)
         if not duration then
             duration = textOverlay:CreateFontString(nil, "OVERLAY", "GameFontNormal")
             button.Text = duration
-        elseif duration.GetParent and duration:GetParent() ~= textOverlay and type(duration.SetParent) == "function" then
-            duration:SetParent(textOverlay)
+        elseif duration.GetParent and duration:GetParent() ~= textOverlay then
+            -- PTR 7 seals configured display elements with
+            -- ForbiddenAspect.ChangeParent; SetParent would hard-error inside
+            -- initializeFrame and kill the lane. Retire the stray element and
+            -- rebuild on the overlay instead.
+            duration:Hide()
+            duration = textOverlay:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            button.Text = duration
         end
         duration:Hide()
         ApplyFont(duration, lane.cooldownSize)
@@ -2795,11 +2906,16 @@ local function PrepareAuraButton(button, lane, index)
         -- hour/day units.
         local formatter = BuildAuraDurationFormatter(lane)
         if formatter then
-            _durationTextOptions.formatter = formatter
+            -- PTR 7 (12.1) renamed the duration-text formatter option from
+            -- `formatter` to `textFormatter`; the old key is dropped by
+            -- ProcessCustomAuraButtonDurationTextOptions, which silently reverts to
+            -- Blizzard's default formatter (losing MSUF's color escapes + minute
+            -- suffix + decimals). The MSUF NumericRuleFormatter object is unchanged.
+            _durationTextOptions.textFormatter = formatter
             button:SetDurationText(duration, _durationTextOptions)
-            _durationTextOptions.formatter = nil
+            _durationTextOptions.textFormatter = nil
         else
-            _durationTextOptions.formatter = nil
+            _durationTextOptions.textFormatter = nil
             button:SetDurationText(duration)
         end
     else
@@ -2813,8 +2929,11 @@ local function PrepareAuraButton(button, lane, index)
         if not count then
             count = textOverlay:CreateFontString(nil, "OVERLAY", "GameFontNormal")
             button._msufA3ApplicationCount = count
-        elseif count.GetParent and count:GetParent() ~= textOverlay and type(count.SetParent) == "function" then
-            count:SetParent(textOverlay)
+        elseif count.GetParent and count:GetParent() ~= textOverlay then
+            -- Same ChangeParent seal as the duration text above.
+            count:Hide()
+            count = textOverlay:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            button._msufA3ApplicationCount = count
         end
         button.Count = count
         count:Hide()
@@ -2837,10 +2956,11 @@ local function PrepareAuraButton(button, lane, index)
         end
         LayoutAuraBorder(button, border, lane)
         button._msufA3AuraBorder = border
-        button:SetAuraBorder(border, GetAuraBorderOptions(lane.showAuraSymbol))
+        button:ClearDispelTypeTextures()
+        button:AddDispelTypeTexture(border, GetAuraBorderOptions(lane.showAuraSymbol))
         auraBorderBound = true
     else
-        button:ClearAuraBorder()
+        button:ClearDispelTypeTextures()
         if button._msufA3AuraBorder and button._msufA3AuraBorder.Hide then button._msufA3AuraBorder:Hide() end
     end
 
@@ -2856,13 +2976,80 @@ local function PrepareAuraButton(button, lane, index)
         symbol:SetJustifyH("RIGHT")
         symbol:SetJustifyV("BOTTOM")
         ApplyFont(symbol, math_min(lane.stackSize or DEFAULT_SHARED.stackTextSize, 14))
-        button:SetAuraSymbol(symbol, _auraSymbolOptions)
+        button:SetDispelTypeText(symbol, _auraSymbolOptions)
     else
-        button:ClearAuraSymbol()
+        button:ClearDispelTypeText()
         if button._msufA3AuraSymbol and button._msufA3AuraSymbol.Hide then button._msufA3AuraSymbol:Hide() end
     end
 
+    -- Shared icon style: static border ring + two-step soft shadow. All
+    -- regions are button-owned textures created once here (initializeFrame);
+    -- draw order BACKGROUND(-7,-6) shadow < BORDER(-1) ring < ARTWORK icon <
+    -- OVERLAY dispel border, so the dispel-type border overdraws the static
+    -- ring for typed debuffs.
+    local style = lane.iconStyle
+    local styleBorder = button._msufA3StyleBorder
+    if style and style.borderEnabled then
+        if not styleBorder then
+            styleBorder = button:CreateTexture(nil, "BORDER", nil, -1)
+            styleBorder:SetTexture("Interface\\Buttons\\WHITE8X8")
+            button._msufA3StyleBorder = styleBorder
+        end
+        local inset = style.borderThickness
+        styleBorder:ClearAllPoints()
+        styleBorder:SetPoint("TOPLEFT", button, "TOPLEFT", -inset, inset)
+        styleBorder:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", inset, -inset)
+        styleBorder:SetVertexColor(style.borderR, style.borderG, style.borderB, style.borderA)
+        styleBorder:Show()
+    elseif styleBorder then
+        styleBorder:Hide()
+    end
+    local shadowInner = button._msufA3StyleShadowInner
+    local shadowOuter = button._msufA3StyleShadowOuter
+    if style and style.shadowEnabled then
+        if not shadowInner then
+            shadowInner = button:CreateTexture(nil, "BACKGROUND", nil, -6)
+            shadowInner:SetTexture("Interface\\Buttons\\WHITE8X8")
+            button._msufA3StyleShadowInner = shadowInner
+            shadowOuter = button:CreateTexture(nil, "BACKGROUND", nil, -7)
+            shadowOuter:SetTexture("Interface\\Buttons\\WHITE8X8")
+            button._msufA3StyleShadowOuter = shadowOuter
+        end
+        local base = (style.borderEnabled and style.borderThickness or 0)
+        local innerExtent = base + math_max(1, math_floor((style.shadowSize * 0.5) + 0.5))
+        local outerExtent = base + style.shadowSize
+        shadowInner:ClearAllPoints()
+        shadowInner:SetPoint("TOPLEFT", button, "TOPLEFT", -innerExtent, innerExtent)
+        shadowInner:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", innerExtent, -innerExtent)
+        shadowInner:SetVertexColor(style.shadowR, style.shadowG, style.shadowB, style.shadowA * 0.6)
+        shadowInner:Show()
+        shadowOuter:ClearAllPoints()
+        shadowOuter:SetPoint("TOPLEFT", button, "TOPLEFT", -outerExtent, outerExtent)
+        shadowOuter:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", outerExtent, -outerExtent)
+        shadowOuter:SetVertexColor(style.shadowR, style.shadowG, style.shadowB, style.shadowA * 0.3)
+        shadowOuter:Show()
+    elseif shadowInner then
+        shadowInner:Hide()
+        if shadowOuter then shadowOuter:Hide() end
+    end
+
     button:SetMouseMotionEnabled(lane.showTooltip ~= false)
+    -- PTR 7 tooltips: the dedicated AuraButtonTooltip is positioned from the
+    -- button's own anchor state; without SetTooltipAnchorPoint the intrinsic
+    -- calls SetOwner with a nil anchor and the tooltip never appears. Mirror
+    -- MSUF's global unit-tooltip settings onto the button (cold path, once per
+    -- created button): CURSOR anchor follows the cursor, everything else uses
+    -- the classic bottom-right aura anchor; OOC mode maps to the native
+    -- combat-hide flag.
+    if lane.showTooltip ~= false and type(button.SetTooltipAnchorPoint) == "function" then
+        local general = _G.MSUF_DB and _G.MSUF_DB.general
+        local anchor = "ANCHOR_BOTTOMRIGHT"
+        if general and general.unitTooltipAnchor == "CURSOR" then anchor = "ANCHOR_CURSOR" end
+        button:SetTooltipAnchorPoint(anchor)
+        if type(button.SetHideTooltipInCombat) == "function" then
+            button:SetHideTooltipInCombat((general and general.unitTooltipMode == "OOC") == true)
+        end
+    end
     button._msufA3LaneLayoutSignature = lane._msufA3LayoutSignature
 end
 
@@ -2911,15 +3098,10 @@ local function LayoutDispelSensorButton(button, sensor, parentFrame, index)
     local target = DispelSensorButtonTarget(parentFrame, sensor)
     if not target then return false end
     button:ClearAllPoints()
-    if sensor.visual == "corner" then
-        local slot = sensor.slots and sensor.slots[index or 1]
-        if not slot then return false end
-        local size = ClampNumber(sensor.size, 8, 1, 64)
-        button:SetSize(size, size)
-        button:SetPoint(slot.anchor or "TOPLEFT", target, slot.anchor or "TOPLEFT", slot.x or 0, slot.y or 0)
-    else
-        button:SetAllPoints(target)
-    end
+    -- Corner buttons cover the whole target like border/overlay: the single
+    -- consolidated button hosts one region per corner, each anchored to the
+    -- button rect (== target rect), so per-corner button geometry is gone.
+    button:SetAllPoints(target)
     SyncFrameStrata(button, ResolveFrameStrata(parentFrame, sensor.strata))
     if button.SetFrameLevel then button:SetFrameLevel(DispelSensorFrameLevel(parentFrame, sensor, target)) end
     return true
@@ -2930,10 +3112,6 @@ local function LayoutDispelSensorOverlay(region, button, sensor, visualTarget)
     local style = sensor.style or "FULL"
     local thickness = ClampNumber(sensor.thickness, 3, 1, 32)
     region:ClearAllPoints()
-    if sensor.visual == "corner" then
-        region:SetAllPoints(button)
-        return true
-    end
     if sensor.visual == "border" then
         local pad = math_min(2, math_max(0, math_floor((thickness * 0.5) + 0.5)))
         region:SetPoint("TOPLEFT", button, "TOPLEFT", -pad, pad)
@@ -2964,15 +3142,20 @@ local function LayoutDispelSensorOverlay(region, button, sensor, visualTarget)
     return true
 end
 
+-- MSUF supplies its own sensor art (WHITE8X8 fill / msuf edge texture) and only
+-- wants Blizzard to apply the dispel-type color. On PTR 7 that is
+-- PreserveAsset; Border/BorderWithIcon would replace the texture with the
+-- stock dispel border atlas and reset its vertex color, destroying the
+-- overlay/corner visuals.
 local function GetSensorOverlayOptions()
-    local styles = _G.AuraButtonBorderStyle
-    AURA_SENSOR_OVERLAY_OPTIONS.style = styles and styles.Color or 1
+    local styles = _G.Enum and _G.Enum.CustomAuraButtonDispelTypeTextureStyle
+    AURA_SENSOR_OVERLAY_OPTIONS.style = styles and styles.PreserveAsset or nil
     return AURA_SENSOR_OVERLAY_OPTIONS
 end
 
 local function GetSensorBorderOptions()
-    local styles = _G.AuraButtonBorderStyle
-    AURA_SENSOR_BORDER_OPTIONS.style = styles and styles.Color or 1
+    local styles = _G.Enum and _G.Enum.CustomAuraButtonDispelTypeTextureStyle
+    AURA_SENSOR_BORDER_OPTIONS.style = styles and styles.PreserveAsset or nil
     return AURA_SENSOR_BORDER_OPTIONS
 end
 
@@ -2998,8 +3181,40 @@ local function PrepareDispelSensorButton(button, sensor, parentFrame, index)
     button:ClearDurationCooldown()
     button:ClearDurationText()
     button:ClearDurationBar()
-    button:ClearAuraSymbol()
+    button:ClearDispelTypeText()
 
+    button:ClearDispelTypeTextures()
+    if sensor.visual == "corner" then
+        -- PTR 7 multiple dispel textures: the single consolidated corner
+        -- button carries one colored region per corner slot. The button covers
+        -- the target rect, so each region anchors to the button at its
+        -- configured corner offset.
+        local slots = sensor.slots
+        if not (type(slots) == "table" and #slots > 0) then return false end
+        local regions = button._msufA3DispelSensorRegions
+        if not regions then
+            regions = {}
+            button._msufA3DispelSensorRegions = regions
+        end
+        local size = ClampNumber(sensor.size, 8, 1, 64)
+        local alpha = Clamp01(sensor.alpha, 1)
+        for i = 1, #slots do
+            local slot = slots[i]
+            local region = regions[i]
+            if not region then
+                region = button:CreateTexture(nil, "OVERLAY")
+                regions[i] = region
+            end
+            region:ClearAllPoints()
+            region:SetSize(size, size)
+            region:SetPoint(slot.anchor or "TOPLEFT", button, slot.anchor or "TOPLEFT", slot.x or 0, slot.y or 0)
+            region:SetTexture("Interface\\Buttons\\WHITE8X8")
+            region:SetAlpha(alpha)
+            button:AddDispelTypeTexture(region, GetSensorOverlayOptions())
+        end
+        for i = #slots + 1, #regions do regions[i]:Hide() end
+        return true
+    end
     local region = button._msufA3DispelSensorRegion
     if not region then
         region = button:CreateTexture(nil, "OVERLAY")
@@ -3010,18 +3225,14 @@ local function PrepareDispelSensorButton(button, sensor, parentFrame, index)
         region:Hide()
         return false
     end
-    if sensor.visual == "corner" then
-        region:SetTexture("Interface\\Buttons\\WHITE8X8")
-        region:SetAlpha(Clamp01(sensor.alpha, 1))
-        button:SetAuraBorder(region, GetSensorOverlayOptions())
-    elseif sensor.visual == "overlay" then
+    if sensor.visual == "overlay" then
         region:SetTexture("Interface\\Buttons\\WHITE8X8")
         region:SetAlpha(Clamp01(sensor.alpha, 0.35))
-        button:SetAuraBorder(region, GetSensorOverlayOptions())
+        button:AddDispelTypeTexture(region, GetSensorOverlayOptions())
     else
         region:SetTexture(MSUF_AURA_SENSOR_EDGE_TEXTURE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
         region:SetAlpha(0.82)
-        button:SetAuraBorder(region, GetSensorBorderOptions())
+        button:AddDispelTypeTexture(region, GetSensorBorderOptions())
     end
     return true
 end
@@ -3079,6 +3290,7 @@ local function ApplyManagedAuraGroupLayout(container, groupKey, lane)
 end
 
 local function CreateNativeAuraContainer(root, parentOverride)
+    ApplyAuraTooltipStyle()
     local container = CreateFrame("AuraContainer", nil, parentOverride or root, "CustomAuraContainerTemplate")
     if not container then
         A3.nativeAuraRuntimeAvailable = false
@@ -3647,7 +3859,7 @@ local function NeedsPartyAuraRangeGate(cfg)
 end
 A3._NeedsPartyAuraRangeGate = NeedsPartyAuraRangeGate
 
--- EUI-style range fast path. Only identity-dependent helpful displays and the
+-- Flat-lane range fast path. Only identity-dependent helpful displays and the
 -- fixed Spell/Dispel slot owner are fail-closed out of range. Ordinary token-
 -- filtered Buff/Debuff flows remain under AuraContainer's incremental UNIT_AURA
 -- ownership and are never reparsed merely because a range edge fired.
@@ -4777,7 +4989,7 @@ function A3.RenderFrame(frame, reason)
             and A3._RefreshAppliedNativeAuras(frame, false) then
             return true
         end
-        if InCombat() then return false end
+        if AuraRuntimeCombatBlocked() then return false end
     end
     if not cfgReady then cfg = FrameAuraConfig(frame, frame.MSUFUnitKey) end
     if FrameAppliedConfigIsCurrent(frame, reason, cfg) then
@@ -4799,7 +5011,8 @@ A3.RenderUnitChangedFrame = function(frame, oldUnit, newUnit)
         return false
     end
     local root = frame.Auras
-    if InCombat() and not RootCanReuseContainersForConfig(root, cfg) then
+    -- PTR 7: recreate is combat-legal; only the unloaded-addon case still bails.
+    if AuraRuntimeCombatBlocked() and not RootCanReuseContainersForConfig(root, cfg) then
         return false
     end
     return ApplyConfig(frame, cfg, "MSUF_UNIT_CHANGED_AURAS")
@@ -4858,7 +5071,7 @@ function A3._AuraPreviewGroupKind(scope)
 end
 
 function A3._NotifyAuraColdpathPreview(reason, scope)
-    if InCombat() then return A3._QueueDeferredAuraRuntime(scope or "shared", reason or "AURAS3_PREVIEW") end
+    if AuraRuntimeCombatBlocked() then return A3._QueueDeferredAuraRuntime(scope or "shared", reason or "AURAS3_PREVIEW") end
     local did = false
     reason = reason or "AURAS3_PREVIEW"
     if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
@@ -4878,7 +5091,7 @@ function A3._NotifyAuraColdpathPreview(reason, scope)
 end
 
 A3._ApplyRuntimeUnit = function(runtimeUnit)
-    if InCombat() then return A3._QueueDeferredAuraRuntime(runtimeUnit, "AURAS3_RUNTIME_UNIT") end
+    if AuraRuntimeCombatBlocked() then return A3._QueueDeferredAuraRuntime(runtimeUnit, "AURAS3_RUNTIME_UNIT") end
     local frame = (A3._runtimeFrames and A3._runtimeFrames[runtimeUnit])
         or (UF.GetFrame and UF.GetFrame(runtimeUnit))
         or (UF.frames and UF.frames[runtimeUnit])
@@ -4899,7 +5112,7 @@ end
 
 function A3._ApplyGroupAuraFrame(frame, unit, kind)
     if not (frame and type(unit) == "string" and unit ~= "") then return false end
-    if InCombat() then return A3._QueueDeferredAuraRuntime(unit, "AURAS3_GROUP_FRAME") end
+    if AuraRuntimeCombatBlocked() then return A3._QueueDeferredAuraRuntime(unit, "AURAS3_GROUP_FRAME") end
     if EnsureNativeAuraRefreshDriver then EnsureNativeAuraRefreshDriver() end
     frame._msufIsGroupFrame = true
     if kind then frame._msufGFKind = kind end
@@ -4914,7 +5127,7 @@ end
 function A3._RequestGroupKindNow(kind)
     local gf = A3._GroupAPI()
     if not gf then return false end
-    if InCombat() then return A3._QueueDeferredAuraRuntime(kind or "group", "AURAS3_GROUP_KIND") end
+    if AuraRuntimeCombatBlocked() then return A3._QueueDeferredAuraRuntime(kind or "group", "AURAS3_GROUP_KIND") end
     if type(gf.RefreshVisuals) == "function" then
         return gf.RefreshVisuals(kind, gf.DIRTY_AURAS) == true
     end
@@ -4944,7 +5157,7 @@ end
 function A3._RequestGroupUnitNow(unit)
     local gf = A3._GroupAPI()
     if not (gf and type(unit) == "string" and unit ~= "") then return false end
-    if InCombat() then return A3._QueueDeferredAuraRuntime(unit, "AURAS3_GROUP_UNIT") end
+    if AuraRuntimeCombatBlocked() then return A3._QueueDeferredAuraRuntime(unit, "AURAS3_GROUP_UNIT") end
     if type(gf.ForEachFrameForUnit) == "function" then
         return gf.ForEachFrameForUnit(unit, ApplyRequestedGroupUnitFrame, gf)
     end
@@ -4983,11 +5196,12 @@ A3._RequestUnitNow = function(unit)
 end
 
 function A3.RequestUnit(unit)
-    if InCombat() then return A3._QueueDeferredAuraRuntime(unit, "AURAS3_REQUEST_UNIT") end
+    if AuraRuntimeCombatBlocked() then return A3._QueueDeferredAuraRuntime(unit, "AURAS3_REQUEST_UNIT") end
     return A3._RequestUnitNow(unit)
 end
 
 A3._DoRefreshAll = function()
+    ApplyAuraTooltipStyle()
     A3.BumpRuntimeConfig()
     A3._runtimeConfigCache = nil
     A3._RequestUnitNow("*")
@@ -5032,7 +5246,7 @@ function A3._FlushDeferredAuraRuntime()
 end
 
 function A3.RefreshAll()
-    if InCombat() then return A3._QueueDeferredAuraRuntime("shared", "AURAS3_REFRESH_ALL") end
+    if AuraRuntimeCombatBlocked() then return A3._QueueDeferredAuraRuntime("shared", "AURAS3_REFRESH_ALL") end
     if A3._refreshAllCoalescing == true then
         A3._refreshAllPending = true
         return true
@@ -5073,7 +5287,7 @@ end
 
 function A3.RequestScope(scope, reason)
     scope = tostring(scope or "shared"):lower()
-    if InCombat() then return A3._QueueDeferredAuraRuntime(scope, reason or "AURAS3_SCOPE_APPLY") end
+    if AuraRuntimeCombatBlocked() then return A3._QueueDeferredAuraRuntime(scope, reason or "AURAS3_SCOPE_APPLY") end
     if scope == "" or scope == "shared" or scope == "global" or scope == "all" or scope == "*" then
         return A3.RefreshAll()
     end
@@ -5090,7 +5304,7 @@ if type(MSUF.RegisterLocaleCallback) == "function" then
 end
 
 function A3.RefreshUnit(unit)
-    if InCombat() then return A3._QueueDeferredAuraRuntime(unit, "AURAS3_REFRESH_UNIT") end
+    if AuraRuntimeCombatBlocked() then return A3._QueueDeferredAuraRuntime(unit, "AURAS3_REFRESH_UNIT") end
     if unit == "boss" then
         for i = 1, 5 do InvalidateUnitRuntimeConfig("boss" .. i) end
         return A3.RequestUnit("boss")
@@ -5103,7 +5317,7 @@ function A3.RefreshUnit(unit)
 end
 
 function A3.ApplyFontsFromGlobal(scope, reason)
-    if InCombat() then return A3._QueueDeferredAuraRuntime(scope or "shared", reason or "AURAS3_FONT_VISUALS", true) end
+    if AuraRuntimeCombatBlocked() then return A3._QueueDeferredAuraRuntime(scope or "shared", reason or "AURAS3_FONT_VISUALS", true) end
     A3._nativeVisualGen = (A3._nativeVisualGen or 0) + 1
     if scope ~= nil then
         return A3.RequestScope(scope, reason or "AURAS3_FONT_VISUALS")

@@ -124,7 +124,7 @@ end
 
 -- /msufgp drivers — every frame in the UI with an armed OnUpdate script.
 -- OnUpdate only runs while a frame is visible, so the visible rows ARE the
--- steady per-frame consumers (across ALL addons, EUI included).
+-- steady per-frame consumers (across ALL addons).
 local function DumpDrivers()
   local EnumerateFrames = _G.EnumerateFrames
   if not EnumerateFrames then
@@ -259,30 +259,30 @@ local function Dump()
   end
 end
 
--- /msufgp euiscope on|off — flip the measured group-frame cost drivers to
--- EUI's effective scope (no double threat consumers, no range fade, no status
+-- /msufgp leanscope on|off — flip the measured group-frame cost drivers to
+-- a lean reference scope (no double threat consumers, no range fade, no status
 -- text family). Original values are snapshotted into SavedVariables so "off"
 -- restores them even after a reload. Refuses to run in combat: the toggles go
 -- through the full config refresh.
--- The measured cost drivers that EUI's raid frames do not run per event on
+-- The measured cost drivers that lean reference raid frames do not run per event on
 -- 12.1 (native aura container owns absorb display; no per-event threat/range
 -- Lua). The perfy trace ranks overAbsorbOverlay's prediction machinery as the
 -- #1 MSUF group block, so it leads this list.
-local EUI_SCOPE_KEYS = {
+local LEAN_SCOPE_KEYS = {
   "overAbsorbOverlay", "fullHealthAbsorbStripe", "healPredEnabled",
   "aggroEnabled", "ciEnabled", "rangeFadeEnabled",
   "statusText", "statusGhostText", "statusAFKText", "statusDNDText",
 }
 -- Absorb-only isolation: flip JUST the over-absorb glow/stripe off, so the
--- absorb renders as a plain bar exactly like EllesmereUI (which has no
+-- absorb renders as a plain bar (no
 -- health-gated spill edge). This drops the prediction UNIT_HEALTH registration
 -- for the overlay -- the #1 MSUF group block in the perfy trace -- while
 -- leaving threat/range/status/heal-prediction untouched, so a before/after
 -- profiler read isolates the absorb overlay's exact cost.
-local EUI_ABSORB_KEYS = { "overAbsorbOverlay", "fullHealthAbsorbStripe" }
-local EUI_SCOPE_PROFILES = { "gf_party", "gf_raid", "gf_mythicraid" }
+local LEAN_ABSORB_KEYS = { "overAbsorbOverlay", "fullHealthAbsorbStripe" }
+local LEAN_SCOPE_PROFILES = { "gf_party", "gf_raid", "gf_mythicraid" }
 
-local function ApplyEuiScope(state, keys, backupField, label)
+local function ApplyLeanScope(state, keys, backupField, label)
   if _G.InCombatLockdown and _G.InCombatLockdown() then
     print("|cff7fd5ffMSUF|r group pulse: leave combat first")
     return
@@ -298,7 +298,7 @@ local function ApplyEuiScope(state, keys, backupField, label)
       backup = {}
       db[backupField] = backup
     end
-    for _, profileKey in ipairs(EUI_SCOPE_PROFILES) do
+    for _, profileKey in ipairs(LEAN_SCOPE_PROFILES) do
       local profile = db[profileKey]
       if type(profile) == "table" then
         local slot = backup[profileKey]
@@ -322,7 +322,7 @@ local function ApplyEuiScope(state, keys, backupField, label)
       print("|cff7fd5ffMSUF|r group pulse: no " .. label .. " backup to restore")
       return
     end
-    for _, profileKey in ipairs(EUI_SCOPE_PROFILES) do
+    for _, profileKey in ipairs(LEAN_SCOPE_PROFILES) do
       local profile, slot = db[profileKey], backup[profileKey]
       if type(profile) == "table" and type(slot) == "table" then
         for _, key in ipairs(keys) do
@@ -336,12 +336,12 @@ local function ApplyEuiScope(state, keys, backupField, label)
   end
 end
 
-local function EuiScope(state)
-  ApplyEuiScope(state, EUI_SCOPE_KEYS, "_msufGPEuiScopeBackup", "EUI scope (threat/range/status/absorb)")
+local function LeanScope(state)
+  ApplyLeanScope(state, LEAN_SCOPE_KEYS, "_msufGPLeanScopeBackup", "lean scope (threat/range/status/absorb)")
 end
 
-local function EuiAbsorb(state)
-  ApplyEuiScope(state, EUI_ABSORB_KEYS, "_msufGPEuiAbsorbBackup", "EUI absorb (plain bar, no glow)")
+local function LeanAbsorb(state)
+  ApplyLeanScope(state, LEAN_ABSORB_KEYS, "_msufGPLeanAbsorbBackup", "lean absorb (plain bar, no glow)")
 end
 
 _G.SLASH_MSUFGROUPPULSE1 = "/msufgp"
@@ -357,14 +357,14 @@ _G.SlashCmdList["MSUFGROUPPULSE"] = function(msg)
     Dump()
   elseif msg == "drivers" then
     DumpDrivers()
-  elseif msg == "euiscope on" or msg == "euiscope" then
-    EuiScope("on")
-  elseif msg == "euiscope off" then
-    EuiScope("off")
-  elseif msg == "euiabsorb on" or msg == "euiabsorb" then
-    EuiAbsorb("on")
-  elseif msg == "euiabsorb off" then
-    EuiAbsorb("off")
+  elseif msg == "leanscope on" or msg == "leanscope" then
+    LeanScope("on")
+  elseif msg == "leanscope off" then
+    LeanScope("off")
+  elseif msg == "leanabsorb on" or msg == "leanabsorb" then
+    LeanAbsorb("on")
+  elseif msg == "leanabsorb off" then
+    LeanAbsorb("off")
   elseif msg == "suspendhidden on" or msg == "suspendhidden" then
     _G.MSUF_GF_SuspendHidden = true
     print("|cff7fd5ffMSUF|r group pulse: hidden-frame event suspend ON — hidden frames unregister all unit events (0 overhead while off). Toggle a frame's visibility to apply.")
@@ -373,11 +373,11 @@ _G.SlashCmdList["MSUFGROUPPULSE"] = function(msg)
     print("|cff7fd5ffMSUF|r group pulse: hidden-frame event suspend OFF (default: keep events registered while hidden).")
   elseif msg == "predsync on" or msg == "predsync" then
     _G.MSUF_GF_PredictionSync = true
-    print("|cff7fd5ffMSUF|r group pulse: synchronous absorb/heal prediction ON (EUI-style, no render-frame coalescer).")
+    print("|cff7fd5ffMSUF|r group pulse: synchronous absorb/heal prediction ON (no render-frame coalescer).")
   elseif msg == "predsync off" then
     _G.MSUF_GF_PredictionSync = nil
     print("|cff7fd5ffMSUF|r group pulse: synchronous prediction OFF (default: render-frame coalescer).")
   else
-    print("|cff7fd5ffMSUF|r group pulse: /msufgp on | dump | drivers | reset | off | euiscope on|off | euiabsorb on|off")
+    print("|cff7fd5ffMSUF|r group pulse: /msufgp on | dump | drivers | reset | off | leanscope on|off | leanabsorb on|off")
   end
 end

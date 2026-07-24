@@ -1368,7 +1368,7 @@ end
 -- FLAT prediction writer for the plain-bar archetype: any combination of an
 -- incoming-heal bar, an absorb bar, and a heal-absorb bar with STATIC anchors
 -- and NO over-absorb overlay/stripe and NO mixed follow-clamp. This is exactly
--- EllesmereUI's absorb+heal-prediction shape. It skips the general
+-- the flat absorb+heal-prediction shape. It skips the general
 -- ApplyPredictionValues state machine (per-lane show/refresh branch pairs,
 -- follow-layout checks, over-absorb glow) and does the one thing a data event
 -- changes: read the dirty lane(s) from the mask and write the bar(s) with
@@ -1383,7 +1383,7 @@ local function FlushFlatPrediction(frame, mask)
   -- and its bar existing. Reading the plain HP max is deferred until we know at
   -- least one lane will render -- and read at most once, with no per-call
   -- closure (this is a per-member, per-event hot path; a boxed upvalue frame
-  -- here is pure GC churn EUI never pays on its flat writer).
+  -- here is pure GC churn a flat writer never pays).
   local doHeal = (mask % 2) >= 1 and frame._msufPredictionHealActive == true and frame.incomingHealBar
   local doAbsorb = (mask % 4) >= 2 and frame._msufPredictionAbsorbActive == true and frame.absorbBar
   local doHealAbsorb = mask >= 4 and frame._msufPredictionHealAbsorbActive == true and frame.healAbsorbBar
@@ -1741,7 +1741,7 @@ local function QueuePredictionDataEvent(frame, event)
   -- driver arm/disarm, so a same-frame burst that "collapses" to one flush
   -- still costs more queued than just flushing each lane on the spot. Measured
   -- net-negative for this archetype -- so render this lane synchronously, which
-  -- is exactly EllesmereUI's per-event model. Every bar write is value-deduped
+  -- is exactly the flat per-event model. Every bar write is value-deduped
   -- downstream, and the flush touches only StatusBar values (combat-safe).
   if frame._msufPredictionSimpleAbsorb == true then
     local flush = frame._msufPredictionFlushData
@@ -1755,7 +1755,7 @@ local function QueuePredictionDataEvent(frame, event)
   if (mask % (bit * 2)) < bit then
     frame._msufPredictionDirtyMask = mask + bit
   end
-  -- EllesmereUI renders absorb synchronously on the event (one UpdateAbsorb
+  -- The flat baseline renders absorb synchronously on the event (one UpdateAbsorb
   -- call, no render-frame driver). Opt-in parity: flush the accumulated mask
   -- immediately instead of queuing onto the OnUpdate coalescer. Every bar write
   -- downstream is value-deduped, so a same-frame burst still collapses to the

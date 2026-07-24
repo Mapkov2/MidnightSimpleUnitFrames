@@ -38,7 +38,7 @@ local POWER_EVENTS_FAST = {
   "UNIT_POWER_FREQUENT", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE",
 }
 -- Group power bars never show alternate power, so they skip the BAR_SHOW/HIDE
--- registrations (matches EllesmereUI's lean per-unit tracker).
+-- registrations (matches the lean per-unit tracker baseline).
 local POWER_EVENTS_GROUP = { "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER" }
 local POWER_SHAPE_MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\ClassPower\\"
 local DETACHED_SHAPE_TEXTURES = {
@@ -562,7 +562,7 @@ function Power.GetEvents(frame, spec)
   -- Group members render a normal (mana/rage/energy) power bar; the
   -- alternate-power show/hide stream is a single-frame/boss concern. Dropping
   -- those two registrations per raid member trims the per-frame event set
-  -- toward EllesmereUI's lean tracker without changing any displayed value.
+  -- toward the lean tracker baseline without changing any displayed value.
   if spec and spec.scope == "group" then
     return POWER_EVENTS_GROUP
   end

@@ -288,12 +288,10 @@ BridgeBuildDashboardCard = function(parent, cardW, cardH)
     local previous = A._bridgeDashboardCard
     if previous then previous.cancelled = true end
 
-    local kicker, maturity, title
+    local kicker, title
     if T and type(T.Font) == "function" then
         kicker = T.Font(parent, "GameFontDisableSmall", "MSUF Assistant", T.colors and T.colors.accent or { 0.45, 0.75, 1, 1 })
         kicker:SetPoint("TOPLEFT", parent, "TOPLEFT", 24, -24)
-        maturity = T.Font(parent, "GameFontDisableSmall", "(Early Alpha)", T.colors and T.colors.danger or { 1, 0.28, 0.28, 1 })
-        maturity:SetPoint("LEFT", kicker, "RIGHT", 4, 0)
         title = T.Font(parent, "GameFontNormalLarge", "MSUF Assistant", T.colors and T.colors.text)
         title:SetPoint("TOPLEFT", parent, "TOPLEFT", 24, -48)
     end

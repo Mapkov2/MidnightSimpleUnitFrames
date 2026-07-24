@@ -1787,7 +1787,7 @@ function HealthText.SelectEventUpdate(frame, spec, event, update)
   if event == "UNIT_ABSORB_AMOUNT_CHANGED" then return UpdateAbsorbRuntime end
   if event == "UNIT_HEALTH" then
     local rt = frame and frame._msufTextRuntime
-    -- EUI-style inline write for a group frame with a single percent-only health
+    -- Flat inline write for a group frame with a single percent-only health
     -- slot: write in the same route pass as the bar (which published the plain
     -- percent), skipping the deferred dirty-text queue/ticker/drain. Any other
     -- text shape (absorb-combined, value/missing modes) keeps the coalescer.
@@ -1861,12 +1861,12 @@ PowerText.Update = UpdatePowerTextValues
 function PowerText.SelectEventUpdate(frame, spec, event, update)
   if event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT" then
     local rt = frame and frame._msufTextRuntime
-    -- EUI-style inline write: a group frame with a single percent-only power
+    -- Flat inline write: a group frame with a single percent-only power
     -- slot writes its text synchronously in the same compiled route pass as the
     -- bar (which just published the plain percent to rt._dispatchPowerPercent),
     -- consuming that value with the existing bucket dedup. This drops the
     -- deferred dirty-text machinery (MarkDirty -> C_Timer ticker -> FlushDirtyText
-    -- -> per-frame state re-fetch) that EllesmereUI's inline SetFormattedText
+    -- -> per-frame state re-fetch) that an inline SetFormattedText
     -- never pays. Any other text shape keeps the deferred coalescer.
     if spec and spec.scope == "group" and rt and rt.powerHotFromPercent then
       return UpdatePowerTextValues
