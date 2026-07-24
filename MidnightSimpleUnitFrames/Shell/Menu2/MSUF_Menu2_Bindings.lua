@@ -1539,6 +1539,48 @@ local function ResetProfilePage()
     if type(_G.MSUF_ShowReloadRecommendedPopup) == "function" then _G.MSUF_ShowReloadRecommendedPopup("Profile reset") end
     return true
 end
+-- A deliberate "Reset to defaults" must leave no stale runtime cache behind, or
+-- the user keeps seeing pre-reset geometry (aura lane offsets, spell-indicator
+-- anchors, unit-frame positions) even though the saved values are already back
+-- to factory. The normal apply path trusts these caches for speed, so the reset
+-- drops them here before ApplyAfterPageReset re-reads the fresh defaults. Every
+-- call below is cold-path only: generation bumps and flag sets, no layout pass.
+local function PurgeRuntimeCachesForReset(info)
+    -- The aura/SI/GF/castbar invalidations run for EVERY page kind, not just the
+    -- page that was reset: bump the revision counters, flag geometry and wipe the
+    -- small resolver tables so ApplyAfterPageReset below repopulates each cache
+    -- from the fresh defaults. A reset is deliberate and rare, so invalidating a
+    -- cache the page did not touch only costs one recompute and guarantees no
+    -- scope keeps pre-reset values. Everything here is cold-path only.
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    if a3 then
+        -- A global bump is intended here (unlike a single-control edit): a page
+        -- reset means every scope's cached aura lane layout should recompute.
+        SafeInvoke(a3.BumpRuntimeConfig)
+        local siRuntime = a3.SpellIndicators
+        SafeInvoke(siRuntime and siRuntime.RequestGeometryRepair)
+    end
+    local gf = MSUF and MSUF.GF
+    if gf then
+        SafeInvoke(gf.InvalidateConfCache)
+        local si = gf.SpellIndicators
+        SafeInvoke(si and si.InvalidateRuntimeCaches)
+    end
+    -- Castbars and bars keep their own resolver caches: the resolved statusbar
+    -- texture table (shared by every bar and castbar) and the revision-keyed
+    -- castbar style cache (texture, fill direction, reverse fill). Without
+    -- dropping both, a reset frame keeps its old texture/style even though the
+    -- saved values are already back to factory.
+    SafeInvoke(_G.MSUF_ClearResolvedStatusbarTextureCache)
+    SafeInvoke(_G.MSUF_BumpCastbarStyleRevision)
+    -- Unit-frame screen positions sit in a per-frame anchor cache the hot apply
+    -- path short-circuits against, so a reset frame would otherwise stay put.
+    -- Only unit resets move a unit frame; drop the cache and force a re-anchor
+    -- from the fresh defaults. (Group headers reposition through the GF reset.)
+    if info and info.kind == "unit" then
+        SafeInvoke(_G.MSUF_ForceReanchorAllUnitFrames_Once)
+    end
+end
 local function ResetPageImpl(pageKey)
     local info = PAGE_RESET_INFO[pageKey or ""]
     if not info then return false end
@@ -1557,6 +1599,7 @@ local function ResetPageImpl(pageKey)
     if not handler then return false end
     handler(db, defaults, info)
     EnsureTargetTargetAlias(db)
+    PurgeRuntimeCachesForReset(info)
     ApplyAfterPageReset(pageKey, info)
     if M.ShowStatusFeedback then
         M.ShowStatusFeedback(M.Format("%s reset", tostring(info.label or pageKey)), "ok", 1.4)
