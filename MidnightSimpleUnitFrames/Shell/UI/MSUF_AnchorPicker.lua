@@ -74,8 +74,10 @@ local function IsForbiddenFrame(frame)
     return PlainBool(forbidden) ~= false
 end
 
-local function IsBlocked(frame, name)
+local function IsBlocked(frame)
     -- Never let the picker select root/protected/runtime-owned frames as anchors.
+    -- This runs inside the hover loop, so it must stay cheap: identity and
+    -- forbidden checks only. Caller-specific vetoes live in PickAllowed.
     if not frame then return true end
     if frame == UIParent or frame == WorldFrame then return true end
     if IsForbiddenFrame(frame) then return true end
@@ -83,11 +85,17 @@ local function IsBlocked(frame, name)
     if not unitOK or (isSecretValue and isSecretValue(unitToken)) or unitToken then return true end
     local ov = _G.MSUF_AnchorPicker
     if ov and (frame == ov or frame == ov._highlight) then return true end
-    if ov and type(ov._isCandidateAllowed) == "function" then
-        local ok, allowed = pcall(ov._isCandidateAllowed, frame, name)
-        if not ok or allowed ~= true then return true end
-    end
     return false
+end
+
+-- Caller-specific rejection (anchor cycles etc.) is deliberately NOT part of
+-- the hover loop: the anchor-dependency walk behind _isCandidateAllowed is far
+-- too heavy to run per frame per tick (that was the 6.0 CPU freeze when the
+-- picker opened). It runs exactly once, when the user confirms a target.
+local function PickAllowed(ov, frame, name)
+    if not (ov and type(ov._isCandidateAllowed) == "function") then return true end
+    local ok, allowed = pcall(ov._isCandidateAllowed, frame, name)
+    return ok and allowed == true
 end
 
 local function IsBlockedName(name)
@@ -126,10 +134,70 @@ local function NamedFromFocus(frame)
     return nil, nil
 end
 
-local function SafeVis(frame)
-    if IsForbiddenFrame(frame) then return false end
-    local ok, hasMethod, visible = SafeFrameCall(frame, "IsVisible")
-    return ok and hasMethod and PlainBool(visible) == true
+-- The EnumerateFrames fallback visits every frame in the UI, so its per-frame
+-- work must stay near-zero: direct method calls inside a single protected
+-- boundary (any throw or secret value skips that frame), and the cursor rect
+-- test runs before the name is even read. The expensive IsBlocked chain -
+-- including the caller's _isCandidateAllowed anchor-cycle walk - may only ever
+-- see the handful of named frames actually under the cursor, never the whole
+-- enumeration.
+local function EvaluateFrameUnderCursor(fr, cx, cy)
+    local forbidden = fr:IsForbidden()
+    if isSecretValue and isSecretValue(forbidden) then return nil end
+    if forbidden then return nil end
+    local visible = fr:IsVisible()
+    if isSecretValue and isSecretValue(visible) then return nil end
+    if visible ~= true and visible ~= 1 then return nil end
+    local l, b, w, h = fr:GetRect()
+    if isSecretValue and (isSecretValue(l) or isSecretValue(b) or isSecretValue(w) or isSecretValue(h)) then return nil end
+    l = tonumber(l); b = tonumber(b); w = tonumber(w); h = tonumber(h)
+    if not (l and b and w and h) then return nil end
+    if w <= 0 or h <= 0 then return nil end
+    if cx < l or cx > (l + w) or cy < b or cy > (b + h) then return nil end
+    local name = fr:GetName()
+    if isSecretValue and isSecretValue(name) then return nil end
+    if type(name) ~= "string" or name == "" then return nil end
+    return name, w * h
+end
+
+local scanFrames, scanNames, scanAreas = {}, {}, {}
+
+local function SmallestAllowedCandidate(count)
+    while true do
+        local best
+        for i = 1, count do
+            local area = scanAreas[i]
+            if area and (not best or area < scanAreas[best]) then best = i end
+        end
+        if not best then return nil, nil end
+        local frame, name = scanFrames[best], scanNames[best]
+        if not IsBlockedName(name) and not IsBlocked(frame, name) then return frame, name end
+        scanAreas[best] = false
+    end
+end
+
+-- The full-UI scan stays too heavy for every 33 ms hover tick even with the
+-- cheap ordering above, so it runs at most every 4th tick and serves the
+-- cached result in between. The cache starts empty on each open so the first
+-- tick always scans.
+local ENUM_SCAN_TICKS = 4
+local enumTicksLeft = 0
+local enumCachedFrame, enumCachedName = nil, nil
+
+-- 5.5-proven behaviour: the picker keeps the last frame it managed to name and
+-- highlights that until a better hit appears. Hover never flickers back to
+-- "nothing" just because one tick found no candidate.
+local stickyFrame, stickyName = nil, nil
+
+local function RememberNamed(frame, name)
+    if name then stickyFrame, stickyName = frame, name end
+    return stickyFrame, stickyName
+end
+
+local function ResetHoverCaches()
+    enumTicksLeft = 0
+    enumCachedFrame, enumCachedName = nil, nil
+    stickyFrame, stickyName = nil, nil
 end
 
 local function GetNamed()
@@ -140,7 +208,7 @@ local function GetNamed()
         if ok and type(foci) == "table" then
             for i = 1, #foci do
                 local f, n = NamedFromFocus(foci[i])
-                if n then return f, n end
+                if n then return RememberNamed(f, n) end
             end
         end
     end
@@ -148,38 +216,40 @@ local function GetNamed()
         local ok, focus = pcall(GetMouseFocus)
         if ok then
             local f, n = NamedFromFocus(focus)
-            if n then return f, n end
+            if n then return RememberNamed(f, n) end
         end
     end
 
-    -- Older clients may not expose a useful focus stack. Fall back to the
-    -- smallest valid named frame currently under the cursor.
-    local cx, cy = GetCursorPosition()
-    local sc = UIParent:GetEffectiveScale() or 1
-    cx, cy = cx / sc, cy / sc
-
+    -- No named frame in the focus stack (unnamed UI trees, mouse-disabled
+    -- frames, older clients). Fall back to the smallest valid named frame
+    -- currently under the cursor.
     if EnumerateFrames then
-        local bestF, bestN, bestA = nil, nil, nil
-        local enumOK, fr = pcall(EnumerateFrames)
-        if not enumOK then fr = nil end
-        while fr do
-            if SafeVis(fr) then
-                local nameOK, hasName, name = SafeFrameCall(fr, "GetName")
-                if not nameOK or not hasName or (isSecretValue and isSecretValue(name)) then name = nil end
-                if not IsBlocked(fr, name) and not IsBlockedName(name) then
-                    local l, b, w, h = SafeGetRect(fr)
-                    if l and cx >= l and cx <= (l + w) and cy >= b and cy <= (b + h) then
-                        local area = w * h
-                        if (not bestA) or area < bestA then bestF, bestN, bestA = fr, name, area end
-                    end
+        if enumTicksLeft > 0 then
+            enumTicksLeft = enumTicksLeft - 1
+        else
+            enumTicksLeft = ENUM_SCAN_TICKS - 1
+
+            local cx, cy = GetCursorPosition()
+            local sc = UIParent:GetEffectiveScale() or 1
+            cx, cy = cx / sc, cy / sc
+
+            local count = 0
+            local fr = EnumerateFrames()
+            while fr do
+                local evalOK, name, area = pcall(EvaluateFrameUnderCursor, fr, cx, cy)
+                if evalOK and name then
+                    count = count + 1
+                    scanFrames[count], scanNames[count], scanAreas[count] = fr, name, area
                 end
+                fr = EnumerateFrames(fr)
             end
-            enumOK, fr = pcall(EnumerateFrames, fr)
-            if not enumOK then fr = nil end
+            local bestF, bestN = SmallestAllowedCandidate(count)
+            for i = 1, count do scanFrames[i], scanNames[i] = nil, nil end
+            enumCachedFrame, enumCachedName = bestF, bestN
         end
-        if bestN then return bestF, bestN end
+        if enumCachedName then return RememberNamed(enumCachedFrame, enumCachedName) end
     end
-    return nil, nil
+    return stickyFrame, stickyName
 end
 
 local function EnsureAnchorPicker()
@@ -261,12 +331,14 @@ local function EnsureAnchorPicker()
         end
         -- Cache localized strings per open to keep the 33 ms hover loop allocation-light.
         self._elapsed = 0; self._pickedFrame = nil; self._pickedName = nil
+        ResetHoverCaches()
         self._lCtrlHeld = Tr("CTRL: held - click to anchor!")
         self._lCtrlNotHeld = Tr("CTRL: not held")
         self._lHoverNone = Tr("Hover: no named frame found")
         self._lHoverFmt = Tr("Hover: %s")
         self._lCtrlRequired = Tr("|cffff6060CTRL required:|r |cffffffffhold |r|cff55ff55CTRL + Left-Click|r|cffffffff to confirm the anchor target.|r")
         self._lNoNamedFrame = Tr("|cffffcc33No named frame found under cursor.|r |cffffffffTry a different spot.|r")
+        self._lTargetNotAllowed = Tr("|cffff6060Target not allowed:|r |cffffffffanchoring to this frame would create a loop. Hover a different frame.|r")
         self._info:SetText(Tr("Anchor Picker"))
         self._sub:SetText(Tr("|cffffffffHover a frame, then hold |r|cff55ff55CTRL + Left-Click|r|cffffffff to anchor.  |  Right-Click or Escape cancels.|r"))
         self._hover:SetText(self._lHoverNone)
@@ -282,6 +354,7 @@ local function EnsureAnchorPicker()
         if self.UnregisterEvent then self:UnregisterEvent("PLAYER_REGEN_DISABLED") end
         self._pickedFrame = nil; self._pickedName = nil; self._highlight:Hide()
         self._onPick = nil; self._isCandidateAllowed = nil
+        ResetHoverCaches()
         if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
     end)
 
@@ -341,6 +414,10 @@ local function EnsureAnchorPicker()
         local name = self._pickedName
         if not name or name == "" then
             self._sub:SetText(self._lNoNamedFrame)
+            return
+        end
+        if not PickAllowed(self, self._pickedFrame, name) then
+            self._sub:SetText(self._lTargetNotAllowed)
             return
         end
         if type(self._onPick) == "function" then self._onPick(name) end
