@@ -9,8 +9,8 @@ end
 
 local data = {
     currentVersion = "6.0-Beta27",
-    previousVersion = "6.0-Beta26",
-    rangeLabel = "6.0-Beta26 -> 6.0-Beta27",
+    previousVersion = "6.0-beta26",
+    rangeLabel = "6.0-beta26 -> 6.0-Beta27",
     entries = {
         {
             version = "6.0-Beta27",
@@ -28,7 +28,7 @@ local data = {
         },
         {
             version = "6.0-Beta26",
-            date = "2026-07-23",
+            date = "2026-07-24",
             sections = {
                 {
                     title = "Highlights",
@@ -40,6 +40,8 @@ local data = {
                         "Added an optional \"Show cast spell icon in portrait\" mode that temporarily replaces 2D or class portraits during casts, channels, and empowered spells.",
                         "Added compact top-right three-dot color shortcuts across supported Menu2 cards so their exact scoped colors open directly in the shared color picker.",
                         "Improved Aura styling workflows and live previews across Menu2, Edit Mode, Unit Frames, Group Frames, and custom Aura containers.",
+                        "Added a Fill Direction setting per Unit Frame so Health and Power can fill left to right, right to left, bottom to top, or top to bottom.",
+                        "Added dedicated Power bar textures with a shared Bars default and a per-unit override, so a power bar no longer has to inherit the frame's bar texture.",
                     },
                 },
                 {
@@ -49,6 +51,9 @@ local data = {
                         "Made Health, Power, Class Resource, and Alternative Mana smoothing explicit opt-in settings while preserving Quick Setup as an intentional smoothing preset.",
                         "Simplified contextual text editing, added direct Bars/Aura/Text color targets, refined accordion and dashboard visuals, and suppressed redundant shortcuts on the dedicated Colors page.",
                         "Completed Menu2/Edit Mode source coverage for all shipped locales, including the new portrait, provider, status, Aura, and color-picker controls.",
+                        "Replaced the per-frame \"Reverse fill direction\" toggle with a single Fill Direction dropdown that combines the fill axis and direction; existing reversed frames keep their setting.",
+                        "Added a \"Power textures\" card to every Unit Frame page and matching Power bar texture defaults on the Bars page, with the Class Resource detached texture still taking precedence for a detached Player bar.",
+                        "Added the /msufgp group event pulse profiler, which reports how much in-combat group-frame time flows through compiled event routes versus work outside them. It is inert until switched on.",
                     },
                 },
                 {
@@ -62,7 +67,13 @@ local data = {
                         "Compiled lean Health, Power, Prediction, and Threat routes for Group Frames, reusing resolved values directly and skipping consumers that have no visible work.",
                         "Kept suspended secure Group Frame children in a stable inventory so roster rebinds reactivate them without duplicate entries or stale active routing.",
                         "Improved offline Group Frame visibility, status targeting, level/name anchoring, secret-safe absorb handling, and profile migration behavior.",
-                        "Expanded the Core Lua 5.1 suite to 152 passing runtime, Menu2, Assistant, Aura, Castbar, Group Frame, smoothing, status, and hotpath regression tests.",
+                        "Fixed the \"Power bar border\" toggle and \"Border thickness\" slider being ignored while the power bar was detached; a detached bar now uses its own unit frame's border in both the flat and rounded skins. The Class Resource \"Power bar outline\" slider keeps its Round/Crystal/Orb edge and is disabled for the Bar shape, and a customized value migrates into the affected unit's border once.",
+                        "Fixed detaching the power bar silently repainting it: an unset detached background texture now follows the global bar background instead of borrowing the foreground, and the detached texture overrides no longer leak from Player onto Target, Focus, or Pet.",
+                        "Wrote percent-only Group Frame health and power text inline in the same compiled route pass as the bar, skipping the deferred dirty-text ticker for the most common raid text shape.",
+                        "Started the timed-aura driver only while an Aura slot actually owns an aura, so empty slots add no shared OnUpdate work.",
+                        "Dropped the alternate-power event registrations from Group Frame power bars and gave flat absorb setups a lean writer that only updates values.",
+                        "Removed the native health-bar measurement from the per-event prediction layout check by caching it and invalidating on real bar resizes, authoritative refreshes, and applies.",
+                        "Expanded the Core Lua 5.1 suite to 155 passing runtime, Menu2, Assistant, Aura, Castbar, Group Frame, smoothing, status, and hotpath regression tests.",
                     },
                 },
             },
@@ -140,31 +151,6 @@ local data = {
                         "Restored compact text-slot controls and changed status toggles to refresh in place.",
                         "Improved combined absorb text, class-colored HP text, Aura growth anchors, Castbar provider handling, Power visibility, screen clamping, and late-anchor retry behavior.",
                         "Expanded Lua 5.1 regression coverage for text, status, Edit Mode, ArcUI anchors, colors, highlights, Group Frame coalescing, and runtime routing.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-Beta23",
-            date = "2026-07-19",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Updated Edit Mode with a compact dockable toolbar, responsive layouts, auto-hide, and zero idle polling.",
-                        "Rebuilt the Color Picker with progressive controls, palettes, precise RGB/HEX input, and faster color pages.",
-                        "Added configurable Castbar icon-border thickness and pixel-perfect outlines across live frames and previews.",
-                    },
-                },
-                {
-                    title = "Fixes",
-                    bullets = {
-                        "Reduced Unit Frame and Group Frame runtime work by reusing event-owned health, power, prediction, and threat state.",
-                        "Moved Group Frame database repair out of combat and steady runtime paths.",
-                        "Fixed Castbar auto-width, native duration handling, secret-safe target colors, and outline colors after border changes.",
-                        "Fixed legacy UI_Parent anchors and prevented repeated retries for unavailable custom anchors.",
-                        "Fixed first-open custom Menu fonts, direct menu navigation, and Aura workspace sizing.",
-                        "Completed Edit Mode and Color Picker translations and expanded regression coverage.",
                     },
                 },
             },
