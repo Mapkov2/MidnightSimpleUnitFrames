@@ -395,9 +395,9 @@ Has(auraLayoutContext, 'scopeTag = "Shared"',
     "Aura color picker does not expose its shared scope in the visible picker title")
 Has(auraLayoutContext, 'colorScopeTag = "Shared"',
     "Aura text color picker does not retain the visible shared-scope tag")
-assert(Count(auraSource, "note = AURA_SHARED_COLOR_NOTE") == 8,
+assert(Count(auraSource, "note = AURA_SHARED_COLOR_NOTE") == 9,
     "not every Aura color shortcut carries the concise shared-scope explanation")
-assert(Count(auraSource, 'scopeTag = "Shared"') == 8,
+assert(Count(auraSource, 'scopeTag = "Shared"') == 9,
     "not every Aura color shortcut carries the visible Shared tag")
 
 local groupAuraSource = Read(pagesRoot .. "MSUF_Menu2_GroupAuras.lua")

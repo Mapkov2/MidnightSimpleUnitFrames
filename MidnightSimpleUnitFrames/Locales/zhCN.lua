@@ -3907,6 +3907,7 @@ L["Player frame reference used for relative layout."] = "用于相对布局的�
 L["Player moved - now open its size popup"] = "玩家移动 - 现在打开其尺寸弹出窗口"
 L["Portrait border"] = "肖像边框"
 L["Power Textures"] = "功率纹理"
+L["Shape Outline"] = "形状轮廓"
 L["Power Txt"] = "电源文本"
 L["Power area"] = "电源面积"
 L["Powerbar & Position"] = "电源条和位置"
@@ -4481,3 +4482,9 @@ L["Art for this frame's power bar, detached or not. Leave on the global option t
 L["Axis and direction the Health and Power bars fill. Vertical options fill bottom-to-top or top-to-bottom; combines with Smooth fill."] = "生命值与能量条的填充轴向和方向。垂直选项从下往上或从上往下填充，可与平滑填充组合使用。"
 L["Background art behind every unit's power bar. Overridable per unit on the unit page."] = "每个单位能量条后方的背景外观。可在各单位页面单独覆盖。"
 L["Background art behind this frame's power bar."] = "此框体能量条后方的背景外观。"
+
+--- Aura icon border/shadow colors and Shape Outline card (6.0 Beta 28)
+L["Shape Outline"] = "形状轮廓"
+L["Icon Border & Shadow Colors"] = "图标边框与阴影颜色"
+L["Icon Border Color"] = "图标边框颜色"
+L["Icon Shadow Color"] = "图标阴影颜色"

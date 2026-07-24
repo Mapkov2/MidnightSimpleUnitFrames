@@ -3292,6 +3292,7 @@ L["Player frame reference used for relative layout."] = "Ссылка на ка�
 L["Player moved - now open its size popup"] = "Игрок перемещен – теперь откройте всплывающее окно его размера."
 L["Portrait border"] = "Портретная граница"
 L["Power Textures"] = "Силовые текстуры"
+L["Shape Outline"] = "Контур формы"
 L["Power Txt"] = "Питание"
 L["Power area"] = "Силовая зона"
 L["Powerbar & Position"] = "Powerbar и позиция"
@@ -3877,3 +3878,9 @@ L["Art for this frame's power bar, detached or not. Leave on the global option t
 L["Axis and direction the Health and Power bars fill. Vertical options fill bottom-to-top or top-to-bottom; combines with Smooth fill."] = "Ось и направление заполнения полос здоровья и ресурса. Вертикальные варианты заполняют снизу вверх или сверху вниз и сочетаются с плавным заполнением."
 L["Background art behind every unit's power bar. Overridable per unit on the unit page."] = "Фоновое оформление за полосой ресурса каждой единицы. Можно переопределить для каждого юнита на его странице."
 L["Background art behind this frame's power bar."] = "Фоновое оформление за полосой ресурса этой рамки."
+
+--- Aura icon border/shadow colors and Shape Outline card (6.0 Beta 28)
+L["Shape Outline"] = "Контур фигуры"
+L["Icon Border & Shadow Colors"] = "Цвета рамки и тени значка"
+L["Icon Border Color"] = "Цвет рамки значка"
+L["Icon Shadow Color"] = "Цвет тени значка"

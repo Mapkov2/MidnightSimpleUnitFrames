@@ -3253,6 +3253,7 @@ L["Player frame reference used for relative layout."] = "상대 레이아웃에 
 L["Player moved - now open its size popup"] = "플레이어 이동 - 이제 크기 팝업이 열립니다."
 L["Portrait border"] = "초상화 테두리"
 L["Power Textures"] = "파워 텍스처"
+L["Shape Outline"] = "모양 외곽선"
 L["Power Txt"] = "전원 텍스트"
 L["Power area"] = "전력 영역"
 L["Powerbar & Position"] = "파워바 및 위치"
@@ -3837,3 +3838,9 @@ L["Art for this frame's power bar, detached or not. Leave on the global option t
 L["Axis and direction the Health and Power bars fill. Vertical options fill bottom-to-top or top-to-bottom; combines with Smooth fill."] = "생명력과 자원 바가 채워지는 축과 방향입니다. 세로 옵션은 아래에서 위로 또는 위에서 아래로 채우며 부드러운 채우기와 함께 사용할 수 있습니다."
 L["Background art behind every unit's power bar. Overridable per unit on the unit page."] = "모든 유닛 자원 바 뒤에 표시되는 배경 이미지입니다. 유닛 페이지에서 개별적으로 재정의할 수 있습니다."
 L["Background art behind this frame's power bar."] = "이 프레임의 자원 바 뒤에 표시되는 배경 이미지입니다."
+
+--- Aura icon border/shadow colors and Shape Outline card (6.0 Beta 28)
+L["Shape Outline"] = "모양 윤곽선"
+L["Icon Border & Shadow Colors"] = "아이콘 테두리 및 그림자 색상"
+L["Icon Border Color"] = "아이콘 테두리 색상"
+L["Icon Shadow Color"] = "아이콘 그림자 색상"

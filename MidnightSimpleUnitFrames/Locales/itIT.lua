@@ -3269,6 +3269,7 @@ L["Player frame reference used for relative layout."] = "Riferimento al frame de
 L["Player moved - now open its size popup"] = "Il giocatore si è spostato: ora apri il popup delle sue dimensioni"
 L["Portrait border"] = "Bordo verticale"
 L["Power Textures"] = "Trame di potere"
+L["Shape Outline"] = "Contorno della forma"
 L["Power Txt"] = "Testo di potenza"
 L["Power area"] = "Zona di potere"
 L["Powerbar & Position"] = "Barra di potenza e posizione"
@@ -3860,3 +3861,9 @@ L["Art for this frame's power bar, detached or not. Leave on the global option t
 L["Axis and direction the Health and Power bars fill. Vertical options fill bottom-to-top or top-to-bottom; combines with Smooth fill."] = "Asse e direzione di riempimento delle barre di salute e risorsa. Le opzioni verticali riempiono dal basso verso l'alto o dall'alto verso il basso e si combinano con il riempimento morbido."
 L["Background art behind every unit's power bar. Overridable per unit on the unit page."] = "Grafica di sfondo dietro la barra della risorsa di ogni unità. Sovrascrivibile per unità nella sua pagina."
 L["Background art behind this frame's power bar."] = "Grafica di sfondo dietro la barra della risorsa di questo riquadro."
+
+--- Aura icon border/shadow colors and Shape Outline card (6.0 Beta 28)
+L["Shape Outline"] = "Contorno della forma"
+L["Icon Border & Shadow Colors"] = "Colori del bordo e dell'ombra dell'icona"
+L["Icon Border Color"] = "Colore del bordo dell'icona"
+L["Icon Shadow Color"] = "Colore dell'ombra dell'icona"

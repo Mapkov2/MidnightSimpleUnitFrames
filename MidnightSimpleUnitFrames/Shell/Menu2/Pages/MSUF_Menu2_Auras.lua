@@ -1884,7 +1884,7 @@ local function BuildUnitStyle(ctx, b, scope)
 
     refreshMiniPreview = BuildAuraStylePreviewWorkbench(ctx, b, unit, lane)
 
-    local featuresH = 244 + extraDebuffControls
+    local featuresH = 244 + extraDebuffControls + (lane == "buff" and 32 or 0)
     local features = b:CollapsibleSection(baseId .. "_features", "Basics", featuresH, true)
     local fw = BodyWidth(features)
     local featuresY = -44
@@ -1892,6 +1892,11 @@ local function BuildUnitStyle(ctx, b, scope)
     BindStyleSwitch(features, "Show Cooldown Text", 24, featuresY - 56, fw - 48, "showCooldownText", true, "AURAS3_SHOW_COOLDOWN_TEXT")
     BindStyleSwitch(features, "Show Cooldown Swipe", 24, featuresY - 88, fw - 48, "showCooldownSwipe", true, "AURAS3_SHOW_COOLDOWN_SWIPE")
     BindStyleSwitch(features, "Show Tooltip", 24, featuresY - 120, fw - 48, "showTooltip", true, "AURAS3_TOOLTIP")
+    if lane == "buff" then
+        -- PTR 7 item enchantments: temporary weapon enchants as native
+        -- buttons inside the player buff flow (player scope only at runtime).
+        BindStyleSwitch(features, "Show Weapon Enchants (Player)", 24, featuresY - 152, fw - 48, "showWeaponEnchants", false, "AURAS3_WEAPON_ENCHANTS")
+    end
     if lane == "debuff" then
         BindStyleDropdown(features, "Dispel-type Border", 24, featuresY - 170,
             type(Model.DebuffTypeBorderModeValues) == "function" and Model.DebuffTypeBorderModeValues() or DEBUFF_TYPE_BORDER_MODE_VALUES,
@@ -1902,7 +1907,7 @@ local function BuildUnitStyle(ctx, b, scope)
     -- block: writes apply to every aura lane on all frames (Buffs, Debuffs,
     -- Custom containers incl. the Dot tracker), so after the scope apply we
     -- also request a global aura refresh.
-    local iconStyle = b:CollapsibleSection(baseId .. "_icon_style", "Icon Border & Shadow (all lanes)", 232, false)
+    local iconStyle = b:CollapsibleSection(baseId .. "_icon_style", "Icon Border & Shadow (all lanes)", 264, false)
     local isw = BodyWidth(iconStyle)
     local styleCol = max(140, floor((isw - 68) / 2))
     local styleGap = 10
@@ -1934,22 +1939,10 @@ local function BuildUnitStyle(ctx, b, scope)
             function(value) IconStyleWrite(key, tonumber(value) or defaultValue, reason) end,
             AuraControlMeta(ctx, "style.shared.icon-style." .. AuraCatalogToken(key))))
     end
-    local function IconStyleColor(label, y, colorKey, defaultColor, reason)
-        local swatch = W.Color(iconStyle, label)
-        M.BindColor(ctx, swatch,
-            function()
-                local c = IconStyleReadColor(colorKey, defaultColor)
-                return c[1] or defaultColor[1], c[2] or defaultColor[2], c[3] or defaultColor[3]
-            end,
-            function(r, g, blue)
-                local c = IconStyleReadColor(colorKey, defaultColor)
-                IconStyleWrite(colorKey, { r, g, blue, c[4] or defaultColor[4] }, reason)
-            end,
-            AuraControlMeta(ctx, "style.shared.icon-style." .. AuraCatalogToken(colorKey)))
-        W.MoveWidget(swatch, iconStyle, 24 + styleCol + styleGap, y, styleCol, "LEFT")
-        AddStyleControl(swatch)
-        return swatch
-    end
+    -- Border/Shadow color swatches now live on the Colors page (Auras section)
+    -- and are reachable from this section via the three-dot context-color
+    -- shortcut attached below; only the enable toggles, thickness/size and the
+    -- alpha sliders remain inline here.
     local function IconStyleAlphaSlider(label, col, y, colorKey, defaultColor, reason)
         return AddStyleControl(BindSlider(ctx, iconStyle, label, 24 + col * (styleCol + styleGap), y,
             0, 100, 1, styleCol,
@@ -1965,14 +1958,55 @@ local function BuildUnitStyle(ctx, b, scope)
     end
     local ICON_STYLE_BORDER_DEFAULT = { 0, 0, 0, 1 }
     local ICON_STYLE_SHADOW_DEFAULT = { 0, 0, 0, 0.8 }
+    -- The RGB swatches were relocated to the Colors page (Auras section). This
+    -- quiet three-dot shortcut opens the same two shared colors in the context
+    -- picker; alpha stays on the inline sliders above, so the picker is RGB-only.
+    if W.AttachContextColorShortcut then
+        W.AttachContextColorShortcut(iconStyle, {
+            title = "Icon Border & Shadow Colors",
+            note = AURA_SHARED_COLOR_NOTE,
+            scopeTag = "Shared",
+            historySource = "menu:auras-icon-style-color",
+            getTargets = function()
+                return {
+                    {
+                        label = "Icon Border Color",
+                        historyLabel = "Aura icon border color",
+                        getRGB = function()
+                            local c = IconStyleReadColor("styleBorderColor", ICON_STYLE_BORDER_DEFAULT)
+                            return c[1] or 0, c[2] or 0, c[3] or 0
+                        end,
+                        setRGB = function(r, g, blue)
+                            local c = IconStyleReadColor("styleBorderColor", ICON_STYLE_BORDER_DEFAULT)
+                            IconStyleWrite("styleBorderColor", { r, g, blue, c[4] or ICON_STYLE_BORDER_DEFAULT[4] }, "AURAS3_ICON_STYLE_BORDER_COLOR")
+                        end,
+                        defaultR = 0, defaultG = 0, defaultB = 0,
+                    },
+                    {
+                        label = "Icon Shadow Color",
+                        historyLabel = "Aura icon shadow color",
+                        getRGB = function()
+                            local c = IconStyleReadColor("styleShadowColor", ICON_STYLE_SHADOW_DEFAULT)
+                            return c[1] or 0, c[2] or 0, c[3] or 0
+                        end,
+                        setRGB = function(r, g, blue)
+                            local c = IconStyleReadColor("styleShadowColor", ICON_STYLE_SHADOW_DEFAULT)
+                            IconStyleWrite("styleShadowColor", { r, g, blue, c[4] or ICON_STYLE_SHADOW_DEFAULT[4] }, "AURAS3_ICON_STYLE_SHADOW_COLOR")
+                        end,
+                        defaultR = 0, defaultG = 0, defaultB = 0,
+                    },
+                }
+            end,
+        })
+    end
     IconStyleSwitch("Icon Border", -34, "styleBorderEnabled", "AURAS3_ICON_STYLE_BORDER")
-    IconStyleColor("Border Color", -34, "styleBorderColor", ICON_STYLE_BORDER_DEFAULT, "AURAS3_ICON_STYLE_BORDER_COLOR")
     IconStyleSlider("Border Thickness", 0, -66, 1, 8, "styleBorderThickness", 1, "AURAS3_ICON_STYLE_BORDER")
     IconStyleAlphaSlider("Border Alpha (%)", 1, -66, "styleBorderColor", ICON_STYLE_BORDER_DEFAULT, "AURAS3_ICON_STYLE_BORDER_COLOR")
     IconStyleSwitch("Icon Shadow", -122, "styleShadowEnabled", "AURAS3_ICON_STYLE_SHADOW")
-    IconStyleColor("Shadow Color", -122, "styleShadowColor", ICON_STYLE_SHADOW_DEFAULT, "AURAS3_ICON_STYLE_SHADOW_COLOR")
     IconStyleSlider("Shadow Size", 0, -154, 1, 16, "styleShadowSize", 4, "AURAS3_ICON_STYLE_SHADOW")
     IconStyleAlphaSlider("Shadow Alpha (%)", 1, -154, "styleShadowColor", ICON_STYLE_SHADOW_DEFAULT, "AURAS3_ICON_STYLE_SHADOW_COLOR")
+    -- PTR 7 native flow padding: inner inset between the lane box and icons.
+    IconStyleSlider("Lane Padding", 0, -196, 0, 16, "stylePadding", 0, "AURAS3_LANE_PADDING")
 
     local stack = b:CollapsibleSection(baseId .. "_stack", "Stack Count", 296, false)
     if W.AttachContextColorShortcut then
@@ -2846,12 +2880,11 @@ local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
             }, "growth"),
         },
     })
-    local function NumberRow(label, id, semanticKey, minValue, maxValue, defaultValue, getValue, setValue, resetValue)
+    local function NumberRow(label, id, semanticKey, minValue, maxValue, defaultValue, getValue, setValue)
         return LaneMeta({
             kind = "slider", label = label, id = id,
             min = minValue, max = maxValue, step = 1, default = defaultValue,
             get = getValue, set = setValue,
-            reset = resetValue and function() setValue(resetValue()) end or nil,
         }, AuraCatalogToken(semanticKey))
     end
     local numberRows = W.SettingsRows(ctx, section, {
@@ -2859,32 +2892,25 @@ local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
         rows = {
             NumberRow("X", "x", "offset-x", -300, 300, 0,
                 function() return Model.ReadNumber(unit, LaneXKey(kind), 0, -4096, 4096) end,
-                function(v) Model.WriteNumber(unit, LaneXKey(kind), v, -4096, 4096); ApplyUnit(ctx, unit, "AURAS3_UNIT_X") end,
-                function() return 0 end),
+                function(v) Model.WriteNumber(unit, LaneXKey(kind), v, -4096, 4096); ApplyUnit(ctx, unit, "AURAS3_UNIT_X") end),
             NumberRow("Y", "y", "offset-y", -300, 300, LaneDefaultY(kind),
                 function() return Model.ReadNumber(unit, LaneYKey(kind), LaneDefaultY(kind), -4096, 4096) end,
-                function(v) Model.WriteNumber(unit, LaneYKey(kind), v, -4096, 4096); ApplyUnit(ctx, unit, "AURAS3_UNIT_Y") end,
-                function() return LaneDefaultY(kind) end),
+                function(v) Model.WriteNumber(unit, LaneYKey(kind), v, -4096, 4096); ApplyUnit(ctx, unit, "AURAS3_UNIT_Y") end),
             NumberRow("Max", "max", "max-icons", 0, 80, LaneDefaultMax(kind),
                 function() return Model.ReadNumber(unit, LaneMaxKey(kind), LaneDefaultMax(kind), 0, 80) end,
-                function(v) Model.WriteNumber(unit, LaneMaxKey(kind), v, 0, 80); ApplyUnit(ctx, unit, "AURAS3_UNIT_MAX") end,
-                function() return LaneDefaultMax(kind) end),
+                function(v) Model.WriteNumber(unit, LaneMaxKey(kind), v, 0, 80); ApplyUnit(ctx, unit, "AURAS3_UNIT_MAX") end),
             NumberRow("Size", "size", "icon-size", 10, 80, 26,
                 function() return Model.ReadNumber(unit, LaneSizeKey(kind), 26, 1, 128) end,
-                function(v) Model.WriteNumber(unit, LaneSizeKey(kind), v, 1, 128); ApplyUnit(ctx, unit, "AURAS3_UNIT_SIZE") end,
-                function() return 26 end),
+                function(v) Model.WriteNumber(unit, LaneSizeKey(kind), v, 1, 128); ApplyUnit(ctx, unit, "AURAS3_UNIT_SIZE") end),
             NumberRow("Per row", "perRow", "per-row", 1, 40, nil,
                 function() return Model.ReadLanePerRow(unit, kind) end,
-                function(v) Model.WriteLanePerRow(unit, kind, v); ApplyUnit(ctx, unit, "AURAS3_UNIT_PER_ROW") end,
-                nil),
+                function(v) Model.WriteLanePerRow(unit, kind, v); ApplyUnit(ctx, unit, "AURAS3_UNIT_PER_ROW") end),
             NumberRow("Gap", "gap", "spacing", 0, 12, 2,
                 function() return Model.ReadNumber(unit, "spacing", 2, 0, 64) end,
-                function(v) Model.WriteNumber(unit, "spacing", v, 0, 64); ApplyUnit(ctx, unit, "AURAS3_UNIT_SPACING") end,
-                function() return 2 end),
+                function(v) Model.WriteNumber(unit, "spacing", v, 0, 64); ApplyUnit(ctx, unit, "AURAS3_UNIT_SPACING") end),
             NumberRow("Layer (0-30)", "layer", "layer", 0, 30, kind == "buff" and 5 or 6,
                 function() return type(Model.ReadLaneLayer) == "function" and Model.ReadLaneLayer(unit, kind) or (kind == "buff" and 5 or 6) end,
-                function(v) if type(Model.WriteLaneLayer) == "function" then Model.WriteLaneLayer(unit, kind, v); ApplyUnit(ctx, unit, "AURAS3_UNIT_LAYER") end end,
-                function() return kind == "buff" and 5 or 6 end),
+                function(v) if type(Model.WriteLaneLayer) == "function" then Model.WriteLaneLayer(unit, kind, v); ApplyUnit(ctx, unit, "AURAS3_UNIT_LAYER") end end),
         },
     })
     local function CollectRows(result)
