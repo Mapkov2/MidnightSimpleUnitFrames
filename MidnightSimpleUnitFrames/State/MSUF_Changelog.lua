@@ -8,10 +8,58 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-Beta27",
-    previousVersion = "6.0-beta26",
-    rangeLabel = "6.0-beta26 -> 6.0-Beta27",
+    currentVersion = "6.0-Beta28",
+    previousVersion = "6.0-Beta27",
+    rangeLabel = "6.0-Beta27 -> 6.0-Beta28",
     entries = {
+        {
+            version = "6.0-Beta28",
+            date = "2026-07-25",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Fixed unit frame and group frame tooltips not appearing on hover at all; hovering Player, Target, Focus, Pet, Party, and Raid frames shows the unit tooltip again, and the related tooltip settings do something once more.",
+                        "Rebuilt aura icon layering on one shared 0-30 scale per frame kind, so an aura lane at layer 7 now renders above a text at layer 5 and below one at layer 9 instead of sinking below every text and status element.",
+                        "Added \"Show Weapon Enchants (Player)\", which renders temporary weapon enchants as native icons inside the Player buff lane.",
+                        "Menu previews now mirror the live frame: real name, class, portrait, level, reaction, and exact Health/Power/absorb values, with the stylized sample kept as the fallback.",
+                        "Fixed the Anchor Picker freezing the game while open by moving the expensive anchor-cycle walk out of the hover loop; rejected targets are now reported when you confirm one.",
+                        "Retired the separate Class Resources detached power textures so the Bars page and the Player unit page own the power bar's art whether it is detached or not; a customized detached texture migrates onto the Player page once.",
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Moved the Aura \"Icon Border Color\" and \"Icon Shadow Color\" swatches to the Colors page under a new \"Icon Border & Shadow\" card, reachable from the Aura style section through the three-dot color shortcut. Thickness, size, and alpha stay inline.",
+                        "Added a \"Lane Padding\" slider that insets aura icons from the lane box using the native flow padding.",
+                        "Replaced the Class Resources \"Power Textures\" card with a \"Shape Outline\" card that only keeps the Round/Crystal/Orb edge it still owns.",
+                        "Made \"Reset to defaults\" drop the matching runtime caches, so a reset frame no longer keeps pre-reset aura offsets, spell-indicator anchors, textures, castbar styling, or positions.",
+                        "Hidden group frames now unregister their unit events by default instead of only when opted in; single frames are excluded because their unit is already gone when hidden. /msufgp suspendhidden default restores the automatic behavior.",
+                        "Added the /msufauralayers diagnostic, which dumps the aura level/strata chain and probes host and container layering live. It is inert until invoked.",
+                        "Updated all supported locales for the new aura color, shape outline, and icon border/shadow controls.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Folded aura lanes that legacy builds and imports had pinned to the MEDIUM strata back to AUTO exactly once, so aura layering can be ordered against bars and texts again; a deliberately re-picked strata is kept.",
+                        "Made the aura container the single layering authority and stopped writing AuraButton levels and strata entirely, which is the surface PTR 7 restricts hardest.",
+                        "Fixed spell indicator icons on unit frames rendering a full band below every text at the same layer.",
+                        "Fixed an aura lane dying when a filter token Blizzard rejects reached the native validator; the lane now falls back to its plain base filter and reports the reason.",
+                        "Fixed the group and unit preview raid group number, target-of-target name, and portrait so they follow the live roster and unit instead of a fixed sample.",
+                        "Fixed preview edits not reaching the live frame when no host panel was attached, and when the text-layout entry point was unavailable.",
+                        "Made in-combat hovers cost a single flag read while tooltips are set to Never or Out of combat, recomputed only on combat transitions and setting changes.",
+                        "Debounced group frame tooltips by a short hover delay, so sweeping the cursor across raid frames only builds a tooltip for the frame it settles on.",
+                        "Collapsed the aura combat check to a single upvalue read after the aura container has loaded once, so combat identity refreshes pay no C calls there.",
+                        "Moved aura strata and level writes behind the geometry signature guard, so content-only refreshes such as aura swaps and identity updates perform no widget calls.",
+                        "Coalesced live preview refreshes on a wider window, capping value streams at five renders per second, and dropped every listener for the duration of a fight.",
+                        "Removed the pcall wrappers from aura font application and validated SetFont through its return value instead.",
+                        "Fixed the detached power bar preview and the global texture refresh still resolving the retired detached texture keys.",
+                        "Expanded the Core Lua 5.1 suite to 158 passing tests, including new anchor picker scan budget, preview live parity, and page reset cache purge regressions.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-Beta27",
             date = "2026-07-24",
@@ -110,47 +158,6 @@ local data = {
                         "Fixed rounded frame masks on login and kept class-colored backgrounds correct for players, NPCs, pets, bosses, and temporarily missing units.",
                         "Prevented background opacity from being multiplied twice and kept color changes attached to the active imported profile.",
                         "Expanded Lua 5.1 regression coverage for Menu2 cold paths, preview lifecycles, text-slot sizing, opacity, history, Auras, and rounded-frame startup.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-Beta24",
-            date = "2026-07-21",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Rebuilt Colors and Color Painter with focused categories, clickable live previews, reusable brush colors, quick reset actions, and lazy loading for faster navigation.",
-                        "Added global mouseover highlight styles: a portrait-safe soft gradient or solid border with configurable color and size across Unit Frames and Group Frames.",
-                        "Expanded Unit Frame and Group Frame text controls with clearer slot editing, combined HP + Absorb formats, per-slot shield icons, color modes, placement, and layers.",
-                        "Redesigned the Edit Mode quick popups and added customizable menu accent themes.",
-                        "Added ArcUI cooldown anchors for supported third-party cooldown layouts.",
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Added Player & Target, Party & Raid, Castbar, Aura, Power, and Class Resource color workspaces with matching preview targets and deep-link navigation.",
-                        "Added Dark, Class Color, Unified, and Gradient health-color modes plus shared text-color controls inside the Colors workflow.",
-                        "Moved mouseover highlight behavior to Miscellaneous while keeping its colors in Colors, and updated Menu search and Assistant routing accordingly.",
-                        "Improved Edit Mode popup layouts, responsive controls, and direct access to the relevant Unit Frame, Group Frame, Aura, and Castbar settings.",
-                        "Added menu accent presets, class-color accents, and custom accent colors.",
-                        "Added a reload recommendation when switching the Player Castbar back to Blizzard's provider.",
-                        "Removed the obsolete UUF profile importer and its no-longer-needed compression libraries.",
-                        "Updated all supported locales for the new text, Colors, Color Painter, Edit Mode, and highlight controls.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Coalesced Group Frame header rebind, OnShow, and range-settle work so roster layout changes refresh once without adding polling or combat hot-path work.",
-                        "Preserved configured health-bar backgrounds when health colors refresh.",
-                        "Kept rounded and square mouseover highlights on cached, direct hover paths and live-applied style changes without a full color refresh.",
-                        "Reused event-owned Unit Frame health, power, prediction, identity, and status state to avoid duplicate reads and unnecessary event routes.",
-                        "Restored compact text-slot controls and changed status toggles to refresh in place.",
-                        "Improved combined absorb text, class-colored HP text, Aura growth anchors, Castbar provider handling, Power visibility, screen clamping, and late-anchor retry behavior.",
-                        "Expanded Lua 5.1 regression coverage for text, status, Edit Mode, ArcUI anchors, colors, highlights, Group Frame coalescing, and runtime routing.",
                     },
                 },
             },
