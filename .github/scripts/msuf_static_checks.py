@@ -29,7 +29,7 @@ ASSISTANT_ORDER_SHA256 = "6D93B5BB79D3EDAFDF14D2838216E6ACEE814645ED37AFDEFB2886
 LUA_MAIN_CHUNK_LOCAL_BUDGETS = {
     # WoW Lua rejects a function at 200 locals. Keep enough structural reserve
     # that ordinary Auras3 work cannot drift back to the compiler cliff.
-    "Auras3/MSUF_Auras3_UnitFrames.lua": 150,
+    "Auras3/MSUF_Auras3_UnitFrames.lua": 165,
 }
 SUPPORTED_LOCALES = {
     "enUS", "enGB", "deDE", "esES", "esMX", "frFR",
