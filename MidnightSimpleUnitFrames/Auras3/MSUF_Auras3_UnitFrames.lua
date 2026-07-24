@@ -2169,9 +2169,6 @@ local PTR4_AURA_CONTAINER_METHODS = {
     "SetAuraGroupMaxFrameCount",
     "SetAuraGroupCandidateFilters",
     "SetAuraGroupSortMethod",
-    "SetAuraLayoutAnchorPoint",
-    "SetAuraLayoutGrowthDirection",
-    "SetAuraLayoutRowWidth",
     "AddAuraSlot",
     "SetAuraSlotFilterString",
     "SetAuraSlotCandidateFilters",
@@ -2207,6 +2204,17 @@ local function ValidatePTR4AuraContainerContract(container)
             A3.nativeAuraRuntimeError = "PTR4 AuraContainer missing " .. methodName
             return false
         end
+    end
+    -- 12.1 PTR 7 renamed the container-level layout setters from
+    -- SetAuraLayout{AnchorPoint,GrowthDirection,RowWidth} to the shared flow
+    -- layout API SetFlowLayout{AnchorPoint,GrowthDirection,MaximumLineSize}.
+    -- Require either variant so the contract passes on both patched and
+    -- not-yet-patched clients; ApplyContainerFlowLayout picks the live one.
+    if type(container.SetFlowLayoutGrowthDirection) ~= "function"
+        and type(container.SetAuraLayoutGrowthDirection) ~= "function" then
+        A3.nativeAuraRuntimeAvailable = false
+        A3.nativeAuraRuntimeError = "PTR4 AuraContainer missing layout API (SetFlowLayoutGrowthDirection)"
+        return false
     end
     return true
 end
@@ -2590,6 +2598,28 @@ local function EnsureAuraTextOverlay(button)
     return overlay
 end
 
+-- Container-level layout application, feature-detecting the API the running
+-- client exposes. PTR 7 (12.1) replaced SetAuraLayout{AnchorPoint,
+-- GrowthDirection,RowWidth} with the shared SetFlowLayout{AnchorPoint,
+-- GrowthDirection,MaximumLineSize}. AnchorUtil.FlowDirection values are the
+-- same +/-1 signs MSUF already computes (Right/Up = 1, Left/Down = -1), so the
+-- growth direction maps 1:1. Only ever called from the signature-guarded
+-- geometry cold path, so the branch/global lookup cost is irrelevant.
+local function ApplyContainerFlowLayout(container, anchorPoint, xSign, ySign, lineSize)
+    if type(container.SetFlowLayoutGrowthDirection) == "function" then
+        local flowDir = _G.AnchorUtil and _G.AnchorUtil.FlowDirection
+        local hDir = flowDir and (xSign >= 0 and flowDir.Right or flowDir.Left) or xSign
+        local vDir = flowDir and (ySign >= 0 and flowDir.Up or flowDir.Down) or ySign
+        container:SetFlowLayoutAnchorPoint(anchorPoint)
+        container:SetFlowLayoutGrowthDirection(hDir, vDir)
+        container:SetFlowLayoutMaximumLineSize(lineSize)
+    elseif type(container.SetAuraLayoutGrowthDirection) == "function" then
+        container:SetAuraLayoutAnchorPoint(anchorPoint)
+        container:SetAuraLayoutGrowthDirection(xSign, ySign)
+        container:SetAuraLayoutRowWidth(lineSize)
+    end
+end
+
 local function SyncContainerGeometry(container, lane, parentFrame, forceGeometry, preserveAlpha)
     if not (container and lane) then return false end
     forceGeometry = forceGeometry == true or container._msufA3ForceManagedAuraGeometry == true
@@ -2616,17 +2646,17 @@ local function SyncContainerGeometry(container, lane, parentFrame, forceGeometry
     end
     container._msufA3GeomSig = sig
     container._msufA3GeomParent = parentFrame
-    -- 12.1 moved anchor/growth/wrapping from SetAuraGroupLayout to container-
-    -- level setters. Keep those secure/native decisions in this signature-
-    -- guarded cold path so Blizzard's ApplyLayout cannot restore its
-    -- TOPLEFT/right/down defaults after aura assignment churn.
+    -- 12.1 moved anchor/growth/wrapping to container-level setters, and PTR 7
+    -- renamed them again (SetAuraLayout* -> SetFlowLayout*). ApplyContainerFlowLayout
+    -- feature-detects and applies whichever the live client exposes. Keeping this
+    -- in the signature-guarded cold path stops Blizzard's ApplyLayout from
+    -- restoring its TOPLEFT/right/down defaults after aura assignment churn.
+    -- A one-icon native row/line is the secret-safe vertical layout primitive;
+    -- horizontal lanes retain their configured full row width.
     local initialAnchor = lane.initialAnchor or "TOPLEFT"
-    container:SetAuraLayoutAnchorPoint(initialAnchor)
-    container:SetAuraLayoutGrowthDirection(lane.xSign or 1, lane.ySign or -1)
-    -- A one-icon native row is the secret-safe vertical layout primitive.
-    -- Horizontal lanes retain their configured full row width.
-    container:SetAuraLayoutRowWidth(lane.verticalGrowth == true
-        and (lane.size or 1) or (lane.width or lane.size or 1))
+    ApplyContainerFlowLayout(container, initialAnchor,
+        lane.xSign or 1, lane.ySign or -1,
+        lane.verticalGrowth == true and (lane.size or 1) or (lane.width or lane.size or 1))
     container.createdButtons = lane.max
     container:SetSize(lane.size or 1, lane.size or 1)
     if parentFrame and layoutHost then
@@ -3031,13 +3061,14 @@ local function ManagedAuraGroupLayoutOptions(lane)
     local size = lane.size or DEFAULT_SHARED.iconSize
     local spacing = lane.spacing or DEFAULT_SHARED.spacing
     return {
-        -- Blizzard 12.1.0 (PTR 68569) validates these per-group field names in
-        -- Blizzard_CustomAuraContainer.lua. The previous frameWidth/frameHeight
-        -- names were ignored, so native layout kept stale icon dimensions.
+        -- Blizzard 12.1.0 validates these per-group field names in
+        -- Blizzard_CustomAuraContainer.lua. frameWidth/frameHeight (old) and
+        -- elementSpacingX/elementSpacingY (pre-PTR7) are ignored; PTR 7 reads
+        -- elementWidth/elementHeight plus elementSpacing (X) and lineSpacing (Y).
         elementWidth = size,
         elementHeight = size,
-        elementSpacingX = spacing,
-        elementSpacingY = spacing,
+        elementSpacing = spacing,
+        lineSpacing = spacing,
     }
 end
 

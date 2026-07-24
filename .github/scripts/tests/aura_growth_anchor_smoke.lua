@@ -184,7 +184,7 @@ local function NativeAuraApplyLayout(self)
     local frames = group:GetFramesByIndex()
     local options = self.groupLayouts[groupKey] or {}
     local size = options.elementWidth or 10
-    local spacing = options.elementSpacingX or 0
+    local spacing = options.elementSpacing or 0
     local step = size + spacing
     local rowWidth = self.auraLayoutRowWidth or size
     local perRow = math.max(1, math.floor(((rowWidth + spacing) / math.max(step, 1)) + 0.0001))
@@ -297,6 +297,29 @@ function Frame:SetAuraLayoutRowWidth(width)
     self.layoutSetterCalls.width = self.layoutSetterCalls.width + 1
     self.auraLayoutRowWidth = width
 end
+-- PTR 7 (12.1) renamed the container layout setters. The runtime prefers these
+-- and falls back to the SetAuraLayout* names above on not-yet-patched clients.
+-- Route both onto the same captured state/counters so assertions are stable
+-- regardless of which branch the runtime takes.
+function Frame:SetFlowLayoutAnchorPoint(anchor)
+    self.layoutSetterCalls.anchor = self.layoutSetterCalls.anchor + 1
+    self.auraLayoutAnchorPoint = anchor
+end
+function Frame:SetFlowLayoutGrowthDirection(horizontalDirection, verticalDirection)
+    self.layoutSetterCalls.growth = self.layoutSetterCalls.growth + 1
+    self.auraLayoutHorizontalDirection = horizontalDirection
+    self.auraLayoutVerticalDirection = verticalDirection
+end
+function Frame:SetFlowLayoutMaximumLineSize(width)
+    self.layoutSetterCalls.width = self.layoutSetterCalls.width + 1
+    self.auraLayoutRowWidth = width
+end
+-- Mirror the live AnchorUtil.FlowDirection / FlowLayoutAxis enums so the
+-- runtime's enum mapping is exercised (values are the same +/-1 signs).
+_G.AnchorUtil = _G.AnchorUtil or {
+    FlowDirection = { Left = -1, Right = 1, Up = 1, Down = -1 },
+    FlowLayoutAxis = { Horizontal = 0, Vertical = 1 },
+}
 
 _G.CreateFrame = function(frameType, _, parent)
     if frameType == "AuraContainer" then return NewAuraContainer(parent) end
@@ -1926,9 +1949,14 @@ Check(coreSource:sub(eventElementsStart, eventElementsStop):find("Auras = true",
     "Auras element is not admitted to the core event router")
 Check(runtimeSource:find("layoutHost:SetPoint(lane.anchor, parentFrame, lane.anchor, lane.x, lane.y)", 1, true),
     "live lane host no longer anchors its bounding box with lane.anchor")
-Check(runtimeSource:find("SetAuraLayoutAnchorPoint", 1, true), "native layout anchor setter missing")
-Check(runtimeSource:find("SetAuraLayoutGrowthDirection", 1, true), "native growth setter missing")
-Check(runtimeSource:find("SetAuraLayoutRowWidth", 1, true), "native row-width setter missing")
+-- PTR 7 (12.1) primary layout API.
+Check(runtimeSource:find("SetFlowLayoutAnchorPoint", 1, true), "PTR7 flow layout anchor setter missing")
+Check(runtimeSource:find("SetFlowLayoutGrowthDirection", 1, true), "PTR7 flow growth setter missing")
+Check(runtimeSource:find("SetFlowLayoutMaximumLineSize", 1, true), "PTR7 flow max-line-size setter missing")
+-- Legacy fallback retained for not-yet-patched 12.1 clients.
+Check(runtimeSource:find("SetAuraLayoutAnchorPoint", 1, true), "legacy layout anchor fallback removed")
+Check(runtimeSource:find("SetAuraLayoutGrowthDirection", 1, true), "legacy growth fallback removed")
+Check(runtimeSource:find("SetAuraLayoutRowWidth", 1, true), "legacy row-width fallback removed")
 Check(runtimeSource:find("lane.verticalGrowth == true", 1, true)
     and runtimeSource:find("and (lane.size or 1) or (lane.width or lane.size or 1)", 1, true),
     "native vertical layout no longer forces one-icon rows")
