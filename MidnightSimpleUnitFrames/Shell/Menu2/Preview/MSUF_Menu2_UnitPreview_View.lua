@@ -1097,6 +1097,77 @@ local function KillPreviewAnimationForCombat(box)
     box._previewAnimationData = nil
     RefreshPreviewAnimationButton(box)
 end
+--- Live-state driver: keeps the preview mirroring the real unit (target
+--- swaps, health/power ticks, roster changes) while the menu is open.
+--- Zero combat overhead by construction: PLAYER_REGEN_DISABLED drops every
+--- listener for the whole fight (only the single re-arm signal stays), and
+--- the driver exists only while a preview box is in use.
+local LIVE_STATE_UNIT_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_NAME_UPDATE", "UNIT_LEVEL", "UNIT_FACTION" }
+local LIVE_STATE_UNIT_TOKENS = { player = "player", target = "target", targettarget = "targettarget", focustarget = "focustarget", focus = "focus", boss = "boss1", pet = "pet" }
+local SyncUnitPreviewLiveState
+local function UnitPreviewLiveStateEvent(driver, event)
+    local box = driver._msufLiveStateBox
+    if not box then
+        driver:UnregisterAllEvents()
+        return
+    end
+    if event == "PLAYER_REGEN_DISABLED" then
+        driver:UnregisterAllEvents()
+        driver._msufLiveArmed = false
+        driver:RegisterEvent("PLAYER_REGEN_ENABLED")
+        return
+    end
+    if not (box.IsShown and box:IsShown()) then
+        driver:UnregisterAllEvents()
+        driver._msufLiveArmed = false
+        return
+    end
+    if event == "PLAYER_REGEN_ENABLED" then
+        SyncUnitPreviewLiveState(box, box.key, "PLAYER_REGEN_ENABLED")
+        return
+    end
+    if PreviewAnimationInCombat() then return end
+    if box.RequestRefresh then box:RequestRefresh("UNIT_PREVIEW_LIVE_STATE") end
+end
+SyncUnitPreviewLiveState = function(box, key, reason)
+    if not (box and CreateFrame) then return end
+    local driver = box._msufLiveStateDriver
+    if not driver then
+        driver = CreateFrame("Frame")
+        driver._msufLiveStateBox = box
+        driver:SetScript("OnEvent", UnitPreviewLiveStateEvent)
+        box._msufLiveStateDriver = driver
+    end
+    local unit = LIVE_STATE_UNIT_TOKENS[CanonKey(key or box.key)] or "player"
+    if PreviewAnimationInCombat() then
+        driver:UnregisterAllEvents()
+        driver._msufLiveUnit = unit
+        driver._msufLiveArmed = false
+        driver:RegisterEvent("PLAYER_REGEN_ENABLED")
+        return
+    end
+    if driver._msufLiveArmed == true and driver._msufLiveUnit == unit then return end
+    driver:UnregisterAllEvents()
+    driver._msufLiveUnit = unit
+    driver._msufLiveArmed = true
+    driver:RegisterEvent("PLAYER_REGEN_DISABLED")
+    driver:RegisterEvent("PLAYER_TARGET_CHANGED")
+    driver:RegisterEvent("PLAYER_FOCUS_CHANGED")
+    driver:RegisterEvent("GROUP_ROSTER_UPDATE")
+    if driver.RegisterUnitEvent then
+        for i = 1, #LIVE_STATE_UNIT_EVENTS do
+            driver:RegisterUnitEvent(LIVE_STATE_UNIT_EVENTS[i], unit)
+        end
+        driver:RegisterUnitEvent("UNIT_PET", "player")
+    end
+    if reason == "PLAYER_REGEN_ENABLED" and box.RequestRefresh then box:RequestRefresh("UNIT_PREVIEW_LIVE_STATE") end
+end
+local function ReleaseUnitPreviewLiveState(box)
+    local driver = box and box._msufLiveStateDriver
+    if not driver then return end
+    driver:UnregisterAllEvents()
+    driver._msufLiveArmed = false
+end
 local function RefreshPreviewAnimationFrame(box)
     local refresh = Preview and Preview.Refresh
     if type(refresh) == "function" then
@@ -1804,6 +1875,7 @@ local function BuildPreview(parent, panel, width, height)
     end)
     box:SetScript("OnHide", function(self)
         StopPreviewAnimationDriver(self)
+        ReleaseUnitPreviewLiveState(self)
         self._refreshSerial = (tonumber(self._refreshSerial) or 0) + 1
         self._refreshQueued = nil
         self._refreshReason = nil
@@ -1868,10 +1940,10 @@ do
     Preview.RefreshDeps = deps
     AssignNamedValues(deps, [[
         PreviewInCombat TR PortraitStyleGet RuntimeSpecForPreviewKey RuntimeVisualScaleForPreviewKey ClampPreviewZoom UpdatePreviewZoomControls ZOOM_MIN
-        max min abs floor format TEX_W8 FONT STATUS_PREVIEW CurrentPanelKey UnitDB UNIT_DATA UNIT_LABELS ReadPowerBarEnabled ReadPowerBarHeight
+        max min abs floor format TEX_W8 FONT STATUS_PREVIEW CurrentPanelKey UnitDB UNIT_DATA UNIT_LABELS ReadPowerBarEnabled ReadPowerBarHeight LiveUnitData SyncLiveStateDriver
     ]],
         PreviewInCombat, TR, PortraitStyleGet, RuntimeSpecForPreviewKey, RuntimeVisualScaleForPreviewKey, ClampPreviewZoom, UpdatePreviewZoomControls, ZOOM_MIN,
-        max, min, abs, floor, format, TEX_W8, FONT, STATUS_PREVIEW, CurrentPanelKey, UnitDB, UNIT_DATA, UNIT_LABELS, ReadPowerBarEnabled, ReadPowerBarHeight)
+        max, min, abs, floor, format, TEX_W8, FONT, STATUS_PREVIEW, CurrentPanelKey, UnitDB, UNIT_DATA, UNIT_LABELS, ReadPowerBarEnabled, ReadPowerBarHeight, PreviewModel.LiveUnitData, SyncUnitPreviewLiveState)
     AssignNamedValues(deps, [[
         PreviewRaidGroupNameAllowed PreviewRaidGroupNameText NormalizeRaidGroupNameAnchor CastbarEnabled CastbarShowIcon CastbarShowText ReadCastbarSize ReadCastbarNum FormatCastbarPreviewTime
         CastbarOffsetFields CastbarDetached CanDetachPowerBarKey ClampPreviewLayer SetTex PlaceHandle PlaceHandleAroundRegions UnitPreviewText UnitPreviewTextMovesTogether

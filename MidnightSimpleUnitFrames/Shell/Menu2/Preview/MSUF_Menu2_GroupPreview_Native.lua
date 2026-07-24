@@ -50,10 +50,10 @@ end
 local function SetFSColor(fs, color)
     if fs and fs.SetTextColor and color then fs:SetTextColor(color[1], color[2], color[3], color[4] or 1) end
 end
-local function ScheduleNativePreviewRefresh(box, fn)
+local function ScheduleNativePreviewRefresh(box, fn, delay)
     if type(fn) ~= "function" then return end
     if C_Timer and C_Timer.After then
-        C_Timer.After(GROUP_PREVIEW_REFRESH_DELAY, fn)
+        C_Timer.After(tonumber(delay) or GROUP_PREVIEW_REFRESH_DELAY, fn)
     else
         fn()
     end
@@ -1605,7 +1605,10 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             if self.Refresh then self:Refresh(self._msufGFRefreshReason) end
             self._msufGFRefreshReason = nil
         end
-        ScheduleNativePreviewRefresh(self, RunRefresh)
+        -- Live-mirror events (player regen ticks out of combat) coalesce on a
+        -- wider window so value streams cost at most five renders per second.
+        ScheduleNativePreviewRefresh(self, RunRefresh,
+            reason == "GROUP_PREVIEW_LIVE_STATE" and 0.2 or nil)
     end
     function box:ReleaseRuntimePreview()
         self._msufGFRefreshSerial = (tonumber(self._msufGFRefreshSerial) or 0) + 1
@@ -1620,11 +1623,61 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             self:SetPropagateKeyboardInput(true)
         end
     end
+    -- Live-state driver: the mock cell mirrors the player's current values,
+    -- so refresh when they change while the menu preview is visible. Zero
+    -- combat overhead by construction: PLAYER_REGEN_DISABLED drops every
+    -- listener for the whole fight and only the re-arm signal stays.
+    local GF_LIVE_STATE_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_NAME_UPDATE" }
+    local liveStateDriver = CreateFrame("Frame")
+    box._msufGFLiveStateDriver = liveStateDriver
+    function box:ArmLiveStateDriver()
+        local driver = self._msufGFLiveStateDriver
+        if not driver then return end
+        driver:UnregisterAllEvents()
+        if PreviewAnimationInCombat() then
+            driver._msufLiveArmed = false
+            driver:RegisterEvent("PLAYER_REGEN_ENABLED")
+            return
+        end
+        driver._msufLiveArmed = true
+        driver:RegisterEvent("PLAYER_REGEN_DISABLED")
+        if driver.RegisterUnitEvent then
+            for i = 1, #GF_LIVE_STATE_EVENTS do
+                driver:RegisterUnitEvent(GF_LIVE_STATE_EVENTS[i], "player")
+            end
+        end
+    end
+    function box:ReleaseLiveStateDriver()
+        local driver = self._msufGFLiveStateDriver
+        if not driver then return end
+        driver:UnregisterAllEvents()
+        driver._msufLiveArmed = false
+    end
+    liveStateDriver:SetScript("OnEvent", function(driver, event)
+        if event == "PLAYER_REGEN_DISABLED" then
+            driver:UnregisterAllEvents()
+            driver._msufLiveArmed = false
+            driver:RegisterEvent("PLAYER_REGEN_ENABLED")
+            return
+        end
+        if not (box.IsShown and box:IsShown()) then
+            driver:UnregisterAllEvents()
+            driver._msufLiveArmed = false
+            return
+        end
+        if event == "PLAYER_REGEN_ENABLED" then
+            box:ArmLiveStateDriver()
+            return
+        end
+        if PreviewAnimationInCombat() then return end
+        box:RequestRefresh("GROUP_PREVIEW_LIVE_STATE")
+    end)
     box:HookScript("OnShow", function(self)
         if self.RegisterEvent then
             self:RegisterEvent("PLAYER_REGEN_DISABLED")
             self:RegisterEvent("PLAYER_REGEN_ENABLED")
         end
+        if self.ArmLiveStateDriver then self:ArmLiveStateDriver() end
         if PreviewAnimationActive(self) then StartPreviewAnimationDriver(self) end
         RefreshPreviewAnimationButton(self)
         self:RequestRefresh("GROUP_PREVIEW_SHOW")
@@ -1635,6 +1688,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             self:UnregisterEvent("PLAYER_REGEN_DISABLED")
             self:UnregisterEvent("PLAYER_REGEN_ENABLED")
         end
+        if self.ReleaseLiveStateDriver then self:ReleaseLiveStateDriver() end
         self:ReleaseRuntimePreview()
     end)
     box:SetScript("OnEvent", function(self, event)

@@ -38,9 +38,10 @@ local UNIT_SET = M.KeySetFromWords "player target targettarget focustarget focus
 local CONTROL_CHILD_KEYS, CONTROL_NAME_SUFFIXES = M.WordList "minusButton plusButton Button _msufPeelButton", M.WordList "Button Text Low High"
 local UNIT_LABELS = { player = "Player", target = "Target", targettarget = "Target of Target", focustarget = "Focus Target", focus = "Focus", boss = "Boss Frames", pet = "Pet" }
 local UNIT_DATA = {
-    -- Preview data is intentionally stylized and stable. Do not replace this with live Unit*
-    -- API calls; preview should render identically while the player is offline, in combat, or
-    -- inspecting another profile.
+    -- Stylized fallback data. The preview prefers a live snapshot of the real
+    -- unit (see LiveUnitData below) so it mirrors the frame's current state;
+    -- this table backfills any unit or field that is unavailable (unit does
+    -- not exist, loading screens, secret-restricted values).
     player = { name = "MIDNIGHT", class = "ROGUE", className = "Rogue", race = "Night Elf", hp = 0.72, power = 0.52, powerToken = "ENERGY", level = "80", elite = false, isPlayer = true, portraitTexture = "Interface\\ICONS\\Ability_Stealth" },
     target = { name = "Astral Warden", class = "MAGE", className = "Mage", race = "Construct", hp = 0.41, power = 0.68, powerToken = "MANA", level = "82", elite = true, reactionKind = "neutral", npcKind = "npcRegular", portraitTexture = "Interface\\ICONS\\Spell_Frost_FrostBolt02" },
     targettarget = { name = "Moonlit Tank", class = "WARRIOR", className = "Warrior", race = "Human", hp = 0.88, power = 0.36, powerToken = "RAGE", level = "80", elite = false, isPlayer = true, portraitTexture = "Interface\\ICONS\\Ability_Warrior_DefensiveStance" },
@@ -54,9 +55,10 @@ local function PreviewRaidGroupNameAllowed(key)
 end
 local function PreviewRaidGroupNameText(conf)
     local style = conf and conf.raidGroupNameStyle
-    if style == "BRACKET" then return "[2]" end
-    if style == "NONE" then return "2" end
-    return "(2)"
+    local group = tostring(Preview.LiveRaidSubgroup and Preview.LiveRaidSubgroup() or 2)
+    if style == "BRACKET" then return "[" .. group .. "]" end
+    if style == "NONE" then return group end
+    return "(" .. group .. ")"
 end
 local function NormalizePreviewRaidGroupNameAnchor(anchor)
     if anchor == "NAMELEFT" or anchor == "NAMERIGHT"
@@ -125,6 +127,145 @@ local function CanonKey(key)
     if UNIT_SET[key] then return key end
     return "player"
 end
+local IsSecretValue = _G.issecretvalue or function(_) return false end
+local LIVE_UNIT_TOKENS = { player = "player", target = "target", targettarget = "targettarget", focustarget = "focustarget", focus = "focus", boss = "boss1", pet = "pet" }
+local liveUnitDataCache = {}
+local function LiveNumber(value)
+    if value == nil or IsSecretValue(value) == true then return nil end
+    return tonumber(value)
+end
+local function LivePlain(value)
+    if value == nil or IsSecretValue(value) == true then return nil end
+    return value
+end
+--- Live snapshot of the unit behind a preview key so the preview mirrors the
+--- frame's current state (name, class, exact HP/power values, level, elite,
+--- reaction). Strictly pull-based: only preview refreshes call this (menu
+--- open, out of combat), never events or combat code, so it adds zero combat
+--- overhead. Every field falls back to the stylized UNIT_DATA mock when the
+--- unit or a value is unavailable (missing unit, loading, secret values).
+local function LiveUnitData(key)
+    key = CanonKey(key)
+    local unit = LIVE_UNIT_TOKENS[key]
+    local UnitExists = _G.UnitExists
+    if not (unit and type(UnitExists) == "function") then return nil end
+    if _G.InCombatLockdown and _G.InCombatLockdown() then return nil end
+    local exists = UnitExists(unit)
+    if IsSecretValue(exists) == true or exists ~= true then return nil end
+    local mock = UNIT_DATA[key] or UNIT_DATA.player or {}
+    local d = liveUnitDataCache[key]
+    if not d then
+        d = {}
+        liveUnitDataCache[key] = d
+    end
+    d.live = true
+    d.liveUnit = unit
+    d.name = LivePlain(_G.UnitName and _G.UnitName(unit)) or mock.name
+    local className, classToken
+    if _G.UnitClass then className, classToken = _G.UnitClass(unit) end
+    d.class = LivePlain(classToken) or mock.class
+    d.className = LivePlain(className) or mock.className
+    d.race = (_G.UnitRace and LivePlain(_G.UnitRace(unit)))
+        or (_G.UnitCreatureType and LivePlain(_G.UnitCreatureType(unit)))
+        or mock.race
+    local level = _G.UnitLevel and LiveNumber(_G.UnitLevel(unit))
+    d.level = (level and level > 0 and tostring(level)) or (level and "??") or mock.level
+    local isPlayer = _G.UnitIsPlayer and _G.UnitIsPlayer(unit)
+    if IsSecretValue(isPlayer) == true then isPlayer = mock.isPlayer end
+    d.isPlayer = isPlayer == true
+    d.isPet = key == "pet"
+    local classification = _G.UnitClassification and LivePlain(_G.UnitClassification(unit))
+    d.elite = classification == "elite" or classification == "rareelite"
+        or classification == "worldboss" or classification == "rare"
+        or (classification == nil and mock.elite == true)
+    local dead = _G.UnitIsDeadOrGhost and _G.UnitIsDeadOrGhost(unit)
+    if IsSecretValue(dead) == true then dead = false end
+    local reaction = _G.UnitReaction and LiveNumber(_G.UnitReaction(unit, "player"))
+    if d.isPlayer or dead ~= true then
+        if reaction and reaction >= 5 then
+            d.reactionKind = "friendly"
+        elseif reaction and reaction == 4 then
+            d.reactionKind = "neutral"
+        elseif reaction then
+            d.reactionKind = "enemy"
+        else
+            d.reactionKind = mock.reactionKind or (d.isPlayer and "friendly" or "enemy")
+        end
+    else
+        d.reactionKind = "dead"
+    end
+    local hpCur = _G.UnitHealth and LiveNumber(_G.UnitHealth(unit))
+    local hpMax = _G.UnitHealthMax and LiveNumber(_G.UnitHealthMax(unit))
+    if hpCur and hpMax and hpMax > 0 then
+        if hpCur < 0 then hpCur = 0 elseif hpCur > hpMax then hpCur = hpMax end
+        d.hpCur, d.hpMax = hpCur, hpMax
+        d.hp = hpCur / hpMax
+    else
+        d.hpCur, d.hpMax = nil, nil
+        d.hp = mock.hp or 0.72
+    end
+    local powerToken
+    if _G.UnitPowerType then
+        local _, token = _G.UnitPowerType(unit)
+        powerToken = LivePlain(token)
+    end
+    d.powerToken = powerToken or mock.powerToken or "MANA"
+    local powerCur = _G.UnitPower and LiveNumber(_G.UnitPower(unit))
+    local powerMax = _G.UnitPowerMax and LiveNumber(_G.UnitPowerMax(unit))
+    if powerCur and powerMax and powerMax > 0 then
+        if powerCur < 0 then powerCur = 0 elseif powerCur > powerMax then powerCur = powerMax end
+        d.powerCur, d.powerMax = powerCur, powerMax
+        d.power = powerCur / powerMax
+    else
+        d.powerCur, d.powerMax = nil, nil
+        d.power = mock.power or 0.5
+    end
+    -- Absorb is exact only while one exists; a zero would blank the absorb
+    -- element preview, so the stylized sample backs the zero case.
+    local absorb = _G.UnitGetTotalAbsorbs and LiveNumber(_G.UnitGetTotalAbsorbs(unit))
+    d.absorb = (absorb and absorb > 0) and absorb or nil
+    -- Type classification mirrors the live NPC tint decisions closely enough
+    -- for a preview; PreviewNPCKind applies the same settings gating on top.
+    if d.isPlayer then
+        d.npcKind = nil
+    elseif key == "boss" or classification == "worldboss" then
+        d.npcKind = "npcBoss"
+    elseif classification == "elite" or classification == "rareelite" then
+        d.npcKind = d.powerToken == "MANA" and "npcCaster" or "npcMelee"
+    elseif classification == "normal" or classification == "trivial" or classification == "minus" then
+        d.npcKind = "npcRegular"
+    else
+        d.npcKind = mock.npcKind
+    end
+    d.portraitTexture = mock.portraitTexture
+    return d
+end
+--- Player's current raid subgroup for the raid-group name preview. nil when
+--- not in a raid (callers keep their stylized fallback).
+local function LiveRaidSubgroup()
+    if _G.InCombatLockdown and _G.InCombatLockdown() then return nil end
+    if not (_G.IsInRaid and _G.IsInRaid() and _G.GetRaidRosterInfo) then return nil end
+    local index = _G.UnitInRaid and _G.UnitInRaid("player")
+    if IsSecretValue(index) == true then return nil end
+    index = tonumber(index)
+    if not index then return nil end
+    -- UnitInRaid has historically been 0-based; accept either convention.
+    -- Allocation-free: this runs inside preview refreshes.
+    local candidate = index
+    for _ = 1, 2 do
+        if candidate >= 1 and candidate <= 40 then
+            local name, _, subgroup = _G.GetRaidRosterInfo(candidate)
+            if name ~= nil and not IsSecretValue(subgroup) then
+                local mine = _G.UnitIsUnit and _G.UnitIsUnit("player", "raid" .. candidate)
+                if mine == true or _G.UnitIsUnit == nil then return tonumber(subgroup) end
+            end
+        end
+        candidate = index + 1
+    end
+    return nil
+end
+Preview.LiveUnitData = LiveUnitData
+Preview.LiveRaidSubgroup = LiveRaidSubgroup
 local function ProfileSystemNeedsInit()
     local active = _G.MSUF_ActiveProfile
     local gdb = _G.MSUF_GlobalDB
@@ -286,12 +427,23 @@ local function TextScopeSet(key, field, value)
 end
 local function ForceTextUnit(key, reason)
     key = CanonKey(key)
-    if type(_G.MSUF_UFCore_RequestLayoutForUnit) == "function" then _G.MSUF_UFCore_RequestLayoutForUnit(key, reason or "UNIT_TEXT_OPTIONS", key == "target" or key == "targettarget" or key == "focustarget" or key == "focus") end
-    if type(_G.MSUF_ForceTextLayoutForUnitKey) == "function" then _G.MSUF_ForceTextLayoutForUnitKey(key) end
+    if type(_G.MSUF_ForceTextLayoutForUnitKey) == "function" then
+        _G.MSUF_ForceTextLayoutForUnitKey(key)
+    elseif type(_G.MSUF_UFCore_NotifyConfigChanged) == "function" then
+        -- Text-layout entry unavailable: a full scoped apply must still land
+        -- so a preview edit can never stay preview-only.
+        _G.MSUF_UFCore_NotifyConfigChanged(key, true, true, reason or "UNIT_TEXT_OPTIONS")
+    end
 end
 local function ApplyPanelUnit(panel, key, reason)
     key = CanonKey(key or CurrentPanelKey(panel))
-    if panel and panel._msufAPI and type(panel._msufAPI.ApplySettingsForKey) == "function" then panel._msufAPI.ApplySettingsForKey(key) end
+    if panel and panel._msufAPI and type(panel._msufAPI.ApplySettingsForKey) == "function" then
+        panel._msufAPI.ApplySettingsForKey(key)
+    elseif type(_G.MSUF_UFCore_NotifyConfigChanged) == "function" then
+        -- Pinned/floating previews can commit without a host panel; the live
+        -- frame must still re-apply the written settings (preview<->live parity).
+        _G.MSUF_UFCore_NotifyConfigChanged(key, true, true, reason or "UNIT_OPTIONS")
+    end
     if type(_G.MSUF_SyncUnitPositionPopup) == "function" then _G.MSUF_SyncUnitPositionPopup(key, _G.MSUF_DB and _G.MSUF_DB[key]) end
     if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then _G.MSUF_UFPreview_RequestRefresh(reason or "UNIT_OPTIONS") end
 end
@@ -830,13 +982,13 @@ local ABSORB_MODE_BASE = {
     PERCENTMAXCURABSORB = "PERCENTMAXCUR",
 }
 local ABSORB_ICON_MARKUP = "|TInterface\\Icons\\INV_Shield_06:0|t"
-local function FormatMode(mode, cur, maxVal, pct, sep, isPower, hidePercentSymbol, shortNumbers, absorbIcon)
+local function FormatMode(mode, cur, maxVal, pct, sep, isPower, hidePercentSymbol, shortNumbers, absorbIcon, absorbValue)
     if isPower then mode = NormalizePowerMode(mode) else mode = NormalizeHpMode(mode) end
     if mode == "NONE" then return "" end
     local absorbBase = ABSORB_MODE_BASE[mode]
     local c = NumText(cur, shortNumbers)
     local m = NumText(maxVal, shortNumbers)
-    local a = NumText(125000, shortNumbers)
+    local a = NumText(tonumber(absorbValue) or 125000, shortNumbers)
     local absorbText = (absorbIcon and (ABSORB_ICON_MARKUP .. " ") or "") .. a
     local p = tostring(pct)
     if hidePercentSymbol ~= true then p = p .. "%" end
@@ -877,7 +1029,7 @@ M.AssignNamedValues(Model, [[
     ClassPortraitVisual UnitPreviewPortraitTexture FontColor NormalizeToTInlineColorMode PreviewNameColorFlags PreviewNameColor
     PreviewToTInlineColor SetTex NormalizePreviewAnchorMode UnitPreviewBarOverrideEnabled PreviewHealPredictionEnabled
     PreviewResolveHealPredAnchorMode PreviewResolveAbsorbAnchorMode PreviewAbsorbBarEnabled PreviewOverlayWidth LayoutUnitPreviewOverlay
-    MakeFS ReadPowerBarEnabled CanDetachPowerBarKey ReadPowerBarHeight ResolveNameAnchor ResolveNameOffsetDelta NumText JoinSep FormatMode UnitPreviewText
+    MakeFS ReadPowerBarEnabled CanDetachPowerBarKey ReadPowerBarHeight ResolveNameAnchor ResolveNameOffsetDelta NumText JoinSep FormatMode UnitPreviewText LiveUnitData LiveRaidSubgroup
 ]],
     UNIT_KEYS, UNIT_SET, UNIT_LABELS, UNIT_DATA, PreviewRaidGroupNameAllowed, PreviewRaidGroupNameText, NormalizePreviewRaidGroupNameAnchor,
     TEXT_ANCHORS, HP_MODES, POWER_MODES, SEP_ITEMS, PORTRAIT_MODE_ITEMS, PORTRAIT_RENDER_ITEMS, PortraitClassItems,
@@ -891,4 +1043,4 @@ M.AssignNamedValues(Model, [[
     ClassPortraitVisual, UnitPreviewPortraitTexture, FontColor, NormalizeToTInlineColorMode, PreviewNameColorFlags, PreviewNameColor,
     PreviewToTInlineColor, SetTex, NormalizePreviewAnchorMode, UnitPreviewBarOverrideEnabled, PreviewHealPredictionEnabled,
     PreviewResolveHealPredAnchorMode, PreviewResolveAbsorbAnchorMode, PreviewAbsorbBarEnabled, PreviewOverlayWidth, LayoutUnitPreviewOverlay,
-    MakeFS, ReadPowerBarEnabled, CanDetachPowerBarKey, ReadPowerBarHeight, ResolveNameAnchor, ResolveNameOffsetDelta, NumText, JoinSep, FormatMode, UnitPreviewText)
+    MakeFS, ReadPowerBarEnabled, CanDetachPowerBarKey, ReadPowerBarHeight, ResolveNameAnchor, ResolveNameOffsetDelta, NumText, JoinSep, FormatMode, UnitPreviewText, LiveUnitData, LiveRaidSubgroup)

@@ -23,9 +23,13 @@ local FAST_REFRESH_REASONS = {
     MENU_TEXT_FOCUS = true,
     MENU_TEXT_CLEAR_FOCUS = true,
 }
+local UNIT_PREVIEW_LIVE_STATE_DELAY = 0.2
 local function PreviewRefreshDelay(reason)
     reason = tostring(reason or "")
     if FAST_REFRESH_REASONS[reason] or reason:find("^MSUF2_") or reason:find("^AURAS3_") then return 0 end
+    -- Live-mirror events (health/power ticks out of combat) coalesce on a
+    -- wider window so regen streams cost at most five renders per second.
+    if reason == "UNIT_PREVIEW_LIVE_STATE" then return UNIT_PREVIEW_LIVE_STATE_DELAY end
     return UNIT_PREVIEW_REFRESH_DELAY
 end
 local function PreviewInCombat()

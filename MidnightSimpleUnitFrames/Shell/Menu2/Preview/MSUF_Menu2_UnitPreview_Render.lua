@@ -122,6 +122,11 @@ local function CopyPreviewAnimationData(box, data, hpFrac, powerFrac)
     for k, v in pairs(data or {}) do copy[k] = v end
     copy.hp = hpFrac
     copy.power = powerFrac
+    -- Live snapshots carry exact current values; while the combat animation
+    -- drives the fractions, value texts must follow the animated fraction on
+    -- the live max scale instead of freezing on the sampled current value.
+    copy.hpCur = nil
+    copy.powerCur = nil
     return copy
 end
 local function ResolvePreviewPowerColor(renderState, data, power)
@@ -686,7 +691,9 @@ function Preview.Refresh(box, reason)
     local UNIT_LABELS = D.UNIT_LABELS or {}
     local key = D.CurrentPanelKey(panel)
     local conf, g = D.UnitDB(key)
-    local data = UNIT_DATA[key] or UNIT_DATA.player or {}
+    -- Live snapshot first so the preview mirrors the real frame's current
+    -- state (exact name/class/HP/power); stylized mock only as fallback.
+    local data = (D.LiveUnitData and D.LiveUnitData(key)) or UNIT_DATA[key] or UNIT_DATA.player or {}
     local runtimeSpec = R.RuntimeSpecForPreviewKey(key)
     local runtimePower = runtimeSpec and runtimeSpec.power
     local runtimeStatus = runtimeSpec and runtimeSpec.status
@@ -695,6 +702,7 @@ function Preview.Refresh(box, reason)
     local runtimeText = runtimeSpec and runtimeSpec.text
     local runtimeClassPower = runtimeSpec and runtimeSpec.classPower
     box.key = key
+    if D.SyncLiveStateDriver then D.SyncLiveStateDriver(box, key) end
     local skipControlRefresh = (reason == "OPTIONS_APPLY_DB" or reason == "UNIT_MENU_ENTER" or reason == "UNIT_MENU_REENTER")
         or reason == "UNIT_PREVIEW_DRAG"
         or reason == "UNIT_PREVIEW_ANIMATE"
@@ -777,7 +785,7 @@ function Preview.Refresh(box, reason)
     if runtimeClassPower == nil then classPowerOn = key == "player" and bars.showClassPower ~= false end
     if classPowerPreviewSpec then classPowerOn = bars.showClassPower ~= false and classPowerPreviewSpec.enabled ~= false and classPowerPreviewSpec.mode ~= "none" end
     local powerFrac = tonumber(data.power) or 1
-    if not detachedPower and key ~= "player" then powerFrac = 1 end
+    if not detachedPower and key ~= "player" and data.live ~= true then powerFrac = 1 end
     if powerFrac < 0 then powerFrac = 0 elseif powerFrac > 1 then powerFrac = 1 end
     local animState = UnitPreviewAnimationState(box, 1, key)
     local animHp = animState and tonumber(animState.hpPct)
@@ -1585,8 +1593,11 @@ function Preview.Refresh(box, reason)
     end
     mock.nameText:SetText(R.ShortenPreviewName(data.name, key, conf))
     mock.raidGroupNameText:SetText(D.PreviewRaidGroupNameText(conf))
-    local hpMax, pMax = 1000000, 240000
-    local hpCur, pCur = floor(hpMax * data.hp + 0.5), floor(pMax * powerFrac + 0.5)
+    -- Live snapshots carry the frame's exact values; the stylized pair only
+    -- backs mock data. Animated refreshes strip hpCur/powerCur so texts follow
+    -- the combat-preview fraction on the live max scale.
+    local hpMax, pMax = tonumber(data.hpMax) or 1000000, tonumber(data.powerMax) or 240000
+    local hpCur, pCur = tonumber(data.hpCur) or floor(hpMax * data.hp + 0.5), tonumber(data.powerCur) or floor(pMax * powerFrac + 0.5)
     local hpSlots = R.TextScopeHasSlots(key, "textLeft", "textCenter", "textRight")
     local hpLeftMode, hpCenterMode, hpRightMode
     if hpSlots then
@@ -1628,13 +1639,13 @@ function Preview.Refresh(box, reason)
     local hpSepRaw = R.TextScopeGet(key, "hpTextSeparator", "")
     mock.hpTextLeft:SetText(R.FormatMode(hpLeftMode, hpCur, hpMax, hpPctValue, hpSepRaw, false, hpLeftHidePercent,
         R.TextScopeGet(key, "hpFullValueShort", R.TextScopeGet(key, "useShortNumbers", true)) == true,
-        R.TextScopeGet(key, R.TextScopeGet(key, "hpTextReverse", false) == true and "hpTextRightAbsorbIcon" or "hpTextLeftAbsorbIcon", R.TextScopeGet(key, "hpAbsorbIcon", false)) == true))
+        R.TextScopeGet(key, R.TextScopeGet(key, "hpTextReverse", false) == true and "hpTextRightAbsorbIcon" or "hpTextLeftAbsorbIcon", R.TextScopeGet(key, "hpAbsorbIcon", false)) == true, data.absorb))
     mock.hpTextCenter:SetText(R.FormatMode(hpCenterMode, hpCur, hpMax, hpPctValue, hpSepRaw, false, hpCenterHidePercent,
         R.TextScopeGet(key, "hpFullValueShort", R.TextScopeGet(key, "useShortNumbers", true)) == true,
-        R.TextScopeGet(key, "hpTextCenterAbsorbIcon", R.TextScopeGet(key, "hpAbsorbIcon", false)) == true))
+        R.TextScopeGet(key, "hpTextCenterAbsorbIcon", R.TextScopeGet(key, "hpAbsorbIcon", false)) == true, data.absorb))
     mock.hpText:SetText(R.FormatMode(hpRightMode, hpCur, hpMax, hpPctValue, hpSepRaw, false, hpRightHidePercent,
         R.TextScopeGet(key, "hpFullValueShort", R.TextScopeGet(key, "useShortNumbers", true)) == true,
-        R.TextScopeGet(key, R.TextScopeGet(key, "hpTextReverse", false) == true and "hpTextLeftAbsorbIcon" or "hpTextRightAbsorbIcon", R.TextScopeGet(key, "hpAbsorbIcon", false)) == true))
+        R.TextScopeGet(key, R.TextScopeGet(key, "hpTextReverse", false) == true and "hpTextLeftAbsorbIcon" or "hpTextRightAbsorbIcon", R.TextScopeGet(key, "hpAbsorbIcon", false)) == true, data.absorb))
     mock.hpTextPct:SetText("")
     local powerSlots = R.TextScopeHasSlots(key, "powerTextLeft", "powerTextCenter", "powerTextRight")
     local powerLeftMode, powerCenterMode, powerRightMode
@@ -1695,7 +1706,7 @@ function Preview.Refresh(box, reason)
         local showInline = key == "target" and conf.showName ~= false and totConf.showToTInTargetName == true
         if showInline then
             local sep = R.ToTInlineSeparator(totConf.totInlineSeparator, totConf.totInlineCustomSeparator)
-            local totData = UNIT_DATA.targettarget or { name = "Target" }
+            local totData = (D.LiveUnitData and D.LiveUnitData("targettarget")) or UNIT_DATA.targettarget or { name = "Target" }
             local tr, tg, tb = R.PreviewNameColor("target", data, fr, fg, fb)
             local ir, ig, ib = R.PreviewToTInlineColor(totConf.totInlineColorMode, totData, tr, tg, tb, fr, fg, fb)
             mock.totInlineSep:SetText(sep ~= "" and sep or " ")
@@ -1782,7 +1793,13 @@ function Preview.Refresh(box, reason)
             if mock.portrait.tex.SetVertexColor then mock.portrait.tex:SetVertexColor(1, 1, 1, 1) end
             mock.portrait.initial:Hide()
         else
-            mock.portrait.tex:SetTexture(R.UnitPreviewPortraitTexture(key, data))
+            -- Mirror the live unit's actual portrait when the unit exists;
+            -- SetPortraitTexture is a plain texture API (no protected state).
+            if data.liveUnit and type(_G.SetPortraitTexture) == "function" then
+                _G.SetPortraitTexture(mock.portrait.tex, data.liveUnit)
+            else
+                mock.portrait.tex:SetTexture(R.UnitPreviewPortraitTexture(key, data))
+            end
             if mock.portrait.tex.SetVertexColor then mock.portrait.tex:SetVertexColor(1, 1, 1, 1) end
             if mock.portrait.tex.SetTexCoord then
                 local pSpec = runtimeSpec and runtimeSpec.portrait

@@ -190,12 +190,17 @@ local function BuildScene(box, reason)
         and buildFrameState(box, 1, kind, box._msufGFMenuPreviewAnimState or {}, box._animationElapsed)
     if animState then box._msufGFMenuPreviewAnimState = animState end
     local runtimeSpec = S.CompiledSpec(kind)
+    -- Group cells mirror the player's current state (name, class, exact
+    -- HP/power) so the preview matches the live group frame. Pull-based only:
+    -- sampled during this refresh, stylized values back any missing field.
+    local liveData = MSUF and MSUF.UFPreview and type(MSUF.UFPreview.LiveUnitData) == "function"
+        and MSUF.UFPreview.LiveUnitData("player") or nil
     local scene = {
         S = S, box = box, reason = reason, H = H, M = M, MSUF = MSUF,
         mock = S.mock, kind = kind, label = H.PreviewScopeLabel(kind), conf = conf, gf = gf,
-        previewAnimation = previewAnimation, animState = animState,
-        hpPct = animState and math.max(0.02, math.min(0.98, tonumber(animState.hpPct) or 0.72)) or 0.72,
-        powerPct = animState and math.max(0, math.min(1, tonumber(animState.powerPct) or 0.70)) or 0.70,
+        previewAnimation = previewAnimation, animState = animState, liveData = liveData,
+        hpPct = animState and math.max(0.02, math.min(0.98, tonumber(animState.hpPct) or 0.72)) or (liveData and liveData.hp) or 0.72,
+        powerPct = animState and math.max(0, math.min(1, tonumber(animState.powerPct) or 0.70)) or (liveData and liveData.power) or 0.70,
         healPct = animState and math.max(0.01, math.min(0.24, tonumber(animState.healPct) or 0.12)) or 0.12,
         absorbPct = animState and math.max(0.01, math.min(0.24, tonumber(animState.absorbPct) or 0.08)) or 0.08,
         runtimeSpec = runtimeSpec,
@@ -1363,7 +1368,8 @@ function Render.Install(box, ctx, deps)
         if runtimeSpec and runtimeSpec.backgroundAlpha ~= nil then bgAlpha = runtimeSpec.backgroundAlpha end
         mock:SetBackdropColor(conf.bgR or 0.08, conf.bgG or 0.08, conf.bgB or 0.09, bgAlpha)
         mock:SetBackdropBorderColor(0, 0, 0, 0)
-        local cls = self._msufGFRenderState.GF_PREVIEW_CLASSES[((kind == "party" and 5 or 2) % #self._msufGFRenderState.GF_PREVIEW_CLASSES) + 1]
+        local cls = (scene.liveData and scene.liveData.class)
+            or self._msufGFRenderState.GF_PREVIEW_CLASSES[((kind == "party" and 5 or 2) % #self._msufGFRenderState.GF_PREVIEW_CLASSES) + 1]
         local br, bg, bb = runtimeBorder.r or conf.borderR or 0, runtimeBorder.g or conf.borderG or 0, runtimeBorder.b or conf.borderB or 0
         mock._msufGFPreviewBorderR = br
         mock._msufGFPreviewBorderG = bg
@@ -1632,7 +1638,7 @@ function Render.Install(box, ctx, deps)
             or 1
         local baselineOffset = (runtimeSpec and 0) or (gf and gf.ResolveFontBaselineOffset and gf.ResolveFontBaselineOffset(kind)) or 0
         SetPreviewFont(mock._nameFS, max(6, ScaleValue((runtimeSpec and runtimeSpec.nameFontSize) or conf.nameFontSize or 12, previewScale, 6)))
-        local previewName = self._msufGFRenderState.GF_PREVIEW_NAMES[5]
+        local previewName = (scene.liveData and scene.liveData.name) or self._msufGFRenderState.GF_PREVIEW_NAMES[5]
         if gf and gf.ResolveNameTruncation and gf.TruncateName then
             local maxC, noEllipsis, clipSide = gf.ResolveNameTruncation(kind)
             if maxC and maxC > 0 then previewName = gf.TruncateName(previewName, maxC, noEllipsis, clipSide) end
@@ -1696,9 +1702,12 @@ function Render.Install(box, ctx, deps)
         elseif (not runtimeSpec) and conf and conf.hpTextReverse == true then
             hpLeftHidePercent, hpRightHidePercent = hpRightHidePercent, hpLeftHidePercent
         end
-        local fakeMax = 1000000
-        local fakeHP = max(1, floor(fakeMax * hpPct + 0.5))
-        local fakeAbsorb = 125000
+        -- Exact live values when available; while the combat animation runs,
+        -- the current value follows the animated fraction on the live scale.
+        local fakeMax = (scene.liveData and scene.liveData.hpMax) or 1000000
+        local fakeHP = (not scene.animState and scene.liveData and scene.liveData.hpCur)
+            or max(1, floor(fakeMax * hpPct + 0.5))
+        local fakeAbsorb = (scene.liveData and scene.liveData.absorb) or 125000
         local hpTextR, hpTextG, hpTextB = fr or 1, fg or 1, fb or 1
         local healthTextMode = (conf.fontOverride == true and conf.colorHealthTextByHealth ~= nil)
             and conf.colorHealthTextByHealth or (gen and gen.colorHealthTextByHealth)
@@ -1751,8 +1760,9 @@ function Render.Install(box, ctx, deps)
         elseif gf and gf.IsPowerTextEnabled then
             showPowerText = showText and gf.IsPowerTextEnabled(kind, conf)
         end
-        local fakePowMax = 100
-        local fakePow = max(0, floor(fakePowMax * powerPct + 0.5))
+        local fakePowMax = (scene.liveData and scene.liveData.powerMax) or 100
+        local fakePow = (not scene.animState and scene.liveData and scene.liveData.powerCur)
+            or max(0, floor(fakePowMax * powerPct + 0.5))
         local powerDelimiter = runtimeText.powerDelimiter or conf.powerTextDelimiter or conf.textDelimiter or " - "
         local function PreviewPowerText(mode, hidePercentSymbol)
             if gf and gf.FormatPowerText then return gf.FormatPowerText(mode, fakePow, fakePowMax, powerDelimiter, nil, hidePercentSymbol) end
