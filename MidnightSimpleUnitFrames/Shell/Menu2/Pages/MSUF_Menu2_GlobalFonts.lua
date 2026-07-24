@@ -126,7 +126,8 @@ end
 local function ConfiguredFontColorPreview(scope)
     scope = NormalizeScopeKey(scope or CurrentFontScope())
     local getFor = GP.FontScopeGetFor
-    if IsGFScope(scope) and FontOverrideGetFor(scope)
+    local overrideFor = GP.FontOverrideGetFor
+    if IsGFScope(scope) and type(overrideFor) == "function" and overrideFor(scope)
         and type(getFor) == "function" and getFor(scope, "useGlobalFontColor", true) == false
     then
         return RGB(getFor(scope, "fontR", 1), getFor(scope, "fontG", 1), getFor(scope, "fontB", 1))
