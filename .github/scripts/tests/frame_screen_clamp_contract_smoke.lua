@@ -4,7 +4,8 @@ local function Read(path)
     local file = assert(io.open(path, "rb"))
     local content = file:read("*a")
     file:close()
-    return content
+    -- Windows checkouts may carry CRLF; the contracts below match with \n.
+    return (content:gsub("\r\n", "\n"))
 end
 
 local function Source(relative)

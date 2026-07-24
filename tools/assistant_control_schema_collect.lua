@@ -6,6 +6,9 @@
 -- erase or duplicate controls owned by another page.
 
 _G = _G or _ENV
+-- Local runs may use Lua 5.4 (CI installs 5.1); mirror the core-smoke shims.
+loadstring = loadstring or load
+unpack = unpack or table.unpack
 
 local function Read(path)
     local file, err = io.open(path, "rb")
