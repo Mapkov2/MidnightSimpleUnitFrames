@@ -17,6 +17,19 @@ UF.Layers = Layers
 Layers.GROUP_FOREGROUND_BASE_OFFSET = 64
 Layers.TEXT_BASE_OFFSET = 10
 Layers.STATUS_BASE_OFFSET = 10
+--- PTR 7 hard rules for the native aura chain: (1) never touch AuraButton
+--- level/strata/points after initializeFrame without probing
+--- CanBeAccessedInContext() and re-applying on PLAYER_ENTERING_WORLD /
+--- PLAYER_REGEN_ENABLED; MSUF owns zero such touches by design. (2) any frame
+--- anchored to an aura container that needs layout scripts must inherit
+--- DisableUntrustedLayoutScriptsTemplate at creation.
+--- One relational 0..30 scale per frame kind: on unit frames every element
+--- family (texts, status icons, aura lanes, spell icons) computes
+--- frame + 10 + layer; on group frames they all compute frame + 64 + layer
+--- (the foreground band, see TextLevel/StatusLevel). An aura lane at layer 7
+--- therefore renders above a text at layer 5 and below one at layer 9 on any
+--- frame kind. Aura/spell runtimes read this shared unit base.
+Layers.UNIT_AURA_BASE_OFFSET = 10
 Layers.HEALTH_OFFSET = 1
 Layers.PORTRAIT_OFFSET = 6
 Layers.PORTRAIT_BORDER_OFFSET = 7

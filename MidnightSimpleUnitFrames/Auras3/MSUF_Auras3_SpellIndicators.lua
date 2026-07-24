@@ -18,6 +18,7 @@ local math_floor, math_min, math_max = math.floor, math.min, math.max
 local FrameLayers = MSUF.UF and MSUF.UF.Layers or {}
 local SPELL_FRAME_EFFECT_BASE_OFFSET = tonumber(FrameLayers.SPELL_FRAME_EFFECT_BASE_OFFSET) or 1
 local SPELL_ICON_BASE_OFFSET = tonumber(FrameLayers.SPELL_ICON_BASE_OFFSET) or 64
+local UNIT_SPELL_BASE_OFFSET = tonumber(FrameLayers.UNIT_AURA_BASE_OFFSET) or 10
 local CreateFrame = _G.CreateFrame
 local hooksecurefunc = _G.hooksecurefunc
 local issecretvalue = _G.issecretvalue or function(_) return false end
@@ -246,8 +247,14 @@ local function SlotStructuralSignature(slot)
 end
 
 local function SpellIconBaseOffset(parentFrame)
-    return parentFrame and parentFrame.MSUFSpec and parentFrame.MSUFSpec.scope == "group"
-        and SPELL_ICON_BASE_OFFSET or 0
+    -- Same relational scale as texts/status/aura lanes (UF.Layers): unit
+    -- frames use the shared element base (frame + 10 + layer), group frames
+    -- the foreground band base (frame + 64 + layer). A base of 0 parked unit
+    -- spell icons a full band below every text at the same popover layer.
+    if parentFrame and parentFrame.MSUFSpec and parentFrame.MSUFSpec.scope == "group" then
+        return SPELL_ICON_BASE_OFFSET
+    end
+    return UNIT_SPELL_BASE_OFFSET
 end
 
 SlotLayoutSignature = function(slot)

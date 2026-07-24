@@ -1971,11 +1971,15 @@ local CoreEnableFrame = A3.EnableFrame
 if type(CoreEnableFrame) == "function" then
     function A3.EnableFrame(frame, ...)
         local ret = CoreEnableFrame(frame, ...)
-        if frame and frame.unit then
-            if UnitPreviewActive(frame.unit) then
-                EM.RefreshUnit(frame.unit)
+        -- Engine frames carry the unit in MSUFUnitKey; the secure "unit"
+        -- attribute never surfaces as frame.unit, so that field alone would
+        -- leave edit-mode previews stale on targeted element refreshes.
+        local unit = frame and (frame.MSUFUnitKey or frame.unit)
+        if unit then
+            if UnitPreviewActive(unit) then
+                EM.RefreshUnit(unit)
             else
-                EM.HideUnit(frame.unit)
+                EM.HideUnit(unit)
             end
         end
         return ret
@@ -1985,7 +1989,8 @@ end
 local CoreDisableFrame = A3.DisableFrame
 if type(CoreDisableFrame) == "function" then
     function A3.DisableFrame(frame, ...)
-        if frame and frame.unit then EM.HideUnit(frame.unit) end
+        local unit = frame and (frame.MSUFUnitKey or frame.unit)
+        if unit then EM.HideUnit(unit) end
         if type(CoreDisableFrame) == "function" then return CoreDisableFrame(frame, ...) end
     end
 end

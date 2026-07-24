@@ -1996,6 +1996,34 @@ do
     A3._HideLane(container)
 end
 
+-- Relational layering contract: ONE 0..30 scale per frame kind, shared by
+-- texts, status icons, aura lanes, and spell icons. Strata stays an explicit
+-- advanced override (default AUTO = inherit frame strata); the container is
+-- the single layering authority and AuraButtons are never re-leveled.
+do
+    local layersSource = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Layers.lua")
+    local runtimeSource = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua")
+    Check(layersSource:find("Layers.TEXT_BASE_OFFSET = 10", 1, true)
+        and layersSource:find("Layers.STATUS_BASE_OFFSET = 10", 1, true)
+        and layersSource:find("Layers.UNIT_AURA_BASE_OFFSET = 10", 1, true),
+        "unit element families no longer share the 10-based relational scale")
+    Check(runtimeSource:find("UNIT_AURA_BASE_OFFSET", 1, true),
+        "aura runtime dropped the shared unit element base")
+    local spellSource = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_SpellIndicators.lua")
+    Check(spellSource:find("FrameLayers.UNIT_AURA_BASE_OFFSET", 1, true),
+        "spell indicators dropped the shared unit element base")
+    -- Lane buttons must never be re-leveled; dispel SENSOR buttons keep their
+    -- per-visual levels (overlay rides the health band) and are the only
+    -- allowed button-level writes.
+    Check(not runtimeSource:find("(lane.layer or 1) + 1)", 1, true)
+        and not runtimeSource:find("SyncFrameStrata(button, ResolveFrameStrata(parentFrame, lane.strata))", 1, true),
+        "lane AuraButtons regained level/strata writes (container must stay the only authority)")
+    Check(runtimeSource:find("DispelSensorFrameLevel(parentFrame, sensor, target)", 1, true),
+        "dispel sensor buttons lost their per-visual level writes")
+    Check(runtimeSource:find("auras3StrataNormalized", 1, true),
+        "legacy MEDIUM aura strata migration removed")
+end
+
 -- Static integration guards: live, Edit Mode, Menu2 unit/group previews, and
 -- the group External lane all preserve the same full-capacity rectangle and
 -- selected-anchor/internal-flow split.
@@ -2020,7 +2048,8 @@ Check(not runtimeSource:find("SetAuraLayoutRowWidth", 1, true), "removed legacy 
 Check(not runtimeSource:find("button:SetAuraBorder(", 1, true), "deprecated SetAuraBorder call resurfaced")
 Check(not runtimeSource:find("button:SetAuraSymbol(", 1, true), "deprecated SetAuraSymbol call resurfaced")
 Check(runtimeSource:find("lane.verticalGrowth == true", 1, true)
-    and runtimeSource:find("and (lane.size or 1) or (lane.width or lane.size or 1)", 1, true),
+    and runtimeSource:find("and (lane.size or 1)", 1, true)
+    and runtimeSource:find("((lane.width or lane.size or 1) - 2 * (lane.padding or 0))", 1, true),
     "native vertical layout no longer forces one-icon rows")
 Check(Count(runtimeSource, "initialAnchor = ButtonAnchor(xSign, ySign)") >= 2,
     "unit/group compilers no longer share initial-anchor derivation")

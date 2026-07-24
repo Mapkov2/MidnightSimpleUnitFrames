@@ -33,6 +33,7 @@ local math_floor, math_min, math_max = math.floor, math.min, math.max
 local FrameLayers = UF.Layers or {}
 local DISPEL_OVERLAY_EFFECT_OFFSET = tonumber(FrameLayers.DISPEL_OVERLAY_EFFECT_OFFSET) or 12
 local AURA_ICON_BASE_OFFSET = tonumber(FrameLayers.AURA_ICON_BASE_OFFSET) or 64
+local UNIT_AURA_BASE_OFFSET = tonumber(FrameLayers.UNIT_AURA_BASE_OFFSET) or 10
 local CreateFrame = _G.CreateFrame
 local C_AddOns = _G.C_AddOns
 local C_Timer = _G.C_Timer
@@ -137,6 +138,8 @@ local DEFAULT_SHARED = {
     cooldownTextOffsetX = 0,
     cooldownTextOffsetY = 0,
     cooldownDecimalSeconds = 3,
+    showWeaponEnchants = false,
+    stylePadding = 0,
     styleBorderEnabled = false,
     styleBorderThickness = 1,
     styleBorderColor = { 0, 0, 0, 1 },
@@ -324,6 +327,8 @@ local STYLE_SHARED_LAYOUT_KEYS = {
     cooldownDecimalSeconds = true,
     buffCooldownDecimalSeconds = true,
     debuffCooldownDecimalSeconds = true,
+    showWeaponEnchants = true,
+    stylePadding = true,
     styleBorderEnabled = true,
     styleBorderThickness = true,
     styleBorderColor = true,
@@ -444,12 +449,12 @@ local function InCombat()
 end
 
 -- NOTE: Inbound AuraContainer/AuraButton methods (SetEnabled, SetUnit,
--- AddAuraGroup/AddAuraSlot on PTR4, SetIcon, ...)
+-- AddAuraGroup/AddAuraSlot, SetIcon, ...)
 -- are secure delegates. Call them directly from our code. Wrapping them does
 -- not fix forbidden table access and makes PTR stack traces harder to reason
 -- about.
 --
--- PTR4 containers own AuraButton creation and anchoring. MSUF does not create
+-- 12.1 native containers own AuraButton creation and anchoring. MSUF does not create
 -- AuraButton objects directly; all lane/sensor buttons are created by
 -- AddAuraGroup/AddAuraSlot and customized in initializeFrame.
 
@@ -488,9 +493,17 @@ end
 -- PTR 7 allows creating aura containers (and their batched AuraButtons)
 -- during combat, so aura cold paths no longer wait for PLAYER_REGEN. The one
 -- remaining hard blocker is demand-loading Blizzard_AuraContainer itself:
--- LoadAddOn is refused in combat. After its first load this never defers.
+-- LoadAddOn is refused in combat. Addons never unload, so after the first
+-- successful check this collapses to a single upvalue read -- combat identity
+-- refreshes pay zero C calls here.
+local _auraContainerLoadedOnce = false
 local function AuraRuntimeCombatBlocked()
-    return InCombat() and not IsAddOnLoaded(AURA_CONTAINER_ADDON)
+    if _auraContainerLoadedOnce then return false end
+    if IsAddOnLoaded(AURA_CONTAINER_ADDON) then
+        _auraContainerLoadedOnce = true
+        return false
+    end
+    return InCombat()
 end
 
 -- PTR 7 global aura tooltip skinning: when the user runs MSUF's own unit-info
@@ -705,7 +718,35 @@ local function ReadDurationBarDisplay(primary, secondary, key, fallback)
     return NormalizeDurationBarDisplay(ReadRaw(primary, secondary, key), fallback)
 end
 
+-- One-shot saved-variables normalization: legacy builds/imports left aura lane
+-- strata pinned to "MEDIUM" across profiles, which overrides AUTO and parks the
+-- whole aura chain a strata ABOVE every LOW frame element — at that point no
+-- 0..30 layer value can order auras against bars/texts (strata beats level).
+-- AUTO resolves to the unit frame's own strata (relational model, same as the
+-- reference addons), so MEDIUM-pinned lanes are folded back to AUTO exactly
+-- once; a user who deliberately re-picks a strata afterwards keeps it.
+local AURA_LANE_STRATA_KEYS = {
+    buffStrata = true, debuffStrata = true,
+    trackedBuffStrata = true, externalStrata = true,
+}
+local function NormalizeLegacyAuraStrata(node, depth, seen)
+    if type(node) ~= "table" or depth > 12 or seen[node] then return end
+    seen[node] = true
+    for key, value in pairs(node) do
+        if AURA_LANE_STRATA_KEYS[key] then
+            if value == "MEDIUM" then node[key] = "AUTO" end
+        elseif type(value) == "table" then
+            NormalizeLegacyAuraStrata(value, depth + 1, seen)
+        end
+    end
+end
+
 local function EnsureDB()
+    local rootDB = _G.MSUF_DB
+    if type(rootDB) == "table" and rootDB.auras3StrataNormalized ~= 1 then
+        rootDB.auras3StrataNormalized = 1
+        NormalizeLegacyAuraStrata(rootDB, 1, {})
+    end
     if A3.EnsureDB then
         local auras, shared = A3.EnsureDB()
         if type(auras) == "table" then
@@ -864,8 +905,18 @@ local function ApplyAuraIconZoom(texture, lane)
 end
 
 local function AuraIconBaseOffset(parentFrame)
-    return parentFrame and parentFrame.MSUFSpec and parentFrame.MSUFSpec.scope == "group"
-        and AURA_ICON_BASE_OFFSET or 0
+    -- Unit frames use the SAME element base as texts and status icons
+    -- (frame + 10 + layer, see UF.Layers.UNIT_AURA_BASE_OFFSET), so the
+    -- Layers popover's 0..30 values form one comparable scale: aura layer 7
+    -- renders above a text at layer 5 and below one at layer 9. The old base
+    -- of 0 shifted auras a full band below every text/status element, which
+    -- made the aura layer slider look dead against them. Group frames keep
+    -- the fixed foreground band (base 64) where icons never sink under
+    -- effects.
+    if parentFrame and parentFrame.MSUFSpec and parentFrame.MSUFSpec.scope == "group" then
+        return AURA_ICON_BASE_OFFSET
+    end
+    return UNIT_AURA_BASE_OFFSET
 end
 
 local function AddHidePermanentCandidateFilter(candidateFilters, candidateFilterSignature, hidePermanent)
@@ -1067,7 +1118,18 @@ local function NativeFilter(baseFilter, filters)
             filter = filter .. "|!PLAYER"
         end
     end
-    return NormalizeNativeFilterString(filter, baseFilter)
+    local normalized = NormalizeNativeFilterString(filter, baseFilter)
+    -- Cold-path safety net: MSUF's token whitelist normalizes user input, but
+    -- Blizzard's validator is the final authority. A token Blizzard rejects
+    -- would hard-assert inside AddAuraGroup and kill the lane, so fall back to
+    -- the plain base filter instead and surface the reason.
+    local auraUtil = _G.AuraUtil
+    if auraUtil and type(auraUtil.IsValidFilterString) == "function"
+        and auraUtil.IsValidFilterString(normalized) ~= true then
+        A3.nativeAuraRuntimeError = "invalid native filter: " .. tostring(normalized)
+        return NormalizeNativeFilterString(baseFilter, baseFilter)
+    end
+    return normalized
 end
 
 local function NormalizeDispelSensorTrigger(value, fallback)
@@ -1215,6 +1277,7 @@ local function CompileUnitLane(unit, shared, layout, filtersRoot, kind, candidat
     local rowWrap = ReadRaw(shared, nil, spec.wrapKey) or ReadRaw(shared, nil, "rowWrap") or DEFAULT_SHARED.rowWrap
     local growthX, growthY, xSign, ySign, verticalGrowth = GrowthParts(growth, rowWrap)
     local cols, rows = GridShape(maxCount, perRow, verticalGrowth)
+    local lanePadding = Round(ClampNumber(ReadRaw(layout, shared, "stylePadding"), 0, 0, 16))
     local debuffTypeBorderMode = kind == "debuff" and ReadDebuffTypeBorderMode(layout, shared) or "OFF"
     local cooldownAnchor = ReadAnchor(shared, nil, "cooldownTextAnchor", DEFAULT_SHARED.cooldownTextAnchor)
     local rawStrata = ReadRaw(layout, shared, spec.strataKey)
@@ -1235,8 +1298,11 @@ local function CompileUnitLane(unit, shared, layout, filtersRoot, kind, candidat
         perRow = Round(perRow),
         cols = cols,
         rows = rows,
-        width = math_max(1, cols * size + math_max(cols - 1, 0) * spacing),
-        height = math_max(1, rows * size + math_max(rows - 1, 0) * spacing),
+        padding = lanePadding,
+        weaponEnchants = kind == "buff" and unit == "player"
+            and ReadBool(shared, layout, "showWeaponEnchants", false),
+        width = math_max(1, cols * size + math_max(cols - 1, 0) * spacing + 2 * lanePadding),
+        height = math_max(1, rows * size + math_max(rows - 1, 0) * spacing + 2 * lanePadding),
         x = Round(ReadNumber(layout, shared, spec.xKey, DEFAULT_SHARED[spec.xKey] or 0, -4096, 4096)),
         y = Round(ReadNumber(layout, shared, spec.yKey, DEFAULT_SHARED[spec.yKey] or 0, -4096, 4096)),
         anchor = ReadAnchor(layout, shared, spec.anchorKey, spec.defaultAnchor),
@@ -2020,13 +2086,14 @@ local function ApplyFont(fs, size)
     if type(applyResolved) == "function" then
         applyResolved(fs, fontPath, size, fontFlags, general and general.fontKey)
     else
-        local ok, applied = pcall(fs.SetFont, fs, fontPath, size, fontFlags)
-        local ready = ok and applied ~= false
+        -- SetFont returns success on 10.x+ (invalid paths return false, they
+        -- do not error) -- validate via the return value, never via pcall.
+        local ready = fs:SetFont(fontPath, size, fontFlags) ~= false
         local matches = _G.MSUF_FontApplicationMatches
         if ready and type(matches) == "function" then ready = matches(fs, fontPath, size) == true end
         if not ready then
             if fontPath ~= STANDARD_TEXT_FONT and STANDARD_TEXT_FONT then
-                pcall(fs.SetFont, fs, STANDARD_TEXT_FONT, size, fontFlags)
+                fs:SetFont(STANDARD_TEXT_FONT, size, fontFlags)
             end
             if type(_G.MSUF_MarkFontApplyFailed) == "function" then _G.MSUF_MarkFontApplyFailed() end
         end
@@ -2264,7 +2331,7 @@ local function PlaceCooldownText(fs, owner, lane)
     end
 end
 
-local PTR4_AURA_CONTAINER_METHODS = {
+local NATIVE_AURA_CONTAINER_METHODS = {
     "SetUnit",
     "SetEnabled",
     "AddAuraGroup",
@@ -2284,7 +2351,7 @@ local PTR4_AURA_CONTAINER_METHODS = {
     "SetFlowLayoutMaximumLineSize",
 }
 
-local PTR4_AURA_BUTTON_METHODS = {
+local NATIVE_AURA_BUTTON_METHODS = {
     "SetIcon",
     "ClearIcon",
     "SetDurationCooldown",
@@ -2305,37 +2372,37 @@ local PTR4_AURA_BUTTON_METHODS = {
     "SetCancelAuraButtons",
 }
 
-local function ValidatePTR4AuraContainerContract(container)
+local function ValidateNativeAuraContainerContract(container)
     if not container then return false end
-    for i = 1, #PTR4_AURA_CONTAINER_METHODS do
-        local methodName = PTR4_AURA_CONTAINER_METHODS[i]
+    for i = 1, #NATIVE_AURA_CONTAINER_METHODS do
+        local methodName = NATIVE_AURA_CONTAINER_METHODS[i]
         if type(container[methodName]) ~= "function" then
             A3.nativeAuraRuntimeAvailable = false
-            A3.nativeAuraRuntimeError = "PTR4 AuraContainer missing " .. methodName
+            A3.nativeAuraRuntimeError = "native AuraContainer missing " .. methodName
             return false
         end
     end
     return true
 end
 
-local function ValidatePTR4AuraButtonContract(button)
+local function ValidateNativeAuraButtonContract(button)
     if not button then
         A3.nativeAuraRuntimeAvailable = false
-        A3.nativeAuraRuntimeError = "PTR4 AuraButton missing"
+        A3.nativeAuraRuntimeError = "native AuraButton missing"
         error(A3.nativeAuraRuntimeError, 3)
     end
-    for i = 1, #PTR4_AURA_BUTTON_METHODS do
-        local methodName = PTR4_AURA_BUTTON_METHODS[i]
+    for i = 1, #NATIVE_AURA_BUTTON_METHODS do
+        local methodName = NATIVE_AURA_BUTTON_METHODS[i]
         if type(button[methodName]) ~= "function" then
             A3.nativeAuraRuntimeAvailable = false
-            A3.nativeAuraRuntimeError = "PTR4 AuraButton missing " .. methodName
+            A3.nativeAuraRuntimeError = "native AuraButton missing " .. methodName
             error(A3.nativeAuraRuntimeError, 3)
         end
     end
     return true
 end
 
-local function ConfigurePTR4AuraContainer(container, unit)
+local function ConfigureNativeAuraContainer(container, unit)
     container:SetUnit(unit)
     container:SetEnabled(true)
 end
@@ -2394,13 +2461,16 @@ local function FrameAppliedConfigIsCurrent(frame, reason, cfg)
 end
 
 LaneTrackingSignature = function(lane)
-    -- initialAnchor is tracking-level on purpose: the container is anchored to
-    -- its layout host exactly once (it is sealed after AddAuraGroup), so a
-    -- growth-direction change must recreate the container rather than
-    -- re-anchor a live one.
+    -- initialAnchor, layer, and strata are tracking-level on purpose: the
+    -- container is anchored once and born at its final level/strata as a child
+    -- of the MSUF-owned host (it is sealed after AddAuraGroup), so growth,
+    -- layer, or strata changes must recreate the container rather than mutate
+    -- a live sealed one. Recreate is the only path PTR 7 guarantees.
     return tostring(lane.unit) .. "\030" .. tostring(lane.kind) .. "\030" .. tostring(lane.nativeFilter)
         .. "\030" .. tostring(lane.max) .. "\030" .. tostring(lane.candidateFilterSignature)
         .. "\030" .. tostring(lane.initialAnchor)
+        .. "\030" .. tostring(lane.layer) .. "\030" .. tostring(lane.strata)
+        .. "\030" .. tostring(lane.weaponEnchants)
 end
 
 LaneStructuralSignature = function(lane)
@@ -2434,6 +2504,7 @@ LaneLayoutSignature = function(lane)
         .. "\030" .. tostring(lane.stackY) .. "\030" .. tostring(lane.showTooltip)
         .. "\030" .. tostring(lane.showAuraBorder) .. "\030" .. tostring(lane.showAuraSymbol)
         .. "\030" .. tostring(lane.alpha)
+        .. "\030" .. tostring(lane.padding)
         .. "\030" .. tostring(lane.iconStyle and lane.iconStyle.signature)
         .. "\030" .. tostring(A3._nativeVisualGen or 0)
 end
@@ -2697,13 +2768,17 @@ end
 -- pass a one-icon maximumLineSize, which is the native way to force a column:
 -- every icon wraps to a new line and lines stack along the vertical growth
 -- direction. Only ever called from the signature-guarded geometry cold path.
-local function ApplyContainerFlowLayout(container, anchorPoint, xSign, ySign, lineSize)
+local function ApplyContainerFlowLayout(container, anchorPoint, xSign, ySign, lineSize, padding)
     local flowDir = _G.AnchorUtil and _G.AnchorUtil.FlowDirection
     container:SetFlowLayoutAnchorPoint(anchorPoint)
     container:SetFlowLayoutGrowthDirection(
         flowDir and (xSign >= 0 and flowDir.Right or flowDir.Left) or xSign,
         flowDir and (ySign >= 0 and flowDir.Up or flowDir.Down) or ySign)
     container:SetFlowLayoutMaximumLineSize(lineSize)
+    if type(container.SetFlowLayoutPadding) == "function" then
+        padding = padding or 0
+        container:SetFlowLayoutPadding(padding, padding, padding, padding)
+    end
 end
 
 local function SyncContainerGeometry(container, lane, parentFrame, forceGeometry, preserveAlpha)
@@ -2713,26 +2788,14 @@ local function SyncContainerGeometry(container, lane, parentFrame, forceGeometry
     container._msufA3NativeLaneConfig = lane
     container._msufA3ParentFrame = parentFrame
     local layoutHost = container._msufA3LayoutHost
-    local resolvedStrata
-    if parentFrame then
-        resolvedStrata = ResolveFrameStrata(parentFrame, lane.strata)
-        -- Strata/level authority lives on the MSUF-owned layout host only:
-        -- AddAuraGroup seals the container with UntrustedLayoutScriptExecution
-        -- on PTR 7, so direct SetFrameStrata/SetFrameLevel calls on a live
-        -- container are unreliable. The container is created as a child of the
-        -- host and inherits both through the parent chain.
-        if layoutHost then
-            SyncFrameStrata(layoutHost, resolvedStrata)
-        else
-            SyncFrameStrata(container, resolvedStrata)
-        end
-    end
     -- Geometry depends only on the lane's layout signature (size/spacing/anchor/
-    -- offsets/level/growth/visual gen) and the parent frame. Content-only
+    -- offsets/level/strata/growth/visual gen) and the parent frame. Content-only
     -- refreshes -- swaps, identity, UNIT_AURA -- reuse the same lane, so skip the
     -- container resize + per-button re-layout when nothing geometric changed. A
     -- changed icon count or filter alters the tracking signature instead, which
-    -- recreates the container, so a stale skip here is not possible.
+    -- recreates the container, so a stale skip here is not possible. Everything
+    -- below this guard is cold: the combat swap path pays exactly these
+    -- compares and zero widget calls.
     local sig = lane._msufA3LayoutSignature
     if forceGeometry ~= true
         and sig ~= nil and container._msufA3GeomSig == sig and container._msufA3GeomParent == parentFrame then
@@ -2740,6 +2803,22 @@ local function SyncContainerGeometry(container, lane, parentFrame, forceGeometry
     end
     container._msufA3GeomSig = sig
     container._msufA3GeomParent = parentFrame
+    local resolvedStrata
+    if parentFrame then
+        resolvedStrata = ResolveFrameStrata(parentFrame, lane.strata)
+        -- Strata is written on BOTH the host and the container: the intrinsic
+        -- may carry an explicit strata of its own (explicit strata breaks
+        -- parent inheritance entirely), so relying on host inheritance parked
+        -- the whole chain on the wrong strata and every LOW element covered
+        -- the icons regardless of frame levels. Container writes stick on
+        -- PTR 7 (probe-verified) and land pre-seal on fresh containers.
+        -- lane.strata is part of the layout signature, so this cold block
+        -- re-runs exactly when it can change.
+        if layoutHost then
+            SyncFrameStrata(layoutHost, resolvedStrata)
+        end
+        SyncFrameStrata(container, resolvedStrata)
+    end
     -- 12.1 moved anchor/growth/wrapping to container-level setters, and PTR 7
     -- renamed them again (SetAuraLayout* -> SetFlowLayout*). ApplyContainerFlowLayout
     -- feature-detects and applies whichever the live client exposes. Keeping this
@@ -2748,9 +2827,13 @@ local function SyncContainerGeometry(container, lane, parentFrame, forceGeometry
     -- A one-icon native row/line is the secret-safe vertical layout primitive;
     -- horizontal lanes retain their configured full row width.
     local initialAnchor = lane.initialAnchor or "TOPLEFT"
+    -- maximumLineSize measures CONTENT extent; the host box (lane.width/height)
+    -- already includes 2*padding, so strip it back out for the line limit.
     ApplyContainerFlowLayout(container, initialAnchor,
         lane.xSign or 1, lane.ySign or -1,
-        lane.verticalGrowth == true and (lane.size or 1) or (lane.width or lane.size or 1))
+        lane.verticalGrowth == true and (lane.size or 1)
+            or ((lane.width or lane.size or 1) - 2 * (lane.padding or 0)),
+        lane.padding)
     container.createdButtons = lane.max
     container:SetSize(lane.size or 1, lane.size or 1)
     if parentFrame and layoutHost then
@@ -2773,11 +2856,14 @@ local function SyncContainerGeometry(container, lane, parentFrame, forceGeometry
     if parentFrame then
         local level = (parentFrame:GetFrameLevel() or 0) + AuraIconBaseOffset(parentFrame) + (lane.layer or 1)
         if layoutHost and layoutHost.SetFrameLevel then
-            -- Host-only level writes: the container (a child of the host)
-            -- and its AuraButtons follow through C-side parent delta
-            -- propagation, which no PTR 7 seal can block.
             layoutHost:SetFrameLevel(level)
-        elseif container.SetFrameLevel then
+        end
+        -- Reference-addon model: the CONTAINER is the single layering
+        -- authority — its level and strata are written explicitly and
+        -- relatively on every geometry sync (container writes stick on PTR 7,
+        -- probe-verified; fresh containers take them pre-seal). AuraButtons
+        -- are never re-leveled: they spawn at container level + 1 and follow.
+        if container.SetFrameLevel then
             container:SetFrameLevel(level)
         end
     end
@@ -2787,19 +2873,17 @@ local function SyncContainerGeometry(container, lane, parentFrame, forceGeometry
 end
 
 local function PrepareAuraButton(button, lane, index)
-    ValidatePTR4AuraButtonContract(button)
+    ValidateNativeAuraButtonContract(button)
     button._msufA3NativeButton = true
     button._msufA3LaneKind = lane.kind
     LayoutButton(button, lane, index)
-    local buttonParent = button:GetParent()
     button:SetAlpha(1)
-    local parentFrame = button._msufA3ParentFrame
-    if parentFrame then
-        SyncFrameStrata(button, ResolveFrameStrata(parentFrame, lane.strata))
-        button:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + AuraIconBaseOffset(parentFrame) + (lane.layer or 1) + 1)
-    else
-        button:SetFrameLevel((buttonParent:GetFrameLevel() or 0) + 1)
-    end
+    -- Reference-addon model: never touch AuraButton level or strata. Buttons
+    -- spawn at container level + 1 and inherit the container's strata, and the
+    -- container is the single explicitly-written layering authority. Button
+    -- writes are the one surface PTR 7 restricts hardest (template-sealed,
+    -- access-denied while auras are secret), so owning zero of them makes the
+    -- chain immune to those rules.
     if lane.unit == "player" and lane.kind == "buff" then
         button:SetCancelAuraButtons("RightButtonUp")
     end
@@ -2904,13 +2988,12 @@ local function PrepareAuraButton(button, lane, index)
         -- formatted from the secret duration object with no addon cost. MSUF caps
         -- long buffs at localized whole minutes instead of raw seconds or
         -- hour/day units.
+        -- PTR 7 duration-text options: the formatter rides `textFormatter`
+        -- (the pre-PTR7 `formatter` key is silently dropped). Smooth C-side
+        -- color curves stay OUT until DurationTextBindingColorOptions is
+        -- source-verified: no pcall probing in initializeFrame, ever.
         local formatter = BuildAuraDurationFormatter(lane)
         if formatter then
-            -- PTR 7 (12.1) renamed the duration-text formatter option from
-            -- `formatter` to `textFormatter`; the old key is dropped by
-            -- ProcessCustomAuraButtonDurationTextOptions, which silently reverts to
-            -- Blizzard's default formatter (losing MSUF's color escapes + minute
-            -- suffix + decimals). The MSUF NumericRuleFormatter object is unchanged.
             _durationTextOptions.textFormatter = formatter
             button:SetDurationText(duration, _durationTextOptions)
             _durationTextOptions.textFormatter = nil
@@ -3033,20 +3116,26 @@ local function PrepareAuraButton(button, lane, index)
         if shadowOuter then shadowOuter:Hide() end
     end
 
-    button:SetMouseMotionEnabled(lane.showTooltip ~= false)
-    -- PTR 7 tooltips: the dedicated AuraButtonTooltip is positioned from the
-    -- button's own anchor state; without SetTooltipAnchorPoint the intrinsic
-    -- calls SetOwner with a nil anchor and the tooltip never appears. Mirror
-    -- MSUF's global unit-tooltip settings onto the button (cold path, once per
-    -- created button): CURSOR anchor follows the cursor, everything else uses
-    -- the classic bottom-right aura anchor; OOC mode maps to the native
-    -- combat-hide flag.
-    if lane.showTooltip ~= false and type(button.SetTooltipAnchorPoint) == "function" then
+    -- PTR 7 aura tooltips are wired natively: the AuraButton intrinsic ships a
+    -- default tooltipAnchorPoint ("ANCHOR_BOTTOMLEFT" KeyValue) and shows the
+    -- shared AuraButtonTooltip from its own OnEnter whenever mouse motion is
+    -- enabled and the container has a unit. Enabling motion is therefore the
+    -- ONLY thing that makes a tooltip appear/disappear; the anchor + combat-hide
+    -- calls below merely restyle it to match MSUF's unit-info tooltip. This is
+    -- the button cold path (initializeFrame, once per created button) and the
+    -- native OnEnter carries zero addon cost per hover.
+    local wantTooltip = lane.showTooltip ~= false
+    button:SetMouseMotionEnabled(wantTooltip)
+    if wantTooltip and type(button.SetTooltipAnchorPoint) == "function" then
         local general = _G.MSUF_DB and _G.MSUF_DB.general
-        local anchor = "ANCHOR_BOTTOMRIGHT"
-        if general and general.unitTooltipAnchor == "CURSOR" then anchor = "ANCHOR_CURSOR" end
+        -- CURSOR follows the cursor like MSUF's modern unit tooltip; FIXED and
+        -- EXTERNAL are unit-info-frame placements with no per-button meaning, so
+        -- aura icons keep the classic bottom-right growth anchor.
+        local anchor = (general and general.unitTooltipAnchor == "CURSOR")
+            and "ANCHOR_CURSOR" or "ANCHOR_BOTTOMRIGHT"
         button:SetTooltipAnchorPoint(anchor)
         if type(button.SetHideTooltipInCombat) == "function" then
+            -- OOC ("only out of combat") maps to the native combat-hide flag.
             button:SetHideTooltipInCombat((general and general.unitTooltipMode == "OOC") == true)
         end
     end
@@ -3161,7 +3250,7 @@ end
 
 local function PrepareDispelSensorButton(button, sensor, parentFrame, index)
     if not (button and sensor and parentFrame) then return false end
-    ValidatePTR4AuraButtonContract(button)
+    ValidateNativeAuraButtonContract(button)
     button._msufA3NativeButton = true
     button._msufA3DispelSensor = sensor.visual
     if button.EnableMouse then button:EnableMouse(false) end
@@ -3253,17 +3342,13 @@ local function BuildManagedAuraGroupOptions(container, lane)
             nextIndex = nextIndex + 1
             button._msufA3ManagedAuraButton = true
             button._msufA3ParentFrame = container._msufA3ParentFrame
-            local groupButtons = container._msufA3ManagedGroupButtons
-            if groupButtons then
-                groupButtons[nextIndex] = button
-            else
-                container[nextIndex] = button
-            end
+            -- No MSUF-side button bookkeeping: 12.1 exposes
+            -- GetAuraGroupFrame/GetAuraGroupFrameCount for enumeration.
             PrepareAuraButton(button, lane, nextIndex)
             -- A mixed owner stays at alpha 1 so fixed slots retain their own
             -- opacity and Party range can gate the owner. Carry flow opacity on
             -- its buttons instead of multiplying every sibling AuraSlot.
-            if groupButtons then button:SetAlpha(lane.alpha or 1) end
+            if container._msufA3GroupSlotsRoot == true then button:SetAlpha(lane.alpha or 1) end
         end,
     }
 end
@@ -3297,7 +3382,7 @@ local function CreateNativeAuraContainer(root, parentOverride)
         A3.nativeAuraRuntimeError = "CustomAuraContainerTemplate is unavailable"
         return nil
     end
-    if not ValidatePTR4AuraContainerContract(container) then
+    if not ValidateNativeAuraContainerContract(container) then
         if container.Hide then container:Hide() end
         return nil
     end
@@ -3312,11 +3397,35 @@ local function CreateManagedNativeLane(container, lane, parentFrame)
     container._msufA3ManagedAuraGroups = true
     container._msufA3ManagedGroupKey = ManagedAuraKey(lane)
     container.createdButtons = lane.max or 0
-    ConfigurePTR4AuraContainer(container, lane.unit)
+    ConfigureNativeAuraContainer(container, lane.unit)
 
     container:AddAuraGroup(container._msufA3ManagedGroupKey, lane.nativeFilter, BuildManagedAuraGroupOptions(container, lane))
     container._msufA3FilterString = lane.nativeFilter
     container._msufA3SortSignature = AuraSortSignature(lane)
+    -- PTR 7 item enchantments: temporary weapon enchants render as native
+    -- buttons inside the player buff flow. The frames are CustomAuraButtons,
+    -- so the normal initializeFrame styling pipeline applies unchanged.
+    -- weaponEnchants is part of the tracking signature -> toggling recreates.
+    if lane.weaponEnchants == true and type(container.AddItemEnchantment) == "function" then
+        local slots = _G.AuraContainerItemEnchantmentSlot
+        local enchantOptions = {
+            initializeFrame = function(button)
+                button._msufA3ManagedAuraButton = true
+                button._msufA3ParentFrame = container._msufA3ParentFrame
+                PrepareAuraButton(button, lane, 1)
+            end,
+        }
+        container:AddItemEnchantment(slots and slots.MainHand or 0, enchantOptions)
+        container:AddItemEnchantment(slots and slots.OffHand or 1, enchantOptions)
+        if type(container.SetItemEnchantmentLayout) == "function" then
+            local placement = _G.CustomAuraContainerItemEnchantmentPlacement
+            container:SetItemEnchantmentLayout({
+                placement = placement and placement.BeforeAuraGroups or 0,
+                elementSpacing = lane.spacing or 0,
+                lineSpacing = lane.spacing or 0,
+            })
+        end
+    end
     if not ApplyManagedAuraGroupLayout(container, container._msufA3ManagedGroupKey, lane) then
         if container.Hide then container:Hide() end
         return nil
@@ -3429,7 +3538,7 @@ local function CreateManagedDispelSensor(container, sensor, parentFrame)
     container.unit = sensor.unit
     container.createdButtons = sensor.max or 1
     container._msufA3SensorSlotFilterStrings = {}
-    ConfigurePTR4AuraContainer(container, sensor.unit)
+    ConfigureNativeAuraContainer(container, sensor.unit)
     SyncDispelSensorGeometry(container, sensor, parentFrame)
 
     for i = 1, container.createdButtons do
@@ -3490,6 +3599,7 @@ local function SyncDispelSensorRootGeometry(container, sensorRoot, parentFrame, 
         -- base so each AuraButton's explicit effect level remains authoritative
         -- and is not inherited above text/status overlays.
         container:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + 1)
+        SyncFrameStrata(container, ReadParentFrameStrata(parentFrame))
     end
     -- AuraButton setup is callback-only on PTR 5. Layout changes are part of
     -- the structural signature and replace this container instead.
@@ -3508,7 +3618,7 @@ local function CreateManagedDispelSensorRoot(container, sensorRoot, parentFrame)
     container._msufA3SensorSlotFilterStrings = {}
     container.unit = sensorRoot.unit
     container.createdButtons = sensorRoot.max or 1
-    ConfigurePTR4AuraContainer(container, sensorRoot.unit)
+    ConfigureNativeAuraContainer(container, sensorRoot.unit)
     SyncDispelSensorRootGeometry(container, sensorRoot, parentFrame)
 
     local buttonIndex = 0
@@ -3582,6 +3692,7 @@ SyncDispelSensorGeometry = function(container, sensor, parentFrame, forceGeometr
     if root then container:SetAllPoints(root) end
     if parentFrame and container.SetFrameLevel then
         container:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + 1)
+        SyncFrameStrata(container, ReadParentFrameStrata(parentFrame))
     end
     -- Do not touch already initialized AuraButtons here; they may be forbidden
     -- while aura data is secret.
@@ -3636,6 +3747,7 @@ local function SyncGroupSlotsGeometry(container, groupSlots, parentFrame, forceG
         local root = container:GetParent()
         if root then container:SetAllPoints(root) end
         if container.SetFrameLevel then container:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + 1) end
+        SyncFrameStrata(container, ReadParentFrameStrata(parentFrame))
         container._msufA3LaneSlotParent = parentFrame
     end
     container._msufA3NativeLaneConfig = groupSlots
@@ -3661,7 +3773,7 @@ local function CreateManagedGroupSlots(container, groupSlots, parentFrame)
     container._msufA3LaneSlotSortSignatures = {}
     container._msufA3GroupRootKey = groupSlots.rootKey or "GroupSlots"
     container.unit = groupSlots.unit
-    ConfigurePTR4AuraContainer(container, groupSlots.unit)
+    ConfigureNativeAuraContainer(container, groupSlots.unit)
     container:SetAlpha(1)
     local flowLane = groupSlots.flowLane
     if flowLane then
@@ -3700,7 +3812,6 @@ local function CreateManagedGroupSlots(container, groupSlots, parentFrame)
     container._msufA3FixedButtonCount = buttonIndex
     if flowLane then
         container._msufA3ManagedAuraGroups = true
-        container._msufA3ManagedGroupButtons = {}
         container._msufA3ManagedGroupKey = ManagedAuraKey(flowLane)
         container:AddAuraGroup(container._msufA3ManagedGroupKey, flowLane.nativeFilter,
             BuildManagedAuraGroupOptions(container, flowLane))
@@ -3728,7 +3839,7 @@ end
 local function HeaderGroupSlotsContainer(root, parentFrame)
     local container = parentFrame and parentFrame.AuraContainer
     if not container or container._msufA3HeaderContainerConsumed == true then return nil end
-    if not ValidatePTR4AuraContainerContract(container) then return nil end
+    if not ValidateNativeAuraContainerContract(container) then return nil end
     container._msufA3HeaderContainerConsumed = true
     container._msufA3Root = root
     return container
@@ -4253,13 +4364,27 @@ A3._CreateNativeLane = function(root, lane, parentFrame)
     -- anchored lanes as aura counts change.
     local host = CreateFrame("Frame", nil, root)
     if not host then return nil end
+    -- Birth-order levels: the host receives its final strata/level BEFORE the
+    -- container (and later its batch-created AuraButtons) are born as its
+    -- children. Children spawn at parent level + 1, so the whole chain starts
+    -- at the correct absolute level without ever needing a SetFrameLevel call
+    -- on the sealed intrinsic objects. Layer/strata changes recreate the lane
+    -- (tracking signature), which re-runs this birth ordering.
+    if parentFrame then
+        local hostStrata = ResolveFrameStrata(parentFrame, lane and lane.strata)
+        if hostStrata then SyncFrameStrata(host, hostStrata) end
+        if host.SetFrameLevel and parentFrame.GetFrameLevel then
+            host:SetFrameLevel((parentFrame:GetFrameLevel() or 0)
+                + AuraIconBaseOffset(parentFrame) + (lane and lane.layer or 1))
+        end
+    end
     local container = CreateNativeAuraContainer(root, host)
     if not container then
         if host.Hide then host:Hide() end
         return nil
     end
     container._msufA3LayoutHost = host
-    if not container then return nil end
+    container._msufA3HostParented = true
     return CreateManagedNativeLane(container, lane, parentFrame)
 end
 
@@ -4613,14 +4738,14 @@ SpellIndicatorsRuntime.Install({
     addonName = AURA_CONTAINER_ADDON,
     EnsureLoaded = EnsureBlizzardAuraContainerLoaded,
     CreateContainer = CreateNativeAuraContainer,
-    ConfigureContainer = ConfigurePTR4AuraContainer,
+    ConfigureContainer = ConfigureNativeAuraContainer,
     RegisterContainer = RegisterNativeContainer,
     RebindUnit = A3._RebindNativeContainerUnit,
     IsVisible = A3._NativeContainerVisible,
     HideContainer = A3._HideLane,
     RecreateGroupSlots = RecreateGroupSlots,
     SetRangeAlpha = SetRangeAlpha,
-    ValidateAuraButton = ValidatePTR4AuraButtonContract,
+    ValidateAuraButton = ValidateNativeAuraButtonContract,
     PrepareAuraButton = PrepareAuraButton,
 })
 
@@ -4893,7 +5018,7 @@ local function CreateClassPowerAuraSensor(parent, key, spellIDs, initializeFrame
     -- do not include it in Auras3's generic world-repair registry until it has a
     -- stored geometry descriptor that can be replayed safely.
     container._msufA3SkipDirectIdentityRefresh = true
-    ConfigurePTR4AuraContainer(container, "player")
+    ConfigureNativeAuraContainer(container, "player")
     container:AddAuraSlot(tostring(key or "msuf_classpower"), "HELPFUL", {
         maxFrameCount = 1,
         candidateFilters = { includeSpellIDs = spellIDs },
