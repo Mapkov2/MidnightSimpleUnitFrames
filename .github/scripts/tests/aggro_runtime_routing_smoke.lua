@@ -390,7 +390,7 @@ party:Fire("UNIT_THREAT_LIST_UPDATE", "party1")
 Check(party._msufBorderShown == false,
   "authoritative threat clear did not remove the remaining border")
 
--- The EUI-style fast path must preserve the existing shared-border priority
+-- The flat-lane fast path must preserve the existing shared-border priority
 -- contract when a dispel or test visual is active.
 combatByUnit.party1 = true
 threatByUnit.party1 = 3

@@ -951,7 +951,7 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     EnsureFreshGroupAuraNativeRenderer(db.gf_mythicraid)
     db.bars = db.bars or {}
     SetDefault(db.bars, "showAltMana", false)
-    -- Match the performance baseline used by EUI: native interpolation is an
+    -- Performance baseline: native interpolation is an
     -- explicit visual option, never an implicit cost on a fresh profile.
     db.bars.smoothPowerBar = false
     db.bars.classPowerSmoothFill = false

@@ -48,8 +48,8 @@ local CUSTOM_FRAME_EFFECTS = VTP "none=None|healthtint=Health Tint|border=Border
 local DEBUFF_TYPE_BORDER_MODE_VALUES = VTP "OFF=Off|BORDER=Border|SYMBOL=Border + Symbol"
 local COOLDOWN_SWIPE_DIRECTION_VALUES = VTP "NORMAL=Normal|REVERSE=Reverse"
 local AURA_SORT_DIRECTION_VALUES = VTP "NORMAL=Normal|REVERSE=Reversed"
-local BUFF_AURA_SORT_METHOD_VALUES = VTP "DEFAULT=Player & Priority First|BIG_DEFENSIVE=Other Defensives First|IMPORTANT_FIRST=Important First|EXPIRATION=Player First, Expiring Soon|EXPIRATION_ONLY=Expiring Soon|NAME=Player First, then Name|NAME_ONLY=Name"
-local DEBUFF_AURA_SORT_METHOD_VALUES = VTP "DEFAULT=Player & Priority First|UNIT_FRAME_DEBUFF=Debuff Type First|IMPORTANT_FIRST=Important First|EXPIRATION=Player First, Expiring Soon|EXPIRATION_ONLY=Expiring Soon|NAME=Player First, then Name|NAME_ONLY=Name"
+local BUFF_AURA_SORT_METHOD_VALUES = VTP "DEFAULT=Player & Priority First|BIG_DEFENSIVE=Other Defensives First|IMPORTANT_FIRST=Important First|EXPIRATION=Player First, Expiring Soon|EXPIRATION_ONLY=Expiring Soon|NAME=Player First, then Name|NAME_ONLY=Name|INSTANCE_ID=Arrival Order"
+local DEBUFF_AURA_SORT_METHOD_VALUES = VTP "DEFAULT=Player & Priority First|UNIT_FRAME_DEBUFF=Debuff Type First|IMPORTANT_FIRST=Important First|EXPIRATION=Player First, Expiring Soon|EXPIRATION_ONLY=Expiring Soon|NAME=Player First, then Name|NAME_ONLY=Name|INSTANCE_ID=Arrival Order"
 local DURATION_BAR_DISPLAY_VALUES = VTP "BAR_ONLY=Bar Only|OVERLAY=Icon + Bar"
 local DURATION_BAR_POSITION_VALUES = VTP "BOTTOM=Bottom|TOP=Top"
 local DURATION_BAR_DIRECTION_VALUES = VTP "REMAINING=Remaining|ELAPSED=Elapsed"
@@ -95,8 +95,8 @@ function M.AttachAuraFontsAndColors(section, title, unit)
         },
     })
 end
-local BUFF_AURA_SORT_METHOD_OK = { DEFAULT=true, BIG_DEFENSIVE=true, IMPORTANT_FIRST=true, EXPIRATION=true, EXPIRATION_ONLY=true, NAME=true, NAME_ONLY=true }
-local DEBUFF_AURA_SORT_METHOD_OK = { DEFAULT=true, UNIT_FRAME_DEBUFF=true, IMPORTANT_FIRST=true, EXPIRATION=true, EXPIRATION_ONLY=true, NAME=true, NAME_ONLY=true }
+local BUFF_AURA_SORT_METHOD_OK = { DEFAULT=true, BIG_DEFENSIVE=true, IMPORTANT_FIRST=true, EXPIRATION=true, EXPIRATION_ONLY=true, NAME=true, NAME_ONLY=true, INSTANCE_ID=true }
+local DEBUFF_AURA_SORT_METHOD_OK = { DEFAULT=true, UNIT_FRAME_DEBUFF=true, IMPORTANT_FIRST=true, EXPIRATION=true, EXPIRATION_ONLY=true, NAME=true, NAME_ONLY=true, INSTANCE_ID=true }
 local function AuraSortMethodValues(lane)
     return lane == "debuff" and DEBUFF_AURA_SORT_METHOD_VALUES or BUFF_AURA_SORT_METHOD_VALUES
 end
@@ -115,7 +115,7 @@ local AURA_ANCHOR_LABELS = {
 local AURA_SORT_SUMMARY_LABELS = {
     DEFAULT = "Priority first", BIG_DEFENSIVE = "Defensives first", UNIT_FRAME_DEBUFF = "Debuff type first",
     IMPORTANT_FIRST = "Important first", EXPIRATION = "Player + expiring", EXPIRATION_ONLY = "Expiring soon",
-    NAME = "Player + name", NAME_ONLY = "Name",
+    NAME = "Player + name", NAME_ONLY = "Name", INSTANCE_ID = "Arrival order",
 }
 local function AnchorLabel(value)
     value = tostring(value or "CENTER"):upper()
@@ -1107,6 +1107,22 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
         durationBarDirection = "REMAINING",
         iconZoom = 100,
     }
+    -- Shared icon style (border/shadow) is one global block; the preview
+    -- mirrors it for every scope and lane, matching the live runtime stamp.
+    if type(Model.ReadBool) == "function" then
+        cfg.styleBorderEnabled = Model.ReadBool("shared", "styleBorderEnabled", false) == true
+        cfg.styleShadowEnabled = Model.ReadBool("shared", "styleShadowEnabled", false) == true
+    end
+    if type(Model.ReadNumber) == "function" then
+        cfg.styleBorderThickness = Model.ReadNumber("shared", "styleBorderThickness", 1, 1, 8)
+        cfg.styleShadowSize = Model.ReadNumber("shared", "styleShadowSize", 4, 1, 16)
+    end
+    if type(Model.ReadValue) == "function" then
+        local bc = Model.ReadValue("shared", "styleBorderColor", nil)
+        cfg.styleBorderColor = type(bc) == "table" and bc or nil
+        local sc = Model.ReadValue("shared", "styleShadowColor", nil)
+        cfg.styleShadowColor = type(sc) == "table" and sc or nil
+    end
     if isGroup then
         local group = GFReadGroup(scope, lane or "debuff")
         local root = GFReadRoot(scope)
@@ -1323,6 +1339,61 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
         icon.swipe:Hide()
         icon.durationBar:Hide()
         icon.dispelBorder:Hide()
+        if icon.msufStyleBorder then icon.msufStyleBorder:Hide() end
+        if icon.msufStyleShadowIn then icon.msufStyleShadowIn:Hide() end
+        if icon.msufStyleShadowOut then icon.msufStyleShadowOut:Hide() end
+    end
+    -- Mirrors the runtime's LayoutButton icon style: BORDER-layer ring below
+    -- the icon plus a two-step BACKGROUND shadow.
+    local function ApplyPreviewIconStyle(icon, cfg, barOnly)
+        local border = icon.msufStyleBorder
+        if cfg.styleBorderEnabled == true and not barOnly then
+            if not border then
+                border = icon:CreateTexture(nil, "BORDER", nil, -1)
+                border:SetTexture("Interface\\Buttons\\WHITE8X8")
+                icon.msufStyleBorder = border
+            end
+            local t = cfg.styleBorderThickness or 1
+            local c = cfg.styleBorderColor
+            border:ClearAllPoints()
+            border:SetPoint("TOPLEFT", icon, "TOPLEFT", -t, t)
+            border:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", t, -t)
+            border:SetVertexColor(c and c[1] or 0, c and c[2] or 0, c and c[3] or 0, c and c[4] or 1)
+            border:Show()
+        elseif border then
+            border:Hide()
+        end
+        local inner = icon.msufStyleShadowIn
+        local outer = icon.msufStyleShadowOut
+        if cfg.styleShadowEnabled == true and not barOnly then
+            if not inner then
+                inner = icon:CreateTexture(nil, "BACKGROUND", nil, -6)
+                inner:SetTexture("Interface\\Buttons\\WHITE8X8")
+                icon.msufStyleShadowIn = inner
+                outer = icon:CreateTexture(nil, "BACKGROUND", nil, -7)
+                outer:SetTexture("Interface\\Buttons\\WHITE8X8")
+                icon.msufStyleShadowOut = outer
+            end
+            local base = cfg.styleBorderEnabled == true and (cfg.styleBorderThickness or 1) or 0
+            local size = cfg.styleShadowSize or 4
+            local innerE = base + max(1, floor((size * 0.5) + 0.5))
+            local outerE = base + size
+            local c = cfg.styleShadowColor
+            local cr, cg, cb, ca = c and c[1] or 0, c and c[2] or 0, c and c[3] or 0, c and c[4] or 0.8
+            inner:ClearAllPoints()
+            inner:SetPoint("TOPLEFT", icon, "TOPLEFT", -innerE, innerE)
+            inner:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", innerE, -innerE)
+            inner:SetVertexColor(cr, cg, cb, ca * 0.6)
+            inner:Show()
+            outer:ClearAllPoints()
+            outer:SetPoint("TOPLEFT", icon, "TOPLEFT", -outerE, outerE)
+            outer:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", outerE, -outerE)
+            outer:SetVertexColor(cr, cg, cb, ca * 0.3)
+            outer:Show()
+        elseif inner then
+            inner:Hide()
+            if outer then outer:Hide() end
+        end
     end
     local function RenderPreviewIcon(icon, index, cfg, isBuffIcon, forceText)
         icon:SetSize(cfg.size, cfg.size)
@@ -1334,6 +1405,7 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
         ApplyAuraPreviewIconZoom(icon.icon, cfg.iconZoom)
         icon.bg:SetShown(not barOnly)
         icon.icon:SetShown(not barOnly)
+        ApplyPreviewIconStyle(icon, cfg, barOnly)
         local r, g, b = isBuffIcon and 0.20 or 0.78, isBuffIcon and 0.72 or 0.20, isBuffIcon and 0.42 or 0.24
         local borderAtlas = (not barOnly and not isBuffIcon) and DEBUFF_TYPE_BORDER_PREVIEW_ATLAS[cfg.debuffBorderMode] or nil
         local showPreviewEdges = isBuffIcon == true and not barOnly
@@ -1825,6 +1897,82 @@ local function BuildUnitStyle(ctx, b, scope)
             type(Model.DebuffTypeBorderModeValues) == "function" and Model.DebuffTypeBorderModeValues() or DEBUFF_TYPE_BORDER_MODE_VALUES,
             fw - 48, ReadScopeDebuffBorderMode, WriteScopeDebuffBorderMode, "AURAS3_DEBUFF_TYPE_BORDER_MODE")
     end
+
+    -- Shared icon style (static border + soft shadow). One global
+    -- block: writes apply to every aura lane on all frames (Buffs, Debuffs,
+    -- Custom containers incl. the Dot tracker), so after the scope apply we
+    -- also request a global aura refresh.
+    local iconStyle = b:CollapsibleSection(baseId .. "_icon_style", "Icon Border & Shadow (all lanes)", 232, false)
+    local isw = BodyWidth(iconStyle)
+    local styleCol = max(140, floor((isw - 68) / 2))
+    local styleGap = 10
+    local function IconStyleWrite(key, value, reason)
+        if type(Model.WriteValue) == "function" then Model.WriteValue(unit, key, value) end
+        ApplyUnit(ctx, unit, reason)
+        local runtime = _G.MSUF_Auras3
+        if runtime and type(runtime.RequestApply) == "function" then runtime.RequestApply(reason) end
+        RefreshStylePreview()
+    end
+    local function IconStyleReadColor(colorKey, defaultColor)
+        local c = type(Model.ReadValue) == "function" and Model.ReadValue(unit, colorKey, defaultColor) or defaultColor
+        if type(c) ~= "table" then c = defaultColor end
+        return c
+    end
+    local function IconStyleSwitch(label, y, key, reason)
+        return AddStyleControl(BindSwitch(ctx, iconStyle, label, 24, y, styleCol,
+            function() return (type(Model.ReadBool) == "function" and Model.ReadBool(unit, key, false)) == true end,
+            function(v) IconStyleWrite(key, v == true, reason) end,
+            AuraControlMeta(ctx, "style.shared.icon-style." .. AuraCatalogToken(key))))
+    end
+    local function IconStyleSlider(label, col, y, minVal, maxVal, key, defaultValue, reason)
+        return AddStyleControl(BindSlider(ctx, iconStyle, label, 24 + col * (styleCol + styleGap), y,
+            minVal, maxVal, 1, styleCol,
+            function()
+                local value = type(Model.ReadValue) == "function" and Model.ReadValue(unit, key, defaultValue) or defaultValue
+                return tonumber(value) or defaultValue
+            end,
+            function(value) IconStyleWrite(key, tonumber(value) or defaultValue, reason) end,
+            AuraControlMeta(ctx, "style.shared.icon-style." .. AuraCatalogToken(key))))
+    end
+    local function IconStyleColor(label, y, colorKey, defaultColor, reason)
+        local swatch = W.Color(iconStyle, label)
+        M.BindColor(ctx, swatch,
+            function()
+                local c = IconStyleReadColor(colorKey, defaultColor)
+                return c[1] or defaultColor[1], c[2] or defaultColor[2], c[3] or defaultColor[3]
+            end,
+            function(r, g, blue)
+                local c = IconStyleReadColor(colorKey, defaultColor)
+                IconStyleWrite(colorKey, { r, g, blue, c[4] or defaultColor[4] }, reason)
+            end,
+            AuraControlMeta(ctx, "style.shared.icon-style." .. AuraCatalogToken(colorKey)))
+        W.MoveWidget(swatch, iconStyle, 24 + styleCol + styleGap, y, styleCol, "LEFT")
+        AddStyleControl(swatch)
+        return swatch
+    end
+    local function IconStyleAlphaSlider(label, col, y, colorKey, defaultColor, reason)
+        return AddStyleControl(BindSlider(ctx, iconStyle, label, 24 + col * (styleCol + styleGap), y,
+            0, 100, 1, styleCol,
+            function()
+                local c = IconStyleReadColor(colorKey, defaultColor)
+                return floor(((tonumber(c[4]) or defaultColor[4]) * 100) + 0.5)
+            end,
+            function(value)
+                local c = IconStyleReadColor(colorKey, defaultColor)
+                IconStyleWrite(colorKey, { c[1] or defaultColor[1], c[2] or defaultColor[2], c[3] or defaultColor[3], (tonumber(value) or 100) / 100 }, reason)
+            end,
+            AuraControlMeta(ctx, "style.shared.icon-style." .. AuraCatalogToken(colorKey) .. "-alpha")))
+    end
+    local ICON_STYLE_BORDER_DEFAULT = { 0, 0, 0, 1 }
+    local ICON_STYLE_SHADOW_DEFAULT = { 0, 0, 0, 0.8 }
+    IconStyleSwitch("Icon Border", -34, "styleBorderEnabled", "AURAS3_ICON_STYLE_BORDER")
+    IconStyleColor("Border Color", -34, "styleBorderColor", ICON_STYLE_BORDER_DEFAULT, "AURAS3_ICON_STYLE_BORDER_COLOR")
+    IconStyleSlider("Border Thickness", 0, -66, 1, 8, "styleBorderThickness", 1, "AURAS3_ICON_STYLE_BORDER")
+    IconStyleAlphaSlider("Border Alpha (%)", 1, -66, "styleBorderColor", ICON_STYLE_BORDER_DEFAULT, "AURAS3_ICON_STYLE_BORDER_COLOR")
+    IconStyleSwitch("Icon Shadow", -122, "styleShadowEnabled", "AURAS3_ICON_STYLE_SHADOW")
+    IconStyleColor("Shadow Color", -122, "styleShadowColor", ICON_STYLE_SHADOW_DEFAULT, "AURAS3_ICON_STYLE_SHADOW_COLOR")
+    IconStyleSlider("Shadow Size", 0, -154, 1, 16, "styleShadowSize", 4, "AURAS3_ICON_STYLE_SHADOW")
+    IconStyleAlphaSlider("Shadow Alpha (%)", 1, -154, "styleShadowColor", ICON_STYLE_SHADOW_DEFAULT, "AURAS3_ICON_STYLE_SHADOW_COLOR")
 
     local stack = b:CollapsibleSection(baseId .. "_stack", "Stack Count", 296, false)
     if W.AttachContextColorShortcut then

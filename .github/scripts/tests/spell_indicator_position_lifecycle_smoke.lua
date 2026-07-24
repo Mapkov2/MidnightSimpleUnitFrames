@@ -116,8 +116,12 @@ function Frame:ClearDurationBar()
   self.clearDurationBarCalls = (self.clearDurationBarCalls or 0) + 1
   self._mockPrivateDurationBar = nil
 end
-function Frame:ClearAuraBorder() end
-function Frame:ClearAuraSymbol() end
+-- PTR 7 dispel display names (runtime no longer calls the deprecated
+-- SetAuraBorder/SetAuraSymbol aliases).
+function Frame:ClearDispelTypeTextures() end
+function Frame:ClearDispelTypeText() end
+function Frame:AddDispelTypeTexture() end
+function Frame:SetDispelTypeText() end
 function Frame:CreateTexture() return NewFrame(self) end
 function Frame:CreateFontString() return NewFrame(self) end
 function Frame:GetTimerDuration() return self.timerDuration end

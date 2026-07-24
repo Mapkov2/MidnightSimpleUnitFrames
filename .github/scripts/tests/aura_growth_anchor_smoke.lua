@@ -158,9 +158,12 @@ local AURA_BUTTON_BINDINGS = {
     "SetDurationBar", "ClearDurationBar",
     "SetDurationText", "ClearDurationText",
     "SetApplicationCount", "ClearApplicationCount",
-    "SetAuraBorder", "ClearAuraBorder",
-    "SetAuraSymbol", "ClearAuraSymbol",
+    -- PTR 7 dispel display names (SetAuraBorder/SetAuraSymbol aliases are
+    -- deprecated and no longer called by the runtime).
+    "AddDispelTypeTexture", "ClearDispelTypeTextures",
+    "SetDispelTypeText", "ClearDispelTypeText",
     "SetMouseMotionEnabled", "SetCancelAuraButtons",
+    "SetTooltipAnchorPoint", "SetHideTooltipInCombat",
 }
 
 local function NewAuraButton(parent)
@@ -284,23 +287,8 @@ function Frame:SetAuraSlotFilterString(slotKey, filter)
 end
 function Frame:AddItemEnchantment() end
 function Frame:UpdateAllAuras() self.updateAllAurasCalls = (self.updateAllAurasCalls or 0) + 1 end
-function Frame:SetAuraLayoutAnchorPoint(anchor)
-    self.layoutSetterCalls.anchor = self.layoutSetterCalls.anchor + 1
-    self.auraLayoutAnchorPoint = anchor
-end
-function Frame:SetAuraLayoutGrowthDirection(horizontalDirection, verticalDirection)
-    self.layoutSetterCalls.growth = self.layoutSetterCalls.growth + 1
-    self.auraLayoutHorizontalDirection = horizontalDirection
-    self.auraLayoutVerticalDirection = verticalDirection
-end
-function Frame:SetAuraLayoutRowWidth(width)
-    self.layoutSetterCalls.width = self.layoutSetterCalls.width + 1
-    self.auraLayoutRowWidth = width
-end
--- PTR 7 (12.1) renamed the container layout setters. The runtime prefers these
--- and falls back to the SetAuraLayout* names above on not-yet-patched clients.
--- Route both onto the same captured state/counters so assertions are stable
--- regardless of which branch the runtime takes.
+-- PTR 7 (12.1) container flow layout API; the legacy SetAuraLayout* setters
+-- were removed from the client and from the runtime.
 function Frame:SetFlowLayoutAnchorPoint(anchor)
     self.layoutSetterCalls.anchor = self.layoutSetterCalls.anchor + 1
     self.auraLayoutAnchorPoint = anchor
@@ -319,6 +307,13 @@ end
 _G.AnchorUtil = _G.AnchorUtil or {
     FlowDirection = { Left = -1, Right = 1, Up = 1, Down = -1 },
     FlowLayoutAxis = { Horizontal = 0, Vertical = 1 },
+}
+-- PTR 7 dispel texture style enum: the runtime must route sensors through
+-- PreserveAsset (keep MSUF art, color only) and lane borders through
+-- Border/BorderWithIcon. Values are arbitrary; MSUF resolves by name.
+_G.Enum = _G.Enum or {}
+_G.Enum.CustomAuraButtonDispelTypeTextureStyle = _G.Enum.CustomAuraButtonDispelTypeTextureStyle or {
+    Border = 0, BorderWithIcon = 1, Icon = 2, PreserveAsset = 3, CustomAsset = 4,
 }
 
 _G.CreateFrame = function(frameType, _, parent)
@@ -770,6 +765,29 @@ do
     local playerCast = CompileBorder("PLAYER_CAST", false)
     Equal(playerCast.sensors.dispelBorder.max, 1,
         "group player-cast border retained duplicate AuraSlots")
+
+    -- PTR 7 multiple dispel textures: N corner positions consolidate onto ONE
+    -- AuraSlot whose button carries one region per corner.
+    local cornerFrame = NewFrame(nil)
+    cornerFrame._msufIsGroupFrame = true
+    cornerFrame._msufGFKind = "party"
+    cornerFrame.MSUFUnitKey = "party1"
+    cornerFrame.MSUFSpec = {
+        auras = { enabled = true },
+        cornerIndicators = {
+            enabled = true, needsDispel = true, size = 10,
+            dispelSlots = {
+                { key = "tl", anchor = "TOPLEFT", x = 1, y = -1 },
+                { key = "br", anchor = "BOTTOMRIGHT", x = -1, y = 1 },
+            },
+        },
+    }
+    Check(AurasElement.IsEnabled(cornerFrame) == true, "group corner sensor did not compile")
+    local cornerCfg = assert(cornerFrame._msufA3NativeGroupConfig)
+    Equal(cornerCfg.sensors.dispelCorner.max, 1,
+        "corner sensor did not consolidate onto one AuraSlot")
+    Equal(cornerCfg.sensors.dispelCorner.filterCount, 2,
+        "corner sensor lost its per-corner region count")
 end
 
 -- The direct identity driver is shared by all eligible native containers, but
@@ -1938,6 +1956,46 @@ do
     Near(verticalFallback.laneBottom, 50 + 5 - 35, "vertical custom preview fallback anchored Y")
 end
 
+-- Shared icon style (border + shadow): stamped onto every finalized
+-- lane, rendered once per button inside initializeFrame, and part of the lane
+-- layout signature so style changes recreate containers.
+do
+    local baseline = UnitLane("TOPRIGHT", "RIGHT")
+    Check(type(baseline.iconStyle) == "table", "lane missing shared icon style stamp")
+    Check(baseline.iconStyle.borderEnabled == false and baseline.iconStyle.shadowEnabled == false,
+        "icon style default is not off")
+    local baselineSig = baseline._msufA3LayoutSignature
+    local shared = _G.MSUF_DB.auras3.shared
+    shared.styleBorderEnabled = true
+    shared.styleBorderThickness = 2
+    shared.styleBorderColor = { 0.10, 0.20, 0.30, 0.90 }
+    shared.styleShadowEnabled = true
+    shared.styleShadowSize = 4
+    A3._runtimeConfigGen = (A3._runtimeConfigGen or 1) + 1
+    local cfg = assert(A3.ResolveUnitFrameConfig("player", {}))
+    local styled = assert(cfg.lanes and cfg.lanes.buff)
+    Check(styled.iconStyle.borderEnabled == true and styled.iconStyle.shadowEnabled == true,
+        "shared icon style did not compile onto the lane")
+    Equal(styled.iconStyle.borderThickness, 2, "icon style border thickness")
+    Check(styled._msufA3LayoutSignature ~= baselineSig,
+        "icon style change did not alter the lane layout signature")
+    local container = ApplyLane(styled)
+    local frames = assert(container:GetAuraGroup(container._msufA3ManagedGroupKey)):GetFramesByIndex()
+    Check(#frames > 0, "styled lane created no buttons")
+    for i = 1, #frames do
+        local button = frames[i]
+        local border = button._msufA3StyleBorder
+        Check(border ~= nil, "styled button missing border texture")
+        Equal(border.point and border.point[4], 2, "border ring x inset")
+        Equal(border.point and border.point[5], -2, "border ring y inset")
+        Check(button._msufA3StyleShadowInner ~= nil and button._msufA3StyleShadowOuter ~= nil,
+            "styled button missing shadow steps")
+        Equal(button._msufA3StyleShadowOuter.point and button._msufA3StyleShadowOuter.point[4], 6,
+            "shadow outer extent (border 2 + size 4)")
+    end
+    A3._HideLane(container)
+end
+
 -- Static integration guards: live, Edit Mode, Menu2 unit/group previews, and
 -- the group External lane all preserve the same full-capacity rectangle and
 -- selected-anchor/internal-flow split.
@@ -1953,10 +2011,14 @@ Check(runtimeSource:find("layoutHost:SetPoint(lane.anchor, parentFrame, lane.anc
 Check(runtimeSource:find("SetFlowLayoutAnchorPoint", 1, true), "PTR7 flow layout anchor setter missing")
 Check(runtimeSource:find("SetFlowLayoutGrowthDirection", 1, true), "PTR7 flow growth setter missing")
 Check(runtimeSource:find("SetFlowLayoutMaximumLineSize", 1, true), "PTR7 flow max-line-size setter missing")
--- Legacy fallback retained for not-yet-patched 12.1 clients.
-Check(runtimeSource:find("SetAuraLayoutAnchorPoint", 1, true), "legacy layout anchor fallback removed")
-Check(runtimeSource:find("SetAuraLayoutGrowthDirection", 1, true), "legacy growth fallback removed")
-Check(runtimeSource:find("SetAuraLayoutRowWidth", 1, true), "legacy row-width fallback removed")
+-- The pre-PTR7 setters were removed from the client; the runtime must not
+-- reference them anymore.
+Check(not runtimeSource:find("SetAuraLayoutAnchorPoint", 1, true), "removed legacy layout anchor setter resurfaced")
+Check(not runtimeSource:find("SetAuraLayoutGrowthDirection", 1, true), "removed legacy growth setter resurfaced")
+Check(not runtimeSource:find("SetAuraLayoutRowWidth", 1, true), "removed legacy row-width setter resurfaced")
+-- Same for the deprecated dispel display aliases.
+Check(not runtimeSource:find("button:SetAuraBorder(", 1, true), "deprecated SetAuraBorder call resurfaced")
+Check(not runtimeSource:find("button:SetAuraSymbol(", 1, true), "deprecated SetAuraSymbol call resurfaced")
 Check(runtimeSource:find("lane.verticalGrowth == true", 1, true)
     and runtimeSource:find("and (lane.size or 1) or (lane.width or lane.size or 1)", 1, true),
     "native vertical layout no longer forces one-icon rows")
@@ -1970,7 +2032,7 @@ Check(Count(runtimeSource, "EnsureAuraTextOverlay(button) or button") == 1
     "AuraButton initialization regained duplicate overlay or geometry work")
 Check(runtimeSource:find('lane._msufA3DurationFormatter', 1, true)
     and runtimeSource:find('button:SetApplicationCount(count, _applicationCountOptions)', 1, true)
-    and runtimeSource:find('button:SetAuraSymbol(symbol, _auraSymbolOptions)', 1, true),
+    and runtimeSource:find('button:SetDispelTypeText(symbol, _auraSymbolOptions)', 1, true),
     "AuraButton initialization no longer reuses formatter and option state")
 Check(runtimeSource:find('texture._msufA3IconZoomKey == zoom', 1, true)
     and not runtimeSource:find('local key = tostring(zoom)', 1, true),

@@ -97,7 +97,7 @@ flat._msufPredictionFlushData(flat, 2)
 gen._msufPredictionFlushData(gen, 2)
 Check(flat.absorbBar.shown == false, "flat: zero absorb did not hide the bar")
 
--- EUI-shape archetype: absorb + heal-prediction, no overlay -> flat writer,
+-- Flat-shape archetype: absorb + heal-prediction, no overlay -> flat writer,
 -- and BOTH bars render correctly, masked (heal event touches only heal).
 sim.absorb = 500
 sim.incomingHeal = 250
