@@ -135,10 +135,19 @@ local function EnsureGroupVisual(shell)
   return visual
 end
 
+-- Group-frame tooltip handlers, assigned in the do-block lower in this file
+-- (they need StoredAttrUnit). The file loads fully before any group child is
+-- created, so these upvalues are non-nil by the time EnsureMouseoverHooks runs.
+local GroupShowTooltip, GroupHideTooltip
+
 local function EnsureMouseoverHooks(frame)
-  if not (Highlight and frame and frame.HookScript) or frame._msufGFMouseoverHighlightHooked == true then return end
-  frame:HookScript("OnEnter", Highlight.GroupEnter)
-  frame:HookScript("OnLeave", Highlight.GroupLeave)
+  if not (frame and frame.HookScript) or frame._msufGFMouseoverHighlightHooked == true then return end
+  if Highlight then
+    frame:HookScript("OnEnter", Highlight.GroupEnter)
+    frame:HookScript("OnLeave", Highlight.GroupLeave)
+  end
+  frame:HookScript("OnEnter", GroupShowTooltip)
+  frame:HookScript("OnLeave", GroupHideTooltip)
   frame._msufGFMouseoverHighlightHooked = true
 end
 
@@ -181,6 +190,69 @@ local function StoredAttrUnit(frame)
   if value == NO_UNIT then return nil end
   if value ~= nil then return value end
   return frame and frame.MSUFUnitKey or nil
+end
+
+-- Group-frame tooltip on hover (party/raid). A short hover-delay debounce means
+-- sweeping the cursor across many raid frames never builds a tooltip for a
+-- frame the mouse only passes over -- only the frame it settles on pays the
+-- gt:SetUnit cost. All mode/anchor/dedupe and the NEVER fast-path live in
+-- Tooltips.ShowUnit; the unit token comes from the adapter's own cached
+-- attribute index (StoredAttrUnit), so there is no secure read per hover.
+do
+  local C_Timer, GetTime = C_Timer, GetTime
+  local HOVER_DELAY = 0.12
+  local pendingFrame, pendingToken, pendingAt, timerActive
+
+  local function TooltipAllowed()
+    local tooltips = MSUF.Tooltips
+    return not tooltips or type(tooltips.Allowed) ~= "function" or tooltips.Allowed()
+  end
+
+  local function TimerCallback()
+    timerActive = nil
+    local frame, token = pendingFrame, pendingToken
+    if not frame then return end
+    local now = GetTime and GetTime() or 0
+    if pendingAt and now < pendingAt then
+      timerActive = true
+      C_Timer.After(pendingAt - now, TimerCallback)
+      return
+    end
+    pendingFrame, pendingToken, pendingAt = nil, nil, nil
+    if frame._msufGFTooltipToken ~= token then return end
+    if frame.IsMouseOver and not frame:IsMouseOver() then return end
+    local tooltips = MSUF.Tooltips
+    if tooltips and not tooltips.hoverInert and tooltips.ShowUnit then
+      tooltips.ShowUnit(frame, StoredAttrUnit(frame))
+    end
+  end
+
+  GroupShowTooltip = function(self)
+    -- Combat fast-path: hoverInert is true when a tooltip cannot show right now
+    -- (NEVER, or OOC in combat), so an in-combat hover in those modes costs one
+    -- field read and returns before TooltipAllowed / scheduling any timer.
+    local tooltips = MSUF.Tooltips
+    if not tooltips or tooltips.hoverInert then return end
+    if not TooltipAllowed() then return end
+    local token = (self._msufGFTooltipToken or 0) + 1
+    self._msufGFTooltipToken = token
+    pendingFrame, pendingToken = self, token
+    pendingAt = (GetTime and GetTime() or 0) + HOVER_DELAY
+    if timerActive ~= true then
+      timerActive = true
+      C_Timer.After(HOVER_DELAY, TimerCallback)
+    end
+  end
+
+  GroupHideTooltip = function(self)
+    local tooltips = MSUF.Tooltips
+    if not tooltips or tooltips.hoverInert then return end
+    self._msufGFTooltipToken = (self._msufGFTooltipToken or 0) + 1
+    if pendingFrame == self then
+      pendingFrame, pendingToken, pendingAt = nil, nil, nil
+    end
+    if tooltips.HideUnit then tooltips.HideUnit(self) end
+  end
 end
 
 local function RemovePriorityUnitIndex(frame, unit)

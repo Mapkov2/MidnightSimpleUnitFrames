@@ -521,10 +521,39 @@ local function EnsureRuntimeOnShow(frame)
   end
 end
 
+-- Unit-frame tooltip on hover. The UFCore refactor (f17590e5) split the
+-- mouseover highlight into MSUF.Highlight and dropped the tooltip trigger that
+-- used to live beside it, so unit-frame tooltips stopped firing entirely. These
+-- handlers restore it and stay branch-thin: all mode/anchor/dedupe work and the
+-- NEVER fast-path live in Tooltips.ShowUnit, and the unit token is a cached
+-- plain field (no secure GetAttribute per hover).
+local function ShowUnitTooltip(frame)
+  local tooltips = MSUF.Tooltips
+  -- Combat fast-path: hoverInert is true when a tooltip cannot show right now
+  -- (NEVER, or OOC in combat), so an in-combat hover in those modes costs one
+  -- field read and returns -- zero further Lua.
+  if not tooltips or tooltips.hoverInert then return end
+  if tooltips.ShowUnit then
+    tooltips.ShowUnit(frame, frame and (frame.unitKey or frame.MSUFUnitKey))
+  end
+end
+
+local function HideUnitTooltip(frame)
+  local tooltips = MSUF.Tooltips
+  if not tooltips or tooltips.hoverInert then return end
+  if tooltips.HideUnit then
+    tooltips.HideUnit(frame)
+  end
+end
+
 local function EnsureMouseoverHooks(frame)
-  if not (Highlight and frame and frame.HookScript) or frame._msufMouseoverHighlightHooked == true then return end
-  frame:HookScript("OnEnter", Highlight.UnitEnter)
-  frame:HookScript("OnLeave", Highlight.UnitLeave)
+  if not (frame and frame.HookScript) or frame._msufMouseoverHighlightHooked == true then return end
+  if Highlight then
+    frame:HookScript("OnEnter", Highlight.UnitEnter)
+    frame:HookScript("OnLeave", Highlight.UnitLeave)
+  end
+  frame:HookScript("OnEnter", ShowUnitTooltip)
+  frame:HookScript("OnLeave", HideUnitTooltip)
   frame._msufMouseoverHighlightHooked = true
 end
 

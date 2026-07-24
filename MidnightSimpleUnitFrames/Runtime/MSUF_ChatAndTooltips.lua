@@ -468,6 +468,16 @@ local function MSUF_NormalizeTooltipSettings(g)
 end
 
 local tooltipCache = {}
+-- Combat fast-path flag. hoverInert is true exactly when a hover cannot show a
+-- tooltip right now: mode NEVER (always) or mode OOC while in combat. The
+-- per-frame OnEnter/OnLeave hooks read this single boolean and bail, so those
+-- configs cost nothing per hover in combat. It is recomputed only on combat
+-- transitions and setting changes (below), never per hover. Assigned near the
+-- combat watcher further down; forward-declared here so the cache refresh can
+-- call it.
+local MSUF_RecomputeHoverInert
+Tooltips.hoverInert = false
+
 local function MSUF_GetTooltipCache()
     local g = MSUF_GetTooltipGeneral()
     if tooltipCache.general ~= g
@@ -496,7 +506,9 @@ end
 
 local function MSUF_RefreshTooltipCache()
     tooltipCache.general = nil
-    return MSUF_GetTooltipCache()
+    local cache = MSUF_GetTooltipCache()
+    if MSUF_RecomputeHoverInert then MSUF_RecomputeHoverInert() end
+    return cache
 end
 
 local function MSUF_ApplyTooltipFixedPoint(frame, g, defaultOffsetY)
@@ -875,6 +887,43 @@ Tooltips.HideUnit = Tooltips.HideUnit or function(owner)
         HidePlayerInfoTooltip()
     end
     MSUF_ClearTrackedGameTooltip(owner)
+end
+
+-- Assign the forward-declared fast-path recompute (see MSUF_GetTooltipCache).
+-- Runs only on combat transitions, world entry, and setting changes -- never
+-- per hover. When a config becomes inert we also drop any unit tooltip we own
+-- (never another addon's, hence the owner check) so nothing lingers while the
+-- OnLeave hooks are short-circuited.
+MSUF_RecomputeHoverInert = function()
+    local mode = MSUF_GetTooltipCache().mode
+    local inert
+    if mode == TOOLTIP_MODE_NEVER then
+        inert = true
+    elseif mode == TOOLTIP_MODE_OOC then
+        inert = (_G.InCombatLockdown and _G.InCombatLockdown()) and true or false
+    else
+        inert = false
+    end
+    if inert == Tooltips.hoverInert then return end
+    Tooltips.hoverInert = inert
+    if inert then
+        local gt = _G.GameTooltip
+        if gt and not gt:IsForbidden() and gt._msufUnitTooltipOwner ~= nil then
+            MSUF_ClearTrackedGameTooltip(gt._msufUnitTooltipOwner)
+        end
+        HidePlayerInfoTooltip()
+    end
+end
+
+do
+    local watcher = _G.CreateFrame and _G.CreateFrame("Frame")
+    if watcher and type(watcher.RegisterEvent) == "function" and type(watcher.SetScript) == "function" then
+        watcher:RegisterEvent("PLAYER_REGEN_DISABLED")
+        watcher:RegisterEvent("PLAYER_REGEN_ENABLED")
+        watcher:RegisterEvent("PLAYER_ENTERING_WORLD")
+        watcher:SetScript("OnEvent", MSUF_RecomputeHoverInert)
+    end
+    MSUF_RecomputeHoverInert()
 end
 --- [8c6] Removed legacy Options UI relayout functions (Player/Bars).
 --- These were dead/duplicate layout builders superseded by MSUF_Options_Core.lua.
