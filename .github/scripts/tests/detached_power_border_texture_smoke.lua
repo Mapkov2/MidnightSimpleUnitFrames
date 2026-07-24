@@ -186,7 +186,7 @@ end
 
 -- Shipped defaults pair a textured bar with a flat background, so borrowing the
 -- foreground on detach was immediately visible.
-local DEFAULT_BARS = { detachedPowerBarTexture = "", detachedPowerBarBgTexture = "", detachedPowerBarOutline = 1 }
+local DEFAULT_BARS = { detachedPowerBarOutline = 1 }
 
 local spec = Compile("player", { showPowerBar = true, powerBarDetached = false }, DEFAULT_BARS)
 Check(spec.power.texture == FG and spec.power.backgroundTexture == BG,
@@ -202,16 +202,18 @@ spec = Compile("target", { showPowerBar = true, powerBarDetached = true }, DEFAU
 Check(spec.power.texture == FG and spec.power.backgroundTexture == BG,
   "non-player detached bar drifted from the global bar textures")
 
+-- The retired Class Resources keys must be inert even if a stale profile still
+-- carries them: the Bars page and the per-unit dropdowns own power art now.
 spec = Compile("player", { showPowerBar = true, powerBarDetached = true }, {
   detachedPowerBarTexture = "Flat", detachedPowerBarBgTexture = "Solid",
 })
-Check(spec.power.texture == "tex/Flat" and spec.power.backgroundTexture == "tex/Solid",
-  "explicit detached texture overrides stopped applying")
+Check(spec.power.texture == FG and spec.power.backgroundTexture == BG,
+  "retired detached texture keys still override the compiled power art")
 
 --------------------------------------------------------------------------------
--- Power bars carry their own art: shared bars value, per-unit override, and the
--- Class Resources detached art as the most specific layer. Applies to every unit
--- and to attached bars, not just the detached Player bar.
+-- Power bars carry their own art: shared bars value, then the per-unit override
+-- as the most specific layer. Applies to every unit and to attached bars; the
+-- detached Player bar has no extra texture layer anymore.
 --------------------------------------------------------------------------------
 
 spec = Compile("target", { showPowerBar = true }, { powerBarTexture = "Flat", powerBarBgTexture = "Solid" })
@@ -224,15 +226,30 @@ spec = Compile("target", { showPowerBar = true, powerBarTexture = "Glaze", power
 Check(spec.power.texture == "tex/Glaze" and spec.power.backgroundTexture == "tex/Smooth",
   "per-unit power texture did not override the shared bars value")
 
+-- Beta 27: the per-unit dropdown must stay live while detached. A separate
+-- Class Resources texture layer repainted the bar on detach and made the unit
+-- page's texture dropdowns inert, so that layer no longer exists.
 spec = Compile("player", { showPowerBar = true, powerBarDetached = true, powerBarTexture = "Glaze" },
   { powerBarTexture = "Flat", detachedPowerBarTexture = "Dragon" })
-Check(spec.power.texture == "tex/Dragon",
-  "Class Resources detached art lost to the per-unit power texture")
+Check(spec.power.texture == "tex/Glaze",
+  "detached Player bar dropped the per-unit power texture")
+
+spec = Compile("player", { showPowerBar = true, powerBarDetached = true },
+  { powerBarTexture = "Flat", detachedPowerBarTexture = "Dragon" })
+Check(spec.power.texture == "tex/Flat",
+  "detached Player bar with an unset per-unit texture stopped following the shared bars value")
+
+spec = Compile("player", { showPowerBar = true, powerBarDetached = true, powerBarBgTexture = "Smooth" },
+  { detachedPowerBarTexture = "Dragon", detachedPowerBarBgTexture = "Solid" })
+Check(spec.power.backgroundTexture == "tex/Smooth",
+  "detached Player bar dropped the per-unit power background")
+Check(spec.power.texture == FG,
+  "detached Player bar with no power texture configured drifted from the global bar texture")
 
 spec = Compile("player", { showPowerBar = true, powerBarDetached = true, powerBarTexture = "Glaze" },
   { powerBarTexture = "Flat" })
 Check(spec.power.texture == "tex/Glaze",
-  "detached Player bar dropped the per-unit power texture when Class Resources art is unset")
+  "detached Player bar dropped the per-unit power texture without Class Resources keys present")
 
 spec = Compile("player", { showPowerBar = true, powerBarDetached = false }, DEFAULT_BARS)
 Check(spec.power.texture == FG,
@@ -251,21 +268,22 @@ Check(spec.power.borderEnabled == true and spec.power.borderThickness == 5,
 --------------------------------------------------------------------------------
 
 -- The compiler owns the whole power-texture precedence now (shared bars value ->
--- per-unit override -> Class Resources detached art), so the global refresh must
--- read the finished spec instead of re-applying the detached override itself.
--- That keeps the original guarantee -- the detached value never leaks onto other
--- units -- without a Player special case or a second texture-key resolve.
+-- per-unit override), so every runtime repaint must read the finished spec.
+-- The retired Class Resources detached texture keys must not resurface in any
+-- runtime override path.
 local textureRuntime = Read("Runtime/MSUF_TextureRuntime.lua")
 Check(not textureRuntime:find("texDPB", 1, true),
   "global texture refresh still re-applies the detached override instead of the compiled spec")
 Check(textureRuntime:find("spec.power and spec.power.texture", 1, true),
   "global texture refresh no longer reads the compiled per-unit power texture")
+Check(not textureRuntime:find("detachedPowerBarTexture", 1, true),
+  "global texture refresh still reads the retired detached texture keys")
 
 local barBackground = Read("Runtime/MSUF_BarBackgroundRuntime.lua")
-Check(barBackground:find('frame.MSUFUnitKey == "player"', 1, true),
-  "detached background override is not scoped to the Player frame")
-Check(not barBackground:find("dpbBgTex = _DPB.ResolveFg()", 1, true),
-  "detached background still falls back to the foreground texture")
+Check(not barBackground:find("detachedPowerBar", 1, true),
+  "bar background runtime still reads the retired detached texture keys")
+Check(not barBackground:find("_DPB", 1, true),
+  "bar background runtime still carries the detached texture resolver cache")
 
 local rounded = Read("UnitFrames/Effects/MSUF_UF_RoundedFrames.lua")
 Check(not rounded:find("bars.detachedPowerBarOutline", 1, true),
@@ -276,7 +294,8 @@ Check(rounded:find("if power.borderEnabled ~= true then return 0 end", 1, true),
 local classPowerPage = Read("Shell/Menu2/Pages/MSUF_Menu2_AdvancedClassPower.lua")
 Check(classPowerPage:find('SetControlEnabled(self.dpbTextures.outline, playerDetached and playerShape ~= "BAR")', 1, true),
   "Class Resources outline slider is not gated to the detached shapes it still owns")
-Check(classPowerPage:find('TextureValues("Use global background texture")', 1, true),
-  "detached background dropdown still advertises the foreground fallback")
+Check(not classPowerPage:find("detachedPowerBarTexture", 1, true)
+  and not classPowerPage:find("detachedPowerBarBgTexture", 1, true),
+  "Class Resources page still exposes the retired detached texture dropdowns")
 
 print("detached power border/texture smoke: ok")

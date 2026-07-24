@@ -140,7 +140,7 @@ local function _Iter_ApplyAllBarTex(f)
     if S.applyBg then S.applyBg(f) end
 
     -- The compiler owns the full power-texture precedence (global bars value ->
-    -- per-unit override -> Class Resources detached art), so the finished spec
+    -- Class Resources detached art -> per-unit override), so the finished spec
     -- value is authoritative for every unit. This pass therefore needs no
     -- detached/Player special case and no second texture-key resolve.
     local pbTex = (spec and spec.power and spec.power.texture) or (spec and spec.texture) or hpTex
@@ -205,13 +205,9 @@ Export("MSUF_UpdateAbsorbBarTextures", UpdateAbsorbBarTextures)
 Export("MSUF_UpdateAllBarTextures", UpdateAllBarTextures, "UpdateAllBarTextures", true)
 
 local function DetachedPowerBarRefreshTextures()
-    local dpb = MSUF.Bars and MSUF.Bars._DetachedPowerBarTextures
-    if dpb then
-        dpb.fgK = false
-        dpb.fgC = nil
-        dpb.bgK = false
-        dpb.bgC = nil
-    end
+    -- The detached Player bar has no dedicated texture keys anymore; the
+    -- compiled spec owns the full power-texture precedence, so a plain
+    -- player-scoped refresh repaints everything.
     UpdateAllBarTextures("player")
 end
 Export("MSUF_DetachedPowerBar_RefreshTextures", DetachedPowerBarRefreshTextures)

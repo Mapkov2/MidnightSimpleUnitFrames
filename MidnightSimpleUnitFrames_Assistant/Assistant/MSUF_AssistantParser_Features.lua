@@ -923,16 +923,8 @@ function A._ParseClassPowerDetachedPowerBarDetailShortcut(text, raw)
         label = "Detached Power Bar Width Mode"
         local setting = ClassPowerSetting(key)
         value = setting and EnumValueForText(setting, text) or nil
-    elseif ContainsAny(text, FeaturesPhrases[128]) then
-        if ContainsAny(text, FeaturesPhrases[129]) then
-            key = "bars.detachedPowerBarBgTexture"
-            label = "Detached Power Bar Background Texture"
-        else
-            key = "bars.detachedPowerBarTexture"
-            label = "Detached Power Bar Foreground Texture"
-        end
-        local setting = ClassPowerSetting(key)
-        value = setting and ValueForRegistrySetting and ValueForRegistrySetting(setting, text, raw or text) or nil
+    -- Detached texture phrases fall through to the generic parser: power art is
+    -- owned by the Player unit page / Bars page settings now.
     elseif ContainsAny(text, FeaturesPhrases[130]) then
         key = "bars.detachedPowerBarOutline"
         label = "Detached Power Bar Outline"

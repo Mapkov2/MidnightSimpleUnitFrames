@@ -1389,10 +1389,17 @@ local function RenderDetachedPower(preview, bars, player, classFrame)
     local height = shape == "ORB" and width or Clamp(player.detachedPowerBarHeight, 6, 2, 80)
     local x, y = tonumber(player.detachedPowerBarOffsetX) or 0, tonumber(player.detachedPowerBarOffsetY) or -4
     local pr, pg, pb = PowerColor()
-    local fgTex = ResolveTexture(bars.detachedPowerBarTexture)
-    -- An unset detached background follows the global bar background, not the
-    -- foreground, so detaching alone never repaints the bar (see UF config).
-    local bgTex = ResolveTexture(bars.detachedPowerBarBgTexture,
+    -- The detached bar follows the normal power-texture precedence (per-unit
+    -- Player value -> shared bars value -> global bar texture); there is no
+    -- separate Class Resources texture anymore (see UF config).
+    local playerFg = player.powerBarTexture
+    if type(playerFg) ~= "string" or playerFg == "" then playerFg = bars.powerBarTexture end
+    local fgTex = ResolveTexture(playerFg)
+    -- An unset background follows the global bar background, not the
+    -- foreground, so detaching alone never repaints the bar.
+    local playerBg = player.powerBarBgTexture
+    if type(playerBg) ~= "string" or playerBg == "" then playerBg = bars.powerBarBgTexture end
+    local bgTex = ResolveTexture(playerBg,
         type(_G.MSUF_GetBarBackgroundTexture) == "function" and _G.MSUF_GetBarBackgroundTexture() or fgTex)
     -- Shapes keep the Class-Resources edge; the rectangular bar follows the
     -- Player unit page's own power border toggle/thickness.

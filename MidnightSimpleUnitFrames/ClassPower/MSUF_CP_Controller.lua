@@ -401,8 +401,6 @@ local function EnsureDefaults()
     if b.classPowerShowPrediction == nil then b.classPowerShowPrediction = true end
     if b.classPowerTextOffsetX    == nil then b.classPowerTextOffsetX    = 0    end
     if b.classPowerTextOffsetY    == nil then b.classPowerTextOffsetY    = 0    end
-    if b.detachedPowerBarTexture  == nil then b.detachedPowerBarTexture  = ""   end
-    if b.detachedPowerBarBgTexture == nil then b.detachedPowerBarBgTexture = ""  end
     if b.detachedPowerBarOutline  == nil then b.detachedPowerBarOutline  = 1    end
 
     --- AltMana defaults

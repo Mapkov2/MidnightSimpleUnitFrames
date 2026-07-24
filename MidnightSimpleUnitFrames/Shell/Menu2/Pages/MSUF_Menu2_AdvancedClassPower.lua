@@ -52,8 +52,6 @@ local CLASSPOWER_SETTING_KEY_BY_PATH = {
     ["detached_power.text.size"] = "player.powerFontSize",
     ["detached_power.text.x"] = "player.powerOffsetX",
     ["detached_power.text.y"] = "player.powerOffsetY",
-    ["detached_power.textures.bg"] = "bars.detachedPowerBarBgTexture",
-    ["detached_power.textures.fg"] = "bars.detachedPowerBarTexture",
     ["detached_power.textures.outline"] = "bars.detachedPowerBarOutline",
     ["layout.enabled"] = "bars.showClassPower",
     ["layout.height"] = "bars.classPowerHeight",
@@ -1075,7 +1073,9 @@ function Page:BuildDetachedPower()
     AddTooltip(self.dpbText.preset, "Power Text", "Simple presets for Player power text while detached power is managed by Class Resources. Custom Slots means the existing slot layout is kept until you choose a preset.")
     AddTooltip(self.dpbText.onBar, "Power Text On Bar", "Places Player power text on the detached power bar. When off, the same Player power text remains positioned by the normal text layout.")
     AddTooltip(self.dpbText.x, "Text X", "Moves all detached Player power text slots together. Slot X/Y controls below add per-slot offsets.")
-    local powerTexturesCard = W.ControlCard(textures, "Power Textures", nil, 14, -38, cardW, 260)
+    -- Power art is owned by the Bars page and the Player unit page (detached or
+    -- not); this tab keeps only the shape edge that Class Resources still owns.
+    local powerTexturesCard = W.ControlCard(textures, "Shape Outline", "Power textures live on the Bars page and the Player unit page.", 14, -38, cardW, 160)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(powerTexturesCard, function()
             local refs = { "power.current" }
@@ -1094,15 +1094,13 @@ function Page:BuildDetachedPower()
         })
     end
     local texture = self:Controls(textures, Bars, ApplyDetachedPowerBar, "detached_power.textures", {
-        { "fg", "dropdown", "Foreground texture", function() return TextureValues("Use global bar texture") end, 300, "detachedPowerBarTexture", "", group = "detached" },
-        { "bg", "dropdown", "Background texture", function() return TextureValues("Use global background texture") end, 300, "detachedPowerBarBgTexture", "", group = "detached" },
         { "outline", "slider", "Power bar outline", 0, 8, 1, 300, "detachedPowerBarOutline", 1, ApplyDetachedPowerBarOutline, group = "detached" },
     })
     self.dpbTextures = texture
     AddTooltip(texture.outline, "Power Bar Outline", "Edge strength of the Round, Crystal and Orb detached Player power shapes. 0 disables only that edge. A detached Bar keeps the power border from its own unit frame page.")
     PlaceColumn(layout, 32, twoColumns and -154 or -188, 54, controlW, "LEFT", self.dpb.anchor, self.dpb.sync, mode.mode, self.dpb.orbSize, self.dpb.height)
     PlaceColumn(layout, rightX, twoColumns and -154 or -520, 54, controlW, "LEFT", self.dpb.x, self.dpb.y, self.dpb.layer)
-    PlaceColumn(textures, 32, -104, 54, controlW, "LEFT", texture.fg, texture.bg, texture.outline)
+    PlaceColumn(textures, 32, -104, 54, controlW, "LEFT", texture.outline)
     PlaceColumn(text, 32, -104, 54, controlW, "LEFT", self.dpbText.onBar, self.dpbText.preset, self.dpbText.right)
     for i, control in ipairs({ self.dpbHide[1], self.dpbText.left, self.dpbHide[2], self.dpbText.center, self.dpbHide[3], self.dpbText.sep }) do
         MoveWidget(control, text, 32, ({ -264, -298, -350, -384, -436, -470 })[i], controlW, "LEFT")

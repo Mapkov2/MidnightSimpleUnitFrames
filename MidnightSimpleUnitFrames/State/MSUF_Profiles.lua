@@ -1560,8 +1560,6 @@ local MSUF_PROFILEIO_BARS_TEXTURE_WARNING_KEYS = {
     "classPowerBgTexture",
     "powerBarTexture",
     "powerBarBgTexture",
-    "detachedPowerBarTexture",
-    "detachedPowerBarBgTexture",
     "playerHPBarTexture",
     "playerHPBarBgTexture",
 }

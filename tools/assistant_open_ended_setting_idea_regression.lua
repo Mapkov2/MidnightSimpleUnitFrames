@@ -91,9 +91,12 @@ local cases = {
         unchanged = { "gf_raid.bgColor", "gf_raid.deadBgColor" },
     },
     {
+        -- The retired Class Resources detached texture settings must not come
+        -- back as suggestions; power art is owned by the Bars/unit pages now.
         input = "change target power bar texture",
-        contains = { "Class Power Bar Texture", "Detached Power Bar Background Texture", "Detached Power Bar Foreground Texture" },
-        unchanged = { "general.barTexture", "bars.classPowerBarTexture", "bars.detachedPowerBarBgTexture", "bars.detachedPowerBarTexture" },
+        contains = { "Class Power Bar Texture" },
+        notContains = { "Detached Power Bar Foreground Texture", "Detached Power Bar Background Texture" },
+        unchanged = { "general.barTexture", "bars.classPowerBarTexture" },
     },
     {
         input = "change target name text size",

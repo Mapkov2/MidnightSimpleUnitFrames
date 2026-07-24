@@ -499,13 +499,6 @@ local function ClearResolvedStatusbarTextureCache()
         for key in pairs(castbarTextureCache) do castbarTextureCache[key] = nil end
     end
 
-    local detachedTextures = MSUF and MSUF.Bars and MSUF.Bars._DetachedPowerBarTextures
-    if detachedTextures then
-        detachedTextures.fgK = false
-        detachedTextures.fgC = nil
-        detachedTextures.bgK = false
-        detachedTextures.bgC = nil
-    end
     GetLSM()
 end
 ExportPublic("MSUF_ClearResolvedStatusbarTextureCache", ClearResolvedStatusbarTextureCache)

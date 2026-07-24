@@ -828,7 +828,7 @@ local function BuildTextureSection(ctx, b)
         end, topY - 54, "textures.background")
     -- Shared power-bar art for every unit power bar (detached or not). Stored in
     -- the shared bars table like powerBarHeight, and resolved in the UF compiler
-    -- as: this value -> per-unit powerBarTexture -> Class Resources detached art.
+    -- as: this value -> Class Resources detached art -> per-unit powerBarTexture.
     local powerTexture = BindTextureDropdown("Power bar texture", function() return TextureValues("Use bar texture") end,
         function() return Bars().powerBarTexture or "" end,
         function(v)

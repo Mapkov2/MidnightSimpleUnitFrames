@@ -160,13 +160,6 @@ local function MSUF_GetPowerBarBackgroundTintRGBA()
 end
 ExportPublic("MSUF_GetPowerBarBackgroundTintRGBA", MSUF_GetPowerBarBackgroundTintRGBA)
 
---- Detached power bar texture resolvers (cache + DB read).
-local _DPB = MSUF.Bars._DetachedPowerBarTextures or {}
-_DPB.fgK = _DPB.fgK or false
-_DPB.bgK = _DPB.bgK or false
-_DPB.CDM = _DPB.CDM or {
-}
-
 local BLIZZARD_COOLDOWN_VIEWER_FRAMES = {
     EssentialCooldownViewer = true,
     UtilityCooldownViewer = true,
@@ -200,32 +193,6 @@ local function MSUF_GetEffectiveCooldownFrame(frameName)
     return frameName and _G[frameName] or nil
 end
 ExportPublic("MSUF_GetEffectiveCooldownFrame", MSUF_GetEffectiveCooldownFrame)
-
-function _DPB.ResolveFg()
-    local b = _G.MSUF_DB and _G.MSUF_DB.bars or {}
-    local key = b.detachedPowerBarTexture
-    if not key or key == "" then return nil end
-    if key == _DPB.fgK and _DPB.fgC then return _DPB.fgC end
-    local resolve = _G.MSUF_ResolveStatusbarTextureKey
-    local path = (type(resolve) == "function" and resolve(key)) or nil
-    _DPB.fgK = key
-    _DPB.fgC = path
-    return path
-end
-
-function _DPB.ResolveBg()
-    local b = _G.MSUF_DB and _G.MSUF_DB.bars or {}
-    local key = b.detachedPowerBarBgTexture
-    if not key or key == "" then return nil end
-    if key == _DPB.bgK and _DPB.bgC then return _DPB.bgC end
-    local resolve = _G.MSUF_ResolveStatusbarTextureKey
-    local path = (type(resolve) == "function" and resolve(key)) or nil
-    _DPB.bgK = key
-    _DPB.bgC = path
-    return path
-end
-
-MSUF.Bars._DetachedPowerBarTextures = _DPB
 
 local _MSUF_BgKeyCache = {}
 local function _MSUF_GetBgKeys(prefix)
@@ -438,26 +405,9 @@ local function MSUF_ApplyBarBackgroundVisual(frame)
         -- only their tint; replacing the texture turns the shape back into a bar.
         _MSUF_ApplyBgColor(frame, frame.powerBarBG, "Power", pr, pg, pb, pa)
     else
+        -- The compiled spec already resolves the full power-background
+        -- precedence for detached bars too, so no per-frame override remains.
         _MSUF_ApplyBgToTexture(frame, powerTex, frame.powerBarBG, "Power", pr, pg, pb, pa)
-    end
-
-    if shapedPower then
-        frame._msufDPBBgTexOverride = nil
-    elseif frame._msufPowerBarDetached and frame.powerBarBG and frame.MSUFUnitKey == "player" then
-        -- Player-only, matching the compiler: the Class Resources page owns these
-        -- two keys. An unset background must keep the unit's normal background
-        -- art, so there is deliberately no foreground fallback here.
-        local dpbBgTex = _DPB.ResolveBg()
-        if dpbBgTex then
-            if frame._msufDPBBgTexOverride ~= dpbBgTex then
-                frame.powerBarBG:SetTexture(dpbBgTex)
-                frame._msufDPBBgTexOverride = dpbBgTex
-            end
-        else
-            frame._msufDPBBgTexOverride = nil
-        end
-    elseif frame._msufDPBBgTexOverride then
-        frame._msufDPBBgTexOverride = nil
     end
 
     if (not frame.hpBarBG) and (not frame.powerBarBG) and frame.bg then

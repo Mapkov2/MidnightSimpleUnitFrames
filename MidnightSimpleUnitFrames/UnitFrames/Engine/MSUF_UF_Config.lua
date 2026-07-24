@@ -1147,9 +1147,10 @@ end
 -- bar texture. Resolution is scope-aware and happens once here in the compile
 -- (cold) path, so the runtime only ever reads the finished spec value:
 --   global bars.powerBarTexture -> per-unit conf.powerBarTexture
--- The Class Resources detached override below stays the most specific layer and
--- is applied afterwards for the Player's detached bar. An empty value at every
--- level keeps the historical behavior (power follows the unit bar texture).
+-- The same two layers cover the detached Player bar; there is no separate
+-- Class Resources texture anymore, so the unit page owns the bar's appearance
+-- whether it is detached or not. An empty value at every level keeps the
+-- historical behavior (power follows the unit bar texture).
 local function PowerTextureFromScope(conf, bars, fallback)
   local key = conf and conf.powerBarTexture
   if type(key) ~= "string" or key == "" then
@@ -1170,25 +1171,6 @@ local function PowerBackgroundTextureFromScope(conf, bars, fallback)
     return ResolveStatusbarTextureKey(key, fallback or WHITE)
   end
   return fallback
-end
-
-local function DetachedPowerTextureFromBars(bars, fallback)
-  local key = bars and bars.detachedPowerBarTexture
-  if type(key) == "string" and key ~= "" then
-    return ResolveStatusbarTextureKey(key, fallback or TextureFromGlobal())
-  end
-  return fallback or TextureFromGlobal()
-end
-
--- An unset detached background keeps the unit's own bar background art. Falling
--- back to the *foreground* here made detaching alone repaint the bar, because
--- the shipped defaults pair a "MSUF Lucent" bar with a "Solid" background.
-local function DetachedPowerBackgroundTextureFromBars(bars, foregroundTexture, fallback)
-  local key = bars and bars.detachedPowerBarBgTexture
-  if type(key) == "string" and key ~= "" then
-    return ResolveStatusbarTextureKey(key, fallback or foregroundTexture or WHITE)
-  end
-  return fallback or BackgroundTextureFromGlobal()
 end
 
 local function ClassPowerFallbackWidth(out, bars)
@@ -1783,14 +1765,6 @@ local function CompileUnitPower(out, unit, key, conf, general, bars, health)
     power.embed = true
   end
   power.detached = conf.powerBarDetached == true
-  -- Most specific layer: the Class Resources detached art for the Player. When
-  -- those keys are unset it now falls back to the resolved power texture above
-  -- (global/per-unit) instead of the unit bar texture, so detaching alone never
-  -- discards a configured power texture.
-  if key == "player" and power.detached == true then
-    power.texture = DetachedPowerTextureFromBars(bars, power.texture)
-    power.backgroundTexture = DetachedPowerBackgroundTextureFromBars(bars, power.texture, power.backgroundTexture)
-  end
   power.detachedWidth = Number(conf.detachedPowerBarWidth, out.width)
   power.detachedHeight = Number(conf.detachedPowerBarHeight, power.height)
   power.orbSize = Number(conf.detachedPowerOrbSize, 54)

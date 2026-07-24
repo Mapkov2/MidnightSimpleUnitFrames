@@ -2989,19 +2989,33 @@ if MSUF_DB.bars == nil then
     end
     --- Shared power-bar art for every unit's power bar (detached or not).
     --- Empty = follow the unit's bar texture, which is the historical behavior.
-    --- A per-unit powerBarTexture overrides this; the Class Resources
-    --- detachedPowerBarTexture below stays the most specific layer.
+    --- A per-unit powerBarTexture overrides this.
     if MSUF_DB.bars.powerBarTexture == nil then
         MSUF_DB.bars.powerBarTexture = ""
     end
     if MSUF_DB.bars.powerBarBgTexture == nil then
         MSUF_DB.bars.powerBarBgTexture = ""
     end
-    if MSUF_DB.bars.detachedPowerBarTexture == nil then
-        MSUF_DB.bars.detachedPowerBarTexture = ""
-    end
-    if MSUF_DB.bars.detachedPowerBarBgTexture == nil then
-        MSUF_DB.bars.detachedPowerBarBgTexture = ""
+    --- The Class Resources detached texture keys are retired: the Bars/unit
+    --- page power textures own the detached Player bar too. Carry a customized
+    --- value over once so an existing detached bar keeps its art, then drop
+    --- the stored keys.
+    do
+        local player = MSUF_DB.player
+        local legacyFg = MSUF_DB.bars.detachedPowerBarTexture
+        if type(legacyFg) == "string" and legacyFg ~= ""
+            and player and player.powerBarDetached == true
+            and (player.powerBarTexture == nil or player.powerBarTexture == "") then
+            player.powerBarTexture = legacyFg
+        end
+        local legacyBg = MSUF_DB.bars.detachedPowerBarBgTexture
+        if type(legacyBg) == "string" and legacyBg ~= ""
+            and player and player.powerBarDetached == true
+            and (player.powerBarBgTexture == nil or player.powerBarBgTexture == "") then
+            player.powerBarBgTexture = legacyBg
+        end
+        MSUF_DB.bars.detachedPowerBarTexture = nil
+        MSUF_DB.bars.detachedPowerBarBgTexture = nil
     end
     if MSUF_DB.bars.detachedPowerBarOutline == nil then
         MSUF_DB.bars.detachedPowerBarOutline = 1

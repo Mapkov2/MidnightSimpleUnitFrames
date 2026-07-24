@@ -95,7 +95,6 @@ Bars.ApplyBarBackgroundVisual
 Bars._ApplyOverlayTextureAlpha
 Bars._ClassBackgroundColor
 Bars._DarkTint
-Bars._DetachedPowerBarTextures
 Bars._MatchHPColor
 Castbars.Apply
 Castbars.Backend
