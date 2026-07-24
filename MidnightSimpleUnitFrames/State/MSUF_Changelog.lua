@@ -8,10 +8,24 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-Beta26",
-    previousVersion = "6.0-Beta25",
-    rangeLabel = "6.0-Beta25 -> 6.0-Beta26",
+    currentVersion = "6.0-Beta27",
+    previousVersion = "6.0-Beta26",
+    rangeLabel = "6.0-Beta26 -> 6.0-Beta27",
     entries = {
+        {
+            version = "6.0-Beta27",
+            date = "2026-07-24",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Aura Border Styling",
+                        "All features ready for PTR 7",
+                        "MSUF 6.0 reached feature complete status",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-Beta26",
             date = "2026-07-23",

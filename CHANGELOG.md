@@ -1,5 +1,13 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-Beta27 - 2026-07-24
+
+### Highlights
+
+- Aura Border Styling
+- All features ready for PTR 7
+- MSUF 6.0 reached feature complete status
+
 ## 6.0-Beta26 - 2026-07-24
 
 ### Highlights
