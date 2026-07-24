@@ -367,10 +367,13 @@ _G.SlashCmdList["MSUFGROUPPULSE"] = function(msg)
     LeanAbsorb("off")
   elseif msg == "suspendhidden on" or msg == "suspendhidden" then
     _G.MSUF_GF_SuspendHidden = true
-    print("|cff7fd5ffMSUF|r group pulse: hidden-frame event suspend ON — hidden frames unregister all unit events (0 overhead while off). Toggle a frame's visibility to apply.")
+    print("|cff7fd5ffMSUF|r group pulse: hidden-frame event suspend FORCED ON for ALL scopes (single frames too). Toggle a frame's visibility to apply.")
   elseif msg == "suspendhidden off" then
+    _G.MSUF_GF_SuspendHidden = false
+    print("|cff7fd5ffMSUF|r group pulse: hidden-frame event suspend FORCED OFF (A/B baseline: keep events registered while hidden).")
+  elseif msg == "suspendhidden default" then
     _G.MSUF_GF_SuspendHidden = nil
-    print("|cff7fd5ffMSUF|r group pulse: hidden-frame event suspend OFF (default: keep events registered while hidden).")
+    print("|cff7fd5ffMSUF|r group pulse: hidden-frame event suspend back to DEFAULT (ON for group frames, off for single).")
   elseif msg == "predsync on" or msg == "predsync" then
     _G.MSUF_GF_PredictionSync = true
     print("|cff7fd5ffMSUF|r group pulse: synchronous absorb/heal prediction ON (no render-frame coalescer).")

@@ -903,12 +903,21 @@ local function FrameOnHide(frame)
   if RefreshHealthLifecycleSinkRoutes and frame._msufHealthLifecycleSink then
     RefreshHealthLifecycleSinkRoutes(frame)
   end
-  -- Aggressive parity mode (opt-in): a hidden frame whose unit still exists
-  -- keeps receiving every registered UNIT_* event and burns FrameOnEvent's
-  -- early-return per event. Unregister them all while hidden so the frame is
-  -- truly inert (FrameOnShow restores from the recorded recipe). This is the
-  -- "zero overhead when off" guarantee; the compiled routes stay on the frame.
-  if _G.MSUF_GF_SuspendHidden == true
+  -- Zero-overhead-while-hidden: a hidden frame whose unit still exists keeps
+  -- receiving every registered UNIT_* event and burns FrameOnEvent's early-
+  -- return per event. Unregister them all while hidden so the frame is truly
+  -- inert (FrameOnShow restores from the recorded recipe and reseeds). Default
+  -- ON for GROUP frames only -- that is the case the user cares about, and a
+  -- hidden group child can legitimately still own a live unit (priority views,
+  -- the transient header-rebind window). Single frames are excluded: a hidden
+  -- single frame's unit is gone (no target/pet/focus), so its unit events never
+  -- fire anyway, and suspending them would only churn register/unregister on
+  -- every target/focus swap. The diagnostic flag overrides both ways:
+  --   MSUF_GF_SuspendHidden == false -> force OFF (A/B baseline via /msufgp)
+  --   MSUF_GF_SuspendHidden == true  -> force ON for every scope (single too)
+  local suspendFlag = _G.MSUF_GF_SuspendHidden
+  if suspendFlag ~= false
+    and (suspendFlag == true or frame._msufCoreScope == "group")
     and frame._msufCoreEventsSuspended ~= true
     and frame._msufEventNames
     and frame.UnregisterEvent then
@@ -1733,10 +1742,11 @@ RegisterFrameEvent = function(frame, event, unitless)
     return
   end
   -- Record the registration recipe so FrameOnHide can fully suspend a hidden
-  -- frame's unit events and FrameOnShow can restore them (opt-in via
-  -- _G.MSUF_GF_SuspendHidden). A hidden frame whose unit still exists otherwise
-  -- keeps receiving every UNIT_* event and pays FrameOnEvent's early-return per
-  -- event; suspending makes it truly inert, guaranteeing zero overhead while off.
+  -- frame's unit events and FrameOnShow can restore them. Default ON for group
+  -- frames (see FrameOnHide). A hidden group child whose unit still exists would
+  -- otherwise keep receiving every UNIT_* event and pay FrameOnEvent's early-
+  -- return per event; suspending makes it truly inert, guaranteeing zero
+  -- overhead while hidden.
   local reg = frame._msufEventReg
   if not reg then reg = {}; frame._msufEventReg = reg end
   reg[event] = unitless == true
