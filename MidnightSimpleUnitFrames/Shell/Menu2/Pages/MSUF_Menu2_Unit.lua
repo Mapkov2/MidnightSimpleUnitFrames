@@ -23,18 +23,44 @@ local POWER_UNITS = KSW("player target focus targettarget focustarget pet boss")
 local CASTBAR_FIELDS = {
     -- Castbar settings live in general DB rather than each unit DB. Keep this map as the one
     -- place where unit pages translate a unit key into the correct castbar field names.
-    player = { enable = "enablePlayerCastbar", backend = "castbarPlayerBackend", providerMemory = "castbarPlayerBackendBeforeHide", time = "showPlayerCastTime", icon = "castbarPlayerShowIcon", text = "castbarPlayerShowSpellName", timeFormat = "castbarPlayerTimeFormat", w = "castbarPlayerBarWidth", h = "castbarPlayerBarHeight", match = "castbarPlayerMatchWidth" },
-    target = { enable = "enableTargetCastbar", backend = "castbarTargetBackend", providerMemory = "castbarTargetBackendBeforeHide", time = "showTargetCastTime", icon = "castbarTargetShowIcon", text = "castbarTargetShowSpellName", targetName = "castbarTargetShowTargetName", timeFormat = "castbarTargetTimeFormat", w = "castbarTargetBarWidth", h = "castbarTargetBarHeight", match = "castbarTargetMatchWidth" },
-    focus = { enable = "enableFocusCastbar", backend = "castbarFocusBackend", providerMemory = "castbarFocusBackendBeforeHide", time = "showFocusCastTime", icon = "castbarFocusShowIcon", text = "castbarFocusShowSpellName", targetName = "castbarFocusShowTargetName", timeFormat = "castbarFocusTimeFormat", w = "castbarFocusBarWidth", h = "castbarFocusBarHeight", match = "castbarFocusMatchWidth" },
-    boss = { enable = "enableBossCastbar", backend = "bossCastbarBackend", providerMemory = "bossCastbarBackendBeforeHide", time = "showBossCastTime", icon = "showBossCastIcon", text = "showBossCastName", targetName = "showBossCastTargetName", timeFormat = "bossCastTimeFormat", w = "bossCastbarWidth", h = "bossCastbarHeight", match = "bossCastbarMatchWidth" },
+    player = {
+        stylePrefix = "castbarPlayer", enable = "enablePlayerCastbar", backend = "castbarPlayerBackend",
+        providerMemory = "castbarPlayerBackendBeforeHide", time = "showPlayerCastTime",
+        icon = "castbarPlayerShowIcon", text = "castbarPlayerShowSpellName",
+        timeFormat = "castbarPlayerTimeFormat", w = "castbarPlayerBarWidth", h = "castbarPlayerBarHeight",
+        match = "castbarPlayerMatchWidth", detached = "castbarPlayerDetached",
+        offsetX = "castbarPlayerOffsetX", offsetY = "castbarPlayerOffsetY",
+    },
+    target = {
+        stylePrefix = "castbarTarget", enable = "enableTargetCastbar", backend = "castbarTargetBackend",
+        providerMemory = "castbarTargetBackendBeforeHide", time = "showTargetCastTime",
+        icon = "castbarTargetShowIcon", text = "castbarTargetShowSpellName",
+        targetName = "castbarTargetShowTargetName", timeFormat = "castbarTargetTimeFormat",
+        w = "castbarTargetBarWidth", h = "castbarTargetBarHeight", match = "castbarTargetMatchWidth",
+        detached = "castbarTargetDetached", offsetX = "castbarTargetOffsetX", offsetY = "castbarTargetOffsetY",
+    },
+    focus = {
+        stylePrefix = "castbarFocus", enable = "enableFocusCastbar", backend = "castbarFocusBackend",
+        providerMemory = "castbarFocusBackendBeforeHide", time = "showFocusCastTime",
+        icon = "castbarFocusShowIcon", text = "castbarFocusShowSpellName",
+        targetName = "castbarFocusShowTargetName", timeFormat = "castbarFocusTimeFormat",
+        w = "castbarFocusBarWidth", h = "castbarFocusBarHeight", match = "castbarFocusMatchWidth",
+        detached = "castbarFocusDetached", offsetX = "castbarFocusOffsetX", offsetY = "castbarFocusOffsetY",
+    },
+    boss = {
+        stylePrefix = "bossCast", enable = "enableBossCastbar", backend = "bossCastbarBackend",
+        providerMemory = "bossCastbarBackendBeforeHide", time = "showBossCastTime",
+        icon = "showBossCastIcon", text = "showBossCastName", targetName = "showBossCastTargetName",
+        timeFormat = "bossCastTimeFormat", w = "bossCastbarWidth", h = "bossCastbarHeight",
+        match = "bossCastbarMatchWidth", detached = "bossCastbarDetached",
+        offsetX = "bossCastbarOffsetX", offsetY = "bossCastbarOffsetY",
+    },
 }
-local CASTBAR_PREFIX = { player = "castbarPlayer", target = "castbarTarget", focus = "castbarFocus", boss = "bossCast" }
 local CASTBAR_COPY_SUFFIXES = WL [[IconPosition IconSize IconZoom IconOffsetX IconOffsetY IconSpacing IconBorderThickness IconBorderStyle IconFrameLevelOffset SpellNamePosition SpellNameFontSize TextOffsetX TextOffsetY SpellNameAlign SpellNameMaxWidth SpellNameTruncate TimePosition TimeFontSize TimeOffsetX TimeOffsetY FrameLevelOffset]]
 --- OffsetX/OffsetY mean two different things depending on the detach state: anchored
 --- to the unit frame they are a relative gap and safe to copy, detached they are an
 --- absolute UIParent position (see MSUF_CastbarAnchors) and copying them would stack
 --- both castbars on the same screen spot. Only the relative case travels.
-local CASTBAR_ANCHORED_OFFSET_SUFFIXES = WL [[OffsetX OffsetY]]
 local CASTBAR_TARGET_NAME_COPY_SUFFIXES = WL [[TargetNamePosition TargetNameFontSize TargetNameAlign TargetNameOffsetX TargetNameOffsetY]]
 local LOAD_CONDITIONS = KLR [[
 loadCondHideMounted=Mounted
@@ -224,7 +250,10 @@ local COPY_FRAME_BASIC_FIELDS = WL [[
 ]]
 local COPY_TRANSPARENCY_FIELDS = WL [[hpBarAlpha powerBarAlpha hpBgAlpha powerBarBgAlpha alphaExcludeTextPortrait rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode]]
 local COPY_LOAD_CONDITION_FIELDS = WL [[loadCondHideMounted loadCondHideInVehicle loadCondHideResting loadCondHideInCombat loadCondHideOutOfCombat loadCondHideStealthed loadCondHideSolo loadCondHideInGroup loadCondHideInInstance loadCondHideInHousing loadCondActive]]
-local COPY_LAYOUT_FIELDS = WL [[width height offsetX offsetY point relativePoint anchorFrameName anchorToUnitframe bossLayoutMode invertBossOrder spacing]]
+--- Boss layout fields describe the boss1-boss5 container rather than one unit frame.
+--- They have no semantic equivalent on Player/Target/Focus/etc. and must never be
+--- cleared when a normal unit's frame geometry is copied to Boss.
+local COPY_LAYOUT_FIELDS = WL [[width height offsetX offsetY point relativePoint anchorFrameName anchorToUnitframe]]
 local AURA_COPY_UNITS = KSW("player target focus boss")
 local AURA_COPY_FLAGS = { player = "showPlayer", target = "showTarget", focus = "showFocus", boss = "showBoss" }
 local AURA_BOSS_RUNTIME_UNITS = WL("boss1 boss2 boss3 boss4 boss5")
@@ -360,6 +389,14 @@ local function CopyPowerBarFields(dst, src, srcKey)
         dst[spec.key] = ReadPowerCopyValue(src, srcKey, spec)
     end
 end
+local function CopyCastbarValue(g, sourceKey, destinationKey)
+    if not sourceKey or not destinationKey then return end
+    local value = g[sourceKey]
+    --- General defaults normally hydrate every castbar key. Still, an older or
+    --- partially migrated profile can omit one; absence must not erase a valid
+    --- destination value during a copy.
+    if value ~= nil then g[destinationKey] = value end
+end
 local function CopyCastbar(g, src, dst)
     src, dst = CanonUnitKey(src), CanonUnitKey(dst)
     local s, d = CASTBAR_FIELDS[src], CASTBAR_FIELDS[dst]
@@ -372,32 +409,33 @@ local function CopyCastbar(g, src, dst)
     if remembered == "BLIZZARD" and dst ~= "player" then remembered = "MSUF" end
     g[d.enable] = (backend == "MSUF")
     g[d.backend] = backend
-    g[d.providerMemory] = remembered
-    g[d.time] = g[s.time]
-    g[d.icon] = g[s.icon]
-    g[d.text] = g[s.text]
-    if s.targetName and d.targetName then g[d.targetName] = g[s.targetName] end
-    g[d.timeFormat] = g[s.timeFormat]
-    g[d.w] = g[s.w]
-    g[d.h] = g[s.h]
-    g[d.match] = g[s.match]
-    local srcPrefix = CASTBAR_PREFIX[src]
-    local dstPrefix = CASTBAR_PREFIX[dst]
+    if remembered ~= nil then g[d.providerMemory] = remembered end
+    CopyCastbarValue(g, s.time, d.time)
+    CopyCastbarValue(g, s.icon, d.icon)
+    CopyCastbarValue(g, s.text, d.text)
+    if s.targetName and d.targetName then CopyCastbarValue(g, s.targetName, d.targetName) end
+    CopyCastbarValue(g, s.timeFormat, d.timeFormat)
+    CopyCastbarValue(g, s.w, d.w)
+    CopyCastbarValue(g, s.h, d.h)
+    CopyCastbarValue(g, s.match, d.match)
+    local srcPrefix = s.stylePrefix
+    local dstPrefix = d.stylePrefix
     if not srcPrefix or not dstPrefix then return true end
     for i = 1, #CASTBAR_COPY_SUFFIXES do
-        g[dstPrefix .. CASTBAR_COPY_SUFFIXES[i]] = g[srcPrefix .. CASTBAR_COPY_SUFFIXES[i]]
+        local suffix = CASTBAR_COPY_SUFFIXES[i]
+        CopyCastbarValue(g, srcPrefix .. suffix, dstPrefix .. suffix)
     end
     --- Only meaningful while both castbars hang off their own unit frame. A detached
     --- source stores an absolute screen position, and a detached destination would
     --- reinterpret the copied gap as one, so leave the destination where it is.
-    if g[srcPrefix .. "Detached"] ~= true and g[dstPrefix .. "Detached"] ~= true then
-        for i = 1, #CASTBAR_ANCHORED_OFFSET_SUFFIXES do
-            g[dstPrefix .. CASTBAR_ANCHORED_OFFSET_SUFFIXES[i]] = g[srcPrefix .. CASTBAR_ANCHORED_OFFSET_SUFFIXES[i]]
-        end
+    if g[s.detached] ~= true and g[d.detached] ~= true then
+        CopyCastbarValue(g, s.offsetX, d.offsetX)
+        CopyCastbarValue(g, s.offsetY, d.offsetY)
     end
     if s.targetName and d.targetName then
         for i = 1, #CASTBAR_TARGET_NAME_COPY_SUFFIXES do
-            g[dstPrefix .. CASTBAR_TARGET_NAME_COPY_SUFFIXES[i]] = g[srcPrefix .. CASTBAR_TARGET_NAME_COPY_SUFFIXES[i]]
+            local suffix = CASTBAR_TARGET_NAME_COPY_SUFFIXES[i]
+            CopyCastbarValue(g, srcPrefix .. suffix, dstPrefix .. suffix)
         end
     end
     return true

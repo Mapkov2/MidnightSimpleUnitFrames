@@ -34,6 +34,12 @@ local ALLOWLIST = {
     --- Legacy width-source key; MSUF_Defaults migrates it into MatchWidth, which the
     --- copy already carries. Copying it back would resurrect a pre-migration value.
     castbarMatchUnitWidth = true,
+    --- Boss-only container geometry has no equivalent on a single Player/Target/etc.
+    --- frame. Carrying any of these through Unit Copy would either leak dead keys into
+    --- normal units or erase the destination Boss stack layout.
+    bossLayoutMode = true,
+    invertBossOrder = true,
+    spacing = true,
 }
 
 local function Read(path)
@@ -122,10 +128,11 @@ end
 assert(next(castbarRequired), "no castbar suffixes parsed")
 
 local castbarCovered = {}
-for _, name in ipairs({ "CASTBAR_COPY_SUFFIXES", "CASTBAR_TARGET_NAME_COPY_SUFFIXES", "CASTBAR_ANCHORED_OFFSET_SUFFIXES" }) do
+for _, name in ipairs({ "CASTBAR_COPY_SUFFIXES", "CASTBAR_TARGET_NAME_COPY_SUFFIXES" }) do
     for key in pairs(WordListLiteral(unitPage, name)) do castbarCovered[key] = true end
 end
---- CASTBAR_FIELDS names the keys CopyCastbar assigns explicitly.
+--- CASTBAR_FIELDS names the keys CopyCastbar assigns explicitly, including the
+--- non-uniform Boss geometry keys (bossCastbarDetached/OffsetX/OffsetY).
 local castbarFields = unitPage:match("local CASTBAR_FIELDS = {\n(.-)\n}")
 assert(castbarFields, "CASTBAR_FIELDS block not found")
 for suffix in castbarFields:gmatch("castbarPlayer(%u[%w]*)") do castbarCovered[suffix] = true end
