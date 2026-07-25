@@ -12,6 +12,7 @@
 - Retired the separate Class Resources detached power textures so the Bars page and the Player unit page own the power bar's art whether it is detached or not; a customized detached texture migrates onto the Player page once.
 - Fixed the MSUF Color Picker's color wheel, brightness bar, and opacity slider ignoring the mouse, which left the compact picker looking frozen; dragging them changes the color live again.
 - Fixed the Castbar texture not stretching across the bar: the fill repeated the 256 px art instead of scaling it, which showed a seam near the right edge of the default Player and Target castbars and cut the gradient short on narrower ones.
+- Rebuilt the Custom Aura full-frame Glow effect: instead of stretching Blizzard's square action-button alert art over the wide health bar, the glow is now a crisp radial halo with round corners that fits any bar shape. It renders from eight static slices of one small texture with no animation, so an active glow costs nothing per frame; the marching-ants glow stays on square aura icons where it belongs.
 
 ### Changes
 
@@ -21,7 +22,11 @@
 - Made "Reset to defaults" drop the matching runtime caches, so a reset frame no longer keeps pre-reset aura offsets, spell-indicator anchors, textures, castbar styling, or positions.
 - Hidden group frames now unregister their unit events by default instead of only when opted in; single frames are excluded because their unit is already gone when hidden. `/msufgp suspendhidden default` restores the automatic behavior.
 - Added the `/msufauralayers` diagnostic, which dumps the aura level/strata chain and probes host and container layering live. It is inert until invoked.
-- Updated all supported locales for the new aura color, shape outline, and icon border/shadow controls.
+- Added "New character profile" to Profiles > Profile Management, which picks the profile a brand-new character starts on instead of always landing on Default. The active profile itself stays a per-character choice, and the setting clears itself if the profile it points at is deleted.
+- Split the custom aura container's "Icon Style" section into Basics, Stack Count, Cooldown Text, and Duration Bar sub-sections, matching how the Buff and Debuff lane style sections are already laid out. Each group's controls now grey out until its own toggle is on, so the stack, cooldown, swipe, and duration bar settings only offer what currently applies.
+- Made the menu accent color own only the interactive layer by default: navigation, tabs, pills, focus rings, and highlights follow the accent while panels stay midnight. The new "Tint menu surfaces" toggle under Global > Misc > Menu behavior restores the full re-tint of panels, borders, and the navigation rail, and applies after a UI reload just like the accent itself.
+- Split the Custom Aura "Icon Style" card into the same accordion sub-sections the Buff and Debuff style pages already use - Basics, Stack Count, Cooldown Text, and Duration Bar - for every custom container including Dots on target. Detail controls now gray out while their master toggle is off, so it is visible at a glance which sliders belong to which feature.
+- Updated all supported locales for the new aura color, shape outline, icon border/shadow, new character profile, and menu surface tinting controls.
 
 ### Fixes & Performance
 
@@ -38,7 +43,12 @@
 - Coalesced live preview refreshes on a wider window, capping value streams at five renders per second, and dropped every listener for the duration of a fight.
 - Removed the `pcall` wrappers from aura font application and validated `SetFont` through its return value instead.
 - Fixed the detached power bar preview and the global texture refresh still resolving the retired detached texture keys.
-- Expanded the Core Lua 5.1 suite to 158 passing tests, including new anchor picker scan budget, preview live parity, and page reset cache purge regressions.
+- Made the repair that runs when a character's active profile has gone missing always clone the same source — Default when it exists, otherwise the first profile by name — instead of whichever profile the table happened to hand back first.
+- Fixed menu labels becoming unreadable under a bright accent. Rotating the palette onto a new hue does not preserve luminance, so accents like the gold class colors or Jade could leave near-white text on a light pill. The text ramp is now re-validated against WCAG contrast after an accent is applied, and an accent-colored pill darkens to a deeper shade of itself rather than flipping its label to black. Success, warning, and danger colors are never touched.
+- Brightened disabled control labels from a 2.4:1 to a 3.7:1 contrast ratio against the panel, so a gated control still reads well enough to tell what enabling its parent would unlock.
+- Dropped three menu textures per glassed frame — the grain, the outer glow, and the top-line bloom — plus the panel depth grain. All of them carried 0.008-0.014 alpha in a color within ~0.01 of the surface beneath, which resolves to less than one 8-bit level: they cost draw calls to render nothing visible.
+- Rebuilt the Spell Indicator full-frame glow as a static halo cut from a single radial gradient — four corner quarters plus four edge strips — instead of stretching Blizzard's square action-button alert art across the health bar. The corners stay round at any bar aspect ratio rather than smearing, the halo overlaps the bar's own border so it reads as attached to the frame, and because nothing animates, an active glow costs no Lua and no C-side ticks.
+- Expanded the Core Lua 5.1 suite to 159 passing tests, including new anchor picker scan budget, preview live parity, page reset cache purge, and new-character profile selection regressions.
 
 ## 6.0-Beta27 - 2026-07-24
 
