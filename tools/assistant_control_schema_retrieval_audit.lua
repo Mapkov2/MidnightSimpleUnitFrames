@@ -27,7 +27,7 @@ local Data = assert(Assistant.ControlSchemaData, "generated control schema data 
 Check(Data.version == 3, "reviewed schema version")
 Check(#(Data.contexts or {}) == 40, "reviewed 40 class/spec contexts")
 Check(#(Data.collectionStates or {}) == 154, "reviewed 154-state finite UI matrix")
-Check(Data.collectionUnionControls == 2361 and #(Data.records or {}) == 2361,
+Check(Data.collectionUnionControls == 2397 and #(Data.records or {}) == 2397,
     "reviewed 2361-control exhaustive union")
 
 local columns, contextIds, stateCounts = {}, {}, {}
@@ -180,7 +180,7 @@ for _, group in pairs(labelGroups) do
         if #group > maxCollision then maxCollision = #group end
     end
 end
-Check(collisionGroups == 284 and collisionRows == 1783 and maxCollision == 32,
+Check(collisionGroups == 294 and collisionRows == 1820 and maxCollision == 32,
     string.format("reviewed label-collision inventory drift: groups=%d rows=%d max=%d",
         collisionGroups, collisionRows, maxCollision))
 
